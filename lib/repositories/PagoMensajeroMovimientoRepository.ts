@@ -9,6 +9,7 @@ import type {
   ListarPorMensajeroFiltros,
   ListarPorMensajeroPage,
   PagoMensajeroTxClient,
+  PremioRegistradoRow,
 } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { PagoMensajeroMovimientoDTO } from "@/lib/types/wallet-mensajero";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
@@ -147,6 +148,10 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
       // clave— asi que el feed del cierre sigue cayendo en el `DEFAULT CURRENT_TIMESTAMP`
       // de la columna exactamente como antes.
       ...(m.fechaMovimiento !== undefined ? { fechaMovimiento: m.fechaMovimiento } : {}),
+      // Feature 293 (T4.2, R17): la fecha del PODIO, mismo criterio de opcionalidad. Es la
+      // columna sobre la que la base impone «un premio por (mensajero, dia)»; quien no la
+      // manda deja `premio_dia` en NULL y cae en la primera rama del CHECK.
+      ...(m.premioDia !== undefined ? { premioDia: m.premioDia } : {}),
     }));
     const res = await tx.pagoMensajeroMovimiento.createMany({ data, skipDuplicates: true });
     return res.count;
@@ -325,5 +330,106 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
       select: { nombre: true },
     });
     return u?.nombre ?? null;
+  }
+
+  /**
+   * Feature 293 (T2.2, design §5, R24) — Σ de los premios VIVOS de cada cierre, en UNA consulta.
+   *
+   * Vivo = registrado menos anulado, y la resta es la unica forma correcta: la anulacion NO
+   * borra ni edita la fila del premio (R21), escribe una compensacion `ajuste_pago` con el mismo
+   * `premio_dia`. Por eso el `groupBy` va por `(origenId, categoria)` y el signo lo pone esta
+   * funcion, no la base.
+   *
+   * Tres piezas del WHERE, y las tres cargan peso:
+   *  - `origenTipo: 'cierre_dia'` — sin el, el `origen_id` de un PAGO podria contarse como si
+   *    fuera un cierre. Es lo que un test [PG] mata con una mutacion; un doble no lo ve.
+   *  - `origenId: { in: cierreIds }` — el acotado al conjunto pedido.
+   *  - el `OR` de las dos categorias, con `premioDia: { not: null }` SOLO en la rama del
+   *    `ajuste_pago`: esa categoria existe desde la 44 para ajustes manuales que no tienen nada
+   *    que ver con el premio, y contarlos aqui restaria de lo pagable un dinero ajeno.
+   */
+  async sumarPremiosVivosPorCierre(cierreIds: string[]): Promise<Record<string, string>> {
+    const total: Record<string, string> = {};
+    for (const id of cierreIds) total[id] = "0.00"; // entrada por CADA id pedido
+    if (cierreIds.length === 0) return total;
+
+    const grupos = await this.prisma.pagoMensajeroMovimiento.groupBy({
+      by: ["origenId", "categoria"],
+      where: {
+        origenTipo: "cierre_dia",
+        origenId: { in: cierreIds },
+        OR: [
+          { categoria: "premio_ranking" },
+          { categoria: "ajuste_pago", premioDia: { not: null } },
+        ],
+      },
+      _sum: { monto: true },
+    });
+
+    const acumulado = new Map<string, Prisma.Decimal>();
+    for (const g of grupos) {
+      if (g.origenId === null) continue; // imposible por el `in`; el tipo lo admite
+      const suma = new Prisma.Decimal(g._sum.monto ?? 0);
+      const previo = acumulado.get(g.origenId) ?? new Prisma.Decimal(0);
+      // `premio_ranking` SUMA (devengo) y su compensacion RESTA (pago del mismo importe).
+      acumulado.set(
+        g.origenId,
+        g.categoria === "premio_ranking" ? previo.add(suma) : previo.sub(suma),
+      );
+    }
+    for (const [cierreId, valor] of acumulado) total[cierreId] = valor.toFixed(2);
+    return total;
+  }
+
+  /**
+   * Feature 293 (T3.3, R9) — las filas del mundo del premio de UN mensajero en unos dias.
+   *
+   * El acotado por mensajero va en el WHERE (R20), como en el resto de este repositorio, y los
+   * dias entran por `in` sobre `premio_dia`: la columna es `@db.Date`, asi que el caller pasa
+   * medianoches UTC (`fechaComoDate`) y la comparacion es exacta, sin rangos que puedan
+   * desbordar a un dia vecino.
+   *
+   * Con `tx` la lectura va POR ESA TRANSACCION (revision de la 293, m4); sin el, por el cliente
+   * propio del repositorio, que es lo que quiere el listado del podio. Es el mismo criterio que
+   * `crearMovimientos`, con la diferencia de que ahi el `tx` es obligatorio porque escribe.
+   */
+  async listarPremiosPorDias(
+    mensajeroId: string,
+    dias: Date[],
+    tx?: PagoMensajeroTxClient,
+  ): Promise<PremioRegistradoRow[]> {
+    if (dias.length === 0) return [];
+    const cliente = tx ?? this.prisma;
+    const rows = await cliente.pagoMensajeroMovimiento.findMany({
+      where: {
+        mensajeroId, // R20: acotado por mensajero en el WHERE
+        premioDia: { in: dias },
+        categoria: { in: ["premio_ranking", "ajuste_pago"] },
+      },
+      select: {
+        categoria: true,
+        premioDia: true,
+        monto: true,
+        origenTipo: true,
+        origenId: true,
+        fechaMovimiento: true,
+      },
+      orderBy: { fechaMovimiento: "asc" },
+    });
+    return rows.flatMap((r) => {
+      // `premio_dia` no puede ser NULL aqui (el `in` lo excluye), pero el tipo lo admite y no
+      // se inventa una fecha: la fila que no la tenga simplemente no sale.
+      if (r.premioDia === null) return [];
+      if (r.categoria !== "premio_ranking" && r.categoria !== "ajuste_pago") return [];
+      return [
+        {
+          categoria: r.categoria,
+          premioDia: r.premioDia,
+          monto: r.monto.toFixed(2),
+          cierreId: r.origenTipo === "cierre_dia" ? r.origenId : null,
+          fechaMovimiento: r.fechaMovimiento,
+        },
+      ];
+    });
   }
 }

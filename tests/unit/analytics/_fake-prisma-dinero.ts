@@ -69,6 +69,12 @@ export interface FilaLedgerMensajero extends Origen {
   readonly tipo: string;
   readonly monto: string;
   readonly fechaMovimiento: Date;
+  /**
+   * Feature 293 (T2.4): la fecha del PODIO. OPCIONAL como el par `origen_*`, pero el test de la
+   * conciliacion tiene que sembrarla —si la fila no la trae, `cumpleWhere` LANZA en vez de
+   * ignorar el filtro, que es exactamente lo que se quiere—.
+   */
+  readonly premioDia?: Date | null;
 }
 
 export interface FilaCierreDia {
@@ -159,7 +165,9 @@ type Registro = Record<string, unknown>;
 /* Evaluacion del WHERE                                                        */
 /* -------------------------------------------------------------------------- */
 
-const OPERADORES = ["in", "notIn", "equals", "gt", "gte", "lt", "lte"] as const;
+// Feature 293 (T2.4): + `not`, que la exclusion del premio necesita para distinguir la
+// compensacion de un premio (`ajuste_pago` CON `premio_dia`) de un ajuste manual cualquiera.
+const OPERADORES = ["in", "notIn", "equals", "not", "gt", "gte", "lt", "lte"] as const;
 
 function comparar(valor: unknown, referencia: unknown): number {
   const a = valor instanceof Date ? valor.getTime() : valor;
@@ -196,6 +204,13 @@ function cumpleCondicion(valor: unknown, condicion: unknown): boolean {
       if (!(valor === esperado || comparableIguales(valor, esperado))) return false;
       continue;
     }
+    // Feature 293 (T2.4): `not` con un valor escalar (incluido `null`), que es la unica forma
+    // que la conciliacion usa. `{ not: null }` es «la columna TIENE valor», con la semantica de
+    // Prisma —y no la de SQL, donde `<> NULL` nunca es verdadero—.
+    if (clave === "not") {
+      if (valor === esperado || comparableIguales(valor, esperado)) return false;
+      continue;
+    }
     // Cotas: un valor NULO nunca entra en un rango (semantica de SQL).
     if (valor === null || valor === undefined) return false;
     const signo = comparar(valor, esperado);
@@ -212,10 +227,41 @@ function comparableIguales(a: unknown, b: unknown): boolean {
   return a instanceof Date && b instanceof Date && a.getTime() === b.getTime();
 }
 
+/**
+ * AMPLIADO EN LA 293 (T2.4), no reemplazado: el fake gana los TRES combinadores.
+ *
+ * Hasta hoy `AND`/`OR`/`NOT` LANZABAN, y estaba bien mientras nadie los usara: la 293 excluye del
+ * lado ledger de la conciliacion el premio y su compensacion, y esa exclusion no se puede
+ * escribir sin ellos —`categoria NOT IN (...)` sacaria tambien los `ajuste_pago` legitimos—.
+ *
+ * La semantica es la de Prisma y se escribe aqui para que no dependa de la memoria de nadie:
+ *   - `AND: [a, b]` -> se cumplen TODAS;
+ *   - `OR: [a, b]`  -> se cumple ALGUNA (lista vacia = no casa nada, como el `in: []` de SQL);
+ *   - `NOT: x`      -> NO se cumple `x`; `NOT: [a, b]` -> no se cumplen TODAS a la vez.
+ *
+ * La forma que usa la conciliacion es `NOT: { OR: [...] }`, que es la UNICA que no depende de
+ * como Prisma interprete un `NOT` con lista: `NOT (a OR b)` es `¬a AND ¬b` en cualquier lectura.
+ * Y lo que de verdad manda —lo que Postgres ejecuta— se mide en el test [PG] de la feature.
+ */
 function cumpleWhere(fila: Registro, where: unknown): boolean {
   if (where === undefined || where === null) return true;
   for (const [campo, condicion] of Object.entries(where as Registro)) {
-    if (campo.startsWith("$") || campo === "AND" || campo === "OR" || campo === "NOT") {
+    if (campo === "AND") {
+      const lista = (Array.isArray(condicion) ? condicion : [condicion]) as unknown[];
+      if (!lista.every((c) => cumpleWhere(fila, c))) return false;
+      continue;
+    }
+    if (campo === "OR") {
+      const lista = (Array.isArray(condicion) ? condicion : [condicion]) as unknown[];
+      if (!lista.some((c) => cumpleWhere(fila, c))) return false;
+      continue;
+    }
+    if (campo === "NOT") {
+      const lista = (Array.isArray(condicion) ? condicion : [condicion]) as unknown[];
+      if (lista.every((c) => cumpleWhere(fila, c))) return false;
+      continue;
+    }
+    if (campo.startsWith("$")) {
       throw new Error(`fake-prisma: combinador "${campo}" no soportado`);
     }
     if (!(campo in fila)) {

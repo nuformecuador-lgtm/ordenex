@@ -322,6 +322,10 @@ function walletDobles() {
     agregarCuentaPorPagar: vi.fn(),
     listarCuentasPorPagarTodos: vi.fn(),
     obtenerNombreMensajero: vi.fn(),
+    // 293/T2.2-T3.3: los dos metodos NUEVOS del contrato (lectura). No-op aqui: este
+    // doble no ejercita el premio.
+    sumarPremiosVivosPorCierre: vi.fn(async () => ({})),
+    listarPremiosPorDias: vi.fn(async () => []),
   } as unknown as IPagoMensajeroMovimientoRepository;
   const walletMensajeroFeedService = {
     construirMovimientosDePago: vi.fn().mockResolvedValue({ libro: [], egresoCaja: [] }),
@@ -367,6 +371,12 @@ function makeServices(db: Db) {
         Object.fromEntries(ids.map((id) => [id, "0.00"])),
       ),
       obtenerCierreParaPago: vi.fn(async () => null),
+    },
+    {
+      // Feature 293 (T2.3): lectura de premios; "0.00" por id -> lo pagable no cambia.
+      sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) =>
+        Object.fromEntries(ids.map((id) => [id, "0.00"])),
+      ),
     }),
     envioSatelite: new EnvioDevolucionCentralService(ordenRepo),
     recepcionCentral: new RecepcionBodegaCentralService(ordenRepo),

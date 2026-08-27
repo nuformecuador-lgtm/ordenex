@@ -995,18 +995,25 @@ export class LiquidacionService implements ILiquidacionService {
     const cierres = await this.pagoRepo.listarCierresImputables(mensajeroId, tx);
     if (cierres.length === 0) return [];
 
-    const pagados = await this.pagoRepo.sumarVigentesPorCierre(cierres.map((c) => c.id));
+    const ids = cierres.map((c) => c.id);
+    const pagados = await this.pagoRepo.sumarVigentesPorCierre(ids);
+    // Feature 293 (T2.3, §6/3, R24) — los PREMIOS VIVOS de esos mismos cierres. UNA llamada
+    // para todo el conjunto, como la de arriba: el numero de consultas no crece con el numero
+    // de cierres. Sin esto el premio nunca entraria en la ventana imputable y no se podria
+    // cobrar — que es el corazon de la decision humana de imputarlo al cierre.
+    const premios = await this.mensajeroRepo.sumarPremiosVivosPorCierre(ids);
     const imputables: CierreImputable[] = [];
     for (const cierre of cierres) {
       // R24, defensa en profundidad: el WHERE del repositorio ya acota por mensajero, pero un
       // cierre de otra persona no puede recibir un centimo aunque una lectura futura se
       // equivocara. Cuesta una comparacion y cierra el agujero en el punto donde duele.
       if (cierre.mensajeroId !== mensajeroId) continue;
-      const pendiente = derivarPendienteCierre(
-        cierre.totalPagoMensajero,
-        cierre.totalEfectivo,
-        pagados[cierre.id] ?? "0.00",
-      );
+      const pendiente = derivarPendienteCierre({
+        pagoDebido: cierre.totalPagoMensajero,
+        efectivo: cierre.totalEfectivo,
+        premiosVivos: premios[cierre.id] ?? "0.00",
+        pagadoVigente: pagados[cierre.id] ?? "0.00",
+      });
       if (new Prisma.Decimal(pendiente).lte(0)) continue; // R5: imputable = pendiente > 0
       imputables.push({
         cierreId: cierre.id,
@@ -1134,11 +1141,19 @@ export class LiquidacionService implements ILiquidacionService {
       if (cierre === null) return null;
       const pagados = await this.pagoRepo.sumarVigentesPorCierre([cierre.id]);
       const vigentes = new Prisma.Decimal(pagados[cierre.id] ?? "0.00").sub(monto);
-      return derivarPendienteCierre(
-        cierre.totalPagoMensajero,
-        cierre.totalEfectivo,
-        vigentes.lt(0) ? new Prisma.Decimal(0) : vigentes,
-      );
+      // Feature 293 (T2.3, R26) — CONSUMIDOR QUE `design.md §6` NO ENUMERA y que el compilador
+      // SI señalo (es el 21.º). Responde «cuanto se le debe por este cierre una vez aplicado el
+      // contraasiento», que es literalmente la pregunta que R26 obliga a contestar con el mismo
+      // calculo y en un unico sitio. Dejarlo con `premiosVivos: "0.00"` habria devuelto, tras
+      // anular un pago, un restante MENOR que el real en cierres con premio: la pantalla diria
+      // que queda menos por pagar del que queda.
+      const premios = await this.mensajeroRepo.sumarPremiosVivosPorCierre([cierre.id]);
+      return derivarPendienteCierre({
+        pagoDebido: cierre.totalPagoMensajero,
+        efectivo: cierre.totalEfectivo,
+        premiosVivos: premios[cierre.id] ?? "0.00",
+        pagadoVigente: vigentes.lt(0) ? new Prisma.Decimal(0) : vigentes,
+      });
     }
 
     const agregado = await this.tiendaRepo.agregarSaldoPorTienda(beneficiario.tiendaId, {});
@@ -1249,11 +1264,16 @@ export class LiquidacionService implements ILiquidacionService {
    */
   private async pendienteDelCierre(cierre: CierreParaPagoDTO): Promise<string> {
     const pagados = await this.pagoRepo.sumarVigentesPorCierre([cierre.id]);
-    return derivarPendienteCierre(
-      cierre.totalPagoMensajero,
-      cierre.totalEfectivo,
-      pagados[cierre.id] ?? "0.00",
-    );
+    // Feature 293 (T2.3, §6/4, R24/R27): sin esta lectura, pagar el premio de un cierre saldado
+    // devolveria `sin_saldo` —o `excede` si el cierre tenia otra deuda menor—: el tope de [P1]
+    // se compara contra ESTE numero.
+    const premios = await this.mensajeroRepo.sumarPremiosVivosPorCierre([cierre.id]);
+    return derivarPendienteCierre({
+      pagoDebido: cierre.totalPagoMensajero,
+      efectivo: cierre.totalEfectivo,
+      premiosVivos: premios[cierre.id] ?? "0.00",
+      pagadoVigente: pagados[cierre.id] ?? "0.00",
+    });
   }
 
   /**

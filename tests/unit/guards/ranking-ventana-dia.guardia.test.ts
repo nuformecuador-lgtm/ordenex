@@ -132,10 +132,32 @@ describe("RankingService · ventana del dia natural CR (166)", () => {
     // `premio_ranking` de la feature 76 siga intacta y que nadie mueva la ventana del dia CR
     // por la puerta de una migracion. Por eso, ademas de la lista, se censa lo que TOCA cada
     // migracion nueva. Una tercera entrada aqui exige mirarla a mano antes de ampliarla.
+    //
+    // AMPLIADA el 2026-08-27 por la feature 293 (premio del ranking en la cuenta por pagar). Se
+    // miro a mano, que es lo que este censo pide: la migracion NO crea ni altera ninguna tabla
+    // del modulo del ranking —sus dos `ALTER TABLE` son sobre `pago_mensajero_movimiento`— y no
+    // toca la ventana del dia. Lo que si hace es NOMBRAR `'premio_ranking'` como valor de enum
+    // del libro del mensajero, que es una categoria de dinero y NO la tabla de la feature 76.
     expect(migracionesDelModulo).toEqual([
       "20260716130000_premio_ranking",
       "20260811120000_ranking_snapshot",
+      "20260827120000_premio_ranking_devengo",
     ]);
+
+    // La de la 293: ni una sentencia sobre las tres tablas del modulo del ranking.
+    const sql293 = soloSentenciasDdl(
+      fs.readFileSync(
+        path.join(DIR_MIGRACIONES, "20260827120000_premio_ranking_devengo", "migration.sql"),
+        "utf8",
+      ),
+    );
+    for (const [, tabla] of sql293.matchAll(/(?:CREATE|ALTER)\s+TABLE\s+"([a-z_]+)"/gi)) {
+      expect(tabla).toBe("pago_mensajero_movimiento");
+    }
+    // Y el unico `premio_ranking` que aparece es el LITERAL de enum (comilla simple), nunca el
+    // identificador de la tabla de la 76 (comilla doble).
+    expect(sql293).not.toMatch(/"premio_ranking"/);
+    expect(sql293).toMatch(/'premio_ranking'/); // control de no-vacuidad de la linea de arriba
 
     // La migracion de la 196 es ADITIVA: solo crea/altera sus dos tablas propias. Se mide el
     // codigo, no la prosa: el `.sql` explica por escrito de que tabla NO habla, y un censo

@@ -191,6 +191,14 @@ function montar(
     }),
     agregarCuentaPorPagar: vi.fn(async () => ({ devengado: "32000.00", pagado: "0.00" })),
     obtenerNombreMensajero: vi.fn(async () => "Marco Mensajero"),
+    // Feature 293 (T2.3, §6/3): `imputablesDe` lee ademas los PREMIOS VIVOS de la ventana.
+    // "0.00" por cada id -> la ventana, los candados y su ORDEN son EXACTAMENTE los de antes,
+    // que es lo que este archivo mide. Se apunta en el log para que su posicion sea visible.
+    sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) => {
+      log.push("leer:premios-vivos");
+      return Object.fromEntries(ids.map((id) => [id, "0.00"]));
+    }),
+    listarPremiosPorDias: vi.fn(async () => []),
     listarPorMensajero: vi.fn(),
     listarCuentasPorPagarTodos: vi.fn(),
     listarCuentasPorPagarPaginado: vi.fn(),

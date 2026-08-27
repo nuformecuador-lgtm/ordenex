@@ -81,6 +81,14 @@ function newService(repo: ICierresAdminRepository, zonaDelSatelite: string | nul
       Object.fromEntries(ids.map((id) => [id, "0.00"])),
     ),
     obtenerCierreParaPago: vi.fn(async () => null),
+  },
+  // Feature 293 (T2.3): la lectura de PREMIOS que el servicio ahora exige. Este caso no
+  // ejercita el premio, asi que devuelve "0.00" por cada id — con lo que lo pagable es
+  // EXACTAMENTE el de antes, que es la no-regresion que interesa aqui.
+  {
+    sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) =>
+      Object.fromEntries(ids.map((id) => [id, "0.00"])),
+    ),
   });
 }
 

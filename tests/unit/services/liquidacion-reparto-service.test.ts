@@ -129,6 +129,8 @@ interface Opciones {
   cierres?: CierreImputableDTO[][];
   /** Σ de pagos vigentes por cierre. Una entrada por LLAMADA; la ultima se repite. */
   pagados?: Record<string, string>[];
+  /** Feature 293 (T2.3): Σ de PREMIOS VIVOS por cierre. Ausente = "0.00" en todos. */
+  premios?: Record<string, string>;
   /** El CONTEO por estado de R36 (no la lista de cierres: ver el DTO). */
   noAprobados?: CierresNoAprobadosPorEstadoDTO[];
   cuenta?: { devengado: string; pagado: string };
@@ -285,6 +287,14 @@ function buildDobles(opciones: Opciones = {}) {
       log.push("leer:nombre-mensajero");
       return opciones.nombre === undefined ? "Marco Mensajero" : opciones.nombre;
     }),
+    // Feature 293 (T2.3, §6/3): la Σ de PREMIOS VIVOS que `imputablesDe` lee para cada cierre
+    // de la ventana. Por defecto `"0.00"` por id -> el reparto reparte exactamente lo mismo que
+    // antes, que es la no-regresion de este archivo; `opciones.premios` lo cambia por cierre.
+    sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) => {
+      log.push("leer:premios-vivos");
+      return Object.fromEntries(ids.map((id) => [id, opciones.premios?.[id] ?? "0.00"]));
+    }),
+    listarPremiosPorDias: vi.fn(async () => []),
     listarPorMensajero: vi.fn(),
     listarCuentasPorPagarTodos: vi.fn(),
     listarCuentasPorPagarPaginado: vi.fn(),
@@ -1342,3 +1352,59 @@ function pagoDelReparto(
     anulacion: null,
   };
 }
+
+// ── Feature 293 (T2.3, §6 filas 3 y 5) — el PREMIO entra en la ventana imputable ────────────
+
+describe("293/R24/R27 — un cierre saldado con premio vuelve a ser IMPUTABLE", () => {
+  it("`imputablesDe`: sin premio el cierre saldado no esta en la ventana; con premio, si", async () => {
+    // Un solo cierre, con P = 5 000 y los 5 000 YA pagados: saldado, no imputable. Se le imputa
+    // un premio de 2 000 y tiene que volver a la ventana por EXACTAMENTE ese importe.
+    const soloUno = [cierre("c-viejo", "5000.00", "2026-07-01T10:00:00.000Z")];
+    const sinPremio = buildDobles({ cierres: [soloUno], pagados: [{ "c-viejo": "5000.00" }] });
+    const conPremio = buildDobles({
+      cierres: [soloUno],
+      pagados: [{ "c-viejo": "5000.00" }],
+      premios: { "c-viejo": "2000.00" },
+    });
+
+    const a = await sinPremio.service.previsualizarRepartoMensajero(
+      { mensajeroId: MENSAJERO },
+      ACTOR_ADMIN,
+    );
+    const b = await conPremio.service.previsualizarRepartoMensajero(
+      { mensajeroId: MENSAJERO },
+      ACTOR_ADMIN,
+    );
+
+    if (a.status !== "ok" || b.status !== "ok") throw new Error("esperaba ok");
+    expect(a.previsualizacion.imputable).toBe("0.00");
+    expect(a.previsualizacion.recorte.enVentana).toBe(0);
+    expect(b.previsualizacion.imputable).toBe("2000.00");
+    expect(b.previsualizacion.recorte.enVentana).toBe(1);
+  });
+
+  it("el premio se SUMA al pendiente propio del cierre en la ventana", async () => {
+    const d = buildDobles({
+      cierres: [[cierre("c-viejo", "5000.00", "2026-07-01T10:00:00.000Z")]],
+      premios: { "c-viejo": "2000.00" },
+    });
+
+    const r = await d.service.previsualizarRepartoMensajero({ mensajeroId: MENSAJERO }, ACTOR_ADMIN);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.previsualizacion.imputable).toBe("7000.00");
+  });
+
+  it("UNA sola lectura de premios por ventana, no una por cierre", async () => {
+    const d = buildDobles({ premios: { "c-viejo": "1000.00" } });
+
+    await d.service.previsualizarRepartoMensajero({ mensajeroId: MENSAJERO }, ACTOR_ADMIN);
+
+    expect(d.log.filter((l) => l === "leer:premios-vivos")).toHaveLength(1);
+    expect(d.mensajeroRepo.sumarPremiosVivosPorCierre).toHaveBeenCalledWith([
+      "c-viejo",
+      "c-medio",
+      "c-nuevo",
+    ]);
+  });
+});

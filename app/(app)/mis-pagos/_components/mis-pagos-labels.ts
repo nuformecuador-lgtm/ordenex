@@ -31,6 +31,9 @@ export const CATEGORIA_PAGO_LABEL: Record<PagoMensajeroMovimientoCategoria, stri
   liquidacion: "Liquidación",
   ajuste_devengo: "Ajuste (devengo)",
   ajuste_pago: "Ajuste (pago)",
+  // Feature 293 (T1.6, R34, Q4 cerrada por el leader): rotulo PROPIO y distinguible del de los
+  // ajustes. Sin esta linea el `Record` deja de compilar: el compilador es la guardia.
+  premio_ranking: "Premio del ranking",
 };
 
 /** Etiqueta legible del origen de un movimiento (WalletOrigenTipo, subconjunto de la 44). */
@@ -38,6 +41,10 @@ export const ORIGEN_PAGO_LABEL: Record<string, string> = {
   cierre_dia: "Cierre del día",
   pago_mensajero: "Liquidación",
   manual: "Manual",
+  // Feature 293 (T1.6): origen de las filas de CAJA del premio. No aparece en este libro
+  // —aqui el premio va con `cierre_dia`—, pero el mapa es de `WalletOrigenTipo` y dejarlo fuera
+  // haria que un dia se pintara el valor crudo.
+  ranking_snapshot_fila: "Premio del ranking",
 };
 
 /** Origen legible con fallback al valor crudo si no hay etiqueta conocida. */

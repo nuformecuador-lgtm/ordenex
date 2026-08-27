@@ -87,6 +87,7 @@ export const EditarPlantillaForm = forwardRef<
         textareaRef={textareaRef}
         value={cuerpo}
         onInsert={(next) => setCuerpo(next)}
+        variablesNombres={plantilla.variablesNombres}
       />
     </div>
   );

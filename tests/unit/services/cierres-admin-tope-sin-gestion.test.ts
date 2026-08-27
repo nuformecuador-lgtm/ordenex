@@ -75,6 +75,12 @@ function newService(
       Object.fromEntries(ids.map((id) => [id, "0.00"])),
     ),
     obtenerCierreParaPago: vi.fn(async () => null),
+  },
+  // Feature 293 (T2.3): lectura de premios; "0.00" por id -> lo pagable no cambia.
+  {
+    sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) =>
+      Object.fromEntries(ids.map((id) => [id, "0.00"])),
+    ),
   });
   return { service, repo, ordenRepo };
 }

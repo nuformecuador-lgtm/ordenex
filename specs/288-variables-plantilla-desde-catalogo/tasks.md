@@ -184,14 +184,14 @@
 
 ## Fase 4 — UI
 
-### T17. `CampoVariablePicker`
+### [x] T17. `CampoVariablePicker`
 - **Toca:** `app/(app)/configuracion/plantillas/_components/CampoVariablePicker.tsx` (nuevo).
 - **Hacer:** contrato de `design.md §5.1`. Por defecto consume
   `CAMPOS_PLANTILLA.filter(c => c.aliasDe === undefined)`.
 - **Hecho (asserts en T18):** ver T18.
 - **Depende de:** T1.
 
-### T18. Tests del picker
+### [x] T18. Tests del picker
 - **Toca:** `tests/unit/plantillas/CampoVariablePicker.test.tsx` (nuevo, jsdom + RTL).
 - **Hecho (asserts):**
   - Se pintan nombre **y** descripción de cada opción (**R1**).
@@ -208,7 +208,7 @@
   - `getByRole("combobox", { name: /campo/i })` lo encuentra; la lista es `role="listbox"` (**R30**).
 - **Depende de:** T17.
 
-### T19. Reemplazo de `VariablesInsert`
+### [x] T19. Reemplazo de `VariablesInsert`
 - **Toca:** `app/(app)/configuracion/plantillas/_components/VariablesInsert.tsx`.
 - **Hacer:** quitar input libre / `normalizarClave` / botón «Añadir» / estado editable de
   variables / botón de quitar / botón manual de vista previa. Montar `CampoVariablePicker`,
@@ -220,7 +220,7 @@
 - **Hecho (asserts en T20):** ver T20.
 - **Depende de:** T9, T17.
 
-### T20. Tests de `VariablesInsert`
+### [x] T20. Tests de `VariablesInsert`
 - **Toca:** `tests/unit/plantillas/VariablesInsert.test.tsx` (reescritura parcial; se
   conservan los tests de `insertarPlaceholder`). `previewAction` se inyecta con un doble que
   delega en `previewConEjemplos`, y los tests avanzan el debounce con temporizadores falsos.
@@ -243,7 +243,7 @@
     de debounce, y una respuesta tardía de un cuerpo anterior **no** pisa el panel.
 - **Depende de:** T19.
 
-### T21. `[P]` Formularios y DTO
+### [x] T21. `[P]` Formularios y DTO
 - **Toca:** `CrearPlantillaForm.tsx`, `EditarPlantillaForm.tsx`,
   `lib/types/plantilla-mensaje.ts` (`PlantillaListItemDTO`) y su mapeo.
 - **Hacer:** propagar `variablesNombres` (`{}` en crear; `plantilla.variablesNombres` en editar).

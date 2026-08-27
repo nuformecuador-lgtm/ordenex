@@ -1400,6 +1400,13 @@ enum WalletOrigenTipo {
   pago_mensajero
   gasto
   orden_incidente // feature 158/R37: egreso de indemnizacion aprobado sobre un incidente del ADMIN
+  // Feature 293 (design §3.4, R20): origen del EGRESO DE CAJA del premio del ranking y de su
+  // reverso. Apunta a `ranking_snapshot_fila.id` —la fila del podio— y NO al cierre: el unico de
+  // la caja es `(origen_tipo, origen_id, categoria)` SIN mensajero, y el feed del cierre YA
+  // escribio `(cierre_dia, cierreId, egreso_pago_mensajero)` al aprobar, asi que reusar esa clave
+  // mandaria el egreso del premio a `ON CONFLICT DO NOTHING`: dinero fuera de la caja sin
+  // registro y sin error. Se usa SOLO en las dos filas de la caja del premio.
+  ranking_snapshot_fila
 
   @@map("wallet_origen_tipo")
 }
@@ -1523,6 +1530,12 @@ enum PagoMensajeroMovimientoCategoria {
   // ajustes manuales (inmutables, correccion compensatoria R3)
   ajuste_devengo
   ajuste_pago
+  // Feature 293 (design §3.1, R14): PREMIO DEL PODIO del ranking. Categoria PROPIA y no
+  // `ajuste_devengo`, porque aquel se rotula «Ajuste (devengo)» y ahi ya viven los
+  // contraasientos de la anulacion de liquidaciones: mezclarlos hace imposible responder «que
+  // parte de esta cuenta es premio» (decision (d) del humano). Vive en la rama `devengo` del
+  // CHECK tipo<->categoria: el premio SUBE la cuenta por pagar.
+  premio_ranking
 
   @@map("pago_mensajero_movimiento_categoria")
 }
@@ -1547,6 +1560,20 @@ model PagoMensajeroMovimiento {
   registradoPor   String?                          @map("registrado_por") // FK usuario (actor) en manual; NULL en automaticos
   fechaMovimiento DateTime                         @default(now()) @map("fecha_movimiento")
   createdAt       DateTime                         @default(now()) @map("created_at")
+  // Feature 293 (design §3.3, R17): FECHA CALENDARIO CR DEL PODIO del que nace el premio
+  // (medianoche UTC, convencion `@db.Date` del repo). NULL en todo lo que no es premio ni
+  // reverso de premio.
+  //
+  // ⚠️ LOS DOS UNICOS PARCIALES Y LOS DOS CHECK QUE LA GOBIERNAN VIVEN SOLO EN LA MIGRACION
+  // (`20260827120000_premio_ranking_devengo`), porque Prisma no expresa ni indices parciales ni
+  // CHECK:
+  //   - `pago_mensajero_movimiento_premio_dia_uq`      (mensajero_id, premio_dia) WHERE categoria = 'premio_ranking'
+  //   - `pago_mensajero_movimiento_premio_reverso_uq`  (mensajero_id, premio_dia) WHERE categoria = 'ajuste_pago' AND premio_dia IS NOT NULL
+  //   - `pago_mensajero_movimiento_premio_dia_check`   y el tipo<->categoria de la 172
+  // El primero ES la guarda no negociable de R17. Un `migrate dev --create-only` futuro puede
+  // proponer un `DROP INDEX` fantasma de cualquiera de los dos (no los ve en el datamodel): eso
+  // NUNCA se resuelve borrando el indice — se borra la linea que el diff propone.
+  premioDia       DateTime?                        @map("premio_dia") @db.Date
   // SIN updatedAt / deletedAt: la fila es INMUTABLE (R3). No hay soft-delete.
 
   mensajero   Usuario  @relation("PagoMensajeroMovimientoMensajero", fields: [mensajeroId], references: [id])

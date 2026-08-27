@@ -242,13 +242,22 @@ function servicio(repo: ICierresAdminRepository) {
   // empezara a firmar evidencias, aquí se vería.
   const createSignedUrls = vi.fn(async () => ({}));
   const signedUrls = { createSignedUrls } as unknown as ISignedUrlProvider;
+  const sumarPremiosVivosPorCierre = vi.fn(async (ids: string[]) =>
+    Object.fromEntries(ids.map((id) => [id, "0.00"])),
+  );
   const sumarVigentesPorCierre = vi.fn(async (ids: string[]) =>
     Object.fromEntries(ids.map((id) => [id, "0.00"])),
   );
-  const svc = new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls, {
-    sumarVigentesPorCierre,
-    obtenerCierreParaPago: vi.fn(async () => null),
-  });
+  const svc = new CierresAdminService(
+    repo,
+    zonaRepo,
+    ordenRepo,
+    signedUrls,
+    { sumarVigentesPorCierre, obtenerCierreParaPago: vi.fn(async () => null) },
+    // Feature 293 (T2.3): lectura de premios; "0.00" por id -> las cifras de este archivo,
+    // que miden el tope y el orden del listado, no se mueven ni un centimo.
+    { sumarPremiosVivosPorCierre },
+  );
   return { svc, createSignedUrls, sumarVigentesPorCierre };
 }
 

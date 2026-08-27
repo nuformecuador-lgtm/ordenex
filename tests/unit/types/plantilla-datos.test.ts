@@ -220,11 +220,16 @@ describe("alias del catalogo (R4/R5)", () => {
   // Lo que consume el selector (R4). Si el catalogo crece, este numero se actualiza a
   // conciencia: es la superficie que se le ofrece al maestro.
   //
-  // OJO: el spec de la feature 282 dice «44 entradas, 39 propias». Es un error de conteo del
-  // spec, medido aqui: las claves son 45 (40 propias + 5 alias). Manda la cuenta real.
-  it("el catalogo tiene 45 entradas, 40 propias y 5 alias", () => {
-    expect(CAMPOS_PLANTILLA).toHaveLength(45);
-    expect(CAMPOS_PLANTILLA.filter((c) => c.aliasDe === undefined)).toHaveLength(40);
+  // OJO: el spec de la feature 282 dice «44 entradas, 39 propias». Era un error de conteo del
+  // spec: medido aqui, eran 45 (40 propias + 5 alias). Manda la cuenta real.
+  //
+  // 2026-08-27 (feature 288, pedido humano): se BORRAN `telefono`, `direccion` y
+  // `direccion_completa` —ninguna de las 7 plantillas vivas las usaba—, asi que quedan 42
+  // (37 propias + 5 alias). Los otros 25 campos retirados NO se descuentan aqui: siguen en el
+  // catalogo con `ocultoEnSelector`, que es justo la diferencia entre ocultar y borrar.
+  it("el catalogo tiene 42 entradas, 37 propias y 5 alias", () => {
+    expect(CAMPOS_PLANTILLA).toHaveLength(42);
+    expect(CAMPOS_PLANTILLA.filter((c) => c.aliasDe === undefined)).toHaveLength(37);
     expect(CAMPOS_PLANTILLA.filter((c) => c.aliasDe !== undefined)).toHaveLength(5);
   });
 });

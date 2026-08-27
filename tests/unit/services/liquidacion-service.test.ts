@@ -158,6 +158,8 @@ function buildDobles(opciones: {
   pagadoVigente?: string;
   /** T C.1: los comprobantes que devuelven los dos listados del repositorio. */
   pagos?: LiquidacionPagoDTO[];
+  /** Feature 293 (T2.3, §6/4): Σ de PREMIOS VIVOS del cierre. Ausente = "0.00". */
+  premiosVivos?: string;
 }) {
   const log: Registro[] = [];
   const tx = buildTx(log);
@@ -282,6 +284,14 @@ function buildDobles(opciones: {
     listarCuentasPorPagarPaginado: vi.fn(),
     listarCuentasPorPagarCompleto: vi.fn(),
     obtenerNombreMensajero: vi.fn(),
+    // Feature 293 (T2.3, §6/4): la Σ de PREMIOS VIVOS que `pendienteDelCierre` lee para fijar
+    // el tope del pago. Escribe en el log, como sus hermanas: los caminos que NO deben leerla
+    // (el de la tienda) comparan el log ENTERO y una llamada colada los pondria rojos.
+    sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) => {
+      log.push("leer:premios-vivos");
+      return Object.fromEntries(ids.map((id) => [id, opciones.premiosVivos ?? "0.00"]));
+    }),
+    listarPremiosPorDias: vi.fn(async () => []),
   } as unknown as IPagoMensajeroMovimientoRepository;
 
   const llamadasTx = { n: 0 };
@@ -922,6 +932,10 @@ describe("R20 — el cierre debe existir y estar APROBADO, leido dentro de la tr
       "bloquear:cierre:c1",
       "leer:cierre",
       "leer:pagado-vigente",
+      // Feature 293 (T2.3, §6/4): lo pagable de un cierre pasa a incluir sus premios vivos, asi
+      // que el tope de [P1] se lee con DOS agregaciones y no con una. Va DENTRO de la
+      // transaccion y bajo el candado, como la de arriba.
+      "leer:premios-vivos",
       "crear:documento",
       "crear:movimiento",
       "tx:commit",
@@ -1003,6 +1017,53 @@ describe("R22/R23/R24/R25 — el pendiente del cierre manda [P1]", () => {
 
     expect(r).toEqual({ status: "sin_saldo" });
     expect(d.pagoRepo.crear).not.toHaveBeenCalled();
+  });
+
+  // ── Feature 293 (T2.3, §6/4) — el PREMIO es pagable por este mismo camino ──────────────
+
+  it("293/R24/R27: un cierre SALDADO con premio deja de responder `sin_saldo`", async () => {
+    // Sin el premio, este cierre (E >= P) no genera nada pendiente y el pago se rechaza. Con
+    // 5 000 de premio imputados, el mismo pago tiene que entrar: es literalmente la decision
+    // humana —«el premio se cobra con el flujo de pago por cierre que ya existe»— y sin este
+    // call-site pagarlo seria imposible.
+    const saldado = buildDobles({
+      creditos: "0.00",
+      debitos: "0.00",
+      cierre: cierreDTO({ totalPagoMensajero: "50000.00", totalEfectivo: "80000.00" }),
+    });
+    const conPremio = buildDobles({
+      creditos: "0.00",
+      debitos: "0.00",
+      cierre: cierreDTO({ totalPagoMensajero: "50000.00", totalEfectivo: "80000.00" }),
+      premiosVivos: "5000.00",
+    });
+    const pagoDelPremio = { ...INPUT_MENSAJERO, monto: "5000.00" };
+
+    expect(await saldado.service.registrarPagoMensajero(pagoDelPremio, ACTOR_ADMIN)).toEqual({
+      status: "sin_saldo",
+    });
+    expect(
+      await conPremio.service.registrarPagoMensajero(pagoDelPremio, ACTOR_ADMIN),
+    ).toMatchObject({ status: "ok", restante: "0.00" });
+    expect(conPremio.pagoRepo.crear).toHaveBeenCalledTimes(1);
+  });
+
+  it("293/R25: el premio NO se acota con el efectivo del dia (el tope lo incluye entero)", async () => {
+    // E = 80 000 cubre de sobra la P de 50 000, asi que el cierre no debe nada POR SI MISMO; el
+    // disponible tiene que ser EXACTAMENTE el premio, ni un centimo mas.
+    const d = buildDobles({
+      creditos: "0.00",
+      debitos: "0.00",
+      cierre: cierreDTO({ totalPagoMensajero: "50000.00", totalEfectivo: "80000.00" }),
+      premiosVivos: "5000.00",
+    });
+
+    const r = await d.service.registrarPagoMensajero(
+      { ...INPUT_MENSAJERO, monto: "5000.01" },
+      ACTOR_ADMIN,
+    );
+
+    expect(r).toEqual({ status: "excede", disponible: "5000.00" });
   });
 
   it("R22: con E entre 0 y P, el pendiente es P - E (la regla min(P,E) de la 44, no una copia)", async () => {
@@ -1149,6 +1210,7 @@ describe("R39/R40/R41/R42 — atomicidad, y donde NO se escribe (camino del mens
       "bloquear:cierre:c1",
       "leer:cierre",
       "leer:pagado-vigente",
+      "leer:premios-vivos", // 293/T2.3
       "crear:documento",
     ]);
   });
@@ -1248,10 +1310,12 @@ describe("R43/R47 — la rama idempotente del camino del mensajero", () => {
       "bloquear:cierre:c1",
       "leer:cierre",
       "leer:pagado-vigente",
+      "leer:premios-vivos", // 293/T2.3
       "crear:documento",
       "obtener:por-clave",
       "leer:cierre:fuera-de-tx",
       "leer:pagado-vigente",
+      "leer:premios-vivos", // 293/T2.3: tambien en la relectura idempotente, misma formula
     ]);
   });
 

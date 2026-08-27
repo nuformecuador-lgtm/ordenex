@@ -433,3 +433,83 @@ describe("los tests de arriba no pasan por conjunto vacio", () => {
     expect(cruce.every((f) => f.suma !== "0.00")).toBe(true);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Feature 293 (T2.4, design §6/16, R28) — el PREMIO no descuadra la conciliacion */
+/* -------------------------------------------------------------------------- */
+
+describe("293/R28 · el lado ledger del mensajero EXCLUYE el premio y su compensacion", () => {
+  /**
+   * El libro del mensajero del cierre `c1`, con las CUATRO clases de fila que pueden convivir:
+   *   - lo que el feed escribio AL APROBAR (`pago_devengado`), que SI se concilia;
+   *   - un `ajuste_pago` normal (sin `premio_dia`), que TAMBIEN se concilia — no es del premio;
+   *   - el PREMIO, que nace DESPUES y no esta en el snapshot del cierre;
+   *   - su COMPENSACION (`ajuste_pago` CON `premio_dia`), que tampoco.
+   *
+   * Sin el filtro, las dos ultimas se sumarian al lado ledger y la conciliacion declararia un
+   * descuadre FALSO cada vez que alguien pagara un premio.
+   */
+  const CON_PREMIO: readonly FilaLedgerMensajero[] = [
+    { mensajeroId: MENSAJERO, categoria: "pago_devengado", tipo: "devengo", monto: "40.00", fechaMovimiento: DENTRO, origenTipo: "cierre_dia", origenId: "c1", premioDia: null },
+    { mensajeroId: MENSAJERO, categoria: "ajuste_pago", tipo: "pago", monto: "7.00", fechaMovimiento: DENTRO, origenTipo: "cierre_dia", origenId: "c1", premioDia: null },
+    { mensajeroId: MENSAJERO, categoria: "premio_ranking", tipo: "devengo", monto: "5000.00", fechaMovimiento: DENTRO, origenTipo: "cierre_dia", origenId: "c1", premioDia: new Date("2026-08-02T00:00:00.000Z") },
+    { mensajeroId: MENSAJERO, categoria: "ajuste_pago", tipo: "pago", monto: "5000.00", fechaMovimiento: DENTRO, origenTipo: "cierre_dia", origenId: "c1", premioDia: new Date("2026-08-02T00:00:00.000Z") },
+  ];
+
+  function filasDelMensajero(filas: readonly { ledger: string; suma: string; tipo: string }[]) {
+    return filas.filter((f) => f.ledger === "pago_mensajero_movimiento");
+  }
+
+  it("el premio (5.000) NO entra en la Σ del ledger: el devengo sigue siendo 40,00", async () => {
+    const { repo } = repositorio({ ledgerMensajero: CON_PREMIO });
+
+    const filas = await repo.sumarLedgerPorOrigenDeCierre(CONSULTA(), ["c1", "c2"]);
+
+    expect(filasDelMensajero(filas)).toEqual([
+      { ledger: "pago_mensajero_movimiento", cierreId: "c1", tipo: "devengo", suma: "40.00" },
+      // El `ajuste_pago` NORMAL sigue contando: el filtro no puede sacar la categoria entera.
+      { ledger: "pago_mensajero_movimiento", cierreId: "c1", tipo: "pago", suma: "7.00" },
+    ]);
+    expect(JSON.stringify(filas)).not.toContain("5000.00");
+  });
+
+  it("CONTROL DE NO-VACUIDAD: sin el filtro, esas dos filas SI cambiarian las cifras", async () => {
+    // Es la mitad que impide que este bloque sea una ausencia que se cumple sola: las filas del
+    // premio EXISTEN en el fixture, con importe, dentro del rango y con el origen correcto. Si el
+    // filtro se quitara, el devengo pasaria de 40,00 a 5.040,00 y el pago de 7,00 a 5.007,00.
+    expect(CON_PREMIO.filter((f) => f.categoria === "premio_ranking")).toHaveLength(1);
+    expect(CON_PREMIO.filter((f) => f.categoria === "ajuste_pago" && f.premioDia !== null)).toHaveLength(1);
+    expect(CON_PREMIO.every((f) => f.origenTipo === "cierre_dia" && f.origenId === "c1")).toBe(true);
+    expect(CON_PREMIO.every((f) => f.fechaMovimiento >= DESDE && f.fechaMovimiento < HASTA)).toBe(true);
+  });
+
+  it("el filtro es SOLO del libro del mensajero: los otros dos libros no lo llevan", async () => {
+    const { repo, fake } = repositorio({ ledgerMensajero: CON_PREMIO });
+
+    await repo.sumarLedgerPorOrigenDeCierre(CONSULTA(), ["c1", "c2"]);
+
+    const conNot = fake.llamadas.filter((l) => (l.args.where as Record<string, unknown>).NOT !== undefined);
+    expect(conNot).toHaveLength(1);
+    expect(conNot[0]!.modelo).toBe("pagoMensajeroMovimiento");
+    // Y sigue llevando el vinculo por origen (R23), no una ventana temporal.
+    const where = conNot[0]!.args.where as Record<string, unknown>;
+    expect(where.origenTipo).toBe("cierre_dia");
+    expect(where.origenId).toEqual({ in: ["c1", "c2"] });
+    expect(where).not.toHaveProperty("fechaMovimiento");
+  });
+
+  it("la exclusion se escribe como `NOT { OR }`, que es `¬a AND ¬b` sin ambiguedad", async () => {
+    // `NOT: [a, b]` seria «no se cumplen las dos a la vez», y con esa lectura el premio se
+    // colaria igual. Sobre dinero, una ambiguedad de semantica no es un detalle de estilo.
+    const { repo, fake } = repositorio({ ledgerMensajero: CON_PREMIO });
+
+    await repo.sumarLedgerPorOrigenDeCierre(CONSULTA(), ["c1", "c2"]);
+
+    const where = fake.llamadas.find((l) => l.modelo === "pagoMensajeroMovimiento")!.args
+      .where as Record<string, unknown>;
+    expect(Array.isArray(where.NOT)).toBe(false);
+    expect(where.NOT).toEqual({
+      OR: [{ categoria: "premio_ranking" }, { categoria: "ajuste_pago", premioDia: { not: null } }],
+    });
+  });
+});

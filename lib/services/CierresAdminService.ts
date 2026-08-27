@@ -20,6 +20,7 @@ import type {
   ICierresAdminRepository,
 } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { ILiquidacionPagoRepository } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
+import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -168,6 +169,15 @@ type LiquidacionLecturaRepo = Pick<
   "sumarVigentesPorCierre" | "obtenerCierreParaPago"
 >;
 
+/**
+ * Feature 293 (T2.3, design §7) — del repositorio del LIBRO del mensajero, esta pantalla consume
+ * UN metodo, y es de LECTURA. Mismo criterio que el `Pick` de arriba y por el mismo motivo: deja
+ * escrito —y hace que el typecheck lo imponga— que la pantalla de cierres puede DERIVAR lo
+ * pagable con el premio dentro, y NO puede escribir un premio (R3: el premio solo nace de un
+ * acto humano en `Wallet > Mensajeros`).
+ */
+type PremiosLecturaRepo = Pick<IPagoMensajeroMovimientoRepository, "sumarPremiosVivosPorCierre">;
+
 // Resultado interno de resolver el alcance del actor (R2/R3).
 type AlcanceResult =
   | { status: "ok"; alcance: Alcance }
@@ -191,6 +201,18 @@ export class CierresAdminService implements ICierresAdminService {
     // fuera opcional, olvidar cablearla dejaria todos los pendientes en silencio a `null` —una
     // deuda invisible— en vez de romper el build.
     private readonly liquidacionRepo: LiquidacionLecturaRepo,
+    /**
+     * Feature 293 (T2.3/T2.5, R24/R26/R27) — SOLO LECTURA de los premios imputados, para que lo
+     * pagable de cada cierre aprobado sea `snapshot + premios vivos − pagos vigentes` y no una
+     * segunda formula.
+     *
+     * OBLIGATORIA, sin default, y por el MISMO motivo que `liquidacionRepo`: si fuera opcional,
+     * olvidar cablearla dejaria los pendientes SIN el premio en silencio —un cierre que la
+     * pantalla declara saldado cuando debe ₡5.000— en vez de romper el build. Va DESPUES de
+     * `liquidacionRepo` y ANTES del notificador opcional, asi que no hay forma de cablearla
+     * «casi bien».
+     */
+    private readonly premiosRepo: PremiosLecturaRepo,
     /**
      * FEATURE 271 (T6.6, R42/R47) — notificador de «quedaste BLOQUEADO», con DEFAULT NO-OP. Lo
      * dispara el RECHAZO, que es la UNICA via por la que un mensajero llega a tener DOS cierres
@@ -839,6 +861,10 @@ export class CierresAdminService implements ICierresAdminService {
     // UNA sola llamada, siempre: tambien con la lista vacia, para que el conteo de consultas de
     // este listado sea el mismo se pinte lo que se pinte.
     const pagados = await this.liquidacionRepo.sumarVigentesPorCierre(idsAprobados);
+    // Feature 293 (T2.3, §6/6, R24/R27): los PREMIOS VIVOS de la misma pagina, con la misma
+    // propiedad —UNA llamada por listado, no una por fila—. Es lo que hace que un cierre saldado
+    // al que se le registra un premio vuelva a aparecer con «Pendiente de liquidar».
+    const premios = await this.premiosRepo.sumarPremiosVivosPorCierre(idsAprobados);
 
     // FEATURE 271 (T7.1, R48) — EL ESTADO DE BLOQUEO DEL MENSAJERO, EN LA FILA.
     //
@@ -864,11 +890,12 @@ export class CierresAdminService implements ICierresAdminService {
         ? {
             ...r,
             bloqueoMensajero,
-            pendientePagoMensajero: derivarPendienteCierre(
-              r.totalPagoMensajero, // P — snapshot de la 39
-              r.totales.efectivo, // E — snapshot de la 37
-              pagados[r.cierreId] ?? "0.00", // Σ pagos VIGENTES del cierre (R80)
-            ),
+            pendientePagoMensajero: derivarPendienteCierre({
+              pagoDebido: r.totalPagoMensajero, // P — snapshot de la 39, NUNCA reescrito (293/R13)
+              efectivo: r.totales.efectivo, // E — snapshot de la 37
+              premiosVivos: premios[r.cierreId] ?? "0.00", // Σ premios VIVOS del cierre (293/R24)
+              pagadoVigente: pagados[r.cierreId] ?? "0.00", // Σ pagos VIGENTES del cierre (R80)
+            }),
           }
         : { ...r, bloqueoMensajero }; // R28: no aprobado -> `null` (lo que ya puso `toResumen`)
     });
@@ -889,11 +916,17 @@ export class CierresAdminService implements ICierresAdminService {
     const cierre = await this.liquidacionRepo.obtenerCierreParaPago(cierreId);
     if (cierre === null) return "0.00";
     const pagados = await this.liquidacionRepo.sumarVigentesPorCierre([cierreId]);
-    return derivarPendienteCierre(
-      cierre.totalPagoMensajero,
-      cierre.totalEfectivo,
-      pagados[cierreId] ?? "0.00",
-    );
+    // Feature 293 (T2.3, §6/7): al APROBAR aun no puede haber premio —el premio se registra
+    // despues y solo sobre un cierre ya aprobado—, asi que esta lectura devolvera `"0.00"`
+    // siempre. Se hace igual, y a proposito: dos formulas para el mismo numero es como dos
+    // pantallas acaban diciendo cifras distintas (R26).
+    const premios = await this.premiosRepo.sumarPremiosVivosPorCierre([cierreId]);
+    return derivarPendienteCierre({
+      pagoDebido: cierre.totalPagoMensajero,
+      efectivo: cierre.totalEfectivo,
+      premiosVivos: premios[cierreId] ?? "0.00",
+      pagadoVigente: pagados[cierreId] ?? "0.00",
+    });
   }
 
   /**

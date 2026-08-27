@@ -58,6 +58,29 @@ export interface SnapshotDiaRow {
   filas: SnapshotFilaRow[];
 }
 
+/**
+ * Feature 293 (T3.1, R4) — una fila del PODIO congelado de una fecha, con lo justo para la
+ * pantalla de premios y para el registro. Es un tipo PROPIO y no `SnapshotFilaRow`: aquel
+ * alimenta el DTO del historico, cuyo contrato declara que viaja al cliente
+ * (`lib/types/ranking-snapshot.ts`), y el `filaId` no viaja ahi.
+ *
+ * `filaId` es la clave del `ranking_snapshot_fila`, y es lo UNICO que el cliente manda al
+ * registrar (R16): mensajero, fecha, posicion y monto los resuelve el servidor desde aqui.
+ */
+export interface PodioFilaRow {
+  filaId: string;
+  /** 1 | 2 | 3. Las filas sin podio no salen de este metodo. */
+  posicion: number;
+  mensajeroId: string;
+  /** Nombre CONGELADO (R4): el de la corrida, no el actual. */
+  mensajeroNombre: string;
+  entregadas: number;
+  asignadas: number;
+  /** STRING escala 2 o `null` (sin premio). NUNCA el premio VIGENTE (R15). */
+  premioMonto: string | null;
+  premioDescripcion: string | null;
+}
+
 export interface IRankingSnapshotRepository {
   /**
    * R14 — escribe cabecera + filas en UNA transaccion: todo o nada. Un fallo a mitad deja la
@@ -76,4 +99,31 @@ export interface IRankingSnapshotRepository {
    * vacio es un resultado distinto y legitimo («ese dia no hubo actividad»).
    */
   obtenerPorFecha(fecha: Date): Promise<SnapshotDiaRow | null>;
+  /**
+   * Feature 293 (T3.1, R4/R6) — las filas del PODIO (`posicion` 1, 2 o 3) de esa fecha, en orden
+   * de posicion ascendente, tal como se congelaron.
+   *
+   * `null` = esa fecha NO tiene snapshot (R6: «ese dia no tiene ranking congelado»), que es
+   * distinto de `[]` = la fecha esta congelada pero nadie ocupo podio. Las dos cosas se dicen en
+   * pantalla con textos distintos, asi que el repositorio no puede colapsarlas.
+   */
+  listarPodioDeFecha(fecha: Date): Promise<PodioFilaRow[] | null>;
+  /**
+   * Feature 293 (T3.1, R16) — UNA fila del podio por su id, con la FECHA de su snapshot.
+   *
+   * Es la lectura que sostiene R16: la peticion del cliente solo dice CUAL fila se registra, y
+   * todo lo demas —mensajero, fecha del podio, posicion y monto CONGELADO— sale de aqui. Ningun
+   * dato del cliente puede influir en lo que se escribe.
+   *
+   * `null` = ese id no existe, o existe pero no ocupo podio (`posicion IS NULL`): una fila sin
+   * podio no tiene premio que registrar y no se distingue de una inexistente a efectos de esta
+   * feature.
+   */
+  obtenerFilaDelPodio(filaId: string): Promise<PodioFilaConFecha | null>;
+}
+
+/** La fila del podio mas la fecha calendario de su snapshot (`@db.Date`, medianoche UTC). */
+export interface PodioFilaConFecha extends PodioFilaRow {
+  /** Fecha del snapshot tal como esta en la columna: medianoche UTC del dia calendario CR. */
+  fecha: Date;
 }
