@@ -91,7 +91,27 @@ function fakeLiquidacion(opts: { pagados?: Record<string, string>; cierre?: Cier
   };
 }
 
-function newService(repo: ICierresAdminRepository, liquidacion = fakeLiquidacion()) {
+/**
+ * Feature 293 (T2.3, §6/6) — doble de la lectura de PREMIOS, con contador. `premios` es la Σ de
+ * premios VIVOS por cierre; ausente = "0.00", que es lo que hace que todos los casos previos de
+ * este archivo sigan midiendo exactamente lo que median.
+ */
+function fakePremios(opts: { premios?: Record<string, string> } = {}) {
+  const idsPedidos: string[][] = [];
+  return {
+    idsPedidos,
+    sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) => {
+      idsPedidos.push(ids);
+      return Object.fromEntries(ids.map((id) => [id, opts.premios?.[id] ?? "0.00"]));
+    }),
+  };
+}
+
+function newService(
+  repo: ICierresAdminRepository,
+  liquidacion = fakeLiquidacion(),
+  premios = fakePremios(),
+) {
   const zonaRepo = {
     findCentralZonaId: vi.fn(async () => "z-central"),
   } as unknown as IZonaRepository;
@@ -110,8 +130,15 @@ function newService(repo: ICierresAdminRepository, liquidacion = fakeLiquidacion
   const signedUrls = {
     createSignedUrls: vi.fn(async () => ({})),
   } as unknown as ISignedUrlProvider;
-  const service = new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls, liquidacion);
-  return { service, liquidacion };
+  const service = new CierresAdminService(
+    repo,
+    zonaRepo,
+    ordenRepo,
+    signedUrls,
+    liquidacion,
+    premios,
+  );
+  return { service, liquidacion, premios };
 }
 
 // ── R22: la derivacion ──────────────────────────────────────────────────────────────────────
@@ -190,7 +217,14 @@ describe("R22 — el pendiente sale de min(P, E) menos los pagos VIGENTES, en el
       const r = await service.listarCierresAdmin(MAESTRO);
 
       if (r.status !== "ok") throw new Error("esperaba ok");
-      expect(r.historico[0]!.pendientePagoMensajero).toBe(derivarPendienteCierre(p, e, pagado));
+      expect(r.historico[0]!.pendientePagoMensajero).toBe(
+        derivarPendienteCierre({
+          pagoDebido: p,
+          efectivo: e,
+          premiosVivos: "0.00",
+          pagadoVigente: pagado,
+        }),
+      );
     }
   });
 });
@@ -320,7 +354,14 @@ describe("R26 — los tres listados traen el campo, con UNA sola consulta cada u
     } as unknown as IOrdenRepository;
     const signedUrls = { createSignedUrls: vi.fn(async () => ({})) } as unknown as ISignedUrlProvider;
     const liquidacion = fakeLiquidacion();
-    const service = new CierresAdminService(fakeRepo(), zonaRepo, ordenRepo, signedUrls, liquidacion);
+    const service = new CierresAdminService(
+      fakeRepo(),
+      zonaRepo,
+      ordenRepo,
+      signedUrls,
+      liquidacion,
+      fakePremios(),
+    );
 
     const r = await service.listarCierresAdmin({ usuarioId: "sat", rol: "adminSatelite" });
 
@@ -478,5 +519,110 @@ describe("R16/R18 — aprobar devuelve el pendiente, sin convertirlo en condicio
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(typeof r.pendientePagoMensajero).toBe("string");
     expect(r.pendientePagoMensajero).toMatch(/^\d+\.\d{2}$/);
+  });
+});
+
+// ── Feature 293 (T2.3, §6 filas 6 y 7) — el PREMIO entra en lo pagable de esta pantalla ─────
+
+describe("293/R24/R27 — un cierre SALDADO con premio vuelve a estar pendiente", () => {
+  it("`conPendiente` (listado): el badge pasa de `0.00` al importe del premio", async () => {
+    // El cierre debe 50 000 y ya se le entregaron los 50 000: SALDADO. Se le imputa un premio
+    // de 5 000 y el listado tiene que volver a decir que hay deuda — es el caso de borde 2 de la
+    // ficha, y el que se ve el primer dia en produccion (donde hoy todos los cierres estan a 0).
+    const repo = fakeRepo({
+      findCierresByAlcance: vi.fn(async () => [row({ cierreId: "c1" })]),
+    });
+
+    const saldado = await newService(
+      repo,
+      fakeLiquidacion({ pagados: { c1: "50000.00" } }),
+      fakePremios(),
+    ).service.listarCierresAdmin(MAESTRO);
+    const conPremio = await newService(
+      repo,
+      fakeLiquidacion({ pagados: { c1: "50000.00" } }),
+      fakePremios({ premios: { c1: "5000.00" } }),
+    ).service.listarCierresAdmin(MAESTRO);
+
+    if (saldado.status !== "ok" || conPremio.status !== "ok") throw new Error("esperaba ok");
+    expect(saldado.historico[0]!.pendientePagoMensajero).toBe("0.00");
+    expect(conPremio.historico[0]!.pendientePagoMensajero).toBe("5000.00");
+  });
+
+  it("el snapshot del cierre NO se toca (R13): `totalPagoMensajero` sigue diciendo 50 000", async () => {
+    const repo = fakeRepo({
+      findCierresByAlcance: vi.fn(async () => [row({ cierreId: "c1" })]),
+    });
+    const { service } = newService(
+      repo,
+      fakeLiquidacion({ pagados: { c1: "50000.00" } }),
+      fakePremios({ premios: { c1: "5000.00" } }),
+    );
+
+    const r = await service.listarCierresAdmin(MAESTRO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.historico[0]!.totalPagoMensajero).toBe("50000.00");
+    expect(r.historico[0]!.totales).toEqual(CERO);
+  });
+
+  it("el detalle de UN cierre dice la MISMA cifra que el listado (R26)", async () => {
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
+        cierre: row({ cierreId: "c1" }),
+        gestiones: [],
+      })),
+    });
+    const { service } = newService(
+      repo,
+      fakeLiquidacion({ pagados: { c1: "50000.00" } }),
+      fakePremios({ premios: { c1: "5000.00" } }),
+    );
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.cierre.pendientePagoMensajero).toBe("5000.00");
+  });
+
+  it("UNA sola consulta de premios por listado, con los ids de la pagina (no una por fila)", async () => {
+    const repo = fakeRepo({
+      findCierresByAlcance: vi.fn(async () => [
+        row({ cierreId: "c1" }),
+        row({ cierreId: "c2" }),
+        row({ cierreId: "c3", estado: "solicitado" }), // R28: los no aprobados no entran
+      ]),
+    });
+    const { service, premios } = newService(repo);
+
+    await service.listarCierresAdmin(MAESTRO);
+
+    expect(premios.sumarPremiosVivosPorCierre).toHaveBeenCalledTimes(1);
+    expect(premios.idsPedidos).toEqual([["c1", "c2"]]);
+  });
+
+  it("`pendienteTrasAprobar` usa la MISMA formula (con el premio dentro)", async () => {
+    // Al aprobar todavia no puede haber premio; lo que se afirma aqui es que si lo hubiera, esta
+    // superficie diria lo mismo que el listado — que es lo que R26 exige y lo que impide que dos
+    // pantallas den cifras distintas.
+    const { service } = newService(
+      fakeRepo(),
+      fakeLiquidacion({
+        cierre: {
+          id: "c1",
+          mensajeroId: "m1",
+          estado: "aprobado",
+          totalPagoMensajero: "50000.00",
+          totalEfectivo: "50000.00",
+        },
+      }),
+      fakePremios({ premios: { c1: "5000.00" } }),
+    );
+
+    const r = await service.aprobarCierre("c1", MAESTRO);
+
+    expect(r).toMatchObject({ status: "ok", pendientePagoMensajero: "5000.00" });
   });
 });

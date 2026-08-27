@@ -199,9 +199,14 @@ describe("R29 — el `min(P, E)` del pago al mensajero se calcula con ESA `E`", 
   it("el pendiente del cierre (172) hereda la misma `E`, sin reimplementar la regla", async () => {
     const { E, P } = await snapshotDelCierre();
     // Sin pagos vigentes contra el cierre todavía.
-    expect(derivarPendienteCierre(P, E, "0.00")).toBe("1000.00");
+    // 293/T2.3 — NO-REGRESION: con `premiosVivos: "0.00"` las dos cifras son las de antes.
+    expect(
+      derivarPendienteCierre({ pagoDebido: P, efectivo: E, premiosVivos: "0.00", pagadoVigente: "0.00" }),
+    ).toBe("1000.00");
     // Y si ya se le entregaron 400 de esos 1.000, quedan 600.
-    expect(derivarPendienteCierre(P, E, "400.00")).toBe("600.00");
+    expect(
+      derivarPendienteCierre({ pagoDebido: P, efectivo: E, premiosVivos: "0.00", pagadoVigente: "400.00" }),
+    ).toBe("600.00");
   });
 
   it("una entrega de UN solo método sigue comportándose exactamente igual que antes", async () => {

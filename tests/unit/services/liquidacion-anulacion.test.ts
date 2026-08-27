@@ -162,6 +162,8 @@ function buildDobles(opciones: {
   debitos?: string;
   cierre?: CierreParaPagoDTO | null;
   pagadoVigente?: string;
+  /** Feature 293 (T2.3): Σ de PREMIOS VIVOS del cierre del pago. Ausente = "0.00". */
+  premiosVivos?: string;
   ahora?: Date;
 }) {
   const log: string[] = [];
@@ -280,6 +282,13 @@ function buildDobles(opciones: {
     listarCuentasPorPagarPaginado: vi.fn(),
     listarCuentasPorPagarCompleto: vi.fn(),
     obtenerNombreMensajero: vi.fn(),
+    // Feature 293 (T2.3) — el consumidor de `derivarPendienteCierre` que `design.md §6` NO
+    // enumeraba y que el compilador SI señalo: `restanteTrasAnular`. Responde «cuanto se le debe
+    // por este cierre una vez aplicado el contraasiento», que es la pregunta de R26.
+    sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) =>
+      Object.fromEntries(ids.map((id) => [id, opciones.premiosVivos ?? "0.00"])),
+    ),
+    listarPremiosPorDias: vi.fn(async () => []),
   } as unknown as IPagoMensajeroMovimientoRepository;
 
   const llamadasTx = { n: 0 };
@@ -773,6 +782,21 @@ describe("R71 — el disponible vuelve al valor exacto previo al pago", () => {
     const r = await d.service.anularPago(anular(), ACTOR_ADMIN);
 
     expect(r).toMatchObject({ status: "ok", restante: "0.01" });
+  });
+
+  it("293/R26: el restante tras anular INCLUYE los premios vivos del cierre", async () => {
+    // El mismo caso de arriba (cierre de 50 000, pago de 15 000 que se anula) pero con 5 000 de
+    // premio imputados: el restante correcto es 55 000, no 50 000. Sin este call-site en el
+    // calculo nuevo, la pantalla ofreceria pagar 5 000 menos de lo que se debe.
+    const d = buildDobles({
+      pago: pagoAMensajero(),
+      pagadoVigente: "15000.00",
+      premiosVivos: "5000.00",
+    });
+
+    const r = await d.service.anularPago(anular(), ACTOR_ADMIN);
+
+    expect(r).toMatchObject({ status: "ok", restante: "55000.00" });
   });
 
   it("MENSAJERO: el pendiente devuelto NUNCA supera lo que el cierre genera", async () => {

@@ -73,6 +73,13 @@ export const WALLET_ORIGEN_TIPO_SEED = [
   // para responder "movimientos de este origen", y un `origen_id` que apunta a `orden_incidente`
   // etiquetado como `gestion_orden` devolveria basura.
   "orden_incidente",
+  // Feature 293 (T1.5, design §3.4, R20): origen del EGRESO DE CAJA del premio del ranking y de
+  // su reverso — la FILA DEL PODIO (`ranking_snapshot_fila.id`), no el cierre. Valor PROPIO por
+  // el mismo motivo que `orden_incidente`: el indice `(origen_tipo, origen_id)` existe para
+  // responder «movimientos de este origen», y un `origen_id` que apunta a la fila del podio
+  // etiquetado como `cierre_dia` ademas de devolver basura CHOCARIA con el
+  // `egreso_pago_mensajero` que el feed del cierre ya escribio.
+  "ranking_snapshot_fila",
 ] as const satisfies readonly PrismaWalletOrigenTipo[];
 
 export type WalletOrigenTipo = (typeof WALLET_ORIGEN_TIPO_SEED)[number];

@@ -694,7 +694,17 @@ const CATALOGO = [
     fuente: { tipo: "ledger", tablas: ["pago_mensajero_movimiento"] },
     alcance: ALCANCE_FINANCIERA,
     definicion: {
-      categorias: ["pago_devengado", "pago_efectivo", "liquidacion", "ajuste_devengo", "ajuste_pago"],
+      // Feature 293 (T1.7, design §6/17): + `premio_ranking`. El CALCULO no cambia (agrega por
+      // `tipo`, y el premio es un devengo mas); lo que cambia es el CATALOGO, que debe nombrar
+      // todas las categorias del libro o queda incompleto.
+      categorias: [
+        "pago_devengado",
+        "pago_efectivo",
+        "liquidacion",
+        "ajuste_devengo",
+        "ajuste_pago",
+        "premio_ranking",
+      ],
     },
   },
   {

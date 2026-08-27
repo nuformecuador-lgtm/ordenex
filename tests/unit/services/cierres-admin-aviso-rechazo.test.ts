@@ -127,14 +127,28 @@ function newService(
     ),
     obtenerCierreParaPago: vi.fn(async () => null),
   };
+  // Feature 293 (T2.3): lectura de premios; "0.00" por id -> lo pagable no cambia.
+  const premiosRepo = {
+    sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) =>
+      Object.fromEntries(ids.map((id) => [id, "0.00"])),
+    ),
+  };
   const notificar =
     opts.notificar ??
     (vi.fn(async () => {
       traza.push("notificar");
     }) as MensajeroBloqueadoNotificador);
   const service = opts.sinNotificador
-    ? new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls, liquidacionRepo)
-    : new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls, liquidacionRepo, notificar);
+    ? new CierresAdminService(repo, zonaRepo, ordenRepo, signedUrls, liquidacionRepo, premiosRepo)
+    : new CierresAdminService(
+        repo,
+        zonaRepo,
+        ordenRepo,
+        signedUrls,
+        liquidacionRepo,
+        premiosRepo,
+        notificar,
+      );
   return { service, repo, ordenRepo, findBloqueoDetalle, notificar, traza };
 }
 

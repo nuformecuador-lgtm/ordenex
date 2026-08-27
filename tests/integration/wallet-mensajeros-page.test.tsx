@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { ReactElement } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Feature 57: el PageHeader del topbar monta el LogoutButton (client:
@@ -33,6 +34,15 @@ import type {
 
 vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(),
+}));
+
+// Feature 293 (T5.3): la página monta el panel de PREMIOS DEL RANKING, que es un componente
+// cliente y consume sus tres Server Actions. Se doblan por el mismo motivo que las de wallet:
+// acá se prueba el montaje y el control de acceso de la PÁGINA, no la lectura del podio.
+vi.mock("@/lib/actions/premio-ranking-devengo", () => ({
+  listarPremiosDelDiaAction: vi.fn(),
+  registrarPremioAction: vi.fn(),
+  anularPremioAction: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/wallet-mensajero", () => ({
@@ -72,10 +82,15 @@ import {
   listarCuentasPorPagarPaginadoAction,
   listarPagosDeMensajeroAction,
 } from "@/lib/actions/wallet-mensajero";
+import { listarPremiosDelDiaAction } from "@/lib/actions/premio-ranking-devengo";
+// `fechaObjetivo` solo se usa para el PAYLOAD que devuelve la Server Action doblada; las dos
+// fechas que la página pinta se afirman contra su literal (ver el caso de R8 más abajo).
+import { fechaObjetivo } from "@/lib/ranking/snapshot-dia";
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarCuentasPorPagarPaginadoAction);
 const desgloseMock = vi.mocked(listarPagosDeMensajeroAction);
+const premiosMock = vi.mocked(listarPremiosDelDiaAction);
 
 // Feature 170 — FASE 2 (T L.2): la PÁGINA 1 del listado. El `total` es el del CONJUNTO —30
 // mensajeros de los que la página trae dos—, para que un pre-fetch que bajara `items.length`
@@ -192,7 +207,28 @@ beforeEach(() => {
   tableCalls.length = 0;
   listarMock.mockResolvedValue(CUENTAS_OK);
   desgloseMock.mockResolvedValue({ status: "ok", data: DESGLOSE_DATA });
+  // Feature 293 (T5.3): sin podio congelado. Acá se mide QUE EL PANEL ESTÁ, no lo que pinta
+  // dentro (eso es `PremiosRankingPanel.test.tsx`).
+  premiosMock.mockResolvedValue({
+    status: "ok",
+    fecha: fechaObjetivo(new Date()),
+    hayPodio: false,
+    filas: [],
+  });
 });
+
+/**
+ * Renderiza el Server Component ya resuelto con los proveedores que la app le pone encima
+ * (`app/(app)/layout.tsx`): el de avisos —el panel de premios usa `useToast`— y una caché de
+ * SWR aislada por test, para que un test no vea la lectura del anterior.
+ */
+async function renderPagina(pagina: ReactElement) {
+  return render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <ToastProvider>{pagina}</ToastProvider>
+    </SWRConfig>,
+  );
+}
 
 afterEach(() => {
   cleanup();
@@ -212,6 +248,9 @@ describe("WalletMensajerosPage — control de acceso por rol (R19)", () => {
     }
     // R19: no expone cuentas por pagar para rol no autorizado.
     expect(listarMock).not.toHaveBeenCalled();
+    // Feature 293 (T5.3, R1/R2): tampoco el panel de premios. No es que se oculte el control:
+    // es que la página entera no llega a montarse, así que no hay podio que pedir.
+    expect(premiosMock).not.toHaveBeenCalled();
   });
 
   it("feature 94 (paridad adm↔maestro): el admin ve las cuentas por pagar igual que el maestro", async () => {
@@ -220,7 +259,7 @@ describe("WalletMensajerosPage — control de acceso por rol (R19)", () => {
       "@/app/(app)/wallet/mensajeros/page"
     );
 
-    render(await WalletMensajerosPage());
+    await renderPagina(await WalletMensajerosPage());
 
     expect(
       screen.getByRole("heading", {
@@ -241,6 +280,7 @@ describe("WalletMensajerosPage — control de acceso por rol (R19)", () => {
     );
     await expect(WalletMensajerosPage()).rejects.toThrow("NEXT_NOT_FOUND");
     expect(listarMock).not.toHaveBeenCalled();
+    expect(premiosMock).not.toHaveBeenCalled();
   });
 
   it("si la action responde forbidden, no renderiza la tabla (defensa en profundidad)", async () => {
@@ -260,7 +300,7 @@ describe("WalletMensajerosPage — pre-fetch del maestro (R18/R21)", () => {
       "@/app/(app)/wallet/mensajeros/page"
     );
 
-    render(await WalletMensajerosPage());
+    await renderPagina(await WalletMensajerosPage());
 
     // R18: titulo de la pagina + tabla de cuentas por pagar montada.
     expect(
@@ -299,7 +339,7 @@ describe("WalletMensajerosPage — pre-fetch del maestro (R18/R21)", () => {
       "@/app/(app)/wallet/mensajeros/page"
     );
 
-    render(await WalletMensajerosPage());
+    await renderPagina(await WalletMensajerosPage());
 
     expect(listarMock).toHaveBeenCalledTimes(1);
     expect(listarMock).toHaveBeenCalledWith({});
@@ -308,6 +348,86 @@ describe("WalletMensajerosPage — pre-fetch del maestro (R18/R21)", () => {
     expect(initialData.total).toBe(TOTAL_CONJUNTO);
     expect(initialData.total).not.toBe(initialData.items.length);
     expect(initialData.pageSize).toBe(25);
+  });
+});
+
+// =========================================================================
+// Feature 293 (T5.3, R1) — EL PANEL DE PREMIOS DEL RANKING vive en ESTA página
+// =========================================================================
+//
+// R1 dice «únicamente desde `Wallet > Mensajeros`». La mitad «únicamente» la vigila la guardia
+// de alcance sobre el árbol; la mitad «desde acá» sólo se puede medir montando la página, y es
+// la que impide que las tres Server Actions se queden sin superficie —el estado exacto en el
+// que `rutearABodegaSatelite` pasó cinco días en producción—.
+
+describe("WalletMensajerosPage — el panel de premios del ranking (R1)", () => {
+  it("el maestro lo ve, ENCIMA de la tabla de cuentas por pagar", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
+    const { default: WalletMensajerosPage } = await import(
+      "@/app/(app)/wallet/mensajeros/page"
+    );
+
+    await renderPagina(await WalletMensajerosPage());
+
+    const panel = screen.getByRole("region", { name: "Premios del ranking" });
+    const tabla = screen.getByTestId("cuentas-por-pagar-table-stub");
+    // «Encima» no es una impresión: el panel PRECEDE a la tabla en el documento.
+    expect(panel.compareDocumentPosition(tabla)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    // Y está CABLEADO: pide el podio del día por su Server Action.
+    await waitFor(() => expect(premiosMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("feature 94 (paridad adm↔maestro): el admin también lo ve", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "a", rol: "admin" });
+    const { default: WalletMensajerosPage } = await import(
+      "@/app/(app)/wallet/mensajeros/page"
+    );
+
+    await renderPagina(await WalletMensajerosPage());
+
+    expect(
+      screen.getByRole("region", { name: "Premios del ranking" }),
+    ).toBeInTheDocument();
+  });
+
+  it("abre en el día que el ranking congela y no deja elegir uno posterior a hoy (R8)", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
+    const { default: WalletMensajerosPage } = await import(
+      "@/app/(app)/wallet/mensajeros/page"
+    );
+
+    // Los dos días los resuelve el SERVIDOR con los mismos helpers que el cron del ranking (el
+    // reloj del navegador no es el de Costa Rica), así que aquí se CONGELA el reloj y se afirma
+    // contra el LITERAL. Antes se comparaba contra `fechaObjetivo(ahora)` y
+    // `fechaCalendarioCR(ahora)` —las mismas funciones que produce la página—: eso está verde
+    // aunque devuelvan el día equivocado, y ese día decide qué premio se ofrece registrar.
+    //
+    // Los literales son un EJEMPLO del contrato fijado a un instante, no un contrato en sí. El
+    // instante está elegido para que discrimine: las 02:00Z del 28 son las **20:00 del 27 en
+    // Costa Rica**, o sea que la fecha UTC ya va un día por delante. Un atajo por
+    // `toISOString().slice(0,10)` —el ⛔ que documenta `lib/ranking/snapshot-dia.ts`— daría
+    // 2026-08-27 / 2026-08-28 y este caso lo vería.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-28T02:00:00.000Z"));
+    let pagina: ReactElement;
+    try {
+      pagina = await WalletMensajerosPage();
+    } finally {
+      // El render y el `waitFor` van con el reloj REAL: lo que se congela es la resolución de
+      // los dos días, que ocurre en el servidor y ya viajó como prop.
+      vi.useRealTimers();
+    }
+
+    await renderPagina(pagina);
+
+    const selector = screen.getByLabelText("Día del podio");
+    expect(selector).toHaveValue("2026-08-26"); // D−1 en CR: el último día que el cron congela
+    expect(selector).toHaveAttribute("max", "2026-08-27"); // hoy en CR (R8)
+    await waitFor(() =>
+      expect(premiosMock).toHaveBeenCalledWith({ fecha: "2026-08-26" }),
+    );
   });
 });
 

@@ -226,10 +226,17 @@ describe("UP — CHECK tipo <-> categoria de los dos libros (condicion heredada 
     expect([...ramasMensajero.keys()].sort()).toEqual(["devengo", "pago"]);
     expect(ramasMensajero.get("devengo")).toEqual(["pago_devengado", "ajuste_devengo"]);
     expect(ramasMensajero.get("pago")).toEqual(["pago_efectivo", "liquidacion", "ajuste_pago"]);
-    // Exhaustivo sobre el enum REAL y ni un valor de mas (medido en produccion, T A.0: 5/5).
+    // Exhaustivo sobre el enum TAL COMO ERA cuando esta migracion se escribio (T A.0 lo midio
+    // en produccion: 5/5). El `.sql` de una carpeta es una FOTO punto-en-el-tiempo y no se
+    // reescribe; lo que se resta aqui son los valores que features POSTERIORES anadieron, cada
+    // una con su propio `DROP`+`ADD` de este mismo CHECK:
+    //   - `premio_ranking` (293): lo anade `20260827120000_premio_ranking_devengo`.
+    const AGREGADAS_DESPUES = ["premio_ranking"];
     const clasificadas = [...ramasMensajero.values()].flat();
     expect([...clasificadas].sort()).toEqual(
-      valoresDelEnum("PagoMensajeroMovimientoCategoria").sort(),
+      valoresDelEnum("PagoMensajeroMovimientoCategoria")
+        .filter((v) => !AGREGADAS_DESPUES.includes(v))
+        .sort(),
     );
     expect(new Set(clasificadas).size).toBe(clasificadas.length);
     expect([...ramasMensajero.keys()].sort()).toEqual(

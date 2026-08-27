@@ -4,8 +4,11 @@ import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { listarCuentasPorPagarPaginadoAction } from "@/lib/actions/wallet-mensajero";
+import { fechaObjetivo } from "@/lib/ranking/snapshot-dia";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 
 import { CuentasPorPagarTable } from "./_components/CuentasPorPagarTable";
+import { PremiosRankingPanel } from "./_components/PremiosRankingPanel";
 
 /**
  * Feature 44 (T14, R18/R19/R21/R22) — pagina `/wallet/mensajeros`: las CUENTAS POR PAGAR a
@@ -38,12 +41,32 @@ export default async function WalletMensajerosPage() {
     notFound();
   }
 
+  // Feature 293 (T5.3, design §9) — los dos días que el panel de premios necesita, resueltos en
+  // el SERVIDOR: el que muestra al abrirse (el último que el ranking congeló, `fechaObjetivo` =
+  // ayer en CR — la misma función que usa el cron) y la cota superior del selector (hoy en CR,
+  // R8). No se calculan en el cliente porque el reloj del navegador no es el de Costa Rica y
+  // porque el render del servidor y el de la hidratación tienen que dar el mismo día.
+  const ahora = new Date();
+  const fechaInicialPremios = fechaObjetivo(ahora);
+  const fechaMaximaPremios = fechaCalendarioCR(ahora);
+
   return (
     <AppPage
       title="Cuentas por pagar a mensajeros"
       description="Lo devengado, lo ya pagado del efectivo y lo pendiente por mensajero"
     >
       <section aria-label="Cuentas por pagar a mensajeros" className="flex flex-col gap-4">
+        {/*
+          Feature 293 (T5.3, R1) — el panel de PREMIOS DEL RANKING, encima de la tabla. Va aquí
+          y en ningún otro sitio: es la única puerta desde la que se registra el premio del
+          podio. El rol NO se vuelve a decidir dentro —arriba ya hubo `notFound()` para todo lo
+          que no es acceso total—, y el servicio responde `forbidden` con el mismo predicado.
+        */}
+        <PremiosRankingPanel
+          fechaInicial={fechaInicialPremios}
+          fechaMaxima={fechaMaximaPremios}
+        />
+
         <CuentasPorPagarTable
           initialData={{
             items: cuentasResult.items,

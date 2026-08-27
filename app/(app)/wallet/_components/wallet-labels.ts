@@ -207,6 +207,10 @@ export const ORIGEN_LABEL: Record<WalletOrigenTipo, string> = {
   // movimiento, no la accion. `ORIGEN_LABEL` es un `Record` completo — sin esta clave el build
   // no compila, que es exactamente la red que obliga a decidir la etiqueta.
   orden_incidente: "Incidente de orden",
+  // Feature 293 (T1.6, R20/R34): origen del egreso de caja del premio del ranking y de su
+  // reverso — la FILA DEL PODIO del dia congelado. Misma forma que sus hermanos: nombra la
+  // ENTIDAD que origina el movimiento.
+  ranking_snapshot_fila: "Premio del ranking",
 };
 
 /** Opciones del `Select` de tipo (con opción "todos" = value ""). */

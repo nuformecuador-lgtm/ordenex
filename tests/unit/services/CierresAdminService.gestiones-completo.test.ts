@@ -133,6 +133,8 @@ function newService(repo: ReturnType<typeof fakeRepo>) {
       sumarVigentesPorCierre: vi.fn(async () => new Map()),
       obtenerCierreParaPago: vi.fn(async () => null),
     } as never,
+    // Feature 293 (T2.3): lectura de premios; este caso no los ejercita.
+    { sumarPremiosVivosPorCierre: vi.fn(async () => ({})) },
   );
   return { service, createSignedUrls };
 }

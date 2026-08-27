@@ -362,6 +362,10 @@ function aprobar(db: Db, cierreId: string) {
       listarCuentasPorPagarPaginado: vi.fn(),
       listarCuentasPorPagarCompleto: vi.fn(),
       obtenerNombreMensajero: vi.fn(),
+      // 293/T2.2-T3.3: los dos metodos NUEVOS del contrato (lectura). No-op aqui: este
+      // doble no ejercita el premio.
+      sumarPremiosVivosPorCierre: vi.fn(async () => ({})),
+      listarPremiosPorDias: vi.fn(async () => []),
     },
     { construirMovimientosDePago: vi.fn(async () => ({ libro: [], egresoCaja: [] })) },
     // Feature 158: feed del egreso de indemnizacion (real: sin incidentes devuelve []).

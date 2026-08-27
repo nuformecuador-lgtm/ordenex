@@ -239,10 +239,44 @@ export class ConciliacionCierresAnaliticaRepository
       orderBy: [{ origenId: "asc" as const }, { tipo: "asc" as const }],
     });
 
+    /**
+     * Feature 293 (T2.4, design §6/16, R28) — EL LIBRO DEL MENSAJERO EXCLUYE EL PREMIO.
+     *
+     * Esta conciliacion compara el SNAPSHOT del cierre contra lo que ese cierre movio **al
+     * aprobarse**. El premio del ranking nace DESPUES, por un acto humano, y NO esta en el
+     * snapshot: sin este filtro cada premio declararia un descuadre FALSO —y dispararia el aviso
+     * del servicio— cada vez que alguien pagara uno.
+     *
+     * Se excluyen las DOS categorias del mundo del premio, no solo una: si se dejara fuera
+     * `premio_ranking` pero entrara su compensacion (`ajuste_pago` con `premio_dia`), anular un
+     * premio restaria del lado ledger un dinero que el snapshot nunca conto — el mismo descuadre
+     * falso con el signo contrario. El `premioDia: { not: null }` es lo que separa esa
+     * compensacion de un `ajuste_pago` cualquiera, que SI debe seguir contando.
+     *
+     * Los otros dos libros no llevan filtro: el premio no les escribe ni una fila (su egreso de
+     * caja va con `origen_tipo = 'ranking_snapshot_fila'`, que este WHERE ya deja fuera).
+     */
+    const agregadoDelMensajero = () => ({
+      ...agregado(),
+      where: {
+        ...where,
+        // `NOT: { OR: [...] }` y NO `NOT: [a, b]`: el primero es `¬a AND ¬b` en cualquier
+        // lectura; el segundo depende de como se interprete un `NOT` con lista, y con la lectura
+        // «no se cumplen las dos a la vez» el premio se colaria igualmente. Sobre dinero, una
+        // ambiguedad de semantica no es un detalle de estilo.
+        NOT: {
+          OR: [
+            { categoria: "premio_ranking" as const },
+            { categoria: "ajuste_pago" as const, premioDia: { not: null } },
+          ],
+        },
+      },
+    });
+
     const [caja, tienda, mensajero] = await Promise.all([
       this.prisma.walletMovimiento.groupBy(agregado()),
       this.prisma.walletTiendaMovimiento.groupBy(agregado()),
-      this.prisma.pagoMensajeroMovimiento.groupBy(agregado()),
+      this.prisma.pagoMensajeroMovimiento.groupBy(agregadoDelMensajero()),
     ]);
 
     const porLedger: Readonly<Record<LedgerConciliable, readonly GrupoLedgerCrudo[]>> = {

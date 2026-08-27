@@ -124,6 +124,12 @@ function buildService(): ICierresAdminService {
     // necesita (`Pick`), asi que esta pantalla no puede registrar ni anular un pago: aprobar y
     // pagar son dos escrituras distintas (design §8).
     new LiquidacionPagoRepository(prisma),
+    // Feature 293 (T2.5, R24/R26/R27): COMPOSITION ROOT de la lectura de PREMIOS. Sin esta
+    // linea el servicio no compila —la dependencia es obligatoria a proposito—, y con ella lo
+    // pagable de cada cierre aprobado incluye el premio en las TRES superficies que
+    // `conPendiente` alimenta: listado, historico y detalle. El servicio solo recibe el metodo
+    // de suma (`Pick`), asi que esta pantalla no puede escribir un premio (R3).
+    new PagoMensajeroMovimientoRepository(prisma),
     // FEATURE 271 (T6.6, R42): COMPOSITION ROOT del aviso «quedaste bloqueado». Se cablea aqui y
     // no como default del service (ver `lib/notificaciones/notificadores.ts`): el default es el
     // no-op, para que ninguna suite que instancie el service escriba avisos en la base.
