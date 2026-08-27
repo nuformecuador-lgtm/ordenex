@@ -187,11 +187,18 @@ export function ChatConversacion({
 
   const hiloOk = data?.status === "ok" ? data : null;
   const mensajes = hiloOk?.mensajes ?? [];
-  // El cliente respondió al menos una vez ⇒ se habilita el texto libre. Ya enviamos una
-  // plantilla y sigue sin responder ⇒ no se ofrece otra (misma regla que el detalle).
-  const hayEntrante = mensajes.some((m) => m.direccion === "entrante");
-  const haySaliente = mensajes.some((m) => m.direccion === "saliente");
-  const plantillasBloqueadas = !hayEntrante && haySaliente;
+  // QUÉ SE PUEDE ENVIAR lo decide el SERVIDOR, y lo decide POR DÍA. Aquí vivían dos
+  // predicados sobre el hilo entero (`!hayEntrante && haySaliente`) que ignoraban la fecha:
+  // como el hilo sobrevive a las reasignaciones, un saliente de ayer dejaba el chat mudo
+  // para siempre y el mensajero que recibía el paquete al día siguiente no podía ni mandar
+  // plantilla ni escribir. `listarHiloChat` ahora mide contra el día calendario de CR.
+  //
+  // MIENTRAS EL HILO CARGA las dos van en `false`, que es el estado de arranque del día:
+  // se puede elegir plantilla y no se puede teclear. Es también lo que se ve si la acción
+  // responde `forbidden`, y es el lado conservador (nunca ofrece un envío que el servidor
+  // vaya a rechazar).
+  const plantillaBloqueada = hiloOk?.plantillaBloqueada ?? false;
+  const textoLibreHabilitado = hiloOk?.textoLibreHabilitado ?? false;
 
   // Feature 161 (R21-R23): tono cuando el refresco de 10 s trae un mensaje NUEVO del
   // cliente. Se cuentan SOLO los entrantes, de modo que un saliente propio no suene (R22).
@@ -273,16 +280,16 @@ export function ChatConversacion({
   const puedeEnviar =
     !enviando &&
     borrador.texto.trim().length > 0 &&
-    (hayEntrante || borrador.plantillaId !== null);
+    (textoLibreHabilitado || borrador.plantillaId !== null);
   // Sin respuesta del cliente el composer no acepta tecleo; con plantilla elegida muestra
   // su texto en solo-lectura (se enviará tal cual, como exige Meta fuera de ventana).
   const composerDeshabilitado =
-    enviando || (!hayEntrante && borrador.plantillaId === null);
-  const composerSoloLectura = !hayEntrante;
+    enviando || (!textoLibreHabilitado && borrador.plantillaId === null);
+  const composerSoloLectura = !textoLibreHabilitado;
 
   /** Elegir una plantilla rellena el composer y habilita el envío. */
   function elegirPlantilla(plantilla: PlantillaTextoDTO) {
-    if (plantillasBloqueadas) return;
+    if (plantillaBloqueada) return;
     setBorrador({ texto: renderizar(plantilla), plantillaId: plantilla.id });
     composerRef.current?.focus();
   }
@@ -347,7 +354,7 @@ export function ChatConversacion({
     if (texto === "" || enviando) return;
     setEnviando(true);
     try {
-      if (hayEntrante) {
+      if (textoLibreHabilitado) {
         await enviarTextoLibre(texto);
       } else if (borrador.plantillaId !== null) {
         await enviarComoPlantilla(borrador.plantillaId);
@@ -446,7 +453,7 @@ export function ChatConversacion({
                 key={plantilla.id}
                 type="button"
                 onClick={() => elegirPlantilla(plantilla)}
-                disabled={plantillasBloqueadas}
+                disabled={plantillaBloqueada}
                 aria-pressed={elegida}
                 title={renderizar(plantilla)}
                 className={cn(
@@ -489,7 +496,7 @@ export function ChatConversacion({
             disabled={composerDeshabilitado}
             readOnly={composerSoloLectura && !composerDeshabilitado}
             placeholder={
-              hayEntrante
+              textoLibreHabilitado
                 ? "Escribe un mensaje…"
                 : "Elige una plantilla para iniciar la conversación"
             }
@@ -508,10 +515,10 @@ export function ChatConversacion({
         </div>
 
         {/* Por qué está bloqueado el texto libre / qué se va a enviar. */}
-        {!hayEntrante ? (
+        {!textoLibreHabilitado ? (
           <p className="px-1 text-[11px] text-muted-foreground">
-            {plantillasBloqueadas
-              ? "Ya enviaste una plantilla. Espera la respuesta del cliente para continuar."
+            {plantillaBloqueada
+              ? "Ya escribiste hoy a este cliente. Espera su respuesta para continuar."
               : borrador.plantillaId === null
                 ? "El cliente aún no ha respondido: solo puedes enviar una plantilla aprobada."
                 : "Se enviará la plantilla tal cual; no es editable hasta que el cliente responda."}
@@ -520,7 +527,9 @@ export function ChatConversacion({
       </form>
 
       {/* Feature 121 (R10-R13): minimapa de una ubicación compartida, dentro de la misma
-          ventana y sin recargar. */}
+          ventana y sin recargar. El modal es EL MISMO que abre "Navegar" en el detalle de la
+          orden, así que desde aquí también se puede saltar a la app de mapas propia (fila
+          "Abrir en:", derivada del punto compartido; pedido humano 2026-08-27). */}
       <UbicacionModal
         punto={ubicacionCliente}
         onOpenChange={(abierto) => {

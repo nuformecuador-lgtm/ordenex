@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 
-import { porcentajesDeReparto } from "@/components/private/analytics/porcentajes";
+import { formatearValor } from "@/components/private/analytics/formato";
+import {
+  pesosDeReparto,
+  porcentajesDeReparto,
+  textoDePeso,
+} from "@/components/private/analytics/porcentajes";
 
 /** Los pesos en PUNTOS enteros, que es como se leen en pantalla. */
 const enPuntos = (valores: readonly (number | null)[]) =>
@@ -79,5 +84,74 @@ describe("El reparto en porcentajes", () => {
     it("el dato ausente cuenta como cero y conserva su sitio", () => {
       expect(enPuntos([null, 3, 1])).toEqual([0, 75, 25]);
     });
+  });
+});
+
+// ─── LA PARTE QUE EXISTE Y NO LLEGA AL 1 % (feature 290) ──────────────────────────────────
+//
+// EL CASO EXACTO DE PRODUCCIÓN, no uno inventado: el panel «Detalle gestión» del 2026-08-27,
+// con 233 órdenes repartidas en `[1, 0, 0, 1, 0, 231]`. Entregadas y Reprogramadas valen LO
+// MISMO (1 = 0,429 %) y en pantalla salían distintas: «1 (1 %)» una y «1 (0 %)» la otra, ésta
+// además sin franja, porque el entero redondeado se usaba también como anchura.
+describe("la porción diminuta: etiqueta «<1 %» y franja visible (feature 290)", () => {
+  const PRODUCCION = [1, 0, 0, 1, 0, 231];
+  const ENTREGADAS = 0;
+  const UN_CERO_DE_VERDAD = 1;
+  const REPROGRAMADAS = 3;
+  const MAYOR = 5;
+
+  /** Como lo escribe la gráfica: el número lo pone el formateador de la casa. */
+  const escribir = (indice: number) => {
+    const peso = pesosDeReparto(PRODUCCION)[indice];
+    if (!peso) throw new Error(`no hay peso en la posición ${indice}`);
+    return textoDePeso(peso, (fraccion) => formatearValor(fraccion, "porcentaje"));
+  };
+
+  const ancho = (indice: number) => pesosDeReparto(PRODUCCION)[indice]?.ancho ?? Number.NaN;
+
+  // ⚠ EL CORAZÓN DE LA FICHA. Dos categorías con el MISMO valor no pueden rotularse distinto:
+  // quien lee la pantalla concluye que una ocurrió y la otra no. Da igual a cuál de las dos le
+  // tocara el punto sobrante del resto mayor.
+  it("las dos categorías de valor 1 dicen lo mismo, y no es «0 %»", () => {
+    expect(escribir(ENTREGADAS)).toBe(escribir(REPROGRAMADAS));
+    expect(escribir(REPROGRAMADAS)).not.toBe(formatearValor(0, "porcentaje"));
+    expect(escribir(REPROGRAMADAS)).toBe(`<${formatearValor(0.01, "porcentaje")}`);
+  });
+
+  // Y el reverso, que es lo que hace que «<1 %» signifique algo: un cero medido sigue siendo
+  // un cero. Si las dos cosas se escribieran igual, la etiqueta no distinguiría nada.
+  it("una categoría que vale cero de verdad sigue diciendo «0 %»", () => {
+    expect(escribir(UN_CERO_DE_VERDAD)).toBe(formatearValor(0, "porcentaje"));
+    expect(escribir(UN_CERO_DE_VERDAD)).not.toContain("<");
+  });
+
+  it("ninguna categoría con valor queda sin franja, y la que vale cero no recibe ninguna", () => {
+    for (const [indice, valor] of PRODUCCION.entries()) {
+      if (valor > 0) expect(ancho(indice), `posición ${indice}`).toBeGreaterThan(0);
+      else expect(ancho(indice), `posición ${indice}`).toBe(0);
+    }
+  });
+
+  // La astilla no se saca de la nada: la paga el segmento mayor. Sin esto la barra mediría más
+  // de lo que dice y `flex` encogería en silencio todas las demás franjas.
+  it("la astilla la paga el mayor: los anchos siguen sumando 100 %", () => {
+    const pesos = pesosDeReparto(PRODUCCION);
+
+    expect(pesos.reduce((suma, peso) => suma + peso.ancho, 0)).toBeCloseTo(1, 10);
+    expect(ancho(MAYOR)).toBeLessThan(pesos[MAYOR]?.fraccion ?? 0);
+    // Y el descuento NO se cuela en lo que se lee: el mayor sigue escribiendo su 99 %.
+    expect(escribir(MAYOR)).toBe(formatearValor(0.99, "porcentaje"));
+  });
+
+  // El método del resto mayor sigue intacto: es lo que hace que la columna sume 100.
+  it("los porcentajes escritos siguen siendo los del resto mayor", () => {
+    expect(enPuntos(PRODUCCION).reduce((suma, punto) => suma + punto, 0)).toBe(100);
+    expect(porcentajesDeReparto(PRODUCCION)).toEqual([0.01, 0, 0, 0, 0, 0.99]);
+  });
+
+  // Una astilla de 0,05 % sería un ancho «distinto de cero» que no se ve: sobre los 300-600 px
+  // de la barra son 0,3 px. El mínimo tiene que ser del orden del píxel y medio.
+  it("la astilla es visible: al menos medio punto de la barra", () => {
+    expect(ancho(REPROGRAMADAS)).toBeGreaterThanOrEqual(0.005);
   });
 });

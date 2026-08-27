@@ -59,6 +59,27 @@ export type ListarHiloChatResult =
       ventanaAbierta: boolean;
       /** Marca del ultimo entrante en ISO, o `null` si no hay ninguno. */
       ultimoEntranteAt: string | null;
+      /**
+       * Ya salio un mensaje HOY (dia calendario de Costa Rica) y el cliente aun no ha
+       * respondido hoy -> no se ofrece otra plantilla hasta que conteste.
+       *
+       * EL "HOY" ES EL PUNTO, y es lo que arregla el bug del chat mudo. Antes esto se
+       * derivaba en el componente sobre el hilo ENTERO (`!hayEntrante && haySaliente`), y
+       * como el hilo es por `(orden_id, telefono_e164)` y sobrevive a las reasignaciones
+       * (`ChatConversacionRepository.upsertParaOrden` solo reescribe `mensajero_id`), un
+       * saliente de AYER —una plantilla, o la bienvenida automatica del job
+       * `whatsapp_bienvenida`— bloqueaba el chat PARA SIEMPRE: al mensajero que recibia el
+       * paquete reasignado al dia siguiente no le dejaba ni mandar plantilla ni escribir.
+       * Cada dia arranca como gestion nueva.
+       */
+      plantillaBloqueada: boolean;
+      /**
+       * El cliente respondio HOY: solo entonces se acepta texto libre. Es mas estricto que
+       * `ventanaAbierta` A PROPOSITO (decision humana): un entrante de ayer a las 23:00 deja
+       * la ventana de Meta abierta, pero no reabre la conversacion del dia. El dia empieza
+       * siempre por una plantilla, y el texto libre se gana con la respuesta del cliente.
+       */
+      textoLibreHabilitado: boolean;
       mensajes: ChatMensajeVista[];
     }
   | { status: "unauthenticated" }

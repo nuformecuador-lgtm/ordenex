@@ -11,7 +11,7 @@ import { codigoCssSinComentarios } from "../../fixtures/sin-comentarios";
  * Feature 224 — GUARDIA del bloque que hace que AL IMPRIMIR los tokens sean los CLAROS.
  *
  * La 221 apagó el variant `dark:` en papel; su guardia vive en `impresion-sin-dark.guardia.test.ts`.
- * Ésta vigila la otra mitad: el `@media print` que redeclara los 50 tokens claros para `.dark`,
+ * Ésta vigila la otra mitad: el `@media print` que redeclara los 54 tokens claros para `.dark`,
  * `body:has(> .dark)`, `.tema-sistema` y `body:has(> .tema-sistema)`.
  *
  * ── QUÉ VIGILA, Y POR QUÉ CADA COSA SE ROMPE EN SILENCIO
@@ -22,7 +22,7 @@ import { codigoCssSinComentarios } from "../../fixtures/sin-comentarios";
  *     porque empata en especificidad con `.dark` y pierde por orden. El bloque gana por el `html`
  *     que lleva delante, y aquí se calcula la especificidad para comprobarlo.
  *  3. **Que siga ANTES de `.dark`.** No por la cascada —no gana por orden— sino por el lector de
- *     tokens: un bloque de impresión detrás de `.dark` mete 35 hexes claros en la mitad «oscuro»
+ *     tokens: un bloque de impresión detrás de `.dark` mete 38 hexes claros en la mitad «oscuro»
  *     del archivo y `token("oscuro", …)` empieza a devolverlos, EN VERDE.
  *  4. **Que sea un ESPEJO exacto**: las mismas claves que `.dark`, con los valores de
  *     `:root, .tema-claro`. Un token nuevo en `.dark` sin su gemelo aquí sale en papel oscuro.
@@ -431,7 +431,7 @@ describe("feature 224 — EL CASO: el bloque GANA, y no por casualidad", () => {
       expect(
         bloque,
         "el bloque de tokens de impresión quedó DESPUÉS de una declaración de la tinta oscura. " +
-          "Ganaría por orden, sí, pero envenena el lector de tokens de pantalla: sus 35 hexes " +
+          "Ganaría por orden, sí, pero envenena el lector de tokens de pantalla: sus 38 hexes " +
           'claros pasan a ser los últimos de la mitad «oscuro» y `token("oscuro", …)` empieza a ' +
           "devolverlos, con toda la verificación de tema oscuro midiendo el tema claro EN VERDE.",
       ).toBeLessThan(donde);
@@ -552,7 +552,7 @@ describe("feature 224 — en papel sin fondos, la tinta pasa a ser la clara", ()
 });
 
 /**
- * EL ROL de cada uno de los 50 tokens, escrito a mano porque NO está en el CSS y no se puede
+ * EL ROL de cada uno de los 54 tokens, escrito a mano porque NO está en el CSS y no se puede
  * derivar de él: que `--card` sea una superficie y `--card-foreground` una tinta es un hecho de
  * diseño, no una propiedad del hex.
  *
@@ -615,6 +615,14 @@ const ROL: Record<string, "tinta" | "superficie" | "linea" | "grafico"> = {
   "--warning-strong": "tinta",
   "--danger-strong": "tinta",
   "--info-strong": "tinta",
+  // Feature 292 — los cuatro pares de `--chart-*`. Su rol es TINTA y no `grafico`: el
+  // `--chart-N` a secas pinta un segmento de barra, pero su `-strong` es el TEXTO del `Badge`
+  // que acompaña a ese segmento. Clasificarlo de gráfico lo sacaría del barrido de legibilidad
+  // de abajo, que es donde tiene que estar.
+  "--chart-6-strong": "tinta",
+  "--chart-11-strong": "tinta",
+  "--chart-12-strong": "tinta",
+  "--chart-13-strong": "tinta",
 };
 
 /**
@@ -629,7 +637,7 @@ const ROL: Record<string, "tinta" | "superficie" | "linea" | "grafico"> = {
  * ⚠️ ESTA LISTA SE DERIVA, NO SE ELIGE. La primera versión la escribí a mano con cuatro filas y
  * **le faltaban dos** (`--sidebar-foreground` y `--sidebar-border`): una lista escrita a mano que
  * dice ser «lo que empeora» es una afirmación de censo sin censo, que es el mismo defecto que esta
- * ficha ya pagó con F4. Ahora el caso barre los 50 tokens, descarta los roles que no son
+ * ficha ya pagó con F4. Ahora el caso barre los 54 tokens, descarta los roles que no son
  * legibilidad, y **exige que lo que baje sea exactamente esta lista**.
  *
  * ── POR QUÉ NO SE ARREGLA AQUÍ, y por qué el caso mide las DOS columnas
@@ -640,10 +648,10 @@ const ROL: Record<string, "tinta" | "superficie" | "linea" | "grafico"> = {
  * patrón de la 208 llevado al papel y toca `Badge`/`Button`/`Pagination`: ficha propia.
  *
  * La segunda columna (`claro`) no es adorno, aunque hoy esté GARANTIZADA POR CONSTRUCCIÓN: el caso
- * del espejo compara los 35 hexes contra `:root, .tema-claro`, así que «iguala al tema claro» vale
+ * del espejo compara los 38 hexes contra `:root, .tema-claro`, así que «iguala al tema claro» vale
  * para todos y no sólo para éstos. Se repite aquí, fila a fila, porque es el argumento del que
  * cuelga la decisión de NO arreglarlo: si alguna vez dejara de valer, esto lo dice en la fila
- * concreta en vez de en un `toEqual` de 35 claves.
+ * concreta en vez de en un `toEqual` de 38 claves.
  */
 const SE_PIERDE_EN_PAPEL = [
   { id: "P1", que: "`Badge`/`Button` default y `Pagination` (`--primary-foreground`)", cual: "primary-foreground", antes: 18.33, despues: 1 },
@@ -656,7 +664,7 @@ const SE_PIERDE_EN_PAPEL = [
 
 describe("feature 224 — LO QUE EMPEORA: la tinta que se apoyaba en un fondo que no se imprime", () => {
   /**
-   * Autocomprobación del ROL: tiene que cubrir los 50 tokens del bloque, ni uno más ni uno menos.
+   * Autocomprobación del ROL: tiene que cubrir los 54 tokens del bloque, ni uno más ni uno menos.
    * Sin esto, un token nuevo se quedaría sin rol, el barrido de abajo lo saltaría y la lista
    * volvería a estar incompleta EN VERDE — que es justo lo que pasó la primera vez.
    */

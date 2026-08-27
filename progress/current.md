@@ -7,6 +7,112 @@
 > por feature, y la narrativa de decisiones dentro de cada entrada de `feature_list.json`.
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
+
+
+## 🎨 2026-08-27 — ficha 292: las tarjetas del monitoreo toman el color de su segmento
+
+`feature/292-color-cards-monitoreo`. **Sin SDD** por decisión humana. Reportado desde la pantalla y
+**medido antes de tocar nada**: `contadores.ts` tenía DOS tablas de color —`COLOR_SEGMENTO` (la
+barra) y `VARIANTE_CONTADOR` (las tarjetas)— y discrepaban en **4 de 8**.
+
+**Decisión humana: opción B** (el fondo de la tarjeta toma el color del segmento). Se le ofreció
+también el punto de color —más barato y sin tocar contraste— y eligió B a sabiendas del coste.
+**Se descartó invertirlo**: que la barra usara las variantes semánticas juntaría `devueltas` con
+`reprogramadas` e `incidentes` con `rechazadas`, y la barra existe para distinguir las ocho.
+
+**El coste real:** los `--chart-*` son colores PLANOS y el `Badge` necesita un PAR (`-soft` fondo +
+`-strong` texto). Cuatro pares nuevos, replicados en los cinco bloques de tokens.
+
+**Contraste AA medido sobre los hex** —nunca en el navegador— y **re-medido por el leader con
+aritmética propia**, con el control WCAG `#767676`/`#ffffff` = 4,54:
+
+| par | claro | oscuro |
+| --- | --- | --- |
+| chart-6 | **5,98** | 6,91 |
+| chart-11 | **6,38** | 7,02 |
+| chart-12 | **9,45** | 8,45 |
+| chart-13 | **8,49** | 6,48 |
+
+Dos tintas se movieron porque el color del segmento NO llegaba: **chart-6 daba 3,57** y
+**chart-12, 4,34**. Ninguna sale de la rampa de su propio color.
+
+- **Guardia nueva:** renderiza el tablero y compara las clases del DOM de cada tarjeta con las de su
+  segmento. **No** deriva las dos tablas de una tercera, que sería una tautología. Incluye que la
+  barra siga distinguiendo OCHO categorías, porque la otra forma de aprobar la concordancia es
+  pintarlo todo igual.
+- **Mutación:** devolver `devueltas` a `warning` → 2 rojos; bajar `--chart-6-strong` al color plano →
+  la guardia de contraste cae con 3,57 < 4,5.
+- **Gate rápido:** typecheck ✅, lint ✅, **2.328 verdes / 2 rojos**, los dos AJENOS y preexistentes
+  (`VariablesInsert`, el contrato viejo de plantillas que otra sesión derogó a propósito).
+- ⚠️ **Deuda dicha:** el criterio de la 258 «el color codifica gravedad, no identidad» queda
+  **retirado** para esos cuatro contadores.
+
+### Lo que sigue vivo, y es la ficha 291
+
+`GraficaDonut` y `GraficaRanking` rotulan con el mismo reparto por resto mayor que la 290, así que
+pueden escribir «0 %» junto a un dato real. Ahí el dibujo **no** depende del redondeo, así que es
+defecto de etiqueta, no de desaparición. Queda `pending` **a propósito**: el arnés admite dos fichas
+en vuelo por zona y `frontend` ya tiene la 289 (ajena) y esta 292.
+
+---
+
+## 🩹 2026-08-27 — ficha 290: la barra de analítica escondía toda categoría bajo el 1 %
+
+`fix/290-barra-reparto-menor-uno-porciento`. **Sin SDD** por decisión humana («es algo tan pequeño,
+hazlo sin preguntar»). Reportado desde la pantalla: «Reprogramadas 1 (0 %)» y **sin franja**, junto a
+«Entregadas 1 (1 %)» **con** franja — el mismo valor pintado de dos formas.
+
+**Reproducido ejecutando el módulo de producción**, no razonado: con `[1, 0, 0, 1, 0, 231]` sobre 233,
+las dos categorías de valor 1 pesan 0,429 %; el reparto por resto mayor solo tiene **un punto**
+sobrante y su desempate lo da a la de menor índice, y `GraficaReparto.tsx:93` usaba ESE entero como
+anchura de la franja.
+
+**Arreglo (mínimo, sin rediseño):** `pesosDeReparto` devuelve ahora `fraccion`, `ancho` y
+`bajoUnPunto`; la leyenda escribe **«<1 %»** cuando la parte existe pero no llega al punto, y toda
+franja con valor recibe una **astilla de 0,5 puntos** descontada del segmento mayor. **El método del
+resto mayor NO se tocó** y `porcentajesDeReparto` conserva su firma: `GraficaDonut` y `GraficaRanking`
+siguen intactos.
+
+Medido tras el cambio: `<1 %` / `<1 %` / `99 %`, anchos 1,00 / 0,50 / 98,50 y **suma exacta 100 %**.
+
+- **Gate rápido:** typecheck ✅, lint sin errores, **2.283 tests verdes y 1 rojo AJENO** —
+  `obtenerTarifa` (ficha 275, otra sesión). **Delta 0 medido, no supuesto**: con el árbol en `dev`
+  limpio (`git stash`) ese guard falla igual y con **la misma lista de un elemento**.
+- **Mutación (la exigí y se ejecutó):** sin la guarda del «<1 %» → 2 rojos; sin la astilla → 5 rojos;
+  restaurado → 23 verdes.
+- ⚠️ **Deuda señalada y NO tocada:** `GraficaRanking` y `GraficaDonut` siguen pudiendo rotular «0 %»
+  en una porción diminuta. Ahí no desaparece nada del dibujo (su ancho sale del valor crudo), así que
+  es solo la etiqueta. Sin ficha; decisión humana.
+
+---
+
+## 🧹 2026-08-27 — cuatro órdenes de prueba retiradas de producción (borrado lógico)
+
+Guías **24218485, 17127402, 33809242, 99272742** (REM-0001..0004, tienda Nuform, zona GAM, ₡20.000,
+con «PRUEBA» en destinatario, producto, notas y dirección; tres de los cuatro teléfonos, colombianos).
+`deleted_at = 2026-08-27 15:17:25 UTC`, por SQL directo vía MCP a pedido del humano.
+**Reversible:** `UPDATE orden SET deleted_at = NULL WHERE num_guia IN (...)`.
+
+- **El borrado físico era imposible**, no una preferencia: FK RESTRICT desde `orden_historial_estado`
+  (6–8 filas cada una), `chat_conversacion` (1 hilo y 4–8 mensajes cada una) y `cierre_sin_gestion`
+  —las cuatro entraron en el cierre `336196b3`, **aprobado** hoy a las 12:39, total ₡0,00—. Forzarlo
+  obligaba a tocar contabilidad ya cerrada.
+- **El cierre no se rompe:** `cierre_sin_gestion` guarda copia denormalizada (guía, destinatario,
+  producto, tienda, zona) y no depende de la orden viva. Verificado DESPUÉS del UPDATE.
+- **Los hilos de WhatsApp se van con ellas:** solo se alcanzan desde la orden (no hay bandeja global,
+  únicamente `findByOrdenParaMensajero`) y el matcheo de entrantes ya filtra `o.deleted_at IS NULL`
+  (`lib/repositories/ChatConversacionRepository.ts:85`).
+- **NO se tocaron** las guías **34360188** (Cinthya) y **68425574** (kisha): llevan «PRUEBA 27 08 26»
+  en el campo producto, pero destinatario y dirección son reales, están en `ayuda_tienda` y asignadas.
+- Producción tras el cambio: **207 vivas / 4 borradas / 211 totales**.
+
+⚠️ **Esto no se puede hacer desde la app.** `orden.deleted_at` existe y TODAS las lecturas lo
+respetan, pero **nadie lo escribe**: el `borrarOrden` del andamiaje inicial se retiró (queda su
+mención en `lib/actions/ordenes.ts:41`). Mientras siga así, cada limpieza es SQL a mano contra
+producción. **Sin ficha todavía** — decisión del humano.
+
+---
+
 ## 🚀 RELEASE DESPLEGADA — 2026-08-26 noche. **EMPIEZA A LEER POR AQUÍ**
 
 **PR #516**, `dev` → `prod`. Tres fichas del módulo de usuarios: **285** (buscador + filtro por rol),

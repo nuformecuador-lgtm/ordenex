@@ -79,6 +79,10 @@ export const ORDEN_FILTER_FIELDS = [
   "created_hasta",
   "reasignables",
   "q",
+  // Pedido humano (2026-08-27): el interruptor de las ELIMINADAS. La whitelist pasa de 12 a 13
+  // claves y `.strict()` sigue siendo la unica defensa; quien puede USARLA lo decide el service
+  // (solo `maestro`), no este schema.
+  "eliminados",
 ] as const;
 export type OrdenFilterField = (typeof ORDEN_FILTER_FIELDS)[number];
 
@@ -153,6 +157,12 @@ export const ordenFilterBase = z
     // asignado), no una columna, y solo sabe ACOTAR: `z.literal(true)` porque "no
     // filtrar" se expresa OMITIENDO la clave, no mandando `false`.
     reasignables: z.literal(true).optional(),
+    // Pedido humano (2026-08-27) — ELIMINADAS. `z.literal(true)` por la MISMA razon que
+    // `reasignables`: "no filtrar" se expresa OMITIENDO la clave, nunca mandando `false`. Pero
+    // al reves que su vecina, esta clave no ACOTA: SUSTITUYE el universo del listado por el de
+    // las borradas (`deleted_at IS NOT NULL`). Es la unica del sistema que lo hace, y por eso es
+    // la unica que el service ademas AUTORIZA por rol antes de traducirla.
+    eliminados: z.literal(true).optional(),
     // Feature 169/R1/R3/R4 — TERMINO DE BUSQUEDA. Se llama `q` y no `search`/`texto`
     // porque es corto, es la convencion universal de un buscador y NO coincide con ningun
     // nombre de columna: deja claro que no es un filtro de columna (como si lo son
@@ -377,6 +387,21 @@ export type OrdenListItemDTO = OrdenDTO & {
    * (R29): es derivado en tiempo de lectura, no una columna de `orden`.
    */
   intentosEntrega?: number;
+  /**
+   * Pedido humano (2026-08-27) — `true` si la orden NO registra ninguna gestion posterior a su
+   * creacion, es decir: si todavia se puede ELIMINAR. Lo resuelve el servidor con el mismo
+   * predicado que autoriza el borrado (`OrdenHistorialService.idsConGestionPosteriorEnLote` +
+   * `ESTADOS_CREACION`), de modo que la pantalla no puede ofrecer un boton que el servidor vaya
+   * a rechazar — que es el fallo que este campo existe para impedir, y no un adorno.
+   *
+   * Solo viaja para el rol que puede borrar (`maestro`); para el resto es `undefined`, porque el
+   * dato no alimenta ninguna decision suya y su conteo cuesta una consulta por pagina. Opcional
+   * (`?`) por el patron aditivo del resto del DTO: no rompe los fixtures de UI.
+   *
+   * `undefined` NO significa "se puede": la UI exige `=== true` para ofrecer el boton (fallo
+   * cerrado), y el servidor revalida de todas formas.
+   */
+  sinGestion?: boolean;
   // Datos de las relaciones DIRECTAS (FK) de la orden, resueltas via joins
   // (Prisma `include`) en el mismo query del listado. Aditivo: la UI existente
   // que solo usa los escalares/`*Nombre` sigue funcionando. La `tarifa` anidada en

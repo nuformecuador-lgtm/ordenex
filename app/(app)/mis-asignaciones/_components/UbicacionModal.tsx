@@ -31,8 +31,12 @@ export interface UbicacionModalProps {
   descripcion?: string;
   /**
    * Feature 289 — destino para la fila "Abrir en:" (Waze / Maps / selector del sistema).
-   * OPT-IN: sin esta prop el modal se comporta exactamente como antes, que es lo que quiere
-   * el chat (feature 121), donde el punto es de un cliente y no un destino de reparto.
+   *
+   * Pedido humano 2026-08-27: la fila YA NO es opt-in. Sin esta prop el modal deriva el
+   * destino del propio `punto` que está pintando, así que el mensajero puede saltar a su app
+   * de mapas mire el mapa que mire —la ubicación que le compartió el cliente por el chat
+   * incluida—. Pasarla sigue teniendo sentido cuando hay MÁS que las coordenadas: la orden
+   * aporta la dirección escrita, que es el único destino posible si aún no está geocodificada.
    */
   destino?: DestinoNavegacion;
   /**
@@ -82,6 +86,15 @@ export function UbicacionModal({
     captura !== null && captura.lat === lat && captura.lng === lng;
   const gpsRepartidor = gpsPedido ? captura.coords : null;
 
+  // Destino efectivo de la fila "Abrir en:". Si el consumidor no pasa uno (el chat, el pin de
+  // `PosNavBlock`), se arma con las coordenadas del punto pintado y el título del modal como
+  // etiqueta: es lo que Android muestra sobre el pin del selector, y las apps navegan por
+  // coordenadas, así que no se pierde nada. Sin punto NI destino no hay a dónde ir y la fila
+  // no se pinta.
+  const destinoEfectivo: DestinoNavegacion | null =
+    destino ??
+    (punto !== null ? { lat: punto.lat, lng: punto.lng, texto: titulo } : null);
+
   return (
     <Dialog open={abierto ?? punto !== null} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
@@ -110,7 +123,9 @@ export function UbicacionModal({
               : "No se pudo obtener tu ubicación actual."}
           </p>
         ) : null}
-        {destino ? <AbrirEnAppNavegacion destino={destino} /> : null}
+        {destinoEfectivo ? (
+          <AbrirEnAppNavegacion destino={destinoEfectivo} />
+        ) : null}
       </DialogContent>
     </Dialog>
   );

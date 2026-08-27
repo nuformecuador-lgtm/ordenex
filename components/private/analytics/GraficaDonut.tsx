@@ -17,7 +17,7 @@
 import { Suspense, lazy } from "react";
 
 import { formatearValor } from "./formato";
-import { porcentajesDeReparto } from "./porcentajes";
+import { pesosDeReparto, textoDePeso } from "./porcentajes";
 import { clasesDeLienzo, GraficaMarco } from "./GraficaMarco";
 import { SerieTextual } from "./SerieTextual";
 import type { AnilloProps, GraficaProps, SerieDato } from "./tipos";
@@ -77,13 +77,22 @@ export function GraficaDonut({
   // por el lienzo. Con dos cuentas, el numero que se ve y el que lee un lector de pantalla
   // podrian discrepar.
   //
-  // `porcentajesDeReparto` reparte por resto mayor (suma 100 % exacto) y devuelve FRACCIONES,
-  // que es lo que `formatearValor(_, "porcentaje")` espera: el simbolo y el locale los pone el
-  // formateador de la casa, aqui no se escribe ni un `%`.
+  // `pesosDeReparto` reparte por resto mayor (suma 100 % exacto) y `textoDePeso` lo ESCRIBE: el
+  // numero lo pone `formatearValor(_, "porcentaje")` —simbolo y locale son del formateador de la
+  // casa, aqui no se escribe ni un `%`— y el caso pequeno lleva delante el «menor que».
+  //
+  // ⚠ POR QUE NO SE FORMATEA LA FRACCION A SECAS (feature 291). Una porcion que EXISTE pero cuyo
+  // peso exacto no llega a un punto redondea a 0, y con la fraccion redondeada salia «0 %» pegado
+  // a su propia cifra: un cero que niega el dato que tiene al lado. `textoDePeso` escribe ahi
+  // «<1 %», y el cero de verdad sigue diciendo «0 %» — son dos hechos distintos.
+  //
+  // El `ancho` que tambien devuelve el reparto no se usa AQUI, y es correcto: el anillo lo pinta
+  // recharts con el VALOR CRUDO de cada punto, asi que ninguna porcion desaparece por el
+  // redondeo. En este grafico la 291 es solo la etiqueta (en `GraficaReparto` si era el dibujo).
   const pesos =
     mostrarPorcentaje && preparadas
-      ? porcentajesDeReparto(preparadas.series[0]?.puntos.map((punto) => punto.valor) ?? []).map(
-          (fraccion) => formatearValor(fraccion, "porcentaje"),
+      ? pesosDeReparto(preparadas.series[0]?.puntos.map((punto) => punto.valor) ?? []).map((peso) =>
+          textoDePeso(peso, (fraccion) => formatearValor(fraccion, "porcentaje")),
         )
       : undefined;
 
