@@ -22,8 +22,10 @@ import { destinoDeOrden } from "./pos-card/pos-format";
 //  - El control es SIEMPRE un `<button>`. Antes, una orden sin coordenadas era un `<a>`
 //    directo a Google Maps; ahora abre el mismo modal, sin mapa pero con el aviso y la
 //    fila de apps, para que en ese caso el mensajero también pueda elegir con qué navegar.
-//  - Se pasa `destino`, que es lo que habilita esa fila. El chat no lo pasa, y por eso su
-//    modal de ubicación compartida sigue igual que antes.
+//  - Se pasa `destino` porque la ORDEN aporta algo que el punto no tiene: la dirección
+//    escrita, único destino posible cuando aún no está geocodificada. La fila en sí ya no
+//    depende de esta prop —el modal la deriva del punto—, así que la ubicación compartida
+//    del chat ofrece las mismas apps (pedido humano 2026-08-27).
 
 export interface UbicacionTriggerProps {
   orden: MiAsignacionDTO;

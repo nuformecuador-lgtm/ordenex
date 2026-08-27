@@ -520,7 +520,9 @@ export function ChatConversacion({
       </form>
 
       {/* Feature 121 (R10-R13): minimapa de una ubicación compartida, dentro de la misma
-          ventana y sin recargar. */}
+          ventana y sin recargar. El modal es EL MISMO que abre "Navegar" en el detalle de la
+          orden, así que desde aquí también se puede saltar a la app de mapas propia (fila
+          "Abrir en:", derivada del punto compartido; pedido humano 2026-08-27). */}
       <UbicacionModal
         punto={ubicacionCliente}
         onOpenChange={(abierto) => {
