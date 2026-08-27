@@ -329,3 +329,286 @@ Backend de la 285 implementado y verificado: el `WHERE` probado **donde vive** (
 casos), 24 mutaciones corridas con el arnés autocomprobado (23 muertas, 1 superviviente
 explicada y sustituida por la que sí observa el fallo), gate completo con **0 fallos nuevos**
 (1 → 1, +50 verdes); quedan pendientes los 10 requisitos de superficie para `frontend_dev`.
+
+---
+---
+
+# Feature 285 · BITÁCORA DE FRONTEND (segunda tanda)
+
+> **No sobreescribe nada de arriba.** Lo de arriba es la tanda de `backend_dev`, que dejó
+> **10 de los 29 requisitos marcados `[FRONTEND]` a propósito**. Ésta es esa mitad: R7, R9,
+> R10, R11, R18, R20, R21, R28 y las partes de superficie de R12 y R29. **Ninguno estaba
+> dado por bueno**; aquí se implementan y se miden.
+>
+> **No se tocó ni una línea de backend.** El contrato del borde (`q`, `rol`, las dos
+> constantes, la lista blanca) se **consume**, no se reescribe.
+
+---
+
+## 8. Archivos creados / modificados (frontend)
+
+### Creados (3)
+
+| Archivo | Qué es |
+| --- | --- |
+| `app/(app)/configuracion/_components/usuarios-filtros-def.ts` | Módulo **puro** (sin React): claves, placeholder y `construirFiltrosUsuarios(): FilterDef[]`. Calco de `ordenes-filtros-def.ts`. |
+| `app/(app)/configuracion/_components/seleccion-a-filtro-usuarios.ts` | Módulo **puro**: `FilterSelection` + término → `{ q?, rol? }`, más `hayFiltroUsuarios` y `serializarFiltroUsuarios`. Calco de `seleccion-a-filter.ts`. |
+| `tests/unit/components/usuarios-filtros-def.test.ts` | T-P1…T-P4 y las reglas de la traducción (15 casos). |
+
+### Modificados (2)
+
+| Archivo | Qué cambió |
+| --- | --- |
+| `app/(app)/configuracion/_components/UsuariosModule.tsx` | La barra compartida en `DataTable.filtros`, el estado (término aparte de la selección), la key de SWR con los roles ordenados, la vuelta a página 1, el `fallbackData` condicionado, el `emptyState` según haya filtros y la descarga con el filtro del render. |
+| `tests/unit/components/usuarios-module.test.tsx` | T-C1…T-C8 y sus contrapruebas (5 → 22 casos). |
+
+### Lo que NO se tocó, comprobado con `git status --short`
+
+- **`app/(app)/configuracion/page.tsx` — T4.4 cumplido**: no aparece en el diff. El filtro de
+  rol no necesita catálogo del servidor (los roles son un enum y `ROL_LABELS` ya es
+  exhaustivo), así que la página sigue precargando exactamente lo mismo.
+- **`app/(app)/ordenes/**` completo**, incluidos `ordenes-filtros-def.ts`,
+  `seleccion-a-filter.ts` y `serializar-filtro.ts`. Reusar aquí es **consumir**
+  `BuscadorFiltros`/`FilterComponent`, no editar lo ajeno. Hay un test que lo vigila: los dos
+  módulos nuevos no pueden importar nada cuya ruta contenga `ordenes`.
+- **`components/shared/BuscadorFiltros.tsx` y `components/shared/FilterComponent.tsx`**: ya
+  soportaban todo lo que hacía falta (`kind: "multi"`, `minChars`, `placeholder`, `debounceMs`).
+- **`components/shared/PasswordInput.tsx`** (ficha 286) y todo lo de la 287:
+  `restablecerContrasenaUsuario`, sus tres modales y `ContrasenaGeneradaPanel` siguen intactos
+  y sus 24 casos verdes. El filtro **convive** con la acción por fila, no la sustituye.
+- **`lib/actions/tarifas.ts`** y `tests/unit/guards/superficie-de-uso.guardia.test.ts`.
+- Todo el backend de esta misma ficha: `lib/types/usuario.ts`, `UserRepository`,
+  `UsuarioService`, `lib/utils/escapar-like.ts` y sus tests.
+- `tests/unit/descarga/**` (R24: esta feature no cambia ninguna columna).
+
+---
+
+## 9. Las tres trampas del encargo, y cómo se cerró cada una
+
+### (1) El `fallbackData` habría pintado el listado SIN filtrar
+
+`fallbackData` se aplicaba con `page === 1 && pageSize === initialData.pageSize`, y **esa
+condición sigue siendo cierta al filtrar**: SWR le daría al primer render de una búsqueda la
+respuesta *sin filtrar* que precargó el servidor, para una clave que es otra. Ahora exige
+además `!hayFiltro`.
+
+**Y aquí hay un hallazgo que cambia el test**, porque la aserción evidente **no habría matado
+nada**. Se midió con una sonda (`useSWR` + `fallbackData` + petición en vuelo):
+
+```
+MONTAJE      loading= true   data= FALLBACK
+TRAS CAMBIO  loading= true   data= FALLBACK
+```
+
+`isLoading` de SWR es `true` **aunque haya `fallbackData`**, y `DataTable` pinta **esqueletos**
+en ese estado. Es decir: **las FILAS salen igual con el fallo y sin él**, así que un
+`queryByText("Ana Pérez")).toBeNull()` habría estado verde con la mutación puesta — un test
+incapaz de morir. Lo que **sí** delata el fallo es el **total**: `Pagination` recibe
+`data?.total` y ese valor **no pasa por `isLoading`**. Con el fallo la barra dice `1-1 de 1`
+—el total del listado completo bajo una búsqueda que aún no tiene el suyo—; sin él, `Sin
+resultados`. **T-C4 afirma sobre el resumen de la paginación**, y la mutación M-C4 lo mata
+(1 rojo, bien aislado).
+
+### (2) El `emptyState` decía «Crea el primer usuario» bajo un filtro
+
+Ahora depende de si hay filtros. Con filtros: **«Ningún usuario coincide con los filtros»**,
+icono `SearchX`, descripción «Revisa el texto que escribiste o quita algún filtro para ver más
+resultados.» y **sin CTA de crear**. Sin filtros: el de hoy, intacto, con su botón.
+
+No es solo precisión de redacción: el mensaje viejo es **literalmente falso** —sí hay
+usuarios— y **ofrece crear una cuenta a quien probablemente ya la tiene**, escondida detrás
+del filtro que acaba de poner. Cubierto en las **dos direcciones** (T-C5), para que arreglarlo
+no se convierta en dejar fijo el mensaje nuevo: M-C5 y M-C11 mueren cada una por su lado.
+
+### (3) La descarga tenía que pedirse con los filtros puestos
+
+`obtenerFilas` se construye **en el render** (ya lo hacía) y ahora cierra sobre el filtro de
+**ese** render: `listarUsuariosCompleto(hayFiltro ? filtro : {})`. Con filtros el archivo trae
+exactamente lo que la pantalla muestra (R22); **sin filtros la entrada sigue siendo `{}`
+literal** (R23), que es la petición de hoy byte a byte — importante porque el schema del modo
+completo es `.strict()` y `page`/`pageSize` serían `validation_error`. Las dos mitades tienen
+caso (T-C7) y M-C7 muere.
+
+---
+
+## 10. Mapa `R<n> → test` de los 10 requisitos que quedaban
+
+| R | Qué exige | Test que lo cubre (fichero) |
+| --- | --- | --- |
+| R7 | por debajo del mínimo no consulta e indica cuántos faltan | **T-C8/R7** (`usuarios-module.test.tsx`: cero llamadas tras 700 ms + el aviso) + **T-P3/R7** (`usuarios-filtros-def.test.ts`: la clave `q` se omite) |
+| R9 | la interfaz trunca al máximo | **T-P3/R9** (`MAX+50` → exactamente `MAX`) + el caso del **corte dentro de una tira de espacios** |
+| R10 | una sola consulta por ráfaga | **T-C2/R10** (nueve pulsaciones = **una** llamada nueva) |
+| R11 | el texto de ayuda dice «nombre o correo» | **T-P4/R11** + **T-C1/R28** (el `placeholder` del campo montado) |
+| R12 (UI) | todos los roles, etiqueta legible, selección múltiple | **T-P1** (3 casos: `kind: "multi"`, exhaustividad contra `ROL_LABELS`, etiquetas legibles) + **T-C1/R12** (las 6 opciones y `aria-multiselectable` en la pantalla) |
+| R18 | al cambiar el filtro, vuelve a página 1 | **T-C3/R18** (en la página 3, teclear pide `page: 1`) |
+| R20 | vacío con filtros dice «ninguno coincide», sin CTA | **T-C5/R20**, en sus **dos** direcciones |
+| R21 | acción de limpiar todo | **T-C6/R21** (vuelve a pedir todo, el campo vacío **y** el control retirado) |
+| R28 | monta los componentes compartidos | **T-C1/R28** (campo «Buscar» + botón «Filtros» de la barra compartida) |
+| R29 (UI) | el mínimo sale de un solo origen | **T-C8/R29** (el prop **es** `USUARIO_BUSQUEDA_MIN_CHARS`) + **T-C8/R7** (la mitad de comportamiento) |
+
+**Y de propina, medidos en la superficie** (no eran obligación de esta tanda, pero son los que
+delatan un cableado mal hecho): R1 (`{ page, pageSize }` sin claves de relleno), R13/R14/R15
+(la lista de roles viaja, y desmarcar el último **omite** la clave, nunca `[]`), R16 (término y
+roles juntos), R22/R23 (la descarga, T-C7).
+
+**Con esto, los 29 requisitos de la ficha están cubiertos**: 19 en la tanda de backend, 10 aquí.
+
+---
+
+## 11. Mutaciones del frontend
+
+### 11.1 El arnés, autocomprobado ANTES de creerle nada
+
+Mismo protocolo que la tanda de backend, con `--reporter=default` (en vitest 4 **no existe**
+`--reporter=basic`, y en la 287 eso habría dado 22 falsos supervivientes). Cinco casos con
+respuesta conocida:
+
+| Control | Qué se le dio | Exigido | Real |
+| --- | --- | --- | --- |
+| A | ancla que **no existe** | `ERROR-DE-ARNES` | `ERROR-DE-ARNES: el ancla aparece 0 veces` ✔ |
+| B | ancla que aparece **6 veces** (`setPage`) | `ERROR-DE-ARNES` | `ERROR-DE-ARNES: el ancla aparece 6 veces` ✔ |
+| C | fichero de test **inexistente** | `ERROR-DE-ARNES` | `ERROR-DE-ARNES: vitest NO imprimio resumen de Tests` ✔ |
+| D | control **positivo** (mutación real) | `MUERTA` | `MUERTA` (1 rojo: T-P4) ✔ |
+| E | control **negativo** (cambia un comentario) | `SUPERVIVIENTE` | `SUPERVIVIENTE` (0 rojos) ✔ |
+
+Las tres autocomprobaciones están **en el arnés**, no en la intención: (a) el ancla debe
+aparecer **exactamente una vez**; (b) el archivo se **relee de disco** y debe contener el
+reemplazo; (c) vitest debe haber **impreso su resumen** y ejecutado **> 0 tests**, o el
+resultado es `ERROR-DE-ARNES`, **nunca** «superviviente».
+
+### 11.2 Las 21 mutaciones: **21 muertas, 0 supervivientes**
+
+| # | Mutación | Archivo | Qué la mató |
+| --- | --- | --- | --- |
+| M-P1 | `kind: "multi"` → `"single"` | `usuarios-filtros-def` | **T-P1** + 6 casos de módulo (7 rojos) |
+| M-P2 | perder una opción (`apiKey` fuera) | `usuarios-filtros-def` | **T-P1** (exhaustividad) + T-C1 |
+| M-P3 | `label: ROL_LABELS[value]` → `label: value` | `usuarios-filtros-def` | **T-P1** (etiquetas legibles) + 6 más |
+| M-P4 | placeholder → `"Buscar…"` | `usuarios-filtros-def` | **T-P4** (y solo ése) |
+| M-P5 | emitir `rol: []` en vez de omitir | `seleccion-a-filtro-usuarios` | **T-P2** + `hayFiltro` |
+| M-P6 | quitar la truncación al máximo | `seleccion-a-filtro-usuarios` | **T-P3/R9** (2 casos) |
+| M-P7 | truncar **sin volver a recortar** | `seleccion-a-filtro-usuarios` | el caso del **pegado con espacios** (y solo ése) |
+| M-P8 | mínimo a mano (`1`) en vez de la constante | `seleccion-a-filtro-usuarios` | **T-P3/R7** + 3 más |
+| M-P9 | `hayFiltroUsuarios` siempre `true` | `seleccion-a-filtro-usuarios` | la contraprueba del `fallbackData` + T-C5 |
+| M-P10 | key de SWR **sin ordenar** los roles | `seleccion-a-filtro-usuarios` | la key estable (y solo ése) |
+| M-C1 | la barra compartida **no se monta** | `UsuariosModule` | **T-C1** + 12 más (13 rojos) |
+| M-C2 | sin espera (`debounceMs={0}`) | `UsuariosModule` | **T-C2/R10** |
+| M-C3 | no volver a la página 1 | `UsuariosModule` | **T-C3/R18** (y solo ése) |
+| M-C4 | `fallbackData` **como hoy** (sin `!hayFiltro`) | `UsuariosModule` | **T-C4** (y solo ése) |
+| M-C5 | `emptyState` fijo (el de hoy siempre) | `UsuariosModule` | **T-C5/R20** (y solo ése) |
+| M-C6 | "Limpiar todo" no retira las claves activas | `UsuariosModule` | **T-C6/R21** (y solo ése) |
+| M-C7 | la descarga ignora los filtros (`{}` fijo) | `UsuariosModule` | **T-C7/R22** (y solo ése) |
+| M-C8 | `minChars={2}` escrito a mano | `UsuariosModule` | **T-C8/R29** (y solo ése) |
+| M-C9 | el filtro **no llega al fetcher** | `UsuariosModule` | 10 rojos |
+| M-C10 | el filtro **no entra en la key de SWR** | `UsuariosModule` | 9 rojos |
+| M-C11 | el vacío filtrado vuelve a decir «No hay usuarios» | `UsuariosModule` | **T-C5/R20** (y solo ése) |
+
+El árbol se verificó restaurado tras la tanda (`git status --short` idéntico, cero `.mutbak`
+huérfanos) y las dos suites vuelven a 37/37 en verde.
+
+**Sobre M-C8, y conviene que quede escrito:** esa mutación (`minChars={2}` a mano) es
+**indistinguible en tiempo de ejecución** mientras la constante valga 2 — que es exactamente el
+error que R29 prohíbe, y por eso no se puede afirmar solo con comportamiento. T-C8 lo cierra
+mirando **el prop tal como se pasa** (`minChars={USUARIO_BUSQUEDA_MIN_CHARS}`, y ningún
+`minChars` numérico en el módulo), además del caso de comportamiento que mide el umbral. Es la
+misma disciplina que pedía `design.md` §9.5: contra la constante importada, no contra un `2`
+escrito en el test ni contra la función que genera el valor.
+
+---
+
+## 12. Hallazgos y avisos de esta tanda
+
+1. **`isLoading` de SWR es `true` con `fallbackData`** (medido con sonda, §9-1). Cualquier
+   test futuro que quiera afirmar algo sobre lo que se pinta **durante** una petición en vuelo
+   tiene que mirar algo que no pase por `isLoading` —el resumen de `Pagination`, por ejemplo—;
+   las filas están tapadas por los esqueletos y no distinguen nada.
+2. **R7 se cumple con el texto del componente compartido, que dice el MÍNIMO, no cuántos
+   faltan.** `avisoMinimoCaracteres` produce «Escribe al menos 2 caracteres para buscar».
+   Operativamente informa lo mismo (con 1 escrito, falta 1), y **cambiar esa cadena sería
+   editar `FilterComponent`**, que esta ficha declara intocable y que comparte con la barra de
+   órdenes. Se deja así **a conciencia**, no por olvido: si se quiere el conteo exacto
+   («falta 1 carácter»), es un cambio en el componente compartido y afecta a las dos barras.
+3. **La paginación no se resetea al pulsar «Limpiar todo» si ya no había filtro**, y es
+   correcto: el reset cuelga del cambio de `filtroKey`, así que limpiar desde un estado sin
+   filtros no mueve la página. No hay caso que lo exija y no se inventó uno.
+4. **P3 del spec (persistencia de filtros entre visitas) se cerró por *default*: aquí tampoco
+   se recuerdan.** Ni URL ni almacenamiento del navegador, igual que la barra de órdenes.
+   Queda constancia de que se aplicó el *default*, no de que alguien lo confirmara.
+5. **La barra nace con el buscador solo**, y el filtro de rol se **pide** en el selector
+   «Filtros». Es el comportamiento de la barra compartida, no una decisión nueva de esta
+   pantalla; quien espere ver el desplegable de rol al entrar, no lo verá hasta pedirlo.
+
+---
+
+## 13. Salida real del gate (frontend)
+
+`./init.sh` **COMPLETO** (el rápido se niega solo: el diff de la rama toca `lib/types/**`).
+`INIT_EXIT` se escribe **DENTRO** del log, no con un `echo` posterior que ya tapó un rojo en
+este repo, y el log **no se canaliza por `tail`**.
+
+### 13.1 Primera corrida
+
+```
+✓ typecheck paso
+✓ lint paso        (100 problems, 0 errors, 100 warnings — los MISMOS de la tanda de backend)
+ Test Files  2 failed | 1421 passed (1423)
+      Tests  2 failed | 19455 passed | 26 skipped (19483)
+✗ 'pnpm run test' fallo
+INIT_EXIT=1
+```
+
+Dos rojos, y **ninguno de los dos es una aserción sobre código de esta tanda**:
+
+1. **El ajeno conocido** (ficha 275, otra sesión), idéntico al que ya midió el backend:
+   `superficie-de-uso.guardia.test.ts` → `+ [ "lib/actions/tarifas.ts:67 obtenerTarifa" ]`.
+2. **`censo-order-status-rename.test.ts` → `Error: Test timed out in 20000ms`.** No es un
+   `expect` fallido: es un **timeout**, el patrón conocido de rojo por carga. **Medido, no
+   supuesto:** ese fichero pasa **solo en 305 ms** (8/8), y ese caso escanea directorios en
+   disco, así que sufre la contención de I/O de la suite entera. Se comprobó además que no es
+   contenido mío: en aislado encuentra **0 infractores** con mis 3 archivos nuevos ya en el
+   árbol.
+
+### 13.2 Segunda corrida (misma rama, mismo árbol) — el timeout NO reaparece
+
+```
+✓ typecheck paso
+✓ lint paso        (100 problems, 0 errors, 100 warnings)
+ Test Files  1 failed | 1422 passed (1423)
+      Tests  1 failed | 19456 passed | 26 skipped (19483)
+✗ 'pnpm run test' fallo
+INIT_EXIT=1
+```
+
+Un solo rojo: **el ajeno conocido de la 275**.
+
+### 13.3 Delta contra la referencia
+
+Referencia de la rama base (fin de la tanda de backend): **1 fallo | 19 424 verdes | 19 451
+ejecutados**.
+
+| | referencia | corrida 1 | **corrida 2** |
+| --- | --- | --- | --- |
+| fallos | 1 | 2 (1 ajeno + 1 timeout) | **1** (el ajeno) |
+| verdes | 19 424 | 19 455 | **19 456** |
+| ejecutados (+skipped) | 19 451 | 19 483 | **19 483** |
+
+**0 fallos nuevos.** Los **+32** casos son exactamente los de esta tanda: 15 en
+`usuarios-filtros-def.test.ts` (nuevo) y 17 añadidos a `usuarios-module.test.tsx` (5 → 22).
+La aritmética cuadra sin residuo: 19 424 + 32 = 19 456.
+
+**Los tests de integración tienen base.** Este worktree no traía `.env` ni `node_modules`
+(`git worktree add` no los copia); se resolvió **antes de medir nada**, copiando el `.env` del
+checkout principal y montando `node_modules` con un *junction*. Sin eso, los ~545 tests de
+`tests/integration/db/**` se habrían saltado **en silencio declarado** y el delta no sería
+comparable con el del backend. Los 26 `skipped` son los mismos que en la referencia.
+
+---
+
+## 14. Veredicto (frontend)
+
+Frontend de la 285 implementado y verificado: los **10 requisitos de superficie** que el
+backend dejó pendientes, cada uno mapeado a un test concreto; **21 mutaciones corridas, 21
+muertas, 0 supervivientes**, con el arnés **autocomprobado antes** con cinco controles de
+respuesta conocida; gate **completo** con **0 fallos nuevos** (1 → 1, +32 verdes). Se reusan
+los componentes compartidos sin tocarlos y **sin tocar el módulo de órdenes**. Las tres trampas
+del encargo están cerradas y **medidas**, y la de `fallbackData` obligó a cambiar la aserción:
+la evidente no podía matar su mutación.
