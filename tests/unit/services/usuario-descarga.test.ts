@@ -239,3 +239,166 @@ describe("UsuarioService.listarCompleto — dataset sin paginacion", () => {
     expect(excedido).not.toHaveProperty("items");
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+// FEATURE 285 — la descarga queda ACOTADA a los filtros activos (design §6, §9.3)
+//
+// ⚠️ El WHERE no se prueba aqui (los dobles no ven el SQL): esta en
+// `tests/integration/db/usuarios-filtro-busqueda.test.ts`. Lo que se prueba aqui es lo que vive
+// en el servicio — que los dos caminos arman el MISMO filtro, y que el tope se mide sobre el
+// total que el repositorio devuelve para ESE filtro.
+// ───────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Repositorio en memoria que SI filtra: aplica `busqueda` (fragmento, insensible a mayusculas,
+ * sobre nombre o correo) y `roles`. No es el `WHERE` real —no lo puede ser— pero permite que el
+ * `total` que ve el servicio dependa del filtro, que es lo que R25 necesita para significar algo.
+ */
+function repoQueFiltra(filas: UsuarioListItem[]) {
+  const list = vi.fn(async (params: ListUsuariosParams): Promise<ListUsuariosResult> => {
+    const casa = (u: UsuarioListItem): boolean => {
+      if (params.roles?.length && !params.roles.includes(u.rolValue)) return false;
+      if (params.busqueda) {
+        const t = params.busqueda.toLowerCase();
+        if (!u.nombre.toLowerCase().includes(t) && !u.email.toLowerCase().includes(t)) return false;
+      }
+      return true;
+    };
+    const filtradas = filas.filter(casa);
+    return {
+      items: filtradas.slice(params.skip, params.skip + params.take),
+      total: filtradas.length, // el `count` con el MISMO where
+    };
+  });
+  return { repo: { list } as unknown as IUserRepository, list };
+}
+
+describe("285/T-S2 — pantalla y descarga arman el MISMO filtro (R22)", () => {
+  it("`listar` y `listarCompleto` pasan al repositorio los MISMOS busqueda/roles", async () => {
+    const { repo, list } = repoQueFiltra([usuario({ id: "u1" })]);
+    const svc = servicio(repo);
+
+    const entrada = { q: "ro", rol: ["mensajero", "admin"] } as const;
+    await svc.listar(listarUsuariosSchema.parse(entrada), MAESTRO);
+    await svc.listarCompleto(listarUsuariosCompletoSchema.parse(entrada), MAESTRO);
+
+    const dePantalla = list.mock.calls[0][0];
+    const deDescarga = list.mock.calls[1][0];
+
+    expect(deDescarga.busqueda).toBe(dePantalla.busqueda);
+    expect(deDescarga.roles).toEqual(dePantalla.roles);
+    // Anti-vacuidad: si los dos fueran `undefined`, la igualdad de arriba no diria nada.
+    expect(deDescarga.busqueda).toBe("ro");
+    expect(deDescarga.roles).toEqual(["mensajero", "admin"]);
+  });
+
+  it("y sin filtros los dos siguen pidiendo el listado ENTERO, como hoy (R23)", async () => {
+    const { repo, list } = repoQueFiltra([usuario({ id: "u1" })]);
+    const svc = servicio(repo);
+
+    await svc.listar(listarUsuariosSchema.parse({}), MAESTRO);
+    await svc.listarCompleto(listarUsuariosCompletoSchema.parse({}), MAESTRO);
+
+    for (const [params] of list.mock.calls) {
+      expect(params).not.toHaveProperty("busqueda");
+      expect(params).not.toHaveProperty("roles");
+    }
+  });
+
+  it("la descarga entrega EXACTAMENTE lo que la pantalla muestra al aplicar el filtro (R22)", async () => {
+    const filas = [
+      usuario({ id: "ana", nombre: "Ana Rojas", email: "ana@ejemplo.cr", rolValue: "mensajero" }),
+      usuario({ id: "beto", nombre: "Beto Mora", email: "beto@ejemplo.cr", rolValue: "admin" }),
+      usuario({ id: "carla", nombre: "Carla Sanz", email: "carla@ejemplo.cr", rolValue: "mensajero" }),
+    ];
+    const svc = servicio(repoQueFiltra(filas).repo);
+
+    const entrada = { rol: ["mensajero"] } as const;
+    const pantalla = await svc.listar(listarUsuariosSchema.parse(entrada), MAESTRO);
+    const descarga = await svc.listarCompleto(
+      listarUsuariosCompletoSchema.parse(entrada),
+      MAESTRO,
+    );
+
+    expect(pantalla.status).toBe("ok");
+    expect(descarga.status).toBe("ok");
+    if (pantalla.status !== "ok" || descarga.status !== "ok") return;
+    expect(ids(descarga.items).sort()).toEqual(["ana", "carla"]);
+    expect(ids(descarga.items).sort()).toEqual(ids(pantalla.items).sort());
+    expect(descarga.total).toBe(2);
+  });
+});
+
+describe("285/T-S3 — el tope se mide sobre el total FILTRADO (R25)", () => {
+  it("un subconjunto por debajo del tope se descarga aunque el conjunto SIN filtrar lo exceda", async () => {
+    // El conjunto entero excede el tope; el filtrado no. Si el tope se midiera contra un total
+    // sin filtrar, esto seria `limite_excedido` y los 3 mensajeros no se podrian descargar.
+    const excedente = Array.from({ length: LIMITE + 5 }, (_, i) =>
+      usuario({ id: `admin-${i}`, nombre: `Admin ${i}`, rolValue: "admin" }),
+    );
+    const mensajeros = [
+      usuario({ id: "m1", nombre: "Ana Rojas", rolValue: "mensajero" }),
+      usuario({ id: "m2", nombre: "Beto Mora", rolValue: "mensajero" }),
+      usuario({ id: "m3", nombre: "Carla Sanz", rolValue: "mensajero" }),
+    ];
+    const svc = servicio(repoQueFiltra([...excedente, ...mensajeros]).repo);
+
+    // Contraprueba: SIN filtro el mismo conjunto SI excede el tope.
+    const sinFiltro = await svc.listarCompleto(listarUsuariosCompletoSchema.parse({}), MAESTRO);
+    expect(sinFiltro.status).toBe("limite_excedido");
+
+    const filtrado = await svc.listarCompleto(
+      listarUsuariosCompletoSchema.parse({ rol: ["mensajero"] }),
+      MAESTRO,
+    );
+    expect(filtrado.status).toBe("ok");
+    if (filtrado.status !== "ok") return;
+    expect(filtrado.total).toBe(3);
+    expect(ids(filtrado.items).sort()).toEqual(["m1", "m2", "m3"]);
+  });
+
+  it("y el tope SIGUE aplicando cuando lo filtrado tambien lo excede (no se ha desactivado)", async () => {
+    const muchos = Array.from({ length: LIMITE + 1 }, (_, i) =>
+      usuario({ id: `m-${i}`, nombre: `Mensajero ${i}`, rolValue: "mensajero" }),
+    );
+    const r = await servicio(repoQueFiltra(muchos).repo).listarCompleto(
+      listarUsuariosCompletoSchema.parse({ rol: ["mensajero"] }),
+      MAESTRO,
+    );
+
+    expect(r).toEqual({ status: "limite_excedido", total: LIMITE + 1, limite: LIMITE });
+    expect(r).not.toHaveProperty("items");
+  });
+});
+
+describe("285/T-S4 — el listado filtrado no expone ningun campo nuevo (R27)", () => {
+  it("la fila del listado y la de la descarga llevan las MISMAS claves, con y sin filtro", async () => {
+    // ⚠️ Este caso vigila la FRONTERA del servicio: que el filtro no ensanche la proyeccion al
+    // pasar por aqui. Que `LIST_SELECT` no crezca en el repositorio solo lo puede afirmar la
+    // consulta real, y esta afirmado en el test de integracion (285/T-S4-int).
+    const filas = [usuario({ id: "ana", nombre: "Ana Rojas", rolValue: "mensajero" })];
+    const svc = servicio(repoQueFiltra(filas).repo);
+
+    const sinFiltro = await svc.listar(listarUsuariosSchema.parse({}), MAESTRO);
+    const conFiltro = await svc.listar(
+      listarUsuariosSchema.parse({ q: "rojas", rol: ["mensajero"] }),
+      MAESTRO,
+    );
+    const descarga = await svc.listarCompleto(
+      listarUsuariosCompletoSchema.parse({ q: "rojas" }),
+      MAESTRO,
+    );
+
+    expect(sinFiltro.status).toBe("ok");
+    expect(conFiltro.status).toBe("ok");
+    expect(descarga.status).toBe("ok");
+    if (sinFiltro.status !== "ok" || conFiltro.status !== "ok" || descarga.status !== "ok") return;
+
+    const esperadas = ["createdAt", "email", "estado", "id", "nombre", "rolValue"];
+    expect(Object.keys(sinFiltro.items[0]).sort()).toEqual(esperadas);
+    expect(Object.keys(conFiltro.items[0]).sort()).toEqual(esperadas);
+    expect(Object.keys(descarga.items[0]).sort()).toEqual(esperadas);
+    // Y en particular, nunca el hash.
+    expect(conFiltro.items[0]).not.toHaveProperty("passwordHash");
+  });
+});

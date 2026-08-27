@@ -83,11 +83,27 @@ export interface UsuarioListItem {
 
 // Feature 25/R13/R15: parametros del listado paginado. `sortBy` llega como
 // string desde el borde y el repositorio lo valida contra su lista blanca (R15).
+//
+// Feature 285: gana el filtro del listado. Los nombres son DE DOMINIO, no de transporte
+// (`busqueda`/`roles`, no `q`/`rol`): la traduccion clave-publica -> concepto interno la hace
+// el servicio, que es donde se hace en el resto del repo.
 export interface ListUsuariosParams {
   skip: number;
   take: number;
   sortBy?: string;
   sortDir?: "asc" | "desc";
+  /**
+   * Feature 285/R2/R4/R5/R6: fragmento a buscar en NOMBRE o CORREO. Llega YA RECORTADO por el
+   * borde (el schema aplica `.trim()` antes del minimo). El repositorio es quien escapa sus
+   * comodines: aqui viaja el texto tal cual lo tecleo la persona.
+   */
+  busqueda?: string;
+  /**
+   * Feature 285/R13/R14: roles admitidos, por VALOR del enum. **NUNCA una lista vacia**:
+   * ausente = sin filtro. El borde la rechaza con `.nonempty()` para que `[]` no pueda
+   * degradar a "todos" y devolver de mas.
+   */
+  roles?: RolValue[];
 }
 
 export interface ListUsuariosResult {
@@ -96,7 +112,26 @@ export interface ListUsuariosResult {
 }
 
 // Feature 25/R16: solo los campos editables por el maestro. NUNCA email, cedula
-// ni passwordHash (Decision 5).
+// ni passwordHash (Decision 5, firmada el 2026-07-10).
+//
+// ⚠️ DECISION 5 — ACOTADA Y PARCIALMENTE REVERTIDA EL 2026-08-26 (feature 287,
+// specs/287-maestro-restablece-contrasena). Se revierte SOLO su clausula de alcance
+// («Reset de contrasena desde edicion: FUERA de alcance»): desde esa fecha el maestro
+// SI puede RESTABLECER la contrasena de un usuario.
+//
+// EL MOTIVO ORIGINAL QUEDA PROTEGIDO, y por eso la reversion es parcial. La Decision 5
+// impedia que el maestro pudiera FIJAR una credencial de otra persona —una que el
+// conociera de antemano y pudiera reusar en silencio—. Eso sigue INTACTO: el maestro no
+// ESCRIBE ninguna contrasena. El sistema la GENERA, se muestra una sola vez y solo se
+// persiste su hash. Restablecer no es fijar: ni siquiera el maestro elige que credencial
+// queda.
+//
+// ALCANCE EXACTO DE LO QUE **NO** CAMBIA: este tipo (`UpdateUsuarioData`) sigue SIN
+// admitir email, cedula ni passwordHash. El RESTABLECER va por `updatePasswordHash` (ver
+// mas abajo), que es un metodo distinto y una operacion propia con su confirmacion; NO
+// por `update`. Anadir la contrasena a la via de edicion habria sido revertir la Decision
+// 5 entera y convertir un campo hoy imposible de tocar por error en uno mas del
+// formulario.
 export interface UpdateUsuarioData {
   nombre?: string;
   telefono?: string;
@@ -135,6 +170,13 @@ export interface IUserRepository {
   /**
    * Feature 20/R9: persiste un nuevo hash de contrasena en `Usuario`. No
    * devuelve el hash. Usado por el reset de contrasena tras validar el OTP.
+   *
+   * Feature 287 (2026-08-26): AHORA TAMBIEN LO USA EL MAESTRO. Es la unica via por la que la
+   * contrasena de un usuario puede cambiar desde el modulo de usuarios —`update` sigue sin
+   * admitirla (ver la nota de la Decision 5 sobre `UpdateUsuarioData`)—, y por eso el
+   * restablecimiento del maestro se apoya en este metodo en vez de ensanchar la edicion.
+   * Los dos caminos que lo llaman son independientes entre si: el de la feature 20 exige un OTP
+   * por correo, el de la 287 exige sesion + rol `maestro` y NO toca el correo en ningun paso.
    */
   updatePasswordHash(usuarioId: string, passwordHash: string): Promise<void>;
   /**

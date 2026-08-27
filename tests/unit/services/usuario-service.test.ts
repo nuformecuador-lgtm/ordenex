@@ -329,3 +329,100 @@ describe("listar / listarTiposIdentificacion", () => {
     if (r.status === "ok") expect(r.roles).toEqual([{ id: "rol-1", value: "maestro" }]);
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+// FEATURE 285 — el filtro, visto desde el SERVICIO (design §9.3)
+//
+// ⚠️ LO QUE ESTE ARCHIVO NO PUEDE DEMOSTRAR, y esta medido cuatro veces en este repo: un
+// doble del repositorio NO VE EL SQL. Con el `WHERE` mutado —sin la rama `email`, sin
+// `mode: "insensitive"`, con el `AND` cambiado por `OR` o con el `count` sin `where`— todo lo de
+// aqui sigue en verde, porque el doble responde lo mismo se filtre como se filtre. R2/R4/R5/
+// R13/R16/R17 se dan por cubiertos SOLO en
+// `tests/integration/db/usuarios-filtro-busqueda.test.ts`.
+//
+// Lo que SI se demuestra aqui es lo que vive en el servicio: que el guard va antes de consultar
+// aun con filtros (R26), y que los dos caminos —pantalla y descarga— arman EL MISMO filtro
+// (R22).
+// ───────────────────────────────────────────────────────────────────────────────────────────
+
+const LISTAR_CON_FILTRO = {
+  page: 1,
+  pageSize: 20,
+  sortBy: "createdAt" as const,
+  sortDir: "desc" as const,
+  q: "ro",
+  rol: ["mensajero", "admin"] as [RolValue, ...RolValue[]],
+};
+
+describe("285/T-S1 — el guard va ANTES de consultar, tambien con filtros (R26)", () => {
+  it("un actor no maestro recibe forbidden y el repositorio NO recibe ninguna llamada", async () => {
+    for (const actor of [ADMIN, MENSAJERO, DESCONOCIDO]) {
+      const repoLocal = buildRepo();
+      const svc = new UsuarioService(repoLocal);
+
+      const listado = await svc.listar(LISTAR_CON_FILTRO, actor);
+      const descarga = await svc.listarCompleto(
+        { sortBy: "createdAt", sortDir: "desc", q: "ro", rol: ["mensajero"] },
+        actor,
+      );
+
+      expect(listado, `rol ${actor.rol}`).toEqual({ status: "forbidden" });
+      expect(descarga, `rol ${actor.rol}`).toEqual({ status: "forbidden" });
+      // Lo que de verdad afirma R26: NO se ejecuta la consulta filtrada.
+      expect(repoLocal.list, `rol ${actor.rol}`).not.toHaveBeenCalled();
+    }
+  });
+
+  it("CONTRAPRUEBA: el maestro SI consulta con los filtros puestos", async () => {
+    // Sin este lado, el test de arriba pasaria con un servicio que no consultara NUNCA.
+    const repoLocal = buildRepo();
+    const r = await new UsuarioService(repoLocal).listar(LISTAR_CON_FILTRO, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(repoLocal.list).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("285/T-S2 — traduccion de las claves publicas a las de dominio (R2/R13/R14)", () => {
+  it("`q` viaja como `busqueda` y `rol` como `roles`", async () => {
+    await service.listar(LISTAR_CON_FILTRO, MAESTRO);
+
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.busqueda).toBe("ro");
+    expect(arg.roles).toEqual(["mensajero", "admin"]);
+    // Las claves de TRANSPORTE no cruzan la frontera del repositorio.
+    expect(arg).not.toHaveProperty("q");
+    expect(arg).not.toHaveProperty("rol");
+  });
+
+  it("sin filtros, las claves se OMITEN: el repositorio distingue «sin filtro» de «vacio» (R1/R14)", async () => {
+    await service.listar({ page: 1, pageSize: 20, sortBy: "createdAt", sortDir: "desc" }, MAESTRO);
+
+    const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(Object.keys(arg).sort()).toEqual(["skip", "sortBy", "sortDir", "take"]);
+  });
+
+  it("un filtro sin el otro viaja solo, sin arrastrar al ausente", async () => {
+    await service.listar(
+      { page: 1, pageSize: 20, sortBy: "createdAt", sortDir: "desc", q: "ana" },
+      MAESTRO,
+    );
+    await service.listar(
+      {
+        page: 1,
+        pageSize: 20,
+        sortBy: "createdAt",
+        sortDir: "desc",
+        rol: ["apiKey"] as [RolValue, ...RolValue[]],
+      },
+      MAESTRO,
+    );
+
+    const soloQ = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const soloRol = (repo.list as ReturnType<typeof vi.fn>).mock.calls[1][0];
+    expect(soloQ.busqueda).toBe("ana");
+    expect(soloQ).not.toHaveProperty("roles");
+    expect(soloRol.roles).toEqual(["apiKey"]);
+    expect(soloRol).not.toHaveProperty("busqueda");
+  });
+});

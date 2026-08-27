@@ -127,21 +127,33 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 > decisión del humano (2026-08-25) se hacen **en producción justo después de desplegar**.
 > Cada fila se responde con **un número o un nombre**, nunca con «se ve bien».
 
-- [ ] **M8 · LOS TRES ARCHIVOS DE LA PWA, CONTRA EL DESPLIEGUE DE VERDAD.** Es **lo primero** que
-      hay que mirar tras desplegar: hasta esta release respondían **307 a `/login`** y por eso la
-      PWA **nunca se ha podido instalar**. Se comprueba **sin cookies**:
+- [x] **M8 · CERRADO EL 2026-08-26 — LA PWA YA ES INSTALABLE.** Medido contra `https://ordenex.co`
+      **sin cookies**, con los cuatro `curl -sI` de abajo:
 
       ```
-      curl -sI https://<dominio>/manifest.json | head -1     # se espera: HTTP/2 200
-      curl -sI https://<dominio>/sw.js         | head -1     # se espera: HTTP/2 200
-      curl -sI https://<dominio>/offline.html  | head -1     # se espera: HTTP/2 200
-      curl -sI https://<dominio>/ordenes       | head -1     # se espera: 307 (sigue protegido)
+      /manifest.json  ->  HTTP/1.1 200 OK    (antes: 307)
+      /sw.js          ->  HTTP/1.1 200 OK    (antes: 307)
+      /offline.html   ->  HTTP/1.1 200 OK    (antes: 307)
+      /ordenes        ->  HTTP/1.1 307       (sigue protegido, como debe)
       ```
 
-      Si alguno vuelve **307**, el arreglo del `matcher` no llegó y **el resto de la 284 no sirve
-      de nada**: nada de lo que hace la PWA llega al dispositivo. Y con los tres en 200, en un
-      teléfono: que el navegador **ofrezca instalar** (Chrome → menú → «Instalar aplicación»), que
-      es la comprobación que ningún `curl` puede hacer.
+      **El arreglo del `matcher` de la 284 llegó y funciona.** Hasta hoy los tres respondían 307 a
+      `/login` y por eso la PWA **nunca se pudo instalar** desde que existe. Esto era la premisa de
+      la que colgaba el resto de la 284: con los tres en 307, nada de lo que hace la PWA llegaba al
+      dispositivo. Ya no.
+      **Lo que sigue SIN comprobar** —y ningún `curl` puede hacerlo— es que el navegador de un
+      teléfono **ofrezca instalar** (Chrome → menú → «Instalar aplicación»). Eso queda en M5.
+
+      > **La receta, para repetirla en cualquier release** (los cuatro se leen sin cookies; si
+      > alguno de los tres primeros vuelve 307, el `matcher` se rompió otra vez y nada de lo que
+      > hace la PWA llega al dispositivo):
+      >
+      > ```
+      > curl -sI https://ordenex.co/manifest.json | head -1     # se espera: 200
+      > curl -sI https://ordenex.co/sw.js         | head -1     # se espera: 200
+      > curl -sI https://ordenex.co/offline.html  | head -1     # se espera: 200
+      > curl -sI https://ordenex.co/ordenes       | head -1     # se espera: 307 (protegido)
+      > ```
 
 - [ ] **M1 · El relevo espera.** Con la app abierta, desplegar y recargar: en DevTools →
       Application → Service Workers debe aparecer uno **`waiting`** y el que dice **`activated`**
@@ -174,10 +186,14 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 
 ### De la 264 — el detalle del cierre
 
-- [ ] **Ver la sección «Órdenes sin gestionar» en pantalla.** Cierre terminado en **`8F88DCD5`**:
-      debe listar **4 guías**, y el pie seguir en **₡14.900** general y **₡2.000** de pago al
-      mensajero. Los datos ya están verificados contra la base (2026-08-22); **lo que falta es que
-      alguien mire los píxeles**, y era una ficha visual sin tarea de «ver la app».
+- [x] ~~**Ver la sección «Órdenes sin gestionar» en pantalla.** Cierre terminado en `8F88DCD5`:
+      debe listar 4 guías, y el pie seguir en ₡14.900 general y ₡2.000 de pago al mensajero.~~
+      **IRREPETIBLE, dado de baja el 2026-08-26.** Medido ese día contra producción: `cierre_dia`
+      tiene **0 filas**. El cierre `8F88DCD5` y sus 4 guías **se borraron el 2026-08-25**, cuando el
+      humano vació producción para el arranque comercial. No es una comprobación pendiente: es una
+      que ya no se puede hacer, y dejarla como casilla sin marcar engaña a quien la lea.
+      **Si se quiere la garantía, hay que rehacerla sobre un cierre nuevo de la operación real** —
+      y entonces son otras guías y otras cifras, así que es una tarea nueva, no ésta.
 
 ### De la 262 — corregir el día de reparto
 
@@ -190,7 +206,11 @@ Lo que `F6` **no pudo cubrir en local por falta de datos**, y en producción sí
 - [ ] **«Una orden de otra zona no aparece», sobre un listado CON contenido.** En local se comprobó
       sobre un listado **vacío**, así que no discrimina entre «el acotado funciona» y «no había nada
       que mostrar». Es la comprobación de aislamiento entre zonas: merece datos de verdad.
-- [ ] **Un caso de `ayuda_tienda`**: en local no hay ninguna orden en ese estado.
+- [ ] **Un caso de `ayuda_tienda`**: en local no hay ninguna orden en ese estado. **Y en producción
+      tampoco, medido el 2026-08-26**: de 167 órdenes de la operación real, los estados vivos son
+      `en_reparto` 86, `en_ruta_bodega_satelite` 58, `en_preparacion` 15, `en_bodega_central` 7 y
+      `por_recoger` 1. **Cero en `ayuda_tienda`.** Sigue abierta, pero no se desbloquea esperando:
+      se desbloquea el día que la operación real produzca una, y entonces hay que acordarse.
 
 ### De la 262 — una pregunta de producto, no una comprobación
 

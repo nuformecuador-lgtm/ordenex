@@ -70,6 +70,8 @@ describe("R23: login de cuenta pendiente", () => {
       create: vi.fn(),
       findValidById: vi.fn(),
       deleteById: vi.fn(),
+      // Feature 287/R16: exigido por `ISessionRepository`; esta regresion no lo ejercita.
+      deleteAllByUserId: vi.fn().mockResolvedValue(0),
     };
     const riskEngine: IRiskEngine = {
       evaluate: vi.fn().mockResolvedValue({ score: 0, reasons: [], isHigh: false }),

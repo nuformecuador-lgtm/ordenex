@@ -1,5 +1,7 @@
 import { z } from "zod";
+import type { RolValue } from "@prisma/client";
 import { usuariosConfig } from "@/lib/config/usuarios";
+import { ROL_LABELS } from "@/lib/auth/rol-label";
 import { strongPasswordSchema } from "@/lib/types/password-policy";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
@@ -90,6 +92,41 @@ export const cambiarEstadoUsuarioSchema = z
   .strict();
 export type CambiarEstadoUsuarioInput = z.infer<typeof cambiarEstadoUsuarioSchema>;
 
+// Feature 285 (design §2.1/§7) — limites del termino de busqueda del listado de usuarios.
+// Se EXPORTAN porque el minimo lo consume TAMBIEN el campo de la barra: un solo origen del
+// 2, en vez de un 2 en el schema y otro escrito a mano en el control, que se separan a la
+// primera (R29).
+//
+// MINIMO = 2, Y NO EL 3 DE `/ordenes`. El 3 de alla NO es una preferencia de UX, es de
+// RENDIMIENTO: `pg_trgm` no genera trigramas utiles por debajo de 3 caracteres, asi que un
+// termino de 1-2 seria un Seq Scan garantizado sobre la tabla mas grande del sistema. AQUI
+// esa razon NO existe: no hay columna generada ni trigramas, el plan es Seq Scan con termino
+// o sin el, y `usuario` es una tabla de decenas de filas. Copiar el 3 seria importar el numero
+// sin su motivo. Se pone 2 porque si hay una razon que sobrevive al cambio de tabla: con UN
+// caracter la consulta devuelve casi todo el listado —un "filtro" que no filtra, y una
+// consulta por cada letra tecleada—, y con dos ya se acota de forma util.
+export const USUARIO_BUSQUEDA_MIN_CHARS = 2;
+// El maximo no protege al motor (cuanto mas largo el termino, MAS selectivo). Existe para
+// acotar el peso de la clave de cache del listado y para que el campo no se use como canal de
+// datos. 120 esta muy por encima de lo que alguien teclea para ENCONTRAR a una persona —se
+// busca un fragmento, nunca el valor entero—, y por encima queda la truncacion en la
+// superficie, de modo que un pegado largo nunca acabe en un listado en estado de error.
+export const USUARIO_BUSQUEDA_MAX_CHARS = 120;
+
+// Feature 285 (design §2.2) — lista blanca de roles del filtro, DERIVADA de `ROL_LABELS`.
+//
+// `ROL_LABELS` es `Record<RolValue, string>` y es EXHAUSTIVO sobre el enum de Postgres: si el
+// enum gana un valor, el compilador exige su etiqueta, y de ahi sale sola la opcion nueva del
+// filtro. El `as` esta acotado a tipar la tupla como NO VACIA (lo que `z.enum` pide) y no es lo
+// que garantiza la exhaustividad: eso lo garantiza el test que compara esta lista contra las
+// claves de `ROL_LABELS`.
+//
+// Se filtra por el VALOR del enum y no por `rol_id`: el rol es un enum, no una fila de
+// catalogo, asi que no hay nada que precargar, no viajan UUIDs distintos por entorno y el
+// borde puede validar "es un rol", no solo "es un string no vacio".
+const ROLES_FILTRO = Object.keys(ROL_LABELS) as [RolValue, ...RolValue[]];
+export const usuarioRolFiltroSchema = z.enum(ROLES_FILTRO);
+
 // R13/R15: parametros del listado. `pageSize` acotado a MAX_PAGE_SIZE via clamp;
 // `sortBy`/`sortDir` por lista blanca con defaults.
 export const listarUsuariosSchema = z.object({
@@ -102,6 +139,20 @@ export const listarUsuariosSchema = z.object({
     .transform((n) => Math.min(n, usuariosConfig.MAX_PAGE_SIZE)),
   sortBy: z.enum(USUARIO_SORT_FIELDS).default("createdAt"),
   sortDir: z.enum(["asc", "desc"]).default("desc"),
+  // Feature 285/R6/R8: termino de busqueda por nombre o correo. `.trim()` va ANTES de
+  // `.min()` a proposito: `"  a  "` es 1 caracter, no 5, y al servicio llega ya recortado.
+  // Fuera de rango (corto o largo) es `validation_error` SIN ejecutar consulta alguna.
+  q: z
+    .string()
+    .trim()
+    .min(USUARIO_BUSQUEDA_MIN_CHARS)
+    .max(USUARIO_BUSQUEDA_MAX_CHARS)
+    .optional(),
+  // Feature 285/R13/R15: roles seleccionados (SELECCION MULTIPLE). `.nonempty()` porque una
+  // lista vacia es `validation_error`, NUNCA "sin filtro" — misma disciplina que `idList` en
+  // `lib/types/orden.ts`. Falla cerrado: si el repositorio recibiera `[]` y lo descartara, un
+  // filtro presente degradaria a "todos" y devolveria DE MAS.
+  rol: z.array(usuarioRolFiltroSchema).nonempty().optional(),
 });
 export type ListarUsuariosInput = z.infer<typeof listarUsuariosSchema>;
 
@@ -152,3 +203,20 @@ export type ListarTiposIdentificacionResult =
   | { status: "ok"; tipos: { id: string; value: string }[] }
   | ActionError;
 export type ListarRolesResult = { status: "ok"; roles: RolItem[] } | ActionError;
+
+/**
+ * Feature 287/R15/R21 — resultado del restablecimiento de contrasena EN EL BORDE.
+ *
+ * ⚠️ NO se anade ningun schema zod aqui, y es deliberado: la accion solo recibe el `id` del
+ * usuario objetivo (validado con el mismo `idSchema` que las demas), asi que **no hay entrada
+ * donde meter una contrasena** (R6/R10). La ausencia del parametro es la garantia; un schema con
+ * `.strict()` seria una defensa mas debil, porque alguien puede relajarlo.
+ *
+ * `generatedPassword` es obligatorio en `ok` y no existe en ninguna otra rama: es el TIPO el que
+ * impide que un error viaje con la contrasena (R15). `self_reset_forbidden` va aparte de
+ * `ActionError` porque es una negativa con motivo propio (R5), distinguible de `forbidden`.
+ */
+export type RestablecerContrasenaResult =
+  | { status: "ok"; usuarioId: string; generatedPassword: string; sesionesRevocadas: number }
+  | { status: "self_reset_forbidden" } // R5
+  | ActionError; // unauthenticated (R1) | forbidden (R2) | not_found (R4) | validation_error (R6)

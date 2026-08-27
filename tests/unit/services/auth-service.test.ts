@@ -81,6 +81,8 @@ function buildMocks() {
     }),
     findValidById: vi.fn(),
     deleteById: vi.fn(),
+    // Feature 287/R16: exigido por `ISessionRepository`; el login no lo ejercita.
+    deleteAllByUserId: vi.fn().mockResolvedValue(0),
   };
   const riskEngine: IRiskEngine = {
     evaluate: vi.fn().mockResolvedValue({ score: 0, reasons: [], isHigh: false }),

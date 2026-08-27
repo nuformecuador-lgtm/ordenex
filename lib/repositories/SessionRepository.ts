@@ -29,4 +29,20 @@ export class SessionRepository implements ISessionRepository {
       throw error;
     }
   }
+
+  /**
+   * Feature 287/R16/R19 — TODAS las sesiones del usuario, expiradas o no. Devuelve el `count`.
+   *
+   * SIN LOGICA DE NEGOCIO: el `where` es el `userId` y nada mas. Que el filtro NO mire
+   * `expiresAt` es el requisito (R16), no un descuido — una sesion sin expirar es justo la que
+   * hay que cerrar. El `deleteMany` de Prisma no lanza cuando no encuentra filas: devuelve
+   * `{ count: 0 }`, asi que el metodo es idempotente sin un `try` que mantener.
+   *
+   * NOTA MEDIDA (design §4): `Session.userId` NO tiene indice, asi que esto es un recorrido
+   * secuencial. Se acepta a sabiendas: es una accion manual y rara, ni ruta caliente ni cron.
+   */
+  async deleteAllByUserId(userId: string): Promise<number> {
+    const { count } = await this.prisma.session.deleteMany({ where: { userId } });
+    return count;
+  }
 }
