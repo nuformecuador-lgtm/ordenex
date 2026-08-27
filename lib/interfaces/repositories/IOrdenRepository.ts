@@ -1043,13 +1043,23 @@ export interface IOrdenRepository {
    * fila por insertar (sin lotes huerfanos, R28/R35); las duplicadas que `skipDuplicates`
    * salta conservan su `carga_id` previo (R36). Devuelve el total insertado y el `cargaId`
    * resuelto (`null` si no se creo ni reutilizo ningun lote).
+   *
+   * FEATURE 294 — `omitidas`: las `num_remision` del lote que NO acabaron como fila nueva.
+   * `skipDuplicates` compila a `ON CONFLICT DO NOTHING` y descarta filas SIN error; hasta esta
+   * ficha ese descarte era invisible y la carga seguia contandolas como creadas (medido en
+   * produccion: tres ordenes "cargadas" que no existian). Quien llame TIENE que mirar esta
+   * lista: es la unica forma de que una fila que no entro aparezca en el resumen.
+   *
+   * El snapshot before/after esta acotado a `deleted_at IS NULL`, en consonancia con el indice
+   * unico PARCIAL de `20260827160000_orden_num_remision_unico_parcial`: una remision de una
+   * orden BORRADA ya no bloquea la insercion ni hace salir al batch por el early-return.
    */
   createManyOrdenes(
     data: CreateOrdenData[],
     batchSize: number,
     historial: HistorialContexto,
     lote: LoteContexto,
-  ): Promise<{ inserted: number; cargaId: string | null }>;
+  ): Promise<{ inserted: number; cargaId: string | null; omitidas: string[] }>;
 
   /**
    * Feature 88/R8/R9/R10: inserta en lotes de `batchSize` con `skipDuplicates` (patron
@@ -1072,6 +1082,13 @@ export interface IOrdenRepository {
    * siempre entra con `lote.cargaId = null`: el repo genera UN id la primera vez y lo REUSA en
    * los batches internos siguientes de la misma llamada (una peticion = un lote, R30).
    * Devuelve las creadas y el `cargaId` resuelto (`null` si no se creo ningun lote).
+   *
+   * FEATURE 294 — `omitidas` y el acotado a `deleted_at IS NULL` del diff before/after: MISMO
+   * trato que `createManyOrdenes` (ver alli el detalle). Las dos rutas insertan con
+   * `skipDuplicates`, asi que las dos pueden tragarse una fila sin decirlo; ninguna de las dos
+   * lo hace ya. Aqui `omitidas` es redundante con "esta en `data` pero no en `creadas`", y se
+   * devuelve igualmente: que el contrato lo diga explicito es lo que impide que el proximo
+   * llamador se olvide de restar los dos conjuntos.
    */
   createManyOrdenesConGuia(
     data: CreateOrdenData[],
@@ -1085,7 +1102,11 @@ export interface IOrdenRepository {
      * como esta ruta y `createManyOrdenes` acabaron divergiendo. Default `true`.
      */
     opciones?: CreateOrdenOpciones,
-  ): Promise<{ creadas: CreateOrdenConGuiaResultRow[]; cargaId: string | null }>;
+  ): Promise<{
+    creadas: CreateOrdenConGuiaResultRow[];
+    cargaId: string | null;
+    omitidas: string[];
+  }>;
 
   // --- Feature 141: persistencia de las URLs de descarga de etiquetas (R47/R48) ---
 

@@ -1,0 +1,72 @@
+-- Feature 294 — EL UNICO DE `num_remision` PASA A SER **PARCIAL**: solo cuenta lo VIVO.
+--
+-- MEDIDO EN PRODUCCION el 2026-08-27, con una tienda real bloqueada. Nuform confirmaba la carga
+-- de 3 ordenes y no aparecia NINGUNA, sin un solo error. Las tres piezas del fallo mudo:
+--
+--   1) `OrdenRepository.findExistingRemisiones` valida el duplicado con `deleted_at IS NULL`,
+--      asi que una remision BORRADA no cuenta como duplicada y la fila pasa la validacion.
+--   2) `orden_tienda_id_num_remision_key` era `UNIQUE (tienda_id, num_remision)` **sin
+--      predicado**: la borrada SEGUIA ocupando el numero.
+--   3) `createMany({ skipDuplicates: true })` descarta la fila SIN error.
+--
+-- El resultado no era "una orden menos": era que NO se creaba ni la fila de `carga` y el
+-- usuario veia un exito que no habia ocurrido. Y desde que la eliminacion de ordenes por el
+-- maestro esta en produccion (PR #509, llegado con el #532), cada borrado quema para siempre su
+-- numero de remision.
+--
+-- LA CORRECCION ES LA QUE EL CODIGO YA ASUMIA. La validacion de duplicados mira solo lo vivo;
+-- el indice miraba tambien lo muerto. Dos definiciones distintas de la misma identidad, y la
+-- discrepancia solo se manifestaba como una fila que se evaporaba. Con el predicado, la
+-- constraint dice exactamente lo que la validacion comprueba: **una remision viva por tienda**.
+--
+-- LO QUE **NO** SE RELAJA, y conviene decirlo explicito: dos ordenes VIVAS de la misma tienda
+-- con el mismo `num_remision` siguen siendo imposibles. El predicado no abre esa puerta, solo
+-- saca de la cuenta a las filas que ya no existen para el negocio.
+--
+-- SIN RIESGO DE DATO PREEXISTENTE, por el mismo argumento que uso `20260825160000` y con la
+-- misma forma: el indice nuevo es ESTRICTAMENTE MAS DEBIL que el que sustituye (cubre un
+-- SUBCONJUNTO de las filas). Si `(tienda_id, num_remision)` era unico sobre TODAS las filas,
+-- lo es trivialmente sobre las que tienen `deleted_at IS NULL`. Ninguna fila puede violarlo:
+-- no hay backfill, ni deduplicacion, ni un SELECT de verificacion que pueda fallar a mitad.
+--
+-- ⚠️ POR QUE ESTE INDICE YA NO VIVE EN `schema.prisma`, con lo MEDIDO y no con lo supuesto.
+-- Prisma **no sabe expresar indices parciales**: el `@@unique([tiendaId, numRemision])` que
+-- habia en el modelo solo puede rendirse como un UNIQUE sin predicado. Se comprobo que pasa en
+-- cada camino, el 2026-08-27, con el indice ya aplicado en la base local:
+--
+--   * `prisma migrate diff --from-config-datasource --to-schema <modelo>` sale VACIO **con y
+--     sin** el `@@unique`. La introspeccion de Prisma no lee el predicado, asi que ni propone
+--     recrear el indice viejo ni propone soltar el parcial. El riesgo NO es ese, y decirlo al
+--     reves seria inventar.
+--   * `prisma migrate diff --from-empty --to-schema <modelo>` —el render del datamodel desde
+--     cero, que es lo que hace `prisma db push`— SI escribe
+--     `CREATE UNIQUE INDEX "orden_tienda_id_num_remision_key" ON "orden"("tienda_id",
+--     "num_remision");` **sin el WHERE** mientras el `@@unique` siga en el modelo. Sin el, no
+--     escribe nada.
+--   * Y el cliente generado: con el `@@unique`, `OrdenWhereUniqueInput` sigue ofreciendo
+--     `tiendaId_numRemision`. Es decir, `findUnique`/`upsert` por un par que la base YA NO
+--     garantiza unico —puede haber N borradas y una viva con ese par—: la misma familia de
+--     fallo mudo que trae esta ficha, servida por el ORM.
+--
+-- Por eso la restriccion se retira del modelo y se declara AQUI, con el mismo patron que ya
+-- usan `zona_es_gam_unico` (20260711120000), `jobs_dedupe_key_key` (20260717120000) y los
+-- unicos parciales del premio (20260827120000). `db/schema.prisma` conserva el comentario que
+-- explica donde vive la restriccion, para que nadie la eche de menos y la "restaure".
+--
+-- ORDEN DE LAS SENTENCIAS: aqui **no** se puede crear antes de soltar (el nombre del indice es
+-- el MISMO, a proposito: se sustituye la definicion, no se anade otra). El hueco entre las dos
+-- sentencias no existe en la practica porque Prisma corre el archivo dentro de UNA transaccion,
+-- y por eso tampoco se usa `CONCURRENTLY` (no puede correr dentro de una transaccion).
+--
+-- LO QUE NO CAMBIA: `num_guia` sigue siendo UNIQUE GLOBAL y sin predicado (`orden_num_guia_key`).
+-- Ese numero lo genera Ordenex, se imprime en la etiqueta y lo leen la bodega y el mensajero:
+-- una guia borrada NO debe poder reasignarse jamas. `orden_tienda_id_idx` tampoco se toca.
+--
+-- RLS: no hay tabla nueva -> no hay superficie RLS nueva. Esta migracion no toca RLS ni policies.
+-- Tampoco mueve una sola fila: cero INSERT/UPDATE/DELETE.
+
+DROP INDEX "orden_tienda_id_num_remision_key";
+
+CREATE UNIQUE INDEX "orden_tienda_id_num_remision_key"
+  ON "orden"("tienda_id", "num_remision")
+  WHERE "deleted_at" IS NULL;

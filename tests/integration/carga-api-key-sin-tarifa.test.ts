@@ -79,7 +79,7 @@ function ordenRepo(): IOrdenRepository {
       { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false },
       { id: "d2", nombre: "Cumbaya", cantonId: "c1", zonaId: "z2", esCentral: false },
     ]),
-    createManyOrdenes: vi.fn(async () => ({ inserted: 0, cargaId: null })),
+    createManyOrdenes: vi.fn(async () => ({ inserted: 0, cargaId: null, omitidas: [] })),
     createManyOrdenesConGuia: vi.fn(async (data: CreateOrdenData[]) => ({
       creadas: data.map((d, i) => ({
         ordenId: `ord-${d.numRemision}`,
@@ -88,6 +88,7 @@ function ordenRepo(): IOrdenRepository {
         estatusValue: "por_recolectar_en_tienda",
       })),
       cargaId: "44444444-4444-4444-8444-444444444444",
+      omitidas: [],
     })),
   } as unknown as IOrdenRepository;
 }

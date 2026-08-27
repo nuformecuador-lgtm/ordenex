@@ -148,6 +148,31 @@ describeSiHayBase("R31 — la busqueda usa el indice y no recorre `orden`", () =
     opciones: { forzarIndice?: boolean } = {},
   ): Promise<string> {
     if (opciones.forzarIndice) {
+      // FEATURE 294 (2026-08-27) — POR QUE AHORA TAMBIEN SE VACIA LA PENDING LIST.
+      //
+      // `enable_seqscan = off` bastaba para aislar la pregunta de este archivo («¿PUEDE el
+      // trigram servir esta consulta?») mientras el trigram fuera el UNICO indice aplicable:
+      // sin recorrido secuencial, el planificador no tenia otra salida. La 294 convirtio
+      // `orden_tienda_id_num_remision_key` en un unico PARCIAL (`WHERE deleted_at IS NULL`), y
+      // eso lo hace utilizable como camino indexado para el `deleted_at IS NULL` que el
+      // repositorio pone en TODA consulta del listado. Con dos indices aplicables, el veredicto
+      // vuelve a decidirse por COSTE — que es justo lo que la cabecera explica que aqui no se
+      // puede medir bien: el GIN con `fastupdate` acumula entradas en una PENDING LIST que
+      // dispara su coste estimado, y ese estado depende de cuantas veces se haya corrido antes
+      // esta suite. Medido: el mismo caso caia o pasaba entre corridas consecutivas.
+      //
+      // Vaciar la pending list quita ESA distorsion (y solo esa) y devuelve el determinismo.
+      // NO se ha relajado ninguna asercion: el plan esperado sigue siendo el trigram.
+      //
+      // Y QUE PASA EN PRODUCCION, medido y no razonado: con 50 067 ordenes vivas, la pending
+      // list vaciada y `ANALYZE` fresco, las CUATRO consultas de este archivo eligen
+      // `orden_busqueda_texto_trgm_idx` —con y sin `enable_seqscan`—, y el unico parcial no
+      // aparece en ningun plan (coste del trigram 55,25 / 86,67 frente a un recorrido integro
+      // del parcial). El riesgo de que el indice nuevo se coma la busqueda existe SOLO en un
+      // corpus de tres cifras como el de este archivo.
+      await ctx.tx.$executeRawUnsafe(
+        `SELECT gin_clean_pending_list('orden_busqueda_texto_trgm_idx')`,
+      );
       await ctx.tx.$executeRawUnsafe("SET LOCAL enable_seqscan = off");
     }
     const filas = (await ctx.tx.$queryRawUnsafe(
