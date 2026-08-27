@@ -1,4 +1,4 @@
-# Feature 285 — Tasks
+# Feature 288 — Tasks
 
 > Cada task es discreta, dice **qué archivos toca** y trae un criterio de «hecho» que es un
 > **assert ejecutable**, no un `grep` ni un comentario. `[P]` = paralelizable con las tasks

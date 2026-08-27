@@ -1,4 +1,4 @@
-# Feature 285 — Diseño técnico
+# Feature 288 — Diseño técnico
 
 > Requisitos: `requirements.md`. Contexto vivo: `lib/types/plantilla-datos.ts` (catálogo
 > `CAMPOS_PLANTILLA`, 44 claves), `lib/utils/plantilla-mensaje.ts`,
@@ -88,7 +88,7 @@ no tiene ese modo de fallo. El coste es un `cast` en el repositorio.
 ```prisma
   /// Snapshot `clave -> nombre legible` tomado del catálogo (`CAMPOS_PLANTILLA`) en el
   /// último guardado. Es PRESENTACIÓN: ningún camino de envío lo lee. `{}` = fila anterior
-  /// a la feature 285 (se deriva del catálogo al pintar, R21), NUNCA null.
+  /// a la feature 288 (se deriva del catálogo al pintar, R21), NUNCA null.
   variablesNombres Json @default("{}") @map("variables_nombres")
 ```
 

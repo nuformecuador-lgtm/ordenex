@@ -2,6 +2,7 @@ import {
   CatalogoInvalidoError,
   UsuarioDuplicadoError,
   type IUserRepository,
+  type ListUsuariosParams,
   type UpdateUsuarioData,
   type UsuarioPublico,
 } from "@/lib/interfaces/repositories/IUserRepository";
@@ -16,7 +17,9 @@ import type {
   ListarUsuariosCompletoServiceResult,
   ListarUsuariosServiceResult,
   ObtenerUsuarioServiceResult,
+  RestablecerContrasenaServiceResult,
 } from "@/lib/interfaces/services/IUsuarioService";
+import type { ISessionRepository } from "@/lib/interfaces/repositories/ISessionRepository";
 import type {
   ActualizarUsuarioInput,
   CambiarEstadoUsuarioInput,
@@ -67,6 +70,15 @@ export class UsuarioService implements IUsuarioService {
     // Feature 21: repo del catalogo de vehiculos para validar `usuario.vehiculo_id`.
     // Opcional por el mismo motivo que `zonaRepo`: los tests que no lo ejercitan lo omiten.
     private readonly vehiculoRepo?: IVehiculoRepository,
+    // Feature 287/R16/R20: el revocador de sesiones del restablecimiento.
+    //
+    // ⚠️ OPCIONAL EN EL CONSTRUCTOR, OBLIGATORIO EN EL USO. Opcional porque hay decenas de
+    // `new UsuarioService(repo)` en los tests existentes y romperlos todos no compra nada. Pero
+    // `restablecerContrasena` LANZA si no esta (R20) en vez de seguir adelante: un colaborador
+    // opcional que se ignora en silencio es exactamente el modo de fallo que en este repo dejo
+    // dos notificadores muertos con la suite entera en verde. Quien lo pasa de verdad esta
+    // probado en `tests/unit/actions/usuarios-composition.test.ts`.
+    private readonly sessionRepo?: Pick<ISessionRepository, "deleteAllByUserId">,
   ) {}
 
   async crear(input: CrearUsuarioInput, actor: Actor): Promise<CrearUsuarioServiceResult> {
@@ -121,8 +133,30 @@ export class UsuarioService implements IUsuarioService {
     }
   }
 
+  /**
+   * Feature 285 (design §3.2) — traduce las claves PUBLICAS del borde (`q`, `rol`) a los
+   * nombres de dominio que entiende el repositorio (`busqueda`, `roles`).
+   *
+   * ES UNO SOLO Y LO LLAMAN LOS DOS CAMINOS (`listar` y `listarCompleto`), por la misma razon
+   * por la que `OrdenService.construirWhere` es compartido: si cada uno armara el suyo, la
+   * pantalla y la descarga podrian discrepar sin que nada lo delatara — y lo que se descubriria
+   * no es un test rojo, sino un archivo que no es lo que la tabla muestra (R22).
+   *
+   * Las claves ausentes se OMITEN (no viajan como `undefined` explicito) para que el
+   * repositorio distinga "sin filtro" de "filtro vacio". `rol` nunca llega como `[]`: el borde
+   * lo rechaza con `.nonempty()`.
+   */
+  private construirFiltro(
+    input: Pick<ListarUsuariosInput, "q" | "rol">,
+  ): Pick<ListUsuariosParams, "busqueda" | "roles"> {
+    return {
+      ...(input.q !== undefined ? { busqueda: input.q } : {}), // R2/R6
+      ...(input.rol !== undefined ? { roles: input.rol } : {}), // R13/R14
+    };
+  }
+
   async listar(input: ListarUsuariosInput, actor: Actor): Promise<ListarUsuariosServiceResult> {
-    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R3/R4
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R3/R4 (285/R26)
 
     const skip = (input.page - 1) * input.pageSize;
     const { items, total } = await this.repo.list({
@@ -130,6 +164,7 @@ export class UsuarioService implements IUsuarioService {
       take: input.pageSize, // ya acotado a MAX_PAGE_SIZE por el schema (R13)
       sortBy: input.sortBy,
       sortDir: input.sortDir,
+      ...this.construirFiltro(input), // feature 285/R2/R13/R16
     });
 
     return { status: "ok", items, page: input.page, pageSize: input.pageSize, total };
@@ -139,23 +174,32 @@ export class UsuarioService implements IUsuarioService {
    * Feature 170 (T B.1, design §2.1) — el MISMO listado sin recorte por pagina, para la
    * descarga del dataset completo.
    *
-   * NO hay `construirWhere` que extraer aqui, y eso es un HALLAZGO, no un olvido:
-   * `listar` no construye ningun `where` (el repositorio lista TODOS los usuarios; el
-   * modulo entero es exclusivo de `maestro`, que no esta acotado a un subconjunto). El
-   * alcance por rol de este listado ES el guard `ALLOWED_ROLES`, y por eso este metodo
-   * usa literalmente el mismo, escrito ANTES de tocar la base (R17): un rol no autorizado
-   * recibe `forbidden` sin que se ejecute una sola consulta.
+   * ⚠️ AQUI DECIA, HASTA LA FEATURE 285, que «NO hay `construirWhere` que extraer aqui, y eso es
+   * un HALLAZGO»: era cierto mientras el listado no tenia filtro alguno. La 285 lo DESMIENTE, y
+   * por eso el parrafo se reescribe en vez de dejarse: un comentario que afirma algo falso con
+   * aire de hallazgo verificado es peor que ninguno — la proxima sesion lo usaria de argumento.
    *
-   * La paridad con el listado (R9/R11/R19) se sostiene sobre llamar al MISMO
-   * `repo.list` con los MISMOS `sortBy`/`sortDir`: cualquier criterio que el repositorio
-   * aplique —hoy y manana— lo aplica identico en los dos caminos, porque es el mismo
-   * metodo. Solo cambian `skip` (0) y `take` (tope + 1).
+   * LO QUE HAY AHORA. El listado si construye filtro (`q` -> `busqueda`, `rol` -> `roles`), y
+   * este metodo llama al MISMO `construirFiltro` que `listar`, no a una copia. Eso es lo que
+   * hace que la descarga entregue EXACTAMENTE las filas que la pantalla muestra (R22): no es una
+   * coincidencia que haya que mantener, es el mismo codigo.
+   *
+   * LO QUE NO CAMBIA, y sigue siendo verdad: el alcance POR ACTOR de este listado ES el guard
+   * `ALLOWED_ROLES` —el modulo entero es exclusivo de `maestro`, que no esta acotado a un
+   * subconjunto de filas—, y por eso este metodo usa literalmente el mismo guard, escrito ANTES
+   * de tocar la base (R17 de la 170 / R26 de la 285): un rol no autorizado recibe `forbidden`
+   * sin que se ejecute una sola consulta, tambien cuando manda filtros.
+   *
+   * La paridad con el listado (R9/R11/R19) se sostiene sobre llamar al MISMO `repo.list` con los
+   * MISMOS `sortBy`/`sortDir` y el MISMO filtro: cualquier criterio que el repositorio aplique
+   * —hoy y manana— lo aplica identico en los dos caminos, porque es el mismo metodo. Solo
+   * cambian `skip` (0) y `take` (tope + 1).
    */
   async listarCompleto(
     input: ListarUsuariosCompletoInput,
     actor: Actor,
   ): Promise<ListarUsuariosCompletoServiceResult> {
-    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R17
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R17 (285/R26)
 
     const limite = descargaConfig.MAX_FILAS;
 
@@ -167,10 +211,18 @@ export class UsuarioService implements IUsuarioService {
       take: limite + 1,
       sortBy: input.sortBy, // R11: mismos defaults del schema (createdAt/desc)
       sortDir: input.sortDir,
+      ...this.construirFiltro(input), // feature 285/R22: el MISMO filtro que la pantalla
     });
 
     // R27/R28: por encima del tope no se entrega NADA. Nunca un dataset truncado en
     // silencio: o van todas las filas, o va el error accionable con los conteos.
+    //
+    // Feature 285/R25: `total` es ahora el total FILTRADO (el repositorio cuenta con el mismo
+    // `where` con el que pagina), asi que el tope se mide sobre lo que de verdad se va a
+    // descargar. Es la consecuencia directa —y deseada— de que el `count` lleve el `where`: sin
+    // eso, un `limite_excedido` calculado sobre el conjunto SIN filtrar rechazaria la descarga de
+    // 8 mensajeros porque la tabla entera es grande. La direccion del cambio solo puede ser a
+    // mejor: filtrar nunca sube el total.
     if (total > limite) return { status: "limite_excedido", total, limite };
 
     return { status: "ok", items, total };
@@ -263,6 +315,73 @@ export class UsuarioService implements IUsuarioService {
 
     const roles = await this.repo.listRoles();
     return { status: "ok", roles };
+  }
+
+  /**
+   * Feature 287 — EL MAESTRO RESTABLECE LA CONTRASENA DE UN USUARIO.
+   *
+   * El sistema GENERA la contrasena (R8), revoca TODAS las sesiones del objetivo (R16) y SOLO
+   * DESPUES persiste el hash (R11/R12). La contrasena en claro se devuelve UNA vez, aqui (R21).
+   *
+   * ⚠️ EL ORDEN DE LOS DOS ESCRITOS NO ES ARBITRARIO (R11). No son atomicos —dos tablas, dos
+   * llamadas— y el orden decide que queda si el proceso muere en medio:
+   *
+   *   hash → revocar : contrasena rotada Y SESIONES VIVAS. Quien tuviera una sesion sigue
+   *                    dentro, y el legitimo ya no puede entrar. Estado MAS PERMISIVO.
+   *   revocar → hash : sesiones cerradas y contrasena sin rotar. Nadie gana acceso; el maestro
+   *                    reintenta. Estado MAS RESTRICTIVO — es el elegido.
+   *
+   * ⚠️ NO SE TOCAN LOS DISPOSITIVOS DE CONFIANZA (R18), y la respuesta intuitiva («si revocas,
+   * revoca todo») es la equivocada: quien perdio su contrasena llega con +40 de fallos recientes
+   * en el `RiskEngine`; con su dispositivo intacto suma 40 < 50 y entra, pero borrandolo suma 80,
+   * se dispara el OTP por correo y el correo esta caido. Borrarlo dejaria fuera justo a quien esta
+   * feature existe para dejar entrar. Se revoca lo que PORTA acceso, no lo que solo puntua riesgo.
+   *
+   * ⚠️ NO ENVIA NADA (R37/R38): ni correo al usuario ni ninguna otra notificacion. No es un olvido
+   * —es decision firmada del humano el 2026-08-26— y ademas el camino no toca el proveedor de
+   * correo ni para fallar, que es la condicion operativa que hace esta ficha necesaria (el SMTP
+   * de produccion rechaza la credencial con 535). El riesgo aceptado esta escrito como RS1 en
+   * `specs/287-maestro-restablece-contrasena/design.md` §12.
+   */
+  async restablecerContrasena(
+    id: string,
+    actor: Actor,
+  ): Promise<RestablecerContrasenaServiceResult> {
+    // R2/R3: el MISMO `ALLOWED_ROLES` del resto del modulo, no una copia. Dos listas de permisos
+    // para el mismo modulo divergen en cuanto alguien toque una.
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" };
+
+    const usuario = await this.repo.findById(id);
+    if (!usuario) return { status: "not_found" }; // R4
+
+    // R5: el maestro no se restablece a si mismo. Revocarle las sesiones a mitad del flujo puede
+    // tumbarle la sesion antes de que copie la contrasena que solo se ve una vez, y si es el
+    // unico maestro se queda fuera con el correo caido.
+    if (usuario.id === actor.usuarioId) return { status: "self_reset_forbidden" };
+
+    // R20: sin revocador NO se completa un restablecimiento. Falla visible, antes de generar
+    // nada: un restablecimiento que no revoca no restablece, solo lo aparenta.
+    const sessionRepo = this.sessionRepo;
+    if (!sessionRepo) {
+      throw new Error(
+        "UsuarioService.restablecerContrasena requiere el repositorio de sesiones: sin el no se " +
+          "pueden revocar las sesiones del usuario y el restablecimiento seria una mentira (287/R20)",
+      );
+    }
+
+    // R8/R9/R10: la genera el sistema con el MISMO generador del alta, que valida su propia
+    // salida contra `strongPasswordSchema`. Del actor no entra ningun valor: no hay parametro.
+    const plain = generateStrongPassword();
+    const passwordHash = await hashPassword(plain); // R12: solo se persiste el hash
+
+    // R11/R16: PRIMERO revocar TODAS las sesiones del objetivo...
+    const sesionesRevocadas = await sessionRepo.deleteAllByUserId(usuario.id);
+    // ...y solo DESPUES el hash (R12). Ver el porque del orden en la cabecera.
+    await this.repo.updatePasswordHash(usuario.id, passwordHash);
+
+    // R21: la contrasena en claro viaja EXACTAMENTE una vez, aqui. No se guarda en ningun sitio,
+    // no se loguea (R23/R24) y no hay forma de volver a pedirla.
+    return { status: "ok", usuarioId: usuario.id, generatedPassword: plain, sesionesRevocadas };
   }
 
   // R9/R10/R11: traduce los errores de dominio del repositorio a resultados

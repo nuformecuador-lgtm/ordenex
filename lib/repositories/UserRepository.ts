@@ -1,6 +1,7 @@
 import { Prisma, type EstadoUsuario, type PrismaClient, type RolValue } from "@prisma/client";
 import type { UsuarioPorRolDTO } from "@/lib/types/usuario-por-rol";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
+import { escaparComodinesLike } from "@/lib/utils/escapar-like";
 import {
   CatalogoInvalidoError,
   UsuarioDuplicadoError,
@@ -174,19 +175,56 @@ export class UserRepository implements IUserRepository {
     return rows.map((r) => ({ id: r.id, nombre: r.nombre, zonaId: r.zonaId }));
   }
 
-  /** Feature 25/R13/R14/R15: listado paginado con `rolValue`, sin hash. */
+  /**
+   * Feature 25/R13/R14/R15: listado paginado con `rolValue`, sin hash.
+   *
+   * Feature 285 (design §3.3): ademas FILTRA por rol y por termino de busqueda. Cuatro
+   * decisiones que conviene poder senalar en el codigo:
+   *
+   * 1. **El `count` recibe EL MISMO objeto `where` que el `findMany`** (R17). Hasta esta
+   *    feature era un `count()` a secas, y era correcto porque no habia filtro. En cuanto entra
+   *    uno, dejarlo asi pintaria "1-25 de 48" bajo una tabla de 3 filas y —peor— haria que el
+   *    tope de la descarga se midiera contra el total SIN filtrar. Es un fallo MUDO: no rompe
+   *    ningun test que mire filas, solo miente en el numero.
+   * 2. **El `OR` de dos columnas aqui es seguro, y hay que decir por que.** En `/ordenes` esta
+   *    prohibido meter el termino en un `OR` porque alli convive con el acotamiento por rol del
+   *    actor, y un `OR` mal puesto lo desactivaria. En usuarios NO existe tal acotamiento: el
+   *    modulo entero es de `maestro` y no recorta filas por actor. El `OR` es HERMANO del filtro
+   *    de rol —`AND (rol …) AND (nombre … OR email …)`—, asi que el rol sigue mandando (R16).
+   * 3. **Escapado de comodines** (R5): Prisma interpola el valor de `contains` dentro de
+   *    `%valor%` sin escaparlo; sin esto, `"%"` devuelve el listado entero.
+   * 4. **`mode: "insensitive"`** (ILIKE) para R4. NO pliega acentos: `jose` no encuentra a
+   *    `José` (`jos` si, porque se busca por fragmento). Limitacion aceptada a conciencia en
+   *    design §8: plegarlos exigiria columna generada + `pg_trgm` + migracion sobre una tabla
+   *    de decenas de filas.
+   */
   async list(params: ListUsuariosParams): Promise<ListUsuariosResult> {
     const column = SORT_COLUMN[params.sortBy ?? "createdAt"] ?? "createdAt"; // R15
     const orderBy = { [column]: params.sortDir ?? "desc" } as const;
 
+    // Un solo `where`, construido una vez, usado por la pagina Y por el conteo.
+    const termino = params.busqueda ? escaparComodinesLike(params.busqueda) : undefined;
+    const where: Prisma.UsuarioWhereInput = {
+      ...(params.roles?.length ? { rol: { value: { in: params.roles } } } : {}), // R13/R14
+      ...(termino !== undefined
+        ? {
+            OR: [
+              { nombre: { contains: termino, mode: "insensitive" } }, // R2/R4
+              { email: { contains: termino, mode: "insensitive" } }, // R2/R4
+            ],
+          }
+        : {}),
+    };
+
     const [rows, total] = await Promise.all([
       this.prisma.usuario.findMany({
         select: LIST_SELECT,
-        orderBy,
+        orderBy, // R19: el criterio de orden no depende de que haya filtro
         skip: params.skip,
         take: params.take,
+        where,
       }),
-      this.prisma.usuario.count(),
+      this.prisma.usuario.count({ where }), // ⚠️ R17: EL MISMO `where`, no `count()` a secas
     ]);
 
     const items: UsuarioListItem[] = rows.map((row) => ({

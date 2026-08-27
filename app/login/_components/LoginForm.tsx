@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FormField } from "@/components/shared/FormField";
+import { PasswordInput } from "@/components/shared/PasswordInput";
 
 // Validación de cliente: email válido, password no vacía
 const credentialsSchema = z.object({
@@ -248,10 +249,10 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
             error={credentialsFieldErrors.password}
           >
             {(control) => (
-              <Input
+              <PasswordInput
                 {...control}
                 ref={passwordRef}
-                type="password"
+                etiqueta="Contraseña"
                 placeholder="Tu contraseña"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

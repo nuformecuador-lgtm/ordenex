@@ -7,9 +7,14 @@ import {
   cambiarEstadoUsuario,
   listarTiposIdentificacion,
   listarRoles,
+  restablecerContrasenaUsuario,
 } from "@/lib/actions/usuarios";
 import type { Actor, IUsuarioService } from "@/lib/interfaces/services/IUsuarioService";
 import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
+import {
+  USUARIO_BUSQUEDA_MAX_CHARS,
+  USUARIO_BUSQUEDA_MIN_CHARS,
+} from "@/lib/types/usuario";
 
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
 
@@ -52,6 +57,13 @@ function fakeService(overrides: Partial<IUsuarioService> = {}): IUsuarioService 
     listarRoles: vi
       .fn()
       .mockResolvedValue({ status: "ok", roles: [{ id: "rol-1", value: "maestro" }] }),
+    // Feature 287 (T7): el doble implementa la interfaz COMPLETA.
+    restablecerContrasena: vi.fn().mockResolvedValue({
+      status: "ok",
+      usuarioId: "usr-1",
+      generatedPassword: "Gen3rada!X",
+      sesionesRevocadas: 2,
+    }),
     ...overrides,
   };
 }
@@ -89,8 +101,11 @@ describe("R2: sin sesion -> unauthenticated sin tocar el service", () => {
     );
     expect((await listarTiposIdentificacion(deps)).status).toBe("unauthenticated");
     expect((await listarRoles(deps)).status).toBe("unauthenticated");
+    // Feature 287/R1: el restablecimiento entra por la MISMA puerta que las demas.
+    expect((await restablecerContrasenaUsuario("usr-1", deps)).status).toBe("unauthenticated");
     expect(service.crear).not.toHaveBeenCalled();
     expect(service.listar).not.toHaveBeenCalled();
+    expect(service.restablecerContrasena).not.toHaveBeenCalled();
   });
 });
 
@@ -199,5 +214,147 @@ describe("id invalido -> validation_error con clave id", () => {
     expect(r.status).toBe("validation_error");
     if (r.status === "validation_error") expect(Object.keys(r.fieldErrors)).toEqual(["id"]);
     expect(service.obtener).not.toHaveBeenCalled();
+  });
+});
+
+/* ========================================================================== */
+/* FEATURE 287 (T7) — el borde del restablecimiento de contrasena              */
+/* ========================================================================== */
+
+describe("287/R6/R10: la accion NO tiene por donde recibir una contrasena", () => {
+  it("la firma admite exactamente `(id, deps)` — no hay un tercer parametro de entrada", () => {
+    // ⭑ LA MUTACION QUE ESTE CASO MATA: «ampliar la firma con un segundo parametro de entrada»
+    //   (`restablecerContrasenaUsuario(id, input, deps)`). Eso abriria la puerta a que el maestro
+    //   FIJE una contrasena que conoce de antemano, que es justo lo que la Decision 5 de la
+    //   feature 25 protegia y lo que esta ficha NO revierte. La ausencia del parametro es la
+    //   garantia (R10), no una validacion que alguien pueda relajar.
+    //
+    //   `Function.length` cuenta los parametros sin default: `deps` lo tiene, asi que 1 es lo
+    //   correcto y un `input` intermedio subiria la cuenta a 2.
+    expect(restablecerContrasenaUsuario.length).toBe(1);
+  });
+
+  it.each([
+    { id: "", que: "vacio" },
+    { id: null, que: "null" },
+    { id: 123, que: "numerico" },
+    // ⭑ El caso que dice el requisito con todas las letras: si alguien intentara colar una
+    //   contrasena por el unico parametro que hay, el borde la rechaza sin efectos.
+    { id: { password: "Elegida-1!" }, que: "un objeto con una contrasena dentro" },
+  ])("id $que -> validation_error sin llamar al service (R6)", async ({ id }) => {
+    const service = fakeService();
+    const r = await restablecerContrasenaUsuario(id, {
+      usuarioService: service,
+      getActor: getActor(MAESTRO),
+    });
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") expect(Object.keys(r.fieldErrors)).toEqual(["id"]);
+    expect(service.restablecerContrasena, "R6: sin efectos de ningun tipo").not.toHaveBeenCalled();
+  });
+});
+
+describe("287/R19/R21: propaga la contrasena y el numero de sesiones del service", () => {
+  it("delega con el id parseado y el actor, y devuelve lo que el service dio", async () => {
+    const service = fakeService();
+    const r = await restablecerContrasenaUsuario("usr-1", {
+      usuarioService: service,
+      getActor: getActor(MAESTRO),
+    });
+
+    expect(service.restablecerContrasena).toHaveBeenCalledWith("usr-1", MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.generatedPassword).toBe("Gen3rada!X"); // R21: una vez, aqui
+    expect(r.sesionesRevocadas).toBe(2); // R19
+    expect(r.usuarioId).toBe("usr-1");
+  });
+});
+
+describe("287/R15: ninguna rama de error viaja con contrasena", () => {
+  it.each(["forbidden", "not_found", "self_reset_forbidden"] as const)(
+    "`%s` del service llega al borde sin `generatedPassword`",
+    async (status) => {
+      const service = fakeService({
+        restablecerContrasena: vi.fn().mockResolvedValue({ status }),
+      });
+      const r = await restablecerContrasenaUsuario("usr-1", {
+        usuarioService: service,
+        getActor: getActor(MAESTRO),
+      });
+
+      expect(r.status).toBe(status);
+      // R15 comprobado sobre el objeto REAL, no sobre el tipo: el tipo ya lo impide, pero un
+      // `...resultado` descuidado en el borde podria arrastrar el campo en tiempo de ejecucion.
+      expect(Object.keys(r)).toEqual(["status"]);
+      expect(JSON.stringify(r)).not.toContain("generatedPassword");
+    },
+  );
+
+  it("un fallo INESPERADO del service tampoco devuelve contrasena", async () => {
+    const service = fakeService({
+      restablecerContrasena: vi.fn().mockRejectedValue(new Error("boom")),
+    });
+    // El manejador global convierte un error no mapeado en INTERNAL, y `toActionError` lo
+    // re-lanza: lo que NO puede pasar es que salga un `ok` con secreto.
+    await expect(
+      restablecerContrasenaUsuario("usr-1", {
+        usuarioService: service,
+        getActor: getActor(MAESTRO),
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+// FEATURE 285 — el BORDE del filtro: fuera de contrato, `validation_error` SIN CONSULTAR.
+//
+// R8 y R15 no dicen solo «responde validation_error»: dicen «sin ejecutar ninguna consulta».
+// Esa mitad NO la puede afirmar un test de schema —zod no sabe si alguien consulto despues—,
+// asi que se afirma aqui, que es donde se ve que el servicio no recibe la llamada.
+// ───────────────────────────────────────────────────────────────────────────────────────────
+describe("285/R8/R15 — filtro fuera de contrato: validation_error sin llamar al service", () => {
+  const casos: { que: string; input: Record<string, unknown>; campo: string }[] = [
+    {
+      que: "termino por DEBAJO del minimo",
+      input: { q: "a".repeat(USUARIO_BUSQUEDA_MIN_CHARS - 1) },
+      campo: "q",
+    },
+    {
+      que: "termino por ENCIMA del maximo",
+      input: { q: "b".repeat(USUARIO_BUSQUEDA_MAX_CHARS + 1) },
+      campo: "q",
+    },
+    { que: "termino de solo espacios (1 caracter al recortar)", input: { q: "  a  " }, campo: "q" },
+    { que: "lista de roles VACIA", input: { rol: [] }, campo: "rol" },
+    { que: "rol que no existe", input: { rol: ["superadmin"] }, campo: "rol" },
+  ];
+
+  it.each(casos)("$que -> validation_error y el service NO se llama", async ({ input, campo }) => {
+    const service = fakeService();
+    const r = await listarUsuarios(input, {
+      usuarioService: service,
+      getActor: getActor(MAESTRO),
+    });
+
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") expect(Object.keys(r.fieldErrors)).toContain(campo);
+    // La mitad que el schema no puede afirmar: no se ejecuto ninguna consulta.
+    expect(service.listar).not.toHaveBeenCalled();
+  });
+
+  it("CONTRAPRUEBA: un filtro VALIDO si llega al service, ya recortado (R6)", async () => {
+    // Sin este lado, los casos de arriba pasarian con una accion que no llamara NUNCA al
+    // servicio: la ausencia de llamada dejaria de significar «rechazado» para significar «roto».
+    const service = fakeService();
+    const r = await listarUsuarios(
+      { q: "  ro  ", rol: ["mensajero", "admin"] },
+      { usuarioService: service, getActor: getActor(MAESTRO) },
+    );
+
+    expect(r.status).toBe("ok");
+    expect(service.listar).toHaveBeenCalledTimes(1);
+    const [entrada] = (service.listar as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(entrada.q).toBe("ro"); // R6: el borde recorta antes de dejarlo pasar
+    expect(entrada.rol).toEqual(["mensajero", "admin"]);
   });
 });

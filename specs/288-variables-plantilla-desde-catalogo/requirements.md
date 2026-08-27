@@ -1,4 +1,4 @@
-# Feature 285 — Las variables de una plantilla se eligen de un catálogo, no se escriben a mano
+# Feature 288 — Las variables de una plantilla se eligen de un catálogo, no se escriben a mano
 
 > Requisitos en notación EARS. Sin detalles de implementación (eso vive en `design.md`).
 > Alcance: `configuracion/plantillas` (crear y editar) + la resolución de variables al
