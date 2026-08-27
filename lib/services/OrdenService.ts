@@ -13,9 +13,13 @@ import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHis
 import type {
   ListarOrdenesCompletoInput,
   ListarOrdenesInput,
+  OrdenListItemDTO,
   SortDir,
   SortField,
 } from "@/lib/types/orden";
+// Pedido humano (2026-08-27): la segunda mitad del predicado de `sinGestion`. Se lee de la
+// fuente unica de los estados de nacimiento, no se re-declara.
+import { ESTADOS_CREACION } from "@/lib/types/order-status-transiciones";
 import { soloDigitosSiPareceNumero } from "@/lib/utils/busqueda-orden";
 // Pedido humano (2026-08-19): el rango de creacion y el termino de busqueda los traduce el
 // util COMPARTIDO, porque la barra de este listado se aplica tambien a la bodega satelite y
@@ -67,10 +71,25 @@ const FILTER_TO_COLUMN = {
  */
 const NUM_GUIA_MAX = 2_147_483_647;
 
+/**
+ * Pedido humano (2026-08-27) — los estados en los que una orden puede seguir SIN gestionar. Es
+ * la fuente unica (`ESTADOS_CREACION`), no una copia: la segunda mitad del predicado de
+ * `sinGestion`.
+ */
+const SET_ESTADOS_CREACION: ReadonlySet<string> = new Set<string>(ESTADOS_CREACION);
+
 // Feature 160 (design §3.5): el derivador de intentos EN LOTE. `Pick` para dobles de test sin
 // DB, e `import type` para que la dependencia sea SOLO de tipo (sin ciclo de modulos:
 // `OrdenHistorialService` depende de repositorios, nunca de los servicios de lista).
-type IntentosSvc = Pick<IOrdenHistorialService, "contarIntentosEnLote">;
+// Pedido humano (2026-08-27): el `Pick` GANA `idsConGestionPosteriorEnLote`, de donde sale el
+// `sinGestion` de cada fila (¿se puede ofrecer «Eliminar» sobre ella?). Va por el MISMO servicio
+// —y no por un derivado propio de este listado— porque el borrado se autoriza con esa misma
+// respuesta: dos derivaciones del mismo hecho es como la barra acaba ofreciendo lo que el
+// servidor rechaza.
+type IntentosSvc = Pick<
+  IOrdenHistorialService,
+  "contarIntentosEnLote" | "idsConGestionPosteriorEnLote"
+>;
 
 export class OrdenService implements IOrdenService {
   /**
@@ -200,6 +219,12 @@ export class OrdenService implements IOrdenService {
     // FILTER_TO_COLUMN; el repositorio lo traduce. Solo acota (nunca amplia), asi que
     // convive sin conflicto con el acotamiento por rol que se escribe debajo.
     if (input.filter?.reasignables) where.reasignables = true;
+    // ELIMINADAS (pedido humano 2026-08-27): la unica clave que no ACOTA sino que SUSTITUYE el
+    // universo del listado (`deleted_at IS NOT NULL` en vez de `IS NULL`). Tampoco es una
+    // columna, asi que tampoco pasa por FILTER_TO_COLUMN. El acotamiento por rol que se escribe
+    // debajo sigue teniendo la ultima palabra —y ademas `listar`/`listarCompleto` ya rechazaron
+    // a todo el que no sea `maestro` antes de llegar aqui.
+    if (input.filter?.eliminados) where.soloEliminados = true;
     // Feature 169/R2/R14/R21: el TERMINO. Como las claves temporales y `reasignables`, no
     // es una columna y por eso no pasa por FILTER_TO_COLUMN. Se escribe ANTES del
     // acotamiento por rol —igual que todos los filtros— para que el rol siga teniendo la
@@ -253,11 +278,57 @@ export class OrdenService implements IOrdenService {
     });
   }
 
+  /**
+   * Pedido humano (2026-08-27) — «solo el maestro ve las eliminadas». `true` = el actor pidio el
+   * interruptor y NO puede: el listado responde `forbidden` sin construir el `where`.
+   *
+   * SE RECHAZA, no se ignora en silencio. Ignorarlo devolveria el listado de las vivas con el
+   * interruptor puesto en pantalla, y quien lo pidiera concluiria que no hay ninguna orden
+   * eliminada — una respuesta correcta a una pregunta que nadie hizo.
+   */
+  private eliminadasVedadas(
+    filter: { eliminados?: true } | undefined,
+    actor: Actor,
+  ): boolean {
+    return filter?.eliminados === true && actor.rol !== "maestro";
+  }
+
+  /**
+   * Pedido humano (2026-08-27) — anota `sinGestion` en cada fila: si la orden NO registra
+   * gestion posterior a su creacion, y por tanto todavia se puede ELIMINAR.
+   *
+   * SOLO para el `maestro`, que es el unico que puede borrar. Para el resto ni se consulta (una
+   * consulta por pagina que nadie usaria) y el campo viaja `undefined`; la UI exige `=== true`,
+   * asi que la ausencia no habilita nada.
+   *
+   * MISMO predicado de dos partes que aplica `EliminarOrdenService`, y con la misma direccion
+   * del error: sin movimiento en el historial Y todavia en un estado de nacimiento. Repetirlo
+   * aqui no es duplicar la regla —la fuente del hecho es UNA (`idsConGestionPosteriorEnLote`)—;
+   * es aplicarla a la pregunta «¿ofrezco el boton?» ademas de a «¿lo autorizo?».
+   */
+  private async marcarSinGestion(
+    items: OrdenListItemDTO[],
+    actor: Actor,
+  ): Promise<OrdenListItemDTO[]> {
+    if (actor.rol !== "maestro" || items.length === 0) return items;
+    const conGestion = await this.historial.idsConGestionPosteriorEnLote(
+      items.map((o) => o.id),
+    );
+    return items.map((o) => ({
+      ...o,
+      sinGestion:
+        !conGestion.has(o.id) &&
+        o.estatusValue !== undefined &&
+        SET_ESTADOS_CREACION.has(o.estatusValue),
+    }));
+  }
+
   async listar(
     input: ListarOrdenesInput,
     actor: Actor,
   ): Promise<ListarOrdenesServiceResult> {
     if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R24
+    if (this.eliminadasVedadas(input.filter, actor)) return { status: "forbidden" };
 
     const skip = (input.page - 1) * input.pageSize;
     const { items, total } = await this.listarConFallbackDeGuia(input, actor, {
@@ -273,10 +344,10 @@ export class OrdenService implements IOrdenService {
     // leer). Pagina vacia -> 0 consultas (R13). `?? 0` porque las ordenes sin intentos no
     // vienen en el Map y el `0` SIEMPRE se expone (R14/R19).
     const intentos = await this.historial.contarIntentosEnLote(items.map((o) => o.id));
-    const itemsConIntentos = items.map((o) => ({
-      ...o,
-      intentosEntrega: intentos.get(o.id) ?? 0,
-    }));
+    const itemsConIntentos = await this.marcarSinGestion(
+      items.map((o) => ({ ...o, intentosEntrega: intentos.get(o.id) ?? 0 })),
+      actor,
+    );
 
     return {
       status: "ok",
@@ -300,6 +371,7 @@ export class OrdenService implements IOrdenService {
     actor: Actor,
   ): Promise<ListarOrdenesCompletoServiceResult> {
     if (!KNOWN_ROLES.has(actor.rol)) return { status: "forbidden" }; // R14/R24
+    if (this.eliminadasVedadas(input.filter, actor)) return { status: "forbidden" };
 
     const limite = descargaConfig.MAX_FILAS;
 
@@ -324,6 +396,10 @@ export class OrdenService implements IOrdenService {
 
     // Mismo merge de intentos que `listar` (feature 160), para que la columna
     // "intentos" del archivo no diverja de la que se ve en pantalla.
+    //
+    // `sinGestion` NO se anota aqui, y no es un olvido: es la respuesta a «¿ofrezco el boton
+    // Eliminar en esta fila?», y en un archivo descargado no hay boton. Anotarlo costaria una
+    // consulta sobre hasta `MAX_FILAS` ordenes para una columna que nadie mira.
     const intentos = await this.historial.contarIntentosEnLote(items.map((o) => o.id));
     const itemsConIntentos = items.map((o) => ({
       ...o,

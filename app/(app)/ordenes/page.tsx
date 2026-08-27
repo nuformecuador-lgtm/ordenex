@@ -78,6 +78,13 @@ export default async function OrdenesPage() {
   // `/recepcion-satelite`. Hoy, en la práctica, sólo maestro/admin tienen desde dónde reportar.
   const puedeReportarIncidente = rol ? esAccesoTotal(rol) : false;
 
+  // Pedido humano (2026-08-27): ELIMINAR una orden —y RECUPERAR una eliminada, y verlas
+  // siquiera— es SOLO del `maestro`. No es `esAccesoTotal` y no es un descuido que no lo sea:
+  // el borrado retira la orden de los listados de la tienda dueña y del mensajero asignado, y
+  // con dos roles capaces de hacerlo el rastro de quién lo hizo deja de ser una sola persona.
+  // Las dos Server Actions y el propio listado revalidan el rol server-side.
+  const puedeEliminar = rol === RolValue.maestro;
+
   // Feature 144/TB2.5 (R47, R64): el catálogo de los filtros (zonas, cuentas tienda,
   // mensajeros y geografía) se resuelve AQUÍ, en el servidor, tras las guardias de rol; sus
   // lecturas corren en paralelo dentro del service y el resultado baja por props, de
@@ -130,6 +137,7 @@ export default async function OrdenesPage() {
           incluirFiltroReasignables={incluirFiltroReasignables}
           incluirFiltroMensajero={incluirFiltroMensajero}
           puedeReportarIncidente={puedeReportarIncidente}
+          puedeEliminar={puedeEliminar}
           fechasDiaReparto={fechasDiaReparto}
         />
       ) : (

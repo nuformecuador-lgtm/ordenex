@@ -113,6 +113,20 @@ export interface ListOrdenesWhere {
    */
   reasignables?: true;
   /**
+   * Pedido humano (2026-08-27) — INVIERTE el `deleted_at IS NULL` de este listado, y es la
+   * UNICA clave del sistema que lo hace. Ausente (el caso de siempre, y el de todas las demas
+   * lecturas del repo) -> `deleted_at IS NULL`; `true` -> `deleted_at IS NOT NULL`.
+   *
+   * NO es "incluir tambien las borradas": es "SOLO las borradas". Mezclarlas con las vivas
+   * dejaria un listado en el que la misma barra de acciones tendria que ofrecer «Eliminar» y
+   * «Recuperar» a la vez, y la fila no dice a simple vista en cual de los dos mundos esta. Con
+   * el interruptor puesto, TODAS las filas estan borradas y la barra ofrece una sola cosa.
+   *
+   * Quien puede pedirla lo decide el SERVICE (solo `maestro`, `OrdenService.listar`): el
+   * repositorio traduce, no autoriza.
+   */
+  soloEliminados?: true;
+  /**
    * Feature 169 (design §4.2) — TERMINO de busqueda YA NORMALIZADO por el service
    * (minusculas, sin los acentos del mapa, espacios colapsados). Es un TERMINO, nunca un
    * patron: los comodines y su escape son dialecto de la capa de datos y se aplican en el
@@ -957,8 +971,36 @@ export interface IOrdenRepository {
     data: UpdateOrdenData,
     historial: HistorialContexto,
   ): Promise<OrdenDTO | null>;
-  // BORRADO 2026-08-07 (tanda 2): `softDelete` (unico writer de `deleted_at`) y
-  // `existsEstatus`. El predicado `deleted_at IS NULL` sigue vivo en TODAS las lecturas.
+  // BORRADO 2026-08-07 (tanda 2): `existsEstatus`. Para comprobar que un estatus existe, lo
+  // vivo es `findEstatusIdByValue`, que es lo que usan los servicios de dominio.
+  //
+  // `softDelete` tambien se retiro ese dia ("ninguna pantalla ofrece borrar una orden") y
+  // VUELVE con la feature «eliminar orden» (2026-08-26), ahora POR LOTE y con superficie:
+  // vuelve a ser el UNICO writer de `deleted_at` en `orden`. El predicado `deleted_at IS NULL`
+  // nunca se fue: sigue vivo y aplicandose en TODAS las lecturas.
+  /**
+   * Borrado LOGICO por lote: fija `deleted_at = now()` en las ordenes de `ids` que aun NO
+   * estuvieran borradas. El `where` incluye `deletedAt: null` (patron de `OrdenGeocodeRepository`
+   * y del resto de escrituras guardadas del repo), de modo que es IDEMPOTENTE y seguro ante
+   * carreras: dos borrados simultaneos no reescriben el instante del primero.
+   *
+   * Devuelve CUANTAS filas cambio, que no tiene por que ser `ids.length` si otra sesion se
+   * adelanto. `ids` vacio -> `0` SIN consultar.
+   */
+  softDelete(ids: readonly string[]): Promise<number>;
+  /**
+   * Pedido humano (2026-08-27) — LA REVERSION del borrado logico: devuelve `deleted_at` a NULL
+   * en las ordenes de `ids` que SI estuvieran borradas. Es el gemelo exacto de `softDelete` y
+   * el segundo (y ultimo) writer de la columna.
+   *
+   * El `where` incluye `deletedAt: { not: null }` por la MISMA razon que el de `softDelete`
+   * lleva `deletedAt: null`: hace la operacion idempotente y a prueba de carreras. Una orden
+   * que nunca estuvo borrada no entra en el conteo, de modo que `restore` no puede "recuperar"
+   * lo que no se habia perdido.
+   *
+   * Devuelve CUANTAS filas cambio; `ids` vacio -> `0` SIN consultar.
+   */
+  restore(ids: readonly string[]): Promise<number>;
   findEstatusIdByValue(value: string): Promise<string | null>;
   /**
    * Feature 27/R15/R16/R17: lee `usuario.fulfillment` de la tienda que realiza la

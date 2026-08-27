@@ -6,6 +6,7 @@ import { BOOLEAN_MARCADO } from "@/components/shared/FilterComponent";
 import {
   CLAVE_BUSQUEDA,
   CLAVE_CREACION,
+  CLAVE_ELIMINADOS,
   CLAVE_REASIGNABLES,
 } from "./ordenes-filtros-def";
 
@@ -54,6 +55,14 @@ export function seleccionAFilter(sel: FilterSelection): Partial<OrdenFilterInput
       // termino; la guarda del vacio es por si el filter se construye a mano.
       const termino = values[0] ?? "";
       if (termino !== "") out.q = termino;
+      continue;
+    }
+
+    if (key === CLAVE_ELIMINADOS) {
+      // Pedido humano (2026-08-27): mismo trato que `reasignables` —interruptor, `true` o
+      // ausente, nunca `false`—. Lo que NO es igual es el efecto: el borde lo autoriza por rol
+      // (solo `maestro`) y responde `forbidden` a quien no puede, en vez de ignorarlo.
+      if (values[0] === BOOLEAN_MARCADO) out.eliminados = true;
       continue;
     }
 

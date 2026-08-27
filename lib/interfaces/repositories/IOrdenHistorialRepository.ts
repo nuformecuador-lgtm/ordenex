@@ -130,6 +130,23 @@ export interface IOrdenHistorialRepository {
    */
   contarIntentosVigentesEnLote(ordenIds: string[]): Promise<Map<string, number>>;
   /**
+   * Pedido humano (2026-08-27) — de un LOTE de ordenes, cuales registran al menos UNA
+   * TRANSICION POSTERIOR A SU CREACION. Es el insumo del unico predicado nuevo de «eliminar
+   * orden»: solo se borra el registro que nadie ha gestionado todavia.
+   *
+   * EL CRITERIO ES `estatus_origen_id IS NOT NULL`, y no una lista de `origen_tipo`. La fila de
+   * NACIMIENTO es, por contrato del choke point (49/R10, `registrar-cambio-estado.ts`), la
+   * unica con origen NULO —asi se valida contra `ESTADOS_CREACION`—; cualquier otra fila salio
+   * de mover la orden de un estado a otro. Una lista de familias habria que ampliarla cada vez
+   * que el enum gana un valor, y el dia que alguien se olvide el borrado se abriria en silencio
+   * sobre ordenes ya gestionadas. Este predicado no se puede quedar desactualizado.
+   *
+   * Devuelve un SET con los ids que SI tienen movimiento (los que no, simplemente no estan):
+   * misma convencion que `contarIntentosVigentesEnLote`. `ordenIds` vacio -> Set vacio SIN
+   * emitir consulta. Resuelve sobre `@@index([ordenId, createdAt])`.
+   */
+  findIdsConTransicionPosteriorACreacion(ordenIds: string[]): Promise<Set<string>>;
+  /**
    * R27: `true` si existe al menos una transicion de `ordenId` cuyo actor sea `usuarioId`
    * (la orden estuvo actuada por ese usuario). Sostiene la autorizacion del mensajero: ve
    * el historial de una orden que le fue/esta asignada, aunque hoy ya no la tenga asignada.

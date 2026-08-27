@@ -292,6 +292,23 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
     return porOrden;
   }
 
+  /**
+   * Pedido humano (2026-08-27) — los ids del lote que YA registran una transicion posterior a
+   * su creacion. Ver el contrato en la interfaz: el criterio es `estatus_origen_id IS NOT NULL`
+   * (la fila de nacimiento es la unica con origen nulo), no una lista de familias.
+   *
+   * `groupBy` por `ordenId` y no `findMany` + dedup en memoria: la respuesta es a lo sumo una
+   * fila por orden del lote, aunque la orden acumule cincuenta transiciones.
+   */
+  async findIdsConTransicionPosteriorACreacion(ordenIds: string[]): Promise<Set<string>> {
+    if (ordenIds.length === 0) return new Set(); // ni una consulta
+    const rows = await this.prisma.ordenHistorialEstado.groupBy({
+      by: ["ordenId"],
+      where: { ordenId: { in: ordenIds }, estatusOrigenId: { not: null } },
+    });
+    return new Set(rows.map((r) => r.ordenId));
+  }
+
   /** R27: `true` si la orden tuvo al menos una transicion actuada por `usuarioId`. */
   async existeActuacionDe(ordenId: string, usuarioId: string): Promise<boolean> {
     const found = await this.prisma.ordenHistorialEstado.findFirst({

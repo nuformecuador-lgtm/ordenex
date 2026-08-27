@@ -51,6 +51,18 @@ export const CLAVE_ESTADO = "status_id";
 export const CLAVE_REASIGNABLES = "reasignables";
 
 /**
+ * Pedido humano (2026-08-27) — clave del interruptor ELIMINADAS. Marcado, el listado deja de
+ * mostrar las ordenes vivas y muestra EXCLUSIVAMENTE las borradas (`deleted_at IS NOT NULL`);
+ * desmarcado, el filtro no existe y el listado es el de siempre.
+ *
+ * Es SUSTITUTIVO y no acumulativo, y por eso el control se llama «Eliminadas» y no «Incluir
+ * eliminadas»: mezclarlas con las vivas dejaria en la misma tabla filas sobre las que la barra
+ * tendria que ofrecer «Eliminar» y «Recuperar» a la vez, sin que la fila diga en cual de los dos
+ * mundos esta. Solo se declara al `maestro`, que es el unico que puede borrar y recuperar.
+ */
+export const CLAVE_ELIMINADOS = "eliminados";
+
+/**
  * Clave del filtro por MENSAJERO ASIGNADO. Es la misma que espera el `filter` de
  * `listarOrdenes`, asi que `seleccionAFilter` la deja pasar tal cual (identidad, como el
  * resto de claves de catalogo).
@@ -99,6 +111,13 @@ export function construirFiltrosOrdenes(
      * interno y el catalogo tampoco se lo entrega, asi que el control se quedaria vacio.
      */
     incluirMensajero?: boolean;
+    /**
+     * Pedido humano (2026-08-27): declara el interruptor «Eliminadas». Solo el `maestro` lo
+     * recibe —es el unico que puede eliminar y recuperar—, y el servidor RECHAZA la clave a
+     * cualquier otro rol en vez de ignorarla. Por defecto `false`: ninguna superficie previa lo
+     * gana por descuido.
+     */
+    incluirEliminados?: boolean;
     ahora?: Date;
   },
 ): FilterDef[] {
@@ -163,6 +182,22 @@ export function construirFiltrosOrdenes(
               // asociacion", y `null` no es ese contrato.
               parentValue: m.zonaId ?? undefined,
             })),
+          },
+        ]
+      : [];
+
+  // Pedido humano (2026-08-27): el interruptor de las ELIMINADAS. Mismo `kind: "boolean"` que
+  // «Reasignables» —o esta puesto o no esta—, pero al contrario que aquel NO acota el listado:
+  // lo SUSTITUYE. Por defecto NO se declara (`?? false`, al reves que sus vecinos): que una
+  // superficie gane por descuido la capacidad de listar lo borrado es lo unico que no puede
+  // pasar aqui.
+  const eliminados: FilterDef[] =
+    opts.incluirEliminados ?? false
+      ? [
+          {
+            key: CLAVE_ELIMINADOS,
+            label: "Eliminadas",
+            kind: "boolean",
           },
         ]
       : [];
@@ -239,6 +274,10 @@ export function construirFiltrosOrdenes(
       })),
     },
     ...reasignables,
+    // ULTIMO de la barra, detras incluso de «Reasignables»: es el interruptor que cambia el
+    // universo entero del listado, no un filtro mas, y no debe quedar a mano de un clic
+    // distraido mientras se afina una busqueda.
+    ...eliminados,
   ];
 }
 

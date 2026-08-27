@@ -17,7 +17,7 @@ import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHis
  */
 export type IntentosSvcDoble = Pick<
   IOrdenHistorialService,
-  "contarIntentosEnLote" | "contarIntentos"
+  "contarIntentosEnLote" | "contarIntentos" | "idsConGestionPosteriorEnLote"
 >;
 
 /**
@@ -35,10 +35,17 @@ export type IntentosSvcDoble = Pick<
  */
 export function fakeIntentosEnLote(
   porOrden: Record<string, number> = {},
+  conGestion: string[] = [],
 ): IntentosSvcDoble {
   return {
     contarIntentosEnLote: vi.fn(async () => new Map(Object.entries(porOrden))),
     contarIntentos: vi.fn(async (ordenId: string) => porOrden[ordenId] ?? 0),
+    // Pedido humano (2026-08-27): el doble se ENSANCHA una vez mas, por la misma razon que lo
+    // hizo la 276 — un objeto con un metodo de mas sigue siendo asignable a un `Pick` mas
+    // estrecho, asi que las 30+ suites que solo piden `contarIntentosEnLote` no se enteran.
+    // El default `[]` es "ninguna orden tiene gestion posterior", que es el caso que ejercita
+    // la rama util de `sinGestion`.
+    idsConGestionPosteriorEnLote: vi.fn(async () => new Set(conGestion)),
   };
 }
 
