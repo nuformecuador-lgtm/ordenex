@@ -149,3 +149,89 @@ describe("RecuperarContrasenaForm — fase contraseña (R7/R17)", () => {
     expect(screen.queryByText("Contraseña actualizada")).not.toBeInTheDocument();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// Feature 286 — el ojito, en la fase de contraseña
+// ─────────────────────────────────────────────────────────────────────────────────────
+
+describe("RecuperarContrasenaForm — el ojito de cada contraseña (286: R1, R9, R13, R14)", () => {
+  it("R1/R14: los dos campos de la fase tienen ojito, con su propio nombre accesible", async () => {
+    const user = userEvent.setup();
+    render(<RecuperarContrasenaForm />);
+    await avanzarAFasePassword(user);
+
+    expect(screen.getByLabelText("Nueva contraseña")).toHaveAttribute(
+      "type",
+      "password",
+    );
+    expect(screen.getByLabelText("Confirmar contraseña")).toHaveAttribute(
+      "type",
+      "password",
+    );
+    expect(
+      screen.getByRole("button", { name: "Nueva contraseña: oculta. Mostrar." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Confirmar contraseña: oculta. Mostrar." }),
+    ).toBeInTheDocument();
+  });
+
+  it("R9: revelar «Nueva contraseña» NO revela «Confirmar contraseña», ni al reves", async () => {
+    const user = userEvent.setup();
+    render(<RecuperarContrasenaForm />);
+    await avanzarAFasePassword(user);
+
+    const nueva = screen.getByLabelText("Nueva contraseña");
+    const confirmar = screen.getByLabelText("Confirmar contraseña");
+
+    await user.click(
+      screen.getByRole("button", { name: "Nueva contraseña: oculta. Mostrar." }),
+    );
+    expect(nueva).toHaveAttribute("type", "text");
+    expect(confirmar).toHaveAttribute("type", "password");
+
+    await user.click(
+      screen.getByRole("button", { name: "Confirmar contraseña: oculta. Mostrar." }),
+    );
+    expect(nueva).toHaveAttribute("type", "text");
+    expect(confirmar).toHaveAttribute("type", "text");
+
+    await user.click(
+      screen.getByRole("button", { name: "Nueva contraseña: visible. Ocultar." }),
+    );
+    expect(nueva).toHaveAttribute("type", "password");
+    expect(confirmar).toHaveAttribute("type", "text");
+  });
+
+  it("R10: pulsar el ojito no restablece nada ni pierde lo tecleado", async () => {
+    const user = userEvent.setup();
+    render(<RecuperarContrasenaForm />);
+    await avanzarAFasePassword(user);
+
+    await user.type(screen.getByLabelText("Nueva contraseña"), "Abcdef1!");
+    await user.click(
+      screen.getByRole("button", { name: "Nueva contraseña: oculta. Mostrar." }),
+    );
+
+    expect(mockedRestablecer).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Nueva contraseña")).toHaveValue("Abcdef1!");
+  });
+
+  it("R13: el `ref` sigue llegando al input — al fallar la validacion, el foco va al campo", async () => {
+    const user = userEvent.setup();
+    render(<RecuperarContrasenaForm />);
+    await avanzarAFasePassword(user);
+
+    // Contraseña que no cumple la politica: la validacion de cliente falla y el
+    // formulario mueve el foco al campo por su `ref`. Si el `ref` se hubiera quedado en
+    // el envoltorio, esto dejaria de enfocar el input y nadie se enteraria.
+    await user.type(screen.getByLabelText("Nueva contraseña"), "corta");
+    await user.type(screen.getByLabelText("Confirmar contraseña"), "corta");
+    await user.click(screen.getByRole("button", { name: "Restablecer contraseña" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Nueva contraseña")).toHaveFocus(),
+    );
+    expect(mockedRestablecer).not.toHaveBeenCalled();
+  });
+});
