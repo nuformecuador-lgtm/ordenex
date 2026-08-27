@@ -3519,6 +3519,17 @@
       "complexity": "baja",
       "branch": "feature/289-abrir-navegacion-en-app-externa",
       "status_note": "PR #519 abierto contra dev el 2026-08-27. SIN SDD por decision humana: el cambio es un modulo puro de URLs + un componente de 3 enlaces, no justifica los tres archivos de spec. Se verifica con tests unitarios y de componente."
+    },
+    {
+      "id": 290,
+      "title": "la barra de reparto de analitica esconde toda categoria que no llegue al 1%",
+      "description": "En 'Detalle gestion' una categoria con dato real desaparece de la barra y su leyenda dice 0%, porque el ancho de cada franja se calcula con el porcentaje ya redondeado a enteros.",
+      "zone": "frontend",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "fix/290-barra-reparto-menor-uno-porciento",
+      "status_note": "REPRODUCIDO el 2026-08-27 ejecutando el modulo real de produccion con los numeros de la pantalla (1, 0, 0, 1, 0, 231 sobre 233): 'Reprogramadas 1' sale como 0% y con ancho 0%, y 'Entregadas 1' -- el MISMO valor -- sale como 1%. Causa doble: el reparto por resto mayor de porcentajes.ts da los puntos sobrantes por orden de indice al empatar el resto, y GraficaReparto.tsx:93 usa ESE entero como ancho de la franja. ALCANCE (arreglo minimo, sin rediseno): (a) etiqueta '<1 %' cuando el valor es >0 pero redondea a 0; (b) ancho minimo visible para toda franja con valor >0, descontado del segmento mayor para que el reparto siga sumando 100%. NO se toca el metodo del resto mayor: la suma exacta a 100 es su razon de ser. SIN SDD por decision humana (2026-08-27, 'es algo tan pequeno, hazlo sin preguntar'): dos archivos y un modulo puro que ya tiene tests."
     }
   ]
 }
