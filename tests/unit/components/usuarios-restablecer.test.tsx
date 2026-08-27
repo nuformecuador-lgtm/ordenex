@@ -50,6 +50,10 @@ const ITEM: UsuarioListItemDTO = {
   email: "ana@example.com",
   rolValue: "mensajero",
   estado: "activo",
+  // Feature 285: `zonaNombre` es obligatorio en `UsuarioListItem`. `null` es el caso mayoritario
+  // (solo `mensajero` y `adminSatelite` conservan zona) y es justo lo que esta prueba necesita:
+  // no mira la columna de zona, solo el restablecimiento de contrasena.
+  zonaNombre: null,
   createdAt: new Date("2026-01-01T00:00:00Z"),
 };
 
