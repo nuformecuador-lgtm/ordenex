@@ -24,6 +24,7 @@ import {
 import type { VehiculoDTO } from "@/lib/types/vehiculos";
 
 import { GeografiaSelector } from "./GeografiaSelector";
+import { PAGO_ZONA_TEXTO } from "./tarifas-labels";
 import {
   CobroVehiculoTarifas,
   type CobroVehiculoValue,
@@ -326,7 +327,8 @@ export function CrearZonaForm({
       {/* Las dos secciones van lado a lado (6-6 del grid de 12) desde `lg`; por
           debajo se apilan, que es lo único legible en un móvil. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Sección 1: lo que Ordenex le paga al mensajero por repartir en la zona.
+        {/* Sección 1: lo que Ordenex PAGA por cada gestión de la zona —al mensajero la entrega,
+            a la bodega el rechazo del cliente—.
             La celda es `relative` y la sección se posiciona ABSOLUTA dentro (sólo
             desde `lg`): así no aporta altura, la fila la fija "Tarifas de zona" y
             esta columna nunca queda más alta que la otra —si su contenido no cabe
@@ -334,11 +336,14 @@ export function CrearZonaForm({
             `lg` vuelve al flujo normal y se apila sin recortes. */}
         <div className="relative lg:col-span-6">
           <section className="flex flex-col gap-4 rounded-md border border-border p-4 lg:absolute lg:inset-0 lg:overflow-y-auto">
+            {/* Feature 303 — decía «Pago a mensajeros» y «por entrega y por no entrega», y las
+                dos cosas estaban mal por el mismo motivo: de los dos montos, sólo el de entrega
+                se le paga al mensajero (el del rechazo es ingreso de la BODEGA, `ingreso-bodega
+                .ts`), y «no entrega» abarcaba `devuelta` y `reprogramada`, que no pagan nada. */}
             <div className="flex flex-col gap-1">
-              <h4 className="text-sm font-semibold">Pago a mensajeros</h4>
+              <h4 className="text-sm font-semibold">{PAGO_ZONA_TEXTO.seccion}</h4>
               <p className="max-w-prose text-xs text-muted-foreground">
-                Lo que Ordenex le paga al mensajero por entrega y por no entrega en
-                esta zona.
+                {PAGO_ZONA_TEXTO.seccionAyuda}
               </p>
             </div>
 

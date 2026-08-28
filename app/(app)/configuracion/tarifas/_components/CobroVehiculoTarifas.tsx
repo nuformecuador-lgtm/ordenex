@@ -10,7 +10,7 @@ import type { VehiculoDTO } from "@/lib/types/vehiculos";
 
 import {
   AVISO_MONTO_CERO,
-  PAGO_MENSAJERO_ZONA_TEXTO,
+  PAGO_ZONA_TEXTO,
   seGuardaComoCero,
 } from "./tarifas-labels";
 
@@ -27,12 +27,36 @@ interface Monto {
 const montoVacio = (): Monto => ({ entregado: "", noEntregado: "" });
 
 /**
+ * La ayuda de un monto: SIEMPRE quién lo cobra, y además el aviso si se va a guardar en cero.
+ *
+ * Las dos frases van en `<span>` separados dentro del mismo `<p>` de `FormField`, que es el
+ * que cuelga del campo por `aria-describedby`: quien usa un lector de pantalla oye primero de
+ * quién es el dinero y después, si toca, que está sin configurar.
+ */
+function AyudaMonto({
+  destino,
+  enCero,
+}: Readonly<{ destino: string; enCero: boolean }>) {
+  return (
+    <>
+      <span>{destino}</span>
+      {enCero ? (
+        <>
+          {" "}
+          <span className="font-medium">{AVISO_MONTO_CERO.pago}</span>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+/**
  * Bloque reusable: título + los 2 inputs de monto.
  *
  * Feature 303 — pasa a `FormField` por DOS motivos, ninguno de negocio: el `Label` suelto no
- * estaba asociado a su `Input` (sin `htmlFor`/`id`, un lector de pantalla no leía nada), y el
- * aviso del cero necesita colgar del campo por `aria-describedby`. `idPrefix` mantiene los
- * ids únicos cuando hay un bloque por vehículo.
+ * estaba asociado a su `Input` (sin `htmlFor`/`id`, un lector de pantalla no leía nada), y la
+ * ayuda de cada monto necesita colgar del campo por `aria-describedby`. `idPrefix` mantiene
+ * los ids únicos cuando hay un bloque por vehículo.
  */
 function MontoBlock({
   idPrefix,
@@ -51,10 +75,13 @@ function MontoBlock({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <FormField
           id={`${idPrefix}-entregado`}
-          label={PAGO_MENSAJERO_ZONA_TEXTO.entregado}
+          label={PAGO_ZONA_TEXTO.entregado}
           labelClassName="text-xs text-muted-foreground"
           hint={
-            seGuardaComoCero(value.entregado) ? AVISO_MONTO_CERO.pago : undefined
+            <AyudaMonto
+              destino={PAGO_ZONA_TEXTO.entregadoDestino}
+              enCero={seGuardaComoCero(value.entregado)}
+            />
           }
         >
           <Input
@@ -68,12 +95,13 @@ function MontoBlock({
         </FormField>
         <FormField
           id={`${idPrefix}-no-entregado`}
-          label={PAGO_MENSAJERO_ZONA_TEXTO.rechazado}
+          label={PAGO_ZONA_TEXTO.rechazado}
           labelClassName="text-xs text-muted-foreground"
           hint={
-            seGuardaComoCero(value.noEntregado)
-              ? AVISO_MONTO_CERO.pago
-              : undefined
+            <AyudaMonto
+              destino={PAGO_ZONA_TEXTO.rechazadoDestino}
+              enCero={seGuardaComoCero(value.noEntregado)}
+            />
           }
         >
           <Input
@@ -192,12 +220,13 @@ export function CobroVehiculoTarifas({
     console.log("[Tarifas] Cobro/monto:", payload);
   }, [payload]);
 
-  // Feature 303 — el título dice DE QUIÉN es el dinero. «Monto» a secas no se distinguía de
-  // las tarifas que se le COBRAN a la tienda, que viven en la misma pantalla y son el dinero
-  // contrario.
+  // Feature 303 — el título NOMBRA a los dos destinatarios en vez de atribuirle todo el dinero
+  // al mensajero: el monto de entrega se le paga a él, pero el de rechazo es ingreso de la
+  // bodega y nunca se le paga. «Monto» a secas, además, no se distinguía de las tarifas que se
+  // le COBRAN a la tienda, que viven en la misma pantalla y son el dinero contrario.
   const label = cobroVehiculo
-    ? PAGO_MENSAJERO_ZONA_TEXTO.tituloPorVehiculo
-    : PAGO_MENSAJERO_ZONA_TEXTO.titulo;
+    ? PAGO_ZONA_TEXTO.tituloPorVehiculo
+    : PAGO_ZONA_TEXTO.titulo;
 
   return (
     <section className="flex flex-col gap-4 border-t border-border pt-6">

@@ -7,6 +7,7 @@ import {
   CobroVehiculoTarifas,
   type CobroVehiculoValue,
 } from "@/app/(app)/configuracion/tarifas/_components/CobroVehiculoTarifas";
+import { CrearZonaForm } from "@/app/(app)/configuracion/tarifas/_components/CrearZonaForm";
 import {
   TarifaCamposGrid,
   tarifaValoresVacios,
@@ -32,6 +33,30 @@ import type { VehiculoDTO } from "@/lib/types/vehiculos";
  * NINGUNA regla de negocio entra aquí: estos tests miran texto y accesibilidad, nunca el
  * payload que se guarda (eso no lo tocó la 303).
  */
+
+// `CrearZonaForm` (la sección que ENVUELVE el bloque de pagos) sólo se monta aquí para leer
+// sus dos textos: nada de esto llega a llamarse.
+vi.mock("@/lib/actions/zonas", () => ({
+  crearZona: vi.fn(),
+  actualizarZona: vi.fn(),
+}));
+vi.mock("@/lib/actions/tarifas", () => ({
+  crearTarifa: vi.fn(),
+  actualizarTarifa: vi.fn(),
+}));
+vi.mock("@/lib/actions/geografia", () => ({
+  actualizarDistritosEspeciales: vi.fn(),
+}));
+vi.mock("@/hooks/useToast", () => ({
+  useToast: () => ({
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    show: vi.fn(),
+    dismiss: vi.fn(),
+  }),
+}));
 
 const VEHICULOS: VehiculoDTO[] = [
   { id: "v-moto", name: "Moto" },
@@ -81,11 +106,46 @@ afterEach(() => {
 });
 
 describe("Pago al mensajero por zona — rótulos (CobroVehiculoTarifas)", () => {
-  it("titula el bloque con el dinero del que habla, no con un «Monto» neutro", () => {
+  it("titula el bloque nombrando a los DOS destinatarios, no sólo al mensajero", () => {
     render(<CobroVehiculoTarifas vehiculos={VEHICULOS} />);
 
-    expect(screen.getByText("Pago al mensajero por zona")).toBeInTheDocument();
+    expect(
+      screen.getByText("Pagos por zona (mensajero y bodega)"),
+    ).toBeInTheDocument();
+    // «Monto» no decía de qué dinero hablaba; «Pago al mensajero» atribuía a UNO los DOS
+    // montos, y el del rechazo nunca se le paga a él.
     expect(screen.queryByText("Monto")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Pago al mensajero/)).not.toBeInTheDocument();
+  });
+
+  it("cada monto dice QUIÉN lo cobra, sin tener que leer el código", () => {
+    render(<CobroVehiculoTarifas vehiculos={VEHICULOS} />);
+
+    expect(screen.getByText("Se le paga al mensajero.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Es ingreso de la bodega, no del mensajero."),
+    ).toBeInTheDocument();
+  });
+
+  it("la atribución de cada monto cuelga de SU campo, no del vecino", () => {
+    render(
+      <CobroVehiculoTarifas
+        vehiculos={VEHICULOS}
+        initial={cobroInicial(1700, 1000)}
+      />,
+    );
+
+    const ayudaDe = (nombre: string) => {
+      const campo = screen.getByLabelText(nombre);
+      const id = campo.getAttribute("aria-describedby");
+      expect(id).toBeTruthy();
+      return document.getElementById(id!.split(" ")[0]);
+    };
+
+    expect(ayudaDe("Entregado")).toHaveTextContent("Se le paga al mensajero.");
+    expect(ayudaDe("Rechazado por el cliente")).toHaveTextContent(
+      "Es ingreso de la bodega, no del mensajero.",
+    );
   });
 
   it("nombra el resultado que REALMENTE paga: «Rechazado por el cliente»", () => {
@@ -106,9 +166,10 @@ describe("Pago al mensajero por zona — rótulos (CobroVehiculoTarifas)", () =>
     await user.click(screen.getByLabelText("Cobro por vehículo"));
 
     expect(
-      screen.getByText("Pago al mensajero por zona y vehículo"),
+      screen.getByText("Pagos por zona y vehículo (mensajero y bodega)"),
     ).toBeInTheDocument();
     expect(screen.queryByText("Monto por vehículo")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Pago al mensajero/)).not.toBeInTheDocument();
     // Un par de montos por vehículo, cada uno con su rótulo ya asociado.
     expect(screen.getAllByLabelText("Rechazado por el cliente")).toHaveLength(2);
   });
@@ -141,9 +202,14 @@ describe("Aviso del cero — pago al mensajero (el caso GAM)", () => {
     const aviso = document.getElementById(describedBy!.split(" ")[0]);
     expect(aviso).toHaveTextContent(AVISO_MONTO_CERO.pago);
 
-    // Y el campo que SÍ tiene monto no arrastra el aviso de su vecino.
+    // Y el campo que SÍ tiene monto conserva su atribución pero NO arrastra el aviso del
+    // vecino: los dos campos tienen ayuda siempre, y sólo uno está en cero.
     const entregado = screen.getByLabelText("Entregado");
-    expect(entregado.getAttribute("aria-describedby")).toBeNull();
+    const ayudaEntregado = document.getElementById(
+      entregado.getAttribute("aria-describedby")!.split(" ")[0],
+    );
+    expect(ayudaEntregado).toHaveTextContent("Se le paga al mensajero.");
+    expect(ayudaEntregado).not.toHaveTextContent(AVISO_MONTO_CERO.pago);
   });
 
   it("con los dos montos mayores que cero NO avisa nada", () => {
@@ -206,6 +272,43 @@ describe("Aviso del cero — pago al mensajero (el caso GAM)", () => {
 
     // Y no se cuela un aviso de más en el resto de la sección.
     expect(screen.getAllByText(AVISO_MONTO_CERO.pago)).toHaveLength(1);
+  });
+});
+
+describe("La sección que envuelve el bloque (CrearZonaForm)", () => {
+  function renderZona() {
+    return render(
+      <CrearZonaForm
+        mode="crear"
+        provincias={[]}
+        vehiculos={VEHICULOS}
+        zonas={[]}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+  }
+
+  it("ya no le atribuye al mensajero los dos dineros", () => {
+    renderZona();
+
+    expect(
+      screen.getByRole("heading", { name: "Pagos por zona" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Pago a mensajeros")).not.toBeInTheDocument();
+  });
+
+  it("explica los dos destinatarios y no habla de «no entrega»", () => {
+    renderZona();
+
+    expect(
+      screen.getByText(/la entrega se le paga al mensajero/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/el rechazo del cliente es ingreso de la bodega/i),
+    ).toBeInTheDocument();
+    // «no entrega» abarcaba `devuelta` y `reprogramada`, que no pagan nada.
+    expect(screen.queryByText(/por no entrega/i)).not.toBeInTheDocument();
   });
 });
 

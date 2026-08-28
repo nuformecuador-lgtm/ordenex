@@ -56,15 +56,32 @@ export const TARIFA_CAMPO_LABEL = {
  * `lib/utils/ingreso-bodega.ts` paga ese monto sólo si el resultado es `rechazada`; una
  * `devuelta` y una `reprogramada` también son «no entregado» y no pagan nada.
  *
- * El título dice de quién es el dinero, porque el bloque convive en la misma pantalla con las
- * tarifas que se le COBRAN a la tienda y hasta hoy los dos rótulos eran igual de neutros.
+ * EL DEFECTO DE FONDO, Y LO QUE LO ARREGLA. Estos DOS montos no son el mismo dinero, y la
+ * pantalla los presentaba como si lo fueran:
+ * - `entregado` → `cobroEntregado`, y `lib/utils/pago-mensajero.ts` se lo paga AL MENSAJERO
+ *   (sólo por `entregada`).
+ * - `rechazado` → `cobroRechazado`, que según `lib/utils/ingreso-bodega.ts` es INGRESO DE LA
+ *   BODEGA responsable del mensajero y «NUNCA se paga al mensajero».
+ *
+ * Por eso el título ya no atribuye el dinero a nadie —nombra a los dos destinatarios— y quien
+ * cobra cada monto lo dice CADA CAMPO, en su ayuda: así no hay que leer el código para saberlo.
  */
-export const PAGO_MENSAJERO_ZONA_TEXTO = {
-  titulo: "Pago al mensajero por zona",
-  /** Con el cobro por vehículo activo, el mismo pago se desglosa por vehículo. */
-  tituloPorVehiculo: "Pago al mensajero por zona y vehículo",
+export const PAGO_ZONA_TEXTO = {
+  /** Encabezado de la sección que envuelve el bloque (`CrearZonaForm`). */
+  seccion: "Pagos por zona",
+  /** La explicación de la sección: los dos dineros y su destinatario, en una línea. */
+  seccionAyuda:
+    "Lo que Ordenex paga por cada gestión en esta zona: la entrega se le paga al mensajero; " +
+    "el rechazo del cliente es ingreso de la bodega responsable de él.",
+  titulo: "Pagos por zona (mensajero y bodega)",
+  /** Con el cobro por vehículo activo, los mismos dos pagos se desglosan por vehículo. */
+  tituloPorVehiculo: "Pagos por zona y vehículo (mensajero y bodega)",
   entregado: "Entregado",
+  /** Quién cobra ESTE monto (feature 39). */
+  entregadoDestino: "Se le paga al mensajero.",
   rechazado: "Rechazado por el cliente",
+  /** Quién cobra ESTE otro (feature 56). Lo dice en negativo a propósito: es el que se confundía. */
+  rechazadoDestino: "Es ingreso de la bodega, no del mensajero.",
 } as const;
 
 /**
