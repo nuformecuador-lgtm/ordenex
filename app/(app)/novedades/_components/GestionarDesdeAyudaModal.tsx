@@ -57,6 +57,12 @@ import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 // la ficha 301 `derivarIngresoOrden` emite conceptos únicamente para `entregada` y `rechazada`. Lo
 // que sí cuesta en LOS DOS modos es el intento, que adelanta el escalado del cron de plazo vencido.
 //
+// ⚠️ **Y ESO MISMO ES LO QUE EL AVISO VISIBLE NEGABA HASTA EL 2026-08-28 (ficha 309):** era un
+// texto único para los dos modos y decía «mueve el dinero igual» también al reprogramar. Este
+// párrafo llevaba un día diciendo lo contrario, dos pantallas más arriba del literal que lo
+// contradecía. Ahora el aviso sale del modo (`GESTION_AYUDA_AVISO`), y su asimetría está fijada por
+// los dos casos emparejados de `tests/components/GestionarDesdeAyudaModal.test.tsx`.
+//
 // D7 (firmada) exige decir el precio ANTES, con palabras y siempre visible; sin él la tienda
 // descubre el cobro en su billetera dos días después y la primera reclamación es «yo sólo apreté un
 // botón». El IMPORTE concreto no se nombra en el aviso visible, por el mismo criterio que la 240
@@ -112,13 +118,40 @@ const RESULTADO_POR_MODO = {
 export const GESTION_AYUDA_TITULO = "Resolver la orden por tu cuenta";
 
 /**
- * D7 — EL AVISO QUE DICE EL PRECIO. Va arriba, siempre visible y nunca en un tooltip: es lo único
- * que la tienda no puede deducir de la pantalla. Dice las tres consecuencias (el cierre ajeno, el
- * intento y el dinero) y de paso explica por qué se le piden foto y motivo, que es la pregunta que
- * haría cualquiera al ver los campos.
+ * D7 — EL AVISO QUE DICE EL PRECIO, **UNO POR MODO**. Va arriba, siempre visible y nunca en un
+ * tooltip: es lo único que la tienda no puede deducir de la pantalla. Explica de paso por qué se le
+ * piden foto y motivo, que es la pregunta que haría cualquiera al ver los campos.
+ *
+ * ⚠️ FICHA 309 (2026-08-28) — HASTA HOY ERA **UN SOLO TEXTO PARA LOS DOS MODOS**, y el texto decía
+ * «y mueve el dinero igual». Al reprogramar eso es FALSO, y lo contradecía la cabecera de este
+ * mismo archivo tres pantallas más arriba: quien iba a reprogramar leía en rojo que le iban a
+ * cobrar. Los tres sitios donde se decide el dinero de una gestión dan CERO para `reprogramada`, y
+ * están medidos, no supuestos:
+ *
+ *   · `pagoPorResultado` (`lib/utils/pago-mensajero.ts:22`) — sólo `entregada` paga al mensajero.
+ *   · `ingresoBodegaPorResultado` (`lib/utils/ingreso-bodega.ts:23`) — sólo `rechazada` da ingreso
+ *     de bodega.
+ *   · `derivarIngresoOrden` (`lib/utils/ingreso-ordenex.ts:185-186`) — desde la ficha 301 emite
+ *     conceptos únicamente para `entregada` y `rechazada`; `reprogramada` cae en el `return {}`.
+ *
+ * **Lo que NO se hizo, y conviene saberlo antes de «simplificar»:** quitar el aviso entero del modo
+ * reprogramar. Las otras dos consecuencias —la gestión entra en el cierre de OTRA persona y suma un
+ * intento de entrega— son ciertas en LOS DOS modos, y callarlas dejaría la reprogramación como la
+ * acción barata y sin advertencia, que es justo lo que D2 y D7 vinieron a impedir. Se cambia la
+ * frase que mentía, no el aviso.
+ *
+ * El modo `rechazar` conserva su literal INTACTO: ahí el dinero sí se mueve, y son dos importes con
+ * dueños distintos (el `cobroRechazado` que va al cierre del mensajero como ingreso de bodega, y el
+ * flete de devolución más IVA que sí se le cobra a la tienda). El IMPORTE concreto no se nombra en
+ * ninguno de los dos, por el mismo criterio que la 240: depende de la tarifa vigente y de si la
+ * orden es GAM.
  */
-export const GESTION_AYUDA_AVISO_PRECIO =
-  "Esto cuenta como una gestión del mensajero: entra en su cierre del día, suma un intento de entrega y mueve el dinero igual. Por eso pide foto y motivo.";
+export const GESTION_AYUDA_AVISO: Record<ModoGestionDesdeAyuda, string> = {
+  reprogramar:
+    "Esto cuenta como una gestión del mensajero: entra en su cierre del día y suma un intento de entrega. Reprogramar no cobra nada. Por eso pide foto y motivo.",
+  rechazar:
+    "Esto cuenta como una gestión del mensajero: entra en su cierre del día, suma un intento de entrega y mueve el dinero igual. Por eso pide foto y motivo.",
+};
 
 /** D7: los dos rótulos, sin el verbo «gestionar» y sin la palabra «entrega» detrás. */
 export const GESTION_AYUDA_CONFIRMAR: Record<ModoGestionDesdeAyuda, string> = {
@@ -394,12 +427,15 @@ export function GestionarDesdeAyudaModal({
       <div className="flex flex-col gap-4">
         {/* D7 — EL PRECIO, ARRIBA Y SIEMPRE VISIBLE. `role="note"` y no `alert`: no es la
             consecuencia de un error, es la condición de la acción, y un `alert` la anunciaría de
-            nuevo en cada re-render. */}
+            nuevo en cada re-render.
+
+            Ficha 309: el texto SALE DEL MODO. Hasta el 2026-08-28 era una constante única y le
+            decía a quien reprogramaba que se le movía el dinero — y no se le mueve ni un colón. */}
         <p
           role="note"
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
         >
-          {GESTION_AYUDA_AVISO_PRECIO}
+          {GESTION_AYUDA_AVISO[modo]}
         </p>
 
         {esReprogramar ? (
