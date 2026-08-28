@@ -56,10 +56,53 @@ dice «del cliente» en textos que aquí pueden quedar falsos. (e) El binario de
 guarda** (D1/R15 de la 311) y a los 30 días Meta lo da por no disponible: el histórico tiene que
 **decirlo**, no romperse.
 
-**Preguntas abiertas que van a la puerta humana** (no se rellenan por suposición): si el primer nivel
-son conversaciones u órdenes; si el filtro de fecha corta por la conversación o por el mensaje; si al
-entrar se aterriza en lo más reciente y se pagina hacia atrás; y si `adminSatelite`/`adminTienda`
-quedan fuera (por defecto **sí, fuera**).
+**PUERTA HUMANA del 2026-08-28: las 9 preguntas, CERRADAS.** El spec v1 (38 requisitos, sin
+migración) se revisa con estas respuestas:
+
+- **P1 — el cambio de diseño de verdad.** El hilo es por **orden + mensajero**, no por
+  `orden + teléfono`: «el chat del mensajero del día que gestionó esa orden». Como la tabla es
+  `@@unique([ordenId, telefonoE164])`, una misma (orden, mensajero) puede tener **más de una fila**
+  si el cliente cambió de número — se fusiona **en la consulta**, agrupando por
+  `(orden_id, mensajero_id)`, **sin tocar la DB**. Y una orden **reasignada** tiene dos hilos, uno
+  por mensajero: eso es correcto, no un duplicado que deduplicar.
+- **P2** — la fecha corta por **mensaje**, listado e hilo diferenciados, y **sin añadir nada a la
+  DB**: la alternativa A6 (columna materializada `ultima_actividad_at` o índice nuevo) queda
+  **descartada por decisión humana**, no aplazada.
+- **P3/P4/P5** — se aterriza en lo más reciente paginando hacia atrás; **solo `maestro` y `admin`**;
+  el histórico **sí** ve los adjuntos por la vía separada, sin relajar la del mensajero. Y enviados
+  y recibidos van en el **mismo** hilo y en el mismo orden cronológico, no en una vista aparte.
+- **P6 — corrige lo que el spec recomendaba.** El separador **sí** usa «hoy»/«ayer» y **nunca**
+  lleva año, ni siquiera fuera del año en curso. El resto de días se queda en «jueves 28 de agosto».
+  El off-by-one vive justo ahí, en la fecha calendario CR.
+- **P7** — el filtro «por orden» es el **número exacto**, no coincidencia parcial ni el input libre.
+- **P8 — cambio de alcance.** El **listado también se pagina** (N conversaciones a la vez, con
+  cursor propio) y los **mensajes no se cargan hasta abrir la conversación**. Son **dos**
+  paginaciones y ningún mensaje viaja en la respuesta del listado — lo que además baja el riesgo que
+  `T0` iba a medir.
+- **P9** — sin límite de antigüedad: **un cron futuro** limpiará el exceso (fuera de alcance), y la
+  media de más de 30 días sale como no disponible.
+
+**Estado: `spec_ready`.** Spec v2 tras la puerta: **45 requisitos R1–R45** (la numeración R1–R38 se
+conserva; 6 modificados, 7 nuevos), los 45 mapeados a un test con `assert` de comportamiento, y
+**sigue sin migración** — `T7.2` gana un assert que vigila que `chat_mensaje` no gane columna de
+mensajero.
+
+**⚠️ LÍMITE CONOCIDO que destapó el spec, verificado por el leader en el archivo real (R45 + A10).**
+El «una orden reasignada tiene dos hilos, uno por mensajero» se cumple **sólo cuando el dato lo
+permite**: `ChatConversacionRepository.upsertParaOrden` hace `update: { mensajeroId }`, o sea que una
+reasignación **reescribe** el mensajero de la fila existente, y `chat_mensaje` no guarda quién era el
+mensajero de cada mensaje. Si el cliente conserva su número, esa orden tiene **una sola fila** y el
+hilo sale atribuido al mensajero **actual**, con los mensajes de los dos. Partirlo de verdad exige
+columna nueva en `chat_mensaje` — migración, prohibida por P2. Queda fijado por un test con
+«LIMITACIÓN CONOCIDA» en el nombre (mismo patrón que la 311 con `migrarTelefono`); la partición real
+sería **su propia feature**.
+
+**Tres cosas que el spec corrigió de la ficha, medidas en el árbol real:** el guardia de la 229 es
+más estrecho de lo que se declaró y una ruta `/historico/conversaciones` **no lo toca**; las trampas
+(d) y (e) **ya las resolvieron la 311 y la 316** —`chat-format.ts` elige el texto del adjunto por
+dirección y `MediaAdjunto` ya pinta el aviso ante el 410—, así que pasan a **tests de no-regresión**;
+y **`orden.busqueda_texto` no incluye el nombre del mensajero**, lo que obliga a una segunda mitad
+del criterio contra `usuario`, con espejo SQL de `normalizarTerminoBusqueda` y test de paridad.
 
 ## 💬 2026-08-28 — ficha 316: el mensajero puede ENVIAR imagen, video, nota de voz y documentos
 

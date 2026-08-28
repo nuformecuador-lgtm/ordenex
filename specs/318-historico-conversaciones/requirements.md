@@ -1,10 +1,15 @@
 # Feature 318 — Histórico de conversaciones: admin y maestro leen el chat de todos los mensajeros
 
-> Requisitos en notación EARS (`docs/specs.md`). Numerados `R1..R38`. Sin detalles de
+> Requisitos en notación EARS (`docs/specs.md`). Numerados `R1..R45`. Sin detalles de
 > implementación (esos van en `design.md`). Cada requisito está mapeado a un test concreto —ruta de
-> archivo y `assert`— en `tasks.md`. Un requisito sin test es un fallo de la feature
-> (`CLAUDE.md` §4). Un criterio que se satisfaga reescribiendo un comentario NO vale: hay
+> archivo y `assert` de comportamiento— en `tasks.md`. Un requisito sin test es un fallo de la
+> feature (`CLAUDE.md` §4). Un criterio que se satisfaga reescribiendo un comentario NO vale: hay
 > precedente en este repo.
+>
+> **Revisión del 2026-08-28 tras la puerta humana.** Las nueve preguntas abiertas están
+> **CERRADAS** (ver «Decisiones cerradas» al final). La numeración `R1..R38` se conserva —renumerar
+> rompería las citas de la ficha y de `progress/`—; los requisitos que cambiaron están marcados
+> **[MODIFICADO 2026-08-28]** y los nuevos van al final (`R39..R45`).
 
 ## Pedido literal del humano (2026-08-28)
 
@@ -23,13 +28,14 @@
 - Ítem de sidebar **«Histórico»** con subítem **«Conversaciones»**, visible sólo para `maestro` y
   `admin`.
 - Ruta nueva bajo `app/(app)/` con gate de rol **server-side**.
-- Listado paginado de **todas** las conversaciones de **todos** los mensajeros.
-- Lectura del hilo completo de una conversación —entrantes y salientes—, **independiente de la
-  fecha**, con separador de día y paginación por scroll.
+- Listado **paginado** de todas las conversaciones de todos los mensajeros, donde la unidad es el
+  hilo **(orden + mensajero)**.
+- Lectura del hilo completo —entrantes y salientes en la misma cronología—, **independiente de la
+  fecha**, con separador de día y paginación por scroll, **cargada sólo al abrir la conversación**.
 - Barra de filtros reutilizada (`BuscadorFiltros` + `FilterComponent`): filtro por **mensajero**,
-  por **fecha**, por **orden**, e input de búsqueda libre.
-- Ensanchamiento **explícito** de la autorización de lectura del hilo y de sus adjuntos para los
-  dos roles del histórico.
+  por **fecha**, por **orden** (número exacto) e input de búsqueda libre.
+- Ensanchamiento **explícito** de la autorización de lectura del hilo y de sus adjuntos para los dos
+  roles del histórico.
 
 **Fuera de alcance (declarado)**
 
@@ -39,10 +45,11 @@
 - Buscar **dentro** del texto de los mensajes (el input busca por orden/persona, no por cuerpo del
   mensaje). No está pedido y `chat_mensaje.cuerpo` no tiene índice de texto.
 - Almacenar el binario de la media. Se mantiene **D1/R15 de la 311**: no hay copia propia.
-- Marcar el hilo como leído por parte del admin (`chat_conversacion.mensajero_leido_at` es del
-  mensajero y esta pantalla **no lo escribe**, R25).
+- **Purga o retención del histórico.** Decisión humana (P9): no hay límite de antigüedad y
+  **un cron futuro limpiará el exceso**; ese cron es otra feature.
 - Cambiar la autorización del chat del mensajero (R26).
-- Migración de base de datos (R27) — ver `design.md` §2.4 para el disparador que la reabriría.
+- **Migración de base de datos (R27).** Cerrado por decisión humana (P1, P2, P8): la agrupación por
+  `(orden, mensajero)` y el orden del listado se resuelven **en la consulta**, no en el esquema.
 
 ## Lo confirmado EN EL ARCHIVO REAL (no en el grafo), 2026-08-28
 
@@ -51,15 +58,18 @@
 | `SIDEBAR_ITEMS` soporta `children` y `roles`, y el icono viaja como `IconKey` (string) | `lib/auth/menu-visibility.ts:16-46`, `:48-52`, `:62-89` |
 | El Sidebar resuelve `IconKey → componente` en un mapa **exhaustivo** (`Record<IconKey, …>`) | `app/(app)/_components/Sidebar.tsx:147-171`, `:307` |
 | Precedente R10 de la 129: ítem y gate leen la MISMA constante | `app/(app)/analitica/page.tsx:114-127` lee `ROLES_ACCESO_ANALITICA` de `lib/auth/menu-visibility.ts:155` |
-| `ChatConversacion` es `@@unique([ordenId, telefonoE164])` → **una orden puede tener más de un hilo** | `db/schema.prisma:295-316` |
+| `ChatConversacion` es `@@unique([ordenId, telefonoE164])`: la fila se keyea por **teléfono**, no por mensajero | `db/schema.prisma:295-316` |
+| **`upsertParaOrden` REESCRIBE `mensajero_id` al reasignar** (`update: { mensajeroId }`) | `lib/repositories/ChatConversacionRepository.ts:110-132` |
+| Un cambio de número deja **dos filas** de hilo para la misma orden, y la evidencia es una burbuja de **sistema** | `ChatConversacionRepository.ts:201-248`; `db/schema.prisma:350-351`; `BurbujaSistema.tsx` |
 | `ChatMensaje` tiene el índice `[conversacionId, ocurridoAt]` puesto para el historial ordenado | `db/schema.prisma:358` |
+| **`chat_mensaje` NO tiene columna de mensajero** | `db/schema.prisma:322-373` (ver la LIMITACIÓN CONOCIDA de R45) |
 | `Orden` tiene `destinatario`, `numGuia Int?`, `numRemision String`, `mensajeroAsignadoId` | `db/schema.prisma:565-570`, `:595` |
 | `orden.busqueda_texto` (columna GENERADA + índice GIN trgm) ya cubre guía, remisión, teléfono, destinatario y producto — **NO el nombre del mensajero** | `db/schema.prisma:638-654`, `:760` |
-| El repositorio del chat autoriza **por mensajero asignado** | `lib/repositories/ChatConversacionRepository.ts:141-156`; `lib/repositories/ChatMensajeRepository.ts:269-311` |
+| El repositorio del chat autoriza **por mensajero asignado** | `ChatConversacionRepository.ts:141-156`; `ChatMensajeRepository.ts:269-311` |
 | El proxy de media autoriza **por mensajero asignado** y responde 410 al expirar | `app/api/chat/media/[mensajeId]/route.ts:72-94` |
-| **Trampa (d) YA RESUELTA por la 316**: los textos del adjunto se eligen por dirección | `app/(app)/mis-asignaciones/_components/chat/chat-format.ts:92-130`; `MediaAdjunto.tsx:41-47` |
+| **Trampa (d) YA RESUELTA por la 316**: los textos del adjunto se eligen por dirección | `chat-format.ts:92-130`; `MediaAdjunto.tsx:41-47` |
 | **Trampa (e) YA RESUELTA por la 311**: la media expirada se dice, no rompe | `MediaAdjunto.tsx:22-31`, `:166-176`, `:212-226` |
-| **Trampa (c) MEDIDA Y ACOTADA**: la guardia de la 229 se pone roja si cambian `PUBLIC_ROUTES`/`SELF_AUTH_ROUTES`/`REDIRECT_TO_ROOT`, si aparece un **segmento de carpeta `rastreo`** bajo `app/`, o si un `page.tsx`/`route.ts` importa `rastreo-publico`/`RastreoPublico`. **Una ruta nueva que no toque esas tres cosas NO la enrojece** | `tests/unit/guards/rastreo-sin-ruta-nueva.guardia.test.ts:49-66`, `:141-164` |
+| **Trampa (c) MEDIDA Y ACOTADA**: la guardia de la 229 se pone roja si cambian las tres listas del middleware, si aparece un **segmento de carpeta `rastreo`** bajo `app/`, o si un `page.tsx`/`route.ts` importa `rastreo-publico`/`RastreoPublico`. **Una ruta nueva que no toque esas tres cosas NO la enrojece** | `tests/unit/guards/rastreo-sin-ruta-nueva.guardia.test.ts:49-66`, `:141-164` |
 
 ---
 
@@ -111,38 +121,40 @@ roles del sistema, exactamente el mismo `href` que devolvía antes de la feature
 
 ## R10 — Se listan las conversaciones de TODOS los mensajeros
 
-MIENTRAS el actor pertenezca a `ROLES_HISTORICO_CONVERSACIONES`, el listado DEBE incluir
-conversaciones cuyo mensajero NO sea el actor, sin ninguna restricción por mensajero asignado.
+MIENTRAS el actor pertenezca a `ROLES_HISTORICO_CONVERSACIONES`, el listado DEBE incluir hilos cuyo
+mensajero NO sea el actor, sin ninguna restricción por mensajero asignado.
 
-## R11 — Qué identifica cada fila del listado
+## R11 — Qué identifica cada fila del listado **[MODIFICADO 2026-08-28 — P1]**
 
 Cada fila del listado DEBE identificar: la **orden** (número de guía si existe, si no la remisión),
-el **destinatario**, el **mensajero** del hilo y el instante del **último mensaje** del hilo.
+el **destinatario**, el **mensajero dueño del hilo** y el instante del **último mensaje** del hilo.
+La fila representa el par **(orden, mensajero)**, no una fila de `chat_conversacion`.
 
 ## R12 — Órdenes borradas fuera
 
-SI la orden de una conversación está borrada lógicamente (`deleted_at` no nulo), ENTONCES esa
-conversación NO DEBE aparecer en el listado ni ser legible por esta pantalla.
+SI la orden de un hilo está borrada lógicamente (`deleted_at` no nulo), ENTONCES ese hilo NO DEBE
+aparecer en el listado ni ser legible por esta pantalla.
 
-## R13 — El listado se pagina por cursor, sin OFFSET
+## R13 — El listado se pagina por cursor, sin OFFSET **[MODIFICADO 2026-08-28 — P1, P8]**
 
-El listado DEBE paginarse con un cursor estable compuesto por el instante de última actividad y el
-identificador de la conversación; NO DEBE usar `OFFSET`.
+El listado DEBE devolver como mucho **N hilos por página** y paginarse con un cursor estable
+compuesto por el instante de última actividad y la clave del hilo **(orden, mensajero)**; NO DEBE
+usar `OFFSET`.
 
-## R14 — Orden del listado
+## R14 — Orden del listado **[MODIFICADO 2026-08-28 — P1]**
 
-El listado DEBE ordenarse por última actividad descendente, con el identificador de la conversación
-como desempate determinista.
+El listado DEBE ordenarse por última actividad del hilo descendente, con la clave
+**(orden, mensajero)** como desempate determinista.
 
-## R15 — Ninguna conversación duplicada ni perdida entre páginas
+## R15 — Ningún hilo duplicado ni perdido entre páginas **[MODIFICADO 2026-08-28 — P1]**
 
-CUANDO dos conversaciones comparten exactamente el mismo instante de última actividad, el sistema
-DEBE devolver cada una **una sola vez** a lo largo de la paginación completa.
+CUANDO dos hilos comparten exactamente el mismo instante de última actividad, el sistema DEBE
+devolver cada uno **una sola vez** a lo largo de la paginación completa.
 
 ## R16 — El hilo muestra las dos direcciones
 
-CUANDO se abre una conversación, el sistema DEBE mostrar tanto los mensajes **entrantes** como los
-**salientes** del hilo.
+CUANDO se abre un hilo, el sistema DEBE mostrar tanto los mensajes **entrantes** como los
+**salientes**.
 
 ## R17 — El hilo es independiente de la fecha
 
@@ -151,8 +163,8 @@ filtro: se lee completo.
 
 ## R18 — El hilo no se carga de golpe
 
-CUANDO se abre una conversación, el sistema DEBE solicitar como mucho una página de mensajes de
-tamaño fijo, no el hilo completo.
+CUANDO se abre un hilo, el sistema DEBE solicitar como mucho una página de mensajes de tamaño fijo,
+no el hilo completo.
 
 ## R19 — Paginación del hilo por cursor estable
 
@@ -165,19 +177,24 @@ devolver cada uno **una sola vez** a lo largo de la paginación completa del hil
 
 ## R21 — Se aterriza en lo más reciente y se pagina hacia atrás
 
-CUANDO se abre una conversación, el sistema DEBE mostrar los mensajes **más recientes** y, al
-desplazarse hacia arriba hasta el extremo, DEBE cargar la página inmediatamente anterior.
+CUANDO se abre un hilo, el sistema DEBE mostrar los mensajes **más recientes** y, al desplazarse
+hacia arriba hasta el extremo, DEBE cargar la página inmediatamente anterior.
 
 ## R22 — El scroll no salta al cargar más
 
 CUANDO se carga una página anterior por scroll, el sistema DEBE conservar la posición de lectura: el
 mensaje que el lector tenía a la vista sigue a la vista.
 
-## R23 — Separador de día
+## R23 — Separador de día **[MODIFICADO 2026-08-28 — P6]**
 
-El sistema DEBE insertar, antes del primer mensaje de cada día del hilo, un separador con el día de
-la semana, el día del mes y el mes en minúscula inicial y en español —forma «jueves 28 de agosto»—,
-calculado en la zona horaria de Costa Rica.
+El sistema DEBE insertar, antes del primer mensaje de cada día del hilo, un separador que diga:
+
+- **«hoy»** si ese día es la fecha calendario de Costa Rica en curso;
+- **«ayer»** si es la inmediatamente anterior;
+- en cualquier otro caso, el día de la semana, el día del mes y el mes, en minúscula inicial y en
+  español — forma **«jueves 28 de agosto»**.
+
+El separador **NUNCA** DEBE incluir el año, ni siquiera para días de otro año.
 
 ## R24 — Solo lectura: sin controles de escritura
 
@@ -186,8 +203,8 @@ reaccionar ni ninguna otra acción que produzca un mensaje.
 
 ## R25 — Solo lectura: sin efectos de escritura
 
-CUANDO se abre o se pagina una conversación desde el histórico, el sistema NO DEBE escribir en
-ninguna tabla; en particular NO DEBE tocar `chat_conversacion.mensajero_leido_at`.
+CUANDO se abre o se pagina un hilo desde el histórico, el sistema NO DEBE escribir en ninguna tabla;
+en particular NO DEBE tocar `chat_conversacion.mensajero_leido_at`.
 
 ## R26 — La autorización del mensajero no se toca
 
@@ -207,7 +224,7 @@ reaccionan y NO DEBE pintarlos como burbuja propia.
 ## R29 — Adjuntos legibles por el histórico
 
 CUANDO un actor de `ROLES_HISTORICO_CONVERSACIONES` solicita el binario de un adjunto de cualquier
-conversación, el sistema DEBE servirlo aunque el actor no sea el mensajero de esa orden.
+hilo, el sistema DEBE servirlo aunque el actor no sea el mensajero de esa orden.
 
 ## R30 — El ensanche no abre la puerta a nadie más
 
@@ -229,24 +246,24 @@ función pura, siguiendo el patrón de `ordenes-filtros-def.ts` + `seleccion-a-f
 ## R33 — Filtro por mensajero
 
 El sistema DEBE ofrecer un filtro de selección múltiple por mensajero; CUANDO hay mensajeros
-seleccionados, el listado DEBE devolver únicamente conversaciones cuyo mensajero esté entre los
+seleccionados, el listado DEBE devolver únicamente hilos cuyo mensajero esté entre los
 seleccionados.
 
 ## R34 — Filtro por fecha
 
 El sistema DEBE ofrecer un filtro de rango de fechas; CUANDO hay rango aplicado, el listado DEBE
-devolver únicamente conversaciones **con al menos un mensaje** cuyo `ocurrido_at` caiga dentro del
-rango, tomando las cotas del día calendario de Costa Rica y con el extremo `hasta` **inclusivo**.
+devolver únicamente hilos **con al menos un mensaje** cuyo `ocurrido_at` caiga dentro del rango,
+tomando las cotas del día calendario de Costa Rica y con el extremo `hasta` **inclusivo**.
 
-## R35 — Filtro por orden
+## R35 — Filtro por orden: número EXACTO **[MODIFICADO 2026-08-28 — P7]**
 
-El sistema DEBE ofrecer un filtro por orden; CUANDO hay una orden indicada, el listado DEBE devolver
-únicamente las conversaciones de esa orden (que pueden ser más de una, R-contexto: `@@unique([ordenId,
-telefonoE164])`).
+El sistema DEBE ofrecer un filtro por **número de orden exacto**: CUANDO se indica un valor, el
+listado DEBE devolver únicamente los hilos de la orden cuyo `num_guia` **o** `num_remision` sea
+**igual** a ese valor. El sistema NO DEBE aplicar coincidencia parcial en este filtro.
 
 ## R36 — El input de búsqueda libre y su alcance
 
-El input de búsqueda libre DEBE encontrar una conversación por **nombre del destinatario**, por
+El input de búsqueda libre DEBE encontrar un hilo por **nombre del destinatario**, por
 **`num_guia`**, por **`num_remision`** y por **nombre del mensajero**, con plegado de acentos y sin
 distinguir mayúsculas.
 
@@ -263,87 +280,83 @@ sistema DEBE responder `validation_error` **sin ejecutar ninguna consulta**.
 
 ---
 
-## Preguntas abiertas — **PENDIENTES DE LA PUERTA HUMANA**
+> Los siguientes requisitos **nacen de las respuestas del humano del 2026-08-28** y se numeran al
+> final para no mover las citas existentes.
 
-Cada una lleva una recomendación razonada. **Ninguna está cerrada**: el spec implementa la
-recomendación sólo si el humano la aprueba, y la decisión contraria cambia requisitos concretos
-(se indica cuáles).
+## R39 — El filtro de fecha se comporta DIFERENCIADO en cada superficie **[NUEVO — P2]**
 
-### P1 — ¿La lista de primer nivel son CONVERSACIONES u ÓRDENES?
+El sistema DEBE aplicar el rango de fechas con dos semánticas distintas y explícitas:
 
-**Recomendación: conversaciones (un hilo por `orden + teléfono`).**
-Razón: `ChatConversacion` es `@@unique([ordenId, telefonoE164])` (`db/schema.prisma:312`), así que
-una orden **puede** tener más de un hilo (el cliente cambió de número: ver `migrarTelefono` en
-`ChatConversacionRepository.ts:201-248`, que deja el hilo viejo vivo). Fundir dos hilos de números
-distintos bajo una sola fila mezclaría dos interlocutores en una misma cronología, y ni el modelo ni
-la UI del mensajero lo hacen hoy. La fila **rotula la orden**, que es como el humano pidió agrupar
-(«por orden»); si una orden tiene dos hilos, aparecen dos filas con la misma orden y distinto
-número.
-**Si el humano decide «órdenes»:** cambian R11, R13, R14, R15 y el contrato del listado.
+- **en el LISTADO**, el rango **SELECCIONA** qué hilos aparecen (los que tienen al menos un mensaje
+  dentro, R34);
+- **en el HILO abierto**, el rango **NO recorta nada** (R17), y la vista DEBE decírselo al lector
+  con un aviso visible cuando se abre un hilo con rango aplicado.
 
-### P2 — El filtro por fecha, ¿corta por la fecha de la CONVERSACIÓN o por la del MENSAJE?
+El sistema NO DEBE resolver esta diferencia con dato nuevo en la base.
 
-**Recomendación: por la fecha del MENSAJE, y sólo en el LISTADO.**
-Razón: una conversación no tiene «una» fecha propia útil (`created_at` es cuándo se abrió el hilo, no
-cuándo hubo actividad). Lo que un admin busca es «qué se habló el 12». El rango selecciona
-conversaciones **con actividad** en él (R34) y el hilo abierto se sigue leyendo completo (R17), que
-es lo que el humano pidió literalmente («independiente de la fecha»).
-**Si el humano decide «fecha de la conversación»:** cambia R34 y desaparece la dependencia del
-listado sobre `chat_mensaje`.
+## R40 — Enviados y recibidos, un solo hilo y una sola cronología **[NUEVO — P5]**
 
-### P3 — Al entrar al hilo, ¿se aterriza en lo más reciente o en lo más antiguo?
+El sistema DEBE presentar los mensajes entrantes y salientes **entrelazados en el mismo hilo**,
+ordenados por `ocurrido_at`; NO DEBE ofrecer vistas, pestañas ni columnas separadas por dirección,
+ni reordenar por dirección.
 
-**Recomendación: en lo más reciente, paginando hacia atrás (R21).**
-Razón: es el comportamiento del chat del propio repo
-(`ChatConversacion.tsx:310-312` ancla el hilo abajo) y el de WhatsApp. Aterrizar en el primer
-mensaje de un hilo de meses obliga a desplazarse hasta el final para ver lo último, que es lo que
-casi siempre se busca.
-**Si el humano decide «lo más antiguo»:** cambian R21 y R22 y el sentido del cursor.
+## R41 — Carga perezosa: el listado no trae mensajes **[NUEVO — P8]**
 
-### P4 — ¿`adminSatelite` y `adminTienda` quedan fuera?
+CUANDO el sistema responde al listado de hilos, la respuesta NO DEBE contener ningún mensaje.
+Los mensajes de un hilo DEBEN solicitarse **sólo** cuando ese hilo se abre.
 
-**Recomendación: FUERA.** El pedido dice «admin y maestro». Además `adminTienda` es un inquilino:
-darle el histórico de **todos** los mensajeros le enseñaría conversaciones de órdenes de otras
-tiendas (fuga entre inquilinos). `adminSatelite` está acotado a su zona en el resto del producto y
-esta pantalla no tiene recorte por zona.
-**Si el humano decide incluirlos:** hay que diseñar el recorte por tienda/zona ANTES, y cambian R1,
-R10 y R29.
+## R42 — La unidad del hilo es (orden, mensajero) **[NUEVO — P1]**
 
-### P5 — ¿El histórico ve los ADJUNTOS, o sólo el texto?
+El sistema DEBE tratar como **un único hilo** todas las filas de `chat_conversacion` que compartan
+`orden_id` y `mensajero_id`, fusionando sus mensajes en una sola secuencia ordenada por
+`(ocurrido_at, id)`. La fusión NO DEBE alterar el orden relativo de los mensajes ni duplicarlos.
 
-**Recomendación: sí, los ve (R29).** Un histórico que muestra «imagen» sin poder abrirla no sirve
-para lo que se pide (revisar qué se le dijo al cliente). Pero es un **ensanche real de
-autorización**: hoy `findMediaParaMensajero` (`ChatMensajeRepository.ts:269-311`) exige
-`o.mensajero_asignado_id = $actor`. El diseño lo hace por una **vía separada y explícita** (§4), no
-relajando la existente.
-**Si el humano decide «sólo texto»:** caen R29 y R31, y el proxy no se toca en absoluto.
+## R43 — Cabecera del hilo fusionado **[NUEVO — P1]**
 
-### P6 — El separador de día, ¿lleva año? ¿usa «hoy»/«ayer»?
+CUANDO un hilo fusiona más de un número de teléfono, la cabecera DEBE rotular la orden y el
+mensajero, mostrar el número **vigente** (el de la fila con actividad más reciente) e indicar que
+hay más de un número; y el cambio de número DEBE seguir siendo legible **dentro** del hilo como el
+mensaje de sistema que ya existe.
 
-**Recomendación: sin «hoy»/«ayer»** (el humano fijó el formato: «jueves x de X») y **con año sólo
-cuando el día no pertenece al año en curso** («jueves 28 de agosto de 2025»). En un histórico que
-puede recorrer años, un separador sin año es ambiguo.
-**Si el humano decide «nunca año»:** cambia el `assert` de R23.
+## R44 — Dos mensajeros de la misma orden son dos hilos **[NUEVO — P1]**
 
-### P7 — El filtro «por orden», ¿qué control es?
+SI una misma orden tiene hilos de dos mensajeros distintos, ENTONCES el listado DEBE mostrarlos como
+**dos filas distintas**, cada una atribuida a su mensajero; el sistema NO DEBE fusionarlas ni
+tratarlas como duplicado.
 
-**Recomendación: un filtro de texto de coincidencia EXACTA** contra `num_guia` o `num_remision`
-(`kind: "text"`), distinto del input libre —que es difuso—. Un `multi` con todas las órdenes como
-opciones no es viable (la lista es ilimitada).
-**Si el humano decide otra cosa** (p. ej. que el input libre baste y no haya filtro «orden»
-separado): cae R35.
+## R45 — Límite conocido de la atribución tras una reasignación **[NUEVO — P1]**
 
-### P8 — Volumen: ¿cuántas conversaciones y mensajes hay hoy?
+MIENTRAS `chat_conversacion.mensajero_id` sea reescrito por la reasignación
+(`upsertParaOrden`, `ChatConversacionRepository.ts:110-132`) y `chat_mensaje` no tenga columna de
+mensajero, el sistema DEBE atribuir el hilo al mensajero que hoy consta en la fila y DEBE incluir en
+él los mensajes anteriores a la reasignación; el sistema NO DEBE inventar una partición por
+mensajero que el dato no sostiene.
 
-**No medido, y no se rellena por suposición (regla 6).** El orden del listado se calcula con un
-`MAX(ocurrido_at)` por conversación (§2.4 del design): correcto siempre, pero su coste crece con el
-número de **conversaciones**. La tarea `T0` de `tasks.md` mide `count(*)` de `chat_conversacion` y
-de `chat_mensaje` **antes** de implementar. **Recomendación: sin migración** (R27) mientras
-`chat_conversacion` esté por debajo de ~50.000 filas; por encima, se abre un PR propio con el índice
-o la columna materializada —una migración manda el gate al modo completo (`docs/verification.md`)—.
+> **LIMITACIÓN CONOCIDA — declarada, no descubierta.** El humano pidió «el chat del mensajero del
+> día que gestionó esa orden». Eso se cumple **siempre que el dato lo permita**: dos mensajeros con
+> hilos separados dan dos filas (R44). Pero cuando la orden se reasigna y el cliente **conserva su
+> número**, hoy no hay dos filas: `upsertParaOrden` **reescribe** `mensajero_id` sobre la única fila
+> `(orden, teléfono)`, y `chat_mensaje` no guarda quién era el mensajero de cada mensaje
+> (`db/schema.prisma:322-373`). Partir de verdad ese hilo exigiría **una columna nueva en
+> `chat_mensaje` (migración)**, que esta feature tiene **prohibida** por decisión humana (R27). Se
+> fija el comportamiento con un test para que sea una limitación **vigilada** y no un accidente —
+> mismo patrón que la 311 usó con `migrarTelefono` (`ChatConversacionRepository.ts:201-224`). Si se
+> quiere la partición real, se reabre con el humano en su propia feature.
 
-### P9 — Retención: ¿el histórico enseña conversaciones de órdenes ya cerradas/antiguas sin límite?
+---
 
-**Recomendación: sí, sin límite temporal** (es un «histórico»). Se declara que **la media de más de
-30 días aparecerá como no disponible** (D1/R15 de la 311) y que eso **no es un fallo** (R31).
-**Si el humano quiere un tope de antigüedad:** es un requisito nuevo y un filtro por defecto.
+## Decisiones cerradas por el humano — 2026-08-28
+
+Las nueve preguntas abiertas de la primera versión de este spec **están cerradas**. No se reabren.
+
+| # | Respuesta literal del humano | Qué fija en el spec |
+| --- | --- | --- |
+| **P1** | «hilo por orden y mensajero, el chat del mensajero del dia que gestiono esa orden» | La unidad del hilo es **(orden, mensajero)**: **R42** (fusión sin tocar la DB), **R43** (cabecera con dos números), **R44** (dos mensajeros = dos hilos, no duplicado), **R45** (límite conocido tras reasignación). Cambian **R11, R13, R14, R15**. Diseño en `design.md` §1.3 y §2.4. |
+| **P2** | «mensaje pero diferenciado sin agregar nada en la db» | El filtro de fecha corta **por mensaje** (**R34**) y se comporta **diferenciado** entre listado e hilo (**R39**, con **R17**). **La alternativa A6 —columna materializada `ultima_actividad_at` o índice nuevo— queda DESCARTADA por decisión humana, no aplazada.** Sigue **sin migración** (**R27**). |
+| **P3** | «si» | Se aterriza en el mensaje más reciente y se pagina hacia atrás: **R21**, **R22**. |
+| **P4** | «solo admin/maestro» | `ROLES_HISTORICO_CONVERSACIONES = ["maestro","admin"]`: **R1**. `adminSatelite`, `adminTienda`, `mensajero` y `apiKey` quedan **fuera**, y la guardia lo vigila. |
+| **P5** | «si — enviados y recibidos en el mismo orden, no fuera» | El histórico **sí** ve los adjuntos, por la vía separada `findMediaParaLectorHistorico` y sin relajar la del mensajero: **R29**, **R30**, **R26**. Y entrantes y salientes van en **el mismo hilo y la misma cronología**: **R40** (con **R16**). |
+| **P6** | «hoy/ayer esta bien y sin año» | El separador usa **«hoy»** y **«ayer»** y **nunca** lleva año: **R23** (modificado; corrige la recomendación anterior). El cálculo de «hoy»/«ayer» va contra la **fecha calendario CR**, que es donde está el off-by-one. |
+| **P7** | «numero exacto» | El filtro «orden» es el **número exacto** (`num_guia` o `num_remision`), sin coincidencia parcial: **R35** (modificado). |
+| **P8** | «tambien paginado, solo X conversaciones a la vez, y solo hasta que se abra una se cargan los mensajes» | **Dos paginaciones**: la del listado (**R13**, N hilos por página) y la del hilo (**R18**, **R19**). Y **carga perezosa**: la respuesta del listado no lleva ni un mensaje (**R41**). |
+| **P9** | «sin limite, un cron futuro limpiara el exceso» | Sin límite de antigüedad; **la purga es un cron futuro y queda FUERA de alcance**. La media de más de 30 días saldrá como no disponible y eso no es un fallo: **R31**. |
