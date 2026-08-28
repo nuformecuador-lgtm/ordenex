@@ -97,8 +97,13 @@ const ARBOLES_UI = ["app", "components"] as const;
 // misma que la feature 192 ya pintaba, ahora sobre la primitiva. Nace `fuera` con su motivo
 // escrito en `censo-tablas.ts` (es una vista de lectura dentro de un modal, y R34 de esa
 // ficha le prohíbe ofrecer acciones).
-const TOTAL_ARCHIVOS_CON_DATATABLE = 26;
-const TOTAL_INSTANCIAS_DATATABLE = 26;
+// FEATURE 304: 26 → 27 archivos y 26 → 27 instancias. La de más es la tabla que dice qué
+// filas de la carga masiva entraron con el monto REDONDEADO y de cuánto a cuánto (el aviso de
+// la 299, que hasta ahora moría en el cliente). Nace `fuera`, con su motivo en
+// `censo-tablas.ts`: son filas del archivo que la propia tienda acaba de subir, y los dos
+// pasos que la montan ya ofrecen sus descargas. Censo total: 28 = 27 `<DataTable>` + 1 cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 27;
+const TOTAL_INSTANCIAS_DATATABLE = 27;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -231,7 +236,9 @@ describe("guardia de cobertura del censo de tablas", () => {
     );
     // FEATURE 258 (F3.1): 5 -> 6 exclusiones. La de mas es el detalle del tablero del dia,
     // que pasa de `<Table>` cruda a `<DataTable>` sin cambiar de alcance.
-    expect(excluidas.length).toBe(6);
+    // FEATURE 304: 6 -> 7. La de mas es el aviso de los montos redondeados de la carga masiva,
+    // que nace `fuera` y sin control de descarga (motivo en `censo-tablas.ts`).
+    expect(excluidas.length).toBe(7);
     for (const inst of excluidas) {
       const tabla = registro.get(inst.ruta)!.tablas[inst.indice];
       expect(inst.declaraDescarga, `${inst.ruta} :: ${tabla.nombre}`).toBe(false);
@@ -257,7 +264,8 @@ describe("guardia de cobertura del censo de tablas", () => {
     const totalCensado =
       CENSO_DATATABLE.reduce((n, e) => n + e.tablas.length, 0) +
       CENSO_TABLAS_CRUDAS.reduce((n, e) => n + e.tablas.length, 0);
-    expect(totalCensado).toBe(27);
+    // FEATURE 304: 27 → 28, por la tabla del aviso de montos redondeados de la carga masiva.
+    expect(totalCensado).toBe(28);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -309,8 +317,12 @@ describe("guardia de cobertura del censo de tablas", () => {
     // La de mas es el detalle del tablero del dia, que pasa de `<Table>` cruda a
     // `<DataTable>`: cambia la primitiva con la que se pinta, no lo que el usuario puede
     // hacer con ella. Ninguna descarga se gana ni se pierde.
+    //
+    // FEATURE 304: 7 -> 8 fuera de alcance, y las 20 dentro de alcance NO se mueven. La de más
+    // es el aviso de los montos redondeados de la carga masiva: una tabla que EXPLICA un dato
+    // del archivo que la tienda acaba de subir, no un conjunto que nadie pueda llevarse.
     expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(20);
-    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(7);
+    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(8);
   });
 
   it("una tabla compartida declara TODAS las pantallas que la montan", () => {

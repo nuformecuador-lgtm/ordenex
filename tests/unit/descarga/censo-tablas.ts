@@ -117,6 +117,12 @@ export interface ArchivoCensado {
 // tiene registradas por ruta y no por tipo de listado.
 //
 // Totales: 33 → 26 tablas = 25 `<DataTable>` en 25 archivos + 1 `<table>` cruda.
+//
+// FEATURE 304 — SUMA de una tabla, `fuera`: «Órdenes con el monto redondeado (carga masiva)».
+// Dice qué filas entraron con el monto redondeado al colón más cercano (aviso de la 299) y de
+// cuánto a cuánto. No gana descarga y el motivo está escrito en su entrada: son filas del
+// archivo que la tienda acaba de subir, y los dos pasos que la montan ya descargan lo suyo.
+// Ninguna decisión de alcance previa cambia.
 
 /**
  * Las 25 instancias de `<DataTable>` del árbol (25 archivos), en el orden en que aparecen
@@ -217,6 +223,19 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
         nombre: "Órdenes con error (previsualización)",
         estado: "fuera",
         nota: "ya tiene su propia descarga xlsx de filas con error (feature 143, P3 ratificada)",
+      },
+    ],
+  },
+  {
+    ruta: "app/(app)/ordenes/_components/OrdenesConMontoAjustadoTabla.tsx",
+    tablas: [
+      {
+        nombre: "Órdenes con el monto redondeado (carga masiva)",
+        estado: "fuera",
+        nota:
+          "aviso de la feature 304 sobre el archivo que la propia tienda acaba de subir: son " +
+          "las filas que traían céntimos, y los dos pasos que la montan ya ofrecen su descarga " +
+          "(filas con error en la revisión previa, manifiesto y etiquetas en el resultado)",
       },
     ],
   },

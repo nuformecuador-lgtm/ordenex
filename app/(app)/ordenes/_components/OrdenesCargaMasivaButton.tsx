@@ -35,6 +35,7 @@ const CLASIFICACION_VACIA: ClasificacionCarga = {
   numRemisionesNuevas: [],
   existentes: [],
   errores: [],
+  ajustadas: [],
 };
 
 /**
@@ -259,7 +260,12 @@ export function OrdenesCargaMasivaButton() {
           ) : (
             // R12: solo lectura. Sin `onDone`: no queda acción que confirmar, y el
             // modal ya cierra con su propio botón "Cerrar" del pie.
-            <OrdenesCargaResumen numRemisiones={clasificacion.numRemisionesNuevas} />
+            // Feature 304: las que se guardaron con el monto redondeado salen de la carga
+            // REAL (`setClasificacion(clasif)` de arriba), no del dry-run.
+            <OrdenesCargaResumen
+              numRemisiones={clasificacion.numRemisionesNuevas}
+              ajustadas={clasificacion.ajustadas}
+            />
           )}
         </div>
       </Modal>
