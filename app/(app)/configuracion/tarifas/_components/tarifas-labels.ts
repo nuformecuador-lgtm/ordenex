@@ -63,19 +63,22 @@ export const TARIFA_CAMPO_LABEL = {
  * - `rechazado` → `cobroRechazado`, que según `lib/utils/ingreso-bodega.ts` es INGRESO DE LA
  *   BODEGA responsable del mensajero y «NUNCA se paga al mensajero».
  *
- * Por eso el título ya no atribuye el dinero a nadie —nombra a los dos destinatarios— y quien
- * cobra cada monto lo dice CADA CAMPO, en su ayuda: así no hay que leer el código para saberlo.
+ * Por eso quien cobra cada monto lo dice CADA CAMPO, en su ayuda, y la sección lo resume
+ * arriba: así no hay que leer el código para saberlo.
+ *
+ * Feature 310 — el bloque interno ya NO tiene título propio («Pagos por zona (mensajero y
+ * bodega)» y su variante por vehículo, que vivían aquí). Iba pegado al encabezado de la
+ * sección, casi con las mismas palabras, y eran dos títulos seguidos que decían lo mismo. El
+ * que se queda es `seccion`, que es el que de verdad es un encabezado —`<h4>`, en el índice de
+ * la página y a juego con «Tarifas de zona»— y trae su explicación (`seccionAyuda`) debajo.
  */
 export const PAGO_ZONA_TEXTO = {
-  /** Encabezado de la sección que envuelve el bloque (`CrearZonaForm`). */
+  /** Encabezado ÚNICO del bloque de pagos (`CrearZonaForm`). */
   seccion: "Pagos por zona",
   /** La explicación de la sección: los dos dineros y su destinatario, en una línea. */
   seccionAyuda:
     "Lo que Ordenex paga por cada gestión en esta zona: la entrega se le paga al mensajero; " +
     "el rechazo del cliente es ingreso de la bodega responsable de él.",
-  titulo: "Pagos por zona (mensajero y bodega)",
-  /** Con el cobro por vehículo activo, los mismos dos pagos se desglosan por vehículo. */
-  tituloPorVehiculo: "Pagos por zona y vehículo (mensajero y bodega)",
   entregado: "Entregado",
   /** Quién cobra ESTE monto (feature 39). */
   entregadoDestino: "Se le paga al mensajero.",
