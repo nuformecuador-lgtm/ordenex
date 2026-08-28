@@ -427,6 +427,55 @@ describe("cargarViaApi — validacion de valor heredada (R13, D3 override)", () 
   });
 });
 
+/**
+ * FEATURE 299 — LA MISMA PUERTA, EL OTRO CANAL.
+ *
+ * `cargarViaApi` valida con el MISMO `filaCargaSchema` que la via sesion, asi que el redondeo
+ * lo hereda entero. Este bloque existe porque «lo hereda» hay que MEDIRLO: es un contrato
+ * publico y un integrador que mande centimos tiene que ver, en su propia respuesta, que el
+ * monto que guardamos no es el que mando.
+ */
+describe("cargarViaApi — monto redondeado al colon (feature 299)", () => {
+  it("299: 11898.81 se persiste como 11899 Y la fila del summary dice que se ajusto", async () => {
+    const repo = buildRepo();
+    const r = await buildService(repo).cargarViaApi([row({ monto_cobrar: "11898.81" })], APIKEY);
+
+    expect(conGuiaArg(repo)[0].montoCobrar).toBe(11899);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.summary.filas[0]).toMatchObject({
+      resultado: "creada",
+      montoAjustado: { original: 11898.81, aplicado: 11899 },
+    });
+  });
+
+  it("299: un monto ENTERO no se toca y la respuesta no gana ni una clave", async () => {
+    const repo = buildRepo();
+    const r = await buildService(repo).cargarViaApi([row({ monto_cobrar: "11899" })], APIKEY);
+
+    expect(conGuiaArg(repo)[0].montoCobrar).toBe(11899);
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect("montoAjustado" in r.summary.filas[0]).toBe(false);
+  });
+
+  it("299: sin monto (vacio) tampoco avisa: `null` no es un ajuste", async () => {
+    const repo = buildRepo();
+    const r = await buildService(repo).cargarViaApi([row({ monto_cobrar: "" })], APIKEY);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect("montoAjustado" in r.summary.filas[0]).toBe(false);
+  });
+
+  it("299: el medio SUBE (half away from zero), igual que en la via sesion", async () => {
+    const repo = buildRepo();
+    await buildService(repo).cargarViaApi([row({ monto_cobrar: "11898.5" })], APIKEY);
+    expect(conGuiaArg(repo)[0].montoCobrar).toBe(11899);
+  });
+});
+
 describe("cargarViaApi — dedup y exito parcial (R7/R11/R12)", () => {
   it("R11: remision existente en DB -> duplicada, sin consumir guia", async () => {
     const repo = buildRepo({
