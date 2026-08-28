@@ -3778,7 +3778,7 @@
       "title": "un job recurrente puede morir en silencio y solo lo nota el operador",
       "description": "La serie de un job recurrente arranca con una siembra manual que no esta en el despliegue; si falta, el job no corre nunca y nada avisa.",
       "zone": "backend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "media",
       "branch": null,
@@ -3789,7 +3789,7 @@
       "title": "la descarga del listado de ordenes deja elegir que columnas salen",
       "description": "El boton de descarga de ordenes emite 15 columnas fijas, y el manifiesto ya tiene un selector de columnas que se puede reutilizar.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
       "branch": null,
@@ -3860,6 +3860,17 @@
       "complexity": "media",
       "branch": null,
       "status_note": "PARTE 2 DE LA 319, y DEPENDE de ella: no se empieza hasta que el criterio por estado este en `dev`. Pedida por el humano el 2026-08-28 tras descubrir que entre la carga y la llegada a bodega central un integrador NO TIENE NINGUNA SALIDA: cancelar exige `en_bodega_central` o `en_ruta_bodega_central` (y ademas se identifica por `numGuia`, que con fulfillment aun no existe), y borrar es exclusivo del `maestro`. DECISION DEL HUMANO: la tienda borra las SUYAS con el MISMO predicado que la app -- los cuatro estados de la 319 y nada mas--. Eso REVIERTE en parte la decision de la feature de eliminar («con dos roles capaces de borrar, el rastro de quien lo hizo deja de ser una sola persona»), y se acepta a sabiendas: en esos cuatro estados la orden no esta en ningun cierre ni en la ruta de ningun mensajero, y la API key identifica al autor -- el rastro no se pierde, cambia de forma. LO QUE HAY QUE COPIAR DE LA 106, y no es opcional: el owner se fuerza DENTRO del `where` (`numGuia` + `tiendaId` + `deletedAt IS NULL` en el MISMO statement, patron `cancelarViaApi`), nunca en un `if` posterior, para que no exista ventana entre leer y comprobar; y un `null` NO distingue «no existe» de «es de otra tienda»: el borde responde `no_encontrada` en los dos casos. OJO CON EL SERVICIO: `EliminarOrdenService` corta hoy con `actor.rol !== 'maestro'` y NO acota por tienda, porque el maestro puede borrar cualquiera. Abrirlo al canal API sin anadir el acotamiento por owner dejaria a una key borrando ordenes ajenas. El predicado de estado SI se comparte con la 319; la autorizacion NO. Hoy no existe ningun endpoint DELETE en toda la API publica: este seria el primero."
+    },
+    {
+      "id": 321,
+      "title": "un endpoint del canal API puede nacer sin documentar y el gate no lo ve",
+      "description": "El censo de rutas del OpenAPI compara el spec consigo mismo y con su copia en texto, nunca contra las rutas que existen de verdad.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": null,
+      "status_note": "PREGUNTADA POR EL HUMANO el 2026-08-28 mientras se implementaba la 320 -- «donde quedara documentado lo de la api, es importante para que otros se conecten»-- y el rastreo destapo el hueco. EL CONTRATO VIVE EN CUATRO SITIOS y ninguno se actualiza solo: `lib/api/openapi-spec.ts` (fuente de verdad, es lo que sirve `/api/docs/openapi` y renderiza el Swagger UI), `docs/api/api-key-openapi.yaml` (gemelo en texto; su cabecera dice «GENERADO, no editar a mano» pero NADA lo regenera: lo sincronizan los asserts de `tests/unit/api/openapi-*.test.ts`), `docs/api/ordenex-api-key.postman_collection.json`, y el censo `PATHS_ESPERADOS` de `tests/unit/api/openapi-177-paths-pdf-y-carga-id.test.ts`, que es una LISTA LITERAL escrita a mano. EL AGUJERO: ese censo afirma `toHaveLength(10)` y `toEqual(PATHS_ESPERADOS)` contra el objeto TS y contra el YAML -- es decir, compara el spec CONSIGO MISMO y con su copia, NUNCA contra `app/api/ordenes/api-key/**`. Consecuencia medida: crear una ruta nueva sin tocar el spec deja el gate ENTERO EN VERDE, y el integrador no se entera de que el endpoint existe. Es la misma familia de fallo mudo de las fichas 313, 315 y 318: el sistema no falla, aparenta. ARREGLO: una guardia que lea las rutas REALES del canal en el filesystem y exija que cada una tenga su `path` en el spec, y al reves. Hay que traducir la convencion de Next (`[numGuia]` -> `{numGuia}`) y decidir que hacer con las rutas que a proposito no se publican, si las hay -- con anotacion explicita, como hace `superficie-de-uso` con `@sin-superficie`, nunca con una lista de excepciones muda. ⚠️ NO SUSTITUIR EL CENSO LITERAL por algo derivado del filesystem: `PATHS_ESPERADOS` ES el contrato publicado y sigue teniendo valor -- si se deriva de su propia fuente queda verde para siempre. La guardia nueva se SUMA, no reemplaza."
     }
   ]
 }
