@@ -47,6 +47,18 @@ Cuando abres Claude Code en la raíz de este repo, actúas como **leader**. El l
    Detalle y límites en `docs/verification.md`. "Compila" no es "funciona".
 6. **No inventes.** Si un dato no está en `docs/`, `specs/` o el código, es
    desconocido: pregunta o márcalo como abierto. No lo rellenes con supuestos.
+7. **Buscar código empieza por el grafo, no por `grep`.** El repo está indexado en el MCP
+   `codebase-memory` bajo el nombre **`R-job-singularis-projects-ordenex`** —no `ordenex`, que
+   responde *project not found*, y `R-ark-studio-projects-ricardo-ordenex` es OTRO repo—. Toda
+   pregunta del tipo «dónde está X», «quién llama a Y», «qué hace Z» se resuelve con
+   `search_graph`, `trace_path`, `get_code_snippet`, `query_graph`, `get_architecture` o
+   `search_code`. `grep`/`glob` quedan para texto plano, configs, `db/schema.prisma`, `specs/`,
+   `progress/` y para leer un archivo entero antes de editarlo.
+   **El índice caduca, y su forma de mentir es devolver de más:** el 2026-08-28 dio por vivos
+   `actualizarOrden` y `OrdenService.actualizar`, borrados el 2026-08-07 —donde hoy solo queda el
+   comentario del borrado—. Por eso, antes de concluir «esto ya existe» a partir del grafo,
+   **confirma el símbolo en el archivo real**; y si el árbol se ha movido, `detect_changes` y
+   reindexa. El grafo te dice DÓNDE mirar; el archivo dice QUÉ hay.
 
 ## Arranque de sesión
 

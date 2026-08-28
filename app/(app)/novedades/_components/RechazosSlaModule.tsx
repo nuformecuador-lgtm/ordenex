@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
 import { Pagination } from "@/components/shared/Pagination";
 import { useToast } from "@/hooks/useToast";
-import { money } from "@/lib/config/moneda";
 import { listarRechazosSlaTiendaAction } from "@/lib/actions/rechazos-sla-tienda";
 import type { RechazoSlaTiendaDTO } from "@/lib/types/rechazo-sla-tienda";
 
@@ -15,22 +13,33 @@ import type { RechazoSlaTiendaDTO } from "@/lib/types/rechazo-sla-tienda";
 // continuación natural de la orden que "se graduó" de novedad a rechazo por vencimiento de SLA.
 // Componente PRIVADO (datos sensibles de la tienda por props, arquitectura §private): el Server
 // Component padre YA validó rol `adminTienda` y pre-fetch de la página 1 (R12/R13). Por cada orden
-// muestra la guía (o placeholder si `null`, R14), la remisión, el destinatario y su MONTO de
-// rechazo (56); `monto === null` → "pendiente de cierre" (Q2 default). Money-safe: el monto llega
-// como STRING y se renderiza tal cual, NUNCA se parsea a número. Al cambiar de página re-fetch por
-// Server Action `listarRechazosSlaTiendaAction({ page })` (lectura interna, NO fetch a /api),
-// patrón `NovedadesModule` (R14). Lista vacía → estado vacío legible.
+// muestra la guía (o placeholder si `null`, R14), la remisión y el destinatario. Al cambiar de
+// página re-fetch por Server Action `listarRechazosSlaTiendaAction({ page })` (lectura interna, NO
+// fetch a /api), patrón `NovedadesModule` (R14). Lista vacía → estado vacío legible.
+//
+// Feature 308 (2026-08-28) — ESTA LISTA YA NO PINTA NINGÚN IMPORTE, y no es una omisión: aquí se
+// pintaba `RechazoSlaTiendaDTO.monto` en negrita y SIN ETIQUETA, y ese número NO ES DE LA TIENDA.
+// Es el `ingreso_bodega_rechazo` de 56 (cadena medida: DTO → `RechazosSlaTiendaService.listar` →
+// `OrdenRepository.findRechazadasSlaByTienda`, que lo lee de `gestion.ingresoBodegaRechazo`), o
+// sea, lo que la BODEGA ingresa por el rechazo. A la tienda un rechazo le cuesta por OTRA vía
+// (flete de retorno + IVA), así que el importe que leía como propio no era ni su ingreso ni su
+// cargo. Se RETIRA (decisión del humano, 2026-08-28): no se etiqueta y no se sustituye por el
+// cargo real de la tienda — eso sería backend y quedó fuera de alcance. Con el importe fuera cae
+// también su badge de "pendiente de cierre": solo existía para explicar POR QUÉ ese mismo importe
+// ajeno todavía no se podía pintar. El campo `monto` del DTO se deja intacto a propósito (retirarlo
+// es backend). Si vuelve a hacer falta un número en esta pantalla, tiene que ser el de la tienda y
+// tiene que llevar etiqueta.
 
 // --- Etiquetas i18n-ready (texto separado de la lógica) ---
 const GUIA_LABEL = "Guía";
 const GUIA_SIN_ASIGNAR_LABEL = "sin asignar";
 const REMISION_LABEL = "Remisión";
-/** Q2 default: la gestión sintética SLA aún no se snapshotea en un cierre → monto no disponible. */
-const MONTO_PENDIENTE_LABEL = "Pendiente de cierre";
 const LISTA_ARIA_LABEL = "Órdenes rechazadas por plazo vencido";
 const VACIO_TITULO = "No tenés órdenes rechazadas por plazo vencido";
+// Feature 308: la frase prometía "con su monto" y ese monto era el de la bodega. Sin importe en
+// la lista, prometerlo además sería prometer algo que ya no ocurre.
 const VACIO_DETALLE =
-  "Cuando una de tus órdenes en devolución llegue a rechazo por vencerse el plazo, aparecerá acá con su monto.";
+  "Cuando una de tus órdenes en devolución llegue a rechazo por vencerse el plazo, aparecerá acá.";
 const PAGINACION_ARIA_LABEL = "Paginación de rechazos por plazo vencido";
 
 export interface RechazosSlaModuleProps {
@@ -38,17 +47,6 @@ export interface RechazosSlaModuleProps {
   total: number;
   page: number;
   pageSize: number;
-}
-
-/**
- * Monto del rechazo (STRING money-safe, escala 2): se formatea con el helper compartido SIN
- * parsear a número (feature 201; antes se le pegaba un `₡` a mano y la tienda leía
- * `₡13331832.72`). `null` = la gestión SLA aún no está snapshoteada → "pendiente de cierre"
- * (Q2), que NO es lo mismo que "sin monto": por eso el nulo lo resuelve esta función y no el
- * marcador genérico de `money`.
- */
-function montoLabel(monto: string | null): string {
-  return monto === null ? MONTO_PENDIENTE_LABEL : money(monto);
 }
 
 export function RechazosSlaModule({
@@ -129,15 +127,6 @@ export function RechazosSlaModule({
               <p className="text-sm text-muted-foreground">
                 <IntentosDato intentos={valorIntentos(rechazo)} />
               </p>
-            </div>
-            <div className="flex items-center">
-              {rechazo.monto === null ? (
-                <Badge variant="outline">{MONTO_PENDIENTE_LABEL}</Badge>
-              ) : (
-                <span className="text-base font-semibold text-foreground">
-                  {montoLabel(rechazo.monto)}
-                </span>
-              )}
             </div>
           </li>
         ))}

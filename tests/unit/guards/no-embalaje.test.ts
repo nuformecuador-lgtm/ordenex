@@ -25,6 +25,15 @@ const IGNORED_DIRS = new Set([
   // propio guard) pero bajo otra ruta relativa, y falla por su reflejo. El
   // guard audita el codigo del proyecto, no copias anidadas de si mismo.
   ".claude",
+  // `.vitest/` es el volcado JSON que `pnpm run test:json` deja para que
+  // `comparar-baseline-rojos.mjs` sepa que fallo. Es estado del arnes, no
+  // fuente del repo, y ademas contiene los NOMBRES de todos los tests: entre
+  // ellos los del propio guard, asi que sin este ignore la primera corrida
+  // completa dejaba el repo en un estado donde la segunda fallaba por su
+  // propio reflejo. Se ignora el DIRECTORIO -- por eso el reporte ya no cae
+  // en la raiz-- y no se anota el archivo en el whitelist: lo que no es
+  // fuente no deberia necesitar una excepcion nominal.
+  ".vitest",
 ]);
 
 const TEXT_EXTENSIONS = new Set([

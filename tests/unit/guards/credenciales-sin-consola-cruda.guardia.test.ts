@@ -32,7 +32,7 @@
 // este hotfix acotado.
 //
 // **La excepción conocida, y por qué se queda fuera de este hotfix.**
-// `lib/clients/whatsapp-cloud.ts` tiene un `console.log` propio (línea ~382) que imprime la URL de
+// `lib/clients/whatsapp-cloud.ts` tiene un `console.log` propio (línea ~415) que imprime la URL de
 // la colección de plantillas de WhatsApp, con el `wabaId` interpolado. El `wabaId` es un
 // identificador de cuenta de negocio de Meta, no una credencial reutilizable: quien lo lee no
 // puede autenticarse con él. Es una infracción real de la MISMA regla (`console.log` crudo en
@@ -128,7 +128,7 @@ function claveDe(h: Hallazgo): string {
 // =================================================================================================
 
 const EXCEPCIONES: Record<string, string> = {
-  "lib/clients/whatsapp-cloud.ts:382":
+  "lib/clients/whatsapp-cloud.ts:415":
     "loguea la URL de la colección de plantillas de WhatsApp, con el `wabaId` interpolado. Es un " +
     "identificador de cuenta de Meta, no una credencial reutilizable (a diferencia del " +
     "`access_token` OAuth2 del incidente que motiva esta guardia): severidad menor. Queda fuera " +
@@ -214,7 +214,7 @@ describe("CONTRAPRUEBA — el detector no está roto", () => {
   it("un console.log fuera de la lista de excepciones queda SIN cubrir por claveDe", () => {
     const hallazgo: Hallazgo = { ruta: "lib/auth/google-sa-token.ts", linea: 999 };
     expect(EXCEPCIONES[claveDe(hallazgo)]).toBeUndefined();
-    const conocida: Hallazgo = { ruta: "lib/clients/whatsapp-cloud.ts", linea: 382 };
+    const conocida: Hallazgo = { ruta: "lib/clients/whatsapp-cloud.ts", linea: 415 };
     expect(EXCEPCIONES[claveDe(conocida)]).toBeDefined();
   });
 });

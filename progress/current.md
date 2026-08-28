@@ -9,6 +9,65 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 💬 2026-08-28 — ficha 316: el mensajero puede ENVIAR imagen, video, nota de voz y documentos
+
+**Estado: `spec_ready`, spec APROBADO por el humano** (32 requisitos R1-R32, los 32 mapeados a un test
+con `assert`; trazabilidad verificada por el leader, ninguno huerfano). Rama
+`feature/316-chat-enviar-media` desde `origin/dev` en `7435bdff`. Zona `fullstack`, complejidad alta, `sdd: true`.
+
+**⚠️ RENUMERADA 312 → 316, y esta vez ANTES de escribir una línea de código.** Al bajar `dev` para
+empezar apareció que otra sesión ya había tomado el **312** (`corregir los datos del cliente de una
+orden ya cargada`), y también el **313** y el **314**. El **315 no se toma aunque esté libre** en
+`feature_list.json`: la rama `origin/fix/315-liberar-al-aprobar-cierre` ya lo reclama por nombre, y
+registrarlo sería la cuarta colisión seguida. Mismo precedente que la 311, renumerada **tres veces**.
+
+**La trampa del renumerado, esquivada a propósito.** La 311 documenta que su `sed` global se comió el
+eslabón intermedio **dos veces**, porque un barrido no distingue entre **usar** un número y
+**citarlo**. Aquí las 12 ocurrencias se revisaron una a una antes de tocar nada: las 12 *usaban* el
+número y ninguna citaba historia ajena, así que el barrido era seguro. Verificado después: **0
+ocurrencias de `312`** en el spec.
+
+**Y esta vez el gate sí lo habría cazado.** El PR #565 (`fix/init-valida-feature-list`) hace que
+`init.sh` valide `feature_list.json` **siempre** y detecte **ids duplicados** — exactamente el agujero
+(`jq` ausente + `warn` en vez de `fail`) que dejó pasar las tres colisiones de la 311.
+
+**De dónde sale.** La 311 dejó el ENTRANTE completo y declaró el saliente **fuera de alcance por
+escrito** (`specs/311-chat-media-reacciones-contactos/requirements.md:18-21`). Hoy el `<form>` de
+`ChatConversacion.tsx` tiene exactamente un `<textarea>` y un botón `Send`: el mensajero que quiere
+mandar la foto del paquete en la puerta tiene que salirse a su WhatsApp personal.
+
+**Decisiones cerradas por el humano, no reabrir:** (a) cámara, galería, nota de voz y documentos
+PDF/Word/Excel; (b) el clip se bloquea con el **mismo** criterio que el texto libre
+(`textoLibreHabilitado`) porque Meta no acepta media fuera de la ventana de 24 h; (c) **no se
+guarda binario propio** — se mantiene viva la regla D1/R15 de la 311 y se acepta que a los 30 días
+el adjunto diga que ya no está disponible; (d) el textarea viaja como `caption` (no en audio, que
+Meta no lo admite).
+
+**Medido el 2026-08-28, y es la buena noticia: NO hace falta migración.** El enum
+`ChatMensajeTipo` ya tiene `imagen|audio|video|documento|sticker` y `ChatMensaje` ya tiene las
+columnas `media*` nullable. Falta solo el camino de **escritura** (`InsertarSalienteInput` no tiene
+campos `media*`). Y el proxy `/api/chat/media/[mensajeId]` **sirve un saliente sin un solo cambio**:
+autoriza por mensajero asignado y no filtra por dirección.
+
+**Trampas declaradas antes de empezar**, para que no se descubran a mitad:
+`whatsapp-cloud.ts::enviar()` siempre serializa JSON y subir media es `multipart` → cliente aparte;
+`reintentarEnvio` y `persistirFalloPermanente` están **tipados a `"texto" | "plantilla"`**, así que
+un saliente de media rompe el reintento **hoy**; `lib/config/chat-media.ts` es política de *servido*
+y no de *subida* → archivo nuevo, para que nadie use `MIMES_INCRUSTABLES` como whitelist de subida;
+y `MediaAdjunto.tsx` dice «del cliente» en textos que con salientes pasan a ser falsos.
+
+**⚠️ Riesgo principal — la nota de voz.** Chrome en Android graba `audio/webm;codecs=opus` y Meta
+**no lo acepta** como `type: audio` (quiere `ogg/opus`, `mpeg`, `aac` o `amr`). Hay que **medir** el
+mimeType real con `MediaRecorder.isTypeSupported`, no suponerlo: es exactamente el tipo de supuesto
+que la ficha de la 311 documenta haber pagado caro (R9 estuvo a punto de quedar muerto en silencio
+por casar contra un nombre de evento que la v21.0 no usa).
+
+**Cupo.** Se pasó la 311 a `done` en el mismo commit del alta (`1a4a90d7`): estaba mergeada con la
+ficha sin actualizar. Fullstack queda sin ninguna `in_progress`. **El gate no lo habría avisado:**
+`jq` no está instalado y en `init.sh:35` eso es `warn` y no `fail`, así que todo el bloque de
+validación de `feature_list.json` —incluida la regla del cupo— se salta.
+
+
 ## 💬 2026-08-27 — ficha 311: el chat da tratamiento a media, reacciones, contactos y cambio de número
 
 **Estado: `in_progress`, spec APROBADO por el humano.** Rama
@@ -87,6 +146,50 @@ pintarse como «Mensaje no compatible»; la guardia 229 congela `PUBLIC_ROUTES` 
 está mergeada en `dev`** (PRs #518 y #533) pero su ficha sigue `in_progress`: no se tocó sin
 confirmación del humano.
 
+
+## 🚨 2026-08-28 — INCIDENTE DE PRODUCCIÓN: las reprogramadas nunca volvían a la central
+
+Reportado por el humano en caliente: **«acepté las reprogramadas de ayer para hoy y no aparecen en
+el filtro de reasignables»**. No era el cierre ni el filtro.
+
+**La causa, medida antes de tocar nada.** `liberar_reprogramadas` es un job **recurrente**: se
+re-agenda solo *después* de cada corrida, así que la serie necesita una **siembra inicial**
+(`scripts/seed-jobs-liberar-reprogramadas.ts`). Esa siembra **no está en ningún paso del despliegue
+y nunca se corrió contra esta base**. Sin primera fila no hay segunda.
+
+- **0 filas** de ese tipo en `jobs` y **0 transiciones `liberacion_reprogramada`** en toda la
+  historia de la base (que arrancó el 2026-08-26).
+- **40 órdenes** atrapadas en `reprogramada`, con el mensajero de ayer todavía puesto.
+- El filtro REASIGNABLES pide `en_bodega_central` **Y** `mensajero_asignado_id IS NULL`
+  (`OrdenRepository.ts:1224`). Esas 40 fallaban las dos condiciones.
+- **`analitica_rollup_diario` estaba igual**, también con 0 filas: el rollup diario no se ha
+  escrito nunca. Segundo job muerto por la misma causa, y este no lo reportó nadie.
+
+**El descarte que importa:** el endpoint `/api/cron/liberar-reprogramadas` (feature 46) NO está en
+`vercel.json`, y eso parecía la causa. No lo es: desde la feature 90 la vía vigente es la COLA, que
+`procesar-jobs` drena cada minuto y que funciona — 374 geocodificaciones y 236 optimizaciones
+drenadas. Lo que faltaba era la fila, no el cron.
+
+**Arreglo aplicado** (por MCP, decisión humana explícita): dos filas sembradas a las 14:08 UTC,
+`liberar_reprogramadas` con `run_after` en el pasado y `analitica_rollup_diario` en su horario
+(00:30 CR). El drenador la ejecutó a las **14:10** con el código real de producción — no un `UPDATE`
+a mano. Resultado medido:
+
+| | |
+| --- | --- |
+| **25 liberadas** | a `en_bodega_central`, sin mensajero y con `prioridad = true` |
+| **5 congeladas** | cierre de un mensajero en `solicitado` — regla de la 276, correcto |
+| **10 intactas** | fechas 31/08 y 01/09, todavía no les toca |
+
+La serie quedó viva sin desplegar nada: hay fila `pending` para `2026-08-29 06:00 UTC`, re-agendada
+por la propia corrida.
+
+⚠️ **La deuda es la FICHA 313, y es la lección:** nada garantiza que esa siembra exista. Ningún test
+ni guardia comprueba que un tipo con recurrencia registrada tenga fila viva. Si la base se recrea
+—como el 2026-08-25— los dos jobs vuelven a morir igual de callados. **La única señal de este fallo
+fue un operador que no podía trabajar:** el build llevaba dos días verde.
+
+---
 
 ## 🎨 2026-08-27 — ficha 292: las tarjetas del monitoreo toman el color de su segmento
 

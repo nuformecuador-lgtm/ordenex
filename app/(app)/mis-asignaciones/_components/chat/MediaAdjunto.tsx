@@ -6,7 +6,9 @@ import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { ChatMediaVista } from "@/lib/types/chat-whatsapp";
+import type { ChatMensajeDireccion } from "@prisma/client";
 
+import { textoAccesible } from "./chat-format";
 import { urlMediaChat, useMediaChat } from "./hooks/useMediaChat";
 
 // Feature 311 (R24/R27/R28/R29) — el adjunto de una burbuja: imagen, sticker, audio, video o
@@ -37,6 +39,11 @@ export interface MediaAdjuntoProps {
   media: ChatMediaVista | null;
   /** Pie de foto, si vino (R2). Se usa como texto alternativo de la imagen. */
   caption: string | null;
+  /**
+   * Feature 316 (R23): quien mando el adjunto. Los textos accesibles de la 311 estaban
+   * cableados a "del cliente" y con salientes eso es FALSO; el mapa vive en `chat-format`.
+   */
+  direccion: ChatMensajeDireccion;
 }
 
 /**
@@ -135,16 +142,21 @@ function ImagenAdjunta({
   mensajeId,
   tipo,
   caption,
-}: Readonly<{ mensajeId: string; tipo: "imagen" | "sticker"; caption: string | null }>) {
+  direccion,
+}: Readonly<{
+  mensajeId: string;
+  tipo: "imagen" | "sticker";
+  caption: string | null;
+  direccion: ChatMensajeDireccion;
+}>) {
   const { estado, url, activar } = useMediaChat(mensajeId, true);
   // R28: el `alt` nunca queda vacio. Con pie de foto se usa el pie (es lo que describe la
-  // imagen); sin el, una etiqueta que dice QUE es y de QUIEN vino.
+  // imagen); sin el, una etiqueta que dice QUE es y de QUIEN vino (R23: quien vino depende de
+  // la direccion del mensaje, no siempre es el cliente).
   const alternativo =
     caption !== null && caption.trim() !== ""
       ? caption
-      : tipo === "sticker"
-        ? "Sticker enviado por el cliente"
-        : "Imagen enviada por el cliente";
+      : textoAccesible(tipo, direccion);
 
   const reintentoAccesible =
     tipo === "sticker"
@@ -188,10 +200,14 @@ function ImagenAdjunta({
 function ReproductorAdjunto({
   mensajeId,
   tipo,
-}: Readonly<{ mensajeId: string; tipo: "audio" | "video" }>) {
+  direccion,
+}: Readonly<{
+  mensajeId: string;
+  tipo: "audio" | "video";
+  direccion: ChatMensajeDireccion;
+}>) {
   const { estado, url, activar } = useMediaChat(mensajeId, false);
-  const nombreAccesible =
-    tipo === "audio" ? "Nota de voz del cliente" : "Video enviado por el cliente";
+  const nombreAccesible = textoAccesible(tipo, direccion);
 
   if (estado === "expirado" || estado === "error") {
     return (
@@ -278,16 +294,24 @@ export function MediaAdjunto({
   tipo,
   media,
   caption,
+  direccion,
 }: Readonly<MediaAdjuntoProps>) {
   // Sin metadatos de adjunto no hay nada que pedirle al proxy: la burbuja lo DICE en vez de
   // quedarse vacia (R27).
   if (media === null) return <AvisoError>Adjunto no disponible.</AvisoError>;
 
   if (tipo === "imagen" || tipo === "sticker") {
-    return <ImagenAdjunta mensajeId={mensajeId} tipo={tipo} caption={caption} />;
+    return (
+      <ImagenAdjunta
+        mensajeId={mensajeId}
+        tipo={tipo}
+        caption={caption}
+        direccion={direccion}
+      />
+    );
   }
   if (tipo === "audio" || tipo === "video") {
-    return <ReproductorAdjunto mensajeId={mensajeId} tipo={tipo} />;
+    return <ReproductorAdjunto mensajeId={mensajeId} tipo={tipo} direccion={direccion} />;
   }
   return <DocumentoAdjunto mensajeId={mensajeId} media={media} />;
 }

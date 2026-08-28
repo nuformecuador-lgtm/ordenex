@@ -529,12 +529,19 @@ describe("NovedadesModule", () => {
     ).toBeInTheDocument();
 
     // Y «Reprogramar» lleva a la ventana de la 237, NO al modal de reprogramación de la feature
-    // 100: se distingue por el aviso del precio, que aquél no tiene y no puede tener. Se abre AL
-    // FINAL porque el diálogo es modal y esconde del árbol de accesibilidad todo lo de detrás.
+    // 100: se distingue por el aviso de las consecuencias, que aquél no tiene y no puede tener. Se
+    // abre AL FINAL porque el diálogo es modal y esconde del árbol de accesibilidad todo lo de
+    // detrás.
+    //
+    // ⚠️ FICHA 309 (2026-08-28): el discriminador ERA «mueve el dinero igual» y ha dejado de
+    // servir, porque al REPROGRAMAR ya no se dice — y no se dice porque era falso (reprogramar no
+    // paga al mensajero, no genera ingreso de bodega y no factura a la tienda). Se cambia por el
+    // cierre AJENO, que es lo que de verdad distingue esta ventana de la de la 100 en los dos
+    // modos. El contrato del texto por modo vive en `GestionarDesdeAyudaModal.test.tsx`.
     await user.click(screen.getByRole("button", { name: /^Reprogramar la orden/ }));
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("Resolver la orden por tu cuenta");
-    expect(dialog).toHaveTextContent("mueve el dinero igual");
+    expect(dialog).toHaveTextContent("entra en su cierre del día");
     expect(reprogramarMock).not.toHaveBeenCalled();
   });
 
