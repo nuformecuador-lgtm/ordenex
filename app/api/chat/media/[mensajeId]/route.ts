@@ -19,15 +19,20 @@
 // contra una lista firmada— no se roza. La autorizacion REAL (propiedad de la orden) vive aqui.
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type { RolValue } from "@prisma/client";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
+import { ROLES_HISTORICO_CONVERSACIONES } from "@/lib/auth/menu-visibility";
 import { ChatMensajeRepository } from "@/lib/repositories/ChatMensajeRepository";
 import { WhatsappMediaClient } from "@/lib/clients/whatsapp-media";
 import { loadWhatsappConfig } from "@/lib/config/whatsapp";
 import { CACHE_CONTROL_MEDIA } from "@/lib/config/chat-media";
 import { contentDisposition, contentTypeSeguro } from "@/lib/utils/chat-media-headers";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
-import type { IChatMensajeRepository } from "@/lib/interfaces/repositories/IChatMensajeRepository";
+import type {
+  IChatMediaHistoricoReader,
+  IChatMensajeRepository,
+} from "@/lib/interfaces/repositories/IChatMensajeRepository";
 import type { WhatsappMediaDescargador } from "@/lib/clients/whatsapp-media";
 
 // Prisma + sesion: no corre en el edge.
@@ -36,11 +41,43 @@ export const runtime = "nodejs";
 /** El id del mensaje es un uuid; cualquier otra cosa ni siquiera llega a la base. */
 const mensajeIdSchema = z.uuid();
 
+/**
+ * Feature 318 (design §4) — `ROLES_HISTORICO_CONVERSACIONES` es una tupla de literales y su
+ * `.includes` solo aceptaria esos literales. Se ensancha el tipo del ARRAY (nunca el de
+ * `actor.rol`) en este unico punto, igual que hacen el service del histórico y la pagina de la
+ * ruta. CERO literales de rol en este archivo: la lista vive en un solo sitio.
+ */
+const ROLES_LECTOR_HISTORICO: readonly RolValue[] = ROLES_HISTORICO_CONVERSACIONES;
+
+/**
+ * Las DOS vias de autorizacion del adjunto. Se declaran juntas porque el `GET` elige una u otra
+ * por rol; ninguna se apaga con un booleano (A2, descartada en design §6).
+ */
+type ChatMediaRepo = Pick<IChatMensajeRepository, "findMediaParaMensajero"> &
+  IChatMediaHistoricoReader;
+
 export interface ChatMediaRouteDeps {
   getActor?: () => Promise<Actor | null>;
-  mensajeRepo?: Pick<IChatMensajeRepository, "findMediaParaMensajero">;
+  /**
+   * La via del histórico es OPCIONAL en el doble a proposito: los tests de la 311 inyectan
+   * repositorios que solo declaran `findMediaParaMensajero` y NO se tocan (R26). Si falta, se
+   * normaliza a "sin fila", que es fallar CERRADO (403), nunca abierto.
+   */
+  mensajeRepo?: Pick<IChatMensajeRepository, "findMediaParaMensajero"> &
+    Partial<IChatMediaHistoricoReader>;
   /** `null` explicito = WhatsApp sin credenciales; se responde 502 sin tocar la red. */
   descargador?: WhatsappMediaDescargador | null;
+}
+
+/** Completa la via del histórico ausente en un doble con el desenlace mas restrictivo. */
+function normalizarRepo(inyectado: ChatMediaRouteDeps["mensajeRepo"]): ChatMediaRepo {
+  if (inyectado === undefined) return new ChatMensajeRepository(getPrismaClient());
+  const historico = inyectado.findMediaParaLectorHistorico;
+  return {
+    findMediaParaMensajero: (id, mensajeroId) => inyectado.findMediaParaMensajero(id, mensajeroId),
+    findMediaParaLectorHistorico: async (id) =>
+      historico === undefined ? null : historico.call(inyectado, id),
+  };
 }
 
 /** Construye el descargador; `null` si la credencial de WhatsApp no esta configurada. */
@@ -72,8 +109,16 @@ export async function GET(
   // 2) Propiedad de la orden. MISMA puerta que `listarHilo` (R16/R17 de la 109): una sola query
   //    que solo devuelve fila si la orden del mensaje esta asignada a ESTE mensajero. Sin fila,
   //    403 sin llamar a la Graph API (R23).
-  const repo = deps.mensajeRepo ?? new ChatMensajeRepository(getPrismaClient());
-  const media = await repo.findMediaParaMensajero(parsed.data, actor.usuarioId);
+  //
+  //    Feature 318 (design §4, R29/R30): el LECTOR DEL HISTORICO (`maestro`/`admin`) lee por una
+  //    via SEPARADA —la misma consulta sin la condicion del mensajero— porque su pantalla es el
+  //    hilo de TODOS los mensajeros. Cualquier otro rol (`adminSatelite`, `adminTienda`, un
+  //    mensajero ajeno) cae en la rama del mensajero y, al no ser el asignado, no hay fila: 403
+  //    sin llamar a la Graph API (R30). La URL, las cabeceras y la politica de cache NO cambian.
+  const repo = normalizarRepo(deps.mensajeRepo);
+  const media = ROLES_LECTOR_HISTORICO.includes(actor.rol)
+    ? await repo.findMediaParaLectorHistorico(parsed.data)
+    : await repo.findMediaParaMensajero(parsed.data, actor.usuarioId);
   if (media === null) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   // 3) El mensaje es suyo pero no tiene adjunto (un texto, una ubicacion, una reaccion).

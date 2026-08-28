@@ -43,7 +43,12 @@ export type IconKey =
   // y otra el pulso del día en curso, y compartir icono invitaría a leer el monitoreo como
   // una sección de analítica. Mismo criterio que `shieldAlert` (158), `chartColumn` (129) y
   // `store` (167).
-  | "gauge";
+  | "gauge"
+  // Feature 318 (R6): histórico de conversaciones. Icono PROPIO y no reciclado: `IconKey`
+  // es una unión cerrada y compartir icono con otra sección invitaría a leer el histórico
+  // como parte de esa sección. Mismo criterio escrito para `shieldAlert` (158),
+  // `chartColumn` (129), `store` (167) y `gauge` (192).
+  | "history";
 
 /** Subitem de navegacion (dentro de un item colapsable). Sin icono propio. */
 export interface MenuChild {
@@ -155,6 +160,36 @@ export const ROLES_SIN_ACCESO_ANALITICA = ["mensajero"] as const satisfies reado
 export const ROLES_ACCESO_ANALITICA: readonly RolAnalitica[] = ROLES_ANALITICA.filter(
   (rol) => !(ROLES_SIN_ACCESO_ANALITICA as readonly string[]).includes(rol),
 );
+
+/**
+ * Feature 318 (R1) — único punto de verdad de quién ACCEDE al histórico de
+ * conversaciones. Lo leen TANTO el `roles` del ítem de menú «Histórico» (abajo) COMO el
+ * gate `notFound()` de `app/(app)/historico/conversaciones/page.tsx`, para que las dos
+ * capas no puedan divergir (precedente R10 de la 129). Ningún literal de rol se escribe
+ * en la página; lo vigila
+ * `tests/unit/guards/historico-roles-una-sola-fuente.guardia.test.ts`.
+ *
+ * Decisión humana del 2026-08-28 (P4, «solo admin/maestro»): exactamente `maestro` y
+ * `admin`. `adminSatelite`, `adminTienda`, `mensajero` y `apiKey` quedan FUERA.
+ *
+ * POR QUÉ UNA WHITELIST PROPIA Y NO DERIVAR DE `ROLES_ACCESO_TOTAL`
+ * (`lib/auth/acceso-total.ts`, que hoy contiene exactamente estos dos nombres — design
+ * §3.1, alternativa A5 DESCARTADA): la lección de «no escribas dos listas gemelas»
+ * aplica cuando divergir EN SILENCIO es el daño. Aquí la asimetría va al revés: si
+ * mañana alguien añadiera `adminSatelite` a «acceso total de gestión», derivar le
+ * regalaría el histórico de conversaciones de TODOS los inquilinos sin que nadie lo
+ * decidiera. Una whitelist propia obliga a que ampliar el histórico sea una edición de
+ * ESTE nombre, con fecha y autor.
+ *
+ * Es un `as const satisfies` y no una anotación `readonly RolValue[]` a propósito: el
+ * `satisfies` comprueba que cada nombre es un `RolValue` real del esquema sin ensanchar
+ * el tipo, de modo que la tupla conserva su identidad y el ítem de menú puede
+ * REFERENCIARLA (R2 se afirma con `toBe`, no con `toEqual`).
+ */
+export const ROLES_HISTORICO_CONVERSACIONES = [
+  "maestro",
+  "admin",
+] as const satisfies readonly RolValue[];
 
 /**
  * Fuente de verdad del menu. Vive en este modulo server-safe (NO en el
@@ -398,6 +433,30 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     href: "/incidentes",
     iconKey: "shieldAlert",
     roles: ["maestro", "admin", "adminSatelite"],
+  },
+  {
+    // Feature 318 (R2/R3/R9): histórico de conversaciones de WhatsApp — todos los hilos
+    // de todos los mensajeros, en SOLO LECTURA. `roles` apunta a la CONSTANTE, nunca a un
+    // literal copiado: este ítem sólo decide qué se MUESTRA y la defensa real es el
+    // `notFound()` de la página, que lee esa misma constante.
+    //
+    // POSICIÓN: LA ÚLTIMA del bloque de administración, y no es decorativo. `primerDestino`
+    // devuelve el `href` del primer ítem visible no marcado `destinoInicial: false`; puesto
+    // aquí, ningún rol cambia de aterrizaje post-login y por eso NO hace falta la marca
+    // `destinoInicial: false` (R9). Moverlo arriba sí la exigiría — es el incidente que ya
+    // documentan "Analítica" (133) y "Monitoreo" (192), y el test de R9 lo caza.
+    //
+    // El `href` del padre NO navega: un ítem con `children` se renderiza como disparador
+    // del desplegable (ver `Sidebar.tsx`), igual que "Entregas" y "Wallet". No existe
+    // ninguna página en `/historico`, sólo `/historico/conversaciones`.
+    //
+    // El subítem NO declara `roles` propios: hereda la visibilidad del padre, así que no
+    // hay una segunda lista que pueda divergir (R3).
+    label: "Histórico",
+    href: "/historico",
+    iconKey: "history",
+    roles: ROLES_HISTORICO_CONVERSACIONES,
+    children: [{ label: "Conversaciones", href: "/historico/conversaciones" }],
   },
   // "Perfil" SALE del menú para todos los roles (pedido humano) y su página se ELIMINÓ:
   // era un placeholder sin contenido que solo ocupaba un sitio en la barra.

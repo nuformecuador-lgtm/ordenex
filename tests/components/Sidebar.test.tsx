@@ -5,7 +5,13 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps, ReactNode } from "react";
 import { Sidebar } from "@/app/(app)/_components/Sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { SIDEBAR_ITEMS, type IconKey, type MenuItem } from "@/lib/auth/menu-visibility";
+import {
+  SIDEBAR_ITEMS,
+  itemsVisibles,
+  type IconKey,
+  type MenuItem,
+} from "@/lib/auth/menu-visibility";
+import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 // usePathname es configurable por test; useRouter se mockea porque el patrón
 // del repo lo espera aunque el Sidebar no lo consuma directamente.
@@ -389,6 +395,8 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
     "store",
     // Feature 192 (R53): tablero del día "Monitoreo".
     "gauge",
+    // Feature 318 (R6): histórico de conversaciones.
+    "history",
   ] as const satisfies readonly IconKey[];
   // Comprobación de exhaustividad tipada: si `IconKey` gana una clave que no está en
   // el array de arriba, `Exclude<IconKey, (typeof TODAS_LAS_CLAVES)[number]>` deja de
@@ -505,5 +513,67 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
     for (const svg of otrosIconos) {
       expect(svg.getAttribute("class")).not.toBe(recoleccionClass);
     }
+  });
+});
+
+// Feature 318 (T1.2 / R6) — el ítem «Histórico» y su icono PROPIO.
+describe("Feature 318 — ítem de sidebar del histórico de conversaciones", () => {
+  const maestro: Actor = { usuarioId: "u-maestro", rol: "maestro" };
+
+  /**
+   * `renderSidebar(SIDEBAR_ITEMS)` pinta el menú COMPLETO sin filtrar; aquí se renderiza
+   * lo que de verdad vería un `maestro` (`itemsVisibles`), que es la condición del
+   * criterio de T1.2. «Histórico» tiene `children`, así que el Sidebar lo pinta como
+   * DISPARADOR del desplegable (un `button`), no como enlace — igual que «Entregas».
+   */
+  function disparadorHistorico(): HTMLElement {
+    return screen.getByRole("button", { name: "Histórico" });
+  }
+
+  it("R6: el ítem «Histórico» monta un <svg> — su `iconKey` resuelve en ICON_BY_KEY", () => {
+    renderSidebar(itemsVisibles(SIDEBAR_ITEMS, maestro));
+
+    const item = disparadorHistorico();
+    expect(item.querySelector("svg")).not.toBeNull();
+  });
+
+  /**
+   * El caso de arriba es la red de seguridad mínima que pide T1.2, pero por sí solo NO
+   * distingue el icono del menú del `ChevronRight` que todo disparador lleva a la derecha:
+   * una mutación que borrara el icono seguiría encontrando un <svg>. Lucide marca cada
+   * icono con su clase `lucide-<kebab>`, así que aquí se exige la del icono real y que NO
+   * coincida con la de ningún otro ítem del menú (R6: clave PROPIA, no reciclada).
+   */
+  it("R6: el icono del histórico es PROPIO y no lo comparte con ningún otro ítem del menú", () => {
+    renderSidebar(itemsVisibles(SIDEBAR_ITEMS, maestro));
+
+    const item = disparadorHistorico();
+    const historicoSvg = [...item.querySelectorAll("svg")].find((svg) =>
+      /lucide-history/.test(svg.getAttribute("class") ?? ""),
+    );
+    expect(historicoSvg, "el ítem «Histórico» debe pintar el icono `History`").toBeDefined();
+    const historicoClass = historicoSvg!.getAttribute("class") ?? "";
+
+    const otrosIconos = [...screen.getAllByRole("link"), ...screen.getAllByRole("button")]
+      .filter((el) => el !== item)
+      .flatMap((el) => [...el.querySelectorAll("svg")])
+      .filter((svg) => svg !== historicoSvg);
+
+    expect(otrosIconos.length).toBeGreaterThan(0);
+    for (const svg of otrosIconos) {
+      expect(svg.getAttribute("class")).not.toBe(historicoClass);
+    }
+  });
+
+  it("R3: el desplegable abre el subítem «Conversaciones» apuntando a la ruta del histórico", async () => {
+    const user = userEvent.setup();
+    renderSidebar(itemsVisibles(SIDEBAR_ITEMS, maestro));
+
+    await user.click(disparadorHistorico());
+
+    const nav = screen.getByRole("navigation", { name: /navegación principal/i });
+    expect(
+      within(nav).getByRole("link", { name: "Conversaciones" }),
+    ).toHaveAttribute("href", "/historico/conversaciones");
   });
 });

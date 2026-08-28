@@ -7,6 +7,7 @@ import type {
   ChatMediaAutorizada,
   ChatMensajeDTO,
   ChatMensajeErrorInput,
+  IChatMediaHistoricoReader,
   IChatMensajeRepository,
   InsertarEntranteInput,
   InsertarSalienteInput,
@@ -104,7 +105,9 @@ function toDTO(row: Row): ChatMensajeDTO {
   };
 }
 
-export class ChatMensajeRepository implements IChatMensajeRepository {
+export class ChatMensajeRepository
+  implements IChatMensajeRepository, IChatMediaHistoricoReader
+{
   constructor(private readonly prisma: ChatMensajePrismaClient) {}
 
   async insertarEntranteIdempotente(input: InsertarEntranteInput): Promise<boolean> {
@@ -297,6 +300,46 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
       WHERE m.id = ${mensajeId}
         AND o.deleted_at IS NULL
         AND o.mensajero_asignado_id = ${mensajeroId}
+      LIMIT 1
+    `);
+
+    const row = rows[0];
+    if (row === undefined) return null;
+    return {
+      mediaId: row.media_id,
+      mediaMime: row.media_mime,
+      mediaNombre: row.media_nombre,
+      ordenId: row.orden_id,
+    };
+  }
+
+  async findMediaParaLectorHistorico(mensajeId: string): Promise<ChatMediaAutorizada | null> {
+    // Feature 318 (design §4, R29/R30/R12) — LA MISMA consulta que `findMediaParaMensajero`
+    // MENOS la condicion `o.mensajero_asignado_id = $mensajeroId`. El histórico lee los hilos
+    // de TODOS los mensajeros (R10/R29), asi que no hay scope de sesion que meter en el WHERE.
+    //
+    // QUIEN AUTORIZA: el caller. Este metodo NO comprueba rol —el repositorio no valida
+    // permisos (`docs/architecture.md`)— y su nombre lo declara: solo lo llama quien ya
+    // verifico que `actor.rol` esta en `ROLES_HISTORICO_CONVERSACIONES`. Por eso es un metodo
+    // NUEVO y no un booleano `omitirScope` sobre el de arriba (A2, descartada en design §6):
+    // asi `findMediaParaMensajero` se queda byte a byte igual y R26 no se roza.
+    //
+    // `o.deleted_at IS NULL` SE CONSERVA (R12): una orden borrada logicamente no da acceso a
+    // sus adjuntos por ninguna via, tampoco por la del histórico.
+    //
+    // Y `m.id = ${mensajeId}` VA SIN `::uuid`, por el mismo motivo escrito arriba:
+    // `ChatMensaje.id` es `String @id @default(uuid())` SIN `@db.Uuid`, asi que la columna
+    // real es `text` y Postgres no tiene operador `text = uuid`; el cast lanzaria `42883` y
+    // el proxy devolveria 500 para TODO adjunto. NO LO PONGAS.
+    const rows = await this.prisma.$queryRaw<
+      { media_id: string | null; media_mime: string | null; media_nombre: string | null; orden_id: string }[]
+    >(Prisma.sql`
+      SELECT m.media_id, m.media_mime, m.media_nombre, c.orden_id
+      FROM chat_mensaje m
+      JOIN chat_conversacion c ON c.id = m.conversacion_id
+      JOIN orden o ON o.id = c.orden_id
+      WHERE m.id = ${mensajeId}
+        AND o.deleted_at IS NULL
       LIMIT 1
     `);
 

@@ -16,7 +16,7 @@
 
 ## Bloque 0 — Medir para saber con qué números se vive (no bloquea el diseño)
 
-- [ ] **T0 — Medir el volumen real de las dos tablas.**
+- [x] **T0 — Medir el volumen real de las dos tablas.**
       Contar `chat_conversacion`, `chat_mensaje`, el número de **grupos** `(orden_id, mensajero_id)`
       y cuántos de esos grupos fusionan **más de un teléfono** (R42/R43).
       **Qué decide ahora:** ya **no** decide si se migra —la puerta humana descartó A6 (P2)— sino
@@ -29,12 +29,12 @@
 
 ## Bloque 1 — Menú, roles y ruta (R1-R9)
 
-- [ ] **T1.1 — Constante `ROLES_HISTORICO_CONVERSACIONES` en `lib/auth/menu-visibility.ts`.**
+- [x] **T1.1 — Constante `ROLES_HISTORICO_CONVERSACIONES` en `lib/auth/menu-visibility.ts`.**
       Whitelist propia `["maestro","admin"] as const satisfies readonly RolValue[]` (design §3.1).
       **Hecho (R1):** `tests/unit/auth/menu-historico.test.ts` →
       `expect([...ROLES_HISTORICO_CONVERSACIONES].sort()).toEqual(["admin","maestro"])`.
 
-- [ ] **T1.2 — `IconKey` nueva `"history"` + entrada en `ICON_BY_KEY` del Sidebar.**
+- [x] **T1.2 — `IconKey` nueva `"history"` + entrada en `ICON_BY_KEY` del Sidebar.**
       **Hecho (R6):** `tests/components/Sidebar.test.tsx` → renderizado con actor `maestro`, el ítem
       «Histórico» monta un `<svg>`: `expect(item.querySelector("svg")).not.toBeNull()`.
       Y en `tests/unit/auth/menu-historico.test.ts`:
@@ -43,7 +43,7 @@
       `for (const it of SIDEBAR_ITEMS) expect(ICON_BY_KEY[it.iconKey]).toBeTypeOf("function")`.
       **Depende de:** T1.1.
 
-- [ ] **T1.3 — Ítem «Histórico» con subítem «Conversaciones», en la ÚLTIMA posición del bloque de
+- [x] **T1.3 — Ítem «Histórico» con subítem «Conversaciones», en la ÚLTIMA posición del bloque de
       administración.**
       **Hecho (R2):** `expect(item.roles).toBe(ROLES_HISTORICO_CONVERSACIONES)` — **`toBe`**, no
       `toEqual`: identidad de referencia, que es lo que mata la mutación «copiar el literal».
@@ -59,7 +59,7 @@
       `/ordenes`). Si el ítem se moviera arriba, este test se pone rojo.
       **Depende de:** T1.1, T1.2.
 
-- [ ] **T1.4 — Ruta `app/(app)/historico/conversaciones/page.tsx` con gate `notFound()`.**
+- [x] **T1.4 — Ruta `app/(app)/historico/conversaciones/page.tsx` con gate `notFound()`.**
       **Hecho (R7):** `tests/components/HistoricoConversacionesPage.test.tsx` → con
       `resolveActorFromSession` mockeado a cada rol NO permitido y a `null`,
       `await expect(HistoricoConversacionesPage()).rejects.toThrow()` y
@@ -68,7 +68,7 @@
       `expect(serviceSpy).not.toHaveBeenCalled()` en los casos denegados.
       **Depende de:** T1.1.
 
-- [ ] **T1.5 — Guardia: ítem y gate no pueden divergir; la whitelist está cerrada.**
+- [x] **T1.5 — Guardia: ítem y gate no pueden divergir; la whitelist está cerrada.**
       `tests/unit/guards/historico-roles-una-sola-fuente.guardia.test.ts`.
       **Hecho (R8):** sobre el fuente **sin comentarios** de la página (`codigoSinComentarios`, el
       quitador del repo),
@@ -84,7 +84,7 @@
 
 ## Bloque 2 — Contratos, borde tipado y helpers (R38, R23, R36) `[P]` con el bloque 1
 
-- [ ] **T2.1 [P] — `lib/types/historico-conversaciones.ts`:** DTOs + zod de las dos entradas
+- [x] **T2.1 [P] — `lib/types/historico-conversaciones.ts`:** DTOs + zod de las dos entradas
       (design §2.2, §2.3), con `.strict()`.
       **Hecho (R38):** `tests/unit/types/historico-conversaciones-schema.test.ts` →
       `safeParse` **falla** con `{ filtro: { mensajero_id: [] } }`, con `fecha_desde: "28/08/2026"`,
@@ -94,11 +94,11 @@
       **Hecho (R41, estructural):** `expect("mensajes" in ({} as HiloHistoricoDTO)).toBe(false)` —
       comprobado además con un test de tipos: el DTO del listado **no declara** campo de mensajes.
 
-- [ ] **T2.2 [P] — Interfaces `IHistoricoConversacionesRepository` / `…Service`.**
+- [x] **T2.2 [P] — Interfaces `IHistoricoConversacionesRepository` / `…Service`.**
       **Hecho:** los tests instancian el service con dobles que implementan la interfaz y
       `pnpm run typecheck` pasa en cero errores.
 
-- [ ] **T2.3 [P] — `lib/utils/separador-dia-cr.ts` con «hoy» / «ayer» / día largo sin año.**
+- [x] **T2.3 [P] — `lib/utils/separador-dia-cr.ts` con «hoy» / «ayer» / día largo sin año.**
       **Hecho (R23):** `tests/unit/utils/separador-dia-cr.test.ts`, con `ahora` fijo
       `2026-08-28T18:00:00Z` (12:00 CR del viernes 28):
       - `expect(separadorDia("2026-08-28T20:00:00Z", ahora)).toBe("hoy")`;
@@ -113,7 +113,7 @@
       - **frontera CR del día largo:** `expect(separadorDia("2026-08-29T05:00:00Z", ahoraDeOtroDia))`
         agrupa como **28** de agosto, no 29.
 
-- [ ] **T2.4 [P] — `lib/utils/busqueda-texto-sql.ts`** (espejo SQL de `normalizarTerminoBusqueda`).
+- [x] **T2.4 [P] — `lib/utils/busqueda-texto-sql.ts`** (espejo SQL de `normalizarTerminoBusqueda`).
       **Hecho (R36, paridad):** `tests/integration/db/busqueda-texto-sql-paridad.test.ts` → para un
       corpus con acentos, mayúsculas y espacios múltiples,
       `expect(await prisma.$queryRaw(sqlNormalizarTextoBusqueda("$1")))
@@ -123,7 +123,7 @@
 
 ## Bloque 3 — Repositorio y service (R10-R21, R25, R28, R33-R37, R39, R40, R42-R45)
 
-- [ ] **T3.1 — `HistoricoConversacionesRepository.listarHilos`** con `GROUP BY (orden_id, mensajero_id)`
+- [x] **T3.1 — `HistoricoConversacionesRepository.listarHilos`** con `GROUP BY (orden_id, mensajero_id)`
       (design §2.4).
       **Hecho (R10):** `tests/integration/repositories/historico-conversaciones.int.test.ts` →
       sembrados hilos de 3 mensajeros distintos, `expect(items).toHaveLength(3)` (el repo NO recibe
@@ -141,7 +141,7 @@
       unión de las dos páginas tiene exactamente 3 claves `(ordenId, mensajeroId)` **distintas**.
       **Depende de:** T2.1, T2.2.
 
-- [ ] **T3.2 — Fusión (orden, mensajero) y sus tres casos.** `[P]` con T3.3
+- [x] **T3.2 — Fusión (orden, mensajero) y sus tres casos.** `[P]` con T3.3
       **Hecho (R42):** sembradas **dos** filas de `chat_conversacion` con la misma
       `(orden_id, mensajero_id)` y teléfonos distintos, cada una con 2 mensajes:
       `expect(items).toHaveLength(1)` y `expect(items[0].totalMensajes).toBe(4)`.
@@ -161,7 +161,7 @@
       «arreglarlo» sepa que hay que reabrirlo con el humano y que exige migración.
       **Depende de:** T3.1.
 
-- [ ] **T3.3 — Filtros del repositorio.**
+- [x] **T3.3 — Filtros del repositorio.**
       **Hecho (R33):** con `mensajero_id: [m1]`, `expect(items.every(i => i.mensajeroId === m1)).toBe(true)`
       y el hilo de `m2` queda fuera.
       **Hecho (R34):** con `fecha_desde = fecha_hasta = "2026-08-15"`, **entra** el hilo cuyo único
@@ -176,7 +176,7 @@
       que no casa nada → `items: []`).
       **Depende de:** T3.1, T2.4.
 
-- [ ] **T3.4 — `listarMensajes` del hilo fusionado, con cursor descendente.**
+- [x] **T3.4 — `listarMensajes` del hilo fusionado, con cursor descendente.**
       **Hecho (R18):** sembrados 100 mensajes, `expect(res.mensajes).toHaveLength(30)`.
       **Hecho (R19):** `expect(sql).not.toMatch(/OFFSET/i)`; la consulta filtra por
       `(ocurrido_at, id) < (cursor)`.
@@ -191,14 +191,14 @@
       agrupados por dirección.
       **Depende de:** T3.1.
 
-- [ ] **T3.5 — Reacciones agregadas sobre la página, incluidas las de otra fila del grupo.**
+- [x] **T3.5 — Reacciones agregadas sobre la página, incluidas las de otra fila del grupo.**
       **Hecho (R28):** sembrado un mensaje con `wa_message_id = W` y una reacción a `W` **fuera** de
       la ventana de la página (y, en un segundo caso, en **otra** `chat_conversacion` del mismo
       grupo): `expect(res.mensajes.some(m => m.tipo === "reaccion")).toBe(false)` y
       `expect(res.mensajes.find(m => m.waMessageId === W).reacciones).toHaveLength(1)`.
       **Depende de:** T3.4, T3.2.
 
-- [ ] **T3.6 — `HistoricoConversacionesService`: autorización, no-escritura y hilo completo.**
+- [x] **T3.6 — `HistoricoConversacionesService`: autorización, no-escritura y hilo completo.**
       **Hecho (R10/R7):** `tests/unit/services/historico-conversaciones-service.test.ts` → para cada
       rol no permitido, `expect(await service.listar(actor, {})).toEqual({ status: "forbidden" })` y
       `expect(repoDoble.listarHilos).not.toHaveBeenCalled()`.
@@ -214,7 +214,7 @@
       `expect(repoDoble.listarMensajes).not.toHaveBeenCalled()` tras invocar **sólo** el listado.
       **Depende de:** T3.1, T3.4.
 
-- [ ] **T3.7 — Server Actions `lib/actions/historico-conversaciones.ts`.**
+- [x] **T3.7 — Server Actions `lib/actions/historico-conversaciones.ts`.**
       **Hecho (R38):** `tests/integration/actions/historico-conversaciones-action.test.ts` → entradas
       inválidas devuelven `{ status: "validation_error" }` y
       `expect(serviceDoble.listar).not.toHaveBeenCalled()`.
@@ -225,14 +225,14 @@
 
 ## Bloque 4 — Ensanche de autorización de media (R26, R29, R30) — P5
 
-- [ ] **T4.1 — `ChatMensajeRepository.findMediaParaLectorHistorico(mensajeId)`** (design §4).
+- [x] **T4.1 — `ChatMensajeRepository.findMediaParaLectorHistorico(mensajeId)`** (design §4).
       Misma consulta menos la condición del mensajero; conserva `o.deleted_at IS NULL` y el `m.id`
       **sin** `::uuid`.
       **Hecho (R29):** `tests/integration/repositories/chat-media-historico.int.test.ts` → devuelve
       fila para un mensaje de una orden asignada a **otro** mensajero.
       **Hecho (R12):** con la orden borrada, devuelve `null`.
 
-- [ ] **T4.2 — Bifurcación por rol en `app/api/chat/media/[mensajeId]/route.ts`.**
+- [x] **T4.2 — Bifurcación por rol en `app/api/chat/media/[mensajeId]/route.ts`.**
       **Hecho (R29):** `tests/integration/api/chat-media-historico.test.ts` → actor `admin` que NO es
       el mensajero → `expect(res.status).toBe(200)` con el `Content-Type` correcto.
       **Hecho (R30):** actor `adminSatelite`, `adminTienda` y `mensajero` ajeno →
@@ -240,7 +240,7 @@
       **Hecho (R26):** el mensajero **asignado** sigue recibiendo `200`.
       **Depende de:** T4.1, T1.1.
 
-- [ ] **T4.3 — No-regresión de la autorización del mensajero.**
+- [x] **T4.3 — No-regresión de la autorización del mensajero.**
       **Hecho (R26):** los tests existentes del scope del mensajero siguen verdes **sin
       modificarse**: `findByOrdenParaMensajero(orden, otroMensajero)` → `null`. Se corre
       `pnpm exec vitest related --run lib/repositories/ChatConversacionRepository.ts
@@ -251,7 +251,7 @@
 
 ## Bloque 5 — UI: filtros (R32-R37, R39)
 
-- [ ] **T5.1 [P] — `historico-filtros-def.ts`** (función pura → `FilterDef[]`, design §5.3).
+- [x] **T5.1 [P] — `historico-filtros-def.ts`** (función pura → `FilterDef[]`, design §5.3).
       **Hecho (R32):** `tests/unit/components/historico-filtros-def.test.ts` →
       `expect(defs.map(d => d.key)).toEqual(["q","mensajero_id","fecha","orden"])` y
       `expect(defs.map(d => d.kind)).toEqual(["text","multi","dateRange","text"])`.
@@ -260,7 +260,7 @@
       **Hecho (R33):** con catálogo de 2 mensajeros, `expect(defs[1].options)` los lista; con
       catálogo vacío, la barra se declara igual con `options: []` (no revienta).
 
-- [ ] **T5.2 [P] — `seleccion-a-filtro.ts`.**
+- [x] **T5.2 [P] — `seleccion-a-filtro.ts`.**
       **Hecho (R32/R38):** `tests/unit/components/historico-seleccion-a-filtro.test.ts` →
       `expect(seleccionAFiltro({ mensajero_id: [] })).toEqual({})` (lista vacía **omitida**, jamás
       `[]`); `expect(seleccionAFiltro({ q: ["ma"] }).q).toBeUndefined()` por debajo del mínimo;
@@ -268,7 +268,7 @@
       rango a la vez; `expect(seleccionAFiltro({ orden: ["1001"] }).orden).toBe("1001")` (escalar,
       no lista).
 
-- [ ] **T5.3 — Barra montada en la pantalla.**
+- [x] **T5.3 — Barra montada en la pantalla.**
       **Hecho (R32):** `tests/components/HistoricoFiltros.test.tsx` → `getByRole("searchbox")` con el
       `aria-label` de `BuscadorFiltros`, y abrir «Filtros» muestra un `role="listbox"` con
       «Mensajero», «Fecha» y «Orden».
@@ -277,7 +277,7 @@
       `expect(onBuscar).toHaveBeenCalledWith("mar")`.
       **Depende de:** T5.1, T5.2.
 
-- [ ] **T5.4 — Aviso de fecha diferenciada al abrir un hilo. [NUEVO — P2]**
+- [x] **T5.4 — Aviso de fecha diferenciada al abrir un hilo. [NUEVO — P2]**
       **Hecho (R39):** `tests/components/HistoricoFechaDiferenciada.test.tsx` →
       (a) con rango aplicado y un hilo abierto,
       `expect(getByText(/se muestra la conversación completa/i)).toBeInTheDocument()`;
@@ -291,7 +291,7 @@
 
 ## Bloque 6 — UI: listado e hilo (R11, R13, R16, R18, R21-R24, R28, R31, R40-R43)
 
-- [ ] **T6.1 — `HilosLista` con scroll infinito y sin mensajes.**
+- [x] **T6.1 — `HilosLista` con scroll infinito y sin mensajes.**
       **Hecho (R13/R11):** `tests/components/HistoricoHilosLista.test.tsx` → con la primera página
       servida por el doble de la acción se ven las filas con guía, destinatario y mensajero; al
       disparar el `IntersectionObserver` del centinela,
@@ -306,7 +306,7 @@
       elementos de lista con nombres de mensajero distintos.
       **Depende de:** T3.7.
 
-- [ ] **T6.2 — `HistoricoHilo`: burbujas reutilizadas + separador de día.**
+- [x] **T6.2 — `HistoricoHilo`: burbujas reutilizadas + separador de día.**
       **Hecho (R16/R40):** hay `li[data-direccion="entrante"]` y `li[data-direccion="saliente"]`, y
       el orden del DOM coincide con el orden cronológico devuelto (no hay pestañas ni secciones por
       dirección: `expect(queryByRole("tablist")).toBeNull()`).
@@ -321,7 +321,7 @@
       (`expect(getByText(/cambió .* número/i)).toBeInTheDocument()`), no en la cabecera.
       **Depende de:** T2.3, T3.7.
 
-- [ ] **T6.3 — Scroll inverso que no salta.**
+- [x] **T6.3 — Scroll inverso que no salta.**
       **Hecho (R18):** en el primer render se pide **una** página:
       `expect(accionDoble).toHaveBeenCalledTimes(1)` y hay 30 burbujas, no 100.
       **Hecho (R21):** la burbuja del mensaje más reciente está en el DOM en el primer render.
@@ -330,7 +330,7 @@
       tras la inserción. Este `assert` mata la implementación ingenua.
       **Depende de:** T6.2.
 
-- [ ] **T6.4 — Media dentro del histórico.**
+- [x] **T6.4 — Media dentro del histórico.**
       **Hecho (R31):** `tests/components/HistoricoMediaExpirada.test.tsx` → con `fetch` devolviendo
       `410`, `expect(getByText("Este archivo ya no está disponible.")).toBeInTheDocument()` y las
       demás burbujas **siguen renderizadas** (`expect(getAllByRole("listitem")).toHaveLength(n)`).
@@ -338,7 +338,7 @@
       «enviada por el cliente» (`expect(getByLabelText(/que enviaste/i)).toBeInTheDocument()`).
       **Depende de:** T6.2, T4.2.
 
-- [ ] **T6.5 — Solo lectura.**
+- [x] **T6.5 — Solo lectura.**
       **Hecho (R24):** `tests/components/HistoricoSoloLectura.test.tsx` → renderizado el hilo con
       mensajes, `expect(queryByRole("textbox")).toBeNull()`,
       `expect(queryByRole("button", { name: /enviar/i })).toBeNull()`,
@@ -352,7 +352,7 @@
 
 ## Bloque 7 — Invariantes, guardias y cierre
 
-- [ ] **T7.1 — Guardia de la 229 y del middleware.**
+- [x] **T7.1 — Guardia de la 229 y del middleware.**
       Correr `pnpm exec vitest run tests/unit/guards/rastreo-sin-ruta-nueva.guardia.test.ts`.
       **Hecho:** verde **sin haber modificado** ese archivo ni `middleware.ts`. El design §3.4
       argumenta por qué una ruta nueva bajo `app/(app)/` no lo enrojece; **este comando es la
@@ -360,7 +360,7 @@
       firmada de `PUBLIC_ROUTES`).
       **Depende de:** T1.4.
 
-- [ ] **T7.2 — Guardia: sin migración ni cambio de esquema.**
+- [x] **T7.2 — Guardia: sin migración ni cambio de esquema.**
       `tests/unit/guards/historico-sin-migracion.guardia.test.ts`.
       **Hecho (R27):**
       (a) `expect(readdirSync("db/migrations").filter(d => /historic|conversacion_histor/i.test(d))).toEqual([])`;
@@ -375,11 +375,11 @@
       obliga a reabrir R45 con el humano en vez de colar la migración de refilón.
       **Depende de:** todo el bloque 3.
 
-- [ ] **T7.3 — Mapa `R<n> → test` completo en `progress/impl_318.md`.**
+- [x] **T7.3 — Mapa `R<n> → test` completo en `progress/impl_318.md`.**
       **Hecho:** los **45** requisitos aparecen con su archivo de test y el nombre del `it(...)` que
       los cubre; ninguno vacío. El reviewer rechaza si falta uno (`docs/verification.md`).
 
-- [ ] **T7.4 — Gate.**
+- [x] **T7.4 — Gate.**
       `./init.sh --rapido` en verde antes del PR. El diff no toca `db/`, `lib/types/**`,
       `middleware.ts`, configuración de build ni nombres de dinero, así que el modo rápido **no se
       niega**; si se negara, es señal de que el alcance creció y hay que **parar**, no correr el
@@ -388,7 +388,7 @@
       la misma sesión** (los rojos ajenos no se cuentan como propios, pero tampoco se esconden).
       **Depende de:** todo.
 
-- [ ] **T7.5 — Deuda y límites declarados.**
+- [x] **T7.5 — Deuda y límites declarados.**
       Registrar en `progress/impl_318.md`: (a) la promoción pendiente de las burbujas del chat a
       `components/shared/chat/` (A1), con el coste medido (13 tests + `ChatConversacion.tsx`);
       (b) el **límite de atribución tras reasignación** (R45/A10) y qué haría falta para levantarlo
