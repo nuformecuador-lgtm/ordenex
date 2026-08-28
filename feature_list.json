@@ -3800,7 +3800,7 @@
       "title": "el mensajero puede enviar imagen, video, nota de voz y documentos por el chat",
       "description": "El chat del mensajero con el cliente solo deja mandar texto. Esta feature anade el adjuntar: foto o video con la camara, archivo de la galeria, nota de voz grabada en el navegador y documentos (PDF, Word, Excel). Se sube el binario a Meta, se envia por la Cloud API y se persiste el saliente con su media_id, que la burbuja pinta con el proxy autenticado que ya existe. Sin almacenamiento propio y sin migracion.",
       "zone": "fullstack",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "alta",
       "branch": "feature/316-chat-enviar-media",

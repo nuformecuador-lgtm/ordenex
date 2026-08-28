@@ -246,7 +246,7 @@
   *Hecho:* los 32 requisitos aparecen con un test existente y verde; el reviewer asserta que no
   hay ninguno huérfano. Se anota además el resultado de **S1** si hubo un iPhone a mano.
 
-- [ ] **F4.** Gate: `./init.sh --rapido` en verde. Depende de F3.
+- [x] **F4.** Gate: `./init.sh --rapido` en verde. Depende de F3.
   *Hecho:* typecheck + lint + tests relacionados + guardias en verde. **Ojo:** esta feature no
   toca migraciones ni `lib/types/` de cimientos, así que el modo rápido no debería negarse; si se
   niega, se corre `./init.sh` completo (regla 5 de `CLAUDE.md`).

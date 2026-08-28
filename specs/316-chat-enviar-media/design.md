@@ -455,6 +455,17 @@ export function formatoNotaVozSoportado(): string | null {
 
 `FORMATOS_NOTA_VOZ` (§2), en orden de preferencia y **todos aceptados por Meta**:
 `audio/ogg;codecs=opus` → `audio/ogg` → `audio/mp4` → `audio/aac` → `audio/mpeg`.
+
+> **Corrección aplicada tras la revisión (2026-08-28).** Esta lista y la tabla de §2 se
+> contradecían: el primer elemento lleva el parámetro de codec (`;codecs=opus`) y la tabla
+> de `MIMES_ENVIO` guarda **MIME base**, así que el assert (e) de A1 —«todos los elementos de
+> `FORMATOS_NOTA_VOZ` están en `MIMES_ENVIO.audio`»— era **imposible de satisfacer
+> literalmente**. Lo cierto, y lo que el código hace, es que `clasificarAdjunto` **normaliza
+> el MIME** (minúsculas y sin parámetros) antes de comparar: `audio/ogg;codecs=opus` →
+> `audio/ogg`, que sí está en la tabla. Sin esa normalización una nota de voz en ogg —formato
+> que Meta **sí** acepta— se habría rechazado como `tipo_no_permitido`, es decir, la feature
+> se rompía sola. El assert vive sobre el MIME base y conserva la regresión que importa:
+> ningún formato de la lista empieza por `audio/webm`, que es el que Meta no admite.
 El `mimeType` con el que se construye el `MediaRecorder` es el que devuelve esa función, y el
 `File` que se sube lleva **el `recorder.mimeType` real** (no el pedido), reclasificado con
 `clasificarAdjunto`: si el navegador devolviera algo distinto de lo pedido, se detecta en el
