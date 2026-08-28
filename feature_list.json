@@ -3717,6 +3717,28 @@
       "complexity": "baja",
       "branch": "fix/307-selector-tienda-api-key",
       "status_note": "SALE DE LA 302 (2026-08-28). El backend publica lo necesario y `listarAdminTiendas()` YA EXISTE y ya autoriza a maestro. Falta un select OPCIONAL 'Tienda destino' en `GenerarApiKeyForm.tsx` y, opcionalmente, una columna con el nombre en `ApiKeysModule.tsx`. SIN ESTO LA 302 NO SIRVE. OJO AL VACIO: el schema trata '' como 'ninguna', no como uuid invalido -- no lo conviertas en error."
+    },
+    {
+      "id": 308,
+      "title": "la pantalla de rechazos por plazo muestra a la tienda un monto que no es suyo",
+      "description": "Por cada orden rechazada por plazo vencido se le enseña a la tienda un importe sin etiqueta que en realidad es el ingreso de la bodega.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": null,
+      "status_note": "ENCONTRADA el 2026-08-28 en el barrido de la 306, y es el MISMO defecto que esa ficha corrigio en un comentario, pero EN PIXELES y de cara al usuario. `RechazosSlaModule.tsx:132-138` pinta en negrita y SIN ETIQUETA un monto que sale de `ingreso_bodega_rechazo` -- verificado en `lib/types/rechazo-sla-tienda.ts:12` y `OrdenRepository.ts:4140`. Ese importe es de la BODEGA, no de la tienda, y el texto de vacio ('aparecera aca con su monto', linea 31) refuerza la lectura de que es un cobro suyo. CONTEXTO QUE LO HACE URGENTE: el 27/08 el cobro por rechazo de GAM llevaba dias en 0.00 sin que nadie lo viera, y esta pantalla es una de las que lo mostraria. DECIDIR: si se etiqueta ('Ingreso de la bodega'), si se sustituye por lo que SI le cuesta a la tienda (flete de retorno + IVA, `ingreso-ordenex.ts:177-182`) o si se retira. Es decision del humano."
+    },
+    {
+      "id": 309,
+      "title": "el aviso de la ventana de ayuda dice que mueve dinero tambien al reprogramar, y no lo mueve",
+      "description": "El mismo aviso se pinta en los dos modos de la ventana, pero reprogramar no genera ningun importe.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": null,
+      "status_note": "ENCONTRADA el 2026-08-28 en el barrido de la 306. `GESTION_AYUDA_AVISO_PRECIO` (`GestionarDesdeAyudaModal.tsx:119`) dice '...y mueve el dinero igual' y se pinta en los DOS modos. Al REPROGRAMAR no se mueve nada: `pago-mensajero.ts:22` da 0.00, `ingreso-bodega.ts:23` da 0.00 y `ingreso-ordenex.ts:185-186` no aporta a ningun concepto. Quien reprograma lee que le van a cobrar. Se puede defender como 'recibe el mismo trato que si lo hiciera el mensajero', pero el usuario no lee eso. ADEMAS, de otra familia y en el mismo modulo: `HabilitarNovedadModal.tsx:22-23,36-41` sigue diciendo 'MAQUETA: la transicion todavia no existe en el backend', falso desde la 235 -- `NovedadesModule.tsx:391` llama a `habilitarNovedad`."
     }
   ]
 }
