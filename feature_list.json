@@ -3822,11 +3822,22 @@
       "title": "dev lleva dos rojos sin registrar: el guard de usuarios y su gemelo de integracion",
       "description": "El DTO del listado de usuarios gano `zonaNombre` y la lista literal del guard cruzado se quedo en seis claves.",
       "zone": "backend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "baja",
       "branch": null,
       "status_note": "RENUMERADA DE 316 A 317 el 2026-08-28, y la historia importa porque es la SEGUNDA colision de ids del dia: mientras se registraba, otra sesion mergeo el PR #573 y su ficha 316 (el mensajero envia media por el chat) llego antes a `dev`. El commit `7229b75b` y el PR #571 la llaman 316: son fotos historicas y NO se reescriben. || ENCONTRADA EL 2026-08-28 por el backend_dev de la 315 al medir su delta contra `dev` limpio, y NO estaba en la lista de rojos conocidos: `dev` llevaba DOS rojos que nadie habia anotado, ademas del de `obtenerTarifa` (ficha 275). LOS HECHOS: `tests/unit/services/usuario-descarga.test.ts:376` -- «la fila del listado y la de la descarga llevan las MISMAS claves, con y sin filtro»-- espera el literal `[createdAt, email, estado, id, nombre, rolValue]` y recibe SIETE: sobra `zonaNombre`. Su gemelo `tests/integration/db/usuarios-filtro-busqueda.test.ts` cae por lo mismo contra la consulta real (el propio comentario del unit lo señala: 285/T-S4-int es quien puede afirmar que `LIST_SELECT` no crece en el repositorio). ANTES DE TOCAR EL LITERAL, MIRAR SI ES EL CONTRATO: `usuarios-descarga-columnas.ts:57` SI consume `zonaNombre` (`zona: usuario.zonaNombre ?? SIN_ZONA`), asi que el campo parece añadido a proposito para la columna «Zona» de la descarga y lo que se quedo atras es el guard. Si es asi, el arreglo es ACTUALIZAR el literal a las siete claves --no borrarlo ni derivarlo de su propia fuente, que lo dejaria verde para siempre-- y comprobar de paso que el listado no expone ningun campo mas de la cuenta. LO QUE ESTO SIGNIFICA, y es lo caro: el gate completo de `dev` lleva dias en rojo con tres fallos, y cada agente que corre el gate tiene que distinguir a mano cuales son suyos. Un rojo permanente entrena a leer los rojos como ruido."
+    },
+    {
+      "id": 318,
+      "title": "el gate rapido no mira el baseline de rojos, asi que falla siempre por deuda ajena",
+      "description": "La comparacion contra tests/baseline-rojos.json vive solo en la rama del gate completo; el modo rapido corre y falla con cualquier rojo conocido.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": null,
+      "status_note": "ENCONTRADA EL 2026-08-28 por el backend_dev de la 317 al medir su gate, y confirmada por el leader en el archivo real. `init.sh:193` corre `scripts/comparar-baseline-rojos.mjs` SOLO en la rama del gate completo; el modo rapido (`init.sh:177-179`) corre `test:rapido` y termina ahi. CONSECUENCIA MEDIDA: mientras exista UNA deuda roja ajena viva --hoy `superficie-de-uso.guardia` -> `lib/actions/tarifas.ts:67 obtenerTarifa`, ficha 275-- `./init.sh --rapido` termina en `INIT_EXIT=1` en CUALQUIER rama y pase lo que pase. Hoy lo comieron cuatro agentes seguidos (309, 308, 315, 317): los cuatro tuvieron que razonar a mano cual de los rojos era suyo, que es EXACTAMENTE lo que `tests/baseline-rojos.json` vino a evitar. Y no es un modo secundario: `CLAUDE.md` regla 5 lo declara «el gate normal, tambien para abrir un PR». EL RIESGO REAL no es la molestia, es el habito: un gate que termina en rojo siempre entrena a leer el rojo como ruido, y el dia que el rojo sea propio nadie lo va a mirar dos veces. ARREGLO: mover la comparacion contra el baseline a un punto por el que pasen LOS DOS modos, no duplicarla. OJO AL DETALLE que ya trae escrito el propio baseline: la comparacion es POR ARCHIVO y no por numero de casos, a proposito (la suite tira 2-5 flakes de saturacion que cambian de sitio); no lo conviertas en comparacion de conteos al moverlo. `tests/baseline-rojos.json` y `scripts/comparar-baseline-rojos.mjs` los trajo otra sesion hoy mismo (PR #565)."
     }
   ]
 }
