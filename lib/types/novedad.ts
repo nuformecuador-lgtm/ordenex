@@ -74,4 +74,37 @@ export interface NovedadDTO extends MiAsignacionDTO {
    * estado, no un historial.
    */
   intentosContacto: number;
+  /**
+   * FICHA 296 (pedido humano 2026-08-27) — nombre del MENSAJERO de la orden. `null` = la orden no
+   * tiene mensajero asignado.
+   *
+   * EL DEFECTO QUE CIERRA. La tienda veia en `/novedades` una orden pidiendo ayuda y no a quien
+   * preguntarle: la card no pintaba ningun mensajero porque el dato NO EXISTIA EN EL CAMINO.
+   * `NovedadDTO` extiende `MiAsignacionDTO`, que es el contrato del PORTAL DEL MENSAJERO — alli el
+   * mensajero es obvio porque es quien mira, asi que ese DTO no tiene ni un campo suyo. Reusarlo en
+   * la pantalla de la TIENDA heredaba ese hueco.
+   *
+   * CAMPO PROPIO DE ESTE DTO, no del contrato compartido — mismo camino que `causa` e
+   * `intentosContacto` y por el mismo motivo: `MiAsignacionDTO` lo consumen tambien las dos listas
+   * del portal del mensajero, y meterlo alli obligaria a emitirlo donde nadie lo lee.
+   *
+   * QUE MENSAJERO ES, que era la decision de fondo. Es el ASIGNADO (`orden.mensajero_asignado_id`),
+   * y sobre el grupo `ayuda` eso es tambien QUIEN PIDIO LA AYUDA: las dos personas no pueden
+   * separarse mientras la orden repose en `ayuda_tienda` (el argumento completo, con las dos
+   * propiedades que lo sostienen, esta en `NovedadOrdenRow.mensajeroNombre`). Se lee de la orden y
+   * no del actor de la transicion `solicitud_ayuda_tienda` porque sale de la MISMA consulta que ya
+   * se hacia, porque no depende del fallback documentado de `findFechaSolicitudAyuda` (una orden en
+   * ayuda sin transicion de solicitud tendria mensajero pero no actor), y porque en el grupo
+   * `devolucion` —donde no hay ninguna solicitud— sigue significando algo: quien trae el paquete de
+   * vuelta, hasta que se libere a bodega.
+   *
+   * REQUERIDO (sin `?`), como `causa` e `intentosContacto`: quien produzca un `NovedadDTO` tiene
+   * que decidir que mensajero pone. Un `?` dejaria que un productor nuevo se olvidara y la card
+   * volviera a no decir nada, que es exactamente el defecto que esta ficha cierra.
+   *
+   * SOLO EL NOMBRE. Ni telefono ni id: el telefono del mensajero es PII de un tercero y ponerlo
+   * aqui seria abrir un canal de contacto directo tienda->mensajero que nadie ha pedido ni
+   * decidido. El hilo de `orden_nota` ya es la via de contacto sobre la orden.
+   */
+  mensajeroNombre: string | null;
 }

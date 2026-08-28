@@ -3974,6 +3974,11 @@ export class OrdenRepository implements IOrdenRepository {
         provincia: { select: { nombre: true } },
         canton: { select: { nombre: true } },
         distrito: { select: { nombre: true } },
+        // FICHA 296: el MENSAJERO, por nombre y en la MISMA consulta. `mensajero_asignado_id` es
+        // NULLABLE, asi que la relacion es opcional -> `?.nombre ?? null`, igual que `distrito`.
+        // El `select` acotado a `nombre` NO es cosmetico: la fila de `usuario` lleva `email`,
+        // `telefono`, `cedula` y `password_hash`, y esta fila viaja al navegador de la TIENDA.
+        mensajeroAsignado: { select: { nombre: true } },
       },
     });
     return rows.map((row) => ({
@@ -3998,6 +4003,10 @@ export class OrdenRepository implements IOrdenRepository {
       cantonNombre: row.canton.nombre,
       distritoNombre: row.distrito?.nombre ?? null,
       intentosContacto: row.intentosContacto,
+      // FICHA 296: `null` cuando la orden no tiene mensajero asignado. NUNCA `""`: una cadena
+      // vacia se pinta como una etiqueta sin valor y la tienda no sabria si es que no hay nadie
+      // o si el nombre se perdio por el camino.
+      mensajeroNombre: row.mensajeroAsignado?.nombre ?? null,
       createdAt: row.createdAt,
     }));
   }

@@ -59,6 +59,10 @@ function ordenRow(overrides: Partial<NovedadOrdenRow> = {}): NovedadOrdenRow {
     // Feature 235 (T6.1, R40): aqui vivia `ayuda: false`. Se retiro con la columna; la razon por
     // la que la fila esta en el listado la dice `estatusValue`, que ya viaja en esta misma fila.
     intentosContacto: 0,
+    // FICHA 296: el mensajero de la orden, YA resuelto a nombre por el repo. El default es un
+    // nombre REAL y no `null`: si el default fuera `null`, el caso «el dato viaja» tendria que
+    // acordarse de sobrescribirlo y el que se olvidara pasaria en verde sin comprobar nada.
+    mensajeroNombre: "Marta Mensajera",
     tiendaNombre: "Tienda Uno",
     zonaNombre: "GAM",
     provinciaNombre: "San Jose",
@@ -441,6 +445,8 @@ describe("NovedadesService.listar — la orden completa al DTO (card POS compart
       provinciaNombre: "San Jose",
       cantonNombre: "Central",
       distritoNombre: "Carmen",
+      // FICHA 296: el mensajero es uno de esos «TODOS los campos».
+      mensajeroNombre: "Marta Mensajera",
     });
   });
 
@@ -538,6 +544,122 @@ describe("NovedadesService.listar — la orden completa al DTO (card POS compart
       }
       // `notas` SI viaja y es OTRA cosa: la nota que la tienda escribio AL CREAR la orden.
       expect(claves).toContain("notas");
+    }
+  });
+});
+
+// =============================================================================================
+// FICHA 296 — EL MENSAJERO LLEGA AL DTO
+//
+// El defecto: la tienda veia una orden pidiendo ayuda y NINGUN mensajero, porque `NovedadDTO`
+// hereda de `MiAsignacionDTO` —el contrato del portal del mensajero, donde el mensajero es quien
+// mira y por eso no es un campo—. El dato no existia en el camino.
+//
+// Estos casos afirman el TRAMO service: fila del repo -> DTO. El tramo de abajo (columnas y join
+// de Prisma) vive en `orden-repository.novedades.test.ts`, y el de la base real en
+// `tests/integration/db/novedades-predicado-sql-real.test.ts`.
+// =============================================================================================
+
+describe("296 — el mensajero de la orden viaja hasta el DTO de `/novedades`", () => {
+  it("EL CASO DEL DEFECTO: una orden en ayuda sale con el nombre de su mensajero", async () => {
+    const repo = fakeRepo({
+      countNovedadesByTienda: vi.fn(async () => 1),
+      findNovedadesByTienda: vi.fn(async () => [
+        ordenRow({ id: "pidio-ayuda", estatusValue: "ayuda_tienda", mensajeroNombre: "Kevin" }),
+      ]),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("ayuda"), ADMIN);
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    expect(res.items[0].mensajeroNombre).toBe("Kevin");
+  });
+
+  it("el valor sale DE LA FILA y no de una constante: dos ordenes, dos mensajeros", async () => {
+    // Mata la mutacion «emitir siempre el mismo nombre»: con una constante las dos filas saldrian
+    // iguales y este caso cae.
+    const repo = fakeRepo({
+      countNovedadesByTienda: vi.fn(async () => 2),
+      findNovedadesByTienda: vi.fn(async () => [
+        ordenRow({ id: "a", estatusValue: "ayuda_tienda", mensajeroNombre: "Kevin" }),
+        ordenRow({ id: "b", estatusValue: "ayuda_tienda", mensajeroNombre: "Rebeca" }),
+      ]),
+      findFechaSolicitudAyuda: vi.fn(
+        async () =>
+          new Map([
+            ["a", new Date("2026-08-27T08:00:00Z")],
+            ["b", new Date("2026-08-27T09:00:00Z")],
+          ]),
+      ),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("ayuda"), ADMIN);
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    // Se casa por `id` y no por posicion: el orden de la pestaña de ayuda lo decide la fecha de
+    // solicitud, y atarse a el mezclaria dos afirmaciones en una.
+    const porId = new Map(res.items.map((i) => [i.id, i.mensajeroNombre]));
+    expect(porId.get("a")).toBe("Kevin");
+    expect(porId.get("b")).toBe("Rebeca");
+  });
+
+  it("una orden SIN mensajero asignado viaja `null`, nunca `\"\"` ni un texto inventado", async () => {
+    const repo = fakeRepo({
+      countNovedadesByTienda: vi.fn(async () => 1),
+      findNovedadesByTienda: vi.fn(async () => [
+        ordenRow({ id: "sin-mensajero", mensajeroNombre: null }),
+      ]),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("devolucion"), ADMIN);
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    // La ausencia se declara: la card decide como pintarla, pero no puede confundir «no hay nadie»
+    // con «hay alguien y se llama vacio».
+    expect(res.items[0].mensajeroNombre).toBeNull();
+    expect(res.items[0].mensajeroNombre).not.toBe("");
+    expect(res.items[0].mensajeroNombre).not.toBeUndefined();
+  });
+
+  it("viaja en LOS DOS grupos y en la DESCARGA, no solo en la pestaña de ayuda", async () => {
+    // La proyeccion es UNA (cabecera de `proyectar`): si el archivo dijera otra cosa que la
+    // pantalla, seria porque alguien la partio en dos.
+    for (const grupo of GRUPOS_NOVEDAD) {
+      const repo = fakeRepo({
+        countNovedadesByTienda: vi.fn(async () => 1),
+        findNovedadesByTienda: vi.fn(async () => [
+          ordenRow({ id: "o1", mensajeroNombre: "Kevin" }),
+        ]),
+      });
+      const service = new NovedadesService(repo, intentos);
+      const pagina = await service.listar(paginaDe(grupo), ADMIN);
+      const completo = await service.listarCompleto({ grupo }, ADMIN);
+      if (pagina.status !== "ok" || completo.status !== "ok") throw new Error("esperaba ok");
+      expect(pagina.items[0].mensajeroNombre, grupo).toBe("Kevin");
+      expect(completo.items[0].mensajeroNombre, grupo).toBe("Kevin");
+    }
+  });
+
+  it("el nombre es lo UNICO que viaja del mensajero: ni telefono, ni email, ni id", async () => {
+    // Esta fila la lee el navegador de la TIENDA. La fila de `usuario` lleva `telefono`, `email`,
+    // `cedula` y `password_hash`; que ninguno aparezca aqui es parte del contrato, no un descuido.
+    const repo = fakeRepo({
+      countNovedadesByTienda: vi.fn(async () => 1),
+      findNovedadesByTienda: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "ayuda_tienda", mensajeroNombre: "Kevin" }),
+      ]),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("ayuda"), ADMIN);
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    const claves = Object.keys(res.items[0]);
+    expect(claves).toContain("mensajeroNombre");
+    for (const prohibida of [
+      "mensajeroTelefono",
+      "mensajeroEmail",
+      "mensajeroId",
+      "mensajeroAsignadoId",
+      "mensajero",
+      "mensajeroPlaca",
+    ]) {
+      expect(claves, prohibida).not.toContain(prohibida);
     }
   });
 });

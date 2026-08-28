@@ -25,6 +25,7 @@ import { AsignacionDetalle } from "../AsignacionDetalle";
 import { PosAmountRow } from "./PosAmountRow";
 import { PosCardHeader } from "./PosCardHeader";
 import { PosNavBlock } from "./PosNavBlock";
+import { textoMensajero } from "./pos-mensajero";
 import { seccionesVisibles, type PosSecciones } from "./pos-secciones";
 
 // POS card · card de una orden EN REPARTO, réplica del `PosCardExpand` de la
@@ -75,6 +76,31 @@ export interface PosOrderCardProps {
    * respetan: la resuelve `seccionesVisibles` en un solo sitio (`pos-secciones`).
    */
   secciones?: PosSecciones;
+  /**
+   * FICHA 296 — nombre del MENSAJERO de la orden, para las superficies que lo tienen.
+   *
+   * TRES ESTADOS, y los tres significan cosas distintas:
+   *   · prop AUSENTE (`undefined`) = esta superficie no tiene el concepto → la card no pinta
+   *     NADA. Es lo que deja el portal del mensajero exactamente igual que antes: allí el
+   *     mensajero es quien mira, y ninguna de sus tres pantallas pasa esta prop.
+   *   · `null` = la orden NO tiene mensajero asignado → se pinta el texto de ausencia en
+   *     palabras (`pos-mensajero`), nunca un hueco ni un «null».
+   *   · `string` = el nombre.
+   *
+   * POR QUÉ UNA PROP Y NO UN CAMPO DE `MiAsignacionDTO`. Ese DTO es el contrato del PORTAL DEL
+   * MENSAJERO; meter ahí el dato obligaría a sus dos listas a emitir un nombre que nadie lee.
+   * El dato es PROPIO de `NovedadDTO` (ver su docstring), y esta card ya trata así todo lo que
+   * sólo tiene una de sus superficies: `estado` (el badge lo decide la tienda), `acciones` (el
+   * panel lo pone el consumidor), `mostrarRuta`, `total`.
+   *
+   * POR QUÉ NO UNA COMPUERTA DE `PosSecciones`. Las compuertas APAGAN secciones donde la
+   * superficie no tiene el dato; no transportan valor. Aquí el dato es aditivo: hay que
+   * ENCENDER algo que sólo una pantalla puede rellenar, y eso es exactamente una prop.
+   *
+   * SÓLO EL NOMBRE, nunca el teléfono: es PII de un tercero y abriría un canal de contacto
+   * directo que nadie pidió. Para hablar con él ya está el hilo de notas de la orden.
+   */
+  mensajero?: string | null;
 }
 
 export function PosOrderCard({
@@ -88,6 +114,7 @@ export function PosOrderCard({
   mostrarRuta = true,
   secciones,
   acciones,
+  mensajero,
 }: PosOrderCardProps) {
   // Estado del desplegable del detalle: UI efímera, de un solo consumidor.
   const [detalleAbierto, setDetalleAbierto] = useState(false);
@@ -181,6 +208,16 @@ export function PosOrderCard({
             {verIntentos ? (
               <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
                 <IntentosDato intentos={valorIntentos(orden)} />
+              </p>
+            ) : null}
+            {/* FICHA 296 — quién lleva esta orden. Va AQUÍ, en el bloque de campos junto a
+                Destinatario / Producto / Intentos, y no entre las marcas de excepción de abajo:
+                es un DATO de la orden, con el mismo criterio con el que la 160 (D6) sacó los
+                intentos de la fila de badges. La compuerta es la PRESENCIA de la prop, no un
+                `PosSecciones`: sin ella la superficie no tiene el concepto y no se pinta nada. */}
+            {mensajero !== undefined ? (
+              <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
+                {textoMensajero(mensajero)}
               </p>
             ) : null}
           </div>

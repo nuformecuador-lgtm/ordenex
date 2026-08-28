@@ -25,6 +25,7 @@ const EN_AYUDA: NovedadDTO = {
   numRemision: "REM-90210",
   estatusValue: "ayuda_tienda",
   intentosContacto: 2,
+  mensajeroNombre: "Marta Mensajera",
   destinatario: "Ana Cliente",
   telefonoDest: "88887777",
   direccion: "Av. Central 120, portón verde",
