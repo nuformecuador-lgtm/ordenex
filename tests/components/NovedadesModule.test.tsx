@@ -304,6 +304,118 @@ describe("NovedadesModule", () => {
     expect(screen.getByText("Sin causa registrada")).toBeInTheDocument();
   });
 
+  // --- FICHA 296 (2026-08-27): A QUIÉN PREGUNTARLE ---
+  //
+  // El defecto que cierran estos casos es literal: la tienda veía una orden pidiendo ayuda y la
+  // card no nombraba a NADIE. El dato es campo propio de `NovedadDTO` y el módulo lo baja por la
+  // prop `mensajero` de la card, NO dentro de `orden` — el adaptador lo saca del spread a
+  // propósito, porque `orden` es un `MiAsignacionDTO` y ese contrato es el del portal del
+  // mensajero.
+  //
+  // Los textos se afirman con su literal ESCRITO A MANO y nunca contra `textoMensajero`, que es
+  // la función que los produce: comparar un texto con su propia fuente está siempre verde.
+  //
+  // Que la MOSAICO lo pinte una vez y el desplegable ninguna no es un detalle cosmético: dice
+  // que el dato vive en el bloque de campos de la card y que `AsignacionDetalle` —que es del
+  // portal del mensajero— sigue sin saber nada de él.
+
+  it("296: en el grupo de AYUDA la card dice quién lleva la orden", () => {
+    render(
+      <NovedadesModule
+        grupo="ayuda"
+        items={[
+          novedad({
+            estatusValue: "ayuda_tienda",
+            causa: null,
+            mensajeroNombre: "Marta Mensajera",
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+
+    const card = cardDe("Ana Cliente");
+    const nombre = apariciones(card, "Mensajero: Marta Mensajera");
+    expect(nombre.compacto).toHaveLength(1);
+    expect(nombre.desplegable).toHaveLength(0);
+    // SÓLO EL NOMBRE: el teléfono del mensajero es PII de un tercero y la vía para hablar con
+    // él es el hilo de notas. Ninguna acción de contacto puede apuntarle. Los botones de
+    // contacto que la card SÍ tiene son los del DESTINATARIO, y siguen en su sitio (control
+    // positivo: sin él esta ausencia también pasaría con la card sin montar).
+    expect(screen.queryByRole("button", { name: /Marta Mensajera/ })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Llamar a Ana Cliente" }),
+    ).toBeInTheDocument();
+  });
+
+  it("296: en el grupo de DEVOLUCIÓN también — es quien trae el paquete de vuelta", () => {
+    render(
+      <NovedadesModule
+        grupo="devolucion"
+        items={[
+          novedad({ estatusValue: "devuelta", mensajeroNombre: "Marta Mensajera" }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+
+    const nombre = apariciones(cardDe("Ana Cliente"), "Mensajero: Marta Mensajera");
+    expect(nombre.compacto).toHaveLength(1);
+    expect(nombre.desplegable).toHaveLength(0);
+  });
+
+  it("296: sin mensajero asignado lo dice en palabras, nunca «null» ni un hueco", () => {
+    render(
+      <NovedadesModule
+        grupo="ayuda"
+        items={[
+          novedad({ estatusValue: "ayuda_tienda", causa: null, mensajeroNombre: null }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+
+    const card = cardDe("Ana Cliente");
+    const ausencia = apariciones(card, "Mensajero: sin asignar");
+    expect(ausencia.compacto).toHaveLength(1);
+    // Ni el valor crudo, ni la etiqueta sola colgando sin valor.
+    expect(within(card).queryByText(/null/i)).toBeNull();
+    expect(within(card).queryByText("Mensajero:")).toBeNull();
+  });
+
+  it("296: el dato viaja también a la vista de DETALLE, no sólo a la mosaico", async () => {
+    const user = userEvent.setup();
+    render(
+      <NovedadesModule
+        grupo="ayuda"
+        items={[
+          novedad({
+            estatusValue: "ayuda_tienda",
+            causa: null,
+            mensajeroNombre: "Marta Mensajera",
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+
+    // Las tres cards POS son PARALELAS, no variantes: conmutar monta OTRO componente, así que
+    // un dato presente en una no está presente en la otra por herencia.
+    await conmutarA(user, "Detalle");
+
+    expect(
+      within(cardDe("Ana Cliente")).getByText("Mensajero: Marta Mensajera"),
+    ).toBeInTheDocument();
+  });
+
   // --- Pedido humano 2026-08-18: la solicitud de AYUDA ---
   // Esta pantalla dejó de ser «las devueltas de mi tienda» para ser «lo que mi tienda tiene que
   // mirar»: entran también órdenes sobre las que el mensajero pidió ayuda. El badge es lo único

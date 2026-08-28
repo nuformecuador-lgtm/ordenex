@@ -19,6 +19,7 @@ import { AsignacionDetalle } from "../AsignacionDetalle";
 import { UbicacionTrigger } from "../UbicacionTrigger";
 import { formatMonto, formatPeso } from "./pos-format";
 import { estadoBadgeClass, estadoPorDefecto, textoParada } from "./pos-estado";
+import { textoMensajero } from "./pos-mensajero";
 import { posSeleccionHandlers } from "./pos-seleccion";
 import { seccionesVisibles } from "./pos-secciones";
 import type { PosOrderCardProps } from "./PosOrderCard";
@@ -47,6 +48,7 @@ export function PosOrderCardMosaico({
   mostrarRuta = true,
   secciones,
   acciones,
+  mensajero,
 }: PosOrderCardProps) {
   // Estado del desplegable del detalle: UI efímera, de un solo consumidor.
   const [detalleAbierto, setDetalleAbierto] = useState(false);
@@ -138,6 +140,14 @@ export function PosOrderCardMosaico({
         {verIntentos ? (
           <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
             <IntentosDato intentos={valorIntentos(orden)} />
+          </p>
+        ) : null}
+        {/* FICHA 296 — quién lleva esta orden, en el MISMO bloque de campos que destinatario,
+            producto e intentos: es un dato de la orden, no una marca de excepción. `truncate`
+            como sus hermanos, para que un nombre largo no ensanche la card del mosaico. */}
+        {mensajero !== undefined ? (
+          <p className="mt-0.5 truncate text-[11px] font-semibold text-muted-foreground">
+            {textoMensajero(mensajero)}
           </p>
         ) : null}
       </div>

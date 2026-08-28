@@ -153,6 +153,19 @@ import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 // El adaptador ya casi no adapta: `novedad-a-orden-card` es un spread más el identificador
 // visible (la guía ocupa el slot de `numRemision`, R9). Ese archivo explica el porqué de las
 // cuatro compuertas; no se apaga ni se enciende una sección sin leerlo.
+//
+// FICHA 296 (2026-08-27) — EL MENSAJERO, QUE NO CABÍA EN LA CARD COMPARTIDA. La tienda veía aquí
+// una orden pidiendo ayuda y no sabía a quién preguntarle. El hueco no era de esta pantalla: la
+// card se comparte con el portal del mensajero y su `orden` es un `MiAsignacionDTO`, el contrato
+// de ESE portal, donde el mensajero es quien mira y su nombre no informa de nada. Por eso el dato
+// es campo PROPIO de `NovedadDTO` y llega a la card por una PROP nueva (`mensajero`), la misma vía
+// por la que esta pantalla ya baja `estado`, `acciones`, `mostrarRuta` y `secciones`.
+//
+// La prop es opcional y su AUSENCIA es la compuerta: quien no la pasa —las tres pantallas del
+// portal del mensajero— no pinta nada y no cambia ni un píxel. Se descartó una compuerta de
+// `PosSecciones` porque esas APAGAN secciones donde falta el dato y no transportan valor, y se
+// descartó meterlo en `MiAsignacionDTO` porque obligaría a las listas del mensajero a emitir un
+// nombre que nadie lee.
 
 /**
  * Lo que cada pestaña necesita DEL SERVIDOR, indexado por grupo.
@@ -568,6 +581,20 @@ export function NovedadesModule({
               // reparto que anunciar: lo que la tienda necesita saber de un vistazo es por qué
               // esa orden está en su pantalla.
               estado={badgeNovedad(novedad)}
+              // FICHA 296 — A QUIÉN PREGUNTARLE. Hasta hoy la tienda veía una orden pidiendo
+              // ayuda y la card no nombraba a nadie. El dato es campo PROPIO de `NovedadDTO`
+              // (no de `MiAsignacionDTO`, que es el contrato del portal del mensajero), así que
+              // no viaja dentro de `orden`: se baja por su prop, igual que `estado` y
+              // `acciones`. El portal del mensajero no pasa esta prop y por eso no cambia.
+              //
+              // Va en LOS DOS grupos, no sólo en el de ayuda: en `devolucion` este nombre es
+              // quien trae el paquete de vuelta. Por eso está aquí, en el JSX común, y no
+              // dentro de `RECURSOS_POR_GRUPO`.
+              //
+              // `null` (orden sin mensajero asignado) NO se filtra aquí: la card lo pinta en
+              // palabras con su fuente única (`pos-mensajero`). Decidir el texto en esta
+              // pantalla lo dejaría fuera de sincronía con las otras dos vistas.
+              mensajero={novedad.mensajeroNombre}
               // Sin `onGestionar`: de aquí no se gestiona nada, así que la card es de
               // solo-visualización — no clickeable ni enfocable (ver `pos-seleccion`).
               mostrarRuta={false}

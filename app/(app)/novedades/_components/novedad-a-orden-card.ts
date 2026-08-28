@@ -86,7 +86,7 @@ export function etiquetaGuia(numGuia: number | null): string {
  * La orden que las cards consumen. Casi todo es un spread: `NovedadDTO` YA ES un
  * `MiAsignacionDTO`, así que no hay nada que traducir.
  *
- * Sobreviven exactamente dos gestos, y los dos son decisiones de PRESENTACIÓN de esta
+ * Sobreviven exactamente tres gestos, y los tres son decisiones de PRESENTACIÓN de esta
  * pantalla, no del contrato:
  *
  *  1. `numRemision` se sobreescribe con `etiquetaGuia(numGuia)`. El DTO trae la remisión
@@ -95,8 +95,19 @@ export function etiquetaGuia(numGuia: number | null): string {
  *  2. `causa` se queda fuera. Es el campo propio de `NovedadDTO` y la card no sabe qué es:
  *     lo consume el MÓDULO, que lo traduce a etiqueta ES y lo baja por la prop `estado`
  *     (el badge). Pasárselo a la card sería ruido que nadie lee.
+ *  3. FICHA 296 — `mensajeroNombre` se queda fuera POR EL MISMO MOTIVO, y no por uno nuevo: la
+ *     card NO lo lee de `orden`, porque `orden` es un `MiAsignacionDTO` y ese contrato es el del
+ *     PORTAL DEL MENSAJERO, donde el mensajero es quien mira y su nombre no informa de nada. Lo
+ *     baja el MÓDULO por la prop `mensajero` de la card —la misma vía por la que ya bajan
+ *     `estado`, `acciones` y `mostrarRuta`, que también son datos que sólo tiene esta pantalla—.
+ *     Dejarlo colarse en el spread lo metería en el objeto como un polizón que nadie lee y haría
+ *     creer que la card lo recibe por ahí.
  */
-export function novedadAOrdenCard({ causa: _causa, ...orden }: NovedadDTO): MiAsignacionDTO {
+export function novedadAOrdenCard({
+  causa: _causa,
+  mensajeroNombre: _mensajeroNombre,
+  ...orden
+}: NovedadDTO): MiAsignacionDTO {
   return {
     ...orden,
     numRemision: etiquetaGuia(orden.numGuia),
