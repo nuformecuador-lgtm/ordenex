@@ -8,6 +8,14 @@
 > fondo respecto a la primera versión son tres: **la unidad del hilo pasa a ser (orden, mensajero)**
 > (P1), **el listado también se pagina y no trae mensajes** (P8), y **la alternativa A6 queda
 > descartada, no aplazada** (P2). La feature **sigue sin migración**.
+>
+> **Corrección documental del 2026-08-28 (post-implementación, sin cambio de alcance).** Dos
+> apartados decían algo que el código nunca hizo, y se corrigen **al código**, no al revés:
+> **§2.4** escribía el `EXISTS` del filtro de fecha correlacionado por fila (`m2.conversacion_id =
+> c.id`) cuando la correlación correcta —y la implementada— es por la **clave del hilo**
+> `(orden_id, mensajero_id)`; y **§7 punto 7** afirmaba que `./init.sh --rapido` no puede negarse
+> cuando el DTO en `lib/types/` **exige el gate completo por diseño**. **`R1..R45` no cambian**:
+> siguen implementados y verificados.
 
 ---
 
@@ -283,10 +291,44 @@ LIMIT  $limite + 1
   `ORDER BY`, dentro del `HAVING` (el valor de corte es agregado). Las dos claves de desempate hacen
   la paginación **total**: dos hilos con el mismo instante no se pisan. Se pide `limite + 1` para
   saber si hay siguiente **sin** un `COUNT`.
-- **Filtro de fecha (R34/R39):** `EXISTS (SELECT 1 FROM chat_mensaje m2 WHERE m2.conversacion_id = c.id
-  AND m2.ocurrido_at >= $desde AND m2.ocurrido_at < $hastaExclusivo)`. Las cotas salen de
-  `inicioDelDiaCREnUtc` / `inicioDelDiaSiguienteCREnUtc` (`lib/utils/fecha-cr.ts:118`, `:129`) —
-  **no** de `startOfDayCR`, seis horas antes, que es el off-by-one documentado en `fecha-cr.ts:27-29`.
+- **Filtro de fecha (R34/R39) — se correlaciona por la CLAVE DEL HILO, no por la fila:**
+
+  ```sql
+  EXISTS (
+    SELECT 1
+    FROM chat_conversacion c2
+    JOIN chat_mensaje m2 ON m2.conversacion_id = c2.id
+    WHERE c2.orden_id     = c.orden_id        -- ⚠ la clave del hilo (R42), NO c2.id = c.id
+      AND c2.mensajero_id = c.mensajero_id
+      AND m2.ocurrido_at >= $desde
+      AND m2.ocurrido_at <  $hastaExclusivo)
+  ```
+
+  Las cotas salen de `inicioDelDiaCREnUtc` / `inicioDelDiaSiguienteCREnUtc`
+  (`lib/utils/fecha-cr.ts:118`, `:129`) — **no** de `startOfDayCR`, seis horas antes, que es el
+  off-by-one documentado en `fecha-cr.ts:27-29`.
+
+  **Por qué la forma por fila (`m2.conversacion_id = c.id`) está MAL, y no debe «restaurarse» como
+  simplificación.** Este `EXISTS` vive en el `WHERE`, es decir se evalúa **antes del `GROUP BY`**:
+  descarta **filas**, no grupos. Con la correlación por fila, un hilo fusionado de dos números
+  (§1.3.1) del que sólo **una** de sus filas tenga mensajes dentro del rango **pierde la otra fila**
+  antes de agregar, y entonces `SUM(act.total)` (`totalMensajes`),
+  `COUNT(DISTINCT c.telefono_e164)` (`telefonosCount`) y
+  `(array_agg(c.telefono_e164 ORDER BY act.ultima DESC))[1]` (`telefono_vigente`) quedan calculados
+  **sobre medio hilo** → rompe R42 y R43. Correlacionando por `(orden_id, mensajero_id)`, el
+  predicado se vuelve **constante dentro del grupo**: o entran todas sus filas o no entra ninguna,
+  que es exactamente lo que pide R34 («el rango **selecciona hilos**, no recorta filas»). La
+  selección es del **hilo**; los agregados, del **hilo entero**.
+
+  **No es un caso exótico:** T0 midió que el **40 %** de los grupos `(orden_id, mensajero_id)` tiene
+  **más de un teléfono** (`progress/impl_321.md`, tabla de T0). Con esa proporción, la forma por
+  fila no es un borde teórico: falsea los contadores de dos de cada cinco hilos en cuanto se aplica
+  un rango.
+
+  **Lo implementado ya es esta forma** —`lib/repositories/HistoricoConversacionesRepository.ts:186-193`,
+  correlación por `c2.orden_id` / `c2.mensajero_id`—, con el porqué escrito en el propio comentario
+  del código (`:160-173`). Este apartado se corrigió el 2026-08-28: la versión anterior del design
+  escribía el `EXISTS` por fila y **el código nunca la siguió**.
 - **Filtro por orden exacto (R35):** `o.num_remision = $v OR (o.num_guia IS NOT NULL AND
   o.num_guia = $vNumerico)`, con `$vNumerico` sólo cuando el valor es un entero. **Igualdad**, nunca
   `ILIKE`.
@@ -572,6 +614,22 @@ export function separadorDia(iso: string, ahora: Date): string {
 5. **El scroll que salta (R22).** Defecto por defecto del scroll inverso; requisito y test propios.
 6. **PII en la fila.** Teléfono enmascarado (§2.2); `busqueda_texto` sigue omitida globalmente por
    `PRISMA_OMIT` (`lib/db/prisma-client.ts:45`) y **no** se selecciona en ninguna consulta nueva.
-7. **El gate rápido.** El diff no toca `db/`, `lib/types/**`, `middleware.ts` ni nombres de dinero,
-   así que `./init.sh --rapido` no se niega. **Y no puede cambiar**: sin migración (R27), no hay
-   camino por el que este PR escale al gate completo.
+7. **Esta feature EXIGE el gate completo. `./init.sh --rapido` se niega, por diseño.**
+   **[CORREGIDO 2026-08-28]** La versión anterior de este punto afirmaba lo contrario («el diff no
+   toca `lib/types/**` … el rápido no se niega»), y era **falso desde que se escribió**: §2.1 y
+   T2.1 colocan el DTO en `lib/types/historico-conversaciones.ts` —que es lo **correcto** según
+   `docs/conventions.md`— y `init.sh:134` lista `^lib/types/` dentro de `RUTAS_SENSIBLES`, junto a
+   `db/migrations/`, `db/schema.prisma`, `init.sh`, `tests/fixtures/sin-comentarios.ts` y la
+   configuración de build. Tocar cualquiera de esas rutas manda al **gate completo**, y es un
+   `fail`, no un aviso (regla 5 de `CLAUDE.md`, `exigir_completo_si_toca_lo_sensible`,
+   `init.sh:137-159`).
+
+   **Por qué está bien que sea así:** un DTO en `lib/types/` es **cimiento** —cambia la forma de
+   todo lo que lo importa, y el radio real del cambio no es «quién lo edita» sino «quién compila
+   contra él»—, así que la selección por diff de `--changed` no basta para cubrirlo. Que el rápido
+   se niegue **no es un defecto del código, ni una excepción concedida, ni señal de que el alcance
+   creció**: es la clasificación funcionando sobre un diseño correcto. La ausencia de migración
+   (R27) **no** exime: `lib/types/` es sensible por sí solo.
+
+   **Consecuencia operativa:** el PR se abre con `./init.sh` **completo** en verde (con el baseline
+   de `dev` medido en la misma sesión), no con `--rapido`. Es lo que hizo el implementer.

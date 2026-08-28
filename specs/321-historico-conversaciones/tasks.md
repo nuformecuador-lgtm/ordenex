@@ -11,6 +11,11 @@
 >
 > **Sin migración (R27).** Si algo durante la implementación pareciera exigir una, se **para** y se
 > consulta: no se mete.
+>
+> **Corrección documental del 2026-08-28 (post-implementación, sin cambio de alcance).** **T7.4**
+> pedía el gate `--rapido` y afirmaba que no podía negarse; es falso: el DTO de T2.1 vive en
+> `lib/types/`, que `init.sh:134` clasifica como cimiento, así que esta feature **exige el gate
+> completo**. Queda reescrita abajo. `R1..R45` y el resto de tareas **no cambian**.
 
 ---
 
@@ -379,13 +384,21 @@
       **Hecho:** los **45** requisitos aparecen con su archivo de test y el nombre del `it(...)` que
       los cubre; ninguno vacío. El reviewer rechaza si falta uno (`docs/verification.md`).
 
-- [x] **T7.4 — Gate.**
-      `./init.sh --rapido` en verde antes del PR. El diff no toca `db/`, `lib/types/**`,
-      `middleware.ts`, configuración de build ni nombres de dinero, así que el modo rápido **no se
-      niega**; si se negara, es señal de que el alcance creció y hay que **parar**, no correr el
-      completo por inercia.
-      **Hecho:** salida real pegada en `progress/impl_321.md`, con el baseline de `dev` **medido en
-      la misma sesión** (los rojos ajenos no se cuentan como propios, pero tampoco se esconden).
+- [x] **T7.4 — Gate: el COMPLETO, y no es opcional. [CORREGIDO 2026-08-28]**
+      `./init.sh` **completo** en verde antes del PR. La redacción anterior de esta tarea pedía
+      `--rapido` y afirmaba que «no se niega»; era **falsa desde que se escribió**. T2.1 crea
+      `lib/types/historico-conversaciones.ts` —el sitio correcto para el DTO según
+      `docs/conventions.md`— y `init.sh:134` lista `^lib/types/` en `RUTAS_SENSIBLES` junto a
+      `db/migrations/`, `db/schema.prisma`, `init.sh` y la config de build: tocar esa ruta **manda
+      al completo por diseño**, como `fail` y no como aviso (regla 5 de `CLAUDE.md`; design §7).
+      Un DTO en `lib/types/` es cimiento: cambia la forma de **todo lo que lo importa**, y la
+      selección por diff de `--changed` no cubre ese radio.
+      **Que el rápido se niegue NO es un defecto del código, ni una excepción, ni señal de que el
+      alcance creció**: es la clasificación funcionando. No se «ajusta» `RUTAS_SENSIBLES` para
+      esquivarlo, y no se para: se corre el completo. Es lo que hizo el implementer.
+      **Hecho:** salida real de `./init.sh` **completo** pegada en `progress/impl_321.md`, con el
+      baseline de `dev` **medido en la misma sesión** (los rojos ajenos no se cuentan como propios,
+      pero tampoco se esconden).
       **Depende de:** todo.
 
 - [x] **T7.5 — Deuda y límites declarados.**

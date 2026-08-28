@@ -68,6 +68,8 @@ interface Medicion {
   // --- T3.3: filtros ------------------------------------------------------------------------
   fechaDentro: HiloHistoricoDTO[];
   fechaEsperada: { ordenDentro: string; ordenFuera: string };
+  fechaFusion: HiloHistoricoDTO[];
+  fechaFusionEsperada: { orden: string; ultimos4Vigente: string };
   ordenExacta: HiloHistoricoDTO[];
   ordenPrefijo: HiloHistoricoDTO[];
   guiaExacta: HiloHistoricoDTO[];
@@ -184,6 +186,31 @@ describeSiHayBase("321 / bloque 3 — HistoricoConversacionesRepository contra P
     await sembrarHilo(tx, ordenFuera, m5, [
       { ocurridoAt: new Date("2026-08-16T06:00:00.000Z"), direccion: "entrante" },
     ]);
+
+    // ---- Escenario FECHA x FUSION (R34 + R42/R43): el rango SELECCIONA EL HILO, no la fila ---
+    // Un hilo fusionado de DOS numeros del que solo UNA fila tiene mensajes dentro del rango. El
+    // `EXISTS` del filtro vive en el `WHERE`, o sea ANTES del `GROUP BY`: si se correlacionara
+    // por fila (`m2.conversacion_id = c.id`, la forma que insinuaba el borrador del design) la
+    // fila de `telFueraDeRango` moriria antes de agregarse y el hilo saldria con los agregados
+    // calculados sobre MEDIO hilo. Aqui se fija lo contrario con numeros exactos.
+    const m18 = await crearUsuario(tx, "Sofia", "FechaFusión");
+    const ordenFechaFusion = await crearOrden(tx, tienda, m18, {});
+    const telEnRango = `50699${digitos(6)}`;
+    const telFueraDeRango = `50611${digitos(6)}`;
+    const convEnRango = await crearConversacion(tx, ordenFechaFusion, m18, telEnRango);
+    const convFueraDeRango = await crearConversacion(tx, ordenFechaFusion, m18, telFueraDeRango);
+    // UN mensaje dentro del dia 2026-07-20 de Costa Rica (15:00Z = 09:00 CR).
+    await crearMensaje(tx, convEnRango, {
+      ocurridoAt: new Date("2026-07-20T15:00:00.000Z"),
+      direccion: "entrante",
+    });
+    // TRES mensajes fuera del rango, y ademas POSTERIORES: son los que fijan el telefono vigente.
+    for (const dia of [25, 26, 27]) {
+      await crearMensaje(tx, convFueraDeRango, {
+        ocurridoAt: new Date(`2026-07-${dia}T15:00:00.000Z`),
+        direccion: "saliente",
+      });
+    }
 
     // ---- Escenario FUSION (R42/R43): una orden, un mensajero, DOS telefonos ------------------
     const m6 = await crearUsuario(tx, "Fabio", "Fusión");
@@ -461,6 +488,14 @@ describeSiHayBase("321 / bloque 3 — HistoricoConversacionesRepository contra P
         fecha_hasta: "2026-08-15",
       }),
       fechaEsperada: { ordenDentro, ordenFuera },
+      fechaFusion: await listar([m18], {
+        fecha_desde: "2026-07-20",
+        fecha_hasta: "2026-07-20",
+      }),
+      fechaFusionEsperada: {
+        orden: ordenFechaFusion,
+        ultimos4Vigente: telFueraDeRango.slice(-4),
+      },
       ordenExacta: await listar(alcanceOrden, { orden: numRemisionM1 }),
       ordenPrefijo: await listar(alcanceOrden, { orden: numRemisionM1.slice(0, -1) }),
       guiaExacta: await listar(alcanceOrden, { orden: String(guiaM1) }),
@@ -799,6 +834,31 @@ describeSiHayBase("321 / bloque 3 — HistoricoConversacionesRepository contra P
     // par se invierte y este assert se pone rojo.
     expect(m.fechaDentro.map((h) => h.ordenId)).toEqual([m.fechaEsperada.ordenDentro]);
     expect(m.fechaDentro.map((h) => h.ordenId)).not.toContain(m.fechaEsperada.ordenFuera);
+  });
+
+  it("R34 x R42/R43: el rango de fechas selecciona el HILO ENTERO, no la fila que casa (mata el EXISTS por conversacion_id)", () => {
+    // Hilo fusionado de DOS numeros; SOLO la fila de `telEnRango` tiene un mensaje dentro del
+    // 2026-07-20. El `EXISTS` del filtro esta en el `WHERE`, antes del `GROUP BY`, asi que la
+    // forma de la correlacion decide QUE FILAS LLEGAN A AGREGARSE:
+    //
+    //   correlacion por CLAVE DEL HILO (lo implementado)  -> llegan las dos filas
+    //   correlacion por FILA (`m2.conversacion_id = c.id`) -> llega solo una
+    //
+    // Por eso los tres numeros de abajo son la prueba: con la correlacion por fila darian
+    // `telefonosCount: 1`, `totalMensajes: 1` y el vigente seria el OTRO numero. No es un caso de
+    // laboratorio: la medicion T0 (`progress/impl_321_T0.md`) encontro que el 40 % de los grupos
+    // fusiona mas de un telefono.
+    expect(m.fechaFusion).toHaveLength(1);
+    expect(m.fechaFusion[0]!.ordenId).toBe(m.fechaFusionEsperada.orden);
+    expect(m.fechaFusion[0]!.telefonosCount).toBe(2);
+    // 1 mensaje dentro del rango + 3 fuera, en la otra fila del mismo hilo: el agregado es del
+    // hilo ENTERO. Si saliera 1, el filtro habria amputado media fusion.
+    expect(m.fechaFusion[0]!.totalMensajes).toBe(4);
+    // El vigente es el numero de la fila que NO casa el rango (su actividad es posterior): otra
+    // via por la que la correlacion por fila se pone roja.
+    expect(m.fechaFusion[0]!.telefonoVigenteMasked).toBe(m.fechaFusionEsperada.ultimos4Vigente);
+    // Y la ultima actividad tambien es la del hilo entero, fuera del rango filtrado.
+    expect(m.fechaFusion[0]!.ultimaActividadAt).toBe("2026-07-27T15:00:00.000Z");
   });
 
   it("R35: el filtro por orden es IGUALDAD exacta, nunca coincidencia parcial", () => {
