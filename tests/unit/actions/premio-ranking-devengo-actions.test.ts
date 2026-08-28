@@ -185,6 +185,7 @@ describe("R16 — al registrar, del cliente solo viaja `filaId`", () => {
       { status: "ya_registrado" as const },
       { status: "anulado" as const },
       { status: "sin_premio" as const },
+      { status: "sin_entregas" as const }, // feature 297
       { status: "sin_cierre" as const },
       { status: "cierre_no_aprobado" as const, estado: "solicitado" },
       { status: "no_encontrado" as const },

@@ -172,6 +172,111 @@ describe("asignarPodio — umbral y puestos (R9)", () => {
   });
 });
 
+describe("asignarPodio — al menos UNA entrega para ocupar podio (feature 297)", () => {
+  /** El podio REAL del 26/08 en produccion, con sus tres nombres y sus tres conteos. */
+  const EL_26_DE_AGOSTO: readonly AgregadoOrdenable[] = [
+    agregado("m-andres", "Andres", 0, 21),
+    agregado("m-carlos", "Carlos", 0, 25),
+    agregado("m-johel", "Johel", 0, 37),
+  ];
+
+  it("el caso del 26/08 —tres a 0 entregas— deja el podio VACIO", () => {
+    // Los tres empatan a 0.0 % y el orden lo decidia el nombre: Andres 1.o, con 5.000 de premio.
+    const filas = asignarPodio(ordenarAgregados(EL_26_DE_AGOSTO), 1);
+
+    expect(filas.map((f) => f.agregado.mensajeroId)).toEqual(["m-andres", "m-carlos", "m-johel"]);
+    // Ninguno ocupa posicion, ni siquiera el que el abecedario ponia primero.
+    expect(filas.map((f) => f.posicion)).toEqual([null, null, null]);
+    // Pero los tres se siguen LISTANDO con su puesto: la 297 no los borra del ranking.
+    expect(filas.map((f) => f.puesto)).toEqual([1, 2, 3]);
+  });
+
+  it("el orden entre ellos NO cambia: la 297 quita elegibilidad, no reordena", () => {
+    // Si la regla se hubiera colado como un criterio de orden, estos tres se moverian.
+    expect(ids(ordenarAgregados(EL_26_DE_AGOSTO))).toEqual(["m-andres", "m-carlos", "m-johel"]);
+  });
+
+  it("una sola entrega basta: con 1/21 SI ocupa podio", () => {
+    const filas = asignarPodio(
+      ordenarAgregados([
+        agregado("m-andres", "Andres", 0, 21),
+        agregado("m-carlos", "Carlos", 1, 25), // 4.0 % — el unico que entrego
+        agregado("m-johel", "Johel", 0, 37),
+      ]),
+      1,
+    );
+
+    // Carlos manda por pct (4.0 > 0.0) y ademas es el unico elegible.
+    expect(filas.map((f) => [f.agregado.mensajeroId, f.posicion])).toEqual([
+      ["m-carlos", 1],
+      ["m-andres", null],
+      ["m-johel", null],
+    ]);
+  });
+
+  it("las posiciones NO quedan vacantes: el primero elegible es el 1.o", () => {
+    // Ana encabeza la lista ordenada pero no entrego; el podio no se queda sin primero, lo toma
+    // Beto. Es exactamente lo que este bucle ya hacia con el umbral de asignadas.
+    const filas = asignarPodio(
+      ordenarAgregados([
+        agregado("m1", "Ana", 0, 10), // 0.0 %, sin entregas -> fuera del podio
+        agregado("m2", "Beto", 1, 10), // 10.0 %
+        agregado("m3", "Cira", 2, 10), // 20.0 %
+      ]),
+      1,
+    );
+
+    expect(filas.map((f) => [f.agregado.mensajeroId, f.puesto, f.posicion])).toEqual([
+      ["m3", 1, 1], // Cira, 20.0 %
+      ["m2", 2, 2], // Beto, 10.0 %
+      ["m1", 3, null], // Ana se lista tercera, sin posicion
+    ]);
+  });
+
+  it("quien SI entrego sigue ocupando podio igual que antes de la 297", () => {
+    const filas = asignarPodio(
+      ordenarAgregados([
+        agregado("m1", "Ana", 9, 10),
+        agregado("m2", "Beto", 10, 10),
+        agregado("m3", "Cira", 3, 4),
+        agregado("m4", "Dora", 1, 8),
+      ]),
+      1,
+    );
+
+    expect(filas.map((f) => [f.agregado.mensajeroId, f.posicion])).toEqual([
+      ["m2", 1],
+      ["m1", 2],
+      ["m3", 3],
+      ["m4", null], // cuarto elegible: solo hay tres posiciones
+    ]);
+  });
+
+  it("el umbral de asignadas sigue vigente: las DOS condiciones tienen que cumplirse", () => {
+    const filas = asignarPodio(
+      ordenarAgregados([
+        agregado("m1", "Ana", 2, 2), // 100.0 %, entrego, pero 2 < 3 asignadas -> fuera
+        agregado("m2", "Beto", 0, 9), // 9 asignadas, pero 0 entregas -> fuera
+        agregado("m3", "Cira", 3, 9), // cumple las dos -> unico del podio
+      ]),
+      3,
+    );
+
+    expect(filas.map((f) => [f.agregado.mensajeroId, f.posicion])).toEqual([
+      ["m1", null],
+      ["m3", 1],
+      ["m2", null],
+    ]);
+  });
+
+  it("con entregas y asignadas = 0 el motivo sigue siendo el pct indefinido", () => {
+    // No es un caso nuevo (ya estaba cubierto), pero deja escrito que las dos razones conviven:
+    // 0/0 no ocupa podio ni con el umbral en 0 ni con la regla de la 297.
+    const filas = asignarPodio(ordenarAgregados([agregado("m1", "Ana", 0, 0)]), 0);
+    expect(filas[0]?.posicion).toBeNull();
+  });
+});
+
 describe("formatearPct — porcentaje derivado, nunca persistido (R10)", () => {
   it("sin denominador el porcentaje es null, no cero", () => {
     expect(formatearPct(0, 0)).toBeNull();

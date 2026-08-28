@@ -362,6 +362,27 @@ describe("R16 — el registro manda `filaId` y NADA más", () => {
     ).toBeInTheDocument();
   });
 
+  it("feature 297 — «no entregó nada ese día» se explica con su causa propia, no con un fallo", async () => {
+    // PRIMERO es la fila del 26/08: 0 de 21, con su premio congelado. La fila es historia y se
+    // sigue pintando con su botón; lo que el maestro tiene que leer al pulsarlo es POR QUÉ.
+    const user = userEvent.setup();
+    registrarMock.mockResolvedValue({ status: "sin_entregas" });
+    listarMock.mockResolvedValue(podio([PRIMERO]));
+    montar();
+
+    await waitFor(() => filaDe("Kevin Rojas"));
+    await user.click(
+      screen.getByRole("button", { name: "Registrar el premio de Kevin Rojas" }),
+    );
+
+    const aviso = await within(filaDe("Kevin Rojas")).findByText(
+      /no entregó ninguna orden: el premio no se puede cobrar/i,
+    );
+    expect(aviso).toHaveAttribute("role", "alert");
+    // Y no se releen los datos: no se escribió nada.
+    expect(listarMock.mock.calls.length).toBe(1);
+  });
+
   it("R11 — un rechazo por «sin cierre» del servidor tampoco es un error genérico", async () => {
     const user = userEvent.setup();
     registrarMock.mockResolvedValue({ status: "sin_cierre" });
