@@ -1,4 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
+// FICHA 296: la guardia del contrato compartido LEE el archivo de la interfaz (ver el ultimo
+// `describe`). Es lectura estatica, sin DB ni red.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { MisAsignacionesService } from "@/lib/services/MisAsignacionesService";
 import type {
   IGestionOrdenRepository,
@@ -1459,5 +1463,91 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
     const repo = conFilas([{ id: "o1", estatusValue: "por_recoger", fechaReparto: DIA_21 }]);
     await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H);
     expect(repo.findMisAsignaciones).toHaveBeenCalledTimes(1);
+  });
+});
+
+// =============================================================================================
+// FICHA 296 (2026-08-27) — EL PORTAL DEL MENSAJERO NO CAMBIA
+//
+// La 296 anadio el nombre del mensajero a `/novedades`, la pantalla de la TIENDA. El campo se puso
+// en `NovedadDTO` —campo PROPIO, como `causa` e `intentosContacto`— y NO en `MiAsignacionDTO`, que
+// es el contrato COMPARTIDO del que `NovedadDTO` hereda.
+//
+// El motivo es este archivo: `MiAsignacionDTO` lo emiten tambien las dos listas de este portal, y
+// aqui el mensajero es QUIEN MIRA. Meter el campo en el contrato compartido habria obligado a
+// emitir en cada card del mensajero su propio nombre, para que nadie lo lea.
+//
+// Los dos casos de abajo son el ANCLA de esa decision: uno mide el DTO que sale de verdad, el otro
+// LEE el contrato. Hacen falta los dos — el contrato puede declarar un campo opcional que el
+// servicio no emita, y el servicio puede emitir una clave que el contrato no declare.
+// =============================================================================================
+
+describe("296 — `MiAsignacionDTO` no gana ningun campo de mensajero", () => {
+  it("las cards que emite el portal no traen NINGUNA clave de mensajero", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "b", estatusValue: "en_reparto" }),
+      ]),
+    });
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    const cards = [...r.porRecoger, ...r.porGestionar];
+    // No-vacuidad: sin cards, el bucle de abajo no comprobaria nada y esto pasaria en verde.
+    expect(cards).toHaveLength(2);
+    for (const card of cards) {
+      for (const clave of Object.keys(card)) {
+        expect(
+          clave.toLowerCase().startsWith("mensajero"),
+          `la card del portal emite \`${clave}\`: el mensajero es quien MIRA esta pantalla, asi ` +
+            `que su nombre no tiene por que viajar en ella (ficha 296)`,
+        ).toBe(false);
+      }
+    }
+    // Control positivo: el DTO SI trae lo suyo. Sin esto, un DTO mutilado dejaria las aserciones
+    // de arriba satisfechas por la razon equivocada.
+    expect(Object.keys(cards[0])).toContain("destinatario");
+    expect(Object.keys(cards[0])).toContain("tiendaNombre");
+  });
+
+  it("y el CONTRATO tampoco lo declara: el campo vive en `NovedadDTO`, no en el compartido", () => {
+    // Lectura ESTATICA del contrato, porque un campo OPCIONAL que todavia nadie emite no lo caza
+    // el caso de arriba — y esa es exactamente la forma en que este campo se colaria al contrato
+    // compartido: `mensajeroNombre?: string | null`, aditivo, sin romper un solo fixture.
+    const ruta = resolve(__dirname, "../../../lib/interfaces/services/IMisAsignacionesService.ts");
+    const fuente = readFileSync(ruta, "utf8");
+    expect(fuente.length).toBeGreaterThan(0); // el fichero se leyo de verdad
+
+    const inicio = fuente.indexOf("export interface MiAsignacionDTO {");
+    expect(inicio, "no se encontro `export interface MiAsignacionDTO`").toBeGreaterThanOrEqual(0);
+    // El cierre del bloque es la primera `}` a columna 0 despues de la apertura.
+    const cierre = fuente.indexOf("\n}", inicio);
+    expect(cierre, "no se encontro el cierre del bloque").toBeGreaterThan(inicio);
+    const cuerpo = fuente.slice(inicio, cierre);
+
+    // Los comentarios de ese archivo hablan del mensajero en cada parrafo: se quitan ANTES de
+    // buscar, o el test estaria midiendo la prosa en vez del contrato.
+    const sinComentarios = cuerpo
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("//"))
+      .join("\n");
+    // Auto-comprobacion del despojado: si dejara de funcionar, esto seria rojo por la prosa y no
+    // por un campo — o, peor, alguien relajaria la asercion de abajo hasta hacerla inutil.
+    expect(sinComentarios).not.toContain("portal del mensajero");
+    expect(sinComentarios).toContain("destinatario: string;"); // pero SI conserva los campos
+
+    const camposDeMensajero = sinComentarios
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => /^mensajero[A-Za-z]*\??\s*:/.test(l));
+    expect(
+      camposDeMensajero,
+      "`MiAsignacionDTO` es el contrato del PORTAL DEL MENSAJERO y lo emiten sus dos listas: un " +
+        "campo de mensajero aqui obliga a emitirlo donde nadie lo lee. El de la ficha 296 vive " +
+        "en `NovedadDTO` (`lib/types/novedad.ts`), junto a `causa` e `intentosContacto`.",
+    ).toEqual([]);
   });
 });

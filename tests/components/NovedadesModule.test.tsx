@@ -131,6 +131,7 @@ const novedad = (over: Partial<NovedadDTO> = {}): NovedadDTO => ({
   estatusValue: "devuelta",
   // Pedido humano 2026-08-18: requerido en `NovedadDTO`. El default es "nadie lo ha intentado".
   intentosContacto: 0,
+  mensajeroNombre: "Marta Mensajera",
   destinatario: "Ana Cliente",
   telefonoDest: "88887777",
   causa: "not_found",
