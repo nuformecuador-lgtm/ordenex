@@ -1,5 +1,5 @@
 import type { PlantillaEstado } from "@prisma/client";
-import { MessageSquareHeart, Store } from "lucide-react";
+import { Check, MessageSquareHeart, Store } from "lucide-react";
 
 import type { Column } from "@/components/shared/DataTable";
 import { Badge } from "@/components/ui/badge";
@@ -133,8 +133,8 @@ export interface PlantillasColumnsActions {
 }
 
 /**
- * Columnas del listado de plantillas (feature 107/R6): nombre · estado · cuerpo ·
- * acciones. El `estado` se pinta como `Badge` de SOLO LECTURA
+ * Columnas del listado de plantillas (feature 107/R6): nombre · plant. tienda · estado ·
+ * cuerpo · acciones. El `estado` se pinta como `Badge` de SOLO LECTURA
  * (`pending`/`activo`/`refused` no son accionables desde el front); la ÚNICA acción
  * de estado es "Desactivar", visible cuando el estado no es ya `inactivo` (R24).
  */
@@ -167,6 +167,23 @@ export function buildPlantillasColumns(
           ) : null}
         </span>
       ),
+    },
+    {
+      id: "plantillaTienda",
+      value: "Plant. Tienda",
+      // Columna DEDICADA (pedido humano del 2026-08-28) ademas de la insignia del nombre: la
+      // insignia se lee fila a fila, una columna propia se barre en vertical y contesta "cuales
+      // son de tienda" de un vistazo.
+      //
+      // Solo se pinta el chulito del `true`. El `false` va VACIO a proposito: una columna con
+      // marca en unas filas y hueco en otras se lee mas rapido que una con dos simbolos que hay
+      // que distinguir. El nombre accesible va en el `aria-label` del icono —un `<Check>` sin
+      // texto no dice nada a un lector de pantalla— y las filas sin marca se anuncian como la
+      // celda vacia que son.
+      render: (row) =>
+        row.plantillaTienda ? (
+          <Check className="size-4 text-primary" aria-label="Sí" role="img" />
+        ) : null,
     },
     {
       id: "estado",

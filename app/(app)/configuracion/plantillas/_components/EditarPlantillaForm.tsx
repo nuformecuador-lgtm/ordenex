@@ -96,6 +96,7 @@ export const EditarPlantillaForm = forwardRef<
         id="plantilla-tienda-edit"
         checked={plantillaTienda}
         onCheckedChange={setPlantillaTienda}
+        disabled={plantilla.plantillaTienda}
       />
 
       <VariablesInsert
