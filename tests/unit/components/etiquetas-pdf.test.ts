@@ -29,6 +29,7 @@ import {
   LIENZO_BASE_MM,
   MAQUETA_BASE,
 } from "@/lib/pdf/etiquetas-layout";
+import { camposYInicio } from "@/lib/pdf/etiquetas-maqueta";
 import { fuenteEtiqueta } from "@/lib/pdf/etiquetas-fuente";
 import {
   HOJAS_ETIQUETA,
@@ -72,6 +73,7 @@ function etiqueta(overrides: Partial<EtiquetaGuiaDTO> = {}): EtiquetaGuiaDTO {
     provinciaNombre: "ProvinciaTest",
     cantonNombre: "CantonTest",
     distritoNombre: "DistritoTest",
+    fechaCreacion: "2026-08-27", // feature 295
     qrValue: String(numGuia),
     barcodeValue: String(numGuia),
     ...overrides,
@@ -428,6 +430,195 @@ describe("R1/R3 — el numero de guia deja de pisar la primera fila (medido en e
       // Y el cuerpo de la guia no se ha encogido para lograrlo (R27).
       expect(guia!.t.tamano).toBeCloseTo(layout.fontGuia, 6);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 295 — la FECHA en la etiqueta, medida SOBRE EL PDF.
+//
+// El precedente manda como se verifica esto: la 282 existe porque una linea
+// pisaba a otra y nadie lo vio hasta que llego una etiqueta impresa de
+// produccion. Asi que aqui no basta con «el dato viaja»: se leen las
+// coordenadas del PDF y se comprueba que la linea nueva no toca nada, en las
+// CUATRO hojas del catalogo.
+//
+// Los dos ejes, y por que cada uno:
+//   - VERTICAL: la fecha NO estrena linea base, se sube a la de los rotulos de
+//     cabecera. Esa linea ya cumple la regla derivada de la 282 respecto del
+//     numero de guia (`guiaY - cabeceraY = 8 >= fontGuia * PT_A_MM = 7,7611`),
+//     asi que la separacion se hereda en vez de inventarse. Se mide igualmente.
+//   - HORIZONTAL: es lo unico nuevo, y en esa fila solo hay literales fijos
+//     ("GUÍA", "REMISIÓN") mas la fecha, que siempre son diez caracteres. Se
+//     exige que los tres intervalos de tinta sean disjuntos.
+//
+// Y lo que NO cambia lo siguen guardando los tests de la 282 que ya existen: el
+// bloque de campos sigue teniendo SIETE filas (R4), arranca en la misma linea
+// base (R1/R3) y el corpus se imprime sin marca de recorte (R6/R26). Meter la
+// fecha como octavo campo habria bajado el cupo de 10 lineas a 9 y el caso
+// `direccion-3-lineas` habria salido recortado: por eso va en la cabecera.
+// ---------------------------------------------------------------------------
+
+/** Ancho de tinta de un texto, medido con las MISMAS metricas con las que se dibujo. */
+function anchoMm(
+  doc: ReturnType<typeof buildEtiquetasPdf>,
+  texto: string,
+  estilo: "bold" | "normal",
+  pt: number,
+): number {
+  doc.setFont("helvetica", estilo);
+  doc.setFontSize(pt);
+  return doc.getTextWidth(texto);
+}
+
+describe("Feature 295 — la fecha de creacion se imprime y no pisa nada", () => {
+  const FECHA = "2026-08-27";
+
+  it("sale impresa en las CUATRO hojas, leida del propio PDF", () => {
+    for (const hoja of HOJAS_ETIQUETA) {
+      const doc = construir(
+        [etiqueta({ fechaCreacion: FECHA })],
+        new Map(),
+        hoja,
+      );
+      const textos = textosDecodificados(bytesDe(doc));
+      expect(textos, `falta el rotulo de la fecha en ${hoja.id}`).toContain("FECHA");
+      expect(textos, `falta la fecha en ${hoja.id}`).toContain(FECHA);
+    }
+  });
+
+  it("comparte linea base con los rotulos de cabecera: no estrena geometria vertical", () => {
+    for (const hoja of HOJAS_ETIQUETA) {
+      const doc = construir([etiqueta({ fechaCreacion: FECHA })], new Map(), hoja);
+      const u8 = new Uint8Array(bytesDe(doc));
+      const fuentes = fuentesDePagina(u8);
+      const textos = textosDePagina(u8).map((t) => ({
+        t,
+        texto: textoLegible(t, fuentes.get(t.fuenteRes)),
+      }));
+      const de = (texto: string) => {
+        const encontrado = textos.find((x) => x.texto === texto);
+        expect(encontrado, `no se encontro «${texto}» en ${hoja.id}`).toBeDefined();
+        return encontrado!;
+      };
+
+      const yGuiaRotulo = yEnMm(de("GUÍA").t.y, hoja.altoMm);
+      const yRemisionRotulo = yEnMm(de("REMISIÓN").t.y, hoja.altoMm);
+      const yFechaRotulo = yEnMm(de("FECHA").t.y, hoja.altoMm);
+      const yFechaValor = yEnMm(de(FECHA).t.y, hoja.altoMm);
+
+      expect(yFechaRotulo).toBeCloseTo(yGuiaRotulo, 6);
+      expect(yFechaRotulo).toBeCloseTo(yRemisionRotulo, 6);
+      expect(yFechaValor).toBeCloseTo(yGuiaRotulo, 6);
+      // Y con el cuerpo de los rotulos, no con uno propio.
+      expect(de("FECHA").t.tamano).toBeCloseTo(crearLayout(hoja).fontRotulo, 6);
+      expect(de(FECHA).t.tamano).toBeCloseTo(crearLayout(hoja).fontRotulo, 6);
+    }
+  });
+
+  it("queda 1 em del cuerpo de la guia POR ENCIMA de su numero: la regla de la 282, hacia arriba", () => {
+    for (const hoja of HOJAS_ETIQUETA) {
+      const layout = crearLayout(hoja);
+      const doc = construir(
+        [etiqueta({ numGuia: 19887906, fechaCreacion: FECHA })],
+        new Map(),
+        hoja,
+      );
+      const u8 = new Uint8Array(bytesDe(doc));
+      const fuentes = fuentesDePagina(u8);
+      const textos = textosDePagina(u8).map((t) => ({
+        t,
+        texto: textoLegible(t, fuentes.get(t.fuenteRes)),
+      }));
+      const yFecha = yEnMm(textos.find((x) => x.texto === FECHA)!.t.y, hoja.altoMm);
+      const yGuia = yEnMm(textos.find((x) => x.texto === "19887906")!.t.y, hoja.altoMm);
+
+      // El numero de guia dibuja su tinta HACIA ARRIBA desde su linea base (los
+      // digitos no tienen descendente): con la fecha un em por encima, su tinta
+      // acaba justo donde empieza la del numero, sin invadirla.
+      const separacion = yGuia - yFecha;
+      expect(
+        separacion,
+        `${hoja.id}: ${separacion.toFixed(3)} mm sobre un numero de ${layout.fontGuia} pt`,
+      ).toBeGreaterThanOrEqual(layout.fontGuia * PT_A_MM - 1e-6);
+    }
+  });
+
+  it("no se solapa con «GUÍA» ni con «REMISIÓN»: los tres intervalos son disjuntos", () => {
+    for (const hoja of HOJAS_ETIQUETA) {
+      const layout = crearLayout(hoja);
+      const doc = construir([etiqueta({ fechaCreacion: FECHA })], new Map(), hoja);
+      const u8 = new Uint8Array(bytesDe(doc));
+      const fuentes = fuentesDePagina(u8);
+      const textos = textosDePagina(u8).map((t) => ({
+        t,
+        texto: textoLegible(t, fuentes.get(t.fuenteRes)),
+      }));
+      const tramo = (texto: string, estilo: "bold" | "normal") => {
+        const encontrado = textos.find((x) => x.texto === texto)!;
+        const inicio = encontrado.t.x * PT_A_MM;
+        return {
+          texto,
+          inicio,
+          fin: inicio + anchoMm(doc, texto, estilo, encontrado.t.tamano),
+        };
+      };
+
+      const guia = tramo("GUÍA", "bold");
+      const rotuloFecha = tramo("FECHA", "bold");
+      const valorFecha = tramo(FECHA, "normal");
+      const remision = tramo("REMISIÓN", "bold");
+
+      // Controles positivos: si la `x` del PDF no significara "borde izquierdo del
+      // texto", las comparaciones de abajo serian ruido. «GUÍA» empieza en el
+      // margen y «REMISIÓN» (dibujado con align: right) TERMINA en el margen
+      // derecho; que ambas se cumplan fija la lectura de la coordenada.
+      expect(guia.inicio, `${hoja.id}: GUÍA no empieza en el margen`).toBeCloseTo(
+        layout.x(MAQUETA_BASE.margin),
+        3,
+      );
+      expect(remision.fin, `${hoja.id}: REMISIÓN no acaba en el margen derecho`).toBeCloseTo(
+        layout.x(LIENZO_BASE_MM - MAQUETA_BASE.margin),
+        3,
+      );
+
+      // La fila entera, de izquierda a derecha, sin que un tramo entre en el otro.
+      const fila = [guia, rotuloFecha, valorFecha, remision];
+      for (let i = 1; i < fila.length; i++) {
+        const holgura = fila[i].inicio - fila[i - 1].fin;
+        expect(
+          holgura,
+          `${hoja.id}: «${fila[i - 1].texto}» y «${fila[i].texto}» se solapan (${holgura.toFixed(3)} mm)`,
+        ).toBeGreaterThan(0);
+      }
+      // Y el par rotulo+valor va centrado en el lienzo: la holgura sobrante no se
+      // acumula toda a un lado (seria la señal de que un dia el par se come un
+      // rotulo al crecer).
+      const centroPar = (rotuloFecha.inicio + valorFecha.fin) / 2;
+      expect(centroPar).toBeCloseTo(layout.x(LIENZO_BASE_MM / 2), 3);
+    }
+  });
+
+  it("la fecha NO entra en el bloque de campos: sigue habiendo siete filas y arrancan donde arrancaban", () => {
+    const hoja = getHojaEtiqueta("100x100");
+    const doc = construir([etiqueta({ fechaCreacion: FECHA })], new Map(), hoja);
+    const u8 = new Uint8Array(bytesDe(doc));
+    const fuentes = fuentesDePagina(u8);
+    const textos = textosDePagina(u8).map((t) => ({
+      t,
+      texto: textoLegible(t, fuentes.get(t.fuenteRes)),
+    }));
+
+    const yFecha = yEnMm(textos.find((x) => x.texto === FECHA)!.t.y, hoja.altoMm);
+    const yDestinatario = yEnMm(
+      textos.find((x) => x.texto === "DESTINATARIO")!.t.y,
+      hoja.altoMm,
+    );
+    // La primera fila de campos sigue en la linea base DERIVADA de la 282: la
+    // fecha no la ha empujado ni un milimetro.
+    expect(yDestinatario).toBeCloseTo(camposYInicio(), 3);
+    expect(yFecha).toBeLessThan(yDestinatario);
+    // Y el rotulo de la fecha no vive en la columna de rotulos del bloque.
+    expect(textos.filter((x) => x.texto === "FECHA")).toHaveLength(1);
   });
 });
 

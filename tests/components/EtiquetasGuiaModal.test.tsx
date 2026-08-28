@@ -112,6 +112,7 @@ function makeEtiqueta(
     provinciaNombre: "San José",
     cantonNombre: "Escazú",
     distritoNombre: null,
+    fechaCreacion: "2026-08-27", // feature 295
     qrValue: overrides.ordenId,
     barcodeValue: "1",
     ...overrides,

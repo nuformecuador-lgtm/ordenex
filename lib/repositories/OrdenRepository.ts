@@ -793,6 +793,10 @@ const WITH_ETIQUETA = {
     direccion: true,
     producto: true,
     montoCobrar: true,
+    // Feature 295: el dia en que la tienda cargo el envio. Es LA fecha que la
+    // etiqueta imprime; sin esta columna en la proyeccion el dato no existe en
+    // todo el camino hasta el PDF (era exactamente el estado anterior a la 295).
+    createdAt: true,
     tienda: { select: { nombre: true } },
     zona: { select: { nombre: true } },
     provincia: { select: { nombre: true } },
@@ -806,6 +810,9 @@ type OrdenEtiquetaRow = Prisma.OrdenGetPayload<typeof WITH_ETIQUETA>;
 // R1/R4/R5/R6: serializa la fila de etiqueta a EtiquetaRow. Resuelve los nombres
 // legibles, mapea Decimal montoCobrar -> number|null (R5, sin moneda) y deja
 // distritoNombre null si la orden no tiene distrito (R4). NO expone deletedAt (R6).
+// Feature 295: `created_at` (timestamp UTC) sale como fecha CALENDARIO DE CR
+// `YYYY-MM-DD`, la misma convencion con la que el manifiesto escribe su columna
+// `fecha` y con la que el comprobante de cierre pinta las suyas.
 function toEtiquetaRow(row: OrdenEtiquetaRow): EtiquetaRow {
   return {
     id: row.id,
@@ -822,6 +829,7 @@ function toEtiquetaRow(row: OrdenEtiquetaRow): EtiquetaRow {
     provinciaNombre: row.provincia.nombre,
     cantonNombre: row.canton.nombre,
     distritoNombre: row.distrito?.nombre ?? null,
+    fechaCreacion: fechaCalendarioCR(row.createdAt), // feature 295
   };
 }
 

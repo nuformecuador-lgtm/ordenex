@@ -74,6 +74,7 @@ function etiqueta(ordenId = "ord-1"): EtiquetaGuiaDTO {
     provinciaNombre: "San Jose",
     cantonNombre: "Central",
     distritoNombre: "Carmen",
+    fechaCreacion: "2026-08-27", // feature 295
     qrValue: "1042",
     barcodeValue: "1042",
   };

@@ -66,12 +66,31 @@ export default async function PaquetePage({
       </header>
 
       <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-3 border-b border-border pb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
               Guía
             </p>
             <p className="text-2xl font-bold leading-tight">{orden.numGuia}</p>
+          </div>
+          {/* Feature 295 — la fecha de creación, en la cabecera y entre los dos
+              números, igual que en el papel y en la vista previa: esta página es
+              el destino del QR de la etiqueta, así que quien escanea el paquete
+              debe leer lo mismo que lleva pegado. Como último campo de la lista
+              habría quedado escondida bajo el scroll en un móvil.
+
+              Se pinta TAL CUAL llega: `fechaCreacion` ya es la fecha de
+              calendario de Costa Rica resuelta en el servidor. El navegador que
+              abre esta página es el de un mensajero o un cliente y puede estar
+              en otra zona horaria: rederivarla aquí podría cambiar el día.
+
+              El `flex-wrap` es por el tercer bloque: en pantallas estrechas la
+              remisión baja de línea en vez de aplastar a los otros dos. */}
+          <div className="text-center">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Fecha
+            </p>
+            <p className="text-sm font-medium">{orden.fechaCreacion}</p>
           </div>
           <div className="text-right">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
