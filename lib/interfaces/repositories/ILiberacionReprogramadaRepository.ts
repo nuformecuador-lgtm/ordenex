@@ -89,6 +89,26 @@ export interface ILiberacionReprogramadaRepository {
    */
   findOrdenesLiberables(hoyCR: Date): Promise<OrdenLiberableRow[]>;
   /**
+   * FICHA 315 — LAS MISMAS CANDIDATAS, ACOTADAS A UN SOLO CIERRE.
+   *
+   * Devuelve las ordenes cuya gestion `reprogramada` VIGENTE pertenece a `cierreId` y cuya
+   * `fecha_reprogramacion` ya vencio (`<= hoyCR`). Es `findOrdenesLiberables` con DOS
+   * restricciones anadidas, no una consulta con reglas propias: mismo estatus de origen, mismo
+   * `orderBy`/`take: 1` de la gestion vigente, mismos tres hechos proyectados y mismo filtro de
+   * fecha. Quien decide sigue siendo el servicio (`puedeLiberarse`).
+   *
+   * ⚠️ EL FILTRO DE FECHA ES LA MITAD DEL CONTRATO, no un detalle heredado. Un cierre real del
+   * 2026-08-28 llevaba ordenes reprogramadas para el 28/08 (vencida), el 31/08 y el 01/09: soltar
+   * las dos ultimas al aprobarlo pondria un paquete en la calle DIAS antes de lo pactado con el
+   * destinatario, que es peor que la demora que esta ficha arregla.
+   *
+   * La correlacion es con la gestion VIGENTE, no con «alguna gestion del cierre»: una orden que
+   * paso por este cierre pero cuya ultima reprogramada es de OTRO cierre no sale de aqui. Asi lo
+   * que este camino libera es siempre un SUBCONJUNTO de lo que liberaria la corrida de
+   * medianoche — solo que horas antes.
+   */
+  findOrdenesLiberablesDeCierre(cierreId: string, hoyCR: Date): Promise<OrdenLiberableRow[]>;
+  /**
    * R13/R17: transiciona UNA orden al destino, limpia `mensajero_asignado_id` y fija
    * `liberada_reprogramada_at = corridaAt`, con escritura GUARDADA por
    * `estatus_id = reprogramada` + no borrada (concurrencia/idempotencia: una segunda
