@@ -186,6 +186,13 @@ añadidos:
      la 109 impide la evidencia duplicada ante un reenvío de Meta (R18).
    - **No se toca `orden` ni `cliente`** (R17): el service solo tiene inyectados los repos de
      chat; no hay forma de escribir en el maestro desde aquí, y así queda por construcción.
+   - **La migración es SOLO EVIDENCIA, no continuidad** (bloque «LIMITACIÓN CONOCIDA» bajo R16 en
+     `requirements.md`, decisión del humano del 2026-08-27): migrar el hilo **no** hace que los
+     mensajes posteriores del cliente lleguen. Un entrante se resuelve a su orden por
+     `orden.telefono_dest` (`resolverOrdenActivaPorNumero`), no por el `telefono_e164` del hilo,
+     y R17 prohíbe tocar ese campo; así que un mensaje enviado desde el número NUEVO cuenta como
+     `sinResolver`, el webhook responde `200` y no llega a nadie. Fijado con un `assert` en
+     `tests/unit/services/chat-whatsapp-service.test.ts`.
 
 `IngestaResumen` gana `hilosMigrados: number` (conteo agregado, sin PII).
 

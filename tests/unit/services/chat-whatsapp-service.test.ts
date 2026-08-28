@@ -908,6 +908,62 @@ describe("Feature 299 · cambio de numero del cliente (R16/R17/R18)", () => {
     expect(fuente).not.toMatch(/telefonoDest\s*=/);
   });
 
+  it("LIMITACION CONOCIDA (decision humana 2026-08-27): un entrante desde el numero NUEVO NO resuelve orden y se cuenta sinResolver", async () => {
+    // ESTO ES LO ESPERADO, NO UN BUG. Ver el bloque «LIMITACION CONOCIDA» bajo R16 en
+    // `specs/299-chat-media-reacciones-contactos/requirements.md`: el cambio de numero se queda
+    // SOLO COMO EVIDENCIA. La resolucion de un entrante va por `orden.telefono_dest`
+    // (`ChatConversacionRepository.resolverOrdenActivaPorNumero`) y R17 prohibe tocar ese campo
+    // del maestro, asi que migrar el hilo (R16) NO hace que los mensajes del numero nuevo
+    // lleguen. El humano descarto la tabla de alias y escribir `orden.telefono_dest`.
+    //
+    // Si este test se pone rojo, alguien ha cambiado el comportamiento: NO lo "arregles"
+    // tocando el maestro; reabre R16/R17 con el humano primero.
+    const ANTERIOR = "50688887777";
+    const NUEVO = "50699996666";
+
+    // El fake reproduce la semantica REAL del repo: solo resuelve el numero que sigue guardado
+    // en `orden.telefono_dest`, que es el ANTERIOR (R17 lo deja intacto).
+    const conv = fakeConversacionRepo({
+      resolverOrdenActivaPorNumero: vi.fn(async (telefono: string) =>
+        telefono === ANTERIOR
+          ? { ordenId: "orden-1", mensajeroId: "men-1", telefonoE164: ANTERIOR }
+          : null,
+      ),
+    });
+    const msg = fakeMensajeRepo();
+    const service = new ChatWhatsappService({ conversacionRepo: conv, mensajeRepo: msg });
+
+    // 1) Llega el evento de cambio de numero: el hilo SI se migra (R16) y queda la evidencia.
+    const migracion = await service.ingerirEventos(eventoCambioNumero());
+    expect(migracion.hilosMigrados).toBe(1);
+    expect(conv.migrarTelefono).toHaveBeenCalledWith(ANTERIOR, NUEVO);
+
+    // 2) El cliente escribe DESDE EL NUMERO NUEVO. Aqui es donde se rompe la continuidad.
+    const posterior = await service.ingerirEventos(
+      eventos({
+        mensajes: [
+          {
+            waMessageId: "wamid.DESPUES",
+            telefonoE164: NUEVO,
+            tipo: "texto",
+            cuerpo: "ya cambie de numero, sigo esperando el pedido",
+            ocurridoAt: AHORA,
+          },
+        ],
+      }),
+    );
+
+    expect(conv.resolverOrdenActivaPorNumero).toHaveBeenLastCalledWith(NUEVO);
+    expect(posterior).toMatchObject({ mensajesRegistrados: 0, sinResolver: 1 });
+    // El mensaje no cae en el hilo migrado: no se inserta nada por este entrante (la unica
+    // llamada al insert es la evidencia del paso 1).
+    expect(msg.insertarEntranteIdempotente).toHaveBeenCalledTimes(1);
+    // Y el lote no revienta: el service devuelve resumen en vez de lanzar, que es lo que deja al
+    // webhook responder 200 (fijado en
+    // `tests/integration/api/webhook-whatsapp.route.test.ts` :: "R9: responde 200 aunque un
+    // evento no mapee a hilo (sinResolver)").
+  });
+
   it("un entrante NORMAL no dispara ninguna migracion de hilo", async () => {
     const conv = fakeConversacionRepo();
     const msg = fakeMensajeRepo();

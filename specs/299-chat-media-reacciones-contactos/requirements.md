@@ -114,8 +114,20 @@ media y sus metadatos (D1).
 
 **R16** — CUANDO se ingiere un evento de cambio de número con número nuevo determinable y existe
 una conversación cuyo `telefono_e164` es el número anterior, el sistema DEBE reescribir ese
-`telefono_e164` al número nuevo, de modo que los mensajes posteriores del cliente caigan en el
-MISMO hilo.
+`telefono_e164` al número nuevo.
+
+> **LIMITACIÓN CONOCIDA, DECIDIDA POR EL HUMANO EL 2026-08-27 — no es un bug, no la «arregles».**
+> La redacción original de R16 prometía además «de modo que los mensajes posteriores del cliente
+> caigan en el MISMO hilo». **Eso no ocurre, y la cláusula se retiró por falsa.** Un entrante se
+> resuelve a su orden por `orden.telefono_dest` (`ChatConversacionRepository.resolverOrdenActivaPorNumero`),
+> NO por el teléfono del hilo; y R17 prohibe tocar ese campo del maestro. Por tanto **un mensaje
+> enviado desde el número NUEVO no resuelve ninguna orden**: se cuenta `sinResolver`, el webhook
+> responde `200` y el mensaje no llega a nadie (Meta no reintenta un `200`).
+>
+> Se evaluaron tres salidas —tabla de alias, escribir `orden.telefono_dest`, o dejarlo— y **el
+> humano eligió dejarlo como EVIDENCIA**: la migración del hilo y la burbuja de R18 sirven para que
+> quede constancia del cambio, no para sostener la conversación. La burbuja **debe decirlo de
+> forma explícita** para no sugerir una continuidad que no existe (ver R32).
 
 **R17** — CUANDO el sistema migra un hilo por cambio de número, NO DEBE modificar el teléfono de
 la orden ni el del cliente en el maestro de datos (D3).

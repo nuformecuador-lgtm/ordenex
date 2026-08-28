@@ -83,6 +83,9 @@
   `sistema` se inserta con ambos teléfonos, que el service **no** tiene ni usa ningún repo de
   orden/cliente (spy sobre las deps: cero escrituras fuera de los repos de chat, R17), y que
   reprocesar el mismo `wa_message_id` no inserta una segunda evidencia.
+  Además, un `assert` fija la **LIMITACIÓN CONOCIDA** de R16 (decisión del humano del
+  2026-08-27): tras migrar el hilo, un entrante desde el número NUEVO **no** resuelve orden y se
+  cuenta `sinResolver` —la migración es evidencia, no continuidad—.
 - [ ] **D3. [P]** Guardia de PII: los logs del normalizador y del service no citan número, cuerpo,
   caption ni datos de contacto. Depende de D2. Cubre R35 (parte webhook/service).
   *Hecho:* el test espía `console.warn`/el `ChatLogger` inyectado durante una ingesta con número
@@ -212,7 +215,7 @@
 | R13 | `tests/integration/db/chat-mensaje-media-migration.test.ts` :: *la migracion crea enum y columnas y el down.sql las revierte* | integration |
 | R14 | `tests/components/ChatBurbujaContenido.test.tsx` :: *un mensaje otro con cuerpo null muestra el aviso de mensaje no compatible* + `tests/unit/repositories/chat-mensaje-repository.test.ts` :: *contactos_json corrupto se lee como null* | component + unit |
 | R15 | `tests/integration/api/chat-media-proxy.route.test.ts` :: *el proxy no persiste el binario en ningun almacenamiento* | integration |
-| R16 | `tests/unit/services/chat-whatsapp-service.test.ts` :: *el cambio de numero reescribe telefono_e164 del hilo* + `tests/unit/repositories/chat-conversacion-repository.test.ts` :: *migrarTelefono* | unit |
+| R16 | `tests/unit/services/chat-whatsapp-service.test.ts` :: *el cambio de numero reescribe telefono_e164 del hilo* + *LIMITACION CONOCIDA (decision humana 2026-08-27): un entrante desde el numero NUEVO NO resuelve orden y se cuenta sinResolver* + `tests/unit/repositories/chat-conversacion-repository.test.ts` :: *migrarTelefono* | unit |
 | R17 | `tests/unit/services/chat-whatsapp-service.test.ts` :: *el cambio de numero no escribe en orden ni cliente* | unit |
 | R18 | `tests/unit/services/chat-whatsapp-service.test.ts` :: *deja evidencia con ambos numeros, no la duplica al reprocesar y no rompe si el hilo destino ya existe* | unit |
 | R19 | `tests/unit/actions/chat-whatsapp-actions.test.ts` :: *listarHiloChat expone media/contactos/sistema y cuelga las reacciones del mensaje objetivo sin burbuja propia* + `tests/unit/utils/chat-reacciones.test.ts` | unit |
