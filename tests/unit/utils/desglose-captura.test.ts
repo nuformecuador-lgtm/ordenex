@@ -4,6 +4,8 @@ import {
   ERRORES_LINEA,
   acotarMonto,
   capturaCuadra,
+  centimosNoCapturables,
+  cuadreInalcanzable,
   erroresDeLinea,
   lineaNueva,
   lineasIniciales,
@@ -205,6 +207,52 @@ describe("desglose-captura — pendiente y suma (R4/R11)", () => {
   it("una linea sin monto o con texto no numerico cuenta como 0 y no ensucia la suma", () => {
     expect(pendiente([linea("efectivo", ""), linea("SINPE", "3000")], 8000)).toBe(5000);
     expect(totalCapturado([linea("efectivo", "abc"), linea("SINPE", "3000")])).toBe(3000);
+  });
+});
+
+// Feature 300 — un total con CENTIMOS. El editor solo teclea enteros, asi que ese total no tiene
+// ninguna captura que lo iguale: lo que hay que arreglar no es la regla, es que nada de lo que se
+// ofrece (el pre-cargado, el tope, el aviso) finja que si la tiene.
+describe("desglose-captura — total con centimos (feature 300)", () => {
+  const CON_CENTIMOS = 11898.81; // el monto de la captura que reporto el humano
+
+  it("centimosNoCapturables devuelve la cola que el teclado no puede escribir", () => {
+    expect(centimosNoCapturables(CON_CENTIMOS)).toBe(81);
+    expect(centimosNoCapturables(0.05)).toBe(5);
+    expect(centimosNoCapturables(-11898.81)).toBe(81); // nunca negativo
+  });
+
+  it("con un total ENTERO no hay cola ninguna: el caso de casi todas las ordenes", () => {
+    for (const total of [0, 1, 320, 1000, 8000, 11898, 1234567]) {
+      expect(centimosNoCapturables(total), `${total}`).toBe(0);
+      expect(cuadreInalcanzable(total), `${total}`).toBe(false);
+    }
+  });
+
+  it("cuadreInalcanzable coincide SIEMPRE con que no exista captura entera que cuadre", () => {
+    // No se afirma sobre `cuadreInalcanzable` a solas: se compara contra la REGLA que gobierna
+    // de verdad (`capturaCuadra`) barriendo todos los enteros de alrededor del total.
+    for (const total of [8000, 11898.81, 0.5, 999.99, 1000]) {
+      const entero = Math.floor(total);
+      const alcanzable = [entero - 1, entero, entero + 1].some((intento) =>
+        capturaCuadra([linea("efectivo", String(intento))], total),
+      );
+      expect(alcanzable, `total ${total}`).toBe(!cuadreInalcanzable(total));
+    }
+  });
+
+  it("el pre-cargado y el tope NO proponen un numero que el propio tope rechaza", () => {
+    // El fallo: `textoDeMonto` redondeaba, asi que con 11.898,81 la linea nacia en 11.899 —por
+    // ENCIMA de `topeDeLinea`— y acotar devolvia ese mismo 11.899. El editor se contradecia solo.
+    expect(topeDeLinea([linea("", "")], 0, CON_CENTIMOS)).toBe(CON_CENTIMOS);
+    expect(lineasIniciales(CON_CENTIMOS)[0].monto).toBe("11898");
+    expect(acotarMonto("11899", [linea("", "")], 0, CON_CENTIMOS)).toBe("11898");
+    expect(lineaNueva(pendiente([linea("efectivo", "11000")], CON_CENTIMOS)).monto).toBe("898");
+  });
+
+  it("y ese pre-cargado es el MAXIMO tecleable: uno mas ya se pasa del total", () => {
+    expect(totalCapturado([linea("efectivo", "11898")])).toBeLessThan(CON_CENTIMOS);
+    expect(totalCapturado([linea("efectivo", "11899")])).toBeGreaterThan(CON_CENTIMOS);
   });
 });
 

@@ -75,9 +75,9 @@ describe("derivarIngresoOrden — entregada (R8)", () => {
   });
 });
 
-describe("derivarIngresoOrden — devuelta/rechazada (R8)", () => {
-  it("devuelta no-central: flete devolucion + su IVA (mismo % ivaFlete), SIN comision", () => {
-    const d = derivarIngresoOrden(input({ resultado: "devuelta", esCentral: false }), TARIFA);
+describe("derivarIngresoOrden — rechazada (R8; ficha 301)", () => {
+  it("rechazada no-central: flete devolucion + su IVA (mismo % ivaFlete), SIN comision", () => {
+    const d = derivarIngresoOrden(input({ resultado: "rechazada", esCentral: false }), TARIFA);
     expect(d.ingreso_flete_devolucion?.toFixed(2)).toBe("400.00");
     expect(d.ingreso_iva_flete_devolucion?.toFixed(2)).toBe("52.00"); // 400 * 13%
     expect(d.ingreso_comision_cod).toBeUndefined();
@@ -89,6 +89,154 @@ describe("derivarIngresoOrden — devuelta/rechazada (R8)", () => {
     const d = derivarIngresoOrden(input({ resultado: "rechazada", esCentral: true }), TARIFA);
     expect(d.ingreso_flete_devolucion?.toFixed(2)).toBe("600.00");
     expect(d.ingreso_iva_flete_devolucion?.toFixed(2)).toBe("78.00"); // 600 * 13%
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// FICHA 301 (2026-08-28) — UNA DEVUELTA NO GENERA NADA.
+//
+// Es un cambio de REGLA DE NEGOCIO, no la correccion de un fallo: hasta esa fecha `devuelta`
+// cobraba el flete de devolucion + IVA igual que `rechazada`, por diseño de la F1.4. El
+// humano lo cambio con dos cierres solicitados encima: 9 ordenes devueltas a ₡2.400 de flete
+// devuelto GAM + 13 % = ₡24.408,00 que se habrian cobrado a las tiendas al aprobarlos.
+//
+// El bloque de abajo fija los CUATRO resultados de golpe, y esa totalidad es el punto: un
+// test que solo dijera "devuelta no cobra" tambien pasaria si se dejara de cobrar SIEMPRE,
+// que es la forma mas cara de romper esto. Mutaciones comprobadas contra estos casos:
+//   (a) devolver `devuelta` a la condicion  -> rojo en los casos `devuelta` y `reprogramada`;
+//   (b) sacar `rechazada` de la condicion   -> rojo en el caso `rechazada`.
+// ---------------------------------------------------------------------------------------
+describe("derivarIngresoOrden — los CUATRO resultados (ficha 301)", () => {
+  const CONCEPTOS_DEVOLUCION = ["ingreso_flete_devolucion", "ingreso_iva_flete_devolucion"] as const;
+
+  it("entregada: cobra el flete NORMAL + su IVA, y NADA de devolucion", () => {
+    const d = derivarIngresoOrden(input({ resultado: "entregada", esCentral: true }), TARIFA);
+    expect(d.ingreso_flete?.toFixed(2)).toBe("1500.00"); // columna GAM
+    expect(d.ingreso_iva_flete?.toFixed(2)).toBe("195.00");
+    for (const c of CONCEPTOS_DEVOLUCION) expect(d[c]).toBeUndefined();
+  });
+
+  it("rechazada: SIGUE cobrando el flete de devolucion + su IVA, con los mismos montos", () => {
+    // La mitad que NO cambia. Si esto se pusiera en cero, Ordenex dejaria de facturar los
+    // retornos que si ocurren.
+    const d = derivarIngresoOrden(input({ resultado: "rechazada", esCentral: true }), TARIFA);
+    expect(d.ingreso_flete_devolucion?.toFixed(2)).toBe("600.00"); // valorFleteDevueltoGam
+    expect(d.ingreso_iva_flete_devolucion?.toFixed(2)).toBe("78.00"); // 600 * 13%
+    expect(d.ingreso_flete).toBeUndefined();
+  });
+
+  it("devuelta: NO APORTA A NINGUN CONCEPTO (objeto vacio, no ceros)", () => {
+    // `toEqual({})` y no "los seis en cero": un concepto AUSENTE no entra en el agregado; un
+    // 0.00 explicito si participa de la suma (ver `agregarIngresosPorConcepto`).
+    for (const esCentral of [false, true]) {
+      for (const esZonaEspecial of [false, true]) {
+        expect(
+          derivarIngresoOrden(input({ resultado: "devuelta", esCentral, esZonaEspecial }), TARIFA),
+        ).toEqual({});
+      }
+    }
+  });
+
+  it("reprogramada: sigue sin aportar nada (no se movio de sitio)", () => {
+    expect(derivarIngresoOrden(input({ resultado: "reprogramada" }), TARIFA)).toEqual({});
+  });
+
+  it("devuelta y reprogramada dan lo MISMO; rechazada da algo DISTINTO de las dos", () => {
+    // La distincion explicita: la devuelta paso a comportarse como la reprogramada, y ni una
+    // ni otra se parecen a la rechazada. Una mutacion que dejara de cobrar SIEMPRE igualaria
+    // las tres y este caso se pondria rojo.
+    const devuelta = derivarIngresoOrden(input({ resultado: "devuelta" }), TARIFA);
+    const reprogramada = derivarIngresoOrden(input({ resultado: "reprogramada" }), TARIFA);
+    const rechazada = derivarIngresoOrden(input({ resultado: "rechazada" }), TARIFA);
+    expect(devuelta).toEqual(reprogramada);
+    expect(rechazada).not.toEqual(devuelta);
+    expect(Object.keys(rechazada)).toHaveLength(2);
+  });
+
+  it("el cierre de los DOS cierres pendientes: 9 devueltas GAM ya no facturan ₡24.408,00", () => {
+    // Los numeros de la ficha 301, medidos en produccion el 2026-08-28 sobre los dos cierres
+    // solicitados y sin aprobar: 9 ordenes devueltas a ₡2.400,00 de flete devuelto GAM al
+    // 13 % de IVA. 9 * 2400 = 21.600 + 2.808 de IVA = 24.408,00.
+    const tarifaProd: TarifaVigente = {
+      ...TARIFA,
+      valorFleteDevueltoGam: "2400.00",
+      ivaFlete: "13.00",
+    };
+    const nueveDevueltas = Array.from({ length: 9 }, () => ({
+      input: input({ resultado: "devuelta" as const, esCentral: true }),
+      tarifa: tarifaProd,
+    }));
+
+    // ANTES de la 301 esto emitia 21.600,00 + 2.808,00. Ahora no emite NINGUN concepto.
+    expect(agregarIngresosPorConcepto(nueveDevueltas)).toEqual([]);
+
+    // Y la contraprueba de que la tarifa y el escenario son los correctos: las MISMAS nueve
+    // ordenes, si acabaran rechazadas, si facturarian esos ₡24.408,00.
+    const nueveRechazadas = nueveDevueltas.map((g) => ({
+      ...g,
+      input: { ...g.input, resultado: "rechazada" as const },
+    }));
+    const agg = Object.fromEntries(
+      agregarIngresosPorConcepto(nueveRechazadas).map((a) => [a.categoria, a.monto]),
+    );
+    expect(agg.ingreso_flete_devolucion).toBe("21600.00");
+    expect(agg.ingreso_iva_flete_devolucion).toBe("2808.00");
+    expect(
+      new Prisma.Decimal(agg.ingreso_flete_devolucion)
+        .plus(agg.ingreso_iva_flete_devolucion)
+        .toFixed(2),
+    ).toBe("24408.00");
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// FICHA 247 — EL DOBLE COBRO, MEDIDO EN PRODUCCION (orden 63050 de NUFORM: ₡2.200 + 13 % el
+// 2026-07-22 como `devuelta` y otra vez el 2026-07-28 como `rechazada`, sobrecoste ₡2.486).
+//
+// La 301 lo cierra por construccion: el primer cobro deja de existir. Este test lo AFIRMA
+// recorriendo el camino completo de aquella orden, para que quede rojo si alguien devuelve
+// `devuelta` a la condicion "por simetria".
+// ---------------------------------------------------------------------------------------
+describe("una devuelta que acaba rechazada cobra UNA sola vez (fichas 247/301)", () => {
+  const TARIFA_63050: TarifaVigente = { ...TARIFA, valorFleteDevueltoGam: "2200.00" };
+  const enGam = { esCentral: true as const };
+
+  it("los dos cierres de la orden 63050 juntos facturan el retorno UNA vez, al rechazarse", () => {
+    // Cierre del 2026-07-22: la gestion fue `devuelta`. Cierre del 28: `rechazada`.
+    const cierre22 = agregarIngresosPorConcepto([
+      { input: input({ resultado: "devuelta", ...enGam }), tarifa: TARIFA_63050 },
+    ]);
+    const cierre28 = agregarIngresosPorConcepto([
+      { input: input({ resultado: "rechazada", ...enGam }), tarifa: TARIFA_63050 },
+    ]);
+
+    // El primer cierre no factura NADA por esa orden: ahi estaba el sobrecoste.
+    expect(cierre22).toEqual([]);
+
+    // El segundo factura el retorno una vez: 2200 + 13% = 2486.00, que es exactamente el
+    // sobrecoste que la 247 midio como cobrado DE MAS.
+    const c28 = Object.fromEntries(cierre28.map((a) => [a.categoria, a.monto]));
+    expect(c28.ingreso_flete_devolucion).toBe("2200.00");
+    expect(c28.ingreso_iva_flete_devolucion).toBe("286.00");
+
+    // Suma de los DOS cierres = un solo cobro de retorno, no dos.
+    const total = [...cierre22, ...cierre28]
+      .filter((a) => a.categoria.includes("devolucion"))
+      .reduce((acc, a) => acc.plus(a.monto), new Prisma.Decimal(0));
+    expect(total.toFixed(2)).toBe("2486.00");
+  });
+
+  it("y da igual cuantas devueltas haya antes del rechazo: el retorno se cobra una vez", () => {
+    // Tres intentos fallidos (cron de SLA liberando y reprogramando) y un rechazo final.
+    const agg = agregarIngresosPorConcepto([
+      { input: input({ resultado: "devuelta", ...enGam }), tarifa: TARIFA_63050 },
+      { input: input({ resultado: "devuelta", ...enGam }), tarifa: TARIFA_63050 },
+      { input: input({ resultado: "devuelta", ...enGam }), tarifa: TARIFA_63050 },
+      { input: input({ resultado: "rechazada", ...enGam }), tarifa: TARIFA_63050 },
+    ]);
+    const map = Object.fromEntries(agg.map((a) => [a.categoria, a.monto]));
+    expect(map.ingreso_flete_devolucion).toBe("2200.00"); // x1, no x4
+    expect(map.ingreso_iva_flete_devolucion).toBe("286.00");
   });
 });
 
@@ -130,10 +278,10 @@ describe("agregarIngresosPorConcepto (R10)", () => {
     expect(cats).not.toContain("ingreso_iva_comision_cod");
   });
 
-  it("cierre mixto (entregada + devuelta): emite conceptos de ambos caminos", () => {
+  it("cierre mixto (entregada + rechazada): emite conceptos de ambos caminos", () => {
     const agg = agregarIngresosPorConcepto([
       { input: input({ resultado: "entregada", cobraComision: true }), tarifa: TARIFA },
-      { input: input({ resultado: "devuelta" }), tarifa: TARIFA },
+      { input: input({ resultado: "rechazada" }), tarifa: TARIFA },
     ]);
     const cats = agg.map((a) => a.categoria);
     expect(cats).toEqual(
@@ -146,6 +294,20 @@ describe("agregarIngresosPorConcepto (R10)", () => {
         "ingreso_iva_flete_devolucion",
       ]),
     );
+  });
+
+  it("ficha 301: una devuelta dentro de un cierre mixto NO añade ningun concepto", () => {
+    // El mismo cierre, con y sin la devuelta: byte a byte lo mismo. Si la devuelta volviera a
+    // facturar, el segundo agregado traeria dos conceptos mas y montos distintos.
+    const entregada = { input: input({ resultado: "entregada" as const }), tarifa: TARIFA };
+    const sinDevuelta = agregarIngresosPorConcepto([entregada]);
+    const conDevuelta = agregarIngresosPorConcepto([
+      entregada,
+      { input: input({ resultado: "devuelta" }), tarifa: TARIFA },
+      { input: input({ resultado: "devuelta", esCentral: true }), tarifa: TARIFA },
+    ]);
+    expect(conDevuelta).toEqual(sinDevuelta);
+    expect(conDevuelta.map((a) => a.categoria)).not.toContain("ingreso_flete_devolucion");
   });
 
   it("R9/R10: todas sin tarifa -> ningun concepto (todo 0.00, omitidos)", () => {

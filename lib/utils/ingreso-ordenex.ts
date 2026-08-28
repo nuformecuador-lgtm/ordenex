@@ -18,10 +18,28 @@ import type { OrigenFlete } from "@/lib/types/tarifa";
  * - `entregada` -> flete (valorFleteGam si esCentral, si no valorFlete) + IVA del flete; y
  *   SOLO si `cobraComision === true`: comision COD (% de montoCobrar) + su IVA. Si
  *   `cobraComision === false`, comision y su IVA quedan AUSENTES (no "0.00" forzado).
- * - `devuelta`|`rechazada` -> flete de DEVOLUCION (valorFleteDevueltoGam si esCentral, si no
+ * - `rechazada` -> flete de DEVOLUCION (valorFleteDevueltoGam si esCentral, si no
  *   valorFleteDevuelto) + su IVA (mismo % ivaFlete). SIN comision COD (no hubo recaudo).
+ * - `devuelta` -> NO APORTA A NINGUN CONCEPTO (ver el bloque de abajo).
  * - `reprogramada` (u otro en transito) -> no aporta a ningun concepto.
  * - `tarifa === null` (tienda sin tarifa vigente) -> todos los conceptos 0.00, sin lanzar (R9).
+ *
+ * ⚠️ REGLA DE NEGOCIO CAMBIADA EL 2026-08-28 (ficha 301) — UNA `devuelta` NO GENERA NADA.
+ * Hasta esa fecha `devuelta` cobraba el flete de devolucion + IVA exactamente igual que
+ * `rechazada`, y NO era un bug: era el diseño original de la F1.4 y el enum del ledger lo
+ * documentaba asi. El humano cambio la REGLA, no la implementacion. El motivo es el que ya
+ * dice la maquina de estados: una `devuelta` es un INTENTO FALLIDO que sigue vivo —se puede
+ * liberar por el cron de SLA (99), reprogramar la tienda (100) o recuperar a bodega (100)— y
+ * el paquete no ha vuelto a la tienda; la que SI devuelve el paquete es `rechazada`
+ * (`devolucion_rechazada` de la 139: al aprobar el cierre pasa a `por_devolver` /
+ * `por_devolver_a_tienda`). Se cobra el retorno cuando el retorno ocurre, no antes.
+ *
+ * LA CATEGORIA `ingreso_flete_devolucion` SE QUEDA: la sigue emitiendo `rechazada`, con el
+ * MISMO monto y el MISMO IVA que antes de hoy. Lo unico que se fue es la `devuelta`.
+ *
+ * MEDIDO ANTES DE TOCAR NADA (ficha 301): `wallet_movimiento` y `wallet_tienda_movimiento`
+ * estaban a CERO y no habia ninguna `devuelta` dentro de un cierre APROBADO, asi que este
+ * cambio no deja historico que corregir ni necesita backfill.
  *
  * TARIFA ESPECIAL POR DISTRITO (2026-08-25). La feature 274 declaro en su R40 que
  * `tarifas.tarifa_especial` y `distrito.zona_especial` existian y NO cobraban, y dejo un test
@@ -152,7 +170,11 @@ export function derivarIngresoOrden(
     return out;
   }
 
-  if (input.resultado === "devuelta" || input.resultado === "rechazada") {
+  // Ficha 301 (2026-08-28): SOLO `rechazada`. La `devuelta` estuvo aqui hasta esa fecha y se
+  // fue por decision de negocio, no por un fallo: el retorno se cobra cuando el paquete vuelve
+  // de verdad a la tienda, y eso es `rechazada`. Volver a meter `devuelta` en esta condicion
+  // re-abre 24.408,00 de cobro sobre los dos cierres que estaban solicitados ese dia.
+  if (input.resultado === "rechazada") {
     const fleteDev = resolverFlete(tarifa, input).fleteDevuelto;
     return {
       ingreso_flete_devolucion: round2(fleteDev),
@@ -160,7 +182,7 @@ export function derivarIngresoOrden(
     };
   }
 
-  // reprogramada (u otro en transito): no aporta a ningun concepto.
+  // `devuelta` (301), `reprogramada` (u otro en transito): no aportan a ningun concepto.
   return {};
 }
 
@@ -317,12 +339,13 @@ export function gananciaOrdenex(ingresoTotal: string, pagoMensajero: string): st
  * Pago a la tienda: la plata RECIBIDA (total general del cierre) menos los dos conceptos que
  * Ordenex le factura sobre esa plata — flete + IVA y comision + IVA.
  *
- * NO descuenta el flete de devolucion + IVA: una devolucion no cobra COD, asi que no aporta
- * al total general y no se le resta a lo recibido. Si un dia hay que cobrarlo tambien, se
- * cambia ACA y las dos pantallas de admin lo reflejan a la vez.
+ * NO descuenta el flete de devolucion + IVA (el de los RECHAZOS desde la ficha 301): un
+ * rechazo no cobra COD, asi que no aporta al total general y no se le resta a lo recibido. Si
+ * un dia hay que cobrarlo tambien, se cambia ACA y las dos pantallas de admin lo reflejan a
+ * la vez.
  *
- * Puede ser NEGATIVO si lo facturado supera lo recibido (p.ej. un cierre de puras
- * devoluciones con algo de efectivo suelto).
+ * Puede ser NEGATIVO si lo facturado supera lo recibido (p.ej. un cierre de puros rechazos
+ * con algo de efectivo suelto). Un cierre de puras DEVUELTAS ya no factura nada (301).
  *
  * Money-safe: resta con Prisma.Decimal sobre STRING, salida STRING escala 2.
  */

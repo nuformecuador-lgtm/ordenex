@@ -480,8 +480,13 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
       montoCobrar: "25900",
       cobraComision: true,
     });
+    // FICHA 301 (2026-08-28): la segunda llamada pide `rechazada`, no `devuelta`. El escenario
+    // publico se sigue llamando "devuelto" y sus importes NO cambian, pero el resultado de
+    // gestion que factura el retorno es `rechazada`: una `devuelta` es un intento fallido que
+    // sigue vivo y desde esa fecha no genera ingreso alguno. Si esto volviera a `devuelta`, la
+    // cotizacion publicaria ceros y le prometeria al integrador que un retorno es gratis.
     expect(segunda[0]).toEqual({
-      resultado: "devuelta",
+      resultado: "rechazada",
       esCentral: false,
       esZonaEspecial: false,
       montoCobrar: "25900",

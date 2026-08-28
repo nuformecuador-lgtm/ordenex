@@ -4,6 +4,7 @@ import {
   PlantillaDuplicadaError,
   type CreatePlantillaData,
   type IPlantillaMensajeRepository,
+  type ListarUsablesParaTextoParams,
   type ListPlantillasParams,
   type ListPlantillasResult,
   type PlantillaBienvenida,
@@ -329,13 +330,21 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
    * acto del maestro, con su cuerpo y sus variables del catalogo.
    */
 
-  async listarUsablesParaTexto(): Promise<PlantillaTextoEnviable[]> {
+  async listarUsablesParaTexto(
+    opciones: ListarUsablesParaTextoParams,
+  ): Promise<PlantillaTextoEnviable[]> {
     return this.prisma.plantillaMensaje.findMany({
       // `saved_not_aprobation` queda FUERA junto a `inactivo` (2026-08-26): una plantilla
       // guardada sin aprobacion es un borrador, y un borrador no se le ofrece al mensajero ni
       // por el camino wa.me, que no depende de Meta pero si del texto que el negocio dio por
       // bueno. `pending` SI sigue apareciendo: esa ya se envio y su texto es definitivo.
-      where: { ...VIGENTE, estado: { notIn: ["inactivo", "saved_not_aprobation"] } },
+      where: {
+        ...VIGENTE,
+        estado: { notIn: ["inactivo", "saved_not_aprobation"] },
+        // Las PLANTILLAS DE TIENDA solo se ofrecen donde su superficie lo permite. Ver
+        // `ListarUsablesParaTextoParams.incluirDeTienda`.
+        ...(opciones.incluirDeTienda ? {} : { plantillaTienda: false }),
+      },
       select: { id: true, nombre: true, cuerpo: true, variables: true },
       orderBy: { nombre: "asc" },
     });

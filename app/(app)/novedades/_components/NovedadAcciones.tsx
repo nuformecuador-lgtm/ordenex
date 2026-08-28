@@ -243,6 +243,8 @@ export function NovedadAcciones(props: NovedadAccionesProps) {
                 orden={novedad}
                 size="sm"
                 disparador="whatsapp"
+                // ESTA es la superficie de las plantillas de tienda, y la unica.
+                incluirPlantillasDeTienda
               />
             </div>
           );

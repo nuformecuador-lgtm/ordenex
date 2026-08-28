@@ -1096,9 +1096,12 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
   }
 
   it("R5: aprobar un CierreDia inserta el credito COD + debitos por tienda (via el repo real)", async () => {
+    // Ficha 301 (2026-08-28): la segunda gestion era `devuelta`. Pasa a `rechazada`, que es el
+    // resultado que sigue debitando el retorno a la tienda; una devuelta ya no debita nada y
+    // dejaria a `t2` sin ninguna fila que comprobar.
     const { repo, tiendaRows } = buildStack([
       gestion("entregada", "t1", "10000.00"),
-      gestion("devuelta", "t2", null),
+      gestion("rechazada", "t2", null),
     ]);
     const { service } = newService({ repo });
 
@@ -1114,7 +1117,7 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
     const t1 = tiendaRows.filter((m) => m.tiendaId === "t1");
     const t1cats = t1.map((m) => m.categoria);
     expect(t1cats).toEqual(expect.arrayContaining(["cod_recaudado", "flete", "iva_flete", "comision_cod", "iva_comision_cod"]));
-    // t2 (devuelta, flag on): debitos de devolucion SIN credito (saldo negativo).
+    // t2 (rechazada, flag on): debitos de devolucion SIN credito (saldo negativo).
     const t2 = tiendaRows.filter((m) => m.tiendaId === "t2");
     const t2cats = t2.map((m) => m.categoria);
     expect(t2cats).toEqual(expect.arrayContaining(["flete_devolucion", "iva_flete_devolucion"]));

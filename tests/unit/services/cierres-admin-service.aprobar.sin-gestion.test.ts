@@ -297,8 +297,12 @@ describe("264/B8 — aprobar un cierre CON ordenes sin gestionar mueve el mismo 
     expect(porCategoria.ingreso_iva_flete).toBe("130.00");
     expect(porCategoria.ingreso_comision_cod).toBe("500.00");
     expect(porCategoria.ingreso_iva_comision_cod).toBe("65.00");
-    expect(porCategoria.ingreso_flete_devolucion).toBe("800.00");
-    expect(porCategoria.ingreso_iva_flete_devolucion).toBe("104.00");
+    // FICHA 301 (2026-08-28): eran 800.00 y 104.00 —el doble— porque la devuelta del fixture
+    // facturaba lo mismo que la rechazada. Desde esa fecha solo paga la rechazada: 400.00 de
+    // flete devuelto y 52.00 de IVA. Los cuatro literales de arriba NO se movieron, que es la
+    // otra mitad de lo que este caso mide: el cambio no arrastro la entrega.
+    expect(porCategoria.ingreso_flete_devolucion).toBe("400.00");
+    expect(porCategoria.ingreso_iva_flete_devolucion).toBe("52.00");
   });
 
   it("R22: ninguna orden barrida aparece como origen de un movimiento de dinero", async () => {
