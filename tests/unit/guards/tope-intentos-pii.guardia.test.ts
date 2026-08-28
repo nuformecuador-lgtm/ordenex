@@ -103,6 +103,7 @@ describe("276/R38 — el aviso agregado del cron de liberacion no lleva PII", ()
           gestionEsVisitaReal: true,
         },
       ]),
+      findOrdenesLiberablesDeCierre: vi.fn(async () => []), // ficha 315: sin uso en este caso
       liberarOrden: vi.fn(async () => true),
       findLiberadasHoy: vi.fn(async () => []),
     };

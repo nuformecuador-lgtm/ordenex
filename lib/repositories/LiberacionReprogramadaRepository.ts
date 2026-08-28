@@ -39,10 +39,49 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
    * `@db.Date` a medianoche UTC; `hoyCR` viene en la misma convencion (util fecha-cr).
    */
   async findOrdenesLiberables(hoyCR: Date): Promise<OrdenLiberableRow[]> {
+    return this.buscarLiberables(hoyCR, null);
+  }
+
+  /**
+   * FICHA 315 — las mismas candidatas, acotadas al cierre que se acaba de aprobar.
+   *
+   * El `some` sobre `gestion_orden` es el PREFILTRO indexado (`@@index([cierreId])`): reduce el
+   * escaneo a las ordenes que tocaron ese cierre. La exactitud la pone la correlacion en memoria
+   * de `buscarLiberables` —la gestion VIGENTE tiene que ser la de ESE cierre—, que es donde ya
+   * vive el filtro de fecha por la misma razon: la gestion vigente sale de un `take: 1` y Prisma
+   * no deja filtrar por ella desde el `where` del padre.
+   */
+  async findOrdenesLiberablesDeCierre(
+    cierreId: string,
+    hoyCR: Date,
+  ): Promise<OrdenLiberableRow[]> {
+    return this.buscarLiberables(hoyCR, cierreId);
+  }
+
+  /**
+   * El cuerpo COMPARTIDO por las dos consultas de arriba. Se comparte a proposito: si el camino
+   * del evento (315) tuviera su propio `select`, su propio `take: 1` o su propio filtro de fecha,
+   * seria una segunda regla que puede divergir de la del cron — y la divergencia mas cara aqui es
+   * justo la que nadie ve, porque las dos consultas devuelven filas plausibles.
+   *
+   * `cierreId === null` = la corrida COMPLETA del reloj (46/276), byte a byte la de siempre.
+   */
+  private async buscarLiberables(
+    hoyCR: Date,
+    cierreId: string | null,
+  ): Promise<OrdenLiberableRow[]> {
     const rows = await this.prisma.orden.findMany({
       where: {
         deletedAt: null, // R10
         estatus: { value: ESTATUS_REPROGRAMADA }, // R10
+        // FICHA 315: prefiltro por cierre. Ausente en la corrida del reloj.
+        ...(cierreId === null
+          ? {}
+          : {
+              gestiones: {
+                some: { cierreId, resultado: RESULTADO_REPROGRAMADA, anuladaAt: null },
+              },
+            }),
       },
       select: {
         id: true,
@@ -90,7 +129,15 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
       const gestion = r.gestiones[0];
       const fecha = gestion?.fechaReprogramacion ?? null;
       // R11: sin fecha vigente o fecha futura -> permanece bloqueada.
+      //
+      // 💰 FICHA 315 — ESTA LINEA ES LA QUE IMPIDE EL DEFECTO PEOR. Vale para los dos caminos y
+      // por el mismo motivo: la fecha de reprogramacion es un COMPROMISO con el destinatario. Al
+      // aprobar un cierre se libera lo que YA VENCIO; lo del 31/08 sigue esperando al calendario.
       if (fecha === null || fecha.getTime() > hoyCR.getTime()) continue;
+      // FICHA 315: acotado a un cierre, la gestion VIGENTE tiene que ser la de ESE cierre. El
+      // `some` de arriba solo garantiza que ALGUNA gestion lo fuera; si la ultima reprogramada es
+      // de otro cierre, la que manda es aquella y esta aprobacion no dice nada sobre ella.
+      if (cierreId !== null && (gestion?.cierreId ?? null) !== cierreId) continue;
       liberables.push({
         id: r.id,
         zonaId: r.zonaId,

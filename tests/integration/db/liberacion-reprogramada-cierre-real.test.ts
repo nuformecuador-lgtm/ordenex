@@ -315,6 +315,10 @@ describeSiHayBase("276/T6 — `findOrdenesLiberables` contra Postgres real", () 
       const liberadas: string[] = [];
       const repoEspia = {
         findOrdenesLiberables: (hoy: Date) => ctx.repo.findOrdenesLiberables(hoy),
+        // FICHA 315: el otro disparador tiene su propio archivo contra Postgres
+        // (`liberacion-al-aprobar-cierre-real.test.ts`); aqui solo se mide la corrida del reloj.
+        findOrdenesLiberablesDeCierre: (cierreId: string, hoy: Date) =>
+          ctx.repo.findOrdenesLiberablesDeCierre(cierreId, hoy),
         liberarOrden: async (input: { ordenId: string }) => {
           liberadas.push(ctx.clavePorId.get(input.ordenId) ?? input.ordenId);
           return true;
