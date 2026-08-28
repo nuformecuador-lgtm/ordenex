@@ -200,6 +200,54 @@ describe("congelar — paridad EXACTA con el ranking en vivo (R3)", () => {
     ]);
   });
 
+  it("feature 297: el podio del 26/08 (tres a 0 entregas) sale VACIO del vivo Y del congelado", async () => {
+    // El caso real de produccion. Se mide en ESTE archivo —el de la paridad— porque los dos
+    // servicios comparten `lib/ranking/orden-ranking.ts` a proposito: si alguien reimplementara
+    // el criterio en uno de los dos, el vivo y el congelado divergirian justo aqui.
+    const datos: Datos = {
+      mensajeros: [
+        { id: "m-andres", nombre: "Andres" },
+        { id: "m-carlos", nombre: "Carlos" },
+        { id: "m-johel", nombre: "Johel" },
+      ],
+      asignadas: [
+        { mensajeroId: "m-andres", total: 21 },
+        { mensajeroId: "m-carlos", total: 25 },
+        { mensajeroId: "m-johel", total: 37 },
+      ],
+      entregadas: [], // NADIE entrego
+      premios: [
+        { posicion: 1, monto: "5000.00", descripcion: "Primer lugar" },
+        { posicion: 2, monto: null, descripcion: null },
+        { posicion: 3, monto: null, descripcion: null },
+      ],
+    };
+    const { service, vivo, escrituras } = buildService(datos);
+
+    await service.congelar(CORRIDA);
+    const enVivo = await vivo.obtenerRanking(MAESTRO, DENTRO_DEL_DIA);
+    if (enVivo.status !== "ok") throw new Error("el vivo debia responder ok");
+
+    // EN VIVO: los tres se listan, con su 0.0 %, y ninguno ocupa posicion ni lleva premio.
+    expect(enVivo.data.ranking.map((r) => r.mensajeroId)).toEqual([
+      "m-andres",
+      "m-carlos",
+      "m-johel",
+    ]);
+    expect(enVivo.data.ranking.map((r) => r.posicion)).toEqual([null, null, null]);
+    expect(enVivo.data.ranking.map((r) => r.pct)).toEqual(["0.0", "0.0", "0.0"]);
+    expect(enVivo.data.ranking.map((r) => r.premio)).toEqual([null, null, null]);
+
+    // CONGELADO: las tres filas se escriben (hay actividad, R5) y ninguna congela premio: el
+    // CHECK de la base solo deja monto donde hay posicion, y ya no hay ninguna.
+    expect(escrituras[0].filas.map((f) => [f.mensajeroId, f.puesto, f.posicion])).toEqual([
+      ["m-andres", 1, null],
+      ["m-carlos", 2, null],
+      ["m-johel", 3, null],
+    ]);
+    expect(escrituras[0].filas.map((f) => f.premioMonto)).toEqual([null, null, null]);
+  });
+
   it("los conteos congelados son los mismos enteros que muestra el vivo (R10)", async () => {
     const { service, vivo, escrituras } = buildService(escenario());
 
@@ -264,14 +312,17 @@ describe("congelar — filas congeladas (R5/R6/R7/R8/R16)", () => {
     expect(escrituras[0].filas[0]).toMatchObject({ entregadas: 3, asignadas: 0, posicion: null });
   });
 
-  it("`asignadas > 0` sin entregas ES actividad y produce fila (R5)", async () => {
+  it("`asignadas > 0` sin entregas ES actividad y produce fila (R5), pero SIN podio (297)", async () => {
     const { service, escrituras } = buildService({
       mensajeros: [{ id: "m1", nombre: "Ana" }],
       entregadas: [],
       asignadas: [{ mensajeroId: "m1", total: 6 }],
     });
     await service.congelar(CORRIDA);
-    expect(escrituras[0].filas[0]).toMatchObject({ entregadas: 0, asignadas: 6, posicion: 1 });
+    // R5 sigue: la fila se congela, con sus dos conteos. Lo que la feature 297 cambia es la
+    // POSICION: 0 entregas ya no ocupa podio, asi que aqui era `1` y ahora es `null`.
+    expect(escrituras[0].filas[0]).toMatchObject({ entregadas: 0, asignadas: 6, posicion: null });
+    expect(escrituras[0].filas).toHaveLength(1);
   });
 
   it("la fila lleva puesto, posicion, id, nombre congelado y los dos conteos (R6/R16)", async () => {

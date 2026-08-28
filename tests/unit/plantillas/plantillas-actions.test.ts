@@ -28,6 +28,7 @@ function plantilla(overrides: Partial<PlantillaPublica> = {}): PlantillaPublica 
     variablesNombres: {},
     estado: "pending",
     welcomeMessage: false,
+    plantillaTienda: false,
     templateId: null,
     templateIdioma: null,
     createdBy: "m1",

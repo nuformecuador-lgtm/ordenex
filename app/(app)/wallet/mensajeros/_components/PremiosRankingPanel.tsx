@@ -135,6 +135,10 @@ function avisoDeRegistro(resultado: RegistrarPremioActionResult): AvisoDeFila["t
       return PREMIOS_RANKING.yaAnulado;
     case "sin_premio":
       return PREMIOS_RANKING.sinPremio;
+    // Feature 297: el podio de un día ya congelado puede llevar a alguien con 0 entregas. El
+    // botón sigue ahí —la fila es historia y se muestra tal cual— y el rechazo dice POR QUÉ.
+    case "sin_entregas":
+      return PREMIOS_RANKING.sinEntregas;
     case "sin_cierre":
       return PREMIOS_RANKING.sinCierre;
     case "cierre_no_aprobado":

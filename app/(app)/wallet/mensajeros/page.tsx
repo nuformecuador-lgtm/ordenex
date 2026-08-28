@@ -7,8 +7,7 @@ import { listarCuentasPorPagarPaginadoAction } from "@/lib/actions/wallet-mensaj
 import { fechaObjetivo } from "@/lib/ranking/snapshot-dia";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 
-import { CuentasPorPagarTable } from "./_components/CuentasPorPagarTable";
-import { PremiosRankingPanel } from "./_components/PremiosRankingPanel";
+import { WalletMensajerosTabs } from "./_components/WalletMensajerosTabs";
 
 /**
  * Feature 44 (T14, R18/R19/R21/R22) — pagina `/wallet/mensajeros`: las CUENTAS POR PAGAR a
@@ -57,21 +56,29 @@ export default async function WalletMensajerosPage() {
     >
       <section aria-label="Cuentas por pagar a mensajeros" className="flex flex-col gap-4">
         {/*
-          Feature 293 (T5.3, R1) — el panel de PREMIOS DEL RANKING, encima de la tabla. Va aquí
-          y en ningún otro sitio: es la única puerta desde la que se registra el premio del
-          podio. El rol NO se vuelve a decidir dentro —arriba ya hubo `notFound()` para todo lo
-          que no es acceso total—, y el servicio responde `forbidden` con el mismo predicado.
-        */}
-        <PremiosRankingPanel
-          fechaInicial={fechaInicialPremios}
-          fechaMaxima={fechaMaximaPremios}
-        />
+          Feature 293 (T5.3, R1) — el panel de PREMIOS DEL RANKING sigue viviendo AQUÍ y en
+          ningún otro sitio: es la única puerta desde la que se registra el premio del podio. El
+          rol NO se vuelve a decidir dentro —arriba ya hubo `notFound()` para todo lo que no es
+          acceso total—, y el servicio responde `forbidden` con el mismo predicado.
 
-        <CuentasPorPagarTable
-          initialData={{
-            items: cuentasResult.items,
-            total: cuentasResult.total,
-            pageSize: cuentasResult.pageSize,
+          FICHA 298 (2026-08-27) — lo que cambia es DÓNDE, no QUÉ. Hasta hoy el panel iba apilado
+          encima de la tabla, en esta misma sección, y la pantalla quedó desordenada. Ahora cada
+          bloque tiene su PESTAÑA (`WalletMensajerosTabs`), con las cuentas por pagar de entrada
+          porque es a lo que se entra aquí. Los datos siguen resolviéndose en el SERVIDOR y
+          bajando ya serializados por props (R21): el envoltorio de pestañas es cliente, pero no
+          lee nada por su cuenta.
+        */}
+        <WalletMensajerosTabs
+          cuentas={{
+            initialData: {
+              items: cuentasResult.items,
+              total: cuentasResult.total,
+              pageSize: cuentasResult.pageSize,
+            },
+          }}
+          premios={{
+            fechaInicial: fechaInicialPremios,
+            fechaMaxima: fechaMaximaPremios,
           }}
         />
       </section>

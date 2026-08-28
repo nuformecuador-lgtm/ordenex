@@ -33,19 +33,32 @@ const DIA = new Date("2026-08-26T00:00:00.000Z");
  */
 const TX_DE_LA_TRANSACCION = { soyLaTransaccion: true } as unknown as PremioTx;
 
+/**
+ * La fila del podio por defecto: un premio REGISTRABLE.
+ *
+ * Feature 297: antes este molde traia `entregadas: 0` —la foto del 26/08—, y desde que registrar
+ * exige al menos una entrega eso convertiria todos los casos de escritura en un `sin_entregas`
+ * que no prueba nada de lo que dicen. El 0/21 sigue vivo, pero EXPLICITO, en `filaDel26` y en los
+ * tests que hablan de el.
+ */
 function fila(over: Partial<PodioFilaConFecha> = {}): PodioFilaConFecha {
   return {
     filaId: "f1",
     posicion: 1,
     mensajeroId: "m1",
     mensajeroNombre: "Kevin Rojas",
-    entregadas: 0,
+    entregadas: 18,
     asignadas: 21,
     premioMonto: "5000.00",
     premioDescripcion: "Bono por buen rendimiento",
     fecha: DIA,
     ...over,
   };
+}
+
+/** El 26/08 REAL: primer puesto por orden alfabetico, 0 de 21, con 5.000 congelados. */
+function filaDel26(over: Partial<PodioFilaConFecha> = {}): PodioFilaConFecha {
+  return fila({ mensajeroNombre: "Andres", entregadas: 0, asignadas: 21, ...over });
 }
 
 const CIERRE_APROBADO: CierreDelDiaRow = {
@@ -253,12 +266,28 @@ describe("R4/R5/R6/R9 — el podio de un dia con el estado de cada premio", () =
   });
 
   it("R5: `entregadas / asignadas` viajan SIEMPRE, tambien el `0 / 21` del 26/08", async () => {
-    const d = dobles();
+    const d = dobles({ podio: [filaDel26()] });
 
     const r = await d.service.listarPremiosDelDia({ fecha: "2026-08-26" }, MAESTRO);
 
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.filas[0]).toMatchObject({ entregadas: 0, asignadas: 21 });
+  });
+
+  it("feature 297: la fila del 26/08 se SIGUE viendo con su premio — es historia", async () => {
+    // El snapshot congelado no se reescribe: el podio del 26 dice lo que dijo, y el panel lo
+    // pinta entero. Lo que cambia es que registrarlo se niega (ver el bloque de la 297 abajo).
+    const d = dobles({ podio: [filaDel26()] });
+
+    const r = await d.service.listarPremiosDelDia({ fecha: "2026-08-26" }, MAESTRO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.filas[0]).toMatchObject({
+      posicion: 1,
+      mensajeroNombre: "Andres",
+      premioMonto: "5000.00",
+      entregadas: 0,
+    });
   });
 
   it("R4/R15: el nombre y el monto son los CONGELADOS, y el monto es STRING", async () => {
@@ -474,6 +503,55 @@ describe("R7/R11/R12/R18/R32 — los desenlaces del registro que NO escriben", (
     }
   });
 
+  it("feature 297: una fila CONGELADA con 0 entregas -> `sin_entregas`, sin escribir nada", async () => {
+    // Es lo UNICO que cubre los dias ya congelados: el 26/08 sigue teniendo a Andres 1.o con sus
+    // 5.000, y sin esta guarda ese premio seguiria siendo pagable manana.
+    const d = dobles({ filaPorId: filaDel26() });
+
+    expect(await d.service.registrarPremio({ filaId: "f1" }, MAESTRO)).toEqual({
+      status: "sin_entregas",
+    });
+    // El motivo es PROPIO, no un error generico: la pantalla dice por que.
+    expect(d.confirmadoLibro).toHaveLength(0);
+    expect(d.confirmadoCaja).toHaveLength(0);
+    // Y se corta ANTES de resolver el cierre: el dato esta en la propia fila congelada.
+    expect(d.log).toEqual(["leer:fila"]);
+    expect(d.cierreRepo.resolverCierreDelDia).not.toHaveBeenCalled();
+  });
+
+  it("feature 297: no se salta ni con el cierre APROBADO y el premio congelado", async () => {
+    // El camino feliz completo salvo por las entregas. Si la guarda estuviera detras del cierre
+    // —o no estuviera—, este caso escribiria los 5.000.
+    const d = dobles({ filaPorId: filaDel26(), cierre: CIERRE_APROBADO });
+
+    expect(await d.service.registrarPremio({ filaId: "f1" }, MAESTRO)).toEqual({
+      status: "sin_entregas",
+    });
+    expect(d.libroRepo.crearMovimientos).not.toHaveBeenCalled();
+    expect(d.caja.emitirEgresoPremio).not.toHaveBeenCalled();
+  });
+
+  it("feature 297: con UNA entrega el registro pasa — el corte esta en cero, no mas arriba", async () => {
+    const d = dobles({ filaPorId: filaDel26({ entregadas: 1 }) });
+
+    expect(await d.service.registrarPremio({ filaId: "f1" }, MAESTRO)).toEqual({
+      status: "ok",
+      monto: "5000.00",
+      cierreId: "c1",
+    });
+    expect(d.confirmadoLibro).toHaveLength(1);
+  });
+
+  it("feature 297: R7 manda sobre la 297 — sin premio congelado se dice `sin_premio`", async () => {
+    // Las dos causas concurren en la misma fila. Se responde la que el maestro tiene que oir:
+    // ese dia no habia premio que registrar, entregas aparte.
+    const d = dobles({ filaPorId: filaDel26({ premioMonto: null }) });
+
+    expect(await d.service.registrarPremio({ filaId: "f1" }, MAESTRO)).toEqual({
+      status: "sin_premio",
+    });
+  });
+
   it("R11: sin cierre de ese dia -> `sin_cierre`, causa EXACTA y sin escribir", async () => {
     const d = dobles({ cierre: null });
 
@@ -656,5 +734,19 @@ describe("R29/R30/R31/R33 — la anulacion", () => {
     expect(await d.service.anularPremio({ filaId: "x", motivo: "x" }, MAESTRO)).toEqual({
       status: "no_encontrado",
     });
+  });
+
+  it("feature 297: un premio YA registrado de una fila con 0 entregas SI se puede anular", async () => {
+    // La guarda de la 297 es del COBRO, no de la correccion. Si se bloqueara tambien aqui, un
+    // premio escrito antes de la 297 sobre una fila de 0 entregas quedaria devengado para
+    // siempre: justo el dinero que la ficha persigue.
+    const d = dobles({ filaPorId: filaDel26(), registradas: [PREMIO_YA_REGISTRADO] });
+
+    const r = await d.service.anularPremio({ filaId: "f1", motivo: "Nadie entrego ese dia" }, MAESTRO);
+
+    expect(r).toEqual({ status: "ok" });
+    expect(d.confirmadoLibro).toHaveLength(1);
+    expect(d.confirmadoLibro[0]).toMatchObject({ tipo: "pago", monto: "5000.00" });
+    expect(d.confirmadoCaja).toHaveLength(1);
   });
 });

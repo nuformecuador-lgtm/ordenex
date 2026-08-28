@@ -3,6 +3,7 @@
 import { MessagesSquare, Power, RotateCcw, Undo2 } from "lucide-react";
 
 import { ContactoButtons } from "@/components/shared/ContactoButtons";
+import { EnviarPlantillaWhatsappButton } from "@/components/shared/EnviarPlantillaWhatsappButton";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { grupoDeEstatus } from "@/lib/types/novedad-grupo";
@@ -221,12 +222,29 @@ export function NovedadAcciones(props: NovedadAccionesProps) {
     <div className="flex flex-wrap items-center gap-2">
       {acciones.map((accion) => {
         if (accion === "contacto") {
+          // EL GLOBO DE WHATSAPP YA NO ABRE UN CHAT VACIO (pedido humano 2026-08-27). Abrirlo
+          // vacio dejaba el trabajo a medias: quien atiende una novedad tenia que escribir a
+          // mano, cada vez, un mensaje que ya existe redactado y aprobado. Ahora lista las
+          // plantillas, ENSENA como queda cada una con los datos de esta orden, y al elegir
+          // abre WhatsApp con el texto puesto: solo queda darle a enviar.
+          //
+          // Se apaga el globo de `ContactoButtons` (`mostrarWhatsapp={false}`) y lo sustituye
+          // `EnviarPlantillaWhatsappButton` con el MISMO icono, tooltip y `aria-label`: para
+          // quien mira la fila no hay un boton nuevo, es el de siempre haciendo mas.
+          // «Llamar» no se toca.
           return (
-            <ContactoButtons
-              key={accion}
-              telefono={novedad.telefonoDest}
-              nombre={novedad.destinatario}
-            />
+            <div key={accion} className="flex items-center gap-2">
+              <ContactoButtons
+                telefono={novedad.telefonoDest}
+                nombre={novedad.destinatario}
+                mostrarWhatsapp={false}
+              />
+              <EnviarPlantillaWhatsappButton
+                orden={novedad}
+                size="sm"
+                disparador="whatsapp"
+              />
+            </div>
           );
         }
         // «+1 intento de contacto» no comparte la forma de las de icono: lleva estado propio, llama

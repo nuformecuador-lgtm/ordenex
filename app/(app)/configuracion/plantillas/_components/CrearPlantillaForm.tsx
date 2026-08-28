@@ -10,6 +10,7 @@ import {
 } from "@/lib/types/plantilla-mensaje";
 import { crearPlantilla } from "@/lib/actions/plantillas";
 
+import { PlantillaTiendaField } from "./PlantillaTiendaField";
 import { VariablesInsert } from "./VariablesInsert";
 
 type FieldErrors = Record<string, string[]>;
@@ -38,11 +39,12 @@ export const CrearPlantillaForm = forwardRef<CrearPlantillaFormHandle>(
   function CrearPlantillaForm(_props, ref) {
     const [nombre, setNombre] = useState("");
     const [cuerpo, setCuerpo] = useState("");
+    const [plantillaTienda, setPlantillaTienda] = useState(false);
     const [errors, setErrors] = useState<FieldErrors>({});
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     async function submit(): Promise<CrearPlantillaResult> {
-      const parsed = crearPlantillaSchema.safeParse({ nombre, cuerpo });
+      const parsed = crearPlantillaSchema.safeParse({ nombre, cuerpo, plantillaTienda });
       if (!parsed.success) {
         const fieldErrors = parsed.error.flatten().fieldErrors as FieldErrors;
         setErrors(fieldErrors);
@@ -78,6 +80,12 @@ export const CrearPlantillaForm = forwardRef<CrearPlantillaFormHandle>(
             className={TEXTAREA_CLASS}
           />
         </FormField>
+
+        <PlantillaTiendaField
+          id="plantilla-tienda"
+          checked={plantillaTienda}
+          onCheckedChange={setPlantillaTienda}
+        />
 
         <VariablesInsert
           textareaRef={textareaRef}

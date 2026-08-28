@@ -83,6 +83,11 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
   // la deja sin usar mientras tanto. Se pregunta ANTES de abrir el formulario, no después de
   // escribir: descubrir la consecuencia con el texto ya cambiado es descubrirla tarde.
   const [avisoEditar, setAvisoEditar] = useState<PlantillaListItemDTO | null>(null);
+  // Segunda puerta, en el GUARDADO. La primera (`avisoEditar`) se pregunta con el formulario
+  // aun cerrado; esta se pregunta con los cambios ya escritos, que es cuando el maestro sabe
+  // de verdad que esta a punto de mandar a Meta. No es la misma pregunta repetida: la primera
+  // evita entrar por error, esta evita salir por error.
+  const [confirmarGuardar, setConfirmarGuardar] = useState(false);
   const [enviarAprobacion, setEnviarAprobacion] = useState<PlantillaListItemDTO | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [desactivar, setDesactivar] = useState<PlantillaListItemDTO | null>(
@@ -116,8 +121,30 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
     }
   }
 
-  async function onConfirmEditar() {
+  /**
+   * Botón "Guardar" del formulario. NO guarda todavía si el guardado tiene consecuencia en
+   * Meta: pregunta primero. La decisión se toma con el valor VIVO del interruptor, no con el
+   * de la fila, porque encenderlo en esta misma edición ya deja el texto fuera de Meta y
+   * entonces no hay riesgo del que avisar.
+   */
+  async function onGuardarEditar() {
+    const row = editar;
+    if (!row) return;
+    const seVaAMeta =
+      !editarRef.current?.esPlantillaTienda() && !editarNoTieneConsecuencia(row);
+    if (seVaAMeta) {
+      setConfirmarGuardar(true);
+      return;
+    }
+    await guardarEdicion();
+  }
+
+  async function guardarEdicion() {
     const res = await editarRef.current?.submit();
+    // Se cierra SIEMPRE la confirmación, incluso sin resultado: si el guardado falló por
+    // validación, el error se pinta en el formulario que hay detrás y dejar el modal encima
+    // lo taparía; y si no hubo respuesta, un modal colgado es lo último que ayuda.
+    setConfirmarGuardar(false);
     if (!res) return;
     if (res.status === "ok") {
       await mutate();
@@ -132,13 +159,12 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
   }
 
   /**
-   * Abre la edición. Un BORRADOR (guardado sin aprobación y nunca enlazado con Meta) entra
-   * directo: editarlo no tiene consecuencia, sigue siendo un borrador. Cualquier otra pasa
-   * primero por el aviso, porque guardar la manda a revisión.
+   * Abre la edición. Entran directo las filas cuya edición no tiene consecuencia fuera de casa
+   * —un BORRADOR nunca enviado y una PLANTILLA DE TIENDA, ver `editarNoTieneConsecuencia`—.
+   * Cualquier otra pasa primero por el aviso, porque guardar la manda a revisión.
    */
   function onEditarClick(row: PlantillaListItemDTO) {
-    const esBorrador = row.estado === "saved_not_aprobation" && row.templateId === null;
-    if (esBorrador) setEditar(row);
+    if (editarNoTieneConsecuencia(row)) setEditar(row);
     else setAvisoEditar(row);
   }
 
@@ -153,6 +179,12 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
         toast.success("Plantilla enviada para aprobación.");
       } else if (res.status === "ya_enviada") {
         toast.info("Esa plantilla ya estaba en revisión.");
+      } else if (res.status === "no_aplica") {
+        // El botón no debería estar visible; si se llegó aquí, la fila cambió bajo los pies.
+        toast.info("Una plantilla de tienda no necesita aprobación de WhatsApp.");
+        await mutate();
+        setEnviarAprobacion(null);
+        return;
       } else if (res.status === "no_configurado") {
         toast.error("WhatsApp no está configurado: no hay a dónde enviarla.");
         return;
@@ -316,7 +348,7 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
         title="Editar plantilla"
         confirmLabel="Guardar"
         cancelLabel="Cancelar"
-        onConfirm={onConfirmEditar}
+        onConfirm={onGuardarEditar}
       >
         {editar ? (
           <EditarPlantillaForm ref={editarRef} plantilla={editar} />
@@ -339,6 +371,23 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
         closeOnConfirm={false}
         confirmDisabled={enviando}
         onConfirm={onConfirmEnviarAprobacion}
+      />
+
+      <Modal
+        open={confirmarGuardar}
+        onOpenChange={(open) => {
+          if (!open) setConfirmarGuardar(false);
+        }}
+        title="Guardar envía la plantilla para aprobación"
+        description={
+          editar
+            ? `Al guardar los cambios, "${editar.nombre}" se enviará de nuevo a WhatsApp para su aprobación y NO se podrá usar hasta que la aprueben. Esto no se puede cancelar una vez enviado.`
+            : undefined
+        }
+        confirmLabel="Guardar y enviar"
+        cancelLabel="Cancelar"
+        closeOnConfirm={false}
+        onConfirm={guardarEdicion}
       />
 
       <Modal
@@ -404,6 +453,17 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
       />
     </section>
   );
+}
+
+/**
+ * `true` cuando editar esta fila NO tiene consecuencia fuera de casa, que es el criterio que
+ * comparten las dos puertas (el aviso previo y la confirmación del guardado). Son dos casos:
+ * un BORRADOR que nunca se envió, y una PLANTILLA DE TIENDA, cuyo texto no va a Meta por
+ * ningún camino. Vive en una sola función para que las dos puertas no puedan divergir.
+ */
+function editarNoTieneConsecuencia(row: PlantillaListItemDTO): boolean {
+  if (row.plantillaTienda) return true;
+  return row.estado === "saved_not_aprobation" && row.templateId === null;
 }
 
 /** Traduce el `status` de error a un mensaje de UI (solo los que llegan como toast). */

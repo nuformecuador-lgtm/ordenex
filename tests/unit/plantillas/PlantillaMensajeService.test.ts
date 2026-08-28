@@ -23,6 +23,7 @@ function plantilla(overrides: Partial<PlantillaPublica> = {}): PlantillaPublica 
     variablesNombres: {},
     estado: "pending",
     welcomeMessage: false,
+    plantillaTienda: false,
     templateId: null,
     templateIdioma: null,
     createdBy: "m1",
@@ -65,7 +66,7 @@ beforeEach(() => {
 describe("R5: forbidden si el actor no es maestro", () => {
   it("todas las operaciones rechazan a un rol distinto de maestro", async () => {
     for (const actor of [ADMIN, DESCONOCIDO]) {
-      expect((await service.crear({ nombre: "N", cuerpo: "c" }, actor)).status).toBe("forbidden");
+      expect((await service.crear({ nombre: "N", cuerpo: "c", plantillaTienda: false }, actor)).status).toBe("forbidden");
       expect((await service.listar({ page: 1, pageSize: 25 }, actor)).status).toBe("forbidden");
       expect((await service.actualizar("pl-1", { nombre: "N" }, actor)).status).toBe("forbidden");
       expect((await service.cambiarEstado("pl-1", { estado: "inactivo" }, actor)).status).toBe(
@@ -80,7 +81,7 @@ describe("R5: forbidden si el actor no es maestro", () => {
 
 describe("R8/R12/R15: crea con nombre y cuerpo validos, persiste variables, nace pending", () => {
   it("deriva las variables del cuerpo y las pasa al repo", async () => {
-    const r = await service.crear({ nombre: "Aviso", cuerpo: "Hola {{usuario}} y {{cod}}" }, MAESTRO);
+    const r = await service.crear({ nombre: "Aviso", cuerpo: "Hola {{usuario}} y {{cod}}", plantillaTienda: false }, MAESTRO);
     expect(r.status).toBe("ok");
     expect(repo.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -95,7 +96,7 @@ describe("R8/R12/R15: crea con nombre y cuerpo validos, persiste variables, nace
 
 describe("R16: validation_error de cuerpo por llave malformada", () => {
   it("crear con {{}} -> validation_error sin llamar al repo", async () => {
-    const r = await service.crear({ nombre: "X", cuerpo: "Hola {{}}" }, MAESTRO);
+    const r = await service.crear({ nombre: "X", cuerpo: "Hola {{}}", plantillaTienda: false }, MAESTRO);
     expect(r.status).toBe("validation_error");
     if (r.status === "validation_error") expect(r.fieldErrors).toHaveProperty("cuerpo");
     expect(repo.create).not.toHaveBeenCalled();
@@ -106,7 +107,7 @@ describe("R10: crear devuelve conflict si el nombre existe", () => {
   it("mapea PlantillaDuplicadaError a conflict(nombre)", async () => {
     repo = buildRepo({ create: vi.fn().mockRejectedValue(new PlantillaDuplicadaError("nombre")) });
     service = new PlantillaMensajeService(repo);
-    const r = await service.crear({ nombre: "Dup", cuerpo: "c" }, MAESTRO);
+    const r = await service.crear({ nombre: "Dup", cuerpo: "c", plantillaTienda: false }, MAESTRO);
     expect(r.status).toBe("conflict");
     if (r.status === "conflict") expect(r.campo).toBe("nombre");
   });
