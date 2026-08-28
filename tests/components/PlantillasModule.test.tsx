@@ -152,8 +152,12 @@ describe("PlantillasModule — eliminar (R27/R28)", () => {
 // asi que lo que hay que probar es que un solo click la dispara con el id correcto y que la
 // fila marcada se distingue de las demas SIN pulsar nada.
 describe("PlantillasModule - mensaje de bienvenida", () => {
+  // 2026-08-27: solo una plantilla `activo` puede marcarse (el envio de bienvenida sale solo,
+  // sin nadie que lo revise). `ITEM` esta en `pending`, asi que estos casos parten de una
+  // copia ACTIVA; el `pending` original pasa a ser el testigo del boton deshabilitado.
+  const ACTIVA: PlantillaListItemDTO = { ...ITEM, estado: "activo" };
   const OTRA: PlantillaListItemDTO = {
-    ...ITEM,
+    ...ACTIVA,
     id: "p2",
     nombre: "recogida",
     welcomeMessage: true,
@@ -161,11 +165,12 @@ describe("PlantillasModule - mensaje de bienvenida", () => {
 
   it("un click en 'Mensaje de bienvenida' marca la fila por id, sin confirmacion", async () => {
     marcarPlantillaBienvenidaMock.mockImplementation(async () => {
-      items = [{ ...ITEM, welcomeMessage: true }];
+      items = [{ ...ACTIVA, welcomeMessage: true }];
       return { status: "ok", plantilla: { id: "p1" } };
     });
+    items = [ACTIVA]; // el listado se revalida contra esto, no contra `initialData`
     const user = userEvent.setup();
-    renderModule(<PlantillasModule initialData={{ items: [ITEM], total: 1, pageSize: 25 }} />);
+    renderModule(<PlantillasModule initialData={{ items: [ACTIVA], total: 1, pageSize: 25 }} />);
 
     const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
     await within(table).findByText("bienvenida");
@@ -179,10 +184,56 @@ describe("PlantillasModule - mensaje de bienvenida", () => {
     ).toBeInTheDocument();
   });
 
+  it.each([
+    ["pending"],
+    ["saved_not_aprobation"],
+    ["refused"],
+    ["inactivo"],
+  ] as const)(
+    "una plantilla `%s` NO puede marcarse: el boton esta deshabilitado",
+    async (estado) => {
+      // El guardia de verdad esta en el service; esto comprueba que la UI no invita a pulsar
+      // algo que el servidor va a rechazar. El boton sigue VISIBLE a proposito: es donde
+      // cuelga el tooltip que explica que falta la aprobacion de Meta.
+      const fila = { ...ITEM, estado };
+      items = [fila];
+      renderModule(<PlantillasModule initialData={{ items: [fila], total: 1, pageSize: 25 }} />);
+
+      const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
+      await within(table).findByText("bienvenida");
+
+      expect(
+        within(table).getByRole("button", { name: /mensaje de bienvenida/i }),
+      ).toBeDisabled();
+      expect(marcarPlantillaBienvenidaMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("estado_invalido (la fila cambio bajo los pies): avisa y revalida", async () => {
+    // Se llega aqui cuando el listado en pantalla esta viejo: el boton se pinto habilitado
+    // porque la fila era `activo` en la ultima carga, y ya no lo es.
+    marcarPlantillaBienvenidaMock.mockResolvedValue({
+      status: "estado_invalido",
+      estado: "pending",
+    });
+    items = [ACTIVA];
+    const user = userEvent.setup();
+    renderModule(<PlantillasModule initialData={{ items: [ACTIVA], total: 1, pageSize: 25 }} />);
+
+    const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
+    await within(table).findByText("bienvenida");
+    await user.click(within(table).getByRole("button", { name: /mensaje de bienvenida/i }));
+
+    expect(
+      (await screen.findAllByText("Solo una plantilla activa puede ser el mensaje de bienvenida."))
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
   it("resalta la fila marcada: insignia propia y su boton deshabilitado", async () => {
-    items = [ITEM, OTRA];
+    items = [ACTIVA, OTRA];
     renderModule(
-      <PlantillasModule initialData={{ items: [ITEM, OTRA], total: 2, pageSize: 25 }} />,
+      <PlantillasModule initialData={{ items: [ACTIVA, OTRA], total: 2, pageSize: 25 }} />,
     );
 
     const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
@@ -203,10 +254,43 @@ describe("PlantillasModule - mensaje de bienvenida", () => {
     ).toBeEnabled();
   });
 
+  it("desactivar LA bienvenida avisa, ANTES de confirmar, de que se pierde la marca", async () => {
+    // La perdida es real y silenciosa: la desactivacion retira la marca y nadie designa una
+    // sustituta. Si el modal no lo dice aqui, el sitio donde se nota es el cliente que no
+    // recibe nada al recoger su paquete —y para entonces no hay pantalla donde avisar—.
+    const marcada = { ...ACTIVA, welcomeMessage: true };
+    items = [marcada];
+    const user = userEvent.setup();
+    renderModule(<PlantillasModule initialData={{ items: [marcada], total: 1, pageSize: 25 }} />);
+
+    const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
+    await within(table).findByText("bienvenida");
+    await user.click(within(table).getByRole("button", { name: /^desactivar$/i }));
+
+    const dialogo = await screen.findByRole("dialog");
+    expect(within(dialogo).getByText(/dejará de ser el mensaje de bienvenida/i)).toBeInTheDocument();
+    // Y la consecuencia, no solo el hecho: que no se enviara nada hasta elegir otra.
+    expect(within(dialogo).getByText(/no se enviará nada al recoger el paquete/i)).toBeInTheDocument();
+  });
+
+  it("desactivar una plantilla cualquiera NO menciona la bienvenida", async () => {
+    items = [ACTIVA];
+    const user = userEvent.setup();
+    renderModule(<PlantillasModule initialData={{ items: [ACTIVA], total: 1, pageSize: 25 }} />);
+
+    const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
+    await within(table).findByText("bienvenida");
+    await user.click(within(table).getByRole("button", { name: /^desactivar$/i }));
+
+    const dialogo = await screen.findByRole("dialog");
+    expect(within(dialogo).queryByText(/mensaje de bienvenida/i)).toBeNull();
+  });
+
   it("not_found: avisa y revalida en vez de dejar la fila marcada en pantalla", async () => {
     marcarPlantillaBienvenidaMock.mockResolvedValue({ status: "not_found" });
+    items = [ACTIVA];
     const user = userEvent.setup();
-    renderModule(<PlantillasModule initialData={{ items: [ITEM], total: 1, pageSize: 25 }} />);
+    renderModule(<PlantillasModule initialData={{ items: [ACTIVA], total: 1, pageSize: 25 }} />);
 
     const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
     await within(table).findByText("bienvenida");

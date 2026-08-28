@@ -65,6 +65,24 @@ export const TOOLTIP_BIENVENIDA =
 /** Lo que explica el boton cuando la fila YA es la bienvenida: por que no hay nada que pulsar. */
 export const TOOLTIP_BIENVENIDA_ACTUAL = `Esta es la plantilla de bienvenida. ${TOOLTIP_BIENVENIDA}`;
 
+/**
+ * Lo que explica el boton cuando la fila NO esta `activo` (2026-08-27). Dice el REQUISITO, no
+ * «no se puede»: el maestro necesita saber que lo que falta es la aprobacion de Meta, porque
+ * es la unica pista de que hay algo que esperar y no algo que arreglar.
+ */
+export const TOOLTIP_BIENVENIDA_NO_ACTIVA =
+  "Solo una plantilla activa puede ser el mensaje de bienvenida: este envio sale solo, sin nadie que lo revise. Espera a que Meta la apruebe.";
+
+/**
+ * `true` si la fila puede marcarse como bienvenida. Exportado y usado TANTO por el boton como
+ * por su tooltip, para que lo que se deshabilita y lo que se explica no puedan discrepar.
+ * Espejo del guardia del service (`marcarMensajeBienvenida`), que es quien manda: esto es
+ * cortesia de UI, no la puerta.
+ */
+export function puedeSerBienvenida(row: PlantillaListItemDTO): boolean {
+  return row.estado === "activo" && !row.welcomeMessage;
+}
+
 export interface PlantillasColumnsActions {
   /** Abre el formulario de edición de la fila (R20). */
   onEditar: (row: PlantillaListItemDTO) => void;
@@ -154,10 +172,12 @@ export function buildPlantillasColumns(
                   // ve de un vistazo sin leer nada.
                   variant={row.welcomeMessage ? "default" : "outline"}
                   size="sm"
-                  // Ya marcada = nada que hacer. Se deja VISIBLE y deshabilitada en vez de
-                  // ocultarla: escondida, la fila resaltada perderia justo el control que
-                  // explica por que esta resaltada.
-                  disabled={row.welcomeMessage}
+                  // Ya marcada = nada que hacer; no `activo` = no se permite (el envio de
+                  // bienvenida sale SOLO y exige una plantilla enviable). En ambos casos se
+                  // deja VISIBLE y deshabilitada en vez de ocultarla: escondida, la fila
+                  // perderia justo el control que explica su estado, y el tooltip —que es
+                  // donde se dice el motivo— no tendria donde colgarse.
+                  disabled={!puedeSerBienvenida(row)}
                   aria-pressed={row.welcomeMessage}
                   onClick={() => actions.onMarcarBienvenida(row)}
                 >
@@ -167,7 +187,11 @@ export function buildPlantillasColumns(
               }
             />
             <TooltipContent>
-              {row.welcomeMessage ? TOOLTIP_BIENVENIDA_ACTUAL : TOOLTIP_BIENVENIDA}
+              {row.welcomeMessage
+                ? TOOLTIP_BIENVENIDA_ACTUAL
+                : row.estado !== "activo"
+                  ? TOOLTIP_BIENVENIDA_NO_ACTIVA
+                  : TOOLTIP_BIENVENIDA}
             </TooltipContent>
           </Tooltip>
           {puedeEnviarseAAprobacion(row.estado) ? (

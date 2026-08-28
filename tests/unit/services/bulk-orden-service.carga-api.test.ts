@@ -152,7 +152,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
       .mockResolvedValue([
         { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false },
       ]),
-    createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null }),
+    createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null, omitidas: [] }),
     // Feature 141 (R47/R48): persistencia de las URLs de descarga de etiquetas.
     setCargaDownloadUrl: vi.fn(async () => {}),
     setOrdenesDownloadUrl: vi.fn(async () => {}),
@@ -168,7 +168,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
         _historial: unknown,
         _lote: unknown,
         opciones?: { conGuia?: boolean },
-      ) => ({ creadas: conGuiaEco(data, opciones), cargaId: "carga-api-1" }),
+      ) => ({ creadas: conGuiaEco(data, opciones), cargaId: "carga-api-1", omitidas: [] }),
     ),
     // Feature 16: resumen del lote (solo lectura), exigido por IOrdenRepository y no
     // ejercitado por la carga via API.

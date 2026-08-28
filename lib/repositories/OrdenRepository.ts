@@ -101,6 +101,14 @@ import type { FiltroAlcanceTablero } from "@/lib/types/alcance-tablero";
  * snapshot `before` (leido DENTRO de la tx): si TODAS las `num_remision` del batch ya existen,
  * el `createMany` con `skipDuplicates` no insertaria nada y asegurar el lote dejaria una fila
  * de `carga` sin ninguna orden que la referencie.
+ *
+ * FEATURE 294 — `before` LLEGA AQUI YA ACOTADO A LO VIVO (`deleted_at IS NULL`), y ese detalle
+ * ES la mitad del arreglo de la ficha. Hasta el 2026-08-27 el snapshot traia tambien las
+ * BORRADAS: una remision de una orden eliminada hacia que esta funcion respondiera `false`, el
+ * batch salia por el early-return con `count: 0` y no se creaba ni la fila de `carga` — el
+ * sintoma exacto que se midio en produccion. Con el indice unico ya PARCIAL
+ * (`20260827160000_orden_num_remision_unico_parcial`) el INSERT si entraria, pero sin este
+ * cambio nunca llegaria a ejecutarse. Las dos piezas van juntas o no arreglan nada.
  */
 function hayFilasPorInsertar(
   chunk: { numRemision: string }[],
@@ -108,6 +116,30 @@ function hayFilasPorInsertar(
 ): boolean {
   const existentes = new Set(before.map((r) => r.numRemision));
   return chunk.some((d) => !existentes.has(d.numRemision));
+}
+
+/**
+ * FEATURE 294 — las `num_remision` del chunk que NO acabaron como fila nueva.
+ *
+ * `createMany({ skipDuplicates: true })` compila a `ON CONFLICT DO NOTHING`: descarta filas sin
+ * error y sin dejar rastro. Hasta esta ficha ese descarte era INVISIBLE — el resumen de la
+ * carga seguia contando la fila como `creada` y la tienda veia un exito que no habia ocurrido.
+ * Devolver esta lista es lo que permite al servicio decir la verdad (reclasificarlas como
+ * `duplicada`, que es la cubeta que ya existe para "esta fila no entro").
+ *
+ * Se compara por `num_remision` y no por cantidad: el llamador necesita saber CUALES, no
+ * cuantas. Dentro de una misma llamada las remisiones del lote son unicas (el servicio
+ * deduplica intra-archivo antes de persistir, R26), asi que la comparacion por conjunto es
+ * exacta; si un llamador futuro repitiera una remision en el mismo `data`, las dos entradas
+ * colapsarian a una sola y la repetida NO se reportaria — por eso el dedup intra-lote sigue
+ * siendo responsabilidad del servicio.
+ */
+function remisionesOmitidas(
+  chunk: { numRemision: string }[],
+  insertadas: { numRemision: string }[],
+): string[] {
+  const entraron = new Set(insertadas.map((r) => r.numRemision));
+  return chunk.filter((d) => !entraron.has(d.numRemision)).map((d) => d.numRemision);
 }
 
 /**
@@ -1560,8 +1592,11 @@ export class OrdenRepository implements IOrdenRepository {
     batchSize: number,
     historial: HistorialContexto,
     lote: LoteContexto,
-  ): Promise<{ inserted: number; cargaId: string | null }> {
+  ): Promise<{ inserted: number; cargaId: string | null; omitidas: string[] }> {
     let inserted = 0;
+    // Feature 294: las remisiones que NO entraron, acumuladas entre batches. Ver
+    // `remisionesOmitidas`: sin esto, `skipDuplicates` se traga filas en silencio.
+    const omitidas: string[] = [];
     // Feature 141: el id del lote se resuelve UNA vez y se reutiliza en los batches
     // siguientes de esta misma llamada (via API key entra `null` y lo genera el helper).
     let cargaId: string | null = lote.cargaId;
@@ -1582,7 +1617,17 @@ export class OrdenRepository implements IOrdenRepository {
           // (migracion 20260825160000): sin el, una orden homonima de OTRA tienda entraria en
           // `beforeIds` y la fila recien insertada NO se contaria como nueva (sin historial,
           // sin geocodificacion, fuera del resultado).
-          where: { numRemision: { in: chunkNums }, tiendaId: { in: chunkTiendas } },
+          //
+          // FEATURE 294 — `deletedAt: null`: EL SNAPSHOT MIRA LO MISMO QUE EL INDICE. Desde
+          // `20260827160000_orden_num_remision_unico_parcial` el unico solo cubre las ordenes
+          // VIVAS, y `findExistingRemisiones` ya validaba asi. Sin este filtro, una remision de
+          // una orden BORRADA seguia entrando en el snapshot: `hayFilasPorInsertar` respondia
+          // que no quedaba nada, el batch salia con `count: 0` y no se creaba ni la fila de
+          // `carga`. Es EXACTAMENTE lo que se midio en produccion el 2026-08-27. Va en las DOS
+          // consultas (`before` y `after`) o se rompe el diff: con solo `before` acotado, la
+          // borrada aparecería en `after` sin estar en `beforeIds` y se contaria como NUEVA
+          // —historial y geocodificacion sobre una orden eliminada—.
+          where: { numRemision: { in: chunkNums }, tiendaId: { in: chunkTiendas }, deletedAt: null },
           // Feature 141: `numRemision` se anade al select (aditivo sobre una query que YA se
           // ejecutaba) para saber si queda algo por insertar ANTES de asegurar el lote (R24).
           select: { id: true, numRemision: true },
@@ -1590,8 +1635,10 @@ export class OrdenRepository implements IOrdenRepository {
         const beforeIds = new Set(before.map((r) => r.id));
         // Feature 141 (R28/R35): si TODAS las filas del batch ya existen, no hay nada que
         // insertar -> no se toca `carga` (ningun lote huerfano por un chunk 100% duplicado).
+        // Feature 294: y esas filas no se pierden en el camino — el chunk ENTERO se reporta
+        // como omitido, que es lo que el servicio convierte en `duplicada` en el resumen.
         if (!hayFilasPorInsertar(chunk, before)) {
-          return { count: 0, cargaId };
+          return { count: 0, cargaId, omitidas: chunk.map((d) => d.numRemision) };
         }
         // Feature 141 (R34): el lote se resuelve DENTRO de esta tx, antes del insert (la FK
         // `orden.carga_id` exige que la fila de `carga` exista al insertar las ordenes).
@@ -1610,11 +1657,13 @@ export class OrdenRepository implements IOrdenRepository {
           skipDuplicates: true,
         });
         const after = await tx.orden.findMany({
-          where: { numRemision: { in: chunkNums }, tiendaId: { in: chunkTiendas } },
+          // Feature 294: MISMO acotado a lo vivo que `before` (ver el comentario de arriba).
+          where: { numRemision: { in: chunkNums }, tiendaId: { in: chunkTiendas }, deletedAt: null },
           // Feature 91 (design §0/C3): `direccion` se anade al select para decidir POR
           // FILA si encolar geocodificacion (R8/R9). Es aditivo sobre una query que YA se
           // ejecutaba: no anade round-trip.
-          select: { id: true, estatusId: true, direccion: true },
+          // Feature 294: `numRemision` tambien, para poder decir CUALES filas no entraron.
+          select: { id: true, numRemision: true, estatusId: true, direccion: true },
         });
         const nuevas = after.filter((r) => !beforeIds.has(r.id));
         // R9/R20: por cada orden creada, origen null (creacion) -> destino estado inicial.
@@ -1639,12 +1688,15 @@ export class OrdenRepository implements IOrdenRepository {
             direccion: nueva.direccion,
           });
         }
-        return { count: result.count, cargaId: loteId };
+        // Feature 294: lo que `skipDuplicates` descarto, con nombre y apellido. Se deriva de
+        // `nuevas` (el diff before/after) y no de `result.count`, que solo dice CUANTAS.
+        return { count: result.count, cargaId: loteId, omitidas: remisionesOmitidas(chunk, nuevas) };
       });
       inserted += chunkResult.count;
       cargaId = chunkResult.cargaId;
+      omitidas.push(...chunkResult.omitidas);
     }
-    return { inserted, cargaId };
+    return { inserted, cargaId, omitidas };
   }
 
   /**
@@ -1662,9 +1714,16 @@ export class OrdenRepository implements IOrdenRepository {
     historial: HistorialContexto,
     lote: LoteContexto,
     opciones: CreateOrdenOpciones = {},
-  ): Promise<{ creadas: CreateOrdenConGuiaResultRow[]; cargaId: string | null }> {
+  ): Promise<{
+    creadas: CreateOrdenConGuiaResultRow[];
+    cargaId: string | null;
+    omitidas: string[];
+  }> {
     const conGuia = opciones.conGuia ?? true; // default historico: esta ruta numera
     const creadas: CreateOrdenConGuiaResultRow[] = [];
+    // Feature 294: mismo trato que `createManyOrdenes` — las dos rutas usan `skipDuplicates`,
+    // asi que las dos tienen que poder decir que filas se trago.
+    const omitidas: string[] = [];
     // Feature 141 (R19): una peticion = UN lote. El id se resuelve en el primer batch que
     // inserta y se reutiliza en los siguientes de esta misma llamada.
     let cargaId: string | null = lote.cargaId;
@@ -1683,14 +1742,23 @@ export class OrdenRepository implements IOrdenRepository {
           // (migracion 20260825160000): sin el, una orden homonima de OTRA tienda entraria en
           // `beforeIds` y la fila recien insertada NO se contaria como nueva (sin historial,
           // sin geocodificacion, fuera del resultado).
-          where: { numRemision: { in: chunkNums }, tiendaId: { in: chunkTiendas } },
+          // FEATURE 294: `deletedAt: null` en las DOS consultas del diff, por el mismo motivo
+          // exacto que en `createManyOrdenes` (ver alli el razonamiento largo). Sin el, una
+          // remision de orden BORRADA hace que el batch salga por el early-return y la carga
+          // no cree nada, ni siquiera la fila de `carga`.
+          where: { numRemision: { in: chunkNums }, tiendaId: { in: chunkTiendas }, deletedAt: null },
           // Feature 141: `numRemision` para decidir si queda algo por insertar (R24).
           select: { id: true, numRemision: true },
         });
         const beforeIds = new Set(before.map((r) => r.id));
         // Feature 141 (R33/R35): batch 100% duplicado -> no se resuelve ningun lote.
+        // Feature 294: y el chunk entero se reporta como omitido, no se pierde en silencio.
         if (!hayFilasPorInsertar(chunk, before)) {
-          return { creadas: [] as CreateOrdenConGuiaResultRow[], cargaId };
+          return {
+            creadas: [] as CreateOrdenConGuiaResultRow[],
+            cargaId,
+            omitidas: chunk.map((d) => d.numRemision),
+          };
         }
         // Feature 141 (R34): lote resuelto DENTRO de la tx, antes del insert (creado con id
         // server-side en el primer batch con ordenes, reutilizado en los siguientes, R30).
@@ -1705,7 +1773,8 @@ export class OrdenRepository implements IOrdenRepository {
           skipDuplicates: true,
         });
         const after = await tx.orden.findMany({
-          where: { numRemision: { in: chunkNums }, tiendaId: { in: chunkTiendas } },
+          // Feature 294: MISMO acotado a lo vivo que `before` (ver el comentario de arriba).
+          where: { numRemision: { in: chunkNums }, tiendaId: { in: chunkTiendas }, deletedAt: null },
           // Feature 155/R11: `direccion` se anade al select para decidir POR FILA si encolar
           // geocodificacion, exactamente como ya hacia `createManyOrdenes`. Es aditivo sobre
           // una query que YA se ejecutaba: no anade round-trip.
@@ -1771,12 +1840,19 @@ export class OrdenRepository implements IOrdenRepository {
             direccion: nueva.direccion,
           });
         }
-        return { creadas: resultado, cargaId: loteId };
+        // Feature 294: las que `skipDuplicates` descarto. `resultado` lleva ya el
+        // `numRemision` de cada creada, asi que el conjunto omitido sale del mismo diff.
+        return {
+          creadas: resultado,
+          cargaId: loteId,
+          omitidas: remisionesOmitidas(chunk, resultado),
+        };
       });
       creadas.push(...chunkResult.creadas);
       cargaId = chunkResult.cargaId;
+      omitidas.push(...chunkResult.omitidas);
     }
-    return { creadas, cargaId };
+    return { creadas, cargaId, omitidas };
   }
 
   // Feature 141: `cargaId` se inyecta en el INSERT (R36). `downloadUrl` NO se envia aqui:

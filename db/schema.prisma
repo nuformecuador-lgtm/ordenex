@@ -523,7 +523,7 @@ model ZonaDistrito {
 model Orden {
   id                     String    @id @default(uuid())
   numGuia                Int?      @unique @map("num_guia") // feature 17/R1: nullable, sin default; asignado en "Generar guia" via nextval(orden_num_guia_seq)
-  numRemision            String    @map("num_remision") // R9/R14: lo provee el usuario. SIN @unique global: la unicidad es POR TIENDA, ver @@unique([tiendaId, numRemision]) abajo
+  numRemision            String    @map("num_remision") // R9/R14: lo provee el usuario. SIN @unique global: la unicidad es POR TIENDA y solo entre ordenes VIVAS (indice PARCIAL a mano, ver el bloque de la feature 294 abajo)
   estatusId              String    @map("estatus_id") // R10: FK not null
   destinatario           String
   telefonoDest           String    @map("telefono_dest")
@@ -639,9 +639,36 @@ model Orden {
   // remision (el planner puede servirlas con este, pero no se retira en la misma migracion que
   // cambia la constraint: un cambio a la vez).
   //
-  // NO incluye `deletedAt`: igual que antes, una orden borrada logicamente sigue reservando su
-  // numero dentro de su tienda. Ese comportamiento NO cambia con esta migracion.
-  @@unique([tiendaId, numRemision], map: "orden_tienda_id_num_remision_key")
+  // FEATURE 294 (2026-08-27) — LA RESTRICCION YA NO SE DECLARA AQUI, Y NO ES UN OLVIDO.
+  //
+  // El indice sigue existiendo, con el mismo nombre `orden_tienda_id_num_remision_key`, pero
+  // desde `20260827160000_orden_num_remision_unico_parcial` es **PARCIAL**:
+  //
+  //   CREATE UNIQUE INDEX "orden_tienda_id_num_remision_key"
+  //     ON "orden"("tienda_id", "num_remision") WHERE "deleted_at" IS NULL;
+  //
+  // POR QUE PARCIAL. Hasta esa migracion, una orden BORRADA seguia ocupando su numero, pero
+  // `findExistingRemisiones` validaba el duplicado con `deleted_at IS NULL`: la fila pasaba la
+  // validacion y despues `createMany({ skipDuplicates })` la descartaba SIN error. Medido en
+  // produccion con una tienda bloqueada (ficha 294): tres ordenes "cargadas" que no existian, y
+  // ni siquiera una fila de `carga`. El predicado hace que la base diga lo mismo que el codigo
+  // ya comprobaba: UNA remision VIVA por tienda.
+  //
+  // POR QUE NO ESTA EN EL MODELO, con lo MEDIDO (2026-08-27, base local ya migrada). Prisma
+  // **no expresa indices parciales**, y con el `@@unique` puesto:
+  //   * `migrate diff --from-config-datasource --to-schema` sale vacio igual — la
+  //     introspeccion no lee el predicado, asi que el riesgo NO es que proponga recrearlo;
+  //   * `migrate diff --from-empty --to-schema` (el render del datamodel, o sea `db push`) SI
+  //     escribe el indice **sin** el `WHERE`;
+  //   * y el cliente generado ofrece `tiendaId_numRemision` en `OrdenWhereUniqueInput`, o sea
+  //     un `findUnique`/`upsert` por un par que la base ya no garantiza unico (puede haber N
+  //     borradas con ese par). Esa es la razon de peso: el ORM invitando al mismo fallo mudo.
+  // Mismo patron que `zona_es_gam_unico` (20260711120000), `jobs_dedupe_key_key`
+  // (20260717120000) y los unicos parciales de la 293. Lo vigila
+  // `tests/unit/db/orden-num-remision-parcial.test.ts`.
+  //
+  // `@@index([tiendaId])` se mantiene: el parcial ya no sirve de prefijo a las consultas que
+  // filtran por tienda SIN mirar `deleted_at`.
   @@index([tiendaId])
   @@index([estatusId])
   @@index([createdAt])

@@ -110,15 +110,20 @@ export interface SincronizarTemplateData {
   estado: PlantillaEstado;
 }
 
-/** Datos para IMPORTAR (crear) una plantilla local a partir de un template de Meta. */
-export interface CrearDesdeMetaData {
-  nombre: string;
-  cuerpo: string;
-  variables: string[];
-  templateId: string;
-  idioma: string;
-  estado: PlantillaEstado;
-}
+/**
+ * BORRADO 2026-08-27 (pedido humano): `CrearDesdeMetaData`, los datos con que la
+ * sincronizacion IMPORTABA una plantilla que solo existia en Meta. El sync ya no crea filas
+ * locales; ver `sincronizarTemplatePorNombre` y el encabezado del service.
+ */
+
+/** Desenlace de sincronizar UN template de Meta contra la plantilla local del mismo nombre. */
+export type SincronizarTemplateOutcome =
+  /** Habia fila local y algun dato difiere: se escribio. */
+  | "actualizada"
+  /** Habia fila local y ya coincidia en todo: NO se escribio (ni `updatedAt` se movio). */
+  | "sin_cambios"
+  /** No hay plantilla local vigente con ese nombre: se ignora (el sync ya no importa). */
+  | "inexistente";
 
 /** R10: violacion de unicidad del nombre. Patron `UsuarioDuplicadoError`. */
 export class PlantillaDuplicadaError extends Error {
@@ -181,6 +186,11 @@ export interface IPlantillaMensajeRepository {
   /** R20/R22: aplica nombre/cuerpo/variables; `null` si no existe o esta soft-deleted. */
   update(id: string, data: UpdatePlantillaData): Promise<PlantillaPublica | null>;
   /** R24: fija el estado; `null` si no existe o esta soft-deleted. */
+  /**
+   * Cambia el estado de una plantilla vigente. Si el estado destino NO es `activo`, DESMARCA
+   * de paso la bienvenida (2026-08-27): solo una plantilla activa puede serlo, asi que la
+   * marca no puede sobrevivir a la salida de `activo`. Reactivar no la vuelve a marcar.
+   */
   updateEstado(id: string, estado: PlantillaEstado): Promise<PlantillaPublica | null>;
   /** R27: soft delete (fija deletedAt); `false` si no existe o ya estaba borrada. */
   softDelete(id: string): Promise<boolean>;
@@ -200,16 +210,19 @@ export interface IPlantillaMensajeRepository {
   setTemplate(id: string, data: SetTemplateData): Promise<void>;
   /**
    * Cron 24h (Meta->local): actualiza por NOMBRE el templateId, idioma y estado de una
-   * plantilla vigente. NO borra filas. Preserva un `inactivo` puesto por el usuario
-   * (no lo reactiva). Devuelve `true` si habia una fila que actualizar.
+   * plantilla vigente. NO crea ni borra filas. Preserva un `inactivo` puesto por el usuario
+   * (no lo reactiva).
+   *
+   * ESCRIBE SOLO SI HAY ALGO QUE CAMBIAR (2026-08-27, pedido humano). Antes lanzaba dos
+   * `updateMany` a ciegas en cada corrida, asi que las 24 h movian el `updatedAt` de todas las
+   * plantillas aunque Meta no hubiera cambiado nada: el listado se reordenaba solo y
+   * «modificada» dejaba de significar «alguien la toco». Ahora compara primero y devuelve
+   * `sin_cambios` sin tocar la fila.
    */
-  sincronizarTemplatePorNombre(nombre: string, data: SincronizarTemplateData): Promise<boolean>;
-  /**
-   * Cron 24h (Meta->local): IMPORTA (crea) una plantilla local desde un template de Meta que
-   * no existia. Devuelve `false` si el nombre ya esta en uso (p. ej. una plantilla borrada con
-   * ese nombre): no se resucita ni se pisa, se omite.
-   */
-  crearDesdeMeta(data: CrearDesdeMetaData): Promise<boolean>;
+  sincronizarTemplatePorNombre(
+    nombre: string,
+    data: SincronizarTemplateData,
+  ): Promise<SincronizarTemplateOutcome>;
   /** Envio del mensajero: plantillas vigentes, `activo` y enlazadas con Meta (templateId no nulo). */
   listarEnviables(): Promise<PlantillaEnviable[]>;
   /** Una plantilla enviable por id (vigente, `activo`, con templateId); `null` si no aplica. */

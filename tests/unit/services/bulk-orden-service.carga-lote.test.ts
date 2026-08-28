@@ -103,6 +103,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
       async (data: CreateOrdenData[], _b: number, _h: unknown, lote: LoteContexto) => ({
         inserted: data.length,
         cargaId: lote.cargaId ?? UUID_NUEVO,
+        omitidas: [] as string[],
       }),
     ),
     createManyOrdenesConGuia: vi.fn(
@@ -114,6 +115,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
           estatusValue: "por_recolectar_en_tienda",
         })),
         cargaId: lote.cargaId ?? UUID_NUEVO,
+        omitidas: [] as string[],
       }),
     ),
     ...overrides,

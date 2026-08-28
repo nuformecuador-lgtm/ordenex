@@ -36,9 +36,16 @@ function plantilla(overrides: Partial<PlantillaPublica> = {}): PlantillaPublica 
   };
 }
 
+/**
+ * Por defecto la fila existe y esta `activo`: el unico estado desde el que se puede marcar
+ * (2026-08-27). Los casos que prueban el rechazo pisan `findById` con otro estado.
+ */
 function repoFalso(overrides: Partial<IPlantillaMensajeRepository> = {}) {
   return {
-    marcarWelcomeMessage: vi.fn().mockResolvedValue(plantilla({ welcomeMessage: true })),
+    findById: vi.fn().mockResolvedValue(plantilla({ estado: "activo" })),
+    marcarWelcomeMessage: vi
+      .fn()
+      .mockResolvedValue(plantilla({ estado: "activo", welcomeMessage: true })),
     ...overrides,
   } as unknown as IPlantillaMensajeRepository;
 }
@@ -55,19 +62,54 @@ describe("service.marcarMensajeBienvenida", () => {
     expect(repo.marcarWelcomeMessage).toHaveBeenCalledWith("pl-1");
   });
 
-  it("se permite desde CUALQUIER estado: un borrador sin aprobar tambien se puede elegir", async () => {
-    // Elegir la bienvenida es una decision local; esperar a la aprobacion de Meta para poder
-    // siquiera declararla dejaria el ajuste inaccesible justo cuando se configura el modulo.
+  // DEROGADO 2026-08-27 (pedido humano). Aqui vivia «se permite desde CUALQUIER estado: un
+  // borrador sin aprobar tambien se puede elegir», con el argumento de que exigir la
+  // aprobacion de Meta dejaria el ajuste inaccesible al configurar el modulo. Lo que ese
+  // argumento no miraba: la bienvenida se envia SOLA al recoger el paquete, sin nadie delante.
+  // Marcar un borrador no dejaba el ajuste accesible, dejaba configurado un silencio —el
+  // cliente no recibia nada y no habia pantalla donde avisarlo—. Los `it.each` de abajo son
+  // ahora la afirmacion contraria, estado por estado.
+  it.each([
+    ["saved_not_aprobation"],
+    ["pending"],
+    ["refused"],
+    ["inactivo"],
+  ] as const)(
+    "estado_invalido desde `%s`: NO se marca, y el repositorio ni se toca",
+    async (estado) => {
+      const repo = repoFalso({ findById: vi.fn().mockResolvedValue(plantilla({ estado })) });
+      const service = new PlantillaMensajeService(repo);
+
+      const r = await service.marcarMensajeBienvenida("pl-1", MAESTRO);
+
+      expect(r.status).toBe("estado_invalido");
+      // El estado viaja en la respuesta: es lo que permite a la UI decir CUAL es el problema.
+      if (r.status === "estado_invalido") expect(r.estado).toBe(estado);
+      // Y lo que de verdad importa: la escritura no ocurrio.
+      expect(repo.marcarWelcomeMessage).not.toHaveBeenCalled();
+    },
+  );
+
+  it("desde `activo` si se marca (el unico estado que lo permite)", async () => {
     const repo = repoFalso({
-      marcarWelcomeMessage: vi
-        .fn()
-        .mockResolvedValue(plantilla({ estado: "saved_not_aprobation", welcomeMessage: true })),
+      findById: vi.fn().mockResolvedValue(plantilla({ estado: "activo" })),
     });
     const service = new PlantillaMensajeService(repo);
 
     const r = await service.marcarMensajeBienvenida("pl-1", MAESTRO);
 
     expect(r.status).toBe("ok");
+    expect(repo.marcarWelcomeMessage).toHaveBeenCalledWith("pl-1");
+  });
+
+  it("carrera perdida: existia y estaba activa, pero la borraron antes del SET -> not_found", async () => {
+    // `findById` y `marcarWelcomeMessage` son dos viajes a la base. Que el segundo devuelva
+    // null NO puede reportarse como `estado_invalido`: la plantilla ya no esta, y el maestro
+    // tiene que ver «no existe» para que el refresco del listado tenga sentido.
+    const repo = repoFalso({ marcarWelcomeMessage: vi.fn().mockResolvedValue(null) });
+    const service = new PlantillaMensajeService(repo);
+
+    expect((await service.marcarMensajeBienvenida("pl-1", MAESTRO)).status).toBe("not_found");
   });
 
   it("es idempotente: volver a marcar la misma plantilla no la desmarca", async () => {
@@ -86,10 +128,15 @@ describe("service.marcarMensajeBienvenida", () => {
   });
 
   it("not_found cuando la plantilla no existe o esta borrada", async () => {
-    const repo = repoFalso({ marcarWelcomeMessage: vi.fn().mockResolvedValue(null) });
+    // Lo decide el `findById` previo, que es tambien quien lee el estado: una sola lectura
+    // resuelve «no existe» y «existe pero no esta activa» sin confundirlas.
+    const repo = repoFalso({ findById: vi.fn().mockResolvedValue(null) });
     const service = new PlantillaMensajeService(repo);
 
-    expect((await service.marcarMensajeBienvenida("nope", MAESTRO)).status).toBe("not_found");
+    const r = await service.marcarMensajeBienvenida("nope", MAESTRO);
+
+    expect(r.status).toBe("not_found");
+    expect(repo.marcarWelcomeMessage).not.toHaveBeenCalled();
   });
 
   it.each([["admin"], ["adminTienda"], ["adminSatelite"], ["mensajero"], ["apiKey"]])(
@@ -154,6 +201,23 @@ describe("action.marcarPlantillaBienvenida", () => {
     expect(r.status).toBe("ok");
     expect(plantillaService.marcarMensajeBienvenida).toHaveBeenCalledWith("pl-1", MAESTRO);
   });
+
+  it("`estado_invalido` viaja INTACTO a la UI, con su estado", async () => {
+    // Sin este caso, `estado_invalido` caeria por el `toPlantillaActionError` y la UI recibiria
+    // un error generico: la razon por la que no se pudo se perderia justo en el borde.
+    const plantillaService = servicioFalso({
+      marcarMensajeBienvenida: vi
+        .fn()
+        .mockResolvedValue({ status: "estado_invalido", estado: "pending" }),
+    });
+
+    const r = await marcarPlantillaBienvenida("pl-1", {
+      plantillaService,
+      getActor: async () => MAESTRO,
+    });
+
+    expect(r).toEqual({ status: "estado_invalido", estado: "pending" });
+  });
 });
 
 describe("repositorio.marcarWelcomeMessage", () => {
@@ -214,6 +278,64 @@ describe("repositorio.marcarWelcomeMessage", () => {
     expect(await repo.marcarWelcomeMessage("fantasma")).toBeNull();
     // No se relee la fila que no se pudo marcar.
     expect(prisma.plantillaMensaje.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+// SALIR DE `activo` DESMARCA LA BIENVENIDA (pedido humano 2026-08-27).
+//
+// La regla vive en `updateEstado` y no en cada service A PROPOSITO: por este unico metodo
+// pasan los TRES caminos que mueven el estado —desactivar, enviar a aprobacion, y el
+// reintento de propagacion a Meta—. Ponerla en los services obligaria a que los tres se
+// acuerden, y el que se olvide dejara la marca colgando de una plantilla que ya no se puede
+// enviar: el negocio creeria tener bienvenida y el cliente no recibiria nada.
+describe("repositorio.updateEstado — la marca de bienvenida no sobrevive a salir de `activo`", () => {
+  function prismaEspia() {
+    const escrituras: Array<{ where: unknown; data: unknown }> = [];
+    const prisma = {
+      plantillaMensaje: {
+        updateMany: vi.fn(async (args: { where: unknown; data: unknown }) => {
+          escrituras.push(args);
+          return { count: 1 };
+        }),
+        findFirst: vi.fn(async () => ({ ...plantilla(), variablesNombres: {} })),
+      },
+    };
+    return { prisma, escrituras };
+  }
+
+  function repoCon(prisma: unknown) {
+    return new PlantillaMensajeRepository(
+      prisma as ConstructorParameters<typeof PlantillaMensajeRepository>[0],
+    );
+  }
+
+  it.each([["inactivo"], ["pending"], ["refused"], ["saved_not_aprobation"]] as const)(
+    "hacia `%s`: la misma escritura que mueve el estado limpia la marca",
+    async (estado) => {
+      const { prisma, escrituras } = prismaEspia();
+
+      await repoCon(prisma).updateEstado("pl-1", estado);
+
+      // UNA escritura, no dos: no hay ventana en la que la fila este inactiva y aun marcada.
+      expect(escrituras).toHaveLength(1);
+      expect(escrituras[0]).toEqual({
+        where: { id: "pl-1", deletedAt: null },
+        data: { estado, welcomeMessage: false },
+      });
+    },
+  );
+
+  it("hacia `activo`: NO toca la marca (reactivar no re-marca a nadie)", async () => {
+    // El reverso importa tanto como la regla: si `updateEstado` escribiera `welcomeMessage`
+    // tambien al reactivar, tendria que decidir con que valor —y `true` resucitaria una marca
+    // que alguien retiro, `false` desmarcaria la bienvenida vigente al reactivar cualquier
+    // otra plantilla—. La respuesta correcta es no tocarla.
+    const { prisma, escrituras } = prismaEspia();
+
+    await repoCon(prisma).updateEstado("pl-1", "activo");
+
+    expect(escrituras[0].data).toEqual({ estado: "activo" });
+    expect(escrituras[0]).not.toHaveProperty("data.welcomeMessage");
   });
 });
 // EL LECTOR DE LA MARCA. `findWelcomeMessage` es lo que consulta el encolado del envio

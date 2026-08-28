@@ -1,4 +1,5 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { PlantillaEstado } from "@prisma/client";
 import type { PlantillaPublica } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
 import type {
   ActualizarPlantillaInput,
@@ -73,10 +74,18 @@ export type EnviarAprobacionPlantillaServiceResult =
  * anterior en la misma transaccion, asi que "ya hay otra" no es un problema que el maestro
  * tenga que resolver antes, es justo lo que la accion significa.
  */
+/**
+ * `estado_invalido` (2026-08-27): la plantilla existe pero NO esta `activo`, y la bienvenida
+ * se envia sola —sin nadie que corrija—, asi que solo puede marcarse una enviable. Lleva el
+ * `estado` que tiene para que la UI pueda decir CUAL es el problema y no un «no se pudo».
+ * No es un `validation_error`: no hay ningun campo del formulario que el maestro pueda
+ * arreglar, lo que falta es que Meta apruebe la plantilla.
+ */
 export type MarcarBienvenidaPlantillaServiceResult =
   | { status: "ok"; plantilla: PlantillaPublica }
   | { status: "forbidden" }
-  | { status: "not_found" };
+  | { status: "not_found" }
+  | { status: "estado_invalido"; estado: PlantillaEstado };
 
 export type PreviewPlantillaServiceResult =
   | { status: "ok"; texto: string }

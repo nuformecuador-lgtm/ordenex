@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { PlantillaEstado } from "@prisma/client";
 import { plantillasConfig } from "@/lib/config/plantillas";
 import type {
   PlantillaListItem,
@@ -105,5 +106,8 @@ export type EnviarAprobacionPlantillaResult =
  */
 export type MarcarBienvenidaPlantillaResult =
   | { status: "ok"; plantilla: PlantillaPublica }
+  // 2026-08-27: la plantilla existe pero no esta `activo`. Fuera de `ActionError` por lo mismo
+  // que `ya_enviada`: es un desenlace normal con palabras propias, no un fallo a reintentar.
+  | { status: "estado_invalido"; estado: PlantillaEstado }
   | ActionError;
 export type PreviewPlantillaResult = { status: "ok"; texto: string } | ActionError;

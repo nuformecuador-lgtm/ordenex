@@ -247,7 +247,10 @@ describe("createManyOrdenes — sin lotes huerfanos (R28/R35)", () => {
     expect(carga.create).not.toHaveBeenCalled();
     expect(carga.filas.size).toBe(0);
     expect(prisma.orden.createMany).not.toHaveBeenCalled();
-    expect(res).toEqual({ inserted: 0, cargaId: null });
+    // Feature 294: el early-return sigue sin tocar `carga`, pero la fila que se queda fuera YA
+    // NO se pierde — sale nombrada en `omitidas`, que es lo que el servicio convierte en
+    // `duplicada` en el resumen. Sin esto, la tienda veia «creada» una orden inexistente.
+    expect(res).toEqual({ inserted: 0, cargaId: null, omitidas: ["REM-DUP"] });
   });
 
   it("un batch mixto (una nueva, una duplicada) SI crea el lote", async () => {
@@ -342,7 +345,8 @@ describe("createManyOrdenesConGuia — un lote por peticion (R30/R32/R36)", () =
       loteCtx({ cargaId: null, usuarioCargaId: "key-user-1" }),
     );
 
-    expect(res).toEqual({ creadas: [], cargaId: null });
+    // Feature 294: misma regla que en la ruta sin guia — lo que no entra, se nombra.
+    expect(res).toEqual({ creadas: [], cargaId: null, omitidas: ["REM-1"] });
     expect(carga.filas.size).toBe(0);
   });
 });

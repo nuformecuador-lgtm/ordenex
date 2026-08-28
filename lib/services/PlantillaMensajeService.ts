@@ -256,9 +256,17 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
    * local sobre plantillas que ya existen, no un cambio del texto que Meta aprobo. Por eso
    * tampoco hay confirmacion en la UI: es reversible marcando otra.
    *
-   * Se permite desde CUALQUIER estado a proposito. Acotarlo a `activo` obligaria al maestro a
-   * esperar la aprobacion de Meta para poder siquiera declarar su intencion, y el momento del
-   * envio —que es quien tiene que exigir una plantilla enviable— no es este.
+   * SOLO desde `activo` (pedido humano 2026-08-27). Antes se permitia desde cualquier estado
+   * con el argumento de que «el momento del envio es quien exige una plantilla enviable». La
+   * practica lo desmintio: el envio automatico de bienvenida NO tiene a nadie delante que
+   * corrija. `enviarBienvenida` resuelve la marcada y, si no es enviable, el paquete se recoge
+   * y el cliente no recibe NADA —sin aviso, porque no hay pantalla donde darlo—. Dejar
+   * declarar como bienvenida un borrador sin aprobar era, en los hechos, dejar configurar un
+   * silencio. La marca ahora exige lo mismo que el envio: `activo`.
+   *
+   * La comprobacion va en el SERVICE y no en el `where` del repositorio a proposito: aqui se
+   * puede distinguir «no existe» de «existe pero no esta activa», y esa diferencia es
+   * justo lo que la UI necesita para decir por que no se pudo.
    */
   async marcarMensajeBienvenida(
     id: string,
@@ -266,8 +274,15 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
   ): Promise<MarcarBienvenidaPlantillaServiceResult> {
     if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R5
 
+    const actual = await this.repo.findById(id);
+    if (actual === null) return { status: "not_found" }; // no existe o esta borrada
+    if (actual.estado !== "activo") {
+      return { status: "estado_invalido", estado: actual.estado };
+    }
+
     const plantilla = await this.repo.marcarWelcomeMessage(id);
-    if (!plantilla) return { status: "not_found" }; // no existe o esta borrada
+    // Carrera perdida (la borraron entre el `findById` y el SET): no existe, como antes.
+    if (!plantilla) return { status: "not_found" };
     return { status: "ok", plantilla };
   }
 

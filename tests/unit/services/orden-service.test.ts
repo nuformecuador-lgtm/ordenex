@@ -66,8 +66,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findAllProvincias: vi.fn().mockResolvedValue([]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]),
     findDistritosByCantonIds: vi.fn().mockResolvedValue([]),
-    createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null }), // feature 141
-    createManyOrdenesConGuia: vi.fn().mockResolvedValue({ creadas: [], cargaId: null }), // feature 88/141
+    createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null, omitidas: [] }), // feature 141/294
+    createManyOrdenesConGuia: vi.fn().mockResolvedValue({ creadas: [], cargaId: null, omitidas: [] }), // feature 88/141/294
     // Feature 141 (R47/R48): persistencia de las URLs de descarga de etiquetas.
     setCargaDownloadUrl: vi.fn(async () => {}),
     setOrdenesDownloadUrl: vi.fn(async () => {}),

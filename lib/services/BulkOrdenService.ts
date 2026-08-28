@@ -214,6 +214,8 @@ export class BulkOrdenService implements IBulkOrdenService {
           lote,
         );
         cargaId = persistido.cargaId;
+        // Feature 294: lo que no entro, se dice. Ver `reclasificarOmitidas`.
+        await this.reclasificarOmitidas(filas, persistido.omitidas, tiendaId);
       } else {
         const persistido = await this.repo.createManyOrdenes(
           toCreate,
@@ -222,10 +224,56 @@ export class BulkOrdenService implements IBulkOrdenService {
           lote,
         );
         cargaId = persistido.cargaId;
+        await this.reclasificarOmitidas(filas, persistido.omitidas, tiendaId);
       }
     }
 
     return { status: "ok", summary: this.buildSummary(rows.length, filas, cargaId) };
+  }
+
+  /**
+   * FEATURE 294 — UNA FILA QUE NO ENTRO DEJA DE SER INVISIBLE.
+   *
+   * Las dos rutas de lote insertan con `skipDuplicates` (`ON CONFLICT DO NOTHING`): una fila
+   * puede quedarse fuera SIN error y sin excepcion. Hasta esta ficha nadie miraba ese hueco, y
+   * el resumen seguia diciendo `creada` — que es como una tienda real confirmo la carga de tres
+   * ordenes que nunca existieron, sin un solo mensaje (medido en produccion el 2026-08-27).
+   *
+   * QUE SE HACE CON ELLAS. Se reclasifican a `duplicada`, que es la cubeta que el resumen YA
+   * tiene para "esta fila no se creo porque el numero ya estaba usado" — la misma que ve el
+   * usuario cuando el pre-chequeo la detecta antes de insertar. No se inventa un estado nuevo:
+   * el summary cuenta `creadas`/`duplicadas`/`conError`, la UI ya sabe pintar las tres y el
+   * contrato publico de la 88 ya las documenta.
+   *
+   * Y CON SU `estatus`. Se consulta el estado REAL de la orden que ocupa el numero (una sola
+   * consulta, y solo si hubo omitidas), igual que hace el pre-chequeo de duplicados. Si no se
+   * resuelve —el numero lo ocupa algo que esta lectura no ve— se deja SIN estatus antes que
+   * repetir el estado inicial del lote: decir "creada en `en_preparacion`" sobre una fila que
+   * no se creo es exactamente la mentira que esta ficha viene a matar.
+   *
+   * CUANDO OCURRE, despues del indice parcial: ya no por una orden borrada (ese era el caso de
+   * produccion y lo cierra la migracion), sino por una CARRERA real — otra peticion inserto esa
+   * misma remision entre el pre-chequeo y el INSERT. Poco frecuente, pero deja de ser mudo.
+   */
+  private async reclasificarOmitidas(
+    filas: RowResult[],
+    omitidas: string[],
+    tiendaId: string,
+  ): Promise<void> {
+    if (omitidas.length === 0) return;
+    const pendientes = new Set(omitidas);
+    // El estado real de quien ocupa el numero. Misma lectura que el pre-chequeo (R25), acotada
+    // a las remisiones afectadas: en el caso normal (`omitidas` vacio) no se ejecuta.
+    const existentes = await this.repo.findExistingRemisiones([...pendientes], tiendaId);
+    for (const fila of filas) {
+      if (fila.resultado !== "creada") continue;
+      if (!pendientes.has(fila.numRemision)) continue;
+      fila.resultado = "duplicada";
+      // `estatus` se REEMPLAZA (no se conserva el inicial del lote) y se borra si no consta.
+      const real = existentes.get(fila.numRemision);
+      if (real !== undefined) fila.estatus = real;
+      else delete fila.estatus;
+    }
   }
 
   async cargarViaApi(
@@ -443,6 +491,8 @@ export class BulkOrdenService implements IBulkOrdenService {
     }
 
     const creadas: CreateOrdenConGuiaResultRow[] = [];
+    // Feature 294: las que `skipDuplicates` descarto, acumuladas sobre los DOS grupos.
+    const omitidas: string[] = [];
     let cargaId: string | null = null;
     for (const grupo of grupos) {
       if (grupo.ordenes.length === 0) continue;
@@ -460,7 +510,14 @@ export class BulkOrdenService implements IBulkOrdenService {
       );
       cargaId = persistido.cargaId ?? cargaId;
       creadas.push(...persistido.creadas);
+      omitidas.push(...persistido.omitidas);
     }
+
+    // Feature 294 — ANTES de armar el bloque `ordenes`: una fila que no entro se reclasifica a
+    // `duplicada` (ver `reclasificarOmitidas`). Hacerlo aqui y no despues es lo que impide que
+    // se le asigne un `numGuia` o que aparezca en `ordenes[]`: los dos bucles de abajo filtran
+    // por `resultado === "creada"`.
+    await this.reclasificarOmitidas(filas, omitidas, tiendaId);
 
     // R10: mapea el `num_guia` (por num_remision) a las filas creadas y arma el bloque plano.
     const guiaPorRemision = new Map(creadas.map((c) => [c.numRemision, c]));
@@ -472,7 +529,11 @@ export class BulkOrdenService implements IBulkOrdenService {
     for (const f of filas) {
       if (f.resultado !== "creada") continue;
       const creada = guiaPorRemision.get(f.numRemision);
-      if (!creada) continue; // defensivo: una creada sin fila persistida (no debería ocurrir).
+      // Feature 294: este `continue` era el AGUJERO — una fila que `skipDuplicates` se trago no
+      // esta en `creadas`, salia por aqui y se quedaba como `creada` sin `numGuia` y fuera del
+      // bloque `ordenes`. Ahora `reclasificarOmitidas` ya la degrado a `duplicada` unas lineas
+      // arriba, asi que esto vuelve a ser lo que decia ser: una guarda que no se recorre.
+      if (!creada) continue;
       f.numGuia = creada.numGuia;
       f.estatus = creada.estatusValue;
       const destinoDeLaOrden =

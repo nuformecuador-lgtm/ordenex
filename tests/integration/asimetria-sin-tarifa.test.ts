@@ -294,7 +294,7 @@ function ordenRepoDoble(): IOrdenRepository {
     findAllProvincias: vi.fn(async () => PROVINCIAS),
     findCantonesByProvinciaIds: vi.fn(async () => CANTONES),
     findDistritosByCantonIds: vi.fn(async () => DISTRITOS),
-    createManyOrdenes: vi.fn(async () => ({ inserted: 0, cargaId: null })),
+    createManyOrdenes: vi.fn(async () => ({ inserted: 0, cargaId: null, omitidas: [] })),
     createManyOrdenesConGuia: vi.fn(async (data: CreateOrdenData[]) => ({
       creadas: data.map((d, i) => ({
         ordenId: `ord-${d.numRemision}`,
@@ -303,6 +303,7 @@ function ordenRepoDoble(): IOrdenRepository {
         estatusValue: "por_recolectar_en_tienda",
       })),
       cargaId: "44444444-4444-4444-8444-444444444444",
+      omitidas: [],
     })),
   } as unknown as IOrdenRepository;
 }
