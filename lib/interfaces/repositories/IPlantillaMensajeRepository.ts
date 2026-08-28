@@ -178,6 +178,17 @@ export interface UpdatePlantillaData {
   plantillaTienda?: boolean;
 }
 
+/**
+ * Alcance de `listarUsablesParaTexto`. El parametro es OBLIGATORIO a proposito: cada superficie
+ * tiene que declarar si le corresponden las PLANTILLAS DE TIENDA, en vez de heredarlas por un
+ * default que nadie mira. Una plantilla de tienda NO se envia desde el mensajero —ni por wa.me
+ * ni por el chat—: es del admin de tienda, desde `/novedades`.
+ */
+export interface ListarUsablesParaTextoParams {
+  /** `true` SOLO en la superficie del admin de tienda (`/novedades`). */
+  incluirDeTienda: boolean;
+}
+
 export interface ListPlantillasParams {
   skip: number;
   take: number;
@@ -254,5 +265,7 @@ export interface IPlantillaMensajeRepository {
    */
   findWelcomeMessage(): Promise<PlantillaBienvenida | null>;
   /** Flujo wa.me: plantillas vigentes NO desactivadas, con cuerpo, para renderizar en cliente. */
-  listarUsablesParaTexto(): Promise<PlantillaTextoEnviable[]>;
+  listarUsablesParaTexto(
+    opciones: ListarUsablesParaTextoParams,
+  ): Promise<PlantillaTextoEnviable[]>;
 }
