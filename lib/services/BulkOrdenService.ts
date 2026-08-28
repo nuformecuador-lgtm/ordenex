@@ -34,6 +34,7 @@ import type {
   TarifaVigenteResuelta,
 } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import { clavePar, type ParTarifa } from "@/lib/utils/cascada-tarifa";
+import type { MontoAjustado } from "@/lib/utils/monto-cobrar";
 import { MSG_CARGA_SIN_TARIFA, MSG_FILA_SIN_TARIFA } from "@/lib/services/mensajes-tarifa";
 import { ConflictError } from "@/lib/errors/app-error";
 import {
@@ -173,6 +174,9 @@ export class BulkOrdenService implements IBulkOrdenService {
         numRemision: result.createData.numRemision,
         resultado: "creada",
         estatus: ctx.estatusInicialValue, // R19: estatus resuelto por lote (R16/R17)
+        // Feature 299: la clave solo aparece cuando HUBO ajuste. Una carga normal devuelve
+        // exactamente el mismo resumen que antes de esta ficha, byte a byte.
+        ...(result.montoAjustado !== null ? { montoAjustado: result.montoAjustado } : {}),
       });
     });
 
@@ -273,6 +277,9 @@ export class BulkOrdenService implements IBulkOrdenService {
       const real = existentes.get(fila.numRemision);
       if (real !== undefined) fila.estatus = real;
       else delete fila.estatus;
+      // Feature 299: y el aviso de redondeo se CAE con ella. Esta fila no creo ninguna orden,
+      // asi que no se ajusto ningun monto: mismo criterio que el `estatus` de arriba.
+      delete fila.montoAjustado;
     }
   }
 
@@ -383,6 +390,9 @@ export class BulkOrdenService implements IBulkOrdenService {
         numRemision: result.createData.numRemision,
         resultado: "creada",
         estatus: ctx.estatusInicialValue,
+        // Feature 299: mismo aviso y por el mismo canal que la via sesion. El integrador lo
+        // necesita MAS todavia: su sistema tiene el monto original y el nuestro el redondeado.
+        ...(result.montoAjustado !== null ? { montoAjustado: result.montoAjustado } : {}),
       });
     });
 
@@ -448,6 +458,8 @@ export class BulkOrdenService implements IBulkOrdenService {
       for (const orden of sinTarifa) {
         const idx = indicePorRemision.get(orden.numRemision);
         if (idx === undefined) continue; // defensivo: no deberia ocurrir
+        // Feature 299: la fila se REESCRIBE entera, asi que el aviso de redondeo se cae con
+        // ella — y debe caerse: sin orden creada no se ajusto ningun monto.
         filas[idx] = {
           fila: filas[idx].fila,
           numRemision: orden.numRemision,
@@ -647,6 +659,9 @@ export class BulkOrdenService implements IBulkOrdenService {
         createData: CreateOrdenData;
         esCentral: boolean;
         esZonaEspecial: boolean;
+        // Feature 299: el aviso de redondeo del monto, o `null` si no hubo. Lo emite el
+        // schema —la puerta COMPARTIDA por las dos vias—, asi que las dos lo reciben igual.
+        montoAjustado: MontoAjustado | null;
       } {
     const numRemisionRaw = (raw.num_remision ?? "").trim();
 
@@ -695,6 +710,9 @@ export class BulkOrdenService implements IBulkOrdenService {
       status: "creada",
       esCentral: geo.esCentral, // feature 98/R2
       esZonaEspecial: geo.esZonaEspecial, // marca del distrito: elige el pacto especial
+      // Feature 299: viene YA calculado del schema; aqui solo se transporta a la fila del
+      // resumen. `null` en el caso normal (monto entero, o sin monto).
+      montoAjustado: data.monto_cobrar_ajuste,
       createData: {
         numRemision: data.num_remision,
         estatusId: "", // el llamador lo completa (ya resuelto una sola vez, R7)

@@ -674,10 +674,25 @@ describe("BulkOrdenService.cargarMasiva — monto_cobrar (R23)", () => {
     const repo = buildRepo();
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
+    await service.cargarMasiva([row({ monto_cobrar: "12000" })], TIENDA);
+
+    const arg = createManyArg(repo);
+    expect(arg[0].montoCobrar).toBe(12000);
+  });
+
+  // FEATURE 299 — este `it` decia `"12.50" -> 12.5`, y ese literal ERA el contrato de
+  // entonces: «el monto pasa tal cual». Hoy es justo lo contrario, y por eso no se relaja
+  // (no se cambia el esperado por «lo que salga») sino que se sustituye por el contrario
+  // afirmado: el decimal NO llega a la columna. El caso de arriba se movio a un entero para
+  // que siga midiendo lo que decia medir —que un monto valido se persiste— sin solaparse.
+  it("299: decimal -> se persiste REDONDEADO al colon (nunca llega un centimo a la columna)", async () => {
+    const repo = buildRepo();
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
+
     await service.cargarMasiva([row({ monto_cobrar: "12.50" })], TIENDA);
 
     const arg = createManyArg(repo);
-    expect(arg[0].montoCobrar).toBe(12.5);
+    expect(arg[0].montoCobrar).toBe(13);
   });
 
   it("no numerico -> error de fila", async () => {
@@ -700,6 +715,97 @@ describe("BulkOrdenService.cargarMasiva — monto_cobrar (R23)", () => {
     if (r.status === "ok") {
       expect(r.summary.filas[0].errores).toHaveProperty("monto_cobrar");
     }
+  });
+});
+
+/**
+ * FEATURE 299 — la via SESION de la puerta de alta.
+ *
+ * El caso es literal: `11898.81` es el monto de la captura que reporto el humano el
+ * 2026-08-27, la que la pantalla de entrega pintaba como «A cobrar 11.899 / Capturado 11.899 /
+ * Diferencia 0» mientras rechazaba el desglose por no sumar «exactamente». Con esta ficha esa
+ * orden ya no puede nacer.
+ */
+describe("BulkOrdenService.cargarMasiva — monto redondeado al colon (feature 299)", () => {
+  it("299: 11898.81 se persiste como 11899 Y la fila creada dice que se ajusto", async () => {
+    const repo = buildRepo();
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
+
+    const r = await service.cargarMasiva([row({ monto_cobrar: "11898.81" })], TIENDA);
+
+    // (1) lo que se guarda: un entero, el unico monto que el desglose de la entrega sabe cobrar
+    expect(createManyArg(repo)[0].montoCobrar).toBe(11899);
+
+    // (2) lo que se dice: la fila reporta el ajuste con los DOS numeros. Sin esto, el sistema
+    // de la tienda y el nuestro dicen cifras distintas y nadie sabe por que.
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.summary.filas[0]).toMatchObject({
+      resultado: "creada",
+      montoAjustado: { original: 11898.81, aplicado: 11899 },
+    });
+  });
+
+  it("299: un monto ENTERO no se toca y no genera aviso alguno", async () => {
+    const repo = buildRepo();
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
+
+    const r = await service.cargarMasiva([row({ monto_cobrar: "11899" })], TIENDA);
+
+    expect(createManyArg(repo)[0].montoCobrar).toBe(11899);
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    // Ni la clave: una carga normal devuelve el mismo resumen que antes de esta ficha.
+    expect("montoAjustado" in r.summary.filas[0]).toBe(false);
+  });
+
+  it("299: un monto VACIO sigue siendo null y tampoco avisa (la rama de 'sin COD' no cambia)", async () => {
+    const repo = buildRepo();
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
+
+    const r = await service.cargarMasiva([row({ monto_cobrar: "" })], TIENDA);
+
+    expect(createManyArg(repo)[0].montoCobrar).toBeNull();
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect("montoAjustado" in r.summary.filas[0]).toBe(false);
+  });
+
+  it("299: el medio SUBE, igual que lo pinta `money()` (half away from zero)", async () => {
+    const repo = buildRepo();
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
+
+    await service.cargarMasiva([row({ monto_cobrar: "11898.50" })], TIENDA);
+
+    expect(createManyArg(repo)[0].montoCobrar).toBe(11899);
+  });
+
+  /**
+   * FEATURE 299 x 294 — una fila que `skipDuplicates` descarto se reclasifica a `duplicada`, y
+   * con ella se cae el aviso: no se creo ninguna orden, asi que no se ajusto ningun monto.
+   * Es el mismo criterio con el que la 294 borra el `estatus` de esa fila.
+   */
+  it("299/294: la fila que no llego a crearse pierde el aviso al degradarse a duplicada", async () => {
+    const repo = buildRepo({
+      // La rama por defecto de esta suite es la (b): `por_recolectar_en_tienda` CON guia.
+      createManyOrdenesConGuia: vi
+        .fn()
+        .mockResolvedValue({ creadas: [], cargaId: "carga-1", omitidas: ["REM-1"] }),
+      findExistingRemisiones: vi
+        .fn()
+        // Primera llamada: el pre-chequeo no ve la remision (la fila entra como creada).
+        .mockResolvedValueOnce(new Map())
+        // Segunda: la reclasificacion pregunta por quien ocupa el numero.
+        .mockResolvedValueOnce(new Map([["REM-1", "entregada"]])),
+    });
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
+
+    const r = await service.cargarMasiva([row({ monto_cobrar: "11898.81" })], TIENDA);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.summary.filas[0].resultado).toBe("duplicada");
+    expect("montoAjustado" in r.summary.filas[0]).toBe(false);
   });
 });
 
