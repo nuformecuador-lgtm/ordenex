@@ -191,6 +191,11 @@ function avisoCero(campo: TarifaCampo, valor: string): string | undefined {
 /**
  * Rejilla de los campos numéricos. `idPrefix` evita colisión de ids cuando la
  * rejilla convive con otro formulario en la misma página.
+ *
+ * Feature 310 — los campos van `rowAligned`: aquí conviven rótulos de un renglón («Valor
+ * flete», «Fulfillment») con otros de dos («Comisión por cobro contra entrega (%)») y el
+ * aviso del cero aparece sólo en los campos que están en cero, así que sin alinear por fila
+ * cada celda medía distinto y los `Input` de una misma fila no casaban.
  */
 export function TarifaCamposGrid({
   idPrefix,
@@ -216,6 +221,7 @@ export function TarifaCamposGrid({
           error={errors[campo.key]}
           hint={avisoCero(campo, valores[campo.key])}
           required={!("opcional" in campo && campo.opcional)}
+          rowAligned
         >
           <Input
             type="number"

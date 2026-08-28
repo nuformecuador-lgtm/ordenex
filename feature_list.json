@@ -3739,6 +3739,17 @@
       "complexity": "baja",
       "branch": null,
       "status_note": "ENCONTRADA el 2026-08-28 en el barrido de la 306. `GESTION_AYUDA_AVISO_PRECIO` (`GestionarDesdeAyudaModal.tsx:119`) dice '...y mueve el dinero igual' y se pinta en los DOS modos. Al REPROGRAMAR no se mueve nada: `pago-mensajero.ts:22`, `ingreso-bodega.ts:23` e `ingreso-ordenex.ts:185-186` dan cero. Quien reprograma lee que le van a cobrar. ADEMAS, de otra familia y en el mismo modulo: `HabilitarNovedadModal.tsx:22-23,36-41` sigue diciendo 'MAQUETA: la transicion todavia no existe en el backend', falso desde la 235."
+    },
+    {
+      "id": 310,
+      "title": "los textos nuevos de tarifas desordenaron la rejilla del formulario",
+      "description": "Con las etiquetas y ayudas nuevas, los campos dejan de estar alineados y hay dos titulos casi iguales seguidos.",
+      "zone": "frontend",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "fix/310-layout-tarifas",
+      "status_note": "REPORTADA POR EL HUMANO con captura el 2026-08-28, justo despues de desplegar la 303. La 303 arreglo los TEXTOS y el aviso del cero -- y eso mismo rompio la disposicion, porque los rotulos nuevos son mas largos y el aviso anade altura variable. TRES DEFECTOS VISIBLES: (1) TITULO DUPLICADO: la seccion dice 'Pagos por zona' y el bloque, justo debajo, 'Pagos por zona (mensajero y bodega)'. El propio implementador de la 303 lo dejo dicho: acorto el de arriba para no repetir, y aun asi quedan dos casi iguales seguidos. (2) LOS DOS MONTOS DEL PAGO A DISTINTA ALTURA: 'Se le paga al mensajero.' ocupa una linea y 'Es ingreso de la bodega, no del mensajero.' ocupa dos, asi que los inputs quedan descuadrados. (3) LA REJILLA DE TARIFAS PIERDE LA ALINEACION POR FILA: 'Comision por cobro contra entrega (%)', 'IVA de la comision por cobro contra entrega (%)' y 'Flete de retorno GAM (solo rechazos)' rompen a dos renglones, y el aviso 'Sin configurar' aparece solo en los campos en cero. NO SE TOCAN LOS TEXTOS NI EL AVISO: los aprobo el humano y arreglaron un problema real (44 rechazos sin pagar por un cero indistinguible de un olvido). Lo que hay que arreglar es la DISPOSICION para que aguante rotulos de dos lineas y ayudas de altura distinta."
     }
   ]
 }
