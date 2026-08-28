@@ -28,6 +28,10 @@ function base(overrides: Partial<EtiquetaGuiaDTO>): EtiquetaGuiaDTO {
     provinciaNombre: "San José",
     cantonNombre: "Mora",
     distritoNombre: "Colón",
+    // Feature 295: la fecha de creacion NO consta en la evidencia (la etiqueta de
+    // produccion no llevaba ninguna: ese era el defecto). Se rellena con un dia
+    // cualquiera y ningun requisito de la 282 afirma nada sobre ella.
+    fechaCreacion: "2026-08-25",
     qrValue: String(numGuia),
     barcodeValue: String(numGuia),
     ...overrides,

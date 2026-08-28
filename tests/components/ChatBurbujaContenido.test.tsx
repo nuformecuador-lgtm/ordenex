@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { screen, cleanup, act, waitFor } from "@testing-library/react";
 import type { ChatMensajeTipo } from "@prisma/client";
 
-// Feature 308 (R14/R27) — NINGUNA burbuja del hilo queda vacia.
+// Feature 311 (R14/R27) — NINGUNA burbuja del hilo queda vacia.
 //
 // El sintoma que arregla la feature: todo entrante que no fuera `text` ni `location` caia en
 // `otro` con `cuerpo = null` y se pintaba como `<p>{cuerpo ?? ""}</p>`, o sea una burbuja con

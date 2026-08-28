@@ -4,7 +4,7 @@ import {
   parsearContactosGuardados,
 } from "@/lib/types/chat-contactos";
 
-// Feature 308 — B1.T (R7/R14). `contactos_json` es el UNICO dato de la feature que vive como
+// Feature 311 — B1.T (R7/R14). `contactos_json` es el UNICO dato de la feature que vive como
 // JSON. El invariante que estos tests protegen es que ese JSON se valida con zod en las DOS
 // direcciones y que un JSON historico o corrupto degrada a "sin contactos" en vez de reventar
 // el listado del hilo entero.

@@ -1,0 +1,103 @@
+-- FICHA 305 — `orden.monto_cobrar` NO PUEDE TENER CENTIMOS. LA DEFENSA VIVE EN LA BASE.
+--
+-- QUE PASO, MEDIDO. El desglose de pago de la entrega SOLO admite enteros
+-- (`components/shared/DesglosePagoField.tsx` filtra el input a digitos, decision deliberada) y
+-- el guard de la gestion exige que el desglose sume EXACTAMENTE el monto. Una orden cargada con
+-- centimos no se puede entregar NUNCA: la pantalla dice «Diferencia 0» —porque la pinta con
+-- `money()`, ya redondeado— y a la vez se niega a cerrar. El 2026-08-27 hubo que redondear
+-- CATORCE ordenes A MANO en la base para desbloquear a los mensajeros.
+--
+-- POR QUE UNA RESTRICCION Y NO SOLO EL ARREGLO DE LA 299. La ficha 299 cerro la CARGA
+-- (`filaCargaSchema` redondea al colon mas cercano al entrar) y dejo una guardia que persigue
+-- las puertas de TypeScript. Esa guardia declara ella misma lo que NO puede cubrir, y es
+-- exactamente el camino por el que entraron los centimos que hubo que limpiar: **un `UPDATE`
+-- escrito a mano contra la base**. Ningun barrido de fuentes ve esa sentencia; ningun test de
+-- servicio con dobles la ve tampoco. La UNICA defensa que alcanza a todo el que escriba en la
+-- tabla —aplicacion, script, consola de Supabase, psql— es la propia tabla.
+--
+-- LA REGLA ES LA MISMA QUE LA DE LA CARGA, dicha en SQL: el monto es un entero de colones.
+-- `monto_cobrar = trunc(monto_cobrar)` es literalmente la forma que la guardia de la 299 dejo
+-- escrita como «la vuelta pendiente».
+--
+-- ═══════════════════════════════════════════════════════════════════════════════════════════
+-- ESTA MIGRACION SI NORMALIZA LO VIEJO ANTES DE PONER LA RESTRICCION. ES UN CAMBIO DE DECISION.
+-- ═══════════════════════════════════════════════════════════════════════════════════════════
+-- Si alguien busca en el historial la version anterior de este archivo, encontrara escrito lo
+-- contrario —«AQUI NO HAY BACKFILL», «redondear desde aqui seria mover dinero de una tienda sin
+-- que nadie lo decida»— y el motivo era bueno. YA NO ESTA VIGENTE. El humano decidio lo
+-- contrario el 2026-08-28, con el dato delante, y estos son los tres motivos:
+--
+--   1. EN PRODUCCION NO CAMBIA NI UNA FILA. Medido ese mismo dia: CERO ordenes con centimos de
+--      301. El `UPDATE` de abajo, alli, es literalmente un no-op — no mueve dinero de nadie
+--      porque no hay dinero desalineado que mover.
+--   2. LO QUE LIMPIA ES BASURA DE ENTORNOS DE PRUEBA, y es justo lo que estaba BLOQUEANDO. La
+--      version sin backfill fallo el despliegue TRES VECES seguidas con 23514: la base de
+--      PREVIEW tiene ordenes viejas de prueba con centimos, y las bases locales tambien (cinco
+--      filas del 2026-07-24, con remisiones `REM-0001`, `111111`, `63494`, `63416`, `111117`).
+--      Cada entorno con datos viejos exigia una limpieza manual antes de dejar pasar la
+--      migracion. Ese peaje se cobraba en todos los entornos para proteger un caso —dinero real
+--      desalineado— que en produccion NO EXISTE.
+--   3. NO INVENTA UNA REGLA NUEVA: aplica EL MISMO REDONDEO que el sistema ya hace al cargar
+--      desde la 299. `redondearMontoCobrar` es `Math.round`, y `round(numeric)` de Postgres es
+--      half away from zero: sobre un monto NO NEGATIVO —el unico que la carga deja entrar— las
+--      dos son la misma operacion. Una fila normalizada aqui queda con el valor que habria
+--      tenido si hubiera entrado por la puerta arreglada.
+--
+-- EL ORDEN IMPORTA Y NO ES CASUAL: primero el `UPDATE`, despues el `ADD CONSTRAINT`. Al reves
+-- la restriccion abortaria antes de que el redondeo llegue a correr. Van en la MISMA migracion
+-- —y por tanto en la misma transaccion, que es como Prisma ejecuta cada archivo—, asi que no
+-- existe un instante en el que la tabla este normalizada pero desprotegida, ni al reves.
+--
+-- LO QUE ESTE `UPDATE` NO ES: no es una excusa para dejar de mirar. Sigue siendo util correr
+-- esto ANTES de desplegar a un entorno con datos que importen, para SABER que se va a tocar:
+--
+--   SELECT id, monto_cobrar, round(monto_cobrar) AS quedaria, deleted_at FROM orden
+--   WHERE monto_cobrar IS NOT NULL AND monto_cobrar <> trunc(monto_cobrar);
+--
+-- Si eso devuelve filas en produccion, la medida del 2026-08-28 caduco y la decision de arriba
+-- —que se apoya en ese cero— hay que volver a tomarla.
+--
+-- ⚠️ LA RESTRICCION SIGUE SIENDO VALIDANTE, Y SE QUIERE ASI. `ADD CONSTRAINT ... CHECK` sin
+-- `NOT VALID` recorre la tabla y ABORTA con 23514 si encuentra una fila que no cumple. NO se usa
+-- `NOT VALID`: una restriccion que no vale para lo que ya hay es una restriccion que MIENTE. El
+-- backfill no la vuelve decorativa — la deja como la unica red que queda si algun dia el
+-- redondeo no alcanzara a una fila (por ejemplo, si `round` desbordara el `numeric(12,2)` por
+-- encima de 9.999.999.999,99: ahi la migracion abortaria con 22003 en vez de 23514, ruidosa
+-- igual, y nunca en silencio).
+--
+-- ALCANCE: TODAS LAS FILAS, TAMBIEN LAS BORRADAS — Y ES UNA DECISION, NO UN DESCUIDO.
+-- `orden` tiene borrado logico (`deleted_at`). Un `CHECK` no admite predicado, asi que exentar
+-- a las borradas exigiria escribirlo como `deleted_at IS NOT NULL OR <regla>`. NO se hace:
+--   * el `deleted_at` de una orden es un valor de columna, no una tumba: se pone y se quita con
+--     un `UPDATE`. Una orden borrada con centimos es una orden imposible de entregar esperando
+--     a que alguien la restaure;
+--   * la variante con predicado invita a la maniobra en dos pasos (marcar borrada, escribir los
+--     centimos) y convierte el significado de la restriccion en «depende».
+-- Por lo mismo, el `UPDATE` de abajo TAMPOCO lleva `deleted_at IS NULL`: normaliza tambien a las
+-- borradas, porque si no la restriccion abortaria por ellas y volveriamos al bloqueo.
+-- El unico parcial de `num_remision` (20260827160000) SI lleva predicado, y por un motivo que
+-- aqui no aplica: alli lo que se define es la IDENTIDAD de una remision viva. Un centimo, en
+-- cambio, esta mal en la fila la vea quien la vea.
+--
+-- `IS NULL OR` ES REDUNDANTE Y SE ESCRIBE IGUAL. Un `CHECK` que evalua a NULL se considera
+-- satisfecho, asi que `monto_cobrar = trunc(monto_cobrar)` ya dejaria pasar las filas sin monto.
+-- Se escribe explicito porque «sin monto a cobrar» es un caso legitimo del negocio (la 299 lo
+-- dice: `null` no es un cero ni un ajuste) y quien lea esta linea dentro de un año no deberia
+-- tener que acordarse de la semantica trivalente de SQL para saberlo. Por simetria, el `WHERE`
+-- del `UPDATE` filtra `IS NOT NULL` explicito: `NULL <> trunc(NULL)` es NULL y no actualizaria
+-- nada, pero decirlo evita que la siguiente lectura tenga que razonarlo.
+--
+-- POR QUE NO ESTA EN `db/schema.prisma`: Prisma no sabe expresar un `CHECK`. El modelo lleva un
+-- comentario que dice donde vive la restriccion, con el mismo patron que ya usan los indices
+-- parciales (`orden_tienda_id_num_remision_key`, `zona_es_gam_unico`, `jobs_dedupe_key_key`).
+--
+-- RLS: no hay tabla nueva -> no hay superficie RLS nueva. No se toca RLS ni ninguna policy.
+-- Ninguna otra tabla se toca: el unico `UPDATE` y el unico `ALTER` son sobre `orden`.
+
+-- 1) Normaliza lo que ya existe. En produccion no toca ni una fila (0 de 301, 2026-08-28).
+UPDATE "orden" SET "monto_cobrar" = round("monto_cobrar")
+WHERE "monto_cobrar" IS NOT NULL AND "monto_cobrar" <> trunc("monto_cobrar");
+
+-- 2) Y ahora si, cierra la puerta para todo el que escriba en la tabla.
+ALTER TABLE "orden" ADD CONSTRAINT "orden_monto_cobrar_entero_check"
+  CHECK ("monto_cobrar" IS NULL OR "monto_cobrar" = trunc("monto_cobrar"));

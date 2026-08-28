@@ -119,5 +119,7 @@ export type MarcarBienvenidaPlantillaResult =
   // 2026-08-27: la plantilla existe pero no esta `activo`. Fuera de `ActionError` por lo mismo
   // que `ya_enviada`: es un desenlace normal con palabras propias, no un fallo a reintentar.
   | { status: "estado_invalido"; estado: PlantillaEstado }
+  /** Plantilla DE TIENDA: la bienvenida va por Meta y esta no vive alli. */
+  | { status: "no_aplica" }
   | ActionError;
 export type PreviewPlantillaResult = { status: "ok"; texto: string } | ActionError;

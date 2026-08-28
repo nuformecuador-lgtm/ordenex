@@ -1,4 +1,4 @@
-# Feature 308 — El chat muestra media, reacciones, contactos y el cambio de número del cliente
+# Feature 311 — El chat muestra media, reacciones, contactos y el cambio de número del cliente
 
 > Requisitos en notación EARS (`docs/specs.md`). Numerados `R1..R35`. Sin detalles de
 > implementación (esos van en `design.md`). Cada requisito es testeable y está mapeado a un

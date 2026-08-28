@@ -7,7 +7,7 @@ import { BurbujaContenido } from "@/app/(app)/mis-asignaciones/_components/chat/
 import type { ChatMensajeVista } from "@/lib/types/chat-whatsapp";
 import type { ChatMensajeTipo } from "@prisma/client";
 
-// Feature 308 (R24/R27/R28/R29) — las burbujas con ADJUNTO.
+// Feature 311 (R24/R27/R28/R29) — las burbujas con ADJUNTO.
 //
 // El binario NO viaja en el hilo: la burbuja se lo pide al proxy propio
 // (`/api/chat/media/<id-interno>`), que es quien autoriza y quien distingue "caducado" (410) de

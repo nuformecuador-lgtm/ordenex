@@ -29,7 +29,7 @@ const SELECT = {
   errorCodigo: true,
   errorTitulo: true,
   errorDetalle: true,
-  // Feature 308 (design §4): columnas de los tipos entrantes nuevos. `mediaId` se lee aqui
+  // Feature 311 (design §4): columnas de los tipos entrantes nuevos. `mediaId` se lee aqui
   // porque la ruta proxy lo necesita; NO viaja a la UI (el mapeo del DTO a la vista lo omite).
   mediaId: true,
   mediaMime: true,
@@ -121,7 +121,7 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
           // Feature 121 (R4): coords del entrante de ubicacion; NULL en los demas entrantes.
           latitud: input.latitud ?? null,
           longitud: input.longitud ?? null,
-          // Feature 308 (R1/R4/R5/R7/R9): cada grupo lo puebla SOLO su tipo; el resto queda
+          // Feature 311 (R1/R4/R5/R7/R9): cada grupo lo puebla SOLO su tipo; el resto queda
           // NULL. Un entrante de media o una reaccion es un entrante MAS: no toca el dedupe
           // (`skipDuplicates` sigue arbitrando por `wa_message_id`) ni el sellado (R12).
           mediaId: input.mediaId ?? null,
@@ -262,7 +262,7 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
     mensajeId: string,
     mensajeroId: string,
   ): Promise<ChatMediaAutorizada | null> {
-    // Feature 308 (design §5.2, R23): UNA sola query. El join mensaje -> conversacion -> orden
+    // Feature 311 (design §5.2, R23): UNA sola query. El join mensaje -> conversacion -> orden
     // con `o.mensajero_asignado_id = $mensajeroId` ES la autorizacion: si la orden no esta
     // asignada a quien pide, no hay fila y el proxy responde 403 sin tocar la Graph API.
     //

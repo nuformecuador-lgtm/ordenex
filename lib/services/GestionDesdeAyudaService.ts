@@ -44,6 +44,14 @@ import { startOfDayCR } from "@/lib/utils/fecha-cr";
  *    devolucion (`ingreso_flete_devolucion`, hasta ₡2.600 —₡2.200 en GAM— mas IVA 13 %, medido);
  * 3. y suma un intento que adelanta el escalado del cron de SLA (99).
  *
+ * FICHA 301 (2026-08-28) — EL PUNTO 2 ES AHORA EXCLUSIVO DE `rechazada`, y por eso pesa mas
+ * que antes. Hasta esa fecha una `devuelta` cobraba EXACTAMENTE el mismo flete de devolucion,
+ * asi que elegir uno u otro resultado no cambiaba lo que se le facturaba a la tienda por el
+ * retorno. Desde la 301 solo `rechazada` lo cobra: una `devuelta` desde esta misma pantalla
+ * no genera NINGUN concepto de ingreso. La eleccion de resultado en la ayuda pasa a decidir
+ * si hay cobro de retorno o no lo hay. (El `cobroRechazado` del punto 1 no cambia: es ingreso
+ * de bodega en el cierre del mensajero y nunca dependio de este calculo.)
+ *
  * ## Por que este servicio existe y no se llama a `MisAsignacionesService.gestionar`
  *
  * Cuatro guardas de aquel metodo lo impiden y NINGUNA es accidental (design §4.1): exige rol

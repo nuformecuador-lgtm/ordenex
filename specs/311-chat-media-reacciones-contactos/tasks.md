@@ -1,4 +1,4 @@
-# Feature 308 — Tasks
+# Feature 311 — Tasks
 
 > Checklist de pasos discretos y verificables. `[P]` = paralelizable con sus hermanos del mismo
 > bloque. Cada task lleva **criterio de "hecho" en forma de `assert`** (no "existe el archivo" ni
@@ -7,7 +7,7 @@
 > rechace (`CLAUDE.md` §4).
 >
 > **Antes de empezar:** la ficha no puede pasar a `in_progress` hasta que cierre una de las dos
-> features fullstack en vuelo (278/288) — ver `status_note` de la 308. Y hay que aprobar el spec
+> features fullstack en vuelo (278/288) — ver `status_note` de la 311. Y hay que aprobar el spec
 > en la puerta humana (`spec_ready`).
 
 ## Bloque A — Datos y migración
@@ -187,13 +187,13 @@
   la ficha y en `progress/current.md`. Lo original:
    Recorrido manual con un payload real de Meta (imagen + nota de voz + reacción +
   contacto) en la base local, comprobando la burbuja y la descarga por el proxy. Depende de G8.
-  *Hecho:* nota en `progress/impl_308.md` con lo observado (sin pegar PII).
+  *Hecho:* nota en `progress/impl_311.md` con lo observado (sin pegar PII).
 - [x] **H2.** `./init.sh --rapido` en verde. **Ojo:** este diff toca `db/schema.prisma`, una
   migración y `lib/types/`, así que el modo rápido **se niega solo** (`CLAUDE.md` §5) ⇒ corre
   `./init.sh` completo. Depende de H1.
   *Hecho:* gate completo en verde, con el baseline de `dev` medido ANTES (memoria: los baselines
   caducan con cualquier PR ajeno).
-- [x] **H3.** `progress/impl_308.md` con el mapa R→test completo y `feature_list.json` id 308 a
+- [x] **H3.** `progress/impl_311.md` con el mapa R→test completo y `feature_list.json` id 311 a
   `done`. Depende de H2.
   *Hecho:* el archivo existe y su tabla coincide con la de abajo, con los 35 requisitos cubiertos.
 

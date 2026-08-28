@@ -453,9 +453,11 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
     expect(r.ingreso_flete_devolucion).toBeUndefined();
   });
 
-  it("MEDIDO: el flete de DEVOLUCION y su IVA, y que una devolucion NO cobra comision", () => {
+  it("MEDIDO: el flete de DEVOLUCION y su IVA, y que un rechazo NO cobra comision", () => {
+    // FICHA 301 (2026-08-28): este caso medía `devuelta`. El flete de devolucion y su IVA no
+    // cambiaron de formula ni de importe — cambio QUIEN los paga: solo `rechazada`.
     const r = derivarIngresoOrden(
-      { resultado: "devuelta", esCentral: false, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
+      { resultado: "rechazada", esCentral: false, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
       TARIFA,
     );
 
@@ -463,6 +465,18 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
     expect(r.ingreso_iva_flete_devolucion?.toFixed(2)).toBe("195.00"); // 13 % de 1 500
     expect(r.ingreso_comision_cod).toBeUndefined(); // no hubo recaudo
     expect(r.ingreso_flete).toBeUndefined();
+  });
+
+  it("MEDIDO (ficha 301): una DEVUELTA no aporta a ningun concepto de ingreso", () => {
+    // La guardia de la 173 mide que las formulas de dinero no se alteren de pasada. Esta
+    // linea es la excepcion declarada: el 2026-08-28 el humano cambio la REGLA (no la
+    // formula) y una devuelta dejo de facturar. Queda medido aqui para que el proximo cambio
+    // "de pasada" en ingreso-ordenex.ts tenga que pasar tambien por este archivo.
+    const r = derivarIngresoOrden(
+      { resultado: "devuelta", esCentral: false, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
+      TARIFA,
+    );
+    expect(r).toEqual({});
   });
 
   it("MEDIDO: el pago al mensajero por gestion — solo `entregada` paga, y paga `cobroEntregado`", () => {

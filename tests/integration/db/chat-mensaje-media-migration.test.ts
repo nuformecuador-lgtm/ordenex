@@ -4,7 +4,7 @@ import path from "path";
 import type { PrismaClient } from "@prisma/client";
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
 
-// Feature 308 — A2/A3.T (R13). La migracion `*_chat_mensaje_media_reacciones`.
+// Feature 311 — A2/A3.T (R13). La migracion `*_chat_mensaje_media_reacciones`.
 //
 // A DIFERENCIA de la 121 (que se cubrio por REGEX sobre el .sql), aqui se aplica el DDL DE
 // VERDAD en un esquema desechable y se pregunta al catalogo de Postgres. Motivo: lo que hay que
@@ -72,13 +72,13 @@ const COLUMNAS_NUEVAS = [
 // Catalogo REAL de Postgres (up + down aplicados en un esquema desechable)
 // ---------------------------------------------------------------------------
 
-const ESQUEMA = "f308_migracion_test";
+const ESQUEMA = "f311_migracion_test";
 
 type ColumnaRow = { column_name: string; is_nullable: string; data_type: string };
 type EnumRow = { enumlabel: string };
 
 describe.skipIf(!HAY_BASE_DE_DATOS)(
-  "Feature 308 · la migracion aplicada DE VERDAD (R13)",
+  "Feature 311 · la migracion aplicada DE VERDAD (R13)",
   () => {
     let prisma: PrismaClient;
 
@@ -201,7 +201,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(
 // Aserciones estaticas (no necesitan motor): forma del .sql y ausencia de drift
 // ---------------------------------------------------------------------------
 
-describe("Feature 308 · forma de la migracion (A2/A3)", () => {
+describe("Feature 311 · forma de la migracion (A2/A3)", () => {
   it("declara los ocho valores con IF NOT EXISTS y documenta el GOTCHA 55P04", () => {
     for (const v of VALORES_NUEVOS) {
       expect(upSql).toContain(`ALTER TYPE "chat_mensaje_tipo" ADD VALUE IF NOT EXISTS '${v}';`);
@@ -234,7 +234,7 @@ describe("Feature 308 · forma de la migracion (A2/A3)", () => {
   });
 });
 
-describe("Feature 308 · schema.prisma refleja la migracion (sin drift)", () => {
+describe("Feature 311 · schema.prisma refleja la migracion (sin drift)", () => {
   const bloqueEnum = schemaPrisma.match(/enum ChatMensajeTipo \{([\s\S]*?)\n\}/);
   const bloqueModelo = schemaPrisma.match(/model ChatMensaje \{([\s\S]*?)\n\}/);
 

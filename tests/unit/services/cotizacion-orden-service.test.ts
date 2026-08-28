@@ -59,17 +59,26 @@ const TARIFA: TarifaVigente = {
 };
 
 /**
- * Tarifa del caso de los centimos (T7B.4): con comision del 10% un monto de `35.04` produce
- * una comision EXACTA de `3.504`, que la aritmetica redondea a `3.50`. Tres filas iguales
+ * Tarifa del caso de los centimos (T7B.4): con comision del `10.01 %` un monto de `35` produce
+ * una comision EXACTA de `3.5035`, que la aritmetica redondea a `3.50`. Tres filas iguales
  * suman `10.50` si el lote acumula los valores DE CADA FILA, y `10.51` si alguien acumulara
- * los exactos sin redondear. Los dos centimos de diferencia son el test.
+ * los exactos sin redondear. Ese centimo de diferencia es el test.
+ *
+ * ⚠️ FICHA 305 — POR QUE EL DECIMAL SE MUDO DEL MONTO AL PORCENTAJE. Hasta hoy el caso se
+ * construia con un monto de `35.04` y una comision del `10 %`. Desde que la cotizacion redondea
+ * el monto al colon (igual que la carga), un monto con centimos ya no llega vivo hasta la
+ * aritmetica: `35.04` se cotiza como `35` y la comision saldria exacta, dejando este test SIN
+ * NADA QUE MEDIR aunque siguiera verde. Lo que el test vigila —que el lote acumule los importes
+ * YA REDONDEADOS de cada fila y no los exactos— no ha cambiado, asi que la escala de mas se
+ * consigue ahora por el unico camino que sigue existiendo: un porcentaje con centimos, que es
+ * ademas lo que la columna `tarifas.comision_cod` (`DECIMAL(5,2)`) permite.
  */
 const TARIFA_CENTIMOS: TarifaVigente = {
   valorFlete: "10.00",
   valorFleteGam: "10.00",
   valorFleteDevuelto: "4.00",
   valorFleteDevueltoGam: "4.00",
-  comisionCod: "10.00",
+  comisionCod: "10.01",
   ivaFlete: "0.00",
   ivaComisionCod: "0.00",
   // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
@@ -480,8 +489,13 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
       montoCobrar: "25900",
       cobraComision: true,
     });
+    // FICHA 301 (2026-08-28): la segunda llamada pide `rechazada`, no `devuelta`. El escenario
+    // publico se sigue llamando "devuelto" y sus importes NO cambian, pero el resultado de
+    // gestion que factura el retorno es `rechazada`: una `devuelta` es un intento fallido que
+    // sigue vivo y desde esa fecha no genera ingreso alguno. Si esto volviera a `devuelta`, la
+    // cotizacion publicaria ceros y le prometeria al integrador que un retorno es gratis.
     expect(segunda[0]).toEqual({
-      resultado: "devuelta",
+      resultado: "rechazada",
       esCentral: false,
       esZonaEspecial: false,
       montoCobrar: "25900",
@@ -565,6 +579,36 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
 
     // 25900 − (2500 + 325 + 906.50 + 117.85) = 22050.65: lo que RECIBE la tienda (D1).
     expect(entregado.total).toBe("₡22.050,65");
+  });
+
+  it("FICHA 305 · cotiza sobre el monto REDONDEADO, que es el que se va a cobrar", async () => {
+    // EL DEFECTO QUE CIERRA, medido de punta a punta. La carga persiste `11898.81` como `11899`
+    // desde la feature 299 (con centimos la orden no se puede entregar nunca), pero la
+    // cotizacion seguia calculando sobre el exacto: se prometia la comision de `11898.81` y
+    // luego se cobraba la de `11899`.
+    const conCentimos = await cotizar([fila({ monto_cobrar: "11898.81" })]);
+    const yaEntero = await cotizar([fila({ monto_cobrar: "11899" })]);
+
+    // La afirmacion central: cotizar el monto con centimos es EXACTAMENTE cotizar el redondeado.
+    // No compara una funcion consigo misma —son dos ENTRADAS distintas por el mismo camino— y es
+    // lo que se rompe en cuanto alguien quite el redondeo de la puerta.
+    expect(costosDe(conCentimos)).toEqual(costosDe(yaEntero));
+    expect(conCentimos.totales).toEqual(yaEntero.totales);
+
+    // Y los importes concretos, calculados a mano sobre 11899 y no copiados de la salida:
+    //   comision      = 11899 × 3,50 %          = 416,465  -> 416,47 (ROUND_HALF_UP)
+    //   iva comision  = 416,47 × 13 %           = 54,1411  -> 54,14
+    //   total tienda  = 11899 − 2500 − 325 − 416,47 − 54,14 = 8603,39
+    const entregado = costosDe(conCentimos).entregado;
+    expect(entregado.comision).toBe("₡416,47");
+    expect(entregado.ivaComision).toBe("₡54,14");
+    expect(entregado.total).toBe("₡8.603,39");
+
+    // LO QUE SE PUBLICABA ANTES DE ESTA FICHA, escrito para que el cambio observable quede a la
+    // vista: sobre el monto exacto la comision era 11898,81 × 3,50 % = 416,45835 -> 416,46 y el
+    // total 8603,21. Un centimo en la comision, dieciocho en el total.
+    expect(entregado.comision).not.toBe("₡416,46");
+    expect(entregado.total).not.toBe("₡8.603,21");
   });
 
   it("T7.6 devuelto.total es negativo e igual a -(flete + iva) (R31)", async () => {
@@ -679,20 +723,21 @@ describe("CotizacionOrdenService — totales del LOTE (T7B)", () => {
   });
 
   it("T7B.4 el total del lote se acumula en Prisma.Decimal antes de formatear (R55)", async () => {
-    // Tres filas cuya comision exacta es 3.504 y que la aritmetica redondea a 3.50 POR FILA.
-    // El lote suma los valores DE CADA FILA: 3×3.50 = 10.50. Acumular los exactos sin
-    // redondear daria 10.512 -> 10.51, y son esos dos centimos los que este test fija.
-    const resumen = await cotizar([fila({ monto_cobrar: "35.04" }), fila({ monto_cobrar: "35.04" }), fila({ monto_cobrar: "35.04" })], {
-      tarifa: TARIFA_CENTIMOS,
-    });
+    // Tres filas cuya comision exacta es 3.5035 (35 × 10,01 %) y que la aritmetica redondea a
+    // 3.50 POR FILA. El lote suma los valores DE CADA FILA: 3×3.50 = 10.50. Acumular los
+    // exactos sin redondear daria 10.5105 -> 10.51, y es ese centimo el que este test fija.
+    const resumen = await cotizar(
+      [fila({ monto_cobrar: "35" }), fila({ monto_cobrar: "35" }), fila({ monto_cobrar: "35" })],
+      { tarifa: TARIFA_CENTIMOS },
+    );
 
     expect(costosDe(resumen).entregado.comision).toBe("₡3,50");
     expect(resumen.totales.entregado.comision).toBe("₡10,50");
     expect(resumen.totales.entregado.comision).not.toBe("₡10,51");
     expect(resumen.totales.entregado.flete).toBe("₡30,00");
-    // 3 × (35.04 − 10.00 − 3.50) = 3 × 21.54 = 64.62.
-    expect(costosDe(resumen).entregado.total).toBe("₡21,54");
-    expect(resumen.totales.entregado.total).toBe("₡64,62");
+    // 3 × (35 − 10.00 − 3.50) = 3 × 21.50 = 64.50.
+    expect(costosDe(resumen).entregado.total).toBe("₡21,50");
+    expect(resumen.totales.entregado.total).toBe("₡64,50");
     expect(resumen.totales.devuelto.total).toBe("-₡12,00");
   });
 

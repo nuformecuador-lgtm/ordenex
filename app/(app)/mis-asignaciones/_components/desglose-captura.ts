@@ -67,15 +67,52 @@ function centimosDeLinea(linea: LineaEnEdicion): number {
 
 /**
  * UX de calle: la captura NO maneja decimales. El mensajero teclea con una mano y de pie, y un
- * punto de mas convierte 8.000 en 8. Por eso lo que se pre-carga se redondea a unidad entera y
+ * punto de mas convierte 8.000 en 8. Por eso lo que se pre-carga se trunca a unidad entera y
  * lo que se teclea se filtra a digitos (`soloDigitos`).
  *
- * La aritmetica interna sigue en centimos (R11): el redondeo es de ENTRADA, no de calculo, para
+ * La aritmetica interna sigue en centimos (R11): el truncado es de ENTRADA, no de calculo, para
  * que este modulo siga cuadrando igual que `sumaCuadra` del borde si algun dia entran decimales
  * por otra via.
+ *
+ * FEATURE 300 — `Math.floor`, y NO el `Math.round` que habia. Con un total con centimos
+ * (11.898,81) redondear proponia 11.899, que es MAS de lo que `topeDeLinea` admite: la funcion
+ * que existe para acotar devolvia un valor por encima de su propio tope, y ese numero imposible
+ * era justo el que el mensajero se encontraba pre-cargado. Truncando, lo que se ofrece es
+ * siempre un importe que el editor acepta. Con un total ENTERO —las ordenes sanas, que son casi
+ * todas— truncar y redondear dan lo mismo, asi que el cambio solo se nota donde esta el fallo.
  */
 function textoDeMonto(monto: number): string {
-  return String(Math.round(monto));
+  return String(Math.floor(monto));
+}
+
+/**
+ * FEATURE 300 — los CENTIMOS del total que este editor NO puede capturar (0..99).
+ *
+ * Todo lo que se puede teclear aqui es un entero de la unidad monetaria (`soloDigitos`), asi que
+ * cualquier suma alcanzable es entera. Si el total a cobrar arrastra una cola de centimos, esa
+ * cola no es «lo que aun falta por teclear»: es un importe que el teclado que se ofrece no puede
+ * escribir, y por tanto un cuadre que no existe. Se devuelve el NUMERO —y no solo un booleano—
+ * porque el aviso tiene que poder decirlo con su cifra delante, en vez de afirmar que no falta
+ * nada mientras bloquea la entrega.
+ *
+ * Siempre positivo: un total negativo no es un caso de esta pantalla, pero devolver aqui un
+ * resto negativo convertiria el aviso en otro numero raro y no hay motivo para arriesgarlo.
+ */
+export function centimosNoCapturables(totalACobrar: number): number {
+  const sueltos = aCentimos(totalACobrar) % 100;
+  return sueltos < 0 ? -sueltos : sueltos;
+}
+
+/**
+ * FEATURE 300 — `true` si el cuadre EXACTO es INALCANZABLE desde este editor.
+ *
+ * NO afloja la regla de negocio: `capturaCuadra` sigue exigiendo la igualdad exacta y este
+ * predicado no la toca ni la sustituye. Lo unico que separa es «te falta teclear» de «esto no se
+ * puede teclear», que son dos situaciones distintas y hasta hoy se contaban con la misma frase —
+ * la que dejaba al mensajero buscando un numero que no existe.
+ */
+export function cuadreInalcanzable(totalACobrar: number): boolean {
+  return centimosNoCapturables(totalACobrar) !== 0;
 }
 
 /**

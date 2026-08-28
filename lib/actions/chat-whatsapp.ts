@@ -222,7 +222,7 @@ export async function listarHiloChat(
 
   const mensajeRepo = deps.mensajeRepo ?? new ChatMensajeRepository(prisma);
   const filas = await mensajeRepo.listarHilo(hilo.id);
-  // Feature 308 (R19/R20/D4): las filas `tipo=reaccion` NO son burbujas. Se sacan del hilo y se
+  // Feature 311 (R19/R20/D4): las filas `tipo=reaccion` NO son burbujas. Se sacan del hilo y se
   // cuelgan del mensaje al que reaccionan. `mensajes` es ya el hilo SIN ellas.
   const { burbujas: mensajes, reaccionesPorWaMessageId } = agregarReacciones(filas);
   const ahoraDate = (deps.now ?? (() => new Date()))();
@@ -264,7 +264,7 @@ export async function listarHiloChat(
       // Feature 121 (R8): coords del entrante de ubicacion; null en el resto (columnas nullable).
       latitud: m.latitud,
       longitud: m.longitud,
-      // Feature 308 (R19/R21): metadatos del adjunto SIN el media id de Meta. La UI pide el
+      // Feature 311 (R19/R21): metadatos del adjunto SIN el media id de Meta. La UI pide el
       // binario por `/api/chat/media/${m.id}` (id interno, autorizable); el id de Meta se queda
       // en el servidor. `mediaId === null` = este mensaje no tiene adjunto.
       media:

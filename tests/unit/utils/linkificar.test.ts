@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { hrefSeguro, linkificar } from "@/lib/utils/linkificar";
 
-// Feature 308 (R33/R34) — trocear un mensaje del cliente en texto + enlaces.
+// Feature 311 (R33/R34) — trocear un mensaje del cliente en texto + enlaces.
 //
 // Lo que se fija aqui: se enlaza SOLO el tramo de la URL (D6) y NINGUN esquema distinto de
 // http/https produce enlace. El texto lo escribe un tercero, asi que esto es una barrera de
@@ -133,7 +133,7 @@ describe("linkificar (R33/R34)", () => {
 // --------------------------------------------------------------------------------------------
 // La SEGUNDA barrera de R34, fijada aparte. `linkificar` no puede ejercitarla: `CANDIDATO_URL`
 // —la primera barrera— ya impide que `javascript:` llegue a `hrefSeguro`, asi que borrar el
-// chequeo de protocolo deja la suite entera VERDE (lo comprobo el reviewer de la 308). Estos
+// chequeo de protocolo deja la suite entera VERDE (lo comprobo el reviewer de la 311). Estos
 // tests invocan el helper DIRECTAMENTE para que la defensa en profundidad no se pueda retirar
 // por «redundante»: si alguien amplia la regex de candidatos, la barrera tiene que seguir ahi.
 // --------------------------------------------------------------------------------------------

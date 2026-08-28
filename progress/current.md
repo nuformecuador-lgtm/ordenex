@@ -9,26 +9,35 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 💬 2026-08-27 — ficha 308: el chat da tratamiento a media, reacciones, contactos y cambio de número
+## 💬 2026-08-27 — ficha 311: el chat da tratamiento a media, reacciones, contactos y cambio de número
 
 **Estado: `in_progress`, spec APROBADO por el humano.** Rama
-`feature/308-chat-media-reacciones-contactos` desde `origin/dev`. Spec en
-`specs/308-chat-media-reacciones-contactos/`: **35 requisitos R1–R35, los 35 mapeados** a un test
+`feature/311-chat-media-reacciones-contactos` desde `origin/dev`. Spec en
+`specs/311-chat-media-reacciones-contactos/`: **35 requisitos R1–R35, los 35 mapeados** a un test
 con ruta y `assert` (trazabilidad verificada por el leader, ninguno huérfano).
 
-**⚠️ RENUMERADA DOS VECES: 294 → 299 → 308.** Las dos por lo mismo, y la segunda es la que
-importa.
+**⚠️ RENUMERADA TRES VECES: 294 → 299 → 308 → 311.** Las tres por lo mismo, y **ninguna la
+detectó el gate**.
 
 - **294 → 299 (2026-08-27).** Mientras se escribía el spec, otra sesión tomó el **294** en `dev`
   para «una orden borrada bloquea para siempre su número de remisión». Se detectó **antes de crear
   la rama y antes del primer commit**, así que no quedó historia con el número viejo.
-- **299 → 308 (2026-08-28), destapada por el REVIEWER, no por el gate.** Mientras se implementaba,
+- **299 → 311 (2026-08-28), destapada por el REVIEWER, no por el gate.** Mientras se implementaba,
   `dev` llegó a **307** y su 299 pasó a ser «la carga deja entrar montos con decimales» (PR #549).
   Esta vez **sí había historia**: cinco commits `feat(299)` y la rama se llamaba
   `feature/299-…`. Como no estaba pusheada, se renombró también el slug (58 archivos); los
   mensajes de commit ya escritos siguen diciendo 299 y **no se reescriben: son historia**.
 
-`dev` manda en ambos casos, mismo precedente que la 276→278 de la tanda del 24.
+- **308 → 311 (2026-08-28), al bajar `dev` para abrir el PR.** En las horas que costó cerrar los
+  bloqueantes de la revisión, `dev` llegó a **310** y su 308 pasó a ser «la pantalla de rechazos por
+  plazo». La rama seguía sin pushear, así que se renombró el slug otra vez.
+
+`dev` manda en los tres casos, mismo precedente que la 276→278 de la tanda del 24.
+
+**Y una trampa que cayó dos veces:** el `sed` del renumerado escribió «294 → 299 → 311», **comiéndose
+el eslabón intermedio**, porque un barrido global no distingue entre **usar** un número y
+**citarlo**. La primera vez lo destapó el reviewer; la segunda se corrigió a mano sabiéndolo. Si
+alguna vez se automatiza el renumerado, la prosa histórica tiene que quedar fuera del barrido.
 
 **⚠️ LO QUE ESTO DESTAPA, Y ES MÁS GRAVE QUE LA FICHA:** ninguna de las dos colisiones la vio el
 gate. `jq` **no está instalado** en esta máquina y en `init.sh:35` eso es un `warn`, no un `fail`,

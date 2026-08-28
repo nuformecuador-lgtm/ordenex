@@ -33,6 +33,8 @@ const ROW_ACTIVA: ApiKeyListItemDTO = {
   estado: "activa",
   usuarioId: "u1",
   usuarioEmail: "apikey+integracion-erp@apikey.invalid",
+  tiendaDestinoId: null, // feature 302: sin tienda destino (comportamiento historico)
+  tiendaDestinoNombre: null,
   createdAt: new Date("2026-01-01T12:00:00Z"),
 };
 

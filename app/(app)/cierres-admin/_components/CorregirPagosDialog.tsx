@@ -4,8 +4,8 @@ import { useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
 import {
-  DESGLOSE_TEXTOS,
   DesglosePagoField,
+  mensajeDeCuadre,
 } from "@/components/shared/DesglosePagoField";
 import {
   capturaCuadra,
@@ -162,8 +162,11 @@ export function CorregirPagosDialog({
           lineas={lineas}
           montoACobrar={montoACobrar}
           errores={errores}
-          // El descuadre se dice ANTES de pulsar, con el mismo texto que ve el mensajero.
-          errorCuadre={cuadra ? undefined : DESGLOSE_TEXTOS.noCuadra}
+          // El descuadre se dice ANTES de pulsar, con el mismo texto que ve el mensajero — y
+          // desde la feature 300 por el MISMO `mensajeDeCuadre`, no por dos expresiones
+          // paralelas: un `monto_recibido` con céntimos tampoco se puede cuadrar desde aquí, y
+          // el admin merece leer por qué igual que el mensajero.
+          errorCuadre={mensajeDeCuadre(lineas, montoACobrar)}
           errorMetodo={undefined}
           errorServidor={errorServidor}
           onChange={setLineas}

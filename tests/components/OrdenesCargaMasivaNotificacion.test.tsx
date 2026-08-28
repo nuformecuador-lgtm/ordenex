@@ -110,7 +110,12 @@ async function abrirModal(user: ReturnType<typeof userEvent.setup>) {
 function validar(filasUnicas: FilaParseada[], nuevas: string[]) {
   act(() => {
     upload.props?.onValidated({
-      clasificacion: { numRemisionesNuevas: nuevas, existentes: [], errores: [] },
+      clasificacion: {
+        numRemisionesNuevas: nuevas,
+        existentes: [],
+        errores: [],
+        ajustadas: [],
+      },
       filasUnicas,
     });
   });

@@ -552,6 +552,22 @@ export interface EtiquetaRow {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null;
+  /**
+   * Feature 295 — DIA en que la tienda cargo el envio (`orden.created_at`), como
+   * fecha CALENDARIO de Costa Rica `YYYY-MM-DD`, YA SERIALIZADA (patron de
+   * `RecepcionSateliteRow.fechaReparto`: el `Date` no cruza la frontera del repo).
+   *
+   * Es la fecha que la etiqueta imprime, y de las tres candidatas es la unica que
+   * sirve: la de IMPRESION cambia en cada reimpresion (dos etiquetas del mismo
+   * paquete dirian dias distintos) y la de REPARTO esta vacia en la mayoria de
+   * ordenes (las de bodega no la tienen, medido en produccion), asi que saldria en
+   * blanco casi siempre. `created_at` es NOT NULL en `orden`: nunca es `null`.
+   *
+   * Se serializa con `fechaCalendarioCR` y NO con `toISOString().slice(0, 10)`:
+   * despues de las 18:00 de CR aquello devuelve el dia SIGUIENTE (off-by-one), y
+   * una etiqueta que dice "mañana" es peor que una sin fecha.
+   */
+  fechaCreacion: string;
 }
 
 // Feature 148 — fila proyectada para armar el MANIFIESTO de un lote (R4/R6/R7).
@@ -762,6 +778,30 @@ export interface NovedadOrdenRow {
    * no le sirve a nadie para decidir si vale la pena volver a intentarlo.
    */
   intentosContacto: number;
+  /**
+   * FICHA 296 (pedido humano 2026-08-27) — nombre del MENSAJERO ASIGNADO a la orden
+   * (`orden.mensajero_asignado_id -> usuario.nombre`), YA RESUELTO como los cinco catalogos de
+   * arriba: aqui nunca sale un id. `null` = la orden no tiene mensajero asignado.
+   *
+   * SALE DE LA MISMA CONSULTA. Es un sexto join en el `select` que ya se hacia, no una lectura
+   * nueva ni una por fila: mismo universo de filas, una columna mas. Es el motivo por el que se
+   * lee de `orden` y no del historial.
+   *
+   * Y ES TAMBIEN QUIEN PIDIO LA AYUDA, no solo quien la lleva. Sobre el grupo `ayuda` los dos
+   * conceptos NO PUEDEN separarse, y no por convencion sino por construccion:
+   *   (i) la UNICA arista que entra a `ayuda_tienda` es #62 (`en_reparto -> ayuda_tienda`, via
+   *       `solicitud_ayuda_tienda`, `lib/types/order-status-transiciones.ts`), y la toma el
+   *       mensajero ASIGNADO —`SolicitudAyudaService` se autoriza por `autorizarSobreHilo`, que
+   *       para el rol mensajero exige pertenencia—; y
+   *   (ii) NINGUNA escritura de `mensajero_asignado_id` de este repositorio deja la orden en
+   *       `ayuda_tienda`: todas cambian `estatus_id` en el MISMO `data` (asignar, desasignar,
+   *       liberar a bodega, corte, aprobacion de cierre). La unica escritura guardada por
+   *       `ayuda_tienda` es `transicionarAyuda`, y su `data` toca SOLO `estatusId`.
+   * Mientras la fila este en la pestaña, el asignado ES el solicitante. Si (i) o (ii) dejaran de
+   * ser ciertas —una arista nueva hacia `ayuda_tienda`, o una reasignacion que no mueva el
+   * estado—, este campo pasaria a significar solo «quien lo lleva» y habria que decidir de nuevo.
+   */
+  mensajeroNombre: string | null;
   createdAt: Date;
 }
 

@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MessageSquarePlus, Send, X } from "lucide-react";
+import { MessageCircle, MessageSquarePlus, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Sheet,
   SheetClose,
@@ -13,7 +14,10 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/useToast";
-import { listarPlantillasParaEnvio } from "@/lib/actions/whatsapp-envio";
+import {
+  listarPlantillasParaEnvio,
+  listarPlantillasParaEnvioTienda,
+} from "@/lib/actions/whatsapp-envio";
 import { renderPlantilla } from "@/lib/utils/plantilla-mensaje";
 import { datosPlantillaDesdeAsignacion } from "@/lib/utils/whatsapp-envio-valores";
 import { resolverValoresPlantilla, type DatosPlantilla } from "@/lib/types/plantilla-datos";
@@ -21,11 +25,16 @@ import { normalizarTelefonoCR } from "@/lib/utils/telefono-cr";
 import type { PlantillaTextoDTO } from "@/lib/types/whatsapp-envio";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
-// Integracion WhatsApp — boton "burbuja" junto a los botones de contacto del panel del
-// mensajero. Abre un bottom sheet con las plantillas disponibles (vigentes, no desactivadas),
-// RENDERIZA cada una con los datos de la orden y, al elegir una, abre WhatsApp (wa.me) con el
-// mensaje ya escrito hacia el telefono del destinatario. El mensajero revisa y envia desde su
-// propio WhatsApp. Movil-first (sheet inferior), a juego con `ContactoButtons`.
+// Integracion WhatsApp — boton que abre un bottom sheet con las plantillas disponibles
+// (vigentes, no desactivadas), RENDERIZA cada una con los datos de la orden y, al elegir una,
+// abre WhatsApp (wa.me) con el mensaje ya escrito hacia el telefono del destinatario. Quien
+// contacta revisa y envia desde su propio WhatsApp. Movil-first (sheet inferior), a juego con
+// `ContactoButtons`.
+//
+// PROMOVIDO a `components/shared/` el 2026-08-27, al aparecer el SEGUNDO consumidor en otro
+// modulo (`/novedades`). Nacio en `mis-asignaciones/_components/` cuando solo lo usaba el panel
+// del mensajero; la regla del repo es promover cuando hay evidencia de reuso, y aqui la hay.
+// Ver el mismo razonamiento escrito en `FormSheet`.
 
 export interface EnviarPlantillaWhatsappButtonProps {
   /** Orden en gestion: define el destino (telefono) y los valores de las variables. */
@@ -44,6 +53,27 @@ export interface EnviarPlantillaWhatsappButtonProps {
    * del chat para no reenviar otra plantilla mientras se espera la respuesta del cliente.
    */
   disabled?: boolean;
+  /**
+   * Como se PRESENTA el disparador. Solo aplica al modo wa.me (con `onElegirPlantilla` manda
+   * el modo chat, que tiene su propio icono).
+   *
+   * - `plantilla` (default): avion de papel. Es un boton de mas junto a «Llamar»/«WhatsApp»,
+   *   y su icono tiene que decir que lo suyo son las plantillas.
+   * - `whatsapp`: globo + tooltip «WhatsApp». OCUPA EL SITIO del enlace wa.me directo (que
+   *   abria un chat vacio) en `/novedades`, asi que hereda su icono, su tooltip y su
+   *   `aria-label` PALABRA POR PALABRA: para quien mira la pantalla el boton no se ha movido
+   *   ni ha cambiado de nombre, solo hace mejor lo que ya prometia.
+   */
+  disparador?: "plantilla" | "whatsapp";
+  /**
+   * `true` SOLO en `/novedades`: anade a la lista las PLANTILLAS DE TIENDA, que es la unica
+   * superficie donde se pueden usar (no se envian a Meta y no son del mensajero).
+   *
+   * Elige entre dos Server Actions distintas en vez de mandar un booleano al servidor: quien
+   * decide el alcance es la pantalla, y asi el panel del mensajero no tiene forma de pedirlas
+   * ni por error ni a mano.
+   */
+  incluirPlantillasDeTienda?: boolean;
 }
 
 export function EnviarPlantillaWhatsappButton({
@@ -51,6 +81,8 @@ export function EnviarPlantillaWhatsappButton({
   size = "lg",
   onElegirPlantilla,
   disabled = false,
+  disparador = "plantilla",
+  incluirPlantillasDeTienda = false,
 }: Readonly<EnviarPlantillaWhatsappButtonProps>) {
   const toast = useToast();
   const [abierto, setAbierto] = useState(false);
@@ -65,10 +97,13 @@ export function EnviarPlantillaWhatsappButton({
 
   // Iconos y etiquetas DISTINTOS por modo (pedido humano): en wa.me el globo "envia fuera"
   // (abre WhatsApp); en el chat "redacta/pega" el mensaje en el propio input del panel.
-  const Icono = modoChat ? MessageSquarePlus : Send;
+  const comoWhatsapp = !modoChat && disparador === "whatsapp";
+  const Icono = modoChat ? MessageSquarePlus : comoWhatsapp ? MessageCircle : Send;
   const ariaLabel = modoChat
     ? `Usar plantilla en el chat con ${orden.destinatario}`
-    : `Enviar plantilla por WhatsApp a ${orden.destinatario}`;
+    : comoWhatsapp
+      ? `WhatsApp a ${orden.destinatario}`
+      : `Enviar plantilla por WhatsApp a ${orden.destinatario}`;
 
   // Datos de la orden usados para resolver las variables de cada plantilla. El adaptador
   // declara que campos NO puede aportar esta superficie (el DTO de la asignacion no trae ni
@@ -86,7 +121,9 @@ export function EnviarPlantillaWhatsappButton({
     if (items !== null || cargando) return;
     setCargando(true);
     try {
-      const r = await listarPlantillasParaEnvio();
+      const r = await (incluirPlantillasDeTienda
+        ? listarPlantillasParaEnvioTienda()
+        : listarPlantillasParaEnvio());
       if (r.status === "ok") {
         setItems(r.items);
       } else {
@@ -122,19 +159,35 @@ export function EnviarPlantillaWhatsappButton({
     setAbierto(false);
   }
 
+  const boton = (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      className={iconButtonClass}
+      onClick={handleAbrir}
+      disabled={disabled}
+      aria-label={ariaLabel}
+    >
+      <Icono className={iconClass} aria-hidden="true" />
+    </Button>
+  );
+
   return (
     <>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className={iconButtonClass}
-        onClick={handleAbrir}
-        disabled={disabled}
-        aria-label={ariaLabel}
-      >
-        <Icono className={iconClass} aria-hidden="true" />
-      </Button>
+      {/* El tooltip SOLO en el modo `whatsapp`, porque alli este boton sustituye a uno que ya
+          lo tenia (`ContactoButtons`) y quitarselo seria una perdida. EL TOOLTIP NO ES EL
+          NOMBRE DEL BOTON: el `aria-label` sigue puesto y nombra al destinatario concreto,
+          porque un tooltip solo aparece con hover o foco. Mismo razonamiento, palabra por
+          palabra, que la cabecera de `ContactoButtons`. */}
+      {comoWhatsapp ? (
+        <Tooltip>
+          <TooltipTrigger render={boton} />
+          <TooltipContent>WhatsApp</TooltipContent>
+        </Tooltip>
+      ) : (
+        boton
+      )}
       <Sheet open={abierto} onOpenChange={setAbierto}>
         {/* X propia (showCloseButton={false} desactiva la del componente compartido): la
             posicionamos absolute a 30px del borde derecho, siempre visible sobre el header. */}

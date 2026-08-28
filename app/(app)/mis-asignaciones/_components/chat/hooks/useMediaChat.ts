@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-// Feature 308 (design §7, R24/R28) — descarga del adjunto de una burbuja por el proxy propio.
+// Feature 311 (design §7, R24/R28) — descarga del adjunto de una burbuja por el proxy propio.
 //
 // Se usa `fetch` y NO un `<img src>` directo A PROPOSITO: el `onError` de un `<img>` no
 // distingue "el archivo ya no existe" de "no hay red", y R24 exige decirlo explicitamente. El

@@ -4365,6 +4365,8 @@ después a **279**. Por eso `fb5bd1c2` es ancestro de `dev` y aun así su conten
 278 actual.
 
 **El ancla fiable es el slug de la rama, no el id.** Los ids se reasignan cuando dos sesiones
-paralelas toman el mismo número; el slug sobrevive porque el remoto no se renombra. La ficha 308
-(chat: media y reacciones) lo sufrió **dos veces**: nació como **294**, pasó a **299** el 27 y a
-**308** el 28, esta última ya con cinco commits escritos con el número viejo.
+paralelas toman el mismo número; el slug sobrevive porque el remoto no se renombra. La ficha 311
+(chat: media y reacciones) lo sufrió **tres veces**: nació como **294**, pasó a **299** el 27, a
+**308** y a **311** el 28. Las dos últimas ya con commits escritos con el número viejo. Ninguna la
+detectó el gate: `jq` no está instalado y su ausencia es un `warn`, así que la validación de
+`feature_list.json` no corre —y los ids duplicados no se comprueban ni con `jq`.

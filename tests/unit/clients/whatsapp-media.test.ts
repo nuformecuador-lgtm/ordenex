@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { WhatsappMediaClient } from "@/lib/clients/whatsapp-media";
 import type { WhatsappConfig } from "@/lib/config/whatsapp";
 
-// Feature 308 — F1.T (R21/R24/R35). Cliente de DESCARGA de media. Tres cosas que se prueban
+// Feature 311 — F1.T (R21/R24/R35). Cliente de DESCARGA de media. Tres cosas que se prueban
 // aqui y en ningun otro sitio:
 //   1. `expirado` es un desenlace PROPIO (R24): la UI tiene que poder decir "ya no esta
 //      disponible" y no "error"; sin esta distincion el requisito no existe.

@@ -194,6 +194,9 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
 
     // R4: el dueño de la cotizacion sale SIEMPRE del actor de la key; ningun identificador
     // del cuerpo o de la query participa.
+    // Feature 302: `actor.usuarioId` es el DUEÑO resuelto por `ApiKeyAuthService` — la tienda
+    // real si la key apunta a una. Es lo que hace que la cotizacion salga con LA tarifa de esa
+    // tienda y no con la de una cuenta recien creada que no tiene ninguna.
     const tiendaId = actor.usuarioId;
 
     // Feature 274/R32 (design §4.4) — EL ORDEN SE INVIRTIO. Hasta la 273 la tarifa se resolvia
@@ -393,6 +396,22 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
  * motivo desde la feature 274: ya no es que el lote entero se corte con `sin_tarifa`, es que
  * una fila cuyo par (tienda, zona) no resuelve se degrada a `error` ANTES de llegar a esta
  * funcion (R34). El cero mudo sigue sin poder emitirse (R15).
+ *
+ * ⚠️ FICHA 301 (2026-08-28) — EL ESCENARIO "DEVUELTO" SE DERIVA DE `rechazada`, NO DE
+ * `devuelta`, Y NO ES UN DETALLE DE NOMBRES. Lo que esta funcion publica es una PROMESA de
+ * precio al integrador, y una promesa solo vale si coincide con lo que se le acabara
+ * cobrando. Ese dia se cambio la regla de negocio: un resultado de gestion `devuelta` dejo de
+ * generar ingreso alguno, porque es un INTENTO FALLIDO que sigue vivo (se puede reprogramar,
+ * liberar por SLA o recuperar a bodega) y el paquete no ha vuelto a la tienda. Quien devuelve
+ * el paquete —y por tanto quien paga el retorno— es `rechazada` (`devolucion_rechazada` de la
+ * 139: al aprobar el cierre la orden pasa a `por_devolver`/`por_devolver_a_tienda`).
+ *
+ * El escenario del contrato publico se llama "devuelto" y significa "cuanto cuesta si el
+ * paquete SE DEVUELVE", que es exactamente ese cobro. Por eso apunta a `rechazada` y por eso
+ * los importes publicados NO cambian con la 301: siguen siendo el flete de devolucion + su
+ * IVA, alcanzables de verdad. La alternativa —seguir derivando de `devuelta` y publicar
+ * ceros— habria dicho al integrador que un retorno es gratis, que es falso en cuanto la
+ * tienda rechaza la orden; se descarto por eso.
  */
 function calcularEscenarios(
   geo: { esCentral: boolean; esZonaEspecial: boolean },
@@ -402,7 +421,8 @@ function calcularEscenarios(
   const input = { ...geo, montoCobrar, cobraComision: COBRA_COMISION };
 
   const entregada = derivarIngresoOrden({ ...input, resultado: "entregada" }, tarifa);
-  const devuelta = derivarIngresoOrden({ ...input, resultado: "devuelta" }, tarifa);
+  // Ficha 301: `rechazada` es el resultado que factura el retorno (ver el bloque de arriba).
+  const devuelta = derivarIngresoOrden({ ...input, resultado: "rechazada" }, tarifa);
 
   const flete = entregada.ingreso_flete ?? cero();
   const iva = entregada.ingreso_iva_flete ?? cero();

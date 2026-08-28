@@ -7,7 +7,7 @@ import type { ChatMediaVista } from "@/lib/types/chat-whatsapp";
 
 import { urlMediaChat, useMediaChat } from "./hooks/useMediaChat";
 
-// Feature 308 (R24/R27/R28/R29) — el adjunto de una burbuja: imagen, sticker, audio, video o
+// Feature 311 (R24/R27/R28/R29) — el adjunto de una burbuja: imagen, sticker, audio, video o
 // documento.
 //
 // QUE SE BAJA SOLO Y QUE NO (design §7, P3): imagen y sticker se cargan al montar la burbuja

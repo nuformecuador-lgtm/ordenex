@@ -5,7 +5,7 @@ import { Check, Copy, UserRound } from "lucide-react";
 
 import type { ChatContactoNormalizado } from "@/lib/types/chat-contactos";
 
-// Feature 308 (R31, D5) — tarjeta de un `contacts` compartido por el cliente.
+// Feature 311 (R31, D5) — tarjeta de un `contacts` compartido por el cliente.
 //
 // CADA dato se puede copiar por separado: el mensajero suele necesitar EL TELEFONO, no la
 // tarjeta entera. La confirmacion es un `role="status"` (region viva que el lector de pantalla

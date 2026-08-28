@@ -27,7 +27,7 @@ export interface IngestaResumen {
   /** Entrantes cuyo numero no mapeo a ninguna orden activa asignada (R25/D4). */
   sinResolver: number;
   /**
-   * Feature 308 (R16/R18): hilos cuyo `telefono_e164` se reescribio por un cambio de numero del
+   * Feature 311 (R16/R18): hilos cuyo `telefono_e164` se reescribio por un cambio de numero del
    * cliente. Conteo AGREGADO, sin PII: nunca el numero anterior ni el nuevo.
    */
   hilosMigrados: number;
@@ -136,7 +136,7 @@ export class ChatWhatsappService {
     let hilosMigrados = 0;
 
     for (const mensaje of eventos.mensajes) {
-      // Feature 308 (design §3, R16/R17/R18): el CAMBIO DE NUMERO se aplica ANTES de resolver
+      // Feature 311 (design §3, R16/R17/R18): el CAMBIO DE NUMERO se aplica ANTES de resolver
       // la orden, para que la burbuja de sistema de este mismo evento se escriba en un hilo ya
       // coherente con el numero nuevo.
       //
@@ -176,7 +176,7 @@ export class ChatWhatsappService {
       const hilo = await this.deps.conversacionRepo.upsertParaOrden({
         ordenId: resolucion.ordenId,
         mensajeroId: resolucion.mensajeroId,
-        // Feature 308 (R18): tras migrar, el hilo de esta orden vive bajo el numero NUEVO. El
+        // Feature 311 (R18): tras migrar, el hilo de esta orden vive bajo el numero NUEVO. El
         // upsert tiene que keyear por ese numero o crearia un hilo vacio con el viejo y la
         // evidencia caeria fuera del hilo que el mensajero mira.
         telefonoE164:
@@ -192,7 +192,7 @@ export class ChatWhatsappService {
         // entrante de ubicacion es un entrante mas: no toca el dedupe ni el sellado (R5/R6).
         latitud: mensaje.ubicacion?.latitud ?? null,
         longitud: mensaje.ubicacion?.longitud ?? null,
-        // Feature 308 (R1/R2/R4/R5/R7/R12): los campos de los tipos nuevos viajan igual que
+        // Feature 311 (R1/R2/R4/R5/R7/R12): los campos de los tipos nuevos viajan igual que
         // lat/lng en la 121. El dedupe por `wa_message_id` y el sellado de `ultimo_entrante_at`
         // NO se tocan: una imagen, una reaccion o la evidencia del cambio de numero son
         // entrantes MAS. Eso es tambien lo que impide DUPLICAR la evidencia si Meta reenvia el

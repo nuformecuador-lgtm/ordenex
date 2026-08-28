@@ -1,4 +1,4 @@
-// Feature 308 (design §7.1, R33/R34) — trocea un texto en segmentos para pintarlo con enlaces.
+// Feature 311 (design §7.1, R33/R34) — trocea un texto en segmentos para pintarlo con enlaces.
 //
 // PURA a proposito: sin React, sin DOM. La regla de seguridad (que esquemas se enlazan) se
 // prueba aqui, sobre datos, y no dentro de un render.
@@ -88,7 +88,7 @@ function recortarPuntuacionFinal(candidato: string): string {
  * SE EXPORTA A PROPOSITO, aunque `linkificar` sea el unico llamador del modulo. Hoy la primera
  * barrera (`CANDIDATO_URL`, anclada al esquema) ya impide que `javascript:` llegue hasta aqui, de
  * modo que borrar el chequeo de protocolo dejaria la suite VERDE —lo comprobo el reviewer de la
- * 308— y nadie se enteraria hasta que alguien ampliara la regex. Exportarlo permite fijar la
+ * 311— y nadie se enteraria hasta que alguien ampliara la regex. Exportarlo permite fijar la
  * barrera con un test que la invoca directa: es defensa en profundidad, no redundancia.
  */
 export function hrefSeguro(candidato: string): string | null {

@@ -1,0 +1,40 @@
+-- DOWN (ficha 305) — suelta el `CHECK` de `orden.monto_cobrar` y devuelve la tabla a como estaba
+-- antes de `20260828140000_orden_monto_cobrar_entero`: sin ninguna restriccion sobre la escala
+-- del monto.
+--
+-- ⚠️ ESTE DOWN NO ES LA INVERSA COMPLETA DEL UP, Y NO PUEDE SERLO. El up hace DOS cosas:
+-- normaliza las filas que tenian centimos (`round`) y despues añade la restriccion. Este down
+-- deshace la SEGUNDA. **EL REDONDEO NO SE REVIERTE, y es imposible que se revierta**: `round`
+-- pierde el valor de origen. Una fila que quedo en `11899` pudo venir de `11898.81`, de
+-- `11899.40` o de cualquier otro punto del intervalo, y la base no guarda cual — no hay columna
+-- de respaldo, no hay tabla de historico, no hay nada que consultar. Cualquier down que
+-- pretendiera «devolver los centimos» estaria inventandolos.
+--
+-- QUE SIGNIFICA ESO EN LA PRACTICA. Tras correr este down la tabla vuelve a ACEPTAR centimos,
+-- pero las filas que el up redondeo SIGUEN redondeadas. Si eso importa, el valor previo hay que
+-- sacarlo de fuera de la base (el archivo que cargo la tienda, un respaldo anterior al deploy) y
+-- reescribirlo a mano. Por eso conviene que quien despliegue haya corrido antes la consulta que
+-- `migration.sql` deja escrita: es la unica foto de lo que se va a perder.
+--   * En PRODUCCION esto es teorico: medido el 2026-08-28, CERO ordenes con centimos de 301, asi
+--     que el up no redondeo nada y este down deja la tabla identica a como estaba.
+--   * En PREVIEW y en las bases locales SI se redondearon filas, y eran justamente basura de
+--     prueba: no hay nada que recuperar.
+--
+-- LA PARTE QUE SI ES EXACTAMENTE INVERSA: soltar la restriccion. Una sentencia, sin indices,
+-- sin columnas.
+--
+-- ⚠️ NO PUEDE FALLAR, PERO DEJA LA PUERTA ABIERTA. Soltar la restriccion no destruye ni un dato
+-- —las filas que hay siguen siendo enteras— pero devuelve la base al estado en que un `UPDATE` a
+-- mano puede volver a meter una orden imposible de entregar. Quien lo ejecute debe saber que el
+-- sintoma NO aparece al escribirla: aparece semanas despues, en la mano de un mensajero que no
+-- puede cerrar la entrega, y la unica pista es el «Diferencia 0» que se contradice a si mismo.
+--
+-- EL CAMINO DE VUELTA SI ES LIMPIO, y esto cambio con el backfill: si mientras la restriccion
+-- estuvo suelta entro una fila con centimos, volver a aplicar el up ya NO aborta — la redondea y
+-- sigue. El 23514 solo queda como red para lo que el redondeo no pueda arreglar.
+--
+-- `IF EXISTS` para que el down sea idempotente: correrlo dos veces no es un error.
+--
+-- No toca RLS ni policies (el up tampoco las toco) y no mueve ninguna fila.
+
+ALTER TABLE "orden" DROP CONSTRAINT IF EXISTS "orden_monto_cobrar_entero_check";

@@ -4,16 +4,22 @@
 import { z } from "zod";
 
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
+import { redondearMontoCobrarTexto } from "@/lib/utils/monto-cobrar";
 
 /**
  * Un decimal NO NEGATIVO serializado como texto (`"25900"`, `"25900.50"`).
  *
- * `monto_cobrar` se conserva como STRING de punta a punta y no pasa por
- * `Number(`: es la BASE de la comision COD y `derivarIngresoOrden` espera
- * `montoCobrar: string | null` para meterlo tal cual en un `Prisma.Decimal`
- * (R33). Aqui esta la diferencia deliberada con `filaCargaSchema`
- * (`lib/types/carga-masiva.ts`), que si lo convierte a numero porque la columna
- * lo recibe como numero.
+ * `monto_cobrar` se conserva como STRING de punta a punta y este modulo no
+ * escribe una sola conversion a numero: es la BASE de la comision COD y
+ * `derivarIngresoOrden` espera `montoCobrar: string | null` para meterlo tal
+ * cual en un `Prisma.Decimal` (R33).
+ *
+ * FICHA 305 — LO QUE SI CAMBIA ES EL VALOR: el monto sale de aqui REDONDEADO al
+ * colon, igual que en la carga. Sigue siendo un string y sigue sin convertirse
+ * a numero EN ESTE ARCHIVO; el redondeo se delega en `redondearMontoCobrarTexto`
+ * (`lib/utils/monto-cobrar.ts`), que es la MISMA funcion de la feature 299 que
+ * usa `filaCargaSchema`. La conversion vive alli, declarada, y por eso la
+ * cotizacion y la carga no pueden discrepar para ninguna entrada.
  */
 const DECIMAL_NO_NEGATIVO = /^\d+(\.\d+)?$/;
 
@@ -55,8 +61,21 @@ export const filaCotizacionSchema = z.object({
     .trim()
     .optional()
     .transform((value) => (value === undefined || value === "" ? undefined : value)),
-  // R32: vacio o ausente -> `null`, y la base de la comision es cero. El valor
-  // NO se convierte a numero: se valida su FORMA y se entrega como texto.
+  // R32: vacio o ausente -> `null`, y la base de la comision es cero. El valor se
+  // valida por su FORMA y se entrega como texto.
+  //
+  // FICHA 305 — SALE REDONDEADO AL COLON, COMO EN LA CARGA. Hasta hoy la
+  // cotizacion calculaba el precio sobre el monto EXACTO y la carga persistia el
+  // REDONDEADO (feature 299): quien cotizara `11898.81` recibia la comision de
+  // `11898.81` y despues se le cobraba la de `11899`. Son centimos sobre la
+  // comision, pero son dos cifras que no cuadran, y este endpoint publica un
+  // PRECIO. Cotizar sobre el monto que de verdad se va a cobrar es la unica
+  // forma de que la promesa valga.
+  //
+  // POR QUE AQUI Y NO EN EL SERVICE: esta es la PUERTA, el mismo sitio en que la
+  // carga redondea. El service consume `monto_cobrar` en dos puntos —la base de
+  // la comision COD y el `total` del escenario entregado— y redondear en uno
+  // solo dejaria justo la incoherencia que se viene a cerrar.
   monto_cobrar: z
     .string()
     .trim()
@@ -68,7 +87,7 @@ export const filaCotizacionSchema = z.object({
         ctx.addIssue({ code: "custom", message: "monto_cobrar debe ser numerico y no negativo" });
         return z.NEVER;
       }
-      return value;
+      return redondearMontoCobrarTexto(value);
     }),
 });
 
@@ -117,6 +136,12 @@ export interface CostosEntregado {
  * Los CINCO importes del escenario DEVUELTO (R27). SIN `ivaComision`: una
  * devolucion no cobra comision COD, asi que su IVA no existe. `comision` es el
  * cero EXPLICITO de R28 — nunca falta y nunca es `null`.
+ *
+ * FICHA 301 (2026-08-28): "devuelto" es el escenario en que el PAQUETE VUELVE a
+ * la tienda, y desde esa fecha eso es exactamente una gestion `rechazada` (ver
+ * `calcularEscenarios` en `CotizacionOrdenService`). Un intento fallido que
+ * queda como `devuelta` —reprogramable, recuperable— ya no factura nada. Los
+ * importes de esta interfaz NO cambiaron de valor con la 301.
  */
 export interface CostosDevuelto {
   flete: string;

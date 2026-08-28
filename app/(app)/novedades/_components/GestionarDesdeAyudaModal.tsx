@@ -28,12 +28,39 @@ import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 // =================================================================================================
 //
 // **Qué se está firmando con un clic, y por eso el aviso de arriba no es cortesía.** Lo que esta
-// ventana registra NO es un trámite de escritorio: crea una gestión atribuida al MENSAJERO, que
-// entra en su cierre del día, suma un intento de entrega y mueve el mismo dinero. Un rechazo cobra
-// a la tienda el `cobroRechazado` de la tarifa —medido el 2026-08-20 contra producción: hasta
-// ₡1.000, media 400—. D7 (firmada) exige decir ese precio ANTES, con palabras y siempre visible;
-// sin él la tienda descubre el cobro en su billetera dos días después y la primera reclamación es
-// «yo sólo apreté un botón».
+// ventana registra NO es un trámite de escritorio: crea una gestión atribuida al MENSAJERO —
+// `crearGestionDesdeAyuda` inserta la fila con el mensajero de la orden y `cierre_id` NULO, para
+// que la vincule su siguiente cierre—, suma un intento de entrega y mueve dinero real.
+//
+// ⚠️ **EL DINERO DE UN RECHAZO SON DOS IMPORTES CON DUEÑOS DISTINTOS, y hasta el 2026-08-27 este
+// bloque decía mal el primero:** afirmaba que «un rechazo cobra a la tienda el `cobroRechazado` de
+// la tarifa». Es falso por las dos mitades, y su vecino `NovedadAcciones` ya decía lo contrario
+// desde el 2026-08-20 — dos versiones del mismo hecho a dos archivos de distancia.
+//
+//   1. El `cobroRechazado` —hasta ₡1.000, media 400, medido el 2026-08-20 contra producción— NO se
+//      le cobra a la tienda: es INGRESO DE LA BODEGA. Sale de `TarifaZonaMensajero.cobroRechazado`
+//      (`db/schema.prisma`), que es la tarifa por zona+vehículo DEL MENSAJERO y no la de la tienda;
+//      lo deriva `ingresoBodegaPorResultado` (`lib/utils/ingreso-bodega.ts`, «NUNCA se paga al
+//      mensajero»), y al aprobar el cierre se snapshotea en `gestion_orden.ingreso_bodega_rechazo`
+//      y en `cierre_dia.total_ingreso_bodega_rechazos` (`CierreDiaRepository`), o sea EN EL CIERRE
+//      DEL MENSAJERO al que se atribuye la gestión. Tampoco acaba en su bolsillo:
+//      `pagoPorResultado` (`lib/utils/pago-mensajero.ts`) sólo paga `entregada`, y con
+//      `cobroEntregado`. En la billetera de la tienda no hay apunte por este concepto.
+//   2. A la tienda un rechazo SÍ le cuesta, pero POR OTRA VÍA Y DESDE SU PROPIA TARIFA: el flete de
+//      retorno más su IVA — `ingreso_flete_devolucion` + `ingreso_iva_flete_devolucion` en
+//      `derivarIngresoOrden` (`lib/utils/ingreso-ordenex.ts`), calculados sobre
+//      `Tarifa.valorFleteDevuelto` / `valorFleteDevueltoGam` y el `ivaFlete` de esa misma fila.
+//      Ése es el cobro que la tienda ve dos días después.
+//
+// **Y REPROGRAMAR DESDE AQUÍ NO MUEVE NI UN COLÓN.** `reprogramada` no paga al mensajero (sólo
+// `entregada`), no genera ingreso de bodega (sólo `rechazada`) y no factura nada a la tienda: desde
+// la ficha 301 `derivarIngresoOrden` emite conceptos únicamente para `entregada` y `rechazada`. Lo
+// que sí cuesta en LOS DOS modos es el intento, que adelanta el escalado del cron de plazo vencido.
+//
+// D7 (firmada) exige decir el precio ANTES, con palabras y siempre visible; sin él la tienda
+// descubre el cobro en su billetera dos días después y la primera reclamación es «yo sólo apreté un
+// botón». El IMPORTE concreto no se nombra en el aviso visible, por el mismo criterio que la 240
+// (`RechazarNovedadModal`, D10): depende de la tarifa vigente de la tienda y de si la orden es GAM.
 //
 // **UN componente con `modo`, no dos.** La única diferencia entre reprogramar y rechazar es el
 // campo de fecha y los rótulos; dos archivos serían dos copias del bloque de evidencias, que es lo

@@ -134,7 +134,11 @@ describe("filaCargaSchema (R30, design.md §5)", () => {
   it("R30: conserva la semantica de num_remision/destinatario/telefono/producto/monto_cobrar/notas", () => {
     const data = filaCargaSchema.parse(filaOk);
     expect(data.num_remision).toBe("REM-1");
-    expect(data.monto_cobrar).toBe(25.9);
+    // FEATURE 299 — el esperado era `25.9`, el monto crudo de `filaOk` ("25.90"). Ese literal
+    // ERA el contrato de la 15 («el monto pasa tal cual») y esta ficha lo cambia a proposito:
+    // el desglose de la entrega solo admite enteros, asi que el schema redondea al entrar. Se
+    // sustituye por el contrario AFIRMADO, no por lo que salga.
+    expect(data.monto_cobrar).toBe(26);
     expect(data.notas).toBe("");
 
     const vacios = filaCargaSchema.safeParse({ ...filaOk, num_remision: "", producto: "" });
@@ -144,5 +148,82 @@ describe("filaCargaSchema (R30, design.md §5)", () => {
     expect(montoInvalido.success).toBe(false);
 
     expect(filaCargaSchema.parse({ ...filaOk, monto_cobrar: "" }).monto_cobrar).toBeNull();
+  });
+});
+
+/**
+ * FEATURE 299 — LA PUERTA DE ALTA, medida donde vive.
+ *
+ * Este schema lo comparten las DOS vias de alta (`cargarMasiva` por pantalla y `cargarViaApi`
+ * por API key, feature 88), asi que lo que se afirme aqui vale para las dos. El desglose de
+ * pago de la entrega solo admite ENTEROS —decision deliberada de `DesglosePagoField`—, de modo
+ * que un monto con centimos producia una orden imposible de entregar: 14 hubo que redondearlas
+ * a mano en la base el 2026-08-27.
+ */
+describe("filaCargaSchema — monto redondeado al colon (feature 299)", () => {
+  const filaConMonto = (monto: string) => ({
+    num_remision: "REM-1",
+    destinatario: "Ana",
+    telefono: "88887777",
+    producto: "Caja",
+    provincia: "Cartago",
+    canton_distrito: "Cartago (Occidental)",
+    direccion: "Frente a X",
+    notas: "",
+    monto_cobrar: monto,
+  });
+
+  it("299: el caso real de la captura — 11898.81 sale como 11899, con el aviso al lado", () => {
+    const data = filaCargaSchema.parse(filaConMonto("11898.81"));
+    expect(data.monto_cobrar).toBe(11899);
+    expect(data.monto_cobrar_ajuste).toEqual({ original: 11898.81, aplicado: 11899 });
+  });
+
+  it("299: un entero sale intacto y SIN aviso", () => {
+    const data = filaCargaSchema.parse(filaConMonto("11899"));
+    expect(data.monto_cobrar).toBe(11899);
+    expect(data.monto_cobrar_ajuste).toBeNull();
+  });
+
+  it("299: vacio y ausente siguen siendo null, y null no es un ajuste", () => {
+    const vacio = filaCargaSchema.parse(filaConMonto(""));
+    expect(vacio.monto_cobrar).toBeNull();
+    expect(vacio.monto_cobrar_ajuste).toBeNull();
+
+    const sinColumna: Record<string, string> = filaConMonto("x");
+    delete sinColumna.monto_cobrar;
+    const ausente = filaCargaSchema.parse(sinColumna);
+    expect(ausente.monto_cobrar).toBeNull();
+    expect(ausente.monto_cobrar_ajuste).toBeNull();
+  });
+
+  // Los bordes del redondeo, con su direccion declarada. El medio SUBE: es la misma regla
+  // (half away from zero) con la que `formatMontoString` viene pintando el dinero sin
+  // centimos desde la feature 230, asi que lo que se guarda es lo que la pantalla ya decia.
+  it.each([
+    ["0.49", 0],
+    ["0.5", 1],
+    ["0.51", 1],
+    ["11898.4999", 11898],
+    ["11898.5", 11899],
+    ["11899.5", 11900],
+    ["0", 0],
+    ["0.0", 0],
+  ])("299: %s -> %i", (entrada, esperado) => {
+    expect(filaCargaSchema.parse(filaConMonto(entrada)).monto_cobrar).toBe(esperado);
+  });
+
+  it("299: lo invalido sigue siendo invalido (el redondeo no ablanda la validacion)", () => {
+    expect(filaCargaSchema.safeParse(filaConMonto("abc")).success).toBe(false);
+    expect(filaCargaSchema.safeParse(filaConMonto("-0.4")).success).toBe(false);
+  });
+
+  it("299/143: el schema sigue sin ser `.strict()` tras ganar el transform", () => {
+    // El `.transform` del objeto no endurece nada: la fila re-subida con su columna extra
+    // `motivo_error` (feature 143/R16) tiene que seguir pasando.
+    const conExtra = { ...filaConMonto("100"), motivo_error: "Fila 7 — telefono: ...", otra: "x" };
+    const r = filaCargaSchema.safeParse(conExtra);
+    expect(r.success).toBe(true);
+    if (r.success) expect("motivo_error" in r.data).toBe(false);
   });
 });

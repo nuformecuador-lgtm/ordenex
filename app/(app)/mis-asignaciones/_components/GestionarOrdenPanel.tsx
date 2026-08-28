@@ -54,7 +54,7 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
 import { SolicitarAyudaModal } from "./SolicitarAyudaModal";
-import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
+import { EnviarPlantillaWhatsappButton } from "@/components/shared/EnviarPlantillaWhatsappButton";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { CAUSA_INCIDENTE_OPTIONS } from "./causa-incidente-options";
 import {
@@ -68,8 +68,8 @@ import {
 // El EDITOR de líneas vive en `components/shared` desde que lo comparte la corrección del
 // desglose que hace el admin en un cierre abierto (pedido humano 2026-08-19).
 import {
-  DESGLOSE_TEXTOS,
   DesglosePagoField,
+  mensajeDeCuadre,
 } from "@/components/shared/DesglosePagoField";
 import { VerificarGuiaGate } from "./VerificarGuiaGate";
 import { UbicacionTrigger } from "./UbicacionTrigger";
@@ -772,10 +772,12 @@ export function GestionarOrdenPanel({
   // pierde en silencio (es el camino por el que llegan las reglas 1, 2, 4 y 5 del borde).
   const pagosError = firstError(fieldErrors, "pagos");
   // R9: la diferencia se calcula y se dice de forma CONTINUA, no al pulsar.
-  const cuadreError =
-    sinCobro || capturaCuadra(lineas, montoACobrar)
-      ? undefined
-      : DESGLOSE_TEXTOS.noCuadra;
+  // Feature 300: QUÉ se dice lo decide `mensajeDeCuadre`, que vive con el editor y es el mismo
+  // para los dos consumidores. Con un monto a cobrar con céntimos el desglose no puede cuadrar
+  // —aquí solo se teclean enteros—, y entonces el aviso lo DICE con el número real delante en
+  // vez de repetir «debe sumar exactamente», que pide algo imposible junto a una diferencia
+  // pintada como cero.
+  const cuadreError = sinCobro ? undefined : mensajeDeCuadre(lineas, montoACobrar);
   // El desglose que no cuadra no llega ni a intentarlo: «Guardar gestión» se deshabilita mientras
   // la suma no iguale el monto a cobrar. `revisarDesglose` (:538) sigue siendo la barrera de
   // verdad —el botón puede habilitarse con las líneas a medias—; esto solo evita el pulso inútil.

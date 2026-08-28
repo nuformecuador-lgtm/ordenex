@@ -26,6 +26,7 @@ function etiquetaRow(overrides: Partial<EtiquetaRow> = {}): EtiquetaRow {
     provinciaNombre: "San Jose",
     cantonNombre: "Central",
     distritoNombre: "Carmen",
+    fechaCreacion: "2026-08-25", // feature 295: ya serializada por el repo (YYYY-MM-DD de CR)
     ...overrides,
   };
 }
@@ -177,6 +178,8 @@ describe("EtiquetaGuiaService — armado del DTO de etiqueta (R1)", () => {
       provinciaNombre: "San Jose",
       cantonNombre: "Central",
       distritoNombre: "Carmen",
+      // Feature 295: la fecha de creacion viaja del repo al DTO SIN reformatearse.
+      fechaCreacion: "2026-08-25",
       qrValue: "501",
       barcodeValue: "501",
     });
@@ -269,6 +272,7 @@ describe("EtiquetaGuiaService — no expone internos (R6)", () => {
         "destinatario",
         "direccion",
         "distritoNombre",
+        "fechaCreacion", // feature 295
         "montoCobrar",
         "numGuia",
         "numRemision",

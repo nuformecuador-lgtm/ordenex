@@ -7,7 +7,7 @@ import type {
 } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 import type { WebhookEventos } from "@/lib/types/whatsapp-webhook";
 import type { WhatsappEnvioOutcome } from "@/lib/clients/whatsapp-cloud";
-import { SIN_CAMPOS_308 } from "@/tests/fixtures/chat-mensaje";
+import { SIN_CAMPOS_311 } from "@/tests/fixtures/chat-mensaje";
 import { readFileSync } from "fs";
 import { join as joinPath } from "path";
 
@@ -63,7 +63,7 @@ function fakeMensajeRepo(over: Partial<IChatMensajeRepository> = {}): IChatMensa
         errorCodigo: null,
         errorTitulo: null,
         errorDetalle: null,
-        ...SIN_CAMPOS_308,
+        ...SIN_CAMPOS_311,
       ocurridoAt: AHORA,
       createdAt: AHORA,
     })),
@@ -206,7 +206,7 @@ describe("enviarTexto (R18/R19/R20/R21)", () => {
         errorCodigo: null,
         errorTitulo: null,
         errorDetalle: null,
-        ...SIN_CAMPOS_308,
+        ...SIN_CAMPOS_311,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -317,7 +317,7 @@ describe("enviarTexto (R18/R19/R20/R21)", () => {
         errorCodigo: null,
         errorTitulo: null,
         errorDetalle: null,
-        ...SIN_CAMPOS_308,
+        ...SIN_CAMPOS_311,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -376,7 +376,7 @@ describe("enviarPlantilla (envio + persistencia tipo plantilla)", () => {
         errorCodigo: null,
         errorTitulo: null,
         errorDetalle: null,
-        ...SIN_CAMPOS_308,
+        ...SIN_CAMPOS_311,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -471,7 +471,7 @@ describe("enviarPlantilla (envio + persistencia tipo plantilla)", () => {
         errorCodigo: null,
         errorTitulo: null,
         errorDetalle: null,
-        ...SIN_CAMPOS_308,
+        ...SIN_CAMPOS_311,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -512,7 +512,7 @@ describe("reintentarEnvio (D1/F3)", () => {
         errorCodigo: null,
         errorTitulo: null,
         errorDetalle: null,
-        ...SIN_CAMPOS_308,
+        ...SIN_CAMPOS_311,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -553,7 +553,7 @@ describe("reintentarEnvio (D1/F3)", () => {
         errorCodigo: null,
         errorTitulo: null,
         errorDetalle: null,
-        ...SIN_CAMPOS_308,
+        ...SIN_CAMPOS_311,
         ocurridoAt: AHORA,
         createdAt: AHORA,
       })),
@@ -579,7 +579,7 @@ describe("reintentarEnvio (D1/F3)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Feature 308 — D1/D2/D3.T (R1/R2/R4/R5/R7/R12/R16/R17/R18/R35). Ingesta de los tipos nuevos
+// Feature 311 — D1/D2/D3.T (R1/R2/R4/R5/R7/R12/R16/R17/R18/R35). Ingesta de los tipos nuevos
 // y cambio de numero del cliente.
 // ---------------------------------------------------------------------------
 
@@ -591,7 +591,7 @@ function entrantesInsertados(repo: IChatMensajeRepository): InsertarEntranteInpu
   return fn.mock.calls.map((c) => c[0]);
 }
 
-const CONTACTO_308 = {
+const CONTACTO_311 = {
   nombre: "Ana Perez",
   telefonos: [{ valor: "+506 8888-1111", tipo: "CELL" }],
   correos: [{ valor: "ana@example.com", tipo: null }],
@@ -600,7 +600,7 @@ const CONTACTO_308 = {
   urls: [],
 };
 
-describe("Feature 308 · ingesta de los tipos nuevos (R1/R2/R4/R5/R7/R12)", () => {
+describe("Feature 311 · ingesta de los tipos nuevos (R1/R2/R4/R5/R7/R12)", () => {
   it("R1/R2: un entrante de imagen llega al repo con su mediaId y el caption como cuerpo", async () => {
     const conv = fakeConversacionRepo();
     const msg = fakeMensajeRepo();
@@ -702,14 +702,14 @@ describe("Feature 308 · ingesta de los tipos nuevos (R1/R2/R4/R5/R7/R12)", () =
             telefonoE164: "50688887777",
             tipo: "contactos",
             cuerpo: null,
-            contactos: [CONTACTO_308],
+            contactos: [CONTACTO_311],
             ocurridoAt: AHORA,
           },
         ],
       }),
     );
 
-    expect(entrantesInsertados(msg)[0].contactos).toEqual([CONTACTO_308]);
+    expect(entrantesInsertados(msg)[0].contactos).toEqual([CONTACTO_311]);
   });
 
   it("R12: un entrante de media ya registrado no se duplica ni re-sella la ventana", async () => {
@@ -766,7 +766,7 @@ describe("Feature 308 · ingesta de los tipos nuevos (R1/R2/R4/R5/R7/R12)", () =
   });
 });
 
-describe("Feature 308 · cambio de numero del cliente (R16/R17/R18)", () => {
+describe("Feature 311 · cambio de numero del cliente (R16/R17/R18)", () => {
   /** Un entrante `sistema` con los dos numeros, ya normalizado por el borde del webhook. */
   function eventoCambioNumero(waMessageId = "wamid.SYS") {
     return eventos({
@@ -910,7 +910,7 @@ describe("Feature 308 · cambio de numero del cliente (R16/R17/R18)", () => {
 
   it("LIMITACION CONOCIDA (decision humana 2026-08-27): un entrante desde el numero NUEVO NO resuelve orden y se cuenta sinResolver", async () => {
     // ESTO ES LO ESPERADO, NO UN BUG. Ver el bloque «LIMITACION CONOCIDA» bajo R16 en
-    // `specs/308-chat-media-reacciones-contactos/requirements.md`: el cambio de numero se queda
+    // `specs/311-chat-media-reacciones-contactos/requirements.md`: el cambio de numero se queda
     // SOLO COMO EVIDENCIA. La resolucion de un entrante va por `orden.telefono_dest`
     // (`ChatConversacionRepository.resolverOrdenActivaPorNumero`) y R17 prohibe tocar ese campo
     // del maestro, asi que migrar el hilo (R16) NO hace que los mensajes del numero nuevo
@@ -982,7 +982,7 @@ describe("Feature 308 · cambio de numero del cliente (R16/R17/R18)", () => {
   });
 });
 
-describe("Feature 308 · PII en los logs de la ingesta (R35)", () => {
+describe("Feature 311 · PII en los logs de la ingesta (R35)", () => {
   it("no loguea numero, cuerpo, caption ni datos de contacto en NINGUNA rama", async () => {
     const NUMERO = "50688887777";
     const CAPTION = "esta es la casa amarilla de la esquina";
@@ -1022,7 +1022,7 @@ describe("Feature 308 · PII en los logs de la ingesta (R35)", () => {
             telefonoE164: NUMERO,
             tipo: "contactos",
             cuerpo: null,
-            contactos: [CONTACTO_308],
+            contactos: [CONTACTO_311],
             ocurridoAt: AHORA,
           },
           {

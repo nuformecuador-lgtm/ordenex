@@ -424,9 +424,15 @@ export const PREMIOS_RANKING = {
   entregadasAsignadas: (entregadas: number, asignadas: number) =>
     `${entregadas} / ${asignadas} entregadas`,
   entregadasAyuda:
-    "Entregadas de asignadas ese día. Con todos en cero, el podio lo decide el orden alfabético.",
+    "Entregadas de asignadas ese día. Quien no entregó nada no ocupa podio ni cobra premio.",
   /** R7/R9 — la fila no tenía premio congelado ese día. */
   sinPremio: "Sin premio asignado ese día.",
+  /**
+   * Feature 297 — la fila congelada tiene CERO entregas. Se dice la causa EXACTA, igual que
+   * `sinCierre` o `cierreNoAprobado`: el podio de un día anterior a la 297 pudo salir por orden
+   * alfabético con todos en cero, y ese premio se sigue viendo aunque ya no se pueda cobrar.
+   */
+  sinEntregas: "Ese día no entregó ninguna orden: el premio no se puede cobrar.",
   /** R11 — la causa EXACTA, no un error genérico. Esta feature no crea cierres. */
   sinCierre: "Ese día no tiene cierre: el premio no se puede imputar todavía.",
   /** R12 — la causa exacta, nombrando el estado en que está ese cierre. */

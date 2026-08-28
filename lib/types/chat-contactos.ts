@@ -1,4 +1,4 @@
-// Feature 308 (design §1.3, R7) — forma NORMALIZADA de un `contacts` de WhatsApp.
+// Feature 311 (design §1.3, R7) — forma NORMALIZADA de un `contacts` de WhatsApp.
 //
 // Es el UNICO dato de esta feature que se guarda como JSON (`chat_mensaje.contactos_json`):
 // `contacts` es una estructura anidada y de aridad variable (N contactos x N telefonos x N

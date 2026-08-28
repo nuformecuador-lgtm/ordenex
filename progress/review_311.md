@@ -1,6 +1,6 @@
-# Review — Feature 308 · el chat muestra media, reacciones, contactos y el cambio de numero
+# Review — Feature 311 · el chat muestra media, reacciones, contactos y el cambio de numero
 
-- **Rama:** `feature/308-chat-media-reacciones-contactos`
+- **Rama:** `feature/311-chat-media-reacciones-contactos`
 - **Commits propios:** `35bdd07c`, `8b9d35e5`, `ac7369d7`, `8b534461`, `773cd300`
 - **Alcance medido contra el merge-base (`1f360a8e`):** 57 archivos, +6767 / -58. Coincide con lo
   declarado. Un `git diff origin/dev..HEAD` a secas da 73 archivos y -725: es DRIFT, la rama esta
@@ -14,13 +14,13 @@
 ## Checklist de CHECKPOINTS.md
 
 ### Especificacion
-- [x] `specs/308-.../requirements.md` con R1–R35 en EARS.
-- [x] `specs/308-.../design.md` con alternativas descartadas y su porque.
+- [x] `specs/311-.../requirements.md` con R1–R35 en EARS.
+- [x] `specs/311-.../design.md` con alternativas descartadas y su porque.
 - [ ] **`tasks.md` con todas las tasks marcadas — FALLA: 0 de 29 marcadas.** (bloqueante 2)
 
 ### Trazabilidad
 - [x] Los 35 requisitos mapean a un test que existe y que MUERDE (detalle abajo).
-- [ ] **`progress/impl_308.md` con el mapa R→test — FALLA: no existe.** (bloqueante 3)
+- [ ] **`progress/impl_311.md` con el mapa R→test — FALLA: no existe.** (bloqueante 3)
 
 ### Calidad de codigo
 - [x] `pnpm typecheck` verde (medido por mi).
@@ -55,7 +55,7 @@
 ### Verificacion final
 - [ ] `./init.sh` completo en verde — rojo por baseline heredado (delta 0 de esta feature).
 - [x] Este archivo.
-- [ ] **Entrada en `progress/history.md` para la 308 — FALLA:** la entrada anadida en este diff es
+- [ ] **Entrada en `progress/history.md` para la 311 — FALLA:** la entrada anadida en este diff es
       de la **278**, no de esta feature.
 
 ---
@@ -81,7 +81,7 @@ Los 7 archivos rojos, uno a uno, y ninguno toca chat/whatsapp/media:
 | `tests/unit/guards/superficie-de-uso.guardia.test.ts` | 1 |
 
 **Coincide archivo por archivo y conteo por conteo con el baseline heredado de `dev` (30). Delta
-atribuible a la feature 308: 0.** Los de base fallan por `The column (not available) does not
+atribuible a la feature 311: 0.** Los de base fallan por `The column (not available) does not
 exist in the current database`: la base local lleva migraciones de commits de `dev` que esta rama
 todavia no tiene. Los dos flakes conocidos (`ranking-snapshot-migration`, `CrearTiendaForm`) NO
 aparecieron en esta corrida.
@@ -174,9 +174,9 @@ verificadas**. La bitacora no refleja el estado real del arbol.
 **Que falta:** marcar lo hecho, y dejar H1 explicitamente como NO hecho (ver M6) en vez de
 omitirlo.
 
-### BLOQUEANTE 3 — no existe `progress/impl_308.md`; el que hay esta a medias
+### BLOQUEANTE 3 — no existe `progress/impl_311.md`; el que hay esta a medias
 
-Solo existe `progress/impl_308_backend.md`. Su mapa R→test cubre **27 de 35** (R1–R26 y R35):
+Solo existe `progress/impl_311_backend.md`. Su mapa R→test cubre **27 de 35** (R1–R26 y R35):
 faltan **R27, R28, R29, R30, R31, R32, R33 y R34**, todo el bloque G. Y su ultima seccion sigue
 titulada *"Pendiente para el frontend (bloque G)"*, listando como pendiente codigo que el commit
 `ac7369d7` ya escribio. Un lector futuro concluiria que la UI no existe.
@@ -184,7 +184,7 @@ titulada *"Pendiente para el frontend (bloque G)"*, listando como pendiente codi
 Es un fallo de BITACORA, no de cobertura: los ocho tests de R27–R34 existen, los ejecute, y uno de
 ellos lo verifique por mutacion.
 
-**Que falta:** `progress/impl_308.md` con el mapa de los 35 y el estado real del bloque G.
+**Que falta:** `progress/impl_311.md` con el mapa de los 35 y el estado real del bloque G.
 
 ### BLOQUEANTE 4 — un nombre de archivo con emoji o CJK tumba la descarga (500)
 
@@ -269,22 +269,22 @@ quedar marcada como NO hecha en vez de omitida.
 **RECHAZADO.** El diseno y la implementacion son solidos —la autorizacion del proxy, la PII, el XSS
 y el forzado de descarga estan bien resueltos, y lo verifique rompiendo el codigo—, pero hay
 **cuatro bloqueantes**: la colision del id 299 con `dev` (B1, ya resuelta), `tasks.md` sin marcar (B2), la
-bitacora `impl_308` inexistente e incompleta (B3) y el 500 al descargar un adjunto con nombre no
+bitacora `impl_311` inexistente e incompleta (B3) y el 500 al descargar un adjunto con nombre no
 Latin-1 (B4). B1–B3 son minutos de bookkeeping; B4 es un cambio de una linea en
 `sanearNombreArchivo` mas su test. Vuelve al implementer.
 
 ---
 
-## Addenda — re-chequeo del 2026-08-28 (tras la renumeracion 299 → 308)
+## Addenda — re-chequeo del 2026-08-28 (tras la renumeracion 299 → 311)
 
-El leader aplico `64464b9b chore(308): renumerada de 299 a 308`, que ataca el bloqueante 1.
+El leader aplico `64464b9b chore(311): renumerada de 299 a 311`, que ataca el bloqueante 1.
 Comprobado por mi sobre el arbol resultante:
 
 | Bloqueante | Estado |
 | --- | --- |
-| B1 colision de id | **RESUELTO.** `feature_list.json` no tiene ids duplicados (`uniq -d` vacio); la ficha es id 308, `specs/308-chat-media-reacciones-contactos/`, y no queda ninguna referencia residual a 299 en los archivos de la feature (las `#299` que sobreviven son a un PR viejo, correctamente protegidas). |
+| B1 colision de id | **RESUELTO.** `feature_list.json` no tiene ids duplicados (`uniq -d` vacio); la ficha es id 311, `specs/311-chat-media-reacciones-contactos/`, y no queda ninguna referencia residual a 299 en los archivos de la feature (las `#299` que sobreviven son a un PR viejo, correctamente protegidas). |
 | B2 `tasks.md` sin marcar | **ABIERTO:** 0 marcadas / 29 sin marcar. |
-| B3 bitacora `impl_308.md` | **ABIERTO:** solo `progress/impl_308_backend.md`, con 27 de 35 requisitos y la seccion "Pendiente para el frontend". |
+| B3 bitacora `impl_311.md` | **ABIERTO:** solo `progress/impl_311_backend.md`, con 27 de 35 requisitos y la seccion "Pendiente para el frontend". |
 | B4 filename no Latin-1 → 500 | **ABIERTO:** `sanearNombreArchivo` sigue sin filtrar por encima de U+00FF. |
 
 **La renumeracion no rompio nada:** `pnpm typecheck` verde y los 19 archivos de test de la feature
@@ -292,9 +292,9 @@ en **262 verdes / 0 rojos** despues del cambio (58 archivos tocados, casi todos 
 
 ### Efecto colateral de la renumeracion, que corregi en este mismo archivo
 
-El `sed` global de 299 a 308 **reescribio tambien las citas del numero VIEJO**, que estaban aqui a
-proposito para documentar la colision. El bloqueante 1 acabo afirmando que *"el 308 ya esta ocupado
-en dev"* y citando una rama `fix/308-carga-redondea-montos` que no existe: el registro de por que
+El `sed` global de 299 a 311 **reescribio tambien las citas del numero VIEJO**, que estaban aqui a
+proposito para documentar la colision. El bloqueante 1 acabo afirmando que *"el 311 ya esta ocupado
+en dev"* y citando una rama `fix/311-carga-redondea-montos` que no existe: el registro de por que
 hubo que renumerar quedaba diciendo lo contrario de lo que paso. Restaurado a mano (la ficha de
 `dev` es la **299**, rama `fix/299-carga-redondea-montos`).
 
@@ -308,17 +308,17 @@ bien.
 Lo verifique despues de escribir el parrafo de arriba, y **la sospecha se confirma**. El `sed` de
 `64464b9b` reescribio la narracion historica en:
 
-1. **`status_note` de la ficha en `feature_list.json`:** *"RENUMERADA DE 294 A 308 el 2026-08-27,
+1. **`status_note` de la ficha en `feature_list.json`:** *"RENUMERADA DE 294 A 311 el 2026-08-27,
    ANTES de crear la rama y sin ningun commit escrito con el numero viejo"*.
-2. **`progress/current.md` (linea 19):** *"RENUMERADA DE 294 A 308 — cuarta colision de ids del
+2. **`progress/current.md` (linea 19):** *"RENUMERADA DE 294 A 311 — cuarta colision de ids del
    mes"*, describiendo solo el evento del 294.
-3. **`progress/history.md` (linea 4368):** *"La ficha 308 (chat: media y reacciones) nacio como 294
+3. **`progress/history.md` (linea 4368):** *"La ficha 311 (chat: media y reacciones) nacio como 294
    y se renumero por lo mismo tres dias despues"*.
 
-Las tres afirman ahora un salto **294 → 308 el 2026-08-27** que NO ocurrio: ese dia la ficha paso
-de 294 a **299**, y el salto a 308 es del **2026-08-28**, un evento distinto y posterior. Peor, la
+Las tres afirman ahora un salto **294 → 311 el 2026-08-27** que NO ocurrio: ese dia la ficha paso
+de 294 a **299**, y el salto a 311 es del **2026-08-28**, un evento distinto y posterior. Peor, la
 clausula *"ANTES de crear la rama y sin ningun commit escrito con el numero viejo"* era cierta del
-294 y es **falsa del 308**: hay cinco commits escritos como `feat(299)` y la rama se llamaba
+294 y es **falsa del 311**: hay cinco commits escritos como `feat(299)` y la rama se llamaba
 `feature/299-...` (el propio mensaje de `64464b9b` lo reconoce al justificar que renombra tambien
 el slug).
 

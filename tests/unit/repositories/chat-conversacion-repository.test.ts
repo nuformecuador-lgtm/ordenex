@@ -210,10 +210,10 @@ describe("ChatConversacionRepository · no leidos del chat", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Feature 308 — C3.T (R16/R18). `migrarTelefono`: el cliente cambio de numero.
+// Feature 311 — C3.T (R16/R18). `migrarTelefono`: el cliente cambio de numero.
 // ---------------------------------------------------------------------------
 
-describe("Feature 308 · migrarTelefono (R16/R18)", () => {
+describe("Feature 311 · migrarTelefono (R16/R18)", () => {
   it("R16: reescribe telefono_e164 del hilo y devuelve las filas migradas", async () => {
     const prisma = buildPrisma();
     prisma.$executeRaw.mockResolvedValue(1);

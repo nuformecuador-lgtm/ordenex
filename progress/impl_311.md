@@ -1,11 +1,11 @@
-# Impl — Feature 308 · el chat muestra media, reacciones, contactos y el cambio de número
+# Impl — Feature 311 · el chat muestra media, reacciones, contactos y el cambio de número
 
-> Consolida `impl_308_backend.md` (que cubría 27 de 35 y quedó diciendo «pendiente el frontend»
+> Consolida `impl_311_backend.md` (que cubría 27 de 35 y quedó diciendo «pendiente el frontend»
 > con el frontend ya escrito) y la parte de UI. **Este archivo es el mapa R→test completo.**
 
 ## Estado
 
-**Implementada.** Rama `feature/308-chat-media-reacciones-contactos`, 7 commits sobre `origin/dev`.
+**Implementada.** Rama `feature/311-chat-media-reacciones-contactos`, 7 commits sobre `origin/dev`.
 
 | commit | qué |
 |---|---|
@@ -14,7 +14,7 @@
 | `ac7369d7` | frontend: burbujas, reacciones, contactos, linkificación |
 | `8b534461` | el cambio de número es EVIDENCIA, no continuidad; test que lo fija |
 | `773cd300` | la burbuja lo dice al mensajero |
-| `64464b9b` | renumerada 299 → 308 (segunda colisión de id) |
+| `64464b9b` | renumerada 299 → 311 (segunda colisión de id) |
 | `06b47e6f` | restaura el registro que el `sed` de la renumeración borró |
 | `917f296d` | B4/M1/M2 de la revisión |
 
@@ -42,7 +42,7 @@ y el mensajero ve un globo vacío con la hora.**
 
 ## Trazabilidad R→test — 35 de 35
 
-> Copiada literal de `specs/308-chat-media-reacciones-contactos/tasks.md`, que es la fuente única.
+> Copiada literal de `specs/311-chat-media-reacciones-contactos/tasks.md`, que es la fuente única.
 > El reviewer verificó que **muerden** rompiendo la implementación en 8 puntos: 7 pusieron rojo su
 > test; el 8.º (chequeo de protocolo en `hrefSeguro`) no tenía test propio y se añadió en M2.
 
@@ -94,7 +94,7 @@ lint       0 errores (118 warnings preexistentes)
 vitest     35 failed | 20497 passed | 26 skipped
 ```
 
-**Delta atribuible a la 308: 0.** De esos 35: **30 son el baseline heredado de `dev`** medido cinco
+**Delta atribuible a la 311: 0.** De esos 35: **30 son el baseline heredado de `dev`** medido cinco
 veces (premio-ranking 20, orden-remision 5, analitica-financiera 2, usuarios-filtro 1,
 usuario-descarga 1, superficie-de-uso 1) y **5 son flakes de saturación** en componentes que la
 feature no toca (`usuario-form`, `wallet-tiendas-desglose`, `TableroOperativo`,

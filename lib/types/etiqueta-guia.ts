@@ -25,6 +25,14 @@ export interface EtiquetaGuiaDTO {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null; // R4
+  /**
+   * Feature 295 — el DIA en que la tienda cargo el envio (`orden.created_at`) como
+   * fecha calendario de Costa Rica `YYYY-MM-DD`, el mismo formato con el que el
+   * manifiesto y el comprobante de cierre escriben las suyas. Es el unico dato de
+   * fecha que la etiqueta publica, y quien recibe el paquete lo lee para saber de
+   * cuando es. Nunca es null: `created_at` es NOT NULL en `orden`.
+   */
+  fechaCreacion: string;
   qrValue: string; // = String(numGuia) (R7): el QR codifica /paquete/<numGuia>
   barcodeValue: string; // = String(numGuia) (decision F1.4 (b), R8)
 }

@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 import { linkificar } from "@/lib/utils/linkificar";
 
-// Feature 308 (R33/R34) — texto de una burbuja con las URL convertidas en enlace.
+// Feature 311 (R33/R34) — texto de una burbuja con las URL convertidas en enlace.
 //
 // SOLO el tramo de la URL es enlace (D6): el resto de la frase sigue siendo texto plano dentro
 // del mismo parrafo. NUNCA se usa `dangerouslySetInnerHTML`: los segmentos llegan como datos

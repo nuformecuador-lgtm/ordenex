@@ -116,6 +116,7 @@ const novedad = (over: Partial<NovedadDTO> = {}): NovedadDTO => ({
   numRemision: "REM-90210",
   estatusValue: "devuelta",
   intentosContacto: 0,
+  mensajeroNombre: "Marta Mensajera",
   destinatario: "Ana Cliente",
   telefonoDest: "88887777",
   causa: "not_found",

@@ -32,6 +32,19 @@ function listStubs(): Pick<IApiKeyRepository, "list" | "count"> {
 }
 
 /**
+ * Feature 302: `IApiKeyRepository` exige `findTiendaDestino`. En los tests que generan SIN
+ * tienda destino no debe invocarse (el service ni siquiera lo pregunta cuando el input no la
+ * trae): stub que falla ruidosamente, no uno que devuelva `null` en silencio.
+ */
+function tiendaDestinoStub(): Pick<IApiKeyRepository, "findTiendaDestino"> {
+  return {
+    findTiendaDestino: vi.fn(async () => {
+      throw new Error("findTiendaDestino no debe invocarse sin tiendaDestinoId");
+    }),
+  };
+}
+
+/**
  * Ciclo de vida: `IApiKeyRepository` ahora exige `rotar`/`setEstado`. En los tests de
  * `generar` no deben invocarse: stubs que fallan ruidosamente.
  */
@@ -51,6 +64,7 @@ function makeRepo() {
   const repo: IApiKeyRepository = {
     ...listStubs(),
     ...lifecycleStubs(),
+    ...tiendaDestinoStub(),
     createConUsuario: vi.fn(async (data: CreateApiKeyConUsuarioData) => {
       capturado.push(data);
       return {
@@ -59,6 +73,9 @@ function makeRepo() {
         keyPrefix: data.keyPrefix,
         estado: "activa" as const,
         usuarioId: `u-dedicado-${capturado.length}`,
+        // Feature 302: el repositorio devuelve lo que se le pidio guardar y el owner ya resuelto.
+        tiendaDestinoId: data.tiendaDestinoId,
+        ownerUsuarioId: data.tiendaDestinoId ?? `u-dedicado-${capturado.length}`,
         createdAt: new Date("2026-07-16T12:00:00Z"),
       };
     }),
@@ -160,6 +177,7 @@ describe("ApiKeyService.generar — usuario dedicado (R7/R8/R9/R10/R11/R12)", ()
     const repo: IApiKeyRepository = {
       ...listStubs(),
       ...lifecycleStubs(),
+      ...tiendaDestinoStub(),
       createConUsuario: vi.fn(async () => {
         throw new UsuarioDuplicadoError("email");
       }),
@@ -173,6 +191,7 @@ describe("ApiKeyService.generar — usuario dedicado (R7/R8/R9/R10/R11/R12)", ()
     const repo: IApiKeyRepository = {
       ...listStubs(),
       ...lifecycleStubs(),
+      ...tiendaDestinoStub(),
       createConUsuario: vi.fn(async () => {
         throw new UsuarioDuplicadoError("cedula");
       }),
@@ -200,6 +219,7 @@ describe("ApiKeyService.generar — usuario dedicado (R7/R8/R9/R10/R11/R12)", ()
         "keyPrefix",
         "passwordHash",
         "slug",
+        "tiendaDestinoId", // feature 302: la tienda a cuyo nombre cargara la key (o null)
       ].sort(),
     );
   });
@@ -210,6 +230,7 @@ describe("ApiKeyService.generar — atomicidad (R13)", () => {
     const repo: IApiKeyRepository = {
       ...listStubs(),
       ...lifecycleStubs(),
+      ...tiendaDestinoStub(),
       createConUsuario: vi.fn(async () => {
         throw new Error("transaccion abortada");
       }),
@@ -278,7 +299,16 @@ describe("ApiKeyService.generar — la key (R14..R22)", () => {
     expect(r.apiKey).not.toHaveProperty("keyHash");
     expect(r.apiKey).not.toHaveProperty("plainKey");
     expect(Object.keys(r.apiKey).sort()).toEqual(
-      ["createdAt", "estado", "id", "identificador", "keyPrefix", "usuarioId"].sort(),
+      [
+        "createdAt",
+        "estado",
+        "id",
+        "identificador",
+        "keyPrefix",
+        "ownerUsuarioId", // feature 302: dueno de las ordenes, ya resuelto (no es un secreto)
+        "tiendaDestinoId", // feature 302
+        "usuarioId",
+      ].sort(),
     );
     // [82] La irrecuperabilidad del secreto A NIVEL DEL REPOSITORIO se verifica ahora en
     // `tests/unit/repositories/api-key-repository.secreto.test.ts`, contra la clase real
@@ -361,6 +391,8 @@ function apiKeyPublico(estado: "activa" | "inactiva" = "activa") {
     keyPrefix: "ordx_abc1234",
     estado: estado as "activa" | "inactiva",
     usuarioId: "u-dedicado-1",
+    tiendaDestinoId: null, // feature 302: key sin tienda destino
+    ownerUsuarioId: "u-dedicado-1",
     createdAt: new Date("2026-07-16T12:00:00Z"),
   };
 }
@@ -377,6 +409,7 @@ function makeLifecycleRepo(opts: { notFound?: boolean } = {}) {
     findByKeyHash: vi.fn(async () => {
       throw new Error("findByKeyHash no debe invocarse desde el ciclo de vida");
     }),
+    ...tiendaDestinoStub(),
     ...listStubs(),
     rotar: vi.fn(async () => (opts.notFound ? null : apiKeyPublico())),
     setEstado: vi.fn(async (_id: string, estado: "activa" | "inactiva") =>

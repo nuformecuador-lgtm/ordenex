@@ -206,6 +206,11 @@ export class NovedadesService implements INovedadesService {
       // Pedido humano 2026-08-18: SIEMPRE se emite, el `0` incluido. Es un valor CONOCIDO
       // («nadie lo ha intentado todavia»), no un dato ausente.
       intentosContacto: row.intentosContacto,
+      // FICHA 296: el MENSAJERO, que es lo que la tienda no tenia. Viaja TAL CUAL desde la fila
+      // (el repo ya resolvio el nombre) y en los DOS grupos: en `ayuda` es a quien preguntarle
+      // —y, por construccion, quien pidio la ayuda—; en `devolucion`, quien trae el paquete de
+      // vuelta. `null` cuando no hay asignado; el service no lo disfraza de cadena vacia.
+      mensajeroNombre: row.mensajeroNombre,
       // Feature 236 (R26): para el grupo de ayuda el mapa esta vacio A PROPOSITO y esto sale
       // `null`. La pantalla no debe pintar causa ninguna sobre esas filas, ni anunciar su ausencia.
       causa: causas.get(row.id)?.causa ?? null,

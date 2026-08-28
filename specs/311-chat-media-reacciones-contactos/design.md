@@ -1,4 +1,4 @@
-# Feature 308 — Design
+# Feature 311 — Design
 
 > Decisiones técnicas. Extiende el chat de las features 109/120/121; todo lo que aquí no se
 > redefine se hereda sin cambios (firma HMAC del webhook, scope por mensajero, ventana de 24 h,

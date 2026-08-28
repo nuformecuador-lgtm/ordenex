@@ -6,8 +6,13 @@
 //
 // DEFAULT `true` (opcion 1 aprobada F1.4-Q3: la tienda debe el flete de devolucion + su IVA).
 // Con `false`, el feed NO genera los debitos `flete_devolucion`/`iva_flete_devolucion` en el
-// ledger de la tienda (la devolucion no afecta su saldo; el ingreso de la 42 no cambia).
+// ledger de la tienda (el retorno no afecta su saldo; el ingreso de la 42 no cambia).
 // Se lee en UN SOLO punto (WalletTiendaFeedService); NINGUN otro archivo decide la regla.
+//
+// FICHA 301 (2026-08-28) — ESTE INTERRUPTOR YA NO ALCANZA A LAS `devuelta`. Es un filtro
+// sobre lo que `derivarIngresoOrden` emite, y desde esa fecha una `devuelta` no emite nada:
+// los dos debitos que este flag puede descartar nacen SOLO de una gestion `rechazada`.
+// El flag no cambia de semantica ni de default; cambia el conjunto sobre el que actua.
 
 // Parseo booleano money-safe: solo "false"/"0" (trim, case-insensitive) -> false; ausente,
 // vacio o cualquier otro valor -> true (default seguro: la tienda debe el flete de devolucion).
@@ -30,8 +35,11 @@ function readPositiveInt(name: string, fallback: number): number {
 export interface WalletTiendaConfig {
   /**
    * R28/F1.4-Q3: si `true` (default), el ledger de la tienda registra los debitos
-   * `flete_devolucion` e `iva_flete_devolucion` en gestiones devuelta/rechazada (saldo
-   * negativo). Si `false`, esos dos debitos NO se generan en la tienda (los absorbe Ordenex).
+   * `flete_devolucion` e `iva_flete_devolucion` en gestiones `rechazada` (saldo negativo).
+   * Si `false`, esos dos debitos NO se generan en la tienda (los absorbe Ordenex).
+   *
+   * Ficha 301 (2026-08-28): antes decia «devuelta/rechazada». Una `devuelta` ya no genera
+   * ninguno de los dos conceptos, asi que no hay nada que este flag pueda descartar en ella.
    */
   TIENDA_DEBITA_FLETE_DEVOLUCION: boolean;
   /**

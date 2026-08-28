@@ -63,7 +63,8 @@ export interface ApiKeysColumnsOptions {
 
 /**
  * Columnas del listado de API keys (feature 82/R14): identificador · prefijo ·
- * usuario dedicado (email sintético [D1]) · fecha de creación · estado · webhook · acciones.
+ * usuario dedicado (email sintético [D1]) · tienda destino (307) · fecha de creación ·
+ * estado · webhook · acciones.
  *
  * El prefijo se muestra seguido de un elipsis en `font-mono` (R15). El DTO de
  * fila (`ApiKeyListItemDTO`) no declara `keyHash` ni el secreto, así que NUNCA
@@ -96,6 +97,19 @@ export function buildApiKeysColumns({
           {row.usuarioEmail}
         </span>
       ),
+    },
+    {
+      /**
+       * Feature 307 — A NOMBRE DE QUIÉN carga la clave. La 302 permitió que una key
+       * cargue como una tienda ya registrada, pero sin esta columna el listado enseñaba
+       * la cuenta dedicada de TODAS por igual: dos keys con destinos distintos se veían
+       * idénticas. `null` (comportamiento histórico: la key es dueña de sus órdenes) se
+       * pinta con el mismo placeholder que el resto de valores ausentes.
+       */
+      id: "tiendaDestino",
+      value: "Tienda destino",
+      render: (row) => row.tiendaDestinoNombre ?? SIN_DATO,
+      minWidth: "140px",
     },
     {
       id: "createdAt",

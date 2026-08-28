@@ -13,7 +13,7 @@ import { normalizarTelefonoWa } from "@/lib/utils/whatsapp-telefono";
 // --- Esquemas de la forma cruda de Meta (solo lo que consumimos; el resto se strip-ea) ---
 
 /**
- * Feature 308 (design §2.1, R1/R2) — la forma comun de los cinco tipos de MEDIA de Meta
+ * Feature 311 (design §2.1, R1/R2) — la forma comun de los cinco tipos de MEDIA de Meta
  * (`image`, `audio`, `video`, `document`, `sticker`). Solo `id` es obligatorio: sin el no hay
  * forma de bajar el binario y el mensaje se degrada a `otro` (R3).
  *
@@ -34,7 +34,7 @@ const metaMediaSchema = z
   .catch(undefined);
 
 /**
- * Feature 308 (R7) — un contacto compartido, tal como lo manda Meta. TODOS sus miembros son
+ * Feature 311 (R7) — un contacto compartido, tal como lo manda Meta. TODOS sus miembros son
  * blandos: Meta ha cambiado la forma de `contacts` mas de una vez y un cambio suyo no debe
  * romper la ingesta. El strip de zod DESCARTA lo que no se declara aqui (R7).
  */
@@ -90,7 +90,7 @@ const metaContactSchema = z.object({
 });
 
 // Un mensaje ENTRANTE del cliente. `text.body` solo viene en type "text"; el resto de tipos
-// trae su propio sub-objeto (media, reaction, contacts, system) desde la feature 308.
+// trae su propio sub-objeto (media, reaction, contacts, system) desde la feature 311.
 const metaMessageSchema = z.object({
   id: z.string().min(1),
   from: z.string().min(1),
@@ -106,7 +106,7 @@ const metaMessageSchema = z.object({
     .object({ latitude: z.number(), longitude: z.number() })
     .optional()
     .catch(undefined),
-  // Feature 308 (design §2.1): los cinco tipos de media comparten forma.
+  // Feature 311 (design §2.1): los cinco tipos de media comparten forma.
   image: metaMediaSchema,
   audio: metaMediaSchema,
   video: metaMediaSchema,
@@ -199,7 +199,7 @@ export interface WebhookMensajeEntrante {
    */
   ubicacion?: { latitud: number; longitud: number };
   /**
-   * Feature 308 (R1/R2): datos del adjunto cuando `tipo` es imagen/audio/video/documento/
+   * Feature 311 (R1/R2): datos del adjunto cuando `tipo` es imagen/audio/video/documento/
    * sticker. Sub-objeto COHESIVO por la misma razon que `ubicacion`: o viene el grupo entero o
    * ninguno. NO contiene el binario (D1/R15): solo el id de Meta y sus metadatos.
    */
@@ -209,11 +209,11 @@ export interface WebhookMensajeEntrante {
     mediaNombre: string | null;
     mediaTamanoBytes: number | null;
   };
-  /** Feature 308 (R4/R5): presente solo si `tipo === "reaccion"`. `emoji: null` = RETIRADA. */
+  /** Feature 311 (R4/R5): presente solo si `tipo === "reaccion"`. `emoji: null` = RETIRADA. */
   reaccion?: { objetivoWaMessageId: string; emoji: string | null };
-  /** Feature 308 (R7): lista NO vacia de contactos; ausente si el mensaje no es `contactos`. */
+  /** Feature 311 (R7): lista NO vacia de contactos; ausente si el mensaje no es `contactos`. */
   contactos?: ChatContactoNormalizado[];
-  /** Feature 308 (R9): numeros del cambio de numero del cliente. `telefonoNuevo` siempre presente. */
+  /** Feature 311 (R9): numeros del cambio de numero del cliente. `telefonoNuevo` siempre presente. */
   sistema?: { telefonoAnterior: string | null; telefonoNuevo: string };
   ocurridoAt: Date;
 }
@@ -293,7 +293,7 @@ export function esCoordenadaValida(latitud: number, longitud: number): boolean {
 }
 
 /**
- * Feature 308 (design §2.2, R11) — mapa explicito `type` de Meta -> enum de dominio. Lo que no
+ * Feature 311 (design §2.2, R11) — mapa explicito `type` de Meta -> enum de dominio. Lo que no
  * este aqui cae en `otro` por DEFECTO: los tipos fuera de alcance (`button`, `interactive`,
  * `order`, `request_welcome`, `ephemeral`) y cualquier tipo futuro que Meta invente.
  */
@@ -351,7 +351,7 @@ function mediaCrudaDe(m: MetaMessage): z.infer<typeof metaMediaSchema> {
 }
 
 /**
- * Feature 308 (design §2.2, R1/R3) — helper PURO: normaliza el adjunto de un entrante de media.
+ * Feature 311 (design §2.2, R1/R3) — helper PURO: normaliza el adjunto de un entrante de media.
  * `null` cuando no hay identificador utilizable ⇒ el mensaje se degrada a `otro` (R3). No lanza.
  */
 export function normalizarMedia(m: MetaMessage): WebhookMensajeEntrante["media"] | null {
@@ -366,7 +366,7 @@ export function normalizarMedia(m: MetaMessage): WebhookMensajeEntrante["media"]
 }
 
 /**
- * Feature 308 (R2) — el pie de foto de un adjunto es el CUERPO del mensaje: no tiene columna
+ * Feature 311 (R2) — el pie de foto de un adjunto es el CUERPO del mensaje: no tiene columna
  * propia. Asi la linkificacion del texto funciona igual sobre el caption de una imagen.
  */
 export function captionDeMedia(m: MetaMessage): string | null {
@@ -374,7 +374,7 @@ export function captionDeMedia(m: MetaMessage): string | null {
 }
 
 /**
- * Feature 308 (design §2.2, R4/R5/R6) — helper PURO: normaliza una reaccion.
+ * Feature 311 (design §2.2, R4/R5/R6) — helper PURO: normaliza una reaccion.
  * - Sin `message_id` ⇒ `null` ⇒ el mensaje se degrada a `otro` (R6).
  * - `emoji` ausente o cadena vacia ⇒ `emoji: null`, que es la reaccion RETIRADA (R5), NO una
  *   reaccion con emoji vacio: el agregado del hilo la usa para BORRAR la anterior.
@@ -405,7 +405,7 @@ function componerDireccion(dir: {
 }
 
 /**
- * Feature 308 (design §2.2, R7/R8) — helper PURO: normaliza `contacts`. Descarta los contactos
+ * Feature 311 (design §2.2, R7/R8) — helper PURO: normaliza `contacts`. Descarta los contactos
  * sin ningun dato utilizable; lista resultante vacia ⇒ `null` ⇒ degradacion a `otro` (R8).
  * No lanza y no loguea: el contenido de un contacto es PII de un tercero (R35).
  */
@@ -459,7 +459,7 @@ export function normalizarContactos(m: MetaMessage): ChatContactoNormalizado[] |
 }
 
 /**
- * Feature 308 (R9/P1) — subtipos de `system` que significan "el cliente cambio de numero".
+ * Feature 311 (R9/P1) — subtipos de `system` que significan "el cliente cambio de numero".
  *
  * SON TRES A PROPOSITO. La Cloud API ha usado los tres nombres para el MISMO evento
  * (`user_changed_number` es el antiguo) y el repo apunta a `v21.0`
@@ -474,7 +474,7 @@ const SUBTIPOS_CAMBIO_NUMERO: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Feature 308 (design §2.2, R9/R10) — helper PURO: normaliza el cambio de numero del cliente.
+ * Feature 311 (design §2.2, R9/R10) — helper PURO: normaliza el cambio de numero del cliente.
  *
  * Cascada tolerante para el numero NUEVO (`system.wa_id ?? system.new_wa_id ?? system.customer`)
  * porque la forma ha variado entre versiones y el repo NO tiene un payload real capturado (P1).
@@ -525,7 +525,7 @@ export function parseWebhookEventos(raw: unknown): WebhookEventos {
           }
         }
 
-        // Feature 308 (design §2.2): un tipo mapeado cuyo sub-objeto no trae lo ESENCIAL se
+        // Feature 311 (design §2.2): un tipo mapeado cuyo sub-objeto no trae lo ESENCIAL se
         // degrada a `otro` sin lanzar y sin romper el lote (R3/R6/R8/R10). Ninguna rama de
         // aqui loguea nada: el cuerpo, el caption, el numero y los contactos son PII (R35).
         let media: WebhookMensajeEntrante["media"];

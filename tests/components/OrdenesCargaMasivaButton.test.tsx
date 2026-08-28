@@ -7,6 +7,7 @@ import { OrdenesCargaMasivaButton } from "@/app/(app)/ordenes/_components/Ordene
 import type { OrdenesCargaUploadProps } from "@/app/(app)/ordenes/_components/OrdenesCargaUpload";
 import type { OrdenesCargaPreviewProps } from "@/app/(app)/ordenes/_components/OrdenesCargaPreview";
 import type { FilaParseada } from "@/app/(app)/ordenes/_components/carga-masiva-parser";
+import type { OrdenMontoAjustado } from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
 import type { RowResult } from "@/lib/types/carga-masiva";
 
 // ---------------------------------------------------------------------------
@@ -56,9 +57,14 @@ vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaPreview", () => ({
 // Tercer paso (R12): el resumen del lote en solo lectura. Se dobla para no
 // arrastrar su Server Action; lo que verifica este archivo es el CABLEADO (que se
 // monte y con qué `numRemisiones`), no su render.
-const resumen = vi.hoisted(() => ({ props: null as { numRemisiones: string[] } | null }));
+interface ResumenDobleProps {
+  numRemisiones: string[];
+  /** Feature 304: las creadas con el monto redondeado que el paso 3 debe recibir. */
+  ajustadas?: { fila: number | null; numRemision: string; original: number; aplicado: number }[];
+}
+const resumen = vi.hoisted(() => ({ props: null as ResumenDobleProps | null }));
 vi.mock("@/app/(app)/ordenes/_components/OrdenesCargaResumen", () => ({
-  OrdenesCargaResumen: (props: { numRemisiones: string[] }) => {
+  OrdenesCargaResumen: (props: ResumenDobleProps) => {
     resumen.props = props;
     return <div data-testid="resumen-double" />;
   },
@@ -117,6 +123,7 @@ function validar(payload: {
   numRemisionesNuevas?: string[];
   existentes?: { numRemision: string; estatus: string | null }[];
   errores?: RowResult[];
+  ajustadas?: OrdenMontoAjustado[];
   filasUnicas?: FilaParseada[];
 }) {
   act(() => {
@@ -130,6 +137,8 @@ function validar(payload: {
             numRemision: string;
             errores: Record<string, string[]>;
           }[]) ?? [],
+        // Feature 304: las creadas con el monto redondeado. Vacías salvo que el caso las pida.
+        ajustadas: payload.ajustadas ?? [],
       },
       filasUnicas: payload.filasUnicas ?? [fila("REM-A", 1)],
     });
@@ -230,6 +239,55 @@ describe("OrdenesCargaMasivaButton — confirmar carga real", () => {
     expect(resumen.props?.numRemisiones).toEqual(["REM-A"]);
     // R13: el paso es solo lectura — no recibe ningún callback de confirmación.
     expect(resumen.props).not.toHaveProperty("onDone");
+  });
+
+  it("feature 304: el aviso de monto redondeado de la carga REAL llega al paso 'resultado'", async () => {
+    // El cableado de punta a punta con la clasificación de PRODUCCIÓN (solo se dobla el
+    // transporte de chunks): el `montoAjustado` que emite el backend (feature 299) sale del
+    // resultado de la carga real y tiene que llegar al paso que la tienda ve al final, que es
+    // el único donde se pinta la columna «Monto».
+    const user = userEvent.setup();
+    procesarEnChunksMock.mockResolvedValue([
+      {
+        fila: 1,
+        numRemision: "REM-A",
+        resultado: "creada",
+        montoAjustado: { original: 11898.81, aplicado: 11899 },
+      },
+      { fila: 2, numRemision: "REM-B", resultado: "creada" },
+    ] satisfies RowResult[]);
+
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+    validar({
+      numRemisionesNuevas: ["REM-A", "REM-B"],
+      filasUnicas: [fila("REM-A", 1), fila("REM-B", 2)],
+    });
+
+    await user.click(screen.getByRole("button", { name: "confirmar-double" }));
+    expect(await screen.findByTestId("resumen-double")).toBeInTheDocument();
+
+    // Las dos se crearon (el ajuste NO saca a la fila de las creadas)...
+    expect(resumen.props?.numRemisiones).toEqual(["REM-A", "REM-B"]);
+    // ...y solo la ajustada llega con sus dos montos.
+    expect(resumen.props?.ajustadas).toEqual([
+      { fila: 1, numRemision: "REM-A", original: 11898.81, aplicado: 11899 },
+    ]);
+  });
+
+  it("feature 304: sin ajustes, el paso 'resultado' recibe la lista vacía (nada que decir)", async () => {
+    const user = userEvent.setup();
+    procesarEnChunksMock.mockResolvedValue([
+      { fila: 1, numRemision: "REM-A", resultado: "creada" },
+    ] satisfies RowResult[]);
+
+    render(<OrdenesCargaMasivaButton />);
+    await openModal();
+    validar({ numRemisionesNuevas: ["REM-A"], filasUnicas: [fila("REM-A", 1)] });
+
+    await user.click(screen.getByRole("button", { name: "confirmar-double" }));
+    expect(await screen.findByTestId("resumen-double")).toBeInTheDocument();
+    expect(resumen.props?.ajustadas).toEqual([]);
   });
 
   it("R20 (feature 143): en el paso 'resultado' no existe ningún botón de descarga de errores", async () => {

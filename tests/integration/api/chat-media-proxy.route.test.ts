@@ -7,7 +7,7 @@ import type { WhatsappMediaOutcome } from "@/lib/clients/whatsapp-media";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ChatMediaAutorizada } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 
-// Feature 308 — F3.T (R15/R21/R22/R23/R24/R25). El proxy de media.
+// Feature 311 — F3.T (R15/R21/R22/R23/R24/R25). El proxy de media.
 //
 // Lo que estos tests protegen, en una frase: NADIE que no sea el mensajero asignado consigue
 // que el servidor llame siquiera a la Graph API, y lo que sale por el cable nunca lleva el
@@ -194,7 +194,7 @@ describe("GET /api/chat/media/[mensajeId] — descarga y sniffing (R25)", () => 
   });
 
   it("un filename con CJK y emoji responde 200 (no 500) y conserva el nombre en filename*", async () => {
-    // REGRESION (revision 308, B4): el nombre se interpolaba CRUDO en `Content-Disposition`, y
+    // REGRESION (revision 311, B4): el nombre se interpolaba CRUDO en `Content-Disposition`, y
     // una cabecera HTTP es una ByteString -> `new Headers({...})` lanzaba
     // «Cannot convert argument to a ByteString ... value 22577 which is greater than 255» y el
     // handler moria con 500 EN VEZ de entregar el archivo. Los acentos del español caen dentro

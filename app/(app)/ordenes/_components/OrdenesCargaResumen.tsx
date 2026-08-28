@@ -9,12 +9,23 @@ import { resumenCargaMasiva } from "@/lib/actions/carga-masiva-resumen";
 import { formatMonto } from "@/lib/config/moneda";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 
+import type { OrdenMontoAjustado } from "./carga-masiva-clasificacion";
 import { EstatusBadge } from "./EstatusBadge";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
+import { OrdenesConMontoAjustadoTabla } from "./OrdenesConMontoAjustadoTabla";
 
 export interface OrdenesCargaResumenProps {
   /** `num_remision` del lote recién creado (feature 15, filas con `resultado==="creada"`), R7/R21. */
   numRemisiones: string[];
+  /**
+   * Feature 304: las filas del lote que se guardaron con el monto REDONDEADO (aviso de la
+   * 299). Opcional y por defecto vacío: sin ajustes este paso se ve exactamente igual que
+   * antes, que es lo que pasa en casi todas las cargas.
+   *
+   * Es la única columna de esta tabla que puede NO coincidir con lo que la tienda mandó, así
+   * que es aquí —y no solo en la revisión previa— donde tiene que poder explicarse el número.
+   */
+  ajustadas?: OrdenMontoAjustado[];
 }
 
 type LoadState<T> =
@@ -33,7 +44,10 @@ type LoadState<T> =
  * queda es la única confirmación visual de QUÉ se cargó tras subir un archivo de
  * cientos de filas.
  */
-export function OrdenesCargaResumen({ numRemisiones }: OrdenesCargaResumenProps) {
+export function OrdenesCargaResumen({
+  numRemisiones,
+  ajustadas = [],
+}: OrdenesCargaResumenProps) {
   const [filasState, setFilasState] = useState<LoadState<ResumenCargaOrdenDTO[]>>({
     status: "loading",
   });
@@ -163,6 +177,17 @@ export function OrdenesCargaResumen({ numRemisiones }: OrdenesCargaResumenProps)
             seleccion={{ numRemisiones }}
           />
         </div>
+      ) : null}
+
+      {/* Feature 304: la explicación de la columna «Monto», justo encima de la tabla que la
+          pinta. La orden se creó —esto no es un error ni una fila omitida—, pero su monto no
+          es el del archivo, y la tienda tiene que poder ver de cuánto a cuánto sin abrir un
+          ticket. Sin ajustes no se pinta nada y el paso se ve como siempre. */}
+      {ajustadas.length > 0 ? (
+        <OrdenesConMontoAjustadoTabla
+          ajustadas={ajustadas}
+          descripcion="El monto a cobrar se guarda sin céntimos: estas filas se guardaron con el monto del archivo redondeado al colón más cercano."
+        />
       ) : null}
 
       <DataTable<ResumenCargaOrdenDTO>

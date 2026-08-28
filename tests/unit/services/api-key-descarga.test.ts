@@ -38,6 +38,8 @@ function apiKey(over: Partial<ApiKeyListItem> & { id: string }): ApiKeyListItem 
     estado: "activa",
     usuarioId: `u-${over.id}`,
     usuarioEmail: `apikey+${over.id}@apikey.invalid`,
+    tiendaDestinoId: null, // feature 302
+    tiendaDestinoNombre: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     ...over,
   };
