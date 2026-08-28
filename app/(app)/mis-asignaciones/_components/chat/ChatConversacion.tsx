@@ -1,14 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowLeft,
-  Check,
-  CheckCheck,
-  MapPin,
-  Package,
-  Send,
-} from "lucide-react";
+import { ArrowLeft, Check, CheckCheck, Package, Send } from "lucide-react";
 import useSWR from "swr";
 
 import { cn } from "@/lib/utils";
@@ -32,6 +25,9 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 
 import { UbicacionModal } from "../UbicacionModal";
 import type { UbicacionPunto } from "../ubicacion-mapa-tipos";
+import { BurbujaContenido } from "./BurbujaContenido";
+import { BurbujaSistema } from "./BurbujaSistema";
+import { Reacciones } from "./Reacciones";
 import {
   ESTADO_CHIP,
   estadoDe,
@@ -83,17 +79,17 @@ function Burbuja({
   mensaje: ChatMensajeVista;
   onAbrirUbicacion: (punto: UbicacionPunto) => void;
 }) {
+  // Feature 311 (R32): el cambio de numero del cliente es una fila de SISTEMA, centrada y sin
+  // `data-direccion`: no la escribio ninguno de los dos.
+  if (mensaje.tipo === "sistema") {
+    return <BurbujaSistema sistema={mensaje.sistema} ocurridoAt={mensaje.ocurridoAt} />;
+  }
+
   const saliente = mensaje.direccion === "saliente";
-  // Feature 121 (R9/R15): un mensaje de ubicación se pinta como botón con pin (nunca se
-  // vuelcan las coordenadas al DOM visible); alimenta el minimapa del modal.
-  const esUbicacion =
-    mensaje.tipo === "ubicacion" &&
-    mensaje.latitud !== null &&
-    mensaje.longitud !== null;
 
   return (
     <li
-      className={cn("flex", saliente ? "justify-end" : "justify-start")}
+      className={cn("flex flex-col", saliente ? "items-end" : "items-start")}
       data-direccion={mensaje.direccion}
     >
       <div
@@ -104,26 +100,9 @@ function Burbuja({
             : "rounded-bl-sm bg-card text-card-foreground",
         )}
       >
-        {esUbicacion ? (
-          <button
-            type="button"
-            onClick={() =>
-              onAbrirUbicacion({
-                lat: mensaje.latitud as number,
-                lng: mensaje.longitud as number,
-              })
-            }
-            aria-label="Ver ubicación compartida"
-            className="flex items-center gap-1.5 rounded-sm text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-          >
-            <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
-            Ubicación compartida
-          </button>
-        ) : (
-          <p className="whitespace-pre-wrap break-words leading-relaxed">
-            {mensaje.cuerpo ?? ""}
-          </p>
-        )}
+        {/* Feature 311 (R14/R27): QUE se pinta lo decide un switch EXHAUSTIVO por tipo. Aqui
+            ya no se ramifica a mano ni queda un `<p>` vacio para lo desconocido. */}
+        <BurbujaContenido mensaje={mensaje} onAbrirUbicacion={onAbrirUbicacion} />
         <div className="mt-1 flex items-center justify-end gap-1">
           <span className="text-[10px] text-muted-foreground">
             {horaCorta(mensaje.ocurridoAt)}
@@ -131,6 +110,9 @@ function Burbuja({
           {saliente ? <Acuses estado={mensaje.estado} /> : null}
         </div>
       </div>
+      {/* Feature 311 (R30/D4): las reacciones van DENTRO del `<li>` de su mensaje objetivo; el
+          hilo no trae ninguna burbuja suelta de tipo `reaccion`. */}
+      <Reacciones reacciones={mensaje.reacciones} saliente={saliente} />
     </li>
   );
 }

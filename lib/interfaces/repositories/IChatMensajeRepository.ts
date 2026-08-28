@@ -3,9 +3,35 @@
 // `estado` por `wa_message_id`, insert de salientes y listado ordenado del hilo. La
 // interfaz NO expone `PrismaClient`.
 import type { ChatMensajeDireccion, ChatMensajeEstado, ChatMensajeTipo } from "@prisma/client";
+import type { ChatContactoNormalizado } from "@/lib/types/chat-contactos";
+
+/**
+ * Feature 311 (design §4) — los nueve campos nuevos de un mensaje, agrupados por el tipo que
+ * los usa. Se comparten entre el DTO de lectura y el input de escritura porque son EXACTAMENTE
+ * los mismos datos; `contactos` cruza la interfaz TIPADO (nunca `Prisma.JsonValue` ni `any`):
+ * la conversion JSON<->tipo vive dentro del repositorio.
+ */
+export interface ChatMensajeCamposMedia {
+  /** Id de media de Meta (R1). NUNCA se expone a la UI: la burbuja usa el id interno (R21). */
+  mediaId: string | null;
+  mediaMime: string | null;
+  /** `filename` de un documento (R29); `null` en el resto. */
+  mediaNombre: string | null;
+  /** Solo si Meta lo mando; normalmente `null` (P2). */
+  mediaTamanoBytes: number | null;
+  /** `reaction.message_id`: el mensaje al que reacciona (R4). */
+  reaccionAWaMessageId: string | null;
+  /** Emoji de la reaccion; `null` con `reaccionAWaMessageId` presente = RETIRADA (R5). */
+  reaccionEmoji: string | null;
+  /** Contactos compartidos ya normalizados (R7); `null` si no es un mensaje de contactos. */
+  contactos: ChatContactoNormalizado[] | null;
+  /** Evidencia del cambio de numero del cliente (R9/R18). */
+  sistemaTelefonoAnterior: string | null;
+  sistemaTelefonoNuevo: string | null;
+}
 
 /** DTO plano de un mensaje de chat (nunca la entidad Prisma cruda). */
-export interface ChatMensajeDTO {
+export interface ChatMensajeDTO extends ChatMensajeCamposMedia {
   id: string;
   conversacionId: string;
   direccion: ChatMensajeDireccion;
@@ -33,8 +59,11 @@ export interface ChatMensajeErrorInput {
   detalle: string | null;
 }
 
-/** Datos de un mensaje ENTRANTE a insertar (R6). `estado` no aplica a entrantes. */
-export interface InsertarEntranteInput {
+/**
+ * Datos de un mensaje ENTRANTE a insertar (R6). `estado` no aplica a entrantes.
+ * Los campos de la feature 311 son OPCIONALES: un entrante de texto no los manda y quedan NULL.
+ */
+export interface InsertarEntranteInput extends Partial<ChatMensajeCamposMedia> {
   conversacionId: string;
   tipo: ChatMensajeTipo;
   cuerpo: string | null;
@@ -118,4 +147,27 @@ export interface IChatMensajeRepository {
    * haber entrantes). Evita depender de la columna `ultimo_entrante_at`, que puede desincronizar.
    */
   ultimoEntranteAt(conversacionId: string): Promise<Date | null>;
+
+  /**
+   * Feature 311 (design §4/§5.2, R23) — media de UN mensaje, SOLO si ese mensaje pertenece a un
+   * hilo de una orden asignada a `mensajeroId`. Es la MISMA puerta que `listarHilo` (R16/R17 de
+   * la 109): la propiedad de la orden se resuelve en el servidor, nunca por un parametro del
+   * cliente. Una sola query con el join, para que la autorizacion del proxy sea barata y no
+   * duplique la regla.
+   *
+   * `null` = mensaje inexistente, de otro hilo o de una orden ajena. El caller responde 403 SIN
+   * tocar la Graph API. `mediaId: null` = el mensaje existe y es suyo pero no tiene adjunto (404).
+   */
+  findMediaParaMensajero(
+    mensajeId: string,
+    mensajeroId: string,
+  ): Promise<ChatMediaAutorizada | null>;
+}
+
+/** Lo minimo que el proxy necesita para servir un adjunto ya autorizado (design §4). */
+export interface ChatMediaAutorizada {
+  mediaId: string | null;
+  mediaMime: string | null;
+  mediaNombre: string | null;
+  ordenId: string;
 }

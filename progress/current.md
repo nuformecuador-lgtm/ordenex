@@ -9,6 +9,85 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 💬 2026-08-27 — ficha 311: el chat da tratamiento a media, reacciones, contactos y cambio de número
+
+**Estado: `in_progress`, spec APROBADO por el humano.** Rama
+`feature/311-chat-media-reacciones-contactos` desde `origin/dev`. Spec en
+`specs/311-chat-media-reacciones-contactos/`: **35 requisitos R1–R35, los 35 mapeados** a un test
+con ruta y `assert` (trazabilidad verificada por el leader, ninguno huérfano).
+
+**⚠️ RENUMERADA TRES VECES: 294 → 299 → 308 → 311.** Las tres por lo mismo, y **ninguna la
+detectó el gate**.
+
+- **294 → 299 (2026-08-27).** Mientras se escribía el spec, otra sesión tomó el **294** en `dev`
+  para «una orden borrada bloquea para siempre su número de remisión». Se detectó **antes de crear
+  la rama y antes del primer commit**, así que no quedó historia con el número viejo.
+- **299 → 311 (2026-08-28), destapada por el REVIEWER, no por el gate.** Mientras se implementaba,
+  `dev` llegó a **307** y su 299 pasó a ser «la carga deja entrar montos con decimales» (PR #549).
+  Esta vez **sí había historia**: cinco commits `feat(299)` y la rama se llamaba
+  `feature/299-…`. Como no estaba pusheada, se renombró también el slug (58 archivos); los
+  mensajes de commit ya escritos siguen diciendo 299 y **no se reescriben: son historia**.
+
+- **308 → 311 (2026-08-28), al bajar `dev` para abrir el PR.** En las horas que costó cerrar los
+  bloqueantes de la revisión, `dev` llegó a **310** y su 308 pasó a ser «la pantalla de rechazos por
+  plazo». La rama seguía sin pushear, así que se renombró el slug otra vez.
+
+`dev` manda en los tres casos, mismo precedente que la 276→278 de la tanda del 24.
+
+**Y una trampa que cayó dos veces:** el `sed` del renumerado escribió «294 → 299 → 311», **comiéndose
+el eslabón intermedio**, porque un barrido global no distingue entre **usar** un número y
+**citarlo**. La primera vez lo destapó el reviewer; la segunda se corrigió a mano sabiéndolo. Si
+alguna vez se automatiza el renumerado, la prosa histórica tiene que quedar fuera del barrido.
+
+**⚠️ LO QUE ESTO DESTAPA, Y ES MÁS GRAVE QUE LA FICHA:** ninguna de las dos colisiones la vio el
+gate. `jq` **no está instalado** en esta máquina y en `init.sh:35` eso es un `warn`, no un `fail`,
+así que **todo el bloque de validación de `feature_list.json` (línea 52) se salta entero**: ni la
+regla de máximo 2 `in_progress` por zona —la regla 1 de `CLAUDE.md`, marcada como no negociable—
+ni la correspondencia ficha↔spec. Y los **ids duplicados no se comprueban ni con `jq`**. Las dos
+colisiones las cazó una lectura humana. Pendiente de decisión del humano: reescribir esas
+validaciones en `node` (que sí está disponible) para que sean incondicionales.
+
+**El bug que la origina.** `tipoDeMeta` (`lib/types/whatsapp-webhook.ts`) solo mapea `text` y
+`location`; todo lo demás cae en `otro` con `cuerpo: null`, y `ChatConversacion.tsx` pinta
+`<p>{cuerpo ?? ""}</p>`. En producción: **el cliente manda una foto y el mensajero ve un globo
+vacío con la hora**. Afecta a `image`, `audio`, `video`, `document`, `sticker`, `reaction` y
+`contacts`.
+
+**Decisiones del humano, cerradas antes del spec (no reabrir):**
+
+- **Media por proxy bajo demanda, sin almacenar.** Se guarda el media `id` + metadatos; una ruta
+  propia autenticada baja el binario de la Graph API al abrirlo. **No** se usó el bucket de
+  Storage a propósito: sin bucket nuevo, sin cron de purga. El token nunca llega al navegador.
+- **Meta borra el binario a los 30 días** → cuando la descarga falle por eso, la UI **debe decir
+  que el archivo ya no está disponible**. Es requisito, no cortesía.
+- **Cambio de número**: se **migra el hilo** al número nuevo y se deja **evidencia persistente del
+  anterior y el nuevo** como burbuja de sistema. **No** se toca el teléfono de la orden ni del
+  cliente — sigue siendo dato del maestro.
+- Reacciones **ancladas a su burbuja** como en WhatsApp; `contacts` con datos **copiables**; y en un
+  texto se enlaza **solo el tramo de la URL**.
+
+**Fuera de alcance, confirmado:** `button` e `interactive` (no usan plantillas con botones de
+respuesta rápida), `order`, `request_welcome`, `ephemeral` y `message_template_status_update`.
+
+**Corrección aplicada en la puerta, antes de aprobar.** El borrador casaba el cambio de número solo
+contra `system.type === "user_changed_number"`, pero el repo apunta a **v21.0**
+(`lib/config/whatsapp.ts:10`), donde el evento **no se llama así**. R9 habría quedado **muerto en
+silencio y ningún test lo habría delatado**, porque los tests usan el mismo payload supuesto. Ahora
+acepta los tres nombres históricos y el test los recorre con `it.each`.
+
+**Pendiente de medición (P1):** no hay un payload real de `system` capturado en el repo. Cuando
+llegue uno en producción, confirmar el campo del número nuevo **contra lo medido**, no contra la
+cascada tolerante, y anotarlo aquí.
+
+**Riesgos declarados:** la ruta proxy sirve PII y debe exigir la misma autorización que
+`listarHilo`; los entrantes ya guardados como `otro` **no se pueden reconstruir** y pasarán a
+pintarse como «Mensaje no compatible»; la guardia 229 congela `PUBLIC_ROUTES` posicionalmente.
+
+**Cupo:** se abrió al pasar la **278 a `done`**. Fullstack queda con 288 y esta. ⚠️ **La 288 también
+está mergeada en `dev`** (PRs #518 y #533) pero su ficha sigue `in_progress`: no se tocó sin
+confirmación del humano.
+
+
 ## 🎨 2026-08-27 — ficha 292: las tarjetas del monitoreo toman el color de su segmento
 
 `feature/292-color-cards-monitoreo`. **Sin SDD** por decisión humana. Reportado desde la pantalla y
