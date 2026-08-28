@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
+import { filaCargaSchema } from "@/lib/types/carga-masiva";
 import { cotizacionBodySchema, filaCotizacionSchema } from "@/lib/types/cotizacion";
 import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
@@ -86,11 +87,55 @@ describe("filaCotizacionSchema · `num_remision` es OPCIONAL (R9, decision D5)",
 });
 
 describe("filaCotizacionSchema · `monto_cobrar` se conserva como STRING (R32, R33)", () => {
-  it("un decimal no negativo pasa TAL CUAL, sin convertirse a numero", () => {
-    for (const valor of ["0", "25900", "25900.50", "99999999999.51"]) {
+  it("un entero pasa TAL CUAL, y sigue siendo un string", () => {
+    // El TRANSPORTE no cambia con la ficha 305: sigue sin convertirse a numero en el borde,
+    // porque es la base de la comision COD y viaja hasta un `Prisma.Decimal`.
+    for (const valor of ["0", "25900", "99999999999"]) {
       const parsed = filaCotizacionSchema.parse({ ...FILA_DE_CARGA, monto_cobrar: valor });
       expect(parsed.monto_cobrar).toBe(valor);
       expect(typeof parsed.monto_cobrar).toBe("string");
+    }
+  });
+
+  it("FICHA 305 · un monto con centimos sale REDONDEADO al colon, como en la carga", () => {
+    // ESTE ASERTO ES EL CONTRATO NUEVO, y sustituye a propósito al «pasa tal cual» que estaba
+    // aqui hasta la 305. Hasta esa fecha la cotizacion calculaba el precio sobre el monto EXACTO
+    // mientras la carga persistia el REDONDEADO (feature 299): quien cotizaba `11898.81` recibia
+    // la comision de `11898.81` y despues se le cobraba la de `11899`. Dos cifras que no cuadran
+    // en un endpoint que publica un PRECIO.
+    const casos: readonly [string, string][] = [
+      ["11898.81", "11899"], // el caso real de la captura del 2026-08-27
+      ["25900.50", "25901"], // el medio SUBE (half away from zero sobre un monto no negativo)
+      ["25900.49", "25900"],
+      ["0.5", "1"],
+      ["0.49", "0"],
+      ["99999999999.51", "100000000000"],
+    ];
+    for (const [entra, sale] of casos) {
+      const parsed = filaCotizacionSchema.parse({ ...FILA_DE_CARGA, monto_cobrar: entra });
+      expect(parsed.monto_cobrar, `${entra} deberia cotizar sobre ${sale}`).toBe(sale);
+      expect(typeof parsed.monto_cobrar).toBe("string");
+    }
+  });
+
+  it("FICHA 305 · el numero que sale es EL MISMO que persiste la carga", () => {
+    // La comprobacion que da sentido a la de arriba: no basta con que la cotizacion redondee,
+    // tiene que redondear a LO MISMO que se va a cobrar. Se contrasta contra `filaCargaSchema`,
+    // que es la puerta que decide el valor persistido — no contra una constante escrita a mano
+    // ni contra la funcion que la propia cotizacion usa (eso estaria verde por construccion).
+    for (const monto of ["11898.81", "25900.50", "25900.49", "0.5", "0.49", "0", "7"]) {
+      const cotizado = filaCotizacionSchema.parse({
+        ...FILA_DE_CARGA,
+        monto_cobrar: monto,
+      }).monto_cobrar;
+      const cargado = filaCargaSchema.parse({
+        ...FILA_DE_CARGA,
+        canton_distrito: "Escazú (San Rafael)",
+        monto_cobrar: monto,
+      }).monto_cobrar;
+      expect(String(cotizado), `la cotizacion y la carga discrepan en ${monto}`).toBe(
+        String(cargado),
+      );
     }
   });
 
