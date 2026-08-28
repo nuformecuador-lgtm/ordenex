@@ -29,6 +29,42 @@ verificada cuando hay evidencia ejecutable.
 > En este repo `dev` llegó rojo **tres veces**, y el único check automático del PR es un build de
 > Vercel que **no ejecuta un solo test**.
 
+### El veredicto de los tests lo da el baseline — en los DOS modos
+
+`dev` arrastra rojos que no son tuyos. Si el gate fallara por ellos no contestaría la única
+pregunta que hay que contestar —**¿rompí algo?**— y alguien tendría que comparar a mano, archivo
+por archivo, contra un número que viaja por chat: en la ficha 311 eso pasó **ocho veces**, y una se
+concluyó mal.
+
+Por eso la suite **corre igual** (no se oculta ni un rojo de la consola) pero el veredicto lo dicta
+`scripts/comparar-baseline-rojos.mjs` contra `tests/baseline-rojos.json`:
+
+- **verde** si no aparece ningún archivo que antes no fallara;
+- **rojo** en cuanto aparece uno **que no está en la lista**.
+
+La comparación es **por archivo, no por número de casos**, y es deliberado: la suite tira 2–5
+flakes de saturación que cambian de sitio entre corridas —medido: 30, 31 y 32 rojos sobre el mismo
+código—, así que exigir conteos exactos gritaría en falso a diario, y un gate que grita en falso se
+acaba ignorando. El coste aceptado a sabiendas: si un archivo **ya listado** gana un rojo nuevo de
+verdad, esto no lo ve.
+
+**Estaba solo en el modo completo hasta la ficha 318.** El rápido corría los tests y terminaba, así
+que con una deuda roja ajena viva —`superficie-de-uso.guardia`— **terminaba en rojo en
+cualquier rama y pasara lo que pasara**. Se lo comieron cinco agentes seguidos (309, 308, 315, 317
+y 313). El daño no era la molestia: un gate que siempre acaba en rojo enseña a leer el rojo como
+ruido, y el día que el rojo sea propio nadie lo mira dos veces.
+
+**Mantener la lista es parte del trabajo.** Un archivo que vuelve a verde **el gate lo avisa**;
+bórralo de `tests/baseline-rojos.json` en ese mismo PR o la lista se fosiliza y deja de proteger.
+Nunca añadas uno «para pasar el gate»: se añade cuando la deuda es de otro, está **medida**, y con
+su motivo y su fecha escritos.
+
+> **En modo rápido, "no salió rojo" no es "volvió a verde".** El rápido corre un subconjunto
+> (`--changed` + guardias), así que la mayor parte del baseline **no se ejecuta** en cada corrida.
+> La comparación distingue *rojo* de *no ejecutado* y solo propone podar lo que **corrió y pasó**.
+> Si tratara la ausencia como recuperación, el gate pediría borrar entradas que siguen rojas — un
+> aviso falso, que es peor que el problema que vino a resolver.
+
 ### Cuándo `--rapido` se niega, y por qué esas rutas
 
 `init.sh --rapido` mira tu diff contra la base común con `origin/dev` —**lo commiteado y lo que
@@ -63,6 +99,24 @@ pnpm run test:guardias    # las guardias (van SIEMPRE, ver abajo)
 pnpm exec vitest related --run <archivos>   # que tests cubren ESTOS archivos
 ```
 
+`init.sh --rapido` no llama a `test:rapido`: llama a esos dos scripts por separado, añadiéndoles el
+reporter JSON que la comparación necesita, y **corre los dos aunque el primero falle**.
+`test:rapido` los encadena con `&&`, así que un rojo en el primero se llevaría por delante a las
+guardias; mientras el veredicto era el exit code daba igual (rojo es rojo), pero con el baseline
+decidiendo saldría **verde sin haberlas corrido**. Reproducir a mano lo que corre el gate rápido:
+
+```bash
+pnpm run test:cambiados --reporter=default --reporter=json --outputFile.json=.vitest/rojos-cambiados.json
+pnpm run test:guardias  --reporter=default --reporter=json --outputFile.json=.vitest/rojos-guardias.json
+node scripts/comparar-baseline-rojos.mjs .vitest/rojos-cambiados.json .vitest/rojos-guardias.json
+```
+
+Los dos reportes van **juntos a una sola llamada**: cada uno es media corrida, y por separado cada
+llamada trataría como "no ejecutado" lo que la otra sí corrió. No hay scripts `:json` en
+`package.json` a propósito: *qué* se selecciona queda definido en un solo sitio, y —medido el
+2026-08-28— **tocar `package.json` hace que `--changed` seleccione 1550 archivos de test, la suite
+entera, frente a 0 sin él**.
+
 ### Por que dos niveles
 
 La suite son ~10.000 tests y ~4 minutos. Correrla al cerrar **cada** tanda convertia el arnes en
@@ -83,7 +137,7 @@ Medido en este repo el 2026-08-03:
 `--rapido` selecciona por el **grafo de imports**. Las guardias **no importan lo que vigilan**:
 recorren el arbol de archivos (censo de tablas, columnas sensibles, modulos puros, emisores de una
 categoria). **Ningun grafo de imports las selecciona**, asi que serian justo lo que se pierde. Por
-eso `test:rapido` las corre enteras siempre; cuestan ~8 s.
+eso el modo rapido las corre enteras siempre; cuestan ~8 s.
 
 Se seleccionan por patron (`vitest run guard`), no por lista: una guardia nueva entra sola.
 

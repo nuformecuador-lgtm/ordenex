@@ -174,24 +174,75 @@ if [ -f package.json ]; then
   [ "$MODO" = "rapido" ] && exigir_completo_si_toca_lo_sensible
   run_if typecheck
   run_if lint
+  # -----------------------------------------------------------------------------------------
+  # EL VEREDICTO DE LOS TESTS LO DA EL BASELINE, Y EN LOS DOS MODOS (ficha 318, 2026-08-28)
+  # -----------------------------------------------------------------------------------------
+  #
+  # POR QUE LA COMPARACION VIVE AQUI, FUERA DEL `if $MODO`. Nacio dentro de la rama del gate
+  # completo (2026-08-28) y el modo rapido se quedo sin ella: corria `test:rapido` y terminaba.
+  # Como `dev` arrastra deuda ajena -hoy `superficie-de-uso.guardia`-, eso hacia que
+  # el modo rapido terminara en rojo EN CUALQUIER RAMA Y PASE LO QUE PASE. Se lo comieron cinco
+  # agentes seguidos (fichas 309, 308, 315, 317 y 313), y los cinco tuvieron que razonar A MANO
+  # cual de los rojos era suyo, que es exactamente lo que el baseline vino a evitar. Y no es un
+  # modo secundario: la regla 5 de CLAUDE.md lo declara "el gate normal, tambien para abrir un
+  # PR". El dano real no es la molestia: un gate que termina en rojo SIEMPRE entrena a leer el
+  # rojo como ruido, y el dia que el rojo sea propio nadie lo mirara dos veces.
+  #
+  # Por eso el `if` de abajo decide UNA sola cosa -que suite corre y donde deja su reporte- y
+  # el veredicto se calcula una vez, aqui, con una unica llamada. Una segunda copia de la
+  # comparacion dentro de cada rama seria mas facil de escribir y divergiria: la primera vez
+  # que alguien afinara el criterio, lo afinaria en una sola de las dos y la otra mentiria.
+  #
+  # La suite corre igual y no se oculta ni un rojo de la consola; lo que cambia es QUIEN dicta
+  # el veredicto: la comparacion por ARCHIVO contra `tests/baseline-rojos.json`. Verde si no
+  # aparece ningun archivo que antes no fallara. El `|| true` es deliberado -- que la suite
+  # termine en rojo ya no decide nada por si solo, y sin el `set -e` cortaria aqui. Antes esto
+  # era `run_if test`, que fallaba siempre y obligaba a comparar a mano contra un numero que
+  # viajaba por chat: en la ficha 311 paso OCHO veces, y una se concluyo mal.
+  #
+  # SE BORRAN LOS REPORTES ANTES DE CORRER. Si una corrida se cae sin escribir el suyo, el de
+  # la corrida ANTERIOR sigue en disco y la comparacion dictaminaria sobre una foto vieja. Un
+  # gate que da un veredicto sobre datos de ayer es peor que uno que falla.
+  rm -f .vitest/rojos.json .vitest/rojos-cambiados.json .vitest/rojos-guardias.json
+
   if [ "$MODO" = "rapido" ]; then
-    run_if test:rapido
-    warn "modo rapido: solo los tests relacionados con tus cambios + las guardias."
-    warn "El completo NO es opcional antes de una release a prod: ahi se corre './init.sh' a secas."
-  else
-    # GATE COMPLETO CONTRA EL BASELINE (2026-08-28). Antes esto era `run_if test`, que fallaba
-    # SIEMPRE: `dev` arrastra deuda ajena, asi que el gate terminaba en rojo aunque tu cambio
-    # estuviera impecable y alguien tenia que comparar A MANO los rojos contra un numero que
-    # viajaba por chat. En la ficha 311 eso paso OCHO veces, y una se concluyo mal.
+    # LAS DOS CORRIDAS VAN SIEMPRE, cada una con su `|| true`, y NO se usa `pnpm run
+    # test:rapido`: ese script encadena las dos con `&&`, asi que un rojo en la primera se
+    # lleva por delante a las guardias. Mientras el veredicto lo daba el exit code daba igual
+    # -rojo es rojo-, pero con el baseline decidiendo se vuelve peligroso al reves: un rojo YA
+    # CONOCIDO en `--changed` saltaria las guardias y el gate saldria VERDE sin haberlas
+    # corrido, justo las que "van SIEMPRE" porque ningun grafo de imports las selecciona.
+    # Se separan aqui, en bash, y no con `;` dentro del script de package.json, porque los
+    # scripts de npm corren en `cmd.exe` en Windows, donde `;` no separa comandos.
     #
-    # Ahora la suite corre igual (no se oculta ni un rojo de la consola) pero el VEREDICTO lo
-    # da la comparacion por ARCHIVO contra `tests/baseline-rojos.json`: verde si no aparece
-    # ningun archivo que antes no fallara. El `|| true` es deliberado -- que la suite termine
-    # en rojo ya no decide nada por si solo, y sin el `set -e` cortaria aqui.
+    # Y se llama a los scripts EXISTENTES anadiendoles el reporter, en vez de crear un
+    # `test:*:json` por cada uno. Dos razones: la primera es que QUE se selecciona sigue
+    # definido en un solo sitio -`test:cambiados` y `test:guardias`-, y no hay una copia que
+    # se pueda quedar atras cuando alguien afine la seleccion. La segunda esta MEDIDA hoy:
+    # tocar `package.json` hace que `--changed` seleccione 1550 archivos de test -- la suite
+    # entera-, frente a 0 sin el. Anadir ahi dos entradas cuyo unico llamador es este archivo
+    # habria metido al gate en su propia lista de cimientos a cambio de nada.
+    echo "-> pnpm run test:cambiados (con reporte JSON)"
+    pnpm run test:cambiados --reporter=default --reporter=json --outputFile.json=.vitest/rojos-cambiados.json || true
+    echo "-> pnpm run test:guardias (con reporte JSON)"
+    pnpm run test:guardias --reporter=default --reporter=json --outputFile.json=.vitest/rojos-guardias.json || true
+    REPORTES=".vitest/rojos-cambiados.json .vitest/rojos-guardias.json"
+  else
     echo "-> pnpm run test:json"
     pnpm run test:json || true
-    COMPARACION=$(node scripts/comparar-baseline-rojos.mjs .vitest/rojos.json)       || fail "hay rojos NUEVOS respecto del baseline (el detalle esta justo arriba)"
-    ok "tests: $COMPARACION"
+    REPORTES=".vitest/rojos.json"
+  fi
+
+  # Los reportes se pasan JUNTOS a una sola llamada: el modo rapido son dos corridas parciales
+  # y solo unidas describen que se ejecuto de verdad. La comparacion distingue "rojo" de "no
+  # ejecutado", que en modo rapido deja de ser un caso raro y pasa a ser lo normal -- casi todo
+  # el baseline no se corre-, y por eso NO reclama que se poden entradas que siguen rojas.
+  COMPARACION=$(node scripts/comparar-baseline-rojos.mjs $REPORTES)                 || fail "hay rojos NUEVOS respecto del baseline (el detalle esta justo arriba)"
+  ok "tests: $COMPARACION"
+
+  if [ "$MODO" = "rapido" ]; then
+    warn "modo rapido: solo los tests relacionados con tus cambios + las guardias."
+    warn "El completo NO es opcional antes de una release a prod: ahi se corre './init.sh' a secas."
   fi
 fi
 
