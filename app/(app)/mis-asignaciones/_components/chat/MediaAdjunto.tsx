@@ -1,10 +1,14 @@
 "use client";
 
-import { AlertTriangle, Download, FileText, Play } from "lucide-react";
+import type { ReactNode } from "react";
+import { AlertTriangle, Download, FileText, Play, RotateCcw } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { ChatMediaVista } from "@/lib/types/chat-whatsapp";
+import type { ChatMensajeDireccion } from "@prisma/client";
 
+import { textoAccesible } from "./chat-format";
 import { urlMediaChat, useMediaChat } from "./hooks/useMediaChat";
 
 // Feature 311 (R24/R27/R28/R29) — el adjunto de una burbuja: imagen, sticker, audio, video o
@@ -15,15 +19,16 @@ import { urlMediaChat, useMediaChat } from "./hooks/useMediaChat";
 // se refresca cada 10 s: bajar un video en cada refresco seria gastarle los datos moviles al
 // repartidor por nada.
 //
-// EXPIRACION (R24): el proxy responde `410` cuando Meta ya borro el binario (30 dias). El aviso
-// se pinta DENTRO de la burbuja —no como toast— porque pertenece al mensaje y tiene que seguir
-// ahi al volver a mirarlo. Nunca se deja un `<img>` roto.
+// EXPIRACION (R24): el proxy responde `410` cuando Meta no entrega el binario: tanto si ya lo
+// borro por antiguedad (30 dias) como si el `media_id` no existe alli (Meta devuelve el mismo
+// `code: 100` en ambos casos). Por eso el TEXTO VISIBLE no promete los 30 dias: no siempre es
+// cierto. El aviso se pinta DENTRO de la burbuja —no como toast— porque pertenece al mensaje y
+// tiene que seguir ahi al volver a mirarlo. Nunca se deja un `<img>` roto.
 
 /** Tipos de mensaje que llevan adjunto. */
 export type TipoMediaChat = "imagen" | "sticker" | "audio" | "video" | "documento";
 
-const TEXTO_EXPIRADO =
-  "Este archivo ya no está disponible (WhatsApp lo elimina a los 30 días).";
+const TEXTO_EXPIRADO = "Este archivo ya no está disponible.";
 
 const NOMBRE_DOCUMENTO_POR_DEFECTO = "Documento adjunto";
 
@@ -34,6 +39,11 @@ export interface MediaAdjuntoProps {
   media: ChatMediaVista | null;
   /** Pie de foto, si vino (R2). Se usa como texto alternativo de la imagen. */
   caption: string | null;
+  /**
+   * Feature 316 (R23): quien mando el adjunto. Los textos accesibles de la 311 estaban
+   * cableados a "del cliente" y con salientes eso es FALSO; el mapa vive en `chat-format`.
+   */
+  direccion: ChatMensajeDireccion;
 }
 
 /**
@@ -68,20 +78,63 @@ function AvisoError({ children }: Readonly<{ children: string }>) {
   );
 }
 
-/** Botón de "traer el archivo" para los tipos que no cargan solos. */
+/**
+ * Botón de "traer el archivo" para los tipos que no cargan solos, y también el de reintentar
+ * (misma pieza, otro icono y otra etiqueta: no se duplican los estilos).
+ *
+ * `nombreAccesible` existe porque en un mismo hilo puede haber VARIAS burbujas fallidas: un
+ * botón que solo dice "Reintentar" se repite y el lector de pantalla no los distingue.
+ */
 function BotonCargar({
   etiqueta,
   onClick,
-}: Readonly<{ etiqueta: string; onClick: () => void }>) {
+  nombreAccesible,
+  Icono = Play,
+}: Readonly<{
+  etiqueta: string;
+  onClick: () => void;
+  nombreAccesible?: string;
+  Icono?: LucideIcon;
+}>) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-label={nombreAccesible}
       className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
     >
-      <Play className="size-3.5 shrink-0" aria-hidden="true" />
+      <Icono className="size-3.5 shrink-0" aria-hidden="true" />
       {etiqueta}
     </button>
+  );
+}
+
+/** Etiqueta VISIBLE del reintento; el nombre accesible lo distingue por adjunto. */
+const TEXTO_REINTENTAR = "Reintentar";
+
+/**
+ * Aviso (texto visible, R24/R27) + salida del callejón sin salida: hasta ahora un adjunto que
+ * fallaba quedaba muerto hasta desmontar la burbuja.
+ */
+function AvisoConReintento({
+  nombreAccesible,
+  onReintentar,
+  children,
+}: Readonly<{
+  nombreAccesible: string;
+  onReintentar: () => void;
+  children: ReactNode;
+}>) {
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      {children}
+      <BotonCargar
+        etiqueta={TEXTO_REINTENTAR}
+        nombreAccesible={nombreAccesible}
+        Icono={RotateCcw}
+        onClick={onReintentar}
+      />
+    </div>
   );
 }
 
@@ -89,19 +142,38 @@ function ImagenAdjunta({
   mensajeId,
   tipo,
   caption,
-}: Readonly<{ mensajeId: string; tipo: "imagen" | "sticker"; caption: string | null }>) {
-  const { estado, url } = useMediaChat(mensajeId, true);
+  direccion,
+}: Readonly<{
+  mensajeId: string;
+  tipo: "imagen" | "sticker";
+  caption: string | null;
+  direccion: ChatMensajeDireccion;
+}>) {
+  const { estado, url, activar } = useMediaChat(mensajeId, true);
   // R28: el `alt` nunca queda vacio. Con pie de foto se usa el pie (es lo que describe la
-  // imagen); sin el, una etiqueta que dice QUE es y de QUIEN vino.
+  // imagen); sin el, una etiqueta que dice QUE es y de QUIEN vino (R23: quien vino depende de
+  // la direccion del mensaje, no siempre es el cliente).
   const alternativo =
     caption !== null && caption.trim() !== ""
       ? caption
-      : tipo === "sticker"
-        ? "Sticker enviado por el cliente"
-        : "Imagen enviada por el cliente";
+      : textoAccesible(tipo, direccion);
 
-  if (estado === "expirado") return <AvisoExpirado />;
-  if (estado === "error") return <AvisoError>No se pudo cargar la imagen.</AvisoError>;
+  const reintentoAccesible =
+    tipo === "sticker"
+      ? "Reintentar la descarga del sticker"
+      : "Reintentar la descarga de la imagen";
+
+  if (estado === "expirado" || estado === "error") {
+    return (
+      <AvisoConReintento nombreAccesible={reintentoAccesible} onReintentar={activar}>
+        {estado === "expirado" ? (
+          <AvisoExpirado />
+        ) : (
+          <AvisoError>No se pudo cargar la imagen.</AvisoError>
+        )}
+      </AvisoConReintento>
+    );
+  }
   if (estado !== "listo" || url === null) {
     return (
       <p className="text-xs text-muted-foreground">
@@ -128,14 +200,33 @@ function ImagenAdjunta({
 function ReproductorAdjunto({
   mensajeId,
   tipo,
-}: Readonly<{ mensajeId: string; tipo: "audio" | "video" }>) {
+  direccion,
+}: Readonly<{
+  mensajeId: string;
+  tipo: "audio" | "video";
+  direccion: ChatMensajeDireccion;
+}>) {
   const { estado, url, activar } = useMediaChat(mensajeId, false);
-  const nombreAccesible =
-    tipo === "audio" ? "Nota de voz del cliente" : "Video enviado por el cliente";
+  const nombreAccesible = textoAccesible(tipo, direccion);
 
-  if (estado === "expirado") return <AvisoExpirado />;
-  if (estado === "error")
-    return <AvisoError>No se pudo cargar el archivo. Inténtalo de nuevo.</AvisoError>;
+  if (estado === "expirado" || estado === "error") {
+    return (
+      <AvisoConReintento
+        nombreAccesible={
+          tipo === "audio"
+            ? "Reintentar la descarga de la nota de voz"
+            : "Reintentar la descarga del video"
+        }
+        onReintentar={activar}
+      >
+        {estado === "expirado" ? (
+          <AvisoExpirado />
+        ) : (
+          <AvisoError>No se pudo cargar el archivo. Inténtalo de nuevo.</AvisoError>
+        )}
+      </AvisoConReintento>
+    );
+  }
   if (estado === "cargando")
     return <p className="text-xs text-muted-foreground">Cargando archivo…</p>;
   if (estado !== "listo" || url === null) {
@@ -203,16 +294,24 @@ export function MediaAdjunto({
   tipo,
   media,
   caption,
+  direccion,
 }: Readonly<MediaAdjuntoProps>) {
   // Sin metadatos de adjunto no hay nada que pedirle al proxy: la burbuja lo DICE en vez de
   // quedarse vacia (R27).
   if (media === null) return <AvisoError>Adjunto no disponible.</AvisoError>;
 
   if (tipo === "imagen" || tipo === "sticker") {
-    return <ImagenAdjunta mensajeId={mensajeId} tipo={tipo} caption={caption} />;
+    return (
+      <ImagenAdjunta
+        mensajeId={mensajeId}
+        tipo={tipo}
+        caption={caption}
+        direccion={direccion}
+      />
+    );
   }
   if (tipo === "audio" || tipo === "video") {
-    return <ReproductorAdjunto mensajeId={mensajeId} tipo={tipo} />;
+    return <ReproductorAdjunto mensajeId={mensajeId} tipo={tipo} direccion={direccion} />;
   }
   return <DocumentoAdjunto mensajeId={mensajeId} media={media} />;
 }

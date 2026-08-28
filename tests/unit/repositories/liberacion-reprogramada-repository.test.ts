@@ -143,6 +143,112 @@ describe("findOrdenesLiberables (R10/R11)", () => {
   });
 });
 
+/**
+ * FICHA 315 — la MISMA consulta, acotada al cierre que se acaba de aprobar.
+ *
+ * Aqui se mide la FORMA de la consulta (que el prefiltro por cierre existe y que el resto no se
+ * movio) y la correlacion en memoria. Que el SQL resultante devuelva de verdad lo que se afirma se
+ * mide contra Postgres en `tests/integration/db/liberacion-al-aprobar-cierre-real.test.ts`: un
+ * doble de Prisma no ejecuta ningun `where`.
+ */
+describe("findOrdenesLiberablesDeCierre (ficha 315)", () => {
+  const CIERRE = "c-315";
+
+  function filaCruda(over: Record<string, unknown> = {}) {
+    return {
+      id: "o1",
+      zonaId: "z1",
+      gestiones: [
+        {
+          fechaReprogramacion: new Date("2026-07-14T00:00:00.000Z"),
+          cierreId: CIERRE,
+          cierre: { estado: "aprobado" },
+          historialEstados: [{ id: "h1" }],
+          ...over,
+        },
+      ],
+    };
+  }
+
+  it("prefiltra por el cierre SIN perder ninguna condicion de la corrida del reloj", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([filaCruda()]);
+
+    await repoWith(prisma).findOrdenesLiberablesDeCierre(CIERRE, HOY);
+
+    const arg = prisma.orden.findMany.mock.calls[0][0];
+    // Las dos de siempre siguen ahi: una consulta acotada que perdiera `deletedAt`/`estatus`
+    // liberaria ordenes borradas o que ya no estan reprogramadas.
+    expect(arg.where).toMatchObject({
+      deletedAt: null,
+      estatus: { value: "reprogramada" },
+      gestiones: {
+        some: { cierreId: CIERRE, resultado: "reprogramada", anuladaAt: null },
+      },
+    });
+    // Y la gestion vigente se elige EXACTAMENTE igual que en el camino del reloj.
+    expect(arg.select.gestiones).toMatchObject({
+      where: { resultado: "reprogramada", anuladaAt: null },
+      orderBy: { createdAt: "desc" },
+      take: 1,
+    });
+  });
+
+  it("la corrida del RELOJ no gana el prefiltro por cierre (no se acota sola)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([filaCruda()]);
+
+    await repoWith(prisma).findOrdenesLiberables(HOY);
+
+    expect(prisma.orden.findMany.mock.calls[0][0].where.gestiones).toBeUndefined();
+  });
+
+  it("💰 la fecha FUTURA no sale, aunque la orden sea de ese cierre", async () => {
+    // El caso REAL del 2026-08-28: el cierre aprobado llevaba ademas ordenes para el 31/08 y el
+    // 01/09. Soltarlas pondria un paquete en la calle DIAS antes de lo pactado.
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      filaCruda({ fechaReprogramacion: new Date("2026-07-16T00:00:00.000Z") }),
+    ]);
+
+    expect(await repoWith(prisma).findOrdenesLiberablesDeCierre(CIERRE, HOY)).toEqual([]);
+  });
+
+  it("la fecha de HOY si sale (el limite es `<=`, no `<`)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([filaCruda({ fechaReprogramacion: HOY })]);
+
+    expect(await repoWith(prisma).findOrdenesLiberablesDeCierre(CIERRE, HOY)).toHaveLength(1);
+  });
+
+  it("si la gestion VIGENTE es de otro cierre, esta aprobacion no dice nada sobre ella", async () => {
+    // El `some` la trajo (una gestion VIEJA si era de este cierre), pero la que manda es la
+    // ultima, y esa cuelga de un cierre distinto: quien la libere sera la aprobacion de AQUEL.
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      filaCruda({ cierreId: "c-otro", cierre: { estado: "solicitado" } }),
+    ]);
+
+    expect(await repoWith(prisma).findOrdenesLiberablesDeCierre(CIERRE, HOY)).toEqual([]);
+  });
+
+  it("la fila que sale es la MISMA `OrdenLiberableRow` del camino del reloj, entera", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([filaCruda()]);
+
+    expect(await repoWith(prisma).findOrdenesLiberablesDeCierre(CIERRE, HOY)).toEqual([
+      {
+        id: "o1",
+        zonaId: "z1",
+        fechaReprogramacion: new Date("2026-07-14T00:00:00.000Z"),
+        gestionCierreId: CIERRE,
+        gestionCierreEstado: "aprobado",
+        gestionEsVisitaReal: true,
+      },
+    ]);
+  });
+});
+
 describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
   it("R13: UPDATE guardado por estatus=reprogramada, fija destino + limpia mensajero + marca", async () => {
     const prisma = buildPrisma();

@@ -1,0 +1,47 @@
+{
+  "_lee_esto": [
+    "Rojos CONOCIDOS de `dev`. El gate no falla por ellos; falla cuando aparece un archivo que NO",
+    "esta en esta lista. La comparacion es POR ARCHIVO, no por numero de casos: la suite tira 2-5",
+    "flakes de saturacion que cambian de sitio entre corridas, y comparar conteos exactos daria",
+    "falsas alarmas constantes -- un gate que grita en falso se acaba ignorando, que es justo el",
+    "problema que esto viene a resolver.",
+    "",
+    "EL COSTE DE ESTA ELECCION, dicho aqui para que nadie se lleve una sorpresa: si un archivo YA",
+    "listado gana un rojo NUEVO de verdad, esto no lo ve. Se acepto a sabiendas. La contrapartida",
+    "es que la lista es corta, se lee de un vistazo y cada entrada incomoda hasta que alguien la",
+    "borra.",
+    "",
+    "COMO SE MANTIENE:",
+    "  - Un archivo que vuelve a verde -> el gate lo AVISA. Borralo de aqui en ese mismo PR, o la",
+    "    lista se fosiliza y deja de proteger.",
+    "  - Nunca anadas un archivo aqui para 'pasar el gate'. Se anade cuando la deuda es de otro y",
+    "    esta medida, con su motivo y su fecha escritos. Sin motivo, no entra.",
+    "",
+    "MEDIDO el 2026-08-28 sobre la rama fix/init-valida-feature-list, que es `origin/dev` MAS DOS",
+    "archivos (init.sh y un script) que no tocan una sola linea de producto: 31 rojos en estos 7",
+    "archivos. Por eso se sabe que son de `dev` y no de una feature en vuelo.",
+    "",
+    "PODA DEL 2026-08-28, hecha en el mismo PR que introduce esto y siguiendo su propio aviso:",
+    "salieron de la lista `premio-ranking-idempotencia`, `premio-ranking-devengo-migration`,",
+    "`orden-remision-borrada-libera-numero` y `analitica-financiera-action` -- 28 de los 31 rojos.",
+    "Habian estado rojos tres corridas seguidas y aparecieron VERDES en cuanto el arbol y la base",
+    "local se pusieron al dia. Eso confirma lo que se sospechaba: NO eran deuda de `dev`, eran",
+    "DRIFT del entorno local (rama por detras y migraciones ajenas ya aplicadas en la Postgres de",
+    "la maquina). Si vuelven, volveran como ROJOS NUEVOS y con evidencia, que es exactamente el",
+    "comportamiento que se quiere: no se readmiten por costumbre."
+  ],
+  "archivos": {
+    "tests/unit/services/usuario-descarga.test.ts": {
+      "motivo": "La fila trae una clave `zonaNombre` que la lista esperada no declara: el test se quedo atras respecto del cambio que la anadio. Es el diagnostico MAS claro de los siete y el mas barato de saldar.",
+      "desde": "2026-08-28"
+    },
+    "tests/integration/db/usuarios-filtro-busqueda.test.ts": {
+      "motivo": "Mismo sintoma que `usuario-descarga`: la clave `zonaNombre` de mas en la fila (R27 de la ficha 285).",
+      "desde": "2026-08-28"
+    },
+    "tests/unit/guards/superficie-de-uso.guardia.test.ts": {
+      "motivo": "La guardia de superficie de uso senala `lib/actions/tarifas.ts:67 obtenerTarifa`. Ajeno a las features de chat; probablemente de la ficha 274 (cascada de tarifas).",
+      "desde": "2026-08-28"
+    }
+  }
+}

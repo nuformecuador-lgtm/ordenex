@@ -4,6 +4,9 @@
 // (en linea + encolado de reintento ante `transitorio`, D1). Recibe repos + cliente por
 // constructor (inyeccion por interfaz, patron `EnvioPlantillaWhatsappService`).
 import type { WhatsappCloudClient, WhatsappEnvioOutcome } from "@/lib/clients/whatsapp-cloud";
+import type { WhatsappMediaSubidor } from "@/lib/clients/whatsapp-media-upload";
+import type { TipoAdjuntoEnvio } from "@/lib/config/chat-media-envio";
+import { validarAdjunto } from "@/lib/config/chat-media-envio";
 import type { IChatConversacionRepository } from "@/lib/interfaces/repositories/IChatConversacionRepository";
 import type { IChatMensajeRepository } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 import type { IPlantillaMensajeRepository } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
@@ -18,7 +21,12 @@ import { resolverValoresPlantilla } from "@/lib/types/plantilla-datos";
  * Cliente minimo consumido: el envio de texto libre (saliente del chat) y el envio de una
  * PLANTILLA aprobada (saliente fuera de la ventana de 24 h). Ambos exigen credencial de ENVIO.
  */
-type ChatClient = Pick<WhatsappCloudClient, "enviarTexto" | "enviarPlantilla">;
+type ChatClient = Pick<WhatsappCloudClient, "enviarTexto" | "enviarPlantilla"> &
+  // Feature 316: `enviarMedia` es OPCIONAL en el contrato consumido a proposito. La ingesta y
+  // el envio de texto/plantilla siguen funcionando con un cliente que no lo tenga (y los fakes
+  // de los tests que solo ejercitan aquello no cambian); `enviarMedia()` lo EXIGE y falla claro
+  // si falta, igual que `requireClient` hace con el cliente entero.
+  Partial<Pick<WhatsappCloudClient, "enviarMedia">>;
 
 /** Resumen de la ingesta de un lote (conteos agregados, sin PII). */
 export interface IngestaResumen {
@@ -77,6 +85,46 @@ export interface EnviarPlantillaChatInput {
   cuerpoRenderizado: string;
 }
 
+/**
+ * Feature 316 (design §4) — desenlace del envio de un ADJUNTO desde el chat.
+ *
+ * NO tiene `transitorio`, y esa ausencia ES la decision (design §4.1): un saliente de adjunto
+ * NUNCA queda `queued`. Un `transitorio` de la Graph API se persiste `failed` con su motivo
+ * (R20) y se devuelve como `permanente` a quien llamo, porque para el mensajero es igual de
+ * definitivo: el `media_id` caduca en Meta y —por D3/R18— no existe copia propia del binario
+ * para volver a subirlo, asi que un reintento automatico gastaria cuota contra un id muerto.
+ * El reintento es del mensajero, con el adjunto todavia seleccionado (R19).
+ */
+export type EnviarMediaChatOutcome =
+  | { status: "ok"; mensajeId: string; mensajeChatId: string }
+  | { status: "fuera_ventana" } // R3: se sale ANTES de subir un solo byte
+  | { status: "tipo_no_permitido" } // R9/R11: defensa del servidor, no del navegador
+  | { status: "demasiado_grande"; limiteBytes: number } // R10/R11
+  | { status: "fallo_subida"; detalle: string } // R19: nada enviado, nada persistido
+  | { status: "permanente"; detalle: string; mensajeChatId: string }; // R20: `failed` visible
+
+export interface EnviarMediaChatInput {
+  ordenId: string;
+  mensajeroId: string;
+  /** Numero del cliente en E.164 sin `+` (lo aporta el `OrdenEnvioReader`). */
+  telefonoE164: string;
+  adjunto: {
+    /** MIME del binario RECIBIDO (`File.type`), nunca uno declarado aparte por el cliente. */
+    mime: string;
+    /** Nombre del archivo; viaja en el multipart y, si es documento, hasta el WhatsApp del cliente. */
+    nombre: string;
+    /** Tamano del binario RECIBIDO (`File.size`), la unica fuente del limite de R10/R11. */
+    bytes: number;
+    /**
+     * El binario TAL CUAL. Cruza de aqui al `FormData` de la Graph API sin tocar disco ni base
+     * (R18/D3): por eso este campo NUNCA llega a `insertarSaliente`.
+     */
+    cuerpo: Blob;
+  };
+  /** Pie del adjunto (R5). Vacio o ausente = sin pie; en audio se ignora (R6). */
+  caption?: string;
+}
+
 export interface ChatWhatsappServiceDeps {
   conversacionRepo: IChatConversacionRepository;
   mensajeRepo: IChatMensajeRepository;
@@ -86,6 +134,11 @@ export interface ChatWhatsappServiceDeps {
    * credencial de ENVIO no esta configurada. `enviarTexto`/`reintentarEnvio` lo exigen.
    */
   client?: ChatClient;
+  /**
+   * Feature 316 (design §3.1): sube el binario a Meta y devuelve su `media_id`. Opcional
+   * porque la ingesta y el envio de texto no lo necesitan; `enviarMedia()` lo EXIGE.
+   */
+  subidor?: WhatsappMediaSubidor;
   /**
    * D1/F3: encola un reintento del saliente `queued` ante `transitorio`. Opcional para
    * tests; si falta, el `transitorio` se persiste igual (no se pierde) sin encolar.
@@ -113,6 +166,19 @@ export interface ChatWhatsappServiceDeps {
 export interface ChatLogger {
   warn(message: string): void;
 }
+
+/**
+ * Feature 316 -- puente entre el tipo del MENSAJE (columna `tipo`, en espanol, el que devuelve
+ * `clasificarAdjunto`) y el `type` que exige la Graph API (en ingles y en singular). Un mapa
+ * explicito y no un `if` disperso: son dos vocabularios distintos y el compilador obliga a
+ * cubrir los cuatro.
+ */
+const TIPO_META: Record<TipoAdjuntoEnvio, "image" | "video" | "audio" | "document"> = {
+  imagen: "image",
+  video: "video",
+  audio: "audio",
+  documento: "document",
+};
 
 export class ChatWhatsappService {
   private readonly ventanaMs: number;
@@ -408,6 +474,120 @@ export class ChatWhatsappService {
   }
 
   /**
+   * Feature 316 (design 4, R3/R11/R17/R18/R19/R20) -- envia un ADJUNTO al cliente.
+   *
+   * El ORDEN de operaciones es deliberado: cada paso barato va antes de cada paso caro, para
+   * que un envio que no puede salir no gaste la red movil del mensajero ni cuota de Meta.
+   *
+   *   1. upsert del hilo               (igual que `enviarTexto`)
+   *   2. ventana de 24 h  -> `fuera_ventana`                                [R3: SIN subir]
+   *   3. `validarAdjunto(mime, bytes)` -> tipo/tamano                       [R11: defensa]
+   *   4. subir a Meta     -> fallo => `fallo_subida`, SIN persistir nada    [R19]
+   *   5. enviar el mensaje-> ok  => `insertarSaliente(sent, media*)`        [R17]
+   *                       -> fallo (pasajero O determinista) => `failed`    [R20], sin encolar
+   *
+   * El paso 3 mide `bytes` del binario RECIBIDO, no un campo declarado por el cliente: una
+   * peticion fabricada que mienta sobre su tamano se rechaza igual (R11).
+   */
+  async enviarMedia(input: EnviarMediaChatInput): Promise<EnviarMediaChatOutcome> {
+    const client = this.requireClient();
+    const subidor = this.deps.subidor;
+    if (client.enviarMedia === undefined || subidor === undefined) {
+      throw new Error("ChatWhatsappService: envio de adjuntos no configurado (cliente/subidor)");
+    }
+
+    const telefonoE164 = normalizarTelefonoWa(input.telefonoE164);
+    const hilo = await this.deps.conversacionRepo.upsertParaOrden({
+      ordenId: input.ordenId,
+      mensajeroId: input.mensajeroId,
+      telefonoE164,
+    });
+
+    // R3: fuera de la ventana Meta NO acepta media libre (solo plantillas). Se sale AQUI, antes
+    // de subir un solo byte: descubrirlo tras la subida seria gastar la red del mensajero para
+    // nada y dejar un binario huerfano en Meta.
+    const ultimoEntranteAt = await this.deps.mensajeRepo.ultimoEntranteAt(hilo.id);
+    if (!this.dentroDeVentana(ultimoEntranteAt)) return { status: "fuera_ventana" };
+
+    // R11: MISMA funcion pura que corre en el navegador. La del navegador es cortesia de red;
+    // esta es la defensa. Un HEIC que llegue aqui -peticion fabricada o cliente sin la
+    // normalizacion de 2.1- es `tipo_no_permitido`: el servidor no normaliza (no hay canvas).
+    const validacion = validarAdjunto(input.adjunto.mime, input.adjunto.bytes);
+    if (!validacion.ok) {
+      return validacion.motivo === "tipo_no_permitido"
+        ? { status: "tipo_no_permitido" }
+        : { status: "demasiado_grande", limiteBytes: validacion.limiteBytes };
+    }
+    const tipo = validacion.tipo;
+
+    const subida = await subidor.subir({
+      mime: input.adjunto.mime,
+      nombre: input.adjunto.nombre,
+      cuerpo: input.adjunto.cuerpo,
+    });
+    if (subida.status !== "ok") {
+      // R19: no se envia mensaje y NO se persiste saliente. Un saliente sin `media_id` seria
+      // una burbuja permanentemente rota; el adjunto sigue en el composer para reintentar.
+      return { status: "fallo_subida", detalle: subida.detalle };
+    }
+
+    const ahora = this.now();
+    const caption = input.caption?.trim();
+    const conPie = caption !== undefined && caption !== "";
+    const outcome = await client.enviarMedia(telefonoE164, TIPO_META[tipo], subida.mediaId, {
+      // El cliente vuelve a omitir el pie en audio (R6); aqui no se manda vacio.
+      ...(conPie ? { caption } : {}),
+      // `filename` solo tiene efecto en documento, que es donde el cliente lo ve.
+      ...(tipo === "documento" ? { filename: input.adjunto.nombre } : {}),
+    });
+
+    // Lo UNICO que se persiste del adjunto: su identificador en Meta y sus metadatos (R18/D3).
+    const camposMedia = {
+      mediaId: subida.mediaId,
+      mediaMime: input.adjunto.mime,
+      mediaNombre: input.adjunto.nombre,
+      mediaTamanoBytes: input.adjunto.bytes,
+    };
+    // Una nota de voz no tiene pie (R6) y un adjunto sin texto tampoco: `null`, no cadena vacia.
+    const cuerpo = conPie && tipo !== "audio" ? (caption as string) : null;
+
+    if (outcome.status === "ok") {
+      // R17/R18: el binario NO entra aqui -ni como Blob, ni como base64, ni troceado-: viajo
+      // del FormData de la accion al FormData de Meta y ahi se acabo.
+      const guardado = await this.deps.mensajeRepo.insertarSaliente({
+        conversacionId: hilo.id,
+        tipo,
+        cuerpo,
+        waMessageId: outcome.mensajeId,
+        estado: "sent",
+        ocurridoAt: ahora,
+        ...camposMedia,
+      });
+      return { status: "ok", mensajeId: outcome.mensajeId, mensajeChatId: guardado.id };
+    }
+
+    // R20: CUALQUIER fallo del envio -pasajero o determinista- se cierra como `failed` con su
+    // motivo y su `media_id`, y NO se encola reintento. Que un `transitorio` no se reintente
+    // aqui (a diferencia del texto) es la decision de design 4.1: el `media_id` caduca en Meta
+    // y no hay copia propia del binario para resubirlo, asi que el job moriria en dead-letter.
+    const fallido = await this.persistirFalloPermanente(
+      {
+        conversacionId: hilo.id,
+        tipo,
+        cuerpo,
+        plantillaId: null,
+        ...camposMedia,
+      },
+      {
+        detalle: outcome.detalle,
+        codigoMeta: outcome.status === "permanente" ? outcome.codigoMeta : null,
+      },
+      ahora,
+    );
+    return { status: "permanente", detalle: outcome.detalle, mensajeChatId: fallido };
+  }
+
+  /**
    * D1/F3: reintenta el envio de un saliente `queued` (drenado del job). Si el mensaje ya no
    * esta `queued` (reconciliado por otra corrida) es un no-op. `ok` reconcilia el
    * `wa_message_id`; `transitorio` RELANZA para que el job aplique backoff/dead-letter.
@@ -419,6 +599,28 @@ export class ChatWhatsappService {
 
     const hilo = await this.deps.conversacionRepo.findById(mensaje.conversacionId);
     if (hilo === null) return;
+
+    // Feature 316 (R21, design 4.1) -- DOBLE CINTURON. Abajo solo hay dos caminos: plantilla y
+    // "todo lo demas", y "todo lo demas" se reenvia con `enviarTexto`. Un saliente de ADJUNTO
+    // que llegase ahi mandaria su PIE como un mensaje de texto suelto: un mensaje DISTINTO del
+    // que el mensajero envio, sin el adjunto, y sin que el se entere.
+    //
+    // No es defensa "por si acaso": `procesarFallo` devuelve a `queued` un saliente `failed`
+    // cuyo codigo de Meta sea transitorio, y ese es un camino REAL que desemboca aqui aunque
+    // `enviarMedia` no encole nada. Se cierra como `failed` con el motivo, y se registra.
+    if (mensaje.tipo !== "texto" && mensaje.tipo !== "plantilla") {
+      await this.deps.mensajeRepo.marcarFallido(mensaje.id, {
+        codigo: null,
+        titulo: null,
+        detalle:
+          `reintento no soportado para un saliente de tipo ${mensaje.tipo}: ` +
+          "el media id de Meta caduca y no hay copia propia del binario para resubirlo",
+      });
+      this.deps.logger?.warn(
+        `[whatsapp] reintento omitido: saliente de tipo ${mensaje.tipo} no se reenvia como texto`,
+      );
+      return;
+    }
 
     // Un saliente de PLANTILLA se reenvia COMO PLANTILLA. Antes se reenviaba siempre con
     // `enviarTexto`, lo que mandaba el cuerpo renderizado como texto libre: un mensaje
@@ -499,9 +701,20 @@ export class ChatWhatsappService {
   private async persistirFalloPermanente(
     base: {
       conversacionId: string;
-      tipo: "texto" | "plantilla";
-      cuerpo: string;
+      /**
+       * Feature 316 (design 4.2): antes era `"texto" | "plantilla"`, que es tipar de MENOS los
+       * tipos que el chat sabe EMITIR. Se amplia a los de adjunto -y solo a esos: sigue sin
+       * admitir `sticker`, `ubicacion`, `reaccion` ni `sistema`, que el chat no emite-.
+       */
+      tipo: "texto" | "plantilla" | TipoAdjuntoEnvio;
+      /** `null` desde la 316: una nota de voz fallida no tiene cuerpo (Meta no admite pie). */
+      cuerpo: string | null;
       plantillaId: string | null;
+      /** R20: el fallo conserva el `media_id`, que es lo que deja la burbuja fallida util. */
+      mediaId?: string | null;
+      mediaMime?: string | null;
+      mediaNombre?: string | null;
+      mediaTamanoBytes?: number | null;
     },
     outcome: { detalle: string; codigoMeta: number | null },
     ahora: Date,
@@ -511,6 +724,10 @@ export class ChatWhatsappService {
       tipo: base.tipo,
       cuerpo: base.cuerpo,
       plantillaId: base.plantillaId,
+      mediaId: base.mediaId ?? null,
+      mediaMime: base.mediaMime ?? null,
+      mediaNombre: base.mediaNombre ?? null,
+      mediaTamanoBytes: base.mediaTamanoBytes ?? null,
       waMessageId: null,
       estado: "failed",
       ocurridoAt: ahora,

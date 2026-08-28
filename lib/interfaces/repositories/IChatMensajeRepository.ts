@@ -85,6 +85,23 @@ export interface InsertarSalienteInput {
   ocurridoAt: Date;
   /** Motivo, cuando se inserta ya `failed` (rechazo determinista de la Graph API). */
   error?: ChatMensajeErrorInput | null;
+  /**
+   * Feature 316 (design §1.1, R17) — adjunto PROPIO ya subido a Meta. Ausentes en un saliente de
+   * texto o de plantilla, donde quedan NULL.
+   *
+   * Se declaran los CUATRO campos a mano y NO `Partial<ChatMensajeCamposMedia>` como hace
+   * `InsertarEntranteInput`: aquel arrastraria `reaccion*`, `contactos` y `sistema*`, y un
+   * saliente de esta feature nunca es una reaccion, ni contactos, ni un evento de sistema.
+   * Ofrecer esos campos en el input de ESCRITURA seria una puerta abierta a persistir un
+   * saliente imposible. El DTO de LECTURA (`ChatMensajeDTO`) si los trae todos y no se toca.
+   *
+   * `mediaTamanoBytes` en un saliente se conoce SIEMPRE (`File.size`), a diferencia del entrante
+   * (P2 de la 311): es la unica asimetria con el entrante.
+   */
+  mediaId?: string | null;
+  mediaMime?: string | null;
+  mediaNombre?: string | null;
+  mediaTamanoBytes?: number | null;
 }
 
 export interface IChatMensajeRepository {
