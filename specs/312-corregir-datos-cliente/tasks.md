@@ -16,7 +16,7 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
 
 ## Bloque 0 — Antes de tocar nada
 
-- [ ] **T0.1** Releer, con el archivo delante y sin fiarse de este spec:
+- [x] **T0.1** Releer, con el archivo delante y sin fiarse de este spec:
       `lib/repositories/OrdenRepository.ts:1362` (`update`),
       `lib/repositories/ChatConversacionRepository.ts:65` (`resolverOrdenActivaPorNumero`) y
       `:141` (`findByOrdenParaMensajero`, el desempate que sostiene design §5.4),
@@ -25,7 +25,7 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
       `lib/types/orden.ts:39` (`actualizarOrdenSchema`, y que **no** lleva `.max()`).
       _Hecho:_ el censo del design §0 se confirma o se corrige **en el spec** antes de escribir
       código. Si algo no cuadra, se para y se pregunta.
-- [ ] **T0.2** `./init.sh --rapido` en verde sobre la rama recién creada, **antes** del primer
+- [x] **T0.2** `./init.sh --rapido` en verde sobre la rama recién creada, **antes** del primer
       cambio. _Hecho:_ log con `INIT_EXIT=0` escrito dentro del propio log (no fiarse del exit
       code del comando que lo canaliza).
 
@@ -33,7 +33,7 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
 
 ## Bloque A — Módulos puros y contratos (sin I/O)
 
-- [ ] **A1 [P]** `lib/types/correccion-datos-cliente.ts`: `CAMPOS_CORREGIBLES`,
+- [x] **A1 [P]** `lib/types/correccion-datos-cliente.ts`: `CAMPOS_CORREGIBLES`,
       `ESTADOS_SIN_CORRECCION` (derivado de `ESTADOS_TERMINALES` + `"rechazada"`, con
       `satisfies readonly OrderStatusValue[]`), `estadoAdmiteCorreccion`, `rolAdmiteCorreccion`
       (que para `adminTienda` decide con `grupoDeEstatus(...) !== null` leyendo
@@ -44,14 +44,14 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
       `adminTienda` con `devuelta` ⇒ `true` **y con `ayuda_tienda` ⇒ `true`** (P2);
       `adminTienda` con `en_reparto` ⇒ `false`;
       `mensajero`/`adminSatelite`/`apiKey` siempre `false`. **(R8, R9, R10, R11, R24)**
-- [ ] **A2 [P] ⇐ A1** `corregirDatosClienteSchema` en el mismo módulo, **derivado** de
+- [x] **A2 [P] ⇐ A1** `corregirDatosClienteSchema` en el mismo módulo, **derivado** de
       `actualizarOrdenSchema` con `.pick(...).strict().extend({ordenId}).refine(...)`.
       _Hecho:_ `tests/unit/types/correccion-datos-cliente-schema.test.ts` verde:
       una clave fuera de los 4 (`estatusId`, `zonaId`, `peso`, `direccion`) ⇒ error;
       objeto con solo `ordenId` ⇒ error del `refine`; `destinatario: ""` ⇒ error;
       `notas: null` ⇒ válido; **`producto` y `notas` de 5.000 caracteres ⇒ VÁLIDOS y sin
       recortar** (R6: ningún tope propio, igual que la carga). **(R1, R2, R3, R6)**
-- [ ] **A3 [P] ⇐ A2** `lib/interfaces/services/ICorregirDatosClienteService.ts` con
+- [x] **A3 [P] ⇐ A2** `lib/interfaces/services/ICorregirDatosClienteService.ts` con
       `CorregirDatosClienteInput`, los cuatro desenlaces de design §4.2 y el docstring de por qué
       es servicio propio y no un método de `IOrdenService`.
       _Hecho:_ typecheck limpio; el union no tiene ninguna rama sin usar.
@@ -65,17 +65,17 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
 
 ## Bloque B — Repositorio (backend, con Postgres)
 
-- [ ] **B1 ⇐ A1** `IOrdenRepository`: declarar `CorregirDatosClienteData` (4 claves, **sin**
+- [x] **B1 ⇐ A1** `IOrdenRepository`: declarar `CorregirDatosClienteData` (4 claves, **sin**
       `estatusId` ni `direccion`) y `corregirDatosCliente(ordenId, data, estadosBloqueados)`.
       `update` **no se toca**.
       _Hecho:_ typecheck; y una nota en el docstring diciendo que la ausencia de `estatusId` es
       el mecanismo por el que R14 no depende de que nadie se acuerde.
-- [ ] **B2 ⇐ B1** `OrdenRepository`: el método `corregirDatosCliente` como **un solo**
+- [x] **B2 ⇐ B1** `OrdenRepository`: el método `corregirDatosCliente` como **un solo**
       `updateMany` con la ventana en el `WHERE` (design §7). **Sin `$transaction` y sin tocar el
       constructor**: con una sola sentencia no hay dos escrituras que coordinar.
       _Hecho:_ typecheck; `grep` que confirme 0 call-sites de `new OrdenRepository(...)` tocados;
       y que el archivo del repositorio **no gana** ningún import del hilo de notas.
-- [ ] **B3 ⇐ B2** `tests/integration/db/corregir-datos-cliente.repo.test.ts` **contra Postgres**
+- [x] **B3 ⇐ B2** `tests/integration/db/corregir-datos-cliente.repo.test.ts` **contra Postgres**
       (los tests de servicio usan dobles y no ven el `WHERE`).
       Casos, cada uno con su fila sembrada:
       1. orden en `en_reparto` ⇒ `"ok"` y las 4 columnas cambian.
@@ -96,10 +96,10 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
 
 ## Bloque C — Servicio
 
-- [ ] **C1 ⇐ A1,A3,B1** `lib/services/CorregirDatosClienteService.ts` con la secuencia de
+- [x] **C1 ⇐ A1,A3,B1** `lib/services/CorregirDatosClienteService.ts` con la secuencia de
       design §3.2. Dependencias por `Pick<…>` de interfaz, como `EliminarOrdenService`.
       _Hecho:_ se construye entero con dobles; no importa Prisma ni `next/headers`.
-- [ ] **C2 ⇐ C1** `tests/unit/services/corregir-datos-cliente-service.test.ts`:
+- [x] **C2 ⇐ C1** `tests/unit/services/corregir-datos-cliente-service.test.ts`:
       - `mensajero` / `adminSatelite` / `apiKey` ⇒ `forbidden`, y **el repositorio no se llama**. **(R10)**
       - `adminTienda` sobre orden de otra tienda ⇒ `forbidden`. **(R9)**
       - `adminTienda` sobre orden propia en `devuelta` ⇒ `ok`. **(R9)**
@@ -115,7 +115,7 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
       - la decisión se toma con el rol y la tienda **del actor**, jamás con lo que venga en el
         input (un input que traiga `rol`/`tiendaId` no cambia el desenlace). **(R25)**
       _Hecho:_ todos verdes; ninguna aserción compara un texto contra la función que lo genera.
-- [ ] **C3 [P] ⇐ C1** Comprobación **estructural** de la ausencia de rastro: ningún módulo de la
+- [x] **C3 [P] ⇐ C1** Comprobación **estructural** de la ausencia de rastro: ningún módulo de la
       ficha (`lib/services/CorregirDatosClienteService.ts`, `lib/actions/corregir-datos-cliente.ts`,
       `lib/repositories/OrdenRepository.corregirDatosCliente`) importa `OrdenNotaRepository`,
       `OrdenNotaService`, `lib/actions/orden-notas` ni escribe en `orden_historial_estado`.
@@ -127,19 +127,19 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
 
 ## Bloque D — Server Action
 
-- [ ] **D1 ⇐ A2,C1** `lib/actions/corregir-datos-cliente.ts`: `"use server"`,
+- [x] **D1 ⇐ A2,C1** `lib/actions/corregir-datos-cliente.ts`: `"use server"`,
       `withErrorHandler` + `resolveActorFromSession` + `corregirDatosClienteSchema` +
       `buildService()`, traductor de `AppErrorShape` a `{unauthenticated}` /
       `{validation_error}`. Patrón literal de `lib/actions/eliminar-orden.ts`.
       _Hecho:_ typecheck; el composition root **pasa de verdad** el repositorio al servicio (no
       basta con importarlo).
-- [ ] **D2 ⇐ D1** `tests/unit/actions/corregir-datos-cliente.action.test.ts`:
+- [x] **D2 ⇐ D1** `tests/unit/actions/corregir-datos-cliente.action.test.ts`:
       - sin sesión ⇒ `{status:"unauthenticated"}` **y el servicio no se construye**. **(R7)**
       - entrada con `estatusId` ⇒ `validation_error`, servicio no llamado. **(R2)**
       - entrada sin ningún campo ⇒ `validation_error`. **(R3)**
       - con sesión y entrada válida ⇒ delega en el servicio con el actor de la sesión. **(R25)**
       _Hecho:_ verdes con dobles inyectados por `deps`.
-- [ ] **D3 [P] ⇐ D1** Test dedicado: ningún módulo de la feature contiene `console.` ni interpola
+- [x] **D3 [P] ⇐ D1** Test dedicado: ningún módulo de la feature contiene `console.` ni interpola
       `destinatario`/`telefono`/`producto`/`notas` en un texto de error. Se reusa **como técnica**
       el detector de `console.` que ya vive en `tests/unit/guards/orden-nota-frontera.guardia.test.ts`
       (se cita solo como precedente del mecanismo: esta ficha no toca el hilo de notas).
@@ -203,7 +203,7 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
 
 ## Bloque G — WhatsApp y cierre
 
-- [ ] **G1 ⇐ B2** `tests/integration/db/corregir-datos-cliente.chat.test.ts` **contra Postgres**:
+- [x] **G1 ⇐ B2** `tests/integration/db/corregir-datos-cliente.chat.test.ts` **contra Postgres**:
       sembrar orden viva con mensajero asignado, `telefono_dest = "8888-7777"`, y un
       `chat_conversacion` con `telefono_e164 = "50688887777"` y 2 mensajes. Corregir a
       `"8888-9999"`. Entonces:
@@ -213,11 +213,11 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
         su `telefono_e164` **sin cambiar**. **(R19)**
       _Hecho:_ verde, y el caso R21 matado con una mutación (si el `UPDATE` no escribiera
       `telefono_dest`, R20 debe caer).
-- [ ] **G2 [P] ⇐ B2** Test que confirma que la feature **no llama** a
+- [x] **G2 [P] ⇐ B2** Test que confirma que la feature **no llama** a
       `ChatConversacionRepository.migrarTelefono` ni a ninguna otra escritura del módulo de chat
       (design §5.3, D5): `grep` estructural sobre los módulos de la ficha.
       _Hecho:_ verde con contraprueba. **(R19)**
-- [ ] **G3 ⇐ B3** Caso de guardado del teléfono dentro del test de integración de B3: tras
+- [x] **G3 ⇐ B3** Caso de guardado del teléfono dentro del test de integración de B3: tras
       corregir con `" 8888-9999 "`, la columna guarda `"8888-9999"` (recortado, **no**
       `"50688889999"`), igual que la carga (T1, 2026-08-28).
       _Hecho:_ verde. **(R17)**

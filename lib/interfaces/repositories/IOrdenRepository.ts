@@ -45,6 +45,28 @@ export interface CreateOrdenData {
   montoCobrar?: number | null;
 }
 
+/**
+ * FICHA 312 (2026-08-28) — los CUATRO campos que la correccion de datos del cliente puede
+ * escribir, y NINGUNO MAS.
+ *
+ * ⚠️ QUE NO ESTE `estatusId` NI `direccion` NO ES UN DESCUIDO: ES EL MECANISMO. `update` (arriba)
+ * puede escribir los dos, y por eso arrastra dos efectos colaterales — el append a
+ * `orden_historial_estado` cuando cambia el estatus y el encolado de geocodificacion cuando cambia
+ * la direccion. La ficha 312 exige que la correccion NO escriba en ninguna otra tabla (R14) y no
+ * toque ningun otro dato de la orden (R5). Con este tipo, esas dos garantias dejan de depender de
+ * que el llamador se acuerde de no mandar `estatusId`: NO SON REPRESENTABLES.
+ *
+ * Si alguien añade aqui un campo, esta reabriendo el alcance de la ficha (D1) y quitandole a R5/R14
+ * su unica defensa estructural. La conversacion va a la puerta de aprobacion humana, no a este tipo.
+ */
+export interface CorregirDatosClienteData {
+  destinatario?: string;
+  telefonoDest?: string;
+  producto?: string;
+  /** `null` = vaciar la nota PROPIA de la orden (columna `orden.notas`), no ninguna nota de hilo. */
+  notas?: string | null;
+}
+
 // Campos actualizables a nivel de datos (ya filtrados por rol en el servicio).
 export interface UpdateOrdenData {
   estatusId?: string;
@@ -1011,6 +1033,32 @@ export interface IOrdenRepository {
     data: UpdateOrdenData,
     historial: HistorialContexto,
   ): Promise<OrdenDTO | null>;
+  /**
+   * FICHA 312 (design §7) — CORRECCION DE LOS DATOS DEL CLIENTE. Metodo HERMANO de `update`, no
+   * una variante suya, y `update` NO se toca: sus dos consumidores vivos
+   * (`DevolucionOrigenService`, `EnvioDevolucionCentralService`) SI transicionan estados y
+   * necesitan el historial que este metodo tiene prohibido escribir.
+   *
+   * UNA SOLA SENTENCIA, con la ventana de estado EN EL `WHERE` de la que muta y no en un `if`
+   * previo (mecanismo de `OrdenNotaRepository.marcarBorrada`): asi no existe ventana entre el
+   * chequeo y el efecto. Eso ES R13 — si el estado se movio entre la lectura del servicio y esta
+   * escritura, la sentencia no alcanza ninguna fila y no queda ningun efecto parcial.
+   *
+   * SIN `$transaction` y sin tocar el constructor: con una sola sentencia no hay dos escrituras
+   * que coordinar, y Postgres ya la ejecuta atomicamente.
+   *
+   * @param estadosBloqueados los `order_status.value` en los que NO se corrige (D3:
+   *        `ESTADOS_SIN_CORRECCION`). Va como parametro y no hardcodeado para que la REGLA viva en
+   *        el modulo puro que la pantalla tambien lee.
+   * @returns `"ok"` si escribio la fila; `"conflict"` si no alcanzo ninguna (borrada, inexistente
+   *        o ya fuera de la ventana). NUNCA escribe en `orden_historial_estado`, en `orden_nota`
+   *        ni en ninguna otra tabla (R14): ver `CorregirDatosClienteData`.
+   */
+  corregirDatosCliente(
+    ordenId: string,
+    data: CorregirDatosClienteData,
+    estadosBloqueados: readonly string[],
+  ): Promise<"ok" | "conflict">;
   // BORRADO 2026-08-07 (tanda 2): `existsEstatus`. Para comprobar que un estatus existe, lo
   // vivo es `findEstatusIdByValue`, que es lo que usan los servicios de dominio.
   //
