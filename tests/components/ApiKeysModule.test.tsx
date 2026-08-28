@@ -41,6 +41,14 @@ vi.mock("@/lib/actions/webhooks", () => ({
   rotarSecretoWebhook: vi.fn(),
 }));
 
+// Feature 307: el formulario de alta puebla su selector de "Tienda destino" con la Server
+// Action que ya existia (302). Se mockea para no arrastrar la sesion ni la DB.
+const listarAdminTiendasMock = vi.fn();
+vi.mock("@/lib/actions/usuarios-por-rol", () => ({
+  listarAdminTiendas: (...a: unknown[]) => listarAdminTiendasMock(...a),
+  listarUsuariosPorRol: vi.fn(),
+}));
+
 import { ApiKeysModule } from "@/app/(app)/configuracion/api/_components/ApiKeysModule";
 
 const ITEM: ApiKeyListItemDTO = {
@@ -132,6 +140,7 @@ beforeEach(() => {
     status: "creada",
     secret: WEBHOOK_SECRET,
   });
+  listarAdminTiendasMock.mockResolvedValue({ status: "ok", usuarios: [] });
 });
 
 afterEach(() => {
@@ -728,5 +737,55 @@ describe("ApiKeysModule — alta con webhook (feature 108)", () => {
     await screen.findByLabelText("Clave de API generada");
 
     await waitFor(() => expect(listarApiKeysMock).toHaveBeenCalled());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 307 — columna "Tienda destino"
+// ---------------------------------------------------------------------------
+describe("ApiKeysModule — columna de tienda destino (feature 307)", () => {
+  it("muestra el NOMBRE de la tienda a cuyo nombre carga la key", async () => {
+    const conTienda: ApiKeyListItemDTO = {
+      ...ITEM,
+      tiendaDestinoId: "3f2b1a09-8c7d-4e6f-9a0b-1c2d3e4f5a6b",
+      tiendaDestinoNombre: "Tienda Norte",
+    };
+    listarApiKeysMock.mockResolvedValue({
+      status: "ok",
+      items: [conTienda],
+      page: 1,
+      pageSize: 25,
+      total: 1,
+    });
+
+    renderModule(
+      <ApiKeysModule initialData={{ items: [conTienda], total: 1, pageSize: 25 }} />,
+    );
+
+    const table = screen.getByRole("table", { name: "API keys" });
+    expect(
+      within(table).getByRole("columnheader", { name: "Tienda destino" }),
+    ).toBeInTheDocument();
+    expect(await within(table).findByText("Tienda Norte")).toBeInTheDocument();
+    // El uuid interno NO se pinta: la columna es para leerla, no para copiar ids.
+    expect(within(table).queryByText(conTienda.tiendaDestinoId!)).toBeNull();
+  });
+
+  it("sin tienda destino la celda dice algo, no queda en blanco ni pinta 'null'", async () => {
+    // `ITEM` es el caso historico (302): `tiendaDestinoNombre` en `null`.
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    const table = screen.getByRole("table", { name: "API keys" });
+    const columnas = within(table)
+      .getAllByRole("columnheader")
+      .map((c) => c.textContent?.trim());
+    const indice = columnas.indexOf("Tienda destino");
+    expect(indice).toBeGreaterThanOrEqual(0);
+
+    await within(table).findByText("integracion-erp");
+    const fila = within(table).getAllByRole("row")[1]!;
+    const celda = within(fila).getAllByRole("cell")[indice]!;
+    expect(celda.textContent?.trim()).toBe("—");
+    expect(celda.textContent).not.toContain("null");
   });
 });
