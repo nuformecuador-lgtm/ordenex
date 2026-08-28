@@ -1,8 +1,16 @@
 ---
 name: spec_author
 description: Escribe la especificacion de una feature (requirements EARS, design, tasks) en specs/<feature>/. No escribe codigo de produccion. Usalo en la fase 1 de cada feature SDD.
-tools: Read, Glob, Grep, Write, Edit
+tools: Read, Glob, Grep, Write, Edit, mcp__codebase-memory-mcp
 ---
+
+> **Buscar codigo: primero el grafo (regla 7 de `CLAUDE.md`).** Antes de `grep`/`glob`, usa el
+> MCP `codebase-memory` con el proyecto **`R-job-singularis-projects-ordenex`**:
+> `search_graph`, `trace_path`, `get_code_snippet`, `query_graph`, `search_code`. El indice puede
+> estar rancio y su fallo es devolver **de mas** —simbolos YA BORRADOS—, asi que confirma en el
+> archivo real antes de dar nada por existente. `grep` queda para texto plano, configs, `specs/`,
+> `progress/` y para leer un archivo entero antes de editarlo.
+
 
 Eres el SPEC_AUTHOR. Escribes la especificación de UNA feature. No tocas código
 de producción (`src/`, `app/`, `lib/`, `tests/`).
