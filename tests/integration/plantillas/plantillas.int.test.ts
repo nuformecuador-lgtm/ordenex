@@ -215,7 +215,7 @@ beforeEach(() => {
 
 describe("R8/R15/R12: crear persiste el array de variables y nace pending", () => {
   it("crea y guarda las variables derivadas del cuerpo", async () => {
-    const r = await service.crear({ nombre: "Aviso", cuerpo: "Hola {{usuario}} {{cod}} {{usuario}}" }, MAESTRO);
+    const r = await service.crear({ nombre: "Aviso", cuerpo: "Hola {{usuario}} {{cod}} {{usuario}}", plantillaTienda: false }, MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status === "ok") {
       expect(r.plantilla.variables).toEqual(["usuario", "cod"]); // R15: dedup, orden
@@ -226,8 +226,8 @@ describe("R8/R15/R12: crear persiste el array de variables y nace pending", () =
 
 describe("R10: unicidad de nombre (P2002 -> conflict)", () => {
   it("segundo create con el mismo nombre -> conflict(nombre)", async () => {
-    await service.crear({ nombre: "Unica", cuerpo: "a" }, MAESTRO);
-    const dup = await service.crear({ nombre: "Unica", cuerpo: "b" }, MAESTRO);
+    await service.crear({ nombre: "Unica", cuerpo: "a", plantillaTienda: false }, MAESTRO);
+    const dup = await service.crear({ nombre: "Unica", cuerpo: "b", plantillaTienda: false }, MAESTRO);
     expect(dup.status).toBe("conflict");
     if (dup.status === "conflict") expect(dup.campo).toBe("nombre");
   });
@@ -235,7 +235,7 @@ describe("R10: unicidad de nombre (P2002 -> conflict)", () => {
 
 describe("R20: editar recalcula variables y persiste", () => {
   it("actualiza cuerpo y variables", async () => {
-    const creada = await service.crear({ nombre: "Edit", cuerpo: "Hola {{usuario}}" }, MAESTRO);
+    const creada = await service.crear({ nombre: "Edit", cuerpo: "Hola {{usuario}}", plantillaTienda: false }, MAESTRO);
     if (creada.status !== "ok") throw new Error("setup");
     const upd = await service.actualizar(creada.plantilla.id, { cuerpo: "Nuevo {{cod}}" }, MAESTRO);
     expect(upd.status).toBe("ok");
@@ -248,8 +248,8 @@ describe("R20: editar recalcula variables y persiste", () => {
 
 describe("R27/R28: soft delete oculta la plantilla del listado", () => {
   it("crea dos, elimina una y el listado solo devuelve la vigente", async () => {
-    const a = await service.crear({ nombre: "A", cuerpo: "a" }, MAESTRO);
-    await service.crear({ nombre: "B", cuerpo: "b" }, MAESTRO);
+    const a = await service.crear({ nombre: "A", cuerpo: "a", plantillaTienda: false }, MAESTRO);
+    await service.crear({ nombre: "B", cuerpo: "b", plantillaTienda: false }, MAESTRO);
     if (a.status !== "ok") throw new Error("setup");
 
     const del = await service.eliminar(a.plantilla.id, MAESTRO); // R27

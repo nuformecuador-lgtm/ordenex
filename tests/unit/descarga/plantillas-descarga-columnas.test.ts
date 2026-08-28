@@ -17,6 +17,7 @@ const PLANTILLA: PlantillaListItemDTO = {
   variables: ["destinatario"],
   variablesNombres: {},
   welcomeMessage: false,
+  plantillaTienda: false,
   templateId: "meta-tpl-99887766",
   createdAt: new Date("2026-03-15T18:30:00.000Z"),
 };

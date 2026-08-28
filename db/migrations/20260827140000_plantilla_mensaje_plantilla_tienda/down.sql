@@ -1,0 +1,11 @@
+-- Revierte la marca de PLANTILLA DE TIENDA.
+--
+-- POR QUE ESTE ARCHIVO EXISTE Y NO ES OPCIONAL: `db-rollback.ts` revierte SIEMPRE la ultima
+-- carpeta y ABORTA (exit 1) si le falta su `down.sql`, bloqueando el rollback de TODAS las
+-- migraciones anteriores y no solo el de la suya.
+--
+-- LO QUE SE PIERDE, DECLARADO: que plantillas eran "de tienda". Tras el rollback quedan como
+-- plantillas normales, con el estado que ya tuvieran; las que estuvieran `activo` sin
+-- `template_id` (que es como nacen las de tienda) pasarian a parecer aprobadas por Meta sin
+-- estarlo. No hay nada que archivar —es un booleano— pero si hay que volver a marcarlas.
+ALTER TABLE "plantilla_mensaje" DROP COLUMN IF EXISTS "plantilla_tienda";

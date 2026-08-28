@@ -43,6 +43,7 @@ const ITEM: PlantillaListItemDTO = {
   variables: ["usuario", "cod"],
   variablesNombres: {},
   welcomeMessage: false,
+  plantillaTienda: false,
   templateId: null,
   createdAt: new Date("2026-01-01T12:00:00Z"),
 };

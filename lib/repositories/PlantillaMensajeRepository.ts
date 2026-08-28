@@ -27,6 +27,7 @@ const PUBLIC_SELECT = {
   variablesNombres: true, // feature 282: snapshot `clave -> nombre` (presentacion)
   estado: true,
   welcomeMessage: true, // mensaje de bienvenida (como mucho una vigente en `true`)
+  plantillaTienda: true, // plantilla de tienda: no pasa por Meta
   templateId: true,
   templateIdioma: true,
   createdBy: true,
@@ -42,6 +43,7 @@ const LIST_SELECT = {
   variables: true,
   variablesNombres: true, // feature 282: el listado tambien pinta etiquetas legibles
   welcomeMessage: true, // el listado RESALTA la plantilla de bienvenida
+  plantillaTienda: true, // el listado le oculta "Enviar para aprobacion"
   templateId: true,
   createdAt: true,
 } as const;
@@ -97,6 +99,10 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
             ? { variablesNombres: data.variablesNombres }
             : {}),
           createdBy: data.createdBy,
+          // Plantilla de tienda: solo se escribe si el service lo dice; si no, default `false`.
+          ...(data.plantillaTienda !== undefined
+            ? { plantillaTienda: data.plantillaTienda }
+            : {}),
           // El estado inicial lo DICE el service (hoy `saved_not_aprobation`), no el default
           // de la columna: ver `CreatePlantillaData.estado`.
           estado: data.estado,
@@ -156,6 +162,9 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
           // el cuerpo. Un update de solo `nombre` deja el snapshot anterior intacto.
           ...(data.variablesNombres !== undefined
             ? { variablesNombres: data.variablesNombres }
+            : {}),
+          ...(data.plantillaTienda !== undefined
+            ? { plantillaTienda: data.plantillaTienda }
             : {}),
         },
       });

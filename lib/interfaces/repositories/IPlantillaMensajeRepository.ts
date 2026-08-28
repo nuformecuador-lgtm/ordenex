@@ -22,6 +22,11 @@ export interface PlantillaPublica {
    * la base, no este tipo (ver `marcarWelcomeMessage`).
    */
   welcomeMessage: boolean;
+  /**
+   * `true` en una PLANTILLA DE TIENDA: su texto no se manda a Meta, se envia por el camino
+   * wa.me. No tiene aprobacion que esperar (nace `activo`) y `enviarAprobacion` la rechaza.
+   */
+  plantillaTienda: boolean;
   templateId: string | null; // enlace a Meta; NULL = no propagada / no sincronizada
   templateIdioma: string | null; // idioma del template en Meta (necesario para enviar)
   createdBy: string | null;
@@ -40,6 +45,8 @@ export interface PlantillaListItem {
   variablesNombres: Record<string, string>;
   /** `true` si es la plantilla de bienvenida; el listado la RESALTA (como mucho una fila). */
   welcomeMessage: boolean;
+  /** `true` en una PLANTILLA DE TIENDA: el listado le OCULTA "Enviar para aprobacion". */
+  plantillaTienda: boolean;
   templateId: string | null; // el admin ve si la plantilla ya esta enlazada con Meta
   createdAt: Date;
 }
@@ -146,6 +153,13 @@ export interface CreatePlantillaData {
    * manda (no hay entrada zod nueva); lo calcula el servidor (design.md §4.5).
    */
   variablesNombres?: Record<string, string>;
+  /**
+   * PLANTILLA DE TIENDA. Opcional: si no llega, la columna se queda en su default `false`.
+   * Va junto al `estado` y no en lugar de el porque son datos distintos: el service manda
+   * `activo` + `plantillaTienda: true` para una de tienda, y `saved_not_aprobation` +
+   * `false` para el resto.
+   */
+  plantillaTienda?: boolean;
 }
 
 /** R20/R22: solo nombre y/o cuerpo; `variables` recalculadas por el service si cambia el cuerpo. */
@@ -155,6 +169,8 @@ export interface UpdatePlantillaData {
   variables?: string[];
   /** Feature 282 (R17): se reescribe junto con `variables` cuando cambia el cuerpo. */
   variablesNombres?: Record<string, string>;
+  /** PLANTILLA DE TIENDA: se puede alternar al editar; ausente = no se toca. */
+  plantillaTienda?: boolean;
 }
 
 export interface ListPlantillasParams {

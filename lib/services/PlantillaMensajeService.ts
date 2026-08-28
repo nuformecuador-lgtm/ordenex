@@ -58,13 +58,18 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
         cuerpo: input.cuerpo,
         variables: validado.variables, // R15
         createdBy: actor.usuarioId, // FK -> usuario creador (R8)
+        plantillaTienda: input.plantillaTienda,
         // 2026-08-26: GUARDAR YA NO ES ENVIAR. Nace `saved_not_aprobation` y aqui NO se llama
         // a `trasCrear`: la propagacion a Meta pasa a ser un acto explicito y confirmado del
         // maestro (`enviarAprobacion`). El motivo es que enviar a Meta NO SE PUEDE DESHACER
         // —una vez en revision, ni se cancela ni se retira— y el alta era la unica mutacion
         // del modulo que disparaba un efecto irreversible sin preguntar. Guardar un borrador
         // pasa a costar cero.
-        estado: "saved_not_aprobation",
+        // UNA PLANTILLA DE TIENDA NACE ACTIVA. Su texto no sale hacia Meta por ningun camino
+        // (ver `plantillaTienda` en el schema), asi que no hay revision que esperar: dejarla
+        // en `saved_not_aprobation` la marcaria como borrador a la espera de un veredicto que
+        // nadie va a emitir, y el mensajero no podria usarla nunca.
+        estado: input.plantillaTienda ? "activo" : "saved_not_aprobation",
       });
       return { status: "ok", plantilla };
     } catch (error) {
@@ -135,6 +140,7 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
 
     const data: UpdatePlantillaData = {};
     if (input.nombre !== undefined) data.nombre = input.nombre;
+    if (input.plantillaTienda !== undefined) data.plantillaTienda = input.plantillaTienda;
 
     // R22: si el cuerpo cambia, valida su forma (R16) y recalcula variables (R15).
     if (input.cuerpo !== undefined) {
@@ -155,6 +161,21 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
     try {
       const actualizada = await this.repo.update(id, data);
       if (!actualizada) return { status: "not_found" }; // R21
+
+      // UNA PLANTILLA DE TIENDA NO SE PROPAGA, se edite lo que se edite: su texto no vive en
+      // Meta. Se mira el resultado (`actualizada`) y no la fila previa a proposito, porque el
+      // switch se puede haber encendido en ESTA misma edicion y lo que decide si hay que
+      // llamar a Meta es lo que la plantilla ES al terminar de guardar, no lo que era.
+      if (actualizada.plantillaTienda) {
+        // Encenderlo sobre un borrador lo vuelve usable YA: pasa a `activo` por la misma razon
+        // por la que nace activa al crearse. Cualquier otro estado se respeta —incluido un
+        // `inactivo` puesto a mano, que es una decision del negocio, no un tramite pendiente.
+        if (actualizada.estado === "saved_not_aprobation") {
+          const activada = (await this.repo.updateEstado(id, "activo")) ?? actualizada;
+          return { status: "ok", plantilla: activada };
+        }
+        return { status: "ok", plantilla: actualizada };
+      }
 
       // EDITAR UN BORRADOR NO LO ENVIA. Una plantilla que nunca salio de casa
       // (`saved_not_aprobation` y sin `templateId`) se sigue guardando y sigue siendo un
@@ -235,6 +256,11 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
 
     const actual = await this.repo.findById(id);
     if (!actual) return { status: "not_found" };
+
+    // Plantilla de tienda: no hay template que crear en Meta. Se rechaza en el SERVICE y no
+    // solo ocultando el boton, porque la accion es irreversible: una vez creado el template
+    // alla, no se retira de revision.
+    if (actual.plantillaTienda) return { status: "no_aplica" };
 
     // Sin credenciales de WhatsApp el CRUD local funciona igual, pero no hay a quien enviar:
     // se dice, en vez de fingir un envio y dejar la fila mintiendo en `pending`.

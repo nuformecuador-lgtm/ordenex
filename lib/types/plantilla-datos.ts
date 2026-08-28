@@ -710,7 +710,14 @@ export const CLAVES_OCULTAS_EN_SELECTOR: ReadonlySet<string> = new Set([
   "intentos_contacto",
   "prioridad",
   "orden_id",
-  // Datos del mensajero
+  // Datos del mensajero. DESDE 2026-08-27 ESTAN TODOS, sin excepcion (pedido humano): el
+  // selector no ofrece NINGUN dato del mensajero. Antes se colaban `mensajero` (nombre
+  // completo) y `mensajero_nombre`, que son justo los dos que apetece poner en un mensaje al
+  // cliente; el criterio nuevo es que quien reparte no se anuncia en la plantilla.
+  // Siguen resolviendo si un cuerpo ya guardado los usa: esto es la OFERTA del selector, no
+  // una retirada del catalogo (ver el TSDoc de arriba).
+  "mensajero",
+  "mensajero_nombre",
   "mensajero_apellidos",
   "mensajero_telefono",
   "mensajero_placa",

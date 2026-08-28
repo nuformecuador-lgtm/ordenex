@@ -29,6 +29,7 @@ function plantilla(overrides: Partial<PlantillaPublica> = {}): PlantillaPublica 
     variablesNombres: {},
     estado: "saved_not_aprobation",
     welcomeMessage: false,
+    plantillaTienda: false,
     templateId: null,
     templateIdioma: null,
     createdBy: "m1",
@@ -79,7 +80,7 @@ describe("crear ya no propaga a Meta", () => {
     const repo = repoFalso();
     const service = new PlantillaMensajeService(repo, propagadorFalso());
 
-    const res = await service.crear({ nombre: "aviso", cuerpo: "Hola {{cliente}}" }, MAESTRO);
+    const res = await service.crear({ nombre: "aviso", cuerpo: "Hola {{cliente}}", plantillaTienda: false }, MAESTRO);
 
     expect(res.status).toBe("ok");
     expect(repo.create).toHaveBeenCalledWith(
@@ -92,7 +93,7 @@ describe("crear ya no propaga a Meta", () => {
     const whatsapp = propagadorFalso();
     const service = new PlantillaMensajeService(repo, whatsapp);
 
-    await service.crear({ nombre: "aviso", cuerpo: "Hola" }, MAESTRO);
+    await service.crear({ nombre: "aviso", cuerpo: "Hola", plantillaTienda: false }, MAESTRO);
 
     expect(whatsapp.trasCrear).not.toHaveBeenCalled();
     expect(whatsapp.trasActualizar).not.toHaveBeenCalled();

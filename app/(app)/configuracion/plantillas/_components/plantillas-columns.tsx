@@ -1,5 +1,5 @@
 import type { PlantillaEstado } from "@prisma/client";
-import { MessageSquareHeart } from "lucide-react";
+import { MessageSquareHeart, Store } from "lucide-react";
 
 import type { Column } from "@/components/shared/DataTable";
 import { Badge } from "@/components/ui/badge";
@@ -44,9 +44,19 @@ const ENVIABLE_A_APROBACION: ReadonlySet<PlantillaEstado> = new Set([
   "refused",
 ]);
 
-/** `true` si la fila puede mandarse a aprobacion. Exportado: el modulo decide el mismo criterio. */
-export function puedeEnviarseAAprobacion(estado: PlantillaEstado): boolean {
-  return ENVIABLE_A_APROBACION.has(estado);
+/**
+ * `true` si la fila puede mandarse a aprobacion. Exportado: el modulo decide el mismo criterio.
+ *
+ * Recibe la FILA y no solo el estado desde 2026-08-27: una PLANTILLA DE TIENDA puede estar en
+ * un estado enviable (`saved_not_aprobation` si se marco despues de crearla) y aun asi no
+ * tener nada que enviar, porque su texto no vive en Meta. El estado por si solo ya no basta
+ * para contestar la pregunta.
+ */
+export function puedeEnviarseAAprobacion(
+  row: Pick<PlantillaListItemDTO, "estado" | "plantillaTienda">,
+): boolean {
+  if (row.plantillaTienda) return false;
+  return ENVIABLE_A_APROBACION.has(row.estado);
 }
 
 function truncar(texto: string): string {
@@ -111,6 +121,15 @@ export function buildPlantillasColumns(
               Bienvenida
             </Badge>
           ) : null}
+          {/* Sin esta insignia, una plantilla de tienda `activo` es indistinguible de una que
+              Meta aprobo, y la diferencia es justo la que explica por que a esta le falta el
+              boton de "Enviar para aprobacion". */}
+          {row.plantillaTienda ? (
+            <Badge variant="secondary">
+              <Store className="size-3" aria-hidden="true" />
+              Tienda
+            </Badge>
+          ) : null}
         </span>
       ),
     },
@@ -170,7 +189,7 @@ export function buildPlantillasColumns(
               {row.welcomeMessage ? TOOLTIP_BIENVENIDA_ACTUAL : TOOLTIP_BIENVENIDA}
             </TooltipContent>
           </Tooltip>
-          {puedeEnviarseAAprobacion(row.estado) ? (
+          {puedeEnviarseAAprobacion(row) ? (
             <Button
               type="button"
               size="sm"

@@ -11,6 +11,7 @@ import {
 } from "@/lib/types/plantilla-mensaje";
 import { actualizarPlantilla } from "@/lib/actions/plantillas";
 
+import { PlantillaTiendaField } from "./PlantillaTiendaField";
 import { VariablesInsert } from "./VariablesInsert";
 
 type FieldErrors = Record<string, string[]>;
@@ -22,6 +23,13 @@ const TEXTAREA_CLASS =
 /** Handle imperativo: el Modal anfitrión dispara el submit async. */
 export interface EditarPlantillaFormHandle {
   submit: () => Promise<ActualizarPlantillaResult>;
+  /**
+   * Valor ACTUAL del interruptor "Plantilla de tienda", que no tiene por qué ser el de la
+   * fila: el maestro puede haberlo encendido en esta misma edición. El módulo lo consulta
+   * para decidir si el guardado necesita la confirmación de "esto vuelve a Meta" — una
+   * plantilla de tienda no la necesita porque no sale de casa.
+   */
+  esPlantillaTienda: () => boolean;
 }
 
 export interface EditarPlantillaFormProps {
@@ -42,11 +50,12 @@ export const EditarPlantillaForm = forwardRef<
 >(function EditarPlantillaForm({ plantilla }, ref) {
   const [nombre, setNombre] = useState(plantilla.nombre);
   const [cuerpo, setCuerpo] = useState(plantilla.cuerpo);
+  const [plantillaTienda, setPlantillaTienda] = useState(plantilla.plantillaTienda);
   const [errors, setErrors] = useState<FieldErrors>({});
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   async function submit(): Promise<ActualizarPlantillaResult> {
-    const parsed = actualizarPlantillaSchema.safeParse({ nombre, cuerpo });
+    const parsed = actualizarPlantillaSchema.safeParse({ nombre, cuerpo, plantillaTienda });
     if (!parsed.success) {
       const fieldErrors = parsed.error.flatten().fieldErrors as FieldErrors;
       setErrors(fieldErrors);
@@ -65,7 +74,7 @@ export const EditarPlantillaForm = forwardRef<
     return res;
   }
 
-  useImperativeHandle(ref, () => ({ submit }));
+  useImperativeHandle(ref, () => ({ submit, esPlantillaTienda: () => plantillaTienda }));
 
   return (
     <div className="flex flex-col gap-4">
@@ -82,6 +91,12 @@ export const EditarPlantillaForm = forwardRef<
           className={TEXTAREA_CLASS}
         />
       </FormField>
+
+      <PlantillaTiendaField
+        id="plantilla-tienda-edit"
+        checked={plantillaTienda}
+        onCheckedChange={setPlantillaTienda}
+      />
 
       <VariablesInsert
         textareaRef={textareaRef}
