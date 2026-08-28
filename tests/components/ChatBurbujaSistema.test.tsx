@@ -71,6 +71,36 @@ describe("Burbuja de sistema — cambio de numero (R32)", () => {
     expect(fila?.textContent).toMatch(/cambió su número/i);
   });
 
+  it("R32/R16: junto a los dos numeros, avisa de que el numero nuevo no llega a esta orden", async () => {
+    await montar([CAMBIO_NUMERO]);
+
+    // La evidencia sola sugiere una continuidad que NO existe: un entrante se resuelve por
+    // `orden.telefono_dest`, no por el telefono del hilo, asi que lo que mande el cliente desde
+    // el numero NUEVO se cuenta `sinResolver` y nadie lo ve (ver LIMITACION CONOCIDA de R16).
+    // Sin esta linea el mensajero espera respuestas que nunca van a aparecer.
+    const [fila] = screen.getAllByRole("listitem");
+    const texto = fila?.textContent ?? "";
+    expect(texto).toContain(ANTERIOR);
+    expect(texto).toContain(NUEVO);
+    expect(texto).toContain("Sus mensajes desde el número nuevo no llegarán a esta orden.");
+  });
+
+  it("R32/R16: el aviso sigue ahi aunque falte un numero", async () => {
+    await montar([
+      burbuja({
+        id: "m-sistema-parcial-aviso",
+        tipo: "sistema",
+        cuerpo: null,
+        sistema: { telefonoAnterior: ANTERIOR, telefonoNuevo: null },
+      }),
+    ]);
+
+    const [fila] = screen.getAllByRole("listitem");
+    const texto = fila?.textContent ?? "";
+    expect(texto).toMatch(/número desconocido/i);
+    expect(texto).toContain("Sus mensajes desde el número nuevo no llegarán a esta orden.");
+  });
+
   it("R32: la fila NO es entrante ni saliente (sin data-direccion)", async () => {
     await montar([CAMBIO_NUMERO]);
 
