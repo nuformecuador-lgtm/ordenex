@@ -12,32 +12,32 @@
 
 ## Bloque A — Datos y migración
 
-- [ ] **A1.** `db/schema.prisma`: añadir al enum `ChatMensajeTipo` los valores `imagen`, `audio`,
+- [x] **A1.** `db/schema.prisma`: añadir al enum `ChatMensajeTipo` los valores `imagen`, `audio`,
   `video`, `documento`, `sticker`, `reaccion`, `contactos`, `sistema`; añadir al modelo
   `ChatMensaje` las 9 columnas nullable de design §1.2 y el índice
   `chat_mensaje_reaccion_idx` (declarado con `map:` explícito). Cubre R13.
   *Hecho:* `pnpm db:generate` compila y un test de tipos (`expectTypeOf`/asignación) acepta los
   ocho literales nuevos como `ChatMensajeTipo`.
-- [ ] **A2.** Migración `db/migrations/<ts>_chat_mensaje_media_reacciones/migration.sql` (UP):
+- [x] **A2.** Migración `db/migrations/<ts>_chat_mensaje_media_reacciones/migration.sql` (UP):
   8 × `ALTER TYPE ... ADD VALUE IF NOT EXISTS`, 9 × `ADD COLUMN`, índice parcial, con el GOTCHA
   55P04 documentado (design §1.4). Depende de A1. Cubre R13.
   *Hecho:* `tests/integration/db/chat-mensaje-media-migration.test.ts` asserta contra
   `information_schema.columns` que las 9 columnas existen y son nullable, y contra `pg_enum` que
   los 8 valores están en `chat_mensaje_tipo`.
-- [ ] **A3.** `down.sql` de A2: `DROP INDEX` + 9 × `DROP COLUMN IF EXISTS` + recreación del enum
+- [x] **A3.** `down.sql` de A2: `DROP INDEX` + 9 × `DROP COLUMN IF EXISTS` + recreación del enum
   con los 4 valores previos, con la precondición documentada. Depende de A2. Cubre R13.
   *Hecho:* el mismo test asserta que tras aplicar `down.sql` en una base sin filas de los tipos
   nuevos, `pg_enum` vuelve a tener exactamente 4 valores y las 9 columnas ya no existen.
 
 ## Bloque B — Borde tipado del webhook
 
-- [ ] **B1.** `lib/types/chat-contactos.ts`: `chatContactosSchema` (zod) + tipo
+- [x] **B1.** `lib/types/chat-contactos.ts`: `chatContactosSchema` (zod) + tipo
   `ChatContactoNormalizado` (nombre, teléfonos, correos, direcciones, organización, URLs), todo
   opcional y tolerante (design §1.3). `[P]` con B2. Cubre R7.
   *Hecho:* `tests/unit/types/chat-contactos.test.ts` asserta que un payload de Meta real se
   normaliza con sus teléfonos/correos y que un payload corrupto devuelve `success: false` sin
   lanzar.
-- [ ] **B2.** `lib/types/whatsapp-webhook.ts`: extender `metaMessageSchema` con
+- [x] **B2.** `lib/types/whatsapp-webhook.ts`: extender `metaMessageSchema` con
   `image/audio/video/document/sticker/reaction/contacts/system` (todos
   `.optional().catch(undefined)`), convertir `tipoDeMeta` en el `Record` de design §2.2 y añadir
   los helpers puros `normalizarMedia`, `normalizarReaccion`, `normalizarSistema`,
@@ -47,20 +47,20 @@
 
 ## Bloque C — Repositorio e interfaces
 
-- [ ] **C1. [P]** `lib/interfaces/repositories/IChatMensajeRepository.ts`: extender
+- [x] **C1. [P]** `lib/interfaces/repositories/IChatMensajeRepository.ts`: extender
   `ChatMensajeDTO` e `InsertarEntranteInput` con los 9 campos (contactos tipado, nunca `Json`).
   `lib/interfaces/repositories/IChatConversacionRepository.ts`: añadir
   `migrarTelefono(anterior, nuevo): Promise<number>`. Depende de A1. Cubre R13, R16 (contrato).
   *Hecho:* `pnpm typecheck` en verde con las implementaciones aún sin ampliar sería imposible ⇒
   el criterio es que typecheck pase tras C2.
-- [ ] **C2.** `ChatMensajeRepository`: columnas nuevas en `SELECT`/`Row`/`toDTO` y en el `data`
+- [x] **C2.** `ChatMensajeRepository`: columnas nuevas en `SELECT`/`Row`/`toDTO` y en el `data`
   de `insertarEntranteIdempotente`; `contactos_json` se valida con `safeParse` al leer (design
   §1.3). Depende de C1. Cubre R1, R7, R12, R14 (lectura tolerante).
   *Hecho:* `tests/unit/repositories/chat-mensaje-repository.test.ts` asserta que un entrante de
   imagen persiste `media_id`/`media_mime`, que un `contactos_json` corrupto devuelve
   `contactos: null` sin lanzar, y que el dedupe por `wa_message_id` sigue omitiendo el reenvío
   con las columnas nuevas.
-- [ ] **C3.** `ChatConversacionRepository.migrarTelefono` (UPDATE por `telefono_e164`, tolerante
+- [x] **C3.** `ChatConversacionRepository.migrarTelefono` (UPDATE por `telefono_e164`, tolerante
   al conflicto de `@@unique([ordenId, telefonoE164])`, devuelve filas migradas). Depende de C1.
   Cubre R16, R18.
   *Hecho:* `tests/unit/repositories/chat-conversacion-repository.test.ts` asserta que reescribe
@@ -69,14 +69,14 @@
 
 ## Bloque D — Service (ingesta y cambio de número)
 
-- [ ] **D1.** `ChatWhatsappService.ingerirEventos`: propagar `media/reaccion/contactos/sistema` al
+- [x] **D1.** `ChatWhatsappService.ingerirEventos`: propagar `media/reaccion/contactos/sistema` al
   `insertarEntranteIdempotente` sin tocar dedupe ni `marcarUltimoEntrante`. Depende de B2, C2.
   Cubre R1, R2, R4, R5, R7, R12.
   *Hecho:* `tests/unit/services/chat-whatsapp-service.test.ts` asserta que un entrante de imagen
   llega al repo con `mediaId`, que una reacción llega con objetivo y emoji (`null` si retirada),
   que un `wa_message_id` repetido no inserta y que solo el insert nuevo sella
   `ultimo_entrante_at`.
-- [ ] **D2.** Cambio de número en `ingerirEventos` (design §3): llamar `migrarTelefono` antes de
+- [x] **D2.** Cambio de número en `ingerirEventos` (design §3): llamar `migrarTelefono` antes de
   resolver la orden, registrar el entrante `sistema` con los dos teléfonos y sumar
   `hilosMigrados` al `IngestaResumen`. Depende de D1, C3. Cubre R16, R17, R18.
   *Hecho:* mismo archivo — asserta que se llama `migrarTelefono(anterior, nuevo)`, que el mensaje
@@ -86,20 +86,20 @@
   Además, un `assert` fija la **LIMITACIÓN CONOCIDA** de R16 (decisión del humano del
   2026-08-27): tras migrar el hilo, un entrante desde el número NUEVO **no** resuelve orden y se
   cuenta `sinResolver` —la migración es evidencia, no continuidad—.
-- [ ] **D3. [P]** Guardia de PII: los logs del normalizador y del service no citan número, cuerpo,
+- [x] **D3. [P]** Guardia de PII: los logs del normalizador y del service no citan número, cuerpo,
   caption ni datos de contacto. Depende de D2. Cubre R35 (parte webhook/service).
   *Hecho:* el test espía `console.warn`/el `ChatLogger` inyectado durante una ingesta con número
   y caption conocidos y asserta que **ninguna** llamada contiene esas cadenas.
 
 ## Bloque E — Contrato hacia la UI
 
-- [ ] **E1. [P]** `lib/utils/chat-reacciones.ts`: función pura `agregarReacciones(mensajes)`
+- [x] **E1. [P]** `lib/utils/chat-reacciones.ts`: función pura `agregarReacciones(mensajes)`
   (design §6). Cubre R19, R20.
   *Hecho:* `tests/unit/utils/chat-reacciones.test.ts` asserta que las filas `reaccion`
   desaparecen de la lista, que se cuelgan del mensaje objetivo, que la última del mismo autor gana
   y que una retirada (emoji `null`) deja el objetivo sin reacciones; y que una reacción a un
   mensaje ausente del hilo se descarta sin burbuja huérfana.
-- [ ] **E2.** `lib/types/chat-whatsapp.ts` (`ChatMensajeVista`: `media`, `contactos`, `sistema`,
+- [x] **E2.** `lib/types/chat-whatsapp.ts` (`ChatMensajeVista`: `media`, `contactos`, `sistema`,
   `reacciones`) + `listarHiloChat` mapea los campos nuevos y aplica `agregarReacciones`. Depende
   de C2, E1. Cubre R19, R21 (no expone el media id), R35.
   *Hecho:* `tests/unit/actions/chat-whatsapp-actions.test.ts` asserta que un hilo con imagen +
@@ -109,16 +109,16 @@
 
 ## Bloque F — Cliente de media y ruta proxy
 
-- [ ] **F1. [P]** `lib/clients/whatsapp-media.ts` con `fetchImpl` inyectable, timeout, dos saltos
+- [x] **F1. [P]** `lib/clients/whatsapp-media.ts` con `fetchImpl` inyectable, timeout, dos saltos
   (metadata → binario) y `WhatsappMediaOutcome` (`ok | expirado | error`). Cubre R21, R24, R35.
   *Hecho:* `tests/unit/clients/whatsapp-media.test.ts` asserta: con 2xx devuelve `ok` con el
   stream y el mime; con 404 de Meta devuelve `expirado`; con `error.code 100` devuelve `expirado`;
   el token viaja en `Authorization` y **no** aparece en el `detalle` de ningún error.
-- [ ] **F2.** `lib/repositories/ChatMensajeRepository.findMediaParaMensajero(mensajeId, mensajeroId)`
+- [x] **F2.** `lib/repositories/ChatMensajeRepository.findMediaParaMensajero(mensajeId, mensajeroId)`
   (una query con el join a conversación/orden). Depende de C2. Cubre R23.
   *Hecho:* test de repo que asserta `null` para un mensaje de una orden de otro mensajero y el
   registro con `mediaId` para el propio.
-- [ ] **F3.** `app/api/chat/media/[mensajeId]/route.ts` (GET, `runtime = "nodejs"`): sesión →
+- [x] **F3.** `app/api/chat/media/[mensajeId]/route.ts` (GET, `runtime = "nodejs"`): sesión →
   `findMediaParaMensajero` → cliente F1 → passthrough del stream; cabeceras y códigos de design
   §5.4. Depende de F1, F2. Cubre R21, R22, R23, R24, R25, R15.
   *Hecho:* `tests/integration/api/chat-media-proxy.route.test.ts` asserta: 200 con el binario y el
@@ -128,11 +128,11 @@
   filename saneado; un `image/svg+xml` sale como `attachment` + `application/octet-stream` +
   `nosniff`; y que el handler no escribe en ningún almacenamiento (ningún import de Storage: se
   asserta que el módulo no expone/llama a un cliente de Supabase Storage — R15).
-- [ ] **F4. [P]** Saneador de `filename` y decisión inline/attachment como helpers puros en
+- [x] **F4. [P]** Saneador de `filename` y decisión inline/attachment como helpers puros en
   `lib/utils/chat-media-headers.ts`. Depende de F3 (o antes; F3 los consume). Cubre R25.
   *Hecho:* test unitario que asserta que `"a\"b\r\nc/../d.pdf"` sale sin comillas, sin CR/LF ni
   separadores; que `image/png` es inline y `application/pdf` no.
-- [ ] **F5.** Guardia de ruta privada: la ruta NO se añade a `PUBLIC_ROUTES` ni a
+- [x] **F5.** Guardia de ruta privada: la ruta NO se añade a `PUBLIC_ROUTES` ni a
   `SELF_AUTH_ROUTES` de `middleware.ts` (design §5.2). Depende de F3. Cubre R26.
   *Hecho:* `tests/integration/api/chat-media-middleware.test.ts` (molde de
   `webhook-whatsapp-middleware.test.ts`) asserta que `GET /api/chat/media/<uuid>` **sin cookie**
@@ -141,39 +141,39 @@
 
 ## Bloque G — UI del hilo
 
-- [ ] **G1. [P]** `lib/utils/linkificar.ts` (helper puro, design §7.1). Cubre R33, R34.
+- [x] **G1. [P]** `lib/utils/linkificar.ts` (helper puro, design §7.1). Cubre R33, R34.
   *Hecho:* `tests/unit/utils/linkificar.test.ts` asserta que `"mira https://x.co/a. gracias"`
   produce 3 segmentos con el enlace = `https://x.co/a` (sin el punto final); que `javascript:alert(1)`
   y `data:text/html,...` NO producen segmento `enlace`; que un texto sin URL devuelve 1 segmento.
-- [ ] **G2.** `TextoConEnlaces.tsx`. Depende de G1. Cubre R33, R34.
+- [x] **G2.** `TextoConEnlaces.tsx`. Depende de G1. Cubre R33, R34.
   *Hecho:* `tests/components/ChatTextoConEnlaces.test.tsx` asserta que el `<a>` tiene
   `target="_blank"` y `rel="noopener noreferrer"`, que el texto circundante NO está dentro del
   `<a>`, y que el componente no usa `dangerouslySetInnerHTML` (assert sobre el HTML renderizado
   con una carga `<img onerror=...>`: se ve como TEXTO, no como elemento).
-- [ ] **G3.** `hooks/useMediaChat.ts` + `MediaAdjunto.tsx`: imagen/sticker con `alt`, audio/vídeo
+- [x] **G3.** `hooks/useMediaChat.ts` + `MediaAdjunto.tsx`: imagen/sticker con `alt`, audio/vídeo
   con `controls` + `aria-label`, documento con nombre visible y `<a download>`; carga automática
   solo para imagen/sticker (P3). Depende de E2, F3. Cubre R27, R28, R29.
   *Hecho:* `tests/components/ChatBurbujaMedia.test.tsx` asserta: la imagen expone un `img` con
   `alt` no vacío; el audio y el vídeo exponen un control con nombre accesible
   (`getByLabelText`); el documento muestra su `filename` como texto y una acción de descarga; y
   ninguna burbuja de los tipos nuevos queda con `textContent` solo de hora (R27).
-- [ ] **G4.** Estado `expirado` en `useMediaChat`/`MediaAdjunto` (410 → texto explícito, design
+- [x] **G4.** Estado `expirado` en `useMediaChat`/`MediaAdjunto` (410 → texto explícito, design
   §7). Depende de G3. Cubre R24 (lado UI).
   *Hecho:* mismo archivo — con el `fetch` mockeado a 410 se asserta que aparece el texto de "ya no
   está disponible" **dentro de la burbuja** y que NO se renderiza un `img` roto.
-- [ ] **G5. [P]** `TarjetaContacto.tsx` con copiado por dato. Depende de E2. Cubre R31.
+- [x] **G5. [P]** `TarjetaContacto.tsx` con copiado por dato. Depende de E2. Cubre R31.
   *Hecho:* `tests/components/ChatTarjetaContacto.test.tsx` asserta que se listan nombre, teléfono
   y correo; que al pulsar "Copiar teléfono" se llama `navigator.clipboard.writeText` con ESE
   valor; y que aparece una confirmación en un nodo con `role="status"` (perceptible sin
   animación).
-- [ ] **G6. [P]** `Reacciones.tsx` + anclaje en la burbuja objetivo. Depende de E2. Cubre R30.
+- [x] **G6. [P]** `Reacciones.tsx` + anclaje en la burbuja objetivo. Depende de E2. Cubre R30.
   *Hecho:* `tests/components/ChatReacciones.test.tsx` asserta que el chip de emoji está DENTRO del
   mismo `<li>` que el mensaje objetivo (`within(li).getByLabelText(/Reaccionó con/)`) y que el
   hilo NO contiene un `<li>` extra por la reacción (conteo de burbujas invariante).
-- [ ] **G7. [P]** `BurbujaSistema.tsx`. Depende de E2. Cubre R32.
+- [x] **G7. [P]** `BurbujaSistema.tsx`. Depende de E2. Cubre R32.
   *Hecho:* `tests/components/ChatBurbujaSistema.test.tsx` asserta que se muestran ambos números y
   que el `<li>` NO lleva `data-direccion="entrante"|"saliente"` (es fila de sistema, distinta).
-- [ ] **G8.** `BurbujaContenido.tsx` (switch exhaustivo con `never` en el default) y
+- [x] **G8.** `BurbujaContenido.tsx` (switch exhaustivo con `never` en el default) y
   `ChatConversacion.tsx` delegando en él, incluido `otro` → "Mensaje no compatible". Depende de
   G2–G7. Cubre R14, R27.
   *Hecho:* `tests/components/ChatBurbujaContenido.test.tsx` asserta que un mensaje `otro` con
@@ -182,15 +182,18 @@
 
 ## Bloque H — Cierre
 
-- [ ] **H1.** Recorrido manual con un payload real de Meta (imagen + nota de voz + reacción +
+- [ ] **H1.** ⚠️ **NO HECHA, y no se marca:** en este entorno no hay credencial de WhatsApp ni un
+  payload real de Meta capturado. Queda como verificación pendiente **en producción**, anotada en
+  la ficha y en `progress/current.md`. Lo original:
+   Recorrido manual con un payload real de Meta (imagen + nota de voz + reacción +
   contacto) en la base local, comprobando la burbuja y la descarga por el proxy. Depende de G8.
   *Hecho:* nota en `progress/impl_308.md` con lo observado (sin pegar PII).
-- [ ] **H2.** `./init.sh --rapido` en verde. **Ojo:** este diff toca `db/schema.prisma`, una
+- [x] **H2.** `./init.sh --rapido` en verde. **Ojo:** este diff toca `db/schema.prisma`, una
   migración y `lib/types/`, así que el modo rápido **se niega solo** (`CLAUDE.md` §5) ⇒ corre
   `./init.sh` completo. Depende de H1.
   *Hecho:* gate completo en verde, con el baseline de `dev` medido ANTES (memoria: los baselines
   caducan con cualquier PR ajeno).
-- [ ] **H3.** `progress/impl_308.md` con el mapa R→test completo y `feature_list.json` id 308 a
+- [x] **H3.** `progress/impl_308.md` con el mapa R→test completo y `feature_list.json` id 308 a
   `done`. Depende de H2.
   *Hecho:* el archivo existe y su tabla coincide con la de abajo, con los 35 requisitos cubiertos.
 
