@@ -6,6 +6,8 @@ import type { ChatMediaRouteDeps } from "@/app/api/chat/media/[mensajeId]/route"
 import type { WhatsappMediaOutcome } from "@/lib/clients/whatsapp-media";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ChatMediaAutorizada } from "@/lib/interfaces/repositories/IChatMensajeRepository";
+import type { PrismaClient } from "@prisma/client";
+import { ChatMensajeRepository } from "@/lib/repositories/ChatMensajeRepository";
 
 // Feature 311 — F3.T (R15/R21/R22/R23/R24/R25). El proxy de media.
 //
@@ -260,5 +262,157 @@ describe("GET /api/chat/media/[mensajeId] — sin almacenamiento propio (R15/D1)
     expect(fuente).not.toMatch(/\.create\(/);
     expect(fuente).not.toMatch(/\.update\(/);
     expect(fuente).not.toMatch(/createMany/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Feature 316 — F2 (R24/R25). El proxy sirve un adjunto SALIENTE **sin un solo cambio**.
+//
+// La premisa del design §6.4 de la 316 es que `findMediaParaMensajero` autoriza por
+// `orden.mensajero_asignado_id` y NO filtra por `direccion`, asi que un mensaje propio del
+// mensajero se sirve por la misma ruta que los entrantes de la 311. Este bloque la convierte en
+// un ASSERT, y lo hace por dos vias para que no sea tautologico:
+//
+//   1) La ruta, con un doble del repositorio que reproduce la semantica REAL de la query
+//      (casa por id de mensaje y por mensajero asignado, y NADA MAS: no mira la direccion).
+//   2) La query de verdad: se instancia el `ChatMensajeRepository` REAL con un `$queryRaw`
+//      espiado y se asserta que el SQL no menciona `direccion` en ninguna forma. Sin este
+//      segundo assert, el doble del punto 1 solo estaria probandose a si mismo.
+//
+// Si algun dia alguien acota el proxy a los entrantes, el punto 2 lo delata en el PR.
+
+const OTRO_MENSAJERO: Actor = { usuarioId: "men-2", rol: "mensajero", zonaId: null };
+const MEDIA_ID_SALIENTE = "MEDIA-SALIENTE-777";
+
+/** Fila tal y como quedaria en la base tras enviar una foto desde el chat (316, R17). */
+const FILA_SALIENTE = {
+  mensajeId: MENSAJE_ID,
+  direccion: "saliente" as const,
+  tipo: "imagen" as const,
+  mediaId: MEDIA_ID_SALIENTE,
+  mediaMime: "image/jpeg",
+  mediaNombre: "foto-que-envie.jpg",
+  ordenId: "orden-1",
+  mensajeroAsignadoId: MENSAJERO.usuarioId,
+};
+
+/**
+ * Doble FIEL a la query real: autoriza por (id del mensaje, mensajero asignado a la orden) y
+ * **no** consulta `direccion`. La fidelidad la sostiene el ultimo `describe` de este archivo.
+ */
+function repoComoLaQueryReal(fila = FILA_SALIENTE) {
+  return {
+    findMediaParaMensajero: vi.fn(
+      async (mensajeId: string, mensajeroId: string): Promise<ChatMediaAutorizada | null> => {
+        if (mensajeId !== fila.mensajeId) return null;
+        if (mensajeroId !== fila.mensajeroAsignadoId) return null;
+        return {
+          mediaId: fila.mediaId,
+          mediaMime: fila.mediaMime,
+          mediaNombre: fila.mediaNombre,
+          ordenId: fila.ordenId,
+        };
+      },
+    ),
+  };
+}
+
+describe("316 / F2 — el proxy sirve un adjunto SALIENTE sin cambios (R24)", () => {
+  it("200 con el binario para el mensajero asignado, con las mismas cabeceras que un entrante", async () => {
+    const descargador = descargadorOk();
+    const res = await pedir({
+      getActor: async () => MENSAJERO,
+      mensajeRepo: repoComoLaQueryReal(),
+      descargador,
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/jpeg");
+    expect(res.headers.get("Content-Disposition")).toBe("inline");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(res.headers.get("Cache-Control")).toContain("private");
+    expect(await res.text()).toBe("BINARIO");
+    // El adjunto propio se baja de Meta igual que el del cliente: mismo `media_id`, mismo camino.
+    expect(descargador.descargar).toHaveBeenCalledWith(MEDIA_ID_SALIENTE);
+  });
+
+  it("403 para OTRO mensajero, sin tocar la Graph API (la puerta es la orden, no la direccion)", async () => {
+    const descargador = descargadorOk();
+    const repo = repoComoLaQueryReal();
+
+    const res = await pedir({
+      getActor: async () => OTRO_MENSAJERO,
+      mensajeRepo: repo,
+      descargador,
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "forbidden" });
+    expect(repo.findMediaParaMensajero).toHaveBeenCalledWith(MENSAJE_ID, OTRO_MENSAJERO.usuarioId);
+    expect(descargador.descargar).not.toHaveBeenCalled();
+  });
+
+  it("R25: 410 cuando el binario propio ya caduco en Meta (30 dias), no 502", async () => {
+    const res = await pedir({
+      getActor: async () => MENSAJERO,
+      mensajeRepo: repoComoLaQueryReal(),
+      descargador: descargadorCon({ status: "expirado" }),
+    });
+
+    expect(res.status).toBe(410);
+    expect(await res.json()).toEqual({ error: "expirado" });
+  });
+
+  it("el media id de Meta no sale ni en las cabeceras ni en el cuerpo del saliente", async () => {
+    const res = await pedir({
+      getActor: async () => MENSAJERO,
+      mensajeRepo: repoComoLaQueryReal(),
+      descargador: descargadorOk(),
+    });
+
+    const cabeceras = JSON.stringify([...res.headers.entries()]);
+    expect(cabeceras).not.toContain(MEDIA_ID_SALIENTE);
+    expect(await res.text()).not.toContain(MEDIA_ID_SALIENTE);
+  });
+
+  it("tampoco se filtra en el cuerpo de los desenlaces de error del saliente (410 y 502)", async () => {
+    for (const outcome of [
+      { status: "expirado" } as const,
+      { status: "error", detalle: "HTTP 500" } as const,
+    ]) {
+      const res = await pedir({
+        getActor: async () => MENSAJERO,
+        mensajeRepo: repoComoLaQueryReal(),
+        descargador: descargadorCon(outcome),
+      });
+      expect(await res.text()).not.toContain(MEDIA_ID_SALIENTE);
+    }
+  });
+});
+
+describe("316 / F2 — la premisa: la autorizacion NO filtra por direccion", () => {
+  it("el SQL real de findMediaParaMensajero no menciona la direccion del mensaje", async () => {
+    const queryRaw = vi.fn().mockResolvedValue([]);
+    const repo = new ChatMensajeRepository({ $queryRaw: queryRaw } as unknown as PrismaClient);
+
+    await repo.findMediaParaMensajero(MENSAJE_ID, MENSAJERO.usuarioId);
+
+    const arg = queryRaw.mock.calls[0][0] as { strings: readonly string[]; values: unknown[] };
+    const texto = arg.strings.join("?");
+    // La puerta es la orden asignada...
+    expect(texto).toContain("o.mensajero_asignado_id");
+    // ...y NADA sobre quien mando el mensaje: por eso el saliente se sirve sin cambiar el proxy.
+    expect(texto).not.toMatch(/direccion/i);
+    expect(texto).not.toMatch(/entrante/i);
+    expect(texto).not.toMatch(/saliente/i);
+    expect(arg.values).toContain(MENSAJERO.usuarioId);
+  });
+
+  it("el route handler tampoco mira la direccion en ninguna rama", () => {
+    const fuenteRoute = fs.readFileSync(
+      path.join(__dirname, "..", "..", "..", "app", "api", "chat", "media", "[mensajeId]", "route.ts"),
+      "utf8",
+    );
+    expect(fuenteRoute).not.toMatch(/direccion/i);
   });
 });

@@ -15,6 +15,10 @@ import { WalletMensajeroFeedService } from "@/lib/services/WalletMensajeroFeedSe
 import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { notificarMensajeroBloqueadoReal } from "@/lib/notificaciones/notificadores";
+// FICHA 315: el timbre de la liberacion de reprogramadas al aprobar. `buildLiberarReprogramadas
+// Service` es el MISMO ensamblaje que usa el cron de las 00:00 CR (90/R22).
+import { liberarAlAprobarCierreCon } from "@/lib/services/liberacion-al-aprobar-cierre";
+import { buildLiberarReprogramadasService } from "@/lib/services/jobs/liberar-reprogramadas-handler";
 import { gestionConfig } from "@/lib/config/gestion";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -134,6 +138,12 @@ function buildService(): ICierresAdminService {
     // no como default del service (ver `lib/notificaciones/notificadores.ts`): el default es el
     // no-op, para que ninguna suite que instancie el service escriba avisos en la base.
     notificarMensajeroBloqueadoReal,
+    // FICHA 315: COMPOSITION ROOT del timbre de la liberacion. Sin esta linea el servicio se
+    // construye con su default NO-OP y aprobar un cierre vuelve a no liberar nada, en produccion,
+    // con toda la suite en verde — el mismo fallo mudo que la 271 documenta dos lineas arriba.
+    // Reusa `buildLiberarReprogramadasService()`, el MISMO ensamblaje que usa el cron: dos
+    // cableados distintos del mismo servicio serian dos comportamientos que pueden divergir.
+    liberarAlAprobarCierreCon(buildLiberarReprogramadasService()),
   );
 }
 

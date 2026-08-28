@@ -92,6 +92,92 @@ describe("ChatMensajeRepository", () => {
     expect(dto.waMessageId).toBe("wamid.OUT1");
   });
 
+  // Feature 316 — A3 (R17/R18): el saliente de ADJUNTO. Sin migracion: las cuatro columnas
+  // `media*` ya existen desde la 311; lo que faltaba era el camino de ESCRITURA.
+  it("R17: insertarSaliente escribe las cuatro columnas de media y el DTO las expone", async () => {
+    const prisma = buildPrisma();
+    prisma.chatMensaje.create.mockResolvedValue({
+      id: "msg-media-1",
+      conversacionId: "hilo-1",
+      direccion: "saliente",
+      tipo: "imagen",
+      cuerpo: "mira la entrega",
+      plantillaId: null,
+      waMessageId: "wamid.OUTMEDIA",
+      estado: "sent",
+      mediaId: "MEDIA-1",
+      mediaMime: "image/jpeg",
+      mediaNombre: "foto.jpg",
+      mediaTamanoBytes: 1234,
+      ocurridoAt: new Date("2026-08-28T12:00:00.000Z"),
+      createdAt: new Date("2026-08-28T12:00:00.000Z"),
+    });
+    const repo = new ChatMensajeRepository(prisma as unknown as PrismaClient);
+
+    const dto = await repo.insertarSaliente({
+      conversacionId: "hilo-1",
+      tipo: "imagen",
+      cuerpo: "mira la entrega",
+      waMessageId: "wamid.OUTMEDIA",
+      estado: "sent",
+      mediaId: "MEDIA-1",
+      mediaMime: "image/jpeg",
+      mediaNombre: "foto.jpg",
+      mediaTamanoBytes: 1234,
+      ocurridoAt: new Date("2026-08-28T12:00:00.000Z"),
+    });
+
+    const arg = prisma.chatMensaje.create.mock.calls[0][0];
+    expect(arg.data).toMatchObject({
+      direccion: "saliente",
+      tipo: "imagen",
+      mediaId: "MEDIA-1",
+      mediaMime: "image/jpeg",
+      mediaNombre: "foto.jpg",
+      mediaTamanoBytes: 1234,
+    });
+    // R18: lo que se persiste es el IDENTIFICADOR y sus metadatos, jamas el binario.
+    expect(Object.keys(arg.data)).not.toContain("mediaBinario");
+    expect(dto.mediaId).toBe("MEDIA-1");
+    expect(dto.mediaMime).toBe("image/jpeg");
+    expect(dto.mediaNombre).toBe("foto.jpg");
+    expect(dto.mediaTamanoBytes).toBe(1234);
+  });
+
+  it("R17: un saliente de texto persiste las cuatro columnas de media a NULL", async () => {
+    // Que el input las lleve opcionales no puede traducirse en `undefined` hacia Prisma: un
+    // `undefined` deja la columna a merced del default. Se escriben NULL explicitos.
+    const prisma = buildPrisma();
+    prisma.chatMensaje.create.mockResolvedValue({
+      id: "msg-2",
+      conversacionId: "hilo-1",
+      direccion: "saliente",
+      tipo: "texto",
+      cuerpo: "sin adjunto",
+      plantillaId: null,
+      waMessageId: "wamid.OUT2",
+      estado: "sent",
+      ocurridoAt: new Date("2026-08-28T12:05:00.000Z"),
+      createdAt: new Date("2026-08-28T12:05:00.000Z"),
+    });
+    const repo = new ChatMensajeRepository(prisma as unknown as PrismaClient);
+
+    await repo.insertarSaliente({
+      conversacionId: "hilo-1",
+      tipo: "texto",
+      cuerpo: "sin adjunto",
+      waMessageId: "wamid.OUT2",
+      estado: "sent",
+      ocurridoAt: new Date("2026-08-28T12:05:00.000Z"),
+    });
+
+    const data = prisma.chatMensaje.create.mock.calls[0][0].data;
+    expect(data.mediaId).toBeNull();
+    expect(data.mediaMime).toBeNull();
+    expect(data.mediaNombre).toBeNull();
+    expect(data.mediaTamanoBytes).toBeNull();
+  });
+
   it("R7/R8: actualizarEstadoPorWaMessageId filtra por wa_message_id + saliente y devuelve el conteo", async () => {
     const prisma = buildPrisma();
     prisma.chatMensaje.updateMany.mockResolvedValue({ count: 1 });

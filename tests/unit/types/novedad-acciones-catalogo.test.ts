@@ -33,12 +33,17 @@ const JUEGO_ESPERADO: Record<GrupoNovedad, AccionNovedad[]> = {
   // del grupo de devolución. El juego pasa de cuatro a SEIS. No es un añadido cosmético: cada una
   // de esas dos celdas crea una gestión atribuida al mensajero que entra en su cierre, suma un
   // intento y mueve dinero, así que el censo de aquí es lo que impide que aparezcan donde no deben.
+  //
+  // ⚠️ FICHA 312 (F1, 2026-08-28): entra `corregirDatos` y el juego pasa de seis a SIETE. Va antes
+  // de `intentoContacto` porque el orden de la tabla es el de pintado y «+1 intento de contacto»
+  // cierra la fila (no resuelve la orden, deja constancia).
   ayuda: [
     "contacto",
     "reprogramarDesdeAyuda",
     "rechazarDesdeAyuda",
     "habilitar",
     "conversacion",
+    "corregirDatos",
     "intentoContacto",
   ],
   // ⚠️ FEATURE 240 (T5.1 — R33, 2026-08-20). **Lo que decía este comentario hasta hoy:**
@@ -53,7 +58,11 @@ const JUEGO_ESPERADO: Record<GrupoNovedad, AccionNovedad[]> = {
   // ⚠️ ESTE LITERAL **ES** EL CONTRATO. Se actualiza A MANO, entrada por entrada. Sustituirlo por
   // una derivación de `ACCIONES_POR_GRUPO` —su propia fuente— lo dejaría verde para siempre, con
   // «Habilitar» repuesto incluido, que es justo la mutación que este caso tiene que matar (T7.4).
-  devolucion: ["contacto", "reprogramar", "rechazar"],
+  //
+  // ⚠️ FICHA 312 (F1, 2026-08-28): `corregirDatos` entra TAMBIEN aqui —la MISMA clave, no una
+  // gemela— y el juego pasa de tres a CUATRO (R23, P2 del 2026-08-28). Que la misma palabra
+  // aparezca en las dos listas de este literal es lo que hace visible la decision.
+  devolucion: ["contacto", "reprogramar", "rechazar", "corregirDatos"],
 };
 
 /** Toda acción que la unión declara. Escrita a mano por el mismo motivo que el juego de arriba. */
@@ -68,6 +77,8 @@ const ACCIONES_DECLARADAS: AccionNovedad[] = [
   // que aparezcan las cuatro en esta lista es lo que lo hace visible.
   "reprogramarDesdeAyuda",
   "rechazarDesdeAyuda",
+  // Ficha 312 (F1): la correccion de los datos del cliente. UNA clave para los dos grupos.
+  "corregirDatos",
 ];
 
 describe("236/R18 — la tabla es el censo EXACTO de lo que ofrece cada grupo", () => {
@@ -161,6 +172,27 @@ describe("236/R18 — la tabla es el censo EXACTO de lo que ofrece cada grupo", 
     expect(ACCIONES_POR_GRUPO.ayuda).toContain("conversacion");
   });
 
+  // ===============================================================================================
+  // FICHA 312 (F1 — R23, 2026-08-28)
+  // ===============================================================================================
+
+  it("312/R23: «Corregir datos» está en LOS DOS grupos, y con UNA sola clave", () => {
+    // R23 dicho entero: la tienda corrige un nombre mal escrito venga la orden de una devolución
+    // anclada o de una solicitud de ayuda. P2 (2026-08-28) lo cerró así con este motivo del humano:
+    // en `ayuda_tienda` la tienda ya reprograma, rechaza y escribe en el hilo —decisiones de más
+    // peso que arreglar un nombre—, así que negárselo ahí era una asimetría sin motivo.
+    expect(ACCIONES_POR_GRUPO.ayuda).toContain("corregirDatos");
+    expect(ACCIONES_POR_GRUPO.devolucion).toContain("corregirDatos");
+
+    // Y **una sola clave**, no una pareja `corregirDatosDesdeAyuda`/`corregirDatos` como la que la
+    // 237 necesitó: aquellas van a SERVICIOS distintos, ésta es la misma operación, el mismo
+    // servicio y la misma ventana en los dos grupos. Con dos claves, `NovedadAcciones` tendría que
+    // ramificar por grupo para llamar a lo mismo — la decisión fuera de la tabla que R18/R19 de la
+    // 236 prohíben. El precedente correcto es `contacto`, no `reprogramarDesdeAyuda`.
+    const parecidas = ACCIONES_DECLARADAS.filter((a) => a.toLowerCase().includes("corregir"));
+    expect(parecidas).toEqual(["corregirDatos"]);
+  });
+
   it("`contacto` está en la tabla de los DOS grupos, y no fuera de ella", () => {
     // Si se quedara fuera «porque siempre está», la tabla dejaría de ser el censo de lo que la fila
     // ofrece y volvería a haber una decisión fuera de ella. La tabla es TODO el panel o no sirve.
@@ -223,6 +255,9 @@ describe("236/R21 — fallo cerrado: un estado sin grupo no ofrece nada que resu
     // Feature 237: las dos de la ayuda entran en esta lista con más motivo que ninguna. Un estado
     // sin grupo que ofreciera «Rechazar desde ayuda» dispararía un cobro sobre una orden de la que
     // la pantalla no sabe ni en qué estado está.
+    // Ficha 312: `corregirDatos` entra en esta lista. Un estado sin grupo del que la pantalla no
+    // sabe nada no puede ofrecer editar los datos de su cliente: el servidor lo rechazaria, y
+    // ofrecerlo seria el boton que se descubre pulsandolo.
     const DE_RESOLUCION = [
       "reprogramar",
       "habilitar",
@@ -231,11 +266,12 @@ describe("236/R21 — fallo cerrado: un estado sin grupo no ofrece nada que resu
       "intentoContacto",
       "reprogramarDesdeAyuda",
       "rechazarDesdeAyuda",
+      "corregirDatos",
     ] as const;
     for (const accion of DE_RESOLUCION) {
       expect(ACCIONES_SIN_GRUPO, accion).not.toContain(accion);
     }
-    // CONTROL POSITIVO: esas siete SÍ existen en algún grupo, así que las siete ausencias de
+    // CONTROL POSITIVO: esas ocho SÍ existen en algún grupo, así que las ocho ausencias de
     // arriba dicen algo. Sin esto pasarían igual con la unión vacía.
     const enAlgunGrupo = new Set<string>(
       GRUPOS_NOVEDAD.flatMap((grupo) => [...ACCIONES_POR_GRUPO[grupo]]),

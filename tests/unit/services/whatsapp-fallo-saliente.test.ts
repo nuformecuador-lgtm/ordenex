@@ -8,6 +8,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { datosPlantillaFixture } from "@/tests/fixtures/plantilla-datos";
 import { ChatWhatsappService } from "@/lib/services/ChatWhatsappService";
+import { WhatsappCloudClient } from "@/lib/clients/whatsapp-cloud";
+import type { WhatsappConfig } from "@/lib/config/whatsapp";
 import type { ChatLogger } from "@/lib/services/ChatWhatsappService";
 import { CODIGOS_TRANSITORIOS, esErrorTransitorio } from "@/lib/services/whatsapp/errores-meta";
 import { cuerpoParaLog, volcarStatusesFallidos } from "@/lib/services/whatsapp/chat-logger";
@@ -330,5 +332,85 @@ describe("cuerpoParaLog: volcado de la peticion saliente", () => {
     } finally {
       process.env.WHATSAPP_DEBUG_LOG = previo;
     }
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Feature 316 — B3.T (R28). El volcado de la peticion saliente de un ADJUNTO.
+//
+// `enviar()` vuelca el cuerpo ANTES de mandarlo (es lo que permite diagnosticar un 400 sin
+// adivinar que se envio). El cuerpo de `enviarMedia` lleva DOS datos nuevos que no estaban en
+// el texto ni en la plantilla: el `caption` que escribio el mensajero y el `filename` del
+// documento. Ninguno puede acabar en un log (R28), y el codigo HTTP si tiene que estar: sin el
+// no queda nada accionable.
+// ---------------------------------------------------------------------------
+
+describe("Feature 316 · el volcado de un enviarMedia fallido no filtra caption ni filename (R28)", () => {
+  const CAPTION = "Ana, dejo tu paquete en la porteria del 4B";
+  const FILENAME = "acta-de-entrega-de-ana-perez.pdf";
+  const DESTINO = "573112195060";
+
+  const CONFIG: WhatsappConfig = {
+    token: "TOKEN-DE-PRUEBA",
+    numeroId: "num-1",
+    wabaId: "waba-1",
+    apiVersion: "v21.0",
+    templateCategoria: "UTILITY",
+    templateIdioma: "es",
+  };
+
+  /** Cliente real con un 400 de la Graph API y un logger que acumula todo lo volcado. */
+  function clienteQueFalla() {
+    const lineas: string[] = [];
+    const logger: ChatLogger = { warn: (m: string) => lineas.push(m) };
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: { code: 131_053, message: "media not found" } }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }),
+    ) as unknown as typeof fetch;
+
+    return {
+      client: new WhatsappCloudClient({ config: CONFIG, fetchImpl, timeoutMs: 50, logger }),
+      lineas,
+    };
+  }
+
+  it("el volcado NO contiene el pie ni el nombre del archivo, y SI el codigo HTTP", async () => {
+    const { client, lineas } = clienteQueFalla();
+
+    const outcome = await client.enviarMedia(DESTINO, "document", "MEDIA-1", {
+      caption: CAPTION,
+      filename: FILENAME,
+    });
+
+    expect(outcome.status).toBe("permanente");
+    const volcado = lineas.join("\n");
+    expect(volcado).not.toContain(CAPTION);
+    expect(volcado).not.toContain(FILENAME);
+    // El numero destino tampoco, que ya se redactaba antes de la 316 (regresion).
+    expect(volcado).not.toContain(DESTINO);
+    // Y lo que SI tiene que quedar: el codigo HTTP (y el de Meta), que es lo accionable.
+    expect(volcado).toContain("HTTP 400");
+    expect(volcado).toContain("131053");
+  });
+
+  it("lo que sobrevive del cuerpo es la ESTRUCTURA: tipo, media id y la longitud del pie", () => {
+    const salida = cuerpoParaLog({
+      messaging_product: "whatsapp",
+      to: DESTINO,
+      type: "document",
+      document: { id: "MEDIA-1", caption: CAPTION, filename: FILENAME },
+    }) as { type: string; document: { id: string; caption: string; filename: string } };
+
+    // El `media_id` NO es PII y se conserva: es la unica forma de casar el log con la burbuja.
+    expect(salida.type).toBe("document");
+    expect(salida.document.id).toBe("MEDIA-1");
+    // El marcador conserva la LONGITUD, que es justo lo que explica un 400 por pie demasiado
+    // largo; el texto, no.
+    expect(salida.document.caption).toBe(`<str:${CAPTION.length}>`);
+    expect(salida.document.filename).toBe(`<str:${FILENAME.length}>`);
   });
 });

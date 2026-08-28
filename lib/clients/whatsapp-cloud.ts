@@ -136,6 +136,39 @@ export class WhatsappCloudClient {
     });
   }
 
+  /**
+   * Feature 316 (design §3.2, R5/R6/R17) — envia un adjunto YA SUBIDO a Meta, referenciando su
+   * `media_id`. Es JSON y por eso SI reusa `enviar()`: misma URL `/messages`, mismo manejo de
+   * `transitorio`/`permanente` y mismo volcado redactado. Lo que va aparte es la SUBIDA del
+   * binario (`whatsapp-media-upload.ts`), que es multipart.
+   *
+   * `caption` (el pie que escribio el mensajero) se OMITE en dos casos, y ninguno es cosmetico:
+   *   - `tipo === "audio"`: Meta NO admite pie en audio (R6/D4). Mandarlo produce un 400.
+   *   - pie vacio: una clave `caption: ""` es ruido que tampoco viaja.
+   * `filename` solo se manda en `document`, que es donde el cliente lo ve como nombre del
+   * archivo en su WhatsApp; en imagen/video/audio Meta lo ignora.
+   */
+  async enviarMedia(
+    destino: string,
+    tipo: "image" | "video" | "audio" | "document",
+    mediaId: string,
+    opts?: { caption?: string; filename?: string },
+  ): Promise<WhatsappEnvioOutcome> {
+    const caption = opts?.caption?.trim();
+    const llevaCaption = tipo !== "audio" && caption !== undefined && caption !== "";
+
+    return this.enviar({
+      messaging_product: "whatsapp",
+      to: destino,
+      type: tipo,
+      [tipo]: {
+        id: mediaId,
+        ...(llevaCaption ? { caption } : {}),
+        ...(tipo === "document" && opts?.filename ? { filename: opts.filename } : {}),
+      },
+    });
+  }
+
   private async enviar(cuerpo: unknown): Promise<WhatsappEnvioOutcome> {
     const url = `${GRAPH_BASE}/${this.config.apiVersion}/${this.config.numeroId}/messages`;
 

@@ -96,10 +96,10 @@ function makeOrden(
     producto: "Producto",
     peso: 1,
     notas: null,
-    // Pedido humano (2026-08-27): por defecto la orden NO ha sido gestionada, que es el caso
-    // ELIMINABLE. El servidor resuelve este campo con el mismo predicado que autoriza el
-    // borrado; aqui se fija por fila para poder medir las dos ramas.
-    sinGestion: true,
+    // Por defecto la fila ES eliminable. El servidor resuelve este campo con el mismo predicado
+    // que autoriza el borrado (ficha 319: el ESTADO de la orden, nada mas); aqui se fija por
+    // fila para poder medir las dos ramas de la pantalla.
+    eliminable: true,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...over,
@@ -169,11 +169,11 @@ describe("la acción se ofrece en CUALQUIER estado, si la orden no se ha gestion
     expect(await screen.findByRole("button", { name: ACCION })).toBeInTheDocument();
   });
 
-  // Pedido humano (2026-08-27): EL requisito nuevo. El estado da igual —`en_bodega_central`
-  // tiene otras acciones por lote y la fila se puede marcar—; lo que decide es `sinGestion`.
-  it("NO se ofrece sobre una orden que YA fue gestionada", async () => {
+  // La pantalla NO decide: obedece a `eliminable`, que resuelve el servidor. Que la fila se
+  // pueda marcar (su estado tiene otras acciones por lote) es indiferente.
+  it("NO se ofrece sobre una fila que el servidor marca como no eliminable", async () => {
     listarOrdenesMock.mockResolvedValue(
-      pagina([makeOrden({ id: "o1", sinGestion: false })]),
+      pagina([makeOrden({ id: "o1", eliminable: false })]),
     );
     const user = userEvent.setup();
     renderConSwr(<OrdenesListado accionesLote puedeEliminar />);
@@ -185,11 +185,11 @@ describe("la acción se ofrece en CUALQUIER estado, si la orden no se ha gestion
     expect(screen.queryByRole("button", { name: ACCION })).toBeNull();
   });
 
-  it("selección mixta: el botón lleva el conteo y solo borra las no gestionadas", async () => {
+  it("selección mixta: el botón lleva el conteo y solo borra las eliminables", async () => {
     listarOrdenesMock.mockResolvedValue(
       pagina([
-        makeOrden({ id: "o1", sinGestion: true }),
-        makeOrden({ id: "o2", sinGestion: false }),
+        makeOrden({ id: "o1", eliminable: true }),
+        makeOrden({ id: "o2", eliminable: false }),
       ]),
     );
     const user = userEvent.setup();

@@ -77,6 +77,8 @@ const handlers = {
   onConversacion: vi.fn(),
   // Feature 237 (T7.1): UN handler para los dos desenlaces, con el modo como segundo argumento.
   onGestionarDesdeAyuda: vi.fn(),
+  // Ficha 312 (F2): UN handler para LOS DOS GRUPOS, porque es una sola clave y una sola operación.
+  onCorregirDatos: vi.fn(),
 };
 
 function renderAcciones(over: Partial<NovedadDTO> = {}) {
@@ -104,7 +106,12 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
   // No es una aserción que se actualiza para que pase: es el PRODUCTO de la ficha. Hasta hoy la
   // tienda podía avisar y devolver la orden al mensajero, pero no resolverla; ahora tiene sus dos
   // desenlaces. El censo pasa de cinco controles a SIETE.
-  it("R22/237: la fila de AYUDA ofrece exactamente siete controles, y son los suyos", () => {
+  // ⚠️ FICHA 312 (F1/F2, 2026-08-28) — EL CENSO PASA DE SIETE CONTROLES A OCHO, y es el producto
+  // de la ficha: la tienda ya puede arreglar un destinatario o un teléfono mal escritos desde aquí,
+  // que hasta hoy sólo se arreglaban con un `UPDATE` a mano contra producción. El literal se
+  // actualiza A MANO, una entrada más; jamás se deriva de `ACCIONES_POR_GRUPO`, que es su propia
+  // fuente y lo dejaría verde con cualquier contenido.
+  it("R22/237/312: la fila de AYUDA ofrece exactamente ocho controles, y son los suyos", () => {
     renderAcciones({ estatusValue: "ayuda_tienda" });
 
     expect(censoDeBotones()).toEqual([
@@ -114,6 +121,7 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
       "Rechazar la orden de Ana Cliente",
       "Habilitar la orden de Ana Cliente",
       "Abrir la conversación de la orden de Ana Cliente",
+      "Corregir los datos del cliente de la orden de Ana Cliente",
       "Registrar un intento de contacto con la orden de Ana Cliente",
     ]);
   });
@@ -130,7 +138,10 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
   // **Qué cambió:** la 240 borró esa celda (R33). El literal se actualiza A MANO, una entrada
   // menos; jamás se deriva de `ACCIONES_POR_GRUPO`, que es su propia fuente y lo dejaría verde para
   // siempre.
-  it("240/R33: la fila de DEVOLUCIÓN ofrece exactamente cuatro controles, sin «Habilitar»", () => {
+  // ⚠️ FICHA 312 (F1/F2, 2026-08-28): de cuatro controles a CINCO. «Corregir datos» entra en LOS DOS
+  // grupos (R23, P2) con la MISMA clave, así que aparece en este censo y en el de arriba — y que
+  // aparezca en los dos es lo que hace visible la decisión.
+  it("240/R33 + 312/R23: la fila de DEVOLUCIÓN ofrece cinco controles, sin «Habilitar»", () => {
     renderAcciones({ estatusValue: "devuelta" });
 
     // El espejo del caso de arriba. Es lo que convierte las ausencias de cada uno en afirmaciones:
@@ -140,6 +151,7 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
       "WhatsApp a Ana Cliente",
       "Reprogramar la orden de Ana Cliente",
       "Rechazar la orden de Ana Cliente",
+      "Corregir los datos del cliente de la orden de Ana Cliente",
     ]);
   });
 
@@ -154,8 +166,9 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
         "aprobar el cierre (238): «Habilitar» ahí ofrecía deshacer algo que físicamente no se " +
         "puede deshacer. Es el punto 12, y la 240 lo cerró borrando la celda.",
     ).toBeNull();
-    // CONTROL POSITIVO de que la card SÍ se renderizó: los otros cuatro controles están.
-    expect(censoDeBotones()).toHaveLength(4);
+    // CONTROL POSITIVO de que la card SÍ se renderizó: los otros cinco controles están (312: el
+    // quinto es «Corregir datos», que sí va en los dos grupos).
+    expect(censoDeBotones()).toHaveLength(5);
 
     cleanup();
     renderAcciones({ estatusValue: "ayuda_tienda" });
@@ -207,6 +220,48 @@ describe("NovedadAcciones — cada control llama a SU handler (236/R27)", () => 
     expect(handlers.onConversacion).toHaveBeenCalledTimes(1);
     expect(handlers.onConversacion.mock.calls[0][0]).toMatchObject({ id: "o-ayuda" });
     expect(handlers.onHabilitar).not.toHaveBeenCalled();
+    expect(handlers.onReprogramar).not.toHaveBeenCalled();
+    expect(handlers.onRechazar).not.toHaveBeenCalled();
+  });
+
+  // ===============================================================================================
+  // FICHA 312 (F2 — R23) — LA MISMA PUERTA DESDE LOS DOS GRUPOS.
+  // ===============================================================================================
+  //
+  // Lo que estos dos casos protegen es lo contrario que los de la 237: allí dos botones con el
+  // MISMO rótulo tenían que llamar a cosas DISTINTAS; aquí el mismo botón, desde los dos grupos,
+  // tiene que llamar a LO MISMO. Si alguien partiera la celda en dos claves, uno de los dos grupos
+  // se quedaría llamando a otro handler y el censo de arriba seguiría verde.
+  it("312/R23: «Corregir datos» llama a SU handler desde el grupo de AYUDA", async () => {
+    const user = userEvent.setup();
+    renderAcciones({ id: "o-ayuda", estatusValue: "ayuda_tienda" });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Corregir los datos del cliente de la orden de Ana Cliente",
+      }),
+    );
+
+    expect(handlers.onCorregirDatos).toHaveBeenCalledTimes(1);
+    expect(handlers.onCorregirDatos.mock.calls[0][0]).toMatchObject({ id: "o-ayuda" });
+    // Y ninguna otra: corregir un dato no reprograma, no rechaza y no habilita.
+    expect(handlers.onGestionarDesdeAyuda).not.toHaveBeenCalled();
+    expect(handlers.onHabilitar).not.toHaveBeenCalled();
+    expect(handlers.onConversacion).not.toHaveBeenCalled();
+  });
+
+  it("312/R23: y el MISMO handler desde el grupo de DEVOLUCIÓN", async () => {
+    const user = userEvent.setup();
+    renderAcciones({ id: "o-devuelta", estatusValue: "devuelta" });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Corregir los datos del cliente de la orden de Ana Cliente",
+      }),
+    );
+
+    expect(handlers.onCorregirDatos).toHaveBeenCalledTimes(1);
+    expect(handlers.onCorregirDatos.mock.calls[0][0]).toMatchObject({ id: "o-devuelta" });
     expect(handlers.onReprogramar).not.toHaveBeenCalled();
     expect(handlers.onRechazar).not.toHaveBeenCalled();
   });

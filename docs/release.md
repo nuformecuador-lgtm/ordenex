@@ -47,6 +47,14 @@
 - [ ] **Migraciones**: si la release lleva alguna, confirmar contra la base que aplicó y que **no
       tocó filas que no debía** (`updated_at = created_at` es la prueba barata de que nada más se
       escribió).
+- [ ] **Los jobs recurrentes tienen su primera fila.** Desde la ficha 313 el propio build la
+      siembra (`scripts/migrate-deploy.ts`, lineas `[siembra] ...` del log del deploy), asi que
+      normalmente basta con leerlas. Si el log no esta a mano, la consulta es directa:
+      `SELECT tipo, estado, run_after FROM jobs WHERE tipo IN ('liberar_reprogramadas','analitica_rollup_diario') AND estado <> 'failed';`
+      **Se espera una fila por tipo.** Cero es el fallo del 2026-08-28: un recurrente se re-agenda
+      solo *despues* de correr, asi que sin la primera fila no hay ninguna, y no falla nada. Costo
+      40 ordenes atrapadas en `reprogramada` y un rollup diario que no se escribio nunca, con el
+      build en verde dos dias y la unica senal siendo un operador que no podia trabajar.
 - [ ] **Cerrar las fichas** que esta release termina de verdad, y **decir en su nota lo que sigue
       vivo** en vez de darlas por limpias.
 

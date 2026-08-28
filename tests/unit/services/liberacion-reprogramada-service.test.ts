@@ -51,6 +51,9 @@ function fakeRepo(
 ): ILiberacionReprogramadaRepository {
   return {
     findOrdenesLiberables: vi.fn(async () => [liberableRow()]),
+    // FICHA 315: el disparador por cierre devuelve por defecto LO MISMO que el del reloj, para
+    // que los casos que lo ejerciten midan la regla y no el doble.
+    findOrdenesLiberablesDeCierre: vi.fn(async () => [liberableRow()]),
     liberarOrden: vi.fn(async () => true),
     findLiberadasHoy: vi.fn(async () => []),
     ...overrides,

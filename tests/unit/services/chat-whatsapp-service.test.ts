@@ -7,6 +7,7 @@ import type {
 } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 import type { WebhookEventos } from "@/lib/types/whatsapp-webhook";
 import type { WhatsappEnvioOutcome } from "@/lib/clients/whatsapp-cloud";
+import type { WhatsappMediaSubidaOutcome } from "@/lib/clients/whatsapp-media-upload";
 import { SIN_CAMPOS_311 } from "@/tests/fixtures/chat-mensaje";
 import { readFileSync } from "fs";
 import { join as joinPath } from "path";
@@ -1054,5 +1055,336 @@ describe("Feature 311 · PII en los logs de la ingesta (R35)", () => {
     consolaWarn.mockRestore();
     consolaLog.mockRestore();
     consolaError.mockRestore();
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Feature 316 — C1.T/C2.T (R3/R11/R17/R18/R19/R20/R21). Envio de un ADJUNTO y la guarda del
+// reintento. Todo con repos, cliente y subidor fakeados: cero red, cero DB.
+// ---------------------------------------------------------------------------
+
+/**
+ * Marca reconocible DENTRO del binario. Si algun dia el binario se colara hasta la fila que se
+ * persiste (base64, buffer serializado, lo que sea), esta cadena aparece en el `JSON.stringify`
+ * de los argumentos y el test de R18 se pone rojo.
+ */
+const MARCA_BINARIA = "BYTES-DEL-ADJUNTO-QUE-NO-SE-PERSISTEN";
+
+function adjuntoFake(over: Partial<{ mime: string; nombre: string; bytes: number }> = {}) {
+  return {
+    mime: over.mime ?? "image/jpeg",
+    nombre: over.nombre ?? "foto.jpg",
+    bytes: over.bytes ?? 1234,
+    cuerpo: new Blob([MARCA_BINARIA], { type: over.mime ?? "image/jpeg" }),
+  };
+}
+
+function fakeSubidor(outcome: WhatsappMediaSubidaOutcome = { status: "ok", mediaId: "MEDIA-1" }) {
+  return { subir: vi.fn(async () => outcome) };
+}
+
+function fakeClientMedia(outcome: WhatsappEnvioOutcome) {
+  return {
+    enviarTexto: vi.fn(async () => outcome),
+    enviarPlantilla: vi.fn(async () => outcome),
+    enviarMedia: vi.fn(async () => outcome),
+  };
+}
+
+/** Inputs con los que se llamo `insertarSaliente`. */
+function salientesInsertados(repo: IChatMensajeRepository): Record<string, unknown>[] {
+  const fn = repo.insertarSaliente as unknown as { mock: { calls: [Record<string, unknown>][] } };
+  return fn.mock.calls.map((c) => c[0]);
+}
+
+describe("Feature 316 · enviarMedia (R3/R11/R17/R18/R19/R20)", () => {
+  function servicio(over: {
+    msg?: IChatMensajeRepository;
+    subidor?: ReturnType<typeof fakeSubidor>;
+    client?: ReturnType<typeof fakeClientMedia>;
+    ultimoEntranteAt?: Date | null;
+    encolarReintento?: (id: string) => Promise<void>;
+  } = {}) {
+    const msg =
+      over.msg ??
+      fakeMensajeRepo(
+        over.ultimoEntranteAt === undefined
+          ? {}
+          : { ultimoEntranteAt: vi.fn(async () => over.ultimoEntranteAt ?? null) },
+      );
+    const subidor = over.subidor ?? fakeSubidor();
+    const client = over.client ?? fakeClientMedia({ status: "ok", mensajeId: "wamid.MEDIA" });
+    const service = new ChatWhatsappService({
+      conversacionRepo: fakeConversacionRepo(),
+      mensajeRepo: msg,
+      client,
+      subidor,
+      encolarReintento: over.encolarReintento,
+      now: () => AHORA,
+    });
+    return { service, msg, subidor, client };
+  }
+
+  const INPUT_BASE = {
+    ordenId: "orden-1",
+    mensajeroId: "men-1",
+    telefonoE164: "573001112233",
+  };
+
+  it("(a) R3: fuera de la ventana de 24 h NO sube nada ni persiste nada", async () => {
+    const { service, msg, subidor, client } = servicio({ ultimoEntranteAt: null });
+
+    const res = await service.enviarMedia({ ...INPUT_BASE, adjunto: adjuntoFake() });
+
+    expect(res).toEqual({ status: "fuera_ventana" });
+    expect(subidor.subir).not.toHaveBeenCalled();
+    expect(client.enviarMedia).not.toHaveBeenCalled();
+    expect(msg.insertarSaliente).not.toHaveBeenCalled();
+  });
+
+  it("(b) R11: un mime fuera de la lista blanca es tipo_no_permitido, sin subir", async () => {
+    const { service, msg, subidor } = servicio();
+
+    const res = await service.enviarMedia({
+      ...INPUT_BASE,
+      // El servidor NO normaliza (no hay canvas en Node): un HEIC que llegue aqui se rechaza.
+      adjunto: adjuntoFake({ mime: "image/heic", nombre: "foto.heic" }),
+    });
+
+    expect(res).toEqual({ status: "tipo_no_permitido" });
+    expect(subidor.subir).not.toHaveBeenCalled();
+    expect(msg.insertarSaliente).not.toHaveBeenCalled();
+  });
+
+  it("(b) R11: una imagen de 6 MB es demasiado_grande con su limite, sin subir", async () => {
+    const { service, msg, subidor } = servicio();
+
+    const res = await service.enviarMedia({
+      ...INPUT_BASE,
+      adjunto: adjuntoFake({ bytes: 6 * 1024 * 1024 }),
+    });
+
+    expect(res).toEqual({ status: "demasiado_grande", limiteBytes: 5 * 1024 * 1024 });
+    expect(subidor.subir).not.toHaveBeenCalled();
+    expect(msg.insertarSaliente).not.toHaveBeenCalled();
+  });
+
+  it("(c) R17: camino feliz -> sube, envia y persiste el saliente con sus cuatro campos media", async () => {
+    const { service, msg, subidor, client } = servicio();
+
+    const res = await service.enviarMedia({
+      ...INPUT_BASE,
+      adjunto: adjuntoFake(),
+      caption: "aqui esta tu paquete",
+    });
+
+    expect(subidor.subir).toHaveBeenCalledTimes(1);
+    expect(client.enviarMedia).toHaveBeenCalledWith(
+      "573001112233",
+      "image",
+      "MEDIA-1",
+      { caption: "aqui esta tu paquete" },
+    );
+    expect(salientesInsertados(msg)[0]).toMatchObject({
+      tipo: "imagen",
+      estado: "sent",
+      waMessageId: "wamid.MEDIA",
+      cuerpo: "aqui esta tu paquete",
+      mediaId: "MEDIA-1",
+      mediaMime: "image/jpeg",
+      mediaNombre: "foto.jpg",
+      mediaTamanoBytes: 1234,
+    });
+    expect(res).toMatchObject({ status: "ok", mensajeId: "wamid.MEDIA", mensajeChatId: "msg-out" });
+  });
+
+  it("(c) R17: un documento viaja con `filename` y se persiste como `documento`", async () => {
+    const { service, msg, client } = servicio();
+
+    await service.enviarMedia({
+      ...INPUT_BASE,
+      adjunto: adjuntoFake({ mime: "application/pdf", nombre: "factura.pdf" }),
+    });
+
+    expect(client.enviarMedia).toHaveBeenCalledWith("573001112233", "document", "MEDIA-1", {
+      filename: "factura.pdf",
+    });
+    expect(salientesInsertados(msg)[0]).toMatchObject({ tipo: "documento" });
+  });
+
+  it("R6: una nota de voz no manda pie y se persiste con `cuerpo` null", async () => {
+    const { service, msg, client } = servicio();
+
+    await service.enviarMedia({
+      ...INPUT_BASE,
+      adjunto: adjuntoFake({ mime: "audio/ogg", nombre: "nota.ogg" }),
+      caption: "este texto se queda en el composer",
+    });
+
+    // El pie no viaja (el cliente ademas lo omitiria) y no se persiste como cuerpo.
+    expect(client.enviarMedia).toHaveBeenCalledWith("573001112233", "audio", "MEDIA-1", {
+      caption: "este texto se queda en el composer",
+    });
+    expect(salientesInsertados(msg)[0]).toMatchObject({ tipo: "audio", cuerpo: null });
+  });
+
+  it("(d) R19: si la SUBIDA falla, no se envia mensaje y no se persiste NADA", async () => {
+    const { service, msg, client } = servicio({
+      subidor: fakeSubidor({ status: "error", detalle: "subir media a whatsapp: HTTP 500" }),
+    });
+
+    const res = await service.enviarMedia({ ...INPUT_BASE, adjunto: adjuntoFake() });
+
+    expect(res.status).toBe("fallo_subida");
+    expect(client.enviarMedia).not.toHaveBeenCalled();
+    expect(msg.insertarSaliente).not.toHaveBeenCalled();
+  });
+
+  it("(d) R19: un `rechazado` de la subida tambien deja el hilo intacto", async () => {
+    const { service, msg, client } = servicio({
+      subidor: fakeSubidor({
+        status: "rechazado",
+        detalle: "subir media a whatsapp: HTTP 400",
+        codigoMeta: 100,
+      }),
+    });
+
+    expect((await service.enviarMedia({ ...INPUT_BASE, adjunto: adjuntoFake() })).status).toBe(
+      "fallo_subida",
+    );
+    expect(client.enviarMedia).not.toHaveBeenCalled();
+    expect(msg.insertarSaliente).not.toHaveBeenCalled();
+  });
+
+  it("(e) R20: un `transitorio` del envio queda `failed` con su media id y SIN encolar", async () => {
+    const encolarReintento = vi.fn(async () => {});
+    const { service, msg } = servicio({
+      client: fakeClientMedia({
+        status: "transitorio",
+        detalle: "enviar mensaje de whatsapp: HTTP 503",
+      }),
+      encolarReintento,
+    });
+
+    const res = await service.enviarMedia({ ...INPUT_BASE, adjunto: adjuntoFake() });
+
+    expect(salientesInsertados(msg)[0]).toMatchObject({
+      tipo: "imagen",
+      estado: "failed",
+      mediaId: "MEDIA-1",
+      error: { detalle: "enviar mensaje de whatsapp: HTTP 503" },
+    });
+    // La decision de design 4.1: el media id caduca y no hay copia del binario -> no se encola.
+    expect(encolarReintento).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ status: "permanente" });
+  });
+
+  it("(e) R20: un `permanente` del envio conserva el codigo de Meta en el saliente failed", async () => {
+    const { service, msg } = servicio({
+      client: fakeClientMedia({
+        status: "permanente",
+        detalle: "enviar mensaje de whatsapp: HTTP 400",
+        codigoMeta: 131_053,
+      }),
+    });
+
+    await service.enviarMedia({ ...INPUT_BASE, adjunto: adjuntoFake() });
+
+    expect(salientesInsertados(msg)[0]).toMatchObject({
+      estado: "failed",
+      mediaId: "MEDIA-1",
+      error: { codigo: 131_053 },
+    });
+  });
+
+  it("(f) R18: ningun argumento persistido lleva los bytes, ni un Blob, ni un ArrayBuffer", async () => {
+    const { service, msg } = servicio();
+
+    await service.enviarMedia({ ...INPUT_BASE, adjunto: adjuntoFake(), caption: "pie" });
+
+    const args = salientesInsertados(msg);
+    expect(args).toHaveLength(1);
+    expect(JSON.stringify(args)).not.toContain(MARCA_BINARIA);
+    for (const valor of Object.values(args[0])) {
+      expect(valor).not.toBeInstanceOf(Blob);
+      expect(valor).not.toBeInstanceOf(ArrayBuffer);
+    }
+    // Y el subidor si recibio el binario: es el UNICO que lo toca (viaja al FormData de Meta).
+    expect(args[0]).not.toHaveProperty("cuerpoBinario");
+  });
+});
+
+describe("Feature 316 · C2: la guarda de reintentarEnvio (R21)", () => {
+  /** Un saliente `queued` con el `tipo` que se quiera probar. */
+  function servicioConQueued(tipo: "texto" | "imagen" | "audio") {
+    const msg = fakeMensajeRepo({
+      findById: vi.fn(async () => ({
+        id: "msg-queued",
+        conversacionId: "hilo-1",
+        direccion: "saliente" as const,
+        tipo,
+        cuerpo: tipo === "texto" ? "hola" : "un pie de foto",
+        plantillaId: null,
+        waMessageId: null,
+        estado: "queued" as const,
+        latitud: null,
+        longitud: null,
+        errorCodigo: null,
+        errorTitulo: null,
+        errorDetalle: null,
+        ...SIN_CAMPOS_311,
+        ocurridoAt: AHORA,
+        createdAt: AHORA,
+      })),
+    });
+    const conv = fakeConversacionRepo({
+      findById: vi.fn(async () => ({
+        id: "hilo-1",
+        telefonoE164: "573001112233",
+        ordenId: "orden-1",
+        mensajeroId: "men-1",
+        ultimoEntranteAt: AHORA,
+      })),
+    });
+    const client = fakeClientMedia({ status: "ok", mensajeId: "wamid.RETRY" });
+    const service = new ChatWhatsappService({
+      conversacionRepo: conv,
+      mensajeRepo: msg,
+      client,
+      now: () => AHORA,
+    });
+    return { service, msg, client };
+  }
+
+  it("R21: un `queued` de tipo imagen NO se reenvia como texto; se cierra failed y no lanza", async () => {
+    const { service, msg, client } = servicioConQueued("imagen");
+
+    await expect(service.reintentarEnvio("msg-queued")).resolves.toBeUndefined();
+
+    // Sin la guarda, aqui se habria mandado el PIE como un mensaje de texto suelto.
+    expect(client.enviarTexto).not.toHaveBeenCalled();
+    expect(client.enviarMedia).not.toHaveBeenCalled();
+    expect(msg.marcarFallido).toHaveBeenCalledTimes(1);
+    expect(msg.reconciliarSaliente).not.toHaveBeenCalled();
+  });
+
+  it("R21: lo mismo con una nota de voz (que ni siquiera tiene cuerpo)", async () => {
+    const { service, msg, client } = servicioConQueued("audio");
+
+    await service.reintentarEnvio("msg-queued");
+
+    expect(client.enviarTexto).not.toHaveBeenCalled();
+    expect(msg.marcarFallido).toHaveBeenCalledTimes(1);
+  });
+
+  it("regresion 109/120: un `queued` de tipo texto SIGUE reenviandose con enviarTexto", async () => {
+    const { service, msg, client } = servicioConQueued("texto");
+
+    await service.reintentarEnvio("msg-queued");
+
+    expect(client.enviarTexto).toHaveBeenCalledWith("573001112233", "hola");
+    expect(msg.reconciliarSaliente).toHaveBeenCalledWith("msg-queued", "wamid.RETRY", "sent");
+    expect(msg.marcarFallido).not.toHaveBeenCalled();
   });
 });

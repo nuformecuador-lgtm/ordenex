@@ -45,6 +45,28 @@ export interface CreateOrdenData {
   montoCobrar?: number | null;
 }
 
+/**
+ * FICHA 312 (2026-08-28) — los CUATRO campos que la correccion de datos del cliente puede
+ * escribir, y NINGUNO MAS.
+ *
+ * ⚠️ QUE NO ESTE `estatusId` NI `direccion` NO ES UN DESCUIDO: ES EL MECANISMO. `update` (arriba)
+ * puede escribir los dos, y por eso arrastra dos efectos colaterales — el append a
+ * `orden_historial_estado` cuando cambia el estatus y el encolado de geocodificacion cuando cambia
+ * la direccion. La ficha 312 exige que la correccion NO escriba en ninguna otra tabla (R14) y no
+ * toque ningun otro dato de la orden (R5). Con este tipo, esas dos garantias dejan de depender de
+ * que el llamador se acuerde de no mandar `estatusId`: NO SON REPRESENTABLES.
+ *
+ * Si alguien añade aqui un campo, esta reabriendo el alcance de la ficha (D1) y quitandole a R5/R14
+ * su unica defensa estructural. La conversacion va a la puerta de aprobacion humana, no a este tipo.
+ */
+export interface CorregirDatosClienteData {
+  destinatario?: string;
+  telefonoDest?: string;
+  producto?: string;
+  /** `null` = vaciar la nota PROPIA de la orden (columna `orden.notas`), no ninguna nota de hilo. */
+  notas?: string | null;
+}
+
 // Campos actualizables a nivel de datos (ya filtrados por rol en el servicio).
 export interface UpdateOrdenData {
   estatusId?: string;
@@ -860,6 +882,25 @@ export type CancelarViaApiResult =
   | { status: "not_found" }
   | { status: "conflict"; estadoActual: string };
 
+/**
+ * FICHA 320 — la lectura MINIMA que el service de BORRADO por API key necesita de UNA orden.
+ *
+ * `estatusValue` es el unico dato de DECISION (lo consulta `esEstadoEliminable`, fuente unica de
+ * la 319); `numGuia`/`numRemision` son la IDENTIDAD que se devuelve al integrador para que sepa
+ * que retiro, e `id` es por donde se escribe. Ni montos, ni fila entera, ni `estatusId` —nadie lo
+ * lee: aqui no hay transicion que registrar—.
+ *
+ * Molde de `OrdenParaHabilitacionApi` (feature 266) por la misma razon: lo que no llega no se
+ * puede consultar por descuido.
+ */
+export interface OrdenParaEliminacionApi {
+  id: string;
+  /** `null` cuando la orden aun no tiene guia: el caso que motiva la ficha (fulfillment). */
+  numGuia: number | null;
+  numRemision: string;
+  estatusValue: string;
+}
+
 // Feature 102 (T7, design §5.2) — fila de una orden RECHAZADA POR SLA de la tienda, para la
 // superficie derivada de solo-lectura (dentro de /novedades). Molde de `NovedadOrdenRow`, mas el
 // `numRemision` y el `monto` de 56. `monto` = `ingreso_bodega_rechazo` de la gestion sintetica SLA
@@ -1011,13 +1052,41 @@ export interface IOrdenRepository {
     data: UpdateOrdenData,
     historial: HistorialContexto,
   ): Promise<OrdenDTO | null>;
+  /**
+   * FICHA 312 (design §7) — CORRECCION DE LOS DATOS DEL CLIENTE. Metodo HERMANO de `update`, no
+   * una variante suya, y `update` NO se toca: sus dos consumidores vivos
+   * (`DevolucionOrigenService`, `EnvioDevolucionCentralService`) SI transicionan estados y
+   * necesitan el historial que este metodo tiene prohibido escribir.
+   *
+   * UNA SOLA SENTENCIA, con la ventana de estado EN EL `WHERE` de la que muta y no en un `if`
+   * previo (mecanismo de `OrdenNotaRepository.marcarBorrada`): asi no existe ventana entre el
+   * chequeo y el efecto. Eso ES R13 — si el estado se movio entre la lectura del servicio y esta
+   * escritura, la sentencia no alcanza ninguna fila y no queda ningun efecto parcial.
+   *
+   * SIN `$transaction` y sin tocar el constructor: con una sola sentencia no hay dos escrituras
+   * que coordinar, y Postgres ya la ejecuta atomicamente.
+   *
+   * @param estadosBloqueados los `order_status.value` en los que NO se corrige (D3:
+   *        `ESTADOS_SIN_CORRECCION`). Va como parametro y no hardcodeado para que la REGLA viva en
+   *        el modulo puro que la pantalla tambien lee.
+   * @returns `"ok"` si escribio la fila; `"conflict"` si no alcanzo ninguna (borrada, inexistente
+   *        o ya fuera de la ventana). NUNCA escribe en `orden_historial_estado`, en `orden_nota`
+   *        ni en ninguna otra tabla (R14): ver `CorregirDatosClienteData`.
+   */
+  corregirDatosCliente(
+    ordenId: string,
+    data: CorregirDatosClienteData,
+    estadosBloqueados: readonly string[],
+  ): Promise<"ok" | "conflict">;
   // BORRADO 2026-08-07 (tanda 2): `existsEstatus`. Para comprobar que un estatus existe, lo
   // vivo es `findEstatusIdByValue`, que es lo que usan los servicios de dominio.
   //
   // `softDelete` tambien se retiro ese dia ("ninguna pantalla ofrece borrar una orden") y
-  // VUELVE con la feature «eliminar orden» (2026-08-26), ahora POR LOTE y con superficie:
-  // vuelve a ser el UNICO writer de `deleted_at` en `orden`. El predicado `deleted_at IS NULL`
-  // nunca se fue: sigue vivo y aplicandose en TODAS las lecturas.
+  // VUELVE con la feature «eliminar orden» (2026-08-26), ahora POR LOTE y con superficie. El
+  // predicado `deleted_at IS NULL` nunca se fue: sigue vivo y aplicandose en TODAS las lecturas.
+  // Desde la ficha 320 los writers de la columna son TRES —`softDelete` (app, por lote, sin
+  // frontera de tienda), `restore` (su reversion) y `softDeleteViaApi` (canal por API key, UNA
+  // orden y acotada al owner)—; el enunciado de "unico writer" que vivia aqui ya no es cierto.
   /**
    * Borrado LOGICO por lote: fija `deleted_at = now()` en las ordenes de `ids` que aun NO
    * estuvieran borradas. El `where` incluye `deletedAt: null` (patron de `OrdenGeocodeRepository`
@@ -1031,7 +1100,8 @@ export interface IOrdenRepository {
   /**
    * Pedido humano (2026-08-27) — LA REVERSION del borrado logico: devuelve `deleted_at` a NULL
    * en las ordenes de `ids` que SI estuvieran borradas. Es el gemelo exacto de `softDelete` y
-   * el segundo (y ultimo) writer de la columna.
+   * el segundo writer de la columna. El TERCERO lo trae la ficha 320: `softDeleteViaApi`, el del
+   * canal por API key, que es el unico acotado por tienda.
    *
    * El `where` incluye `deletedAt: { not: null }` por la MISMA razon que el de `softDelete`
    * lleva `deletedAt: null`: hace la operacion idempotente y a prueba de carreras. Una orden
@@ -1755,6 +1825,46 @@ export interface IOrdenRepository {
     numGuia: number,
     ownerId: string,
   ): Promise<OrdenParaHabilitacionApi | null>;
+
+  /**
+   * FICHA 320 (T1) — LECTURA, y solo lectura, de la orden `ordenId` DEL OWNER, para que el
+   * service de borrado por API key decida entre 404, 409 y borrar.
+   *
+   * El owner va EN EL `where` (`id = ordenId AND tienda_id = ownerId AND deleted_at IS NULL`),
+   * igual que en `cancelarViaApi` y `findParaHabilitacionApi`, y NO en un `if` posterior. `null`
+   * cubre los tres casos —no existe, ya borrada, es de otra tienda— SIN distinguirlos: el borde
+   * responde el mismo 404 en los tres, de modo que una key no puede usar este endpoint para
+   * averiguar si existe una orden ajena.
+   *
+   * `ordenId` llega YA resuelto por `findByGuiaORemisionForOwner` (feature 177), que tambien
+   * fuerza el owner. Volver a exigirlo aqui es redundante A PROPOSITO.
+   */
+  findParaEliminacionApi(
+    ordenId: string,
+    ownerId: string,
+  ): Promise<OrdenParaEliminacionApi | null>;
+  /**
+   * FICHA 320 (T2) — TERCER (y ultimo) writer de `deleted_at` en `orden`, y el unico ACOTADO POR
+   * TIENDA. Fija `deleted_at = now()` en UNA orden.
+   *
+   * LAS CUATRO CLAVES DEL `where` VAN JUNTAS EN LA MISMA SENTENCIA, que es lo que hace que no
+   * exista ventana entre comprobar y escribir: `id` identifica, `tiendaId` es la frontera
+   * multi-tenant, `deletedAt: null` la hace idempotente ante carreras (dos borrados simultaneos
+   * no reescriben el instante del primero) y `estatus.value IN estadosPermitidos` impide que una
+   * orden que cambio de estado entre la lectura y el UPDATE se borre igualmente.
+   *
+   * `estadosPermitidos` lo pasa el SERVICE desde `ESTADOS_ELIMINABLES` (fuente unica, ficha 319):
+   * el repositorio no decide que estados son borrables, solo aplica el filtro que recibe. Una
+   * lista VACIA no borra nada (`IN ()` no casa con ninguna fila): falla CERRADO.
+   *
+   * Devuelve CUANTAS filas cambio (0 o 1). NO escribe en ninguna otra tabla: ni historial de
+   * estados (borrar no es transicionar), ni `gestion_orden`, ni la carga.
+   */
+  softDeleteViaApi(params: {
+    ordenId: string;
+    ownerId: string;
+    estadosPermitidos: readonly string[];
+  }): Promise<number>;
 
   /**
    * Suma UNO al contador de intentos de contacto de la orden y devuelve el valor RESULTANTE.

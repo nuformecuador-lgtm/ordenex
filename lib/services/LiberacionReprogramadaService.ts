@@ -67,6 +67,30 @@ export interface LiberacionLogger {
 const defaultLogger: LiberacionLogger = { warn: (m) => console.warn(m) };
 
 /**
+ * FICHA 315 — etiqueta del disparador, SOLO para los avisos. Que un log diga cual de los dos
+ * caminos hablo es lo que permitira, la proxima vez, contestar «¿por que esta orden salio a las
+ * 14:48 y no a las 00:00?» sin adivinar.
+ */
+const ETIQUETA_RELOJ = "liberar-reprogramadas";
+const ETIQUETA_CIERRE = "liberar-al-aprobar-cierre";
+
+/**
+ * Lo que se resuelve UNA vez por corrida y no depende de las candidatas: la zona central (para
+ * derivar la bodega responsable) y los tres estatus del catalogo. `null` = catalogo incompleto.
+ */
+interface ContextoLiberacion {
+  centralZonaId: string | null;
+  estatusReprogramadaId: string;
+  estatusBodegaId: string;
+  estatusBodegaSateliteId: string;
+}
+
+/** Corrida que no libero nada. Funcion y no constante: cada llamada devuelve su propio objeto. */
+function sinLiberacion(): LiberacionResult {
+  return { evaluadas: 0, liberadas: 0, omitidas: 0, esperandoCierre: 0 };
+}
+
+/**
  * Feature 46 — logica de negocio de la liberacion programada (R12-R14/R17). Por cada
  * orden reprogramada cuya fecha ya llego (`hoyCR`), deriva su bodega responsable
  * (`resolverDestinoCierre`, reusa la regla 41/37) y la transiciona a `en_bodega_central` /
@@ -83,11 +107,41 @@ export class LiberacionReprogramadaService implements ILiberacionReprogramadaSer
   ) {}
 
   async ejecutarLiberacion(hoyCR: Date): Promise<LiberacionResult> {
+    const ctx = await this.resolverContexto(ETIQUETA_RELOJ);
+    if (ctx === null) return sinLiberacion();
+    // R10: candidatas (reprogramadas, no borradas, fecha <= hoy CR).
+    const ordenes = await this.repo.findOrdenesLiberables(hoyCR);
+    return this.liberarCandidatas(ordenes, ctx, ETIQUETA_RELOJ);
+  }
+
+  /**
+   * FICHA 315 — el MISMO bucle, con las candidatas acotadas al cierre recien aprobado.
+   *
+   * No re-implementa nada: mismo contexto, mismo `puedeLiberarse`, mismo `liberarOrden` guardado
+   * por `estatus_id = reprogramada` (idempotente: si la corrida del reloj ya la solto, este pase
+   * afecta 0 filas y cuenta como `omitida`, no como fallo). Lo unico distinto es de donde salen
+   * las candidatas y la etiqueta del log.
+   *
+   * Los dos disparadores y por que ninguno sobra estan explicados en
+   * `ILiberacionReprogramadaService.liberarPorCierreAprobado`.
+   */
+  async liberarPorCierreAprobado(cierreId: string, hoyCR: Date): Promise<LiberacionResult> {
+    const ctx = await this.resolverContexto(ETIQUETA_CIERRE);
+    if (ctx === null) return sinLiberacion();
+    const ordenes = await this.repo.findOrdenesLiberablesDeCierre(cierreId, hoyCR);
+    return this.liberarCandidatas(ordenes, ctx, ETIQUETA_CIERRE);
+  }
+
+  /**
+   * Zona central + los tres estatus del catalogo, resueltos UNA vez por corrida (no por orden).
+   * `null` = el catalogo esta incompleto (seed pendiente) y no se libera nada: resultado
+   * controlado, no crash. Aviso agregado sin PII (R19).
+   */
+  private async resolverContexto(etiqueta: string): Promise<ContextoLiberacion | null> {
     // R12: la clasificacion a central usa la zona central (o null: todo cae a satelite,
     // fallback seguro de `resolverDestinoCierre`).
     const centralZonaId = await this.zonaRepo.findCentralZonaId();
 
-    // Resuelve los estatus una sola vez (no por orden). Guarda si falta el seed.
     const [estatusReprogramadaId, estatusBodegaId, estatusBodegaSateliteId] = await Promise.all([
       this.ordenRepo.findEstatusIdByValue(ESTATUS_REPROGRAMADA),
       this.ordenRepo.findEstatusIdByValue(ESTATUS_EN_BODEGA),
@@ -98,16 +152,23 @@ export class LiberacionReprogramadaService implements ILiberacionReprogramadaSer
       estatusBodegaId === null ||
       estatusBodegaSateliteId === null
     ) {
-      // Catalogo incompleto: no se libera nada (resultado controlado, no crash). Aviso
-      // agregado sin PII (R19).
       this.logger.warn(
-        "[liberar-reprogramadas] catalogo de estados incompleto (seed pendiente); no se libera",
+        `[${etiqueta}] catalogo de estados incompleto (seed pendiente); no se libera`,
       );
-      return { evaluadas: 0, liberadas: 0, omitidas: 0, esperandoCierre: 0 };
+      return null;
     }
+    return { centralZonaId, estatusReprogramadaId, estatusBodegaId, estatusBodegaSateliteId };
+  }
 
-    // R10: candidatas (reprogramadas, no borradas, fecha <= hoy CR).
-    const ordenes = await this.repo.findOrdenesLiberables(hoyCR);
+  /**
+   * EL BUCLE, compartido por los dos disparadores. Resiliente por orden (un fallo no aborta la
+   * corrida) e idempotente (la escritura va guardada por el estatus de origen).
+   */
+  private async liberarCandidatas(
+    ordenes: OrdenLiberableRow[],
+    ctx: ContextoLiberacion,
+    etiqueta: string,
+  ): Promise<LiberacionResult> {
     // R13: una marca unica para toda la corrida.
     const corridaAt = new Date();
 
@@ -128,19 +189,24 @@ export class LiberacionReprogramadaService implements ILiberacionReprogramadaSer
         // ni prioridad—. El `continue` va ANTES de `liberarOrden`, que es la unica escritura de
         // este bucle. Y NO cuenta como `omitida`: omitir es un fallo o una carrera perdida; esto
         // es la regla funcionando.
+        //
+        // FICHA 315: la puerta se comprueba TAMBIEN en el camino del evento, y no es redundante.
+        // El cierre que se acaba de aprobar es el de la gestion vigente en el caso normal, pero
+        // entre el commit y esta lectura pueden haber pasado cosas; la regla se pregunta contra lo
+        // que la base dice AHORA, no contra lo que el llamador cree.
         if (!puedeLiberarse(orden)) {
           esperandoCierre += 1;
           continue;
         }
         // R12: bodega responsable derivada de la zona (misma regla que el corte 41).
-        const { destinoTipo } = resolverDestinoCierre(orden.zonaId, centralZonaId);
+        const { destinoTipo } = resolverDestinoCierre(orden.zonaId, ctx.centralZonaId);
         const destinoEstatusId =
-          destinoTipo === "bodega_central" ? estatusBodegaId : estatusBodegaSateliteId;
+          destinoTipo === "bodega_central" ? ctx.estatusBodegaId : ctx.estatusBodegaSateliteId;
 
         const ok = await this.repo.liberarOrden({
           ordenId: orden.id,
           destinoEstatusId,
-          estatusReprogramadaId,
+          estatusReprogramadaId: ctx.estatusReprogramadaId,
           corridaAt,
         });
         // R17: false = ya salio de `reprogramada` entre la lectura y la escritura
@@ -154,14 +220,14 @@ export class LiberacionReprogramadaService implements ILiberacionReprogramadaSer
     }
 
     if (omitidas > 0) {
-      this.logger.warn(`[liberar-reprogramadas] ${omitidas} orden(es) no liberada(s) en esta corrida`);
+      this.logger.warn(`[${etiqueta}] ${omitidas} orden(es) no liberada(s) en esta corrida`);
     }
     if (esperandoCierre > 0) {
       // R38: SOLO un conteo agregado. Ni ids, ni guias, ni tiendas, ni mensajeros. Es lo unico que
       // hace visible la poblacion congelada del «Riesgo declarado»; la alerta operativa sobre ella
       // sigue siendo ficha aparte (M3 del §7bis de la 215).
       this.logger.warn(
-        `[liberar-reprogramadas] ${esperandoCierre} orden(es) esperan la aprobacion de su cierre`,
+        `[${etiqueta}] ${esperandoCierre} orden(es) esperan la aprobacion de su cierre`,
       );
     }
 

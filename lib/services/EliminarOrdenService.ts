@@ -1,15 +1,14 @@
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
-import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type { DetalleConflicto } from "@/lib/interfaces/services/IGuiaAsignacionService";
 import type {
   EliminarOrdenInput,
   EliminarOrdenServiceResult,
   IEliminarOrdenService,
 } from "@/lib/interfaces/services/IEliminarOrdenService";
-import { ESTADOS_CREACION } from "@/lib/types/order-status-transiciones";
+import { esEstadoEliminable } from "@/lib/types/order-status-eliminables";
 import {
-  MSG_ORDEN_CON_GESTION,
+  MSG_ORDEN_NO_ELIMINABLE,
   MSG_ORDEN_NO_EXISTE,
   MSG_ORDEN_YA_BORRADA,
 } from "@/lib/services/mensajes-eliminar-orden";
@@ -27,27 +26,14 @@ export type EliminarOrdenRepo = Pick<
   "findByIdsForTransicion" | "softDelete"
 >;
 
-/**
- * El historial, del que sale el UNICO predicado de negocio de la accion. Es un `Pick`, como en
- * `GuiaAsignacionService` / `AsignacionSateliteService`: el service depende del metodo, no del
- * servicio entero.
- */
-export type EliminarOrdenHistorial = Pick<
-  IOrdenHistorialService,
-  "idsConGestionPosteriorEnLote"
->;
-
-/**
- * Estados en los que una orden puede seguir SIN gestionar. Es el mismo conjunto en el que nace
- * (`ESTADOS_CREACION`), leido de la fuente unica y no re-declarado aqui.
- */
-const SET_CREACION: ReadonlySet<string> = new Set<string>(ESTADOS_CREACION);
+// FICHA 319 (2026-08-28) — AQUI VIVIA `EliminarOrdenHistorial`, el `Pick` de
+// `idsConGestionPosteriorEnLote` con el que este service contaba las transiciones de la orden.
+// SE RETIRA con el conteo, no se deja inyectado sin uso: una dependencia que nadie consulta es
+// exactamente el cable suelto que hace creer al siguiente lector que la regla sigue mirando el
+// historial. Efecto colateral medible: el borrado pasa de DOS consultas a UNA.
 
 export class EliminarOrdenService implements IEliminarOrdenService {
-  constructor(
-    private readonly repo: EliminarOrdenRepo,
-    private readonly historial: EliminarOrdenHistorial,
-  ) {}
+  constructor(private readonly repo: EliminarOrdenRepo) {}
 
   async eliminar(
     input: EliminarOrdenInput,
@@ -60,18 +46,26 @@ export class EliminarOrdenService implements IEliminarOrdenService {
     // roles capaces de borrar, el rastro de quien lo hizo deja de ser una sola persona.
     // `esAccesoTotal` ya NO sirve aqui a proposito: es "ve y gestiona todos los modulos", que es
     // una pregunta distinta de "puede retirar una orden del sistema".
+    //
+    // ⚠️ FICHA 320 (2026-08-28) — ESTA REGLA YA NO ES LA UNICA FORMA DE BORRAR UNA ORDEN, y quien
+    // lea solo esta linea deducira lo contrario. El humano abrio el borrado al canal por API key:
+    // una tienda puede retirar LAS SUYAS con `DELETE /api/ordenes/api-key/orden/{id}`. Eso revierte
+    // en parte la decision de arriba y se acepto a sabiendas — en los cuatro estados eliminables el
+    // paquete esta quieto y la API key identifica al autor, asi que el rastro no se pierde, cambia
+    // de forma—. Lo que NO se toco es este camino: por PANTALLA sigue borrando solo el `maestro`,
+    // y sigue pudiendo borrar cualquier orden porque este service NO acota por tienda.
+    // El canal API tiene su propio servicio (`ApiOrdenEliminacionService`) justamente por eso: su
+    // autorizacion es otra —el DUEÑO, forzado dentro del `where`—. Lo unico que comparten es el
+    // predicado de ESTADO de tres lineas mas abajo.
     if (actor.rol !== "maestro") return { status: "forbidden" };
 
     const ordenIds = [...new Set(input.ordenIds)];
     if (ordenIds.length === 0) return { status: "ok", eliminadas: 0 };
 
-    // 2. Precarga que INCLUYE borradas, para distinguir los motivos de rechazo, y —en la MISMA
-    // ida— el conjunto de las que ya tienen movimiento. Van en paralelo porque son
-    // independientes: ninguna decide si la otra hace falta.
-    const [ordenes, conGestion] = await Promise.all([
-      this.repo.findByIdsForTransicion(ordenIds),
-      this.historial.idsConGestionPosteriorEnLote(ordenIds),
-    ]);
+    // 2. Precarga que INCLUYE borradas, para distinguir los motivos de rechazo. Desde la ficha
+    // 319 es la UNICA consulta de lectura de la accion: el estado de la orden trae toda la
+    // informacion que la decision necesita.
+    const ordenes = await this.repo.findByIdsForTransicion(ordenIds);
     const ordenMap = new Map(ordenes.map((o) => [o.id, o]));
 
     const detalle: DetalleConflicto[] = [];
@@ -85,16 +79,21 @@ export class EliminarOrdenService implements IEliminarOrdenService {
         detalle.push({ ordenId: id, motivo: MSG_ORDEN_YA_BORRADA });
         continue;
       }
-      // 3. EL PREDICADO DE NEGOCIO (pedido humano 2026-08-27): solo se elimina el registro que
-      // NADIE ha gestionado desde que se creo. Se comprueba por los DOS lados, y las dos
-      // condiciones son necesarias:
-      //   - sin transicion posterior a la creacion (el historial es la evidencia auditable);
-      //   - y todavia en un estado de nacimiento (`ESTADOS_CREACION`).
-      // La segunda no sobra: una orden anterior al historial —o cuyo rastro se perdiera— tiene
-      // CERO filas de movimiento y aun asi puede estar entregada. Con solo la primera regla, esa
-      // orden seria borrable. Falla CERRADO: ante la duda, no se borra.
-      if (conGestion.has(id) || !SET_CREACION.has(orden.estatusValue)) {
-        detalle.push({ ordenId: id, motivo: MSG_ORDEN_CON_GESTION });
+      // 3. EL PREDICADO DE NEGOCIO. FICHA 319 (pedido humano 2026-08-28): manda EL ESTADO, y
+      // SOLO el estado. Antes eran dos condiciones y se exigian las dos —sin transicion
+      // posterior a la creacion Y todavia en un estado de nacimiento—; el conteo de transiciones
+      // SE RETIRA. Motivo del humano: el estado ya dice quien hizo que con el paquete, y el
+      // conteo lo contradice al descalificar una orden solo por haberle impreso la etiqueta.
+      //
+      // Lo que costaba: generar la guia rompia las DOS mitades a la vez (anade fila de historial
+      // y mueve a `en_bodega_central`), asi que una orden numerada no se podia borrar nunca. En
+      // produccion, el 2026-08-28: CERO eliminables de 429 vivas.
+      //
+      // La lista y el porque de cada estado viven en `lib/types/order-status-eliminables.ts`, y
+      // es la MISMA que consulta `OrdenService` para decidir si ofrece el boton. Sigue fallando
+      // CERRADO: es una lista de INCLUSION, lo que no esta en ella no se borra.
+      if (!esEstadoEliminable(orden.estatusValue)) {
+        detalle.push({ ordenId: id, motivo: MSG_ORDEN_NO_ELIMINABLE });
       }
     }
     // Todo-o-nada por lote, como `deshacerAsignacion`: si UNA orden del lote no se puede borrar,

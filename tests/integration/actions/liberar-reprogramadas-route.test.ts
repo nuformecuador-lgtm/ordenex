@@ -21,7 +21,18 @@ function fakeService(
     omitidas: 2,
   })),
 ): { service: ILiberacionReprogramadaService; spy: typeof spy } {
-  return { service: { ejecutarLiberacion: spy }, spy };
+  return {
+    service: {
+      ejecutarLiberacion: spy,
+      // FICHA 315: el OTRO disparador del mismo servicio (la aprobacion de un cierre). Esta ruta
+      // no lo usa y por eso el doble lo declara reventando: si el cron llamara alguna vez por
+      // aqui, este archivo lo diria en vez de pasarlo por alto.
+      liberarPorCierreAprobado: vi.fn(async () => {
+        throw new Error("el cron no libera por cierre: eso lo dispara la aprobacion (315)");
+      }),
+    },
+    spy,
+  };
 }
 
 function req(headers: Record<string, string> = {}): Request {
@@ -94,7 +105,8 @@ describe("handleLiberarReprogramadas — errores del service (R19)", () => {
     });
     const res = await handleLiberarReprogramadas(req({ authorization: `Bearer ${SECRET}` }), {
       getSecret: () => SECRET,
-      service: { ejecutarLiberacion: boom },
+      // FICHA 315: el doble implementa el contrato entero; esta ruta solo ejerce el del reloj.
+      service: { ejecutarLiberacion: boom, liberarPorCierreAprobado: vi.fn() },
     });
     expect(res.status).toBeGreaterThanOrEqual(500);
     const text = JSON.stringify(await res.json());
