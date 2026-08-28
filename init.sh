@@ -179,7 +179,19 @@ if [ -f package.json ]; then
     warn "modo rapido: solo los tests relacionados con tus cambios + las guardias."
     warn "El completo NO es opcional antes de una release a prod: ahi se corre './init.sh' a secas."
   else
-    run_if test
+    # GATE COMPLETO CONTRA EL BASELINE (2026-08-28). Antes esto era `run_if test`, que fallaba
+    # SIEMPRE: `dev` arrastra deuda ajena, asi que el gate terminaba en rojo aunque tu cambio
+    # estuviera impecable y alguien tenia que comparar A MANO los rojos contra un numero que
+    # viajaba por chat. En la ficha 311 eso paso OCHO veces, y una se concluyo mal.
+    #
+    # Ahora la suite corre igual (no se oculta ni un rojo de la consola) pero el VEREDICTO lo
+    # da la comparacion por ARCHIVO contra `tests/baseline-rojos.json`: verde si no aparece
+    # ningun archivo que antes no fallara. El `|| true` es deliberado -- que la suite termine
+    # en rojo ya no decide nada por si solo, y sin el `set -e` cortaria aqui.
+    echo "-> pnpm run test:json"
+    pnpm run test:json || true
+    COMPARACION=$(node scripts/comparar-baseline-rojos.mjs .vitest-rojos.json)       || fail "hay rojos NUEVOS respecto del baseline (el detalle esta justo arriba)"
+    ok "tests: $COMPARACION"
   fi
 fi
 

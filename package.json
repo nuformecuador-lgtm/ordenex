@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:json": "vitest run --reporter=default --reporter=json --outputFile.json=.vitest-rojos.json",
     "test:watch": "vitest",
     "test:cambiados": "vitest run --changed origin/dev --passWithNoTests",
     "test:guardias": "vitest run guard",

@@ -58,3 +58,6 @@ next-env.d.ts
 
 # worktrees de agentes (copias completas del repo)
 /.claude/worktrees/
+
+# Reporte JSON de la corrida de tests, insumo de scripts/comparar-baseline-rojos.mjs
+.vitest-rojos.json
