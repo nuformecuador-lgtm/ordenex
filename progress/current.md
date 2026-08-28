@@ -88,6 +88,50 @@ está mergeada en `dev`** (PRs #518 y #533) pero su ficha sigue `in_progress`: n
 confirmación del humano.
 
 
+## 🚨 2026-08-28 — INCIDENTE DE PRODUCCIÓN: las reprogramadas nunca volvían a la central
+
+Reportado por el humano en caliente: **«acepté las reprogramadas de ayer para hoy y no aparecen en
+el filtro de reasignables»**. No era el cierre ni el filtro.
+
+**La causa, medida antes de tocar nada.** `liberar_reprogramadas` es un job **recurrente**: se
+re-agenda solo *después* de cada corrida, así que la serie necesita una **siembra inicial**
+(`scripts/seed-jobs-liberar-reprogramadas.ts`). Esa siembra **no está en ningún paso del despliegue
+y nunca se corrió contra esta base**. Sin primera fila no hay segunda.
+
+- **0 filas** de ese tipo en `jobs` y **0 transiciones `liberacion_reprogramada`** en toda la
+  historia de la base (que arrancó el 2026-08-26).
+- **40 órdenes** atrapadas en `reprogramada`, con el mensajero de ayer todavía puesto.
+- El filtro REASIGNABLES pide `en_bodega_central` **Y** `mensajero_asignado_id IS NULL`
+  (`OrdenRepository.ts:1224`). Esas 40 fallaban las dos condiciones.
+- **`analitica_rollup_diario` estaba igual**, también con 0 filas: el rollup diario no se ha
+  escrito nunca. Segundo job muerto por la misma causa, y este no lo reportó nadie.
+
+**El descarte que importa:** el endpoint `/api/cron/liberar-reprogramadas` (feature 46) NO está en
+`vercel.json`, y eso parecía la causa. No lo es: desde la feature 90 la vía vigente es la COLA, que
+`procesar-jobs` drena cada minuto y que funciona — 374 geocodificaciones y 236 optimizaciones
+drenadas. Lo que faltaba era la fila, no el cron.
+
+**Arreglo aplicado** (por MCP, decisión humana explícita): dos filas sembradas a las 14:08 UTC,
+`liberar_reprogramadas` con `run_after` en el pasado y `analitica_rollup_diario` en su horario
+(00:30 CR). El drenador la ejecutó a las **14:10** con el código real de producción — no un `UPDATE`
+a mano. Resultado medido:
+
+| | |
+| --- | --- |
+| **25 liberadas** | a `en_bodega_central`, sin mensajero y con `prioridad = true` |
+| **5 congeladas** | cierre de un mensajero en `solicitado` — regla de la 276, correcto |
+| **10 intactas** | fechas 31/08 y 01/09, todavía no les toca |
+
+La serie quedó viva sin desplegar nada: hay fila `pending` para `2026-08-29 06:00 UTC`, re-agendada
+por la propia corrida.
+
+⚠️ **La deuda es la FICHA 313, y es la lección:** nada garantiza que esa siembra exista. Ningún test
+ni guardia comprueba que un tipo con recurrencia registrada tenga fila viva. Si la base se recrea
+—como el 2026-08-25— los dos jobs vuelven a morir igual de callados. **La única señal de este fallo
+fue un operador que no podía trabajar:** el build llevaba dos días verde.
+
+---
+
 ## 🎨 2026-08-27 — ficha 292: las tarjetas del monitoreo toman el color de su segmento
 
 `feature/292-color-cards-monitoreo`. **Sin SDD** por decisión humana. Reportado desde la pantalla y
