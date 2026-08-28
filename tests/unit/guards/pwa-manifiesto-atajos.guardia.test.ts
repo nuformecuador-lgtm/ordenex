@@ -171,9 +171,17 @@ describe("pwa · los atajos del manifiesto", () => {
       porRol.set(rol, new Set(destinos));
     }
 
+    // Feature 321 — `maestro` 16 -> 17 y `admin` 11 -> 12, por UN destino nuevo y solo uno:
+    // el subitem «Conversaciones» (`/historico/conversaciones`) del item «Histórico», visible
+    // exclusivamente para esos dos roles (`ROLES_HISTORICO_CONVERSACIONES`, decision humana del
+    // 2026-08-28). Por eso `adminSatelite`, `mensajero` y `adminTienda` NO se mueven — y que
+    // sigan clavados es parte de lo que se afirma aqui. El item padre no suma: tiene `children`,
+    // asi que `destinosDe` devuelve los subitems y no su `href`, que no navega.
+    // La CONCLUSION no cambia: el destino nuevo lo ven dos roles de cinco, la interseccion
+    // sigue vacia y por tanto siguen siendo CERO atajos.
     expect(Object.fromEntries([...porRol].map(([rol, d]) => [rol, d.size]))).toEqual({
-      maestro: 16,
-      admin: 11,
+      maestro: 17,
+      admin: 12,
       adminSatelite: 6,
       mensajero: 6,
       adminTienda: 3,

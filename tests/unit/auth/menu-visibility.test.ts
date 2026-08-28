@@ -147,6 +147,11 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Configuración",
       "Cierres del día",
       "Incidentes",
+      // Feature 321 (R2/R9): "Histórico" entra la ÚLTIMA, después de "Incidentes". La
+      // posición NO es decorativa: es lo que hace que `primerDestino` no cambie para
+      // ningún rol y por eso el ítem no necesita `destinoInicial: false`. La lista se
+      // sigue comparando por IGUALDAD: un ítem nuevo no declarado aquí pone el caso rojo.
+      "Histórico",
     ]);
   });
 
@@ -165,6 +170,7 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Wallet",
       "Cierres del día",
       "Incidentes", // feature 158 (Q-I)
+      "Histórico", // feature 321 (R2/R9): el ÚLTIMO, para no mover el aterrizaje de nadie
     ]);
     expect(visibles).not.toContain("Configuración");
   });
