@@ -3580,22 +3580,22 @@
       "title": "la etiqueta para imprimir no lleva ninguna fecha",
       "description": "Quien recibe un paquete no puede saber de cuando es: la etiqueta muestra guia, destinatario, direccion, producto y monto, pero ninguna fecha.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "branch": null,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27 ('falta ese dato en las etiquetas para imprimir'). MEDIDO antes de registrarla: la fecha no es que no se pinte, es que NO EXISTE en el camino -- `EtiquetaRow` (la proyeccion del repositorio) no la trae y `EtiquetaGuiaDTO` no la publica, asi que el cambio va de la consulta al PDF y toca las dos mitades. DECISION HUMANA sobre CUAL de las tres fechas: la de CREACION de la orden (el dia en que la tienda cargo el envio). Se le ofrecieron las otras dos y se descartaron con su motivo: la de IMPRESION cambia en cada reimpresion -- dos etiquetas del mismo paquete dirian fechas distintas --, y la de REPARTO esta VACIA en la mayoria de ordenes (las de bodega no la tienen: medido en produccion), asi que saldria en blanco casi siempre. OJO AL PRECEDENTE: la ficha 282 ya arreglo esta misma etiqueta por datos superpuestos (el numero de guia pisaba la primera fila). Anadir una linea puede reabrir ese defecto, asi que la verificacion tiene que MIRAR el PDF, no solo comprobar que el dato viaja."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27 ('falta ese dato en las etiquetas para imprimir'). MEDIDO antes de registrarla: la fecha no es que no se pinte, es que NO EXISTE en el camino -- `EtiquetaRow` (la proyeccion del repositorio) no la trae y `EtiquetaGuiaDTO` no la publica, asi que el cambio va de la consulta al PDF y toca las dos mitades. DECISION HUMANA sobre CUAL de las tres fechas: la de CREACION de la orden (el dia en que la tienda cargo el envio). Se le ofrecieron las otras dos y se descartaron con su motivo: la de IMPRESION cambia en cada reimpresion -- dos etiquetas del mismo paquete dirian fechas distintas --, y la de REPARTO esta VACIA en la mayoria de ordenes (las de bodega no la tienen: medido en produccion), asi que saldria en blanco casi siempre. OJO AL PRECEDENTE: la ficha 282 ya arreglo esta misma etiqueta por datos superpuestos (el numero de guia pisaba la primera fila). Anadir una linea puede reabrir ese defecto, asi que la verificacion tiene que MIRAR el PDF, no solo comprobar que el dato viaja. || CERRADA 2026-08-28 al mergear el PR #555 en dev. Las dos mitades fueron en UN solo PR para no dejarlas apiladas. La fecha va en la CABECERA y no como octavo campo: medido que con ocho campos el corpus de la 282 se recortaria con puntos suspensivos."
     },
     {
       "id": 296,
       "title": "la tarjeta de novedades no dice que mensajero pidio la ayuda",
       "description": "La tienda ve una orden pidiendo ayuda pero no a quien preguntarle: la tarjeta no muestra ningun mensajero.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "branch": null,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27. CAUSA MEDIDA: `NovedadDTO` extiende `MiAsignacionDTO`, que es el contrato del PORTAL DEL MENSAJERO -- ahi el mensajero es obvio porque es quien mira, asi que el DTO no tiene NINGUN campo de mensajero. Al reusarlo en /novedades, que la ve la TIENDA, el dato no existe en el camino: hay que anadirlo al DTO y a la proyeccion, no solo pintarlo. DECISION QUE EL IMPLEMENTADOR NO DEBE TOMAR SOLO: 'quien solicito la ayuda' y 'quien la lleva ahora' pueden ser personas distintas si la orden se reasigno despues. El actor de la transicion `solicitud_ayuda_tienda` esta en `orden_historial_estado` (verificado: hoy dice 'Mensajero para pruebas' en las dos ordenes vivas), y el asignado actual esta en `orden.mensajero_asignado_id`. Lo pedido literalmente es QUIEN SOLICITO; lo util para la tienda es A QUIEN LLAMAR. Si difieren hay que mostrar los dos o elegir con el humano. OJO: `MiAsignacionDTO` lo consumen tambien las dos listas del portal del mensajero; anadir el campo alli obligaria a emitirlo donde nadie lo lee. El precedente esta escrito en el propio codigo (`causa` e `intentosContacto` son campos PROPIOS de NovedadDTO por ese mismo motivo): el campo nuevo va en NovedadDTO, no en el contrato compartido."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27. CAUSA MEDIDA: `NovedadDTO` extiende `MiAsignacionDTO`, que es el contrato del PORTAL DEL MENSAJERO -- ahi el mensajero es obvio porque es quien mira, asi que el DTO no tiene NINGUN campo de mensajero. Al reusarlo en /novedades, que la ve la TIENDA, el dato no existe en el camino: hay que anadirlo al DTO y a la proyeccion, no solo pintarlo. DECISION QUE EL IMPLEMENTADOR NO DEBE TOMAR SOLO: 'quien solicito la ayuda' y 'quien la lleva ahora' pueden ser personas distintas si la orden se reasigno despues. El actor de la transicion `solicitud_ayuda_tienda` esta en `orden_historial_estado` (verificado: hoy dice 'Mensajero para pruebas' en las dos ordenes vivas), y el asignado actual esta en `orden.mensajero_asignado_id`. Lo pedido literalmente es QUIEN SOLICITO; lo util para la tienda es A QUIEN LLAMAR. Si difieren hay que mostrar los dos o elegir con el humano. OJO: `MiAsignacionDTO` lo consumen tambien las dos listas del portal del mensajero; anadir el campo alli obligaria a emitirlo donde nadie lo lee. El precedente esta escrito en el propio codigo (`causa` e `intentosContacto` son campos PROPIOS de NovedadDTO por ese mismo motivo): el campo nuevo va en NovedadDTO, no en el contrato compartido. || CERRADA 2026-08-28 al mergear el PR #556 en dev. Demostrado que quien pide la ayuda y quien la lleva son la MISMA persona sobre este grupo, con la condicion de caducidad escrita al lado del campo. Solo el nombre: el telefono es PII de un tercero."
     },
     {
       "id": 297,
@@ -3679,11 +3679,11 @@
       "title": "la tienda no se entera de que su monto se redondeo al cargar",
       "description": "La carga ajusta el monto con centimos y lo informa, pero la pantalla del resumen no lo pinta: quien sube por pantalla ve otro numero sin saber por que.",
       "zone": "frontend",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "branch": "fix/304-aviso-monto-ajustado",
-      "status_note": "SALE DE LA 299 (2026-08-28) y el humano pidio arreglarla. El backend YA emite el aviso por fila (`montoAjustado: { original, aplicado }`), pero `carga-masiva-clasificacion.ts` solo conserva el `numRemision` de las filas creadas, asi que el dato llega al resumen y MUERE ahi. El integrador si lo ve (recibe el JSON crudo); la tienda que sube por pantalla no. NO hay que tocar backend."
+      "status_note": "SALE DE LA 299 (2026-08-28) y el humano pidio arreglarla. El backend YA emite el aviso por fila (`montoAjustado: { original, aplicado }`), pero `carga-masiva-clasificacion.ts` solo conserva el `numRemision` de las filas creadas, asi que el dato llega al resumen y MUERE ahi. El integrador si lo ve (recibe el JSON crudo); la tienda que sube por pantalla no. NO hay que tocar backend. || CERRADA 2026-08-28 al mergear el PR #554 en dev. Los montos se pintan con el formateador EXACTO de la 300; con el general, el aviso habria dicho 'de 11.899 a 11.899'."
     },
     {
       "id": 305,
@@ -3701,10 +3701,10 @@
       "title": "un comentario del modulo de ayuda afirma que el rechazo se le cobra a la tienda, y es falso",
       "description": "El codigo que gestiona una orden desde novedades documenta un cobro que no existe, y su archivo vecino dice justo lo contrario.",
       "zone": "backend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "baja",
-      "branch": null,
+      "branch": "fix/306-comentario-falso-ayuda",
       "status_note": "ENCONTRADA el 2026-08-28 en el barrido de la 303, no tocada por estar en otro modulo. `GestionarDesdeAyudaModal.tsx` (32-35) afirma que 'un rechazo cobra a la tienda el cobroRechazado'. FALSO dos veces: ese monto es ingreso de la BODEGA (feature 56) y a la tienda un rechazo le cuesta por otra via (flete de retorno + IVA). SU VECINO LO DESMIENTE: `NovedadAcciones.tsx:79-81` lo corrigio el 2026-08-20. Dos versiones del mismo hecho a dos archivos de distancia. El texto VISIBLE no atribuye nada mal: es prosa que engana a quien lea el codigo, y es la clase de dato que produjo la 303."
     },
     {
@@ -3712,11 +3712,11 @@
       "title": "el formulario de api key no deja elegir la tienda a cuyo nombre carga",
       "description": "El backend ya admite atar una clave a una tienda existente, pero la pantalla no ofrece elegirla, asi que la funcion no se puede usar.",
       "zone": "frontend",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "branch": "fix/307-selector-tienda-api-key",
-      "status_note": "SALE DE LA 302 (2026-08-28). El backend publica lo necesario y `listarAdminTiendas()` YA EXISTE y ya autoriza a maestro. Falta un select OPCIONAL 'Tienda destino' en `GenerarApiKeyForm.tsx` y, opcionalmente, una columna con el nombre en `ApiKeysModule.tsx`. SIN ESTO LA 302 NO SIRVE. OJO AL VACIO: el schema trata '' como 'ninguna', no como uuid invalido -- no lo conviertas en error."
+      "status_note": "SALE DE LA 302 (2026-08-28). El backend publica lo necesario y `listarAdminTiendas()` YA EXISTE y ya autoriza a maestro. Falta un select OPCIONAL 'Tienda destino' en `GenerarApiKeyForm.tsx` y, opcionalmente, una columna con el nombre en `ApiKeysModule.tsx`. SIN ESTO LA 302 NO SIRVE. OJO AL VACIO: el schema trata '' como 'ninguna', no como uuid invalido -- no lo conviertas en error. || CERRADA 2026-08-28 al mergear el PR #553 en dev. Con esto la 302 ya SIRVE: se puede generar la key de Nuform apuntando a la Nuform que ya existe."
     },
     {
       "id": 308,
@@ -3727,7 +3727,7 @@
       "sdd": false,
       "complexity": "baja",
       "branch": null,
-      "status_note": "ENCONTRADA el 2026-08-28 en el barrido de la 306, y es el MISMO defecto que esa ficha corrigio en un comentario, pero EN PIXELES y de cara al usuario. `RechazosSlaModule.tsx:132-138` pinta en negrita y SIN ETIQUETA un monto que sale de `ingreso_bodega_rechazo` -- verificado en `lib/types/rechazo-sla-tienda.ts:12` y `OrdenRepository.ts:4140`. Ese importe es de la BODEGA, no de la tienda, y el texto de vacio ('aparecera aca con su monto', linea 31) refuerza la lectura de que es un cobro suyo. CONTEXTO QUE LO HACE URGENTE: el 27/08 el cobro por rechazo de GAM llevaba dias en 0.00 sin que nadie lo viera, y esta pantalla es una de las que lo mostraria. DECIDIR: si se etiqueta ('Ingreso de la bodega'), si se sustituye por lo que SI le cuesta a la tienda (flete de retorno + IVA, `ingreso-ordenex.ts:177-182`) o si se retira. Es decision del humano."
+      "status_note": "ENCONTRADA el 2026-08-28 en el barrido de la 306, y es el MISMO defecto que esa ficha corrigio en un comentario, pero EN PIXELES y de cara al usuario. `RechazosSlaModule.tsx:132-138` pinta en negrita y SIN ETIQUETA un monto que sale de `ingreso_bodega_rechazo` -- verificado en `lib/types/rechazo-sla-tienda.ts:12` y `OrdenRepository.ts:4140`. Ese importe es de la BODEGA, no de la tienda, y el texto de vacio ('aparecera aca con su monto', linea 31) refuerza la lectura de que es un cobro suyo. CONTEXTO QUE LO HACE URGENTE: el 27/08 el cobro por rechazo de GAM llevaba dias en 0.00 sin que nadie lo viera, y esta pantalla es una de las que lo mostraria. DECIDIR: etiquetarlo, sustituirlo por lo que SI le cuesta a la tienda (flete de retorno + IVA) o retirarlo."
     },
     {
       "id": 309,
@@ -3738,7 +3738,7 @@
       "sdd": false,
       "complexity": "baja",
       "branch": null,
-      "status_note": "ENCONTRADA el 2026-08-28 en el barrido de la 306. `GESTION_AYUDA_AVISO_PRECIO` (`GestionarDesdeAyudaModal.tsx:119`) dice '...y mueve el dinero igual' y se pinta en los DOS modos. Al REPROGRAMAR no se mueve nada: `pago-mensajero.ts:22` da 0.00, `ingreso-bodega.ts:23` da 0.00 y `ingreso-ordenex.ts:185-186` no aporta a ningun concepto. Quien reprograma lee que le van a cobrar. Se puede defender como 'recibe el mismo trato que si lo hiciera el mensajero', pero el usuario no lee eso. ADEMAS, de otra familia y en el mismo modulo: `HabilitarNovedadModal.tsx:22-23,36-41` sigue diciendo 'MAQUETA: la transicion todavia no existe en el backend', falso desde la 235 -- `NovedadesModule.tsx:391` llama a `habilitarNovedad`."
+      "status_note": "ENCONTRADA el 2026-08-28 en el barrido de la 306. `GESTION_AYUDA_AVISO_PRECIO` (`GestionarDesdeAyudaModal.tsx:119`) dice '...y mueve el dinero igual' y se pinta en los DOS modos. Al REPROGRAMAR no se mueve nada: `pago-mensajero.ts:22`, `ingreso-bodega.ts:23` e `ingreso-ordenex.ts:185-186` dan cero. Quien reprograma lee que le van a cobrar. ADEMAS, de otra familia y en el mismo modulo: `HabilitarNovedadModal.tsx:22-23,36-41` sigue diciendo 'MAQUETA: la transicion todavia no existe en el backend', falso desde la 235."
     }
   ]
 }
