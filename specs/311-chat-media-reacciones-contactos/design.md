@@ -345,9 +345,11 @@ error de compilación, no otra burbuja vacía).
 - **Cuándo se baja (P3):** imagen y sticker cargan al montar la burbuja; audio, vídeo y documento
   esperan a una acción explícita del mensajero. Sin esto, cada refresco SWR de 10 s podría
   disparar descargas de vídeo por la red móvil del repartidor.
-- **Expiración (R24):** el estado `expirado` pinta el texto "Este archivo ya no está disponible
-  (WhatsApp lo elimina a los 30 días)" dentro de la burbuja, con el icono en `aria-hidden`. No es
-  un `toast`: el aviso pertenece al mensaje y debe seguir ahí al volver a mirarlo.
+- **Expiración (R24):** el estado `expirado` pinta el texto "Este archivo ya no está disponible."
+  dentro de la burbuja, con el icono en `aria-hidden`. No es un `toast`: el aviso pertenece al
+  mensaje y debe seguir ahí al volver a mirarlo. La copy **no** menciona los 30 días porque el
+  proxy también responde `expirado` cuando el `media_id` no existe en Meta (mismo `code: 100` que
+  un binario caducado), así que no siempre sería cierto.
 - **Accesibilidad (R28/R29/R31):** `alt` = caption si lo hay, si no "Imagen enviada por el
   cliente" / "Sticker enviado por el cliente"; `<audio controls>` y `<video controls>` con
   `aria-label` descriptivo; la descarga es un `<a download>` con el nombre visible como texto del

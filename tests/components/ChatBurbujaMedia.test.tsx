@@ -190,7 +190,6 @@ describe("Burbuja con adjunto (R24/R27/R28/R29)", () => {
       expect(screen.getByText(/ya no está disponible/i)).toBeInTheDocument();
     });
     expect(container.querySelector("img")).toBeNull();
-    expect(screen.getByText(/30 días/i)).toBeInTheDocument();
   });
 
   it("R24: un 410 en el audio tambien se explica; no se queda un reproductor mudo", async () => {
@@ -283,6 +282,99 @@ describe("Burbuja con adjunto (R24/R27/R28/R29)", () => {
     await userEvent.click(screen.getByRole("button", { name: /Reproducir video/i }));
 
     expect(await screen.findByLabelText("Video que enviaste")).toBeInTheDocument();
+  });
+
+  // Reintento tras un fallo. El adjunto que fallaba quedaba MUERTO hasta desmontar la burbuja:
+  // el efecto de descarga solo dependia de `pedido`, que tras el fallo ya valia `true`, asi que
+  // no se relanzaba ningun `fetch`. Por eso el assert que importa aqui es el NUMERO DE LLAMADAS
+  // al proxy, no que el boton exista.
+
+  it("Reintento: tras un 502 aparece el boton y al pulsarlo se pide OTRA VEZ el binario", async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 502, blob: async () => new Blob([]) });
+    pintar(mensaje("imagen"));
+
+    const reintentar = await screen.findByRole("button", {
+      name: "Reintentar la descarga de la imagen",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(reintentar);
+
+    // El binario se vuelve a pedir de verdad: segunda llamada al proxy, mismo id interno.
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe("/api/chat/media/msg-1");
+  });
+
+  it("Reintento: si el segundo intento responde 200 la burbuja queda lista y el aviso se va", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 502, blob: async () => new Blob([]) });
+    fetchMock.mockResolvedValue(respuestaOk());
+    pintar(mensaje("imagen"));
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Reintentar la descarga de la imagen" }),
+    );
+
+    const imagen = await screen.findByRole("img");
+    expect(imagen).toHaveAttribute("src", "blob:objeto-1");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Reintentar la descarga de la imagen" }),
+    ).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("Reintento: desde un 410 tambien hay salida, y el aviso de caducado sigue siendo texto", async () => {
+    fetchMock.mockResolvedValueOnce(respuestaExpirada());
+    fetchMock.mockResolvedValue(respuestaOk());
+    pintar(mensaje("imagen"));
+
+    await waitFor(() => {
+      expect(screen.getByText(/ya no está disponible/i)).toBeInTheDocument();
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Reintentar la descarga de la imagen" }),
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByRole("img")).toBeInTheDocument();
+    expect(screen.queryByText(/ya no está disponible/i)).toBeNull();
+  });
+
+  it("Reintento: el audio caducado ofrece reintentar con nombre accesible propio y repite la peticion", async () => {
+    fetchMock.mockResolvedValue(respuestaExpirada());
+    pintar(mensaje("audio", { media: { mime: "audio/ogg", nombre: null, tamanoBytes: null } }));
+
+    await userEvent.click(screen.getByRole("button", { name: /Reproducir nota de voz/i }));
+
+    const reintentar = await screen.findByRole("button", {
+      name: "Reintentar la descarga de la nota de voz",
+    });
+    expect(screen.getByText(/ya no está disponible/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(reintentar);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("Reintento: un fetch RECHAZADO (sin cobertura) tambien se puede reintentar", async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    fetchMock.mockResolvedValue(respuestaOk());
+    pintar(mensaje("imagen"));
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Reintentar la descarga de la imagen" }),
+    );
+
+    expect(await screen.findByRole("img")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("R27: ninguna burbuja con adjunto queda sin contenido perceptible", async () => {
