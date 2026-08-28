@@ -18,15 +18,24 @@ import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
  * enteros), y la guardia de la 299 declara ella misma que un `UPDATE` crudo se le escapa.
  *
  * QUE SE MIDE, y todo ejecutando el SQL REAL de los dos archivos de la migracion:
- *   1. FORMA EN DISCO: el up añade la constraint SIN `NOT VALID` y sin backfill; el down la
- *      suelta y no hace nada mas.
- *   2. COMPORTAMIENTO: entero y `NULL` pasan; centimos rebotan, tanto por INSERT como por el
+ *   1. FORMA EN DISCO: el up NORMALIZA lo viejo (`round`) y DESPUES añade la constraint, sin
+ *      `NOT VALID`; el down la suelta y no hace nada mas.
+ *   2. EL CASO QUE BLOQUEABA EL DESPLIEGUE: una base CON FILAS SUCIAS aplica la migracion SIN
+ *      abortar, y las filas quedan redondeadas con la MISMA regla que la carga de la 299.
+ *   3. COMPORTAMIENTO: entero y `NULL` pasan; centimos rebotan, tanto por INSERT como por el
  *      `UPDATE` a mano que es el camino que motiva la ficha.
- *   3. ALCANCE: la restriccion alcanza TAMBIEN a las ordenes BORRADAS (`deleted_at` no nulo).
- *      Es una decision, no un descuido, y se mide para que quede fijada.
- *   4. AL REVES (subir, bajar, volver a subir): tras el down los centimos vuelven a entrar —lo
- *      que prueba que era la constraint y no otra cosa la que rechazaba— y el segundo up ABORTA
- *      mientras esa fila sucia siga ahi, que es la señal correcta y no un fallo del rollback.
+ *   4. ALCANCE: la restriccion —y el backfill— alcanzan TAMBIEN a las ordenes BORRADAS
+ *      (`deleted_at` no nulo). Es una decision, no un descuido, y se mide para que quede fijada.
+ *   5. AL REVES (subir, bajar, volver a subir): tras el down los centimos vuelven a entrar —lo
+ *      que prueba que era la constraint y no otra cosa la que rechazaba— y el segundo up YA NO
+ *      aborta: redondea la fila sucia y sigue. Y el down NO deshace ese redondeo, que es la
+ *      unica parte del up que es irreversible.
+ *
+ * ⚠️ ESTE ARCHIVO FIJA UNA DECISION QUE CAMBIO. La primera version de la ficha 305 se escribio
+ * SIN backfill a proposito, y aqui habia tests que lo fijaban («no mueve una sola fila», «volver
+ * a subir ABORTA»). El humano decidio lo contrario el 2026-08-28 —el motivo esta en el docstring
+ * de `migration.sql`— y esos tests NO se borraron: se dieron la vuelta para fijar la decision
+ * NUEVA. Si alguien vuelve a quitar el `UPDATE`, esto se pone rojo.
  *
  * DONDE CORRE. En un esquema DESECHABLE, nunca sobre `public`. La base local es COMPARTIDA por
  * varios arboles de trabajo: aplicarle una migracion desde un test pondria rojo el gate de otra
@@ -79,11 +88,31 @@ describe("305 · forma en disco de la migracion", () => {
     expect(upExec).not.toMatch(/NOT VALID/i);
   });
 
-  it("no mueve una sola fila: aqui NO hay backfill", () => {
-    // Redondear desde la migracion seria mover dinero de una tienda sin que nadie lo decida.
-    expect(upExec).not.toMatch(/^\s*UPDATE\b/im);
+  it("el UP NORMALIZA lo viejo con `round`, y SOLO las filas que tienen centimos", () => {
+    // DECISION DEL 2026-08-28, que reemplaza a la contraria: en produccion esto no toca ni una
+    // fila (0 de 301, medido) y lo que limpia es basura de preview y de las bases locales, que
+    // es justo lo que hacia fallar el despliegue con 23514.
+    const updates = upExec.match(/UPDATE\s+"orden"/g) ?? [];
+    expect(updates).toHaveLength(1);
+    expect(upExec).toMatch(
+      /UPDATE\s+"orden"\s+SET\s+"monto_cobrar"\s*=\s*round\("monto_cobrar"\)/,
+    );
+    // El `WHERE` acota a lo desalineado: una fila ya entera NO se reescribe.
+    expect(upExec).toMatch(/"monto_cobrar"\s*<>\s*trunc\("monto_cobrar"\)/);
+    // Y NO lleva `deleted_at IS NULL`: alcanza tambien a las borradas, igual que la constraint.
+    // (El comportamiento se mide contra Postgres mas abajo; esto solo fija la forma.)
+    expect(upExec).not.toMatch(/deleted_at/i);
+    // Sigue sin crear ni borrar filas: normalizar no es inventar ni destruir.
     expect(upExec).not.toMatch(/^\s*INSERT\b/im);
     expect(upExec).not.toMatch(/^\s*DELETE\b/im);
+  });
+
+  it("el `UPDATE` va ANTES del `ADD CONSTRAINT`: al reves la restriccion abortaria primero", () => {
+    const iUpdate = upExec.search(/UPDATE\s+"orden"/);
+    const iConstraint = upExec.search(/ADD CONSTRAINT/);
+    expect(iUpdate).toBeGreaterThanOrEqual(0);
+    expect(iConstraint).toBeGreaterThanOrEqual(0);
+    expect(iUpdate).toBeLessThan(iConstraint);
   });
 
   it("no toca RLS ni ninguna otra tabla", () => {
@@ -91,6 +120,7 @@ describe("305 · forma en disco de la migracion", () => {
     expect(upExec).not.toMatch(/CREATE POLICY/i);
     expect(downExec).not.toMatch(/ROW LEVEL SECURITY/i);
     expect(upExec.match(/ALTER TABLE\s+"(\w+)"/g)).toEqual(['ALTER TABLE "orden"']);
+    expect(upExec.match(/UPDATE\s+"(\w+)"/g)).toEqual(['UPDATE "orden"']);
     expect(downExec.match(/ALTER TABLE\s+"(\w+)"/g)).toEqual(['ALTER TABLE "orden"']);
   });
 
@@ -124,6 +154,28 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("305 · la base rechaza un monto con centimo
       /"orden"/g,
       `"${esquema}"."orden"`,
     );
+  }
+
+  /**
+   * Aplica el archivo ENTERO en UNA SOLA transaccion, que es exactamente como Prisma ejecuta
+   * cada migracion. No es un detalle: desde que el up hace DOS cosas (redondear y restringir),
+   * lo que hay que poder afirmar es que no existe un instante en que una haya pasado y la otra
+   * no. Si el `ADD CONSTRAINT` abortara, el `UPDATE` se va con el.
+   */
+  function aplicar(archivo: "migration.sql" | "down.sql"): Promise<unknown> {
+    const sentencias = sqlDe(archivo)
+      .split(";")
+      .map((s) => s.trim())
+      .filter((s) => s !== "");
+    return db.$transaction(sentencias.map((s) => db.$executeRawUnsafe(s)));
+  }
+
+  /** El monto guardado, como texto (`"11899.00"`) o `null`. */
+  async function montoDe(id: string): Promise<string | null> {
+    const filas = await db.$queryRawUnsafe<Array<{ monto: string | null }>>(
+      `SELECT "monto_cobrar"::text AS monto FROM "${esquema}"."orden" WHERE "id" = '${id}'`,
+    );
+    return filas[0]?.monto ?? null;
   }
 
   /** La definicion de la constraint EN LA REPLICA, o `null` si no esta puesta. */
@@ -224,12 +276,37 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("305 · la base rechaza un monto con centimo
     await db.$executeRawUnsafe(`DELETE FROM "${esquema}"."orden"`);
   });
 
-  it("el UP real aplica y deja la constraint VALIDADA (no `NOT VALID`)", async () => {
-    await db.$executeRawUnsafe(sqlDe("migration.sql"));
+  // ESTE ES EL CASO QUE MOTIVA EL CAMBIO DE DECISION. La version sin backfill fallaba aqui con
+  // 23514, y por eso el despliegue a preview reboto TRES VECES. Con el `UPDATE` dentro, una base
+  // sucia entra sola: sin limpieza manual y sin dejar de proteger lo que viene despues.
+  it("CON FILAS SUCIAS DENTRO, el UP real entra SIN abortar, las redondea y valida", async () => {
+    await insertar("vieja-con-centimos", "11898.81");
+    await insertar("borrada-con-centimos-previa", "0.50", true);
+    await insertar("ya-entera", "11899");
+    await insertar("sin-monto-previa", null);
+
+    expect(
+      await rechazo(aplicar("migration.sql")),
+      "la migracion aborto con datos viejos sucios: es el bug que se esta cerrando",
+    ).toBeNull();
+
+    // La regla aplicada es la MISMA que la de la carga (299): `round()` de Postgres es half away
+    // from zero, igual que `Math.round` sobre un monto no negativo. `0.50` -> `1`, no `0`.
+    expect(await montoDe("vieja-con-centimos")).toBe("11899.00");
+    expect(await montoDe("borrada-con-centimos-previa")).toBe("1.00");
+    // El backfill alcanza a las BORRADAS por lo mismo que la constraint: si las exentara, la
+    // constraint abortaria por ellas y volveriamos al bloqueo.
+
+    // Y NO reescribe lo que ya estaba bien ni inventa un cero donde no habia monto.
+    expect(await montoDe("ya-entera")).toBe("11899.00");
+    expect(await montoDe("sin-monto-previa")).toBeNull();
+
     const puesta = await constraintPuesta();
-    expect(puesta).not.toBeNull();
+    expect(puesta, "el UP no dejo la constraint puesta").not.toBeNull();
     expect(puesta?.valida, "quedo NOT VALID: no protege lo que ya hay").toBe(true);
     expect(puesta?.def).toMatch(/trunc/);
+
+    await db.$executeRawUnsafe(`DELETE FROM "${esquema}"."orden"`);
   });
 
   it("un monto ENTERO entra, y `NULL` tambien (sin monto a cobrar es legitimo)", async () => {
@@ -271,7 +348,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("305 · la base rechaza un monto con centimo
   });
 
   it("AL REVES · el DOWN la suelta y los centimos vuelven a entrar", async () => {
-    await db.$executeRawUnsafe(sqlDe("down.sql"));
+    await aplicar("down.sql");
     expect(await constraintPuesta()).toBeNull();
     // Que ahora SI entre es lo que prueba que era la constraint —y no otra cosa— la que
     // rechazaba arriba.
@@ -279,21 +356,34 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("305 · la base rechaza un monto con centimo
   });
 
   it("AL REVES · el DOWN es idempotente: correrlo dos veces no es un error", async () => {
-    expect(await rechazo(db.$executeRawUnsafe(sqlDe("down.sql")))).toBeNull();
+    expect(await rechazo(aplicar("down.sql"))).toBeNull();
   });
 
-  it("AL REVES · volver a subir ABORTA mientras la fila sucia siga ahi, y eso es lo correcto", async () => {
-    // Es la propiedad que hace util a la migracion: valida lo que YA existe en vez de fiarse.
-    // Un `NOT VALID` habria pasado aqui en verde dejando la fila imposible de entregar dentro.
-    expect(await rechazo(db.$executeRawUnsafe(sqlDe("migration.sql")))).toBe(CONSTRAINT);
-    expect(await constraintPuesta()).toBeNull();
-  });
-
-  it("AL REVES · limpiada la fila, el segundo UP entra y vuelve a rechazar los centimos", async () => {
-    await db.$executeRawUnsafe(`DELETE FROM "${esquema}"."orden" WHERE "id" = 'sucia'`);
-    await db.$executeRawUnsafe(sqlDe("migration.sql"));
+  // Aqui vivia el test contrario («volver a subir ABORTA mientras la fila sucia siga ahi»), que
+  // fijaba la decision anterior. NO se borro: se dio la vuelta. La decision del 2026-08-28 es que
+  // la migracion normaliza lo viejo, y eso se mide justo aqui.
+  it("AL REVES · volver a subir con la fila sucia dentro YA NO ABORTA: la redondea", async () => {
+    expect(await montoDe("sucia")).toBe("11898.81");
+    expect(
+      await rechazo(aplicar("migration.sql")),
+      "aborto con 23514: es el fallo que rebotaba el despliegue de preview tres veces",
+    ).toBeNull();
+    expect(await montoDe("sucia")).toBe("11899.00");
     expect((await constraintPuesta())?.valida).toBe(true);
+  });
+
+  it("AL REVES · y con la restriccion de vuelta, un centimo NUEVO sigue rebotando", async () => {
+    // Que el up normalice lo VIEJO no lo vuelve permisivo con lo que llegue DESPUES.
     expect(await rechazo(insertar("otra-con-centimos", "11898.81"))).toBe(CONSTRAINT);
     expect(await rechazo(insertar("otra-entera", "12000"))).toBeNull();
+  });
+
+  it("AL REVES · el DOWN NO deshace el redondeo — y por eso el down lo dice por escrito", async () => {
+    // Es la unica parte del up que es IRREVERSIBLE, y no por descuido: `round` pierde el valor
+    // de origen. `11899` pudo venir de `11898.81`, de `11899.40` o de cualquier otro punto del
+    // intervalo, y la base no guarda cual. Un down que «devolviera los centimos» los inventaria.
+    await aplicar("down.sql");
+    expect(await constraintPuesta()).toBeNull();
+    expect(await montoDe("sucia"), "el down no puede resucitar los `.81`").toBe("11899.00");
   });
 });

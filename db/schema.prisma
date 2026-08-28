@@ -557,6 +557,9 @@ model Orden {
   // "restaure" en el modelo. El porque esta en el docstring de la migracion: con centimos la
   // orden no se puede entregar NUNCA (el desglose de pago solo admite enteros) y el 2026-08-27
   // hubo que redondear 14 ordenes a mano. La 299 cerro la carga; esto cierra el `UPDATE` a mano.
+  // Esa migracion ADEMAS redondea (`round`) las filas que ya tenian centimos, justo antes de
+  // añadir la restriccion: en produccion no toco ninguna (0 de 301, medido el 2026-08-28) y lo
+  // que limpia es basura de entornos de prueba, que era lo que bloqueaba el despliegue.
   montoCobrar            Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
   mensajeroAsignadoId    String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro); feature 159: unica fuente de verdad del mensajero de una orden
   asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas). OJO: desde la 246/D7 ya NO es la fuente unica del denominador del ranking — solo la RAMA DE RESPALDO, para las ordenes sin `fecha_reparto`
