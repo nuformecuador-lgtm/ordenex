@@ -3602,22 +3602,22 @@
       "title": "quien no entrego nada ese dia no ocupa podio ni puede cobrar premio",
       "description": "El podio puede quedar encabezado por alguien con cero entregas -- lo decide el orden alfabetico cuando todos empatan a 0% -- y ese puesto lleva premio en dinero.",
       "zone": "backend",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "media",
       "branch": "feature/297-podio-exige-una-entrega",
-      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27, con el caso delante: el podio del 26/08 quedo Andres 1o (0 de 21), Carlos 2o (0 de 25) y Johel 3o (0 de 37) -- NADIE entrego nada, todos empataron a 0% y el orden lo decidio el NOMBRE ALFABETICO (lib/ranking/orden-ranking.ts, criterio 4). El primer puesto llevaba 5.000.00 de premio. ALCANCE ELEGIDO POR EL HUMANO entre tres: la regla llega TAMBIEN AL PODIO, no solo al pago. Se descarto 'solo bloquear el pago' porque dejaria la contradiccion en pantalla -- un ganador con premio que el sistema se niega a pagar -- y se descarto exigir un minimo mayor (3 o 5) por ahora. DOS PIEZAS, y las dos hacen falta: (1) `asignarPodio` exige entregadas >= 1 para ser elegible, lo que cambia el ranking EN VIVO y los snapshots FUTUROS; (2) el registro del premio rechaza una fila de podio con entregadas = 0, que es lo unico que cubre los dias YA CONGELADOS -- el 26/08 sigue teniendo a Andres 1o con su premio, y sin esta guarda seguiria siendo pagable. NO SE REESCRIBEN los snapshots ya congelados: son historia. OJO: `orden-ranking.ts` lo comparten el ranking vivo y el snapshot A PROPOSITO ('reusar el criterio era el encargo, no reimplementarlo'), asi que el cambio va ahi y en ningun otro sitio."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27, con el caso delante: el podio del 26/08 quedo Andres 1o (0 de 21), Carlos 2o (0 de 25) y Johel 3o (0 de 37) -- NADIE entrego nada, todos empataron a 0% y el orden lo decidio el NOMBRE ALFABETICO (lib/ranking/orden-ranking.ts, criterio 4). El primer puesto llevaba 5.000.00 de premio. ALCANCE ELEGIDO POR EL HUMANO entre tres: la regla llega TAMBIEN AL PODIO, no solo al pago. Se descarto 'solo bloquear el pago' porque dejaria la contradiccion en pantalla -- un ganador con premio que el sistema se niega a pagar -- y se descarto exigir un minimo mayor (3 o 5) por ahora. DOS PIEZAS, y las dos hacen falta: (1) `asignarPodio` exige entregadas >= 1 para ser elegible, lo que cambia el ranking EN VIVO y los snapshots FUTUROS; (2) el registro del premio rechaza una fila de podio con entregadas = 0, que es lo unico que cubre los dias YA CONGELADOS -- el 26/08 sigue teniendo a Andres 1o con su premio, y sin esta guarda seguiria siendo pagable. NO SE REESCRIBEN los snapshots ya congelados: son historia. OJO: `orden-ranking.ts` lo comparten el ranking vivo y el snapshot A PROPOSITO ('reusar el criterio era el encargo, no reimplementarlo'), asi que el cambio va ahi y en ningun otro sitio. || CERRADA 2026-08-28 al mergear el PR #541 y abrir la release #543. Gate completo sobre dev: 20.336 verdes, 3 rojos ajenos."
     },
     {
       "id": 298,
       "title": "el panel de premios amontona la pantalla de cuentas por pagar",
       "description": "El apartado de premios se apila encima de la tabla de cuentas por pagar, en la misma seccion, y la pantalla quedo desordenada.",
       "zone": "frontend",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "branch": "fix/298-tabs-wallet-mensajeros",
-      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27, el mismo dia que se desplego la 293: 'al meter ese nuevo apartado en mensajeros creo desorden, separalo por tabs por lo menos'. VERIFICADO en app/(app)/wallet/mensajeros/page.tsx: `PremiosRankingPanel` y `CuentasPorPagarTable` cuelgan de la MISMA seccion, uno encima del otro. ALCANCE: separarlos en pestanas reusando el patron de tabs que el repo ya tiene (la 277 lo hizo en 'Por recoger' y el modulo de novedades tiene NovedadesTabs). NO se cambia ninguna regla de negocio ni el registro del premio: es disposicion. || IMPLEMENTADA 2026-08-27. Reusa TabsGroup (el mismo de NovedadesTabs), sin tabs propio. Pestana por defecto: Cuentas por pagar -- a esa pantalla se entra a pagar, el premio es un acto ocasional. La pestana NO va a la URL: los dos precedentes del repo la tienen en estado local y uno lo razona por escrito; ser el unico ?tab= seria inventar un contrato de URL. EL RIESGO ANTICIPADO ERA REAL Y ESTA MEDIDO: el refresco tras registrar un premio llega a quien este SUSCRITO a la clave, asi que desmontar el panel inactivo dejaba la cuenta por pagar sin actualizar. Con keepMounted hay segunda lectura; sin el, el test cae con 'expected 1 to be greater than 1'. Mutaciones: las dos pestanas con el mismo bloque -> 7 rojos cada una; sin keepMounted -> 1 rojo, justo el del refresco. Se retiro CON LAPIDA el caso que afirmaba que el panel iba ENCIMA de la tabla: el orden en el documento dejo de ser el contrato, que era precisamente el defecto."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27, el mismo dia que se desplego la 293: 'al meter ese nuevo apartado en mensajeros creo desorden, separalo por tabs por lo menos'. VERIFICADO en app/(app)/wallet/mensajeros/page.tsx: `PremiosRankingPanel` y `CuentasPorPagarTable` cuelgan de la MISMA seccion, uno encima del otro. ALCANCE: separarlos en pestanas reusando el patron de tabs que el repo ya tiene (la 277 lo hizo en 'Por recoger' y el modulo de novedades tiene NovedadesTabs). NO se cambia ninguna regla de negocio ni el registro del premio: es disposicion. || IMPLEMENTADA 2026-08-27. Reusa TabsGroup (el mismo de NovedadesTabs), sin tabs propio. Pestana por defecto: Cuentas por pagar -- a esa pantalla se entra a pagar, el premio es un acto ocasional. La pestana NO va a la URL: los dos precedentes del repo la tienen en estado local y uno lo razona por escrito; ser el unico ?tab= seria inventar un contrato de URL. EL RIESGO ANTICIPADO ERA REAL Y ESTA MEDIDO: el refresco tras registrar un premio llega a quien este SUSCRITO a la clave, asi que desmontar el panel inactivo dejaba la cuenta por pagar sin actualizar. Con keepMounted hay segunda lectura; sin el, el test cae con 'expected 1 to be greater than 1'. Mutaciones: las dos pestanas con el mismo bloque -> 7 rojos cada una; sin keepMounted -> 1 rojo, justo el del refresco. Se retiro CON LAPIDA el caso que afirmaba que el panel iba ENCIMA de la tabla: el orden en el documento dejo de ser el contrato, que era precisamente el defecto. || CERRADA 2026-08-28: PR #540 -> dev, release #543 -> prod."
     },
     {
       "id": 299,
@@ -3635,11 +3635,33 @@
       "title": "la pantalla de entrega dice 'Diferencia 0' y a la vez que el desglose no cuadra",
       "description": "Con un monto con centimos, la entrega muestra las cifras redondeadas y un error de descuadre al mismo tiempo, asi que el mensajero no puede saber que le piden.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "baja",
-      "branch": null,
+      "branch": "fix/300-entrega-monto-con-centimos",
       "status_note": "SALE DE LA 299 (2026-08-27). Aunque la 299 cierre la puerta de entrada, esto hay que arreglarlo igual: una orden vieja o llegada por otra via puede tener decimales, y hoy el mensajero se queda BLOQUEADO sin entender por que -- la pantalla afirma que la diferencia es cero. DOS PIEZAS: que lo mostrado y lo comparado sean el MISMO numero, y que el aviso de la carga diga que la fila se ajusto (la mitad de pantalla de la 299). NO se arregla subiendo decimales al input: esa decision esta razonada en components/shared/DesglosePagoField.tsx y no se reabre aqui."
+    },
+    {
+      "id": 301,
+      "title": "una devolucion no debe generar flete: solo lo entregado y lo rechazado",
+      "description": "Al aprobar un cierre, cada orden devuelta cobra flete de devolucion mas IVA a la tienda, y no deberia cobrar nada.",
+      "zone": "backend",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "media",
+      "branch": "fix/301-devuelta-no-genera-flete",
+      "status_note": "URGENTE, reportado por el humano el 2026-08-28 con dos cierres SOLICITADOS y sin aprobar esperando. NO ES UN BUG DE IMPLEMENTACION: `derivarIngresoOrden` (lib/utils/ingreso-ordenex.ts:155) cobra `ingreso_flete_devolucion` a `devuelta` Y a `rechazada` A PROPOSITO desde el diseno original (el enum del ledger lo documenta asi). El humano CAMBIA LA REGLA: solo entregada y rechazada generan flete; devuelta no genera nada. IMPACTO MEDIDO ANTES DE TOCAR NADA: los dos cierres pendientes suman 9 devueltas (5 de Andy Cortes, 4 de Johel Hernandez), a 2.400.00 de flete devuelto GAM + 13% de IVA = 24.408.00 que se cobrarian a las tiendas al aprobarlos. LLEGAMOS A TIEMPO, medido: wallet_movimiento y wallet_tienda_movimiento estan a CERO y hay CERO devueltas en cierres ya aprobados, asi que NO hay nada que corregir hacia atras. Esos dos cierres serian los primeros. EFECTO LATERAL BUENO: la ficha 247 (`el flete de devolucion se cobra dos veces cuando una devuelta acaba rechazada`) deja de tener objeto si la devuelta no cobra -- comprobarlo y cerrarla o reescribirla. REVISAR ADEMAS: CotizacionOrdenService (lo que se le promete al integrador), WalletTiendaFeedService y mapeo-concepto-tienda, que nombran el concepto."
+    },
+    {
+      "id": 302,
+      "title": "una api key puede cargar a nombre de una tienda que ya existe, sin duplicarla",
+      "description": "Generar una api key crea siempre una tienda nueva, asi que una tienda ya registrada acabaria con dos cuentas, dos saldos y sin sus tarifas en la segunda.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "media",
+      "branch": null,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-28: Nuform ya esta registrada y quiere cargar por API sin que 'se generen dos Nuform'. MEDIDO ANTES DE PROPONER: `ApiKeyService.generar` crea SIEMPRE usuario + key en una transaccion, con email y cedula sinteticos derivados del identificador (`apikey+<slug>@apikey.invalid`). Ese email no colisiona con el real de Nuform, asi que NO da error: crearia la segunda tienda EN SILENCIO. Consecuencias medidas: wallet y saldo separados, listados y analitica con dos Nuform, y la tienda nueva SIN tarifas -- la Nuform actual tiene exactamente 1 tarifa propia, y la nueva naceria con cero. POR QUE NO BASTA APUNTAR LA KEY AL USUARIO EXISTENTE: `ApiKeyAuthService` exige que la cuenta de la key tenga el rol `apiKey`, y lo comprueba en DOS capas (267). Nuform es `adminTienda`, asi que seria rechazada con forbidden. DISENO PROPUESTO POR EL LEADER: separar QUIEN ENTRA de QUIEN ES EL DUENO. La key conserva su cuenta dedicada -- portador de la credencial, con su rol restringido -- y las ordenes que cree se registran a nombre de la TIENDA REAL. Una sola Nuform en datos, sin tocar la postura de seguridad del canal. SE DESCARTA relajar la comprobacion de rol: una key filtrada actuaria con los permisos completos de la tienda, sesion web incluida. OJO AL COMENTARIO [D4] de ApiKeyAuthService ('el actor es el usuario dedicado de la key, dueño de las ordenes que cree'): esta ficha lo cambia, asi que hay que reescribirlo, no dejarlo mintiendo. EL MANUAL DEL INTEGRADOR NO CAMBIA: misma key `ordx_`, misma cabecera Authorization: Bearer, mismos endpoints y mismo formato. Es un cambio integramente de nuestro lado. SIN MIGRACION DE DATOS: hay CERO api keys en produccion, asi que no hay ninguna que reapuntar."
     }
   ]
 }

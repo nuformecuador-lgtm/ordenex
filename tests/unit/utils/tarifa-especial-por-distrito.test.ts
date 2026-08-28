@@ -148,18 +148,31 @@ describe("derivarIngresoOrden — el pacto es la BASE, el IVA se calcula sobre e
     expect(normal.ingreso_comision_cod?.toFixed(2)).toBe("1250.00"); // 5% de 25.000
   });
 
-  for (const resultado of ["devuelta", "rechazada"] as const) {
-    it(`${resultado} en distrito especial: usa el pacto de DEVOLUCION, no el de entrega`, () => {
-      const d = derivarIngresoOrden(
-        { ...ORDEN, resultado, esCentral: false, esZonaEspecial: true },
-        CON_PACTO,
-      );
-      expect(d.ingreso_flete_devolucion?.toFixed(2)).toBe("1200.00");
-      expect(d.ingreso_iva_flete_devolucion?.toFixed(2)).toBe("156.00"); // 1200 * 13%
-      // Y NO el de entrega, que es el error facil de cometer con dos columnas parecidas.
-      expect(d.ingreso_flete_devolucion?.toFixed(2)).not.toBe("2500.00");
-    });
-  }
+  it("rechazada en distrito especial: usa el pacto de DEVOLUCION, no el de entrega", () => {
+    const d = derivarIngresoOrden(
+      { ...ORDEN, resultado: "rechazada", esCentral: false, esZonaEspecial: true },
+      CON_PACTO,
+    );
+    expect(d.ingreso_flete_devolucion?.toFixed(2)).toBe("1200.00");
+    expect(d.ingreso_iva_flete_devolucion?.toFixed(2)).toBe("156.00"); // 1200 * 13%
+    // Y NO el de entrega, que es el error facil de cometer con dos columnas parecidas.
+    expect(d.ingreso_flete_devolucion?.toFixed(2)).not.toBe("2500.00");
+  });
+
+  it("ficha 301: el pacto de devolucion NO se aplica a una devuelta (no cobra nada)", () => {
+    // Hasta el 2026-08-28 este caso emitia los mismos 1.200,00 + 156,00 que el rechazo. El
+    // pacto especial sigue existiendo y sigue eligiendose bien; lo que ya no ocurre es que una
+    // devuelta llegue a usarlo, porque no deriva ningun concepto.
+    const d = derivarIngresoOrden(
+      { ...ORDEN, resultado: "devuelta", esCentral: false, esZonaEspecial: true },
+      CON_PACTO,
+    );
+    expect(d).toEqual({});
+    // `resolverFlete` (el que ELIGE el monto) no se toco: el pacto de devolucion sigue ahi.
+    expect(resolverFlete(CON_PACTO, { esCentral: false, esZonaEspecial: true }).fleteDevuelto.toFixed(2)).toBe(
+      "1200.00",
+    );
+  });
 
   it("distrito especial SIN pacto: el importe es el de siempre (no bloquea, no cobra 0)", () => {
     const sin = derivarIngresoOrden(

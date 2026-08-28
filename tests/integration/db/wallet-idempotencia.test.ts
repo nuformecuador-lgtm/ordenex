@@ -126,8 +126,8 @@ function casaResultado(resultado: string, filtro: WhereGestion["resultado"]): bo
  * `{count: n}` dejaria la guarda sin nadie que la mire, que es como el fallo de agosto llego a
  * `dev`.
  */
-function gestionOrdenFake() {
-  const filas = GESTIONES_EN_BASE.map((g) => ({
+function gestionOrdenFake(extras: readonly (typeof GESTIONES_EN_BASE)[number][] = []) {
+  const filas = [...GESTIONES_EN_BASE, ...extras].map((g) => ({
     ...g,
     confirmadaFisicaAt: null as Date | null,
   }));
@@ -230,6 +230,11 @@ function buildPrisma(
   const detalle = [
     { ordenId: "o1", tiendaId: "t1", montoCobrar: new Prisma.Decimal("10000.00"), cobraComision: true, esCentral: false, ...TARIFA_CONGELADA },
     { ordenId: "o2", tiendaId: "t1", montoCobrar: null, cobraComision: true, esCentral: false, ...TARIFA_CONGELADA },
+    // FICHA 301 (2026-08-28): `o4` es el RECHAZO, y existe porque la `devuelta` (o2) dejo de
+    // facturar. Sin el, el caso R6 pasaria de deduplicar 6 conceptos a deduplicar 4 y los dos
+    // de devolucion —que son dinero— saldrian del test. La fila solo la usa la gestion extra
+    // que ese caso inyecta; los demas casos no tienen ninguna gestion que la mire.
+    { ordenId: "o4", tiendaId: "t1", montoCobrar: null, cobraComision: true, esCentral: false, ...TARIFA_CONGELADA },
   ];
   const prisma = {
     cierreDia: cierreStore
@@ -288,7 +293,13 @@ beforeEach(async () => {
 describe("wallet idempotencia (R6/R13)", () => {
   it("R6: doble aprobacion del mismo cierre -> UN SOLO set de movimientos (skipDuplicates)", async () => {
     const store = makeWalletStore();
-    const prisma = buildPrisma(store);
+    // FICHA 301: hasta el 2026-08-28 los dos conceptos de devolucion los ponia la `devuelta`
+    // (g2) del cierre. Ya no los pone, asi que el cierre trae ademas un RECHAZO —el resultado
+    // que si los factura— para que este caso siga deduplicando los SEIS conceptos y no cuatro.
+    const gestiones = gestionOrdenFake([
+      { id: "g4", ordenId: "o4", cierreId: "c1", resultado: "rechazada", anuladaAt: null },
+    ]);
+    const prisma = buildPrisma(store, makeOrdenStore(), gestiones);
     const repo = makeRepo(prisma);
 
     const aprobar = () =>
@@ -311,9 +322,20 @@ describe("wallet idempotencia (R6/R13)", () => {
     // Cada par (cierre_dia, c1, categoria) aparece una sola vez.
     const claves = store.rows.map((r) => `${r.origenTipo}|${r.origenId}|${r.categoria}`);
     expect(new Set(claves).size).toBe(claves.length);
-    // El cierre solo-entregada+devuelta produce: flete, iva_flete, comision, iva_comision,
-    // flete_devolucion, iva_flete_devolucion (6 conceptos, ninguno duplicado).
+    // El cierre entregada + devuelta + rechazada produce: flete, iva_flete, comision,
+    // iva_comision, flete_devolucion, iva_flete_devolucion (6 conceptos, ninguno duplicado).
+    // Ficha 301: los dos ultimos los pone la RECHAZADA; la devuelta no aporta ninguno.
     expect(store.rows.length).toBe(6);
+    expect([...new Set(store.rows.map((r) => r.categoria))].sort()).toEqual(
+      [
+        "ingreso_comision_cod",
+        "ingreso_flete",
+        "ingreso_flete_devolucion",
+        "ingreso_iva_comision_cod",
+        "ingreso_iva_flete",
+        "ingreso_iva_flete_devolucion",
+      ].sort(),
+    );
   });
 
   // INVERTIDO el 2026-08-19 (feature 239, T2.3/T2.5). Este caso nacio el 2026-08-18 para mirar

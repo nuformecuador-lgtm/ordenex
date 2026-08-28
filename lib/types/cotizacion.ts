@@ -117,6 +117,12 @@ export interface CostosEntregado {
  * Los CINCO importes del escenario DEVUELTO (R27). SIN `ivaComision`: una
  * devolucion no cobra comision COD, asi que su IVA no existe. `comision` es el
  * cero EXPLICITO de R28 — nunca falta y nunca es `null`.
+ *
+ * FICHA 301 (2026-08-28): "devuelto" es el escenario en que el PAQUETE VUELVE a
+ * la tienda, y desde esa fecha eso es exactamente una gestion `rechazada` (ver
+ * `calcularEscenarios` en `CotizacionOrdenService`). Un intento fallido que
+ * queda como `devuelta` —reprogramable, recuperable— ya no factura nada. Los
+ * importes de esta interfaz NO cambiaron de valor con la 301.
  */
 export interface CostosDevuelto {
   flete: string;

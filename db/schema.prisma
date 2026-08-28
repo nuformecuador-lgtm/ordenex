@@ -1399,12 +1399,18 @@ enum WalletMovimientoTipo {
 // categorias `ingreso_*` (los 6 conceptos de Ordenex + `ingreso_ajuste` manual). Las
 // `egreso_*` quedan RESERVADAS para 43/44/45 (patron "reservar valores del enum" de la
 // feature 37), disponibles sin nueva migracion de enum.
+//
+// FICHA 301 (2026-08-28) — los dos conceptos de devolucion los emite SOLO `rechazada`. Hasta
+// esa fecha esta lista decia `devuelta/rechazada` y era verdad: `devuelta` cobraba lo mismo,
+// por diseño de la F1.4. El humano cambio la regla —una devuelta es un intento fallido que
+// sigue vivo, el paquete solo vuelve a la tienda cuando la gestion es `rechazada`— y los dos
+// values SIGUEN EXISTIENDO con el mismo monto: no se dropea ninguno.
 enum WalletMovimientoCategoria {
   ingreso_flete // entregada: valorFlete[Gam]
-  ingreso_flete_devolucion // devuelta/rechazada: valorFleteDevuelto[Gam] (A1)
+  ingreso_flete_devolucion // rechazada: valorFleteDevuelto[Gam] (A1; la devuelta ya no, ficha 301)
   ingreso_comision_cod // entregada + orden.cobraComision (Q1)
   ingreso_iva_flete // ivaFlete% sobre flete
-  ingreso_iva_flete_devolucion // ivaFlete% sobre flete de devolucion (A1)
+  ingreso_iva_flete_devolucion // ivaFlete% sobre flete de devolucion, o sea rechazada (A1/301)
   ingreso_iva_comision_cod // ivaComisionCod% sobre comision (solo si hubo comision)
   ingreso_ajuste // manual (F1.4-Q6)
   egreso_pago_tienda // reservado feature 43
@@ -1494,10 +1500,10 @@ enum WalletTiendaMovimientoCategoria {
   cod_recaudado
   // debitos (espejo 1:1 de los 6 conceptos de ingreso de la 42, R8)
   flete
-  flete_devolucion
+  flete_devolucion // solo desde una gestion `rechazada` (ficha 301: la devuelta no debita)
   comision_cod
   iva_flete
-  iva_flete_devolucion
+  iva_flete_devolucion // idem: `rechazada` (ficha 301)
   iva_comision_cod
   // pago/liquidacion (F1.4-Q4; RESERVADO aunque el pago sea follow-up)
   pago_tienda
