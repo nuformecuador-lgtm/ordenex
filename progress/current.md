@@ -16,11 +16,27 @@
 `specs/308-chat-media-reacciones-contactos/`: **35 requisitos R1–R35, los 35 mapeados** a un test
 con ruta y `assert` (trazabilidad verificada por el leader, ninguno huérfano).
 
-**⚠️ RENUMERADA DE 294 A 308 — cuarta colisión de ids del mes.** Mientras se escribía el spec, otra
-sesión tomó el **294** en `dev` para «una orden borrada bloquea para siempre su número de
-remisión». `dev` manda, mismo precedente que la 276→278. Se detectó **antes de crear la rama y
-antes de escribir un solo commit**, así que no queda historia con el número viejo: el spec se movió
-a `specs/308-…` y sus referencias internas están al día (0 ocurrencias de `294`, verificado).
+**⚠️ RENUMERADA DOS VECES: 294 → 299 → 308.** Las dos por lo mismo, y la segunda es la que
+importa.
+
+- **294 → 299 (2026-08-27).** Mientras se escribía el spec, otra sesión tomó el **294** en `dev`
+  para «una orden borrada bloquea para siempre su número de remisión». Se detectó **antes de crear
+  la rama y antes del primer commit**, así que no quedó historia con el número viejo.
+- **299 → 308 (2026-08-28), destapada por el REVIEWER, no por el gate.** Mientras se implementaba,
+  `dev` llegó a **307** y su 299 pasó a ser «la carga deja entrar montos con decimales» (PR #549).
+  Esta vez **sí había historia**: cinco commits `feat(299)` y la rama se llamaba
+  `feature/299-…`. Como no estaba pusheada, se renombró también el slug (58 archivos); los
+  mensajes de commit ya escritos siguen diciendo 299 y **no se reescriben: son historia**.
+
+`dev` manda en ambos casos, mismo precedente que la 276→278 de la tanda del 24.
+
+**⚠️ LO QUE ESTO DESTAPA, Y ES MÁS GRAVE QUE LA FICHA:** ninguna de las dos colisiones la vio el
+gate. `jq` **no está instalado** en esta máquina y en `init.sh:35` eso es un `warn`, no un `fail`,
+así que **todo el bloque de validación de `feature_list.json` (línea 52) se salta entero**: ni la
+regla de máximo 2 `in_progress` por zona —la regla 1 de `CLAUDE.md`, marcada como no negociable—
+ni la correspondencia ficha↔spec. Y los **ids duplicados no se comprueban ni con `jq`**. Las dos
+colisiones las cazó una lectura humana. Pendiente de decisión del humano: reescribir esas
+validaciones en `node` (que sí está disponible) para que sean incondicionales.
 
 **El bug que la origina.** `tipoDeMeta` (`lib/types/whatsapp-webhook.ts`) solo mapea `text` y
 `location`; todo lo demás cae en `otro` con `cuerpo: null`, y `ChatConversacion.tsx` pinta

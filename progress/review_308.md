@@ -150,18 +150,18 @@ se toca), R28/R29/R31/R32/R33 (componentes, con `getByLabelText`, `role="status"
 
 ## Hallazgos
 
-### BLOQUEANTE 1 — colision de id: el 308 ya esta ocupado en `dev`
+### BLOQUEANTE 1 (RESUELTO el 2026-08-28) — colision de id: el 299 ya estaba ocupado en `dev`
 
-`origin/dev` trae desde `1b5cc90a` (PR #549) una ficha **id 308** distinta: *"la carga deja entrar
+`origin/dev` trae desde `1b5cc90a` (PR #549) una ficha **id 299** distinta: *"la carga deja entrar
 montos con decimales que la entrega no sabe cobrar"*, `status: done`, rama
-`fix/308-carga-redondea-montos`. Esta rama **anade otra entrada con id 308**. Al mergear,
+`fix/299-carga-redondea-montos`. Esta rama anadia **otra entrada con id 299**. Al mergear,
 `feature_list.json` queda con dos fichas del mismo id, y todo el rastro de esta feature (rama,
-`specs/308-...`, prefijo de los commits) apunta a un numero que en `dev` significa otra cosa.
+`specs/299-...`, prefijo de los commits) apuntaba a un numero que en `dev` significa otra cosa.
 `./init.sh` NO lo detecta: no valida ids duplicados y ademas `jq` no esta instalado en esta
 maquina, asi que ni el cupo por zona ni la comprobacion de specs llegan a correr.
 
 **Que falta:** renumerar la ficha al siguiente id libre **conservando el slug de la rama**
-(precedente 276→278, y el propio 294→308 de esta), mover el directorio del spec y dejarlo dicho en
+(precedente 276→278, y el propio 294→299 de esta), mover el directorio del spec y dejarlo dicho en
 el `status_note`. Es el mismo accidente que la nota de `history.md` de esta misma rama documenta
 para la 278.
 
@@ -268,7 +268,65 @@ quedar marcada como NO hecha en vez de omitida.
 
 **RECHAZADO.** El diseno y la implementacion son solidos —la autorizacion del proxy, la PII, el XSS
 y el forzado de descarga estan bien resueltos, y lo verifique rompiendo el codigo—, pero hay
-**cuatro bloqueantes**: la colision del id 308 con `dev` (B1), `tasks.md` sin marcar (B2), la
+**cuatro bloqueantes**: la colision del id 299 con `dev` (B1, ya resuelta), `tasks.md` sin marcar (B2), la
 bitacora `impl_308` inexistente e incompleta (B3) y el 500 al descargar un adjunto con nombre no
 Latin-1 (B4). B1–B3 son minutos de bookkeeping; B4 es un cambio de una linea en
 `sanearNombreArchivo` mas su test. Vuelve al implementer.
+
+---
+
+## Addenda — re-chequeo del 2026-08-28 (tras la renumeracion 299 → 308)
+
+El leader aplico `64464b9b chore(308): renumerada de 299 a 308`, que ataca el bloqueante 1.
+Comprobado por mi sobre el arbol resultante:
+
+| Bloqueante | Estado |
+| --- | --- |
+| B1 colision de id | **RESUELTO.** `feature_list.json` no tiene ids duplicados (`uniq -d` vacio); la ficha es id 308, `specs/308-chat-media-reacciones-contactos/`, y no queda ninguna referencia residual a 299 en los archivos de la feature (las `#299` que sobreviven son a un PR viejo, correctamente protegidas). |
+| B2 `tasks.md` sin marcar | **ABIERTO:** 0 marcadas / 29 sin marcar. |
+| B3 bitacora `impl_308.md` | **ABIERTO:** solo `progress/impl_308_backend.md`, con 27 de 35 requisitos y la seccion "Pendiente para el frontend". |
+| B4 filename no Latin-1 → 500 | **ABIERTO:** `sanearNombreArchivo` sigue sin filtrar por encima de U+00FF. |
+
+**La renumeracion no rompio nada:** `pnpm typecheck` verde y los 19 archivos de test de la feature
+en **262 verdes / 0 rojos** despues del cambio (58 archivos tocados, casi todos comentarios).
+
+### Efecto colateral de la renumeracion, que corregi en este mismo archivo
+
+El `sed` global de 299 a 308 **reescribio tambien las citas del numero VIEJO**, que estaban aqui a
+proposito para documentar la colision. El bloqueante 1 acabo afirmando que *"el 308 ya esta ocupado
+en dev"* y citando una rama `fix/308-carga-redondea-montos` que no existe: el registro de por que
+hubo que renumerar quedaba diciendo lo contrario de lo que paso. Restaurado a mano (la ficha de
+`dev` es la **299**, rama `fix/299-carga-redondea-montos`).
+
+**La leccion, que es del arnes y no de esta feature:** un renumerado masivo por `sed` no distingue
+"el id de esta ficha" de "el id que se cita como historia". Los textos que EXPLICAN una colision
+son justo los que no deben renumerarse, y son invisibles al ojo porque el resultado sigue leyendose
+bien.
+
+### menor M7 (nuevo) — el registro de la primera colision quedo reescrito en tres sitios
+
+Lo verifique despues de escribir el parrafo de arriba, y **la sospecha se confirma**. El `sed` de
+`64464b9b` reescribio la narracion historica en:
+
+1. **`status_note` de la ficha en `feature_list.json`:** *"RENUMERADA DE 294 A 308 el 2026-08-27,
+   ANTES de crear la rama y sin ningun commit escrito con el numero viejo"*.
+2. **`progress/current.md` (linea 19):** *"RENUMERADA DE 294 A 308 — cuarta colision de ids del
+   mes"*, describiendo solo el evento del 294.
+3. **`progress/history.md` (linea 4368):** *"La ficha 308 (chat: media y reacciones) nacio como 294
+   y se renumero por lo mismo tres dias despues"*.
+
+Las tres afirman ahora un salto **294 → 308 el 2026-08-27** que NO ocurrio: ese dia la ficha paso
+de 294 a **299**, y el salto a 308 es del **2026-08-28**, un evento distinto y posterior. Peor, la
+clausula *"ANTES de crear la rama y sin ningun commit escrito con el numero viejo"* era cierta del
+294 y es **falsa del 308**: hay cinco commits escritos como `feat(299)` y la rama se llamaba
+`feature/299-...` (el propio mensaje de `64464b9b` lo reconoce al justificar que renombra tambien
+el slug).
+
+El efecto es que **la segunda colision desaparece del registro**, justo la que destapo el hueco del
+arnes que ese mismo commit dice querer anotar: `init.sh` no valida ids duplicados en
+`feature_list.json`. No lo arreglo yo (es bookkeeping del leader); lo dejo medido y localizado.
+
+### Veredicto tras la addenda
+
+**Sigue RECHAZADO**, ahora con **tres** bloqueantes abiertos: B2, B3 y B4. B4 es el unico de
+codigo.
