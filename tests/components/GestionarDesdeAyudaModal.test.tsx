@@ -17,6 +17,16 @@
 // no es suyo del todo — dispara ingreso de bodega en el cierre de otra persona y un cargo a su
 // propia tienda por otra vía.
 //
+// ⚠️ **FICHA 309 (2026-08-28) — TODO ESO ES DEL MODO `rechazar`, Y HASTA HOY EL AVISO LO DECÍA
+// TAMBIÉN AL REPROGRAMAR.** Era un literal único para los dos modos, con la frase «mueve el dinero
+// igual». Reprogramar no mueve nada —los tres sitios que deciden el dinero de una gestión dan cero
+// para `reprogramada`— así que la pantalla estaba disuadiendo de la acción barata y empujando hacia
+// la única que sí cobra. Este archivo lo tenía FIJADO como contrato («y también al REPROGRAMAR») y
+// el caso pasaba en verde: no bastaba con que los literales estuvieran escritos a mano, había que
+// escribir el contrato POR MODO. La asimetría vive ahora en cinco casos emparejados: los dos
+// literales completos, las consecuencias de cada uno, y la ausencia/presencia de la palabra
+// «dinero» sobre el diálogo entero.
+//
 // ⚠️ **LOS TEXTOS SE ESCRIBEN AQUÍ A MANO, NUNCA CONTRA LA CONSTANTE IMPORTADA.** Comparar el
 // aviso contra `GESTION_AYUDA_AVISO_PRECIO` estaría verde con cualquier contenido, incluido el día
 // que alguien lo vacíe o le quite la palabra «dinero». En esta misma rama se acaban de arreglar dos
@@ -51,8 +61,23 @@ const gestionarMock = vi.mocked(gestionarDesdeAyuda);
 // --- Los literales, escritos a mano. Son el contrato visible de D7. ------------------------------
 
 const TITULO = "Resolver la orden por tu cuenta";
-const AVISO_PRECIO =
+/**
+ * FICHA 309 (2026-08-28) — SON DOS AVISOS, UNO POR MODO, Y ESA ASIMETRÍA ES EL CONTRATO.
+ *
+ * Hasta hoy había UN literal para los dos modos y decía «mueve el dinero igual» también al
+ * reprogramar, donde no se mueve ni un colón: `pagoPorResultado` sólo paga `entregada`,
+ * `ingresoBodegaPorResultado` sólo cobra en `rechazada` y `derivarIngresoOrden` sólo emite
+ * conceptos para esas dos desde la ficha 301. Quien reprogramaba leía en rojo que le iban a cobrar.
+ *
+ * Los dos literales van A MANO, como todos los de este archivo, y NO se importa
+ * `GESTION_AYUDA_AVISO`: compararlos contra la constante que los produce estaría verde el día que
+ * alguien vuelva a poner la frase del dinero en el modo reprogramar, que es exactamente la recaída
+ * que estos casos existen para cazar.
+ */
+const AVISO_RECHAZAR =
   "Esto cuenta como una gestión del mensajero: entra en su cierre del día, suma un intento de entrega y mueve el dinero igual. Por eso pide foto y motivo.";
+const AVISO_REPROGRAMAR =
+  "Esto cuenta como una gestión del mensajero: entra en su cierre del día y suma un intento de entrega. Reprogramar no cobra nada. Por eso pide foto y motivo.";
 const LABEL_FOTOS = "Fotos de evidencia";
 const LABEL_MOTIVO = "Motivo";
 const LABEL_FECHA = "Nueva fecha";
@@ -151,26 +176,57 @@ describe("237/D7 — el aviso del precio, que es lo que evita cobrar ₡1.000 si
   it("se lee TAL CUAL, palabra por palabra, al RECHAZAR", () => {
     montar("rechazar");
     // El literal, a mano. Dice las tres consecuencias: el cierre AJENO, el intento y el dinero.
-    expect(screen.getByText(AVISO_PRECIO)).toBeInTheDocument();
+    expect(screen.getByText(AVISO_RECHAZAR)).toBeInTheDocument();
   });
 
-  it("y también al REPROGRAMAR: no es un aviso del rechazo, es de las dos", () => {
-    // Reprogramar desde ayuda también suma un intento y mueve el reloj del plazo. Si el aviso
-    // sólo saliera al rechazar, la reprogramación sería la acción barata sin advertencia — que es
-    // exactamente lo que D2 y D7 vinieron a impedir.
+  it("y también al REPROGRAMAR hay aviso: no es un aviso del rechazo, es de las dos", () => {
+    // Reprogramar desde ayuda también entra en el cierre de OTRA persona y suma un intento. Si no
+    // hubiera aviso al reprogramar, sería la acción barata y sin advertencia — que es exactamente
+    // lo que D2 y D7 vinieron a impedir. Por eso la ficha 309 cambió la FRASE, no el aviso.
     montar("reprogramar");
-    expect(screen.getByText(AVISO_PRECIO)).toBeInTheDocument();
+    expect(screen.getByText(AVISO_REPROGRAMAR)).toBeInTheDocument();
   });
 
-  it("nombra las TRES consecuencias, no una fórmula vaga", () => {
+  it("nombra las TRES consecuencias al RECHAZAR, no una fórmula vaga", () => {
     // Anti-degradación: un «esta acción tiene consecuencias» pasaría el caso de arriba si alguien
     // reescribiera el texto, pero no éste. Las tres cosas que la tienda no puede deducir de la
     // pantalla son: en el cierre de OTRA persona, un intento MÁS, y DINERO.
     montar("rechazar");
-    const aviso = screen.getByText(AVISO_PRECIO);
+    const aviso = screen.getByText(AVISO_RECHAZAR);
     expect(aviso).toHaveTextContent("cierre del día");
     expect(aviso).toHaveTextContent("suma un intento de entrega");
     expect(aviso).toHaveTextContent("mueve el dinero igual");
+  });
+
+  it("y al REPROGRAMAR nombra las DOS que sí son ciertas, sin la del dinero", () => {
+    // 309: el cierre ajeno y el intento SIGUEN, porque siguen siendo verdad en los dos modos. Lo
+    // que desaparece es la tercera. Sin este caso, «arreglar» el aviso vaciándolo pasaría.
+    montar("reprogramar");
+    const aviso = screen.getByText(AVISO_REPROGRAMAR);
+    expect(aviso).toHaveTextContent("cierre del día");
+    expect(aviso).toHaveTextContent("suma un intento de entrega");
+    // Y lo dice EN POSITIVO, que es la mitad de la ficha: no basta con callar el cobro, hay que
+    // desmentirlo, porque el modo hermano de la misma ventana sí cobra.
+    expect(aviso).toHaveTextContent("Reprogramar no cobra nada");
+  });
+
+  it("💰 EL CASO DE LA FICHA 309: reprogramar NO menciona dinero en ninguna parte de la ventana", () => {
+    // ⚠️ ESTE ES EL CASO QUE MUERDE, y va sobre el diálogo ENTERO y no sobre el `<p>` del aviso: si
+    // mañana alguien vuelve a colar la frase del cobro —en el aviso, en la ayuda del motivo o en la
+    // de las fotos—, se pone rojo igual. Verificado contra el código el 2026-08-28:
+    // `pagoPorResultado` (pago-mensajero.ts:22) y `ingresoBodegaPorResultado` (ingreso-bodega.ts:23)
+    // devuelven "0.00" para `reprogramada`, y `derivarIngresoOrden` (ingreso-ordenex.ts:185-186) no
+    // le emite ningún concepto. Anunciar un cobro que no existe no es un texto feo: es la pantalla
+    // disuadiendo de la acción BARATA y empujando hacia la que sí cuesta ₡2.600 más IVA.
+    montar("reprogramar");
+    expect(screen.getByRole("dialog")).not.toHaveTextContent("dinero");
+  });
+
+  it("el ESPEJO: al rechazar sí lo menciona, porque ahí el dinero sí se mueve", () => {
+    // La presencia que empareja la ausencia de arriba (regla de este archivo): sin ella, el caso
+    // anterior seguiría verde el día que el aviso desapareciera de los dos modos.
+    montar("rechazar");
+    expect(screen.getByRole("dialog")).toHaveTextContent("mueve el dinero igual");
   });
 
   it("está SIEMPRE visible, no escondido tras un tooltip ni tras un despliegue", () => {
@@ -178,7 +234,15 @@ describe("237/D7 — el aviso del precio, que es lo que evita cobrar ₡1.000 si
     // se descubre pasando el puntero: en una pantalla táctil no hay puntero que pasar.
     montar("rechazar");
     const notas = screen.getAllByRole("note").map((n) => n.textContent);
-    expect(notas).toContain(AVISO_PRECIO);
+    expect(notas).toContain(AVISO_RECHAZAR);
+  });
+
+  it("y al reprogramar también es `note` y también está siempre visible", () => {
+    // El par del caso de arriba en el otro modo: la ficha 309 no podía dejar el aviso del modo
+    // reprogramar degradado a un texto suelto sin rol.
+    montar("reprogramar");
+    const notas = screen.getAllByRole("note").map((n) => n.textContent);
+    expect(notas).toContain(AVISO_REPROGRAMAR);
   });
 
   it("y el título NO usa el verbo «gestionar», que es el del mensajero (236/D6)", () => {

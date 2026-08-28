@@ -18,9 +18,9 @@ export interface HabilitarNovedadModalProps {
    * Confirmación con la nota YA validada y recortada (nunca vacía): el modal garantiza la
    * obligatoriedad, el consumidor decide qué hacer con ella.
    *
-   * Hoy el consumidor sólo avisa de que la acción no está disponible (maqueta declarada,
-   * ver `NovedadAcciones`), pero la firma es la definitiva: el día que exista la Server
-   * Action, se cablea aquí sin tocar este archivo.
+   * El consumidor es `NovedadesModule.habilitar`, que llama a la Server Action
+   * `habilitarNovedad`: publica esta nota en el hilo de la orden y la devuelve a la ruta.
+   * La firma nunca cambió al cablearse, que es lo que este comentario prometía.
    */
   onConfirmar: (nota: string) => void | Promise<void>;
 }
@@ -34,12 +34,19 @@ export interface HabilitarNovedadModalProps {
  * tienda ya dio por devuelta no deja más rastro que el que alguien escriba: sin nota, el
  * historial no puede decir POR QUÉ volvió a circular.
  *
- * ⚠️ MAQUETA: la transición todavía no existe en el backend. Lo que este archivo garantiza
- * hoy es la regla de superficie —no se puede confirmar sin nota— y no hay ningún borde
- * detrás que la revalide, porque no hay borde. Cuando lo haya, la validación de zod es
- * obligatoria igual: esta guarda es de UI y una guarda de UI no protege un dato (mismo
- * criterio que `ReprogramarNovedadModal`, cuya guarda de fecha convive con el `refine` del
- * schema).
+ * ⚠️ ESTE BLOQUE DECÍA «MAQUETA: la transición todavía no existe en el backend» HASTA EL
+ * 2026-08-28 (ficha 309), Y ERA FALSO DESDE NUEVE DÍAS ANTES. La transición existe desde la
+ * feature 235 (2026-08-19): confirmar aquí llega a la Server Action `habilitarNovedad`, que
+ * publica la nota en el hilo y delega en el punto único de rescate —el MISMO que usa
+ * «Recuperar» del lado del mensajero— para devolver la orden a la ruta
+ * (`ayuda_tienda → en_reparto`). Se cuenta en vez de borrarlo porque el aviso caducado es más
+ * peligroso que no tener ninguno: invita a cablear por segunda vez algo ya cableado.
+ *
+ * SÍ HAY BORDE, y por eso la nota se valida DOS VECES: `habilitarNovedadSchema`
+ * (`lib/types/novedad-habilitar.ts`) la exige no vacía y acotada al mismo tope que una nota del
+ * hilo. Lo que este archivo garantiza es la regla de superficie —no se puede confirmar sin
+ * nota— y esa guarda NO es la defensa: una guarda de UI no protege un dato (mismo criterio que
+ * `ReprogramarNovedadModal`, cuya guarda de fecha convive con el `refine` del schema).
  */
 export function HabilitarNovedadModal({
   orden,
