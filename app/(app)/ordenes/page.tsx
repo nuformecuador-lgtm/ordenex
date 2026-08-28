@@ -78,6 +78,19 @@ export default async function OrdenesPage() {
   // `/recepcion-satelite`. Hoy, en la práctica, sólo maestro/admin tienen desde dónde reportar.
   const puedeReportarIncidente = rol ? esAccesoTotal(rol) : false;
 
+  // Ficha 312 (E2, design §9.1): accion POR FILA "Corregir datos" (destinatario, telefono,
+  // producto y notas), para roles de ACCESO TOTAL.
+  //
+  // NO va por `accionesLote` aunque hoy coincida el predicado, y no es duplicacion: un lote no
+  // tiene un «destinatario» comun, asi que la correccion no puede ser una accion de barra. Se
+  // declara aparte para que nadie la meta ahi al leer esto dentro de seis meses.
+  //
+  // ⚠️ El `adminTienda` NO la recibe, y es deliberado (D2): tambien opera en `/ordenes`
+  // (`usaFiltroEstado` lo incluye), pero su superficie de correccion son las cards de
+  // `/novedades` —sobre sus propias ordenes y en los dos grupos—. El servidor lo autoriza
+  // igualmente ahi, no aqui.
+  const puedeCorregirDatos = rol ? esAccesoTotal(rol) : false;
+
   // Pedido humano (2026-08-27): ELIMINAR una orden —y RECUPERAR una eliminada, y verlas
   // siquiera— es SOLO del `maestro`. No es `esAccesoTotal` y no es un descuido que no lo sea:
   // el borrado retira la orden de los listados de la tienda dueña y del mensajero asignado, y
@@ -137,6 +150,7 @@ export default async function OrdenesPage() {
           incluirFiltroReasignables={incluirFiltroReasignables}
           incluirFiltroMensajero={incluirFiltroMensajero}
           puedeReportarIncidente={puedeReportarIncidente}
+          puedeCorregirDatos={puedeCorregirDatos}
           puedeEliminar={puedeEliminar}
           fechasDiaReparto={fechasDiaReparto}
         />

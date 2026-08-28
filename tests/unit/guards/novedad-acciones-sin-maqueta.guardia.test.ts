@@ -379,7 +379,7 @@ export const x = 1;`,
     ).toBe("");
   });
 
-  it("el censo LEYÓ el árbol de verdad: hay archivos, con código, y las ocho entradas", () => {
+  it("el censo LEYÓ el árbol de verdad: hay archivos, con código, y las nueve entradas", () => {
     // Anti-vacuidad. Una guardia que no encuentra nada denuncia cero infracciones y su verde es
     // indistinguible del bueno.
     expect(FUENTES.length).toBeGreaterThanOrEqual(8);
@@ -393,7 +393,12 @@ export const x = 1;`,
       ...ACCIONES_SIN_GRUPO,
     ]);
     expect(Object.keys(PRODUCTOR_POR_ACCION).sort()).toEqual([...declaradas].sort());
-    expect(Object.keys(PRODUCTOR_POR_ACCION)).toHaveLength(8);
+    // ⚠️ FICHA 312 (F1, 2026-08-28): pasa de OCHO a NUEVE. La novena es `corregirDatos`, y entra
+    // en los DOS grupos con UNA sola clave (design §9.2): es la misma operacion, el mismo
+    // servicio y la misma ventana en ayuda y en devolucion, asi que partirla obligaria a
+    // `NovedadAcciones` a ramificar por grupo para llamar a lo mismo. El literal se actualiza a
+    // mano, como sus hermanos.
+    expect(Object.keys(PRODUCTOR_POR_ACCION)).toHaveLength(9);
     // Y hay de las DOS clases: si todas fueran `sinOperacion`, los frentes 1 y 2 no ejercerían
     // nada; si ninguna lo fuera, el frente 3 tampoco.
     expect(entradasConProductor().length).toBeGreaterThanOrEqual(6);
@@ -492,6 +497,12 @@ describe("240/R38 — y algún archivo de la pantalla la LLAMA", () => {
       return `${accionServidor} ← ${importadores.sort().join(", ")}`;
     });
     expect(mapa.sort()).toEqual([
+      // ⚠️ FICHA 312 (F2, 2026-08-28) — la fila nueva. Quien dispara la correccion es
+      // `NovedadesModule` y NO la ventana, que es COMPARTIDA con el modulo de ordenes y vive en
+      // `app/(app)/ordenes/_components/`. Si la llamada estuviera alli dentro, este frente diria
+      // «nadie la importa» y estaria en lo cierto: el cable se ve en la pantalla que ofrece el
+      // boton, que es exactamente lo que esta guardia existe para exigir.
+      "corregirDatosCliente ← NovedadesModule.tsx",
       "gestionarDesdeAyuda ← GestionarDesdeAyudaModal.tsx",
       "gestionarDesdeAyuda ← GestionarDesdeAyudaModal.tsx",
       "habilitarNovedad ← NovedadesModule.tsx",
