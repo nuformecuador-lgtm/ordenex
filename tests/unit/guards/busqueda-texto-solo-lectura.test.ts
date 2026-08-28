@@ -46,12 +46,35 @@ const EXTENSIONES = new Set([".ts", ".tsx"]);
  * justo lo que esta guardia protege: si manana alguien mete un `busquedaTexto` de verdad en
  * cualquiera de esos dos, ahora sale ROJO. Los dos siguen pudiendo DOCUMENTARLA cuanto
  * quieran; lo que ya no pueden es usarla en silencio.
+ *
+ * FEATURE 321 — entra un CUARTO archivo, `lib/repositories/HistoricoConversacionesRepository.ts`,
+ * y entra como LECTOR, JAMAS como escritor. El historico de conversaciones busca por texto libre
+ * (R36, design §1.2) sobre los mismos campos que la columna ya indexa —destinatario, num_guia,
+ * num_remision, telefono, producto—, que es literalmente para lo que existe: reusarla evita un
+ * segundo indice trigram sobre `orden` y una segunda definicion de «que es buscable». La nombra
+ * en DOS lineas, las dos dentro de un `Prisma.sql` parametrizado del `WHERE`:
+ *   `o.busqueda_texto LIKE ${patronLike(...)}` (termino tal cual y, si aplica, solo digitos).
+ * NO la selecciona (sigue fuera del `select` y del DTO, R28: sigue omitida por `PRISMA_OMIT` y
+ * es PII duplicada), NO la escribe y la feature NO trae migracion: el esquema no se toca.
+ * Lo que sostiene esa promesa no es este parrafo, es el caso «solo aparece como criterio de
+ * LECTURA», que desde la 321 se aplica a TODO repositorio de la lista blanca —no solo a
+ * `OrdenRepository`—, ademas de los casos globales de `data:`, verbo de escritura y `select:`.
+ * Cualquier archivo nuevo en esta lista es una decision que hay que tomar a mano.
  */
 const PERMITIDOS = new Set([
   "lib/db/prisma-client.ts",
   "lib/repositories/OrdenRepository.ts",
+  "lib/repositories/HistoricoConversacionesRepository.ts",
   "scripts/bench-busqueda-ordenes.ts",
 ]);
+
+/**
+ * Los repositorios de la lista blanca: los unicos que hablan con Prisma nombrando la columna,
+ * y por tanto los unicos donde la distincion lectura/escritura hay que afirmarla archivo a
+ * archivo. Se DERIVA de `PERMITIDOS` para que añadir un repositorio ahi arriba no pueda colarse
+ * sin pasar por la comprobacion de solo-lectura de mas abajo.
+ */
+const REPOSITORIOS_PERMITIDOS = [...PERMITIDOS].filter((a) => a.startsWith("lib/repositories/"));
 
 function archivosDeCodigo(): string[] {
   const salida: string[] = [];
@@ -102,7 +125,7 @@ describe("nadie escribe `busquedaTexto` (R27)", () => {
     expect(MENCIONES.length).toBeGreaterThan(0);
   });
 
-  it("solo la nombran EN CODIGO los tres archivos que deben", () => {
+  it("solo la nombran EN CODIGO los archivos de la lista blanca", () => {
     const archivos = [...new Set(MENCIONES.map((m) => m.archivo))].sort();
     const intrusos = archivos.filter((a) => !PERMITIDOS.has(a));
     expect(
@@ -144,7 +167,7 @@ describe("nadie escribe `busquedaTexto` (R27)", () => {
     expect(sospechosas).toEqual([]);
   });
 
-  it("en el repositorio solo aparece como criterio de LECTURA (`contains` o `LIKE`)", () => {
+  it("en los repositorios solo aparece como criterio de LECTURA (`contains` o `LIKE`)", () => {
     // El filtro `!texto.startsWith("//")` que habia aqui se retira: era la mitigacion local de
     // que el censo leyera prosa, y ademas solo cubria el comentario de linea COMPLETA. Ahora
     // MENCIONES ya viene sin comentarios de ningun tipo (feature 209).
@@ -154,13 +177,23 @@ describe("nadie escribe `busquedaTexto` (R27)", () => {
     // `Prisma.sql` parametrizado—. Las dos son LECTURA, que es lo unico que esta guardia
     // vigila: escribirla la rechazaria Postgres entera. Se admiten las dos formas y nada mas;
     // cualquier tercera aparicion sigue poniendo esto rojo.
-    const enRepo = MENCIONES.filter((m) => m.archivo === "lib/repositories/OrdenRepository.ts");
-    expect(enRepo.length).toBeGreaterThan(0);
-    for (const mencion of enRepo) {
-      expect(
-        mencion.texto.includes("contains") || / LIKE /.test(mencion.texto),
-        mencion.texto,
-      ).toBe(true);
+    //
+    // Feature 321: la comprobacion deja de estar clavada a `OrdenRepository` y recorre TODOS
+    // los repositorios de la lista blanca (hoy tambien `HistoricoConversacionesRepository`,
+    // que la lee con el mismo `LIKE` parametrizado, R36). Se exige ademas que cada uno de
+    // ellos la nombre de verdad: un permiso que ya no se usa es una lista blanca que miente.
+    expect(REPOSITORIOS_PERMITIDOS.length).toBeGreaterThan(0);
+    for (const repo of REPOSITORIOS_PERMITIDOS) {
+      const enRepo = MENCIONES.filter((m) => m.archivo === repo);
+      expect(enRepo.length, `${repo} esta en la lista blanca y ya no la nombra`).toBeGreaterThan(
+        0,
+      );
+      for (const mencion of enRepo) {
+        expect(
+          mencion.texto.includes("contains") || / LIKE /.test(mencion.texto),
+          `${repo}: ${mencion.texto}`,
+        ).toBe(true);
+      }
     }
   });
 });

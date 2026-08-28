@@ -30,6 +30,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 260 (B3): hidratacion por lote de ids. No la ejercita este servicio.
     findListItemsByIds: vi.fn().mockResolvedValue([]),
     update: vi.fn(),
+    // Ficha 312: writer de la correccion de los datos del cliente. Mismo motivo que sus dos
+    // vecinos de abajo — ningun servicio de este archivo lo invoca; el doble existe para
+    // satisfacer el contrato completo del repo.
+    corregirDatosCliente: vi.fn().mockResolvedValue("ok" as const),
     // Feature «eliminar orden»: writer de `deleted_at`. Ningun servicio de este archivo lo
     // invoca; el doble existe para satisfacer el contrato completo del repo.
     softDelete: vi.fn().mockResolvedValue(0),
@@ -105,6 +109,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // `habilitarNovedad`) colapsaron en UN punto de escritura guardado por estado.
     transicionarAyuda: vi.fn().mockResolvedValue(true),
     findParaHabilitacionApi: vi.fn().mockResolvedValue(null), // feature 266/T3.1: lectura scoped por owner del canal por API key
+    // Ficha 320: el par lectura/escritura del BORRADO por API key, tambien scoped por owner.
+    findParaEliminacionApi: vi.fn().mockResolvedValue(null),
+    softDeleteViaApi: vi.fn().mockResolvedValue(0),
     incrementarIntentoContacto: vi.fn().mockResolvedValue(0),
     // Feature 236: los dos metodos del listado pasan a llevar el GRUPO en la firma.
     countNovedadesByTienda: vi.fn().mockResolvedValue(0),

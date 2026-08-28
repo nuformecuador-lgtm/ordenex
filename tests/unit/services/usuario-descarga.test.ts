@@ -395,7 +395,18 @@ describe("285/T-S4 — el listado filtrado no expone ningun campo nuevo (R27)", 
     expect(descarga.status).toBe("ok");
     if (sinFiltro.status !== "ok" || conFiltro.status !== "ok" || descarga.status !== "ok") return;
 
-    const esperadas = ["createdAt", "email", "estado", "id", "nombre", "rolValue"];
+    // ⚠️ LISTA ESCRITA A MANO, y tiene que seguir siendolo. Es EL contrato de R27, no un
+    // detalle de mantenimiento: si algun dia se derivara de `Object.keys` del DTO, de un tipo
+    // o del propio resultado, quedaria verde para siempre sin comprobar nada — se compararia
+    // la fuente consigo misma. Cuando el DTO cambie a proposito, se edita esta lista A MANO y
+    // el cambio se ve en el diff, que es justo lo que se quiere.
+    //
+    // Crecio a SIETE claves el 2026-08-28 (ficha 317). `zonaNombre` entro el 2026-08-26 con la
+    // columna «Zona» de la tabla y del Excel (pedido humano; ver `UsuarioListItem` y
+    // `filaDescargaUsuario`), pero el commit que lo anadio era un respaldo SIN GATE, asi que
+    // este guard se quedo atras y `dev` arrastro el rojo. El campo es legitimo; la lista era
+    // la desactualizada.
+    const esperadas = ["createdAt", "email", "estado", "id", "nombre", "rolValue", "zonaNombre"];
     expect(Object.keys(sinFiltro.items[0]).sort()).toEqual(esperadas);
     expect(Object.keys(conFiltro.items[0]).sort()).toEqual(esperadas);
     expect(Object.keys(descarga.items[0]).sort()).toEqual(esperadas);

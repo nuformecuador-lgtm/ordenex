@@ -48,6 +48,7 @@ function fila(over: Partial<OrdenLiberableRow> = {}): OrdenLiberableRow {
 function montar(filas: OrdenLiberableRow[], over: Partial<ILiberacionReprogramadaRepository> = {}) {
   const repo: ILiberacionReprogramadaRepository = {
     findOrdenesLiberables: vi.fn(async () => filas),
+    findOrdenesLiberablesDeCierre: vi.fn(async () => filas), // ficha 315: mismas filas
     liberarOrden: vi.fn(async () => true),
     findLiberadasHoy: vi.fn(async () => []),
     ...over,

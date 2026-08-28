@@ -21,6 +21,64 @@
 
 ---
 
+## 2026-08-28 — NUEVO: `DELETE /ordenes/api-key/orden/{id}` — eliminar una orden que aún no se gestionó
+
+**Aditivo: no rompe nada.** Es un verbo nuevo sobre una URL que ya existía. Si no lo llamás, tu
+integración no cambia en absoluto.
+
+**Qué resuelve.** Entre que cargás una orden y que el paquete llega a la bodega central no tenías
+ninguna salida: cancelar (`PUT .../{numGuia}/cancelar`) exige que la orden ya esté en
+`en_bodega_central` o `en_ruta_bodega_central` —y se pide por número de guía, que con fulfillment
+todavía no existe—. Ese hueco es lo que cierra este endpoint.
+
+```
+DELETE /api/ordenes/api-key/orden/{id}
+Authorization: Bearer ordx_...
+
+200 OK
+{ "numGuia": 100234, "numRemision": "REM-0001", "estado": "en_bodega_central" }
+```
+
+**El identificador es el mismo del `GET`**: `num_guia` **o** `num_remision`, con la misma
+precedencia (si es un entero positivo se busca primero por guía). Lo habitual aquí es la remisión,
+porque una orden recién cargada puede no tener guía todavía; en ese caso la respuesta trae
+`"numGuia": null`.
+
+**Cuándo procede.** Solo en estos cuatro estados, es decir mientras el paquete sigue quieto en tu
+tienda o en la bodega central y nadie lo ha movido hacia el cliente ni hacia otra bodega:
+
+- `en_preparacion`
+- `por_recolectar_en_tienda`
+- `recolectando`
+- `en_bodega_central`
+
+**Haber generado la etiqueta NO impide eliminar.** Imprimir la guía deja la orden en
+`en_bodega_central`, que está en la lista.
+
+**Qué devuelve cada caso:**
+
+| Situación | Código |
+|---|---|
+| Eliminada | `200` con `{ numGuia, numRemision, estado }` |
+| No existe, ya la eliminaste, o es de otro integrador | `404` (el mismo en los tres) |
+| Existe y es tuya, pero ya se gestionó (`en_reparto`, entregada, devuelta…) | `409` |
+| `{id}` vacío o de más de 128 caracteres | `422` |
+
+**Tres cosas que conviene saber:**
+
+1. **Es un borrado lógico.** La orden desaparece del canal —un `GET` posterior a la misma URL
+   devuelve `404`— y deja de aparecer en el listado. No se pierde el historial interno del envío.
+2. **Libera tu `num_remision`.** La remisión es única *entre tus órdenes vivas*, así que después de
+   eliminar podés volver a cargar la misma remisión. Antes de esto, una remisión gastada por error
+   quedaba ocupada.
+3. **Repetir el `DELETE` no es un error de servidor:** devuelve `404`, igual que cualquier orden
+   que ya no está.
+
+**Para una orden que ya va camino del cliente esto no sirve** — ahí la salida sigue siendo
+`PUT /ordenes/api-key/{numGuia}/cancelar`, que no la borra: la manda de vuelta a tu tienda.
+
+---
+
 ## 2026-08-25 — ROMPEDOR: desaparece el campo `generado` de las respuestas de `/generate`
 
 **Esto SÍ puede romper tu integración.** Es el único cambio de esta tanda que quita algo del

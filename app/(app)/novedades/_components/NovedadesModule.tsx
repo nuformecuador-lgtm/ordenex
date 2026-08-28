@@ -30,6 +30,13 @@ import type { NovedadDTO } from "@/lib/types/novedad";
 import { grupoDeEstatus, type GrupoNovedad } from "@/lib/types/novedad-grupo";
 
 import { habilitarNovedad } from "@/lib/actions/habilitar-novedad";
+// FICHA 312 (F2) — la correccion de los datos del cliente. La ventana la COMPARTE con el
+// modulo de ordenes (vive alli, donde nace y donde esta su consumidor principal) y esta
+// pantalla la importa, igual que `/recepcion-satelite` importa `ReportarIncidenteAccion`.
+// El CABLE, en cambio, se ve aqui: la ventana no importa la Server Action, se la pasa la
+// pantalla que ofrece el boton.
+import { corregirDatosCliente } from "@/lib/actions/corregir-datos-cliente";
+import { CorregirDatosClienteModal } from "@/app/(app)/ordenes/_components/CorregirDatosClienteModal";
 
 import {
   COLUMNAS_DESCARGA_AYUDA,
@@ -309,6 +316,13 @@ export function NovedadesModule({
   // pueden estar abiertas a la vez, así que un estado con discriminante sólo añadiría una pregunta
   // en cada render.
   const [ordenARechazar, setOrdenARechazar] = useState<NovedadDTO | null>(null);
+  // FICHA 312 (F2, R23): la orden cuyos datos de cliente se están corrigiendo (null = ventana
+  // cerrada). Mismo patrón que sus cuatro hermanas de arriba y por el mismo motivo: son ventanas
+  // distintas que no pueden estar abiertas a la vez.
+  //
+  // UN SOLO estado para LOS DOS grupos, igual que la celda es una sola clave: corregir es la misma
+  // operación en «ayuda» y en «devolución» (design §9.2).
+  const [ordenACorregir, setOrdenACorregir] = useState<NovedadDTO | null>(null);
 
   // 2026-08-13: mismo conmutador y misma transición que las cuatro pantallas del portal del
   // mensajero, sobre las MISMAS piezas. `vista` es la que toca RENDERIZAR (el hook sostiene
@@ -459,6 +473,26 @@ export function NovedadesModule({
         ? GESTION_AYUDA_ERROR_FORBIDDEN
         : GESTION_AYUDA_ERROR_SESION,
     );
+  }
+
+  /**
+   * FICHA 312 (F2, R29) — LO QUE LA PANTALLA HACE CUANDO LA CORRECCIÓN SE GUARDA.
+   *
+   * **Relee del SERVIDOR, no pinta lo tecleado.** R29 lo pide con esas palabras: los valores
+   * nuevos salen de la relectura, nunca de un estado local optimista. Es además la lección de
+   * 236/D8 sobre esta misma card, aplicada al caso fácil: si el servidor no guardó lo que la
+   * pantalla cree, la fila lo dirá por el dato.
+   *
+   * **La fila NO desaparece**, y ahí se separa de sus cuatro hermanas: corregir un nombre no
+   * cambia el estado de la orden, así que la novedad sigue en su grupo y en la lista. Por eso no
+   * hay `sacarDeLaLista` aquí.
+   *
+   * **Y no se avisa a nadie ni se publica nada** (D4, decisión humana del 2026-08-28): corregir no
+   * deja rastro. El único rastro es el `updated_at` de la fila.
+   */
+  async function trasCorregirDatos() {
+    setOrdenACorregir(null);
+    await cambiarPagina(page);
   }
 
   /**
@@ -613,6 +647,7 @@ export function NovedadesModule({
                   onGestionarDesdeAyuda={(orden, modo) =>
                     setOrdenAGestionarDesdeAyuda({ orden, modo })
                   }
+                  onCorregirDatos={setOrdenACorregir}
                 />
               }
             />
@@ -696,6 +731,26 @@ export function NovedadesModule({
             if (!open) setOrdenARechazar(null);
           }}
           onResuelto={(res) => void resolverRechazo(res)}
+        />
+      ) : null}
+
+      {/* FICHA 312 (F2, R23/R26) — LA VENTANA DE LA CORRECCIÓN, la MISMA que el módulo de órdenes.
+          Mismo montaje condicional y misma `key` que las cuatro de arriba: con la ventana cerrada
+          NO ESTÁ EN EL ÁRBOL, y `key={orden.id}` hace que los cuatro campos arranquen precargados
+          con los de ESTA orden en cada apertura, sin heredar el borrador de la anterior.
+
+          `corregir` es el cable de esta pantalla: la ventana es compartida y no importa la Server
+          Action, así que cada superficie enseña la suya (ver `EnviarCorreccion`). */}
+      {ordenACorregir ? (
+        <CorregirDatosClienteModal
+          key={ordenACorregir.id}
+          open
+          orden={ordenACorregir}
+          onOpenChange={(open) => {
+            if (!open) setOrdenACorregir(null);
+          }}
+          corregir={(entrada) => corregirDatosCliente(entrada)}
+          onSuccess={() => void trasCorregirDatos()}
         />
       ) : null}
 

@@ -53,6 +53,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 260 (B3): hidratacion por lote de ids. No la ejercita este servicio.
     findListItemsByIds: vi.fn().mockResolvedValue([]),
     update: vi.fn().mockResolvedValue(dto()),
+    // Ficha 312: writer de la correccion de los datos del cliente. Mismo motivo que sus dos
+    // vecinos de abajo — ningun servicio de este archivo lo invoca; el doble existe para
+    // satisfacer el contrato completo del repo.
+    corregirDatosCliente: vi.fn().mockResolvedValue("ok" as const),
     // Feature «eliminar orden»: writer de `deleted_at`. Ningun servicio de este archivo lo
     // invoca; el doble existe para satisfacer el contrato completo del repo.
     softDelete: vi.fn().mockResolvedValue(0),
@@ -133,6 +137,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // `habilitarNovedad`) colapsaron en UN punto de escritura guardado por estado.
     transicionarAyuda: vi.fn().mockResolvedValue(true),
     findParaHabilitacionApi: vi.fn().mockResolvedValue(null), // feature 266/T3.1: lectura scoped por owner del canal por API key
+    // Ficha 320: el par lectura/escritura del BORRADO por API key, tambien scoped por owner.
+    findParaEliminacionApi: vi.fn().mockResolvedValue(null),
+    softDeleteViaApi: vi.fn().mockResolvedValue(0),
     incrementarIntentoContacto: vi.fn().mockResolvedValue(0),
     // Feature 236: los dos metodos del listado pasan a llevar el GRUPO en la firma.
     countNovedadesByTienda: vi.fn().mockResolvedValue(0),
@@ -514,55 +521,73 @@ describe("listar — visibilidad de la tienda de origen (feature 48, R12/R14)", 
 // conservan testigo en el bloque de `listar`.
 
 // ---------------------------------------------------------------------------------------
-// Pedido humano (2026-08-27) — `sinGestion`: ¿se puede ofrecer «Eliminar» sobre esta fila? Lo
-// resuelve el SERVIDOR con el mismo predicado que autoriza el borrado, para que la pantalla no
-// pueda ofrecer lo que el servidor va a rechazar.
+// `eliminable`: ¿se puede ofrecer «Eliminar» sobre esta fila? Lo resuelve el SERVIDOR con el
+// mismo predicado que autoriza el borrado, para que la pantalla no pueda ofrecer lo que el
+// servidor va a rechazar.
+//
+// FICHA 319 (2026-08-28): el campo se llamaba `sinGestion` y el criterio pedia ademas cero
+// transiciones en el historial. Ese conteo se retiro —dejaba la ventana VACIA: 0 eliminables de
+// 429 vivas en produccion— y hoy manda el ESTADO. La coincidencia estado-por-estado entre esta
+// respuesta y la del service del borrado se mide en `eliminar-criterio-unico.test.ts`; aqui se
+// mide lo propio del listado (a quien se le anota y a quien no).
 // ---------------------------------------------------------------------------------------
-describe("listar / sinGestion (eliminar orden)", () => {
+describe("listar / eliminable (eliminar orden)", () => {
   const PAGINA = { page: 1, pageSize: 20, sortBy: "created_at", sortDir: "desc" } as const;
 
-  function conPagina(items: OrdenListItemDTO[], conGestion: string[] = []) {
+  function conPagina(items: OrdenListItemDTO[]) {
     const r = buildRepo({ list: vi.fn().mockResolvedValue({ items, total: items.length }) });
-    const h = fakeIntentosEnLote({}, conGestion);
+    const h = fakeIntentosEnLote();
     return { service: new OrdenService(r, h), historial: h };
   }
 
-  it("orden en estado de NACIMIENTO y sin movimiento -> sinGestion true", async () => {
+  it("orden en un estado eliminable -> eliminable true", async () => {
     const { service } = conPagina([listItem({ id: "o1", estatusValue: "en_preparacion" })]);
 
     const r = await service.listar(PAGINA, MAESTRO);
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.items[0].sinGestion).toBe(true);
+    expect(r.items[0].eliminable).toBe(true);
   });
 
-  it("orden CON movimiento en el historial -> sinGestion false", async () => {
-    const { service } = conPagina(
-      [listItem({ id: "o1", estatusValue: "en_preparacion" })],
-      ["o1"],
-    );
+  it("orden YA numerada, en la bodega central -> eliminable true (el caso de la ficha 319)", async () => {
+    // Con el criterio anterior esto era `false` SIEMPRE: generar la guia dejaba transicion y
+    // sacaba del estado de nacimiento. Es la fila que el maestro no podia borrar en produccion.
+    const { service } = conPagina([
+      listItem({ id: "o1", estatusValue: "en_bodega_central", numGuia: 4321 }),
+    ]);
 
     const r = await service.listar(PAGINA, MAESTRO);
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.items[0].sinGestion).toBe(false);
+    expect(r.items[0].eliminable).toBe(true);
   });
 
-  it("orden fuera de un estado de nacimiento -> sinGestion false aunque el historial calle", async () => {
-    // La direccion SEGURA del error: sin rastro de movimiento, el estado manda.
+  it("orden en un estado que ya no admite borrado -> eliminable false", async () => {
     const { service } = conPagina([listItem({ id: "o1", estatusValue: "entregada" })]);
 
     const r = await service.listar(PAGINA, MAESTRO);
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.items[0].sinGestion).toBe(false);
+    expect(r.items[0].eliminable).toBe(false);
   });
 
-  it("un rol que NO puede eliminar no recibe el campo, y no se consulta el historial", async () => {
-    const { service, historial } = conPagina([
+  it("`en_reparto` -> eliminable false: «eso esta en gestion»", async () => {
+    // El estado que mas cerca queda de la frontera y el que el humano nombro primero. Aunque no
+    // tenga ni un intento de entrega, el paquete va con el mensajero.
+    const { service } = conPagina([listItem({ id: "o1", estatusValue: "en_reparto" })]);
+
+    const r = await service.listar(PAGINA, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.items[0].eliminable).toBe(false);
+  });
+
+  it("un rol que NO puede eliminar no recibe el campo", async () => {
+    const { service } = conPagina([
       listItem({ id: "o1", estatusValue: "en_preparacion", tiendaId: "store1" }),
     ]);
 
@@ -570,19 +595,20 @@ describe("listar / sinGestion (eliminar orden)", () => {
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.items[0].sinGestion).toBeUndefined();
-    expect(historial.idsConGestionPosteriorEnLote).not.toHaveBeenCalled();
+    expect(r.items[0].eliminable).toBeUndefined();
   });
 
-  it("UNA sola llamada por listado, con TODOS los ids de la pagina", async () => {
+  it("anotarlo NO cuesta ninguna consulta extra al historial", async () => {
+    // La unica llamada del listado sigue siendo la de los intentos (feature 160). Antes habia
+    // una segunda, por pagina, solo para este campo.
     const { service, historial } = conPagina([
       listItem({ id: "o1", estatusValue: "en_preparacion" }),
-      listItem({ id: "o2", estatusValue: "en_preparacion" }),
+      listItem({ id: "o2", estatusValue: "en_bodega_central" }),
     ]);
 
     await service.listar(PAGINA, MAESTRO);
 
-    expect(historial.idsConGestionPosteriorEnLote).toHaveBeenCalledTimes(1);
-    expect(historial.idsConGestionPosteriorEnLote).toHaveBeenCalledWith(["o1", "o2"]);
+    expect(historial.contarIntentosEnLote).toHaveBeenCalledTimes(1);
+    expect(Object.keys(historial)).toEqual(["contarIntentosEnLote", "contarIntentos"]);
   });
 });

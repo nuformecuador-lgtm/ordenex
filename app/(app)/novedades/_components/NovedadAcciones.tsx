@@ -1,6 +1,6 @@
 "use client";
 
-import { MessagesSquare, Power, RotateCcw, Undo2 } from "lucide-react";
+import { MessagesSquare, PencilLine, Power, RotateCcw, Undo2 } from "lucide-react";
 
 import { ContactoButtons } from "@/components/shared/ContactoButtons";
 import { EnviarPlantillaWhatsappButton } from "@/components/shared/EnviarPlantillaWhatsappButton";
@@ -113,6 +113,17 @@ export interface NovedadAccionesProps {
    * padre a mantener dos estados que nunca pueden estar abiertos a la vez.
    */
   onGestionarDesdeAyuda: (novedad: NovedadDTO, modo: ModoGestionDesdeAyuda) => void;
+  /**
+   * FICHA 312 (F2, R23): abre la ventana con la que la tienda CORRIGE los datos del cliente
+   * —destinatario, teléfono, producto y notas— de esta orden.
+   *
+   * **UN solo handler para los DOS grupos**, igual que la celda es una sola clave: es la misma
+   * operación y la misma ventana en «ayuda» y en «devolución» (design §9.2). Ramificar por grupo
+   * aquí sería la decisión fuera de la tabla que la guardia de la 236 caza.
+   *
+   * ⚠️ Corregir NO deja rastro (D4, 2026-08-28): no publica nota en el hilo ni avisa a nadie.
+   */
+  onCorregirDatos: (novedad: NovedadDTO) => void;
 }
 
 /** Cómo se pinta una acción de icono: su etiqueta visible, su icono y cómo se nombra a sí misma. */
@@ -204,6 +215,27 @@ const ICONO_POR_ACCION: Record<
     Icono: Undo2,
     nombreAccesible: (destinatario) => `Rechazar la orden de ${destinatario}`,
     onClick: (novedad, props) => props.onGestionarDesdeAyuda(novedad, "rechazar"),
+  },
+  // ===============================================================================================
+  // FICHA 312 (F2, R23 — 2026-08-28) — LA TIENDA ARREGLA EL DATO MAL ESCRITO, EN LOS DOS GRUPOS.
+  // ===============================================================================================
+  //
+  // La carga masiva entra con el destinatario o el teléfono mal escritos y hasta hoy la única vía
+  // de arreglarlo era un `UPDATE` a mano contra producción. El `adminTienda` corrige desde aquí,
+  // sobre sus propias órdenes, y el servidor revalida rol, pertenencia y estado igualmente (R25).
+  //
+  // `PencilLine` es PROPIO de esta acción —como `Power` lo es de «Habilitar»—: ninguna otra acción
+  // de la fila edita un dato, así que no hay dibujo que reutilizar ni ambigüedad que resolver.
+  //
+  // El nombre accesible se aparta de la gramática «<Verbo> la orden de X» porque lo que se corrige
+  // no es la orden entera: son los datos de su cliente, y decirlo evita que alguien espere poder
+  // cambiar aquí la dirección o el monto (D1: los cuatro campos y nada más).
+  corregirDatos: {
+    etiqueta: "Corregir datos",
+    Icono: PencilLine,
+    nombreAccesible: (destinatario) =>
+      `Corregir los datos del cliente de la orden de ${destinatario}`,
+    onClick: (novedad, props) => props.onCorregirDatos(novedad),
   },
 };
 

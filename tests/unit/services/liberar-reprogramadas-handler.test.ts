@@ -31,7 +31,14 @@ describe("crearLiberarReprogramadasHandler (R22)", () => {
   it("invoca ejecutarLiberacion UNA vez con startOfDayCR(now)", async () => {
     const now = new Date("2026-07-19T18:00:00.000Z"); // 12:00 CR del 19
     const spy = vi.fn(async () => ({ evaluadas: 2, liberadas: 2, omitidas: 0 }));
-    const service: ILiberacionReprogramadaService = { ejecutarLiberacion: spy };
+    const service: ILiberacionReprogramadaService = {
+      ejecutarLiberacion: spy,
+      // FICHA 315: el handler del cron NO usa el disparador por cierre; el doble revienta si lo
+      // llamara, para que un cableado cruzado no pase por alto.
+      liberarPorCierreAprobado: vi.fn(async () => {
+        throw new Error("el handler del reloj no libera por cierre (315)");
+      }),
+    };
     const handler = crearLiberarReprogramadasHandler(service, () => now);
 
     await handler(job);

@@ -3,9 +3,6 @@
 import { z } from "zod";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
-import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
-import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
-import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { EliminarOrdenService } from "@/lib/services/EliminarOrdenService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -40,17 +37,11 @@ export interface EliminarOrdenDeps {
 
 function buildService(): IEliminarOrdenService {
   const prisma = getPrismaClient();
-  // El historial entra por el MISMO wiring de produccion que usan las otras trece superficies
-  // que lo consumen (`buildHistorialService` de `liberacion-reprogramada`, patron identico): es
-  // de donde sale el predicado «esta orden ya fue gestionada».
-  return new EliminarOrdenService(
-    new OrdenRepository(prisma),
-    new OrdenHistorialService(
-      new OrdenRepository(prisma),
-      new OrdenHistorialRepository(prisma),
-      new OrdenDiaRepartoCambioRepository(prisma),
-    ),
-  );
+  // FICHA 319 (2026-08-28): el service deja de recibir el historial. Se le inyectaba para
+  // contar transiciones («esta orden ya fue gestionada»), y ese conteo se retiro: hoy decide el
+  // ESTADO, que ya viene en la fila. Se retira tambien del wiring —y no solo del uso— porque una
+  // dependencia construida y nunca consultada es un cable suelto que miente sobre la regla.
+  return new EliminarOrdenService(new OrdenRepository(prisma));
 }
 
 /** Espejo de `toDeshacerActionError`: solo los dos codigos que este borde puede producir. */

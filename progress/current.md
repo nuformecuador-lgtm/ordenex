@@ -9,6 +9,142 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 💬 2026-08-28 — ficha 321: histórico de conversaciones (admin y maestro leen el chat de todos)
+
+**Estado: `pending` → spec EN CURSO (`spec_author` lanzado).** Rama
+`feature/321-historico-conversaciones` desde `origin/dev` en `156669af`, ya mergeada con `dev`. Zona `fullstack`,
+complejidad alta, `sdd: true`. Alta registrada en `feature_list.json`.
+
+**Qué pidió el humano.** Un ítem de sidebar **Histórico** visible solo para `maestro` y `admin`,
+con subítem **Conversaciones**: se listan las conversaciones de **todos** los mensajeros y se leen
+todos los mensajes enviados y recibidos **por orden**, independientes de la fecha, con separador de
+día «jueves 28 de agosto». El hilo **pagina por scroll** (no carga todo de golpe). Filtros por fecha
+y por orden, montados sobre la **barra de filtros que ya usan las tablas**, con el mensajero como
+control externo y un input libre que alcanza nombre del destinatario, `num_guia`, `num_remision` y
+nombre del mensajero. Es **solo lectura**.
+
+**⚠️ DOS colisiones de número esquivadas en la misma sesión, antes de escribir una línea.** Se
+descartó el **315** (libre en la lista, pero `origin/fix/315-liberar-al-aprobar-cierre` lo reclama
+por nombre) y, al crear la rama desde `origin/dev`, apareció que otra sesión ya había registrado el
+**317**: la rama se renombró `317 → 318` en el acto — y al aterrizar hubo que renumerar **otra vez**
+(ver abajo). Precedente: la 311 se renumeró **tres** veces y
+la 316 una.
+
+**Bajada de `dev`, hecha antes de empezar.** `origin/dev` está en `156669af` y la rama nace de ahí.
+El `dev` **local** figura 2 ahead / 7 behind, pero `git diff origin/dev...dev` es **vacío**: sus dos
+commits extra (`bca25ded`, el fix del adjunto de la 311) ya entraron a `origin/dev` por PR con otro
+sha. **No hay nada que mergear ni conflicto que resolver**; el `dev` local se queda como está para no
+tocar historia ajena.
+
+**Cupo.** La **316** se pasa a `done` en este mismo commit: llevaba `in_progress` con el PR #573 ya
+mergeado a `origin/dev` (merge `9c5ebec5`). Mismo precedente que la 311, cerrada en el commit del
+alta de la 316. Fullstack queda sin ninguna `in_progress`.
+
+**Lo que YA existe (medido, no supuesto), para que el spec no reinvente:** `ChatConversacion`
+(`@@unique([ordenId, telefonoE164])` → una orden puede tener más de un hilo) y `ChatMensaje` con el
+índice **explícito** `[conversacion_id, ocurrido_at]` puesto para el historial ordenado; las burbujas
+del chat en `app/(app)/mis-asignaciones/_components/chat/`; el menú en un único punto,
+`SIDEBAR_ITEMS` de `lib/auth/menu-visibility.ts`, que ya soporta `children` y `roles`; y la barra
+reusable `components/shared/BuscadorFiltros.tsx` sobre `FilterComponent.tsx`.
+
+**Trampas declaradas antes de empezar.** (a) La autorización del chat es **por mensajero asignado**
+—`ChatConversacionRepository` y el proxy `/api/chat/media/[mensajeId]`—, así que hoy un admin que no
+es el mensajero del hilo **no ve ni el hilo ni sus adjuntos**: ensancharla tiene que ser explícito y
+con test propio. (b) El ítem de menú solo *muestra*; la defensa real es el gate de la ruta, y ambas
+capas deben leer la **misma** constante de roles (precedente R10 de la 129). (c) El **guardia de la
+229** congela `PUBLIC_ROUTES` posicionalmente: cualquier ruta nueva lo pone rojo. (d) `MediaAdjunto`
+dice «del cliente» en textos que aquí pueden quedar falsos. (e) El binario de la media **no se
+guarda** (D1/R15 de la 311) y a los 30 días Meta lo da por no disponible: el histórico tiene que
+**decirlo**, no romperse.
+
+**PUERTA HUMANA del 2026-08-28: las 9 preguntas, CERRADAS.** El spec v1 (38 requisitos, sin
+migración) se revisa con estas respuestas:
+
+- **P1 — el cambio de diseño de verdad.** El hilo es por **orden + mensajero**, no por
+  `orden + teléfono`: «el chat del mensajero del día que gestionó esa orden». Como la tabla es
+  `@@unique([ordenId, telefonoE164])`, una misma (orden, mensajero) puede tener **más de una fila**
+  si el cliente cambió de número — se fusiona **en la consulta**, agrupando por
+  `(orden_id, mensajero_id)`, **sin tocar la DB**. Y una orden **reasignada** tiene dos hilos, uno
+  por mensajero: eso es correcto, no un duplicado que deduplicar.
+- **P2** — la fecha corta por **mensaje**, listado e hilo diferenciados, y **sin añadir nada a la
+  DB**: la alternativa A6 (columna materializada `ultima_actividad_at` o índice nuevo) queda
+  **descartada por decisión humana**, no aplazada.
+- **P3/P4/P5** — se aterriza en lo más reciente paginando hacia atrás; **solo `maestro` y `admin`**;
+  el histórico **sí** ve los adjuntos por la vía separada, sin relajar la del mensajero. Y enviados
+  y recibidos van en el **mismo** hilo y en el mismo orden cronológico, no en una vista aparte.
+- **P6 — corrige lo que el spec recomendaba.** El separador **sí** usa «hoy»/«ayer» y **nunca**
+  lleva año, ni siquiera fuera del año en curso. El resto de días se queda en «jueves 28 de agosto».
+  El off-by-one vive justo ahí, en la fecha calendario CR.
+- **P7** — el filtro «por orden» es el **número exacto**, no coincidencia parcial ni el input libre.
+- **P8 — cambio de alcance.** El **listado también se pagina** (N conversaciones a la vez, con
+  cursor propio) y los **mensajes no se cargan hasta abrir la conversación**. Son **dos**
+  paginaciones y ningún mensaje viaja en la respuesta del listado — lo que además baja el riesgo que
+  `T0` iba a medir.
+- **P9** — sin límite de antigüedad: **un cron futuro** limpiará el exceso (fuera de alcance), y la
+  media de más de 30 días sale como no disponible.
+
+**⚠️ TERCERA COLISIÓN DE NÚMERO, y la lección es nueva: renumerada 318 → 321 AL ATERRIZAR.**
+Mientras esta rama trabajaba, otra sesión registró **su propio id 318** en `origin/dev` (PR #575,
+`chore/cierre-317-y-ficha-318`) y además el **319** y el **320**. Dos fichas con el mismo id habrían
+puesto **rojo el propio `init.sh` de `dev`**, que valida ids duplicados. **Lo cazó el reviewer, no el
+gate.** La lección que no estaba escrita: verificar el id **al abrir** la rama no basta —el número se
+puede perder *mientras* trabajas—, así que hay que **revalidarlo contra `origin/dev` justo antes del
+PR**. El conflicto de `feature_list.json` se resolvió partiendo de la lista de `origin/dev` para no
+perder ninguna alta ajena, reaplicando encima el cierre de la 316 y añadiendo la ficha propia ya
+renumerada. Verificado: **cero ids duplicados** y ninguna alta de `dev` perdida.
+
+**Y el barrido del renumerado volvió a morder, como en la 311.** Un `sed 318 → 321` sobre los
+archivos que "mencionan 318" alcanzó **siete tests de dinero** (`KpiValorAnimado`, `PriceLabel`,
+`moneda-formato`, `columnas-sensibles`, `dinero-sin-centimos`, `factura-contraste`,
+`monto-cotizacion`), donde `318` era un **importe**, no un número de ficha. Se detectó revisando qué
+archivos había tocado el barrido y se restauraron los siete. Mismo error que la 311 documenta: **un
+barrido no distingue entre usar el número y que el número aparezca**. En `current.md` el peligro era
+un **teléfono** (`3183723487`), por eso ahí se editó a mano y no con `sed`.
+
+**CERRADA LA FASE 2: PR #584 abierto contra `dev`.** Gate **completo** (752 s, el obligatorio aquí:
+el DTO vive en `lib/types/`, ruta sensible de `init.sh:134`, así que el rápido **se niega por
+diseño**): `typecheck` limpio, `lint` sin errores, **1541/1543 archivos verdes**. Los 2 rojos:
+`superficie-de-uso` está en el baseline señalando `lib/actions/tarifas.ts:67`, y **`no-embalaje` es
+flake de saturación** — timeout de 20 s bajo carga, **868 ms y verde en aislado**. No se mete al
+baseline: eso lo volvería permanente. Comprobado además que **no** es el autoenvenenamiento que
+arregló `c4b13288` — el guard ignora el directorio `.vitest`, así que el volcado de 8,7 MB no lo lee;
+es tiempo, no contenido.
+
+**Los menores del reviewer, atendidos antes del PR:** el `EXISTS` del filtro de fecha se corrigió **en
+el design, no en el código**, y ahora lo fija un test **probado por causación** (con la forma del
+design el caso se pone rojo con `expected 1 to be 2`); y la contradicción del gate quedó escrita al
+derecho en §7 y T7.4. **Etiqueta duplicada (m4): decisión del humano, se dejan los dos «Histórico»** —
+es la palabra que pidió literalmente, y el de Ranking va anidado bajo su padre.
+
+**REVIEWER: APROBADO**, 45/45 requisitos verificados contra el archivo de test real (254 tests nuevos
+en 23 archivos), gate completo verde en su propia corrida, **cero hallazgos mayores**. El único
+bloqueante era de aterrizaje —la colisión de id—, ya resuelto. Menores anotados: el `EXISTS` del
+filtro de fecha del `design.md` §2.4 está **mal escrito** y el código está bien (corregir el design,
+no el código); falta el test que fije esa desviación; y la contradicción del gate (§7 / T7.4 dicen
+que el rápido basta, pero `init.sh:134` lista `^lib/types/` como ruta sensible y ahí viven los DTOs).
+
+**Estado: `spec_ready`.** Spec v2 tras la puerta: **45 requisitos R1–R45** (la numeración R1–R38 se
+conserva; 6 modificados, 7 nuevos), los 45 mapeados a un test con `assert` de comportamiento, y
+**sigue sin migración** — `T7.2` gana un assert que vigila que `chat_mensaje` no gane columna de
+mensajero.
+
+**⚠️ LÍMITE CONOCIDO que destapó el spec, verificado por el leader en el archivo real (R45 + A10).**
+El «una orden reasignada tiene dos hilos, uno por mensajero» se cumple **sólo cuando el dato lo
+permite**: `ChatConversacionRepository.upsertParaOrden` hace `update: { mensajeroId }`, o sea que una
+reasignación **reescribe** el mensajero de la fila existente, y `chat_mensaje` no guarda quién era el
+mensajero de cada mensaje. Si el cliente conserva su número, esa orden tiene **una sola fila** y el
+hilo sale atribuido al mensajero **actual**, con los mensajes de los dos. Partirlo de verdad exige
+columna nueva en `chat_mensaje` — migración, prohibida por P2. Queda fijado por un test con
+«LIMITACIÓN CONOCIDA» en el nombre (mismo patrón que la 311 con `migrarTelefono`); la partición real
+sería **su propia feature**.
+
+**Tres cosas que el spec corrigió de la ficha, medidas en el árbol real:** el guardia de la 229 es
+más estrecho de lo que se declaró y una ruta `/historico/conversaciones` **no lo toca**; las trampas
+(d) y (e) **ya las resolvieron la 311 y la 316** —`chat-format.ts` elige el texto del adjunto por
+dirección y `MediaAdjunto` ya pinta el aviso ante el 410—, así que pasan a **tests de no-regresión**;
+y **`orden.busqueda_texto` no incluye el nombre del mensajero**, lo que obliga a una segunda mitad
+del criterio contra `usuario`, con espejo SQL de `normalizarTerminoBusqueda` y test de paridad.
+
 ## 💬 2026-08-28 — ficha 316: el mensajero puede ENVIAR imagen, video, nota de voz y documentos
 
 **Estado: `spec_ready`, spec APROBADO por el humano** (32 requisitos R1-R32, los 32 mapeados a un test

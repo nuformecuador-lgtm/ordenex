@@ -388,20 +388,26 @@ export type OrdenListItemDTO = OrdenDTO & {
    */
   intentosEntrega?: number;
   /**
-   * Pedido humano (2026-08-27) — `true` si la orden NO registra ninguna gestion posterior a su
-   * creacion, es decir: si todavia se puede ELIMINAR. Lo resuelve el servidor con el mismo
-   * predicado que autoriza el borrado (`OrdenHistorialService.idsConGestionPosteriorEnLote` +
-   * `ESTADOS_CREACION`), de modo que la pantalla no puede ofrecer un boton que el servidor vaya
-   * a rechazar — que es el fallo que este campo existe para impedir, y no un adorno.
+   * `true` si esta orden SE PUEDE ELIMINAR. Lo resuelve el servidor con el mismo predicado que
+   * autoriza el borrado (`esEstadoEliminable`, de `lib/types/order-status-eliminables.ts`), de
+   * modo que la pantalla no puede ofrecer un boton que el servidor vaya a rechazar — que es el
+   * fallo que este campo existe para impedir, y no un adorno.
+   *
+   * FICHA 319 (2026-08-28) — se llamaba `sinGestion` y significaba «no registra gestion
+   * posterior a su creacion», que era el criterio del 2026-08-27. Ese criterio se retiro (el
+   * conteo de transiciones descalificaba una orden solo por haberle impreso la etiqueta: CERO
+   * eliminables de 429 vivas en produccion) y hoy manda la LISTA DE ESTADOS. El nombre cambia
+   * con el: dejarlo diciendo `sinGestion` haria que quien lo leyera dedujera una regla que ya no
+   * existe.
    *
    * Solo viaja para el rol que puede borrar (`maestro`); para el resto es `undefined`, porque el
-   * dato no alimenta ninguna decision suya y su conteo cuesta una consulta por pagina. Opcional
-   * (`?`) por el patron aditivo del resto del DTO: no rompe los fixtures de UI.
+   * dato no alimenta ninguna decision suya. Opcional (`?`) por el patron aditivo del resto del
+   * DTO: no rompe los fixtures de UI.
    *
    * `undefined` NO significa "se puede": la UI exige `=== true` para ofrecer el boton (fallo
    * cerrado), y el servidor revalida de todas formas.
    */
-  sinGestion?: boolean;
+  eliminable?: boolean;
   // Datos de las relaciones DIRECTAS (FK) de la orden, resueltas via joins
   // (Prisma `include`) en el mismo query del listado. Aditivo: la UI existente
   // que solo usa los escalares/`*Nombre` sigue funcionando. La `tarifa` anidada en

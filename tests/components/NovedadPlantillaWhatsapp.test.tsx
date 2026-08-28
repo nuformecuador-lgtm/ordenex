@@ -83,6 +83,10 @@ const handlers = {
   onRechazar: vi.fn(),
   onConversacion: vi.fn(),
   onGestionarDesdeAyuda: vi.fn(),
+  // Ficha 312 (F2): el panel gana la celda «Corregir datos» en los dos grupos. Este archivo no la
+  // ejerce —mide el globo de WhatsApp—, pero la prop es obligatoria: un handler que falte deja de
+  // compilar, que es justo lo que se quiere de una acción de la fila.
+  onCorregirDatos: vi.fn(),
 };
 
 function renderAcciones(over: Partial<NovedadDTO> = {}) {

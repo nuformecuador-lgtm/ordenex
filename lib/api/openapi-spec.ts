@@ -69,7 +69,7 @@ export const openApiSpec = {
     title: "Ordenex — API de integración por API key",
     version: "1.0.0",
     description: [
-      "Canal de integración por **API key** para crear, listar, consultar y cancelar órdenes.",
+      "Canal de integración por **API key** para crear, listar, consultar, cancelar y eliminar órdenes.",
       "",
       "Autenticación: todos los endpoints exigen el header `Authorization: Bearer ordx_...`",
       "(API key con prefijo `ordx_`). La key identifica a un usuario dedicado que es el **dueño**",
@@ -553,6 +553,61 @@ export const openApiSpec = {
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
           "404": { $ref: "#/components/responses/NotFound" },
+          "422": { $ref: "#/components/responses/ValidationError" },
+        },
+      },
+      // FICHA 320 — el PRIMER `DELETE` del canal. Va en ESTE path (mismo recurso, otro verbo) y no
+      // en un sub-recurso `/eliminar`: retira el recurso que la ruta identifica, de modo que un
+      // `GET` a la misma URL pasa a devolver 404. `cancelar` es un `PUT` porque NO retira nada
+      // —transiciona la orden y la deja viva—.
+      delete: {
+        tags: ["Órdenes"],
+        summary: "Eliminar una orden propia",
+        operationId: "eliminarOrden",
+        description: [
+          "Retira una orden propia que **todavía no se ha gestionado**. Es un borrado lógico: la",
+          "orden desaparece del canal (un `GET` posterior a la misma URL devuelve 404) y libera su",
+          "`num_remision` para que puedas volver a cargarla.",
+          "",
+          "Solo procede si el estado actual es uno de estos cuatro: `en_preparacion`,",
+          "`por_recolectar_en_tienda`, `recolectando` o `en_bodega_central` —es decir, mientras el",
+          "paquete sigue quieto en tu tienda o en la bodega central—. Haber generado la etiqueta NO",
+          "impide eliminar. Cualquier otro estado devuelve 409.",
+          "",
+          "Acepta el mismo identificador que el `GET`: `num_guia` **o** `num_remision`. Usar la",
+          "remisión es lo habitual aquí, porque una orden recién cargada puede no tener guía",
+          "todavía.",
+          "",
+          "Una orden inexistente, ya eliminada o de otro dueño devuelve el mismo 404. Repetir el",
+          "`DELETE` sobre una orden ya eliminada devuelve 404, no un error.",
+        ].join("\n"),
+        responses: {
+          "200": {
+            description: "Orden eliminada.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/EliminacionResponse" },
+                examples: {
+                  conGuia: {
+                    summary: "Orden ya numerada, eliminada desde en_bodega_central",
+                    value: {
+                      numGuia: 100234,
+                      numRemision: "REM-0001",
+                      estado: "en_bodega_central",
+                    },
+                  },
+                  sinGuia: {
+                    summary: "Orden recién cargada, todavía sin guía",
+                    value: { numGuia: null, numRemision: "REM-0002", estado: "en_preparacion" },
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { $ref: "#/components/responses/Conflict" },
           "422": { $ref: "#/components/responses/ValidationError" },
         },
       },
@@ -1574,6 +1629,29 @@ export const openApiSpec = {
           numGuia: { type: "integer" },
           estadoAnterior: { type: "string", enum: ORDER_STATUS_ENUM },
           estado: { type: "string", const: "devolviendo_a_tienda" },
+        },
+      },
+      // FICHA 320 — respuesta del `DELETE`. Devuelve la IDENTIDAD de lo retirado y el estado que
+      // tenia. `numGuia` es nullable a proposito: la orden que mas se elimina es la que todavia no
+      // tiene guia. No lleva un `eliminada: true` — el 200 ya lo dice, y un campo constante no
+      // habilita ninguna decision del cliente (misma razon por la que se retiro `generado`).
+      EliminacionResponse: {
+        type: "object",
+        required: ["numGuia", "numRemision", "estado"],
+        properties: {
+          numGuia: {
+            type: ["integer", "null"],
+            description: "Guía de la orden eliminada; `null` si aún no tenía.",
+          },
+          numRemision: {
+            type: "string",
+            description: "Tu número de remisión. Vuelve a quedar libre para reutilizarlo.",
+          },
+          estado: {
+            type: "string",
+            description: "Estado que la orden tenía al eliminarla (eliminar no cambia el estado).",
+            enum: ["en_preparacion", "por_recolectar_en_tienda", "recolectando", "en_bodega_central"],
+          },
         },
       },
       PdfGenerateResponse: {

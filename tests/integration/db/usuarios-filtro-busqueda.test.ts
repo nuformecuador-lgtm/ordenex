@@ -54,8 +54,27 @@ const SUFIJO_MAYUS = SUFIJO.toUpperCase();
 /** Cuantas filas se piden cuando se quiere "todo": el corpus mas el resto de la base. */
 const TAKE_TODO = 2000;
 
-/** Las claves EXACTAS de `UsuarioListItem`. Ni una mas (R27). */
-const CLAVES_DE_FILA = ["createdAt", "email", "estado", "id", "nombre", "rolValue"];
+/**
+ * Las claves EXACTAS de `UsuarioListItem`. Ni una mas (R27).
+ *
+ * ⚠️ ESCRITA A MANO, y asi debe quedarse. Es el contrato: derivarla de `Object.keys` del DTO,
+ * de un tipo o del propio resultado la dejaria verde para siempre —se estaria comparando la
+ * fuente consigo misma— y este archivo perderia su unica razon de existir. Cuando la
+ * proyeccion cambie a proposito, se edita esta lista a mano y se ve en el diff.
+ *
+ * Crecio a SIETE el 2026-08-28 (ficha 317): `zonaNombre` se anadio a `LIST_SELECT` el
+ * 2026-08-26 para la columna «Zona» (tabla + Excel), en un commit de respaldo que no paso el
+ * gate, y este guard se quedo atras. El campo es legitimo; la lista era la desactualizada.
+ */
+const CLAVES_DE_FILA = [
+  "createdAt",
+  "email",
+  "estado",
+  "id",
+  "nombre",
+  "rolValue",
+  "zonaNombre",
+];
 
 interface Corpus {
   ana: string;
