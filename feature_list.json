@@ -3580,10 +3580,10 @@
       "title": "la etiqueta para imprimir no lleva ninguna fecha",
       "description": "Quien recibe un paquete no puede saber de cuando es: la etiqueta muestra guia, destinatario, direccion, producto y monto, pero ninguna fecha.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "baja",
-      "branch": null,
+      "branch": "fix/295-fecha-en-etiquetas",
       "status_note": "PEDIDA POR EL HUMANO el 2026-08-27 ('falta ese dato en las etiquetas para imprimir'). MEDIDO antes de registrarla: la fecha no es que no se pinte, es que NO EXISTE en el camino -- `EtiquetaRow` (la proyeccion del repositorio) no la trae y `EtiquetaGuiaDTO` no la publica, asi que el cambio va de la consulta al PDF y toca las dos mitades. DECISION HUMANA sobre CUAL de las tres fechas: la de CREACION de la orden (el dia en que la tienda cargo el envio). Se le ofrecieron las otras dos y se descartaron con su motivo: la de IMPRESION cambia en cada reimpresion -- dos etiquetas del mismo paquete dirian fechas distintas --, y la de REPARTO esta VACIA en la mayoria de ordenes (las de bodega no la tienen: medido en produccion), asi que saldria en blanco casi siempre. OJO AL PRECEDENTE: la ficha 282 ya arreglo esta misma etiqueta por datos superpuestos (el numero de guia pisaba la primera fila). Anadir una linea puede reabrir ese defecto, asi que la verificacion tiene que MIRAR el PDF, no solo comprobar que el dato viaja."
     },
     {
@@ -3591,10 +3591,10 @@
       "title": "la tarjeta de novedades no dice que mensajero pidio la ayuda",
       "description": "La tienda ve una orden pidiendo ayuda pero no a quien preguntarle: la tarjeta no muestra ningun mensajero.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "baja",
-      "branch": null,
+      "branch": "fix/296-mensajero-en-novedades",
       "status_note": "PEDIDA POR EL HUMANO el 2026-08-27. CAUSA MEDIDA: `NovedadDTO` extiende `MiAsignacionDTO`, que es el contrato del PORTAL DEL MENSAJERO -- ahi el mensajero es obvio porque es quien mira, asi que el DTO no tiene NINGUN campo de mensajero. Al reusarlo en /novedades, que la ve la TIENDA, el dato no existe en el camino: hay que anadirlo al DTO y a la proyeccion, no solo pintarlo. DECISION QUE EL IMPLEMENTADOR NO DEBE TOMAR SOLO: 'quien solicito la ayuda' y 'quien la lleva ahora' pueden ser personas distintas si la orden se reasigno despues. El actor de la transicion `solicitud_ayuda_tienda` esta en `orden_historial_estado` (verificado: hoy dice 'Mensajero para pruebas' en las dos ordenes vivas), y el asignado actual esta en `orden.mensajero_asignado_id`. Lo pedido literalmente es QUIEN SOLICITO; lo util para la tienda es A QUIEN LLAMAR. Si difieren hay que mostrar los dos o elegir con el humano. OJO: `MiAsignacionDTO` lo consumen tambien las dos listas del portal del mensajero; anadir el campo alli obligaria a emitirlo donde nadie lo lee. El precedente esta escrito en el propio codigo (`causa` e `intentosContacto` son campos PROPIOS de NovedadDTO por ese mismo motivo): el campo nuevo va en NovedadDTO, no en el contrato compartido."
     },
     {
