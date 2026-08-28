@@ -28,6 +28,31 @@ import { generateStrongPassword } from "@/lib/utils/password-generator";
 // `admin` seria una escalada de privilegios silenciosa.
 const ALLOWED_ROLES = new Set<string>(["maestro"]);
 
+/**
+ * Feature 302 — ROL EXIGIDO A LA TIENDA DESTINO.
+ *
+ * Solo una cuenta de tienda de verdad (`adminTienda`) puede ser duena de las ordenes que cree una
+ * key. No se admite apuntar una key a otra cuenta `apiKey` (encadenaria credenciales sin que
+ * nadie pueda auditar la cadena) ni a un `mensajero`/`adminSatelite`/`maestro` (no son duenos de
+ * ordenes: `orden.tienda_id` apunta a la tienda). La comprobacion es del SERVICE, y `generar` es
+ * la UNICA via de alta: no hay otro camino que escriba `tienda_destino_id`.
+ */
+const ROL_TIENDA_DESTINO = "adminTienda";
+
+/** Feature 302: unico estado de la tienda destino que se acepta al generar la key. */
+const ESTADO_TIENDA_DESTINO = "activo";
+
+/** Mensajes de rechazo de la tienda destino, bajo la clave del campo que los produce. */
+const MSG_TIENDA_DESTINO = {
+  inexistente: "La tienda destino no existe",
+  rol: "La tienda destino debe ser una cuenta de tienda",
+  inactiva: "La tienda destino no esta activa",
+} as const;
+
+function errorTiendaDestino(mensaje: string): GenerarApiKeyResult {
+  return { status: "validation_error", fieldErrors: { tiendaDestinoId: [mensaje] } };
+}
+
 export class ApiKeyService implements IApiKeyService {
   constructor(private readonly repo: IApiKeyRepository) {}
 
@@ -46,6 +71,26 @@ export class ApiKeyService implements IApiKeyService {
           identificador: ["El identificador debe contener al menos una letra o numero"],
         },
       };
+    }
+
+    // Feature 302 — LA TIENDA DESTINO SE VALIDA ANTES DE ESCRIBIR NADA. Es opcional: sin ella el
+    // camino es el de siempre (la cuenta dedicada es duena de sus ordenes, 88/[D4]). Con ella, la
+    // key cargara a nombre de una tienda YA REGISTRADA, que es justo lo que evita la segunda
+    // cuenta duplicada. Tres rechazos posibles, todos `validation_error` en el campo del select y
+    // ninguno de ellos crea usuario ni key:
+    //   - no existe: el uuid no corresponde a ninguna cuenta;
+    //   - no es `adminTienda`: apuntar a otra `apiKey` encadenaria credenciales, y los demas roles
+    //     no son duenos de ordenes (`orden.tienda_id` es la tienda);
+    //   - no esta `activo`: colgar una key de una tienda dada de baja nace roto (la autenticacion
+    //     lo rechazaria en cada peticion, ver `ApiKeyAuthService`).
+    const tiendaDestinoId = input.tiendaDestinoId ?? null;
+    if (tiendaDestinoId !== null) {
+      const candidata = await this.repo.findTiendaDestino(tiendaDestinoId);
+      if (candidata === null) return errorTiendaDestino(MSG_TIENDA_DESTINO.inexistente);
+      if (candidata.rol !== ROL_TIENDA_DESTINO) return errorTiendaDestino(MSG_TIENDA_DESTINO.rol);
+      if (candidata.estado !== ESTADO_TIENDA_DESTINO) {
+        return errorTiendaDestino(MSG_TIENDA_DESTINO.inactiva);
+      }
     }
 
     // R8: contrasena aleatoria (cripto) para la cuenta dedicada; solo se persiste su
@@ -70,6 +115,7 @@ export class ApiKeyService implements IApiKeyService {
         keyPrefix, // R17
         keyHash,
         createdById: actor.usuarioId, // R21
+        tiendaDestinoId, // feature 302: ya validada arriba (o null)
       });
 
       // R18: el secreto en claro sale exactamente UNA vez, aqui. No existe ninguna

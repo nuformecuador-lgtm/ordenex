@@ -65,9 +65,14 @@ describeSiHayBase("236 — el predicado partido de `/novedades`, contra el esque
     expect(GRUPOS_NOVEDAD.length).toBeGreaterThan(1);
   });
 
-  it("la PÁGINA de cada grupo también, con su `select` de veinte columnas y cinco joins", async () => {
+  it("la PÁGINA de cada grupo también, con su `select` de columnas y seis joins", async () => {
     // Aquí es donde un nombre de columna equivocado revienta: el `select` trae la orden completa
-    // más los cinco catálogos por nombre (estatus, tienda, zona, provincia, cantón, distrito).
+    // más los catálogos por nombre (estatus, tienda, zona, provincia, cantón, distrito) y —desde
+    // la ficha 296— el MENSAJERO ASIGNADO (`mensajeroAsignado: { nombre }`).
+    //
+    // Ese sexto join es el único que apunta a `usuario` y no a un catálogo, así que es el que
+    // podría estar mal nombrado sin que ningún doble se enterase: el de arriba, con Prisma
+    // mockeado, acepta cualquier objeto como `select`. Aquí lo ejecuta Postgres.
     for (const grupo of GRUPOS_NOVEDAD) {
       await expect(
         repo.findNovedadesByTienda(TIENDA_INEXISTENTE, grupo, { skip: 0, take: 10 }),

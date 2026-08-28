@@ -389,6 +389,31 @@ describe("RepartoModule", () => {
     // tarjeta y su disparador.
   });
 
+  // FICHA 296 (2026-08-27) — EL PORTAL DEL MENSAJERO NO CAMBIA.
+  //
+  // La ficha añadió a la card POS —que esta pantalla COMPARTE con `/novedades`— un dato nuevo:
+  // el nombre del mensajero de la orden, para que la tienda sepa a quién preguntarle. Aquí ese
+  // dato no tiene sentido: el mensajero es quien mira, y leer su propio nombre en cada card no
+  // informa de nada. La compuerta es la PRESENCIA de la prop `mensajero`, y este módulo no la
+  // pasa.
+  //
+  // Es una AUSENCIA, y las ausencias se rompen sin que nadie se entere: el día que alguien
+  // «uniforme» las cards pasando la prop desde aquí, o le ponga un default a la card, esta
+  // pantalla se llenaría de un dato que nadie pidió y el fallo saldría en la calle, no aquí.
+  it("296: la card del portal del mensajero NO muestra el dato del mensajero", () => {
+    renderModule({
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    // Control positivo: la card está montada de verdad. Sin él, la ausencia de abajo estaría
+    // verde también con la pantalla en blanco.
+    expect(cardDe("REM-G1")).toBeInTheDocument();
+    // `queryAllByText` y no `queryByText`: una consulta singular LANZA si hubiera más de una
+    // coincidencia, y un fallo tiene que leerse como "hay dato donde no debe", no como un
+    // error de la consulta.
+    expect(screen.queryAllByText(/^Mensajero:/)).toHaveLength(0);
+  });
+
   it("Sin órdenes en reparto: muestra el aviso y NO renderiza el panel de detalle", () => {
     renderModule({ porGestionar: [] });
 

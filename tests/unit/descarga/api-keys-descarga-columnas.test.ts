@@ -16,6 +16,8 @@ const API_KEY: ApiKeyListItemDTO = {
   estado: "inactiva",
   usuarioId: "1a2b3c4d-5e6f-4708-9a0b-1c2d3e4f5a6b",
   usuarioEmail: "apikey+tienda-uno@apikey.invalid",
+  tiendaDestinoId: null, // feature 302
+  tiendaDestinoNombre: null,
   createdAt: new Date("2026-03-15T18:30:00.000Z"),
 };
 
@@ -25,6 +27,7 @@ describe("columnas de descarga del inventario de API keys", () => {
       "identificador",
       "prefijo",
       "usuarioDedicado",
+      "tiendaDestino",
       "fechaCreacion",
       "estado",
     ]);
@@ -32,9 +35,26 @@ describe("columnas de descarga del inventario de API keys", () => {
       "Identificador",
       "Prefijo",
       "Usuario dedicado",
+      "Tienda destino",
       "Fecha de creación",
       "Estado",
     ]);
+  });
+
+  // Feature 307 — la tienda destino sale con NOMBRE, y "sin tienda" es celda vacia (no
+  // la cadena "null" ni el uuid). El fixture base la trae en `null`, que es el
+  // comportamiento historico de la 302; aqui se cubre la rama con tienda.
+  it("emite el NOMBRE de la tienda destino, y celda vacia si no hay (307)", () => {
+    expect(filaDescargaApiKey(API_KEY).tiendaDestino).toBeNull();
+
+    const conTienda: ApiKeyListItemDTO = {
+      ...API_KEY,
+      tiendaDestinoId: "3f2b1a09-8c7d-4e6f-9a0b-1c2d3e4f5a6b",
+      tiendaDestinoNombre: "Tienda Norte",
+    };
+    const fila = filaDescargaApiKey(conTienda);
+    expect(fila.tiendaDestino).toBe("Tienda Norte");
+    expect(Object.values(fila)).not.toContain(conTienda.tiendaDestinoId);
   });
 
   it("emite valores CRUDOS: texto, numero o celda vacia, nunca objetos (R7)", () => {

@@ -81,6 +81,7 @@ function novedad(over: Partial<NovedadDTO> & { id: string }): NovedadDTO {
     numRemision: "REM-001",
     estatusValue: "devuelta",
     intentosContacto: 0,
+    mensajeroNombre: "Marta Mensajera",
     destinatario: "Ana Cliente",
     telefonoDest: "88887777",
     direccion: "Av. Central 120",

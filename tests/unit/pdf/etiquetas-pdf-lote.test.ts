@@ -67,6 +67,7 @@ function etiqueta(overrides: Partial<EtiquetaGuiaDTO> = {}): EtiquetaGuiaDTO {
     provinciaNombre: "ProvinciaTest",
     cantonNombre: "CantonTest",
     distritoNombre: "DistritoTest",
+    fechaCreacion: "2026-08-27", // feature 295
     qrValue: String(numGuia),
     barcodeValue: String(numGuia),
     ...overrides,

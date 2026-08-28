@@ -3580,22 +3580,22 @@
       "title": "la etiqueta para imprimir no lleva ninguna fecha",
       "description": "Quien recibe un paquete no puede saber de cuando es: la etiqueta muestra guia, destinatario, direccion, producto y monto, pero ninguna fecha.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "branch": null,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27 ('falta ese dato en las etiquetas para imprimir'). MEDIDO antes de registrarla: la fecha no es que no se pinte, es que NO EXISTE en el camino -- `EtiquetaRow` (la proyeccion del repositorio) no la trae y `EtiquetaGuiaDTO` no la publica, asi que el cambio va de la consulta al PDF y toca las dos mitades. DECISION HUMANA sobre CUAL de las tres fechas: la de CREACION de la orden (el dia en que la tienda cargo el envio). Se le ofrecieron las otras dos y se descartaron con su motivo: la de IMPRESION cambia en cada reimpresion -- dos etiquetas del mismo paquete dirian fechas distintas --, y la de REPARTO esta VACIA en la mayoria de ordenes (las de bodega no la tienen: medido en produccion), asi que saldria en blanco casi siempre. OJO AL PRECEDENTE: la ficha 282 ya arreglo esta misma etiqueta por datos superpuestos (el numero de guia pisaba la primera fila). Anadir una linea puede reabrir ese defecto, asi que la verificacion tiene que MIRAR el PDF, no solo comprobar que el dato viaja."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27 ('falta ese dato en las etiquetas para imprimir'). MEDIDO antes de registrarla: la fecha no es que no se pinte, es que NO EXISTE en el camino -- `EtiquetaRow` (la proyeccion del repositorio) no la trae y `EtiquetaGuiaDTO` no la publica, asi que el cambio va de la consulta al PDF y toca las dos mitades. DECISION HUMANA sobre CUAL de las tres fechas: la de CREACION de la orden (el dia en que la tienda cargo el envio). Se le ofrecieron las otras dos y se descartaron con su motivo: la de IMPRESION cambia en cada reimpresion -- dos etiquetas del mismo paquete dirian fechas distintas --, y la de REPARTO esta VACIA en la mayoria de ordenes (las de bodega no la tienen: medido en produccion), asi que saldria en blanco casi siempre. OJO AL PRECEDENTE: la ficha 282 ya arreglo esta misma etiqueta por datos superpuestos (el numero de guia pisaba la primera fila). Anadir una linea puede reabrir ese defecto, asi que la verificacion tiene que MIRAR el PDF, no solo comprobar que el dato viaja. || CERRADA 2026-08-28 al mergear el PR #555 en dev. Las dos mitades fueron en UN solo PR para no dejarlas apiladas. La fecha va en la CABECERA y no como octavo campo: medido que con ocho campos el corpus de la 282 se recortaria con puntos suspensivos."
     },
     {
       "id": 296,
       "title": "la tarjeta de novedades no dice que mensajero pidio la ayuda",
       "description": "La tienda ve una orden pidiendo ayuda pero no a quien preguntarle: la tarjeta no muestra ningun mensajero.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "branch": null,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27. CAUSA MEDIDA: `NovedadDTO` extiende `MiAsignacionDTO`, que es el contrato del PORTAL DEL MENSAJERO -- ahi el mensajero es obvio porque es quien mira, asi que el DTO no tiene NINGUN campo de mensajero. Al reusarlo en /novedades, que la ve la TIENDA, el dato no existe en el camino: hay que anadirlo al DTO y a la proyeccion, no solo pintarlo. DECISION QUE EL IMPLEMENTADOR NO DEBE TOMAR SOLO: 'quien solicito la ayuda' y 'quien la lleva ahora' pueden ser personas distintas si la orden se reasigno despues. El actor de la transicion `solicitud_ayuda_tienda` esta en `orden_historial_estado` (verificado: hoy dice 'Mensajero para pruebas' en las dos ordenes vivas), y el asignado actual esta en `orden.mensajero_asignado_id`. Lo pedido literalmente es QUIEN SOLICITO; lo util para la tienda es A QUIEN LLAMAR. Si difieren hay que mostrar los dos o elegir con el humano. OJO: `MiAsignacionDTO` lo consumen tambien las dos listas del portal del mensajero; anadir el campo alli obligaria a emitirlo donde nadie lo lee. El precedente esta escrito en el propio codigo (`causa` e `intentosContacto` son campos PROPIOS de NovedadDTO por ese mismo motivo): el campo nuevo va en NovedadDTO, no en el contrato compartido."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27. CAUSA MEDIDA: `NovedadDTO` extiende `MiAsignacionDTO`, que es el contrato del PORTAL DEL MENSAJERO -- ahi el mensajero es obvio porque es quien mira, asi que el DTO no tiene NINGUN campo de mensajero. Al reusarlo en /novedades, que la ve la TIENDA, el dato no existe en el camino: hay que anadirlo al DTO y a la proyeccion, no solo pintarlo. DECISION QUE EL IMPLEMENTADOR NO DEBE TOMAR SOLO: 'quien solicito la ayuda' y 'quien la lleva ahora' pueden ser personas distintas si la orden se reasigno despues. El actor de la transicion `solicitud_ayuda_tienda` esta en `orden_historial_estado` (verificado: hoy dice 'Mensajero para pruebas' en las dos ordenes vivas), y el asignado actual esta en `orden.mensajero_asignado_id`. Lo pedido literalmente es QUIEN SOLICITO; lo util para la tienda es A QUIEN LLAMAR. Si difieren hay que mostrar los dos o elegir con el humano. OJO: `MiAsignacionDTO` lo consumen tambien las dos listas del portal del mensajero; anadir el campo alli obligaria a emitirlo donde nadie lo lee. El precedente esta escrito en el propio codigo (`causa` e `intentosContacto` son campos PROPIOS de NovedadDTO por ese mismo motivo): el campo nuevo va en NovedadDTO, no en el contrato compartido. || CERRADA 2026-08-28 al mergear el PR #556 en dev. Demostrado que quien pide la ayuda y quien la lleva son la MISMA persona sobre este grupo, con la condicion de caducidad escrita al lado del campo. Solo el nombre: el telefono es PII de un tercero."
     },
     {
       "id": 297,
@@ -3624,11 +3624,11 @@
       "title": "la carga deja entrar montos con decimales que la entrega no sabe cobrar",
       "description": "Una orden cargada con centimos no se puede entregar nunca: el desglose de pago solo admite enteros y la validacion exige cuadrar al centimo.",
       "zone": "backend",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "branch": "fix/299-carga-redondea-montos",
-      "status_note": "REPORTADO POR EL HUMANO el 2026-08-27 con captura: al entregar, 'A cobrar 11.899 / Capturado 11.899 / Diferencia 0' Y ADEMAS el error 'El desglose debe sumar exactamente el monto a cobrar'. El humano ya redondeo A MANO en la base unas 14 ordenes para desbloquearlas. CONTRADICCION MEDIDA, y son dos puertas que no se hablan: DesglosePagoField filtra el input a DIGITOS a proposito (comentario propio: `text` + inputMode numeric para no perder lo tecleado), mientras que carga-masiva.ts:95 acepta cualquier `Number(value)` finito >= 0 -- decimales incluidos. Y la pantalla miente: pinta el monto con `money()` (redondeado) mientras el guard compara contra el valor EXACTO, asi que dice 'Diferencia 0' y a la vez que no cuadra. DECISION HUMANA 2026-08-27: REDONDEAR AL COLON MAS CERCANO Y AVISAR. Se le ofrecio rechazar la fila (mas estricto con el dato de la tienda, pero le obliga a corregir el archivo cada vez) y redondear a multiplos de 5 (comodo en efectivo, pero innecesario con SINPE); eligio la primera. EL LEADER PROPUSO Y EL HUMANO ACEPTO hacerlo EN LA CARGA y no despues, como el planteaba: redondear en un paso posterior deja una ventana con ordenes incobrables y depende de que alguien se acuerde de ejecutarlo. ALCANCE: normalizar en TODAS las puertas de alta (carga masiva y canal por API key, feature 88), e informar en el resultado de la carga que esa fila se ajusto -- sin eso, el sistema de la tienda y el nuestro dicen numeros distintos y nadie sabe por que. Guardia que impida que un decimal vuelva a entrar por cualquier via. MEDIDO HOY: 0 ordenes vivas con decimales sobre 294, asi que NO hace falta backfill."
+      "status_note": "REPORTADO POR EL HUMANO el 2026-08-27 con captura: al entregar, 'A cobrar 11.899 / Capturado 11.899 / Diferencia 0' Y ADEMAS el error 'El desglose debe sumar exactamente el monto a cobrar'. El humano ya redondeo A MANO en la base unas 14 ordenes para desbloquearlas. CONTRADICCION MEDIDA, y son dos puertas que no se hablan: DesglosePagoField filtra el input a DIGITOS a proposito (comentario propio: `text` + inputMode numeric para no perder lo tecleado), mientras que carga-masiva.ts:95 acepta cualquier `Number(value)` finito >= 0 -- decimales incluidos. Y la pantalla miente: pinta el monto con `money()` (redondeado) mientras el guard compara contra el valor EXACTO, asi que dice 'Diferencia 0' y a la vez que no cuadra. DECISION HUMANA 2026-08-27: REDONDEAR AL COLON MAS CERCANO Y AVISAR. Se le ofrecio rechazar la fila (mas estricto con el dato de la tienda, pero le obliga a corregir el archivo cada vez) y redondear a multiplos de 5 (comodo en efectivo, pero innecesario con SINPE); eligio la primera. EL LEADER PROPUSO Y EL HUMANO ACEPTO hacerlo EN LA CARGA y no despues, como el planteaba: redondear en un paso posterior deja una ventana con ordenes incobrables y depende de que alguien se acuerde de ejecutarlo. ALCANCE: normalizar en TODAS las puertas de alta (carga masiva y canal por API key, feature 88), e informar en el resultado de la carga que esa fila se ajusto -- sin eso, el sistema de la tienda y el nuestro dicen numeros distintos y nadie sabe por que. Guardia que impida que un decimal vuelva a entrar por cualquier via. MEDIDO HOY: 0 ordenes vivas con decimales sobre 294, asi que NO hace falta backfill. || CERRADA 2026-08-28 al mergear el PR #549 en dev. Deja dos cabos: el aviso en pantalla (ficha 304) y la defensa en la base mas la cotizacion (305)."
     },
     {
       "id": 300,
@@ -3657,11 +3657,88 @@
       "title": "una api key puede cargar a nombre de una tienda que ya existe, sin duplicarla",
       "description": "Generar una api key crea siempre una tienda nueva, asi que una tienda ya registrada acabaria con dos cuentas, dos saldos y sin sus tarifas en la segunda.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "media",
       "branch": "feature/302-api-key-tienda-existente",
-      "status_note": "PEDIDA POR EL HUMANO el 2026-08-28: Nuform ya esta registrada y quiere cargar por API sin que 'se generen dos Nuform'. MEDIDO ANTES DE PROPONER: `ApiKeyService.generar` crea SIEMPRE usuario + key en una transaccion, con email y cedula sinteticos derivados del identificador (`apikey+<slug>@apikey.invalid`). Ese email no colisiona con el real de Nuform, asi que NO da error: crearia la segunda tienda EN SILENCIO. Consecuencias medidas: wallet y saldo separados, listados y analitica con dos Nuform, y la tienda nueva SIN tarifas -- la Nuform actual tiene exactamente 1 tarifa propia, y la nueva naceria con cero. POR QUE NO BASTA APUNTAR LA KEY AL USUARIO EXISTENTE: `ApiKeyAuthService` exige que la cuenta de la key tenga el rol `apiKey`, y lo comprueba en DOS capas (267). Nuform es `adminTienda`, asi que seria rechazada con forbidden. DISENO PROPUESTO POR EL LEADER: separar QUIEN ENTRA de QUIEN ES EL DUENO. La key conserva su cuenta dedicada -- portador de la credencial, con su rol restringido -- y las ordenes que cree se registran a nombre de la TIENDA REAL. Una sola Nuform en datos, sin tocar la postura de seguridad del canal. SE DESCARTA relajar la comprobacion de rol: una key filtrada actuaria con los permisos completos de la tienda, sesion web incluida. OJO AL COMENTARIO [D4] de ApiKeyAuthService ('el actor es el usuario dedicado de la key, dueño de las ordenes que cree'): esta ficha lo cambia, asi que hay que reescribirlo, no dejarlo mintiendo. EL MANUAL DEL INTEGRADOR NO CAMBIA: misma key `ordx_`, misma cabecera Authorization: Bearer, mismos endpoints y mismo formato. Es un cambio integramente de nuestro lado. SIN MIGRACION DE DATOS: hay CERO api keys en produccion, asi que no hay ninguna que reapuntar."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-28: Nuform ya esta registrada y quiere cargar por API sin que 'se generen dos Nuform'. MEDIDO ANTES DE PROPONER: `ApiKeyService.generar` crea SIEMPRE usuario + key en una transaccion, con email y cedula sinteticos derivados del identificador (`apikey+<slug>@apikey.invalid`). Ese email no colisiona con el real de Nuform, asi que NO da error: crearia la segunda tienda EN SILENCIO. Consecuencias medidas: wallet y saldo separados, listados y analitica con dos Nuform, y la tienda nueva SIN tarifas -- la Nuform actual tiene exactamente 1 tarifa propia, y la nueva naceria con cero. POR QUE NO BASTA APUNTAR LA KEY AL USUARIO EXISTENTE: `ApiKeyAuthService` exige que la cuenta de la key tenga el rol `apiKey`, y lo comprueba en DOS capas (267). Nuform es `adminTienda`, asi que seria rechazada con forbidden. DISENO PROPUESTO POR EL LEADER: separar QUIEN ENTRA de QUIEN ES EL DUENO. La key conserva su cuenta dedicada -- portador de la credencial, con su rol restringido -- y las ordenes que cree se registran a nombre de la TIENDA REAL. Una sola Nuform en datos, sin tocar la postura de seguridad del canal. SE DESCARTA relajar la comprobacion de rol: una key filtrada actuaria con los permisos completos de la tienda, sesion web incluida. OJO AL COMENTARIO [D4] de ApiKeyAuthService ('el actor es el usuario dedicado de la key, dueño de las ordenes que cree'): esta ficha lo cambia, asi que hay que reescribirlo, no dejarlo mintiendo. EL MANUAL DEL INTEGRADOR NO CAMBIA: misma key `ordx_`, misma cabecera Authorization: Bearer, mismos endpoints y mismo formato. Es un cambio integramente de nuestro lado. SIN MIGRACION DE DATOS: hay CERO api keys en produccion, asi que no hay ninguna que reapuntar. || CERRADA 2026-08-28 al mergear el PR #551 en dev. NO SE PUEDE USAR TODAVIA: falta el selector de tienda en el formulario (ficha 307); hasta entonces toda key nace sin tienda destino y se comporta como hoy."
+    },
+    {
+      "id": 303,
+      "title": "el apartado de tarifas usa palabras que no dicen lo que el sistema hace",
+      "description": "Los campos de tarifas se llamaban de forma ambigua o incorrecta, y un monto en cero no se distinguia de uno sin configurar.",
+      "zone": "frontend",
+      "status": "done",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "fix/303-claridad-tarifas",
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-28 despues de que un cobro sin configurar le costara media hora: en GAM el cobro por rechazo estaba en 0.00 y nadie podia saber si era 'esta zona no paga' o 'nadie lo puso'; las otras cuatro zonas tienen 1.000 y 1.700, y quedaron 44 rechazos sin pagar a la bodega. EL PEOR ROTULO era 'No entregado': ese monto solo se paga con resultado RECHAZADA -- una devuelta y una reprogramada tambien son 'no entregado' y no pagan nada. RENOMBRADOS: 'Rechazado por el cliente', 'Flete de retorno (solo rechazos)', 'Comision por cobro contra entrega'. `Fulfillment` y `Tarifa especial` NO se tocan (decision del humano: asi lo conocen). AVISO DEL CERO, y no a bulto: en los montos de pago tambien con el campo EN BLANCO (ahi el vacio se guarda como 0, que es el caso 'nadie lo puso'); en tarifas solo con cero explicito; NUNCA en las especiales, donde el vacio ya significa 'sin pacto'. SEGUNDA TANDA -- EL TITULO QUE EL LEADER PROPUSO MAL: 'Pago al mensajero por zona' atribuia al mensajero un dinero que es de la BODEGA, contradiciendo la explicacion que el propio leader habia dado media hora antes. Ahora el titulo no atribuye ('Pagos por zona (mensajero y bodega)') y lo hace CADA CAMPO, que era el defecto de fondo: dos dineros distintos presentados como si fueran el mismo. Del barrido de la UI salio la ficha 306. CERRADA al mergear el PR #550."
+    },
+    {
+      "id": 304,
+      "title": "la tienda no se entera de que su monto se redondeo al cargar",
+      "description": "La carga ajusta el monto con centimos y lo informa, pero la pantalla del resumen no lo pinta: quien sube por pantalla ve otro numero sin saber por que.",
+      "zone": "frontend",
+      "status": "done",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "fix/304-aviso-monto-ajustado",
+      "status_note": "SALE DE LA 299 (2026-08-28) y el humano pidio arreglarla. El backend YA emite el aviso por fila (`montoAjustado: { original, aplicado }`), pero `carga-masiva-clasificacion.ts` solo conserva el `numRemision` de las filas creadas, asi que el dato llega al resumen y MUERE ahi. El integrador si lo ve (recibe el JSON crudo); la tienda que sube por pantalla no. NO hay que tocar backend. || CERRADA 2026-08-28 al mergear el PR #554 en dev. Los montos se pintan con el formateador EXACTO de la 300; con el general, el aviso habria dicho 'de 11.899 a 11.899'."
+    },
+    {
+      "id": 305,
+      "title": "nada impide meter un monto con centimos por fuera de la carga",
+      "description": "La guarda de la 299 cubre el codigo, pero un UPDATE a mano en la base vuelve a dejar una orden imposible de entregar.",
+      "zone": "backend",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "fix/305-monto-entero-en-base",
+      "status_note": "SALE DE LA 299 (2026-08-28), recomendado por el leader y aceptado por el humano. DOS PIEZAS: (1) CHECK en la base de que `monto_cobrar` es entero -- la UNICA defensa universal, cubre incluso un UPDATE a mano, que es EXACTAMENTE como se metieron los centimos que hubo que limpiar el 27 (14 ordenes). Momento barato: 0 ordenes vivas con decimales, entra sin limpiar nada. (2) La COTIZACION redondea igual que la carga: hoy cotiza sobre el exacto y se cobra sobre el redondeado. Son centimos sobre la comision, pero es incoherente. Audiencia medida: CERO api keys. OJO: la 299 dejo la cotizacion en la LISTA BLANCA de su guarda con el motivo escrito; al hacer esto hay que sacarla de ahi y no dejar la lista mintiendo."
+    },
+    {
+      "id": 306,
+      "title": "un comentario del modulo de ayuda afirma que el rechazo se le cobra a la tienda, y es falso",
+      "description": "El codigo que gestiona una orden desde novedades documenta un cobro que no existe, y su archivo vecino dice justo lo contrario.",
+      "zone": "backend",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "fix/306-comentario-falso-ayuda",
+      "status_note": "ENCONTRADA el 2026-08-28 en el barrido de la 303, no tocada por estar en otro modulo. `GestionarDesdeAyudaModal.tsx` (32-35) afirma que 'un rechazo cobra a la tienda el cobroRechazado'. FALSO dos veces: ese monto es ingreso de la BODEGA (feature 56) y a la tienda un rechazo le cuesta por otra via (flete de retorno + IVA). SU VECINO LO DESMIENTE: `NovedadAcciones.tsx:79-81` lo corrigio el 2026-08-20. Dos versiones del mismo hecho a dos archivos de distancia. El texto VISIBLE no atribuye nada mal: es prosa que engana a quien lea el codigo, y es la clase de dato que produjo la 303."
+    },
+    {
+      "id": 307,
+      "title": "el formulario de api key no deja elegir la tienda a cuyo nombre carga",
+      "description": "El backend ya admite atar una clave a una tienda existente, pero la pantalla no ofrece elegirla, asi que la funcion no se puede usar.",
+      "zone": "frontend",
+      "status": "done",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "fix/307-selector-tienda-api-key",
+      "status_note": "SALE DE LA 302 (2026-08-28). El backend publica lo necesario y `listarAdminTiendas()` YA EXISTE y ya autoriza a maestro. Falta un select OPCIONAL 'Tienda destino' en `GenerarApiKeyForm.tsx` y, opcionalmente, una columna con el nombre en `ApiKeysModule.tsx`. SIN ESTO LA 302 NO SIRVE. OJO AL VACIO: el schema trata '' como 'ninguna', no como uuid invalido -- no lo conviertas en error. || CERRADA 2026-08-28 al mergear el PR #553 en dev. Con esto la 302 ya SIRVE: se puede generar la key de Nuform apuntando a la Nuform que ya existe."
+    },
+    {
+      "id": 308,
+      "title": "la pantalla de rechazos por plazo muestra a la tienda un monto que no es suyo",
+      "description": "Por cada orden rechazada por plazo vencido se le enseña a la tienda un importe sin etiqueta que en realidad es el ingreso de la bodega.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": null,
+      "status_note": "ENCONTRADA el 2026-08-28 en el barrido de la 306, y es el MISMO defecto que esa ficha corrigio en un comentario, pero EN PIXELES y de cara al usuario. `RechazosSlaModule.tsx:132-138` pinta en negrita y SIN ETIQUETA un monto que sale de `ingreso_bodega_rechazo` -- verificado en `lib/types/rechazo-sla-tienda.ts:12` y `OrdenRepository.ts:4140`. Ese importe es de la BODEGA, no de la tienda, y el texto de vacio ('aparecera aca con su monto', linea 31) refuerza la lectura de que es un cobro suyo. CONTEXTO QUE LO HACE URGENTE: el 27/08 el cobro por rechazo de GAM llevaba dias en 0.00 sin que nadie lo viera, y esta pantalla es una de las que lo mostraria. DECIDIR: etiquetarlo, sustituirlo por lo que SI le cuesta a la tienda (flete de retorno + IVA) o retirarlo."
+    },
+    {
+      "id": 309,
+      "title": "el aviso de la ventana de ayuda dice que mueve dinero tambien al reprogramar, y no lo mueve",
+      "description": "El mismo aviso se pinta en los dos modos de la ventana, pero reprogramar no genera ningun importe.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": null,
+      "status_note": "ENCONTRADA el 2026-08-28 en el barrido de la 306. `GESTION_AYUDA_AVISO_PRECIO` (`GestionarDesdeAyudaModal.tsx:119`) dice '...y mueve el dinero igual' y se pinta en los DOS modos. Al REPROGRAMAR no se mueve nada: `pago-mensajero.ts:22`, `ingreso-bodega.ts:23` e `ingreso-ordenex.ts:185-186` dan cero. Quien reprograma lee que le van a cobrar. ADEMAS, de otra familia y en el mismo modulo: `HabilitarNovedadModal.tsx:22-23,36-41` sigue diciendo 'MAQUETA: la transicion todavia no existe en el backend', falso desde la 235."
     }
   ]
 }

@@ -118,6 +118,10 @@ function prismaRow(overrides: Record<string, unknown> = {}) {
     provincia: { nombre: "San Jose" },
     canton: { nombre: "Central" },
     distrito: { nombre: "Carmen" },
+    // FICHA 296: la relacion del mensajero tal como la devuelve Prisma —objeto anidado, no un
+    // nombre ya plano—. Es NULLABLE (`mensajero_asignado_id` lo es), asi que el doble tiene que
+    // poder darla como `null` sin que el repo reviente.
+    mensajeroAsignado: { nombre: "Marta Mensajera" },
     ...overrides,
   };
 }
@@ -372,6 +376,11 @@ describe("OrdenRepository.findNovedadesByTienda (R4/R10)", () => {
       provincia: { select: { nombre: true } },
       canton: { select: { nombre: true } },
       distrito: { select: { nombre: true } },
+      // FICHA 296: el join del mensajero, ACOTADO A `nombre`. Este `toEqual` ES el contrato del
+      // `select` (por eso es literal y no se deriva de nada): quitar esta clave lo pone rojo, y
+      // ampliarla a `true` —que arrastraria `email`, `telefono`, `cedula` y `password_hash` hasta
+      // el navegador de la tienda— tambien.
+      mensajeroAsignado: { select: { nombre: true } },
     });
     expect(arg.select).not.toHaveProperty("deletedAt");
   });
@@ -539,6 +548,53 @@ describe("OrdenRepository.findNovedadesByTienda (R4/R10)", () => {
     expect(rows[0].producto).toBe("Cafe");
     expect(rows[0].numRemision).toBe("REM-001");
     expect(rows[0].zonaNombre).toBe("GAM");
+  });
+
+  // --- FICHA 296 (2026-08-27): la fila trae el MENSAJERO ---
+  // El defecto que cierra: `/novedades` es la pantalla de la TIENDA y no decia a quien preguntar,
+  // porque el mensajero no viajaba por ninguna capa. Aqui se afirma la de mas abajo: el join sale
+  // en la MISMA consulta y el nombre llega resuelto.
+
+  it("296: el nombre del mensajero se resuelve de la relacion, en la MISMA consulta", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      prismaRow({ estatus: { value: "ayuda_tienda" }, mensajeroAsignado: { nombre: "Kevin" } }),
+    ]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findNovedadesByTienda("tienda-1", "ayuda", { skip: 0, take: 10 });
+
+    expect(rows[0].mensajeroNombre).toBe("Kevin");
+    // «En la MISMA consulta» no es un comentario: UNA llamada a `findMany` sobre `orden` y ni una
+    // sola sobre `usuario`. Si alguien lo resolviera con una lectura por fila, esto cae.
+    expect(prisma.orden.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("296: sin mensajero asignado la relacion es null y el nombre sale null (nunca `\"\"`)", async () => {
+    // `mensajero_asignado_id` es NULLABLE: una orden `devuelta` ya liberada a bodega no tiene
+    // ninguno. Es el mismo trato que `distrito`, el otro FK opcional de este `select`.
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([prismaRow({ mensajeroAsignado: null })]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findNovedadesByTienda("tienda-1", "devolucion", { skip: 0, take: 10 });
+
+    expect(rows[0].mensajeroNombre).toBeNull();
+    expect(rows[0].mensajeroNombre).not.toBe("");
+  });
+
+  it("296: la fila expone el NOMBRE y no la relacion cruda ni el FK", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([prismaRow({ mensajeroAsignado: { nombre: "Kevin" } })]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findNovedadesByTienda("tienda-1", "devolucion", { skip: 0, take: 10 });
+
+    // Mismo criterio que los cinco catalogos: la fila lleva nombres, no ids ni objetos anidados.
+    // Y el objeto anidado importa mas aqui que en los catalogos: es una fila de `usuario`.
+    expect(rows[0]).not.toHaveProperty("mensajeroAsignado");
+    expect(rows[0]).not.toHaveProperty("mensajeroAsignadoId");
+    expect(JSON.stringify(rows[0])).not.toContain("password");
   });
 });
 

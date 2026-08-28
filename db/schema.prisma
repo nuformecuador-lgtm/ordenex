@@ -128,6 +128,7 @@ model Usuario {
   cierreDetallesTienda                CierreDetail[]            @relation("CierreDetailTienda") // feature 69/R6: snapshots que congelaron a esta tienda como destinataria
   apiKey                              ApiKey?                   @relation("ApiKeyUsuario") // feature 81/[D6]: la key dedicada a ESTA cuenta sintetica (1:1)
   apiKeysCreadas                      ApiKey[]                  @relation("ApiKeyCreadaPor") // feature 81/R21: keys que este usuario (maestro) genero
+  apiKeysComoTiendaDestino            ApiKey[]                  @relation("ApiKeyTiendaDestino") // feature 302: keys que cargan A NOMBRE de esta tienda (rol adminTienda); la FK es RESTRICT
   rutaOptimizada                      RutaOptimizada?           @relation("RutaOptimizadaMensajero") // feature 92/R26: ruta optimizada vigente de ESTE mensajero (1:1)
   plantillasCreadas                   PlantillaMensaje[]        @relation("PlantillaMensajeCreador") // feature 107/R8: plantillas de mensaje que este usuario (maestro) creo
   webhookSuscripcion                  WebhookSuscripcion?       @relation("WebhookSuscripcionOwner") // feature 99/R1: suscripcion de webhook de ESTE owner (usuario dedicado de la API key); 1:1
@@ -151,7 +152,7 @@ model Usuario {
   ordenNotasEscritas                  OrdenNota[]               @relation("OrdenNotaAutor") // feature 227: notas del hilo que ESTE usuario publico; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
   postulacionesRecursoAtendidas       PostulacionRecurso[]      @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
   diaRepartoCambiosRealizados         OrdenDiaRepartoCambio[]   @relation("OrdenDiaRepartoCambioActor") // feature 262/R20: correcciones del dia de reparto que ESTE usuario hizo; la FK es RESTRICT (quien corrigio es evidencia y no se pierde al dar de baja al usuario)
-  habilitacionesApiPedidas            OrdenHabilitacionApi[]    @relation("OrdenHabilitacionApiActor") // feature 266/R21: habilitaciones que ESTE usuario dedicado de API key pidio por el canal integrador; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
+  habilitacionesApiPedidas            OrdenHabilitacionApi[]    @relation("OrdenHabilitacionApiActor") // feature 266/R21: habilitaciones pedidas por el canal integrador a nombre de ESTE usuario (302: el dueno resuelto de la key -- su cuenta dedicada, o la tienda real a la que apunta); la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -544,6 +545,21 @@ model Orden {
   peso                   Decimal?  @db.Decimal(10, 3) // feature 15/R4: nullable (carga masiva sin peso)
   notas                  String? // R14a: texto nullable
   direccion              String? // feature 15/R1: nuevo, carga masiva
+  // FICHA 305 (2026-08-28) — EL MONTO ES UN ENTERO DE COLONES, Y LO GARANTIZA LA BASE.
+  // La columna sigue siendo `DECIMAL(12,2)` (no se cambia el tipo: eso reescribiria la tabla y
+  // perderia la capacidad de representar lo que ya hay), pero desde
+  // `20260828140000_orden_monto_cobrar_entero` lleva la restriccion
+  //   CONSTRAINT "orden_monto_cobrar_entero_check"
+  //     CHECK ("monto_cobrar" IS NULL OR "monto_cobrar" = trunc("monto_cobrar"))
+  // que alcanza a TODAS las filas, tambien las borradas. Prisma NO sabe expresar un `CHECK`, asi
+  // que la restriccion vive SOLO en el SQL de esa migracion —mismo patron que los indices
+  // parciales de mas abajo—; este comentario existe para que nadie la eche de menos aqui y la
+  // "restaure" en el modelo. El porque esta en el docstring de la migracion: con centimos la
+  // orden no se puede entregar NUNCA (el desglose de pago solo admite enteros) y el 2026-08-27
+  // hubo que redondear 14 ordenes a mano. La 299 cerro la carga; esto cierra el `UPDATE` a mano.
+  // Esa migracion ADEMAS redondea (`round`) las filas que ya tenian centimos, justo antes de
+  // añadir la restriccion: en produccion no toco ninguna (0 de 301, medido el 2026-08-28) y lo
+  // que limpia es basura de entornos de prueba, que era lo que bloqueaba el despliegue.
   montoCobrar            Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
   mensajeroAsignadoId    String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro); feature 159: unica fuente de verdad del mensajero de una orden
   asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas). OJO: desde la 246/D7 ya NO es la fuente unica del denominador del ranking — solo la RAMA DE RESPALDO, para las ordenes sin `fecha_reparto`
@@ -2070,23 +2086,33 @@ enum EstadoApiKey {
 }
 
 model ApiKey {
-  id            String       @id @default(uuid())
-  identificador String // input crudo (recortado) para mostrar. No unico [D8]
-  slug          String // normalizado; base del email/cedula sinteticos (R5)
-  keyPrefix     String       @map("key_prefix") // `ordx_` + 7 chars, en claro (R17)
-  keyHash       String       @unique @map("key_hash") // SHA-256 hex del secreto completo (R16/R25)
-  estado        EstadoApiKey @default(activa) @map("estado") // ciclo de vida propio de la key (activar/desactivar)
-  usuarioId     String       @unique @map("usuario_id") // [D6] 1:1 con la cuenta dedicada (R21)
-  createdById   String       @map("created_by_id") // actor que la genero (R21)
-  createdAt     DateTime     @default(now()) @map("created_at") // R21
+  id              String       @id @default(uuid())
+  identificador   String // input crudo (recortado) para mostrar. No unico [D8]
+  slug            String // normalizado; base del email/cedula sinteticos (R5)
+  keyPrefix       String       @map("key_prefix") // `ordx_` + 7 chars, en claro (R17)
+  keyHash         String       @unique @map("key_hash") // SHA-256 hex del secreto completo (R16/R25)
+  estado          EstadoApiKey @default(activa) @map("estado") // ciclo de vida propio de la key (activar/desactivar)
+  usuarioId       String       @unique @map("usuario_id") // [D6] 1:1 con la cuenta dedicada (R21)
+  // Feature 302 — TIENDA DESTINO: la cuenta REAL (rol `adminTienda`) a nombre de la cual se
+  // registran las ordenes que cree esta key. Separa QUIEN ENTRA (la cuenta dedicada de arriba,
+  // portadora de la credencial y con su rol restringido) de QUIEN ES EL DUENO de los datos.
+  // NULL = comportamiento historico (81/88/D4): la propia cuenta dedicada es la duena.
+  // FK RESTRICT como sus dos hermanas: borrar la tienda exige borrar antes la key. NO se deja
+  // el `SetNull` que Prisma pone por defecto en una relacion opcional, porque eso repuntaria la
+  // key a su cuenta dedicada EN SILENCIO y sus ordenes cambiarian de dueno sin que nadie lo pida.
+  tiendaDestinoId String?      @map("tienda_destino_id")
+  createdById     String       @map("created_by_id") // actor que la genero (R21)
+  createdAt       DateTime     @default(now()) @map("created_at") // R21
   // Default declarado para que coincida con `20260716150000_api_key`, que creo la columna
   // como `NOT NULL DEFAULT CURRENT_TIMESTAMP` (espejo de `created_at`).
-  updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at")
+  updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at")
 
-  usuario   Usuario @relation("ApiKeyUsuario", fields: [usuarioId], references: [id])
-  createdBy Usuario @relation("ApiKeyCreadaPor", fields: [createdById], references: [id])
+  usuario       Usuario  @relation("ApiKeyUsuario", fields: [usuarioId], references: [id])
+  createdBy     Usuario  @relation("ApiKeyCreadaPor", fields: [createdById], references: [id])
+  tiendaDestino Usuario? @relation("ApiKeyTiendaDestino", fields: [tiendaDestinoId], references: [id], onDelete: Restrict)
 
   @@index([createdById])
+  @@index([tiendaDestinoId]) // feature 302: soporta el lookup inverso (que keys cargan en esta tienda)
   @@map("api_key")
 }
 

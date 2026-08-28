@@ -11,8 +11,10 @@ import type {
   IApiKeyRepository,
   ListApiKeysParams,
   ListApiKeysResult,
+  TiendaDestinoCandidata,
 } from "@/lib/interfaces/repositories/IApiKeyRepository";
 import type { ApiKeyPublico } from "@/lib/types/api-key";
+import { resolverOwnerApiKey } from "@/lib/utils/api-key-owner";
 
 type ApiKeyPrismaClient = Pick<
   PrismaClient,
@@ -29,8 +31,33 @@ const PUBLIC_SELECT = {
   keyPrefix: true,
   estado: true,
   usuarioId: true,
+  tiendaDestinoId: true, // feature 302
   createdAt: true,
 } as const;
+
+/** Fila cruda de `PUBLIC_SELECT`; el `ownerUsuarioId` publico se deriva de ella. */
+type FilaPublica = {
+  id: string;
+  identificador: string;
+  keyPrefix: string;
+  estado: EstadoApiKey;
+  usuarioId: string;
+  tiendaDestinoId: string | null;
+  createdAt: Date;
+};
+
+/**
+ * Feature 302: proyeccion publica. Lo unico que anade sobre la fila es `ownerUsuarioId`, y lo
+ * anade por la MISMA funcion que usa la autenticacion (`resolverOwnerApiKey`), no por un `??`
+ * escrito aqui: si las dos respuestas discrepasen, el webhook quedaria colgado de una cuenta que
+ * no recibe ordenes y nada fallaria. Sigue sin proyectar `keyHash` (R19).
+ */
+function toPublico(fila: FilaPublica): ApiKeyPublico {
+  return {
+    ...fila,
+    ownerUsuarioId: resolverOwnerApiKey(fila.usuarioId, fila.tiendaDestinoId),
+  };
+}
 
 /**
  * Feature 82/R6: seleccion del listado. Hermano de `PUBLIC_SELECT` y con la misma
@@ -44,8 +71,12 @@ const LIST_SELECT = {
   keyPrefix: true,
   estado: true,
   usuarioId: true,
+  tiendaDestinoId: true, // feature 302
   createdAt: true,
   usuario: { select: { email: true } },
+  // Feature 302: el nombre de la tienda destino, por include (mismo patron que `usuario.email`,
+  // [D1]). Sin el, la pantalla solo veria un uuid y no podria decir a nombre de QUIEN carga la key.
+  tiendaDestino: { select: { nombre: true } },
 } as const;
 
 /** [D1] Rol de la cuenta dedicada. Se resuelve por lookup, nunca por id hardcodeado. */
@@ -96,17 +127,21 @@ export class ApiKeyRepository implements IApiKeyRepository {
           select: { id: true },
         });
 
-        return await tx.apiKey.create({
+        const fila = await tx.apiKey.create({
           data: {
             identificador: data.identificador,
             slug: data.slug,
             keyPrefix: data.keyPrefix, // R17
             keyHash: data.keyHash, // R16: solo el hash
             usuarioId: usuario.id, // R21/[D6]
+            // Feature 302: la tienda REAL a cuyo nombre cargara la key (o null). Ya validada por
+            // el service; aqui solo se persiste.
+            tiendaDestinoId: data.tiendaDestinoId,
             createdById: data.createdById, // R21
           },
           select: PUBLIC_SELECT, // R19: sin keyHash
         });
+        return toPublico(fila);
       });
     } catch (error) {
       throw mapDuplicadoError(error);
@@ -127,12 +162,21 @@ export class ApiKeyRepository implements IApiKeyRepository {
         estado: true, // estado PROPIO de la key (palanca de revocacion, feature 88/R7)
         usuarioId: true,
         usuario: { select: { estado: true, rol: { select: { value: true } } } },
+        // Feature 302: la tienda destino viaja con su ESTADO y su ROL, no solo con su id. El
+        // service los exige (`adminTienda` + `activo`) en la MISMA peticion que autentica: si
+        // vinieran despues, habria una ventana en la que la key carga a nombre de una tienda dada
+        // de baja. Un `include` de mas por request, contra el indice de la FK.
+        tiendaDestinoId: true,
+        tiendaDestino: { select: { estado: true, rol: { select: { value: true } } } },
       },
     });
     if (!row) return null;
     return {
       apiKeyId: row.id,
       usuarioId: row.usuarioId,
+      tiendaDestinoId: row.tiendaDestinoId,
+      tiendaDestinoEstado: row.tiendaDestino?.estado ?? null,
+      tiendaDestinoRol: row.tiendaDestino?.rol.value ?? null,
       estado: row.usuario.estado,
       apiKeyEstado: row.estado,
       rol: row.usuario.rol.value,
@@ -159,6 +203,8 @@ export class ApiKeyRepository implements IApiKeyRepository {
     const items: ApiKeyListItem[] = rows.map((row) => ({
       id: row.id,
       identificador: row.identificador,
+      tiendaDestinoId: row.tiendaDestinoId, // feature 302
+      tiendaDestinoNombre: row.tiendaDestino?.nombre ?? null, // feature 302: se aplana el include
       keyPrefix: row.keyPrefix,
       estado: row.estado,
       usuarioId: row.usuarioId,
@@ -184,11 +230,13 @@ export class ApiKeyRepository implements IApiKeyRepository {
     data: { keyPrefix: string; keyHash: string },
   ): Promise<ApiKeyPublico | null> {
     try {
-      return await this.prisma.apiKey.update({
-        where: { id },
-        data: { keyPrefix: data.keyPrefix, keyHash: data.keyHash },
-        select: PUBLIC_SELECT, // R6/R19: sin keyHash
-      });
+      return toPublico(
+        await this.prisma.apiKey.update({
+          where: { id },
+          data: { keyPrefix: data.keyPrefix, keyHash: data.keyHash },
+          select: PUBLIC_SELECT, // R6/R19: sin keyHash
+        }),
+      );
     } catch (error) {
       if (esRegistroNoEncontrado(error)) return null;
       throw error;
@@ -202,15 +250,31 @@ export class ApiKeyRepository implements IApiKeyRepository {
    */
   async setEstado(id: string, estado: EstadoApiKey): Promise<ApiKeyPublico | null> {
     try {
-      return await this.prisma.apiKey.update({
-        where: { id },
-        data: { estado },
-        select: PUBLIC_SELECT, // R6/R19: sin keyHash
-      });
+      return toPublico(
+        await this.prisma.apiKey.update({
+          where: { id },
+          data: { estado },
+          select: PUBLIC_SELECT, // R6/R19: sin keyHash
+        }),
+      );
     } catch (error) {
       if (esRegistroNoEncontrado(error)) return null;
       throw error;
     }
+  }
+
+  /**
+   * Feature 302: la cuenta candidata a TIENDA DESTINO, con su rol y su estado. Solo query: quien
+   * decide si sirve es `ApiKeyService.generar`. La proyeccion es minima y SIN PII (nada de email,
+   * telefono, cedula ni hash de contrasena): esta lectura solo existe para autorizar una eleccion.
+   */
+  async findTiendaDestino(usuarioId: string): Promise<TiendaDestinoCandidata | null> {
+    const row = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: { id: true, nombre: true, estado: true, rol: { select: { value: true } } },
+    });
+    if (!row) return null;
+    return { id: row.id, nombre: row.nombre, rol: row.rol.value, estado: row.estado };
   }
 }
 

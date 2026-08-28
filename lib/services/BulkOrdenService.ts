@@ -34,6 +34,7 @@ import type {
   TarifaVigenteResuelta,
 } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import { clavePar, type ParTarifa } from "@/lib/utils/cascada-tarifa";
+import type { MontoAjustado } from "@/lib/utils/monto-cobrar";
 import { MSG_CARGA_SIN_TARIFA, MSG_FILA_SIN_TARIFA } from "@/lib/services/mensajes-tarifa";
 import { ConflictError } from "@/lib/errors/app-error";
 import {
@@ -173,6 +174,9 @@ export class BulkOrdenService implements IBulkOrdenService {
         numRemision: result.createData.numRemision,
         resultado: "creada",
         estatus: ctx.estatusInicialValue, // R19: estatus resuelto por lote (R16/R17)
+        // Feature 299: la clave solo aparece cuando HUBO ajuste. Una carga normal devuelve
+        // exactamente el mismo resumen que antes de esta ficha, byte a byte.
+        ...(result.montoAjustado !== null ? { montoAjustado: result.montoAjustado } : {}),
       });
     });
 
@@ -273,6 +277,9 @@ export class BulkOrdenService implements IBulkOrdenService {
       const real = existentes.get(fila.numRemision);
       if (real !== undefined) fila.estatus = real;
       else delete fila.estatus;
+      // Feature 299: y el aviso de redondeo se CAE con ella. Esta fila no creo ninguna orden,
+      // asi que no se ajusto ningun monto: mismo criterio que el `estatus` de arriba.
+      delete fila.montoAjustado;
     }
   }
 
@@ -286,7 +293,13 @@ export class BulkOrdenService implements IBulkOrdenService {
     // roles: defensa en profundidad sobre la autenticación por key del borde.
     if (actor.rol !== "apiKey") return { status: "forbidden" };
 
-    const tiendaId = actor.usuarioId; // D4: el usuario dedicado de la key es el dueño.
+    // Feature 302 — ENMIENDA AL [D4] DE LA 88. Decia «el usuario dedicado de la key es el dueño»,
+    // y desde la 302 ya no siempre lo es: `ApiKeyAuthService` resuelve el dueño ANTES de llegar
+    // aqui (la tienda real apuntada por la key, o la cuenta dedicada si no apunta a ninguna).
+    // Esta linea no cambia —el dueño es y sigue siendo `actor.usuarioId`— pero lo que ese id
+    // SIGNIFICA si cambio, y ahi esta el punto de la ficha: una tienda ya registrada deja de
+    // duplicarse porque sus ordenes por API nacen con SU `tienda_id`, con su wallet y sus tarifas.
+    const tiendaId = actor.usuarioId;
 
     // FULFILLMENT (2026-08-25) — EL PREDICADO DE ESTA VIA ES LA TARIFA, NO EL FLAG DEL USUARIO.
     //
@@ -383,6 +396,9 @@ export class BulkOrdenService implements IBulkOrdenService {
         numRemision: result.createData.numRemision,
         resultado: "creada",
         estatus: ctx.estatusInicialValue,
+        // Feature 299: mismo aviso y por el mismo canal que la via sesion. El integrador lo
+        // necesita MAS todavia: su sistema tiene el monto original y el nuestro el redondeado.
+        ...(result.montoAjustado !== null ? { montoAjustado: result.montoAjustado } : {}),
       });
     });
 
@@ -448,6 +464,8 @@ export class BulkOrdenService implements IBulkOrdenService {
       for (const orden of sinTarifa) {
         const idx = indicePorRemision.get(orden.numRemision);
         if (idx === undefined) continue; // defensivo: no deberia ocurrir
+        // Feature 299: la fila se REESCRIBE entera, asi que el aviso de redondeo se cae con
+        // ella — y debe caerse: sin orden creada no se ajusto ningun monto.
         filas[idx] = {
           fila: filas[idx].fila,
           numRemision: orden.numRemision,
@@ -458,7 +476,8 @@ export class BulkOrdenService implements IBulkOrdenService {
     }
 
     // R9/R10: persistencia con `num_guia` inmediato (misma tx que la creación). El actor del
-    // historial es el usuario dedicado de la key; origenTipo `carga_api` (D7).
+    // historial es el dueño resuelto de la key (302: la tienda real si la key apunta a una);
+    // origenTipo `carga_api` (D7).
     //
     // Feature 155/R21: la rama `conGuia: false` ESTA VIVA desde el 2026-08-25. La 155 la
     // escribio declarandola inalcanzable —"el dia que un integrador con bodega propia pueda
@@ -466,7 +485,10 @@ export class BulkOrdenService implements IBulkOrdenService {
     // `en_preparacion` y su `numGuia` viaja como `null`, nunca un numero fabricado.
     //
     // Feature 141 (R30/R31/R32/R33): UNA fila de `carga` por peticion, con `usuario_carga` =
-    // usuario dedicado de la key y `total_files` = cantidad de objetos del array recibido
+    // el dueño resuelto de la key (302: la tienda real si la key apunta a una — consecuencia
+    // asumida: el `name` del lote comparte espacio de nombres con los lotes que esa tienda
+    // cargue por pantalla, y un nombre repetido sigue abortando con 409 como manda R24) y
+    // `total_files` = cantidad de objetos del array recibido
     // (`rows.length`, incluyendo duplicadas y filas con error), NUNCA el tamaño de los batches
     // internos. El id lo genera SIEMPRE el servidor dentro de la tx (`cargaId: null`, R15) y
     // se reutiliza entre batches. `name` es el nombre opcional del lote (R20/R21/R22).
@@ -647,6 +669,9 @@ export class BulkOrdenService implements IBulkOrdenService {
         createData: CreateOrdenData;
         esCentral: boolean;
         esZonaEspecial: boolean;
+        // Feature 299: el aviso de redondeo del monto, o `null` si no hubo. Lo emite el
+        // schema —la puerta COMPARTIDA por las dos vias—, asi que las dos lo reciben igual.
+        montoAjustado: MontoAjustado | null;
       } {
     const numRemisionRaw = (raw.num_remision ?? "").trim();
 
@@ -695,6 +720,9 @@ export class BulkOrdenService implements IBulkOrdenService {
       status: "creada",
       esCentral: geo.esCentral, // feature 98/R2
       esZonaEspecial: geo.esZonaEspecial, // marca del distrito: elige el pacto especial
+      // Feature 299: viene YA calculado del schema; aqui solo se transporta a la fila del
+      // resumen. `null` en el caso normal (monto entero, o sin monto).
+      montoAjustado: data.monto_cobrar_ajuste,
       createData: {
         numRemision: data.num_remision,
         estatusId: "", // el llamador lo completa (ya resuelto una sola vez, R7)

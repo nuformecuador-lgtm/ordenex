@@ -3,6 +3,12 @@
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/shared/FormField";
 
+import {
+  AVISO_MONTO_CERO,
+  TARIFA_CAMPO_LABEL,
+  esCeroExplicito,
+} from "./tarifas-labels";
+
 /**
  * Campos numéricos que pueblan la tabla `tarifas`, OMITIENDO `nombre`, `zona_id`
  * y `tienda_id` (el acotado lo decide quien usa el formulario, no los campos).
@@ -15,23 +21,39 @@ import { FormField } from "@/components/shared/FormField";
  * (`CrearZonaForm`). Es el mismo formulario salvo por la selección de tienda.
  */
 export const TARIFA_CAMPOS = [
-  { key: "valorFlete", label: "Valor flete", tipo: "monto" },
-  { key: "valorFleteDevuelto", label: "Valor flete devuelto", tipo: "monto" },
-  { key: "valorFleteGam", label: "Valor flete GAM", tipo: "monto" },
-  { key: "valorFleteDevueltoGam", label: "Valor flete devuelto GAM", tipo: "monto" },
-  { key: "fulfillment", label: "Fulfillment", tipo: "monto" },
-  { key: "comisionCod", label: "Comisión COD (%)", tipo: "porcentaje" },
-  { key: "ivaFlete", label: "IVA flete (%)", tipo: "porcentaje" },
-  { key: "ivaComisionCod", label: "IVA comisión COD (%)", tipo: "porcentaje" },
+  { key: "valorFlete", label: TARIFA_CAMPO_LABEL.valorFlete, tipo: "monto" },
+  {
+    key: "valorFleteDevuelto",
+    label: TARIFA_CAMPO_LABEL.valorFleteDevuelto,
+    tipo: "monto",
+  },
+  { key: "valorFleteGam", label: TARIFA_CAMPO_LABEL.valorFleteGam, tipo: "monto" },
+  {
+    key: "valorFleteDevueltoGam",
+    label: TARIFA_CAMPO_LABEL.valorFleteDevueltoGam,
+    tipo: "monto",
+  },
+  { key: "fulfillment", label: TARIFA_CAMPO_LABEL.fulfillment, tipo: "monto" },
+  {
+    key: "comisionCod",
+    label: TARIFA_CAMPO_LABEL.comisionCod,
+    tipo: "porcentaje",
+  },
+  { key: "ivaFlete", label: TARIFA_CAMPO_LABEL.ivaFlete, tipo: "porcentaje" },
+  {
+    key: "ivaComisionCod",
+    label: TARIFA_CAMPO_LABEL.ivaComisionCod,
+    tipo: "porcentaje",
+  },
   {
     key: "tarifaEspecial",
-    label: "Tarifa especial",
+    label: TARIFA_CAMPO_LABEL.tarifaEspecial,
     tipo: "monto",
     opcional: true,
   },
   {
     key: "tarifaEspecialDevuelta",
-    label: "Tarifa especial devuelta",
+    label: TARIFA_CAMPO_LABEL.tarifaEspecialDevuelta,
     tipo: "monto",
     opcional: true,
   },
@@ -152,6 +174,21 @@ export function validarTarifaCampos(
 }
 
 /**
+ * Feature 303 — el aviso del CERO de un campo de tarifa, o `undefined` si no toca avisar.
+ *
+ * NO se avisa en los campos `opcional` (hoy las dos tarifas especiales): ahí el vacío YA
+ * significa «sin pacto especial» y se distingue solo, así que un 0 tecleado es un pacto
+ * deliberado de cero, no un olvido — decirle «sin configurar» sería mentirle.
+ *
+ * En los demás sólo cuenta el cero EXPLÍCITO: el vacío es un error de obligatorio y ya tiene
+ * su propio mensaje debajo del campo.
+ */
+function avisoCero(campo: TarifaCampo, valor: string): string | undefined {
+  if ("opcional" in campo && campo.opcional) return undefined;
+  return esCeroExplicito(valor) ? AVISO_MONTO_CERO.cobro : undefined;
+}
+
+/**
  * Rejilla de los campos numéricos. `idPrefix` evita colisión de ids cuando la
  * rejilla convive con otro formulario en la misma página.
  */
@@ -177,6 +214,7 @@ export function TarifaCamposGrid({
           id={`${idPrefix}-${campo.key}`}
           label={campo.label}
           error={errors[campo.key]}
+          hint={avisoCero(campo, valores[campo.key])}
           required={!("opcional" in campo && campo.opcional)}
         >
           <Input

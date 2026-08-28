@@ -199,6 +199,46 @@ describe("carga API: happy path (R10)", () => {
     expect(json.filas[1].errores).toHaveProperty("provincia");
     expect(json.ordenes).toEqual([]);
   });
+
+  // FEATURE 299 — el aviso de redondeo llega ENTERO al cuerpo publico. El borde no re-mapea
+  // el summary (lo serializa tal cual), pero eso es una propiedad del contrato del integrador
+  // y no una casualidad de implementacion: si mañana alguien filtra claves, esto lo dice.
+  it("299: la fila cuyo monto se redondeo viaja con `montoAjustado` en el JSON publico", async () => {
+    const service = fakeService({
+      cargarViaApi: vi.fn().mockResolvedValue({
+        status: "ok",
+        summary: okSummary({
+          filas: [
+            {
+              fila: 1,
+              numRemision: "REM-1",
+              resultado: "creada",
+              estatus: "por_recolectar_en_tienda",
+              numGuia: 1042,
+              montoAjustado: { original: 11898.81, aplicado: 11899 },
+            },
+          ],
+        }),
+        manifiestoOrdenIds: ["ord-1"],
+      } satisfies CargaViaApiResult),
+    });
+    const res = await handleCargaApi(
+      reqConBearer(BODY, SECRETO),
+      deps({ status: "ok", actor: KEY_ACTOR, apiKeyId: "k1" }, service),
+    );
+    const json = await res.json();
+    expect(json.filas[0].montoAjustado).toEqual({ original: 11898.81, aplicado: 11899 });
+  });
+
+  it("299: la fila SIN ajuste no gana la clave (una carga normal responde igual que siempre)", async () => {
+    const service = fakeService();
+    const res = await handleCargaApi(
+      reqConBearer(BODY, SECRETO),
+      deps({ status: "ok", actor: KEY_ACTOR, apiKeyId: "k1" }, service),
+    );
+    const json = await res.json();
+    expect(json.filas[0]).not.toHaveProperty("montoAjustado");
+  });
 });
 
 describe("carga API: seguridad (R6)", () => {

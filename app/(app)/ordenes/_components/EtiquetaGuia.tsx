@@ -78,6 +78,7 @@ export function EtiquetaGuia({
   const {
     numGuia,
     numRemision,
+    fechaCreacion,
     destinatario,
     telefonoDest,
     direccion,
@@ -107,6 +108,26 @@ export function EtiquetaGuia({
             Guía
           </p>
           <p className="text-lg font-bold leading-tight">{numGuia}</p>
+        </div>
+        {/* Feature 295 — la fecha de creacion va EN LA CABECERA y entre los dos
+            numeros, que es exactamente donde la dibuja el PDF
+            (`drawFechaCabecera`, centrada entre "GUÍA" y "REMISIÓN"): la vista
+            previa sirve para decidir si imprimir, asi que tiene que parecerse al
+            papel. Como octavo campo del bloque de abajo se veria bien en pantalla
+            y NO coincidiria con lo impreso.
+
+            SE PINTA TAL CUAL LLEGA: `fechaCreacion` ya es la fecha de calendario
+            de Costa Rica resuelta en el servidor. Volver a derivarla aqui
+            (`new Date(...)` + `toLocale*`) la interpretaria en la zona horaria
+            del NAVEGADOR, que no tiene por que ser la de CR, y podria mostrar el
+            dia anterior o el siguiente. */}
+        <div className="text-center">
+          <p className="text-[10px] uppercase tracking-wide text-neutral-500">
+            Fecha
+          </p>
+          <p className="font-medium" data-testid="etiqueta-fecha">
+            {fechaCreacion}
+          </p>
         </div>
         <div className="text-right">
           <p className="text-[10px] uppercase tracking-wide text-neutral-500">

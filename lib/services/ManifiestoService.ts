@@ -59,7 +59,8 @@ function distinct(values: string[]): string[] {
  * R29 — ¿puede este actor ver esta orden en el manifiesto? Mismo criterio que
  * `EtiquetaGuiaService.esVisiblePara`: el rol `apiKey` (canal de integracion) SOLO ve
  * las ordenes de su propia tienda (`actor.usuarioId` es el `tienda_id` con el que se
- * crean sus ordenes). Los roles de sesion mantienen el acceso completo: el manifiesto
+ * crean sus ordenes; desde la feature 302 ese id puede ser el de la tienda REAL a cuyo
+ * nombre carga la key). Los roles de sesion mantienen el acceso completo: el manifiesto
  * es un READ derivado del lote que el propio usuario acaba de operar, y la sesion ya
  * se exige en el borde (R28).
  */

@@ -50,8 +50,8 @@ function buildRepo(): {
       const f = filas.get(owner);
       return f ? { url: f.url, activa: f.activa } : null;
     },
-    async ownerEsApiKey() {
-      return true;
+    async resolverOwnerWebhook(owner: string) {
+      return owner;
     },
   };
   return { repo, filas, upsert, actualizarUrl, actualizarSecreto, desactivar };

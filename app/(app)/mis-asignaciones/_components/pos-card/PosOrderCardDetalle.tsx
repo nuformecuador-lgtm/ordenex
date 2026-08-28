@@ -12,6 +12,7 @@ import {
 import { UbicacionTrigger } from "../UbicacionTrigger";
 import { formatMonto } from "./pos-format";
 import { estadoBadgeClass, estadoPorDefecto, textoParada } from "./pos-estado";
+import { textoMensajero } from "./pos-mensajero";
 import { posSeleccionHandlers } from "./pos-seleccion";
 import { seccionesVisibles } from "./pos-secciones";
 import type { PosOrderCardProps } from "./PosOrderCard";
@@ -37,6 +38,7 @@ export function PosOrderCardDetalle({
   mostrarRuta = true,
   secciones,
   acciones,
+  mensajero,
 }: PosOrderCardProps) {
   const estado = estadoProp ?? estadoPorDefecto(esActiva, esDetalle);
   // Feature 196: las mismas compuertas que las otras dos vistas, con el mismo default.
@@ -145,6 +147,14 @@ export function PosOrderCardDetalle({
         {verIntentos ? (
           <p className="text-[11px] font-semibold text-muted-foreground">
             <IntentosDato intentos={valorIntentos(orden)} />
+          </p>
+        ) : null}
+        {/* FICHA 296 — quién lleva esta orden. Va en la columna central, con los demás datos de
+            la fila y NO entre las marcas de excepción de arriba: es un dato, no una excepción.
+            La compuerta es la PRESENCIA de la prop; el portal del mensajero no la pasa. */}
+        {mensajero !== undefined ? (
+          <p className="truncate text-[11px] font-semibold text-muted-foreground">
+            {textoMensajero(mensajero)}
           </p>
         ) : null}
         {/* Feature 261 (F2, R11): el badge dice QUÉ es la orden; esta línea dice POR QUÉ todavía

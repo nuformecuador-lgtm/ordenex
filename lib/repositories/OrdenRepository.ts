@@ -793,6 +793,10 @@ const WITH_ETIQUETA = {
     direccion: true,
     producto: true,
     montoCobrar: true,
+    // Feature 295: el dia en que la tienda cargo el envio. Es LA fecha que la
+    // etiqueta imprime; sin esta columna en la proyeccion el dato no existe en
+    // todo el camino hasta el PDF (era exactamente el estado anterior a la 295).
+    createdAt: true,
     tienda: { select: { nombre: true } },
     zona: { select: { nombre: true } },
     provincia: { select: { nombre: true } },
@@ -806,6 +810,9 @@ type OrdenEtiquetaRow = Prisma.OrdenGetPayload<typeof WITH_ETIQUETA>;
 // R1/R4/R5/R6: serializa la fila de etiqueta a EtiquetaRow. Resuelve los nombres
 // legibles, mapea Decimal montoCobrar -> number|null (R5, sin moneda) y deja
 // distritoNombre null si la orden no tiene distrito (R4). NO expone deletedAt (R6).
+// Feature 295: `created_at` (timestamp UTC) sale como fecha CALENDARIO DE CR
+// `YYYY-MM-DD`, la misma convencion con la que el manifiesto escribe su columna
+// `fecha` y con la que el comprobante de cierre pinta las suyas.
 function toEtiquetaRow(row: OrdenEtiquetaRow): EtiquetaRow {
   return {
     id: row.id,
@@ -822,6 +829,7 @@ function toEtiquetaRow(row: OrdenEtiquetaRow): EtiquetaRow {
     provinciaNombre: row.provincia.nombre,
     cantonNombre: row.canton.nombre,
     distritoNombre: row.distrito?.nombre ?? null,
+    fechaCreacion: fechaCalendarioCR(row.createdAt), // feature 295
   };
 }
 
@@ -3966,6 +3974,11 @@ export class OrdenRepository implements IOrdenRepository {
         provincia: { select: { nombre: true } },
         canton: { select: { nombre: true } },
         distrito: { select: { nombre: true } },
+        // FICHA 296: el MENSAJERO, por nombre y en la MISMA consulta. `mensajero_asignado_id` es
+        // NULLABLE, asi que la relacion es opcional -> `?.nombre ?? null`, igual que `distrito`.
+        // El `select` acotado a `nombre` NO es cosmetico: la fila de `usuario` lleva `email`,
+        // `telefono`, `cedula` y `password_hash`, y esta fila viaja al navegador de la TIENDA.
+        mensajeroAsignado: { select: { nombre: true } },
       },
     });
     return rows.map((row) => ({
@@ -3990,6 +4003,10 @@ export class OrdenRepository implements IOrdenRepository {
       cantonNombre: row.canton.nombre,
       distritoNombre: row.distrito?.nombre ?? null,
       intentosContacto: row.intentosContacto,
+      // FICHA 296: `null` cuando la orden no tiene mensajero asignado. NUNCA `""`: una cadena
+      // vacia se pinta como una etiqueta sin valor y la tienda no sabria si es que no hay nadie
+      // o si el nombre se perdio por el camino.
+      mensajeroNombre: row.mensajeroAsignado?.nombre ?? null,
       createdAt: row.createdAt,
     }));
   }

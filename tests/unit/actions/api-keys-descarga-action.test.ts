@@ -15,6 +15,8 @@ const ITEM: ApiKeyListItemDTO = {
   estado: "activa",
   usuarioId: "u-dedicado",
   usuarioEmail: "apikey+tienda-uno@apikey.invalid",
+  tiendaDestinoId: null, // feature 302
+  tiendaDestinoNombre: null,
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
 };
 

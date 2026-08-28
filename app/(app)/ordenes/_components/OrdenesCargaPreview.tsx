@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { OrdenesExistentesTabla } from "@/app/(app)/ordenes/_components/OrdenesExistentesTabla";
 import { OrdenesConErrorTabla } from "@/app/(app)/ordenes/_components/OrdenesConErrorTabla";
+import { OrdenesConMontoAjustadoTabla } from "@/app/(app)/ordenes/_components/OrdenesConMontoAjustadoTabla";
 import type { ClasificacionCarga } from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
 import {
   construirChips,
@@ -48,6 +49,10 @@ export interface OrdenesCargaPreviewProps {
  * dry-run (num_remision duplicados y errores de geografía) ANTES de escribir en
  * la DB. Los chips resumen los tipos de error y, al pulsarlos, llevan al inicio
  * del resumen las filas con ese error. La carga real solo ocurre al confirmar.
+ *
+ * Feature 304: y las filas que se cargarán con el monto REDONDEADO (aviso de la 299). Se
+ * dicen aquí, antes de confirmar, y aparte de los errores y de las duplicadas: esas filas sí
+ * se cargan, así que mezclarlas con las que no entran sería otra mentira más.
  */
 export function OrdenesCargaPreview({
   clasificacion,
@@ -56,7 +61,7 @@ export function OrdenesCargaPreview({
   progresoTexto,
   onConfirmar,
 }: OrdenesCargaPreviewProps) {
-  const { numRemisionesNuevas, existentes, errores } = clasificacion;
+  const { numRemisionesNuevas, existentes, errores, ajustadas } = clasificacion;
   const nuevas = numRemisionesNuevas.length;
 
   const [chipActivo, setChipActivo] = useState<string | null>(null);
@@ -140,6 +145,16 @@ export function OrdenesCargaPreview({
                 : `${errores.length} con error y no se cargarán.`}
             </span>
           ) : null}
+          {/* Feature 304: una línea más del MISMO resumen, en la misma alerta neutra que
+              cuenta las duplicadas, y nunca junto a las filas con error: estas SÍ se cargan.
+              Sin filas ajustadas —el caso de casi todas las cargas— no se pinta nada. */}
+          {ajustadas.length > 0 ? (
+            <span className="block">
+              {ajustadas.length === 1
+                ? "1 traía céntimos y se cargará con el monto redondeado al colón más cercano."
+                : `${ajustadas.length} traían céntimos y se cargarán con el monto redondeado al colón más cercano.`}
+            </span>
+          ) : null}
         </AlertDescription>
       </Alert>
 
@@ -203,6 +218,16 @@ export function OrdenesCargaPreview({
 
       {existentes.length > 0 ? (
         <OrdenesExistentesTabla existentes={existentes} />
+      ) : null}
+
+      {/* Feature 304: el detalle de qué fila y de cuánto a cuánto. Va DESPUÉS de los
+          hallazgos que impiden cargar (errores, duplicadas) porque estas filas no impiden
+          nada: se cargan, solo que con otro número. */}
+      {ajustadas.length > 0 ? (
+        <OrdenesConMontoAjustadoTabla
+          ajustadas={ajustadas}
+          descripcion="El monto a cobrar se guarda sin céntimos: estas filas se cargarán con el monto del archivo redondeado al colón más cercano."
+        />
       ) : null}
 
       <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
