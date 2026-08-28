@@ -107,7 +107,7 @@ function makeOrden(over: Partial<OrdenListItemDTO> & { id: string }): OrdenListI
     producto: "Producto",
     peso: 1,
     notas: null,
-    sinGestion: false,
+    eliminable: false,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...over,
