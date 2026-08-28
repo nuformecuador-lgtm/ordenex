@@ -88,6 +88,7 @@ import { startOfDayCR } from "@/lib/utils/fecha-cr";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type {
+  OrdenParaEliminacionApi,
   OrdenParaHabilitacionApi,
   ParadaRutaRow,
   TransicionAyudaInput,
@@ -1491,7 +1492,10 @@ export class OrdenRepository implements IOrdenRepository {
   // `findEstatusIdByValue`, que es lo que usan los servicios de dominio.
 
   /**
-   * Feature «eliminar orden» (2026-08-26) — UNICO writer de `deleted_at` en `orden`. Reemplaza
+   * Feature «eliminar orden» (2026-08-26) — writer de `deleted_at` en `orden` POR LOTE y sin
+   * frontera de tienda (la autoriza el rol `maestro`, ver `EliminarOrdenService`). Desde la ficha
+   * 320 NO es el unico: el canal por API key escribe la columna con `softDeleteViaApi`, que borra
+   * UNA orden y lleva el `tienda_id` del owner en su `where`. Reemplaza
    * al `softDelete` de una sola orden que se retiro el 2026-08-07 por quedarse sin pantalla; el
    * `deleted_at IS NULL` de TODAS las lecturas nunca dejo de aplicarse, asi que fijar la columna
    * basta para que la orden desaparezca de los listados sin tocar ninguna de ellas.
@@ -1510,8 +1514,9 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * Pedido humano (2026-08-27) — LA REVERSION de `softDelete`, y el segundo (y ultimo) writer
-   * de `deleted_at`. Simetrico hasta en el `where`: alli `deletedAt: null`, aqui
+   * Pedido humano (2026-08-27) — LA REVERSION de `softDelete`, y el segundo writer de
+   * `deleted_at` (el tercero es `softDeleteViaApi`, ficha 320, el del canal por API key).
+   * Simetrico hasta en el `where`: alli `deletedAt: null`, aqui
    * `deletedAt: { not: null }`, y por el mismo motivo — idempotencia y carreras. Una orden
    * viva no entra en el conteo, asi que este metodo no puede "recuperar" nada que no estuviera
    * borrado, ni pisar el instante de un borrado ajeno.
@@ -3936,6 +3941,69 @@ export class OrdenRepository implements IOrdenRepository {
       estatusValue: orden.estatus.value,
       mensajeroAsignadoId: orden.mensajeroAsignadoId,
     };
+  }
+
+  /**
+   * FICHA 320 (T1) — la lectura del borrado por API key. MISMO patron que
+   * `findParaHabilitacionApi` y `cancelarViaApi`: las tres claves del `where` van juntas y en el
+   * MISMO statement, con el owner FORZADO. `null` no distingue «no existe» de «ya borrada» de «es
+   * de otra tienda»; el borde responde el mismo 404 en los tres casos.
+   *
+   * `select` acotado: el estado (la decision), la identidad publica (lo que se devuelve) y el id
+   * (por donde se escribe). Nada mas.
+   */
+  async findParaEliminacionApi(
+    ordenId: string,
+    ownerId: string,
+  ): Promise<OrdenParaEliminacionApi | null> {
+    const orden = await this.prisma.orden.findFirst({
+      where: { id: ordenId, tiendaId: ownerId, deletedAt: null },
+      select: {
+        id: true,
+        numGuia: true,
+        numRemision: true,
+        estatus: { select: { value: true } },
+      },
+    });
+    if (!orden) return null;
+    return {
+      id: orden.id,
+      numGuia: orden.numGuia,
+      numRemision: orden.numRemision,
+      estatusValue: orden.estatus.value,
+    };
+  }
+
+  /**
+   * FICHA 320 (T2) — la ESCRITURA del borrado por API key, y la frontera multi-tenant de verdad.
+   *
+   * Las CUATRO condiciones viajan en el `where` de ESTA sentencia y no en un `if` previo: aunque
+   * la lectura de `findParaEliminacionApi` hubiera dicho que si, entre las dos consultas la orden
+   * pudo cambiar de estado o borrarla otra sesion. Un `updateMany` con `count = 0` es la respuesta
+   * correcta a las dos carreras, y ninguna de ellas puede acabar en un borrado indebido.
+   *
+   * `estatus.value IN estadosPermitidos` la trae el service desde `ESTADOS_ELIMINABLES`: el repo
+   * aplica el filtro, no lo decide. Con una lista vacia el `IN` no casa y no se borra nada.
+   *
+   * `data` toca UNA sola columna. No hay `appendCambioEstado` (a diferencia de `cancelarViaApi`):
+   * borrar no es transicionar, el estado se conserva y el historial de la orden queda intacto por
+   * si hay que auditarla — exactamente lo mismo que hace el borrado de la app.
+   */
+  async softDeleteViaApi(params: {
+    ordenId: string;
+    ownerId: string;
+    estadosPermitidos: readonly string[];
+  }): Promise<number> {
+    const { count } = await this.prisma.orden.updateMany({
+      where: {
+        id: params.ordenId,
+        tiendaId: params.ownerId,
+        deletedAt: null,
+        estatus: { value: { in: [...params.estadosPermitidos] } },
+      },
+      data: { deletedAt: new Date() },
+    });
+    return count;
   }
 
   /**

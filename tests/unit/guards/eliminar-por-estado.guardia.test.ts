@@ -47,6 +47,12 @@ const RAIZ = path.resolve(__dirname, "../../..");
 const ARCHIVOS = {
   autoriza: "lib/services/EliminarOrdenService.ts",
   ofrece: "lib/services/OrdenService.ts",
+  // FICHA 320 (2026-08-28): el TERCER consumidor del criterio, el del canal por API key. Entra en
+  // esta guardia el mismo día que nace, y por el motivo de siempre: es un servicio DISTINTO —su
+  // autorización no se parece en nada a la de la app, que corta por rol `maestro` y no acota por
+  // tienda— pero la pregunta «¿este estado admite borrado?» tiene que responderla EL MISMO sitio.
+  // Si divergieran, la API aceptaría lo que la pantalla rechaza sobre la misma orden.
+  apiBorra: "lib/services/ApiOrdenEliminacionService.ts",
   lista: "lib/types/order-status-eliminables.ts",
   dto: "lib/types/orden.ts",
 } as const;
@@ -105,6 +111,7 @@ describe("guardia 319 / el criterio de eliminación tiene UNA sola fuente", () =
     it.each([
       ["el que AUTORIZA", ARCHIVOS.autoriza],
       ["el que OFRECE el botón", ARCHIVOS.ofrece],
+      ["el que BORRA por API", ARCHIVOS.apiBorra],
     ])("%s no menciona `idsConGestionPosteriorEnLote` en su código", (_quien, rel) => {
       // El criterio retirado. Su método sigue vivo en `IOrdenHistorialService` (deuda declarada
       // allí, sin consumidores): lo que no puede volver es a decidir un borrado.
@@ -125,6 +132,7 @@ describe("guardia 319 / el criterio de eliminación tiene UNA sola fuente", () =
     it.each([
       ["el que AUTORIZA", ARCHIVOS.autoriza],
       ["el que OFRECE el botón", ARCHIVOS.ofrece],
+      ["el que BORRA por API", ARCHIVOS.apiBorra],
     ])("%s pregunta por `esEstadoEliminable`, no por una lista propia", (_quien, rel) => {
       const codigo = soloCodigo(leer(rel));
       expect(codigo).toContain("esEstadoEliminable");
@@ -138,6 +146,7 @@ describe("guardia 319 / el criterio de eliminación tiene UNA sola fuente", () =
     it.each([
       ["el que AUTORIZA", ARCHIVOS.autoriza],
       ["el que OFRECE el botón", ARCHIVOS.ofrece],
+      ["el que BORRA por API", ARCHIVOS.apiBorra],
     ])("%s NO reutiliza `ESTADOS_CREACION` para decidir el borrado", (_quien, rel) => {
       // El atajo tentador, y el que hay que impedir: `ESTADOS_CREACION` también valida que una
       // orden NACE en un estado legal (`registrar-cambio-estado.ts`) y define métricas
