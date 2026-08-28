@@ -151,8 +151,8 @@ export class PremioRankingDevengoService implements IPremioRankingDevengoService
    * `filaId`.
    *
    * Las comprobaciones van en este orden y cada una tiene su mensaje propio (nunca un error
-   * generico, R11/R12 lo exigen): existe la fila -> tiene premio -> hay cierre de ese dia -> ese
-   * cierre esta aprobado. Solo entonces se abre la transaccion.
+   * generico, R11/R12 lo exigen): existe la fila -> tiene premio -> ENTREGO algo (feature 297)
+   * -> hay cierre de ese dia -> ese cierre esta aprobado. Solo entonces se abre la transaccion.
    */
   async registrarPremio(
     input: RegistrarPremioInput,
@@ -164,6 +164,11 @@ export class PremioRankingDevengoService implements IPremioRankingDevengoService
     if (fila === null) return { status: "no_encontrado" };
     // R7: monto ausente o cero -> se rechaza SIN escribir nada, aunque lo pidan.
     if (!tienePremio(fila)) return { status: "sin_premio" };
+    // Feature 297: cero entregas ese dia -> no se cobra. Desde la 297 `asignarPodio` ya no da
+    // posicion a quien no entrego, asi que ninguna fila NUEVA puede llegar aqui asi; esta guarda
+    // existe por los snapshots YA CONGELADOS, que son historia y no se reescriben. Va ANTES de
+    // resolver el cierre: el dato esta en la propia fila congelada y no hace falta leer nada mas.
+    if (fila.entregadas < 1) return { status: "sin_entregas" };
     const monto = fila.premioMonto as string;
 
     const fechaTexto = textoDeFecha(fila.fecha);
@@ -237,6 +242,10 @@ export class PremioRankingDevengoService implements IPremioRankingDevengoService
   /**
    * R29-R33 — la anulacion: un movimiento COMPENSATORIO y el reverso de caja, en la misma
    * transaccion, dejando el efecto neto en cero y SIN tocar las filas originales (R21).
+   *
+   * Feature 297: aqui NO va la guarda de «cero entregas». Anular es el remedio, no el cobro; si
+   * un premio de una fila con 0 entregas alcanzo a registrarse antes de la 297, bloquear su
+   * anulacion dejaria ese dinero devengado para siempre — exactamente lo contrario de la ficha.
    */
   async anularPremio(input: AnularPremioInput, actor: Actor): Promise<AnularPremioResult> {
     if (this.sinAcceso(actor)) return { status: "forbidden" };

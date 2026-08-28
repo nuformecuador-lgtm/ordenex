@@ -47,6 +47,15 @@ export type RegistrarPremioResult =
   | { status: "ya_registrado" }
   | { status: "anulado" }
   | { status: "sin_premio" }
+  /**
+   * Feature 297 — la fila congelada tiene CERO entregas ese dia. Desde la 297 nadie asi ocupa
+   * podio, pero los snapshots ya congelados NO se reescriben (son historia): el 26/08 sigue
+   * teniendo a Andres 1.o con sus 5.000, y esta rama es lo UNICO que impide cobrarlo.
+   *
+   * Es un rechazo de DOMINIO con nombre propio, como `sin_cierre` o `cierre_no_aprobado`: el
+   * maestro ve el boton, lo pulsa y le tienen que decir POR QUE, no «no se pudo».
+   */
+  | { status: "sin_entregas" }
   | { status: "sin_cierre" }
   | { status: "cierre_no_aprobado"; estado: string }
   | { status: "no_encontrado" }

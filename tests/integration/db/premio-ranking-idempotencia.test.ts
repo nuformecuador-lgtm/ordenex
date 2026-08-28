@@ -115,6 +115,14 @@ describeSiHayBase("293/T4.4 — el premio del ranking, contra Postgres", () => {
       dias?: string[];
       /** Si `true`, ademas siembra una gestion del dia ANTERIOR en el MISMO cierre (R19). */
       gestionDelDiaAnterior?: boolean;
+      /**
+       * Feature 297 — entregas CONGELADAS del primer puesto, que es la fila que casi todos los
+       * casos registran. Por defecto 18 de 21: un premio registrable.
+       *
+       * Se pone en `0` para reproducir el 26/08 (Andres, 0 de 21, primero por orden alfabetico):
+       * ese premio quedo congelado y desde la 297 el registro lo rechaza.
+       */
+      entregadasDelPrimero?: number;
     } = {},
   ) {
     await serializarEscriturasReales(tx);
@@ -201,8 +209,9 @@ describeSiHayBase("293/T4.4 — el premio del ranking, contra Postgres", () => {
               posicion: f.posicion,
               mensajeroId: f.mensajeroId,
               mensajeroNombre: `Congelado ${f.puesto}`,
-              // R5: el `0 / 21` del 26/08, sembrado a proposito.
-              entregadas: f.puesto === 1 ? 0 : 10,
+              // R5 / feature 297: el primer puesto es el que se registra, asi que por defecto
+              // trae entregas (18 de 21). El `0 / 21` del 26/08 se pide explicitamente.
+              entregadas: f.puesto === 1 ? (opciones.entregadasDelPrimero ?? 18) : 10,
               asignadas: 21,
               premioMonto: f.premio === null ? null : new Prisma.Decimal(f.premio),
               premioDescripcion: f.desc,
@@ -816,7 +825,7 @@ describeSiHayBase("293/T4.4 — el premio del ranking, contra Postgres", () => {
 
   // ── R4/R5/R7/R9: la lectura del podio, sobre datos reales ──────────────────────────────────
 
-  it("R4/R5/R7/R9: el panel lee el podio congelado con `0 / 21` y los estados derivados", async () => {
+  it("R4/R5/R7/R9: el panel lee el podio congelado y los estados derivados", async () => {
     const medido = await enTransaccionRevertida(prisma, async (tx) => {
       const s = await sembrar(tx);
       const servicio = servicioDelPremio(tx);
@@ -834,10 +843,10 @@ describeSiHayBase("293/T4.4 — el premio del ranking, contra Postgres", () => {
     }
     expect(medido.antes.hayPodio).toBe(true);
     expect(medido.antes.filas).toHaveLength(3);
-    // R5: el `0 / 21` del primer puesto viaja tal cual, sin ocultarse ni sustituirse.
+    // R5: los dos conteos congelados viajan tal cual, sin recalcularse ni redondearse.
     expect(medido.antes.filas[0]).toMatchObject({
       posicion: 1,
-      entregadas: 0,
+      entregadas: 18,
       asignadas: 21,
       premioMonto: "5000.00",
       estado: "no_registrado",
@@ -851,6 +860,54 @@ describeSiHayBase("293/T4.4 — el premio del ranking, contra Postgres", () => {
     // R6: una fecha sin snapshot lo dice por su nombre.
     if (medido.sinPodio.status !== "ok") throw new Error("esperaba ok");
     expect(medido.sinPodio).toMatchObject({ hayPodio: false, filas: [] });
+  });
+
+  // ── Feature 297: el dia YA CONGELADO con cero entregas ─────────────────────────────────────
+
+  it("297: el `0 / 21` del 26/08 se SIGUE leyendo con su premio, y su registro se niega", async () => {
+    // El caso real: Andres, primero por orden alfabetico, 0 de 21, con 5.000 congelados. El
+    // snapshot es historia y NO se reescribe, asi que la fila sigue ahi con su monto; lo unico
+    // que impide que ese dinero salga es la guarda del registro, y aqui se mide contra Postgres
+    // con los repositorios reales.
+    const medido = await enTransaccionRevertida(prisma, async (tx) => {
+      const s = await sembrar(tx, { entregadasDelPrimero: 0 });
+      const servicio = servicioDelPremio(tx);
+      const filaId = s.podios[DIA]![0]!.id;
+
+      const antes = await servicio.listarPremiosDelDia({ fecha: DIA }, s.actor);
+      const registro = await servicio.registrarPremio({ filaId }, s.actor);
+      const despues = await servicio.listarPremiosDelDia({ fecha: DIA }, s.actor);
+
+      return {
+        antes,
+        registro,
+        despues,
+        libro: await contarLibro(tx, s.mensajeroId),
+        caja: await cajaDelPremio(tx, [filaId]),
+      };
+    });
+
+    if (medido.antes.status !== "ok" || medido.despues.status !== "ok") {
+      throw new Error("esperaba ok");
+    }
+    // R5: el `0 / 21` viaja tal cual, sin ocultarse ni sustituirse, y con su premio congelado.
+    expect(medido.antes.filas[0]).toMatchObject({
+      posicion: 1,
+      entregadas: 0,
+      asignadas: 21,
+      premioMonto: "5000.00",
+    });
+    // El rechazo tiene NOMBRE propio: la pantalla dice por que, no «no se pudo».
+    expect(medido.registro).toEqual({ status: "sin_entregas" });
+    // Y no queda ni un asiento en NINGUNO de los dos libros de dinero.
+    expect(medido.libro).toHaveLength(0);
+    expect(medido.caja).toHaveLength(0);
+    // La fila sigue exactamente como estaba: el registro no la marco de ninguna forma.
+    expect(medido.despues.filas[0]).toMatchObject({
+      entregadas: 0,
+      premioMonto: "5000.00",
+      estado: "no_registrado",
+    });
   });
 
   // ── §4: la resolucion dia -> cierre, medida contra el motor ────────────────────────────────
