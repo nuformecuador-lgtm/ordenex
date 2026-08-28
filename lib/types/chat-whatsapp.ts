@@ -1,5 +1,27 @@
 // Feature 109 — tipos del chat de WhatsApp que cruzan la frontera Server Action <-> UI.
 import type { ChatMensajeDireccion, ChatMensajeEstado, ChatMensajeTipo } from "@prisma/client";
+import type { ChatContactoNormalizado } from "@/lib/types/chat-contactos";
+import type { ReaccionAgregada } from "@/lib/utils/chat-reacciones";
+
+/**
+ * Feature 299 (design §6, R19/R21) — metadatos del adjunto que la UI necesita para decidir COMO
+ * pintarlo. NO lleva el media id de Meta A PROPOSITO: la burbuja construye la URL con
+ * `/api/chat/media/${mensaje.id}`, que es el id INTERNO que ya tiene. El id de Meta no aparece
+ * en ninguna URL, log de acceso ni historial del navegador (R21/R35).
+ */
+export interface ChatMediaVista {
+  mime: string | null;
+  /** `filename` del documento; `null` en imagen/audio/video/sticker. */
+  nombre: string | null;
+  /** Solo si Meta lo mando; normalmente `null` -> la UI no promete un tamaño que no conoce (P2). */
+  tamanoBytes: number | null;
+}
+
+/** Feature 299 (R9/R32) — evidencia del cambio de numero del cliente, para la burbuja de sistema. */
+export interface ChatSistemaVista {
+  telefonoAnterior: string | null;
+  telefonoNuevo: string | null;
+}
 
 /** Una burbuja del hilo tal como la consume la UI del mensajero (R22). */
 export interface ChatMensajeVista {
@@ -15,6 +37,21 @@ export interface ChatMensajeVista {
    */
   latitud: number | null;
   longitud: number | null;
+  /**
+   * Feature 299 (R1/R28/R29): presente SOLO en los tipos con adjunto (imagen, audio, video,
+   * documento, sticker); `null` en el resto. Que no sea `null` es lo que le dice a la UI que
+   * hay algo que pedirle al proxy.
+   */
+  media: ChatMediaVista | null;
+  /** Feature 299 (R7/R31): contactos compartidos; `null` si el mensaje no es de contactos. */
+  contactos: ChatContactoNormalizado[] | null;
+  /** Feature 299 (R9/R32): numeros del cambio de numero; `null` si no es un mensaje de sistema. */
+  sistema: ChatSistemaVista | null;
+  /**
+   * Feature 299 (R19/R20/R30): reacciones ANCLADAS a esta burbuja. Vacio = sin reacciones. Las
+   * reacciones NO llegan nunca como burbuja propia: `listarHiloChat` las agrega aqui (D4).
+   */
+  reacciones: ReaccionAgregada[];
   /** Instante del evento en ISO 8601 (serializable a la UI). */
   ocurridoAt: string;
 }

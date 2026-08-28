@@ -79,4 +79,19 @@ export interface IChatConversacionRepository {
    * suya, o el hilo no existe, o no hay entrantes, no escribe nada.
    */
   marcarLeidoHastaUltimoEntrante(ordenId: string, mensajeroId: string): Promise<void>;
+
+  /**
+   * Feature 299 (design §3, R16/R18) — el cliente cambio de numero: reescribe `telefono_e164`
+   * de los hilos que hoy tienen `anterior` para que los mensajes posteriores caigan en el MISMO
+   * hilo. Devuelve cuantas filas migraron (0 es un desenlace VALIDO, no un error).
+   *
+   * TOLERANTE AL CONFLICTO: si ya existe un hilo de esa MISMA orden con el numero nuevo, el
+   * unico `(orden_id, telefono_e164)` impide migrar esa fila. NO se fusionan hilos (P5) y NO se
+   * lanza: la fila se deja como esta, el evento se registra igual como evidencia y la ingesta
+   * del lote continua con su 200 (R18).
+   *
+   * NO toca el telefono de la orden ni el del cliente (R17): este repositorio solo escribe en
+   * `chat_conversacion`.
+   */
+  migrarTelefono(anterior: string, nuevo: string): Promise<number>;
 }

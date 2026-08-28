@@ -198,6 +198,36 @@ export class ChatConversacionRepository implements IChatConversacionRepository {
     `);
   }
 
+  async migrarTelefono(anterior: string, nuevo: string): Promise<number> {
+    // Feature 299 (design §3, R16/R18): el cliente cambio de numero -> los hilos que hoy
+    // tienen el numero ANTERIOR pasan a tener el NUEVO, para que sus mensajes posteriores
+    // caigan en el MISMO hilo. Ambos lados se normalizan aqui por la misma razon que en
+    // `upsertParaOrden`: la clave del hilo es siempre el numero canonico.
+    const antes = normalizarTelefonoWa(anterior);
+    const despues = normalizarTelefonoWa(nuevo);
+    // Sin numero utilizable, o con el mismo numero a ambos lados, no hay nada que migrar. Se
+    // devuelve 0 (desenlace valido) en vez de lanzar: la ingesta del lote no puede romperse.
+    if (antes === "" || despues === "" || antes === despues) return 0;
+
+    // EL `NOT EXISTS` ES EL "ON CONFLICT DO NOTHING" (P5). El unico `(orden_id, telefono_e164)`
+    // hace que migrar una fila cuya orden YA tiene hilo con el numero nuevo viole la
+    // restriccion y aborte la transaccion entera del webhook. Filtrar esas filas ANTES del
+    // UPDATE es lo que deja el evento sin fusionar hilos, sin lanzar y sin romper el 200: el
+    // hilo destino existente se queda como esta y la evidencia se registra igual (R18).
+    //
+    // NO se toca `orden` ni `cliente` (R17): este UPDATE escribe solo en `chat_conversacion`.
+    return await this.prisma.$executeRaw(Prisma.sql`
+      UPDATE chat_conversacion c
+      SET telefono_e164 = ${despues}, updated_at = NOW()
+      WHERE c.telefono_e164 = ${antes}
+        AND NOT EXISTS (
+          SELECT 1 FROM chat_conversacion otro
+          WHERE otro.orden_id = c.orden_id
+            AND otro.telefono_e164 = ${despues}
+        )
+    `);
+  }
+
   async findById(id: string): Promise<ChatConversacionDTO | null> {
     const row = await this.prisma.chatConversacion.findUnique({
       where: { id },

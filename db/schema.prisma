@@ -258,6 +258,17 @@ enum ChatMensajeTipo {
   plantilla
   otro
   ubicacion // Feature 121: mensaje entrante `type=location` con coordenadas lat/lng
+  // Feature 299 (design §1.1): los tipos entrantes que antes caian en `otro` con cuerpo NULL
+  // (burbuja vacia). `otro` se CONSERVA como sumidero de lo que sigue fuera de alcance
+  // (button, interactive, order, request_welcome, ephemeral) y de las degradaciones.
+  imagen
+  audio
+  video
+  documento
+  sticker
+  reaccion
+  contactos
+  sistema
 
   @@map("chat_mensaje_tipo")
 }
@@ -324,6 +335,19 @@ model ChatMensaje {
   errorCodigo    Int?                 @map("error_codigo") // p. ej. 131026 (indeliverable), 130429 (cuota)
   errorTitulo    String?              @map("error_titulo")
   errorDetalle   String?              @map("error_detalle") // texto de Meta SOBRE EL ERROR, nunca el destino
+  // Feature 299 (design §1.2): columnas NULLABLE que sostienen los tipos entrantes nuevos.
+  // Cada grupo lo puebla SOLO su tipo; el resto queda NULL. El binario de la media NUNCA se
+  // guarda (D1/R15): aqui solo vive el identificador de Meta y sus metadatos, y el proxy
+  // (`/api/chat/media/<id>`) lo baja bajo demanda con el token del servidor.
+  mediaId                 String?  @map("media_id") // id de media de Meta (R1); nunca sale al navegador
+  mediaMime               String?  @map("media_mime") // mime_type de Meta (R1); decide inline vs descarga (R25)
+  mediaNombre             String?  @map("media_nombre") // filename de documentos (R1/R29)
+  mediaTamanoBytes        Int?     @map("media_tamano_bytes") // file_size SI Meta lo manda; normalmente NULL (P2)
+  reaccionAWaMessageId    String?  @map("reaccion_a_wa_message_id") // reaction.message_id: mensaje reaccionado (R4)
+  reaccionEmoji           String?  @map("reaccion_emoji") // emoji; NULL = reaccion RETIRADA (R5)
+  contactosJson           Json?    @map("contactos_json") // payload normalizado de `contacts` (R7); se valida con zod al leer
+  sistemaTelefonoAnterior String?  @map("sistema_telefono_anterior") // numero previo del cambio (R9/R18)
+  sistemaTelefonoNuevo    String?  @map("sistema_telefono_nuevo") // numero nuevo del cambio (R9/R18)
   ocurridoAt     DateTime             @map("ocurrido_at") // timestamp del evento (de Meta en entrantes)
   createdAt      DateTime             @default(now()) @map("created_at")
 
@@ -337,6 +361,13 @@ model ChatMensaje {
   // su nombre por defecto y ese rename dejaria mudo al `DROP INDEX IF EXISTS
   // "chat_mensaje_error_codigo_idx"` del `down.sql` de esa migracion.
   @@index([errorCodigo, ocurridoAt(sort: Desc)], map: "chat_mensaje_error_codigo_idx") // diagnostico: fallos recientes por codigo
+  // Feature 299 (design §1.2): el agregado de reacciones (R19) busca todas las reacciones de un
+  // hilo por su mensaje objetivo. El indice REAL es PARCIAL (`WHERE reaccion_a_wa_message_id IS
+  // NOT NULL`) y va a mano en `20260827180000_chat_mensaje_media_reacciones`; Prisma no expresa
+  // el predicado, asi que aqui se declara el btree equivalente. El `map:` es OBLIGATORIO por la
+  // misma razon que en el indice de arriba: sin el, el rename por defecto de Prisma dejaria mudo
+  // al `DROP INDEX IF EXISTS "chat_mensaje_reaccion_idx"` del `down.sql`.
+  @@index([conversacionId, reaccionAWaMessageId], map: "chat_mensaje_reaccion_idx")
   @@map("chat_mensaje")
 }
 

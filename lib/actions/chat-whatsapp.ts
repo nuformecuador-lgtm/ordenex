@@ -27,6 +27,7 @@ import type { IOrdenEnvioReader } from "@/lib/repositories/OrdenEnvioReader";
 import type { IChatConversacionRepository } from "@/lib/interfaces/repositories/IChatConversacionRepository";
 import type { IChatMensajeRepository } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 import type { IPlantillaMensajeRepository } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
+import { agregarReacciones } from "@/lib/utils/chat-reacciones";
 import type {
   EnviarMensajeChatResult,
   EnviarPlantillaChatResult,
@@ -220,7 +221,10 @@ export async function listarHiloChat(
   }
 
   const mensajeRepo = deps.mensajeRepo ?? new ChatMensajeRepository(prisma);
-  const mensajes = await mensajeRepo.listarHilo(hilo.id);
+  const filas = await mensajeRepo.listarHilo(hilo.id);
+  // Feature 299 (R19/R20/D4): las filas `tipo=reaccion` NO son burbujas. Se sacan del hilo y se
+  // cuelgan del mensaje al que reaccionan. `mensajes` es ya el hilo SIN ellas.
+  const { burbujas: mensajes, reaccionesPorWaMessageId } = agregarReacciones(filas);
   const ahoraDate = (deps.now ?? (() => new Date()))();
   const ahora = ahoraDate.getTime();
   const ventanaAbierta =
@@ -260,6 +264,24 @@ export async function listarHiloChat(
       // Feature 121 (R8): coords del entrante de ubicacion; null en el resto (columnas nullable).
       latitud: m.latitud,
       longitud: m.longitud,
+      // Feature 299 (R19/R21): metadatos del adjunto SIN el media id de Meta. La UI pide el
+      // binario por `/api/chat/media/${m.id}` (id interno, autorizable); el id de Meta se queda
+      // en el servidor. `mediaId === null` = este mensaje no tiene adjunto.
+      media:
+        m.mediaId === null
+          ? null
+          : { mime: m.mediaMime, nombre: m.mediaNombre, tamanoBytes: m.mediaTamanoBytes },
+      // Ya viene validado con zod desde el repo (`safeParse`): un JSON corrupto llega como null.
+      contactos: m.contactos,
+      sistema:
+        m.tipo === "sistema"
+          ? {
+              telefonoAnterior: m.sistemaTelefonoAnterior,
+              telefonoNuevo: m.sistemaTelefonoNuevo,
+            }
+          : null,
+      reacciones:
+        m.waMessageId === null ? [] : (reaccionesPorWaMessageId.get(m.waMessageId) ?? []),
       ocurridoAt: m.ocurridoAt.toISOString(),
     })),
   };

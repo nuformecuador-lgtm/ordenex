@@ -26,6 +26,11 @@ export interface IngestaResumen {
   statusesAplicados: number;
   /** Entrantes cuyo numero no mapeo a ninguna orden activa asignada (R25/D4). */
   sinResolver: number;
+  /**
+   * Feature 299 (R16/R18): hilos cuyo `telefono_e164` se reescribio por un cambio de numero del
+   * cliente. Conteo AGREGADO, sin PII: nunca el numero anterior ni el nuevo.
+   */
+  hilosMigrados: number;
 }
 
 /** Desenlace de un envio saliente de texto desde el chat (lo devuelve la server action). */
@@ -128,10 +133,27 @@ export class ChatWhatsappService {
     let mensajesRegistrados = 0;
     let statusesAplicados = 0;
     let sinResolver = 0;
+    let hilosMigrados = 0;
 
     for (const mensaje of eventos.mensajes) {
+      // Feature 299 (design §3, R16/R17/R18): el CAMBIO DE NUMERO se aplica ANTES de resolver
+      // la orden. Migrar primero es lo que hace que este mismo evento —y todo lo que venga
+      // despues del numero nuevo— caiga en el hilo que ya existia, en vez de abrir uno vacio.
+      // El repo es tolerante al conflicto y devuelve 0 sin lanzar (P5), asi que la ingesta del
+      // lote y su 200 se mantienen pase lo que pase. No se loguea ningun numero (R35).
+      if (mensaje.sistema !== undefined && mensaje.sistema.telefonoAnterior !== null) {
+        hilosMigrados += await this.deps.conversacionRepo.migrarTelefono(
+          mensaje.sistema.telefonoAnterior,
+          mensaje.sistema.telefonoNuevo,
+        );
+      }
+
       // Normaliza el numero entrante (Meta lo entrega con o sin `+`) antes de resolver/keyear:
       // asi el mismo cliente cae SIEMPRE en el mismo hilo (raiz del bug de duplicados).
+      //
+      // La resolucion usa el `from` del evento, que en un cambio de numero es el ANTERIOR. Y
+      // TIENE que ser asi: la orden se busca por `orden.telefono_dest`, que R17 prohibe tocar,
+      // asi que el unico numero que casa con la orden sigue siendo el anterior.
       const resolucion = await this.deps.conversacionRepo.resolverOrdenActivaPorNumero(
         normalizarTelefonoWa(mensaje.telefonoE164),
       );
@@ -145,7 +167,11 @@ export class ChatWhatsappService {
       const hilo = await this.deps.conversacionRepo.upsertParaOrden({
         ordenId: resolucion.ordenId,
         mensajeroId: resolucion.mensajeroId,
-        telefonoE164: resolucion.telefonoE164,
+        // Feature 299 (R18): tras migrar, el hilo de esta orden vive bajo el numero NUEVO. El
+        // upsert tiene que keyear por ese numero o crearia un hilo vacio con el viejo y la
+        // evidencia caeria fuera del hilo que el mensajero mira.
+        telefonoE164:
+          mensaje.sistema !== undefined ? mensaje.sistema.telefonoNuevo : resolucion.telefonoE164,
       });
 
       const insertado = await this.deps.mensajeRepo.insertarEntranteIdempotente({
@@ -157,6 +183,20 @@ export class ChatWhatsappService {
         // entrante de ubicacion es un entrante mas: no toca el dedupe ni el sellado (R5/R6).
         latitud: mensaje.ubicacion?.latitud ?? null,
         longitud: mensaje.ubicacion?.longitud ?? null,
+        // Feature 299 (R1/R2/R4/R5/R7/R12): los campos de los tipos nuevos viajan igual que
+        // lat/lng en la 121. El dedupe por `wa_message_id` y el sellado de `ultimo_entrante_at`
+        // NO se tocan: una imagen, una reaccion o la evidencia del cambio de numero son
+        // entrantes MAS. Eso es tambien lo que impide DUPLICAR la evidencia si Meta reenvia el
+        // mismo `system` (R18): el segundo intento cae en el dedupe y no inserta.
+        mediaId: mensaje.media?.mediaId ?? null,
+        mediaMime: mensaje.media?.mediaMime ?? null,
+        mediaNombre: mensaje.media?.mediaNombre ?? null,
+        mediaTamanoBytes: mensaje.media?.mediaTamanoBytes ?? null,
+        reaccionAWaMessageId: mensaje.reaccion?.objetivoWaMessageId ?? null,
+        reaccionEmoji: mensaje.reaccion?.emoji ?? null,
+        contactos: mensaje.contactos ?? null,
+        sistemaTelefonoAnterior: mensaje.sistema?.telefonoAnterior ?? null,
+        sistemaTelefonoNuevo: mensaje.sistema?.telefonoNuevo ?? null,
         ocurridoAt: mensaje.ocurridoAt,
       });
 
@@ -183,7 +223,7 @@ export class ChatWhatsappService {
       }
     }
 
-    return { mensajesRegistrados, statusesAplicados, sinResolver };
+    return { mensajesRegistrados, statusesAplicados, sinResolver, hilosMigrados };
   }
 
   /**

@@ -208,3 +208,75 @@ describe("ChatConversacionRepository · no leidos del chat", () => {
     expect(arg.values).toEqual(["orden-1", "men-1"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Feature 299 — C3.T (R16/R18). `migrarTelefono`: el cliente cambio de numero.
+// ---------------------------------------------------------------------------
+
+describe("Feature 299 · migrarTelefono (R16/R18)", () => {
+  it("R16: reescribe telefono_e164 del hilo y devuelve las filas migradas", async () => {
+    const prisma = buildPrisma();
+    prisma.$executeRaw.mockResolvedValue(1);
+    const repo = new ChatConversacionRepository(prisma as unknown as PrismaClient);
+
+    const migradas = await repo.migrarTelefono("50688887777", "50699996666");
+
+    expect(migradas).toBe(1);
+    const arg = prisma.$executeRaw.mock.calls[0][0] as {
+      strings: readonly string[];
+      values: unknown[];
+    };
+    const texto = sqlTexto(arg);
+    expect(texto).toContain("UPDATE chat_conversacion");
+    expect(texto).toContain("SET telefono_e164");
+    // Los numeros viajan como PARAMETROS, nunca interpolados en el texto.
+    expect(texto).not.toContain("50699996666");
+    expect(arg.values).toContain("50699996666");
+    expect(arg.values).toContain("50688887777");
+  });
+
+  it("R18/P5: si la orden YA tiene hilo con el numero nuevo, no migra y devuelve 0 sin lanzar", async () => {
+    // El `NOT EXISTS` del WHERE deja fuera esa fila: `$executeRaw` devuelve 0 filas afectadas.
+    const prisma = buildPrisma();
+    prisma.$executeRaw.mockResolvedValue(0);
+    const repo = new ChatConversacionRepository(prisma as unknown as PrismaClient);
+
+    await expect(repo.migrarTelefono("50688887777", "50699996666")).resolves.toBe(0);
+    expect(sqlTexto(prisma.$executeRaw.mock.calls[0][0])).toContain("NOT EXISTS");
+  });
+
+  it("R17: el UPDATE escribe SOLO en chat_conversacion (ni orden ni cliente)", async () => {
+    const prisma = buildPrisma();
+    prisma.$executeRaw.mockResolvedValue(1);
+    const repo = new ChatConversacionRepository(prisma as unknown as PrismaClient);
+    await repo.migrarTelefono("50688887777", "50699996666");
+
+    const texto = sqlTexto(prisma.$executeRaw.mock.calls[0][0]);
+    expect(texto).not.toMatch(/UPDATE\s+orden/i);
+    expect(texto).not.toMatch(/UPDATE\s+cliente/i);
+    expect(texto).not.toMatch(/telefono_dest/i);
+    expect(prisma.orden.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("normaliza ambos numeros: `+506 8888-7777` y `88887777` son el MISMO hilo", async () => {
+    const prisma = buildPrisma();
+    prisma.$executeRaw.mockResolvedValue(1);
+    const repo = new ChatConversacionRepository(prisma as unknown as PrismaClient);
+
+    await repo.migrarTelefono("+506 8888-7777", "9999-6666");
+
+    const arg = prisma.$executeRaw.mock.calls[0][0] as { values: unknown[] };
+    expect(arg.values).toContain("50688887777");
+    expect(arg.values).toContain("50699996666");
+  });
+
+  it("mismo numero a ambos lados o numero vacio: 0 sin tocar la base", async () => {
+    const prisma = buildPrisma();
+    const repo = new ChatConversacionRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.migrarTelefono("50688887777", "+506 8888-7777")).toBe(0);
+    expect(await repo.migrarTelefono("", "50699996666")).toBe(0);
+    expect(await repo.migrarTelefono("50688887777", "")).toBe(0);
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+  });
+});
