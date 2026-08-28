@@ -215,10 +215,17 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
       toast.error("La plantilla ya no existe.");
       await mutate();
     } else if (res.status === "estado_invalido") {
-      // El boton ya viene deshabilitado para este caso: llegar aqui significa que la fila
+      // El boton ya NO se pinta para este caso (2026-08-27): llegar aqui significa que la fila
       // cambio de estado desde la ultima carga. Por eso se REFRESCA ademas de avisar, o el
-      // maestro seguiria viendo un boton habilitado que no funciona.
+      // maestro seguiria viendo un boton que no funciona.
       toast.error("Solo una plantilla activa puede ser el mensaje de bienvenida.");
+      await mutate();
+    } else if (res.status === "no_aplica") {
+      // Igual que arriba, pero por el otro motivo: la fila es una plantilla para envío de la
+      // tienda y esas no pintan el botón. Solo se llega con el listado viejo en pantalla.
+      toast.error(
+        "Una plantilla para envío de la tienda no puede ser el mensaje de bienvenida.",
+      );
       await mutate();
     } else {
       toast.error(mensajeError(res.status));

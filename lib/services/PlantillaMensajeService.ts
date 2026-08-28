@@ -302,6 +302,12 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
 
     const actual = await this.repo.findById(id);
     if (actual === null) return { status: "not_found" }; // no existe o esta borrada
+    // UNA PLANTILLA DE TIENDA NO PUEDE SER LA BIENVENIDA, aunque este `activo`. El envio de
+    // bienvenida sale SOLO al recoger el paquete y va POR META, que necesita un template
+    // aprobado; una plantilla de tienda no tiene `templateId` porque nunca se envio alli. La
+    // comprobacion va ANTES que la del estado a proposito: `activo` es precisamente el estado
+    // en el que nacen, asi que sin esto pasarian el filtro justo por serlo.
+    if (actual.plantillaTienda) return { status: "no_aplica" };
     if (actual.estado !== "activo") {
       return { status: "estado_invalido", estado: actual.estado };
     }

@@ -76,12 +76,26 @@ export const TOOLTIP_BIENVENIDA =
 export const TOOLTIP_BIENVENIDA_ACTUAL = `Esta es la plantilla de bienvenida. ${TOOLTIP_BIENVENIDA}`;
 
 /**
- * Lo que explica el boton cuando la fila NO esta `activo` (2026-08-27). Dice el REQUISITO, no
- * «no se puede»: el maestro necesita saber que lo que falta es la aprobacion de Meta, porque
- * es la unica pista de que hay algo que esperar y no algo que arreglar.
+ * BORRADO 2026-08-27 (pedido humano): aqui vivia `TOOLTIP_BIENVENIDA_NO_ACTIVA`, el texto que
+ * explicaba por que el boton estaba deshabilitado en una plantilla no `activo`. Ya no hay boton
+ * que explicar: en esas filas no se pinta (ver `muestraBotonBienvenida`).
  */
-export const TOOLTIP_BIENVENIDA_NO_ACTIVA =
-  "Solo una plantilla activa puede ser el mensaje de bienvenida: este envio sale solo, sin nadie que lo revise. Espera a que Meta la apruebe.";
+
+/**
+ * `true` si la fila PINTA el boton de bienvenida. Distinto de `puedeSerBienvenida`, que decide
+ * si se puede PULSAR: la fila ya marcada lo pinta deshabilitado (es donde se lee que ella es la
+ * bienvenida), y estas dos no lo pintan en absoluto —
+ *
+ *   - PLANTILLA DE TIENDA: nunca podra serlo. La bienvenida sale por Meta y ella no vive alli.
+ *   - Estado distinto de `activo`: hoy no puede serlo.
+ *
+ * En los dos casos el boton seria un control muerto, y un control muerto estorba mas de lo que
+ * informa. Antes se dejaba visible y deshabilitado con un tooltip que decia el motivo; el
+ * pedido humano del 2026-08-27 lo retira.
+ */
+export function muestraBotonBienvenida(row: PlantillaListItemDTO): boolean {
+  return !row.plantillaTienda && row.estado === "activo";
+}
 
 /**
  * `true` si la fila puede marcarse como bienvenida. Exportado y usado TANTO por el boton como
@@ -90,6 +104,9 @@ export const TOOLTIP_BIENVENIDA_NO_ACTIVA =
  * cortesia de UI, no la puerta.
  */
 export function puedeSerBienvenida(row: PlantillaListItemDTO): boolean {
+  // Una plantilla de tienda esta `activo` desde que nace, asi que sin esta linea pasaria el
+  // filtro justo por serlo — y la bienvenida sale por Meta, donde ella no existe.
+  if (row.plantillaTienda) return false;
   return row.estado === "activo" && !row.welcomeMessage;
 }
 
@@ -182,37 +199,34 @@ export function buildPlantillasColumns(
           >
             Editar
           </Button>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  // La marcada va SOLIDA (`default`) y el resto en `outline`: la diferencia se
-                  // ve de un vistazo sin leer nada.
-                  variant={row.welcomeMessage ? "default" : "outline"}
-                  size="sm"
-                  // Ya marcada = nada que hacer; no `activo` = no se permite (el envio de
-                  // bienvenida sale SOLO y exige una plantilla enviable). En ambos casos se
-                  // deja VISIBLE y deshabilitada en vez de ocultarla: escondida, la fila
-                  // perderia justo el control que explica su estado, y el tooltip —que es
-                  // donde se dice el motivo— no tendria donde colgarse.
-                  disabled={!puedeSerBienvenida(row)}
-                  aria-pressed={row.welcomeMessage}
-                  onClick={() => actions.onMarcarBienvenida(row)}
-                >
-                  <MessageSquareHeart className="size-4" aria-hidden="true" />
-                  Mensaje de bienvenida
-                </Button>
-              }
-            />
-            <TooltipContent>
-              {row.welcomeMessage
-                ? TOOLTIP_BIENVENIDA_ACTUAL
-                : row.estado !== "activo"
-                  ? TOOLTIP_BIENVENIDA_NO_ACTIVA
-                  : TOOLTIP_BIENVENIDA}
-            </TooltipContent>
-          </Tooltip>
+          {muestraBotonBienvenida(row) ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    // La marcada va SOLIDA (`default`) y el resto en `outline`: la diferencia
+                    // se ve de un vistazo sin leer nada.
+                    variant={row.welcomeMessage ? "default" : "outline"}
+                    size="sm"
+                    // Lo unico que queda deshabilitado es la fila YA marcada: no hay nada que
+                    // pulsar, pero el boton se deja visible porque es donde se lee que ella es
+                    // la bienvenida. Los demas casos en que no se puede marcar ya no llegan
+                    // aqui: esas filas no pintan el boton (ver `muestraBotonBienvenida`).
+                    disabled={!puedeSerBienvenida(row)}
+                    aria-pressed={row.welcomeMessage}
+                    onClick={() => actions.onMarcarBienvenida(row)}
+                  >
+                    <MessageSquareHeart className="size-4" aria-hidden="true" />
+                    Mensaje de bienvenida
+                  </Button>
+                }
+              />
+              <TooltipContent>
+                {row.welcomeMessage ? TOOLTIP_BIENVENIDA_ACTUAL : TOOLTIP_BIENVENIDA}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
           {puedeEnviarseAAprobacion(row) ? (
             <Button
               type="button"

@@ -4,13 +4,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
 /**
- * Texto que acompaña al interruptor. Es la ÚNICA explicación de qué cambia al encenderlo, y
- * por eso dice las tres consecuencias juntas —no va a Meta, queda activa ya, no se envía a
- * aprobación—: el maestro decide esto ANTES de escribir el cuerpo, y descubrir después que su
- * plantilla no necesitaba aprobación (o que sí) es descubrirlo tarde.
+ * Texto que acompaña al interruptor. Es la ÚNICA explicación de qué cambia al encenderlo, así
+ * que dice las dos cosas que no se pueden deducir del nombre: que no espera aprobación, y —lo
+ * que más se presta a error— DÓNDE se usa. Corregido el 2026-08-27: decía «desde el chat del
+ * mensajero», que es justo la superficie en la que NO aparece.
  */
 export const AYUDA_PLANTILLA_TIENDA =
-  "El texto no se envía a WhatsApp para su aprobación: queda activa de inmediato y se usa desde el chat del mensajero.";
+  "No pasa por la aprobación de WhatsApp: queda activa de inmediato y solo se envía desde Novedades.";
 
 export interface PlantillaTiendaFieldProps {
   /** Id del interruptor; enlaza el `Label htmlFor` y la ayuda. */
@@ -39,10 +39,10 @@ export function PlantillaTiendaField({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
-        <Label htmlFor={id}>Plantilla de tienda</Label>
+        <Label htmlFor={id}>Plantilla para envío de la tienda</Label>
         <Switch
           id={id}
-          aria-label="Plantilla de tienda"
+          aria-label="Plantilla para envío de la tienda"
           aria-describedby={ayudaId}
           checked={checked}
           onCheckedChange={onCheckedChange}

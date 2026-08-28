@@ -14,7 +14,10 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/useToast";
-import { listarPlantillasParaEnvio } from "@/lib/actions/whatsapp-envio";
+import {
+  listarPlantillasParaEnvio,
+  listarPlantillasParaEnvioTienda,
+} from "@/lib/actions/whatsapp-envio";
 import { renderPlantilla } from "@/lib/utils/plantilla-mensaje";
 import { datosPlantillaDesdeAsignacion } from "@/lib/utils/whatsapp-envio-valores";
 import { resolverValoresPlantilla, type DatosPlantilla } from "@/lib/types/plantilla-datos";
@@ -62,6 +65,15 @@ export interface EnviarPlantillaWhatsappButtonProps {
    *   ni ha cambiado de nombre, solo hace mejor lo que ya prometia.
    */
   disparador?: "plantilla" | "whatsapp";
+  /**
+   * `true` SOLO en `/novedades`: anade a la lista las PLANTILLAS DE TIENDA, que es la unica
+   * superficie donde se pueden usar (no se envian a Meta y no son del mensajero).
+   *
+   * Elige entre dos Server Actions distintas en vez de mandar un booleano al servidor: quien
+   * decide el alcance es la pantalla, y asi el panel del mensajero no tiene forma de pedirlas
+   * ni por error ni a mano.
+   */
+  incluirPlantillasDeTienda?: boolean;
 }
 
 export function EnviarPlantillaWhatsappButton({
@@ -70,6 +82,7 @@ export function EnviarPlantillaWhatsappButton({
   onElegirPlantilla,
   disabled = false,
   disparador = "plantilla",
+  incluirPlantillasDeTienda = false,
 }: Readonly<EnviarPlantillaWhatsappButtonProps>) {
   const toast = useToast();
   const [abierto, setAbierto] = useState(false);
@@ -108,7 +121,9 @@ export function EnviarPlantillaWhatsappButton({
     if (items !== null || cargando) return;
     setCargando(true);
     try {
-      const r = await listarPlantillasParaEnvio();
+      const r = await (incluirPlantillasDeTienda
+        ? listarPlantillasParaEnvioTienda()
+        : listarPlantillasParaEnvio());
       if (r.status === "ok") {
         setItems(r.items);
       } else {

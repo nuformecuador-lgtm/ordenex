@@ -91,7 +91,13 @@ export type MarcarBienvenidaPlantillaServiceResult =
   | { status: "ok"; plantilla: PlantillaPublica }
   | { status: "forbidden" }
   | { status: "not_found" }
-  | { status: "estado_invalido"; estado: PlantillaEstado };
+  | { status: "estado_invalido"; estado: PlantillaEstado }
+  /**
+   * La plantilla es DE TIENDA: la bienvenida sale por Meta y esta nunca se envio alli, asi
+   * que no hay template que mandar. Es un desenlace distinto de `estado_invalido` porque no
+   * se arregla esperando: no es un tramite pendiente, es que no le corresponde.
+   */
+  | { status: "no_aplica" };
 
 export type PreviewPlantillaServiceResult =
   | { status: "ok"; texto: string }

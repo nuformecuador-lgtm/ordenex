@@ -22,8 +22,11 @@ import { NovedadAcciones } from "@/app/(app)/novedades/_components/NovedadAccion
 import type { NovedadDTO } from "@/lib/types/novedad";
 
 const listarPlantillasParaEnvioMock = vi.fn();
+const listarPlantillasParaEnvioTiendaMock = vi.fn();
 vi.mock("@/lib/actions/whatsapp-envio", () => ({
   listarPlantillasParaEnvio: (...a: unknown[]) => listarPlantillasParaEnvioMock(...a),
+  listarPlantillasParaEnvioTienda: (...a: unknown[]) =>
+    listarPlantillasParaEnvioTiendaMock(...a),
 }));
 
 vi.mock("@/lib/actions/orden-ayuda", () => ({
@@ -89,7 +92,7 @@ let openSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  listarPlantillasParaEnvioMock.mockResolvedValue({
+  const respuesta = {
     status: "ok",
     items: [
       {
@@ -105,7 +108,11 @@ beforeEach(() => {
         variables: ["destinatario"],
       },
     ],
-  });
+  };
+  // Las DOS resuelven igual: lo que este archivo mide sobre la eleccion de accion es CUAL se
+  // llama (ver el caso de abajo), no que devuelvan cosas distintas.
+  listarPlantillasParaEnvioMock.mockResolvedValue(respuesta);
+  listarPlantillasParaEnvioTiendaMock.mockResolvedValue(respuesta);
   openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
 });
 
@@ -158,6 +165,21 @@ describe("/novedades — el globo de WhatsApp abre las plantillas", () => {
     await screen.findByRole("dialog");
 
     expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  // LA SUPERFICIE DECIDE EL ALCANCE. `/novedades` es la unica pantalla donde se pueden usar
+  // las plantillas para envio de la tienda, asi que pide la accion que las incluye. Si algun
+  // dia alguien cablea aqui la del mensajero, las de tienda desaparecen sin que falle nada
+  // mas: por eso se afirma la accion concreta y no solo el resultado.
+  it("pide la lista que INCLUYE las plantillas de tienda, no la del mensajero", async () => {
+    const user = userEvent.setup();
+    renderAcciones();
+
+    await user.click(screen.getByRole("button", { name: `WhatsApp a ${DESTINATARIO}` }));
+    await screen.findByRole("dialog");
+
+    expect(listarPlantillasParaEnvioTiendaMock).toHaveBeenCalledTimes(1);
+    expect(listarPlantillasParaEnvioMock).not.toHaveBeenCalled();
   });
 
   // «Llamar» no se toca: sigue marcando, y sigue siendo un botón distinto del globo.

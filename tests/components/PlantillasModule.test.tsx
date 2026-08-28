@@ -191,11 +191,16 @@ describe("PlantillasModule - mensaje de bienvenida", () => {
     ["refused"],
     ["inactivo"],
   ] as const)(
-    "una plantilla `%s` NO puede marcarse: el boton esta deshabilitado",
+    "una plantilla `%s` NO puede marcarse: el boton NI SIQUIERA SE PINTA",
     async (estado) => {
-      // El guardia de verdad esta en el service; esto comprueba que la UI no invita a pulsar
-      // algo que el servidor va a rechazar. El boton sigue VISIBLE a proposito: es donde
-      // cuelga el tooltip que explica que falta la aprobacion de Meta.
+      // ⚠️ 2026-08-27, PEDIDO HUMANO — ESTE CASO CAMBIA DE SENTIDO A PROPOSITO. Hasta hoy
+      // afirmaba que el boton seguia VISIBLE y deshabilitado, «porque es donde cuelga el
+      // tooltip que explica que falta la aprobacion de Meta». La decision nueva es que un
+      // control que no se puede pulsar estorba mas de lo que informa. No es una asercion
+      // ajustada para que pase: es el producto que cambio.
+      //
+      // El guardia de verdad sigue estando en el service; esto solo comprueba que la UI no
+      // ofrece lo que el servidor va a rechazar.
       const fila = { ...ITEM, estado };
       items = [fila];
       renderModule(<PlantillasModule initialData={{ items: [fila], total: 1, pageSize: 25 }} />);
@@ -204,11 +209,29 @@ describe("PlantillasModule - mensaje de bienvenida", () => {
       await within(table).findByText("bienvenida");
 
       expect(
-        within(table).getByRole("button", { name: /mensaje de bienvenida/i }),
-      ).toBeDisabled();
+        within(table).queryByRole("button", { name: /mensaje de bienvenida/i }),
+      ).toBeNull();
       expect(marcarPlantillaBienvenidaMock).not.toHaveBeenCalled();
     },
   );
+
+  // Una plantilla PARA ENVIO DE LA TIENDA esta `activo` desde que nace, asi que es la unica
+  // que llegaria al boton por la puerta del estado. La bienvenida sale por Meta y ella no vive
+  // alli: tampoco lo pinta.
+  it("una plantilla para envio de la tienda tampoco pinta el boton, aunque este `activo`", async () => {
+    const deTienda = { ...ITEM, estado: "activo" as const, plantillaTienda: true };
+    items = [deTienda];
+    renderModule(
+      <PlantillasModule initialData={{ items: [deTienda], total: 1, pageSize: 25 }} />,
+    );
+
+    const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
+    await within(table).findByText("bienvenida");
+
+    expect(
+      within(table).queryByRole("button", { name: /mensaje de bienvenida/i }),
+    ).toBeNull();
+  });
 
   it("estado_invalido (la fila cambio bajo los pies): avisa y revalida", async () => {
     // Se llega aqui cuando el listado en pantalla esta viejo: el boton se pinto habilitado
