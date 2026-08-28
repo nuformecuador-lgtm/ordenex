@@ -1,24 +1,46 @@
 # Ficha 312 — Corregir los datos del cliente de una orden
 
-**Estado:** borrador de especificación (pendiente de aprobación humana).
+**Estado:** especificación con el alcance cerrado. Las cuatro preguntas de producto (P1–P4) y las
+tres técnicas (T1–T3) fueron respondidas por el humano el **2026-08-28**; están recogidas abajo,
+en §Preguntas resueltas, y ya no hay ninguna abierta.
 **Zona:** fullstack. **SDD:** sí.
 
 ## Problema
 
 La carga masiva entra con el destinatario o el teléfono mal escritos. Hoy la aplicación no
 ofrece **ninguna** superficie para arreglarlo: la única vía es un `UPDATE` a mano contra
-producción. Esta ficha pone esa corrección dentro de la app, con autorización por rol, ventana
-de estado y rastro en el hilo de la orden.
+producción. Esta ficha pone esa corrección dentro de la app, con autorización por rol y ventana
+de estado.
 
 ## Alcance cerrado por el humano (no se reabre)
 
 | Decisión | Contenido |
 | --- | --- |
 | D1 — Campos | `destinatario`, `telefonoDest`, `producto`, `notas`. **Nada más.** Fuera dirección, ubicación, zona, monto, estatus y tienda. La dirección se deja fuera **a sabiendas** de que es el error de carga más caro. |
-| D2 — Quién | `maestro` y `admin` desde el módulo de órdenes. `adminTienda` **solo** desde la card de `/novedades`, y solo sobre sus propias órdenes, las que llegan ahí **por una devolución**. |
-| D3 — Ventana | No se corrige si el estado está en `ESTADOS_TERMINALES` (`entregada`, `devuelta_a_tienda`, `incidente`) **más** `rechazada`. |
-| D4 — Rastro | Nota automática en el **hilo de notas** de la orden (`orden_nota`), con valor viejo → nuevo, autor y fecha. **NO** se escribe en `orden_historial_estado`: eso es historial de ESTADO, y corregir un dato no es transicionar. |
-| D5 — Teléfono/WhatsApp | El hilo de chat existente **se conserva** y se le anota la corrección; los mensajes nuevos entran ya por el número corregido. Coherente con la 311: un cambio de número es **evidencia, no continuidad**. |
+| D2 — Quién | `maestro` y `admin` desde el módulo de órdenes. `adminTienda` **solo** desde las cards de `/novedades`, sobre sus propias órdenes, y **en los DOS grupos** de esa pantalla (`devolucion` y `ayuda`). |
+| D3 — Ventana | No se corrige si el estado está en `ESTADOS_TERMINALES` (`entregada`, `devuelta_a_tienda`, `incidente`) **más** `rechazada`. Exactamente esos cuatro valores. |
+| D4 — Rastro | **NINGUNO.** Decidido el 2026-08-28: no hay nota en el hilo, ni tabla de auditoría, ni fila de historial, ni registro de qué cambió. Corregir deja solo el `updated_at` de la fila. **Lo que se pierde:** no se puede saber quién corrigió qué, ni cuál era el valor anterior. Detalle y motivo, abajo. |
+| D5 — Teléfono/WhatsApp | Esta ficha **no toca el módulo de chat**. La conversación anterior se queda donde está, intacta; los mensajes nuevos entran ya por el número corregido. Si el número estaba mal escrito, ese hilo viejo es una conversación con otra persona y **no sirve de nada**: no se migra, no se fusiona y no se borra. |
+
+### D4, al detalle — la ausencia de rastro es una decisión, no un olvido
+
+Decidido por el humano el **2026-08-28**, en respuesta a la pregunta P1 de la versión anterior de
+este documento. Palabras literales: *«no veo necesario avisar que se corrigió un dato»*.
+
+En consecuencia, y de forma deliberada:
+
+- **no** se publica ninguna nota en el hilo de la orden;
+- **no** se crea ninguna tabla ni columna de auditoría;
+- **no** se escribe fila alguna en el historial de estado;
+- **no** se guarda en ningún sitio qué campo cambió, ni cuál era su valor anterior.
+
+Corregir deja **únicamente** el `updated_at` de la fila de la orden.
+
+**Lo que esto cuesta, escrito para quien lea esto en tres meses:** después de una corrección
+**no se puede saber quién la hizo, qué campo tocó, ni cuál era el valor anterior**. Si algún día
+hace falta responder «¿este teléfono siempre fue este?», la respuesta no estará en el sistema.
+Se aceptó ese coste a cambio de no construir —ni mantener— un rastro que nadie pidió leer.
+Quien quiera reabrirlo tiene la alternativa completa evaluada y descartada en `design.md` §8/B.
 
 ---
 
@@ -37,160 +59,170 @@ responder `validation_error` sin escribir nada.
 
 **R4** — CUANDO ninguno de los campos recibidos difiera del valor ya almacenado (comparados
 tras el mismo recorte que se aplica al guardar), el sistema DEBE terminar SIN escribir en la
-orden y SIN crear ninguna nota, e informar el desenlace como «sin cambios».
+orden e informar el desenlace como «sin cambios».
 
 **R5** — CUANDO una corrección se aplica, el sistema NO DEBE modificar ningún otro dato de la
 orden: ni el estado, ni la dirección, ni las coordenadas, ni zona/provincia/cantón/distrito, ni
 el monto a cobrar, ni la tienda, ni el mensajero asignado, ni el día de reparto, ni el número
 de guía, ni el número de remisión.
 
+**R6** — El sistema NO DEBE rechazar ni recortar `producto` ni `notas` por longitud: DEBE aceptar
+cualquier valor que la carga masiva aceptaría para esos mismos campos. *(Un tope que la carga no
+tiene produciría el caso absurdo «se pudo cargar pero no se puede corregir».)*
+
 ### Autorización
 
-**R6** — SI la petición llega sin sesión válida, ENTONCES el sistema DEBE responder
+**R7** — SI la petición llega sin sesión válida, ENTONCES el sistema DEBE responder
 `unauthenticated` sin construir el servicio ni tocar ninguna fila.
 
-**R7** — MIENTRAS el actor autenticado tenga rol `maestro` o `admin`, el sistema DEBE permitirle
-corregir cualquier orden viva cuyo estado esté dentro de la ventana de R10, sin restricción de
+**R8** — MIENTRAS el actor autenticado tenga rol `maestro` o `admin`, el sistema DEBE permitirle
+corregir cualquier orden viva cuyo estado esté dentro de la ventana de R11, sin restricción de
 tienda.
 
-**R8** — MIENTRAS el actor autenticado tenga rol `adminTienda`, el sistema DEBE permitirle
-corregir ÚNICAMENTE órdenes cuya tienda dueña sea él mismo Y cuyo estado sea el de la
-devolución anclada que `/novedades` lista en su grupo `devolucion`; en cualquier otro caso DEBE
-responder `forbidden`.
+**R9** — MIENTRAS el actor autenticado tenga rol `adminTienda`, el sistema DEBE permitirle
+corregir ÚNICAMENTE órdenes cuya tienda dueña sea él mismo Y cuyo estado sea el de alguno de los
+grupos que `/novedades` lista (el de la devolución anclada o el de la ayuda de la tienda); en
+cualquier otro caso DEBE responder `forbidden`.
 
-**R9** — SI el actor tiene un rol distinto de `maestro`, `admin` o `adminTienda` (`mensajero`,
+**R10** — SI el actor tiene un rol distinto de `maestro`, `admin` o `adminTienda` (`mensajero`,
 `adminSatelite`, `apiKey`), ENTONCES el sistema DEBE responder `forbidden` sin escribir nada.
 
 ### Ventana de estado
 
-**R10** — SI el estado actual de la orden es `entregada`, `devuelta_a_tienda`, `incidente` o
+**R11** — SI el estado actual de la orden es `entregada`, `devuelta_a_tienda`, `incidente` o
 `rechazada`, ENTONCES el sistema DEBE rechazar la corrección sin escribir nada.
 
-**R11** — SI la orden no existe, o está borrada lógicamente, o pertenece a otra tienda cuando el
+**R12** — SI la orden no existe, o está borrada lógicamente, o pertenece a otra tienda cuando el
 actor es `adminTienda`, ENTONCES el sistema DEBE devolver el MISMO resultado opaco que devuelve
 por rol no autorizado, sin distinguir cuál de los casos ocurrió.
 
-**R12** — CUANDO el estado de la orden cambie entre el momento en que el sistema la lee y el
+**R13** — CUANDO el estado de la orden cambie entre el momento en que el sistema la lee y el
 momento en que escribe, el sistema NO DEBE aplicar la corrección y DEBE informarlo como
 conflicto, sin dejar ningún efecto parcial.
 
-### Rastro
+### Ausencia de rastro (D4)
 
-**R13** — CUANDO una corrección se aplica, el sistema DEBE crear en el hilo de notas de esa
-orden UNA nota que enumere, por cada campo corregido y solo por esos, la etiqueta del campo, el
-valor anterior y el valor nuevo.
+**R14** — CUANDO una corrección se aplica, el sistema DEBE escribir ÚNICAMENTE en la fila de esa
+orden y en NINGUNA otra tabla: ni en el historial de estado, ni en el hilo de notas de la orden,
+ni en ninguna tabla de auditoría.
 
-**R14** — CUANDO el sistema crea la nota de R13, DEBE atribuirla al usuario autenticado que
-ejecutó la corrección, con el rol con el que la ejecutó y con la fecha y hora en que ocurrió.
+**R15** — CUANDO una corrección se aplica, el sistema DEBE dejar como único rastro la marca de
+última modificación (`updated_at`) de la fila corregida.
 
-**R15** — CUANDO una corrección se aplica, el sistema NO DEBE registrar ninguna fila en el
-historial de estado de la orden.
-
-**R16** — El sistema DEBE aplicar la corrección y crear su nota de forma ATÓMICA: no DEBE existir
-ningún desenlace en el que la orden quede corregida sin nota, ni una nota sin corrección
-aplicada.
-
-**R17** — El cuerpo de la nota de R13 NO DEBE exceder el tope de cuerpo del hilo de notas; SI la
-composición completa no cabe, ENTONCES el sistema DEBE recortarla por el final dejando una marca
-visible de que se recortó.
-
-**R18** — Ningún módulo de esta feature DEBE escribir en registros (`console`, logs de servidor
+**R16** — Ningún módulo de esta feature DEBE escribir en registros (`console`, logs de servidor
 o de navegador) el destinatario, el teléfono, el producto ni las notas de una orden.
 
 ### Teléfono y WhatsApp
 
-**R19** — CUANDO se corrija `telefonoDest`, el sistema DEBE guardarlo con el mismo tratamiento
+**R17** — CUANDO se corrija `telefonoDest`, el sistema DEBE guardarlo con el mismo tratamiento
 que le da la carga masiva al número que entra por el archivo.
 
-**R20** — SI el número corregido no produce ningún dígito utilizable al normalizarlo con la
+**R18** — SI el número corregido no produce ningún dígito utilizable al normalizarlo con la
 normalización de WhatsApp del sistema, ENTONCES el sistema DEBE responder `validation_error` sin
 escribir nada.
 
-**R21** — CUANDO se corrija `telefonoDest`, el sistema NO DEBE modificar, mover ni borrar la
-conversación de WhatsApp que la orden ya tuviera: sus mensajes DEBEN seguir siendo consultables
-tal cual estaban.
+**R19** — CUANDO se corrija `telefonoDest`, el sistema NO DEBE modificar, mover ni borrar la
+conversación de WhatsApp que la orden ya tuviera: sus filas y sus mensajes DEBEN quedar tal cual
+estaban.
 
-**R22** — CUANDO llegue un mensaje entrante desde el número CORREGIDO, y la orden esté viva y con
+**R20** — CUANDO llegue un mensaje entrante desde el número CORREGIDO, y la orden esté viva y con
 mensajero asignado, el sistema DEBE resolverlo a esa orden.
 
-**R23** — CUANDO llegue un mensaje entrante desde el número ANTERIOR, el sistema NO DEBE
+**R21** — CUANDO llegue un mensaje entrante desde el número ANTERIOR, el sistema NO DEBE
 resolverlo a esa orden.
 
 ### Superficies
 
-**R24** — El listado de órdenes DEBE ofrecer la corrección como acción POR FILA únicamente a los
-roles de R7 y únicamente sobre filas cuyo estado esté dentro de la ventana de R10.
+**R22** — El listado de órdenes DEBE ofrecer la corrección como acción POR FILA únicamente a los
+roles de R8 y únicamente sobre filas cuyo estado esté dentro de la ventana de R11.
 
-**R25** — La card de `/novedades` DEBE ofrecer la corrección únicamente en el grupo de
-`devolucion`.
+**R23** — Las cards de `/novedades` DEBEN ofrecer la corrección en LOS DOS grupos de esa pantalla,
+`devolucion` y `ayuda`.
 
-**R26** — SI el estado de una fila no se conoce o no está dentro de la ventana de R10, ENTONCES
+**R24** — SI el estado de una fila no se conoce o no está dentro de la ventana de R11, ENTONCES
 la superficie NO DEBE ofrecer la corrección sobre esa fila (fallo cerrado: la ausencia de dato
 no habilita).
 
-**R27** — El sistema DEBE revalidar en el servidor el rol, la pertenencia y el estado en CADA
+**R25** — El sistema DEBE revalidar en el servidor el rol, la pertenencia y el estado en CADA
 petición de corrección, con independencia de lo que la superficie haya ofrecido.
 
-**R28** — CUANDO se abra la superficie de corrección sobre una orden, DEBE presentar los cuatro
+**R26** — CUANDO se abra la superficie de corrección sobre una orden, DEBE presentar los cuatro
 campos precargados con los valores actuales de esa orden.
 
-**R29** — SI la orden ya tiene número de guía asignado, ENTONCES la superficie DEBE advertir,
+**R27** — SI la orden ya tiene número de guía asignado, ENTONCES la superficie DEBE advertir,
 ANTES de confirmar, que la etiqueta ya impresa conserva los datos anteriores.
 
-**R30** — CUANDO la corrección incluya el teléfono, la superficie DEBE advertir, ANTES de
+**R28** — CUANDO la corrección incluya el teléfono, la superficie DEBE advertir, ANTES de
 confirmar, que la conversación de WhatsApp anterior no se traslada al número nuevo.
 
-**R31** — CUANDO la corrección se aplique con éxito, la superficie DEBE releer el estado DEL
+**R29** — CUANDO la corrección se aplique con éxito, la superficie DEBE releer el estado DEL
 SERVIDOR y mostrar los valores nuevos; no DEBE pintarlos desde estado local optimista.
 
-**R32** — CUANDO el servidor rechace la corrección, la superficie DEBE conservar lo tecleado,
+**R30** — CUANDO el servidor rechace la corrección, la superficie DEBE conservar lo tecleado,
 mostrar un motivo accionable y NO reflejar ningún cambio; el motivo NO DEBE exponer
 identificadores internos ni el detalle de por qué se rechazó cuando el resultado del servidor es
-opaco (R11).
+opaco (R12).
 
 ---
 
 ## Fuera de alcance (declarado)
 
+- **Todo rastro de la corrección** (D4): nota en el hilo, tabla de auditoría, fila de historial o
+  cualquier registro de qué cambió y quién lo cambió. Decidido el 2026-08-28; el coste está
+  escrito arriba, en «D4, al detalle».
 - Corregir la **dirección**, la ubicación, la zona, el monto, el estatus o la tienda (D1).
 - Re-geocodificar (consecuencia de lo anterior: sin dirección editable no hay re-geocodificación).
-- Reimprimir la etiqueta automáticamente. R29 **avisa**; reimprimir es el gesto que ya existe en
-  el listado (`EtiquetaOrdenAccion`) y esta ficha no lo cambia.
+- Reimprimir la etiqueta. R27 **avisa** y nada más (respuesta a P4): reimprimir es el gesto que ya
+  existe en la fila del listado (`EtiquetaOrdenAccion`) y esta ficha no lo cambia ni lo duplica
+  dentro del modal.
 - Fusionar, migrar o borrar hilos de chat de WhatsApp (D5, y ver §5 de `design.md`).
-- Dar a `maestro`/`admin` lectura del hilo de notas (hoy no la tienen; ver Pregunta 1).
+- Cambiar nada del módulo de chat, incluido el panel del mensajero (respuesta a T2; ver
+  `design.md` §5.4).
 - Corrección por LOTE. Los cuatro campos son propios de cada orden.
+- Un tope de longitud propio para `producto` o `notas` (R6, respuesta a P3).
 
 ---
 
-## Preguntas abiertas
+## Preguntas resueltas (2026-08-28)
 
-**P1 — `maestro`/`admin` escriben un rastro que no pueden leer.**
-`OrdenNotaService.listar` solo admite `adminTienda` y `mensajero` (227/R12: «no hay vista de
-supervisión», decisión P8). La nota de R13 la verán la tienda dueña y el mensajero asignado; el
-`maestro` que corrigió **no**. ¿Se acepta así, o esta ficha debe abrir la lectura del hilo a los
-roles de acceso total? Abrirla es tocar una decisión firmada de la 227, así que no se hace sin
-respuesta.
+Se dejan escritas con su respuesta —y no se borran— porque cada una explica por qué el spec dice
+lo que dice.
+
+**P1 — ¿Qué rastro deja la corrección?**
+**Respuesta: ninguno.** «No veo necesario avisar que se corrigió un dato». Se retiran la nota
+automática, el formato «valor viejo → nuevo», la atribución al autor y toda dependencia con el
+hilo de notas. Ver D4 y `design.md` §6. De paso desaparece la incoherencia que este spec había
+detectado (escribir un rastro donde el propio autor no puede leerlo): ya no se escribe nada.
 
 **P2 — ¿El `adminTienda` puede corregir también desde el grupo de AYUDA?**
-El encargo dice «las que llegan a novedades por una devolución», y así está escrito en R8 (solo
-`devuelta`). Pero `/novedades` lista dos grupos, y en `ayuda_tienda` la tienda ya puede
-reprogramar, rechazar y hablar por el hilo. ¿Se deja fuera a propósito o es un olvido?
+**Respuesta: sí, desde los dos grupos.** Motivo del humano: en `ayuda_tienda` la tienda ya
+reprograma, rechaza y escribe en el hilo, así que ahí toma decisiones de más peso que arreglar un
+nombre. R9 y R23 recogen la decisión.
 
-**P3 — Tope de longitud de `producto` y `notas`.**
-Ni la columna ni la carga masiva declaran uno (`requiredNonEmpty` / `.trim()`). Si la corrección
-tampoco lo declara, un texto largo se guarda entero y solo se recorta en la nota (R17). ¿Se
-quiere un tope explícito en la corrección, aunque diverja de lo que la carga admite?
+**P3 — ¿Tope de longitud para `producto` y `notas`?**
+**Respuesta: sin tope**, igual que la carga (R6). Un tope que la carga no tiene crearía el caso
+absurdo «se pudo cargar pero no se puede corregir».
 
-**P4 — El aviso de la etiqueta (R29) frente a la guía ya impresa.**
-Se avisa, y nada más. ¿Debe además ofrecerse reimprimir desde el mismo modal, o basta con que el
-operador use la acción de etiqueta que ya está en la fila?
+**P4 — ¿El modal debe ofrecer reimprimir la etiqueta?**
+**Respuesta: no, basta con avisar.** R27 se queda tal cual; la acción de etiqueta ya está en la
+fila.
 
-> Las preguntas puramente técnicas (forma canónica del teléfono, hilo de chat visible en el panel
-> del mensajero) están al final de `design.md`, junto al análisis que las produce.
+**T1 — ¿Guardar el teléfono en forma canónica (E.164)?**
+**Respuesta: no.** Se guarda como lo guarda la carga: texto recortado. Canonizar solo desde esta
+superficie dejaría la columna con dos formatos según por dónde entró el dato. R17.
+
+**T2 — Dos hilos de chat por orden tras corregir el número.**
+**Respuesta: no hay nada que arreglar y no se toca el módulo de chat.** El hilo viejo es
+desechable. Y la lectura del panel ya está blindada: ver `design.md` §5.4, con la medición.
+
+**T3 — ¿Ampliar la ventana de estados?**
+**Respuesta: no.** Se queda con los cuatro valores de D3.
+
+**Preguntas abiertas vivas: ninguna.**
 
 ---
 
 ## Trazabilidad
 
-Cada `R<n>` de este documento tiene su test nombrado en `tasks.md`. Un requisito sin test es un
-fallo de la feature (`docs/specs.md` §Trazabilidad).
+Cada `R<n>` de este documento (R1–R30) tiene su test nombrado en `tasks.md`. Un requisito sin test
+es un fallo de la feature (`docs/specs.md` §Trazabilidad).
