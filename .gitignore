@@ -60,4 +60,4 @@ next-env.d.ts
 /.claude/worktrees/
 
 # Reporte JSON de la corrida de tests, insumo de scripts/comparar-baseline-rojos.mjs
-.vitest-rojos.json
+.vitest/

@@ -190,7 +190,7 @@ if [ -f package.json ]; then
     # en rojo ya no decide nada por si solo, y sin el `set -e` cortaria aqui.
     echo "-> pnpm run test:json"
     pnpm run test:json || true
-    COMPARACION=$(node scripts/comparar-baseline-rojos.mjs .vitest-rojos.json)       || fail "hay rojos NUEVOS respecto del baseline (el detalle esta justo arriba)"
+    COMPARACION=$(node scripts/comparar-baseline-rojos.mjs .vitest/rojos.json)       || fail "hay rojos NUEVOS respecto del baseline (el detalle esta justo arriba)"
     ok "tests: $COMPARACION"
   fi
 fi
