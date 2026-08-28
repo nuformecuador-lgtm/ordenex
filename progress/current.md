@@ -101,6 +101,21 @@ archivos había tocado el barrido y se restauraron los siete. Mismo error que la
 barrido no distingue entre usar el número y que el número aparezca**. En `current.md` el peligro era
 un **teléfono** (`3183723487`), por eso ahí se editó a mano y no con `sed`.
 
+**CERRADA LA FASE 2: PR #584 abierto contra `dev`.** Gate **completo** (752 s, el obligatorio aquí:
+el DTO vive en `lib/types/`, ruta sensible de `init.sh:134`, así que el rápido **se niega por
+diseño**): `typecheck` limpio, `lint` sin errores, **1541/1543 archivos verdes**. Los 2 rojos:
+`superficie-de-uso` está en el baseline señalando `lib/actions/tarifas.ts:67`, y **`no-embalaje` es
+flake de saturación** — timeout de 20 s bajo carga, **868 ms y verde en aislado**. No se mete al
+baseline: eso lo volvería permanente. Comprobado además que **no** es el autoenvenenamiento que
+arregló `c4b13288` — el guard ignora el directorio `.vitest`, así que el volcado de 8,7 MB no lo lee;
+es tiempo, no contenido.
+
+**Los menores del reviewer, atendidos antes del PR:** el `EXISTS` del filtro de fecha se corrigió **en
+el design, no en el código**, y ahora lo fija un test **probado por causación** (con la forma del
+design el caso se pone rojo con `expected 1 to be 2`); y la contradicción del gate quedó escrita al
+derecho en §7 y T7.4. **Etiqueta duplicada (m4): decisión del humano, se dejan los dos «Histórico»** —
+es la palabra que pidió literalmente, y el de Ranking va anidado bajo su padre.
+
 **REVIEWER: APROBADO**, 45/45 requisitos verificados contra el archivo de test real (254 tests nuevos
 en 23 archivos), gate completo verde en su propia corrida, **cero hallazgos mayores**. El único
 bloqueante era de aterrizaje —la colisión de id—, ya resuelto. Menores anotados: el `EXISTS` del
