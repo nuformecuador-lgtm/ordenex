@@ -193,6 +193,35 @@ describe("GET /api/chat/media/[mensajeId] — descarga y sniffing (R25)", () => 
     expect(disposicion).toBe('attachment; filename="factura.pdf"');
   });
 
+  it("un filename con CJK y emoji responde 200 (no 500) y conserva el nombre en filename*", async () => {
+    // REGRESION (revision 308, B4): el nombre se interpolaba CRUDO en `Content-Disposition`, y
+    // una cabecera HTTP es una ByteString -> `new Headers({...})` lanzaba
+    // «Cannot convert argument to a ByteString ... value 22577 which is greater than 255» y el
+    // handler moria con 500 EN VEZ de entregar el archivo. Los acentos del español caen dentro
+    // de Latin-1, por eso solo se veia con CJK/emoji. La salida es RFC 5987/6266.
+    const res = await pedir(
+      {
+        getActor: async () => MENSAJERO,
+        mensajeRepo: {
+          findMediaParaMensajero: vi.fn(async () =>
+            media({ mediaMime: "application/pdf", mediaNombre: "报告 final 🎉.pdf" }),
+          ),
+        },
+        descargador: descargadorOk("application/pdf"),
+      },
+      "?descarga=1",
+    );
+
+    expect(res.status).toBe(200);
+    const disposicion = res.headers.get("Content-Disposition") ?? "";
+    expect(disposicion).toContain("attachment");
+    expect(disposicion).toContain("filename*=UTF-8''");
+    const codificado = disposicion.split("filename*=UTF-8''")[1] as string;
+    expect(decodeURIComponent(codificado)).toBe("报告 final 🎉.pdf");
+    // El binario sigue saliendo: el fallo era en la construccion de la respuesta, no antes.
+    expect(await res.text()).toBe("BINARIO");
+  });
+
   it("un image/svg+xml sale como attachment + octet-stream + nosniff", async () => {
     const res = await pedir({
       getActor: async () => MENSAJERO,

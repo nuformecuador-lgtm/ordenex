@@ -137,8 +137,17 @@ export class ChatWhatsappService {
 
     for (const mensaje of eventos.mensajes) {
       // Feature 308 (design §3, R16/R17/R18): el CAMBIO DE NUMERO se aplica ANTES de resolver
-      // la orden. Migrar primero es lo que hace que este mismo evento —y todo lo que venga
-      // despues del numero nuevo— caiga en el hilo que ya existia, en vez de abrir uno vacio.
+      // la orden, para que la burbuja de sistema de este mismo evento se escriba en un hilo ya
+      // coherente con el numero nuevo.
+      //
+      // LO QUE ESTO *NO* CONSIGUE (limitacion conocida, DECISION DEL HUMANO del 2026-08-27; ver
+      // el bloque «LIMITACION CONOCIDA» bajo R16 en los requirements y el comentario largo de
+      // `ChatConversacionRepository.migrarTelefono`): migrar NO da continuidad al hilo. Un
+      // entrante se resuelve por `orden.telefono_dest` —que R17 prohibe tocar—, no por el
+      // `telefono_e164` del hilo, asi que un mensaje enviado desde el numero NUEVO seguira sin
+      // resolver orden y se contara `sinResolver`. La migracion es EVIDENCIA del cambio (R18/
+      // R32), no continuidad. Si vienes a «arreglarlo», reabre R16/R17 con el humano primero.
+      //
       // El repo es tolerante al conflicto y devuelve 0 sin lanzar (P5), asi que la ingesta del
       // lote y su 200 se mantienen pase lo que pase. No se loguea ningun numero (R35).
       if (mensaje.sistema !== undefined && mensaje.sistema.telefonoAnterior !== null) {

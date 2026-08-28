@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { linkificar } from "@/lib/utils/linkificar";
+import { hrefSeguro, linkificar } from "@/lib/utils/linkificar";
 
 // Feature 308 (R33/R34) — trocear un mensaje del cliente en texto + enlaces.
 //
@@ -127,5 +127,37 @@ describe("linkificar (R33/R34)", () => {
       .map((s) => s.href);
 
     expect(enlaces).toEqual(["https://a.co", "https://b.co/x?q=1&z=2"]);
+  });
+});
+
+// --------------------------------------------------------------------------------------------
+// La SEGUNDA barrera de R34, fijada aparte. `linkificar` no puede ejercitarla: `CANDIDATO_URL`
+// —la primera barrera— ya impide que `javascript:` llegue a `hrefSeguro`, asi que borrar el
+// chequeo de protocolo deja la suite entera VERDE (lo comprobo el reviewer de la 308). Estos
+// tests invocan el helper DIRECTAMENTE para que la defensa en profundidad no se pueda retirar
+// por «redundante»: si alguien amplia la regex de candidatos, la barrera tiene que seguir ahi.
+// --------------------------------------------------------------------------------------------
+describe("hrefSeguro — chequeo de protocolo (R34, segunda barrera)", () => {
+  it.each([
+    "javascript:alert(1)",
+    "JavaScript:alert(1)",
+    "data:text/html;base64,PHNjcmlwdD4=",
+    "file:///etc/passwd",
+    "vbscript:msgbox(1)",
+    "blob:https://app.test/abcd",
+  ])("%s NO produce href", (candidato) => {
+    expect(hrefSeguro(candidato)).toBeNull();
+  });
+
+  it("lo que ni siquiera parsea como URL tampoco produce href", () => {
+    expect(hrefSeguro("http://")).toBeNull();
+    expect(hrefSeguro("no es una url")).toBeNull();
+  });
+
+  it("http y https si, y al `www.` se le antepone https antes del MISMO chequeo", () => {
+    expect(hrefSeguro("https://ordenex.co/guia")).toBe("https://ordenex.co/guia");
+    expect(hrefSeguro("http://ordenex.co")).toBe("http://ordenex.co");
+    expect(hrefSeguro("www.ordenex.co")).toBe("https://www.ordenex.co");
+    expect(hrefSeguro("WWW.ordenex.co")).toBe("https://WWW.ordenex.co");
   });
 });

@@ -81,11 +81,17 @@ function recortarPuntuacionFinal(candidato: string): string {
 /**
  * `href` del candidato, o `null` si no es un enlace seguro.
  *
- * Es la barrera de R34 y se aplica IGUAL a las dos formas de candidato: al `www.` se le
+ * Es la SEGUNDA barrera de R34 y se aplica IGUAL a las dos formas de candidato: al `www.` se le
  * antepone `https://` y el resultado pasa por el MISMO chequeo de protocolo. Ampliar el
  * enlazado no relaja la seguridad.
+ *
+ * SE EXPORTA A PROPOSITO, aunque `linkificar` sea el unico llamador del modulo. Hoy la primera
+ * barrera (`CANDIDATO_URL`, anclada al esquema) ya impide que `javascript:` llegue hasta aqui, de
+ * modo que borrar el chequeo de protocolo dejaria la suite VERDE —lo comprobo el reviewer de la
+ * 308— y nadie se enteraria hasta que alguien ampliara la regex. Exportarlo permite fijar la
+ * barrera con un test que la invoca directa: es defensa en profundidad, no redundancia.
  */
-function hrefSeguro(candidato: string): string | null {
+export function hrefSeguro(candidato: string): string | null {
   const conEsquema = candidato.toLowerCase().startsWith("www.")
     ? `https://${candidato}`
     : candidato;

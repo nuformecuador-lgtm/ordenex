@@ -46,6 +46,11 @@ export function contentTypeSeguro(mime: string | null): string {
  * Quita comillas, barras invertidas, CR/LF y separadores de ruta: un `\r\n` dentro del nombre es
  * INYECCION DE CABECERA (parte la respuesta en dos), y un `../` convierte el nombre en una ruta.
  * Recorta a un largo razonable y cae a un nombre generico si no queda nada.
+ *
+ * El resultado PUEDE llevar caracteres no ASCII (`informe-año.pdf`, `报告.pdf`, `foto 🎉.jpg`):
+ * el nombre real es dato del cliente y aqui se conserva. Lo que NO se puede hacer es meterlo
+ * crudo en la cabecera —una cabecera HTTP solo admite ByteString y eso da un 500—; de eso se
+ * encarga `contentDisposition`, emitiendo la forma de RFC 5987/6266.
  */
 export function sanearNombreArchivo(nombre: string | null): string {
   if (nombre === null) return NOMBRE_ADJUNTO_POR_DEFECTO;
@@ -55,13 +60,66 @@ export function sanearNombreArchivo(nombre: string | null): string {
     .replace(/\.{2,}/g, ".") // `..` deja de ser un salto de directorio
     .trim()
     .slice(0, MAX_LARGO_FILENAME)
+    // El `slice` cuenta UNIDADES UTF-16, asi que puede PARTIR un emoji por la mitad y dejar un
+    // surrogate suelto. No es cosmetico: `encodeURIComponent` LANZA `URIError` ante un surrogate
+    // desemparejado, y eso serian 500 en el proxy por culpa de un nombre de archivo.
+    .replace(SURROGATE_SUELTO, "")
     .trim();
   return limpio === "" || limpio === "." ? NOMBRE_ADJUNTO_POR_DEFECTO : limpio;
+}
+
+/** Mitad de un par surrogate sin su pareja (alta sin baja, o baja sin alta). */
+const SURROGATE_SUELTO = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+/** Todo lo que NO es ASCII imprimible, y por tanto no cabe en el `filename` clasico. */
+const NO_ASCII_IMPRIMIBLE = /[^\x20-\x7e]+/g;
+
+/**
+ * Fallback ASCII del nombre, para el `filename=` clasico de `Content-Disposition`.
+ *
+ * POR QUE EXISTE: una cabecera HTTP es una ByteString. Interpolar `报告.pdf` o `foto 🎉.jpg` tal
+ * cual revienta con «Cannot convert argument to a ByteString ...» y el proxy responde 500 en vez
+ * de entregar el archivo. El nombre REAL no se pierde: viaja en `filename*` (RFC 5987), que lee
+ * cualquier navegador actual; esto es solo la red de seguridad para un cliente antiguo.
+ *
+ * Se parte del nombre YA saneado, de modo que comillas, barras, CR/LF y `..` siguen fuera.
+ */
+export function nombreAsciiSeguro(nombre: string | null): string {
+  const ascii = sanearNombreArchivo(nombre)
+    .replace(NO_ASCII_IMPRIMIBLE, "_")
+    .replace(/_{2,}/g, "_")
+    .trim();
+  // Un nombre integramente CJK degenera en `_` o `_.pdf`: eso no le dice nada a nadie, mejor el
+  // generico. El nombre real sigue viajando en `filename*`.
+  return ascii === "" || ascii === "." || ascii === "_" ? NOMBRE_ADJUNTO_POR_DEFECTO : ascii;
+}
+
+/**
+ * Percent-encoding del nombre para `filename*=UTF-8''...` (`attr-char` de RFC 5987).
+ *
+ * `encodeURIComponent` deja pasar `*`, `'`, `(` y `)`, que NO son `attr-char`: se codifican a
+ * mano. Todo lo que sale de aqui es ASCII sin espacios, comillas ni CR/LF, asi que este valor no
+ * puede reintroducir un salto de cabecera pase lo que pase.
+ */
+function percentEncodeRfc5987(nombre: string): string {
+  return encodeURIComponent(nombre).replace(
+    /['()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
 }
 
 /**
  * `Content-Disposition` completo. `inline` SOLO cuando el tipo es incrustable y el cliente no
  * pidio descarga; en cualquier otro caso `attachment` con el nombre ya saneado (R25).
+ *
+ * FORMA DE LA CABECERA (RFC 6266 §4.1 sobre RFC 5987):
+ *
+ *   attachment; filename="<fallback ASCII>"; filename*=UTF-8''<nombre real percent-encoded>
+ *
+ * El `filename*` SOLO se añade cuando el nombre no es ASCII puro, para que el caso corriente
+ * siga siendo la cabecera corta de siempre. Y se añade —en vez de reducir a ASCII a secas—
+ * porque reducir le entrega `_.pdf` a quien mando un `informe.pdf` escrito en chino: el nombre
+ * real es dato del cliente y con `filename*` lo conserva cualquier navegador actual (R25/R29).
  */
 export function contentDisposition(
   mime: string | null,
@@ -69,5 +127,10 @@ export function contentDisposition(
   descargaForzada: boolean,
 ): string {
   if (!descargaForzada && esMimeIncrustable(mime)) return "inline";
-  return `attachment; filename="${sanearNombreArchivo(nombre)}"`;
+  const real = sanearNombreArchivo(nombre);
+  const ascii = nombreAsciiSeguro(nombre);
+  const base = `attachment; filename="${ascii}"`;
+  // ASCII puro: `filename*` seria una copia literal del anterior y solo alarga la cabecera.
+  if (real === ascii) return base;
+  return `${base}; filename*=UTF-8''${percentEncodeRfc5987(real)}`;
 }
