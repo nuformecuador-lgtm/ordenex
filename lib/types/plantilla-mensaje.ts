@@ -17,6 +17,14 @@ export const crearPlantillaSchema = z
   .object({
     nombre: z.string().min(1),
     cuerpo: z.string().min(1),
+    /**
+     * PLANTILLA DE TIENDA. OPCIONAL con default `false`: es la unica entrada del cliente que
+     * el service acepta ademas de nombre y cuerpo, y omitirla tiene que significar "una
+     * plantilla normal" —no un `undefined` que cada capa interprete a su manera—. El resto de
+     * lo que decide el alta (`estado`, `variables`, `variablesNombres`) lo sigue derivando el
+     * servidor: esto NO es una puerta para que el cliente fije el estado.
+     */
+    plantillaTienda: z.boolean().default(false),
   })
   .strict();
 export type CrearPlantillaInput = z.infer<typeof crearPlantillaSchema>;
@@ -99,6 +107,8 @@ export type EnviarAprobacionPlantillaResult =
   | { status: "ok"; plantilla: PlantillaPublica }
   | { status: "ya_enviada"; plantilla: PlantillaPublica }
   | { status: "no_configurado" }
+  /** Plantilla DE TIENDA: no pasa por Meta, no hay nada que enviar a aprobar. */
+  | { status: "no_aplica" }
   | ActionError;
 /**
  * Marcar el MENSAJE DE BIENVENIDA. Sin rama `conflict`: la accion desmarca a la anterior, asi

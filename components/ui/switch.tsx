@@ -16,6 +16,8 @@ export interface SwitchProps {
   id?: string;
   /** Nombre accesible del control (rol `switch`). */
   "aria-label"?: string;
+  /** Id del texto que DESCRIBE el control (la ayuda que explica la consecuencia). */
+  "aria-describedby"?: string;
   /** Clases extra para la raíz. */
   className?: string;
 }
@@ -36,6 +38,7 @@ export function Switch({
   ...rest
 }: SwitchProps) {
   const ariaLabel = rest["aria-label"];
+  const ariaDescribedBy = rest["aria-describedby"];
 
   return (
     <SwitchPrimitive.Root
@@ -44,6 +47,7 @@ export function Switch({
       onCheckedChange={(next) => onCheckedChange(next)}
       disabled={disabled}
       aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
       data-slot="switch"
       className={cn(
         "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent px-0.5 outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:bg-primary data-[unchecked]:bg-input",

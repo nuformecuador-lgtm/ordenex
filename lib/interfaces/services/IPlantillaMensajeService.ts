@@ -66,6 +66,12 @@ export type EnviarAprobacionPlantillaServiceResult =
   | { status: "ok"; plantilla: PlantillaPublica }
   | { status: "ya_enviada"; plantilla: PlantillaPublica }
   | { status: "no_configurado" }
+  /**
+   * La plantilla es DE TIENDA: su texto no va a Meta, asi que no hay aprobacion que pedir.
+   * La UI ya le oculta el boton, pero el guard vive AQUI y no solo alli: ocultar un boton no
+   * es impedir la accion, y esta es irreversible (crea un template en Meta que no se retira).
+   */
+  | { status: "no_aplica" }
   | { status: "forbidden" }
   | { status: "not_found" };
 

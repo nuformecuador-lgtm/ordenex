@@ -99,14 +99,14 @@ describe("CampoVariablePicker", () => {
     }
   });
 
-  // Feature 288, pedido humano 2026-08-27: 25 campos dejan de OFRECERSE. Siguen en el
+  // Feature 288, pedido humano 2026-08-27: 27 campos dejan de OFRECERSE. Siguen en el
   // catalogo y siguen resolviendo (eso lo fija
   // `tests/unit/plantillas/campos-ocultos-siguen-resolviendo.test.ts`); aqui solo se
   // comprueba que el selector no los propone.
-  it("ocultos: ninguna de las 25 claves retiradas aparece con el filtro vacío", () => {
+  it("ocultos: ninguna de las 27 claves retiradas aparece con el filtro vacío", () => {
     render(<CampoVariablePicker onSeleccionar={vi.fn()} />);
 
-    expect(CLAVES_OCULTAS_EN_SELECTOR.size).toBe(25);
+    expect(CLAVES_OCULTAS_EN_SELECTOR.size).toBe(27);
     for (const clave of CLAVES_OCULTAS_EN_SELECTOR) {
       expect(document.getElementById(`campo-opcion-${clave}`)).toBeNull();
     }
@@ -178,7 +178,7 @@ describe("CampoVariablePicker", () => {
   });
 
   // R9 se prueba INYECTANDO el catálogo, no con el default, y la razón es un efecto
-  // colateral real de ocultar los 25 (pedido humano 2026-08-27): `notas` era el único campo
+  // colateral real de ocultar los 27 (pedido humano 2026-08-27): `notas` era el único campo
   // `sensible` que el selector ofrecía, y ahora está oculto. Hoy NINGÚN campo ofrecido es
   // sensible, así que con el catálogo por defecto el distintivo no es alcanzable.
   //

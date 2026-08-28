@@ -1,7 +1,7 @@
-// Feature 288 — pedido humano 2026-08-27: 25 campos dejan de OFRECERSE en el selector.
+// Feature 288 — pedido humano 2026-08-27: 27 campos dejan de OFRECERSE en el selector.
 //
 // ESTE ARCHIVO EXISTE PARA IMPEDIR UNA "SIMPLIFICACION" CONCRETA: que alguien lea
-// «retiramos 25 campos» y los borre de `CAMPOS_PLANTILLA`. Si eso pasa:
+// «retiramos 27 campos» y los borre de `CAMPOS_PLANTILLA`. Si eso pasa:
 //   - `CAMPOS_PLANTILLA_POR_CLAVE` los pierde y `valorDeCampo` devuelve "",
 //   - toda plantilla YA APROBADA POR META que use `{{provincia}}` llega VACIA al cliente,
 //   - y `clavesSinCampo` empieza a acusarlas de «retiradas del catalogo» (R16), que es
@@ -28,8 +28,8 @@ const BORRADAS = ["telefono", "direccion", "direccion_completa"] as const;
 const OCULTAS = [...CLAVES_OCULTAS_EN_SELECTOR];
 
 describe("los campos ocultos del selector SIGUEN siendo campos de pleno derecho", () => {
-  it("las 25 claves ocultas siguen existiendo en CAMPOS_PLANTILLA_POR_CLAVE", () => {
-    expect(OCULTAS).toHaveLength(25);
+  it("las 27 claves ocultas siguen existiendo en CAMPOS_PLANTILLA_POR_CLAVE", () => {
+    expect(OCULTAS).toHaveLength(27);
     const ausentes = OCULTAS.filter((clave) => !CAMPOS_PLANTILLA_POR_CLAVE.has(clave));
     expect(ausentes).toEqual([]);
   });
@@ -84,7 +84,7 @@ describe("los campos ocultos del selector SIGUEN siendo campos de pleno derecho"
 
 // ---------------------------------------------------------------------------------------
 // El CONTRASTE. Estos tres SI se borraron del catalogo, y por eso se comportan al reves que
-// los 25 de arriba. Los dos bloques juntos son la documentacion ejecutable de la diferencia
+// los 27 de arriba. Los dos bloques juntos son la documentacion ejecutable de la diferencia
 // entre OCULTAR (sigue resolviendo) y BORRAR (deja de existir), que es la decision de fondo
 // de esta feature.
 // ---------------------------------------------------------------------------------------

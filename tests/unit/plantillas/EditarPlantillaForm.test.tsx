@@ -37,6 +37,7 @@ function plantillaFixture(
     variables: ["sucursal"],
     variablesNombres,
     welcomeMessage: false,
+    plantillaTienda: false,
     templateId: null,
     createdAt: new Date("2026-08-01T00:00:00.000Z"),
   };
