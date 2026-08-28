@@ -110,9 +110,14 @@ export const cotizacionBodySchema = z.object({
 export type CotizacionBody = z.infer<typeof cotizacionBodySchema>;
 
 /**
- * Los SEIS importes del escenario ENTREGADO (R26). Todos STRING y todos YA
- * FORMATEADOS: no existe un campo crudo de escala 2 en paralelo (R34, decision
- * firmada A3).
+ * Los SEIS importes del escenario ENTREGADO (R26). Todos STRING y todos CRUDOS
+ * —money-safe de escala 2, `"2500.00"`, sin simbolo ni agrupacion de miles— y
+ * cada uno en UNA sola forma: no existe un campo formateado en paralelo.
+ *
+ * ENMIENDA DEL 2026-08-28 (ficha 319): hasta hoy la forma unica era la
+ * FORMATEADA (R34, decision firmada A3). Se invierte cual de las dos se sirve y
+ * se conserva lo esencial de A3 —una sola representacion por campo—; el porque
+ * esta en `lib/utils/monto-cotizacion.ts`.
  *
  * FULFILLMENT (2026-08-25): el sexto concepto. Es el monto FIJO por orden de la
  * tarifa que resuelve, y solo aparece con valor cuando la tienda hace

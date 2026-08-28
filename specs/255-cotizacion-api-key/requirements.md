@@ -146,28 +146,39 @@ convertir ningún importe a número de punto flotante en ningún punto del cálc
 
 ## 6. Formato de los importes
 
-**R34.** El sistema DEBE emitir cada importe SOLO en su forma formateada, y NO DEBE emitir además
-su valor crudo de escala 2. *(Decisión firmada por el humano el 2026-08-21; no se reabre.)*
+> **ENMIENDA DEL 2026-08-28 (ficha 319), firmada por el humano.** Los importes pasan a servirse
+> CRUDOS. Se invierte cuál de las dos formas viaja en el contrato; **no** se reabre la parte de la
+> decisión A3 que importaba —una sola forma por campo, nunca dos que se desincronizan—, que sigue
+> vigente y sigue teniendo test. R34, R35 y R36 quedan reescritos abajo; **R37 se extingue** (sin
+> símbolo no hay nada delante de lo que colocar el signo) y la segunda mitad de R39 (agrupar los
+> miles) desaparece con la agrupación. R38, R40, R41 y R42 se conservan intactos. El motivo del
+> cambio está en `lib/utils/monto-cotizacion.ts` y el aviso al integrador en
+> `docs/api/CHANGELOG.md`.
 
-**R35.** El sistema DEBE formatear cada importe como: signo (si corresponde), símbolo de moneda,
-parte entera agrupada de tres en tres, separador decimal y exactamente DOS dígitos decimales.
+**R34.** *(reescrito por la 319)* El sistema DEBE emitir cada importe SOLO en su forma CRUDA
+—string *money-safe* de escala 2— y NO DEBE emitir además su valor formateado.
 
-**R36.** El sistema DEBE tomar el símbolo, el separador de miles y el separador decimal de la
-configuración de moneda, y NO DEBE escribir ninguno de esos tres caracteres literalmente en el
-código del formateador.
+**R35.** *(reescrito por la 319)* El sistema DEBE serializar cada importe como: signo negativo si
+corresponde, parte entera SIN agrupar, punto y exactamente DOS dígitos decimales.
 
-**R37.** El sistema DEBE colocar el signo negativo DELANTE del símbolo de moneda.
+**R36.** *(reescrito por la 319, invertido)* El sistema NO DEBE leer la configuración de moneda al
+serializar los importes de la cotización: la configuración de PRESENTACIÓN no puede alterar un
+contrato de máquina.
+
+**R37.** *(EXTINGUIDO por la 319.)* Decía: el sistema DEBE colocar el signo negativo DELANTE del
+símbolo de moneda. Sin símbolo en la salida el requisito no tiene objeto; lo que sobrevive, y se
+sigue probando, es que el signo del negativo no se pierde.
 
 **R38.** CUANDO el importe vale cero, el sistema DEBE emitirlo sin signo (nunca un "menos cero").
 
-**R39.** El sistema DEBE aplicar el redondeo a escala 2 en la ARITMÉTICA y agrupar los miles
-DESPUÉS, de forma que un acarreo que cambie el número de dígitos de la parte entera quede
-correctamente agrupado.
+**R39.** *(acortado por la 319)* El sistema DEBE aplicar el redondeo a escala 2 en la ARITMÉTICA y
+no en la serialización. *(La segunda mitad —agrupar los miles DESPUÉS del redondeo— se extingue
+con la agrupación.)*
 
-**R40.** El formateador de importes de la cotización DEBE residir fuera de los árboles de
+**R40.** El serializador de importes de la cotización DEBE residir fuera de los árboles de
 pantalla, y ningún fuente de esos árboles DEBE serializar importes de la cotización por su cuenta.
 
-**R41.** El formateador de importes de la cotización DEBE quedar declarado como EXCEPCIÓN de
+**R41.** El serializador de importes de la cotización DEBE quedar declarado como EXCEPCIÓN de
 salida de máquina en la guardia del dinero sin céntimos (junto a la excepción ya existente de las
 descargas XLSX/CSV), y NO DEBE ser consumido por ninguna pantalla.
 

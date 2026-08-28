@@ -21,6 +21,43 @@
 
 ---
 
+## 2026-08-28 — ROMPEDOR: los importes de la cotización pasan a viajar CRUDOS
+
+**Esto SÍ puede romper tu integración** si consumes `POST /api/ordenes/api-key/cotizacion`. No
+cambia ningún nombre de campo, ni se añade ni se quita ninguno: cambia la **forma del valor**.
+
+Antes cada importe llegaba formateado, con símbolo de moneda, miles agrupados y coma decimal:
+
+```json
+{ "flete": "₡2.500,00", "total": "-₡1.578,00" }
+```
+
+Ahora llega crudo, como un string *money-safe* de escala 2 —sin símbolo, sin separador de miles y
+con el punto como separador decimal:
+
+```json
+{ "flete": "2500.00", "total": "-1578.00" }
+```
+
+Afecta a **todos** los importes de la respuesta, en los dos escenarios (`entregado` y `devuelto`)
+y también dentro del bloque `totales`: `flete`, `iva`, `comision`, `ivaComision`, `fulfillment` y
+`total`. Lo que **no** cambia: siguen siendo strings (nunca números JSON), siguen llevando
+exactamente dos decimales, el cero sigue siendo explícito (`"0.00"`, nunca ausente ni `null`) y el
+negativo sigue marcándose con un `-` al principio.
+
+**Qué tienes que hacer.** Si parseabas quitando el símbolo y dando la vuelta a los separadores,
+borra ese paso: el valor ya es un número en texto y `parseFloat`/`Decimal` lo aceptan tal cual.
+Ojo con lo contrario —dejar el parser viejo puesto—: `"2500.00"` pasado por una limpieza que
+esperaba miles con punto **no falla**, devuelve `2.5`. Es un error silencioso, así que revísalo
+aunque tu integración parezca seguir funcionando.
+
+**Por qué.** El canal hablaba dos dialectos de dinero: `POST /api/ordenes/api-key/carga` ya
+devolvía `costoEnvio` crudo mientras la cotización devolvía lo mismo formateado, y eso obligaba a
+mantener dos parsers para la misma moneda. Ahora los dos endpoints dicen el dinero igual. La
+moneda no ha cambiado; solo dejó de viajar dentro del campo.
+
+---
+
 ## 2026-08-25 — ROMPEDOR: desaparece el campo `generado` de las respuestas de `/generate`
 
 **Esto SÍ puede romper tu integración.** Es el único cambio de esta tanda que quita algo del
