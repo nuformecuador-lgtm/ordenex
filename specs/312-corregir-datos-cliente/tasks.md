@@ -221,7 +221,7 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
       corregir con `" 8888-9999 "`, la columna guarda `"8888-9999"` (recortado, **no**
       `"50688889999"`), igual que la carga (T1, 2026-08-28).
       _Hecho:_ verde. **(R17)**
-- [ ] **G4 ⇐ todo lo anterior** `progress/impl_312.md` con el mapa `R<n> → test` **completo** y
+- [x] **G4 ⇐ todo lo anterior** `progress/impl_312.md` con el mapa `R<n> → test` **completo** y
       **commiteado** (un informe sin commitear se pierde con el primer `git checkout`).
       _Hecho:_ los **30** requisitos tienen su archivo y su nombre de test; ninguno sin cubrir.
       Incluye una línea recordando que **no hay rastro por decisión del 2026-08-28** (D4), para
