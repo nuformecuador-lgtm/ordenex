@@ -71,6 +71,34 @@ export type EnviarMensajeChatResult =
   | { status: "permanente"; mensajeChatId: string; detalle: string };
 
 /**
+ * Feature 316 (design 5) -- resultado del envio de un ADJUNTO desde el chat. Misma forma que
+ * `EnviarMensajeChatResult` mas los desenlaces propios de un adjunto.
+ *
+ * NO tiene `transitorio` A PROPOSITO (design 4.1): un saliente de adjunto nunca queda `queued`
+ * porque el `media_id` caduca en Meta y no hay copia propia del binario para resubirlo. Que el
+ * union lo OMITA es lo que impide que el `switch` de la UI prometa un reintento que no existe.
+ *
+ * Tampoco tiene `no_convertible` (R31), y tambien es deliberado: la normalizacion de la imagen
+ * ocurre SOLO en el navegador, asi que ese desenlace no lo puede producir el servidor -al que
+ * un HEIC, si llega, le llega como `tipo_no_permitido` (R9)-. Vive como estado del composer,
+ * no como `status` de la accion; meterlo aqui seria prometer un caso imposible.
+ */
+export type EnviarMediaChatResult =
+  | { status: "ok"; mensajeChatId: string }
+  | { status: "unauthenticated" } // R26: sin sesion, sin subir ni llamar a Meta
+  | { status: "forbidden" } // R27: la orden no esta asignada a este mensajero
+  | { status: "fuera_ventana" } // R3: fuera de la ventana de 24 h, sin subir nada
+  | { status: "no_configurado" } // WhatsApp aun sin credenciales de envio
+  | { status: "tipo_no_permitido" } // R9/R11
+  // R10/R11: el limite viaja para que el aviso diga CUAL era, en vez de "demasiado grande".
+  | { status: "demasiado_grande"; limiteBytes: number }
+  | { status: "caption_largo"; maximo: number } // R12
+  | { status: "fallo_subida" } // R19: nada enviado, nada persistido; el adjunto sigue elegido
+  // R20: se subio pero el envio fallo. El saliente YA quedo `failed` con su motivo y su
+  // media id; no hay reintento automatico.
+  | { status: "permanente"; mensajeChatId: string; detalle: string };
+
+/**
  * Resultado del envio de una PLANTILLA desde el chat. Sirve dentro Y fuera de la ventana de
  * 24 h, por eso NO tiene `fuera_ventana`. `not_found` = la plantilla no existe o no es enviable
  * (no vigente / sin `template_id`).

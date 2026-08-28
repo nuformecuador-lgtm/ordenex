@@ -16,7 +16,7 @@
 
 ## Bloque A — Cimientos: política de subida y contrato de escritura
 
-- [ ] **A0.** Fijar con un test que **no hace falta migración**: el enum `ChatMensajeTipo` acepta
+- [x] **A0.** Fijar con un test que **no hace falta migración**: el enum `ChatMensajeTipo` acepta
   los cuatro tipos de adjunto y `ChatMensaje` tiene las cuatro columnas `media*` nullable.
   Cubre la premisa de R17/R18.
   *Hecho:* `tests/unit/types/chat-media-envio-tipos.test.ts` asserta con `expectTypeOf` /
@@ -25,7 +25,7 @@
   añadir ninguna migración nueva (`git status` de `db/migrations/` sin altas al cerrar la feature
   se comprueba en el review, pero el assert es el de tipos).
 
-- [ ] **A1. [P]** `lib/config/chat-media-envio.ts` (NUEVO): `MIMES_ENVIO`, `LIMITE_BYTES`,
+- [x] **A1. [P]** `lib/config/chat-media-envio.ts` (NUEVO): `MIMES_ENVIO`, `LIMITE_BYTES`,
   `LIMITE_DOCUMENTO_BYTES`, `FORMATOS_NOTA_VOZ`, `MAX_CAPTION`, `TIMEOUT_SUBIDA_MS`,
   `MAX_LADO_LARGO_ENVIO`, `CALIDAD_JPEG_ENVIO`, y las funciones puras `clasificarAdjunto(mime)` y
   `validarAdjunto(mime, bytes)` (design §2). Cubre R8, R9, R10, R12.
@@ -44,7 +44,7 @@
   y `validarAdjunto("application/pdf", 26*1024*1024)` devuelve `demasiado_grande` con
   `limiteBytes: 25*1024*1024` (un PDF de 30 MB, que Meta aceptaría, aquí se rechaza a propósito).
 
-- [ ] **A4.** `lib/utils/comprimir-imagen.ts`: añadir la opción `devolverOriginalSiMayor`
+- [x] **A4.** `lib/utils/comprimir-imagen.ts`: añadir la opción `devolverOriginalSiMayor`
   (default `true`, comportamiento histórico) y **cubrir con tests el comportamiento del que ahora
   depende la 316** — hoy el helper no tiene ninguno (design §2.1). `[P]` con A1/A2. Cubre R29,
   R30, R31, R32.
@@ -67,14 +67,14 @@
   (e) **R31:** con `toBlob` devolviendo `null`, el helper devuelve el `File` original y su `type`
   sigue siendo `image/heic` ⇒ `clasificarAdjunto` da `null` ⇒ es el camino de excepción de E1(g).
 
-- [ ] **A2. [P]** `lib/interfaces/repositories/IChatMensajeRepository.ts`: añadir a
+- [x] **A2. [P]** `lib/interfaces/repositories/IChatMensajeRepository.ts`: añadir a
   `InsertarSalienteInput` los cuatro campos `mediaId/mediaMime/mediaNombre/mediaTamanoBytes`
   opcionales (design §1.1; NO se usa `Partial<ChatMensajeCamposMedia>` entero). Cubre R17.
   *Hecho:* el typecheck del repo pasa tras A3 y un test de tipos en
   `tests/unit/types/chat-media-envio-tipos.test.ts` asserta que `InsertarSalienteInput` **no**
   admite `reaccionEmoji` (`@ts-expect-error`), y sí `mediaId`.
 
-- [ ] **A3.** `lib/repositories/ChatMensajeRepository.insertarSaliente()`: escribir las cuatro
+- [x] **A3.** `lib/repositories/ChatMensajeRepository.insertarSaliente()`: escribir las cuatro
   columnas nuevas. Depende de A2. Cubre R17, R18.
   *Hecho:* `tests/unit/repositories/chat-mensaje-repository.test.ts` asserta que un saliente con
   `{ tipo:"imagen", mediaId:"MEDIA-1", mediaMime:"image/jpeg", mediaTamanoBytes: 1234 }` llega al
@@ -83,7 +83,7 @@
 
 ## Bloque B — Integración con Meta
 
-- [ ] **B1. [P]** `lib/clients/whatsapp-media-upload.ts` (NUEVO): `POST /<version>/<numeroId>/media`
+- [x] **B1. [P]** `lib/clients/whatsapp-media-upload.ts` (NUEVO): `POST /<version>/<numeroId>/media`
   multipart con `messaging_product=whatsapp`, `type` y `file`; outcome tipado
   `ok | rechazado | error`; `fetchImpl` inyectable y `AbortSignal.timeout` (design §3.1).
   Depende de A1. Cubre R17, R19, R28.
@@ -97,7 +97,7 @@
   (e) **R28:** ningún `detalle` de ninguna rama contiene el token
   (`expect(detalle).not.toContain(config.token)`) y el token viaja solo en `Authorization`.
 
-- [ ] **B2. [P]** `lib/clients/whatsapp-cloud.ts`: método `enviarMedia(destino, tipo, mediaId,
+- [x] **B2. [P]** `lib/clients/whatsapp-cloud.ts`: método `enviarMedia(destino, tipo, mediaId,
   { caption?, filename? })` que **reusa `enviar()`** (JSON). Depende de A1. Cubre R5, R6, R17.
   *Hecho:* `tests/unit/clients/whatsapp-cloud-enviar-media.test.ts` asserta sobre el body
   serializado que (a) con `tipo:"image"` y caption sale
@@ -106,7 +106,7 @@
   `filename` sale `document:{id, filename, caption}`; (d) un 400 devuelve `permanente` y un 503
   `transitorio`, igual que `enviarTexto`.
 
-- [ ] **B3.** `cuerpoParaLog` (`lib/services/whatsapp/chat-logger.ts`): redactar `caption` y
+- [x] **B3.** `cuerpoParaLog` (`lib/services/whatsapp/chat-logger.ts`): redactar `caption` y
   `filename` además del destinatario. Depende de B2. Cubre R28.
   *Hecho:* `tests/unit/services/whatsapp-fallo-saliente.test.ts` (o el test del logger) asserta que
   el string volcado por el logger tras un `enviarMedia` fallido **no contiene** el texto del
@@ -114,7 +114,7 @@
 
 ## Bloque C — Service
 
-- [ ] **C1.** `ChatWhatsappService.enviarMedia(input)` con el orden de operaciones de design §4:
+- [x] **C1.** `ChatWhatsappService.enviarMedia(input)` con el orden de operaciones de design §4:
   hilo → ventana → `validarAdjunto` → subir → enviar → persistir. Depende de A1, A3, B1, B2.
   Cubre R3, R11, R17, R18, R19, R20.
   *Hecho:* `tests/unit/services/chat-whatsapp-service.test.ts` asserta que
@@ -132,7 +132,7 @@
   (f) **R18:** ninguno de los argumentos que recibe `insertarSaliente` contiene los bytes del
   adjunto (`expect(JSON.stringify(args)).not.toContain(MARCA_BINARIA)`) ni un `Blob`/`ArrayBuffer`.
 
-- [ ] **C2.** Guarda de `reintentarEnvio` + re-tipado de `persistirFalloPermanente`
+- [x] **C2.** Guarda de `reintentarEnvio` + re-tipado de `persistirFalloPermanente`
   (design §4.1/§4.2). Depende de C1. Cubre R21.
   *Hecho:* el mismo test asserta que, dado un mensaje `queued` con `tipo:"imagen"`,
   `reintentarEnvio` **no llama** a `client.enviarTexto` (`expect(enviarTexto).not.toHaveBeenCalled()`),
@@ -141,14 +141,14 @@
 
 ## Bloque D — Server Action y contrato
 
-- [ ] **D1.** `EnviarMediaChatResult` en `lib/types/chat-whatsapp.ts` (design §5). `[P]` con C.
+- [x] **D1.** `EnviarMediaChatResult` en `lib/types/chat-whatsapp.ts` (design §5). `[P]` con C.
   Cubre R9, R10, R12, R19, R20.
   *Hecho:* test de tipos en `tests/unit/types/chat-media-envio-tipos.test.ts`: un `switch`
   exhaustivo sobre el union compila sin `default` (assert de exhaustividad con `never`), y
   `@ts-expect-error` sobre `{ status:"transitorio" }` prueba que ese caso **no** existe (design
   §5: un adjunto no se encola).
 
-- [ ] **D2.** `enviarMediaChat(formData, deps)` en `lib/actions/chat-whatsapp.ts`, con el patrón
+- [x] **D2.** `enviarMediaChat(formData, deps)` en `lib/actions/chat-whatsapp.ts`, con el patrón
   `FormData` de `lib/actions/incidentes.ts`. Depende de C1, D1. Cubre R11, R12, R26, R27.
   *Hecho:* `tests/unit/actions/chat-whatsapp-actions.test.ts` asserta que
   (a) **R26:** sin actor devuelve `unauthenticated` y ni `ordenReader.findParaEnvio` ni
@@ -164,7 +164,7 @@
 
 ## Bloque E — UI: composer y nota de voz
 
-- [ ] **E1.** Composer de `ChatConversacion.tsx`: botón de clip + menú de cuatro vías, inputs
+- [x] **E1.** Composer de `ChatConversacion.tsx`: botón de clip + menú de cuatro vías, inputs
   ocultos, estado `adjunto`, previsualización con quitar, `maxLength` = `MAX_CAPTION` con adjunto,
   bloqueo por `textoLibreHabilitado`, envío único, `enviando`, `accept="image/*"` y la secuencia
   **normalizar → clasificar → validar** de design §2.1/§6.1. Depende de D2, A4.
@@ -197,7 +197,7 @@
   o `toBlob` nulo), se ve el aviso "No se pudo preparar la foto" —texto DISTINTO del de tipo no
   permitido— y `enviarMediaChat` **no** fue llamado.
 
-- [ ] **E2.** `hooks/useGrabadorVoz.ts` + vía de nota de voz (design §6.2). **P1 CERRADA
+- [x] **E2.** `hooks/useGrabadorVoz.ts` + vía de nota de voz (design §6.2). **P1 CERRADA
   (opción A), sin bloqueo.** Depende de E1. Cubre R6, R13, R14, R15, R16.
   *Hecho:* `tests/components/ChatNotaVoz.test.tsx`, con `MediaRecorder`/`getUserMedia` mockeados,
   asserta que
@@ -214,7 +214,7 @@
   (e) **R6:** al enviar la nota con texto escrito, el `FormData` **no** lleva `caption` y el texto
   **sigue** en el `<textarea>` después del envío.
 
-- [ ] **E3. [P]** `MediaAdjunto.tsx`: prop `direccion` y `textoAccesible(tipo, direccion)` en
+- [x] **E3. [P]** `MediaAdjunto.tsx`: prop `direccion` y `textoAccesible(tipo, direccion)` en
   `chat-format.ts`; `BurbujaContenido.tsx` solo la propaga (design §6.3). Cubre R23.
   *Hecho:* `tests/components/ChatBurbujaMedia.test.tsx` (existente, se amplía) asserta que un
   mensaje `{ tipo:"imagen", direccion:"saliente" }` produce un `<img>` cuyo `alt` **no contiene**
@@ -223,14 +223,14 @@
 
 ## Bloque F — Hilo, proxy y cierre
 
-- [ ] **F1.** Burbuja saliente con adjunto de punta a punta en el hilo. Depende de E1, E3.
+- [x] **F1.** Burbuja saliente con adjunto de punta a punta en el hilo. Depende de E1, E3.
   Cubre R22.
   *Hecho:* `tests/components/ChatBurbujaMedia.test.tsx` asserta que, con
   `listarHiloChat` devolviendo un saliente `{ tipo:"imagen", media:{...}, estado:"sent" }`, el
   `<li>` tiene `data-direccion="saliente"`, contiene el adjunto y muestra el acuse (`Check`), sin
   recargar (el harness `_chat-hilo-harness.tsx` ya monta el hilo con SWR).
 
-- [ ] **F2. [P]** Verificar por test que el proxy sirve un SALIENTE sin cambios (design §6.4).
+- [x] **F2. [P]** Verificar por test que el proxy sirve un SALIENTE sin cambios (design §6.4).
   Cubre R24, R25.
   *Hecho:* `tests/integration/api/chat-media-proxy.route.test.ts` (existente, se amplía) asserta
   que con un mensaje `direccion:"saliente"` y `mediaId` presente, el handler responde `200` con el
@@ -240,7 +240,7 @@
   `app/api/chat/media/[mensajeId]/route.ts`** (si obliga a tocarlo, la premisa del design §6.4 era
   falsa y hay que volver a la puerta).
 
-- [ ] **F3.** `progress/impl_316-chat-enviar-media.md` con el mapa R→test REAL (ruta + nombre del
+- [x] **F3.** `progress/impl_316-chat-enviar-media.md` con el mapa R→test REAL (ruta + nombre del
   `it`), medido tras correr los tests, no copiado de aquí. Depende de todo. Cubre la regla 4 de
   `CLAUDE.md`.
   *Hecho:* los 32 requisitos aparecen con un test existente y verde; el reviewer asserta que no

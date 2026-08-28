@@ -28,7 +28,10 @@ import type { IChatConversacionRepository } from "@/lib/interfaces/repositories/
 import type { IChatMensajeRepository } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 import type { IPlantillaMensajeRepository } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
 import { agregarReacciones } from "@/lib/utils/chat-reacciones";
+import { MAX_CAPTION, validarAdjunto } from "@/lib/config/chat-media-envio";
+import { WhatsappMediaUploadClient } from "@/lib/clients/whatsapp-media-upload";
 import type {
+  EnviarMediaChatResult,
   EnviarMensajeChatResult,
   EnviarPlantillaChatResult,
   ListarHiloChatResult,
@@ -68,6 +71,9 @@ function buildEnvioService(): ChatWhatsappService | null {
     conversacionRepo: new ChatConversacionRepository(prisma),
     mensajeRepo: new ChatMensajeRepository(prisma),
     client: new WhatsappCloudClient({ config, logger: consoleLogger }),
+    // Feature 316: cliente de SUBIDA aparte del de envio (design 3.1). Sin el, `enviarMedia`
+    // del service falla claro en vez de a medias.
+    subidor: new WhatsappMediaUploadClient({ config }),
     encolarReintento: crearEncolarReintentoChatEnvio(new JobRepository(prisma)),
   });
 }
@@ -114,6 +120,126 @@ export async function enviarMensajeChat(
   // R21: transitorio -> ya persistido `queued` y encolado; la UI lo trata como reintentable.
   // No se filtra el detalle del cliente (podria ecoar el destino): solo el desenlace.
   return { status: "transitorio", mensajeChatId: outcome.mensajeChatId };
+}
+
+/**
+ * File-like: lo unico que hace falta del binario que llega por `FormData`. Mismo contrato que
+ * `lib/actions/incidentes.ts` (patron copiado, no inventado): tipo, tamano y el binario.
+ */
+interface FileLike {
+  type: string;
+  size: number;
+  name?: string;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+/**
+ * Extrae del `FormData` lo que la accion necesita. NO hay campo de tipo ni de tamano: el MIME
+ * sale de `archivo.type` y el tamano de `archivo.size`, ambos del binario que EFECTIVAMENTE
+ * llego (R11). Un `FormData` que traiga un `tamano` declarado se ignora en silencio, que es
+ * justo lo que hace falta para que una peticion fabricada no cuele.
+ */
+function rawMediaFromFormData(formData: FormData): {
+  ordenId: unknown;
+  caption: unknown;
+  archivo: FileLike | null;
+} {
+  const archivo = formData.get("archivo");
+  return {
+    ordenId: formData.get("ordenId"),
+    caption: formData.get("caption") ?? "",
+    // Un `File` llega como objeto con `arrayBuffer`; una string es un campo de texto y no vale.
+    archivo: archivo === null || typeof archivo === "string" ? null : (archivo as FileLike),
+  };
+}
+
+const captionSchema = z.string().max(MAX_CAPTION);
+
+/**
+ * Feature 316 (design 5, R3/R9/R10/R11/R12/R17/R19/R20/R26/R27) -- envia un ADJUNTO al cliente
+ * de la orden `ordenId`, con el texto del composer como pie (R5).
+ *
+ * Recibe `FormData` porque lleva el binario: las Server Actions soportan archivos nativamente
+ * y eso evita crear una ruta API solo para subirlos (mismo criterio que `reportarIncidente`,
+ * y design 8 alternativa 7). El binario NO se escribe en disco ni en la base: pasa de este
+ * `FormData` al `FormData` de la Graph API (R18/D3).
+ *
+ * La PUERTA de autorizacion es la MISMA que `enviarMensajeChat`, en el mismo orden, y las
+ * comprobaciones caras van despues de las baratas: sin actor (R26) y orden ajena (R27) salen
+ * antes de tocar el binario, de subir nada y de llamar a Meta.
+ */
+export async function enviarMediaChat(
+  formData: FormData,
+  deps: ChatWhatsappDeps = {},
+): Promise<EnviarMediaChatResult> {
+  const actor = await (deps.getActor ?? resolveActorFromSession)();
+  if (!actor) return { status: "unauthenticated" }; // R26
+
+  const raw = rawMediaFromFormData(formData);
+  const oId = idSchema.safeParse(raw.ordenId);
+  if (!oId.success || raw.archivo === null) return { status: "forbidden" };
+
+  // R12: el pie se acota ANTES de subir un solo byte. `caption_largo` lleva el maximo para que
+  // el aviso pueda decir cuanto sobra, en vez de un "demasiado largo" que no ayuda.
+  const cap = captionSchema.safeParse(raw.caption);
+  if (!cap.success) return { status: "caption_largo", maximo: MAX_CAPTION };
+
+  const ordenReader = deps.ordenReader ?? new OrdenEnvioReader(getPrismaClient());
+  const datos = await ordenReader.findParaEnvio(oId.data, actor.usuarioId);
+  // R27: inexistente o de otro mensajero. La propiedad de la orden se resuelve en el SERVIDOR
+  // contra la sesion, nunca por un parametro del cliente.
+  if (datos === null) return { status: "forbidden" };
+
+  // R11: la MISMA funcion pura que ya corrio en el navegador, ahora sobre el binario recibido.
+  // La del navegador es cortesia de red; esta es la defensa.
+  const validacion = validarAdjunto(raw.archivo.type, raw.archivo.size);
+  if (!validacion.ok) {
+    return validacion.motivo === "tipo_no_permitido"
+      ? { status: "tipo_no_permitido" }
+      : { status: "demasiado_grande", limiteBytes: validacion.limiteBytes };
+  }
+
+  const service = deps.service !== undefined ? deps.service : buildEnvioService();
+  if (service === null) return { status: "no_configurado" };
+
+  const outcome = await service.enviarMedia({
+    ordenId: oId.data,
+    mensajeroId: actor.usuarioId,
+    telefonoE164: datos.orden.telefonoDest,
+    adjunto: {
+      mime: raw.archivo.type,
+      // Nombre por defecto si el navegador no lo manda: el multipart exige uno y no se deduce
+      // de la extension (design 2: el tipo lo decide el MIME, nunca el nombre).
+      nombre: raw.archivo.name ?? "adjunto",
+      bytes: raw.archivo.size,
+      // Sin `arrayBuffer()` ni copia intermedia: el binario cruza tal cual (R18).
+      cuerpo: raw.archivo as unknown as Blob,
+    },
+    caption: cap.data,
+  });
+
+  switch (outcome.status) {
+    case "ok":
+      return { status: "ok", mensajeChatId: outcome.mensajeChatId };
+    case "fuera_ventana":
+      return { status: "fuera_ventana" };
+    case "tipo_no_permitido":
+      return { status: "tipo_no_permitido" };
+    case "demasiado_grande":
+      return { status: "demasiado_grande", limiteBytes: outcome.limiteBytes };
+    case "fallo_subida":
+      // R19: no se envio nada y no se persistio nada. El `detalle` del cliente NO se propaga a
+      // la UI (cita la operacion y el HTTP; no aporta al mensajero y no se promete reintento).
+      return { status: "fallo_subida" };
+    case "permanente":
+      // R20: el saliente ya quedo `failed` con su motivo. El detalle de Meta SI se expone: es
+      // lo accionable, y el cliente ya lo entrego sin secretos ni numero destino.
+      return {
+        status: "permanente",
+        mensajeChatId: outcome.mensajeChatId,
+        detalle: outcome.detalle,
+      };
+  }
 }
 
 /** Idioma por defecto de los templates si la config esta disponible; `undefined` si no. */

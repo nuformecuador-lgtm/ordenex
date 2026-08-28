@@ -77,6 +77,7 @@ export function BurbujaContenido({
             tipo={mensaje.tipo}
             media={mensaje.media}
             caption={mensaje.cuerpo}
+            direccion={mensaje.direccion}
           />
           {mensaje.tipo === "imagen" || mensaje.tipo === "sticker" ? null : (
             <Caption cuerpo={mensaje.cuerpo} />

@@ -1,11 +1,41 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, act, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+// Feature 316 (F1): la mitad de abajo de este archivo monta el HILO entero para ver la burbuja
+// SALIENTE con adjunto de punta a punta. Estos mocks no afectan a los tests de arriba, que
+// renderizan `BurbujaContenido` suelto y no tocan ninguna Server Action.
+const listarHiloChatMock = vi.fn();
+vi.mock("@/lib/actions/chat-whatsapp", () => ({
+  listarHiloChat: (...a: unknown[]) => listarHiloChatMock(...a),
+  enviarMensajeChat: vi.fn(),
+  enviarPlantillaChat: vi.fn(),
+  enviarMediaChat: vi.fn(),
+}));
+
+const listarPlantillasActivasParaEnvioMock = vi.fn();
+vi.mock("@/lib/actions/whatsapp-envio", () => ({
+  listarPlantillasActivasParaEnvio: (...a: unknown[]) =>
+    listarPlantillasActivasParaEnvioMock(...a),
+}));
+
+vi.mock("@/lib/audio/tono-notificacion", () => ({
+  reproducirTono: vi.fn(),
+  prepararAudio: vi.fn(),
+  reiniciarAudioParaTests: vi.fn(),
+}));
+
+vi.mock("@/app/(app)/mis-asignaciones/_components/UbicacionMapa", () => ({
+  UbicacionMapa: () => null,
+}));
+
 import { BurbujaContenido } from "@/app/(app)/mis-asignaciones/_components/chat/BurbujaContenido";
+import { ChatConversacion } from "@/app/(app)/mis-asignaciones/_components/chat/ChatConversacion";
 import type { ChatMensajeVista } from "@/lib/types/chat-whatsapp";
 import type { ChatMensajeTipo } from "@prisma/client";
+
+import { burbuja, okHilo, ORDEN, renderChat } from "./_chat-hilo-harness";
 
 // Feature 311 (R24/R27/R28/R29) — las burbujas con ADJUNTO.
 //
@@ -187,6 +217,74 @@ describe("Burbuja con adjunto (R24/R27/R28/R29)", () => {
     expect(screen.queryByText(/ya no está disponible/i)).toBeNull();
   });
 
+  // Feature 316 (E3/R23) — los textos accesibles se resuelven por DIRECCION. La 311 los cableo
+  // a "del cliente" porque solo existia el entrante; con salientes eso le mentiria al lector de
+  // pantalla sobre quien mando el adjunto.
+
+  it("R23: la imagen SALIENTE no se anuncia como enviada por el cliente", async () => {
+    pintar(mensaje("imagen", { direccion: "saliente" }));
+
+    const imagen = await screen.findByRole("img");
+    const alternativo = imagen.getAttribute("alt") ?? "";
+    expect(alternativo).not.toMatch(/cliente/i);
+    expect(alternativo).toMatch(/enviaste/i);
+  });
+
+  it("R23: la imagen ENTRANTE conserva el texto de la 311 (regresion)", async () => {
+    pintar(mensaje("imagen", { direccion: "entrante" }));
+
+    expect(
+      await screen.findByAltText("Imagen enviada por el cliente"),
+    ).toBeInTheDocument();
+  });
+
+  it("R23: el sticker saliente dice que lo enviaste tu", async () => {
+    pintar(mensaje("sticker", { direccion: "saliente" }));
+
+    expect(await screen.findByAltText("Sticker que enviaste")).toBeInTheDocument();
+  });
+
+  it("R23: el reproductor de la nota de voz SALIENTE no la atribuye al cliente", async () => {
+    pintar(
+      mensaje("audio", {
+        direccion: "saliente",
+        media: { mime: "audio/ogg", nombre: null, tamanoBytes: null },
+      }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /Reproducir nota de voz/i }));
+
+    const reproductor = await screen.findByLabelText("Nota de voz que enviaste");
+    expect(reproductor.tagName.toLowerCase()).toBe("audio");
+    expect(screen.queryByLabelText(/cliente/i)).toBeNull();
+  });
+
+  it("R23: la nota de voz ENTRANTE conserva su nombre accesible de la 311 (regresion)", async () => {
+    pintar(
+      mensaje("audio", {
+        direccion: "entrante",
+        media: { mime: "audio/ogg", nombre: null, tamanoBytes: null },
+      }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /Reproducir nota de voz/i }));
+
+    expect(await screen.findByLabelText("Nota de voz del cliente")).toBeInTheDocument();
+  });
+
+  it("R23: el video saliente tampoco se atribuye al cliente", async () => {
+    pintar(
+      mensaje("video", {
+        direccion: "saliente",
+        media: { mime: "video/mp4", nombre: null, tamanoBytes: null },
+      }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /Reproducir video/i }));
+
+    expect(await screen.findByLabelText("Video que enviaste")).toBeInTheDocument();
+  });
+
   it("R27: ninguna burbuja con adjunto queda sin contenido perceptible", async () => {
     const casos: ChatMensajeTipo[] = ["imagen", "sticker", "audio", "video", "documento"];
 
@@ -201,5 +299,61 @@ describe("Burbuja con adjunto (R24/R27/R28/R29)", () => {
       });
       unmount();
     }
+  });
+});
+
+// Feature 316 (F1/R22/R25) — LA BURBUJA SALIENTE CON ADJUNTO, EN EL HILO DE VERDAD.
+//
+// Los tests de arriba montan `BurbujaContenido` suelto; este monta la conversacion entera con
+// el hilo que devuelve la Server Action, que es donde se ve lo que la feature promete: el
+// adjunto propio a la derecha, con su acuse de entrega y sin recargar la pagina.
+describe("Burbuja SALIENTE con adjunto en el hilo (F1/R22/R25)", () => {
+  const SALIENTE_CON_FOTO: ChatMensajeVista = burbuja({
+    id: "msg-1",
+    direccion: "saliente",
+    tipo: "imagen",
+    cuerpo: null,
+    estado: "sent",
+    media: { mime: "image/jpeg", nombre: null, tamanoBytes: 120_000 },
+  });
+
+  async function montarHilo(mensajes: ChatMensajeVista[]): Promise<void> {
+    listarHiloChatMock.mockResolvedValue(okHilo(mensajes));
+    listarPlantillasActivasParaEnvioMock.mockResolvedValue({ status: "ok", items: [] });
+    renderChat(<ChatConversacion orden={ORDEN} onVolver={() => {}} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+
+  it("R22: el adjunto propio se pinta a la derecha, con su adjunto y su acuse", async () => {
+    await montarHilo([SALIENTE_CON_FOTO]);
+
+    const fila = await waitFor(() => {
+      const li = screen.getByRole("listitem");
+      expect(li).toHaveAttribute("data-direccion", "saliente");
+      return li;
+    });
+
+    // El adjunto esta DENTRO de la burbuja saliente, pedido al proxy por el id INTERNO.
+    const imagen = await within(fila).findByRole("img");
+    expect(imagen).toHaveAttribute("src", "blob:objeto-1");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("/api/chat/media/msg-1");
+    // R23: y no se le atribuye al cliente.
+    expect(imagen.getAttribute("alt") ?? "").not.toMatch(/cliente/i);
+    // Los acuses de entrega son los mismos que ya tiene un saliente de texto.
+    expect(fila.querySelector("svg.lucide-check")).not.toBeNull();
+  });
+
+  it("R25: un adjunto PROPIO caducado dice que el archivo ya no esta disponible", async () => {
+    fetchMock.mockResolvedValue(respuestaExpirada());
+    await montarHilo([SALIENTE_CON_FOTO]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Este archivo ya no está disponible/i)).toBeInTheDocument();
+    });
+    const fila = screen.getByRole("listitem");
+    expect(fila).toHaveAttribute("data-direccion", "saliente");
+    expect(fila.querySelector("img")).toBeNull();
   });
 });
