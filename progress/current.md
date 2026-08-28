@@ -9,6 +9,58 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 💬 2026-08-28 — ficha 318: histórico de conversaciones (admin y maestro leen el chat de todos)
+
+**Estado: `pending` → spec EN CURSO (`spec_author` lanzado).** Rama
+`feature/318-historico-conversaciones` desde `origin/dev` en `156669af`. Zona `fullstack`,
+complejidad alta, `sdd: true`. Alta registrada en `feature_list.json`.
+
+**Qué pidió el humano.** Un ítem de sidebar **Histórico** visible solo para `maestro` y `admin`,
+con subítem **Conversaciones**: se listan las conversaciones de **todos** los mensajeros y se leen
+todos los mensajes enviados y recibidos **por orden**, independientes de la fecha, con separador de
+día «jueves 28 de agosto». El hilo **pagina por scroll** (no carga todo de golpe). Filtros por fecha
+y por orden, montados sobre la **barra de filtros que ya usan las tablas**, con el mensajero como
+control externo y un input libre que alcanza nombre del destinatario, `num_guia`, `num_remision` y
+nombre del mensajero. Es **solo lectura**.
+
+**⚠️ DOS colisiones de número esquivadas en la misma sesión, antes de escribir una línea.** Se
+descartó el **315** (libre en la lista, pero `origin/fix/315-liberar-al-aprobar-cierre` lo reclama
+por nombre) y, al crear la rama desde `origin/dev`, apareció que otra sesión ya había registrado el
+**317**: la rama se renombró `317 → 318` en el acto. Precedente: la 311 se renumeró **tres** veces y
+la 316 una.
+
+**Bajada de `dev`, hecha antes de empezar.** `origin/dev` está en `156669af` y la rama nace de ahí.
+El `dev` **local** figura 2 ahead / 7 behind, pero `git diff origin/dev...dev` es **vacío**: sus dos
+commits extra (`bca25ded`, el fix del adjunto de la 311) ya entraron a `origin/dev` por PR con otro
+sha. **No hay nada que mergear ni conflicto que resolver**; el `dev` local se queda como está para no
+tocar historia ajena.
+
+**Cupo.** La **316** se pasa a `done` en este mismo commit: llevaba `in_progress` con el PR #573 ya
+mergeado a `origin/dev` (merge `9c5ebec5`). Mismo precedente que la 311, cerrada en el commit del
+alta de la 316. Fullstack queda sin ninguna `in_progress`.
+
+**Lo que YA existe (medido, no supuesto), para que el spec no reinvente:** `ChatConversacion`
+(`@@unique([ordenId, telefonoE164])` → una orden puede tener más de un hilo) y `ChatMensaje` con el
+índice **explícito** `[conversacion_id, ocurrido_at]` puesto para el historial ordenado; las burbujas
+del chat en `app/(app)/mis-asignaciones/_components/chat/`; el menú en un único punto,
+`SIDEBAR_ITEMS` de `lib/auth/menu-visibility.ts`, que ya soporta `children` y `roles`; y la barra
+reusable `components/shared/BuscadorFiltros.tsx` sobre `FilterComponent.tsx`.
+
+**Trampas declaradas antes de empezar.** (a) La autorización del chat es **por mensajero asignado**
+—`ChatConversacionRepository` y el proxy `/api/chat/media/[mensajeId]`—, así que hoy un admin que no
+es el mensajero del hilo **no ve ni el hilo ni sus adjuntos**: ensancharla tiene que ser explícito y
+con test propio. (b) El ítem de menú solo *muestra*; la defensa real es el gate de la ruta, y ambas
+capas deben leer la **misma** constante de roles (precedente R10 de la 129). (c) El **guardia de la
+229** congela `PUBLIC_ROUTES` posicionalmente: cualquier ruta nueva lo pone rojo. (d) `MediaAdjunto`
+dice «del cliente» en textos que aquí pueden quedar falsos. (e) El binario de la media **no se
+guarda** (D1/R15 de la 311) y a los 30 días Meta lo da por no disponible: el histórico tiene que
+**decirlo**, no romperse.
+
+**Preguntas abiertas que van a la puerta humana** (no se rellenan por suposición): si el primer nivel
+son conversaciones u órdenes; si el filtro de fecha corta por la conversación o por el mensaje; si al
+entrar se aterriza en lo más reciente y se pagina hacia atrás; y si `adminSatelite`/`adminTienda`
+quedan fuera (por defecto **sí, fuera**).
+
 ## 💬 2026-08-28 — ficha 316: el mensajero puede ENVIAR imagen, video, nota de voz y documentos
 
 **Estado: `spec_ready`, spec APROBADO por el humano** (32 requisitos R1-R32, los 32 mapeados a un test
