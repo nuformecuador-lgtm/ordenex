@@ -4337,3 +4337,33 @@ crecimiento contra ella— y encontró **cinco** sitios, no dos. Dos son de esta
 resueltos o medidos como sanos. **Los otros tres son ajenos y siguen vivos**:
 `ActualizarAnalitica.test.tsx`, `NotificationsBell.test.tsx` y `TableroOperativo.test.tsx`, los tres
 con SWR, o sea con los dos ingredientes. No se tocan aquí; merecen ficha propia.
+
+## 2026-08-24 — 278 · plantilla de carga masiva v3: provincia + cantón_distrito + dirección
+
+> **Entrada escrita a posteriori el 2026-08-27**, al cerrar el bookkeeping. La ficha se quedó en
+> `in_progress` aunque el código llevaba días en `dev`; el humano lo confirmó y el leader lo
+> verificó antes de moverla.
+
+**Qué entró.** La plantilla de carga masiva pasa a v3: `provincia` + `canton_distrito` +
+`direccion`. PR **#487**, merge `f755f852`, implementación `950557b7`, rama
+`feature/276-plantilla-carga-masiva-v3`.
+
+**Verificado al cerrar:** `f755f852` **es ancestro de `origin/dev`**. El código está dentro; no es
+una suposición.
+
+**No verificado, y queda dicho:** no aparece registro de revisión de esta ficha.
+`progress/impl_276.md` y `progress/review_276.md` son del **tope de intentos** (hoy id 276), no de
+esta, y la rama no tiene un commit `review(...)` propio. Si la revisión existió, no quedó en el repo.
+
+### La lección, que es de proceso y no de código
+
+**Buscar esta ficha en el historial por su número lleva al sitio equivocado.** La tanda del
+2026-08-24 tuvo una **colisión triple de ids**: esta feature nació como 276, se renumeró a 278
+conservando el slug de la rama, y el commit `fb5bd1c2` —titulado `docs(278): la entrada de
+historial`— **no habla de ella**: cerraba el portal del adminSatélite, que `731b265e` renumeró
+después a **279**. Por eso `fb5bd1c2` es ancestro de `dev` y aun así su contenido no describe a la
+278 actual.
+
+**El ancla fiable es el slug de la rama, no el id.** Los ids se reasignan cuando dos sesiones
+paralelas toman el mismo número; el slug sobrevive porque el remoto no se renombra. La ficha 299
+(chat: media y reacciones) nació como 294 y se renumeró por lo mismo tres días después.
