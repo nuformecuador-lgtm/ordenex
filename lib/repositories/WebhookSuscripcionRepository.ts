@@ -5,6 +5,7 @@ import type {
   WebhookSuscripcionUpsertData,
   WebhookSuscripcionVista,
 } from "@/lib/interfaces/repositories/IWebhookSuscripcionRepository";
+import { resolverOwnerApiKey } from "@/lib/utils/api-key-owner";
 
 // Feature 99 (design §5) — repositorio de suscripciones de webhook (patron
 // `ApiKeyRepository`, `Pick<PrismaClient>`). Solo queries: sin logica de negocio.
@@ -84,12 +85,38 @@ export class WebhookSuscripcionRepository implements IWebhookSuscripcionReposito
     });
   }
 
-  /** D3: `true` si el owner es un usuario de rol `apiKey` (guard del controller). */
-  async ownerEsApiKey(ownerUsuarioId: string): Promise<boolean> {
+  /**
+   * D3 + feature 302: resuelve el owner EFECTIVO de la suscripcion de webhook a partir de la
+   * cuenta que la pantalla senala, o `null` si esa cuenta no participa del canal integrador.
+   *
+   * POR QUE ESTO DEJO DE SER UN BOOLEANO (`ownerEsApiKey`). El despachador busca la suscripcion
+   * por `orden.tienda_id` (`WebhookEstadoService`), y desde la 302 una key puede crear ordenes a
+   * nombre de OTRA cuenta. Colgar la suscripcion del `usuario_id` de la key —que es lo que la
+   * pantalla tiene en la mano— daria de alta una fila que no recibiria jamas un evento: no
+   * fallaria nada, simplemente no llegarian los webhooks. Fallo mudo. Por eso el guard, ademas de
+   * autorizar, DEVUELVE a nombre de quien hay que colgarla.
+   *
+   * Tres desenlaces:
+   *   - cuenta de rol `apiKey`  -> su tienda destino si la tiene, y si no ella misma (identico al
+   *     comportamiento anterior: sin tienda destino, el owner es la propia cuenta dedicada);
+   *   - cuenta que ES la tienda destino de alguna key -> ella misma (por eso existe el indice
+   *     `api_key_tienda_destino_id_idx`);
+   *   - cualquier otra cuenta -> `null`, y el controller responde `owner_invalido` como antes.
+   */
+  async resolverOwnerWebhook(ownerUsuarioId: string): Promise<string | null> {
     const row = await this.prisma.usuario.findUnique({
       where: { id: ownerUsuarioId },
-      select: { rol: { select: { value: true } } },
+      select: {
+        rol: { select: { value: true } },
+        apiKey: { select: { tiendaDestinoId: true } },
+        // `take: 1`: solo interesa SI existe alguna, no cuantas ni cuales.
+        apiKeysComoTiendaDestino: { select: { id: true }, take: 1 },
+      },
     });
-    return row?.rol.value === ROL_API_KEY;
+    if (!row) return null;
+    if (row.rol.value === ROL_API_KEY) {
+      return resolverOwnerApiKey(ownerUsuarioId, row.apiKey?.tiendaDestinoId ?? null);
+    }
+    return row.apiKeysComoTiendaDestino.length > 0 ? ownerUsuarioId : null;
   }
 }

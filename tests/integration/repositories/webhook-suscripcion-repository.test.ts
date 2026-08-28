@@ -14,7 +14,21 @@ interface Fila {
   activa: boolean;
 }
 
-function buildPrisma(filas: Fila[] = [], rolPorUsuario: Record<string, string> = {}) {
+/**
+ * Feature 302: lo que el repositorio necesita saber de una cuenta para decidir a nombre de quien
+ * cuelga la suscripcion. `tiendaDestinoDeSuKey === undefined` = la cuenta no tiene fila en
+ * `api_key`; `null` = tiene key pero sin tienda destino (el caso historico).
+ */
+interface CanalUsuario {
+  tiendaDestinoDeSuKey?: string | null;
+  esTiendaDestinoDeAlguna?: boolean;
+}
+
+function buildPrisma(
+  filas: Fila[] = [],
+  rolPorUsuario: Record<string, string> = {},
+  canal: Record<string, CanalUsuario> = {},
+) {
   const webhookSuscripcion = {
     upsert: vi.fn(async (args: { where: { ownerUsuarioId: string }; create: Fila; update: Partial<Fila> }) => {
       const existente = filas.find((f) => f.ownerUsuarioId === args.where.ownerUsuarioId);
@@ -37,7 +51,18 @@ function buildPrisma(filas: Fila[] = [], rolPorUsuario: Record<string, string> =
   const usuario = {
     findUnique: vi.fn(async (args: { where: { id: string } }) => {
       const rol = rolPorUsuario[args.where.id];
-      return rol ? { rol: { value: rol } } : null;
+      if (!rol) return null;
+      const c: CanalUsuario = canal[args.where.id] ?? {};
+      return {
+        rol: { value: rol },
+        // El include del repositorio: la key de ESTA cuenta (1:1) y las keys que cargan a su
+        // nombre (`take: 1`, solo interesa si hay alguna).
+        apiKey:
+          c.tiendaDestinoDeSuKey === undefined
+            ? null
+            : { tiendaDestinoId: c.tiendaDestinoDeSuKey },
+        apiKeysComoTiendaDestino: c.esTiendaDestinoDeAlguna ? [{ id: "k-alguna" }] : [],
+      };
     }),
   };
   return { prisma: { webhookSuscripcion, usuario } as unknown as PrismaClient, filas };
@@ -133,12 +158,35 @@ describe("R8 — desactivarByOwner", () => {
   });
 });
 
-describe("D3 — ownerEsApiKey", () => {
-  it("true solo si el owner es rol apiKey; excluye un adminTienda u owner inexistente", async () => {
-    const { prisma } = buildPrisma([], { "u-api": "apiKey", "u-tienda": "adminTienda" });
+describe("D3 — resolverOwnerWebhook (quien puede tener webhook)", () => {
+  it("una cuenta de key SIN tienda destino se cuelga de si misma; un adminTienda ajeno y un id inexistente, de nadie", async () => {
+    const { prisma } = buildPrisma(
+      [],
+      { "u-api": "apiKey", "u-tienda": "adminTienda" },
+      { "u-api": { tiendaDestinoDeSuKey: null } },
+    );
     const repo = new WebhookSuscripcionRepository(prisma);
-    expect(await repo.ownerEsApiKey("u-api")).toBe(true);
-    expect(await repo.ownerEsApiKey("u-tienda")).toBe(false);
-    expect(await repo.ownerEsApiKey("u-inexistente")).toBe(false);
+    // Comportamiento HISTORICO intacto: sin tienda destino, el owner es la cuenta dedicada.
+    expect(await repo.resolverOwnerWebhook("u-api")).toBe("u-api");
+    // Un adminTienda al que no apunta ninguna key sigue sin poder tener webhook (-> owner_invalido).
+    expect(await repo.resolverOwnerWebhook("u-tienda")).toBeNull();
+    expect(await repo.resolverOwnerWebhook("u-inexistente")).toBeNull();
+  });
+
+  it("302: una cuenta de key CON tienda destino se cuelga de la TIENDA, no de si misma", async () => {
+    const { prisma } = buildPrisma(
+      [],
+      { "u-api": "apiKey", "u-nuform": "adminTienda" },
+      {
+        "u-api": { tiendaDestinoDeSuKey: "u-nuform" },
+        "u-nuform": { esTiendaDestinoDeAlguna: true },
+      },
+    );
+    const repo = new WebhookSuscripcionRepository(prisma);
+    // Es LA linea que evita el fallo mudo: el despachador busca por `orden.tienda_id`, que para
+    // las ordenes de esta key es `u-nuform`. Colgarla de `u-api` no daria error, solo silencio.
+    expect(await repo.resolverOwnerWebhook("u-api")).toBe("u-nuform");
+    // Y senalar directamente a la tienda tambien vale, porque hay una key que carga a su nombre.
+    expect(await repo.resolverOwnerWebhook("u-nuform")).toBe("u-nuform");
   });
 });

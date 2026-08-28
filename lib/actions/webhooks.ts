@@ -33,8 +33,27 @@ const ROL_MAESTRO = "maestro";
 export interface WebhookActionDeps {
   getActor?: () => Promise<Actor | null>;
   service?: IWebhookSuscripcionService;
-  /** D3: comprueba que el owner objetivo es un usuario de rol `apiKey`. */
-  ownerEsApiKey?: (ownerUsuarioId: string) => Promise<boolean>;
+  /**
+   * D3 + feature 302: resuelve el owner EFECTIVO de la suscripcion (o `null` si la cuenta no
+   * participa del canal integrador). Ver `IWebhookSuscripcionRepository.resolverOwnerWebhook`.
+   */
+  resolverOwnerWebhook?: (ownerUsuarioId: string) => Promise<string | null>;
+}
+
+/**
+ * Feature 302 — TODAS las acciones de webhook pasan por aqui antes de tocar la suscripcion.
+ *
+ * La pantalla senala la cuenta dedicada de la key (`apiKey.usuarioId`), pero desde la 302 las
+ * ordenes de esa key pueden pertenecer a otra cuenta, y el despachador busca la suscripcion por
+ * `orden.tienda_id`. Si el alta colgase la fila de un id y la lectura preguntase por otro, el
+ * maestro veria "sin webhook" justo despues de crearlo, y los eventos no llegarian nunca: dos
+ * fallos mudos por el precio de uno. Resolviendolo en las CUATRO acciones, alta, baja, rotacion y
+ * consulta hablan siempre de la misma fila.
+ */
+function buildResolverOwner(
+  deps: WebhookActionDeps,
+): (ownerUsuarioId: string) => Promise<string | null> {
+  return deps.resolverOwnerWebhook ?? ((id: string) => buildRepo().resolverOwnerWebhook(id));
 }
 
 function buildRepo() {
@@ -75,15 +94,16 @@ export async function registrarWebhook(
     };
   }
 
-  // D3: el owner objetivo debe ser un usuario de rol `apiKey`.
-  const ownerEsApiKey = deps.ownerEsApiKey ?? ((id: string) => buildRepo().ownerEsApiKey(id));
-  if (!(await ownerEsApiKey(parsed.data.ownerUsuarioId))) {
+  // D3 + 302: el owner objetivo debe participar del canal integrador, y la suscripcion se cuelga
+  // del owner EFECTIVO de sus ordenes (la tienda destino si la key apunta a una).
+  const ownerUsuarioId = await buildResolverOwner(deps)(parsed.data.ownerUsuarioId);
+  if (ownerUsuarioId === null) {
     return { status: "owner_invalido" };
   }
 
   const service = deps.service ?? buildService();
   try {
-    return await service.registrar(parsed.data);
+    return await service.registrar({ ...parsed.data, ownerUsuarioId });
   } catch (error) {
     // R32: sin clave de cifrado no se puede persistir el secreto cifrado.
     if (error instanceof WebhookSecretKeyError) return { status: "config_error" };
@@ -111,8 +131,13 @@ export async function desactivarWebhook(
     };
   }
 
+  // 302: misma resolucion que el alta. Si la cuenta no participa del canal, se usa su propio id:
+  // la baja es idempotente y sobre una fila que no existe es un no-op, igual que antes.
+  const ownerUsuarioId =
+    (await buildResolverOwner(deps)(parsed.data.ownerUsuarioId)) ?? parsed.data.ownerUsuarioId;
+
   const service = deps.service ?? buildService();
-  await service.desactivar(parsed.data.ownerUsuarioId);
+  await service.desactivar(ownerUsuarioId);
   return { status: "ok" };
 }
 
@@ -137,9 +162,14 @@ export async function rotarSecretoWebhook(
     };
   }
 
+  // 302: misma resolucion que el alta; sin owner efectivo se conserva el id recibido y la
+  // rotacion responde `not_found` como haria hoy con un id sin suscripcion.
+  const ownerUsuarioId =
+    (await buildResolverOwner(deps)(parsed.data.ownerUsuarioId)) ?? parsed.data.ownerUsuarioId;
+
   const service = deps.service ?? buildService();
   try {
-    return await service.rotarSecreto(parsed.data.ownerUsuarioId);
+    return await service.rotarSecreto(ownerUsuarioId);
   } catch (error) {
     // R32: sin clave de cifrado no se puede persistir el secreto cifrado.
     if (error instanceof WebhookSecretKeyError) return { status: "config_error" };
@@ -167,7 +197,12 @@ export async function obtenerWebhook(
     };
   }
 
+  // 302: misma resolucion que el alta. Sin esto, la pantalla preguntaria por la cuenta dedicada
+  // y no encontraria la suscripcion que ella misma acaba de crear sobre la tienda destino.
+  const ownerUsuarioId =
+    (await buildResolverOwner(deps)(parsed.data.ownerUsuarioId)) ?? parsed.data.ownerUsuarioId;
+
   const service = deps.service ?? buildService();
-  const webhook = await service.obtener(parsed.data.ownerUsuarioId);
+  const webhook = await service.obtener(ownerUsuarioId);
   return { status: "ok", webhook };
 }

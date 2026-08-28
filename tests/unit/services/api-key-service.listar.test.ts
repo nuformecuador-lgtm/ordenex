@@ -21,6 +21,8 @@ function item(n: number): ApiKeyListItem {
     estado: "activa",
     usuarioId: `u-dedicado-${n}`,
     usuarioEmail: `apikey+tienda-${n}@apikey.invalid`,
+    tiendaDestinoId: null, // feature 302
+    tiendaDestinoNombre: null,
     createdAt: new Date(`2026-07-1${n}T12:00:00Z`),
   };
 }
@@ -40,6 +42,10 @@ function makeRepo(items: ApiKeyListItem[] = [item(1), item(2)], total = items.le
     // para delatar cualquier invocacion, mismo criterio que `createConUsuario` arriba.
     findByKeyHash: vi.fn(async () => {
       throw new Error("findByKeyHash no debe invocarse desde listar");
+    }),
+    // Feature 302: la eleccion de tienda destino es cosa de `generar`; listar no la mira.
+    findTiendaDestino: vi.fn(async () => {
+      throw new Error("findTiendaDestino no debe invocarse desde listar");
     }),
     // Ciclo de vida: escrituras que listar nunca debe tocar.
     rotar: vi.fn(async () => {
@@ -96,7 +102,17 @@ describe("ApiKeyService.listar — resultado (R4/R5/R7)", () => {
 
     if (r.status !== "ok") throw new Error("se esperaba ok");
     expect(Object.keys(r.items[0]).sort()).toEqual(
-      ["createdAt", "estado", "id", "identificador", "keyPrefix", "usuarioEmail", "usuarioId"].sort(),
+      [
+        "createdAt",
+        "estado",
+        "id",
+        "identificador",
+        "keyPrefix",
+        "tiendaDestinoId", // feature 302
+        "tiendaDestinoNombre", // feature 302
+        "usuarioEmail",
+        "usuarioId",
+      ].sort(),
     );
     expect(r.items[0].usuarioEmail).toBe("apikey+tienda-1@apikey.invalid"); // [D1]
   });

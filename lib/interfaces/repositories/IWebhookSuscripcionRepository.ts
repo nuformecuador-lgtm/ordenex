@@ -44,6 +44,13 @@ export interface IWebhookSuscripcionRepository {
   findByOwner(ownerUsuarioId: string): Promise<WebhookSuscripcionVista | null>;
   /** R8: da de baja (activa=false) la suscripcion del owner. No-op si no existe. */
   desactivarByOwner(ownerUsuarioId: string): Promise<void>;
-  /** D3 (guard del controller): `true` si el owner es un usuario de rol `apiKey`. */
-  ownerEsApiKey(ownerUsuarioId: string): Promise<boolean>;
+  /**
+   * D3 (guard del controller) + feature 302: el owner EFECTIVO al que debe colgarse la
+   * suscripcion, o `null` si la cuenta no participa del canal integrador (-> `owner_invalido`).
+   *
+   * Devuelve un id y no un booleano porque desde la 302 el owner de las ordenes de una key puede
+   * ser OTRA cuenta (`api_key.tienda_destino_id`), y el despachador busca la suscripcion por
+   * `orden.tienda_id`: colgarla del id equivocado no da error, solo deja de entregar eventos.
+   */
+  resolverOwnerWebhook(ownerUsuarioId: string): Promise<string | null>;
 }

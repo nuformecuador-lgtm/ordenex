@@ -30,6 +30,11 @@ function makeRepo(findResult: ApiKeyAutenticada | null): IApiKeyRepository {
     setEstado: vi.fn(async () => {
       throw new Error("setEstado no debe invocarse desde la autenticacion");
     }),
+    // Feature 302: la tienda destino se valida al GENERAR la key; la autenticacion la lee de la
+    // fila que ya devolvio `findByKeyHash`, no la vuelve a consultar. Lanza para delatarlo.
+    findTiendaDestino: vi.fn(async () => {
+      throw new Error("findTiendaDestino no debe invocarse desde la autenticacion");
+    }),
   };
 }
 
@@ -37,11 +42,25 @@ function activa(overrides: Partial<ApiKeyAutenticada> = {}): ApiKeyAutenticada {
   return {
     apiKeyId: "key-1",
     usuarioId: "u-dedicado-1",
+    // Feature 302: por defecto, key SIN tienda destino -> comportamiento historico.
+    tiendaDestinoId: null,
+    tiendaDestinoEstado: null,
+    tiendaDestinoRol: null,
     estado: "activo",
     apiKeyEstado: "activa",
     rol: "apiKey",
     ...overrides,
   };
+}
+
+/** Feature 302: la MISMA fila, pero con la key apuntando a una tienda real y sana. */
+function conTiendaDestino(overrides: Partial<ApiKeyAutenticada> = {}): ApiKeyAutenticada {
+  return activa({
+    tiendaDestinoId: "u-nuform",
+    tiendaDestinoEstado: "activo",
+    tiendaDestinoRol: "adminTienda",
+    ...overrides,
+  });
 }
 
 describe("ApiKeyAuthService.autenticar — sin secreto (R2)", () => {
@@ -149,6 +168,106 @@ describe("ApiKeyAuthService.autenticar — rol del usuario dedicado (267, defens
       makeRepo(activa({ apiKeyEstado: "inactiva" })),
     ).autenticar(RAW_KEY);
     expect(porRol).toEqual(porRevocacion);
+  });
+});
+
+describe("ApiKeyAuthService.autenticar — tienda destino (302: quien entra vs quien es el dueno)", () => {
+  it("SIN tienda destino el actor es la cuenta dedicada: el camino de la 88/[D4], intacto", async () => {
+    const repo = makeRepo(activa({ usuarioId: "u-dedicada" }));
+    const r = await new ApiKeyAuthService(repo).autenticar(RAW_KEY);
+    expect(r).toEqual({
+      status: "ok",
+      apiKeyId: "key-1",
+      actor: { usuarioId: "u-dedicada", rol: "apiKey" },
+    });
+  });
+
+  it("CON tienda destino el actor es LA TIENDA, y el rol sigue siendo `apiKey`", async () => {
+    const repo = makeRepo(conTiendaDestino({ usuarioId: "u-dedicada", tiendaDestinoId: "u-nuform" }));
+    const r = await new ApiKeyAuthService(repo).autenticar(RAW_KEY);
+    // El `usuarioId` cambia (es el dueno de las ordenes) pero el `rol` NO: si el rol pasara a
+    // `adminTienda`, `BulkOrdenService.cargarViaApi` rechazaria la carga (exige `apiKey`) y
+    // `resolverAlcance` trataria al integrador como una sesion de tienda.
+    expect(r).toEqual({
+      status: "ok",
+      apiKeyId: "key-1",
+      actor: { usuarioId: "u-nuform", rol: "apiKey" },
+    });
+  });
+
+  it("la trazabilidad de QUE credencial actuo no se pierde: `apiKeyId` sigue siendo el de la key", async () => {
+    const repo = makeRepo(conTiendaDestino({ apiKeyId: "key-de-nuform" }));
+    const r = await new ApiKeyAuthService(repo).autenticar(RAW_KEY);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.apiKeyId).toBe("key-de-nuform");
+  });
+
+  it("dos keys apuntadas a la MISMA tienda producen el mismo dueno (una sola Nuform)", async () => {
+    const a = await new ApiKeyAuthService(
+      makeRepo(conTiendaDestino({ apiKeyId: "k-a", usuarioId: "u-key-a" })),
+    ).autenticar(RAW_KEY);
+    const b = await new ApiKeyAuthService(
+      makeRepo(conTiendaDestino({ apiKeyId: "k-b", usuarioId: "u-key-b" })),
+    ).autenticar(RAW_KEY);
+    expect(a.status === "ok" && a.actor.usuarioId).toBe("u-nuform");
+    expect(b.status === "ok" && b.actor.usuarioId).toBe("u-nuform");
+  });
+});
+
+describe("ApiKeyAuthService.autenticar — la tienda destino se revalida en CADA peticion (302)", () => {
+  it.each(["pendiente", "inactivo", "bloqueado"] as const)(
+    "tienda destino en estado %s -> forbidden (dar de baja la tienda corta tambien su canal por API)",
+    async (estado) => {
+      const repo = makeRepo(conTiendaDestino({ tiendaDestinoEstado: estado }));
+      const r = await new ApiKeyAuthService(repo).autenticar(RAW_KEY);
+      expect(r).toEqual({ status: "forbidden" });
+    },
+  );
+
+  it.each(["apiKey", "mensajero", "adminSatelite", "maestro", "admin", "", "ADMINTIENDA"])(
+    "tienda destino con rol %s -> forbidden: solo una cuenta de tienda puede ser duena",
+    async (rol) => {
+      const repo = makeRepo(conTiendaDestino({ tiendaDestinoRol: rol }));
+      const r = await new ApiKeyAuthService(repo).autenticar(RAW_KEY);
+      expect(r).toEqual({ status: "forbidden" });
+    },
+  );
+
+  it("el forbidden por tienda destino es INDISTINGUIBLE del de una key revocada", async () => {
+    const porTienda = await new ApiKeyAuthService(
+      makeRepo(conTiendaDestino({ tiendaDestinoEstado: "inactivo" })),
+    ).autenticar(RAW_KEY);
+    const porRevocacion = await new ApiKeyAuthService(
+      makeRepo(activa({ apiKeyEstado: "inactiva" })),
+    ).autenticar(RAW_KEY);
+    expect(porTienda).toEqual(porRevocacion);
+  });
+});
+
+describe("ApiKeyAuthService.autenticar — la 302 NO relaja el rol de la credencial (267)", () => {
+  // Esta es la alternativa que la ficha DESCARTA: apuntar la key a la cuenta de la tienda
+  // exigiria dejar pasar un actor con rol `adminTienda`, y entonces una key filtrada actuaria con
+  // los permisos completos de la tienda, sesion web incluida. Con tienda destino o sin ella, la
+  // cuenta PORTADORA de la credencial tiene que seguir siendo `apiKey`.
+  it.each(["maestro", "admin", "adminTienda", "adminSatelite", "mensajero"])(
+    "cuenta dedicada con rol %s -> forbidden, AUNQUE la tienda destino sea valida",
+    async (rol) => {
+      const repo = makeRepo(conTiendaDestino({ rol }));
+      const r = await new ApiKeyAuthService(repo).autenticar(RAW_KEY);
+      expect(r).toEqual({ status: "forbidden" });
+    },
+  );
+
+  it("y las palancas de revocacion siguen mandando sobre la tienda destino", async () => {
+    // Usuario dedicado no activo, key inactiva: cada una basta por si sola, con tienda destino sana.
+    const porUsuario = await new ApiKeyAuthService(
+      makeRepo(conTiendaDestino({ estado: "bloqueado" })),
+    ).autenticar(RAW_KEY);
+    const porKey = await new ApiKeyAuthService(
+      makeRepo(conTiendaDestino({ apiKeyEstado: "inactiva" })),
+    ).autenticar(RAW_KEY);
+    expect(porUsuario).toEqual({ status: "forbidden" });
+    expect(porKey).toEqual({ status: "forbidden" });
   });
 });
 

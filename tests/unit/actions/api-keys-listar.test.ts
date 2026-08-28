@@ -136,6 +136,8 @@ describe("listarApiKeys (action) — el secreto no cruza al cliente (R6)", () =>
           estado: "activa",
           usuarioId: "u-dedicado",
           usuarioEmail: "apikey+tienda-uno@apikey.invalid",
+          tiendaDestinoId: null, // feature 302
+          tiendaDestinoNombre: null,
           createdAt: new Date("2026-07-16T12:00:00Z"),
         },
       ],

@@ -9,8 +9,32 @@ import type { ApiKeyPublico } from "@/lib/types/api-key";
 export interface ApiKeyAutenticada {
   /** id de la fila `api_key` (para trazabilidad futura; nunca es el secreto). */
   apiKeyId: string;
-  /** Usuario dedicado 1:1 de la key. Sera el `tienda_id` de las ordenes creadas (D4). */
+  /**
+   * Usuario dedicado 1:1 de la key: QUIEN ENTRA (portador de la credencial, rol `apiKey`).
+   *
+   * ⚠️ Feature 302 — YA NO ES NECESARIAMENTE EL DUENO DE LAS ORDENES. Lo era mientras `D4`
+   * decia «el usuario dedicado es dueno de las ordenes que cree»; desde la 302 el dueno lo
+   * decide `resolverOwnerApiKey(usuarioId, tiendaDestinoId)`. Este campo sigue siendo la
+   * identidad de la CREDENCIAL, y es sobre el que se comprueban `estado` y `rol`.
+   */
   usuarioId: string;
+  /**
+   * Feature 302 — la tienda REAL a nombre de la cual carga esta key (`adminTienda`), o `null`
+   * si la key es duena de sus propias ordenes (comportamiento historico).
+   */
+  tiendaDestinoId: string | null;
+  /**
+   * Estado de la tienda destino, o `null` si no hay tienda destino. El service lo exige `activo`
+   * (fallo cerrado): dar de baja una tienda tiene que cortar tambien lo que entra por su key.
+   */
+  tiendaDestinoEstado: EstadoUsuario | null;
+  /**
+   * `value` del rol de la tienda destino, o `null` si no hay tienda destino. El service exige
+   * `adminTienda`: una tienda destino con cualquier otro rol es una fila mal configurada y
+   * CIERRA el canal en vez de ampliarlo (mismo criterio que 267 sobre el rol de la cuenta
+   * dedicada).
+   */
+  tiendaDestinoRol: string | null;
   /** Estado del usuario dedicado: la carga solo procede si es `activo` (R5). */
   estado: EstadoUsuario;
   /**
@@ -44,6 +68,26 @@ export interface CreateApiKeyConUsuarioData {
   keyHash: string;
   /** Actor (maestro) que genera la key (R21). */
   createdById: string;
+  /**
+   * Feature 302: `usuario.id` de la tienda REAL a nombre de la cual cargara la key, o `null`
+   * para el comportamiento historico (la cuenta dedicada es la duena). El service ya comprobo
+   * que existe, que su rol es `adminTienda` y que esta activa: el repositorio no valida nada.
+   */
+  tiendaDestinoId: string | null;
+}
+
+/**
+ * Feature 302 — proyeccion MINIMA de una cuenta candidata a TIENDA DESTINO, lo justo para que
+ * `ApiKeyService` decida si la acepta. Sin PII (ni email, ni telefono, ni cedula, ni hash).
+ */
+export interface TiendaDestinoCandidata {
+  id: string;
+  /** Para mostrarla en el resultado/listado; nunca se usa para decidir. */
+  nombre: string;
+  /** `value` del rol; el service exige `adminTienda`. */
+  rol: string;
+  /** El service exige `activo`: no se cuelga una key de una tienda dada de baja. */
+  estado: EstadoUsuario;
 }
 
 /**
@@ -55,6 +99,10 @@ export interface CreateApiKeyConUsuarioData {
 export interface ApiKeyListItem {
   id: string;
   identificador: string;
+  /** Feature 302: id de la tienda real a cuyo nombre carga la key, o `null`. */
+  tiendaDestinoId: string | null;
+  /** Feature 302: nombre de esa tienda (para la pantalla), o `null` si no hay tienda destino. */
+  tiendaDestinoNombre: string | null;
   /** No secreto (81/R17): permite mostrar `ordx_ab12cd3…` sin revelar nada. */
   keyPrefix: string;
   /** Estado propio de la key (activar/desactivar): `activa` | `inactiva`. */
@@ -127,4 +175,11 @@ export interface IApiKeyRepository {
    * publica actualizada, o `null` si el id no existe (R3). NUNCA proyecta `keyHash`.
    */
   setEstado(id: string, estado: EstadoApiKey): Promise<ApiKeyPublico | null>;
+
+  /**
+   * Feature 302: lee la cuenta `usuarioId` como CANDIDATA a tienda destino (id, nombre, rol y
+   * estado), o `null` si no existe ningun usuario con ese id. Solo query: quien decide si la
+   * candidata sirve es `ApiKeyService.generar` (rol `adminTienda` + estado `activo`).
+   */
+  findTiendaDestino(usuarioId: string): Promise<TiendaDestinoCandidata | null>;
 }

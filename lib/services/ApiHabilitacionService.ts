@@ -129,6 +129,10 @@ export class ApiHabilitacionService implements IApiHabilitacionService {
 
     // 3. R3/R4 — el owner es SIEMPRE `actor.usuarioId` y se fuerza en el `where` del repo. El
     //    `null` es OPACO: no distingue «no existe» de «es de otra tienda».
+    //    Feature 302: `actor.usuarioId` es el DUEÑO resuelto (la tienda real si la key apunta a
+    //    una), asi que `actor_usuario_id` del log de habilitacion pasa a nombrar a ESA tienda y no
+    //    a la cuenta dedicada. Quien quiera saber QUE credencial actuo lo tiene en el `apiKeyId`
+    //    del resultado de autenticacion, que es donde vive la trazabilidad de la key.
     const orden = await this.ordenRepo.findParaHabilitacionApi(numGuia, actor.usuarioId);
     if (orden === null) return filaConError(numGuia, "no_encontrada");
 
