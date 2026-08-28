@@ -55,7 +55,22 @@ export type AccionNovedad =
    */
   | "reprogramarDesdeAyuda"
   /** Feature 237 (R1, mitad de pantalla) — «Rechazar» DESDE LA AYUDA. Clave propia, idem. */
-  | "rechazarDesdeAyuda";
+  | "rechazarDesdeAyuda"
+  /**
+   * FICHA 312 (F1, R23 — 2026-08-28) — «Corregir datos»: destinatario, telefono, producto y notas
+   * de la orden. Ni un campo mas (D1): fuera direccion, ubicacion, zona, monto, estatus y tienda.
+   *
+   * ⚠️ UNA SOLA CLAVE PARA LOS DOS GRUPOS, y aqui SI corresponde —al reves que
+   * `reprogramarDesdeAyuda`/`rechazarDesdeAyuda`, que necesitaron claves propias porque cada una
+   * va a un SERVICIO distinto—. Corregir datos es la MISMA operacion, el mismo servicio y la
+   * misma ventana en los dos grupos: partirla en dos claves obligaria a `NovedadAcciones` a
+   * ramificar por grupo para llamar a lo mismo, que es exactamente la decision fuera de la tabla
+   * que R18/R19 de la 236 prohiben. El precedente correcto es `contacto`.
+   *
+   * ⚠️ NO DEJA RASTRO (D4, decision humana del 2026-08-28): no publica nota en el hilo, no
+   * escribe historial y no avisa a nadie. El unico rastro es el `updated_at` de la fila.
+   */
+  | "corregirDatos";
 
 /**
  * **LA TABLA.** Que ofrece cada grupo, en el orden en que se pinta.
@@ -125,9 +140,10 @@ export const ACCIONES_POR_GRUPO = {
     "rechazarDesdeAyuda",
     "habilitar",
     "conversacion",
+    "corregirDatos",
     "intentoContacto",
   ],
-  devolucion: ["contacto", "reprogramar", "rechazar"],
+  devolucion: ["contacto", "reprogramar", "rechazar", "corregirDatos"],
 } as const satisfies Record<GrupoNovedad, readonly AccionNovedad[]>;
 
 /**
@@ -256,5 +272,14 @@ export const PRODUCTOR_POR_ACCION = {
   rechazarDesdeAyuda: {
     accionServidor: "gestionarDesdeAyuda",
     modulo: "lib/actions/gestion-desde-ayuda",
+  },
+  /**
+   * FICHA 312 — la correccion escribe en la fila de la orden y en NINGUNA otra tabla (R14). Su
+   * operacion existe desde el 2026-08-28 y la dispara `NovedadesModule`, que es quien monta la
+   * ventana compartida con el modulo de ordenes.
+   */
+  corregirDatos: {
+    accionServidor: "corregirDatosCliente",
+    modulo: "lib/actions/corregir-datos-cliente",
   },
 } as const satisfies Record<AccionNovedad, ProductorAccion>;
