@@ -66,6 +66,13 @@ import {
   notificadorNoOp,
   type MensajeroBloqueadoNotificador,
 } from "@/lib/notificaciones/notificadores";
+// FICHA 315 (defecto de produccion del 2026-08-28): aprobar un cierre libera las ordenes
+// reprogramadas de ese cierre que ya vencieron. Solo el TIPO y el NO-OP entran aqui; el camino
+// real lo cablea el composition root.
+import {
+  liberarAlAprobarCierreNoOp,
+  type LiberarAlAprobarCierre,
+} from "@/lib/services/liberacion-al-aprobar-cierre";
 
 // Roles autorizados en el modulo (R1): acceso total (maestro/admin -> bodega central) y el
 // adminSatelite (su bodega). Cualquier otro -> forbidden.
@@ -228,6 +235,15 @@ export class CierresAdminService implements ICierresAdminService {
      * hay una guardia que lo comprueba (`notificacion-notificadores-reales.test.ts`).
      */
     private readonly notificarBloqueo: MensajeroBloqueadoNotificador = notificadorNoOp,
+    /**
+     * FICHA 315 — el TIMBRE de la liberacion de reprogramadas. OPCIONAL Y CON DEFAULT NO-OP, por
+     * el mismo motivo exacto que `notificarBloqueo`: aqui el riesgo de un default real no es un
+     * silencio, es que cualquiera de las trece suites que instancian este servicio MUEVA ORDENES
+     * en la base local compartida. El composition root (`lib/actions/cierres-admin.ts`) inyecta el
+     * real y hay una guardia que comprueba que alguien lo PASA de verdad
+     * (`liberacion-al-aprobar-cierre.test.ts`).
+     */
+    private readonly liberarReprogramadasDelCierre: LiberarAlAprobarCierre = liberarAlAprobarCierreNoOp,
   ) {}
 
   /**
@@ -821,6 +837,31 @@ export class CierresAdminService implements ICierresAdminService {
       confirmacionFisica: confirmacionFisica.map(({ gestionId }) => ({ gestionId })),
     });
     if (res === "updated") {
+      // 💰 FICHA 315 — LA APROBACION ES EL EVENTO QUE LIBERA. Aqui, y no en el reloj.
+      //
+      // Lo que arregla, medido en produccion el 2026-08-28: la corrida de las 14:10 UTC dejo CINCO
+      // ordenes congeladas porque su cierre estaba `solicitado`; el humano lo aprobo a las 14:48 y
+      // nadie volvio a mirarlas. Siguieron fuera del filtro de reasignables hasta que se encolo
+      // una corrida a mano a las 15:20 —con la automatica siguiente a nueve horas—. La 276 puso la
+      // puerta (no liberar mientras el cierre pueda sumar un intento) y no puso el timbre.
+      //
+      // POR QUE HAY DOS DISPARADORES Y NO ES DUPLICACION —lo importante de este bloque—:
+      //   · ESTE (evento): la orden esperaba una APROBACION, que es un acto humano con hora
+      //     exacta. Sondear un reloj cada pocos minutos para enterarse de algo cuyo instante se
+      //     conoce es pagar latencia por nada, y aun asi dejaria al operador esperando.
+      //   · EL DE LAS 00:00 CR (`liberar_reprogramadas`): la orden esperaba al CALENDARIO. Una
+      //     reprogramada para el 31/08 no espera a que nadie apruebe nada; ese caso NO TIENE
+      //     EVENTO al que engancharse y sin la corrida diaria no saldria nunca.
+      // Ninguno cubre lo del otro. Y el diario es ademas LA RED de este: si esto falla, o si el
+      // proceso muere entre el commit de arriba y esta linea, la medianoche lo recoge.
+      //
+      // FUERA DE LA TRANSACCION Y DESPUES DE QUE HAYA CONFIRMADO. `resolverCierre` ya emitio el
+      // dinero de este cierre y cerro su tx; en Postgres un error de sentencia aborta la
+      // transaccion ENTERA, asi que meter esto dentro dejaria que una orden atascada revirtiera
+      // una aprobacion contable ya emitida. La liberacion absorbe su propio fallo y lo registra
+      // (`liberarAlAprobarCierreCon`): nunca silencioso, nunca fatal.
+      await this.liberarReprogramadasDelCierre(cierreId);
+
       // Feature 172 (T C.2, §8/R16): el pendiente se deriva DESPUES de que la aprobacion haya
       // confirmado, nunca dentro de su transaccion. Un fallo aqui no puede revertir la
       // aprobacion —que es justo lo que el humano descarto (decision 3, alternativa A)—.

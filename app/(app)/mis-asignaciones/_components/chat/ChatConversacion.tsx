@@ -1,17 +1,40 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, CheckCheck, Package, Send } from "lucide-react";
+import {
+  ArrowLeft,
+  Camera,
+  Check,
+  CheckCheck,
+  FileText,
+  ImageUp,
+  Mic,
+  Package,
+  Paperclip,
+  Send,
+  X,
+} from "lucide-react";
 import useSWR from "swr";
 
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 import { useTonoAlIncrementar } from "@/hooks/useTonoAlIncrementar";
 import {
+  enviarMediaChat,
   enviarMensajeChat,
   enviarPlantillaChat,
   listarHiloChat,
 } from "@/lib/actions/chat-whatsapp";
+import {
+  CALIDAD_JPEG_ENVIO,
+  clasificarAdjunto,
+  LIMITE_BYTES,
+  MAX_CAPTION,
+  MAX_LADO_LARGO_ENVIO,
+  validarAdjunto,
+  type TipoAdjuntoEnvio,
+} from "@/lib/config/chat-media-envio";
+import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import { listarPlantillasActivasParaEnvio } from "@/lib/actions/whatsapp-envio";
 import { renderPlantilla } from "@/lib/utils/plantilla-mensaje";
 import { datosPlantillaDesdeAsignacion } from "@/lib/utils/whatsapp-envio-valores";
@@ -23,6 +46,7 @@ import type {
 import type { PlantillaTextoDTO } from "@/lib/types/whatsapp-envio";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
+import { useGrabadorVoz } from "./hooks/useGrabadorVoz";
 import { UbicacionModal } from "../UbicacionModal";
 import type { UbicacionPunto } from "../ubicacion-mapa-tipos";
 import { BurbujaContenido } from "./BurbujaContenido";
@@ -58,6 +82,56 @@ const REFRESH_INTERVAL_MS = 10_000;
 
 /** Alto máximo del composer antes de empezar a hacer scroll (~6 líneas). */
 const COMPOSER_MAX_PX = 128;
+
+// Feature 316 (design §6.1) — el composer gana un adjunto. Todo lo de aquí abajo es de esa
+// feature; el camino del texto libre y el de la plantilla no cambian.
+
+/** Tope de caracteres del composer SIN adjunto (el de un mensaje de texto de Meta). */
+const MAX_TEXTO_LIBRE = 4096;
+
+/** `accept` de cámara y archivo. Se deja `image/*` A PROPÓSITO (design §6.1): con la
+ * normalización de R29 el HEIC del iPhone SÍ se puede elegir, y cerrar el `accept` a
+ * `image/jpeg,image/png` le escondería al usuario de iOS sus propias fotos en el selector. La
+ * lista blanca se aplica DESPUÉS de normalizar, que es donde tiene sentido. */
+const ACCEPT_MEDIA = "image/*,video/mp4,video/3gpp";
+
+/** `accept` de la vía de documentos: los cinco MIME de la política más sus extensiones. */
+const ACCEPT_DOCUMENTO =
+  "application/pdf,application/msword," +
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document," +
+  "application/vnd.ms-excel," +
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet," +
+  ".pdf,.doc,.docx,.xls,.xlsx";
+
+/**
+ * R9: el archivo no se puede enviar por su TIPO. Texto deliberadamente DISTINTO del de R31: uno
+ * dice "esto no se manda por WhatsApp" y el otro "tu foto no se pudo preparar"; confundirlos
+ * haría que el mensajero tirara una foto válida creyendo que el formato no vale.
+ */
+const AVISO_TIPO_NO_PERMITIDO = "Ese tipo de archivo no se puede enviar por WhatsApp.";
+
+/** R31: la conversión a JPEG no se pudo completar (el navegador no supo decodificar la foto). */
+const AVISO_NO_CONVERTIBLE =
+  "No se pudo preparar la foto. Vuelve a tomarla o elige otra imagen.";
+
+/** Aviso previo del tope del vídeo, ANTES de abrir la cámara (D8/R10). */
+const AVISO_LIMITE_VIDEO = "El vídeo no puede pasar de 16 MB.";
+
+const AVISO_ADJUNTO_BLOQUEADO =
+  "Tampoco puedes enviar fotos, vídeos, notas de voz ni documentos hasta que el cliente responda.";
+
+/** Adjunto ya normalizado y validado, esperando en el composer (R4). */
+interface AdjuntoComposer {
+  archivo: File;
+  /** `URL.createObjectURL` de la previsualización; `null` en documento. Se revoca al quitarlo. */
+  previewUrl: string | null;
+  tipo: TipoAdjuntoEnvio;
+}
+
+/** Megabytes enteros del límite, para que el aviso diga CUÁL era (R10). */
+function limiteLegible(bytes: number): string {
+  return `${Math.round(bytes / (1024 * 1024))} MB`;
+}
 
 function Acuses({ estado }: { estado: ChatMensajeVista["estado"] }) {
   if (estado === null) return null;
@@ -144,6 +218,21 @@ export function ChatConversacion({
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+
+  // Feature 316 (design §6.1): estado del adjunto del composer.
+  const [adjunto, setAdjunto] = useState<AdjuntoComposer | null>(null);
+  const [menuAdjuntar, setMenuAdjuntar] = useState(false);
+  const [preparando, setPreparando] = useState(false);
+  const [avisoAdjunto, setAvisoAdjunto] = useState<string | null>(null);
+  const inputCamaraRef = useRef<HTMLInputElement>(null);
+  const inputArchivoRef = useRef<HTMLInputElement>(null);
+  const inputDocumentoRef = useRef<HTMLInputElement>(null);
+  // El object URL vive en una ref ADEMÁS de en el estado: al desmontar hay que revocarlo y el
+  // cleanup no puede leer el estado de un componente que ya se fue.
+  const previewRef = useRef<string | null>(null);
+  // R7: el candado del doble envío es una REF, no el `enviando` del estado. Dos clicks (o click
+  // + Enter) dentro del mismo tick verían el estado viejo y dispararían dos envíos.
+  const enviandoRef = useRef(false);
 
   const ordenId = orden?.id ?? null;
 
@@ -235,6 +324,23 @@ export function ChatConversacion({
     el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_PX)}px`;
   }, [borrador.texto, ordenId]);
 
+  // Feature 316 (R13-R16): la nota de voz. El hook MIDE el dispositivo y entrega el `File` por
+  // callback; ese `File` entra por el MISMO camino de validación que un archivo elegido a mano.
+  const grabador = useGrabadorVoz({
+    onGrabacion: (archivoGrabado) => {
+      void aceptarArchivo(archivoGrabado);
+    },
+  });
+
+  // Un object URL que no se revoca es memoria retenida hasta recargar la pestaña.
+  useEffect(
+    () => () => {
+      if (previewRef.current !== null) URL.revokeObjectURL(previewRef.current);
+      previewRef.current = null;
+    },
+    [],
+  );
+
   if (!orden) {
     return (
       <section
@@ -261,13 +367,141 @@ export function ChatConversacion({
   const chip = ESTADO_CHIP[estadoDe(orden.estatusValue)];
   const puedeEnviar =
     !enviando &&
-    borrador.texto.trim().length > 0 &&
-    (textoLibreHabilitado || borrador.plantillaId !== null);
+    !preparando &&
+    (adjunto !== null ||
+      (borrador.texto.trim().length > 0 &&
+        (textoLibreHabilitado || borrador.plantillaId !== null)));
   // Sin respuesta del cliente el composer no acepta tecleo; con plantilla elegida muestra
   // su texto en solo-lectura (se enviará tal cual, como exige Meta fuera de ventana).
   const composerDeshabilitado =
     enviando || (!textoLibreHabilitado && borrador.plantillaId === null);
   const composerSoloLectura = !textoLibreHabilitado;
+
+  /** Quita el adjunto del composer y revoca su previsualización (R4). */
+  function quitarAdjunto() {
+    if (previewRef.current !== null) URL.revokeObjectURL(previewRef.current);
+    previewRef.current = null;
+    setAdjunto(null);
+  }
+
+  /**
+   * Normalizar → clasificar → validar → dejar listo en el composer (design §2.1).
+   *
+   * EL ORDEN IMPORTA y es lo contrario de lo intuitivo: el límite de 5 MB de la imagen se
+   * comprueba DESPUÉS de convertir (R30/R32), que es por lo que una foto de 8 MB se puede
+   * enviar. `comprimirImagen` NUNCA lanza: si no pudo, devuelve el original, y por eso el MIME
+   * se vuelve a mirar DESPUÉS — es lo que convierte "no pudo" en el aviso propio de R31 en vez
+   * de en un "tipo no permitido" que le mentiría al mensajero.
+   */
+  async function aceptarArchivo(elegido: File) {
+    setMenuAdjuntar(false);
+    setAvisoAdjunto(null);
+    quitarAdjunto();
+
+    const esImagen = elegido.type.startsWith("image/");
+    const fueraDeListaBlanca = clasificarAdjunto(elegido.type) === null;
+    const excedeLimite = elegido.size > LIMITE_BYTES.imagen;
+
+    setPreparando(true);
+    try {
+      const preparada =
+        esImagen && (fueraDeListaBlanca || excedeLimite)
+          ? await comprimirImagen(elegido, {
+              // R29: sin atajo por tamaño. Un HEIC de 200 KB TAMBIÉN hay que convertirlo.
+              saltarSiMenorA: 0,
+              // Aquí la conversión es obligatoria: un JPEG más grande sigue siendo mejor que un
+              // formato que Meta rechaza.
+              devolverOriginalSiMayor: false,
+              maxLadoLargo: MAX_LADO_LARGO_ENVIO,
+              calidad: CALIDAD_JPEG_ENVIO,
+            })
+          : elegido;
+
+      const tipo = clasificarAdjunto(preparada.type);
+      if (tipo === null) {
+        setAvisoAdjunto(esImagen ? AVISO_NO_CONVERTIBLE : AVISO_TIPO_NO_PERMITIDO);
+        return;
+      }
+
+      // R11: la MISMA función pura que corre en el servidor. La de aquí es cortesía de red.
+      const validacion = validarAdjunto(preparada.type, preparada.size);
+      if (!validacion.ok) {
+        setAvisoAdjunto(
+          validacion.motivo === "tipo_no_permitido"
+            ? AVISO_TIPO_NO_PERMITIDO
+            : `Ese archivo supera el límite de ${limiteLegible(validacion.limiteBytes)} para este tipo.`,
+        );
+        return;
+      }
+
+      const previewUrl = tipo === "documento" ? null : URL.createObjectURL(preparada);
+      previewRef.current = previewUrl;
+      setAdjunto({ archivo: preparada, previewUrl, tipo });
+    } finally {
+      setPreparando(false);
+    }
+  }
+
+  /** `onChange` común de las tres vías de `<input type="file">`. */
+  function alElegirArchivo(evento: React.ChangeEvent<HTMLInputElement>) {
+    const elegido = evento.target.files?.[0] ?? null;
+    // Se limpia el input para que elegir DOS VECES el mismo archivo vuelva a disparar `change`.
+    evento.target.value = "";
+    if (elegido !== null) void aceptarArchivo(elegido);
+  }
+
+  /**
+   * Envío CON adjunto: un solo mensaje (R5). Tras `ok` se limpia y se revalida el hilo, que es
+   * lo que hace aparecer la burbuja (R22); tras un fallo el adjunto SE CONSERVA (R19) para que
+   * el mensajero pueda reintentar sin volver a buscarlo.
+   */
+  async function enviarAdjunto(elegido: AdjuntoComposer, texto: string) {
+    const formData = new FormData();
+    formData.set("ordenId", orden!.id);
+    formData.set("archivo", elegido.archivo);
+    // R6: Meta NO admite pie en audio. El texto no se manda... y tampoco se borra.
+    if (elegido.tipo !== "audio" && texto !== "") formData.set("caption", texto);
+
+    const res = await enviarMediaChat(formData);
+    switch (res.status) {
+      case "ok":
+        quitarAdjunto();
+        // R6: tras una nota de voz, lo escrito sigue en el composer.
+        if (elegido.tipo !== "audio") setBorrador(BORRADOR_VACIO);
+        await mutate();
+        break;
+      case "fuera_ventana":
+        toast.error("La ventana de 24 h expiró. Envía una plantilla.");
+        await mutate();
+        break;
+      case "tipo_no_permitido":
+        toast.error(AVISO_TIPO_NO_PERMITIDO);
+        break;
+      case "demasiado_grande":
+        toast.error(
+          `Ese archivo supera el límite de ${limiteLegible(res.limiteBytes)} para este tipo.`,
+        );
+        break;
+      case "caption_largo":
+        toast.error(`El pie no puede pasar de ${res.maximo} caracteres.`);
+        break;
+      case "fallo_subida":
+        toast.error("No se pudo subir el archivo. Inténtalo de nuevo.");
+        break;
+      case "permanente":
+        toast.error(`WhatsApp rechazó el envío: ${res.detalle}`);
+        await mutate();
+        break;
+      case "no_configurado":
+        toast.error("El envío por WhatsApp no está configurado.");
+        break;
+      case "forbidden":
+        toast.error("No puedes responder este chat.");
+        break;
+      default:
+        toast.error("Tu sesión expiró. Vuelve a entrar.");
+    }
+  }
 
   /** Elegir una plantilla rellena el composer y habilita el envío. */
   function elegirPlantilla(plantilla: PlantillaTextoDTO) {
@@ -331,17 +565,29 @@ export function ChatConversacion({
     }
   }
 
+  /**
+   * UN SOLO envío (R5): con adjunto va por `enviarMediaChat` con el texto como pie; sin
+   * adjunto, por el camino de siempre. Nunca los dos.
+   */
   async function enviar() {
+    // R7: el candado es la ref, que ya está puesta cuando llega el segundo click o el Enter.
+    if (enviandoRef.current || preparando) return;
     const texto = borrador.texto.trim();
-    if (texto === "" || enviando) return;
+    const conAdjunto = adjunto;
+    if (conAdjunto === null && texto === "") return;
+
+    enviandoRef.current = true;
     setEnviando(true);
     try {
-      if (textoLibreHabilitado) {
+      if (conAdjunto !== null) {
+        await enviarAdjunto(conAdjunto, texto);
+      } else if (textoLibreHabilitado) {
         await enviarTextoLibre(texto);
       } else if (borrador.plantillaId !== null) {
         await enviarComoPlantilla(borrador.plantillaId);
       }
     } finally {
+      enviandoRef.current = false;
       setEnviando(false);
     }
   }
@@ -459,7 +705,201 @@ export function ChatConversacion({
         }}
         className="flex flex-col gap-1.5 border-t border-border bg-card px-3 py-3 md:px-4"
       >
+        {/* Feature 316 (R4): el adjunto elegido se VE antes de enviarse y se puede quitar. */}
+        {adjunto !== null ? (
+          <div className="flex items-center gap-2 rounded-2xl bg-muted px-3 py-2">
+            {adjunto.tipo === "imagen" && adjunto.previewUrl !== null ? (
+              // eslint-disable-next-line @next/next/no-img-element -- object URL local
+              <img
+                src={adjunto.previewUrl}
+                alt={`Adjunto listo para enviar: ${adjunto.archivo.name}`}
+                className="size-12 shrink-0 rounded-lg object-cover"
+              />
+            ) : null}
+            {adjunto.tipo === "video" && adjunto.previewUrl !== null ? (
+              <video
+                src={adjunto.previewUrl}
+                aria-label={`Vídeo listo para enviar: ${adjunto.archivo.name}`}
+                className="size-12 shrink-0 rounded-lg object-cover"
+              />
+            ) : null}
+            {adjunto.tipo === "audio" && adjunto.previewUrl !== null ? (
+              // R13: se puede ESCUCHAR la nota antes de mandarla.
+              <audio
+                controls
+                src={adjunto.previewUrl}
+                aria-label="Nota de voz grabada"
+                className="h-9 min-w-0 flex-1"
+              />
+            ) : null}
+            {adjunto.tipo === "documento" ? (
+              <FileText className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            ) : null}
+            <span className="min-w-0 flex-1 truncate text-xs text-foreground">
+              {adjunto.archivo.name}
+            </span>
+            <button
+              type="button"
+              onClick={quitarAdjunto}
+              aria-label={adjunto.tipo === "audio" ? "Descartar nota de voz" : "Quitar adjunto"}
+              className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
+
+        {/* Una foto de 12 MP tarda un momento en convertirse en un movil de gama baja; sin este
+            estado pareceria que la app se colgo (design 6.1). */}
+        {preparando ? (
+          <p role="status" className="px-1 text-[11px] text-muted-foreground">
+            Preparando la foto…
+          </p>
+        ) : null}
+
+        {avisoAdjunto !== null ? (
+          <p role="alert" className="px-1 text-[11px] text-danger-strong">
+            {avisoAdjunto}
+          </p>
+        ) : null}
+
+        {/* R13: mientras graba, la unica salida no es esperar: se detiene o se cancela. */}
+        {grabador.estado === "grabando" ? (
+          <div className="flex items-center gap-2 rounded-2xl bg-muted px-3 py-2">
+            <Mic className="size-4 shrink-0 text-danger-strong" aria-hidden="true" />
+            <span className="flex-1 text-xs text-foreground">Grabando nota de voz…</span>
+            <button
+              type="button"
+              onClick={grabador.detener}
+              className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
+            >
+              Detener
+            </button>
+            <button
+              type="button"
+              onClick={grabador.cancelar}
+              className="rounded-full border border-border px-3 py-1 text-xs font-medium"
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : null}
+
+        {/* R16: permiso denegado o microfono inaccesible. Se dice y se vuelve al composer. */}
+        {grabador.estado === "sin_permiso" || grabador.estado === "fallo" ? (
+          <p role="alert" className="px-1 text-[11px] text-danger-strong">
+            {grabador.aviso}
+          </p>
+        ) : null}
+
         <div className="flex items-end gap-2">
+          {/* Feature 316 (R1): las CUATRO vias de adjuntar. */}
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setMenuAdjuntar((abierto) => !abierto)}
+              // R2/D2: EL MISMO booleano del servidor que gobierna el textarea. No se recalcula
+              // aqui: el criterio de la ventana vive en `listarHiloChat`.
+              disabled={!textoLibreHabilitado || enviando}
+              aria-haspopup="menu"
+              aria-expanded={menuAdjuntar}
+              aria-label="Adjuntar"
+              className="flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Paperclip className="size-[18px]" aria-hidden="true" />
+            </button>
+
+            {menuAdjuntar ? (
+              <div
+                role="menu"
+                aria-label="Formas de adjuntar"
+                className="absolute bottom-12 left-0 z-10 w-64 rounded-xl border border-border bg-card p-1 shadow-lg"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => inputCamaraRef.current?.click()}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                >
+                  <Camera className="size-4 shrink-0" aria-hidden="true" />
+                  Cámara (foto o vídeo)
+                </button>
+                {/* D8/R10: el tope se dice ANTES de abrir la camara, no cuando el video ya
+                    esta grabado y no se puede recomprimir. */}
+                <p className="px-3 pb-1 text-[11px] text-muted-foreground">
+                  {AVISO_LIMITE_VIDEO}
+                </p>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => inputArchivoRef.current?.click()}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                >
+                  <ImageUp className="size-4 shrink-0" aria-hidden="true" />
+                  Archivo del dispositivo
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => inputDocumentoRef.current?.click()}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                >
+                  <FileText className="size-4 shrink-0" aria-hidden="true" />
+                  Documento (PDF, Word o Excel)
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  // R15: sin un formato que Meta acepte, esta via NO se ofrece. Las otras tres
+                  // siguen; no se manda como documento algo que el cliente no podra escuchar.
+                  disabled={!grabador.soportado}
+                  onClick={() => {
+                    setMenuAdjuntar(false);
+                    grabador.iniciar();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Mic className="size-4 shrink-0" aria-hidden="true" />
+                  Nota de voz
+                </button>
+                {!grabador.soportado ? (
+                  <p className="px-3 pb-1 text-[11px] text-muted-foreground">
+                    {grabador.aviso}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <input
+              ref={inputCamaraRef}
+              type="file"
+              accept={ACCEPT_MEDIA}
+              capture="environment"
+              onChange={alElegirArchivo}
+              aria-label="Tomar foto o vídeo con la cámara"
+              className="hidden"
+            />
+            <input
+              ref={inputArchivoRef}
+              type="file"
+              accept={ACCEPT_MEDIA}
+              onChange={alElegirArchivo}
+              aria-label="Elegir un archivo del dispositivo"
+              className="hidden"
+            />
+            <input
+              ref={inputDocumentoRef}
+              type="file"
+              accept={ACCEPT_DOCUMENTO}
+              onChange={alElegirArchivo}
+              aria-label="Elegir un documento"
+              className="hidden"
+            />
+          </div>
+
           <textarea
             ref={composerRef}
             value={borrador.texto}
@@ -474,13 +914,17 @@ export function ChatConversacion({
               }
             }}
             rows={1}
-            maxLength={4096}
+            // R12: con adjunto el texto viaja como PIE, y el pie de Meta es mucho mas corto que
+            // un mensaje de texto. Se impide escribir de mas en vez de rechazarlo al enviar.
+            maxLength={adjunto !== null ? MAX_CAPTION : MAX_TEXTO_LIBRE}
             disabled={composerDeshabilitado}
             readOnly={composerSoloLectura && !composerDeshabilitado}
             placeholder={
-              textoLibreHabilitado
-                ? "Escribe un mensaje…"
-                : "Elige una plantilla para iniciar la conversación"
+              adjunto !== null && adjunto.tipo !== "audio"
+                ? "Añade un pie de foto…"
+                : textoLibreHabilitado
+                  ? "Escribe un mensaje…"
+                  : "Elige una plantilla para iniciar la conversación"
             }
             aria-label="Mensaje para el destinatario"
             className="min-h-10 flex-1 resize-none overflow-y-auto rounded-2xl bg-muted px-4 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -505,6 +949,11 @@ export function ChatConversacion({
                 ? "El cliente aún no ha respondido: solo puedes enviar una plantilla aprobada."
                 : "Se enviará la plantilla tal cual; no es editable hasta que el cliente responda."}
           </p>
+        ) : null}
+
+        {/* R2: por que el clip esta bloqueado, en texto visible y ANTES de intentarlo. */}
+        {!textoLibreHabilitado ? (
+          <p className="px-1 text-[11px] text-muted-foreground">{AVISO_ADJUNTO_BLOQUEADO}</p>
         ) : null}
       </form>
 
