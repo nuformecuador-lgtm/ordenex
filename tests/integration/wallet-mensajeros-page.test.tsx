@@ -15,6 +15,7 @@ import {
   waitFor,
   fireEvent,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { RolValue } from "@prisma/client";
 
 import { SWRConfig } from "swr";
@@ -361,7 +362,17 @@ describe("WalletMensajerosPage — pre-fetch del maestro (R18/R21)", () => {
 // que `rutearABodegaSatelite` pasó cinco días en producción—.
 
 describe("WalletMensajerosPage — el panel de premios del ranking (R1)", () => {
-  it("el maestro lo ve, ENCIMA de la tabla de cuentas por pagar", async () => {
+  // 🪦 LÁPIDA — FICHA 298 (2026-08-27). Aquí vivía «el maestro lo ve, ENCIMA de la tabla de
+  // cuentas por pagar», que afirmaba `panel.compareDocumentPosition(tabla) ===
+  // DOCUMENT_POSITION_FOLLOWING`. Se retira porque el orden en el documento DEJÓ DE SER el
+  // contrato: el humano pidió separar los dos bloques en pestañas justamente porque apilarlos
+  // desordenaba la pantalla, y ahora ninguno está «encima» del otro.
+  //
+  // Lo que ese caso protegía de verdad —que el panel de premios ESTÁ en esta página y está
+  // CABLEADO a su Server Action— no se pierde: lo afirma el caso de abajo, que además exige que
+  // cada bloque viva en SU pestaña y que a los dos se llegue.
+  it("cada bloque vive en SU pestaña, y a las dos se llega (298)", async () => {
+    const user = userEvent.setup();
     resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
     const { default: WalletMensajerosPage } = await import(
       "@/app/(app)/wallet/mensajeros/page"
@@ -369,17 +380,45 @@ describe("WalletMensajerosPage — el panel de premios del ranking (R1)", () => 
 
     await renderPagina(await WalletMensajerosPage());
 
-    const panel = screen.getByRole("region", { name: "Premios del ranking" });
-    const tabla = screen.getByTestId("cuentas-por-pagar-table-stub");
-    // «Encima» no es una impresión: el panel PRECEDE a la tabla en el documento.
-    expect(panel.compareDocumentPosition(tabla)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
+    // Las dos pestañas, en su orden: se entra a PAGAR, no a registrar premios.
+    const lista = screen.getByRole("tablist", { name: "Secciones de mensajeros" });
+    expect(
+      within(lista)
+        .getAllByRole("tab")
+        .map((t) => t.textContent),
+    ).toEqual(["Cuentas por pagar", "Premios del ranking"]);
+
+    // El panel VISIBLE al entrar es el de las cuentas: `getByRole("tabpanel")` sólo ve el
+    // activo (el otro va `hidden`), así que este `getByRole` en singular ya es la afirmación de
+    // que no hay dos paneles a la vista.
+    const alEntrar = screen.getByRole("tabpanel");
+    expect(
+      within(alEntrar).getByTestId("cuentas-por-pagar-table-stub"),
+    ).toBeInTheDocument();
+    expect(
+      within(alEntrar).queryByRole("region", { name: "Premios del ranking" }),
+    ).toBeNull();
+
+    // Y el de premios se alcanza con UNA pulsación, con su panel real dentro.
+    await user.click(screen.getByRole("tab", { name: "Premios del ranking" }));
+    const enPremios = await waitFor(() => {
+      const activo = screen.getByRole("tabpanel");
+      if (!within(activo).queryByRole("region", { name: "Premios del ranking" })) {
+        throw new Error("el panel de premios no está visible");
+      }
+      return activo;
+    });
+    // El espejo exacto de la ausencia de arriba: acá NO está la tabla del vecino.
+    expect(
+      within(enPremios).queryByTestId("cuentas-por-pagar-table-stub"),
+    ).toBeNull();
+
     // Y está CABLEADO: pide el podio del día por su Server Action.
     await waitFor(() => expect(premiosMock).toHaveBeenCalledTimes(1));
   });
 
   it("feature 94 (paridad adm↔maestro): el admin también lo ve", async () => {
+    const user = userEvent.setup();
     resolveActorMock.mockResolvedValue({ usuarioId: "a", rol: "admin" });
     const { default: WalletMensajerosPage } = await import(
       "@/app/(app)/wallet/mensajeros/page"
@@ -387,8 +426,10 @@ describe("WalletMensajerosPage — el panel de premios del ranking (R1)", () => 
 
     await renderPagina(await WalletMensajerosPage());
 
+    // 298: el panel vive detrás de su pestaña, así que la paridad se mide llegando a él.
+    await user.click(screen.getByRole("tab", { name: "Premios del ranking" }));
     expect(
-      screen.getByRole("region", { name: "Premios del ranking" }),
+      await screen.findByRole("region", { name: "Premios del ranking" }),
     ).toBeInTheDocument();
   });
 
@@ -422,7 +463,16 @@ describe("WalletMensajerosPage — el panel de premios del ranking (R1)", () => 
 
     await renderPagina(pagina);
 
-    const selector = screen.getByLabelText("Día del podio");
+    // 298: el selector vive en la pestaña de premios. Se abre antes de mirarlo y se busca
+    // DENTRO del panel activo: `screen.getByLabelText` lo encontraría igual dentro de un panel
+    // oculto, y eso no probaría que el maestro puede usarlo.
+    await userEvent.setup().click(
+      screen.getByRole("tab", { name: "Premios del ranking" }),
+    );
+
+    const selector = await waitFor(() =>
+      within(screen.getByRole("tabpanel")).getByLabelText("Día del podio"),
+    );
     expect(selector).toHaveValue("2026-08-26"); // D−1 en CR: el último día que el cron congela
     expect(selector).toHaveAttribute("max", "2026-08-27"); // hoy en CR (R8)
     await waitFor(() =>
