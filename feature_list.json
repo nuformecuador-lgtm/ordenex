@@ -3722,12 +3722,12 @@
       "id": 308,
       "title": "la pantalla de rechazos por plazo muestra a la tienda un monto que no es suyo",
       "description": "Por cada orden rechazada por plazo vencido se le enseña a la tienda un importe sin etiqueta que en realidad es el ingreso de la bodega.",
-      "zone": "fullstack",
+      "zone": "frontend",
       "status": "in_progress",
       "sdd": false,
       "complexity": "baja",
       "branch": null,
-      "status_note": "ENCONTRADA el 2026-08-28 en el barrido de la 306, y es el MISMO defecto que esa ficha corrigio en un comentario, pero EN PIXELES y de cara al usuario. `RechazosSlaModule.tsx:132-138` pinta en negrita y SIN ETIQUETA un monto que sale de `ingreso_bodega_rechazo` -- verificado en `lib/types/rechazo-sla-tienda.ts:12` y `OrdenRepository.ts:4140`. Ese importe es de la BODEGA, no de la tienda, y el texto de vacio ('aparecera aca con su monto', linea 31) refuerza la lectura de que es un cobro suyo. CONTEXTO QUE LO HACE URGENTE: el 27/08 el cobro por rechazo de GAM llevaba dias en 0.00 sin que nadie lo viera, y esta pantalla es una de las que lo mostraria. DECIDIR: etiquetarlo, sustituirlo por lo que SI le cuesta a la tienda (flete de retorno + IVA) o retirarlo."
+      "status_note": "ENCONTRADA el 2026-08-28 en el barrido de la 306, y es el MISMO defecto que esa ficha corrigio en un comentario, pero EN PIXELES y de cara al usuario. `RechazosSlaModule.tsx:132-138` pinta en negrita y SIN ETIQUETA un monto que sale de `ingreso_bodega_rechazo` -- verificado en `lib/types/rechazo-sla-tienda.ts:12` y `OrdenRepository.ts:4140`. Ese importe es de la BODEGA, no de la tienda, y el texto de vacio ('aparecera aca con su monto', linea 31) refuerza la lectura de que es un cobro suyo. CONTEXTO QUE LO HACE URGENTE: el 27/08 el cobro por rechazo de GAM llevaba dias en 0.00 sin que nadie lo viera, y esta pantalla es una de las que lo mostraria. DECIDIR: etiquetarlo, sustituirlo por lo que SI le cuesta a la tienda (flete de retorno + IVA) o retirarlo. || DECIDIDO POR EL HUMANO 2026-08-28: se RETIRA el monto, no se etiqueta ni se sustituye. Con eso la ficha deja de ser fullstack y pasa a FRONTEND: no se toca `RechazoSlaTiendaDTO` ni el backend. Entra tambien el texto de vacio de la linea 31 («aparecera aca con su monto»), que es la otra mitad de lo que hace leer ese dinero como propio."
     },
     {
       "id": 309,
