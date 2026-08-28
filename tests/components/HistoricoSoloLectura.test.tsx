@@ -29,7 +29,7 @@ import {
   renderHistorico,
 } from "./_historico-harness";
 
-// Feature 318 / T6.5 (R24/R25) — el histórico es SOLO LECTURA.
+// Feature 321 / T6.5 (R24/R25) — el histórico es SOLO LECTURA.
 //
 // No es una promesa de un comentario: se afirma por ARIA. Con el hilo cargado y sus mensajes en
 // pantalla, no existe campo de redacción, ni botón de enviar, ni de adjuntar, ni grupo de

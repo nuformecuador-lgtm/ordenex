@@ -7,7 +7,7 @@ import { BUSQUEDA_MIN_CHARS } from "@/lib/types/orden";
 import { ultimosNDiasCalendarioCR } from "@/lib/utils/fecha-cr";
 
 /**
- * Feature 318 — T5.1 (R32, R33, R37): la barra del historico se DECLARA como datos.
+ * Feature 321 — T5.1 (R32, R33, R37): la barra del historico se DECLARA como datos.
  *
  * Todas las aserciones son sobre el valor devuelto por la funcion pura, no sobre el texto
  * del archivo: ninguna se satisface reescribiendo un comentario.

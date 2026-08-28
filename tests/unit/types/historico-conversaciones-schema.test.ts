@@ -9,7 +9,7 @@ import {
 } from "@/lib/types/historico-conversaciones";
 import { BUSQUEDA_MAX_CHARS, BUSQUEDA_MIN_CHARS } from "@/lib/types/orden";
 
-// Feature 318 / T2.1 — el BORDE TIPADO de las dos entradas del histórico (R38) y la propiedad
+// Feature 321 / T2.1 — el BORDE TIPADO de las dos entradas del histórico (R38) y la propiedad
 // ESTRUCTURAL de la carga perezosa (R41).
 //
 // Lo que se mide aqui no es «zod funciona»: es que cada entrada mal formada que el design

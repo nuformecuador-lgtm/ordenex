@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { claveDiaCR, separadorDia } from "@/lib/utils/separador-dia-cr";
 
-// Feature 318 / T2.3 — el separador de dia del hilo (R23, decision humana P6).
+// Feature 321 / T2.3 — el separador de dia del hilo (R23, decision humana P6).
 //
 // Dos cosas se miden aqui, y la segunda es la que de verdad se rompe sola:
 //   1. la FORMA: «hoy», «ayer», «jueves 28 de agosto», sin coma y SIN AÑO nunca;

@@ -7,7 +7,7 @@ import { ROLES_HISTORICO_CONVERSACIONES } from "@/lib/auth/menu-visibility";
 import type { ObtenerCatalogoFiltrosOrdenesResult } from "@/lib/types/filtros-ordenes";
 
 /**
- * Feature 318 (T1.4, R7) — EL GATE DE LA RUTA.
+ * Feature 321 (T1.4, R7) — EL GATE DE LA RUTA.
  *
  * El ítem de menú sólo decide qué se MUESTRA; la defensa real es este `notFound()`. Y no
  * basta con que responda 404: R7 exige que responda **antes de consultar dato alguno**,

@@ -1,4 +1,4 @@
-# Feature 318 — Tareas
+# Feature 321 — Tareas
 
 > Checklist de pasos discretos y verificables. `[P]` = paralelizable con las tareas de su mismo
 > bloque. Cada tarea tiene criterio de **hecho**; ningún criterio es «existe el archivo» ni «el
@@ -22,7 +22,7 @@
       **Qué decide ahora:** ya **no** decide si se migra —la puerta humana descartó A6 (P2)— sino
       (a) el tamaño de página por defecto del listado (`limite`, R13) y (b) si el caso de la fusión
       de teléfonos es frecuente o raro, para dimensionar los datos de prueba de T3.2.
-      **Hecho:** los cuatro números quedan escritos en `progress/impl_318.md` con fecha y método.
+      **Hecho:** los cuatro números quedan escritos en `progress/impl_321.md` con fecha y método.
       **Depende de:** nada. **Bloquea:** nada (T3.1 puede empezar en paralelo).
 
 ---
@@ -244,7 +244,7 @@
       **Hecho (R26):** los tests existentes del scope del mensajero siguen verdes **sin
       modificarse**: `findByOrdenParaMensajero(orden, otroMensajero)` → `null`. Se corre
       `pnpm exec vitest related --run lib/repositories/ChatConversacionRepository.ts
-      lib/repositories/ChatMensajeRepository.ts` y se pega la salida en `progress/impl_318.md`.
+      lib/repositories/ChatMensajeRepository.ts` y se pega la salida en `progress/impl_321.md`.
       **Depende de:** T4.1.
 
 ---
@@ -375,7 +375,7 @@
       obliga a reabrir R45 con el humano en vez de colar la migración de refilón.
       **Depende de:** todo el bloque 3.
 
-- [x] **T7.3 — Mapa `R<n> → test` completo en `progress/impl_318.md`.**
+- [x] **T7.3 — Mapa `R<n> → test` completo en `progress/impl_321.md`.**
       **Hecho:** los **45** requisitos aparecen con su archivo de test y el nombre del `it(...)` que
       los cubre; ninguno vacío. El reviewer rechaza si falta uno (`docs/verification.md`).
 
@@ -384,12 +384,12 @@
       `middleware.ts`, configuración de build ni nombres de dinero, así que el modo rápido **no se
       niega**; si se negara, es señal de que el alcance creció y hay que **parar**, no correr el
       completo por inercia.
-      **Hecho:** salida real pegada en `progress/impl_318.md`, con el baseline de `dev` **medido en
+      **Hecho:** salida real pegada en `progress/impl_321.md`, con el baseline de `dev` **medido en
       la misma sesión** (los rojos ajenos no se cuentan como propios, pero tampoco se esconden).
       **Depende de:** todo.
 
 - [x] **T7.5 — Deuda y límites declarados.**
-      Registrar en `progress/impl_318.md`: (a) la promoción pendiente de las burbujas del chat a
+      Registrar en `progress/impl_321.md`: (a) la promoción pendiente de las burbujas del chat a
       `components/shared/chat/` (A1), con el coste medido (13 tests + `ChatConversacion.tsx`);
       (b) el **límite de atribución tras reasignación** (R45/A10) y qué haría falta para levantarlo
       (columna `mensajero_id` en `chat_mensaje` = migración = decisión humana); (c) que la **purga
@@ -412,4 +412,4 @@ T0  (medición, no bloquea)
 ```
 
 Un commit por tarea lógica completada (`docs/conventions.md`), con mensaje
-`feat(318): …` / `test(318): …`.
+`feat(321): …` / `test(321): …`.

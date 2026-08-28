@@ -314,7 +314,7 @@ export class ChatMensajeRepository
   }
 
   async findMediaParaLectorHistorico(mensajeId: string): Promise<ChatMediaAutorizada | null> {
-    // Feature 318 (design §4, R29/R30/R12) — LA MISMA consulta que `findMediaParaMensajero`
+    // Feature 321 (design §4, R29/R30/R12) — LA MISMA consulta que `findMediaParaMensajero`
     // MENOS la condicion `o.mensajero_asignado_id = $mensajeroId`. El histórico lee los hilos
     // de TODOS los mensajeros (R10/R29), asi que no hay scope de sesion que meter en el WHERE.
     //

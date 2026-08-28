@@ -6,7 +6,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ChatMediaAutorizada } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 import { ROLES_HISTORICO_CONVERSACIONES } from "@/lib/auth/menu-visibility";
 
-// Feature 318 / T4.2 (R29, R30, R26) — la bifurcacion por rol del proxy de media.
+// Feature 321 / T4.2 (R29, R30, R26) — la bifurcacion por rol del proxy de media.
 //
 // Lo que fija este archivo, en una frase: el lector del histórico (`maestro`/`admin`) obtiene el
 // binario de un adjunto que NO es de su orden, y NADIE MAS gana nada — un `adminSatelite`, un
@@ -74,7 +74,7 @@ function repoDoble() {
   };
 }
 
-describe("318 / R29 — el lector del histórico ve el adjunto de una orden ajena", () => {
+describe("321 / R29 — el lector del histórico ve el adjunto de una orden ajena", () => {
   it.each([...ROLES_HISTORICO_CONVERSACIONES])(
     "actor %s que NO es el mensajero de la orden recibe 200 con su Content-Type",
     async (rol) => {
@@ -121,7 +121,7 @@ describe("318 / R29 — el lector del histórico ve el adjunto de una orden ajen
   });
 });
 
-describe("318 / R30 — el ensanche no abre la puerta a nadie mas", () => {
+describe("321 / R30 — el ensanche no abre la puerta a nadie mas", () => {
   it.each([
     ["adminSatelite" as const, "u-satelite"],
     ["adminTienda" as const, "u-tienda"],
@@ -157,7 +157,7 @@ describe("318 / R30 — el ensanche no abre la puerta a nadie mas", () => {
   });
 });
 
-describe("318 / R26 — la autorizacion del mensajero queda intacta", () => {
+describe("321 / R26 — la autorizacion del mensajero queda intacta", () => {
   it("el mensajero ASIGNADO sigue recibiendo 200 por su via de siempre", async () => {
     const descargador = descargadorOk();
     const mensajeRepo = repoDoble();

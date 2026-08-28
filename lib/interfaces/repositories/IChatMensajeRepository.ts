@@ -182,7 +182,7 @@ export interface IChatMensajeRepository {
 }
 
 /**
- * Feature 318 (design §4, R29/R30/R12) — la SEGUNDA puerta al binario de un adjunto, la del
+ * Feature 321 (design §4, R29/R30/R12) — la SEGUNDA puerta al binario de un adjunto, la del
  * lector del histórico.
  *
  * POR QUE UN CONTRATO APARTE Y NO UN METODO MAS EN `IChatMensajeRepository`: son dos

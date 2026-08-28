@@ -1,4 +1,4 @@
-# Feature 318 — Diseño técnico
+# Feature 321 — Diseño técnico
 
 > Cubre `R1..R45` de `requirements.md`. Todo lo que se afirma aquí sobre el código existente está
 > **confirmado en el archivo real** (regla 7 de `CLAUDE.md`: el grafo dice dónde mirar, el archivo

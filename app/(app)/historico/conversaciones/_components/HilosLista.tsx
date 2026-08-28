@@ -15,7 +15,7 @@ import { separadorDia } from "@/lib/utils/separador-dia-cr";
 
 import { guiaVisible } from "@/app/(app)/mis-asignaciones/_components/chat/chat-format";
 
-// Feature 318 / T6.1 (design §5.1 y §5.4, R11/R13/R41/R43/R44) — el LISTADO de hilos.
+// Feature 321 / T6.1 (design §5.1 y §5.4, R11/R13/R41/R43/R44) — el LISTADO de hilos.
 //
 // La unidad es el PAR `(orden, mensajero)` (R42), no una fila de `chat_conversacion`: por eso
 // la clave de cada fila son los dos ids juntos y por eso dos mensajeros de la misma orden son

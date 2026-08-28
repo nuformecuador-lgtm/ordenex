@@ -10,7 +10,7 @@ import {
 import { ChatMensajeRepository } from "@/lib/repositories/ChatMensajeRepository";
 import type { ChatMediaAutorizada } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 
-// Feature 318 / T4.1 (R29, R12) — `findMediaParaLectorHistorico` contra Postgres REAL.
+// Feature 321 / T4.1 (R29, R12) — `findMediaParaLectorHistorico` contra Postgres REAL.
 //
 // POR QUE CONTRA POSTGRES Y NO CON UN DOBLE, igual que su gemelo `chat-media-autorizada`: este
 // metodo es SQL crudo (`$queryRaw`), y el fallo que ese archivo documenta era del MOTOR, no de
@@ -44,7 +44,7 @@ interface Medicion {
   mediaIdSembrado: string;
 }
 
-describeSiHayBase("318 / R29-R12 — findMediaParaLectorHistorico contra Postgres real", () => {
+describeSiHayBase("321 / R29-R12 — findMediaParaLectorHistorico contra Postgres real", () => {
   let prisma: PrismaClient;
   let m: Medicion;
 
@@ -65,9 +65,9 @@ describeSiHayBase("318 / R29-R12 — findMediaParaLectorHistorico contra Postgre
 
     const repo = new ChatMensajeRepository(tx as unknown as PrismaClient);
 
-    const tienda = await crearUsuario(tx, "Tienda del test 318");
-    const mensajeroDuenio = await crearUsuario(tx, "Mensajero duenio 318");
-    const otroMensajero = await crearUsuario(tx, "Mensajero ajeno 318");
+    const tienda = await crearUsuario(tx, "Tienda del test 321");
+    const mensajeroDuenio = await crearUsuario(tx, "Mensajero duenio 321");
+    const otroMensajero = await crearUsuario(tx, "Mensajero ajeno 321");
 
     // La orden es del PRIMER mensajero. El lector del histórico no es ninguno de los dos.
     const ordenAjenaId = await crearOrden(tx, tienda, mensajeroDuenio, null);
@@ -142,10 +142,10 @@ describeSiHayBase("318 / R29-R12 — findMediaParaLectorHistorico contra Postgre
     const { id } = await tx.usuario.create({
       data: {
         nombre: `${nombre} ${sufijo}`,
-        email: `t318-${sufijo}@example.test`,
+        email: `t321-${sufijo}@example.test`,
         telefono: "00000000",
         passwordHash: "x",
-        cedula: `t318${sufijo}`,
+        cedula: `t321${sufijo}`,
         tipoIdentificacionId: tipo.id,
         rolId: rol.id,
       },
@@ -174,7 +174,7 @@ describeSiHayBase("318 / R29-R12 — findMediaParaLectorHistorico contra Postgre
     const sufijo = randomUUID().slice(0, 12);
     const { id } = await tx.orden.create({
       data: {
-        numRemision: `t318-${sufijo}`,
+        numRemision: `t321-${sufijo}`,
         estatusId: estatus.id,
         destinatario: "Destinatario de prueba",
         telefonoDest: "00000000",

@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
 
-// Feature 318 — GUARDIA: SIN MIGRACION NI CAMBIO DE ESQUEMA (T7.2, cubre R27 y el limite R45).
+// Feature 321 — GUARDIA: SIN MIGRACION NI CAMBIO DE ESQUEMA (T7.2, cubre R27 y el limite R45).
 //
 // El histórico de conversaciones resuelve la agrupacion por `(orden, mensajero)` y el orden del
 // listado EN LA CONSULTA, no en el esquema: la puerta humana descarto materializar
@@ -45,7 +45,7 @@ function modeloDelEsquema(nombre: string): string {
 
 const SCHEMA_MODELO_CHAT_MENSAJE = modeloDelEsquema("ChatMensaje");
 
-describe("318 / R27 — la feature no añade ninguna migracion", () => {
+describe("321 / R27 — la feature no añade ninguna migracion", () => {
   it("CONTROL DE NO-VACUIDAD: el censo de migraciones no esta vacio", () => {
     // Sin esto, un `readdirSync` que devolviera [] por una ruta mal resuelta dejaria la guardia
     // verde en falso: el filtro de abajo tambien daria [].
@@ -54,7 +54,7 @@ describe("318 / R27 — la feature no añade ninguna migracion", () => {
 
   it("ninguna carpeta de `db/migrations/` corresponde al histórico de conversaciones", () => {
     const sospechosas = MIGRACIONES.filter((dir) => /historic|conversacion_histor/i.test(dir));
-    expect(sospechosas, "la feature 318 añadio una migracion").toEqual([]);
+    expect(sospechosas, "la feature 321 añadio una migracion").toEqual([]);
   });
 
   it("CONTRAPRUEBA: el filtro SI cazaria una migracion de esta feature", () => {
@@ -70,7 +70,7 @@ describe("318 / R27 — la feature no añade ninguna migracion", () => {
   });
 });
 
-describe("318 / R27 — el esquema conserva exactamente los objetos que la feature usa", () => {
+describe("321 / R27 — el esquema conserva exactamente los objetos que la feature usa", () => {
   it("el indice `[conversacionId, ocurridoAt]` sigue existiendo: es EL indice del hilo", () => {
     // La paginacion por cursor `(ocurrido_at, id)` del hilo (R19/R42) se apoya en el. Si
     // desapareciera, «sin migracion» seguiria siendo cierto pero la feature quedaria sin plan.
@@ -100,7 +100,7 @@ describe("318 / R27 — el esquema conserva exactamente los objetos que la featu
   });
 });
 
-describe("318 / R45 — el limite conocido de la atribucion sigue siendo real", () => {
+describe("321 / R45 — el limite conocido de la atribucion sigue siendo real", () => {
   it("CONTROL: el recorte del modelo no esta vacio ni trae el esquema entero", () => {
     expect(SCHEMA_MODELO_CHAT_MENSAJE).toContain("@@map(\"chat_mensaje\")");
     expect(SCHEMA_MODELO_CHAT_MENSAJE).not.toContain("model ChatConversacion");

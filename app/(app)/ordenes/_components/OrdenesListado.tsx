@@ -204,6 +204,7 @@ export function OrdenesListado({
   incluirFiltroMensajero = true,
   permitirDescarga = true,
   puedeReportarIncidente = false,
+  puedeCorregirDatos = false,
   puedeEliminar = false,
   fechasDiaReparto = SIN_FECHAS_DIA_REPARTO,
 }: Readonly<{
@@ -272,6 +273,17 @@ export function OrdenesListado({
    * reporte. Es una acción por ORDEN, no por lote: no entra en `accionesDe`.
    */
   puedeReportarIncidente?: boolean;
+  /**
+   * Ficha 312 (E2, design §9.1): ofrece la acción POR FILA "Corregir datos" en el listado. Se
+   * pasa tal cual a `OrdenesModule`, que la monta sólo en las filas cuyo estado admite la
+   * corrección (R22/R24). Es una acción por ORDEN, no por lote: un lote no tiene un
+   * «destinatario» común, así que no entra en `accionesDe`.
+   *
+   * La enciende la página sólo para `maestro`/`admin`; el `adminTienda` corrige desde las cards
+   * de `/novedades` y por eso NO recibe la prop. El servidor revalida rol, pertenencia y estado
+   * en cada petición (R25), así que esto decide qué se OFRECE, nunca qué se permite.
+   */
+  puedeCorregirDatos?: boolean;
   /**
    * Pedido humano (2026-08-27): ofrece ELIMINAR órdenes y RECUPERAR las eliminadas, más el
    * interruptor «Eliminadas» de la barra que es la única forma de listarlas.
@@ -810,11 +822,11 @@ export function OrdenesListado({
     // pero ahora con tres respuestas posibles, no una.
     //   - listado de ELIMINADAS: siempre, la única acción de esa vista es recuperar;
     //   - alguna fila con acción por su estado: como siempre;
-    //   - alguna fila todavía sin gestionar y el rol que puede borrar: "Eliminar" las alcanza.
+    //   - alguna fila con estado eliminable y el rol que puede borrar: "Eliminar" las alcanza.
     // Si no se cumple ninguna, la columna no se monta: casillas que no llevan a ningún botón.
     if (verEliminadas) return items.length > 0;
     if (items.some((row) => accionesDe(row.estatusValue).length > 0)) return true;
-    return puedeEliminar && items.some((row) => row.sinGestion === true);
+    return puedeEliminar && items.some((row) => row.eliminable === true);
   }
 
   /**
@@ -841,7 +853,7 @@ export function OrdenesListado({
     // más que puede ser la única de la fila.
     if (
       accionesDe(value).length === 0 &&
-      !(puedeEliminar && row.sinGestion === true)
+      !(puedeEliminar && row.eliminable === true)
     ) {
       return MOTIVO_SIN_ACCIONES;
     }
@@ -902,13 +914,17 @@ export function OrdenesListado({
     // "Eliminar" va SIEMPRE la ÚLTIMA, y al final de la barra por la misma razón por la que es
     // secundaria: es la acción que no se debe pulsar por inercia.
     //
-    // Pedido humano (2026-08-27): SOLO sobre las órdenes que nadie ha gestionado desde que se
-    // crearon (`sinGestion`, que resuelve el servidor con el MISMO predicado que autoriza el
-    // borrado). Si ninguna de las marcadas lo está, el botón NO APARECE — que es literalmente lo
-    // pedido, "solo visible si no se ha realizado ninguna gestión". Se exige `=== true`: un DTO
-    // sin el campo (rol que no lo recibe, fixture antiguo) no habilita nada.
+    // SOLO sobre las órdenes cuyo ESTADO admite borrarlas (`eliminable`, que resuelve el
+    // servidor con el MISMO predicado que autoriza el borrado). Si ninguna de las marcadas lo
+    // está, el botón NO APARECE. Se exige `=== true`: un DTO sin el campo (rol que no lo recibe,
+    // fixture antiguo) no habilita nada.
+    //
+    // Ficha 319 (2026-08-28): el campo se llamaba `sinGestion` y el criterio era "nadie la ha
+    // gestionado desde que se creó". Se retiró porque generar la guía ya contaba como gestión y
+    // dejaba la ventana VACÍA (0 eliminables de 429 vivas en producción). Aquí no se decide
+    // nada: la regla vive en `lib/types/order-status-eliminables.ts` y esta pantalla solo la lee.
     const elegiblesEliminar = puedeEliminar
-      ? seleccionadas.filter((o) => o.sinGestion === true)
+      ? seleccionadas.filter((o) => o.eliminable === true)
       : [];
     if (elegiblesEliminar.length === 0) return porEstado;
     // Con conteo cuando no alcanza a toda la selección, igual que las acciones por estado: sin
@@ -1026,6 +1042,7 @@ export function OrdenesListado({
         resaltarPrioridad={valueUnico === ESTADO_EN_BODEGA}
         permitirDescarga={permitirDescarga}
         puedeReportarIncidente={puedeReportarIncidente}
+        puedeCorregirDatos={puedeCorregirDatos}
       />
 
       {/* Modales de acción por lote (solo acceso total). Montados una vez; `open` por

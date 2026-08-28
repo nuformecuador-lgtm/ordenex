@@ -171,7 +171,7 @@ describe("pwa · los atajos del manifiesto", () => {
       porRol.set(rol, new Set(destinos));
     }
 
-    // Feature 318 — `maestro` 16 -> 17 y `admin` 11 -> 12, por UN destino nuevo y solo uno:
+    // Feature 321 — `maestro` 16 -> 17 y `admin` 11 -> 12, por UN destino nuevo y solo uno:
     // el subitem «Conversaciones» (`/historico/conversaciones`) del item «Histórico», visible
     // exclusivamente para esos dos roles (`ROLES_HISTORICO_CONVERSACIONES`, decision humana del
     // 2026-08-28). Por eso `adminSatelite`, `mensajero` y `adminTienda` NO se mueven — y que

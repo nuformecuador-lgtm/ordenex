@@ -1,4 +1,4 @@
-// Feature 318 (R23, design §5.5) — la etiqueta del SEPARADOR DE DIA del hilo del histórico:
+// Feature 321 (R23, design §5.5) — la etiqueta del SEPARADOR DE DIA del hilo del histórico:
 // «hoy», «ayer» o «jueves 28 de agosto». NUNCA lleva año, ni siquiera para un dia de otro año
 // (decision humana P6).
 //

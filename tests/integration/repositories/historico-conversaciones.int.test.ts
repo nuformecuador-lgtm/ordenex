@@ -21,7 +21,7 @@ import type {
 import type { ChatMensajeVista } from "@/lib/types/chat-whatsapp";
 import { MENSAJES_LIMITE_DEFECTO } from "@/lib/types/historico-conversaciones";
 
-// Feature 318 — bloque 3 del repositorio (T3.1 a T3.5) contra Postgres REAL.
+// Feature 321 — bloque 3 del repositorio (T3.1 a T3.5) contra Postgres REAL.
 //
 // POR QUE CONTRA POSTGRES Y NO CON UN DOBLE. Todo lo que este bloque decide vive EN SQL: un
 // `GROUP BY (orden_id, mensajero_id)` que fusiona dos filas de telefono, un `LATERAL` que calcula
@@ -102,7 +102,7 @@ interface Medicion {
   hiloDeDosMeses: number;
 }
 
-describeSiHayBase("318 / bloque 3 — HistoricoConversacionesRepository contra Postgres real", () => {
+describeSiHayBase("321 / bloque 3 — HistoricoConversacionesRepository contra Postgres real", () => {
   let prisma: PrismaClient;
   let m: Medicion;
 
@@ -126,7 +126,7 @@ describeSiHayBase("318 / bloque 3 — HistoricoConversacionesRepository contra P
     await serializarEscriturasReales(tx);
 
     const repo = new HistoricoConversacionesRepository(tx as unknown as HistoricoPrismaClient);
-    const tienda = await crearUsuario(tx, "Tienda", "318");
+    const tienda = await crearUsuario(tx, "Tienda", "321");
 
     // ---- Escenario BASE: tres mensajeros, tres hilos + un hilo de orden BORRADA -------------
     const m1 = await crearUsuario(tx, "Ana", "Zulúaga");
@@ -550,10 +550,10 @@ describeSiHayBase("318 / bloque 3 — HistoricoConversacionesRepository contra P
       data: {
         nombre,
         primerApellido: apellido,
-        email: `t318-${sufijo}@example.test`,
+        email: `t321-${sufijo}@example.test`,
         telefono: "00000000",
         passwordHash: "x",
-        cedula: `t318${sufijo}`,
+        cedula: `t321${sufijo}`,
         tipoIdentificacionId: tipo.id,
         rolId: rol.id,
       },
@@ -581,7 +581,7 @@ describeSiHayBase("318 / bloque 3 — HistoricoConversacionesRepository contra P
     const sufijo = randomUUID().slice(0, 12);
     const { id } = await tx.orden.create({
       data: {
-        numRemision: `rem-318-${sufijo}`,
+        numRemision: `rem-321-${sufijo}`,
         numGuia: opciones.numGuia ?? null,
         estatusId: estatus.id,
         destinatario: opciones.destinatario ?? "Destinatario de prueba",

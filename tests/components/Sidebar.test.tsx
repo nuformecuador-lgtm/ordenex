@@ -395,7 +395,7 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
     "store",
     // Feature 192 (R53): tablero del día "Monitoreo".
     "gauge",
-    // Feature 318 (R6): histórico de conversaciones.
+    // Feature 321 (R6): histórico de conversaciones.
     "history",
   ] as const satisfies readonly IconKey[];
   // Comprobación de exhaustividad tipada: si `IconKey` gana una clave que no está en
@@ -516,8 +516,8 @@ describe("Feature 129 — ítem de sidebar de Analítica", () => {
   });
 });
 
-// Feature 318 (T1.2 / R6) — el ítem «Histórico» y su icono PROPIO.
-describe("Feature 318 — ítem de sidebar del histórico de conversaciones", () => {
+// Feature 321 (T1.2 / R6) — el ítem «Histórico» y su icono PROPIO.
+describe("Feature 321 — ítem de sidebar del histórico de conversaciones", () => {
   const maestro: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 
   /**

@@ -43,12 +43,22 @@ export interface IOrdenHistorialService {
    */
   contarIntentosEnLote(ordenIds: string[]): Promise<Map<string, number>>;
   /**
-   * Pedido humano (2026-08-27) — de un LOTE de ordenes, cuales YA fueron gestionadas despues de
-   * nacer (al menos una transicion con origen). Es el insumo del predicado de «eliminar orden»,
-   * y por eso vive AQUI y no en el service del borrado: el historial es el dueño de "que le ha
-   * pasado a esta orden", y tanto el listado (para ofrecer el boton) como el service del
-   * borrado (para autorizarlo) tienen que leer LA MISMA respuesta. Dos derivaciones del mismo
-   * hecho es exactamente como la pantalla acaba ofreciendo lo que el servidor rechaza.
+   * De un LOTE de ordenes, cuales YA fueron gestionadas despues de nacer (al menos una
+   * transicion con origen). Nacio el 2026-08-27 como insumo del predicado de «eliminar orden»,
+   * y vive AQUI —y no en el service del borrado— porque el historial es el dueño de "que le ha
+   * pasado a esta orden".
+   *
+   * ⚠️ FICHA 319 (2026-08-28) — SE QUEDA SIN CONSUMIDORES DE PRODUCCION. Sus dos llamadores
+   * (`EliminarOrdenService` y `OrdenService.marcarSinGestion`) eran las dos mitades del criterio
+   * viejo, y el humano lo retiro: eliminar se decide por el ESTADO de la orden y nada mas,
+   * porque contar transiciones descalificaba una orden solo por haberle impreso la etiqueta
+   * (CERO eliminables de 429 vivas medidas en produccion).
+   *
+   * NO SE BORRA en esta ficha, a proposito y avisando: la implementacion y su suite estan
+   * probadas, y "de un lote, cuales ya se movieron" es una pregunta con usos plausibles fuera de
+   * este criterio. Queda aqui como deuda DECLARADA: si al leer esto sigue sin llamadores, el
+   * siguiente que pase por aqui puede retirarla —con su implementacion en
+   * `OrdenHistorialService` y sus tests— sin romper nada.
    *
    * Los ids sin movimiento NO estan en el Set (misma convencion que `contarIntentosEnLote` con
    * su Map); `ordenIds` vacio -> Set vacio sin consultar.

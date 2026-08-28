@@ -146,7 +146,7 @@ function SidebarCollapseToggle() {
 // cruzan el borde RSC (menu-visibility) solo traen la clave string serializable;
 // aqui la resolvemos al render.
 //
-// EXPORTADO desde la feature 318 (T1.2) para que el test de menu pueda comprobar en
+// EXPORTADO desde la feature 321 (T1.2) para que el test de menu pueda comprobar en
 // RUNTIME que toda `iconKey` declarada en SIDEBAR_ITEMS resuelve a un componente. El
 // tipo `Record<IconKey, SidebarIcon>` sigue siendo la garantia FUERTE (una clave nueva
 // sin entrada es error de typecheck); la exportacion solo abre la red de seguridad.
@@ -174,7 +174,7 @@ export const ICON_BY_KEY: Record<IconKey, SidebarIcon> = {
   // `chartColumn` de "Analitica": el cierre analitico del negocio y el pulso del dia en
   // curso son dos pantallas distintas.
   gauge: Gauge,
-  // Feature 318 (R6): historico de conversaciones. Icono PROPIO, distinto del
+  // Feature 321 (R6): historico de conversaciones. Icono PROPIO, distinto del
   // `clipboardCheck` de "Cierres del dia" y del `chartColumn` de "Analitica": leer el
   // chat pasado no es cerrar el dia ni analizar el negocio.
   history: History,

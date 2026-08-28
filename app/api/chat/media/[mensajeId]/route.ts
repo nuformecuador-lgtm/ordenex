@@ -42,7 +42,7 @@ export const runtime = "nodejs";
 const mensajeIdSchema = z.uuid();
 
 /**
- * Feature 318 (design §4) — `ROLES_HISTORICO_CONVERSACIONES` es una tupla de literales y su
+ * Feature 321 (design §4) — `ROLES_HISTORICO_CONVERSACIONES` es una tupla de literales y su
  * `.includes` solo aceptaria esos literales. Se ensancha el tipo del ARRAY (nunca el de
  * `actor.rol`) en este unico punto, igual que hacen el service del histórico y la pagina de la
  * ruta. CERO literales de rol en este archivo: la lista vive en un solo sitio.
@@ -110,7 +110,7 @@ export async function GET(
   //    que solo devuelve fila si la orden del mensaje esta asignada a ESTE mensajero. Sin fila,
   //    403 sin llamar a la Graph API (R23).
   //
-  //    Feature 318 (design §4, R29/R30): el LECTOR DEL HISTORICO (`maestro`/`admin`) lee por una
+  //    Feature 321 (design §4, R29/R30): el LECTOR DEL HISTORICO (`maestro`/`admin`) lee por una
   //    via SEPARADA —la misma consulta sin la condicion del mensajero— porque su pantalla es el
   //    hilo de TODOS los mensajeros. Cualquier otro rol (`adminSatelite`, `adminTienda`, un
   //    mensajero ajeno) cae en la rama del mensajero y, al no ser el asignado, no hay fila: 403

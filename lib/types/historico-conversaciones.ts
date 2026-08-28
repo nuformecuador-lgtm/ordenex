@@ -1,4 +1,4 @@
-// Feature 318 (design §2.2 y §2.3) — DTOs y BORDE TIPADO del historico de conversaciones.
+// Feature 321 (design §2.2 y §2.3) — DTOs y BORDE TIPADO del historico de conversaciones.
 //
 // Es el unico punto donde se declara la forma de las DOS entradas del historico (listado de
 // hilos y pagina de mensajes). El borde valida con zod ANTES de que nadie toque la base (R38):

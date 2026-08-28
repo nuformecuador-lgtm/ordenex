@@ -1,4 +1,4 @@
-// Feature 318 (T2.4, design §1.2, R36) — gemelo EN SQL de `normalizarTerminoBusqueda`
+// Feature 321 (T2.4, design §1.2, R36) — gemelo EN SQL de `normalizarTerminoBusqueda`
 // (`lib/utils/busqueda-orden.ts`).
 //
 // POR QUE EXISTE. El input de busqueda libre del histórico tiene que encontrar un hilo tambien

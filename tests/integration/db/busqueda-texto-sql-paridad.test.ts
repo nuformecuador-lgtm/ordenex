@@ -5,7 +5,7 @@ import { normalizarTerminoBusqueda } from "@/lib/utils/busqueda-orden";
 import { sqlNormalizarTextoBusqueda } from "@/lib/utils/busqueda-texto-sql";
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
 
-// Feature 318 / T2.4 — PARIDAD entre `sqlNormalizarTextoBusqueda` (Postgres) y
+// Feature 321 / T2.4 — PARIDAD entre `sqlNormalizarTextoBusqueda` (Postgres) y
 // `normalizarTerminoBusqueda` (Node), R36.
 //
 // POR QUE IMPORTA. El termino que teclea el usuario se normaliza en Node; el nombre del

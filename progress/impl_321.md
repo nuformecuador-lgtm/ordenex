@@ -1,7 +1,7 @@
-# Feature 318 — Histórico de conversaciones · bitácora de implementación
+# Feature 321 — Histórico de conversaciones · bitácora de implementación
 
-> Rama `feature/318-historico-conversaciones`. Spec aprobado por el humano en
-> `specs/318-historico-conversaciones/` (`requirements.md` R1–R45, `design.md`, `tasks.md`).
+> Rama `feature/321-historico-conversaciones`. Spec aprobado por el humano en
+> `specs/321-historico-conversaciones/` (`requirements.md` R1–R45, `design.md`, `tasks.md`).
 > Implementada por el IMPLEMENTER delegando en `backend_dev` y `frontend_dev` (`AGENTS.md`).
 > Fecha: **2026-08-28**.
 
@@ -20,7 +20,7 @@ guardia que mide el diff caduca al mergear — lección ya pagada en este repo).
 ## T0 — Volumen real de las dos tablas (2026-08-28)
 
 Base **local** `postgresql://localhost:5432/ordenex` (PostgreSQL 16.1), cliente `pg`, cuatro
-`SELECT`, ninguna escritura. El SQL exacto está en `progress/impl_318_T0.md`.
+`SELECT`, ninguna escritura. El SQL exacto está en `progress/impl_321_T0.md`.
 
 | # | Qué | Valor |
 | --- | --- | --- |
@@ -84,7 +84,7 @@ del listado se queda en **25** (design §2.2): no hay señal para moverlo.
 - `tests/components/HistoricoMediaExpirada.test.tsx`
 - `tests/components/HistoricoSoloLectura.test.tsx`
 - `tests/components/_historico-harness.tsx`
-- `progress/impl_318_T0.md`
+- `progress/impl_321_T0.md`
 
 ### Modificados
 
@@ -101,7 +101,7 @@ del listado se queda en **25** (design §2.2): no hay señal para moverlo.
   que el ítem nuevo enrojeció (cable trampa funcionando).
 - `tests/unit/guards/busqueda-texto-solo-lectura.test.ts`,
   `tests/unit/guards/pwa-manifiesto-atajos.guardia.test.ts` — ver «Gate».
-- `specs/318-historico-conversaciones/tasks.md` — casillas.
+- `specs/321-historico-conversaciones/tasks.md` — casillas.
 
 ---
 
@@ -361,7 +361,7 @@ no importa `rastreo-publico` y no toca las tres listas del middleware.
 ## Drift de sesión paralela (NO es de esta feature)
 
 Durante la implementación aparecieron en el árbol de trabajo SIETE archivos modificados que **ningún
-subagente de la 318 tocó** y que no tienen nada que ver con el histórico:
+subagente de la 321 tocó** y que no tienen nada que ver con el histórico:
 
 - `app/(app)/configuracion/plantillas/_components/EditarPlantillaForm.tsx`
 - `app/(app)/configuracion/plantillas/_components/PlantillaTiendaField.tsx`
@@ -373,7 +373,7 @@ subagente de la 318 tocó** y que no tienen nada que ver con el histórico:
 
 (la tanda entera va de «plantilla de tienda»: `disabled` en el interruptor y una constante
 `AYUDA_PLANTILLA_TIENDA_FIJA`). Son de **otra sesión**, precedente conocido en este repo. Se dejaron
-intactos. **Que el leader no los meta en el commit de la 318.**
+intactos. **Que el leader no los meta en el commit de la 321.**
 
 También siguen en la raíz, sin rastrear y de antes de empezar, `tmp-diag.mjs`, `tmp-diag2.mjs`,
 `tmp-diag3.mjs` y `tmp-diag4.mjs`.

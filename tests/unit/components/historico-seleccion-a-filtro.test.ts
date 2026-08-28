@@ -7,7 +7,7 @@ import { BUSQUEDA_MIN_CHARS } from "@/lib/types/orden";
 import { ultimosNDiasCalendarioCR } from "@/lib/utils/fecha-cr";
 
 /**
- * Feature 318 — T5.2 (R32/R38): la seleccion del control generico traducida al `filtro` del
+ * Feature 321 — T5.2 (R32/R38): la seleccion del control generico traducida al `filtro` del
  * borde.
  *
  * Cada regla dura de aqui corresponde a un RECHAZO de `filtroHilosHistoricoSchema`, asi que

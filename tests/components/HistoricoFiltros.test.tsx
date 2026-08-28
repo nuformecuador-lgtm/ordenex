@@ -20,7 +20,7 @@ import {
   renderHistorico,
 } from "./_historico-harness";
 
-// Feature 318 / T5.3 (R32/R37) — la BARRA DE FILTROS, montada en la pantalla.
+// Feature 321 / T5.3 (R32/R37) — la BARRA DE FILTROS, montada en la pantalla.
 //
 // Lo que estos casos protegen no es que la barra exista, sino que sea LA MISMA barra del resto
 // del repo: `BuscadorFiltros` como contenedor (campo + selector «Filtros») y `FilterComponent`

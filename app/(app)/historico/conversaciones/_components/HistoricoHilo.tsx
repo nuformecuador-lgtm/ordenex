@@ -26,7 +26,7 @@ import type { UbicacionPunto } from "@/app/(app)/mis-asignaciones/_components/ub
 
 import { etiquetaNumeros } from "./HilosLista";
 
-// Feature 318 / T6.2-T6.5 (design §5.1, §5.2, §5.4, §5.5, §5.6) — el HILO abierto.
+// Feature 321 / T6.2-T6.5 (design §5.1, §5.2, §5.4, §5.5, §5.6) — el HILO abierto.
 //
 // LAS BURBUJAS SON LAS DEL CHAT DEL MENSAJERO, importadas TAL CUAL desde
 // `app/(app)/mis-asignaciones/_components/chat/` (design §5.2). No se escribe aquí ningún

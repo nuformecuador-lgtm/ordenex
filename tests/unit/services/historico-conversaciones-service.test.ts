@@ -16,7 +16,7 @@ import type { HiloHistoricoDTO } from "@/lib/types/historico-conversaciones";
 import { listarMensajesHistoricoSchema } from "@/lib/types/historico-conversaciones";
 import { ROLES_HISTORICO_CONVERSACIONES } from "@/lib/auth/menu-visibility";
 
-// Feature 318 / T3.6 — `HistoricoConversacionesService`: AUTORIZACION, NO-ESCRITURA y hilo
+// Feature 321 / T3.6 — `HistoricoConversacionesService`: AUTORIZACION, NO-ESCRITURA y hilo
 // completo.
 //
 // Los tres asuntos que este archivo fija, y por que cada uno se mide como se mide:
@@ -80,7 +80,7 @@ const TODOS_LOS_ROLES: RolValue[] = [
 const PERMITIDOS: readonly RolValue[] = ROLES_HISTORICO_CONVERSACIONES;
 const DENEGADOS = TODOS_LOS_ROLES.filter((rol) => !PERMITIDOS.includes(rol));
 
-describe("318 / T3.6 — HistoricoConversacionesService", () => {
+describe("321 / T3.6 — HistoricoConversacionesService", () => {
   let repo: ReturnType<typeof crearRepoDoble>;
   let service: HistoricoConversacionesService;
 

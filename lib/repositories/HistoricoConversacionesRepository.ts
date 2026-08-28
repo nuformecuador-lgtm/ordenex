@@ -1,4 +1,4 @@
-// Feature 318 (T3.1-T3.5, design §2.3 y §2.4) — repositorio del HISTORICO de conversaciones.
+// Feature 321 (T3.1-T3.5, design §2.3 y §2.4) — repositorio del HISTORICO de conversaciones.
 //
 // SOLO LECTURA, y eso es una propiedad del TIPO, no una costumbre: el cliente Prisma que este
 // repositorio acepta esta acotado a `$queryRaw` (ver `HistoricoPrismaClient`). No hay forma de

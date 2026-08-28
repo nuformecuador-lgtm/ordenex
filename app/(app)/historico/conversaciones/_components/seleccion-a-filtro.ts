@@ -12,7 +12,7 @@ import {
   CLAVE_ORDEN,
 } from "./historico-filtros-def";
 
-// Feature 318 / T5.2 (design §5.3, R32/R38) — traduccion de la seleccion agregada del
+// Feature 321 / T5.2 (design §5.3, R32/R38) — traduccion de la seleccion agregada del
 // componente GENERICO al `filtro` que valida `filtroHilosHistoricoSchema`.
 //
 // La traduccion es responsabilidad de la SUPERFICIE, no del componente (R58 de la 144):

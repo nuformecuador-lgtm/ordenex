@@ -44,7 +44,7 @@ export type IconKey =
   // una sección de analítica. Mismo criterio que `shieldAlert` (158), `chartColumn` (129) y
   // `store` (167).
   | "gauge"
-  // Feature 318 (R6): histórico de conversaciones. Icono PROPIO y no reciclado: `IconKey`
+  // Feature 321 (R6): histórico de conversaciones. Icono PROPIO y no reciclado: `IconKey`
   // es una unión cerrada y compartir icono con otra sección invitaría a leer el histórico
   // como parte de esa sección. Mismo criterio escrito para `shieldAlert` (158),
   // `chartColumn` (129), `store` (167) y `gauge` (192).
@@ -162,7 +162,7 @@ export const ROLES_ACCESO_ANALITICA: readonly RolAnalitica[] = ROLES_ANALITICA.f
 );
 
 /**
- * Feature 318 (R1) — único punto de verdad de quién ACCEDE al histórico de
+ * Feature 321 (R1) — único punto de verdad de quién ACCEDE al histórico de
  * conversaciones. Lo leen TANTO el `roles` del ítem de menú «Histórico» (abajo) COMO el
  * gate `notFound()` de `app/(app)/historico/conversaciones/page.tsx`, para que las dos
  * capas no puedan divergir (precedente R10 de la 129). Ningún literal de rol se escribe
@@ -435,7 +435,7 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     roles: ["maestro", "admin", "adminSatelite"],
   },
   {
-    // Feature 318 (R2/R3/R9): histórico de conversaciones de WhatsApp — todos los hilos
+    // Feature 321 (R2/R3/R9): histórico de conversaciones de WhatsApp — todos los hilos
     // de todos los mensajeros, en SOLO LECTURA. `roles` apunta a la CONSTANTE, nunca a un
     // literal copiado: este ítem sólo decide qué se MUESTRA y la defensa real es el
     // `notFound()` de la página, que lee esa misma constante.

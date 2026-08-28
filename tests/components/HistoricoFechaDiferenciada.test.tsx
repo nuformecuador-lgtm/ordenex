@@ -17,7 +17,7 @@ import {
   renderHistorico,
 } from "./_historico-harness";
 
-// Feature 318 / T5.4 (R39, con R17) — el filtro de fecha se comporta DIFERENCIADO.
+// Feature 321 / T5.4 (R39, con R17) — el filtro de fecha se comporta DIFERENCIADO.
 //
 // En el LISTADO el rango SELECCIONA qué hilos aparecen; en el HILO abierto NO recorta nada. Sin
 // decírselo al lector, quien viene de filtrar por un día cree que está leyendo un hilo

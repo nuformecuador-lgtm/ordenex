@@ -1,4 +1,4 @@
-// Feature 318 (T2.2, design §2.1 y §2.5) — contrato del servicio del HISTORICO de
+// Feature 321 (T2.2, design §2.1 y §2.5) — contrato del servicio del HISTORICO de
 // conversaciones. Logica de negocio pura: no conoce HTTP, ni Next, ni Prisma; se construye con
 // un doble del repositorio.
 //

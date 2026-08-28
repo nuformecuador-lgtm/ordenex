@@ -47,7 +47,7 @@ const EXTENSIONES = new Set([".ts", ".tsx"]);
  * cualquiera de esos dos, ahora sale ROJO. Los dos siguen pudiendo DOCUMENTARLA cuanto
  * quieran; lo que ya no pueden es usarla en silencio.
  *
- * FEATURE 318 — entra un CUARTO archivo, `lib/repositories/HistoricoConversacionesRepository.ts`,
+ * FEATURE 321 — entra un CUARTO archivo, `lib/repositories/HistoricoConversacionesRepository.ts`,
  * y entra como LECTOR, JAMAS como escritor. El historico de conversaciones busca por texto libre
  * (R36, design §1.2) sobre los mismos campos que la columna ya indexa —destinatario, num_guia,
  * num_remision, telefono, producto—, que es literalmente para lo que existe: reusarla evita un
@@ -57,7 +57,7 @@ const EXTENSIONES = new Set([".ts", ".tsx"]);
  * NO la selecciona (sigue fuera del `select` y del DTO, R28: sigue omitida por `PRISMA_OMIT` y
  * es PII duplicada), NO la escribe y la feature NO trae migracion: el esquema no se toca.
  * Lo que sostiene esa promesa no es este parrafo, es el caso «solo aparece como criterio de
- * LECTURA», que desde la 318 se aplica a TODO repositorio de la lista blanca —no solo a
+ * LECTURA», que desde la 321 se aplica a TODO repositorio de la lista blanca —no solo a
  * `OrdenRepository`—, ademas de los casos globales de `data:`, verbo de escritura y `select:`.
  * Cualquier archivo nuevo en esta lista es una decision que hay que tomar a mano.
  */
@@ -178,7 +178,7 @@ describe("nadie escribe `busquedaTexto` (R27)", () => {
     // vigila: escribirla la rechazaria Postgres entera. Se admiten las dos formas y nada mas;
     // cualquier tercera aparicion sigue poniendo esto rojo.
     //
-    // Feature 318: la comprobacion deja de estar clavada a `OrdenRepository` y recorre TODOS
+    // Feature 321: la comprobacion deja de estar clavada a `OrdenRepository` y recorre TODOS
     // los repositorios de la lista blanca (hoy tambien `HistoricoConversacionesRepository`,
     // que la lee con el mismo `LIKE` parametrizado, R36). Se exige ademas que cada uno de
     // ellos la nombre de verdad: un permiso que ya no se usa es una lista blanca que miente.

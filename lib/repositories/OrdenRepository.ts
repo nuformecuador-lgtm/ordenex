@@ -40,6 +40,7 @@ import {
   type CorreccionDiaAplicada,
   type DeshacerAsignacionItem,
   type CantonRow,
+  type CorregirDatosClienteData,
   type CreateOrdenData,
   type CreateOrdenConGuiaResultRow,
   type CreateOrdenOpciones,
@@ -1438,6 +1439,51 @@ export class OrdenRepository implements IOrdenRepository {
       });
       return row ? toDTO(row) : null;
     });
+  }
+
+  /**
+   * FICHA 312 (design §7) — CORRECCION DE LOS DATOS DEL CLIENTE. Hermano de `update`, y no una
+   * rama suya: `update` puede escribir `estatusId` y `direccion`, y por eso arrastra el append al
+   * historial y el encolado de geocodificacion. Este camino es ESTRUCTURALMENTE INCAPAZ de
+   * dispararlos, porque `CorregirDatosClienteData` no puede expresar esos dos campos (R5/R14).
+   *
+   * UNA SOLA SENTENCIA. La ventana de estado va en el `WHERE` de la sentencia QUE MUTA —no en un
+   * `if` previo— exactamente como `OrdenNotaRepository.marcarBorrada`: asi no queda ninguna
+   * ventana entre comprobar y escribir. Un estado que se mueva entre la lectura del servicio y
+   * esta escritura hace que el `updateMany` no alcance ninguna fila, y eso es el `"conflict"` de
+   * R13 — sin efecto parcial que deshacer, porque no hubo primera escritura.
+   *
+   * `deletedAt: null` en el mismo `WHERE` cubre R12 por el mismo mecanismo: una orden borrada
+   * logicamente no se corrige, y el desenlace es indistinguible del de una orden que se movio.
+   *
+   * SIN `$transaction` y SIN tocar el constructor: no hay dos escrituras que coordinar. Mientras
+   * el diseño llevaba una nota automatica, este metodo necesitaba una transaccion y
+   * `OrdenRepository` un tercer parametro para inyectar el repositorio del hilo. D4 retiro la
+   * nota (2026-08-28) y con ella toda esa superficie. Este archivo NO gana ningun import del hilo
+   * de notas, y eso lo vigila una guardia.
+   */
+  async corregirDatosCliente(
+    ordenId: string,
+    data: CorregirDatosClienteData,
+    estadosBloqueados: readonly string[],
+  ): Promise<"ok" | "conflict"> {
+    const { count } = await this.prisma.orden.updateMany({
+      where: {
+        id: ordenId,
+        deletedAt: null,
+        estatus: { value: { notIn: [...estadosBloqueados] } },
+      },
+      // Se proyecta campo a campo (y no `...data`) para que lo que llega a Prisma sea EXACTAMENTE
+      // el cuarteto de D1 aunque el llamador ensanche el objeto en tiempo de ejecucion. Un
+      // `undefined` es «no lo toques» para Prisma, asi que la columna ni aparece en el `SET`.
+      data: {
+        destinatario: data.destinatario,
+        telefonoDest: data.telefonoDest,
+        producto: data.producto,
+        notas: data.notas,
+      },
+    });
+    return count === 1 ? "ok" : "conflict";
   }
 
   // BORRADO 2026-08-07 (tanda 2): aqui vivia tambien `existsEstatus` (la guarda de catalogo de

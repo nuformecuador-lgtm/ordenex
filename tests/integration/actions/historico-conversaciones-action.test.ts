@@ -7,7 +7,7 @@ import {
 import type { IHistoricoConversacionesService } from "@/lib/interfaces/services/IHistoricoConversacionesService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
-// Feature 318 / T3.7 — el BORDE de las dos Server Actions del histórico.
+// Feature 321 / T3.7 — el BORDE de las dos Server Actions del histórico.
 //
 // QUE SE MIDE AQUI Y NO EN OTRO SITIO. El servicio ya valida por su cuenta (T3.6), pero lo que
 // llega a una Server Action es `unknown`: viene del navegador. Este archivo afirma las dos
@@ -33,7 +33,7 @@ function crearServiceDoble() {
   };
 }
 
-describe("318 / T3.7 — Server Actions del histórico de conversaciones", () => {
+describe("321 / T3.7 — Server Actions del histórico de conversaciones", () => {
   let servicio: ReturnType<typeof crearServiceDoble>;
 
   beforeEach(() => {

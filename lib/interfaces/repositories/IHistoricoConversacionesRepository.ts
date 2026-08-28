@@ -1,4 +1,4 @@
-// Feature 318 (T2.2, design §2.1 y §2.5) — contrato del repositorio del HISTORICO de
+// Feature 321 (T2.2, design §2.1 y §2.5) — contrato del repositorio del HISTORICO de
 // conversaciones. Solo queries (`docs/architecture.md`): la autorizacion por rol vive en
 // `HistoricoConversacionesService`, no aqui. La interfaz NO expone `PrismaClient`.
 //

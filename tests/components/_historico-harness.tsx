@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Feature 318 (bloques 5 y 6) — arnés compartido de los tests de la UI del histórico.
+// Feature 321 (bloques 5 y 6) — arnés compartido de los tests de la UI del histórico.
 //
 // Los cinco archivos de la feature montan la MISMA superficie viva
 // (`HistoricoConversacionesModule`) con las dos Server Actions dobladas. Se centraliza aquí

@@ -20,7 +20,7 @@ import { HilosLista, claveHilo } from "./HilosLista";
 import { HistoricoFiltrosBar } from "./HistoricoFiltrosBar";
 import { HistoricoHilo } from "./HistoricoHilo";
 
-// Feature 318 / bloques 5 y 6 (design §5.1) — el MÓDULO de cliente del histórico.
+// Feature 321 / bloques 5 y 6 (design §5.1) — el MÓDULO de cliente del histórico.
 //
 //   page.tsx (server, gate)
 //     └─ HistoricoConversacionesModule   ← esto

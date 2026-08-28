@@ -15,7 +15,7 @@ import {
   renderHistorico,
 } from "./_historico-harness";
 
-// Feature 318 / T6.4 (R31 + trampa (d)) — la MEDIA dentro del histórico.
+// Feature 321 / T6.4 (R31 + trampa (d)) — la MEDIA dentro del histórico.
 //
 // El binario no viaja en la respuesta: la burbuja se lo pide al proxy propio
 // (`/api/chat/media/<id-interno>`), que es quien autoriza y quien distingue «caducado» (410) de

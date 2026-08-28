@@ -1,7 +1,7 @@
-# Feature 318 — T0: volumen real de las dos tablas del chat
+# Feature 321 — T0: volumen real de las dos tablas del chat
 
 > Medición del **2026-08-28**, hecha por el BACKEND_DEV como parte del bloque 1.
-> Este archivo es la materia prima de T0; el leader lo consolida en `progress/impl_318.md`.
+> Este archivo es la materia prima de T0; el leader lo consolida en `progress/impl_321.md`.
 
 ## Dónde se midió, y qué NO es
 

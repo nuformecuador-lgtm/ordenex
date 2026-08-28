@@ -17,7 +17,7 @@ import type { FiltroHilosHistorico } from "@/lib/types/historico-conversaciones"
 import { CLAVE_BUSQUEDA, construirFiltrosHistorico } from "./historico-filtros-def";
 import { seleccionAFiltroHistorico } from "./seleccion-a-filtro";
 
-// Feature 318 / T5.3 (design §5.3, R32/R33/R34/R35/R37) — la BARRA DE FILTROS del histórico,
+// Feature 321 / T5.3 (design §5.3, R32/R33/R34/R35/R37) — la BARRA DE FILTROS del histórico,
 // montada sobre las MISMAS dos piezas que la barra de `/ordenes` y la del panel maestro:
 // `BuscadorFiltros` como contenedor y `FilterComponent` para los controles que se piden.
 //

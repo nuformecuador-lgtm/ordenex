@@ -1,4 +1,4 @@
-# Feature 318 — Histórico de conversaciones: admin y maestro leen el chat de todos los mensajeros
+# Feature 321 — Histórico de conversaciones: admin y maestro leen el chat de todos los mensajeros
 
 > Requisitos en notación EARS (`docs/specs.md`). Numerados `R1..R45`. Sin detalles de
 > implementación (esos van en `design.md`). Cada requisito está mapeado a un test concreto —ruta de

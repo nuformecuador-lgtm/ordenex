@@ -10,7 +10,7 @@ import type { ObtenerCatalogoFiltrosOrdenesResult } from "@/lib/types/filtros-or
 import { HistoricoConversacionesModule } from "./_components/HistoricoConversacionesModule";
 
 /**
- * Feature 318 (R7/R8) — ruta del HISTÓRICO DE CONVERSACIONES.
+ * Feature 321 (R7/R8) — ruta del HISTÓRICO DE CONVERSACIONES.
  *
  * El rol se resuelve SOLO server-side, con el patrón literal de
  * `app/(app)/analitica/page.tsx` (que a su vez copia el de

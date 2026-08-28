@@ -4,7 +4,7 @@ import { codigoSinComentarios } from "@/tests/fixtures/sin-comentarios";
 import { ROLES_HISTORICO_CONVERSACIONES } from "@/lib/auth/menu-visibility";
 
 /**
- * Feature 318 (T1.5) — GUARDIA: el ítem de menú y el gate de la ruta NO PUEDEN DIVERGIR,
+ * Feature 321 (T1.5) — GUARDIA: el ítem de menú y el gate de la ruta NO PUEDEN DIVERGIR,
  * y la whitelist está CERRADA.
  *
  * ## Qué vigila (R8)

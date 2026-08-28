@@ -1,4 +1,4 @@
-// Feature 318 (T3.6, design §2.5) — servicio del HISTORICO de conversaciones.
+// Feature 321 (T3.6, design §2.5) — servicio del HISTORICO de conversaciones.
 //
 // AQUI VIVE LA AUTORIZACION, y solo aqui (`docs/architecture.md`: el repositorio no valida
 // permisos). Se compara contra `ROLES_HISTORICO_CONVERSACIONES`, la MISMA constante que consume

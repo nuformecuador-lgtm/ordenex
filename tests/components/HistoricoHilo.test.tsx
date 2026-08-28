@@ -20,7 +20,7 @@ import {
   renderHistorico,
 } from "./_historico-harness";
 
-// Feature 318 / T6.2 y T6.3 (R16, R18, R21, R22, R23, R28, R40, R43) — el HILO abierto.
+// Feature 321 / T6.2 y T6.3 (R16, R18, R21, R22, R23, R28, R40, R43) — el HILO abierto.
 //
 // Aquí se afirma lo que la reutilización de las burbujas del chat del mensajero NO daba hecho:
 // el separador de día, la cabecera del hilo fusionado, la cronología entrelazada y —sobre

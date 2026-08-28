@@ -15,7 +15,7 @@ import {
   renderHistorico,
 } from "./_historico-harness";
 
-// Feature 318 / T6.1 (R11/R13/R41/R43/R44) — el LISTADO de hilos.
+// Feature 321 / T6.1 (R11/R13/R41/R43/R44) — el LISTADO de hilos.
 //
 // Cuatro propiedades, y ninguna se satisface «existiendo»:
 //

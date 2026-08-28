@@ -9,10 +9,10 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 💬 2026-08-28 — ficha 318: histórico de conversaciones (admin y maestro leen el chat de todos)
+## 💬 2026-08-28 — ficha 321: histórico de conversaciones (admin y maestro leen el chat de todos)
 
 **Estado: `pending` → spec EN CURSO (`spec_author` lanzado).** Rama
-`feature/318-historico-conversaciones` desde `origin/dev` en `156669af`. Zona `fullstack`,
+`feature/321-historico-conversaciones` desde `origin/dev` en `156669af`, ya mergeada con `dev`. Zona `fullstack`,
 complejidad alta, `sdd: true`. Alta registrada en `feature_list.json`.
 
 **Qué pidió el humano.** Un ítem de sidebar **Histórico** visible solo para `maestro` y `admin`,
@@ -26,7 +26,8 @@ nombre del mensajero. Es **solo lectura**.
 **⚠️ DOS colisiones de número esquivadas en la misma sesión, antes de escribir una línea.** Se
 descartó el **315** (libre en la lista, pero `origin/fix/315-liberar-al-aprobar-cierre` lo reclama
 por nombre) y, al crear la rama desde `origin/dev`, apareció que otra sesión ya había registrado el
-**317**: la rama se renombró `317 → 318` en el acto. Precedente: la 311 se renumeró **tres** veces y
+**317**: la rama se renombró `317 → 318` en el acto — y al aterrizar hubo que renumerar **otra vez**
+(ver abajo). Precedente: la 311 se renumeró **tres** veces y
 la 316 una.
 
 **Bajada de `dev`, hecha antes de empezar.** `origin/dev` está en `156669af` y la rama nace de ahí.
@@ -81,6 +82,31 @@ migración) se revisa con estas respuestas:
   `T0` iba a medir.
 - **P9** — sin límite de antigüedad: **un cron futuro** limpiará el exceso (fuera de alcance), y la
   media de más de 30 días sale como no disponible.
+
+**⚠️ TERCERA COLISIÓN DE NÚMERO, y la lección es nueva: renumerada 318 → 321 AL ATERRIZAR.**
+Mientras esta rama trabajaba, otra sesión registró **su propio id 318** en `origin/dev` (PR #575,
+`chore/cierre-317-y-ficha-318`) y además el **319** y el **320**. Dos fichas con el mismo id habrían
+puesto **rojo el propio `init.sh` de `dev`**, que valida ids duplicados. **Lo cazó el reviewer, no el
+gate.** La lección que no estaba escrita: verificar el id **al abrir** la rama no basta —el número se
+puede perder *mientras* trabajas—, así que hay que **revalidarlo contra `origin/dev` justo antes del
+PR**. El conflicto de `feature_list.json` se resolvió partiendo de la lista de `origin/dev` para no
+perder ninguna alta ajena, reaplicando encima el cierre de la 316 y añadiendo la ficha propia ya
+renumerada. Verificado: **cero ids duplicados** y ninguna alta de `dev` perdida.
+
+**Y el barrido del renumerado volvió a morder, como en la 311.** Un `sed 318 → 321` sobre los
+archivos que "mencionan 318" alcanzó **siete tests de dinero** (`KpiValorAnimado`, `PriceLabel`,
+`moneda-formato`, `columnas-sensibles`, `dinero-sin-centimos`, `factura-contraste`,
+`monto-cotizacion`), donde `318` era un **importe**, no un número de ficha. Se detectó revisando qué
+archivos había tocado el barrido y se restauraron los siete. Mismo error que la 311 documenta: **un
+barrido no distingue entre usar el número y que el número aparezca**. En `current.md` el peligro era
+un **teléfono** (`3183723487`), por eso ahí se editó a mano y no con `sed`.
+
+**REVIEWER: APROBADO**, 45/45 requisitos verificados contra el archivo de test real (254 tests nuevos
+en 23 archivos), gate completo verde en su propia corrida, **cero hallazgos mayores**. El único
+bloqueante era de aterrizaje —la colisión de id—, ya resuelto. Menores anotados: el `EXISTS` del
+filtro de fecha del `design.md` §2.4 está **mal escrito** y el código está bien (corregir el design,
+no el código); falta el test que fije esa desviación; y la contradicción del gate (§7 / T7.4 dicen
+que el rápido basta, pero `init.sh:134` lista `^lib/types/` como ruta sensible y ahí viven los DTOs).
 
 **Estado: `spec_ready`.** Spec v2 tras la puerta: **45 requisitos R1–R45** (la numeración R1–R38 se
 conserva; 6 modificados, 7 nuevos), los 45 mapeados a un test con `assert` de comportamiento, y
