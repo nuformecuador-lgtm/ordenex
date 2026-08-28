@@ -59,7 +59,7 @@ export async function listarPlantillasActivasParaEnvio(
 
 // OJO AL NOMBRE. Aqui vivian `listarPlantillasEnviables` y `enviarPlantillaWhatsapp` (el camino
 // Meta), borradas el 2026-08-07. Las DOS que quedan arriba se llaman casi igual y estan VIVAS:
-// `listarPlantillasParaEnvio` la llama `EnviarPlantillaWhatsappButton.tsx:99` y
+// `listarPlantillasParaEnvio` la llama `components/shared/EnviarPlantillaWhatsappButton.tsx` y
 // `listarPlantillasActivasParaEnvio` la llama `chat/ChatConversacion.tsx:21`.
 // `repo.listarEnviables()` tampoco murio: lo sigue usando `listarPlantillasActivasParaEnvio`
 // para quedarse solo con las plantillas que Meta aceptaria.

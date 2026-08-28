@@ -54,7 +54,7 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
 import { SolicitarAyudaModal } from "./SolicitarAyudaModal";
-import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
+import { EnviarPlantillaWhatsappButton } from "@/components/shared/EnviarPlantillaWhatsappButton";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { CAUSA_INCIDENTE_OPTIONS } from "./causa-incidente-options";
 import {
