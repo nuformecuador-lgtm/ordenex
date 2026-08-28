@@ -29,7 +29,7 @@ describe("registrarWebhook — autorizacion", () => {
   it("sin sesion -> unauthenticated", async () => {
     const r = await registrarWebhook(
       { ownerUsuarioId: "o1", url: "https://a.example.com" },
-      { getActor: async () => null, service: buildService(), ownerEsApiKey: async () => true },
+      { getActor: async () => null, service: buildService(), resolverOwnerWebhook: async (id: string) => id },
     );
     expect(r.status).toBe("unauthenticated");
   });
@@ -38,7 +38,7 @@ describe("registrarWebhook — autorizacion", () => {
     const service = buildService();
     const r = await registrarWebhook(
       { ownerUsuarioId: "o1", url: "https://a.example.com" },
-      { getActor: async () => ADMIN, service, ownerEsApiKey: async () => true },
+      { getActor: async () => ADMIN, service, resolverOwnerWebhook: async (id: string) => id },
     );
     expect(r.status).toBe("forbidden");
     expect(service.registrar).not.toHaveBeenCalled();
@@ -48,7 +48,7 @@ describe("registrarWebhook — autorizacion", () => {
     const service = buildService("ordx_whsec_secreto-visible-una-vez");
     const r = await registrarWebhook(
       { ownerUsuarioId: "o1", url: "https://a.example.com" },
-      { getActor: async () => MAESTRO, service, ownerEsApiKey: async () => true },
+      { getActor: async () => MAESTRO, service, resolverOwnerWebhook: async (id: string) => id },
     );
     expect(r).toEqual({ status: "creada", secret: "ordx_whsec_secreto-visible-una-vez" });
     expect(service.registrar).toHaveBeenCalledWith({
@@ -64,17 +64,17 @@ describe("registrarWebhook — autorizacion", () => {
     };
     const r = await registrarWebhook(
       { ownerUsuarioId: "o1", url: "https://b.example.com" },
-      { getActor: async () => MAESTRO, service, ownerEsApiKey: async () => true },
+      { getActor: async () => MAESTRO, service, resolverOwnerWebhook: async (id: string) => id },
     );
     expect(r).toEqual({ status: "actualizada" });
     expect(JSON.stringify(r)).not.toContain("secret");
   });
 
-  it("D3: si el owner objetivo no es rol apiKey -> owner_invalido, sin registrar", async () => {
+  it("D3/302: si la cuenta no participa del canal integrador -> owner_invalido, sin registrar", async () => {
     const service = buildService();
     const r = await registrarWebhook(
       { ownerUsuarioId: "o1", url: "https://a.example.com" },
-      { getActor: async () => MAESTRO, service, ownerEsApiKey: async () => false },
+      { getActor: async () => MAESTRO, service, resolverOwnerWebhook: async () => null },
     );
     expect(r.status).toBe("owner_invalido");
     expect(service.registrar).not.toHaveBeenCalled();
@@ -83,7 +83,7 @@ describe("registrarWebhook — autorizacion", () => {
   it("input invalido -> validation_error", async () => {
     const r = await registrarWebhook(
       { url: "https://a.example.com" },
-      { getActor: async () => MAESTRO, service: buildService(), ownerEsApiKey: async () => true },
+      { getActor: async () => MAESTRO, service: buildService(), resolverOwnerWebhook: async (id: string) => id },
     );
     expect(r.status).toBe("validation_error");
   });
@@ -104,7 +104,7 @@ describe("desactivarWebhook — autorizacion", () => {
     const service = buildService();
     const r = await desactivarWebhook(
       { ownerUsuarioId: "o1" },
-      { getActor: async () => MAESTRO, service },
+      { getActor: async () => MAESTRO, service, resolverOwnerWebhook: async (id: string) => id },
     );
     expect(r.status).toBe("ok");
     expect(service.desactivar).toHaveBeenCalledWith("o1");
@@ -142,7 +142,7 @@ describe("rotarSecretoWebhook (gate P4) — autorizacion y contrato", () => {
     const service = buildService("ordx_whsec_rotado");
     const r = await rotarSecretoWebhook(
       { ownerUsuarioId: "o1" },
-      { getActor: async () => MAESTRO, service },
+      { getActor: async () => MAESTRO, service, resolverOwnerWebhook: async (id: string) => id },
     );
     expect(r).toEqual({ status: "ok", secret: "ordx_whsec_rotado" });
     expect(service.rotarSecreto).toHaveBeenCalledWith("o1");
@@ -155,7 +155,7 @@ describe("rotarSecretoWebhook (gate P4) — autorizacion y contrato", () => {
     };
     const r = await rotarSecretoWebhook(
       { ownerUsuarioId: "o1" },
-      { getActor: async () => MAESTRO, service },
+      { getActor: async () => MAESTRO, service, resolverOwnerWebhook: async (id: string) => id },
     );
     expect(r.status).toBe("not_found");
   });
@@ -169,7 +169,7 @@ describe("rotarSecretoWebhook (gate P4) — autorizacion y contrato", () => {
     };
     const r = await rotarSecretoWebhook(
       { ownerUsuarioId: "o1" },
-      { getActor: async () => MAESTRO, service },
+      { getActor: async () => MAESTRO, service, resolverOwnerWebhook: async (id: string) => id },
     );
     expect(r.status).toBe("config_error");
   });
@@ -209,7 +209,7 @@ describe("obtenerWebhook (gate D2) — autorizacion y contrato", () => {
     };
     const r = await obtenerWebhook(
       { ownerUsuarioId: "o1" },
-      { getActor: async () => MAESTRO, service },
+      { getActor: async () => MAESTRO, service, resolverOwnerWebhook: async (id: string) => id },
     );
     expect(r).toEqual({ status: "ok", webhook: { url: "https://a.example.com", activa: true } });
     expect(JSON.stringify(r)).not.toContain("secret");
@@ -223,7 +223,7 @@ describe("obtenerWebhook (gate D2) — autorizacion y contrato", () => {
     };
     const r = await obtenerWebhook(
       { ownerUsuarioId: "o1" },
-      { getActor: async () => MAESTRO, service },
+      { getActor: async () => MAESTRO, service, resolverOwnerWebhook: async (id: string) => id },
     );
     expect(r).toEqual({ status: "ok", webhook: null });
   });

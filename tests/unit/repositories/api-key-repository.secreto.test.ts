@@ -39,6 +39,7 @@ const FILA_COMPLETA: Record<string, unknown> = {
   keyHash: KEY_HASH,
   estado: "activa", // estado propio de la key (ciclo de vida)
   usuarioId: "u-dedicado",
+  tiendaDestinoId: "u-nuform", // feature 302
   createdById: "u-maestro",
   createdAt: new Date("2026-07-16T12:00:00Z"),
   usuario: {
@@ -51,6 +52,29 @@ const FILA_COMPLETA: Record<string, unknown> = {
     estado: "activo",
     rol: { id: "rol-apikey", value: "apiKey" },
   },
+  // Feature 302: la tienda destino, con el MISMO cebo (`passwordHash`) que su hermana de
+  // arriba. Es una cuenta REAL de tienda: si alguna operacion pidiera el usuario entero, se
+  // llevaria el hash de la contrasena de una persona, no el de una cuenta sintetica.
+  tiendaDestino: {
+    id: "u-nuform",
+    nombre: "Nuform",
+    email: "nuform@example.com",
+    passwordHash: "$2b$10$y",
+    estado: "activo",
+    rol: { id: "rol-admintienda", value: "adminTienda" },
+  },
+};
+
+/** Feature 302: la fila de `usuario` que sirve `findTiendaDestino`, con su cebo. */
+const USUARIO_COMPLETO: Record<string, unknown> = {
+  id: "u-nuform",
+  nombre: "Nuform",
+  email: "nuform@example.com",
+  passwordHash: "$2b$10$y",
+  cedula: "1-2345-6789",
+  telefono: "88888888",
+  estado: "activo",
+  rol: { id: "rol-admintienda", value: "adminTienda" },
 };
 
 type Select = Record<string, unknown>;
@@ -92,8 +116,15 @@ function makePrisma() {
     usuario: { create: vi.fn(async () => ({ id: "u-dedicado" })) },
     apiKey,
   };
+  // Feature 302: `findTiendaDestino` lee `usuario` (no `api_key`). El mismo fake que proyecta
+  // exactamente lo pedido, para que el guard tambien lo cubra.
+  const capturarUsuario = (args: unknown) => {
+    selects.push((args as { select?: Select } | undefined)?.select);
+    return project(USUARIO_COMPLETO, (args as { select?: Select } | undefined)?.select);
+  };
   const prisma = {
     apiKey,
+    usuario: { findUnique: vi.fn(async (args: unknown) => capturarUsuario(args)) },
     rol: { findUnique: vi.fn(async () => ({ id: "rol-apikey" })) },
     tipoIdentificacion: { findUnique: vi.fn(async () => ({ id: "tipo-cedula" })) },
     $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
@@ -110,6 +141,7 @@ const DATA: CreateApiKeyConUsuarioData = {
   keyPrefix: "ordx_abc1234",
   keyHash: KEY_HASH,
   createdById: "u-maestro",
+  tiendaDestinoId: null, // feature 302: sin tienda destino (comportamiento historico)
 };
 
 /**
@@ -129,6 +161,9 @@ const INVOCACIONES: Record<string, (r: ApiKeyRepository) => Promise<unknown>> = 
   // proyeccion (PUBLIC_SELECT) nunca incluye el hash ni el secreto.
   rotar: (r) => r.rotar("key-1", { keyPrefix: "ordx_nuevo12", keyHash: KEY_HASH }),
   setEstado: (r) => r.setEstado("key-1", "inactiva"),
+  // Feature 302: lee una cuenta de tienda REAL para autorizarla como destino. No toca
+  // `api_key`, pero si su `usuario`: tiene que demostrar que no se lleva el `passwordHash`.
+  findTiendaDestino: (r) => r.findTiendaDestino("u-nuform"),
 };
 
 function metodosDelRepositorio(): string[] {

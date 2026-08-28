@@ -50,6 +50,8 @@ const ITEM: ApiKeyListItemDTO = {
   estado: "activa",
   usuarioId: "u1",
   usuarioEmail: "apikey+integracion-erp@apikey.invalid",
+  tiendaDestinoId: null, // feature 302
+  tiendaDestinoNombre: null,
   createdAt: new Date("2026-01-01T12:00:00Z"),
 };
 
@@ -248,6 +250,8 @@ describe("ApiKeysModule — listado (R14–R19)", () => {
       id: "k9",
       identificador: "pagina-dos",
       usuarioEmail: "apikey+pagina-dos@apikey.invalid",
+      tiendaDestinoId: null, // feature 302
+      tiendaDestinoNombre: null,
     };
     listarApiKeysMock.mockImplementation(
       async ({ page, pageSize }: { page: number; pageSize: number }) => ({

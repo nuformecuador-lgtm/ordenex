@@ -52,6 +52,9 @@ function apiKeyPublico(estado: "activa" | "inactiva" = "activa") {
     keyPrefix: "ordx_abc1234",
     estado,
     usuarioId: "u-dedicado",
+    // Feature 302: key SIN tienda destino -> el dueno es su propia cuenta dedicada.
+    tiendaDestinoId: null,
+    ownerUsuarioId: "u-dedicado",
     createdAt: new Date("2026-07-16T12:00:00Z"),
   };
 }

@@ -12,9 +12,12 @@ interface Row {
   usuarioId: string;
   createdAt: Date;
   usuario: { email: string };
+  // Feature 302: la tienda a cuyo nombre carga la key. `null` = ninguna (caso historico).
+  tiendaDestinoId: string | null;
+  tiendaDestino: { nombre: string } | null;
 }
 
-function row(n: number): Row {
+function row(n: number, tienda: { id: string; nombre: string } | null = null): Row {
   return {
     id: `key-${n}`,
     identificador: `Tienda ${n}`,
@@ -23,6 +26,8 @@ function row(n: number): Row {
     usuarioId: `u-dedicado-${n}`,
     createdAt: new Date(`2026-07-1${n}T12:00:00Z`),
     usuario: { email: `apikey+tienda-${n}@apikey.invalid` },
+    tiendaDestinoId: tienda?.id ?? null,
+    tiendaDestino: tienda ? { nombre: tienda.nombre } : null,
   };
 }
 
@@ -47,7 +52,17 @@ describe("ApiKeyRepository.list — proyeccion (R6)", () => {
     // agrega `keyHash: true` al select, este test cae.
     expect(args.select).not.toHaveProperty("keyHash");
     expect(Object.keys(args.select).sort()).toEqual(
-      ["createdAt", "estado", "id", "identificador", "keyPrefix", "usuario", "usuarioId"].sort(),
+      [
+        "createdAt",
+        "estado",
+        "id",
+        "identificador",
+        "keyPrefix",
+        "tiendaDestino", // feature 302: include del nombre, para la pantalla
+        "tiendaDestinoId", // feature 302
+        "usuario",
+        "usuarioId",
+      ].sort(),
     );
   });
 
@@ -67,12 +82,37 @@ describe("ApiKeyRepository.list — proyeccion (R6)", () => {
     const { items } = await new ApiKeyRepository(prisma).list({ skip: 0, take: 25 });
 
     expect(Object.keys(items[0]).sort()).toEqual(
-      ["createdAt", "estado", "id", "identificador", "keyPrefix", "usuarioEmail", "usuarioId"].sort(),
+      [
+        "createdAt",
+        "estado",
+        "id",
+        "identificador",
+        "keyPrefix",
+        "tiendaDestinoId", // feature 302
+        "tiendaDestinoNombre", // feature 302
+        "usuarioEmail",
+        "usuarioId",
+      ].sort(),
     );
     // [D1]: el email sintetico, no el uuid crudo del include.
     expect(items[0].usuarioEmail).toBe("apikey+tienda-1@apikey.invalid");
     expect(items[0].estado).toBe("activa"); // ciclo de vida: el listado expone el estado
     expect(items[0]).not.toHaveProperty("usuario");
+    expect(items[0]).not.toHaveProperty("tiendaDestino"); // el include se aplana, como `usuario`
+  });
+
+  it("302: sin tienda destino, ambos campos salen en `null` (no ausentes)", async () => {
+    const { prisma } = makePrisma([row(1)]);
+    const { items } = await new ApiKeyRepository(prisma).list({ skip: 0, take: 25 });
+    expect(items[0].tiendaDestinoId).toBeNull();
+    expect(items[0].tiendaDestinoNombre).toBeNull();
+  });
+
+  it("302: con tienda destino, aplana su NOMBRE para que la pantalla no muestre un uuid", async () => {
+    const { prisma } = makePrisma([row(1, { id: "u-nuform", nombre: "Nuform" })]);
+    const { items } = await new ApiKeyRepository(prisma).list({ skip: 0, take: 25 });
+    expect(items[0].tiendaDestinoId).toBe("u-nuform");
+    expect(items[0].tiendaDestinoNombre).toBe("Nuform");
   });
 });
 

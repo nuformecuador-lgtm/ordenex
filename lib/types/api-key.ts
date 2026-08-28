@@ -8,13 +8,25 @@ import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 // Feature 81 (design §3): contratos de I/O de la generacion de API keys.
 // Feature 82 (design §2.3): contratos de I/O del listado.
 
-/** R3: unica entrada obligatoria. `trim` antes de medir la longitud (3..60). */
+/**
+ * R3: el identificador es la unica entrada OBLIGATORIA (`trim` antes de medir, 3..60).
+ *
+ * Feature 302 — `tiendaDestinoId` es la segunda entrada, y es OPCIONAL a proposito: sin ella la
+ * generacion se comporta EXACTAMENTE como hasta hoy (cuenta dedicada duena de sus ordenes), asi
+ * que el camino existente no se rompe. Con ella, las ordenes de la key se registran a nombre de
+ * esa tienda ya registrada. La cadena vacia se normaliza a "no elegida" ANTES de validar el uuid:
+ * un `<select>` sin seleccion manda `""`, y eso es "ninguna", no "un uuid invalido".
+ */
 export const generarApiKeySchema = z.object({
   identificador: z
     .string()
     .trim()
     .min(3, "El identificador debe tener al menos 3 caracteres")
     .max(60, "El identificador no puede exceder 60 caracteres"),
+  tiendaDestinoId: z.preprocess(
+    (v) => (v === "" || v === null ? undefined : v),
+    z.string().uuid("La tienda destino debe ser un uuid valido").optional(),
+  ),
 });
 
 export type GenerarApiKeyInput = z.infer<typeof generarApiKeySchema>;
@@ -30,7 +42,20 @@ export interface ApiKeyPublico {
   keyPrefix: string;
   /** Ciclo de vida propio de la key: `activa` autoriza la carga, `inactiva` la revoca. */
   estado: EstadoApiKey;
+  /** Cuenta dedicada 1:1 (rol `apiKey`): QUIEN ENTRA con la credencial. */
   usuarioId: string;
+  /** Feature 302: tienda real a cuyo nombre carga la key, o `null` (comportamiento historico). */
+  tiendaDestinoId: string | null;
+  /**
+   * Feature 302 — QUIEN ES EL DUENO de las ordenes de esta key: `tiendaDestinoId ?? usuarioId`,
+   * ya resuelto por `resolverOwnerApiKey` para que nadie tenga que volver a componerlo.
+   *
+   * No es decoracion: la pantalla cuelga el webhook de la key de ESTE id, y el despachador
+   * (`WebhookEstadoService`) busca la suscripcion por `orden.tienda_id`. Colgarlo del
+   * `usuarioId` cuando hay tienda destino daria de alta una suscripcion que no recibiria jamas
+   * un evento, sin error ninguno.
+   */
+  ownerUsuarioId: string;
   createdAt: Date;
 }
 

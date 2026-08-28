@@ -20,6 +20,7 @@ const DATA: CreateApiKeyConUsuarioData = {
   keyPrefix: "ordx_abc1234",
   keyHash: "a".repeat(64),
   createdById: "u-maestro",
+  tiendaDestinoId: null, // feature 302: sin tienda destino (comportamiento historico)
 };
 
 interface MockOpts {
@@ -147,7 +148,15 @@ describe("ApiKeyRepository.createConUsuario — la key (R16/R17/R19/R21)", () =>
     const args = apiKeyCreate.mock.calls[0][0] as { select: Record<string, boolean> };
     expect(args.select).not.toHaveProperty("keyHash");
     expect(Object.keys(args.select).sort()).toEqual(
-      ["createdAt", "estado", "id", "identificador", "keyPrefix", "usuarioId"].sort(),
+      [
+        "createdAt",
+        "estado",
+        "id",
+        "identificador",
+        "keyPrefix",
+        "tiendaDestinoId", // feature 302
+        "usuarioId",
+      ].sort(),
     );
     expect(out).not.toHaveProperty("keyHash");
   });
@@ -166,6 +175,8 @@ describe("ApiKeyRepository.findByKeyHash — lookup por hash sin filtrar el secr
       estado: "activa",
       usuarioId: "u-dedicado",
       usuario: { estado: "activo", rol: { value: "apiKey" } },
+      tiendaDestinoId: null,
+      tiendaDestino: null,
     });
     const out = await repoDe(prisma).findByKeyHash("a".repeat(64));
 
@@ -174,17 +185,49 @@ describe("ApiKeyRepository.findByKeyHash — lookup por hash sin filtrar el secr
     expect(args.where).toEqual({ keyHash: "a".repeat(64) });
     // El select NO incluye keyHash ni ningun secreto; solo lo minimo para autorizar.
     expect(args.select).not.toHaveProperty("keyHash");
-    expect(Object.keys(args.select).sort()).toEqual(["estado", "id", "usuario", "usuarioId"].sort());
+    expect(Object.keys(args.select).sort()).toEqual(
+      // Feature 302: dos claves mas, y ninguna es un secreto — la tienda destino y su estado/rol,
+      // que el service necesita para decidir en la MISMA peticion que autentica.
+      ["estado", "id", "tiendaDestino", "tiendaDestinoId", "usuario", "usuarioId"].sort(),
+    );
     // La proyeccion devuelta tampoco expone keyHash. Incluye el estado PROPIO de la key
     // (apiKeyEstado), insumo de la palanca de revocacion de la feature 88/R7.
     expect(out).toEqual({
       apiKeyId: "key-1",
       usuarioId: "u-dedicado",
+      tiendaDestinoId: null,
+      tiendaDestinoEstado: null,
+      tiendaDestinoRol: null,
       estado: "activo",
       apiKeyEstado: "activa",
       rol: "apiKey",
     });
     expect(out).not.toHaveProperty("keyHash");
+  });
+
+  it("302: cuando la key apunta a una tienda, la proyeccion trae su id, su estado y su rol", async () => {
+    // Sin estos tres campos, `ApiKeyAuthService` no podria comprobar en cada peticion que la
+    // tienda destino sigue siendo una tienda y sigue activa: quedaria una ventana en la que una
+    // tienda dada de baja sigue recibiendo carga por su key.
+    const { prisma } = makePrismaFind({
+      id: "key-1",
+      estado: "activa",
+      usuarioId: "u-dedicado",
+      usuario: { estado: "activo", rol: { value: "apiKey" } },
+      tiendaDestinoId: "u-nuform",
+      tiendaDestino: { estado: "activo", rol: { value: "adminTienda" } },
+    });
+    const out = await repoDe(prisma).findByKeyHash("a".repeat(64));
+    expect(out).toEqual({
+      apiKeyId: "key-1",
+      usuarioId: "u-dedicado",
+      tiendaDestinoId: "u-nuform",
+      tiendaDestinoEstado: "activo",
+      tiendaDestinoRol: "adminTienda",
+      estado: "activo",
+      apiKeyEstado: "activa",
+      rol: "apiKey",
+    });
   });
 
   it("R4: devuelve null cuando ninguna fila coincide con el hash", async () => {
@@ -222,6 +265,7 @@ describe("ApiKeyRepository.rotar / setEstado — ciclo de vida (R2/R3/R4/R6)", (
     keyPrefix: "ordx_nuevo12",
     estado: "activa",
     usuarioId: "u-dedicado",
+    tiendaDestinoId: null, // feature 302: fila SIN tienda destino
     createdAt: new Date("2026-07-16T12:00:00Z"),
   };
 
@@ -249,7 +293,21 @@ describe("ApiKeyRepository.rotar / setEstado — ciclo de vida (R2/R3/R4/R6)", (
     // R6/R19: el retorno nunca proyecta keyHash.
     expect(args.select).not.toHaveProperty("keyHash");
     expect(out).not.toHaveProperty("keyHash");
-    expect(out).toEqual(PUBLIC_ROW);
+    // Feature 302: la forma publica anade `ownerUsuarioId` (el dueno de las ordenes, ya resuelto).
+    // Sin tienda destino es la propia cuenta dedicada: identico al comportamiento historico.
+    expect(out).toEqual({ ...PUBLIC_ROW, ownerUsuarioId: "u-dedicado" });
+  });
+
+  it("302: si la fila trae tienda destino, el ownerUsuarioId publico es LA TIENDA", async () => {
+    const { prisma } = makePrismaUpdate({ ...PUBLIC_ROW, tiendaDestinoId: "u-nuform" });
+    const out = await repoDe(prisma).rotar("key-1", {
+      keyPrefix: "ordx_nuevo12",
+      keyHash: "f".repeat(64),
+    });
+    // Es el id del que cuelga el webhook de la key: si aqui saliera `u-dedicado`, la suscripcion
+    // se colgaria de una cuenta que no recibe ninguna orden y no llegaria un solo evento.
+    expect(out?.ownerUsuarioId).toBe("u-nuform");
+    expect(out?.usuarioId).toBe("u-dedicado"); // la credencial NO cambia de dueno
   });
 
   it("R3: rotar de un id inexistente (P2025) devuelve null", async () => {

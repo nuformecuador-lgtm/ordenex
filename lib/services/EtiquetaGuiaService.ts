@@ -22,8 +22,11 @@ function distinct(values: string[]): string[] {
  * Feature 136 — ¿puede este actor ver la etiqueta de esta orden?
  *
  * El rol `apiKey` (canal de integracion de la carga por API) SOLO ve las ordenes
- * de su propia tienda: `actor.usuarioId` es el usuario dedicado de la key y el
- * `tienda_id` con el que se crean sus ordenes (`BulkOrdenService.cargarViaApi`).
+ * de su propia tienda: `actor.usuarioId` es el `tienda_id` con el que se crean sus
+ * ordenes (`BulkOrdenService.cargarViaApi`). Desde la feature 302 ese id es el DUENO
+ * resuelto por `ApiKeyAuthService` —la tienda real apuntada por la key, o su cuenta
+ * dedicada si no apunta a ninguna—, no siempre la cuenta dedicada. La regla no cambia:
+ * el actor ve las ordenes de UN solo dueno, el suyo.
  * Hasta ahora el aislamiento entre tiendas descansaba unicamente en el borde —los
  * `ordenIds` salen del summary de la propia carga—, asi que un futuro llamador que
  * pasara ids ajenos filtraria datos de otra tienda sin que nada lo impidiera. La

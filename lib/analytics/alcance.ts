@@ -104,14 +104,27 @@ export type ResolucionAlcance =
  * MISMA cerradura.
  *
  * Por que el sujeto sigue acotado —y por que esto no es un agujero multi-tenant:
- *   - la cuenta es DEDICADA: `api_key.usuario_id` es `@unique` (81/88, D6/R21), asi que
- *     el integrador es otro `usuario` con su propio id;
  *   - el recorte se hace por `actor.usuarioId` contra `orden.tienda_id` (FK a `usuario`),
- *     exactamente igual que para un `adminTienda`. Como el id es propio, el integrador y
- *     un `adminTienda` NUNCA son el mismo sujeto: no comparten filas, ni `tiendaId`, ni
- *     entrada de cache;
+ *     exactamente igual que para un `adminTienda`;
  *   - lo que se publica esta acotado ademas por la lista blanca de ids
  *     (`publicacion-api-key.ts`), atada al catalogo por test (267/R17-R19, R34).
+ *
+ * ⚠️ ENMIENDA 2026-08-28 (feature 302) — SE CAE UNA DE LAS TRES RAZONES DE ARRIBA, y hay que
+ * decirlo en vez de dejarla mintiendo. Este parrafo afirmaba: «como el id es propio, el
+ * integrador y un `adminTienda` NUNCA son el mismo sujeto: no comparten filas, ni `tiendaId`, ni
+ * entrada de cache». Desde la 302 SI pueden serlo: una key puede apuntar a una tienda real
+ * (`api_key.tienda_destino_id`) y entonces `ApiKeyAuthService` construye el actor con el
+ * `usuarioId` DE ESA TIENDA. Es deliberado —es toda la ficha: una sola Nuform en ordenes, wallet,
+ * tarifas y analitica—, y lo que hay que entender es que NO abre un agujero entre inquilinos:
+ *   - el recorte sigue siendo de UN solo sujeto: `tipo: "tienda"` con UN `tiendaId`. Una key no
+ *     puede ver dos tiendas, ni elegir cual, ni pasar un `tienda_id` por la query (el borde no lee
+ *     esa clave, 267/R9);
+ *   - compartir entrada de cache con el `adminTienda` de esa misma tienda es CORRECTO: misma
+ *     metrica + mismo alcance + mismo filtro = el mismo numero, lo pida quien lo pida. La clave
+ *     (`claveDeAlcance`) lleva `tienda:<id>` y no el rol, y eso sigue siendo lo que debe llevar;
+ *   - lo que SI cambia, y es la consecuencia asumida de la ficha: una key con tienda destino ve
+ *     los indicadores de TODAS las ordenes de esa tienda, incluidas las que la tienda cargo por
+ *     pantalla. Es la contrapartida de que la tienda sea una sola.
  *
  * Por que NO se creo una quinta variante de `AlcanceDatos` (267/R2): `claveDeAlcance`
  * (`cache-clave.ts:85`) es un `switch` EXHAUSTIVO sin `default`, y su cabecera avisa de
@@ -250,9 +263,11 @@ export function resolverAlcance(
       return denegado("metrica_desconocida");
     }
     if (!esMetricaPublicableApiKey(metricaId)) return denegado("metrica_prohibida");
-    // R1 / 267/R2 — MISMA variante que el `adminTienda`, otro sujeto: el `usuarioId` de la
-    // cuenta dedicada de la key, que es a quien apunta `orden.tienda_id` de sus ordenes.
-    // `usuarioId` ya se comprobo util arriba (R11): no se duplica la guarda.
+    // R1 / 267/R2 — MISMA variante que el `adminTienda`: el `usuarioId` del actor, que es a quien
+    // apunta el `orden.tienda_id` de sus ordenes. Desde la 302 ese id puede ser el de la cuenta
+    // dedicada de la key O el de la tienda real a cuyo nombre carga (lo decide
+    // `ApiKeyAuthService`, fuera de `lib/analytics/`); aqui la regla no cambia: se recorta a ese
+    // unico sujeto. `usuarioId` ya se comprobo util arriba (R11): no se duplica la guarda.
     return concedido({ tipo: "tienda", tiendaId: usuarioId });
   }
 

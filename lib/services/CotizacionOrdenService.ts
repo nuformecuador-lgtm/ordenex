@@ -194,6 +194,9 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
 
     // R4: el dueño de la cotizacion sale SIEMPRE del actor de la key; ningun identificador
     // del cuerpo o de la query participa.
+    // Feature 302: `actor.usuarioId` es el DUEÑO resuelto por `ApiKeyAuthService` — la tienda
+    // real si la key apunta a una. Es lo que hace que la cotizacion salga con LA tarifa de esa
+    // tienda y no con la de una cuenta recien creada que no tiene ninguna.
     const tiendaId = actor.usuarioId;
 
     // Feature 274/R32 (design §4.4) — EL ORDEN SE INVIRTIO. Hasta la 273 la tarifa se resolvia

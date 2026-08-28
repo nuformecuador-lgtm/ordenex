@@ -293,7 +293,13 @@ export class BulkOrdenService implements IBulkOrdenService {
     // roles: defensa en profundidad sobre la autenticación por key del borde.
     if (actor.rol !== "apiKey") return { status: "forbidden" };
 
-    const tiendaId = actor.usuarioId; // D4: el usuario dedicado de la key es el dueño.
+    // Feature 302 — ENMIENDA AL [D4] DE LA 88. Decia «el usuario dedicado de la key es el dueño»,
+    // y desde la 302 ya no siempre lo es: `ApiKeyAuthService` resuelve el dueño ANTES de llegar
+    // aqui (la tienda real apuntada por la key, o la cuenta dedicada si no apunta a ninguna).
+    // Esta linea no cambia —el dueño es y sigue siendo `actor.usuarioId`— pero lo que ese id
+    // SIGNIFICA si cambio, y ahi esta el punto de la ficha: una tienda ya registrada deja de
+    // duplicarse porque sus ordenes por API nacen con SU `tienda_id`, con su wallet y sus tarifas.
+    const tiendaId = actor.usuarioId;
 
     // FULFILLMENT (2026-08-25) — EL PREDICADO DE ESTA VIA ES LA TARIFA, NO EL FLAG DEL USUARIO.
     //
@@ -470,7 +476,8 @@ export class BulkOrdenService implements IBulkOrdenService {
     }
 
     // R9/R10: persistencia con `num_guia` inmediato (misma tx que la creación). El actor del
-    // historial es el usuario dedicado de la key; origenTipo `carga_api` (D7).
+    // historial es el dueño resuelto de la key (302: la tienda real si la key apunta a una);
+    // origenTipo `carga_api` (D7).
     //
     // Feature 155/R21: la rama `conGuia: false` ESTA VIVA desde el 2026-08-25. La 155 la
     // escribio declarandola inalcanzable —"el dia que un integrador con bodega propia pueda
@@ -478,7 +485,10 @@ export class BulkOrdenService implements IBulkOrdenService {
     // `en_preparacion` y su `numGuia` viaja como `null`, nunca un numero fabricado.
     //
     // Feature 141 (R30/R31/R32/R33): UNA fila de `carga` por peticion, con `usuario_carga` =
-    // usuario dedicado de la key y `total_files` = cantidad de objetos del array recibido
+    // el dueño resuelto de la key (302: la tienda real si la key apunta a una — consecuencia
+    // asumida: el `name` del lote comparte espacio de nombres con los lotes que esa tienda
+    // cargue por pantalla, y un nombre repetido sigue abortando con 409 como manda R24) y
+    // `total_files` = cantidad de objetos del array recibido
     // (`rows.length`, incluyendo duplicadas y filas con error), NUNCA el tamaño de los batches
     // internos. El id lo genera SIEMPRE el servidor dentro de la tx (`cargaId: null`, R15) y
     // se reutiliza entre batches. `name` es el nombre opcional del lote (R20/R21/R22).
