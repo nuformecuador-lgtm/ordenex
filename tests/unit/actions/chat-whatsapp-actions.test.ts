@@ -271,6 +271,7 @@ describe("listarHiloChat (R16/R22)", () => {
       findById: vi.fn(),
       contarNoLeidosPorMensajero: vi.fn(async () => []),
       marcarLeidoHastaUltimoEntrante: vi.fn(async () => {}),
+      migrarTelefono: vi.fn(async () => 0),
     };
   }
 
@@ -286,6 +287,7 @@ describe("listarHiloChat (R16/R22)", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       listarHilo: vi.fn(async () => lista as any),
       ultimoEntranteAt: vi.fn(async () => null),
+      findMediaParaMensajero: vi.fn(async () => null),
     };
   }
 
@@ -472,6 +474,7 @@ function convNoLeidos(
     findById: vi.fn(),
     contarNoLeidosPorMensajero: vi.fn(async () => []),
     marcarLeidoHastaUltimoEntrante: vi.fn(async () => {}),
+    migrarTelefono: vi.fn(async () => 0),
     ...over,
   };
 }
@@ -576,5 +579,232 @@ describe("marcarChatLeido", () => {
     expect(await marcarChatLeido("orden-1", deps)).toEqual({ status: "ok" });
     expect(await marcarChatLeido("orden-1", deps)).toEqual({ status: "ok" });
     expect(repo.marcarLeidoHastaUltimoEntrante).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 311 — E2.T (R19/R20/R21/R35). El contrato que `listarHiloChat` entrega a la UI.
+// ---------------------------------------------------------------------------
+
+describe("Feature 311 · listarHiloChat expone los tipos nuevos (R19/R21)", () => {
+  const AHORA_311 = new Date("2026-08-27T12:00:00.000Z");
+  const RECIENTE = new Date(AHORA_311.getTime() - 60 * 60 * 1000);
+  const MEDIA_ID_DE_META = "MEDIA-ID-DE-META-QUE-NO-DEBE-SALIR";
+
+  /** Repo del hilo con lo minimo que usa `listarHiloChat` (copia local del de arriba). */
+  function conv311(ultimoEntranteAt: Date): IChatConversacionRepository {
+    return {
+      resolverOrdenActivaPorNumero: vi.fn(),
+      upsertParaOrden: vi.fn(),
+      marcarUltimoEntrante: vi.fn(),
+      findByOrdenParaMensajero: vi.fn(async () => ({
+        id: "hilo-1",
+        telefonoE164: "50688887777",
+        ordenId: "orden-1",
+        mensajeroId: "men-1",
+        ultimoEntranteAt,
+      })),
+      findById: vi.fn(),
+      contarNoLeidosPorMensajero: vi.fn(async () => []),
+      marcarLeidoHastaUltimoEntrante: vi.fn(async () => {}),
+      migrarTelefono: vi.fn(async () => 0),
+    };
+  }
+
+  function mensajes311(lista: unknown[]): IChatMensajeRepository {
+    return {
+      insertarEntranteIdempotente: vi.fn(),
+      insertarSaliente: vi.fn(),
+      actualizarEstadoPorWaMessageId: vi.fn(),
+      findByWaMessageId: vi.fn(),
+      marcarFallido: vi.fn(async () => {}),
+      reconciliarSaliente: vi.fn(),
+      findById: vi.fn(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      listarHilo: vi.fn(async () => lista as any),
+      ultimoEntranteAt: vi.fn(async () => null),
+      findMediaParaMensajero: vi.fn(async () => null),
+    };
+  }
+
+  /** Fila del repo con todos los campos del DTO; se sobreescribe lo que cada test necesita. */
+  function fila(over: Record<string, unknown>) {
+    return {
+      id: "m1",
+      conversacionId: "hilo-1",
+      direccion: "entrante",
+      tipo: "texto",
+      cuerpo: null,
+      plantillaId: null,
+      waMessageId: null,
+      estado: null,
+      latitud: null,
+      longitud: null,
+      errorCodigo: null,
+      errorTitulo: null,
+      errorDetalle: null,
+      mediaId: null,
+      mediaMime: null,
+      mediaNombre: null,
+      mediaTamanoBytes: null,
+      reaccionAWaMessageId: null,
+      reaccionEmoji: null,
+      contactos: null,
+      sistemaTelefonoAnterior: null,
+      sistemaTelefonoNuevo: null,
+      ocurridoAt: RECIENTE,
+      createdAt: RECIENTE,
+      ...over,
+    };
+  }
+
+  function listar(filas: unknown[]) {
+    return listarHiloChat("orden-1", {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      conversacionRepo: conv311(RECIENTE),
+      mensajeRepo: mensajes311(filas),
+      now: () => AHORA_311,
+    });
+  }
+
+  it("R19: un hilo con imagen + reaccion devuelve UNA burbuja con `reacciones` no vacio", async () => {
+    const res = await listar([
+      fila({
+        id: "m-img",
+        waMessageId: "wamid.IMG",
+        tipo: "imagen",
+        cuerpo: "mira",
+        mediaId: MEDIA_ID_DE_META,
+        mediaMime: "image/jpeg",
+      }),
+      fila({
+        id: "m-react",
+        waMessageId: "wamid.R",
+        tipo: "reaccion",
+        reaccionAWaMessageId: "wamid.IMG",
+        reaccionEmoji: "❤️",
+        ocurridoAt: new Date(RECIENTE.getTime() + 1000),
+      }),
+    ]);
+
+    expect(res.status).toBe("ok");
+    if (res.status !== "ok") return;
+    // La reaccion NO es una burbuja: el hilo tiene UNA sola (D4/R19).
+    expect(res.mensajes).toHaveLength(1);
+    expect(res.mensajes[0].id).toBe("m-img");
+    expect(res.mensajes[0].reacciones).toEqual([{ emoji: "❤️", conteo: 1 }]);
+    expect(res.mensajes[0].media).toEqual({
+      mime: "image/jpeg",
+      nombre: null,
+      tamanoBytes: null,
+    });
+  });
+
+  it("R21/R35: la vista NO contiene el media id de Meta en NINGUN campo", async () => {
+    const res = await listar([
+      fila({
+        id: "m-img",
+        waMessageId: "wamid.IMG",
+        tipo: "imagen",
+        mediaId: MEDIA_ID_DE_META,
+        mediaMime: "image/jpeg",
+      }),
+    ]);
+
+    expect(res.status).toBe("ok");
+    if (res.status !== "ok") return;
+    // El id de Meta se queda en el servidor: la UI pide el binario por el id INTERNO.
+    expect(JSON.stringify(res)).not.toContain(MEDIA_ID_DE_META);
+    expect(res.mensajes[0].media).not.toBeNull();
+  });
+
+  it("R19: un mensaje de contactos expone los contactos ya tipados", async () => {
+    const contacto = {
+      nombre: "Ana Perez",
+      telefonos: [{ valor: "+506 8888-1111", tipo: "CELL" }],
+      correos: [],
+      direcciones: [],
+      organizacion: null,
+      urls: [],
+    };
+    const res = await listar([
+      fila({ id: "m-c", waMessageId: "wamid.C", tipo: "contactos", contactos: [contacto] }),
+    ]);
+
+    expect(res.status).toBe("ok");
+    if (res.status !== "ok") return;
+    expect(res.mensajes[0].contactos).toEqual([contacto]);
+  });
+
+  it("R19: un mensaje de sistema expone AMBOS numeros del cambio", async () => {
+    const res = await listar([
+      fila({
+        id: "m-sys",
+        waMessageId: "wamid.SYS",
+        tipo: "sistema",
+        sistemaTelefonoAnterior: "50688887777",
+        sistemaTelefonoNuevo: "50699996666",
+      }),
+    ]);
+
+    expect(res.status).toBe("ok");
+    if (res.status !== "ok") return;
+    expect(res.mensajes[0].sistema).toEqual({
+      telefonoAnterior: "50688887777",
+      telefonoNuevo: "50699996666",
+    });
+  });
+
+  it("R20: una reaccion RETIRADA deja el mensaje objetivo SIN reacciones", async () => {
+    const res = await listar([
+      fila({ id: "m-txt", waMessageId: "wamid.T", tipo: "texto", cuerpo: "hola" }),
+      fila({
+        id: "m-r1",
+        waMessageId: "wamid.R1",
+        tipo: "reaccion",
+        reaccionAWaMessageId: "wamid.T",
+        reaccionEmoji: "👍",
+        ocurridoAt: new Date(RECIENTE.getTime() + 1000),
+      }),
+      fila({
+        id: "m-r2",
+        waMessageId: "wamid.R2",
+        tipo: "reaccion",
+        reaccionAWaMessageId: "wamid.T",
+        reaccionEmoji: null, // retirada (R5)
+        ocurridoAt: new Date(RECIENTE.getTime() + 2000),
+      }),
+    ]);
+
+    expect(res.status).toBe("ok");
+    if (res.status !== "ok") return;
+    expect(res.mensajes).toHaveLength(1);
+    expect(res.mensajes[0].reacciones).toEqual([]);
+  });
+
+  it("un mensaje de texto sin nada de la 311 sale con los campos nuevos vacios", async () => {
+    const res = await listar([fila({ id: "m-txt", tipo: "texto", cuerpo: "hola" })]);
+
+    expect(res.status).toBe("ok");
+    if (res.status !== "ok") return;
+    expect(res.mensajes[0]).toMatchObject({
+      media: null,
+      contactos: null,
+      sistema: null,
+      reacciones: [],
+    });
+  });
+
+  it("R16 sigue en pie: una orden ajena responde `forbidden` sin leer nada", async () => {
+    const mensajeRepo = mensajes311([]);
+    const res = await listarHiloChat("orden-1", {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(null), // la orden no es de este mensajero
+      mensajeRepo,
+    });
+
+    expect(res).toEqual({ status: "forbidden" });
+    expect(mensajeRepo.listarHilo).not.toHaveBeenCalled();
   });
 });

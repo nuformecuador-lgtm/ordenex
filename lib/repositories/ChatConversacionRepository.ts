@@ -198,6 +198,55 @@ export class ChatConversacionRepository implements IChatConversacionRepository {
     `);
   }
 
+  async migrarTelefono(anterior: string, nuevo: string): Promise<number> {
+    // Feature 311 (design §3, R16/R18): el cliente cambio de numero -> los hilos que hoy
+    // tienen el numero ANTERIOR pasan a tener el NUEVO. Ambos lados se normalizan aqui por la
+    // misma razon que en `upsertParaOrden`: la clave del hilo es siempre el numero canonico.
+    //
+    // LO QUE ESTA MIGRACION *NO* HACE (limitacion conocida, DECISION DEL HUMANO del 2026-08-27;
+    // ver el bloque «LIMITACION CONOCIDA» bajo R16 en
+    // `specs/311-chat-media-reacciones-contactos/requirements.md`):
+    //
+    //   NO consigue que los mensajes posteriores del cliente caigan en este hilo. Un entrante
+    //   se resuelve a su orden por `orden.telefono_dest` (ver `resolverOrdenActivaPorNumero`,
+    //   arriba en este mismo archivo), NO por el `telefono_e164` del hilo; y R17 prohibe tocar
+    //   ese campo del maestro. Asi que un mensaje enviado desde el numero NUEVO no resuelve
+    //   ninguna orden: se cuenta `sinResolver`, el webhook responde 200 y el mensaje no llega
+    //   a nadie (Meta no reintenta un 200).
+    //
+    // El UPDATE de aqui deja el hilo COHERENTE y sostiene la EVIDENCIA del cambio (la burbuja
+    // de sistema de R18/R32), que es exactamente el alcance que el humano eligio tras evaluar
+    // las tres salidas (tabla de alias, escribir `orden.telefono_dest`, o dejarlo asi).
+    // NO es un descuido: fijado por el test
+    // «LIMITACION CONOCIDA (decision humana 2026-08-27): un entrante desde el numero NUEVO NO
+    // resuelve orden y se cuenta sinResolver» en
+    // `tests/unit/services/chat-whatsapp-service.test.ts`. Si vienes a «arreglarlo» tocando el
+    // maestro, primero reabre R16/R17 con el humano.
+    const antes = normalizarTelefonoWa(anterior);
+    const despues = normalizarTelefonoWa(nuevo);
+    // Sin numero utilizable, o con el mismo numero a ambos lados, no hay nada que migrar. Se
+    // devuelve 0 (desenlace valido) en vez de lanzar: la ingesta del lote no puede romperse.
+    if (antes === "" || despues === "" || antes === despues) return 0;
+
+    // EL `NOT EXISTS` ES EL "ON CONFLICT DO NOTHING" (P5). El unico `(orden_id, telefono_e164)`
+    // hace que migrar una fila cuya orden YA tiene hilo con el numero nuevo viole la
+    // restriccion y aborte la transaccion entera del webhook. Filtrar esas filas ANTES del
+    // UPDATE es lo que deja el evento sin fusionar hilos, sin lanzar y sin romper el 200: el
+    // hilo destino existente se queda como esta y la evidencia se registra igual (R18).
+    //
+    // NO se toca `orden` ni `cliente` (R17): este UPDATE escribe solo en `chat_conversacion`.
+    return await this.prisma.$executeRaw(Prisma.sql`
+      UPDATE chat_conversacion c
+      SET telefono_e164 = ${despues}, updated_at = NOW()
+      WHERE c.telefono_e164 = ${antes}
+        AND NOT EXISTS (
+          SELECT 1 FROM chat_conversacion otro
+          WHERE otro.orden_id = c.orden_id
+            AND otro.telefono_e164 = ${despues}
+        )
+    `);
+  }
+
   async findById(id: string): Promise<ChatConversacionDTO | null> {
     const row = await this.prisma.chatConversacion.findUnique({
       where: { id },

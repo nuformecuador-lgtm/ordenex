@@ -2,16 +2,18 @@
 // dedupe (R8) y la actualizacion de estado por `wa_message_id` (R7) se apoyan en el indice
 // unico PARCIAL de la migracion. Patron `WalletMovimientoRepository` (createMany
 // skipDuplicates = ON CONFLICT DO NOTHING).
-import type { ChatMensajeEstado, PrismaClient } from "@prisma/client";
+import { Prisma, type ChatMensajeEstado, type PrismaClient } from "@prisma/client";
 import type {
+  ChatMediaAutorizada,
   ChatMensajeDTO,
   ChatMensajeErrorInput,
   IChatMensajeRepository,
   InsertarEntranteInput,
   InsertarSalienteInput,
 } from "@/lib/interfaces/repositories/IChatMensajeRepository";
+import { parsearContactosGuardados } from "@/lib/types/chat-contactos";
 
-type ChatMensajePrismaClient = Pick<PrismaClient, "chatMensaje">;
+type ChatMensajePrismaClient = Pick<PrismaClient, "chatMensaje" | "$queryRaw">;
 
 const SELECT = {
   id: true,
@@ -27,6 +29,17 @@ const SELECT = {
   errorCodigo: true,
   errorTitulo: true,
   errorDetalle: true,
+  // Feature 311 (design §4): columnas de los tipos entrantes nuevos. `mediaId` se lee aqui
+  // porque la ruta proxy lo necesita; NO viaja a la UI (el mapeo del DTO a la vista lo omite).
+  mediaId: true,
+  mediaMime: true,
+  mediaNombre: true,
+  mediaTamanoBytes: true,
+  reaccionAWaMessageId: true,
+  reaccionEmoji: true,
+  contactosJson: true,
+  sistemaTelefonoAnterior: true,
+  sistemaTelefonoNuevo: true,
   ocurridoAt: true,
   createdAt: true,
 } as const;
@@ -45,6 +58,17 @@ type Row = {
   errorCodigo: number | null;
   errorTitulo: string | null;
   errorDetalle: string | null;
+  mediaId: string | null;
+  mediaMime: string | null;
+  mediaNombre: string | null;
+  mediaTamanoBytes: number | null;
+  reaccionAWaMessageId: string | null;
+  reaccionEmoji: string | null;
+  // La columna es JSONB: Prisma la entrega como `JsonValue`. NO se propaga asi: `toDTO` la
+  // valida con zod y el DTO expone `ChatContactoNormalizado[] | null` (design §1.3).
+  contactosJson: Prisma.JsonValue | null;
+  sistemaTelefonoAnterior: string | null;
+  sistemaTelefonoNuevo: string | null;
   ocurridoAt: Date;
   createdAt: Date;
 };
@@ -64,6 +88,17 @@ function toDTO(row: Row): ChatMensajeDTO {
     errorCodigo: row.errorCodigo,
     errorTitulo: row.errorTitulo,
     errorDetalle: row.errorDetalle,
+    mediaId: row.mediaId,
+    mediaMime: row.mediaMime,
+    mediaNombre: row.mediaNombre,
+    mediaTamanoBytes: row.mediaTamanoBytes,
+    reaccionAWaMessageId: row.reaccionAWaMessageId,
+    reaccionEmoji: row.reaccionEmoji,
+    // R14: una fila historica o con un JSON corrupto se lee como "sin contactos", no revienta
+    // el listado del hilo entero. `safeParse`, nunca un cast.
+    contactos: parsearContactosGuardados(row.contactosJson),
+    sistemaTelefonoAnterior: row.sistemaTelefonoAnterior,
+    sistemaTelefonoNuevo: row.sistemaTelefonoNuevo,
     ocurridoAt: row.ocurridoAt,
     createdAt: row.createdAt,
   };
@@ -86,6 +121,20 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
           // Feature 121 (R4): coords del entrante de ubicacion; NULL en los demas entrantes.
           latitud: input.latitud ?? null,
           longitud: input.longitud ?? null,
+          // Feature 311 (R1/R4/R5/R7/R9): cada grupo lo puebla SOLO su tipo; el resto queda
+          // NULL. Un entrante de media o una reaccion es un entrante MAS: no toca el dedupe
+          // (`skipDuplicates` sigue arbitrando por `wa_message_id`) ni el sellado (R12).
+          mediaId: input.mediaId ?? null,
+          mediaMime: input.mediaMime ?? null,
+          mediaNombre: input.mediaNombre ?? null,
+          mediaTamanoBytes: input.mediaTamanoBytes ?? null,
+          reaccionAWaMessageId: input.reaccionAWaMessageId ?? null,
+          reaccionEmoji: input.reaccionEmoji ?? null,
+          // `undefined` deja la columna sin tocar; `Prisma.DbNull` escribe NULL SQL (no el
+          // literal JSON `null`, que es lo que haria `Prisma.JsonNull`).
+          contactosJson: input.contactos ?? Prisma.DbNull,
+          sistemaTelefonoAnterior: input.sistemaTelefonoAnterior ?? null,
+          sistemaTelefonoNuevo: input.sistemaTelefonoNuevo ?? null,
           ocurridoAt: input.ocurridoAt,
           // `estado` no aplica a entrantes (queda NULL).
         },
@@ -207,5 +256,41 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
       select: SELECT,
     });
     return rows.map(toDTO);
+  }
+
+  async findMediaParaMensajero(
+    mensajeId: string,
+    mensajeroId: string,
+  ): Promise<ChatMediaAutorizada | null> {
+    // Feature 311 (design §5.2, R23): UNA sola query. El join mensaje -> conversacion -> orden
+    // con `o.mensajero_asignado_id = $mensajeroId` ES la autorizacion: si la orden no esta
+    // asignada a quien pide, no hay fila y el proxy responde 403 sin tocar la Graph API.
+    //
+    // Se comprueba la asignacion contra `orden`, no solo contra `chat_conversacion.mensajero_id`:
+    // el hilo sobrevive a las reasignaciones (`upsertParaOrden` reescribe `mensajero_id`), pero
+    // la fuente de verdad de "de quien es la orden" es `orden.mensajero_asignado_id`, que es la
+    // misma puerta que usa `OrdenEnvioReader.findParaEnvio` en `listarHilo` (R16/R17 de la 109).
+    // `deleted_at IS NULL` por el mismo motivo que alli: una orden borrada no da acceso a nada.
+    const rows = await this.prisma.$queryRaw<
+      { media_id: string | null; media_mime: string | null; media_nombre: string | null; orden_id: string }[]
+    >(Prisma.sql`
+      SELECT m.media_id, m.media_mime, m.media_nombre, c.orden_id
+      FROM chat_mensaje m
+      JOIN chat_conversacion c ON c.id = m.conversacion_id
+      JOIN orden o ON o.id = c.orden_id
+      WHERE m.id = ${mensajeId}::uuid
+        AND o.deleted_at IS NULL
+        AND o.mensajero_asignado_id = ${mensajeroId}
+      LIMIT 1
+    `);
+
+    const row = rows[0];
+    if (row === undefined) return null;
+    return {
+      mediaId: row.media_id,
+      mediaMime: row.media_mime,
+      mediaNombre: row.media_nombre,
+      ordenId: row.orden_id,
+    };
   }
 }
