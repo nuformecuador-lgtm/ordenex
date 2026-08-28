@@ -32,7 +32,6 @@ echo "== Arnes SDD :: init (modo: $MODO) =="
 # 1. Herramientas base
 command -v node >/dev/null 2>&1 || fail "node no esta instalado"
 command -v pnpm >/dev/null 2>&1 || fail "pnpm no esta instalado. Instalalo con: npm i -g pnpm"
-command -v jq   >/dev/null 2>&1 || warn "jq no esta instalado (recomendado para validar feature_list.json)"
 ok "node $(node -v)"
 
 # 2. Dependencias
@@ -49,46 +48,23 @@ fi
 # 3. Regla: maximo 2 features in_progress por zona (frontend / backend / fullstack).
 #    Antes era 1; el humano lo subio a 2 (2026-07-22) para permitir dos peticiones
 #    concurrentes por zona. Coincide con CLAUDE.md regla 1 y AGENTS.md Paralelismo.
-if command -v jq >/dev/null 2>&1 && [ -f feature_list.json ]; then
-  IN_PROGRESS_COUNT=$(jq '[.features[] | select(.status=="in_progress")] | length' feature_list.json)
-  if [ "$IN_PROGRESS_COUNT" -gt 0 ]; then
-    OVER_LIMIT=$(jq -r '
-      [.features[] | select(.status=="in_progress" and .zone != null)]
-      | group_by(.zone)
-      | map(select(length > 2))[]
-      | "\(.[0].zone): \(map(.id|tostring) | join(", ")) (\(length) in_progress, max 2)"
-    ' feature_list.json)
-    if [ -n "$OVER_LIMIT" ]; then
-      fail "mas de 2 features in_progress en la misma zona: $OVER_LIMIT"
-    fi
-  fi
-  ok "regla max-2-por-zona respetada (in_progress=$IN_PROGRESS_COUNT)"
-
-  # 4. Toda feature sdd EN VUELO (spec_ready o in_progress) debe tener su carpeta
-  #    de specs. Se acota a "en vuelo" a proposito: las `done` tempranas (1-16) son
-  #    previas a la convencion de specs y no tienen carpeta, e incluirlas dejaba el
-  #    gate permanentemente rojo; `pending`/`cancelled` no la necesitan aun/ya.
-  #    La carpeta se resuelve por `spec_path` explicito o, si no, por glob
-  #    `specs/<id>-*` (convencion real `<id>-<slug>`), NO por `.name` (el bug previo:
-  #    `.name` no matchea el slug de la carpeta, p.ej. name "login" vs specs/1-login).
-  MISSING=$(jq -r '
-    .features[]
-    | select(.sdd==true and (.status=="spec_ready" or .status=="in_progress"))
-    | "\(.id)\t\(.spec_path // "")"
-  ' feature_list.json | while IFS=$'\t' read -r id spath; do
-    if [ -n "$spath" ] && [ -f "$spath/requirements.md" ]; then
-      continue
-    fi
-    found=""
-    for d in specs/"$id"-*/; do
-      [ -f "${d}requirements.md" ] && { found=1; break; }
-    done
-    [ -n "$found" ] || echo "$id"
-  done)
-  if [ -n "$MISSING" ]; then
-    fail "faltan specs para features sdd en vuelo (por id): $MISSING"
-  fi
-  ok "specs presentes para features sdd en vuelo"
+if [ -f feature_list.json ]; then
+  # EN NODE, NO EN jq (2026-08-28). Este bloque colgaba de `if command -v jq`, y `jq` es
+  # OPCIONAL aqui: su ausencia era un `warn`. En una maquina sin `jq` -como la del humano- se
+  # saltaba ENTERO y en silencio, asi que NO se comprobaba ni la regla 1 de CLAUDE.md (max 2
+  # `in_progress` por zona, marcada NO NEGOCIABLE) ni la correspondencia ficha<->spec. Un check
+  # que no corre es peor que uno que no existe: crees que te cubre.
+  #
+  # Ademas se anade lo que NUNCA existio: IDS DUPLICADOS. La ficha 311 se renumero TRES veces
+  # (294 -> 299 -> 308 -> 311) porque otra sesion tomo cada id mientras se trabajaba, y las tres
+  # las cazo una lectura humana, no el gate. Coste medido: ~75 min en una sola feature.
+  #
+  # `node` SI es requisito duro (se comprueba arriba con `fail`), asi que esto corre SIEMPRE.
+  # El detalle de los errores lo escribe el script en STDERR, que ya se ve; `$(...)` solo
+  # captura STDOUT, donde el script pone el resumen del caso verde. Interpolar la captura en
+  # el mensaje de fallo dejaba un "invalido:" seguido de nada.
+  VALIDACION=$(node scripts/validar-feature-list.mjs)     || fail "feature_list.json invalido (el detalle esta justo arriba)"
+  ok "feature_list.json: $VALIDACION"
 fi
 
 # 5. Calidad de codigo (si los scripts existen)
