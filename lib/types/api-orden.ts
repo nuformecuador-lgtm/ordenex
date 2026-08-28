@@ -56,3 +56,22 @@ export interface ApiOrdenCancelacionDTO {
   estadoAnterior: string;
   estado: string; // "devolviendo_a_tienda"
 }
+
+/**
+ * FICHA 320 — Resultado del BORRADO (DELETE) de una orden propia por el canal integrador.
+ *
+ * Devuelve la IDENTIDAD de lo que se retiro y el estado que tenia al retirarlo. `numGuia` es
+ * `null` a proposito y no por descuido: la orden que mas necesita este endpoint es justo la que
+ * todavia no tiene guia (nace en `en_preparacion` con fulfillment), y por eso `numRemision` —que
+ * es NOT NULL y lo provee el propio integrador— viaja siempre y es el eco fiable de que se borro
+ * lo que se pidio borrar.
+ *
+ * `estado` es el estado que la orden TENIA (borrar no transiciona: el estado no cambia y no se
+ * escribe historial). No lleva ningun `eliminada: true`: un campo constante no habilita ninguna
+ * decision del cliente —el 200 ya lo dice— y el canal ya retiro uno asi el 2026-08-25 (`generado`).
+ */
+export interface ApiOrdenEliminacionDTO {
+  numGuia: number | null;
+  numRemision: string;
+  estado: string; // el estatus.value que tenia al borrarse; siempre uno de ESTADOS_ELIMINABLES
+}

@@ -46,6 +46,17 @@ export class EliminarOrdenService implements IEliminarOrdenService {
     // roles capaces de borrar, el rastro de quien lo hizo deja de ser una sola persona.
     // `esAccesoTotal` ya NO sirve aqui a proposito: es "ve y gestiona todos los modulos", que es
     // una pregunta distinta de "puede retirar una orden del sistema".
+    //
+    // ⚠️ FICHA 320 (2026-08-28) — ESTA REGLA YA NO ES LA UNICA FORMA DE BORRAR UNA ORDEN, y quien
+    // lea solo esta linea deducira lo contrario. El humano abrio el borrado al canal por API key:
+    // una tienda puede retirar LAS SUYAS con `DELETE /api/ordenes/api-key/orden/{id}`. Eso revierte
+    // en parte la decision de arriba y se acepto a sabiendas — en los cuatro estados eliminables el
+    // paquete esta quieto y la API key identifica al autor, asi que el rastro no se pierde, cambia
+    // de forma—. Lo que NO se toco es este camino: por PANTALLA sigue borrando solo el `maestro`,
+    // y sigue pudiendo borrar cualquier orden porque este service NO acota por tienda.
+    // El canal API tiene su propio servicio (`ApiOrdenEliminacionService`) justamente por eso: su
+    // autorizacion es otra —el DUEÑO, forzado dentro del `where`—. Lo unico que comparten es el
+    // predicado de ESTADO de tres lineas mas abajo.
     if (actor.rol !== "maestro") return { status: "forbidden" };
 
     const ordenIds = [...new Set(input.ordenIds)];

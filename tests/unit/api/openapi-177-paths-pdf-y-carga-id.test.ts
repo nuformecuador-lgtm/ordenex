@@ -131,9 +131,16 @@ describe("177/R41 + 255/R47 + 267/R39 + 266/R28 — el OpenAPI publica los diez 
     expect(pathsDelYaml()).toEqual(PATHS_ESPERADOS);
   });
 
-  it("la consulta por identificador es GET y reutiliza el schema OrdenDetalle de la 106", () => {
+  // ALTA de la FICHA 320 (2026-08-28) — el path de la orden por identificador gana un SEGUNDO
+  // verbo. El censo de PATHS no sube (sigue en diez): el borrado NO estrena ruta, estrena
+  // `DELETE` sobre la que ya existe, porque retira EXACTAMENTE el recurso que esa ruta
+  // identifica. Esta lista estaba firmada en `["parameters", "get"]` y publicar el borrado la
+  // puso ROJA: ESE es su trabajo, y sube a tres A PROPOSITO, en el mismo commit que publica el
+  // endpoint. El contenido del `delete` (schema, codigos, los dos artefactos) se afirma en
+  // `openapi-320-eliminar.test.ts`, igual que la 266 hizo con el suyo.
+  it("la consulta por identificador es GET, comparte path con el DELETE de la 320 y reutiliza OrdenDetalle", () => {
     const operacion = openApiSpec.paths[PATH_DETALLE_POR_ID];
-    expect(Object.keys(operacion)).toEqual(["parameters", "get"]);
+    expect(Object.keys(operacion)).toEqual(["parameters", "get", "delete"]);
     expect(operacion.get.responses["200"].content["application/json"].schema).toEqual({
       $ref: "#/components/schemas/OrdenDetalle",
     });
