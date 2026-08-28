@@ -15,7 +15,10 @@
  *    su `identificador`, que es el que sale.
  *
  * Lo que SÍ sale es exactamente lo que la tabla enseña (R24): identificador, prefijo,
- * usuario dedicado, fecha de creación y estado. El PREFIJO no es secreto por construcción
+ * usuario dedicado, tienda destino, fecha de creación y estado. La TIENDA DESTINO entra con
+ * la feature 307, que es la que la puso en pantalla: R24 dice «lo que la tabla enseña», así
+ * que añadir la columna a la tabla y no al archivo dejaría el export contando otra historia.
+ * Sale el NOMBRE, nunca el `tiendaDestinoId` (uuid interno, R23). El PREFIJO no es secreto por construcción
  * (81/R17): son los primeros caracteres, lo mismo que ya se ve en pantalla, y sin el resto
  * del secreto no autoriza nada.
  *
@@ -31,6 +34,7 @@ export const COLUMNAS_DESCARGA_API_KEYS: DescargaColumna[] = [
   { clave: "identificador", encabezado: "Identificador" },
   { clave: "prefijo", encabezado: "Prefijo" },
   { clave: "usuarioDedicado", encabezado: "Usuario dedicado" },
+  { clave: "tiendaDestino", encabezado: "Tienda destino" },
   { clave: "fechaCreacion", encabezado: "Fecha de creación" },
   { clave: "estado", encabezado: "Estado" },
 ];
@@ -59,6 +63,8 @@ export function filaDescargaApiKey(apiKey: ApiKeyListItemDTO): DescargaFila {
     identificador: apiKey.identificador,
     prefijo: apiKey.keyPrefix,
     usuarioDedicado: apiKey.usuarioEmail,
+    // Feature 307: `null` (sin tienda destino) -> celda vacía, no la cadena "null".
+    tiendaDestino: apiKey.tiendaDestinoNombre,
     fechaCreacion: fechaCreacion(apiKey.createdAt),
     estado: ESTADO_API_KEY_LABEL[apiKey.estado] ?? apiKey.estado,
   };
