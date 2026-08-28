@@ -57,6 +57,8 @@ describe("EtiquetaGuia", () => {
 
     expect(screen.getByText("4021")).toBeInTheDocument(); // num guía
     expect(screen.getByText("REM-777")).toBeInTheDocument();
+    // Feature 295: la fecha de creación, tal cual la resuelve el servidor.
+    expect(screen.getByText("2026-08-27")).toBeInTheDocument();
     expect(screen.getByText("María Solís")).toBeInTheDocument();
     expect(screen.getByText("0999888777")).toBeInTheDocument();
     expect(screen.getByText("100m sur de la iglesia")).toBeInTheDocument();
