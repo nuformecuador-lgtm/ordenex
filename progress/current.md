@@ -9,6 +9,65 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 💬 2026-08-28 — ficha 316: el mensajero puede ENVIAR imagen, video, nota de voz y documentos
+
+**Estado: `spec_ready`, spec APROBADO por el humano** (32 requisitos R1-R32, los 32 mapeados a un test
+con `assert`; trazabilidad verificada por el leader, ninguno huerfano). Rama
+`feature/316-chat-enviar-media` desde `origin/dev` en `7435bdff`. Zona `fullstack`, complejidad alta, `sdd: true`.
+
+**⚠️ RENUMERADA 312 → 316, y esta vez ANTES de escribir una línea de código.** Al bajar `dev` para
+empezar apareció que otra sesión ya había tomado el **312** (`corregir los datos del cliente de una
+orden ya cargada`), y también el **313** y el **314**. El **315 no se toma aunque esté libre** en
+`feature_list.json`: la rama `origin/fix/315-liberar-al-aprobar-cierre` ya lo reclama por nombre, y
+registrarlo sería la cuarta colisión seguida. Mismo precedente que la 311, renumerada **tres veces**.
+
+**La trampa del renumerado, esquivada a propósito.** La 311 documenta que su `sed` global se comió el
+eslabón intermedio **dos veces**, porque un barrido no distingue entre **usar** un número y
+**citarlo**. Aquí las 12 ocurrencias se revisaron una a una antes de tocar nada: las 12 *usaban* el
+número y ninguna citaba historia ajena, así que el barrido era seguro. Verificado después: **0
+ocurrencias de `312`** en el spec.
+
+**Y esta vez el gate sí lo habría cazado.** El PR #565 (`fix/init-valida-feature-list`) hace que
+`init.sh` valide `feature_list.json` **siempre** y detecte **ids duplicados** — exactamente el agujero
+(`jq` ausente + `warn` en vez de `fail`) que dejó pasar las tres colisiones de la 311.
+
+**De dónde sale.** La 311 dejó el ENTRANTE completo y declaró el saliente **fuera de alcance por
+escrito** (`specs/311-chat-media-reacciones-contactos/requirements.md:18-21`). Hoy el `<form>` de
+`ChatConversacion.tsx` tiene exactamente un `<textarea>` y un botón `Send`: el mensajero que quiere
+mandar la foto del paquete en la puerta tiene que salirse a su WhatsApp personal.
+
+**Decisiones cerradas por el humano, no reabrir:** (a) cámara, galería, nota de voz y documentos
+PDF/Word/Excel; (b) el clip se bloquea con el **mismo** criterio que el texto libre
+(`textoLibreHabilitado`) porque Meta no acepta media fuera de la ventana de 24 h; (c) **no se
+guarda binario propio** — se mantiene viva la regla D1/R15 de la 311 y se acepta que a los 30 días
+el adjunto diga que ya no está disponible; (d) el textarea viaja como `caption` (no en audio, que
+Meta no lo admite).
+
+**Medido el 2026-08-28, y es la buena noticia: NO hace falta migración.** El enum
+`ChatMensajeTipo` ya tiene `imagen|audio|video|documento|sticker` y `ChatMensaje` ya tiene las
+columnas `media*` nullable. Falta solo el camino de **escritura** (`InsertarSalienteInput` no tiene
+campos `media*`). Y el proxy `/api/chat/media/[mensajeId]` **sirve un saliente sin un solo cambio**:
+autoriza por mensajero asignado y no filtra por dirección.
+
+**Trampas declaradas antes de empezar**, para que no se descubran a mitad:
+`whatsapp-cloud.ts::enviar()` siempre serializa JSON y subir media es `multipart` → cliente aparte;
+`reintentarEnvio` y `persistirFalloPermanente` están **tipados a `"texto" | "plantilla"`**, así que
+un saliente de media rompe el reintento **hoy**; `lib/config/chat-media.ts` es política de *servido*
+y no de *subida* → archivo nuevo, para que nadie use `MIMES_INCRUSTABLES` como whitelist de subida;
+y `MediaAdjunto.tsx` dice «del cliente» en textos que con salientes pasan a ser falsos.
+
+**⚠️ Riesgo principal — la nota de voz.** Chrome en Android graba `audio/webm;codecs=opus` y Meta
+**no lo acepta** como `type: audio` (quiere `ogg/opus`, `mpeg`, `aac` o `amr`). Hay que **medir** el
+mimeType real con `MediaRecorder.isTypeSupported`, no suponerlo: es exactamente el tipo de supuesto
+que la ficha de la 311 documenta haber pagado caro (R9 estuvo a punto de quedar muerto en silencio
+por casar contra un nombre de evento que la v21.0 no usa).
+
+**Cupo.** Se pasó la 311 a `done` en el mismo commit del alta (`1a4a90d7`): estaba mergeada con la
+ficha sin actualizar. Fullstack queda sin ninguna `in_progress`. **El gate no lo habría avisado:**
+`jq` no está instalado y en `init.sh:35` eso es `warn` y no `fail`, así que todo el bloque de
+validación de `feature_list.json` —incluida la regla del cupo— se salta.
+
+
 ## 💬 2026-08-27 — ficha 311: el chat da tratamiento a media, reacciones, contactos y cambio de número
 
 **Estado: `in_progress`, spec APROBADO por el humano.** Rama

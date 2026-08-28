@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  enviarMediaChat,
   enviarMensajeChat,
   enviarPlantillaChat,
   listarHiloChat,
@@ -14,6 +15,7 @@ import type { IChatMensajeRepository } from "@/lib/interfaces/repositories/IChat
 import type { ChatWhatsappService } from "@/lib/services/ChatWhatsappService";
 import type { DatosPlantilla } from "@/lib/types/plantilla-datos";
 import { datosPlantillaFixture } from "@/tests/fixtures/plantilla-datos";
+import { MAX_CAPTION } from "@/lib/config/chat-media-envio";
 
 // Feature 109 — F1.T/F2.T (R16/R17/R20/R21). Server Actions del chat: scope por
 // OrdenEnvioReader (R17/R16), persistencia del saliente (R20) y manejo de transitorio (R21).
@@ -806,5 +808,205 @@ describe("Feature 311 · listarHiloChat expone los tipos nuevos (R19/R21)", () =
 
     expect(res).toEqual({ status: "forbidden" });
     expect(mensajeRepo.listarHilo).not.toHaveBeenCalled();
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Feature 316 — D2.T (R11/R12/R26/R27). `enviarMediaChat(formData)`: el borde HTTP del envio
+// de un adjunto. La puerta es la MISMA que `enviarMensajeChat`; lo propio es que el binario
+// llega por `FormData` y que el servidor mide el archivo QUE LLEGO, no lo que le declaren.
+// ---------------------------------------------------------------------------
+
+describe("enviarMediaChat (R11/R12/R26/R27)", () => {
+  /** `File` de prueba con el tamano que se pida, sin materializar los megas en memoria. */
+  function archivo(
+    { nombre = "foto.jpg", mime = "image/jpeg", bytes = 1234 } = {},
+  ): File {
+    const file = new File([new Uint8Array([1, 2, 3])], nombre, { type: mime });
+    // `size` es de solo lectura en `File`: se sobrescribe para simular un archivo grande sin
+    // reservar 6 MB en cada corrida del test.
+    Object.defineProperty(file, "size", { value: bytes });
+    return file;
+  }
+
+  function formData(
+    over: { ordenId?: string; caption?: string; archivo?: File | null; extra?: Record<string, string> } = {},
+  ): FormData {
+    const fd = new FormData();
+    fd.set("ordenId", over.ordenId ?? "orden-1");
+    if (over.caption !== undefined) fd.set("caption", over.caption);
+    const f = over.archivo === undefined ? archivo() : over.archivo;
+    if (f !== null) fd.set("archivo", f);
+    for (const [k, v] of Object.entries(over.extra ?? {})) fd.set(k, v);
+    return fd;
+  }
+
+  function serviceFake(outcome: unknown = { status: "ok", mensajeId: "wamid.M", mensajeChatId: "msg-1" }) {
+    return { enviarMedia: vi.fn(async () => outcome) } as unknown as ChatWhatsappService;
+  }
+
+  it("(a) R26: sin sesion -> unauthenticated, sin tocar la orden ni el service", async () => {
+    const service = serviceFake();
+    const reader = ordenReader(ORDEN_DATA);
+
+    const res = await enviarMediaChat(formData(), {
+      getActor: getActor(null),
+      ordenReader: reader,
+      service,
+    });
+
+    expect(res).toEqual({ status: "unauthenticated" });
+    expect(reader.findParaEnvio).not.toHaveBeenCalled();
+    expect(service.enviarMedia).not.toHaveBeenCalled();
+  });
+
+  it("(b) R27: orden de otro mensajero -> forbidden, sin llamar al service", async () => {
+    const service = serviceFake();
+
+    const res = await enviarMediaChat(formData(), {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(null),
+      service,
+    });
+
+    expect(res).toEqual({ status: "forbidden" });
+    expect(service.enviarMedia).not.toHaveBeenCalled();
+  });
+
+  it("(c) R11: 6 MB se rechaza AUNQUE el FormData declare un `tamano` mentiroso", async () => {
+    const service = serviceFake();
+
+    const res = await enviarMediaChat(
+      formData({
+        archivo: archivo({ bytes: 6 * 1024 * 1024 }),
+        // El campo mentiroso: si el servidor lo mirase, esto pasaria como 10 bytes.
+        extra: { tamano: "10" },
+      }),
+      { getActor: getActor(MENSAJERO), ordenReader: ordenReader(ORDEN_DATA), service },
+    );
+
+    expect(res).toEqual({ status: "demasiado_grande", limiteBytes: 5 * 1024 * 1024 });
+    expect(service.enviarMedia).not.toHaveBeenCalled();
+  });
+
+  it("(c) R11: un tipo fuera de la lista blanca se rechaza sin llamar al service", async () => {
+    const service = serviceFake();
+
+    const res = await enviarMediaChat(
+      formData({ archivo: archivo({ nombre: "app.exe", mime: "application/x-msdownload" }) }),
+      { getActor: getActor(MENSAJERO), ordenReader: ordenReader(ORDEN_DATA), service },
+    );
+
+    expect(res).toEqual({ status: "tipo_no_permitido" });
+    expect(service.enviarMedia).not.toHaveBeenCalled();
+  });
+
+  it("(d) R12: un pie de MAX_CAPTION + 1 -> caption_largo, sin llamar al service", async () => {
+    const service = serviceFake();
+
+    const res = await enviarMediaChat(formData({ caption: "x".repeat(MAX_CAPTION + 1) }), {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      service,
+    });
+
+    expect(res).toEqual({ status: "caption_largo", maximo: MAX_CAPTION });
+    expect(service.enviarMedia).not.toHaveBeenCalled();
+  });
+
+  it("(d) R12: el borde exacto (MAX_CAPTION) SI pasa", async () => {
+    const service = serviceFake();
+
+    const res = await enviarMediaChat(formData({ caption: "x".repeat(MAX_CAPTION) }), {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      service,
+    });
+
+    expect(res).toEqual({ status: "ok", mensajeChatId: "msg-1" });
+  });
+
+  it("(e) camino feliz: ok, y el service recibe el caption y el mime del ARCHIVO", async () => {
+    const service = serviceFake();
+
+    const res = await enviarMediaChat(
+      formData({ caption: "aqui esta tu paquete", archivo: archivo({ nombre: "entrega.jpg" }) }),
+      { getActor: getActor(MENSAJERO), ordenReader: ordenReader(ORDEN_DATA), service },
+    );
+
+    expect(res).toEqual({ status: "ok", mensajeChatId: "msg-1" });
+    const arg = (service.enviarMedia as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({
+      ordenId: "orden-1",
+      mensajeroId: "men-1",
+      telefonoE164: "573001112233",
+      caption: "aqui esta tu paquete",
+      adjunto: { mime: "image/jpeg", nombre: "entrega.jpg", bytes: 1234 },
+    });
+    // R18: el binario pasa TAL CUAL (es el `File` recibido), sin copia intermedia ni buffer.
+    expect(typeof arg.adjunto.cuerpo.arrayBuffer).toBe("function");
+  });
+
+  it("un FormData sin archivo -> forbidden (peticion malformada), sin llamar al service", async () => {
+    const service = serviceFake();
+
+    const res = await enviarMediaChat(formData({ archivo: null }), {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      service,
+    });
+
+    expect(res).toEqual({ status: "forbidden" });
+    expect(service.enviarMedia).not.toHaveBeenCalled();
+  });
+
+  it("R3: `fuera_ventana` del service se propaga a la UI", async () => {
+    const res = await enviarMediaChat(formData(), {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      service: serviceFake({ status: "fuera_ventana" }),
+    });
+
+    expect(res).toEqual({ status: "fuera_ventana" });
+  });
+
+  it("R19: `fallo_subida` llega SIN el detalle interno del cliente", async () => {
+    const res = await enviarMediaChat(formData(), {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      service: serviceFake({ status: "fallo_subida", detalle: "subir media a whatsapp: HTTP 500" }),
+    });
+
+    expect(res).toEqual({ status: "fallo_subida" });
+    expect(res).not.toHaveProperty("detalle");
+  });
+
+  it("R20: `permanente` lleva el mensajeChatId del saliente failed y su motivo", async () => {
+    const res = await enviarMediaChat(formData(), {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      service: serviceFake({
+        status: "permanente",
+        detalle: "enviar mensaje de whatsapp: HTTP 400",
+        mensajeChatId: "msg-fail",
+      }),
+    });
+
+    expect(res).toEqual({
+      status: "permanente",
+      mensajeChatId: "msg-fail",
+      detalle: "enviar mensaje de whatsapp: HTTP 400",
+    });
+  });
+
+  it("service null (sin credencial) -> no_configurado", async () => {
+    const res = await enviarMediaChat(formData(), {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      service: null,
+    });
+
+    expect(res).toEqual({ status: "no_configurado" });
   });
 });

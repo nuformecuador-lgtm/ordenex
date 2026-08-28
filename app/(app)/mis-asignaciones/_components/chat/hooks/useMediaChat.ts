@@ -44,11 +44,22 @@ export function useMediaChat(mensajeId: string, autoCargar: boolean): UseMediaCh
     autoCargar ? "cargando" : "inactivo",
   );
   const [url, setUrl] = useState<string | null>(null);
+  // Contador de intento. Existe SOLO para que el efecto se vuelva a ejecutar al reintentar:
+  // tras un fallo `pedido` ya vale `true`, asi que ponerlo otra vez a `true` no cambia ninguna
+  // dependencia y no se lanzaria ningun `fetch` (la burbuja se quedaba muerta en "Cargando
+  // archivo..." hasta desmontarla). Al mensajero se le cae un fetch por cobertura y tiene que
+  // poder reintentar sin cerrar el chat.
+  const [intento, setIntento] = useState(0);
 
   const activar = useCallback(() => {
+    // Ya esta el binario en memoria: reintentar solo tiraria el object URL vivo.
+    if (estado === "listo") return;
     setPedido(true);
-    setEstado((actual) => (actual === "listo" ? actual : "cargando"));
-  }, []);
+    setEstado("cargando");
+    // La limpieza del efecto anterior revoca su object URL: no se puede seguir apuntando a el.
+    setUrl(null);
+    setIntento((n) => n + 1);
+  }, [estado]);
 
   useEffect(() => {
     if (!pedido) return;
@@ -84,7 +95,8 @@ export function useMediaChat(mensajeId: string, autoCargar: boolean): UseMediaCh
       abort.abort();
       if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
     };
-  }, [mensajeId, pedido]);
+    // `intento` es dependencia a proposito: es lo unico que cambia al reintentar tras un fallo.
+  }, [mensajeId, pedido, intento]);
 
   return { estado, url, activar };
 }

@@ -162,6 +162,14 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
         errorCodigo: input.error?.codigo ?? null,
         errorTitulo: input.error?.titulo ?? null,
         errorDetalle: input.error?.detalle ?? null,
+        // Feature 316 (R17/R18): metadatos del adjunto propio. Lo unico que se guarda del
+        // adjunto es su IDENTIFICADOR en Meta y estos metadatos; el binario no entra aqui ni
+        // en ningun almacenamiento propio (D3). Un saliente de texto o plantilla los deja NULL:
+        // el `?? null` explicito impide que un `undefined` se convierta en un default de Prisma.
+        mediaId: input.mediaId ?? null,
+        mediaMime: input.mediaMime ?? null,
+        mediaNombre: input.mediaNombre ?? null,
+        mediaTamanoBytes: input.mediaTamanoBytes ?? null,
       },
       select: SELECT,
     });

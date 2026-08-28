@@ -32,8 +32,17 @@ const CLAVES_PII = new Set([
  * que rellenan la plantilla: nombre, direccion, montos). Para diagnosticar un 400 lo que hace
  * falta es la ESTRUCTURA -cuantos parametros van, en que orden, de que tipo-, no el contenido.
  * Se sustituyen por un marcador que conserva tipo y longitud.
+ *
+ * Feature 316 (R28): `caption` y `filename` entran AQUI y no en `CLAVES_PII`, y la eleccion es
+ * deliberada. No identifican a nadie por si solos —son texto y nombre de archivo que escribe o
+ * elige el MENSAJERO, no el destinatario—, asi que lo que corresponde no es borrarlos sino
+ * tratarlos como contenido: `<str:N>` conserva la LONGITUD, que es exactamente el dato que
+ * explica el 400 mas probable de esta feature (un pie por encima de `MAX_CAPTION`, o un
+ * `filename` que Meta rechaza por largo). Un `[redactado]` plano perderia esa pista y no
+ * protegeria nada mas: el requisito es que el caption y el nombre del archivo NO aparezcan en
+ * el log, y con el marcador no aparecen.
  */
-const CLAVES_CONTENIDO = new Set(["body", "text"]);
+const CLAVES_CONTENIDO = new Set(["body", "text", "caption", "filename"]);
 
 /** ¿Volcado SIN redactar? `WHATSAPP_DEBUG_LOG=true`. Pensado para depurar, no para produccion. */
 export function debugCompletoActivo(): boolean {
