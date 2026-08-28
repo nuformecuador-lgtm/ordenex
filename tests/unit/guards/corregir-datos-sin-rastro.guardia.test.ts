@@ -37,12 +37,34 @@ import { codigoSinComentarios, quitarComentarios } from "../../fixtures/sin-come
 
 const RAIZ = path.resolve(__dirname, "../../..");
 
-/** Los modulos que ESTA ficha crea. Censo declarado y con control de no-vacuidad (bloque 1). */
+/**
+ * Los modulos que ESTA ficha crea o amplia. Censo DECLARADO —los archivos no entran solos— y con
+ * control de no-vacuidad (bloque 1).
+ *
+ * ⚠️ **LA PANTALLA ENTRA EN EL CENSO, Y ESO ES LA MITAD DE R16.** Hasta el 2026-08-28 esta lista
+ * eran los cuatro modulos del backend, y con razon: la ficha entro en dos tandas y la primera no
+ * tenia pantalla. Pero un censo que se queda en el backend deja fuera justo donde los datos del
+ * cliente se TECLEAN y se PINTAN — un `console.log(orden.telefonoDest)` puesto para depurar la
+ * ventana los vuelca enteros al log del navegador y de la plataforma, no rompe ningun test y nadie
+ * se entera. La guardia seguiria verde vigilando codigo que ya no es donde esta el riesgo, que es
+ * la peor forma de fallar.
+ *
+ * Los dos ultimos son archivos COMPARTIDOS con otras fichas (`/novedades` los tenia desde la 236 y
+ * la 240): entran porque esta ficha les anade su celda y su ventana, y porque pintan el
+ * destinatario y el telefono de cada fila. Estaban limpios de `console` el dia que entraron.
+ */
 const MODULOS_DE_LA_FICHA = [
   "lib/types/correccion-datos-cliente.ts",
   "lib/interfaces/services/ICorregirDatosClienteService.ts",
   "lib/services/CorregirDatosClienteService.ts",
   "lib/actions/corregir-datos-cliente.ts",
+  // Bloque E — la superficie del modulo de ordenes (`maestro`/`admin`).
+  "app/(app)/ordenes/_components/CorregirDatosClienteModal.tsx",
+  "app/(app)/ordenes/_components/CorregirDatosClienteAccion.tsx",
+  "app/(app)/ordenes/_components/corregir-datos-cliente-error-messages.ts",
+  // Bloque F — la superficie de `/novedades` (`adminTienda`, en los DOS grupos).
+  "app/(app)/novedades/_components/NovedadAcciones.tsx",
+  "app/(app)/novedades/_components/NovedadesModule.tsx",
 ] as const;
 
 /** El repositorio NO entra entero (tiene medio centenar de escrituras legitimas): entra el CUERPO
@@ -173,7 +195,7 @@ describe("312 — el detector de rastro se prueba a si mismo", () => {
 // ---------------------------------------------------------------------------
 
 describe("312 — anti-vacuidad del censo", () => {
-  it("los cinco fragmentos vigilados existen y ninguno esta vacio", () => {
+  it("todos los fragmentos vigilados existen y ninguno esta vacio", () => {
     for (const ruta of MODULOS_DE_LA_FICHA) {
       expect(existsSync(path.join(RAIZ, ruta)), `falta ${ruta}`).toBe(true);
     }
@@ -190,6 +212,24 @@ describe("312 — anti-vacuidad del censo", () => {
       "class CorregirDatosClienteService",
     );
     expect(porRuta.get("lib/actions/corregir-datos-cliente.ts")).toContain('"use server"');
+    // Y los de la PANTALLA, por su contenido y no por su nombre de archivo: si alguien renombrara
+    // el componente y dejara la ruta, este censo estaria midiendo otra cosa.
+    expect(porRuta.get("app/(app)/ordenes/_components/CorregirDatosClienteModal.tsx")).toContain(
+      "export function CorregirDatosClienteModal",
+    );
+    expect(porRuta.get("app/(app)/ordenes/_components/CorregirDatosClienteAccion.tsx")).toContain(
+      "export function CorregirDatosClienteAccion",
+    );
+    expect(
+      porRuta.get("app/(app)/ordenes/_components/corregir-datos-cliente-error-messages.ts"),
+    ).toContain("corregirDatosClienteErrorMessage");
+    // Los dos compartidos: se reconocen por la celda y la ventana que ESTA ficha les anadio.
+    expect(porRuta.get("app/(app)/novedades/_components/NovedadAcciones.tsx")).toContain(
+      "corregirDatos",
+    );
+    expect(porRuta.get("app/(app)/novedades/_components/NovedadesModule.tsx")).toContain(
+      "CorregirDatosClienteModal",
+    );
   });
 });
 

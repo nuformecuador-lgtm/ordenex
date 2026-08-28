@@ -71,9 +71,14 @@ function toCorregirActionError(shape: AppErrorShape): BorderError {
  * pertenencia y estado en CADA peticion, con independencia de lo que la pantalla haya ofrecido
  * (R25).
  *
- * @sin-superficie ficha 312 en dos tandas: el backend entra primero y su modal (bloque E) y su
- * celda de `/novedades` (bloque F) llegan despues, en la misma ficha y contra este mismo codigo.
- * La anotacion CADUCA: en cuanto alguna pantalla la importe, esta guardia exige borrarla.
+ * ⏳ AQUI VIVIA LA ANOTACION DE «SIN SUPERFICIE», y se BORRO el 2026-08-28 al llegar la tanda de
+ * frontend de esta misma ficha. Decia que el backend entraba primero y que su modal (bloque E) y su
+ * celda de `/novedades` (bloque F) llegaban despues, y terminaba: «la anotacion CADUCA: en cuanto
+ * alguna pantalla la importe, esta guardia exige borrarla». Eso es lo que paso: hoy la importan y
+ * la llaman `CorregirDatosClienteAccion` (modulo de ordenes) y `NovedadesModule` (las cards de
+ * `/novedades`, en los DOS grupos), asi que la excusa habria sobrevivido a su motivo — que es
+ * exactamente lo que `superficie-de-uso.guardia.test.ts` pone en rojo. No se repone: si algun dia
+ * las dos pantallas desaparecieran, lo que sobra es la accion, no la excusa.
  */
 export async function corregirDatosCliente(
   input: unknown,

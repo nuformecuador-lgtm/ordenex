@@ -30,6 +30,7 @@ import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { HistorialOrdenSheet } from "./HistorialOrdenSheet";
 import { EtiquetaOrdenAccion } from "./EtiquetaOrdenAccion";
 import { ReportarIncidenteAccion } from "./ReportarIncidenteAccion";
+import { CorregirDatosClienteAccion } from "./CorregirDatosClienteAccion";
 
 /**
  * Acción por lote ofrecida en la barra contextual cuando hay filas seleccionadas.
@@ -125,6 +126,7 @@ export function OrdenesModule({
   resaltarPrioridad = false,
   permitirDescarga = false,
   puedeReportarIncidente = false,
+  puedeCorregirDatos = false,
   filtros,
   resetSeleccion = 0,
 }: {
@@ -202,6 +204,16 @@ export function OrdenesModule({
    * NO es una acción por LOTE a propósito: un incidente pide causa, motivo y fotos por orden.
    */
   puedeReportarIncidente?: boolean;
+  /**
+   * Ficha 312 (E2, design §9.1): ofrece la acción POR FILA "Corregir datos" (destinatario,
+   * teléfono, producto y notas). Opt-in y por defecto `false`, de modo que ninguna superficie
+   * previa cambia. La página la enciende sólo para roles de ACCESO TOTAL (maestro/admin) —el
+   * `adminTienda` corrige desde las cards de `/novedades`, no desde aquí— y la acción se
+   * auto-oculta además en las filas cuyo estado no admite la corrección (R22/R24).
+   *
+   * NO es una acción por LOTE a propósito: un lote no tiene un «destinatario» común.
+   */
+  puedeCorregirDatos?: boolean;
   /**
    * Barra de filtros de la superficie, que la tabla coloca en la misma línea que el
    * control de descarga. Solo se pasa a través: este módulo tampoco la mira. Quien
@@ -362,10 +374,11 @@ export function OrdenesModule({
         ]
       : columnasDatos;
 
-    // La columna de acciones por fila existe si la enciende AL MENOS una de sus dos
-    // fuentes: el historial/etiqueta (49/32) o el reporte de incidente (158). Cada pieza
-    // se monta por separado, así que encender una no arrastra la otra.
-    if (!mostrarHistorial && !puedeReportarIncidente) return conSeleccion;
+    // La columna de acciones por fila existe si la enciende AL MENOS una de sus TRES
+    // fuentes: el historial/etiqueta (49/32), el reporte de incidente (158) o la corrección de
+    // los datos del cliente (312). Cada pieza se monta por separado, así que encender una no
+    // arrastra las otras.
+    if (!mostrarHistorial && !puedeReportarIncidente && !puedeCorregirDatos) return conSeleccion;
     return [
       ...conSeleccion,
       {
@@ -383,6 +396,10 @@ export function OrdenesModule({
               </>
             ) : null}
             {puedeReportarIncidente ? <ReportarIncidenteAccion orden={row} /> : null}
+            {/* Ficha 312 (R22): la fila la ofrece sólo si la página la encendió Y el estado la
+                admite. Lo segundo lo decide el propio disparador, que no renderiza nada cuando
+                no aplica. */}
+            {puedeCorregirDatos ? <CorregirDatosClienteAccion orden={row} /> : null}
           </div>
         ),
       },
@@ -391,6 +408,7 @@ export function OrdenesModule({
     columns,
     mostrarHistorial,
     puedeReportarIncidente,
+    puedeCorregirDatos,
     haySeleccion,
     seleccionIds,
     bloqueoSeleccion,

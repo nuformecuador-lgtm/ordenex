@@ -204,6 +204,7 @@ export function OrdenesListado({
   incluirFiltroMensajero = true,
   permitirDescarga = true,
   puedeReportarIncidente = false,
+  puedeCorregirDatos = false,
   puedeEliminar = false,
   fechasDiaReparto = SIN_FECHAS_DIA_REPARTO,
 }: Readonly<{
@@ -272,6 +273,17 @@ export function OrdenesListado({
    * reporte. Es una acción por ORDEN, no por lote: no entra en `accionesDe`.
    */
   puedeReportarIncidente?: boolean;
+  /**
+   * Ficha 312 (E2, design §9.1): ofrece la acción POR FILA "Corregir datos" en el listado. Se
+   * pasa tal cual a `OrdenesModule`, que la monta sólo en las filas cuyo estado admite la
+   * corrección (R22/R24). Es una acción por ORDEN, no por lote: un lote no tiene un
+   * «destinatario» común, así que no entra en `accionesDe`.
+   *
+   * La enciende la página sólo para `maestro`/`admin`; el `adminTienda` corrige desde las cards
+   * de `/novedades` y por eso NO recibe la prop. El servidor revalida rol, pertenencia y estado
+   * en cada petición (R25), así que esto decide qué se OFRECE, nunca qué se permite.
+   */
+  puedeCorregirDatos?: boolean;
   /**
    * Pedido humano (2026-08-27): ofrece ELIMINAR órdenes y RECUPERAR las eliminadas, más el
    * interruptor «Eliminadas» de la barra que es la única forma de listarlas.
@@ -1026,6 +1038,7 @@ export function OrdenesListado({
         resaltarPrioridad={valueUnico === ESTADO_EN_BODEGA}
         permitirDescarga={permitirDescarga}
         puedeReportarIncidente={puedeReportarIncidente}
+        puedeCorregirDatos={puedeCorregirDatos}
       />
 
       {/* Modales de acción por lote (solo acceso total). Montados una vez; `open` por

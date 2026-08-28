@@ -150,18 +150,18 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
 
 ## Bloque E — Superficie `/ordenes` (frontend)
 
-- [ ] **E1 ⇐ D1** `CorregirDatosClienteModal.tsx` (+ `corregir-datos-cliente-error-messages.ts`):
+- [x] **E1 ⇐ D1** `CorregirDatosClienteModal.tsx` (+ `corregir-datos-cliente-error-messages.ts`):
       tipo estructural `CorregirDatosClienteOrdenUI`, 4 campos precargados, validación en cliente
       con **el mismo** schema (sin largo máximo propio), los dos avisos condicionales, errores
       traducidos por causa. **Ningún texto promete rastro** («se registrará quién lo cambió» y
       similares están prohibidos: no se registra, design §9.3).
       _Hecho:_ compila y se monta en el test de E3.
-- [ ] **E2 ⇐ E1** `CorregirDatosClienteAccion.tsx` (disparador por fila, patrón
+- [x] **E2 ⇐ E1** `CorregirDatosClienteAccion.tsx` (disparador por fila, patrón
       `ReportarIncidenteAccion`: `return null` cuando no aplica) + cableado en `OrdenesModule`
       (tercera fuente de la columna `acciones`), `OrdenesListado` (prop pasante) y
       `app/(app)/ordenes/page.tsx` (`puedeCorregirDatos = esAccesoTotal(rol)`).
       _Hecho:_ typecheck y `adminTienda` **no** recibe la prop (verificado en el test de E3).
-- [ ] **E3 ⇐ E2** `tests/components/CorregirDatosCliente.ordenes.test.tsx`:
+- [x] **E3 ⇐ E2** `tests/components/CorregirDatosCliente.ordenes.test.tsx`:
       - el disparador **no se renderiza** con `estatusValue` en cada uno de los 4 bloqueados,
         ni con `estatusValue: undefined`. **(R22, R24)**
       - se renderiza en `en_reparto`. **(R22)**
@@ -179,7 +179,7 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
 
 ## Bloque F — Superficie `/novedades` (frontend)
 
-- [ ] **F1 ⇐ D1** `novedad-acciones-catalogo.ts`: `AccionNovedad` += `"corregirDatos"`;
+- [x] **F1 ⇐ D1** `novedad-acciones-catalogo.ts`: `AccionNovedad` += `"corregirDatos"`;
       celda en `ACCIONES_POR_GRUPO.devolucion` **Y en `ACCIONES_POR_GRUPO.ayuda`** (R23, P2);
       **una sola clave para los dos grupos** (design §9.2: misma operación, mismo servicio, mismo
       modal — el precedente es `contacto`, no `reprogramarDesdeAyuda`);
@@ -188,12 +188,12 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
       _Hecho:_ `pnpm exec vitest run novedad-acciones` verde (las **dos** guardias: la de una sola
       tabla y la de sin-maqueta, que exige que algún archivo de `app/(app)/novedades/` importe de
       verdad esa Server Action). **(R23)**
-- [ ] **F2 ⇐ F1,E1** `NovedadAcciones.tsx` (icono `PencilLine`, rótulo «Corregir datos», nombre
+- [x] **F2 ⇐ F1,E1** `NovedadAcciones.tsx` (icono `PencilLine`, rótulo «Corregir datos», nombre
       accesible con el destinatario) + `NovedadesModule.tsx` (estado, montaje del modal
       **importado de `ordenes/_components`**, relectura tras éxito).
       _Hecho:_ typecheck; el modal no se duplica; el handler es **uno solo**, sin ramificar por
       grupo.
-- [ ] **F3 ⇐ F2** `tests/components/CorregirDatosCliente.novedades.test.tsx`:
+- [x] **F3 ⇐ F2** `tests/components/CorregirDatosCliente.novedades.test.tsx`:
       - la acción aparece en una card del grupo `devolucion`. **(R23)**
       - la acción aparece **también** en una card del grupo `ayuda`. **(R23)**
       - éxito ⇒ la lista se relee del servidor. **(R29)**
@@ -226,11 +226,19 @@ una tabla de auditoría, es la misma señal. La ausencia de rastro es una decisi
       _Hecho:_ los **30** requisitos tienen su archivo y su nombre de test; ninguno sin cubrir.
       Incluye una línea recordando que **no hay rastro por decisión del 2026-08-28** (D4), para
       que quien lea el informe no lo lea como un hueco.
-- [ ] **G5 ⇐ G4** `./init.sh --rapido` verde, con `INIT_EXIT` escrito **dentro** del log.
+- [x] **G5 ⇐ G4** `./init.sh --rapido` verde, con `INIT_EXIT` escrito **dentro** del log.
       _Hecho:_ typecheck 0, lint 0, tests relacionados verdes y **todas** las guardias verdes
       (en especial `novedad-acciones-una-tabla`, `novedad-acciones-sin-maqueta`,
       `superficie-de-uso`, y `orden-nota-frontera` — que debe seguir verde **sin haberla
       tocado**).
+      _Lo que se corrió, 2026-08-28:_ el gate **COMPLETO** (`./init.sh`), no el rápido. El rápido
+      **se niega solo** porque esta ficha tocó `lib/types/` (el módulo puro `correccion-datos-
+      cliente.ts` de la tanda de backend), y eso es un `fail`, no un aviso. Resultado:
+      `INIT_EXIT=0`, `== init OK ==`, **21.134 tests verdes** y **3 archivos rojos, los TRES del
+      baseline** (`superficie-de-uso` → `obtenerTarifa` de la 275, `usuario-descarga` y
+      `usuarios-filtro-busqueda`, los dos por la `zonaNombre` de la 285). **Delta de esta tanda:
+      cero.** Nota para `design.md` §2.1, que dice lo contrario: la ficha no trae migración, pero
+      el módulo de tipos basta para que el rápido se niegue.
 - [ ] **G6 ⇐ G5** Repaso a mano en la app (la suite no encuentra lo que ver la app sí):
       - corregir una orden como `maestro` desde `/ordenes`;
       - corregir una orden como `adminTienda` desde `/novedades`, **en las dos pestañas**
