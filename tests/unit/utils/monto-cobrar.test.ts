@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   normalizarMontoCobrar,
   redondearMontoCobrar,
+  redondearMontoCobrarTexto,
 } from "@/lib/utils/monto-cobrar";
 
 // FEATURE 299 — el modulo puro que redondea el monto a cobrar al colon mas cercano.
@@ -20,6 +21,51 @@ describe("redondearMontoCobrar (feature 299)", () => {
     [0, 0],
   ])("%s -> %s", (entrada, esperado) => {
     expect(redondearMontoCobrar(entrada)).toBe(esperado);
+  });
+});
+
+// FICHA 305 — la MISMA regla para el monto que viaja como TEXTO (la cotizacion por API key).
+describe("redondearMontoCobrarTexto (ficha 305)", () => {
+  it.each([
+    ["11898.81", "11899"], // el monto de la captura del 2026-08-27
+    ["11898.5", "11899"], // el medio SUBE, igual que en la version numerica
+    ["11898.49", "11898"],
+    ["0.5", "1"],
+    ["0.49", "0"],
+    ["0", "0"],
+    ["11899", "11899"], // un entero no se toca, ni gana un `.0`
+    ["9999999999.99", "10000000000"], // el tope de `DECIMAL(12,2)`: el acarreo añade un digito
+  ])("%s -> %s", (entrada, esperado) => {
+    expect(redondearMontoCobrarTexto(entrada)).toBe(esperado);
+  });
+
+  it("sale SIN separador decimal: lo que devuelve es un entero listo para `Prisma.Decimal`", () => {
+    for (const monto of ["11898.81", "0.5", "9999999999.99", "7"]) {
+      expect(redondearMontoCobrarTexto(monto)).toMatch(/^\d+$/);
+    }
+  });
+
+  it("NO ES UNA SEGUNDA REGLA: da exactamente lo mismo que la version numerica", () => {
+    // El corazon de la ficha 305. Si alguien reimplementara el redondeo aqui —con
+    // `Prisma.Decimal`, con `toFixed(0)`, con lo que sea— este barrido es lo que lo delata en
+    // cuanto las dos versiones difieran en un solo valor del corpus.
+    const discrepan: string[] = [];
+    for (let entero = 0; entero < 60; entero++) {
+      for (let centimos = 0; centimos < 100; centimos++) {
+        const texto = `${entero}.${String(centimos).padStart(2, "0")}`;
+        const porTexto = redondearMontoCobrarTexto(texto);
+        const porNumero = String(redondearMontoCobrar(Number(texto)));
+        if (porTexto !== porNumero) discrepan.push(`${texto}: ${porTexto} != ${porNumero}`);
+      }
+    }
+    expect(discrepan).toEqual([]);
+  });
+
+  it("es IDEMPOTENTE: redondear lo ya redondeado no lo mueve", () => {
+    for (const monto of ["11898.81", "0.5", "25900.49"]) {
+      const una = redondearMontoCobrarTexto(monto);
+      expect(redondearMontoCobrarTexto(una)).toBe(una);
+    }
   });
 });
 

@@ -27,13 +27,22 @@
 //  4. NO HAY CAMINO DE EDICION: `UpdateOrdenData` no declara `montoCobrar`, asi que la columna
 //     no se puede reescribir despues del alta; si alguien abre esa puerta, este diente lo dice.
 //
-// LO QUE ESTA GUARDIA NO CUBRE, declarado y no tapado:
-//  - un `UPDATE` en SQL crudo sobre `orden.monto_cobrar` (no hay ninguno hoy; el barrido de
-//    dientes 3/4 mira TypeScript, no cadenas SQL);
-//  - la base no tiene un `CHECK (monto_cobrar = trunc(monto_cobrar))`. Seria la unica defensa
-//    verdaderamente universal —cubre incluso lo que se escriba a mano en la base, que es
-//    justamente como se desbloquearon las 14 ordenes— pero exige una migracion y esta ficha se
-//    implemento con la orden explicita de no tocar la base. Queda como la vuelta pendiente.
+// LA VUELTA PENDIENTE, YA DADA (FICHA 305, 2026-08-28)
+// ----------------------------------------------------
+// Donde esto decia «la base no tiene un `CHECK (monto_cobrar = trunc(monto_cobrar))` … queda
+// como la vuelta pendiente», ahora lo tiene: `20260828140000_orden_monto_cobrar_entero`. Esa es
+// la defensa universal —alcanza al `UPDATE` a mano, que es JUSTO como entraron los centimos que
+// hubo que limpiar— y la vigila `tests/integration/db/orden-monto-cobrar-entero-migration.test.ts`
+// CONTRA POSTGRES, porque una restriccion de la base no la ve ningun doble.
+//
+// Esta guardia NO se retira por eso, y conviene decir por que: el `CHECK` protege LA COLUMNA,
+// esta guardia protege LAS PUERTAS. Sin ella, una puerta nueva que meta centimos deja de ser un
+// dato malo y pasa a ser un 23514 en la cara de una tienda a mitad de una carga de 5.000 filas.
+// Son dos redes distintas y ninguna sustituye a la otra.
+//
+// LO QUE ESTA GUARDIA SIGUE SIN CUBRIR, declarado y no tapado: un `UPDATE` en SQL crudo sobre
+// `orden.monto_cobrar` (no hay ninguno hoy; el barrido de dientes 3/4 mira TypeScript, no
+// cadenas SQL). Ese hueco lo tapa ahora la base, no este archivo.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
@@ -41,6 +50,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { filaCargaSchema } from "@/lib/types/carga-masiva";
+import { filaCotizacionSchema } from "@/lib/types/cotizacion";
 
 const RAIZ = path.resolve(__dirname, "..", "..", "..");
 
@@ -80,13 +90,25 @@ function fuentes(): { ruta: string; codigo: string }[] {
  */
 const CLAVE_EN_SCHEMA_ZOD = /^[ \t]*monto_cobrar\s*:\s*z\b/m;
 
+/**
+ * Lo que una puerta devuelve como monto. `number` en la carga (la columna lo recibe como
+ * numero) y `string` en la cotizacion (transporta el importe como texto hasta el
+ * `Prisma.Decimal`). El TRANSPORTE puede diferir; lo que no puede diferir es que sea un entero.
+ */
+type MontoDeSalida = number | string | null;
+
+/** «Entero» en los dos transportes: sin parte decimal en el numero, sin separador en el texto. */
+function esEntero(valor: number | string): boolean {
+  return typeof valor === "number" ? Number.isInteger(valor) : /^-?\d+$/.test(valor);
+}
+
 interface Puerta {
   ruta: string;
   /**
    * Que hace esa puerta con el monto. `null` = no normaliza, y entonces `porque` tiene que
-   * explicar por que no hace falta (spoiler: porque no da de alta nada).
+   * explicar por que no hace falta.
    */
-  normaliza: ((monto: string) => number | null) | null;
+  normaliza: ((monto: string) => MontoDeSalida) | null;
   porque: string;
 }
 
@@ -111,15 +133,32 @@ const PUERTAS: readonly Puerta[] = [
     porque: "puerta de alta de las DOS vias (carga masiva por pantalla y canal por API key)",
   },
   {
+    // FICHA 305 (2026-08-28) — ESTA ENTRADA ERA LA EXCEPCION DE LA LISTA, Y HA DEJADO DE SERLO.
+    //
+    // La 299 la exceptuo con este motivo escrito: «cotizar no da de alta nada, su monto viaja
+    // como STRING a proposito, y redondearlo cambiaria un precio publicado». Todo eso sigue
+    // siendo cierto salvo la conclusion: la cotizacion NO crea ordenes, pero PROMETE el precio
+    // de la orden que se crearia, y esa orden se cobra sobre el monto REDONDEADO. Cotizar sobre
+    // el exacto era prometer una cifra y cobrar otra. La 299 declaro esa diferencia como deuda
+    // conocida (centimos sobre la comision); la 305 la paga.
+    //
+    // El monto SIGUE viajando como string: lo que cambia es su VALOR, no su transporte. El
+    // redondeo se delega en `redondearMontoCobrarTexto`, que llama a la MISMA
+    // `redondearMontoCobrar` de la carga — por eso las dos filas de abajo, medidas sobre el
+    // mismo corpus, no pueden divergir.
     ruta: "lib/types/cotizacion.ts",
-    normaliza: null,
+    normaliza: (monto) =>
+      filaCotizacionSchema.parse({
+        provincia: "Cartago",
+        canton: "Cartago",
+        distrito: "Occidental",
+        direccion: "Frente a X",
+        monto_cobrar: monto,
+      }).monto_cobrar,
     porque:
-      "COTIZAR NO DA DE ALTA NADA (feature 255, lectura pura: ni orden, ni lote, ni historial). " +
-      "Ademas su monto viaja como STRING de punta a punta a proposito —es la base de la " +
-      "comision COD y `derivarIngresoOrden` lo mete tal cual en un `Prisma.Decimal`—, asi que " +
-      "redondearlo aqui cambiaria un precio publicado sin crear ninguna orden. La diferencia " +
-      "que eso deja (el precio se cotiza sobre el monto exacto y se cobra sobre el redondeado) " +
-      "esta declarada en el informe de la ficha 299 y es de centimos sobre la comision.",
+      "el PRECIO PUBLICADO por API key. No da de alta nada, pero cotiza la orden que se " +
+      "creara, y esa se cobra sobre el monto redondeado: si cotizara sobre el exacto, las dos " +
+      "cifras no cuadrarian (ficha 305)",
   },
 ];
 
@@ -162,10 +201,14 @@ describe("guardia 299 · diente 1 — el censo de puertas de alta esta completo"
 describe("guardia 299 · diente 2 — la puerta que dice redondear, redondea (en ejecucion)", () => {
   const queNormalizan = PUERTAS.filter((p) => p.normaliza !== null);
 
-  it("hay al menos una puerta normalizadora que medir", () => {
-    // Sin esto, borrar el `normaliza` de la unica entrada dejaria el `it.each` de abajo sin
-    // casos y el diente pasaria sin comprobar nada.
-    expect(queNormalizan.length).toBeGreaterThan(0);
+  it("TODAS las puertas censadas normalizan: hoy no queda ninguna exceptuada", () => {
+    // Sin esto, borrar el `normaliza` de una entrada la devolveria a la lista blanca y el
+    // `it.each` de abajo se quedaria sin ese caso — en verde y sin comprobar nada. La 299 tenia
+    // aqui una excepcion (la cotizacion) y la 305 la retiro: si mañana hace falta otra, esta
+    // linea obliga a cambiarla A MANO y a escribir el motivo, que es justo lo que se quiere.
+    const exceptuadas = PUERTAS.filter((p) => p.normaliza === null).map((p) => p.ruta);
+    expect(exceptuadas, "una puerta volvio a la lista blanca sin que nadie lo discuta").toEqual([]);
+    expect(queNormalizan.length).toBeGreaterThan(1);
   });
 
   it.each(queNormalizan.map((p) => [p.ruta, p] as const))(
@@ -176,16 +219,34 @@ describe("guardia 299 · diente 2 — la puerta que dice redondear, redondea (en
       const conCola: string[] = [];
       for (const monto of montosDePrueba()) {
         const salida = normaliza(monto);
-        if (salida !== null && !Number.isInteger(salida)) conCola.push(`${monto} -> ${salida}`);
+        if (salida !== null && !esEntero(salida)) conCola.push(`${monto} -> ${salida}`);
       }
       expect(conCola, "un monto con centimos cruzo la puerta de alta").toEqual([]);
     },
   );
 
-  it("y el caso real de la captura sale con el numero exacto que el humano redondeo a mano", () => {
-    const normaliza = queNormalizan[0].normaliza;
-    if (normaliza === null) throw new Error("filtrado arriba");
-    expect(normaliza("11898.81")).toBe(11899);
+  it.each(queNormalizan.map((p) => [p.ruta, p] as const))(
+    "%s: el caso real de la captura sale con el numero exacto que el humano redondeo a mano",
+    (_ruta, puerta) => {
+      const normaliza = puerta.normaliza;
+      if (normaliza === null) throw new Error("filtrado arriba");
+      expect(String(normaliza("11898.81"))).toBe("11899");
+    },
+  );
+
+  it("las DOS puertas dan EXACTAMENTE el mismo numero para todo el corpus (ficha 305)", () => {
+    // El corazon de la 305: la carga cobra sobre el redondeado y la cotizacion promete el precio
+    // de esa misma orden. Que cada una salga «entera» por su lado no basta — tienen que salir
+    // IGUALES. Comparadas como texto porque los transportes son distintos (number vs string).
+    const discrepan: string[] = [];
+    for (const monto of montosDePrueba()) {
+      const salidas = queNormalizan.map((p) => {
+        const valor = p.normaliza?.(monto) ?? null;
+        return valor === null ? "null" : String(valor);
+      });
+      if (new Set(salidas).size > 1) discrepan.push(`${monto} -> ${salidas.join(" | ")}`);
+    }
+    expect(discrepan, "dos puertas redondean el MISMO monto a numeros distintos").toEqual([]);
   });
 });
 

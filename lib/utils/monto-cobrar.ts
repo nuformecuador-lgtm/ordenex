@@ -53,6 +53,36 @@ export function redondearMontoCobrar(monto: number): number {
 }
 
 /**
+ * FICHA 305 — LA MISMA REGLA, PARA QUIEN TRANSPORTA EL MONTO COMO TEXTO.
+ *
+ * La usa la COTIZACION por API key (`filaCotizacionSchema`, `lib/types/cotizacion.ts`), que
+ * conserva `monto_cobrar` como string de punta a punta porque es la base de la comision COD y
+ * `derivarIngresoOrden` lo mete tal cual en un `Prisma.Decimal`. Hasta esta ficha, la cotizacion
+ * calculaba el precio sobre el monto EXACTO y la carga cobraba sobre el REDONDEADO: dos cifras
+ * que no cuadran el dia que alguien las compare.
+ *
+ * ⚠️ ES UNA DELEGACION, NO UNA SEGUNDA IMPLEMENTACION, y la diferencia importa. Si aqui se
+ * escribiera el redondeo otra vez —da igual que fuera con `Prisma.Decimal` y su ROUND_HALF_UP,
+ * que sobre el papel dice lo mismo— habria DOS reglas capaces de divergir, y el defecto que
+ * volveria seria exactamente el que esta ficha cierra: cotizar una cifra y cobrar otra. Pasando
+ * por `redondearMontoCobrar` las dos puertas no pueden discrepar para NINGUNA entrada, porque
+ * ejecutan el mismo `Math.round`.
+ *
+ * EL COSTE DE ESA DELEGACION, dicho y no escondido: convierte a `number`, asi que un monto por
+ * encima de 2^53 se redondearia a un vecino binario. No es un riesgo real de este dominio y
+ * tampoco es nuevo: `monto_cobrar` es `DECIMAL(12,2)` (tope 9.999.999.999,99, ocho ordenes de
+ * magnitud por debajo) y `filaCargaSchema` ya hace `Number(value)` sobre ESTE MISMO campo desde
+ * la feature 15. Si algun dia el tope de la columna subiera, la carga y la cotizacion romperian
+ * a la vez y de la misma forma — que es la propiedad que se quiere conservar.
+ *
+ * Entra un decimal no negativo ya validado por el schema (`/^\d+(\.\d+)?$/`) y sale la parte
+ * entera SIN separador, lista para `new Prisma.Decimal(...)`.
+ */
+export function redondearMontoCobrarTexto(monto: string): string {
+  return String(redondearMontoCobrar(Number(monto)));
+}
+
+/**
  * Normaliza el monto de una fila de alta.
  *
  * `null` (columna vacia o ausente) sigue siendo `null`: «sin monto a cobrar» no es un cero ni

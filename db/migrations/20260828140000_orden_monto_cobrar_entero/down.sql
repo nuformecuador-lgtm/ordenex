@@ -1,0 +1,24 @@
+-- DOWN (ficha 305) — suelta el `CHECK` de `orden.monto_cobrar` y devuelve la tabla a como estaba
+-- antes de `20260828140000_orden_monto_cobrar_entero`: sin ninguna restriccion sobre la escala
+-- del monto.
+--
+-- ES EXACTAMENTE LA INVERSA DEL UP, y no hay mas que soltar: el up ejecuta UNA sentencia
+-- (`ADD CONSTRAINT`), no crea indices, no crea columnas y no mueve filas. Este down tampoco.
+--
+-- ⚠️ ESTE ROLLBACK NO PUEDE FALLAR, pero DEJA LA PUERTA ABIERTA. Soltar la restriccion no
+-- destruye ni un dato —las filas que hay siguen siendo enteras— pero devuelve la base al estado
+-- en que un `UPDATE` a mano puede volver a meter una orden imposible de entregar. Quien lo
+-- ejecute debe saber que el sintoma NO aparece al escribirla: aparece semanas despues, en la
+-- mano de un mensajero que no puede cerrar la entrega, y la unica pista es el «Diferencia 0» que
+-- se contradice a si mismo.
+--
+-- Y OJO CON EL CAMINO DE VUELTA: si mientras la restriccion estuvo suelta entro una fila con
+-- centimos, volver a aplicar el up ABORTA con 23514 hasta que alguien decida que hacer con esa
+-- fila. Ese fallo es correcto y es el mismo que describe `migration.sql`; la consulta para
+-- saberlo de antemano esta alli.
+--
+-- `IF EXISTS` para que el down sea idempotente: correrlo dos veces no es un error.
+--
+-- No toca RLS ni policies (el up tampoco las toco) y no mueve ninguna fila.
+
+ALTER TABLE "orden" DROP CONSTRAINT IF EXISTS "orden_monto_cobrar_entero_check";

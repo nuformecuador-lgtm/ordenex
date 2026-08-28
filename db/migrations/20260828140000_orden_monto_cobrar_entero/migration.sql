@@ -1,0 +1,76 @@
+-- FICHA 305 — `orden.monto_cobrar` NO PUEDE TENER CENTIMOS. LA DEFENSA VIVE EN LA BASE.
+--
+-- QUE PASO, MEDIDO. El desglose de pago de la entrega SOLO admite enteros
+-- (`components/shared/DesglosePagoField.tsx` filtra el input a digitos, decision deliberada) y
+-- el guard de la gestion exige que el desglose sume EXACTAMENTE el monto. Una orden cargada con
+-- centimos no se puede entregar NUNCA: la pantalla dice «Diferencia 0» —porque la pinta con
+-- `money()`, ya redondeado— y a la vez se niega a cerrar. El 2026-08-27 hubo que redondear
+-- CATORCE ordenes A MANO en la base para desbloquear a los mensajeros.
+--
+-- POR QUE UNA RESTRICCION Y NO SOLO EL ARREGLO DE LA 299. La ficha 299 cerro la CARGA
+-- (`filaCargaSchema` redondea al colon mas cercano al entrar) y dejo una guardia que persigue
+-- las puertas de TypeScript. Esa guardia declara ella misma lo que NO puede cubrir, y es
+-- exactamente el camino por el que entraron los centimos que hubo que limpiar: **un `UPDATE`
+-- escrito a mano contra la base**. Ningun barrido de fuentes ve esa sentencia; ningun test de
+-- servicio con dobles la ve tampoco. La UNICA defensa que alcanza a todo el que escriba en la
+-- tabla —aplicacion, script, consola de Supabase, psql— es la propia tabla.
+--
+-- LA REGLA ES LA MISMA QUE LA DE LA CARGA, dicha en SQL: el monto es un entero de colones.
+-- `monto_cobrar = trunc(monto_cobrar)` es literalmente la forma que la guardia de la 299 dejo
+-- escrita como «la vuelta pendiente».
+--
+-- ALCANCE: TODAS LAS FILAS, TAMBIEN LAS BORRADAS — Y ES UNA DECISION, NO UN DESCUIDO.
+-- `orden` tiene borrado logico (`deleted_at`). Un `CHECK` no admite predicado, asi que exentar
+-- a las borradas exigiria escribirlo como `deleted_at IS NOT NULL OR <regla>`. NO se hace:
+--   * el `deleted_at` de una orden es un valor de columna, no una tumba: se pone y se quita con
+--     un `UPDATE`. Una orden borrada con centimos es una orden imposible de entregar esperando
+--     a que alguien la restaure;
+--   * la variante con predicado invita a la maniobra en dos pasos (marcar borrada, escribir los
+--     centimos) y convierte el significado de la restriccion en «depende»;
+--   * y no hay nada que exentar: en la unica base alcanzable desde el arbol de trabajo (la de
+--     desarrollo, `localhost/ordenex`, 67 ordenes) hay CERO filas borradas con decimales. Una
+--     excepcion para un conjunto vacio seria dato inventado.
+-- El unico parcial de `num_remision` (20260827160000) SI lleva predicado, y por un motivo que
+-- aqui no aplica: alli lo que se define es la IDENTIDAD de una remision viva. Un centimo, en
+-- cambio, esta mal en la fila la vea quien la vea.
+--
+-- ⚠️ ESTA MIGRACION VALIDA LAS FILAS QUE YA EXISTEN, Y SE QUIERE ASI. `ADD CONSTRAINT ... CHECK`
+-- sin `NOT VALID` recorre la tabla y ABORTA con 23514 si encuentra una fila que no cumple. NO se
+-- usa `NOT VALID`: una restriccion que no vale para lo que ya hay es una restriccion que MIENTE,
+-- y esta ficha existe justamente porque una promesa a medias («el codigo redondea») dejo pasar
+-- lo que nadie miraba. Antes de aplicarla a una base con datos, correr:
+--
+--   SELECT id, monto_cobrar, deleted_at FROM orden
+--   WHERE monto_cobrar IS NOT NULL AND monto_cobrar <> trunc(monto_cobrar);
+--
+-- Si devuelve filas, esta migracion falla — y ese fallo es la señal correcta. Redondearlas
+-- desde aqui seria mover dinero de una tienda sin que nadie lo decida: la limpieza es una
+-- decision humana, igual que lo fue el 2026-08-27. Por eso AQUI NO HAY BACKFILL.
+--
+-- EL MOMENTO, CON LO QUE SE MIDIO Y LO QUE NO — leelo antes de desplegar:
+--   * PRODUCCION: reportado en CERO ordenes vivas con decimales (medida del 2026-08-28, la que
+--     justifica que esta ficha entre ahora y sin limpieza previa). NO se pudo re-medir desde el
+--     arbol de trabajo: la credencial de produccion es «sensitive» y solo se alcanza por el MCP
+--     de Supabase. Si esa medida caduco, esta migracion aborta en el deploy — ruidosa, no muda.
+--   * DESARROLLO (`localhost/ordenex`, 67 ordenes): CINCO filas VIVAS con centimos, todas del
+--     2026-07-24, sin `num_guia` y con remisiones de prueba (`REM-0001`, `111111`, `63494`,
+--     `63416`, `111117`). Ahi esta migracion ABORTA hasta que alguien las redondee o las borre.
+--     NO se tocan desde aqui, por lo dicho arriba: la limpieza es una decision humana.
+-- La validacion es instantanea sobre una tabla de este tamaño y no toma mas lock que el
+-- `ACCESS EXCLUSIVE` breve del propio `ALTER TABLE`.
+--
+-- `IS NULL OR` ES REDUNDANTE Y SE ESCRIBE IGUAL. Un `CHECK` que evalua a NULL se considera
+-- satisfecho, asi que `monto_cobrar = trunc(monto_cobrar)` ya dejaria pasar las filas sin monto.
+-- Se escribe explicito porque «sin monto a cobrar» es un caso legitimo del negocio (la 299 lo
+-- dice: `null` no es un cero ni un ajuste) y quien lea esta linea dentro de un año no deberia
+-- tener que acordarse de la semantica trivalente de SQL para saberlo.
+--
+-- POR QUE NO ESTA EN `db/schema.prisma`: Prisma no sabe expresar un `CHECK`. El modelo lleva un
+-- comentario que dice donde vive la restriccion, con el mismo patron que ya usan los indices
+-- parciales (`orden_tienda_id_num_remision_key`, `zona_es_gam_unico`, `jobs_dedupe_key_key`).
+--
+-- RLS: no hay tabla nueva -> no hay superficie RLS nueva. No se toca RLS ni ninguna policy.
+-- No mueve una sola fila: cero INSERT/UPDATE/DELETE.
+
+ALTER TABLE "orden" ADD CONSTRAINT "orden_monto_cobrar_entero_check"
+  CHECK ("monto_cobrar" IS NULL OR "monto_cobrar" = trunc("monto_cobrar"));
