@@ -8,11 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import {
   formatMonto as formatMontoConfigurado,
+  monedaConfig,
   SIN_MONTO_RAYA,
 } from "@/lib/config/moneda";
 import { aCentimos } from "@/lib/utils/pagos-recaudo";
 import {
   acotarMonto,
+  capturaCuadra,
+  centimosNoCapturables,
+  cuadreInalcanzable,
   lineaNueva,
   opcionesPara,
   pendiente,
@@ -34,6 +38,39 @@ function money(monto: number): string {
   return formatMontoConfigurado(monto, SIN_MONTO_RAYA);
 }
 
+/**
+ * FEATURE 300 — el importe del resumen del cobro, EXACTO.
+ *
+ * El defecto que arregla, con la captura que lo reportó: una orden de 11.898,81 pintaba «A
+ * cobrar ₡11.899», «Capturado ₡11.899» y «Diferencia ₡0» —el formateador de la 230 redondea— y
+ * DEBAJO el error de descuadre, porque la comparación (`capturaCuadra`) mira el valor exacto.
+ * La pantalla afirmaba que cuadra y que no cuadra a la vez, y el mensajero se quedaba bloqueado
+ * sin un número al que apuntar. Lo mostrado y lo comparado tienen que ser el MISMO número.
+ *
+ * EXCEPCIÓN DECLARADA a «el dinero se pinta sin céntimos» (feature 230), acotada A PROPÓSITO a
+ * este resumen y a su aviso: cuando la cola decimal es 0 —el caso de casi todas las órdenes—
+ * este formateador ES `money()`, byte a byte, así que no cambia ni una pantalla de las que hoy
+ * funcionan. Solo aparece la cola cuando ESCONDERLA sería mentir, porque es exactamente lo que
+ * impide cerrar la orden. Un céntimo que no se ve no es una lectura más limpia: es un bloqueo
+ * sin causa visible.
+ *
+ * Money-safe: se parte de los CÉNTIMOS ENTEROS (`aCentimos`) y la parte entera se pinta con el
+ * formateador compartido; no hay `toFixed` ni aritmética de coma flotante sobre el importe. El
+ * separador decimal sale de configuración —ese es el oficio que le queda desde la 230—, nunca
+ * escrito a mano.
+ */
+export function montoExacto(monto: number): string {
+  const centimos = aCentimos(monto);
+  const negativo = centimos < 0;
+  const absolutos = negativo ? -centimos : centimos;
+  const sueltos = absolutos % 100;
+  if (sueltos === 0) return money(monto);
+  const enteros = (absolutos - sueltos) / 100;
+  const cola = sueltos < 10 ? `0${sueltos}` : `${sueltos}`;
+  // El signo va DELANTE del símbolo ("-₡0,19"), mismo criterio que `formatMontoString`.
+  return `${negativo ? "-" : ""}${money(enteros)}${monedaConfig.separadorDecimal}${cola}`;
+}
+
 export const DESGLOSE_TEXTOS = {
   titulo: "Método de pago",
   linea: "Línea de pago",
@@ -51,7 +88,48 @@ export const DESGLOSE_TEXTOS = {
    * el que se le paga (feature 44).
    */
   noCuadra: "El desglose debe sumar exactamente el monto a cobrar.",
+  /**
+   * FEATURE 300: el descuadre que NO se puede arreglar tecleando mejor.
+   *
+   * El editor solo admite montos enteros (decisión razonada más abajo, en el `<Input/>`, y no se
+   * reabre aquí), así que un monto a cobrar con céntimos no tiene ninguna captura que lo iguale.
+   * Antes se decía con la misma frase que un descuadre normal —«debe sumar exactamente»—, que
+   * pide algo que no se puede hacer, y encima junto a una diferencia pintada como cero.
+   *
+   * El aviso dice las tres cosas que el mensajero necesita: cuál es el monto DE VERDAD, por qué
+   * no se puede capturar, y a quién avisar. Un bloqueo explicado es aceptable; uno que se
+   * contradice, no. Se nombra la moneda por su símbolo de configuración (llega ya formateado en
+   * los parámetros), nunca escrita a mano.
+   */
+  noCuadraPorCentimos: (montoACobrar: string, centimos: string) =>
+    `El monto a cobrar es ${montoACobrar} y aquí solo se capturan montos sin céntimos: ` +
+    `los ${centimos} finales no se pueden teclear, así que la suma nunca va a cuadrar. ` +
+    `Avisa a la oficina para que ajusten el monto de la orden.`,
 } as const;
+
+/**
+ * FEATURE 300 — el aviso de cuadre, decidido en UN solo sitio.
+ *
+ * Los dos consumidores del editor (el panel del mensajero y la corrección del admin) escribían
+ * cada uno su `cuadra ? undefined : DESGLOSE_TEXTOS.noCuadra`. Con dos frases posibles, esa
+ * duplicación es exactamente como una de las dos pantallas se queda con el mensaje que miente.
+ *
+ * El orden importa y no es casual: lo INALCANZABLE se mira primero. Con céntimos en el total,
+ * `capturaCuadra` no puede dar `true` jamás (toda suma tecleable es entera), así que el otro
+ * mensaje nunca sería el correcto — pero preguntarlo en este orden deja escrito el porqué.
+ */
+export function mensajeDeCuadre(
+  lineas: readonly LineaEnEdicion[],
+  montoACobrar: number,
+): string | undefined {
+  if (cuadreInalcanzable(montoACobrar)) {
+    return DESGLOSE_TEXTOS.noCuadraPorCentimos(
+      montoExacto(montoACobrar),
+      montoExacto(centimosNoCapturables(montoACobrar) / 100),
+    );
+  }
+  return capturaCuadra(lineas, montoACobrar) ? undefined : DESGLOSE_TEXTOS.noCuadra;
+}
 
 /**
  * Feature 213 (R1-R9) — EDITOR DE LÍNEAS del recaudo.
@@ -186,25 +264,29 @@ export function DesglosePagoField({
         </Button>
       ) : null}
 
-      {/* R8: los tres importes, siempre visibles y recalculados en cada tecla. */}
+      {/* R8: los tres importes, siempre visibles y recalculados en cada tecla.
+          Feature 300: se pintan con `montoExacto`, que es `money()` mientras no haya céntimos
+          —o sea, siempre que la orden esté sana— y solo enseña la cola decimal cuando ES la
+          razón por la que la diferencia no llega a cero. Antes, «Diferencia ₡0» en rojo junto
+          al error de descuadre era la contradicción que bloqueaba al mensajero. */}
       <dl
         aria-label={DESGLOSE_TEXTOS.resumen}
         className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground"
       >
         <div className="flex gap-1.5">
           <dt>{DESGLOSE_TEXTOS.aCobrar}</dt>
-          <dd className="font-semibold text-foreground">{money(montoACobrar)}</dd>
+          <dd className="font-semibold text-foreground">{montoExacto(montoACobrar)}</dd>
         </div>
         <div className="flex gap-1.5">
           <dt>{DESGLOSE_TEXTOS.capturado}</dt>
-          <dd className="font-semibold text-foreground">{money(capturado)}</dd>
+          <dd className="font-semibold text-foreground">{montoExacto(capturado)}</dd>
         </div>
         <div className="flex gap-1.5">
           <dt>{DESGLOSE_TEXTOS.diferencia}</dt>
           <dd
             className={`font-semibold ${diferencia === 0 ? "text-foreground" : "text-destructive"}`}
           >
-            {money(diferencia)}
+            {montoExacto(diferencia)}
           </dd>
         </div>
       </dl>
