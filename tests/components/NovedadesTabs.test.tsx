@@ -348,8 +348,9 @@ describe("NovedadesTabs — R2/R8: la partición es del SERVIDOR, no de la panta
   it("237: el «Reprogramar» de cada fila abre la ventana de SU grupo, no la del vecino", async () => {
     // Éste es el heredero del control negativo que la 237 dejó sin discriminador. Los dos botones
     // se llaman igual y hacen cosas distintas: el de la fila en ayuda crea una gestión atribuida al
-    // mensajero —con intento y con dinero— y el de la devuelta llama al servicio de la feature 100.
-    // Confundirlos no daría un error visible: daría un `conflict` en un caso y un cobro en el otro.
+    // mensajero —que entra en SU cierre del día y suma un intento— y el de la devuelta llama al
+    // servicio de la feature 100. Confundirlos no daría un error visible: daría un `conflict` en un
+    // caso y una gestión en el cierre de otra persona en el otro.
     const user = userEvent.setup();
     renderTabs({
       ayuda: {
@@ -363,22 +364,27 @@ describe("NovedadesTabs — R2/R8: la partición es del SERVIDOR, no de la panta
       },
     });
 
-    // La fila en AYUDA -> la ventana de la 237, que se reconoce por el aviso del precio.
+    // La fila en AYUDA -> la ventana de la 237, que se reconoce por su aviso de consecuencias.
+    //
+    // ⚠️ FICHA 309 (2026-08-28): el discriminador ERA «mueve el dinero igual», y era el peor
+    // posible justo en esta rama — al REPROGRAMAR no se mueve ni un colón, así que la frase se
+    // retiró de ese modo por falsa. Se usa el CIERRE AJENO, que sí es cierto en los dos modos y
+    // sigue siendo imposible en el modal de la 100.
     await user.click(
       screen.getByRole("button", { name: "Reprogramar la orden de Ana Cliente" }),
     );
     const ventana237 = await screen.findByRole("dialog");
     expect(ventana237).toHaveTextContent("Resolver la orden por tu cuenta");
-    expect(ventana237).toHaveTextContent("mueve el dinero igual");
+    expect(ventana237).toHaveTextContent("entra en su cierre del día");
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-    // La fila DEVUELTA -> el modal de la feature 100, que no dice nada de cierres ni de dinero.
+    // La fila DEVUELTA -> el modal de la feature 100, que no dice nada de cierres ajenos.
     await user.click(
       screen.getByRole("button", { name: "Reprogramar la orden de Beto Cliente" }),
     );
     const modal100 = await screen.findByRole("dialog");
     expect(modal100).not.toHaveTextContent("Resolver la orden por tu cuenta");
-    expect(modal100).not.toHaveTextContent("mueve el dinero igual");
+    expect(modal100).not.toHaveTextContent("entra en su cierre del día");
   });
 });
