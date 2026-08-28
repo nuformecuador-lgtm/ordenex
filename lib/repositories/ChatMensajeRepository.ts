@@ -271,6 +271,14 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
     // la fuente de verdad de "de quien es la orden" es `orden.mensajero_asignado_id`, que es la
     // misma puerta que usa `OrdenEnvioReader.findParaEnvio` en `listarHilo` (R16/R17 de la 109).
     // `deleted_at IS NULL` por el mismo motivo que alli: una orden borrada no da acceso a nada.
+    //
+    // POR QUE `m.id = ${mensajeId}` SIN `::uuid`: `ChatMensaje.id` se declara `String @id
+    // @default(uuid())` SIN `@db.Uuid`, asi que la columna REAL en Postgres es `text`. Un
+    // `::uuid` sobre el parametro hace que la comparacion sea `text = uuid`, operador que
+    // Postgres NO tiene: la query lanza `42883` y el proxy devuelve 500 para TODO adjunto. El
+    // parametro ya viaja parametrizado (`Prisma.sql`), y el route valida el formato con
+    // `z.uuid()` antes de llamar, asi que quitar el cast no relaja ninguna garantia. NO LO
+    // VUELVAS A PONER sin cambiar antes el tipo de la columna con una migracion.
     const rows = await this.prisma.$queryRaw<
       { media_id: string | null; media_mime: string | null; media_nombre: string | null; orden_id: string }[]
     >(Prisma.sql`
@@ -278,7 +286,7 @@ export class ChatMensajeRepository implements IChatMensajeRepository {
       FROM chat_mensaje m
       JOIN chat_conversacion c ON c.id = m.conversacion_id
       JOIN orden o ON o.id = c.orden_id
-      WHERE m.id = ${mensajeId}::uuid
+      WHERE m.id = ${mensajeId}
         AND o.deleted_at IS NULL
         AND o.mensajero_asignado_id = ${mensajeroId}
       LIMIT 1
