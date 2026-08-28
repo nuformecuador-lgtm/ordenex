@@ -484,3 +484,29 @@ export const ANULAR_PREMIO_TEXTO = {
   confirmar: "Anular el premio",
   cancelar: "Cancelar",
 } as const;
+
+/**
+ * FICHA 298 (2026-08-27, pedido del humano) — LOS RÓTULOS DE LAS DOS PESTAÑAS de
+ * `/wallet/mensajeros`.
+ *
+ * El día que la 293 estrenó el panel de premios lo dejó APILADO encima de la tabla de cuentas
+ * por pagar, dentro de la misma sección: dos bloques con su propio selector, su propia tabla y
+ * sus propios botones, uno detrás del otro. Acá no cambia ninguna regla —ni el registro del
+ * premio ni lo que cada bloque enseña—: cambia DÓNDE vive cada uno.
+ *
+ * El ORDEN no es alfabético ni cronológico: a esta pantalla se entra a PAGAR lo que se debe, y
+ * registrar el premio del podio es lo excepcional. Por eso «Cuentas por pagar» va primera y es
+ * la que abre (`TabsGroup` selecciona la primera habilitada si nadie pide otra).
+ *
+ * El nombre accesible del grupo es DISTINTO del de la sección, del `<h1>` y del de la tabla
+ * («Cuentas por pagar a mensajeros» los tres): si coincidiera, el nombre del `tablist` chocaría
+ * con el de la región y el de la tabla, que es el fallo que la 277 ya documentó en «Por recoger».
+ */
+export const PESTANAS_MENSAJEROS = {
+  /** Nombre accesible del `tablist`. */
+  grupo: "Secciones de mensajeros",
+  /** La de entrada: lo que se le debe a cada mensajero. */
+  cuentas: "Cuentas por pagar",
+  /** La excepcional: el premio del podio de un día (293/R1). */
+  premios: "Premios del ranking",
+} as const;
