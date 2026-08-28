@@ -18,13 +18,21 @@ export const MSG_ORDEN_YA_BORRADA = "orden ya borrada";
 // ---------------------------------------------------------------------------------------
 
 /**
- * La orden ya registra al menos UNA gestion posterior a su creacion, asi que no se puede
- * eliminar. "Gestion" aqui es lo que el sistema entiende por tal en su unica evidencia
- * auditable: una transicion de estado con origen (`orden_historial_estado` con
- * `estatus_origen_id` NO nulo). La fila de nacimiento tiene ese campo NULO y por tanto no
- * cuenta — es la creacion, no una gestion posterior a ella.
+ * El ESTADO de la orden no admite eliminarla.
+ *
+ * FICHA 319 (2026-08-28) — se llamaba `MSG_ORDEN_CON_GESTION` y decia «orden con gestion
+ * posterior a la creacion», que era literalmente el criterio de entonces: contar transiciones
+ * en `orden_historial_estado`. Ese conteo SE RETIRO (decision del humano: el estado ya dice
+ * quien hizo que con el paquete, y el conteo descalificaba una orden solo por haberle impreso
+ * la etiqueta). El nombre y el texto se mueven con el criterio, en vez de quedarse citando una
+ * regla que ya no se aplica: el siguiente que lea este motivo en un `conflict` deduciria que el
+ * rechazo salio del historial, y saldria de la lista de
+ * `lib/types/order-status-eliminables.ts`.
+ *
+ * Sigue sin exponer identificadores internos ni datos del destinatario. Tampoco nombra el
+ * estado concreto: el motivo va por orden y la fila ya muestra su estatus en pantalla.
  */
-export const MSG_ORDEN_CON_GESTION = "orden con gestion posterior a la creacion";
+export const MSG_ORDEN_NO_ELIMINABLE = "orden en un estado que no admite eliminarla";
 
 /**
  * La orden NO esta borrada (`deleted_at` nulo): no hay nada que recuperar. Es el espejo
