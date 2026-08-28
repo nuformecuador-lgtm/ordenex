@@ -51,12 +51,16 @@ function AyudaMonto({
 }
 
 /**
- * Bloque reusable: título + los 2 inputs de monto.
+ * Bloque reusable: los 2 inputs de monto, con un título encima sólo si se le da uno.
  *
  * Feature 303 — pasa a `FormField` por DOS motivos, ninguno de negocio: el `Label` suelto no
  * estaba asociado a su `Input` (sin `htmlFor`/`id`, un lector de pantalla no leía nada), y la
  * ayuda de cada monto necesita colgar del campo por `aria-describedby`. `idPrefix` mantiene
  * los ids únicos cuando hay un bloque por vehículo.
+ *
+ * Feature 310 — `label` pasa a OPCIONAL: con un solo bloque, el título de la sección ya lo
+ * nombra y repetirlo aquí eran dos títulos casi iguales seguidos. Con cobro por vehículo
+ * sigue habiendo uno por bloque, y ahí es imprescindible: dice de qué vehículo son los montos.
  */
 function MontoBlock({
   idPrefix,
@@ -65,18 +69,22 @@ function MontoBlock({
   onChange,
 }: Readonly<{
   idPrefix: string;
-  label: string;
+  label?: string;
   value: Monto;
   onChange: (next: Monto) => void;
 }>) {
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-sm font-medium">{label}</p>
+      {label ? <p className="text-sm font-medium">{label}</p> : null}
+      {/* Feature 310 — `rowAligned`: la ayuda de la izquierda ocupa un renglón y la de la
+          derecha dos, así que sin alinear por fila los dos `Input` quedaban a distinta
+          altura; el aviso del cero, que aparece en uno y no en el otro, lo agravaba. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <FormField
           id={`${idPrefix}-entregado`}
           label={PAGO_ZONA_TEXTO.entregado}
           labelClassName="text-xs text-muted-foreground"
+          rowAligned
           hint={
             <AyudaMonto
               destino={PAGO_ZONA_TEXTO.entregadoDestino}
@@ -97,6 +105,7 @@ function MontoBlock({
           id={`${idPrefix}-no-entregado`}
           label={PAGO_ZONA_TEXTO.rechazado}
           labelClassName="text-xs text-muted-foreground"
+          rowAligned
           hint={
             <AyudaMonto
               destino={PAGO_ZONA_TEXTO.rechazadoDestino}
@@ -220,14 +229,12 @@ export function CobroVehiculoTarifas({
     console.log("[Tarifas] Cobro/monto:", payload);
   }, [payload]);
 
-  // Feature 303 — el título NOMBRA a los dos destinatarios en vez de atribuirle todo el dinero
-  // al mensajero: el monto de entrega se le paga a él, pero el de rechazo es ingreso de la
-  // bodega y nunca se le paga. «Monto» a secas, además, no se distinguía de las tarifas que se
-  // le COBRAN a la tienda, que viven en la misma pantalla y son el dinero contrario.
-  const label = cobroVehiculo
-    ? PAGO_ZONA_TEXTO.tituloPorVehiculo
-    : PAGO_ZONA_TEXTO.titulo;
-
+  // Feature 310 — este bloque YA NO se titula. Lo hacía para no llamarse «Monto» a secas
+  // (feature 303), pero quien lo envuelve —la sección «Pagos por zona» de `CrearZonaForm`—
+  // ya lo nombra justo encima, y quedaban dos títulos casi iguales seguidos. Lo que el título
+  // aportaba no se pierde: la ayuda de la sección dice a quién va cada dinero y la de cada
+  // campo lo repite en su sitio. Con cobro por vehículo, cada bloque sigue titulado con el
+  // NOMBRE DEL VEHÍCULO, que es lo único que ahí no se puede deducir.
   return (
     <section className="flex flex-col gap-4 border-t border-border pt-6">
       <div className="flex items-center gap-2">
@@ -253,7 +260,6 @@ export function CobroVehiculoTarifas({
 
       {cobroVehiculo ? (
         <div className="flex flex-col gap-4">
-          <p className="text-sm font-medium">{label}</p>
           {vehiculos.map((v) => (
             <MontoBlock
               key={v.id}
@@ -267,7 +273,6 @@ export function CobroVehiculoTarifas({
       ) : (
         <MontoBlock
           idPrefix="cobro-zona"
-          label={label}
           value={montoDefault}
           onChange={setMontoDefault}
         />

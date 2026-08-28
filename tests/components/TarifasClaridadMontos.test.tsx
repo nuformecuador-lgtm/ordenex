@@ -106,12 +106,13 @@ afterEach(() => {
 });
 
 describe("Pago al mensajero por zona — rótulos (CobroVehiculoTarifas)", () => {
-  it("titula el bloque nombrando a los DOS destinatarios, no sólo al mensajero", () => {
+  it("no se titula a sí mismo: lo nombra la sección que lo envuelve (feature 310)", () => {
     render(<CobroVehiculoTarifas vehiculos={VEHICULOS} />);
 
-    expect(
-      screen.getByText("Pagos por zona (mensajero y bodega)"),
-    ).toBeInTheDocument();
+    // El bloque tenía su propio título, y pegado al de la sección eran dos casi iguales
+    // seguidos. Lo que aquél aportaba —de quién es cada dinero— no se pierde: lo dice la
+    // ayuda de cada campo, que es donde hace falta.
+    expect(screen.queryByText(/^Pagos por zona/)).not.toBeInTheDocument();
     // «Monto» no decía de qué dinero hablaba; «Pago al mensajero» atribuía a UNO los DOS
     // montos, y el del rechazo nunca se le paga a él.
     expect(screen.queryByText("Monto")).not.toBeInTheDocument();
@@ -159,15 +160,17 @@ describe("Pago al mensajero por zona — rótulos (CobroVehiculoTarifas)", () =>
     expect(screen.queryByText("No entregado")).not.toBeInTheDocument();
   });
 
-  it("con cobro por vehículo, el título dice que el pago se desglosa por vehículo", async () => {
+  it("con cobro por vehículo, cada bloque lo titula SU vehículo", async () => {
     const user = userEvent.setup();
     render(<CobroVehiculoTarifas vehiculos={VEHICULOS} />);
 
     await user.click(screen.getByLabelText("Cobro por vehículo"));
 
-    expect(
-      screen.getByText("Pagos por zona y vehículo (mensajero y bodega)"),
-    ).toBeInTheDocument();
+    // El único título que queda por bloque es el que no se puede deducir mirando la pantalla:
+    // de qué vehículo son estos dos montos (feature 310).
+    expect(screen.getByText("Moto")).toBeInTheDocument();
+    expect(screen.getByText("Carro")).toBeInTheDocument();
+    expect(screen.queryByText(/^Pagos por zona/)).not.toBeInTheDocument();
     expect(screen.queryByText("Monto por vehículo")).not.toBeInTheDocument();
     expect(screen.queryByText(/^Pago al mensajero/)).not.toBeInTheDocument();
     // Un par de montos por vehículo, cada uno con su rótulo ya asociado.
@@ -296,6 +299,20 @@ describe("La sección que envuelve el bloque (CrearZonaForm)", () => {
       screen.getByRole("heading", { name: "Pagos por zona" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Pago a mensajeros")).not.toBeInTheDocument();
+  });
+
+  it("titula la sección UNA sola vez, con y sin cobro por vehículo (feature 310)", async () => {
+    const user = userEvent.setup();
+    renderZona();
+
+    // El humano lo reportó con captura: «Pagos por zona» y, justo debajo, «Pagos por zona
+    // (mensajero y bodega)». Dos títulos casi iguales seguidos. Queda el encabezado.
+    const titulos = () => screen.getAllByText(/^Pagos por zona/);
+    expect(titulos()).toHaveLength(1);
+    expect(titulos()[0]).toBe(screen.getByRole("heading", { name: "Pagos por zona" }));
+
+    await user.click(screen.getByLabelText("Cobro por vehículo"));
+    expect(titulos()).toHaveLength(1);
   });
 
   it("explica los dos destinatarios y no habla de «no entrega»", () => {
