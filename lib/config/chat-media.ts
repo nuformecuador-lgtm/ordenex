@@ -1,4 +1,4 @@
-// Feature 299 (design §5.4) — configuracion del proxy de media del chat. Va aparte de
+// Feature 308 (design §5.4) — configuracion del proxy de media del chat. Va aparte de
 // `lib/config/whatsapp.ts` porque no son credenciales: son POLITICAS de servido (que se puede
 // incrustar, cuanto se espera, como se cachea) y `docs/architecture.md` prohibe hardcodearlas en
 // el route handler.

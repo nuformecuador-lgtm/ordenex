@@ -4365,5 +4365,5 @@ después a **279**. Por eso `fb5bd1c2` es ancestro de `dev` y aun así su conten
 278 actual.
 
 **El ancla fiable es el slug de la rama, no el id.** Los ids se reasignan cuando dos sesiones
-paralelas toman el mismo número; el slug sobrevive porque el remoto no se renombra. La ficha 299
+paralelas toman el mismo número; el slug sobrevive porque el remoto no se renombra. La ficha 308
 (chat: media y reacciones) nació como 294 y se renumeró por lo mismo tres días después.

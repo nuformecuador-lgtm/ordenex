@@ -54,9 +54,9 @@ describe("parseWebhookEventos (R5)", () => {
     );
   });
 
-  // Feature 299 (R3): un `image` SIN el sub-objeto `image` (o sin `id` dentro) no tiene binario
+  // Feature 308 (R3): un `image` SIN el sub-objeto `image` (o sin `id` dentro) no tiene binario
   // que bajar, asi que sigue degradando a `otro`. Este test es de la 109 y se CONSERVA: es la
-  // garantia de que la 299 no convirtio la degradacion en una burbuja de imagen rota.
+  // garantia de que la 308 no convirtio la degradacion en una burbuja de imagen rota.
   it("un mensaje de media sin identificador utilizable degrada a 'otro' sin cuerpo (R3)", () => {
     const eventos = parseWebhookEventos({
       entry: [
@@ -111,7 +111,7 @@ describe("parseWebhookEventos (R5)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Feature 299 — B2.T. Los ocho tipos entrantes nuevos: media, reaccion, contactos y el cambio
+// Feature 308 — B2.T. Los ocho tipos entrantes nuevos: media, reaccion, contactos y el cambio
 // de numero del cliente. Regla comun a TODOS: nada lanza y nada rompe el lote; lo que no trae
 // el dato esencial DEGRADA a `otro` (R3/R6/R8/R10/R11).
 // ---------------------------------------------------------------------------
@@ -123,7 +123,7 @@ function payloadConMensajes(...mensajes: Record<string, unknown>[]) {
 
 const BASE = { from: "50688887777", timestamp: "1700000000" };
 
-describe("Feature 299 · media entrante (R1/R2/R3)", () => {
+describe("Feature 308 · media entrante (R1/R2/R3)", () => {
   const CASOS = [
     { metaType: "image", tipo: "imagen", mime: "image/jpeg" },
     { metaType: "audio", tipo: "audio", mime: "audio/ogg" },
@@ -211,7 +211,7 @@ describe("Feature 299 · media entrante (R1/R2/R3)", () => {
   });
 });
 
-describe("Feature 299 · reacciones (R4/R5/R6)", () => {
+describe("Feature 308 · reacciones (R4/R5/R6)", () => {
   it("R4: una reaction con message_id y emoji conserva objetivo y emoji", () => {
     const eventos = parseWebhookEventos(
       payloadConMensajes({
@@ -270,7 +270,7 @@ describe("Feature 299 · reacciones (R4/R5/R6)", () => {
   });
 });
 
-describe("Feature 299 · contactos (R7/R8)", () => {
+describe("Feature 308 · contactos (R7/R8)", () => {
   it("R7: normaliza nombre, telefonos y correos y DESCARTA lo no declarado", () => {
     const eventos = parseWebhookEventos(
       payloadConMensajes({
@@ -336,7 +336,7 @@ describe("Feature 299 · contactos (R7/R8)", () => {
   });
 });
 
-describe("Feature 299 · cambio de numero del cliente (R9/R10)", () => {
+describe("Feature 308 · cambio de numero del cliente (R9/R10)", () => {
   // LOS TRES NOMBRES SON EL PUNTO. La Cloud API ha usado los tres para el mismo evento y el
   // repo apunta a v21.0 (`lib/config/whatsapp.ts`), donde NO se llama `user_changed_number`:
   // casar solo contra ese literal dejaria R9 muerto en silencio en la version que corremos.
@@ -414,7 +414,7 @@ describe("Feature 299 · cambio de numero del cliente (R9/R10)", () => {
   });
 });
 
-describe("Feature 299 · tipos fuera de alcance y desconocidos (R11)", () => {
+describe("Feature 308 · tipos fuera de alcance y desconocidos (R11)", () => {
   const FUERA_DE_ALCANCE = [
     "button",
     "interactive",

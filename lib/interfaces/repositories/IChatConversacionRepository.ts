@@ -81,7 +81,7 @@ export interface IChatConversacionRepository {
   marcarLeidoHastaUltimoEntrante(ordenId: string, mensajeroId: string): Promise<void>;
 
   /**
-   * Feature 299 (design §3, R16/R18) — el cliente cambio de numero: reescribe `telefono_e164`
+   * Feature 308 (design §3, R16/R18) — el cliente cambio de numero: reescribe `telefono_e164`
    * de los hilos que hoy tienen `anterior` para que los mensajes posteriores caigan en el MISMO
    * hilo. Devuelve cuantas filas migraron (0 es un desenlace VALIDO, no un error).
    *

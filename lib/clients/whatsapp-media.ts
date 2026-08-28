@@ -1,4 +1,4 @@
-// Feature 299 (design §5.3, R21/R24/R35) — cliente de DESCARGA de media de la Graph API.
+// Feature 308 (design §5.3, R21/R24/R35) — cliente de DESCARGA de media de la Graph API.
 //
 // Va aparte de `whatsapp-cloud.ts` (que ENVIA) porque su desenlace es distinto: aqui no hay
 // `transitorio` que reintentar, hay un binario que servir o un "ya no existe" que contar. Hereda

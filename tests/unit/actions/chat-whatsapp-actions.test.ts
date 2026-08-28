@@ -583,16 +583,16 @@ describe("marcarChatLeido", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Feature 299 — E2.T (R19/R20/R21/R35). El contrato que `listarHiloChat` entrega a la UI.
+// Feature 308 — E2.T (R19/R20/R21/R35). El contrato que `listarHiloChat` entrega a la UI.
 // ---------------------------------------------------------------------------
 
-describe("Feature 299 · listarHiloChat expone los tipos nuevos (R19/R21)", () => {
-  const AHORA_299 = new Date("2026-08-27T12:00:00.000Z");
-  const RECIENTE = new Date(AHORA_299.getTime() - 60 * 60 * 1000);
+describe("Feature 308 · listarHiloChat expone los tipos nuevos (R19/R21)", () => {
+  const AHORA_308 = new Date("2026-08-27T12:00:00.000Z");
+  const RECIENTE = new Date(AHORA_308.getTime() - 60 * 60 * 1000);
   const MEDIA_ID_DE_META = "MEDIA-ID-DE-META-QUE-NO-DEBE-SALIR";
 
   /** Repo del hilo con lo minimo que usa `listarHiloChat` (copia local del de arriba). */
-  function conv299(ultimoEntranteAt: Date): IChatConversacionRepository {
+  function conv308(ultimoEntranteAt: Date): IChatConversacionRepository {
     return {
       resolverOrdenActivaPorNumero: vi.fn(),
       upsertParaOrden: vi.fn(),
@@ -611,7 +611,7 @@ describe("Feature 299 · listarHiloChat expone los tipos nuevos (R19/R21)", () =
     };
   }
 
-  function mensajes299(lista: unknown[]): IChatMensajeRepository {
+  function mensajes308(lista: unknown[]): IChatMensajeRepository {
     return {
       insertarEntranteIdempotente: vi.fn(),
       insertarSaliente: vi.fn(),
@@ -662,9 +662,9 @@ describe("Feature 299 · listarHiloChat expone los tipos nuevos (R19/R21)", () =
     return listarHiloChat("orden-1", {
       getActor: getActor(MENSAJERO),
       ordenReader: ordenReader(ORDEN_DATA),
-      conversacionRepo: conv299(RECIENTE),
-      mensajeRepo: mensajes299(filas),
-      now: () => AHORA_299,
+      conversacionRepo: conv308(RECIENTE),
+      mensajeRepo: mensajes308(filas),
+      now: () => AHORA_308,
     });
   }
 
@@ -783,7 +783,7 @@ describe("Feature 299 · listarHiloChat expone los tipos nuevos (R19/R21)", () =
     expect(res.mensajes[0].reacciones).toEqual([]);
   });
 
-  it("un mensaje de texto sin nada de la 299 sale con los campos nuevos vacios", async () => {
+  it("un mensaje de texto sin nada de la 308 sale con los campos nuevos vacios", async () => {
     const res = await listar([fila({ id: "m-txt", tipo: "texto", cuerpo: "hola" })]);
 
     expect(res.status).toBe("ok");
@@ -797,7 +797,7 @@ describe("Feature 299 · listarHiloChat expone los tipos nuevos (R19/R21)", () =
   });
 
   it("R16 sigue en pie: una orden ajena responde `forbidden` sin leer nada", async () => {
-    const mensajeRepo = mensajes299([]);
+    const mensajeRepo = mensajes308([]);
     const res = await listarHiloChat("orden-1", {
       getActor: getActor(MENSAJERO),
       ordenReader: ordenReader(null), // la orden no es de este mensajero

@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { ReaccionAgregada } from "@/lib/utils/chat-reacciones";
 
-// Feature 299 (R30, D4) — chips de reaccion ANCLADOS a la burbuja del mensaje reaccionado.
+// Feature 308 (R30, D4) — chips de reaccion ANCLADOS a la burbuja del mensaje reaccionado.
 //
 // En WhatsApp una reaccion pertenece al mensaje al que reacciona: un "👍" suelto cinco burbujas
 // mas abajo no dice a que reacciono el cliente. Por eso este componente se renderiza DENTRO del

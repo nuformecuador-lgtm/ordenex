@@ -10,7 +10,7 @@ import { TarjetaContacto } from "./TarjetaContacto";
 import { TextoConEnlaces } from "./TextoConEnlaces";
 import { TextoCambioNumero } from "./BurbujaSistema";
 
-// Feature 299 (R14/R27) — QUE se pinta dentro de una burbuja, por tipo de mensaje.
+// Feature 308 (R14/R27) — QUE se pinta dentro de una burbuja, por tipo de mensaje.
 //
 // El `switch` es EXHAUSTIVO con `never` en el `default` a proposito: asi, el dia que se añada un
 // tipo nuevo al enum y nadie lo pinte, el fallo es un ERROR DE COMPILACION y no otra burbuja

@@ -6,7 +6,7 @@ import {
   sanearNombreArchivo,
 } from "@/lib/utils/chat-media-headers";
 
-// Feature 299 — F4.T (R25). Reglas de cabecera del proxy de media. Son decisiones de SEGURIDAD
+// Feature 308 — F4.T (R25). Reglas de cabecera del proxy de media. Son decisiones de SEGURIDAD
 // (que se puede incrustar y con que nombre se descarga), por eso son helpers puros con test
 // propio y no logica enterrada en el route handler.
 

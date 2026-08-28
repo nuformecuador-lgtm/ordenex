@@ -1,4 +1,4 @@
--- DOWN de la feature 299 (design §1.4, R13). Revierte EXACTAMENTE el migration.sql de esta
+-- DOWN de la feature 308 (design §1.4, R13). Revierte EXACTAMENTE el migration.sql de esta
 -- carpeta, en orden inverso:
 --   (3) suelta el indice parcial de reacciones;
 --   (2) elimina las nueve columnas de `chat_mensaje`;

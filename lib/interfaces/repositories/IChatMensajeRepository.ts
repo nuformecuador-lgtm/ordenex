@@ -6,7 +6,7 @@ import type { ChatMensajeDireccion, ChatMensajeEstado, ChatMensajeTipo } from "@
 import type { ChatContactoNormalizado } from "@/lib/types/chat-contactos";
 
 /**
- * Feature 299 (design §4) — los nueve campos nuevos de un mensaje, agrupados por el tipo que
+ * Feature 308 (design §4) — los nueve campos nuevos de un mensaje, agrupados por el tipo que
  * los usa. Se comparten entre el DTO de lectura y el input de escritura porque son EXACTAMENTE
  * los mismos datos; `contactos` cruza la interfaz TIPADO (nunca `Prisma.JsonValue` ni `any`):
  * la conversion JSON<->tipo vive dentro del repositorio.
@@ -61,7 +61,7 @@ export interface ChatMensajeErrorInput {
 
 /**
  * Datos de un mensaje ENTRANTE a insertar (R6). `estado` no aplica a entrantes.
- * Los campos de la feature 299 son OPCIONALES: un entrante de texto no los manda y quedan NULL.
+ * Los campos de la feature 308 son OPCIONALES: un entrante de texto no los manda y quedan NULL.
  */
 export interface InsertarEntranteInput extends Partial<ChatMensajeCamposMedia> {
   conversacionId: string;
@@ -149,7 +149,7 @@ export interface IChatMensajeRepository {
   ultimoEntranteAt(conversacionId: string): Promise<Date | null>;
 
   /**
-   * Feature 299 (design §4/§5.2, R23) — media de UN mensaje, SOLO si ese mensaje pertenece a un
+   * Feature 308 (design §4/§5.2, R23) — media de UN mensaje, SOLO si ese mensaje pertenece a un
    * hilo de una orden asignada a `mensajeroId`. Es la MISMA puerta que `listarHilo` (R16/R17 de
    * la 109): la propiedad de la orden se resuelve en el servidor, nunca por un parametro del
    * cliente. Una sola query con el join, para que la autorizacion del proxy sea barata y no

@@ -199,13 +199,13 @@ export class ChatConversacionRepository implements IChatConversacionRepository {
   }
 
   async migrarTelefono(anterior: string, nuevo: string): Promise<number> {
-    // Feature 299 (design §3, R16/R18): el cliente cambio de numero -> los hilos que hoy
+    // Feature 308 (design §3, R16/R18): el cliente cambio de numero -> los hilos que hoy
     // tienen el numero ANTERIOR pasan a tener el NUEVO. Ambos lados se normalizan aqui por la
     // misma razon que en `upsertParaOrden`: la clave del hilo es siempre el numero canonico.
     //
     // LO QUE ESTA MIGRACION *NO* HACE (limitacion conocida, DECISION DEL HUMANO del 2026-08-27;
     // ver el bloque «LIMITACION CONOCIDA» bajo R16 en
-    // `specs/299-chat-media-reacciones-contactos/requirements.md`):
+    // `specs/308-chat-media-reacciones-contactos/requirements.md`):
     //
     //   NO consigue que los mensajes posteriores del cliente caigan en este hilo. Un entrante
     //   se resuelve a su orden por `orden.telefono_dest` (ver `resolverOrdenActivaPorNumero`,

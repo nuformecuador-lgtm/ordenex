@@ -49,7 +49,7 @@ vi.mock("@/app/(app)/mis-asignaciones/_components/UbicacionMapa", () => ({
 }));
 
 import { ChatConversacion } from "@/app/(app)/mis-asignaciones/_components/chat/ChatConversacion";
-import { VISTA_SIN_299 } from "@/tests/fixtures/chat-mensaje";
+import { VISTA_SIN_308 } from "@/tests/fixtures/chat-mensaje";
 
 const ORDEN: MiAsignacionDTO = {
   id: "orden-1",
@@ -64,7 +64,7 @@ const ORDEN: MiAsignacionDTO = {
   montoCobrar: 5000,
   latitud: null,
   longitud: null,
-  ...VISTA_SIN_299,
+  ...VISTA_SIN_308,
   notas: null,
   tiendaNombre: "Tienda",
   zonaNombre: "Zona",
@@ -83,7 +83,7 @@ const SALIENTE_DE_AYER: ChatMensajeVista = {
   estado: "delivered",
   latitud: null,
   longitud: null,
-  ...VISTA_SIN_299,
+  ...VISTA_SIN_308,
   ocurridoAt: "2026-07-22T20:00:00.000Z",
 };
 

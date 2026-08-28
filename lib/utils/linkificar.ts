@@ -1,4 +1,4 @@
-// Feature 299 (design §7.1, R33/R34) — trocea un texto en segmentos para pintarlo con enlaces.
+// Feature 308 (design §7.1, R33/R34) — trocea un texto en segmentos para pintarlo con enlaces.
 //
 // PURA a proposito: sin React, sin DOM. La regla de seguridad (que esquemas se enlazan) se
 // prueba aqui, sobre datos, y no dentro de un render.

@@ -128,7 +128,7 @@ describe("ChatMensajeRepository", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Feature 299 — C2.T / F2.T (R1/R7/R12/R14/R23). Columnas nuevas y autorizacion del proxy.
+// Feature 308 — C2.T / F2.T (R1/R7/R12/R14/R23). Columnas nuevas y autorizacion del proxy.
 // ---------------------------------------------------------------------------
 
 const CONTACTO = {
@@ -171,7 +171,7 @@ function filaCruda(over: Record<string, unknown> = {}) {
   };
 }
 
-describe("Feature 299 · ChatMensajeRepository — columnas nuevas (R1/R7)", () => {
+describe("Feature 308 · ChatMensajeRepository — columnas nuevas (R1/R7)", () => {
   it("R1: un entrante de imagen persiste media_id y media_mime", async () => {
     const prisma = buildPrisma();
     prisma.chatMensaje.createMany.mockResolvedValue({ count: 1 });
@@ -284,7 +284,7 @@ describe("Feature 299 · ChatMensajeRepository — columnas nuevas (R1/R7)", () 
   });
 });
 
-describe("Feature 299 · findMediaParaMensajero — autorizacion del proxy (R23)", () => {
+describe("Feature 308 · findMediaParaMensajero — autorizacion del proxy (R23)", () => {
   function prismaConFilas(filas: unknown[]) {
     const queryRaw = vi.fn().mockResolvedValue(filas);
     return Object.assign(buildPrisma(), { $queryRaw: queryRaw });

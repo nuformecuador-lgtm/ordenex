@@ -13,7 +13,7 @@ import { CODIGOS_TRANSITORIOS, esErrorTransitorio } from "@/lib/services/whatsap
 import { cuerpoParaLog, volcarStatusesFallidos } from "@/lib/services/whatsapp/chat-logger";
 import { parseWebhookEventos } from "@/lib/types/whatsapp-webhook";
 import type { IChatConversacionRepository } from "@/lib/interfaces/repositories/IChatConversacionRepository";
-import { SIN_CAMPOS_299 } from "@/tests/fixtures/chat-mensaje";
+import { SIN_CAMPOS_308 } from "@/tests/fixtures/chat-mensaje";
 import type {
   ChatMensajeDTO,
   IChatMensajeRepository,
@@ -69,7 +69,7 @@ function salienteDTO(over: Partial<ChatMensajeDTO> = {}): ChatMensajeDTO {
     errorCodigo: null,
     errorTitulo: null,
     errorDetalle: null,
-    ...SIN_CAMPOS_299,
+    ...SIN_CAMPOS_308,
     ocurridoAt: new Date("2026-07-28T22:00:00Z"),
     createdAt: new Date("2026-07-28T22:00:00Z"),
     ...over,

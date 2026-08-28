@@ -4,7 +4,7 @@ import type { ChatSistemaVista } from "@/lib/types/chat-whatsapp";
 
 import { horaCorta } from "./chat-format";
 
-// Feature 299 (R32, D3) — el cliente cambio su numero de WhatsApp.
+// Feature 308 (R32, D3) — el cliente cambio su numero de WhatsApp.
 //
 // Es una fila de SISTEMA: va centrada y sin `data-direccion`, porque no la escribio ni el
 // cliente ni el mensajero. Cita AMBOS numeros (R32/R18): es la evidencia de por que el hilo

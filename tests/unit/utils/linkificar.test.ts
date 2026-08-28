@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { linkificar } from "@/lib/utils/linkificar";
 
-// Feature 299 (R33/R34) — trocear un mensaje del cliente en texto + enlaces.
+// Feature 308 (R33/R34) — trocear un mensaje del cliente en texto + enlaces.
 //
 // Lo que se fija aqui: se enlaza SOLO el tramo de la URL (D6) y NINGUN esquema distinto de
 // http/https produce enlace. El texto lo escribe un tercero, asi que esto es una barrera de

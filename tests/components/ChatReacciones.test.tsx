@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { screen, cleanup, act, within } from "@testing-library/react";
 
-// Feature 299 (R30, D4) — las reacciones se pintan ANCLADAS a su mensaje.
+// Feature 308 (R30, D4) — las reacciones se pintan ANCLADAS a su mensaje.
 //
 // Lo que se fija aqui: el chip de emoji vive DENTRO del mismo `<li>` que el mensaje al que
 // reacciono el cliente, y el hilo NO gana una burbuja suelta por la reaccion. Un "👍" cinco

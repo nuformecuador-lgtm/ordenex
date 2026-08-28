@@ -1,4 +1,4 @@
-# Feature 299 — bitácora de implementación (BACKEND)
+# Feature 308 — bitácora de implementación (BACKEND)
 
 > Alcance de esta bitácora: bloques **A, B, C, D, E, F** de `tasks.md` (datos, borde del webhook,
 > repositorios, service, contrato hacia la UI, cliente de media y ruta proxy). El bloque **G**
@@ -16,7 +16,7 @@
 | `lib/config/chat-media.ts` | Política de servido: lista blanca de MIME, timeout, `Cache-Control`, nombre por defecto |
 | `lib/clients/whatsapp-media.ts` | Cliente de descarga (2 saltos, `fetchImpl` inyectable, `WhatsappMediaOutcome`) (F1, R21/R24/R35) |
 | `app/api/chat/media/[mensajeId]/route.ts` | Proxy `GET`, `runtime="nodejs"`, passthrough del stream (F3, R15/R21-R25) |
-| `tests/fixtures/chat-mensaje.ts` | `SIN_CAMPOS_299` / `VISTA_SIN_299` para los tests que arman DTO/vista a mano |
+| `tests/fixtures/chat-mensaje.ts` | `SIN_CAMPOS_308` / `VISTA_SIN_308` para los tests que arman DTO/vista a mano |
 
 ## Archivos modificados
 
@@ -36,7 +36,7 @@
 | `tests/unit/repositories/chat-conversacion-repository.test.ts` | +5 tests (R16/R17/R18) |
 | `tests/unit/services/chat-whatsapp-service.test.ts` | +15 tests (R1/R2/R4/R5/R7/R12/R16/R17/R18/R35) |
 | `tests/unit/actions/chat-whatsapp-actions.test.ts` | +7 tests (R19/R20/R21/R35) |
-| `tests/unit/services/whatsapp-fallo-saliente.test.ts`, `tests/components/ChatConversacion*.test.tsx` | Solo fixtures: los DTO/vista literales usan `SIN_CAMPOS_299` / `VISTA_SIN_299` |
+| `tests/unit/services/whatsapp-fallo-saliente.test.ts`, `tests/components/ChatConversacion*.test.tsx` | Solo fixtures: los DTO/vista literales usan `SIN_CAMPOS_308` / `VISTA_SIN_308` |
 
 ## Mapa R → test (alcance backend)
 

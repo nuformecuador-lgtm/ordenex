@@ -4,7 +4,7 @@ import { render, screen, cleanup } from "@testing-library/react";
 
 import { TextoConEnlaces } from "@/app/(app)/mis-asignaciones/_components/chat/TextoConEnlaces";
 
-// Feature 299 (R33/R34) — el texto de la burbuja con sus URL enlazadas.
+// Feature 308 (R33/R34) — el texto de la burbuja con sus URL enlazadas.
 //
 // Lo que se fija aqui: el `<a>` sale con `target="_blank"` y `rel="noopener noreferrer"`, el
 // texto de alrededor NO queda dentro del enlace, y una carga con etiquetas HTML se VE como

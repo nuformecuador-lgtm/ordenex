@@ -1,4 +1,4 @@
-// Feature 299 (design §5.4, R25) — decisiones de CABECERA del proxy de media, como helpers
+// Feature 308 (design §5.4, R25) — decisiones de CABECERA del proxy de media, como helpers
 // PUROS. Viven fuera del route handler para poder probarlas sin sesion, sin Prisma y sin red:
 // son reglas de seguridad, y una regla de seguridad que solo se puede probar levantando media
 // aplicacion acaba sin probarse.

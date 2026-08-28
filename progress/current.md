@@ -9,18 +9,18 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 💬 2026-08-27 — ficha 299: el chat da tratamiento a media, reacciones, contactos y cambio de número
+## 💬 2026-08-27 — ficha 308: el chat da tratamiento a media, reacciones, contactos y cambio de número
 
 **Estado: `in_progress`, spec APROBADO por el humano.** Rama
-`feature/299-chat-media-reacciones-contactos` desde `origin/dev`. Spec en
-`specs/299-chat-media-reacciones-contactos/`: **35 requisitos R1–R35, los 35 mapeados** a un test
+`feature/308-chat-media-reacciones-contactos` desde `origin/dev`. Spec en
+`specs/308-chat-media-reacciones-contactos/`: **35 requisitos R1–R35, los 35 mapeados** a un test
 con ruta y `assert` (trazabilidad verificada por el leader, ninguno huérfano).
 
-**⚠️ RENUMERADA DE 294 A 299 — cuarta colisión de ids del mes.** Mientras se escribía el spec, otra
+**⚠️ RENUMERADA DE 294 A 308 — cuarta colisión de ids del mes.** Mientras se escribía el spec, otra
 sesión tomó el **294** en `dev` para «una orden borrada bloquea para siempre su número de
 remisión». `dev` manda, mismo precedente que la 276→278. Se detectó **antes de crear la rama y
 antes de escribir un solo commit**, así que no queda historia con el número viejo: el spec se movió
-a `specs/299-…` y sus referencias internas están al día (0 ocurrencias de `294`, verificado).
+a `specs/308-…` y sus referencias internas están al día (0 ocurrencias de `294`, verificado).
 
 **El bug que la origina.** `tipoDeMeta` (`lib/types/whatsapp-webhook.ts`) solo mapea `text` y
 `location`; todo lo demás cae en `otro` con `cuerpo: null`, y `ChatConversacion.tsx` pinta

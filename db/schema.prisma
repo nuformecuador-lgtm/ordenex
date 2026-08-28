@@ -258,7 +258,7 @@ enum ChatMensajeTipo {
   plantilla
   otro
   ubicacion // Feature 121: mensaje entrante `type=location` con coordenadas lat/lng
-  // Feature 299 (design §1.1): los tipos entrantes que antes caian en `otro` con cuerpo NULL
+  // Feature 308 (design §1.1): los tipos entrantes que antes caian en `otro` con cuerpo NULL
   // (burbuja vacia). `otro` se CONSERVA como sumidero de lo que sigue fuera de alcance
   // (button, interactive, order, request_welcome, ephemeral) y de las degradaciones.
   imagen
@@ -335,7 +335,7 @@ model ChatMensaje {
   errorCodigo    Int?                 @map("error_codigo") // p. ej. 131026 (indeliverable), 130429 (cuota)
   errorTitulo    String?              @map("error_titulo")
   errorDetalle   String?              @map("error_detalle") // texto de Meta SOBRE EL ERROR, nunca el destino
-  // Feature 299 (design §1.2): columnas NULLABLE que sostienen los tipos entrantes nuevos.
+  // Feature 308 (design §1.2): columnas NULLABLE que sostienen los tipos entrantes nuevos.
   // Cada grupo lo puebla SOLO su tipo; el resto queda NULL. El binario de la media NUNCA se
   // guarda (D1/R15): aqui solo vive el identificador de Meta y sus metadatos, y el proxy
   // (`/api/chat/media/<id>`) lo baja bajo demanda con el token del servidor.
@@ -361,7 +361,7 @@ model ChatMensaje {
   // su nombre por defecto y ese rename dejaria mudo al `DROP INDEX IF EXISTS
   // "chat_mensaje_error_codigo_idx"` del `down.sql` de esa migracion.
   @@index([errorCodigo, ocurridoAt(sort: Desc)], map: "chat_mensaje_error_codigo_idx") // diagnostico: fallos recientes por codigo
-  // Feature 299 (design §1.2): el agregado de reacciones (R19) busca todas las reacciones de un
+  // Feature 308 (design §1.2): el agregado de reacciones (R19) busca todas las reacciones de un
   // hilo por su mensaje objetivo. El indice REAL es PARCIAL (`WHERE reaccion_a_wa_message_id IS
   // NOT NULL`) y va a mano en `20260827180000_chat_mensaje_media_reacciones`; Prisma no expresa
   // el predicado, asi que aqui se declara el btree equivalente. El `map:` es OBLIGATORIO por la

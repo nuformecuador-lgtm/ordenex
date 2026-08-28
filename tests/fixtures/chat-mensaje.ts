@@ -1,4 +1,4 @@
-// Feature 299 — fixture compartido para los tests que construyen un `ChatMensajeDTO` a mano.
+// Feature 308 — fixture compartido para los tests que construyen un `ChatMensajeDTO` a mano.
 //
 // La feature añadio NUEVE columnas nullable a `chat_mensaje` (media, reaccion, contactos,
 // cambio de numero). Ninguna aplica a un saliente de texto ni a un entrante de la 109/121, pero
@@ -10,7 +10,7 @@
 import type { ChatMensajeCamposMedia } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 import type { ChatMensajeVista } from "@/lib/types/chat-whatsapp";
 
-export const SIN_CAMPOS_299: ChatMensajeCamposMedia = {
+export const SIN_CAMPOS_308: ChatMensajeCamposMedia = {
   mediaId: null,
   mediaMime: null,
   mediaNombre: null,
@@ -26,7 +26,7 @@ export const SIN_CAMPOS_299: ChatMensajeCamposMedia = {
  * Lo mismo para el contrato hacia la UI (`ChatMensajeVista`): una burbuja de texto o de
  * plantilla no tiene adjunto, ni contactos, ni cambio de numero, ni reacciones.
  */
-export const VISTA_SIN_299 = {
+export const VISTA_SIN_308 = {
   media: null,
   contactos: null,
   sistema: null,

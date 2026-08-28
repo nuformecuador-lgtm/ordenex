@@ -7,7 +7,7 @@ import type { WhatsappMediaOutcome } from "@/lib/clients/whatsapp-media";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ChatMediaAutorizada } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 
-// Feature 299 — F3.T (R15/R21/R22/R23/R24/R25). El proxy de media.
+// Feature 308 — F3.T (R15/R21/R22/R23/R24/R25). El proxy de media.
 //
 // Lo que estos tests protegen, en una frase: NADIE que no sea el mensajero asignado consigue
 // que el servidor llame siquiera a la Graph API, y lo que sale por el cable nunca lleva el

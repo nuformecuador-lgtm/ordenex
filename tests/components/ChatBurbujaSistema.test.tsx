@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { screen, cleanup, act } from "@testing-library/react";
 
-// Feature 299 (R32, D3) — el cliente cambio su numero de WhatsApp.
+// Feature 308 (R32, D3) — el cliente cambio su numero de WhatsApp.
 //
 // Lo que se fija aqui: la evidencia se ve, cita AMBOS numeros, y la fila NO es entrante ni
 // saliente (no la escribio ninguno de los dos). Sin ella el mensajero veria el hilo continuar

@@ -79,7 +79,7 @@ function Burbuja({
   mensaje: ChatMensajeVista;
   onAbrirUbicacion: (punto: UbicacionPunto) => void;
 }) {
-  // Feature 299 (R32): el cambio de numero del cliente es una fila de SISTEMA, centrada y sin
+  // Feature 308 (R32): el cambio de numero del cliente es una fila de SISTEMA, centrada y sin
   // `data-direccion`: no la escribio ninguno de los dos.
   if (mensaje.tipo === "sistema") {
     return <BurbujaSistema sistema={mensaje.sistema} ocurridoAt={mensaje.ocurridoAt} />;
@@ -100,7 +100,7 @@ function Burbuja({
             : "rounded-bl-sm bg-card text-card-foreground",
         )}
       >
-        {/* Feature 299 (R14/R27): QUE se pinta lo decide un switch EXHAUSTIVO por tipo. Aqui
+        {/* Feature 308 (R14/R27): QUE se pinta lo decide un switch EXHAUSTIVO por tipo. Aqui
             ya no se ramifica a mano ni queda un `<p>` vacio para lo desconocido. */}
         <BurbujaContenido mensaje={mensaje} onAbrirUbicacion={onAbrirUbicacion} />
         <div className="mt-1 flex items-center justify-end gap-1">
@@ -110,7 +110,7 @@ function Burbuja({
           {saliente ? <Acuses estado={mensaje.estado} /> : null}
         </div>
       </div>
-      {/* Feature 299 (R30/D4): las reacciones van DENTRO del `<li>` de su mensaje objetivo; el
+      {/* Feature 308 (R30/D4): las reacciones van DENTRO del `<li>` de su mensaje objetivo; el
           hilo no trae ninguna burbuja suelta de tipo `reaccion`. */}
       <Reacciones reacciones={mensaje.reacciones} saliente={saliente} />
     </li>

@@ -1,4 +1,4 @@
--- Feature 299 (design §1.4, R13) — UNICO cambio de esquema. Extension ADITIVA sobre la
+-- Feature 308 (design §1.4, R13) — UNICO cambio de esquema. Extension ADITIVA sobre la
 -- 109/120/121 (chat 1:1 mensajero<->cliente) para que los entrantes que hoy caen en `otro` con
 -- cuerpo NULL (burbuja vacia) tengan tipo propio y datos que pintar. Tres efectos:
 --   (1) ocho valores nuevos en el enum `chat_mensaje_tipo`;

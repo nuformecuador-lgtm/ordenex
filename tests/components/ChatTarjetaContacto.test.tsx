@@ -5,7 +5,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/re
 import { TarjetaContacto } from "@/app/(app)/mis-asignaciones/_components/chat/TarjetaContacto";
 import type { ChatContactoNormalizado } from "@/lib/types/chat-contactos";
 
-// Feature 299 (R31, D5) — la tarjeta de un contacto compartido.
+// Feature 308 (R31, D5) — la tarjeta de un contacto compartido.
 //
 // Lo que se fija aqui: se ven los datos, CADA dato se copia por separado (el mensajero necesita
 // el telefono, no la tarjeta entera) y la confirmacion es PERCEPTIBLE sin depender de una

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { agregarReacciones, type MensajeConReaccion } from "@/lib/utils/chat-reacciones";
 
-// Feature 299 — E1.T (R19/R20). La reaccion PERTENECE al mensaje al que reacciona (D4). Estos
+// Feature 308 — E1.T (R19/R20). La reaccion PERTENECE al mensaje al que reacciona (D4). Estos
 // tests fijan las cuatro reglas del agregado: sale de las burbujas, se cuelga del objetivo, la
 // ultima del mismo autor gana, y una RETIRADA deja el mensaje sin reaccion.
 

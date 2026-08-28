@@ -1,4 +1,4 @@
-// Feature 299 (design §5, R15/R21/R22/R23/R24/R25/R26) — PROXY de media del chat.
+// Feature 308 (design §5, R15/R21/R22/R23/R24/R25/R26) — PROXY de media del chat.
 //
 // Sirve el binario que el cliente mando por WhatsApp, bajandolo de la Graph API con el token del
 // SERVIDOR. No se almacena nada (D1/R15): no hay bucket, ni disco, ni columna binaria; solo el

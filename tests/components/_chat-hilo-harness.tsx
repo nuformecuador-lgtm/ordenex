@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Feature 299 — arnes compartido de los tests de burbuja del hilo del mensajero.
+// Feature 308 — arnes compartido de los tests de burbuja del hilo del mensajero.
 //
 // Los tres archivos de la feature (reacciones, burbuja de sistema, contenido por tipo) montan
 // la MISMA superficie viva —`ChatConversacion` dentro de `ChatFlotante`— con el hilo mockeado.
