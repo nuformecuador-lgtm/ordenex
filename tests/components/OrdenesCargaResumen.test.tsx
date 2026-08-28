@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { OrdenesCargaResumen } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
-import { monedaConfig, SIN_MONTO } from "@/lib/config/moneda";
+import { formatMonto, monedaConfig, SIN_MONTO } from "@/lib/config/moneda";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 
 // Feature 16 / 159 R12, R13, R14, R22(d) — el resumen del lote recien cargado, en
@@ -374,5 +374,58 @@ describe("OrdenesCargaResumen — etiquetas del lote recién cargado", () => {
     expect(
       screen.queryByRole("button", { name: "Descargar etiquetas" }),
     ).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// FEATURE 304 — por qué el «Monto» de esta tabla no es el del archivo
+//
+// La columna «Monto» de arriba es la única que puede NO coincidir con lo que la tienda
+// mandó: la 299 redondea al colón más cercano un monto con céntimos, porque con céntimos la
+// orden no se puede entregar nunca. Hasta esta ficha, quien cargaba por pantalla veía el
+// número cambiado y ningún motivo.
+//
+// OJO AL CONVIVIR CON LA 230: el caso de arriba exige que NINGUNA celda del resumen lleve
+// cola decimal, y aquí se exige justo lo contrario para el monto DEL ARCHIVO. No es una
+// contradicción: sin la cola, los dos importes se pintarían con la misma cadena y el aviso
+// no diría nada. Es la misma excepción declarada que la 300 abrió con `montoExacto`.
+// ---------------------------------------------------------------------------------------
+describe("OrdenesCargaResumen — el monto redondeado se explica (feature 304)", () => {
+  const AJUSTADAS = [
+    { fila: 7, numRemision: "REM-0001", original: 11898.81, aplicado: 11899 },
+  ];
+  const TABLA_AJUSTES = /órdenes con el monto redondeado/i;
+
+  it("lista la fila ajustada con el monto del archivo y el que se guardó", async () => {
+    render(
+      <OrdenesCargaResumen numRemisiones={["REM-0001"]} ajustadas={AJUSTADAS} />,
+    );
+    await screen.findByText("REM-0001");
+
+    const tabla = screen.getByRole("table", { name: TABLA_AJUSTES });
+    const celdas = within(tabla)
+      .getAllByRole("cell")
+      .map((td) => td.textContent ?? "");
+    // El separador sale de configuración, nunca escrito a mano; y el importe esperado se
+    // compone con el formateador GENERAL, no con el mismo que pinta la celda.
+    expect(celdas).toEqual([
+      "7",
+      "REM-0001",
+      `${formatMonto(11898)}${monedaConfig.separadorDecimal}81`,
+      formatMonto(11899),
+    ]);
+    // Y se dice POR QUÉ, no solo qué.
+    expect(screen.getByText(/se guardaron con el monto del archivo redondeado/i))
+      .toBeInTheDocument();
+  });
+
+  it("sin ajustes el paso se ve EXACTAMENTE como antes: ni tabla ni explicación", async () => {
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
+    await screen.findByText("REM-0001");
+
+    expect(screen.queryByRole("table", { name: TABLA_AJUSTES })).toBeNull();
+    expect(screen.queryByText(/redondead/i)).toBeNull();
+    // La única tabla del paso sigue siendo el resumen del lote.
+    expect(screen.getAllByRole("table")).toHaveLength(1);
   });
 });

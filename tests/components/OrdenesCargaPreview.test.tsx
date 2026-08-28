@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { OrdenesCargaPreview } from "@/app/(app)/ordenes/_components/OrdenesCargaPreview";
 import type { ClasificacionCarga } from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
 import type { FilaParseada } from "@/app/(app)/ordenes/_components/carga-masiva-parser";
+import { formatMonto, monedaConfig } from "@/lib/config/moneda";
 
 // --- Feature 143: dobles para la descarga de filas con error -----------------
 
@@ -78,6 +79,8 @@ function clasif(overrides: Partial<ClasificacionCarga> = {}): ClasificacionCarga
     numRemisionesNuevas: [],
     existentes: [],
     errores: [],
+    // Feature 304: sin ajustes por defecto — el caso de casi todas las cargas.
+    ajustadas: [],
     ...overrides,
   };
 }
@@ -330,5 +333,111 @@ describe("OrdenesCargaPreview — descargar filas con error (feature 143)", () =
     expect(descargas).toHaveLength(1);
     expect(descargas[0]).toHaveTextContent(/\.xlsx/i);
     expect(screen.queryByText(/csv/i)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 304 — las filas que se cargan con el monto REDONDEADO
+// ---------------------------------------------------------------------------
+
+/** El caso real de la captura del 2026-08-27 (fichas 299/300). */
+const ORIGINAL = 11898.81;
+const APLICADO = 11899;
+
+/**
+ * Lo que debe leerse en cada columna, compuesto con el formateador GENERAL (`formatMonto`) y
+ * el separador de CONFIGURACIÓN, nunca con un `₡` escrito a mano ni llamando al mismo
+ * `montoExacto` que pinta la celda: una aserción contra su propia fuente estaría verde pasara
+ * lo que pasara.
+ */
+const COMA = monedaConfig.separadorDecimal;
+const ORIGINAL_EN_PANTALLA = `${formatMonto(11898)}${COMA}81`;
+const APLICADO_EN_PANTALLA = formatMonto(APLICADO);
+
+const TABLA_AJUSTES = /órdenes con el monto redondeado/i;
+
+describe("OrdenesCargaPreview — monto redondeado (feature 304)", () => {
+  const conAjuste = clasif({
+    numRemisionesNuevas: ["REM-7", "REM-8"],
+    ajustadas: [
+      { fila: 7, numRemision: "REM-7", original: ORIGINAL, aplicado: APLICADO },
+    ],
+  });
+
+  function render304(clasificacion = conAjuste) {
+    render(
+      <OrdenesCargaPreview
+        clasificacion={clasificacion}
+        confirmando={false}
+        onConfirmar={vi.fn()}
+      />,
+    );
+  }
+
+  it("los dos montos NO se pintan igual: el del archivo conserva sus céntimos", () => {
+    // El punto entero de la ficha. Con el formateador general (feature 230) los dos importes
+    // salen con la MISMA cadena, y la tabla diría «de ₡11.899 a ₡11.899»: la pantalla que se
+    // contradice sola. Si esta aserción cae, el aviso dejó de informar de nada.
+    expect(formatMonto(ORIGINAL)).toBe(APLICADO_EN_PANTALLA);
+    expect(ORIGINAL_EN_PANTALLA).not.toBe(APLICADO_EN_PANTALLA);
+  });
+
+  it("dice cuántas se ajustaron y muestra la fila con LOS DOS montos", () => {
+    render304();
+
+    expect(
+      screen.getByText(/1 traía céntimos y se cargará con el monto redondeado/i),
+    ).toBeInTheDocument();
+
+    const tabla = screen.getByRole("table", { name: TABLA_AJUSTES });
+    const celdas = within(tabla)
+      .getAllByRole("cell")
+      .map((td) => td.textContent ?? "");
+    expect(celdas).toEqual([
+      "7",
+      "REM-7",
+      ORIGINAL_EN_PANTALLA,
+      APLICADO_EN_PANTALLA,
+    ]);
+  });
+
+  it("NO es un error ni una duplicada: no toca esos grupos ni sus tablas", () => {
+    render304();
+
+    // La fila ajustada sigue contada entre las nuevas (2, no 1).
+    expect(
+      screen.getByRole("button", { name: /confirmar y cargar 2 nuevas/i }),
+    ).toBeEnabled();
+    // Y no aparece ninguna de las dos superficies de "esto no entró".
+    expect(screen.queryByRole("table", { name: /órdenes con error/i })).toBeNull();
+    expect(screen.queryByRole("table", { name: /órdenes ya existentes/i })).toBeNull();
+    expect(screen.queryByText(/con error/i)).toBeNull();
+  });
+
+  it("sin ajustes, el paso se ve EXACTAMENTE como antes: ni tabla ni línea", () => {
+    render304(clasif({ numRemisionesNuevas: ["REM-7"] }));
+
+    expect(screen.queryByRole("table", { name: TABLA_AJUSTES })).toBeNull();
+    expect(screen.queryByText(/redondead/i)).toBeNull();
+    expect(screen.queryByText(/céntimos/i)).toBeNull();
+  });
+
+  it("con varias ajustadas lo dice en plural y lista todas", () => {
+    render304(
+      clasif({
+        numRemisionesNuevas: ["REM-7", "REM-8"],
+        ajustadas: [
+          { fila: 7, numRemision: "REM-7", original: ORIGINAL, aplicado: APLICADO },
+          { fila: 8, numRemision: "REM-8", original: 0.5, aplicado: 1 },
+        ],
+      }),
+    );
+
+    expect(
+      screen.getByText(/2 traían céntimos y se cargarán con el monto redondeado/i),
+    ).toBeInTheDocument();
+    const tabla = screen.getByRole("table", { name: TABLA_AJUSTES });
+    expect(within(tabla).getAllByRole("row")).toHaveLength(3); // cabecera + 2 filas
+    expect(within(tabla).getByText(`${formatMonto(0)}${COMA}50`)).toBeInTheDocument();
   });
 });
