@@ -552,6 +552,22 @@ export interface EtiquetaRow {
   provinciaNombre: string;
   cantonNombre: string;
   distritoNombre: string | null;
+  /**
+   * Feature 295 — DIA en que la tienda cargo el envio (`orden.created_at`), como
+   * fecha CALENDARIO de Costa Rica `YYYY-MM-DD`, YA SERIALIZADA (patron de
+   * `RecepcionSateliteRow.fechaReparto`: el `Date` no cruza la frontera del repo).
+   *
+   * Es la fecha que la etiqueta imprime, y de las tres candidatas es la unica que
+   * sirve: la de IMPRESION cambia en cada reimpresion (dos etiquetas del mismo
+   * paquete dirian dias distintos) y la de REPARTO esta vacia en la mayoria de
+   * ordenes (las de bodega no la tienen, medido en produccion), asi que saldria en
+   * blanco casi siempre. `created_at` es NOT NULL en `orden`: nunca es `null`.
+   *
+   * Se serializa con `fechaCalendarioCR` y NO con `toISOString().slice(0, 10)`:
+   * despues de las 18:00 de CR aquello devuelve el dia SIGUIENTE (off-by-one), y
+   * una etiqueta que dice "mañana" es peor que una sin fecha.
+   */
+  fechaCreacion: string;
 }
 
 // Feature 148 — fila proyectada para armar el MANIFIESTO de un lote (R4/R6/R7).

@@ -39,6 +39,7 @@ function makeEtiqueta(
     provinciaNombre: "San José",
     cantonNombre: "Escazú",
     distritoNombre: "San Rafael",
+    fechaCreacion: "2026-08-27", // feature 295: dia en que la tienda cargo el envio
     qrValue: "4021", // = String(numGuia): el QR codifica /paquete/<numGuia>
     barcodeValue: "4021",
     ...overrides,

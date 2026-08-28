@@ -180,6 +180,7 @@ describe("OrdenRepository.findEtiquetaByNumGuia (feature 32/R1/R3)", () => {
       direccion: "calle",
       producto: "caja",
       montoCobrar: null,
+      createdAt: new Date("2026-08-25T15:00:00.000Z"), // feature 295
       tienda: { nombre: "T" },
       zona: { nombre: "Limon" },
       provincia: { nombre: "P" },
@@ -205,6 +206,99 @@ describe("OrdenRepository.findEtiquetaByNumGuia (feature 32/R1/R3)", () => {
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     expect(await repo.findEtiquetaByNumGuia(501)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 295 — la FECHA DE CREACION en la proyeccion de la etiqueta.
+//
+// Se prueba AQUI, en el repositorio, y no solo en el servicio: el servicio usa un
+// doble del repo y con el la proyeccion es lo que el doble devuelva, asi que una
+// columna que se caiga del `select` lo dejaria igual de verde. Lo que puede
+// romperse en silencio es exactamente esto —que el `select` deje de pedir
+// `created_at`, o que el dia se derive con `toISOString()`— y por eso son las dos
+// aserciones de este bloque.
+// ---------------------------------------------------------------------------
+
+/** Fila cruda de Prisma para la proyeccion de etiqueta, con `createdAt` inyectable. */
+function filaCrudaEtiqueta(createdAt: Date) {
+  return {
+    id: "o1",
+    tiendaId: "tienda-1",
+    numGuia: 501,
+    numRemision: "REM-1",
+    destinatario: "Ana",
+    telefonoDest: "099",
+    direccion: "calle",
+    producto: "caja",
+    montoCobrar: null,
+    createdAt,
+    tienda: { nombre: "T" },
+    zona: { nombre: "Limon" },
+    provincia: { nombre: "P" },
+    canton: { nombre: "C" },
+    distrito: { nombre: "D" },
+  };
+}
+
+describe("OrdenRepository — la etiqueta proyecta la fecha de creacion (feature 295)", () => {
+  it("el SELECT de la etiqueta PIDE `createdAt`, por las dos vias (id y num_guia)", async () => {
+    const { prisma } = buildPrisma({
+      orden: { findFirst: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
+    });
+    const orden = prisma.orden as unknown as {
+      findFirst: ReturnType<typeof vi.fn>;
+      findMany: ReturnType<typeof vi.fn>;
+    };
+    const fila = filaCrudaEtiqueta(new Date("2026-08-25T15:00:00.000Z"));
+    orden.findFirst.mockResolvedValue(fila);
+    orden.findMany.mockResolvedValue([fila]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.findEtiquetaByNumGuia(501);
+    await repo.findEtiquetasByIds(["o1"]);
+
+    // Sin esta columna en la proyeccion el dato NO EXISTE en el camino al PDF: es
+    // el estado exacto que la ficha 295 vino a arreglar.
+    expect(orden.findFirst.mock.calls[0][0].select.createdAt).toBe(true);
+    expect(orden.findMany.mock.calls[0][0].select.createdAt).toBe(true);
+  });
+
+  it("la sirve como fecha CALENDARIO de Costa Rica, no como el dia UTC", async () => {
+    const { prisma } = buildPrisma({
+      orden: { findFirst: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
+    });
+    const orden = prisma.orden as unknown as { findFirst: ReturnType<typeof vi.fn> };
+    // 20:00 del 25 en Costa Rica (UTC-6) es ya el 26 en UTC. `toISOString().slice(0,10)`
+    // imprimiria "2026-08-26": la etiqueta diria MAÑANA. Ese off-by-one es el motivo
+    // de que la conversion sea `fechaCalendarioCR`.
+    orden.findFirst.mockResolvedValue(
+      filaCrudaEtiqueta(new Date("2026-08-26T02:00:00.000Z")),
+    );
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const row = await repo.findEtiquetaByNumGuia(501);
+
+    expect(row?.fechaCreacion).toBe("2026-08-25");
+    expect(row?.fechaCreacion).not.toBe(
+      new Date("2026-08-26T02:00:00.000Z").toISOString().slice(0, 10),
+    );
+  });
+
+  it("`findEtiquetasByIds` la sirve con la misma convencion (una sola derivacion)", async () => {
+    const { prisma } = buildPrisma({
+      orden: { findFirst: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
+    });
+    const orden = prisma.orden as unknown as { findMany: ReturnType<typeof vi.fn> };
+    orden.findMany.mockResolvedValue([
+      filaCrudaEtiqueta(new Date("2026-08-26T02:00:00.000Z")),
+    ]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findEtiquetasByIds(["o1"]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].fechaCreacion).toBe("2026-08-25");
   });
 });
 

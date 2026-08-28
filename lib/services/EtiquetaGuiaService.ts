@@ -122,6 +122,10 @@ export class EtiquetaGuiaService implements IEtiquetaGuiaService {
       provinciaNombre: row.provinciaNombre,
       cantonNombre: row.cantonNombre,
       distritoNombre: row.distritoNombre,
+      // Feature 295: la fecha viaja TAL CUAL desde la fila (ya es `YYYY-MM-DD` de
+      // Costa Rica). El service no la formatea ni la recalcula: derivar el dia dos
+      // veces, en dos capas, es como se acaban imprimiendo dos dias distintos.
+      fechaCreacion: row.fechaCreacion,
       qrValue: String(numGuia), // R7: QR codifica num_guia (UNIQUE en orden)
       barcodeValue: String(numGuia), // R8: barcode codifica num_guia
     };

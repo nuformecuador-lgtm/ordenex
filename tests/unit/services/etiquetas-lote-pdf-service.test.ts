@@ -31,6 +31,7 @@ function etiqueta(numGuia: number): EtiquetaGuiaDTO {
     provinciaNombre: "P",
     cantonNombre: "C",
     distritoNombre: "D",
+    fechaCreacion: "2026-08-27", // feature 295
     qrValue: String(numGuia),
     barcodeValue: String(numGuia),
   };
