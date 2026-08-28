@@ -99,6 +99,20 @@ const PATH_ANALITICA = "/api/ordenes/api-key/analitica";
 // puede usarlo.
 const PATH_HABILITAR = "/api/ordenes/api-key/habilitar";
 
+// ⚠️ FICHA 322 (2026-08-28) — LO QUE ESTA LISTA NO PUEDE VER, Y QUIÉN LO VE AHORA.
+//
+// Esta lista es el contrato PUBLICADO, escrito y firmado a mano, y ése es justo su valor: subir de
+// diez a once obliga a un humano a escribir el alta y su porqué en el mismo commit (la 255, la 267
+// y la 266 lo hicieron aquí arriba). Lo que NO puede hacer —porque compara el objeto TS contra sí
+// mismo y contra su copia en `.yaml`, nunca contra el filesystem— es enterarse de que existe un
+// `app/api/ordenes/api-key/**/route.ts` que nadie documentó: eso deja el gate ENTERO en verde. Se
+// midió el 2026-08-28: con una ruta nueva sin documentar en el canal, los 13 archivos y 223 tests
+// de `tests/unit/api/` pasaron los 223.
+//
+// Ese hueco lo cubre ahora `tests/unit/guards/openapi-canal-rutas-reales.guardia.test.ts`, que lee
+// las rutas REALES del filesystem y compara OPERACIONES (verbo + path) en las dos direcciones. Las
+// dos se necesitan y NINGUNA sustituye a la otra: sin esta lista se pierde la firma humana del
+// contrato; sin la guardia vuelve el agujero de la 322. No borres una alegando la otra.
 /** Los 10 endpoints que el canal por API key publica tras la 177, la 255, la 267 y la 266. */
 const PATHS_ESPERADOS = [
   "/api/ordenes/api-key/carga",
