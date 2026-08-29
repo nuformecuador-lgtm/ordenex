@@ -57,6 +57,11 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // vecinos de abajo — ningun servicio de este archivo lo invoca; el doble existe para
     // satisfacer el contrato completo del repo.
     corregirDatosCliente: vi.fn().mockResolvedValue("ok" as const),
+    // Ficha 327: las dos lecturas de la correccion de ubicacion. Mismo motivo que el writer de
+    // arriba: ningun servicio de este archivo las invoca, el doble esta para satisfacer el
+    // contrato completo del repo.
+    findParaCorreccion: vi.fn().mockResolvedValue(null),
+    findDistritoParaCorreccion: vi.fn().mockResolvedValue(null),
     // Feature «eliminar orden»: writer de `deleted_at`. Ningun servicio de este archivo lo
     // invoca; el doble existe para satisfacer el contrato completo del repo.
     softDelete: vi.fn().mockResolvedValue(0),
