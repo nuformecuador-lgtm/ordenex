@@ -9,6 +9,8 @@ vi.mock("@/app/_components/LogoutButton", () => ({
 import { render, screen, cleanup } from "@testing-library/react";
 import type { RolValue } from "@prisma/client";
 
+import { ToastProvider } from "@/providers/ToastProvider";
+
 import type { WalletModuleProps } from "@/app/(app)/wallet/_components/WalletModule";
 
 // Feature 42 (T11, R18/R19/R21) — la página `/wallet` resuelve el rol SOLO server-side;
@@ -25,8 +27,13 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(),
 }));
 
+// Ficha 334 (T E2): los mocks declaran TODAS las actions que importa el árbol de `WalletModule`,
+// no solo las que pre-obtiene la página. El motivo es que los dos casos de R1/R2 montan el módulo
+// REAL (ver el bloque del final), y vitest lanza al RESOLVER el import: una action que faltara en
+// el mock no dejaría un caso rojo, dejaría el archivo entero sin ejecutar.
 vi.mock("@/lib/actions/wallet", () => ({
   listarMovimientosAction: vi.fn(),
+  listarMovimientosCompletoAction: vi.fn(),
   verResumenCajaAction: vi.fn(),
   registrarMovimientoManualAction: vi.fn(),
 }));
@@ -34,11 +41,18 @@ vi.mock("@/lib/actions/wallet", () => ({
 // Feature 45: la página también pre-obtiene el desglose de egresos y las plantillas.
 vi.mock("@/lib/actions/wallet-egresos", () => ({
   verDesgloseEgresosAction: vi.fn(),
+  registrarEgresoAdministrativoAction: vi.fn(),
+  reversarEgresoAdministrativoAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/gasto-fijo-plantilla", () => ({
   // Feature 170 — FASE 2 (T I.2): la página pre-carga la PÁGINA 1 de las plantillas, no el
   // conjunto entero. El listado sin paginar sigue existiendo: lo usa la DESCARGA del panel.
   listarPlantillasPaginadoAction: vi.fn(),
+  listarPlantillasCompletoAction: vi.fn(),
+  crearPlantillaAction: vi.fn(),
+  actualizarPlantillaAction: vi.fn(),
+  eliminarPlantillaAction: vi.fn(),
+  setActivaPlantillaAction: vi.fn(),
 }));
 
 class NotFoundError extends Error {
@@ -55,13 +69,25 @@ vi.mock("next/navigation", () => ({
 }));
 
 // Stub del módulo cliente: captura las props que le pasa el Server Component.
+//
+// Ficha 334 (T E2): el stub pasa a ser CONMUTABLE. Por defecto sigue siendo el `<div>` de siempre
+// —el resto del archivo mide el pre-fetch y las props, no la pantalla— pero los dos casos de R1/R2
+// lo ponen a `true` y entonces el stub delega en el módulo REAL, montado con las props que la
+// página le pasa. No se usa `vi.importActual` a propósito: ahí las dependencias del módulo dejan de
+// estar mockeadas y el panel de gastos fijos acaba abriendo una conexión de verdad contra Postgres.
 const moduleCalls: WalletModuleProps[] = [];
-vi.mock("@/app/(app)/wallet/_components/WalletModule", () => ({
-  WalletModule: (props: WalletModuleProps) => {
-    moduleCalls.push(props);
-    return <div data-testid="wallet-module-stub" />;
-  },
-}));
+let montarModuloReal = false;
+vi.mock("@/app/(app)/wallet/_components/WalletModule", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/app/(app)/wallet/_components/WalletModule")>();
+  return {
+    WalletModule: (props: WalletModuleProps) => {
+      moduleCalls.push(props);
+      if (montarModuloReal) return <actual.WalletModule {...props} />;
+      return <div data-testid="wallet-module-stub" />;
+    },
+  };
+});
 
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMovimientosAction, verResumenCajaAction } from "@/lib/actions/wallet";
@@ -184,6 +210,7 @@ const PLANTILLAS_OK = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  montarModuloReal = false;
   moduleCalls.length = 0;
   listarMock.mockResolvedValue(MOVIMIENTOS_OK);
   resumenMock.mockResolvedValue(RESUMEN_OK);
@@ -383,5 +410,57 @@ describe("WalletPage — la descripción de la página (R59)", () => {
     const texto = (document.body.textContent ?? "").toLowerCase();
     expect(texto).toContain("dinero en caja");
     expect(texto).toContain("ganancia de ordenex");
+  });
+});
+
+// =================================================================================================
+// FICHA 334 (T E2, R1/R2) — LA BARRA DE ACCIONES TIENE UN SOLO BOTÓN
+// =================================================================================================
+//
+// Estos dos casos montan el módulo REAL (`vi.importActual`), no el stub que usa el resto del
+// archivo, y lo montan con las PROPS QUE LE PASA LA PÁGINA: así lo que se mide es la pantalla que
+// una persona con acceso total ve de verdad, y no un montaje inventado para el test.
+//
+// Antes de esta ficha había DOS botones casi iguales —«Registrar movimiento» (ajuste ingreso/egreso)
+// y «Registrar egreso» (gasto variable/sueldo)— con dos vocabularios que no se explicaban entre sí.
+// Se fusionan en uno solo que deriva el tipo y la categoría del concepto elegido.
+describe("WalletPage — un solo control para mover dinero a mano (R1/R2)", () => {
+  async function pintarLaWalletEntera() {
+    montarModuloReal = true;
+    resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
+    const { default: WalletPage } = await import("@/app/(app)/wallet/page");
+    render(<ToastProvider>{await WalletPage()}</ToastProvider>);
+
+    expect(moduleCalls, "la página no llegó a montar el módulo").toHaveLength(1);
+  }
+
+  it("la wallet ofrece un solo botón para registrar dinero", async () => {
+    await pintarLaWalletEntera();
+
+    const botones = screen.getAllByRole("button", { name: "Registrar movimiento" });
+    expect(botones).toHaveLength(1);
+  });
+
+  it("ya no hay un segundo botón de registro manual", async () => {
+    await pintarLaWalletEntera();
+
+    // El botón del diálogo retirado, por su nombre exacto: si alguien lo reintrodujera —o dejara
+    // vivo el componente viejo montándolo otra vez— este caso lo dice.
+    expect(
+      screen.queryByRole("button", { name: "Registrar egreso" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Registrar egreso administrativo" }),
+    ).not.toBeInTheDocument();
+
+    // Y no por la puerta de atrás: en TODA la pantalla hay exactamente un control cuyo nombre
+    // empieza por «Registrar». (El de la plantilla de gasto fijo se llama «Nueva plantilla», y
+    // una plantilla no mueve dinero: lo emite el cron desde ella.)
+    const registradores = screen
+      .getAllByRole("button")
+      .filter((b) => (b.textContent ?? "").trim().startsWith("Registrar"));
+    expect(registradores.map((b) => (b.textContent ?? "").trim())).toEqual([
+      "Registrar movimiento",
+    ]);
   });
 });
