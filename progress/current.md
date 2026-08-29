@@ -283,6 +283,51 @@ está mergeada en `dev`** (PRs #518 y #533) pero su ficha sigue `in_progress`: n
 confirmación del humano.
 
 
+## 🚀 RELEASE DESPLEGADA — 2026-08-29 madrugada. **EMPIEZA A LEER POR AQUÍ**
+
+**PR #606**, `dev` → `prod`, sobre el SHA `b954569a`. **Sin migraciones.**
+
+**Gate COMPLETO sobre el SHA exacto:** `INIT_EXIT=0`, **21.818 verdes**, un solo archivo rojo y en
+el baseline conocido. `dev` re-comprobado justo antes de abrir: no se había movido.
+
+### Lo que entra
+
+| | |
+| --- | --- |
+| **327** | corregir **dirección y ubicación** de una orden, con **aviso del importe** antes de guardar cuando el cambio mueve la tarifa |
+| **314** | elegir y **reordenar** las columnas del Excel; el catálogo pasa de 15 a **22** |
+| **325** | buscador y filtros en las dos pestañas de novedades, sobre el conjunto entero y no sobre la página |
+| **226** | el anillo de foco pasa de **1,29 a 3,33** — para quien navega con teclado, era no ver dónde está |
+| 318, 322, 323, 329 | el gate y sus guardias: el rápido ya juzga contra el baseline, un endpoint no puede nacer sin documentar, el guard de deriva deja de depender del `.env`, y un recorrido que tardaba 38 s ahora tarda 195 ms |
+| 326 | primer buscador propio retirado, con el censo de los otros dieciséis |
+
+### Verificación posterior
+
+1. **Errores de runtime: cero nuevos.** El único grupo es un aviso de obsolescencia de `pg` en el
+   corte diario, presente desde el 2026-07-27 — anterior a esta release.
+2. **Los jobs recurrentes corrieron SOLOS y se re-agendaron.** `liberar_reprogramadas` y
+   `analitica_rollup_diario` ejecutaron el 29 a sus horas y tienen ya su fila del 30. **Es la prueba
+   de que el arreglo de ayer funciona:** ayer hubo que sembrarlos a mano; hoy la serie se perpetúa
+   sola. El incidente de las reprogramadas queda cerrado por comportamiento, no por promesa.
+
+### ⚠️ Lo que sigue sin verse
+
+**El modal de corrección no lo ha mirado nadie.** El repaso de la ficha 330 cubrió el selector de
+columnas, el buscador y la navegación por teclado, pero **no consiguió abrirlo** — su disparador no
+está en la fila. Quedan sin ver a mano los cinco campos nuevos, los tres selectores encadenados y
+**el aviso del importe**, que es justo donde se confirma un cambio de dinero.
+
+Está cubierto por tests y trece mutaciones. Pero en este repo un repaso visual ya encontró siete
+textos rotos que doce mil tests daban por buenos.
+
+### Un error de proceso, anotado
+
+**Las fichas 329 y 330 no llegaron a `dev` con su rama:** se registraron y se empujaron, pero **no se
+abrió su PR**, y la rama siguiente salió de un `dev` que no las tenía. Se recuperan en este mismo
+commit. Empujar no es mergear, y una rama sin PR es trabajo que no existe para nadie más.
+
+---
+
 ## 🚀 RELEASE DESPLEGADA — 2026-08-28 noche. **EMPIEZA A LEER POR AQUÍ**
 
 **PR #588**, `dev` → `prod`, sobre el SHA `f2b5b78f`. Despliegue de producción en **READY**
