@@ -30,8 +30,15 @@ import {
 // (solo maestro; la página ya validó el rol). Reutilizado por el panel para ambos modos.
 // La plantilla es CONFIGURACIÓN (mutable, editable): el cron la lee y emite los egresos;
 // este diálogo NUNCA crea un egreso a mano. Money-safe: el monto viaja como STRING y se
-// valida >0 con regex (sin parseFloat/Number); el backend re-valida con Decimal. Sin
-// borrado (R25): la desactivación (en el panel) es el mecanismo para dejar de generar.
+// valida >0 con regex (sin parseFloat/Number); el backend re-valida con Decimal.
+//
+// Ficha 332 — hasta el 2026-08-29 esta cabecera decía, verbatim: «Sin borrado (R25): la
+// desactivación (en el panel) es el mecanismo para dejar de generar». Esa decisión de `45/R25`
+// quedó **revocada** el 2026-08-29 por decisión humana (motivo: la tabla acumula ruido y el
+// histórico del libro no depende de la plantilla; puntero:
+// `specs/332-eliminar-plantilla-gasto-fijo`). Las plantillas SÍ se eliminan, pero no desde
+// aquí: este diálogo sigue siendo sólo crear/editar. El borrado vive en el panel, con su
+// confirmación, porque es irreversible y no comparte ni un campo con este formulario.
 //
 // Feature 85 (T F.2, design §4.3) — EL DIÁLOGO PIDE EL CICLO, y lo ENVÍA SIEMPRE.
 //

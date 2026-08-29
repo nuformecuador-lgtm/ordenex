@@ -17,11 +17,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { Modal } from "@/components/shared/Modal";
 import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { gastoFijoConfig } from "@/lib/config/gasto-fijo";
 import {
+  eliminarPlantillaAction,
   listarPlantillasCompletoAction,
   listarPlantillasPaginadoAction,
   setActivaPlantillaAction,
@@ -63,12 +65,26 @@ async function leerPagina(
   return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
 
-// Feature 45 (T24, R22b/R23/R24/R25/R26) — panel CRUD de PLANTILLAS de gasto fijo (solo
-// maestro; la página ya validó el rol). Lista todas las plantillas (activas e inactivas),
-// permite crear/editar (diálogo reutilizado) y activar/desactivar (NUNCA borrar, R25: la
-// desactivación es el mecanismo para dejar de generar). Deja explícito que los egresos de
-// gasto fijo los emite el CRON automáticamente, no este panel. Money-safe: el monto llega
-// como STRING y se renderiza TAL CUAL con `money`, sin parseFloat/Number.
+// Feature 45 (T24, R22b/R23/R24/R25/R26) — panel CRUD de PLANTILLAS de gasto fijo (acceso
+// total; la página ya validó el rol). Lista todas las plantillas (activas e inactivas),
+// permite crear/editar (diálogo reutilizado), activar/desactivar y ELIMINAR. Deja explícito
+// que los egresos de gasto fijo los emite el CRON automáticamente, no este panel. Money-safe:
+// el monto llega como STRING y se renderiza TAL CUAL con `money`, sin parseFloat/Number.
+//
+// Ficha 332 (T14–T16) — EL BORRADO EXISTE, y esta nota es donde se ve el cambio. Hasta el
+// 2026-08-29 esta cabecera decía, verbatim: «permite crear/editar (diálogo reutilizado) y
+// activar/desactivar (NUNCA borrar, R25: la desactivación es el mecanismo para dejar de
+// generar)». La ficha 332 **revoca** ese «sin borrado» de `45/R25` con decisión humana del
+// 2026-08-29 — motivo: la tabla acumula ruido (configuración vieja que ya no se cobra y que el
+// usuario no puede sacar de su vista) y el histórico NO depende de la plantilla: no hay FK a
+// `wallet_movimiento`, la referencia es derivada (`origen_id = '<plantillaId>:<periodo>'`) y la
+// descripción del egreso ya lleva concepto y periodo, así que la fila del libro se explica sola.
+// Puntero: `specs/332-eliminar-plantilla-gasto-fijo`. La nota larga vive en
+// `lib/interfaces/repositories/IGastoFijoPlantillaRepository.ts`.
+//
+// Desactivar NO se fue con la revocación (R11): son dos intenciones distintas —pausar es
+// reversible y conserva el id (y con él la clave de idempotencia del cron); eliminar saca la
+// fila—, y por eso la confirmación del borrado ofrece «Desactivar» como alternativa (R16).
 //
 // Feature 85 (T F.3, design §4.4) — la tabla enseña por fin el CICLO que la base guarda desde
 // la 84: «Periodicidad» (en palabras) y «Próximo cobro» (la fecha, o «No se cobra» si está
@@ -116,6 +132,11 @@ export function GastosFijosPlantillasPanel({
   const [editando, setEditando] = useState<GastoFijoPlantillaDTO | null>(null);
   // id de la plantilla cuyo toggle activo está en vuelo (deshabilita solo esa fila).
   const [alternando, setAlternando] = useState<string | null>(null);
+  // Ficha 332 (R12/R13): la plantilla que el usuario pidió eliminar y todavía NO confirmó. El
+  // borrado no ocurre hasta que este objeto pasa por el `onConfirm` del Modal.
+  const [aEliminar, setAEliminar] = useState<GastoFijoPlantillaDTO | null>(null);
+  // id de la plantilla cuyo borrado está en vuelo (deshabilita solo esa fila, como `alternando`).
+  const [eliminando, setEliminando] = useState<string | null>(null);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialData.pageSize);
@@ -191,6 +212,54 @@ export function GastosFijosPlantillasPanel({
     }
   }
 
+  /**
+   * Ficha 332 (R2/R18/R19/R20) — ejecuta el borrado YA CONFIRMADO por el usuario.
+   *
+   * Sólo lo llama el `onConfirm` del Modal: mientras la confirmación no se acepta, esta función
+   * no corre y no se borra nada (R13). Del servidor vuelve un `status` a secas —sin payload—,
+   * así que la tabla NO se reconstruye en el cliente: se relee la página (R18).
+   *
+   * Los cinco estados tienen mensaje propio (R19), calcados de `alternarActiva`. `not_found`
+   * además relee: si el servidor dice que la fila ya no está, el listado que el usuario tiene
+   * delante está desactualizado y releerlo ES la respuesta.
+   */
+  async function eliminarPlantilla(plantilla: GastoFijoPlantillaDTO) {
+    // R20: se mide ANTES de borrar. Con paginación server-side, borrar la única fila de la
+    // página 3 deja una tabla vacía con el mensaje «Todavía no hay plantillas», que sería
+    // FALSO: las hay, en la página 1. Es una condición sobre lo que el panel ya tiene en la
+    // mano; no se recalcula el número de páginas ni se toca `Pagination`.
+    const filasVisibles = data?.items.length ?? 0;
+    setEliminando(plantilla.id);
+    try {
+      const result = await eliminarPlantillaAction({ id: plantilla.id });
+
+      if (result.status === "ok") {
+        toast.success("Plantilla eliminada.");
+        if (filasVisibles === 1 && page > 1) setPage(page - 1);
+        recargar();
+        router.refresh();
+        return;
+      }
+      if (result.status === "not_found") {
+        toast.error("La plantilla ya no existe.");
+        recargar();
+        return;
+      }
+      if (result.status === "forbidden") {
+        toast.error("No tenés permiso para administrar plantillas.");
+        return;
+      }
+      if (result.status === "validation_error") {
+        toast.error("No se pudo eliminar la plantilla.");
+        return;
+      }
+      // unauthenticated
+      toast.error("Tu sesión expiró. Iniciá sesión de nuevo.");
+    } finally {
+      setEliminando(null);
+    }
+  }
+
   // Columnas construidas inline (baratas): cierran sobre los handlers/estado de la fila.
   const columns: Column<GastoFijoPlantillaDTO>[] = [
     { id: "concepto", value: "Concepto", render: (p) => p.concepto },
@@ -251,6 +320,19 @@ export function GastosFijosPlantillasPanel({
             onClick={() => void alternarActiva(p)}
           >
             {p.activa ? "Desactivar" : "Activar"}
+          </Button>
+          {/* Ficha 332 (R1/R12): el borrado NO ocurre desde aquí. Este botón sólo ABRE la
+              confirmación; el `destructive` es para que no se confunda con «Desactivar», que
+              está justo al lado y es la acción reversible. Se deshabilita SÓLO su fila
+              mientras su propio borrado está en vuelo (mismo patrón que `alternando`). */}
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            disabled={eliminando === p.id}
+            onClick={() => setAEliminar(p)}
+          >
+            Eliminar
           </Button>
         </div>
       ),
@@ -361,6 +443,52 @@ export function GastosFijosPlantillasPanel({
         plantilla={editando}
         onGuardado={recargar}
       />
+
+      {/* Ficha 332 (R12–R17) — LA CONFIRMACIÓN DEL BORRADO.
+          `Modal` de `components/shared/` (el mismo que ya usa el diálogo de crear/editar), con
+          su foco atrapado, su `aria-modal` y su anti-doble-submit. No es un `window.confirm`:
+          el contenido que R14–R16 piden —concepto, monto formateado, las tres consecuencias y
+          la alternativa— no cabe en uno, y en jsdom no se puede probar sin mockear un global. */}
+      <Modal
+        open={aEliminar !== null}
+        onOpenChange={(abierto) => {
+          if (!abierto) setAEliminar(null);
+        }}
+        title="Eliminar plantilla de gasto fijo"
+        // R14: el monto se pinta desde el STRING que ya trae el DTO, con `money`, sin
+        // parseFloat/Number — igual que la columna «Monto» de esta misma tabla.
+        description={aEliminar ? `«${aEliminar.concepto}» — ${money(aEliminar.monto)}` : ""}
+        confirmLabel="Eliminar"
+        cancelLabel="Cancelar"
+        confirmVariant="destructive"
+        onConfirm={async () => {
+          if (!aEliminar) return;
+          await eliminarPlantilla(aEliminar);
+        }}
+      >
+        {aEliminar ? (
+          <div className="flex flex-col gap-3 text-sm">
+            {/* R15: las tres consecuencias, en este orden y sin rodeos. */}
+            <ul className="list-disc space-y-1 pl-5">
+              <li>La plantilla desaparece de esta tabla.</li>
+              <li>Deja de generar cobros automáticos.</li>
+              <li>
+                Los cobros ya hechos{" "}
+                <strong>siguen en el libro de movimientos</strong>: no se borran ni se
+                modifican.
+              </li>
+            </ul>
+            {/* R16: la alternativa, en su propia línea. No es decoración: pausar conserva el
+                id de la plantilla y con él la clave de idempotencia del cron, que eliminar
+                tira (design §7 R-1). El usuario no tiene por qué saber qué es eso, así que se
+                le dice lo que sí le importa: que la plantilla se queda y puede reactivarla. */}
+            <p className="text-muted-foreground">
+              Si sólo querés dejar de cobrarla por ahora, usá Desactivar: la plantilla se queda
+              y podés reactivarla cuando quieras.
+            </p>
+          </div>
+        ) : null}
+      </Modal>
     </Card>
   );
 }

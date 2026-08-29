@@ -12,7 +12,15 @@ import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 // Feature 45 (T12, R22b/R24/R25/R26) — tests del panel CRUD de PLANTILLAS de gasto fijo.
 // Las actions se mockean (no se toca el backend real). Verifica: lista concepto/monto STRING/
 // estado; "Nueva plantilla" crea; "Editar" actualiza con id; "Desactivar"/"Activar" alternan
-// `activa` (nunca borran); la nota deja claro que el egreso lo genera el cron.
+// `activa`; la nota deja claro que el egreso lo genera el cron.
+//
+// Ficha 332 (T17) — el panel gana el BORRADO. Hasta el 2026-08-29 esta cabecera decía, de
+// «Desactivar»/«Activar», que alternan `activa` «(nunca borran)»: era cierto porque no había
+// forma de borrar. La ficha 332 **revoca** el «sin borrado» de `45/R25` con decisión humana de
+// esa fecha (motivo: la tabla acumula ruido y el histórico del libro no depende de la
+// plantilla; puntero: `specs/332-eliminar-plantilla-gasto-fijo`). Lo que sigue siendo verdad
+// —y tiene su caso— es que DESACTIVAR no borra: son dos intenciones distintas y las dos
+// existen (R11). Los casos de esta ficha cubren R1, R12–R20.
 //
 // Feature 85 (T F.3/T F.6) — la tabla gana «Periodicidad» y «Próximo cobro» (R18/R19/R20), el
 // encabezado del monto pasa a «Monto» y ningún texto promete ya un cobro mensual (R22). El
@@ -26,6 +34,8 @@ import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 const crearMock = vi.fn();
 const actualizarMock = vi.fn();
 const setActivaMock = vi.fn();
+/** Ficha 332: el borrado. Se programa por caso; sin `mockResolvedValue` no devuelve nada. */
+const eliminarMock = vi.fn();
 // Feature 170 - FASE 2 (T I.2): el panel pide su PAGINA al servidor (SWR revalida al montar)
 // y relee el conjunto completo al descargar. Las dos se programan en `renderPanel`.
 const listarPaginaMock = vi.fn();
@@ -34,6 +44,7 @@ vi.mock("@/lib/actions/gasto-fijo-plantilla", () => ({
   crearPlantillaAction: (...a: unknown[]) => crearMock(...a),
   actualizarPlantillaAction: (...a: unknown[]) => actualizarMock(...a),
   setActivaPlantillaAction: (...a: unknown[]) => setActivaMock(...a),
+  eliminarPlantillaAction: (...a: unknown[]) => eliminarMock(...a),
   listarPlantillasPaginadoAction: (...a: unknown[]) => listarPaginaMock(...a),
   listarPlantillasAction: (...a: unknown[]) => listarCompletoMock(...a),
 }));
@@ -325,6 +336,10 @@ describe("GastosFijosPlantillasPanel — activar/desactivar (R25)", () => {
 
     await waitFor(() => expect(setActivaMock).toHaveBeenCalledTimes(1));
     expect(setActivaMock.mock.calls[0][0]).toEqual({ id: ACTIVA.id, activa: false });
+    // Ficha 332 (R11): desactivar NO se fue con la revocación del «sin borrado», y sobre todo
+    // NO se convirtió en un borrado encubierto. La fila se pausa; sigue en la tabla.
+    expect(eliminarMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("row", { name: /Alquiler de bodega/ })).toBeInTheDocument();
   }, 15000);
 
   it("Activar una plantilla inactiva llama setActiva con activa=true", async () => {
@@ -337,5 +352,281 @@ describe("GastosFijosPlantillasPanel — activar/desactivar (R25)", () => {
 
     await waitFor(() => expect(setActivaMock).toHaveBeenCalledTimes(1));
     expect(setActivaMock.mock.calls[0][0]).toEqual({ id: INACTIVA.id, activa: true });
+  }, 15000);
+});
+
+/* -------------------------------------------------------------------------- */
+/* Ficha 332 — el borrado: botón, confirmación y lo que se ve después          */
+/* (R1, R12–R20). El backend está mockeado: aquí sólo se prueba la pantalla.   */
+/* -------------------------------------------------------------------------- */
+
+type Usuario = ReturnType<typeof userEvent.setup>;
+
+/**
+ * Pide eliminar la fila de `concepto` y devuelve la confirmación YA abierta.
+ *
+ * Devuelve el diálogo —y no se usa `screen`— a propósito: con la confirmación abierta hay DOS
+ * botones «Eliminar» en el documento (el de la fila y el de confirmar), así que todo lo de la
+ * confirmación se busca DENTRO de ella o la consulta es ambigua.
+ */
+async function pedirEliminar(user: Usuario, concepto: RegExp): Promise<HTMLElement> {
+  const fila = screen.getByRole("row", { name: concepto });
+  await user.click(within(fila).getByRole("button", { name: "Eliminar" }));
+  return screen.findByRole("dialog");
+}
+
+/** El texto del diálogo con los saltos de línea del JSX colapsados. */
+function texto(nodo: HTMLElement): string {
+  return (nodo.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+
+describe("GastosFijosPlantillasPanel — el botón Eliminar (ficha 332, R1)", () => {
+  it("cada fila ofrece Eliminar, junto a Editar y al toggle de su estado", () => {
+    montarPanel([ACTIVA, INACTIVA]);
+
+    for (const [concepto, toggle] of [
+      ["Alquiler de bodega", "Desactivar"],
+      ["Internet", "Activar"],
+    ]) {
+      const fila = screen.getByRole("row", { name: new RegExp(concepto) });
+      expect(within(fila).getByRole("button", { name: "Eliminar" })).toBeInTheDocument();
+      // Y las dos acciones que ya existían siguen ahí: la ficha AÑADE una tercera (R11).
+      expect(within(fila).getByRole("button", { name: "Editar" })).toBeInTheDocument();
+      expect(within(fila).getByRole("button", { name: toggle })).toBeInTheDocument();
+    }
+  });
+});
+
+describe("GastosFijosPlantillasPanel — la confirmación (ficha 332, R12–R17)", () => {
+  it("Eliminar abre la confirmación y NO llama a la acción (R12/R13)", async () => {
+    const user = userEvent.setup();
+    montarPanel([ACTIVA]);
+
+    const dialog = await pedirEliminar(user, /Alquiler de bodega/);
+
+    expect(within(dialog).getByText("Eliminar plantilla de gasto fijo")).toBeInTheDocument();
+    // R13: mientras la confirmación no se acepta, no se borra nada. Es LA aserción de la
+    // ficha: sin ella, un botón que llamara a la acción y ADEMÁS abriera el diálogo pasaría.
+    expect(eliminarMock).not.toHaveBeenCalled();
+  }, 15000);
+
+  it("la confirmación identifica la plantilla por concepto y monto (R14)", async () => {
+    const user = userEvent.setup();
+    montarPanel([ACTIVA]);
+
+    const dialog = await pedirEliminar(user, /Alquiler de bodega/);
+
+    // El `"300.00"` del servidor se pinta con `money` —STRING, sin parseFloat/Number—, igual
+    // que la columna «Monto» de la tabla: sin la cola de céntimos (feature 230).
+    expect(within(dialog).getByText("«Alquiler de bodega» — ₡300")).toBeInTheDocument();
+  }, 15000);
+
+  it("el monto pasa por `money`: agrupa miles y no se pega crudo (R14)", async () => {
+    // ⭑ El caso que DISCRIMINA. Con `300.00` un `${p.monto}` a pelo se vería casi igual; con
+    //   un monto de siete cifras, pegar el STRING crudo daría «1500000.00» y una conversión a
+    //   número daría «1500000». Sólo el camino money-safe da «₡1.500.000».
+    const user = userEvent.setup();
+    const CARA: GastoFijoPlantillaDTO = { ...ACTIVA, monto: "1500000.00" };
+    montarPanel([CARA]);
+
+    const dialog = await pedirEliminar(user, /Alquiler de bodega/);
+
+    expect(within(dialog).getByText("«Alquiler de bodega» — ₡1.500.000")).toBeInTheDocument();
+    expect(texto(dialog)).not.toContain("1500000.00");
+  }, 15000);
+
+  it("enuncia las TRES consecuencias del borrado (R15)", async () => {
+    const user = userEvent.setup();
+    montarPanel([ACTIVA]);
+
+    const cuerpo = texto(await pedirEliminar(user, /Alquiler de bodega/));
+
+    expect(cuerpo).toContain("La plantilla desaparece de esta tabla.");
+    expect(cuerpo).toContain("Deja de generar cobros automáticos.");
+    // La tercera es la que más importa y la que un resumen se comería: el histórico del libro
+    // NO se toca (R8/R9), y el usuario tiene que leerlo ANTES de aceptar.
+    expect(cuerpo).toContain(
+      "Los cobros ya hechos siguen en el libro de movimientos: no se borran ni se modifican.",
+    );
+  }, 15000);
+
+  it("ofrece Desactivar como alternativa, con lo que la pausa conserva (R16)", async () => {
+    const user = userEvent.setup();
+    montarPanel([ACTIVA]);
+
+    const cuerpo = texto(await pedirEliminar(user, /Alquiler de bodega/));
+
+    expect(cuerpo).toContain("usá Desactivar");
+    expect(cuerpo).toContain("la plantilla se queda y podés reactivarla cuando quieras");
+  }, 15000);
+
+  it("Cancelar cierra la confirmación sin llamar a la acción (R17)", async () => {
+    const user = userEvent.setup();
+    montarPanel([ACTIVA]);
+
+    const dialog = await pedirEliminar(user, /Alquiler de bodega/);
+    await user.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(eliminarMock).not.toHaveBeenCalled();
+    // Y la fila sigue en la tabla: cancelar no deja el listado a medias.
+    expect(screen.getByRole("row", { name: /Alquiler de bodega/ })).toBeInTheDocument();
+  }, 15000);
+});
+
+describe("GastosFijosPlantillasPanel — después de confirmar (ficha 332, R2/R18/R19)", () => {
+  it("confirmar llama a la acción con { id } y, tras ok, avisa y relee la página", async () => {
+    const user = userEvent.setup();
+    eliminarMock.mockResolvedValue({ status: "ok" });
+    montarPanel([ACTIVA]);
+    await waitFor(() => expect(listarPaginaMock).toHaveBeenCalled());
+    const lecturasAntes = listarPaginaMock.mock.calls.length;
+
+    const dialog = await pedirEliminar(user, /Alquiler de bodega/);
+    await user.click(within(dialog).getByRole("button", { name: "Eliminar" }));
+
+    await waitFor(() => expect(eliminarMock).toHaveBeenCalledTimes(1));
+    // R2: el id EXACTO y nada más. El schema del borde es `.strict()`: una clave de sobra
+    // moriría allí, así que mandar de más se rompería en producción y no aquí.
+    expect(eliminarMock.mock.calls[0][0]).toEqual({ id: ACTIVA.id });
+
+    // R18: el aviso y la RELECTURA. La acción devuelve `{ status: "ok" }` sin payload, así que
+    // la tabla no se puede reconstruir en el cliente: hay que volver a pedirla al servidor.
+    expect(await screen.findByText("Plantilla eliminada.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(listarPaginaMock.mock.calls.length).toBeGreaterThan(lecturasAntes),
+    );
+  }, 15000);
+
+  /**
+   * R19 — los cuatro fallos, cada uno con SU mensaje.
+   *
+   * Cada caso afirma además que los mensajes de los otros tres NO están: sin eso, un panel que
+   * mostrara siempre el mismo texto pasaría los cuatro casos y el usuario no podría distinguir
+   * «no tenés permiso» de «tu sesión expiró», que piden cosas distintas.
+   */
+  const FALLOS: ReadonlyArray<{ resultado: Record<string, unknown>; mensaje: string }> = [
+    {
+      resultado: { status: "forbidden" },
+      mensaje: "No tenés permiso para administrar plantillas.",
+    },
+    {
+      resultado: { status: "unauthenticated" },
+      mensaje: "Tu sesión expiró. Iniciá sesión de nuevo.",
+    },
+    { resultado: { status: "not_found" }, mensaje: "La plantilla ya no existe." },
+    {
+      resultado: { status: "validation_error", fieldErrors: {} },
+      mensaje: "No se pudo eliminar la plantilla.",
+    },
+  ];
+
+  for (const { resultado, mensaje } of FALLOS) {
+    it(`${String(resultado.status)} muestra su propio mensaje y ningún otro (R19)`, async () => {
+      const user = userEvent.setup();
+      eliminarMock.mockResolvedValue(resultado);
+      montarPanel([ACTIVA]);
+
+      const dialog = await pedirEliminar(user, /Alquiler de bodega/);
+      await user.click(within(dialog).getByRole("button", { name: "Eliminar" }));
+
+      await waitFor(() => expect(eliminarMock).toHaveBeenCalledTimes(1));
+      // `findAllByText`: un aviso de error se anuncia con prioridad alta, así que el texto
+      // aparece además en la región `aria-live` del proveedor de toasts. Son dos nodos con el
+      // mismo texto y `findByText` reventaría por ambigüedad — que es ruido, no un fallo.
+      expect((await screen.findAllByText(mensaje)).length).toBeGreaterThan(0);
+      for (const otro of FALLOS.filter((f) => f.mensaje !== mensaje)) {
+        expect(screen.queryAllByText(otro.mensaje)).toHaveLength(0);
+      }
+      // Y no se anuncia un éxito que no hubo.
+      expect(screen.queryAllByText("Plantilla eliminada.")).toHaveLength(0);
+    }, 15000);
+  }
+
+  it("los cuatro estados de error tienen mensajes distintos entre sí (R19)", () => {
+    // Anti-vacuidad de la tabla de arriba: si dos filas compartieran mensaje, los casos
+    // «ningún otro» se anularían entre sí y quedarían verdes sin probar nada.
+    expect(new Set(FALLOS.map((f) => f.mensaje)).size).toBe(FALLOS.length);
+  });
+});
+
+describe("GastosFijosPlantillasPanel — la página que se queda vacía (ficha 332, R20)", () => {
+  /** Una plantilla que sólo vive en la página 2, para no confundirla con las de la 1. */
+  const SOLA_EN_LA_2: GastoFijoPlantillaDTO = {
+    ...ACTIVA,
+    id: "44444444-4444-4444-4444-444444444444",
+    concepto: "Bodega satélite",
+  };
+
+  /**
+   * Monta el panel con DOS páginas de verdad: 26 filas en total y 25 por página, con la lectura
+   * respondiendo distinto según la página pedida. Sin esto, `page` nunca pasa de 1 y R20 no se
+   * puede ejercitar.
+   */
+  function montarDosPaginas(pagina2: GastoFijoPlantillaDTO[]) {
+    const PAGINA_1 = [ACTIVA, INACTIVA];
+    listarPaginaMock.mockImplementation(async (input: unknown) => {
+      const { page } = input as { page: number };
+      return {
+        status: "ok",
+        items: page === 1 ? PAGINA_1 : pagina2,
+        total: 26,
+        pageSize: 25,
+      };
+    });
+    listarCompletoMock.mockResolvedValue({ status: "ok", plantillas: [] });
+    return renderPanel(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <GastosFijosPlantillasPanel
+          initialData={paginaInicial(PAGINA_1, { total: 26 })}
+          ahoraIso={AHORA_ISO}
+        />
+      </SWRConfig>,
+    );
+  }
+
+  it("borrada la ÚNICA fila de la página 2, el panel muestra la página 1", async () => {
+    const user = userEvent.setup();
+    eliminarMock.mockResolvedValue({ status: "ok" });
+    montarDosPaginas([SOLA_EN_LA_2]);
+
+    await user.click(screen.getByRole("button", { name: "Página siguiente" }));
+    await screen.findByRole("row", { name: /Bodega satélite/ });
+
+    const dialog = await pedirEliminar(user, /Bodega satélite/);
+    await user.click(within(dialog).getByRole("button", { name: "Eliminar" }));
+    await waitFor(() => expect(eliminarMock).toHaveBeenCalledTimes(1));
+
+    // Sin R20 la tabla se quedaría vacía diciendo «Todavía no hay plantillas de gasto fijo»,
+    // que sería FALSO: las hay, en la página 1. Se comprueba por lo que se VE.
+    expect(await screen.findByRole("row", { name: /Alquiler de bodega/ })).toBeInTheDocument();
+    expect(
+      screen.queryByText("Todavía no hay plantillas de gasto fijo."),
+    ).not.toBeInTheDocument();
+  }, 15000);
+
+  it("si la página 2 tenía DOS filas, no se mueve de página (R20)", async () => {
+    // ⭑ La contraparte que mata la mutación «volver siempre a la página anterior»: la regla es
+    //   «la página se quedó vacía», no «se borró algo estando en la página 2».
+    const user = userEvent.setup();
+    eliminarMock.mockResolvedValue({ status: "ok" });
+    const ACOMPANANTE: GastoFijoPlantillaDTO = {
+      ...ACTIVA,
+      id: "55555555-5555-5555-5555-555555555555",
+      concepto: "Vigilancia",
+    };
+    montarDosPaginas([SOLA_EN_LA_2, ACOMPANANTE]);
+
+    await user.click(screen.getByRole("button", { name: "Página siguiente" }));
+    await screen.findByRole("row", { name: /Bodega satélite/ });
+
+    const dialog = await pedirEliminar(user, /Bodega satélite/);
+    await user.click(within(dialog).getByRole("button", { name: "Eliminar" }));
+    await waitFor(() => expect(eliminarMock).toHaveBeenCalledTimes(1));
+    await screen.findByText("Plantilla eliminada.");
+
+    // Sigue en la página 2: las filas de la 1 no aparecen.
+    expect(screen.queryByRole("row", { name: /Alquiler de bodega/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /Vigilancia/ })).toBeInTheDocument();
   }, 15000);
 });

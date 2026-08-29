@@ -182,6 +182,21 @@ FUERA DE ALCANCE (follow-up explícito, no se implementa en v1):
   activarla/desactivarla; el sistema NO DEBE borrar plantillas (la desactivación —`activa = false`— es el
   mecanismo para dejar de generar, preservando el historial y los egresos ya emitidos).
 
+  > **⚠️ SUPERSEDED 2026-08-29 por la ficha 332** (`specs/332-eliminar-plantilla-gasto-fijo`).
+  > El borrado de plantillas dejó de estar prohibido: decisión humana de esa fecha. Lo que sigue
+  > vigente de R25 —editar y activar/desactivar— no cambia; lo que queda revocado es sólo la
+  > cláusula «el sistema NO DEBE borrar plantillas».
+  >
+  > **El texto de arriba se conserva VERBATIM**, como la foto de su momento: este bloque se AÑADE,
+  > no lo reescribe. La premisa que lo sostenía —«preservando el historial y los egresos ya
+  > emitidos»— resultó no depender de la plantilla: `wallet_movimiento` no declara ninguna FK a
+  > `gasto_fijo_plantilla`, la referencia es derivada (`origen_id = '<plantillaId>:<periodo>'`, un
+  > texto) y la `descripcion` del movimiento ya lleva el concepto y el periodo, así que la fila del
+  > libro se explica sola sin la plantilla. El motivo del cambio: la tabla acumula ruido —
+  > configuración vieja que ya no se cobra y que nadie podía sacar de su vista—. Lo que R25 sí
+  > acertaba, y la 332 **no** toca, es que el libro es inmutable: el borrado llega hasta la tabla
+  > de plantillas y se detiene ahí.
+
 - **R26** — El sistema DEBE listar al maestro las plantillas de gasto fijo (activas e inactivas), con su
   `concepto`, `monto` (STRING) y estado `activa`.
 
