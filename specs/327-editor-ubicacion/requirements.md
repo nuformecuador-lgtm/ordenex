@@ -253,6 +253,13 @@ céntimos reales en la feature 204. El backend emite STRING escala 2 y la pantal
 `money()`. Si el negocio quiere verlos enteros, es una decisión de **presentación** y se toma en el
 formateador, nunca en el cálculo.
 
+✅ **RATIFICADA POR EL HUMANO EL 2026-08-29: SIN céntimos, como el resto de la app.** Se le
+presento la tension medida -- el servidor manda `2825.40` y la pantalla muestra `₡2.825`-- y eligio
+NO crear una tercera excepcion a la 230. El codigo se queda tal cual: `money()`. El coste queda
+aceptado y dicho: se confirma un cambio de tarifa viendo el importe redondeado. Con esto la
+contradiccion interna de esta P4 («no se redondean» junto a «lo pinta con `money()`») queda cerrada
+a favor del formateador de la casa.
+
 ---
 
 ## Trazabilidad

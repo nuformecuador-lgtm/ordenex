@@ -75,7 +75,7 @@ desactivado. Es la prueba de que esa suite nunca cubrió este camino.
    ventana con clave compartida — patrón ya vivo en el repo, que sirve a las dos superficies con una
    implementación y no toca ninguna de las dos páginas.
 
-## ⚠️ Decisión pendiente: los céntimos del aviso
+## Los céntimos del aviso — decidido
 
 El spec dice tres veces que el importe se pinte con el formateador de la casa. **Ese formateador es
 la feature 230: el dinero se pinta SIN céntimos, redondeando.** Medido: el servidor manda `2825.40`
@@ -87,7 +87,10 @@ las únicas dos excepciones declaradas de la 230 son descargas y salidas de máq
 tercera es decisión humana**; y lo contrario obliga a escribir un formateador de dinero propio en la
 capa de UI, que es justo lo que la 230 centralizó.
 
-**Queda pendiente de decisión del humano.** Es un cambio de una línea más dos literales de test.
+**RESUELTO por el humano el 2026-08-29: sin céntimos, como el resto de la app.** No se crea una
+tercera excepción a la 230 y el código se queda tal cual. La contradicción del spec queda cerrada
+a favor del formateador de la casa; el coste aceptado es que se confirma un cambio de tarifa viendo
+el importe redondeado.
 
 ## Deuda declarada
 
