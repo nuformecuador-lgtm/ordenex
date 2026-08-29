@@ -37,6 +37,8 @@ function buildPlantillaRepo(activas: GastoFijoPlantillaDTO[]): IGastoFijoPlantil
     // Feature 170 (T I.1): listado paginado; el cron no lo usa.
     listarPaginado: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     obtenerPorId: vi.fn(),
+    // Ficha 332: el borrado entra en el contrato del repositorio; el cron NO lo usa (ni debe).
+    eliminar: vi.fn(),
   };
 }
 

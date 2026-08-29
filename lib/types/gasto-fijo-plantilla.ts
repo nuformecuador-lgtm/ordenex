@@ -95,13 +95,31 @@ export type ActualizarGastoFijoPlantillaInput = z.infer<
   typeof actualizarGastoFijoPlantillaSchema
 >;
 
-// R25: activar/desactivar una plantilla (sin borrado; la desactivacion detiene el cron).
+// R25: activar/desactivar una plantilla (la desactivacion detiene el cron y la fila se queda).
+// Desde la ficha 332 convive con el BORRADO, que **revoca** el «sin borrado» de `45/R25` con
+// decision humana del 2026-08-29 (ver `specs/332-eliminar-plantilla-gasto-fijo`): desactivar es
+// pausar —reversible, conserva el id—; eliminar saca la fila de la tabla.
 export const setActivaPlantillaSchema = z.object({
   id: z.string().uuid(),
   activa: z.boolean(),
 });
 
 export type SetActivaPlantillaInput = z.infer<typeof setActivaPlantillaSchema>;
+
+/**
+ * Ficha 332 (R6) — entrada del BORRADO de una plantilla: solo su identificador.
+ *
+ * `.strict()` a proposito, y es lo unico que este schema tiene de particular: una clave
+ * desconocida muere en el BORDE con `validation_error`, sin llegar al servicio. En una operacion
+ * irreversible, aceptar en silencio un campo que nadie va a leer es la forma barata de que el
+ * llamador crea que pidio algo que no pidio.
+ *
+ * Aqui NO viaja ningun monto: el unico que aparece en este camino es el que la confirmacion
+ * pinta, y sale del DTO que la pantalla ya tiene (STRING, money-safe).
+ */
+export const eliminarPlantillaSchema = z.object({ id: z.string().uuid() }).strict();
+
+export type EliminarPlantillaInput = z.infer<typeof eliminarPlantillaSchema>;
 
 /**
  * Feature 170 — FASE 2 (T I.1, R40) — entrada del listado paginado de PLANTILLAS de gasto

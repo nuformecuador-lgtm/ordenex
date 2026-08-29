@@ -54,9 +54,14 @@ function toDTO(r: PlantillaRow): GastoFijoPlantillaDTO {
 const ORDEN_PLANTILLAS: Prisma.GastoFijoPlantillaOrderByWithRelationInput = { createdAt: "desc" };
 
 /**
- * Feature 45 — repositorio de PLANTILLAS de gasto fijo. SOLO queries Prisma. CRUD sin borrado
- * (R25): crear, actualizar (concepto/monto), setActiva (activar/desactivar), listar (todas),
- * listarActivas (cron), obtenerPorId. Montos SIEMPRE STRING en el DTO (money-safe, R12).
+ * Feature 45 — repositorio de PLANTILLAS de gasto fijo. SOLO queries Prisma: crear, actualizar
+ * (concepto/monto/ciclo), setActiva (activar/desactivar), eliminar, listar (todas), listarActivas
+ * (cron), obtenerPorId. Montos SIEMPRE STRING en el DTO (money-safe, R12).
+ *
+ * El CRUD incluye BORRADO desde la ficha 332, que **revoca** el «sin borrado» de `45/R25` con
+ * decision humana del 2026-08-29: la tabla acumula ruido y el historico del libro no depende de
+ * la plantilla (sin FK, referencia derivada). Ver `specs/332-eliminar-plantilla-gasto-fijo` y la
+ * nota larga en `lib/interfaces/repositories/IGastoFijoPlantillaRepository.ts`.
  */
 export class GastoFijoPlantillaRepository implements IGastoFijoPlantillaRepository {
   constructor(private readonly prisma: PlantillaPrismaClient) {}
@@ -93,10 +98,27 @@ export class GastoFijoPlantillaRepository implements IGastoFijoPlantillaReposito
     return toDTO(row);
   }
 
-  /** R25: activa/desactiva (sin borrado). */
+  /** R25: activa/desactiva. Reversible y conserva el id (y con el la clave del cron). */
   async setActiva(id: string, activa: boolean): Promise<GastoFijoPlantillaDTO> {
     const row = await this.prisma.gastoFijoPlantilla.update({ where: { id }, data: { activa } });
     return toDTO(row);
+  }
+
+  /**
+   * Ficha 332 (R2/R3/R8) — borra la plantilla. `true` si borro una fila, `false` si ya no existia.
+   *
+   * `deleteMany` y no `delete`, igual que `VehiculoRepository.delete`: `delete` lanza `P2025`
+   * cuando la fila ya no esta y obligaria al servicio a traducir un codigo de error de la ORM a
+   * `not_found`. El `count` es esa misma respuesta, sin excepcion y sin ventana TOCTOU.
+   *
+   * El `where` lleva SOLO la clave primaria (R3): ni `activa`, ni fechas, ni nada mas. Y no puede
+   * tocar `wallet_movimiento` (R8) porque `PlantillaPrismaClient` no lo expone — el libro queda
+   * intacto por el TIPO, no por buena voluntad. Lo afirma
+   * `tests/unit/repositories/gasto-fijo-plantilla-eliminar.test.ts`.
+   */
+  async eliminar(id: string): Promise<boolean> {
+    const res = await this.prisma.gastoFijoPlantilla.deleteMany({ where: { id } });
+    return res.count > 0;
   }
 
   /**

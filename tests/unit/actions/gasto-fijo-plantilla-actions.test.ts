@@ -3,6 +3,7 @@ import {
   crearPlantillaAction,
   actualizarPlantillaAction,
   setActivaPlantillaAction,
+  eliminarPlantillaAction,
   listarPlantillasAction,
 } from "@/lib/actions/gasto-fijo-plantilla";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -45,6 +46,8 @@ function fakeService(overrides: Partial<IGastoFijoPlantillaService> = {}): IGast
     crearPlantilla: vi.fn(async () => ({ status: "ok" as const, plantilla: plantilla() })),
     actualizarPlantilla: vi.fn(async () => ({ status: "ok" as const, plantilla: plantilla() })),
     setActivaPlantilla: vi.fn(async () => ({ status: "ok" as const, plantilla: plantilla() })),
+    // Ficha 332: el borrado. `ok` NO lleva payload (no hay fila que devolver).
+    eliminarPlantilla: vi.fn(async () => ({ status: "ok" as const })),
     listarPlantillas: vi.fn(async () => ({ status: "ok" as const, plantillas: [plantilla()] })),
     // Feature 170 (T I.1): el doble sigue implementando la interfaz COMPLETA.
     listarPlantillasPaginado: vi.fn(async () => ({
@@ -241,6 +244,75 @@ describe("setActivaPlantillaAction (R18/R25)", () => {
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("ok");
+  });
+});
+
+// ── Ficha 332 (R4/R5/R6) — el BORDE del borrado ──
+//
+// Lo que este bloque afirma es lo que decide el borde y NADA mas: sin sesion no se llega al
+// servicio, una entrada que no identifica una plantilla con un id valido tampoco, y `forbidden`
+// no lo inventa la accion —lo devuelve el servicio, que es quien conoce el rol—.
+describe("eliminarPlantillaAction (ficha 332, R4/R5/R6)", () => {
+  it("R5: sin sesion -> unauthenticated, sin tocar el service", async () => {
+    const service = fakeService();
+    const r = await eliminarPlantillaAction({ id: UUID }, { service, getActor: async () => null });
+    expect(r).toEqual({ status: "unauthenticated" });
+    expect(service.eliminarPlantilla).not.toHaveBeenCalled();
+  });
+
+  it("R6: id que no es uuid -> validation_error, sin tocar el service", async () => {
+    const service = fakeService();
+    const r = await eliminarPlantillaAction(
+      { id: "no-uuid" },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("esperado validation_error");
+    expect(r.fieldErrors.id).toBeDefined();
+    expect(service.eliminarPlantilla).not.toHaveBeenCalled();
+  });
+
+  it("R6: sin id -> validation_error, sin tocar el service", async () => {
+    const service = fakeService();
+    const r = await eliminarPlantillaAction({}, { service, getActor: async () => MAESTRO });
+    expect(r.status).toBe("validation_error");
+    expect(service.eliminarPlantilla).not.toHaveBeenCalled();
+  });
+
+  it("R6: una clave DESCONOCIDA muere en el borde (`.strict()`), aunque el id sea valido", async () => {
+    // El id va bien a proposito: el unico motivo posible del rojo es la clave de mas. Sin
+    // `.strict()` este caso pasaria al servicio y borraria igual, callado.
+    const service = fakeService();
+    const r = await eliminarPlantillaAction(
+      { id: UUID, borrarTambienElHistorico: true },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(r.status).toBe("validation_error");
+    expect(service.eliminarPlantilla).not.toHaveBeenCalled();
+  });
+
+  it("R4: forbidden lo decide el SERVICE (el borde no conoce el rol)", async () => {
+    const service = fakeService({
+      eliminarPlantilla: vi.fn(async () => ({ status: "forbidden" as const })),
+    });
+    const r = await eliminarPlantillaAction({ id: UUID }, { service, getActor: async () => OTRO });
+    expect(r).toEqual({ status: "forbidden" });
+    expect(service.eliminarPlantilla).toHaveBeenCalledWith({ id: UUID }, OTRO);
+  });
+
+  it("R7: not_found se propaga desde el service", async () => {
+    const service = fakeService({
+      eliminarPlantilla: vi.fn(async () => ({ status: "not_found" as const })),
+    });
+    const r = await eliminarPlantillaAction({ id: UUID }, { service, getActor: async () => MAESTRO });
+    expect(r).toEqual({ status: "not_found" });
+  });
+
+  it("R2: con sesion, id valido y permiso -> ok, y el service recibe `{ id }` y el actor", async () => {
+    const service = fakeService();
+    const r = await eliminarPlantillaAction({ id: UUID }, { service, getActor: async () => MAESTRO });
+    expect(r).toEqual({ status: "ok" });
+    expect(service.eliminarPlantilla).toHaveBeenCalledWith({ id: UUID }, MAESTRO);
   });
 });
 
