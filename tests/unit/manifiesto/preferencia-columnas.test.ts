@@ -1,18 +1,30 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
+import {
+  clavesVisiblesEnOrden,
+  columnasEnOrden,
+  guardar,
+  leerCrudo,
+  sanearPreferencia,
+} from "@/lib/columnas/preferencia-columnas";
 import { etiquetaColumna } from "@/lib/manifiesto/etiquetas-columnas";
 import {
   claveColumnas,
-  columnasVisibles,
-  guardarOcultas,
-  leerCrudoColumnas,
-  sanearOcultas,
+  claveDeColumnaManifiesto,
 } from "@/lib/manifiesto/preferencia-columnas";
+import type { ManifiestoFlujo } from "@/lib/types/manifiesto";
 import type { XlsxColumn } from "@/lib/utils/xlsx-template";
 
 // Feature 194 (T4) — modulo puro de preferencia de columnas del manifiesto (R14, R16, R17,
 // R19, R20, R21, R22).
+//
+// FICHA 314 — RE-CABLEADO, no reescrito. La maquinaria se mudó a
+// `lib/columnas/preferencia-columnas.ts` (generalizada por ámbito) y aquí lo único propio del
+// manifiesto que queda es su CLAVE: donde antes se pasaba `flujo`, ahora se pasa
+// `claveColumnas(flujo)`, que devuelve exactamente el mismo string de siempre. Los OCHO casos
+// de abajo y el bloque de etiquetas se conservan intactos en lo que afirman: son la evidencia
+// de que la mudanza no cambió una sola conducta observable (314/R30).
 //
 // REGLA R23 (conjunto ABIERTO, heredada de 160/R28): estos tests usan una lista `publicadas` de
 // PRUEBA, inventada aqui, y NUNCA la constante real `COLUMNAS_MANIFIESTO`. Ningun aserto afirma
@@ -28,6 +40,36 @@ const PUBLICADAS: readonly XlsxColumn[] = [
 
 function claves(columnas: readonly XlsxColumn[]): string[] {
   return columnas.map((columna) => columna.key);
+}
+
+/** Las columnas que salen en el archivo, con el catálogo de prueba de este archivo. */
+function columnasVisibles(
+  crudo: string | null,
+  publicadas: readonly XlsxColumn[],
+): XlsxColumn[] {
+  return columnasEnOrden(
+    publicadas,
+    clavesVisiblesEnOrden(crudo, claves(publicadas)),
+    claveDeColumnaManifiesto,
+  );
+}
+
+/** Lectura por FLUJO, tal y como la hace el binding del ámbito manifiesto. */
+function leerCrudoColumnas(flujo: ManifiestoFlujo): string | null {
+  return leerCrudo(claveColumnas(flujo));
+}
+
+/** Escritura por FLUJO, con el `orden` vacío: el formato de la 194, byte por byte. */
+function guardarOcultas(flujo: ManifiestoFlujo, ocultas: readonly string[]): void {
+  guardar(claveColumnas(flujo), { ocultas, orden: [] });
+}
+
+/** Las ocultas ya saneadas contra el catálogo de prueba. */
+function sanearOcultas(
+  crudo: string | null,
+  publicadas: readonly XlsxColumn[],
+): string[] {
+  return [...sanearPreferencia(crudo, claves(publicadas)).ocultas];
 }
 
 const descriptorOriginal = Object.getOwnPropertyDescriptor(

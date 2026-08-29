@@ -109,6 +109,41 @@ export function crearPrismaDeTestConEspia(): {
   return { prisma: cliente as unknown as PrismaClient, eventos };
 }
 
+/** El cliente que `enTransaccionRevertida` entrega al test: la tx interactiva de Prisma. */
+export type TxDeTest = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
+
+/**
+ * FICHA 327 — el cliente de la tx del test, MAS un `$transaction` que no abre nada.
+ *
+ * POR QUE HACE FALTA. `Prisma.TransactionClient` **no tiene `$transaction`** (esta en la
+ * `ITXClientDenyList`). En cuanto un repositorio abre su propia transaccion por dentro —lo que
+ * hace `OrdenRepository.corregirDatosCliente` desde la 327, para que el encolado del job comparta
+ * transaccion con la escritura (OUTBOX, feature 91/R7)— ejercerlo con el `tx` pelado revienta con
+ * «tx.$transaction is not a function», y ese rojo no dice nada del codigo.
+ *
+ * QUE SE PIERDE Y QUE NO. El pass-through NO abre un savepoint: la «transaccion interna» es la
+ * misma del test. Lo que se sigue midiendo intacto es lo que estas suites existen para medir —el
+ * SQL REAL contra Postgres: el `WHERE` de la ventana, las columnas que cambian, las filas que
+ * aparecen o no en otras tablas—. La atomicidad del outbox NO se afirma con esto: se afirma
+ * comprobando que el encolado recibe EL MISMO cliente que la escritura (4.º argumento), que es la
+ * propiedad de la que depende el invariante.
+ *
+ * El `bind` es necesario: las funciones del cliente Prisma (`$queryRaw`, `$executeRawUnsafe`, ...)
+ * necesitan su `this`, y devolverlas desatadas del proxy las rompe en silencio.
+ */
+export function clienteConTransaccionAnidada(tx: TxDeTest): PrismaClient {
+  const proxy = new Proxy(tx as object, {
+    get(target, prop) {
+      if (prop === "$transaction") {
+        return async (fn: (t: unknown) => unknown) => fn(proxy);
+      }
+      const valor = Reflect.get(target, prop) as unknown;
+      return typeof valor === "function" ? valor.bind(target) : valor;
+    },
+  });
+  return proxy as unknown as PrismaClient;
+}
+
 /** Portador del valor: se lanza para forzar el ROLLBACK sin perder lo que se calculo. */
 class Revertir extends Error {
   constructor(readonly valor: unknown) {

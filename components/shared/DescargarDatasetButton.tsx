@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ColumnasPopover } from "@/components/shared/ColumnasPopover";
 import { descargarBlob } from "@/components/shared/descargar-blob";
+import { usePreferenciaColumnas } from "@/hooks/usePreferenciaColumnas";
 import { useToast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
-import type { DescargaTipo } from "@/lib/types/descarga";
+import type { DescargaColumna, DescargaTipo } from "@/lib/types/descarga";
 import type { DataTableDescarga } from "@/components/shared/DataTable";
 
 /**
@@ -24,6 +26,11 @@ import type { DataTableDescarga } from "@/components/shared/DataTable";
  * ningún servidor ni se almacena fuera del equipo del usuario (R32). El despachador
  * `descarga-dataset` (y con él `exceljs`) se carga con un `import()` DINÁMICO dentro del
  * handler, para no entrar en el bundle inicial de todas las pantallas con tabla.
+ *
+ * FICHA 314 — cuando la configuración declara `ambitoColumnas`, este control monta además el
+ * selector de columnas (`ColumnasPopover`) y emite el archivo con las columnas MARCADAS y en
+ * el orden que el usuario haya fijado en ese ámbito. Sin ámbito no hay selector y salen todas
+ * las columnas declaradas (R33), que es lo que siguen haciendo las 24 tablas restantes.
  */
 export interface DescargarDatasetButtonProps extends DataTableDescarga {
   /** Texto del botón (i18n por prop, sin literal fijo en el consumidor). */
@@ -44,6 +51,26 @@ const ETIQUETA_FORMATO: Record<DescargaTipo, string> = {
 const FORMATO_POR_DEFECTO: DescargaTipo = "xlsx";
 
 /**
+ * Ficha 314 — prefijo de la clave de preferencia de columnas de un LISTADO. Estrena el suyo a
+ * propósito: la clave del manifiesto (`ordenex:manifiesto-columnas:<flujo>`) no se toca, porque
+ * es superficie viva en producción y moverla huerfanaría en silencio lo ya guardado (R10).
+ */
+const PREFIJO_CLAVE_COLUMNAS = "ordenex:descarga-columnas:";
+
+/**
+ * Accesores del ámbito «descarga de listado». A NIVEL DE MÓDULO, no inline: son dependencias
+ * de los `useMemo` del hook, y una función creada en el render cambia de identidad cada vez.
+ */
+function claveDeDescarga(columna: DescargaColumna): string {
+  return columna.clave;
+}
+
+/** R3: el nombre de cada opción ES el encabezado con el que la columna sale en el archivo. */
+function etiquetaDeDescarga(columna: DescargaColumna): string {
+  return columna.encabezado;
+}
+
+/**
  * R23/R27 — Mensajes ACCIONABLES: dicen qué hacer, no solo que no hubo archivo. El
  * mensaje del propio `obtenerFilas` (ya saneado por el consumidor) tiene prioridad.
  */
@@ -57,10 +84,23 @@ export function DescargarDatasetButton({
   columnas,
   obtenerFilas,
   formatos,
+  ambitoColumnas,
   label,
   className,
 }: DescargarDatasetButtonProps) {
   const toast = useToast();
+  // Ficha 314 — ÚNICO punto donde la preferencia de columnas se aplica a un listado. Sin
+  // ámbito la clave es `null`: el hook no lee, no escribe y devuelve las columnas declaradas
+  // tal cual, así que las 24 tablas restantes no cambian ni una línea (R33).
+  const claveColumnas =
+    ambitoColumnas === undefined
+      ? null
+      : `${PREFIJO_CLAVE_COLUMNAS}${ambitoColumnas}`;
+  const { visibles } = usePreferenciaColumnas(
+    claveColumnas,
+    columnas,
+    claveDeDescarga,
+  );
   const [generando, setGenerando] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
   // Guard de CARRERA (R26): `generando` como estado no está actualizado hasta el
@@ -106,7 +146,10 @@ export function DescargarDatasetButton({
       const archivo = await construirDescarga({
         tipo,
         titulo,
-        columnas,
+        // R4/R5/R20: las columnas MARCADAS y en el orden efectivo del ámbito. Sin ámbito son
+        // las declaradas, en el orden del catálogo. El filtro va en las columnas y nunca en
+        // los datos: las filas llegan enteras y el generador ignora las claves no declaradas.
+        columnas: visibles,
         filas: resultado.filas,
       });
       // R32: el archivo nace y muere en el navegador; ni subida ni almacenamiento.
@@ -132,7 +175,7 @@ export function DescargarDatasetButton({
   return (
     <div
       ref={contenedorRef}
-      className={cn("relative inline-block", className)}
+      className={cn("relative inline-flex items-center gap-1", className)}
       onKeyDown={(evento) => {
         if (evento.key === "Escape" && menuAbierto) setMenuAbierto(false);
       }}
@@ -150,6 +193,19 @@ export function DescargarDatasetButton({
         {generando ? null : <Download aria-hidden="true" />}
         {label ?? DEFAULT_LABEL}
       </Button>
+
+      {/* R1 — control PARALELO al botón, no un paso de su camino: abrirlo no descarga, y el
+          botón descarga en un click con lo ya guardado (R6). Solo se monta si hay ámbito. */}
+      {claveColumnas !== null ? (
+        <ColumnasPopover
+          claveAlmacenamiento={claveColumnas}
+          publicadas={columnas}
+          claveDe={claveDeDescarga}
+          etiquetaDe={etiquetaDeDescarga}
+          titulo="Columnas del archivo"
+          etiquetaDisparador="Elegir columnas de la descarga"
+        />
+      ) : null}
 
       {eligeFormato && menuAbierto ? (
         <div

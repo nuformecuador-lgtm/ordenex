@@ -22,7 +22,7 @@
 // Prisma a jsdom). Lo que se mide aqui es el contrato de PANTALLA; que la accion autorice de verdad
 // lo miden `corregir-datos-cliente-service.test.ts` y `corregir-datos-cliente.repo.test.ts`.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
@@ -32,17 +32,45 @@ import {
 import {
   CORREGIR_TITULO,
   CORREGIR_CONFIRMAR,
+  CORREGIR_PROVINCIA_LABEL,
+  CORREGIR_CANTON_LABEL,
+  CORREGIR_DISTRITO_LABEL,
+  CORREGIR_UBICACION_CARGANDO,
+  CORREGIR_UBICACION_FALLO,
 } from "@/app/(app)/ordenes/_components/CorregirDatosClienteModal";
+import {
+  AVISO_TITULO,
+  AVISO_CONFIRMAR,
+  AVISO_SIN_TARIFA,
+  AVISO_YA_EN_UN_CIERRE,
+  AVISO_COL_ACTUAL,
+  AVISO_COL_PROPUESTA,
+  avisoEspecialSinPacto,
+} from "@/app/(app)/ordenes/_components/CorregirUbicacionAviso";
+import type { AvisoCambioUbicacion } from "@/lib/interfaces/services/ICorregirDatosClienteService";
 import { ESTADOS_SIN_CORRECCION } from "@/lib/types/correccion-datos-cliente";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 const corregirDatosClienteMock = vi.fn();
+const obtenerUbicacionOrdenMock = vi.fn();
 vi.mock("@/lib/actions/corregir-datos-cliente", () => ({
   corregirDatosCliente: (...args: unknown[]) => corregirDatosClienteMock(...args),
+  // FICHA 327 (R31) — la PRECARGA que la ventana pide al abrirse. Si faltara del mock, vitest
+  // lanzaria al resolver el import y este archivo no dejaria un caso rojo: dejaria CERO casos.
+  obtenerUbicacionOrden: (...args: unknown[]) => obtenerUbicacionOrdenMock(...args),
+}));
+
+const obtenerCatalogoMock = vi.fn();
+vi.mock("@/lib/actions/filtros-ordenes", () => ({
+  obtenerCatalogoFiltrosOrdenes: (...args: unknown[]) => obtenerCatalogoMock(...args),
 }));
 
 const mutateMock = vi.fn();
-vi.mock("swr", () => ({
+// `useSWR` REAL —el catalogo geografico pasa por el, con la accion ya mockeada arriba— y SOLO
+// `useSWRConfig` sustituido. Mockear el modulo entero dejaria el catalogo sin cargar nunca, los
+// tres desplegables vacios, y los casos de encadenamiento pasarian en verde sin medir nada.
+vi.mock("swr", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("swr")>()),
   useSWRConfig: () => ({ mutate: mutateMock }),
 }));
 
@@ -74,12 +102,112 @@ function orden(over: Partial<OrdenListItemDTO> = {}): OrdenListItemDTO {
   } as unknown as OrdenListItemDTO;
 }
 
-/** Abre la ventana sobre esa orden y devuelve el `user` para seguir tecleando. */
+// -------------------------------------------------------------------------------------------------
+// FICHA 327 — LOS FIXTURES DE LA UBICACION
+// -------------------------------------------------------------------------------------------------
+//
+// La geografia se declara con DOS provincias, TRES cantones y CUATRO distritos a proposito: con una
+// sola rama, «elegir provincia recorta los cantones» pasaria en verde con un componente que no
+// recorta nada. El encadenamiento solo se puede medir si hay algo que dejar fuera.
+
+const PROVINCIAS = [
+  { id: "prov-sj", nombre: "San José" },
+  { id: "prov-al", nombre: "Alajuela" },
+];
+const CANTONES = [
+  { id: "can-escazu", nombre: "Escazú", padreId: "prov-sj" },
+  { id: "can-desamp", nombre: "Desamparados", padreId: "prov-sj" },
+  { id: "can-alajuela", nombre: "Alajuela centro", padreId: "prov-al" },
+];
+const DISTRITOS = [
+  { id: "dis-san-rafael", nombre: "San Rafael", padreId: "can-escazu" },
+  { id: "dis-san-antonio", nombre: "San Antonio", padreId: "can-escazu" },
+  { id: "dis-patarra", nombre: "Patarrá", padreId: "can-desamp" },
+  { id: "dis-la-garita", nombre: "La Garita", padreId: "can-alajuela" },
+];
+
+const CATALOGO_OK = {
+  status: "ok" as const,
+  catalogo: {
+    zonas: [],
+    tiendas: [],
+    mensajeros: [],
+    provincias: PROVINCIAS,
+    cantones: CANTONES,
+    distritos: DISTRITOS,
+  },
+};
+
+/** Los NUEVE valores actuales que devuelve la precarga (R31). */
+function ubicacion(over: Record<string, unknown> = {}) {
+  return {
+    status: "ok" as const,
+    orden: {
+      ordenId: ORDEN_ID,
+      destinatario: "Ana Pérez",
+      telefonoDest: "8888-7777",
+      producto: "Zapatos negros",
+      notas: "Dejar con el guarda",
+      direccion: "Av. Central 120, portón verde",
+      peso: 1.5,
+      provinciaId: "prov-sj",
+      cantonId: "can-escazu",
+      distritoId: "dis-san-rafael",
+      zonaNombre: "GAM Oeste",
+      distritoNombre: "San Rafael",
+      numGuia: null,
+      yaEnUnCierre: false,
+      ...over,
+    },
+  };
+}
+
+/**
+ * 💰 El aviso del servidor. Los importes llevan CENTIMOS a proposito: asi el caso deja escrito, en
+ * el propio test, como se pinta en esta pantalla un importe con cola decimal.
+ */
+function aviso(over: Partial<AvisoCambioUbicacion> = {}): AvisoCambioUbicacion {
+  return {
+    actual: {
+      zonaId: "zona-oeste",
+      zonaNombre: "GAM Oeste",
+      distritoNombre: "San Rafael",
+      esCentral: true,
+      esZonaEspecial: false,
+      tarifa: "resuelta",
+      fleteConIva: "2825.40",
+      comisionConIva: "1130.00",
+      fleteOrigen: "normal",
+    },
+    propuesta: {
+      zonaId: "zona-cartago",
+      zonaNombre: "Cartago",
+      distritoNombre: "Patarrá",
+      esCentral: false,
+      esZonaEspecial: false,
+      tarifa: "resuelta",
+      fleteConIva: "4520.00",
+      comisionConIva: "1130.00",
+      fleteOrigen: "normal",
+    },
+    yaEnUnCierre: false,
+    ...over,
+  };
+}
+
+/**
+ * Abre la ventana sobre esa orden y devuelve el `user` para seguir tecleando.
+ *
+ * ⚠️ **ESPERA A QUE LA PRECARGA TERMINE** (R31). Sin esta espera, los casos tocarian el formulario
+ * mientras los controles de ubicacion siguen deshabilitados, y la respuesta que llega despues
+ * pisaria lo tecleado — un flake que solo aparece bajo carga, que es la peor clase.
+ */
 async function abrir(over: Partial<OrdenListItemDTO> = {}, onSuccess?: () => void) {
   const user = userEvent.setup();
   render(<CorregirDatosClienteAccion orden={orden(over)} onSuccess={onSuccess} />);
   await user.click(screen.getByRole("button", { name: DISPARADOR }));
   expect(await screen.findByText(CORREGIR_TITULO)).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByText(CORREGIR_UBICACION_CARGANDO)).toBeNull());
   return user;
 }
 
@@ -87,9 +215,32 @@ function campo(nombre: RegExp): HTMLInputElement | HTMLTextAreaElement {
   return screen.getByLabelText(nombre) as HTMLInputElement | HTMLTextAreaElement;
 }
 
+function combo(nombre: string): HTMLElement {
+  return screen.getByRole("combobox", { name: nombre });
+}
+
+/** Elige una opción en uno de los tres desplegables encadenados. */
+async function elegir(
+  user: ReturnType<typeof userEvent.setup>,
+  nombre: string,
+  opcion: string,
+) {
+  await user.click(combo(nombre));
+  const listbox = await screen.findByRole("listbox");
+  await user.click(within(listbox).getByRole("option", { name: opcion }));
+}
+
+/** Cambia el distrito a uno de OTRO cantón: el gesto que dispara el gate del dinero. */
+async function cambiarDistrito(user: ReturnType<typeof userEvent.setup>) {
+  await elegir(user, CORREGIR_CANTON_LABEL, "Desamparados");
+  await elegir(user, CORREGIR_DISTRITO_LABEL, "Patarrá");
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   corregirDatosClienteMock.mockResolvedValue({ status: "ok", cambios: ["destinatario"] });
+  obtenerUbicacionOrdenMock.mockResolvedValue(ubicacion());
+  obtenerCatalogoMock.mockResolvedValue(CATALOGO_OK);
 });
 afterEach(cleanup);
 
@@ -180,11 +331,17 @@ describe("312/R26 — la ventana abre con los cuatro valores actuales", () => {
 // R27 / R28 — LOS DOS AVISOS, CADA UNO CON SU PAR PRESENCIA/AUSENCIA
 // =================================================================================================
 
-describe("312/R27 — el aviso de la etiqueta ya impresa", () => {
-  it("con guía asignada avisa, y NOMBRA la guía", async () => {
+describe("312/R27 + 327/R36 — el aviso de la etiqueta ya impresa", () => {
+  it("con guía asignada avisa, NOMBRA la guía y —desde la 327— NOMBRA LA DIRECCIÓN", async () => {
+    // ⚠️ EL LITERAL CAMBIA A PROPOSITO CON LA 327 (R36). La 312 decia «los datos anteriores» a
+    // secas, y con la direccion fuera del alcance eso bastaba. Ahora la direccion SI se corrige y
+    // es justo el dato que el papel lleva impreso: sin nombrarlo, quien lee el aviso no sabe si la
+    // etiqueta se queda vieja en lo unico que importa para entregar el paquete.
     await abrir({ numGuia: 8123 });
     expect(
-      screen.getByText(/la etiqueta pegada al paquete seguirá mostrando los datos anteriores/i),
+      screen.getByText(
+        /la etiqueta pegada al paquete seguirá mostrando la dirección y los datos anteriores/i,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText(/guía 8123/)).toBeInTheDocument();
   });
@@ -329,5 +486,382 @@ describe("312/D4 — ningún texto anuncia un registro que no existe", () => {
     expect(texto).not.toMatch(/historial de cambios|quién lo cambió/i);
     // CONTROL POSITIVO de que había texto que mirar (si no, las cuatro ausencias no dirían nada).
     expect(texto).toContain(CORREGIR_TITULO);
+  });
+});
+
+// =================================================================================================
+// FICHA 327 / R31 — LOS NUEVE CAMPOS PRECARGADOS, Y LOS TRES SELECTORES ENCADENADOS
+// =================================================================================================
+
+describe("327/R31 — la ventana abre con los NUEVE valores actuales", () => {
+  it("los cuatro de la 312 más dirección, peso y la geografía SELECCIONADA", async () => {
+    await abrir();
+    expect(campo(/^Destinatario$/).value).toBe("Ana Pérez");
+    expect(campo(/Teléfono/).value).toBe("8888-7777");
+    expect(campo(/^Producto$/).value).toBe("Zapatos negros");
+    expect(campo(/^Notas$/).value).toBe("Dejar con el guarda");
+    expect(campo(/^Dirección$/).value).toBe("Av. Central 120, portón verde");
+    expect(campo(/^Peso/).value).toBe("1.5");
+    // Los tres desplegables no llegan vacíos: llegan CON LO QUE LA ORDEN TIENE HOY. Un editor que
+    // los abriera en blanco convertiría «corregir la dirección» en «volver a elegir la ubicación
+    // entera», y el primer despiste dejaría la orden en otra zona — que es dinero.
+    expect(combo(CORREGIR_PROVINCIA_LABEL).textContent).toContain("San José");
+    expect(combo(CORREGIR_CANTON_LABEL).textContent).toContain("Escazú");
+    expect(combo(CORREGIR_DISTRITO_LABEL).textContent).toContain("San Rafael");
+  });
+
+  it("y la precarga se pide POR ESA ORDEN, no por cualquiera", async () => {
+    // Control de que el fixture no está midiendo la nada: la lectura lleva el id de la fila.
+    await abrir();
+    expect(obtenerUbicacionOrdenMock).toHaveBeenCalledTimes(1);
+    expect(obtenerUbicacionOrdenMock.mock.calls[0][0]).toEqual({ ordenId: ORDEN_ID });
+  });
+
+  it("NO hay selector de zona: la deriva el servidor del distrito (R5)", async () => {
+    // Un desplegable de zonas aquí abriría a mano la puerta que la ficha cierra por tipo: el
+    // `.strict()` del schema rechaza `zonaId`, así que ese control sería un botón que el servidor
+    // rechaza siempre.
+    await abrir();
+    expect(screen.queryByRole("combobox", { name: /zona/i })).toBeNull();
+  });
+});
+
+describe("327/R31 — los tres selectores están ENCADENADOS por `padreId`", () => {
+  it("elegir provincia recorta los cantones a los suyos", async () => {
+    const user = await abrir();
+    await elegir(user, CORREGIR_PROVINCIA_LABEL, "Alajuela");
+
+    await user.click(combo(CORREGIR_CANTON_LABEL));
+    const lista = await screen.findByRole("listbox");
+    const etiquetas = within(lista)
+      .getAllByRole("option")
+      .map((o) => o.textContent?.trim());
+    expect(etiquetas).toEqual(["Alajuela centro"]);
+    // El par del recorte: los de la OTRA provincia ya no se ofrecen. Sin esta línea, un componente
+    // que no filtrara nada pasaría el caso de arriba en cuanto la lista tuviera un solo elemento.
+    expect(etiquetas).not.toContain("Escazú");
+    expect(etiquetas).not.toContain("Desamparados");
+  });
+
+  it("elegir cantón recorta los distritos, y sin cantón el distrito ni se puede tocar", async () => {
+    const user = await abrir();
+    await elegir(user, CORREGIR_PROVINCIA_LABEL, "Alajuela");
+    // Cambiar de provincia LIMPIA el cantón y el distrito: dejarlos colgados produciría justo la
+    // geografía incoherente que el servidor rechaza (R6).
+    expect(combo(CORREGIR_DISTRITO_LABEL)).toBeDisabled();
+
+    await elegir(user, CORREGIR_CANTON_LABEL, "Alajuela centro");
+    await user.click(combo(CORREGIR_DISTRITO_LABEL));
+    const lista = await screen.findByRole("listbox");
+    const etiquetas = within(lista)
+      .getAllByRole("option")
+      .map((o) => o.textContent?.trim());
+    expect(etiquetas).toEqual(["La Garita"]);
+    expect(etiquetas).not.toContain("San Rafael");
+  });
+});
+
+// =================================================================================================
+// 💰 FICHA 327 / R33 — EL GATE DEL DINERO: NO SE GUARDA SIN HABER VISTO LOS IMPORTES
+// =================================================================================================
+
+describe("327/R33 — cambiar el distrito no se guarda hasta confirmar", () => {
+  it("guardar enseña la comparación con LAS DOS columnas y NO escribe nada", async () => {
+    corregirDatosClienteMock.mockResolvedValueOnce({
+      status: "confirmacion_requerida",
+      aviso: aviso(),
+    });
+    const user = await abrir();
+    await cambiarDistrito(user);
+    await user.click(screen.getByRole("button", { name: CORREGIR_CONFIRMAR }));
+
+    expect(await screen.findByText(AVISO_TITULO)).toBeInTheDocument();
+    // Las DOS columnas, con sus rótulos: enseñar sólo el importe nuevo obligaría a quien mira a
+    // recordar el viejo, que es exactamente lo que este panel existe para evitar.
+    expect(screen.getByText(AVISO_COL_ACTUAL)).toBeInTheDocument();
+    expect(screen.getByText(AVISO_COL_PROPUESTA)).toBeInTheDocument();
+    expect(screen.getByText("GAM Oeste")).toBeInTheDocument();
+    expect(screen.getByText("Cartago")).toBeInTheDocument();
+    expect(screen.getByText("₡2.825")).toBeInTheDocument();
+    expect(screen.getByText("₡4.520")).toBeInTheDocument();
+    expect(screen.getAllByText("₡1.130")).toHaveLength(2);
+
+    // 💰 LA PRIMERA PETICIÓN NO CONFIRMA NADA. Este literal es la mitad de pantalla de R33: si el
+    // botón de guardar mandara `true`, el servidor escribiría sin que nadie hubiera visto un solo
+    // importe — y ni un caso de este archivo se enteraría salvo éste.
+    expect(corregirDatosClienteMock).toHaveBeenCalledTimes(1);
+    expect(corregirDatosClienteMock.mock.calls[0][0].confirmaCambioDeUbicacion).toBe(false);
+    // Y nada se dio por guardado: ni toast de éxito, ni relectura del listado.
+    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(mutateMock).not.toHaveBeenCalled();
+    expect(screen.getByText(CORREGIR_TITULO)).toBeInTheDocument();
+  });
+
+  it("y sólo el botón del panel reenvía CONFIRMANDO, con el distrito nuevo", async () => {
+    corregirDatosClienteMock.mockResolvedValueOnce({
+      status: "confirmacion_requerida",
+      aviso: aviso(),
+    });
+    const user = await abrir();
+    await cambiarDistrito(user);
+    await user.click(screen.getByRole("button", { name: CORREGIR_CONFIRMAR }));
+    await screen.findByText(AVISO_TITULO);
+
+    await user.click(screen.getByRole("button", { name: AVISO_CONFIRMAR }));
+
+    await waitFor(() => expect(corregirDatosClienteMock).toHaveBeenCalledTimes(2));
+    const segunda = corregirDatosClienteMock.mock.calls[1][0];
+    expect(segunda.confirmaCambioDeUbicacion).toBe(true);
+    // Confirma LO QUE SE ENSEÑÓ: el mismo distrito, no otro.
+    expect(segunda.distritoId).toBe("dis-patarra");
+    expect(segunda.cantonId).toBe("can-desamp");
+    expect(segunda.provinciaId).toBe("prov-sj");
+    await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("el botón «Guardar cambios» NO manda la confirmación NUNCA, ni al segundo intento", async () => {
+    // El caso que cierra el atajo: alguien podría «arreglar» el segundo clic para que confirme
+    // solo, y el flujo se vería igual de bien en pantalla. Aquí el servidor pide confirmación las
+    // dos veces y las dos peticiones tienen que llegar sin ella.
+    corregirDatosClienteMock.mockResolvedValue({
+      status: "confirmacion_requerida",
+      aviso: aviso(),
+    });
+    const user = await abrir();
+    await cambiarDistrito(user);
+    await user.click(screen.getByRole("button", { name: CORREGIR_CONFIRMAR }));
+    await screen.findByText(AVISO_TITULO);
+    await user.click(screen.getByRole("button", { name: CORREGIR_CONFIRMAR }));
+
+    await waitFor(() => expect(corregirDatosClienteMock).toHaveBeenCalledTimes(2));
+    for (const llamada of corregirDatosClienteMock.mock.calls) {
+      expect(llamada[0].confirmaCambioDeUbicacion).toBe(false);
+    }
+  });
+
+  it("corregir SÓLO la dirección no dispara ningún aviso (el gate mira el distrito)", async () => {
+    // El par del caso de arriba. El servidor decide, y con la dirección cambiada devuelve `ok`:
+    // la ventana no puede inventarse un panel de confirmación por su cuenta.
+    const user = await abrir();
+    await user.clear(campo(/^Dirección$/));
+    await user.type(campo(/^Dirección$/), "Av. Segunda 45");
+    await user.click(screen.getByRole("button", { name: CORREGIR_CONFIRMAR }));
+
+    await waitFor(() => expect(corregirDatosClienteMock).toHaveBeenCalledTimes(1));
+    expect(corregirDatosClienteMock.mock.calls[0][0].direccion).toBe("Av. Segunda 45");
+    expect(screen.queryByText(AVISO_TITULO)).toBeNull();
+    await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+  });
+});
+
+// =================================================================================================
+// 💰 FICHA 327 / R13 — «SIN TARIFA» NO ES «CERO»
+// =================================================================================================
+
+describe("327/R13 — la pantalla ramifica por el DISCRIMINANTE, no por el importe", () => {
+  async function conAviso(
+    user: ReturnType<typeof userEvent.setup>,
+  ): Promise<void> {
+    await cambiarDistrito(user);
+    await user.click(screen.getByRole("button", { name: CORREGIR_CONFIRMAR }));
+    await screen.findByText(AVISO_TITULO);
+  }
+
+  it("con `sin_tarifa` dice «sin tarifa configurada» y NO pinta ₡0", async () => {
+    const base = aviso();
+    corregirDatosClienteMock.mockResolvedValueOnce({
+      status: "confirmacion_requerida",
+      aviso: aviso({
+        propuesta: {
+          ...base.propuesta,
+          tarifa: "sin_tarifa",
+          // El servidor manda "0.00" en los DOS importes cuando no hay tarifa: es literalmente lo
+          // que devuelve `costosListadoOrden` sin tarifa resuelta.
+          fleteConIva: "0.00",
+          comisionConIva: "0.00",
+        },
+      }),
+    });
+    const user = await abrir();
+    await conAviso(user);
+
+    // Las dos celdas de la columna propuesta: flete y comisión.
+    expect(screen.getAllByText(AVISO_SIN_TARIFA)).toHaveLength(2);
+    // Y NO hay ningún cero pintado como importe. `"0.00"` no significa «gratis», significa «nadie
+    // configuró la tarifa de ese par (tienda, zona)»: enseñarlo como precio sería mentir.
+    expect(document.body.textContent).not.toContain("₡0");
+    // La columna «Ahora» sigue con sus importes: el hueco es del par NUEVO, no de la orden.
+    expect(screen.getByText("₡2.825")).toBeInTheDocument();
+  });
+
+  it("EL CASO QUE MATA LA MUTACIÓN: tarifa RESUELTA con importe cero SÍ pinta ₡0", async () => {
+    // Una orden que no cobra comisión (`cobraComision: false`) trae `comisionConIva: "0.00"` con la
+    // tarifa PERFECTAMENTE resuelta, y es un caso corriente en producción. Quien ramifique por el
+    // importe —`if (importe === "0.00")`— pintaría aquí «sin tarifa configurada», que es falso: la
+    // tarifa existe y la comisión vale cero. El caso de arriba, por sí solo, deja pasar esa
+    // mutación, porque allí el discriminante y el importe dicen lo mismo.
+    const base = aviso();
+    corregirDatosClienteMock.mockResolvedValueOnce({
+      status: "confirmacion_requerida",
+      aviso: aviso({
+        actual: { ...base.actual, comisionConIva: "0.00" },
+        propuesta: { ...base.propuesta, comisionConIva: "0.00" },
+      }),
+    });
+    const user = await abrir();
+    await conAviso(user);
+
+    expect(screen.queryByText(AVISO_SIN_TARIFA)).toBeNull();
+    expect(screen.getAllByText("₡0")).toHaveLength(2);
+    expect(screen.getByText("₡2.825")).toBeInTheDocument();
+    expect(screen.getByText("₡4.520")).toBeInTheDocument();
+  });
+});
+
+// =================================================================================================
+// FICHA 327 / R14 y R16 — LAS DOS SEÑALES, CADA UNA CON SU PAR PRESENCIA/AUSENCIA
+// =================================================================================================
+
+describe("327/R14 — el flete que sale de la normal por falta de pacto se SEÑALA", () => {
+  async function avisoCon(over: Partial<AvisoCambioUbicacion>) {
+    corregirDatosClienteMock.mockResolvedValueOnce({
+      status: "confirmacion_requerida",
+      aviso: aviso(over),
+    });
+    const user = await abrir();
+    await cambiarDistrito(user);
+    await user.click(screen.getByRole("button", { name: CORREGIR_CONFIRMAR }));
+    await screen.findByText(AVISO_TITULO);
+  }
+
+  it("con `especial_sin_pacto` en la propuesta aparece la señal, y nombra su columna", async () => {
+    // El importe es IDÉNTICO al de una orden corriente: sin esta línea no hay forma de distinguir
+    // «cobra la normal porque le toca» de «cobra la normal porque falta configurar el pacto».
+    const base = aviso();
+    await avisoCon({
+      propuesta: { ...base.propuesta, esZonaEspecial: true, fleteOrigen: "especial_sin_pacto" },
+    });
+    expect(screen.getByText(avisoEspecialSinPacto(AVISO_COL_PROPUESTA))).toBeInTheDocument();
+    expect(screen.queryByText(avisoEspecialSinPacto(AVISO_COL_ACTUAL))).toBeNull();
+  });
+
+  it("con `normal` en las dos, la señal NO aparece", async () => {
+    await avisoCon({});
+    expect(screen.queryByText(/no tiene monto pactado/i)).toBeNull();
+  });
+});
+
+describe("327/R16 — el aviso de la orden que ya entró en un cierre", () => {
+  async function avisoCon(yaEnUnCierre: boolean) {
+    corregirDatosClienteMock.mockResolvedValueOnce({
+      status: "confirmacion_requerida",
+      aviso: aviso({ yaEnUnCierre }),
+    });
+    const user = await abrir();
+    await cambiarDistrito(user);
+    await user.click(screen.getByRole("button", { name: CORREGIR_CONFIRMAR }));
+    await screen.findByText(AVISO_TITULO);
+  }
+
+  it("con `yaEnUnCierre: true` avisa —y AVISA, no bloquea: el botón de confirmar sigue ahí", async () => {
+    await avisoCon(true);
+    expect(screen.getByText(AVISO_YA_EN_UN_CIERRE)).toBeInTheDocument();
+    // Lo ya facturado no cambia (la fila de `cierre_detail` es inmutable) y el importe nuevo rige
+    // de la próxima gestión en adelante. Bloquear aquí condenaría a re-intentarse con la ubicación
+    // equivocada justo a la orden que esta ficha existe para arreglar.
+    expect(screen.getByRole("button", { name: AVISO_CONFIRMAR })).toBeEnabled();
+  });
+
+  it("con `false` NO aparece: un aviso que sale siempre no es un aviso", async () => {
+    await avisoCon(false);
+    expect(screen.queryByText(AVISO_YA_EN_UN_CIERRE)).toBeNull();
+  });
+});
+
+// =================================================================================================
+// FICHA 327 / R34 — EL RECHAZO DE LA GEOGRAFÍA, JUNTO A SU CAMPO
+// =================================================================================================
+
+describe("327/R34 — `validation_error` en el distrito", () => {
+  it("pinta el motivo junto al desplegable, conserva el borrador y no filtra identificadores", async () => {
+    corregirDatosClienteMock.mockResolvedValueOnce({
+      status: "validation_error",
+      fieldErrors: { distritoId: ["El distrito no pertenece al cantón indicado"] },
+    });
+    const user = await abrir();
+    await user.clear(campo(/^Dirección$/));
+    await user.type(campo(/^Dirección$/), "Calle 7, casa azul");
+    await cambiarDistrito(user);
+    await user.click(screen.getByRole("button", { name: CORREGIR_CONFIRMAR }));
+
+    expect(
+      await screen.findByText("El distrito no pertenece al cantón indicado"),
+    ).toBeInTheDocument();
+    expect(combo(CORREGIR_DISTRITO_LABEL)).toHaveAttribute("aria-invalid", "true");
+    // El borrador entero sigue ahí: volver a teclearlo es justo el coste que R34 evita.
+    expect(campo(/^Dirección$/).value).toBe("Calle 7, casa azul");
+    expect(screen.getByText(CORREGIR_TITULO)).toBeInTheDocument();
+    // Y no se cuela ningún identificador interno en la pantalla.
+    expect(document.body.textContent).not.toContain(ORDEN_ID);
+    expect(mutateMock).not.toHaveBeenCalled();
+  });
+});
+
+// =================================================================================================
+// FICHA 327 / R31 — LA DEGRADACIÓN: SI LA PRECARGA FALLA, LA VENTANA NO SE MUERE
+// =================================================================================================
+
+describe("327/R31 — precarga caída: la ventana sigue sirviendo para lo demás", () => {
+  it("lo DICE, apaga los controles de ubicación y deja corregir los cuatro de la 312", async () => {
+    obtenerUbicacionOrdenMock.mockResolvedValue({ status: "forbidden" });
+    const user = await abrir();
+
+    expect(screen.getByText(CORREGIR_UBICACION_FALLO)).toBeInTheDocument();
+    expect(campo(/^Dirección$/)).toBeDisabled();
+    expect(campo(/^Peso/)).toBeDisabled();
+    expect(combo(CORREGIR_PROVINCIA_LABEL)).toBeDisabled();
+    expect(combo(CORREGIR_DISTRITO_LABEL)).toBeDisabled();
+
+    await user.clear(campo(/^Destinatario$/));
+    await user.type(campo(/^Destinatario$/), "Ana Mora");
+    await user.click(screen.getByRole("button", { name: CORREGIR_CONFIRMAR }));
+
+    await waitFor(() => expect(corregirDatosClienteMock).toHaveBeenCalledTimes(1));
+    const entrada = corregirDatosClienteMock.mock.calls[0][0];
+    expect(entrada.destinatario).toBe("Ana Mora");
+    // R3 — los tres de geografía viajan JUNTOS o no viajan. Con la precarga caída no viaja ninguno
+    // de los cinco, y el servidor deja la ubicación exactamente como estaba. Mandar una geografía
+    // a medias —o una dirección vacía— sería peor que no mandar nada.
+    expect(entrada.direccion).toBeUndefined();
+    expect(entrada.provinciaId).toBeUndefined();
+    expect(entrada.cantonId).toBeUndefined();
+    expect(entrada.distritoId).toBeUndefined();
+    expect(entrada.peso).toBeUndefined();
+  });
+});
+
+// =================================================================================================
+// FICHA 327 / R35 — EL PANEL DEL AVISO TAMPOCO PROMETE NINGÚN RASTRO
+// =================================================================================================
+
+describe("327/R35 — ni el panel del importe anuncia un registro que no existe", () => {
+  it("barrido del texto con la comparación montada", async () => {
+    corregirDatosClienteMock.mockResolvedValueOnce({
+      status: "confirmacion_requerida",
+      aviso: aviso({ yaEnUnCierre: true }),
+    });
+    const user = await abrir({ numGuia: 8123 });
+    await cambiarDistrito(user);
+    await user.click(screen.getByRole("button", { name: CORREGIR_CONFIRMAR }));
+    await screen.findByText(AVISO_TITULO);
+
+    const texto = document.body.textContent ?? "";
+    expect(texto).not.toMatch(/quedará registrado|se registrará|queda registrado|auditoría/i);
+    expect(texto).not.toMatch(/historial de cambios|quién lo cambió/i);
+    // Vocabulario (pedido humano): nada de «SLA» en la pantalla.
+    expect(texto).not.toMatch(/\bSLA\b/);
+    // CONTROL POSITIVO de que había texto que mirar, y del más comprometido: el panel del dinero.
+    expect(texto).toContain(AVISO_TITULO);
+    expect(texto).toContain(AVISO_YA_EN_UN_CIERRE);
   });
 });

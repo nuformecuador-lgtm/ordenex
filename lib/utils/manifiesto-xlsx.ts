@@ -52,19 +52,37 @@ function toRow(fila: ManifiestoFilaDTO): Record<string, XlsxCellValue> {
 /**
  * Selecciona las columnas a emitir a partir de las claves pedidas (feature 194 §7).
  *
- * El filtro va SOBRE `COLUMNAS_MANIFIESTO`, jamás sobre la entrada: por construcción el orden
- * relativo publicado se conserva sea cual sea el orden en que llegan las claves (194/R8), y una
- * clave que no corresponda a ninguna columna publicada se ignora sin ruido.
+ * FICHA 314 — ESTO DEROGA 194/R8, por decisión del humano del 2026-08-28. Hasta hoy el filtro
+ * iba SOBRE `COLUMNAS_MANIFIESTO` y descartaba el orden en que llegaban las claves, de modo
+ * que el orden publicado era inviolable. Desde que el selector deja REORDENAR (314/R18-R21),
+ * eso sería el fallo mudo de manual: el usuario mueve una columna, la lista se mueve en
+ * pantalla, pulsa descargar y el archivo sale como antes, sin un solo error. Así que ahora se
+ * mapean las claves EN EL ORDEN RECIBIDO, quedándose con las publicadas.
  *
- * Si el filtro no deja ninguna columna, se devuelve el conjunto COMPLETO (194/R13): el fallo
- * sería un archivo que el usuario no obtiene por una preferencia corrupta. El `throw` de
- * `buildXlsxRows` con 0 columnas sigue vivo como red de seguridad de sus otros llamadores.
+ * Alcance real del cambio: el único llamador de producción es `DescargarManifiestoButton`, que
+ * pasa las claves ya en el orden efectivo del ámbito. SIN orden guardado ese orden ES el del
+ * catálogo, así que el archivo de todo el mundo sale exactamente igual que ayer; la conducta
+ * solo difiere para quien reordena, que es quien lo pidió.
+ *
+ * Lo que NO cambia: una clave que no corresponda a ninguna columna publicada se ignora sin
+ * ruido, y si no casa ninguna se devuelve el conjunto COMPLETO (194/R13) — el fallo sería un
+ * archivo que el usuario no obtiene por una preferencia corrupta. El `throw` de `buildXlsxRows`
+ * con 0 columnas sigue vivo como red de seguridad de sus otros llamadores.
  */
 function columnasAEmitir(clavesVisibles?: readonly string[]): XlsxColumn[] {
   if (clavesVisibles === undefined) return COLUMNAS_MANIFIESTO;
-  const elegidas = COLUMNAS_MANIFIESTO.filter((columna) =>
-    clavesVisibles.includes(columna.key),
+  const porClave = new Map(
+    COLUMNAS_MANIFIESTO.map((columna) => [columna.key, columna]),
   );
+  const elegidas: XlsxColumn[] = [];
+  const yaPuestas = new Set<string>();
+  for (const clave of clavesVisibles) {
+    const columna = porClave.get(clave);
+    // Una clave repetida emitiría dos veces la misma cabecera: se queda con la primera.
+    if (columna === undefined || yaPuestas.has(clave)) continue;
+    yaPuestas.add(clave);
+    elegidas.push(columna);
+  }
   return elegidas.length === 0 ? COLUMNAS_MANIFIESTO : elegidas;
 }
 
@@ -76,10 +94,10 @@ function columnasAEmitir(clavesVisibles?: readonly string[]): XlsxColumn[] {
  * @param clavesVisibles feature 194 — subconjunto OPCIONAL de `key`s de `COLUMNAS_MANIFIESTO`
  * que el usuario quiere ver en el archivo. Si se OMITE, se emiten todas las columnas
  * publicadas, exactamente como hasta ahora (194/R24). Si se pasa, se emiten las columnas
- * publicadas cuyas claves figuren en la lista, siempre en el orden de `COLUMNAS_MANIFIESTO`
- * (194/R7, R8, R9). Si ninguna clave casa, se DEGRADA a "todas las publicadas" en lugar de
- * fallar (194/R13). El filtrado ocurre en las columnas, no en los datos: `toRow` sigue
- * proyectando la fila entera y `buildXlsxRows` ignora las claves no declaradas.
+ * publicadas cuyas claves figuren en la lista, EN EL ORDEN EN QUE LLEGAN (314/R20, R21: deroga
+ * 194/R8; ver `columnasAEmitir`). Si ninguna clave casa, se DEGRADA a "todas las publicadas"
+ * en lugar de fallar (194/R13). El filtrado ocurre en las columnas, no en los datos: `toRow`
+ * sigue proyectando la fila entera y `buildXlsxRows` ignora las claves no declaradas.
  *
  * @throws si `filas` está vacío. R17: sin filas NO se ofrece la descarga y NO se
  * genera archivo alguno; el consumidor no debe llegar hasta aquí, pero la utilidad
