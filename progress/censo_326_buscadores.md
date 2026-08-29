@@ -91,3 +91,39 @@ falta.
 acepte un modo «Aplicar».** Migrarlos antes cambiaría un submit deliberado por consultas por
 pulsación sobre agregaciones de dinero — exactamente el tipo de «arreglo» que rompe algo que no
 estaba roto.
+
+## Migración 1, ya hecha — lo que se midió al ejecutarla (2026-08-28)
+
+`CuentasPorPagarFiltros` migrado y **borrado**; el `useEffect` con `setTimeout` de
+`CuentasPorPagarTable` también. El buscador pasa al slot `filtros` de `DataTable`, como las otras
+dos pantallas paginadas sobre `DataTable` (`/ordenes`, Usuarios). Tres correcciones al censo:
+
+**1. «No se pierde ni un comportamiento» era casi cierto: se pierde uno, pequeño y medido.**
+La guarda del consumidor comparaba lo NORMALIZADO por
+`normalizarBusquedaMensajero` —`trim` + plegado de acentos + minúsculas—; la del canónico compara
+`trim()` a secas. Lo que cubrían las dos (el espacio al final de un término vigente) sigue cubierto;
+lo que solo cubría la vieja es reescribir el MISMO término con otros acentos o mayúsculas
+(«jose» → «José»): antes no costaba consulta, ahora cuesta una, y en este listado una consulta es
+agregar el libro entero de cada mensajero. **No se conservó a propósito**: dejar la guarda del
+dominio encima de la del canónico haría que quitar la del canónico no rompiera nada observable
+—o sea, un mutante vivo por construcción—. Si algún día molesta, el sitio es una prop del canónico
+(`comparar?: (t: string) => string`), no una segunda guarda en el consumidor.
+
+**2. La guarda de «sin cambio» del canónico es INVISIBLE desde la página 1.** Cuando el término no
+cambia, el consumidor típico hace `setAplicada(mismoString)` y **React se ahorra el render él
+solo**: quitar la guarda no rompe nada medible. Lo único que la delata aquí es que el término
+aplicado devuelve a la página 1 — así que **el test tiene que medirse desde la página 2**. Medido:
+con la guarda quitada, el caso desde la página 2 cae y el mismo caso desde la 1 pasa verde.
+Vale para cualquier futura migración que quiera probar esta guarda.
+
+**3. El regalo del selector «Filtros» NO entró, y no es cuestión de ganas.** Los filtros por fecha
+y por cierre que esa pantalla dice que le faltan no se pueden cablear desde el cliente:
+`listarCuentasPorPagarPaginadoSchema` es `.strict()` y solo admite `page`/`pageSize`/`busqueda`, y
+esos dos recortes cambiarían **las columnas de dinero** de cada fila, que hoy son la agregación del
+libro entero de cada mensajero. Es backend y decisión de producto: su propia ficha.
+
+Coste secundario, ya anticipado por el censo para `RecogerModule`/`RepartoModule`: se pierde el
+`<label>` visible («Mensajero»). El nombre accesible se conserva idéntico
+(`aria-label="Buscar por mensajero"`). Y desaparece el `<form onSubmit={preventDefault}>` que solo
+existía para tragarse el Enter: el canónico no monta form y no hay ninguno por encima, así que no
+queda salto de página.
