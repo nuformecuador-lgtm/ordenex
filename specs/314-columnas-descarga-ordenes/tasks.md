@@ -210,7 +210,7 @@ tests/components/ColumnasManifiestoCatalogoAbierto.test.tsx tests/components/Man
 verde **sin haber tocado ninguno de esos cuatro archivos**, y los siete casos previos de
 `DescargarManifiestoColumnas.test.tsx` intactos.
 
-### [~] T17 — Trazabilidad y gate
+### [x] T17 — Trazabilidad y gate
 Depende de: T11, T12, T13, T14, T15, T16. Requisitos: todos.
 Archivos: **crear** `progress/impl_314.md`.
 Contenido: la tabla de abajo con la salida real de cada test pegada, `git diff --stat` demostrando
