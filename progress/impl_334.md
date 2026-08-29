@@ -342,3 +342,288 @@ el patrón del repo.
 
 Backend de la 334 cerrado en T0/A/B/C con typecheck y lint sin errores, 3355 tests relacionados
 verdes y tres mutaciones ejecutadas y revertidas; falta la tanda D (interfaz) y el cierre.
+
+---
+
+# TANDA D (interfaz) + E2 — 2026-08-29
+
+Ejecutada por el `frontend_dev` sobre la misma rama `feature/334-movimiento-unificado-wallet`,
+con el backend ya commiteado (`e6a40868`). Alcance: **D1–D6 + E2**. No se tocó `lib/`, ni
+`feature_list.json`, ni `progress/current.md`, ni `specs/`, ni se corrió `./init.sh` (es del
+leader), ni se ejecutó ningún comando de git que escriba.
+
+## Archivos tocados
+
+**Nuevos (producción)**
+- `app/(app)/wallet/_components/wallet-conceptos-manuales.ts` — ⟨D1⟩ el catálogo de los cuatro
+  conceptos, con su etiqueta, su categoría de destino, su etiqueta de descripción, su ejemplo y
+  su ENRUTADO (unión discriminada `egreso_administrativo` / `ajuste_manual`). Módulo puro: sin
+  React y sin leer ningún reloj.
+- `app/(app)/wallet/_components/RegistrarMovimientoCajaDialog.tsx` — ⟨D3⟩ el diálogo único.
+
+**Modificados (producción)**
+- `app/(app)/wallet/_components/WalletModule.tsx` — ⟨D4⟩ la barra de acciones pasa de dos hijos
+  a uno, con el mismo `onRegistrado={() => void recargar(filtros, page)}`.
+
+**Borrados (producción)**
+- `app/(app)/wallet/_components/RegistrarMovimientoManualDialog.tsx` — ⟨D5⟩
+- `app/(app)/wallet/_components/RegistrarEgresoAdministrativoDialog.tsx` — ⟨D5⟩
+
+**Tests**
+- NUEVO `tests/unit/components/wallet-conceptos-manuales.test.ts` — ⟨D2⟩ (7 casos)
+- NUEVO `tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx` — ⟨D6⟩ (20 casos)
+- BORRADO `tests/unit/components/wallet-registrar-egreso-dialog.test.tsx` — ⟨D6⟩, en el mismo
+  commit que el nuevo, **con sus casos migrados** (tabla más abajo).
+- MODIFICADO `tests/integration/wallet-page.test.tsx` — ⟨E2⟩ dos casos nuevos (R1/R2) + los
+  mocks de actions ampliados. **Ninguna aserción existente se tocó**: los 10 casos previos
+  siguen con su texto y sus expectativas intactas.
+
+## Qué caso de los dos diálogos viejos fue a parar dónde (R29)
+
+El archivo borrado tenía **CUATRO** casos, no tres: los tres que nombra R29 más el que le añadió
+la ficha 85 (R25). Los cuatro sobreviven.
+
+| caso del archivo borrado | dónde vive ahora | qué cambió |
+| --- | --- | --- |
+| «el selector de tipo ofrece SOLO {gasto variable, sueldo}, sin gasto fijo» | «el selector no ofrece «Gasto fijo»: ese lo emite el cron desde su plantilla (R11)» | el selector ofrece ahora CUATRO conceptos; la aserción que importa —`queryByRole("option", { name: "Gasto fijo" })` ausente— se conserva **literal** |
+| «registra un gasto variable con el tipo, monto y descripción enviados» | «gasto variable: envía tipoEgreso=gasto_variable con el monto STRING exacto (R5/R15)» | **idéntico**: mismo `toEqual({ tipoEgreso: "gasto_variable", monto: "125.50", descripcion: "Suministros" })` |
+| «al elegir Sueldo cambia el label y envía tipoEgreso=sueldo» | «sueldo: cambia la etiqueta de la descripción y envía tipoEgreso=sueldo (R6/R9)» | **idéntico**: mismo `toEqual({ tipoEgreso: "sueldo", monto: "800.00", descripcion: "Juan Pérez — julio 2026" })`, y sigue alcanzando la descripción por `getByLabelText("Trabajador y periodo")` |
+| «no llama la action si el monto es 0 o la descripción está vacía» | «monto 0 y descripción vacía no llaman a ninguna action y pintan los dos mensajes (R13/R14)» | **idéntico**, y AMPLIADO: ahora comprueba que NINGUNA de las dos actions se llamó, no solo una |
+| (ficha 85, R25) «el diálogo de egreso manual no ofrece periodicidad ni fecha de cobro» | «un movimiento no es periódico: no hay ciclo, ni unidad, ni día de primer cobro (85/R25)» | **ADAPTADO, con motivo escrito.** Aquel caso afirmaba que el diálogo tenía CERO controles `input[type="date"]`. El diálogo unificado tiene campo de fecha por diseño (R19), así que esa aserción concreta ya no puede sostenerse tal cual. Lo que el caso protegía —que un gasto variable o un sueldo NO son periódicos, que la periodicidad es de la PLANTILLA de gasto fijo y de nada más— se conserva entero: ni «Cada cuánto se cobra», ni «Unidad del ciclo», ni «Día del primer cobro», ni «Cada». Y la comprobación de fecha se ENDURECE en vez de retirarse: hay **exactamente un** control de fecha, y es el que responde a la etiqueta «Fecha», de modo que un control de fecha colado por la puerta de atrás sigue cayendo |
+
+**El archivo borrado NO estaba citado por ninguna fila `R<n>` de ningún `specs/*/tasks.md` ni
+`specs/*/design.md`.** `specs/85-gasto-fijo-periodicidad-ui/tasks.md:152` lo nombra, pero dentro
+del **cuerpo de la task F7**, no en una fila de tabla de requisito, que es lo único que lee
+`tests/unit/guards/test-citado-desaparecido.guardia.test.ts` (su `FILA_DE_REQUISITO`). La guardia
+se corrió tras el borrado y quedó **verde**, así que no hizo falta ninguna anotación
+`@test-desaparecido` — y no se tocó `specs/`.
+
+## Decisiones de la interfaz que conviene tener escritas
+
+1. **La fecha SOLO viaja si es distinta de hoy** (`fechaAEnviar()`). Es lo que hace que los dos
+   casos migrados conserven su `toEqual` sin una clave de más, y sobre todo lo que cumple R23 con
+   coste cero: sin la clave manda el `DEFAULT CURRENT_TIMESTAMP` y el movimiento del día en curso
+   sigue encabezando el libro, byte a byte como antes de esta ficha.
+2. **Los textos de rechazo de la fecha en el cliente son los del BORDE.** El diálogo llama a
+   `problemaDeFechaMovimiento` (`lib/types/wallet.ts`) en vez de escribir su propia redacción, así
+   que «Esa fecha no existe en el calendario.», «La fecha no puede ser posterior a hoy.» y «No se
+   admiten movimientos anteriores al …» no pueden divergir entre las dos orillas.
+3. **El `min` y el `max` del selector de fecha se congelan al ABRIR**, no se recalculan en cada
+   render: leer el reloj durante el render haría que la ventana cambiara sola a medianoche debajo
+   de una persona que está escribiendo. `max` = `fechaCalendarioCR()`, `min` =
+   `primerDiaMovimientoAdmisible()` (la ventana de 30 días de `lib/config/wallet-movimiento.ts`).
+4. **Voseo, y ninguna sigla.** «Elegí el concepto, el monto y la fecha», «No tenés permiso para
+   registrar movimientos.», «Tu sesión expiró. Iniciá sesión de nuevo.», «Poné el día en que
+   ocurrió». La línea de ayuda dice «Se registra en el libro como «Gasto variable».», con el
+   nombre DERIVADO de `CATEGORIA_LABEL` (R4), no copiado.
+5. **Money-safe (R15):** ninguna conversión a punto flotante en los dos archivos nuevos —
+   comprobado por grep, y el comentario de cabecera está redactado para no contener ni siquiera
+   el literal que se está prohibiendo.
+6. **`vi.importActual` descartado en `wallet-page.test.tsx`.** El primer intento montaba el módulo
+   real con `vi.importActual`; ahí las dependencias del módulo dejan de estar mockeadas y el panel
+   de gastos fijos acabó **abriendo una conexión real contra Postgres** (`SASL:
+   SCRAM-SERVER-FIRST-MESSAGE: client password must be a string`). Se sustituyó por un stub
+   CONMUTABLE (`vi.mock` con `importOriginal` + una bandera que los dos casos de R1/R2 ponen a
+   `true`), que sí respeta los mocks del archivo. El resto de la suite sigue viendo el
+   `wallet-module-stub` de siempre.
+
+## Mapa `R<n> → test` de esta tanda, ejecutado
+
+| R | test | estado |
+| --- | --- | --- |
+| R1 | `tests/integration/wallet-page.test.tsx` :: «la wallet ofrece un solo botón para registrar dinero» | verde |
+| R2 | `tests/integration/wallet-page.test.tsx` :: «ya no hay un segundo botón de registro manual» | verde |
+| R3 | `wallet-registrar-movimiento-dialog.test.tsx` :: «ofrece gasto variable, sueldo y los dos ajustes, y nada más» | verde |
+| R4 | `wallet-registrar-movimiento-dialog.test.tsx` :: «la línea de ayuda sigue al concepto elegido» + `wallet-conceptos-manuales.test.ts` :: «el nombre del libro se DERIVA» | verde |
+| R5 | `wallet-registrar-movimiento-dialog.test.tsx` :: «gasto variable: envía tipoEgreso=gasto_variable…» | verde |
+| R6 | `wallet-registrar-movimiento-dialog.test.tsx` :: «sueldo: cambia la etiqueta de la descripción…» | verde |
+| R7 | `wallet-registrar-movimiento-dialog.test.tsx` :: «ajuste que suma: envía tipo=ingreso y categoria=ingreso_ajuste» | verde |
+| R8 | `wallet-registrar-movimiento-dialog.test.tsx` :: «ajuste que resta: envía tipo=egreso y categoria=egreso_ajuste» | verde |
+| R9 | `wallet-conceptos-manuales.test.ts` :: «los cuatro tienen etiqueta…» + «las DOS etiquetas que ya existían se conservan byte a byte» | verde |
+| R10 | `tests/integration/wallet-page.test.tsx` :: los 10 casos previos, sin tocar | verdes |
+| R11 | `wallet-conceptos-manuales.test.ts` :: «ninguno mapea a egreso_gasto_fijo ni a ninguna otra categoría del SEED» + `wallet-registrar-movimiento-dialog.test.tsx` :: «el selector no ofrece «Gasto fijo»» | verde |
+| R13 | `wallet-registrar-movimiento-dialog.test.tsx` :: «monto 0 y descripción vacía no llaman a ninguna action…» | verde |
+| R14 | idem | verde |
+| R15 | `wallet-registrar-movimiento-dialog.test.tsx` :: «…con el monto STRING exacto (R5/R15)» | verde |
+| R18 | `wallet-registrar-movimiento-dialog.test.tsx` :: «llama a onRegistrado, refresca la ruta y cierra el diálogo» | verde |
+| R19 | `wallet-registrar-movimiento-dialog.test.tsx` :: «la fecha arranca en el día de hoy de Costa Rica…» | verde |
+| R20 | `wallet-registrar-movimiento-dialog.test.tsx` :: «una fecha del futuro se rechaza en el cliente, sin llamar a la action» | verde |
+| R21 | `wallet-registrar-movimiento-dialog.test.tsx` :: «un día que no existe en el calendario se rechaza en el cliente» | verde |
+| R22 | `wallet-registrar-movimiento-dialog.test.tsx` :: «si se elige un día anterior, la fecha viaja tal cual…» | verde |
+| R23 | `wallet-registrar-movimiento-dialog.test.tsx` :: «si NO se toca la fecha, la clave fecha no viaja…» | verde |
+| R29 | los cinco casos migrados de la tabla de arriba | verdes |
+| R31 | `wallet-registrar-movimiento-dialog.test.tsx` :: «forbidden/unauthenticated → el aviso en voseo…» + «el título y la descripción del diálogo también hablan de vos» | verde |
+| R32 | `wallet-registrar-movimiento-dialog.test.tsx` :: «concepto, monto, fecha y descripción tienen nombre accesible» + «el validation_error del borde con clave fecha se pinta bajo el campo de la fecha» | verde |
+
+Nota sobre R19/R23: el día calendario de Costa Rica se calcula **dentro del test** (restando 6 h
+al instante actual y quedándose con los 10 primeros caracteres del ISO), no se importa de
+`lib/utils/fecha-cr.ts`. Comparar el componente contra la misma función que el componente usa
+deja el caso siempre verde —precedente medido en este repo— y aquí lo que se quiere afirmar es el
+DÍA, no la función.
+
+## Salidas reales
+
+### `pnpm typecheck`
+
+```
+> ordenex@0.1.0 typecheck R:\job\singularis\projects\ordenex
+> tsc --noEmit
+
+=== TYPECHECK EXIT=0 ===
+```
+
+(La primera corrida ya salió limpia: no hizo falta borrar `.next/dev`.)
+
+### `pnpm lint`
+
+```
+✖ 127 problems (0 errors, 127 warnings)
+```
+
+**0 errores.** Ninguno de los 127 avisos cae en un archivo de esta tanda: comprobado filtrando la
+salida por los cinco nombres tocados, que no devuelve ni una línea.
+
+### `pnpm exec vitest related --run` sobre los archivos de producción tocados
+
+```
+$ pnpm exec vitest related --run \
+    "app/(app)/wallet/_components/RegistrarMovimientoCajaDialog.tsx" \
+    "app/(app)/wallet/_components/wallet-conceptos-manuales.ts" \
+    "app/(app)/wallet/_components/WalletModule.tsx"
+
+ Test Files  4 passed (4)
+      Tests  50 passed (50)
+   Duration  11.88s
+```
+
+### Corrida explícita, por nombre, de cada archivo de test creado o modificado
+
+```
+$ pnpm exec vitest run tests/unit/components/wallet-conceptos-manuales.test.ts \
+    tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx \
+    tests/integration/wallet-page.test.tsx
+
+ Test Files  3 passed (3)
+      Tests  39 passed (39)
+   Duration  11.41s
+```
+
+Ni un solo rojo por timeout en esta tanda: los 20 casos del diálogo llevan su `15000` explícito
+(el mismo que traía el archivo que sustituyen) y el más lento tardó 822 ms.
+
+### Guardias del arnés relacionadas
+
+```
+$ pnpm exec vitest run tests/unit/guards/test-citado-desaparecido.guardia.test.ts \
+    tests/unit/guards/plantilla-gasto-fijo-borrado.guardia.test.ts \
+    tests/unit/guards/caja-173-alcance.guardia.test.ts
+
+ Test Files  3 passed (3)
+      Tests  70 passed (70)
+```
+
+## Mutaciones ejecutadas (con su salida ROJA)
+
+### M1 — «que el diálogo mande siempre la fecha, aunque sea la de hoy»
+
+`fechaAEnviar()` pasa de devolver `undefined` cuando la fecha es la de hoy a devolver siempre la
+fecha elegida.
+
+```
+     × gasto variable: envía tipoEgreso=gasto_variable con el monto STRING exacto (R5/R15) 537ms
+     × sueldo: cambia la etiqueta de la descripción y envía tipoEgreso=sueldo (R6/R9) 822ms
+     × ajuste que suma: envía tipo=ingreso y categoria=ingreso_ajuste (R7) 720ms
+     × ajuste que resta: envía tipo=egreso y categoria=egreso_ajuste (R8) 685ms
+     × si NO se toca la fecha, la clave `fecha` no viaja… (R23) 376ms
+
+AssertionError: expected { tipoEgreso: 'gasto_variable', …(3) } to deeply equal { tipoEgreso: 'gasto_variable', …(2) }
+- Expected
++ Received
++   "fecha": "2026-08-29",
+
+AssertionError: expected [ 'descripcion', 'fecha', …(2) ] to deeply equal [ Array(3) ]
+- Expected
++ Received
++   "fecha",
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 15 passed (20)
+```
+
+**Cinco casos rojos**, entre ellos los dos migrados con su `toEqual` intacto. Revertida.
+
+### M2 — «que el selector ofrezca el gasto FIJO»
+
+Se añade un quinto concepto al catálogo, con id `gasto_fijo`, etiqueta «Gasto fijo» y categoría
+`egreso_gasto_fijo`.
+
+```
+     × el catálogo ofrece los cuatro conceptos del pedido y ninguno más 7ms
+     × el conjunto de categorías destino es EXACTAMENTE las cuatro admitidas 2ms
+     × ninguno mapea a `egreso_gasto_fijo` ni a ninguna otra categoría del SEED 1ms
+     × ofrece gasto variable, sueldo y los dos ajustes, y nada más 392ms
+     × el selector no ofrece «Gasto fijo»: ese lo emite el cron desde su plantilla (R11) 193ms
+     × un movimiento no es periódico: no hay ciclo, ni unidad, ni día de primer cobro (85/R25) 177ms
+
+AssertionError: expected [ Array(5) ] to have a length of 4 but got 5
+AssertionError: expected [ 'egreso_ajuste', …(4) ] to deeply equal [ 'egreso_ajuste', …(3) ]
++   "egreso_gasto_fijo",
+AssertionError: expected [ 'Gasto variable', 'Sueldo', …(3) ] to deeply equal [ 'Gasto variable', 'Sueldo', …(2) ]
++   "Gasto fijo",
+
+ Test Files  2 failed (2)
+      Tests  6 failed | 21 passed (27)
+```
+
+**Seis casos rojos** en los dos niveles: el catálogo (donde vive la regla) y el diálogo (donde se
+ve). Revertida.
+
+### M3 — «que vuelva el segundo botón de registro manual»
+
+Se añade un segundo botón rotulado «Registrar egreso» en la barra de acciones de
+`WalletModule.tsx`.
+
+```
+     × ya no hay un segundo botón de registro manual 83ms
+
+ FAIL  tests/integration/wallet-page.test.tsx > … > ya no hay un segundo botón de registro manual
+expected document not to contain element, found <button
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 passed (12)
+```
+
+Revertida. Esta mutación es además la que prueba que el caso de E2 mide la pantalla REAL y no el
+stub: con el stub montado, el botón añadido no habría existido en el documento y el caso habría
+pasado en verde.
+
+Las tres mutaciones se revirtieron copiando de vuelta el original guardado antes de mutar, y el
+árbol quedó comprobado con `git status --short` (sin restos de la marca `MUTACION`).
+
+## Rojo PREEXISTENTE, ajeno a esta tanda
+
+`tests/unit/guards/superficie-de-uso.guardia.test.ts` falla con un solo infractor:
+
+```
++   "lib/actions/tarifas.ts:67 obtenerTarifa",
+```
+
+**No lo causa esta ficha.** `obtenerTarifa` no tiene un solo importador de producción en todo el
+árbol (solo `tests/integration/actions/tarifas-action.test.ts`), y ninguno de los dos diálogos
+borrados menciona la palabra «tarifa» —verificado sobre los blobs de `HEAD`, no sobre el árbol
+local—. La action llegó en `b7bd887a` (2026-08-24, feature 273), que **ya estaba en `origin/dev`
+(`b776d0da`)**, la base de esta rama; comprobado con `git merge-base --is-ancestor`. Queda para el
+leader: o se le devuelve superficie, o se anota `@sin-superficie` junto al export. Se avisa aquí
+porque `./init.sh` completo —el cierre de esta ficha— lo va a encontrar.
+
+## Lo que queda pendiente de esta tanda
+
+- **E1** ya lo dejó hecho el backend; **E3** (gate completo) y **E4** (bitácora final + PR) son
+  del leader.
+- El `min` del selector de fecha se calcula en el NAVEGADOR con `primerDiaMovimientoAdmisible()`,
+  que lee `WALLET_MOVIMIENTO_DIAS_HACIA_ATRAS` de `process.env`. En el bundle de cliente esa
+  variable no es `NEXT_PUBLIC_*`, así que el navegador usa siempre el **fallback de 30 días**. Si
+  algún día se configura otro valor por entorno, el tope visual del selector y el del borde
+  podrían discrepar; el borde manda y responde `validation_error` con su texto, que el diálogo
+  pinta bajo el campo, así que **no hay agujero de validación** — pero la pista visual quedaría
+  corrida. Se anota y no se arregla aquí: tocaría `lib/`, que está fuera de esta tanda.

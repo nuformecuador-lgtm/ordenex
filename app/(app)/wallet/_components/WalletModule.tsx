@@ -29,8 +29,7 @@ import { CajaResumenCard } from "./CajaResumenCard";
 import { WalletLedger } from "./WalletLedger";
 import { filaDescargaMovimientoCaja } from "./wallet-ledger-descarga-columnas";
 import { WalletFiltros, FILTROS_VACIOS, type WalletFiltrosValue } from "./WalletFiltros";
-import { RegistrarMovimientoManualDialog } from "./RegistrarMovimientoManualDialog";
-import { RegistrarEgresoAdministrativoDialog } from "./RegistrarEgresoAdministrativoDialog";
+import { RegistrarMovimientoCajaDialog } from "./RegistrarMovimientoCajaDialog";
 import { ComposicionGananciaCard } from "./ComposicionGananciaCard";
 import {
   GastosFijosPlantillasPanel,
@@ -209,10 +208,11 @@ export function WalletModule({
           largo de la página pintada) se le pasa a la tarjeta como tercer tile. */}
       <section aria-label="Resumen de la caja y acciones" className="flex flex-col gap-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <RegistrarEgresoAdministrativoDialog
-            onRegistrado={() => void recargar(filtros, page)}
-          />
-          <RegistrarMovimientoManualDialog
+          {/* Ficha 334 (T D4, R1/R2): UN solo control para mover dinero a mano. Antes eran dos
+              botones casi iguales —«Registrar movimiento» y «Registrar egreso»— con dos
+              vocabularios que no se explicaban entre si, y habia que adivinar cual abrir. El
+              enrutado por concepto vive dentro del dialogo, no aqui. */}
+          <RegistrarMovimientoCajaDialog
             onRegistrado={() => void recargar(filtros, page)}
           />
         </div>

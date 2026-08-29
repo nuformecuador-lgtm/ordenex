@@ -172,7 +172,9 @@ cumple por construcción y aquí se fija como regresión).
 | R22 | `tests/unit/components/wallet-gastos-fijos-panel.test.tsx` :: «ningún texto del panel ni del diálogo dice “cada mes”» | caso nuevo |
 | R23 | `tests/unit/components/wallet-gastos-fijos-panel.test.tsx` :: «el próximo cobro se calcula con el instante recibido por props, no con el reloj del navegador» | caso nuevo |
 | R24 | `tests/unit/components/wallet-gasto-fijo-plantilla-dialog.test.tsx` :: «el monto “1234.56” viaja como cadena tal cual» + `tests/unit/descarga/gastos-fijos-descarga-columnas.test.ts` :: «el monto sale crudo, sin símbolo ni redondeo» | nuevo + existente |
-| R25 | `tests/unit/components/wallet-registrar-egreso-dialog.test.tsx` :: «el diálogo de egreso manual no ofrece periodicidad ni fecha de cobro» | caso nuevo |
+| R25 | `tests/unit/components/wallet-registrar-movimiento-dialog.test.tsx` :: «el diálogo de movimiento manual no ofrece periodicidad ni concepto de gasto fijo» | caso nuevo, **repuntado el 2026-08-29** |
+
+> **R25 — la cita se mudó, la cobertura no se perdió.** El caso nació en `wallet-registrar-egreso-dialog.test.tsx`, que la **ficha 334** borró al fusionar los dos diálogos de movimiento en uno. Sus cuatro casos se trasladaron al test del diálogo nuevo; el de este R25 se **endureció**: antes afirmaba *cero* `input[type="date"]` y el diálogo unificado tiene fecha por diseño, así que ahora afirma que hay **exactamente uno** y que es el de la etiqueta «Fecha». La regla de fondo —un gasto variable no puede ser periódico, R19 de la ficha 45— sigue cubierta. Se repunta aquí a mano porque `test-citado-desaparecido.guardia` **no barre `requirements.md`**: su alcance son `tasks.md` y `design.md`, y la exclusión es deuda declarada con números en su propia cabecera.
 
 Ningún requisito queda sin test. El mapa definitivo, con la salida real de cada corrida, lo
 escribe el implementer en `progress/impl_85.md`.
