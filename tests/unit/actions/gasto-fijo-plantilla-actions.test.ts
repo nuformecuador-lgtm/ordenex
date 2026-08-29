@@ -17,6 +17,15 @@ const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 const OTRO: Actor = { usuarioId: "u-otro", rol: "adminSatelite" };
 const UUID = "11111111-1111-4111-8111-111111111111";
 
+// Feature 85 (R1): el ciclo VIGENTE que el dialogo reenvia al editar. Los tres valores estan
+// elegidos para que NINGUNO coincida con los defaults del schema de crear (`meses`/`1`/hoy-CR):
+// asi un test que pase por culpa de un default no puede pasar por casualidad.
+const CICLO_VIGENTE = {
+  periodicidadUnidad: "semanas",
+  periodicidadCantidad: 2,
+  fechaCobro: "2026-03-31",
+} as const;
+
 function plantilla(): GastoFijoPlantillaDTO {
   return {
     id: UUID,
@@ -120,20 +129,88 @@ describe("actualizarPlantillaAction (R18/R25)", () => {
   it("id no-uuid -> validation_error", async () => {
     const service = fakeService();
     const r = await actualizarPlantillaAction(
-      { id: "no-uuid", concepto: "Alquiler", monto: "85000.00" },
+      // Feature 85: el resto del payload va COMPLETO y valido a proposito, para que el
+      // validation_error solo pueda venir del id.
+      { id: "no-uuid", concepto: "Alquiler", monto: "85000.00", ...CICLO_VIGENTE },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("esperado validation_error");
+    expect(r.fieldErrors.id).toBeDefined();
     expect(service.actualizarPlantilla).not.toHaveBeenCalled();
   });
 
   it("not_found se propaga desde el service", async () => {
     const service = fakeService({ actualizarPlantilla: vi.fn(async () => ({ status: "not_found" as const })) });
     const r = await actualizarPlantillaAction(
-      { id: UUID, concepto: "Alquiler", monto: "85000.00" },
+      // Feature 85 (R1): el ciclo es OBLIGATORIO al actualizar; sin el, este caso moriria en el
+      // borde con validation_error y nunca llegaria al service que devuelve el not_found.
+      { id: UUID, concepto: "Alquiler", monto: "85000.00", ...CICLO_VIGENTE },
       { service, getActor: async () => MAESTRO },
     );
     expect(r).toEqual({ status: "not_found" });
+  });
+
+  // ── Feature 85 (R1) — LA guardia del fallo mudo que abre esta ficha ──
+  //
+  // Hasta la 85, `actualizarGastoFijoPlantillaSchema` heredaba de `crear` los defaults
+  // `meses`/`1`/hoy-CR, asi que ESTE MISMO payload —el que mandaba `GastoFijoPlantillaDialog`—
+  // pasaba el borde entero y el servicio escribia un ciclo INVENTADO encima del que la plantilla
+  // ya tenia: periodicidad a mensual y ancla movida al dia de la edicion, sin un solo aviso.
+  it("actualizar sin periodicidad devuelve validation_error en los tres campos y no llama al servicio", async () => {
+    const service = fakeService();
+    const r = await actualizarPlantillaAction(
+      { id: UUID, concepto: "Alquiler", monto: "85000.00" },
+      { service, getActor: async () => MAESTRO },
+    );
+
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("esperado validation_error");
+    expect(r.fieldErrors.periodicidadUnidad).toBeDefined();
+    expect(r.fieldErrors.periodicidadCantidad).toBeDefined();
+    expect(r.fieldErrors.fechaCobro).toBeDefined();
+    expect(service.actualizarPlantilla).not.toHaveBeenCalled();
+  });
+
+  it("R5/R6: una fecha de cobro inexistente o una cantidad 0 mueren en el borde", async () => {
+    const service = fakeService();
+
+    const fechaImposible = await actualizarPlantillaAction(
+      { id: UUID, concepto: "Alquiler", monto: "85000.00", ...CICLO_VIGENTE, fechaCobro: "2026-02-31" },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(fechaImposible.status).toBe("validation_error");
+
+    const cantidadCero = await actualizarPlantillaAction(
+      { id: UUID, concepto: "Alquiler", monto: "85000.00", ...CICLO_VIGENTE, periodicidadCantidad: 0 },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(cantidadCero.status).toBe("validation_error");
+
+    expect(service.actualizarPlantilla).not.toHaveBeenCalled();
+  });
+
+  it("con el ciclo completo, el servicio lo recibe TAL CUAL (nada se reescribe en el borde)", async () => {
+    const service = fakeService();
+    const r = await actualizarPlantillaAction(
+      { id: UUID, concepto: "Alquiler", monto: "999.00", ...CICLO_VIGENTE },
+      { service, getActor: async () => MAESTRO },
+    );
+
+    expect(r.status).toBe("ok");
+    // Literales fijos: NO se comparan contra CICLO_VIGENTE por spread ni contra los defaults del
+    // schema, que es justamente lo que un test verde-por-construccion haria.
+    expect(service.actualizarPlantilla).toHaveBeenCalledWith(
+      {
+        id: UUID,
+        concepto: "Alquiler",
+        monto: "999.00",
+        periodicidadUnidad: "semanas",
+        periodicidadCantidad: 2,
+        fechaCobro: "2026-03-31",
+      },
+      MAESTRO,
+    );
   });
 });
 
