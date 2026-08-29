@@ -204,33 +204,54 @@ de confirmar, que la etiqueta ya impresa conserva la dirección y los datos ante
 
 ## Preguntas abiertas
 
+> **Estado: las cuatro están CERRADAS.** P1 y P2 las resolvió el humano el **2026-08-28**; P3 y P4
+> las cerró el `backend_dev` ese mismo día, midiendo. Ninguna quedó pendiente para el frontend.
+
 **P1 — Cuando la zona nueva no tiene tarifa, ¿basta con avisar o hay que bloquear?**
-Este documento decide **avisar y dejar guardar** (R13), por coherencia con la regla ya firmada de la
-feature 274 (un par sin tarifa no bloquea: se muestra el hueco y se sigue). La consecuencia hay que
-decirla: la corrección puede dejar una orden en una zona por la que Ordenex **no facturará nada**
-hasta que alguien configure la tarifa. La alternativa —bloquear— dejaría la orden con la ubicación
-**equivocada** por un hueco de configuración en otra tabla. Si el humano prefiere bloquear, cambia
-R13 y su test; nada más.
+✅ **RESUELTA POR EL HUMANO EL 2026-08-28: se AVISA y se deja guardar.** El modal dirá «sin tarifa
+configurada» en vez de un importe, que es como el resto del sistema trata una tarifa ausente
+(coherente con la regla ya firmada de la feature 274: un par sin tarifa no bloquea, se muestra el
+hueco y se sigue). **Riesgo aceptado, dicho en voz alta:** la corrección puede dejar una orden en una
+zona por la que Ordenex **no facturará nada** hasta que alguien configure esa tarifa. La alternativa
+—bloquear— dejaría la orden con la ubicación **equivocada** por un hueco de configuración que vive en
+otra tabla. R13 y su test quedan como estaban.
 
 **P2 — El `adminTienda` puede mover su propio flete.**
-D4 dice «los mismos roles de la 312», y esta ficha no lo reabre. Queda anotado que, con esa regla, un
-`adminTienda` puede corregir el distrito de su orden en `/novedades` y con ello cambiar la zona y el
-importe que se le factura. El aviso de R11 y la confirmación de R33 se le exigen igual que a
-`maestro`, así que **no puede hacerlo sin verlo**; pero no hay una segunda aprobación. Si el humano
-quiere que ese caso concreto pase por `maestro`, es un requisito nuevo.
+✅ **RESUELTA POR EL HUMANO EL 2026-08-28: SÍ puede.** El `adminTienda` corrige la ubicación de sus
+propias órdenes aunque eso mueva su propio flete; ve el aviso con los dos importes y confirma. La
+razón del humano: **es el mismo nivel de confianza que ya tiene para cargar órdenes y declarar su
+monto a cobrar — no se le da una capacidad nueva de mover dinero, se le da la de arreglar un dato.**
+El aviso de R11 y la confirmación de R33 se le exigen igual que a `maestro`, así que no puede hacerlo
+sin verlo. No hay segunda aprobación, y no hace falta. D4 no se reabre.
 
 **P3 — ¿Cuánto dura la ventana de coordenadas viejas, y molesta a alguien?**
-R22 deja la orden con la dirección nueva y las coordenadas anteriores hasta que corra el trabajo
-encolado. Es el diseño de la feature 91 y esta ficha no lo cambia. No se ha medido cuánto tarda esa
-cola en producción ni si alguna puerta que exige coordenadas (asignación de guía, ruteo a satélite)
-llega a decidir con las viejas en ese intervalo. Si importa, se mide antes de desplegar; si no
-importa, se dice y se cierra.
+✅ **CERRADA POR EL `backend_dev` EL 2026-08-28. Se deja como está (R22 no cambia), y esto es lo que
+se midió** —porque «no molesta» sin número es una suposición—:
+
+- **La ventana dura como mucho ~1 minuto.** El drenador de la cola es `/api/cron/procesar-jobs` con
+  `schedule: "* * * * *"` (`vercel.json:13-14`): corre **cada minuto**. El job entra `pending` con
+  `run_after = now()`, así que lo recoge el siguiente tick.
+- **Sí hay una puerta que decide con coordenadas, y en ese minuto decidiría con las viejas.**
+  `AsignabilidadCoordenadasService` tiene como primer paso de su árbol —normativo, `:7`— «R2
+  coordenadas presentes → asignable». Una orden con la dirección nueva y las coordenadas anteriores
+  pasa ese paso, y si alguien la asigna en ese intervalo, el optimizador la rutea al **punto viejo**.
+- **Aun así no se limpian las coordenadas**, y el motivo está en `design.md` §7.3: ponerlas a `null`
+  dejaría la orden **fuera** de esas mismas puertas hasta que corriera el trabajo, es decir, corregir
+  un dato **bloquearía la operación**. Cambiar un ruteo equivocado de un minuto por un bloqueo
+  cierto es peor negocio.
+- **Lo que queda abierto es de operación, no de diseño:** si la cola se atasca (jobs `failed`
+  acumulados), esa ventana deja de ser un minuto. Eso lo cubre el dead-letter de la feature 90 y no
+  es alcance de esta ficha.
 
 **P4 — ¿El aviso debe decir el importe con dos decimales, o el negocio los quiere enteros?**
-La ficha 305 (2026-08-28) fijó que **el monto a cobrar** es un entero de colones, con restricción en
-la base. Los importes de flete y comisión **no** tienen esa restricción y salen con escala 2 del
-camino money-safe. El aviso los pintará tal cual salen (con `money()`). Si el humano quiere verlos
-redondeados, es una decisión de presentación, no de cálculo.
+✅ **CERRADA POR EL `backend_dev` EL 2026-08-28: escala 2, tal como salen, y NO se redondean.** La
+ficha 305 fijó que **el monto a cobrar** es un entero de colones, con restricción en la base; el flete
+y la comisión **no** tienen esa restricción, y su escala 2 es la que factura el cierre. El aviso
+existe para enseñar **lo que se va a cobrar**: redondearlo para la pantalla haría que el número
+mostrado y el facturado dejaran de coincidir, que es exactamente la clase de desajuste que costó
+céntimos reales en la feature 204. El backend emite STRING escala 2 y la pantalla lo pinta con
+`money()`. Si el negocio quiere verlos enteros, es una decisión de **presentación** y se toma en el
+formateador, nunca en el cálculo.
 
 ---
 

@@ -48,6 +48,19 @@ export const actualizarOrdenSchema = z
     provinciaId: z.string().min(1).optional(),
     cantonId: z.string().min(1).optional(),
     distritoId: z.string().min(1).nullable().optional(),
+    // FICHA 327 (A1, design §8.1) — la direccion entra al schema. Estuvo fuera desde siempre y la
+    // 312 la dejo fuera A SABIENDAS; la 327 reabre esa decision (su D1) porque es el error de
+    // carga mas caro. Se amplia AQUI, y no con un `.extend()` local en el schema de la
+    // correccion, por el mismo motivo por el que la 312 derivo de este objeto: la regla de cada
+    // campo de la orden vive en UN sitio.
+    //
+    // ⚠️ AMPLIAR ESTE SCHEMA NO AMPLIA `OrdenRepository.update`: `toUpdateData()` sigue sin
+    // proyectar `direccion` y ningun consumidor vivo la informa. Quien SI la escribe es
+    // `corregirDatosCliente`, que comparte con `update` el guard de re-geocodificacion.
+    //
+    // `min(1)` rechaza la cadena vacia; la de SOLO ESPACIOS la rechaza el servicio al recortarla
+    // (`CAMPOS_NO_VACIABLES`), igual que a `destinatario`/`producto`: una sola regla de «vacio».
+    direccion: z.string().min(1).optional(),
     notas: z.string().nullable().optional(),
   })
   .strict();

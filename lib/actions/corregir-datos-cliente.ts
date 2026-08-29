@@ -1,13 +1,17 @@
 "use server";
 
+import { z } from "zod";
+
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { CorregirDatosClienteService } from "@/lib/services/CorregirDatosClienteService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   CorregirDatosClienteServiceResult,
   ICorregirDatosClienteService,
+  ObtenerUbicacionServiceResult,
 } from "@/lib/interfaces/services/ICorregirDatosClienteService";
 import { corregirDatosClienteSchema } from "@/lib/types/correccion-datos-cliente";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
@@ -33,18 +37,36 @@ type BorderError =
 
 export type CorregirDatosClienteActionResult = CorregirDatosClienteServiceResult | BorderError;
 
+/** FICHA 327 (R31) — el desenlace de la PRECARGA. `forbidden` es el mismo objeto opaco (R18/R30). */
+export type ObtenerUbicacionOrdenResult = ObtenerUbicacionServiceResult | BorderError;
+
 export interface CorregirDatosClienteDeps {
   service?: ICorregirDatosClienteService;
   getActor?: () => Promise<Actor | null>;
 }
 
 /**
- * El COMPOSITION ROOT. Construye el repositorio real y LO PASA al service: importarlo no basta —
- * un servicio que recibe `undefined` compila igual y muere en produccion.
+ * El COMPOSITION ROOT. Construye los repositorios reales y LOS PASA al service: importarlos no
+ * basta — un servicio que recibe `undefined` compila igual y muere en produccion.
+ *
+ * ⚠️ EL SEGUNDO ARGUMENTO ES OBLIGATORIO Y ESTE ES EL UNICO SITIO QUE LO PASA. Sin
+ * `TarifaVigenteRepository`, el aviso del importe de R11 reventaria en la primera correccion que
+ * cambiara el distrito, en produccion y no en ningun test. Un test del composition root real lo
+ * fija.
  */
 function buildService(): ICorregirDatosClienteService {
-  return new CorregirDatosClienteService(new OrdenRepository(getPrismaClient()));
+  const prisma = getPrismaClient();
+  return new CorregirDatosClienteService(
+    new OrdenRepository(prisma),
+    new TarifaVigenteRepository(prisma),
+  );
 }
+
+/**
+ * FICHA 327 — el borde de la PRECARGA. Solo el id: no hay nada que validar mas alla de que sea un
+ * uuid, y `.strict()` cierra la puerta a que alguien cuele campos por aqui.
+ */
+const obtenerUbicacionOrdenSchema = z.object({ ordenId: z.uuid() }).strict();
 
 /** Espejo de `toEliminarActionError`: solo los dos codigos que este borde puede producir. */
 function toCorregirActionError(shape: AppErrorShape): BorderError {
@@ -62,8 +84,17 @@ function toCorregirActionError(shape: AppErrorShape): BorderError {
 }
 
 /**
- * Corrige los datos del cliente de UNA orden: `destinatario`, `telefonoDest`, `producto` y
- * `notas`, y nada mas (D1).
+ * Corrige los datos del cliente de UNA orden y, desde la ficha 327, tambien su ubicacion:
+ * `destinatario`, `telefonoDest`, `producto`, `notas`, `direccion`, `provinciaId`, `cantonId`,
+ * `distritoId` y `peso`. Nada mas (312/D1 + 327/D1).
+ *
+ * ⚠️ ESTA ACCION PUEDE MOVER DINERO (327/D5), y por eso puede responder `confirmacion_requerida`:
+ * si la correccion cambia el DISTRITO y no llega `confirmaCambioDeUbicacion: true`, el servidor NO
+ * escribe nada y devuelve los importes de la ubicacion actual y de la propuesta. La pantalla los
+ * pinta y reenvia confirmando. El gate esta en el servidor —no en el modal— justo para que no se
+ * lo pueda saltar un cliente hecho a mano.
+ *
+ * `zonaId` NO se acepta ni con confirmacion: la deriva el servidor del distrito (327/R5).
  *
  * El orden importa y esta medido en su test: la SESION se comprueba antes que el schema, asi que
  * ni una peticion sin sesion ni una entrada invalida llegan a construir el service ni a tocar
@@ -96,9 +127,51 @@ export async function corregirDatosCliente(
         telefonoDest: data.telefonoDest,
         producto: data.producto,
         notas: data.notas,
+        // Ficha 327 — la ubicacion. `distritoId` sale del schema como `string | undefined`: el
+        // `refine` de R4 ya descarto el `null` que el origen admitia.
+        direccion: data.direccion,
+        provinciaId: data.provinciaId,
+        cantonId: data.cantonId,
+        distritoId: data.distritoId ?? undefined,
+        peso: data.peso,
+        confirmaCambioDeUbicacion: data.confirmaCambioDeUbicacion,
       },
       actor,
     );
+  });
+  return isAppErrorShape(r) ? toCorregirActionError(r) : r;
+}
+
+/**
+ * FICHA 327 (R31, design §9.3) — LA PRECARGA del editor: los nueve valores actuales de la orden
+ * mas los nombres que la pantalla pinta.
+ *
+ * VIVE EN ESTE ARCHIVO Y NO EN UNO NUEVO a proposito: la guardia de la 312 vigila un CENSO de
+ * modulos, y un archivo nuevo con datos del cliente dentro tendria que entrar en el. Aqui ya esta
+ * vigilado.
+ *
+ * MISMO ORDEN QUE LA ESCRITURA: sesion antes que schema, y el service revalida rol, pertenencia y
+ * ventana (R18/R28). A quien no cruza esa puerta se le devuelve el MISMO `forbidden` opaco que por
+ * cualquier otro motivo (R30): ni un dato de la orden.
+ *
+ * @sin-superficie TRANSITORIA: la 327 entra en dos tandas y esta es la de backend. Su pantalla es
+ * el bloque E de la misma ficha (`CorregirDatosClienteModal` la llama al abrirse, para precargar
+ * los nueve campos, `tasks.md` E2). **LA ANOTACION CADUCA EN CUANTO EL MODAL LA IMPORTE**, y la
+ * propia guardia lo exige: su caso «ninguna anotacion sobrevive a su motivo» se pone ROJA el dia
+ * que esta accion sea alcanzable y la excusa siga aqui. Es exactamente lo que le paso a
+ * `listarAyudaTiendaCompletoAction` (novedades) y a la hermana `corregirDatosCliente` de este mismo
+ * archivo. **Si el bloque E se cancelara, lo que sobra es la accion, no la anotacion.**
+ */
+export async function obtenerUbicacionOrden(
+  input: unknown,
+  deps: CorregirDatosClienteDeps = {},
+): Promise<ObtenerUbicacionOrdenResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = obtenerUbicacionOrdenSchema.parse(input);
+    const service = deps.service ?? buildService();
+    return service.obtenerUbicacion(data.ordenId, actor);
   });
   return isAppErrorShape(r) ? toCorregirActionError(r) : r;
 }

@@ -18,7 +18,7 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
 
 ## Bloque 0 — Antes de tocar nada
 
-- [ ] **T0.1** Releer, con el archivo delante y sin fiarse de este spec:
+- [x] **T0.1** Releer, con el archivo delante y sin fiarse de este spec:
       `lib/repositories/OrdenRepository.ts:1364-1443` (`update` y el **guard latente**, cuya frase
       clave está medida en `:1385`, no en `:1383`), `:1466-1488` (`corregirDatosCliente`),
       `:1553-1569` (`toUpdateData`, que **no** proyecta `direccion`), `:1614-1646`
@@ -32,17 +32,24 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
       `tests/unit/guards/corregir-datos-sin-rastro.guardia.test.ts:56-68,258-274`.
       _Hecho:_ el censo de `design.md` §0 se confirma **o se corrige en el spec** antes de escribir
       una línea de código. Si algo no cuadra, se para y se pregunta.
-- [ ] **T0.2** `./init.sh --rapido` en verde sobre la rama recién creada, **antes** del primer
+- [x] **T0.2** `./init.sh --rapido` en verde sobre la rama recién creada, **antes** del primer
       cambio. _Hecho:_ log con `INIT_EXIT=$?` escrito **dentro** del propio log.
       _Anotado:_ el rápido **se negará solo** en cuanto la ficha toque `lib/types/` (A1/A2). Eso es
       un `fail`, no un aviso, y obliga al **gate completo** — es exactamente lo que le pasó a la 312
       (su `tasks.md` G5). Presupuestar el tiempo desde ahora.
+      > **DESVIACIÓN, 2026-08-28.** Lo que se corrió como base **no fue `./init.sh --rapido`** sino
+      > `pnpm run typecheck` (limpio) + los **6 archivos de test** que la ficha iba a tocar
+      > (94/94 verdes). Motivo: el árbol venía **sin `.env`** —deuda conocida, registrada por la
+      > chore/323— y sin él el gate sale rojo por `prisma migrate diff`, un rojo que no dice nada
+      > del código. Se copió el `.env` del árbol principal (gitignored, **no commiteado**), con lo
+      > que la base local quedó disponible y las suites contra Postgres corren de verdad. El gate
+      > que vale es el COMPLETO de G2.
 
 ---
 
 ## Bloque A — Módulos puros y contratos (sin I/O)
 
-- [ ] **A1** `lib/types/orden.ts:39`: `actualizarOrdenSchema` gana
+- [x] **A1** `lib/types/orden.ts:39`: `actualizarOrdenSchema` gana
       `direccion: z.string().min(1).optional()`. **Y en el mismo commit**, reescribir los dos
       comentarios que quedan mintiendo (`design.md` §8.1):
       `OrdenRepository.ts:1384-1388` (la mitad de la frase que deja de ser cierta) y el docstring de
@@ -50,13 +57,13 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
       _Hecho:_ `grep` que confirme **cero** consumidores de `actualizarOrdenSchema` fuera de
       `lib/types/correccion-datos-cliente.ts`; typecheck limpio; y los dos comentarios dicen que
       `update` sigue sin poder escribir la dirección **y quién sí puede**.
-- [ ] **A2 ⇐ A1** `lib/types/correccion-datos-cliente.ts`: `CAMPOS_CORREGIBLES` pasa a nueve,
+- [x] **A2 ⇐ A1** `lib/types/correccion-datos-cliente.ts`: `CAMPOS_CORREGIBLES` pasa a nueve,
       nace `CAMPOS_GEOGRAFIA`, y `corregirDatosClienteSchema` amplía su `.pick(...)` y suma los dos
       `refine` nuevos + la clave `confirmaCambioDeUbicacion` (`design.md` §9.1).
       **`zonaId` NO entra en el `.pick()`** y sigue cayendo por `.strict()` (R5).
       _Hecho:_ typecheck; el `refine` de «al menos un campo» **no** cuenta
       `confirmaCambioDeUbicacion` como campo a corregir.
-- [ ] **A3 ⇐ A2** Ampliar `tests/unit/types/correccion-datos-cliente-schema.test.ts`:
+- [x] **A3 ⇐ A2** Ampliar `tests/unit/types/correccion-datos-cliente-schema.test.ts`:
       - los **nueve** campos juntos ⇒ válido. **(R1)**
       - `zonaId`, `estatusId`, `tiendaId`, `montoCobrar`, `cobraComision`, `numGuia`, `numRemision`,
         `mensajeroAsignadoId` ⇒ `validation_error`, uno por uno. **(R2)**
@@ -68,7 +75,7 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
         null`, `ordenId` uuid).
       _Hecho:_ verde. La fila `direccion`/`peso` del `it.each` de rechazados (`:25-41`) se **mueve**
       a los aceptados; la de `zonaId` **se queda donde está**.
-- [ ] **A4 [P] ⇐ A2** `ICorregirDatosClienteService`: el desenlace
+- [x] **A4 [P] ⇐ A2** `ICorregirDatosClienteService`: el desenlace
       `{ status: "confirmacion_requerida"; aviso }`, los tipos `AvisoCambioUbicacion` y
       `UbicacionConCostos` con su discriminante `tarifa: "resuelta" | "sin_tarifa"`, y el contrato de
       la lectura de precarga (`design.md` §9.2/§9.3).
@@ -79,35 +86,35 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
 
 ## Bloque B — Repositorio (backend, con Postgres)
 
-- [ ] **B1 ⇐ A2** `IOrdenRepository`:
+- [x] **B1 ⇐ A2** `IOrdenRepository`:
       `CorregirDatosClienteData` gana **exactamente seis** claves (`direccion`, `provinciaId`,
       `cantonId`, `distritoId`, `zonaId`, `peso`); su docstring pasa a enumerar **las siete que
       siguen sin ser representables** (`design.md` §6).
       Nacen `OrdenParaCorreccionRow` + `findParaCorreccion` y `DistritoResueltoRow` +
       `findDistritoParaCorreccion` (`design.md` §9.4).
       _Hecho:_ typecheck; `montoCobrar` declarado como **STRING**, no `number`.
-- [ ] **B2 ⇐ B1** `OrdenRepository`: extraer el colapso de la N:M a `zonaUnicaDeDistrito(zonas)` y
+- [x] **B2 ⇐ B1** `OrdenRepository`: extraer el colapso de la N:M a `zonaUnicaDeDistrito(zonas)` y
       hacer que **lo usen las dos** lecturas (`findDistritosByCantonIds` y la nueva). Implementar
       `findParaCorreccion` (con `deletedAt: null` y `cierreDetalles: { take: 1 }`) y
       `findDistritoParaCorreccion` (con `canton.provinciaId` para R6).
       _Hecho:_ typecheck; `grep` que confirme que **no** se amplió `OrdenPrismaClient`; y que
       `findDistritosByCantonIds` sigue devolviendo lo mismo que antes (su suite existente, verde y
       **sin editar**).
-- [ ] **B3 ⇐ B1** Extraer el guard latente de `update` a `encolarSiCambiaDireccion(tx, id, dir)` y
+- [x] **B3 ⇐ B1** Extraer el guard latente de `update` a `encolarSiCambiaDireccion(tx, id, dir)` y
       hacer que `update` **lo llame** en lugar del código inline (`design.md` §7.2).
       **Sin cambio de comportamiento**: la pre-lectura sigue siendo condicional y el encolado sigue
       exigiendo «informada Y distinta».
       _Hecho:_ `tests/integration/repositories/orden-geocode-enqueue.test.ts` verde **sin editarlo**;
       el comentario de la 91 se conserva (movido, no borrado) y dice ahora que el guard **ya tiene
       un llamador vivo**.
-- [ ] **B4 ⇐ B3** `corregirDatosCliente` pasa a `$transaction`: pre-lectura condicional de
+- [x] **B4 ⇐ B3** `corregirDatosCliente` pasa a `$transaction`: pre-lectura condicional de
       `direccion` → `updateMany` con el **mismo `WHERE` de siempre** → `count === 0` ⇒ `"conflict"`
       **sin encolar** → `count === 1` ⇒ `encolarSiCambiaDireccion` con el `tx`.
       El `data` se sigue proyectando **clave a clave** (nunca `...data`).
       _Hecho:_ typecheck; el método **conserva su nombre** (`async corregirDatosCliente(`), porque el
       recortador de la guardia de la 312 lo busca literalmente; `grep` que confirme **cero**
       call-sites de `new OrdenRepository(...)` tocados (el `jobRepo` ya venía con default).
-- [ ] **B5 ⇐ B4** Ampliar `tests/integration/db/corregir-datos-cliente.repo.test.ts` **contra
+- [x] **B5 ⇐ B4** Ampliar `tests/integration/db/corregir-datos-cliente.repo.test.ts` **contra
       Postgres**, cada caso con su fila sembrada:
       1. corregir dirección + los tres ids + peso en `en_reparto` ⇒ `"ok"`, y las columnas guardan
          lo enviado **recortado**. **(R1, R8)**
@@ -127,7 +134,7 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
       `notIn` debe poner rojo el 6; escribir `zonaId` desde el input debe poner rojo el 2; que
       `zonaUnicaDeDistrito` devuelva `zonas[0]` debe poner rojo el 7). Un test de integración que
       pasa sin datos reporta `passed` sin comprobar nada.
-- [ ] **B6 ⇐ B4** `tests/integration/repositories/corregir-ubicacion-geocode.test.ts` — **la prueba
+- [x] **B6 ⇐ B4** `tests/integration/repositories/corregir-ubicacion-geocode.test.ts` — **la prueba
       de que el guard se activa de verdad**, que es lo que esta ficha no puede dar por hecho:
       - corregir la dirección ⇒ **una** fila `geocodificacion` encolada, con
         `dedupeKey = geocodificacion:<ordenId>:<hash8>` y `maxIntentos = 8`. **(R19)**
@@ -138,12 +145,23 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
       - el `payload` es **exactamente** `{ ordenId }`: ni la dirección, ni el destinatario. **(R23)**
       _Hecho:_ verde, y **con mutación**: si `corregirDatosCliente` deja de llamar al guard, el
       primer caso debe ponerse rojo; si encola fuera de la transacción, el cuarto.
+      > **DESVIACIÓN DE RUTA, 2026-08-28.** El archivo vive en
+      > **`tests/integration/db/corregir-ubicacion-geocode.test.ts`**, no en
+      > `tests/integration/repositories/`. Motivo medido: en este repo
+      > `tests/integration/repositories/` es la carpeta del **Prisma MOCKEADO**
+      > (`orden-geocode-enqueue.test.ts` lo es), y con un doble no se puede demostrar lo que este
+      > archivo existe para demostrar — que la **pre-lectura ve el valor anterior** y que la fila de
+      > `jobs` **aparece de verdad**. `design.md` §7.4 exige «contra Postgres», y esa carpeta es
+      > `tests/integration/db/`. Se cubren los cinco casos de la lista, más R22.
+      > Medido: con el guard desconectado caen **2** (R19 y la identidad del `tx` de R21) y
+      > `orden-geocode-enqueue` **sigue verde** — que es la prueba de que aquella suite nunca cubrió
+      > este camino, que es justo el agujero que la ficha señalaba.
 
 ---
 
 ## Bloque C — Servicio
 
-- [ ] **C1 ⇐ A4, B1** `CorregirDatosClienteService`: la secuencia de la 312 se conserva entera
+- [x] **C1 ⇐ A4, B1** `CorregirDatosClienteService`: la secuencia de la 312 se conserva entera
       (rol → orden → pertenencia → ventana) y se le añade, **después** del diff:
       resolución del distrito, comprobación de la cadena provincia→cantón→distrito (R6), derivación
       de la zona (R5/R7), gate de confirmación (R11/R15) y composición del aviso con
@@ -151,7 +169,7 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
       Dependencias por `Pick<…>`: repositorio de orden **y** de tarifas (`design.md` §9.5).
       _Hecho:_ se construye entero con dobles; no importa Prisma ni `next/headers`; `montoCobrar`
       viaja como STRING en todo el camino.
-- [ ] **C2 ⇐ C1** Ampliar `tests/unit/services/corregir-datos-cliente-service.test.ts`:
+- [x] **C2 ⇐ C1** Ampliar `tests/unit/services/corregir-datos-cliente-service.test.ts`:
       - distrito que no pertenece al cantón, y cantón que no pertenece a la provincia ⇒
         `validation_error` en `distritoId`, **sin** llamar a la escritura. **(R6)**
       - distrito con 0 zonas y con 2 zonas ⇒ `validation_error` nombrando el motivo, sin escribir. **(R7)**
@@ -172,7 +190,7 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
       - un input que traiga `rol`/`tiendaId` no cambia el desenlace: se decide con el **actor**. **(R28)**
       - la lectura de precarga con un rol denegado ⇒ `forbidden` y **cero** datos de la orden. **(R18)**
       _Hecho:_ todos verdes; ninguna aserción compara un texto contra la función que lo genera.
-- [ ] **C3 [P] ⇐ C1** Actualizar `tests/unit/guards/corregir-datos-sin-rastro.guardia.test.ts`
+- [x] **C3 [P] ⇐ C1** Actualizar `tests/unit/guards/corregir-datos-sin-rastro.guardia.test.ts`
       (`design.md` §8.2), **sin relajarla**:
       - del bloque `CorregirDatosClienteData` se retira **solo** la cláusula `not.toContain
         ("direccion")`; se **añaden** `cobraComision`, `numGuia`, `numRemision` y
@@ -182,7 +200,14 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
       _Hecho:_ verde **con contraprueba** (inyectar `estatusId` en el tipo debe ponerlo rojo;
       inyectar un `console.log(orden.direccion)` en el aviso, también). Y `pnpm exec vitest run
       orden-nota-frontera` verde **sin haber tocado esa guardia**.
-- [ ] **C4 [P] ⇐ C1** `tests/unit/services/corregir-ubicacion-importes.test.ts` — **el dinero, sin
+      > **MEDIA TAREA APLAZADA A E1, 2026-08-28.** El censo `MODULOS_DE_LA_FICHA` **NO** gana todavía
+      > `CorregirUbicacionAviso.tsx`: ese archivo **aún no existe** (lo crea E1) y añadirlo ahora
+      > pondría la guardia roja por su propio `existsSync`, que es como se acaba enseñando a ignorar
+      > una guardia. Queda una **nota a pie del censo, dentro del array**, diciendo exactamente qué
+      > entrada falta y por qué — para que el `frontend_dev` no pueda crear el componente sin verla.
+      > La otra mitad de C3 (el bloque del tipo, con sus siete prohibidos, y el nuevo caso que mide
+      > `zonaId` en el `.pick()`) **sí está hecha y matada con mutaciones**.
+- [x] **C4 [P] ⇐ C1** `tests/unit/services/corregir-ubicacion-importes.test.ts` — **el dinero, sin
       aserciones contra su propia fuente**: se siembra una tarifa concreta (valores literales) y se
       comprueba que el aviso devuelve los importes **calculados a mano** en el propio test, no
       `costosListadoOrden(...)` invocada otra vez. Incluye al menos: GAM vs. no GAM (la zona elige
@@ -194,13 +219,13 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
 
 ## Bloque D — Server Action
 
-- [ ] **D1 ⇐ A2, C1** `lib/actions/corregir-datos-cliente.ts`: la acción existente pasa los nueve
+- [x] **D1 ⇐ A2, C1** `lib/actions/corregir-datos-cliente.ts`: la acción existente pasa los nueve
       campos y `confirmaCambioDeUbicacion`; nace `obtenerUbicacionOrden` **en el mismo archivo**
       (para no crecer el censo de la guardia, `design.md` §9.3). El `buildService()` **pasa de
       verdad** el `TarifaVigenteRepository`, no solo lo importa.
       _Hecho:_ typecheck; y una prueba que construya el servicio por el composition root real y
       compruebe que la dependencia de tarifas **no llega `undefined`**.
-- [ ] **D2 ⇐ D1** Ampliar `tests/unit/actions/corregir-datos-cliente.action.test.ts`:
+- [x] **D2 ⇐ D1** Ampliar `tests/unit/actions/corregir-datos-cliente.action.test.ts`:
       - entrada con `zonaId` o con `estatusId` ⇒ `validation_error`, servicio no llamado. **(R2)**
       - entrada válida con los nueve ⇒ delega con el actor de la sesión. **(R28)**
       - sin sesión ⇒ `unauthenticated` **también** en `obtenerUbicacionOrden`, y el servicio no se
