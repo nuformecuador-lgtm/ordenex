@@ -237,21 +237,27 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
 
 ## Bloque E — Superficie `/ordenes` (frontend)
 
-- [ ] **E1 ⇐ D1** `app/(app)/ordenes/_components/CorregirUbicacionAviso.tsx`: la comparación
+- [x] **E1 ⇐ D1** `app/(app)/ordenes/_components/CorregirUbicacionAviso.tsx`: la comparación
       (zona actual vs. propuesta, flete + IVA y comisión + IVA de cada una con `money()`), el texto
       de «sin tarifa configurada» **en lugar de un importe**, la marca de `especial_sin_pacto`, el
       aviso de cierre y el botón de confirmar.
       _Hecho:_ compila; **ni un cálculo**: el componente solo pinta lo que le llega. Ni un `console`.
-- [ ] **E2 ⇐ E1** `CorregirDatosClienteModal`: carga de precarga al abrir, los tres selectores
+- [x] **E2 ⇐ E1** `CorregirDatosClienteModal`: carga de precarga al abrir, los tres selectores
       encadenados por `padreId`, el campo de dirección (sin `maxLength`) y el de peso, y la segunda
       fase que monta `CorregirUbicacionAviso` cuando el servidor responde `confirmacion_requerida`.
       El aviso de etiqueta (312/R27) pasa a nombrar la **dirección**.
       _Hecho:_ typecheck; si la precarga falla, el modal sigue permitiendo corregir los cuatro campos
       de la 312 y lo dice; ningún texto promete un registro de la corrección.
-- [ ] **E3 ⇐ E2** Cableado en `/ordenes`: la página ya carga `obtenerCatalogoFiltrosOrdenes`, así
-      que solo hay que pasar su geografía al modal por `OrdenesModule`/`OrdenesListado`.
-      _Hecho:_ typecheck; **el disparador y la prop de rol no se tocan** (R27).
-- [ ] **E4 ⇐ E3** Ampliar `tests/components/CorregirDatosCliente.ordenes.test.tsx`:
+- [x] **E3 ⇐ E2** ~~Cableado en `/ordenes`: pasar la geografía al modal por
+      `OrdenesModule`/`OrdenesListado`.~~ **SUSTITUIDO, Y POR UNA MEDICIÓN (2026-08-29).** La
+      ventana pide el catálogo ELLA MISMA, con SWR y una clave compartida
+      (`CLAVE_GEOGRAFIA_CORRECCION`). El motivo está en F1: el cableado por props es imposible en la
+      otra superficie sin poner roja una guardia, y dos caminos distintos para el mismo dato en una
+      ventana COMPARTIDA es justo lo que R32 pide que no pase. `/ordenes` no se toca: ni una línea
+      de `page.tsx`, `OrdenesListado` ni `OrdenesModule`.
+      _Hecho:_ typecheck 0; **el disparador y la prop de rol no se tocan** (R27) — literalmente, esos
+      tres archivos no aparecen en el diff.
+- [x] **E4 ⇐ E3** Ampliar `tests/components/CorregirDatosCliente.ordenes.test.tsx`:
       - el modal abre con los **nueve** valores actuales dentro, incluidos provincia, cantón y
         distrito seleccionados. **(R31)**
       - elegir provincia recorta los cantones, y elegir cantón recorta los distritos. **(R31)**
@@ -272,12 +278,28 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
 
 ## Bloque F — Superficie `/novedades` (frontend)
 
-- [ ] **F1 ⇐ E2** `app/(app)/novedades/page.tsx` pide `obtenerCatalogoFiltrosOrdenes` (ya autoriza a
-      `adminTienda`) y `NovedadesModule` pasa la geografía al modal. **`ACCIONES_POR_GRUPO` no se
-      toca.**
-      _Hecho:_ typecheck; `pnpm exec vitest run novedad-acciones` verde **sin haber editado ninguna
-      de las dos guardias** — eso es lo que confirma que no se abrió una acción nueva.
-- [ ] **F2 ⇐ F1** Ampliar `tests/components/CorregirDatosCliente.novedades.test.tsx`:
+- [x] **F1 ⇐ E2** ~~`app/(app)/novedades/page.tsx` pide `obtenerCatalogoFiltrosOrdenes` y
+      `NovedadesModule` pasa la geografía al modal.~~ **NO SE HACE ASÍ, Y ESTÁ MEDIDO
+      (2026-08-29).** Ese import es EXACTAMENTE lo que el propio criterio de «hecho» de esta tarea
+      prohíbe: con él, `novedad-acciones-sin-maqueta.guardia` se pone ROJA en su frente 4 (el censo
+      inverso, 240/R38), que exige que toda Server Action importada por un archivo de
+      `app/(app)/novedades/**` esté declarada como acción de fila o exceptuada a mano. Medido
+      añadiendo el import y corriendo la guardia:
+
+      ```
+      × 240/R38 — ninguna Server Action de fila se dispara sin estar declarada en la tabla
+        + [ "obtenerCatalogoFiltrosOrdenes (lo dispara app/(app)/novedades/page.tsx)" ]
+      ```
+
+      Las dos salidas eran editar la guardia (que esta tarea prohíbe) o no meter la acción en ese
+      árbol. Se elige la segunda: el catálogo lo pide la VENTANA, que vive en
+      `app/(app)/ordenes/_components/`, con SWR y clave compartida — el mismo patrón con el que
+      `FiltrosEntregas` (`/dashboard`) y la barra de analítica piden ESE MISMO catálogo desde el
+      cliente. **`/novedades` no se toca: ni `page.tsx`, ni `NovedadesTabs`, ni `NovedadesModule`, ni
+      `ACCIONES_POR_GRUPO`.**
+      _Hecho:_ typecheck 0; `pnpm exec vitest run novedad-acciones` **verde (43/43), sin haber
+      editado ninguna de las dos guardias y sin un solo archivo de `/novedades` en el diff**.
+- [x] **F2 ⇐ F1** Ampliar `tests/components/CorregirDatosCliente.novedades.test.tsx`:
       - el modal abierto desde una card de `devolucion` **y** desde una de `ayuda` ofrece los
         **nueve** campos, iguales en las dos. **(R32)**
       - el flujo de confirmación funciona igual que en `/ordenes` (una sola implementación). **(R32, R33)**
@@ -292,12 +314,21 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
       _Hecho:_ los **36** requisitos tienen archivo y nombre de test. Incluye una sección con **la
       enmienda declarada a 312/R5 y 312/R14** (`requirements.md` §D6), para que quien lea el informe
       no la lea como un incumplimiento.
-- [ ] **G2 ⇐ G1** **Gate COMPLETO** (`./init.sh`), no el rápido: esta ficha toca `lib/types/` y el
+- [x] **G2 ⇐ G1** **Gate COMPLETO** (`./init.sh`), no el rápido: esta ficha toca `lib/types/` y el
       rápido **se niega solo**. `INIT_EXIT` escrito **dentro** del log.
-      _Hecho:_ typecheck 0, lint 0, y verdes en particular: `cierre-detail-inmutable` (que es la
-      prueba de R17), `novedad-acciones-una-tabla`, `novedad-acciones-sin-maqueta`,
-      `orden-nota-frontera`, `superficie-de-uso`, `orden-geocode-enqueue`. El delta de rojos
-      respecto del baseline de la rama debe ser **cero**; los rojos heredados se nombran uno a uno.
+      _Hecho (tanda de FRONTEND, 2026-08-29):_ `INIT_EXIT=0`, escrito dentro del log —y hacía falta:
+      la primera corrida terminó con **exit code 0 en el proceso de fondo y `INIT_EXIT=1` dentro del
+      log** (typecheck rojo en un test). **21.695 pasados, 26 saltados, 1 rojo**, 1.554 archivos,
+      444,76 s. typecheck 0, lint 0 errores (126 avisos, todos heredados).
+      Verdes uno a uno: `cierre-detail-inmutable` (3, la prueba de R17), `novedad-acciones-una-tabla`
+      (8), `novedad-acciones-sin-maqueta` (19), `orden-nota-frontera` (10),
+      `orden-geocode-enqueue` (8), `corregir-datos-sin-rastro` (16, ya con el panel del aviso en su
+      censo), `corregir-ubicacion-importes` (9), `corregir-ubicacion-geocode` (11),
+      `CorregirDatosCliente.ordenes` (40) y `CorregirDatosCliente.novedades` (13).
+      **Delta de rojos = 0.** El único rojo es el heredado, nombrado: `superficie-de-uso.guardia`
+      → `lib/actions/tarifas.ts:67 obtenerTarifa` (ficha 275). ⚠️ Y esa lista es de UNA sola
+      entrada: `obtenerUbicacionOrden` **no aparece en ella**, que es la prueba positiva de que
+      borrar su `@sin-superficie` era lo correcto y de que la ventana la alcanza de verdad.
 - [ ] **G3 ⇐ G2** Repaso a mano en la app (la suite no encuentra lo que ver la app sí):
       - corregir la dirección de una orden como `maestro` desde `/ordenes` y comprobar que **no**
         pide confirmación;

@@ -65,17 +65,16 @@ const MODULOS_DE_LA_FICHA = [
   // Bloque F — la superficie de `/novedades` (`adminTienda`, en los DOS grupos).
   "app/(app)/novedades/_components/NovedadAcciones.tsx",
   "app/(app)/novedades/_components/NovedadesModule.tsx",
-  // ⚠️ FICHA 327 / C3 — FALTA UNA ENTRADA, Y ES DELIBERADO QUE ESTE ESCRITO AQUI.
+  // ⚠️ FICHA 327 / E1 — EL PANEL DEL AVISO DEL IMPORTE. La tanda de backend dejo aqui escrita la
+  // entrada que faltaba, DENTRO del array y no en una nota lejana, porque `existsSync` de abajo
+  // habria puesto la guardia roja por un archivo que aun no se habia escrito — y una guardia roja
+  // «por lo normal» es una guardia que se acaba ignorando. El archivo ya existe (2026-08-29) y la
+  // entrada entra donde tenia que entrar.
   //
-  // El bloque E de la 327 crea `app/(app)/ordenes/_components/CorregirUbicacionAviso.tsx`: el
-  // panel que pinta la comparacion de importes, es decir, el componente que recibe el
-  // `montoCobrar`, los fletes y la ubicacion de una orden. EN CUANTO EXISTA tiene que entrar en
-  // esta lista, con su reconocimiento por contenido en el bloque 1.
-  //
-  // No se añade ya porque `existsSync` de abajo pondria roja la guardia por un archivo que aun no
-  // se ha escrito — y una guardia roja «por lo normal» es una guardia que se acaba ignorando. La
-  // tanda de backend (bloques A-D) llega antes que la de pantalla; esta nota es lo que impide que
-  // el censo se quede vigilando codigo donde ya no esta el riesgo.
+  // Es el componente que recibe la UBICACION y los IMPORTES de una orden real, asi que es
+  // exactamente donde un `console.log(aviso)` puesto para depurar el panel volcaria la zona, el
+  // distrito y el flete al log del navegador sin romper nada.
+  "app/(app)/ordenes/_components/CorregirUbicacionAviso.tsx",
 ] as const;
 
 /** El repositorio NO entra entero (tiene medio centenar de escrituras legitimas): entra el CUERPO
@@ -234,6 +233,10 @@ describe("312 — anti-vacuidad del censo", () => {
     expect(
       porRuta.get("app/(app)/ordenes/_components/corregir-datos-cliente-error-messages.ts"),
     ).toContain("corregirDatosClienteErrorMessage");
+    // FICHA 327 — el panel del aviso, por su export y no por su nombre de archivo.
+    expect(porRuta.get("app/(app)/ordenes/_components/CorregirUbicacionAviso.tsx")).toContain(
+      "export function CorregirUbicacionAviso",
+    );
     // Los dos compartidos: se reconocen por la celda y la ventana que ESTA ficha les anadio.
     expect(porRuta.get("app/(app)/novedades/_components/NovedadAcciones.tsx")).toContain(
       "corregirDatos",

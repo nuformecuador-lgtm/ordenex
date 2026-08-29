@@ -154,13 +154,15 @@ export async function corregirDatosCliente(
  * ventana (R18/R28). A quien no cruza esa puerta se le devuelve el MISMO `forbidden` opaco que por
  * cualquier otro motivo (R30): ni un dato de la orden.
  *
- * @sin-superficie TRANSITORIA: la 327 entra en dos tandas y esta es la de backend. Su pantalla es
- * el bloque E de la misma ficha (`CorregirDatosClienteModal` la llama al abrirse, para precargar
- * los nueve campos, `tasks.md` E2). **LA ANOTACION CADUCA EN CUANTO EL MODAL LA IMPORTE**, y la
- * propia guardia lo exige: su caso «ninguna anotacion sobrevive a su motivo» se pone ROJA el dia
- * que esta accion sea alcanzable y la excusa siga aqui. Es exactamente lo que le paso a
- * `listarAyudaTiendaCompletoAction` (novedades) y a la hermana `corregirDatosCliente` de este mismo
- * archivo. **Si el bloque E se cancelara, lo que sobra es la accion, no la anotacion.**
+ * ⏳ AQUI VIVIA LA ANOTACION DE «SIN SUPERFICIE», y se BORRO el 2026-08-29 al llegar la tanda de
+ * frontend de esta misma ficha. Decia que la 327 entraba en dos tandas, que esta era la de backend
+ * y que su pantalla —el bloque E— llegaba despues, y terminaba: «LA ANOTACION CADUCA EN CUANTO EL
+ * MODAL LA IMPORTE». Eso es lo que paso: hoy la importa y la llama `CorregirDatosClienteModal` al
+ * abrirse, para precargar los nueve campos, y ese modal lo montan las DOS superficies
+ * (`CorregirDatosClienteAccion` en el modulo de ordenes y `NovedadesModule` en las cards de
+ * `/novedades`). Con la excusa puesta, el caso «ninguna anotacion sobrevive a su motivo» de
+ * `superficie-de-uso.guardia.test.ts` se pondria ROJO solo. No se repone: si algun dia esas
+ * pantallas desaparecieran, lo que sobra es la accion, no la excusa.
  */
 export async function obtenerUbicacionOrden(
   input: unknown,
