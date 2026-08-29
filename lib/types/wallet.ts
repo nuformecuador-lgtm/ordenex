@@ -6,6 +6,12 @@ import type {
   WalletOrigenTipo as PrismaWalletOrigenTipo,
 } from "@prisma/client";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import { walletMovimientoConfig } from "@/lib/config/wallet-movimiento";
+import {
+  esFechaCalendarioValida,
+  fechaCalendarioCR,
+  ultimosNDiasCalendarioCR,
+} from "@/lib/utils/fecha-cr";
 
 // Feature 42 (design §1.1/§3) — fuente unica de verdad de tipos/categorias/origenes de
 // la wallet, respaldada por los enums Postgres nativos (patron METODO_PAGO_SEED). El
@@ -298,14 +304,69 @@ export const montoPositivoSchema = z
     }
   }, "El monto debe ser mayor que 0.");
 
+// ── Ficha 334 — la FECHA del movimiento manual (R19/R20/R21) ──
+
+/** La forma `YYYY-MM-DD`. Se declara una vez: la usan el regex del schema y su superRefine. */
+const FORMATO_FECHA_CALENDARIO = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Ficha 334 — el dia calendario de Costa Rica MAS ANTIGUO que admite un movimiento manual.
+ *
+ * `ultimosNDiasCalendarioCR` cuenta N dias calendario INCLUIDO hoy, asi que la ventana de
+ * `DIAS_HACIA_ATRAS` dias hacia atras son esos dias MAS el de hoy: de ahi el `+ 1`. Se deriva
+ * de la config (`lib/config/wallet-movimiento.ts`) y no de un literal, porque es una cota de
+ * negocio (docs/architecture.md).
+ */
+export function primerDiaMovimientoAdmisible(now: Date = new Date()): string {
+  return ultimosNDiasCalendarioCR(walletMovimientoConfig.DIAS_HACIA_ATRAS + 1, now).desde;
+}
+
+/**
+ * Que le pasa a `value` como fecha de un movimiento manual, o `null` si no le pasa nada.
+ *
+ * Devuelve el MOTIVO y no un booleano porque los tres rechazos son distintos y el dialogo los
+ * pinta bajo el mismo campo: «no existe», «es del futuro» y «se sale de la ventana» no se
+ * arreglan igual. Las dos piezas comunes salen de `lib/utils/fecha-cr.ts` — el ROUND-TRIP, que
+ * es lo unico que caza `2026-02-31` (un dia desbordado RUEDA al mes siguiente en vez de dar
+ * `Invalid Date`), y el dia calendario CR sin off-by-one, que es lo unico que impide que a las
+ * 20:00 de Costa Rica «hoy» sea ya el dia siguiente.
+ */
+export function problemaDeFechaMovimiento(value: string, now: Date = new Date()): string | null {
+  if (!esFechaCalendarioValida(value)) return "Esa fecha no existe en el calendario.";
+  if (value > fechaCalendarioCR(now)) return "La fecha no puede ser posterior a hoy."; // R20
+  const primerDia = primerDiaMovimientoAdmisible(now);
+  if (value < primerDia) return `No se admiten movimientos anteriores al ${primerDia}.`;
+  return null;
+}
+
+/** Dia calendario `YYYY-MM-DD` existente y dentro de la ventana admisible (R19/R20/R21). */
+export function esFechaMovimientoValida(value: string, now: Date = new Date()): boolean {
+  return problemaDeFechaMovimiento(value, now) === null;
+}
+
+export const fechaMovimientoSchema = z
+  .string()
+  .regex(FORMATO_FECHA_CALENDARIO, "La fecha debe tener el formato YYYY-MM-DD.")
+  .superRefine((v, ctx) => {
+    // Zod v4 corre los refines AUNQUE el regex ya haya fallado (lo mismo que documenta
+    // `montoPositivoSchema` aqui arriba). Sin esta salida temprana, `29-08-2026` emitiria DOS
+    // mensajes bajo el mismo campo diciendo la misma cosa.
+    if (!FORMATO_FECHA_CALENDARIO.test(v)) return;
+    const problema = problemaDeFechaMovimiento(v);
+    if (problema !== null) ctx.addIssue({ code: "custom", message: problema });
+  });
+
 // Manual (R15/F1.4-Q6): ingreso/egreso de AJUSTE, descripcion obligatoria, monto > 0.
 // Solo las categorias de ajuste; el tipo debe casar con la categoria (ingreso<->ingreso_ajuste).
+// Ficha 334 (R19/R22/R23): + `fecha` OPCIONAL. Ausente ⇒ el movimiento se fecha con el instante
+// del registro, byte a byte como hasta hoy; ese es todo el coste de la ampliacion.
 export const registrarMovimientoManualSchema = z
   .object({
     tipo: z.enum(WALLET_MOVIMIENTO_TIPO_SEED),
     categoria: z.enum(["ingreso_ajuste", "egreso_ajuste"] as const),
     monto: montoPositivoSchema,
     descripcion: z.string().trim().min(1, "La descripcion es obligatoria."),
+    fecha: fechaMovimientoSchema.optional(),
   })
   .refine(
     (v) =>
@@ -362,10 +423,14 @@ export const TIPO_EGRESO_MANUAL_A_CATEGORIA = {
 // R2/R4/R5/R19 (borde): egreso manual = tipo del conjunto {gasto_variable, sueldo}, monto
 // STRING > 0 con hasta 2 decimales, descripcion no vacia. `gasto_fijo` u otro valor cae
 // fuera del enum -> ZodError -> validation_error (R19).
+// Ficha 334 (R19/R22/R23): + `fecha` OPCIONAL, la MISMA pieza que el ajuste manual. El
+// `z.enum(TIPO_EGRESO_MANUAL_SEED)` NO se toca: es el tercero de los cuatro sitios donde vive
+// la regla «el gasto FIJO no se registra a mano» (R11, heredada del R19 de la ficha 45).
 export const registrarEgresoAdministrativoSchema = z.object({
   tipoEgreso: z.enum(TIPO_EGRESO_MANUAL_SEED),
   monto: montoPositivoSchema,
   descripcion: z.string().trim().min(1, "La descripcion es obligatoria."),
+  fecha: fechaMovimientoSchema.optional(),
 });
 
 export type RegistrarEgresoAdministrativoInput = z.infer<

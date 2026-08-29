@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -16,6 +17,7 @@ import {
   type RegistrarEgresoAdministrativoInput,
   type ReversarEgresoInput,
 } from "@/lib/types/wallet";
+import { instanteDelMovimientoManual } from "@/lib/utils/fecha-movimiento-manual";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 // Roles autorizados (R17): acceso total (maestro/admin, dueños de la caja central), espejo de
@@ -48,8 +50,14 @@ export class WalletEgresoService implements IWalletEgresoService {
     // (fuera del indice unico parcial: cada egreso manual es una fila propia),
     // registrado_por=<maestro>. Un unico INSERT atomico via crearMovimientos.
     const categoria = TIPO_EGRESO_MANUAL_A_CATEGORIA[input.tipoEgreso];
+    // Ficha 334 (R28, design §5): el `id` lo genera EL SERVICIO y viaja en la insercion, para
+    // poder releer despues EXACTAMENTE esta fila. Sigue siendo UN SOLO INSERT.
+    const id = randomUUID();
+    // Ficha 334 (R22/R23): con «hoy» la clave NO viaja y manda el DEFAULT de la columna.
+    const fechaMovimiento = instanteDelMovimientoManual(input.fecha);
     await this.repo.crearMovimientos(this.writeClient, [
       {
+        id,
         tipo: "egreso",
         categoria,
         monto: input.monto,
@@ -57,19 +65,21 @@ export class WalletEgresoService implements IWalletEgresoService {
         origenId: null,
         descripcion: input.descripcion,
         registradoPor: actor.usuarioId,
+        ...(fechaMovimiento !== undefined ? { fechaMovimiento } : {}),
       },
     ]);
 
-    // Relee el egreso recien creado (el manual no se deduplica, siempre se inserta). Se
-    // relee el mas reciente de esa categoria para exponer id/fecha reales (patron
-    // WalletService.registrarMovimientoManual).
-    const { movimientos } = await this.repo.listar({
-      page: 1,
-      pageSize: 1,
-      tipo: "egreso",
-      categoria,
-    });
-    return { status: "ok", movimiento: movimientos[0] };
+    // Ficha 334 (R28): se relee POR ID, no «el mas reciente de esta categoria». Aquella
+    // relectura funcionaba por ACCIDENTE (todo se fechaba con `now()`); registrado un gasto
+    // variable con fecha de la semana pasada devolveria OTRO gasto variable.
+    const movimiento = await this.repo.obtenerPorId(id);
+    if (movimiento === null) {
+      // Imposible por construccion: el egreso manual lleva `origen_id NULL`, queda fuera del
+      // indice unico parcial y nunca se deduplica. Se propaga con contexto antes que devolver
+      // una fila ajena.
+      throw new Error(`wallet: el egreso manual ${id} no se pudo releer tras insertarlo`);
+    }
+    return { status: "ok", movimiento };
   }
 
   async reversarEgreso(

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   BalanceFiltros,
@@ -20,6 +21,7 @@ import type {
 } from "@/lib/types/wallet";
 import { descargaConfig } from "@/lib/config/descarga";
 import { derivarCaja, derivarComposicionGanancia } from "@/lib/utils/caja-tesoreria";
+import { instanteDelMovimientoManual } from "@/lib/utils/fecha-movimiento-manual";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 // Roles autorizados (R19/R65): acceso total (maestro/admin, dueños de la caja central).
@@ -181,8 +183,16 @@ export class WalletService implements IWalletService {
     // R15/Q6: manual = origen_tipo manual, origen_id NULL, registrado_por = actor, monto
     // > 0, descripcion obligatoria (ya validado por zod en el borde; se persiste como
     // fila INMUTABLE, R3). El repo NO expone update/delete: la correccion es otro ajuste.
+    //
+    // Ficha 334 (R28, design §5): el `id` lo genera EL SERVICIO y viaja en la insercion, para
+    // poder releer despues EXACTAMENTE esta fila. `createMany` sobre Postgres no devuelve los
+    // ids generados y sigue habiendo UN SOLO INSERT (precedente: registrar-cambio-dia-reparto).
+    const id = randomUUID();
+    // Ficha 334 (R22/R23): con «hoy» la clave NO viaja y manda el DEFAULT de la columna.
+    const fechaMovimiento = instanteDelMovimientoManual(input.fecha);
     await this.repo.crearMovimientos(this.writeClient, [
       {
+        id,
         tipo: input.tipo,
         categoria: input.categoria,
         monto: input.monto,
@@ -190,18 +200,23 @@ export class WalletService implements IWalletService {
         origenId: null, // fuera del indice unico parcial: los manuales no se deduplican
         descripcion: input.descripcion,
         registradoPor: actor.usuarioId,
+        ...(fechaMovimiento !== undefined ? { fechaMovimiento } : {}),
       },
     ]);
 
-    // Devuelve el movimiento recien creado (el manual no se deduplica, siempre se inserta).
-    // Se relee el mas reciente del actor para exponer id/fecha reales.
-    const { movimientos } = await this.repo.listar({
-      page: 1,
-      pageSize: 1,
-      tipo: input.tipo,
-      categoria: input.categoria,
-    });
-    const movimiento = movimientos[0];
+    // Ficha 334 (R28): se relee POR ID, no «el mas reciente de esta categoria».
+    //
+    // La relectura vieja (`listar({ page: 1, pageSize: 1, tipo, categoria })`) funcionaba por
+    // ACCIDENTE —todo se fechaba con `now()`, asi que el mas reciente era siempre el recien
+    // creado—. Con una fecha del pasado devolveria OTRO ajuste de la misma categoria: el
+    // servicio afirmaria «este es el movimiento que registraste» sobre una fila ajena.
+    const movimiento = await this.repo.obtenerPorId(id);
+    if (movimiento === null) {
+      // Imposible por construccion (el manual lleva `origen_id NULL`, queda fuera del indice
+      // unico parcial y por tanto NUNCA se deduplica). Se propaga con contexto en vez de
+      // devolver una fila inventada: en el libro de la caja, mentir es peor que fallar.
+      throw new Error(`wallet: el movimiento manual ${id} no se pudo releer tras insertarlo`);
+    }
     return { status: "ok", movimiento };
   }
 }
