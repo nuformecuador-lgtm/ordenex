@@ -3,6 +3,7 @@ import type { IGastoFijoPlantillaRepository } from "@/lib/interfaces/repositorie
 import type {
   ActualizarPlantillaServiceResult,
   CrearPlantillaServiceResult,
+  EliminarPlantillaServiceResult,
   IGastoFijoPlantillaService,
   ListarPlantillasCompletoServiceResult,
   ListarPlantillasPaginadoServiceResult,
@@ -12,6 +13,7 @@ import type {
 import type {
   ActualizarGastoFijoPlantillaInput,
   CrearGastoFijoPlantillaInput,
+  EliminarPlantillaInput,
   SetActivaPlantillaInput,
 } from "@/lib/types/gasto-fijo-plantilla";
 import { descargaConfig } from "@/lib/config/descarga";
@@ -23,9 +25,14 @@ import { rangoDePagina } from "@/lib/utils/rango-pagina";
 
 /**
  * Feature 45 — logica de negocio de las PLANTILLAS de gasto fijo (CRUD del maestro). No conoce
- * HTTP ni Prisma directamente: recibe el repo por inyeccion. Guardia de rol maestro (R17) en
- * TODOS los metodos. Sin borrado (R25): la desactivacion (setActivaPlantilla) detiene la
- * generacion del cron preservando el historial. Money-safe: DTOs con montos STRING.
+ * HTTP ni Prisma directamente: recibe el repo por inyeccion. Guardia de acceso total (R17) en
+ * TODOS los metodos, `eliminarPlantilla` incluido. Money-safe: DTOs con montos STRING.
+ *
+ * El CRUD tiene BORRADO desde la ficha 332, que **revoca** el «sin borrado» de `45/R25` con
+ * decision humana del 2026-08-29: la tabla acumula ruido y el historico del libro no depende de
+ * la plantilla (no hay FK; la descripcion del movimiento ya lleva concepto y periodo). Puntero:
+ * `specs/332-eliminar-plantilla-gasto-fijo`. `setActivaPlantilla` NO se va con ella (R11): pausar
+ * y eliminar son dos intenciones distintas.
  */
 export class GastoFijoPlantillaService implements IGastoFijoPlantillaService {
   constructor(private readonly repo: IGastoFijoPlantillaRepository) {}
@@ -71,8 +78,36 @@ export class GastoFijoPlantillaService implements IGastoFijoPlantillaService {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R17
     const existente = await this.repo.obtenerPorId(input.id);
     if (existente === null) return { status: "not_found" };
-    const plantilla = await this.repo.setActiva(input.id, input.activa); // R25 (sin borrado)
+    const plantilla = await this.repo.setActiva(input.id, input.activa); // R25 (pausa reversible)
     return { status: "ok", plantilla };
+  }
+
+  /**
+   * Ficha 332 (R1/R2/R3/R4/R7) — elimina la plantilla. El contrato completo —incluido el traspaso
+   * a la ficha 333 (R25)— esta en `IGastoFijoPlantillaService.eliminarPlantilla`.
+   *
+   * SIN `obtenerPorId` previo, y es deliberado: `actualizarPlantilla` y `setActivaPlantilla` leen
+   * antes porque tienen que devolver el DTO resultante; aqui no hay DTO que devolver. Un `SELECT`
+   * previo solo añadiria una consulta y una ventana TOCTOU —entre el `SELECT` y el `DELETE` otra
+   * pestaña puede borrar la fila— para terminar diciendo lo mismo. El `count` del `deleteMany` ES
+   * la respuesta, y es atomico.
+   *
+   * ⚠️ RIESGO R-1 (design §7 de la 332) — BORRAR Y RECREAR PUEDE COBRAR DOS VECES EL MISMO
+   * PERIODO. La idempotencia del cron es `origen_id = '<plantillaId>:<periodo>'` bajo el indice
+   * unico parcial `(origen_tipo, origen_id, categoria)`. Eliminar tira el id: una plantilla nueva
+   * con el mismo concepto trae otro uuid -> otra clave -> el cron puede emitir un segundo egreso
+   * de un mes ya cobrado, y el indice no lo impide porque las claves son distintas. No lo
+   * introduce esta ficha (hoy se consigue igual creando una segunda plantilla con el mismo
+   * concepto) y la mitigacion es de diseño: la confirmacion empuja a DESACTIVAR cuando la
+   * intencion es pausar (R16), porque desactivar conserva el id y con el la clave.
+   */
+  async eliminarPlantilla(
+    input: EliminarPlantillaInput,
+    actor: Actor,
+  ): Promise<EliminarPlantillaServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R4: ANTES del repositorio
+    const borrada = await this.repo.eliminar(input.id); // R2/R3: por clave primaria y nada mas
+    return borrada ? { status: "ok" } : { status: "not_found" }; // R7: sin lanzar
   }
 
   async listarPlantillas(actor: Actor): Promise<ListarPlantillasServiceResult> {
@@ -105,7 +140,7 @@ export class GastoFijoPlantillaService implements IGastoFijoPlantillaService {
    * entero antes de que el tope lo mire: de R29 —feature `done`, requisito vivo— se cumple el
    * transporte y no la materializacion, igual que en los otros diez. La diferencia es QUE
    * conjunto es: las plantillas de gasto fijo son una tabla de CONFIGURACION que un humano da de
-   * alta a mano y que no se borra (R25), asi que su tamaño lo marca el catalogo de gastos de la
+   * alta y de baja a mano (ficha 332), asi que su tamaño lo marca el catalogo de gastos de la
    * operacion —decenas— y no el paso de los dias. Llegar al tope aqui significaria que alguien la
    * esta usando como bitacora, y el problema seria ese.
    *

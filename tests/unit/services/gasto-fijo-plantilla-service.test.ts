@@ -7,9 +7,13 @@ import type {
 } from "@/lib/interfaces/repositories/IGastoFijoPlantillaRepository";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 
-// Feature 45 (R17/R24/R25/R26) — tests unit del GastoFijoPlantillaService. Guardia de rol
-// maestro en TODOS los metodos; crear/editar/activar/desactivar/listar; not_found cuando el id
-// no existe; SIN metodo de borrado (R25 — la desactivacion es el mecanismo). Montos STRING.
+// Feature 45 (R17/R24/R25/R26) — tests unit del GastoFijoPlantillaService. Guardia de acceso
+// total en TODOS los metodos; crear/editar/activar/desactivar/listar; not_found cuando el id no
+// existe. Montos STRING.
+//
+// Ficha 332 (2026-08-29): el servicio TAMBIEN elimina. Esa ficha revoca el «sin borrado» de
+// `45/R25` con OK humano; ver `specs/332-eliminar-plantilla-gasto-fijo` y el describe del final,
+// que hasta esa fecha afirmaba lo contrario y ahora esta invertido (no borrado: invertido).
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 const ADMIN: Actor = { usuarioId: "u-admin", rol: "admin" }; // feature 94: paridad con maestro
@@ -48,6 +52,8 @@ function buildRepo(overrides: Partial<IGastoFijoPlantillaRepository> = {}): IGas
     // Feature 170 (T I.1): el listado paginado vive en su propia suite (*-paginado).
     listarPaginado: vi.fn().mockResolvedValue({ items: [plantilla()], total: 1 }),
     obtenerPorId: vi.fn().mockResolvedValue(plantilla()),
+    // Ficha 332: el borrado. `true` = borro una fila; los casos de `not_found` lo sobreescriben.
+    eliminar: vi.fn().mockResolvedValue(true),
     ...overrides,
   };
 }
@@ -188,16 +194,75 @@ describe("GastoFijoPlantillaService.listarPlantillas (R17/R26)", () => {
   });
 });
 
-describe("GastoFijoPlantillaService — sin borrado (R25)", () => {
-  it("R25: el service NO expone metodo de borrado", () => {
+describe("GastoFijoPlantillaService.eliminarPlantilla (ficha 332, R2/R4/R7)", () => {
+  it("R4: rol sin acceso total -> forbidden, sin llamar a repo.eliminar", async () => {
     const repo = buildRepo();
     const svc = new GastoFijoPlantillaService(repo);
-    expect((svc as unknown as Record<string, unknown>).borrar).toBeUndefined();
-    expect((svc as unknown as Record<string, unknown>).eliminar).toBeUndefined();
-    expect((svc as unknown as Record<string, unknown>).delete).toBeUndefined();
-    // R25: el repo tampoco expone delete de plantillas.
-    expect((repo as unknown as Record<string, unknown>).borrar).toBeUndefined();
-    expect((repo as unknown as Record<string, unknown>).delete).toBeUndefined();
+    const r = await svc.eliminarPlantilla({ id: "p-1" }, OTRO);
+    expect(r).toEqual({ status: "forbidden" });
+    expect(repo.eliminar).not.toHaveBeenCalled(); // el guard va ANTES del repositorio
+  });
+
+  it("R2: maestro -> ok, y llama a eliminar con EL id pedido", async () => {
+    const repo = buildRepo();
+    const svc = new GastoFijoPlantillaService(repo);
+    const r = await svc.eliminarPlantilla({ id: "p-1" }, MAESTRO);
+    expect(r).toEqual({ status: "ok" }); // sin payload: no hay fila que devolver
+    expect(repo.eliminar).toHaveBeenCalledTimes(1);
+    expect(repo.eliminar).toHaveBeenCalledWith("p-1");
+  });
+
+  it("feature 94: admin -> elimina (paridad con maestro; borrar usa el MISMO guard que editar)", async () => {
+    const repo = buildRepo();
+    const svc = new GastoFijoPlantillaService(repo);
+    const r = await svc.eliminarPlantilla({ id: "p-1" }, ADMIN);
+    expect(r).toEqual({ status: "ok" });
+    expect(repo.eliminar).toHaveBeenCalledWith("p-1");
+  });
+
+  it("R7: la fila ya no existia (eliminar -> false) -> not_found, sin lanzar", async () => {
+    const repo = buildRepo({ eliminar: vi.fn().mockResolvedValue(false) });
+    const svc = new GastoFijoPlantillaService(repo);
+    await expect(svc.eliminarPlantilla({ id: "no-existe" }, MAESTRO)).resolves.toEqual({
+      status: "not_found",
+    });
+  });
+
+  it("no lee antes de borrar: el `count` del deleteMany ES la respuesta (sin TOCTOU)", async () => {
+    // Un `obtenerPorId` previo solo añadiria una consulta y una ventana entre el SELECT y el
+    // DELETE. Este caso lo fija: si alguien lo reintroduce, aqui se ve.
+    const repo = buildRepo();
+    const svc = new GastoFijoPlantillaService(repo);
+    await svc.eliminarPlantilla({ id: "p-1" }, MAESTRO);
+    expect(repo.obtenerPorId).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ⚠️ DADO VUELTA por la ficha 332 (2026-08-29). Hasta esa fecha este bloque se llamaba
+ * «GastoFijoPlantillaService — sin borrado (R25)» y afirmaba EXACTAMENTE lo contrario: que ni el
+ * servicio ni el repositorio exponian `borrar`/`eliminar`/`delete`. Era el testigo de `45/R25`
+ * («el sistema NO DEBE borrar plantillas»).
+ *
+ * La ficha 332 revoca `45/R25` con OK humano de esa fecha —la tabla acumula ruido y el historico
+ * del libro no depende de la plantilla— y por eso el bloque NO se borra: se INVIERTE. Es la
+ * convencion de este repo (`decision5-revertida`, `d5-revertida`, `reversion-r49`): la decision
+ * vieja no se borra, se da vuelta, para que quien lea dentro de seis meses vea que hubo una
+ * decision anterior y quien la cambio. Puntero: `specs/332-eliminar-plantilla-gasto-fijo`.
+ */
+describe("GastoFijoPlantillaService — borrado habilitado: la ficha 332 revoca 45/R25", () => {
+  it("R1/R2: el service SI expone eliminarPlantilla, y el repositorio SI expone eliminar", () => {
+    const repo = buildRepo();
+    const svc = new GastoFijoPlantillaService(repo);
+    expect(typeof (svc as unknown as Record<string, unknown>).eliminarPlantilla).toBe("function");
+    expect(typeof (repo as unknown as Record<string, unknown>).eliminar).toBe("function");
+  });
+
+  it("R11: y desactivar NO se fue con la revocacion — pausar sigue siendo su propia intencion", () => {
+    const repo = buildRepo();
+    const svc = new GastoFijoPlantillaService(repo);
+    expect(typeof (svc as unknown as Record<string, unknown>).setActivaPlantilla).toBe("function");
+    expect(typeof (repo as unknown as Record<string, unknown>).setActiva).toBe("function");
   });
 });
 

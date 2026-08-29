@@ -1812,8 +1812,14 @@ enum PeriodicidadUnidad {
 
 // Feature 45 (design §1.2): plantilla recurrente de GASTO FIJO. CONFIGURACION mutable (NO es
 // el libro wallet_movimiento, que es inmutable): SI lleva updatedAt y se edita/activa/
-// desactiva. NO se borra (R25): la desactivacion (activa=false) detiene la generacion futura
-// y preserva el rastro de que genero cada egreso. El cron DIARIO
+// desactiva. Y SI SE ELIMINA desde la ficha 332, que REVOCA el «NO se borra (R25)» de la
+// feature 45 con decision humana del 2026-08-29 — motivo: la tabla acumula ruido y el
+// historico NO depende de la plantilla (no hay FK a wallet_movimiento, la referencia es
+// derivada y la descripcion del egreso ya lleva concepto y periodo, asi que la fila del libro
+// se explica sola). Puntero: specs/332-eliminar-plantilla-gasto-fijo. Desactivar
+// (activa=false) NO desaparece: es la PAUSA reversible —detiene la generacion futura,
+// conserva la fila y con ella el id, o sea la clave de idempotencia—. La ficha 332 cambia
+// SOLO este comentario: el modelo es identico y no lleva migracion. El cron DIARIO
 // (`/api/cron/generar-gastos-fijos`, `0 6 * * *`) lee las ACTIVAS, filtra las que aplican HOY
 // segun su periodicidad (`lib/utils/periodicidad.ts`) y emite un egreso `egreso_gasto_fijo` en
 // la caja principal por cada una. RLS habilitada sin policies (solo service role, patron

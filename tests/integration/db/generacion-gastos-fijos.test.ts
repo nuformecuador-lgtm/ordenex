@@ -88,6 +88,8 @@ function fakePlantillaRepo(activas: GastoFijoPlantillaDTO[]): IGastoFijoPlantill
     // Feature 170 (T I.1): listado paginado; el cron no lo usa.
     listarPaginado: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     obtenerPorId: vi.fn(),
+    // Ficha 332: el borrado entra en el contrato del repositorio; el cron NO lo usa (ni debe).
+    eliminar: vi.fn(),
   };
 }
 
@@ -148,6 +150,44 @@ describe("cron gastos fijos — idempotencia por periodo (R28/R31)", () => {
     expect(store.rows).toHaveLength(2);
     const claves = store.rows.map((r) => r.origenId).sort();
     expect(claves).toEqual(["p-alquiler:2026-07", "p-alquiler:2026-08"]);
+  });
+
+  /**
+   * Ficha 332 (R10) — LA CLAVE DE IDEMPOTENCIA DERIVA DEL ID, NO DEL CONCEPTO.
+   *
+   * Es el testigo del riesgo R-1 de `specs/332-eliminar-plantilla-gasto-fijo/design.md §7`: desde
+   * que las plantillas se pueden BORRAR, «borrar Alquiler y volver a crear Alquiler» produce una
+   * plantilla con OTRO uuid, o sea otra clave, y el indice unico parcial NO impide que el cron
+   * emita un segundo egreso de un periodo ya cobrado. Aqui se fija el hecho —dos plantillas con
+   * el MISMO concepto y el mismo periodo generan DOS filas con claves distintas— para que quien
+   * cambie la derivacion de `origen_id` tenga que hacerlo a proposito.
+   *
+   * No lo introduce la ficha 332: hoy se consigue igual creando una segunda plantilla con el
+   * mismo concepto, sin borrar nada. La mitigacion es de diseño (la confirmacion empuja a
+   * DESACTIVAR, que conserva el id), no un `if` en el cron.
+   */
+  it("R10: dos plantillas con el MISMO concepto producen origen_id DISTINTOS (borrar y recrear no reusa la clave)", async () => {
+    const store = makeWalletStore();
+    const { svc } = serviceFor(store, [
+      plantilla({ id: "p-vieja", concepto: "Alquiler" }),
+      // La «recreada»: mismo concepto, mismo monto, mismo ciclo. Lo unico distinto es el uuid,
+      // que es exactamente lo que pasa al borrar y volver a dar de alta el gasto.
+      plantilla({ id: "p-recreada", concepto: "Alquiler" }),
+    ]);
+
+    const r = await svc.ejecutarGeneracion(JULIO);
+
+    // Dos egresos del MISMO periodo y el MISMO concepto: el indice unico no los junta, porque la
+    // clave lleva el id de la plantilla y no su concepto.
+    expect(r.egresosGenerados).toBe(2);
+    expect(store.rows.map((f) => f.origenId).sort()).toEqual([
+      "p-recreada:2026-07",
+      "p-vieja:2026-07",
+    ]);
+
+    // Y las descripciones son identicas: por el TEXTO no hay forma de distinguirlas. La clave es
+    // el id, y borrarlo lo tira.
+    expect(new Set(store.rows.map((f) => f.descripcion))).toEqual(new Set(["Alquiler — 2026-07"]));
   });
 
   it("un egreso del cron NO colisiona con su reversa (ingreso_ajuste, otra categoria)", async () => {

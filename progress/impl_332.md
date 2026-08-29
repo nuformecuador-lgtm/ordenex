@@ -1,0 +1,383 @@
+# Ficha 332 — Eliminar plantillas de gasto fijo · bitácora del BACKEND (T0–T13)
+
+> Agente: `backend_dev`. Alcance: **T0 a T13** de `specs/332-eliminar-plantilla-gasto-fijo/tasks.md`.
+> **T14–T18 (frontend + apéndice en `specs/45`), T19 (guardia), T20–T22 (gate, cierre y repaso a
+> mano) NO son de esta bitácora** y quedan abiertas. Fecha: 2026-08-29.
+> Rama: `feature/332-eliminar-plantilla-gasto-fijo` (ya existía, nacida de `origin/dev` `48d40398`).
+
+---
+
+## 0. Lo que se decidió antes de escribir una línea
+
+- **Quién puede borrar: `esAccesoTotal` (maestro + admin)**, igual que crear, editar y activar.
+  Es la pregunta abierta 2 de `requirements.md`, resuelta por el leader: la decisión humana de
+  «sólo maestro» era para APROBAR COBROS (ficha 333). Este CRUD no gana una asimetría que nadie
+  pidió. Hay un caso explícito que lo fija (`admin -> ok`, paridad de la feature 94).
+- **La ficha 85 ya está mergeada** en esta rama: las columnas de periodicidad/próximo cobro y el
+  schema de ACTUALIZAR sin defaults son el estado correcto y no se tocaron. El conflicto que
+  advertía `tasks.md` (riesgo R-2) **ya no existe**.
+- **`db/migrations/**` NO se tocó** (R24). Ver §5.
+
+---
+
+## 1. Tarea por tarea
+
+### T0 — Lectura del terreno y línea base
+La rama ya existía, así que **la parte de `git` de T0 se saltó a propósito** (instrucción del
+leader). Lo demás sí: se leyeron enteros `GastoFijoPlantillaService.ts`,
+`GastoFijoPlantillaRepository.ts`, las dos interfaces, `lib/actions/gasto-fijo-plantilla.ts`,
+`lib/types/gasto-fijo-plantilla.ts` y el panel, más `docs/architecture.md` y `docs/conventions.md`.
+
+**Línea base, ANTES de tocar nada:**
+
+```
+> ordenex@0.1.0 typecheck R:\job\singularis\projects\ordenex
+> tsc --noEmit
+
+TYPECHECK_EXIT=0
+```
+
+`git status` limpio. La base venía verde: cualquier rojo posterior es mío.
+
+### T1 — `eliminar` en el contrato del repositorio · R2/R22
+`lib/interfaces/repositories/IGastoFijoPlantillaRepository.ts`:
+- La cabecera («NO expone `delete` (R25)») se sustituyó por **la nota larga de la revocación**, que
+  es donde vive completa: palabra **revoca**, fecha **2026-08-29**, **motivo** (la tabla acumula
+  ruido; el histórico no depende de la plantilla: sin FK, referencia derivada, la descripción del
+  movimiento ya lleva concepto y periodo) y **puntero** `specs/332-eliminar-plantilla-gasto-fijo`.
+  Conserva verbatim, entre comillas, lo que la cabecera decía hasta esa fecha.
+- Se añadió `eliminar(id: string): Promise<boolean>` con su docstring (por qué `deleteMany` y no
+  `delete`; R3 y R8).
+- Se reescribió la nota de `setActiva` («sin borrado») explicando que pausar y eliminar son dos
+  intenciones distintas y que las dos existen (R11).
+
+**Señal esperada, obtenida:** el typecheck marcó el repositorio concreto como incompleto
+(`TS2420: Property 'eliminar' is missing in type 'GastoFijoPlantillaRepository'`), más los cuatro
+dobles literales de la interfaz. Ese rojo ES la prueba de que el contrato cambió.
+
+### T2 — Implementación en el repositorio · R2/R3/R8
+`lib/repositories/GastoFijoPlantillaRepository.ts`:
+
+```
+const res = await this.prisma.gastoFijoPlantilla.deleteMany({ where: { id } });
+return res.count > 0;
+```
+
+- `PlantillaPrismaClient = Pick<PrismaClient, "gastoFijoPlantilla">` **NO se ensanchó**: es lo que
+  hace estructuralmente imposible tocar el libro (R8).
+- Notas de la clase y de `setActiva` reescritas con el puntero y la fecha.
+
+### T3 — El `WHERE` probado donde vive · R3/R8 · **la tarea que de verdad prueba algo**
+Nuevo `tests/unit/repositories/gasto-fijo-plantilla-eliminar.test.ts`, 4 casos:
+(a) literal `{ where: { id } }` + desmontado clave a clave; (a-bis) con DOS filas en una tienda en
+memoria que **aplica** el filtro, la otra plantilla sigue viva; (b) `count 0 -> false` sin lanzar;
+(c) un `Proxy` de cliente Prisma que **revienta ante cualquier modelo que no sea
+`gastoFijoPlantilla`**, con autocomprobación del propio detector (se le exige lanzar ante
+`walletMovimiento` antes de creerle el verde).
+
+**La mutación, ejecutada — no supuesta.** `{ where: { id } }` → `{}`:
+
+```
+ ❯ tests/unit/repositories/gasto-fijo-plantilla-eliminar.test.ts (4 tests | 3 failed) 13ms
+     × (a) filtra por el id EXACTO y por ninguna otra columna 8ms
+     × (a-bis) R3: borra EXACTAMENTE esa fila; la otra plantilla sigue en la tabla 1ms
+     × (b) la fila ya no existia (count 0) -> false, sin lanzar 1ms
+
+ FAIL  ... > (a) filtra por el id EXACTO y por ninguna otra columna
+AssertionError: expected "vi.fn()" to be called with arguments: [ Array(1) ]
+Received:
+  1st vi.fn() call:
+  [
+-   {
+-     "where": {
+-       "id": "11111111-1111-4111-8111-111111111111",
+-     },
+-   },
++   {},
+  ]
+
+ FAIL  ... > (a-bis) R3: borra EXACTAMENTE esa fila; la otra plantilla sigue en la tabla
+AssertionError: expected [] to deeply equal [ Array(1) ]
+- Expected
++ Received
+- [
+-   "22222222-2222-4222-8222-222222222222",
+- ]
++ []
+
+ FAIL  ... > (b) la fila ya no existia (count 0) -> false, sin lanzar
+AssertionError: expected "vi.fn()" to be called with arguments: [ Array(1) ]
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+```
+
+Archivo restaurado desde copia y vuelto a verde (4/4). El `where` del repositorio quedó
+byte-idéntico al original: `git diff` no muestra cambio en esa línea más allá del método nuevo.
+
+### T4 — Schema de borde · R6
+`lib/types/gasto-fijo-plantilla.ts`: `eliminarPlantillaSchema = z.object({ id: z.string().uuid() }).strict()`
++ `EliminarPlantillaInput`. `.strict()` con su motivo escrito: en una operación irreversible,
+aceptar en silencio una clave que nadie lee es la forma barata de que el llamador crea que pidió
+algo que no pidió. Nota de la línea de `setActiva` reescrita.
+
+### T5 — Contrato del servicio · R25/R22
+`lib/interfaces/services/IGastoFijoPlantillaService.ts`: `EliminarPlantillaServiceResult`
+(`ok` | `forbidden` | `not_found`) y `eliminarPlantilla(input, actor)`. En su docstring va, además
+de la revocación, **el contrato con la ficha 333 (R25)** con sus tres puntos: (1) cancelar los
+pendientes en la MISMA operación atómica, (2) contarlos ANTES y pasar el número a la confirmación,
+(3) si el número cambia entre medias lo decide la 333, la 332 no lo prejuzga. Más el punto de
+sutura (la transacción entra aquí; el tipo de resultado ganará el campo del conteo) y **por qué hoy
+no se deja ni un parámetro opcional «por si acaso»**. Notas de cabecera y de `setActiva`
+reescritas.
+
+**Señal esperada, obtenida:** `TS2420: Property 'eliminarPlantilla' is missing in type 'GastoFijoPlantillaService'`.
+
+### T6 — Implementación en el servicio · R2/R4/R7/R25
+Guard `esAccesoTotal` **antes** de tocar el repositorio; `repo.eliminar(id)`; `ok`/`not_found` según
+el booleano. **Sin `obtenerPorId` previo**, con el motivo escrito (una consulta de más y una ventana
+TOCTOU para terminar diciendo lo mismo; el `count` es la respuesta y es atómico). El **riesgo R-1**
+de `design.md §7` queda anotado junto al método: borrar tira el id, y con él la clave de
+idempotencia del cron.
+
+**El sitio delicado (`§4.2` del design).** En el docstring de `listarPlantillasCompleto` la frase
+«que no se borra (R25)» sostenía la **excepción declarada a `170/R29` de la feature 184**. Se
+cambió SÓLO la premisa citada —«que se da de alta **y de baja** a mano (ficha 332)»— y **el resto
+del párrafo quedó intacto**: la conclusión (la tabla es configuración, no bitácora; su tamaño lo
+marca el catálogo de gastos) sigue en pie y de hecho se refuerza.
+
+### T7 — Tests del servicio + la INVERSIÓN del testigo · R2/R4/R7/R11
+`tests/unit/services/gasto-fijo-plantilla-service.test.ts`:
+- `buildRepo` (literal completo de la interfaz) gana `eliminar`.
+- Casos nuevos: `forbidden` sin llamar al repo (R4); `ok` + `eliminar("p-1")` (R2); `admin -> ok`
+  (paridad feature 94); `false -> not_found` sin lanzar (R7); y **«no lee antes de borrar»**
+  (`obtenerPorId` no se llamó), que fija la decisión de §2.2 del design.
+- **El testigo del `45/R25` se INVIRTIÓ, no se borró.** El `describe` «— sin borrado (R25)» pasa a
+  **«borrado habilitado: la ficha 332 revoca 45/R25»**, sus aserciones están dadas vuelta (el
+  service **sí** expone `eliminarPlantilla`, el repo **sí** expone `eliminar`) y el comentario del
+  bloque conserva que **hasta el 2026-08-29 afirmaba exactamente lo contrario**, con el puntero y
+  citando la convención del repo (`decision5-revertida`, `d5-revertida`, `reversion-r49`). Se le
+  añadió un segundo caso: R11 — desactivar **no se fue** con la revocación.
+
+### T8 — Server Action · R5/R6
+`lib/actions/gasto-fijo-plantilla.ts`: `EliminarPlantillaActionResult` + `eliminarPlantillaAction`,
+espejo literal de `setActivaPlantillaAction` (sesión → `UnauthenticatedError`; `parse` →
+`VALIDATION_ERROR`; delegación al service dentro de `withErrorHandler`). **Sin** anotación
+`@sin-superficie` — ver §4, que es el único punto que el leader tiene que leer sí o sí. Notas de
+cabecera y de `setActivaPlantillaAction` reescritas.
+
+### T9 — Tests de la acción · R4/R5/R6/R7
+`tests/unit/actions/gasto-fijo-plantilla-actions.test.ts`: `fakeService` (literal completo) gana
+`eliminarPlantilla`. Siete casos: sin sesión (R5); id no-uuid (R6); sin id (R6); **clave
+desconocida con el id VÁLIDO** (R6, `.strict()` — el id va bien a propósito para que el único
+motivo posible del rojo sea la clave de más); `forbidden` lo decide el service (R4); `not_found` se
+propaga (R7); y el camino feliz afirmando que el service recibe `{ id }` y el actor.
+
+### T10 — Dobles reparados
+`tests/integration/db/generacion-gastos-fijos.test.ts` (`fakePlantillaRepo`) **y
+`tests/unit/services/generacion-gastos-fijos-service.test.ts` (`buildPlantillaRepo`)**. El segundo
+**no estaba en el censo de `design.md §4.1`**: lo encontró el typecheck, que es exactamente para lo
+que T1 pedía mirar el rojo. Los `as unknown as` de `gasto-fijo-plantillas-{paginado,completo}` no
+se ven afectados, como preveía el spec. `pnpm typecheck` volvió a 0 en todo el repo.
+
+### T11 — El libro sobrevive, contra Postgres · R8/R9
+Nuevo `tests/integration/db/gasto-fijo-plantilla-borrado.test.ts`. Crea la plantilla con el
+repositorio real, inserta su egreso **tal como lo emite el cron** (`egreso_gasto_fijo`,
+`origen_tipo='gasto'`, `origen_id='<id>:2026-09'`, descripción `'<concepto> — 2026-09'`, autor
+NULL) **más un movimiento ajeno**, borra la plantilla y afirma: la plantilla ya no está; el egreso
+sigue con `monto` (STRING, `toFixed(2)`), `fecha_movimiento`, `origen_id` y `descripcion` intactos;
+la descripción sigue llevando concepto y periodo (se explica sola); `createdAt` sin mover; el
+movimiento ajeno vivo; y el **conteo del libro idéntico antes y después** del borrado. Todo dentro
+de `enTransaccionRevertida`: no queda ni una fila.
+
+**¿Se corrió o se saltó? SE CORRIÓ.** `HAY_BASE_DE_DATOS` era verdadero:
+`PostgreSQL database "ordenex", schema "public" at "localhost:5432"`, `Database schema is up to
+date!` (168 migraciones). Salida: `Test Files 1 passed (1) / Tests 1 passed (1)`, 235 ms de tests
+— no un `skipped` disfrazado.
+
+**Y no es un verde vacío, medido:** con `eliminar` mutado a un no-op (`const res = { count: 1 }`)
+el test se puso ROJO en `expect(r.plantillaDespues).toBeNull()`, imprimiendo la fila que seguía en
+la tabla. Restaurado y verde otra vez. No hay ningún `if (!x) return;`: si el fixture no se puede
+crear, el test falla.
+
+### T12 — La clave derivada · R10
+Caso nuevo en `tests/integration/db/generacion-gastos-fijos.test.ts`: dos plantillas con el MISMO
+concepto y el mismo periodo producen `origen_id` **distintos** (`p-vieja:2026-07` /
+`p-recreada:2026-07`) y DOS egresos; y sus descripciones son idénticas, o sea que por el texto no
+hay forma de distinguirlas. Es el testigo de que borrar y recrear **no reusa** la clave de
+idempotencia. Su comentario apunta a `design.md §7 R-1`.
+
+### T13 — Comentario del modelo y barrido del backend · R21/R22/R24
+`db/schema.prisma` l. 1815: el «NO se borra (R25)» pasa a la revocación con fecha, motivo y
+puntero, dejando dicho que desactivar sigue existiendo como pausa y que **la ficha cambia sólo el
+comentario: el modelo es idéntico y no lleva migración**. `prisma validate`: *The schema at
+db\schema.prisma is valid*.
+
+**Censo de `design.md §4.1`, sitios 1–13 (los del backend): los 13 cubiertos.**
+
+| # | Archivo | Estado |
+| --- | --- | --- |
+| 1 | `db/schema.prisma` | reescrito |
+| 2–3 | `lib/interfaces/repositories/IGastoFijoPlantillaRepository.ts` | reescritos (aquí va la nota LARGA) |
+| 4–5 | `lib/interfaces/services/IGastoFijoPlantillaService.ts` | reescritos |
+| 6–8 | `lib/services/GastoFijoPlantillaService.ts` | reescritos (#8 sólo la premisa, ver T6) |
+| 9–10 | `lib/repositories/GastoFijoPlantillaRepository.ts` | reescritos |
+| 11 | `lib/types/gasto-fijo-plantilla.ts` | reescrito |
+| 12–13 | `lib/actions/gasto-fijo-plantilla.ts` | reescritos |
+
+Comprobación: `grep -rn "sin borrado\|no se borra\|NO se borra\|NUNCA borrar\|NO expone .delete"
+lib/ db/schema.prisma | grep -i plantilla` sólo devuelve **las frases de la propia revocación** (las
+que dicen «hasta esa fecha decía…» o «revoca el "sin borrado"»). Ninguna afirmación vigente.
+
+**Sitios 14–18 siguen abiertos y NO son de este agente:** `GastosFijosPlantillasPanel.tsx:68` y
+`GastoFijoPlantillaDialog.tsx:18,23` (T16), `tests/unit/components/wallet-gastos-fijos-panel.test.tsx:15`
+(T17) y `specs/45-wallet-gastos-sueldos/{requirements,design}.md` (T18).
+
+---
+
+## 2. Archivos tocados
+
+**Producción (7):**
+`db/schema.prisma` (sólo comentario) · `lib/interfaces/repositories/IGastoFijoPlantillaRepository.ts` ·
+`lib/repositories/GastoFijoPlantillaRepository.ts` · `lib/interfaces/services/IGastoFijoPlantillaService.ts` ·
+`lib/services/GastoFijoPlantillaService.ts` · `lib/types/gasto-fijo-plantilla.ts` ·
+`lib/actions/gasto-fijo-plantilla.ts`
+
+**Tests (6, dos nuevos):**
+`tests/unit/repositories/gasto-fijo-plantilla-eliminar.test.ts` **(nuevo)** ·
+`tests/integration/db/gasto-fijo-plantilla-borrado.test.ts` **(nuevo)** ·
+`tests/unit/services/gasto-fijo-plantilla-service.test.ts` ·
+`tests/unit/actions/gasto-fijo-plantilla-actions.test.ts` ·
+`tests/unit/services/generacion-gastos-fijos-service.test.ts` ·
+`tests/integration/db/generacion-gastos-fijos.test.ts`
+
+**Sin migración. Sin cambio de esquema. `db/migrations/**` intacto.** Y no se tocó `feature_list.json`,
+ni `progress/current.md`, ni nada bajo `specs/`, `app/` o `components/`.
+
+---
+
+## 3. Mapa `R<n> → test`
+
+| R | Estado | Test que lo cubre |
+| --- | --- | --- |
+| R1 | backend listo, UI pendiente | La acción existe y se ejercita en `tests/unit/actions/gasto-fijo-plantilla-actions.test.ts`. El botón por fila es **T17** (frontend). |
+| R2 | ✅ | `tests/unit/services/gasto-fijo-plantilla-service.test.ts` «R2: maestro -> ok, y llama a eliminar con EL id pedido» · `tests/unit/actions/…` «R2: … el service recibe `{ id }` y el actor» · `tests/integration/db/gasto-fijo-plantilla-borrado.test.ts` (la fila deja de estar) |
+| R3 | ✅ | `tests/unit/repositories/gasto-fijo-plantilla-eliminar.test.ts` (a) y (a-bis) — **mutación del `where` verificada en rojo** |
+| R4 | ✅ | `…/gasto-fijo-plantilla-service.test.ts` «R4: rol sin acceso total -> forbidden, sin llamar a repo.eliminar» · `…/gasto-fijo-plantilla-actions.test.ts` «R4: forbidden lo decide el SERVICE» |
+| R5 | ✅ | `…/gasto-fijo-plantilla-actions.test.ts` «R5: sin sesion -> unauthenticated, sin tocar el service» |
+| R6 | ✅ | `…/gasto-fijo-plantilla-actions.test.ts` ×3: id no-uuid, sin id, y **clave desconocida con id válido** (`.strict()`) |
+| R7 | ✅ | `…/gasto-fijo-plantilla-service.test.ts` «R7: … -> not_found, sin lanzar» · `…/actions…` «R7: not_found se propaga desde el service» |
+| R8 | ✅ | `…/gasto-fijo-plantilla-eliminar.test.ts` (c) (el cliente sólo expone `gastoFijoPlantilla`, con autocomprobación) · `tests/integration/db/gasto-fijo-plantilla-borrado.test.ts` (3) (conteo del libro idéntico; el movimiento ajeno vivo) |
+| R9 | ✅ | `tests/integration/db/gasto-fijo-plantilla-borrado.test.ts` (2) — monto, `fecha_movimiento`, `origen_id` y `descripcion` intactos, contra Postgres real |
+| R10 | ✅ | `tests/integration/db/generacion-gastos-fijos.test.ts` «R10: dos plantillas con el MISMO concepto producen origen_id DISTINTOS» |
+| R11 | parcial (backend ✅) | `…/gasto-fijo-plantilla-service.test.ts` «R11: y desactivar NO se fue con la revocacion» + los casos de `setActivaPlantilla` que ya existían. El «Desactivar sigue llamando a `setActiva`» del panel es **T17**. |
+| R12–R20 | ❌ **pendientes** | **Frontend: T14–T17.** Ninguno es alcanzable desde el backend. |
+| R21 | parcial | Backend barrido en T13 (los 13 sitios). Faltan los sitios 14–18 (**T16/T17/T18**) y la guardia que lo afirma (**T19**). |
+| R22 | parcial | La revocación con sus 4 piezas (revoca / 2026-08-29 / motivo / puntero) está escrita en los 7 archivos de producción del backend. Verificarlo por test es **T19**. |
+| R23 | ❌ **pendiente** | **T18** — apéndice en `specs/45-wallet-gastos-sueldos/`. Fuera del alcance de este agente por instrucción explícita (no tocar `specs/`). |
+| R24 | ✅ (por construcción) | `db/migrations/20260713150000_gasto_fijo_plantilla/` **no aparece en el diff**: `git status` sólo lista los 13 archivos de §2. La exclusión razonada del censo la escribirá la guardia de **T19**. |
+| R25 | ✅ | El contrato con la 333 está escrito en el docstring de `IGastoFijoPlantillaService.eliminarPlantilla` (tres puntos + punto de sutura) y en `specs/332/design.md §5`. Su verificación por test es **T19 bloque (f)**. |
+| R26 | **sin test, y es deliberado** | Comportamiento propiedad de la **ficha 333**, dueña de la tabla de pendientes. La 332 sólo promete R25 —que el contrato quede escrito—, y eso está hecho. No hay nada que probar aquí sin inventar el esquema de otra ficha. |
+
+---
+
+## 4. ⚠️ Lo único que el leader tiene que decidir antes de mergear
+
+**`eliminarPlantillaAction` nace sin superficie hasta T14, y la guardia lo dice.**
+
+```
+ FAIL  tests/unit/guards/superficie-de-uso.guardia.test.ts > R-A — …
++ [
++   "lib/actions/gasto-fijo-plantilla.ts:158 eliminarPlantillaAction",
++   "lib/actions/tarifas.ts:67 obtenerTarifa",
++ ]
+```
+
+- Es **consecuencia directa de secuenciar backend → frontend**, que es lo que manda `tasks.md`. Se
+  cierra sola en **T14**, cuando el panel monte el botón.
+- **NO se le puso `@sin-superficie`**, y es deliberado: `design.md §2.3` lo prohíbe expresamente
+  («nace con consumidor vivo»). Anotarla ahora obligaría a acordarse de quitarla después, que es
+  justo la basura que esa guardia existe para evitar.
+- `obtenerTarifa` **es deuda ajena y previa**: el archivo ya figura en `tests/baseline-rojos.json`
+  por él. Ojo con esto, porque el propio baseline lo advierte: la comparación es **por archivo**, así
+  que un archivo ya listado que gana un rojo nuevo **el gate no lo ve**. Por eso queda escrito aquí.
+- **Conclusión práctica:** este backend **no se debe mergear solo**. Va con T14–T17 o el árbol
+  queda con una Server Action que ningún usuario puede disparar — exactamente el incidente que esa
+  guardia nació para impedir.
+
+---
+
+## 5. Verificación ejecutada
+
+**No se corrió `./init.sh`** (ni rápido ni completo): es **T20**, y para esta ficha el rápido se
+niega solo porque el diff toca `db/schema.prisma` y rutas con nombre de dinero. Lo corre el leader,
+con el árbol quieto.
+
+### `pnpm typecheck`
+```
+> ordenex@0.1.0 typecheck R:\job\singularis\projects\ordenex
+> tsc --noEmit
+
+TYPECHECK_EXIT=0
+```
+
+### `pnpm lint`
+```
+✖ 127 problems (0 errors, 127 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+LINT_EXIT=0
+```
+De esas 127, **una** es mía: `tests/unit/repositories/gasto-fijo-plantilla-eliminar.test.ts:50:37
+warning '_args' is defined but never used`. Es el mismo patrón —y el mismo warning— del archivo de
+referencia que el spec manda copiar (`historicos-paginados-where.test.ts`): el parámetro se declara
+explícitamente **porque es justo lo que el test captura**; sin él el mock sería de cero argumentos.
+Cero errores.
+
+### `pnpm exec vitest related --run` sobre los 6 archivos de producción TS tocados
+```
+ Test Files  16 passed (16)
+      Tests  177 passed (177)
+   Duration  17.44s
+```
+
+### Corrida explícita por nombre de cada archivo de test creado o modificado
+(`vitest related` no alcanza los que sólo importan tipos, así que va aparte)
+```
+ pnpm exec vitest run \
+   tests/unit/repositories/gasto-fijo-plantilla-eliminar.test.ts \
+   tests/unit/services/gasto-fijo-plantilla-service.test.ts \
+   tests/unit/actions/gasto-fijo-plantilla-actions.test.ts \
+   tests/unit/services/generacion-gastos-fijos-service.test.ts \
+   tests/integration/db/generacion-gastos-fijos.test.ts \
+   tests/integration/db/gasto-fijo-plantilla-borrado.test.ts
+
+ Test Files  6 passed (6)
+      Tests  65 passed (65)
+   Duration  863ms
+```
+
+### Vecino que no se debía romper
+`tests/unit/components/wallet-gastos-fijos-panel.test.tsx` → `12 passed`. El panel sigue verde
+con el backend nuevo debajo; T14/T17 arrancan desde ahí.
+
+### `prisma validate`
+```
+Prisma schema loaded from db\schema.prisma.
+The schema at db\schema.prisma is valid 🚀
+```
+
+---
+
+## 6. Money-safe
+
+En este camino **no viaja ningún monto**: la entrada es `{ id }` y la salida es un `status`. Los
+únicos montos que aparecen —el del fixture de T11 y el del DTO— se manejan como **STRING de punta
+a punta** (`monto.toFixed(2)`, `new Prisma.Decimal(MONTO)`), sin un solo `Number` ni `parseFloat`.
+
+---
+
+## 7. Veredicto
+
+**T0–T13 cerradas y verdes; el backend del borrado está completo y probado donde vive, pero NO es
+mergeable por sí solo: la acción no tiene superficie hasta T14.**

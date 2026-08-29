@@ -8,6 +8,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   ActualizarPlantillaServiceResult,
   CrearPlantillaServiceResult,
+  EliminarPlantillaServiceResult,
   IGastoFijoPlantillaService,
   ListarPlantillasPaginadoServiceResult,
   ListarPlantillasServiceResult,
@@ -16,6 +17,7 @@ import type {
 import {
   actualizarGastoFijoPlantillaSchema,
   crearGastoFijoPlantillaSchema,
+  eliminarPlantillaSchema,
   listarPlantillasGastoFijoCompletoSchema,
   listarPlantillasGastoFijoPaginadoSchema,
   setActivaPlantillaSchema,
@@ -28,7 +30,11 @@ import type { AppErrorShape } from "@/lib/errors";
 // lib/actions/wallet.ts). Resuelve el actor por sesion, valida en el borde con zod y delega
 // en el servicio bajo `withErrorHandler`. `unauthenticated` (sin sesion, R18) y
 // `validation_error` (ZodError, R24) se resuelven en el borde; `forbidden`/`ok`/`not_found`
-// los devuelve el service. Money-safe: DTOs con montos STRING (R12). Sin borrado (R25).
+// los devuelve el service. Money-safe: DTOs con montos STRING (R12).
+//
+// El CRUD incluye BORRADO (`eliminarPlantillaAction`) desde la ficha 332, que **revoca** el «sin
+// borrado» de `45/R25` con decision humana del 2026-08-29: la tabla acumula ruido y el historico
+// del libro no depende de la plantilla. Ver `specs/332-eliminar-plantilla-gasto-fijo`.
 
 export type CrearPlantillaActionResult =
   | CrearPlantillaServiceResult
@@ -42,6 +48,13 @@ export type ActualizarPlantillaActionResult =
 
 export type SetActivaPlantillaActionResult =
   | SetActivaPlantillaServiceResult
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+// Ficha 332 (R5/R6): el borrado. `forbidden`/`not_found` los decide el service; `unauthenticated`
+// y `validation_error`, este borde.
+export type EliminarPlantillaActionResult =
+  | EliminarPlantillaServiceResult
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -115,7 +128,7 @@ export async function actualizarPlantillaAction(
   return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
 }
 
-/** R17/R18/R25: activa/desactiva una plantilla (solo maestro; sin borrado). */
+/** R17/R18/R25: activa/desactiva una plantilla (acceso total). Pausa reversible: la fila se queda. */
 export async function setActivaPlantillaAction(
   input: unknown,
   deps: PlantillaDeps = {},
@@ -126,6 +139,32 @@ export async function setActivaPlantillaAction(
     const data = setActivaPlantillaSchema.parse(input);
     const service = deps.service ?? buildService();
     return service.setActivaPlantilla(data, actor);
+  });
+  return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
+}
+
+/**
+ * Ficha 332 (R1/R5/R6) — ELIMINA una plantilla de gasto fijo (acceso total).
+ *
+ * Espejo de `setActivaPlantillaAction`: sesion -> `UnauthenticatedError` (R5), `parse` ->
+ * `VALIDATION_ERROR` (R6, con `.strict()`: una clave desconocida muere aqui), y el resto lo decide
+ * el service (`forbidden`/`ok`/`not_found`). Server Action y no route handler porque es una
+ * mutacion interna disparada por un componente propio (`docs/architecture.md`).
+ *
+ * **Revoca `45/R25`** con decision humana del 2026-08-29 — ver
+ * `specs/332-eliminar-plantilla-gasto-fijo`. El libro (`wallet_movimiento`) no se toca: los
+ * egresos ya emitidos siguen intactos y se explican solos (R8/R9).
+ */
+export async function eliminarPlantillaAction(
+  input: unknown,
+  deps: PlantillaDeps = {},
+): Promise<EliminarPlantillaActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R5: antes de tocar el service
+    const data = eliminarPlantillaSchema.parse(input); // ZodError -> VALIDATION_ERROR (R6)
+    const service = deps.service ?? buildService();
+    return service.eliminarPlantilla(data, actor);
   });
   return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
 }
