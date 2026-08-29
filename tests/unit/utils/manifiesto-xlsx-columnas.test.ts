@@ -8,9 +8,23 @@ import {
 import type { ManifiestoFilaDTO } from "@/lib/types/manifiesto";
 
 // Feature 194 (T5) — el generador acepta un SUBCONJUNTO de columnas elegido por el usuario:
-// R7 (el archivo trae las visibles y ninguna oculta), R8 (el orden es el de
-// COLUMNAS_MANIFIESTO, no el del usuario), R9 (la cabecera emite la clave máquina), R13 (una
-// selección vacía degrada a "todas", no falla) y R24 (sin selección, todas — como hoy).
+// R7 (el archivo trae las visibles y ninguna oculta), R9 (la cabecera emite la clave máquina),
+// R13 (una selección vacía degrada a "todas", no falla) y R24 (sin selección, todas).
+//
+// ── DEROGACIÓN DE 194/R8 (ficha 314, decisión del humano del 2026-08-28) ──────────────────
+// La 194 decidió que el orden del archivo fuera SIEMPRE el de `COLUMNAS_MANIFIESTO`, sin hacer
+// caso al orden en que llegaran las claves. La ficha 314 da al selector la capacidad de
+// REORDENAR y la aplica «al componente entero y en todos sus usos, manifiesto incluido»
+// (314/R20, R21), así que R8 deja de regir: el generador emite EN EL ORDEN RECIBIDO.
+//
+// El caso de abajo NO se borra, se VOLTEA —afirma ahora lo contrario— porque lo que importa
+// conservar es la pregunta, no la respuesta: «¿qué hace el generador cuando las claves llegan
+// invertidas?». La alternativa que se descartó era dejar 194/R8 intacto y ofrecer reordenar
+// solo en pantalla: el usuario movería columnas, la lista se movería, y el archivo saldría
+// igual que antes sin un solo error. El fallo mudo de manual.
+//
+// En producción la conducta solo cambia para quien reordena: sin orden guardado, el orden
+// efectivo ES el del catálogo y el archivo sale exactamente como ayer.
 //
 // R23 / 160-R28: el conjunto de columnas es ABIERTO. NINGÚN aserto de esta suite afirma un
 // número total de columnas. Todo se expresa como "contiene", "no contiene" o "índice
@@ -111,8 +125,9 @@ describe("buildManifiestoXlsx con selección de columnas (feature 194)", () => {
     expect(worksheet.getRow(2).getCell(colMonto).value).toBe(15000);
   });
 
-  it("R8: con las claves en orden INVERTIDO conserva el orden relativo de COLUMNAS_MANIFIESTO", async () => {
-    // El usuario marcó primero `fecha` y al final `numGuia`; el archivo no le hace caso.
+  it("314/R20: emite las columnas en el orden RECIBIDO, aunque venga invertido (deroga 194/R8)", async () => {
+    // El usuario puso `fecha` la primera y `numGuia` la última: el archivo le hace caso. Este
+    // caso afirmaba lo contrario hasta la ficha 314; la derogación está razonada arriba.
     const cabecera = await cabeceraDe(
       await buildManifiestoXlsx([makeFila()], [
         "fecha",
@@ -123,15 +138,37 @@ describe("buildManifiestoXlsx con selección de columnas (feature 194)", () => {
     );
 
     // Índices RELATIVOS entre las claves pedidas, nunca posiciones absolutas.
-    expect(cabecera.indexOf(headerDe("numGuia"))).toBeLessThan(
-      cabecera.indexOf(headerDe("destinatario")),
-    );
-    expect(cabecera.indexOf(headerDe("destinatario"))).toBeLessThan(
+    expect(cabecera.indexOf(headerDe("fecha"))).toBeLessThan(
       cabecera.indexOf(headerDe("zona")),
     );
     expect(cabecera.indexOf(headerDe("zona"))).toBeLessThan(
-      cabecera.indexOf(headerDe("fecha")),
+      cabecera.indexOf(headerDe("destinatario")),
     );
+    expect(cabecera.indexOf(headerDe("destinatario"))).toBeLessThan(
+      cabecera.indexOf(headerDe("numGuia")),
+    );
+    // Y la secuencia emitida es EXACTAMENTE la pedida: no sobra ni falta ninguna.
+    expect(cabecera).toEqual([
+      headerDe("fecha"),
+      headerDe("zona"),
+      headerDe("destinatario"),
+      headerDe("numGuia"),
+    ]);
+  });
+
+  it("314/R20: una clave repetida en la petición no duplica su columna en el archivo", async () => {
+    // El orden lo pone quien llama, así que una lista con una clave dos veces dejaría de ser
+    // un subconjunto: emitiría la misma cabecera dos veces y `buildXlsxRows` volcaría el mismo
+    // dato en dos columnas. Se queda con la primera aparición.
+    const cabecera = await cabeceraDe(
+      await buildManifiestoXlsx([makeFila()], [
+        "zona",
+        "numGuia",
+        "zona",
+      ]),
+    );
+
+    expect(cabecera).toEqual([headerDe("zona"), headerDe("numGuia")]);
   });
 
   it("R13: una selección VACÍA emite todas las columnas publicadas en vez de fallar", async () => {

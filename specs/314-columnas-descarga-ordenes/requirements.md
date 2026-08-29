@@ -164,7 +164,24 @@ test es un fallo de la feature.
 
 ---
 
-## Preguntas abiertas
+## Preguntas abiertas — RESPONDIDAS por el humano el 2026-08-28
+
+Las cuatro quedaron cerradas antes de implementar. Ninguna se reabre.
+
+| # | Respuesta |
+| --- | --- |
+| 1 | **Los siete encabezados se aceptan tal cual**, incluidos «Fecha de reprogramación» (y no «Liberada el») y «Peso (kg)» (y no «Peso»). |
+| 2 | **Los dos importes salen como TEXTO**, igual que el resto de descargas de dinero. Excel no los autosuma, y se acepta: convertirlos reintroduciría en el navegador la aritmética que la feature 204 quitó, y ahí 14 de 66 órdenes medidas salían un céntimo desviadas del cierre. |
+| 3 | **Una sola preferencia para toda la pantalla** de órdenes, no una por pestaña. |
+| 4 | **Las siete columnas nuevas van INTERCALADAS por afinidad**: el teléfono junto al destinatario, el peso junto al producto, los dos importes junto al monto, las dos fechas junto a la de creación (y las notas al final, por ser texto largo). El orden relativo de las 15 actuales no cambia (R17). |
+
+Además, la **Q7 de `tasks.md`** —no era una decisión, sino la consecuencia de la 3 y la 4— queda
+**ratificada**: quien nunca abra el selector pasa de 15 a 22 columnas en su archivo.
+
+El texto original de las cuatro preguntas se conserva abajo, para que se lea qué se preguntó y con
+qué alternativas, no solo qué se respondió.
+
+---
 
 1. **Encabezados de las siete columnas nuevas.** Los encabezados son contrato (hay una guardia que
    exige una aserción literal de orden sobre el catálogo), así que se confirman antes de
@@ -181,22 +198,24 @@ test es un fallo de la feature.
    | `comisionConIva` | Comisión + IVA | idéntico al de la tabla en pantalla |
 
    ¿Se aceptan los siete? En particular «Fecha de reprogramación» frente a «Liberada el», y
-   «Peso (kg)» frente a «Peso».
+   «Peso (kg)» frente a «Peso». → **SÍ, los siete tal cual** (2026-08-28).
 
 2. **Los dos importes salen como texto.** `fleteConIva` y `comisionConIva` llegan del servidor como
    cadena de escala 2 (feature 204) y se emiten **tal cual**, igual que ya hace el desglose de
    tiendas. La consecuencia es que en Excel esa celda es texto y la hoja no la autosuma.
    Convertirla a número reintroduciría en el navegador la aritmética que la 204 quitó (14 de 66
    órdenes medidas salían un céntimo desviadas). ¿Se acepta el mismo criterio que en el resto de
-   descargas de dinero, o se prefiere celda numérica asumiendo la conversión?
+   descargas de dinero, o se prefiere celda numérica asumiendo la conversión? → **TEXTO, el mismo
+   criterio que el resto de descargas de dinero** (2026-08-28).
 
 3. **Una preferencia para toda la pantalla, o una por pestaña.** `/ordenes` filtra por estado y por
    otros criterios dentro de la misma pantalla. El manifiesto sí separa por flujo porque cada flujo
    es una operación distinta. Propuesta: **una sola** preferencia para toda la descarga de
-   `/ordenes`. ¿Se confirma?
+   `/ordenes`. ¿Se confirma? → **SÍ, una sola para toda la pantalla** (2026-08-28).
 
 4. **Las columnas nuevas se intercalan por afinidad** (el teléfono junto al destinatario, el peso
    junto al producto, los dos importes junto al monto, las dos fechas junto a la de creación) en
    vez de añadirse todas al final. El orden **relativo** de las 15 actuales no cambia (R17), pero
    quien hoy lea la hoja por número de columna verá desplazamientos. ¿Se confirma la afinidad, o se
-   prefiere añadirlas al final para no mover ni una posición?
+   prefiere añadirlas al final para no mover ni una posición? → **SÍ, intercaladas por afinidad**
+   (2026-08-28).

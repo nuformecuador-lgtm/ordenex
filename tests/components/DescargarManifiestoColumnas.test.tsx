@@ -94,6 +94,22 @@ function guardarOcultasEnDisco(flujo: ManifiestoFlujo, ocultas: string[]): void 
   );
 }
 
+/**
+ * Ficha 314 — preferencia con ORDEN explícito. Se escribe el JSON a mano, igual que arriba,
+ * porque lo que se juzga es que el botón HONRE lo que hay en el almacenamiento, no que sepa
+ * escribirlo (de eso responden los tests del selector).
+ */
+function guardarOrdenEnDisco(
+  flujo: ManifiestoFlujo,
+  ocultas: string[],
+  orden: string[],
+): void {
+  window.localStorage.setItem(
+    claveColumnas(flujo),
+    JSON.stringify({ ocultas, orden }),
+  );
+}
+
 /** Claves que recibió el generador en su ÚLTIMA llamada (2.º argumento). */
 function clavesDeLaUltimaLlamada(): readonly string[] {
   const llamada = buildManifiestoXlsxMock.mock.calls.at(-1);
@@ -366,5 +382,40 @@ describe("DescargarManifiestoButton + preferencia de columnas (feature 194)", ()
     expect([...claves]).toEqual(esperadas);
     // Y las filas viajan enteras: el filtro va en las columnas, no en los datos.
     expect(buildManifiestoXlsxMock.mock.calls[0]![0]).toHaveLength(1);
+  });
+
+  it("314/R21 — con un orden guardado, el generador recibe las claves EN ESE orden", async () => {
+    // La ficha 314 lleva reordenar al componente entero, manifiesto incluido. Este caso es la
+    // evidencia de que la elección llega hasta el ARCHIVO y no se queda en la pantalla: sin él,
+    // el usuario movería columnas, la lista se movería y el archivo saldría igual que ayer sin
+    // un solo error (el fallo mudo que 194/R8 habría dejado vivo).
+    //
+    // El orden esperado se DERIVA del catálogo invirtiéndolo, jamás se escribe a mano, y no se
+    // afirma ningún total (R23).
+    const alReves = [...COLUMNAS_MANIFIESTO]
+      .reverse()
+      .map((columna) => columna.key);
+    guardarOrdenEnDisco("carga_masiva", [OCULTA.key], alReves);
+    const user = userEvent.setup();
+
+    render(
+      <DescargarManifiestoButton
+        flujo="carga_masiva"
+        seleccion={{ numRemisiones: ["REM-001"] }}
+      />,
+    );
+    await user.click(botonesDescarga()[0]!);
+
+    await waitFor(() => expect(buildManifiestoXlsxMock).toHaveBeenCalledTimes(1));
+    const claves = clavesDeLaUltimaLlamada();
+
+    // Las visibles, en el orden del USUARIO. La oculta sigue fuera: mover no marca ni
+    // desmarca, y ocultar no reordena.
+    expect([...claves]).toEqual(alReves.filter((clave) => clave !== OCULTA.key));
+    expect(claves).not.toContain(OCULTA.key);
+    // Contraprueba de no-vacuidad: ese orden NO es el del catálogo.
+    expect([...claves]).not.toEqual(
+      COLUMNAS_MANIFIESTO.filter((c) => c.key !== OCULTA.key).map((c) => c.key),
+    );
   });
 });
