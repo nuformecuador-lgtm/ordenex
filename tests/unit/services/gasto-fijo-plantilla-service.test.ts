@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { GastoFijoPlantillaService } from "@/lib/services/GastoFijoPlantillaService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
-import type { IGastoFijoPlantillaRepository } from "@/lib/interfaces/repositories/IGastoFijoPlantillaRepository";
+import type {
+  ActualizarPlantillaInput,
+  IGastoFijoPlantillaRepository,
+} from "@/lib/interfaces/repositories/IGastoFijoPlantillaRepository";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 
 // Feature 45 (R17/R24/R25/R26) — tests unit del GastoFijoPlantillaService. Guardia de rol
@@ -195,5 +198,105 @@ describe("GastoFijoPlantillaService — sin borrado (R25)", () => {
     // R25: el repo tampoco expone delete de plantillas.
     expect((repo as unknown as Record<string, unknown>).borrar).toBeUndefined();
     expect((repo as unknown as Record<string, unknown>).delete).toBeUndefined();
+  });
+});
+
+// ── Feature 85 (R2) — editar el monto NO mueve el ciclo ──
+//
+// El doble de repositorio de arriba solo recuerda CON QUE se le llamo. Este otro tiene ESTADO y
+// escribe como escribe el repositorio real (`update` con los cinco campos, sin condicion), de
+// modo que la fila que se inspecciona al final es la que habria quedado en la tabla.
+//
+// Los literales `semanas`/`2`/`2026-03-31` estan elegidos a proposito: ninguno coincide con los
+// defaults del schema de crear (`meses`/`1`/hoy-CR), asi que este test NO puede estar verde por
+// construccion —si algo reinventara el ciclo, la fila guardada no diria esto—.
+describe("GastoFijoPlantillaService.actualizarPlantilla — persistencia del ciclo (R2, feature 85)", () => {
+  function repoConEstado(semilla: GastoFijoPlantillaDTO) {
+    const fila: GastoFijoPlantillaDTO = { ...semilla };
+    const repo = buildRepo({
+      obtenerPorId: vi.fn(async () => ({ ...fila })),
+      actualizar: vi.fn(async (_id: string, input: ActualizarPlantillaInput) => {
+        // Espejo de `GastoFijoPlantillaRepository.actualizar`: escribe los cinco campos.
+        fila.concepto = input.concepto;
+        fila.monto = input.monto;
+        fila.periodicidadUnidad = input.periodicidadUnidad;
+        fila.periodicidadCantidad = input.periodicidadCantidad;
+        fila.fechaCobro = input.fechaCobro;
+        return { ...fila };
+      }),
+    });
+    return { repo, filaGuardada: () => ({ ...fila }) };
+  }
+
+  it("editar el monto no mueve el ciclo: el repositorio recibe semanas/2/2026-03-31", async () => {
+    const { repo, filaGuardada } = repoConEstado(
+      plantilla({
+        id: "p-ciclo",
+        concepto: "Alquiler",
+        monto: "80000.00",
+        periodicidadUnidad: "semanas",
+        periodicidadCantidad: 2,
+        fechaCobro: "2026-03-31",
+      }),
+    );
+    const svc = new GastoFijoPlantillaService(repo);
+
+    const r = await svc.actualizarPlantilla(
+      {
+        id: "p-ciclo",
+        concepto: "Alquiler",
+        monto: "999.00",
+        periodicidadUnidad: "semanas",
+        periodicidadCantidad: 2,
+        fechaCobro: "2026-03-31",
+      },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+
+    const fila = filaGuardada();
+    expect(fila.monto).toBe("999.00"); // lo unico que cambio
+    expect(fila.periodicidadUnidad).toBe("semanas");
+    expect(fila.periodicidadCantidad).toBe(2);
+    expect(fila.fechaCobro).toBe("2026-03-31");
+
+    // Y lo mismo en el contrato con el repositorio, con literales: nada de `...PERIODICIDAD`.
+    expect(repo.actualizar).toHaveBeenCalledWith("p-ciclo", {
+      concepto: "Alquiler",
+      monto: "999.00",
+      periodicidadUnidad: "semanas",
+      periodicidadCantidad: 2,
+      fechaCobro: "2026-03-31",
+    });
+  });
+
+  it("cambiar el ciclo A PROPOSITO si lo mueve (la ficha no congela el ciclo, cierra el reset mudo)", async () => {
+    const { repo, filaGuardada } = repoConEstado(
+      plantilla({
+        id: "p-ciclo",
+        periodicidadUnidad: "semanas",
+        periodicidadCantidad: 2,
+        fechaCobro: "2026-03-31",
+      }),
+    );
+    const svc = new GastoFijoPlantillaService(repo);
+
+    await svc.actualizarPlantilla(
+      {
+        id: "p-ciclo",
+        concepto: "Alquiler",
+        monto: "80000.00",
+        periodicidadUnidad: "meses",
+        periodicidadCantidad: 1,
+        fechaCobro: "2026-04-01",
+      },
+      MAESTRO,
+    );
+
+    const fila = filaGuardada();
+    expect(fila.periodicidadUnidad).toBe("meses");
+    expect(fila.periodicidadCantidad).toBe(1);
+    expect(fila.fechaCobro).toBe("2026-04-01");
   });
 });

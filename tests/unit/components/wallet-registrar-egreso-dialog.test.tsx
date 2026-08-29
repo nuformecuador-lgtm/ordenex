@@ -51,6 +51,43 @@ describe("RegistrarEgresoAdministrativoDialog — tipos ofrecidos (R19/R22a)", (
   }, 15000);
 });
 
+describe("RegistrarEgresoAdministrativoDialog — un variable no es periódico (feature 85, R25)", () => {
+  it("el diálogo de egreso manual no ofrece periodicidad ni fecha de cobro", async () => {
+    const user = userEvent.setup();
+    renderDialog(<RegistrarEgresoAdministrativoDialog />);
+
+    await user.click(screen.getByRole("button", { name: "Registrar egreso" }));
+    const dialog = await screen.findByRole("dialog");
+
+    // La regla del pedido literal: la periodicidad es de la PLANTILLA de gasto fijo y de nada
+    // más. Un gasto variable o un sueldo se registran una vez, cuando ocurren. Hoy se cumple
+    // por construcción —la feature 85 no añadió nada aquí— y esto lo fija como regresión: si
+    // alguien copiara los controles del diálogo de la plantilla a este, el caso se pone rojo.
+    expect(
+      within(dialog).queryByRole("combobox", { name: "Cada cuánto se cobra" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("combobox", { name: "Unidad del ciclo" }),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Día del primer cobro")).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Cada")).not.toBeInTheDocument();
+
+    // Tampoco por la puerta de atrás: ningún control de fecha, se llame como se llame.
+    expect(dialog.querySelectorAll('input[type="date"]')).toHaveLength(0);
+
+    // Y el único selector del diálogo sigue siendo el de tipo, con sus DOS opciones: ni
+    // «Diaria» ni «Mensual» asoman por ahí.
+    const combos = within(dialog).getAllByRole("combobox");
+    expect(combos).toHaveLength(1);
+    await user.click(within(dialog).getByRole("combobox", { name: "Tipo de egreso" }));
+    const lista = await screen.findByRole("listbox");
+    expect(within(lista).getAllByRole("option")).toHaveLength(2);
+    for (const nombre of ["Diaria", "Semanal", "Quincenal", "Mensual", "Personalizada"]) {
+      expect(within(lista).queryByRole("option", { name: nombre })).not.toBeInTheDocument();
+    }
+  }, 15000);
+});
+
 describe("RegistrarEgresoAdministrativoDialog — submit (R2/R22a)", () => {
   it("registra un gasto variable con el tipo, monto y descripción enviados", async () => {
     const user = userEvent.setup();

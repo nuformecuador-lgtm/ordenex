@@ -54,6 +54,14 @@ export default async function WalletPage() {
     notFound();
   }
 
+  // Feature 85 (T F.4, R23): el instante del PRÓXIMO COBRO se resuelve AQUÍ, en el servidor, y
+  // baja por props hasta la tabla de plantillas. La pantalla no puede leer el reloj del
+  // navegador para esa columna: el panel se renderiza también en el servidor, así que un cambio
+  // de día entre el render y la hidratación daría dos fechas distintas para la misma fila; y
+  // además la fecha quedaría a merced del reloj de la máquina del usuario. Es el mismo criterio
+  // con el que `wallet/mensajeros/page.tsx` resuelve la suya.
+  const ahoraIso = new Date().toISOString();
+
   return (
     <AppPage
       title="Wallet"
@@ -74,6 +82,7 @@ export default async function WalletPage() {
           total: plantillasResult.total,
           pageSize: plantillasResult.pageSize,
         }}
+        ahoraIso={ahoraIso}
       />
     </AppPage>
   );

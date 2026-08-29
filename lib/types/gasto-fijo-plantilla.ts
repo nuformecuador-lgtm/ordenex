@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { montoPositivoSchema } from "@/lib/types/wallet";
-import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { esFechaCalendarioValida, fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { gastoFijoConfig } from "@/lib/config/gasto-fijo";
 import type { PeriodicidadUnidad } from "@/lib/utils/periodicidad";
 
@@ -27,21 +27,50 @@ export type GastoFijoPlantillaDTO = {
 
 // ── Schemas zod de borde ──
 
-// Feature 84 — fragmento de periodicidad compartido por crear/actualizar.
+// Feature 84 / 85 (design §2.1) — periodicidad del ciclo: UNA declaracion de las reglas de
+// campo y DOS aplicaciones de ellas, para que crear y actualizar no puedan divergir en la regla
+// aunque difieran —a proposito— en la OBLIGATORIEDAD.
 //
-// TODOS OPCIONALES CON DEFAULT, a proposito: la UI actual (`GastoFijoPlantillaDialog`, feature
-// 85) todavia NO envia periodicidad ni fecha de cobro. Con estos defaults la pantalla sigue
-// funcionando sin cambios y una plantilla creada hoy se comporta como antes (mensual). Cuando la
-// 85 empiece a mandar los campos, el mismo schema los valida sin tocar nada aca.
-const periodicidadFields = {
-  periodicidadUnidad: z.enum(["dias", "semanas", "meses"]).default("meses"),
-  periodicidadCantidad: z.coerce.number().int().min(1, "La cantidad debe ser al menos 1.").default(1),
+// CREAR conserva los defaults `meses`/`1`/hoy-CR (R4): una creacion no pisa ningun valor previo,
+// asi que el default es el PRIMER valor del ciclo y no el borrado de otro. Es el comportamiento
+// documentado desde antes de la 84 y el que uso el backfill de su migracion.
+//
+// ACTUALIZAR los EXIGE (R1, feature 85): sin `.default()` y sin `.optional()`. Hasta aqui los
+// heredaba de crear, y por eso una edicion de `{id, concepto, monto}` —exactamente lo que mandaba
+// `GastoFijoPlantillaDialog`— reescribia el ciclo a `meses`/`1` y movia el ancla `fechaCobro` al
+// dia de la edicion, en silencio; y cambiar la unidad de/hacia `meses` cambia el formato del
+// periodo de la clave de idempotencia (`YYYY-MM` <-> `YYYY-MM-DD`), que es el escenario de DOBLE
+// COBRO que documenta `GeneracionGastosFijosService`. Con la 85 el dialogo SI envia los tres
+// campos (R15) y una edicion incompleta muere en el BORDE con `validation_error`, nombrando cada
+// campo ausente, sin llegar al servicio.
+const periodicidadUnidadSchema = z.enum(["dias", "semanas", "meses"]);
+const periodicidadCantidadSchema = z.coerce
+  .number()
+  .int()
+  .min(1, "La cantidad debe ser al menos 1.");
+// R5: el regex mide la FORMA y `2026-02-31` la cumple, pero `new Date("2026-02-31T00:00:00.000Z")`
+// RUEDA al 3 de marzo sin error. `esFechaCalendarioValida` (el round-trip que el repo ya usa para
+// esto) exige que el dia EXISTA: un ancla rodada es la misma familia de fallo que cierra la 85
+// —el sistema guarda un dia distinto del que le pidieron, callado—.
+const fechaCobroSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha de cobro debe tener el formato YYYY-MM-DD.")
+  .refine(esFechaCalendarioValida, "La fecha de cobro no existe en el calendario.");
+
+// CREAR: los tres opcionales con default (R4).
+const periodicidadConDefault = {
+  periodicidadUnidad: periodicidadUnidadSchema.default("meses"),
+  periodicidadCantidad: periodicidadCantidadSchema.default(1),
   // Default = hoy en hora CR (no `new Date()`: `fechaCalendarioCR` evita el off-by-one de UTC).
   // Se evalua por parseo, asi que no se congela al cargar el modulo.
-  fechaCobro: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha de cobro debe tener el formato YYYY-MM-DD.")
-    .default(() => fechaCalendarioCR()),
+  fechaCobro: fechaCobroSchema.default(() => fechaCalendarioCR()),
+};
+
+// ACTUALIZAR: los tres OBLIGATORIOS (R1). Mismas reglas, cero defaults.
+const periodicidadRequerida = {
+  periodicidadUnidad: periodicidadUnidadSchema,
+  periodicidadCantidad: periodicidadCantidadSchema,
+  fechaCobro: fechaCobroSchema,
 };
 
 // R24: crear plantilla = concepto no vacio + monto STRING > 0 (hasta 2 decimales). `activa`
@@ -49,14 +78,17 @@ const periodicidadFields = {
 export const crearGastoFijoPlantillaSchema = z.object({
   concepto: z.string().trim().min(1, "El concepto es obligatorio."),
   monto: montoPositivoSchema,
-  ...periodicidadFields,
+  ...periodicidadConDefault,
 });
 
 export type CrearGastoFijoPlantillaInput = z.infer<typeof crearGastoFijoPlantillaSchema>;
 
-// R25: editar concepto/monto de una plantilla existente (identificada por id uuid).
+// R25: editar una plantilla existente (identificada por id uuid). Se DERIVA del schema de crear
+// para que `concepto` y `monto` se declaren una sola vez, y redeclara SOLO lo que tiene que
+// diferir: los tres campos del ciclo, en su variante sin default (R1).
 export const actualizarGastoFijoPlantillaSchema = crearGastoFijoPlantillaSchema.extend({
   id: z.string().uuid(),
+  ...periodicidadRequerida,
 });
 
 export type ActualizarGastoFijoPlantillaInput = z.infer<

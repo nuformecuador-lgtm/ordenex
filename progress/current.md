@@ -9,6 +9,121 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 💰 2026-08-29 — repaso del módulo wallet: cuatro fichas (85, 332, 333, 334)
+
+**Estado: las cuatro `pending`, specs EN CURSO (cuatro `spec_author` en paralelo).** El alta viaja en
+el **PR #608** (solo `feature_list.json`, gate `--rapido` verde: 2449/2450, único rojo en el baseline
+conocido). Las specs van en `chore/specs-wallet`, nacida de `chore/registro-fichas-wallet`
+(`05e5e958`), que sale de `origin/dev` en `8061d816`. **Apilado declarado: #608 se mergea ANTES que
+el PR de las specs** — el precedente contrario en este repo dejó commits que nunca llegaron a `dev`
+con el hijo en verde y «merged».
+
+**Qué pidió el humano** (textual, 2026-08-29): las plantillas de gastos fijos no se pueden eliminar;
+los gastos fijos deben ser parametrizables — «poner qué día quieren que se haga el cobro» —; el cobro
+no debe ser automático sino **autorizado por un administrador**; eso debe tener **notificaciones y
+recordatorios**; y le preocupa **la simplicidad de hacer ajustes o movimientos de dinero** dentro de
+la wallet.
+
+**MEDIDO CONTRA PRODUCCIÓN antes de registrar nada** (solo lectura, 2026-08-29). Es lo que da peso a
+cada ficha, y sin ello la 333 no se justificaría hoy:
+
+- 2 plantillas de gasto fijo («Alquiler bodega» 10.000, «Alquiler camioneta» 25.000), las **dos
+  inactivas** desde el 2026-08-27, con `fecha_cobro` = 2026-08-04 en ambas.
+- **0** movimientos `egreso_gasto_fijo` emitidos **jamás**: el mecanismo nunca ha cobrado nada y
+  desactivar fue el sucedáneo del borrado que no existe.
+- **0** movimientos de ajuste sobre **38** filas del libro: nadie ha usado nunca ese diálogo.
+
+**EL FALLO MUDO que destapó el repaso, verificado leyendo el código.**
+`GastoFijoPlantillaDialog` envía solo `{id, concepto, monto}`; los defaults de `periodicidadFields`
+en `actualizarGastoFijoPlantillaSchema` rellenan `meses`/`1`/**hoy**, y
+`GastoFijoPlantillaRepository.actualizar` los escribe **sin condición**. Resultado: **editar el monto
+reescribe la periodicidad a mensual y mueve el ancla del ciclo al día de la edición.** De `semanas` a
+`meses` cambia además el formato de la clave de idempotencia (`<id>:2026-09-14` → `<id>:2026-09`),
+que es el escenario de **doble cobro** que `GeneracionGastosFijosService` advierte por escrito en su
+cabecera. En producción **aún no ha mordido**: las dos ediciones del 2026-08-27 fueron
+desactivaciones, que van por `setActiva` y no tocan `fecha_cobro`.
+
+**Las cuatro fichas.**
+
+| # | Ficha | Zona | Tamaño | Depende |
+|---|---|---|---|---|
+| 85 | periodicidad y día de cobro del gasto fijo en la UI | fullstack | media | 84 |
+| 332 | eliminar plantillas de gasto fijo | fullstack | baja | 85 |
+| 333 | el gasto fijo se cobra con autorización, aviso y recordatorio | fullstack | alta | 85 |
+| 334 | un solo diálogo para mover dinero en la wallet | fullstack | media | — |
+
+La **85 ya existía** en `pending` desde el 2026-07-17 (la mitad de frontend que la 84 dejó sin
+entregar): se **amplía**, no se duplica. Pasa de `frontend` a `fullstack` y pierde el «(frontend)»
+del nombre, que ya mentía — el arreglo honesto del reset toca el schema, no solo el diálogo.
+
+**PUERTA HUMANA del 2026-08-29: cuatro decisiones CERRADAS antes de escribir los specs.**
+
+- **Borrado (332).** La fila desaparece de la tabla de plantillas. Decisión textual: «lo importante
+  es el historial del libro, si el movimiento ya se hizo no hay problema que quede allí ese histórico
+  pero cuando ya no se necesite sí es importante poder prescindir y eliminarlo». Es viable sin perder
+  nada: `wallet_movimiento` **no tiene FK** a `gasto_fijo_plantilla` (referencia derivada
+  `origen_id = '<plantillaId>:<periodo>'`) y la descripción del movimiento ya lleva el concepto.
+  Esta ficha **revoca explícitamente** el R25 de la 45 («sin borrado»), con OK humano.
+- **Autorización (333).** Se decide **por plantilla** (cobra sola / requiere aprobación), no global.
+- **Quién aprueba (333): SOLO EL MAESTRO.** ⚠️ Es la **primera excepción** a la paridad
+  admin↔maestro que la ficha 94 dio en wallet, y al resto del CRUD de plantillas, que usa
+  `esAccesoTotal` (maestro + admin). El admin **ve** los pendientes y no los aprueba. Está pedido
+  como excepción deliberada en el spec para que nadie lo lea como descuido.
+- **Recordatorio (333).** Diario mientras siga pendiente; el pendiente **no vence solo**. No hace
+  falta cron nuevo: `generar-gastos-fijos` ya corre diario a las 6:00.
+- **Borrar con pendientes (332+333).** Se cancelan, y la confirmación lo dice con el número delante.
+  La cascada la **posee la 333** (dueña de la tabla de pendientes); la 332 solo la declara, para que
+  siga siendo implementable hoy sin la 333.
+- **Fecha del movimiento (334).** El movimiento manual **admite fecha, con tope en hoy**.
+
+**Trampas pasadas a los specs por escrito, para que no se redescubran caras.** (a) El notificador hay
+que **inyectarlo en el composition root**, no basta con importarlo — precedente: 2 de 7 notificadores
+muertos con la suite verde. (b) El recordatorio **diario** choca con `notificacion_dedupe_key` si la
+clave no incluye el día: es el mismo error que la 262 documentó, donde el segundo aviso no salía
+nunca, en silencio. (c) La guardia del reset de la 85 debe afirmar **valores literales**, no
+compararse contra los defaults del propio schema, o está verde por construcción. (d) La 334 borra dos
+componentes al fusionarlos: la cobertura de ambos tiene que sobrevivir, con los archivos de test
+nombrados — borrar un componente ya se llevó su test por delante y costó una regresión en producción.
+(e) La fecha de la 334 **no puede reutilizar `created_at`** sin enumerar antes qué consumidores del
+ledger se mueven (analítica y rollup diario incluidos).
+
+**AVANCE del 2026-08-29 (tarde).** Los cuatro specs están escritos y commiteados. El humano **retiró
+la puerta de aprobación** de los specs para esta tanda («tan pronto termines con los specs implementá
+sin preguntar»), así que se implementa en cuanto cada spec cierra.
+
+- **PR #608 — alta de las cuatro fichas: MERGEADO** en `dev` (`4eaff293`).
+- **Ficha 85 — IMPLEMENTADA, `in_progress`, PR #609 abierto y sin mergear.** Rama
+  `feature/85-gasto-fijo-periodicidad-ui`. Fase B (`backend_dev`) y fase F (`frontend_dev`),
+  secuenciadas. `./init.sh` **completo** en verde: **21.881/21.908**, `INIT_EXIT=0`. El único archivo
+  rojo es `superficie-de-uso.guardia.test.ts`, del baseline, y se verificó **su contenido**: el único
+  infractor es `lib/actions/tarifas.ts:67 obtenerTarifa`, ajeno a la ficha. Se mira el contenido y no
+  solo el nombre porque el baseline compara **por archivo** y no vería un rojo nuevo dentro de uno ya
+  listado. Siete mutaciones aplicadas con salida roja real en `progress/impl_85.md`.
+  - Una de esas mutaciones **corrigió el enunciado del propio spec**: mutar el borde no puede
+    enrojecer el test de servicio, porque ese test vive por debajo de zod. Se mutó también el
+    servicio.
+  - Los specs de la **332, 333 y 334** viajan en ese mismo PR (solo documentos).
+- **BLOQUEO ACTIVO:** el merge de #609 lo rechaza el clasificador de auto mode. Hasta que entre, la 85
+  no pasa a `done` y **fullstack sigue en su tope de 2** (321 + 85): la 332 no puede arrancar sin
+  romper la regla 1, que el gate valida.
+
+**Decisiones de producto tomadas por el leader** al retirarse la puerta, todas fuera del dinero: presets
+de periodicidad + «Personalizada»; fecha de cobro pasada **se avisa, no se bloquea**; «Monto» en vez de
+«Monto mensual»; «No se cobra» en inactivas; las dos columnas nuevas **sí** entran al Excel; el
+interruptor de la 333 nace en «requiere aprobación»; el aviso llega a maestro y admin y **decide solo el
+maestro**; desactivar **no** cancela pendientes; la cola pagina sin tope duro; y la 334 admite fecha
+hacia atrás con **ventana de 30 días configurable**.
+
+**Consecuencia declarada de esa última** (no la introduce la ficha, la hace visible): el rollup diario
+calcula **el día en curso**, así que un movimiento fechado ayer no entra solo en el agregado de ayer.
+Hay script de backfill, pero es un paso manual.
+
+**Orden restante**, serial por conflicto de archivos y por cupo: **332 → 334 → 333**.
+
+**Lo que falta.** Cerrar los cuatro specs, pasarlos por la puerta humana de aprobación y recién ahí
+tocar código. El cupo de `in_progress` en fullstack lo ocupa hoy la **321**, así que solo una de las
+cuatro puede entrar a `in_progress` a la vez hasta que la 321 cierre.
+
 ## 💬 2026-08-28 — ficha 321: histórico de conversaciones (admin y maestro leen el chat de todos)
 
 **Estado: `pending` → spec EN CURSO (`spec_author` lanzado).** Rama
