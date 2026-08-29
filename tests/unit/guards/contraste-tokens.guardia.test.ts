@@ -328,10 +328,16 @@ function superficiesDe(tema: "claro" | "oscuro"): { nombre: string; hex: string 
  * El hex de una utilidad (`bg-danger-soft`, `text-card`, `dark:bg-danger/15`) en un tema y sobre
  * una superficie. `token()` primero y `paleta()` después, que es el orden real: los tokens con
  * variante por tema viven en `:root`/`.dark` y los de paleta, una sola vez, en `@theme inline`.
+ *
+ * Feature 226 — acepta también `ring-*`, que es la MISMA aritmética: un anillo con alfa se compone
+ * sobre lo que tiene detrás igual que un fondo. Lo que cambia es contra QUÉ se mide después (para
+ * `bg-` es la tinta; para `ring-`, la propia superficie), y eso lo decide quien llama.
+ * `ring-3` —que es un ANCHO, no un color— no encaja en el patrón y hace lanzar: el censo de la 226
+ * filtra los anchos antes de llegar aquí.
  */
 function hexDeUtilidad(utilidad: string, tema: "claro" | "oscuro", superficie: string): string {
   const sinVariantes = utilidad.replace(/^(?:[a-z-]+:)*/, "");
-  const m = sinVariantes.match(/^(?:bg|text)-([a-z][a-z0-9-]*)(?:\/(\d+))?$/);
+  const m = sinVariantes.match(/^(?:bg|text|ring)-([a-z][a-z0-9-]*)(?:\/(\d+))?$/);
   if (!m) {
     throw new Error(
       `\`${utilidad}\` no es una utilidad de color que esta guardia sepa resolver. Fallar es lo ` +
@@ -553,5 +559,202 @@ describe("Feature 222 — el botón `destructive` cumple AA en reposo y en hover
       "oscuro/muted (paneles apagados)",
       "oscuro/secondary",
     ]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// Feature 226 — EL ANILLO DE FOCO, que es un indicador de interfaz (WCAG 1.4.11)
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Feature 226 — EL ANILLO DE FOCO DEL BOTÓN CONTRA EL FONDO ADYACENTE.
+ *
+ * ── QUÉ SE ARREGLA, con los números medidos
+ * El anillo de foco es LA señal de dónde está el teclado: quien no usa ratón depende de él
+ * enteramente. No es estética. Todas las variantes del `Button` lo pintaban con alfa, y el color
+ * efectivo de un anillo con alfa NO es su token: es la mezcla con lo que tiene detrás. Esa mezcla
+ * se mide contra ESE MISMO fondo, así que el alfa se come el contraste dos veces.
+ *
+ * Peor de las seis superficies declaradas, ANTES de esta ficha:
+ *
+ *   claro  · `ring-ring/50`        1.71     oscuro · `ring-ring/50`        2.33
+ *   claro  · `ring-brand/30`       1.38     oscuro · `ring-brand/30`       1.45
+ *   claro  · `ring-destructive/20` 1.29     oscuro · `ring-destructive/40` 1.87
+ *
+ * DESPUÉS, con los anillos opacos y `--ring` en `--color-brand-dark` para el tema claro:
+ *
+ *   claro  · `ring-ring`           3.68     oscuro · `ring-ring`           5.57
+ *   claro  · `ring-destructive`    3.33     oscuro · `ring-destructive`    5.24
+ *
+ * ── ⚠️ EL UMBRAL NO ES EL DE TEXTO, y equivocarlo falla en las dos direcciones
+ * 1.4.11 pide **3:1** a un componente de interfaz, no el 4.5 de 1.4.3. Pedir 4.5 obligaría a
+ * cambiar más paleta de la necesaria; quedarse por debajo de 3 no arregla nada. Y se mide el
+ * ANILLO contra el fondo ADYACENTE, no contra el texto del botón.
+ *
+ * ── POR QUÉ NO BASTABA CON SUBIR EL ALFA
+ * Con el naranja de marca opaco el anillo se queda en 2.81 sobre `--secondary`, 2.88 sobre
+ * `--muted` y 2.99 sobre `--background`: falla en tres de las seis superficies por centésimas, y
+ * «aprobar por una centésima no es aprobar» (lección de la 210) vale igual al revés. Por eso el
+ * token del anillo baja a `#d4530d` en tema claro. El caso «los dos motivos del arreglo» deja
+ * esos números atornillados: si dejaran de ser ciertos, la decisión hay que releerla.
+ *
+ * ── QUÉ MIDE Y QUÉ NO
+ * Mide TODA utilidad `ring-<color>` que viva en `components/ui/button.tsx`, censada del código y
+ * no de una lista copiada: si mañana alguien estrena una variante con su propio anillo, entra
+ * sola. NO mide el resto de la app — `Input`, `Checkbox`, `Pagination`, el `Sidebar` y una
+ * treintena de sitios siguen en `ring-ring/50`, que con el token nuevo sube pero NO llega a 3.
+ * Eso es DEUDA DECLARADA de esta ficha, cuyo alcance es el `Button`, y no un hallazgo nuevo.
+ */
+
+/**
+ * El umbral de WCAG 1.4.11 para componentes de interfaz. Escrito A MANO y a propósito: es el
+ * número contra el que se juzga, y no puede salir de la misma fuente que produce el color.
+ */
+const NO_TEXTO_1411 = 3;
+
+/**
+ * El censo de anillos DEL CÓDIGO. `ring-3` es un ANCHO y no un color, así que el patrón exige
+ * letra detrás del guion; las variantes (`focus-visible:`, `dark:`, `aria-invalid:`) se conservan
+ * porque deciden en qué tema aplica cada anillo.
+ */
+function anillosDe(fuente: string): string[] {
+  return [
+    ...new Set(
+      [...fuente.matchAll(/(?:[a-z-]+:)*ring-[a-z][a-z0-9-]*(?:\/\d+)?/g)].map((m) => m[0]),
+    ),
+  ];
+}
+
+const ANILLOS_BOTON = anillosDe(boton);
+
+/** Un anillo `dark:` sólo existe en oscuro; el resto aplica en los dos temas. */
+function temasDe(utilidad: string): ("claro" | "oscuro")[] {
+  return utilidad.startsWith("dark:") ? ["oscuro"] : ["claro", "oscuro"];
+}
+
+/**
+ * SUELO por tema: el PEOR anillo sobre la peor de las seis superficies, medido el 2026-08-28.
+ * Como en la 210 y en la 222, aprobar por una centésima no es aprobar: si un cambio mejora, este
+ * suelo falla y se sube A MANO.
+ */
+const SUELO_ANILLO: Record<string, number> = {
+  claro: 3.33, // `focus-visible:ring-destructive` sobre `--secondary` (#eef1f8)
+  oscuro: 5.24, // `focus-visible:ring-destructive` sobre `--muted`/`--secondary` (#16294a)
+};
+
+describe("Feature 226 — el anillo de foco del Button cumple 1.4.11 en los dos temas (guardia)", () => {
+  /**
+   * Autocomprobación del censo. Sin ella, un patrón que dejara de enganchar mediría una lista
+   * VACÍA y los `it.each` de abajo pasarían sin haber mirado un solo anillo: el fallo mudo que
+   * esta familia de guardias ya pagó dos veces.
+   */
+  it("el censo encuentra los anillos del CÓDIGO del botón, y son los declarados", () => {
+    expect(
+      ANILLOS_BOTON,
+      "el censo de anillos cambió. No se actualiza a ojo: cada anillo nuevo hay que MEDIRLO en " +
+        "los dos temas y sobre las seis superficies antes de meterlo en esta lista.",
+    ).toEqual([
+      "focus-visible:ring-ring",
+      "aria-invalid:ring-destructive",
+      "focus-visible:ring-destructive",
+    ]);
+    expect(ANILLOS_BOTON.every((a) => a.includes("ring-"))).toBe(true);
+  });
+
+  /** El ancho sigue puesto: un anillo de 0 px no se ve por mucho contraste que tenga. */
+  it("el anillo sigue teniendo ancho: `ring-3` en foco y en `aria-invalid`", () => {
+    expect(boton).toContain("focus-visible:ring-3");
+    expect(boton).toContain("aria-invalid:ring-3");
+  });
+
+  const CASOS_ANILLO = ANILLOS_BOTON.flatMap((utilidad) =>
+    temasDe(utilidad).map((tema) => [utilidad, tema] as const),
+  );
+
+  it.each(CASOS_ANILLO)(
+    "`%s` en tema %s: 3:1 contra el fondo adyacente en TODAS las superficies",
+    (utilidad, tema) => {
+      for (const superficie of superficiesDe(tema)) {
+        // El anillo se pinta ENCIMA de la superficie: si lleva alfa, es la mezcla lo que se ve.
+        const anillo = hexDeUtilidad(utilidad, tema, superficie.hex);
+        const medido = contraste(anillo, superficie.hex);
+        expect(
+          medido,
+          `${tema}: \`${utilidad}\` (${anillo}) sobre ${superficie.nombre} (${superficie.hex}) ` +
+            `mide ${medido.toFixed(2)}, y WCAG 1.4.11 pide ${NO_TEXTO_1411} a un indicador de ` +
+            "interfaz. El anillo de foco es LA señal de dónde está el teclado: por debajo de 3 " +
+            "no se ve, y quien navega sin ratón se queda sin saber dónde está.",
+        ).toBeGreaterThanOrEqual(NO_TEXTO_1411);
+      }
+    },
+  );
+
+  it.each(["claro", "oscuro"] as const)(
+    "tema %s: el peor anillo sobre la peor superficie no baja del suelo medido",
+    (tema) => {
+      const peor = Math.min(
+        ...ANILLOS_BOTON.filter((u) => temasDe(u).includes(tema)).flatMap((utilidad) =>
+          superficiesDe(tema).map((s) => contraste(hexDeUtilidad(utilidad, tema, s.hex), s.hex)),
+        ),
+      );
+      expect(
+        peor,
+        `el anillo de foco EMPEORÓ en tema ${tema}: el peor medía ${SUELO_ANILLO[tema]} al ` +
+          "cerrar la 226. Si el cambio es a mejor, sube el suelo A MANO.",
+      ).toBeGreaterThanOrEqual(SUELO_ANILLO[tema] - EPSILON);
+    },
+  );
+
+  /**
+   * LOS DOS MOTIVOS DEL ARREGLO, ejecutables en vez de en prosa:
+   *
+   *  (a) los alfas que había NO llegan a 3 ni siquiera con el token nuevo, así que subir sólo el
+   *      token no habría bastado; y
+   *  (b) el naranja de marca OPACO tampoco llega en tres de las seis superficies claras, así que
+   *      subir sólo el alfa tampoco.
+   *
+   * Si algún día la paleta cambia y alguna de las dos deja de ser cierta, este caso se pone rojo:
+   * la decisión hay que releerla con los números nuevos, no heredarla.
+   */
+  it("los dos motivos del arreglo siguen en pie: ni el alfa solo, ni el token solo", () => {
+    const ALFAS_RETIRADOS = [
+      "ring-ring/50",
+      "ring-brand/30",
+      "ring-destructive/20",
+      "ring-destructive/40",
+    ];
+    const yaCumplen = (["claro", "oscuro"] as const).flatMap((tema) =>
+      ALFAS_RETIRADOS.map((utilidad) => ({
+        donde: `${tema}/${utilidad}`,
+        peor: Math.min(
+          ...superficiesDe(tema).map((s) => contraste(hexDeUtilidad(utilidad, tema, s.hex), s.hex)),
+        ),
+      })).filter((m) => m.peor >= NO_TEXTO_1411),
+    );
+    expect(
+      yaCumplen.map((c) => c.donde),
+      "alguno de los anillos con alfa que esta ficha retiró ya cumpliría 1.4.11. Eso invalida el " +
+        "motivo por el que se pintaron opacos y hay que releer la decisión.",
+    ).toEqual([]);
+
+    const marcaOpaca = superficiesDe("claro")
+      .map((s) => ({ donde: s.nombre, medido: contraste(token("claro", "primary"), s.hex) }))
+      .filter((m) => m.medido < NO_TEXTO_1411);
+    expect(
+      marcaOpaca.map((m) => m.donde),
+      "el naranja de marca opaco ya cumpliría 1.4.11 en las seis superficies: el motivo por el " +
+        "que `--ring` dejó de valer `--primary` en tema claro caducó.",
+    ).toEqual(["background (la página)", "muted (paneles apagados)", "secondary"]);
+  });
+
+  /**
+   * La mitad que hace que lo de arriba signifique algo: que el token del anillo sea el que se
+   * midió. `--ring` es el ÚNICO token que esta ficha toca, y sólo en tema claro.
+   */
+  it("`--ring` gira por tema, y en claro ya no es el naranja de marca", () => {
+    expect(token("claro", "ring")).toBe(paleta("brand-dark"));
+    expect(token("claro", "ring")).not.toBe(token("claro", "primary"));
+    // En oscuro NO se toca: opaco ya medía 5.57 sobre la peor superficie.
+    expect(token("oscuro", "ring")).toBe(token("oscuro", "primary"));
   });
 });
