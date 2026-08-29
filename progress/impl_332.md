@@ -731,3 +731,42 @@ dinero, ni las de censo de tablas, ni las de descarga— se movió con este camb
 señala `eliminarPlantillaAction`, la revocación está escrita donde se lee y vigilada por una
 guardia que se vio roja bloque por bloque, y el texto original de `45/R25` sigue verbatim con su
 apéndice detrás. Falta el gate completo (T20), el commit (T21) y el repaso a mano (T22).
+
+---
+
+## Repaso a mano (T22) — 2026-08-29, navegador real
+
+Hecho por el leader tras el gate, con Playwright sobre `pnpm dev` en local. Cubre **las dos fichas**:
+la 85 (ya mergeada en `dev` y que nadie habia visto en pantalla) y la 332.
+
+**Entorno.** Base local al dia (168 migraciones, `migrate status` OK). Usuario `admin.qa@ordenex.test`
+sembrado con `scripts/seed-usuarios-qa.ts`. Se entra con `admin`, no con `maestro` — lo cual **confirma
+de paso la paridad de la ficha 94**: el admin alcanza `/wallet`. Receta de login: el formulario es de
+React y un `fill` antes de la hidratacion lo envia VACIO; se teclea con `pressSequentially` y se
+**confirma el valor en el DOM** antes de enviar.
+
+**Recorrido y resultado.**
+
+1. `/wallet` carga entera, sin un solo error de navegador en todo el recorrido.
+2. **Crear**: el dialogo pide Concepto, Monto («Es lo que se cobra cada vez.»), «Cada cuanto se cobra»
+   y «Dia del primer cobro». Se creo una plantilla **Quincenal**.
+3. La tabla la pinta con las columnas nuevas: `Concepto · Monto · Periodicidad · Proximo cobro ·
+   Estado · Acciones` -> «Quincenal», «29 de agosto de 2026».
+4. **LA PRUEBA DEL FALLO MUDO, EN LA APP REAL.** Se abrio Editar, se cambio **solo el monto**
+   (10.000 -> 77.777) y se guardo. La fila quedo: `₡77.777 | Quincenal | 29 de agosto de 2026`.
+   **La periodicidad NO se movio y el ancla tampoco.** Antes de la 85, esa misma edicion la habria
+   dejado en Mensual con el ancla en el dia de hoy. Esto es lo que ningun test unitario demuestra:
+   que el camino entero -dialogo, action, schema, service, repo, tabla- se comporta.
+5. **Borrar**: la confirmacion nombra la plantilla y su importe, enuncia las tres consecuencias
+   -incluida «Los cobros ya hechos siguen en el libro de movimientos: no se borran ni se modifican»-
+   y ofrece Desactivar como alternativa. Confirmado, la fila desaparece de la tabla.
+
+**HALLAZGO (menor, no bloqueante).** De los tres botones de la fila, el mas llamativo es **Eliminar**
+(fondo rojo suave) y el menos visible es **Desactivar** (texto plano, sin borde). Esta al reves de lo
+conveniente: la accion segura es la que menos se ve y la destructiva la que mas. No rompe nada y la
+confirmacion cubre el riesgo, pero la jerarquia visual invita a lo contrario de lo que el propio
+dialogo recomienda. Se deja anotado, sin arreglar, para que lo decida el humano.
+
+**Limite declarado.** La tabla local arrancaba vacia, asi que no se vio el comportamiento con varias
+filas ni la vuelta a la pagina anterior al borrar la ultima de una pagina (R20) — eso sigue cubierto
+solo por su test. Tampoco se probo el preset «Personalizada» del ciclo.
