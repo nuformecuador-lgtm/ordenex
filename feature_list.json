@@ -3904,6 +3904,50 @@
       "complexity": "media",
       "branch": null,
       "status_note": "SALE DE LA 226 (2026-08-28) como deuda DECLARADA, no como descuido: aquella acoto su alcance al `Button` y dejo escrito en `DESIGN.md` y en la cabecera de su guardia lo que quedaba fuera. NO ES ESTETICA: WCAG 1.4.11 pide 3:1 a un indicador de interfaz, y el anillo de foco es LA senal de donde esta el teclado -- quien no usa raton depende enteramente de eso. LO QUE FALTA: `Input`, `Checkbox`, `RadioGroup`, `Badge`, `Calendar`, `Pagination`, `DataTable`, el `Sidebar` y ~30 sitios sueltos siguen en `ring-ring/50` o `/40`. OJO AL DATO QUE AHORRA TIEMPO: con el token nuevo que dejo la 226 (`--ring` claro = `--color-brand-dark`) esos anillos SUBEN, pero NO llegan a 3 -- la 226 lo midio: el naranja de marca opaco da 2.81, 2.88 y 2.99 sobre tres de las seis superficies del portal, falla por centesimas. Asi que cambiar el token no basta: hay que retirar el alfa sitio por sitio, igual que se hizo en el `Button`. COMO MEDIR, y esto es lo que mas facil sale mal aqui: sobre los HEX con la aritmetica del repo (`tests/fixtures/contraste.ts`), NUNCA en el navegador -- ya devolvio `lab()` parseado como rgb, transiciones a medio interpolar y CSS rancio del dev server, tres formas distintas de medir mal. Valida la funcion con el control WCAG `#767676`/`#ffffff` = 4,54 antes de fiarte. El umbral es 3:1, NO el 4,5 de texto, y se mide el anillo contra el fondo ADYACENTE, en los DOS temas y contra la peor de las seis superficies. La guardia `contraste-tokens.guardia` de la 226 ya tiene el patron: fija el UMBRAL, no el valor, para que bajar la opacidad manana se ponga rojo."
+    },
+    {
+      "id": 325,
+      "title": "novedades no tiene buscador ni filtros, ni por ayuda ni por devolucion",
+      "description": "El buscador y los filtros que usa el modulo de ordenes no llegan a novedades, asi que sus dos grupos se recorren a ojo.",
+      "zone": "frontend",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "media",
+      "branch": null,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-28: quiere en `/novedades` -- en los dos grupos, ayuda y devolucion-- el mismo buscador y los mismos filtros del modulo de ordenes. NO ES LA FICHA 145, y conviene saber por que: aquella adopta la capacidad de la 144 en los consumidores del `DataTable`, y `/novedades` NO monta un `DataTable` -- son cards en `<ul>/<li>`, y su propio codigo lo dice en `NovedadesModule.tsx:568`: «no monta un DataTable (son cards), asi que el control no llega heredado: se monta [aparte]». Por eso su lista de consumidores no la incluye: no es un olvido, es que no le aplica. Hay que MONTAR el control, no heredarlo. LOS CANONICOS, que son los que se usan y no otros: `components/shared/BuscadorFiltros.tsx`, `DateRangeFilter.tsx`, `FilterComponent.tsx` y `MultiSelectFilter.tsx`. A DECIDIR AL IMPLEMENTAR: que campos de filtro tienen sentido en cada grupo -- no son los mismos que en ordenes, porque una novedad de ayuda y una devolucion no se buscan por lo mismo-- y si el filtro es por grupo o compartido entre las dos pestanas. Relacionada con la 326, que retira los buscadores ad-hoc del resto de la app."
+    },
+    {
+      "id": 326,
+      "title": "hay ocho buscadores y filtros propios fuera de los componentes compartidos",
+      "description": "Cada pantalla que necesito filtrar o buscar se lo resolvio por su cuenta, y el patron del listado esta reimplementado varias veces.",
+      "zone": "frontend",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "media",
+      "branch": null,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-28, con sus palabras: «esos son los componentes nuestros en todo lugar de la app que haya un filtro o un buscador, deberias cambiar los componentes extra que hay por ahi que no son autorizados». LOS CANONICOS: `components/shared/BuscadorFiltros.tsx`, `DateRangeFilter.tsx`, `FilterComponent.tsx`, `MultiSelectFilter.tsx`. CENSO PRELIMINAR del 2026-08-28 (8 archivos con buscador o filtro propio fuera de `components/shared/`): `configuracion/plantillas/_components/CampoVariablePicker.tsx`, `configuracion/tarifas/_components/GeografiaSelector.tsx`, `mis-asignaciones/_components/chat/ChatOrdenesLista.tsx`, `mis-asignaciones/_components/RecogerModule.tsx`, `mis-asignaciones/_components/RepartoModule.tsx`, `monitoreo/_components/TableroDiaControles.tsx`, `wallet/mensajeros/_components/CuentasPorPagarFiltros.tsx` y `CuentasPorPagarTable.tsx`. ⚠️ DECISION DEL HUMANO: se sustituyen SOLO LOS QUE DUPLICAN el patron de listado, no los ocho a ciegas. Al menos dos huelen a selector de FORMULARIO y no a buscador de lista -- `GeografiaSelector` (elige provincia/canton/distrito al configurar una tarifa) y `CampoVariablePicker` (inserta una variable en una plantilla)--: meterlos en el molde del listado seria romper algo que no esta roto. EL CENSO SE PASA AL HUMANO ANTES DE TOCAR NADA, con el veredicto por archivo y su motivo. Relacionada con la 325 (novedades) y con la 145 (rollout en los consumidores de DataTable), que cubren superficies distintas de lo mismo."
+    },
+    {
+      "id": 327,
+      "title": "el editor de datos de la orden no llega a la direccion ni a la ubicacion",
+      "description": "Si el cliente dio mal su direccion o su distrito no hay forma de corregirlo, que es justo el error de carga mas caro.",
+      "zone": "fullstack",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "media",
+      "branch": null,
+      "status_note": "FASE 2 DE LA 312, pedida por el humano el 2026-08-28 con su ejemplo: «si el cliente puso mal su direccion? debo poder corregir ese dato». La 312 dejo la direccion fuera POR DECISION SUYA de esa misma manana; ahora la reabre a sabiendas. CAMPOS QUE GANA: `direccion`, `provinciaId`, `cantonId`, `distritoId` y `peso`, sobre los cuatro que ya edita. FUERA, y sigue fuera: `montoCobrar`, `numRemision`, `cobraComision`, `estatusId`, `mensajeroAsignadoId`, `tiendaId` y `numGuia`. SIN RASTRO, igual que la 312 (decision del humano ratificada el mismo dia). 💰 LA ZONA SE RECALCULA AL CAMBIAR EL DISTRITO, PERO AVISANDO ANTES DE GUARDAR: el modal muestra la zona nueva Y EL IMPORTE QUE PASARIA A COBRARSE, y el humano confirma. Es la decision que hace esta ficha fullstack y la que la hace delicada -- la zona decide la tarifa, asi que corregir una ubicacion mueve el flete y la comision; sin el aviso seria dinero cambiando en silencio y sin rastro. TRES COSAS QUE EL IMPLEMENTADOR NO PUEDE DESCUBRIR TARDE: (1) `OrdenRepository.update` ya trae un GUARD LATENTE de re-geocodificacion escrito por la feature 91 exactamente para este dia -- «el dia que el CRUD gane el campo, sin este guard la orden quedaria con direccion NUEVA y coordenadas VIEJAS, en silencio»--; comprobar que se activa de verdad, no dar por hecho que si. (2) `actualizarOrdenSchema` es `.strict()` y NO admite `direccion`, y el comentario de `OrdenRepository.ts:1383` afirma que la edicion «es estructuralmente incapaz de cambiar una direccion»: al ampliarlo hay que ACTUALIZAR ese comentario o quedara mintiendo. (3) `CorregirDatosClienteData` (312) tiene un tipo que no puede expresar NI `direccion` NI `estatusId`, y eso era deliberado: hacia imposible por tipo escribir en el historial de estados. La exclusion de `estatusId` SIGUE VIGENTE -- al abrir la puerta a la direccion no se abre la otra de paso."
+    },
+    {
+      "id": 328,
+      "title": "los dos huecos del buscador canonico que bloquean retirar cinco ad-hoc",
+      "description": "El buscador no se puede vaciar desde fuera y el orquestador de filtros no tiene modo aplicar, asi que cinco pantallas no pueden migrar.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "media",
+      "branch": null,
+      "status_note": "SALE DEL CENSO DE LA 326 (2026-08-28, `progress/censo_326_buscadores.md`), y es lo que ese censo dio de mas valor: no la lista de duplicados, sino POR QUE cinco de ellos no se pueden migrar hoy. HUECO 1 -- `components/shared/BuscadorFiltros.tsx` ES DE ESCRITURA UNICAMENTE: es dueno de su texto (estado interno) y solo expone `onChange`; no acepta `value` ni forma de vaciarse desde fuera. `onLimpiarTodo` avisa HACIA el consumidor, no ordena HACIA la barra. La unica via de reponerlo a cero es remontarlo con `key` -- lo que ya hacen `FiltrosEntregas`, `HistoricoFiltrosBar` y `SateliteOrdenesListado`-- y eso TIRA EL FOCO. Consecuencia medida: BLOQUEA `TableroDiaControles`, porque `TableroDiaEstados` pinta un boton «Quitar el filtro» que vive en OTRO componente y vacia el filtro desde fuera; con el canonico ese boton no puede existir sin un remonte con salto de foco. Y bloquea cualquier pantalla que quiera sembrar el termino desde la URL. 💰 HUECO 2 -- `FilterComponent` NO TIENE MODO «APLICAR»: emite en cada cambio (con debounce). Las CUATRO barras de wallet (`WalletFiltros`, `MiWalletFiltros`, y las embebidas de `DesglosePagosMensajero` y `DesgloseMovimientosTienda`) mantienen un BORRADOR LOCAL y solo emiten al pulsar Aplicar, y NO ES CAPRICHO: cada lectura de esos listados RECALCULA AGREGACIONES DE DINERO -- el propio `CuentasPorPagarTable` lo deja escrito («escribir un nombre de diez letras sin esperar serian diez agregaciones completas»). Un debounce no equivale a un submit cuando el usuario compone cuatro campos: dispararia consultas intermedias sobre combinaciones que nadie pidio. CUATRO ARCHIVOS DEPENDEN DE ESA UNICA PROP. ORDEN CORRECTO, y el censo lo dice: primero esta ficha, DESPUES los cuatro de wallet. Migrarlos antes cambiaria un submit deliberado por consultas por pulsacion sobre cifras de dinero, que es el tipo de «arreglo» que rompe algo que no estaba roto. DOS HUECOS MENORES ANOTADOS, sin bloquear nada: `MultiSelectFilter` no sabe jerarquias (solo listas planas), y cada consumidor escribe su propio traductor de la seleccion al contrato del servidor -- ya hay cuatro archivos que hacen lo mismo."
     }
   ]
 }
