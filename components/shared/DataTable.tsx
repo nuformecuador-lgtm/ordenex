@@ -127,6 +127,16 @@ export interface DataTableDescarga {
   obtenerFilas: () => Promise<DescargaFilasResult>;
   /** R28: más de uno ⇒ el usuario elige; ausente o uno solo ⇒ descarga directa. */
   formatos?: DescargaTipo[];
+  /**
+   * Ficha 314 (R33, R35) — ÁMBITO de la preferencia de columnas de esta descarga. AUSENTE ⇒
+   * sin selector y salen todas las columnas declaradas, que es lo que hacen hoy las 24 tablas
+   * restantes; encender la siguiente cuesta una línea en su módulo.
+   *
+   * Es un `string` a secas y no un descriptor: `columnas` ya viaja aquí, así que un descriptor
+   * duplicaría el catálogo y abriría la puerta a que las dos copias divergieran. El ámbito es
+   * un IDENTIFICADOR, y quien lee el almacenamiento es el control común.
+   */
+  ambitoColumnas?: string;
 }
 
 export interface DataTableProps<T> {
@@ -514,6 +524,7 @@ export function DataTable<T>({
               columnas={descarga.columnas}
               obtenerFilas={descarga.obtenerFilas}
               formatos={descarga.formatos}
+              ambitoColumnas={descarga.ambitoColumnas}
             />
           ) : null}
         </div>

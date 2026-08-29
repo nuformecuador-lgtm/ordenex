@@ -22,6 +22,7 @@ import type { OrdenListItemDTO } from "@/lib/types/orden";
 
 import { ordenesColumns } from "./ordenes-columns";
 import {
+  AMBITO_DESCARGA_ORDENES,
   COLUMNAS_DESCARGA_ORDENES,
   filaDescargaOrden,
 } from "./ordenes-descarga-columnas";
@@ -466,6 +467,10 @@ export function OrdenesModule({
     ? {
         titulo: TITULO_DESCARGA,
         columnas: COLUMNAS_DESCARGA_ORDENES,
+        // Ficha 314: enciende el selector de columnas de esta descarga. Es un IDENTIFICADOR de
+        // ámbito y nada más — aquí no se lee ni se escribe almacenamiento; de eso se encarga
+        // el control común, que es quien conoce la clave.
+        ambitoColumnas: AMBITO_DESCARGA_ORDENES,
         // Feature 170 (T0.3): el bloque que traducía el resultado a filas —tope, error
         // accionable y proyección— vivía aquí inline. Ahora es `filasDesdeResultado`,
         // el MISMO adaptador que usan las otras 24 tablas: sin cambio funcional, y sin
