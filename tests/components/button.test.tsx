@@ -33,11 +33,27 @@ describe("Button — variante brand-outline", () => {
     expect(button).toHaveClass("disabled:pointer-events-none");
   });
 
-  it("mantiene el foco visible con anillo de marca", () => {
+  /**
+   * Feature 226 — el BORDE sigue siendo de marca; el ANILLO ya no.
+   *
+   * Esta variante pintaba `focus-visible:ring-brand/30`, que mide 1.38 en claro y 1.45 en oscuro
+   * contra el fondo adyacente: muy por debajo del 3:1 que WCAG 1.4.11 pide a un indicador de
+   * interfaz. No tenía arreglo por alfa: `--color-brand` es un token de PALETA, sin variante por
+   * tema, y ni opaco llega a 3 en claro (2.81 sobre `--secondary`). Así que la variante deja de
+   * pintar su propio anillo y hereda el de la clase base, que sí cumple.
+   *
+   * El caso NO se borra —borrarlo dejaría el foco de esta variante sin vigilar, que es lo que
+   * había antes de la 208— sino que cambia de afirmación: sigue habiendo anillo, y ahora es el
+   * que la guardia de contraste mide (`tests/unit/guards/contraste-tokens.guardia.test.ts`).
+   */
+  it("mantiene el foco visible: borde de marca y el anillo estándar, que sí cumple 1.4.11", () => {
     render(<Button variant="brand-outline">Acción</Button>);
     const button = screen.getByRole("button");
     expect(button).toHaveClass("focus-visible:border-brand");
-    expect(button).toHaveClass("focus-visible:ring-brand/30");
+    expect(button).toHaveClass("focus-visible:ring-3");
+    expect(button).toHaveClass("focus-visible:ring-ring");
+    // El anillo con alfa que la 226 retiró no puede volver por la puerta de atrás.
+    expect(button.className).not.toMatch(/ring-brand\/30/);
   });
 
   it("define estilos de dark mode, como el resto de variantes", () => {

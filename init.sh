@@ -168,12 +168,62 @@ exigir_completo_si_toca_lo_sensible() {
   ok "el cambio no toca esquema, tipos compartidos, config ni dinero: el modo rapido basta"
 }
 
+# -------------------------------------------------------------------------------------------------
+# SIN DATABASE_URL LA SUITE SE ENCOGE, Y ESO SE DICE ANTES DE CORRER (ficha 323, 2026-08-28)
+# -------------------------------------------------------------------------------------------------
+#
+# QUE PASA HOY. 77 archivos de tests van envueltos en HAY_BASE_DE_DATOS (tests/integration/db/
+# _postgres-real.ts): si no hay DATABASE_URL resoluble, vitest los da por SALTADOS y la suite
+# termina VERDE. Es la decision correcta -la suite tiene que correr en una maquina sin Postgres-,
+# pero el aviso llegaba tarde y flojo: el unico rastro era un "no hay .env" al FINAL del init,
+# despues de los tests, sin decir que se habia dejado de medir.
+#
+# POR QUE IMPORTA AHORA. Los worktrees son ya la via normal de paralelismo, y "git worktree add"
+# NO lleva el .env (esta gitignorado y vive solo en el arbol principal). O sea: el caso de "sin
+# base" dejo de ser la maquina rara de alguien y paso a ser lo habitual. Un verde que no ha
+# tocado la capa de datos y no lo dice es la version silenciosa del mismo problema que un rojo
+# que confunde.
+#
+# POR QUE WARN Y NO FAIL. Exigir base para correr el gate dejaria sin gate a todo worktree, que
+# es justo donde se trabaja. Lo que se exige es que el hueco tenga NOMBRE y CIFRA en pantalla,
+# antes de la corrida y otra vez al final -la salida del completo son minutos y varios miles de
+# lineas: un aviso al principio y nada mas, no se lee-.
+#
+# El conteo se MIDE, no se escribe a mano: una cifra literal caduca en cuanto alguien anade un
+# test contra Postgres, y una cifra caducada es peor que ninguna.
+SIN_BASE_DE_DATOS=""
+
+anunciar_tests_contra_postgres() {
+  local hay archivos
+  # Misma resolucion que hacen los tests (urlDeBaseDeDatos): process.env, y si falta, el .env
+  # del directorio actual. NO se imprime el valor, solo si existe.
+  hay="$(node -e 'try { process.loadEnvFile(); } catch {} process.stdout.write(process.env.DATABASE_URL ? "si" : "no");' 2>/dev/null)" || hay="?"
+  archivos="$(grep -rl HAY_BASE_DE_DATOS tests --include='*.test.ts' 2>/dev/null | wc -l | tr -d '[:space:]')" || archivos="?"
+
+  if [ "$hay" = "si" ]; then
+    ok "DATABASE_URL resuelta: los $archivos archivos de tests contra Postgres SI se ejecutan"
+    return 0
+  fi
+
+  SIN_BASE_DE_DATOS="$archivos"
+  warn "sin DATABASE_URL: $archivos archivos de tests contra Postgres NO se van a ejecutar."
+  echo "    Se SALTAN, no fallan: los envuelve HAY_BASE_DE_DATOS, de"
+  echo "    tests/integration/db/_postgres-real.ts. La lista completa:"
+  echo "        grep -rl HAY_BASE_DE_DATOS tests --include='*.test.ts'"
+  echo "    Consecuencia: el verde de esta corrida NO dice nada de la capa de datos."
+  echo "    Si estas en un worktree, el .env vive solo en el arbol principal y no se hereda."
+  echo "    Exporta DATABASE_URL en la sesion. NO copies el .env: lleva credenciales."
+}
+
 if [ -f package.json ]; then
   # La clasificacion va ANTES que typecheck y lint a proposito: si el cambio exige el gate
   # completo, decirlo despues de un minuto de espera seria cobrarte la espera dos veces.
   [ "$MODO" = "rapido" ] && exigir_completo_si_toca_lo_sensible
   run_if typecheck
   run_if lint
+  # Antes de la corrida, no despues: si falta la base, lo que NO se va a medir se dice con su
+  # nombre y su cifra mientras todavia se puede arreglar (ficha 323).
+  anunciar_tests_contra_postgres
   # -----------------------------------------------------------------------------------------
   # EL VEREDICTO DE LOS TESTS LO DA EL BASELINE, Y EN LOS DOS MODOS (ficha 318, 2026-08-28)
   # -----------------------------------------------------------------------------------------
@@ -270,6 +320,13 @@ if [ ! -f .env ]; then
   fi
 else
   ok ".env presente"
+fi
+
+# El aviso se repite JUNTO AL VEREDICTO (ficha 323): la corrida completa son minutos y miles de
+# lineas, y lo dicho al principio ya no esta en pantalla cuando aparece el "init OK". Un verde
+# incompleto que solo se anuncio hace cinco minutos se lee como un verde a secas.
+if [ -n "$SIN_BASE_DE_DATOS" ]; then
+  warn "recuerda: este verde NO incluye los $SIN_BASE_DE_DATOS archivos de tests contra Postgres (sin DATABASE_URL se saltaron)."
 fi
 
 echo "${GREEN}== init OK ==${NC}"

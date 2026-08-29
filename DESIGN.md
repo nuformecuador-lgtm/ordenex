@@ -55,7 +55,9 @@ Una sola familia sans (`--font-sans`) para títulos, labels, botones, data y bod
 
 ## Componentes y estados (obligatorios)
 Todo interactivo tiene: default / hover / **focus-visible** / active / disabled — más loading y error donde aplique. No se envía la mitad.
-- **Focus ring estándar**: `focus-visible:ring-3 focus-visible:ring-ring/50`. En TODAS las piezas compartidas (incluidas Pagination, expand de DataTable, Tabs, toggle del Sidebar).
+- **Focus ring estándar**: `focus-visible:ring-3 focus-visible:ring-ring` (OPACO). En TODAS las piezas compartidas (incluidas Pagination, expand de DataTable, Tabs, toggle del Sidebar).
+  El anillo de foco es un indicador de interfaz y WCAG **1.4.11** le pide **3:1 contra el fondo adyacente** — no el 4,5 de texto. Con alfa no llega: `ring-ring/50` mide 1,71 en claro y 2,33 en oscuro sobre la peor de las seis superficies del portal. Opaco mide 3,68 y 5,57 (feature 226; medido en `tests/unit/guards/contraste-tokens.guardia.test.ts`).
+  **Migración a medias, dicho en voz alta**: la 226 sólo llevó al opaco `components/ui/button.tsx`. `Input`, `Checkbox`, `RadioGroup`, `Badge`, `Calendar`, `Pagination`, `DataTable`, el `Sidebar` y una treintena de sitios sueltos siguen en `ring-ring/50` o `ring-ring/40` y NO cumplen 1.4.11. Pieza nueva: escribe el opaco.
 - **Button**: solo variantes de `buttonVariants`; prop `loading` (spinner + disabled) para acciones async. Prohibido armar botones a mano fuera del componente.
 - **DataTable**: única tabla para listas. Estados incorporados: **skeleton** (no el texto "Cargando…"), empty (vía `EmptyState`) y error. Las tablas crudas se migran a esta.
 - **FormField** (`label` + control + `FieldError`): único patrón de campo. Un solo `FieldError` = `<p role="alert" className="text-sm text-destructive">`. Aplica a todos los formularios.

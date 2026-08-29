@@ -151,6 +151,41 @@ Por eso **antes de abrir un PR se corre `./init.sh` completo, sin excepcion**. L
 PRs #209 y #237 de este repo va justo en esa direccion: se mergeo mirando el estado del PR —que es
 un build y **no corre tests**— y entro un guard rojo en `dev`.
 
+### Sin `DATABASE_URL` la suite se encoge — y en un worktree eso es lo normal
+
+**77 archivos de test** (medido el 2026-08-28) van envueltos en `HAY_BASE_DE_DATOS`
+(`tests/integration/db/_postgres-real.ts`). Sin una `DATABASE_URL` resoluble, vitest los da por
+**saltados** y la suite termina **verde sin haber tocado la capa de datos**: en la corrida completa
+de ese día, **52 archivos enteros** no ejecutaron ni una aserción.
+
+`git worktree add` **no lleva el `.env`** —está gitignorado y vive solo en el árbol principal—, así
+que ese caso dejó de ser la máquina rara de alguien: pasa cada vez que se abre un árbol aparte, que
+es la vía normal de paralelismo aquí.
+
+Por eso `init.sh` lo dice **con nombre y cifra, antes de correr**, y lo repite junto al veredicto:
+
+```
+! sin DATABASE_URL: 77 archivos de tests contra Postgres NO se van a ejecutar.
+    Se SALTAN, no fallan: los envuelve HAY_BASE_DE_DATOS, de
+    tests/integration/db/_postgres-real.ts. La lista completa: ...
+```
+
+La cifra **se mide en cada corrida**: escrita a mano caducaría con el siguiente test contra
+Postgres, y una cifra caducada engaña más que ninguna.
+
+**Lo que NO se hizo, a propósito: copiar o enlazar el `.env` al crear el worktree.** Lleva
+credenciales, y además una sola base local compartida entre árboles hace que la migración de una
+feature ponga **rojo el gate de las otras**. Si necesitas esos archivos, exporta `DATABASE_URL` en
+la sesión.
+
+**El guardia de drift de `analytics_daily` ya no depende de esto** (ficha 323). Nunca necesitó una
+base viva: solo que `env("DATABASE_URL")` resolviera, porque el CLI de Prisma carga
+`prisma.config.ts` antes de mirar qué subcomando le pediste. Su `prisma migrate diff` corre ahora
+con una URL **propia e inalcanzable** (`127.0.0.1:1`), así que mide lo mismo en el árbol principal,
+en un worktree y en CI —y si algún día intentara conectarse de verdad, se pondría rojo en vez de
+pasar—. **No se saltó ni se metió en el baseline**: un guardia que se abstiene queda verde por
+vacío, que es justo el modo de fallo que existe para cerrar.
+
 ## Qué cuenta como evidencia
 - Salida real de los tests pasando, pegada en `progress/impl_<feature>.md`.
 - El mapa `R<n> → test`: para cada requisito, el test que lo cubre.

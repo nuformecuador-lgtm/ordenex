@@ -552,10 +552,35 @@ describe("R42 — el down revierte exactamente lo que el up crea", () => {
 // -------------------------------------------------------------------------------------------
 // `prisma migrate diff --from-empty --to-schema db/schema.prisma --script` le pide a Prisma
 // el DDL que generaria para levantar el datamodel desde cero. Es puro calculo local: no abre
-// conexion, no necesita `DATABASE_URL` ni shadow database, tarda ~2,5 s y es determinista.
+// conexion, no necesita una base viva ni shadow database, tarda ~2,5 s y es determinista.
 // Se descarto `--from-migrations` a proposito: exige `datasource.shadowDatabaseUrl` en
 // `prisma.config.ts` —config compartida— y una base viva. Precedente en el repo de spawnear
 // un CLI dentro de un test: `tests/unit/analytics/frontera.guardia.test.ts` lanza `git`.
+//
+// EL ENTORNO DEL PROCESO HIJO SE NEUTRALIZA (ficha 323, 2026-08-28)
+// -------------------------------------------------------------------------------------------
+// El parrafo de arriba decia «no necesita DATABASE_URL», y eso dejo de ser cierto con Prisma 7:
+// el CLI carga `prisma.config.ts` ANTES de mirar que subcomando le pediste, y esa config
+// resuelve `env("DIRECT_URL" | "DATABASE_URL")`. Sin la variable, el CLI ni llega al diff —
+// muere con «Cannot resolve environment variable: DATABASE_URL» y los tres tests de este bloque
+// que llaman al diff se ponen ROJOS.
+//
+// Donde daba la cara: en un WORKTREE. `git worktree add` no lleva el `.env` (esta gitignorado y
+// vive solo en el arbol principal), asi que `./init.sh` sacaba ahi tres rojos que en el arbol
+// principal no existen: el MISMO commit, verde en un sitio y rojo en otro, y ninguno de los dos
+// por deuda de codigo. La salida barata era anotar el archivo en `tests/baseline-rojos.json`,
+// que es exactamente lo que ese JSON prohibe por escrito y que habria cegado este guardia.
+//
+// El arreglo NO es saltarse el guardia ni copiar credenciales a ningun sitio: es que el proceso
+// hijo reciba SIEMPRE una URL propia, sintacticamente valida y deliberadamente INALCANZABLE. El
+// diff sigue siendo el mismo calculo local, y ahora ademas es HERMETICO — mismo resultado con
+// `.env`, sin `.env`, en un worktree o en CI. Dos hechos MEDIDOS el 2026-08-28 lo sostienen:
+//   - con `DATABASE_URL=postgresql://…@127.0.0.1:1/…` (puerto donde no escucha nadie) el diff
+//     devuelve el DDL entero, con los 10 objetos de `analytics_daily` dentro: no se conecta;
+//   - `process.loadEnvFile()` —lo que hace `prisma.config.ts`— NO pisa una variable que ya venga
+//     en el entorno, asi que lo inyectado aqui gana al `.env` real y no hay dos comportamientos.
+// Y si un Prisma futuro decidiera abrir conexion en este subcomando, el puerto 1 la rechaza y el
+// guardia se pone ROJO con el motivo escrito. Falla ruidoso; nunca verde por vacio.
 //
 // LA ASERCION NUCLEAR
 // -------------------------------------------------------------------------------------------
@@ -575,6 +600,23 @@ describe("R42 — el down revierte exactamente lo que el up crea", () => {
 // es justo el modo de fallo que este bloque existe para cerrar.
 
 const PRISMA_CLI = path.join(ROOT, "node_modules", "prisma", "build", "index.js");
+
+/**
+ * Ficha 323 — URL que `prisma.config.ts` necesita para PARSEARSE y que no puede servir a nadie:
+ * `127.0.0.1` con el puerto 1 (reservado, ningun Postgres escucha ahi). No es una credencial ni
+ * apunta a ninguna base real; su unico trabajo es que `env("…")` resuelva. Si alguien la cambia
+ * algun dia por una URL de verdad, este guardia dejaria de ser hermetico sin que nada avise.
+ */
+const URL_SIN_CONEXION = "postgresql://guardia-de-drift:sin-conexion@127.0.0.1:1/no_existe";
+
+/** Entorno del hijo: el del proceso MAS la URL inalcanzable, que pisa lo que hubiera. */
+const ENTORNO_DEL_DIFF: NodeJS.ProcessEnv = {
+  ...process.env,
+  DATABASE_URL: URL_SIN_CONEXION,
+  // `prisma.config.ts` prefiere DIRECT_URL cuando existe: se fija tambien para que la eleccion
+  // del config no dependa de que traiga la maquina.
+  DIRECT_URL: URL_SIN_CONEXION,
+};
 
 let diffCache: { salida: string } | { error: string } | null = null;
 
@@ -597,7 +639,13 @@ function ddlDerivadoDelDatamodel(): string {
             path.join(ROOT, "db", "schema.prisma"),
             "--script",
           ],
-          { cwd: ROOT, encoding: "utf8", timeout: 180_000, stdio: ["ignore", "pipe", "pipe"] },
+          {
+            cwd: ROOT,
+            encoding: "utf8",
+            timeout: 180_000,
+            stdio: ["ignore", "pipe", "pipe"],
+            env: ENTORNO_DEL_DIFF,
+          },
         ),
       };
     } catch (e) {
@@ -821,6 +869,46 @@ describe("R14/R39 + R40/R41 — el datamodel y las migraciones no se separan (gu
       }
       expect(upSql).toContain("NULLS NOT DISTINCT");
       expect(ddl).not.toContain("NULLS NOT DISTINCT");
+    },
+    180_000,
+  );
+
+  it(
+    "FICHA 323 — deriva el DDL aunque el entorno no traiga DATABASE_URL (worktree sin `.env`)",
+    () => {
+      // POR QUE ESTE TEST Y NO UNA ASERCION SOBRE `ENTORNO_DEL_DIFF`. Comprobar que la constante
+      // contiene la URL que la constante contiene siempre esta verde: no mide nada. Lo que aqui
+      // se mide es el COMPORTAMIENTO — se le quita al proceso lo que en un worktree no hay, y el
+      // guardia tiene que seguir derivando el DDL igual.
+      //
+      // Es la unica cosa que se entera si alguien retira el `env:` del `execFileSync`: en una
+      // maquina CON `.env` esa regresion pasaria desapercibida (los demas tests del bloque
+      // seguirian verdes tirando del entorno ambiente) y volveria a aparecer solo en el worktree
+      // del siguiente agente, que es de donde vino la ficha 323.
+      const previo = {
+        DATABASE_URL: process.env.DATABASE_URL,
+        DIRECT_URL: process.env.DIRECT_URL,
+      };
+      const cachePrevia = diffCache;
+      delete process.env.DATABASE_URL;
+      delete process.env.DIRECT_URL;
+      diffCache = null;
+      try {
+        // Solo se afirma que el diff SALE y menciona la tabla. La igualdad con el conjunto de
+        // referencia es trabajo de la asercion nuclear de arriba: repetirla aqui haria que un
+        // drift real se reportase con el mensaje equivocado («depende del entorno») y mandaria a
+        // buscar el fallo donde no esta. Si el diff no sale, `ddlDerivadoDelDatamodel()` LANZA
+        // con el motivo del CLI, que es el rojo que esta ficha vino a quitar de en medio.
+        expect(
+          objetosDeAnalyticsDaily(ddlDerivadoDelDatamodel()),
+          "sin DATABASE_URL en el ambiente el guardia dejo de derivar el DDL: el diff volvio a " +
+            "depender del `.env` de la maquina y en un worktree se pondra rojo sin que exista drift",
+        ).not.toEqual([]);
+      } finally {
+        diffCache = cachePrevia;
+        if (previo.DATABASE_URL !== undefined) process.env.DATABASE_URL = previo.DATABASE_URL;
+        if (previo.DIRECT_URL !== undefined) process.env.DIRECT_URL = previo.DIRECT_URL;
+      }
     },
     180_000,
   );
