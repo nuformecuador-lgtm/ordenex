@@ -87,6 +87,39 @@ nombrados — borrar un componente ya se llevó su test por delante y costó una
 (e) La fecha de la 334 **no puede reutilizar `created_at`** sin enumerar antes qué consumidores del
 ledger se mueven (analítica y rollup diario incluidos).
 
+**AVANCE del 2026-08-29 (tarde).** Los cuatro specs están escritos y commiteados. El humano **retiró
+la puerta de aprobación** de los specs para esta tanda («tan pronto termines con los specs implementá
+sin preguntar»), así que se implementa en cuanto cada spec cierra.
+
+- **PR #608 — alta de las cuatro fichas: MERGEADO** en `dev` (`4eaff293`).
+- **Ficha 85 — IMPLEMENTADA, `in_progress`, PR #609 abierto y sin mergear.** Rama
+  `feature/85-gasto-fijo-periodicidad-ui`. Fase B (`backend_dev`) y fase F (`frontend_dev`),
+  secuenciadas. `./init.sh` **completo** en verde: **21.881/21.908**, `INIT_EXIT=0`. El único archivo
+  rojo es `superficie-de-uso.guardia.test.ts`, del baseline, y se verificó **su contenido**: el único
+  infractor es `lib/actions/tarifas.ts:67 obtenerTarifa`, ajeno a la ficha. Se mira el contenido y no
+  solo el nombre porque el baseline compara **por archivo** y no vería un rojo nuevo dentro de uno ya
+  listado. Siete mutaciones aplicadas con salida roja real en `progress/impl_85.md`.
+  - Una de esas mutaciones **corrigió el enunciado del propio spec**: mutar el borde no puede
+    enrojecer el test de servicio, porque ese test vive por debajo de zod. Se mutó también el
+    servicio.
+  - Los specs de la **332, 333 y 334** viajan en ese mismo PR (solo documentos).
+- **BLOQUEO ACTIVO:** el merge de #609 lo rechaza el clasificador de auto mode. Hasta que entre, la 85
+  no pasa a `done` y **fullstack sigue en su tope de 2** (321 + 85): la 332 no puede arrancar sin
+  romper la regla 1, que el gate valida.
+
+**Decisiones de producto tomadas por el leader** al retirarse la puerta, todas fuera del dinero: presets
+de periodicidad + «Personalizada»; fecha de cobro pasada **se avisa, no se bloquea**; «Monto» en vez de
+«Monto mensual»; «No se cobra» en inactivas; las dos columnas nuevas **sí** entran al Excel; el
+interruptor de la 333 nace en «requiere aprobación»; el aviso llega a maestro y admin y **decide solo el
+maestro**; desactivar **no** cancela pendientes; la cola pagina sin tope duro; y la 334 admite fecha
+hacia atrás con **ventana de 30 días configurable**.
+
+**Consecuencia declarada de esa última** (no la introduce la ficha, la hace visible): el rollup diario
+calcula **el día en curso**, así que un movimiento fechado ayer no entra solo en el agregado de ayer.
+Hay script de backfill, pero es un paso manual.
+
+**Orden restante**, serial por conflicto de archivos y por cupo: **332 → 334 → 333**.
+
 **Lo que falta.** Cerrar los cuatro specs, pasarlos por la puerta humana de aprobación y recién ahí
 tocar código. El cupo de `in_progress` en fullstack lo ocupa hoy la **321**, así que solo una de las
 cuatro puede entrar a `in_progress` a la vez hasta que la 321 cierre.
