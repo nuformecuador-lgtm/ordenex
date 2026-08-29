@@ -1,4 +1,5 @@
 import { money } from "@/lib/config/moneda";
+import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 import type {
   CajaResumenDTO,
   ModoComposicionCaja,
@@ -14,6 +15,8 @@ import {
   WALLET_MOVIMIENTO_CATEGORIA_SEED,
   WALLET_MOVIMIENTO_TIPO_SEED,
 } from "@/lib/types/wallet";
+import { fechaLegible } from "@/lib/utils/dia-reparto-textos";
+import { proximoCobro, type PeriodicidadUnidad } from "@/lib/utils/periodicidad";
 
 // Feature 42 (T12) — etiquetas i18n-ready y helper de moneda de la wallet, separados
 // de la lógica (docs/conventions: textos de UI fuera del componente). Money-safe (R21/
@@ -271,4 +274,118 @@ export { montoValido } from "@/components/shared/monto-cliente";
 /** Un egreso administrativo es reversable (R22c/R32): `tipo=egreso` ∧ `origen_tipo=gasto`. */
 export function esEgresoAdministrativo(m: WalletMovimientoDTO): boolean {
   return m.tipo === "egreso" && m.origenTipo === "gasto";
+}
+
+// ── Feature 85 (T F.1, design §4.2) — cada cuánto se cobra una plantilla de gasto fijo ──
+//
+// Módulo PURO también en esta parte: sin React, sin `Intl` y SIN LEER NINGÚN RELOJ. El único
+// helper que necesita un instante (`proximoCobroTexto`) lo recibe por parámetro, igual que
+// `lib/utils/periodicidad.ts` y por el mismo motivo que `lib/utils/dia-reparto-textos.ts`: un
+// portátil con la hora corrida no puede etiquetar mal una fila (R23).
+
+/**
+ * Las CUATRO periodicidades que nombró el pedido, con su equivalencia en el modelo
+ * `unidad + cantidad` que la ficha 84 dejó en la base.
+ *
+ * Viven aquí —en la etiqueta de un selector— y NO como un enum de la base (design §5, A5): la
+ * tabla admite «cada 3 días» o «cada 6 meses», y eso no cabe en cuatro nombres. Nadie deduce
+ * que «quincenal» son 2 semanas leyendo un selector de unidades: por eso el nombre existe.
+ */
+export const PERIODICIDAD_PRESETS = [
+  { id: "diaria", label: "Diaria", unidad: "dias", cantidad: 1 },
+  { id: "semanal", label: "Semanal", unidad: "semanas", cantidad: 1 },
+  { id: "quincenal", label: "Quincenal", unidad: "semanas", cantidad: 2 },
+  { id: "mensual", label: "Mensual", unidad: "meses", cantidad: 1 },
+] as const;
+
+/** Id de uno de los cuatro presets del pedido. */
+export type PeriodicidadPresetId = (typeof PERIODICIDAD_PRESETS)[number]["id"];
+
+/** El ciclo que no cabe en ningún preset: «cada N días/semanas/meses». */
+export const PERIODICIDAD_PERSONALIZADA = "personalizada";
+
+/** Lo que puede estar elegido en el selector «Cada cuánto se cobra». */
+export type PeriodicidadSeleccion = PeriodicidadPresetId | typeof PERIODICIDAD_PERSONALIZADA;
+
+/** Opciones del `Select` «Cada cuánto se cobra»: los cuatro presets + «Personalizada». */
+export const PERIODICIDAD_OPTIONS = [
+  ...PERIODICIDAD_PRESETS.map((preset) => ({ value: preset.id, label: preset.label })),
+  { value: PERIODICIDAD_PERSONALIZADA, label: "Personalizada" },
+];
+
+/** Las tres unidades del modelo, en orden de menor a mayor. */
+const PERIODICIDAD_UNIDADES = ["dias", "semanas", "meses"] as const;
+
+/** Nombre de cada unidad como opción de un selector (rótulo, en mayúscula inicial). */
+export const PERIODICIDAD_UNIDAD_LABEL: Record<PeriodicidadUnidad, string> = {
+  dias: "Días",
+  semanas: "Semanas",
+  meses: "Meses",
+};
+
+/** Opciones del `Select` de unidad del ciclo propio. */
+export const PERIODICIDAD_UNIDAD_OPTIONS = PERIODICIDAD_UNIDADES.map((unidad) => ({
+  value: unidad,
+  label: PERIODICIDAD_UNIDAD_LABEL[unidad],
+}));
+
+/** La unidad DENTRO de una frase («Cada 3 días»), en singular y en plural. */
+const UNIDAD_EN_FRASE: Record<PeriodicidadUnidad, [singular: string, plural: string]> = {
+  dias: ["día", "días"],
+  semanas: ["semana", "semanas"],
+  meses: ["mes", "meses"],
+};
+
+/**
+ * R20 — cada cuánto se cobra, EN PALABRAS: el nombre del preset cuando el par
+ * `unidad + cantidad` coincide con uno de los cuatro, y «Cada N días/semanas/meses» para
+ * cualquier otro ciclo.
+ *
+ * El singular (`Cada 1 mes`) queda como red: con cantidad 1 las tres unidades SON un preset,
+ * así que hoy no se alcanza. Se escribe igual para que una periodicidad nueva no estrene la
+ * pantalla con un «Cada 1 meses».
+ */
+export function periodicidadLegible(unidad: PeriodicidadUnidad, cantidad: number): string {
+  const preset = PERIODICIDAD_PRESETS.find(
+    (p) => p.unidad === unidad && p.cantidad === cantidad,
+  );
+  if (preset) return preset.label;
+  // El `??` no es paranoia decorativa: `unidad` viene de un enum cerrado y el `Record` la
+  // cubre siempre, pero esta función la EJECUTA también la guardia de datos sensibles de las
+  // descargas (`tests/unit/descarga/columnas-sensibles.guardia.test.ts`) con una sonda —un
+  // Proxy que responde a cualquier lectura—, y una unidad que no es ninguna de las tres no
+  // puede reventar la generación de un archivo. Se dice la unidad TAL CUAL en vez de
+  // inventarle un nombre, mismo criterio que `fechaLegible` con lo que no es una fecha.
+  const [singular, plural] = UNIDAD_EN_FRASE[unidad] ?? [String(unidad), String(unidad)];
+  return `Cada ${cantidad} ${cantidad === 1 ? singular : plural}`;
+}
+
+/** Qué opción del selector representa un ciclo dado; `"personalizada"` si no es un preset. */
+export function presetDePeriodicidad(
+  unidad: PeriodicidadUnidad,
+  cantidad: number,
+): PeriodicidadSeleccion {
+  const preset = PERIODICIDAD_PRESETS.find(
+    (p) => p.unidad === unidad && p.cantidad === cantidad,
+  );
+  return preset ? preset.id : PERIODICIDAD_PERSONALIZADA;
+}
+
+/** R19 — lo que dice la celda de «Próximo cobro» de una plantilla DESACTIVADA. */
+export const PROXIMO_COBRO_INACTIVA = "No se cobra";
+
+/**
+ * R18/R19 — la celda de «Próximo cobro», en palabras: «14 de septiembre de 2026».
+ *
+ * CON AÑO SIEMPRE: un ciclo de seis meses cruza el año, y «14 de mayo» a secas sería ambiguo
+ * en una tabla que mezcla plantillas de periodicidades distintas.
+ *
+ * `activa` NO entra en la aritmética (design §3.4): `proximoCobro` no sabe si la plantilla
+ * está apagada, y no tiene por qué —una plantilla inactiva sigue teniendo ciclo, lo que no
+ * tiene es cobros—. Que eso se lea «No se cobra» es una decisión de presentación, y vive aquí.
+ */
+export function proximoCobroTexto(plantilla: GastoFijoPlantillaDTO, ahora: Date): string {
+  if (!plantilla.activa) return PROXIMO_COBRO_INACTIVA;
+  const fecha = proximoCobro(plantilla, ahora);
+  return `${fechaLegible(fecha)} de ${fecha.slice(0, 4)}`;
 }

@@ -663,7 +663,14 @@ const LISTADOS: Listado[] = [
         total: todos.length,
       });
       completo.plantillas.mockResolvedValue({ status: "ok", plantillas: todos });
-      envolver(<GastosFijosPlantillasPanel initialData={pagina1(todos)} />);
+      // Feature 85 (T F.6, R23): `ahoraIso` es REQUERIDA. Instante fijo: este archivo mide la
+      // paginación, no la fecha del próximo cobro.
+      envolver(
+        <GastosFijosPlantillasPanel
+          initialData={pagina1(todos)}
+          ahoraIso="2026-07-15T18:00:00.000Z"
+        />,
+      );
     },
   },
 ];

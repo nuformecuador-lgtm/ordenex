@@ -443,3 +443,381 @@ puede desplegar la fase B sola.
 Fase B completa (T0.2 + B1..B9): el reset silencioso del ciclo está cerrado en el borde,
 `proximoCobro` existe y está contrastado contra `aplicaHoy` en 4.000 días, typecheck y lint en
 verde, y las tres guardias se comprobaron enrojeciendo de verdad —no declarándolo—.
+
+---
+---
+
+# Ficha 85 — bitácora de implementación · FASE F (frontend), F1..F8 + Z1
+
+> Rama `feature/85-gasto-fijo-periodicidad-ui`, sobre la fase B ya commiteada (`8cff133b`).
+> Alcance de esta parte: `app/(app)/wallet/**` y `tests/**`. **No** se tocó `lib/`, `db/`,
+> `specs/`, `feature_list.json` ni `progress/current.md`, y no se ejecutó ningún comando de
+> escritura de git (el commit lo hace el leader).
+>
+> Herramienta de búsqueda: el MCP `codebase-memory` **no** aparece en el conjunto de tools de
+> este agente, así que la localización se hizo con `grep`/`sed` sobre el árbol real. Se declara
+> explícitamente, como pide la regla 7 de `CLAUDE.md`. Efecto práctico nulo: todo lo que se
+> afirma aquí sobre el código está leído del archivo, no del índice.
+
+## Decisiones de producto aplicadas (venían cerradas por el humano)
+
+1. Control de periodicidad = **presets + «Personalizada»** (Diaria / Semanal / Quincenal /
+   Mensual, y «cada N días/semanas/meses»).
+2. Fecha de cobro en el pasado: **se avisa, no se bloquea** (`role="status"` bajo el campo).
+3. Encabezado del monto: **«Monto»** a secas, en la tabla, en el diálogo y en el archivo.
+4. Plantilla inactiva: la celda dice **«No se cobra»**, no un guion.
+5. «Periodicidad» y «Próximo cobro» **entran también al archivo descargable**.
+6. Mover la fecha de una plantilla activa: **basta un texto de ayuda**, sin confirmación extra.
+
+---
+
+## Qué se hizo en cada tarea
+
+### F1 — etiquetas (`app/(app)/wallet/_components/wallet-labels.ts`)
+
+Se añaden al módulo de etiquetas de la wallet, sin React, sin `Intl` y **sin leer ningún
+reloj** (el instante entra por parámetro):
+
+- `PERIODICIDAD_PRESETS` — las cuatro del pedido con su equivalencia `unidad + cantidad`.
+- `PERIODICIDAD_OPTIONS` / `PERIODICIDAD_UNIDAD_OPTIONS` — las opciones de los dos `Select`.
+- `periodicidadLegible(unidad, cantidad)` — «Diaria/Semanal/Quincenal/Mensual» o «Cada N …».
+- `presetDePeriodicidad(unidad, cantidad)` — qué opción representa un ciclo guardado.
+- `PROXIMO_COBRO_INACTIVA` («No se cobra») y `proximoCobroTexto(plantilla, ahora)`, que
+  devuelve «14 de septiembre de 2026» —**con año siempre**: un ciclo de 6 meses cruza el año—
+  reutilizando `fechaLegible` de `lib/utils/dia-reparto-textos.ts` (tabla de meses, sin `Intl`).
+
+**Hallazgo real, no previsto por el design:** `periodicidadLegible` reventaba bajo la guardia
+de datos sensibles de las descargas (`tests/unit/descarga/columnas-sensibles.guardia.test.ts`),
+que ejecuta cada proyección con una **sonda** —un `Proxy` que responde a cualquier lectura—.
+La unidad sondada no es ninguna de las tres, la tabla de nombres devolvía `undefined` y la
+generación del archivo moría con «Cannot read properties of undefined (reading 'plural')».
+Arreglado con un fallback explícito, mismo criterio que `fechaLegible` con lo que no es una
+fecha, y con su propio caso de test para que nadie lo retire por «código muerto». Lo encontró la
+corrida de F8, no una revisión.
+
+### F2 — diálogo (`GastoFijoPlantillaDialog.tsx`)
+
+Campos, en orden: **Concepto · Monto · Cada cuánto se cobra · [Cada N + Unidad] · Día del
+primer cobro**. Los dos controles del ciclo propio solo aparecen con «Personalizada».
+
+- Al **crear**: mensual y la fecha de hoy en Costa Rica (`fechaCalendarioCR`, no
+  `toISOString().slice(0,10)`) preseleccionadas.
+- Al **editar**: los tres campos se siembran desde el DTO en el mismo bloque que ya re-sembraba
+  concepto y monto al cambiar `plantilla?.id`.
+- Al confirmar se envían **siempre los cinco campos**, tanto al crear como al editar.
+- Validación de cliente: cantidad entera >= 1 (mensaje idéntico al del borde, «La cantidad debe
+  ser al menos 1.») y fecha no vacía.
+- `fieldErrors` del servidor mapeados a `periodicidadUnidad`, `periodicidadCantidad` y
+  `fechaCobro` además de concepto/monto. Con el ciclo elegido por preset, la cantidad y la
+  unidad no tienen control propio: su error se pinta junto al selector, que es el único campo
+  corregible; en «Personalizada» cada uno tiene el suyo.
+- Textos: la descripción deja de decir «cada mes»; el rótulo del monto pasa a **«Monto»** con
+  ayuda «Es lo que se cobra cada vez»; la fecha lleva ayuda fija sobre que mover el ancla mueve
+  el ciclo entero, y un aviso `role="status"` cuando la fecha ya pasó (que **no** bloquea).
+
+Nota de implementación: el `Select` del repo no admite el spread del control de `FormField`
+(no tiene `aria-required`), así que se le cablea la accesibilidad campo a campo, igual que en
+`UsuarioForm`.
+
+### F3 — panel (`GastosFijosPlantillasPanel.tsx`)
+
+- Prop **`ahoraIso: string` REQUERIDA** (sin `?` y sin default) → `useMemo(() => new Date(ahoraIso))`.
+- Columnas: `Concepto | Monto | Periodicidad | Próximo cobro | Estado | Acciones`.
+- «Monto mensual» → **«Monto»**; la descripción de la tarjeta y los dos avisos de
+  activar/desactivar dejan de prometer un cobro mensual («Dejará de generar cobros.» /
+  «Se generará según su periodicidad.»).
+
+### F4 — cadena de props
+
+`app/(app)/wallet/page.tsx` resuelve el instante **en el servidor** (`new Date().toISOString()`)
+y lo pasa a `WalletModule`, que lo declara igualmente **requerido** y lo entrega al panel. Los
+tres eslabones sin opcionales ni defaults: la inyección la garantiza `tsc`.
+
+### F5 — archivo descargable (`gastos-fijos-descarga-columnas.ts`)
+
+Cinco columnas (`concepto`, `monto`, `periodicidad`, `proximoCobro`, `estado`) y
+`filaDescargaGastoFijo(plantilla, ahora)` con un **segundo parámetro**, no una fábrica: el panel
+cierra sobre el mismo `ahora` con el que pinta la tabla, así que archivo y pantalla no pueden
+discrepar de fecha. Monto crudo (STRING, sin símbolo), periodicidad con la MISMA etiqueta que la
+tabla y próximo cobro como `YYYY-MM-DD` —la forma que ORDENA en una hoja de cálculo— o
+«No se cobra» en las inactivas.
+
+**Divergencia declarada frente a la letra de R21:** en pantalla el próximo cobro se lee «14 de
+septiembre de 2026» y en el archivo sale `2026-09-14`. Es el **mismo día** en dos formas, y es
+lo que fija el design §4.5 (ordenable en Excel). El test lo asevera con los dos literales a la
+vez, para que la equivalencia sea explícita y no una coincidencia.
+
+### F6 — montajes existentes del panel
+
+Cuatro, no tres: además de los tres que nombra `tasks.md` está
+`tests/components/descarga/WalletDescarga.test.tsx:268`, que monta `WalletModule` entero y
+también necesita `ahoraIso`. Los cuatro pasan sin `@ts-expect-error` ni casts.
+
+**No se borró ningún caso de test.** Los tres casos de crear/editar del panel se **adaptaron**:
+aseveran ahora los cinco campos (y el de editar es, de hecho, una segunda guardia de R3 con
+`meses`/`1`/`2026-07-01`), y los `getByLabelText("Monto mensual")` pasan a «Monto». El caso del
+listado cambia «automáticamente cada mes» por «según la periodicidad que tenga cada una», que es
+el texto que R22 obliga a poner. Ninguno sobraba.
+
+### F7 — regresión de la regla del pedido (R25)
+
+Caso nuevo en `tests/unit/components/wallet-registrar-egreso-dialog.test.tsx`: el diálogo de
+egreso manual no ofrece ningún control de periodicidad ni de fecha de cobro. Comprueba las tres
+puertas: no hay combobox «Cada cuánto se cobra» ni «Unidad del ciclo», no hay ningún control de
+fecha, y el único `Select` del diálogo sigue siendo el de tipo con sus DOS opciones. Sin código
+de producción nuevo.
+
+---
+
+## Autocomprobación de las guardias (EJECUTADA, con la salida roja real)
+
+Cuatro mutaciones aplicadas al árbol, **corridas** y revertidas por copia de respaldo (no con
+`git checkout`: este agente tiene prohibido escribir con git). Al final, `md5sum` de los cuatro
+archivos de producción contra su copia previa a mutar: **coinciden byte a byte**.
+
+### M-F1 — el diálogo vuelve al payload corto `{ id, concepto, monto }` (el fallo original)
+
+```
+ FAIL  tests/unit/components/wallet-gasto-fijo-plantilla-dialog.test.tsx > … > editar solo el monto reenvía semanas/2/2026-03-31 sin moverlos
+AssertionError: expected { …(3) } to deeply equal { …(6) }
+  {
+    "concepto": "Alquiler de bodega",
+-   "fechaCobro": "2026-03-31",
+    "id": "3f2b1c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+    "monto": "999.00",
+-   "periodicidadCantidad": 2,
+-   "periodicidadUnidad": "semanas",
+  }
+
+ FAIL  tests/unit/components/wallet-gastos-fijos-panel.test.tsx > … > Editar prefila los campos y actualiza con el id de la plantilla
+AssertionError: expected { …(3) } to deeply equal { …(6) }
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 24 passed (26)
+```
+
+### M-F2 — el panel lee el reloj del navegador (`new Date()` en vez del instante de la prop)
+
+### M-F3 — `proximoCobroTexto` ignora `activa`
+
+```
+     × una plantilla inactiva dice que no se cobra, en vez de una fecha            (labels)
+     × la tabla muestra la periodicidad en palabras y la fecha del próximo cobro   (panel)
+     × una plantilla inactiva dice que no se cobra en vez de una fecha             (panel)
+     × el próximo cobro se calcula con el instante recibido por props, no con el reloj del navegador
+     × con otro instante por props, la misma plantilla anuncia otro cobro
+ Test Files  2 failed | 1 passed (3)
+      Tests  5 failed | 23 passed (28)
+```
+
+Dato que conviene guardar: bajo M-F3, `gastos-fijos-descarga-columnas.test.ts` quedó **verde**,
+porque el archivo decide «No se cobra» con su propia comprobación de `activa` y no a través de
+`proximoCobroTexto`. Son dos caminos independientes y cada uno tiene su guardia; por eso hizo
+falta la cuarta mutación.
+
+### M-F4 — el archivo pierde «Próximo cobro» y el monto vuelve a «Monto mensual»
+
+```
+     × declara las cinco columnas en el orden de la pantalla (R5/R21)
+     × la fila lleva EXACTAMENTE las claves declaradas: ni una de más, ni una de menos
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+```
+
+### Reversión comprobada
+
+```
+=== md5: produccion vs backup (deben coincidir los 4) ===
+66fbf2156eefa3416ca1d8deb67a7adf *app/(app)/wallet/_components/GastoFijoPlantillaDialog.tsx
+bccc76603ae87cff0bde1ed0388d8fd9 *app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx
+241620637627daf0a687a5e2d9dce4d5 *app/(app)/wallet/_components/wallet-labels.ts
+838ef4c32656c5760e1993505a2dd5fd *app/(app)/wallet/_components/gastos-fijos-descarga-columnas.ts
+838ef4c32656c5760e1993505a2dd5fd *…/f8/descarga.bak
+66fbf2156eefa3416ca1d8deb67a7adf *…/f8/dialog.bak
+241620637627daf0a687a5e2d9dce4d5 *…/f8/labels.bak
+bccc76603ae87cff0bde1ed0388d8fd9 *…/f8/panel.bak
+```
+
+(`wallet-labels.ts` se editó DESPUÉS de las mutaciones, para el arreglo del fallback de
+`periodicidadLegible`; su md5 de arriba es el del momento de la reversión.)
+
+---
+
+## F8 — corrida acotada del frontend (salidas reales)
+
+### `pnpm typecheck`
+
+```
+> ordenex@0.1.0 typecheck R:\job\singularis\projects\ordenex
+> tsc --noEmit
+
+TYPECHECK_EXIT=0
+```
+
+Sin errores. No hizo falta borrar `.next/dev` (el modo de fallo conocido no se presentó).
+Antes de tocar los cuatro montajes, `tsc` señalaba exactamente los cuatro sitios donde faltaba
+`ahoraIso` — que es para lo que la prop se declaró requerida.
+
+### `pnpm lint`
+
+```
+✖ 126 problems (0 errors, 126 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+LINT_EXIT=0
+```
+
+**0 errores.** Los 126 warnings son preexistentes (`no-unused-vars` sobre parámetros `_algo` en
+tests de toda la suite); filtrando la salida por los catorce archivos de esta fase no aparece
+**ninguno**.
+
+### `pnpm exec vitest related --run <los 6 archivos de producción tocados>`
+
+```
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex
+
+ Test Files  36 passed (36)
+      Tests  485 passed (485)
+   Start at  14:45:22
+   Duration  42.92s (transform 8.21s, setup 6.63s, import 133.45s, tests 123.69s, environment 60.06s)
+
+VITEST_RELATED_EXIT=0
+```
+
+Los 36 archivos relacionados incluyen los ocho de test que esta fase toca, más
+`tests/integration/wallet-page.test.tsx`, `tests/components/paginacion/paginacion-transversal.test.tsx`
+y `tests/unit/descarga/columnas-sensibles.guardia.test.ts` (la que destapó el fallo de F1).
+
+### Corrida EXPLÍCITA de los archivos de test tocados
+
+`vitest related` no ve las aristas de `import type`, así que los diez archivos se corrieron
+además por nombre:
+
+```
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex
+
+ Test Files  10 passed (10)
+      Tests  91 passed (91)
+   Start at  14:47:35
+   Duration  17.25s (transform 3.57s, setup 1.93s, import 29.19s, tests 23.81s, environment 16.20s)
+
+VITEST_EXPLICITO_EXIT=0
+```
+
+(archivos: `wallet-periodicidad-labels`, `wallet-gasto-fijo-plantilla-dialog`,
+`wallet-gastos-fijos-panel`, `wallet-registrar-egreso-dialog`, `gastos-fijos-descarga-columnas`,
+`columnas-sensibles.guardia`, `WalletDescarga`, `WalletPropsDescarga`, `BajoRiesgoPaginacion`,
+`wallet-page`.)
+
+### Comprobación de alcance
+
+```
+=== arbol de trabajo (git status --porcelain) ===
+ M app/(app)/wallet/_components/GastoFijoPlantillaDialog.tsx
+ M app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx
+ M app/(app)/wallet/_components/WalletModule.tsx
+ M app/(app)/wallet/_components/gastos-fijos-descarga-columnas.ts
+ M app/(app)/wallet/_components/wallet-labels.ts
+ M app/(app)/wallet/page.tsx
+ M tests/components/descarga/WalletDescarga.test.tsx
+ M tests/components/descarga/WalletPropsDescarga.test.tsx
+ M tests/components/paginacion/BajoRiesgoPaginacion.test.tsx
+ M tests/unit/components/wallet-gastos-fijos-panel.test.tsx
+ M tests/unit/components/wallet-registrar-egreso-dialog.test.tsx
+ M tests/unit/descarga/gastos-fijos-descarga-columnas.test.ts
+?? tests/unit/components/wallet-gasto-fijo-plantilla-dialog.test.tsx
+?? tests/unit/components/wallet-periodicidad-labels.test.ts
+
+=== prohibidos (db/, vercel.json, feature_list.json, progress/current.md, specs/,
+    lib/types/, lib/utils/periodicidad.ts) ===
+OK: ningun archivo prohibido tocado
+```
+
+---
+
+## Archivos creados / modificados (fase F)
+
+**Producción (6, todos existentes):**
+- `app/(app)/wallet/_components/wallet-labels.ts` — F1.
+- `app/(app)/wallet/_components/GastoFijoPlantillaDialog.tsx` — F2.
+- `app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx` — F3.
+- `app/(app)/wallet/_components/WalletModule.tsx` — F4.
+- `app/(app)/wallet/page.tsx` — F4.
+- `app/(app)/wallet/_components/gastos-fijos-descarga-columnas.ts` — F5.
+
+**Tests (8: 2 nuevos, 6 modificados):**
+- `tests/unit/components/wallet-periodicidad-labels.test.ts` — **nuevo** (F1, 11 casos).
+- `tests/unit/components/wallet-gasto-fijo-plantilla-dialog.test.tsx` — **nuevo** (F2, 14 casos).
+- `tests/unit/components/wallet-gastos-fijos-panel.test.tsx` — F3/F6 (6 casos nuevos, 3 adaptados).
+- `tests/unit/descarga/gastos-fijos-descarga-columnas.test.ts` — F5 (contrato actualizado a mano + 5 casos).
+- `tests/unit/components/wallet-registrar-egreso-dialog.test.tsx` — F7 (1 caso nuevo).
+- `tests/components/paginacion/BajoRiesgoPaginacion.test.tsx` — F6 (`ahoraIso`).
+- `tests/components/descarga/WalletPropsDescarga.test.tsx` — F6 (`ahoraIso`).
+- `tests/components/descarga/WalletDescarga.test.tsx` — F6 (`ahoraIso`, montaje de `WalletModule`).
+
+---
+
+## Z1 — mapa completo `R1-R25 → test` (los 25, ninguno vacío)
+
+| R | Test (archivo :: nombre) | Fase | Estado |
+| --- | --- | --- | --- |
+| R1 | `tests/unit/actions/gasto-fijo-plantilla-actions.test.ts` :: «actualizar sin periodicidad devuelve validation_error en los tres campos y no llama al servicio» | B | verde; rojo bajo M1 |
+| R2 | `tests/unit/services/gasto-fijo-plantilla-service.test.ts` :: «editar el monto no mueve el ciclo: el repositorio recibe semanas/2/2026-03-31» | B | verde; rojo bajo M2 |
+| **R3** | `tests/unit/components/wallet-gasto-fijo-plantilla-dialog.test.tsx` :: «editar solo el monto reenvía semanas/2/2026-03-31 sin moverlos» (+ el hermano del panel :: «Editar prefila los campos y actualiza con el id de la plantilla», con `meses`/`1`/`2026-07-01`) | F | verde; **rojo bajo M-F1** |
+| R4 | `tests/unit/types/gasto-fijo-plantilla-schema.test.ts` :: «crear sin periodicidad aplica meses/1 y la fecha CR del dia (reloj congelado en 2026-03-15)» | B | verde |
+| R5 | `tests/unit/types/gasto-fijo-plantilla-schema.test.ts` :: «rechaza 2026-02-31 al crear y al actualizar aunque cumpla el formato» | B | verde |
+| R6 | `tests/unit/types/gasto-fijo-plantilla-schema.test.ts` :: «rechaza cantidad 0, cantidad decimal y unidad desconocida» | B | verde |
+| R7 | `tests/unit/utils/periodicidad-proximo-cobro.test.ts` :: «devuelve la primera fecha en que la plantilla cobra, para las cuatro periodicidades del pedido» | B | verde; rojo bajo M3 |
+| R8 | idem :: «antes del ancla el proximo cobro es el ancla» | B | verde |
+| R9 | idem :: «si hoy cobra, el proximo cobro es hoy» | B | verde; rojo bajo M3 |
+| R10 | idem :: «ancla 31: el proximo cobro cae 28/feb, 29/feb en bisiesto y 30/abr» | B | verde; rojo bajo M3 |
+| R11 | idem :: «coincide con aplicaHoy: la fecha devuelta cobra y ningun dia anterior desde hoy cobra (barrido de 400 dias)» | B | verde; rojo bajo M3 |
+| R12 | idem :: «con dos instantes distintos del mismo dia CR devuelve lo mismo, y no usa el reloj del sistema» | B | verde; rojo bajo M3 |
+| R13 | `tests/unit/components/wallet-gasto-fijo-plantilla-dialog.test.tsx` :: «crear ofrece diaria/semanal/quincenal/mensual y un ciclo propio, con mensual y hoy preseleccionados» (+ «Personalizada revela Cada N y la unidad; los presets no los muestran») | F | verde |
+| R14 | idem :: «editar siembra la periodicidad y la fecha de cobro vigentes» (+ «un ciclo que no es preset se siembra como Personalizada con su cantidad y su unidad») | F | verde |
+| R15 | idem :: «crear envía los cinco campos: quincenal viaja como semanas/2 con su fecha» (+ «un ciclo propio viaja como cada N unidad: 3 días») | F | verde |
+| R16 | idem :: «cantidad 0 y fecha vacía muestran error y no llaman a la acción» (+ «una cantidad decimal tampoco pasa: el ciclo se cuenta en enteros») | F | verde |
+| R17 | idem :: «un validation_error de fechaCobro se pinta junto al campo de la fecha» (+ «un validation_error de periodicidadCantidad no se descarta en silencio») | F | verde |
+| R18 | `tests/unit/components/wallet-gastos-fijos-panel.test.tsx` :: «la tabla muestra la periodicidad en palabras y la fecha del próximo cobro» | F | verde; rojo bajo M-F3 |
+| R19 | idem :: «una plantilla inactiva dice que no se cobra en vez de una fecha» + `tests/unit/components/wallet-periodicidad-labels.test.ts` :: «una plantilla inactiva dice que no se cobra, en vez de una fecha» + `tests/unit/descarga/gastos-fijos-descarga-columnas.test.ts` :: «una plantilla inactiva dice No se cobra también en el archivo» | F | verde; rojo bajo M-F3 |
+| R20 | `tests/unit/components/wallet-periodicidad-labels.test.ts` :: «nombra las cuatro del pedido: Diaria, Semanal, Quincenal y Mensual» + «compone Cada N … para cualquier otro ciclo, con la unidad en plural» | F | verde |
+| R21 | `tests/unit/descarga/gastos-fijos-descarga-columnas.test.ts` :: «declara las cinco columnas en el orden de la pantalla (R5/R21)» + «la fila lleva la misma periodicidad y el mismo próximo cobro que la tabla» + «la fila lleva EXACTAMENTE las claves declaradas» | F | verde; **rojo bajo M-F4** |
+| R22 | `tests/unit/components/wallet-gastos-fijos-panel.test.tsx` :: «ningún texto del panel ni del diálogo dice cada mes» + «el aviso de desactivar tampoco promete un ciclo mensual» + `wallet-gasto-fijo-plantilla-dialog.test.tsx` :: «ningún texto del diálogo dice que el cobro es mensual» | F | verde |
+| R23 | `tests/unit/components/wallet-gastos-fijos-panel.test.tsx` :: «el próximo cobro se calcula con el instante recibido por props, no con el reloj del navegador» (reloj del proceso puesto en 2030) + «con otro instante por props, la misma plantilla anuncia otro cobro» | F | verde; **rojo bajo M-F2** |
+| R24 | `tests/unit/components/wallet-gasto-fijo-plantilla-dialog.test.tsx` :: «el monto 1234.56 viaja como cadena tal cual (R24)» + `tests/unit/descarga/gastos-fijos-descarga-columnas.test.ts` :: «el monto sale crudo, sin símbolo ni redondeo (R24)» | F | verde |
+| R25 | `tests/unit/components/wallet-registrar-egreso-dialog.test.tsx` :: «el diálogo de egreso manual no ofrece periodicidad ni fecha de cobro» | F | verde |
+
+Los 25 mapeados, ninguno vacío.
+
+---
+
+## Lo que queda abierto (para el leader, antes de cerrar)
+
+1. **El gate completo lo corre el leader.** Esta fase no ejecutó `./init.sh` (ni rápido ni
+   completo): el diff toca `lib/types/` desde la fase B, así que el modo rápido se niega solo y
+   la corrida obligatoria es la **completa** (Z2). Aquí solo se corrió lo acotado de F8.
+2. **Divergencia declarada en R21** (pantalla «14 de septiembre de 2026» vs archivo
+   `2026-09-14`): es el design §4.5 y está aseverada con los dos literales, pero si el humano
+   prefiere que el Excel lleve el texto en palabras, es un cambio de una línea en
+   `filaDescargaGastoFijo` y de un literal en su test.
+3. **El diálogo sí lee el reloj del navegador**, en dos sitios y a propósito: la fecha por
+   defecto al crear (design §4.3, «sembrado con `fechaCalendarioCR()`») y la comparación del
+   aviso de fecha pasada. R23 acota la prohibición a la **columna** del panel, que es lo que se
+   renderiza en el servidor; el contenido del diálogo solo existe cuando alguien lo abre, así
+   que no hay divergencia de hidratación posible. Se anota por si se quisiera bajar también ese
+   instante por props.
+4. **Pasada manual por `/wallet`.** No se hizo (este agente no levanta el dev server). El E2E
+   está declarado inaplicable con evidencia en el design §7, y en este repo mirar la app ya ha
+   cazado textos rotos que la suite daba por buenos: son cuatro textos nuevos (descripción de la
+   tarjeta, los dos avisos del toggle y la ayuda del campo de fecha) y dos columnas.
+
+---
+
+## Veredicto (fase F)
+
+F1..F8 completas: el diálogo pide y **reenvía** el ciclo entero, el listado y el archivo lo
+enseñan, ningún texto promete ya un cobro mensual y el instante del próximo cobro baja del
+servidor con una prop que el compilador obliga a pasar. Typecheck y lint en verde, 36 archivos
+relacionados y los 10 tocados en verde, y las cuatro guardias se comprobaron **enrojeciendo de
+verdad**. Con esto la ficha vuelve a ser desplegable: editar una plantilla desde la UI ya no
+devuelve `validation_error`.

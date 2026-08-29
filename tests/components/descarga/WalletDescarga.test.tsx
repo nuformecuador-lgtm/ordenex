@@ -274,6 +274,9 @@ function renderCaja(movimientos: WalletMovimientoDTO[] = CAJA_PAGINA) {
       desglose={DESGLOSE_EGRESOS}
       composicion={COMPOSICION}
       plantillas={{ items: [], total: 0, pageSize: 25 }}
+      // Feature 85 (T F.4/T F.6, R23): el instante del «Próximo cobro» viaja por la cadena de
+      // props y es REQUERIDO en los dos eslabones. Fijo, para no depender del día de la corrida.
+      ahoraIso="2026-07-15T18:00:00.000Z"
     />,
   );
 }

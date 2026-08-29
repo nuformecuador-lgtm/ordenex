@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { Plus } from "lucide-react";
@@ -34,7 +34,7 @@ import {
   COLUMNAS_DESCARGA_GASTOS_FIJOS,
   filaDescargaGastoFijo,
 } from "./gastos-fijos-descarga-columnas";
-import { money } from "./wallet-labels";
+import { money, periodicidadLegible, proximoCobroTexto } from "./wallet-labels";
 
 /** Nombre visible del panel: hoja, base del archivo y nombre del control (R12/R13). */
 const TITULO_DESCARGA = "Plantillas de gasto fijo";
@@ -67,8 +67,14 @@ async function leerPagina(
 // maestro; la página ya validó el rol). Lista todas las plantillas (activas e inactivas),
 // permite crear/editar (diálogo reutilizado) y activar/desactivar (NUNCA borrar, R25: la
 // desactivación es el mecanismo para dejar de generar). Deja explícito que los egresos de
-// gasto fijo los emite el CRON mensual automáticamente, no este panel. Money-safe: el monto
-// llega como STRING y se renderiza TAL CUAL con `money`, sin parseFloat/Number.
+// gasto fijo los emite el CRON automáticamente, no este panel. Money-safe: el monto llega
+// como STRING y se renderiza TAL CUAL con `money`, sin parseFloat/Number.
+//
+// Feature 85 (T F.3, design §4.4) — la tabla enseña por fin el CICLO que la base guarda desde
+// la 84: «Periodicidad» (en palabras) y «Próximo cobro» (la fecha, o «No se cobra» si está
+// desactivada). El cron dejó de ser mensual en la 84 y los textos de este panel seguían
+// prometiendo un cobro «cada mes»: ya no (R22). El instante del próximo cobro baja por props
+// desde el servidor (`ahoraIso`), nunca del reloj del navegador (R23).
 
 export interface GastosFijosPlantillasPanelProps {
   /**
@@ -76,6 +82,18 @@ export interface GastosFijosPlantillasPanelProps {
    * conjunto. Alimenta el `fallbackData` de SWR.
    */
   initialData: GastosFijosPlantillasPagina;
+  /**
+   * Feature 85 (T F.3, R23) — el instante con el que se calcula la columna «Próximo cobro»,
+   * en ISO, resuelto en el SERVIDOR y bajado por props.
+   *
+   * REQUERIDA a propósito, sin default y sin `?`. Este panel se renderiza también en el
+   * servidor: si leyera `new Date()` del navegador, un cambio de día entre el render del
+   * servidor y la hidratación daría dos fechas distintas para la misma fila, y además el
+   * valor quedaría a merced del reloj de la máquina del usuario. Y requerida —y no opcional
+   * con un default— porque este repo ya se comió un composition root que importaba una
+   * dependencia y nunca la pasaba, con la suite entera en verde: así el olvido lo caza `tsc`.
+   */
+  ahoraIso: string;
   /**
    * Callback tras crear/editar/activar/desactivar. El panel ya recarga SU página por su
    * cuenta (`mutate`); esto sigue avisando al módulo padre, que refresca lo demás.
@@ -85,10 +103,14 @@ export interface GastosFijosPlantillasPanelProps {
 
 export function GastosFijosPlantillasPanel({
   initialData,
+  ahoraIso,
   onCambio,
 }: GastosFijosPlantillasPanelProps) {
   const router = useRouter();
   const toast = useToast();
+
+  /** El instante del servidor, una sola vez: la tabla y el archivo comparten esta fecha. */
+  const ahora = useMemo(() => new Date(ahoraIso), [ahoraIso]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<GastoFijoPlantillaDTO | null>(null);
@@ -138,10 +160,12 @@ export function GastosFijosPlantillasPanel({
       });
 
       if (result.status === "ok") {
+        // R22: ni el aviso de activar ni el de desactivar pueden prometer un cobro mensual.
+        // Cada plantilla tiene el ciclo que le pusieron, y es el que se aplica.
         toast.success(
           plantilla.activa
-            ? "Plantilla desactivada. No se generará en los próximos meses."
-            : "Plantilla activada. Se generará cada mes.",
+            ? "Plantilla desactivada. Dejará de generar cobros."
+            : "Plantilla activada. Se generará según su periodicidad.",
         );
         recargar();
         router.refresh();
@@ -172,9 +196,28 @@ export function GastosFijosPlantillasPanel({
     { id: "concepto", value: "Concepto", render: (p) => p.concepto },
     {
       id: "monto",
-      value: "Monto mensual",
+      // Feature 85 (R22): «Monto mensual» era falso desde que existe la periodicidad, y
+      // `progress/impl_189.md §8` dejó la decisión dirigida por escrito a esta ficha: «dos
+      // plantillas de ₡50.000, una semanal y una mensual, saldrán como filas idénticas bajo
+      // esa etiqueta, y el test seguirá VERDE afirmando que está bien». Cada cuánto se cobra
+      // lo dice ahora la columna de al lado.
+      value: "Monto",
       // Money-safe (R12): STRING tal cual, sin parseFloat/Number.
       render: (p) => money(p.monto),
+    },
+    {
+      id: "periodicidad",
+      value: "Periodicidad",
+      // R18/R20: el ciclo EN PALABRAS. El DTO ya traía los tres campos; la pantalla llevaba
+      // desde la 84 sin enseñarlos.
+      render: (p) => periodicidadLegible(p.periodicidadUnidad, p.periodicidadCantidad),
+    },
+    {
+      id: "proximoCobro",
+      value: "Próximo cobro",
+      // R18/R19/R23: la fecha del próximo cobro, calculada con el instante del SERVIDOR;
+      // «No se cobra» si la plantilla está desactivada.
+      render: (p) => proximoCobroTexto(p, ahora),
     },
     {
       id: "estado",
@@ -223,9 +266,15 @@ export function GastosFijosPlantillasPanel({
           decoración (`aria-hidden`) y no entra en su nombre accesible. */}
       <CardHeader className="border-b">
         <CardTitle>Gastos fijos (plantillas)</CardTitle>
+        {/* R22: la descripción decía «automáticamente cada mes», que dejó de ser cierto
+            cuando la ficha 84 abrió el ciclo a días y semanas. Ahora nombra lo que manda: la
+            periodicidad de cada plantilla, que es lo único que se configura acá (R25: un
+            gasto variable o un sueldo no puede ser periódico, y por eso se registra en otro
+            formulario). */}
         <CardDescription>
-          El sistema cobra estos gastos automáticamente cada mes. No los registres a mano:
-          administrá acá las plantillas y desactivá las que ya no correspondan.
+          El sistema cobra estos gastos por su cuenta, según la periodicidad que tenga cada
+          una. No los registres a mano: administrá acá las plantillas y desactivá las que ya
+          no correspondan.
         </CardDescription>
         <CardAction>
           <Button type="button" onClick={abrirCrear}>
@@ -261,10 +310,14 @@ export function GastosFijosPlantillasPanel({
             descarga={{
               titulo: TITULO_DESCARGA,
               columnas: COLUMNAS_DESCARGA_GASTOS_FIJOS,
+              /**
+               * Feature 85 (T F.5): el mapper cierra sobre el MISMO `ahora` con el que se
+               * pinta la tabla, así que el archivo y la pantalla no pueden discrepar de
+               * fecha en la columna «Próximo cobro».
+               */
               obtenerFilas: () =>
-                filasDesdeResultado(
-                  listarPlantillasCompletoAction(),
-                  filaDescargaGastoFijo,
+                filasDesdeResultado(listarPlantillasCompletoAction(), (p) =>
+                  filaDescargaGastoFijo(p, ahora),
                 ),
             }}
           />

@@ -74,6 +74,15 @@ export interface WalletModuleProps {
    * resuelta server-side, más el `total` del conjunto. El panel pide las siguientes.
    */
   plantillas: GastosFijosPlantillasPagina;
+  /**
+   * Feature 85 (T F.4, R23): el instante con el que el panel de gastos fijos calcula la
+   * columna «Próximo cobro», resuelto en el SERVIDOR (`page.tsx`) y pasado TAL CUAL. Este
+   * módulo no lo interpreta ni lo sustituye: solo lo transporta.
+   *
+   * REQUERIDA, sin `?` y sin default, en los dos eslabones de la cadena: la inyección la
+   * garantiza el compilador, no la buena voluntad de quien monte el módulo mañana.
+   */
+  ahoraIso: string;
 }
 
 /** Construye el input de las actions omitiendo los filtros vacíos (enum/fecha). */
@@ -110,6 +119,7 @@ export function WalletModule({
   desglose: initialDesglose,
   composicion: initialComposicion,
   plantillas,
+  ahoraIso,
 }: WalletModuleProps) {
   const toast = useToast();
 
@@ -231,7 +241,7 @@ export function WalletModule({
       <section aria-label="Gastos fijos">
         {/* Feature 170 — FASE 2 (T I.2): el panel pagina su propio listado y relee su página
             tras cada cambio del CRUD (R23); la wallet ya no guarda la lista en su estado. */}
-        <GastosFijosPlantillasPanel initialData={plantillas} />
+        <GastosFijosPlantillasPanel initialData={plantillas} ahoraIso={ahoraIso} />
       </section>
 
       {/* Feature 200 (tanda 3): el libro deja de ser TRES hermanos sueltos —filtros, tabla y
