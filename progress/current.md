@@ -283,6 +283,44 @@ está mergeada en `dev`** (PRs #518 y #533) pero su ficha sigue `in_progress`: n
 confirmación del humano.
 
 
+## 🚀 RELEASE DESPLEGADA — 2026-08-28 noche. **EMPIEZA A LEER POR AQUÍ**
+
+**PR #588**, `dev` → `prod`, sobre el SHA `f2b5b78f`. Despliegue de producción en **READY**
+(`dpl_2t8riD1i…`). **Sin migraciones**: la del monto entero (305) ya se había desplegado por la
+mañana.
+
+**Gate COMPLETO sobre el SHA exacto:** `INIT_EXIT=0`, 21.558 verdes / 26 skipped, un archivo rojo y
+en el baseline conocido. `dev` re-comprobado justo antes de abrir el PR: no se había movido.
+
+⚠️ **La primera corrida del gate murió en el paso 1** —`falta la carpeta de specs de la ficha 314`—
+antes de ejecutar un solo test. No era un falso positivo: la ficha estaba `in_progress` en `dev` y su
+spec vivía en una rama sin mergear. La validación que trajo el PR #565 esta misma mañana hizo
+exactamente su trabajo.
+
+### Lo que entra
+
+| | |
+| --- | --- |
+| **312** | corregir destinatario, teléfono, producto y notas de una orden ya cargada. Hasta hoy era SQL contra producción |
+| **319** | eliminar una orden **vuelve a ser posible**: no era una mejora, la función no alcanzaba a ninguna orden (0 de 429 medido) |
+| **320** | `DELETE /api/ordenes/api-key/orden/{id}` — el primer `DELETE` de la API pública |
+| **315** | aprobar un cierre libera sus reprogramadas **en el acto** |
+| **313** | la siembra de los jobs recurrentes cuelga del despliegue, con guardia |
+| 308, 309, 310 | tres textos que mentían a la tienda |
+| 311, 316 | el chat con el cliente: media, reacciones, contactos, y el mensajero puede enviar |
+| 317, 321 | rojos sin dueño en `dev`; histórico de conversaciones (otra sesión) |
+
+### Verificación posterior — las tres casillas de `docs/release.md` §3
+
+1. **Errores de runtime: CERO** en la ventana del despliegue.
+2. **Los jobs recurrentes tienen su primera fila**, una por tipo. Es la casilla que nació hoy del
+   incidente, y su primera ejecución real.
+3. **La idempotencia de la siembra quedó probada en producción, no en un test:** las filas vivas son
+   las que se sembraron A MANO a las 14:09, y el build de esta release corrió su siembra automática
+   **sin duplicarlas**.
+
+---
+
 ## 🚨 2026-08-28 — INCIDENTE DE PRODUCCIÓN: las reprogramadas nunca volvían a la central
 
 Reportado por el humano en caliente: **«acepté las reprogramadas de ayer para hoy y no aparecen en
