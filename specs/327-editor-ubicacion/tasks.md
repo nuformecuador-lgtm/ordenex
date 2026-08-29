@@ -309,7 +309,7 @@ parte del trabajo; **borrarlas o relajarlas más allá de lo escrito, no**.
 
 ## Bloque G — Cierre
 
-- [ ] **G1 ⇐ todo lo anterior** `progress/impl_327.md` con el mapa `R<n> → test` **completo** y
+- [x] **G1 ⇐ todo lo anterior** `progress/impl_327.md` con el mapa `R<n> → test` **completo** y
       **commiteado** (un informe sin commitear se pierde con el primer `git checkout`).
       _Hecho:_ los **36** requisitos tienen archivo y nombre de test. Incluye una sección con **la
       enmienda declarada a 312/R5 y 312/R14** (`requirements.md` §D6), para que quien lea el informe
