@@ -24,6 +24,19 @@ export interface TextosGrupoNovedad {
   listaAriaLabel: string;
   /** Nombre accesible de la `Pagination` del pie. Idem. */
   paginacionAriaLabel: string;
+  /**
+   * FICHA 325 — nombre accesible del campo de busqueda de la barra. Propio de cada grupo por el
+   * mismo motivo que los dos de arriba: las dos pestañas viven MONTADAS A LA VEZ (`keepMounted`),
+   * asi que hay dos campos de busqueda en el arbol y un nombre repetido dejaria a un lector de
+   * pantalla —y a quien escriba un test— sin forma de decir cual de los dos es cual.
+   */
+  buscadorAriaLabel: string;
+  /**
+   * FICHA 325 — nombre accesible de la REGION que agrupa buscador y filtros. Mismo motivo que el
+   * de arriba: con las dos pestañas montadas a la vez hay dos barras en el arbol, y un lector de
+   * pantalla que salta entre regiones tiene que poder decir en cual esta.
+   */
+  filtrosAriaLabel: string;
   /** Titulo del estado vacio (R16). Dice QUE aparecera ahi, no «no hay nada». */
   vacioTitulo: string;
   /** Detalle del estado vacio (R16). Dice CUANDO aparecera. */
@@ -62,6 +75,8 @@ export const TEXTOS_POR_GRUPO = {
     pestana: "Ayuda solicitada",
     listaAriaLabel: "Órdenes con ayuda solicitada",
     paginacionAriaLabel: "Paginación de las órdenes con ayuda solicitada",
+    buscadorAriaLabel: "Buscar entre las órdenes con ayuda solicitada",
+    filtrosAriaLabel: "Filtros de las órdenes con ayuda solicitada",
     vacioTitulo: "Ningún mensajero te pidió ayuda",
     vacioDetalle:
       "Cuando un mensajero necesite que resuelvas algo de una orden que lleva encima, aparecerá acá con su mensaje.",
@@ -73,6 +88,8 @@ export const TEXTOS_POR_GRUPO = {
     // Se conserva TAL CUAL el de hoy: esta ficha no tiene ningun motivo para mover el nombre
     // accesible de un control que ya estaba bien, y cambiarlo de paso seria copy sin firma.
     paginacionAriaLabel: "Paginación de novedades",
+    buscadorAriaLabel: "Buscar entre las órdenes en devolución",
+    filtrosAriaLabel: "Filtros de las órdenes en devolución",
     vacioTitulo: "No tenés órdenes en devolución",
     vacioDetalle:
       "Cuando una de tus órdenes vuelva a la tienda, aparecerá acá con su causa y los botones de contacto.",

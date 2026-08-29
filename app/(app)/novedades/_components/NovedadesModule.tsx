@@ -5,6 +5,7 @@ import { useState } from "react";
 import { DescargarDatasetButton } from "@/components/shared/DescargarDatasetButton";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { Pagination } from "@/components/shared/Pagination";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
 import {
   listarAyudaTiendaAction,
@@ -54,6 +55,8 @@ import {
 import { HabilitarNovedadModal } from "./HabilitarNovedadModal";
 import { HiloNotasNovedadModal } from "./HiloNotasNovedadModal";
 import { NovedadAcciones } from "./NovedadAcciones";
+import { NovedadesFiltrosBarra } from "./NovedadesFiltrosBarra";
+import { useNovedadesFiltro } from "./useNovedadesFiltro";
 import { novedadAOrdenCard, SECCIONES_NOVEDAD } from "./novedad-a-orden-card";
 import { TEXTOS_POR_GRUPO } from "./novedad-grupo-textos";
 import {
@@ -173,6 +176,36 @@ import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 // `PosSecciones` porque esas APAGAN secciones donde falta el dato y no transportan valor, y se
 // descartó meterlo en `MiAsignacionDTO` porque obligaría a las listas del mensajero a emitir un
 // nombre que nadie lee.
+//
+// FICHA 325 (2026-08-28) — EL BUSCADOR Y LOS FILTROS, MONTADOS A MANO. Esta pantalla no monta un
+// `DataTable` (son cards), así que la barra no le llega heredada como a los consumidores de la
+// tabla: se monta aquí, igual que el `DescargarDatasetButton` de más abajo y por el mismo motivo.
+// Son los MISMOS componentes de la casa, sin variantes (`BuscadorFiltros` + `FilterComponent`); lo
+// específico de esta pantalla vive en `novedades-filtros.ts` y su estado en `useNovedadesFiltro`.
+//
+// LAS TRES COSAS QUE HAY QUE SABER ANTES DE TOCAR ESTA PARTE:
+//
+//  1. **SE FILTRA SOBRE EL CONJUNTO COMPLETO, NO SOBRE `items`.** `items` son DIEZ de `total`
+//     (`PAGE_SIZE = 10` en `lib/actions/novedades.ts`, y la página sólo pre-carga la 1): filtrar lo
+//     que se ve habría dicho «ninguna coincide» con la orden buscada esperando en la página 3. La
+//     barra pide el listado entero con la lectura que YA existe (`listarCompleto`, la de la
+//     descarga), la PRIMERA vez que alguien la usa. Sin tocar la barra, esta pantalla cuesta
+//     exactamente lo que costaba ayer.
+//  2. **CADA PESTAÑA TIENE SU BARRA.** El módulo se monta dos veces y cada instancia tiene su
+//     propio hook, así que cambiar de pestaña no arrastra el filtro de la otra — que es el fallo a
+//     evitar, y no uno teórico: «Causa de devolución» no existe en el grupo de ayuda (ahí la causa
+//     es SIEMPRE `null` por R26), así que un filtro compartido habría vaciado la otra lista sin que
+//     nada lo explicara.
+//  3. **HAY DOS ESTADOS VACÍOS Y NO SE PUEDEN CONFUNDIR.** «No tenés órdenes en devolución» (R16)
+//     es una afirmación sobre los DATOS; con la barra puesta esa frase sería falsa, así que ahí se
+//     dice «ninguna coincide» y se ofrece limpiar. Un vacío que miente sobre su causa es peor que
+//     no tener buscador.
+//
+// LO QUE ESTA FICHA **NO** TOCA, dicho aquí para que no se lea como un olvido: la DESCARGA sigue
+// bajando el listado entero aunque la barra esté acotando. Cambiarlo significaría mover esta
+// pantalla de `filasDesdeResultado` (familia A: el tope lo evalúa el servidor) a la familia B, y
+// eso está vigilado por `tests/unit/descarga/adaptador-conjunto.guardia.test.ts` con su censo: es
+// una decisión de arquitectura de la descarga, no del buscador.
 
 /**
  * Lo que cada pestaña necesita DEL SERVIDOR, indexado por grupo.
@@ -234,6 +267,20 @@ const MENSAJE_POR_FALLO_DEL_RECHAZO: Record<
   // tienda pulso «Rechazar» y no vio nada: la accion salia por `INTERNAL` y el borde lanzaba.
   sin_gestion_origen: RECHAZO_SIN_GESTION_ORIGEN,
 };
+
+/**
+ * FICHA 325 — LOS TRES TEXTOS DE LA BÚSQUEDA. Exportados para que un test pueda afirmarlos sin
+ * reescribir la cadena a mano, y agrupados aquí para que el día que esta app se traduzca no haya
+ * que ir a buscarlos dentro del JSX.
+ *
+ * NO se reusa `TEXTOS_POR_GRUPO` porque estos NO dependen del grupo: «ninguna coincide» dice lo
+ * mismo de una devolución que de una ayuda. Los de R16 sí dependen, y por eso viven allí.
+ */
+export const BUSCANDO = "Buscando entre todas tus órdenes de esta pestaña…";
+export const SIN_COINCIDENCIAS_TITULO = "Ninguna orden coincide con lo que buscaste";
+export const SIN_COINCIDENCIAS_DETALLE =
+  "Probá con menos palabras, o quitá alguno de los filtros que tenés puestos.";
+export const LIMPIAR_BUSQUEDA = "Limpiar la búsqueda";
 
 export interface NovedadesModuleProps {
   /**
@@ -335,6 +382,12 @@ export function NovedadesModule({
     cambiarVista,
   } = useTransicionVista<VistaCards>("mosaico");
 
+  // FICHA 325 — la barra de esta pestaña. UNA POR INSTANCIA del módulo: es lo que hace que el
+  // filtro de un grupo no siga puesto al pasar al otro. Se le pasa la lectura del CONJUNTO ENTERO
+  // del grupo (la misma que alimenta la descarga), que el hook sólo dispara cuando alguien usa la
+  // barra.
+  const filtro = useNovedadesFiltro(grupo, recursos.listarCompleto);
+
   /**
    * 💰 FEATURE 240 (T5.3, design §10.2 — R30/R31/R32) — LO QUE LA PANTALLA HACE CON EL RECHAZO.
    *
@@ -368,7 +421,7 @@ export function NovedadesModule({
     }
     if (res.status === "conflict") {
       toast.warning(RECHAZO_CONFLICTO);
-      await cambiarPagina(page);
+      await releerListado();
       return;
     }
     toast.error(MENSAJE_POR_FALLO_DEL_RECHAZO[res.status]);
@@ -407,6 +460,9 @@ export function NovedadesModule({
       if (res.rescatada) {
         setItems((prev) => prev.filter((n) => n.id !== orden.id));
         setTotal((prev) => Math.max(0, prev - 1));
+        // FICHA 325: y del conjunto que filtra la barra, que es OTRA copia de la misma lista. Sin
+        // esto la fila desaparecería de la lista sin filtro y seguiría apareciendo con filtro.
+        filtro.quitar(orden.id);
         toast.success("La orden volvió a la ruta.");
         return;
       }
@@ -460,12 +516,12 @@ export function NovedadesModule({
     setOrdenAGestionarDesdeAyuda(null);
     if (res.status === "ok") {
       toast.success(GESTION_AYUDA_EXITO[pendiente.modo]);
-      await cambiarPagina(page);
+      await releerListado();
       return;
     }
     if (res.status === "conflict") {
       toast.warning(res.motivo);
-      await cambiarPagina(page);
+      await releerListado();
       return;
     }
     toast.error(
@@ -492,7 +548,24 @@ export function NovedadesModule({
    */
   async function trasCorregirDatos() {
     setOrdenACorregir(null);
+    await releerListado();
+  }
+
+  /**
+   * FICHA 325 — LA RELECTURA TRAS UNA MUTACIÓN, en sus DOS copias.
+   *
+   * Desde que la barra existe hay dos listas en memoria y las dos vienen del mismo predicado: la
+   * PÁGINA visible (`items`, diez de `total`) y el CONJUNTO ENTERO que la barra filtra. Releer sólo
+   * una dejaría a la pantalla afirmando dos cosas distintas de la misma orden según si hay filtro
+   * puesto o no, que es justo el modo de fallo que 236/D8 midió sobre esta card.
+   *
+   * `filtro.recargar()` NO es una lectura nueva por sistema: si nadie ha usado la barra, el
+   * conjunto no está cargado y no hace nada. Sólo lo llaman las relecturas que confirma el
+   * servidor, nunca el simple cambio de página.
+   */
+  async function releerListado() {
     await cambiarPagina(page);
+    await filtro.recargar();
   }
 
   /**
@@ -510,6 +583,9 @@ export function NovedadesModule({
   function sacarDeLaLista(ordenId: string) {
     setItems((prev) => prev.filter((n) => n.id !== ordenId));
     setTotal((prev) => Math.max(0, prev - 1));
+    // FICHA 325: la orden sale también del conjunto que filtra la barra. Son DOS copias de la misma
+    // lista; quitarla de una sola dejaría la fila viva bajo un filtro y muerta sin él.
+    filtro.quitar(ordenId);
   }
 
   /** Re-fetch de la pagina pedida por Server Action (R22). Errores -> toast, sin romper. */
@@ -535,20 +611,26 @@ export function NovedadesModule({
     }
   }
 
-  if (items.length === 0) {
-    // R10/R16: estado vacio CON TEXTO en vez de una lista sin filas. No es un caso marginal: con
-    // `ayuda_tienda` = 0 y `devuelta` = 0 medidos en produccion el 2026-08-19, es el PRIMER estado
-    // que la tienda va a conocer, y durante un tiempo el unico. Dice que aparecera ahi y cuando.
-    return (
-      <div
-        className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center"
-        role="status"
-      >
-        <p className="text-base font-medium text-foreground">{textos.vacioTitulo}</p>
-        <p className="text-sm text-muted-foreground">{textos.vacioDetalle}</p>
-      </div>
-    );
-  }
+  // R10/R16: estado vacio CON TEXTO en vez de una lista sin filas. No es un caso marginal: con
+  // `ayuda_tienda` = 0 y `devuelta` = 0 medidos en produccion el 2026-08-19, es el PRIMER estado
+  // que la tienda va a conocer, y durante un tiempo el unico. Dice que aparecera ahi y cuando.
+  //
+  // FICHA 325 — `!filtro.barraEnUso` es la mitad que faltaba. Sin esa condición, buscar algo que
+  // no está diría «No tenés órdenes en devolución» sobre una tienda que SÍ las tiene, y encima se
+  // llevaría por delante la barra: el usuario se quedaría sin campo que borrar y sin forma de
+  // volver. Con la barra en uso el vacío se decide más abajo, junto a la lista, y dice otra cosa.
+  const vacioDeVerdad = items.length === 0 && !filtro.barraEnUso;
+  const estadoVacio = (
+    <div
+      className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center"
+      role="status"
+    >
+      <p className="text-base font-medium text-foreground">{textos.vacioTitulo}</p>
+      <p className="text-sm text-muted-foreground">{textos.vacioDetalle}</p>
+    </div>
+  );
+
+  if (vacioDeVerdad) return estadoVacio;
 
   // El patrón de una línea que ya está escrito cuatro veces en el repo (`RepartoModule`,
   // `RecogerModule`, `RecoleccionModule`, `RecolectadasHoyLista`): las dos cards comparten
@@ -557,8 +639,33 @@ export function NovedadesModule({
   const CardVista =
     vistaCards === "mosaico" ? PosOrderCardMosaico : PosOrderCardDetalle;
 
+  // FICHA 325 — QUÉ LISTA SE PINTA, y de dónde sale su paginación.
+  //
+  // `modoFiltrado` exige las DOS cosas: que la barra esté acotando algo Y que el conjunto entero
+  // esté en memoria. Mientras el conjunto viaja —o si no pudo venir— NO se pinta la página del
+  // servidor como si estuviera filtrada: eso sería enseñar diez órdenes cualesquiera bajo un
+  // término de búsqueda, que es exactamente la mentira que esta ficha evita.
+  const modoFiltrado = filtro.filtrando && filtro.estado === "listo";
+  const desde = (filtro.pagina - 1) * pageSize;
+  // La paginación del resultado filtrado es de CLIENTE y usa el MISMO `pageSize` que el servidor:
+  // que la lista cambie de largo al escribir sería un segundo cambio que nadie pidió.
+  const visibles = modoFiltrado
+    ? filtro.resultados.slice(desde, desde + pageSize)
+    : items;
+  const esperandoConjunto = filtro.filtrando && filtro.estado === "cargando";
+
   return (
     <div className="flex flex-col gap-4">
+      {/* FICHA 325 — LA BARRA, en su propia línea y por encima de todo lo demás: es lo primero que
+          se toca al llegar con un dato en la mano. Va aquí y no dentro de la fila de la derecha
+          porque ocupa el ancho completo (el campo no baja de 250px y los filtros pedidos se montan
+          delante de él), y estrujarla contra dos botones la partiría en dos líneas siempre. */}
+      <NovedadesFiltrosBarra
+        filtro={filtro}
+        label={textos.buscadorAriaLabel}
+        regionLabel={textos.filtrosAriaLabel}
+      />
+
       {/* Conmutador en la cabecera de la lista, alineado a la derecha como en las cuatro
           pantallas hermanas. NO lleva al lado el conteo `role="status"` que ellas ponen:
           aquí ese dato ya lo dice la `Pagination` del pie ("11-20 de 25"), y repetirlo
@@ -594,7 +701,38 @@ export function NovedadesModule({
           la convivencia con la `Pagination`, que ya parte los datos en páginas: un carrusel
           dentro de una página paginada son dos mandos para el mismo avance—. Lo que cambia
           entre vistas es la DISPOSICIÓN: grilla para las cards compactas, columna para las
-          filas. La clase de fase anima la lista entera como bloque. */}
+          filas. La clase de fase anima la lista entera como bloque.
+
+          FICHA 325 — TRES SALIDAS Y NO UNA, porque un vacío que no dice su causa se lee como una
+          pantalla rota:
+            · el conjunto viaja  → se dice que se está buscando, y NO se pinta la página del
+              servidor bajo un término que todavía no la acotó;
+            · la barra acota y no queda nada → «ninguna coincide», con la forma de deshacerlo al
+              lado. Nunca el texto de R16, que afirmaría algo falso de los datos;
+            · lo de siempre → la lista. */}
+      {esperandoConjunto ? (
+        <p
+          role="status"
+          className="rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center text-sm text-muted-foreground"
+        >
+          {BUSCANDO}
+        </p>
+      ) : visibles.length === 0 ? (
+        modoFiltrado ? (
+          <div
+            className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center"
+            role="status"
+          >
+            <p className="text-base font-medium text-foreground">{SIN_COINCIDENCIAS_TITULO}</p>
+            <p className="text-sm text-muted-foreground">{SIN_COINCIDENCIAS_DETALLE}</p>
+            <Button type="button" variant="outline" size="sm" onClick={filtro.limpiar}>
+              {LIMPIAR_BUSQUEDA}
+            </Button>
+          </div>
+        ) : (
+          estadoVacio
+        )
+      ) : (
       <ul
         aria-label={textos.listaAriaLabel}
         className={`${
@@ -603,14 +741,14 @@ export function NovedadesModule({
             : "flex flex-col gap-3"
         } ${CLASE_FASE[faseVista]}`}
       >
-        {items.map((novedad) => (
+        {visibles.map((novedad) => (
           <li key={novedad.id}>
             <CardVista
               orden={novedadAOrdenCard(novedad)}
               // `total` alimenta el "parada N de total" de la cabecera, que aquí no se
               // pinta (`mostrarRuta={false}`). Se pasa el tamaño de la página porque es el
               // dato honesto que esta pantalla tiene, no un cero de relleno.
-              total={items.length}
+              total={visibles.length}
               // El badge lo decide el GRUPO DE LA FILA (ver `badgeNovedad`). No hay estado de
               // reparto que anunciar: lo que la tienda necesita saber de un vistazo es por qué
               // esa orden está en su pantalla.
@@ -654,13 +792,17 @@ export function NovedadesModule({
           </li>
         ))}
       </ul>
+      )}
 
+      {/* FICHA 325 — con la barra acotando, la paginación es la DEL RESULTADO: su total es el
+          número de coincidencias y avanzar no vuelve al servidor (el conjunto ya está aquí). Sin
+          barra es la de siempre, byte por byte. Lo que NO cambia nunca es el `pageSize`. */}
       <Pagination
-        page={page}
+        page={modoFiltrado ? filtro.pagina : page}
         pageSize={pageSize}
-        total={total}
-        onPageChange={cambiarPagina}
-        disabled={loading}
+        total={modoFiltrado ? filtro.resultados.length : total}
+        onPageChange={modoFiltrado ? filtro.irAPagina : cambiarPagina}
+        disabled={loading || esperandoConjunto}
         ariaLabel={textos.paginacionAriaLabel}
       />
 
