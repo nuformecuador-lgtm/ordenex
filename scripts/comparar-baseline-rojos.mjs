@@ -16,6 +16,13 @@
 // COSTE ACEPTADO A SABIENDAS: si un archivo YA listado gana un rojo nuevo de verdad, esto no
 // lo ve. A cambio, la pregunta que si responde -- "¿aparecio un archivo que antes no fallaba?"
 // -- es robusta frente al ruido, que es lo que hace que se pueda confiar en ella.
+//
+// ACEPTA VARIOS REPORTES (ficha 318, 2026-08-28), y no es un capricho: el modo rapido no es
+// UNA corrida de vitest, son DOS -- `--changed origin/dev` y las guardias --, cada una con su
+// propio reporte. Los reportes se UNEN antes de decidir: un archivo cuenta como rojo si fallo
+// en cualquiera de ellos, y como ejecutado si aparecio en cualquiera de ellos. Hacer una
+// llamada por reporte seria peor de dos maneras: cada llamada veria media corrida y trataria
+// como "no ejecutado" lo que la otra si corrio, y el veredicto se partiria en dos.
 import { readFileSync, existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
 
@@ -27,55 +34,65 @@ function aRutaDeRepo(nombre) {
 }
 
 /**
- * Archivos con al menos un caso rojo y archivos EJECUTADOS, segun el reporter `json` de vitest
- * (forma tipo jest).
+ * Acumula, sobre `rojos` y `ejecutados`, los archivos de UN reporte del reporter `json` de
+ * vitest (forma tipo jest).
  *
  * Los ejecutados importan para no dar una falsa alarma: un archivo del baseline que esta
  * corrida NO llego a correr no es un archivo "recuperado", es un archivo del que no sabemos
  * nada. Confundirlos hacia que una corrida parcial pidiera borrar medio baseline.
  */
-function clasificar(reporte) {
-  const rojos = new Set();
-  const ejecutados = new Set();
+function acumular(reporte, rojos, ejecutados) {
   for (const suite of reporte.testResults ?? []) {
     const ruta = aRutaDeRepo(suite.name);
     ejecutados.add(ruta);
     if (suite.status === "failed") rojos.add(ruta);
   }
-  return { rojos, ejecutados };
+}
+
+/** Lee un reporte de vitest. Devuelve `null` y explica por STDERR si no se puede usar. */
+function leerReporte(ruta) {
+  // Sin reporte no se puede afirmar nada. Salir en verde aqui seria el peor desenlace
+  // posible: un gate que da por bueno lo que no ha llegado a mirar. Y ojo: vitest SI escribe
+  // el reporte cuando no selecciona ni un archivo (medido: `testResults: []`), asi que un
+  // reporte ausente significa que la corrida se cayo, no que no habia nada que correr.
+  if (!existsSync(ruta)) {
+    console.error(`no existe el reporte de vitest en \`${ruta}\`: la corrida no llego a`);
+    console.error("escribirlo (¿se cayo antes de terminar?). No se puede comparar nada.");
+    return null;
+  }
+  try {
+    return JSON.parse(readFileSync(ruta, "utf8"));
+  } catch (e) {
+    console.error(`el reporte de vitest \`${ruta}\` no es JSON valido: ${e.message}`);
+    return null;
+  }
 }
 
 function main() {
-  const rutaReporte = process.argv[2];
-  if (!rutaReporte) {
-    console.error("uso: node scripts/comparar-baseline-rojos.mjs <reporte-vitest.json>");
+  const rutasReporte = process.argv.slice(2);
+  if (rutasReporte.length === 0) {
+    console.error("uso: node scripts/comparar-baseline-rojos.mjs <reporte-vitest.json>...");
     return 2;
   }
-  // Sin reporte no se puede afirmar nada. Salir en verde aqui seria el peor desenlace
-  // posible: un gate que da por bueno lo que no ha llegado a mirar.
-  if (!existsSync(rutaReporte)) {
-    console.error(`no existe el reporte de vitest en \`${rutaReporte}\`: la corrida no llego a`);
-    console.error("escribirlo (¿se cayo antes de terminar?). No se puede comparar nada.");
-    return 1;
-  }
 
-  let reporte;
-  try {
-    reporte = JSON.parse(readFileSync(rutaReporte, "utf8"));
-  } catch (e) {
-    console.error(`el reporte de vitest no es JSON valido: ${e.message}`);
-    return 1;
+  const rojos = new Set();
+  const ejecutados = new Set();
+  for (const ruta of rutasReporte) {
+    const reporte = leerReporte(ruta);
+    if (reporte === null) return 1;
+    acumular(reporte, rojos, ejecutados);
   }
 
   const conocidos = existsSync(BASELINE)
     ? new Set(Object.keys(JSON.parse(readFileSync(BASELINE, "utf8")).archivos ?? {}))
     : new Set();
-  const { rojos, ejecutados } = clasificar(reporte);
 
   const nuevos = [...rojos].filter((f) => !conocidos.has(f)).sort();
   // Solo cuenta como "recuperado" lo que ESTA corrida ejecuto y salio verde. Un archivo del
   // baseline que no se llego a correr no dice nada, y tratarlo como recuperado hacia que una
-  // corrida parcial pidiera borrar medio baseline.
+  // corrida parcial pidiera borrar medio baseline. Con el modo rapido eso dejo de ser un caso
+  // raro y paso a ser LO NORMAL: ahi solo corren las guardias y lo que toca tu diff, asi que
+  // casi todo el baseline queda sin ejecutar en cada corrida.
   const recuperados = [...conocidos].filter((f) => ejecutados.has(f) && !rojos.has(f)).sort();
 
   // Un archivo del baseline que vuelve a verde NO es un fallo: es una buena noticia. Pero se
@@ -101,7 +118,8 @@ function main() {
 
   const heredados = rojos.size;
   console.log(
-    `sin rojos nuevos (${heredados} archivo(s) rojo(s), todos en el baseline conocido)`,
+    `sin rojos nuevos (${heredados} archivo(s) rojo(s) sobre ${ejecutados.size} ejecutado(s), ` +
+      "todos en el baseline conocido)",
   );
   return 0;
 }
