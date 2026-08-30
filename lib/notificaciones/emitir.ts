@@ -81,6 +81,24 @@ export function textoDiaRepartoCorregido(fechaNuevaISO: string): string {
     : "Una orden tuya cambió de día de reparto.";
 }
 
+/**
+ * FICHA 333 (E1, design §4.3, R35) — el aviso de que quedan cobros de gasto fijo por decidir.
+ *
+ * ⚠️ LLEVA EL NÚMERO Y NADA MÁS. Ni monto, ni concepto, ni nombre de persona, ni el período: el
+ * aviso dice que hay algo que atender; QUÉ es se lee en `/wallet`, que es donde vive la
+ * autorización por rol. Mismo criterio, palabra por palabra, que
+ * `TEXTO_POSTULACION_RECURSO_PENDIENTE`, y la regla general de la 146 §4.6 («nunca dirección,
+ * teléfono ni monto»).
+ *
+ * Singular y plural explícitos, como `textoCargaMasivaTerminada`: «Hay 1 cobros» sería el tipo
+ * de texto roto que ninguna suite ve y que un humano lee todos los días.
+ */
+export function textoCobrosGastoFijoPendientes(n: number): string {
+  return n === 1
+    ? "Hay 1 cobro de gasto fijo esperando tu aprobación."
+    : `Hay ${n} cobros de gasto fijo esperando tu aprobación.`;
+}
+
 /** Roles que aprueban postulaciones y cierres (espejo de ROLES_APROBADORES, F1.4-2). */
 const ROLES_ADMINISTRACION: NotificacionDestinatario[] = [
   { tipo: "rol", rol: "maestro" },
@@ -631,4 +649,70 @@ export async function emitirMensajeroBloqueado(
     })),
   ];
   return emitirFilas(repo, filas, tx);
+}
+
+// ---------------------------------------------------------------------------
+// FICHA 333 §4 — Cobros de gasto fijo esperando decisión. BEST-EFFORT, desde el CRON.
+//
+// ⚠️ LA ENTIDAD DE ESTE AVISO ES **EL DÍA CR**, NO EL COBRO, Y ESA ES LA DECISIÓN QUE EVITA UN
+// SILENCIO TOTAL. `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id,
+// destinatario_rol, destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT
+// NULL`, y `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `false`. Con el COBRO
+// como entidad, esa clave admitiría UNA sola fila por (evento, cobro, maestro) PARA SIEMPRE: el
+// recordatorio del día 2 no saldría NUNCA —sin error, sin log, sin nada—, y ni siquiera haría
+// falta que el índice actuara, porque `emitirFilas` consulta antes `existeNoLeidaPara` y mientras
+// el primer aviso siguiera sin leerse se saltaría la creación. Es EXACTAMENTE el fallo que la 262
+// documentó y evitó eligiendo como entidad el CAMBIO y no la orden.
+//
+// Con el DÍA, las dos propiedades que la ficha pide son ESTRUCTURALES y no de disciplina:
+//   · días distintos ⇒ entidades distintas ⇒ el recordatorio diario sale siempre (R30), leído o
+//     no leído el del día anterior;
+//   · misma corrida repetida el mismo día ⇒ misma entidad ⇒ UN solo aviso (R31).
+//
+// Y tampoco es `entidad_id = NULL` (A4): con `null`, `emitirFilas` se salta la guardia y el
+// índice único es PARCIAL, así que saldría un aviso por cada ejecución.
+// ---------------------------------------------------------------------------
+
+/** Lo MÍNIMO que el aviso necesita: un número y un día. Ni monto, ni concepto, ni persona (R35). */
+export interface GastoFijoCobroPendienteContexto {
+  /** Cuántos cobros siguen `pendiente` en el instante de la corrida. TODOS, no los de hoy. */
+  pendientes: number;
+  /** `YYYY-MM-DD`: el día calendario CR de la corrida. **ES LA ENTIDAD** del aviso. */
+  diaCR: string;
+}
+
+/**
+ * R29/R30/R31/R35 — UNA fila `warning` dirigida al rol `maestro`, y a nadie más.
+ *
+ * `warning` y no `alert`: es «algo pendiente de aprobación», igual que `cierre_dia_por_aprobar`.
+ * Un `alert` teñiría de rojo una cola de trabajo normal (`NotificationsBell.tsx`).
+ *
+ * SÓLO AL `maestro` (pregunta abierta 1, valor por defecto de la ficha): el `admin` VE la cola
+ * pero no puede decidirla (R24), y un recordatorio diario que no se puede atender es ruido. Si
+ * el humano quiere que también lo reciba, se añade el destinatario aquí y R29 pasa a nombrar los
+ * dos.
+ *
+ * SIN ANEXO: el número ya está en la descripción y no hay ningún otro dato que se pueda enseñar
+ * sin romper R35.
+ */
+export async function emitirGastoFijoCobroPendiente(
+  repo: INotificacionRepository,
+  ctx: GastoFijoCobroPendienteContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  return emitirFilas(
+    repo,
+    [
+      {
+        tipo: "warning",
+        evento: "gasto_fijo_cobro_pendiente",
+        descripcion: textoCobrosGastoFijoPendientes(ctx.pendientes),
+        anexo: null,
+        entidadTipo: "gasto_fijo_cobro_dia",
+        entidadId: ctx.diaCR,
+        destinatario: { tipo: "rol", rol: "maestro" },
+      },
+    ],
+    tx,
+  );
 }

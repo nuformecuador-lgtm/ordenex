@@ -371,6 +371,11 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     // suites que lo instancian escriban avisos contra la base local, que en este repo es
     // compartida.
     "CierresAdminService.ts", // feature 271 / R42
+    // FICHA 333 (E5, R34): el CRON DE GASTOS FIJOS pasa a tener notificador —«quedan N cobros
+    // esperando tu aprobacion»—. Es el segundo aviso del arbol que se dispara SOLO, cada noche y
+    // sin nadie mirando, asi que su default no-op no es comodidad: es lo que impide que una suite
+    // escriba avisos contra la base local, que en este repo es COMPARTIDA.
+    "GeneracionGastosFijosService.ts", // ficha 333 / §4.4
   ] as const;
 
   it("lib/actions/postulacion-recurso.ts inyecta el notificador real", () => {
@@ -398,6 +403,29 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     const fuente = leer("app", "api", "cron", "corte-diario", "route.ts");
     expect(fuente).toContain("notificarCierreDiaVencidoReal");
     expect(fuente).toMatch(/new CorteDiarioService\([\s\S]*notificarCierreDiaVencidoReal,[\s\S]*\)/);
+  });
+
+  it("app/api/cron/generar-gastos-fijos/route.ts inyecta el notificador real", () => {
+    // FICHA 333 (E5, R34) — MISMO MOLDE QUE EL DE ARRIBA, Y POR EL MISMO MOTIVO. Este es el otro
+    // cron money-critical del arbol: corre a las 00:00 CR, sin nadie delante, y su aviso es el
+    // recordatorio diario de que hay dinero esperando autorizacion. Si `buildService()` dejara de
+    // pasar el notificador, el service se quedaria con su default NO-OP y el aviso no se emitiria
+    // JAMAS, con la suite entera en verde — que es exactamente lo que le paso a `corte-diario`.
+    //
+    // Se afirma sobre el USO EFECTIVO (fuente sin imports ni comentarios) y no con un `toContain`
+    // a secas: medido en este mismo archivo, un `toContain` se satisface con el `import` de
+    // arriba, asi que borrar solo el argumento del cableado lo dejaria EN VERDE.
+    const fuente = leer("app", "api", "cron", "generar-gastos-fijos", "route.ts");
+    const uso = fuenteSinImportsNiComentarios(fuente);
+    expect(uso).toContain("notificarGastoFijoCobroPendienteReal");
+    expect(uso).toMatch(
+      /new GeneracionGastosFijosService\([\s\S]*notificarGastoFijoCobroPendienteReal,?[\s\S]*\)/,
+    );
+    // Y el `import` tiene que seguir ahi: sin el, lo de arriba no compilaria — pero es el USO lo
+    // que se exige, no el import.
+    expect(fuente).toContain(
+      'import { notificarGastoFijoCobroPendienteReal } from "@/lib/notificaciones/notificadores"',
+    );
   });
 
   it("lib/actions/cierres-admin.ts inyecta el notificador real", () => {

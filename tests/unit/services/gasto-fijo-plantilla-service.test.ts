@@ -5,6 +5,11 @@ import type {
   ActualizarPlantillaInput,
   IGastoFijoPlantillaRepository,
 } from "@/lib/interfaces/repositories/IGastoFijoPlantillaRepository";
+import type {
+  EliminarPlantillaTx,
+  EliminarPlantillaTxRunner,
+} from "@/lib/interfaces/services/IGastoFijoPlantillaService";
+import type { IGastoFijoCobroService } from "@/lib/interfaces/services/IGastoFijoCobroService";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 
 // Feature 45 (R17/R24/R25/R26) — tests unit del GastoFijoPlantillaService. Guardia de acceso
@@ -28,6 +33,7 @@ function plantilla(overrides: Partial<GastoFijoPlantillaDTO> = {}): GastoFijoPla
     periodicidadUnidad: "meses",
     periodicidadCantidad: 1,
     fechaCobro: "2026-07-13",
+    requiereAprobacion: true, // ficha 333/R1
     createdAt: "2026-07-13T10:00:00.000Z",
     updatedAt: "2026-07-13T10:00:00.000Z",
     ...overrides,
@@ -58,56 +64,105 @@ function buildRepo(overrides: Partial<IGastoFijoPlantillaRepository> = {}): IGas
   };
 }
 
+/**
+ * FICHA 333 (F1b) — doble del PUERTO ESTRECHO a los cobros. `cancela` es lo que
+ * `cancelarPorPlantilla` devuelve: el numero REAL de pendientes cancelados dentro de la
+ * transaccion del borrado (R56).
+ */
+function buildCobros(cancela = 0): IGastoFijoCobroService {
+  return {
+    listarPendientes: vi.fn(),
+    aprobar: vi.fn(),
+    rechazar: vi.fn(),
+    cancelarPorPlantilla: vi.fn().mockResolvedValue(cancela),
+    contarPendientesDePlantilla: vi.fn(),
+  };
+}
+
+/**
+ * FICHA 333 (F1b) — runner en memoria con la misma semantica que `prisma.$transaction`: ejecuta
+ * `fn` y propaga lo que devuelva o lance.
+ */
+const runTx: EliminarPlantillaTxRunner = async (fn) => fn({} as EliminarPlantillaTx);
+
+/**
+ * El servicio con sus tres colaboradores. Existe para que los ~23 casos de este archivo —que no
+ * tienen nada que ver con el borrado— no repitan el cableado, y para que un cuarto colaborador se
+ * anada en UN sitio.
+ */
+function servicio(
+  repo: IGastoFijoPlantillaRepository,
+  cobros: IGastoFijoCobroService = buildCobros(),
+): GastoFijoPlantillaService {
+  return new GastoFijoPlantillaService(repo, cobros, runTx, () => AHORA);
+}
+
+/** Reloj inyectado: el `decidido_at` de los cobros cancelados no sale de un `new Date()`. */
+const AHORA = new Date("2026-08-29T18:00:00.000Z");
+
 describe("GastoFijoPlantillaService.crearPlantilla (R17/R24)", () => {
   it("R17: rol no autorizado -> forbidden, sin crear", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD }, OTRO);
+    const svc = servicio(repo);
+    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD, requiereAprobacion: true }, OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.crear).not.toHaveBeenCalled();
   });
 
   it("feature 94: admin -> crea la plantilla (paridad con maestro)", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD }, ADMIN);
+    const svc = servicio(repo);
+    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD, requiereAprobacion: true }, ADMIN);
     expect(r.status).toBe("ok");
     expect(repo.crear).toHaveBeenCalled();
   });
 
   it("R24: maestro -> crea la plantilla; monto STRING", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD }, MAESTRO);
+    const svc = servicio(repo);
+    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD, requiereAprobacion: true }, MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperado ok");
     expect(typeof r.plantilla.monto).toBe("string");
-    expect(repo.crear).toHaveBeenCalledWith({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD });
+    // Ficha 333 (D4): el interruptor viaja al repositorio junto con el resto. El literal se
+    // amplia a mano — es el contrato de lo que el servicio le pide guardar.
+    expect(repo.crear).toHaveBeenCalledWith({
+      concepto: "Alquiler",
+      monto: "80000.00",
+      ...PERIODICIDAD,
+      requiereAprobacion: true,
+    });
   });
 });
 
 describe("GastoFijoPlantillaService.actualizarPlantilla (R17/R25)", () => {
   it("R17: rol no autorizado -> forbidden", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.actualizarPlantilla({ id: "p-1", concepto: "x", monto: "10.00", ...PERIODICIDAD }, OTRO);
+    const svc = servicio(repo);
+    const r = await svc.actualizarPlantilla({ id: "p-1", concepto: "x", monto: "10.00", ...PERIODICIDAD, requiereAprobacion: true }, OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.actualizar).not.toHaveBeenCalled();
   });
 
   it("not_found: el id no existe -> not_found, sin actualizar", async () => {
     const repo = buildRepo({ obtenerPorId: vi.fn().mockResolvedValue(null) });
-    const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.actualizarPlantilla({ id: "no", concepto: "x", monto: "10.00", ...PERIODICIDAD }, MAESTRO);
+    const svc = servicio(repo);
+    const r = await svc.actualizarPlantilla({ id: "no", concepto: "x", monto: "10.00", ...PERIODICIDAD, requiereAprobacion: true }, MAESTRO);
     expect(r).toEqual({ status: "not_found" });
     expect(repo.actualizar).not.toHaveBeenCalled();
   });
 
   it("feature 94: admin -> edita la plantilla (paridad con maestro)", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     const r = await svc.actualizarPlantilla(
-      { id: "p-1", concepto: "Alquiler oficina", monto: "85000.00", ...PERIODICIDAD },
+      {
+        id: "p-1",
+        concepto: "Alquiler oficina",
+        monto: "85000.00",
+        ...PERIODICIDAD,
+        requiereAprobacion: true,
+      },
       ADMIN,
     );
     expect(r.status).toBe("ok");
@@ -116,9 +171,15 @@ describe("GastoFijoPlantillaService.actualizarPlantilla (R17/R25)", () => {
 
   it("R25: maestro -> edita concepto/monto", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     const r = await svc.actualizarPlantilla(
-      { id: "p-1", concepto: "Alquiler oficina", monto: "85000.00", ...PERIODICIDAD },
+      {
+        id: "p-1",
+        concepto: "Alquiler oficina",
+        monto: "85000.00",
+        ...PERIODICIDAD,
+        requiereAprobacion: true,
+      },
       MAESTRO,
     );
     expect(r.status).toBe("ok");
@@ -126,6 +187,7 @@ describe("GastoFijoPlantillaService.actualizarPlantilla (R17/R25)", () => {
       concepto: "Alquiler oficina",
       monto: "85000.00",
       ...PERIODICIDAD,
+      requiereAprobacion: true, // ficha 333 (D4)
     });
   });
 });
@@ -133,7 +195,7 @@ describe("GastoFijoPlantillaService.actualizarPlantilla (R17/R25)", () => {
 describe("GastoFijoPlantillaService.setActivaPlantilla (R17/R25)", () => {
   it("R17: rol no autorizado -> forbidden", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     const r = await svc.setActivaPlantilla({ id: "p-1", activa: false }, OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.setActiva).not.toHaveBeenCalled();
@@ -141,7 +203,7 @@ describe("GastoFijoPlantillaService.setActivaPlantilla (R17/R25)", () => {
 
   it("feature 94: admin -> activa/desactiva la plantilla (paridad con maestro)", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     const r = await svc.setActivaPlantilla({ id: "p-1", activa: false }, ADMIN);
     expect(r.status).toBe("ok");
     expect(repo.setActiva).toHaveBeenCalledWith("p-1", false);
@@ -149,7 +211,7 @@ describe("GastoFijoPlantillaService.setActivaPlantilla (R17/R25)", () => {
 
   it("R25: desactivar (activa=false) -> ok (sin borrado)", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     const r = await svc.setActivaPlantilla({ id: "p-1", activa: false }, MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperado ok");
@@ -159,7 +221,7 @@ describe("GastoFijoPlantillaService.setActivaPlantilla (R17/R25)", () => {
 
   it("not_found: id inexistente", async () => {
     const repo = buildRepo({ obtenerPorId: vi.fn().mockResolvedValue(null) });
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     const r = await svc.setActivaPlantilla({ id: "no", activa: true }, MAESTRO);
     expect(r).toEqual({ status: "not_found" });
   });
@@ -168,7 +230,7 @@ describe("GastoFijoPlantillaService.setActivaPlantilla (R17/R25)", () => {
 describe("GastoFijoPlantillaService.listarPlantillas (R17/R26)", () => {
   it("R17: rol no autorizado -> forbidden, sin listar", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     const r = await svc.listarPlantillas(OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.listar).not.toHaveBeenCalled();
@@ -176,7 +238,7 @@ describe("GastoFijoPlantillaService.listarPlantillas (R17/R26)", () => {
 
   it("feature 94: admin -> lista plantillas (paridad con maestro)", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     const r = await svc.listarPlantillas(ADMIN);
     expect(r.status).toBe("ok");
     expect(repo.listar).toHaveBeenCalled();
@@ -184,7 +246,7 @@ describe("GastoFijoPlantillaService.listarPlantillas (R17/R26)", () => {
 
   it("R26: maestro -> lista activas e inactivas", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     const r = await svc.listarPlantillas(MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperado ok");
@@ -197,7 +259,7 @@ describe("GastoFijoPlantillaService.listarPlantillas (R17/R26)", () => {
 describe("GastoFijoPlantillaService.eliminarPlantilla (ficha 332, R2/R4/R7)", () => {
   it("R4: rol sin acceso total -> forbidden, sin llamar a repo.eliminar", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     const r = await svc.eliminarPlantilla({ id: "p-1" }, OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.eliminar).not.toHaveBeenCalled(); // el guard va ANTES del repositorio
@@ -205,24 +267,26 @@ describe("GastoFijoPlantillaService.eliminarPlantilla (ficha 332, R2/R4/R7)", ()
 
   it("R2: maestro -> ok, y llama a eliminar con EL id pedido", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     const r = await svc.eliminarPlantilla({ id: "p-1" }, MAESTRO);
-    expect(r).toEqual({ status: "ok" }); // sin payload: no hay fila que devolver
+    // Ficha 333 (R56): `ok` YA lleva payload — el numero de pendientes REALMENTE cancelados.
+    expect(r).toEqual({ status: "ok", pendientesCancelados: 0 });
     expect(repo.eliminar).toHaveBeenCalledTimes(1);
-    expect(repo.eliminar).toHaveBeenCalledWith("p-1");
+    // Ficha 333 (R45): el borrado va DENTRO de la transaccion, asi que `eliminar` recibe el `tx`.
+    expect(repo.eliminar).toHaveBeenCalledWith("p-1", expect.anything());
   });
 
   it("feature 94: admin -> elimina (paridad con maestro; borrar usa el MISMO guard que editar)", async () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     const r = await svc.eliminarPlantilla({ id: "p-1" }, ADMIN);
-    expect(r).toEqual({ status: "ok" });
-    expect(repo.eliminar).toHaveBeenCalledWith("p-1");
+    expect(r).toEqual({ status: "ok", pendientesCancelados: 0 });
+    expect(repo.eliminar).toHaveBeenCalledWith("p-1", expect.anything());
   });
 
   it("R7: la fila ya no existia (eliminar -> false) -> not_found, sin lanzar", async () => {
     const repo = buildRepo({ eliminar: vi.fn().mockResolvedValue(false) });
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     await expect(svc.eliminarPlantilla({ id: "no-existe" }, MAESTRO)).resolves.toEqual({
       status: "not_found",
     });
@@ -232,7 +296,7 @@ describe("GastoFijoPlantillaService.eliminarPlantilla (ficha 332, R2/R4/R7)", ()
     // Un `obtenerPorId` previo solo añadiria una consulta y una ventana entre el SELECT y el
     // DELETE. Este caso lo fija: si alguien lo reintroduce, aqui se ve.
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     await svc.eliminarPlantilla({ id: "p-1" }, MAESTRO);
     expect(repo.obtenerPorId).not.toHaveBeenCalled();
   });
@@ -253,14 +317,14 @@ describe("GastoFijoPlantillaService.eliminarPlantilla (ficha 332, R2/R4/R7)", ()
 describe("GastoFijoPlantillaService — borrado habilitado: la ficha 332 revoca 45/R25", () => {
   it("R1/R2: el service SI expone eliminarPlantilla, y el repositorio SI expone eliminar", () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     expect(typeof (svc as unknown as Record<string, unknown>).eliminarPlantilla).toBe("function");
     expect(typeof (repo as unknown as Record<string, unknown>).eliminar).toBe("function");
   });
 
   it("R11: y desactivar NO se fue con la revocacion — pausar sigue siendo su propia intencion", () => {
     const repo = buildRepo();
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
     expect(typeof (svc as unknown as Record<string, unknown>).setActivaPlantilla).toBe("function");
     expect(typeof (repo as unknown as Record<string, unknown>).setActiva).toBe("function");
   });
@@ -304,7 +368,7 @@ describe("GastoFijoPlantillaService.actualizarPlantilla — persistencia del cic
         fechaCobro: "2026-03-31",
       }),
     );
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
 
     const r = await svc.actualizarPlantilla(
       {
@@ -314,6 +378,7 @@ describe("GastoFijoPlantillaService.actualizarPlantilla — persistencia del cic
         periodicidadUnidad: "semanas",
         periodicidadCantidad: 2,
         fechaCobro: "2026-03-31",
+        requiereAprobacion: true, // ficha 333/R1
       },
       MAESTRO,
     );
@@ -333,6 +398,7 @@ describe("GastoFijoPlantillaService.actualizarPlantilla — persistencia del cic
       periodicidadUnidad: "semanas",
       periodicidadCantidad: 2,
       fechaCobro: "2026-03-31",
+      requiereAprobacion: true, // ficha 333 (D4)
     });
   });
 
@@ -345,7 +411,7 @@ describe("GastoFijoPlantillaService.actualizarPlantilla — persistencia del cic
         fechaCobro: "2026-03-31",
       }),
     );
-    const svc = new GastoFijoPlantillaService(repo);
+    const svc = servicio(repo);
 
     await svc.actualizarPlantilla(
       {
@@ -355,6 +421,7 @@ describe("GastoFijoPlantillaService.actualizarPlantilla — persistencia del cic
         periodicidadUnidad: "meses",
         periodicidadCantidad: 1,
         fechaCobro: "2026-04-01",
+        requiereAprobacion: true, // ficha 333/R1
       },
       MAESTRO,
     );
@@ -363,5 +430,212 @@ describe("GastoFijoPlantillaService.actualizarPlantilla — persistencia del cic
     expect(fila.periodicidadUnidad).toBe("meses");
     expect(fila.periodicidadCantidad).toBe(1);
     expect(fila.fechaCobro).toBe("2026-04-01");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FICHA 333 — EL INTERRUPTOR (R1/R3), LA CASCADA DEL BORRADO (R45/R56) Y R48.
+// ---------------------------------------------------------------------------
+
+describe("333/R1 — el interruptor se guarda con sus dos valores", () => {
+  it.each([[true], [false]])(
+    "crearPlantilla pasa `requiereAprobacion = %s` al repositorio, tal cual",
+    async (requiereAprobacion) => {
+      const repo = buildRepo();
+      const svc = servicio(repo);
+
+      const r = await svc.crearPlantilla(
+        { concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD, requiereAprobacion },
+        MAESTRO,
+      );
+
+      expect(r.status).toBe("ok");
+      expect(repo.crear).toHaveBeenCalledWith(
+        expect.objectContaining({ requiereAprobacion }),
+      );
+    },
+  );
+
+  it.each([[true], [false]])(
+    "actualizarPlantilla tambien lo pasa (`%s`): editar puede cambiar el interruptor",
+    async (requiereAprobacion) => {
+      const repo = buildRepo();
+      const svc = servicio(repo);
+
+      const r = await svc.actualizarPlantilla(
+        {
+          id: "p-1",
+          concepto: "Alquiler",
+          monto: "80000.00",
+          ...PERIODICIDAD,
+          requiereAprobacion,
+        },
+        MAESTRO,
+      );
+
+      expect(r.status).toBe("ok");
+      expect(repo.actualizar).toHaveBeenCalledWith(
+        "p-1",
+        expect.objectContaining({ requiereAprobacion }),
+      );
+    },
+  );
+
+  it("el DTO que devuelve el servicio lleva el interruptor (lo que la tabla pinta, R4)", async () => {
+    const repo = buildRepo({
+      crear: vi.fn().mockResolvedValue(plantilla({ requiereAprobacion: false })),
+    });
+
+    const r = await servicio(repo).crearPlantilla(
+      { concepto: "Internet", monto: "25000.00", ...PERIODICIDAD, requiereAprobacion: false },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("esperado ok");
+    expect(r.plantilla.requiereAprobacion).toBe(false);
+  });
+});
+
+describe("333/R3 — un rol sin acceso total no puede cambiar el interruptor", () => {
+  it("crear: forbidden sin tocar el repositorio", async () => {
+    const repo = buildRepo();
+
+    const r = await servicio(repo).crearPlantilla(
+      { concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD, requiereAprobacion: false },
+      OTRO,
+    );
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(repo.crear).not.toHaveBeenCalled();
+  });
+
+  it("editar: forbidden sin tocar el repositorio", async () => {
+    const repo = buildRepo();
+
+    const r = await servicio(repo).actualizarPlantilla(
+      {
+        id: "p-1",
+        concepto: "Alquiler",
+        monto: "80000.00",
+        ...PERIODICIDAD,
+        requiereAprobacion: false,
+      },
+      OTRO,
+    );
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(repo.actualizar).not.toHaveBeenCalled();
+  });
+
+  it("R28: el `admin` SI puede — esta ficha NO estrecha el guard del CRUD de plantillas", async () => {
+    // El contrapunto explicito de R24: decidir un cobro es solo del maestro, pero configurar el
+    // interruptor sigue siendo de acceso total. Si alguien «unificara» los dos guards, esto cae.
+    const repo = buildRepo();
+
+    const r = await servicio(repo).actualizarPlantilla(
+      {
+        id: "p-1",
+        concepto: "Alquiler",
+        monto: "80000.00",
+        ...PERIODICIDAD,
+        requiereAprobacion: true,
+      },
+      ADMIN,
+    );
+
+    expect(r.status).toBe("ok");
+    expect(repo.actualizar).toHaveBeenCalled();
+  });
+});
+
+describe("333/R48 — desactivar una plantilla NO cancela sus cobros pendientes", () => {
+  it("setActivaPlantilla(false) no llama a la cancelacion ni abre transaccion", async () => {
+    // Desactivar es un acto sobre el FUTURO: detiene la generacion y deja lo ya generado
+    // esperando decision. Si alguien colgara la cancelacion de aqui, pausar un gasto tiraria
+    // aprobaciones que un humano todavia tiene que tomar.
+    const repo = buildRepo();
+    const cobros = buildCobros(3);
+
+    const r = await servicio(repo, cobros).setActivaPlantilla({ id: "p-1", activa: false }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(repo.setActiva).toHaveBeenCalledWith("p-1", false);
+    expect(cobros.cancelarPorPlantilla).not.toHaveBeenCalled();
+  });
+
+  it("y volver a activarla tampoco toca ningun cobro", async () => {
+    const cobros = buildCobros(3);
+
+    await servicio(buildRepo(), cobros).setActivaPlantilla({ id: "p-1", activa: true }, MAESTRO);
+
+    expect(cobros.cancelarPorPlantilla).not.toHaveBeenCalled();
+  });
+});
+
+describe("333/R45+R56 — borrar una plantilla cancela sus pendientes en la MISMA transaccion", () => {
+  it("R45: cancela ANTES de borrar, con el mismo `tx`, y los dos pasos van dentro del runner", async () => {
+    // El ORDEN importa y por eso se mide: al reves, el `DELETE` violaria el CHECK
+    // `gasto_fijo_cobro_pendiente_con_plantilla` y abortaria (R46). Y el `tx` tiene que ser EL
+    // MISMO objeto en los dos pasos: dos transacciones distintas dejarian media cascada.
+    const traza: string[] = [];
+    const repo = buildRepo();
+    const cobros = buildCobros(2);
+    (cobros.cancelarPorPlantilla as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      traza.push("cancelar");
+      return 2;
+    });
+    (repo.eliminar as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      traza.push("eliminar");
+      return true;
+    });
+    const marca = {} as EliminarPlantillaTx;
+    const runnerVigilado: EliminarPlantillaTxRunner = async (fn) => {
+      traza.push("tx:abre");
+      const salida = await fn(marca);
+      traza.push("tx:cierra");
+      return salida;
+    };
+    const svc = new GastoFijoPlantillaService(repo, cobros, runnerVigilado, () => AHORA);
+
+    const r = await svc.eliminarPlantilla({ id: "p-1" }, MAESTRO);
+
+    expect(traza).toEqual(["tx:abre", "cancelar", "eliminar", "tx:cierra"]);
+    expect(cobros.cancelarPorPlantilla).toHaveBeenCalledWith(marca, "p-1", MAESTRO, AHORA);
+    expect(repo.eliminar).toHaveBeenCalledWith("p-1", marca);
+    expect(r).toEqual({ status: "ok", pendientesCancelados: 2 });
+  });
+
+  it("R56: reporta el numero REALMENTE cancelado, no el que la confirmacion anuncio", async () => {
+    // La confirmacion pudo decir «se cancelaran 5»; si entre medias alguien aprobo tres, se
+    // cancelan los 2 que quedan y ESE es el numero que sale. El borrado NO se aborta por eso.
+    const svc = servicio(buildRepo(), buildCobros(2));
+
+    await expect(svc.eliminarPlantilla({ id: "p-1" }, MAESTRO)).resolves.toEqual({
+      status: "ok",
+      pendientesCancelados: 2,
+    });
+  });
+
+  it("si la cancelacion lanza, el fallo se propaga y NO se borra la plantilla", async () => {
+    const repo = buildRepo();
+    const cobros = buildCobros();
+    (cobros.cancelarPorPlantilla as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("cancelacion caida"),
+    );
+
+    await expect(
+      servicio(repo, cobros).eliminarPlantilla({ id: "p-1" }, MAESTRO),
+    ).rejects.toThrow("cancelacion caida");
+    expect(repo.eliminar).not.toHaveBeenCalled();
+  });
+
+  it("R4: sin acceso total no se cancela nada ni se abre la transaccion", async () => {
+    const cobros = buildCobros(2);
+
+    const r = await servicio(buildRepo(), cobros).eliminarPlantilla({ id: "p-1" }, OTRO);
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(cobros.cancelarPorPlantilla).not.toHaveBeenCalled();
   });
 });

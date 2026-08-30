@@ -380,7 +380,11 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
     expect(sql).not.toMatch(/job_tipo/);
   });
 
-  it("el enum de eventos sigue siendo un inventario CERRADO: exactamente seis", () => {
+  // ⚠️ EL TITULO YA NO LLEVA EL NUMERO, y es deliberado (mismo criterio que
+  // `notificacion-notificadores-reales.test.ts`): decia «exactamente seis» cuando ya eran ocho, y
+  // un nombre con la cuenta atrasada hace que el inventario PAREZCA mas pequeño de lo que es. La
+  // lista literal de abajo es la fuente; el titulo solo dice que esta cerrada.
+  it("el enum de eventos sigue siendo un inventario CERRADO, y la lista es LITERAL", () => {
     // ⚠️ ERA CUATRO hasta el 2026-08-20. La feature 253 (D6, firmada por el humano EN CONTRA de la
     // recomendacion de su propio spec) anadio `postulacion_recurso_pendiente` con su migracion de
     // enum y su `down.sql` de recreacion — que es exactamente el precio que D1 puso a anadir un
@@ -418,6 +422,43 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       // mensajero; con `N >= 2`, en el de la administracion—.
       "cierre_dia_vencido", // feature 271 / §9.2
       "mensajero_bloqueado_por_cierres", // feature 271 / §9.2
+      // FICHA 333 (E6, R36) — NOVENO valor. Que esta lista se pusiera roja ES LA PRUEBA de que el
+      // inventario sigue CERRADO, y esta ficha pago el precio completo: `ALTER TYPE` en migracion
+      // APARTE (por el 55P04), su `down.sql` recreando el tipo con los OCHO previos, y esta linea
+      // escrita a mano.
+      //
+      // Su productor es el CRON de gastos fijos (`GeneracionGastosFijosService`), que lo emite al
+      // final de su corrida mientras quede al menos un cobro `pendiente`. Destinatario: el rol
+      // `maestro` y nadie mas — el `admin` VE la cola pero no puede decidirla (R24).
+      "gasto_fijo_cobro_pendiente", // ficha 333 / §4.1
+    ]);
+  });
+
+  it("el enum de ENTIDADES tambien es un inventario cerrado, y la de este aviso es EL DIA (R36)", () => {
+    // FICHA 333 (E6) — la lista hermana, y no es simetria decorativa: `gasto_fijo_cobro_dia` es el
+    // PRIMER `entidad_tipo` que NO apunta a una fila de tabla. `entidad_id` es la fecha
+    // `"YYYY-MM-DD"` de la corrida, y de ahi salen las dos propiedades que la ficha necesita: dias
+    // distintos ⇒ entidades distintas ⇒ el recordatorio diario sale siempre (R30); misma corrida
+    // repetida el mismo dia ⇒ misma entidad ⇒ un solo aviso (R31).
+    //
+    // Con el COBRO como entidad, `notificacion_dedupe_key` admitiria UNA sola fila por
+    // (evento, cobro, maestro) PARA SIEMPRE y el recordatorio del dia 2 no saldria nunca, en
+    // silencio: es el fallo que la 262 documento. Por eso el valor esta enumerado aqui y no
+    // derivado del schema — para que reusar uno existente tenga que ser una decision escrita.
+    const schema = fs.readFileSync(path.join(ROOT, "db", "schema.prisma"), "utf8");
+    const entidades = /enum NotificacionEntidadTipo \{([\s\S]*?)\n\}/.exec(schema)![1];
+    const valores = entidades
+      .split("\n")
+      .map((l) => l.trim().split(/\s+\/\//)[0].trim())
+      .filter((l) => l.length > 0 && !l.startsWith("//") && !l.startsWith("@@"));
+    expect(valores).toEqual([
+      "orden",
+      "usuario",
+      "cierre_dia",
+      "carga",
+      "postulacion_recurso", // feature 253 / D6
+      "orden_dia_reparto_cambio", // feature 262 / D7
+      "gasto_fijo_cobro_dia", // ficha 333 / §4.2 — EL DIA CR, no el cobro
     ]);
   });
 });

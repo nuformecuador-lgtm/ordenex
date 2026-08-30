@@ -8,6 +8,7 @@ import {
   periodicidadLegible,
   proximoCobroTexto,
 } from "@/app/(app)/wallet/_components/wallet-labels";
+import { interruptorPlantillaGastoFijo } from "@/app/(app)/wallet/_components/gasto-fijo-estado-label";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 
 // Feature 189 — ORDEN y CENSO de las columnas del archivo descargable de las PLANTILLAS DE
@@ -39,6 +40,7 @@ const QUINCENAL: GastoFijoPlantillaDTO = {
   periodicidadUnidad: "semanas",
   periodicidadCantidad: 2,
   fechaCobro: "2026-08-31",
+  requiereAprobacion: true, // ficha 333/R1
   createdAt: "2026-08-01T00:00:00.000Z",
   updatedAt: "2026-08-01T00:00:00.000Z",
 };
@@ -54,13 +56,22 @@ const INACTIVA: GastoFijoPlantillaDTO = {
 };
 
 describe("orden de las columnas de descarga de las plantillas de gasto fijo", () => {
-  it("declara las cinco columnas en el orden de la pantalla (R5/R21)", () => {
+  it("declara las seis columnas, con «Cobro» al final (R5/R21 · ficha 333/R4)", () => {
+    // FICHA 333 (G4): entra «Cobro», el interruptor. Los dos literales se actualizan A MANO —de
+    // cinco entradas a seis— porque ESTE `toEqual` es el contrato del archivo. Sustituirlo por
+    // una derivación de la propia constante (`COLUMNAS.map(...)` comparado consigo mismo) lo
+    // dejaría verde por construcción y no fijaría nada, que es la familia de fallo que este repo
+    // ya midió.
+    //
+    // «Cobro» va la ÚLTIMA y no en el quinto puesto —donde la tabla lo pinta— para no mover de
+    // sitio a las cinco que ya salían: el motivo está escrito en el módulo.
     expect(COLUMNAS_DESCARGA_GASTOS_FIJOS.map((c) => c.clave)).toEqual([
       "concepto",
       "monto",
       "periodicidad",
       "proximoCobro",
       "estado",
+      "cobro",
     ]);
     expect(COLUMNAS_DESCARGA_GASTOS_FIJOS.map((c) => c.encabezado)).toEqual([
       "Concepto",
@@ -68,6 +79,7 @@ describe("orden de las columnas de descarga de las plantillas de gasto fijo", ()
       "Periodicidad",
       "Próximo cobro",
       "Estado",
+      "Cobro",
     ]);
   });
 
@@ -122,5 +134,43 @@ describe("valores de la fila del archivo (R21/R24)", () => {
     expect(
       filaDescargaGastoFijo(QUINCENAL, new Date("2026-09-20T18:00:00.000Z")).proximoCobro,
     ).toBe("2026-09-28");
+  });
+});
+
+// =================================================================================================
+// FICHA 333 (G4, R4) — LA COLUMNA «COBRO» DEL ARCHIVO
+// =================================================================================================
+
+/** La misma plantilla, en la otra posición del interruptor: COBRA SOLA. */
+const COBRA_SOLA: GastoFijoPlantillaDTO = {
+  ...QUINCENAL,
+  id: "1a2b3c4d-5e6f-4a7b-8c9d-9f8e7d6c5b4a",
+  concepto: "Hosting",
+  requiereAprobacion: false,
+};
+
+describe("la columna «Cobro» del archivo (ficha 333, R4)", () => {
+  it("⭑ dice cosas DISTINTAS en las dos situaciones, con literales", () => {
+    // El caso que discrimina: una columna que devolviera siempre el mismo texto —o que leyera el
+    // campo equivocado— pasaría cualquier aserción escrita sobre una sola plantilla. Aquí se
+    // proyectan las DOS, y los dos valores esperados son literales distintos.
+    expect(filaDescargaGastoFijo(QUINCENAL, AHORA).cobro).toBe("Requiere aprobación");
+    expect(filaDescargaGastoFijo(COBRA_SOLA, AHORA).cobro).toBe("Cobra sola");
+  });
+
+  it("es la MISMA etiqueta que pinta la tabla, no un literal propio del archivo", () => {
+    // El texto sale del módulo puro compartido, y aquí queda fijado contra literales (igual que
+    // `periodicidadLegible` más arriba): si alguien lo cambiara en un solo sitio, esto cae.
+    expect(interruptorPlantillaGastoFijo(true)).toBe("Requiere aprobación");
+    expect(interruptorPlantillaGastoFijo(false)).toBe("Cobra sola");
+  });
+
+  it("no se confunde con «Estado»: activa/inactiva e interruptor son dos cosas", () => {
+    // `INACTIVA` está apagada y SIGUE requiriendo aprobación: desactivar detiene la generación
+    // futura, no cambia quién autoriza lo que se genere (R48). Las dos columnas dicen cosas
+    // distintas de la misma fila, y por eso las dos existen.
+    const fila = filaDescargaGastoFijo(INACTIVA, AHORA);
+    expect(fila.estado).toBe("Inactiva");
+    expect(fila.cobro).toBe("Requiere aprobación");
   });
 });

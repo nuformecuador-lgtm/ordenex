@@ -1,3 +1,4 @@
+import type { PrismaClient } from "@prisma/client";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 import type { PeriodicidadUnidad } from "@/lib/utils/periodicidad";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
@@ -32,15 +33,42 @@ export interface PeriodicidadInput {
   fechaCobro: string; // `YYYY-MM-DD`
 }
 
-export interface CrearPlantillaInput extends PeriodicidadInput {
+/**
+ * Ficha 333 (C3, R1/R2) — EL INTERRUPTOR en la escritura.
+ *
+ * OPCIONAL, y con la misma forma —y por el mismo motivo— que `CrearMovimientoInput.fechaMovimiento`
+ * y `.id`: la clave SOLO viaja si el llamador la trae. Ausente en `crear` ⇒ manda el
+ * `DEFAULT true` de la columna (R2, «requiere aprobación» es la norma); ausente en `actualizar`
+ * ⇒ la fila conserva el valor que tenía, que es lo seguro: una edición parcial NO puede cambiar
+ * en silencio si un gasto se cobra solo o no. Es la familia de fallo que cerró la 85 con la
+ * periodicidad.
+ *
+ * La tanda D (D4) es la que hace que `GastoFijoPlantillaService` lo pase SIEMPRE desde el borde
+ * —donde el schema zod ya le pone su default— y quien puede, entonces, apretarlo a obligatorio.
+ */
+export interface InterruptorAprobacionInput {
+  requiereAprobacion?: boolean;
+}
+
+export interface CrearPlantillaInput extends PeriodicidadInput, InterruptorAprobacionInput {
   concepto: string;
   monto: string; // STRING > 0 -> Prisma.Decimal en la impl
 }
 
-export interface ActualizarPlantillaInput extends PeriodicidadInput {
+export interface ActualizarPlantillaInput extends PeriodicidadInput, InterruptorAprobacionInput {
   concepto: string;
   monto: string; // STRING > 0
 }
+
+/**
+ * Ficha 333 (F1b) — cliente aceptado por `eliminar` cuando el borrado corre DENTRO de una
+ * transaccion: cualquier cosa que exponga `gastoFijoPlantilla`. Lo satisfacen el `PrismaClient`
+ * completo y el `tx` de un `$transaction` (patron `WalletTxClient`).
+ *
+ * Existe porque la cancelacion de los cobros pendientes y el `DELETE` de la plantilla tienen que
+ * ser ATOMICOS (R45): media cancelacion con la plantilla ya borrada dejaria pendientes huerfanos.
+ */
+export type GastoFijoPlantillaTxClient = Pick<PrismaClient, "gastoFijoPlantilla">;
 
 export interface IGastoFijoPlantillaRepository {
   /** R24: crea la plantilla (activa=true por default). Devuelve el DTO con monto STRING. */
@@ -69,8 +97,14 @@ export interface IGastoFijoPlantillaRepository {
    * R3: filtra por la clave primaria y por NADA mas. R8: este repositorio esta tipado
    * `Pick<PrismaClient, "gastoFijoPlantilla">`, asi que no puede tocar `wallet_movimiento`
    * aunque quisiera — el libro no se ve afectado por construccion, no por disciplina.
+   *
+   * ⚠️ FICHA 333 (F1b, R45) — `tx` OPCIONAL Y AL FINAL, con la misma forma que
+   * `IGastoFijoCobroRepository.obtenerPorId`. Desde la 333, el borrado corre DENTRO de la
+   * transaccion que antes cancela los cobros pendientes de esa plantilla: o se cancelan y la
+   * plantilla desaparece, o no ocurre ninguna de las dos cosas. Ausente ⇒ manda el cliente del
+   * repositorio y el comportamiento es el de la 332, intacto.
    */
-  eliminar(id: string): Promise<boolean>;
+  eliminar(id: string, tx?: GastoFijoPlantillaTxClient): Promise<boolean>;
   /** R26: lista TODAS las plantillas (activas e inactivas), mas recientes primero. */
   listar(): Promise<GastoFijoPlantillaDTO[]>;
   /**

@@ -8,7 +8,12 @@ import type {
   ListarMovimientosPage,
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
-import type { AgregadoCajaRow, WalletMovimientoDTO } from "@/lib/types/wallet";
+import type {
+  AgregadoCajaRow,
+  WalletMovimientoCategoria,
+  WalletMovimientoDTO,
+  WalletOrigenTipo,
+} from "@/lib/types/wallet";
 import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron CierresAdminRepository).
@@ -151,6 +156,30 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
   async obtenerPorId(id: string): Promise<WalletMovimientoDTO | null> {
     const row = await this.prisma.walletMovimiento.findUnique({ where: { id } });
     return row === null ? null : toDTO(row);
+  }
+
+  /**
+   * Ficha 333 (C2, design §2/§6.3) — el movimiento que ocupa la clave `(origen_tipo, origen_id,
+   * categoria)`, o `null`. Es la terna de `wallet_movimiento_origen_categoria_uq`, así que hay
+   * como mucho una fila; `findFirst` y no `findUnique` porque ese índice es PARCIAL
+   * (`WHERE origen_id IS NOT NULL`) y Prisma no lo expresa como clave única del cliente.
+   *
+   * Lee DENTRO del `tx` que le pasan: quien la llama acaba de intentar la escritura en esa misma
+   * transacción y necesita ver lo que esa transacción ve.
+   *
+   * NO añade ninguna mutación: el libro sigue siendo append-only e inmutable (R3 de la 42) y
+   * esta clase sigue sin exponer `update` ni `delete`.
+   */
+  async obtenerPorOrigen(
+    tx: WalletTxClient,
+    origenTipo: WalletOrigenTipo,
+    origenId: string,
+    categoria: WalletMovimientoCategoria,
+  ): Promise<WalletMovimientoDTO | null> {
+    const row = await tx.walletMovimiento.findFirst({
+      where: { origenTipo, origenId, categoria },
+    });
+    return row === null || row === undefined ? null : toDTO(row);
   }
 
   /** Feature 45 (R11): SUM(monto) por categoria administrativa, con los mismos filtros. STRING. */

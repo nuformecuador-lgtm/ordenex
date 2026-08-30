@@ -49,6 +49,20 @@ vi.mock("@/lib/actions/gasto-fijo-plantilla", () => ({
   listarPlantillasAction: (...a: unknown[]) => listarCompletoMock(...a),
 }));
 
+/**
+ * Ficha 333 (G4/G7, R55): la confirmación del borrado pregunta al servidor cuántos cobros
+ * PENDIENTES va a cancelar, y lo pregunta AL ABRIRSE. Se mockea aquí porque el panel la importa
+ * de verdad: sin el mock, el módulo de Server Actions se cargaría en jsdom con todo lo que
+ * arrastra (cliente Prisma incluido) y el archivo entero se quedaría sin ejecutar.
+ */
+const contarPendientesMock = vi.fn();
+vi.mock("@/lib/actions/gasto-fijo-cobro", () => ({
+  contarCobrosPendientesDePlantillaAction: (...a: unknown[]) => contarPendientesMock(...a),
+  listarCobrosPendientesAction: vi.fn(),
+  aprobarCobroGastoFijoAction: vi.fn(),
+  rechazarCobroGastoFijoAction: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
@@ -63,6 +77,7 @@ const ACTIVA: GastoFijoPlantillaDTO = {
   periodicidadUnidad: "meses",
   periodicidadCantidad: 1,
   fechaCobro: "2026-07-01",
+  requiereAprobacion: true, // ficha 333/R1
   createdAt: "2026-07-01T00:00:00.000Z",
   updatedAt: "2026-07-01T00:00:00.000Z",
 };
@@ -75,6 +90,7 @@ const INACTIVA: GastoFijoPlantillaDTO = {
   periodicidadUnidad: "meses",
   periodicidadCantidad: 1,
   fechaCobro: "2026-07-01",
+  requiereAprobacion: true, // ficha 333/R1
   createdAt: "2026-07-01T00:00:00.000Z",
   updatedAt: "2026-07-01T00:00:00.000Z",
 };
@@ -122,6 +138,9 @@ function montarPanel(plantillas: GastoFijoPlantillaDTO[], ahoraIso: string = AHO
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Ficha 333 (R55): por defecto, la plantilla que se va a borrar no tiene cobros pendientes.
+  // Los casos que miden el número lo programan explícitamente.
+  contarPendientesMock.mockResolvedValue({ status: "ok", pendientes: 0 });
 });
 
 afterEach(() => {
@@ -262,13 +281,15 @@ describe("GastosFijosPlantillasPanel — crear (R24)", () => {
     await user.click(within(dialog).getByRole("button", { name: "Guardar" }));
 
     expect(crearMock).toHaveBeenCalledTimes(1);
-    // Los CINCO campos: crear también manda el ciclo (R15), con el preset mensual por defecto.
+    // Los SEIS campos: crear también manda el ciclo (R15), con el preset mensual por defecto, y
+    // desde la ficha 333 el interruptor (R2: una plantilla nueva nace en «requiere aprobación»).
     expect(crearMock.mock.calls[0][0]).toEqual({
       concepto: "Luz",
       monto: "60.00",
       periodicidadUnidad: "meses",
       periodicidadCantidad: 1,
       fechaCobro: "2026-09-01",
+      requiereAprobacion: true,
     });
     expect(actualizarMock).not.toHaveBeenCalled();
   }, 15000);
@@ -321,6 +342,8 @@ describe("GastosFijosPlantillasPanel — editar (R25)", () => {
       periodicidadUnidad: "meses",
       periodicidadCantidad: 1,
       fechaCobro: "2026-07-01",
+      // Ficha 333 (R4): el interruptor viaja SIEMPRE, con el valor vigente de la plantilla.
+      requiereAprobacion: true,
     });
   }, 15000);
 });
@@ -477,7 +500,7 @@ describe("GastosFijosPlantillasPanel — la confirmación (ficha 332, R12–R17)
 describe("GastosFijosPlantillasPanel — después de confirmar (ficha 332, R2/R18/R19)", () => {
   it("confirmar llama a la acción con { id } y, tras ok, avisa y relee la página", async () => {
     const user = userEvent.setup();
-    eliminarMock.mockResolvedValue({ status: "ok" });
+    eliminarMock.mockResolvedValue({ status: "ok", pendientesCancelados: 0 });
     montarPanel([ACTIVA]);
     await waitFor(() => expect(listarPaginaMock).toHaveBeenCalled());
     const lecturasAntes = listarPaginaMock.mock.calls.length;
@@ -587,7 +610,7 @@ describe("GastosFijosPlantillasPanel — la página que se queda vacía (ficha 3
 
   it("borrada la ÚNICA fila de la página 2, el panel muestra la página 1", async () => {
     const user = userEvent.setup();
-    eliminarMock.mockResolvedValue({ status: "ok" });
+    eliminarMock.mockResolvedValue({ status: "ok", pendientesCancelados: 0 });
     montarDosPaginas([SOLA_EN_LA_2]);
 
     await user.click(screen.getByRole("button", { name: "Página siguiente" }));
@@ -609,7 +632,7 @@ describe("GastosFijosPlantillasPanel — la página que se queda vacía (ficha 3
     // ⭑ La contraparte que mata la mutación «volver siempre a la página anterior»: la regla es
     //   «la página se quedó vacía», no «se borró algo estando en la página 2».
     const user = userEvent.setup();
-    eliminarMock.mockResolvedValue({ status: "ok" });
+    eliminarMock.mockResolvedValue({ status: "ok", pendientesCancelados: 0 });
     const ACOMPANANTE: GastoFijoPlantillaDTO = {
       ...ACTIVA,
       id: "55555555-5555-5555-5555-555555555555",
@@ -628,5 +651,190 @@ describe("GastosFijosPlantillasPanel — la página que se queda vacía (ficha 3
     // Sigue en la página 2: las filas de la 1 no aparecen.
     expect(screen.queryByRole("row", { name: /Alquiler de bodega/ })).not.toBeInTheDocument();
     expect(screen.getByRole("row", { name: /Vigilancia/ })).toBeInTheDocument();
+  }, 15000);
+});
+
+// =================================================================================================
+// FICHA 333 (G7) — EL INTERRUPTOR EN LA TABLA (R4), DESACTIVAR NO CANCELA (R48) Y EL NÚMERO DE LA
+// CONFIRMACIÓN (R55/R56)
+// =================================================================================================
+
+/** La misma plantilla, en la otra posición del interruptor: COBRA SOLA. */
+const SOLA: GastoFijoPlantillaDTO = {
+  ...ACTIVA,
+  id: "55555555-5555-5555-5555-555555555555",
+  concepto: "Hosting",
+  requiereAprobacion: false,
+};
+
+describe("GastosFijosPlantillasPanel — el interruptor en la tabla (ficha 333, R4)", () => {
+  it("la tabla tiene columna «Cobro» y cada fila dice en cuál de las dos posiciones está", () => {
+    montarPanel([ACTIVA, SOLA]);
+
+    expect(screen.getByRole("columnheader", { name: "Cobro" })).toBeInTheDocument();
+
+    const filaConAprobacion = screen.getByRole("row", { name: /Alquiler de bodega/ });
+    expect(within(filaConAprobacion).getByText("Requiere aprobación")).toBeInTheDocument();
+    expect(within(filaConAprobacion).queryByText("Cobra sola")).not.toBeInTheDocument();
+
+    const filaQueCobraSola = screen.getByRole("row", { name: /Hosting/ });
+    expect(within(filaQueCobraSola).getByText("Cobra sola")).toBeInTheDocument();
+    expect(
+      within(filaQueCobraSola).queryByText("Requiere aprobación"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lo pinta con la insignia del tema, no con un color propio", () => {
+    // Mismo criterio que el resto de la tabla: `Badge`. Un `<span>` con clases de color a mano
+    // se rompería en uno de los dos temas y ninguna prueba lo diría.
+    montarPanel([ACTIVA]);
+
+    const fila = screen.getByRole("row", { name: /Alquiler de bodega/ });
+    const insignia = within(fila)
+      .getByText("Requiere aprobación")
+      .closest('[data-slot="badge"]');
+    expect(insignia, "«Requiere aprobación» no se pinta como insignia").not.toBeNull();
+  });
+
+  it("la descripción de la tarjeta ya no promete que TODAS se cobran solas (R4)", () => {
+    // design §8: hasta esta ficha decía, verbatim, «El sistema cobra estos gastos por su cuenta,
+    // según la periodicidad que tenga cada una», y desde el interruptor eso deja de ser cierto
+    // para las que requieren aprobación. La frase nombra ahora las dos posibilidades.
+    montarPanel([ACTIVA]);
+
+    const descripcion = screen.getByText(/según la periodicidad que tenga cada una/i);
+    expect(descripcion.textContent ?? "").toMatch(/requieren aprobación/i);
+    expect(descripcion.textContent ?? "").toMatch(/antes de salir de la caja/i);
+    // Y sigue sin prometer un cobro mensual (feature 85, R22).
+    expect(descripcion.textContent ?? "").not.toMatch(/cada mes/i);
+  });
+});
+
+describe("GastosFijosPlantillasPanel — desactivar NO cancela lo ya generado (ficha 333, R48)", () => {
+  it("⭑ desactivar sólo apaga la plantilla: no toca ningún cobro pendiente", async () => {
+    // R48: desactivar es un acto sobre el FUTURO. Los cobros ya generados siguen esperando
+    // decisión, y por eso esta acción no llama a nada del camino de los cobros ni promete
+    // cancelar nada. Si algún día alguien «aprovechara» el toggle para cancelarlos, este caso
+    // lo dice antes de que un maestro pierda un gasto que ya estaba en la cola.
+    const user = userEvent.setup();
+    setActivaMock.mockResolvedValue({ status: "ok", plantilla: { ...ACTIVA, activa: false } });
+    montarPanel([ACTIVA]);
+
+    const fila = screen.getByRole("row", { name: /Alquiler de bodega/ });
+    await user.click(within(fila).getByRole("button", { name: "Desactivar" }));
+
+    await waitFor(() => expect(setActivaMock).toHaveBeenCalledTimes(1));
+    expect(contarPendientesMock).not.toHaveBeenCalled();
+    expect(eliminarMock).not.toHaveBeenCalled();
+    const aviso = await screen.findByText(/Plantilla desactivada/i);
+    expect(aviso.textContent ?? "").not.toMatch(/cancel/i);
+  }, 15000);
+});
+
+describe("GastosFijosPlantillasPanel — la confirmación dice cuántos cobros cancela (ficha 333, R55)", () => {
+  it("⭑ el número se pide AL ABRIR la confirmación, no viene con el listado", async () => {
+    const user = userEvent.setup();
+    contarPendientesMock.mockResolvedValue({ status: "ok", pendientes: 2 });
+    montarPanel([ACTIVA]);
+
+    // Con la tabla ya pintada, todavía no se ha preguntado por ningún número: un conteo traído
+    // con la página tendría minutos de antigüedad y estaría autorizando un borrado.
+    await waitFor(() => expect(listarPaginaMock).toHaveBeenCalled());
+    expect(contarPendientesMock).not.toHaveBeenCalled();
+
+    await pedirEliminar(user, /Alquiler de bodega/);
+
+    await waitFor(() => expect(contarPendientesMock).toHaveBeenCalledTimes(1));
+    expect(contarPendientesMock.mock.calls[0][0]).toEqual({ plantillaId: ACTIVA.id });
+  }, 15000);
+
+  it("⭑ enseña «se cancelarán N cobros pendientes» ANTES de aceptar", async () => {
+    const user = userEvent.setup();
+    contarPendientesMock.mockResolvedValue({ status: "ok", pendientes: 2 });
+    montarPanel([ACTIVA]);
+
+    const dialog = await pedirEliminar(user, /Alquiler de bodega/);
+
+    // El literal con el NÚMERO DELANTE, que es lo que R55 pide.
+    expect(
+      await within(dialog).findByText("Se cancelarán 2 cobros pendientes de esta plantilla."),
+    ).toBeInTheDocument();
+    // Y todavía no se ha borrado nada: el aviso llega antes de la decisión, no después.
+    expect(eliminarMock).not.toHaveBeenCalled();
+  }, 15000);
+
+  it("con un solo pendiente lo dice en singular", async () => {
+    const user = userEvent.setup();
+    contarPendientesMock.mockResolvedValue({ status: "ok", pendientes: 1 });
+    montarPanel([ACTIVA]);
+
+    const dialog = await pedirEliminar(user, /Alquiler de bodega/);
+
+    expect(
+      await within(dialog).findByText("Se cancelará 1 cobro pendiente de esta plantilla."),
+    ).toBeInTheDocument();
+  }, 15000);
+
+  it("sin cobros pendientes lo dice también: el cero es una respuesta", async () => {
+    const user = userEvent.setup();
+    contarPendientesMock.mockResolvedValue({ status: "ok", pendientes: 0 });
+    montarPanel([ACTIVA]);
+
+    const dialog = await pedirEliminar(user, /Alquiler de bodega/);
+
+    expect(
+      await within(dialog).findByText("No hay cobros pendientes que cancelar."),
+    ).toBeInTheDocument();
+  }, 15000);
+
+  it("⭑ si el número no se puede leer, se dice — no se finge un cero", async () => {
+    // Un «0» inventado invitaría a aceptar creyendo que no hay nada que cancelar, que es
+    // exactamente la decisión que este número existe para informar.
+    const user = userEvent.setup();
+    contarPendientesMock.mockResolvedValue({ status: "forbidden" });
+    montarPanel([ACTIVA]);
+
+    const dialog = await pedirEliminar(user, /Alquiler de bodega/);
+
+    expect(
+      await within(dialog).findByText(
+        "No se pudo saber cuántos cobros pendientes tiene esta plantilla.",
+      ),
+    ).toBeInTheDocument();
+    expect(texto(dialog)).not.toContain("No hay cobros pendientes que cancelar.");
+  }, 15000);
+
+  it("⭑ tras borrar, el aviso lleva el número REALMENTE cancelado (R56)", async () => {
+    // La confirmación anunció DOS y el servidor canceló TRES —entre una cosa y otra el cron
+    // generó otro—. El borrado sigue adelante y lo que se anuncia es lo que de verdad pasó, no
+    // lo que se prometió.
+    const user = userEvent.setup();
+    contarPendientesMock.mockResolvedValue({ status: "ok", pendientes: 2 });
+    eliminarMock.mockResolvedValue({ status: "ok", pendientesCancelados: 3 });
+    montarPanel([ACTIVA]);
+
+    const dialog = await pedirEliminar(user, /Alquiler de bodega/);
+    await within(dialog).findByText("Se cancelarán 2 cobros pendientes de esta plantilla.");
+    await user.click(within(dialog).getByRole("button", { name: "Eliminar" }));
+
+    await waitFor(() => expect(eliminarMock).toHaveBeenCalledTimes(1));
+    expect(
+      (await screen.findAllByText("Plantilla eliminada. Se cancelaron 3 cobros pendientes."))
+        .length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryAllByText("Plantilla eliminada.")).toHaveLength(0);
+  }, 15000);
+
+  it("sin pendientes cancelados, el aviso del borrado no habla de cobros", async () => {
+    const user = userEvent.setup();
+    eliminarMock.mockResolvedValue({ status: "ok", pendientesCancelados: 0 });
+    montarPanel([ACTIVA]);
+
+    const dialog = await pedirEliminar(user, /Alquiler de bodega/);
+    await user.click(within(dialog).getByRole("button", { name: "Eliminar" }));
+
+    await waitFor(() => expect(eliminarMock).toHaveBeenCalledTimes(1));
+    expect((await screen.findAllByText("Plantilla eliminada.")).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/Se cancelaron/)).toHaveLength(0);
   }, 15000);
 });

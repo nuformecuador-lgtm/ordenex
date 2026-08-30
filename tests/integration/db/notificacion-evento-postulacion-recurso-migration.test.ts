@@ -159,12 +159,20 @@ describe("253 / D6 — el down de la 146 NO se toca, y esto es la comprobacion d
   });
 });
 
-// ⚠️ ACTUALIZADO EL 2026-08-22 POR LA FEATURE 262 (D7), Y SOLO ESTAS DOS ASERCIONES.
+// ⚠️ ACTUALIZADO EL 2026-08-22 POR LA FEATURE 262 (D7), EL 2026-08-23 POR LA 271 Y EL 2026-08-29
+// POR LA FICHA 333, Y SOLO ESTAS DOS ASERCIONES.
 //
 // Las dos de abajo son sobre el ESQUEMA VIVO —«que tiene `db/schema.prisma` HOY»—, asi que crecen
 // con cada valor que se anada. La 262 anade `dia_reparto_corregido` y `orden_dia_reparto_cambio`
 // con su propia migracion (`*_notificacion_evento_dia_reparto_corregido`) y su propio `down.sql` de
-// recreacion, y tiene su propio archivo de test para ellas.
+// recreacion, y tiene su propio archivo de test para ellas. La 271 anade `cierre_dia_vencido` y
+// `mensajero_bloqueado_por_cierres`, y la ficha 333 anade `gasto_fijo_cobro_pendiente` y
+// `gasto_fijo_cobro_dia` (`20260829130000_notificacion_evento_gasto_fijo_cobro`): las dos, con su
+// migracion, su `down.sql` de recreacion y su propio archivo de test.
+//
+// Siguen siendo LITERALES a proposito: derivar la lista del propio `schema.prisma` que vigilan las
+// dejaria verdes por construccion y ampliar un enum volveria a ser un descuido en vez de un acto
+// deliberado.
 //
 // ⛔ TODO LO DEMAS DE ESTE ARCHIVO NO SE TOCA, y esto se escribe para que quede dicho: el UP de la
 // 253, su DOWN con los CUATRO valores de la 146 y la afirmacion de que «el down de la 146 solo
@@ -184,6 +192,10 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // FEATURE 271 (§9.2, Q4 resuelta el 2026-08-23) - los DOS avisos del bloqueo por cierres.
       "cierre_dia_vencido",
       "mensajero_bloqueado_por_cierres",
+      // FICHA 333 (design 4.1/4.2, R29/R30/R36, 2026-08-29) - «quedan cobros de gasto fijo
+      // esperando decision»: lo emite la corrida del cron al terminar y se repite cada dia CR
+      // mientras quede alguno. Migracion `20260829130000_notificacion_evento_gasto_fijo_cobro`.
+      "gasto_fijo_cobro_pendiente",
     ]);
   });
 
@@ -197,6 +209,11 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       ...ENTIDADES_146,
       "postulacion_recurso", // feature 253 / D6
       "orden_dia_reparto_cambio", // feature 262 / D7 (2026-08-22)
+      // FICHA 333 (design 4.2, 2026-08-29) - el PRIMER `entidad_tipo` que NO apunta a una fila de
+      // tabla: la entidad es EL DIA CR de la corrida (`entidad_id = 'YYYY-MM-DD'`). Se le da valor
+      // propio en vez de reusar uno existente por la MISMA razon por la que esta ficha 253 no
+      // reuso `usuario`: prometer una fila que no existe seria un dato falso con formato de dato.
+      "gasto_fijo_cobro_dia",
     ]);
   });
 
@@ -233,12 +250,13 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
     return (filas[0]?.valores ?? "").split(",").filter((v) => v.length > 0);
   }
 
-  // ⚠️ ACTUALIZADAS EL 2026-08-22 POR LA 262, y por la misma razon que las dos del schema: estas
-  // dos leen la BASE APLICADA, o sea el estado de HOY, no una foto historica. Con la migracion
-  // `*_notificacion_evento_dia_reparto_corregido` la base tiene SEIS de cada uno. Lo que se
-  // conserva intacto es el orden —`enumsortorder`—, que es lo que demuestra que el valor se ANADIO
-  // al final y no se recreo el tipo.
-  it("la base tiene los SEIS eventos, con los nuevos al final y en orden de adicion", async () => {
+  // ⚠️ ACTUALIZADAS EL 2026-08-22 POR LA 262, EL 2026-08-23 POR LA 271 Y EL 2026-08-29 POR LA FICHA
+  // 333, y por la misma razon que las dos del schema: estas dos leen la BASE APLICADA, o sea el
+  // estado de HOY, no una foto historica. Hoy la base tiene NUEVE eventos (4 de la 146 + 1 de la
+  // 253 + 1 de la 262 + 2 de la 271 + 1 de la 333) y SIETE tipos de entidad (4 de la 146 + 1 de la
+  // 253 + 1 de la 262 + 1 de la 333). Lo que se conserva intacto es el orden —`enumsortorder`—,
+  // que es lo que demuestra que el valor se ANADIO al final y no se recreo el tipo.
+  it("la base tiene los NUEVE eventos, con los nuevos al final y en orden de adicion", async () => {
     expect(await valoresDe("notificacion_evento")).toEqual([
       ...EVENTOS_146,
       "postulacion_recurso_pendiente", // feature 253 / D6
@@ -246,14 +264,20 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       // FEATURE 271 (§9.2, Q4 resuelta el 2026-08-23) - los DOS avisos del bloqueo por cierres.
       "cierre_dia_vencido",
       "mensajero_bloqueado_por_cierres",
+      // FICHA 333 (design 4.1/4.2, R29/R30/R36, 2026-08-29) - «quedan cobros de gasto fijo
+      // esperando decision». Migracion `20260829130000_notificacion_evento_gasto_fijo_cobro`.
+      "gasto_fijo_cobro_pendiente",
     ]);
   });
 
-  it("y los SEIS tipos de entidad", async () => {
+  it("y los SIETE tipos de entidad", async () => {
     expect(await valoresDe("notificacion_entidad_tipo")).toEqual([
       ...ENTIDADES_146,
       "postulacion_recurso", // feature 253 / D6
       "orden_dia_reparto_cambio", // feature 262 / D7
+      // FICHA 333 (design 4.2, 2026-08-29) - la entidad del aviso es EL DIA CR de la corrida, no
+      // el cobro; sin valor propio la dedupe de la 146 apagaria el recordatorio diario (R30).
+      "gasto_fijo_cobro_dia",
     ]);
   });
 

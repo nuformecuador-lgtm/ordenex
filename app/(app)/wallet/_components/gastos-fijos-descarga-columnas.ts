@@ -16,22 +16,45 @@
  * Excel justo la columna por la que se abre el panel. `periodicidadUnidad` y
  * `periodicidadCantidad` siguen sin salir como campos crudos: salen ya compuestos en la
  * etiqueta legible, que es lo que se lee en pantalla.
+ *
+ * FICHA 333 (G4) — entra «Cobro», el INTERRUPTOR, por ese mismo criterio y no por simetría: desde
+ * esta ficha la tabla lo enseña, y es la diferencia entre «el sistema lo cobra por su cuenta» y
+ * «el dinero espera una decisión». Un archivo de plantillas que no lo dijera obligaría a abrir la
+ * pantalla para saber cuáles cobran solas, que es justo lo que el archivo existe para evitar.
+ *
+ * La etiqueta sale del MISMO módulo puro que pinta el `Badge` de la tabla
+ * (`interruptorPlantillaGastoFijo`). Escribirla aquí como literal dejaría el texto declarado en
+ * dos sitios, y el día que uno cambie —«Requiere autorización», por ejemplo— la tabla y el Excel
+ * dirían cosas distintas de la misma fila sin que nada fallara.
  */
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 import { proximoCobro } from "@/lib/utils/periodicidad";
 
-import { estadoPlantillaGastoFijo } from "./gasto-fijo-estado-label";
+import {
+  estadoPlantillaGastoFijo,
+  interruptorPlantillaGastoFijo,
+} from "./gasto-fijo-estado-label";
 import { PROXIMO_COBRO_INACTIVA, periodicidadLegible } from "./wallet-labels";
 
-/** Columnas del archivo, en el orden de la pantalla: las cinco de datos del panel (la
- * sexta, "Acciones", son botones: no es un dato). */
+/**
+ * Columnas del archivo: las SEIS de datos del panel («Acciones» no entra, son botones: no es un
+ * dato).
+ *
+ * Las cinco primeras van en el orden de la pantalla. «Cobro» va AL FINAL y no en el quinto puesto
+ * —que es donde la tabla lo pinta, entre «Próximo cobro» y «Estado»—, y la diferencia se declara
+ * aquí en vez de dejarla adivinar: añadir una columna al final no mueve de sitio a ninguna de las
+ * que ya salían, así que una hoja guardada, una fórmula o un filtro hechos sobre un archivo
+ * anterior siguen apuntando a la misma columna. Insertarla en medio se los llevaría por delante
+ * sin que nada avisara.
+ */
 export const COLUMNAS_DESCARGA_GASTOS_FIJOS: DescargaColumna[] = [
   { clave: "concepto", encabezado: "Concepto" },
   { clave: "monto", encabezado: "Monto" },
   { clave: "periodicidad", encabezado: "Periodicidad" },
   { clave: "proximoCobro", encabezado: "Próximo cobro" },
   { clave: "estado", encabezado: "Estado" },
+  { clave: "cobro", encabezado: "Cobro" },
 ];
 
 /**
@@ -69,5 +92,10 @@ export function filaDescargaGastoFijo(
         ? proximoCobro(plantilla, ahora)
         : PROXIMO_COBRO_INACTIVA,
     estado: estadoPlantillaGastoFijo(plantilla.activa === true),
+    // Ficha 333 (G4): el interruptor, con la MISMA etiqueta que pinta la tabla. `=== true` por el
+    // mismo motivo que `activa` justo arriba: bajo la guardia de datos sensibles el DTO es una
+    // sonda (un Proxy siempre truthy), y la comparación estricta deja el `false` a la vista en el
+    // test de columnas en vez de depender de la veracidad del proxy.
+    cobro: interruptorPlantillaGastoFijo(plantilla.requiereAprobacion === true),
   };
 }

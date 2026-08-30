@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   ActualizarPlantillaInput,
   CrearPlantillaInput,
+  GastoFijoPlantillaTxClient,
   IGastoFijoPlantillaRepository,
 } from "@/lib/interfaces/repositories/IGastoFijoPlantillaRepository";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
@@ -34,6 +35,9 @@ function toDTO(r: PlantillaRow): GastoFijoPlantillaDTO {
     periodicidadUnidad: r.periodicidadUnidad,
     periodicidadCantidad: r.periodicidadCantidad,
     fechaCobro: fechaCobroADTO(r.fechaCobro),
+    // Ficha 333 (R1/R4): el interruptor viaja en el DTO para que la tabla lo pinte y el diálogo
+    // lo fije. `boolean` puro: no hay monto ni fecha que traducir.
+    requiereAprobacion: r.requiereAprobacion,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -75,6 +79,11 @@ export class GastoFijoPlantillaRepository implements IGastoFijoPlantillaReposito
         periodicidadUnidad: input.periodicidadUnidad,
         periodicidadCantidad: input.periodicidadCantidad,
         fechaCobro: fechaCobroAColumna(input.fechaCobro),
+        // Ficha 333 (R2): SOLO viaja si el llamador lo trae; ausente ⇒ manda el `DEFAULT true` de
+        // la columna, o sea «requiere aprobación». Mismo patrón que `CrearMovimientoInput.id`.
+        ...(input.requiereAprobacion !== undefined
+          ? { requiereAprobacion: input.requiereAprobacion }
+          : {}),
       },
     });
     return toDTO(row);
@@ -93,6 +102,11 @@ export class GastoFijoPlantillaRepository implements IGastoFijoPlantillaReposito
         periodicidadUnidad: input.periodicidadUnidad,
         periodicidadCantidad: input.periodicidadCantidad,
         fechaCobro: fechaCobroAColumna(input.fechaCobro),
+        // Ficha 333 (R1): SOLO viaja si el llamador lo trae; ausente ⇒ la fila conserva el valor
+        // que tenía. Una edición parcial NO puede cambiar en silencio si un gasto se cobra solo.
+        ...(input.requiereAprobacion !== undefined
+          ? { requiereAprobacion: input.requiereAprobacion }
+          : {}),
       },
     });
     return toDTO(row);
@@ -116,8 +130,11 @@ export class GastoFijoPlantillaRepository implements IGastoFijoPlantillaReposito
    * intacto por el TIPO, no por buena voluntad. Lo afirma
    * `tests/unit/repositories/gasto-fijo-plantilla-eliminar.test.ts`.
    */
-  async eliminar(id: string): Promise<boolean> {
-    const res = await this.prisma.gastoFijoPlantilla.deleteMany({ where: { id } });
+  async eliminar(id: string, tx?: GastoFijoPlantillaTxClient): Promise<boolean> {
+    // Ficha 333 (F1b/R45): con `tx`, el DELETE va en la MISMA transaccion que cancelo los cobros
+    // pendientes de esta plantilla. Sin el, manda el cliente del repositorio (comportamiento 332).
+    const cliente = tx ?? this.prisma;
+    const res = await cliente.gastoFijoPlantilla.deleteMany({ where: { id } });
     return res.count > 0;
   }
 

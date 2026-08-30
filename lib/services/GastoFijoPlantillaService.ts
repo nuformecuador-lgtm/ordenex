@@ -4,12 +4,14 @@ import type {
   ActualizarPlantillaServiceResult,
   CrearPlantillaServiceResult,
   EliminarPlantillaServiceResult,
+  EliminarPlantillaTxRunner,
   IGastoFijoPlantillaService,
   ListarPlantillasCompletoServiceResult,
   ListarPlantillasPaginadoServiceResult,
   ListarPlantillasServiceResult,
   SetActivaPlantillaServiceResult,
 } from "@/lib/interfaces/services/IGastoFijoPlantillaService";
+import type { IGastoFijoCobroService } from "@/lib/interfaces/services/IGastoFijoCobroService";
 import type {
   ActualizarGastoFijoPlantillaInput,
   CrearGastoFijoPlantillaInput,
@@ -35,7 +37,23 @@ import { rangoDePagina } from "@/lib/utils/rango-pagina";
  * y eliminar son dos intenciones distintas.
  */
 export class GastoFijoPlantillaService implements IGastoFijoPlantillaService {
-  constructor(private readonly repo: IGastoFijoPlantillaRepository) {}
+  constructor(
+    private readonly repo: IGastoFijoPlantillaRepository,
+    /**
+     * Ficha 333 (F1b, R45) — el PUERTO ESTRECHO a los cobros de gasto fijo. Este servicio no
+     * toca la tabla de cobros: le pide al suyo que cancele los pendientes DENTRO de la
+     * transaccion del borrado. Mismo patron que `LiquidacionService` con
+     * `ICajaPagoTiendaFeedService`.
+     *
+     * REQUERIDO, no opcional con default: un asiento vacio aqui volveria a producir el fallo que
+     * este repo ya midio —un colaborador que nadie inyecta, muerto, con la suite en verde—.
+     */
+    private readonly cobros: IGastoFijoCobroService,
+    /** Ficha 333 (F1b, R45): cancelar y borrar, o ninguna de las dos. Inyectado. */
+    private readonly runTx: EliminarPlantillaTxRunner,
+    /** Reloj inyectado: el `decidido_at` de los cobros cancelados no sale de un `new Date()`. */
+    private readonly ahora: () => Date = () => new Date(),
+  ) {}
 
   async crearPlantilla(
     input: CrearGastoFijoPlantillaInput,
@@ -50,6 +68,10 @@ export class GastoFijoPlantillaService implements IGastoFijoPlantillaService {
       periodicidadUnidad: input.periodicidadUnidad,
       periodicidadCantidad: input.periodicidadCantidad,
       fechaCobro: input.fechaCobro,
+      // Ficha 333 (D4, R1/R2): EL INTERRUPTOR. Llega SIEMPRE resuelto desde el borde —el schema
+      // zod le pone su `.default(true)`—, asi que aqui no hay fallback: una plantilla creada sin
+      // indicarlo nace en «requiere aprobacion», que es la norma de la ficha.
+      requiereAprobacion: input.requiereAprobacion,
     }); // R24
     return { status: "ok", plantilla };
   }
@@ -67,6 +89,9 @@ export class GastoFijoPlantillaService implements IGastoFijoPlantillaService {
       periodicidadUnidad: input.periodicidadUnidad,
       periodicidadCantidad: input.periodicidadCantidad,
       fechaCobro: input.fechaCobro,
+      // Ficha 333 (D4, R1/R3): el interruptor tambien se EDITA, con el mismo guard de acceso
+      // total que el resto del CRUD (R28: esta ficha no estrecha esta autorizacion).
+      requiereAprobacion: input.requiereAprobacion,
     }); // R25 (feature 84: tambien mueve el ciclo/ancla)
     return { status: "ok", plantilla };
   }
@@ -78,6 +103,10 @@ export class GastoFijoPlantillaService implements IGastoFijoPlantillaService {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R17
     const existente = await this.repo.obtenerPorId(input.id);
     if (existente === null) return { status: "not_found" };
+    // ⚠️ FICHA 333 (R48) — DESACTIVAR NO ES BORRAR, y aqui NO se toca ni un cobro. Desactivar es
+    // un acto sobre el FUTURO: detiene la generacion (`listarActivas` ya filtra) y deja lo ya
+    // generado esperando decision. Cancelar aqui haria que pausar un gasto tirara aprobaciones
+    // que alguien todavia tiene que tomar. La cancelacion vive SOLO en `eliminarPlantilla`.
     const plantilla = await this.repo.setActiva(input.id, input.activa); // R25 (pausa reversible)
     return { status: "ok", plantilla };
   }
@@ -106,8 +135,25 @@ export class GastoFijoPlantillaService implements IGastoFijoPlantillaService {
     actor: Actor,
   ): Promise<EliminarPlantillaServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R4: ANTES del repositorio
-    const borrada = await this.repo.eliminar(input.id); // R2/R3: por clave primaria y nada mas
-    return borrada ? { status: "ok" } : { status: "not_found" }; // R7: sin lanzar
+
+    // ⚠️ FICHA 333 (F1b, R45/R56) — LOS DOS PASOS, EN UNA TRANSACCION. El ORDEN importa: primero
+    // se cancelan los cobros que sigan `pendiente`, despues se borra la plantilla. Al reves, el
+    // `DELETE` violaria el CHECK `gasto_fijo_cobro_pendiente_con_plantilla` y abortaria (R46) —
+    // que es exactamente el comportamiento que protege a quien se olvide de cancelar.
+    //
+    // El `count` que devuelve la cancelacion es el numero REAL (R56): si entre la confirmacion y
+    // este instante alguien aprobo o rechazo uno, se cancelan los que queden y se reporta eso.
+    const ahora = this.ahora();
+    return this.runTx(async (tx) => {
+      const pendientesCancelados = await this.cobros.cancelarPorPlantilla(
+        tx,
+        input.id,
+        actor,
+        ahora,
+      );
+      const borrada = await this.repo.eliminar(input.id, tx); // R2/R3: por clave primaria y nada mas
+      return borrada ? { status: "ok", pendientesCancelados } : { status: "not_found" }; // R7: sin lanzar
+    });
   }
 
   async listarPlantillas(actor: Actor): Promise<ListarPlantillasServiceResult> {

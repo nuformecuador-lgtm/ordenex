@@ -2,7 +2,10 @@
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { GastoFijoPlantillaRepository } from "@/lib/repositories/GastoFijoPlantillaRepository";
+import { GastoFijoCobroRepository } from "@/lib/repositories/GastoFijoCobroRepository";
+import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { GastoFijoPlantillaService } from "@/lib/services/GastoFijoPlantillaService";
+import { GastoFijoCobroService } from "@/lib/services/GastoFijoCobroService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -88,9 +91,28 @@ function toPlantillaActionError(
   }
 }
 
+/**
+ * Composition root del CRUD de plantillas.
+ *
+ * ⚠️ FICHA 333 (F1b, R45) — DESDE AQUI SE CABLEA LA CASCADA DEL BORRADO. El servicio recibe el
+ * puerto estrecho a los cobros y el ejecutor de transacciones interactivas: sin los dos, borrar
+ * una plantilla con cobros `pendiente` no cancelaria nada y el `DELETE` abortaria contra el CHECK
+ * `gasto_fijo_cobro_pendiente_con_plantilla` (R46) — ruidosamente, que es lo correcto, pero el
+ * usuario no podria borrar. Los dos son REQUERIDOS a proposito: un default silencioso aqui es la
+ * receta del colaborador muerto que este repo ya midio.
+ */
 function buildService(): IGastoFijoPlantillaService {
   const prisma = getPrismaClient();
-  return new GastoFijoPlantillaService(new GastoFijoPlantillaRepository(prisma));
+  return new GastoFijoPlantillaService(
+    new GastoFijoPlantillaRepository(prisma),
+    new GastoFijoCobroService(
+      new GastoFijoCobroRepository(prisma),
+      new WalletMovimientoRepository(prisma),
+      prisma,
+      (fn) => prisma.$transaction((tx) => fn(tx)),
+    ),
+    (fn) => prisma.$transaction((tx) => fn(tx)),
+  );
 }
 
 export interface PlantillaDeps {

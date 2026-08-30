@@ -200,3 +200,75 @@ describe("periodicidad — cantidad y unidad (R6)", () => {
     ).toBe(false);
   });
 });
+
+// ── FICHA 333 (B2, R2) — el INTERRUPTOR en el borde ───────────────────────────────────────────
+//
+// R2 dice, literal: «CUANDO se cree una plantilla sin indicar el interruptor, el sistema DEBE
+// dejarla en REQUIERE APROBACION». Aqui es donde eso se decide, porque el default lo pone el
+// schema —el repositorio, si no le llega el campo, cae en el `DEFAULT true` de la columna, que
+// dice lo mismo—.
+//
+// Los valores van como LITERALES (`true` / `false`), nunca contra el propio `.default()` del
+// schema: una asercion contra su propia fuente esta verde por construccion.
+describe("gasto-fijo-plantilla — el interruptor de aprobacion en el borde (ficha 333, R2)", () => {
+  it("R2: crear SIN el interruptor deja la plantilla en «requiere aprobacion»", () => {
+    const data = crearGastoFijoPlantillaSchema.parse({
+      concepto: "Alquiler",
+      monto: "80000.00",
+      ...CICLO_VIGENTE,
+    });
+
+    expect(data.requiereAprobacion).toBe(true);
+  });
+
+  it("R1: crear CON «cobra sola» (false) NO lo pisa con el default", () => {
+    // Anti-vacuidad del caso anterior: si el schema forzara `true` en vez de aplicarlo como
+    // default, el primer test pasaria igual y este moriria.
+    const data = crearGastoFijoPlantillaSchema.parse({
+      concepto: "Alquiler",
+      monto: "80000.00",
+      ...CICLO_VIGENTE,
+      requiereAprobacion: false,
+    });
+
+    expect(data.requiereAprobacion).toBe(false);
+  });
+
+  it("R1: el interruptor tiene EXACTAMENTE dos valores; nada que no sea booleano cruza el borde", () => {
+    const conTexto = crearGastoFijoPlantillaSchema.safeParse({
+      concepto: "Alquiler",
+      monto: "80000.00",
+      ...CICLO_VIGENTE,
+      requiereAprobacion: "si",
+    });
+    expect(conTexto.success).toBe(false);
+    if (conTexto.success) throw new Error("el borde acepto un interruptor que no es booleano");
+    expect(conTexto.error.flatten().fieldErrors.requiereAprobacion).toBeDefined();
+  });
+
+  it("R2: actualizar hereda el MISMO default (una edicion sin el campo no deja la fila sin valor)", () => {
+    const data = actualizarGastoFijoPlantillaSchema.parse({
+      id: UUID,
+      concepto: "Alquiler",
+      monto: "80000.00",
+      ...CICLO_VIGENTE,
+    });
+
+    // Es el default de `crear`, heredado por el `.extend()`. Queda AFIRMADO, no supuesto: la
+    // tanda G tiene que enviar el campo desde el dialogo (R4) para que una edicion no reescriba
+    // el interruptor sin querer -- la misma familia de fallo que cerro la 85 con la periodicidad.
+    expect(data.requiereAprobacion).toBe(true);
+  });
+
+  it("R1: actualizar con «cobra sola» explicito lo respeta", () => {
+    const data = actualizarGastoFijoPlantillaSchema.parse({
+      id: UUID,
+      concepto: "Alquiler",
+      monto: "80000.00",
+      ...CICLO_VIGENTE,
+      requiereAprobacion: false,
+    });
+
+    expect(data.requiereAprobacion).toBe(false);
+  });
+});

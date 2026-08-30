@@ -36,6 +36,7 @@ function plantilla(): GastoFijoPlantillaDTO {
     periodicidadUnidad: "meses",
     periodicidadCantidad: 1,
     fechaCobro: "2026-07-13",
+    requiereAprobacion: true, // ficha 333/R1
     createdAt: "2026-07-13T10:00:00.000Z",
     updatedAt: "2026-07-13T10:00:00.000Z",
   };
@@ -46,8 +47,9 @@ function fakeService(overrides: Partial<IGastoFijoPlantillaService> = {}): IGast
     crearPlantilla: vi.fn(async () => ({ status: "ok" as const, plantilla: plantilla() })),
     actualizarPlantilla: vi.fn(async () => ({ status: "ok" as const, plantilla: plantilla() })),
     setActivaPlantilla: vi.fn(async () => ({ status: "ok" as const, plantilla: plantilla() })),
-    // Ficha 332: el borrado. `ok` NO lleva payload (no hay fila que devolver).
-    eliminarPlantilla: vi.fn(async () => ({ status: "ok" as const })),
+    // Ficha 332: el borrado. Ficha 333 (R56): `ok` SI lleva payload — cuantos cobros pendientes
+    // se cancelaron REALMENTE dentro de la transaccion que borro la plantilla.
+    eliminarPlantilla: vi.fn(async () => ({ status: "ok" as const, pendientesCancelados: 0 })),
     listarPlantillas: vi.fn(async () => ({ status: "ok" as const, plantillas: [plantilla()] })),
     // Feature 170 (T I.1): el doble sigue implementando la interfaz COMPLETA.
     listarPlantillasPaginado: vi.fn(async () => ({
@@ -211,6 +213,10 @@ describe("actualizarPlantillaAction (R18/R25)", () => {
         periodicidadUnidad: "semanas",
         periodicidadCantidad: 2,
         fechaCobro: "2026-03-31",
+        // Ficha 333 (R2): el borde resuelve el default del interruptor, igual que resuelve los
+        // tres de la periodicidad. La entrada de arriba NO lo manda, asi que este `true` es
+        // exactamente lo que el schema pone -- y que aparezca aqui, literal, es la prueba.
+        requiereAprobacion: true,
       },
       MAESTRO,
     );
@@ -300,6 +306,16 @@ describe("eliminarPlantillaAction (ficha 332, R4/R5/R6)", () => {
     expect(service.eliminarPlantilla).toHaveBeenCalledWith({ id: UUID }, OTRO);
   });
 
+  it("333/R56: el numero de pendientes cancelados viaja del service al borde, sin tocarlo", async () => {
+    // El borde NO lo calcula ni lo redondea: lo transporta. Es lo que la pantalla usa para decir
+    // «se cancelaron N cobros pendientes» DESPUES del borrado.
+    const service = fakeService({
+      eliminarPlantilla: vi.fn(async () => ({ status: "ok" as const, pendientesCancelados: 3 })),
+    });
+    const r = await eliminarPlantillaAction({ id: UUID }, { service, getActor: async () => MAESTRO });
+    expect(r).toEqual({ status: "ok", pendientesCancelados: 3 });
+  });
+
   it("R7: not_found se propaga desde el service", async () => {
     const service = fakeService({
       eliminarPlantilla: vi.fn(async () => ({ status: "not_found" as const })),
@@ -311,7 +327,7 @@ describe("eliminarPlantillaAction (ficha 332, R4/R5/R6)", () => {
   it("R2: con sesion, id valido y permiso -> ok, y el service recibe `{ id }` y el actor", async () => {
     const service = fakeService();
     const r = await eliminarPlantillaAction({ id: UUID }, { service, getActor: async () => MAESTRO });
-    expect(r).toEqual({ status: "ok" });
+    expect(r).toEqual({ status: "ok", pendientesCancelados: 0 });
     expect(service.eliminarPlantilla).toHaveBeenCalledWith({ id: UUID }, MAESTRO);
   });
 });

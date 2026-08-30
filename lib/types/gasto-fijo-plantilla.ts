@@ -21,6 +21,10 @@ export type GastoFijoPlantillaDTO = {
   periodicidadUnidad: PeriodicidadUnidad;
   periodicidadCantidad: number;
   fechaCobro: string; // `YYYY-MM-DD`: ancla del ciclo (primer cobro). Date, NO ISO datetime.
+  // Ficha 333 (R1/R4) — EL INTERRUPTOR: `true` = «requiere aprobación» (el cron crea un cobro
+  // pendiente y no toca el libro), `false` = «cobra sola» (escribe el egreso directo, como antes
+  // de la 333). Es el valor que la tabla de plantillas pinta como `Badge` y que el diálogo fija.
+  requiereAprobacion: boolean;
   createdAt: string; // ISO
   updatedAt: string; // ISO
 };
@@ -79,6 +83,18 @@ export const crearGastoFijoPlantillaSchema = z.object({
   concepto: z.string().trim().min(1, "El concepto es obligatorio."),
   monto: montoPositivoSchema,
   ...periodicidadConDefault,
+  // Ficha 333 (R2, design §8) — EL INTERRUPTOR, CON DEFAULT `true`, exactamente el patrón con
+  // el que la 84 introdujo la periodicidad: una plantilla creada sin indicarlo nace en «requiere
+  // aprobación», que es la norma que pide la ficha («cobra sola» es la excepción), y la UI que
+  // todavía no lo mande sigue funcionando.
+  //
+  // Lo hereda `actualizarGastoFijoPlantillaSchema` por el `.extend()` de abajo, y ahí el default
+  // NO es inocuo: una edición que no lo envíe deja la plantilla en «requiere aprobación». Es la
+  // misma familia de fallo que cerró la 85 con la periodicidad, y por eso el diálogo de la tanda
+  // G tiene que enviar SIEMPRE este campo (R4). Se deja con default —y no obligatorio como la
+  // periodicidad— porque así lo fija `design.md §8`, y porque la dirección del valor por defecto
+  // es la SEGURA: pedir autorización de más, nunca cobrar de más.
+  requiereAprobacion: z.boolean().default(true),
 });
 
 export type CrearGastoFijoPlantillaInput = z.infer<typeof crearGastoFijoPlantillaSchema>;

@@ -3,6 +3,10 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+// Ficha 333 (H4, R57): el quitador de comentarios COMPARTIDO del repo. Va aqui y no una
+// quinta copia a mano: es el unico punto donde «codigo sin comentarios» esta definido.
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
+
 // FICHA 332 (T19, R21–R25) — **LA GUARDIA DE QUE EL ARBOL NO SIGA DICIENDO QUE LAS PLANTILLAS
 // DE GASTO FIJO NO SE BORRAN.**
 //
@@ -688,5 +692,275 @@ describe("autocomprobacion: los detectores marcan y NO marcan lo que dicen", () 
     expect(normalizar("a\n   b\t c")).toBe("a b c");
     expect(normalizar("// uno\n//   dos")).toBe(" uno dos");
     expect(normalizar("-- sql\n-- comentario")).toBe(" sql comentario");
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   FICHA 333 (H4, R57) — SI EL ÁRBOL BORRA PLANTILLAS, ESE BORRADO CANCELA SUS COBROS PENDIENTES
+   ══════════════════════════════════════════════════════════════════════════════════════════════
+
+   ## Qué protege
+
+   Una plantilla que desaparece dejando cobros en `pendiente` deja dinero por autorizar colgando de
+   una configuración que ya no existe. La base lo impide —`plantilla_id ON DELETE SET NULL` + el
+   CHECK `gasto_fijo_cobro_pendiente_con_plantilla` hacen que el `DELETE` aborte ruidosamente
+   (R46)— pero ese CHECK **sólo se ejerce si alguien tiene un pendiente vivo en ese instante**. Con
+   la cola vacía, un borrado sin cancelación pasa desapercibido durante meses y falla el día que
+   hay algo que cancelar: en producción, con un usuario delante y sin nadie mirando el log.
+
+   Esta guardia cierra ese hueco por el otro lado: es ESTÁTICA y no depende de que exista un dato.
+
+   ## Por qué es CONDICIONAL
+
+   La 332 (que trae el borrado) y la 333 (que trae la tabla de cobros) podían implementarse en
+   cualquier orden, y esta comprobación tenía que valer en los dos: *si* existe en el árbol una
+   operación que borra plantillas, debe cancelar; *si no* existe, no hay nada que exigir y se dice
+   EN VOZ ALTA en vez de pasar en verde por vacío, que es el modo de fallo que este repo ya tiene
+   medido. El detector busca la operación EN EL ÁRBOL, no da por hecho su nombre.
+
+   ## ⚠️ QUÉ SÍMBOLO SE AFIRMA, Y POR QUÉ NO ES EL DEL DISEÑO
+
+   `design.md §9` de la 333 escribió que la fuente de `eliminarPlantilla` debía contener
+   `cancelarPendientesDePlantilla`. Lo implementado es una CADENA de dos eslabones:
+
+       GastoFijoPlantillaService.eliminarPlantilla
+             -> this.cobros.cancelarPorPlantilla(tx, id, actor, ahora)   [IGastoFijoCobroService]
+                   -> repo.cancelarPendientesDePlantilla(tx, …)          [IGastoFijoCobroRepository]
+
+   porque el servicio de plantillas no toca la tabla de cobros: le habla a un PUERTO ESTRECHO
+   (mismo patrón que `LiquidacionService` con `ICajaPagoTiendaFeedService`). Afirmar el nombre del
+   REPOSITORIO en la fuente del servicio de plantillas vigilaría un sitio donde ese nombre no
+   aparece nunca: la guardia estaría roja siempre, o —si se relajara— no vigilaría nada.
+
+   Así que se afirman LOS DOS ESLABONES, cada uno donde vive. El del medio no puede vaciarse sin
+   que esto se ponga rojo.
+
+   ## Cómo afirma
+
+   Sobre el USO EFECTIVO: fuente sin comentarios NI sentencias de import. Es la lección medida en
+   `notificacion-notificadores-reales.test.ts` —un `toContain` a secas se satisface con el
+   `import` de arriba— y aquí importa el doble, porque los comentarios de estos archivos NOMBRAN a
+   propósito la cancelación que el código tiene que hacer.
+*/
+
+const SERVICIO_PLANTILLA_333 = "lib/services/GastoFijoPlantillaService.ts";
+const SERVICIO_COBRO_333 = "lib/services/GastoFijoCobroService.ts";
+const REPO_COBRO_333 = "lib/repositories/GastoFijoCobroRepository.ts";
+
+/** El eslabón que `eliminarPlantilla` DEBE llamar (el puerto estrecho del servicio de cobros). */
+const LLAMADA_EN_EL_BORRADO = "cancelarPorPlantilla";
+/** El eslabón de abajo: lo que ese puerto delega en el repositorio. */
+const METODO_DEL_REPOSITORIO = "cancelarPendientesDePlantilla";
+
+/**
+ * Una operación que BORRA plantillas, buscada por forma y no por nombre exacto: renombrarla a
+ * `borrarPlantilla` no la sacaría del alcance de esta guardia.
+ */
+const OPERACION_DE_BORRADO = /\basync\s+((?:eliminar|borrar|remover)\w*Plantilla\w*)\s*\(/g;
+
+/** El ejecutor de la transacción, en cualquiera de las formas que este repo usa. */
+const RUNNER_DE_TRANSACCION = /\b(?:this\.runTx|(?:this\.)?prisma\.\$transaction)\s*\(/;
+
+/**
+ * Quita las sentencias `import` (incluidas las multilínea) de un fuente YA sin comentarios.
+ *
+ * Escrito aquí y no importado de otra guardia A PROPÓSITO: importar desde un `.test.ts` haría que
+ * vitest registrara sus `describe` otra vez y esa suite correría dos veces por tanda (es la razón
+ * por la que `etiquetas-datatable.ts` y `montajes-componente.ts` viven fuera de su guardia). El
+ * quitador de COMENTARIOS sí es el compartido del repo: ése es el que no puede divergir.
+ */
+function sinImports333(fuenteSinComentarios: string): string {
+  const salida: string[] = [];
+  let dentroDeImport = false;
+  for (const linea of fuenteSinComentarios.split("\n")) {
+    const t = linea.trim();
+    if (dentroDeImport) {
+      if (/from\s+["']/.test(t)) dentroDeImport = false;
+      continue;
+    }
+    if (t.startsWith("import ")) {
+      if (!/from\s+["']/.test(t)) dentroDeImport = true;
+      continue;
+    }
+    salida.push(linea);
+  }
+  return salida.join("\n");
+}
+
+/** El USO EFECTIVO de un archivo: sin comentarios y sin imports. */
+function uso333(rel: string): string {
+  return sinImports333(quitarComentarios(leer(rel)));
+}
+
+/** El CUERPO de un método `async <nombre>(` de una clase, por conteo de llaves. */
+function cuerpoDelMetodo333(fuente: string, nombre: string): string {
+  const m = new RegExp(`\\basync\\s+${nombre}\\s*\\(`).exec(fuente);
+  if (m === null) return "";
+  const abre = fuente.indexOf("{", m.index + m[0].length);
+  if (abre === -1) return "";
+  let profundidad = 0;
+  for (let i = abre; i < fuente.length; i++) {
+    if (fuente[i] === "{") profundidad++;
+    else if (fuente[i] === "}") {
+      profundidad--;
+      if (profundidad === 0) return fuente.slice(abre, i + 1);
+    }
+  }
+  return "";
+}
+
+/** Los nombres de las operaciones que borran plantillas en un fuente dado. */
+function operacionesDeBorrado(uso: string): string[] {
+  return [...uso.matchAll(OPERACION_DE_BORRADO)].map((m) => m[1]);
+}
+
+/**
+ * Lo que le FALTA al cuerpo de una operación de borrado para cumplir R57. Lista vacía = cumple.
+ *
+ * No basta con que la llamada exista: tiene que estar DENTRO de la transacción, porque lo que R45
+ * promete es «o se cancelan y desaparece la plantilla, o no ocurre ninguna de las dos cosas».
+ * Cancelar antes de abrir la transacción dejaría cobros cancelados de una plantilla que sigue viva
+ * si el borrado falla — y eso no lo diría ningún test funcional.
+ */
+function piezasQueFaltanEnElBorrado(cuerpo: string): string[] {
+  const faltan: string[] = [];
+  const tx = RUNNER_DE_TRANSACCION.exec(cuerpo);
+  if (tx === null) faltan.push("la transacción que envuelve cancelar + borrar");
+  const dentroDeLaTx = tx === null ? "" : cuerpo.slice(tx.index);
+
+  if (!cuerpo.includes(`${LLAMADA_EN_EL_BORRADO}(`)) {
+    faltan.push(`la llamada a \`${LLAMADA_EN_EL_BORRADO}\``);
+  } else if (!dentroDeLaTx.includes(`${LLAMADA_EN_EL_BORRADO}(`)) {
+    faltan.push(`\`${LLAMADA_EN_EL_BORRADO}\` está FUERA de la transacción`);
+  }
+
+  if (!/\.eliminar\s*\(/.test(dentroDeLaTx)) {
+    faltan.push("el borrado dentro de la transacción");
+  }
+  return faltan;
+}
+
+describe("(g) R57 — el borrado de una plantilla cancela sus cobros pendientes", () => {
+  const usoDelServicio = uso333(SERVICIO_PLANTILLA_333);
+  const operaciones = operacionesDeBorrado(usoDelServicio);
+
+  it("la guardia dice si HOY hay operación de borrado que vigilar, o si no aplica", () => {
+    // R57 es condicional, y esto es lo que impide que se cumpla «por vacío»: la guardia declara
+    // en voz alta cuál de los dos mundos está mirando. Con la 332 mergeada hay UNA operación.
+    if (operaciones.length === 0) {
+      // Sin operación de borrado no hay nada que exigirle, pero SÍ hay que dejar listo el
+      // eslabón que esa operación tendrá que llamar: si tampoco existiera, R57 sería
+      // inalcanzable y eso no es «no aplicable», es un hueco.
+      expect(
+        uso333(SERVICIO_COBRO_333),
+        `R57 NO APLICA hoy (ninguna operación de borrado en \`${SERVICIO_PLANTILLA_333}\`), ` +
+          `pero el puerto \`${LLAMADA_EN_EL_BORRADO}\` tiene que existir para cuando la traiga ` +
+          `la ficha 332`,
+      ).toContain(`${LLAMADA_EN_EL_BORRADO}(`);
+      return;
+    }
+    expect(operaciones, "el detector encontró operaciones sin nombre").not.toContain("");
+  });
+
+  it("⭑ cada operación de borrado cancela los pendientes DENTRO de su transacción", () => {
+    const hallazgos: string[] = [];
+    for (const nombre of operaciones) {
+      const cuerpo = cuerpoDelMetodo333(usoDelServicio, nombre);
+      if (cuerpo === "") {
+        hallazgos.push(`${nombre}: no se pudo recortar su cuerpo`);
+        continue;
+      }
+      for (const falta of piezasQueFaltanEnElBorrado(cuerpo)) {
+        hallazgos.push(`${SERVICIO_PLANTILLA_333}#${nombre}: falta ${falta}`);
+      }
+    }
+    expect(
+      hallazgos,
+      "una plantilla no puede desaparecer dejando cobros en `pendiente` (R45/R46/R57)",
+    ).toEqual([]);
+  });
+
+  it("⭑ el segundo eslabón: el puerto delega en el método del repositorio", () => {
+    // Sin esto, `cancelarPorPlantilla` podría quedarse vacío —o dejar de tocar la tabla— y la
+    // comprobación de arriba seguiría verde: estaría afirmando que se llama a algo que ya no hace
+    // nada. Es el literal que `design.md §9` nombraba, afirmado donde de verdad vive.
+    const usoDelCobro = uso333(SERVICIO_COBRO_333);
+    const cuerpo = cuerpoDelMetodo333(usoDelCobro, LLAMADA_EN_EL_BORRADO);
+    expect(cuerpo, `\`${LLAMADA_EN_EL_BORRADO}\` no existe en ${SERVICIO_COBRO_333}`).not.toBe(
+      "",
+    );
+    expect(cuerpo).toContain(`${METODO_DEL_REPOSITORIO}(`);
+    // Y el eslabón de abajo existe de verdad en el repositorio.
+    expect(uso333(REPO_COBRO_333)).toContain(`async ${METODO_DEL_REPOSITORIO}(`);
+  });
+});
+
+describe("autocomprobacion de (g): el detector de R57 marca y NO marca lo que dice", () => {
+  it("encuentra la operación real y no confunde con las demás del mismo servicio", () => {
+    const uso = uso333(SERVICIO_PLANTILLA_333);
+    const encontradas = operacionesDeBorrado(uso);
+    // Si la 332 está en el árbol, la operación se llama así. Si algún día se renombra a
+    // `borrarPlantilla`, el detector la sigue encontrando (por eso el patrón no es un literal).
+    expect(encontradas.length).toBeGreaterThan(0);
+    // Y no arrastra `crearPlantilla`, `actualizarPlantilla` ni `setActivaPlantilla`.
+    for (const ajena of ["crearPlantilla", "actualizarPlantilla", "setActivaPlantilla"]) {
+      expect(encontradas).not.toContain(ajena);
+    }
+  });
+
+  it("un borrado SIN la cancelación se caza, y se dice qué le falta", () => {
+    const sinCancelar = `{
+      if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
+      return this.runTx(async (tx) => {
+        const borrada = await this.repo.eliminar(input.id, tx);
+        return borrada ? { status: "ok" } : { status: "not_found" };
+      });
+    }`;
+    expect(piezasQueFaltanEnElBorrado(sinCancelar)).toEqual([
+      "la llamada a `cancelarPorPlantilla`",
+    ]);
+  });
+
+  it("cancelar FUERA de la transacción tampoco cuela (R45: las dos, o ninguna)", () => {
+    const fueraDeLaTx = `{
+      await this.cobros.cancelarPorPlantilla(this.prisma, input.id, actor, ahora);
+      return this.runTx(async (tx) => {
+        const borrada = await this.repo.eliminar(input.id, tx);
+        return borrada ? { status: "ok" } : { status: "not_found" };
+      });
+    }`;
+    expect(piezasQueFaltanEnElBorrado(fueraDeLaTx)).toEqual([
+      "`cancelarPorPlantilla` está FUERA de la transacción",
+    ]);
+  });
+
+  it("un borrado SIN transacción se caza entero", () => {
+    const sinTx = `{
+      await this.cobros.cancelarPorPlantilla(this.prisma, input.id, actor, ahora);
+      const borrada = await this.repo.eliminar(input.id);
+      return borrada ? { status: "ok" } : { status: "not_found" };
+    }`;
+    expect(piezasQueFaltanEnElBorrado(sinTx)).toEqual([
+      "la transacción que envuelve cancelar + borrar",
+      "`cancelarPorPlantilla` está FUERA de la transacción",
+      "el borrado dentro de la transacción",
+    ]);
+  });
+
+  it("el borrado REAL del árbol no tiene ninguna pieza que falte (control positivo)", () => {
+    // Sin este control, los tres casos de arriba podrían pasar con un detector que marcara
+    // TODO: se verían igual de verdes y la guardia no diría nada del código de verdad.
+    const uso = uso333(SERVICIO_PLANTILLA_333);
+    for (const nombre of operacionesDeBorrado(uso)) {
+      expect(piezasQueFaltanEnElBorrado(cuerpoDelMetodo333(uso, nombre))).toEqual([]);
+    }
+  });
+
+  it("`sinImports333` deja fuera el import y conserva el uso", () => {
+    // La distinción que hace que esta guardia signifique algo: un `import` que NOMBRE la
+    // cancelación no puede hacerla pasar por hecha.
+    const fuente = `import { cancelarPorPlantilla } from "@/lib/x";\nconst y = 1;`;
+    expect(sinImports333(fuente)).not.toContain("cancelarPorPlantilla");
+    expect(sinImports333(fuente)).toContain("const y = 1;");
   });
 });

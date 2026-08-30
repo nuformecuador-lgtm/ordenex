@@ -30,6 +30,7 @@ const PLANTILLA: GastoFijoPlantillaDTO = {
   periodicidadUnidad: "meses",
   periodicidadCantidad: 1,
   fechaCobro: "2026-07-13",
+  requiereAprobacion: true, // ficha 333/R1
   createdAt: "2026-07-13T10:00:00.000Z",
   updatedAt: "2026-07-13T10:00:00.000Z",
 };
