@@ -9,6 +9,62 @@
 > `git show <rev>:progress/current.md`.
 
 
+## ✅ 2026-08-29 — wallet: LAS CUATRO FICHAS CERRADAS Y EN `dev`
+
+| # | PR | En `dev` | Gate completo |
+|---|---|---|---|
+| 85 | #609 | `48d40398` | 21.881/21.908 |
+| 332 | #610 | `b776d0da` | 21.943/21.970 |
+| 334 | #611 | `7305949a` | 22.009/22.036 |
+| 333 | #612 | `63a43463` | 22.252/22.279 |
+
+Las cuatro `done`, cada una verificada **sobre el blob remoto**, no sobre el estado del PR. `dev` no
+ganó nada ajeno entre medias, así que cada gate cubre su propio contenido.
+
+**Lo que el módulo tiene ahora y no tenía esta mañana.** La periodicidad y el día de cobro se eligen
+en pantalla y editar el monto ya **no** reescribe el ciclo en silencio; las plantillas se pueden
+**eliminar** de verdad; los gastos fijos marcados «requiere aprobación» **no se cobran solos** —crean
+un pendiente que solo el maestro aprueba, con aviso en la campana, recordatorio diario y su cola
+dentro de `/wallet`—; y mover dinero se hace desde **un** diálogo en vez de dos, con la **fecha en que
+ocurrió**.
+
+**Lo que este día enseñó, más allá de las fichas:**
+
+1. **Un PR «MERGED» no garantiza que tu trabajo esté en `dev`.** El commit del repaso de la 332
+   (`3d29842f`) se empujó después del merge y se quedó fuera **sin ninguna señal**; se rescató con
+   cherry-pick. Desde entonces cada cierre comprueba los commits uno a uno contra `origin/dev`.
+2. **Un gate rojo no prueba nada por sí solo, y uno verde tampoco.** Dos rojos fueron flakes de
+   saturación —`CrearTiendaForm` y un deadlock `40P01`—, diagnosticados aislando antes de repetir y
+   **sin** meterlos al baseline, que compara por archivo y taparía un rojo real suyo. Y al revés: la
+   guardia de superficie ya estaba baselineada, así que un backend mergeado sin su frontend habría
+   salido **verde mintiendo**; por eso se miró su CONTENIDO y las fases fueron en el mismo PR.
+3. **Los censos de inventario cerrado son el sistema funcionando.** Los cinco que rompió la 333
+   existen para que ampliar un enum sea deliberado. Se actualizaron sin relajar ninguno — y
+   aparecieron **cuatro nombres de caso que ya mentían desde la 271**.
+4. **Ver la app encontró lo que la suite no.** Dos repasos con navegador: uno probó en vivo que editar
+   el monto ya no mueve la periodicidad, otro que el `admin` ve la cola con **cero** botones de
+   decidir. Ningún test unitario cubría eso de punta a punta.
+5. **Los subagentes declararon huecos en su propio trabajo** —una mutación que no podía enrojecer lo
+   que decía el spec, un test de render que no mata `Number()`, dos casos que sobreviven a su
+   mutación— y esas confesiones se conservaron en las bitácoras.
+
+**Deuda viva, con dueño y medida:**
+
+- **`wallet_movimiento` no tiene ningún `CHECK`**: un monto **cero** entra en la tabla del dinero.
+  Medido contra producción el 2026-08-29: **0 filas** con monto cero o negativo (38 movimientos,
+  mínimo ₡312) y **0** en `wallet_tienda_movimiento` (40 filas). El borde ya valida `> 0`, así que
+  es **prevención**, no corrección. Sin ficha todavía.
+- De los tres botones de la fila de plantillas, el más llamativo es **Eliminar** y el menos visible
+  **Desactivar**: la acción segura es la que menos se ve. Anotado en la 332, sin arreglar, a decisión
+  del humano.
+- El `min` del selector de fecha (334) usa una env var no pública, así que el cliente siempre pinta la
+  ventana por defecto; el borde valida bien, solo la pista visual quedaría corrida.
+- `prisma migrate dev` está **inusable en esta máquina** por un desajuste de checksum **preexistente**
+  en `20260827160000_orden_num_remision_unico_parcial`. Se trabajó con `migrate deploy`. Ajeno a estas
+  fichas.
+
+---
+
 ## 💰 2026-08-29 — repaso del módulo wallet: cuatro fichas (85, 332, 333, 334)
 
 **Estado: las cuatro `pending`, specs EN CURSO (cuatro `spec_author` en paralelo).** El alta viaja en
