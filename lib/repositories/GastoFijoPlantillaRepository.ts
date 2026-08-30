@@ -34,6 +34,9 @@ function toDTO(r: PlantillaRow): GastoFijoPlantillaDTO {
     periodicidadUnidad: r.periodicidadUnidad,
     periodicidadCantidad: r.periodicidadCantidad,
     fechaCobro: fechaCobroADTO(r.fechaCobro),
+    // Ficha 333 (R1/R4): el interruptor viaja en el DTO para que la tabla lo pinte y el diálogo
+    // lo fije. `boolean` puro: no hay monto ni fecha que traducir.
+    requiereAprobacion: r.requiereAprobacion,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -75,6 +78,11 @@ export class GastoFijoPlantillaRepository implements IGastoFijoPlantillaReposito
         periodicidadUnidad: input.periodicidadUnidad,
         periodicidadCantidad: input.periodicidadCantidad,
         fechaCobro: fechaCobroAColumna(input.fechaCobro),
+        // Ficha 333 (R2): SOLO viaja si el llamador lo trae; ausente ⇒ manda el `DEFAULT true` de
+        // la columna, o sea «requiere aprobación». Mismo patrón que `CrearMovimientoInput.id`.
+        ...(input.requiereAprobacion !== undefined
+          ? { requiereAprobacion: input.requiereAprobacion }
+          : {}),
       },
     });
     return toDTO(row);
@@ -93,6 +101,11 @@ export class GastoFijoPlantillaRepository implements IGastoFijoPlantillaReposito
         periodicidadUnidad: input.periodicidadUnidad,
         periodicidadCantidad: input.periodicidadCantidad,
         fechaCobro: fechaCobroAColumna(input.fechaCobro),
+        // Ficha 333 (R1): SOLO viaja si el llamador lo trae; ausente ⇒ la fila conserva el valor
+        // que tenía. Una edición parcial NO puede cambiar en silencio si un gasto se cobra solo.
+        ...(input.requiereAprobacion !== undefined
+          ? { requiereAprobacion: input.requiereAprobacion }
+          : {}),
       },
     });
     return toDTO(row);

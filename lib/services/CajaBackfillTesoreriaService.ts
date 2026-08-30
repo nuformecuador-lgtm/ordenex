@@ -308,7 +308,7 @@ function fechar(candidata: Candidata, primerMovimiento: ReadonlyMap<string, Date
  * escribir ni una — y sin copiar aqui la categoria, el tipo ni la clave de origen que el puerto
  * fija (R23: los fija el, no quien lo llama).
  *
- * Los otros cuatro metodos del contrato LANZAN. Devolver algo plausible seria peor: este
+ * Los otros CINCO metodos del contrato LANZAN. Devolver algo plausible seria peor: este
  * repositorio no tiene datos que devolver, y un `[]` silencioso convertiria un error de
  * cableado en un informe vacio que parece correcto.
  */
@@ -340,6 +340,11 @@ export class RecolectorDeFilasDeCaja implements IWalletMovimientoRepository {
 
   agregarPorCategoria(): Promise<DesgloseEgresosAgregado> {
     throw new ErrorDeRecolector("agregarPorCategoria");
+  }
+
+  /** Ficha 333: quinto metodo que LANZA, por el mismo motivo que los otros cuatro. */
+  obtenerPorOrigen(): Promise<WalletMovimientoDTO | null> {
+    throw new ErrorDeRecolector("obtenerPorOrigen");
   }
 }
 

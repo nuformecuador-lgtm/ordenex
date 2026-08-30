@@ -32,12 +32,29 @@ export interface PeriodicidadInput {
   fechaCobro: string; // `YYYY-MM-DD`
 }
 
-export interface CrearPlantillaInput extends PeriodicidadInput {
+/**
+ * Ficha 333 (C3, R1/R2) — EL INTERRUPTOR en la escritura.
+ *
+ * OPCIONAL, y con la misma forma —y por el mismo motivo— que `CrearMovimientoInput.fechaMovimiento`
+ * y `.id`: la clave SOLO viaja si el llamador la trae. Ausente en `crear` ⇒ manda el
+ * `DEFAULT true` de la columna (R2, «requiere aprobación» es la norma); ausente en `actualizar`
+ * ⇒ la fila conserva el valor que tenía, que es lo seguro: una edición parcial NO puede cambiar
+ * en silencio si un gasto se cobra solo o no. Es la familia de fallo que cerró la 85 con la
+ * periodicidad.
+ *
+ * La tanda D (D4) es la que hace que `GastoFijoPlantillaService` lo pase SIEMPRE desde el borde
+ * —donde el schema zod ya le pone su default— y quien puede, entonces, apretarlo a obligatorio.
+ */
+export interface InterruptorAprobacionInput {
+  requiereAprobacion?: boolean;
+}
+
+export interface CrearPlantillaInput extends PeriodicidadInput, InterruptorAprobacionInput {
   concepto: string;
   monto: string; // STRING > 0 -> Prisma.Decimal en la impl
 }
 
-export interface ActualizarPlantillaInput extends PeriodicidadInput {
+export interface ActualizarPlantillaInput extends PeriodicidadInput, InterruptorAprobacionInput {
   concepto: string;
   monto: string; // STRING > 0
 }

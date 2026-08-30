@@ -21,6 +21,7 @@ function plantilla(overrides: Partial<GastoFijoPlantillaDTO> = {}): GastoFijoPla
     periodicidadUnidad: "meses",
     periodicidadCantidad: 1,
     fechaCobro: "2026-07-15", // ancla el 15 -> aplica el 15 jul (NOW)
+    requiereAprobacion: true, // ficha 333/R1
     createdAt: "2026-07-01T10:00:00.000Z",
     updatedAt: "2026-07-01T10:00:00.000Z",
     ...overrides,
@@ -49,6 +50,7 @@ function buildMovimientoRepo(count: number): IWalletMovimientoRepository {
     agregarPorCategoriaYTipo: vi.fn(),
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
+    obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
   };
 }
 

@@ -44,6 +44,7 @@ const QUINCENAL: GastoFijoPlantillaDTO = {
   periodicidadUnidad: "semanas",
   periodicidadCantidad: 2,
   fechaCobro: "2026-03-31",
+  requiereAprobacion: true, // ficha 333/R1
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };

@@ -36,6 +36,7 @@ function plantilla(): GastoFijoPlantillaDTO {
     periodicidadUnidad: "meses",
     periodicidadCantidad: 1,
     fechaCobro: "2026-07-13",
+    requiereAprobacion: true, // ficha 333/R1
     createdAt: "2026-07-13T10:00:00.000Z",
     updatedAt: "2026-07-13T10:00:00.000Z",
   };
@@ -211,6 +212,10 @@ describe("actualizarPlantillaAction (R18/R25)", () => {
         periodicidadUnidad: "semanas",
         periodicidadCantidad: 2,
         fechaCobro: "2026-03-31",
+        // Ficha 333 (R2): el borde resuelve el default del interruptor, igual que resuelve los
+        // tres de la periodicidad. La entrada de arriba NO lo manda, asi que este `true` es
+        // exactamente lo que el schema pone -- y que aparezca aqui, literal, es la prueba.
+        requiereAprobacion: true,
       },
       MAESTRO,
     );

@@ -82,6 +82,7 @@ function buildRepo(overrides: Partial<IWalletMovimientoRepository> = {}): IWalle
         sueldo: "0.00",
         indemnizacion: "0.00", // feature 158/R32
       }),
+    obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
     ...overrides,
   };
 }

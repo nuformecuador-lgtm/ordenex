@@ -352,7 +352,7 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
     expect(prisma.walletMovimiento.groupBy.mock.calls[0][0].where).toEqual({});
   });
 
-  it("R47: la superficie del repositorio son CINCO metodos — ni update, ni delete, ni el viejo", () => {
+  it("R47: la superficie del repositorio son SEIS metodos — ni update, ni delete, ni el viejo", () => {
     const metodos = Object.getOwnPropertyNames(WalletMovimientoRepository.prototype)
       .filter((m) => m !== "constructor")
       .sort();
@@ -361,12 +361,16 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
     // Se afirma sobre la lista COMPLETA y CERRADA, no con cuatro `toBeUndefined()`: asi caen
     // igual un `actualizarMonto` futuro (que no se llama «update») y el agregado por `tipo` a
     // secas si alguien lo resucitara.
+    // Ficha 333 (C2): entra `obtenerPorOrigen`, y es una LECTURA por la clave
+    // `(origen_tipo, origen_id, categoria)`. El libro no gana ninguna mutacion: la asercion de
+    // abajo lo sigue afirmando, y esta lista sigue siendo CERRADA.
     expect(metodos).toEqual([
       "agregarPorCategoria",
       "agregarPorCategoriaYTipo",
       "crearMovimientos",
       "listar",
       "obtenerPorId",
+      "obtenerPorOrigen",
     ]);
     expect(metodos.some((m) => /update|delete|actualizar|eliminar|borrar/i.test(m))).toBe(false);
   });

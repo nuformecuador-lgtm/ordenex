@@ -124,4 +124,30 @@ export interface IWalletMovimientoRepository {
    * SUM(monto), STRING (money-safe).
    */
   agregarPorCategoria(filtros: BalanceFiltros): Promise<DesgloseEgresosAgregado>;
+  /**
+   * Ficha 333 (C2, design §2/§6.3) — lee el movimiento que ocupa una CLAVE DE ORIGEN concreta:
+   * `(origen_tipo, origen_id, categoria)`, que es exactamente la terna de
+   * `wallet_movimiento_origen_categoria_uq`. `null` si esa clave no está en el libro.
+   *
+   * PARA QUÉ EXISTE, y es un solo caso (R19): al aprobar un cobro de gasto fijo, `crearMovimientos`
+   * puede devolver 0 porque la clave YA estaba en el libro —pasa si alguien cambió el interruptor
+   * de la plantilla a mitad de período—. Entonces no se crea un segundo movimiento: se lee ESTE y
+   * se enlaza al cobro, y el mensaje al usuario dice la verdad («ya estaba en el libro»).
+   *
+   * `findFirst` y no `findUnique`: la unicidad la da un índice PARCIAL
+   * (`WHERE origen_id IS NOT NULL`) que Prisma no expresa, así que no hay clave única declarada
+   * en el cliente. El motor garantiza que hay como mucho una fila; esto sólo la trae.
+   *
+   * Recibe el `tx` porque quien la llama está DENTRO de la transacción que acaba de intentar la
+   * escritura: leer fuera de ella no vería lo que esa misma transacción escribió.
+   *
+   * ⚠️ El libro sigue INMUTABLE: esto LEE. Este contrato sigue sin exponer `update` ni `delete`
+   * (R3 de la 42), y esta ficha no los añade.
+   */
+  obtenerPorOrigen(
+    tx: WalletTxClient,
+    origenTipo: WalletOrigenTipo,
+    origenId: string,
+    categoria: WalletMovimientoCategoria,
+  ): Promise<WalletMovimientoDTO | null>;
 }

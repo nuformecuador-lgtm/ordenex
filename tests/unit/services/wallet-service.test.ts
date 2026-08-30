@@ -97,6 +97,7 @@ function buildRepo(): IWalletMovimientoRepository {
     agregarPorCategoria: vi
       .fn()
       .mockResolvedValue({ gastoFijo: "0.00", gastoVariable: "0.00", sueldo: "0.00" }),
+    obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
   };
 }
 

@@ -202,6 +202,7 @@ const PLANTILLAS_OK = {
       periodicidadUnidad: "meses" as const,
       periodicidadCantidad: 1,
       fechaCobro: "2026-07-01",
+      requiereAprobacion: true, // ficha 333/R1
       createdAt: "2026-07-01T00:00:00.000Z",
       updatedAt: "2026-07-01T00:00:00.000Z",
     },

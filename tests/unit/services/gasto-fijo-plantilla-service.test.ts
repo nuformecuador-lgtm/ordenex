@@ -28,6 +28,7 @@ function plantilla(overrides: Partial<GastoFijoPlantillaDTO> = {}): GastoFijoPla
     periodicidadUnidad: "meses",
     periodicidadCantidad: 1,
     fechaCobro: "2026-07-13",
+    requiereAprobacion: true, // ficha 333/R1
     createdAt: "2026-07-13T10:00:00.000Z",
     updatedAt: "2026-07-13T10:00:00.000Z",
     ...overrides,
@@ -62,7 +63,7 @@ describe("GastoFijoPlantillaService.crearPlantilla (R17/R24)", () => {
   it("R17: rol no autorizado -> forbidden, sin crear", async () => {
     const repo = buildRepo();
     const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD }, OTRO);
+    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD, requiereAprobacion: true }, OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.crear).not.toHaveBeenCalled();
   });
@@ -70,7 +71,7 @@ describe("GastoFijoPlantillaService.crearPlantilla (R17/R24)", () => {
   it("feature 94: admin -> crea la plantilla (paridad con maestro)", async () => {
     const repo = buildRepo();
     const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD }, ADMIN);
+    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD, requiereAprobacion: true }, ADMIN);
     expect(r.status).toBe("ok");
     expect(repo.crear).toHaveBeenCalled();
   });
@@ -78,7 +79,7 @@ describe("GastoFijoPlantillaService.crearPlantilla (R17/R24)", () => {
   it("R24: maestro -> crea la plantilla; monto STRING", async () => {
     const repo = buildRepo();
     const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD }, MAESTRO);
+    const r = await svc.crearPlantilla({ concepto: "Alquiler", monto: "80000.00", ...PERIODICIDAD, requiereAprobacion: true }, MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperado ok");
     expect(typeof r.plantilla.monto).toBe("string");
@@ -90,7 +91,7 @@ describe("GastoFijoPlantillaService.actualizarPlantilla (R17/R25)", () => {
   it("R17: rol no autorizado -> forbidden", async () => {
     const repo = buildRepo();
     const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.actualizarPlantilla({ id: "p-1", concepto: "x", monto: "10.00", ...PERIODICIDAD }, OTRO);
+    const r = await svc.actualizarPlantilla({ id: "p-1", concepto: "x", monto: "10.00", ...PERIODICIDAD, requiereAprobacion: true }, OTRO);
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.actualizar).not.toHaveBeenCalled();
   });
@@ -98,7 +99,7 @@ describe("GastoFijoPlantillaService.actualizarPlantilla (R17/R25)", () => {
   it("not_found: el id no existe -> not_found, sin actualizar", async () => {
     const repo = buildRepo({ obtenerPorId: vi.fn().mockResolvedValue(null) });
     const svc = new GastoFijoPlantillaService(repo);
-    const r = await svc.actualizarPlantilla({ id: "no", concepto: "x", monto: "10.00", ...PERIODICIDAD }, MAESTRO);
+    const r = await svc.actualizarPlantilla({ id: "no", concepto: "x", monto: "10.00", ...PERIODICIDAD, requiereAprobacion: true }, MAESTRO);
     expect(r).toEqual({ status: "not_found" });
     expect(repo.actualizar).not.toHaveBeenCalled();
   });
@@ -107,7 +108,13 @@ describe("GastoFijoPlantillaService.actualizarPlantilla (R17/R25)", () => {
     const repo = buildRepo();
     const svc = new GastoFijoPlantillaService(repo);
     const r = await svc.actualizarPlantilla(
-      { id: "p-1", concepto: "Alquiler oficina", monto: "85000.00", ...PERIODICIDAD },
+      {
+        id: "p-1",
+        concepto: "Alquiler oficina",
+        monto: "85000.00",
+        ...PERIODICIDAD,
+        requiereAprobacion: true,
+      },
       ADMIN,
     );
     expect(r.status).toBe("ok");
@@ -118,7 +125,13 @@ describe("GastoFijoPlantillaService.actualizarPlantilla (R17/R25)", () => {
     const repo = buildRepo();
     const svc = new GastoFijoPlantillaService(repo);
     const r = await svc.actualizarPlantilla(
-      { id: "p-1", concepto: "Alquiler oficina", monto: "85000.00", ...PERIODICIDAD },
+      {
+        id: "p-1",
+        concepto: "Alquiler oficina",
+        monto: "85000.00",
+        ...PERIODICIDAD,
+        requiereAprobacion: true,
+      },
       MAESTRO,
     );
     expect(r.status).toBe("ok");
@@ -314,6 +327,7 @@ describe("GastoFijoPlantillaService.actualizarPlantilla — persistencia del cic
         periodicidadUnidad: "semanas",
         periodicidadCantidad: 2,
         fechaCobro: "2026-03-31",
+        requiereAprobacion: true, // ficha 333/R1
       },
       MAESTRO,
     );
@@ -355,6 +369,7 @@ describe("GastoFijoPlantillaService.actualizarPlantilla — persistencia del cic
         periodicidadUnidad: "meses",
         periodicidadCantidad: 1,
         fechaCobro: "2026-04-01",
+        requiereAprobacion: true, // ficha 333/R1
       },
       MAESTRO,
     );

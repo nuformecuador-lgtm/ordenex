@@ -66,6 +66,7 @@ function buildWalletDeps() {
     agregarPorCategoriaYTipo: vi.fn(),
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
+    obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
   };
   const walletFeedService: IWalletFeedService = {
     construirMovimientosDeIngreso: vi.fn().mockResolvedValue([]),

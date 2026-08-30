@@ -43,6 +43,7 @@ function plantilla(id: string, dia: number, activa = true): GastoFijoPlantillaDT
     periodicidadUnidad: "meses",
     periodicidadCantidad: 1,
     fechaCobro: "2026-06-01",
+    requiereAprobacion: true, // ficha 333/R1
     createdAt: `2026-06-${String(dia).padStart(2, "0")}T00:00:00.000Z`,
     updatedAt: `2026-06-${String(dia).padStart(2, "0")}T00:00:00.000Z`,
   };
