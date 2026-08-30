@@ -1732,3 +1732,46 @@ $ pnpm exec eslint <los cinco archivos>
 **Veredicto:** los cinco censos siguen siendo inventarios cerrados, ahora con el valor de la 333
 declarado a mano y con su motivo; ninguno se relajó, ninguno se dejó rojo y ningún `down.sql` se
 tocó.
+
+---
+
+## Repaso a mano (I3) — 2026-08-29, navegador real, dos roles y dos temas
+
+Hecho por el leader tras el gate verde. Con Playwright sobre `pnpm dev` en local, sembrando **tres
+cobros pendientes** en la base local para ver la sección con datos de verdad (borrados al terminar:
+0 cobros y 0 plantillas al cerrar).
+
+**LA COMPROBACIÓN QUE IMPORTABA — la excepción a la paridad de la ficha 94, en la app real:**
+
+| rol | ve la sección | botones `Aprobar` | botones `Rechazar` |
+|---|---|---|---|
+| `admin` | sí, «3 por aprobar» | **0** | **0** |
+| `maestro` | sí, «3 por aprobar» | **3** | **3** |
+
+Es la decisión del humano del 2026-08-29 funcionando de punta a punta, no un test de render con un
+doble. Cero errores de navegador en las tres sesiones.
+
+**Presentación.** La sección va entre la tarjeta de la caja y la del libro, con `Badge` de conteo a
+la derecha del título y `DataTable` con Concepto / Período / Monto / Generado el / Acciones. El texto
+de apoyo —«Nadie los cobró todavía: el dinero sigue en la caja y esperan tu decisión.»— dice en una
+línea qué está en juego. **Verificada en modo CLARO y OSCURO**: en los dos se lee, el `Badge` mantiene
+contraste y `Aprobar` (relleno) domina sobre `Rechazar` (contorno), que es la jerarquía correcta.
+
+**UN SUSTO QUE NO ERA UN DEFECTO, anotado para que nadie lo repita.** La columna «Generado el» mostró
+«30 de agosto de 2026» mientras la cabecera decía 29/08/2026, lo que parecía un desfase UTC↔CR de los
+que este repo ya ha pagado caros. **No lo es, y se comprobó en vez de suponerse:** el servicio escribe
+`generadoEl` con `fechaCalendarioCR(now)` (`GeneracionGastosFijosService.ts:111`) y la pantalla lo
+pinta desde una cadena `YYYY-MM-DD`, sin zona horaria de por medio. El desfase lo introdujo **la
+semilla del repaso**, que escribió `new Date()` en crudo y Prisma truncó al día **UTC** en una columna
+`@db.Date`. Lección para el próximo que siembre datos a mano contra esta tabla: usa el día calendario
+CR, o te fabricas un falso positivo.
+
+**Otro tropiezo del entorno, por si vuelve a pasar.** El primer intento dio `500` en `/login`: había
+un `next dev` ANTERIOR vivo en el puerto 3000 —con un cliente Prisma previo a la migración, o sea sin
+la tabla nueva— y el servidor recién levantado se había ido al 3001. El síntoma es idéntico al de un
+cliente rancio; la causa era un servidor viejo que no murió al pararlo.
+
+**Límite declarado.** No se ejercitó `Aprobar` ni `Rechazar` a través de la pantalla: eso está cubierto
+por los tests de integración contra Postgres (incluida la concurrencia). Lo que este repaso añade es lo
+que ningún test veía: que la sección **existe, se encuentra, se lee en los dos temas y ofrece los
+botones exactamente a quien debe**.
