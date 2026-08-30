@@ -1,7 +1,10 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { GastoFijoCobroTxClient } from "@/lib/interfaces/repositories/IGastoFijoCobroRepository";
+import type { WalletTxClient } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type {
   AprobarCobroGastoFijoServiceResult,
+  ContarCobrosPendientesDePlantillaInput,
+  ContarCobrosPendientesDePlantillaServiceResult,
   DecidirCobroGastoFijoInput,
   ListarCobrosPendientesServiceResult,
   RechazarCobroGastoFijoServiceResult,
@@ -17,6 +20,25 @@ import type {
 // más, R24), que es un predicado con NOMBRE PROPIO y distinto: el camino de decisión NO debe
 // autorizar con `esAccesoTotal` (R27), y lo vigila una guardia estática. Ninguna otra operación
 // de wallet ni del CRUD de plantillas cambia de autorización (R28).
+
+/**
+ * FICHA 333 (D2, design §6.3) — el cliente que la transacción de APROBAR necesita: las DOS
+ * tablas que esa transacción toca, y ninguna más. `gasto_fijo_cobro` (la decisión) y
+ * `wallet_movimiento` (el egreso). Con este tipo, quien tenga el `tx` no puede tocar plantillas
+ * ni notificaciones aunque quisiera.
+ */
+export type GastoFijoCobroTx = GastoFijoCobroTxClient & WalletTxClient;
+
+/**
+ * Ejecuta `fn` dentro de UNA transacción y revierte si lanza (R15: o queda el movimiento del
+ * libro Y el cobro aprobado y enlazado, o no queda ninguna de las dos cosas).
+ *
+ * Se INYECTA por constructor y no se importa Prisma en el servicio: la lógica de negocio no
+ * conoce la base, igual que no conoce HTTP. En producción es `(fn) => prisma.$transaction(fn)`;
+ * en los tests, un runner en memoria con la misma semántica. Precedente literal:
+ * `LiquidacionTxRunner`.
+ */
+export type GastoFijoCobroTxRunner = <T>(fn: (tx: GastoFijoCobroTx) => Promise<T>) => Promise<T>;
 
 export interface IGastoFijoCobroService {
   /**
@@ -67,4 +89,20 @@ export interface IGastoFijoCobroService {
     actor: Actor,
     ahora: Date,
   ): Promise<number>;
+  /**
+   * ⚠️ FICHA 333 (D2, R55) — cuántos cobros `pendiente` tiene una plantilla, LEÍDOS EN EL
+   * MOMENTO de pedir la confirmación del borrado. Es lo que permite que el usuario lea «se
+   * cancelarán 2 cobros pendientes» ANTES de aceptar, y no después.
+   *
+   * Guardia: `esAccesoTotal`, no el predicado estrecho. Esto es una LECTURA que acompaña al
+   * borrado de plantillas —cuyo guard es `esAccesoTotal` y esta ficha NO lo estrecha (R28)—, no
+   * una decisión sobre un cobro.
+   *
+   * El número que devuelve es informativo y puede quedar obsoleto entre el aviso y la ejecución:
+   * el que se REPORTA al final es el de `cancelarPorPlantilla` dentro de la transacción (R56).
+   */
+  contarPendientesDePlantilla(
+    input: ContarCobrosPendientesDePlantillaInput,
+    actor: Actor,
+  ): Promise<ContarCobrosPendientesDePlantillaServiceResult>;
 }

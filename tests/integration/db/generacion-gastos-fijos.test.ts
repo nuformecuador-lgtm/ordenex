@@ -5,6 +5,8 @@ import { GeneracionGastosFijosService } from "@/lib/services/GeneracionGastosFij
 import { derivarCaja } from "@/lib/utils/caja-tesoreria";
 import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { IGastoFijoPlantillaRepository } from "@/lib/interfaces/repositories/IGastoFijoPlantillaRepository";
+import type { IGastoFijoCobroRepository } from "@/lib/interfaces/repositories/IGastoFijoCobroRepository";
+import type { GeneracionGastosFijosTx } from "@/lib/interfaces/services/IGeneracionGastosFijosService";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 
 // Feature 45 (R28/R31) — idempotencia del cron por (plantilla, periodo). Simula el indice
@@ -72,7 +74,10 @@ function plantilla(overrides: Partial<GastoFijoPlantillaDTO> = {}): GastoFijoPla
     periodicidadUnidad: "meses",
     periodicidadCantidad: 1,
     fechaCobro: "2026-07-15",
-    requiereAprobacion: true, // ficha 333/R1
+    // Ficha 333 (R5): este archivo mide la IDEMPOTENCIA DEL LIBRO, o sea el camino
+    // AUTOMATICO. Con «requiere aprobacion» estas plantillas no escribirian ni una fila en
+    // `wallet_movimiento` y los tres casos de abajo pasarian a medir el vacio.
+    requiereAprobacion: false,
     createdAt: "2026-07-01T10:00:00.000Z",
     updatedAt: "2026-07-01T10:00:00.000Z",
     ...overrides,
@@ -97,13 +102,34 @@ function fakePlantillaRepo(activas: GastoFijoPlantillaDTO[]): IGastoFijoPlantill
 const JULIO = new Date("2026-07-15T18:00:00.000Z"); // periodo "2026-07"
 const AGOSTO = new Date("2026-08-15T18:00:00.000Z"); // periodo "2026-08"
 
+/**
+ * Ficha 333 — doble del repositorio de COBROS. Este archivo mide la idempotencia del LIBRO con
+ * plantillas que cobran solas, asi que la cola queda siempre en cero: lo que se comprueba de paso
+ * es que ese camino NO crea cobros.
+ */
+function fakeCobroRepo(): IGastoFijoCobroRepository {
+  return {
+    crearPendientes: vi.fn().mockResolvedValue(0),
+    obtenerPorId: vi.fn(),
+    listarPendientes: vi.fn(),
+    contarPendientes: vi.fn().mockResolvedValue(0),
+    contarPendientesDePlantilla: vi.fn(),
+    marcarDecidido: vi.fn(),
+    enlazarMovimiento: vi.fn(),
+    cancelarPendientesDePlantilla: vi.fn(),
+  };
+}
+
 function serviceFor(store: ReturnType<typeof makeWalletStore>, activas: GastoFijoPlantillaDTO[]) {
   const client = { walletMovimiento: store.walletMovimiento } as unknown as PrismaClient;
   return {
     svc: new GeneracionGastosFijosService(
       fakePlantillaRepo(activas),
       new WalletMovimientoRepository(client),
-      client,
+      fakeCobroRepo(),
+      // Ficha 333 (R10): runner en memoria con la misma semantica que `prisma.$transaction`. La
+      // tienda de arriba ya modela el indice unico parcial, que es lo que este archivo mide.
+      async (fn) => fn(client as unknown as GeneracionGastosFijosTx),
     ),
     repo: new WalletMovimientoRepository(client),
   };
@@ -118,11 +144,14 @@ describe("cron gastos fijos — idempotencia por periodo (R28/R31)", () => {
     ]);
 
     const primera = await svc.ejecutarGeneracion(JULIO);
+    // LITERAL a proposito (el contrato del resumen, R13): se actualiza a mano.
     expect(primera).toEqual({
       fecha: "2026-07-15",
       plantillasActivas: 2,
       plantillasQueAplicanHoy: 2,
       egresosGenerados: 2,
+      cobrosPendientesCreados: 0, // ficha 333: las dos COBRAN SOLAS
+      cobrosPendientesTotales: 0,
     });
     expect(store.rows).toHaveLength(2);
     // Feature 173 (T D.1): mismo numero, otro camino — el agregado viene por (categoria, tipo)

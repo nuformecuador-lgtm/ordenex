@@ -26,6 +26,7 @@ import {
   emitirCierreDiaPorAprobar,
   emitirCierreDiaVencido,
   emitirDiaRepartoCorregido,
+  emitirGastoFijoCobroPendiente,
   emitirMensajeroBloqueado,
   emitirPostulacionPendiente,
   emitirPostulacionRecursoPendiente,
@@ -33,6 +34,7 @@ import {
   type CierrePorAprobarContexto,
   type CierreVencidoContexto,
   type DiaRepartoCorregidoContexto,
+  type GastoFijoCobroPendienteContexto,
   type MensajeroBloqueadoContexto,
   type PostulacionContexto,
   type PostulacionRecursoContexto,
@@ -69,6 +71,13 @@ export type DiaRepartoCorregidoNotificador = (ctx: DiaRepartoCorregidoContexto) 
 export type CierreVencidoNotificador = (ctx: CierreVencidoContexto) => Promise<void>;
 /** Feature 271 (R40/R41/R42). Firma del notificador de «quedaste bloqueado por cierres». */
 export type MensajeroBloqueadoNotificador = (ctx: MensajeroBloqueadoContexto) => Promise<void>;
+/**
+ * FICHA 333 (E2, R29/R33/R34). Firma del notificador de «quedan cobros de gasto fijo por
+ * aprobar». Lo usa el CRON de gastos fijos, al final de su corrida.
+ */
+export type GastoFijoCobroPendienteNotificador = (
+  ctx: GastoFijoCobroPendienteContexto,
+) => Promise<void>;
 
 /**
  * DEFAULT de los tres services: no hace nada. Un service construido sin cablear su notificador
@@ -81,7 +90,8 @@ export const notificadorNoOp: PostulacionNotificador &
   PostulacionRecursoNotificador &
   DiaRepartoCorregidoNotificador &
   CierreVencidoNotificador &
-  MensajeroBloqueadoNotificador = async () => {};
+  MensajeroBloqueadoNotificador &
+  GastoFijoCobroPendienteNotificador = async () => {};
 
 /**
  * Construye el repositorio real. Aislado en una funcion para que los tests del camino REAL
@@ -216,6 +226,32 @@ export function notificarMensajeroBloqueadoCon(
   };
 }
 
+/**
+ * FICHA 333 (E2, R29/R33) — emite «quedan N cobros de gasto fijo por aprobar» contra `repo`,
+ * absorbiendo su fallo.
+ *
+ * BEST-EFFORT Y FUERA DE LA TRANSACCION, y aqui el motivo no es comodidad: lo llama el CRON de
+ * gastos fijos, que es MONEY-CRITICAL y corre a las 00:00 CR sin nadie mirando. Cuando esto se
+ * ejecuta, los egresos y los cobros pendientes de la corrida YA estan escritos y commiteados; un
+ * aviso caido no puede tumbar la corrida ni dejarlos a medias. La direccion segura del error es
+ * esa: LA CORRIDA MANDA, EL AVISO ES CORTESIA (R33).
+ *
+ * Y no es un `catch` vacio (`docs/conventions.md`): `emitirBestEffort` deja el fallo REGISTRADO
+ * con el nombre de la operacion y su causa.
+ */
+export function notificarGastoFijoCobroPendienteCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): GastoFijoCobroPendienteNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "gasto_fijo_cobro_pendiente",
+      () => emitirGastoFijoCobroPendiente(repo, ctx),
+      logger,
+    );
+  };
+}
+
 // Bindings de PRODUCCION. Solo el composition root los importa. Resuelven el repositorio en el
 // momento de la emision (no al importar el modulo), para no abrir una conexion por el hecho de
 // que alguien importe este archivo.
@@ -239,3 +275,7 @@ export const notificarCierreDiaVencidoReal: CierreVencidoNotificador = async (ct
 
 export const notificarMensajeroBloqueadoReal: MensajeroBloqueadoNotificador = async (ctx) =>
   notificarMensajeroBloqueadoCon(repoReal())(ctx);
+
+export const notificarGastoFijoCobroPendienteReal: GastoFijoCobroPendienteNotificador = async (
+  ctx,
+) => notificarGastoFijoCobroPendienteCon(repoReal())(ctx);

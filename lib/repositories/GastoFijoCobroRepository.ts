@@ -142,6 +142,18 @@ export class GastoFijoCobroRepository implements IGastoFijoCobroRepository {
   }
 
   /**
+   * R55 — cuantos `pendiente` tiene UNA plantilla, para que la confirmacion del borrado diga el
+   * numero ANTES de que el usuario acepte. El `where` lleva las DOS condiciones: sin
+   * `estado: "pendiente"` contaria tambien los ya decididos, que el borrado NO cancela (R23/R47)
+   * y que por tanto no se van a «cancelar» aunque la plantilla desaparezca.
+   *
+   * Va por `gasto_fijo_cobro_plantilla_id_idx`, el mismo indice que sirve a la cancelacion.
+   */
+  async contarPendientesDePlantilla(plantillaId: string): Promise<number> {
+    return this.prisma.gastoFijoCobro.count({ where: { plantillaId, estado: "pendiente" } });
+  }
+
+  /**
    * ⚠️ R17/R18 — LA TRANSICION. El `where` lleva `id` **y `estado: "pendiente"`**, y ese segundo
    * termino es lo que serializa a dos humanos: bajo `READ COMMITTED` la segunda transaccion
    * espera el bloqueo de fila, re-evalua el `WHERE` tras el commit de la primera, afecta CERO

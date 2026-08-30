@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import type { EliminarPlantillaTx } from "@/lib/interfaces/services/IGastoFijoPlantillaService";
 import { GastoFijoPlantillaService } from "@/lib/services/GastoFijoPlantillaService";
 import type { IGastoFijoPlantillaRepository } from "@/lib/interfaces/repositories/IGastoFijoPlantillaRepository";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
@@ -104,7 +105,20 @@ function repoEnMemoria(filas: GastoFijoPlantillaDTO[] = ALMACEN) {
 }
 
 function servicio(repo: IGastoFijoPlantillaRepository) {
-  return new GastoFijoPlantillaService(repo);
+  // Ficha 333 (F1b): el servicio recibe el puerto a los cobros y el runner de la transaccion del
+  // BORRADO. Este archivo no borra nada —solo lee—, asi que los dos van como dobles inertes: si
+  // alguno se usara por este camino, el `vi.fn()` sin implementacion lo delataria.
+  return new GastoFijoPlantillaService(
+    repo,
+    {
+      listarPendientes: vi.fn(),
+      aprobar: vi.fn(),
+      rechazar: vi.fn(),
+      cancelarPorPlantilla: vi.fn(),
+      contarPendientesDePlantilla: vi.fn(),
+    },
+    async (fn) => fn({} as EliminarPlantillaTx),
+  );
 }
 
 function ids(items: ReadonlyArray<{ id: string }>): string[] {

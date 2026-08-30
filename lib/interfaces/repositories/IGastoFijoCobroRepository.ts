@@ -89,6 +89,19 @@ export interface IGastoFijoCobroRepository {
   /** R29/R30/R41 — cuántos cobros siguen `pendiente`. TODOS, no sólo los de la corrida de hoy. */
   contarPendientes(): Promise<number>;
   /**
+   * ⚠️ FICHA 333 (D2/F1, R55) — cuántos cobros `pendiente` tiene UNA plantilla.
+   *
+   * **No estaba en C1 y se añade en la tanda D porque R55 lo necesita**: es el número que el
+   * diálogo de confirmación de borrado lee AL ABRIRSE para poder decir «se cancelarán N cobros
+   * pendientes» ANTES de aceptar. Se lee en ESE momento y no se deriva de un listado traído con
+   * la página: un número con minutos de antigüedad estaría autorizando un borrado.
+   *
+   * Es una lectura, no la cancelación: el número que el borrado REPORTA es el que devuelve
+   * `cancelarPendientesDePlantilla` en su propia transacción (R56), y los dos pueden diferir
+   * legítimamente si alguien decidió un cobro entre medias.
+   */
+  contarPendientesDePlantilla(plantillaId: string): Promise<number>;
+  /**
    * ⚠️ R17/R18 — LA TRANSICIÓN, y es la que serializa a dos humanos. `updateMany` con
    * **`WHERE id = ... AND estado = 'pendiente'`**: bajo `READ COMMITTED` (el nivel por defecto
    * de Postgres y de Prisma) la segunda transacción espera el bloqueo de fila, re-evalúa el

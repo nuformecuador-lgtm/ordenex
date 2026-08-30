@@ -550,3 +550,463 @@ lo reescribe**.
 válido, migraciones aplicadas y revertidas de verdad, 28 tests contra Postgres EJECUTADOS y la
 mutación del CHECK matando dos de ellos — con cinco puntos diferidos declarados arriba para las
 tandas D–I.**
+
+---
+---
+
+# Bitácora — Ficha 333 · Tandas **D + E + F** (servicios, notificación y borde)
+
+> Encargo acotado: **D, E y F**. Las tandas **G (pantalla), H (censos y guardias) e I (cierre) NO se
+> han hecho** — van en encargos posteriores. Fecha: 2026-08-29. Rama:
+> `feature/333-gasto-fijo-autorizacion` (ya existía; no se creó, no se cambió, no se commiteó nada:
+> el commit es del leader).
+>
+> Base usada para todo lo que corre contra Postgres: **`localhost:5432/ordenex`, esquema `public`**
+> (la LOCAL, la misma de las tandas A–C; `migrate status` → *up to date*, 170 migraciones).
+
+---
+
+## Lo que se hizo, tarea por tarea
+
+### Tanda D · Servicios
+
+| T | Qué quedó | Archivo |
+| --- | --- | --- |
+| **D1** | `ROLES_DECIDEN_COBRO_GASTO_FIJO` + `puedeDecidirCobroGastoFijo`, junto a `esAccesoTotal`, que **no se tocó** (el diff del archivo es puramente aditivo). | `lib/auth/acceso-total.ts` |
+| **D2** | `GastoFijoCobroService`: `listarPendientes` (guard `esAccesoTotal`), `aprobar` y `rechazar` (guard `puedeDecidirCobroGastoFijo`), `cancelarPorPlantilla` y —**añadido en esta tanda**— `contarPendientesDePlantilla`. `aprobar` sigue paso a paso `design §6.3` dentro de `runTx`. No importa Prisma: recibe los dos repos, el cliente de escritura y el runner por constructor. | `lib/services/GastoFijoCobroService.ts` (nuevo) |
+| **D3** | `GeneracionGastosFijosService`: partición por `requiereAprobacion`, las **dos** escrituras dentro de **una** `runTx`, `contarPendientes()` **fuera** de ella y el notificador **fuera** de ella, con default no-op. | `lib/services/GeneracionGastosFijosService.ts` |
+| **D4** | `crearPlantilla`/`actualizarPlantilla` pasan `requiereAprobacion` al repositorio. Guards intactos (`esAccesoTotal`). | `lib/services/GastoFijoPlantillaService.ts` |
+| **D5** | 35 casos con dobles: R14, R16, R17, R19, R20, R21, R23, R24, R25, R45, R49, R55, R56. | `tests/unit/services/gasto-fijo-cobro-service.test.ts` (nuevo) |
+| **D6** | +14 casos: R5, R6, R7, R8, R10, R11, R12, R29, R30, R32, R34. | `tests/unit/services/generacion-gastos-fijos-service.test.ts` |
+| **D7** | 12 casos **contra Postgres**: R15, R17, R18 (concurrencia REAL), R19, R20, R21, R45, R55, R56. | `tests/integration/db/gasto-fijo-cobro-aprobacion.test.ts` (nuevo) |
+| **D8** | 9 casos **contra Postgres**: R9, R10, R22, R51. | `tests/integration/db/gasto-fijo-cobro-idempotencia.test.ts` (nuevo) |
+
+**Añadido que la tanda C no traía y D2/F1 necesitaban (R55):**
+`IGastoFijoCobroRepository.contarPendientesDePlantilla(plantillaId)` +
+`GastoFijoCobroRepository.contarPendientesDePlantilla` (`count({ where: { plantillaId, estado:
+"pendiente" } })`). Su `WHERE` se prueba **donde vive**, contra Postgres, con las dos condiciones
+ejercidas por separado (`333/D7 — R55`).
+
+**Tipos nuevos que la tanda D introduce en los contratos** (para que nadie los busque en Prisma):
+`GastoFijoCobroTx` / `GastoFijoCobroTxRunner` (`IGastoFijoCobroService.ts`),
+`GeneracionGastosFijosTx` / `GeneracionGastosFijosTxRunner` (`IGeneracionGastosFijosService.ts`),
+`EliminarPlantillaTx` / `EliminarPlantillaTxRunner` y `GastoFijoPlantillaTxClient`. Todos siguen el
+precedente de `LiquidacionTxRunner`: el ejecutor de transacciones **se inyecta**, el servicio no
+importa Prisma.
+
+### Tanda E · Notificación
+
+| T | Qué quedó | Archivo |
+| --- | --- | --- |
+| **E1** | `textoCobrosGastoFijoPendientes(n)` (singular/plural), `GastoFijoCobroPendienteContexto { pendientes, diaCR }` y `emitirGastoFijoCobroPendiente` — `warning`, `entidadTipo: "gasto_fijo_cobro_dia"`, `entidadId: diaCR`, destinatario `rol: maestro`, `anexo: null`. El texto vive **sólo** aquí. | `lib/notificaciones/emitir.ts` |
+| **E2** | `GastoFijoCobroPendienteNotificador`, `notificarGastoFijoCobroPendienteCon(repo, logger?)` (best-effort) y el binding `notificarGastoFijoCobroPendienteReal`. `notificadorNoOp` gana el tipo nuevo en su intersección (ahora son 8). | `lib/notificaciones/notificadores.ts` |
+| **E3** | `buildService()` **inyecta** `notificarGastoFijoCobroPendienteReal` (5.º argumento). El `CRON_SECRET` se sigue verificando antes de cualquier efecto. | `app/api/cron/generar-gastos-fijos/route.ts` |
+| **E4** | 11 casos: R29, R30, R32, R33, R35. Con un repositorio doble que reproduce **las dos** barreras reales (la guardia de no-leídas y el índice único). | `tests/unit/notificaciones/gasto-fijo-cobro-aviso.test.ts` (nuevo) |
+| **E5** | El cableado del cron entra en el censo **afirmando sobre el uso efectivo**, y `GeneracionGastosFijosService.ts` entra en `SERVICES_CON_NOTIFICADOR` (que pasa de 7 a 8). | `tests/unit/services/notificacion-notificadores-reales.test.ts` |
+| **E6** | La lista literal de eventos pasa a **nueve** valores; se añade su hermana, la lista literal de **siete** `entidad_tipo`. El título del caso deja de llevar un número atrasado («exactamente seis» cuando ya eran ocho). | `tests/unit/services/notificacion-productores-wiring.test.ts` |
+| **E7** | 6 casos **contra Postgres**: R31 y su contraparte R30, más el control de que quien rechaza el duplicado es `notificacion_dedupe_key` con su `NULLS NOT DISTINCT`. | `tests/integration/db/gasto-fijo-cobro-aviso-dedupe.test.ts` (nuevo) |
+
+### Tanda F · Borde
+
+| T | Qué quedó | Archivo |
+| --- | --- | --- |
+| **F1** | Las **cuatro** Server Actions con el patrón exacto de `wallet-egresos.ts`. Ninguna acepta monto del cliente (`.strict()`). | `lib/actions/gasto-fijo-cobro.ts` (nuevo) |
+| **F1b** | **La 332 está mergeada** (comprobado en el archivo real: `lib/services/GastoFijoPlantillaService.ts` tiene `eliminarPlantilla`), así que fue la rama **«modificar»**: `eliminarPlantilla` abre transacción, cancela y borra, y `EliminarPlantillaServiceResult.ok` gana `pendientesCancelados`. | `lib/services/GastoFijoPlantillaService.ts`, `lib/interfaces/services/IGastoFijoPlantillaService.ts`, `lib/repositories/GastoFijoPlantillaRepository.ts` (+ `tx?` en `eliminar`), `lib/actions/gasto-fijo-plantilla.ts` (composition root) |
+| **F2** | 18 casos: R26 en las **cuatro** actions + `validation_error`, + el orden sesión-antes-de-parse. | `tests/unit/actions/gasto-fijo-cobro-actions.test.ts` (nuevo) |
+| **F3** | 16 casos: R27 y R28, sobre fuente **sin imports ni comentarios**, con el cuerpo de cada método recortado por conteo de llaves (porque el archivo usa los DOS predicados, cada uno en su sitio). | `tests/unit/guards/gasto-fijo-decision-rol.guardia.test.ts` (nuevo) |
+| **F4** | 12 casos: R43 — conversiones, aritmética sobre montos y `toFixed` admitido **sólo** sobre `Prisma.Decimal`. | `tests/unit/guards/gasto-fijo-cobro-money-safe.guardia.test.ts` (nuevo) |
+
+---
+
+## Archivos tocados
+
+**Producción — nuevos (2):**
+`lib/services/GastoFijoCobroService.ts`, `lib/actions/gasto-fijo-cobro.ts`.
+
+**Producción — modificados (14):**
+`lib/auth/acceso-total.ts`, `lib/interfaces/repositories/IGastoFijoCobroRepository.ts`,
+`lib/interfaces/repositories/IGastoFijoPlantillaRepository.ts`,
+`lib/interfaces/services/IGastoFijoCobroService.ts`,
+`lib/interfaces/services/IGastoFijoPlantillaService.ts`,
+`lib/interfaces/services/IGeneracionGastosFijosService.ts`,
+`lib/repositories/GastoFijoCobroRepository.ts`, `lib/repositories/GastoFijoPlantillaRepository.ts`,
+`lib/services/GastoFijoPlantillaService.ts`, `lib/services/GeneracionGastosFijosService.ts`,
+`lib/notificaciones/emitir.ts`, `lib/notificaciones/notificadores.ts`,
+`lib/actions/gasto-fijo-plantilla.ts`, `app/api/cron/generar-gastos-fijos/route.ts`.
+
+**Tests — nuevos (7):**
+`tests/unit/services/gasto-fijo-cobro-service.test.ts`,
+`tests/unit/notificaciones/gasto-fijo-cobro-aviso.test.ts`,
+`tests/unit/actions/gasto-fijo-cobro-actions.test.ts`,
+`tests/unit/guards/gasto-fijo-decision-rol.guardia.test.ts`,
+`tests/unit/guards/gasto-fijo-cobro-money-safe.guardia.test.ts`,
+`tests/integration/db/gasto-fijo-cobro-aprobacion.test.ts`,
+`tests/integration/db/gasto-fijo-cobro-idempotencia.test.ts`,
+`tests/integration/db/gasto-fijo-cobro-aviso-dedupe.test.ts`. *(ocho, contando los tres de
+integración.)*
+
+**Tests — modificados (9):**
+`tests/unit/services/generacion-gastos-fijos-service.test.ts`,
+`tests/unit/services/gasto-fijo-plantilla-service.test.ts`,
+`tests/unit/services/gasto-fijo-plantillas-completo.test.ts`,
+`tests/unit/services/gasto-fijo-plantillas-paginado.test.ts`,
+`tests/unit/services/notificacion-notificadores-reales.test.ts`,
+`tests/unit/services/notificacion-productores-wiring.test.ts`,
+`tests/unit/actions/gasto-fijo-plantilla-actions.test.ts`,
+`tests/integration/db/generacion-gastos-fijos.test.ts`,
+`tests/integration/actions/generar-gastos-fijos-route.test.ts`.
+
+**Nada de esto se tocó:** `feature_list.json`, `progress/current.md`, `specs/`, `app/(app)/`,
+`components/`, `db/migrations/**`, `db/schema.prisma`.
+
+---
+
+## Mapa `R<n>` → test (alcance D+E+F)
+
+| R | Test que lo cubre (nombre real del caso) | Archivo |
+| --- | --- | --- |
+| R1 | `crearPlantilla pasa requiereAprobacion = %s al repositorio, tal cual` (×2) + el gemelo de actualizar | `tests/unit/services/gasto-fijo-plantilla-service.test.ts` |
+| R3 | `crear: forbidden sin tocar el repositorio` / `editar: forbidden sin tocar el repositorio` | idem |
+| R5 | `R5: una plantilla que COBRA SOLA escribe el mismo egreso que antes de la ficha, y no crea cobro` | `tests/unit/services/generacion-gastos-fijos-service.test.ts` |
+| R6 | `R6: una plantilla que REQUIERE APROBACION crea el cobro y NO toca el libro` | idem |
+| R7 | `R7: el cobro guarda el concepto y el monto de la plantilla, y el monto viaja como STRING` | idem |
+| R8 | `R8: la clave del cobro es EXACTAMENTE la que el libro habria recibido…` | idem |
+| R9 | `⭑ la segunda corrida inserta CERO y la corrida termina en éxito` | `tests/integration/db/gasto-fijo-cobro-idempotencia.test.ts` |
+| R10 | `⭑ si la escritura de cobros falla EN EL MOTOR, no queda ningún egreso de la corrida` (+ control positivo) y `R10: las dos escrituras van dentro de UNA sola transaccion…` | idem + unit de generación |
+| R11 | `R11: el periodo del cobro sale de periodoDe y conserva su formato` (×3: meses/dias/semanas) | unit de generación |
+| R12 | `las inactivas no llegan ni al libro ni a la cola, sea cual sea su interruptor` | idem |
+| R13 | `R29: token correcto -> 200 con resumen SIN PII` (literal de 6 claves + tipos) | `tests/integration/actions/generar-gastos-fijos-route.test.ts` |
+| R14 | `⭑ la fila del libro es exactamente la que el requisito describe` + `⭑ la clave que se escribe sale del COBRO…` + `⭑ el autor NO es null…` | `tests/unit/services/gasto-fijo-cobro-service.test.ts` |
+| R15 | `⭑ el camino feliz deja LAS CUATRO cosas…` + `⭑ si la escritura del libro falla EN EL MOTOR, NO queda la decisión` | `tests/integration/db/gasto-fijo-cobro-aprobacion.test.ts` |
+| R16 | `⭑ el monto escrito es el del cobro, no uno leido en el momento de aprobar` + `⭑ money-safe: el monto cruza como STRING…` | unit de servicio |
+| R17 | `⭑ aprobar DOS veces seguidas…`, `⭑ un cobro RECHAZADO no se puede aprobar…`, `⭑ el WHERE estado='pendiente' está EN LA SENTENCIA` | integración aprobación |
+| R18 | `⭑ una gana con ok y la otra pierde con ya_decidido; el libro queda con UNA fila` | idem |
+| R19 | `⭑ el caso MIXTO: no se crea un segundo movimiento y yaEstabaEnElLibro es true` (+ control) | idem |
+| R20 | `⭑ R20: aprobar un cobro que no existe responde not_found sin escribir nada` | idem + unit |
+| R21 | `⭑ el libro no se toca en absoluto` + `⭑ un cobro RECHAZADO no se puede aprobar…` | unit + integración |
+| R22 | `⭑ tras rechazar, la corrida del día siguiente del MISMO período no crea nada…` | integración idempotencia |
+| R23 | `%s sobre un cobro ya decidido responde ya_decidido` (×2) + `el servicio NO expone ninguna forma de reabrir o editar` | unit de servicio |
+| R24 | `⭑ %s con rol %s -> forbidden, sin tocar el repositorio` (×4) + su control positivo | idem |
+| R25 | `con acceso total la cola se devuelve` (maestro y admin) | idem |
+| R26 | Las **cuatro** actions sin sesión + `⭑ la sesion se comprueba ANTES del parse` | `tests/unit/actions/gasto-fijo-cobro-actions.test.ts` |
+| R27 | `⭑ aprobar y rechazar usan el predicado ESTRECHO y NO el ancho` (+ 4 más) | `tests/unit/guards/gasto-fijo-decision-rol.guardia.test.ts` |
+| R28 | `⭑ los servicios censados siguen usandolo` + `⭑ el CRUD de plantillas conserva el guard ancho…` + `⭑ dentro del propio servicio de cobros, LEER sigue siendo de acceso total` | idem |
+| R29 | `⭑ una fila warning al rol maestro, con el dia CR como entidad` + `R29/R30: con pendientes, avisa con el TOTAL…` | `tests/unit/notificaciones/gasto-fijo-cobro-aviso.test.ts` + unit de generación |
+| R30 | `⭑ y sin que nadie haya leido el primero: dias distintos, entidades distintas` + `⭑ el recordatorio del día siguiente SALE…` | idem + `tests/integration/db/gasto-fijo-cobro-aviso-dedupe.test.ts` |
+| R31 | `⭑ la segunda emisión del mismo día no crea nada, y en la tabla queda UNA fila` + la contraprueba sobre el índice | dedupe contra Postgres |
+| R32 | `R32: sin pendientes, NO se llama al notificador` | unit de generación |
+| R33 | `⭑ resuelve sin lanzar, y el fallo se loggea con la operacion y su causa` | unit del aviso |
+| R34 | `app/api/cron/generar-gastos-fijos/route.ts inyecta el notificador real` + la guardia derivada + `R34: el DEFAULT del service es el no-op` | `notificacion-notificadores-reales.test.ts` + unit de generación |
+| R35 | `⭑ solo el numero…` + `⭑ la fila entera es opaca…` + el literal completo de la fila en la base | unit del aviso + dedupe |
+| R36 | `el enum de eventos sigue siendo un inventario CERRADO, y la lista es LITERAL` + `el enum de ENTIDADES tambien…` | `notificacion-productores-wiring.test.ts` |
+| R43 | los 12 casos de la guardia money-safe + `⭑ R43: el monto cruza la frontera como STRING, sin tocarse` | guardia + actions |
+| R45 | `⭑ cancelarPorPlantilla usa el tx QUE RECIBE…` + `R45: cancela ANTES de borrar, con el mismo tx…` + `⭑ cancelar por plantilla devuelve el número REAL…` | unit de servicio + unit de plantillas + integración aprobación |
+| R48 | `setActivaPlantilla(false) no llama a la cancelacion ni abre transaccion` (+ el de reactivar) | `gasto-fijo-plantilla-service.test.ts` |
+| R49 | `la cola solo pide pendiente…` + `aprobar un cobro cancelado no escribe nada` | unit de servicio |
+| R51 | `⭑ dos INSERT con el mismo origen_id violan gasto_fijo_cobro_origen_uq` + `⭑ la unicidad es TOTAL, no parcial` (+ control) | integración idempotencia |
+| R55 | `⭑ el WHERE lleva las DOS condiciones: la plantilla Y el estado` + `acceso total -> el conteo del repositorio, tal cual` | integración aprobación + unit de servicio |
+| R56 | `R56: reporta el numero REALMENTE cancelado…` + `333/R56: el numero de pendientes cancelados viaja del service al borde` | unit de plantillas + unit de actions |
+
+**Los que NO son de estas tandas** (y por qué): R2 lo cubre `tests/unit/types/gasto-fijo-plantilla-schema.test.ts` (tanda B, ya verde); R4, R37–R42 y R44 son de la tanda **G**; R46, R47, R50, R52, R53 y R54 los cubren los dos archivos de integración de la tanda **A**, que se re-ejecutaron aquí y siguen verdes; **R57 es de H4** y NO se ha escrito (ver abajo).
+
+---
+
+## Verificación — salidas reales
+
+### `pnpm typecheck`
+
+```
+> ordenex@0.1.0 typecheck R:\job\singularis\projects\ordenex
+> tsc --noEmit
+
+TYPECHECK_EXIT=0
+```
+
+Limpio, sin una sola línea de error.
+
+### `pnpm lint`
+
+```
+✖ 127 problems (0 errors, 127 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+```
+
+**0 errores.** Las 127 advertencias son `no-unused-vars` sobre parámetros `_algo` de suites ajenas y
+son el estado previo del árbol: ninguna cae en un archivo de esta ficha.
+
+### `pnpm exec vitest related --run` sobre los 16 archivos de producción tocados
+
+```
+ Test Files  620 passed (620)
+      Tests  9098 passed | 26 skipped (9124)
+   Duration  269.93s
+```
+
+### Corrida explícita POR NOMBRE de los 20 archivos de test creados o modificados
+
+*(los 16 de esta tanda + los 4 de las tandas A–C que este trabajo vuelve a tocar de rebote)*
+
+```
+ Test Files  20 passed (20)
+      Tests  326 passed (326)
+```
+
+### Los CINCO archivos que corren contra Postgres — **EJECUTADOS, no saltados**
+
+```
+$ pnpm exec vitest run tests/integration/db/gasto-fijo-cobro-aprobacion.test.ts \
+    tests/integration/db/gasto-fijo-cobro-idempotencia.test.ts \
+    tests/integration/db/gasto-fijo-cobro-aviso-dedupe.test.ts \
+    tests/integration/db/gasto-fijo-cobro-migration.test.ts \
+    tests/integration/db/notificacion-evento-gasto-fijo-migration.test.ts
+
+ Test Files  5 passed (5)
+      Tests  55 passed (55)
+```
+
+**55 casos ejecutados contra `localhost:5432/ordenex`, CERO `skipped`.** Sin `DATABASE_URL` el
+`describe.skip` los habría saltado y el resumen lo diría; no lo dice.
+
+### `pnpm exec vitest run guard` (las guardias corren siempre, no las selecciona el grafo)
+
+```
+ Test Files  1 failed | 164 passed (165)
+      Tests  1 failed | 2505 passed (2506)
+```
+
+El único rojo es `superficie-de-uso.guardia` y está explicado abajo. Ninguna otra guardia del árbol
+—incluida `plantilla-gasto-fijo-borrado.guardia` de la 332, cuyos docstrings esta tanda edita— se
+movió.
+
+---
+
+## Las mutaciones de la regla de dinero — **ejecutadas, con su salida ROJA**
+
+> Las tres se aplicaron, se midió el rojo y se **revirtieron**, verificando después que el árbol
+> vuelve a verde. `git status` al final no muestra ninguna de ellas.
+
+### (a) Cobrar el monto de la plantilla en vez del copiado → **R14 y R16 mueren**
+
+Mutación: en `GastoFijoCobroService.aprobar`, `monto: cobro.monto` → un importe que **no** es la
+copia (el que tendría la plantilla si alguien la hubiera editado entre generar y aprobar).
+
+```
+     × ⭑ el servicio escribe el monto que LEE del cobro, sin tocarlo
+     × ⭑ la fila del libro es exactamente la que el requisito describe
+     × ⭑ el monto escrito es el del cobro, no uno leido en el momento de aprobar
+     × ⭑ money-safe: el monto cruza como STRING y conserva sus decimales exactos
+     × ⭑ el camino feliz deja LAS CUATRO cosas, y el movimiento lleva la clave y el monto copiado
+AssertionError: expected '85000.00' to be '12345.67'
+AssertionError: expected '85000.00' to be '80000.00'
+ Test Files  3 failed (3)
+      Tests  5 failed | 54 passed (59)
+```
+
+Mata casos en **tres** archivos a la vez: el unit del servicio, la integración contra Postgres y la
+guardia money-safe. Revertida → `59 passed (59)`.
+
+### (b) Quitar `estado = 'pendiente'` del `WHERE` de la transición → **R17 y R18 mueren**
+
+Mutación: en `GastoFijoCobroRepository.marcarDecidido`, `where: { id, estado: "pendiente" }` →
+`where: { id }`.
+
+```
+     × ⭑ aprobar DOS veces seguidas: la segunda no toca el libro y no reescribe la decisión
+     × ⭑ un cobro RECHAZADO no se puede aprobar: `ya_decidido` y ni una fila en el libro
+     × ⭑ el `WHERE estado = 'pendiente'` está EN LA SENTENCIA: sobre un decidido afecta 0 filas
+     × ⭑ una gana con `ok` y la otra pierde con `ya_decidido`; el libro queda con UNA fila
+AssertionError: expected { status: 'ok', …(1) } to deeply equal { status: 'ya_decidido' }
+AssertionError: expected 1 to be +0
+AssertionError: expected [ 'ok', 'ok' ] to deeply equal [ 'ok', 'ya_decidido' ]
+ Test Files  1 failed | 1 passed (2)
+      Tests  4 failed | 43 passed (47)
+```
+
+**`expected [ 'ok', 'ok' ]` es el hallazgo:** con el `WHERE` mutado, las DOS aprobaciones
+simultáneas se dan por buenas. El unit con dobles **sobrevive**, y eso está dicho por escrito en su
+cabecera: los dobles no ven el SQL. Revertida → verde.
+
+### (c) Borrar `gasto_fijo_cobro_origen_uq` → **R51 muere**
+
+Mutación: `DROP INDEX "gasto_fijo_cobro_origen_uq"` **dentro de la transacción revertida del propio
+test**. El DDL de Postgres es transaccional, así que el índice vuelve solo al hacer rollback: la
+base compartida no se toca ni un segundo fuera de esa transacción.
+
+```
+     × ⭑ dos `INSERT` con el mismo `origen_id` violan `gasto_fijo_cobro_origen_uq`
+AssertionError: promise resolved "undefined" instead of rejecting
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+```
+
+Revertida → `9 passed (9)`, con el índice intacto (los otros dos casos del bloque, que dependen de
+él, siguen en verde).
+
+### (extra, R34) Quitar el ARGUMENTO del notificador dejando el `import` → **E5 muere**
+
+Es el fallo exacto que el `corte-diario` tuvo en producción, reproducido a propósito:
+
+```
+     × app/api/cron/generar-gastos-fijos/route.ts inyecta el notificador real
+     × cada `notificar*Real` exportado lo PASA algun fichero de lib/ o app/, no solo lo importa
+AssertionError: expected '\r\nexport interface GenerarGastosFij…' to contain
+  'notificarGastoFijoCobroPendienteReal'
+ Test Files  1 failed (1)
+      Tests  2 failed | 21 passed (23)
+```
+
+Caen **las dos**: la guardia del archivo y la derivada del árbol, **con el `import` intacto**.
+Revertida → `23 passed (23)`.
+
+### (extra, R27) Unificar el guard de `aprobar` con `esAccesoTotal` → **F3 muere**
+
+```
+     × ⭑ aprobar con rol `admin` -> forbidden, sin tocar el repositorio
+     × ⭑ `aprobar` y `rechazar` usan el predicado ESTRECHO y NO el ancho
+     × y el codigo REAL no lo contiene: la contraprueba de arriba no esta midiendo su propio ruido
+AssertionError: `aprobar` autoriza con esAccesoTotal
+ Test Files  2 failed (2)
+      Tests  3 failed | 48 passed (51)
+```
+
+Revertida → `51 passed (51)`.
+
+---
+
+## Rojos y desviaciones declaradas
+
+### 1. `superficie-de-uso.guardia` está ROJA, y por DOS motivos distintos
+
+```
++   "lib/actions/gasto-fijo-cobro.ts:124 aprobarCobroGastoFijoAction",
++   "lib/actions/gasto-fijo-cobro.ts:170 contarCobrosPendientesDePlantillaAction",
++   "lib/actions/gasto-fijo-cobro.ts:102 listarCobrosPendientesAction",
++   "lib/actions/gasto-fijo-cobro.ts:145 rechazarCobroGastoFijoAction",
++   "lib/actions/tarifas.ts:67 obtenerTarifa",
+```
+
+- **Las cuatro de esta ficha: es el estado esperado entre F y G**, y `tasks.md` lo dice en **H3**
+  («si alguna no lo tuviera, es un bug de G»). Las consume la pantalla, que es la tanda G. **NO se
+  les puso `@sin-superficie`**: sería una excepción falsa que habría que retirar mañana.
+- **`lib/actions/tarifas.ts:67 obtenerTarifa` es PREEXISTENTE y ajeno a la 333.** No lo importa
+  ningún módulo, no lleva anotación, y su archivo lo tocó por última vez la feature 273.
+  **Medido, no razonado:** se apartó `lib/actions/gasto-fijo-cobro.ts` del árbol, se volvió a correr
+  la guardia y siguió roja con `obtenerTarifa` como único hallazgo. O sea: **esta guardia ya estaba
+  roja en la rama antes de esta tanda**, y la corrida completa del leader la va a encontrar.
+
+### 2. Dónde queda el símbolo que R57 tiene que buscar (H4)
+
+`design §9.3/§9.5` dice que `eliminarPlantilla` «llama a (1)» y que la guardia debe encontrar
+**`cancelarPendientesDePlantilla`** en su fuente. Lo implementado es la **cadena**:
+
+```
+GastoFijoPlantillaService.eliminarPlantilla
+      -> this.cobros.cancelarPorPlantilla(tx, id, actor, ahora)     [IGastoFijoCobroService]
+            -> repo.cancelarPendientesDePlantilla(tx, …)            [IGastoFijoCobroRepository]
+```
+
+Se hizo así porque **D2 exige que `cancelarPorPlantilla` exista en el servicio** y R45/R56 están
+trazados a `gasto-fijo-cobro-service.test.ts`, o sea al método del SERVICIO. Meter además el
+repositorio de cobros dentro de `GastoFijoPlantillaService` dejaría `cancelarPorPlantilla` sin ningún
+consumidor —código muerto— y saltaría la capa. Es el mismo patrón de «puerto estrecho» que
+`LiquidacionService` usa con `ICajaPagoTiendaFeedService`.
+
+**Consecuencia para quien escriba H4:** el símbolo que hay que afirmar en la fuente de
+`GastoFijoPlantillaService.eliminarPlantilla` es **`cancelarPorPlantilla`**, no
+`cancelarPendientesDePlantilla` (que vive un nivel más abajo, en `GastoFijoCobroService`). Si se
+prefiere el literal del design, hay que invertir la inyección y borrar el método del servicio; **esa
+decisión no se tomó aquí**.
+
+### 3. El fixture de tres suites cambia de `requiereAprobacion: true` a `false`
+
+En `generacion-gastos-fijos-service.test.ts`, `generacion-gastos-fijos.test.ts` (integración) y —por
+el mismo motivo— en el fixture de plantillas de las suites de listado, el helper `plantilla()` pasa a
+nacer en **«cobra sola»**. **Ningún cuerpo de test se editó** para el camino automático: lo que
+cambia es el default del helper, y cambia porque esas suites SON el testigo de R5 («el camino
+automático queda idéntico»). Con `true` habrían pasado a medir el camino nuevo con el nombre del
+viejo. Los casos del cobro pendiente ponen `true` **explícitamente**, que es donde esa palabra se
+lee.
+
+### 4. Los tres `toEqual` literales del resumen del cron, actualizados A MANO
+
+`generacion-gastos-fijos-service.test.ts`, `generacion-gastos-fijos.test.ts` y
+`generar-gastos-fijos-route.test.ts` afirman la forma del resumen con un literal. Se les añadieron
+`cobrosPendientesCreados` y `cobrosPendientesTotales` **escribiéndolos**, no derivándolos del
+resultado: ese literal ES el contrato (R13). En el del route handler se añadió además una aserción
+sobre las **claves** ordenadas, para que un campo nuevo con nombre de dinero no pueda cruzar solo.
+
+### 5. `wallet_movimiento` NO tiene ningún `CHECK` — hallazgo de esta tanda
+
+Se descubrió escribiendo la inyección de fallo de R15: un movimiento con `monto = 0` **entra sin
+protestar**. El invariante del importe del libro vive en el borde (zod) y en el servicio, no en la
+tabla; la tabla del COBRO sí lo tiene (`gasto_fijo_cobro_monto_positivo`, R52). El caso de R15
+provoca el fallo por la FK `wallet_movimiento_registrado_por_fkey`, y queda escrito ahí por qué.
+
+### 6. El caso de concurrencia (R18) es el ÚNICO que COMMITEA
+
+Dos transacciones que se pelean por una fila necesitan que esa fila esté commiteada y necesitan DOS
+conexiones: dentro de una transacción revertida no hay concurrencia que medir. Ese bloque —y sólo
+ése— escribe de verdad y limpia lo suyo con una MARCA (`TEST-333-APROBACION`) en un `finally`, en
+`beforeAll` **y** en `afterAll`, en el orden que las FK obligan (cobros → movimientos → plantillas).
+Hay un caso final que comprueba que la base queda **con cero filas** de esa marca.
+
+### 7. Lo que NO se hizo, por encargo
+
+- **Tanda G** entera (pantalla): R4, R37–R42, R44 y el R55 de la confirmación.
+- **Tanda H**: H1 (censo de descarga), H2, H3 (superficie de las cuatro actions) y **H4 (R57)**.
+  R57 **no tiene test**: es el único requisito del alcance backend que queda sin cubrir, y queda
+  dicho en voz alta aquí en vez de darse por «passed» por vacío.
+- **Tanda I**: `./init.sh` completo, repaso a mano y PR.
+- Ningún comando `git` que escriba. Ninguna migración nueva. Ningún `down.sql` tocado.
+
+---
+
+## Contrato que queda para la pantalla (tanda G)
+
+```ts
+// lib/actions/gasto-fijo-cobro.ts  ('use server')
+listarCobrosPendientesAction(input?: unknown, deps?)
+  -> { status:"ok"; items: GastoFijoCobroDTO[]; total: number }
+   | { status:"forbidden" } | { status:"unauthenticated" }
+   | { status:"validation_error"; fieldErrors }
+
+aprobarCobroGastoFijoAction({ id: uuid }, deps?)
+  -> { status:"ok"; yaEstabaEnElLibro: boolean }
+   | { status:"ya_decidido" } | { status:"not_found" } | { status:"forbidden" }
+   | { status:"unauthenticated" } | { status:"validation_error"; fieldErrors }
+
+rechazarCobroGastoFijoAction({ id: uuid }, deps?)
+  -> { status:"ok" } | { status:"ya_decidido" } | { status:"not_found" }
+   | { status:"forbidden" } | { status:"unauthenticated" } | { status:"validation_error"; fieldErrors }
+
+contarCobrosPendientesDePlantillaAction({ plantillaId: uuid }, deps?)
+  -> { status:"ok"; pendientes: number } | { status:"forbidden" }
+   | { status:"unauthenticated" } | { status:"validation_error"; fieldErrors }
+
+// lib/types/gasto-fijo-cobro.ts
+GastoFijoCobroDTO = { id, concepto, monto: string, periodo, generadoEl, estado }
+```
+
+- **`total` NO es `items.length`** (R41): `items` viene recortado a `gastoFijoConfig.MAX_PAGE_SIZE`
+  y el `total` lo cuenta el servidor. La cabecera pinta `total`.
+- **`monto` es STRING con dos decimales** de punta a punta (R43): se pinta con `money(...)`, sin
+  `parseFloat`, sin `Number(` y sin aritmética.
+- **`yaEstabaEnElLibro`** distingue los dos finales felices y el mensaje tiene que decir la verdad
+  (R19): `false` = «se cobró ahora»; `true` = «ya estaba en el libro; se marcó aprobado y no se
+  cobró dos veces».
+- **`ya_decidido` no es un error del usuario**: es el final normal cuando alguien decidió antes.
+- **Los botones sólo si `actor.rol === maestro`** (R40) — y es comodidad: la autorización real la
+  hace el servicio (R24), que responde `forbidden` al `admin` igualmente.
+- **`eliminarPlantillaAction` ahora devuelve `{ status:"ok", pendientesCancelados: number }`**: es el
+  número REAL cancelado (R56), el que el mensaje posterior al borrado debe usar.
+
+---
+
+## Veredicto
+
+**D, E y F entregadas: typecheck y lint sin errores, 620 archivos relacionados en verde (9.098
+tests), los 20 archivos tocados verdes por nombre, 55 casos EJECUTADOS contra Postgres —ninguno
+saltado— y las cinco mutaciones (las tres de dinero más las de R34 y R27) aplicadas, muertas y
+revertidas; con un rojo esperado en `superficie-de-uso.guardia` que la tanda G cierra y otro
+PREEXISTENTE y ajeno (`obtenerTarifa`) que ya venía en la rama, y con R57 declarado SIN cubrir
+porque su guardia es H4.**

@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   ActualizarPlantillaInput,
   CrearPlantillaInput,
+  GastoFijoPlantillaTxClient,
   IGastoFijoPlantillaRepository,
 } from "@/lib/interfaces/repositories/IGastoFijoPlantillaRepository";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
@@ -129,8 +130,11 @@ export class GastoFijoPlantillaRepository implements IGastoFijoPlantillaReposito
    * intacto por el TIPO, no por buena voluntad. Lo afirma
    * `tests/unit/repositories/gasto-fijo-plantilla-eliminar.test.ts`.
    */
-  async eliminar(id: string): Promise<boolean> {
-    const res = await this.prisma.gastoFijoPlantilla.deleteMany({ where: { id } });
+  async eliminar(id: string, tx?: GastoFijoPlantillaTxClient): Promise<boolean> {
+    // Ficha 333 (F1b/R45): con `tx`, el DELETE va en la MISMA transaccion que cancelo los cobros
+    // pendientes de esta plantilla. Sin el, manda el cliente del repositorio (comportamiento 332).
+    const cliente = tx ?? this.prisma;
+    const res = await cliente.gastoFijoPlantilla.deleteMany({ where: { id } });
     return res.count > 0;
   }
 

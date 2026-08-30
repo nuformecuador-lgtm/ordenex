@@ -1,3 +1,4 @@
+import type { PrismaClient } from "@prisma/client";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 import type { PeriodicidadUnidad } from "@/lib/utils/periodicidad";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
@@ -59,6 +60,16 @@ export interface ActualizarPlantillaInput extends PeriodicidadInput, Interruptor
   monto: string; // STRING > 0
 }
 
+/**
+ * Ficha 333 (F1b) — cliente aceptado por `eliminar` cuando el borrado corre DENTRO de una
+ * transaccion: cualquier cosa que exponga `gastoFijoPlantilla`. Lo satisfacen el `PrismaClient`
+ * completo y el `tx` de un `$transaction` (patron `WalletTxClient`).
+ *
+ * Existe porque la cancelacion de los cobros pendientes y el `DELETE` de la plantilla tienen que
+ * ser ATOMICOS (R45): media cancelacion con la plantilla ya borrada dejaria pendientes huerfanos.
+ */
+export type GastoFijoPlantillaTxClient = Pick<PrismaClient, "gastoFijoPlantilla">;
+
 export interface IGastoFijoPlantillaRepository {
   /** R24: crea la plantilla (activa=true por default). Devuelve el DTO con monto STRING. */
   crear(input: CrearPlantillaInput): Promise<GastoFijoPlantillaDTO>;
@@ -86,8 +97,14 @@ export interface IGastoFijoPlantillaRepository {
    * R3: filtra por la clave primaria y por NADA mas. R8: este repositorio esta tipado
    * `Pick<PrismaClient, "gastoFijoPlantilla">`, asi que no puede tocar `wallet_movimiento`
    * aunque quisiera — el libro no se ve afectado por construccion, no por disciplina.
+   *
+   * ⚠️ FICHA 333 (F1b, R45) — `tx` OPCIONAL Y AL FINAL, con la misma forma que
+   * `IGastoFijoCobroRepository.obtenerPorId`. Desde la 333, el borrado corre DENTRO de la
+   * transaccion que antes cancela los cobros pendientes de esa plantilla: o se cancelan y la
+   * plantilla desaparece, o no ocurre ninguna de las dos cosas. Ausente ⇒ manda el cliente del
+   * repositorio y el comportamiento es el de la 332, intacto.
    */
-  eliminar(id: string): Promise<boolean>;
+  eliminar(id: string, tx?: GastoFijoPlantillaTxClient): Promise<boolean>;
   /** R26: lista TODAS las plantillas (activas e inactivas), mas recientes primero. */
   listar(): Promise<GastoFijoPlantillaDTO[]>;
   /**
