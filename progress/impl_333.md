@@ -1486,3 +1486,249 @@ a 9/9.
 
 **Con esto, la divergencia nº1 queda CERRADA.** Las otras cuatro decisiones declaradas siguen como
 estaban.
+
+---
+
+## Censos de inventario cerrado que amplía esta ficha
+
+**Qué son y por qué se tocan.** Cinco archivos de `tests/integration/db/` mantienen inventarios
+**cerrados** —listas literales escritas a mano— sobre los enums de la campana, sobre qué migraciones
+pueden llamarse «de notificaciones» y sobre qué tablas nacieron con `DEFAULT` en `updated_at`. No son
+un obstáculo: existen precisamente para que **ampliar un enum sea un acto deliberado y no un
+descuido**. La 333 los rompe por diseño al añadir `notificacion_evento += gasto_fijo_cobro_pendiente`,
+`notificacion_entidad_tipo += gasto_fijo_cobro_dia` y la tabla `gasto_fijo_cobro`.
+
+Se han actualizado **conservando su propósito**: siguen siendo inventarios cerrados, ahora con un
+valor más, siguiendo el patrón que ya dejaron las fichas 253, 262 y 271 en esos mismos archivos —el
+valor nuevo **al final y en orden de adición**, y cada entrada con el motivo escrito al lado (qué
+ficha la añadió y por qué).
+
+**Todos los literales se actualizaron A MANO.** Ninguno se convirtió en derivado de la fuente que
+vigila: un censo que lea su lista esperada del propio `schema.prisma` o del propio `pg_enum` queda
+verde por construcción y deja de fijar nada. Eso se escribió explícitamente en los archivos donde
+faltaba (`schema-drift-saneamiento.test.ts` y el de la 253), para que el siguiente que pase no lo
+«simplifique».
+
+**Ningún `down.sql` anterior se tocó.** `git diff --name-only` al terminar devuelve exactamente los
+cinco archivos de test y nada más:
+
+```
+tests/integration/db/no-migration-102.test.ts
+tests/integration/db/notificacion-evento-bloqueo-cierre-migration.test.ts
+tests/integration/db/notificacion-evento-dia-reparto-corregido-migration.test.ts
+tests/integration/db/notificacion-evento-postulacion-recurso-migration.test.ts
+tests/integration/db/schema-drift-saneamiento.test.ts
+```
+
+### La tanda H del spec NO enumeró ninguno de estos cinco
+
+`specs/333-gasto-fijo-autorizacion/tasks.md` §«Tanda H · Censos y guardias que esta ficha DEBE
+actualizar» lista **H1–H4** y las cuatro son de otra familia: `censo-tablas.ts`,
+`contadores-cabecera.guardia`, `superficie-de-uso.guardia` y `plantilla-gasto-fijo-borrado.guardia`.
+Su encabezado dice *«ninguna de estas tres se selecciona por el grafo de imports: corren siempre y se
+ponen rojas solas si se olvidan; están aquí para que no se descubran en el gate»* — y es exactamente
+lo que pasó con **estos otros cinco**, que tampoco se seleccionan por imports y que **el spec no
+nombró**. Aparecieron en el `./init.sh` completo, no antes. Queda escrito como hueco del spec.
+
+**La regla que faltaba, dicha para la próxima ficha:** *toda ficha que añada un valor a
+`notificacion_evento` o a `notificacion_entidad_tipo` rompe CUATRO archivos de censo
+(`no-migration-102`, el de la 253, el de la 262 y el de la 271), y toda ficha que cree una tabla con
+`DEFAULT` en `updated_at` rompe un quinto (`schema-drift-saneamiento`).* Esos cinco deberían
+aparecer, por nombre, en la tanda H de cualquier ficha con esas dos formas.
+
+### 1 · `tests/integration/db/no-migration-102.test.ts`
+
+- **Afirmaba:** «la única migración de notificaciones es la de la 146, salvo las declaradas arriba»,
+  con tres excepciones declaradas (253, 262, 271).
+- **Afirma ahora:** lo mismo, con una **cuarta** excepción declarada,
+  `_notificacion_evento_gasto_fijo_cobro`, y un párrafo en el docblock que dice de qué ficha es y por
+  qué. Se deja escrito además que la tabla que sí crea la 333 (`gasto_fijo_cobro`) vive en **otra**
+  migración que no lleva la palabra «notificacion» y no es infra de campana, de modo que las dos
+  aserciones sobre `schema.prisma` (los DOS modelos de la 146, las CINCO tablas/enums con nombre de
+  notificación) siguen siendo las mismas y siguen verdes. La guardia **no se relajó**: la lista sigue
+  cerrada y sigue exigiendo que cada excepción declarada EXISTA.
+- **Mutación** (quitar `"_notificacion_evento_gasto_fijo_cobro"` de la lista) → **ROJO**:
+
+```
+ FAIL  tests/integration/db/no-migration-102.test.ts > Feature 102 · SIN migracion nueva (R3) > la unica migracion de notificaciones es la de la 146, salvo las declaradas arriba
+AssertionError: hay una migracion con concepto de notificacion que nadie declaro en `MIGRACIONES_NOTIFICACIONES_POSTERIORES`: o es de la 102 (y entonces R3/R17 se rompio) o es de otra feature y hay que nombrarla ahi con su motivo: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "20260829130000_notificacion_evento_gasto_fijo_cobro",
++ ]
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+```
+
+### 2 · `tests/integration/db/notificacion-evento-bloqueo-cierre-migration.test.ts` (ficha 271)
+
+- **Afirmaba:** «la base tiene los **OCHO** eventos, con los dos nuevos AL FINAL y en orden de
+  adición».
+- **Afirma ahora:** «la base tiene los **NUEVE** eventos, con los dos de la 271 y el de la 333 AL
+  FINAL y en orden de adición». **El nombre del caso se actualizó**: decía OCHO y ya son nueve, y un
+  nombre desactualizado es la forma más barata de que el próximo lector desconfíe del archivo entero.
+  Se añadió una nota que delimita qué crece y qué no: **solo este caso** mira la base aplicada; el UP
+  de la 271, su DOWN con los SEIS previos y las afirmaciones sobre los `down.sql` de la 146/253/262
+  son **fotos históricas** y siguen intactas.
+- **No se tocó** el caso «⭑ CONTROL: SIN filas del evento nuevo, ese MISMO down corre entero sin
+  fallar», y se comprobó por qué no hacía falta: todo lo que la 333 escribe en `notificacion` corre
+  dentro de `enTransaccionRevertida` + `serializarEscriturasReales` (un `pg_advisory_xact_lock`), el
+  mismo lock que toma ese control, así que ninguna fila con `gasto_fijo_cobro_pendiente` queda
+  commiteada ni visible para él. Verde medido, no supuesto.
+- **Mutación** (quitar `"gasto_fijo_cobro_pendiente"` de la lista esperada) → **ROJO**:
+
+```
+ FAIL  tests/integration/db/notificacion-evento-bloqueo-cierre-migration.test.ts > 271 / §3.2 — la base aplicada, y el DOWN ejercitado de verdad > la base tiene los NUEVE eventos, con los dos de la 271 y el de la 333 AL FINAL y en orden de adicion
+AssertionError: expected [ 'orden_rechazada', …(8) ] to deeply equal [ 'orden_rechazada', …(7) ]
+
+- Expected
++ Received
+
+    "cierre_dia_por_aprobar",
+    "postulacion_recurso_pendiente",
+    "dia_reparto_corregido",
+    "cierre_dia_vencido",
+    "mensajero_bloqueado_por_cierres",
++   "gasto_fijo_cobro_pendiente",
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 passed (15)
+```
+
+### 3 · `tests/integration/db/notificacion-evento-dia-reparto-corregido-migration.test.ts` (ficha 262)
+
+- **Afirmaba, en cuatro casos:** `NotificacionEvento` de `schema.prisma` como inventario CERRADO (8
+  valores), `NotificacionEntidadTipo` igual (6), «la base tiene los **SEIS** eventos, con el nuevo AL
+  FINAL» (que ya listaba 8: el nombre mentía desde la 271) y «y los **SEIS** tipos de entidad».
+- **Afirma ahora:** los mismos cuatro inventarios cerrados con un valor más cada uno
+  (`gasto_fijo_cobro_pendiente` / `gasto_fijo_cobro_dia`), al final y en orden de adición, cada uno
+  con su motivo al lado. **Los dos nombres se corrigieron** a «los **NUEVE** eventos, con el de esta
+  ficha y los posteriores AL FINAL» y «y los **SIETE** tipos de entidad». Se añadió una cabecera que
+  dice qué cuatro casos crecen (los que miran el presente), cuáles son fotos históricas y **por qué
+  siguen siendo literales**.
+- **Mutación** (quitar los dos valores de las cuatro listas) → **ROJO en los cuatro**:
+
+```
+ FAIL  … (R52) > `NotificacionEvento` del schema gana el valor y sigue siendo un inventario CERRADO
+AssertionError: expected [ 'orden_rechazada', …(8) ] to deeply equal [ 'orden_rechazada', …(7) ]
++   "gasto_fijo_cobro_pendiente",
+ FAIL  … (R52) > `NotificacionEntidadTipo` del schema, igual
+AssertionError: expected [ 'orden', 'usuario', …(5) ] to deeply equal [ 'orden', 'usuario', …(4) ]
++   "gasto_fijo_cobro_dia",
+ FAIL  … la base aplicada, y el DOWN ejercitado de verdad > la base tiene los NUEVE eventos, con el de esta ficha y los posteriores AL FINAL
+AssertionError: expected [ 'orden_rechazada', …(8) ] to deeply equal [ 'orden_rechazada', …(7) ]
++   "gasto_fijo_cobro_pendiente",
+ FAIL  … la base aplicada, y el DOWN ejercitado de verdad > y los SIETE tipos de entidad
+AssertionError: expected [ 'orden', 'usuario', …(5) ] to deeply equal [ 'orden', 'usuario', …(4) ]
++   "gasto_fijo_cobro_dia",
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 18 passed (22)
+```
+
+### 4 · `tests/integration/db/notificacion-evento-postulacion-recurso-migration.test.ts` (ficha 253)
+
+- **Afirmaba:** los cuatro casos equivalentes a los de la 262 (los dos enums de `schema.prisma` y los
+  dos de la base aplicada), con los nombres «la base tiene los **SEIS** eventos» y «y los **SEIS**
+  tipos de entidad».
+- **Afirma ahora:** los mismos cuatro con el valor de la 333 al final y con su motivo; nombres
+  corregidos a «los **NUEVE** eventos» y «los **SIETE** tipos de entidad». Se actualizaron también
+  los dos bloques `ACTUALIZADO EL …` para que digan quién amplió qué y cuándo (262, 271, 333) y para
+  dejar por escrito que estas listas **siguen siendo literales a propósito**.
+- **Mutación** (quitar los dos valores de las cuatro listas) → **ROJO en los cuatro**:
+
+```
+ FAIL  … > `NotificacionEvento` del schema gana el valor, y sigue siendo un inventario CERRADO
+AssertionError: expected [ 'orden_rechazada', …(8) ] to deeply equal [ 'orden_rechazada', …(7) ]
++   "gasto_fijo_cobro_pendiente",
+ FAIL  … > `NotificacionEntidadTipo` del schema, igual
+AssertionError: expected [ 'orden', 'usuario', …(5) ] to deeply equal [ 'orden', 'usuario', …(4) ]
++   "gasto_fijo_cobro_dia",
+ FAIL  … la base aplicada, y el down ejercitado de verdad > la base tiene los NUEVE eventos, con los nuevos al final y en orden de adicion
+AssertionError: expected [ 'orden_rechazada', …(8) ] to deeply equal [ 'orden_rechazada', …(7) ]
++   "gasto_fijo_cobro_pendiente",
+ FAIL  … la base aplicada, y el down ejercitado de verdad > y los SIETE tipos de entidad
+AssertionError: expected [ 'orden', 'usuario', …(5) ] to deeply equal [ 'orden', 'usuario', …(4) ]
++   "gasto_fijo_cobro_dia",
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 15 passed (19)
+```
+
+### 5 · `tests/integration/db/schema-drift-saneamiento.test.ts`
+
+- **Afirmaba:** «el censo encuentra las **seis** tablas cuyo `CREATE TABLE` le puso default a
+  `updated_at`» — `api_key`, `gasto_fijo_plantilla`, `jobs`, `premio_ranking`, `ruta_optimizada`,
+  `webhook_suscripcion`.
+- **Afirma ahora:** «el censo encuentra las **SIETE**…», con `gasto_fijo_cobro` en su sitio del orden
+  alfabético y el motivo al lado: su `CREATE TABLE`
+  (`20260829120000_gasto_fijo_cobro/migration.sql:96`) escribe
+  `"updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP`, así que **cae sola en el censo**;
+  el modelo `GastoFijoCobro` lo declara con `@default(now())` y por eso el caso siguiente («cada una
+  de esas tablas declara `@default(now())`») sigue verde y `migrate dev` no propondrá un
+  `DROP DEFAULT` sobre ella.
+- **Aquí está la única mitad derivada, y es correcta:** la lista de la **izquierda** la deriva
+  `tablasConDefaultEnUpdatedAt()` recorriendo `db/migrations/**`; la de la **derecha** la escribe una
+  persona. Son fuentes distintas, así que la comparación mide algo. Se añadió una nota que lo dice y
+  advierte de que derivar las dos de la misma fuente dejaría el caso verde por construcción.
+- **Mutación** (quitar `"gasto_fijo_cobro"` de la lista literal) → **ROJO**:
+
+```
+ FAIL  tests/integration/db/schema-drift-saneamiento.test.ts > updated_at · el modelo declara el DEFAULT que el SQL creo > el censo encuentra las SIETE tablas cuyo CREATE TABLE le puso default a updated_at
+AssertionError: expected [ 'api_key', 'gasto_fijo_cobro', …(5) ] to deeply equal [ 'api_key', …(5) ]
+
+- Expected
++ Received
+
+    "api_key",
++   "gasto_fijo_cobro",
+    "gasto_fijo_plantilla",
+    "jobs",
+    "premio_ranking",
+    "ruta_optimizada",
+    "webhook_suscripcion",
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 passed (16)
+```
+
+### Verificación de los cinco, junta
+
+Antes de tocar nada, con la 333 ya commiteada, los cinco estaban rojos: **11 casos fallando de 79**.
+Después:
+
+```
+$ pnpm exec vitest run tests/integration/db/no-migration-102.test.ts \
+    tests/integration/db/notificacion-evento-bloqueo-cierre-migration.test.ts \
+    tests/integration/db/notificacion-evento-dia-reparto-corregido-migration.test.ts \
+    tests/integration/db/notificacion-evento-postulacion-recurso-migration.test.ts \
+    tests/integration/db/schema-drift-saneamiento.test.ts
+
+ Test Files  5 passed (5)
+      Tests  79 passed (79)
+   Duration  874ms
+```
+
+**79 pasados, 0 saltados, 0 fallidos.** Los casos que hablan con Postgres **corrieron de verdad**, no
+se saltaron: con `--reporter=verbose` aparecen con tiempos de consulta reales (172–175 ms los tres
+«la base tiene los NUEVE eventos», 21–32 ms los «se puede ESCRIBIR de verdad») y no hay ni un `skip`
+en la salida. Y las cinco mutaciones de arriba lo confirman por el otro lado: cada censo enrojece
+cuando se le quita el valor nuevo, o sea que **ninguno estaba verde por vacío**.
+
+```
+$ pnpm run typecheck
+> tsc --noEmit
+(sin salida)                       exit 0
+
+$ pnpm exec eslint <los cinco archivos>
+(sin salida)                       exit 0
+```
+
+**Veredicto:** los cinco censos siguen siendo inventarios cerrados, ahora con el valor de la 333
+declarado a mano y con su motivo; ninguno se relajó, ninguno se dejó rojo y ningún `down.sql` se
+tocó.
