@@ -1010,3 +1010,479 @@ saltado— y las cinco mutaciones (las tres de dinero más las de R34 y R27) apl
 revertidas; con un rojo esperado en `superficie-de-uso.guardia` que la tanda G cierra y otro
 PREEXISTENTE y ajeno (`obtenerTarifa`) que ya venía en la rama, y con R57 declarado SIN cubrir
 porque su guardia es H4.**
+
+---
+---
+
+# Ficha 333 — Tandas **G** (pantalla) y **H** (censos y guardias)
+
+> Encargo acotado: **G y H**. La tanda **I (cierre) NO se ha hecho**: es del leader. No se corrió
+> `./init.sh`, no se tocó `feature_list.json`, `progress/current.md`, `specs/`, `lib/`, `db/` ni
+> ninguna migración, y no se ejecutó ni un comando `git` que escriba.
+>
+> Fecha: 2026-08-29. Rama: `feature/333-gasto-fijo-autorizacion` (ya existía).
+
+---
+
+## Lo que se hizo, tarea por tarea
+
+### Tanda G · Pantalla
+
+- **G1** — `app/(app)/wallet/_components/CobrosGastoFijoPendientesPanel.tsx` (nuevo). `Card` +
+  `CardHeader` + `CardTitle` + `CardDescription` + `CardAction` con `Badge variant="warning"` +
+  `DataTable`. **Sin `descarga`, sin `Pagination`, sin contador derivado del largo del array**: el
+  número de la insignia sale del `total` del servidor. Acciones por fila **sólo si `puedeDecidir`**.
+  El monto se pinta con `money(...)` sobre el STRING; el archivo no contiene `parseFloat` ni
+  `Number(`. Los textos viven en un módulo puro nuevo,
+  `app/(app)/wallet/_components/cobro-gasto-fijo-labels.ts`.
+- **G2** — `WalletModule.tsx`: monta la sección **entre la tarjeta de la caja y la de la ganancia**
+  (design §7). Con `total === 0` **no la renderiza**; y la propia sección se retira sola cuando su
+  relectura devuelve la cola vacía (decidir el último cobro sin recargar la ruta). Tras
+  aprobar/rechazar, `onCambio` recarga libro + resumen + composición + desglose con los filtros
+  vigentes, y la sección relee lo suyo con su `mutate` — el mismo ciclo del panel de plantillas.
+- **G3** — `app/(app)/wallet/page.tsx`: `listarCobrosPendientesAction({})` entra en el `Promise.all`
+  que ya existía; `{ items, total }` y `puedeDecidirCobros = actor.rol === RolValue.maestro` bajan
+  por props. **El guard de la página no se tocó**: sigue siendo `esAccesoTotal` (el admin VE la
+  cola). Un `forbidden` de esa lectura deja la página en `notFound`, como las otras cuatro.
+- **G4** — `GastoFijoPlantillaDialog.tsx` gana el `Switch` «Requiere aprobación» con su ayuda y la
+  línea que nombra la posición elegida («Cobra sola» / «Requiere aprobación»), y **envía el campo
+  SIEMPRE**, al crear y al editar. `GastosFijosPlantillasPanel.tsx` gana la columna «Cobro» con su
+  `Badge`. El texto sale del módulo puro `gasto-fijo-estado-label.ts`, que ya tenía ese patrón.
+  **La descripción de la tarjeta se corrigió**: decía que el sistema cobra estos gastos por su
+  cuenta según su periodicidad —cierto hasta esta ficha— y ahora nombra las dos posibilidades.
+- **G5** — `tests/unit/components/wallet-cobros-pendientes-panel.test.tsx` (nuevo, 22 casos):
+  R37, R38, R39, R40, R41, R42 (+ el matiz de R19 y los cuatro fallos con mensaje propio).
+- **G6** — `tests/unit/components/wallet-page-cobros-pendientes.test.tsx` (nuevo, 10 casos): R44,
+  más R40 y R41 en la frontera servidor→cliente.
+- **G7** — `tests/unit/components/wallet-gastos-fijos-panel.test.tsx` (ampliado, 27 → 38 casos):
+  R4, R48 en la superficie y **R55/R56** (la 332 está mergeada, así que R55 SÍ se cubre; ver T0.2b
+  de la tanda A). `tests/unit/components/wallet-gasto-fijo-plantilla-dialog.test.tsx` (ampliado,
+  14 → 19 casos): R1/R2/R4 del interruptor, con el caso que discrimina el default silencioso.
+
+### Tanda H · Censos y guardias
+
+- **H1** — `tests/unit/descarga/censo-tablas.ts`: la sección nueva queda registrada como `fuera`
+  con su nota obligatoria (cola de decisión efímera; lo aprobado aterriza en el libro de la caja,
+  que sí descarga). Los totales de `cobertura-tablas.guardia.test.ts` se actualizaron con los
+  números **MEDIDOS por la propia guardia** (dijo 28 donde el registro decía 27), no con los del
+  spec 170: **28 archivos / 28 instancias de `<DataTable>`, 8 exclusiones con `<DataTable>`,
+  9 `fuera` en total y 29 tablas censadas**.
+- **H2** — `contadores-cabecera.guardia`: **no hubo que registrar nada**, como `tasks.md` predecía.
+  Y la guardia demostró que sirve: se puso ROJA por el patrón `({X.length})` escrito **dentro de un
+  comentario** del panel nuevo (escanea el fuente crudo, no distingue prosa de código). Se reescribió
+  la frase; el registro sigue con sus DOS entradas de siempre.
+- **H3** — `superficie-de-uso.guardia`: **las cuatro actions nuevas tienen consumidor de
+  producción** y han salido de la lista. Ver la comprobación pegada abajo.
+- **H4** — `tests/unit/guards/plantilla-gasto-fijo-borrado.guardia.test.ts` (ampliado, 27 → 37
+  casos): **R57**, condicional a que exista una operación de borrado en el árbol, buscada **por
+  forma** (`async (eliminar|borrar|remover)…Plantilla…(`) y no por un nombre fijo.
+
+---
+
+## ⚠️ H4 afirma `cancelarPorPlantilla`, no `cancelarPendientesDePlantilla`
+
+`design.md §9` escribió que la fuente de `eliminarPlantilla` debía contener
+`cancelarPendientesDePlantilla`. Lo implementado por la tanda F es una **cadena de dos eslabones**:
+
+```
+GastoFijoPlantillaService.eliminarPlantilla
+      -> this.cobros.cancelarPorPlantilla(tx, id, actor, ahora)   [IGastoFijoCobroService]
+            -> repo.cancelarPendientesDePlantilla(tx, …)          [IGastoFijoCobroRepository]
+```
+
+Afirmar el nombre del REPOSITORIO en la fuente del servicio de plantillas vigilaría un sitio donde
+ese nombre no aparece nunca. La guardia afirma **los dos eslabones, cada uno donde vive**:
+
+1. el cuerpo de la operación de borrado contiene `cancelarPorPlantilla(` **dentro** de su
+   transacción (y el `repo.eliminar(` también: R45 es «las dos o ninguna», así que cancelar fuera
+   de la transacción también se caza), y
+2. el cuerpo de `GastoFijoCobroService.cancelarPorPlantilla` contiene
+   `cancelarPendientesDePlantilla(`, y el repositorio declara ese método.
+
+Sin (2), el puerto podría vaciarse y (1) seguiría verde afirmando que se llama a algo que ya no
+hace nada. Todo sobre el **uso efectivo**: fuente sin comentarios NI imports.
+
+---
+
+## Mapa `R<n>` → test de ESTA tanda
+
+| R | Qué exige | Test que lo cubre |
+| --- | --- | --- |
+| R4 | el interruptor en la tabla y en el diálogo | `wallet-gastos-fijos-panel.test.tsx` («la tabla tiene columna «Cobro»…», «la descripción de la tarjeta ya no promete…») + `wallet-gasto-fijo-plantilla-dialog.test.tsx` (5 casos del interruptor) |
+| R1/R2 (superficie) | dos valores; nueva nace en «requiere aprobación» | `wallet-gasto-fijo-plantilla-dialog.test.tsx` («R2: una plantilla NUEVA nace…», «apagarlo crea…») |
+| R37 | sección que llama la atención, con las primitivas del módulo | `wallet-cobros-pendientes-panel.test.tsx` («es una región con título…», «lo que llama la atención es un `Badge` del tema…») |
+| R38 | sin pendientes, la sección no se renderiza | id. («con el total del servidor en cero no se renderiza NADA», «tampoco queda una tarjeta vacía cuando la cola se vacía mirándola») |
+| R39 | concepto, período, monto, fecha; del más antiguo al más reciente | id. («concepto, período, monto y fecha…», «⭑ los ordena del MÁS ANTIGUO…») |
+| R40 | acciones sólo para el maestro | id. («el maestro ve Aprobar y Rechazar…», «⭑ el admin ve la tabla ENTERA y ningún botón…») + `wallet-page-cobros-pendientes.test.tsx` («⭑ el admin VE la cola y NO puede decidirla») |
+| R41 | el número es el del servidor | id. («⭑ sale del `total` del SERVIDOR…») + `wallet-page-cobros-pendientes.test.tsx` («el `total` llega tal cual al módulo») |
+| R42 | aprobar/rechazar refresca sección + cifras y avisa | id. (bloque «decidir refresca y avisa», 8 casos) |
+| R43 (pantalla) | el monto se pinta como cadena | `gasto-fijo-cobro-money-safe.guardia.test.ts` (el panel entra en el censo) + `wallet-cobros-pendientes-panel.test.tsx` («⭑ el monto se pinta con `money`…») + `wallet-page-cobros-pendientes.test.tsx` («⭑ el monto cruza la frontera como CADENA») |
+| R44 | pre-obtenido en el servidor y pasado por props | `wallet-page-cobros-pendientes.test.tsx` (bloque entero, incluidos los tres casos de «no se lee sin pasar por el guardia») |
+| R48 (superficie) | desactivar no cancela lo ya generado | `wallet-gastos-fijos-panel.test.tsx` («⭑ desactivar sólo apaga la plantilla…») |
+| R55 | la confirmación dice cuántos se cancelan, leído al abrir | id. (6 casos del bloque «la confirmación dice cuántos cobros cancela») |
+| R56 | el aviso posterior lleva el número REAL | id. («⭑ tras borrar, el aviso lleva el número REALMENTE cancelado») |
+| R57 | si existe borrado, cancela en su transacción | `plantilla-gasto-fijo-borrado.guardia.test.ts`, bloque «(g)» + su autocomprobación (6 casos) |
+
+**R55 SÍ aplica**: la 332 está mergeada (`GastoFijoPlantillaService.eliminarPlantilla` existe;
+comprobado en el archivo real, ver T0.2b arriba). Nada de esta tanda se declara «no aplicable».
+
+---
+
+## Verificación — salidas REALES
+
+### `pnpm typecheck`
+
+```
+> ordenex@0.1.0 typecheck R:\job\singularis\projects\ordenex
+> tsc --noEmit
+```
+
+(sin una sola línea de error; en la primera pasada sí las hubo — `"conflict"` faltaba en el tipo de
+fallo de la decisión y `WalletDescarga.test.tsx` no pasaba las props nuevas — y se corrigieron.)
+
+### `pnpm lint`
+
+```
+✖ 127 problems (0 errors, 127 warnings)
+```
+
+**0 errores.** Los 127 avisos son los preexistentes del árbol (`_input`, `_err`… sin usar en tests
+ajenos); ninguno cae en un archivo de esta tanda.
+
+### `pnpm exec vitest related --run` sobre los 7 archivos de producción tocados
+
+```
+ Test Files  10 passed (10)
+      Tests  140 passed (140)
+   Duration  18.11s
+```
+
+### Corrida explícita POR NOMBRE de los 10 archivos de test creados o modificados
+
+```
+ Test Files  10 passed (10)
+      Tests  170 passed (170)
+   Duration  12.28s
+```
+
+(`wallet-cobros-pendientes-panel`, `wallet-page-cobros-pendientes`, `wallet-gastos-fijos-panel`,
+`wallet-gasto-fijo-plantilla-dialog`, `integration/wallet-page`, `components/descarga/WalletDescarga`,
+`descarga/cobertura-tablas.guardia`, `descarga/contadores-cabecera.guardia`,
+`guards/plantilla-gasto-fijo-borrado.guardia`, `guards/gasto-fijo-cobro-money-safe.guardia`.)
+
+### Las guardias, que NO las selecciona el grafo — `pnpm exec vitest run guard`
+
+```
+ Test Files  1 failed | 164 passed (165)
+      Tests  1 failed | 2514 passed (2515)
+```
+
+El único rojo es `superficie-de-uso.guardia`, y es el PREEXISTENTE y ajeno (`obtenerTarifa`): ver la
+comprobación de abajo.
+
+### El censo de descargas — `pnpm exec vitest run tests/unit/descarga`
+
+```
+ Test Files  37 passed (37)
+      Tests  244 passed (244)
+```
+
+### Toda la capa de pantalla — `pnpm exec vitest run tests/unit/components tests/components`
+
+```
+ Test Files  343 passed (343)
+      Tests  4723 passed | 26 skipped (4749)
+   Duration  309.95s
+```
+
+---
+
+## ⭑ La comprobación que cierra la tanda: `superficie-de-uso.guardia`
+
+Las cuatro actions nuevas estaban **sin superficie** al terminar la tanda F, y ese archivo **ya
+estaba en el baseline** por una deuda ajena, así que la comparación por archivo del gate habría
+salido verde mintiendo si esta tanda quedaba a medias. Estado AHORA:
+
+```
+$ pnpm exec vitest run tests/unit/guards/superficie-de-uso.guardia.test.ts
+
+AssertionError: estas Server Actions no las importa NINGÚN módulo alcanzable desde una raíz de
+ruta: …
+- Expected
++ Received
+- []
++ [
++   "lib/actions/tarifas.ts:67 obtenerTarifa",
++ ]
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 passed (18)
+```
+
+**La lista ha vuelto a tener SOLO `obtenerTarifa`.** Las cuatro de la ficha 333
+—`listarCobrosPendientesAction`, `aprobarCobroGastoFijoAction`, `rechazarCobroGastoFijoAction` y
+`contarCobrosPendientesDePlantillaAction`— desaparecieron de ella porque ahora las importa código
+alcanzable desde una raíz de ruta:
+
+| Action | Quién le da superficie |
+| --- | --- |
+| `listarCobrosPendientesAction` | `app/(app)/wallet/page.tsx` (pre-fetch) y el panel (relectura) |
+| `aprobarCobroGastoFijoAction` | `CobrosGastoFijoPendientesPanel.tsx` (botón «Aprobar») |
+| `rechazarCobroGastoFijoAction` | `CobrosGastoFijoPendientesPanel.tsx` (botón «Rechazar») |
+| `contarCobrosPendientesDePlantillaAction` | `GastosFijosPlantillasPanel.tsx` (confirmación de borrado) |
+
+`lib/actions/tarifas.ts:67 obtenerTarifa` **es la deuda preexistente y ajena**: su archivo lo tocó
+por última vez la feature 273, no lleva anotación `@sin-superficie` y la tanda F ya lo midió
+apartando su propio archivo del árbol. **No se le puso anotación**: sería una excepción de una ficha
+que no es ésta. El gate la seguirá encontrando y es lo correcto.
+
+---
+
+## Las mutaciones — aplicadas, ROJAS y revertidas
+
+Cinco, no tres. Todas se aplicaron sobre el árbol real, se corrió el test, se pegó el rojo y se
+restauró el archivo (verificado después: `git diff -- lib/` **vacío** y el panel byte a byte igual
+que antes).
+
+### (a) Pintar el monto con `Number(...)` → **muere la guardia money-safe**
+
+`render: (c) => money(c.monto)` → `render: (c) => money(String(Number(c.monto)))`
+
+```
+     × ⭑ ni `Number(`, ni `parseFloat(`, ni `parseInt(`, ni un `+` unario sobre el monto
+AssertionError: conversion de dinero a numero en el camino del cobro: expected [ Array(1) ] to
+deeply equal []
++ [
++   "app/(app)/wallet/_components/CobrosGastoFijoPendientesPanel.tsx: Number(",
++ ]
+ Tests  1 failed | 11 passed (12)
+```
+
+**Y el dato incómodo, dicho en voz alta: el test de render NO la mata** (22/22 verdes con la
+mutación puesta). `money(String(Number("300000.00")))` pinta exactamente «₡300.000», así que la
+pérdida del céntimo es invisible en pantalla — que es justo por lo que R43 se prueba con una guardia
+estática y no sólo con un render. Por eso el panel **se añadió al censo de
+`gasto-fijo-cobro-money-safe.guardia.test.ts`**, que hasta esta tanda decía por escrito que la
+pantalla no estaba porque todavía no existía.
+
+### (b) Mostrar los botones de decidir también al `admin` → **muere R40**
+
+`const columnas = puedeDecidir ? […]` → `const columnas = true ? […]`
+
+```
+     × concepto, período, monto y fecha de generación, en ese orden y en palabras
+     × ⭑ el admin ve la tabla ENTERA y ningún botón de decisión
+AssertionError: expected [ Array(5) ] to deeply equal [ Array(4) ]
+expected document not to contain element, found <th …
+ Tests  2 failed | 20 passed (22)
+```
+
+### (c) Usar `items.length` como total → **muere R41**
+
+`totalPorAprobarTexto(cola.total)` → `totalPorAprobarTexto(cola.items.length)`
+
+```
+     × ⭑ sale del `total` del SERVIDOR, no del largo de lo pintado
+TestingLibraryElementError: Unable to find an element with the text: 7 por aprobar.
+ Tests  1 failed | 21 passed (22)
+```
+
+Nota: `contadores-cabecera.guardia` **no** habría cazado esta forma (persigue el patrón
+`({X.length})` en el JSX, y aquí el largo entra por un parámetro). El que la mata es el caso de
+comportamiento, con `items` de 2 y `total` de 7.
+
+### (d) Borrar la cancelación del borrado de plantilla → **muere H4 (R57)**
+
+En `lib/services/GastoFijoPlantillaService.ts`, `await this.cobros.cancelarPorPlantilla(…)` → `0`.
+
+```
+     × ⭑ cada operación de borrado cancela los pendientes DENTRO de su transacción
+     × el borrado REAL del árbol no tiene ninguna pieza que falte (control positivo)
+AssertionError: una plantilla no puede desaparecer dejando cobros en `pendiente` (R45/R46/R57)
++ [
++   "lib/services/GastoFijoPlantillaService.ts#eliminarPlantilla: falta la llamada a
++    `cancelarPorPlantilla`",
++ ]
+```
+
+Restaurado y verificado: `git diff --stat -- lib/` **no devuelve nada**.
+
+### (e) Abrir la confirmación sin leer cuántos pendientes cancela → **muere R55**
+
+`onClick={() => pedirConfirmacionDeBorrado(p)}` → `onClick={() => setAEliminar(p)}` (la conducta
+anterior a esta ficha).
+
+```
+     × ⭑ el número se pide AL ABRIR la confirmación, no viene con el listado
+     × ⭑ enseña «se cancelarán N cobros pendientes» ANTES de aceptar
+     × con un solo pendiente lo dice en singular
+     × sin cobros pendientes lo dice también: el cero es una respuesta
+     × ⭑ si el número no se puede leer, se dice — no se finge un cero
+     × ⭑ tras borrar, el aviso lleva el número REALMENTE cancelado (R56)
+ Tests  6 failed | 32 passed (38)
+```
+
+Además, las guardias de la ficha se auto-comprueban con mutaciones **en memoria** (sin tocar el
+árbol): H4 lleva casos que le dan un cuerpo que borra sin cancelar, otro que cancela FUERA de la
+transacción y otro sin transacción, y un control positivo sobre el código real para que los tres
+rojos no puedan venir de un detector que marque todo.
+
+---
+
+## Archivos creados / modificados en esta tanda
+
+**Producción (7):**
+
+```
+app/(app)/wallet/page.tsx                                            (modificado)
+app/(app)/wallet/_components/WalletModule.tsx                        (modificado)
+app/(app)/wallet/_components/CobrosGastoFijoPendientesPanel.tsx      (NUEVO)
+app/(app)/wallet/_components/cobro-gasto-fijo-labels.ts              (NUEVO)
+app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx          (modificado)
+app/(app)/wallet/_components/GastoFijoPlantillaDialog.tsx            (modificado)
+app/(app)/wallet/_components/gasto-fijo-estado-label.ts              (modificado)
+```
+
+**Tests (10):**
+
+```
+tests/unit/components/wallet-cobros-pendientes-panel.test.tsx        (NUEVO, 22 casos)
+tests/unit/components/wallet-page-cobros-pendientes.test.tsx         (NUEVO, 10 casos)
+tests/unit/components/wallet-gastos-fijos-panel.test.tsx             (27 -> 38 casos)
+tests/unit/components/wallet-gasto-fijo-plantilla-dialog.test.tsx    (14 -> 19 casos)
+tests/integration/wallet-page.test.tsx                               (mock + fixture de la cola)
+tests/components/descarga/WalletDescarga.test.tsx                    (props nuevas del módulo)
+tests/unit/descarga/censo-tablas.ts                                  (H1: la tabla nueva, `fuera`)
+tests/unit/descarga/cobertura-tablas.guardia.test.ts                 (H1: totales medidos)
+tests/unit/guards/gasto-fijo-cobro-money-safe.guardia.test.ts        (el panel entra en el censo)
+tests/unit/guards/plantilla-gasto-fijo-borrado.guardia.test.ts       (H4: R57, 27 -> 37 casos)
+```
+
+---
+
+## Decisiones y deuda declaradas (no son olvidos)
+
+1. ~~**La columna «Cobro» NO entró en el archivo descargable de las plantillas.**~~ **CERRADA el
+   2026-08-29 por decisión del leader** — ver «Cierre de la divergencia nº1» al final de este
+   documento. Lo que decía, y se conserva para que se entienda la corrección: *«`gastos-fijos-
+   descarga-columnas.ts` sigue con sus CINCO columnas y su `toEqual` literal intacto. El módulo
+   dice de sí mismo que «el archivo refleja lo que la tabla enseña», así que esto es una
+   divergencia y se declara: `tasks.md > G4` pide el `Badge` en la tabla y el `Switch` en el
+   diálogo, y nada del archivo; ampliarlo obliga a reescribir un contrato literal de las fichas
+   170/85 que no está en el alcance de ésta. Es una línea más su literal el día que se decida.»*
+   El leader lo resolvió al revés y con razón: el criterio de ese módulo está escrito y la ficha 85
+   ya lo cumplió con «Periodicidad» y «Próximo cobro»; dejar «Cobro» fuera lo rompía **en
+   silencio**, que es como se acumula la deuda que después nadie sabe explicar.
+2. **El orden de la cola se aplica TAMBIÉN en la pantalla** (`sort` estable por `generadoEl`),
+   aunque el servidor ya la entregue ordenada. Sin eso, el caso de R39 estaría afirmando contra su
+   propio fixture; con eso, el test le da la lista al revés y exige que salga ordenada. El desempate
+   fino del servidor (`created_at`, `id`) se conserva porque el `sort` es estable y el DTO —a
+   propósito— no expone `createdAt`.
+3. **La sección relee con SWR + `mutate`**, igual que el panel de plantillas, y no con estado local.
+   Es lo que `design.md §7` pide literalmente («`mutate()` de la sección + `onCambio()` al módulo»)
+   y lo que hace que la tarjeta desaparezca sola al decidir el último cobro. La primera lectura
+   sigue siendo la del servidor (R44): SWR arranca con `fallbackData`.
+4. **`ya_decidido` se anuncia con `toast.info`, no con `toast.error`**, y hay un caso que lo afirma
+   contando los toasts de variante `error`. No es cosmético: alguien decidió antes, y llamarlo error
+   haría dudar de si el cobro se duplicó.
+5. **No se verificó nada en el navegador.** La comprobación con ojos (`/wallet` con un pendiente
+   sembrado, aprobar, rechazar, mirar la campana) es **I3** y es del leader. Lo que estos tests no
+   pueden ver: cómo queda el `Badge variant="warning"` en modo oscuro sobre la tarjeta real, y si la
+   sección «llama la atención» de verdad entre la caja y la ganancia.
+
+---
+
+## Cierre de la divergencia nº1 — «Cobro» entra en el archivo descargable de plantillas
+
+> Encargo del leader del 2026-08-29, posterior a la entrega de G+H. Alcance EXACTO: el módulo de
+> columnas de la descarga y su test. **No se tocó nada más**: ni `lib/`, ni la sección de cobros
+> pendientes, ni ningún otro test, ni un solo comando `git` que escriba.
+
+**Por qué se cierra así, y no como yo la había declarado.** `gastos-fijos-descarga-columnas.ts`
+tiene escrito en su propia cabecera que el archivo refleja lo que la tabla enseña, y la ficha 85 lo
+cumplió al añadir «Periodicidad» y «Próximo cobro» con ese mismo argumento. La ficha 333 añade a la
+tabla la columna que dice **si esa plantilla se cobra sola o espera una decisión** —lo que separa un
+egreso automático de uno autorizado— y dejarla fuera del archivo rompía el criterio sin que nada
+fallara. Un Excel de plantillas que no lo diga obliga a abrir la pantalla para saber cuáles cobran
+solas, que es justo lo que el archivo existe para evitar.
+
+### Qué cambió
+
+- **`app/(app)/wallet/_components/gastos-fijos-descarga-columnas.ts`**
+  - `COLUMNAS_DESCARGA_GASTOS_FIJOS` pasa de CINCO a SEIS: entra `{ clave: "cobro", encabezado:
+    "Cobro" }`.
+  - `filaDescargaGastoFijo` proyecta
+    `cobro: interruptorPlantillaGastoFijo(plantilla.requiereAprobacion === true)`.
+    **La etiqueta sale del módulo puro compartido** (`gasto-fijo-estado-label.ts`), el mismo del que
+    la tabla saca su `Badge`: escribir aquí un literal propio dejaría el texto declarado en dos
+    sitios y el día que uno cambiara, tabla y Excel dirían cosas distintas de la misma fila sin que
+    nada se pusiera rojo.
+    El `=== true` no es adorno: lo copia de `activa` justo encima, porque bajo
+    `columnas-sensibles.guardia` el DTO es una **sonda** (un `Proxy` que responde truthy a cualquier
+    lectura) y sin la comparación estricta el `false` no se distinguiría del proxy.
+  - **«Cobro» va la ÚLTIMA, no en el quinto puesto donde la tabla la pinta**, y la diferencia queda
+    escrita en el módulo en vez de dejarla adivinar: añadir al final no mueve de sitio a ninguna de
+    las cinco columnas que ya salían, así que una hoja guardada, una fórmula o un filtro hechos
+    sobre un archivo anterior siguen apuntando a la misma columna. Insertarla en medio se los
+    llevaría por delante sin avisar. (Cambiar el orden de la TABLA para que coincidan sería tocar
+    la pantalla, que el encargo excluye.)
+
+- **`tests/unit/descarga/gastos-fijos-descarga-columnas.test.ts`**
+  - El `toEqual` de claves y de encabezados se actualizó **A MANO**, de cinco entradas a seis, en
+    los dos literales. **No** se sustituyó por una derivación de la propia constante: comparar
+    `COLUMNAS.map(...)` consigo misma queda verde por construcción y deja de fijar el contrato —la
+    familia de fallo que este repo ya tiene medida.
+  - **Caso nuevo que discrimina:** proyecta las DOS situaciones y espera literales **distintos**
+    (`"Requiere aprobación"` / `"Cobra sola"`). Con una sola plantilla, una columna que devolviera
+    siempre lo mismo —o que leyera el campo equivocado— pasaría igual.
+  - Dos casos más: la etiqueta compartida queda fijada contra literales (mismo patrón que
+    `periodicidadLegible` en este archivo), y **«Cobro» no se confunde con «Estado»** — una
+    plantilla `Inactiva` sigue diciendo `Requiere aprobación`, porque desactivar detiene la
+    generación futura y no cambia quién autoriza (R48).
+
+### Verificación — salidas REALES
+
+```
+$ pnpm typecheck
+> tsc --noEmit                                   (sin una sola línea de error)
+
+$ pnpm lint
+✖ 127 problems (0 errors, 127 warnings)          (los mismos avisos preexistentes del árbol)
+
+$ pnpm exec vitest run tests/unit/descarga/gastos-fijos-descarga-columnas.test.ts
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+
+$ pnpm exec vitest run tests/unit/descarga        (los censos de descarga, que corren siempre)
+ Test Files  37 passed (37)
+      Tests  247 passed (247)                     (244 -> 247: los tres casos nuevos)
+
+$ pnpm exec vitest related --run app/(app)/wallet/_components/gastos-fijos-descarga-columnas.ts
+ Test Files  8 passed (8)
+      Tests  102 passed (102)
+```
+
+**Ningún censo movió sus totales, y no es un olvido: `cobertura-tablas.guardia` cuenta INSTANCIAS de
+`<DataTable>` y archivos, no columnas de descarga.** Los números que H1 dejó medidos (28 archivos /
+28 instancias / 8 exclusiones / 9 `fuera` / 29 tablas) siguen siendo los mismos, y la corrida
+completa de `tests/unit/descarga` lo confirma en verde sin tocar una línea de la guardia.
+
+### La mutación, ROJA y revertida
+
+Se hizo que la columna devolviera **siempre** el mismo texto para las dos situaciones
+(`interruptorPlantillaGastoFijo(plantilla.requiereAprobacion === true)` →
+`interruptorPlantillaGastoFijo(true)`):
+
+```
+     × ⭑ dice cosas DISTINTAS en las dos situaciones, con literales
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected 'Requiere aprobación' to be 'Cobra sola' // Object.is equality
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+```
+
+Revertida y comprobada: el archivo vuelve a proyectar
+`interruptorPlantillaGastoFijo(plantilla.requiereAprobacion === true)` (línea 99) y la suite vuelve
+a 9/9.
+
+**Con esto, la divergencia nº1 queda CERRADA.** Las otras cuatro decisiones declaradas siguen como
+estaban.

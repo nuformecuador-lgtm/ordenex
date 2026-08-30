@@ -43,9 +43,10 @@ const RAIZ = path.resolve(__dirname, "../../..");
  * Los archivos que la ficha 333 crea o modifica y por los que pasa un monto. Censo EXPLICITO: si
  * uno se mueve o se renombra, el primer bloque cae en vez de salirse del alcance en silencio.
  *
- * La pantalla (`CobrosGastoFijoPendientesPanel.tsx`) NO esta: nace en la tanda G y su barrido
- * viaja con ella. Añadirla aqui ahora dejaria la guardia roja o —peor— la obligaria a tolerar la
- * ausencia, que es como una lista deja de comprobar nada.
+ * La pantalla (`CobrosGastoFijoPendientesPanel.tsx`) ENTRO con la tanda G, que es cuando nacio:
+ * hasta entonces no estaba, porque una lista que tolera la ausencia de lo que censa deja de
+ * comprobar nada. Es el ULTIMO punto del camino del monto —donde el STRING se pinta— y por tanto
+ * el sitio exacto donde alguien escribiria `Number(...)` para «formatear» un importe.
  *
  * `lib/interfaces/services/IGastoFijoCobroService.ts` TAMPOCO esta, y no es un olvido: por ese
  * contrato no pasa ningun monto —sus metodos mueven ids, actores, relojes y tipos de resultado, y
@@ -59,6 +60,10 @@ const MANIPULAN_EL_MONTO: readonly string[] = [
   "lib/repositories/GastoFijoCobroRepository.ts",
   "lib/services/GastoFijoCobroService.ts",
   "lib/services/GeneracionGastosFijosService.ts",
+  // Ficha 333 (G1/H) — LA PANTALLA. El monto llega como STRING y se pinta con `money(...)` tal
+  // cual; una conversion aqui no rompe ningun test de render (`money` daria un importe parecido)
+  // y perderia el centimo en silencio, que es justo la familia de fallo que la 204 midio.
+  "app/(app)/wallet/_components/CobrosGastoFijoPendientesPanel.tsx",
 ];
 
 /**
@@ -116,7 +121,7 @@ function codigo(rel: string): string {
 }
 
 describe("(0) autocomprobacion — el censo existe y el barrido no mide el vacio", () => {
-  it("los seis archivos censados existen y ninguno se leyo en blanco", () => {
+  it("los siete archivos censados existen y ninguno se leyo en blanco", () => {
     for (const rel of ARCHIVOS_CON_DINERO) {
       expect(codigo(rel).length, `${rel} vacio`).toBeGreaterThan(200);
     }

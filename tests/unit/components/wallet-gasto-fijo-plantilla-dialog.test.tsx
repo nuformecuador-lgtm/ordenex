@@ -109,8 +109,13 @@ describe("GastoFijoPlantillaDialog — editar sin tocar el ciclo (R3) · GUARDIA
     await user.click(within(dialog).getByRole("button", { name: "Guardar" }));
 
     expect(actualizarMock).toHaveBeenCalledTimes(1);
-    // Los CINCO campos, exactos. `toEqual` y no `objectContaining`: que no sobre ninguno
-    // tampoco es negociable, y los tres del ciclo van como literales a propósito.
+    // Los SEIS campos, exactos. `toEqual` y no `objectContaining`: que no sobre ninguno
+    // tampoco es negociable, y los del ciclo van como literales a propósito.
+    //
+    // Ficha 333 (G4, R4): el sexto es `requiereAprobacion`, y entra en ESTA guardia por la MISMA
+    // razón que los tres del ciclo — tiene `.default(true)` en el schema, así que una edición
+    // que no lo mandara pondría en «requiere aprobación» una plantilla que cobraba sola, en
+    // silencio. El literal se actualiza A MANO: es el contrato de lo que el formulario envía.
     expect(actualizarMock.mock.calls[0][0]).toEqual({
       id: "3f2b1c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
       concepto: "Alquiler de bodega",
@@ -118,6 +123,7 @@ describe("GastoFijoPlantillaDialog — editar sin tocar el ciclo (R3) · GUARDIA
       periodicidadUnidad: "semanas",
       periodicidadCantidad: 2,
       fechaCobro: "2026-03-31",
+      requiereAprobacion: true,
     });
     // Y explícitamente: NO son los defaults que el schema aplicaba antes de esta ficha.
     const enviado = actualizarMock.mock.calls[0][0] as Record<string, unknown>;
@@ -222,6 +228,8 @@ describe("GastoFijoPlantillaDialog — crear envía los cinco campos (R15/R24)",
       periodicidadUnidad: "semanas",
       periodicidadCantidad: 2,
       fechaCobro: "2026-09-14",
+      // Ficha 333 (R2): una plantilla nueva nace en «requiere aprobación» sin que nadie lo pida.
+      requiereAprobacion: true,
     });
     expect(actualizarMock).not.toHaveBeenCalled();
   }, 15000);
@@ -272,6 +280,7 @@ describe("GastoFijoPlantillaDialog — crear envía los cinco campos (R15/R24)",
       periodicidadUnidad: "dias",
       periodicidadCantidad: 3,
       fechaCobro: "2026-05-04",
+      requiereAprobacion: true, // ficha 333/R2
     });
   }, 15000);
 });
@@ -388,5 +397,105 @@ describe("GastoFijoPlantillaDialog — textos (R22)", () => {
     // Y NO bloquea: corregir un ancla mal puesta tiene que seguir siendo posible.
     await user.click(within(dialog).getByRole("button", { name: "Guardar" }));
     expect(actualizarMock).toHaveBeenCalledTimes(1);
+  }, 15000);
+});
+
+// =================================================================================================
+// FICHA 333 (G4, design §8 · R1/R2/R4) — EL INTERRUPTOR «Cobra sola» / «Requiere aprobación»
+// =================================================================================================
+//
+// Es la MISMA familia de fallo que la guardia principal de este archivo: `requiereAprobacion`
+// tiene `.default(true)` en el schema —heredado por el de actualizar—, así que un formulario que
+// no lo enviara pondría en «requiere aprobación» una plantilla que cobraba sola, en silencio y
+// sin que nadie lo pidiera. Por eso el caso de editar de abajo es el que discrimina.
+
+/** Una plantilla que COBRA SOLA: el valor que el default del schema pisaría. */
+const COBRA_SOLA: GastoFijoPlantillaDTO = {
+  ...QUINCENAL,
+  id: "5c4b3a29-1817-4655-9443-2211fedcba98",
+  concepto: "Alquiler de bodega",
+  requiereAprobacion: false,
+};
+
+describe("GastoFijoPlantillaDialog — el interruptor (ficha 333, R1/R2/R4)", () => {
+  it("el diálogo ofrece el interruptor, con su ayuda y las dos posiciones nombradas", async () => {
+    const dialog = await abrir(null);
+
+    const control = within(dialog).getByRole("switch", { name: "Requiere aprobación" });
+    // La ayuda dice qué cambia en CADA posición: sin ella, «apagado» no significa nada.
+    expect(textoDescriptivoDe(control)).toMatch(/no sale nada de la caja/i);
+    expect(textoDescriptivoDe(control)).toMatch(/lo cobra por su cuenta/i);
+  }, 15000);
+
+  it("R2: una plantilla NUEVA nace en «requiere aprobación»", async () => {
+    const dialog = await abrir(null);
+
+    expect(within(dialog).getByRole("switch", { name: "Requiere aprobación" })).toBeChecked();
+    // DOS nodos con ese texto, y es lo correcto: el rótulo del control (que no cambia) y la
+    // línea que dice la posición elegida (que sí). Lo que no puede estar es la otra posición.
+    expect(within(dialog).getAllByText("Requiere aprobación")).toHaveLength(2);
+    expect(within(dialog).queryByText("Cobra sola")).not.toBeInTheDocument();
+  }, 15000);
+
+  it("apagarlo crea la plantilla en «cobra sola», y la pantalla lo dice con ese nombre", async () => {
+    const user = userEvent.setup();
+    crearMock.mockResolvedValue({ status: "ok", plantilla: COBRA_SOLA });
+    const dialog = await abrir(null);
+
+    await user.type(within(dialog).getByLabelText("Concepto"), "Alquiler");
+    await user.type(within(dialog).getByLabelText("Monto"), "300.00");
+    ponerFecha(dialog, "2026-09-01");
+    await user.click(within(dialog).getByRole("switch", { name: "Requiere aprobación" }));
+
+    // El estado se lee con el NOMBRE de la posición, no como «apagado».
+    expect(within(dialog).getByText("Cobra sola")).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Guardar" }));
+
+    expect(crearMock).toHaveBeenCalledTimes(1);
+    expect(crearMock.mock.calls[0][0]).toEqual({
+      concepto: "Alquiler",
+      monto: "300.00",
+      periodicidadUnidad: "meses",
+      periodicidadCantidad: 1,
+      fechaCobro: "2026-09-01",
+      requiereAprobacion: false,
+    });
+  }, 15000);
+
+  it("editar siembra el valor VIGENTE de la plantilla, no el default", async () => {
+    const dialog = await abrir(COBRA_SOLA);
+
+    expect(
+      within(dialog).getByRole("switch", { name: "Requiere aprobación" }),
+    ).not.toBeChecked();
+    expect(within(dialog).getByText("Cobra sola")).toBeInTheDocument();
+  }, 15000);
+
+  it("⭑ editar solo el monto NO convierte en «requiere aprobación» a la que cobraba sola", async () => {
+    // EL CASO QUE DISCRIMINA. Si el formulario no reenviara el campo, el `.default(true)` del
+    // schema lo pondría a `true` y la plantilla pasaría a esperar aprobación sin que nadie lo
+    // decidiera. Es, palabra por palabra, el fallo que la ficha 85 midió con la periodicidad.
+    const user = userEvent.setup();
+    actualizarMock.mockResolvedValue({ status: "ok", plantilla: COBRA_SOLA });
+    const dialog = await abrir(COBRA_SOLA);
+
+    await user.clear(within(dialog).getByLabelText("Monto"));
+    await user.type(within(dialog).getByLabelText("Monto"), "777.00");
+    await user.click(within(dialog).getByRole("button", { name: "Guardar" }));
+
+    expect(actualizarMock).toHaveBeenCalledTimes(1);
+    const enviado = actualizarMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(enviado.requiereAprobacion).toBe(false);
+    // Y el literal completo, para que tampoco sobre ni falte ningún otro campo.
+    expect(enviado).toEqual({
+      id: "5c4b3a29-1817-4655-9443-2211fedcba98",
+      concepto: "Alquiler de bodega",
+      monto: "777.00",
+      periodicidadUnidad: "semanas",
+      periodicidadCantidad: 2,
+      fechaCobro: "2026-03-31",
+      requiereAprobacion: false,
+    });
   }, 15000);
 });

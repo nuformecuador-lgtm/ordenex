@@ -28,14 +28,24 @@ import {
   listarPlantillasPaginadoAction,
   setActivaPlantillaAction,
 } from "@/lib/actions/gasto-fijo-plantilla";
+import { contarCobrosPendientesDePlantillaAction } from "@/lib/actions/gasto-fijo-cobro";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 
 import { GastoFijoPlantillaDialog } from "./GastoFijoPlantillaDialog";
-import { estadoPlantillaGastoFijo } from "./gasto-fijo-estado-label";
+import {
+  estadoPlantillaGastoFijo,
+  interruptorPlantillaGastoFijo,
+} from "./gasto-fijo-estado-label";
 import {
   COLUMNAS_DESCARGA_GASTOS_FIJOS,
   filaDescargaGastoFijo,
 } from "./gastos-fijos-descarga-columnas";
+import {
+  COBROS_PENDIENTES_CONTANDO,
+  COBROS_PENDIENTES_SIN_CONTAR,
+  cobrosPendientesACancelarTexto,
+  plantillaEliminadaTexto,
+} from "./cobro-gasto-fijo-labels";
 import { money, periodicidadLegible, proximoCobroTexto } from "./wallet-labels";
 
 /** Nombre visible del panel: hoja, base del archivo y nombre del control (R12/R13). */
@@ -137,6 +147,17 @@ export function GastosFijosPlantillasPanel({
   const [aEliminar, setAEliminar] = useState<GastoFijoPlantillaDTO | null>(null);
   // id de la plantilla cuyo borrado está en vuelo (deshabilita solo esa fila, como `alternando`).
   const [eliminando, setEliminando] = useState<string | null>(null);
+  /**
+   * Ficha 333 (G4, R55) — cuántos cobros PENDIENTES va a cancelar el borrado que se está
+   * confirmando. Lleva dentro el id de la plantilla a la que pertenece el número: una respuesta
+   * que llegue tarde, cuando el usuario ya cerró y abrió la confirmación de OTRA fila, se
+   * descarta en vez de pintar el número de la anterior sobre la actual.
+   */
+  const [pendientesACancelar, setPendientesACancelar] = useState<{
+    plantillaId: string;
+    estado: "contando" | "listo" | "error";
+    pendientes: number;
+  } | null>(null);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialData.pageSize);
@@ -170,6 +191,36 @@ export function GastosFijosPlantillasPanel({
   function abrirEditar(plantilla: GastoFijoPlantillaDTO) {
     setEditando(plantilla);
     setDialogOpen(true);
+  }
+
+  /**
+   * Ficha 333 (G4, R55) — abre la confirmación del borrado y, EN ESE MISMO INSTANTE, pregunta al
+   * servidor cuántos cobros pendientes se van a cancelar.
+   *
+   * El número se pide AQUÍ y no se cuelga del listado que la página trajo: un número con minutos
+   * de antigüedad estaría autorizando un borrado irreversible. Si la lectura falla no se finge un
+   * cero (ver `COBROS_PENDIENTES_SIN_CONTAR`): un cero inventado invita a aceptar creyendo que no
+   * hay nada que cancelar.
+   */
+  function pedirConfirmacionDeBorrado(plantilla: GastoFijoPlantillaDTO) {
+    setAEliminar(plantilla);
+    setPendientesACancelar({
+      plantillaId: plantilla.id,
+      estado: "contando",
+      pendientes: 0,
+    });
+    void (async () => {
+      const result = await contarCobrosPendientesDePlantillaAction({
+        plantillaId: plantilla.id,
+      });
+      setPendientesACancelar((previo) => {
+        // La respuesta es de OTRA confirmación (o de una ya cerrada): se descarta.
+        if (previo === null || previo.plantillaId !== plantilla.id) return previo;
+        return result.status === "ok"
+          ? { plantillaId: plantilla.id, estado: "listo", pendientes: result.pendientes }
+          : { plantillaId: plantilla.id, estado: "error", pendientes: 0 };
+      });
+    })();
   }
 
   async function alternarActiva(plantilla: GastoFijoPlantillaDTO) {
@@ -234,7 +285,10 @@ export function GastosFijosPlantillasPanel({
       const result = await eliminarPlantillaAction({ id: plantilla.id });
 
       if (result.status === "ok") {
-        toast.success("Plantilla eliminada.");
+        // Ficha 333 (R56): el número que se anuncia es el REALMENTE cancelado, el que devuelve el
+        // servidor — no el que la confirmación prometió. Si entre una cosa y otra alguien aprobó
+        // o rechazó un cobro, el borrado sigue adelante y el aviso dice lo que de verdad pasó.
+        toast.success(plantillaEliminadaTexto(result.pendientesCancelados));
         if (filasVisibles === 1 && page > 1) setPage(page - 1);
         recargar();
         router.refresh();
@@ -289,6 +343,23 @@ export function GastosFijosPlantillasPanel({
       render: (p) => proximoCobroTexto(p, ahora),
     },
     {
+      id: "cobro",
+      value: "Cobro",
+      // Ficha 333 (G4, R4/R1): EL INTERRUPTOR de la plantilla, en la tabla. Es la diferencia
+      // entre «el sistema lo cobra por su cuenta» y «el dinero espera tu decisión», así que se
+      // lee de un vistazo y no escondido dentro del diálogo de edición. El texto sale del
+      // módulo puro que también lee el diálogo: tabla y formulario no pueden divergir.
+      //
+      // `warning` para «Requiere aprobación» —el mismo token con el que la sección de cobros
+      // por aprobar llama la atención, y por el mismo motivo: hay algo que atender— y `outline`
+      // para «Cobra sola», que no pide nada de nadie.
+      render: (p) => (
+        <Badge variant={p.requiereAprobacion ? "warning" : "outline"}>
+          {interruptorPlantillaGastoFijo(p.requiereAprobacion)}
+        </Badge>
+      ),
+    },
+    {
       id: "estado",
       value: "Estado",
       // Feature 170 (T D.3): el TEXTO del estado sale de `gasto-fijo-estado-label` (módulo
@@ -330,7 +401,7 @@ export function GastosFijosPlantillasPanel({
             variant="destructive"
             size="sm"
             disabled={eliminando === p.id}
-            onClick={() => setAEliminar(p)}
+            onClick={() => pedirConfirmacionDeBorrado(p)}
           >
             Eliminar
           </Button>
@@ -353,10 +424,17 @@ export function GastosFijosPlantillasPanel({
             periodicidad de cada plantilla, que es lo único que se configura acá (R25: un
             gasto variable o un sueldo no puede ser periódico, y por eso se registra en otro
             formulario). */}
+        {/* Ficha 333 (G4, design §8 · R4): la descripción decía, verbatim, «El sistema cobra
+            estos gastos por su cuenta, según la periodicidad que tenga cada una», y desde esta
+            ficha eso YA NO ES CIERTO para todas: las que requieren aprobación no salen de la
+            caja hasta que alguien las apruebe. La frase nombra ahora las dos posibilidades, que
+            es lo que la columna «Cobro» de la tabla dice fila a fila. (Y sigue sin prometer un
+            cobro «cada mes», que dejó de ser verdad con la ficha 84.) */}
         <CardDescription>
           El sistema cobra estos gastos por su cuenta, según la periodicidad que tenga cada
-          una. No los registres a mano: administrá acá las plantillas y desactivá las que ya
-          no correspondan.
+          una — salvo las que requieren aprobación, que esperan tu decisión en la wallet antes
+          de salir de la caja. No los registres a mano: administrá acá las plantillas y
+          desactivá las que ya no correspondan.
         </CardDescription>
         <CardAction>
           <Button type="button" onClick={abrirCrear}>
@@ -452,7 +530,10 @@ export function GastosFijosPlantillasPanel({
       <Modal
         open={aEliminar !== null}
         onOpenChange={(abierto) => {
-          if (!abierto) setAEliminar(null);
+          if (!abierto) {
+            setAEliminar(null);
+            setPendientesACancelar(null);
+          }
         }}
         title="Eliminar plantilla de gasto fijo"
         // R14: el monto se pinta desde el STRING que ya trae el DTO, con `money`, sin
@@ -468,6 +549,22 @@ export function GastosFijosPlantillasPanel({
       >
         {aEliminar ? (
           <div className="flex flex-col gap-3 text-sm">
+            {/* Ficha 333 (G4/G7, R55) — CUÁNTOS COBROS PENDIENTES SE VAN A CANCELAR, leídos al
+                abrir esta confirmación y no traídos con la página. Va ANTES de la lista de
+                consecuencias porque es el dato que puede cambiar la decisión: cancelar un cobro
+                pendiente es tirar un gasto que ya se generó y que nadie llegó a decidir.
+
+                `role="status"`: el número llega después de que el diálogo se abra, y sin esto
+                quien usa lector de pantalla no se enteraría de que apareció. */}
+            <p role="status" className="font-medium">
+              {pendientesACancelar === null ||
+              pendientesACancelar.plantillaId !== aEliminar.id ||
+              pendientesACancelar.estado === "contando"
+                ? COBROS_PENDIENTES_CONTANDO
+                : pendientesACancelar.estado === "error"
+                  ? COBROS_PENDIENTES_SIN_CONTAR
+                  : cobrosPendientesACancelarTexto(pendientesACancelar.pendientes)}
+            </p>
             {/* R15: las tres consecuencias, en este orden y sin rodeos. */}
             <ul className="list-disc space-y-1 pl-5">
               <li>La plantilla desaparece de esta tabla.</li>

@@ -54,6 +54,16 @@ vi.mock("@/lib/actions/gasto-fijo-plantilla", () => ({
   eliminarPlantillaAction: vi.fn(),
   setActivaPlantillaAction: vi.fn(),
 }));
+// Ficha 333 (G3): la página pre-obtiene además la COLA de cobros de gasto fijo por aprobar, y el
+// panel de plantillas cuenta los pendientes al abrir su confirmación de borrado. Las cuatro van
+// declaradas por el mismo motivo que las de arriba: los casos de R1/R2 montan el módulo REAL, y
+// una action que faltara en el mock no dejaría un caso rojo — dejaría el archivo sin ejecutar.
+vi.mock("@/lib/actions/gasto-fijo-cobro", () => ({
+  listarCobrosPendientesAction: vi.fn(),
+  aprobarCobroGastoFijoAction: vi.fn(),
+  rechazarCobroGastoFijoAction: vi.fn(),
+  contarCobrosPendientesDePlantillaAction: vi.fn(),
+}));
 
 class NotFoundError extends Error {
   constructor() {
@@ -93,12 +103,14 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMovimientosAction, verResumenCajaAction } from "@/lib/actions/wallet";
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
 import { listarPlantillasPaginadoAction } from "@/lib/actions/gasto-fijo-plantilla";
+import { listarCobrosPendientesAction } from "@/lib/actions/gasto-fijo-cobro";
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarMovimientosAction);
 const resumenMock = vi.mocked(verResumenCajaAction);
 const desgloseMock = vi.mocked(verDesgloseEgresosAction);
 const plantillasMock = vi.mocked(listarPlantillasPaginadoAction);
+const cobrosMock = vi.mocked(listarCobrosPendientesAction);
 
 const MOVIMIENTOS_OK = {
   status: "ok" as const,
@@ -209,6 +221,15 @@ const PLANTILLAS_OK = {
   ],
 };
 
+/**
+ * Ficha 333 (G3, R38): la cola de cobros por aprobar, VACIA. Este archivo mide el pre-fetch y las
+ * props de la pagina; el detalle de la seccion vive en sus propios archivos. Con `total` en cero
+ * la seccion ni se monta, asi que los dos casos que pintan la wallet entera siguen midiendo lo
+ * mismo que median. Los casos de la cola cargada estan en
+ * `tests/unit/components/wallet-page-cobros-pendientes.test.tsx`.
+ */
+const COBROS_OK = { status: "ok" as const, items: [], total: 0 };
+
 beforeEach(() => {
   vi.clearAllMocks();
   montarModuloReal = false;
@@ -217,6 +238,7 @@ beforeEach(() => {
   resumenMock.mockResolvedValue(RESUMEN_OK);
   desgloseMock.mockResolvedValue(DESGLOSE_OK);
   plantillasMock.mockResolvedValue(PLANTILLAS_OK);
+  cobrosMock.mockResolvedValue(COBROS_OK);
 });
 
 afterEach(() => {

@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { FormField } from "@/components/shared/FormField";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/hooks/useToast";
@@ -16,6 +18,10 @@ import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import type { PeriodicidadUnidad } from "@/lib/utils/periodicidad";
 
+import {
+  AYUDA_INTERRUPTOR_GASTO_FIJO,
+  INTERRUPTOR_GASTO_FIJO,
+} from "./gasto-fijo-estado-label";
 import {
   PERIODICIDAD_OPTIONS,
   PERIODICIDAD_PERSONALIZADA,
@@ -53,6 +59,13 @@ import {
 //
 // `periodicidadCantidad` NO es dinero: es un contador y viaja como entero. El monto sigue
 // siendo STRING de punta a punta (R24).
+//
+// Ficha 333 (G4, design §8 · R1/R2/R4) — EL INTERRUPTOR: «Cobra sola» / «Requiere aprobación».
+// Y SE ENVÍA SIEMPRE, en crear y en editar, por exactamente la razón que la ficha 85 dejó
+// escrita arriba para el ciclo: `requiereAprobacion` tiene `.default(true)` en el schema
+// —heredado por el de actualizar—, así que una edición que no lo mandara pondría en «requiere
+// aprobación» una plantilla que cobraba sola, en silencio y sin que nadie lo pidiera. El
+// formulario tiene el valor en la mano (el DTO lo trae) y lo reenvía tal cual cuando no se toca.
 
 export interface GastoFijoPlantillaDialogProps {
   /** Visibilidad controlada por el panel. */
@@ -128,6 +141,14 @@ export function GastoFijoPlantillaDialog({
   const [concepto, setConcepto] = useState(plantilla?.concepto ?? "");
   const [monto, setMonto] = useState(plantilla?.monto ?? "");
   const [ciclo, setCiclo] = useState<CicloFormulario>(() => cicloDe(plantilla));
+  /**
+   * Ficha 333 (R1/R2): el interruptor. Una plantilla NUEVA nace en «requiere aprobación», que es
+   * la norma de la ficha —«cobra sola» es la excepción— y la dirección segura del valor por
+   * defecto: pedir autorización de más nunca cobra de más.
+   */
+  const [requiereAprobacion, setRequiereAprobacion] = useState(
+    plantilla?.requiereAprobacion ?? true,
+  );
   const [errores, setErrores] = useState<ErroresFormulario>({});
   // Detecta el cambio de plantilla/modo para re-sembrar los campos cuando el panel reabre
   // el diálogo con otra fila (o pasa de editar a crear) sin desmontarlo.
@@ -137,6 +158,7 @@ export function GastoFijoPlantillaDialog({
     setConcepto(plantilla?.concepto ?? "");
     setMonto(plantilla?.monto ?? "");
     setCiclo(cicloDe(plantilla));
+    setRequiereAprobacion(plantilla?.requiereAprobacion ?? true);
     setErrores({});
   }
 
@@ -219,11 +241,14 @@ export function GastoFijoPlantillaDialog({
             concepto: concepto.trim(),
             monto: monto.trim(),
             ...cicloEnviado,
+            // Ficha 333 (R4): SIEMPRE, también al editar. Ver la nota de la cabecera.
+            requiereAprobacion,
           })
         : await crearPlantillaAction({
             concepto: concepto.trim(),
             monto: monto.trim(),
             ...cicloEnviado,
+            requiereAprobacion,
           });
 
     if (result.status === "ok") {
@@ -409,6 +434,47 @@ export function GastoFijoPlantillaDialog({
             />
           )}
         </FormField>
+
+        {/* Ficha 333 (G4, design §8 · R1/R4) — EL INTERRUPTOR.
+
+            No usa `FormField`: un booleano no puede ser inválido, así que no hay error que
+            pintar. El patrón es el del `Switch` de `UsuarioForm` y `PlantillaTiendaField`
+            —rótulo a la izquierda, control a la derecha, ayuda debajo enlazada por
+            `aria-describedby`—, para que un lector de pantalla anuncie la consecuencia junto al
+            control y no después.
+
+            La línea de estado dice cuál de las DOS posiciones está elegida CON SU NOMBRE
+            («Cobra sola» / «Requiere aprobación»): el estado de un interruptor a secas se lee
+            como «encendido», y encendido no significa nada por sí mismo. El texto sale del mismo
+            módulo puro que lee la columna de la tabla. */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="plantilla-requiere-aprobacion">
+              {INTERRUPTOR_GASTO_FIJO.requiereAprobacion}
+            </Label>
+            <Switch
+              id="plantilla-requiere-aprobacion"
+              aria-label={INTERRUPTOR_GASTO_FIJO.requiereAprobacion}
+              aria-describedby="plantilla-requiere-aprobacion-ayuda"
+              checked={requiereAprobacion}
+              onCheckedChange={setRequiereAprobacion}
+            />
+          </div>
+          <p
+            id="plantilla-requiere-aprobacion-ayuda"
+            className="text-sm text-muted-foreground"
+          >
+            {AYUDA_INTERRUPTOR_GASTO_FIJO}
+          </p>
+          {/* Sin `role="status"` a propósito: el cambio lo anuncia el propio interruptor con su
+              `aria-checked`, y una región viva de más duplicaría el anuncio (además de competir
+              con el aviso de la fecha en el pasado, que sí lo es porque aparece y desaparece). */}
+          <p className="text-sm font-medium">
+            {requiereAprobacion
+              ? INTERRUPTOR_GASTO_FIJO.requiereAprobacion
+              : INTERRUPTOR_GASTO_FIJO.cobraSola}
+          </p>
+        </div>
 
         {fechaEnElPasado ? (
           <p role="status" className="text-sm text-muted-foreground">

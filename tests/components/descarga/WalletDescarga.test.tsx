@@ -274,6 +274,13 @@ function renderCaja(movimientos: WalletMovimientoDTO[] = CAJA_PAGINA) {
       desglose={DESGLOSE_EGRESOS}
       composicion={COMPOSICION}
       plantillas={{ items: [], total: 0, pageSize: 25 }}
+      // Ficha 333 (G2, R38): la cola de cobros por aprobar, VACÍA. Este archivo mide las
+      // DESCARGAS de la wallet y la sección nueva no ofrece ninguna (design §7: es una cola de
+      // decisión efímera; lo que se aprueba aterriza en el libro, que sí descarga). Con `total`
+      // en cero la sección ni se monta, que es exactamente el estado en el que este test la
+      // quiere: si algún día ofreciera descarga, el censo de tablas lo diría antes que esto.
+      cobrosPendientes={{ items: [], total: 0 }}
+      puedeDecidirCobros
       // Feature 85 (T F.4/T F.6, R23): el instante del «Próximo cobro» viaja por la cadena de
       // props y es REQUERIDO en los dos eslabones. Fijo, para no depender del día de la corrida.
       ahoraIso="2026-07-15T18:00:00.000Z"

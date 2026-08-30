@@ -26,6 +26,10 @@ import type {
 } from "@/lib/types/wallet";
 
 import { CajaResumenCard } from "./CajaResumenCard";
+import {
+  CobrosGastoFijoPendientesPanel,
+  type CobrosGastoFijoPendientes,
+} from "./CobrosGastoFijoPendientesPanel";
 import { WalletLedger } from "./WalletLedger";
 import { filaDescargaMovimientoCaja } from "./wallet-ledger-descarga-columnas";
 import { WalletFiltros, FILTROS_VACIOS, type WalletFiltrosValue } from "./WalletFiltros";
@@ -74,6 +78,18 @@ export interface WalletModuleProps {
    */
   plantillas: GastosFijosPlantillasPagina;
   /**
+   * Ficha 333 (G2, R37/R41/R44) — la COLA de cobros de gasto fijo por aprobar, pre-obtenida en
+   * el servidor. `total` es el del SERVIDOR y no el largo de `items`, que viene recortado por el
+   * tope del dominio: es lo que pinta la insignia de la sección.
+   */
+  cobrosPendientes: CobrosGastoFijoPendientes;
+  /**
+   * Ficha 333 (G2, R40) — si el actor puede DECIDIR un cobro (`maestro`). Se resuelve en
+   * `page.tsx` y baja por props: la pantalla no deduce roles. Es comodidad de interfaz; la
+   * autorización real la hace el servicio (R24), que le responde `forbidden` al `admin`.
+   */
+  puedeDecidirCobros: boolean;
+  /**
    * Feature 85 (T F.4, R23): el instante con el que el panel de gastos fijos calcula la
    * columna «Próximo cobro», resuelto en el SERVIDOR (`page.tsx`) y pasado TAL CUAL. Este
    * módulo no lo interpreta ni lo sustituye: solo lo transporta.
@@ -118,6 +134,8 @@ export function WalletModule({
   desglose: initialDesglose,
   composicion: initialComposicion,
   plantillas,
+  cobrosPendientes,
+  puedeDecidirCobros,
   ahoraIso,
 }: WalletModuleProps) {
   const toast = useToast();
@@ -219,6 +237,26 @@ export function WalletModule({
 
         <CajaResumenCard resumen={resumen} movimientos={total} />
       </section>
+
+      {/* Ficha 333 (G2, design §7 · R37/R38/R42) — LA COLA DE COBROS DE GASTO FIJO POR APROBAR,
+          entre la tarjeta de la caja y la de la ganancia: es lo primero que se lee después del
+          dinero y antes de la composición y del libro. No se mueve nada más de esta página.
+
+          R38: con el `total` del SERVIDOR en cero la sección NO se monta —una tarjeta vacía
+          permanente en la pantalla del dinero sería ruido, y lo que se pide es que se note
+          cuando hay algo—. La sección tiene además su propia guarda para el caso de decidir el
+          último cobro sin recargar la ruta.
+
+          R42: tras aprobar o rechazar, la sección relee LO SUYO (su `mutate`) y por este
+          `onCambio` se recargan libro, cifras, composición y desglose con los filtros vigentes.
+          Es el mismo ciclo que ya hace el panel de plantillas. */}
+      {cobrosPendientes.total > 0 ? (
+        <CobrosGastoFijoPendientesPanel
+          initialData={cobrosPendientes}
+          puedeDecidir={puedeDecidirCobros}
+          onCambio={() => void recargar(filtros, page)}
+        />
+      ) : null}
 
       {/* Feature 231 (T6.3, D2) — la tarjeta de la ganancia entra BAJO la de la caja, que es
           donde se hace la pregunta que responde («¿y de dónde sale ese número?»).
