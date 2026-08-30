@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { montoPositivoSchema } from "@/lib/types/wallet";
-import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { esFechaCalendarioValida, fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { gastoFijoConfig } from "@/lib/config/gasto-fijo";
 import type { PeriodicidadUnidad } from "@/lib/utils/periodicidad";
 
@@ -21,27 +21,60 @@ export type GastoFijoPlantillaDTO = {
   periodicidadUnidad: PeriodicidadUnidad;
   periodicidadCantidad: number;
   fechaCobro: string; // `YYYY-MM-DD`: ancla del ciclo (primer cobro). Date, NO ISO datetime.
+  // Ficha 333 (R1/R4) — EL INTERRUPTOR: `true` = «requiere aprobación» (el cron crea un cobro
+  // pendiente y no toca el libro), `false` = «cobra sola» (escribe el egreso directo, como antes
+  // de la 333). Es el valor que la tabla de plantillas pinta como `Badge` y que el diálogo fija.
+  requiereAprobacion: boolean;
   createdAt: string; // ISO
   updatedAt: string; // ISO
 };
 
 // ── Schemas zod de borde ──
 
-// Feature 84 — fragmento de periodicidad compartido por crear/actualizar.
+// Feature 84 / 85 (design §2.1) — periodicidad del ciclo: UNA declaracion de las reglas de
+// campo y DOS aplicaciones de ellas, para que crear y actualizar no puedan divergir en la regla
+// aunque difieran —a proposito— en la OBLIGATORIEDAD.
 //
-// TODOS OPCIONALES CON DEFAULT, a proposito: la UI actual (`GastoFijoPlantillaDialog`, feature
-// 85) todavia NO envia periodicidad ni fecha de cobro. Con estos defaults la pantalla sigue
-// funcionando sin cambios y una plantilla creada hoy se comporta como antes (mensual). Cuando la
-// 85 empiece a mandar los campos, el mismo schema los valida sin tocar nada aca.
-const periodicidadFields = {
-  periodicidadUnidad: z.enum(["dias", "semanas", "meses"]).default("meses"),
-  periodicidadCantidad: z.coerce.number().int().min(1, "La cantidad debe ser al menos 1.").default(1),
+// CREAR conserva los defaults `meses`/`1`/hoy-CR (R4): una creacion no pisa ningun valor previo,
+// asi que el default es el PRIMER valor del ciclo y no el borrado de otro. Es el comportamiento
+// documentado desde antes de la 84 y el que uso el backfill de su migracion.
+//
+// ACTUALIZAR los EXIGE (R1, feature 85): sin `.default()` y sin `.optional()`. Hasta aqui los
+// heredaba de crear, y por eso una edicion de `{id, concepto, monto}` —exactamente lo que mandaba
+// `GastoFijoPlantillaDialog`— reescribia el ciclo a `meses`/`1` y movia el ancla `fechaCobro` al
+// dia de la edicion, en silencio; y cambiar la unidad de/hacia `meses` cambia el formato del
+// periodo de la clave de idempotencia (`YYYY-MM` <-> `YYYY-MM-DD`), que es el escenario de DOBLE
+// COBRO que documenta `GeneracionGastosFijosService`. Con la 85 el dialogo SI envia los tres
+// campos (R15) y una edicion incompleta muere en el BORDE con `validation_error`, nombrando cada
+// campo ausente, sin llegar al servicio.
+const periodicidadUnidadSchema = z.enum(["dias", "semanas", "meses"]);
+const periodicidadCantidadSchema = z.coerce
+  .number()
+  .int()
+  .min(1, "La cantidad debe ser al menos 1.");
+// R5: el regex mide la FORMA y `2026-02-31` la cumple, pero `new Date("2026-02-31T00:00:00.000Z")`
+// RUEDA al 3 de marzo sin error. `esFechaCalendarioValida` (el round-trip que el repo ya usa para
+// esto) exige que el dia EXISTA: un ancla rodada es la misma familia de fallo que cierra la 85
+// —el sistema guarda un dia distinto del que le pidieron, callado—.
+const fechaCobroSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha de cobro debe tener el formato YYYY-MM-DD.")
+  .refine(esFechaCalendarioValida, "La fecha de cobro no existe en el calendario.");
+
+// CREAR: los tres opcionales con default (R4).
+const periodicidadConDefault = {
+  periodicidadUnidad: periodicidadUnidadSchema.default("meses"),
+  periodicidadCantidad: periodicidadCantidadSchema.default(1),
   // Default = hoy en hora CR (no `new Date()`: `fechaCalendarioCR` evita el off-by-one de UTC).
   // Se evalua por parseo, asi que no se congela al cargar el modulo.
-  fechaCobro: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha de cobro debe tener el formato YYYY-MM-DD.")
-    .default(() => fechaCalendarioCR()),
+  fechaCobro: fechaCobroSchema.default(() => fechaCalendarioCR()),
+};
+
+// ACTUALIZAR: los tres OBLIGATORIOS (R1). Mismas reglas, cero defaults.
+const periodicidadRequerida = {
+  periodicidadUnidad: periodicidadUnidadSchema,
+  periodicidadCantidad: periodicidadCantidadSchema,
+  fechaCobro: fechaCobroSchema,
 };
 
 // R24: crear plantilla = concepto no vacio + monto STRING > 0 (hasta 2 decimales). `activa`
@@ -49,27 +82,60 @@ const periodicidadFields = {
 export const crearGastoFijoPlantillaSchema = z.object({
   concepto: z.string().trim().min(1, "El concepto es obligatorio."),
   monto: montoPositivoSchema,
-  ...periodicidadFields,
+  ...periodicidadConDefault,
+  // Ficha 333 (R2, design §8) — EL INTERRUPTOR, CON DEFAULT `true`, exactamente el patrón con
+  // el que la 84 introdujo la periodicidad: una plantilla creada sin indicarlo nace en «requiere
+  // aprobación», que es la norma que pide la ficha («cobra sola» es la excepción), y la UI que
+  // todavía no lo mande sigue funcionando.
+  //
+  // Lo hereda `actualizarGastoFijoPlantillaSchema` por el `.extend()` de abajo, y ahí el default
+  // NO es inocuo: una edición que no lo envíe deja la plantilla en «requiere aprobación». Es la
+  // misma familia de fallo que cerró la 85 con la periodicidad, y por eso el diálogo de la tanda
+  // G tiene que enviar SIEMPRE este campo (R4). Se deja con default —y no obligatorio como la
+  // periodicidad— porque así lo fija `design.md §8`, y porque la dirección del valor por defecto
+  // es la SEGURA: pedir autorización de más, nunca cobrar de más.
+  requiereAprobacion: z.boolean().default(true),
 });
 
 export type CrearGastoFijoPlantillaInput = z.infer<typeof crearGastoFijoPlantillaSchema>;
 
-// R25: editar concepto/monto de una plantilla existente (identificada por id uuid).
+// R25: editar una plantilla existente (identificada por id uuid). Se DERIVA del schema de crear
+// para que `concepto` y `monto` se declaren una sola vez, y redeclara SOLO lo que tiene que
+// diferir: los tres campos del ciclo, en su variante sin default (R1).
 export const actualizarGastoFijoPlantillaSchema = crearGastoFijoPlantillaSchema.extend({
   id: z.string().uuid(),
+  ...periodicidadRequerida,
 });
 
 export type ActualizarGastoFijoPlantillaInput = z.infer<
   typeof actualizarGastoFijoPlantillaSchema
 >;
 
-// R25: activar/desactivar una plantilla (sin borrado; la desactivacion detiene el cron).
+// R25: activar/desactivar una plantilla (la desactivacion detiene el cron y la fila se queda).
+// Desde la ficha 332 convive con el BORRADO, que **revoca** el «sin borrado» de `45/R25` con
+// decision humana del 2026-08-29 (ver `specs/332-eliminar-plantilla-gasto-fijo`): desactivar es
+// pausar —reversible, conserva el id—; eliminar saca la fila de la tabla.
 export const setActivaPlantillaSchema = z.object({
   id: z.string().uuid(),
   activa: z.boolean(),
 });
 
 export type SetActivaPlantillaInput = z.infer<typeof setActivaPlantillaSchema>;
+
+/**
+ * Ficha 332 (R6) — entrada del BORRADO de una plantilla: solo su identificador.
+ *
+ * `.strict()` a proposito, y es lo unico que este schema tiene de particular: una clave
+ * desconocida muere en el BORDE con `validation_error`, sin llegar al servicio. En una operacion
+ * irreversible, aceptar en silencio un campo que nadie va a leer es la forma barata de que el
+ * llamador crea que pidio algo que no pidio.
+ *
+ * Aqui NO viaja ningun monto: el unico que aparece en este camino es el que la confirmacion
+ * pinta, y sale del DTO que la pantalla ya tiene (STRING, money-safe).
+ */
+export const eliminarPlantillaSchema = z.object({ id: z.string().uuid() }).strict();
+
+export type EliminarPlantillaInput = z.infer<typeof eliminarPlantillaSchema>;
 
 /**
  * Feature 170 — FASE 2 (T I.1, R40) — entrada del listado paginado de PLANTILLAS de gasto

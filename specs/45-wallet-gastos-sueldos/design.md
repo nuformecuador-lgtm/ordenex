@@ -235,6 +235,14 @@ Autorización (R17): la página `notFound()` a no-maestro (ya vigente); las acti
   mismo camino (la reversa referencia su `id` uuid, distinto de su `origen_id` derivado). Para dejar de generarlo
   en el futuro, se DESACTIVA la plantilla (`activa=false`, R25) — no se borra ni la plantilla ni el egreso.
 
+  > **⚠️ SUPERSEDED 2026-08-29 por la ficha 332** (`specs/332-eliminar-plantilla-gasto-fijo`).
+  > La plantilla SÍ se puede borrar desde esa fecha, por decisión humana; desactivarla sigue siendo
+  > la pausa reversible y sigue siendo lo correcto cuando la intención es «por ahora no». Lo que NO
+  > cambia —y por eso la línea de arriba se conserva VERBATIM, con este bloque AÑADIDO detrás— es la
+  > otra mitad de la frase: **el egreso no se borra nunca**. El libro es inmutable y el borrado de
+  > la plantilla se detiene antes de él; el movimiento sobrevive con su monto, su fecha, su
+  > `origen_id` y su descripción intactos, y se explica solo porque ésta ya lleva concepto y periodo.
+
 ## 5. Migraciones
 
 ### 5.1 Enum aditivo — `db/migrations/<ts>_wallet_egreso_gasto_fijo_variable/` (R21)

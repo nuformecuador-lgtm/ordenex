@@ -1,0 +1,42 @@
+-- Ficha 333 (A3, design 4.1/4.2) -- el aviso de la campana cuando quedan cobros de gasto fijo
+-- esperando decision.
+--
+-- QUE ANADE, y son DOS valores en DOS enums distintos:
+--
+--   `notificacion_evento`       += 'gasto_fijo_cobro_pendiente'
+--   `notificacion_entidad_tipo` += 'gasto_fijo_cobro_dia'
+--
+-- POR QUE VA SOLA Y CON TIMESTAMP PROPIO, separada de la migracion que crea la tabla. Postgres NO
+-- permite USAR un valor de enum recien anadido en la misma transaccion que lo anadio (`55P04`) y
+-- Prisma Migrate corre cada `migration.sql` dentro de una. Aqui SOLO se anaden los valores; su
+-- primer uso ocurre en runtime (`emitirGastoFijoCobroPendiente`), en transacciones posteriores.
+-- Mismo precedente que la 271, la 262, la 253, la 240, la 239 y la 237.
+--
+-- ⚠️ POR QUE TAMBIEN EL SEGUNDO ENUM, QUE ES LA MITAD QUE SE OLVIDA -- y aqui ademas es LA
+-- DECISION QUE EVITA EL FALLO DE LA 262.
+--
+-- `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+-- destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`
+-- (`20260727120000_notificacion/migration.sql:89-92`), y `NotificacionRepository.crear` ABSORBE
+-- el `P2002` devolviendo `false`. Con una entidad que NO cambiara entre dias -- por ejemplo el
+-- COBRO, que es la eleccion "natural" -- esa clave admitiria UNA sola fila por (evento, cobro,
+-- maestro) PARA SIEMPRE: el recordatorio del dia 2 no saldria NUNCA, sin error, sin log y sin
+-- nada. Es literalmente lo que le paso a la 262 con `orden` como entidad.
+--
+-- Por eso LA ENTIDAD DE ESTE AVISO ES EL DIA CR DE LA CORRIDA (`entidad_id = 'YYYY-MM-DD'`), y
+-- por eso necesita un `entidad_tipo` propio: `gasto_fijo_cobro_dia` es el PRIMER valor del
+-- inventario que NO apunta a una fila de tabla, y el nombre lo DECLARA. Reusar un valor que
+-- promete una fila (`carga`, `usuario`, `cierre_dia`...) seria escribir un dato falso con formato
+-- de dato -- el motivo por el que la 253 no reuso `usuario`. Y emitir con `entidad_id = NULL`
+-- apagaria la dedupe entera (el indice es parcial), de modo que dos corridas del mismo dia
+-- darian dos avisos identicos (R31 rota).
+--
+-- CONSECUENCIAS, y son ESTRUCTURALES, no de disciplina:
+--   - dias distintos  => entidades distintas => el recordatorio diario sale siempre (R30);
+--   - misma corrida repetida el mismo dia => misma entidad => un solo aviso (R31).
+--
+-- ADITIVA: no altera ninguna tabla, no crea columnas, no toca RLS (`notificacion` conserva la de
+-- la 146). SIN BACKFILL: ninguna notificacion existente cambia de evento ni de entidad, y no hay
+-- nada que avisar hacia atras (la tabla de cobros nace vacia en la migracion anterior).
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'gasto_fijo_cobro_pendiente';
+ALTER TYPE "notificacion_entidad_tipo" ADD VALUE IF NOT EXISTS 'gasto_fijo_cobro_dia';

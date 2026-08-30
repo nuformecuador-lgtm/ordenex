@@ -76,9 +76,10 @@ function modeloDeTabla(tabla: string): string {
 
 /**
  * Tablas cuyo `CREATE TABLE` dio a `updated_at` un DEFAULT. El censo es GENERICO (recorre
- * todas las migraciones) a proposito: el invariante no es "estas seis tablas", es "toda tabla
+ * todas las migraciones) a proposito: el invariante no es "estas siete tablas", es "toda tabla
  * cuyo SQL puso un default en `updated_at` lo declara tambien en el modelo". Una tabla nueva
- * escrita con el mismo patron cae sola en el censo sin tocar este archivo.
+ * escrita con el mismo patron cae sola en el censo, y el unico sitio que hay que tocar es la
+ * lista literal de la anti-vacuidad — a mano y a sabiendas, que es el punto.
  *
  * Es correcto mirar SOLO el `CREATE TABLE`: ninguna migracion del repo hace `ALTER COLUMN
  * "updated_at" ... DROP DEFAULT` (verificado sobre `db/migrations/**`), asi que el default con
@@ -99,12 +100,24 @@ function tablasConDefaultEnUpdatedAt(): string[] {
 }
 
 describe("updated_at · el modelo declara el DEFAULT que el SQL creo", () => {
-  it("el censo encuentra las seis tablas cuyo CREATE TABLE le puso default a updated_at", () => {
+  it("el censo encuentra las SIETE tablas cuyo CREATE TABLE le puso default a updated_at", () => {
     // Contrapeso: si el parser se rompiera y devolviera [], el caso de abajo pasaria por vacio
     // en vez de por limpio. Esta lista es la que devuelve la BASE viva consultando
     // `information_schema.columns` (evidencia en progress/chore_saneamiento-deudas.md).
+    //
+    // ⚠️ SE ACTUALIZA A MANO, y esa es toda la gracia: la lista de la izquierda la DERIVA
+    // `tablasConDefaultEnUpdatedAt()` de las migraciones, y la de la derecha la escribe una
+    // persona. Si se derivaran las dos de la misma fuente, el caso quedaria verde por
+    // construccion y una tabla nueva con default en `updated_at` entraria sin que nadie lo
+    // decidiera — que es justo lo contrario de para lo que existe este archivo.
     expect(tablasConDefaultEnUpdatedAt()).toEqual([
       "api_key",
+      // FICHA 333 (2026-08-29) - la cola de cobros de gasto fijo por autorizar. Su
+      // `CREATE TABLE` (`20260829120000_gasto_fijo_cobro/migration.sql`) escribe
+      // `"updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP`, asi que cae sola en el
+      // censo; el modelo `GastoFijoCobro` lo declara con `@default(now())` y por eso el caso de
+      // abajo sigue en verde y `migrate dev` no propondra un `DROP DEFAULT` sobre ella.
+      "gasto_fijo_cobro",
       "gasto_fijo_plantilla",
       "jobs",
       "premio_ranking",

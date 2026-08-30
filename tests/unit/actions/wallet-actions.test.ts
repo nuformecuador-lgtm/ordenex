@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   listarMovimientosAction,
   verResumenCajaAction,
@@ -274,5 +274,102 @@ describe("registrarMovimientoManualAction (R15/R19)", () => {
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperado ok");
     expect(typeof r.movimiento.monto).toBe("string");
+  });
+});
+
+
+// ── Ficha 334 (T C.3) — la fecha invalida NO llega al servicio ──
+//
+// Se prueba EN EL BORDE y con el espia a cero llamadas: es donde la ficha promete que una
+// fecha imposible no escribe ni una fila (R12/R20/R21). Un test de servicio no lo demostraria,
+// porque el servicio ni siquiera valida la fecha — la valida zod aqui.
+
+describe("registrarMovimientoManualAction — la fecha del movimiento (R20/R21)", () => {
+  /** 09:00 CR del 29 de agosto de 2026. */
+  const AHORA = "2026-08-29T15:00:00.000Z";
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function conRelojEnAhora(): void {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(AHORA));
+  }
+
+  function ajuste(fecha: string) {
+    return {
+      tipo: "ingreso",
+      categoria: "ingreso_ajuste",
+      monto: "50.00",
+      descripcion: "correccion",
+      fecha,
+    };
+  }
+
+  it("R20: fecha FUTURA -> validation_error con la clave `fecha`, sin tocar el service", async () => {
+    conRelojEnAhora();
+    const service = fakeService();
+    const r = await registrarMovimientoManualAction(ajuste("2026-08-30"), {
+      service,
+      getActor: async () => MAESTRO,
+    });
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("esperado validation_error");
+    // La clave importa: el dialogo pinta el mensaje BAJO su campo, no en un aviso suelto.
+    expect(Object.keys(r.fieldErrors)).toContain("fecha");
+    expect(r.fieldErrors.fecha).toContain("La fecha no puede ser posterior a hoy.");
+    expect(service.registrarMovimientoManual).not.toHaveBeenCalled();
+  });
+
+  it("R21: dia que NO existe (2026-02-31) -> validation_error, sin tocar el service", async () => {
+    conRelojEnAhora();
+    const service = fakeService();
+    const r = await registrarMovimientoManualAction(ajuste("2026-02-31"), {
+      service,
+      getActor: async () => MAESTRO,
+    });
+    expect(r.status).toBe("validation_error");
+    expect(service.registrarMovimientoManual).not.toHaveBeenCalled();
+  });
+
+  it("fecha fuera de la ventana hacia atras -> validation_error, sin tocar el service", async () => {
+    conRelojEnAhora();
+    const service = fakeService();
+    const r = await registrarMovimientoManualAction(ajuste("2019-03-04"), {
+      service,
+      getActor: async () => MAESTRO,
+    });
+    expect(r.status).toBe("validation_error");
+    expect(service.registrarMovimientoManual).not.toHaveBeenCalled();
+  });
+
+  it("R22: una fecha valida del pasado SI llega al servicio, tal cual, como texto", async () => {
+    // CONTROL DE NO-VACUIDAD de los tres casos de arriba: si el borde rechazara TODA fecha,
+    // aquellos pasarian igual y no dirian nada.
+    conRelojEnAhora();
+    const service = fakeService();
+    const r = await registrarMovimientoManualAction(ajuste("2026-08-28"), {
+      service,
+      getActor: async () => MAESTRO,
+    });
+    expect(r.status).toBe("ok");
+    expect(service.registrarMovimientoManual).toHaveBeenCalledWith(
+      expect.objectContaining({ fecha: "2026-08-28", monto: "50.00" }),
+      MAESTRO,
+    );
+  });
+
+  it("sin la clave `fecha` la entrada sigue siendo valida — el camino de siempre", async () => {
+    conRelojEnAhora();
+    const service = fakeService();
+    const r = await registrarMovimientoManualAction(
+      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(r.status).toBe("ok");
+    const entrada = (service.registrarMovimientoManual as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
+    expect(Object.keys(entrada)).not.toContain("fecha");
   });
 });

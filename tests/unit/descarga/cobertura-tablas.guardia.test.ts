@@ -102,8 +102,14 @@ const ARBOLES_UI = ["app", "components"] as const;
 // la 299, que hasta ahora moría en el cliente). Nace `fuera`, con su motivo en
 // `censo-tablas.ts`: son filas del archivo que la propia tienda acaba de subir, y los dos
 // pasos que la montan ya ofrecen sus descargas. Censo total: 28 = 27 `<DataTable>` + 1 cruda.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 27;
-const TOTAL_INSTANCIAS_DATATABLE = 27;
+// FICHA 333 (H1): 27 → 28 archivos y 27 → 28 instancias. La de más es la COLA de cobros de gasto
+// fijo por aprobar (`wallet/_components/CobrosGastoFijoPendientesPanel.tsx`), la sección nueva de
+// `/wallet`. Nace `fuera` con su motivo en `censo-tablas.ts`: es una cola de decisión efímera y lo
+// que se aprueba aterriza en el libro de la caja, que sí descarga. Los números son los MEDIDOS
+// contra el árbol —la guardia los cotejó y dijo 28—, no una suma de escritorio. Censo total:
+// 29 = 28 `<DataTable>` + 1 cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 28;
+const TOTAL_INSTANCIAS_DATATABLE = 28;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -238,7 +244,9 @@ describe("guardia de cobertura del censo de tablas", () => {
     // que pasa de `<Table>` cruda a `<DataTable>` sin cambiar de alcance.
     // FEATURE 304: 6 -> 7. La de mas es el aviso de los montos redondeados de la carga masiva,
     // que nace `fuera` y sin control de descarga (motivo en `censo-tablas.ts`).
-    expect(excluidas.length).toBe(7);
+    // FICHA 333 (H1): 7 -> 8. La de mas es la cola de cobros de gasto fijo por aprobar, que nace
+    // `fuera` y sin control: lo que se aprueba se descarga desde el LIBRO de la caja.
+    expect(excluidas.length).toBe(8);
     for (const inst of excluidas) {
       const tabla = registro.get(inst.ruta)!.tablas[inst.indice];
       expect(inst.declaraDescarga, `${inst.ruta} :: ${tabla.nombre}`).toBe(false);
@@ -265,7 +273,8 @@ describe("guardia de cobertura del censo de tablas", () => {
       CENSO_DATATABLE.reduce((n, e) => n + e.tablas.length, 0) +
       CENSO_TABLAS_CRUDAS.reduce((n, e) => n + e.tablas.length, 0);
     // FEATURE 304: 27 → 28, por la tabla del aviso de montos redondeados de la carga masiva.
-    expect(totalCensado).toBe(28);
+    // FICHA 333 (H1): 28 → 29, por la cola de cobros de gasto fijo por aprobar.
+    expect(totalCensado).toBe(29);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -321,8 +330,13 @@ describe("guardia de cobertura del censo de tablas", () => {
     // FEATURE 304: 7 -> 8 fuera de alcance, y las 20 dentro de alcance NO se mueven. La de más
     // es el aviso de los montos redondeados de la carga masiva: una tabla que EXPLICA un dato
     // del archivo que la tienda acaba de subir, no un conjunto que nadie pueda llevarse.
+    //
+    // FICHA 333 (H1): 8 -> 9 fuera de alcance, y las 20 dentro de alcance NO se mueven. La de más
+    // es la cola de cobros de gasto fijo por aprobar. Esa asimetría es el dato: la ficha añade una
+    // pantalla de DECISIÓN, no un listado que alguien quiera llevarse — y ninguna descarga
+    // existente se gana ni se pierde con ella.
     expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(20);
-    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(8);
+    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(9);
   });
 
   it("una tabla compartida declara TODAS las pantallas que la montan", () => {
