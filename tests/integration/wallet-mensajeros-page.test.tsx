@@ -50,8 +50,6 @@ vi.mock("@/lib/actions/wallet-mensajero", () => ({
   listarCuentasPorPagarAction: vi.fn(),
   // Feature 170 — FASE 2 (T L.2): la página pre-carga la PÁGINA 1, no el conjunto entero.
   listarCuentasPorPagarPaginadoAction: vi.fn(),
-  verMiCuentaPorPagarAction: vi.fn(),
-  listarMisPagosAction: vi.fn(),
   listarPagosDeMensajeroAction: vi.fn(),
   listarPagosDeMensajeroCompletoAction: vi.fn(),
 }));
