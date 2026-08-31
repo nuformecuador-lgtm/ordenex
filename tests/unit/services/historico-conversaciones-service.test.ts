@@ -13,7 +13,10 @@ import type {
 } from "@/lib/interfaces/repositories/IHistoricoConversacionesRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { HiloHistoricoDTO } from "@/lib/types/historico-conversaciones";
-import { listarMensajesHistoricoSchema } from "@/lib/types/historico-conversaciones";
+import {
+  HILOS_LIMITE_DEFECTO,
+  listarMensajesHistoricoSchema,
+} from "@/lib/types/historico-conversaciones";
 import { ROLES_HISTORICO_CONVERSACIONES } from "@/lib/auth/menu-visibility";
 
 // Feature 321 / T3.6 — `HistoricoConversacionesService`: AUTORIZACION, NO-ESCRITURA y hilo
@@ -118,7 +121,9 @@ describe("321 / T3.6 — HistoricoConversacionesService", () => {
     expect(repo.listarHilos).toHaveBeenCalledWith({
       filtro: {},
       cursor: null,
-      limite: 25,
+      // La cifra sale de la CONSTANTE, no de un literal repetido aqui: si alguien cambia el
+      // tamaño de pagina, este test tiene que seguir describiendo el default, no un 25 fosil.
+      limite: HILOS_LIMITE_DEFECTO,
     });
   });
 

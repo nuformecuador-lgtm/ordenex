@@ -26,8 +26,16 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // Limites de pagina (P8: «solo X conversaciones a la vez»)
 // ---------------------------------------------------------------------------
 
-/** Hilos por pagina del listado si el llamante no pide otra cosa (design §2.2). */
-export const HILOS_LIMITE_DEFECTO = 25;
+/**
+ * Hilos por pagina del listado si el llamante no pide otra cosa (design §2.2).
+ *
+ * Pedido humano (2026-08-31): 10, no 25. La cifra no es un detalle de rendimiento — es lo que
+ * hace VISIBLE el scroll infinito: con 25 la primera pagina cubria de sobra el listado de una
+ * instalacion normal y la carga por scroll no llegaba a ejercitarse nunca. El limite se aplica
+ * en el service (`limite ?? HILOS_LIMITE_DEFECTO`), asi que el cliente no manda ninguna cifra y
+ * cambiarla aqui la cambia en todas partes de una vez.
+ */
+export const HILOS_LIMITE_DEFECTO = 10;
 /** Techo del listado: mas alla, el `ORDER BY` sobre el agregado deja de estar acotado (§7). */
 export const HILOS_LIMITE_MAXIMO = 50;
 /** Mensajes por pagina del hilo si el llamante no pide otra cosa (design §2.3, R18). */

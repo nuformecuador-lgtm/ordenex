@@ -168,7 +168,7 @@ interface ListarHilosHistoricoInput {
     q?: string;                     // R36 — min BUSQUEDA_MIN_CHARS, max BUSQUEDA_MAX_CHARS
   };
   cursor?: CursorHilo | null;       // R13
-  limite?: number;                  // default 25, máx 50   ← «solo X conversaciones a la vez» (P8)
+  limite?: number;                  // default 10 (era 25; pedido humano 2026-08-31), máx 50 (P8)
 }
 
 interface CursorHilo {              // R13/R15 — clave TOTAL, sin OFFSET
