@@ -266,7 +266,11 @@ export const ORIGEN_TIPOS_CON_GESTION = [
 //   - el escalado del cron SLA (`escalado_devuelta_sla`, `DevolucionSlaRepository`) — R18-b;
 //   - la reprogramacion de escritorio de la tienda (`reprogramacion_tienda`,
 //     `GestionOrdenRepository.reprogramarDesdeDevuelta`), que ademas, sumada a la `devuelta` real
-//     de esa misma orden, produce el DOBLE CONTEO que `160/R2` evitaba — R12.
+//     de esa misma orden, produce el DOBLE CONTEO que `160/R2` evitaba — R12. ⏳ FICHA 337
+//     (2026-08-31): ESTA YA NO ENTRA A NINGUN CIERRE (`ORIGENES_GESTION_FUERA_DEL_CIERRE`, mas
+//     abajo en este archivo), asi que el ejemplo describe el mundo hasta esa fecha. La condicion
+//     NO se retira: el escalado del cron sigue entrando, y una lista de inclusion no debe apoyarse
+//     en que otro filtro exista.
 //
 // LISTA DE INCLUSION, jamas de exclusion (R34-c), y no es una preferencia de estilo: con lista
 // negra (`none` / `notIn` sobre las sinteticas conocidas), una familia sintetica FUTURA empezaria
@@ -297,6 +301,62 @@ export const ORIGEN_TIPOS_VISITA_REAL = [
   // del cron SLA (99) y con el el `cobroRechazado` (56). Aqui esa direccion es correcta porque es
   // la propia tienda quien decide el desenlace, sabiendo el precio (el aviso de D7 se lo dice).
   "gestion_tienda_ayuda",
+] as const satisfies readonly OrdenHistorialOrigenTipo[];
+
+// 💰 FICHA 337 (2026-08-31) — LAS FAMILIAS QUE **NO ENTRAN** AL CIERRE DE NINGUN MENSAJERO.
+//
+// ESTA LISTA REVOCA UNA DECISION ANTERIOR, y se dice con todas las letras porque el `cierre_id
+// NULL` de esas dos vias era DELIBERADO, no un descuido:
+//
+//   - `100/R10` (`GestionOrdenRepository.reprogramarDesdeDevuelta`): «cierre_id NULL -> entra al
+//     proximo cierre pero aporta $0.00».
+//   - `240/R18` (`GestionOrdenRepository.rechazarDesdeDevuelta`): «ese NULL es lo que deja que la
+//     recoja el SIGUIENTE cierre del mensajero por el mismo mecanismo que vincula las suyas».
+//
+// **La ficha 337 REVOCA `100/R10` y `240/R18` en su parte de PERTENENCIA AL CIERRE**, con el OK
+// explicito del humano fechado el 2026-08-31, tras medirlo contra produccion: **41 gestiones de
+// escritorio** (22 `rechazo_tienda` + 19 `reprogramacion_tienda`) dentro de los 6 cierres aun no
+// aprobados, y un cierre entero de un mensajero —Andy Cortes— con **5 filas, ninguna suya**. La
+// premisa de aquellas dos decisiones era «aporta 0,00, asi que no molesta»; lo medido dice que el
+// dano no es de pago sino de ATRIBUCION y de CONTEO: el mensajero firma un documento de trabajo
+// que no hizo. Patron de revocacion: `specs/332-eliminar-plantilla-gasto-fijo/design.md` §0.
+//
+// ⚠️ CONSECUENCIA DE DINERO, DECLARADA Y NO RESUELTA AQUI: hoy el cobro de flete devuelto por un
+// rechazo de escritorio (`rechazo_tienda` -> `resultado = rechazada` -> `cobroRechazado`, 56) solo
+// se materializa AL APROBAR EL CIERRE DEL MENSAJERO. Al sacar esas gestiones del cierre, **ese
+// cobro queda EN PAUSA**. NO SE PIERDE —la gestion y su tarifa congelada siguen en la base, y la
+// fila se puede recuperar entera— pero deja de emitirse hasta que exista su via propia de cobro a
+// la tienda, que es OTRA ficha. Quien lea esto buscando «dónde se perdio la plata»: no se perdio,
+// esta aqui, sin documento que la emita todavia.
+//
+// ⚠️ `gestion_tienda_ayuda` **SE QUEDA DENTRO** y su ausencia de esta lista es la decision, no un
+// olvido (pedido humano textual: «lo que no es ayuda»). La ayuda es trabajo que el mensajero SI
+// hizo en la calle —fue a la puerta, no supo cerrar— y la tienda solo lo cerro por el; su gestion
+// le pertenece. Quien anada esa familia aqui vacia de trabajo real los cierres de la 237.
+//
+// ⚠️ TAMPOCO ENTRAN NI `escalado_devuelta_sla` (99) NI `rechazo_tope_intentos` (276), que tambien
+// nacen con `cierre_id NULL` sin que el mensajero decida nada. Quedan FUERA DE ESTA FICHA a
+// proposito: mueven dinero VIVO por el cierre (el `cobroRechazado` de la 56) y sacarlas sin su via
+// de cobro propia pausaria un ingreso que hoy si se emite. Es alcance ajeno, y esta MEDIDO y
+// DICHO, no en silencio. El guardia de `tests/unit/guards/origenes-admitidos-en-cierre.guardia.test.ts`
+// las mantiene visibles como ADMITIDAS, para que la proxima decision se tome mirandolas.
+//
+// LISTA DE EXCLUSION, y aqui SI es lo correcto —al reves que `ORIGEN_TIPOS_VISITA_REAL`, que es de
+// inclusion por una razon de dinero explicada arriba—. El motivo: la pertenencia al cierre es hoy
+// UNIVERSAL (toda gestion con `cierre_id IS NULL` del mensajero entra), y una lista blanca aqui
+// dejaria fuera EN SILENCIO a `escalado_devuelta_sla`, `rechazo_tope_intentos` y a cualquier
+// familia futura de calle —gestiones que el mensajero SI trabajo y que dejarian de pagarse—. La
+// direccion segura del error en ESTE predicado es «ante la duda, entra». Lo que impide que una
+// familia nueva se cuele sin decidirlo NO es la polaridad de la lista: es el guardia del conjunto
+// CERRADO citado arriba, que enrojece en cuanto el enum gana un valor.
+export const ORIGENES_GESTION_FUERA_DEL_CIERRE = [
+  // Feature 240: la tienda rechaza a mano una devolucion ya anclada (`devuelta -> rechazada`).
+  // 22 de las 41 filas medidas. Es la que deja el cobro EN PAUSA (ver arriba).
+  "rechazo_tienda",
+  // Feature 100: la tienda reprograma desde novedades una orden ya devuelta
+  // (`devuelta -> reprogramada`). 19 de las 41 filas medidas. Money-neutral: una `reprogramada`
+  // no emite ningun concepto, asi que sacarla no pausa ningun cobro.
+  "reprogramacion_tienda",
 ] as const satisfies readonly OrdenHistorialOrigenTipo[];
 
 // Feature 215 (T4, R13/R28): aqui vivia `ORIGEN_TIPOS_REPROGRAMADA_INTENTO`, la lista blanca de

@@ -258,7 +258,9 @@ export interface RechazarDesdeDevueltaInput {
  * ⚠️ LOS DOS IDS DE USUARIO SON PERSONAS DISTINTAS, y ese es el corazon de la ficha:
  *   - `mensajeroId` = el mensajero ASIGNADO a la orden. Es a quien se ATRIBUYE la gestion
  *     (`gestion_orden.mensajero_id`) y, por tanto, EN QUE CIERRE CAE: `crearCierre` vincula por
- *     `{ mensajeroId, cierreId: null, anuladaAt: null }` y `findGestionesPendientes` filtra igual.
+ *     `{ mensajeroId, cierreId: null, anuladaAt: null, ORIGEN }` y `findGestionesPendientes`
+ *     filtra igual (`gestionesDelCierreWhere`, ficha 337). `gestion_tienda_ayuda` NO esta entre
+ *     los origenes excluidos, asi que esta via SIGUE cayendo en el cierre, igual que siempre.
  *     💰 Si aqui entrara el id de la tienda, la fila NO se vincularia a ningun cierre NUNCA:
  *     quedaria fuera de los cinco feeds de dinero, fuera del snapshot, fuera del escaneo de la
  *     confirmacion fisica (238) y fuera del conteo de intentos. La ficha dejaria de cumplirse sin
@@ -448,18 +450,30 @@ export interface IGestionOrdenRepository {
    * a mano saldria GRATIS y esperar al plazo costaria —sobre el mismo paquete—, y ademas la fila no
    * entraria en ningun cierre: nadie podria auditar quien decidio el retorno.
    *
-   * ⚠️ EL `mensajero_id` ES EL DEL MENSAJERO, NUNCA EL DE LA TIENDA (R9), y no es cosmetico: es lo
-   * que mete la fila en un cierre (`crearCierre` vincula por `{ mensajeroId, cierreId: null }`).
-   * Con el id de la tienda ahi, la gestion NO se vincularia a ningun cierre nunca y el rechazo
-   * seria invisible y gratis. Quien decidio va al historial, en `actor_usuario_id`.
+   * ⚠️ EL `mensajero_id` ES EL DEL MENSAJERO, NUNCA EL DE LA TIENDA (R9). Sigue siendo la
+   * ATRIBUCION de la orden (a quien se le devolvio el paquete) y lo lee el bloque 139 de la
+   * aprobacion; lo que YA NO hace es meter la fila en el cierre de esa persona — ver la nota de
+   * R18 aqui debajo. Quien decidio va al historial, en `actor_usuario_id`.
    *
    * NO CUENTA COMO INTENTO por su ORIGEN (R19): `rechazo_tienda` esta FUERA de
    * `ORIGEN_TIPOS_VISITA_REAL`, igual que `reprogramacion_tienda` y por la misma razon — la orden
    * YA TIENE contada su gestion `devuelta` real, y sumarla da el doble conteo de 160/R2.
    *
-   * NO emite ningun movimiento de dinero en este instante (R18): el `cierre_id NULL` es lo que
-   * deja que los cinco feeds la cobren cuando se apruebe el cierre que la recoja, por el mismo
-   * mecanismo que cualquier gestion del mensajero.
+   * NO emite ningun movimiento de dinero en este instante (R18).
+   *
+   * 💰 ⏳ **LA FICHA 337 (2026-08-31) REVOCA LA SEGUNDA MITAD DE R18.** Decia que el
+   * `cierre_id NULL` era «lo que deja que los cinco feeds la cobren cuando se apruebe el cierre que
+   * la recoja, por el mismo mecanismo que cualquier gestion del mensajero». Ese mecanismo prestado
+   * era el defecto: metia en el documento de trabajo del mensajero una decision de escritorio en la
+   * que el no intervino (medido: 22 filas `rechazo_tienda` en los 6 cierres pendientes, una de
+   * ellas formando un cierre entero ajeno). Desde la 337, `CierreDiaRepository` excluye esta
+   * familia por su ORIGEN (`ORIGENES_GESTION_FUERA_DEL_CIERRE`).
+   *
+   * ⚠️ **CONSECUENCIA DE DINERO, EN PAUSA Y NO PERDIDA**: sin cierre que la recoja, el
+   * `cobroRechazado` (56) de este rechazo **deja de emitirse** hasta que exista su via propia de
+   * cobro a la tienda —documento aparte, ficha aparte—. La gestion, su `resultado = rechazada` y la
+   * tarifa congelada de la orden siguen enteras en la base: cuando esa via exista, el cobro se
+   * emite desde aqui sin reconstruir nada.
    *
    * Devuelve `true` si transiciono; `false` si la orden ya salio de `devuelta` (carrera con el cron
    * de la 99, o segundo envio). En esa rama el cron tampoco cobra dos veces: si gana la tienda,
@@ -483,7 +497,11 @@ export interface IGestionOrdenRepository {
    *      divergir del primero.
    *   2. `gestion_orden` con `mensajeroId` = el mensajero y `cierreId: null` (R3/R9). El `NULL` es
    *      lo que deja que la vincule EL MISMO mecanismo que vincula las del mensajero, sin camino
-   *      propio.
+   *      propio. ⚠️ ESTO SIGUE VIGENTE PARA LA AYUDA, y la ficha 337 lo RATIFICA en vez de
+   *      revocarlo: `gestion_tienda_ayuda` se queda DENTRO del cierre (pedido humano textual: «lo
+   *      que no es ayuda») porque la visita la hizo el mensajero y la tienda solo la cerro por el.
+   *      Las que salen del cierre son `rechazo_tienda` y `reprogramacion_tienda`, que se deciden
+   *      sobre una orden que YA VOLVIO A BODEGA.
    *   3. las N filas de `gestion_orden_evidencia`, en la MISMA tx (R2/R15).
    *   4. `appendCambioEstado` por el choke point (R4/R5): actor = LA TIENDA,
    *      `origen_tipo = gestion_tienda_ayuda`, enlazando la gestion.
