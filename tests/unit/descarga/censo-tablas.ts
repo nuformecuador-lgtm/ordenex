@@ -131,6 +131,18 @@ export interface ArchivoCensado {
 // cruda). Se incrementan desde los números REALES de la feature 304 (28 = 27 + 1), no desde los
 // del spec original, que ya estaban obsoletos cuando se escribió aquélla.
 //
+// FICHA 337 (segunda mitad) — SUMA de una tabla, `fuera`: «Cobros por rechazo de tienda por
+// aprobar» (`app/(app)/wallet/_components/CobrosRechazoTiendaPendientesPanel.tsx`). Es la cola en
+// la que un administrador decide si se le cobra a la tienda el retorno de una devolución que ella
+// misma rechazó desde novedades, y NO gana descarga: el motivo está en su entrada y es el mismo,
+// palabra por palabra, que el de su hermana de la 333 —cola de decisión efímera, cuyo contenido
+// aterriza en libros que sí descargan—. Se registra aquí porque es lo que `cobertura-tablas.guardia`
+// obliga a DECIDIR: sin esta entrada la guardia se pone roja, que es exactamente el comportamiento
+// buscado (se vio fallar con «29 recibido / 28 esperado» antes de tocar los números).
+//
+// Totales VIGENTES, medidos contra el árbol: **30 tablas = 29 `<DataTable>` en 29 archivos + 1
+// `<table>` cruda**, con 10 exclusiones (9 con `<DataTable>` + la cruda).
+//
 // FEATURE 304 — SUMA de una tabla, `fuera`: «Órdenes con el monto redondeado (carga masiva)».
 // Dice qué filas entraron con el monto redondeado al colón más cercano (aviso de la 299) y de
 // cuánto a cuánto. No gana descarga y el motivo está escrito en su entrada: son filas del
@@ -299,6 +311,26 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
           "produce movimiento alguno. Un archivo de esta cola sería la foto de un instante que " +
           "nadie puede volver a reproducir. Decisión de `specs/333-gasto-fijo-autorizacion/" +
           "design.md §7`",
+      },
+    ],
+  },
+  {
+    // FICHA 337 (segunda mitad) -- la cola de decision del cobro por rechazo desde novedades. Va
+    // entre `CobrosGastoFijoPendientesPanel` y `GastosFijosPlantillasPanel` porque la guardia
+    // recorre el arbol en orden alfabetico.
+    ruta: "app/(app)/wallet/_components/CobrosRechazoTiendaPendientesPanel.tsx",
+    tablas: [
+      {
+        nombre: "Cobros por rechazo de tienda por aprobar",
+        estado: "fuera",
+        nota:
+          "cola de DECISIÓN efímera dentro de /wallet, mismo criterio -- y mismo motivo-- que su " +
+          "hermana «Cobros de gasto fijo por aprobar»: un puñado de filas que existen sólo hasta " +
+          "que alguien las aprueba o las descarta, y que desaparecen de la sección en cuanto se " +
+          "deciden. Lo aprobado aterriza en DOS libros que SÍ descargan con el conjunto completo " +
+          "y sus filtros -- el «Libro de movimientos de la caja principal» y el desglose de " +
+          "movimientos de la tienda--; lo descartado no produce movimiento alguno. Un archivo de " +
+          "esta cola sería la foto de un instante que nadie puede volver a reproducir",
       },
     ],
   },

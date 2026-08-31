@@ -4,6 +4,7 @@ import type {
   GestionResultado,
   GestionUbicacionAusencia,
   MetodoPagoValue,
+  Prisma,
 } from "@prisma/client";
 
 // Feature 36 — contrato del repositorio del flujo del mensajero. Persistencia de
@@ -11,6 +12,18 @@ import type {
 // puntero de bloqueo 1-a-1. Solo queries Prisma; sin logica de negocio (esa vive
 // en MisAsignacionesService). Los `estatusId` destino/origen los resuelve el
 // service via IOrdenRepository.findEstatusIdByValue.
+
+/**
+ * FICHA 337 (segunda mitad) — el cliente de la transaccion que este repositorio abre, tal como se
+ * lo presta a quien necesita escribir DENTRO de ella (`RechazarDesdeDevueltaInput.trasCrearGestion`).
+ *
+ * Es el `tx` completo de Prisma y no un `Pick` estrecho A PROPOSITO: quien lo recibe es un
+ * repositorio AJENO —el del cobro—, y estrecharlo aqui obligaria a este contrato a nombrar la
+ * tabla de ese otro dominio. Quien lo consume SI lo estrecha, en su propia firma
+ * (`RechazoTiendaCobroTxClient = Pick<PrismaClient, "rechazoTiendaCobro">`), que es donde el
+ * acotado significa algo.
+ */
+export type GestionTxClient = Prisma.TransactionClient;
 
 /**
  * Ventana HALF-OPEN `[desde, hasta)` de un dia de Costa Rica, en instantes UTC. Half-open
@@ -248,6 +261,31 @@ export interface RechazarDesdeDevueltaInput {
   motivo: string;
   /** R11: la persona de la TIENDA que decidio. Solo va al historial, nunca a la gestion. */
   actorUsuarioId: string;
+  /**
+   * FICHA 337 (segunda mitad, 2026-08-31) — EL EFECTO EXTRA QUE VIAJA DENTRO DE LA MISMA
+   * TRANSACCION, con la gestion sintetica ya creada.
+   *
+   * Existe para UNA cosa y solo una: dar de alta el COBRO PENDIENTE contra la tienda
+   * (`rechazo_tienda_cobro`) en la misma transaccion que crea la gestion `rechazada`. O queda el
+   * rechazo Y su cobro, o no queda ninguno de los dos. Emitirlo despues, fuera de la tx, abriria
+   * un hueco real: una caida entre el commit y la insercion dejaria un rechazo que no se cobra
+   * NUNCA y sin que nada lo diga -- exactamente el fallo mudo que esta ficha vino a cerrar por el
+   * otro lado.
+   *
+   * POR QUE ES UN CALLBACK Y NO UN PAYLOAD DE DATOS. Este repositorio es el de `gestion_orden` y
+   * NO debe escribir en `rechazo_tienda_cobro`: eso lo hace `RechazoTiendaCobroRepository`, con su
+   * propio cliente acotado, invocado desde el servicio que orquesta. Lo unico que este metodo
+   * presta es su transaccion. Es exactamente la forma que ya usa `crearGestion` dentro del helper
+   * compartido `transicionarDesdeDevuelta`: el llamador aporta QUE se escribe, el helper aporta
+   * DONDE.
+   *
+   * OPCIONAL a proposito: sin el, la conducta de este metodo no cambia ni un byte y todos los
+   * dobles de test que ya existian siguen valiendo.
+   *
+   * Se invoca SOLO si la gestion se creo de verdad. Si lanza, la transaccion entera revierte: no
+   * queda un rechazo a medias.
+   */
+  trasCrearGestion?: (tx: GestionTxClient, gestionId: string) => Promise<void>;
 }
 
 /**
@@ -469,11 +507,14 @@ export interface IGestionOrdenRepository {
    * ellas formando un cierre entero ajeno). Desde la 337, `CierreDiaRepository` excluye esta
    * familia por su ORIGEN (`ORIGENES_GESTION_FUERA_DEL_CIERRE`).
    *
-   * ⚠️ **CONSECUENCIA DE DINERO, EN PAUSA Y NO PERDIDA**: sin cierre que la recoja, el
-   * `cobroRechazado` (56) de este rechazo **deja de emitirse** hasta que exista su via propia de
-   * cobro a la tienda —documento aparte, ficha aparte—. La gestion, su `resultado = rechazada` y la
-   * tarifa congelada de la orden siguen enteras en la base: cuando esa via exista, el cobro se
-   * emite desde aqui sin reconstruir nada.
+   * ⚠️ **CONSECUENCIA DE DINERO — LA VIA PROPIA YA EXISTE, PARA UNO DE LOS DOS CONCEPTOS.**
+   *   · El FLETE DE DEVOLUCION + IVA que paga la TIENDA se emite desde la segunda mitad de la 337:
+   *     este metodo da de alta un COBRO PENDIENTE (`rechazo_tienda_cobro`) en su MISMA transaccion
+   *     —ver `trasCrearGestion`— y un administrador lo aprueba en `/wallet`. Los apuntes que nacen
+   *     al aprobar son los mismos que emitia la aprobacion del cierre.
+   *   · El `cobroRechazado` / `ingreso_bodega_rechazo` (56), que es INGRESO DE LA BODEGA y no del
+   *     ledger de la tienda, **SIGUE EN PAUSA**: se congelaba al crear el cierre del mensajero y lo
+   *     consume el cierre de BODEGA. No se pierde, pero hoy nadie lo emite. Otra ficha.
    *
    * Devuelve `true` si transiciono; `false` si la orden ya salio de `devuelta` (carrera con el cron
    * de la 99, o segundo envio). En esa rama el cron tampoco cobra dos veces: si gana la tienda,

@@ -371,9 +371,14 @@ export interface ICierreDiaRepository {
    * vincula 0 y este metodo devuelve `null` — no se le crea un cierre vacio a su nombre, que es
    * exactamente el caso medido en produccion (5 filas, ninguna suya).
    *
-   * ⚠️ COBRO EN PAUSA: el `cobroRechazado` (56) de un `rechazo_tienda` se emitia al APROBAR el
-   * cierre que lo recogia. Al no recogerlo, ese cobro **queda en pausa y no se pierde** hasta que
-   * exista su via propia de cobro a la tienda (ficha aparte).
+   * ⚠️ LOS DOS COBROS QUE ESTO TOCA, y NO corren la misma suerte:
+   *   · el FLETE DE DEVOLUCION + IVA que paga la TIENDA ya tiene via propia desde la segunda mitad
+   *     de la 337 (`rechazo_tienda_cobro`: pendiente al rechazar, apuntes al aprobarlo en
+   *     `/wallet`). No depende de este cierre y no se pierde.
+   *   · el `cobroRechazado` / `ingreso_bodega_rechazo` (56), que es INGRESO DE LA BODEGA y se
+   *     congelaba AQUI al crear el cierre, **SIGUE EN PAUSA**: sin cierre no se congela y el cierre
+   *     de bodega no tiene que sumar. No se pierde (la gestion y su `resultado` siguen enteros),
+   *     pero hoy nadie lo emite. Es alcance de otra ficha.
    */
   crearCierre(input: CrearCierreInput): Promise<string | null>;
   /** R18: cierres del mensajero (mas reciente primero) con estado + totales. */

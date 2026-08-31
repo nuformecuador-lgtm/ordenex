@@ -7,6 +7,15 @@ import {
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { OrdenDTO } from "@/lib/types/orden";
+import type {
+  ITarifaVigenteRepository,
+  TarifaVigenteResuelta,
+} from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
+import type {
+  CrearCobroRechazoTiendaInput,
+  IRechazoTiendaCobroRepository,
+} from "@/lib/interfaces/repositories/IRechazoTiendaCobroRepository";
+import { clavePar } from "@/lib/utils/cascada-tarifa";
 
 // 💰 Feature 240 (T3.1) — regla del RECHAZO MANUAL por la tienda. Molde:
 // `reprogramacion-tienda-service.test.ts` (100), su hermana de esta misma card.
@@ -54,22 +63,93 @@ function ordenDTO(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
   };
 }
 
-type OrdenRepoDoble = Pick<IOrdenRepository, "findById" | "findEstatusIdByValue">;
+type OrdenRepoDoble = Pick<
+  IOrdenRepository,
+  "findById" | "findEstatusIdByValue" | "findBaseCobroDevolucion"
+>;
 type GestionRepoDoble = Pick<IGestionOrdenRepository, "rechazarDesdeDevuelta">;
+type TarifaRepoDoble = Pick<ITarifaVigenteRepository, "resolveTarifas">;
+type CobroRepoDoble = Pick<IRechazoTiendaCobroRepository, "crearPendiente">;
 
 const ESTATUS: Record<string, string> = { devuelta: "os-devuelta", rechazada: "os-rechazada" };
+
+/** Reloj FIJO. El `generado_el` del cobro no puede depender de cuando corra la suite. */
+const AHORA = new Date("2026-08-31T15:00:00.000Z"); // 09:00 en Costa Rica -> dia CR 2026-08-31
+const DIA_CR = "2026-08-31";
+
+const PAR = { tiendaId: "store-1", zonaId: "z1" };
+
+/**
+ * FICHA 337 — la tarifa que resuelve para el par de la orden de estos casos. Los numeros estan
+ * elegidos para que NO sean intercambiables: 500,00 de devolucion no-GAM contra 400,00 GAM, y un
+ * IVA del 13 % que da 65,00 / 52,00. Si el service leyera la columna equivocada, el test lo dice.
+ */
+function tarifaResuelta(overrides: Partial<TarifaVigenteResuelta> = {}): TarifaVigenteResuelta {
+  return {
+    tarifaId: "tar-1",
+    valorFlete: "1000.00",
+    valorFleteGam: "900.00",
+    valorFleteDevuelto: "500.00",
+    valorFleteDevueltoGam: "400.00",
+    comisionCod: "3.50",
+    ivaFlete: "13.00",
+    ivaComisionCod: "13.00",
+    tarifaEspecial: null,
+    tarifaEspecialDevuelta: null,
+    fulfillment: "0.00",
+    ...overrides,
+  };
+}
 
 function buildOrdenRepo(overrides: Partial<OrdenRepoDoble> = {}): OrdenRepoDoble {
   return {
     findById: vi.fn(async () => ordenDTO()),
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS[v] ?? null),
+    // FICHA 337: las entradas de la formula, tal como estan en el instante del rechazo.
+    findBaseCobroDevolucion: vi.fn(async () => ({
+      ordenId: "o1",
+      tiendaId: "store-1",
+      zonaId: "z1",
+      esCentral: false,
+      esZonaEspecial: false,
+      montoCobrar: "25000.00",
+      cobraComision: true,
+    })),
     ...overrides,
   };
 }
 
 function buildGestionRepo(overrides: Partial<GestionRepoDoble> = {}): GestionRepoDoble {
   return {
-    rechazarDesdeDevuelta: vi.fn(async () => true),
+    // ⭑ EL DOBLE EJECUTA EL HOOK, y no es un detalle: si se limitara a devolver `true`, el alta
+    // del cobro no se ejercitaria NUNCA desde este nivel y la suite quedaria verde con el
+    // cableado roto. El repositorio real lo invoca dentro de su transaccion con la gestion ya
+    // creada; aqui se imita eso con un `tx` de mentira y un id fijo.
+    rechazarDesdeDevuelta: vi.fn(async (input) => {
+      if (input.trasCrearGestion) {
+        await input.trasCrearGestion(TX_FALSO, "gest-nueva");
+      }
+      return true;
+    }),
+    ...overrides,
+  };
+}
+
+/** El `tx` que el repositorio real presta al hook. Aqui no se usa: el doble del cobro lo ignora. */
+const TX_FALSO = {} as Parameters<
+  NonNullable<Parameters<IGestionOrdenRepository["rechazarDesdeDevuelta"]>[0]["trasCrearGestion"]>
+>[0];
+
+function buildTarifaRepo(overrides: Partial<TarifaRepoDoble> = {}): TarifaRepoDoble {
+  return {
+    resolveTarifas: vi.fn(async () => new Map([[clavePar(PAR), tarifaResuelta()]])),
+    ...overrides,
+  };
+}
+
+function buildCobroRepo(overrides: Partial<CobroRepoDoble> = {}): CobroRepoDoble {
+  return {
+    crearPendiente: vi.fn(async () => 1),
     ...overrides,
   };
 }
@@ -77,10 +157,32 @@ function buildGestionRepo(overrides: Partial<GestionRepoDoble> = {}): GestionRep
 function build(
   ordenOverrides: Partial<OrdenRepoDoble> = {},
   gestionOverrides: Partial<GestionRepoDoble> = {},
+  tarifaOverrides: Partial<TarifaRepoDoble> = {},
+  cobroOverrides: Partial<CobroRepoDoble> = {},
 ) {
   const ordenRepo = buildOrdenRepo(ordenOverrides);
   const gestionRepo = buildGestionRepo(gestionOverrides);
-  return { ordenRepo, gestionRepo, service: new RechazoTiendaService(ordenRepo, gestionRepo) };
+  const tarifaRepo = buildTarifaRepo(tarifaOverrides);
+  const cobroRepo = buildCobroRepo(cobroOverrides);
+  return {
+    ordenRepo,
+    gestionRepo,
+    tarifaRepo,
+    cobroRepo,
+    service: new RechazoTiendaService(
+      ordenRepo,
+      gestionRepo,
+      tarifaRepo,
+      cobroRepo,
+      () => AHORA,
+    ),
+  };
+}
+
+/** El input con el que el service da de alta el cobro, leido del doble. */
+function cobroCreado(cobroRepo: CobroRepoDoble): CrearCobroRechazoTiendaInput {
+  const mock = cobroRepo.crearPendiente as ReturnType<typeof vi.fn>;
+  return mock.mock.calls[0][1] as CrearCobroRechazoTiendaInput;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -110,6 +212,11 @@ describe("RechazoTiendaService — el adminTienda dueño rechaza (R1/R12)", () =
       estatusRechazadaId: "os-rechazada",
       motivo: MOTIVO, // R12: llega tal cual, sin recortes ni defaults
       actorUsuarioId: "store-1", // R11: la persona de la tienda que decidio
+      // ⏳ FICHA 337: la clave SEXTA. Este literal ES EL CONTRATO -- afirma que no se manda nada
+      // mas-- asi que se EXTIENDE, no se relaja a `toMatchObject`. Que el hook sea una funcion es
+      // lo que hace que el cobro entre en la transaccion del rechazo; si alguien lo dejara de
+      // pasar, aqui llegaria `undefined` y este caso caeria.
+      trasCrearGestion: expect.any(Function),
     });
   });
 
@@ -124,7 +231,14 @@ describe("RechazoTiendaService — el adminTienda dueño rechaza (R1/R12)", () =
     const { service, ordenRepo } = build();
 
     await expect(service.rechazar("o1", MOTIVO, TIENDA)).resolves.toEqual({ status: "ok" });
-    expect(Object.keys(ordenRepo).sort()).toEqual(["findById", "findEstatusIdByValue"]);
+    // FICHA 337: el censo gana `findBaseCobroDevolucion` -- las entradas de la formula del cobro--
+    // y sigue SIN nada que huela a reloj, anclaje o ventana de plazo, que es lo que este caso
+    // afirma. Se extiende la lista literal en vez de relajarla: es el contrato.
+    expect(Object.keys(ordenRepo).sort()).toEqual([
+      "findBaseCobroDevolucion",
+      "findById",
+      "findEstatusIdByValue",
+    ]);
     // Y el `findById` es UNO: no hay una segunda lectura escondida del historial de anclaje.
     expect(ordenRepo.findById).toHaveBeenCalledTimes(1);
   });
@@ -305,4 +419,195 @@ describe("RechazoTiendaService — las ramas que NO escriben (R3)", () => {
       expect(gestionRepo.rechazarDesdeDevuelta).not.toHaveBeenCalled();
     },
   );
+});
+
+/* -------------------------------------------------------------------------- */
+/* 4. FICHA 337 (segunda mitad) — EL COBRO PENDIENTE CONTRA LA TIENDA          */
+/* -------------------------------------------------------------------------- */
+
+describe("💰 337 — el rechazo da de alta un COBRO PENDIENTE contra la tienda", () => {
+  it("⭑ el cobro nace DENTRO de la transaccion del rechazo, con la gestion recien creada", async () => {
+    // La atomicidad no se afirma con un comentario: se afirma viendo que el alta llega por el
+    // HOOK que el repositorio invoca con el `gestionId`, y no por una llamada suelta del service
+    // despues de que el rechazo haya confirmado. Si alguien moviera el alta fuera de la
+    // transaccion, `crearPendiente` se llamaria con otro `gestionId` (o sin el) y este caso cae.
+    const { service, cobroRepo } = build();
+
+    await expect(service.rechazar("o1", MOTIVO, TIENDA)).resolves.toEqual({ status: "ok" });
+
+    expect(cobroRepo.crearPendiente).toHaveBeenCalledTimes(1);
+    expect(cobroCreado(cobroRepo).gestionId).toBe("gest-nueva");
+  });
+
+  it("⭑ el importe es el que produce `derivarIngresoOrden`, NO uno calculado aqui", async () => {
+    // Tarifa no-GAM: flete devuelto 500,00 e IVA del 13 % -> 65,00. Los numeros del fixture estan
+    // elegidos para que la columna GAM (400,00 / 52,00) de OTRA cosa: si el service leyera la
+    // columna equivocada, o si alguien reimplementara la multiplicacion, aqui se ve.
+    const { service, cobroRepo } = build();
+
+    await service.rechazar("o1", MOTIVO, TIENDA);
+
+    // `toEqual` del objeto ENTERO: es el contrato de lo que se congela, incluidas las ausencias.
+    expect(cobroCreado(cobroRepo)).toEqual({
+      gestionId: "gest-nueva",
+      ordenId: "o1",
+      tiendaId: "store-1", // CONGELADA: a quien se le cobra
+      montoFlete: "500.00", // STRING escala 2, nunca number
+      montoIva: "65.00",
+      tarifaId: "tar-1", // auditoria: de que fila salio
+      generadoEl: DIA_CR, // dia CALENDARIO de Costa Rica, del reloj inyectado
+    });
+  });
+
+  it("⭑ una orden en zona GAM cobra la columna GAM (400,00 + 52,00)", async () => {
+    // El contraste del caso anterior. `esCentral` es la unica diferencia y cambia los DOS importes.
+    const { service, cobroRepo } = build({
+      findBaseCobroDevolucion: vi.fn(async () => ({
+        ordenId: "o1",
+        tiendaId: "store-1",
+        zonaId: "z1",
+        esCentral: true,
+        esZonaEspecial: false,
+        montoCobrar: "25000.00",
+        cobraComision: true,
+      })),
+    });
+
+    await service.rechazar("o1", MOTIVO, TIENDA);
+
+    expect(cobroCreado(cobroRepo).montoFlete).toBe("400.00");
+    expect(cobroCreado(cobroRepo).montoIva).toBe("52.00");
+  });
+
+  it("⭑ el PACTO ESPECIAL del distrito manda sobre la columna normal", async () => {
+    // `tarifa_especial_devuelta` es una entrada de la formula desde el 2026-08-25. Si el service
+    // no pasara `esZonaEspecial`, el pacto no se aplicaria y se cobrarian 500,00 en vez de 300,00.
+    const { service, cobroRepo } = build(
+      {
+        findBaseCobroDevolucion: vi.fn(async () => ({
+          ordenId: "o1",
+          tiendaId: "store-1",
+          zonaId: "z1",
+          esCentral: false,
+          esZonaEspecial: true,
+          montoCobrar: null,
+          cobraComision: false,
+        })),
+      },
+      {},
+      {
+        resolveTarifas: vi.fn(
+          async () =>
+            new Map([[clavePar(PAR), tarifaResuelta({ tarifaEspecialDevuelta: "300.00" })]]),
+        ),
+      },
+    );
+
+    await service.rechazar("o1", MOTIVO, TIENDA);
+
+    expect(cobroCreado(cobroRepo).montoFlete).toBe("300.00");
+    expect(cobroCreado(cobroRepo).montoIva).toBe("39.00"); // 13 % de 300,00
+  });
+
+  it("⭑ SIN tarifa vigente: NO se cobra, pero el rechazo SIGUE adelante", async () => {
+    // El «gap seguro» de R9 de la feature 42, aplicado aqui: sin tarifa no hay importe que
+    // congelar. La direccion segura del error es no cobrar —un cobro fantasma contra una tienda
+    // es peor que uno que no se emitio— y sobre todo NO bloquear a la tienda.
+    const { service, cobroRepo, gestionRepo } = build(
+      {},
+      {},
+      { resolveTarifas: vi.fn(async () => new Map([[clavePar(PAR), null]])) },
+    );
+
+    await expect(service.rechazar("o1", MOTIVO, TIENDA)).resolves.toEqual({ status: "ok" });
+
+    expect(cobroRepo.crearPendiente).not.toHaveBeenCalled();
+    // Y el hook NO viaja: el repositorio se comporta exactamente como antes de esta ficha.
+    const arg = (gestionRepo.rechazarDesdeDevuelta as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.trasCrearGestion).toBeUndefined();
+  });
+
+  it("⭑ flete de devolucion en 0,00: NO se cobra (R10 de la 42), y el rechazo sigue", async () => {
+    // Un cobro de cero no es un cobro. Es la misma regla por la que `agregarIngresosPorConcepto`
+    // OMITE los conceptos en 0.00, y ademas el CHECK `rechazo_tienda_cobro_montos_validos` lo
+    // rechazaria en la base.
+    const { service, cobroRepo } = build(
+      {},
+      {},
+      {
+        resolveTarifas: vi.fn(
+          async () =>
+            new Map([
+              [
+                clavePar(PAR),
+                tarifaResuelta({ valorFleteDevuelto: "0.00", valorFleteDevueltoGam: "0.00" }),
+              ],
+            ]),
+        ),
+      },
+    );
+
+    await expect(service.rechazar("o1", MOTIVO, TIENDA)).resolves.toEqual({ status: "ok" });
+    expect(cobroRepo.crearPendiente).not.toHaveBeenCalled();
+  });
+
+  it("⭑ IVA del 0 %: el cobro SI nace, con el IVA en cero", async () => {
+    // El contraste del caso anterior, y la razon de que el CHECK sea `monto_flete > 0 AND
+    // monto_iva >= 0` y no `> 0` en las dos columnas: el cero del IVA es un valor REAL.
+    const { service, cobroRepo } = build(
+      {},
+      {},
+      {
+        resolveTarifas: vi.fn(
+          async () => new Map([[clavePar(PAR), tarifaResuelta({ ivaFlete: "0.00" })]]),
+        ),
+      },
+    );
+
+    await service.rechazar("o1", MOTIVO, TIENDA);
+
+    expect(cobroCreado(cobroRepo).montoFlete).toBe("500.00");
+    expect(cobroCreado(cobroRepo).montoIva).toBe("0.00");
+  });
+
+  it("⭑ la carrera perdida NO deja cobro: el hook solo corre si la gestion se creo", async () => {
+    // El repositorio real no invoca el hook cuando su `updateMany` guardado afecta cero filas.
+    // Aqui se imita con un doble que devuelve `false` sin ejecutarlo. Un cobro sin rechazo seria
+    // dinero contra una tienda por algo que no paso.
+    const { service, cobroRepo } = build({}, { rechazarDesdeDevuelta: vi.fn(async () => false) });
+
+    const r = await service.rechazar("o1", MOTIVO, TIENDA);
+
+    expect(r.status).toBe("conflict");
+    expect(cobroRepo.crearPendiente).not.toHaveBeenCalled();
+  });
+
+  it("⭑ si el alta del cobro LANZA, la excepcion sube y el rechazo entero revierte", async () => {
+    // La atomicidad, vista desde arriba: el hook corre dentro de la transaccion del repositorio,
+    // asi que un fallo suyo tiene que ABORTARLA. Si el service se lo tragara —un `try/catch`
+    // «para no molestar a la tienda»— quedaria un rechazo que no se cobra nunca y en silencio,
+    // que es exactamente el fallo mudo que esta ficha vino a cerrar.
+    const { service } = build(
+      {},
+      {},
+      {},
+      {
+        crearPendiente: vi.fn(async () => {
+          throw new Error("unique constraint");
+        }),
+      },
+    );
+
+    await expect(service.rechazar("o1", MOTIVO, TIENDA)).rejects.toThrow("unique constraint");
+  });
+
+  it("la tarifa se resuelve por el par (tienda, zona) de la orden, no por la tienda sola", async () => {
+    // La cascada de la feature 274 es sobre el PAR. Pedirla solo por tienda devolveria la fila de
+    // otro nivel y se cobraria una tarifa que no es la de esa zona.
+    const { service, tarifaRepo } = build();
+
+    await service.rechazar("o1", MOTIVO, TIENDA);
+
+    expect(tarifaRepo.resolveTarifas).toHaveBeenCalledWith([{ tiendaId: "store-1", zonaId: "z1" }]);
+  });
 });
