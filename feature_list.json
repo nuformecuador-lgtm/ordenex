@@ -4082,6 +4082,17 @@
       "complexity": "baja",
       "branch": null,
       "status_note": "HALLADA el 2026-08-31 durante el ciclo de la 339, por dos agentes de forma independiente, con el PATH de bash degradado (el PATH de Windows llega separado por `;` y bash lo parte por `:`, asi que se queda sin git, node ni grep). MEDIDO, no supuesto: con `node` ausente `fail()` hace exit 1 y el gate para en seco -- eso funciona. El agujero esta en el escalon de al lado, cuando falta OTRA herramienta: `! pnpm no disponible para correr script 'typecheck'` y lo mismo con 'lint' son avisos, no fallos, y la corrida sigue hasta `== init OK ==` con exit 0. Es decir: el gate puede dar VERDE sin haber ejecutado ni typecheck ni lint. Se anade `! no es un repo git: no se puede clasificar el cambio`, que ademas se salta la NEGATIVA del modo rapido -- justo la guarda que obliga al gate completo cuando el diff toca los cimientos. PROPUESTA: que la ausencia de una herramienta NECESARIA para un tramo declarado sea `fail`, no `warn`; un tramo que no corre no puede contarse como pasado. ⚠️ `init.sh` esta en la lista que OBLIGA al gate completo, asi que verificar este cambio no es barato y por eso no se hizo sobre la marcha. DECISION DEL HUMANO el 2026-08-31: se registra y se deja en pending, no se implementa ahora. Aviso relacionado del mismo dia: con vitest 4 el reporter `basic` ya no existe (`--reporter=basic` aborta con 'Failed to load url basic'), otra forma de creer que un guardia no corre."
+    },
+    {
+      "id": 341,
+      "title": "desde la cabecera del historico de chat se salta a /ordenes filtrado por esa guia",
+      "description": "Un icono en la cabecera del hilo abre /ordenes con la guia (o la remision) como parametro de busqueda, aprovechando que la barra ya lee su estado inicial de la URL.",
+      "zone": "frontend",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "feature/341-historico-a-ordenes",
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-31: «en el historico del chat del admin/maestro agrega un icono en la cabecera que permita redirigir a la vista de ordenes pasando como parametro el num_guia y con el componente recien actualizado que tome ese param para filtrar». Es la PRIMERA consumidora de la 339 y su demostracion de que la capacidad sirve: no hay codigo nuevo de lectura de URL, solo un enlace. || DEPENDE DE LA 339 (PR #642, aun sin mergear a dev): la rama sale de feature/339-filtros-desde-url, no de dev. || MEDIDO ANTES DE ESCRIBIR: (1) `/ordenes` no pasa `terminoKey`, asi que el param es `q`, el defecto de la 339; (2) el DTO del hilo ya trae `numGuia: number | null` y `numRemision`, y `guiaVisible()` resuelve cual mostrar --una orden sin guia cae a la remision, que el buscador de /ordenes tambien indexa--; (3) los roles del historico (maestro, admin) YA ven /ordenes, asi que el enlace no lleva a una puerta cerrada. || ⚠️ CASO BORDE CONOCIDO: `BUSQUEDA_MIN_CHARS` es 3 en /ordenes, asi que una guia de uno o dos digitos no llegaria a viajar. La barra lo dice en pantalla («escribe al menos 3 caracteres»), no falla en silencio. || El humano pidio expresamente NO correr la suite entera: verificacion acotada a lo que toca el cambio."
     }
   ]
 }
