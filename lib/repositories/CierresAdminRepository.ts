@@ -79,6 +79,7 @@ import {
   SIN_GESTION_SELECT,
   toSinGestionRow,
 } from "@/lib/utils/cierre-sin-gestion";
+import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 // Estados de ORIGEN que la resolucion NORMAL (aprobar/rechazar) puede transicionar (R12).
 // Feature 111/R15 (Q1-B): se RETIRA `vencido` (revierte parcialmente la 41 R19). El approve/
@@ -420,7 +421,7 @@ const CIERRE_RESUMEN_SELECT = {
   solicitadoAt: true,
   resueltoAt: true,
   motivoRechazo: true,
-  mensajero: { select: { nombre: true } },
+  mensajero: { select: NOMBRE_USUARIO_SELECT },
   destinoZona: { select: { nombre: true } },
 } as const;
 
@@ -430,7 +431,7 @@ function toResumenRow(r: CierreResumenRow): CierreAdminResumenRow {
   return {
     cierreId: r.id,
     mensajeroId: r.mensajeroId,
-    mensajeroNombre: r.mensajero.nombre,
+    mensajeroNombre: nombreCompletoUsuario(r.mensajero),
     estado: r.estado,
     destinoTipo: r.destinoTipo,
     destinoZonaId: r.destinoZonaId,
@@ -642,7 +643,7 @@ export const GESTION_DESCARGA_SELECT = {
     select: { origenTipo: true },
   },
   // R8/R11: la identidad del CIERRE al que pertenece la gestion.
-  cierre: { select: { solicitadoAt: true, mensajero: { select: { nombre: true } } } },
+  cierre: { select: { solicitadoAt: true, mensajero: { select: NOMBRE_USUARIO_SELECT } } },
 } as const;
 
 type GestionDescargaRow = Prisma.GestionOrdenGetPayload<{
@@ -674,7 +675,7 @@ export function toGestionDescargaDTO(
     throw new Error(`gestion ${g.id} sin cierre: la proyeccion de descarga exige cierre_id`);
   }
   return {
-    mensajeroNombre: g.cierre.mensajero.nombre,
+    mensajeroNombre: nombreCompletoUsuario(g.cierre.mensajero),
     cierreSolicitadoAt: g.cierre.solicitadoAt.toISOString(),
     numGuia: d.numGuia,
     numRemision: d.numRemision,
@@ -1034,8 +1035,9 @@ export class CierresAdminRepository implements ICierresAdminRepository {
           rol: { value: ROL_MENSAJERO },
           ...(zonaDelActor !== null ? { zonaId: zonaDelActor } : {}),
         },
-        // Proyección mínima: id, nombre y su zona. NUNCA email, teléfono, cédula ni hash.
-        select: { id: true, nombre: true, zonaId: true },
+        // Proyección mínima: id, identidad (nombre y apellidos) y su zona. NUNCA email,
+        // teléfono, cédula ni hash.
+        select: { id: true, ...NOMBRE_USUARIO_SELECT, zonaId: true },
         orderBy: { nombre: "asc" },
       }),
     ]);
