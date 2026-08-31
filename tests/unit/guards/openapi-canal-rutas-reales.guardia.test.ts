@@ -116,9 +116,16 @@ const MOTIVO_MINIMO = 20;
  *  `PATHS_ESPERADOS` y se firma allí—: es el ANTI-VACUIDAD. Existe para que el día que el escaneo
  *  deje de encontrar rutas —porque cambió el directorio, la extensión o la convención de Next— la
  *  guardia se ponga ROJA en vez de aprobar un árbol vacío. Bajarlo solo tiene sentido si de verdad
- *  se retiraron endpoints, y entonces se baja a mano y con su motivo, igual que el otro. */
-const MINIMO_RUTAS = 10;
-const MINIMO_OPERACIONES = 11;
+ *  se retiraron endpoints, y entonces se baja a mano y con su motivo, igual que el otro.
+ *
+ *  BAJADA A MANO (2026-08-31), con su motivo: DIEZ → NUEVE `route.ts` y ONCE → DIEZ operaciones.
+ *  Se retiró `app/api/ordenes/api-key/[numGuia]/route.ts` (`GET` de detalle por guía, feature
+ *  106). No es un detector que dejó de ver el árbol: es una BAJA real del contrato, publicada en
+ *  `docs/api/CHANGELOG.md` el mismo día. `GET /api/ordenes/api-key/orden/{id}` (177) sirve el
+ *  MISMO `OrdenDetalle` y además resuelve por `num_remision`, que es lo único que alcanza a una
+ *  orden nacida en `en_preparacion` sin guía. */
+const MINIMO_RUTAS = 9;
+const MINIMO_OPERACIONES = 10;
 
 // ---------------------------------------------------------------------------
 // El detector

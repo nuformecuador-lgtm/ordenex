@@ -253,7 +253,6 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findCausasDevueltaVigentes: vi.fn(async () => new Map()),
     // Feature 106: canal integrador (API por key), no ejercitado aqui.
     listByOwner: vi.fn(async () => ({ items: [], total: 0 })),
-    findDetalleByNumGuiaForOwner: vi.fn(async () => null),
     cancelarViaApi: vi.fn(async () => ({ status: "not_found" as const })),
     // Feature 177: consulta por identificador libre + PDF de etiquetas, no ejercitada aqui.
     findByGuiaORemisionForOwner: vi.fn(

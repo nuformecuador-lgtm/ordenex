@@ -4,6 +4,13 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 
 // Feature 106 (T5/T6) — LECTURA scoped por owner del canal integrador. Prisma mock: el scope
 // (`tienda_id = ownerId AND deleted_at IS NULL`) se afirma sobre el `where` que llega a Prisma.
+//
+// BAJA (2026-08-31) — aqui vivia tambien el bloque de `findDetalleByNumGuiaForOwner`, retirado
+// junto con su endpoint (`GET /api/ordenes/api-key/{numGuia}`). Sus casos ya estaban cubiertos,
+// uno a uno, por `findDetalleByOrdenIdForOwner` en `orden-repository.api-consulta-pdf.test.ts`
+// (misma proyeccion: era la misma constante). Lo que NO estaba duplicado —los seis casos del
+// incidente de la 268/R27, que es donde vive el mapeo de las dos procedencias— se conserva
+// entero aqui abajo, ahora ejercitado por el metodo que sigue vivo.
 
 function buildPrisma(overrides: Record<string, unknown> = {}) {
   return {
@@ -35,6 +42,7 @@ function ordenSelectRow(overrides: Record<string, unknown> = {}) {
 }
 
 const OWNER = "store-1";
+const ORDEN_ID = "orden-1";
 
 describe("OrdenRepository.listByOwner (feature 106, T5)", () => {
   it("R7: el where fuerza tienda_id = ownerId y deleted_at IS NULL (find y count)", async () => {
@@ -94,94 +102,6 @@ describe("OrdenRepository.listByOwner (feature 106, T5)", () => {
   });
 });
 
-describe("OrdenRepository.findDetalleByNumGuiaForOwner (feature 106, T6)", () => {
-  it("R12: devuelve el detalle de una orden propia; where scoped por num_guia + owner + no borrada", async () => {
-    const prisma = buildPrisma({
-      orden: {
-        findMany: vi.fn(),
-        count: vi.fn(),
-        findFirst: vi
-          .fn()
-          .mockResolvedValue({ ...ordenSelectRow(), gestiones: [], incidentesAdmin: [] }),
-      },
-    });
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    const res = await repo.findDetalleByNumGuiaForOwner(10234, OWNER);
-
-    const where = (prisma.orden.findFirst as ReturnType<typeof vi.fn>).mock.calls[0][0].where;
-    expect(where).toMatchObject({ numGuia: 10234, tiendaId: OWNER, deletedAt: null });
-    expect(res).not.toBeNull();
-    expect(res!.numGuia).toBe(10234);
-    expect(res!.estatusValue).toBe("en_bodega_central");
-  });
-
-  it("R13/R14/R24: no existe / ajena / borrada -> null (findFirst null)", async () => {
-    const prisma = buildPrisma();
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-    const res = await repo.findDetalleByNumGuiaForOwner(999, OWNER);
-    expect(res).toBeNull();
-  });
-
-  it("R15: incluye evidencias de entrega/rechazo con storage_path crudo y content-type", async () => {
-    const prisma = buildPrisma({
-      orden: {
-        findMany: vi.fn(),
-        count: vi.fn(),
-        findFirst: vi.fn().mockResolvedValue({
-          ...ordenSelectRow({ estatus: { value: "entregada" } }),
-          gestiones: [
-            {
-              resultado: "entregada",
-              evidenciaStoragePath: "ordenes/o1/evidencia.jpg",
-              evidenciaContentType: "image/jpeg",
-              createdAt: new Date("2026-07-21T10:00:00.000Z"),
-            },
-          ],
-          incidentesAdmin: [],
-        }),
-      },
-    });
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    const res = await repo.findDetalleByNumGuiaForOwner(10234, OWNER);
-
-    // El WHERE de gestiones acota a entrega/rechazo/incidente con evidencia no nula.
-    //
-    // FEATURE 268/R27 (2026-08-22): el `in` gana `incidente`. NO es un olvido de la 106 que se
-    // corrige: es la mitad MENSAJERO del incidente (arista #44), y la otra mitad —la del ADMIN—
-    // no cabe aqui porque no crea gestion ninguna; viaja por `incidentesAdmin`, que este mismo
-    // archivo comprueba mas abajo. El `where` conserva por lo demas su forma exacta (sigue sin
-    // filtrar `anuladaAt`): anadir un value no es la ocasion de cambiar la regla.
-    const gestionesArg = (prisma.orden.findFirst as ReturnType<typeof vi.fn>).mock.calls[0][0].select
-      .gestiones;
-    expect(gestionesArg.where.resultado.in).toEqual(["entregada", "rechazada", "incidente"]);
-    expect(gestionesArg.where.evidenciaStoragePath).toEqual({ not: null });
-    expect(res!.evidencias).toEqual([
-      {
-        resultado: "entregada",
-        storagePath: "ordenes/o1/evidencia.jpg",
-        contentType: "image/jpeg",
-      },
-    ]);
-  });
-
-  it("R18: sin evidencias -> evidencias vacias, no error", async () => {
-    const prisma = buildPrisma({
-      orden: {
-        findMany: vi.fn(),
-        count: vi.fn(),
-        findFirst: vi
-          .fn()
-          .mockResolvedValue({ ...ordenSelectRow(), gestiones: [], incidentesAdmin: [] }),
-      },
-    });
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-    const res = await repo.findDetalleByNumGuiaForOwner(10234, OWNER);
-    expect(res!.evidencias).toEqual([]);
-  });
-});
-
 // FEATURE 268 (T6c / R27, 2026-08-22) — las evidencias del INCIDENTE por sus DOS procedencias.
 // Se afirma en el REPO porque es donde vive el mapeo: el service solo firma lo que recibe.
 describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)", () => {
@@ -210,7 +130,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const res = await repo.findDetalleByNumGuiaForOwner(10234, OWNER);
+    const res = await repo.findDetalleByOrdenIdForOwner(ORDEN_ID, OWNER);
 
     expect(res!.evidencias).toEqual([
       {
@@ -231,7 +151,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const res = await repo.findDetalleByNumGuiaForOwner(10234, OWNER);
+    const res = await repo.findDetalleByOrdenIdForOwner(ORDEN_ID, OWNER);
 
     expect(res!.evidencias).toEqual([
       {
@@ -259,7 +179,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const res = await repo.findDetalleByNumGuiaForOwner(10234, OWNER);
+    const res = await repo.findDetalleByOrdenIdForOwner(ORDEN_ID, OWNER);
 
     expect(res!.evidencias.map((e) => e.storagePath)).toEqual([
       "ordenes/o1/incidente-mensajero.jpg",
@@ -276,7 +196,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const res = await repo.findDetalleByNumGuiaForOwner(10234, OWNER);
+    const res = await repo.findDetalleByOrdenIdForOwner(ORDEN_ID, OWNER);
 
     expect(res!.evidencias).toEqual([]);
   });
@@ -289,7 +209,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.findDetalleByNumGuiaForOwner(10234, OWNER);
+    await repo.findDetalleByOrdenIdForOwner(ORDEN_ID, OWNER);
 
     const { incidentesAdmin } = (prisma.orden.findFirst as ReturnType<typeof vi.fn>).mock.calls[0][0]
       .select;
@@ -313,7 +233,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.findDetalleByNumGuiaForOwner(10234, OWNER);
+    await repo.findDetalleByOrdenIdForOwner(ORDEN_ID, OWNER);
 
     const { incidentesAdmin } = (prisma.orden.findFirst as ReturnType<typeof vi.fn>).mock.calls[0][0]
       .select;

@@ -47,7 +47,6 @@ function paginaVacia(): ApiOrdenListadoDTO {
 function fakeService(): IApiOrdenLecturaService {
   return {
     listar: vi.fn().mockResolvedValue(paginaVacia()),
-    detalle: vi.fn(),
     detallePorOrdenId: vi.fn(), // feature 177: metodo hermano, no usado por este endpoint
   };
 }

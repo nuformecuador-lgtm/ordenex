@@ -22,7 +22,6 @@ import { inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } from "@/lib/utils/f
 type LecturaRepo = Pick<
   IOrdenRepository,
   | "listByOwner"
-  | "findDetalleByNumGuiaForOwner"
   | "findDetalleByOrdenIdForOwner"
   | "findEstatusIdByValue"
 >;
@@ -84,24 +83,22 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
     return { items: items.map(toListItemDTO), pagination: { limit, offset, total } };
   }
 
-  async detalle(actor: Actor, numGuia: number): Promise<ApiOrdenDetalleDTO | null> {
-    // R4/R14: owner = actor.usuarioId; el repo devuelve null si la orden no es del owner.
-    const row = await this.repo.findDetalleByNumGuiaForOwner(numGuia, actor.usuarioId);
-    return this.toDetalleDTO(row);
-  }
-
   /**
-   * Feature 177 (R16/R17) — MISMO detalle publico, pero por `orden.id` (la resolucion de `{id}`
-   * entrega un id, y `num_guia` puede ser NULL). Es una ADICION: `detalle(actor, numGuia)` no
-   * cambia de firma ni de comportamiento. El mapeo y el firmado de evidencias son literalmente
-   * los mismos (`toDetalleDTO`), y el owner se sigue forzando a `actor.usuarioId` (R4/R7).
+   * Feature 177 (R16/R17) — detalle publico de UNA orden propia por `orden.id` (la resolucion de
+   * `{id}` entrega un id, y `num_guia` puede ser NULL). Owner forzado a `actor.usuarioId`
+   * (R4/R7).
+   *
+   * BAJA (2026-08-31): aqui vivia tambien `detalle(actor, numGuia)`, el hermano por `num_guia`
+   * de la 106. Se retiro con su endpoint (`GET /api/ordenes/api-key/{numGuia}`): era el mismo
+   * mapeo sobre la misma proyeccion, alcanzando menos ordenes —una nacida en `en_preparacion`
+   * no tiene guia—. Ver `docs/api/CHANGELOG.md`.
    */
   async detallePorOrdenId(actor: Actor, ordenId: string): Promise<ApiOrdenDetalleDTO | null> {
     const row = await this.repo.findDetalleByOrdenIdForOwner(ordenId, actor.usuarioId);
     return this.toDetalleDTO(row);
   }
 
-  /** Cuerpo comun de `detalle`/`detallePorOrdenId`: fila del repo -> DTO con evidencias firmadas. */
+  /** Fila del repo -> DTO publico con las evidencias firmadas. */
   private async toDetalleDTO(row: ApiOrdenDetalleRow | null): Promise<ApiOrdenDetalleDTO | null> {
     if (!row) return null; // R13/R14: 404 uniforme (no se filtra existencia ajena)
 

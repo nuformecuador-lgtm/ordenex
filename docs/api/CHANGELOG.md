@@ -21,6 +21,61 @@
 
 ---
 
+## 2026-08-31 — RUPTURA: se retira `GET /ordenes/api-key/{num_guia}` (usá `GET /ordenes/api-key/orden/{id}`)
+
+**Rompe si consultabas el detalle por guía en esa URL.** El endpoint deja de existir: a partir de
+esta release responde `404`, como cualquier ruta que el canal no publica.
+
+**Reemplazo, uno a uno:** `GET /api/ordenes/api-key/orden/{id}`. Devuelve **el mismo cuerpo**
+(idéntico schema `OrdenDetalle`: mismos nueve campos de la orden y el mismo array `evidencias` con
+URLs firmadas de 5 min), los mismos `401`/`403`/`404`/`422`, y el mismo 404 uniforme para una orden
+ajena o inexistente. La migración es cambiar la URL:
+
+```diff
+- GET /api/ordenes/api-key/100234
++ GET /api/ordenes/api-key/orden/100234
+```
+
+**Por qué se retira.** `/orden/{id}` acepta como identificador el `num_guia` **o** el
+`num_remision`, así que el endpoint viejo era un segundo camino al mismo recurso que solo sabía
+hacer la mitad. Y la mitad que le faltaba es la que más importa desde fulfillment: una orden que
+nace en `en_preparacion` **no tiene guía todavía** (`numGuia: null`), y por la URL vieja era
+inalcanzable durante toda esa ventana. Mantener dos rutas para un mismo detalle obligaba además a
+publicar, probar y versionar dos veces lo mismo.
+
+**Lo que NO cambia:** `PUT /api/ordenes/api-key/{num_guia}/cancelar` sigue igual, con la guía en el
+path. El listado `GET /api/ordenes/api-key` sigue aceptando los filtros `num_guia` y `num_remision`.
+
+---
+
+## 2026-08-31 — RUPTURA: `POST /ordenes/api-key/cotizacion` ya no devuelve el bloque `totales`
+
+**Rompe si leías `totales`.** La respuesta sigue trayendo `total`, `cotizadas`, `conError` y el
+array `filas` con los dos escenarios de cada fila, exactamente igual que antes. Lo que desaparece
+es el objeto `totales` del lote:
+
+```diff
+ {
+   "total": 3, "cotizadas": 3, "conError": 0,
+-  "totales": { "filasSumadas": 3, "filasExcluidas": 0, "entregado": { ... }, "devuelto": { ... } },
+   "filas": [ ... ]
+ }
+```
+
+**Por qué se retira.** Ese bloque sumaba TODAS las filas cotizadas en el escenario `entregado` y,
+en paralelo, TODAS en el `devuelto`. Son dos compilados bajo dos premisas imposibles: «este lote se
+entrega al 100%» y «este lote se rechaza al 100%». Ningún lote real es ninguna de las dos, así que
+ninguno de los dos números es el costo del lote — y se leían justamente como eso. Lo que este
+endpoint sabe y publica es el precio **por orden**.
+
+**Qué hacer.** Si mostrabas `totales.entregado.total` o `totales.devuelto.total`, agregá vos los
+importes de las filas con `resultado: "cotizada"`, aplicando la tasa de entrega que de verdad
+esperás para tu operación. Los contadores `cotizadas` y `conError` sustituyen a `filasSumadas` y
+`filasExcluidas` uno a uno: valen lo mismo. Los importes de cada fila son los **crudos** de la
+entrada del 2026-08-28, aquí abajo: esta retirada no toca la forma de ningún valor.
+
+---
+
 ## 2026-08-31 — RUPTURA: en `POST /ordenes/api-key/carga`, las filas con error salen de `filas` y viajan en `errores`
 
 **Rompe si buscabas los fallos dentro de `filas`.** La respuesta se parte en dos listas: `filas`

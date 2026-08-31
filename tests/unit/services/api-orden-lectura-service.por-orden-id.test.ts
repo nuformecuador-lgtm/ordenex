@@ -1,6 +1,9 @@
-// Feature 177 (R16/R17) — `ApiOrdenLecturaService.detallePorOrdenId(actor, ordenId)`: MISMO DTO
-// y MISMO firmado de evidencias que `detalle`, pero leyendo por `orden.id`. Es una ADICION: los
-// tests de la 106 (`api-orden-lectura-service.test.ts`) siguen intactos y verdes.
+// Feature 177 (R16/R17) — `ApiOrdenLecturaService.detallePorOrdenId(actor, ordenId)`: el DTO
+// publico del detalle, con sus evidencias firmadas, leyendo por `orden.id`.
+//
+// Nacio como el hermano de `detalle(actor, numGuia)` (106), y desde la baja de ese metodo
+// (2026-08-31, con su endpoint) este archivo es la UNICA cobertura del detalle en el service:
+// aqui viven tambien los casos de incidente de la 268/R27 que antes se afirmaban dos veces.
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { ApiOrdenLecturaService } from "@/lib/services/ApiOrdenLecturaService";
@@ -34,7 +37,6 @@ function row(overrides: Partial<ApiOrdenRow> = {}): ApiOrdenRow {
 function fakeRepo(detalle: ApiOrdenDetalleRow | null) {
   return {
     listByOwner: vi.fn(),
-    findDetalleByNumGuiaForOwner: vi.fn().mockResolvedValue(null),
     findDetalleByOrdenIdForOwner: vi.fn().mockResolvedValue(detalle),
     findEstatusIdByValue: vi.fn(),
   };
@@ -108,8 +110,6 @@ describe("ApiOrdenLecturaService.detallePorOrdenId (feature 177)", () => {
     await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
 
     expect(repo.findDetalleByOrdenIdForOwner).toHaveBeenCalledWith(ORDEN_ID, "store-1");
-    // R17: el metodo de la 106 no se usa en este camino.
-    expect(repo.findDetalleByNumGuiaForOwner).not.toHaveBeenCalled();
   });
 });
 

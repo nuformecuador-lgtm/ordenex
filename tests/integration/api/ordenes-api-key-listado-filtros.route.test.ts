@@ -49,7 +49,6 @@ function paginaVacia(): ApiOrdenListadoDTO {
 function fakeService(overrides: Partial<IApiOrdenLecturaService> = {}): IApiOrdenLecturaService {
   return {
     listar: vi.fn().mockResolvedValue(okListado()),
-    detalle: vi.fn(),
     detallePorOrdenId: vi.fn(), // feature 177: metodo hermano, no usado por este endpoint
     ...overrides,
   };
