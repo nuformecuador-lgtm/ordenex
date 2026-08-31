@@ -14,6 +14,7 @@ import {
   RESULTADOS_QUE_CUENTAN_COMO_INTENTO,
   type OrdenHistorialTransicionDTO,
 } from "@/lib/types/orden-historial";
+import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 // Cliente Prisma acotado a lo que este repo necesita para las LECTURAS (patron
 // CierresAdminRepository/WalletMovimientoRepository). Las escrituras van por el `tx`.
@@ -43,7 +44,7 @@ const WITH_LABELS = {
   include: {
     estatusOrigen: { select: { value: true } },
     estatusDestino: { select: { value: true } },
-    actor: { select: { nombre: true } },
+    actor: { select: NOMBRE_USUARIO_SELECT },
   },
 } as const;
 
@@ -87,7 +88,7 @@ function toEntradaDTO(row: HistorialRow): OrdenHistorialTransicionDTO {
     estatusOrigenValue: row.estatusOrigen?.value ?? null,
     estatusDestinoValue: row.estatusDestino.value,
     origenTipo: row.origenTipo,
-    actorNombre: row.actor?.nombre ?? null,
+    actorNombre: row.actor ? nombreCompletoUsuario(row.actor) : null,
     motivo: row.motivo,
     createdAt: row.createdAt,
   };
