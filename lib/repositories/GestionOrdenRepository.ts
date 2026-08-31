@@ -327,6 +327,20 @@ async function transicionarDesdeDevuelta(
       tx: Prisma.TransactionClient,
       mensajeroId: string,
     ) => Promise<{ id: string }>;
+    /**
+     * FICHA 337 (segunda mitad) — paso 3-bis OPCIONAL: un efecto EXTRA del llamador, con la
+     * gestion ya creada y DENTRO de esta misma transaccion. Hoy lo usa una sola via, el rechazo
+     * de la tienda, para dar de alta su COBRO PENDIENTE: o queda el rechazo Y su cobro, o no queda
+     * ninguno de los dos.
+     *
+     * Va ANTES del append del historial y no despues, y no es indiferente: si el efecto extra
+     * falla, se revierte una transaccion que todavia no habia escrito la fila de auditoria. El
+     * orden entre los dos no cambia el resultado final (la tx es todo-o-nada), pero deja el fallo
+     * mas cerca de su causa cuando se lee un log.
+     *
+     * Ausente ⇒ el helper se comporta EXACTAMENTE como antes de esta ficha.
+     */
+    trasCrearGestion?: (tx: Prisma.TransactionClient, gestionId: string) => Promise<void>;
   },
 ): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
@@ -365,6 +379,13 @@ async function transicionarDesdeDevuelta(
 
     // 3) la gestion sintetica, que es lo unico que difiere entre las dos vias.
     const gestion = await input.crearGestion(tx, ancla.mensajeroId);
+
+    // 3-bis) FICHA 337: el efecto EXTRA del llamador, si lo trae, con la gestion ya creada y en
+    //    ESTA transaccion. Hoy solo el rechazo de la tienda lo usa, para su COBRO PENDIENTE. Si
+    //    lanza, revierte TODO -- incluido el `updateMany` del paso 1 -- y la orden se queda en la
+    //    devolucion anclada, que es la direccion segura del error: mejor un rechazo que no ocurrio
+    //    que un rechazo que no se cobra nunca.
+    if (input.trasCrearGestion) await input.trasCrearGestion(tx, gestion.id);
 
     // 4) append por el choke point (49), actor = adminTienda, familia propia, enlazando la gestion;
     //    origen `devuelta` (fijado por la guarda del UPDATE).
@@ -702,8 +723,12 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
    * `devuelta` SIN gestion que la explique) ABORTA la tx lanzando -> revierte el UPDATE (R20),
    * en vez de persistir una gestion sintetica sin actor. (c) Crea la gestion sintetica
    * `resultado = reprogramada` con `fecha_reprogramacion` (patron `crearGestionYTransicionar`) y
-   * `motivo` opcional, `cierre_id NULL` (entra al proximo cierre pero aporta $0.00: el cierre solo
-   * acredita `entregada`/`rechazada`, R10). (d) Appendea la transicion via el choke point
+   * `motivo` opcional, `cierre_id NULL`. ⏳ Hasta el 2026-08-31 esta linea decia «entra al proximo
+   * cierre pero aporta $0.00» (R10): **la ficha 337 lo REVOCA** — la gestion sigue naciendo con
+   * `cierre_id NULL`, pero NINGUN cierre de mensajero se la lleva ya (el filtro por origen vive en
+   * `CierreDiaRepository.gestionesDelCierreWhere`). Aportar 0,00 no la hacia inofensiva: la metia
+   * en el documento de trabajo de alguien que no la hizo. (d) Appendea la transicion via el choke
+   * point
    * (`actor = adminTienda`, `origen_tipo = reprogramacion_tienda`, enlazando la gestion, R11).
    *
    * NO CUENTA COMO INTENTO DE ENTREGA — y desde la feature 215 (R12/R28/R34) el motivo es el
@@ -747,7 +772,13 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
             resultado: RESULTADO_REPROGRAMADA, // R3
             fechaReprogramacion: new Date(`${input.fechaReprogramacion}T00:00:00.000Z`), // R3
             motivo: input.motivo, // Q1: opcional (puede ser null)
-            cierreId: null, // R10: entra al proximo cierre pero aporta $0.00 (no es entregada/rechazada)
+            // ⏳ DECIA: «R10: entra al proximo cierre pero aporta $0.00 (no es entregada/rechazada)».
+            // 💰 LA FICHA 337 (2026-08-31) **REVOCA esa mitad de `100/R10`**: el NULL se queda —sigue
+            // significando «sin cierre»— pero YA NO la mete en el proximo cierre del mensajero. El
+            // filtro por ORIGEN vive en `CierreDiaRepository` (`gestionesDelCierreWhere`), no aqui:
+            // esta gestion nace igual que siempre y es el cierre quien decide que no es suya.
+            // Money-neutral en los dos mundos: una `reprogramada` no emite ningun concepto.
+            cierreId: null,
           },
           select: { id: true },
         }),
@@ -791,9 +822,15 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
       actorUsuarioId: input.actorUsuarioId, // R11: la persona de la tienda que decidio
       motivo: input.motivo, // R12: el mismo texto en la gestion y en el historial
       llamador: "rechazarDesdeDevuelta",
-      // R8/R18: gestion sintetica `rechazada` con `cierre_id NULL`. Ese NULL es lo que deja que la
-      // recoja el SIGUIENTE cierre del mensajero por el mismo mecanismo que vincula las suyas
-      // (`crearCierre`), sin camino propio y sin mover dinero en este instante.
+      // FICHA 337: si el service trae el alta del COBRO PENDIENTE, entra en ESTA transaccion.
+      // `undefined` cuando no la trae (o no hay nada que cobrar), y entonces el helper no cambia
+      // de conducta. Es la via propia que sustituye al cobro PRESTADO del cierre del mensajero.
+      trasCrearGestion: input.trasCrearGestion,
+      // R8: gestion sintetica `rechazada` con `cierre_id NULL`.
+      // ⏳ R18 DECIA que ese NULL era «lo que deja que la recoja el SIGUIENTE cierre del mensajero
+      // por el mismo mecanismo que vincula las suyas». **REVOCADO por la ficha 337 (2026-08-31)**:
+      // esa via prestada era el bug. Sigue sin camino propio —y esa es justo la deuda que la ficha
+      // declara en voz alta, no un olvido.
       crearGestion: (tx, mensajeroId) =>
         tx.gestionOrden.create({
           data: {
@@ -801,7 +838,16 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
             mensajeroId, // R9: el MENSAJERO, no la tienda. Es lo que la mete en un cierre.
             resultado: RESULTADO_RECHAZADA, // D1: el mismo que escribe el cron
             motivo: input.motivo, // R12: obligatorio en esta via
-            cierreId: null, // R18: ningun movimiento de dinero hasta que se apruebe el cierre
+            // ⏳ DECIA: «R18: ningun movimiento de dinero hasta que se apruebe el cierre».
+            // 💰 LA FICHA 337 (2026-08-31) **REVOCA `240/R18`** en su parte de pertenencia: el cierre
+            // del mensajero ya NO recoge esta gestion. Sigue siendo cierto que aqui NO nace ningun
+            // movimiento de dinero — lo que cambia es QUE documento lo emite despues:
+            //   · el FLETE DE DEVOLUCION + IVA de la TIENDA sale del COBRO PENDIENTE que esta misma
+            //     transaccion da de alta (`trasCrearGestion` -> `rechazo_tienda_cobro`), cuando un
+            //     administrador lo apruebe en `/wallet`;
+            //   · el `cobroRechazado` / `ingreso_bodega_rechazo` (56), que es INGRESO DE LA BODEGA,
+            //     SIGUE EN PAUSA: lo congelaba el cierre del mensajero. No se pierde; no se emite.
+            cierreId: null,
           },
           select: { id: true },
         }),

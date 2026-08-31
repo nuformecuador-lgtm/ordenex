@@ -58,6 +58,7 @@ import {
   type ManifiestoOrdenRow,
   type MensajeroLiteRow,
   type NovedadOrdenRow,
+  type OrdenBaseCobroDevolucionRow,
   type OrdenParaCorreccionRow,
   type OrdenTransicionRow,
   type OrderStatusLiteRow,
@@ -1772,6 +1773,51 @@ export class OrdenRepository implements IOrdenRepository {
    * MISMA consulta: `cierre_detail` tiene `@@index([ordenId])`, que existe justo para trazar en
    * que cierres aparecio una orden. Ni round-trip extra, ni Seq Scan.
    */
+  /**
+   * FICHA 337 (segunda mitad) -- las CINCO entradas de `derivarIngresoOrden` (mas las dos que esa
+   * funcion pide aunque la rama `rechazada` no las use), para congelar el cobro del rechazo que la
+   * tienda hace desde novedades.
+   *
+   * Es la version minima de lo que `cierre_detail` congela al solicitar un cierre: la misma
+   * informacion, para una gestion que ya no va a entrar en ningun cierre. `select` explicito y sin
+   * relaciones de adorno.
+   *
+   * `deletedAt: null` en el `where`, con el mismo criterio que `findById` y `findParaCorreccion`:
+   * una orden borrada cuenta como no encontrada, no como fila sin tarifa.
+   *
+   * Money-safe: `montoCobrar` sale como STRING escala 2 (`toFixed(2)`), nunca `number`.
+   */
+  async findBaseCobroDevolucion(
+    ordenId: string,
+  ): Promise<OrdenBaseCobroDevolucionRow | null> {
+    const row = await this.prisma.orden.findFirst({
+      where: { id: ordenId, deletedAt: null },
+      select: {
+        id: true,
+        tiendaId: true,
+        zonaId: true,
+        montoCobrar: true,
+        cobraComision: true,
+        zona: { select: { esCentral: true } },
+        distrito: { select: { zonaEspecial: true } },
+      },
+    });
+    if (row === null) return null;
+    return {
+      ordenId: row.id,
+      tiendaId: row.tiendaId,
+      zonaId: row.zonaId,
+      esCentral: row.zona.esCentral,
+      // La marca es del DISTRITO, no de la zona, y la columna es tri-valuada: `null` ("nadie lo
+      // decidio") NO es especial. Una orden sin distrito -- el unico FK nullable de `orden`--
+      // entra como `false`: sin distrito no hay marca que aplicar. Mismo `=== true` que usan
+      // `findParaCorreccion` y el listado.
+      esZonaEspecial: row.distrito?.zonaEspecial === true,
+      montoCobrar: row.montoCobrar ? row.montoCobrar.toFixed(2) : null,
+      cobraComision: row.cobraComision,
+    };
+  }
+
   async findParaCorreccion(ordenId: string): Promise<OrdenParaCorreccionRow | null> {
     const row = await this.prisma.orden.findFirst({
       where: { id: ordenId, deletedAt: null },

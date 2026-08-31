@@ -110,9 +110,14 @@ export const cotizacionBodySchema = z.object({
 export type CotizacionBody = z.infer<typeof cotizacionBodySchema>;
 
 /**
- * Los SEIS importes del escenario ENTREGADO (R26). Todos STRING y todos YA
- * FORMATEADOS: no existe un campo crudo de escala 2 en paralelo (R34, decision
- * firmada A3).
+ * Los SEIS importes del escenario ENTREGADO (R26). Todos STRING y todos CRUDOS
+ * —money-safe de escala 2, `"2500.00"`, sin simbolo ni agrupacion de miles— y
+ * cada uno en UNA sola forma: no existe un campo formateado en paralelo.
+ *
+ * ENMIENDA DEL 2026-08-28 (ficha 319): hasta hoy la forma unica era la
+ * FORMATEADA (R34, decision firmada A3). Se invierte cual de las dos se sirve y
+ * se conserva lo esencial de A3 —una sola representacion por campo—; el porque
+ * esta en `lib/utils/monto-cotizacion.ts`.
  *
  * FULFILLMENT (2026-08-25): el sexto concepto. Es el monto FIJO por orden de la
  * tarifa que resuelve, y solo aparece con valor cuando la tienda hace
@@ -181,17 +186,32 @@ export interface FilaCotizacionResultado {
 }
 
 /**
- * La respuesta 200 completa (design.md §2.2).
+ * Los totales del LOTE (decision D2, R51–R56). Espeja EXACTAMENTE la forma de
+ * los costos de una fila —`entregado` con seis conceptos, `devuelto` con
+ * cinco— porque una suma de devoluciones tampoco lleva IVA de comision.
  *
- * NO LLEVA BLOQUE `totales` (retirado el 2026-08-31). El agregado del lote de la 255 sumaba
- * cada fila cotizada en el escenario ENTREGADO y en el DEVUELTO al mismo tiempo: dos
- * compilados bajo las premisas de "100% entregas" y "100% rechazos", ninguna de las cuales
- * describe un lote real. Lo que este endpoint publica es el precio POR ORDEN; el agregado,
- * con la premisa de entrega que corresponda, es de quien consume.
+ * Los dos contadores son parte del contrato, no un extra de cortesia (R54): un
+ * total que calla las filas que dejo fuera se lee como "esto cuesta el lote"
+ * cuando no lo es. `filasSumadas + filasExcluidas` es siempre el total de filas
+ * recibidas, y solo aportan importes las filas `"cotizada"` (R53).
+ */
+export interface TotalesCotizacion {
+  filasSumadas: number;
+  filasExcluidas: number;
+  entregado: CostosEntregado;
+  devuelto: CostosDevuelto;
+}
+
+/**
+ * La respuesta 200 completa (design.md §2.2). El bloque `totales` se emite
+ * SIEMPRE, tambien cuando ninguna fila cotiza: entonces va en cero con
+ * `filasSumadas: 0` (R56). Cero es una afirmacion; ausente seria un dato que
+ * falta.
  */
 export interface CotizacionResumen {
   total: number;
   cotizadas: number;
   conError: number;
+  totales: TotalesCotizacion;
   filas: FilaCotizacionResultado[];
 }

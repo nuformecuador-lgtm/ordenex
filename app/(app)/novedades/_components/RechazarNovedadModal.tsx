@@ -20,11 +20,28 @@ import type { NovedadDTO } from "@/lib/types/novedad";
 // es la mitad que faltaba: la que convierte el clic en una operación.
 //
 // **Qué se está firmando con un clic, y por eso el aviso de arriba no es cortesía.** El rechazo
-// manual escribe una gestión sintética `rechazada` con `cierre_id` nulo, que el siguiente cierre del
-// mensajero recoge; ese cierre le cobra a la tienda EL FLETE DE DEVOLUCIÓN más su IVA. Y **no se
-// puede deshacer**: la gestión queda protegida por la guarda del deshacer del mensajero (D6), así
-// que un rechazo equivocado no tiene marcha atrás desde ninguna pantalla. D10 (firmada) exige decir
-// las dos cosas ANTES, con palabras y siempre visibles.
+// manual escribe una gestión sintética `rechazada` con `cierre_id` nulo, que le cobra a la tienda
+// EL FLETE DE DEVOLUCIÓN más su IVA. Y **no se puede deshacer**: la gestión queda protegida por la
+// guarda del deshacer del mensajero (D6), así que un rechazo equivocado no tiene marcha atrás desde
+// ninguna pantalla. D10 (firmada) exige decir las dos cosas ANTES, con palabras y siempre visibles.
+//
+// ⏳ ⚠️ FICHA 337 (2026-08-31) — EL **CUÁNDO** DE ESE COBRO CAMBIÓ, Y EL TEXTO VISIBLE NO SE TOCÓ.
+// Aquí decía «… que el siguiente cierre del mensajero recoge; ESE CIERRE le cobra…». Ese mecanismo
+// era el defecto de la 337 —metía una decisión de escritorio en el documento de trabajo de un
+// mensajero que no intervino— y se retiró: la gestión ya no entra en ningún cierre.
+//
+// ⏳ **LA PAUSA SE CERRÓ EL MISMO DÍA, en la segunda mitad de la 337.** Aquí decía «hoy ese cobro
+// está EN PAUSA … hasta que exista la vía propia». Esa vía YA EXISTE: el rechazo da de alta un
+// COBRO PENDIENTE contra la tienda (`rechazo_tienda_cobro`) en la MISMA transacción, con el flete
+// de devolución y su IVA CONGELADOS de la tarifa de ese instante, y un administrador lo aprueba
+// desde `/wallet`. Sólo entonces nacen los apuntes —los mismos que emitía la aprobación del
+// cierre—. Decisión del humano del 2026-08-31: **la aprobación va ANTES del cobro**.
+//
+// POR QUE `RECHAZO_AVISO` SIGUE SIN REESCRIBIRSE, y ahora con más razón: dice QUÉ se cobra y que es
+// irreversible, y las dos siguen siendo ciertas. Lo único que cambió otra vez es por qué documento
+// sale. Lo que el aviso NO dice —ni debe— es que un administrador puede descartar el cobro: eso es
+// una decisión interna de Ordenex y prometerle a la tienda que «quizá no se le cobre» sería peor
+// que no nombrarlo. Si el humano quiere matizar la copia, es una decisión de producto.
 //
 // ⚠️ **EL AVISO NOMBRA EL FLETE DE DEVOLUCIÓN, NO EL «cobro por rechazo».** Son dos importes con
 // dueños distintos: el cobro por rechazo es INGRESO DE LA BODEGA (sale de la tarifa de zona+vehículo

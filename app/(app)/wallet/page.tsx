@@ -8,6 +8,7 @@ import { listarMovimientosAction, verResumenCajaAction } from "@/lib/actions/wal
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
 import { listarPlantillasPaginadoAction } from "@/lib/actions/gasto-fijo-plantilla";
 import { listarCobrosPendientesAction } from "@/lib/actions/gasto-fijo-cobro";
+import { listarCobrosRechazoTiendaAction } from "@/lib/actions/rechazo-tienda-cobro";
 
 import { WalletModule } from "./_components/WalletModule";
 
@@ -41,6 +42,7 @@ export default async function WalletPage() {
     desgloseResult,
     plantillasResult,
     cobrosResult,
+    cobrosRechazoResult,
   ] = await Promise.all([
     listarMovimientosAction({}),
     verResumenCajaAction({}),
@@ -53,6 +55,11 @@ export default async function WalletPage() {
     // navegador sin pasar por el guardia de esta página (docs/architecture.md). La ven los dos
     // roles de acceso total (R25); DECIDIRLA es otra cosa, y la decide el servicio (R24).
     listarCobrosPendientesAction({}),
+    // FICHA 337 (segunda mitad): la COLA de cobros por RECHAZO DESDE NOVEDADES, pre-obtenida
+    // AQUI por el mismo motivo que la de arriba -- es dinero por autorizar, asi que baja por props
+    // y no se pide desde el navegador sin pasar por el guardia de esta pagina
+    // (`docs/architecture.md`). La ven y la deciden los dos roles de acceso total.
+    listarCobrosRechazoTiendaAction({}),
   ]);
 
   // Defensa en profundidad: si algún service niega (forbidden/unauthenticated) o valida
@@ -62,7 +69,8 @@ export default async function WalletPage() {
     resumenResult.status !== "ok" ||
     desgloseResult.status !== "ok" ||
     plantillasResult.status !== "ok" ||
-    cobrosResult.status !== "ok"
+    cobrosResult.status !== "ok" ||
+    cobrosRechazoResult.status !== "ok"
   ) {
     notFound();
   }
@@ -73,6 +81,18 @@ export default async function WalletPage() {
   // página no cambia su guardia) pero no la decide. Esto sólo esconde dos botones; lo que impide
   // la decisión es `puedeDecidirCobroGastoFijo` en el servicio (R24).
   const puedeDecidirCobros = actor.rol === RolValue.maestro;
+
+  // FICHA 337 (segunda mitad) -- QUIEN PUEDE DECIDIR UN COBRO POR RECHAZO DE TIENDA, resuelto en
+  // el SERVIDOR y bajado por props.
+  //
+  // ⚠️ NO es el mismo predicado que la linea de arriba, y la diferencia es una decision del humano
+  // del 2026-08-31: la 333 estrecho su guard a `maestro` porque autoriza dinero que SALE de la
+  // caja de Ordenex; esto es COBRAR a una tienda por un servicio ya prestado -- el retorno del
+  // paquete-- y es operacion diaria. Estrechar aqui pondria la caja diaria a esperar al maestro.
+  //
+  // Se calcula con `esAccesoTotal` y no con un `=== admin || === maestro` escrito a mano, para que
+  // sea el MISMO predicado que el servicio aplica: dos copias de la regla divergen.
+  const puedeDecidirCobrosRechazo = esAccesoTotal(actor.rol);
 
   // Feature 85 (T F.4, R23): el instante del PRÓXIMO COBRO se resuelve AQUÍ, en el servidor, y
   // baja por props hasta la tabla de plantillas. La pantalla no puede leer el reloj del
@@ -106,6 +126,13 @@ export default async function WalletPage() {
         // es el que enseña la insignia. Nunca `items.length`.
         cobrosPendientes={{ items: cobrosResult.items, total: cobrosResult.total }}
         puedeDecidirCobros={puedeDecidirCobros}
+        // FICHA 337 (segunda mitad): el recorte que se pinta y el `total` REAL del servidor, que
+        // es el que enseña la insignia. Nunca `items.length`.
+        cobrosRechazoTienda={{
+          items: cobrosRechazoResult.items,
+          total: cobrosRechazoResult.total,
+        }}
+        puedeDecidirCobrosRechazo={puedeDecidirCobrosRechazo}
         ahoraIso={ahoraIso}
       />
     </AppPage>

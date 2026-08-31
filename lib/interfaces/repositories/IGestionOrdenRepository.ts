@@ -4,6 +4,7 @@ import type {
   GestionResultado,
   GestionUbicacionAusencia,
   MetodoPagoValue,
+  Prisma,
 } from "@prisma/client";
 
 // Feature 36 — contrato del repositorio del flujo del mensajero. Persistencia de
@@ -11,6 +12,18 @@ import type {
 // puntero de bloqueo 1-a-1. Solo queries Prisma; sin logica de negocio (esa vive
 // en MisAsignacionesService). Los `estatusId` destino/origen los resuelve el
 // service via IOrdenRepository.findEstatusIdByValue.
+
+/**
+ * FICHA 337 (segunda mitad) — el cliente de la transaccion que este repositorio abre, tal como se
+ * lo presta a quien necesita escribir DENTRO de ella (`RechazarDesdeDevueltaInput.trasCrearGestion`).
+ *
+ * Es el `tx` completo de Prisma y no un `Pick` estrecho A PROPOSITO: quien lo recibe es un
+ * repositorio AJENO —el del cobro—, y estrecharlo aqui obligaria a este contrato a nombrar la
+ * tabla de ese otro dominio. Quien lo consume SI lo estrecha, en su propia firma
+ * (`RechazoTiendaCobroTxClient = Pick<PrismaClient, "rechazoTiendaCobro">`), que es donde el
+ * acotado significa algo.
+ */
+export type GestionTxClient = Prisma.TransactionClient;
 
 /**
  * Ventana HALF-OPEN `[desde, hasta)` de un dia de Costa Rica, en instantes UTC. Half-open
@@ -248,6 +261,31 @@ export interface RechazarDesdeDevueltaInput {
   motivo: string;
   /** R11: la persona de la TIENDA que decidio. Solo va al historial, nunca a la gestion. */
   actorUsuarioId: string;
+  /**
+   * FICHA 337 (segunda mitad, 2026-08-31) — EL EFECTO EXTRA QUE VIAJA DENTRO DE LA MISMA
+   * TRANSACCION, con la gestion sintetica ya creada.
+   *
+   * Existe para UNA cosa y solo una: dar de alta el COBRO PENDIENTE contra la tienda
+   * (`rechazo_tienda_cobro`) en la misma transaccion que crea la gestion `rechazada`. O queda el
+   * rechazo Y su cobro, o no queda ninguno de los dos. Emitirlo despues, fuera de la tx, abriria
+   * un hueco real: una caida entre el commit y la insercion dejaria un rechazo que no se cobra
+   * NUNCA y sin que nada lo diga -- exactamente el fallo mudo que esta ficha vino a cerrar por el
+   * otro lado.
+   *
+   * POR QUE ES UN CALLBACK Y NO UN PAYLOAD DE DATOS. Este repositorio es el de `gestion_orden` y
+   * NO debe escribir en `rechazo_tienda_cobro`: eso lo hace `RechazoTiendaCobroRepository`, con su
+   * propio cliente acotado, invocado desde el servicio que orquesta. Lo unico que este metodo
+   * presta es su transaccion. Es exactamente la forma que ya usa `crearGestion` dentro del helper
+   * compartido `transicionarDesdeDevuelta`: el llamador aporta QUE se escribe, el helper aporta
+   * DONDE.
+   *
+   * OPCIONAL a proposito: sin el, la conducta de este metodo no cambia ni un byte y todos los
+   * dobles de test que ya existian siguen valiendo.
+   *
+   * Se invoca SOLO si la gestion se creo de verdad. Si lanza, la transaccion entera revierte: no
+   * queda un rechazo a medias.
+   */
+  trasCrearGestion?: (tx: GestionTxClient, gestionId: string) => Promise<void>;
 }
 
 /**
@@ -258,7 +296,9 @@ export interface RechazarDesdeDevueltaInput {
  * ⚠️ LOS DOS IDS DE USUARIO SON PERSONAS DISTINTAS, y ese es el corazon de la ficha:
  *   - `mensajeroId` = el mensajero ASIGNADO a la orden. Es a quien se ATRIBUYE la gestion
  *     (`gestion_orden.mensajero_id`) y, por tanto, EN QUE CIERRE CAE: `crearCierre` vincula por
- *     `{ mensajeroId, cierreId: null, anuladaAt: null }` y `findGestionesPendientes` filtra igual.
+ *     `{ mensajeroId, cierreId: null, anuladaAt: null, ORIGEN }` y `findGestionesPendientes`
+ *     filtra igual (`gestionesDelCierreWhere`, ficha 337). `gestion_tienda_ayuda` NO esta entre
+ *     los origenes excluidos, asi que esta via SIGUE cayendo en el cierre, igual que siempre.
  *     💰 Si aqui entrara el id de la tienda, la fila NO se vincularia a ningun cierre NUNCA:
  *     quedaria fuera de los cinco feeds de dinero, fuera del snapshot, fuera del escaneo de la
  *     confirmacion fisica (238) y fuera del conteo de intentos. La ficha dejaria de cumplirse sin
@@ -448,18 +488,33 @@ export interface IGestionOrdenRepository {
    * a mano saldria GRATIS y esperar al plazo costaria —sobre el mismo paquete—, y ademas la fila no
    * entraria en ningun cierre: nadie podria auditar quien decidio el retorno.
    *
-   * ⚠️ EL `mensajero_id` ES EL DEL MENSAJERO, NUNCA EL DE LA TIENDA (R9), y no es cosmetico: es lo
-   * que mete la fila en un cierre (`crearCierre` vincula por `{ mensajeroId, cierreId: null }`).
-   * Con el id de la tienda ahi, la gestion NO se vincularia a ningun cierre nunca y el rechazo
-   * seria invisible y gratis. Quien decidio va al historial, en `actor_usuario_id`.
+   * ⚠️ EL `mensajero_id` ES EL DEL MENSAJERO, NUNCA EL DE LA TIENDA (R9). Sigue siendo la
+   * ATRIBUCION de la orden (a quien se le devolvio el paquete) y lo lee el bloque 139 de la
+   * aprobacion; lo que YA NO hace es meter la fila en el cierre de esa persona — ver la nota de
+   * R18 aqui debajo. Quien decidio va al historial, en `actor_usuario_id`.
    *
    * NO CUENTA COMO INTENTO por su ORIGEN (R19): `rechazo_tienda` esta FUERA de
    * `ORIGEN_TIPOS_VISITA_REAL`, igual que `reprogramacion_tienda` y por la misma razon — la orden
    * YA TIENE contada su gestion `devuelta` real, y sumarla da el doble conteo de 160/R2.
    *
-   * NO emite ningun movimiento de dinero en este instante (R18): el `cierre_id NULL` es lo que
-   * deja que los cinco feeds la cobren cuando se apruebe el cierre que la recoja, por el mismo
-   * mecanismo que cualquier gestion del mensajero.
+   * NO emite ningun movimiento de dinero en este instante (R18).
+   *
+   * 💰 ⏳ **LA FICHA 337 (2026-08-31) REVOCA LA SEGUNDA MITAD DE R18.** Decia que el
+   * `cierre_id NULL` era «lo que deja que los cinco feeds la cobren cuando se apruebe el cierre que
+   * la recoja, por el mismo mecanismo que cualquier gestion del mensajero». Ese mecanismo prestado
+   * era el defecto: metia en el documento de trabajo del mensajero una decision de escritorio en la
+   * que el no intervino (medido: 22 filas `rechazo_tienda` en los 6 cierres pendientes, una de
+   * ellas formando un cierre entero ajeno). Desde la 337, `CierreDiaRepository` excluye esta
+   * familia por su ORIGEN (`ORIGENES_GESTION_FUERA_DEL_CIERRE`).
+   *
+   * ⚠️ **CONSECUENCIA DE DINERO — LA VIA PROPIA YA EXISTE, PARA UNO DE LOS DOS CONCEPTOS.**
+   *   · El FLETE DE DEVOLUCION + IVA que paga la TIENDA se emite desde la segunda mitad de la 337:
+   *     este metodo da de alta un COBRO PENDIENTE (`rechazo_tienda_cobro`) en su MISMA transaccion
+   *     —ver `trasCrearGestion`— y un administrador lo aprueba en `/wallet`. Los apuntes que nacen
+   *     al aprobar son los mismos que emitia la aprobacion del cierre.
+   *   · El `cobroRechazado` / `ingreso_bodega_rechazo` (56), que es INGRESO DE LA BODEGA y no del
+   *     ledger de la tienda, **SIGUE EN PAUSA**: se congelaba al crear el cierre del mensajero y lo
+   *     consume el cierre de BODEGA. No se pierde, pero hoy nadie lo emite. Otra ficha.
    *
    * Devuelve `true` si transiciono; `false` si la orden ya salio de `devuelta` (carrera con el cron
    * de la 99, o segundo envio). En esa rama el cron tampoco cobra dos veces: si gana la tienda,
@@ -483,7 +538,11 @@ export interface IGestionOrdenRepository {
    *      divergir del primero.
    *   2. `gestion_orden` con `mensajeroId` = el mensajero y `cierreId: null` (R3/R9). El `NULL` es
    *      lo que deja que la vincule EL MISMO mecanismo que vincula las del mensajero, sin camino
-   *      propio.
+   *      propio. ⚠️ ESTO SIGUE VIGENTE PARA LA AYUDA, y la ficha 337 lo RATIFICA en vez de
+   *      revocarlo: `gestion_tienda_ayuda` se queda DENTRO del cierre (pedido humano textual: «lo
+   *      que no es ayuda») porque la visita la hizo el mensajero y la tienda solo la cerro por el.
+   *      Las que salen del cierre son `rechazo_tienda` y `reprogramacion_tienda`, que se deciden
+   *      sobre una orden que YA VOLVIO A BODEGA.
    *   3. las N filas de `gestion_orden_evidencia`, en la MISMA tx (R2/R15).
    *   4. `appendCambioEstado` por el choke point (R4/R5): actor = LA TIENDA,
    *      `origen_tipo = gestion_tienda_ayuda`, enlazando la gestion.

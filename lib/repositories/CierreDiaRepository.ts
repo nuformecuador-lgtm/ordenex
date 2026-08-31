@@ -20,6 +20,10 @@ import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import { clavePar } from "@/lib/utils/cascada-tarifa";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { ORIGENES_GESTION_DE_LA_TIENDA } from "@/lib/utils/gestion-de-la-tienda-flag";
+// 💰 FICHA 337 (2026-08-31): las familias de ESCRITORIO que NO pertenecen al cierre de ningun
+// mensajero. El porque, la revocacion que implican y el cobro que queda EN PAUSA estan escritos
+// una sola vez, en la declaracion de la lista.
+import { ORIGENES_GESTION_FUERA_DEL_CIERRE } from "@/lib/types/orden-historial";
 // Feature 264 (B9): la MISMA proyeccion y el MISMO orden que usa el detalle del admin.
 import {
   ORDEN_SIN_GESTION,
@@ -335,6 +339,63 @@ function cierresDeMensajeroWhere(mensajeroId: string): Prisma.CierreDiaWhereInpu
 }
 
 /**
+ * 💰 FICHA 337 (2026-08-31) — QUE GESTIONES PERTENECEN AL CIERRE DE UN MENSAJERO, declarado
+ * UNA sola vez para los DOS puntos que lo preguntan: la LECTURA (`findGestionesPendientes`, que
+ * pinta la pantalla y alimenta los totales) y la ESCRITURA (el `updateMany` de `crearCierre`, que
+ * es quien de verdad pone el `cierre_id`).
+ *
+ * ESTABA ESCRITO DOS VECES, palabra por palabra, y por eso hace falta declararlo aqui: con dos
+ * literales basta que uno gane una condicion para que la pantalla y el documento cuenten
+ * conjuntos distintos —y el que manda es el segundo—.
+ *
+ * LAS CUATRO CONDICIONES, con dueno:
+ *   1. `mensajeroId` (37/R2): nunca el trabajo de otro.
+ *   2. `cierreId: null` (37/R3 + 271/R14): solo lo que ningun cierre se ha llevado ya.
+ *   3. `anuladaAt: null` (67/R16, MONEY-CRITICAL): una gestion DESHECHA no se cobra al aprobar.
+ *   4. ⭐ `historialEstados: { none: ... }` (FICHA 337) — EL ORIGEN. Una gestion que nacio en el
+ *      ESCRITORIO de la tienda (`rechazo_tienda`, `reprogramacion_tienda`) NO es trabajo del
+ *      mensajero y no entra en su documento, aunque lleve su `mensajero_id`.
+ *
+ * POR QUE `none` SOBRE EL HISTORIAL Y NO UNA COLUMNA. Quien registro la gestion ya vive en
+ * `orden_historial_estado` (`origen_tipo`), escrito en la MISMA transaccion que la gestion por el
+ * choke point (`appendCambioEstado`): no existe el estado «gestion de escritorio sin su fila».
+ * Una columna `origen` en `gestion_orden` seria una SEGUNDA VERDAD que mantener sincronizada.
+ * Mismo argumento, mismo repositorio: `marcarDesdeAyudaTienda`, unas lineas mas abajo — de hecho
+ * la nocion de «esto vino de la tienda» ya vivia ahi, solo que MARCABA en vez de EXCLUIR.
+ *
+ * EL PLAN, MEDIDO Y NO SUPUESTO (2026-08-31, `EXPLAIN` sobre la base local, 204 filas de
+ * historial). El `none` se compila a un `NOT EXISTS` correlacionado y Postgres lo resuelve como
+ * **Nested Loop Anti Join con el lado interno MATERIALIZADO**: `orden_historial_estado` se recorre
+ * UNA vez por consulta y no una por gestion — no es un N+1 escondido, que era la objecion obvia.
+ * Con `enable_seqscan = off` (la misma tecnica con la que se midio `marcarDesdeAyudaTienda`) ese
+ * lado interno entra por `orden_historial_actor_origen_created_idx` con un Bitmap Index Scan sobre
+ * `origen_tipo`, y el lado externo sigue usando el parcial de siempre,
+ * `gestion_orden_mensajero_pendiente_idx`. **NO se crea ningun indice y no hay migracion**: se
+ * entra por los que ya existen. Si algun dia esta consulta apareciera lenta, lo que hay que mirar
+ * es un indice parcial `(gestion_orden_id) WHERE origen_tipo IN (...)`, no reescribir el predicado.
+ *
+ * ⚠️ CONSECUENCIA DE DINERO — Y SON DOS CONCEPTOS DISTINTOS, que la nota original de esta ficha
+ * nombraba juntos y no lo son:
+ *
+ *   · **Flete de devolucion + IVA** (lo que paga la TIENDA, `derivarIngresoOrden`): **RESUELTO**
+ *     por la segunda mitad de la 337. El rechazo crea un COBRO PENDIENTE (`rechazo_tienda_cobro`)
+ *     con el importe congelado y un administrador lo aprueba desde `/wallet`; los apuntes que
+ *     nacen son los MISMOS que emitia este cierre. No depende ya de este filtro.
+ *   · **`cobroRechazado` / `ingreso_bodega_rechazo`** (56, INGRESO DE LA BODEGA, de la tarifa
+ *     zona+vehiculo del mensajero): **SIGUE EN PAUSA**. Se congelaba al crear el cierre y lo
+ *     consume el cierre de BODEGA (40/56); sin cierre no se congela. NO se pierde —la gestion y su
+ *     `resultado = rechazada` siguen intactos— pero hoy nadie lo emite. Alcance de otra ficha.
+ */
+function gestionesDelCierreWhere(mensajeroId: string): Prisma.GestionOrdenWhereInput {
+  return {
+    mensajeroId,
+    cierreId: null,
+    anuladaAt: null,
+    historialEstados: { none: { origenTipo: { in: [...ORIGENES_GESTION_FUERA_DEL_CIERRE] } } },
+  };
+}
+
+/**
  * Feature 184 — Tanda C (R16/R5) — el ORDEN del mismo listado, compartido por el conjunto y la
  * pagina. No es simetria: la pagina N que la tabla pinta tiene que ser el segmento N del conjunto
  * del que sale el archivo, y eso solo se sostiene si las dos consultas ordenan igual.
@@ -421,16 +482,21 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     );
   }
 
-  /** R2/R3: gestiones del mensajero sin cierre (cierre_id IS NULL) + detalle. */
+  /**
+   * R2/R3: gestiones del mensajero sin cierre (cierre_id IS NULL) + detalle.
+   *
+   * Feature 67/R13/R14/R15: ESTA lista es la que consumen los 4 grupos (R13), `computeTotales`
+   * (R14), `derivarPagos` (39) y `derivarIngresoBodega` (56) (R15), tanto en la vista EN VIVO
+   * (`listarCierreDia`) como en el SNAPSHOT (`solicitarCierre` y el corte diario de la 41).
+   *
+   * El criterio de PERTENENCIA —las cuatro condiciones, incluida la del ORIGEN que anadio la
+   * ficha 337— vive entero en `gestionesDelCierreWhere`, compartido con el `updateMany` de
+   * `crearCierre` que es quien escribe. Las tres primeras usan el indice parcial
+   * `gestion_orden_mensajero_pendiente_idx`.
+   */
   async findGestionesPendientes(mensajeroId: string): Promise<CierreGestionPendienteRow[]> {
     const rows = await this.prisma.gestionOrden.findMany({
-      // R2: nunca gestiones de otro mensajero; R3: solo sin cierre.
-      // Feature 67/R13/R14/R15: `anuladaAt: null` = solo gestiones VIGENTES. ESTA lista es la
-      // que consumen los 4 grupos (R13), `computeTotales` (R14), `derivarPagos` (39) y
-      // `derivarIngresoBodega` (56) (R15), tanto en la vista EN VIVO (`listarCierreDia`) como
-      // en el SNAPSHOT (`solicitarCierre` y el corte diario de la 41): un solo filtro cubre
-      // los tres requisitos. Usa el indice parcial `gestion_orden_mensajero_pendiente_idx`.
-      where: { mensajeroId, cierreId: null, anuladaAt: null },
+      where: gestionesDelCierreWhere(mensajeroId),
       orderBy: { createdAt: "desc" },
       ...WITH_DETALLE,
     });
@@ -752,8 +818,27 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         // (`CierresAdminRepository`). Sin este filtro, una gestion DESHECHA recibiria
         // `cierre_id` y la wallet la COBRARIA al aprobar el cierre: exactamente el bug que la
         // feature 67 viene a evitar. No basta con filtrar la lista de la vista (design §3-#2).
+        //
+        // 💰 FICHA 337 (2026-08-31) — Y LA CUARTA CONDICION, EL ORIGEN, POR LA MISMA RAZON. Una
+        // gestion nacida en el ESCRITORIO de la tienda (`rechazo_tienda`, `reprogramacion_tienda`)
+        // lleva el `mensajero_id` de quien hizo el reparto, asi que hasta hoy este `updateMany` se
+        // la llevaba al primer cierre de ese mensajero. Medido contra produccion el 2026-08-31:
+        // 41 gestiones asi dentro de los 6 cierres pendientes, y una de ellas formando un cierre
+        // ENTERO sin una sola gestion de su mensajero.
+        //
+        // ⚠️ LOS DOS COBROS QUE ESTO TOCA, dicho aqui porque es aqui donde dejan de ocurrir:
+        //   · el FLETE DE DEVOLUCION + IVA de la TIENDA ya NO depende de este cierre: la segunda
+        //     mitad de la 337 le dio via propia (`rechazo_tienda_cobro` -> aprobacion en
+        //     `/wallet`), y los apuntes que nacen alli son los mismos que nacian aqui.
+        //   · el `cobroRechazado` / `ingreso_bodega_rechazo` (56), que es INGRESO DE LA BODEGA,
+        //     **sigue EN PAUSA**: se congelaba en este `updateMany` y lo suma el cierre de bodega.
+        //     No se pierde (la gestion y su `resultado` siguen en la base) pero hoy nadie lo emite.
         const vinculadas = await tx.gestionOrden.updateMany({
-          where: { mensajeroId, cierreId: null, anuladaAt: null },
+          // 💰 FICHA 337: el MISMO predicado que la lectura, y no una copia — este es el que de
+          // verdad ESCRIBE. Si solo se hubiera filtrado `findGestionesPendientes`, la pantalla
+          // habria dejado de mostrar las gestiones de escritorio y el `updateMany` habria seguido
+          // metiendolas al cierre: el bug entero, ahora invisible.
+          where: gestionesDelCierreWhere(mensajeroId),
           data: { cierreId: cierre.id },
         });
         // Feature 41/C1 + feature 109 (R8/R9/R23): guarda "algo paso". El cierre se conserva si

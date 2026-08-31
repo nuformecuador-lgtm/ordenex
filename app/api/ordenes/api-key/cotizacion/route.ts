@@ -2,12 +2,8 @@
 //
 // `POST /api/ordenes/api-key/cotizacion`. Toma la MISMA entrada que
 // `POST /api/ordenes/api-key/carga` (feature 88) y NO persiste NADA: devuelve, por cada fila,
-// su cobertura y cuanto costaria en los DOS escenarios posibles (entregado y devuelto).
-//
-// SIN TOTALES DEL LOTE (retirados el 2026-08-31): el bloque `totales` de la 255 sumaba todas
-// las filas cotizadas en el escenario entregado Y en el devuelto, o sea bajo las premisas de
-// "100% entregas" y "100% rechazos" a la vez. La cotizacion que este canal publica es POR
-// ORDEN; agregar con una premisa de entrega real es del lado que consume.
+// su cobertura y cuanto costaria en los DOS escenarios posibles (entregado y devuelto), mas un
+// bloque de totales del LOTE (decision D2).
 //
 // CONVIVENCIA DE RUTAS: el segmento estatico gana al dinamico en el App Router, asi que este
 // hermano de `[numGuia]/` no necesita nada especial — mismo precedente que `carga/` y `orden/`.
@@ -23,7 +19,7 @@
 //
 // ESTE ARCHIVO NO CALCULA DINERO. No fija decimales a mano —lo prohibe el diente 2 de la
 // guardia 230, que barre el arbol `app` entero— ni hace aritmetica de importes: el service
-// entrega el resumen YA FORMATEADO y aqui solo se serializa tal cual. Tampoco hay ni una
+// entrega el resumen con los importes YA SERIALIZADOS y aqui solo se emiten tal cual. Tampoco hay ni una
 // query Prisma: eso vive en los repositorios.
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -146,9 +142,9 @@ export async function handleCotizacionApi(
     // Defensa en profundidad: el rol ya se comprobo al autenticar.
     if (cotizacion.status === "forbidden") throw new ForbiddenError();
 
-    // R34/R46: el resumen viaja TAL CUAL. Ya trae `total`, `cotizadas`, `conError` y el
-    // detalle por fila con su indice 1-based, con cada importe UNA sola vez y SOLO formateado.
-    // Este borde no reescribe ni un campo.
+    // R34/R46/R51: el resumen viaja TAL CUAL. Ya trae `total`, `cotizadas`, `conError`, el
+    // bloque `totales` del lote y el detalle por fila con su indice 1-based, con cada importe
+    // UNA sola vez y SOLO crudo. Este borde no reescribe ni un campo.
     return cotizacion.resumen;
   });
 
