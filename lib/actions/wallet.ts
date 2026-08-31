@@ -7,12 +7,14 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   IWalletService,
+  ListarMovimientosDeFilaServiceResult,
   ListarMovimientosServiceResult,
   RegistrarMovimientoManualServiceResult,
   VerResumenCajaServiceResult,
 } from "@/lib/interfaces/services/IWalletService";
 import {
   listarMovimientosCompletoSchema,
+  listarMovimientosDeFilaSchema,
   listarMovimientosSchema,
   registrarMovimientoManualSchema,
   type ListarMovimientosCompletoResult,
@@ -29,6 +31,17 @@ import type { AppErrorShape } from "@/lib/errors";
 
 export type ListarMovimientosActionResult =
   | ListarMovimientosServiceResult
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+/**
+ * Ficha 339 (T3.4) — el detalle de una fila en el BORDE. Se DERIVA del resultado del servicio,
+ * igual que el del listado: `forbidden` lo decide el dominio; `unauthenticated` (sin sesion) y
+ * `validation_error` (ZodError: `fila` fuera del catalogo o `pageSize` por encima del tope) se
+ * resuelven aqui. **Ninguna rama de error viaja con movimientos** (R32/R38).
+ */
+export type ListarMovimientosDeFilaActionResult =
+  | ListarMovimientosDeFilaServiceResult
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -103,6 +116,34 @@ export async function listarMovimientosCompletoAction(
     const data = listarMovimientosCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.listarMovimientosCompleto(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletActionError(r) : r;
+}
+
+/**
+ * Ficha 339 (T3.4, design §4.5) — los movimientos que componen UNA fila de la tarjeta de la
+ * ganancia. Calcada de `listarMovimientosAction`: resuelve el actor, lanza `UnauthenticatedError`
+ * si no hay sesion, valida con el schema derivado del listado y delega en el servicio.
+ *
+ * Lectura interna del mismo proyecto ⇒ Server Action, no ruta API (`docs/architecture.md`). El
+ * cliente manda el TOKEN de la fila; quien traduce ese token a un conjunto de categorias es el
+ * servicio, con la misma definicion que produjo el importe de la fila.
+ *
+ * @sin-superficie la monta `DetalleFilaComposicion` en el bloque B5 de esta misma ficha (la 339
+ * se implementa backend primero); hoy todavia no existe esa pantalla. La anotacion CADUCA sola:
+ * `superficie-de-uso.guardia.test.ts` se pone rojo si un export anotado vuelve a ser alcanzable,
+ * asi que quien cablee el desplegable esta obligado a borrar esta linea.
+ */
+export async function listarMovimientosDeFilaAction(
+  input: unknown,
+  deps: WalletDeps = {},
+): Promise<ListarMovimientosDeFilaActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
+    const data = listarMovimientosDeFilaSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarMovimientosDeFila(data, actor);
   });
   return isAppErrorShape(r) ? toWalletActionError(r) : r;
 }

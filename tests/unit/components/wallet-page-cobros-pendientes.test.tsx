@@ -129,7 +129,13 @@ const RESUMEN_OK = {
       ingreso_ajuste: "0.00",
     },
     totalIngresos: "0.00",
+    // Ficha 339 (T1.3): las dos cubetas nuevas y la bandera del servidor.
+    egresos: {
+      egreso_pago_mensajero: "0.00",
+      egreso_ajuste: "0.00",
+    },
     otrosEgresos: "0.00",
+    hayOtrosEgresos: false,
     totalEgresos: "0.00",
   },
 };

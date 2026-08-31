@@ -60,7 +60,16 @@ const COMPOSICION: ComposicionGananciaDTO = {
     ingreso_ajuste: "90.00",
   },
   totalIngresos: "5709.75",
-  otrosEgresos: "940.00", // el pago a los mensajeros, sobre todo (D2)
+  // Ficha 339 (T1.3): las dos cubetas nuevas. Se dejan en 0,00 y «otros» conserva sus 940,00
+  // para que ESTE fixture siga describiendo la tarjeta de la 231 sin cambiar de significado;
+  // el contrato de rotulos y de pares rotulo↔importe lo actualiza T6.3 con las filas nuevas.
+  egresos: {
+    egreso_pago_mensajero: "0.00",
+    egreso_ajuste: "0.00",
+  },
+  otrosEgresos: "940.00",
+  // R9: lo decide el SERVIDOR. Aqui hay 940,00 sin clasificar, asi que la fila se pinta.
+  hayOtrosEgresos: true,
   totalEgresos: "2190.75",
 };
 
@@ -104,6 +113,7 @@ function pintarComoLa158(overrides: Partial<ComposicionGananciaDTO> = {}) {
     composicion: {
       ...COMPOSICION,
       otrosEgresos: "0.00",
+      hayOtrosEgresos: false, // ficha 339 (R7): sin residuo, la fila «Otros» no se pinta
       totalEgresos: DESGLOSE.total,
       ...overrides,
     },
@@ -191,6 +201,7 @@ describe("Feature 158/R32 — la indemnización es una fila propia y suma al tot
       composicion: {
         ...COMPOSICION,
         otrosEgresos: "0.00",
+        hayOtrosEgresos: false, // ficha 339 (R7)
         totalEgresos: "12345679127.49",
       },
     });

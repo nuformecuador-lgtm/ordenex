@@ -6,6 +6,7 @@ import type {
   WalletOrigenTipo as PrismaWalletOrigenTipo,
 } from "@prisma/client";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import { composicionDetalleConfig } from "@/lib/config/composicion-detalle";
 import { walletMovimientoConfig } from "@/lib/config/wallet-movimiento";
 import {
   esFechaCalendarioValida,
@@ -139,6 +140,67 @@ export const WALLET_EGRESO_DESGLOSADO_SEED = [
 export type WalletEgresoDesglosado = (typeof WALLET_EGRESO_DESGLOSADO_SEED)[number];
 
 /**
+ * Ficha 339 (T1.1, design §2.1, R1/R2) — los egresos propios que ganan FILA PROPIA en la
+ * tarjeta de la ganancia y que hasta hoy caian dentro de «Otros gastos de Ordenex».
+ *
+ * `egreso_pago_mensajero` es el motivo de la ficha: en produccion era el 100 % de «Otros»
+ * (227.300,00 en 9 movimientos), un concepto con nombre propio escondido en un cubo anonimo.
+ * `egreso_ajuste` entra con el —y no se queda en el cubo— porque su espejo del lado de los
+ * ingresos (`ingreso_ajuste`) ya tiene fila con nombre, y porque el dialogo «Registrar
+ * movimiento» le PROMETE al usuario que ese gasto se llamara «Ajuste (egreso)»: sin fila
+ * propia, la tarjeta rompe esa promesa.
+ */
+export const WALLET_EGRESO_NOMBRADO_SEED = [
+  "egreso_pago_mensajero",
+  "egreso_ajuste",
+] as const satisfies readonly WalletMovimientoCategoria[];
+
+export type WalletEgresoNombrado = (typeof WALLET_EGRESO_NOMBRADO_SEED)[number];
+
+/**
+ * Ficha 339 (T1.1, design §2.1) — TODO egreso propio con fila propia en la columna: los cuatro
+ * conceptos que `DesgloseEgresosDTO` ya abria MAS los dos que la 339 saca del cubo.
+ *
+ * Se escribe como EXTENSION (spread) y no como una segunda lista a mano —el mismo patron con el
+ * que `WALLET_INGRESO_PROPIO_SEED` extiende a `WALLET_INGRESO_CONCEPTO_SEED`—: el dia que un
+ * concepto gane fila entra por UN solo sitio, y el COMPLEMENTO (`otrosEgresos`) se recalcula
+ * solo. `WALLET_EGRESO_DESGLOSADO_SEED` NO se toca: sigue significando «los cuatro que
+ * `DesgloseEgresosDTO` abre», que es lo que usan las fichas 45/158.
+ */
+export const WALLET_EGRESO_CON_FILA_SEED = [
+  ...WALLET_EGRESO_DESGLOSADO_SEED,
+  ...WALLET_EGRESO_NOMBRADO_SEED,
+] as const satisfies readonly WalletMovimientoCategoria[];
+
+export type WalletEgresoConFila = (typeof WALLET_EGRESO_CON_FILA_SEED)[number];
+
+/**
+ * Ficha 339 (T1.2, design §2.2) — el token de la fila «Otros gastos de Ordenex».
+ *
+ * NO es un valor del enum de categorias A PROPOSITO: el complemento no es una categoria, es una
+ * operacion de conjuntos («todo egreso propio que no tiene fila»). Darle un valor de enum lo
+ * convertiria en una categoria mas y abriria la puerta a que alguien la escribiera en el libro.
+ */
+export const COMPOSICION_FILA_OTROS = "otros_egresos";
+
+/**
+ * Ficha 339 (T1.2, design §2.2) — el catalogo de FILAS de la tarjeta de la ganancia: 7 de
+ * ingreso + 6 de egreso + el token del complemento = 14.
+ *
+ * Es lo que el cliente manda para pedir el detalle de una fila (`listarMovimientosDeFilaSchema`).
+ * Manda el TOKEN y NUNCA una lista de categorias (design §10-A1): si el navegador pudiera
+ * declarar que categorias componen «Otros», existirian DOS definiciones del complemento —una
+ * para el importe y otra para el detalle— y podrian divergir sin que nada fallara.
+ */
+export const COMPOSICION_FILA_SEED = [
+  ...WALLET_INGRESO_PROPIO_SEED,
+  ...WALLET_EGRESO_CON_FILA_SEED,
+  COMPOSICION_FILA_OTROS,
+] as const;
+
+export type ComposicionFilaId = (typeof COMPOSICION_FILA_SEED)[number];
+
+/**
  * Feature 231 — de quien es el dinero de una categoria: de Ordenex, o de un tercero que lo
  * tiene aparcado en la caja.
  *
@@ -260,13 +322,35 @@ export type ComposicionGananciaDTO = {
   /** Σ de `ingresos`. Identico, importe a importe, a `CajaResumenDTO.ingresosPropios` (R23). */
   totalIngresos: string;
   /**
-   * Egresos propios que `DesgloseEgresosDTO` NO cubre (D2, firmada): hoy el pago al mensajero,
-   * el gasto y el ajuste. Se deriva por COMPLEMENTO, no por lista, para que la columna de la
-   * tarjeta sume `egresosPropios` aunque el catalogo gane un egreso propio (R26).
+   * Ficha 339 (T1.3, R1/R2/R4) — un importe por egreso propio CON FILA que no viene ya en
+   * `DesgloseEgresosDTO`: hoy el pago al mensajero y el ajuste. `Record` TOTAL, sin huecos.
+   *
+   * Va tecleado POR CATEGORIA y no como dos campos camelCase sueltos por tres motivos: (a) la
+   * pantalla construye sus filas recorriendo el seed, igual que hace ya la columna de ingresos;
+   * (b) un concepto nuevo entra anadiendo una entrada al seed, sin tocar este DTO; (c)
+   * `caja-173-alcance.guardia.test.ts` prohibe que `lib/utils/caja-tesoreria.ts` nombre claves
+   * camelCase de formulas, y el docstring de ese modulo ya dice «se teclea POR CATEGORIA».
+   */
+  egresos: Record<WalletEgresoNombrado, string>;
+  /**
+   * Egresos propios que NO tienen fila propia (D2 de la 231; ficha 339: el conjunto contra el
+   * que se complementa pasa de `WALLET_EGRESO_DESGLOSADO_SEED` a `WALLET_EGRESO_CON_FILA_SEED`).
+   * Se deriva por COMPLEMENTO, no por lista, para que la columna de la tarjeta siga sumando
+   * `egresosPropios` aunque el catalogo gane un egreso propio (R26 de la 231, R11 de la 339).
    */
   otrosEgresos: string;
   /** Σ de egresos propios. Identico a `CajaResumenDTO.egresosPropios` (R26). */
   totalEgresos: string;
+  /**
+   * Ficha 339 (T1.3, R9) — si la fila «Otros gastos de Ordenex» tiene algo que ensenar.
+   *
+   * Lo decide el SERVIDOR y no el navegador: comparar `otrosEgresos !== "0.00"` en el cliente
+   * abriria una segunda definicion de «esto esta en cero» en el lado que tiene PROHIBIDO juzgar
+   * dinero, y dependeria de que el formato canonico nunca produjera `"-0.00"`. Se deriva con
+   * `!otrosEgresos.isZero()` —y no con `.gt(0)`— porque un importe negativo es precisamente lo
+   * que mas falta haria ver, y `.gt(0)` lo esconderia.
+   */
+  hayOtrosEgresos: boolean;
 };
 
 // Feature 45 (R11) — desglose de egresos administrativos por tipo para el conjunto
@@ -399,6 +483,36 @@ export const listarMovimientosCompletoSchema = listarMovimientosSchema
   .strict();
 
 export type ListarMovimientosCompletoInput = z.infer<typeof listarMovimientosCompletoSchema>;
+
+/**
+ * Ficha 339 (T1.4, design §4.1 — R20/R29/R32) — entrada del DETALLE de una fila de la tarjeta.
+ *
+ * Se DERIVA del schema del listado y no se copia: asi `tipo`, `categoria`, `desde` y `hasta` son
+ * por construccion los MISMOS filtros que el libro (R20 — el detalle y el importe de la fila
+ * hablan siempre del mismo conjunto), y el dia que el libro gane un filtro lo gana el detalle
+ * solo. Es el precedente literal de `listarMovimientosCompletoSchema` (ficha 170).
+ *
+ * `page`/`pageSize` se REDECLARAN porque los del listado llevan literales (`max(100).default(20)`)
+ * y R29 exige que el tope y el tamano salgan de configuracion. Un `pageSize` por encima del tope
+ * es `validation_error` y NO devuelve ni una fila (R32).
+ *
+ * `fila` es un TOKEN del catalogo de filas, nunca una lista de categorias (design §10-A1): el
+ * complemento de «Otros» lo resuelve el SERVIDOR con la misma definicion que deriva el importe.
+ */
+export const listarMovimientosDeFilaSchema = listarMovimientosSchema
+  .omit({ page: true, pageSize: true })
+  .extend({
+    fila: z.enum(COMPOSICION_FILA_SEED),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(composicionDetalleConfig.MAX_PAGE_SIZE)
+      .default(composicionDetalleConfig.DEFAULT_PAGE_SIZE),
+  });
+
+export type ListarMovimientosDeFilaInput = z.infer<typeof listarMovimientosDeFilaSchema>;
 
 // Feature 170 (T C.2): resultado del modo completo en el BORDE. `limite_excedido` lleva
 // SOLO conteos (R27) y ninguna rama de error viaja con filas (R16/R17/R18). Money-safe: los

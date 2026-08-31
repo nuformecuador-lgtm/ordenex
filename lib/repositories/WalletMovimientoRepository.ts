@@ -53,10 +53,18 @@ function toDTO(r: MovimientoRow): WalletMovimientoDTO {
 
 // WHERE comun a listado y balance (R20): filtros opcionales tipo/categoria/rango fechas
 // sobre fecha_movimiento. `desde`/`hasta` inclusivos.
+//
+// Ficha 339 (T3.2, design §4.4 — R33): + `categorias`, el CONJUNTO de una fila de la tarjeta de
+// la ganancia. Va en `AND` y NO sobreescribiendo `where.categoria`, para que CONVIVAN el filtro
+// de categoria del usuario y el conjunto de la fila; si los dos se contradicen el resultado es
+// vacio, que es lo correcto —el importe de esa fila bajo esos filtros tambien es 0,00—.
+// El recorte lo hace el motor: `categoria IN (…)` viaja en el `WHERE`, nunca es un `filter` en
+// memoria sobre lo que la base ya devolvio.
 function buildWhere(f: BalanceFiltros): Prisma.WalletMovimientoWhereInput {
   const where: Prisma.WalletMovimientoWhereInput = {};
   if (f.tipo !== undefined) where.tipo = f.tipo;
   if (f.categoria !== undefined) where.categoria = f.categoria;
+  if (f.categorias !== undefined) where.AND = [{ categoria: { in: [...f.categorias] } }];
   if (f.desde !== undefined || f.hasta !== undefined) {
     where.fechaMovimiento = {
       ...(f.desde !== undefined ? { gte: f.desde } : {}),

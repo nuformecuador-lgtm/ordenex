@@ -2,13 +2,17 @@ import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import {
+  categoriasDeFilaComposicion,
   derivarCaja,
   derivarComposicionGanancia,
   NATURALEZA_POR_CATEGORIA,
 } from "@/lib/utils/caja-tesoreria";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import {
+  COMPOSICION_FILA_OTROS,
+  WALLET_EGRESO_CON_FILA_SEED,
   WALLET_EGRESO_DESGLOSADO_SEED,
+  WALLET_EGRESO_NOMBRADO_SEED,
   WALLET_INGRESO_PROPIO_SEED,
   WALLET_MOVIMIENTO_CATEGORIA_SEED,
   type AgregadoCajaRow,
@@ -317,23 +321,33 @@ describe("derivarComposicionGanancia — la ganancia concepto por concepto (R23/
       (s, c) => s.add(new Prisma.Decimal(importeDe(WALLET_MOVIMIENTO_CATEGORIA_SEED.indexOf(c)))),
       new Prisma.Decimal(0),
     );
-    // Y el complemento medido a mano: los egresos propios que NO son ninguno de esos cuatro.
+    // Y el complemento medido a mano: los egresos propios que no tienen FILA PROPIA (ficha
+    // 339: ya no son «los que no estan entre los cuatro del desglose», son «los que no estan
+    // entre los SEIS con fila»).
     const otrosEsperado = EGRESOS_PROPIOS.filter(
-      (c) => !(WALLET_EGRESO_DESGLOSADO_SEED as readonly string[]).includes(c),
+      (c) => !(WALLET_EGRESO_CON_FILA_SEED as readonly string[]).includes(c),
     ).reduce(
       (s, c) => s.add(new Prisma.Decimal(importeDe(WALLET_MOVIMIENTO_CATEGORIA_SEED.indexOf(c)))),
       new Prisma.Decimal(0),
     );
+    const nombrados = WALLET_EGRESO_NOMBRADO_SEED.reduce(
+      (s, c) => s.add(new Prisma.Decimal(composicion.egresos[c])),
+      new Prisma.Decimal(0),
+    );
 
     expect(composicion.otrosEgresos).toBe(otrosEsperado.toFixed(2));
-    // La resta de la tarjeta cuadra: los cuatro conceptos + «otros gastos» = el total…
-    expect(desglosados.add(new Prisma.Decimal(composicion.otrosEgresos)).toFixed(2)).toBe(
-      composicion.totalEgresos,
-    );
+    // La resta de la tarjeta cuadra: los cuatro conceptos + los dos NOMBRADOS + «otros gastos»
+    // = el total…
+    expect(
+      desglosados.add(nombrados).add(new Prisma.Decimal(composicion.otrosEgresos)).toFixed(2),
+    ).toBe(composicion.totalEgresos);
     // …y el total es IDENTICO a `egresosPropios` (R26). Esta es la asercion que D2 existe para
     // hacer posible: con solo los cuatro conceptos, la diferencia seria el pago al mensajero.
     expect(composicion.totalEgresos).toBe(caja.egresosPropios);
-    expect(new Prisma.Decimal(composicion.otrosEgresos).gt(0)).toBe(true); // hay hueco de verdad
+    // Sigue habiendo hueco de verdad —`egreso_gasto` tiene importe en este conjunto—, y las
+    // dos filas nuevas tambien traen el suyo: la suma de arriba no cuadra sumando ceros.
+    expect(new Prisma.Decimal(composicion.otrosEgresos).gt(0)).toBe(true);
+    expect(nombrados.gt(0)).toBe(true);
     // El pago a la tienda es de TERCEROS: nunca entra en la columna de egresos de la ganancia.
     expect(new Prisma.Decimal(caja.salidas).gt(composicion.totalEgresos)).toBe(true);
   });
@@ -384,6 +398,133 @@ describe("derivarComposicionGanancia — la ganancia concepto por concepto (R23/
       otrosEgresos: "0.00",
       totalEgresos: "0.00",
     });
+    // Ficha 339 (T2.4): el `Record` de egresos tampoco tiene huecos con el libro vacio — la
+    // pantalla recorre el seed, y una cubeta ausente se pintaria como «un importe vacio».
+    expect(Object.keys(composicion.egresos).sort()).toEqual([...WALLET_EGRESO_NOMBRADO_SEED].sort());
+    for (const importe of Object.values(composicion.egresos)) expect(importe).toBe("0.00");
+    expect(composicion.hayOtrosEgresos).toBe(false);
+  });
+});
+
+// =========================================================================================
+// FICHA 339 (T2.4) — las filas nuevas, la bandera del servidor y las cifras que NO se mueven.
+// =========================================================================================
+
+/**
+ * El libro con el que se miden las cubetas nuevas. Los importes son distintos entre si y
+ * distintos de cualquier total del conjunto: ninguna asercion puede pasar confundiendo dos
+ * cifras. `egreso_gasto` esta a proposito —es el UNICO residuo que queda tras la ficha— y el
+ * pago a la tienda tambien, para que la particion tenga dinero de terceros que dejar fuera.
+ */
+const LIBRO_CON_LAS_FILAS_NUEVAS: AgregadoCajaRow[] = [
+  fila("ingreso_flete", "7000.00"),
+  fila("egreso_pago_mensajero", "227300.00"), // el caso REAL de produccion (9 movimientos)
+  fila("egreso_ajuste", "45.75"),
+  fila("egreso_sueldo", "1200.00"), // tiene fila en `DesgloseEgresosDTO`, no en `egresos`
+  fila("egreso_gasto", "13.20"), // el residuo: lo unico que sigue cayendo en «otros»
+  fila("egreso_pago_tienda", "9999.00"), // de TERCEROS: nunca entra en la ganancia
+];
+
+describe("ficha 339 — las filas nuevas de la columna de egresos (R4/R9/R12/R14)", () => {
+  it("R4: cada cubeta de `egresos` suma SOLO su categoria", () => {
+    const composicion = derivarComposicionGanancia(LIBRO_CON_LAS_FILAS_NUEVAS);
+
+    // Los importes, escritos a mano y no derivados de la funcion que se prueba.
+    expect(composicion.egresos.egreso_pago_mensajero).toBe("227300.00");
+    expect(composicion.egresos.egreso_ajuste).toBe("45.75");
+    // Ninguna cubeta se comio el importe de otra fila de la columna...
+    expect(composicion.egresos.egreso_pago_mensajero).not.toBe(composicion.totalEgresos);
+    expect(composicion.egresos.egreso_ajuste).not.toBe(composicion.otrosEgresos);
+    // ...y el sueldo (que tiene fila en `DesgloseEgresosDTO`) NO aparece en ninguna de las dos
+    // cubetas nuevas ni en «otros»: lo sirve el camino de la 45/158.
+    expect(Object.values(composicion.egresos)).not.toContain("1200.00");
+    expect(composicion.otrosEgresos).not.toBe("1200.00");
+
+    // Dos filas del agregado con la MISMA categoria se acumulan, no se pisan.
+    const repetido = derivarComposicionGanancia([
+      fila("egreso_ajuste", "10.25"),
+      fila("egreso_ajuste", "0.50"),
+    ]);
+    expect(repetido.egresos.egreso_ajuste).toBe("10.75");
+  });
+
+  it("R4/R18: «Otros» se queda EXACTAMENTE con lo que no tiene fila — hoy `egreso_gasto`", () => {
+    const composicion = derivarComposicionGanancia(LIBRO_CON_LAS_FILAS_NUEVAS);
+
+    expect(composicion.otrosEgresos).toBe("13.20");
+    // Y la lista con la que el detalle leera ESOS movimientos sale de la MISMA definicion.
+    expect(categoriasDeFilaComposicion(COMPOSICION_FILA_OTROS)).toEqual(["egreso_gasto"]);
+    // Contraprueba de la ficha: el pago al mensajero YA NO esta dentro del cubo.
+    expect(composicion.otrosEgresos).not.toBe("227300.00");
+    expect(composicion.otrosEgresos).not.toBe("227313.20");
+  });
+
+  it("R9: `hayOtrosEgresos` lo deriva el SERVIDOR, y es `false` cuando el residuo es 0.00", () => {
+    // (a) CON residuo: hay dinero que la tarjeta no sabe nombrar y la fila tiene que pintarse.
+    const conResiduo = derivarComposicionGanancia(LIBRO_CON_LAS_FILAS_NUEVAS);
+    expect(conResiduo.otrosEgresos).toBe("13.20");
+    expect(conResiduo.hayOtrosEgresos).toBe(true);
+
+    // (b) SIN residuo: el mismo libro sin `egreso_gasto` — que es el estado REAL de produccion,
+    //     donde esa categoria no tiene un solo escritor. La fila desaparece.
+    const sinResiduo = derivarComposicionGanancia(
+      LIBRO_CON_LAS_FILAS_NUEVAS.filter((f) => f.categoria !== "egreso_gasto"),
+    );
+    expect(sinResiduo.otrosEgresos).toBe("0.00");
+    expect(sinResiduo.hayOtrosEgresos).toBe(false);
+    // ...y quitar el residuo NO apago las filas nuevas: siguen con su importe.
+    expect(sinResiduo.egresos.egreso_pago_mensajero).toBe("227300.00");
+
+    // (c) el libro vacio tampoco pinta la fila, y la bandera es un BOOLEANO, no un importe.
+    expect(derivarComposicionGanancia([]).hayOtrosEgresos).toBe(false);
+    expect(typeof conResiduo.hayOtrosEgresos).toBe("boolean");
+  });
+
+  it("R12: `otrosEgresos + egresos.*` es el MISMO importe que «otros» antes de la ficha", () => {
+    // La ficha mueve dinero de cubeta y no puede mover ni un centimo del total. El «antes» se
+    // reconstruye con la definicion VIEJA —el complemento de los cuatro del desglose— sobre el
+    // mismo libro, y tiene que coincidir con «lo que hoy hay en las filas nuevas + lo que
+    // queda en otros».
+    const composicion = derivarComposicionGanancia(LIBRO_CON_LAS_FILAS_NUEVAS);
+
+    const otrosAntesDeLaFicha = LIBRO_CON_LAS_FILAS_NUEVAS.filter(
+      (f) =>
+        NATURALEZA_POR_CATEGORIA[f.categoria] === "propio" &&
+        f.tipo === "egreso" &&
+        !(WALLET_EGRESO_DESGLOSADO_SEED as readonly string[]).includes(f.categoria),
+    ).reduce((s, f) => s.add(new Prisma.Decimal(f.total)), new Prisma.Decimal(0));
+
+    const hoy = WALLET_EGRESO_NOMBRADO_SEED.reduce(
+      (s, c) => s.add(new Prisma.Decimal(composicion.egresos[c])),
+      new Prisma.Decimal(composicion.otrosEgresos),
+    );
+
+    expect(hoy.toFixed(2)).toBe(otrosAntesDeLaFicha.toFixed(2));
+    // Control de no-vacuidad: el importe movido NO es cero, y es el grande de verdad.
+    expect(otrosAntesDeLaFicha.toFixed(2)).toBe("227358.95"); // 227 300 + 45,75 + 13,20
+    expect(composicion.otrosEgresos).not.toBe(otrosAntesDeLaFicha.toFixed(2));
+  });
+
+  it("R14: las cifras agregadas de la caja no cambian de valor al repartir la columna", () => {
+    const caja = derivarCaja(LIBRO_CON_LAS_FILAS_NUEVAS);
+    const composicion = derivarComposicionGanancia(LIBRO_CON_LAS_FILAS_NUEVAS);
+
+    // Los valores, escritos A MANO: 227 300 + 45,75 + 1 200 + 13,20 = 228 558,95 de egreso
+    // propio; el pago a la tienda (9 999) es de terceros y no entra en la ganancia.
+    expect(caja.egresosPropios).toBe("228558.95");
+    expect(caja.ingresosPropios).toBe("7000.00");
+    expect(caja.salidas).toBe("238557.95"); // + el pago a la tienda
+    expect(composicion.totalEgresos).toBe(caja.egresosPropios);
+    expect(composicion.totalIngresos).toBe(caja.ingresosPropios);
+
+    // Y la identidad que R11 exige, sobre este libro: las filas con nombre + «otros» = total.
+    const sueldoDelLibro = "1200.00"; // la unica fila del desglose presente en este libro
+    const suma = [
+      sueldoDelLibro,
+      ...WALLET_EGRESO_NOMBRADO_SEED.map((c) => composicion.egresos[c]),
+      composicion.otrosEgresos,
+    ].reduce((s, v) => s.add(new Prisma.Decimal(v)), new Prisma.Decimal(0));
+    expect(suma.toFixed(2)).toBe(composicion.totalEgresos);
   });
 });
 
@@ -409,7 +550,7 @@ const LIBRO_DE_NO_REGRESION: AgregadoCajaRow[] = [
 ];
 
 describe("R38 — las siete cifras y los cuatro conceptos no cambian de valor", () => {
-  it("R38: las siete cifras de `CajaResumenDTO` siguen valiendo lo mismo, importe a importe", () => {
+  it("R38/R14: las siete cifras de `CajaResumenDTO` siguen valiendo lo mismo, importe a importe", () => {
     // Los valores esperados estan escritos A MANO, no derivados del codigo que se prueba: son
     // los que la 173 producia sobre este libro. Si `derivarCaja` cambiara una suma al ganar el
     // modo y el porcentaje, este caso lo dice con el importe a la vista.
@@ -438,7 +579,7 @@ describe("R38 — las siete cifras y los cuatro conceptos no cambian de valor", 
     expect(new Prisma.Decimal(caja.ganancia).add(caja.deTerceros).toFixed(2)).toBe(caja.enCaja);
   });
 
-  it("R38: los cuatro conceptos de `DesgloseEgresosDTO` siguen valiendo lo mismo", async () => {
+  it("R38/R14: los cuatro conceptos de `DesgloseEgresosDTO` siguen valiendo lo mismo", async () => {
     // Se miden por el camino REAL —`WalletMovimientoRepository.agregarPorCategoria`—, con el
     // mismo libro. La feature 231 no toca ese metodo; este caso es la prueba ejecutada, no la
     // afirmacion de que no se toco.
@@ -464,7 +605,12 @@ describe("R38 — las siete cifras y los cuatro conceptos no cambian de valor", 
     // Y la consecuencia FIRMADA en D2: esos cuatro NO son `egresosPropios`. El hueco es el pago
     // al mensajero, y es exactamente lo que `otrosEgresos` recoge para que la tarjeta cuadre.
     const composicion = derivarComposicionGanancia(LIBRO_DE_NO_REGRESION);
-    expect(composicion.otrosEgresos).toBe("940.00");
+    // FICHA 339 (R12/R14): los 940 del pago al mensajero siguen en la columna y siguen en el
+    // total — lo que cambia es la CUBETA. «Otros» se queda a cero porque en este libro no hay
+    // ninguna categoria sin fila propia, y por eso esa fila no se pintaria (R7).
+    expect(composicion.egresos.egreso_pago_mensajero).toBe("940.00");
+    expect(composicion.otrosEgresos).toBe("0.00");
+    expect(composicion.hayOtrosEgresos).toBe(false);
     expect(composicion.totalEgresos).toBe("3940.50");
     expect(new Prisma.Decimal("300.00").add("175.00").add("2400.00").add("125.50").toFixed(2)).toBe(
       "3000.50",

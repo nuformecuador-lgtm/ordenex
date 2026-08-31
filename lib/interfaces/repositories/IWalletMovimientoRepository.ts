@@ -57,6 +57,16 @@ export interface ListarMovimientosFiltros {
   categoria?: WalletMovimientoCategoria;
   desde?: Date;
   hasta?: Date;
+  /**
+   * Ficha 339 (T3.2/T3.5, design §4.4 — R18/R33) — el CONJUNTO de categorias de UNA fila de la
+   * tarjeta de la ganancia. `[]` es un conjunto legitimo (la interseccion vacia): el `IN ()` de
+   * Postgres devuelve cero filas, que es exactamente lo que hay que devolver.
+   *
+   * OPCIONAL a proposito: ausente ⇒ el `where` es byte a byte el de hoy, y ninguno de los tres
+   * caminos que ya leen el libro cambia de comportamiento. Se cumple en `AND` junto a
+   * `categoria` (no en su lugar), asi que el filtro del usuario y el de la fila conviven.
+   */
+  categorias?: readonly WalletMovimientoCategoria[];
 }
 
 export interface ListarMovimientosPage {
@@ -70,6 +80,15 @@ export interface BalanceFiltros {
   categoria?: WalletMovimientoCategoria;
   desde?: Date;
   hasta?: Date;
+  /**
+   * Ficha 339 (T3.2) — el mismo conjunto de la fila que declara `ListarMovimientosFiltros`, aqui
+   * por SIMETRIA del `where` (los dos filtros los traduce el mismo `buildWhere`).
+   *
+   * Los DOS agregados (`agregarPorCategoriaYTipo`, `agregarPorCategoria`) lo pasan como
+   * `undefined` y su SQL no cambia — eso se prueba, no se supone
+   * (`tests/integration/db/composicion-detalle-postgres.test.ts`).
+   */
+  categorias?: readonly WalletMovimientoCategoria[];
 }
 
 // Feature 45 (R11) — desglose de egresos por tipo, ya como STRING (money-safe). Deriva de un

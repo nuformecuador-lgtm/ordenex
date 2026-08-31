@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
+import { RolValue } from "@prisma/client";
 import { WalletService } from "@/lib/services/WalletService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -394,6 +395,155 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
       expect(typeof v).toBe("string");
       expect(v).toMatch(/^-?\d+\.\d{2}$/); // escala 2 SIEMPRE, tambien en el cero
     }
+  });
+});
+
+// == Ficha 339 (T3.3, design 4.3) - el DETALLE de una fila de la tarjeta de la ganancia ==
+//
+// Lo que este archivo puede probar con un doble es el ALCANCE POR ROL y QUE SE LE PIDE A LA
+// BASE (que el conjunto de la fila viaje en los filtros del repositorio, y no salga de un
+// `filter` posterior). Lo que un doble NO puede probar es que el `WHERE` acote de verdad: eso
+// se mide contra Postgres en `tests/integration/db/composicion-detalle-postgres.test.ts`,
+// porque en este repo esta medido cuatro veces que una mutacion del `WHERE` pasa en verde por
+// delante de un doble.
+
+const DETALLE_BASE = { fila: "egreso_pago_mensajero" as const, page: 1, pageSize: 10 };
+
+describe("WalletService.listarMovimientosDeFila (R18/R20/R33/R38/R39/R40)", () => {
+  it("R38/R39: un rol sin acceso total recibe `forbidden`, sin movimientos y SIN tocar el repo", async () => {
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+
+    const r = await svc.listarMovimientosDeFila(DETALLE_BASE, OTRO);
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(Object.keys(r)).toEqual(["status"]); // ninguna rama de error viaja con filas
+    // R39: el guardia va ANTES de la base. Cero invocaciones, no "una que devolvio nada".
+    expect(repo.listar).not.toHaveBeenCalled();
+    // Control de no-vacuidad del `not`: con un rol autorizado, el MISMO camino SI la llama.
+    await new WalletService(repo, writeClient).listarMovimientosDeFila(DETALLE_BASE, MAESTRO);
+    expect(repo.listar).toHaveBeenCalledTimes(1);
+  });
+
+  it("R40: el detalle usa el MISMO predicado de acceso que el listado, rol por rol", async () => {
+    // Se recorre el enum ENTERO y se compara con el listado, que es el alcance vigente: si el
+    // detalle abriera (o cerrara) la puerta a un rol, los dos estados dejarian de coincidir.
+    // Asi la ficha no puede cambiar permisos sin que este caso lo nombre.
+    const roles = Object.values(RolValue);
+    expect(roles.length).toBeGreaterThan(3); // no-vacuidad: el enum trae roles de verdad
+
+    const medidos: Record<string, [string, string]> = {};
+    for (const rol of roles) {
+      const actor: Actor = { usuarioId: `u-${rol}`, rol };
+      const detalle = await new WalletService(buildRepo(), writeClient).listarMovimientosDeFila(
+        DETALLE_BASE,
+        actor,
+      );
+      const listado = await new WalletService(buildRepo(), writeClient).listarMovimientos(
+        { page: 1, pageSize: 20 },
+        actor,
+      );
+      medidos[rol] = [detalle.status, listado.status];
+      expect(detalle.status, `rol ${rol}`).toBe(listado.status);
+    }
+
+    // Y el alcance MEDIDO, escrito a mano: si los dos caminos se abrieran a la vez, la
+    // comparacion de arriba seguiria en verde y esto no.
+    expect(medidos.maestro[0]).toBe("ok");
+    expect(medidos.admin[0]).toBe("ok");
+    expect(medidos.mensajero[0]).toBe("forbidden");
+    expect(medidos.adminTienda[0]).toBe("forbidden");
+    expect(medidos.adminSatelite[0]).toBe("forbidden");
+  });
+
+  it("R18: el conjunto de la fila lo resuelve el SERVIDOR y viaja a la CONSULTA", async () => {
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+
+    await svc.listarMovimientosDeFila(DETALLE_BASE, MAESTRO);
+    await svc.listarMovimientosDeFila({ ...DETALLE_BASE, fila: "otros_egresos" }, MAESTRO);
+    await svc.listarMovimientosDeFila({ ...DETALLE_BASE, fila: "ingreso_flete" }, MAESTRO);
+
+    const llamadas = (repo.listar as ReturnType<typeof vi.fn>).mock.calls.map(
+      (c) => (c[0] as { categorias?: readonly string[] }).categorias,
+    );
+
+    // Una fila de concepto es su propia categoria; «otros» es el COMPLEMENTO derivado, que hoy
+    // vale exactamente `egreso_gasto`. El cliente mando un TOKEN: no hay forma de que el
+    // navegador declare que categorias componen el cubo.
+    expect(llamadas[0]).toEqual(["egreso_pago_mensajero"]);
+    expect(llamadas[1]).toEqual(["egreso_gasto"]);
+    expect(llamadas[2]).toEqual(["ingreso_flete"]);
+    // El pago al mensajero YA NO esta dentro de «otros»: es la ficha entera, medida aqui.
+    expect(llamadas[1]).not.toContain("egreso_pago_mensajero");
+    expect(llamadas[1]).not.toContain("egreso_ajuste");
+  });
+
+  it("R20: los filtros del detalle son los MISMOS del listado, resueltos por el mismo metodo", async () => {
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+    const desde = new Date("2026-08-01T00:00:00.000Z");
+    const hasta = new Date("2026-08-31T00:00:00.000Z");
+
+    await svc.listarMovimientos({ page: 2, pageSize: 25, tipo: "egreso", desde, hasta }, MAESTRO);
+    await svc.listarMovimientosDeFila(
+      { ...DETALLE_BASE, page: 2, pageSize: 25, tipo: "egreso", desde, hasta },
+      MAESTRO,
+    );
+
+    const calls = (repo.listar as ReturnType<typeof vi.fn>).mock.calls;
+    const delListado = calls[0][0] as Record<string, unknown>;
+    const delDetalle = calls[1][0] as Record<string, unknown>;
+
+    // Identicos salvo `categorias`, que es lo UNICO propio del detalle.
+    expect(Object.keys(delDetalle).sort()).toEqual([...Object.keys(delListado), "categorias"].sort());
+    for (const clave of Object.keys(delListado)) {
+      expect(delDetalle[clave], clave).toEqual(delListado[clave]);
+    }
+  });
+
+  it("R33: la interseccion con el filtro de categoria vigente viaja al `WHERE`, tambien vacia", async () => {
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+
+    // (a) el filtro coincide con la fila: la interseccion es esa categoria.
+    await svc.listarMovimientosDeFila(
+      { ...DETALLE_BASE, categoria: "egreso_pago_mensajero" },
+      MAESTRO,
+    );
+    // (b) el filtro contradice a la fila: la interseccion es VACIA y se pasa tal cual, para que
+    //     el recorte lo haga la base (`IN ()` -> cero filas) y no un `if` en memoria.
+    await svc.listarMovimientosDeFila({ ...DETALLE_BASE, categoria: "egreso_sueldo" }, MAESTRO);
+
+    const calls = (repo.listar as ReturnType<typeof vi.fn>).mock.calls;
+    expect((calls[0][0] as { categorias: readonly string[] }).categorias).toEqual([
+      "egreso_pago_mensajero",
+    ]);
+    expect((calls[1][0] as { categorias: readonly string[] }).categorias).toEqual([]);
+    // Y el filtro del usuario NO se pierde por el camino: los dos conviven en el `where`.
+    expect((calls[1][0] as { categoria?: string }).categoria).toBe("egreso_sueldo");
+  });
+
+  it("R31/R34: el `total` sale del repositorio y los montos cruzan como STRING", async () => {
+    const repo = buildRepo();
+    // Una pagina de UNA fila con un total de 47: si el servicio devolviera `movimientos.length`
+    // -que es la trampa que R31 persigue-, este caso cae con los dos numeros a la vista.
+    (repo.listar as ReturnType<typeof vi.fn>).mockResolvedValue({
+      movimientos: [mov({ categoria: "egreso_pago_mensajero", tipo: "egreso", monto: "227300.00" })],
+      total: 47,
+    });
+    const svc = new WalletService(repo, writeClient);
+
+    const r = await svc.listarMovimientosDeFila(DETALLE_BASE, MAESTRO);
+    if (r.status !== "ok") throw new Error("esperado ok");
+
+    expect(r.data.total).toBe(47);
+    expect(r.data.movimientos).toHaveLength(1);
+    expect(r.data.total).not.toBe(r.data.movimientos.length);
+    expect(r.data.page).toBe(1);
+    expect(r.data.pageSize).toBe(10);
+    expect(typeof r.data.movimientos[0].monto).toBe("string");
+    expect(r.data.movimientos[0].monto).toBe("227300.00");
   });
 });
 

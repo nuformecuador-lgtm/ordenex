@@ -8,19 +8,25 @@ import type {
 import type {
   IWalletService,
   ListarMovimientosCompletoServiceResult,
+  ListarMovimientosDeFilaServiceResult,
   ListarMovimientosServiceResult,
   RegistrarMovimientoManualServiceResult,
   VerResumenCajaServiceResult,
 } from "@/lib/interfaces/services/IWalletService";
 import type {
   ListarMovimientosCompletoInput,
+  ListarMovimientosDeFilaInput,
   ListarMovimientosInput,
   RegistrarMovimientoManualInput,
   WalletMovimientoCategoria,
   WalletMovimientoTipo,
 } from "@/lib/types/wallet";
 import { descargaConfig } from "@/lib/config/descarga";
-import { derivarCaja, derivarComposicionGanancia } from "@/lib/utils/caja-tesoreria";
+import {
+  categoriasDeFilaComposicion,
+  derivarCaja,
+  derivarComposicionGanancia,
+} from "@/lib/utils/caja-tesoreria";
 import { instanteDelMovimientoManual } from "@/lib/utils/fecha-movimiento-manual";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
@@ -171,6 +177,52 @@ export class WalletService implements IWalletService {
       status: "ok",
       resumen: derivarCaja(filas, { periodoFiltrado: hayFiltros(filtros) }),
       composicion: derivarComposicionGanancia(filas),
+    };
+  }
+
+  /**
+   * Ficha 339 (T3.3, design §4.3 — R18/R20/R33/R38/R39) — los movimientos que componen el
+   * importe de UNA fila de la tarjeta de la ganancia.
+   *
+   * Los cuatro pasos van en ESTE orden, y el orden es parte del requisito:
+   *
+   *  1. **El guardia, ANTES de la base** (R39). Mismo `esAccesoTotal` que el listado y que el
+   *     resumen, por el motivo ya escrito alli: un `forbidden` evaluado despues del `SELECT` ya
+   *     habria leido el dinero para tirarlo.
+   *  2. **Los filtros, por `construirFiltros`** — el MISMO metodo privado que usan el listado,
+   *     la descarga y el resumen (R20). Sin copia: el detalle y el importe de la fila hablan
+   *     siempre del mismo conjunto.
+   *  3. **El conjunto de la fila lo resuelve el SERVIDOR** con `categoriasDeFilaComposicion`, la
+   *     misma definicion que deriva el importe. Se INTERSECA con el filtro de categoria vigente
+   *     si lo hay; la interseccion vacia se pasa tal cual (`in: []` → cero filas en Postgres):
+   *     el recorte lo hace el `WHERE`, nunca un `if` en memoria (R33).
+   *  4. `repo.listar`, que acota con `IN (…)` en la consulta y cuenta el total con un `count`
+   *     independiente del `take` (R31).
+   *
+   * Aqui no hay ni una operacion de dinero: los importes ya venian derivados y solo se leen.
+   */
+  async listarMovimientosDeFila(
+    input: ListarMovimientosDeFilaInput,
+    actor: Actor,
+  ): Promise<ListarMovimientosDeFilaServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R39: ANTES de la base
+
+    const filtros = this.construirFiltros(input);
+    const deLaFila = categoriasDeFilaComposicion(input.fila);
+    const categorias =
+      filtros.categoria === undefined
+        ? deLaFila
+        : deLaFila.filter((categoria) => categoria === filtros.categoria);
+
+    const { movimientos, total } = await this.repo.listar({
+      ...filtros,
+      categorias,
+      page: input.page,
+      pageSize: input.pageSize,
+    });
+    return {
+      status: "ok",
+      data: { movimientos, total, page: input.page, pageSize: input.pageSize },
     };
   }
 
