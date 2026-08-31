@@ -259,10 +259,16 @@ test que la historia de git vio borrarse.
 
 **Medido — hay exactamente UNA cita que esta ficha rompe:**
 
-```
-specs/172-liquidacion/tasks.md:768
-| R54 | `tests/integration/mis-pagos-page.test.tsx` — el mensajero ve el pago y su reverso |
-```
+En **`specs/172-liquidacion/tasks.md`, línea 768**: la fila de trazabilidad de **R54** apunta al
+test de integración de la página de mis-pagos, con la descripción «el mensajero ve el pago y su
+reverso».
+
+> ⚠️ **Esa fila NO se reproduce aquí tal cual, a propósito** —y es la segunda vez que esta ficha
+> tropieza con lo mismo—. `test-citado-desaparecido.guardia` **no distingue una cita reproducida
+> como documentación de una cita viva**: copiarla con su formato de tabla hace que la guardia la
+> lea como un mapeo de ESTA ficha a un test ya borrado, y el gate se pone rojo. Pasó el
+> 2026-08-31, primero con el marcador de la anotación y después con esta fila. Es una limitación
+> de la guardia, no de este spec: quien documente citas ajenas, que las describa en prosa.
 
 Y **dos falsos vecinos que NO son citas** (verificados contra el detector):
 
