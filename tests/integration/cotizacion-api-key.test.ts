@@ -285,15 +285,22 @@ function escapar(texto: string): string {
 }
 
 /**
- * Un importe formateado segun `design.md` §6.1, con los tres caracteres LEIDOS de
- * `monedaConfig` (escribirlos a mano aqui seria el hardcode de contexto que R36 prohibe).
+ * La forma FORMATEADA que este canal servia hasta la ficha 319 (2026-08-28): simbolo,
+ * miles agrupados y coma decimal, con los tres caracteres LEIDOS de `monedaConfig`
+ * (escribirlos a mano aqui seria el hardcode de contexto que R36 prohibia).
+ *
+ * Ya NO es lo que se sirve: sobrevive como el DETECTOR de la regresion. Si alguien
+ * devolviera el formateo al contrato, el barrido de mas abajo lo caza.
  */
-const IMPORTE = new RegExp(
+const IMPORTE_FORMATEADO = new RegExp(
   `^-?${escapar(monedaConfig.simbolo)}\\d{1,3}(${escapar(monedaConfig.separadorMiles)}\\d{3})*` +
     `${escapar(monedaConfig.separadorDecimal)}\\d{2}$`,
 );
 
-/** Un numero crudo de escala 2 servido como texto: `"2500.00"`, `"-1578.00"`. */
+/**
+ * Un numero crudo de escala 2 servido como texto: `"2500.00"`, `"-1578.00"`. Desde la
+ * ficha 319 esta ES la forma del contrato, y no la forma prohibida que era antes.
+ */
 const CRUDO_ESCALA_2 = /^-?\d+\.\d{2}$/;
 
 const NOMBRES_DE_IMPORTE = ["flete", "iva", "comision", "ivaComision", "total"];
@@ -686,16 +693,14 @@ describe("cotizacion por API key — respuesta 200 (R21/R34/R46/R51/R56)", () =>
       ...Object.values(body.totales.entregado),
       ...Object.values(body.totales.devuelto),
     ]) {
-      expect(importe).toMatch(IMPORTE);
+      expect(importe).toMatch(CRUDO_ESCALA_2);
       // Cero SIN signo (R38): un "menos cero" no se emite nunca.
       expect(importe.startsWith("-")).toBe(false);
-      expect(importe).toBe(
-        `${monedaConfig.simbolo}0${monedaConfig.separadorDecimal}00`,
-      );
+      expect(importe).toBe("0.00");
     }
   });
 
-  it("cada importe aparece una sola vez y solo formateado (ningun campo crudo escala 2) (R34)", async () => {
+  it("cada importe aparece una sola vez y solo CRUDO, ningun campo formateado (R34, enmendada por la 319)", async () => {
     const { sondas, tarifaRepo, ...cotizacionDeps } = depsReales();
     void sondas;
     void tarifaRepo;
@@ -712,8 +717,8 @@ describe("cotizacion por API key — respuesta 200 (R21/R34/R46/R51/R56)", () =>
     const todas = hojas(body);
 
     // (a) Todo campo que se LLAMA como un importe DENTRO de un escenario es un string
-    // formateado. El filtro por escenario no es cosmetico: el `total` de la raiz es un
-    // CONTADOR de filas, no dinero, y confundirlos seria pedirle formato de importe.
+    // money-safe CRUDO. El filtro por escenario no es cosmetico: el `total` de la raiz es
+    // un CONTADOR de filas, no dinero, y confundirlos seria pedirle forma de importe.
     const importes = todas.filter(
       (h) =>
         /\.(entregado|devuelto)\./.test(h.ruta) &&
@@ -722,15 +727,18 @@ describe("cotizacion por API key — respuesta 200 (R21/R34/R46/R51/R56)", () =>
     expect(importes.length).toBeGreaterThan(0);
     for (const h of importes) {
       expect(typeof h.valor, h.ruta).toBe("string");
-      expect(h.valor as string, h.ruta).toMatch(IMPORTE);
+      expect(h.valor as string, h.ruta).toMatch(CRUDO_ESCALA_2);
     }
 
-    // (b) NINGUNA hoja del JSON es un crudo de escala 2 (`"2500.00"`), en ninguna ruta y con
-    // cualquier nombre: es la forma de cazar un `fleteCrudo`/`fleteDecimal` "de cortesia"
-    // colado en paralelo al formateado, que es exactamente lo que la decision A3 descarto.
+    // (b) NINGUNA hoja del JSON viaja FORMATEADA, en ninguna ruta y con cualquier nombre.
+    // La ficha 319 invierte el SENTIDO de esta mitad —antes se prohibia el crudo, hoy se
+    // prohibe el formateado— pero no su PROPOSITO, que es el que firmo A3 y sigue en pie:
+    // cada importe existe en UNA sola forma, nunca en dos que se desincronizan. Asi se caza
+    // un `fleteFormateado` "de cortesia" colado en paralelo al crudo.
     for (const h of todas) {
       if (typeof h.valor === "string") {
-        expect(CRUDO_ESCALA_2.test(h.valor), `${h.ruta} = ${h.valor}`).toBe(false);
+        expect(IMPORTE_FORMATEADO.test(h.valor), `${h.ruta} = ${h.valor}`).toBe(false);
+        expect(h.valor.includes(monedaConfig.simbolo), `${h.ruta} = ${h.valor}`).toBe(false);
       }
       // Y ningun importe viaja como NUMBER: los unicos numeros del contrato son contadores.
       if (typeof h.valor === "number") {
@@ -850,7 +858,7 @@ describe("cotizacion por API key — el borde no calcula ni consulta (T8)", () =
     expect(FUENTE_RUTA).not.toMatch(/prisma\.\$?\w*\.(findMany|findFirst|findUnique|count|raw)/);
     expect(FUENTE_RUTA).not.toMatch(/\$queryRaw|\$executeRaw/);
     // Sin `.toFixed(`: el diente 2 de la guardia 230 barre `app/**` entero y esta ruta entra en
-    // el barrido. El dinero llega YA formateado desde `lib/`.
+    // el barrido. El dinero llega YA serializado desde `lib/`.
     expect(FUENTE_RUTA).not.toContain(".toFixed(");
     // R5: despues de autenticar, un `if (tieneApiKey)` seria codigo muerto e inalcanzable.
     expect(FUENTE_RUTA).not.toMatch(/tieneApiKey|hasApiKey|tieneKey/i);
@@ -893,8 +901,8 @@ describe("cotizacion por API key — tarifa por zona (feature 274, R32-R36)", ()
     // ZONA, asi que dos importes iguales aqui significarian que la tarifa volvio a resolverse
     // por la tienda sola.
     expect(body.filas[0].costos?.entregado.flete).not.toBe(body.filas[1].costos?.entregado.flete);
-    expect(body.filas[0].costos?.entregado.flete).toBe("₡2.500,00");
-    expect(body.filas[1].costos?.entregado.flete).toBe("₡4.000,00");
+    expect(body.filas[0].costos?.entregado.flete).toBe("2500.00");
+    expect(body.filas[1].costos?.entregado.flete).toBe("4000.00");
     expect(tarifaRepo.resolveTarifas).toHaveBeenCalledTimes(1);
   });
 
@@ -1014,7 +1022,7 @@ describe("cotizacion por API key — tarifa por zona (feature 274, R32-R36)", ()
       ...Object.values(body.totales.entregado),
       ...Object.values(body.totales.devuelto),
     ]) {
-      expect(importe).toBe(`${monedaConfig.simbolo}0${monedaConfig.separadorDecimal}00`);
+      expect(importe).toBe("0.00");
     }
     // Y el diagnostico que recibe el integrador es el CORRECTO: geografia, no tarifa.
     for (const f of body.filas) {

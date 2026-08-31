@@ -5,7 +5,7 @@
 // mas un bloque de totales del LOTE (decision D2).
 //
 // Logica de negocio pura: sin HTTP, sin `next/*`, sin Prisma directo. La aritmetica de dinero
-// va con `Prisma.Decimal` de punta a punta y el formateo es el ULTIMO paso (R33/R55).
+// va con `Prisma.Decimal` de punta a punta y la serializacion es el ULTIMO paso (R33/R55).
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
@@ -42,7 +42,7 @@ import {
   type FilaCotizacionResultado,
 } from "@/lib/types/cotizacion";
 import { derivarIngresoOrden, montoFulfillmentDeTarifa } from "@/lib/utils/ingreso-ordenex";
-import { formatMontoCotizacion } from "@/lib/utils/monto-cotizacion";
+import { serializarMontoCotizacion } from "@/lib/utils/monto-cotizacion";
 
 /**
  * R29 — la cotizacion asume que la orden que se crearia COBRA comision, que es el `default
@@ -155,29 +155,29 @@ function acumuladorDevuelto(): MontosDevuelto {
   return { flete: cero(), iva: cero(), comision: cero(), fulfillment: cero(), total: cero() };
 }
 
-function formatearEntregado(montos: MontosEntregado): CostosEntregado {
+function serializarEntregado(montos: MontosEntregado): CostosEntregado {
   return {
-    flete: formatMontoCotizacion(montos.flete),
-    iva: formatMontoCotizacion(montos.iva),
-    comision: formatMontoCotizacion(montos.comision),
-    ivaComision: formatMontoCotizacion(montos.ivaComision),
+    flete: serializarMontoCotizacion(montos.flete),
+    iva: serializarMontoCotizacion(montos.iva),
+    comision: serializarMontoCotizacion(montos.comision),
+    ivaComision: serializarMontoCotizacion(montos.ivaComision),
     // El monto fijo de bodega. Cero explicito cuando la tienda no hace fulfillment: el
     // integrador lee un cero, no un campo que a veces esta y a veces no.
-    fulfillment: formatMontoCotizacion(montos.fulfillment),
-    total: formatMontoCotizacion(montos.total),
+    fulfillment: serializarMontoCotizacion(montos.fulfillment),
+    total: serializarMontoCotizacion(montos.total),
   };
 }
 
-function formatearDevuelto(montos: MontosDevuelto): CostosDevuelto {
+function serializarDevuelto(montos: MontosDevuelto): CostosDevuelto {
   return {
-    flete: formatMontoCotizacion(montos.flete),
-    iva: formatMontoCotizacion(montos.iva),
+    flete: serializarMontoCotizacion(montos.flete),
+    iva: serializarMontoCotizacion(montos.iva),
     // R28: el cero EXPLICITO. Una devolucion no cobra comision COD porque no hubo recaudo;
     // el campo AFIRMA ese cero y nunca falta ni vale `null`.
-    comision: formatMontoCotizacion(montos.comision),
+    comision: serializarMontoCotizacion(montos.comision),
     // El fulfillment SI se cobra en la devolucion: el servicio de bodega ya se presto.
-    fulfillment: formatMontoCotizacion(montos.fulfillment),
-    total: formatMontoCotizacion(montos.total),
+    fulfillment: serializarMontoCotizacion(montos.fulfillment),
+    total: serializarMontoCotizacion(montos.total),
   };
 }
 
@@ -240,7 +240,7 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
 
     const filas: FilaCotizacionResultado[] = [];
     // R55/A7: acumuladores en decimales EXACTOS, alimentados con los valores de cada fila
-    // ANTES de formatear. El bloque del lote se formatea UNA sola vez, al final.
+    // ANTES de serializar. El bloque del lote se serializa UNA sola vez, al final.
     const accEntregado = acumuladorEntregado();
     const accDevuelto = acumuladorDevuelto();
     let filasSumadas = 0;
@@ -280,8 +280,8 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
         numRemision: preparada.numRemision,
         resultado: "cotizada",
         costos: {
-          entregado: formatearEntregado(montos.entregado),
-          devuelto: formatearDevuelto(montos.devuelto),
+          entregado: serializarEntregado(montos.entregado),
+          devuelto: serializarDevuelto(montos.devuelto),
         },
       });
 
@@ -305,8 +305,8 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
         totales: {
           filasSumadas,
           filasExcluidas: total - filasSumadas,
-          entregado: formatearEntregado(accEntregado),
-          devuelto: formatearDevuelto(accDevuelto),
+          entregado: serializarEntregado(accEntregado),
+          devuelto: serializarDevuelto(accDevuelto),
         },
         filas,
       },
