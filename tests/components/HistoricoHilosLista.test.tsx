@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 import type { CursorHilo } from "@/lib/types/historico-conversaciones";
 import { HistoricoConversacionesModule } from "@/app/(app)/historico/conversaciones/_components/HistoricoConversacionesModule";
@@ -10,6 +10,7 @@ import {
   dispararCentinela,
   hilo,
   instalarObservador,
+  mantenerCentinelaVisible,
   okHilos,
   okMensajes,
   renderHistorico,
@@ -30,6 +31,12 @@ import {
 const CURSOR_PAGINA_2: CursorHilo = {
   ultimaActividadAt: "2026-08-28T19:00:00.000Z",
   ordenId: "orden-2",
+  mensajeroId: "mensajero-1",
+};
+
+const CURSOR_PAGINA_3: CursorHilo = {
+  ultimaActividadAt: "2026-08-28T18:00:00.000Z",
+  ordenId: "orden-3",
   mensajeroId: "mensajero-1",
 };
 
@@ -118,6 +125,46 @@ describe("T6.1 — scroll infinito con cursor (R13)", () => {
     });
 
     expect(listarHilos).toHaveBeenCalledTimes(1);
+  });
+
+  // REGRESIÓN medida el 2026-08-31 (prod y local): el listado se paraba en seco a las dos
+  // páginas, sin error, sin petición y sin nada en el log. `IntersectionObserver` sólo avisa
+  // cuando la visibilidad CAMBIA, así que cuando la página que aterriza no llega a empujar el
+  // centinela fuera de vista —páginas cortas, pantalla alta— no hay transición que notificar y
+  // el recorrido muere. Con páginas de 5 en un panel de 642 px y filas de 61, el listado se
+  // quedaba en 10 de 18 hilos.
+  //
+  // El caso NO simula scroll: `dispararCentinela` no se llama ni una vez. El centinela está a
+  // la vista desde el principio y ahí se queda, que es la condición exacta del fallo. QUÉ
+  // MUTACIÓN MATA: quitar el efecto que re-arma el observador en `HilosLista` deja el conteo
+  // en 1 y el caso falla.
+  it("con el panel sin desbordar, sigue pidiendo páginas sin que el usuario haga scroll", async () => {
+    mantenerCentinelaVisible();
+    const listarHilos = vi
+      .fn()
+      .mockResolvedValueOnce(
+        okHilos([hilo({ ordenId: "orden-1", destinatario: "Cliente uno" })], CURSOR_PAGINA_2),
+      )
+      .mockResolvedValueOnce(
+        okHilos([hilo({ ordenId: "orden-2", destinatario: "Cliente dos" })], CURSOR_PAGINA_3),
+      )
+      .mockResolvedValueOnce(
+        okHilos([hilo({ ordenId: "orden-3", destinatario: "Cliente tres" })], null),
+      );
+
+    renderPantalla(listarHilos);
+
+    // El ancla es el destinatario de la TERCERA página, no el conteo: un número de filas lo
+    // cumpliría también un estado a medio camino.
+    await waitFor(() => {
+      expect(screen.getByText("Cliente tres")).toBeInTheDocument();
+      expect(filas()).toHaveLength(3);
+    });
+    expect(listarHilos).toHaveBeenCalledTimes(3);
+    // Y se detiene donde debe: sin cursor no se pide una cuarta.
+    expect(listarHilos).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: CURSOR_PAGINA_3 }),
+    );
   });
 
   // Un servidor que repitiera un hilo entre páginas dejaría dos `key` de React iguales: un

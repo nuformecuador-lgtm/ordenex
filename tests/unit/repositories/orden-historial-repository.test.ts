@@ -158,7 +158,7 @@ describe("findHistorialByOrden (R26/R5)", () => {
     expect(arg.include).toEqual({
       estatusOrigen: { select: { value: true } },
       estatusDestino: { select: { value: true } },
-      actor: { select: { nombre: true } },
+      actor: { select: { nombre: true, primerApellido: true, segundoApellido: true } },
     });
 
     // Feature 262 (B24): el literal CRECE con `clase: "transicion"` y no se relaja a un

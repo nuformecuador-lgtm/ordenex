@@ -269,14 +269,61 @@ export const GANANCIA_LABEL = "Ganancia";
 export const GANANCIA_DEBE_LABEL = "Debe";
 // --- Pago a la tienda: lo recibido menos lo que Ordenex le factura (texto separado, i18n-ready) ---
 export const PAGO_TIENDA_LABEL = "Pago a tienda";
+/**
+ * ⏳ FICHA 338 (2026-08-31) — ESTA NOTA ENSEÑABA MAL, y era la frase que había que arreglar
+ * aparte de los nombres. Decía «No descuenta el flete de devolución: una devolución no cobra
+ * COD», y eso deja entender que una devolución cobra ALGO. No cobra nada: desde la ficha 301
+ * `derivarIngresoOrden` sólo deriva conceptos con `resultado === "rechazada"`.
+ *
+ * El motivo REAL de que no se descuente está en `pagoTiendaOrdenex`: un rechazo no recauda COD,
+ * así que ese dinero nunca entró en el total general y no hay nada de donde restarlo.
+ */
 export const PAGO_TIENDA_NOTA =
-  "Total general menos flete + IVA y comisión + IVA. No descuenta el flete de devolución: una devolución no cobra COD.";
+  "Total general menos flete + IVA y comisión + IVA. No descuenta el flete por rechazo: un rechazo no recauda contra entrega, así que ese dinero nunca entró en el total general.";
 export const GANANCIA_NOTA = "Ingreso bruto menos el pago al mensajero.";
 export const GANANCIA_NOTA_BODEGA = "Ingreso bruto menos el pago a los mensajeros.";
 export const DESGLOSE_TITULO = "Desglose de ingreso";
-export const TARIFA_TITULO = "Tarifa aplicada";
-export const TARIFA_NOTA = "Congelada al solicitar el cierre";
-export const APLICADA_HINT = "← se aplicó";
+/**
+ * ⏳ FICHA 338 (2026-08-31) — EL PANEL DE LA DERECHA DEJA DE SER UNA LISTA DE PRECIOS.
+ *
+ * Se titulaba «Tarifa aplicada» y pintaba los nueve valores de la tarifa CONGELADA, con un
+ * «← se aplicó» (`APLICADA_HINT`, retirado) en la única fila que de verdad se cobró. El humano
+ * lo leyó como nueve cobros: ver nueve importes bajo ese título hace pensar que se cobraron los
+ * nueve, y en una reprogramada —que no cobra nada— no había NI UNA FRASE que lo dijera: había
+ * que deducirlo de una ausencia de marca.
+ *
+ * Lo que pinta ahora, decidido por el humano: **todos los conceptos posibles, cada uno con el
+ * IMPORTE QUE ESTA GESTIÓN COBRÓ, y cero donde no aplica**. La columna pasa a ser SUMABLE y
+ * cierra con su total, así que un cero ya no se puede leer como un cobro.
+ *
+ * Y por eso el título CAMBIA, que no es cosmética: con «Valor flete» diciendo ₡0 mientras la
+ * tarifa vale ₡2.800, «Tarifa aplicada» sería FALSO —alguien pensaría que la tarifa está mal
+ * configurada—. Con «Cobros de esta gestión», el cero es verdad literal.
+ *
+ * ⚠️ LÍMITE ACEPTADO Y DECLARADO POR EL HUMANO. Esta pantalla YA NO MUESTRA LA LISTA DE PRECIOS
+ * de la tarifa congelada: «por qué ₡2.400 y no ₡2.800» no se audita aquí. La pantalla responde
+ * «qué se cobró», no «qué precios existen». Lo que sí queda de la tarifa son los `hint` del
+ * desglose de la izquierda (`tarifa GAM: ₡2.400`, `13,00 % de ₡2.400`), que citan el precio del
+ * concepto que SÍ se cobró. La lista completa vive en `/configuracion/tarifas` y el snapshot
+ * entero sigue viajando en `TarifaSnapshotDTO` para quien lo necesite por API.
+ */
+export const COBROS_TITULO = "Cobros de esta gestión";
+/**
+ * El importe de un concepto que NO se cobró. Es un STRING literal a propósito: acá no se hace
+ * ni una operación de dinero (R13). Todo lo demás lo produce `derivarIngresoOrden` en el
+ * servidor y llega ya formateable al DTO.
+ */
+export const COBRO_CERO = "0.00";
+/**
+ * Qué está viendo quien mira el panel, en una línea. El cero se COMPONE con el mismo `money()`
+ * que pinta las celdas (precedente: `PAGO_SIN_TARIFA_NOTA`): escribirlo a mano dejaría la nota
+ * hablando de un «0,00» mientras la columna dice «₡0».
+ */
+export const COBROS_NOTA = `Lo que se le cobró a la tienda por esta gestión, con la tarifa congelada al solicitar el cierre. Un ${money(
+  COBRO_CERO,
+)} es un concepto que no se cobró.`;
+/** El cierre SUMABLE del panel: sale del DTO (`ingresoOrdenex.total`), no se suma acá. */
+export const COBROS_TOTAL_LABEL = "Total cobrado";
 export const SIN_COMISION_NOTA = "Esta orden no cobra comisión COD.";
 // --- Tarifa especial por distrito (texto separado, i18n-ready) ---
 /**
@@ -296,9 +343,44 @@ export const ESPECIAL_BADGE_NOTA =
 export const ESPECIAL_SIN_PACTO_BADGE_LABEL = "Especial sin pacto";
 export const ESPECIAL_SIN_PACTO_BADGE_NOTA =
   "Distrito marcado como zona especial, pero la tarifa congelada no tenía tarifa especial pactada: se cobró la tarifa normal.";
-/** Etiquetas de las dos filas del pacto dentro de la tarifa congelada. */
+/**
+ * Etiquetas de las dos filas del pacto especial. Se conservan TAL CUAL —incluido el «devuelta»
+ * de la segunda— por la misma decisión de negocio que ya está escrita en
+ * `configuracion/tarifas/_components/tarifas-labels.ts`: «Tarifa especial» es como ellos
+ * conocen esos dos campos, y son los que nombran las columnas `tarifa_especial` y
+ * `tarifa_especial_devuelta`. La ficha 338 renombra el FLETE, no el pacto.
+ */
 export const TARIFA_ESPECIAL_LABEL = "Tarifa especial";
 export const TARIFA_ESPECIAL_DEV_LABEL = "Tarifa especial devuelta";
+
+// --- ⏳ FICHA 338 (2026-08-31): los conceptos de dinero de UNA gestión, por su nombre ---
+//
+// EL NOMBRE, elegido por el humano para toda la app: **«Flete por rechazo»**. El concepto se
+// llamaba «flete de devolución» / «flete devuelto» en pantallas, wallet, Excel y API, y ese
+// nombre decía JUSTO EL CASO QUE NO COBRA: desde la ficha 301 una `devuelta` no deriva nada
+// —el paquete sigue vivo en la calle— y sólo una `rechazada` cobra este flete
+// (`lib/utils/ingreso-ordenex.ts`). No había plata mal cobrada: había vocabulario que asusta,
+// y de hecho asustó —el humano abrió la ficha tras leer «Flete devuelto» en este panel—.
+//
+// Salen a constantes porque los pintan LOS DOS paneles del desglose (el de la izquierda con su
+// fórmula, el de la derecha con el importe cobrado) y dos literales sueltos divergen a la
+// primera corrección. `tests/unit/guards/flete-por-rechazo-censo.guardia.test.ts` vigila que
+// ningún archivo de `app/` vuelva a decir «flete de devolución» ni «flete devuelto».
+export const FLETE_LABEL = "Flete";
+export const IVA_FLETE_LABEL = "IVA flete";
+export const FLETE_RECHAZO_LABEL = "Flete por rechazo";
+export const IVA_FLETE_RECHAZO_LABEL = "IVA del flete por rechazo";
+export const COMISION_COD_LABEL = "Comisión COD";
+export const IVA_COMISION_LABEL = "IVA comisión";
+/**
+ * Los cuatro nombres de COLUMNA de la tabla de precios: la misma zona paga distinto dentro y
+ * fuera del GAM, así que son cuatro cobros POSIBLES y no dos. Coinciden a propósito con los
+ * rótulos de `/configuracion/tarifas` (`TARIFA_CAMPO_LABEL`): la misma cifra no puede llamarse
+ * de dos maneras según por qué pantalla se entre.
+ */
+export const VALOR_FLETE_LABEL = "Valor flete";
+export const VALOR_FLETE_GAM_LABEL = "Valor flete GAM";
+export const FLETE_RECHAZO_GAM_LABEL = "Flete por rechazo GAM";
 /** Origen del flete, en el `hint` de la fila del desglose. */
 export const HINT_TARIFA_ESPECIAL = "tarifa especial pactada";
 export const SIN_TARIFA_CONGELADA_NOTA =
@@ -826,6 +908,46 @@ export function DesgloseIngresoOrdenex({ g }: { g: CierreDetalleGestion }) {
       : t.valorFleteDevuelto;
   const origenFleteHint = fleteEspecial ? HINT_TARIFA_ESPECIAL : `tarifa ${variante}`;
   const origenFleteDevHint = fleteDevEspecial ? HINT_TARIFA_ESPECIAL : `tarifa ${variante}`;
+
+  // ⏳ FICHA 337 (2026-08-31) — ¿SE COBRÓ ESTE CONCEPTO, Y DESDE QUÉ COLUMNA DE LA TARIFA?
+  //
+  // La 337 nació de un defecto visible: en una ENTREGA de zona GAM se marcaban a la vez "Valor
+  // flete GAM" y "Flete devuelto GAM" —dos marcas para dos conceptos que se excluyen—, porque
+  // cada fila decidía con `esCentral` (la zona) y NUNCA con el resultado de la gestión. La zona
+  // elige la COLUMNA de la tarifa; el resultado elige QUÉ CONCEPTO se cobra.
+  //
+  // La fuente de verdad ya estaba en el DTO y no hace falta aritmética ninguna:
+  // `derivarIngresoOrden` deja `flete` en `null` salvo en `entregada` y `fleteDevolucion` en
+  // `null` salvo en `rechazada`. Un `null` es "este concepto no existe acá", que es exactamente
+  // la pregunta.
+  //
+  // ⏳ FICHA 338 (2026-08-31): esto mismo es ahora lo que DECIDE DÓNDE VA EL IMPORTE en el panel
+  // de cobros. Antes encendía un "se aplicó" al lado de un precio de la tarifa; ahora reparte el
+  // ÚNICO importe de flete que la gestión cobró a la columna de la que salió, y deja las otras en
+  // cero. Por eso las tres filas de flete de entrega suman exactamente `ing.flete` y las tres de
+  // rechazo exactamente `ing.fleteDevolucion`: como mucho UNA de cada terna es distinta de cero,
+  // y en una `reprogramada` (o en una `devuelta`, desde la 301) no lo es ninguna.
+  //
+  // Money-safe: se lee la PRESENCIA del concepto (`!== null`), jamás su importe. Ni una
+  // comparación numérica, ni un `parseFloat`; un flete legítimo de "0.00" se reparte igual.
+  const seCobroFlete = ing.flete !== null;
+  const seCobroFleteDev = ing.fleteDevolucion !== null;
+  type ColumnaTarifa = "pacto" | "normal-gam" | "normal-noGam";
+  const columnaDe = (especial: boolean): ColumnaTarifa =>
+    especial ? "pacto" : ing.esCentral ? "normal-gam" : "normal-noGam";
+  const fleteAplicadoEs = (col: ColumnaTarifa) =>
+    seCobroFlete && columnaDe(fleteEspecial) === col;
+  const fleteDevAplicadoEs = (col: ColumnaTarifa) =>
+    seCobroFleteDev && columnaDe(fleteDevEspecial) === col;
+  // El importe cobrado por el flete de ENTREGA en esa columna de tarifa, o CERO si no salió de
+  // ahí. No hay suma ni resta: se elige entre el STRING que mandó el servidor y un literal.
+  const cobroFlete = (col: ColumnaTarifa): string =>
+    fleteAplicadoEs(col) ? (ing.flete as string) : COBRO_CERO;
+  /** Igual para el flete por RECHAZO. */
+  const cobroFleteDev = (col: ColumnaTarifa): string =>
+    fleteDevAplicadoEs(col) ? (ing.fleteDevolucion as string) : COBRO_CERO;
+  /** Un concepto que no aplica a este resultado (`null`) se pinta como el cobro que fue: cero. */
+  const cobrado = (monto: string | null): string => monto ?? COBRO_CERO;
   // La marca del distrito estaba puesta pero el pacto faltaba en la tarifa congelada: se cobró
   // la tabla normal. Se avisa una sola vez por orden, aunque afecte a los dos fletes.
   const faltaPacto =
@@ -835,10 +957,10 @@ export function DesgloseIngresoOrdenex({ g }: { g: CierreDetalleGestion }) {
   return (
     <div className="grid gap-6 sm:grid-cols-2">
       {/* --- Lo que se derivó, con su fórmula --- */}
-      <div className="flex flex-col">
+      <section className="flex flex-col" aria-label={DESGLOSE_TITULO}>
         <div className="mb-1 flex flex-wrap items-center gap-2">
           <h4 className="text-sm font-semibold">{DESGLOSE_TITULO}</h4>
-          {/* La marca del flete de ENTREGA encabeza el desglose; la de devolución va en su
+          {/* La marca del flete de ENTREGA encabeza el desglose; la del rechazo va en su
               propia fila más abajo. Si ninguna aplica, no se pinta nada. */}
           {renderFleteOrigen(ing.fleteOrigen)}
           {ing.fleteDevolucionOrigen === ing.fleteOrigen
@@ -848,42 +970,42 @@ export function DesgloseIngresoOrdenex({ g }: { g: CierreDetalleGestion }) {
         <DesgloseFila label={MONTO_COBRAR_LABEL} value={money(ing.montoCobrar)} />
         {ing.flete === null ? null : (
           <DesgloseFila
-            label="Flete"
+            label={FLETE_LABEL}
             value={money(ing.flete)}
             hint={`${origenFleteHint}: ${money(fleteAplicado)}`}
           />
         )}
         {ing.ivaFlete === null ? null : (
           <DesgloseFila
-            label="IVA flete"
+            label={IVA_FLETE_LABEL}
             value={money(ing.ivaFlete)}
             hint={`${pct(t.ivaFlete)} de ${money(fleteAplicado)}`}
           />
         )}
         {ing.fleteDevolucion === null ? null : (
           <DesgloseFila
-            label="Flete devolución"
+            label={FLETE_RECHAZO_LABEL}
             value={money(ing.fleteDevolucion)}
             hint={`${origenFleteDevHint}: ${money(fleteDevAplicado)}`}
           />
         )}
         {ing.ivaFleteDevolucion === null ? null : (
           <DesgloseFila
-            label="IVA flete devolución"
+            label={IVA_FLETE_RECHAZO_LABEL}
             value={money(ing.ivaFleteDevolucion)}
             hint={`${pct(t.ivaFlete)} de ${money(fleteDevAplicado)}`}
           />
         )}
         {ing.comisionCod === null ? null : (
           <DesgloseFila
-            label="Comisión COD"
+            label={COMISION_COD_LABEL}
             value={money(ing.comisionCod)}
             hint={`${pct(t.comisionCod)} de ${money(ing.montoCobrar)}`}
           />
         )}
         {ing.ivaComisionCod === null ? null : (
           <DesgloseFila
-            label="IVA comisión"
+            label={IVA_COMISION_LABEL}
             value={money(ing.ivaComisionCod)}
             hint={`${pct(t.ivaComisionCod)} de ${money(ing.comisionCod)}`}
           />
@@ -903,58 +1025,61 @@ export function DesgloseIngresoOrdenex({ g }: { g: CierreDetalleGestion }) {
         <div className="mt-1 border-t pt-1">
           <DesgloseFila label={INGRESO_TOTAL_LABEL} value={money(ing.total)} emphasis />
         </div>
-      </div>
+      </section>
 
-      {/* --- La tarifa congelada completa, tal cual quedó al solicitar --- */}
-      <div className="flex flex-col">
-        <h4 className="mb-1 text-sm font-semibold">{TARIFA_TITULO}</h4>
-        <p className="pb-1 text-xs text-muted-foreground">
-          {TARIFA_NOTA} · <span className="font-mono">{t.tarifaId}</span>
-        </p>
-        {/* El "← se aplicó" de las columnas normales se APAGA cuando ganó el pacto: si no, el
-            desglose marcaría dos orígenes distintos para el mismo flete y el admin no sabría
-            cuál leer. Con `especial_sin_pacto` sigue encendido, que es la verdad: ahí el flete
-            salió de la columna normal. */}
-        <DesgloseFila
-          label="Valor flete"
-          value={money(t.valorFlete)}
-          hint={!fleteEspecial && !ing.esCentral ? APLICADA_HINT : undefined}
-        />
-        <DesgloseFila
-          label="Valor flete GAM"
-          value={money(t.valorFleteGam)}
-          hint={!fleteEspecial && ing.esCentral ? APLICADA_HINT : undefined}
-        />
-        <DesgloseFila
-          label="Flete devuelto"
-          value={money(t.valorFleteDevuelto)}
-          hint={!fleteDevEspecial && !ing.esCentral ? APLICADA_HINT : undefined}
-        />
-        <DesgloseFila
-          label="Flete devuelto GAM"
-          value={money(t.valorFleteDevueltoGam)}
-          hint={!fleteDevEspecial && ing.esCentral ? APLICADA_HINT : undefined}
-        />
-        {/* El pacto sólo se lista si existe: `null` significa "esta tarifa no pactaba nada",
-            y una fila con "—" se leería como un pacto de cero, que es otro dato. */}
+      {/* --- ⏳ FICHA 338: TODOS los cobros posibles, con lo que ESTA gestión cobró en cada uno.
+          Hasta hoy esta columna era la tarifa congelada entera —nueve PRECIOS— y sólo una marca
+          discreta decía cuál se había aplicado; en una reprogramada no había marca ninguna y
+          había que deducir de esa ausencia que no se cobró nada.
+
+          Ahora cada fila lleva el IMPORTE, y CERO donde el concepto no se cobró, así que la
+          columna se puede sumar de arriba abajo y termina en su total. Ni una operación de
+          dinero se hace aquí: los importes son los STRING que derivó el servidor y el total es
+          `ing.total` del DTO —la suma de los conceptos presentes, hecha con `Prisma.Decimal` en
+          `CierresAdminRepository.toIngresoOrdenex`—.
+
+          Las tres filas de flete de entrega —normal, GAM y pacto— son TRES COBROS POSIBLES de
+          los que como mucho ocurre uno, y por eso se pueden listar las tres y sumarlas sin
+          contar dos veces. Lo mismo con las tres del flete por rechazo. --- */}
+      <section className="flex flex-col" aria-label={COBROS_TITULO}>
+        <h4 className="mb-1 text-sm font-semibold">{COBROS_TITULO}</h4>
+        {/* ⏳ FICHA 337 (2026-08-31): aqui se imprimia ademas el UUID crudo de la tarifa. Se
+            RETIRA: a la persona que audita un cierre un identificador interno no le dice nada. El
+            dato sigue viajando en `TarifaSnapshotDTO.tarifaId` para quien lo necesite por API. */}
+        <p className="pb-1 text-xs text-muted-foreground">{COBROS_NOTA}</p>
+        <DesgloseFila label={VALOR_FLETE_LABEL} value={money(cobroFlete("normal-noGam"))} />
+        <DesgloseFila label={VALOR_FLETE_GAM_LABEL} value={money(cobroFlete("normal-gam"))} />
+        {/* El pacto sólo se lista si la tarifa congelada lo traía: `null` significa "esta tarifa
+            no pactaba nada", y una fila en cero se leería como un pacto de cero, que es otro
+            dato. No se pierde plata al ocultarla: `fleteEspecial` exige que el pacto exista, así
+            que con la fila ausente el importe va siempre a una columna normal. */}
         {t.tarifaEspecial === null ? null : (
-          <DesgloseFila
-            label={TARIFA_ESPECIAL_LABEL}
-            value={money(t.tarifaEspecial)}
-            hint={fleteEspecial ? APLICADA_HINT : undefined}
-          />
+          <DesgloseFila label={TARIFA_ESPECIAL_LABEL} value={money(cobroFlete("pacto"))} />
         )}
+        <DesgloseFila label={FLETE_RECHAZO_LABEL} value={money(cobroFleteDev("normal-noGam"))} />
+        <DesgloseFila
+          label={FLETE_RECHAZO_GAM_LABEL}
+          value={money(cobroFleteDev("normal-gam"))}
+        />
         {t.tarifaEspecialDevuelta === null ? null : (
-          <DesgloseFila
-            label={TARIFA_ESPECIAL_DEV_LABEL}
-            value={money(t.tarifaEspecialDevuelta)}
-            hint={fleteDevEspecial ? APLICADA_HINT : undefined}
-          />
+          <DesgloseFila label={TARIFA_ESPECIAL_DEV_LABEL} value={money(cobroFleteDev("pacto"))} />
         )}
-        <DesgloseFila label="Comisión COD" value={pct(t.comisionCod)} />
-        <DesgloseFila label="IVA flete" value={pct(t.ivaFlete)} />
-        <DesgloseFila label="IVA comisión" value={pct(t.ivaComisionCod)} />
-      </div>
+        {/* ⏳ FICHA 338: estas cuatro eran PORCENTAJES ("Comisión COD 5,00 %", "IVA flete
+            13,00 %"). Pasan a su IMPORTE cobrado porque, si no, no serían sumables con las de
+            arriba y la ambigüedad que la ficha cierra volvería por otra puerta: un "13,00 %" en
+            medio de una columna de dinero no dice si se cobró algo ni cuánto. El porcentaje sigue
+            visible donde explica un cobro real: en el `hint` del desglose de la izquierda. */}
+        <DesgloseFila label={IVA_FLETE_LABEL} value={money(cobrado(ing.ivaFlete))} />
+        <DesgloseFila
+          label={IVA_FLETE_RECHAZO_LABEL}
+          value={money(cobrado(ing.ivaFleteDevolucion))}
+        />
+        <DesgloseFila label={COMISION_COD_LABEL} value={money(cobrado(ing.comisionCod))} />
+        <DesgloseFila label={IVA_COMISION_LABEL} value={money(cobrado(ing.ivaComisionCod))} />
+        <div className="mt-1 border-t pt-1">
+          <DesgloseFila label={COBROS_TOTAL_LABEL} value={money(ing.total)} emphasis />
+        </div>
+      </section>
     </div>
   );
 }

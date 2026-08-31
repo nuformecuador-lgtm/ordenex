@@ -280,6 +280,18 @@ export interface ICierreDiaRepository {
   /**
    * R2/R3: gestiones del mensajero con `cierre_id IS NULL` + detalle de la orden
    * (join a orden/tienda/geografia). Filtro por mensajero en el WHERE. Solo query.
+   *
+   * 💰 FICHA 337 (2026-08-31) — **NO DEVUELVE las gestiones nacidas en el ESCRITORIO de la
+   * tienda** (`rechazo_tienda`, `reprogramacion_tienda`): llevan el `mensajero_id` del reparto
+   * pero no son trabajo suyo. La lista y el porque viven en `ORIGENES_GESTION_FUERA_DEL_CIERRE`
+   * (`lib/types/orden-historial.ts`), que REVOCA `100/R10` y `240/R18`.
+   *
+   * ⚠️ `gestion_tienda_ayuda` (237) SI se devuelve, y esa presencia es la decision: la ayuda es
+   * una visita que el mensajero HIZO y la tienda solo cerro por el.
+   *
+   * La implementacion comparte el predicado, literalmente, con el `updateMany` de `crearCierre`
+   * (`gestionesDelCierreWhere`): lo que la pantalla lista y lo que el documento se lleva no pueden
+   * ser dos conjuntos.
    */
   findGestionesPendientes(mensajeroId: string): Promise<CierreGestionPendienteRow[]>;
   /**
@@ -352,6 +364,21 @@ export interface ICierreDiaRepository {
    * propiedad + no-cerradas; concurrencia-segura). Devuelve el id del cierre, o `null`
    * si el UPDATE guardado vincula 0 gestiones (carrera: otra solicitud/corte las vinculo
    * primero) -> rollback de la tx, sin efectos (R8/R9/R23).
+   *
+   * 💰 FICHA 337: el UPDATE guardado excluye ademas las gestiones de ESCRITORIO
+   * (`ORIGENES_GESTION_FUERA_DEL_CIERRE`), con el MISMO predicado que `findGestionesPendientes`.
+   * Consecuencia buscada y visible: un mensajero cuyas unicas gestiones sueltas sean de escritorio
+   * vincula 0 y este metodo devuelve `null` — no se le crea un cierre vacio a su nombre, que es
+   * exactamente el caso medido en produccion (5 filas, ninguna suya).
+   *
+   * ⚠️ LOS DOS COBROS QUE ESTO TOCA, y NO corren la misma suerte:
+   *   · el FLETE DE DEVOLUCION + IVA que paga la TIENDA ya tiene via propia desde la segunda mitad
+   *     de la 337 (`rechazo_tienda_cobro`: pendiente al rechazar, apuntes al aprobarlo en
+   *     `/wallet`). No depende de este cierre y no se pierde.
+   *   · el `cobroRechazado` / `ingreso_bodega_rechazo` (56), que es INGRESO DE LA BODEGA y se
+   *     congelaba AQUI al crear el cierre, **SIGUE EN PAUSA**: sin cierre no se congela y el cierre
+   *     de bodega no tiene que sumar. No se pierde (la gestion y su `resultado` siguen enteros),
+   *     pero hoy nadie lo emite. Es alcance de otra ficha.
    */
   crearCierre(input: CrearCierreInput): Promise<string | null>;
   /** R18: cierres del mensajero (mas reciente primero) con estado + totales. */

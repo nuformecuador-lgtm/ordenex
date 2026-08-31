@@ -376,11 +376,11 @@ describe("OrdenRepository.findNovedadesByTienda (R4/R10)", () => {
       provincia: { select: { nombre: true } },
       canton: { select: { nombre: true } },
       distrito: { select: { nombre: true } },
-      // FICHA 296: el join del mensajero, ACOTADO A `nombre`. Este `toEqual` ES el contrato del
-      // `select` (por eso es literal y no se deriva de nada): quitar esta clave lo pone rojo, y
-      // ampliarla a `true` —que arrastraria `email`, `telefono`, `cedula` y `password_hash` hasta
-      // el navegador de la tienda— tambien.
-      mensajeroAsignado: { select: { nombre: true } },
+      // FICHA 296: el join del mensajero, ACOTADO A SU IDENTIDAD (nombre y apellidos). Este
+      // `toEqual` ES el contrato del `select` (por eso es literal y no se deriva de nada):
+      // quitar una de estas claves lo pone rojo, y ampliarla a `true` —que arrastraria `email`,
+      // `telefono`, `cedula` y `password_hash` hasta el navegador de la tienda— tambien.
+      mensajeroAsignado: { select: { nombre: true, primerApellido: true, segundoApellido: true } },
     });
     expect(arg.select).not.toHaveProperty("deletedAt");
   });

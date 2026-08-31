@@ -493,3 +493,78 @@ describe("el doble de este archivo SI mira el `where` (anti-vacuidad)", () => {
     })();
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* 4. FICHA 337 — el EFECTO EXTRA viaja DENTRO de la transaccion               */
+/* -------------------------------------------------------------------------- */
+
+describe("💰 337 — `trasCrearGestion`: el cobro entra en la MISMA transaccion", () => {
+  it("⭑ se invoca con el `tx` y con el id de la gestion RECIEN creada", async () => {
+    // ⭑ LA MUTACION QUE ESTE CASO MATA: borrar `trasCrearGestion: input.trasCrearGestion` del
+    // cuerpo de `rechazarDesdeDevuelta`, o el `if (input.trasCrearGestion)` del helper. Es la
+    // familia del «composition root que no inyecta»: el hook seguiria existiendo en el contrato,
+    // el servicio seguiria construyendolo, la suite de servicio seguiria verde... y NINGUN
+    // rechazo se cobraria nunca. Un fallo mudo sobre dinero.
+    const prisma = buildPrisma();
+    const visto: Array<{ mismaTx: boolean; gestionId: string }> = [];
+
+    const ok = await repoWith(prisma).rechazarDesdeDevuelta({
+      ...INPUT,
+      trasCrearGestion: async (tx, gestionId) => {
+        // El `tx` que llega ES el de la transaccion (el doble se pasa a si mismo como cliente).
+        visto.push({ mismaTx: tx === (prisma as unknown), gestionId });
+      },
+    });
+
+    expect(ok).toBe(true);
+    expect(visto).toHaveLength(1);
+    expect(visto[0].mismaTx).toBe(true);
+    // Y el id es el de LA gestion que acaba de crearse (el que el doble de `create` devuelve),
+    // no uno inventado ni el de la orden.
+    expect(visto[0].gestionId).toBe("g-rechazada");
+  });
+
+  it("⭑ NO se invoca cuando la orden ya salio de `devuelta` (carrera perdida)", async () => {
+    // Un cobro sin rechazo seria dinero contra una tienda por algo que no paso. El hook cuelga del
+    // paso 3, que solo corre si el `updateMany` guardado afecto una fila.
+    const prisma = buildPrisma({ estatusId: idEstado("rechazada") });
+    const hook = vi.fn(async () => {});
+
+    const ok = await repoWith(prisma).rechazarDesdeDevuelta({ ...INPUT, trasCrearGestion: hook });
+
+    expect(ok).toBe(false);
+    expect(hook).not.toHaveBeenCalled();
+  });
+
+  it("⭑ va ANTES del append del historial", async () => {
+    // No cambia el resultado final (la transaccion es todo-o-nada), pero deja el fallo mas cerca
+    // de su causa cuando se lee un log: si el cobro revienta, no se ha escrito todavia la fila de
+    // auditoria de una transicion que va a revertirse.
+    const prisma = buildPrisma();
+    const orden: string[] = [];
+    prisma.ordenHistorialEstado.createMany.mockImplementation(async () => {
+      orden.push("historial");
+      return { count: 1 };
+    });
+
+    await repoWith(prisma).rechazarDesdeDevuelta({
+      ...INPUT,
+      trasCrearGestion: async () => {
+        orden.push("cobro");
+      },
+    });
+
+    expect(orden).toEqual(["cobro", "historial"]);
+  });
+
+  it("sin `trasCrearGestion` el metodo se comporta EXACTAMENTE como antes de la 337", async () => {
+    // El hook es OPCIONAL, y esta es la prueba de que serlo no cuesta nada: la via del cron y
+    // cualquier llamador que no lo traiga siguen igual.
+    const prisma = buildPrisma();
+    const ok = await repoWith(prisma).rechazarDesdeDevuelta(INPUT);
+
+    expect(ok).toBe(true);
+    expect(prisma.gestionOrden.create).toHaveBeenCalledTimes(1);
+    expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
+  });
+});

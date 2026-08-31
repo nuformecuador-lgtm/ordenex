@@ -20,11 +20,28 @@ import type { NovedadDTO } from "@/lib/types/novedad";
 // es la mitad que faltaba: la que convierte el clic en una operación.
 //
 // **Qué se está firmando con un clic, y por eso el aviso de arriba no es cortesía.** El rechazo
-// manual escribe una gestión sintética `rechazada` con `cierre_id` nulo, que el siguiente cierre del
-// mensajero recoge; ese cierre le cobra a la tienda EL FLETE DE DEVOLUCIÓN más su IVA. Y **no se
-// puede deshacer**: la gestión queda protegida por la guarda del deshacer del mensajero (D6), así
-// que un rechazo equivocado no tiene marcha atrás desde ninguna pantalla. D10 (firmada) exige decir
-// las dos cosas ANTES, con palabras y siempre visibles.
+// manual escribe una gestión sintética `rechazada` con `cierre_id` nulo, que le cobra a la tienda
+// EL FLETE DE DEVOLUCIÓN más su IVA. Y **no se puede deshacer**: la gestión queda protegida por la
+// guarda del deshacer del mensajero (D6), así que un rechazo equivocado no tiene marcha atrás desde
+// ninguna pantalla. D10 (firmada) exige decir las dos cosas ANTES, con palabras y siempre visibles.
+//
+// ⏳ ⚠️ FICHA 337 (2026-08-31) — EL **CUÁNDO** DE ESE COBRO CAMBIÓ, Y EL TEXTO VISIBLE NO SE TOCÓ.
+// Aquí decía «… que el siguiente cierre del mensajero recoge; ESE CIERRE le cobra…». Ese mecanismo
+// era el defecto de la 337 —metía una decisión de escritorio en el documento de trabajo de un
+// mensajero que no intervino— y se retiró: la gestión ya no entra en ningún cierre.
+//
+// ⏳ **LA PAUSA SE CERRÓ EL MISMO DÍA, en la segunda mitad de la 337.** Aquí decía «hoy ese cobro
+// está EN PAUSA … hasta que exista la vía propia». Esa vía YA EXISTE: el rechazo da de alta un
+// COBRO PENDIENTE contra la tienda (`rechazo_tienda_cobro`) en la MISMA transacción, con el flete
+// de devolución y su IVA CONGELADOS de la tarifa de ese instante, y un administrador lo aprueba
+// desde `/wallet`. Sólo entonces nacen los apuntes —los mismos que emitía la aprobación del
+// cierre—. Decisión del humano del 2026-08-31: **la aprobación va ANTES del cobro**.
+//
+// POR QUE `RECHAZO_AVISO` SIGUE SIN REESCRIBIRSE, y ahora con más razón: dice QUÉ se cobra y que es
+// irreversible, y las dos siguen siendo ciertas. Lo único que cambió otra vez es por qué documento
+// sale. Lo que el aviso NO dice —ni debe— es que un administrador puede descartar el cobro: eso es
+// una decisión interna de Ordenex y prometerle a la tienda que «quizá no se le cobre» sería peor
+// que no nombrarlo. Si el humano quiere matizar la copia, es una decisión de producto.
 //
 // ⚠️ **EL AVISO NOMBRA EL FLETE DE DEVOLUCIÓN, NO EL «cobro por rechazo».** Son dos importes con
 // dueños distintos: el cobro por rechazo es INGRESO DE LA BODEGA (sale de la tarifa de zona+vehículo
@@ -78,11 +95,17 @@ export const RECHAZO_TITULO = "Rechazar la orden";
  *    tapadillo**.
  *
  * D10 lo dice con todas las letras: «un número inventado en un aviso de dinero es peor que ninguno».
- * Así que el aviso dice **QUÉ** se cobra —el flete de devolución, no el cobro de bodega por rechazo,
+ * Así que el aviso dice **QUÉ** se cobra —el flete por rechazo, no el cobro de bodega por rechazo,
  * que es ingreso de la bodega— y que es irreversible, que es justo lo que no se puede deducir.
+ *
+ * ⏳ FICHA 338 (2026-08-31): el concepto se llamaba aquí «flete de devolución», y ese nombre
+ * decía justo el caso que NO cobra. Sólo un RECHAZO cobra este flete; una devolución no cobra
+ * nada (`lib/utils/ingreso-ordenex.ts`, ficha 301). El nombre en toda la app es «flete por
+ * rechazo», y en esta ventana además cierra el círculo: el botón que se está pulsando es
+ * «Rechazar».
  */
 export const RECHAZO_AVISO =
-  "Esto le cobra a tu tienda el flete de devolución y no se puede deshacer. Si preferís volver a intentar la entrega, usá «Reprogramar».";
+  "Esto le cobra a tu tienda el flete por rechazo y no se puede deshacer. Si preferís volver a intentar la entrega, usá «Reprogramar».";
 
 /** D10/D5: el motivo es OBLIGATORIO, y el rótulo lo dice sin la muleta del asterisco. */
 export const RECHAZO_MOTIVO_LABEL = "Motivo del rechazo";

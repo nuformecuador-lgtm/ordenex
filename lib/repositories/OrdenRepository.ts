@@ -17,6 +17,7 @@ import {
 // Feature 271 (R57-R61) — el UNICO derivador de la jornada de un cierre, y la conversion a fecha
 // de Costa Rica que necesita. `created_at` de un `vencido` va UN DIA por delante de la jornada.
 import { derivarJornada } from "@/lib/utils/jornada-cierre";
+import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 import { ESTADOS_USUARIO_NO_ASIGNABLES } from "@/lib/constants/estado-usuario-asignable";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 // Feature 274 — LA REGLA de resolucion de tarifa vive en un modulo PURO, compartido con el
@@ -57,6 +58,7 @@ import {
   type ManifiestoOrdenRow,
   type MensajeroLiteRow,
   type NovedadOrdenRow,
+  type OrdenBaseCobroDevolucionRow,
   type OrdenParaCorreccionRow,
   type OrdenTransicionRow,
   type OrderStatusLiteRow,
@@ -536,7 +538,7 @@ const WITH_ESTATUS_Y_TIENDA = {
     // `zonaEspecial` (2026-08-25) viaja con el distrito porque decide el MONTO del flete que
     // muestran las dos columnas de dinero de la fila, no solo su etiqueta.
     distrito: { select: { id: true, nombre: true, zonaEspecial: true } },
-    mensajeroAsignado: { select: { id: true, nombre: true } },
+    mensajeroAsignado: { select: { id: true, ...NOMBRE_USUARIO_SELECT } },
     // Gestion de reprogramacion VIGENTE (a lo sumo una, `take: 1`): alimenta la
     // columna "Liberada el" de la tab `reprogramada`. `orden -> gestiones` es 1:N
     // (una orden acumula gestiones entre reintentos), asi que la vigente es la mas
@@ -681,7 +683,7 @@ function toRelaciones(row: OrdenListRow, tarifa: TarifaListRow | null): OrdenLis
     canton: row.canton ? { id: row.canton.id, nombre: row.canton.nombre } : null,
     distrito: row.distrito ? { id: row.distrito.id, nombre: row.distrito.nombre } : null,
     mensajeroAsignado: row.mensajeroAsignado
-      ? { id: row.mensajeroAsignado.id, nombre: row.mensajeroAsignado.nombre }
+      ? { id: row.mensajeroAsignado.id, nombre: nombreCompletoUsuario(row.mensajeroAsignado) }
       : null,
   };
 }
@@ -858,7 +860,7 @@ const WITH_MANIFIESTO = {
     montoCobrar: true,
     tienda: { select: { nombre: true } },
     zona: { select: { nombre: true, esCentral: true } },
-    mensajeroAsignado: { select: { nombre: true } },
+    mensajeroAsignado: { select: NOMBRE_USUARIO_SELECT },
   },
 } as const;
 
@@ -882,7 +884,9 @@ function toManifiestoOrdenRow(row: OrdenManifiestoRow): ManifiestoOrdenRow {
     tiendaNombre: row.tienda.nombre,
     zonaNombre: row.zona.nombre,
     zonaEsCentral: row.zona.esCentral,
-    mensajeroAsignadoNombre: row.mensajeroAsignado?.nombre ?? null,
+    mensajeroAsignadoNombre: row.mensajeroAsignado
+      ? nombreCompletoUsuario(row.mensajeroAsignado)
+      : null,
   };
 }
 
@@ -1769,6 +1773,51 @@ export class OrdenRepository implements IOrdenRepository {
    * MISMA consulta: `cierre_detail` tiene `@@index([ordenId])`, que existe justo para trazar en
    * que cierres aparecio una orden. Ni round-trip extra, ni Seq Scan.
    */
+  /**
+   * FICHA 337 (segunda mitad) -- las CINCO entradas de `derivarIngresoOrden` (mas las dos que esa
+   * funcion pide aunque la rama `rechazada` no las use), para congelar el cobro del rechazo que la
+   * tienda hace desde novedades.
+   *
+   * Es la version minima de lo que `cierre_detail` congela al solicitar un cierre: la misma
+   * informacion, para una gestion que ya no va a entrar en ningun cierre. `select` explicito y sin
+   * relaciones de adorno.
+   *
+   * `deletedAt: null` en el `where`, con el mismo criterio que `findById` y `findParaCorreccion`:
+   * una orden borrada cuenta como no encontrada, no como fila sin tarifa.
+   *
+   * Money-safe: `montoCobrar` sale como STRING escala 2 (`toFixed(2)`), nunca `number`.
+   */
+  async findBaseCobroDevolucion(
+    ordenId: string,
+  ): Promise<OrdenBaseCobroDevolucionRow | null> {
+    const row = await this.prisma.orden.findFirst({
+      where: { id: ordenId, deletedAt: null },
+      select: {
+        id: true,
+        tiendaId: true,
+        zonaId: true,
+        montoCobrar: true,
+        cobraComision: true,
+        zona: { select: { esCentral: true } },
+        distrito: { select: { zonaEspecial: true } },
+      },
+    });
+    if (row === null) return null;
+    return {
+      ordenId: row.id,
+      tiendaId: row.tiendaId,
+      zonaId: row.zonaId,
+      esCentral: row.zona.esCentral,
+      // La marca es del DISTRITO, no de la zona, y la columna es tri-valuada: `null` ("nadie lo
+      // decidio") NO es especial. Una orden sin distrito -- el unico FK nullable de `orden`--
+      // entra como `false`: sin distrito no hay marca que aplicar. Mismo `=== true` que usan
+      // `findParaCorreccion` y el listado.
+      esZonaEspecial: row.distrito?.zonaEspecial === true,
+      montoCobrar: row.montoCobrar ? row.montoCobrar.toFixed(2) : null,
+      cobraComision: row.cobraComision,
+    };
+  }
+
   async findParaCorreccion(ordenId: string): Promise<OrdenParaCorreccionRow | null> {
     const row = await this.prisma.orden.findFirst({
       where: { id: ordenId, deletedAt: null },
@@ -2562,20 +2611,24 @@ export class OrdenRepository implements IOrdenRepository {
 
   /** R28/T15: TODOS los usuarios con rol `mensajero`, SIN filtro de zona. */
   async findAllMensajeros(): Promise<MensajeroLiteRow[]> {
-    return this.prisma.usuario.findMany({
+    const rows = await this.prisma.usuario.findMany({
       where: { rol: { value: "mensajero" } },
-      select: { id: true, nombre: true },
+      select: { id: true, ...NOMBRE_USUARIO_SELECT },
       orderBy: { nombre: "asc" },
     });
+    return rows.map((r) => ({ id: r.id, nombre: nombreCompletoUsuario(r) }));
   }
 
   /** Feature 30/R5 + 34/R5: usuarios rol `mensajero` cuyo `zonaId` sea la zona pasada. */
   async findMensajerosByZona(zonaId: string): Promise<MensajeroLiteRow[]> {
-    return this.prisma.usuario.findMany({
+    const rows = await this.prisma.usuario.findMany({
       where: { rol: { value: "mensajero" }, zonaId },
-      select: { id: true, nombre: true },
+      select: { id: true, ...NOMBRE_USUARIO_SELECT },
       orderBy: { nombre: "asc" },
     });
+    // El modal de asignacion elige a UNA persona: con dos «Carlos» en la zona, el nombre de
+    // pila solo no distingue a quien se le esta entregando la orden.
+    return rows.map((r) => ({ id: r.id, nombre: nombreCompletoUsuario(r) }));
   }
 
   /** Feature 30/R6 + 34/R9: subconjunto de `ids` con rol `mensajero` Y `zonaId` = zona pasada. */
@@ -2991,13 +3044,13 @@ export class OrdenRepository implements IOrdenRepository {
     return rows.map(toManifiestoOrdenRow);
   }
 
-  /** Feature 148/R9: `usuario.nombre` del actor; `null` si el usuario no resuelve. */
+  /** Feature 148/R9: nombre COMPLETO del actor; `null` si el usuario no resuelve. */
   async findUsuarioNombre(usuarioId: string): Promise<string | null> {
     const row = await this.prisma.usuario.findUnique({
       where: { id: usuarioId },
-      select: { nombre: true },
+      select: NOMBRE_USUARIO_SELECT,
     });
-    return row?.nombre ?? null;
+    return row ? nombreCompletoUsuario(row) : null;
   }
 
   // --- Feature 33: recepcion por QR en la bodega satelite (R4/R5/R6/R8/R11/R18) ---
@@ -4303,9 +4356,10 @@ export class OrdenRepository implements IOrdenRepository {
         distrito: { select: { nombre: true } },
         // FICHA 296: el MENSAJERO, por nombre y en la MISMA consulta. `mensajero_asignado_id` es
         // NULLABLE, asi que la relacion es opcional -> `?.nombre ?? null`, igual que `distrito`.
-        // El `select` acotado a `nombre` NO es cosmetico: la fila de `usuario` lleva `email`,
-        // `telefono`, `cedula` y `password_hash`, y esta fila viaja al navegador de la TIENDA.
-        mensajeroAsignado: { select: { nombre: true } },
+        // El `select` acotado a la IDENTIDAD (nombre y apellidos) NO es cosmetico: la fila de
+        // `usuario` lleva `email`, `telefono`, `cedula` y `password_hash`, y esta fila viaja al
+        // navegador de la TIENDA.
+        mensajeroAsignado: { select: NOMBRE_USUARIO_SELECT },
       },
     });
     return rows.map((row) => ({
@@ -4333,7 +4387,7 @@ export class OrdenRepository implements IOrdenRepository {
       // FICHA 296: `null` cuando la orden no tiene mensajero asignado. NUNCA `""`: una cadena
       // vacia se pinta como una etiqueta sin valor y la tienda no sabria si es que no hay nadie
       // o si el nombre se perdio por el camino.
-      mensajeroNombre: row.mensajeroAsignado?.nombre ?? null,
+      mensajeroNombre: row.mensajeroAsignado ? nombreCompletoUsuario(row.mensajeroAsignado) : null,
       createdAt: row.createdAt,
     }));
   }

@@ -48,10 +48,10 @@ export const TIPO_LABEL: Record<WalletMovimientoTipo, string> = {
 /** Etiqueta legible de cada categoría (concepto) del libro. */
 export const CATEGORIA_LABEL: Record<WalletMovimientoCategoria, string> = {
   ingreso_flete: "Flete",
-  ingreso_flete_devolucion: "Flete de devolución",
+  ingreso_flete_devolucion: "Flete por rechazo",
   ingreso_comision_cod: "Comisión COD",
   ingreso_iva_flete: "IVA del flete",
-  ingreso_iva_flete_devolucion: "IVA del flete de devolución",
+  ingreso_iva_flete_devolucion: "IVA del flete por rechazo",
   ingreso_iva_comision_cod: "IVA de la comisión",
   ingreso_ajuste: "Ajuste (ingreso)",
   egreso_pago_tienda: "Pago a tienda",

@@ -8,6 +8,8 @@ import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepositor
 import { RecuperacionBodegaRepository } from "@/lib/repositories/RecuperacionBodegaRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
+import { RechazoTiendaCobroRepository } from "@/lib/repositories/RechazoTiendaCobroRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { ReprogramacionTiendaService } from "@/lib/services/ReprogramacionTiendaService";
 import { RechazoTiendaService } from "@/lib/services/RechazoTiendaService";
@@ -111,7 +113,25 @@ function buildReprogramacionService(): IReprogramacionTiendaService {
 
 function buildRechazoService(): IRechazoTiendaService {
   const prisma = getPrismaClient();
-  return new RechazoTiendaService(new OrdenRepository(prisma), new GestionOrdenRepository(prisma));
+  return new RechazoTiendaService(
+    new OrdenRepository(prisma),
+    new GestionOrdenRepository(prisma),
+    // FICHA 337 (segunda mitad) -- EL CABLEADO DE LA VIA DE COBRO PROPIA, y las DOS dependencias
+    // son OBLIGATORIAS en el constructor a proposito: borrar cualquiera de estas dos lineas rompe
+    // el TYPECHECK, no deja el cobro apagado en silencio. Es la leccion de los notificadores
+    // muertos -- dos de siete quedaron sin inyectar y la suite siguio verde-- aplicada a un
+    // cableado que decide si una tienda paga o no.
+    //
+    //   - `TarifaVigenteRepository`: resuelve la tarifa del par (tienda, zona) para CONGELAR el
+    //     importe en el instante del rechazo. Es el MISMO repositorio que usa el snapshot del
+    //     cierre, asi que el importe congelado sale de la misma cascada.
+    //   - `RechazoTiendaCobroRepository`: da de alta el pendiente DENTRO de la transaccion que
+    //     crea la gestion.
+    //
+    // El reloj se deja en su default (`new Date`): en produccion la fecha del cobro ES la de hoy.
+    new TarifaVigenteRepository(prisma),
+    new RechazoTiendaCobroRepository(prisma),
+  );
 }
 
 function buildRecuperacionService(): IRecuperacionBodegaService {

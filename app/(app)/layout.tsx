@@ -15,6 +15,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 export default async function AppLayout({
   children,
@@ -31,14 +32,16 @@ export default async function AppLayout({
   // corrige nada después del primer pintado porque no hay nada que corregir.
   const tema = normalizarTema((await cookies()).get(COOKIE_TEMA)?.value);
 
-  // Datos del usuario para el footer del sidebar (nombre + rol legible). Se resuelve
-  // el nombre por id (el actor solo trae usuarioId + rol). Sin sesión -> null.
+  // Datos del usuario para el footer del sidebar (nombre completo + rol legible). Se resuelve
+  // el nombre por id (el actor solo trae usuarioId + rol). Sin sesión -> null. Se pinta la
+  // identidad COMPLETA —nombre y apellidos—: es el único sitio donde la persona se reconoce a
+  // sí misma en la aplicación, y dos mensajeros con el mismo nombre de pila veían el mismo pie.
   const usuarioRow = actor
     ? await new UserRepository(getPrismaClient()).findById(actor.usuarioId)
     : null;
   const usuario =
     actor && usuarioRow
-      ? { nombre: usuarioRow.nombre, rolLabel: ROL_LABELS[actor.rol] }
+      ? { nombre: nombreCompletoUsuario(usuarioRow), rolLabel: ROL_LABELS[actor.rol] }
       : null;
 
   return (

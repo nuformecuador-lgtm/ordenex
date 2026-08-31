@@ -14,6 +14,7 @@ import {
   RESULTADOS_QUE_CUENTAN_COMO_INTENTO,
   type OrdenHistorialTransicionDTO,
 } from "@/lib/types/orden-historial";
+import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 // Cliente Prisma acotado a lo que este repo necesita para las LECTURAS (patron
 // CierresAdminRepository/WalletMovimientoRepository). Las escrituras van por el `tx`.
@@ -43,7 +44,7 @@ const WITH_LABELS = {
   include: {
     estatusOrigen: { select: { value: true } },
     estatusDestino: { select: { value: true } },
-    actor: { select: { nombre: true } },
+    actor: { select: NOMBRE_USUARIO_SELECT },
   },
 } as const;
 
@@ -87,7 +88,7 @@ function toEntradaDTO(row: HistorialRow): OrdenHistorialTransicionDTO {
     estatusOrigenValue: row.estatusOrigen?.value ?? null,
     estatusDestinoValue: row.estatusDestino.value,
     origenTipo: row.origenTipo,
-    actorNombre: row.actor?.nombre ?? null,
+    actorNombre: row.actor ? nombreCompletoUsuario(row.actor) : null,
     motivo: row.motivo,
     createdAt: row.createdAt,
   };
@@ -149,7 +150,16 @@ export type FiltroOrdenIntentos = string | { in: string[] };
  * gestiones SINTETICAS que no son visitas de nadie (el escalado del cron SLA y la reprogramacion
  * de escritorio de la tienda) y que entran al cierre del mensajero por la puerta de atras: nacen
  * con `cierre_id: null` y con el `mensajero_id` de la ultima `devuelta` vigente, asi que
- * `CierreDiaRepository.crearCierre` las vincula al siguiente cierre de ese mensajero. Sin esta
+ * `CierreDiaRepository.crearCierre` las vincula al siguiente cierre de ese mensajero.
+ *
+ * ⏳ FICHA 337 (2026-08-31) — ESA PUERTA DE ATRAS SE CERRO PARA LA REPROGRAMACION DE ESCRITORIO
+ * (`reprogramacion_tienda`), que ya NO entra en ningun cierre. **Esta condicion NO se retira**, y la
+ * razon importa: (a) el escalado del cron (`escalado_devuelta_sla`) SIGUE entrando y sigue
+ * necesitandola; (b) esta condicion se defiende sola —una lista de INCLUSION no depende de que la
+ * pertenencia al cierre siga siendo universal—; y (c) dos guardias sobre el mismo hecho no son
+ * redundancia cuando cada uno protege un requisito distinto (aqui el CONTEO de intentos, alli la
+ * ATRIBUCION del trabajo). Lo que cambia es la premisa de UNO de los dos ejemplos, no la
+ * conclusion. Sin esta
  * condicion, al aprobarse ese cierre sumaban +1 cada una: la del escalado incumplia R18-b y la de
  * la tienda incumplia R12 (y, sumada a la `devuelta` real de la misma orden, reproducia el DOBLE
  * CONTEO que `160/R2` evitaba). El discriminador es ESTRUCTURAL, no heuristico —nada de

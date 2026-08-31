@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { ArrowLeft } from "lucide-react";
 import useSWR from "swr";
 
 import { cn } from "@/lib/utils";
@@ -150,24 +151,54 @@ function BurbujaHistorico({
   );
 }
 
-/** R43 — orden, destinatario, mensajero, número vigente y, si fusiona, cuántos números hay. */
-function CabeceraHilo({ cabecera }: Readonly<{ cabecera: HiloHistoricoDTO }>) {
+/** Rótulo del botón de volver. Se exporta para que el test no repita el literal. */
+export const ETIQUETA_VOLVER = "Volver a la lista de conversaciones";
+
+/**
+ * La flecha de «volver a la lista». SÓLO en móvil (`md:hidden`): a partir de `md` los dos
+ * paneles se ven a la vez y no hay ninguna lista a la que volver. Es el mismo gesto —y el
+ * mismo icono— que el header de `ChatConversacion` en el chat del mensajero.
+ */
+function BotonVolver({ onVolver }: Readonly<{ onVolver: () => void }>) {
   return (
-    <header data-testid="historico-hilo-cabecera" className="border-b border-border px-3 py-2">
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <span className="font-mono text-xs text-muted-foreground">
-          {guiaVisible(cabecera)}
-        </span>
-        <span className="font-semibold">{cabecera.destinatario}</span>
-      </div>
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span>{cabecera.mensajeroNombre}</span>
-        <span className="font-mono">{cabecera.telefonoVigente}</span>
-        {cabecera.telefonosCount > 1 ? (
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">
-            {etiquetaNumeros(cabecera.telefonosCount)}
+    <button
+      type="button"
+      onClick={onVolver}
+      aria-label={ETIQUETA_VOLVER}
+      className="-ml-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 md:hidden"
+    >
+      <ArrowLeft className="size-5" aria-hidden="true" />
+    </button>
+  );
+}
+
+/** R43 — orden, destinatario, mensajero, número vigente y, si fusiona, cuántos números hay. */
+function CabeceraHilo({
+  cabecera,
+  onVolver,
+}: Readonly<{ cabecera: HiloHistoricoDTO; onVolver?: () => void }>) {
+  return (
+    <header
+      data-testid="historico-hilo-cabecera"
+      className="flex items-center gap-2 border-b border-border px-3 py-2"
+    >
+      {onVolver === undefined ? null : <BotonVolver onVolver={onVolver} />}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="font-mono text-xs text-muted-foreground">
+            {guiaVisible(cabecera)}
           </span>
-        ) : null}
+          <span className="font-semibold">{cabecera.destinatario}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>{cabecera.mensajeroNombre}</span>
+          <span className="font-mono">{cabecera.telefonoVigente}</span>
+          {cabecera.telefonosCount > 1 ? (
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">
+              {etiquetaNumeros(cabecera.telefonosCount)}
+            </span>
+          ) : null}
+        </div>
       </div>
     </header>
   );
@@ -182,6 +213,16 @@ export interface HistoricoHiloProps {
   ahora: Date;
   /** R39 — hay rango de fecha aplicado en el LISTADO; el hilo no se recorta por él (R17). */
   rangoFechaAplicado: boolean;
+  /**
+   * Volver a la lista. Sólo tiene sentido donde la lista y el hilo NO caben juntos, o sea en
+   * móvil; sin él no se pinta flecha alguna.
+   */
+  onVolver?: () => void;
+  /**
+   * Clases de presentación del `<section>` —incluido el `display`—. Las pone el módulo para
+   * mostrar en móvil este panel O el de la lista, nunca los dos.
+   */
+  className?: string;
 }
 
 export function HistoricoHilo({
@@ -189,6 +230,8 @@ export function HistoricoHilo({
   listar,
   ahora,
   rangoFechaAplicado,
+  onVolver,
+  className,
 }: Readonly<HistoricoHiloProps>) {
   const [ubicacion, setUbicacion] = useState<UbicacionPunto | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -278,7 +321,10 @@ export function HistoricoHilo({
     return (
       <section
         aria-label="Conversación"
-        className="flex h-full min-h-0 items-center justify-center rounded-lg border border-border bg-muted p-8 text-center"
+        className={cn(
+          "h-full min-h-0 items-center justify-center rounded-lg border border-border bg-muted p-8 text-center",
+          className ?? "flex",
+        )}
       >
         <p className="text-sm text-muted-foreground">{TEXTO_SIN_HILO}</p>
       </section>
@@ -288,9 +334,25 @@ export function HistoricoHilo({
   return (
     <section
       aria-label="Conversación"
-      className="flex h-full min-h-0 flex-col rounded-lg border border-border bg-muted"
+      className={cn(
+        "h-full min-h-0 flex-col rounded-lg border border-border bg-muted",
+        className ?? "flex",
+      )}
     >
-      {paginaOk === null ? null : <CabeceraHilo cabecera={paginaOk.cabecera} />}
+      {/* La flecha de volver NO puede depender de que la cabecera haya llegado: mientras la
+          primera página está en vuelo —o si falla— el móvil se quedaría dentro del hilo sin
+          salida, porque la lista está oculta detrás. Por eso hay una barra propia para ese
+          rato, y la cabecera se hace cargo de la flecha en cuanto existe. */}
+      {paginaOk === null ? (
+        onVolver === undefined ? null : (
+          <div className="flex items-center gap-2 border-b border-border px-3 py-2 md:hidden">
+            <BotonVolver onVolver={onVolver} />
+            <span className="text-sm font-medium">Conversación</span>
+          </div>
+        )
+      ) : (
+        <CabeceraHilo cabecera={paginaOk.cabecera} onVolver={onVolver} />
+      )}
 
       {/* R39 — la diferencia entre las dos superficies se DICE. Sin esto, quien viene de
           filtrar por un día cree que está leyendo un hilo recortado. */}

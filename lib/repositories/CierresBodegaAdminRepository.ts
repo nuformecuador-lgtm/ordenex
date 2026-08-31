@@ -38,6 +38,7 @@ import {
   inicioDelDiaCREnUtc,
   inicioDelDiaSiguienteCREnUtc,
 } from "@/lib/utils/fecha-cr";
+import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 // Solo el estado que la 40 puede transicionar (R18): la guardia del updateMany.
 const ESTADO_SOLICITADO = "solicitado";
@@ -59,7 +60,7 @@ const DETALLE_CIERRE_SELECT = {
   totalGeneral: true,
   totalPagoMensajero: true, // feature 39/R20: snapshot del pago al mensajero del cierre_dia
   totalIngresoBodegaRechazos: true, // feature 56/R19: snapshot del ingreso de bodega por rechazos del cierre_dia
-  mensajero: { select: { nombre: true } },
+  mensajero: { select: NOMBRE_USUARIO_SELECT },
 } as const;
 
 type DetalleCierreRow = Prisma.CierreDiaGetPayload<{ select: typeof DETALLE_CIERRE_SELECT }>;
@@ -68,7 +69,7 @@ function toDetalleCierreRow(r: DetalleCierreRow): CierreBodegaDetalleCierreRow {
   return {
     cierreDiaId: r.id,
     mensajeroId: r.mensajeroId,
-    mensajeroNombre: r.mensajero.nombre,
+    mensajeroNombre: nombreCompletoUsuario(r.mensajero),
     totales: {
       efectivo: r.totalEfectivo.toFixed(2),
       simpe: r.totalSimpe.toFixed(2),

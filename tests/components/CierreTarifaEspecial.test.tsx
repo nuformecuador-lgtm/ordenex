@@ -22,9 +22,13 @@ import {
   ESPECIAL_SIN_PACTO_BADGE_NOTA,
   TARIFA_ESPECIAL_LABEL,
   TARIFA_ESPECIAL_DEV_LABEL,
-  APLICADA_HINT,
+  COBROS_TITULO,
+  VALOR_FLETE_LABEL,
+  FLETE_RECHAZO_LABEL,
+  FLETE_RECHAZO_GAM_LABEL,
   columnasPara,
 } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
+import { money } from "@/lib/config/moneda";
 import type {
   CierreDetalleGestion,
   IngresoOrdenexDTO,
@@ -114,6 +118,19 @@ function celdaFlete(ing: IngresoOrdenexDTO) {
   return render(<>{columna.render(gestion(ing))}</>);
 }
 
+/**
+ * El importe pintado en esa fila del PANEL DE COBROS (⏳ ficha 338). Se busca dentro de la
+ * región y no en la pantalla entera porque el desglose de la izquierda repite varios rótulos a
+ * propósito: explica la FÓRMULA del mismo concepto que aquí sale como importe.
+ */
+function cobro(label: string): string {
+  const panel = screen.getByRole("region", { name: COBROS_TITULO });
+  const fila = within(panel).getByText(label).closest("div") as HTMLElement;
+  return (fila.lastElementChild?.textContent ?? "").trim();
+}
+
+const CERO = money("0.00");
+
 afterEach(cleanup);
 
 describe("Marca del origen del flete en la tabla del detalle", () => {
@@ -164,26 +181,34 @@ describe("Desglose auditable de una orden con tarifa especial", () => {
     expect(screen.queryByText(/tarifa no GAM: /)).toBeNull();
   });
 
-  it("el pacto se lista en la tarifa congelada y se marca como el aplicado", () => {
+  it("el pacto lleva el importe cobrado, y la columna normal se queda en cero", () => {
     render(
       <DesgloseIngresoOrdenex
         g={gestion(
           ingreso({
             esZonaEspecial: true,
             fleteOrigen: "especial",
+            flete: "2500.00",
+            ivaFlete: "325.00",
+            fleteConIva: "2825.00",
+            total: "3390.00",
             tarifa: tarifa({ tarifaEspecial: "2500.00" }),
           }),
         )}
       />,
     );
-    const fila = screen.getByText(TARIFA_ESPECIAL_LABEL).closest("div") as HTMLElement;
-    expect(within(fila).getByText(APLICADA_HINT)).toBeInTheDocument();
+    expect(cobro(TARIFA_ESPECIAL_LABEL)).toBe(money("2500.00"));
 
-    // Y "Valor flete" —la columna normal que le habría tocado a esta orden (no GAM)— pierde
-    // el suyo: el flete tiene UN origen, y marcar dos dejaría al admin sin saber cuál leer.
-    // El de "Flete devuelto" sigue encendido y es correcto: esa devolución no es especial.
-    const normal = screen.getByText("Valor flete").closest("div") as HTMLElement;
-    expect(within(normal).queryByText(APLICADA_HINT)).toBeNull();
+    // Y "Valor flete" —la columna normal que le habría tocado a esta orden (no GAM)— queda en
+    // cero: el flete tiene UN origen, y cargarlo dos veces haría que la columna dejara de sumar
+    // el total.
+    //
+    // ⏳ FICHA 337 (2026-08-31): aqui decia ademas «El de "Flete devuelto" sigue encendido y es
+    // correcto: esa devolución no es especial». Era FALSO y describia el defecto: esta gestión es
+    // una ENTREGA (`fleteDevolucion: null`), asi que ningún rechazo se cobró y esa marca no
+    // debería existir. ⏳ FICHA 338: la marca se retiró entera y lo que se afirma es el dinero;
+    // el requisito vive en `CierreTarifaAplicada.test.tsx`.
+    expect(cobro(VALOR_FLETE_LABEL)).toBe(CERO);
   });
 
   it("sin pacto congelado, esas filas NO se pintan (un '—' se leería como pacto de cero)", () => {
@@ -199,7 +224,12 @@ describe("Desglose auditable de una orden con tarifa especial", () => {
       />,
     );
     expect(screen.getByRole("note")).toHaveTextContent(ESPECIAL_SIN_PACTO_BADGE_NOTA);
-    // El flete SÍ salió de la columna normal: ese "← se aplicó" sigue encendido.
-    expect(screen.getAllByText(APLICADA_HINT).length).toBeGreaterThan(0);
+    // El flete SÍ salió de la columna normal, así que ahí es donde tiene que aparecer el importe.
+    // ⏳ FICHA 337: y en EXACTAMENTE UNA fila. Antes se marcaban dos —la entrega y una devolución
+    // que no existia—, y un `> 0` no distinguia una cosa de la otra.
+    // ⏳ FICHA 338: se afirma sobre el dinero y no sobre un rótulo, que es más difícil de falsear.
+    expect(cobro(VALOR_FLETE_LABEL)).toBe(money("1000.00"));
+    expect(cobro(FLETE_RECHAZO_LABEL)).toBe(CERO);
+    expect(cobro(FLETE_RECHAZO_GAM_LABEL)).toBe(CERO);
   });
 });

@@ -1,0 +1,34 @@
+-- DOWN (ficha 337, segunda mitad) -- revierte EXACTAMENTE `migration.sql`, en el orden inverso al
+-- que lo escribio y con las dependencias respetadas.
+--
+--   1. `DROP TABLE rechazo_tienda_cobro` -- arrastra sus cuatro indices
+--      (`rechazo_tienda_cobro_gestion_uq`, `rechazo_tienda_cobro_estado_generado_el_idx`,
+--      `rechazo_tienda_cobro_tienda_id_idx`, `rechazo_tienda_cobro_decidido_por_idx`), sus DOS
+--      CHECK, sus CINCO FK y la configuracion de RLS. Va PRIMERO: mientras la tabla exista, el
+--      tipo del enum tiene una columna que depende de el y el `DROP TYPE` fallaria.
+--   2. `DROP TYPE rechazo_tienda_cobro_estado` -- el tipo se CREO entero en el up, asi que aqui se
+--      suelta entero. No hay `ALTER TYPE ... ADD VALUE` de por medio, asi que no aplica nada de la
+--      leccion de los enums ampliados (recrear-con-lista): ese patron es de las migraciones que
+--      AMPLIAN un enum ajeno, y esta no amplia ninguno.
+--
+-- NINGUN `down.sql` ANTERIOR SE TOCA. Son fotos historicas de lo que habia cuando se escribieron;
+-- esta migracion no amplia ningun enum preexistente, asi que no hay ninguna lista previa que
+-- ninguna de ellas tenga que aprender.
+--
+-- QUE SE PIERDE AL REVERTIR, dicho en voz alta: los cobros -- pendientes, aprobados y
+-- rechazados-- desaparecen con la tabla. Los MOVIMIENTOS que un cobro aprobado escribio en
+-- `wallet_movimiento` y en `wallet_tienda_movimiento` NO se tocan: los dos libros son inmutables
+-- y esta migracion nunca escribio en ellos. Esa asimetria es correcta y es lo que hace seguro el
+-- `DROP TABLE`: lo que se va es la INTENCION de cobrar, no el dinero ya contabilizado.
+--
+-- Consecuencia que hay que saber si se revierte con cobros ya aprobados: los movimientos quedan
+-- con `origen_tipo = 'gestion_orden'` apuntando a una gestion cuyo cobro ya no existe. Siguen
+-- siendo idempotentes por `wallet_movimiento_origen_categoria_uq`, asi que re-aplicar la
+-- migracion y volver a aprobar NO cobra dos veces -- la segunda insercion encuentra la clave
+-- ocupada e inserta cero filas--. Es la misma propiedad por la que el up puede convivir con los
+-- 22 rechazos historicos sin backfill.
+--
+-- AQUI NO HAY NI UN `UPDATE`, NI UN `DELETE` NI UN `INSERT` PARA "REPARAR" NADA.
+DROP TABLE IF EXISTS "rechazo_tienda_cobro";
+
+DROP TYPE IF EXISTS "rechazo_tienda_cobro_estado";

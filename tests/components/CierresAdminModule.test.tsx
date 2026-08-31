@@ -541,11 +541,40 @@ describe("CierresAdminModule", () => {
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
 
-    // La tarifa congelada, incluida la variante NO aplicada (base 2000, se aplicó GAM 2500).
-    expect(within(region).getByText("tar_88")).toBeInTheDocument();
-    expect(within(region).getByText("₡2.000")).toBeInTheDocument();
-    expect(within(region).getAllByText("13.00 %").length).toBeGreaterThan(0);
-    expect(within(region).getByText("3.00 %")).toBeInTheDocument();
+    // Lo que el panel desplegado enseña de esta orden.
+    //
+    // ⏳ FICHA 337 (2026-08-31): aqui se afirmaba ademas `getByText("tar_88")` —el UUID crudo de
+    // la tarifa, que el panel imprimia junto a su nota—. La asercion se INVIERTE en vez de
+    // borrarse (convencion del repo, cf. `decision5-revertida`): a una persona que audita un
+    // cierre un identificador interno no le dice nada, y su sitio lo ocupaba a costa del dato que
+    // si importa. Sigue viajando en el DTO; lo que se retiro es su presencia en pantalla.
+    expect(within(region).queryByText("tar_88")).toBeNull();
+
+    // ⏳ FICHA 338 (2026-08-31) — AQUI SE AFIRMABA LA LISTA DE PRECIOS, Y YA NO EXISTE.
+    //
+    // Estas tres lineas decian `getByText("₡2.000")` (el `valorFlete` base, la variante que NO se
+    // aplico), `"13.00 %"` y `"3.00 %"`. El panel de la derecha era la tarifa congelada entera:
+    // nueve PRECIOS bajo el titulo «Tarifa aplicada». El humano lo leyo como nueve cobros, y en
+    // una reprogramada —que no cobra nada— no habia ni una frase que lo desmintiera.
+    //
+    // Desde la 338 ese panel pinta «Cobros de esta gestion»: cada concepto con el IMPORTE que se
+    // cobro, cero donde no se cobro, y su total. **LIMITE ACEPTADO Y DECLARADO POR EL HUMANO:**
+    // la pantalla deja de mostrar la lista de precios, asi que «por que ₡2.500 y no ₡2.000» ya no
+    // se audita aqui. Responde «que se cobro», no «que precios existen»; los precios viven en
+    // `/configuracion/tarifas` y el snapshot entero sigue en `TarifaSnapshotDTO`.
+    //
+    // Se sustituye por lo que el panel SI afirma ahora, que es mas fuerte: el flete se cobro en
+    // la columna GAM (₡2.500) y la columna normal quedo en cero. El precio ₡2.000 ya no se pinta.
+    expect(within(region).queryByText("₡2.000")).toBeNull();
+    const cobros = within(region).getByRole("region", { name: "Cobros de esta gestión" });
+    const filaDe = (label: string) =>
+      (within(cobros).getByText(label).closest("div")?.lastElementChild?.textContent ?? "").trim();
+    expect(filaDe("Valor flete GAM")).toBe("₡2.500");
+    expect(filaDe("Valor flete")).toBe("₡0");
+    expect(filaDe("Flete por rechazo GAM")).toBe("₡0");
+    expect(filaDe("Total cobrado")).toBe("₡3.673"); // el `total` del DTO, 3672.50 redondeado
+    // El porcentaje NO se pierde: sigue explicando el cobro real en el desglose de al lado.
+    expect(within(region).getAllByText("13.00 % de ₡2.500").length).toBeGreaterThan(0);
   });
 
   it("sin ingresoOrdenex (cierre sin snapshot) no se pinta el botón de desglose", async () => {

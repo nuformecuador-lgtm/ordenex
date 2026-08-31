@@ -361,7 +361,7 @@ describe("CotizacionOrdenService — cobertura por fila (T6)", () => {
     expect(repo.findDistritosByCantonIds).toHaveBeenCalledWith(["c1"]);
     expect(resumen.filas[0].resultado).toBe("cotizada");
     // Distrito con zona y no-central -> columna estandar del flete.
-    expect(costosDe(resumen).entregado.flete).toBe("₡2.500,00");
+    expect(costosDe(resumen).entregado.flete).toBe("2500.00");
   });
 
   it("T6.2 distrito no encontrado en el canton (R18)", async () => {
@@ -457,20 +457,20 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
 
     expect(costosDe(resumen)).toEqual({
       entregado: {
-        flete: "₡2.500,00",
-        iva: "₡325,00",
-        comision: "₡906,50",
-        ivaComision: "₡117,85",
+        flete: "2500.00",
+        iva: "325.00",
+        comision: "906.50",
+        ivaComision: "117.85",
         // Esta tienda no hace fulfillment: cero EXPLICITO, y el total no se mueve.
-        fulfillment: "₡0,00",
-        total: "₡22.050,65",
+        fulfillment: "0.00",
+        total: "22050.65",
       },
       devuelto: {
-        flete: "₡1.396,46",
-        iva: "₡181,54",
-        comision: "₡0,00",
-        fulfillment: "₡0,00",
-        total: "-₡1.578,00",
+        flete: "1396.46",
+        iva: "181.54",
+        comision: "0.00",
+        fulfillment: "0.00",
+        total: "-1578.00",
       },
     });
   });
@@ -525,10 +525,10 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
     // Lote MIXTO: la primera fila cae en un distrito no-central y la segunda en uno central.
     const resumen = await cotizar([fila(), fila({ distrito: "Centro" })]);
 
-    expect(costosDe(resumen, 0).entregado.flete).toBe("₡2.500,00");
-    expect(costosDe(resumen, 0).devuelto.flete).toBe("₡1.396,46");
-    expect(costosDe(resumen, 1).entregado.flete).toBe("₡3.000,00");
-    expect(costosDe(resumen, 1).devuelto.flete).toBe("₡1.500,00");
+    expect(costosDe(resumen, 0).entregado.flete).toBe("2500.00");
+    expect(costosDe(resumen, 0).devuelto.flete).toBe("1396.46");
+    expect(costosDe(resumen, 1).entregado.flete).toBe("3000.00");
+    expect(costosDe(resumen, 1).devuelto.flete).toBe("1500.00");
     // El flag viaja por fila, no por lote: las dos llamadas de cada fila lo comparten.
     const esCentrales = espiaDerivar.mock.calls.map(([input]) => input.esCentral);
     expect(esCentrales).toEqual([false, false, true, true]);
@@ -551,17 +551,17 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
     expect("ivaComision" in costosDe(resumen).devuelto).toBe(false);
   });
 
-  it("T7.4 devuelto.comision es el cero explicito ₡0,00 y nunca falta ni es null (R28)", async () => {
+  it("T7.4 devuelto.comision es el cero explicito 0.00 y nunca falta ni es null (R28)", async () => {
     const resumen = await cotizar([fila(), fila({ monto_cobrar: "" }), fila({ distrito: "Centro" })]);
 
     for (const indice of [0, 1, 2]) {
       const devuelto = costosDe(resumen, indice).devuelto;
-      expect(devuelto.comision).toBe("₡0,00");
+      expect(devuelto.comision).toBe("0.00");
       expect(devuelto.comision).not.toBeNull();
       expect("comision" in devuelto).toBe(true);
     }
     // Tambien arriba: la suma de devoluciones tampoco cobra comision (R52).
-    expect(resumen.totales.devuelto.comision).toBe("₡0,00");
+    expect(resumen.totales.devuelto.comision).toBe("0.00");
   });
 
   it("asume cobraComision true (R29)", async () => {
@@ -569,8 +569,8 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
 
     expect(espiaDerivar.mock.calls.every(([input]) => input.cobraComision === true)).toBe(true);
     // Y se ve en la salida: con `cobraComision` false la comision seria un concepto AUSENTE.
-    expect(costosDe(resumen).entregado.comision).toBe("₡906,50");
-    expect(costosDe(resumen).entregado.ivaComision).toBe("₡117,85");
+    expect(costosDe(resumen).entregado.comision).toBe("906.50");
+    expect(costosDe(resumen).entregado.ivaComision).toBe("117.85");
   });
 
   it("T7.5 entregado.total = monto_cobrar menos los cuatro conceptos (R30)", async () => {
@@ -578,7 +578,7 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
     const entregado = costosDe(resumen).entregado;
 
     // 25900 − (2500 + 325 + 906.50 + 117.85) = 22050.65: lo que RECIBE la tienda (D1).
-    expect(entregado.total).toBe("₡22.050,65");
+    expect(entregado.total).toBe("22050.65");
   });
 
   it("FICHA 305 · cotiza sobre el monto REDONDEADO, que es el que se va a cobrar", async () => {
@@ -600,15 +600,15 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
     //   iva comision  = 416,47 × 13 %           = 54,1411  -> 54,14
     //   total tienda  = 11899 − 2500 − 325 − 416,47 − 54,14 = 8603,39
     const entregado = costosDe(conCentimos).entregado;
-    expect(entregado.comision).toBe("₡416,47");
-    expect(entregado.ivaComision).toBe("₡54,14");
-    expect(entregado.total).toBe("₡8.603,39");
+    expect(entregado.comision).toBe("416.47");
+    expect(entregado.ivaComision).toBe("54.14");
+    expect(entregado.total).toBe("8603.39");
 
     // LO QUE SE PUBLICABA ANTES DE ESTA FICHA, escrito para que el cambio observable quede a la
     // vista: sobre el monto exacto la comision era 11898,81 × 3,50 % = 416,45835 -> 416,46 y el
     // total 8603,21. Un centimo en la comision, dieciocho en el total.
-    expect(entregado.comision).not.toBe("₡416,46");
-    expect(entregado.total).not.toBe("₡8.603,21");
+    expect(entregado.comision).not.toBe("416.46");
+    expect(entregado.total).not.toBe("8603.21");
   });
 
   it("T7.6 devuelto.total es negativo e igual a -(flete + iva) (R31)", async () => {
@@ -616,9 +616,9 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
     const devuelto = costosDe(resumen).devuelto;
 
     // El caso del humano: −(1396.46 + 181.54) = −1578.00, la DEUDA de la tienda (D1).
-    expect(devuelto.flete).toBe("₡1.396,46");
-    expect(devuelto.iva).toBe("₡181,54");
-    expect(devuelto.total).toBe("-₡1.578,00");
+    expect(devuelto.flete).toBe("1396.46");
+    expect(devuelto.iva).toBe("181.54");
+    expect(devuelto.total).toBe("-1578.00");
     expect(devuelto.total.startsWith("-")).toBe(true);
   });
 
@@ -627,10 +627,10 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
 
     for (const indice of [0, 1]) {
       const entregado = costosDe(resumen, indice).entregado;
-      expect(entregado.comision).toBe("₡0,00");
-      expect(entregado.ivaComision).toBe("₡0,00");
+      expect(entregado.comision).toBe("0.00");
+      expect(entregado.ivaComision).toBe("0.00");
       // 0 − (2500 + 325) = −2825.
-      expect(entregado.total).toBe("-₡2.825,00");
+      expect(entregado.total).toBe("-2825.00");
     }
   });
 
@@ -649,8 +649,8 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
     // Y se comprueba en la salida: 906.50 × 13% = 117.845, que sale como 117,85 porque la
     // aritmetica redondea HALF_UP. El service solo transporta ese decimal al formateador.
     const resumen = await cotizar([fila()]);
-    expect(costosDe(resumen).entregado.ivaComision).toBe("₡117,85");
-    expect(costosDe(resumen).devuelto.iva).toBe("₡181,54");
+    expect(costosDe(resumen).entregado.ivaComision).toBe("117.85");
+    expect(costosDe(resumen).devuelto.iva).toBe("181.54");
   });
 });
 
@@ -678,19 +678,19 @@ describe("CotizacionOrdenService — totales del LOTE (T7B)", () => {
     //              2×22050.65 = 44101.30
     //   devuelto:  2×1396.46 = 2792.92; 2×181.54 = 363.08; comision 0; 2×(−1578) = −3156
     expect(resumen.totales.entregado).toEqual({
-      flete: "₡5.000,00",
-      iva: "₡650,00",
-      comision: "₡1.813,00",
-      ivaComision: "₡235,70",
-      fulfillment: "₡0,00",
-      total: "₡44.101,30",
+      flete: "5000.00",
+      iva: "650.00",
+      comision: "1813.00",
+      ivaComision: "235.70",
+      fulfillment: "0.00",
+      total: "44101.30",
     });
     expect(resumen.totales.devuelto).toEqual({
-      flete: "₡2.792,92",
-      iva: "₡363,08",
-      fulfillment: "₡0,00",
-      comision: "₡0,00",
-      total: "-₡3.156,00",
+      flete: "2792.92",
+      iva: "363.08",
+      fulfillment: "0.00",
+      comision: "0.00",
+      total: "-3156.00",
     });
     expect(resumen.totales.filasSumadas).toBe(2);
   });
@@ -731,14 +731,14 @@ describe("CotizacionOrdenService — totales del LOTE (T7B)", () => {
       { tarifa: TARIFA_CENTIMOS },
     );
 
-    expect(costosDe(resumen).entregado.comision).toBe("₡3,50");
-    expect(resumen.totales.entregado.comision).toBe("₡10,50");
-    expect(resumen.totales.entregado.comision).not.toBe("₡10,51");
-    expect(resumen.totales.entregado.flete).toBe("₡30,00");
+    expect(costosDe(resumen).entregado.comision).toBe("3.50");
+    expect(resumen.totales.entregado.comision).toBe("10.50");
+    expect(resumen.totales.entregado.comision).not.toBe("10.51");
+    expect(resumen.totales.entregado.flete).toBe("30.00");
     // 3 × (35 − 10.00 − 3.50) = 3 × 21.50 = 64.50.
-    expect(costosDe(resumen).entregado.total).toBe("₡21,50");
-    expect(resumen.totales.entregado.total).toBe("₡64,50");
-    expect(resumen.totales.devuelto.total).toBe("-₡12,00");
+    expect(costosDe(resumen).entregado.total).toBe("21.50");
+    expect(resumen.totales.entregado.total).toBe("64.50");
+    expect(resumen.totales.devuelto.total).toBe("-12.00");
   });
 
   it("estructural: el service no suma strings formateados ni re-parsea un importe con simbolo (R55)", () => {
@@ -768,19 +768,19 @@ describe("CotizacionOrdenService — totales del LOTE (T7B)", () => {
       filasSumadas: 0,
       filasExcluidas: 3,
       entregado: {
-        flete: "₡0,00",
-        iva: "₡0,00",
-        comision: "₡0,00",
-        ivaComision: "₡0,00",
-        fulfillment: "₡0,00",
-        total: "₡0,00",
+        flete: "0.00",
+        iva: "0.00",
+        comision: "0.00",
+        ivaComision: "0.00",
+        fulfillment: "0.00",
+        total: "0.00",
       },
       devuelto: {
-        flete: "₡0,00",
-        iva: "₡0,00",
-        comision: "₡0,00",
-        fulfillment: "₡0,00",
-        total: "₡0,00",
+        flete: "0.00",
+        iva: "0.00",
+        comision: "0.00",
+        fulfillment: "0.00",
+        total: "0.00",
       },
     });
     expect(resumen.cotizadas).toBe(0);
@@ -811,12 +811,12 @@ describe("CotizacionOrdenService — tarifa por zona (feature 274, R32-R38)", ()
     const resumen = result.resumen;
 
     expect(resumen.filas.map((f) => f.resultado)).toEqual(["cotizada", "cotizada"]);
-    expect(costosDe(resumen, 0).entregado.flete).toBe("₡2.500,00");
-    expect(costosDe(resumen, 1).entregado.flete).toBe("₡4.000,00");
+    expect(costosDe(resumen, 0).entregado.flete).toBe("2500.00");
+    expect(costosDe(resumen, 1).entregado.flete).toBe("4000.00");
     expect(costosDe(resumen, 0).entregado.flete).not.toBe(costosDe(resumen, 1).entregado.flete);
     // Y la devolucion tambien sale de la tarifa de SU zona.
-    expect(costosDe(resumen, 0).devuelto.flete).toBe("₡1.396,46");
-    expect(costosDe(resumen, 1).devuelto.flete).toBe("₡2.000,00");
+    expect(costosDe(resumen, 0).devuelto.flete).toBe("1396.46");
+    expect(costosDe(resumen, 1).devuelto.flete).toBe("2000.00");
 
     // R32/R7: UNA sola consulta por peticion, con los dos pares distintos.
     expect(tarifaRepo.resolveTarifas).toHaveBeenCalledTimes(1);
@@ -906,7 +906,7 @@ describe("CotizacionOrdenService — tarifa por zona (feature 274, R32-R38)", ()
     expect(result.resumen.conError).toBe(3);
     expect(result.resumen.totales.filasSumadas).toBe(0);
     expect(result.resumen.totales.filasExcluidas).toBe(3);
-    expect(result.resumen.totales.entregado.total).toBe("₡0,00");
+    expect(result.resumen.totales.entregado.total).toBe("0.00");
     // Y ni siquiera se consulta la tarifa: no hay un solo par que pedir.
     expect(tarifaRepo.resolveTarifas).not.toHaveBeenCalled();
     // Ninguna fila lleva el error de tarifa: los tres errores son de geografia/validacion.
@@ -981,22 +981,22 @@ describe("CotizacionOrdenService — fulfillment (2026-08-25)", () => {
 
     expect(costosDe(resumen)).toEqual({
       entregado: {
-        flete: "₡2.500,00",
-        iva: "₡325,00",
-        comision: "₡906,50",
-        ivaComision: "₡117,85",
-        fulfillment: "₡1.000,00",
+        flete: "2500.00",
+        iva: "325.00",
+        comision: "906.50",
+        ivaComision: "117.85",
+        fulfillment: "1000.00",
         // 22.050,65 sin fulfillment: lo que RECIBE la tienda baja exactamente el monto.
-        total: "₡21.050,65",
+        total: "21050.65",
       },
       devuelto: {
-        flete: "₡1.396,46",
-        iva: "₡181,54",
-        comision: "₡0,00",
+        flete: "1396.46",
+        iva: "181.54",
+        comision: "0.00",
         // El servicio de bodega YA se presto: una devolucion no lo devuelve gratis.
-        fulfillment: "₡1.000,00",
+        fulfillment: "1000.00",
         // -1.578,00 sin fulfillment: la DEUDA crece por el mismo monto.
-        total: "-₡2.578,00",
+        total: "-2578.00",
       },
     });
   });
@@ -1023,8 +1023,8 @@ describe("CotizacionOrdenService — fulfillment (2026-08-25)", () => {
 
     // Dos filas cotizadas -> 2×1000. La fila sin cobertura no aporta ni un cero (R53).
     expect(resumen.totales.filasSumadas).toBe(2);
-    expect(resumen.totales.entregado.fulfillment).toBe("₡2.000,00");
-    expect(resumen.totales.devuelto.fulfillment).toBe("₡2.000,00");
+    expect(resumen.totales.entregado.fulfillment).toBe("2000.00");
+    expect(resumen.totales.devuelto.fulfillment).toBe("2000.00");
   });
 
   it("no se cuela en la liquidacion: `derivarIngresoOrden` nunca ve el monto", async () => {
