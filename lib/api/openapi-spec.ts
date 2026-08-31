@@ -155,6 +155,17 @@ export const openApiSpec = {
           "o falta de tarifa). Una respuesta 200",
           "puede contener filas con",
           `error. El lote acepta entre 1 y ${MAX_CARGA_ROWS} filas.`,
+          "",
+          "**CAMBIO INCOMPATIBLE (2026-08-31): las filas con error salieron de `filas`.** `filas`",
+          "trae ahora SOLO lo que entró (`creada` y `duplicada`) y lo que falló viaja en la lista",
+          "hermana **`errores`**, con exactamente el mismo contenido de antes: su `fila` 1-based,",
+          "su `numRemision`, su `resultado: \"error\"` y su mapa de errores por campo. Ya no hace",
+          "falta recorrer el lote entero ni ramificar por `resultado` para encontrar lo que hay",
+          "que atender: `if (respuesta.errores.length)` alcanza. Los contadores no se mueven —",
+          "`total`, `creadas`, `duplicadas` y `conError` siguen contando sobre el lote completo—",
+          "y `conError` es siempre `errores.length`. **Si tu integración filtraba `filas` por",
+          "`resultado === \"error\"`, cambiá a `errores`**: ese filtro ahora devuelve vacío",
+          "SIEMPRE, incluso con filas fallidas.",
         ].join("\n"),
         requestBody: {
           required: true,
@@ -216,6 +227,8 @@ export const openApiSpec = {
                       conError: 1,
                       filas: [
                         { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 100234 },
+                      ],
+                      errores: [
                         { fila: 2, numRemision: "REM-0002", resultado: "error", errores: { telefono: ["requerido"] } },
                       ],
                       ordenes: [
@@ -240,6 +253,8 @@ export const openApiSpec = {
                       conError: 1,
                       filas: [
                         { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 100234 },
+                      ],
+                      errores: [
                         { fila: 2, numRemision: "REM-0002", resultado: "error", errores: { tarifa: [MSG_FILA_SIN_TARIFA] } },
                       ],
                       ordenes: [
@@ -1114,11 +1129,15 @@ export const openApiSpec = {
   //     pasa a ser parte del aviso a integradores, no un adorno.
   //
   // (b) POR QUE ES SEMANTICAMENTE CORRECTO. El enum NO es el catalogo entero: se DERIVA de
-  //     `EVENTOS_PUBLICOS` (`WEBHOOK_ESTADO_ENUM`, R29), que son los 12 values que este webhook
-  //     puede emitir de verdad. Los 16 de `OrdenListItem.estado` son un SUPERCONJUNTO: incluyen
-  //     estados internos (`en_preparacion`, `por_recoger`, `en_bodega_satelite`,
-  //     `en_ruta_bodega_satelite`) que nunca viajan en un evento. Documentar el superconjunto era
+  //     `EVENTOS_PUBLICOS` (`WEBHOOK_ESTADO_ENUM`, R29), que son los values que este webhook puede
+  //     emitir de verdad. Los 16 de `OrdenListItem.estado` son un SUPERCONJUNTO: incluyen estados
+  //     internos de ruteo satelite que nunca viajan en un evento. Documentar el superconjunto era
   //     lo incorrecto; no documentar nada, tambien.
+  //
+  //     ⏳ 2026-08-31 — AQUI DECIA «los 12 values» y que los internos eran «(`en_preparacion`,
+  //     `por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`)». Son 13 y `en_preparacion`
+  //     YA NO es uno de ellos: se emite como evento de NACIMIENTO de la rama de fulfillment. El
+  //     enum se DERIVA, asi que se actualizo solo; esta prosa no, y por eso se corrige a mano.
   //
   // (c) POR QUE EL GUARD SIGUE EN 4 (el miedo de la 256 era infundado; design 268 §7.5).
   //     `openapi-contrato-en-reparto.test.ts` no cuenta «enums», cuenta enums DE ESTADO con el
@@ -1226,7 +1245,7 @@ export const openApiSpec = {
                         // feature 268/R29: DERIVADO de `EVENTOS_PUBLICOS`, nunca copiado a mano.
                         enum: WEBHOOK_ESTADO_ENUM,
                         description:
-                          "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de preparación y ruteo satélite que ese catálogo documenta (`en_preparacion`, `por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error.",
+                          "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de ruteo satélite que ese catálogo documenta (`por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. `en_preparacion` SÍ viaja, y solo como evento de NACIMIENTO: es el estado inicial de las órdenes creadas con `fulfillment` (el paquete ya está en bodega), llega una única vez por orden y con `numGuia: null`, porque en esa rama la guía se emite más tarde. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error.",
                       },
                       motivo: {
                         type: ["string", "null"],
@@ -1499,18 +1518,37 @@ export const openApiSpec = {
       },
       CargaRowResult: {
         type: "object",
-        description: "Resultado por fila del lote.",
+        description:
+          "Resultado de una fila que SÍ entró al sistema. Desde 2026-08-31 esta lista no contiene filas en `error`: ésas viajan en `errores` (`CargaFilaError`).",
         required: ["fila", "numRemision", "resultado"],
         properties: {
           fila: { type: "integer", description: "Índice 1-based dentro de `ordenes`." },
           numRemision: { type: "string" },
-          resultado: { type: "string", enum: ["creada", "duplicada", "error"] },
+          resultado: { type: "string", enum: ["creada", "duplicada"] },
           estatus: { type: "string", description: "Estado (en creada/duplicada); nunca ids internos." },
           numGuia: { type: "integer", description: "Número de guía asignado (solo en `creada`)." },
+        },
+      },
+      // 2026-08-31 — la fila que NO entró, publicada aparte. Es el MISMO objeto que antes
+      // viajaba dentro de `filas`; lo único que cambió es dónde se lee. Se declara como schema
+      // propio (y no reusando `CargaRowResult`) porque aquí `errores` es REQUIRED: en esta
+      // lista no existe el elemento sin detalle, y eso es justo lo que la hace fácil de
+      // consumir.
+      CargaFilaError: {
+        type: "object",
+        description: "Una fila que no se creó, con el detalle de por qué.",
+        required: ["fila", "numRemision", "resultado", "errores"],
+        properties: {
+          fila: { type: "integer", description: "Índice 1-based dentro de `ordenes`." },
+          numRemision: {
+            type: "string",
+            description: "Tu número de remisión tal como llegó (vacío si la fila no lo traía).",
+          },
+          resultado: { type: "string", const: "error" },
           errores: {
             type: "object",
             description:
-              "Errores por campo (solo en `error`). Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso la orden no se creó.",
+              "Errores por campo. Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso la orden no se creó.",
             additionalProperties: { type: "array", items: { type: "string" } },
           },
         },
@@ -1542,7 +1580,7 @@ export const openApiSpec = {
       },
       CargaResponse: {
         type: "object",
-        required: ["total", "creadas", "duplicadas", "conError", "filas", "ordenes"],
+        required: ["total", "creadas", "duplicadas", "conError", "filas", "errores", "ordenes"],
         properties: {
           // Feature 177/R45: el integrador necesita este id para llamar a
           // `POST /api/ordenes/api-key/carga/{cargaId}/generate`. Es `null` cuando el lote no
@@ -1557,7 +1595,18 @@ export const openApiSpec = {
           creadas: { type: "integer" },
           duplicadas: { type: "integer" },
           conError: { type: "integer" },
-          filas: { type: "array", items: { $ref: "#/components/schemas/CargaRowResult" } },
+          filas: {
+            type: "array",
+            description:
+              "Las filas que entraron: `creada` y `duplicada`. Nunca contiene una fila en `error`.",
+            items: { $ref: "#/components/schemas/CargaRowResult" },
+          },
+          errores: {
+            type: "array",
+            description:
+              "Las filas que NO se crearon, con su detalle por campo. Lista vacía cuando el lote entero entró; su longitud es siempre `conError`.",
+            items: { $ref: "#/components/schemas/CargaFilaError" },
+          },
           ordenes: { type: "array", items: { $ref: "#/components/schemas/CargaOrden" } },
         },
       },

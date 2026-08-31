@@ -37,6 +37,8 @@ function okSummary(overrides: Partial<CargaViaApiSummary> = {}): CargaViaApiSumm
     filas: [
       { fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 1042 },
     ],
+    // 2026-08-31: las filas que fallan viajan en su propia lista. Aqui no falla ninguna.
+    errores: [],
     ordenes: [
       { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "por_recolectar_en_tienda", costoEnvio: "3.92", fulfillment: "0.00" },
     ],
@@ -126,6 +128,7 @@ function summaryDeLoteGrande(n: number): CargaViaApiSummary {
     duplicadas: 0,
     conError: 0,
     filas,
+    errores: [],
     ordenes,
     cargaId: "33333333-3333-4333-8333-333333333333", // feature 141/R39
   };

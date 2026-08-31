@@ -1,5 +1,6 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
+  CierreTiendaOpcionDTO,
   DesgloseTiendaDTO,
   ListarMovimientosDeTiendaCompletoInput,
   ListarMovimientosDeTiendaInput,
@@ -100,6 +101,21 @@ export type ListarMovimientosDeTiendaServiceResult =
 export type ListarMovimientosDeTiendaCompletoServiceResult =
   ListarCompletoServiceResult<WalletTiendaMovimientoDTO>;
 
+/**
+ * FICHA 335 (design §2.3, R1/R3/R8) — el catalogo de cierres del libro de la PROPIA tienda.
+ *
+ * `hayMas` viaja JUNTO a la lista y no en una consulta aparte: el servicio pide `tope + 1` al
+ * repositorio y responde con el sobrante, que es el patron ya establecido aqui
+ * (`listarMisMovimientosCompleto`). Un `count` separado seria una segunda consulta y R10 dice
+ * que esta lectura se resuelve con UNA.
+ *
+ * `forbidden` NUNCA viaja con cierres: es la misma forma que los otros siete resultados de este
+ * contrato.
+ */
+export type ListarMisCierresServiceResult =
+  | { status: "ok"; cierres: CierreTiendaOpcionDTO[]; hayMas: boolean }
+  | { status: "forbidden" };
+
 export interface IWalletTiendaService {
   /** R16/R17/R19: solo adminTienda; saldo a favor total DERIVADO, acotado a su tienda_id. */
   verMiSaldo(actor: Actor): Promise<VerMiSaldoServiceResult>;
@@ -159,4 +175,23 @@ export interface IWalletTiendaService {
     input: ListarMovimientosDeTiendaCompletoInput,
     actor: Actor,
   ): Promise<ListarMovimientosDeTiendaCompletoServiceResult>;
+  /**
+   * FICHA 335 (R1/R2/R3/R5/R8/R9) — los cierres que dejaron movimientos en el libro de la
+   * tienda del actor, para que el filtro de `/mi-wallet` deje de pedir un identificador escrito
+   * a mano.
+   *
+   * **NO RECIBE ENTRADA, y eso ES la barrera de alcance (R5).** No hay ninguna clave que pueda
+   * ampliar el conjunto porque no hay entrada donde escribirla: ni un `tiendaId` colado, ni un
+   * filtro, ni una pagina. El acotado sale del ACTOR (`actor.usuarioId` = `tienda_id`) y de
+   * ningun otro sitio. Precedente literal en este mismo contrato:
+   * `listarSaldosTiendasCompleto(actor)`.
+   *
+   * **El guard de rol va ANTES de tocar el repositorio (R3).** Con el guard despues, la lista de
+   * cierres de la tienda ya habria salido de la base aunque la respuesta fuera `forbidden`.
+   * Mismo criterio y mismo motivo que `verMiSaldo` y `listarMisMovimientos`.
+   *
+   * **Sin importes (R9):** la respuesta lleva el identificador del cierre, el instante de su
+   * movimiento mas reciente y un CARDINAL. Nada que sea dinero.
+   */
+  listarMisCierres(actor: Actor): Promise<ListarMisCierresServiceResult>;
 }

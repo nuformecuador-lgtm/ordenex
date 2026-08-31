@@ -76,6 +76,90 @@ entrada del 2026-08-28, aquí abajo: esta retirada no toca la forma de ningún v
 
 ---
 
+## 2026-08-31 — RUPTURA: en `POST /ordenes/api-key/carga`, las filas con error salen de `filas` y viajan en `errores`
+
+**Rompe si buscabas los fallos dentro de `filas`.** La respuesta se parte en dos listas: `filas`
+trae **solo lo que entró** (`creada` y `duplicada`) y una lista nueva, `errores`, trae **solo lo que
+falló**. El contenido de cada fila fallida no cambia ni una clave:
+
+```diff
+ {
+   "total": 2, "creadas": 1, "duplicadas": 0, "conError": 1,
+   "filas": [
+     { "fila": 1, "numRemision": "REM-0001", "resultado": "creada", "estatus": "por_recolectar_en_tienda", "numGuia": 100234 },
+-    { "fila": 2, "numRemision": "REM-0002", "resultado": "error", "errores": { "telefono": ["requerido"] } }
+   ],
++  "errores": [
++    { "fila": 2, "numRemision": "REM-0002", "resultado": "error", "errores": { "telefono": ["requerido"] } }
++  ],
+   "ordenes": [ ... ]
+ }
+```
+
+**Por qué.** Hasta hoy el caso que hay que atender venía escondido dentro del caso normal: para
+saber si algo había fallado, había que recorrer el lote entero y ramificar por `resultado` —o, peor,
+por la presencia de una clave opcional— antes de poder hacer nada. Con dos listas, la pregunta se
+responde sola: `if (respuesta.errores.length)`.
+
+**Qué hacer.** Donde filtrabas `filas.filter(f => f.resultado === "error")`, leé `errores`
+directamente. Ese filtro **ya no devuelve nada nunca**, ni siquiera con filas fallidas: es un
+silencio, no un error, así que revisalo aunque tu integración no se haya roto en voz alta.
+
+**Lo que NO cambia:** los contadores. `total`, `creadas`, `duplicadas` y `conError` siguen contando
+sobre el lote **completo**, y `conError` es siempre `errores.length`. `ordenes`, `cargaId`,
+`etiquetasPdf` y `manifiesto` siguen igual, y `filas` conserva el orden y la forma de siempre para
+las filas que sí entraron. La cotización (`POST /ordenes/api-key/cotizacion`) **no** cambia: ahí
+las filas en `error` siguen dentro de `filas`, porque cada fila es una respuesta y no un efecto.
+
+---
+
+## 2026-08-31 — NUEVO value en el webhook `orden.estado_actualizado`: `en_preparacion`
+
+**Aditivo: no rompe nada, pero llega un `estado` que antes no llegaba.** Ningún evento que hoy
+recibís deja de emitirse, y ningún campo cambia de forma. Lo que cambia es que empieza a llegar un
+evento donde antes había silencio.
+
+**Qué resuelve.** Cuando cargás una orden, el estado inicial depende del destino. Dos de las tres
+ramas ya te avisaban al nacer la orden:
+
+- recogida en tienda → nace en `por_recolectar_en_tienda`, que ya era evento público;
+- resto → nace en `en_ruta_bodega_central`, que ya era evento público;
+- **fulfillment** (el paquete ya está en nuestra bodega) → nace en `en_preparacion`, y **no te
+  llegaba nada** hasta que la orden avanzaba a `en_bodega_central` al emitirse la guía. Ese hueco
+  podía durar horas, y desde fuera se lee igual que «la orden no se creó».
+
+Desde esta entrada, esa tercera rama también avisa.
+
+```json
+{
+  "evento": "orden.estado_actualizado",
+  "data": {
+    "numGuia": null,
+    "numRemision": "REM-0002",
+    "estado": "en_preparacion",
+    "motivo": null
+  }
+}
+```
+
+**Dos detalles que importan si tu código asume cosas:**
+
+1. **`numGuia` viaja en `null`.** En la rama de fulfillment la guía se emite más tarde y nunca se
+   fabrica un número. El campo ya estaba declarado como `integer | null` en el contrato, así que
+   esto no es un cambio de forma — pero si tu handler daba por hecho «si llega evento, hay guía»,
+   revisalo. La guía te llega en el evento siguiente, `en_bodega_central`.
+2. **Es un evento de NACIMIENTO y llega una sola vez por orden.** No existe ninguna transición
+   *hacia* `en_preparacion`: es estado inicial y nada más, así que no vas a ver reingresos con este
+   value.
+
+**Qué NO cambia.** Los estados internos de ruteo satélite (`por_recoger`, `en_ruta_bodega_satelite`,
+`en_bodega_satelite`) siguen sin viajar nunca en un evento, y `devolucion_por_confirmar` tampoco.
+
+**Si no querés hacer nada:** el contrato siempre pidió tratar un `estado` desconocido como
+«ignorar», no como error. Si lo cumplís, no necesitás tocar código.
+
+---
+
 ## 2026-08-31 — `GET /ordenes/api-key/analitica`: los tres parámetros pasan a ser opcionales, y se retira el tope de 366 días
 
 **Aditivo: no rompe nada.** Toda llamada que hoy funciona sigue devolviendo exactamente lo mismo.

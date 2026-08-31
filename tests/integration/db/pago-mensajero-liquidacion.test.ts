@@ -69,9 +69,23 @@ describe("R23 — el acto de liquidar NO se implementa en la 44 (solo reservado)
   it("las Server Actions del pago por mensajero NO exponen registrarLiquidacionMensajeroAction", async () => {
     const actions = (await import("@/lib/actions/wallet-mensajero")) as Record<string, unknown>;
     expect(actions.registrarLiquidacionMensajeroAction).toBeUndefined();
-    // solo las 3 lecturas de la 44.
-    expect(typeof actions.verMiCuentaPorPagarAction).toBe("function");
-    expect(typeof actions.listarMisPagosAction).toBe("function");
+
+    // CONTROL POSITIVO, y por eso son DOS y no una: una aserción NEGATIVA sobre un módulo pasa
+    // sola si el módulo se queda vacío, si cambia de ruta o si el import falla en silencio. Los
+    // testigos dicen que este módulo SÍ existe y SÍ exporta lecturas, así que el `toBeUndefined`
+    // de arriba significa algo.
+    //
+    // Ficha 336 (2026-08-30): los testigos eran `verMiCuentaPorPagarAction` y
+    // `listarMisPagosAction`, retiradas con `/mis-pagos`. Se re-anclan a dos acciones VIVAS de
+    // administración, cuya superficie es `/wallet/mensajeros`. Bajar de dos deja el control a un
+    // solo borrado de volverse vacuo.
     expect(typeof actions.listarCuentasPorPagarAction).toBe("function");
+    expect(typeof actions.listarPagosDeMensajeroAction).toBe("function");
+
+    // Y las tres lecturas de la vista PROPIA del mensajero ya no están: la ficha 336 las retiró
+    // en vez de anotarlas `@sin-superficie`.
+    expect(actions.verMiCuentaPorPagarAction).toBeUndefined();
+    expect(actions.listarMisPagosAction).toBeUndefined();
+    expect(actions.listarMisPagosCompletoAction).toBeUndefined();
   });
 });

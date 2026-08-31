@@ -95,6 +95,14 @@ function fakeService(overrides: Partial<IWalletTiendaService> = {}): IWalletTien
       items: [],
       total: 0,
     })),
+    // Ficha 335: el doble sigue implementando la interfaz COMPLETA. La lectura de cierres la
+    // ejercita `tests/unit/actions/wallet-tienda-cierres-action.test.ts`; aqui solo tiene que
+    // existir para que este archivo compile.
+    listarMisCierres: vi.fn(async () => ({
+      status: "ok" as const,
+      cierres: [],
+      hayMas: false,
+    })),
     ...overrides,
   };
 }

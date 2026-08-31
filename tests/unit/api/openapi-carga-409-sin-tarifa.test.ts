@@ -138,15 +138,25 @@ describe("274/R38 (mitad de contrato) — la fila en error se publica con la cla
     }
   });
 
+  // 2026-08-31: la fila degradada ya no vive en `filas`, sino en la lista hermana `errores`.
+  // Lo que esta guardia mide no cambia: el ejemplo PUBLICADO tiene que enseñar la clave
+  // `tarifa` con el literal de la constante, no con una copia re-escrita.
   it("el ejemplo publicado de /carga muestra una fila degradada con `errores.tarifa`", () => {
     const ejemplo = (
       openApiSpec.paths[PATH_CARGA].post.responses["200"].content["application/json"].examples as {
         filaSinTarifa: {
-          value: { filas: ReadonlyArray<{ readonly errores?: Record<string, string[]> }> };
+          value: {
+            filas: ReadonlyArray<{ readonly errores?: Readonly<Record<string, readonly string[]>> }>;
+            errores: ReadonlyArray<{
+              readonly errores?: Readonly<Record<string, readonly string[]>>;
+            }>;
+          };
         };
       }
     ).filaSinTarifa.value;
-    const enError = ejemplo.filas.find((f) => f.errores);
+    // Y la enseña APARTE: ninguna fila de `filas` trae ya el mapa de errores.
+    expect(ejemplo.filas.find((f) => f.errores)).toBeUndefined();
+    const enError = ejemplo.errores.find((f) => f.errores);
     expect(enError?.errores).toEqual({ tarifa: [MSG_FILA_SIN_TARIFA] });
     // El espejo publica el mismo literal.
     expect(yaml).toContain(`- "${MSG_FILA_SIN_TARIFA}"`);

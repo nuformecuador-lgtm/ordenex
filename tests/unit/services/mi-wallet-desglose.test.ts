@@ -68,6 +68,9 @@ function repoFake(): IWalletTiendaMovimientoRepository {
     listarSaldosTodasTiendas: vi.fn(async () => []),
     listarSaldosTiendasPaginado: vi.fn(async () => ({ items: [], total: 0 })),
     agregarDesglosePorTienda: vi.fn(async () => FILAS),
+    // ficha 335: el doble implementa la interfaz COMPLETA. Los cierres del selector los
+    // ejercita `tests/unit/services/mi-wallet-cierres.test.ts`; aqui solo tienen que existir.
+    listarCierresDeTienda: vi.fn(async () => []),
   };
 }
 

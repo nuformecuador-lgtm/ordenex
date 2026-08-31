@@ -237,8 +237,9 @@ export interface ILiquidacionService {
    * R49/R56/R74 — los comprobantes de UN cierre, anulados incluidos y marcados.
    *
    * MISMO gate que registrar (`esAccesoTotal`, [P3]/R1): quien no puede mover el dinero tampoco
-   * ve el detalle de como se movio. El `adminTienda` y el `mensajero` ven LO SUYO por sus
-   * propias pantallas (`/mi-wallet`, `/mis-pagos`), que leen el LIBRO, no esta lista.
+   * ve el detalle de como se movio. El `adminTienda` ve LO SUYO por su propia pantalla
+   * (`/mi-wallet`), que lee el LIBRO, no esta lista. El `mensajero` tenia la suya en
+   * `/mis-pagos`, retirada por la ficha 336 (2026-08-30): hoy no tiene ninguna.
    *
    * Devuelve `PagoRegistradoDTO[]`: el NOMBRE de quien registro (nunca su id) y, si lo hay, el
    * bloque de anulacion con el nombre de quien anulo. Ni un identificador interno cruza (R56).

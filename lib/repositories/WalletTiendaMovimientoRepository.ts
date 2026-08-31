@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
+  CierreDeTiendaAgregadoRow,
   CrearMovimientoTiendaInput,
   DesgloseTiendaAgregadoRow,
   IWalletTiendaMovimientoRepository,
@@ -156,6 +157,68 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
       categoria: g.categoria,
       total: new Prisma.Decimal(g._sum.monto ?? 0).toFixed(2), // money-safe
     }));
+  }
+
+  /**
+   * FICHA 335 (design §2.2, R1/R2/R7/R10) — los cierres que dejaron movimientos en el libro de
+   * UNA tienda.
+   *
+   * SALE DEL PROPIO LIBRO, no del dominio de cierres, y esa eleccion es de alcance antes que de
+   * rendimiento: agrupando `wallet_tienda_movimiento` por `origen_id` el conjunto solo puede
+   * contener cierres que movieron dinero de ESTA tienda, y toda opcion devuelta rinde al menos
+   * una fila cuando se aplique. Leerlo de `cierre_dia` habria exigido un join contra
+   * `cierre_detail` —una fila por ORDEN— y habria ofrecido cierres que para esta tienda no
+   * movieron nada.
+   *
+   * `tiendaId` va PRIMERO en el objeto `where` y lo escribe este metodo, igual que en
+   * `listarPorTienda` y `agregarDesglosePorTienda` (R2): no hay ningun spread encima que pueda
+   * pisarlo, y el acotado nunca se hace en memoria.
+   *
+   * `origenId: { not: null }` NO es defensivo: la columna es nullable (los ajustes `manual` no
+   * tienen origen) y sin el, el `groupBy` devolveria un grupo `null` que no es ningun cierre.
+   *
+   * UNA sola sentencia sea cual sea el numero de cierres (R10): el conteo por cierre sale del
+   * `_count` del mismo `groupBy`, no de N consultas.
+   *
+   * ORDEN (R7): por el movimiento mas reciente descendente, con `origenId` de DESEMPATE para que
+   * el orden sea TOTAL. Sin el desempate, dos cierres con el mismo `_max(fecha_movimiento)`
+   * saldrian en el orden que le convenga al planificador y dos lecturas seguidas podrian
+   * devolver listas distintas — justo en el borde del `take`, que es donde se decide quien entra.
+   *
+   * SIN `_sum` y sin ningun importe (R9): money-safe por construccion.
+   */
+  async listarCierresDeTienda(
+    tiendaId: string,
+    limite: number,
+  ): Promise<CierreDeTiendaAgregadoRow[]> {
+    const grupos = await this.prisma.walletTiendaMovimiento.groupBy({
+      by: ["origenId"],
+      where: {
+        tiendaId, // R2: acotado por tienda en el WHERE, escrito por este metodo
+        origenTipo: "cierre_dia",
+        origenId: { not: null },
+      },
+      _max: { fechaMovimiento: true },
+      _count: { _all: true },
+      orderBy: [{ _max: { fechaMovimiento: "desc" } }, { origenId: "desc" }],
+      take: limite,
+    });
+
+    // `origenId` y `_max.fechaMovimiento` son nullables en el TIPO, no en estas filas: el WHERE
+    // ya excluye el origen nulo, y el maximo de una columna NOT NULL sobre un grupo no vacio
+    // siempre existe. Se descartan en vez de forzarlos con un `!`: si algun dia dejara de ser
+    // cierto, la opcion desaparece en lugar de viajar con un `cierreId` invalido al filtro.
+    const filas: CierreDeTiendaAgregadoRow[] = [];
+    for (const g of grupos) {
+      const ultima = g._max.fechaMovimiento;
+      if (g.origenId === null || ultima === null) continue;
+      filas.push({
+        cierreId: g.origenId,
+        ultimaFecha: ultima.toISOString(),
+        movimientos: g._count._all, // cardinal del `groupBy`, no un monto
+      });
+    }
+    return filas;
   }
 
   /** R20: una fila por tienda (con nombre) + totales credito/debito, para la vista del maestro. */

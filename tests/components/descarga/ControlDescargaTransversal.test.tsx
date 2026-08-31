@@ -585,7 +585,14 @@ describe("Control de descarga · consistencia transversal", () => {
     // borró el 2026-07-31 con la vista legacy que lo montaba. Sigue siendo un SUELO (no una
     // igualdad) para que este barrido no se vuelva a tocar cada vez que se cablea una tabla
     // nueva; quien retire otra sin querer lo ve fallar igual.
-    expect(MODULOS_CON_DESCARGA.length).toBeGreaterThanOrEqual(19);
+    //
+    // Y de 19 a 18 el 2026-08-31 (ficha 336): `MisPagosModule.tsx` declaraba su `descarga={…}`
+    // y se fue entero con `/mis-pagos`, borrada por decisión humana. Es EXACTAMENTE el caso que
+    // este suelo existe para cazar —una descarga que desaparece—, sólo que aquí la desaparición
+    // es deliberada y está documentada en la ficha; por eso se baja el número en vez de
+    // restaurar nada. El suelo sigue siendo suelo: quien retire la vigésima sin querer lo verá
+    // fallar igual.
+    expect(MODULOS_CON_DESCARGA.length).toBeGreaterThanOrEqual(18);
 
     for (const modulo of MODULOS_CON_DESCARGA) {
       // R34: nadie declara `formatos` ⇒ nadie ofrece elección (P7 ratificada).
@@ -644,7 +651,13 @@ describe("Control de descarga · consistencia transversal", () => {
     // agujero: quien se la pasa también usa un adaptador común. Eran tres hasta la FASE 2;
     // T K.3 suma `RecepcionSateliteModule`, que baja el callback a `SateliteOrdenesListado`
     // porque el conjunto completo ya no está en la tabla (R52).
-    expect(MODULOS_PROVEEDORES.length).toBe(4);
+    //
+    // Y vuelven a ser TRES el 2026-08-31 (ficha 336): `MisPagosModule` era el cuarto y se
+    // borró entero con `/mis-pagos`, por decisión humana. Esto es una IGUALDAD y no un suelo
+    // —el censo quiere saber exactamente quién delega el callback—, así que se baja a mano y
+    // con el motivo, que es justo lo que la igualdad obliga a hacer: nadie puede retirar un
+    // proveedor sin pasar por aquí y explicarlo.
+    expect(MODULOS_PROVEEDORES.length).toBe(3);
     for (const modulo of MODULOS_PROVEEDORES) {
       expect(modulo.fuente, `${modulo.ruta} pasa filas sin adaptador`).toMatch(
         /obtenerFilasDescarga=\{[^}]*?(filasDesdeResultado|filasLocales)\(/,
