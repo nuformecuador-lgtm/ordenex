@@ -1,8 +1,12 @@
 # Ficha 339 — bitácora de implementación (BACKEND, bloques B0–B4)
 
 > Zona `fullstack`, backend primero. **Este documento cubre B0, B1, B2, B3 y B4.**
-> Los bloques **B5 (la tarjeta) y B6 (censos ajenos de frontend) NO están hechos**: los implementa
-> el agente de frontend. Lo que este bloque le deja cableado está en § 8.
+> Los bloques **B5 (la tarjeta) y B6 (censos ajenos de frontend)** los implementa el agente de
+> frontend; lo que este bloque le deja cableado está en § 8.
+>
+> **AL DÍA (2026-08-31): B5 y B6 ya están hechos y su bitácora es la SEGUNDA MITAD de este
+> archivo (§ 10 en adelante).** El párrafo de arriba se conserva tal cual porque describe el
+> estado en el que este bloque terminó, no el de hoy.
 
 Rama: `fix/339-otros-gastos`. Fecha: 2026-08-31.
 
@@ -302,3 +306,315 @@ Backend de la 339 completo (B0–B4): «Otros» ya solo puede contener `egreso_g
 cada fila se lee del `WHERE` con la MISMA definición que produce su importe, y las tres mutaciones
 —el `WHERE`, el `total` y la cubeta— se ejecutaron, salieron rojas nombrando el dinero y se
 revirtieron; typecheck y lint en 0, 156 tests verdes en los 11 archivos tocados.
+
+---
+---
+
+# Ficha 339 — bitácora de implementación (FRONTEND, bloques B5–B6)
+
+> **Este bloque AMPLÍA el documento de arriba, no lo sustituye.** Cubre **B5 (la tarjeta)** y
+> **B6 (los censos ajenos de frontend)**. Lo que el backend dejó cableado está en § 8 de arriba;
+> aquí se cuenta qué se hizo con ello.
+
+Rama: `fix/339-otros-gastos`. Fecha: 2026-08-31.
+
+---
+
+## 10 — Qué se hizo, en una frase
+
+La tarjeta «Cómo se compone la ganancia de Ordenex» pasa de **cinco filas de egreso con un cubo
+anónimo de 227.300,00** a **seis filas con nombre + un cubo que sólo aparece cuando de verdad
+queda algo**, y **cada una de sus catorce filas se abre** y enseña los movimientos que componen
+su importe. El total de la columna no se mueve ni un céntimo: lo único que cambia es de qué
+cubeta sale cada importe.
+
+---
+
+## 11 — Archivos creados
+
+| archivo | qué es |
+| --- | --- |
+| `app/(app)/wallet/_components/composicion-detalle-labels.ts` | T5.1 — textos del detalle (4 columnas, vacío, error), rótulos de las dos filas nuevas, pista de «Otros» y los nombres accesibles (`DETALLE_FILA_NOMBRE.abrir/region/tabla/paginacion`) |
+| `app/(app)/wallet/_components/DetalleFilaComposicion.tsx` | T5.2 — el panel: `useSWR` + `DataTable` (fecha · concepto · detalle · importe) + `Pagination`, sin subtotal y sin descarga |
+| `app/(app)/wallet/_components/FilaComposicion.tsx` | T5.3 — la fila desplegable, **una sola pieza para las dos columnas** |
+| `tests/components/DetalleFilaComposicion.test.tsx` | R15/R16/R17/R21–R26/R28/R35/R36 + la mitad de pantalla de R29 y R31 |
+
+## 12 — Archivos modificados
+
+| archivo | qué cambió |
+| --- | --- |
+| `app/(app)/wallet/_components/DesgloseEgresosLista.tsx` | T5.4 — dos filas nuevas recorriendo `WALLET_EGRESO_NOMBRADO_SEED`, «Otros» condicional a `hayOtrosEgresos` con su pista, y las filas pasan a ser desplegables. El `role="group"`, el `aria-label` y la estructura `<dt>`/`<dd>` NO cambian |
+| `app/(app)/wallet/_components/ComposicionGananciaCard.tsx` | T5.5 — recibe `filtros` y los baja a las filas; las siete de ingreso también abren (Q1); `DESCRIPCION` pasa a nombrar los **ajustes** (R41) sin tocar lo que dice que queda fuera (R42) |
+| `app/(app)/wallet/_components/WalletFiltros.tsx` | T5.6 — nace `inputDeFiltros(filtros)`, la ÚNICA función que traduce los filtros vigentes a un input de borde. Vive junto al tipo y al valor vacío que ya vivían ahí |
+| `app/(app)/wallet/_components/WalletModule.tsx` | T5.6 — pasa `filtros` a la tarjeta; `buildInput` **compone** `inputDeFiltros` con la página y `buildInputCompleto` desaparece (era la segunda copia del mismo bucle) |
+| `lib/actions/wallet.ts` | **Deber 1 del backend**: se BORRA la anotación de excepción del docstring de `listarMovimientosDeFilaAction` al cablear su pantalla |
+| `tests/unit/descarga/censo-tablas.ts` + `tests/unit/descarga/cobertura-tablas.guardia.test.ts` | **T6.1** — la tabla nueva se registra `fuera` con su motivo, y los números suben (§ 14) |
+| `tests/components/ComposicionGananciaCard.test.tsx` | **T6.3** — los literales-contrato actualizados A MANO + once casos nuevos (R1/R2/R3/R5/R6/R7/R8/R9/R10/R11-R12/R41/R42) |
+| `tests/integration/wallet-page.test.tsx`, `tests/unit/components/wallet-page-cobros-pendientes.test.tsx`, `tests/components/descarga/WalletDescarga.test.tsx` | cambio de ARNÉS: los tres montan el `WalletModule` REAL, cuyo árbol importa ahora el borde del detalle. Sin declararlo en su doble, el import no resuelve y el archivo entero se queda sin ejecutar |
+
+### 12.1 · Decisiones de forma que conviene dejar escritas
+
+- **El orden**: las cuatro filas existentes **se quedan donde están** y las dos nuevas entran
+  **justo antes de «Otros»** (decisión cerrada, distinta de la que proponía `design.md § Q2`).
+  Aparecen donde el dinero se venía mostrando, en vez de reordenar una tarjeta ya conocida.
+- **Rótulos**: «Pagos a mensajeros» y «Ajustes (egreso)», en la voz PLURAL de sus vecinas de
+  columna («Sueldos», «Indemnizaciones»). El de los ajustes es el concepto que el diálogo
+  «Registrar movimiento» promete por `nombreEnElLibro` («Ajuste (egreso)»), y está escrito **a
+  mano** en el módulo de textos: derivarlo de `CATEGORIA_LABEL` dejaría el caso de R3 comparando
+  el rótulo contra su propia fuente, es decir, siempre verde.
+- **La estructura de la fila** es un `<div>` hijo de la `<dl>` con `<dt>` (botón), `<dd>`
+  (importe) y —cuando toca— un `<dd>` para la pista y otro para el panel. Es lo que mantiene en
+  pie las aserciones heredadas de las fichas 45, 158 y 231, que leen `dt`/`dd` fila a fila.
+- **`aria-controls` va SIEMPRE puesto**, abierto o cerrado: es el precedente vivo del botón de
+  expandir de `DataTable`, y no se inventa una convención nueva para esta tarjeta.
+- **La paginación NO se llama `PAGINACION_*_LABEL`** (design § 6). Es
+  `DETALLE_FILA_NOMBRE.paginacion(fila)`, que además compone el nombre de SU fila (R24). El
+  censo de paginación sigue midiendo **13** y se corrió para comprobarlo.
+
+---
+
+## 13 — Mapa `R<n> → test` (lo que cubre el frontend)
+
+| R | test | estado |
+| --- | --- | --- |
+| R1 | `ComposicionGananciaCard.test.tsx` › R1: la columna de egresos tiene fila «Pagos a mensajeros» con su importe | ✅ |
+| R2 | `ComposicionGananciaCard.test.tsx` › R2: … fila «Ajustes (egreso)» con su importe | ✅ |
+| R3 | `ComposicionGananciaCard.test.tsx` › R3: el rótulo de los ajustes usa el concepto que el diálogo promete en el libro | ✅ |
+| R5 | `ComposicionGananciaCard.test.tsx` › R5: ningún rótulo de la columna de egresos es el valor del enum (+ el heredado de la 231 para ingresos) | ✅ |
+| R6 | `ComposicionGananciaCard.test.tsx` › R28: el orden es el declarado, no el de magnitud (la columna de egresos, con su contraprueba: ni el mayor ni el menor están en los extremos) | ✅ |
+| R7 | `ComposicionGananciaCard.test.tsx` › R7: con `hayOtrosEgresos` falso, la fila «Otros gastos de Ordenex» no está en el DOM | ✅ (mutación en § 15.1) |
+| R8 | `ComposicionGananciaCard.test.tsx` › R8: con `hayOtrosEgresos` verdadero, la fila aparece con su importe | ✅ |
+| R9 | `ComposicionGananciaCard.test.tsx` › R9: la decisión es del SERVIDOR — la tarjeta no compara importes | ✅ |
+| R10 | `ComposicionGananciaCard.test.tsx` › R10: la fila «Otros» lleva su pista sobre el dinero sin clasificar | ✅ |
+| R11/R12 | `ComposicionGananciaCard.test.tsx` › R11/R12: el total de la columna no se movió al sacar dos conceptos del cubo | ✅ |
+| R15 | `DetalleFilaComposicion.test.tsx` › R15: al abrir una fila se muestran los movimientos que componen su importe | ✅ |
+| R16 | `DetalleFilaComposicion.test.tsx` › R16: cada movimiento muestra fecha, concepto, detalle e importe | ✅ |
+| R17 | `DetalleFilaComposicion.test.tsx` › R17: un movimiento sin descripción muestra su origen legible | ✅ |
+| R20 | `DetalleFilaComposicion.test.tsx` › R20: los filtros vigentes de la wallet bajan al detalle, y sólo ellos | ✅ (la mitad del `WHERE` la mide Postgres, § 6 de arriba) |
+| R21 | `DetalleFilaComposicion.test.tsx` › R21: con las filas cerradas no se lee nada | ✅ |
+| R22 | `DetalleFilaComposicion.test.tsx` › R22: abrir una fila cuesta exactamente UNA lectura, y sólo de esa fila | ✅ |
+| R23 | `DetalleFilaComposicion.test.tsx` › R23: dos filas abiertas mantienen páginas independientes | ✅ |
+| R24 | `DetalleFilaComposicion.test.tsx` › R24: el control de abrir nombra SU fila, y no hay dos que se llamen igual (+ el caso del estado del disclosure) | ✅ |
+| R25 | `DetalleFilaComposicion.test.tsx` › R25: una fila sin movimientos muestra su estado vacío | ✅ |
+| R26 | `DetalleFilaComposicion.test.tsx` › R26: un fallo de lectura se cuenta DENTRO de la fila y la tarjeta sigue en pie | ✅ |
+| R28 | `DetalleFilaComposicion.test.tsx` › R28: con más movimientos que la página se puede navegar a la siguiente | ✅ |
+| R29 (mitad de pantalla) | `DetalleFilaComposicion.test.tsx` › R29: el tamaño de página lo manda la CONFIGURACIÓN, y la pantalla no lo escribe | ✅ |
+| R31 (mitad de pantalla) | `DetalleFilaComposicion.test.tsx` › R31: el total que pagina es el del SERVIDOR, no el largo de la página pintada | ✅ (mutación en § 15.2) |
+| R35 | `DetalleFilaComposicion.test.tsx` › R35: ninguna fuente nueva opera con dinero + `ComposicionGananciaCard.test.tsx` › R12 (ampliado a `FilaComposicion.tsx`) | ✅ |
+| R36 | `DetalleFilaComposicion.test.tsx` › R36: el detalle no pinta ningún subtotal de la página visible | ✅ |
+| R41 | `ComposicionGananciaCard.test.tsx` › R41: la descripción nombra también los ajustes | ✅ |
+| R42 | `ComposicionGananciaCard.test.tsx` › R42: la descripción sigue diciendo que el dinero de las tiendas no entra | ✅ |
+| design § 10-A1 | `DetalleFilaComposicion.test.tsx` › el input de una fila es su token y su página, y ninguna lista de categorías | ✅ (mutación en § 15.3) |
+
+---
+
+## 14 — Los tres censos ajenos, cerrados
+
+1. **Censo de tablas (T6.1).** La guardia **se dejó fallar primero**, como manda la convención
+   escrita en ese propio archivo:
+
+   ```
+   FAIL  tests/unit/descarga/cobertura-tablas.guardia.test.ts
+   AssertionError: hay tablas sin registrar en tests/unit/descarga/censo-tablas.ts:
+     expected [ Array(1) ] to deeply equal []
+   +   "app/(app)/wallet/_components/DetalleFilaComposicion.tsx #1",
+   ```
+
+   Y después se registró `fuera` (motivo de `design.md § 8`, entre
+   `CobrosRechazoTiendaPendientesPanel` y `GastosFijosPlantillasPanel`, que es donde cae por el
+   orden alfabético con el que la guardia recorre el árbol) y se subieron los números:
+
+   | número | antes | después |
+   | --- | --- | --- |
+   | `TOTAL_ARCHIVOS_CON_DATATABLE` | 28 | **29** |
+   | `TOTAL_INSTANCIAS_DATATABLE` | 28 | **29** |
+   | `totalCensado` | 29 | **30** |
+   | instancias `fuera` (`excluidas.length`) | 9 | **10** |
+   | tablas censadas `fuera` | 10 | **11** |
+   | tablas censadas `con_descarga` | 19 | **19 (sin cambio)** |
+
+2. **Barrido de STRING de `wallet-page.test.tsx` (T6.2).** Ya lo hizo el backend (§ 5.2 de
+   arriba) y se corrió otra vez aquí: verde. El frontend no lo tocó — sólo añadió al doble de
+   `@/lib/actions/wallet` el export nuevo, sin el cual ese archivo no ejecuta ni un caso.
+
+3. **Censo de paginación (`paginacion-transversal.test.tsx`).** **Intacto en 13.** El nombre
+   accesible del control del detalle se declara como `DETALLE_FILA_NOMBRE.paginacion(fila)` y
+   NO como `export const PAGINACION_*_LABEL`; corrido y verde.
+
+---
+
+## 15 — Las tres mutaciones exigidas (ejecutadas y revertidas)
+
+### 15.1 · R7/R9 — que «Otros» se pinte SIEMPRE, aunque valga 0,00
+
+Mutación en `DesgloseEgresosLista.tsx`: la condición `hayOtrosEgresos` del ternario que decide
+si la fila entra en el DOM se sustituye por `true`.
+
+```
+ ❯ tests/components/ComposicionGananciaCard.test.tsx (29 tests | 3 failed) 964ms
+     × R7: con `hayOtrosEgresos` falso, la fila «Otros gastos de Ordenex» no está en el DOM
+     × R9: la decisión es del SERVIDOR — la tarjeta no compara importes
+     × R10: la fila «Otros» lleva su pista sobre el dinero sin clasificar
+
+ AssertionError: expected <span class="truncate"></span> to be null
+ - Expected: null
+ + Received: <span class="truncate">Otros gastos de Ordenex</span>
+
+ AssertionError: expected <dd …(1)></dd> to be null
+ + Received: <dd class="col-span-2 …">Acá hay dinero de un concepto que esta tarjeta todavía
+             no sabe nombrar. Abrí la fila para ver de dónde viene.</dd>
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 26 passed (29)
+```
+
+Lo que demuestra: la fila «Otros» con importe cero **no puede volver a aparecer en silencio**, y
+la pista tampoco se queda de adorno permanente. Revertida (la condición vuelve a ser la del
+servidor, comprobado en el archivo) y 29/29 en verde.
+
+### 15.2 · R31 — usar el largo de la página como `total` del detalle
+
+Mutación en `DetalleFilaComposicion.tsx`: el `total` deja de leerse de la respuesta del servidor
+y pasa a ser el número de movimientos pintados.
+
+```
+ ❯ tests/components/DetalleFilaComposicion.test.tsx (17 tests | 4 failed) 5199ms
+     × R23: dos filas abiertas mantienen páginas independientes
+     × R28: con más movimientos que la página se puede navegar a la siguiente
+     × R31: el total que pagina es el del SERVIDOR, no el largo de la página pintada
+     × R29: el tamaño de página lo manda la CONFIGURACIÓN, y la pantalla no lo escribe
+
+ AssertionError: expected "vi.fn()" to be called 3 times, but got 2 times
+ TestingLibraryElementError: Unable to find an element with the text: 1-10 de 12
+ TestingLibraryElementError: Unable to find an element with the text: 1-3 de 7
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 13 passed (17)
+```
+
+Lo que demuestra, y es el motivo de que este caso exista: con el largo de la página como total,
+**la barra diría «1-3 de 3» y el botón de siguiente se apagaría** — los otros nueve movimientos
+de la fila quedan inalcanzables sin que nada falle ni se rompa la pantalla. Revertida y 17/17
+verde.
+
+### 15.3 · design § 10-A1 — que el navegador mande CATEGORÍAS en vez del token de fila
+
+Mutación en el fetcher de `DetalleFilaComposicion.tsx`: el cliente resuelve el complemento y
+manda la lista de categorías —las tres correctas de hoy para «Otros», y la propia para el resto—
+en lugar del token.
+
+```
+ ❯ tests/components/DetalleFilaComposicion.test.tsx (17 tests | 5 failed) 2143ms
+     × R22: abrir una fila cuesta exactamente UNA lectura, y sólo de esa fila
+     × R23: dos filas abiertas mantienen páginas independientes
+     × R28: con más movimientos que la página se puede navegar a la siguiente
+     × el input de una fila es su token y su página, y ninguna lista de categorías
+     × R20: los filtros vigentes de la wallet bajan al detalle, y sólo ellos
+
+ AssertionError: expected { categorias: [ …(3) ], page: 1 } to deeply equal
+                          { fila: 'otros_egresos', page: 1 }
+ - "fila": "otros_egresos",
+ + "categorias": [ "egreso_gasto", "egreso_pago_mensajero", "egreso_ajuste" ],
+
+ AssertionError: expected { tipo: 'egreso', …(5) } to deeply equal { tipo: 'egreso', …(5) }
+ + "categorias": [ "egreso_pago_mensajero" ],
+ - "fila": "egreso_pago_mensajero",
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 12 passed (17)
+```
+
+Lo que demuestra: existe una red que impide que el navegador vuelva a tener **una segunda
+definición del complemento**. Y nótese que la mutación es *plausible* —la lista que escribe es la
+correcta HOY—: el fallo que evita no es un error de cálculo, es que esa lista y la del servidor
+puedan separarse mañana sin que nada avise. Revertida (en el archivo sólo queda la palabra
+«categorias» dentro del comentario que explica por qué no se mandan) y 17/17 verde.
+
+---
+
+## 16 — Verificación (frontend)
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+TYPECHECK_EXIT=0        (sin una sola línea de salida)
+
+$ pnpm lint
+✖ 127 problems (0 errors, 127 warnings)
+LINT_EXIT=0
+```
+
+Los 127 avisos son los MISMOS preexistentes que anotó el backend (`no-unused-vars` en tests
+ajenos). Ninguno cae en un archivo de este bloque: filtrar la salida de `pnpm lint` por
+`composicion`, `FilaComposicion`, `DesgloseEgresosLista`, `WalletFiltros`, `WalletModule` y
+`DetalleFila` no devuelve nada.
+
+Corrida explícita, **por nombre**, de todos los archivos de test creados o modificados en B5/B6:
+
+```
+$ pnpm exec vitest run \
+    tests/components/DetalleFilaComposicion.test.tsx \
+    tests/components/ComposicionGananciaCard.test.tsx \
+    tests/unit/descarga/cobertura-tablas.guardia.test.ts \
+    tests/integration/wallet-page.test.tsx \
+    tests/unit/components/wallet-page-cobros-pendientes.test.tsx \
+    tests/components/descarga/WalletDescarga.test.tsx \
+    tests/components/paginacion/paginacion-transversal.test.tsx \
+    tests/components/CajaComposicionBarra.test.tsx
+
+ Test Files  8 passed (8)
+      Tests  106 passed (106)
+```
+
+Todo lo que toca la wallet, la composición y la caja:
+
+```
+$ pnpm exec vitest run wallet composicion caja
+ Test Files  93 passed (93)
+      Tests  1281 passed (1281)
+```
+
+Guardias completas (`pnpm exec vitest run guard`, 169 archivos):
+
+```
+ Test Files  1 failed | 168 passed (169)
+      Tests  1 failed | 2561 passed (2562)
+```
+
+**Los mismos números, test a test, que midió el backend en § 7.** El único rojo sigue siendo
+`superficie-de-uso.guardia.test.ts` por `lib/actions/tarifas.ts:67 obtenerTarifa`, deuda AJENA
+declarada en `tests/baseline-rojos.json` desde el 2026-08-28. Lo que sí cambió es que
+**`listarMovimientosDeFilaAction` ya NO aparece en esa lista**: al cablearse el desplegable, la
+action pasó a ser alcanzable y su anotación de excepción se borró — que es exactamente el deber
+que el backend dejó escrito.
+
+---
+
+## 17 — Lo que quedó dudoso (frontend)
+
+1. **No se ha visto en el navegador.** Todo lo de arriba es jsdom. El disclosure sobre una `<dl>`
+   en rejilla (`grid-cols-[1fr_auto]` con el panel a `col-span-2`) es la primera vez que este
+   repo lo hace, y el aspecto en móvil —una `DataTable` de cuatro columnas dentro de media
+   tarjeta— no está medido. La memoria del repo dice que ver la app encuentra lo que la suite no.
+2. **`aria-controls` apunta a un id que no existe mientras la fila está cerrada.** Es el
+   precedente vivo del `DataTable`, y por eso se copió en vez de inventar otra convención; pero
+   es una elección discutible y está aquí escrita para que se pueda discutir.
+3. **«Ajustes (egreso)» en plural frente a «Ajuste (egreso)» que promete el diálogo.** Se eligió
+   la voz plural de sus vecinas de columna; si se prefiere la coincidencia byte a byte con la
+   promesa, es una línea en `composicion-detalle-labels.ts` y dos literales en su test.
+4. **Cerrar una fila olvida su página.** El estado vive dentro del panel, que se desmonta al
+   cerrar (es lo que compra el «cero lecturas» de R21). Reabrir vuelve a la primera página.
+5. **`inputDeFiltros` vive en `WalletFiltros.tsx`**, que es un componente `"use client"`. Es
+   donde ya viven el tipo y el valor vacío, pero si mañana la usara algo fuera de la wallet
+   convendría mudarla a un módulo puro.
+
+---
+
+## 18 — Veredicto (frontend)
+
+B5 y B6 completos. «Otros gastos de Ordenex» sólo se pinta cuando el SERVIDOR dice que ahí queda
+dinero y, cuando se pinta, lo dice con una pista; los pagos a mensajeros y los ajustes tienen
+fila propia con su nombre; las catorce filas se abren y leen su detalle con el TOKEN de la fila,
+nunca con una lista de categorías; el total de la columna no se movió ni un céntimo. Las tres
+mutaciones se ejecutaron, salieron rojas nombrando lo que protegen y se revirtieron. Typecheck y
+lint en 0; 106 tests verdes en los ocho archivos tocados y 1.281 en todo lo que toca la wallet.

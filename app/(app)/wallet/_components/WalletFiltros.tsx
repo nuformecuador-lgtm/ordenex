@@ -39,6 +39,26 @@ export const FILTROS_VACIOS: WalletFiltrosValue = {
   hasta: "",
 };
 
+/**
+ * Ficha 339 (T5.6, design §5.4) — los filtros VIGENTES traducidos al input de un borde, con los
+ * vacios FUERA. Una cadena vacia no es «no filtres»: seria un filtro que no filtra nada… o un
+ * `validation_error`, segun el campo.
+ *
+ * Vive aqui —junto al tipo y al valor vacio que ya viven aqui— y no dentro de `WalletModule`
+ * porque la usan TRES caminos: la descarga del libro completo, el listado paginado (compuesta
+ * con la pagina) y el detalle de una fila de la tarjeta de la ganancia. Dos constructores
+ * distintos de los mismos filtros es exactamente como el detalle acabaria enseñando un conjunto
+ * que no es el del importe de su fila (R20).
+ */
+export function inputDeFiltros(filtros: WalletFiltrosValue): Record<string, unknown> {
+  const input: Record<string, unknown> = {};
+  if (filtros.tipo) input.tipo = filtros.tipo;
+  if (filtros.categoria) input.categoria = filtros.categoria;
+  if (filtros.desde) input.desde = filtros.desde;
+  if (filtros.hasta) input.hasta = filtros.hasta;
+  return input;
+}
+
 export interface WalletFiltrosProps {
   /** Emite los filtros aplicados (recarga con page reseteada a 1). */
   onAplicar: (value: WalletFiltrosValue) => void;

@@ -36,7 +36,12 @@ import {
 } from "./CobrosRechazoTiendaPendientesPanel";
 import { WalletLedger } from "./WalletLedger";
 import { filaDescargaMovimientoCaja } from "./wallet-ledger-descarga-columnas";
-import { WalletFiltros, FILTROS_VACIOS, type WalletFiltrosValue } from "./WalletFiltros";
+import {
+  WalletFiltros,
+  FILTROS_VACIOS,
+  inputDeFiltros,
+  type WalletFiltrosValue,
+} from "./WalletFiltros";
 import { RegistrarMovimientoCajaDialog } from "./RegistrarMovimientoCajaDialog";
 import { ComposicionGananciaCard } from "./ComposicionGananciaCard";
 import {
@@ -127,29 +132,26 @@ export interface WalletModuleProps {
   ahoraIso: string;
 }
 
-/** Construye el input de las actions omitiendo los filtros vacíos (enum/fecha). */
-function buildInput(filtros: WalletFiltrosValue, page: number, pageSize: number): Record<string, unknown> {
-  const input: Record<string, unknown> = { page, pageSize };
-  if (filtros.tipo) input.tipo = filtros.tipo;
-  if (filtros.categoria) input.categoria = filtros.categoria;
-  if (filtros.desde) input.desde = filtros.desde;
-  if (filtros.hasta) input.hasta = filtros.hasta;
-  return input;
-}
-
 /**
- * Feature 170 (T C.4, R10/R18) — input del modo COMPLETO: los MISMOS filtros vigentes que
- * el listado, SIN `page`/`pageSize`. No se reusa `buildInput` con un `delete` después: el
- * schema del modo completo es `.strict()` y una paginación colada devolvería
- * `validation_error` en vez de un archivo. Aquí no hay nada que quitar porque no se pone.
+ * Construye el input de las actions PAGINADAS: los filtros vigentes más la página.
+ *
+ * Ficha 339 (T5.6, design §5.4) — los cuatro filtros ya no se copian aquí campo a campo: los
+ * pone `inputDeFiltros`, la ÚNICA función que traduce el estado de los filtros a un input de
+ * borde, y esta se limita a COMPONERLA con la paginación. Antes había dos copias del mismo
+ * bucle en este archivo (`buildInput` y `buildInputCompleto`) y el detalle de la tarjeta habría
+ * sido la tercera; dos constructores distintos de los mismos filtros es exactamente cómo el
+ * detalle de una fila acabaría enseñando otro conjunto que el importe de esa fila (R20).
+ *
+ * Feature 170 (T C.4, R10/R18) — el modo COMPLETO usa `inputDeFiltros` A SECAS, sin componer
+ * nada: su schema es `.strict()` y una paginación colada devolvería `validation_error` en vez
+ * de un archivo. Por eso la composición vive aquí y no dentro de la función compartida.
  */
-function buildInputCompleto(filtros: WalletFiltrosValue): Record<string, unknown> {
-  const input: Record<string, unknown> = {};
-  if (filtros.tipo) input.tipo = filtros.tipo;
-  if (filtros.categoria) input.categoria = filtros.categoria;
-  if (filtros.desde) input.desde = filtros.desde;
-  if (filtros.hasta) input.hasta = filtros.hasta;
-  return input;
+function buildInput(
+  filtros: WalletFiltrosValue,
+  page: number,
+  pageSize: number,
+): Record<string, unknown> {
+  return { ...inputDeFiltros(filtros), page, pageSize };
 }
 
 export function WalletModule({
@@ -321,10 +323,14 @@ export function WalletModule({
           Efecto colateral declarado en D2: al salir el desglose de la fila que compartía, el
           panel de gastos fijos pasa a ancho completo — que es lo que su tabla paginada con
           descarga necesitaba desde el principio. */}
+      {/* Ficha 339 (T5.6, R20): la tarjeta recibe los filtros VIGENTES y los baja hasta el
+          desplegable de cada fila, para que el detalle y el importe de esa fila hablen siempre
+          del mismo conjunto. El estado ya vivía aquí; lo único nuevo es que viaja. */}
       <ComposicionGananciaCard
         composicion={composicion}
         desglose={desglose}
         resumen={resumen}
+        filtros={filtros}
       />
 
       <section aria-label="Gastos fijos">
@@ -372,7 +378,7 @@ export function WalletModule({
               onReversado={() => void recargar(filtros, page)}
               obtenerFilasDescarga={() =>
                 filasDesdeResultado(
-                  listarMovimientosCompletoAction(buildInputCompleto(filtros)),
+                  listarMovimientosCompletoAction(inputDeFiltros(filtros)),
                   filaDescargaMovimientoCaja,
                 )
               }

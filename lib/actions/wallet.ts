@@ -129,10 +129,11 @@ export async function listarMovimientosCompletoAction(
  * cliente manda el TOKEN de la fila; quien traduce ese token a un conjunto de categorias es el
  * servicio, con la misma definicion que produjo el importe de la fila.
  *
- * @sin-superficie la monta `DetalleFilaComposicion` en el bloque B5 de esta misma ficha (la 339
- * se implementa backend primero); hoy todavia no existe esa pantalla. La anotacion CADUCA sola:
- * `superficie-de-uso.guardia.test.ts` se pone rojo si un export anotado vuelve a ser alcanzable,
- * asi que quien cablee el desplegable esta obligado a borrar esta linea.
+ * SU SUPERFICIE (bloque B5 de la 339): `DetalleFilaComposicion`, el panel que se despliega al
+ * abrir una fila de la tarjeta «Como se compone la ganancia de Ordenex». Mientras esa pantalla
+ * no existio, este docstring llevo la anotacion de excepcion de
+ * `superficie-de-uso.guardia.test.ts`; al cablear el desplegable se borro, que es exactamente lo
+ * que esa guardia obliga a hacer.
  */
 export async function listarMovimientosDeFilaAction(
   input: unknown,
