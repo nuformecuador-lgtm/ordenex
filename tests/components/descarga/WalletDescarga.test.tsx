@@ -302,6 +302,10 @@ function renderMiWallet() {
       pageSize={20}
       saldo={SALDO_TIENDA}
       desglose={DESGLOSE_TIENDA}
+      // Ficha 335: el catálogo de cierres del selector, REQUERIDO en los dos eslabones. Este
+      // archivo mide la DESCARGA del libro, que no cambia con el filtro de cierre; se siembra
+      // vacío y disponible, que es el estado de una tienda sin cierres todavía.
+      cierres={{ opciones: [], hayMas: false, disponible: true }}
     />,
   );
 }

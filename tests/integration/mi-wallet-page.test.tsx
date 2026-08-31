@@ -15,6 +15,9 @@ import {
 import type { DesgloseTiendaAgregadoRow } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 import type { MiWalletModuleProps } from "@/app/(app)/mi-wallet/_components/MiWalletModule";
+// Ficha 335 (D5): la lista de roles DENEGADOS se deriva de esta constante, la misma que lee el
+// item de menu. Asi el dia que alguien la amplie, este archivo no se queda comprobando de mas.
+import { ROLES_MI_WALLET } from "@/lib/auth/menu-visibility";
 
 // Feature 43 (T14, R18/R19/R21) — la pagina `/mi-wallet` resuelve el rol SOLO server-side;
 // rol != adminTienda (o sin sesion) → `notFound` (R19). El backend acota SIEMPRE a
@@ -29,10 +32,15 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
 // Feature 172 (T G.2): `listarMisMovimientosCompletoAction` se anade al doble porque el bloque
 // de R55 monta el MODULO REAL (`vi.importActual`), y ese modulo la importa para la descarga.
 // Sin declararla, el import del modulo revienta. No la llama nadie en estos tests.
+// Ficha 335 (B4): `listarMisCierresAction` se añade al doble porque `page.tsx` la importa para
+// poblar el selector de cierres. Este `vi.mock` es una FÁBRICA CERRADA —lo que no está aquí no
+// existe para el módulo bajo prueba—, así que sin esta clave el import de la página revienta
+// antes de la primera aserción. Ya pasó con `listarMisMovimientosCompletoAction` (arriba).
 vi.mock("@/lib/actions/wallet-tienda", () => ({
   verMiSaldoAction: vi.fn(),
   listarMisMovimientosAction: vi.fn(),
   listarMisMovimientosCompletoAction: vi.fn(),
+  listarMisCierresAction: vi.fn(),
   listarSaldosTiendasAction: vi.fn(),
 }));
 
@@ -66,6 +74,7 @@ vi.mock("@/app/_components/LogoutButton", () => ({
 
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
+  listarMisCierresAction,
   listarMisMovimientosAction,
   verMiSaldoAction,
 } from "@/lib/actions/wallet-tienda";
@@ -73,6 +82,14 @@ import {
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const saldoMock = vi.mocked(verMiSaldoAction);
 const listarMock = vi.mocked(listarMisMovimientosAction);
+const cierresMock = vi.mocked(listarMisCierresAction);
+
+/** Ficha 335 — un cierre en el libro de la tienda: lo que puebla el selector del filtro. */
+const CIERRES_OK = {
+  status: "ok" as const,
+  cierres: [{ cierreId: "c1", fecha: "2026-07-12T10:00:00.000Z", movimientos: 2 }],
+  hayMas: false,
+};
 
 const SALDO_OK = {
   status: "ok" as const,
@@ -137,6 +154,7 @@ beforeEach(() => {
   moduleCalls.length = 0;
   saldoMock.mockResolvedValue(SALDO_OK);
   listarMock.mockResolvedValue(MOVIMIENTOS_OK);
+  cierresMock.mockResolvedValue(CIERRES_OK);
 });
 
 afterEach(() => {
@@ -486,5 +504,268 @@ describe("MiWalletPage — la tienda distingue el pago del cargo (R55) [P5]", ()
     ]) {
       expect(texto.toLowerCase()).not.toContain(jerga.toLowerCase());
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FICHA 335 — B4: `/mi-wallet` adopta la presentación de `/wallet` (R12–R15) y el selector de
+// cierre degrada sin esconder el dinero (R28–R30).
+//
+// Todo se mide sobre el MÓDULO REAL montado por la página real (`verMiWallet`), no sobre un
+// stub: lo que esta ficha cambia es el árbol que se pinta, y un doble no lo pintaría.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** La `Card` que envuelve al elemento dado, o `null` si no vive dentro de ninguna. */
+function cardDe(elemento: Element): HTMLElement | null {
+  return elemento.closest<HTMLElement>('[data-slot="card"]');
+}
+
+/** La `Card` del libro: la que vive dentro de la sección del desglose. */
+function cardDelLibro(): HTMLElement {
+  const seccion = screen.getByRole("region", { name: "Desglose de movimientos" });
+  const card = seccion.querySelector<HTMLElement>('[data-slot="card"]');
+  if (!card) throw new Error("el libro no está dentro de ninguna tarjeta");
+  return card;
+}
+
+describe("MiWalletPage — la presentación de `/wallet` (R12–R15) [335]", () => {
+  it("R12: el saldo y el libro son dos tarjetas hermanas, ninguna dentro de la otra", async () => {
+    sembrarTienda([COD, FLETE, PAGO], "21200.00");
+    await verMiWallet();
+
+    const cardSaldo = cardDe(screen.getByRole("region", { name: "Saldo a favor" }));
+    const seccionLibro = screen.getByRole("region", { name: "Desglose de movimientos" });
+    const cardLibro = cardDelLibro();
+
+    expect(cardSaldo).not.toBeNull();
+    expect(cardSaldo).not.toBe(cardLibro);
+
+    // El punto de R12: ni anidadas ni una envolviendo a la otra. Antes de esta ficha el libro
+    // no era una tarjeta siquiera; el modo de fallo que se vigila es el contrario, meter el
+    // saldo DENTRO de la tarjeta del libro para "ahorrar un marco".
+    expect(cardSaldo!.contains(cardLibro)).toBe(false);
+    expect(cardLibro.contains(cardSaldo!)).toBe(false);
+
+    // Y son hermanas de verdad: cuelgan del mismo contenedor, no de dos ramas cualesquiera.
+    expect(cardSaldo!.parentElement).toBe(seccionLibro.parentElement);
+  });
+
+  it("R12: el saldo ya NO va encajonado en media pantalla", async () => {
+    sembrarTienda([COD, FLETE], "1200.00");
+    await verMiWallet();
+
+    // El envoltorio `lg:max-w-md` dejaba la tarjeta del saldo a la mitad del ancho y la del
+    // libro entera: dos anchos distintos para dos hermanas. Contraprueba de que se fue.
+    const cardSaldo = cardDe(screen.getByRole("region", { name: "Saldo a favor" }))!;
+    expect(cardSaldo.parentElement?.className ?? "").not.toContain("max-w-md");
+  });
+
+  it("R13: la tarjeta del libro lleva un título visible", async () => {
+    sembrarTienda([COD, FLETE], "1200.00");
+    await verMiWallet();
+
+    const seccionLibro = screen.getByRole("region", { name: "Desglose de movimientos" });
+    const titulo = seccionLibro.querySelector<HTMLElement>('[data-slot="card-title"]');
+
+    expect(titulo).not.toBeNull();
+    expect(titulo!.textContent).toBe("Desglose de movimientos");
+    // VISIBLE, que es lo que pide R13: el `aria-label` de la sección ya nombraba el bloque para
+    // los lectores de pantalla, y para nadie más. Un título `sr-only` no arreglaría nada.
+    expect(titulo!.className).not.toContain("sr-only");
+    expect(titulo).toBeVisible();
+
+    // Y el nombre accesible de la sección sigue intacto: quien navega por regiones llega igual.
+    expect(seccionLibro.getAttribute("aria-label")).toBe("Desglose de movimientos");
+  });
+
+  it("R14: los filtros se renderizan dentro de la tarjeta del libro y por encima de la tabla", async () => {
+    sembrarTienda([COD, FLETE], "1200.00");
+    await verMiWallet();
+
+    const cardLibro = cardDelLibro();
+    const filtros = screen.getByRole("form", { name: "Filtros del desglose" });
+    const tabla = screen.getByRole("table");
+
+    expect(cardLibro.contains(filtros)).toBe(true);
+    expect(cardLibro.contains(tabla)).toBe(true);
+    // Por ENCIMA de la tabla, no en cualquier sitio de la tarjeta: `DOCUMENT_POSITION_FOLLOWING`
+    // dice que la tabla va después del formulario en el orden del documento.
+    expect(
+      filtros.compareDocumentPosition(tabla) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("R15: la paginación está en el pie de la tarjeta, en flujo normal, y conserva su nombre accesible", async () => {
+    sembrarTienda([COD, FLETE], "1200.00");
+    await verMiWallet();
+
+    // El nombre accesible NO cambia: es por el que ya se la encuentra desde la feature 43.
+    const paginacion = screen.getByRole("navigation", { name: "Paginación del desglose" });
+    const pie = paginacion.closest<HTMLElement>('[data-slot="card-footer"]');
+
+    expect(pie).not.toBeNull();
+    expect(cardDelLibro().contains(pie!)).toBe(true);
+
+    // `sticky={false}`: el pie tiene UN solo hijo. En modo pegajoso el control devuelve un
+    // fragmento de DOS elementos (envoltorio + centinela de 1px) y el `display:flex` del pie
+    // los colocaría como dos columnas, con el centinela `w-full` empujando la barra.
+    expect(pie!.children).toHaveLength(1);
+    expect(pie!.firstElementChild).toBe(paginacion);
+    expect(paginacion.className).not.toContain("sticky");
+  });
+});
+
+describe("MiWalletPage — el selector de cierre degrada sin esconder el dinero (R28–R30) [335]", () => {
+  /** Los tres importes y el libro siguen en pantalla: es lo que R29 protege. */
+  function laPantallaSigueEntera() {
+    expect(importeDe("A tu favor")).toBe("₡50.000");
+    expect(importeDe("Cargos de Ordenex")).toBe("₡1.200");
+    expect(importeDe("Ya pagado")).toBe("₡0");
+    expect(saldoEnPantalla()).toBe("₡48.800");
+    expect(screen.getByRole("table")).toBeInTheDocument();
+  }
+
+  it("R29: si la lectura de cierres no responde ok, el saldo y el libro siguen en pantalla y NO hay notFound", async () => {
+    sembrarTienda([COD, FLETE], "1200.00");
+    cierresMock.mockResolvedValue({ status: "forbidden" });
+
+    // Lo primero: la página NO se cae. Un tercer `notFound()` aquí dejaría a la tienda sin ver
+    // su dinero porque se cayó una COMODIDAD.
+    const { default: MiWalletPage } = await import("@/app/(app)/mi-wallet/page");
+    await expect(MiWalletPage()).resolves.toBeTruthy();
+    cleanup();
+
+    await verMiWallet();
+    laPantallaSigueEntera();
+
+    // Lo único degradado es el selector: deshabilitado y diciendo por qué.
+    expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeDisabled();
+    expect(
+      screen.getByText("No pudimos cargar tus cierres. Probá recargando la página."),
+    ).toBeInTheDocument();
+  });
+
+  it("R29: el estado `unauthenticated` de esa lectura tampoco tumba la pantalla", async () => {
+    sembrarTienda([COD, FLETE], "1200.00");
+    cierresMock.mockResolvedValue({ status: "unauthenticated" });
+
+    await verMiWallet();
+    laPantallaSigueEntera();
+    expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeDisabled();
+  });
+
+  it("R28: sin cierres, el selector queda deshabilitado y la pantalla lo dice", async () => {
+    sembrarTienda([COD, FLETE], "1200.00");
+    cierresMock.mockResolvedValue({ status: "ok", cierres: [], hayMas: false });
+
+    await verMiWallet();
+
+    expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeDisabled();
+    expect(screen.getByText("Todavía no hay cierres en tu wallet.")).toBeInTheDocument();
+    // Y no se confunde con la caída: son dos mensajes distintos porque son dos situaciones
+    // distintas — "no hay" no es "no pudimos".
+    expect(
+      screen.queryByText("No pudimos cargar tus cierres. Probá recargando la página."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("R28/R30: con cierres y sin tope alcanzado, no hay aviso ninguno (contraprueba)", async () => {
+    sembrarTienda([COD, FLETE], "1200.00");
+    await verMiWallet(); // `CIERRES_OK`: un cierre, `hayMas: false`
+
+    expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).not.toBeDisabled();
+    expect(screen.queryByText("Todavía no hay cierres en tu wallet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mostramos los cierres más recientes.")).not.toBeInTheDocument();
+  });
+
+  it("R30: con `hayMas`, la pantalla avisa de que solo ofrece los más recientes — y sin un segundo `role=note`", async () => {
+    sembrarTienda([COD, FLETE], "1200.00");
+    cierresMock.mockResolvedValue({ ...CIERRES_OK, hayMas: true });
+
+    await verMiWallet();
+
+    const aviso = screen.getByText("Mostramos los cierres más recientes.");
+    expect(aviso).toBeInTheDocument();
+
+    // El aviso NO lleva `role="note"`. La pantalla tiene EXACTAMENTE uno (el de la tarjeta del
+    // saldo) y se la busca en singular: un segundo `note` rompería `getByRole("note")` en los
+    // dos casos de la 172 sin hacer la pantalla más accesible.
+    expect(aviso.getAttribute("role")).toBeNull();
+    expect(screen.getAllByRole("note")).toHaveLength(1);
+    expect(screen.getByRole("note")).not.toBe(aviso);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FICHA 335 — D5 (R34): el gate de la ruta, DERIVADO de la constante.
+//
+// El caso de la feature 43 que hay arriba enumera cuatro roles a mano y se le escapa `apiKey`.
+// Este los deriva de `ROLES_MI_WALLET`, así que el día que alguien amplíe la constante, la lista
+// de denegados se estrecha SOLA y no queda un rol nuevo sin comprobar — ni un rol quitado
+// comprobado de más.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TODOS_LOS_ROLES: readonly RolValue[] = [
+  "maestro",
+  "admin",
+  "mensajero",
+  "adminTienda",
+  "adminSatelite",
+  "apiKey",
+];
+
+const PERMITIDOS: readonly string[] = ROLES_MI_WALLET;
+const DENEGADOS = TODOS_LOS_ROLES.filter((rol) => !PERMITIDOS.includes(rol));
+
+describe("MiWalletPage — el gate lee la MISMA constante que el menú (R34) [335]", () => {
+  it("CONTROL DE NO-VACUIDAD: hay roles denegados y `adminTienda` no está entre ellos", () => {
+    // Sin esto, una constante que por error contuviera todos los roles dejaría `DENEGADOS`
+    // vacío y el bucle de abajo no ejecutaría ni una aserción: verde sin mirar nada.
+    expect(DENEGADOS.length).toBeGreaterThan(0);
+    expect(DENEGADOS).not.toContain("adminTienda");
+    expect(PERMITIDOS).toEqual(["adminTienda"]);
+  });
+
+  for (const rol of DENEGADOS) {
+    it(`R34: ${rol} recibe notFound() y no dispara ningún pre-fetch`, async () => {
+      resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol });
+      const { default: MiWalletPage } = await import("@/app/(app)/mi-wallet/page");
+
+      await expect(MiWalletPage()).rejects.toThrow("NEXT_NOT_FOUND");
+
+      // Las TRES lecturas quedan sin llamar: el gate va antes del `Promise.all`, así que un rol
+      // ajeno no llega ni a abrir una consulta. `apiKey` incluida, que hoy no se afirma en
+      // ningún otro caso de este archivo.
+      expect(saldoMock).not.toHaveBeenCalled();
+      expect(listarMock).not.toHaveBeenCalled();
+      expect(cierresMock).not.toHaveBeenCalled();
+    });
+  }
+
+  it("R34: el `adminTienda` SÍ pasa — contraprueba de que el gate no está negando a todos", () => {
+    // El bucle de arriba solo mide negativas. Sin esta contraprueba, un `notFound()` sin
+    // condición las pasaría todas.
+    expect(PERMITIDOS).toContain("adminTienda");
+  });
+
+  it("R34: las tres lecturas se disparan para el rol permitido, y la de cierres va SIN argumentos", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "t1", rol: "adminTienda" });
+    const { default: MiWalletPage } = await import("@/app/(app)/mi-wallet/page");
+
+    render(await MiWalletPage());
+
+    expect(saldoMock).toHaveBeenCalledTimes(1);
+    expect(listarMock).toHaveBeenCalledTimes(1);
+    expect(cierresMock).toHaveBeenCalledTimes(1);
+    // R5: la lectura de cierres NO recibe entrada. No hay ninguna clave donde colar un alcance
+    // ajeno porque no hay entrada: la barrera es la ausencia de superficie, no una validación.
+    expect(cierresMock).toHaveBeenCalledWith();
+
+    // Y las opciones cruzan al módulo por props, ya resueltas en el servidor.
+    expect(moduleCalls[0].cierres).toEqual({
+      opciones: CIERRES_OK.cierres,
+      hayMas: false,
+      disponible: true,
+    });
   });
 });

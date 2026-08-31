@@ -43,6 +43,8 @@ function buildWalletDeps() {
     // Feature 170 (T I.1): saldos paginados; doble no-op, esta suite no los lee.
     listarSaldosTiendasPaginado: vi.fn(),
     agregarDesglosePorTienda: vi.fn(), // feature 171: doble no-op, este test no lee el ledger
+    // ficha 335: idem. Este camino no abre el selector de cierres de `/mi-wallet`.
+    listarCierresDeTienda: vi.fn(async () => []),
   };
   const walletTiendaFeedService: IWalletTiendaFeedService = {
     construirMovimientosPorTienda: vi.fn().mockResolvedValue([]),

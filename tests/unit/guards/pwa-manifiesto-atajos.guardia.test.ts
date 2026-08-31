@@ -179,12 +179,20 @@ describe("pwa · los atajos del manifiesto", () => {
     // asi que `destinosDe` devuelve los subitems y no su `href`, que no navega.
     // La CONCLUSION no cambia: el destino nuevo lo ven dos roles de cinco, la interseccion
     // sigue vacia y por tanto siguen siendo CERO atajos.
+    // Ficha 335 — `adminTienda` 3 -> 4, por UN destino nuevo y solo uno: el ítem «Mi wallet»
+    // (`/mi-wallet`), visible exclusivamente para ese rol (`ROLES_MI_WALLET`). Los otros cuatro
+    // roles NO se mueven, y que sigan clavados es parte de lo que se afirma aquí: si el ítem se
+    // hubiera abierto de más, este mismo `toEqual` lo diría.
+    // La CONCLUSIÓN no cambia: el destino nuevo lo ve UN rol de cinco, así que la intersección
+    // sigue vacía y por tanto siguen siendo CERO atajos. Un atajo del manifiesto es global a la
+    // app —lo ve quien instale la PWA, sea cual sea su rol—, y por eso solo puede salir de la
+    // intersección.
     expect(Object.fromEntries([...porRol].map(([rol, d]) => [rol, d.size]))).toEqual({
       maestro: 17,
       admin: 12,
       adminSatelite: 6,
       mensajero: 6,
-      adminTienda: 3,
+      adminTienda: 4,
     });
 
     const interseccion = [...porRol.values()].reduce((acc, destinos) =>

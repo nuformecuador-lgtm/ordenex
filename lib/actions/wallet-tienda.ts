@@ -7,6 +7,7 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   IWalletTiendaService,
+  ListarMisCierresServiceResult,
   ListarMisMovimientosServiceResult,
   ListarSaldosTiendasPaginadoServiceResult,
   ListarMovimientosDeTiendaServiceResult,
@@ -45,6 +46,17 @@ export type ListarMisMovimientosActionResult =
 
 export type ListarSaldosTiendasActionResult =
   | ListarSaldosTiendasServiceResult
+  | { status: "unauthenticated" };
+
+/**
+ * FICHA 335 (design §2.4, R3/R4) — los cierres del libro de la propia tienda, para el selector
+ * del filtro de `/mi-wallet`.
+ *
+ * TRES estados y ni uno mas: `ok`, `forbidden` (lo decide el servicio) y `unauthenticated` (lo
+ * decide este borde). NO hay `validation_error` porque no hay entrada que validar (R5).
+ */
+export type ListarMisCierresActionResult =
+  | ListarMisCierresServiceResult
   | { status: "unauthenticated" };
 
 // Feature 170 (T I.1, R41): el listado paginado de saldos. `forbidden` lo decide el servicio;
@@ -169,6 +181,35 @@ export async function listarSaldosTiendasAction(
     if (!actor) throw new UnauthenticatedError();
     const service = deps.service ?? buildService();
     return service.listarSaldosTiendas(actor);
+  });
+  return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
+}
+
+/**
+ * FICHA 335 (design §2.4, R1/R3/R4/R5) — los cierres que dejaron movimientos en el libro de la
+ * tienda del actor. Es la lectura que sustituye al campo de texto donde habia que teclear el
+ * identificador del cierre.
+ *
+ * Calcada de `verMiSaldoAction`, con las mismas dos propiedades y por los mismos motivos:
+ *
+ *  - **SIN zod, porque no hay entrada (R5).** El unico argumento es `deps`, que es la costura de
+ *    inyeccion de los tests. No existe ninguna clave de peticion que pueda ampliar el alcance:
+ *    la barrera no es una validacion, es la ausencia de superficie.
+ *  - **`UnauthenticatedError` ANTES de instanciar el servicio (R4).** Sin sesion no se construye
+ *    el repositorio ni se abre conexion: se corta aqui.
+ *
+ * El unico `AppErrorShape` que puede salir de `withErrorHandler` es `UNAUTHORIZED`, asi que no
+ * se usa `toWalletTiendaActionError` —cuyo `switch` existe para traducir tambien el `ZodError`
+ * que aqui no puede ocurrir—.
+ */
+export async function listarMisCierresAction(
+  deps: WalletTiendaDeps = {},
+): Promise<ListarMisCierresActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R4: antes de tocar el service
+    const service = deps.service ?? buildService();
+    return service.listarMisCierres(actor);
   });
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
