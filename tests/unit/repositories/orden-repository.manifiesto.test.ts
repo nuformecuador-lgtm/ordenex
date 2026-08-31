@@ -177,7 +177,7 @@ describe("R9 — nombre del actor que ejecuto la operacion", () => {
     expect(nombre).toBe("Ana Maestra");
     expect(prisma.usuario.findUnique).toHaveBeenCalledWith({
       where: { id: "u-1" },
-      select: { nombre: true },
+      select: { nombre: true, primerApellido: true, segundoApellido: true },
     });
   });
 

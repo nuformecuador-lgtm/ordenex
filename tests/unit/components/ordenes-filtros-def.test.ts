@@ -17,11 +17,11 @@ const CATALOGO: CatalogoFiltrosOrdenesDTO = {
     { id: "z2", nombre: "Satelite Norte" },
   ],
   mensajeros: [
-    { id: "m1", nombre: "Ana Mora", zonaId: "z1" },
-    { id: "m2", nombre: "Beto Ruiz", zonaId: "z2" },
+    { id: "m1", nombre: "Ana Mora", zonaId: "z1", estado: "activo" },
+    { id: "m2", nombre: "Beto Ruiz", zonaId: "z2", estado: "activo" },
     // Mensajero SIN zona: existe (la columna es nullable) y no se cuela como opcion
     // huerfana en el encadenado.
-    { id: "m3", nombre: "Caro Sin Zona", zonaId: null },
+    { id: "m3", nombre: "Caro Sin Zona", zonaId: null, estado: "activo" },
   ],
   tiendas: [
     { id: "t1", nombre: "Tienda Activa", esApiKey: false, activa: true },

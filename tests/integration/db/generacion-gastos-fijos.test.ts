@@ -5,6 +5,8 @@ import { GeneracionGastosFijosService } from "@/lib/services/GeneracionGastosFij
 import { derivarCaja } from "@/lib/utils/caja-tesoreria";
 import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { IGastoFijoPlantillaRepository } from "@/lib/interfaces/repositories/IGastoFijoPlantillaRepository";
+import type { IGastoFijoCobroRepository } from "@/lib/interfaces/repositories/IGastoFijoCobroRepository";
+import type { GeneracionGastosFijosTx } from "@/lib/interfaces/services/IGeneracionGastosFijosService";
 import type { GastoFijoPlantillaDTO } from "@/lib/types/gasto-fijo-plantilla";
 
 // Feature 45 (R28/R31) — idempotencia del cron por (plantilla, periodo). Simula el indice
@@ -72,6 +74,10 @@ function plantilla(overrides: Partial<GastoFijoPlantillaDTO> = {}): GastoFijoPla
     periodicidadUnidad: "meses",
     periodicidadCantidad: 1,
     fechaCobro: "2026-07-15",
+    // Ficha 333 (R5): este archivo mide la IDEMPOTENCIA DEL LIBRO, o sea el camino
+    // AUTOMATICO. Con «requiere aprobacion» estas plantillas no escribirian ni una fila en
+    // `wallet_movimiento` y los tres casos de abajo pasarian a medir el vacio.
+    requiereAprobacion: false,
     createdAt: "2026-07-01T10:00:00.000Z",
     updatedAt: "2026-07-01T10:00:00.000Z",
     ...overrides,
@@ -88,11 +94,31 @@ function fakePlantillaRepo(activas: GastoFijoPlantillaDTO[]): IGastoFijoPlantill
     // Feature 170 (T I.1): listado paginado; el cron no lo usa.
     listarPaginado: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     obtenerPorId: vi.fn(),
+    // Ficha 332: el borrado entra en el contrato del repositorio; el cron NO lo usa (ni debe).
+    eliminar: vi.fn(),
   };
 }
 
 const JULIO = new Date("2026-07-15T18:00:00.000Z"); // periodo "2026-07"
 const AGOSTO = new Date("2026-08-15T18:00:00.000Z"); // periodo "2026-08"
+
+/**
+ * Ficha 333 — doble del repositorio de COBROS. Este archivo mide la idempotencia del LIBRO con
+ * plantillas que cobran solas, asi que la cola queda siempre en cero: lo que se comprueba de paso
+ * es que ese camino NO crea cobros.
+ */
+function fakeCobroRepo(): IGastoFijoCobroRepository {
+  return {
+    crearPendientes: vi.fn().mockResolvedValue(0),
+    obtenerPorId: vi.fn(),
+    listarPendientes: vi.fn(),
+    contarPendientes: vi.fn().mockResolvedValue(0),
+    contarPendientesDePlantilla: vi.fn(),
+    marcarDecidido: vi.fn(),
+    enlazarMovimiento: vi.fn(),
+    cancelarPendientesDePlantilla: vi.fn(),
+  };
+}
 
 function serviceFor(store: ReturnType<typeof makeWalletStore>, activas: GastoFijoPlantillaDTO[]) {
   const client = { walletMovimiento: store.walletMovimiento } as unknown as PrismaClient;
@@ -100,7 +126,10 @@ function serviceFor(store: ReturnType<typeof makeWalletStore>, activas: GastoFij
     svc: new GeneracionGastosFijosService(
       fakePlantillaRepo(activas),
       new WalletMovimientoRepository(client),
-      client,
+      fakeCobroRepo(),
+      // Ficha 333 (R10): runner en memoria con la misma semantica que `prisma.$transaction`. La
+      // tienda de arriba ya modela el indice unico parcial, que es lo que este archivo mide.
+      async (fn) => fn(client as unknown as GeneracionGastosFijosTx),
     ),
     repo: new WalletMovimientoRepository(client),
   };
@@ -115,11 +144,14 @@ describe("cron gastos fijos — idempotencia por periodo (R28/R31)", () => {
     ]);
 
     const primera = await svc.ejecutarGeneracion(JULIO);
+    // LITERAL a proposito (el contrato del resumen, R13): se actualiza a mano.
     expect(primera).toEqual({
       fecha: "2026-07-15",
       plantillasActivas: 2,
       plantillasQueAplicanHoy: 2,
       egresosGenerados: 2,
+      cobrosPendientesCreados: 0, // ficha 333: las dos COBRAN SOLAS
+      cobrosPendientesTotales: 0,
     });
     expect(store.rows).toHaveLength(2);
     // Feature 173 (T D.1): mismo numero, otro camino — el agregado viene por (categoria, tipo)
@@ -148,6 +180,44 @@ describe("cron gastos fijos — idempotencia por periodo (R28/R31)", () => {
     expect(store.rows).toHaveLength(2);
     const claves = store.rows.map((r) => r.origenId).sort();
     expect(claves).toEqual(["p-alquiler:2026-07", "p-alquiler:2026-08"]);
+  });
+
+  /**
+   * Ficha 332 (R10) — LA CLAVE DE IDEMPOTENCIA DERIVA DEL ID, NO DEL CONCEPTO.
+   *
+   * Es el testigo del riesgo R-1 de `specs/332-eliminar-plantilla-gasto-fijo/design.md §7`: desde
+   * que las plantillas se pueden BORRAR, «borrar Alquiler y volver a crear Alquiler» produce una
+   * plantilla con OTRO uuid, o sea otra clave, y el indice unico parcial NO impide que el cron
+   * emita un segundo egreso de un periodo ya cobrado. Aqui se fija el hecho —dos plantillas con
+   * el MISMO concepto y el mismo periodo generan DOS filas con claves distintas— para que quien
+   * cambie la derivacion de `origen_id` tenga que hacerlo a proposito.
+   *
+   * No lo introduce la ficha 332: hoy se consigue igual creando una segunda plantilla con el
+   * mismo concepto, sin borrar nada. La mitigacion es de diseño (la confirmacion empuja a
+   * DESACTIVAR, que conserva el id), no un `if` en el cron.
+   */
+  it("R10: dos plantillas con el MISMO concepto producen origen_id DISTINTOS (borrar y recrear no reusa la clave)", async () => {
+    const store = makeWalletStore();
+    const { svc } = serviceFor(store, [
+      plantilla({ id: "p-vieja", concepto: "Alquiler" }),
+      // La «recreada»: mismo concepto, mismo monto, mismo ciclo. Lo unico distinto es el uuid,
+      // que es exactamente lo que pasa al borrar y volver a dar de alta el gasto.
+      plantilla({ id: "p-recreada", concepto: "Alquiler" }),
+    ]);
+
+    const r = await svc.ejecutarGeneracion(JULIO);
+
+    // Dos egresos del MISMO periodo y el MISMO concepto: el indice unico no los junta, porque la
+    // clave lleva el id de la plantilla y no su concepto.
+    expect(r.egresosGenerados).toBe(2);
+    expect(store.rows.map((f) => f.origenId).sort()).toEqual([
+      "p-recreada:2026-07",
+      "p-vieja:2026-07",
+    ]);
+
+    // Y las descripciones son identicas: por el TEXTO no hay forma de distinguirlas. La clave es
+    // el id, y borrarlo lo tira.
+    expect(new Set(store.rows.map((f) => f.descripcion))).toEqual(new Set(["Alquiler — 2026-07"]));
   });
 
   it("un egreso del cron NO colisiona con su reversa (ingreso_ajuste, otra categoria)", async () => {

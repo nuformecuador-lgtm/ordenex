@@ -79,7 +79,7 @@ describe("consultas del listado paginado de cuentas por pagar (T L.1)", () => {
     expect(findMany).toHaveBeenCalledTimes(1);
     const args = findMany.mock.calls[0]![0]!;
     expect(args.where).toEqual({ id: { in: ["m-c", "m-a", "m-d", "m-b"] } }); // los CUATRO
-    expect(args.select).toEqual({ id: true, nombre: true }); // y nada mas del usuario
+    expect(args.select).toEqual({ id: true, ...{ nombre: true, primerApellido: true, segundoApellido: true } }); // y nada mas del usuario
     expect(args.take).toBeUndefined();
     expect(args.skip).toBeUndefined();
   });

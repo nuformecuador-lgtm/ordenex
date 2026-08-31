@@ -99,6 +99,20 @@ const PATH_ANALITICA = "/api/ordenes/api-key/analitica";
 // puede usarlo.
 const PATH_HABILITAR = "/api/ordenes/api-key/habilitar";
 
+// ⚠️ FICHA 322 (2026-08-28) — LO QUE ESTA LISTA NO PUEDE VER, Y QUIÉN LO VE AHORA.
+//
+// Esta lista es el contrato PUBLICADO, escrito y firmado a mano, y ése es justo su valor: subir de
+// diez a once obliga a un humano a escribir el alta y su porqué en el mismo commit (la 255, la 267
+// y la 266 lo hicieron aquí arriba). Lo que NO puede hacer —porque compara el objeto TS contra sí
+// mismo y contra su copia en `.yaml`, nunca contra el filesystem— es enterarse de que existe un
+// `app/api/ordenes/api-key/**/route.ts` que nadie documentó: eso deja el gate ENTERO en verde. Se
+// midió el 2026-08-28: con una ruta nueva sin documentar en el canal, los 13 archivos y 223 tests
+// de `tests/unit/api/` pasaron los 223.
+//
+// Ese hueco lo cubre ahora `tests/unit/guards/openapi-canal-rutas-reales.guardia.test.ts`, que lee
+// las rutas REALES del filesystem y compara OPERACIONES (verbo + path) en las dos direcciones. Las
+// dos se necesitan y NINGUNA sustituye a la otra: sin esta lista se pierde la firma humana del
+// contrato; sin la guardia vuelve el agujero de la 322. No borres una alegando la otra.
 /** Los 10 endpoints que el canal por API key publica tras la 177, la 255, la 267 y la 266. */
 const PATHS_ESPERADOS = [
   "/api/ordenes/api-key/carga",
@@ -131,9 +145,16 @@ describe("177/R41 + 255/R47 + 267/R39 + 266/R28 — el OpenAPI publica los diez 
     expect(pathsDelYaml()).toEqual(PATHS_ESPERADOS);
   });
 
-  it("la consulta por identificador es GET y reutiliza el schema OrdenDetalle de la 106", () => {
+  // ALTA de la FICHA 320 (2026-08-28) — el path de la orden por identificador gana un SEGUNDO
+  // verbo. El censo de PATHS no sube (sigue en diez): el borrado NO estrena ruta, estrena
+  // `DELETE` sobre la que ya existe, porque retira EXACTAMENTE el recurso que esa ruta
+  // identifica. Esta lista estaba firmada en `["parameters", "get"]` y publicar el borrado la
+  // puso ROJA: ESE es su trabajo, y sube a tres A PROPOSITO, en el mismo commit que publica el
+  // endpoint. El contenido del `delete` (schema, codigos, los dos artefactos) se afirma en
+  // `openapi-320-eliminar.test.ts`, igual que la 266 hizo con el suyo.
+  it("la consulta por identificador es GET, comparte path con el DELETE de la 320 y reutiliza OrdenDetalle", () => {
     const operacion = openApiSpec.paths[PATH_DETALLE_POR_ID];
-    expect(Object.keys(operacion)).toEqual(["parameters", "get"]);
+    expect(Object.keys(operacion)).toEqual(["parameters", "get", "delete"]);
     expect(operacion.get.responses["200"].content["application/json"].schema).toEqual({
       $ref: "#/components/schemas/OrdenDetalle",
     });

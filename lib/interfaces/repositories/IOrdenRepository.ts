@@ -46,18 +46,32 @@ export interface CreateOrdenData {
 }
 
 /**
- * FICHA 312 (2026-08-28) — los CUATRO campos que la correccion de datos del cliente puede
- * escribir, y NINGUNO MAS.
+ * FICHA 312 (2026-08-28), AMPLIADA POR LA 327 — los campos que la correccion puede escribir, y
+ * NINGUNO MAS. Cuatro con la 312; DIEZ desde la 327, que le suma la ubicacion.
  *
- * ⚠️ QUE NO ESTE `estatusId` NI `direccion` NO ES UN DESCUIDO: ES EL MECANISMO. `update` (arriba)
- * puede escribir los dos, y por eso arrastra dos efectos colaterales — el append a
- * `orden_historial_estado` cuando cambia el estatus y el encolado de geocodificacion cuando cambia
- * la direccion. La ficha 312 exige que la correccion NO escriba en ninguna otra tabla (R14) y no
- * toque ningun otro dato de la orden (R5). Con este tipo, esas dos garantias dejan de depender de
- * que el llamador se acuerde de no mandar `estatusId`: NO SON REPRESENTABLES.
+ * ⚠️ LO QUE NO ESTA AQUI NO ES UN DESCUIDO: ES EL MECANISMO (327/R24). Estos SIETE campos NO SON
+ * REPRESENTABLES por este tipo, y esa es toda su defensa:
  *
- * Si alguien añade aqui un campo, esta reabriendo el alcance de la ficha (D1) y quitandole a R5/R14
- * su unica defensa estructural. La conversacion va a la puerta de aprobacion humana, no a este tipo.
+ *     estatusId · tiendaId · montoCobrar · cobraComision · numGuia · numRemision ·
+ *     mensajeroAsignadoId
+ *
+ * `estatusId` es el mas caro de los siete: `update` (abajo) SI puede escribirlo y por eso arrastra
+ * el append a `orden_historial_estado`. Este camino es estructuralmente incapaz de dispararlo. Y
+ * `montoCobrar` es el segundo: corregir una ubicacion mueve el FLETE que Ordenex factura, pero no
+ * puede tocar el dinero que la tienda declara que hay que cobrarle al cliente.
+ *
+ * ⚠️ `direccion` ENTRO EN LA 327, Y LO QUE ARRASTRA ESTA ATENDIDO. Escribirla obliga a encolar la
+ * re-geocodificacion (feature 91), y por eso `corregirDatosCliente` pasa a compartir con `update`
+ * el guard `direccionPreviaParaGuard`/`encolarSiCambiaDireccion`, dentro de una transaccion. Sin
+ * eso, la orden quedaria con direccion NUEVA y coordenadas VIEJAS, en silencio.
+ *
+ * ⚠️ `zonaId` ESTA AQUI PERO NO EN EL SCHEMA DEL BORDE. Es la distincion que entrega 327/R5: el
+ * cliente NO puede mandar la zona (`corregirDatosClienteSchema` es `.strict()` y no la incluye);
+ * la DERIVA el servidor a partir del distrito recibido.
+ *
+ * Si alguien añade aqui un campo, esta reabriendo el alcance de la ficha (312/D1, 327/D2) y
+ * quitandole a R24 su unica defensa estructural. La conversacion va a la puerta de aprobacion
+ * humana, no a este tipo. Una guardia mide esta lista.
  */
 export interface CorregirDatosClienteData {
   destinatario?: string;
@@ -65,6 +79,72 @@ export interface CorregirDatosClienteData {
   producto?: string;
   /** `null` = vaciar la nota PROPIA de la orden (columna `orden.notas`), no ninguna nota de hilo. */
   notas?: string | null;
+  // ── FICHA 327 (D1) — la ubicacion: los cinco de entrada mas la zona que deriva el servidor. ──
+  /** Sin `| null`: la orden no se puede quedar sin direccion desde esta superficie (327/R8). */
+  direccion?: string;
+  provinciaId?: string;
+  cantonId?: string;
+  /** Sin `| null`: `orden.zona_id` se deriva del distrito, asi que no se puede vaciar (327/R4). */
+  distritoId?: string;
+  /** DERIVADA del distrito por el servidor, jamas tomada de la entrada (327/R5). */
+  zonaId?: string;
+  /** Sin `| null` y `> 0`: no se deja la orden sin peso desde esta superficie (327/R9). */
+  peso?: number;
+}
+
+/**
+ * FICHA 327 (design §9.4) — la orden tal como la lee la correccion. Sustituye al `findById` que
+ * usaba la 312, cuyo `OrdenDTO` no lleva `direccion`, ni `montoCobrar`, ni `cobraComision` — las
+ * tres entradas del aviso del importe (R11/R12).
+ *
+ * `montoCobrar` es STRING escala 2 y NUNCA `number`: leccion medida de la feature 204 (14 de 66
+ * ordenes con un centimo de desviacion al multiplicar en el navegador). `peso` SI es `number`: no
+ * es dinero.
+ */
+export interface OrdenParaCorreccionRow {
+  id: string;
+  tiendaId: string;
+  /** El `value` del catalogo, no el id: la ventana de estado se decide con el valor. */
+  estatusValue: string;
+  /** 327/R36: la superficie avisa de que la etiqueta ya impresa conserva los datos viejos. */
+  numGuia: number | null;
+  destinatario: string;
+  telefonoDest: string;
+  producto: string;
+  notas: string | null;
+  direccion: string | null;
+  peso: number | null;
+  montoCobrar: string | null;
+  cobraComision: boolean;
+  provinciaId: string;
+  cantonId: string;
+  distritoId: string | null;
+  distritoNombre: string | null;
+  zonaId: string;
+  zonaNombre: string;
+  /** De la ZONA: elige la columna GAM del flete. */
+  esCentral: boolean;
+  /** Del DISTRITO: elige el pacto especial. Ya normalizada (la columna de origen es tri-valuada). */
+  esZonaEspecial: boolean;
+  /** 327/R16: la orden ya tiene al menos una fila congelada en un cierre. */
+  yaEnUnCierre: boolean;
+}
+
+/**
+ * FICHA 327 (design §9.4) — el distrito propuesto, con su cadena geografica y su zona ya
+ * colapsada. `provinciaId` viene por `canton.provinciaId` para poder comprobar la cadena de R6 en
+ * UNA sola consulta.
+ */
+export interface DistritoResueltoRow {
+  id: string;
+  nombre: string;
+  cantonId: string;
+  provinciaId: string;
+  /** `null` = el distrito NO resuelve exactamente una zona (0 o >1). No se inventa una (R7). */
+  zonaId: string | null;
+  zonaNombre: string | null;
+  esCentral: boolean;
+  esZonaEspecial: boolean;
 }
 
 // Campos actualizables a nivel de datos (ya filtrados por rol en el servicio).
@@ -81,12 +161,20 @@ export interface UpdateOrdenData {
   peso?: number | null;
   notas?: string | null;
   /**
-   * Feature 91 (R10/R11, decision Q1): campo del GUARD LATENTE de re-geocodificacion.
-   * Hoy NADIE lo informa: `actualizarOrdenSchema` es `.strict()` y no lo admite, y
-   * `OrdenRepository.toUpdateData()` NO lo proyecta, asi que `update()` sigue siendo
-   * incapaz de ESCRIBIR la direccion. Declararlo aqui permite que el guard exista y sea
-   * testeable hoy, sin ampliar el CRUD (permitir editar la direccion es otra feature,
-   * explicitamente fuera de alcance). NO eliminar por "no usado".
+   * Feature 91 (R10/R11, decision Q1): campo del guard de re-geocodificacion.
+   *
+   * ⚠️ ACTUALIZADO POR LA FICHA 327 (2026-08-28). Este docstring decia «hoy NADIE lo informa» y
+   * daba dos razones; una de las dos ya no vale y por eso se reescribe en vez de dejarla
+   * mintiendo:
+   *  · `actualizarOrdenSchema` SI incluye `direccion` desde la 327. Esa mitad CADUCO.
+   *  · `OrdenRepository.toUpdateData()` sigue SIN proyectarla, y ningun consumidor vivo de
+   *    `update()` la informa, asi que `update()` sigue siendo incapaz de ESCRIBIRLA. Esa mitad
+   *    sigue en pie, y es la que sostiene el campo.
+   *
+   * Quien SI escribe la direccion es `corregirDatosCliente` —con su propio tipo
+   * (`CorregirDatosClienteData`)— y comparte con `update` la UNICA implementacion del guard
+   * (`direccionPreviaParaGuard` + `encolarSiCambiaDireccion`). Ese es hoy el llamador vivo del
+   * guard: ya no es codigo latente. NO eliminar este campo por "no usado".
    */
   direccion?: string | null;
 }
@@ -882,6 +970,25 @@ export type CancelarViaApiResult =
   | { status: "not_found" }
   | { status: "conflict"; estadoActual: string };
 
+/**
+ * FICHA 320 — la lectura MINIMA que el service de BORRADO por API key necesita de UNA orden.
+ *
+ * `estatusValue` es el unico dato de DECISION (lo consulta `esEstadoEliminable`, fuente unica de
+ * la 319); `numGuia`/`numRemision` son la IDENTIDAD que se devuelve al integrador para que sepa
+ * que retiro, e `id` es por donde se escribe. Ni montos, ni fila entera, ni `estatusId` —nadie lo
+ * lee: aqui no hay transicion que registrar—.
+ *
+ * Molde de `OrdenParaHabilitacionApi` (feature 266) por la misma razon: lo que no llega no se
+ * puede consultar por descuido.
+ */
+export interface OrdenParaEliminacionApi {
+  id: string;
+  /** `null` cuando la orden aun no tiene guia: el caso que motiva la ficha (fulfillment). */
+  numGuia: number | null;
+  numRemision: string;
+  estatusValue: string;
+}
+
 // Feature 102 (T7, design §5.2) — fila de una orden RECHAZADA POR SLA de la tienda, para la
 // superficie derivada de solo-lectura (dentro de /novedades). Molde de `NovedadOrdenRow`, mas el
 // `numRemision` y el `monto` de 56. `monto` = `ingreso_bodega_rechazo` de la gestion sintetica SLA
@@ -1044,28 +1151,46 @@ export interface IOrdenRepository {
    * chequeo y el efecto. Eso ES R13 — si el estado se movio entre la lectura del servicio y esta
    * escritura, la sentencia no alcanza ninguna fila y no queda ningun efecto parcial.
    *
-   * SIN `$transaction` y sin tocar el constructor: con una sola sentencia no hay dos escrituras
-   * que coordinar, y Postgres ya la ejecuta atomicamente.
+   * ⚠️ CON `$transaction` DESDE LA FICHA 327, y aqui decia lo contrario. El motivo: cuando la
+   * correccion cambia la direccion hay que encolar la re-geocodificacion, y ese encolado TIENE que
+   * compartir transaccion con la escritura (patron OUTBOX de la feature 91/R7). El constructor
+   * sigue sin tocarse: `jobRepo` ya venia inyectado con default desde la 91.
    *
-   * @param estadosBloqueados los `order_status.value` en los que NO se corrige (D3:
+   * @param estadosBloqueados los `order_status.value` en los que NO se corrige (312/D3:
    *        `ESTADOS_SIN_CORRECCION`). Va como parametro y no hardcodeado para que la REGLA viva en
    *        el modulo puro que la pantalla tambien lee.
    * @returns `"ok"` si escribio la fila; `"conflict"` si no alcanzo ninguna (borrada, inexistente
-   *        o ya fuera de la ventana). NUNCA escribe en `orden_historial_estado`, en `orden_nota`
-   *        ni en ninguna otra tabla (R14): ver `CorregirDatosClienteData`.
+   *        o ya fuera de la ventana), y en ese caso NO encola nada (327/R21). La UNICA escritura
+   *        fuera de `orden` es la fila de `jobs` cuando la direccion cambia (327/R19, enmienda
+   *        declarada a 312/R14): ni historial, ni hilo de notas, ni auditoria.
    */
   corregirDatosCliente(
     ordenId: string,
     data: CorregirDatosClienteData,
     estadosBloqueados: readonly string[],
   ): Promise<"ok" | "conflict">;
+  /**
+   * FICHA 327 (design §9.4) — la lectura que alimenta la correccion Y su aviso de importe.
+   *
+   * Sustituye a `findById` en ese camino: `OrdenDTO` no lleva `direccion`, `montoCobrar` ni
+   * `cobraComision`. Conserva `deletedAt: null` en el `WHERE`, que es lo que hace que una orden
+   * BORRADA y una INEXISTENTE devuelvan `null` igual — el resultado opaco de R30, gratis.
+   */
+  findParaCorreccion(ordenId: string): Promise<OrdenParaCorreccionRow | null>;
+  /**
+   * FICHA 327 (design §9.4) — resuelve UN distrito: su cadena geografica (para R6) y su zona
+   * unica (para R5/R7), en una sola consulta. `null` = ese distrito no existe.
+   */
+  findDistritoParaCorreccion(distritoId: string): Promise<DistritoResueltoRow | null>;
   // BORRADO 2026-08-07 (tanda 2): `existsEstatus`. Para comprobar que un estatus existe, lo
   // vivo es `findEstatusIdByValue`, que es lo que usan los servicios de dominio.
   //
   // `softDelete` tambien se retiro ese dia ("ninguna pantalla ofrece borrar una orden") y
-  // VUELVE con la feature «eliminar orden» (2026-08-26), ahora POR LOTE y con superficie:
-  // vuelve a ser el UNICO writer de `deleted_at` en `orden`. El predicado `deleted_at IS NULL`
-  // nunca se fue: sigue vivo y aplicandose en TODAS las lecturas.
+  // VUELVE con la feature «eliminar orden» (2026-08-26), ahora POR LOTE y con superficie. El
+  // predicado `deleted_at IS NULL` nunca se fue: sigue vivo y aplicandose en TODAS las lecturas.
+  // Desde la ficha 320 los writers de la columna son TRES —`softDelete` (app, por lote, sin
+  // frontera de tienda), `restore` (su reversion) y `softDeleteViaApi` (canal por API key, UNA
+  // orden y acotada al owner)—; el enunciado de "unico writer" que vivia aqui ya no es cierto.
   /**
    * Borrado LOGICO por lote: fija `deleted_at = now()` en las ordenes de `ids` que aun NO
    * estuvieran borradas. El `where` incluye `deletedAt: null` (patron de `OrdenGeocodeRepository`
@@ -1079,7 +1204,8 @@ export interface IOrdenRepository {
   /**
    * Pedido humano (2026-08-27) — LA REVERSION del borrado logico: devuelve `deleted_at` a NULL
    * en las ordenes de `ids` que SI estuvieran borradas. Es el gemelo exacto de `softDelete` y
-   * el segundo (y ultimo) writer de la columna.
+   * el segundo writer de la columna. El TERCERO lo trae la ficha 320: `softDeleteViaApi`, el del
+   * canal por API key, que es el unico acotado por tienda.
    *
    * El `where` incluye `deletedAt: { not: null }` por la MISMA razon que el de `softDelete`
    * lleva `deletedAt: null`: hace la operacion idempotente y a prueba de carreras. Una orden
@@ -1803,6 +1929,46 @@ export interface IOrdenRepository {
     numGuia: number,
     ownerId: string,
   ): Promise<OrdenParaHabilitacionApi | null>;
+
+  /**
+   * FICHA 320 (T1) — LECTURA, y solo lectura, de la orden `ordenId` DEL OWNER, para que el
+   * service de borrado por API key decida entre 404, 409 y borrar.
+   *
+   * El owner va EN EL `where` (`id = ordenId AND tienda_id = ownerId AND deleted_at IS NULL`),
+   * igual que en `cancelarViaApi` y `findParaHabilitacionApi`, y NO en un `if` posterior. `null`
+   * cubre los tres casos —no existe, ya borrada, es de otra tienda— SIN distinguirlos: el borde
+   * responde el mismo 404 en los tres, de modo que una key no puede usar este endpoint para
+   * averiguar si existe una orden ajena.
+   *
+   * `ordenId` llega YA resuelto por `findByGuiaORemisionForOwner` (feature 177), que tambien
+   * fuerza el owner. Volver a exigirlo aqui es redundante A PROPOSITO.
+   */
+  findParaEliminacionApi(
+    ordenId: string,
+    ownerId: string,
+  ): Promise<OrdenParaEliminacionApi | null>;
+  /**
+   * FICHA 320 (T2) — TERCER (y ultimo) writer de `deleted_at` en `orden`, y el unico ACOTADO POR
+   * TIENDA. Fija `deleted_at = now()` en UNA orden.
+   *
+   * LAS CUATRO CLAVES DEL `where` VAN JUNTAS EN LA MISMA SENTENCIA, que es lo que hace que no
+   * exista ventana entre comprobar y escribir: `id` identifica, `tiendaId` es la frontera
+   * multi-tenant, `deletedAt: null` la hace idempotente ante carreras (dos borrados simultaneos
+   * no reescriben el instante del primero) y `estatus.value IN estadosPermitidos` impide que una
+   * orden que cambio de estado entre la lectura y el UPDATE se borre igualmente.
+   *
+   * `estadosPermitidos` lo pasa el SERVICE desde `ESTADOS_ELIMINABLES` (fuente unica, ficha 319):
+   * el repositorio no decide que estados son borrables, solo aplica el filtro que recibe. Una
+   * lista VACIA no borra nada (`IN ()` no casa con ninguna fila): falla CERRADO.
+   *
+   * Devuelve CUANTAS filas cambio (0 o 1). NO escribe en ninguna otra tabla: ni historial de
+   * estados (borrar no es transicionar), ni `gestion_orden`, ni la carga.
+   */
+  softDeleteViaApi(params: {
+    ordenId: string;
+    ownerId: string;
+    estadosPermitidos: readonly string[];
+  }): Promise<number>;
 
   /**
    * Suma UNO al contador de intentos de contacto de la orden y devuelve el valor RESULTANTE.

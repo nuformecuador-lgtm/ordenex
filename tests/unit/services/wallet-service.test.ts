@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { WalletService } from "@/lib/services/WalletService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
+  CrearMovimientoInput,
   IWalletMovimientoRepository,
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
@@ -54,15 +55,49 @@ const AGREGADO: AgregadoCajaRow[] = [
   { categoria: "egreso_gasto", tipo: "egreso", total: "300.00" },
 ];
 
+/**
+ * Ficha 334 (T C.1) — el instante que la BASE pone cuando la clave `fechaMovimiento` no viaja.
+ *
+ * El doble tiene que distinguir «lo puso el DEFAULT de la columna» de «lo puso el servicio»:
+ * si las dos ramas produjeran el mismo valor, el caso de R23 pasaria igual con la rama de R22.
+ */
+const INSTANTE_DEL_DEFAULT = "2026-08-29T21:15:33.000Z";
+
+/**
+ * Doble del repositorio que RECUERDA lo que se inserto, para que `obtenerPorId` pueda devolver
+ * la fila recien creada. Sin esta memoria no se puede probar R28 —«devuelve el que creaste, no
+ * el mas reciente de su categoria»—: haria falta que el doble supiera de que fila se habla.
+ */
 function buildRepo(): IWalletMovimientoRepository {
+  const creados = new Map<string, WalletMovimientoDTO>();
   return {
-    crearMovimientos: vi.fn().mockResolvedValue(1),
+    crearMovimientos: vi.fn(async (_tx: WalletTxClient, movs: CrearMovimientoInput[]) => {
+      for (const m of movs) {
+        if (m.id === undefined) continue; // los escritores automaticos no pasan id
+        creados.set(
+          m.id,
+          mov({
+            id: m.id,
+            tipo: m.tipo,
+            categoria: m.categoria,
+            monto: m.monto,
+            origenTipo: m.origenTipo,
+            origenId: m.origenId,
+            descripcion: m.descripcion ?? null,
+            registradoPor: m.registradoPor ?? null,
+            fechaMovimiento: (m.fechaMovimiento ?? new Date(INSTANTE_DEL_DEFAULT)).toISOString(),
+          }),
+        );
+      }
+      return movs.length;
+    }),
     listar: vi.fn().mockResolvedValue({ movimientos: [mov()], total: 1 }),
     agregarPorCategoriaYTipo: vi.fn().mockResolvedValue(AGREGADO),
-    obtenerPorId: vi.fn().mockResolvedValue(null),
+    obtenerPorId: vi.fn(async (id: string) => creados.get(id) ?? null),
     agregarPorCategoria: vi
       .fn()
       .mockResolvedValue({ gastoFijo: "0.00", gastoVariable: "0.00", sueldo: "0.00" }),
+    obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
   };
 }
 
@@ -420,5 +455,134 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
     // R3: el repo tampoco expone update/delete de movimientos.
     expect((repo as unknown as Record<string, unknown>).actualizar).toBeUndefined();
     expect((repo as unknown as Record<string, unknown>).eliminar).toBeUndefined();
+  });
+});
+
+
+// ── Ficha 334 (T C.1) — la FECHA elegida y el movimiento que se devuelve ──
+//
+// Dos defectos que la fecha vuelve DETERMINISTAS y que por eso entran aqui:
+//
+//  1. Con la fecha de hoy, el movimiento tiene que seguir fechandose con el instante del
+//     registro (R23). Es el caso normal, y su coste tiene que ser CERO.
+//  2. La relectura «el mas reciente de esta categoria» funcionaba por accidente. Con un
+//     movimiento fechado en el pasado devuelve OTRA fila, y el servicio afirma «este es el que
+//     registraste» sobre dinero ajeno (R28).
+
+describe("WalletService.registrarMovimientoManual — la fecha elegida (R22/R23/R28)", () => {
+  /** 09:00 CR del 29 de agosto: el reloj de pared con el que se teclea. */
+  const AHORA = "2026-08-29T15:00:00.000Z";
+  const HOY_CR = "2026-08-29";
+  const AYER_CR = "2026-08-28";
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function conRelojEnAhora(): void {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(AHORA));
+  }
+
+  function ajuste(fecha?: string) {
+    return {
+      tipo: "egreso" as const,
+      categoria: "egreso_ajuste" as const,
+      monto: "50.00",
+      descripcion: "correccion",
+      ...(fecha !== undefined ? { fecha } : {}),
+    };
+  }
+
+  function filaInsertada(repo: IWalletMovimientoRepository): CrearMovimientoInput {
+    return (repo.crearMovimientos as ReturnType<typeof vi.fn>).mock.calls[0][1][0];
+  }
+
+  it("R23: con la fecha de HOY, la clave fechaMovimiento NO viaja (manda el DEFAULT de la columna)", async () => {
+    conRelojEnAhora();
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+
+    const r = await svc.registrarMovimientoManual(ajuste(HOY_CR), MAESTRO);
+
+    expect(r.status).toBe("ok");
+    // La clave AUSENTE, no `undefined`: es lo que deja que la columna caiga en su
+    // `DEFAULT CURRENT_TIMESTAMP` y que el movimiento siga encabezando el libro.
+    expect(Object.keys(filaInsertada(repo))).not.toContain("fechaMovimiento");
+    if (r.status !== "ok") throw new Error("esperado ok");
+    expect(r.movimiento.fechaMovimiento).toBe(INSTANTE_DEL_DEFAULT);
+  });
+
+  it("sin fecha, tampoco viaja — el camino de siempre no cambia ni un byte", async () => {
+    conRelojEnAhora();
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+
+    await svc.registrarMovimientoManual(ajuste(), MAESTRO);
+
+    expect(Object.keys(filaInsertada(repo))).not.toContain("fechaMovimiento");
+  });
+
+  it("R22: con la fecha de AYER, viaja el instante en que ese dia EMPIEZA en Costa Rica (06:00Z)", async () => {
+    conRelojEnAhora();
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+
+    const r = await svc.registrarMovimientoManual(ajuste(AYER_CR), MAESTRO);
+
+    expect(r.status).toBe("ok");
+    // `${ayer}T06:00:00.000Z` y NO `T00:00:00.000Z`: con medianoche UTC, el rollup diario
+    // —que agrupa por `(fecha_movimiento − 6h)::date`— contaria el gasto de ayer como de
+    // ANTEAYER. El literal es el contrato de esa frontera.
+    expect(filaInsertada(repo).fechaMovimiento).toEqual(new Date("2026-08-28T06:00:00.000Z"));
+    if (r.status !== "ok") throw new Error("esperado ok");
+    expect(r.movimiento.fechaMovimiento).toBe("2026-08-28T06:00:00.000Z");
+  });
+
+  it("R28: devuelve el movimiento que CREO, aunque exista uno mas reciente de su misma categoria", async () => {
+    conRelojEnAhora();
+    const repo = buildRepo();
+    // El senuelo: otro ajuste de la MISMA categoria y mas reciente. Es exactamente lo que la
+    // relectura vieja (`listar({ page: 1, pageSize: 1, tipo, categoria })`) habria devuelto.
+    (repo.listar as ReturnType<typeof vi.fn>).mockResolvedValue({
+      movimientos: [
+        mov({
+          id: "w-otro-ajuste-mas-reciente",
+          tipo: "egreso",
+          categoria: "egreso_ajuste",
+          monto: "999.99",
+          origenTipo: "manual",
+          origenId: null,
+          fechaMovimiento: "2026-08-29T20:00:00.000Z",
+        }),
+      ],
+      total: 1,
+    });
+    const svc = new WalletService(repo, writeClient);
+
+    const r = await svc.registrarMovimientoManual(ajuste(AYER_CR), MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("esperado ok");
+    const idInsertado = filaInsertada(repo).id;
+    // CONTROL DE NO-VACUIDAD: el servicio genero un id y lo mando en la insercion.
+    expect(idInsertado).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(r.movimiento.id).toBe(idInsertado);
+    expect(r.movimiento.id).not.toBe("w-otro-ajuste-mas-reciente");
+    expect(r.movimiento.monto).toBe("50.00"); // el suyo, no los 999.99 del senuelo
+    // Y ni siquiera pregunta por el listado: la relectura es por ID.
+    expect(repo.listar).not.toHaveBeenCalled();
+    expect(repo.obtenerPorId).toHaveBeenCalledWith(idInsertado);
+  });
+
+  it("un solo INSERT: la fila lleva su id dentro, no se parte el createMany en dos", async () => {
+    conRelojEnAhora();
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+
+    await svc.registrarMovimientoManual(ajuste(AYER_CR), MAESTRO);
+
+    expect(repo.crearMovimientos).toHaveBeenCalledTimes(1);
+    expect((repo.crearMovimientos as ReturnType<typeof vi.fn>).mock.calls[0][1]).toHaveLength(1);
   });
 });

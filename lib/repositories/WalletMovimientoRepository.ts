@@ -8,7 +8,12 @@ import type {
   ListarMovimientosPage,
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
-import type { AgregadoCajaRow, WalletMovimientoDTO } from "@/lib/types/wallet";
+import type {
+  AgregadoCajaRow,
+  WalletMovimientoCategoria,
+  WalletMovimientoDTO,
+  WalletOrigenTipo,
+} from "@/lib/types/wallet";
 import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron CierresAdminRepository).
@@ -77,6 +82,10 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
   async crearMovimientos(tx: WalletTxClient, movs: CrearMovimientoInput[]): Promise<number> {
     if (movs.length === 0) return 0;
     const data = movs.map((m) => ({
+      // Ficha 334 (design §5, R28): la clave SOLO viaja si el llamador la trae, exactamente
+      // como `fechaMovimiento` aqui abajo. Omitirla —en vez de mandar `undefined`— es lo que
+      // deja a los cinco escritores existentes cayendo en el `@default(uuid())` de la columna.
+      ...(m.id !== undefined ? { id: m.id } : {}),
       tipo: m.tipo,
       categoria: m.categoria,
       monto: new Prisma.Decimal(m.monto), // STRING -> Decimal (money-safe)
@@ -93,14 +102,27 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
     return res.count;
   }
 
-  /** R20/R24: pagina el libro, mas reciente primero, filtros en el WHERE. */
+  /**
+   * R20/R24: pagina el libro, mas reciente primero, filtros en el WHERE.
+   *
+   * Ficha 334 (R26, design §4) — el orden es TOTAL, no solo por fecha. Ordenar por UNA columna
+   * y paginar con `skip`/`take` deja las filas que empatan en orden indefinido, y eso significa
+   * una fila que sale DOS veces o NINGUNA al pasar de pagina. Ya podia pasar (dos pagos a
+   * tienda del mismo dia reciben el mismo instante); con la fecha elegida por el usuario, dos
+   * movimientos del mismo dia pasado reciben EXACTAMENTE el mismo `06:00Z` y el empate deja de
+   * ser raro. `createdAt` desempata por creacion real —que es la semantica de esa columna— e
+   * `id` cierra el orden aunque dos filas compartieran tambien `created_at`.
+   *
+   * Sin indice nuevo a proposito: el desempate solo actua DENTRO de un `fecha_movimiento`
+   * identico, y `@@index([fechaMovimiento])` sigue sirviendo al filtro de rango.
+   */
   async listar(filtros: ListarMovimientosFiltros): Promise<ListarMovimientosPage> {
     const where = buildWhere(filtros);
     const skip = (filtros.page - 1) * filtros.pageSize;
     const [rows, total] = await Promise.all([
       this.prisma.walletMovimiento.findMany({
         where,
-        orderBy: { fechaMovimiento: "desc" },
+        orderBy: [{ fechaMovimiento: "desc" }, { createdAt: "desc" }, { id: "desc" }],
         skip,
         take: filtros.pageSize,
       }),
@@ -134,6 +156,30 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
   async obtenerPorId(id: string): Promise<WalletMovimientoDTO | null> {
     const row = await this.prisma.walletMovimiento.findUnique({ where: { id } });
     return row === null ? null : toDTO(row);
+  }
+
+  /**
+   * Ficha 333 (C2, design §2/§6.3) — el movimiento que ocupa la clave `(origen_tipo, origen_id,
+   * categoria)`, o `null`. Es la terna de `wallet_movimiento_origen_categoria_uq`, así que hay
+   * como mucho una fila; `findFirst` y no `findUnique` porque ese índice es PARCIAL
+   * (`WHERE origen_id IS NOT NULL`) y Prisma no lo expresa como clave única del cliente.
+   *
+   * Lee DENTRO del `tx` que le pasan: quien la llama acaba de intentar la escritura en esa misma
+   * transacción y necesita ver lo que esa transacción ve.
+   *
+   * NO añade ninguna mutación: el libro sigue siendo append-only e inmutable (R3 de la 42) y
+   * esta clase sigue sin exponer `update` ni `delete`.
+   */
+  async obtenerPorOrigen(
+    tx: WalletTxClient,
+    origenTipo: WalletOrigenTipo,
+    origenId: string,
+    categoria: WalletMovimientoCategoria,
+  ): Promise<WalletMovimientoDTO | null> {
+    const row = await tx.walletMovimiento.findFirst({
+      where: { origenTipo, origenId, categoria },
+    });
+    return row === null || row === undefined ? null : toDTO(row);
   }
 
   /** Feature 45 (R11): SUM(monto) por categoria administrativa, con los mismos filtros. STRING. */

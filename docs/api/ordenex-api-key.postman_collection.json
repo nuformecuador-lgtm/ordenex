@@ -608,6 +608,64 @@
           }
         }
       ]
+    },
+    {
+      "name": "10 · Eliminar una orden propia",
+      "description": "`DELETE /api/ordenes/api-key/orden/{id}` — retira una orden que **todavía no se ha gestionado**. Borrado lógico: desaparece del canal (un `GET` a la misma URL pasa a devolver `404`) y su `num_remision` vuelve a quedar libre para recargarla.\n\n**Cuándo procede.** Solo en estos cuatro estados: `en_preparacion`, `por_recolectar_en_tienda`, `recolectando` y `en_bodega_central` — mientras el paquete sigue quieto en tu tienda o en la bodega central. Haber generado la etiqueta NO impide eliminar. Cualquier otro estado devuelve `409`.\n\n**Identificador.** El mismo `{id}` del endpoint 6: `num_guia` **o** `num_remision`. Con fulfillment la orden puede no tener guía todavía, así que lo habitual aquí es usar la remisión.\n\n**Dueño forzado.** Una orden de otro integrador devuelve `404`, idéntico a inexistente: el canal no confirma que exista.",
+      "item": [
+        {
+          "name": "por número de remisión (lo habitual)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ordenes/api-key/orden/{{numRemision}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ordenes", "api-key", "orden", "{{numRemision}}"]
+            },
+            "description": "Responde `200` con `{ numGuia, numRemision, estado }`. `numGuia` es `null` si la orden aún no tenía guía; `estado` es el que la orden tenía al eliminarla (eliminar no cambia el estado)."
+          }
+        },
+        {
+          "name": "por número de guía",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ordenes/api-key/orden/{{numGuia}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ordenes", "api-key", "orden", "{{numGuia}}"]
+            },
+            "description": "Misma resolución que el endpoint 6: si el identificador es un entero positivo se busca primero por `num_guia`."
+          }
+        },
+        {
+          "name": "404: identificador que no existe (o de otro dueño)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ordenes/api-key/orden/NO-EXISTE-XYZ",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ordenes", "api-key", "orden", "NO-EXISTE-XYZ"]
+            },
+            "description": "El mismo `404` cubre tres casos: no existe, ya la eliminaste, o es de otro integrador. Repetir el `DELETE` sobre una orden ya eliminada también devuelve `404`, no un error."
+          }
+        },
+        {
+          "name": "409: la orden ya se gestionó",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ordenes/api-key/orden/{{numGuia}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ordenes", "api-key", "orden", "{{numGuia}}"]
+            },
+            "description": "Con la orden en un estado fuera de los cuatro (por ejemplo `en_reparto`, o ya entregada) responde `409 CONFLICT` y no se toca nada. Para una orden que ya va camino del cliente, la salida es `PUT .../{numGuia}/cancelar` (endpoint 5), no ésta."
+          }
+        }
+      ]
     }
   ]
 }

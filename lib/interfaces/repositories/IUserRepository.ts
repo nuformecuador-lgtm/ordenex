@@ -7,6 +7,12 @@ import type { CuentaTiendaDTO, MensajeroFiltroDTO } from "@/lib/types/filtros-or
 export interface UsuarioPublico {
   id: string;
   nombre: string;
+  // Feature 21: los apellidos son parte de la identidad de la persona (nullable en DB: las
+  // cuentas que no son personas —tiendas, API keys— solo tienen `nombre`). Viajan en la forma
+  // publica porque hay superficies que pintan la identidad COMPLETA (el pie del sidebar), y
+  // recomponerla con una segunda lectura por id seria la misma consulta dos veces.
+  primerApellido?: string | null;
+  segundoApellido?: string | null;
   email: string;
   telefono: string;
   estado: EstadoUsuario;

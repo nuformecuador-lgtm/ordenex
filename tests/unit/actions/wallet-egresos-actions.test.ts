@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   registrarEgresoAdministrativoAction,
   reversarEgresoAdministrativoAction,
@@ -180,5 +180,101 @@ describe("verDesgloseEgresosAction (R11/R17/R18)", () => {
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperado ok");
     expect(typeof r.desglose.total).toBe("string");
+  });
+});
+
+
+// ── Ficha 334 (T C.3) — la fecha invalida NO llega al servicio (espejo del ajuste manual) ──
+
+describe("registrarEgresoAdministrativoAction — la fecha del egreso (R20/R21)", () => {
+  /** 09:00 CR del 29 de agosto de 2026. */
+  const AHORA = "2026-08-29T15:00:00.000Z";
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function conRelojEnAhora(): void {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(AHORA));
+  }
+
+  function gasto(fecha: string) {
+    return { tipoEgreso: "gasto_variable", monto: "1500.00", descripcion: "Papeleria", fecha };
+  }
+
+  it("R20: fecha FUTURA -> validation_error con la clave `fecha`, sin tocar el service", async () => {
+    conRelojEnAhora();
+    const service = fakeService();
+    const r = await registrarEgresoAdministrativoAction(gasto("2026-08-30"), {
+      service,
+      getActor: async () => MAESTRO,
+    });
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") throw new Error("esperado validation_error");
+    expect(Object.keys(r.fieldErrors)).toContain("fecha");
+    expect(r.fieldErrors.fecha).toContain("La fecha no puede ser posterior a hoy.");
+    expect(service.registrarEgreso).not.toHaveBeenCalled();
+  });
+
+  it("R21: dia que NO existe (2026-02-31) -> validation_error, sin tocar el service", async () => {
+    conRelojEnAhora();
+    const service = fakeService();
+    const r = await registrarEgresoAdministrativoAction(gasto("2026-02-31"), {
+      service,
+      getActor: async () => MAESTRO,
+    });
+    expect(r.status).toBe("validation_error");
+    expect(service.registrarEgreso).not.toHaveBeenCalled();
+  });
+
+  it("fecha fuera de la ventana hacia atras -> validation_error, sin tocar el service", async () => {
+    conRelojEnAhora();
+    const service = fakeService();
+    const r = await registrarEgresoAdministrativoAction(gasto("2019-03-04"), {
+      service,
+      getActor: async () => MAESTRO,
+    });
+    expect(r.status).toBe("validation_error");
+    expect(service.registrarEgreso).not.toHaveBeenCalled();
+  });
+
+  it("R22: una fecha valida del pasado SI llega al servicio, tal cual, como texto", async () => {
+    // CONTROL DE NO-VACUIDAD de los tres casos de arriba.
+    conRelojEnAhora();
+    const service = fakeService();
+    const r = await registrarEgresoAdministrativoAction(gasto("2026-08-28"), {
+      service,
+      getActor: async () => MAESTRO,
+    });
+    expect(r.status).toBe("ok");
+    expect(service.registrarEgreso).toHaveBeenCalledWith(
+      expect.objectContaining({ fecha: "2026-08-28", monto: "1500.00" }),
+      MAESTRO,
+    );
+  });
+
+  it("R19: `gasto_fijo` sigue cayendo aunque la fecha sea impecable", async () => {
+    // La regla del gasto FIJO no se debilita al ganar la fecha: el `z.enum` la sostiene.
+    conRelojEnAhora();
+    const service = fakeService();
+    const r = await registrarEgresoAdministrativoAction(
+      { tipoEgreso: "gasto_fijo", monto: "100.00", descripcion: "x", fecha: "2026-08-28" },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(r.status).toBe("validation_error");
+    expect(service.registrarEgreso).not.toHaveBeenCalled();
+  });
+
+  it("sin la clave `fecha` la entrada sigue siendo valida — el camino de siempre", async () => {
+    conRelojEnAhora();
+    const service = fakeService();
+    const r = await registrarEgresoAdministrativoAction(
+      { tipoEgreso: "sueldo", monto: "100.00", descripcion: "x" },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(r.status).toBe("ok");
+    const entrada = (service.registrarEgreso as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(Object.keys(entrada)).not.toContain("fecha");
   });
 });

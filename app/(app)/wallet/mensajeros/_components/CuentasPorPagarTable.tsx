@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import useSWR from "swr";
 import { Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { BuscadorFiltros } from "@/components/shared/BuscadorFiltros";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { DEBOUNCE_MS_DEFAULT } from "@/components/shared/FilterComponent";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { walletMensajeroConfig } from "@/lib/config/wallet-mensajero";
 import {
@@ -18,7 +18,6 @@ import { normalizarBusquedaMensajero } from "@/lib/utils/cuentas-por-pagar-lista
 import { cn } from "@/lib/utils";
 import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 
-import { CuentasPorPagarFiltros } from "./CuentasPorPagarFiltros";
 import { DesglosePagosMensajero } from "./DesglosePagosMensajero";
 import {
   COLUMNAS_DESCARGA_CUENTAS_POR_PAGAR,
@@ -44,8 +43,9 @@ import {
 //  - **la busqueda por nombre pasa al SERVIDOR**. Dejarla en el navegador con la tabla paginada
 //    seria buscar solo dentro de lo que ya esta a la vista: escribir el nombre de un mensajero
 //    de la pagina 3 no lo encontraria, y la pantalla no diria que ha mirado 25 filas de 300. El
-//    texto se manda TAL CUAL (`lib/utils/cuentas-por-pagar-listado.ts` lo normaliza, en un solo
-//    sitio) y cambiarlo devuelve la tabla a la pagina 1 (R45, ver `useEffect`);
+//    texto se manda SIN normalizar —quien decide que casa es
+//    `lib/utils/cuentas-por-pagar-listado.ts`, en un solo sitio— y cambiarlo devuelve la tabla a
+//    la pagina 1 (R45, ver `aplicarBusqueda`);
 //  - **el dinero NO se toca**: cada celda sigue siendo la agregacion del libro ENTERO de ese
 //    mensajero, calculada en el servidor antes de recortar la pagina (T L.1 §5). Aqui no se suma
 //    ni se deriva nada;
@@ -56,6 +56,20 @@ import {
 // El control de paginacion y el contador viven en ESTE archivo, que es el que la guardia de
 // T H.3 mira: reconoce como pantalla paginada al archivo que monta `<Pagination>` y a los que
 // ese archivo importa, nunca hacia arriba.
+//
+// Ficha 326 — el buscador pasa a ser el CANONICO (`components/shared/BuscadorFiltros`) y con el
+// se van dos piezas escritas a mano aqui: el campo propio (`CuentasPorPagarFiltros.tsx`, ya
+// borrado) y el par «tecleado vs aplicado» con su `setTimeout` —que ademas importaba la espera
+// del canonico, o sea que ya dependia de el sin usarlo—. Lo que la barra trae dentro es
+// EXACTAMENTE eso: estado propio del texto, espera antes de avisar y guarda de «sin cambio».
+// Aqui solo queda lo que la barra no puede saber: que el termino aplicado devuelve a la
+// pagina 1.
+
+// El buscador va en la cabecera de la TABLA, en la misma linea que el control de descarga
+// (`filtros` de `DataTable`), igual que las otras dos pantallas paginadas sobre `DataTable`
+// (`/ordenes` y Usuarios). El alto del canonico (`h-8`) esta elegido para esa fila. El contador
+// se queda arriba y a la derecha, donde estaba: es del listado entero, no de la tabla, y la
+// guardia `tests/unit/descarga/contadores-cabecera.guardia.test.ts` lo busca en este archivo.
 
 export interface CuentasPorPagarTableProps {
   /**
@@ -85,13 +99,10 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
   (s) => s <= walletMensajeroConfig.MAX_PAGE_SIZE,
 );
 
-/**
- * Espera entre la última tecla y la consulta. Es la MISMA que el resto de la app aplica a un
- * cambio de filtro (`FilterComponent`), y aquí pesa más que en ningún otro sitio: cada lectura
- * de este listado agrega el libro entero de cada mensajero (T L.1 §5), así que escribir un
- * nombre de diez letras sin esperar serían diez agregaciones completas.
- */
-const ESPERA_BUSQUEDA_MS = DEBOUNCE_MS_DEFAULT;
+/** Nombre accesible del buscador. No se pinta: el canónico lo usa como `aria-label` (R43). */
+const BUSCADOR_LABEL = "Buscar por mensajero";
+/** Qué se puede teclear ahí. Es lo único que documenta el alcance del campo (una columna). */
+const BUSCADOR_PLACEHOLDER = "Buscar por nombre";
 
 // Columnas de la tabla-resumen (R18). Money-safe (R21/R27): los montos se pintan TAL CUAL con
 // `money`, sin parseFloat/Number. El color/badge sale del signo ya calculado en el servidor.
@@ -142,9 +153,11 @@ async function leerPagina(
 }
 
 export function CuentasPorPagarTable({ initialData }: CuentasPorPagarTableProps) {
-  /** Lo que el usuario está escribiendo: el campo responde al instante. */
-  const [busqueda, setBusqueda] = useState("");
-  /** Lo que YA viajó al servidor: de aquí salen la tabla, el contador y el archivo. */
+  /**
+   * Lo que YA viajó al servidor: de aquí salen la tabla, el contador y el archivo. Lo que el
+   * usuario está TECLEANDO ya no se guarda aquí — es del `BuscadorFiltros`, que responde al
+   * instante y solo avisa cuando el término cambia de verdad y el usuario deja de escribir.
+   */
   const [aplicada, setAplicada] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialData.pageSize);
@@ -154,20 +167,16 @@ export function CuentasPorPagarTable({ initialData }: CuentasPorPagarTableProps)
    * eso, escribir tres letras estando en la página 3 dejaría la tabla vacía junto a un contador
    * que dice que hay dos resultados.
    *
-   * Se compara lo NORMALIZADO (la misma función que usa el servidor para decidir qué filas
-   * casan): añadir un espacio al final de un término ya aplicado no es una búsqueda nueva y no
-   * debe costar una consulta ni mover la página.
+   * Se llega aquí SOLO con un término distinto del último emitido: el canónico se guarda lo que
+   * ya avisó y no repite (añadir un espacio al final de un término vigente no es una búsqueda
+   * nueva, así que ni cuesta una consulta ni mueve la página). Por eso `setPage(1)` puede ir
+   * incondicional: si estuviera dentro de una comparación propia, esa comparación sería la
+   * misma guarda escrita dos veces y ninguna de las dos podría medirse.
    */
-  useEffect(() => {
-    if (normalizarBusquedaMensajero(busqueda) === normalizarBusquedaMensajero(aplicada)) {
-      return;
-    }
-    const temporizador = setTimeout(() => {
-      setAplicada(busqueda);
-      setPage(1);
-    }, ESPERA_BUSQUEDA_MS);
-    return () => clearTimeout(temporizador);
-  }, [busqueda, aplicada]);
+  function aplicarBusqueda(termino: string) {
+    setAplicada(termino);
+    setPage(1);
+  }
 
   const { data, error } = useSWR(
     ["wallet-mensajeros:cuentas", page, pageSize, aplicada],
@@ -191,21 +200,15 @@ export function CuentasPorPagarTable({ initialData }: CuentasPorPagarTableProps)
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        {/* El campo NO se deshabilita mientras carga: perder teclas de un nombre a medio
-            escribir es peor que esperar a que llegue la página. */}
-        <CuentasPorPagarFiltros value={busqueda} onChange={setBusqueda} />
-
-        {/* R42: el contador dice el TOTAL del servidor, nunca cuántas filas trae la página.
-            Con una búsqueda puesta informan los dos números —lo encontrado y el conjunto—; sin
-            ella, «12 de 12 mensajeros» no diría nada que «12 mensajeros» no diga. El «de Y» es
-            el total SIN búsqueda que resolvió el Server Component. */}
-        <p role="status" className="text-sm text-muted-foreground">
-          {hayBusqueda
-            ? `${total} de ${initialData.total} mensajeros`
-            : `${total} mensajeros`}
-        </p>
-      </div>
+      {/* R42: el contador dice el TOTAL del servidor, nunca cuántas filas trae la página.
+          Con una búsqueda puesta informan los dos números —lo encontrado y el conjunto—; sin
+          ella, «12 de 12 mensajeros» no diría nada que «12 mensajeros» no diga. El «de Y» es
+          el total SIN búsqueda que resolvió el Server Component. */}
+      <p role="status" className="self-end text-sm text-muted-foreground">
+        {hayBusqueda
+          ? `${total} de ${initialData.total} mensajeros`
+          : `${total} mensajeros`}
+      </p>
 
       {/*
         Feature 172 (T H.4) — la limitación N1. Esta tabla no lista movimientos: cada fila es
@@ -223,6 +226,31 @@ export function CuentasPorPagarTable({ initialData }: CuentasPorPagarTableProps)
         ariaLabel={TITULO_DESCARGA}
         isLoading={cargando}
         error={error ? ERROR_CARGA : null}
+        /**
+         * Ficha 326 — el buscador CANÓNICO. Se le pasa lo mínimo y nada más:
+         *
+         *  - **sin `filtros`**: el selector no se monta. Lo que esta pantalla dice que le falta
+         *    —acotar por rango de fecha y por cierre— no se puede cablear desde aquí: el borde
+         *    del listado (`listarCuentasPorPagarPaginadoSchema`) es `.strict()` y solo admite
+         *    `page`/`pageSize`/`busqueda`, y esos dos recortes cambiarían LAS COLUMNAS DE DINERO
+         *    de cada fila (hoy son la agregación del libro entero de cada mensajero). Eso es
+         *    backend y una decisión de producto, no un cableado de UI;
+         *  - **sin `debounceMs`**: se toma el de la casa, que es exactamente el que este archivo
+         *    importaba a mano. Aquí pesa más que en ningún otro sitio: cada lectura agrega el
+         *    libro entero de cada mensajero (T L.1 §5), así que escribir un nombre de diez
+         *    letras sin esperar serían diez agregaciones completas;
+         *  - **sin `disabled`**: el campo NO se deshabilita mientras carga. Perder teclas de un
+         *    nombre a medio escribir es peor que esperar a que llegue la página;
+         *  - **sin `onLimpiarTodo`**: no hay más filtros que limpiar, y el campo ya trae su
+         *    propia X. Ofrecer «Limpiar todo» al lado sería el mismo gesto dos veces.
+         */
+        filtros={
+          <BuscadorFiltros
+            label={BUSCADOR_LABEL}
+            placeholder={BUSCADOR_PLACEHOLDER}
+            onChange={aplicarBusqueda}
+          />
+        }
         /**
          * Feature 170 (T L.2, R52 · T M.1, cierre de Q-L2) — la tabla pinta UNA página; el
          * archivo sigue siendo el CONJUNTO COMPLETO, y desde T M.1 lo pide con la búsqueda YA

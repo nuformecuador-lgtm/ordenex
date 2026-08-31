@@ -141,6 +141,11 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // vecinos de abajo — ningun servicio de este archivo lo invoca; el doble existe para
     // satisfacer el contrato completo del repo.
     corregirDatosCliente: vi.fn().mockResolvedValue("ok" as const),
+    // Ficha 327: las dos lecturas de la correccion de ubicacion. Mismo motivo que el writer de
+    // arriba: ningun servicio de este archivo las invoca, el doble esta para satisfacer el
+    // contrato completo del repo.
+    findParaCorreccion: vi.fn().mockResolvedValue(null),
+    findDistritoParaCorreccion: vi.fn().mockResolvedValue(null),
     // Feature «eliminar orden»: writer de `deleted_at`. Ningun servicio de este archivo lo
     // invoca; el doble existe para satisfacer el contrato completo del repo.
     softDelete: vi.fn().mockResolvedValue(0),
@@ -229,6 +234,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 235: los tres metodos de la bandera colapsaron en UN punto de escritura.
     transicionarAyuda: vi.fn(async (): Promise<boolean> => true),
     findParaHabilitacionApi: vi.fn(async () => null), // feature 266/T3.1: lectura scoped por owner del canal por API key
+    // Ficha 320: el par lectura/escritura del BORRADO por API key, tambien scoped por owner.
+    findParaEliminacionApi: vi.fn(async () => null),
+    softDeleteViaApi: vi.fn(async (): Promise<number> => 0),
     incrementarIntentoContacto: vi.fn(async (): Promise<number> => 0),
     // Feature 236: los dos metodos del listado pasan a llevar el GRUPO en la firma.
     countNovedadesByTienda: vi.fn(async (): Promise<number> => 0),

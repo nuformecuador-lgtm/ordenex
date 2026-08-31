@@ -148,6 +148,9 @@ function plantillaGasto(i: number, activa = true): GastoFijoPlantillaDTO {
 
 const PLANTILLAS = [plantillaGasto(1), plantillaGasto(2, false)];
 
+/** Instante fijo del panel de gastos fijos (feature 85, R23): 2026-07-15 a las 12:00 de CR. */
+const AHORA_ISO = "2026-07-15T18:00:00.000Z";
+
 function envolver(ui: ReactElement) {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
@@ -222,6 +225,11 @@ function montarPlantillas(
   return envolver(
     <GastosFijosPlantillasPanel
       initialData={paginaInicial(visibles, { total: completo.length })}
+      // Feature 85 (T F.6, R23): el instante del «Próximo cobro» es una prop REQUERIDA y se
+      // resuelve en el servidor. Aquí se fija a un día conocido para que este archivo —que
+      // mide de dónde salen las filas del archivo, no qué fecha llevan— no dependa del
+      // calendario del día en que se ejecute.
+      ahoraIso={AHORA_ISO}
     />,
   );
 }

@@ -24,16 +24,52 @@ const MENSAJERO: RolValue = "mensajero";
 const ADMIN_SATELITE: RolValue = "adminSatelite";
 const API_KEY: RolValue = "apiKey";
 
-describe("312/A1 — D1: los campos corregibles son EXACTAMENTE cuatro", () => {
-  it("la lista es la del alcance cerrado, sin direccion ni estatus ni monto", () => {
-    // R1. Este `toEqual` literal ES el contrato (D1), no una copia de su fuente: si alguien añade
-    // un campo, esta linea es la que le pregunta si de verdad quiso reabrir el alcance.
+describe("312/A1 + 327/D1 — los campos corregibles son EXACTAMENTE nueve", () => {
+  it("la lista es la del alcance cerrado, sin zona ni estatus ni monto", () => {
+    // R1. Este `toEqual` literal ES el contrato (312/D1 + 327/D1), no una copia de su fuente: si
+    // alguien añade un campo, esta linea es la que le pregunta si de verdad quiso reabrir el
+    // alcance.
+    //
+    // ⚠️ ACTUALIZADO EL 2026-08-28 POR LA FICHA 327, Y ESA ES LA UNICA FORMA CORRECTA DE TOCARLO.
+    // La lista pasa de cuatro a nueve porque el humano REABRIO la decision de la 312 —la direccion
+    // se habia dejado fuera «a sabiendas de que es el error de carga mas caro»— y le sumo la
+    // ubicacion y el peso. Cambiar este literal por un `CAMPOS_CORREGIBLES.length` o por un
+    // barrido derivado de su propia fuente lo dejaria SIEMPRE verde y mataria justo lo que hace:
+    // obligar a que ampliar el alcance sea un gesto deliberado y visible en el diff.
+    //
+    // Lo que este literal sigue impidiendo, que es su verdadero trabajo: `zonaId` (la deriva el
+    // servidor, 327/R5), `estatusId`, `tiendaId`, `montoCobrar`, `cobraComision`, `numGuia`,
+    // `numRemision` y `mensajeroAsignadoId` (327/D2).
     expect([...CAMPOS_CORREGIBLES]).toEqual([
+      // 312
       "destinatario",
       "telefonoDest",
       "producto",
       "notas",
+      // 327
+      "direccion",
+      "provinciaId",
+      "cantonId",
+      "distritoId",
+      "peso",
     ]);
+  });
+
+  it("327/R5 y D2 — los OCHO campos prohibidos NO estan en la lista, uno por uno", () => {
+    // El `toEqual` de arriba ya lo garantiza, pero enumerarlos deja escrito CUALES son y por que
+    // duelen: quien lea un fallo de este bloque ve la lista sin tener que ir al spec.
+    for (const prohibido of [
+      "zonaId", // 327/R5: la deriva el servidor a partir del distrito
+      "estatusId", // arrastraria una fila de historial (312/D4)
+      "tiendaId",
+      "montoCobrar", // corregir una ubicacion mueve el FLETE, no el cobro al cliente
+      "cobraComision",
+      "numGuia",
+      "numRemision",
+      "mensajeroAsignadoId",
+    ]) {
+      expect(CAMPOS_CORREGIBLES).not.toContain(prohibido);
+    }
   });
 });
 

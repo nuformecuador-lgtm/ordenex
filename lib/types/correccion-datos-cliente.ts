@@ -15,19 +15,53 @@ import { grupoDeEstatus } from "@/lib/types/novedad-grupo";
 // LO QUE ESTE MODULO NO HACE: no conoce Prisma, ni React, ni HTTP. Valores, tipos y dos
 // predicados.
 //
-// ⚠️ SIN RASTRO (D4, decision humana del 2026-08-28). Corregir un dato NO deja nota en el hilo,
-// ni fila de historial, ni tabla de auditoria: el unico rastro es el `updated_at` de la orden.
-// La nota automatica esta EVALUADA Y DESCARTADA (design §8/B). No es un olvido.
+// ⚠️ SIN RASTRO (312/D4, RATIFICADO el 2026-08-28 por la ficha 327/D3). Corregir un dato NO deja
+// nota en el hilo, ni fila de historial, ni tabla de auditoria: el unico rastro es el `updated_at`
+// de la orden. La nota automatica esta EVALUADA Y DESCARTADA (312/design §8/B). No es un olvido.
+//
+// La 327 añade UNA escritura fuera de la fila de la orden —el trabajo de re-geocodificacion,
+// cuando la direccion cambia— y eso NO contradice lo anterior: ese trabajo lleva SOLO el id de la
+// orden (feature 91/R14), asi que no registra quien corrigio que ni cual era el valor anterior.
+// La enmienda esta declarada en `specs/327-editor-ubicacion/requirements.md` §D6.
 
 /**
- * D1 — LOS CUATRO CAMPOS, como valores. La UI itera esta lista y el schema se DERIVA de ella, de
+ * D1 — LOS NUEVE CAMPOS, como valores. La UI itera esta lista y el schema se DERIVA de ella, de
  * modo que ninguno de los dos puede quedarse con una lista propia.
  *
- * Nada mas: fuera direccion, ubicacion, zona, monto, estatus y tienda. La direccion se deja fuera
- * A SABIENDAS de que es el error de carga mas caro (requirements §D1).
+ * Los cuatro primeros son de la ficha 312. Los cinco ultimos los añade la 327, que reabrio la
+ * decision de aquella misma mañana: la direccion se habia dejado fuera A SABIENDAS de que era el
+ * error de carga mas caro (312/D1), y el humano la reabrio el 2026-08-28.
+ *
+ * ⚠️ `zonaId` NO ESTA, Y NO PUEDE ESTAR (327/R5). La zona la DERIVA el servidor a partir del
+ * distrito recibido; el `.strict()` de abajo rechaza al cliente que la mande. Tampoco estan
+ * `estatusId`, `tiendaId`, `montoCobrar`, `cobraComision`, `numGuia`, `numRemision` ni
+ * `mensajeroAsignadoId` (327/D2): corregir una ubicacion mueve el flete que Ordenex factura, pero
+ * no el dinero que la tienda declara que hay que cobrar, ni el estado, ni el dueño de la orden.
  */
-export const CAMPOS_CORREGIBLES = ["destinatario", "telefonoDest", "producto", "notas"] as const;
+export const CAMPOS_CORREGIBLES = [
+  // Ficha 312
+  "destinatario",
+  "telefonoDest",
+  "producto",
+  "notas",
+  // Ficha 327
+  "direccion",
+  "provinciaId",
+  "cantonId",
+  "distritoId",
+  "peso",
+] as const;
 export type CampoCorregible = (typeof CAMPOS_CORREGIBLES)[number];
+
+/**
+ * FICHA 327 (R3) — LOS TRES QUE VIAJAN JUNTOS O NO VIAJAN.
+ *
+ * No es una preferencia de forma: el servidor comprueba la CADENA provincia -> canton -> distrito
+ * (R6) y deriva la zona del distrito (R5). Con una geografia parcial no hay cadena que comprobar,
+ * y aceptarla dejaria la fila con un canton que no pertenece a su provincia sin que nada lo note.
+ */
+export const CAMPOS_GEOGRAFIA = ["provinciaId", "cantonId", "distritoId"] as const;
+export type CampoGeografia = (typeof CAMPOS_GEOGRAFIA)[number];
 
 /**
  * D3 — LA VENTANA CERRADA. Se LEE de la fuente unica (`ESTADOS_TERMINALES`) y se le suma el unico
@@ -101,30 +135,82 @@ export function rolAdmiteCorreccion(
 }
 
 /**
- * R1/R2/R3/R6 — el schema del BORDE, DERIVADO de `actualizarOrdenSchema` en vez de un cuarteto
- * paralelo escrito a mano.
+ * 312/R1-R3-R6 + 327/R1-R2-R3-R4-R8-R9 — el schema del BORDE, DERIVADO de `actualizarOrdenSchema`
+ * en vez de una lista paralela escrita a mano.
  *
  * POR QUE DERIVAR Y NO COPIAR. Es lo que garantiza que la correccion no acepte un `destinatario`
- * vacio que la actualizacion rechazaria (el `z.string().min(1)` ya vive alli), ni al reves.
+ * vacio que la actualizacion rechazaria (el `z.string().min(1)` ya vive alli), ni al reves. Y con
+ * la 327 esa herencia entrega dos requisitos sin escribir una regla propia:
+ *   · `direccion` hereda `min(1)`      -> 327/R8 (la cadena vacia no pasa)
+ *   · `peso` hereda `number().positive()` y NO es nullable -> 327/R9
+ * La direccion de SOLO ESPACIOS no la caza el `min(1)` —pasa, y se vacia al recortarla—, y por eso
+ * la rechaza el servicio junto a `destinatario` y `producto`, en `CAMPOS_NO_VACIABLES`: hay UNA
+ * definicion de «vacio» para los cuatro campos de texto, no dos.
  *
- * Y ES TAMBIEN LO QUE ENTREGA R6 SIN ESCRIBIR NADA: como el schema origen NO tiene `.max()` en
- * ninguno de los cuatro campos, la correccion hereda «sin tope» de la misma fuente que la carga.
- * Escribir aqui un `.max()` seria justamente el caso que P3 descarto: «se pudo cargar pero no se
- * puede corregir».
+ * Y ES TAMBIEN LO QUE ENTREGA 312/R6 SIN ESCRIBIR NADA: como el schema origen NO tiene `.max()` en
+ * ninguno de los campos, la correccion hereda «sin tope» de la misma fuente que la carga. Escribir
+ * aqui un `.max()` seria justamente el caso que 312/P3 descarto: «se pudo cargar pero no se puede
+ * corregir».
  *
  * `.strict()` se re-declara A PROPOSITO (R2): que `.pick()` conserve el modo del origen en zod 4
- * no es algo que esta ficha quiera dar por sabido. Un test lo fija.
+ * no es algo que esta ficha quiera dar por sabido. Un test lo fija — y es lo que deja fuera a
+ * `zonaId`, que SI existe en el origen y que el cliente NO puede mandar (327/R5).
  *
  * `notas` conserva su `.nullable().optional()`: `null` es «vaciar el campo `notas` DE LA ORDEN»
  * (el campo propio de la orden — aqui no hay ningun hilo de notas de por medio, D4).
  */
 export const corregirDatosClienteSchema = actualizarOrdenSchema
-  .pick({ destinatario: true, telefonoDest: true, producto: true, notas: true })
+  .pick({
+    // 312
+    destinatario: true,
+    telefonoDest: true,
+    producto: true,
+    notas: true,
+    // 327 — la ubicacion. `zonaId` NO se escoge: la deriva el servidor (R5).
+    direccion: true,
+    provinciaId: true,
+    cantonId: true,
+    distritoId: true,
+    peso: true,
+  })
   .strict()
-  .extend({ ordenId: z.uuid() })
+  .extend({
+    ordenId: z.uuid(),
+    /**
+     * FICHA 327 (design §4.1) — EL GATE DEL DINERO, y su nombre esta elegido a proposito.
+     *
+     * Se llama `…DeUbicacion` y no `…DeZona` porque el gate se dispara con el cambio de
+     * DISTRITO: la marca `zona_especial` es del distrito, asi que cambiar de distrito DENTRO de
+     * la misma zona tambien puede mover el flete.
+     *
+     * `false` por defecto: la AUSENCIA no confirma nada. Un cliente que omita la clave recibe el
+     * aviso, no la escritura.
+     */
+    confirmaCambioDeUbicacion: z.boolean().optional().default(false),
+  })
   .refine((d) => CAMPOS_CORREGIBLES.some((campo) => d[campo] !== undefined), {
     path: ["destinatario"],
-    message: "Indica al menos un campo a corregir", // R3
+    // R3 de la 312. `confirmaCambioDeUbicacion` NO cuenta: SIEMPRE viene informada (tiene
+    // default) y contarla dejaria pasar una peticion que no corrige nada.
+    message: "Indica al menos un campo a corregir",
+  })
+  .refine(
+    (d) => {
+      // 327/R3 — los tres, o ninguno.
+      const presentes = CAMPOS_GEOGRAFIA.filter((campo) => d[campo] !== undefined).length;
+      return presentes === 0 || presentes === CAMPOS_GEOGRAFIA.length;
+    },
+    {
+      path: ["distritoId"],
+      message: "Indica provincia, canton y distrito juntos",
+    },
+  )
+  .refine((d) => d.distritoId !== null, {
+    // 327/R4 — el origen declara `distritoId` como `.nullable()` (es el unico FK nullable de
+    // `orden`), pero desde esta superficie no se puede vaciar: la zona se deriva del distrito y
+    // `orden.zona_id` es NOT NULL. La cadena vacia ya la rechaza el `min(1)` heredado.
+    path: ["distritoId"],
+    message: "El distrito es obligatorio",
   });
 
 export type CorregirDatosClienteEntrada = z.infer<typeof corregirDatosClienteSchema>;

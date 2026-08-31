@@ -16,6 +16,20 @@ export type WalletTxClient = Pick<PrismaClient, "walletMovimiento">;
 
 // Fila a insertar en el libro. `monto` STRING (money-safe); origenId NULL solo en manual.
 export interface CrearMovimientoInput {
+  /**
+   * Ficha 334 (design §5, R28): id de la fila, generado ARRIBA por quien inserta.
+   *
+   * Existe porque `createMany` sobre Postgres NO devuelve los ids generados, asi que quien
+   * necesita releer EXACTAMENTE la fila que acaba de crear no tiene por donde agarrarla —y la
+   * relectura «el mas reciente de esa categoria» devuelve otra fila en cuanto un movimiento se
+   * fecha en el pasado. Mismo precedente ya razonado en `lib/repositories/registrar-cambio-
+   * dia-reparto.ts`: generarlos arriba permite seguir haciendo UN SOLO `createMany`.
+   *
+   * OPCIONAL por el mismo motivo —y con la misma forma— que `fechaMovimiento`: ausente ⇒ manda
+   * el `@default(uuid())` de la columna y NINGUNO de los cinco escritores existentes cambia de
+   * comportamiento.
+   */
+  id?: string;
   tipo: WalletMovimientoTipo;
   categoria: WalletMovimientoCategoria;
   monto: string; // STRING 2 dec -> Prisma.Decimal en la impl
@@ -77,7 +91,13 @@ export interface IWalletMovimientoRepository {
    * (sin TOCTOU). Devuelve cuantas filas se insertaron efectivamente.
    */
   crearMovimientos(tx: WalletTxClient, movs: CrearMovimientoInput[]): Promise<number>;
-  /** R20/R24: pagina el libro (orderBy fecha_movimiento desc) con filtros en el WHERE. */
+  /**
+   * R20/R24: pagina el libro (fecha_movimiento desc) con filtros en el WHERE.
+   *
+   * Ficha 334 (R26, design §4): el orden es TOTAL —`fecha_movimiento`, luego `created_at`,
+   * luego `id`—, porque una sola columna con `skip`/`take` deja las filas empatadas en orden
+   * indefinido y paginar repite u omite filas.
+   */
   listar(filtros: ListarMovimientosFiltros): Promise<ListarMovimientosPage>;
   /**
    * Feature 173 (T D.1, design §5.1 — R8 parte datos, R47): `groupBy(categoria, tipo)` +
@@ -104,4 +124,30 @@ export interface IWalletMovimientoRepository {
    * SUM(monto), STRING (money-safe).
    */
   agregarPorCategoria(filtros: BalanceFiltros): Promise<DesgloseEgresosAgregado>;
+  /**
+   * Ficha 333 (C2, design §2/§6.3) — lee el movimiento que ocupa una CLAVE DE ORIGEN concreta:
+   * `(origen_tipo, origen_id, categoria)`, que es exactamente la terna de
+   * `wallet_movimiento_origen_categoria_uq`. `null` si esa clave no está en el libro.
+   *
+   * PARA QUÉ EXISTE, y es un solo caso (R19): al aprobar un cobro de gasto fijo, `crearMovimientos`
+   * puede devolver 0 porque la clave YA estaba en el libro —pasa si alguien cambió el interruptor
+   * de la plantilla a mitad de período—. Entonces no se crea un segundo movimiento: se lee ESTE y
+   * se enlaza al cobro, y el mensaje al usuario dice la verdad («ya estaba en el libro»).
+   *
+   * `findFirst` y no `findUnique`: la unicidad la da un índice PARCIAL
+   * (`WHERE origen_id IS NOT NULL`) que Prisma no expresa, así que no hay clave única declarada
+   * en el cliente. El motor garantiza que hay como mucho una fila; esto sólo la trae.
+   *
+   * Recibe el `tx` porque quien la llama está DENTRO de la transacción que acaba de intentar la
+   * escritura: leer fuera de ella no vería lo que esa misma transacción escribió.
+   *
+   * ⚠️ El libro sigue INMUTABLE: esto LEE. Este contrato sigue sin exponer `update` ni `delete`
+   * (R3 de la 42), y esta ficha no los añade.
+   */
+  obtenerPorOrigen(
+    tx: WalletTxClient,
+    origenTipo: WalletOrigenTipo,
+    origenId: string,
+    categoria: WalletMovimientoCategoria,
+  ): Promise<WalletMovimientoDTO | null>;
 }

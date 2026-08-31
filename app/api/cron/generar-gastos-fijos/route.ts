@@ -11,8 +11,10 @@ import type { IGeneracionGastosFijosService } from "@/lib/interfaces/services/IG
 import { GeneracionGastosFijosService } from "@/lib/services/GeneracionGastosFijosService";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { GastoFijoPlantillaRepository } from "@/lib/repositories/GastoFijoPlantillaRepository";
+import { GastoFijoCobroRepository } from "@/lib/repositories/GastoFijoCobroRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { loadCronConfig } from "@/lib/config/cron";
+import { notificarGastoFijoCobroPendienteReal } from "@/lib/notificaciones/notificadores";
 
 export interface GenerarGastosFijosDeps {
   // Secreto esperado (inyectable en tests). Por defecto, `CRON_SECRET` del entorno.
@@ -28,7 +30,21 @@ function buildService(): IGeneracionGastosFijosService {
   return new GeneracionGastosFijosService(
     new GastoFijoPlantillaRepository(prisma),
     new WalletMovimientoRepository(prisma),
-    prisma,
+    // Ficha 333 (D3): el repo de COBROS pendientes, para las plantillas que requieren aprobacion.
+    new GastoFijoCobroRepository(prisma),
+    // Ficha 333 (R10): las DOS escrituras de la corrida, en UNA transaccion interactiva.
+    (fn) => prisma.$transaction((tx) => fn(tx)),
+    // ⚠️ FICHA 333 (E3, R34) — COMPOSITION ROOT del aviso «quedan N cobros por aprobar». Se cablea
+    // AQUI y no como default del service (ver `lib/notificaciones/notificadores.ts`): el default
+    // es el no-op para que ninguna suite escriba avisos en la base, que es COMPARTIDA.
+    //
+    // ESTA LINEA ES EL REQUISITO, NO EL `import` DE ARRIBA. En `corte-diario` la llamada pasaba
+    // cinco argumentos y el notificador se quedaba con su default: el aviso nocturno no se emitio
+    // JAMAS, con la suite entera en verde. Borrar este argumento —dejando el import intacto—
+    // reproduce ese fallo, y por eso la guardia de
+    // `tests/unit/services/notificacion-notificadores-reales.test.ts` afirma sobre el USO
+    // EFECTIVO (fuente sin imports ni comentarios) y no sobre el fichero entero.
+    notificarGastoFijoCobroPendienteReal,
   );
 }
 
@@ -64,12 +80,18 @@ export async function handleGenerarGastosFijos(
     // vive en el service; el controller solo le pasa `now`.
     const hoy = (deps.now ?? (() => new Date()))();
     const resumen = await service.ejecutarGeneracion(hoy);
-    // R29: resumen SIN PII (solo conteos + la fecha CR de la corrida).
+    // R29 (45) / R13 (333): resumen SIN PII — solo conteos + la fecha CR de la corrida. Se
+    // enumera campo a campo A PROPOSITO, en vez de devolver `resumen` entero: asi, el dia que el
+    // servicio gane un campo con un monto o un identificador, no cruza a la respuesta sola.
     return {
       fecha: resumen.fecha,
       plantillasActivas: resumen.plantillasActivas,
       plantillasQueAplicanHoy: resumen.plantillasQueAplicanHoy,
       egresosGenerados: resumen.egresosGenerados,
+      // Ficha 333 (R13): los cobros pendientes creados y los que quedan. Dos numeros, sin monto,
+      // sin concepto y sin identificador de persona.
+      cobrosPendientesCreados: resumen.cobrosPendientesCreados,
+      cobrosPendientesTotales: resumen.cobrosPendientesTotales,
     };
   });
 

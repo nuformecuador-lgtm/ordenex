@@ -181,6 +181,39 @@ export interface IChatMensajeRepository {
   ): Promise<ChatMediaAutorizada | null>;
 }
 
+/**
+ * Feature 321 (design §4, R29/R30/R12) — la SEGUNDA puerta al binario de un adjunto, la del
+ * lector del histórico.
+ *
+ * POR QUE UN CONTRATO APARTE Y NO UN METODO MAS EN `IChatMensajeRepository`: son dos
+ * autorizaciones distintas, y separarlas en el tipo dice exactamente eso. `IChatMensajeRepository`
+ * es el contrato del chat del mensajero (R26) y no se ensancha; quien solo necesita esa puerta
+ * (el panel del mensajero, sus dobles de test) no gana la otra ni por descuido. `ChatMensajeRepository`
+ * implementa las dos porque la consulta vive en la misma tabla, pero pedir una NO da acceso a la
+ * otra.
+ */
+export interface IChatMediaHistoricoReader {
+  /**
+   * Media de UN mensaje para un lector del histórico.
+   *
+   * Es la MISMA consulta que `findMediaParaMensajero` MENOS la condicion del mensajero: el
+   * histórico lee los hilos de todos los mensajeros (R10/R29), asi que aqui no hay scope de
+   * sesion que aplicar. `o.deleted_at IS NULL` SI se conserva (R12): una orden borrada no da
+   * acceso a nada, ni siquiera al histórico.
+   *
+   * POR QUE UN METODO NUEVO Y NO UN `omitirScope: boolean` EN EL OTRO (alternativa A2,
+   * descartada en design §6): un booleano que apaga la autorizacion dentro de la misma
+   * funcion es la puerta que se olvida abierta, y el nombre `findMediaParaMensajero` dejaria
+   * de decir la verdad. El nombre de ESTE metodo declara su alcance: quien lo llame tiene que
+   * haber comprobado antes que el actor pertenece a `ROLES_HISTORICO_CONVERSACIONES`. La
+   * autorizacion del mensajero (R26) se queda intacta, byte a byte.
+   *
+   * `null` = mensaje inexistente o de una orden borrada. `mediaId: null` = el mensaje existe
+   * pero no tiene adjunto (el caller responde 404).
+   */
+  findMediaParaLectorHistorico(mensajeId: string): Promise<ChatMediaAutorizada | null>;
+}
+
 /** Lo minimo que el proxy necesita para servir un adjunto ya autorizado (design §4). */
 export interface ChatMediaAutorizada {
   mediaId: string | null;

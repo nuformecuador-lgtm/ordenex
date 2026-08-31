@@ -153,6 +153,7 @@ model Usuario {
   postulacionesRecursoAtendidas       PostulacionRecurso[]      @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
   diaRepartoCambiosRealizados         OrdenDiaRepartoCambio[]   @relation("OrdenDiaRepartoCambioActor") // feature 262/R20: correcciones del dia de reparto que ESTE usuario hizo; la FK es RESTRICT (quien corrigio es evidencia y no se pierde al dar de baja al usuario)
   habilitacionesApiPedidas            OrdenHabilitacionApi[]    @relation("OrdenHabilitacionApiActor") // feature 266/R21: habilitaciones pedidas por el canal integrador a nombre de ESTE usuario (302: el dueno resuelto de la key -- su cuenta dedicada, o la tienda real a la que apunta); la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
+  cobrosGastoFijo                     GastoFijoCobro[]          @relation("GastoFijoCobroDecisor") // ficha 333/R15/R21: cobros de gasto fijo que ESTE usuario aprobo o rechazo; la FK es RESTRICT (quien autorizo dinero es evidencia y no se pierde al dar de baja al usuario), mismo criterio que `orden_dia_reparto_cambio.actor_usuario_id`
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -1520,6 +1521,11 @@ model WalletMovimiento {
   // SIN updatedAt / deletedAt: la fila es INMUTABLE (R3). No hay soft-delete.
 
   registrador Usuario? @relation("WalletMovimientoRegistrador", fields: [registradoPor], references: [id])
+  // Ficha 333 (design 1.3): el cobro de gasto fijo que ESTA fila del libro salda, si lo hay.
+  // Anadir el campo de relacion NO cambia la tabla `wallet_movimiento`: sigue sin `updated_at`,
+  // sin `deleted_at` y sin `update`/`delete` expuestos en su repositorio (R3 de la 42). La FK
+  // vive en `gasto_fijo_cobro.movimiento_id` y es RESTRICT: el libro no se borra nunca.
+  cobroGastoFijo GastoFijoCobro?
 
   @@index([fechaMovimiento]) // R24: listado del libro por fecha (desc)
   @@index([tipo, categoria]) // R24: filtros por tipo/categoria
@@ -1812,8 +1818,14 @@ enum PeriodicidadUnidad {
 
 // Feature 45 (design §1.2): plantilla recurrente de GASTO FIJO. CONFIGURACION mutable (NO es
 // el libro wallet_movimiento, que es inmutable): SI lleva updatedAt y se edita/activa/
-// desactiva. NO se borra (R25): la desactivacion (activa=false) detiene la generacion futura
-// y preserva el rastro de que genero cada egreso. El cron DIARIO
+// desactiva. Y SI SE ELIMINA desde la ficha 332, que REVOCA el «NO se borra (R25)» de la
+// feature 45 con decision humana del 2026-08-29 — motivo: la tabla acumula ruido y el
+// historico NO depende de la plantilla (no hay FK a wallet_movimiento, la referencia es
+// derivada y la descripcion del egreso ya lleva concepto y periodo, asi que la fila del libro
+// se explica sola). Puntero: specs/332-eliminar-plantilla-gasto-fijo. Desactivar
+// (activa=false) NO desaparece: es la PAUSA reversible —detiene la generacion futura,
+// conserva la fila y con ella el id, o sea la clave de idempotencia—. La ficha 332 cambia
+// SOLO este comentario: el modelo es identico y no lleva migracion. El cron DIARIO
 // (`/api/cron/generar-gastos-fijos`, `0 6 * * *`) lee las ACTIVAS, filtra las que aplican HOY
 // segun su periodicidad (`lib/utils/periodicidad.ts`) y emite un egreso `egreso_gasto_fijo` en
 // la caja principal por cada una. RLS habilitada sin policies (solo service role, patron
@@ -1841,11 +1853,102 @@ model GastoFijoPlantilla {
   periodicidadUnidad   PeriodicidadUnidad @default(meses) @map("periodicidad_unidad")
   periodicidadCantidad Int                @default(1) @map("periodicidad_cantidad") // CHECK >= 1 en la migracion
   fechaCobro           DateTime           @map("fecha_cobro") @db.Date // ancla: fecha del PRIMER cobro
+  // Ficha 333 (R1/R2, design 1.1) - EL INTERRUPTOR de la plantilla, con exactamente dos valores:
+  // `false` = COBRA SOLA (el cron escribe el egreso directo en el libro, igual que antes de la
+  // 333) y `true` = REQUIERE APROBACION (el cron crea un cobro `pendiente` en `gasto_fijo_cobro`
+  // y NO toca el libro hasta que el maestro decida).
+  // `DEFAULT true` (R2) porque la norma es pedir autorizacion y "cobra sola" es la excepcion. No
+  // reescribe la tabla (Postgres >= 11 guarda el default en el catalogo) y deja las DOS filas
+  // existentes -las dos INACTIVAS, medido contra produccion el 2026-08-29- en "requiere
+  // aprobacion", asi que ese valor no cambia hoy el comportamiento de nada (R12).
+  requiereAprobacion   Boolean            @default(true) @map("requiere_aprobacion")
   createdAt            DateTime           @default(now()) @map("created_at")
   updatedAt            DateTime           @default(now()) @updatedAt @map("updated_at")
 
+  // Ficha 333 (design 1.3 y 9): los cobros generados por esta plantilla. La FK del otro lado es
+  // `ON DELETE SET NULL`, asi que el borrado de la 332 NO se lleva el rastro de las decisiones ya
+  // tomadas (R47); lo que la base SI impide es que una plantilla desaparezca dejando cobros
+  // `pendiente` vivos (CHECK `gasto_fijo_cobro_pendiente_con_plantilla`, R46).
+  cobros GastoFijoCobro[]
+
   @@index([activa]) // cron: WHERE activa = true (R27)
   @@map("gasto_fijo_plantilla")
+}
+
+// Ficha 333 (design 1.2) - estado de un COBRO de gasto fijo. Nace `pendiente` y termina
+// `aprobado`, `rechazado` o `cancelado`. Enum Postgres nativo (patron `PeriodicidadUnidad` /
+// `NotificacionEvento`). Se CREA entero en su migracion (`CREATE TYPE`, no `ALTER TYPE ... ADD
+// VALUE`), asi que no aplica el `55P04` y puede usarse como tipo de columna en esa misma
+// migracion.
+enum GastoFijoCobroEstado {
+  pendiente
+  aprobado
+  rechazado
+  cancelado
+
+  @@map("gasto_fijo_cobro_estado")
+}
+
+// Ficha 333 (design 1.3) - EL COBRO: la intencion de cobrar un periodo de una plantilla que
+// "requiere aprobacion". Lo crea el cron a las 00:00 CR y lo decide el MAESTRO (y solo el:
+// `puedeDecidirCobroGastoFijo`, excepcion deliberada a la paridad de la 94). Hasta que se
+// apruebe NO hay nada en el libro: `wallet_movimiento` sigue siendo append-only e inmutable y
+// el balance sigue derivandose de el sin aprender ningun estado nuevo (design 11-A1).
+//
+// OJO - `origen_id` ES LA CLAVE DEL LIBRO, y su formato es donde se duplica plata. Vale
+// EXACTAMENTE `"<plantillaId>:<periodo>"` con el `periodo` que produce `periodoDe`
+// (`YYYY-MM` en `meses`; `YYYY-MM-DD` en `dias`/`semanas`) - el MISMO texto que acabara en
+// `wallet_movimiento.origen_id` al aprobar, bajo `wallet_movimiento_origen_categoria_uq`. Se
+// resuelve UNA sola vez, al generar el cobro (R8), y NO se recalcula al aprobar. Aqui lo
+// protege `gasto_fijo_cobro_origen_uq` (UNIQUE TOTAL, no parcial: por eso un cobro RECHAZADO
+// impide que su periodo vuelva a generarse, R22).
+//
+// OJO - `concepto` y `monto` son COPIAS de la plantilla tomadas al generar, y no son
+// desnormalizacion perezosa: son la correccion de R16. Lo que el maestro aprueba es lo que vio;
+// leer el monto de la plantilla en el momento de aprobar cobraria un importe que nadie autorizo
+// si alguien la edito entre medias. Y son lo que hace que R47 siga siendo cierto cuando la
+// plantilla ya no exista (`plantilla_id` pasa a NULL, la copia se queda).
+//
+// `periodo` convive con `origen_id` a proposito: `origen_id` es LA CLAVE y `periodo` es el dato
+// que se ENSENA y por el que se ordena. Una clave no se destripa para pintar una celda.
+//
+// Los CINCO CHECK, las tres FK y `gasto_fijo_cobro_origen_uq` van a mano en la migracion
+// (Prisma no expresa CHECK). RLS habilitada sin policies (solo service role, patron
+// `wallet_movimiento` / `gasto_fijo_plantilla` / `notificacion`, R50).
+model GastoFijoCobro {
+  id           String               @id @default(uuid())
+  plantillaId  String?              @map("plantilla_id") // NULL solo cuando la plantilla se borro (ON DELETE SET NULL)
+  origenId     String               @map("origen_id") // "<plantillaId>:<periodo>" - LA CLAVE DEL LIBRO
+  periodo      String // "YYYY-MM" | "YYYY-MM-DD" - lo que se ENSENA y por lo que se ordena
+  concepto     String // copia de la plantilla al generar (R7)
+  monto        Decimal              @db.Decimal(12, 2) // copia de la plantilla al generar; CHECK > 0 (R52)
+  estado       GastoFijoCobroEstado @default(pendiente)
+  generadoEl   DateTime             @map("generado_el") @db.Date // dia CR de la corrida que lo creo
+  decididoPor  String?              @map("decidido_por") // FK usuario: quien aprobo o rechazo (R15/R21)
+  decididoAt   DateTime?            @map("decidido_at") // CHECK: NULL si y solo si estado = 'pendiente'
+  // El `@unique` NO es decoracion ni un indice "por si acaso": design 1.3 declara la
+  // back-relation `WalletMovimiento.cobroGastoFijo` como UNO A UNO, y Prisma exige `@unique`
+  // en el lado que sostiene la FK de una 1-1 (P1012, medido). El indice resultante ademas
+  // ENUNCIA el invariante: una fila del libro salda como mucho UN cobro. La nota de design
+  // 1.3 -"movimiento_id sin indice a proposito"- hablaba del btree simple de la FK RESTRICT,
+  // que efectivamente no existe: no hay ninguna consulta que filtre por esta columna.
+  movimientoId String?              @unique(map: "gasto_fijo_cobro_movimiento_uq") @map("movimiento_id") // FK wallet_movimiento: CHECK solo si estado = 'aprobado'
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @default(now()) @updatedAt @map("updated_at")
+
+  plantilla  GastoFijoPlantilla? @relation(fields: [plantillaId], references: [id], onDelete: SetNull)
+  decisor    Usuario?            @relation("GastoFijoCobroDecisor", fields: [decididoPor], references: [id], onDelete: Restrict)
+  movimiento WalletMovimiento?   @relation(fields: [movimientoId], references: [id], onDelete: Restrict)
+
+  // `gasto_fijo_cobro_origen_uq` SI se declara aqui -al reves que el del libro, que es PARCIAL y
+  // por eso vive solo en la migracion-: es un UNIQUE pleno, Prisma lo expresa entero y asi el
+  // cliente generado conoce la unicidad y `migrate diff` no propone soltarlo. El `map:` reproduce
+  // el nombre que la migracion le pone a mano.
+  @@unique([origenId], map: "gasto_fijo_cobro_origen_uq")
+  @@index([estado, generadoEl]) // la COLA de pendientes, del mas antiguo al mas reciente (R39)
+  @@index([plantillaId]) // cancelacion en cascada del borrado de plantilla (R45) y su conteo (R55)
+  @@index([decididoPor]) // el RESTRICT se ejerce al borrar usuarios (patron orden_dia_reparto_cambio)
+  @@map("gasto_fijo_cobro")
 }
 
 // Feature 76 (R8/R21/design §4.3): tabla de PREMIOS del ranking diario. Exactamente 3
@@ -2347,6 +2450,7 @@ enum NotificacionEvento {
   dia_reparto_corregido // feature 262 (D7): a una orden asignada le corrigieron el dia de reparto; se avisa AL MENSAJERO asignado y a nadie mas (R46/R51)
   cierre_dia_vencido // feature 271 (§9.2, R38/R39): el corte creo un cierre `vencido`; se avisa al MENSAJERO dueño y a su bodega responsable
   mensajero_bloqueado_por_cierres // feature 271 (§9.2, R40/R41/R42): el mensajero quedo BLOQUEADO por acumular cierres, o por un rechazo; mismo evento para las tres causas porque la accion que pide es la misma
+  gasto_fijo_cobro_pendiente // ficha 333 (R29/R30/R36): quedan cobros de gasto fijo esperando decision. Se emite AL FINAL de la corrida del cron y se REPITE cada dia CR mientras siga habiendo alguno; el texto lleva SOLO el numero (R35)
 
   @@map("notificacion_evento")
 }
@@ -2360,6 +2464,16 @@ enum NotificacionEntidadTipo {
   carga
   postulacion_recurso // feature 253 (D6): la entidad es una fila de `postulacion_recurso`, que NO es un `usuario` (no crea cuenta)
   orden_dia_reparto_cambio // feature 262 (D7): la entidad es la fila del RASTRO, no la orden. Con `orden` la clave unica `notificacion_dedupe_key` solo admitiria UN aviso por (evento, orden, mensajero) PARA SIEMPRE, y la segunda correccion de esa orden no avisaria nunca (design §15.2, A20)
+  // Ficha 333 (design 4.2) - PRIMER `entidad_tipo` que NO apunta a una fila de tabla: la entidad
+  // es EL DIA CR de la corrida (`entidad_id = "YYYY-MM-DD"`), no el cobro. Con el COBRO como
+  // entidad, `notificacion_dedupe_key` admitiria UNA sola fila por (evento, cobro, maestro) PARA
+  // SIEMPRE y `NotificacionRepository.crear` absorbe el `P2002` devolviendo `false`: el
+  // recordatorio del dia 2 no saldria NUNCA, en silencio - el fallo exacto que documento la 262.
+  // Con el dia: dias distintos => entidades distintas => el recordatorio diario es ESTRUCTURAL
+  // (R30), y dos corridas del mismo dia => misma entidad => un solo aviso (R31). Se le da valor
+  // propio en vez de reusar uno existente porque reusar un valor que promete una fila (`carga`,
+  // `usuario`...) seria escribir un dato falso con formato de dato.
+  gasto_fijo_cobro_dia
 
   @@map("notificacion_entidad_tipo")
 }

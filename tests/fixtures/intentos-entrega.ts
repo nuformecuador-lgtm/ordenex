@@ -17,7 +17,7 @@ import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHis
  */
 export type IntentosSvcDoble = Pick<
   IOrdenHistorialService,
-  "contarIntentosEnLote" | "contarIntentos" | "idsConGestionPosteriorEnLote"
+  "contarIntentosEnLote" | "contarIntentos"
 >;
 
 /**
@@ -35,19 +35,18 @@ export type IntentosSvcDoble = Pick<
  */
 export function fakeIntentosEnLote(
   porOrden: Record<string, number> = {},
-  conGestion: string[] = [],
 ): IntentosSvcDoble {
   return {
     contarIntentosEnLote: vi.fn(async () => new Map(Object.entries(porOrden))),
     contarIntentos: vi.fn(async (ordenId: string) => porOrden[ordenId] ?? 0),
-    // Pedido humano (2026-08-27): el doble se ENSANCHA una vez mas, por la misma razon que lo
-    // hizo la 276 — un objeto con un metodo de mas sigue siendo asignable a un `Pick` mas
-    // estrecho, asi que las 30+ suites que solo piden `contarIntentosEnLote` no se enteran.
-    // El default `[]` es "ninguna orden tiene gestion posterior", que es el caso que ejercita
-    // la rama util de `sinGestion`.
-    idsConGestionPosteriorEnLote: vi.fn(async () => new Set(conGestion)),
   };
 }
+
+// FICHA 319 (2026-08-28): el doble PIERDE `idsConGestionPosteriorEnLote` y su segundo argumento
+// `conGestion`. Lo gano el 2026-08-27 para alimentar `sinGestion` (¿ofrezco el boton Eliminar?);
+// ese criterio se retiro —hoy manda el ESTADO de la orden— y ningun servicio consulta ya el
+// historial para esto. Un doble que ofrece un metodo que nadie llama es el mismo cable suelto en
+// el lado de los tests: sugiere una dependencia que no existe.
 
 /** Atajo tipado para leer las llamadas del doble en las aserciones. */
 export function llamadasIntentos(doble: IntentosSvcDoble): string[][] {

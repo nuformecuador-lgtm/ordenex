@@ -163,3 +163,75 @@ describe("avisos al editar y al guardar", () => {
     );
   });
 });
+
+// SER PLANTILLA DE TIENDA ES DE IDA (2026-08-28). La puerta real vive en el service; esto
+// vigila que la pantalla no OFREZCA lo que el service va a rechazar. Un interruptor que se
+// puede mover y luego falla al guardar es peor que uno bloqueado: promete algo imposible.
+describe("el interruptor de una plantilla ya guardada como de tienda", () => {
+  it("esta bloqueado y dice por que", async () => {
+    const user = userEvent.setup();
+    montar(renderConFila(fila({ plantillaTienda: true, estado: "activo" })));
+
+    const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
+    await within(table).findByText("aviso");
+    await user.click(within(table).getByRole("button", { name: "Editar" }));
+
+    const conmutador = await screen.findByRole("switch", {
+      name: "Plantilla para envío de la tienda",
+    });
+    // `aria-disabled` y no `toBeDisabled()`: Base UI pinta la raiz como `<span role="switch">`,
+    // y el atributo `disabled` nativo solo existe en controles de formulario.
+    expect(conmutador).toHaveAttribute("aria-disabled", "true");
+    // El motivo tiene que estar EN PANTALLA: un control muerto sin explicacion se lee como
+    // un fallo de la app, no como una regla.
+    expect(screen.getByText(/no puede dejar de serlo/i)).toBeInTheDocument();
+  });
+
+  // El contraste: la misma pantalla sobre una plantilla que NO es de tienda deja encenderlo.
+  // Sin este caso, un `disabled` puesto siempre pasaria el test de arriba.
+  it("sigue libre en una plantilla que no es de tienda", async () => {
+    const user = userEvent.setup();
+    montar(renderConFila(fila({ estado: "saved_not_aprobation" })));
+
+    const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
+    await within(table).findByText("aviso");
+    await user.click(within(table).getByRole("button", { name: "Editar" }));
+
+    const conmutador = await screen.findByRole("switch", {
+      name: "Plantilla para envío de la tienda",
+    });
+    expect(conmutador).not.toHaveAttribute("aria-disabled", "true");
+    await user.click(conmutador);
+    expect(conmutador).toBeChecked();
+  });
+});
+
+// COLUMNA "Plant. Tienda" (pedido humano del 2026-08-28). La insignia junto al nombre ya
+// distinguia la fila, pero se lee fila a fila; una columna propia se barre en vertical.
+describe("la columna Plant. Tienda", () => {
+  it("marca con un chulito la fila que lo es", async () => {
+    montar(renderConFila(fila({ plantillaTienda: true, estado: "activo" })));
+
+    const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
+    await within(table).findByText("aviso");
+
+    expect(
+      within(table).getByRole("columnheader", { name: "Plant. Tienda" }),
+    ).toBeInTheDocument();
+    expect(within(table).getByRole("img", { name: "Sí" })).toBeInTheDocument();
+  });
+
+  // El `false` va VACIO a proposito: la cabecera sigue ahi, la marca no. Si el chulito se
+  // pintara siempre, la columna no distinguiria nada.
+  it("deja la celda vacia cuando no lo es", async () => {
+    montar(renderConFila(fila({ plantillaTienda: false })));
+
+    const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
+    await within(table).findByText("aviso");
+
+    expect(
+      within(table).getByRole("columnheader", { name: "Plant. Tienda" }),
+    ).toBeInTheDocument();
+    expect(within(table).queryByRole("img", { name: "Sí" })).toBeNull();
+  });
+});

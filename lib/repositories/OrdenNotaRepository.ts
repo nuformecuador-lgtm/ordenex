@@ -1,10 +1,11 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import type {
   CrearOrdenNotaInput,
   IOrdenNotaRepository,
   OrdenNotaRow,
   OrdenParaHilo,
 } from "@/lib/interfaces/repositories/IOrdenNotaRepository";
+import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 // Feature 227 (T2.4, design §2.1) — acceso a `orden_nota`. SOLO Prisma: ni una decision de
 // negocio, ni una comprobacion de permisos, ni una proyeccion. Todo eso vive en
@@ -26,8 +27,15 @@ const SELECT_NOTA = {
   cuerpo: true,
   createdAt: true,
   deletedAt: true,
-  autor: { select: { nombre: true } },
+  autor: { select: NOMBRE_USUARIO_SELECT },
 } as const;
+
+type NotaFila = Prisma.OrdenNotaGetPayload<{ select: typeof SELECT_NOTA }>;
+
+/** Colapsa las tres columnas de identidad del autor al `nombre` unico que declara el DTO. */
+function conAutorCompleto(fila: NotaFila): OrdenNotaRow {
+  return { ...fila, autor: { nombre: nombreCompletoUsuario(fila.autor) } };
+}
 
 export class OrdenNotaRepository implements IOrdenNotaRepository {
   constructor(private readonly prisma: OrdenNotaPrismaClient) {}
@@ -40,17 +48,18 @@ export class OrdenNotaRepository implements IOrdenNotaRepository {
     //
     // R34: NO se filtra `deletedAt`. Las borradas tienen que llegar para que la UI pinte el
     // hueco marcado en su posicion; el CUERPO lo descarta el service (design §A9).
-    return this.prisma.ordenNota.findMany({
+    const filas = await this.prisma.ordenNota.findMany({
       where: { ordenId },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: SELECT_NOTA,
     });
+    return filas.map(conAutorCompleto);
   }
 
   async crear(input: CrearOrdenNotaInput): Promise<OrdenNotaRow> {
     // R1: un solo `create`, sin leer ni tocar ninguna fila previa del hilo. `autorId` y
     // `rolAutor` llegan ya resueltos desde el actor (el repo no sabe quien es el actor).
-    return this.prisma.ordenNota.create({
+    const fila = await this.prisma.ordenNota.create({
       data: {
         ordenId: input.ordenId,
         autorId: input.autorId,
@@ -59,6 +68,7 @@ export class OrdenNotaRepository implements IOrdenNotaRepository {
       },
       select: SELECT_NOTA,
     });
+    return conAutorCompleto(fila);
   }
 
   async marcarBorrada(notaId: string, ordenId: string, autorId: string): Promise<number> {

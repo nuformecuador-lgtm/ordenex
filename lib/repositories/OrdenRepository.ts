@@ -17,6 +17,7 @@ import {
 // Feature 271 (R57-R61) — el UNICO derivador de la jornada de un cierre, y la conversion a fecha
 // de Costa Rica que necesita. `created_at` de un `vencido` va UN DIA por delante de la jornada.
 import { derivarJornada } from "@/lib/utils/jornada-cierre";
+import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 import { ESTADOS_USUARIO_NO_ASIGNABLES } from "@/lib/constants/estado-usuario-asignable";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 // Feature 274 — LA REGLA de resolucion de tarifa vive en un modulo PURO, compartido con el
@@ -44,6 +45,7 @@ import {
   type CreateOrdenData,
   type CreateOrdenConGuiaResultRow,
   type CreateOrdenOpciones,
+  type DistritoResueltoRow,
   type DistritoRow,
   type EtiquetaRow,
   type GenerarGuiaDecisionData,
@@ -56,6 +58,7 @@ import {
   type ManifiestoOrdenRow,
   type MensajeroLiteRow,
   type NovedadOrdenRow,
+  type OrdenParaCorreccionRow,
   type OrdenTransicionRow,
   type OrderStatusLiteRow,
   type ProvinciaRow,
@@ -88,6 +91,7 @@ import { startOfDayCR } from "@/lib/utils/fecha-cr";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type {
+  OrdenParaEliminacionApi,
   OrdenParaHabilitacionApi,
   ParadaRutaRow,
   TransicionAyudaInput,
@@ -533,7 +537,7 @@ const WITH_ESTATUS_Y_TIENDA = {
     // `zonaEspecial` (2026-08-25) viaja con el distrito porque decide el MONTO del flete que
     // muestran las dos columnas de dinero de la fila, no solo su etiqueta.
     distrito: { select: { id: true, nombre: true, zonaEspecial: true } },
-    mensajeroAsignado: { select: { id: true, nombre: true } },
+    mensajeroAsignado: { select: { id: true, ...NOMBRE_USUARIO_SELECT } },
     // Gestion de reprogramacion VIGENTE (a lo sumo una, `take: 1`): alimenta la
     // columna "Liberada el" de la tab `reprogramada`. `orden -> gestiones` es 1:N
     // (una orden acumula gestiones entre reintentos), asi que la vigente es la mas
@@ -678,7 +682,7 @@ function toRelaciones(row: OrdenListRow, tarifa: TarifaListRow | null): OrdenLis
     canton: row.canton ? { id: row.canton.id, nombre: row.canton.nombre } : null,
     distrito: row.distrito ? { id: row.distrito.id, nombre: row.distrito.nombre } : null,
     mensajeroAsignado: row.mensajeroAsignado
-      ? { id: row.mensajeroAsignado.id, nombre: row.mensajeroAsignado.nombre }
+      ? { id: row.mensajeroAsignado.id, nombre: nombreCompletoUsuario(row.mensajeroAsignado) }
       : null,
   };
 }
@@ -855,7 +859,7 @@ const WITH_MANIFIESTO = {
     montoCobrar: true,
     tienda: { select: { nombre: true } },
     zona: { select: { nombre: true, esCentral: true } },
-    mensajeroAsignado: { select: { nombre: true } },
+    mensajeroAsignado: { select: NOMBRE_USUARIO_SELECT },
   },
 } as const;
 
@@ -879,7 +883,9 @@ function toManifiestoOrdenRow(row: OrdenManifiestoRow): ManifiestoOrdenRow {
     tiendaNombre: row.tienda.nombre,
     zonaNombre: row.zona.nombre,
     zonaEsCentral: row.zona.esCentral,
-    mensajeroAsignadoNombre: row.mensajeroAsignado?.nombre ?? null,
+    mensajeroAsignadoNombre: row.mensajeroAsignado
+      ? nombreCompletoUsuario(row.mensajeroAsignado)
+      : null,
   };
 }
 
@@ -1376,31 +1382,29 @@ export class OrdenRepository implements IOrdenRepository {
         });
         origenEstatusId = actual?.estatusId ?? null;
       }
-      // ── Feature 91 (R10/R11, decision Q1): GUARD LATENTE de re-geocodificacion ──────
+      // ── Feature 91 (R10/R11, decision Q1): GUARD de re-geocodificacion ─────────────
       //
-      // ESTE CODIGO NO ES ALCANZABLE HOY, Y NO ES CODIGO MUERTO A ELIMINAR.
+      // FUE LATENTE HASTA LA FICHA 327 (2026-08-28), Y YA NO LO ES.
       //
-      // Hoy la condicion `data.direccion !== undefined` NUNCA se cumple: la ruta de
-      // edicion es estructuralmente incapaz de cambiar una direccion — `actualizarOrdenSchema`
-      // (lib/types/orden.ts) es `.strict()` y no incluye `direccion`, y `toUpdateData()`
-      // tampoco la proyecta. Ampliar el CRUD para permitir editarla es OTRA feature y
-      // esta explicitamente FUERA de alcance de la 91 (design §0/C1).
+      // Lo que decia este bloque —«este codigo no es alcanzable hoy»— era cierto y hoy
+      // solo lo es A MEDIAS, asi que se reescribe en vez de dejarlo mintiendo:
       //
-      // Se implementa igualmente porque el dia que el CRUD gane el campo, sin este guard
-      // la orden quedaria con direccion NUEVA y coordenadas VIEJAS, en silencio, sin
-      // ninguna senal de inconsistencia — y nadie relacionaria ese bug con esta feature.
-      // Cuesta ~6 lineas y deja el sistema correcto por construccion.
+      //  · POR ESTE METODO (`update`) la direccion SIGUE sin poder escribirse: `toUpdateData()`
+      //    NO la proyecta, y ninguno de sus consumidores vivos (`DevolucionOrigenService`,
+      //    `EnvioDevolucionCentralService`) la informa. Aqui la condicion sigue sin cumplirse.
+      //    Lo que ya NO es cierto es la otra mitad de la frase original: `actualizarOrdenSchema`
+      //    SI incluye `direccion` desde la 327 (lib/types/orden.ts).
+      //  · QUIEN SI LA ESCRIBE es el hermano de este metodo, `corregirDatosCliente`, y por eso
+      //    el guard esta EXTRAIDO a `direccionPreviaParaGuard` + `encolarSiCambiaDireccion`
+      //    (abajo): UNA implementacion que llaman los dos. Dos copias de «vino informada Y
+      //    difiere» es la forma silenciosa de que un dia una de las dos deje de encolar.
+      //
+      // El porque del guard no cambia: sin el, la orden queda con direccion NUEVA y coordenadas
+      // VIEJAS, en silencio, sin ninguna senal de inconsistencia.
       //
       // La pre-lectura es CONDICIONAL (patron del `estatusId` de arriba) para no anadir
       // una query a cada actualizacion de orden.
-      let direccionPrevia: string | null = null;
-      if (data.direccion !== undefined) {
-        const actual = await tx.orden.findFirst({
-          where: { id, deletedAt: null },
-          select: { direccion: true },
-        });
-        direccionPrevia = actual?.direccion ?? null;
-      }
+      const direccionPrevia = await this.direccionPreviaParaGuard(tx, id, data.direccion);
       // Solo aplica si existe y no esta borrada (R36); updateMany no lanza si 0 filas.
       const result = await tx.orden.updateMany({
         where: { id, deletedAt: null },
@@ -1424,15 +1428,14 @@ export class OrdenRepository implements IOrdenRepository {
           },
         ]);
       }
-      // R10/R11 (guard latente, ver el bloque de arriba): encola SOLO si la actualizacion
-      // cambia EFECTIVAMENTE la direccion (viene informada Y difiere de la almacenada).
-      // Si no viene el campo, o la deja igual, no se encola nada.
-      if (data.direccion !== undefined && data.direccion !== direccionPrevia) {
-        await encolarGeocodificacion(this.jobRepo, tx as unknown as JobTxClient, {
-          id,
-          direccion: data.direccion,
-        });
-      }
+      // R10/R11 (ver el bloque del guard, arriba): la mitad que ENCOLA, en la misma
+      // implementacion que usa `corregirDatosCliente`.
+      await this.encolarSiCambiaDireccion(
+        tx as unknown as JobTxClient,
+        id,
+        data.direccion,
+        direccionPrevia,
+      );
       const row = await tx.orden.findFirst({
         where: { id, deletedAt: null },
         ...WITH_ESTATUS,
@@ -1442,48 +1445,150 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * FICHA 312 (design §7) — CORRECCION DE LOS DATOS DEL CLIENTE. Hermano de `update`, y no una
-   * rama suya: `update` puede escribir `estatusId` y `direccion`, y por eso arrastra el append al
-   * historial y el encolado de geocodificacion. Este camino es ESTRUCTURALMENTE INCAPAZ de
-   * dispararlos, porque `CorregirDatosClienteData` no puede expresar esos dos campos (R5/R14).
+   * ── GUARD DE RE-GEOCODIFICACION, MITAD 1 (feature 91/R10-R11, extraido por la ficha 327/B3) ──
    *
-   * UNA SOLA SENTENCIA. La ventana de estado va en el `WHERE` de la sentencia QUE MUTA —no en un
-   * `if` previo— exactamente como `OrdenNotaRepository.marcarBorrada`: asi no queda ninguna
-   * ventana entre comprobar y escribir. Un estado que se mueva entre la lectura del servicio y
-   * esta escritura hace que el `updateMany` no alcance ninguna fila, y eso es el `"conflict"` de
-   * R13 — sin efecto parcial que deshacer, porque no hubo primera escritura.
+   * Pre-lectura CONDICIONAL de la direccion almacenada. Va ANTES de la sentencia que muta —por eso
+   * el guard son DOS metodos y no uno: leer despues del `UPDATE` devolveria la direccion NUEVA y
+   * la comparacion de la mitad 2 saldria siempre «no cambio», que es el bug silencioso exacto que
+   * este guard existe para impedir.
    *
-   * `deletedAt: null` en el mismo `WHERE` cubre R12 por el mismo mecanismo: una orden borrada
+   * `direccionNueva === undefined` (el caso de casi todas las actualizaciones) NO consulta nada:
+   * no se le añade una query a cada escritura de orden que no toca la direccion.
+   *
+   * `deletedAt: null` en el `where`, igual que las sentencias que la acompañan: una orden borrada
+   * no tiene direccion previa que comparar.
+   */
+  private async direccionPreviaParaGuard(
+    tx: Pick<PrismaClient, "orden">,
+    id: string,
+    direccionNueva: string | null | undefined,
+  ): Promise<string | null> {
+    if (direccionNueva === undefined) return null;
+    const actual = await tx.orden.findFirst({
+      where: { id, deletedAt: null },
+      select: { direccion: true },
+    });
+    return actual?.direccion ?? null;
+  }
+
+  /**
+   * ── GUARD DE RE-GEOCODIFICACION, MITAD 2 ──
+   *
+   * Encola SOLO si la escritura cambia EFECTIVAMENTE la direccion: vino informada Y difiere de la
+   * almacenada. Si no viene el campo, o lo deja igual, no se encola nada (327/R20).
+   *
+   * ⚠️ UNA SOLA IMPLEMENTACION, DOS LLAMADORES (`update` y `corregirDatosCliente`). Duplicar esta
+   * condicion era la alternativa B de `design.md` §11 de la 327 y esta descartada: dos copias de
+   * «informada Y distinta» es la forma silenciosa de que un dia una de las dos deje de encolar y
+   * la orden se quede con direccion NUEVA y coordenadas VIEJAS sin ninguna señal.
+   *
+   * `tx` es SIEMPRE el cliente transaccional del writer (patron OUTBOX de la 91/R7): si la
+   * transaccion revierte, el job desaparece con ella (327/R21).
+   */
+  private async encolarSiCambiaDireccion(
+    tx: JobTxClient,
+    id: string,
+    direccionNueva: string | null | undefined,
+    direccionPrevia: string | null,
+  ): Promise<void> {
+    if (direccionNueva === undefined || direccionNueva === direccionPrevia) return;
+    await encolarGeocodificacion(this.jobRepo, tx, { id, direccion: direccionNueva });
+  }
+
+  /**
+   * FICHA 312 (design §7), AMPLIADA POR LA 327 (B4) — CORRECCION DE LOS DATOS DEL CLIENTE Y DE
+   * SU UBICACION. Hermano de `update`, y no una rama suya: `update` puede escribir `estatusId`,
+   * `tiendaId` y `zonaId` libremente, y arrastra el append al historial. Este camino sigue siendo
+   * ESTRUCTURALMENTE INCAPAZ de dispararlo, porque `CorregirDatosClienteData` no puede expresar
+   * `estatusId` (312/R5, 327/R24).
+   *
+   * LA VENTANA DE ESTADO VA EN EL `WHERE` de la sentencia QUE MUTA —no en un `if` previo—
+   * exactamente como `OrdenNotaRepository.marcarBorrada`: asi no queda ninguna ventana entre
+   * comprobar y escribir. Un estado que se mueva entre la lectura del servicio y esta escritura
+   * hace que el `updateMany` no alcance ninguna fila, y eso es el `"conflict"` de 312/R13 y
+   * 327/R29 — sin efecto parcial que deshacer.
+   *
+   * `deletedAt: null` en el mismo `WHERE` cubre 312/R12 por el mismo mecanismo: una orden borrada
    * logicamente no se corrige, y el desenlace es indistinguible del de una orden que se movio.
    *
-   * SIN `$transaction` y SIN tocar el constructor: no hay dos escrituras que coordinar. Mientras
-   * el diseño llevaba una nota automatica, este metodo necesitaba una transaccion y
-   * `OrdenRepository` un tercer parametro para inyectar el repositorio del hilo. D4 retiro la
-   * nota (2026-08-28) y con ella toda esa superficie. Este archivo NO gana ningun import del hilo
-   * de notas, y eso lo vigila una guardia.
+   * ⚠️ CON `$transaction` DESDE LA 327, Y LA 312 PRESUMIA DE NO TENERLA. El motivo esta escrito
+   * porque es un retroceso aparente: cuando la direccion cambia hay que encolar la
+   * re-geocodificacion, y ese encolado TIENE que compartir transaccion con la escritura o se
+   * rompe el invariante OUTBOX de la feature 91/R7 en las dos direcciones —un job que sobrevive
+   * a una escritura revertida, o una escritura sin job (direccion nueva, coordenadas viejas, EN
+   * SILENCIO)—. El constructor NO cambia: `jobRepo` ya venia inyectado con default desde la 91.
+   *
+   * Sigue SIN escribir en ninguna otra tabla que no sea `orden` y —solo si la direccion cambia—
+   * `jobs`: ni historial, ni hilo de notas, ni auditoria (327/R25, enmienda declarada a 312/R14).
    */
   async corregirDatosCliente(
     ordenId: string,
     data: CorregirDatosClienteData,
     estadosBloqueados: readonly string[],
   ): Promise<"ok" | "conflict"> {
-    const { count } = await this.prisma.orden.updateMany({
-      where: {
-        id: ordenId,
-        deletedAt: null,
-        estatus: { value: { notIn: [...estadosBloqueados] } },
-      },
-      // Se proyecta campo a campo (y no `...data`) para que lo que llega a Prisma sea EXACTAMENTE
-      // el cuarteto de D1 aunque el llamador ensanche el objeto en tiempo de ejecucion. Un
-      // `undefined` es «no lo toques» para Prisma, asi que la columna ni aparece en el `SET`.
-      data: {
-        destinatario: data.destinatario,
-        telefonoDest: data.telefonoDest,
-        producto: data.producto,
-        notas: data.notas,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      // Guard de re-geocodificacion, mitad 1: ANTES de mutar, y solo si la direccion viene.
+      const direccionPrevia = await this.direccionPreviaParaGuard(tx, ordenId, data.direccion);
+
+      const { count } = await tx.orden.updateMany({
+        where: {
+          id: ordenId,
+          deletedAt: null,
+          estatus: { value: { notIn: [...estadosBloqueados] } },
+        },
+        // Se proyecta campo a campo (y no `...data`) para que lo que llega a Prisma sea
+        // EXACTAMENTE la lista de D1 aunque el llamador ensanche el objeto en tiempo de
+        // ejecucion. Un `undefined` es «no lo toques» para Prisma, asi que la columna ni
+        // aparece en el `SET`.
+        //
+        // `zonaId` esta aqui y NO en el schema del borde: la DERIVA el servidor a partir del
+        // distrito (327/R5). El cliente no puede mandarla.
+        data: {
+          destinatario: data.destinatario,
+          telefonoDest: data.telefonoDest,
+          producto: data.producto,
+          notas: data.notas,
+          direccion: data.direccion,
+          provinciaId: data.provinciaId,
+          cantonId: data.cantonId,
+          distritoId: data.distritoId,
+          zonaId: data.zonaId,
+          // `peso` es `Decimal(10,3)` en la columna: se convierte igual que en `toUpdateData`.
+          peso: data.peso !== undefined ? new Prisma.Decimal(data.peso) : undefined,
+        },
+      });
+
+      // 327/R21: si la sentencia no alcanzo la fila NO hubo escritura, asi que no hay nada que
+      // geocodificar. Se sale sin encolar y la transaccion no deja rastro.
+      if (count !== 1) return "conflict";
+
+      // Guard de re-geocodificacion, mitad 2: DENTRO de la misma transaccion (OUTBOX).
+      await this.encolarSiCambiaDireccion(
+        tx as unknown as JobTxClient,
+        ordenId,
+        data.direccion,
+        direccionPrevia,
+      );
+      return "ok";
     });
-    return count === 1 ? "ok" : "conflict";
+  }
+
+  /**
+   * FICHA 327 (design §3) — EL COLAPSO DE LA N:M `zona_distrito`, EN UN SOLO SITIO.
+   *
+   * La regla no la inventa esta ficha: ya estaba viva dentro del `.map()` de
+   * `findDistritosByCantonIds`, y la carga masiva la aplica desde la feature 24.
+   *
+   *   EXACTAMENTE 1 zona -> esa zona
+   *   0 zonas            -> `null` (el distrito no tiene zona asignada: error de fila)
+   *   > 1 zonas          -> `null` (ambiguo; NO SE INVENTA UNA ZONA eligiendo la primera)
+   *
+   * Se extrae porque desde la 327 hay DOS lecturas que la necesitan. Dos copias del colapso
+   * serian dos reglas que un dia divergen, y la que divergiera elegiria la tarifa equivocada
+   * —es decir, facturaria mal— sin romper ningun test.
+   */
+  private zonaUnicaDeDistrito<T>(zonas: readonly T[]): T | null {
+    return zonas.length === 1 ? zonas[0] : null;
   }
 
   // BORRADO 2026-08-07 (tanda 2): aqui vivia tambien `existsEstatus` (la guarda de catalogo de
@@ -1491,7 +1596,10 @@ export class OrdenRepository implements IOrdenRepository {
   // `findEstatusIdByValue`, que es lo que usan los servicios de dominio.
 
   /**
-   * Feature «eliminar orden» (2026-08-26) — UNICO writer de `deleted_at` en `orden`. Reemplaza
+   * Feature «eliminar orden» (2026-08-26) — writer de `deleted_at` en `orden` POR LOTE y sin
+   * frontera de tienda (la autoriza el rol `maestro`, ver `EliminarOrdenService`). Desde la ficha
+   * 320 NO es el unico: el canal por API key escribe la columna con `softDeleteViaApi`, que borra
+   * UNA orden y lleva el `tienda_id` del owner en su `where`. Reemplaza
    * al `softDelete` de una sola orden que se retiro el 2026-08-07 por quedarse sin pantalla; el
    * `deleted_at IS NULL` de TODAS las lecturas nunca dejo de aplicarse, asi que fijar la columna
    * basta para que la orden desaparezca de los listados sin tocar ninguna de ellas.
@@ -1510,8 +1618,9 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * Pedido humano (2026-08-27) — LA REVERSION de `softDelete`, y el segundo (y ultimo) writer
-   * de `deleted_at`. Simetrico hasta en el `where`: alli `deletedAt: null`, aqui
+   * Pedido humano (2026-08-27) — LA REVERSION de `softDelete`, y el segundo writer de
+   * `deleted_at` (el tercero es `softDeleteViaApi`, ficha 320, el del canal por API key).
+   * Simetrico hasta en el `where`: alli `deletedAt: null`, aqui
    * `deletedAt: { not: null }`, y por el mismo motivo — idempotencia y carreras. Una orden
    * viva no entra en el conteo, asi que este metodo no puede "recuperar" nada que no estuviera
    * borrado, ni pisar el instante de un borrado ajeno.
@@ -1626,18 +1735,130 @@ export class OrdenRepository implements IOrdenRepository {
     // Un distrito con EXACTAMENTE una zona resuelve orden.zona_id; con 0 zonas -> sin zona
     // asignada (error de fila); con >1 -> ambiguo/no derivable -> null (mismo trato seguro:
     // no se inventa una zona). El caso normal de negocio es 1 zona por distrito.
-    return rows.map((d) => ({
-      id: d.id,
-      nombre: d.nombre,
-      cantonId: d.cantonId,
-      zonaId: d.zonas.length === 1 ? d.zonas[0].zonaId : null,
-      // Feature 98/R2: `esCentral` de la unica zona; `false` si el distrito no resuelve UNA
-      // zona (0 o >1 -> `zonaId` null -> la fila no llega a tarifarse).
-      esCentral: d.zonas.length === 1 ? d.zonas[0].zona.esCentral : false,
-      // A diferencia de `esCentral`, esta NO depende de que el distrito resuelva UNA zona: la
-      // marca es del distrito, no de su zona. `=== true` porque la columna es tri-valuada.
-      esZonaEspecial: d.zonaEspecial === true,
-    }));
+    //
+    // Ficha 327/B2: el colapso ya NO se escribe aqui. Vive en `zonaUnicaDeDistrito`, y lo comparte
+    // con `findDistritoParaCorreccion`. La salida de esta lectura no cambia.
+    return rows.map((d) => {
+      const zona = this.zonaUnicaDeDistrito(d.zonas);
+      return {
+        id: d.id,
+        nombre: d.nombre,
+        cantonId: d.cantonId,
+        zonaId: zona?.zonaId ?? null,
+        // Feature 98/R2: `esCentral` de la unica zona; `false` si el distrito no resuelve UNA
+        // zona (0 o >1 -> `zonaId` null -> la fila no llega a tarifarse).
+        esCentral: zona?.zona.esCentral ?? false,
+        // A diferencia de `esCentral`, esta NO depende de que el distrito resuelva UNA zona: la
+        // marca es del distrito, no de su zona. `=== true` porque la columna es tri-valuada.
+        esZonaEspecial: d.zonaEspecial === true,
+      };
+    });
+  }
+
+  /**
+   * FICHA 327 (design §9.4) — LA LECTURA DE LA ORDEN QUE LA CORRECCION NECESITA.
+   *
+   * Sustituye al `findById` que usaba la 312. No es un capricho: `OrdenDTO` NO lleva `direccion`,
+   * ni `montoCobrar`, ni `cobraComision`, y los tres son entradas del aviso del importe (R11/R12).
+   *
+   * `deletedAt: null` en el `WHERE` es lo que da R30 gratis: una orden BORRADA sale `null` igual
+   * que una INEXISTENTE, y el servicio no puede distinguirlas ni queriendo.
+   *
+   * `montoCobrar` sale como STRING escala 2 y NUNCA como `number`: es la leccion medida de la
+   * feature 204 (14 de 66 ordenes con un centimo de desviacion al multiplicar en el navegador).
+   * `peso` SI sale como `number`: no es dinero, es un peso con 3 decimales.
+   *
+   * `yaEnUnCierre` (R16) sale de la relacion inversa `Orden.cierreDetalles` con `take: 1`, EN LA
+   * MISMA consulta: `cierre_detail` tiene `@@index([ordenId])`, que existe justo para trazar en
+   * que cierres aparecio una orden. Ni round-trip extra, ni Seq Scan.
+   */
+  async findParaCorreccion(ordenId: string): Promise<OrdenParaCorreccionRow | null> {
+    const row = await this.prisma.orden.findFirst({
+      where: { id: ordenId, deletedAt: null },
+      select: {
+        id: true,
+        tiendaId: true,
+        numGuia: true,
+        destinatario: true,
+        telefonoDest: true,
+        producto: true,
+        notas: true,
+        direccion: true,
+        peso: true,
+        montoCobrar: true,
+        cobraComision: true,
+        provinciaId: true,
+        cantonId: true,
+        distritoId: true,
+        estatus: { select: { value: true } },
+        zona: { select: { id: true, nombre: true, esCentral: true } },
+        distrito: { select: { nombre: true, zonaEspecial: true } },
+        cierreDetalles: { select: { id: true }, take: 1 },
+      },
+    });
+    if (row === null) return null;
+    return {
+      id: row.id,
+      tiendaId: row.tiendaId,
+      estatusValue: row.estatus.value,
+      numGuia: row.numGuia,
+      destinatario: row.destinatario,
+      telefonoDest: row.telefonoDest,
+      producto: row.producto,
+      notas: row.notas,
+      direccion: row.direccion,
+      peso: row.peso ? row.peso.toNumber() : null,
+      montoCobrar: row.montoCobrar ? row.montoCobrar.toFixed(2) : null,
+      cobraComision: row.cobraComision,
+      provinciaId: row.provinciaId,
+      cantonId: row.cantonId,
+      distritoId: row.distritoId,
+      distritoNombre: row.distrito?.nombre ?? null,
+      zonaId: row.zona.id,
+      zonaNombre: row.zona.nombre,
+      esCentral: row.zona.esCentral,
+      // La marca es del DISTRITO, no de la zona, y la columna es tri-valuada: `null` no es
+      // especial. Una orden sin distrito (el unico FK nullable) entra como `false`.
+      esZonaEspecial: row.distrito?.zonaEspecial === true,
+      yaEnUnCierre: row.cierreDetalles.length > 0,
+    };
+  }
+
+  /**
+   * FICHA 327 (design §9.4) — EL DISTRITO PROPUESTO, RESUELTO ENTERO EN UNA CONSULTA.
+   *
+   * Trae `provinciaId` por la relacion `canton.provinciaId` para que el servicio pueda comprobar
+   * la cadena provincia -> canton -> distrito (R6) SIN una segunda consulta, y la zona por el
+   * mismo colapso de la N:M que usa la carga masiva (R7).
+   *
+   * `zonaId: null` significa «este distrito no resuelve UNA zona» (0 o >1), y el servicio lo
+   * rechaza nombrando el motivo: `orden.zona_id` es NOT NULL y elegir una de varias seria
+   * inventar la tarifa.
+   */
+  async findDistritoParaCorreccion(distritoId: string): Promise<DistritoResueltoRow | null> {
+    const row = await this.prisma.distrito.findFirst({
+      where: { id: distritoId },
+      select: {
+        id: true,
+        nombre: true,
+        cantonId: true,
+        zonaEspecial: true,
+        canton: { select: { provinciaId: true } },
+        zonas: { select: { zonaId: true, zona: { select: { nombre: true, esCentral: true } } } },
+      },
+    });
+    if (row === null) return null;
+    const zona = this.zonaUnicaDeDistrito(row.zonas);
+    return {
+      id: row.id,
+      nombre: row.nombre,
+      cantonId: row.cantonId,
+      provinciaId: row.canton.provinciaId,
+      zonaId: zona?.zonaId ?? null,
+      zonaNombre: zona?.zona.nombre ?? null,
+      esCentral: zona?.zona.esCentral ?? false,
+      esZonaEspecial: row.zonaEspecial === true,
+    };
   }
 
   /** R27: insercion masiva en lotes de `batchSize`, tolerando carreras de num_remision. */
@@ -2344,20 +2565,24 @@ export class OrdenRepository implements IOrdenRepository {
 
   /** R28/T15: TODOS los usuarios con rol `mensajero`, SIN filtro de zona. */
   async findAllMensajeros(): Promise<MensajeroLiteRow[]> {
-    return this.prisma.usuario.findMany({
+    const rows = await this.prisma.usuario.findMany({
       where: { rol: { value: "mensajero" } },
-      select: { id: true, nombre: true },
+      select: { id: true, ...NOMBRE_USUARIO_SELECT },
       orderBy: { nombre: "asc" },
     });
+    return rows.map((r) => ({ id: r.id, nombre: nombreCompletoUsuario(r) }));
   }
 
   /** Feature 30/R5 + 34/R5: usuarios rol `mensajero` cuyo `zonaId` sea la zona pasada. */
   async findMensajerosByZona(zonaId: string): Promise<MensajeroLiteRow[]> {
-    return this.prisma.usuario.findMany({
+    const rows = await this.prisma.usuario.findMany({
       where: { rol: { value: "mensajero" }, zonaId },
-      select: { id: true, nombre: true },
+      select: { id: true, ...NOMBRE_USUARIO_SELECT },
       orderBy: { nombre: "asc" },
     });
+    // El modal de asignacion elige a UNA persona: con dos «Carlos» en la zona, el nombre de
+    // pila solo no distingue a quien se le esta entregando la orden.
+    return rows.map((r) => ({ id: r.id, nombre: nombreCompletoUsuario(r) }));
   }
 
   /** Feature 30/R6 + 34/R9: subconjunto de `ids` con rol `mensajero` Y `zonaId` = zona pasada. */
@@ -2773,13 +2998,13 @@ export class OrdenRepository implements IOrdenRepository {
     return rows.map(toManifiestoOrdenRow);
   }
 
-  /** Feature 148/R9: `usuario.nombre` del actor; `null` si el usuario no resuelve. */
+  /** Feature 148/R9: nombre COMPLETO del actor; `null` si el usuario no resuelve. */
   async findUsuarioNombre(usuarioId: string): Promise<string | null> {
     const row = await this.prisma.usuario.findUnique({
       where: { id: usuarioId },
-      select: { nombre: true },
+      select: NOMBRE_USUARIO_SELECT,
     });
-    return row?.nombre ?? null;
+    return row ? nombreCompletoUsuario(row) : null;
   }
 
   // --- Feature 33: recepcion por QR en la bodega satelite (R4/R5/R6/R8/R11/R18) ---
@@ -3939,6 +4164,69 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
+   * FICHA 320 (T1) — la lectura del borrado por API key. MISMO patron que
+   * `findParaHabilitacionApi` y `cancelarViaApi`: las tres claves del `where` van juntas y en el
+   * MISMO statement, con el owner FORZADO. `null` no distingue «no existe» de «ya borrada» de «es
+   * de otra tienda»; el borde responde el mismo 404 en los tres casos.
+   *
+   * `select` acotado: el estado (la decision), la identidad publica (lo que se devuelve) y el id
+   * (por donde se escribe). Nada mas.
+   */
+  async findParaEliminacionApi(
+    ordenId: string,
+    ownerId: string,
+  ): Promise<OrdenParaEliminacionApi | null> {
+    const orden = await this.prisma.orden.findFirst({
+      where: { id: ordenId, tiendaId: ownerId, deletedAt: null },
+      select: {
+        id: true,
+        numGuia: true,
+        numRemision: true,
+        estatus: { select: { value: true } },
+      },
+    });
+    if (!orden) return null;
+    return {
+      id: orden.id,
+      numGuia: orden.numGuia,
+      numRemision: orden.numRemision,
+      estatusValue: orden.estatus.value,
+    };
+  }
+
+  /**
+   * FICHA 320 (T2) — la ESCRITURA del borrado por API key, y la frontera multi-tenant de verdad.
+   *
+   * Las CUATRO condiciones viajan en el `where` de ESTA sentencia y no en un `if` previo: aunque
+   * la lectura de `findParaEliminacionApi` hubiera dicho que si, entre las dos consultas la orden
+   * pudo cambiar de estado o borrarla otra sesion. Un `updateMany` con `count = 0` es la respuesta
+   * correcta a las dos carreras, y ninguna de ellas puede acabar en un borrado indebido.
+   *
+   * `estatus.value IN estadosPermitidos` la trae el service desde `ESTADOS_ELIMINABLES`: el repo
+   * aplica el filtro, no lo decide. Con una lista vacia el `IN` no casa y no se borra nada.
+   *
+   * `data` toca UNA sola columna. No hay `appendCambioEstado` (a diferencia de `cancelarViaApi`):
+   * borrar no es transicionar, el estado se conserva y el historial de la orden queda intacto por
+   * si hay que auditarla — exactamente lo mismo que hace el borrado de la app.
+   */
+  async softDeleteViaApi(params: {
+    ordenId: string;
+    ownerId: string;
+    estadosPermitidos: readonly string[];
+  }): Promise<number> {
+    const { count } = await this.prisma.orden.updateMany({
+      where: {
+        id: params.ordenId,
+        tiendaId: params.ownerId,
+        deletedAt: null,
+        estatus: { value: { in: [...params.estadosPermitidos] } },
+      },
+      data: { deletedAt: new Date() },
+    });
+    return count;
+  }
+
+  /**
    * Suma UNO al contador de intentos de contacto y devuelve el valor RESULTANTE.
    *
    * `{ increment: 1 }` y no un valor calculado en memoria: el incremento ocurre en la base, asi
@@ -4022,9 +4310,10 @@ export class OrdenRepository implements IOrdenRepository {
         distrito: { select: { nombre: true } },
         // FICHA 296: el MENSAJERO, por nombre y en la MISMA consulta. `mensajero_asignado_id` es
         // NULLABLE, asi que la relacion es opcional -> `?.nombre ?? null`, igual que `distrito`.
-        // El `select` acotado a `nombre` NO es cosmetico: la fila de `usuario` lleva `email`,
-        // `telefono`, `cedula` y `password_hash`, y esta fila viaja al navegador de la TIENDA.
-        mensajeroAsignado: { select: { nombre: true } },
+        // El `select` acotado a la IDENTIDAD (nombre y apellidos) NO es cosmetico: la fila de
+        // `usuario` lleva `email`, `telefono`, `cedula` y `password_hash`, y esta fila viaja al
+        // navegador de la TIENDA.
+        mensajeroAsignado: { select: NOMBRE_USUARIO_SELECT },
       },
     });
     return rows.map((row) => ({
@@ -4052,7 +4341,7 @@ export class OrdenRepository implements IOrdenRepository {
       // FICHA 296: `null` cuando la orden no tiene mensajero asignado. NUNCA `""`: una cadena
       // vacia se pinta como una etiqueta sin valor y la tienda no sabria si es que no hay nadie
       // o si el nombre se perdio por el camino.
-      mensajeroNombre: row.mensajeroAsignado?.nombre ?? null,
+      mensajeroNombre: row.mensajeroAsignado ? nombreCompletoUsuario(row.mensajeroAsignado) : null,
       createdAt: row.createdAt,
     }));
   }

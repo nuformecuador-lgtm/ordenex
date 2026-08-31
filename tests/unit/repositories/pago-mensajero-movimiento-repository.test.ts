@@ -205,7 +205,7 @@ describe("PagoMensajeroMovimientoRepository.obtenerNombreMensajero (R18)", () =>
     expect(nombre).toBe("Ana Mensajera");
     const arg = prisma.usuario.findUnique.mock.calls[0][0];
     expect(arg.where).toEqual({ id: "m1" });
-    expect(arg.select).toEqual({ nombre: true });
+    expect(arg.select).toEqual({ nombre: true, primerApellido: true, segundoApellido: true });
   });
 
   it("mensajero inexistente -> null", async () => {

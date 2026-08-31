@@ -210,6 +210,16 @@ describe("262 / D7 — los `down.sql` ANTERIORES no se tocan, y esta es la compr
   });
 });
 
+// ⚠️ AMPLIADO EL 2026-08-23 POR LA 271 Y EL 2026-08-29 POR LA FICHA 333, Y SOLO EN LOS CUATRO
+// CASOS QUE MIRAN EL ESTADO DE HOY: los dos de `schema.prisma` de aqui abajo y los dos de la base
+// aplicada del bloque final. Esos cuatro son inventarios CERRADOS del presente, asi que crecen con
+// cada valor que se anada detras — y siguen siendo LITERALES a proposito: derivarlos de la propia
+// fuente que vigilan (el schema, el enum de Postgres) los dejaria verdes por construccion y no
+// fijarian nada.
+//
+// ⛔ TODO LO DEMAS DE ESTE ARCHIVO NO SE TOCA: el UP de la 262, su DOWN con los CINCO previos y las
+// afirmaciones sobre los `down.sql` de la 146 y de la 253 son FOTOS HISTORICAS y siguen siendo
+// ciertas palabra por palabra.
 describe("262 / D7 — el enum Prisma y el tipo de TypeScript no quedan a la deriva (R52)", () => {
   it("`NotificacionEvento` del schema gana el valor y sigue siendo un inventario CERRADO", () => {
     const bloque = /enum NotificacionEvento \{([\s\S]*?)\n\}/.exec(schemaPrisma)![1];
@@ -226,6 +236,10 @@ describe("262 / D7 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // FEATURE 271 (§9.2, Q4 resuelta el 2026-08-23) - los DOS avisos del bloqueo por cierres.
       "cierre_dia_vencido",
       "mensajero_bloqueado_por_cierres",
+      // FICHA 333 (design 4.1/4.2, R29/R30/R36, 2026-08-29) - «quedan cobros de gasto fijo
+      // esperando decision»: lo emite la corrida del cron al terminar y se repite cada dia CR
+      // mientras quede alguno. Migracion `20260829130000_notificacion_evento_gasto_fijo_cobro`.
+      "gasto_fijo_cobro_pendiente",
     ]);
   });
 
@@ -235,7 +249,16 @@ describe("262 / D7 — el enum Prisma y el tipo de TypeScript no quedan a la der
       .split("\n")
       .map((l) => l.trim().split(/\s+\/\//)[0].trim())
       .filter((l) => l.length > 0 && !l.startsWith("//") && !l.startsWith("@@"));
-    expect(valores).toEqual([...ENTIDADES_PREVIAS, "orden_dia_reparto_cambio"]);
+    expect(valores).toEqual([
+      ...ENTIDADES_PREVIAS,
+      "orden_dia_reparto_cambio",
+      // FICHA 333 (design 4.2, 2026-08-29) - el PRIMER `entidad_tipo` que NO apunta a una fila de
+      // tabla: la entidad es EL DIA CR de la corrida (`entidad_id = 'YYYY-MM-DD'`). Con el COBRO
+      // como entidad, `notificacion_dedupe_key` admitiria UNA sola fila por (evento, cobro,
+      // maestro) PARA SIEMPRE y el recordatorio del dia 2 no saldria nunca — exactamente el fallo
+      // que esta misma ficha 262 documento con `orden` como entidad (§15.2, A20).
+      "gasto_fijo_cobro_dia",
+    ]);
   });
 
   it("`lib/types/notificacion.ts` refleja los dos, sin drift con Prisma", () => {
@@ -271,7 +294,7 @@ describeSiHayBase("262 / D7 — la base aplicada, y el DOWN ejercitado de verdad
     return (filas[0]?.valores ?? "").split(",").filter((v) => v.length > 0);
   }
 
-  it("la base tiene los SEIS eventos, con el nuevo AL FINAL", async () => {
+  it("la base tiene los NUEVE eventos, con el de esta ficha y los posteriores AL FINAL", async () => {
     // El orden (`enumsortorder`) es lo que demuestra que el valor se ANADIO y no que el tipo se
     // recreo por detras.
     expect(await valoresDe("notificacion_evento")).toEqual([
@@ -280,13 +303,19 @@ describeSiHayBase("262 / D7 — la base aplicada, y el DOWN ejercitado de verdad
       // FEATURE 271 (§9.2, Q4 resuelta el 2026-08-23) - los DOS avisos del bloqueo por cierres.
       "cierre_dia_vencido",
       "mensajero_bloqueado_por_cierres",
+      // FICHA 333 (design 4.1/4.2, R29/R30/R36, 2026-08-29) - «quedan cobros de gasto fijo
+      // esperando decision». Migracion `20260829130000_notificacion_evento_gasto_fijo_cobro`.
+      "gasto_fijo_cobro_pendiente",
     ]);
   });
 
-  it("y los SEIS tipos de entidad", async () => {
+  it("y los SIETE tipos de entidad", async () => {
     expect(await valoresDe("notificacion_entidad_tipo")).toEqual([
       ...ENTIDADES_PREVIAS,
       "orden_dia_reparto_cambio",
+      // FICHA 333 (design 4.2, 2026-08-29) - la entidad del aviso es EL DIA CR de la corrida, no
+      // el cobro; sin valor propio la dedupe de la 146 apagaria el recordatorio diario (R30).
+      "gasto_fijo_cobro_dia",
     ]);
   });
 

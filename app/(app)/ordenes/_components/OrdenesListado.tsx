@@ -822,11 +822,11 @@ export function OrdenesListado({
     // pero ahora con tres respuestas posibles, no una.
     //   - listado de ELIMINADAS: siempre, la única acción de esa vista es recuperar;
     //   - alguna fila con acción por su estado: como siempre;
-    //   - alguna fila todavía sin gestionar y el rol que puede borrar: "Eliminar" las alcanza.
+    //   - alguna fila con estado eliminable y el rol que puede borrar: "Eliminar" las alcanza.
     // Si no se cumple ninguna, la columna no se monta: casillas que no llevan a ningún botón.
     if (verEliminadas) return items.length > 0;
     if (items.some((row) => accionesDe(row.estatusValue).length > 0)) return true;
-    return puedeEliminar && items.some((row) => row.sinGestion === true);
+    return puedeEliminar && items.some((row) => row.eliminable === true);
   }
 
   /**
@@ -853,7 +853,7 @@ export function OrdenesListado({
     // más que puede ser la única de la fila.
     if (
       accionesDe(value).length === 0 &&
-      !(puedeEliminar && row.sinGestion === true)
+      !(puedeEliminar && row.eliminable === true)
     ) {
       return MOTIVO_SIN_ACCIONES;
     }
@@ -914,13 +914,17 @@ export function OrdenesListado({
     // "Eliminar" va SIEMPRE la ÚLTIMA, y al final de la barra por la misma razón por la que es
     // secundaria: es la acción que no se debe pulsar por inercia.
     //
-    // Pedido humano (2026-08-27): SOLO sobre las órdenes que nadie ha gestionado desde que se
-    // crearon (`sinGestion`, que resuelve el servidor con el MISMO predicado que autoriza el
-    // borrado). Si ninguna de las marcadas lo está, el botón NO APARECE — que es literalmente lo
-    // pedido, "solo visible si no se ha realizado ninguna gestión". Se exige `=== true`: un DTO
-    // sin el campo (rol que no lo recibe, fixture antiguo) no habilita nada.
+    // SOLO sobre las órdenes cuyo ESTADO admite borrarlas (`eliminable`, que resuelve el
+    // servidor con el MISMO predicado que autoriza el borrado). Si ninguna de las marcadas lo
+    // está, el botón NO APARECE. Se exige `=== true`: un DTO sin el campo (rol que no lo recibe,
+    // fixture antiguo) no habilita nada.
+    //
+    // Ficha 319 (2026-08-28): el campo se llamaba `sinGestion` y el criterio era "nadie la ha
+    // gestionado desde que se creó". Se retiró porque generar la guía ya contaba como gestión y
+    // dejaba la ventana VACÍA (0 eliminables de 429 vivas en producción). Aquí no se decide
+    // nada: la regla vive en `lib/types/order-status-eliminables.ts` y esta pantalla solo la lee.
     const elegiblesEliminar = puedeEliminar
-      ? seleccionadas.filter((o) => o.sinGestion === true)
+      ? seleccionadas.filter((o) => o.eliminable === true)
       : [];
     if (elegiblesEliminar.length === 0) return porEstado;
     // Con conteo cuando no alcanza a toda la selección, igual que las acciones por estado: sin
