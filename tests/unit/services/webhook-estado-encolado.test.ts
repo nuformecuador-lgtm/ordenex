@@ -16,7 +16,12 @@ import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHi
 const VALUE_POR_ID: Record<string, string> = {
   "s-entregada": "entregada", // publico
   "s-en-reparto": "en_reparto", // publico
-  "s-fulfillment": "en_preparacion", // NO publico (interno de preparacion en bodega)
+  // ⏳ 2026-08-31 — `s-fulfillment` era el ejemplo de estado NO publico, y ya no sirve como tal:
+  // `en_preparacion` pasa a ser publico (evento de NACIMIENTO de la rama de fulfillment). Se anade
+  // un interno de RUTEO SATELITE, que sigue sin emitir, y los casos que necesitaban «un estado
+  // fuera de la politica» pasan a usarlo.
+  "s-satelite": "en_bodega_satelite", // NO publico (interno de ruteo satelite)
+  "s-fulfillment": "en_preparacion", // publico desde el 2026-08-31 (nacimiento con fulfillment)
   // Feature 268: los dos values que la 268 hace publicos, y uno que sigue NO siendolo.
   "s-ayuda-tienda": "ayuda_tienda", // publico desde la 268/R1
   "s-incidente": "incidente", // publico desde la 268/R2
@@ -120,13 +125,34 @@ describe("R15 — politica EVENTOS_PUBLICOS", () => {
 
     await emitirWebhooksEstado(
       tx,
-      [entrada("o1", "s-en-reparto"), entrada("o2", "s-fulfillment")],
+      [entrada("o1", "s-en-reparto"), entrada("o2", "s-satelite")],
       repo,
     );
 
-    // Solo la transicion publica (en_reparto) encola; la interna (en_preparacion) no.
+    // Solo la transicion publica (en_reparto) encola; la interna (en_bodega_satelite) no.
     expect(enqueue).toHaveBeenCalledTimes(1);
     expect((enqueue.mock.calls[0] as unknown as unknown[])[1]).toMatchObject({ ordenId: "o1" });
+  });
+
+  it("2026-08-31: el NACIMIENTO en `en_preparacion` SI encola — se acabo el silencio de fulfillment", () => {
+    // El caso que justifica el parche entero, afirmado en el emisor y no solo en la politica: una
+    // orden de fulfillment nace en `en_preparacion` y, hasta hoy, el integrador no recibia NADA
+    // hasta que avanzaba a `en_bodega_central` al emitirse la guia. Si alguien saca el value de
+    // `EVENTOS_PUBLICOS`, este caso —no solo el congelador de la lista— se pone rojo.
+    const { repo, enqueue } = buildRepo();
+    const tx = buildTx(new Set(["o1"]));
+
+    return emitirWebhooksEstado(
+      tx,
+      [entrada("o1", "s-fulfillment", "carga_api")],
+      repo,
+      () => new Date("2026-08-31T10:00:00.000Z"),
+    ).then(() => {
+      expect(enqueue).toHaveBeenCalledTimes(1);
+      const [tipo, payload] = enqueue.mock.calls[0] as unknown as [string, Record<string, unknown>];
+      expect(tipo).toBe("webhook_estado");
+      expect(payload).toMatchObject({ ordenId: "o1", estatusDestinoId: "s-fulfillment" });
+    });
   });
 });
 
@@ -237,7 +263,7 @@ describe("268 — el ciclo de AYUDA emite en sus DOS mitades, y los reingresos l
         entrada("o1", "s-en-reparto", "rescate_ayuda_tienda"), // antes exceptuada (235/P4)
         entrada("o2", "s-en-reparto", "recoleccion"), // la entrada NORMAL a reparto
         entrada("o3", "s-entregada", "gestion"), // otro estado publico
-        entrada("o4", "s-fulfillment", "gestion"), // estado interno: sigue sin emitir
+        entrada("o4", "s-satelite", "gestion"), // estado interno de ruteo satelite: sigue sin emitir
       ],
       repo,
       () => new Date("2026-08-22T10:00:00.000Z"),
