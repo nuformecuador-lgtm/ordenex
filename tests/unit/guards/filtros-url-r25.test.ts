@@ -1,7 +1,16 @@
-import { describe, it, expect, beforeAll } from "vitest";
+// @vitest-environment jsdom
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import path from "path";
+import { createElement } from "react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { ESLint } from "eslint";
 import type { Linter } from "eslint";
+
+import {
+  FilterComponent,
+  type FilterDef,
+  type FilterSelection,
+} from "@/components/shared/FilterComponent";
 
 // Feature 335 / R25 — GUARDIA DE PROPIEDAD: la lectura inicial de la URL no escribe
 // estado desde un efecto.
@@ -34,6 +43,21 @@ import type { Linter } from "eslint";
 // cargarse) daria cero mensajes siempre, y el guardia pasaria a no vigilar nada sin avisar.
 // Por eso el primer caso NO linta: comprueba contra la config resuelta que la regla existe
 // y esta ACTIVA. Si algun dia deja de estarlo, este archivo se pone rojo en vez de mentir.
+//
+// POR QUE EL GUARDIA NECESITA DOS MITADES (hallazgo M2 del revisor)
+// -----------------------------------------------------------------
+// El linter vigila la FORMA: «no hay un setter de estado llamado desde un efecto». Pero
+// R25 no existe por la forma, existe por lo que la forma protege: que la URL se lea UNA
+// vez, al entrar. Y esa propiedad el linter NO puede verla. La ficha llego a tener un
+// efecto que llamaba a `aplicar(...)` —una funcion auxiliar que por dentro hace
+// `setSeleccion`— con valores leidos de una ref reescrita en cada render; la regla no
+// sigue esa indireccion, asi que el fuente pasaba el lint mientras la propiedad estaba
+// rota (era el bloqueante B2). Un guardia que solo linta habria firmado ese codigo.
+//
+// De ahi la segunda mitad, que es de COMPORTAMIENTO: renderiza el componente, muta los
+// query params DESPUES del montaje, hace crecer `filters` —el disparador que volvia a leer
+// la URL— y exige que gane la foto de entrada. Si alguien vuelve a colar una lectura
+// tardia por una indireccion que el linter no atraviesa, este caso lo dice.
 
 const RAIZ = path.join(__dirname, "..", "..", "..");
 
@@ -139,5 +163,72 @@ describe("Feature 335 / R25 — la lectura inicial de la URL no escribe estado d
       familiaHooks,
       `Reglas de hooks de React incumplidas en los archivos de la ficha 335:\n${familiaHooks.join("\n")}`,
     ).toEqual([]);
+  });
+});
+
+// -----------------------------------------------------------------------------------------
+// SEGUNDA MITAD: la propiedad que el linter no puede ver.
+// -----------------------------------------------------------------------------------------
+
+const replaceMock = vi.fn();
+
+/** La URL de la prueba. `let` porque el caso la MUTA a mitad de vida del componente. */
+let parametros = new URLSearchParams();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: replaceMock, push: vi.fn(), refresh: vi.fn() }),
+  usePathname: () => "/fantasia",
+  useSearchParams: () => parametros,
+}));
+
+const COLOR: FilterDef = {
+  key: "color",
+  label: "Color",
+  kind: "multi",
+  options: [
+    { value: "rojo", label: "Rojo" },
+    { value: "azul", label: "Azul" },
+  ],
+};
+
+beforeEach(() => {
+  replaceMock.mockClear();
+  parametros = new URLSearchParams();
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+describe("Feature 335 / R25 — la lectura de la URL ocurre UNA vez, al entrar (propiedad, no forma)", () => {
+  it("R25 — mutar los query params tras el montaje no entra por la siembra: gana la foto de entrada", async () => {
+    // Se entra con `?color=rojo` y el filtro declarado SIN catalogo: su valor se descarta
+    // por R14 y la clave queda pendiente de sembrar. Mientras tanto la URL cambia a `azul`
+    // —lo hace el tablero de `/analitica` y el detalle de `cierres-admin`, que reescriben la
+    // query durante la sesion— y despues llega el catalogo, que es el disparador de la
+    // siembra pendiente. Lo que se siembra debe ser `rojo`: lo que la URL traia AL ENTRAR.
+    parametros = new URLSearchParams("color=rojo");
+    const onChange = vi.fn();
+
+    const vista = render(
+      createElement(FilterComponent, {
+        filters: [{ ...COLOR, options: [] }],
+        onChange,
+        debounceMs: 0,
+      }),
+    );
+
+    parametros = new URLSearchParams("color=azul");
+    vista.rerender(
+      createElement(FilterComponent, { filters: [COLOR], onChange, debounceMs: 0 }),
+    );
+
+    await waitFor(() =>
+      expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ color: ["rojo"] }),
+    );
+    expect(onChange.mock.calls.map(([sel]) => sel as FilterSelection)).not.toContainEqual({
+      color: ["azul"],
+    });
+    expect(screen.getByRole("button", { name: /^Color:/ })).toHaveTextContent("Rojo");
   });
 });

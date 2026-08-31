@@ -1,16 +1,29 @@
 // @vitest-environment jsdom
-import { useState } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
 // Feature 335 / T5.1 — PRUEBA DE HERENCIA: la capacidad va ligada al COMPONENTE, no a la
 // vista (restriccion dura 1 de requirements.md).
 //
-// Se monta un consumidor REAL —`NovedadesFiltrosBarra`, que es puro presentacion y cuyo
-// estado vive en `useNovedadesFiltro`— entrando por una URL con params, y se comprueba que
-// la barra llega escrita y el control montado y acotado SIN que el diff de esta ficha toque
-// un solo archivo bajo `app/`. Si este test pasa, lo hace porque el consumidor hereda la
-// capacidad de los dos canonicos compartidos y no porque nadie lo haya parcheado.
+// POR QUE ESTE ARCHIVO MONTA EL HOOK REAL Y NO UNA MAQUETA
+// -------------------------------------------------------
+// Su primera version fabricaba a mano el objeto `NovedadesFiltro` que la barra consume, con
+// un filtro de zona cuyas `options` YA estaban presentes. Eso ejercita la cascara de
+// presentacion y da un verde tranquilizador, pero se salta justo el tramo donde vivia el
+// fallo B1 del revisor: en `/novedades` el catalogo NO esta al montar. `useNovedadesFiltro`
+// pide el conjunto completo de forma PEREZOSA —desde los manejadores de la barra, nunca
+// desde un efecto de montaje— y mientras tanto `construirFiltrosNovedades` declara los
+// filtros `multi` con `options: []`. Entrando por `/novedades?zona=…`, el control se montaba
+// sin catalogo, el valor de la URL se descartaba por R14 y al llegar el conjunto ya no se
+// reintentaba: el enlace compartido no acotaba nada y el control decia «Zona: Todas».
+//
+// Asi que aqui se monta el hook REAL con el catalogo llegando DESPUES del montaje. El hook
+// recibe `listarCompleto` COMO ARGUMENTO, asi que se le inyecta un doble cuya promesa
+// resuelve cuando este test quiere: eso permite afirmar el ANTES (control montado, sin
+// acotar) y el DESPUES (acotado por la zona que traia la URL) sin adivinar tiempos.
+//
+// Si este archivo pasa, lo hace porque el consumidor HEREDA la capacidad de los dos
+// canonicos compartidos: el diff de la ficha no toca un solo archivo bajo `app/`.
 
 const replaceMock = vi.fn();
 const pushMock = vi.fn();
@@ -24,21 +37,96 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { NovedadesFiltrosBarra } from "@/app/(app)/novedades/_components/NovedadesFiltrosBarra";
-import type { NovedadesFiltro } from "@/app/(app)/novedades/_components/useNovedadesFiltro";
-import type { FilterDef, FilterSelection } from "@/components/shared/FilterComponent";
+import { useNovedadesFiltro } from "@/app/(app)/novedades/_components/useNovedadesFiltro";
 import { olvidarParamsBorrados } from "@/hooks/useFiltrosUrl";
+import type { ListarNovedadesCompletoActionResult } from "@/lib/actions/novedades";
+import type { NovedadDTO } from "@/lib/types/novedad";
 
-const ZONA: FilterDef = {
-  key: "zona",
-  label: "Zona",
-  kind: "multi",
-  options: [
-    { value: "norte", label: "Norte" },
-    { value: "sur", label: "Sur" },
-  ],
+/**
+ * Una novedad completa. Copiada del molde que ya usa
+ * `tests/components/NovedadesBuscador.test.tsx` para no reinventar el DTO: lo unico que
+ * estos casos miran es `zonaNombre` y `destinatario`.
+ */
+const base: NovedadDTO = {
+  id: "o1",
+  numGuia: 1001,
+  numRemision: "REM-2026-0001",
+  estatusValue: "devuelta",
+  intentosContacto: 0,
+  mensajeroNombre: "Marta Mensajera",
+  destinatario: "Ana Cliente",
+  telefonoDest: "88887777",
+  causa: "not_found",
+  producto: "Zapatos deportivos",
+  peso: 1.5,
+  direccion: "Av. Central 120",
+  montoCobrar: 24500,
+  latitud: 9.9281,
+  longitud: -84.0907,
+  notas: null,
+  tiendaNombre: "Tienda Demo",
+  zonaNombre: "GAM Oeste",
+  provinciaNombre: "San José",
+  cantonNombre: "Escazú",
+  distritoNombre: "San Rafael",
+  secuenciaRuta: null,
 };
 
-const OFRECIDOS = [{ key: "zona", label: "Zona" }];
+const novedad = (over: Partial<NovedadDTO> = {}): NovedadDTO => ({ ...base, ...over });
+
+/** El conjunto que devuelve el doble: dos zonas, para que el filtro tenga algo que descartar. */
+const CONJUNTO: NovedadDTO[] = [
+  novedad({ id: "o1", destinatario: "Ana Cliente", zonaNombre: "GAM Oeste" }),
+  novedad({ id: "o2", destinatario: "Beto Cliente", zonaNombre: "GAM Este" }),
+];
+
+/**
+ * Un `listarCompleto` cuya promesa resuelve cuando el test lo diga. Es la pieza que hace
+ * observable el hueco: entre el montaje y `entregar()` el catalogo NO existe, que es
+ * exactamente el estado en el que `/novedades` recibe al visitante de un enlace compartido.
+ */
+function listadoDiferido() {
+  let resolver: ((res: ListarNovedadesCompletoActionResult) => void) | null = null;
+  const promesa = new Promise<ListarNovedadesCompletoActionResult>((resolve) => {
+    resolver = resolve;
+  });
+  const listarCompleto = vi.fn(() => promesa);
+  return {
+    listarCompleto,
+    /** Entrega el catalogo completo. */
+    entregar: () => {
+      if (resolver === null) throw new Error("la promesa no llego a inicializarse");
+      resolver({ status: "ok", items: CONJUNTO, total: CONJUNTO.length });
+    },
+  };
+}
+
+/**
+ * La pantalla real reducida a lo que esta ficha promete: el hook REAL de `/novedades`
+ * alimentando la barra REAL. No hay nada fabricado a mano en medio.
+ */
+function PantallaNovedades({
+  listarCompleto,
+}: {
+  listarCompleto: () => Promise<ListarNovedadesCompletoActionResult>;
+}) {
+  const filtro = useNovedadesFiltro("devolucion", listarCompleto);
+  return (
+    <>
+      <NovedadesFiltrosBarra
+        filtro={filtro}
+        label="Buscar novedades"
+        regionLabel="Filtros de novedades"
+      />
+      {/* Lo que la barra esta acotando, para poder afirmar el EFECTO y no solo el control. */}
+      <ul aria-label="Resultados">
+        {filtro.resultados.map((n) => (
+          <li key={n.id}>{n.destinatario}</li>
+        ))}
+      </ul>
+    </>
+  );
+}
 
 beforeEach(() => {
   replaceMock.mockClear();
@@ -51,101 +139,61 @@ afterEach(() => {
   cleanup();
 });
 
-/**
- * El consumidor minimo de la barra: posee las claves ACTIVAS y decide que controles monta,
- * que es exactamente el reparto de `useNovedadesFiltro`. El resto del contrato se rellena
- * con lo que la barra no mira en este caso (paginacion, conteos, recarga).
- */
-function BarraDeNovedades({
-  onTerminoChange,
-  onSeleccionChange,
-}: {
-  onTerminoChange: (termino: string) => void;
-  onSeleccionChange: (seleccion: FilterSelection) => void;
-}) {
-  const [activos, setActivos] = useState<string[]>([]);
-  const [seleccion, setSeleccion] = useState<FilterSelection>({});
-
-  const filtro: NovedadesFiltro = {
-    ofrecidos: OFRECIDOS,
-    montados: activos.includes("zona") ? [ZONA] : [],
-    activos,
-    onActivosChange: setActivos,
-    onTerminoChange,
-    onSeleccionChange: (siguiente) => {
-      setSeleccion(siguiente);
-      onSeleccionChange(siguiente);
-    },
-    reset: 0,
-    hayFiltrosAplicados: activos.length > 0,
-    limpiar: vi.fn(),
-    filtrando: Object.keys(seleccion).length > 0,
-    barraEnUso: activos.length > 0,
-    estado: "listo",
-    resultados: [],
-    pagina: 1,
-    irAPagina: vi.fn(),
-    quitar: vi.fn(),
-    recargar: vi.fn(async () => {}),
-    reintentar: vi.fn(),
-    limite: null,
-  };
-
-  return (
-    <NovedadesFiltrosBarra
-      filtro={filtro}
-      label="Buscar novedades"
-      regionLabel="Filtros de novedades"
-    />
-  );
+/** Los destinatarios que la lista acotada esta pintando ahora mismo. */
+function acotados(): string[] {
+  const lista = screen.queryByRole("list", { name: "Resultados" });
+  if (lista === null) return [];
+  return Array.from(lista.querySelectorAll("li")).map((li) => li.textContent ?? "");
 }
 
-describe("Herencia de la lectura de URL en un consumidor real (R1, R2, R3, R5, R6)", () => {
-  it("R1/R2/R3/R5 — entrando con `?q=…&zona=…` la barra llega escrita, el control montado y la seleccion acotada", async () => {
-    parametros = new URLSearchParams("q=guia123&zona=norte");
-    const onTerminoChange = vi.fn();
-    const onSeleccionChange = vi.fn();
+describe("Herencia de la lectura de URL en el consumidor REAL de /novedades (R1, R2, R3, R5, R6)", () => {
+  it("R2/R3/R5 — entrando por `?zona=…` el control queda con esa zona SELECCIONADA cuando llega el catalogo", async () => {
+    parametros = new URLSearchParams("zona=GAM Oeste");
+    const { listarCompleto, entregar } = listadoDiferido();
 
-    render(
-      <BarraDeNovedades
-        onTerminoChange={onTerminoChange}
-        onSeleccionChange={onSeleccionChange}
-      />,
-    );
+    render(<PantallaNovedades listarCompleto={listarCompleto} />);
 
-    // R1 — el campo, ya escrito; R5 — y el termino emitido, para que la lista se acote.
-    expect(
-      (screen.getByRole("searchbox", { name: "Buscar novedades" }) as HTMLInputElement)
-        .value,
-    ).toBe("guia123");
-    expect(onTerminoChange).toHaveBeenCalledWith("guia123");
+    // ANTES — R2: la clave se activo desde la URL y el control esta montado sin que nadie lo
+    // pidiera en el selector; el catalogo todavia no llego, asi que no puede acotar nada.
+    const antes = await screen.findByRole("button", { name: /^Zona:/ });
+    expect(antes).toHaveTextContent("Todas");
+    expect(listarCompleto).toHaveBeenCalledTimes(1);
 
-    // R2 — el control se monta sin que nadie lo pida desde el selector; R3/R5 — con su
-    // valor ya elegido y emitido.
-    const control = await screen.findByRole("button", { name: "Zona: Norte" });
-    expect(control).toBeInTheDocument();
+    // DESPUES — R3/R5: llega el catalogo y la clave PENDIENTE se termina de sembrar con lo
+    // que traia la URL AL ENTRAR. Este es el assert que el revisor midio en rojo.
+    entregar();
+
     await waitFor(() =>
-      expect(onSeleccionChange).toHaveBeenCalledWith({ zona: ["norte"] }),
+      expect(screen.getByRole("button", { name: /^Zona:/ })).toHaveTextContent("GAM Oeste"),
     );
+    await waitFor(() => expect(acotados()).toEqual(["Ana Cliente"]));
   });
 
-  it("R6 — sin params el consumidor se comporta como siempre: campo vacio, ningun control y ninguna emision", () => {
-    const onTerminoChange = vi.fn();
-    const onSeleccionChange = vi.fn();
+  it("R1/R5 — entrando por `?q=…` el campo llega escrito y la lista llega acotada por el termino", async () => {
+    parametros = new URLSearchParams("q=Beto");
+    const { listarCompleto, entregar } = listadoDiferido();
 
-    render(
-      <BarraDeNovedades
-        onTerminoChange={onTerminoChange}
-        onSeleccionChange={onSeleccionChange}
-      />,
-    );
+    render(<PantallaNovedades listarCompleto={listarCompleto} />);
 
     expect(
-      (screen.getByRole("searchbox", { name: "Buscar novedades" }) as HTMLInputElement)
-        .value,
+      (screen.getByRole("searchbox", { name: "Buscar novedades" }) as HTMLInputElement).value,
+    ).toBe("Beto");
+
+    entregar();
+
+    await waitFor(() => expect(acotados()).toEqual(["Beto Cliente"]));
+  });
+
+  it("R6 — sin params el consumidor se comporta como siempre: campo vacio, ningun control y ninguna lectura", () => {
+    const { listarCompleto } = listadoDiferido();
+
+    render(<PantallaNovedades listarCompleto={listarCompleto} />);
+
+    expect(
+      (screen.getByRole("searchbox", { name: "Buscar novedades" }) as HTMLInputElement).value,
     ).toBe("");
     expect(screen.queryByRole("button", { name: /^Zona:/ })).toBeNull();
-    expect(onTerminoChange).not.toHaveBeenCalled();
-    expect(onSeleccionChange).not.toHaveBeenCalled();
+    // La lectura completa es la cara de esta pantalla: sin params no se dispara.
+    expect(listarCompleto).not.toHaveBeenCalled();
   });
 });

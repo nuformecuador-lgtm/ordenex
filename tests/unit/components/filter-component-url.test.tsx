@@ -261,6 +261,99 @@ describe("FilterComponent — el orden de montaje no decide el resultado (R2, R3
   });
 });
 
+/**
+ * EL CATALOGO QUE LLEGA TARDE, Y LA FOTO DE LA URL AL ENTRAR.
+ *
+ * Los dos fallos que el revisor demostro son el mismo nudo visto por sus dos extremos:
+ *
+ *  - **B2**: la siembra por crecimiento leia la URL DE AHORA (una ref reescrita en cada
+ *    render), asi que un cambio posterior de los params SI entraba. R7 era falso.
+ *  - **B1**: una clave declarada con `options: []` —el caso real de `/novedades`, cuyo
+ *    catalogo se pide de forma perezosa— quedaba marcada como sembrada aunque su valor se
+ *    hubiera descartado por R14, y al llegar el catalogo ya no se reintentaba. El enlace
+ *    compartido no acotaba nada.
+ *
+ * Los casos de aqui abajo separan las dos mitades que hay que distinguir: **releer** la URL
+ * esta prohibido (R7), **terminar de aplicar lo que ya se leyo** no lo esta (R3/R5).
+ */
+describe("FilterComponent — la foto de la URL al entrar manda (R3, R5, R7)", () => {
+  it("R7 — cambiar los params ANTES de declarar el filtro no siembra el valor nuevo", async () => {
+    // Contraejemplo de B2: el caso hermano que ya existia cambiaba los params SIN cambiar
+    // `filters`, asi que el efecto de siembra ni corria. Aqui el juego de claves CRECE, que
+    // es justo el disparador que volvia a leer la URL.
+    const user = userEvent.setup();
+
+    const { onChange, volverAMontar } = montar([]);
+
+    parametros = new URLSearchParams("color=azul");
+    volverAMontar([COLOR]);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Color:/ })).toBeInTheDocument(),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    expect(await marcada(user, "Color", "Azul")).toBe("false");
+  });
+
+  it("R3/R5 — un catalogo que llega DESPUES del montaje siembra la clave que quedo pendiente", async () => {
+    // Contraejemplo de B1, con el orden de montaje real de `/novedades`: el control se
+    // declara sin opciones (el conjunto se pide perezosamente) y solo despues llega el
+    // catalogo. Si la clave se diera por sembrada al declararla, aqui no pasaria nada.
+    const user = userEvent.setup();
+    parametros = new URLSearchParams("color=rojo");
+
+    const { onChange, volverAMontar } = montar([{ ...COLOR, options: [] }]);
+    expect(onChange).not.toHaveBeenCalled();
+
+    volverAMontar([COLOR]);
+
+    await waitFor(() => expect(ultima(onChange)).toEqual({ color: ["rojo"] }));
+    expect(await marcada(user, "Color", "Rojo")).toBe("true");
+  });
+
+  it("R3/R7 — al llegar el catalogo se siembra la URL DE ENTRADA, nunca la de ahora", async () => {
+    // El caso mas afilado, y el unico que distingue «terminar de aplicar lo ya leido» de
+    // «releer»: la URL cambia mientras el catalogo viaja. Gana la foto de entrada.
+    const user = userEvent.setup();
+    parametros = new URLSearchParams("color=rojo");
+
+    const { onChange, volverAMontar } = montar([{ ...COLOR, options: [] }]);
+
+    parametros = new URLSearchParams("color=azul");
+    volverAMontar([COLOR]);
+
+    await waitFor(() => expect(ultima(onChange)).toEqual({ color: ["rojo"] }));
+    expect(
+      onChange.mock.calls.map(([seleccion]) => seleccion as FilterSelection),
+    ).not.toContainEqual({ color: ["azul"] });
+    expect(await marcada(user, "Color", "Azul")).toBe("false");
+  });
+
+  it("R7 — el gesto del usuario cierra la siembra: el catalogo que llega tarde no le pisa la seleccion", async () => {
+    // El catalogo empieza incompleto (solo «Verde»), asi que «rojo» se descarta por R14 y la
+    // clave queda PENDIENTE. El usuario elige a mano antes de que llegue el resto: cuando
+    // llegue, la siembra ya esta cerrada y no puede resucitar nada.
+    const user = userEvent.setup();
+    parametros = new URLSearchParams("color=rojo");
+
+    const soloVerde: FilterDef = {
+      ...COLOR,
+      options: [{ value: "verde", label: "Verde" }],
+    };
+    const { onChange, volverAMontar } = montar([soloVerde]);
+    expect(onChange).not.toHaveBeenCalled();
+
+    const lista = await abrirMulti(user, "Color");
+    await user.click(within(lista).getByRole("option", { name: "Verde" }));
+    expect(ultima(onChange)).toEqual({ color: ["verde"] });
+
+    volverAMontar([COLOR]);
+
+    await waitFor(() => expect(ultima(onChange)).toEqual({ color: ["verde"] }));
+    expect(await marcada(user, "Color", "Rojo")).toBe("false");
+  });
+});
+
 describe("FilterComponent — la precarga sobrevive a la poda (R17)", () => {
   it("R17 — tras el ciclo completo de efectos no llega ninguna emision que borre la clave sembrada", async () => {
     parametros = new URLSearchParams("color=rojo");

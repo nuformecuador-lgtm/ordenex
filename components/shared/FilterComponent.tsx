@@ -381,10 +381,44 @@ export function FilterComponent({
   const { params } = useFiltrosUrl(leerDeUrl);
 
   /**
-   * Claves ya CONSIDERADAS para la siembra desde la URL. Cada clave se siembra como
-   * mucho una vez en toda la vida del componente: `filters` crece y mengua (la barra
-   * activa una clave, el usuario retira un control), y sin esta memoria cada vaiven
-   * volveria a leer la URL y resucitaria valores.
+   * R7 — LA FOTO DE LOS PARAMS AL ENTRAR. Se captura UNA sola vez, en el inicializador
+   * perezoso de un `useState`, y NO se reasigna nunca: es una copia propia, no una vista
+   * de la URL viva.
+   *
+   * Aqui vivia antes una `paramsRef` reescrita en cada render, y eso hacia FALSO a R7: la
+   * siembra por crecimiento leia la URL DE AHORA, asi que entrar sin params, ver cambiar
+   * la query a `?color=azul` y declarar despues el filtro sembraba «azul». Con la foto
+   * congelada el fallo desaparece POR CONSTRUCCION: no queda ninguna referencia viva por
+   * la que la URL posterior pueda entrar.
+   *
+   * ⚠️ LA DISTINCION QUE HAY QUE NO DESHACER, porque es sutil y se ve al reves: **R7
+   * prohibe RELEER la URL, no prohibe TERMINAR DE APLICAR lo que ya se leyo.** Por eso
+   * abajo se re-siembra contra ESTA foto cuando aparecen opciones nuevas para una clave
+   * todavia pendiente. Lo que se aplica tarde no es informacion nueva: es exactamente la
+   * que traia la direccion por la que el usuario entro. Volver a leer `params` en esos
+   * puntos —que es lo que parece «mas correcto»— reintroduce el fallo B2 entero.
+   */
+  const [paramsIniciales] = useState(
+    () => new URLSearchParams([...params.entries()]),
+  );
+
+  /**
+   * Claves ya SEMBRADAS desde la URL: aquellas cuya siembra produjo valores de verdad.
+   * Cada una se siembra como mucho una vez en toda la vida del componente: `filters` crece
+   * y mengua (la barra activa una clave, el usuario retira un control), y sin esta memoria
+   * cada vaiven volveria a sembrar y resucitaria valores que el usuario ya descarto.
+   *
+   * ⚠️ SE APUNTA POR SEMBRAR, NO POR DECLARAR, y esa es la diferencia entre cumplir R3 y no
+   * cumplirlo. Antes bastaba con que una clave se DECLARARA para darla por sembrada, y eso
+   * mataba el caso real de `/novedades`: alli el catalogo se pide de forma perezosa, asi
+   * que el control se declara con `options: []`, el valor de la URL se descarta por R14 y
+   * la clave quedaba marcada para siempre — cuando llegaba el catalogo ya no se reintentaba
+   * y el enlace compartido no acotaba nada. Las claves que no produjeron nada quedan
+   * PENDIENTES y se reintentan cuando cambia el catalogo.
+   *
+   * Una clave con un valor genuinamente invalido (R16), o sin param, queda pendiente para
+   * siempre y se reintenta: es inofensivo, porque `seleccionDesdeUrl` devuelve `[]`, no hay
+   * nada que aplicar y el efecto sale por su `return` temprano sin tocar el estado.
    */
   const sembradas = useRef<Set<string>>(new Set());
 
@@ -408,7 +442,9 @@ export function FilterComponent({
    * unico que consulta el conjunto.
    */
   const [seleccion, setSeleccion] = useState<FilterSelection>(() =>
-    leerDeUrl ? podarSeleccion(montados, seleccionDesdeUrl(params, montados)) : {},
+    leerDeUrl
+      ? podarSeleccion(montados, seleccionDesdeUrl(paramsIniciales, montados))
+      : {},
   );
 
   /**
@@ -429,15 +465,21 @@ export function FilterComponent({
   const [resetSignal, setResetSignal] = useState(0);
 
   /**
-   * Lo que la URL trae para las claves declaradas AHORA MISMO. Solo lo leen los controles
-   * NO controlados (`text`, `dateRange`) para saber con que valor montarse: cuando una
-   * clave se siembra al crecer `filters`, el control se monta en el render ANTERIOR al
+   * Lo que la URL traia AL ENTRAR para las claves declaradas ahora mismo. Solo lo leen los
+   * controles NO controlados (`text`, `dateRange`) para saber con que valor montarse: cuando
+   * una clave se siembra al crecer `filters`, el control se monta en el render ANTERIOR al
    * efecto que siembra, asi que sin esto arrancaria vacio y mentiria.
+   *
+   * Lee la FOTO, no `params`: si mirara la URL viva, un cambio posterior de la query se
+   * colaria por aqui hasta el valor inicial del control y R7 volveria a ser falso por otra
+   * puerta.
    */
   const precargaUrl = useMemo(
     () =>
-      leerDeUrl && !siembraCerrada ? seleccionDesdeUrl(params, montados) : {},
-    [leerDeUrl, siembraCerrada, params, montados],
+      leerDeUrl && !siembraCerrada
+        ? seleccionDesdeUrl(paramsIniciales, montados)
+        : {},
+    [leerDeUrl, siembraCerrada, paramsIniciales, montados],
   );
 
   // `onChange` cambia de identidad en cada render del consumidor; se lee por ref para
@@ -489,13 +531,28 @@ export function FilterComponent({
   // ver ni quitar. Se compara por CLAVES (no por identidad del array) para no
   // dispararse en cada render del consumidor.
   const clavesMontadas = montados.map((f) => f.key).join(SEPARADOR_CLAVES);
+
+  /**
+   * Firma del CATALOGO de los filtros montados: `clave:nº de opciones`, con el mismo
+   * separador. Es el segundo disparador del efecto de abajo, y sin ella el reintento de la
+   * siembra pendiente no existe: cuando el catalogo de un filtro pasa de vacio a lleno, el
+   * juego de CLAVES no cambia —siguen siendo las mismas— asi que un efecto que solo dependa
+   * de `clavesMontadas` no vuelve a correr nunca. Ese era el fallo de `/novedades`.
+   *
+   * Se calcula sobre TODOS los montados y no solo sobre los pendientes a proposito: saber
+   * cuales estan pendientes exige leer `sembradas.current`, y la regla `react-hooks/refs`
+   * del repo prohibe leer una ref durante el render. Un disparador de mas cuesta una pasada
+   * que sale por el `return` temprano; uno de menos cuesta un requisito.
+   */
+  const firmaCatalogo = montados
+    .map((f) => `${f.key}:${(f.options ?? []).length}`)
+    .join(SEPARADOR_CLAVES);
+
   const seleccionRef = useRef(seleccion);
   const montadosRef = useRef(montados);
-  const paramsRef = useRef(params);
   useEffect(() => {
     seleccionRef.current = seleccion;
     montadosRef.current = montados;
-    paramsRef.current = params;
   });
 
   /**
@@ -509,10 +566,18 @@ export function FilterComponent({
    */
   const precargaInicial = useRef(seleccion);
   useEffect(() => {
-    // Las claves DECLARADAS al montar quedan sembradas de salida: su turno de leer la URL
-    // fue el inicializador de arriba y no lo repiten. Se apunta aqui —y no alli— porque el
-    // render no puede tocar refs, y este efecto corre antes que el que siembra.
-    for (const filtro of montadosRef.current) sembradas.current.add(filtro.key);
+    // Se apuntan como sembradas SOLO las claves que la foto de entrada llego a llenar, no
+    // todas las declaradas: una clave declarada sin catalogo —o sin param— no ha tenido su
+    // turno todavia y debe poder reintentarlo. Se mira la seleccion SIN podar, para que una
+    // clave que la poda de dependencias retiro no se reintente en bucle (su valor si se
+    // leyo; simplemente era incoherente con su padre).
+    //
+    // Se apunta aqui —y no en el inicializador de arriba— porque el render no puede tocar
+    // refs, y este efecto corre antes que el de poda y siembra.
+    if (leerDeUrl) {
+      const leidasAlEntrar = seleccionDesdeUrl(paramsIniciales, montadosRef.current);
+      for (const clave of Object.keys(leidasAlEntrar)) sembradas.current.add(clave);
+    }
     if (Object.keys(precargaInicial.current).length === 0) return;
     emitir(precargaInicial.current);
     // Corre UNA sola vez, al montar: `emitir` se recrea en cada render y depender de el
@@ -535,16 +600,26 @@ export function FilterComponent({
     // DESPUES la barra activa las claves que traia la URL. Sembrar unicamente en el
     // inicializador dejaria esas pantallas sin precarga.
     //
+    // Tambien es el reintento de las claves PENDIENTES: las que se declararon sin catalogo
+    // y cuyo valor se descarto por R14. Cuando el catalogo llega, la firma cambia, este
+    // efecto vuelve a correr y la clave se termina de sembrar. Se siembra contra la FOTO DE
+    // ENTRADA, nunca contra `params`: R7 prohibe RELEER la URL, no prohibe terminar de
+    // aplicar lo que ya se leyo al entrar (ver el comentario de `paramsIniciales`).
+    //
+    // R7 — si el usuario ya toco algo, la siembra esta cerrada y el catalogo que llega tarde
+    // no le pisa la seleccion.
+    //
     // R17 — la poda no se lleva por delante lo sembrado: se siembran claves ya DECLARADAS
     // (`montadosRef`), asi que nunca estan entre las que sobran.
-    const nuevas = siembraCerradaRef.current
+    const pendientes = siembraCerradaRef.current
       ? []
       : montadosRef.current.filter((f) => !sembradas.current.has(f.key));
-    for (const filtro of nuevas) sembradas.current.add(filtro.key);
     const sembrado =
-      leerDeUrl && nuevas.length > 0
-        ? seleccionDesdeUrl(paramsRef.current, nuevas)
+      leerDeUrl && pendientes.length > 0
+        ? seleccionDesdeUrl(paramsIniciales, pendientes)
         : {};
+    // Solo cuenta como sembrada la clave que PRODUJO valores. El resto sigue pendiente.
+    for (const clave of Object.keys(sembrado)) sembradas.current.add(clave);
 
     // Sin nada que podar ni que sembrar no se toca el estado: este efecto corre en TODOS
     // los montajes y emitir aqui romperia el silencio de R6.
@@ -553,9 +628,10 @@ export function FilterComponent({
     for (const clave of sobran) delete siguiente[clave];
     aplicar(siguiente);
     // `aplicar` se recrea en cada render; depender de el volveria a correr el efecto
-    // sin que haya cambiado nada. Lo unico que debe dispararlo es el juego de claves.
+    // sin que haya cambiado nada. Lo unico que debe dispararlo es el juego de claves y el
+    // tamaño del catalogo de cada una (la clave que llega sin opciones y las recibe despues).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clavesMontadas]);
+  }, [clavesMontadas, firmaCatalogo]);
 
   /**
    * R7 — el primer gesto del usuario cierra la siembra PARA SIEMPRE. Sin esto, quitar un
