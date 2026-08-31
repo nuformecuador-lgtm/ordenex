@@ -1,7 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import type { ReactNode } from "react";
-import { AlertTriangle, Download, FileText, Play, RotateCcw } from "lucide-react";
+import {
+  AlertTriangle,
+  Download,
+  FileText,
+  Maximize2,
+  Play,
+  RotateCcw,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -10,6 +18,7 @@ import type { ChatMensajeDireccion } from "@prisma/client";
 
 import { textoAccesible } from "./chat-format";
 import { urlMediaChat, useMediaChat } from "./hooks/useMediaChat";
+import { VistaPreviaMedia } from "./VistaPreviaMedia";
 
 // Feature 311 (R24/R27/R28/R29) — el adjunto de una burbuja: imagen, sticker, audio, video o
 // documento.
@@ -112,6 +121,9 @@ function BotonCargar({
 /** Etiqueta VISIBLE del reintento; el nombre accesible lo distingue por adjunto. */
 const TEXTO_REINTENTAR = "Reintentar";
 
+/** Etiqueta VISIBLE de la vista previa del video; el nombre accesible cita el adjunto. */
+const TEXTO_AMPLIAR = "Ampliar";
+
 /**
  * Aviso (texto visible, R24/R27) + salida del callejón sin salida: hasta ahora un adjunto que
  * fallaba quedaba muerto hasta desmontar la burbuja.
@@ -150,6 +162,7 @@ function ImagenAdjunta({
   direccion: ChatMensajeDireccion;
 }>) {
   const { estado, url, activar } = useMediaChat(mensajeId, true);
+  const [previa, setPrevia] = useState(false);
   // R28: el `alt` nunca queda vacio. Con pie de foto se usa el pie (es lo que describe la
   // imagen); sin el, una etiqueta que dice QUE es y de QUIEN vino (R23: quien vino depende de
   // la direccion del mensaje, no siempre es el cliente).
@@ -183,30 +196,56 @@ function ImagenAdjunta({
   }
 
   return (
-    // Es un object URL (`blob:`) de un binario que sirve NUESTRO proxy: `next/image` no puede
-    // optimizarlo ni conoce sus dimensiones, y con `unoptimized` no aporta nada.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={url}
-      alt={alternativo}
-      className={cn(
-        "rounded-lg object-contain",
-        tipo === "sticker" ? "max-h-32 w-auto" : "max-h-64 w-full",
-      )}
-    />
+    <>
+      {/* La miniatura ES el disparador de la vista previa (asi se abre una foto en cualquier
+          mensajeria). El sticker tambien: es lo unico que hay en la burbuja, y un sticker sin
+          abrir no le quita nada a nadie. */}
+      <button
+        type="button"
+        onClick={() => setPrevia(true)}
+        aria-label={`Ampliar: ${alternativo}`}
+        className="block overflow-hidden rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        {/* Es un object URL (`blob:`) de un binario que sirve NUESTRO proxy: `next/image` no
+            puede optimizarlo ni conoce sus dimensiones, y con `unoptimized` no aporta nada. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url}
+          alt={alternativo}
+          className={cn(
+            "rounded-lg",
+            // La miniatura se DIMENSIONA POR LA CAJA, no por la altura suelta: con
+            // `max-h-64 w-full` una foto vertical de telefono (1080x1920) tocaba el techo de
+            // 256 px de alto y se quedaba en ~144 px de ancho, que es el "muy pequeño" que se
+            // veia. Caja fija + `object-cover` recorta como cualquier mensajeria; la foto
+            // entera se ve al abrir la vista previa.
+            tipo === "sticker"
+              ? "max-h-32 w-auto object-contain"
+              : "h-56 w-60 max-w-full object-cover",
+          )}
+        />
+      </button>
+      <VistaPreviaMedia
+        slide={previa ? { tipo: "imagen", url, descripcion: alternativo } : null}
+        onCerrar={() => setPrevia(false)}
+      />
+    </>
   );
 }
 
 function ReproductorAdjunto({
   mensajeId,
   tipo,
+  media,
   direccion,
 }: Readonly<{
   mensajeId: string;
   tipo: "audio" | "video";
+  media: ChatMediaVista;
   direccion: ChatMensajeDireccion;
 }>) {
   const { estado, url, activar } = useMediaChat(mensajeId, false);
+  const [previa, setPrevia] = useState(false);
   const nombreAccesible = textoAccesible(tipo, direccion);
 
   if (estado === "expirado" || estado === "error") {
@@ -240,19 +279,52 @@ function ReproductorAdjunto({
 
   // R28: controles nativos + nombre accesible. `controls` sin nombre deja al lector de
   // pantalla anunciando "reproductor" a secas.
-  return tipo === "audio" ? (
-    <audio controls src={url} aria-label={nombreAccesible} className="w-56 max-w-full">
-      <track kind="captions" />
-    </audio>
-  ) : (
-    <video
-      controls
-      src={url}
-      aria-label={nombreAccesible}
-      className="max-h-64 w-full rounded-lg"
-    >
-      <track kind="captions" />
-    </video>
+  if (tipo === "audio") {
+    return (
+      <audio controls src={url} aria-label={nombreAccesible} className="w-56 max-w-full">
+        <track kind="captions" />
+      </audio>
+    );
+  }
+
+  // El video se queda reproducible EN LA BURBUJA (es lo que ya habia) y ademas se puede
+  // ampliar. El "Ampliar" es un boton APARTE y no la propia caja del video: con `controls`
+  // dentro, tocar play abriria tambien la vista previa.
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      <video
+        controls
+        // Sin `playsInline`, Safari de iOS se lleva el video a SU pantalla completa en cuanto
+        // se le da a play y el mensajero pierde el hilo de vista.
+        playsInline
+        src={url}
+        aria-label={nombreAccesible}
+        className="max-h-72 w-60 max-w-full rounded-lg bg-black object-contain"
+      >
+        <track kind="captions" />
+      </video>
+      <BotonCargar
+        etiqueta={TEXTO_AMPLIAR}
+        nombreAccesible={`Ampliar: ${nombreAccesible}`}
+        Icono={Maximize2}
+        onClick={() => setPrevia(true)}
+      />
+      <VistaPreviaMedia
+        slide={
+          previa
+            ? {
+                tipo: "video",
+                url,
+                // Meta no siempre manda el mime; sin el, `<source>` se queda sin `type` y
+                // Safari puede no intentar reproducirlo.
+                mime: media.mime ?? "video/mp4",
+                descripcion: nombreAccesible,
+              }
+            : null
+        }
+        onCerrar={() => setPrevia(false)}
+      />
+    </div>
   );
 }
 
@@ -311,7 +383,14 @@ export function MediaAdjunto({
     );
   }
   if (tipo === "audio" || tipo === "video") {
-    return <ReproductorAdjunto mensajeId={mensajeId} tipo={tipo} direccion={direccion} />;
+    return (
+      <ReproductorAdjunto
+        mensajeId={mensajeId}
+        tipo={tipo}
+        media={media}
+        direccion={direccion}
+      />
+    );
   }
   return <DocumentoAdjunto mensajeId={mensajeId} media={media} />;
 }
