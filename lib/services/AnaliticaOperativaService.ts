@@ -870,17 +870,37 @@ function agregarAlGrano(
  * Las fechas calendario CR del rango, ascendentes e inclusivas en ambos extremos. Se apoya
  * SOLO en `lib/utils/fecha-cr` (D7): ni un desplazamiento horario escrito a mano, ni
  * `startOfDayCR` (la trampa 18:00-18:00 documentada de `RankingService`).
+ *
+ * ⚠ 2026-08-31 — LA COTA DURA YA NO ES EL LITERAL `400`, y el cambio importa. Aquel numero se
+ * escribio dando por supuesto que TODO rango cabia en `RANGO_TOPE_DIAS` (366): desde que el
+ * canal por API key sirve el historico completo sin tope, un `400` no habria protegido de nada
+ * —seguiria siendo finito— pero SI habria TRUNCADO en silencio la cobertura de un rango
+ * legitimo mas largo, publicando como comparables dias que no lo son. La cota pasa a DERIVARSE
+ * del propio rango: sigue impidiendo el bucle infinito de una fecha malformada (con `NaN` el
+ * tope queda en 1 y el bucle muere en la primera vuelta) sin recortar nunca un rango bueno.
  */
 function fechasDelRango(consulta: ConsultaAnalitica): readonly string[] {
   const { desdeFecha, hastaFecha } = consulta.rango;
+  const tope = diasDelRango(desdeFecha, hastaFecha);
   const fechas: string[] = [];
   for (let f = desdeFecha; f <= hastaFecha; f = fechaCalendarioCR(inicioDelDiaSiguienteCREnUtc(f))) {
     fechas.push(f);
-    // Cota dura: el filtro de la 135 ya limita la ventana a `RANGO_TOPE_DIAS` (366) y este
-    // bucle no puede convertirse en infinito por una fecha malformada.
-    if (fechas.length > 400) break;
+    if (fechas.length >= tope) break;
   }
   return fechas;
+}
+
+/**
+ * Cuantos dias calendario hay entre las dos fechas contando AMBOS extremos, al menos 1. Solo se
+ * usa como COTA del bucle de arriba, asi que se resuelve sobre medianoche UTC: aqui no se fija
+ * ninguna frontera de dia de Costa Rica —eso es de `ranges.ts`— y un desfase de horas no puede
+ * cambiar el resultado de una resta de fechas de ancho fijo.
+ */
+function diasDelRango(desdeFecha: string, hastaFecha: string): number {
+  const a = Date.parse(`${desdeFecha}T00:00:00.000Z`);
+  const b = Date.parse(`${hastaFecha}T00:00:00.000Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 1;
+  return Math.max(1, Math.round((b - a) / 86_400_000) + 1);
 }
 
 /**

@@ -158,7 +158,7 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
       "Motivo",
       "Flete + IVA",
       "Comisión + IVA",
-      "Flete devolución + IVA",
+      "Flete por rechazo + IVA",
       "Total Ordenex",
       "Pago mensajero",
       "Ingreso bodega",

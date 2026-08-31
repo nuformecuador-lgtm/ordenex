@@ -470,7 +470,10 @@ describe("267/R39 — la analítica es el NOVENO endpoint del canal, en el objet
     // final y desde la MISMA fuente (P4-bis): el centinela y la lista que expande se declaran
     // juntos o acaban divergiendo.
     const metricas = parametroDeAnalitica("metricas");
-    expect(metricas.required).toBe(true);
+    // 2026-08-31 — OPCIONAL: omitirlo equivale a `all`. El `enum` NO cambia por eso: `all` sigue
+    // siendo la forma explícita de pedir todas, y es la que el contrato publica.
+    expect(metricas.required).toBe(false);
+    expect(metricas.description).toMatch(/se omite/i);
     expect([...((metricas.schema as { enum?: readonly string[] }).enum ?? [])]).toEqual([
       ...METRICAS_API_KEY,
       METRICAS_TODAS,
@@ -488,20 +491,26 @@ describe("267/R39 — la analítica es el NOVENO endpoint del canal, en el objet
     expect(idsYaml).toEqual([...METRICAS_API_KEY, METRICAS_TODAS]);
   });
 
-  it("`desde` y `hasta` son OBLIGATORIOS y se publican como fecha calendario inclusiva", () => {
-    // Decisión P3 de la puerta (2026-08-23): los mismos nombres y la misma semántica que publicó
-    // la 257 en el listado. Un canal con dos convenciones de fecha es una trampa para el
-    // integrador, y un rango con default haría que dos llamadas idénticas devolvieran conjuntos
-    // distintos según cuándo se llamó.
+  it("`desde` y `hasta` son OPCIONALES, INCLUSIVOS los dos, y sin tope de ventana", () => {
+    // Los nombres y el formato siguen siendo los que publicó la 257 en el listado: un canal con
+    // dos convenciones de fecha es una trampa para el integrador. Lo que cambió el 2026-08-31 es
+    // la obligatoriedad — omitirlos significa «todo el histórico» — y el tope de 366 días, que
+    // se retiró de este canal porque un histórico completo no cabe en él.
     for (const nombre of ["desde", "hasta"] as const) {
       const p = parametroDeAnalitica(nombre);
-      expect(p.required).toBe(true);
+      expect(p.required).toBe(false);
       expect(p.in).toBe("query");
       expect(p.schema).toEqual({ type: "string", format: "date" });
+      // Que la ausencia significa algo tiene que estar ESCRITO en el parámetro, no solo en la
+      // prosa: un integrador lee la tabla de parámetros antes que el párrafo.
+      expect(p.description).toMatch(/se omite/i);
+      expect(p.description).toContain("INCLUSIVA");
     }
-    const hasta = parametroDeAnalitica("hasta");
-    expect(hasta.description).toContain("INCLUSIVA");
-    expect(hasta.description).toContain("366");
+    // El tope de 366 días no se menciona en NINGÚN parámetro: publicarlo sería prometer un 422
+    // que este canal ya no devuelve.
+    for (const p of parametrosDeAnalitica()) expect(p.description).not.toContain("366");
+    expect(openApiSpec.paths[PATH_ANALITICA].get.description).not.toContain("366");
+    expect(descripcionDeAnaliticaEnYaml()).not.toContain("366");
     // Y no se publican presets: el vocabulario interno de rangos no cruza al contrato público.
     expect(parametrosDeAnalitica().map((p) => p.name)).toEqual(["metricas", "desde", "hasta"]);
   });

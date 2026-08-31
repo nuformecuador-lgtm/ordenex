@@ -352,3 +352,46 @@ describe("267/R38 · el fallback de politica de identidad es seudonima, no real"
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// 2026-08-31 — EL TOPE DE VENTANA (`RANGO_TOPE_DIAS`) DEPENDE DEL CANAL, y es la UNICA
+// diferencia de validacion entre los dos. El canal interno lo conserva porque su consumidor es
+// una grafica con techo de puntos; el canal por API key lo pierde porque publica el HISTORICO
+// COMPLETO, que deja de caber en 366 dias en cuanto la operacion pasa del anio.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe("el tope de ventana es del canal interno, no del canal por API key", () => {
+  const LARGO = { rango: "personalizado", desde: "2024-01-01", hasta: "2026-08-01" } as const;
+  /** La cuenta dedicada de una key: el UNICO actor al que el canal `api_key` concede (267/R1). */
+  const INTEGRADOR: ActorAnalitica = { usuarioId: "u-integrador", rol: "apiKey" };
+
+  it("canal interno (el default): una ventana de mas de 366 dias es validation_error", () => {
+    const r = prepararConsultaAnalitica(LARGO, MAESTRO, "entregas", AHORA);
+
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") return;
+    expect(Object.keys(r.fieldErrors)).toContain("hasta");
+  });
+
+  it("canal api_key: la MISMA ventana se acepta", () => {
+    const r = prepararConsultaAnalitica(LARGO, INTEGRADOR, "entregas", AHORA, "api_key");
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.consulta.rango.desdeFecha).toBe("2024-01-01");
+    expect(r.consulta.rango.hastaFecha).toBe("2026-08-01");
+  });
+
+  it("y en api_key el rango INVERTIDO sigue siendo validation_error: cae el techo, no la coherencia", () => {
+    const r = prepararConsultaAnalitica(
+      { rango: "personalizado", desde: "2026-08-10", hasta: "2024-01-01" },
+      INTEGRADOR,
+      "entregas",
+      AHORA,
+      "api_key",
+    );
+
+    expect(r.status).toBe("validation_error");
+    if (r.status !== "validation_error") return;
+    expect(Object.keys(r.fieldErrors)).toContain("hasta");
+  });
+});

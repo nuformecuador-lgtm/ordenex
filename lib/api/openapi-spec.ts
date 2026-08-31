@@ -913,6 +913,10 @@ export const openApiSpec = {
           "publicables. `all` no se combina con ids: o `all`, o la lista. Un id repetido se sirve",
           "una sola vez, conservando su primera posición.",
           "",
+          "**`metricas` es opcional:** si no lo mandas (o lo mandas vacío) se sirven **todas** las",
+          "publicables, igual que con `all`. Ojo: eso vale para el parámetro entero vacío, no para",
+          "un hueco dentro de la lista — `metricas=entregas,,rechazos` sigue siendo un **422**.",
+          "",
           "**La respuesta tiene SIEMPRE la misma forma,** se pida una métrica o diez: el rango una",
           "vez en la raíz y las series en `metricas[]`, en el orden pedido (el del `enum` cuando se",
           "pidió `all`).",
@@ -923,9 +927,13 @@ export const openApiSpec = {
           "",
           "**La ventana se pide con `desde` y `hasta`, igual que en el listado.** Mismos nombres,",
           "mismo formato `YYYY-MM-DD` y misma semántica: el día se mide en hora de Costa Rica",
-          "(UTC-6) y `hasta` es **inclusivo**. Los dos son obligatorios y no hay atajos tipo",
-          "«últimos 7 días»: así el rango de una respuesta nunca depende de cuándo se llamó. La",
-          "ventana no puede superar 366 días contando ambos extremos.",
+          "(UTC-6), `desde` es **inclusivo** (`>=`) y `hasta` es **inclusivo** (`<=`). No hay",
+          "atajos tipo «últimos 7 días»: un rango que se escribe con fechas siempre significa lo",
+          "mismo, se llame cuando se llame.",
+          "",
+          "**Los dos son opcionales, y omitirlos significa «todo el histórico»:** sin `desde` la",
+          "serie arranca en el primer día del que tenemos datos, y sin `hasta` llega hasta hoy. No",
+          "hay tope de tamaño de ventana: puedes pedir el histórico completo de una vez.",
           "",
           "**`data` trae solo los días que se pueden leer, y OMITE los que no.** Un día del rango",
           "puede faltar en `data`, y falta a propósito, por una de dos razones: (a) es **el día en",
@@ -959,9 +967,9 @@ export const openApiSpec = {
           {
             name: "metricas",
             in: "query",
-            required: true,
+            required: false,
             description:
-              "Ids separados por comas, o `all` para todas las publicables. Solo los valores del enum se publican por este canal; `all` no se combina con ids.",
+              "Ids separados por comas, o `all` para todas las publicables. Si se omite (o se manda vacío) equivale a `all`. Solo los valores del enum se publican por este canal; `all` no se combina con ids.",
             // El enum se DERIVA de la lista blanca (`lib/analytics/publicacion-api-key.ts`), la
             // fuente unica de que se publica. Copiarlo como literal aqui garantizaria que un dia
             // diverja de lo que el endpoint concede de verdad. El centinela viaja en el MISMO
@@ -975,18 +983,18 @@ export const openApiSpec = {
           {
             name: "desde",
             in: "query",
-            required: true,
+            required: false,
             description:
-              "Fecha calendario de Costa Rica (UTC-6), inclusiva. Formato `YYYY-MM-DD`.",
+              "Fecha calendario de Costa Rica (UTC-6), INCLUSIVA (`>=`). Formato `YYYY-MM-DD`. Si se omite, la serie arranca en el primer día del que hay datos.",
             schema: { type: "string", format: "date" },
             example: "2026-08-01",
           },
           {
             name: "hasta",
             in: "query",
-            required: true,
+            required: false,
             description:
-              "Fecha calendario de Costa Rica (UTC-6), INCLUSIVA. Formato `YYYY-MM-DD`. La ventana no puede superar 366 días contando ambos extremos.",
+              "Fecha calendario de Costa Rica (UTC-6), INCLUSIVA (`<=`). Formato `YYYY-MM-DD`. Si se omite, la serie llega hasta hoy. No hay tope de tamaño de ventana.",
             schema: { type: "string", format: "date" },
             example: "2026-08-21",
           },
@@ -1745,8 +1753,16 @@ export const openApiSpec = {
           "Costo si la orden se DEVUELVE, es decir si el paquete vuelve a tu tienda: cinco conceptos, SIN `ivaComision` (no hay comisión que gravar). `comision` es un cero EXPLÍCITO — la afirmación de que una devolución no cobra comisión COD, no un dato ausente. `fulfillment` en cambio SÍ se cobra: el servicio de bodega ya se prestó. `total` es la DEUDA de la tienda = −(flete + iva + fulfillment), y por eso es negativo. **Cuándo se cobra este escenario:** al cerrarse la orden como RECHAZADA, que es el resultado con el que el paquete regresa. Un intento de entrega fallido que aún se puede reprogramar o recuperar NO cobra nada por sí solo; los importes de aquí aparecen cuando el retorno se consuma.",
         required: ["flete", "iva", "comision", "fulfillment", "total"],
         properties: {
-          flete: { type: "string", description: "Flete de devolución. String money-safe de escala 2, crudo." },
-          iva: { type: "string", description: "IVA del flete de devolución. String money-safe de escala 2, crudo." },
+          flete: {
+            type: "string",
+            description:
+              "Flete por rechazo. String money-safe de escala 2, crudo. En pantalla, en la wallet y en las descargas este concepto se llama exactamente así desde el 2026-08-31: sólo lo cobra una gestión RECHAZADA (ver `CotizacionEscenarioDevuelto`), nunca una devolución que siga viva. Antes se documentaba como «Flete de devolución».",
+          },
+          iva: {
+            type: "string",
+            description:
+              "IVA del flete por rechazo. String money-safe de escala 2, crudo. Antes «IVA del flete de devolución».",
+          },
           comision: {
             type: "string",
             description: "Siempre `\"0.00\"`: una devolución no cobra comisión COD.",

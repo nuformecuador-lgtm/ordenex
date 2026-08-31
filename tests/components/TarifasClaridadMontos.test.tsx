@@ -330,14 +330,20 @@ describe("La sección que envuelve el bloque (CrearZonaForm)", () => {
 });
 
 describe("Tarifas de zona/tienda — rótulos (TarifaCampos)", () => {
-  it("el flete de retorno dice que sólo aplica a los rechazos", () => {
+  it("el flete se llama «por rechazo», que es el único resultado que lo cobra", () => {
     renderGrid();
 
-    expect(campo("Flete de retorno (solo rechazos)")).toBeInTheDocument();
-    expect(campo("Flete de retorno GAM (solo rechazos)")).toBeInTheDocument();
+    // ⏳ FICHA 338 (2026-08-31): el nombre DEFINITIVO, para toda la app. «Flete de retorno (solo
+    // rechazos)» fue el primer intento (ficha 303): decía la verdad, pero con una aclaración
+    // entre paréntesis que el nombre nuevo ya no necesita, y no coincidía con lo que la misma
+    // cifra se llamaba en el detalle del cierre y en la wallet.
+    expect(campo("Flete por rechazo")).toBeInTheDocument();
+    expect(campo("Flete por rechazo GAM")).toBeInTheDocument();
     // «Devuelto» nombraba justo el resultado que NO cobra desde la ficha 301.
     expect(sinCampo("Valor flete devuelto")).toBeNull();
     expect(sinCampo("Valor flete devuelto GAM")).toBeNull();
+    expect(sinCampo("Flete de retorno (solo rechazos)")).toBeNull();
+    expect(sinCampo("Flete de retorno GAM (solo rechazos)")).toBeNull();
   });
 
   it("la comisión se llama por su nombre, sin la sigla COD", () => {
