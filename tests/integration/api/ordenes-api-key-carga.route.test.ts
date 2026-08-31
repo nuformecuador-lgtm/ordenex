@@ -21,6 +21,8 @@ function okSummary(overrides: Partial<CargaViaApiSummary> = {}): CargaViaApiSumm
     duplicadas: 0,
     conError: 0,
     filas: [{ fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 1042 }],
+    // 2026-08-31: `filas` solo lleva lo que entro; lo que falla va en esta lista hermana.
+    errores: [],
     ordenes: [
       { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "por_recolectar_en_tienda", costoEnvio: "3.92", fulfillment: "0.00" },
     ],
@@ -174,8 +176,8 @@ describe("carga API: happy path (R10)", () => {
       creadas: 0,
       duplicadas: 1,
       conError: 1,
-      filas: [
-        { fila: 1, numRemision: "REM-D", resultado: "duplicada", estatus: "entregada" },
+      filas: [{ fila: 1, numRemision: "REM-D", resultado: "duplicada", estatus: "entregada" }],
+      errores: [
         { fila: 2, numRemision: "REM-E", resultado: "error", errores: { provincia: ["no encontrada"] } },
       ],
       ordenes: [],
@@ -195,8 +197,8 @@ describe("carga API: happy path (R10)", () => {
     );
     const json = await res.json();
     expect(json.filas[0]).not.toHaveProperty("costoEnvio");
-    expect(json.filas[1]).not.toHaveProperty("costoEnvio");
-    expect(json.filas[1].errores).toHaveProperty("provincia");
+    expect(json.errores[0]).not.toHaveProperty("costoEnvio");
+    expect(json.errores[0].errores).toHaveProperty("provincia");
     expect(json.ordenes).toEqual([]);
   });
 
@@ -634,7 +636,7 @@ describe("carga API: manifiesto del lote (155/R24/R25/R26)", () => {
     );
     const json = await res.json();
 
-    for (const clave of ["total", "creadas", "duplicadas", "conError", "filas", "ordenes"]) {
+    for (const clave of ["total", "creadas", "duplicadas", "conError", "filas", "errores", "ordenes"]) {
       expect(json, `falta la clave ${clave} del contrato 88`).toHaveProperty(clave);
     }
     expect(json).toHaveProperty("etiquetasPdf");

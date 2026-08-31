@@ -21,6 +21,43 @@
 
 ---
 
+## 2026-08-31 — RUPTURA: en `POST /ordenes/api-key/carga`, las filas con error salen de `filas` y viajan en `errores`
+
+**Rompe si buscabas los fallos dentro de `filas`.** La respuesta se parte en dos listas: `filas`
+trae **solo lo que entró** (`creada` y `duplicada`) y una lista nueva, `errores`, trae **solo lo que
+falló**. El contenido de cada fila fallida no cambia ni una clave:
+
+```diff
+ {
+   "total": 2, "creadas": 1, "duplicadas": 0, "conError": 1,
+   "filas": [
+     { "fila": 1, "numRemision": "REM-0001", "resultado": "creada", "estatus": "por_recolectar_en_tienda", "numGuia": 100234 },
+-    { "fila": 2, "numRemision": "REM-0002", "resultado": "error", "errores": { "telefono": ["requerido"] } }
+   ],
++  "errores": [
++    { "fila": 2, "numRemision": "REM-0002", "resultado": "error", "errores": { "telefono": ["requerido"] } }
++  ],
+   "ordenes": [ ... ]
+ }
+```
+
+**Por qué.** Hasta hoy el caso que hay que atender venía escondido dentro del caso normal: para
+saber si algo había fallado, había que recorrer el lote entero y ramificar por `resultado` —o, peor,
+por la presencia de una clave opcional— antes de poder hacer nada. Con dos listas, la pregunta se
+responde sola: `if (respuesta.errores.length)`.
+
+**Qué hacer.** Donde filtrabas `filas.filter(f => f.resultado === "error")`, leé `errores`
+directamente. Ese filtro **ya no devuelve nada nunca**, ni siquiera con filas fallidas: es un
+silencio, no un error, así que revisalo aunque tu integración no se haya roto en voz alta.
+
+**Lo que NO cambia:** los contadores. `total`, `creadas`, `duplicadas` y `conError` siguen contando
+sobre el lote **completo**, y `conError` es siempre `errores.length`. `ordenes`, `cargaId`,
+`etiquetasPdf` y `manifiesto` siguen igual, y `filas` conserva el orden y la forma de siempre para
+las filas que sí entraron. La cotización (`POST /ordenes/api-key/cotizacion`) **no** cambia: ahí
+las filas en `error` siguen dentro de `filas`, porque cada fila es una respuesta y no un efecto.
+
+---
+
 ## 2026-08-31 — NUEVO value en el webhook `orden.estado_actualizado`: `en_preparacion`
 
 **Aditivo: no rompe nada, pero llega un `estado` que antes no llegaba.** Ningún evento que hoy
