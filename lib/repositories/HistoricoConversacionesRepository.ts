@@ -38,6 +38,7 @@ import { agregarReacciones, type MensajeConReaccion } from "@/lib/utils/chat-rea
 import { escaparComodinesLike } from "@/lib/utils/escapar-like";
 import { terminoDeBusqueda } from "@/lib/utils/filtros-listado-ordenes";
 import { inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } from "@/lib/utils/fecha-cr";
+import { nombreCompletoUsuarioSql } from "@/lib/utils/nombre-usuario";
 
 /**
  * El cliente Prisma que este repositorio admite: SOLO `$queryRaw`. Es la mitad estructural de
@@ -79,7 +80,7 @@ function patronLike(valor: string): string {
 }
 
 /** Nombre completo del mensajero tal como se compara en R36: tres columnas de `usuario`. */
-const NOMBRE_MENSAJERO_SQL = "concat_ws(' ', u.nombre, u.primer_apellido, u.segundo_apellido)";
+const NOMBRE_MENSAJERO_SQL = nombreCompletoUsuarioSql("u");
 
 /**
  * El telefono del hilo en su forma SOLO-DIGITOS, para comparar con un termino tecleado de
