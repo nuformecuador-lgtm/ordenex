@@ -826,6 +826,32 @@ export function DesgloseIngresoOrdenex({ g }: { g: CierreDetalleGestion }) {
       : t.valorFleteDevuelto;
   const origenFleteHint = fleteEspecial ? HINT_TARIFA_ESPECIAL : `tarifa ${variante}`;
   const origenFleteDevHint = fleteDevEspecial ? HINT_TARIFA_ESPECIAL : `tarifa ${variante}`;
+
+  // ⏳ FICHA 337 (2026-08-31) — EL "← se aplicó" AHORA MIRA EL RESULTADO, NO SOLO LA ZONA.
+  //
+  // Hasta hoy cada fila de la tarifa congelada decidía su marca con `esCentral` (y el pacto) y
+  // NUNCA con el resultado de la gestión. Consecuencia visible, y la que reportó el humano: en
+  // una ENTREGA de zona GAM se encendían a la vez "Valor flete GAM" y "Flete devuelto GAM" —dos
+  // marcas para dos conceptos que se excluyen: o el paquete se entregó o se devolvió—.
+  //
+  // La fuente de verdad de "¿se cobró este concepto?" ya estaba en el DTO y no hacía falta
+  // ninguna aritmética nueva: `derivarIngresoOrden` deja `flete` en `null` salvo en `entregada`
+  // y `fleteDevolucion` en `null` salvo en `rechazada`. Un `null` es "este concepto no existe
+  // acá", que es exactamente la pregunta. Por eso NINGUNA fila se marca en una `reprogramada`
+  // (ni en una `devuelta`, desde la ficha 301): esas gestiones cobran 0,00 y una marca diría que
+  // se aplicó un precio que no se aplicó.
+  //
+  // Money-safe: se lee la PRESENCIA del concepto (`!== null`), jamás su importe. Ni una
+  // comparación numérica, ni un `parseFloat`; un flete legítimo de "0.00" se marca igual.
+  const seCobroFlete = ing.flete !== null;
+  const seCobroFleteDev = ing.fleteDevolucion !== null;
+  type ColumnaTarifa = "pacto" | "normal-gam" | "normal-noGam";
+  const columnaDe = (especial: boolean): ColumnaTarifa =>
+    especial ? "pacto" : ing.esCentral ? "normal-gam" : "normal-noGam";
+  const fleteAplicadoEs = (col: ColumnaTarifa) =>
+    seCobroFlete && columnaDe(fleteEspecial) === col;
+  const fleteDevAplicadoEs = (col: ColumnaTarifa) =>
+    seCobroFleteDev && columnaDe(fleteDevEspecial) === col;
   // La marca del distrito estaba puesta pero el pacto faltaba en la tarifa congelada: se cobró
   // la tabla normal. Se avisa una sola vez por orden, aunque afecte a los dos fletes.
   const faltaPacto =
@@ -908,32 +934,38 @@ export function DesgloseIngresoOrdenex({ g }: { g: CierreDetalleGestion }) {
       {/* --- La tarifa congelada completa, tal cual quedó al solicitar --- */}
       <div className="flex flex-col">
         <h4 className="mb-1 text-sm font-semibold">{TARIFA_TITULO}</h4>
-        <p className="pb-1 text-xs text-muted-foreground">
-          {TARIFA_NOTA} · <span className="font-mono">{t.tarifaId}</span>
-        </p>
+        {/* ⏳ FICHA 337 (2026-08-31): aqui se imprimia ademas el UUID crudo de la tarifa
+            (`· <span className="font-mono">{t.tarifaId}</span>`). Se RETIRA: a la persona que
+            audita un cierre un identificador interno no le dice nada, y ocupaba el sitio de lo
+            unico que importa —que estos numeros son los del dia en que se pidio el cierre, no los
+            de hoy—. El dato sigue viajando en `TarifaSnapshotDTO.tarifaId` para quien lo necesite
+            por API; lo que se quita es su presencia en pantalla. */}
+        <p className="pb-1 text-xs text-muted-foreground">{TARIFA_NOTA}</p>
         {/* El "← se aplicó" de las columnas normales se APAGA cuando ganó el pacto: si no, el
             desglose marcaría dos orígenes distintos para el mismo flete y el admin no sabría
             cuál leer. Con `especial_sin_pacto` sigue encendido, que es la verdad: ahí el flete
-            salió de la columna normal. */}
+            salió de la columna normal. Y desde la ficha 337 se apaga TAMBIÉN cuando el concepto
+            no se cobró en absoluto: como mucho una de estas cuatro filas puede llevar la marca, y
+            en una `reprogramada` no la lleva ninguna (ver `fleteAplicadoEs` arriba). */}
         <DesgloseFila
           label="Valor flete"
           value={money(t.valorFlete)}
-          hint={!fleteEspecial && !ing.esCentral ? APLICADA_HINT : undefined}
+          hint={fleteAplicadoEs("normal-noGam") ? APLICADA_HINT : undefined}
         />
         <DesgloseFila
           label="Valor flete GAM"
           value={money(t.valorFleteGam)}
-          hint={!fleteEspecial && ing.esCentral ? APLICADA_HINT : undefined}
+          hint={fleteAplicadoEs("normal-gam") ? APLICADA_HINT : undefined}
         />
         <DesgloseFila
           label="Flete devuelto"
           value={money(t.valorFleteDevuelto)}
-          hint={!fleteDevEspecial && !ing.esCentral ? APLICADA_HINT : undefined}
+          hint={fleteDevAplicadoEs("normal-noGam") ? APLICADA_HINT : undefined}
         />
         <DesgloseFila
           label="Flete devuelto GAM"
           value={money(t.valorFleteDevueltoGam)}
-          hint={!fleteDevEspecial && ing.esCentral ? APLICADA_HINT : undefined}
+          hint={fleteDevAplicadoEs("normal-gam") ? APLICADA_HINT : undefined}
         />
         {/* El pacto sólo se lista si existe: `null` significa "esta tarifa no pactaba nada",
             y una fila con "—" se leería como un pacto de cero, que es otro dato. */}
@@ -941,14 +973,14 @@ export function DesgloseIngresoOrdenex({ g }: { g: CierreDetalleGestion }) {
           <DesgloseFila
             label={TARIFA_ESPECIAL_LABEL}
             value={money(t.tarifaEspecial)}
-            hint={fleteEspecial ? APLICADA_HINT : undefined}
+            hint={fleteAplicadoEs("pacto") ? APLICADA_HINT : undefined}
           />
         )}
         {t.tarifaEspecialDevuelta === null ? null : (
           <DesgloseFila
             label={TARIFA_ESPECIAL_DEV_LABEL}
             value={money(t.tarifaEspecialDevuelta)}
-            hint={fleteDevEspecial ? APLICADA_HINT : undefined}
+            hint={fleteDevAplicadoEs("pacto") ? APLICADA_HINT : undefined}
           />
         )}
         <DesgloseFila label="Comisión COD" value={pct(t.comisionCod)} />
