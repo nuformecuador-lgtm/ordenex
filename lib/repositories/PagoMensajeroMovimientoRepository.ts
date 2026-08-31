@@ -17,6 +17,7 @@ import {
   filtrarPorBusquedaMensajero,
   ordenarCuentasPorPagar,
 } from "@/lib/utils/cuentas-por-pagar-listado";
+import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron WalletTiendaMovimientoRepository).
 // Feature 172 (T C.3): + `liquidacionPago`, SOLO para LEER los ids de pago de un cierre (§5).
@@ -258,9 +259,9 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
     const mensajeroIds = [...porMensajero.keys()];
     const usuarios = await this.prisma.usuario.findMany({
       where: { id: { in: mensajeroIds } },
-      select: { id: true, nombre: true },
+      select: { id: true, ...NOMBRE_USUARIO_SELECT },
     });
-    const nombrePorId = new Map(usuarios.map((u) => [u.id, u.nombre]));
+    const nombrePorId = new Map(usuarios.map((u) => [u.id, nombreCompletoUsuario(u)]));
 
     return mensajeroIds.map((mensajeroId) => {
       const acc = porMensajero.get(mensajeroId)!;
@@ -327,9 +328,9 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
   async obtenerNombreMensajero(mensajeroId: string): Promise<string | null> {
     const u = await this.prisma.usuario.findUnique({
       where: { id: mensajeroId },
-      select: { nombre: true },
+      select: NOMBRE_USUARIO_SELECT,
     });
-    return u?.nombre ?? null;
+    return u ? nombreCompletoUsuario(u) : null;
   }
 
   /**

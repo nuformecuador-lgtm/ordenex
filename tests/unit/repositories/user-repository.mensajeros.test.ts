@@ -38,6 +38,8 @@ describe("UserRepository.listMensajeros (R1, R2, R3)", () => {
     expect(arg.select).toEqual({
       id: true,
       nombre: true,
+      primerApellido: true,
+      segundoApellido: true,
       zonaId: true,
       zona: { select: { nombre: true } },
     });

@@ -2,6 +2,7 @@ import { Prisma, type EstadoUsuario, type PrismaClient, type RolValue } from "@p
 import type { UsuarioPorRolDTO } from "@/lib/types/usuario-por-rol";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { escaparComodinesLike } from "@/lib/utils/escapar-like";
+import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 import {
   CatalogoInvalidoError,
   UsuarioDuplicadoError,
@@ -23,7 +24,7 @@ type UserPrismaClient = Pick<PrismaClient, "usuario" | "tipoIdentificacion" | "r
 
 const PUBLIC_SELECT = {
   id: true,
-  nombre: true,
+  ...NOMBRE_USUARIO_SELECT,
   email: true,
   telefono: true,
   estado: true,
@@ -40,7 +41,7 @@ const PUBLIC_SELECT = {
 // R14: seleccion del listado; incluye el `value` legible del rol y NUNCA el hash.
 const LIST_SELECT = {
   id: true,
-  nombre: true,
+  ...NOMBRE_USUARIO_SELECT,
   email: true,
   estado: true,
   createdAt: true,
@@ -112,11 +113,13 @@ export class UserRepository implements IUserRepository {
    * rol solo fijan el `rolValue`.
    */
   async listByRol(rolValue: RolValue): Promise<UsuarioPorRolDTO[]> {
-    return this.prisma.usuario.findMany({
+    const rows = await this.prisma.usuario.findMany({
       where: { rol: { value: rolValue }, estado: "activo" },
-      select: { id: true, nombre: true },
+      select: { id: true, ...NOMBRE_USUARIO_SELECT },
       orderBy: { nombre: "asc" },
     });
+    // Los apellidos viajan solo para componer el texto: el DTO sigue siendo id/nombre.
+    return rows.map((r) => ({ id: r.id, nombre: nombreCompletoUsuario(r) }));
   }
 
   /**
@@ -147,12 +150,17 @@ export class UserRepository implements IUserRepository {
   async listMensajeros(): Promise<MensajeroDTO[]> {
     const rows = await this.prisma.usuario.findMany({
       where: { rol: { value: "mensajero" }, estado: "activo" },
-      select: { id: true, nombre: true, zonaId: true, zona: { select: { nombre: true } } },
+      select: {
+        id: true,
+        ...NOMBRE_USUARIO_SELECT,
+        zonaId: true,
+        zona: { select: { nombre: true } },
+      },
       orderBy: { nombre: "asc" },
     });
     return rows.map((row) => ({
       id: row.id,
-      nombre: row.nombre,
+      nombre: nombreCompletoUsuario(row),
       zonaId: row.zonaId,
       zonaNombre: row.zona?.nombre ?? null,
     }));
@@ -173,12 +181,12 @@ export class UserRepository implements IUserRepository {
       // conversaciones se queda solo con los `activo`, mientras que `/ordenes` los ofrece a
       // todos —esconder a un mensajero dado de baja volveria inalcanzables las ordenes que
       // todavia tiene en la mano—.
-      select: { id: true, nombre: true, zonaId: true, estado: true },
+      select: { id: true, ...NOMBRE_USUARIO_SELECT, zonaId: true, estado: true },
       orderBy: { nombre: "asc" }, // R49: orden determinista
     });
     return rows.map((r) => ({
       id: r.id,
-      nombre: r.nombre,
+      nombre: nombreCompletoUsuario(r),
       zonaId: r.zonaId,
       estado: r.estado,
     }));
@@ -238,7 +246,8 @@ export class UserRepository implements IUserRepository {
 
     const items: UsuarioListItem[] = rows.map((row) => ({
       id: row.id,
-      nombre: row.nombre,
+      // La tabla de usuarios pinta la identidad completa, no solo el nombre de pila.
+      nombre: nombreCompletoUsuario(row),
       email: row.email,
       rolValue: row.rol.value,
       estado: row.estado,
