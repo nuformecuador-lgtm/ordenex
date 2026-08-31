@@ -414,3 +414,138 @@ describe("WalletTiendaMovimientoRepository — el conjunto del archivo (feature 
     expect(new Set(recorrido).size).toBe(3);
   });
 });
+
+// ── FICHA 335 — listarCierresDeTienda: el catalogo de cierres del libro de UNA tienda ──
+//
+// POR QUE ESTOS CASOS VIVEN AQUI Y NO EN EL SERVICIO. En el test de servicio el repositorio es
+// un DOBLE: no ve el SQL. En este repo esta medido CUATRO veces que una mutacion del `WHERE`
+// sobrevive en verde por arriba —«probar el WHERE donde vive»—. El alcance por tienda de esta
+// lectura es lo unico que impide que una tienda vea los cierres de otra, asi que se afirma
+// sobre el ARGUMENTO REAL que sale hacia el ORM, igual que los casos vecinos de la 43 y la 171.
+//
+// La contraprueba de que este caso MUERDE se hizo a mano quitando `tiendaId` del `where` del
+// repositorio: el caso de R2 se pone ROJO nombrando la clave que falta («- "tiendaId": "t1"»).
+// Los otros casos de este bloque siguen verdes con la mutacion, y eso es correcto: miden otras
+// propiedades (el orden, el numero de consultas, el mapeo). La salida roja completa esta pegada
+// en `progress/impl_335.md`, junto con la del test contra Postgres real
+// (`tests/integration/db/mi-wallet-cierres-alcance.test.ts`), que es la otra red que la caza.
+
+describe("WalletTiendaMovimientoRepository.listarCierresDeTienda (ficha 335, R1/R2/R6/R7/R10)", () => {
+  /** Dos cierres del libro de `t1`, tal como los devuelve un `groupBy` con `_max` y `_count`. */
+  function gruposDeDosCierres() {
+    return [
+      {
+        origenId: "cierre-nuevo",
+        _max: { fechaMovimiento: new Date("2026-07-12T14:30:00.000Z") },
+        _count: { _all: 4 },
+      },
+      {
+        origenId: "cierre-viejo",
+        _max: { fechaMovimiento: new Date("2026-07-05T09:00:00.000Z") },
+        _count: { _all: 1 },
+      },
+    ];
+  }
+
+  it("R2: el groupBy de cierres lleva tiendaId, origenTipo cierre_dia y origenId no nulo en el WHERE", async () => {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue(gruposDeDosCierres());
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+
+    await repo.listarCierresDeTienda("t1", 201);
+
+    const arg = prisma.walletTiendaMovimiento.groupBy.mock.calls[0][0];
+    // Igualdad, no `toMatchObject`: un `where` con una clave DE MAS tambien es un cambio de
+    // alcance, y `toMatchObject` lo dejaria pasar.
+    expect(arg.where).toEqual({
+      tiendaId: "t1",
+      origenTipo: "cierre_dia",
+      origenId: { not: null },
+    });
+    // Y el acotado por tienda esta ahi como CLAVE: si alguien lo moviera a un filtro en memoria,
+    // la asercion de arriba ya lo cazaria, pero esta lo dice con el nombre del defecto.
+    expect(Object.keys(arg.where)).toContain("tiendaId");
+    expect(arg.by).toEqual(["origenId"]);
+    expect(arg.take).toBe(201); // el `tope + 1` que le pide el servicio
+  });
+
+  it("R9: la consulta NO pide ninguna suma de dinero, solo el maximo de la fecha y el conteo", async () => {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue([]);
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+
+    await repo.listarCierresDeTienda("t1", 10);
+
+    const arg = prisma.walletTiendaMovimiento.groupBy.mock.calls[0][0];
+    expect(arg._sum).toBeUndefined(); // money-safe por construccion (R9)
+    expect(arg._max).toEqual({ fechaMovimiento: true });
+    expect(arg._count).toEqual({ _all: true });
+  });
+
+  it("R7: ordena por el movimiento mas reciente, descendente, con desempate determinista", async () => {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue(gruposDeDosCierres());
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+
+    await repo.listarCierresDeTienda("t1", 200);
+
+    const arg = prisma.walletTiendaMovimiento.groupBy.mock.calls[0][0];
+    // El orden lo pone la BASE, no una ordenacion en memoria sobre la pagina ya recortada: si
+    // se ordenara despues del `take`, el recorte elegiria filas distintas de las que se pintan.
+    expect(arg.orderBy).toEqual([
+      { _max: { fechaMovimiento: "desc" } },
+      { origenId: "desc" },
+    ]);
+    // El desempate no es adorno: sin el, dos cierres con el mismo instante saldrian en el orden
+    // del planificador y dos lecturas seguidas podrian devolver listas distintas en el borde
+    // del tope.
+    expect(arg.orderBy).toHaveLength(2);
+  });
+
+  it("R10: una sola llamada al ORM, sin consultas por elemento", async () => {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue(gruposDeDosCierres());
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+
+    const filas = await repo.listarCierresDeTienda("t1", 200);
+
+    expect(filas).toHaveLength(2); // hay mas de un elemento: el conteo de consultas significa algo
+    expect(prisma.walletTiendaMovimiento.groupBy).toHaveBeenCalledTimes(1);
+    expect(prisma.walletTiendaMovimiento.findMany).not.toHaveBeenCalled();
+    expect(prisma.walletTiendaMovimiento.count).not.toHaveBeenCalled();
+    // Ni una consulta de nombres: la opcion NO nombra al mensajero del cierre (design §2.5).
+    expect(prisma.usuario.findMany).not.toHaveBeenCalled();
+  });
+
+  it("R6: cada fila lleva el cierre, la fecha ISO de su movimiento mas reciente y su conteo", async () => {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue(gruposDeDosCierres());
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.listarCierresDeTienda("t1", 200)).toEqual([
+      { cierreId: "cierre-nuevo", ultimaFecha: "2026-07-12T14:30:00.000Z", movimientos: 4 },
+      { cierreId: "cierre-viejo", ultimaFecha: "2026-07-05T09:00:00.000Z", movimientos: 1 },
+    ]);
+  });
+
+  it("un grupo sin origen NO se cuela como opcion (el WHERE lo excluye, y el mapper tambien)", async () => {
+    // Los ajustes `manual` tienen `origen_id` NULL. El `where` ya los deja fuera; esta es la
+    // segunda barrera, para que un `cierreId` invalido no pueda viajar nunca al filtro.
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue([
+      { origenId: null, _max: { fechaMovimiento: new Date("2026-07-20T00:00:00.000Z") }, _count: { _all: 9 } },
+      ...gruposDeDosCierres(),
+    ]);
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+
+    const filas = await repo.listarCierresDeTienda("t1", 200);
+    expect(filas.map((f) => f.cierreId)).toEqual(["cierre-nuevo", "cierre-viejo"]);
+  });
+
+  it("sin cierres -> [] (la pantalla lo traduce a «todavia no hay cierres»)", async () => {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.groupBy.mockResolvedValue([]);
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+    expect(await repo.listarCierresDeTienda("t1", 200)).toEqual([]);
+  });
+});

@@ -6,6 +6,7 @@ import type {
 } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type {
   IWalletTiendaService,
+  ListarMisCierresServiceResult,
   ListarMisMovimientosCompletoServiceResult,
   ListarMisMovimientosServiceResult,
   ListarMovimientosDeTiendaCompletoServiceResult,
@@ -16,6 +17,7 @@ import type {
   VerMiSaldoServiceResult,
 } from "@/lib/interfaces/services/IWalletTiendaService";
 import type {
+  CierreTiendaOpcionDTO,
   ListarMovimientosDeTiendaCompletoInput,
   ListarMovimientosDeTiendaInput,
   ListarMovimientosTiendaCompletoInput,
@@ -23,6 +25,7 @@ import type {
   SaldoTiendaResumenDTO,
 } from "@/lib/types/wallet-tienda";
 import { descargaConfig } from "@/lib/config/descarga";
+import { walletTiendaConfig } from "@/lib/config/wallet-tienda";
 import { derivarDesgloseTienda } from "@/lib/utils/desglose-tienda";
 import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
@@ -166,6 +169,46 @@ export class WalletTiendaService implements IWalletTiendaService {
     if (total > limite) return { status: "limite_excedido", total, limite };
 
     return { status: "ok", items: movimientos, total };
+  }
+
+  /**
+   * FICHA 335 (design §2.3, R1/R2/R3/R5/R8/R9) — los cierres del libro de la PROPIA tienda, para
+   * el selector del filtro de `/mi-wallet`.
+   *
+   * **SIN PARAMETRO DE ENTRADA, y es la barrera mas fuerte disponible (R5).** Los otros metodos
+   * de este servicio se defienden de una clave colada con tres cierres independientes (el
+   * `.strict()` del borde, `construirFiltros` leyendo claves explicitas y el `tiendaId` escrito
+   * al final). Aqui no hace falta ninguno: no hay entrada donde escribir esa clave. El unico
+   * origen posible del alcance es `actor.usuarioId`.
+   *
+   * **Guard PRIMERO (R3).** Si estuviera despues, la lista de cierres de la tienda ya habria
+   * salido de la base aunque la respuesta fuera `forbidden`. Mismo criterio que `verMiSaldo`
+   * (`:66`) y `listarSaldosTiendasPaginado`.
+   *
+   * **Tope `N + 1` (R8).** Se piden `limite + 1` filas y `hayMas` es el sobrante: la pantalla
+   * puede avisar de que solo ofrece los mas recientes sin pagar una segunda consulta (R10). Es
+   * el mismo patron de `listarMisMovimientosCompleto`.
+   *
+   * `ultimaFecha` del repositorio se renombra a `fecha` en el DTO de frontera y NO se
+   * transforma: quien la formatea es la pantalla, con el mismo formateador de dia que ya usa la
+   * columna «Fecha» de la tabla.
+   */
+  async listarMisCierres(actor: Actor): Promise<ListarMisCierresServiceResult> {
+    if (actor.rol !== ROL_TIENDA) return { status: "forbidden" }; // R3: antes del repositorio
+
+    const limite = walletTiendaConfig.MAX_CIERRES_FILTRO;
+
+    // R2: el acotado sale del ACTOR y el repositorio lo pone en el WHERE. R8: `limite + 1`.
+    const filas = await this.repo.listarCierresDeTienda(actor.usuarioId, limite + 1);
+
+    const hayMas = filas.length > limite;
+    const cierres: CierreTiendaOpcionDTO[] = filas.slice(0, limite).map((f) => ({
+      cierreId: f.cierreId,
+      fecha: f.ultimaFecha,
+      movimientos: f.movimientos,
+    }));
+
+    return { status: "ok", cierres, hayMas };
   }
 
   async listarSaldosTiendas(actor: Actor): Promise<ListarSaldosTiendasServiceResult> {

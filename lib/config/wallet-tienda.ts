@@ -50,6 +50,18 @@ export interface WalletTiendaConfig {
   DEFAULT_PAGE_SIZE: number;
   /** Cota maxima del tamano de pagina, evita consultas sin limite (R40). */
   MAX_PAGE_SIZE: number;
+  /**
+   * FICHA 335 (R8) — tope de opciones del selector de cierre de `/mi-wallet`.
+   *
+   * NO es un tamano de pagina: el selector no pagina, se recorta. Por eso vive aparte de
+   * `DEFAULT_PAGE_SIZE`/`MAX_PAGE_SIZE` y no entra en el censo de `paginacion-dominios`.
+   *
+   * El 200 es una COTA DE SEGURIDAD, no una medida: produccion esta vacia desde el arranque
+   * comercial del 2026-08-25, asi que no hay un percentil real que ofrecer y esta bitacora no
+   * va a inventar un numero con cara de dato. Por eso es configurable por entorno: el dia que
+   * haya volumen medido, el numero se cambia sin tocar codigo.
+   */
+  MAX_CIERRES_FILTRO: number;
 }
 
 export function loadWalletTiendaConfig(): WalletTiendaConfig {
@@ -59,6 +71,7 @@ export function loadWalletTiendaConfig(): WalletTiendaConfig {
     ),
     DEFAULT_PAGE_SIZE: readPositiveInt("WALLET_TIENDA_DEFAULT_PAGE_SIZE", 25),
     MAX_PAGE_SIZE: readPositiveInt("WALLET_TIENDA_MAX_PAGE_SIZE", 100),
+    MAX_CIERRES_FILTRO: readPositiveInt("WALLET_TIENDA_MAX_CIERRES_FILTRO", 200),
   };
 }
 
