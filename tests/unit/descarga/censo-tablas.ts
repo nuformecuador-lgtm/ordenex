@@ -57,6 +57,15 @@
 // que no monta `<DataTable>` y por eso nunca figuró en este censo. Totales VIGENTES:
 // **32 tablas = 26 dentro de alcance + 6 fuera**, con 31 instancias de `<DataTable>` en 30
 // archivos (los de partida son los de la 172, ver `cobertura-tablas.guardia.test.ts`).
+//
+// ficha 336 «borrar /mis-pagos y /qr» (2026-08-30) — RESTA de una tabla, por decisión humana:
+// sale `app/(app)/mis-pagos/_components/DesglosePagos.tsx` («Desglose de pagos del mensajero»,
+// censada `con_descarga`). Tercera vez que este censo baja, y por el mismo motivo que las dos
+// anteriores: el registro no puede citar un archivo borrado. A diferencia de `OrdenesApartado`
+// y `ZonasModule`, aquí SÍ se pierde la capacidad: el mensajero no tiene otra pantalla donde
+// ver lo que Ordenex le debe, y así lo decidió el humano con el dato delante. Los totales
+// VIGENTES los declara `cobertura-tablas.guardia.test.ts`, que los MIDE contra el árbol; aquí
+// no se copian para que no puedan divergir.
 
 /** Estado de una tabla censada respecto de la descarga. */
 export type EstadoDescarga = "con_descarga" | "pendiente" | "fuera";
@@ -131,6 +140,18 @@ export interface ArchivoCensado {
 // cruda). Se incrementan desde los números REALES de la feature 304 (28 = 27 + 1), no desde los
 // del spec original, que ya estaban obsoletos cuando se escribió aquélla.
 //
+// FICHA 337 (segunda mitad) — SUMA de una tabla, `fuera`: «Cobros por rechazo de tienda por
+// aprobar» (`app/(app)/wallet/_components/CobrosRechazoTiendaPendientesPanel.tsx`). Es la cola en
+// la que un administrador decide si se le cobra a la tienda el retorno de una devolución que ella
+// misma rechazó desde novedades, y NO gana descarga: el motivo está en su entrada y es el mismo,
+// palabra por palabra, que el de su hermana de la 333 —cola de decisión efímera, cuyo contenido
+// aterriza en libros que sí descargan—. Se registra aquí porque es lo que `cobertura-tablas.guardia`
+// obliga a DECIDIR: sin esta entrada la guardia se pone roja, que es exactamente el comportamiento
+// buscado (se vio fallar con «29 recibido / 28 esperado» antes de tocar los números).
+//
+// Totales VIGENTES, medidos contra el árbol: **30 tablas = 29 `<DataTable>` en 29 archivos + 1
+// `<table>` cruda**, con 10 exclusiones (9 con `<DataTable>` + la cruda).
+//
 // FEATURE 304 — SUMA de una tabla, `fuera`: «Órdenes con el monto redondeado (carga masiva)».
 // Dice qué filas entraron con el monto redondeado al colón más cercano (aviso de la 299) y de
 // cuánto a cuánto. No gana descarga y el motivo está escrito en su entrada: son filas del
@@ -190,10 +211,6 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     tablas: [
       { nombre: "Desglose de movimientos de la tienda", estado: "con_descarga" },
     ],
-  },
-  {
-    ruta: "app/(app)/mis-pagos/_components/DesglosePagos.tsx",
-    tablas: [{ nombre: "Desglose de pagos del mensajero", estado: "con_descarga" }],
   },
   {
     // FEATURE 258 (F3.1) — ALTA. El detalle de un mensajero del tablero del día pasó de una
@@ -299,6 +316,26 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
           "produce movimiento alguno. Un archivo de esta cola sería la foto de un instante que " +
           "nadie puede volver a reproducir. Decisión de `specs/333-gasto-fijo-autorizacion/" +
           "design.md §7`",
+      },
+    ],
+  },
+  {
+    // FICHA 337 (segunda mitad) -- la cola de decision del cobro por rechazo desde novedades. Va
+    // entre `CobrosGastoFijoPendientesPanel` y `GastosFijosPlantillasPanel` porque la guardia
+    // recorre el arbol en orden alfabetico.
+    ruta: "app/(app)/wallet/_components/CobrosRechazoTiendaPendientesPanel.tsx",
+    tablas: [
+      {
+        nombre: "Cobros por rechazo de tienda por aprobar",
+        estado: "fuera",
+        nota:
+          "cola de DECISIÓN efímera dentro de /wallet, mismo criterio -- y mismo motivo-- que su " +
+          "hermana «Cobros de gasto fijo por aprobar»: un puñado de filas que existen sólo hasta " +
+          "que alguien las aprueba o las descarta, y que desaparecen de la sección en cuanto se " +
+          "deciden. Lo aprobado aterriza en DOS libros que SÍ descargan con el conjunto completo " +
+          "y sus filtros -- el «Libro de movimientos de la caja principal» y el desglose de " +
+          "movimientos de la tienda--; lo descartado no produce movimiento alguno. Un archivo de " +
+          "esta cola sería la foto de un instante que nadie puede volver a reproducir",
       },
     ],
   },

@@ -154,6 +154,8 @@ model Usuario {
   diaRepartoCambiosRealizados         OrdenDiaRepartoCambio[]   @relation("OrdenDiaRepartoCambioActor") // feature 262/R20: correcciones del dia de reparto que ESTE usuario hizo; la FK es RESTRICT (quien corrigio es evidencia y no se pierde al dar de baja al usuario)
   habilitacionesApiPedidas            OrdenHabilitacionApi[]    @relation("OrdenHabilitacionApiActor") // feature 266/R21: habilitaciones pedidas por el canal integrador a nombre de ESTE usuario (302: el dueno resuelto de la key -- su cuenta dedicada, o la tienda real a la que apunta); la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
   cobrosGastoFijo                     GastoFijoCobro[]          @relation("GastoFijoCobroDecisor") // ficha 333/R15/R21: cobros de gasto fijo que ESTE usuario aprobo o rechazo; la FK es RESTRICT (quien autorizo dinero es evidencia y no se pierde al dar de baja al usuario), mismo criterio que `orden_dia_reparto_cambio.actor_usuario_id`
+  cobrosRechazoTiendaDecididos        RechazoTiendaCobro[]      @relation("RechazoTiendaCobroDecisor") // ficha 337: cobros por rechazo de tienda que ESTE usuario aprobo o rechazo. FK RESTRICT por el mismo motivo que la linea de arriba: quien autorizo un cobro es evidencia y no se pierde al dar de baja al usuario.
+  cobrosRechazoTiendaComoTienda       RechazoTiendaCobro[]      @relation("RechazoTiendaCobroTienda") // ficha 337: cobros por rechazo emitidos CONTRA esta tienda. `tienda_id` va CONGELADO en la fila (leccion 69/R13), asi que esta relacion es historia y no una consulta viva sobre `orden.tienda_id`.
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -759,6 +761,11 @@ model Orden {
   // aplicado SI lo cualifica (`extensions.gin_trgm_ops`), que es lo que importa para que
   // la creacion no dependa del `search_path`.
   @@index([busquedaTexto(ops: raw("gin_trgm_ops"))], type: Gin, map: "orden_busqueda_texto_trgm_idx")
+  // Ficha 337: los cobros a la tienda por rechazo desde novedades de ESTA orden. Coleccion y
+  // no 1-1: la unicidad es por GESTION, y una orden podria acumular mas de un rechazo a lo
+  // largo de su vida (cada uno con su gestion sintetica y su cobro).
+  cobrosRechazoTienda RechazoTiendaCobro[]
+
   @@map("orden")
 }
 
@@ -1068,6 +1075,10 @@ model GestionOrden {
   // Feature 212 (R1): desglose del recaudo al cliente, 0..N lineas (metodo, monto).
   // `monto_recibido` se conserva como TOTAL snapshot (R5).
   pagos                   GestionOrdenPago[]
+  // Ficha 337: el COBRO a la tienda que nace de esta gestion cuando es un `rechazo_tienda`.
+  // UNO A UNO (`rechazo_tienda_cobro_gestion_uq`): un rechazo, un cobro, en cualquier estado.
+  // Opcional porque la inmensa mayoria de gestiones no son un rechazo de escritorio.
+  cobroRechazoTienda      RechazoTiendaCobro?
 
   @@index([ordenId]) // R7
   @@index([mensajeroId]) // R7
@@ -1381,6 +1392,11 @@ model Tarifa {
   @@index([createdAt])
   @@index([tiendaId])
   @@index([zonaId])
+  // Ficha 337: los cobros por rechazo cuyos importes salieron de ESTA fila de tarifa. La FK es
+  // SET NULL: la traza de auditoria es deseable, pero no puede impedir para siempre borrar una
+  // tarifa; los importes ya viajan COPIADOS en la fila del cobro.
+  cobrosRechazoTienda RechazoTiendaCobro[]
+
   @@map("tarifas")
 }
 
@@ -1949,6 +1965,83 @@ model GastoFijoCobro {
   @@index([plantillaId]) // cancelacion en cascada del borrado de plantilla (R45) y su conteo (R55)
   @@index([decididoPor]) // el RESTRICT se ejerce al borrar usuarios (patron orden_dia_reparto_cambio)
   @@map("gasto_fijo_cobro")
+}
+
+// FICHA 337 (segunda mitad, 2026-08-31) -- EL COBRO AUTORIZADO DEL RECHAZO DESDE NOVEDADES.
+//
+// Cuando la TIENDA rechaza desde novedades una orden ya devuelta (`rechazo_tienda` -> gestion
+// sintetica `rechazada`), nace AQUI un COBRO PENDIENTE contra esa tienda. NO un movimiento: un
+// pendiente. Un administrador (`esAccesoTotal`) lo aprueba, y SOLO entonces nacen los apuntes de
+// dinero -- los MISMOS que hoy emite la aprobacion del cierre para una `rechazada`: dos ingresos
+// en la caja de Ordenex (`ingreso_flete_devolucion` + su IVA) y sus dos debitos espejo en el
+// libro de la tienda (`flete_devolucion` + `iva_flete_devolucion`).
+//
+// POR QUE EXISTE: la primera mitad de esta ficha saco las gestiones de escritorio del cierre del
+// mensajero (el mensajero firmaba trabajo que no hizo) y con ellas se fue, EN PAUSA, el cobro que
+// aquel cierre emitia. Esta tabla es su via propia. Decision del humano del 2026-08-31: la
+// APROBACION VA ANTES DEL COBRO -- se descarto emitirlo en el acto porque quitaba la revision
+// previa que hoy da la aprobacion del cierre.
+//
+// ES EL ESPEJO DE `GastoFijoCobro` (ficha 333) Y NO SU GENERALIZACION. Aquella tiene horas de
+// vida en produccion; generalizarla con la operacion andando es el riesgo que no toca correr. Lo
+// que NO se copia es lo que aqui no aplica: el enum tiene TRES valores (no hay `cancelado`
+// porque no hay plantilla que borrar en cascada) y quien decide es `esAccesoTotal`, no el guard
+// estrecho de la 333 -- aquello autorizaba dinero que SALE de Ordenex; esto es cobrar por un
+// servicio prestado, y es operacion diaria.
+//
+// OJO -- `montoFlete` y `montoIva` son COPIAS CONGELADAS, y no son desnormalizacion perezosa:
+// son la misma correccion que R16 de la 333. Salen de `derivarIngresoOrden`
+// (`lib/utils/ingreso-ordenex.ts`) con la tarifa que resolvia para el par (tienda, zona) EN EL
+// INSTANTE DEL RECHAZO. Recalcularlos al aprobar cobraria a la tienda un importe que nadie
+// autorizo si la tarifa cambio entre medias -- y aqui esa ventana puede durar dias. `tiendaId`
+// va congelado por la misma razon y con precedente literal: la feature 69 (su R13) descubrio que
+// el feed del cierre leia `orden.tienda_id` VIVO, asi que re-apuntar la orden movia el dinero de
+// ledger.
+//
+// LA IDEMPOTENCIA es `rechazo_tienda_cobro_gestion_uq` (UNIQUE TOTAL sobre `gestion_id`, no
+// parcial: por eso un cobro RECHAZADO impide que su gestion vuelva a darse de alta), mas
+// `wallet_movimiento_origen_categoria_uq` al aprobar, mas el `WHERE estado = 'pendiente'` de la
+// transicion. Detalle largo en la cabecera de la migracion.
+//
+// Los DOS CHECK y las CINCO FK van a mano en la migracion (Prisma no expresa CHECK). RLS
+// habilitada sin policies (solo service role, patron `gasto_fijo_cobro` / `gestion_orden`).
+enum RechazoTiendaCobroEstado {
+  pendiente
+  aprobado
+  rechazado
+
+  @@map("rechazo_tienda_cobro_estado")
+}
+
+model RechazoTiendaCobro {
+  id          String                   @id @default(uuid())
+  gestionId   String                   @map("gestion_id") // LA CLAVE DE IDEMPOTENCIA: un rechazo, un cobro
+  ordenId     String                   @map("orden_id") // el paquete; de aqui salen guia y remision para pintar la cola
+  tiendaId    String                   @map("tienda_id") // A QUIEN se le cobra, CONGELADO (leccion 69/R13)
+  montoFlete  Decimal                  @map("monto_flete") @db.Decimal(12, 2) // ingreso_flete_devolucion; CHECK > 0
+  montoIva    Decimal                  @map("monto_iva") @db.Decimal(12, 2) // ingreso_iva_flete_devolucion; CHECK >= 0 (el cero es un valor real)
+  tarifaId    String?                  @map("tarifa_id") // QUE FILA de `tarifas` produjo los importes (auditoria); SET NULL
+  estado      RechazoTiendaCobroEstado @default(pendiente)
+  generadoEl  DateTime                 @map("generado_el") @db.Date // dia CALENDARIO CR del rechazo
+  decididoPor String?                  @map("decidido_por") // FK usuario: quien aprobo o rechazo
+  decididoAt  DateTime?                @map("decidido_at") // CHECK: NULL si y solo si estado = 'pendiente'
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  updatedAt   DateTime                 @default(now()) @updatedAt @map("updated_at")
+
+  gestion GestionOrden @relation(fields: [gestionId], references: [id], onDelete: Restrict)
+  orden   Orden        @relation(fields: [ordenId], references: [id], onDelete: Restrict)
+  tienda  Usuario      @relation("RechazoTiendaCobroTienda", fields: [tiendaId], references: [id], onDelete: Restrict)
+  decisor Usuario?     @relation("RechazoTiendaCobroDecisor", fields: [decididoPor], references: [id], onDelete: Restrict)
+  tarifa  Tarifa?      @relation(fields: [tarifaId], references: [id], onDelete: SetNull)
+
+  // Se declara AQUI, y no solo en el `.sql`, porque es un UNIQUE pleno: Prisma lo expresa
+  // entero, el cliente generado conoce la unicidad y `migrate diff` no propone soltarlo. El
+  // `map:` reproduce el nombre que la migracion le pone a mano.
+  @@unique([gestionId], map: "rechazo_tienda_cobro_gestion_uq")
+  @@index([estado, generadoEl]) // la COLA de pendientes, del mas antiguo al mas reciente
+  @@index([tiendaId]) // "que le he cobrado a esta tienda" + el RESTRICT al borrar usuarios
+  @@index([decididoPor]) // el RESTRICT se ejerce al borrar usuarios (patron gasto_fijo_cobro)
+  @@map("rechazo_tienda_cobro")
 }
 
 // Feature 76 (R8/R21/design §4.3): tabla de PREMIOS del ranking diario. Exactamente 3

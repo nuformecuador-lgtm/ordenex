@@ -350,9 +350,40 @@ contexto"). **La agrupación se calcula DESPUÉS del redondeo** (que ya hizo `de
 con `ROUND_HALF_UP` a escala 2), porque un acarreo puede añadir un dígito y cambiar la agrupación
 entera — es la misma lección que dejó escrita la 230 (`lib/config/moneda.ts:118-121`).
 
-### 6.1 Tabla de contrato del formateo (bordes incluidos)
+### 6.1 Tabla de contrato de la serialización (bordes incluidos)
 
-Con `monedaConfig` por defecto (`simbolo "₡"`, `separadorMiles "."`, `separadorDecimal ","`):
+> **ENMENDADA EL 2026-08-28 (ficha 319).** La columna «Salida» pasa de la forma FORMATEADA a la
+> CRUDA; los catorce bordes se conservan porque siguen siendo los mismos catorce. Lo escrito
+> arriba en §6 —la composición con `monedaConfig` y la agrupación de miles— queda **derogado**:
+> ya no hay símbolo, ni separador de miles, ni configuración de por medio. La forma vigente es
+>
+> ```
+> [signo][enteros sin agrupar].[2 dígitos]
+> ```
+>
+> Lo único de §6 que sobrevive intacto es el reparto de responsabilidades del redondeo, que sigue
+> siendo de la aritmética. La tabla histórica se conserva debajo, tachada, porque las filas 6 y 11
+> solo se entienden sabiendo qué borde vigilaban (la agrupación) antes de quedarse sin objeto.
+>
+> | # | Entrada (`Prisma.Decimal`) | Salida vigente | Borde |
+> | --- | --- | --- | --- |
+> | 1 | `0` | `0.00` | cero: dos decimales, sin signo (R38) |
+> | 2 | `-0` / `-0.00` | `0.00` | **"menos cero" no se emite** (R38) |
+> | 3 | `7` | `7.00` | un dígito, cola sintética |
+> | 4 | `7.5` | `7.50` | escala < 2 → se completa a 2 |
+> | 5 | `999` | `999.00` | 3 dígitos exactos |
+> | 6 | `1000` | `1000.00` | múltiplo de 3: **NO se agrupa** |
+> | 7 | `1578` | `1578.00` | el ejemplo del humano, positivo |
+> | 8 | `-1578` | `-1578.00` | el signo abre la cadena (R37, extinguida) |
+> | 9 | `-1578.4` | `-1578.40` | negativo con cola |
+> | 10 | `999.995` redondeado por la aritmética → `1000.00` | `1000.00` | el acarreo es de la aritmética (R39) |
+> | 11 | `13331832.72` | `13331832.72` | ocho dígitos **sin separador de miles** |
+> | 12 | `99999999999.51` | `99999999999.51` | 11 dígitos: no cabe exacto en un `number` → nunca se convierte |
+> | 13 | `0.004` redondeado por la aritmética → `0.00` | `0.00` | un céntimo que se cae no reaparece como signo |
+> | 14 | `-0.5` | `-0.50` | negativo menor que la unidad: el signo SÍ sobrevive |
+
+**Tabla histórica (hasta el 2026-08-28), con `monedaConfig` por defecto** (`simbolo "₡"`,
+`separadorMiles "."`, `separadorDecimal ","`):
 
 | # | Entrada (`Prisma.Decimal`) | Salida | Borde que fija |
 | --- | --- | --- | --- |

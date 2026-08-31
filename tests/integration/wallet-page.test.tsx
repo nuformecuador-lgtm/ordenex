@@ -64,6 +64,14 @@ vi.mock("@/lib/actions/gasto-fijo-cobro", () => ({
   rechazarCobroGastoFijoAction: vi.fn(),
   contarCobrosPendientesDePlantillaAction: vi.fn(),
 }));
+// FICHA 337 (segunda mitad): la pagina pre-obtiene TAMBIEN la cola de cobros por rechazo de
+// tienda. Sin este doble la action real corre, abre Prisma y este archivo cae entero con un
+// `INTERNAL` de conexion.
+vi.mock("@/lib/actions/rechazo-tienda-cobro", () => ({
+  listarCobrosRechazoTiendaAction: vi.fn(),
+  aprobarCobroRechazoTiendaAction: vi.fn(),
+  rechazarCobroRechazoTiendaAction: vi.fn(),
+}));
 
 class NotFoundError extends Error {
   constructor() {
@@ -104,6 +112,7 @@ import { listarMovimientosAction, verResumenCajaAction } from "@/lib/actions/wal
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
 import { listarPlantillasPaginadoAction } from "@/lib/actions/gasto-fijo-plantilla";
 import { listarCobrosPendientesAction } from "@/lib/actions/gasto-fijo-cobro";
+import { listarCobrosRechazoTiendaAction } from "@/lib/actions/rechazo-tienda-cobro";
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarMovimientosAction);
@@ -111,6 +120,7 @@ const resumenMock = vi.mocked(verResumenCajaAction);
 const desgloseMock = vi.mocked(verDesgloseEgresosAction);
 const plantillasMock = vi.mocked(listarPlantillasPaginadoAction);
 const cobrosMock = vi.mocked(listarCobrosPendientesAction);
+const cobrosRechazoMock = vi.mocked(listarCobrosRechazoTiendaAction);
 
 const MOVIMIENTOS_OK = {
   status: "ok" as const,
@@ -239,6 +249,9 @@ beforeEach(() => {
   desgloseMock.mockResolvedValue(DESGLOSE_OK);
   plantillasMock.mockResolvedValue(PLANTILLAS_OK);
   cobrosMock.mockResolvedValue(COBROS_OK);
+  // FICHA 337: cola vacia. Este archivo mide la pantalla de la caja, no esta cola; lo unico que
+  // hace falta es que su lectura responda `ok` y no tumbe la pagina.
+  cobrosRechazoMock.mockResolvedValue({ status: "ok", items: [], total: 0 });
 });
 
 afterEach(() => {

@@ -30,6 +30,10 @@ import {
   CobrosGastoFijoPendientesPanel,
   type CobrosGastoFijoPendientes,
 } from "./CobrosGastoFijoPendientesPanel";
+import {
+  CobrosRechazoTiendaPendientesPanel,
+  type CobrosRechazoTiendaPendientes,
+} from "./CobrosRechazoTiendaPendientesPanel";
 import { WalletLedger } from "./WalletLedger";
 import { filaDescargaMovimientoCaja } from "./wallet-ledger-descarga-columnas";
 import { WalletFiltros, FILTROS_VACIOS, type WalletFiltrosValue } from "./WalletFiltros";
@@ -84,11 +88,34 @@ export interface WalletModuleProps {
    */
   cobrosPendientes: CobrosGastoFijoPendientes;
   /**
+   * FICHA 337 (segunda mitad) -- la COLA de cobros por RECHAZO DESDE NOVEDADES, pre-obtenida en
+   * el servidor. Misma forma que la de arriba y por el mismo motivo: `total` es el del SERVIDOR y
+   * no el largo de `items`, que viene recortado por el tope del dominio.
+   *
+   * Es una prop APARTE y no una lista fundida con la de gasto fijo: son dos decisiones distintas
+   * -- una autoriza un egreso de la caja, la otra cobra a una tienda-- con vocabulario, columnas y
+   * acciones propias. Fundirlas obligaria a una fila polimorfica y a un «tipo de cobro» en
+   * pantalla, que es exactamente lo que hace ilegible una cola de dinero.
+   */
+  cobrosRechazoTienda: CobrosRechazoTiendaPendientes;
+  /**
    * Ficha 333 (G2, R40) — si el actor puede DECIDIR un cobro (`maestro`). Se resuelve en
    * `page.tsx` y baja por props: la pantalla no deduce roles. Es comodidad de interfaz; la
    * autorización real la hace el servicio (R24), que le responde `forbidden` al `admin`.
    */
   puedeDecidirCobros: boolean;
+  /**
+   * FICHA 337 (segunda mitad) -- si el actor puede DECIDIR un cobro por rechazo de tienda.
+   *
+   * PROP PROPIA y NO la de arriba, aunque hoy las dos las cumpla el maestro: los predicados son
+   * distintos a proposito. `puedeDecidirCobros` es `maestro` y nadie mas (autoriza dinero que SALE
+   * de Ordenex, ficha 333); este es ACCESO TOTAL -- maestro y admin-- porque cobrarle a una tienda
+   * por un retorno ya prestado es operacion diaria. Reusar una sola prop ataria las dos reglas y
+   * el dia que una cambie, cambiaria la otra sin que nadie lo decida.
+   *
+   * Es comodidad de interfaz; la autorizacion real la hace el servicio.
+   */
+  puedeDecidirCobrosRechazo: boolean;
   /**
    * Feature 85 (T F.4, R23): el instante con el que el panel de gastos fijos calcula la
    * columna «Próximo cobro», resuelto en el SERVIDOR (`page.tsx`) y pasado TAL CUAL. Este
@@ -135,7 +162,9 @@ export function WalletModule({
   composicion: initialComposicion,
   plantillas,
   cobrosPendientes,
+  cobrosRechazoTienda,
   puedeDecidirCobros,
+  puedeDecidirCobrosRechazo,
   ahoraIso,
 }: WalletModuleProps) {
   const toast = useToast();
@@ -254,6 +283,28 @@ export function WalletModule({
         <CobrosGastoFijoPendientesPanel
           initialData={cobrosPendientes}
           puedeDecidir={puedeDecidirCobros}
+          onCambio={() => void recargar(filtros, page)}
+        />
+      ) : null}
+
+      {/* FICHA 337 (segunda mitad) -- LA COLA DE COBROS POR RECHAZO DESDE NOVEDADES, justo debajo
+          de la de gasto fijo: las dos son «dinero esperando una decision» y se leen juntas, antes
+          de la composicion y del libro.
+
+          Con el `total` del SERVIDOR en cero la seccion NO se monta, mismo criterio que su
+          hermana: una tarjeta vacia permanente en la pantalla del dinero seria ruido. La seccion
+          tiene ademas su propia guarda para el caso de decidir el ultimo cobro sin recargar.
+
+          `onCambio` recarga libro, cifras, composicion y desglose: aprobar aqui escribe DOS
+          ingresos en la caja, asi que las cifras de arriba cambian de verdad.
+
+          ⚠️ QUIEN DECIDE NO ES EL MISMO PREDICADO que el de la cola de arriba, y por eso NO se
+          reusa `puedeDecidirCobros`: aquel es `maestro` y solo el (dinero que SALE de Ordenex);
+          este es ACCESO TOTAL (cobrar por un servicio prestado, operacion diaria). */}
+      {cobrosRechazoTienda.total > 0 ? (
+        <CobrosRechazoTiendaPendientesPanel
+          initialData={cobrosRechazoTienda}
+          puedeDecidir={puedeDecidirCobrosRechazo}
           onCambio={() => void recargar(filtros, page)}
         />
       ) : null}

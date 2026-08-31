@@ -59,8 +59,6 @@ const ARCHIVOS_DE_LA_FEATURE: readonly string[] = [
   "app/(app)/mi-wallet/_components/SaldoTiendaCard.tsx",
   "app/(app)/mi-wallet/_components/mi-wallet-labels.ts",
   "app/(app)/mi-wallet/page.tsx",
-  "app/(app)/mis-pagos/_components/CuentaPorPagarCard.tsx",
-  "app/(app)/mis-pagos/_components/mis-pagos-labels.ts",
   "app/(app)/wallet/_components/wallet-labels.ts",
   "app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx",
   "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",

@@ -327,6 +327,20 @@ async function transicionarDesdeDevuelta(
       tx: Prisma.TransactionClient,
       mensajeroId: string,
     ) => Promise<{ id: string }>;
+    /**
+     * FICHA 337 (segunda mitad) — paso 3-bis OPCIONAL: un efecto EXTRA del llamador, con la
+     * gestion ya creada y DENTRO de esta misma transaccion. Hoy lo usa una sola via, el rechazo
+     * de la tienda, para dar de alta su COBRO PENDIENTE: o queda el rechazo Y su cobro, o no queda
+     * ninguno de los dos.
+     *
+     * Va ANTES del append del historial y no despues, y no es indiferente: si el efecto extra
+     * falla, se revierte una transaccion que todavia no habia escrito la fila de auditoria. El
+     * orden entre los dos no cambia el resultado final (la tx es todo-o-nada), pero deja el fallo
+     * mas cerca de su causa cuando se lee un log.
+     *
+     * Ausente ⇒ el helper se comporta EXACTAMENTE como antes de esta ficha.
+     */
+    trasCrearGestion?: (tx: Prisma.TransactionClient, gestionId: string) => Promise<void>;
   },
 ): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
@@ -365,6 +379,13 @@ async function transicionarDesdeDevuelta(
 
     // 3) la gestion sintetica, que es lo unico que difiere entre las dos vias.
     const gestion = await input.crearGestion(tx, ancla.mensajeroId);
+
+    // 3-bis) FICHA 337: el efecto EXTRA del llamador, si lo trae, con la gestion ya creada y en
+    //    ESTA transaccion. Hoy solo el rechazo de la tienda lo usa, para su COBRO PENDIENTE. Si
+    //    lanza, revierte TODO -- incluido el `updateMany` del paso 1 -- y la orden se queda en la
+    //    devolucion anclada, que es la direccion segura del error: mejor un rechazo que no ocurrio
+    //    que un rechazo que no se cobra nunca.
+    if (input.trasCrearGestion) await input.trasCrearGestion(tx, gestion.id);
 
     // 4) append por el choke point (49), actor = adminTienda, familia propia, enlazando la gestion;
     //    origen `devuelta` (fijado por la guarda del UPDATE).
@@ -801,6 +822,10 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
       actorUsuarioId: input.actorUsuarioId, // R11: la persona de la tienda que decidio
       motivo: input.motivo, // R12: el mismo texto en la gestion y en el historial
       llamador: "rechazarDesdeDevuelta",
+      // FICHA 337: si el service trae el alta del COBRO PENDIENTE, entra en ESTA transaccion.
+      // `undefined` cuando no la trae (o no hay nada que cobrar), y entonces el helper no cambia
+      // de conducta. Es la via propia que sustituye al cobro PRESTADO del cierre del mensajero.
+      trasCrearGestion: input.trasCrearGestion,
       // R8: gestion sintetica `rechazada` con `cierre_id NULL`.
       // ⏳ R18 DECIA que ese NULL era «lo que deja que la recoja el SIGUIENTE cierre del mensajero
       // por el mismo mecanismo que vincula las suyas». **REVOCADO por la ficha 337 (2026-08-31)**:
@@ -815,10 +840,13 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
             motivo: input.motivo, // R12: obligatorio en esta via
             // ⏳ DECIA: «R18: ningun movimiento de dinero hasta que se apruebe el cierre».
             // 💰 LA FICHA 337 (2026-08-31) **REVOCA `240/R18`** en su parte de pertenencia: el cierre
-            // del mensajero ya NO recoge esta gestion. Y con ella se va, EN PAUSA, el cobro que ese
-            // cierre emitia: el `cobroRechazado` (56) de este rechazo **deja de emitirse hasta que
-            // exista su via propia de cobro a la tienda** (ficha aparte). NO SE PIERDE — la fila,
-            // su `resultado = rechazada` y la tarifa congelada de la orden siguen en la base.
+            // del mensajero ya NO recoge esta gestion. Sigue siendo cierto que aqui NO nace ningun
+            // movimiento de dinero — lo que cambia es QUE documento lo emite despues:
+            //   · el FLETE DE DEVOLUCION + IVA de la TIENDA sale del COBRO PENDIENTE que esta misma
+            //     transaccion da de alta (`trasCrearGestion` -> `rechazo_tienda_cobro`), cuando un
+            //     administrador lo apruebe en `/wallet`;
+            //   · el `cobroRechazado` / `ingreso_bodega_rechazo` (56), que es INGRESO DE LA BODEGA,
+            //     SIGUE EN PAUSA: lo congelaba el cierre del mensajero. No se pierde; no se emite.
             cierreId: null,
           },
           select: { id: true },

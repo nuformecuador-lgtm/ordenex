@@ -4,6 +4,13 @@ import { useState } from "react";
 
 import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useToast } from "@/hooks/useToast";
 import {
   listarMisMovimientosAction,
@@ -18,6 +25,7 @@ import type {
 import { SaldoTiendaCard } from "./SaldoTiendaCard";
 import { DesgloseTiendaLedger } from "./DesgloseTiendaLedger";
 import { filaDescargaMiWallet } from "./mi-wallet-descarga-columnas";
+import type { CierresDeLaTienda } from "./mi-wallet-cierres";
 import {
   MiWalletFiltros,
   FILTROS_TIENDA_VACIOS,
@@ -44,6 +52,14 @@ export interface MiWalletModuleProps {
    * los movimientos, no se recalcula aqui: en el cliente no se opera con dinero.
    */
   desglose: DesgloseTiendaDTO;
+  /**
+   * Ficha 335 (design §4.1) — el catalogo de cierres del selector, YA leido en el servidor.
+   *
+   * REQUERIDA Y SIN DEFAULT, a proposito: con un `= { opciones: [], ... }` de cortesia, quien
+   * montara este modulo manana se olvidaria de inyectarlo y el selector saldria vacio en
+   * silencio, sin que nada se pusiera rojo. Que la inyeccion la garantice el compilador.
+   */
+  cierres: CierresDeLaTienda;
 }
 
 /** Construye el input de la action omitiendo los filtros vacios (cierre/concepto/fecha). */
@@ -82,6 +98,7 @@ export function MiWalletModule({
   pageSize,
   saldo: initialSaldo,
   desglose: initialDesglose,
+  cierres,
 }: MiWalletModuleProps) {
   const toast = useToast();
 
@@ -142,40 +159,78 @@ export function MiWalletModule({
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <div className="lg:max-w-md">
-        <SaldoTiendaCard saldo={saldo} desglose={desglose} />
-      </div>
+    // Ficha 335 (B2, R12) — DOS tarjetas HERMANAS, nunca anidadas: la del saldo y la del libro
+    // son hijas del mismo contenedor. `gap-6` es el ritmo por defecto de `DESIGN.md`; el `gap-8`
+    // anterior abría un hueco que no separaba nada.
+    <div className="flex flex-col gap-6">
+      {/* El envoltorio `lg:max-w-md` se va: la tarjeta del saldo pasa a ancho completo, como la
+          del libro. Por DENTRO `SaldoTiendaCard` no se toca ni un byte — ya es una tarjeta con
+          cifra grande y tres importes, que es justo lo que esta ficha pide. */}
+      <SaldoTiendaCard saldo={saldo} desglose={desglose} />
 
-      <section aria-label="Desglose de movimientos" className="flex flex-col gap-4">
-        <MiWalletFiltros
-          onAplicar={aplicarFiltros}
-          onLimpiar={limpiarFiltros}
-          disabled={loading}
-        />
+      {/* El libro deja de ser TRES hermanos sueltos —filtros, tabla y paginación flotando uno
+          debajo del otro— y pasa a UNA tarjeta que los contiene, igual que en `/wallet`.
 
-        {/* Feature 170 (T C.4, R9/R10): el archivo trae el ledger ENTERO de la tienda con
-            los filtros vigentes, no la página. El callback se construye en el render, así
-            que cierra sobre los `filtros` de ESTE render. */}
-        <DesgloseTiendaLedger
-          movimientos={movimientos}
-          isLoading={loading}
-          obtenerFilasDescarga={() =>
-            filasDesdeResultado(
-              listarMisMovimientosCompletoAction(buildInputCompleto(filtros)),
-              filaDescargaMiWallet,
-            )
-          }
-        />
+          La `<section>` sigue por FUERA y conserva su `aria-label`: quien navega por regiones
+          llega igual que antes. El `CardTitle` le pone además el título VISIBLE que la sección
+          nunca tuvo (R13: hasta ahora el nombre del bloque solo existía en el árbol de
+          accesibilidad, o sea para nadie que mirara la pantalla). */}
+      <section aria-label="Desglose de movimientos">
+        <Card>
+          <CardHeader>
+            <CardTitle>Desglose de movimientos</CardTitle>
+          </CardHeader>
 
-        <Pagination
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          onPageChange={cambiarPagina}
-          disabled={loading}
-          ariaLabel="Paginación del desglose"
-        />
+          {/* R14 — la barra de filtros es una BANDA a lo ancho de la tarjeta: hija directa del
+              `Card` (sin `CardContent`, que solo aporta padding lateral) para que el fondo y el
+              `border-b` lleguen a los dos bordes. El padding horizontal se repone con
+              `px-(--card-spacing)`, el mismo de la cabecera y el cuerpo, así que los controles
+              quedan alineados con el título. */}
+          <div className="border-b bg-muted/30 px-(--card-spacing) py-3">
+            <MiWalletFiltros
+              onAplicar={aplicarFiltros}
+              onLimpiar={limpiarFiltros}
+              disabled={loading}
+              cierres={cierres}
+            />
+          </div>
+
+          <CardContent>
+            {/* Feature 170 (T C.4, R9/R10): el archivo trae el ledger ENTERO de la tienda con
+                los filtros vigentes, no la página. El callback se construye en el render, así
+                que cierra sobre los `filtros` de ESTE render. */}
+            <DesgloseTiendaLedger
+              movimientos={movimientos}
+              isLoading={loading}
+              obtenerFilasDescarga={() =>
+                filasDesdeResultado(
+                  listarMisMovimientosCompletoAction(buildInputCompleto(filtros)),
+                  filaDescargaMiWallet,
+                )
+              }
+            />
+          </CardContent>
+
+          {/* R15 — la paginación baja al PIE, que la primitiva ya pinta como banda apoyada en
+              el borde inferior, y en FLUJO NORMAL.
+
+              `sticky={false}` no es cosmético: en modo pegajoso `Pagination` devuelve un
+              fragmento de DOS elementos (envoltorio + centinela de 1px) y el `display:flex` del
+              pie los colocaría como dos columnas, con el centinela `w-full` empujando la barra.
+              El `ariaLabel` NO cambia: es el nombre por el que ya se la encuentra. */}
+          <CardFooter>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={cambiarPagina}
+              disabled={loading}
+              ariaLabel="Paginación del desglose"
+              sticky={false}
+              className="w-full justify-between gap-3 py-0"
+            />
+          </CardFooter>
+        </Card>
       </section>
     </div>
   );

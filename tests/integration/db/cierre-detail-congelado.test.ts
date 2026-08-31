@@ -350,6 +350,8 @@ function aprobar(db: Db, cierreId: string) {
       // Feature 170 (T I.1): saldos paginados; doble no-op, esta suite no los lee.
       listarSaldosTiendasPaginado: vi.fn(),
       agregarDesglosePorTienda: vi.fn(), // feature 171: doble no-op, este test no lee el ledger
+      // ficha 335: idem. Este camino no abre el selector de cierres de `/mi-wallet`.
+      listarCierresDeTienda: vi.fn(async () => []),
     },
     new WalletTiendaFeedService(),
     // 44: fuera del alcance de estos dos casos (su libro sale de los snapshots del cierre_dia,

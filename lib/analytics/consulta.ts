@@ -95,7 +95,15 @@ export function prepararConsultaAnalitica(
   // (1) PARSEAR. R19: si falla, se devuelve `validation_error` y NO se resuelve alcance;
   // el motivo de denegacion no se revela, porque una entrada malformada no puede servir
   // para sondear el catalogo ni los permisos de un rol.
-  const parseado = parseAnaliticaFiltro(raw);
+  //
+  // 2026-08-31 — EL TOPE DE VENTANA (`RANGO_TOPE_DIAS`) NO SE APLICA AL CANAL `api_key`, y es
+  // la UNICA diferencia de validacion entre los dos canales. Motivo: ese canal responde el
+  // HISTORICO COMPLETO cuando el integrador no manda fechas, y un historico deja de caber en
+  // 366 dias en cuanto la operacion pasa del anio. El canal interno lo conserva porque su
+  // consumidor es una grafica con techo de puntos (`TOPE_PUNTOS_SERIE`), no un integrador.
+  // La decision se escribe AQUI —el unico sitio que ya conoce el canal— y no dentro de
+  // `filters.ts`, que sigue sin saber que canales existen.
+  const parseado = parseAnaliticaFiltro(raw, { aplicarTopeVentana: canal !== "api_key" });
   if (parseado.status !== "ok") {
     return { status: "validation_error", fieldErrors: parseado.fieldErrors };
   }

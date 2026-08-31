@@ -146,8 +146,11 @@ export type ListarPagosDeMensajeroResult = {
 // ── Schema zod de borde (R22) ──
 
 // Listado del libro del mensajero: paginado + filtros opcionales por cierre y rango de fechas.
-// El acotado por mensajero NO viaja aqui en la vista propia (lo pone el service desde el actor,
-// R20); en la vista del maestro (R22) `mensajeroId` puede acotar el desglose.
+//
+// NO SE BORRA, aunque su nombre lo sugiera: es la BASE de la que `listarPagosDeMensajeroSchema`
+// (la vista del maestro, R22) deriva con `.extend(...)`. La ficha 336 retiro la vista PROPIA del
+// mensajero (`/mis-pagos`) y con ella su `ListarPagosMensajeroInput`, que se quedo sin ningun
+// consumidor; el schema en si sigue sosteniendo el desglose del maestro.
 export const listarPagosMensajeroSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -156,8 +159,6 @@ export const listarPagosMensajeroSchema = z.object({
   desde: z.coerce.date().optional(),
   hasta: z.coerce.date().optional(),
 });
-
-export type ListarPagosMensajeroInput = z.infer<typeof listarPagosMensajeroSchema>;
 
 // Vista del MAESTRO (R18/R22): el maestro DEBE elegir un mensajero, asi que `mensajeroId` pasa a
 // ser REQUERIDO (a diferencia de la vista propia, donde lo pone el actor y aqui era opcional). Un
@@ -171,20 +172,9 @@ export type ListarPagosDeMensajeroInput = z.infer<typeof listarPagosDeMensajeroS
 
 // ── Feature 170 (T C.1) — modo SIN paginacion (descarga del dataset completo) ──
 
-/**
- * Vista PROPIA del mensajero (`/mis-pagos`). Derivada del schema del listado quitando
- * `page`/`pageSize`, de modo que ambos caminos resuelvan los MISMOS filtros.
- *
- * `mensajeroId` SIGUE ADMITIENDOSE en el schema —se hereda del base— y sigue siendo
- * IRRELEVANTE: el service lo ignora y acota por `actor.usuarioId` (R15/R20). Se conserva por
- * paridad exacta con el listado: quitarlo aqui haria que la descarga rechazara una peticion
- * que el listado acepta, o sea otra divergencia. `.strict()` cierra el resto de claves (R18).
- */
-export const listarMisPagosCompletoSchema = listarPagosMensajeroSchema
-  .omit({ page: true, pageSize: true })
-  .strict();
-
-export type ListarMisPagosCompletoInput = z.infer<typeof listarMisPagosCompletoSchema>;
+// Ficha 336 (2026-08-30): aqui vivian `listarMisPagosCompletoSchema` y
+// `ListarMisPagosCompletoInput`, el modo sin paginacion de la vista PROPIA del mensajero. Se
+// retiraron con `/mis-pagos`; no quedaba ninguna referencia en el arbol.
 
 /**
  * Vista del ACCESO TOTAL: desglose de UN mensajero elegido. `mensajeroId` sigue siendo
@@ -266,9 +256,8 @@ export type ListarCuentasPorPagarCompletoInput = z.infer<
 export type ListarCuentasPorPagarCompletoResult =
   ListarCompletoResult<CuentaPorPagarResumenDTO>;
 
-// Resultados del modo completo en el BORDE (T C.2). `limite_excedido` lleva SOLO conteos
-// (R27) y ninguna rama de error viaja con filas (R16/R17/R18). Los dos ledgers proyectan el
-// mismo DTO; se nombran aparte porque son dos superficies con alcances distintos.
-export type ListarMisPagosCompletoResult = ListarCompletoResult<PagoMensajeroMovimientoDTO>;
+// Resultado del modo completo en el BORDE (T C.2). `limite_excedido` lleva SOLO conteos
+// (R27) y ninguna rama de error viaja con filas (R16/R17/R18). Eran DOS, uno por superficie;
+// la ficha 336 retiro `ListarMisPagosCompletoResult` con la vista propia del mensajero.
 export type ListarPagosDeMensajeroCompletoResult =
   ListarCompletoResult<PagoMensajeroMovimientoDTO>;
