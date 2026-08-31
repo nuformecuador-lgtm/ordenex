@@ -74,32 +74,13 @@ falta ni `leerDeUrl={false}` en ningún consumidor ni un `Suspense` local.
 
 ## T6.2 — Mapa de trazabilidad `R<n> -> test`
 
-**25 de 25 requisitos tienen un test nombrado.** Ninguno dice «cubierto indirectamente».
-109 casos llevan una etiqueta `R<n>` en el nombre del `it` (sobre 86 `it` en 8 archivos);
-la columna «Otros» cuenta los tests adicionales que también lo cubren.
+**25 de 25 requisitos tienen un test nombrado.** 110 casos etiquetados sobre 87 `it` en
+**9 archivos**.
 
-**La columna «Rojo demostrado» es la que importa tras el rechazo.** Marca los requisitos
-cuyo test se escribió como **contraejemplo primero** y se **vio fallar contra el código
-anterior al arreglo** — no «debería fallar si se rompe», sino *falló, y aquí está la salida*.
-Verificado por mí, no solo por el subagente: restauré `FilterComponent.tsx` a su versión
-pre-arreglo (`41c774c9`) y corrí los tests nuevos.
-
-```
-Test Files  3 failed (3)
-     Tests  5 failed | 19 passed (24)
-
-× R7  — cambiar los params ANTES de declarar el filtro no siembra el valor nuevo
-× R3/R5 — un catalogo que llega DESPUES del montaje siembra la clave que quedo pendiente
-× R3/R7 — al llegar el catalogo se siembra la URL DE ENTRADA, nunca la de ahora
-× R2/R3/R5 — entrando por ?zona=… el control queda con esa zona SELECCIONADA (hook REAL)
-× R25 — mutar los query params tras el montaje no entra por la siembra: gana la foto de entrada
-```
-
-Con el arreglo puesto, esos mismos 3 archivos: **24 passed (24)**.
-
-Así que **R2, R3, R5, R7 y R25 —los cinco que el reviewer puso en duda— tienen ahora un test
-que falla de verdad si alguien deshace el arreglo.** Los otros 20 conservan la cobertura que
-el reviewer ya dio por buena («22 de 25 se sostienen»).
+**«Rojo demostrado» = se vio fallar de verdad contra un árbol roto**, no «debería fallar».
+Son **6** requisitos: los 5 de la primera corrección (verificados restaurando
+`FilterComponent.tsx` a `41c774c9`) más **R17**, que la segunda revisión detectó que pasaba
+igual con y sin arreglo (M5) y que ahora cae bajo mutación.
 
 | Requisito | Test que lo verifica | Otros | Rojo demostrado |
 | --- | --- | --- | --- |
@@ -119,7 +100,7 @@ el reviewer ya dio por buena («22 de 25 se sostienen»).
 | R14 | `filtros-url-kinds.test.ts`::«R14 — conserva los valores declarados y descarta los que no estan en options» | 2 | — |
 | R15 | `filtros-url.test.ts`::«R15 — un param que no corresponde a ningun filtro ofrecido no activa nada» | 3 | — |
 | R16 | `filtros-url-kinds.test.ts`::«R14/R16 — si ningun valor esta declarado, la clave no aparece en la seleccion» | 6 | — |
-| R17 | `filter-component-url.test.tsx`::«R17 — tras el ciclo completo de efectos no llega ninguna emision que borre la clave sembrada» | — | — |
+| R17 | `filter-component-url.test.tsx`::«R17 — cuando la poda SI tiene trabajo, se lleva lo que sobra y conserva lo sembrado» | 1 | **sí** |
 | R18 | `filtros-url-hook.test.tsx`::«R18/R22 — «Limpiar todo» sin un solo param propio que borrar NO llama a replace» | 2 | — |
 | R19 | `filtros-url.test.ts`::«R19 — quita el param del termino y las claves propias» | 6 | — |
 | R20 | `filtros-url.test.ts`::«R20 — conserva los params ajenos con su valor y sin reordenarlos» | 4 | — |
@@ -127,7 +108,7 @@ el reviewer ya dio por buena («22 de 25 se sostienen»).
 | R22 | `filtros-url-hook.test.tsx`::«R19/R20/R22 — replace recibe la ruta con SOLO los params ajenos y { scroll: false }» | 3 | — |
 | R23 | `filtros-url-hook.test.tsx`::«R23 — con activo=false los params se ven vacios y la URL no se toca» | 2 | — |
 | R24 | `filtros-url-hook.test.tsx`::«R24 — mock PARCIAL sin useSearchParams ni usePathname: no lanza y la URL se ve vacia» | 4 | — |
-| R25 | `filtros-url-r25.test.ts`::«R25 — mutar los query params tras el montaje no entra por la siembra: gana la foto de entrada» | 3 | **sí** |
+| R25 | `filtros-url-r25-propiedad.test.tsx`::«R25 — mutar los query params tras el montaje no entra por la siembra: gana la foto de entrada» | 3 | **sí** |
 
 ## T6.3 — Gate: `./init.sh --rapido` desde `C:/w335`
 
@@ -369,3 +350,140 @@ ficha no toca `lib/actions/`, ni Server Actions, ni `app/`. **Delta de rojos: 0.
 
 **Sigue sin tocarse ni un archivo bajo `app/`** (verificado en el diff del arreglo: 4
 archivos, +432/−124, ninguno en `app/`).
+
+---
+
+# Segunda corrección: B3, M5 y M1 (2026-08-31)
+
+Segunda revisión: el arreglo de fondo (B1/B2) quedó **verificado y no se tocó**. Quedaban un
+bloqueante y dos residuos, **los tres de test o de comentario**. `FilterComponent.tsx` queda
+**byte a byte idéntico** (`git diff 813029d8 HEAD -- components/shared/FilterComponent.tsx`
+vacío) y de `hooks/useFiltrosUrl.ts` **solo cambia el bloque de comentario**.
+
+## B3 (bloqueante) — el guardia de R25 se saltaba solo y aun así se veía verde
+
+Al fusionar la mitad de comportamiento (M2), el archivo pasó a `// @vitest-environment jsdom`
+y **el arranque de ESLint quedó corriendo dentro de jsdom**: el `beforeAll` expiraba ~2 de
+cada 5 corridas —una vez **113 s aislado, sin nada compitiendo**, o sea *no* era saturación—.
+Lo grave no era el rojo: al expirar un `beforeAll` **sus 3 casos quedan SKIPPED**, así que la
+mitad de linter de R25 dejaba de verificar nada.
+
+**Se partió en dos**, que es lo que devuelve la holgura en vez de depender de acertar un
+número:
+
+| Archivo | Entorno | Qué vigila |
+| --- | --- | --- |
+| `tests/unit/guards/filtros-url-r25.test.ts` | **node** (se le quitó la directiva jsdom) | la FORMA: ESLint con la config real; 3 casos, incluido el que exige que la regla exista y esté **activa** |
+| `tests/unit/guards/filtros-url-r25-propiedad.test.tsx` | jsdom | la PROPIEDAD que el linter no ve: mutar los params tras el montaje no entra por la siembra |
+
+Cada archivo lleva cabecera diciendo que son las dos mitades de R25, cómo se llama la otra y
+**qué costó separarlas**, para que nadie las vuelva a juntar sin saberlo.
+
+### Los números (medidos, no estimados)
+
+Sacar el linter de jsdom lo dividió por ~7. Medido en dos tandas independientes:
+
+| Tanda | Corridas | Peor | Resultado |
+| --- | --- | --- | --- |
+| Subagente (máquina con carga) | 5 | **16,8 s** (tramo `tests`) | `3 passed (3)` ×5 |
+| **Mía, verificación independiente** | 5 | **44,2 s** de reloj total (la 1.ª, aún con carga); las otras 13,5–24,0 s | `3 passed (3)` ×5 |
+| **Mía, máquina en reposo** | 3 | **5,5 s** (tramo `tests`) / 7,9 s de reloj | `3 passed (3)` ×3 |
+
+**13 corridas post-partición: 0 timeouts, 0 SKIPPED, 0 rojos.** Contra los **>113 s** de
+antes. La mitad de comportamiento va en **0,6–0,7 s**.
+
+**El `hookTimeout` se deja en 60 s y NO se sube**: ahora son ~3,5x sobre el peor caso bajo
+carga y ~11x en reposo. Queda escrito en el fuente con las cifras y con la instrucción de que,
+si algún día roza los 60 s, se **vuelva a medir** para averiguar qué se ha encarecido, en vez
+de inflar el número a ojo.
+
+## M5 — R17 pasaba con y sin el arreglo. Ahora cae bajo mutación.
+
+El diagnóstico era exacto: el caso viejo monta **solo** la clave sembrada, así que la poda
+calcula `sobran = []` y **sale por el `return` temprano sin ejercitar nunca la convivencia**.
+
+Caso nuevo: entra con `?color=rojo&acabado=brillo` y luego **retira `acabado` de `filters`**,
+de modo que la poda tiene trabajo real y `color` debe sobrevivir.
+
+**Verificado por mí**, no solo por el subagente. Mutación en `FilterComponent.tsx:627`,
+`{ ...actual, ...sembrado }` → `{ ...sembrado }`:
+
+```
+× R17 — cuando la poda SI tiene trabajo, se lleva lo que sobra y conserva lo sembrado
+  → esperado { "color": ["rojo"] } · recibido {}
+  Tests  1 failed | 1 passed | 16 skipped (18)
+```
+
+**Lo revelador: con la mutación puesta, el caso VIEJO de R17 seguía pasando.** Confirma que no
+distinguía un árbol sano de uno roto. No se borró —sigue valiendo como red contra una emisión
+espuria— pero lleva encima el aviso de lo que no cubre. Tras revertir: `2 passed`, y
+`git diff` de producción **vacío**.
+
+## M1 (residual) — el límite ya está en el CÓDIGO, no solo en la bitácora
+
+Lo había corregido en la bitácora y **no en `hooks/useFiltrosUrl.ts`**, que es donde se lee un
+límite. El comentario dice ahora que `paresBorrados` **no se vacía nunca en toda la sesión
+SPA** —así que cualquier llegada posterior a esa ruta con ese par queda suprimida: un `Link`
+interno, un enlace pegado sin recarga completa, cualquier pantalla que reconstruya la query, no
+solo el botón atrás— y dice también **lo que sí resiste**: el scopeado por `pathname` y por
+valor, y el crecimiento acotado.
+
+## Gate tras la segunda corrección — con el PATH VERIFICADO
+
+**`== init OK ==`** (exit 0).
+
+| Tramo | Resultado |
+| --- | --- |
+| `typecheck` | **verde, 0 errores** |
+| `lint` | **0 errores**, 127 avisos preexistentes de `dev` (0 en los archivos de la ficha) |
+| Relacionados | **84 archivos, 1129 passed + 17 skipped (1146)**, 0 rojos |
+| Guardias | **168 archivos, 2525 passed, 1 failed (2526)** |
+| Baseline | **`✓ sin rojos nuevos (1 archivo rojo sobre 250 ejecutados, todos en el baseline conocido)`** |
+
+El guardia de R25 **ya cuenta entre las guardias** (168 archivos, uno más que antes) y **no
+falla ni se salta**. El único rojo sigue siendo `superficie-de-uso.guardia.test.ts` →
+`lib/actions/tarifas.ts:67 obtenerTarifa`, ajeno y en el baseline desde el 2026-08-28.
+**Delta de rojos de la ficha: 0.**
+
+---
+
+## ⚠️ Hallazgo de ENTORNO, fuera de la ficha: el gate se degrada a avisos
+
+No es de la 335 y **no lo he tocado** —`init.sh` está en la lista de rutas que obligan al gate
+completo, y `docs/verification.md` dice por qué: tocar el gate cambia **la medida** con la que
+se mide todo lo demás—. Pero lo dejo escrito porque me costó una hora y volverá a morder.
+
+**El síntoma.** El shell del agente recibe el `PATH` **de Windows** (separado por `;`) y bash
+lo parte por `:`. Resultado: **no hay `node`, ni `git`, ni siquiera `cat` o `grep`**. Lo
+comprobé al arrancar esta tanda:
+
+```
+node: command not found · git: command not found · pnpm: command not found
+```
+
+**Qué hace `init.sh` en ese entorno.** Lo reproduje a propósito. `fail()` sí hace `exit 1`, así
+que **con `node` ausente el gate para en seco y no miente**. El problema es el escalón de al
+lado: cuando lo que falta es **otra** herramienta, el gate **degrada a `warn`, que es exit 0**:
+
+```
+! no es un repo git: no se puede clasificar el cambio   <- se salta la NEGATIVA del modo rapido
+! pnpm no disponible para correr script 'typecheck'     <- typecheck NO se ejecuta
+! pnpm no disponible para correr script 'lint'          <- lint NO se ejecuta
+```
+
+Es decir: en un entorno a medias, el gate **puede saltarse typecheck, lint y la regla que
+obliga al modo completo ante un cambio de cimientos**, y seguir adelante. Eso es exactamente
+«un verde que no significa nada» que `docs/verification.md` describe como el peor modo de
+fallo. **No conseguí reproducir un `== init OK ==` con exit 0 literal** —mis dos intentos
+murieron antes por `rm`/`wc` ausentes o salieron con exit 1—, así que lo reporto por lo que
+medí y no por lo que se temía: **la degradación silenciosa está confirmada; el exit 0 final
+no**.
+
+**Cómo he trabajado yo:** exportando un `PATH` POSIX correcto en **cada** comando (el estado
+del shell no persiste entre llamadas) y comprobando `node -v`, `git --version` y `pnpm -v`
+**antes** de dar por bueno cualquier número. Los del gate de arriba están medidos así.
+
+**Sugerencia para quien decida sobre el arnés** (no la aplico yo): que la falta de `pnpm` o de
+`git` sea `fail` y no `warn`, por el mismo argumento por el que `--rapido` se niega solo ante
+un cambio de cimientos — un gate que se salta sus propios pasos debería gritarlo, no
+susurrarlo.
