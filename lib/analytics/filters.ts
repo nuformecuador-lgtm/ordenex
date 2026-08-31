@@ -63,7 +63,7 @@ function diasInclusive(desde: string, hasta: string): number {
  * aplica la feature 122 ENCIMA del filtro ya validado. El orden es siempre:
  * parsear -> resolver alcance -> consultar.
  */
-export const analiticaFiltroSchema = z
+const filtroSinTopeDeVentana = z
   .object({
     // R20 — obligatorio y de dominio CERRADO: los cuatro valores de RANGO_PRESETS
     // (`dia | semana | mes | personalizado`, D4). Un valor fuera del dominio se
@@ -99,7 +99,19 @@ export const analiticaFiltroSchema = z
   .refine((f) => !f.desde || !f.hasta || f.desde <= f.hasta, {
     path: ["hasta"],
     message: "El rango de fechas esta invertido",
-  })
+  });
+
+/**
+ * El filtro COMPLETO: los tres `refine` de arriba MAS el tope de ventana. Es el que se aplica
+ * por defecto —y por tanto el del canal interno, la UI—, y el unico que este archivo exporta
+ * como `analiticaFiltroSchema`: quien no diga nada, sigue teniendo tope.
+ *
+ * ⚠ 2026-08-31 — EL TOPE YA NO ES UNIVERSAL, y el motivo esta escrito en `parseAnaliticaFiltro`.
+ * El canal por API key pide HISTORICO COMPLETO, que por construccion pasa de 366 dias en cuanto
+ * el repo lleve mas de un anio operando; el canal interno conserva el tope porque su consumidor
+ * es una GRAFICA con techo de puntos (`TOPE_PUNTOS_SERIE`, ver `./types`), no un integrador.
+ */
+export const analiticaFiltroSchema = filtroSinTopeDeVentana
   // R29 (4) — tope de ventana contando AMBOS extremos. El tope vive en
   // `RANGO_TOPE_DIAS` (`./types`), NUNCA en un literal aqui: ajustarlo debe ser un
   // one-liner con su test, no una caceria de numeros sueltos.
@@ -143,9 +155,28 @@ export type AnaliticaFiltroResultado =
  * acabarian en `formErrors`, invisibles para un consumidor que solo pinta
  * `fieldErrors`: aqui cada clave desconocida se reporta bajo SU PROPIO nombre.
  * No se filtra ningun internal: solo el mensaje declarado en el schema.
+ *
+ * `opciones.aplicarTopeVentana` (2026-08-31) — el UNICO grado de libertad del parseo, y por
+ * defecto `true`: quien llame como siempre, valida como siempre. Se pasa `false` desde UN solo
+ * sitio (`prepararConsultaAnalitica`, para el canal `api_key`) y por una razon concreta: ese
+ * canal publica el HISTORICO COMPLETO cuando no se le dan fechas, y un historico no cabe en una
+ * ventana de `RANGO_TOPE_DIAS` en cuanto la operacion pasa del anio. No es «relajar la
+ * validacion»: los otros tres `refine` —forma, coherencia preset/fechas y rango invertido—
+ * siguen aplicandose IGUAL en los dos canales. Lo unico que cae es el techo de tamano, que
+ * existia para proteger a una grafica con techo de puntos que este canal no tiene.
  */
-export function parseAnaliticaFiltro(raw: unknown): AnaliticaFiltroResultado {
-  const parsed = analiticaFiltroSchema.safeParse(raw);
+export interface OpcionesParseoFiltro {
+  /** `false` retira el tope de `RANGO_TOPE_DIAS`. Por defecto `true`. */
+  readonly aplicarTopeVentana?: boolean;
+}
+
+export function parseAnaliticaFiltro(
+  raw: unknown,
+  opciones: OpcionesParseoFiltro = {},
+): AnaliticaFiltroResultado {
+  const schema =
+    opciones.aplicarTopeVentana === false ? filtroSinTopeDeVentana : analiticaFiltroSchema;
+  const parsed = schema.safeParse(raw);
   if (parsed.success) {
     return { status: "ok", filtro: parsed.data };
   }
