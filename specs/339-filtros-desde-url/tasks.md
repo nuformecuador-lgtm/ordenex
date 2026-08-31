@@ -1,4 +1,4 @@
-# 335 — Tasks
+# 339 — Tasks
 
 Convención: `[P]` = paralelizable con las demás `[P]` del mismo bloque.
 Cada task lleva su criterio de **hecho**, y el criterio es un **assert ejecutable**, nunca
@@ -16,7 +16,7 @@ codifican A4. Empezar antes es escribir el códec dos veces.
 Confirmar que `components/shared/BuscadorFiltros.tsx` y `components/shared/FilterComponent.tsx`
 siguen idénticos a `origin/dev` (la 326 está `in_progress` en la misma zona) y medir el
 baseline de tests **antes** de tocar nada.
-**Hecho:** el baseline de rojos preexistentes queda anotado en `progress/impl_335.md`.
+**Hecho:** el baseline de rojos preexistentes queda anotado en `progress/impl_339.md`.
 **Depende de:** —
 
 ---
@@ -152,11 +152,11 @@ de URL al filtrar.
 Correr `pnpm exec next build` (**nunca** `pnpm build`: encadena `migrate deploy` contra
 una base real) y revisar que ninguna ruta se queje por `useSearchParams`.
 **Hecho:** el build termina sin errores; si alguna ruta protesta, queda anotada en
-`progress/impl_335.md` con su salida (`leerDeUrl={false}` o `Suspense` local).
+`progress/impl_339.md` con su salida (`leerDeUrl={false}` o `Suspense` local).
 **Depende de:** T3.3, T4.3
 
 ### [x] T6.2 Mapa de trazabilidad R→test
-Escribir en `progress/impl_335.md` la tabla completa R1..R25 → archivo::nombre del test.
+Escribir en `progress/impl_339.md` la tabla completa R1..R25 → archivo::nombre del test.
 **Hecho:** los 25 requisitos tienen un test nombrado; ninguno dice «cubierto
 indirectamente».
 **Depende de:** todo el bloque 1-5

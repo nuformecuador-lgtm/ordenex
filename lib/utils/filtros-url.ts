@@ -1,4 +1,4 @@
-// Feature 335 (T1.1) — el CODEC de filtros que viven en la query string.
+// Feature 339 (T1.1) — el CODEC de filtros que viven en la query string.
 //
 // Modulo PURO: sin React, sin DOM, sin router. Traduce en UNA sola direccion
 // —`URLSearchParams -> { termino, seleccion, activos }`— contra el catalogo declarado por

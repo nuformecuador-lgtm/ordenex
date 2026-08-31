@@ -26,6 +26,9 @@ function fakeRepo(overrides: Partial<IWalletTiendaMovimientoRepository> = {}): I
     // Feature 171: el doble implementa la interfaz COMPLETA. El desglose por tienda lo
     // ejercita `wallet-tienda-desglose.test.ts`; aqui solo tiene que existir.
     agregarDesglosePorTienda: vi.fn(async () => []),
+    // Ficha 335: el doble sigue implementando la interfaz COMPLETA. La lectura de cierres
+    // la ejercita `tests/unit/services/mi-wallet-cierres.test.ts`; aqui solo tiene que existir.
+    listarCierresDeTienda: vi.fn(async () => []),
     ...overrides,
   };
 }

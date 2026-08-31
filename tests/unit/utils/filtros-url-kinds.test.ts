@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { seleccionDesdeUrl } from "@/lib/utils/filtros-url";
 import { BOOLEAN_MARCADO, type FilterDef } from "@/components/shared/FilterComponent";
 
-// Feature 335 / T1.3 — validacion por `kind` (R10-R14) y filtro sin ningun valor valido
+// Feature 339 / T1.3 — validacion por `kind` (R10-R14) y filtro sin ningun valor valido
 // (R16). Se prueba a traves de `seleccionDesdeUrl` a proposito: lo que le importa al
 // consumidor no es el valor devuelto por la funcion interna, sino si la clave APARECE o
 // NO en la seleccion.

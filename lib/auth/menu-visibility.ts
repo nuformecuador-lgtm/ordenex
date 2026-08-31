@@ -192,6 +192,23 @@ export const ROLES_HISTORICO_CONVERSACIONES = [
 ] as const satisfies readonly RolValue[];
 
 /**
+ * Ficha 335 (R33) — único punto de verdad de quién ACCEDE a `/mi-wallet`. Lo leen TANTO el
+ * `roles` del ítem de menú «Mi wallet» (abajo) COMO el gate `notFound()` de
+ * `app/(app)/mi-wallet/page.tsx`. Precedentes: R10 de la 129 (analítica) y R1 de la 321
+ * (histórico).
+ *
+ * POR QUÉ IMPORTA QUE SEA UNA SOLA: el ítem de menú solo MUESTRA; la defensa real es el gate
+ * de la ruta. Con dos listas, ampliar una y olvidar la otra produce el peor de los dos fallos
+ * mudos —o una entrada de menú que lleva a un 404, o una ruta abierta a la que nadie ve el
+ * enlace— y ninguno rompe un test que no exista. Con una sola, divergir es imposible.
+ *
+ * `as const satisfies` y no `readonly RolValue[]`: el `satisfies` comprueba que el nombre es un
+ * `RolValue` real del esquema SIN ensanchar el tipo, así la tupla conserva su identidad y el
+ * ítem de menú puede REFERENCIARLA (R33 se afirma con `toBe`, no con `toEqual`).
+ */
+export const ROLES_MI_WALLET = ["adminTienda"] as const satisfies readonly RolValue[];
+
+/**
  * Fuente de verdad del menu. Vive en este modulo server-safe (NO en el
  * "use client" del Sidebar): un Server Component que importa un export de un
  * modulo cliente recibe una referencia-proxy, no el valor real, y `.filter`
@@ -388,6 +405,31 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
       { label: "Tiendas", href: "/wallet/tiendas" },
       { label: "Mensajeros", href: "/wallet/mensajeros" },
     ],
+  },
+  {
+    // Ficha 335 (R31/R32/R33): el saldo a favor de la TIENDA. La pantalla existía desde la
+    // feature 43 y no tenía ninguna entrada de menú: se llegaba escribiendo la URL, o sea que
+    // no se llegaba. Este ítem es la puerta.
+    //
+    // `roles` apunta a LA CONSTANTE, no a un literal copiado: es la misma que lee el gate
+    // `notFound()` de la página (R33). Un `["adminTienda"]` escrito aquí a mano sería una
+    // segunda lista capaz de divergir de la primera sin que nada se pusiera rojo.
+    //
+    // ⚠️ LA POSICIÓN NO ES DECORATIVA. `primerDestino(itemsVisibles(...))` devuelve el `href`
+    // del primer ítem visible que no esté marcado `destinoInicial: false`, y `/dashboard`
+    // redirige ahí. Para el `adminTienda` los visibles son, en orden: «Analítica» (marcada
+    // `destinoInicial: false`), «Órdenes», «Novedades» y ahora este. Puesto DESPUÉS, el
+    // aterrizaje post-login sigue siendo `/ordenes` (R35); puesto antes de «Órdenes», habría
+    // cambiado EN SILENCIO — es el incidente que ya documentan «Analítica» (133) y
+    // «Monitoreo» (192).
+    //
+    // Y por eso NO lleva `destinoInicial: false`: la posición ya protege el aterrizaje, y
+    // `tests/unit/auth/destino-post-login.test.ts` afirma con un `toEqual` que los ítems
+    // marcados son EXACTAMENTE `["/analitica", "/monitoreo"]`.
+    label: "Mi wallet",
+    href: "/mi-wallet",
+    iconKey: "wallet",
+    roles: ROLES_MI_WALLET,
   },
   {
     label: "Configuración",

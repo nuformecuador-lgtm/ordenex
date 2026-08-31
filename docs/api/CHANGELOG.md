@@ -21,6 +21,86 @@
 
 ---
 
+## 2026-08-31 — `GET /ordenes/api-key/analitica`: los tres parámetros pasan a ser opcionales, y se retira el tope de 366 días
+
+**Aditivo: no rompe nada.** Toda llamada que hoy funciona sigue devolviendo exactamente lo mismo.
+Lo que cambia es que ahora hay llamadas *más cortas* que antes eran un `422`.
+
+**`GET /api/ordenes/api-key/analitica` sin ningún parámetro es una llamada válida** y devuelve
+todas las métricas publicables sobre todo el histórico:
+
+```
+GET /api/ordenes/api-key/analitica
+Authorization: Bearer ordx_...
+```
+
+**Qué significa cada ausencia:**
+
+| Parámetro | Si no lo mandás (o lo mandás vacío) |
+| --- | --- |
+| `metricas` | Todas las publicables — el mismo resultado que `metricas=all`, que **no** se retira |
+| `desde` | La serie arranca en el primer día del que hay datos |
+| `hasta` | La serie llega hasta hoy (hora de Costa Rica) |
+
+`desde` es inclusivo (`>=`) y `hasta` es inclusivo (`<=`), igual que antes.
+
+**Se retira el tope de ventana de 366 días.** Ya podés pedir el histórico completo en una sola
+llamada. Era la contradicción del cambio de arriba: pasado un año de operación, la llamada sin
+fechas habría respondido `422` contra su propio caso base.
+
+**Lo que NO cambió, y conviene no darlo por relajado:**
+
+- Un hueco **dentro** de la lista sigue siendo `422`: `metricas=entregas,,rechazos`. El parámetro
+  entero vacío es «no pedí ninguna»; un vacío en medio es una lista mal escrita.
+- `all` mezclado con ids sigue siendo `422`: `metricas=all,entregas`.
+- El **rango invertido** sigue siendo `422` (`desde` posterior a `hasta`).
+- Una fecha que el calendario no tiene sigue siendo `422` (`desde=2026-02-31`).
+- `data` sigue **omitiendo** los días que no se pueden leer —el día en curso y los anteriores a
+  nuestro horizonte de histórico— y `data: []` sigue siendo un `200` correcto. **No rellenes los
+  huecos con ceros.**
+
+**Si pedís el histórico completo, contá con series largas.** Sin `desde`, `data` crece un punto
+por día de operación; este endpoint no pagina.
+
+---
+
+## 2026-08-28 — ROMPEDOR: los importes de la cotización pasan a viajar CRUDOS
+
+**Esto SÍ puede romper tu integración** si consumes `POST /api/ordenes/api-key/cotizacion`. No
+cambia ningún nombre de campo, ni se añade ni se quita ninguno: cambia la **forma del valor**.
+
+Antes cada importe llegaba formateado, con símbolo de moneda, miles agrupados y coma decimal:
+
+```json
+{ "flete": "₡2.500,00", "total": "-₡1.578,00" }
+```
+
+Ahora llega crudo, como un string *money-safe* de escala 2 —sin símbolo, sin separador de miles y
+con el punto como separador decimal:
+
+```json
+{ "flete": "2500.00", "total": "-1578.00" }
+```
+
+Afecta a **todos** los importes de la respuesta, en los dos escenarios (`entregado` y `devuelto`)
+y también dentro del bloque `totales`: `flete`, `iva`, `comision`, `ivaComision`, `fulfillment` y
+`total`. Lo que **no** cambia: siguen siendo strings (nunca números JSON), siguen llevando
+exactamente dos decimales, el cero sigue siendo explícito (`"0.00"`, nunca ausente ni `null`) y el
+negativo sigue marcándose con un `-` al principio.
+
+**Qué tienes que hacer.** Si parseabas quitando el símbolo y dando la vuelta a los separadores,
+borra ese paso: el valor ya es un número en texto y `parseFloat`/`Decimal` lo aceptan tal cual.
+Ojo con lo contrario —dejar el parser viejo puesto—: `"2500.00"` pasado por una limpieza que
+esperaba miles con punto **no falla**, devuelve `2.5`. Es un error silencioso, así que revísalo
+aunque tu integración parezca seguir funcionando.
+
+**Por qué.** El canal hablaba dos dialectos de dinero: `POST /api/ordenes/api-key/carga` ya
+devolvía `costoEnvio` crudo mientras la cotización devolvía lo mismo formateado, y eso obligaba a
+mantener dos parsers para la misma moneda. Ahora los dos endpoints dicen el dinero igual. La
+moneda no ha cambiado; solo dejó de viajar dentro del campo.
+
+---
+
 ## 2026-08-28 — NUEVO: `DELETE /ordenes/api-key/orden/{id}` — eliminar una orden que aún no se gestionó
 
 **Aditivo: no rompe nada.** Es un verbo nuevo sobre una URL que ya existía. Si no lo llamás, tu

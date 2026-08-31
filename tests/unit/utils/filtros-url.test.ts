@@ -13,7 +13,7 @@ import {
 } from "@/lib/utils/filtros-url";
 import type { FilterDef } from "@/components/shared/FilterComponent";
 
-// Feature 335 / T1.2 + T1.4 — el codec PURO: formato de los valores (R4, R8, R9) y
+// Feature 339 / T1.2 + T1.4 — el codec PURO: formato de los valores (R4, R8, R9) y
 // borrado de «Limpiar todo» (R15, R19, R20, R21).
 //
 // Sin renderizar nada: si para escribir un caso hiciera falta un componente, la logica

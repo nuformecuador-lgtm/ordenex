@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 import { useFiltrosUrl, olvidarParamsBorrados } from "@/hooks/useFiltrosUrl";
 
-// Feature 335 / T2.2 — el hook frente a los entornos donde `next/navigation` NO esta
+// Feature 339 / T2.2 — el hook frente a los entornos donde `next/navigation` NO esta
 // entero (R24) y el `router.replace` de «Limpiar todo» (R21, R22, R23).
 //
 // El mock se declara con GETTERS para poder simular el caso mas incomodo y a la vez el

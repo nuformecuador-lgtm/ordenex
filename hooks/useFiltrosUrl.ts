@@ -1,6 +1,6 @@
 "use client";
 
-// Feature 335 (T2.1) — la unica pieza de la ficha que toca `next/navigation`.
+// Feature 339 (T2.1) — la unica pieza de la ficha que toca `next/navigation`.
 //
 // Envuelve la lectura de la query string y el `router.replace` de «Limpiar todo» para que
 // los canonicos compartidos (`BuscadorFiltros`, `FilterComponent`) no conozcan al router.

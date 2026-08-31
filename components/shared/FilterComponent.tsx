@@ -97,7 +97,7 @@ export interface FilterComponentProps {
    */
   debounceMs?: number;
   /**
-   * Feature 335 (R3, R23): siembra la seleccion inicial con lo que traiga la URL, leyendo
+   * Feature 339 (R3, R23): siembra la seleccion inicial con lo que traiga la URL, leyendo
    * cada param por la clave EXACTA de su filtro. `false` deja el orquestador como estaba
    * antes de la ficha: arranca en `{}` y no mira la query. Default `true`.
    *
@@ -138,7 +138,7 @@ const KINDS_CON_OPCIONES = new Set<string>(["multi", "single"]);
 const SEPARADOR_CLAVES = "\u0000";
 
 /**
- * Feature 335 (R10) — el rango con el que arranca un `dateRange` sembrado desde la URL.
+ * Feature 339 (R10) — el rango con el que arranca un `dateRange` sembrado desde la URL.
  *
  * La terna tiene dos formas y solo una es un rango: por ATAJO (`30d,,`) el rango son las
  * fechas que ese atajo representa, declaradas en su opcion; por RANGO (`,desde,hasta`)
@@ -201,7 +201,7 @@ function TextFilter({
   /** Valor de esta clave en la seleccion agregada (`[]` = sin busqueda aplicada). */
   aplicado: string[];
   /**
-   * Feature 335 (R3, R13): texto con el que ARRANCA el campo, para el caso en que la
+   * Feature 339 (R3, R13): texto con el que ARRANCA el campo, para el caso en que la
    * clave venga sembrada desde la URL. Sin esto la seleccion llevaria el termino y el
    * campo se veria VACIO: la pantalla mintiendo sobre lo que esta aplicado.
    *

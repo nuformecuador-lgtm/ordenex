@@ -101,6 +101,25 @@ export interface DesgloseTiendaAgregadoRow {
   total: string;
 }
 
+/**
+ * Ficha 335 (design §2.2, R1/R6) — un cierre del dia VISTO DESDE EL LIBRO DE UNA TIENDA.
+ *
+ * No sale del dominio de cierres: sale de `wallet_tienda_movimiento` agrupado por `origen_id`.
+ * La consecuencia que importa es de alcance: el conjunto ya esta acotado por construccion —solo
+ * puede contener cierres que movieron dinero de ESTA tienda— y toda opcion devuelta rinde al
+ * menos una fila al aplicarse.
+ *
+ * Sin `_sum` y sin ningun monto (R9): la lectura del selector no toca dinero.
+ */
+export interface CierreDeTiendaAgregadoRow {
+  /** `= origen_id`, un `cierre_dia.id`. Nunca `null`: el WHERE lo excluye. */
+  cierreId: string;
+  /** ISO del movimiento MAS RECIENTE de ese cierre EN ESTE LIBRO (no del cierre entero). */
+  ultimaFecha: string;
+  /** Cuantos movimientos de ESA tienda trajo ese cierre. Cardinal, no monto. */
+  movimientos: number;
+}
+
 export interface IWalletTiendaMovimientoRepository {
   /**
    * R6/R13: inserta las filas de forma IDEMPOTENTE en la transaccion `tx`. Usa
@@ -138,4 +157,18 @@ export interface IWalletTiendaMovimientoRepository {
     tiendaId: string,
     filtros: SaldoTiendaFiltros,
   ): Promise<DesgloseTiendaAgregadoRow[]>;
+  /**
+   * Ficha 335 (R1/R2/R7/R10) — los cierres que dejaron al menos un movimiento en el libro de
+   * UNA tienda, del mas reciente al mas antiguo, recortados a `limite`.
+   *
+   * UNA sola sentencia sea cual sea el numero de cierres (R10): es un `groupBy`, no un listado
+   * seguido de N conteos. `tiendaId` va SIEMPRE en el WHERE (R2), como en `listarPorTienda` y
+   * `agregarDesglosePorTienda` — nunca filtrando en memoria.
+   *
+   * Vive AQUI y no en un repositorio nuevo a proposito: habria dos sitios donde escribir el
+   * `tienda_id` del mismo libro, y esa duplicacion es exactamente contra lo que argumentan los
+   * comentarios de este modulo. El coste de extender la interfaz —romper los dobles— lo canta
+   * el typecheck: es ruido, no un fallo mudo.
+   */
+  listarCierresDeTienda(tiendaId: string, limite: number): Promise<CierreDeTiendaAgregadoRow[]>;
 }

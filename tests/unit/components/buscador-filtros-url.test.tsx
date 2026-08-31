@@ -3,7 +3,7 @@ import { useState } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
-// Feature 335 / T3.1-T3.3, T5.2 — `BuscadorFiltros` leyendo su estado inicial de la URL.
+// Feature 339 / T3.1-T3.3, T5.2 — `BuscadorFiltros` leyendo su estado inicial de la URL.
 //
 // El mock de `next/navigation` copia el patron ya escrito del repo
 // (`tests/components/CierresAdminDeepLink.test.tsx:64-75`): un `let` reasignable con la

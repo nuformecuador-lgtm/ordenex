@@ -62,6 +62,8 @@ function buildWalletDeps() {
     listarSaldosTodasTiendas: vi.fn(),
     listarSaldosTiendasPaginado: vi.fn(),
     agregarDesglosePorTienda: vi.fn(),
+    // ficha 335: doble no-op; esta suite no abre el selector de cierres.
+    listarCierresDeTienda: vi.fn(async () => []),
   };
   const walletTiendaFeedService: IWalletTiendaFeedService = {
     construirMovimientosPorTienda: vi.fn().mockResolvedValue([]),

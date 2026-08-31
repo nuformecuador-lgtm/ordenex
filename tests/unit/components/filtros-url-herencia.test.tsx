@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
-// Feature 335 / T5.1 — PRUEBA DE HERENCIA: la capacidad va ligada al COMPONENTE, no a la
+// Feature 339 / T5.1 — PRUEBA DE HERENCIA: la capacidad va ligada al COMPONENTE, no a la
 // vista (restriccion dura 1 de requirements.md).
 //
 // POR QUE ESTE ARCHIVO MONTA EL HOOK REAL Y NO UNA MAQUETA

@@ -104,7 +104,7 @@ export interface BuscadorFiltrosProps {
   /**
    * Lee el estado inicial de la URL al entrar —término libre y qué filtros montar— y
    * limpia SUS params al «Limpiar todo». `false` deja la barra exactamente como estaba
-   * antes de la ficha 335: ni lee la query ni la toca (R23). Default `true`.
+   * antes de la ficha 339: ni lee la query ni la toca (R23). Default `true`.
    */
   leerDeUrl?: boolean;
   /**

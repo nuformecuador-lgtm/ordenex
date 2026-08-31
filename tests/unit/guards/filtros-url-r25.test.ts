@@ -3,7 +3,7 @@ import path from "path";
 import { ESLint } from "eslint";
 import type { Linter } from "eslint";
 
-// Feature 335 / R25 — GUARDIA DE PROPIEDAD: la lectura inicial de la URL no escribe
+// Feature 339 / R25 — GUARDIA DE PROPIEDAD: la lectura inicial de la URL no escribe
 // estado desde un efecto. ESTA ES **LA MITAD DE LINTER**.
 //
 // R25 SE VIGILA CON DOS ARCHIVOS, Y ESTAN SEPARADOS A PROPOSITO
@@ -67,7 +67,7 @@ import type { Linter } from "eslint";
 const RAIZ = path.join(__dirname, "..", "..", "..");
 
 /**
- * Los archivos que la ficha 335 toca. La lectura inicial vive repartida entre el hook
+ * Los archivos que la ficha 339 toca. La lectura inicial vive repartida entre el hook
  * (`useFiltrosUrl`) y los dos componentes canonicos que lo consumen, asi que la propiedad
  * hay que exigirla sobre los tres: cumplirla en el hook y romperla en la barra dejaria el
  * requisito igual de incumplido.
@@ -96,7 +96,7 @@ function describir(resultado: ESLint.LintResult, mensaje: Linter.LintMessage): s
   return `${relativo}:${mensaje.line}:${mensaje.column}  ${mensaje.ruleId ?? "(fatal)"}  ${mensaje.message}`;
 }
 
-describe("Feature 335 / R25 — la lectura inicial de la URL no escribe estado desde un efecto", () => {
+describe("Feature 339 / R25 — la lectura inicial de la URL no escribe estado desde un efecto", () => {
   let eslint: ESLint;
   let resultados: ESLint.LintResult[];
   let configs: Linter.Config[];
@@ -176,7 +176,7 @@ describe("Feature 335 / R25 — la lectura inicial de la URL no escribe estado d
     );
     expect(
       familiaHooks,
-      `Reglas de hooks de React incumplidas en los archivos de la ficha 335:\n${familiaHooks.join("\n")}`,
+      `Reglas de hooks de React incumplidas en los archivos de la ficha 339:\n${familiaHooks.join("\n")}`,
     ).toEqual([]);
   });
 });

@@ -76,10 +76,10 @@ export const TIPO_TIENDA_LABEL: Record<WalletTiendaMovimientoTipo, string> = {
 export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, string> = {
   cod_recaudado: "COD recaudado",
   flete: "Flete",
-  flete_devolucion: "Flete de devolución",
+  flete_devolucion: "Flete por rechazo",
   comision_cod: "Comisión COD",
   iva_flete: "IVA del flete",
-  iva_flete_devolucion: "IVA del flete de devolución",
+  iva_flete_devolucion: "IVA del flete por rechazo",
   iva_comision_cod: "IVA de la comisión",
   pago_tienda: "Pago a la tienda",
   ajuste_credito: "Ajuste (crédito)",

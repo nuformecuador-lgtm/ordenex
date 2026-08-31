@@ -1,4 +1,4 @@
-# 335 — Diseño
+# 339 — Diseño
 
 ## 0. Resumen de la decisión
 
@@ -242,20 +242,20 @@ no es ni una cosa ni la otra.
 
 La 326 migra consumidores ad-hoc **hacia** estos mismos canónicos. Solape y mitigación:
 
-| Archivo | 335 | 326 | Riesgo |
+| Archivo | 339 | 326 | Riesgo |
 | --- | --- | --- | --- |
-| `components/shared/BuscadorFiltros.tsx` | añade 2 props + rama en `limpiarTodo` | probable: no lo toca, lo consume | **bajo**, si la 335 solo AÑADE props opcionales |
+| `components/shared/BuscadorFiltros.tsx` | añade 2 props + rama en `limpiarTodo` | probable: no lo toca, lo consume | **bajo**, si la 339 solo AÑADE props opcionales |
 | `components/shared/FilterComponent.tsx` | añade 1 prop + siembra en el estado inicial | probable: no lo toca, lo consume | **bajo**, misma razón |
 | Consumidores (`app/(app)/**`) | **ninguno** | todos | **nulo** por construcción |
 | `lib/utils/filtros-url.ts`, `hooks/useFiltrosUrl.ts` | archivos nuevos | — | nulo |
 
-Mitigación, en una frase: **la 335 no toca ni un archivo bajo `app/`.** Todo su diff vive
+Mitigación, en una frase: **la 339 no toca ni un archivo bajo `app/`.** Todo su diff vive
 en dos archivos compartidos —y solo por adición de props opcionales con default— más dos
-archivos nuevos y sus tests. Si la 326 aterriza primero, la 335 rebasa sin conflicto
-semántico; si aterriza la 335 primero, los consumidores que la 326 migre heredan la
+archivos nuevos y sus tests. Si la 326 aterriza primero, la 339 rebasa sin conflicto
+semántico; si aterriza la 339 primero, los consumidores que la 326 migre heredan la
 capacidad gratis. La ficha **328** (huecos del canónico) es vecina pero no bloqueante: su
 hueco 1 pide un vaciado *controlado* desde fuera y su nota dice literalmente que hoy
-«bloquea cualquier pantalla que quiera sembrar el término desde la URL» — la 335 lo
+«bloquea cualquier pantalla que quiera sembrar el término desde la URL» — la 339 lo
 resuelve por la vía del valor **inicial**, que no requiere control y no invade su diseño.
 
 ## 7. Contratos de I/O (resumen)

@@ -9,7 +9,7 @@ import {
   type FilterSelection,
 } from "@/components/shared/FilterComponent";
 
-// Feature 335 / R25 — GUARDIA DE PROPIEDAD. ESTA ES **LA MITAD DE COMPORTAMIENTO**.
+// Feature 339 / R25 — GUARDIA DE PROPIEDAD. ESTA ES **LA MITAD DE COMPORTAMIENTO**.
 //
 // R25 SE VIGILA CON DOS ARCHIVOS, Y ESTAN SEPARADOS A PROPOSITO
 // -------------------------------------------------------------
@@ -59,7 +59,7 @@ afterEach(() => {
   cleanup();
 });
 
-describe("Feature 335 / R25 — la lectura de la URL ocurre UNA vez, al entrar (propiedad, no forma)", () => {
+describe("Feature 339 / R25 — la lectura de la URL ocurre UNA vez, al entrar (propiedad, no forma)", () => {
   it("R25 — mutar los query params tras el montaje no entra por la siembra: gana la foto de entrada", async () => {
     // Se entra con `?color=rojo` y el filtro declarado SIN catalogo: su valor se descarta
     // por R14 y la clave queda pendiente de sembrar. Mientras tanto la URL cambia a `azul`

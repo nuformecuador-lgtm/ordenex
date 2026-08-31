@@ -1,7 +1,7 @@
-# Review 335 — La barra de filtros compartida lee su estado inicial desde la URL
+# Review 339 — La barra de filtros compartida lee su estado inicial desde la URL
 
 Revisor: reviewer (agente). Fecha: 2026-08-31.
-Worktree: `C:/w335`, rama `feature/335-filtros-desde-url`, HEAD `68a2647b` (merge de `origin/dev` ya aplicado).
+Worktree: `C:/w335`, rama `feature/339-filtros-desde-url`, HEAD `68a2647b` (merge de `origin/dev` ya aplicado).
 Diff revisado: merge-base..HEAD — 17 archivos, +3236/-108, **0 bajo `app/`** (confirmado).
 
 > Nota de herramientas: el MCP `codebase-memory` no estaba disponible en este entorno de
@@ -19,14 +19,14 @@ Dos hallazgos bloqueantes, ambos reproducidos con un test ejecutable escrito por
 ## Checklist
 
 ### Especificacion
-- [x] `specs/335-filtros-desde-url/requirements.md` — 25 requisitos EARS numerados R1..R25.
-- [x] `specs/335-filtros-desde-url/design.md` — con alternativas descartadas y su porque (A1-A5).
-- [ ] `specs/335-filtros-desde-url/tasks.md` con **todas** las tasks marcadas: **NO**. T6.2 y
+- [x] `specs/339-filtros-desde-url/requirements.md` — 25 requisitos EARS numerados R1..R25.
+- [x] `specs/339-filtros-desde-url/design.md` — con alternativas descartadas y su porque (A1-A5).
+- [ ] `specs/339-filtros-desde-url/tasks.md` con **todas** las tasks marcadas: **NO**. T6.2 y
       T6.3 siguen sin marcar, aunque su trabajo esta hecho y documentado en la bitacora.
 
 ### Trazabilidad
 - [x] Los 25 requisitos tienen un test nombrado; ninguno dice "cubierto indirectamente".
-- [x] `progress/impl_335.md` contiene el mapa R -> test completo.
+- [x] `progress/impl_339.md` contiene el mapa R -> test completo.
 - [ ] Los tests verifican DE VERDAD lo que el requisito promete: **NO para R3, R5 y R7**
       (hallazgos B1 y B2). 22 de 25 se sostienen; 3 tienen contraejemplo.
 
@@ -80,7 +80,7 @@ merge, asi que no hubo nada que aislar como flake.
 
 ### B1 — BLOQUEANTE. `/novedades` SI esta en el caso del catalogo asincrono: el enlace compartido no acota
 
-La bitacora (`progress/impl_335.md`, decision 3) afirma: "se revisaron los 8 consumidores y
+La bitacora (`progress/impl_339.md`, decision 3) afirma: "se revisaron los 8 consumidores y
 **ninguno esta hoy en ese caso**". **Es falso para `/novedades`.**
 
 `app/(app)/novedades/_components/novedades-filtros.ts:304-310` construye los FilterDef con
@@ -177,7 +177,7 @@ envenenamiento cruzado de la memoria de borrados entre las dos barras.
 ### M4 — menor. Dos tasks sin marcar
 
 T6.2 (mapa de trazabilidad) y T6.3 (gate) no estan marcadas en `tasks.md`, aunque su resultado
-esta escrito en `progress/impl_335.md`. Incumple el checkpoint "todas las tasks estan marcadas".
+esta escrito en `progress/impl_339.md`. Incumple el checkpoint "todas las tasks estan marcadas".
 
 ---
 
@@ -200,7 +200,7 @@ esta escrito en `progress/impl_335.md`. Incumple el checkpoint "todas las tasks 
 
 # SEGUNDA PASADA — re-revision del arreglo (2026-08-31)
 
-Revisor: reviewer (agente). Worktree `C:/w335`, rama `feature/335-filtros-desde-url`,
+Revisor: reviewer (agente). Worktree `C:/w335`, rama `feature/339-filtros-desde-url`,
 HEAD **`813029d8`** (merge de `origin/dev` posterior al arreglo, ya con la ficha 337 dentro).
 Commits del arreglo revisados: `41c774c9` (docs M1/M3/M4), `f898b551` (el codigo),
 `e3c5831a` (bitacora).
@@ -357,7 +357,7 @@ camino de B2. Ese caso **se midio en rojo** contra el fuente pre-arreglo.
 
 ### M4 — CERRADO
 
-`specs/335-filtros-desde-url/tasks.md`: **ninguna task sin marcar** (18 marcadas, 0 pendientes).
+`specs/339-filtros-desde-url/tasks.md`: **ninguna task sin marcar** (18 marcadas, 0 pendientes).
 
 ---
 
@@ -412,8 +412,8 @@ hoy un arbol sano de uno roto por esa via.
 
 ### M1 — menor, RESIDUAL. La correccion se escribio en la bitacora, no en el codigo
 
-M1 se dio por cerrado en `41c774c9`, pero ese commit toca **solo** `progress/impl_335.md`,
-`progress/review_335.md` y `tasks.md`: **`hooks/useFiltrosUrl.ts` no se toco**. Su comentario de
+M1 se dio por cerrado en `41c774c9`, pero ese commit toca **solo** `progress/impl_339.md`,
+`progress/review_339.md` y `tasks.md`: **`hooks/useFiltrosUrl.ts` no se toco**. Su comentario de
 «LIMITE CONOCIDO» (l. 53-57) sigue diciendo la version estrecha —«volver ATRAS con el boton del
 navegador a esa MISMA query exacta»— cuando el limite real, ya escrito correctamente en la
 bitacora, es que `paresBorrados` **no se vacia en toda la sesion SPA** y suprime cualquier
@@ -424,7 +424,7 @@ un limite— sigue leyendo la version subestimada.
 
 `/novedades` monta dos barras y un `?q=` dispara dos `listarCompleto()`. **No se cuenta como
 hallazgo** (decision del coordinador). Verificado que **queda anotado como limite conocido** en
-`progress/impl_335.md`, con su porque y sin corregir. Correcto.
+`progress/impl_339.md`, con su porque y sin corregir. Correcto.
 
 ---
 
@@ -437,7 +437,7 @@ hallazgo** (decision del coordinador). Verificado que **queda anotado como limit
 
 ### Trazabilidad
 - [x] Los 25 requisitos tienen un test nombrado.
-- [x] `progress/impl_335.md` contiene el mapa R -> test, ahora con columna «rojo demostrado».
+- [x] `progress/impl_339.md` contiene el mapa R -> test, ahora con columna «rojo demostrado».
 - [x] R2, R3, R5, R7 y la mitad de comportamiento de R25 **verificados en rojo por el revisor**.
 - [ ] R25 **completo**: su mitad de linter se salta cuando el guardia expira (B3).
 

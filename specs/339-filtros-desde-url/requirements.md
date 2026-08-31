@@ -1,4 +1,4 @@
-# 335 — La barra de filtros compartida lee su estado inicial desde la URL
+# 339 — La barra de filtros compartida lee su estado inicial desde la URL
 
 > Zona: `frontend` · SDD: sí · Complejidad: media
 > Canónicos afectados: `components/shared/BuscadorFiltros.tsx`, `components/shared/FilterComponent.tsx`

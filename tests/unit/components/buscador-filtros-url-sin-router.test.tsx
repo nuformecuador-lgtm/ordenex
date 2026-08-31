@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-// Feature 335 / T3.1 (R24) — la barra bajo un mock PARCIAL de `next/navigation`.
+// Feature 339 / T3.1 (R24) — la barra bajo un mock PARCIAL de `next/navigation`.
 //
 // Vive en un archivo aparte porque `vi.mock` es por archivo y este caso necesita
 // justamente lo contrario que el otro: un modulo simulado que NO exporte
