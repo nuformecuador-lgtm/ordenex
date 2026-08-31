@@ -427,8 +427,13 @@ describe("CotizacionOrdenService — cobertura por fila (T6)", () => {
     if (resultadoCarga.status !== "ok") throw new Error("la carga no devolvio ok");
 
     const mensajes = (errores: Record<string, string[]> | undefined) => errores?.distrito;
+    // ⏳ El lado de la CARGA se leia de `summary.filas`, y ahi ya no hay nada que leer: el PR 636
+    // saco las filas con error de `filas` y las mando a su propia lista `errores`, donde cada
+    // entrada conserva su `fila` 1-based y su mapa `errores` por campo. Se cambia la FUENTE, no lo
+    // que el caso afirma: los tres mensajes de geografia siguen teniendo que salir identicos
+    // caracter a caracter por los dos bordes, porque `resolveGeo` es uno solo (design.md §5.1).
     expect(resumen.filas.map((f) => mensajes(f.errores))).toEqual(
-      resultadoCarga.summary.filas.map((f) => mensajes(f.errores)),
+      resultadoCarga.summary.errores.map((f) => mensajes(f.errores)),
     );
     // Y son exactamente los tres del contrato, en el mismo orden.
     expect(resumen.filas.map((f) => mensajes(f.errores))).toEqual([
