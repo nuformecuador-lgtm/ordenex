@@ -104,3 +104,99 @@ tests adicionales que también lo cubren.
 | R23 | `tests/unit/hooks/filtros-url-hook.test.tsx`::«R23 — con activo=false los params se ven vacios y la URL no se toca» | 2 |
 | R24 | `tests/unit/hooks/filtros-url-hook.test.tsx`::«R24 — mock PARCIAL sin useSearchParams ni usePathname: no lanza y la URL se ve vacia» | 4 |
 | R25 | `tests/unit/guards/filtros-url-r25.test.ts`::«R25 — la regla que codifica el requisito existe y esta ACTIVA en la config del repo» | 2 |
+---
+
+## T6.3 — Gate: `./init.sh --rapido` desde `C:/w335`
+
+**Veredicto: `== init OK ==`.**
+
+| Tramo | Resultado |
+| --- | --- |
+| Modo | `✓ el cambio no toca esquema, tipos compartidos, config ni dinero: el modo rapido basta` |
+| `pnpm run typecheck` | **`✓ typecheck paso`** — 0 errores |
+| `pnpm run lint` | **`✓ lint paso`** — `✖ 127 problems (0 errors, 127 warnings)`. **Los 127 avisos son preexistentes de `dev`** (imports sin usar en `app/`, `<img>` en `Sidebar`, un `exhaustive-deps` en `CobroVehiculoTarifas`). Medido aparte sobre los **12 archivos de la ficha**: `exit 0`, **sin una sola línea de salida → 0 errores y 0 avisos**. |
+| Tests relacionados (`--changed origin/dev`) | **82 archivos, 1118 passed + 17 skipped (1135)** — **0 rojos** |
+| Guardias | **166 archivos, 2517 passed, 1 failed (2518)** |
+| Comparación con el baseline | **`✓ tests: sin rojos nuevos (1 archivo rojo sobre 247 ejecutados, todos en el baseline conocido)`** |
+
+**El único rojo es ajeno y estaba ya declarado.** Es
+`tests/unit/guards/superficie-de-uso.guardia.test.ts`, que señala
+`lib/actions/tarifas.ts:67 obtenerTarifa` — deuda de la cascada de tarifas (ficha 274),
+inscrita en `tests/baseline-rojos.json` con motivo y fecha desde el 2026-08-28. **No tiene
+camino causal con este diff**: esta ficha no toca `lib/actions/`, ni Server Actions, ni
+`app/`. **Delta de rojos contra el baseline de T0.1: 0.**
+
+Ningún rojo intermitente apareció en las corridas (el gate se ejecutó tres veces y el
+conjunto de rojos fue idéntico), así que no hay nada que descartar como flake de saturación
+ni nada que proponer para el baseline.
+
+---
+
+## Decisiones que hubo que tomar y no estaban en el spec
+
+Cuatro. Las dos primeras son **bugs reales que el spec no preveía** y que se arreglaron; las
+otras dos son límites que se documentan en vez de taparse.
+
+### 1. «Limpiar todo» no navega si la URL no cambia
+El caso NORMAL de las 8 pantallas es entrar **sin params**. Tal cual estaba escrito el
+diseño, pulsar «Limpiar todo» habría disparado un `router.replace` **a la misma URL** en
+todas ellas, y en el App Router eso es una navegación real (refetch del payload RSC) donde
+antes no había ninguna. `borrarParams` compara ahora la query resultante con la actual y no
+llama a `replace` si son idénticas.
+
+### 2. La memoria de lo recién borrado (el bug del remonte)
+**Verificado en el código, no supuesto.** `NovedadesFiltrosBarra.tsx:74` le pasa
+`key={filtro.reset}` a `BuscadorFiltros`, y `useNovedadesFiltro.ts:229-235` incrementa ese
+`reset` dentro del `onLimpiarTodo`. Secuencia al pulsar «Limpiar todo» con `?q=guia&zona=A`:
+`borrarParams` llama a `replace`; en el mismo manejador el consumidor incrementa `reset` y
+React **remonta la barra en ese mismo commit**; el `replace` de Next viaja por una transición
+y **todavía no ha actualizado `useSearchParams`**; la barra recién montada lee los params
+viejos y **resucita el término y el filtro que el usuario acaba de borrar**.
+
+Se arregló **en el hook, no en `app/`** (la ficha no toca `app/`): una memoria a nivel de
+módulo —sobrevive al remonte, que es justo lo que un `useRef` no hace— de los pares
+`ruta + nombre + valor` recién retirados; el `params` que el hook expone los filtra.
+- Se compara por **nombre Y valor**: limpiar `?zona=A` y llegar después por un enlace nuevo
+  a `?zona=B` **sí se honra**. Solo se suprime exactamente lo que se acaba de tirar.
+- Va **scopeada por `pathname`**: limpiar `zona=A` en `/novedades` no ciega `zona=A` en
+  `/ordenes`.
+- **Límite conocido, documentado en el archivo:** la memoria solo se borra al recargar la
+  página entera, así que volver atrás con el botón del navegador a esa misma query exacta
+  quedaría suprimido. Es el precio de matar un bug visible; la alternativa —no recordar
+  nada— resucita filtros que el usuario acaba de borrar, que es peor.
+- **Cambió un assert preexistente**: `filtros-url-hook.test.tsx::"R24 — useSearchParams
+  devuelve null…"` exigía un `replace` con la URL vacía, que es exactamente la navegación
+  inútil que mata la guarda 1. Es el **único** test cuya expectativa cambia, y lleva el
+  porqué escrito al lado.
+
+### 3. Catálogo asíncrono: un límite que NO se tapó
+Si un consumidor construye las `options` de un filtro **después** del montaje (las pide al
+servidor), la validación de R14 corre contra un catálogo todavía vacío y el valor de la URL
+se descarta; como la clave ya cuenta como sembrada, no se reintenta cuando las opciones
+llegan. **Reintentarlo chocaría de frente con R7** («la lectura ocurre una sola vez, al
+entrar»), así que no se improvisó: se deja anotado. Se revisaron los 8 consumidores y
+**ninguno está hoy en ese caso** —`/novedades`, que es el que carga su conjunto por
+cliente, declara igualmente sus `FilterDef` desde el primer render
+(`novedades-filtros.ts:304-310` devuelve los defs con `options` vacías mientras carga), así
+que la ACTIVACIÓN de la clave (R2) funciona—. **Si alguna pantalla futura lo necesita, es
+una ficha aparte y una pregunta para el humano.**
+
+### 4. Un byte NUL crudo en el fuente
+`FilterComponent.tsx` traía desde `origin/dev` (commit `0cd040f7`, fichas 144/169) un
+`join("<NUL crudo>")`, y por eso **git clasificaba el archivo como binario y no mostraba sus
+diffs**. Al copiarse el patrón, `useFiltrosUrl.ts` heredó el problema. Se extrajo a una
+constante con el byte **escapado** (`"\u0000"`) en los dos archivos: mismo valor en
+ejecución, y los dos vuelven a ser texto UTF-8 revisable. Es la única línea de
+`FilterComponent.tsx` que se toca sin pedirlo la ficha.
+
+---
+
+## Lo que este implementer NO hizo
+
+- **No se tocó ni un archivo bajo `app/`.** Confirmado en el diff.
+- **No se hizo push ni PR** (es del leader).
+- **No se corrió `./init.sh` completo** — el rápido es el gate normal y también el de PR
+  (`docs/verification.md`); el completo es obligatorio antes de una release a `prod` y
+  después del merge a `dev`.
+- **No se tocó `tests/baseline-rojos.json`**: no había nada que añadir ni nada que podar
+  (el único rojo listado sigue rojo y sigue siendo ajeno).
