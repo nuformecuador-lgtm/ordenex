@@ -101,6 +101,22 @@ interface ObservadorRegistrado {
 
 const registrados: ObservadorRegistrado[] = [];
 
+/**
+ * Con esto puesto, el centinela se comporta como uno que NUNCA sale de vista: es el caso del
+ * panel que no llega a desbordar (páginas cortas, pantalla alta). Lo activa `mantenerCentinelaVisible`.
+ */
+let centinelaSiempreVisible = false;
+
+/**
+ * Declara que el centinela permanece a la vista. Sirve para probar la propiedad que el stub
+ * ingenuo NO puede ver: `observe()` sobre un elemento visible encola SIEMPRE un aviso con el
+ * estado actual, así que un componente que re-arma su observador sigue paginando solo, y uno
+ * que no lo re-arma se queda mudo para siempre.
+ */
+export function mantenerCentinelaVisible(): void {
+  centinelaSiempreVisible = true;
+}
+
 class IntersectionObserverDisparable implements IntersectionObserver {
   readonly root: Element | null = null;
   readonly rootMargin = "";
@@ -114,6 +130,17 @@ class IntersectionObserverDisparable implements IntersectionObserver {
 
   observe(elemento: Element): void {
     this.registro.observados.push(elemento);
+    if (!centinelaSiempreVisible) return;
+    // El observador REAL encola un aviso en cuanto empiezas a observar; no espera a que algo
+    // se mueva. Es justo lo que convierte el re-armado en un mecanismo y no en un gesto.
+    const registro = this.registro;
+    queueMicrotask(() => {
+      if (!registro.observados.includes(elemento)) return;
+      registro.callback(
+        [{ isIntersecting: true, target: elemento } as unknown as IntersectionObserverEntry],
+        this,
+      );
+    });
   }
 
   unobserve(elemento: Element): void {
@@ -132,6 +159,7 @@ class IntersectionObserverDisparable implements IntersectionObserver {
 /** Instala el observador disparable. Se llama en `beforeEach` de cada archivo. */
 export function instalarObservador(): void {
   registrados.length = 0;
+  centinelaSiempreVisible = false;
   (globalThis as unknown as { IntersectionObserver: unknown }).IntersectionObserver =
     IntersectionObserverDisparable;
 }
