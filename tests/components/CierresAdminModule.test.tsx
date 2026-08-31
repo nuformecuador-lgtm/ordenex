@@ -542,7 +542,14 @@ describe("CierresAdminModule", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
 
     // La tarifa congelada, incluida la variante NO aplicada (base 2000, se aplicó GAM 2500).
-    expect(within(region).getByText("tar_88")).toBeInTheDocument();
+    //
+    // ⏳ FICHA 337 (2026-08-31): aqui se afirmaba ademas `getByText("tar_88")` —el UUID crudo de
+    // la tarifa, que el panel imprimia junto a «Congelada al solicitar el cierre»—. La asercion se
+    // INVIERTE en vez de borrarse (convencion del repo, cf. `decision5-revertida`): a una persona
+    // que audita un cierre un identificador interno no le dice nada, y su sitio lo ocupaba a costa
+    // del dato que si importa. Sigue viajando en el DTO; lo que se retiro es su presencia en
+    // pantalla.
+    expect(within(region).queryByText("tar_88")).toBeNull();
     expect(within(region).getByText("₡2.000")).toBeInTheDocument();
     expect(within(region).getAllByText("13.00 %").length).toBeGreaterThan(0);
     expect(within(region).getByText("3.00 %")).toBeInTheDocument();

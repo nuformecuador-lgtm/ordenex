@@ -713,6 +713,15 @@ export class CierreDiaService implements ICierreDiaService {
     // escritorio (100, `reprogramacion_tienda`) tambien pasa las ocho guardias y HOY SE PUEDE
     // deshacer. Es dinero neutro (`reprogramada` no emite ningun concepto) y es alcance de otra
     // ficha; se nombra en la lista para que sea una ausencia decidida y no un olvido.
+    //
+    // ⏳ FICHA 337 (2026-08-31) — ESE HUECO SIGUE ABIERTO, pero se ESTRECHA y cambia de forma, y
+    // conviene decir como para que nadie lo de por cerrado ni por peor:
+    //   - SE ESTRECHA: esa gestion ya NO aparece en `findGestionesPendientes`, asi que la pantalla
+    //     del mensajero no le ofrece el boton. Queda alcanzable solo por su id.
+    //   - CAMBIA DE FORMA: la guarda 4 de aqui abajo (`cierre_id IS NULL`) cerraba la ventana en
+    //     cuanto el siguiente cierre recogia la gestion. Al no recogerla ya ningun cierre, esa
+    //     ventana **no se cierra sola nunca**. Sigue siendo dinero neutro y sigue siendo alcance
+    //     ajeno; lo que ya no se puede decir es «se cierra al dia siguiente».
     if (gestion.desdeAyudaTienda) {
       return { status: "conflict", motivo: MSG_GESTION_DE_LA_TIENDA };
     }
