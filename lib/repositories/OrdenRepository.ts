@@ -183,9 +183,11 @@ const API_ORDEN_SELECT = {
 } as const;
 
 // Feature 106 + 177 — `select` del DETALLE (campos publicos + evidencias de entrega/rechazo con
-// `evidencia_storage_path` no nulo). Se extrae a una constante para que la variante por
-// `num_guia` (106) y la variante por `id` (177) NO puedan divergir en su proyeccion (R16/R17):
-// `findDetalleByNumGuiaForOwner` sigue devolviendo exactamente lo mismo que antes.
+// `evidencia_storage_path` no nulo). Nacio como constante para que la variante por `num_guia`
+// (106) y la variante por `id` (177) NO pudieran divergir en su proyeccion (R16/R17). Desde la
+// baja del detalle por guia (2026-08-31) queda UNA sola consumidora,
+// `findDetalleByOrdenIdForOwner`, y la constante se conserva porque es el contrato congelado que
+// vigila `tests/unit/repositories/orden-repository.no-regresion-106.test.ts`.
 //
 // FEATURE 268 (T6c, 2026-08-22) — LAS EVIDENCIAS DEL `incidente`, POR SUS **DOS** PROCEDENCIAS.
 // Hasta aqui un incidente no aparecia por NINGUN endpoint del canal, y son 6 las aristas de
@@ -2380,25 +2382,6 @@ export class OrdenRepository implements IOrdenRepository {
     return { items: rows.map(toApiOrdenRow), total };
   }
 
-  /**
-   * Feature 106/R12/R13/R14/R15/R18: detalle de una orden del owner por `num_guia`. El scope
-   * va en el WHERE (`tienda_id = ownerId` + `deleted_at IS NULL`): una orden inexistente,
-   * borrada o de OTRO owner devuelve `null` (el service -> 404 uniforme, no filtra existencia).
-   * Incluye (join, sin N+1) las gestiones con evidencia de entrega/rechazo; `[]` si no hay. LEE
-   * `gestion_orden`, nunca escribe.
-   */
-  async findDetalleByNumGuiaForOwner(
-    numGuia: number,
-    ownerId: string,
-  ): Promise<ApiOrdenDetalleRow | null> {
-    const row = await this.prisma.orden.findFirst({
-      where: { numGuia, tiendaId: ownerId, deletedAt: null }, // R12/R14/R24: scope forzado
-      select: API_ORDEN_DETALLE_SELECT,
-    });
-    if (!row) return null;
-    return toApiOrdenDetalleRow(row);
-  }
-
   // --- Feature 177: consulta por identificador libre + PDF de etiquetas por API key ---
 
   /**
@@ -2429,9 +2412,11 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * Feature 177/R16/R17: mismo detalle que la 106 pero por `orden.id` (la resolucion de la 177
-   * devuelve el id porque `num_guia` puede ser NULL). Comparte `API_ORDEN_DETALLE_SELECT` con
-   * `findDetalleByNumGuiaForOwner`, que NO cambia. Scope forzado -> `null` para ajena/borrada.
+   * Feature 177/R16/R17: detalle publico de una orden del owner por `orden.id` (la resolucion de
+   * la 177 devuelve el id porque `num_guia` puede ser NULL). El scope va en el WHERE
+   * (`tienda_id = ownerId` + `deleted_at IS NULL`): ajena, borrada o inexistente -> `null` (el
+   * service -> 404 uniforme, no filtra existencia). Incluye (join, sin N+1) las evidencias de
+   * entrega/rechazo/incidente por sus dos procedencias; `[]` si no hay. Solo LEE.
    */
   async findDetalleByOrdenIdForOwner(
     ordenId: string,

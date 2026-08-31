@@ -102,7 +102,7 @@ const PATH_HABILITAR = "/api/ordenes/api-key/habilitar";
 // ⚠️ FICHA 322 (2026-08-28) — LO QUE ESTA LISTA NO PUEDE VER, Y QUIÉN LO VE AHORA.
 //
 // Esta lista es el contrato PUBLICADO, escrito y firmado a mano, y ése es justo su valor: subir de
-// diez a once obliga a un humano a escribir el alta y su porqué en el mismo commit (la 255, la 267
+// nueve a diez obliga a un humano a escribir el alta y su porqué en el mismo commit (la 255, la 267
 // y la 266 lo hicieron aquí arriba). Lo que NO puede hacer —porque compara el objeto TS contra sí
 // mismo y contra su copia en `.yaml`, nunca contra el filesystem— es enterarse de que existe un
 // `app/api/ordenes/api-key/**/route.ts` que nadie documentó: eso deja el gate ENTERO en verde. Se
@@ -113,11 +113,18 @@ const PATH_HABILITAR = "/api/ordenes/api-key/habilitar";
 // las rutas REALES del filesystem y compara OPERACIONES (verbo + path) en las dos direcciones. Las
 // dos se necesitan y NINGUNA sustituye a la otra: sin esta lista se pierde la firma humana del
 // contrato; sin la guardia vuelve el agujero de la 322. No borres una alegando la otra.
-/** Los 10 endpoints que el canal por API key publica tras la 177, la 255, la 267 y la 266. */
+/**
+ * Los 9 endpoints que el canal por API key publica tras la 177, la 255, la 267 y la 266.
+ *
+ * ⚠️ BAJA (2026-08-31) — AQUÍ ESTABA `"/api/ordenes/api-key/{numGuia}"` (el `GET` de detalle por
+ * guía de la 106) y se RETIRA: `GET /api/ordenes/api-key/orden/{id}` devuelve el MISMO
+ * `OrdenDetalle` y además acepta `num_remision`, así que el detalle por guía era un segundo
+ * camino estrictamente más pobre al mismo recurso. El censo baja de diez a nueve a propósito y
+ * en el mismo commit que retira la ruta.
+ */
 const PATHS_ESPERADOS = [
   "/api/ordenes/api-key/carga",
   "/api/ordenes/api-key",
-  "/api/ordenes/api-key/{numGuia}",
   "/api/ordenes/api-key/{numGuia}/cancelar",
   PATH_DETALLE_POR_ID,
   PATH_PDF_ORDEN,
@@ -127,11 +134,11 @@ const PATHS_ESPERADOS = [
   PATH_HABILITAR,
 ];
 
-describe("177/R41 + 255/R47 + 267/R39 + 266/R28 — el OpenAPI publica los diez endpoints del canal", () => {
+describe("177/R41 + 255/R47 + 267/R39 + 266/R28 — el OpenAPI publica los nueve endpoints del canal", () => {
   const clavesTs = Object.keys(openApiSpec.paths);
 
-  it("el objeto TS declara exactamente diez paths, uno por endpoint, y ninguno más", () => {
-    expect(clavesTs).toHaveLength(10);
+  it("el objeto TS declara exactamente nueve paths, uno por endpoint, y ninguno más", () => {
+    expect(clavesTs).toHaveLength(9);
     expect(clavesTs).toEqual(PATHS_ESPERADOS);
   });
 
@@ -141,12 +148,12 @@ describe("177/R41 + 255/R47 + 267/R39 + 266/R28 — el OpenAPI publica los diez 
     expect(clavesTs).toContain(PATH_PDF_CARGA);
   });
 
-  it("el .yaml publicado declara los mismos diez paths, en el mismo orden", () => {
+  it("el .yaml publicado declara los mismos nueve paths, en el mismo orden", () => {
     expect(pathsDelYaml()).toEqual(PATHS_ESPERADOS);
   });
 
   // ALTA de la FICHA 320 (2026-08-28) — el path de la orden por identificador gana un SEGUNDO
-  // verbo. El censo de PATHS no sube (sigue en diez): el borrado NO estrena ruta, estrena
+  // verbo. El censo de PATHS no sube: el borrado NO estrena ruta, estrena
   // `DELETE` sobre la que ya existe, porque retira EXACTAMENTE el recurso que esa ruta
   // identifica. Esta lista estaba firmada en `["parameters", "get"]` y publicar el borrado la
   // puso ROJA: ESE es su trabajo, y sube a tres A PROPOSITO, en el mismo commit que publica el
@@ -272,12 +279,12 @@ describe("177/R45 — CargaResponse publica el cargaId que exige el endpoint de 
 // del octavo declara el supuesto de comisión (R29). El resto del contrato de la cotización lo
 // cubren sus propias suites; aquí vive lo que esta guardia ya congelaba: la lista de paths.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-describe("255/R47 — el octavo endpoint del canal sigue en su sitio, en el objeto TS y en el .yaml", () => {
-  it("los dos artefactos declaran el mismo octavo path, en la misma posición", () => {
+describe("255/R47 — la cotización sigue en su sitio, en el objeto TS y en el .yaml", () => {
+  it("los dos artefactos declaran la cotización en la misma posición (séptima tras la baja del detalle por guía)", () => {
     const clavesTs = Object.keys(openApiSpec.paths);
     const clavesYaml = pathsDelYaml();
-    expect(clavesTs[7]).toBe(PATH_COTIZACION);
-    expect(clavesYaml[7]).toBe(PATH_COTIZACION);
+    expect(clavesTs[6]).toBe(PATH_COTIZACION);
+    expect(clavesYaml[6]).toBe(PATH_COTIZACION);
     // Espejo exacto: el .yaml es un archivo de texto y nada más lo mantiene sincronizado.
     expect(clavesYaml).toEqual(clavesTs);
   });
@@ -432,12 +439,12 @@ function parametroDeAnalitica(nombre: string): ParametroOpenApi {
   return p;
 }
 
-describe("267/R39 — la analítica es el NOVENO endpoint del canal, en el objeto TS y en el .yaml", () => {
-  it("los dos artefactos declaran el mismo noveno path, en la misma posición", () => {
+describe("267/R39 — la analítica sigue publicada, en el objeto TS y en el .yaml", () => {
+  it("los dos artefactos declaran la analítica en la misma posición (octava tras la baja del detalle por guía)", () => {
     const clavesTs = Object.keys(openApiSpec.paths);
     const clavesYaml = pathsDelYaml();
-    expect(clavesTs[8]).toBe(PATH_ANALITICA);
-    expect(clavesYaml[8]).toBe(PATH_ANALITICA);
+    expect(clavesTs[7]).toBe(PATH_ANALITICA);
+    expect(clavesYaml[7]).toBe(PATH_ANALITICA);
     expect(clavesYaml).toEqual(clavesTs);
   });
 
@@ -598,24 +605,25 @@ describe("267/R39 — la analítica es el NOVENO endpoint del canal, en el objet
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-// Feature 266 (R28) — la habilitación por lote, publicada. El canal pasa de NUEVE a DIEZ
-// endpoints, y la afirmación se hace sobre los DOS artefactos: el objeto TS y el `.yaml`, en el
-// mismo orden y en la misma posición. Mismo criterio que la 255 y la 267: un endpoint de
-// ESCRITURA que existe y no está publicado es un contrato que solo conoce quien leyó el código.
+// Feature 266 (R28) — la habilitación por lote, publicada. La afirmación se hace sobre los DOS
+// artefactos: el objeto TS y el `.yaml`, en el mismo orden y en la misma posición. Mismo criterio
+// que la 255 y la 267: un endpoint de ESCRITURA que existe y no está publicado es un contrato que
+// solo conoce quien leyó el código. La habilitación era el DÉCIMO endpoint cuando se publicó; con
+// la baja del `GET /{numGuia}` (2026-08-31) es el NOVENO y sigue siendo el ÚLTIMO de la lista.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-describe("266/R28 — el canal por API key publica DIEZ endpoints, en el objeto TS y en el .yaml", () => {
-  it("los dos artefactos declaran diez paths, el mismo décimo y en la misma posición", () => {
+describe("266/R28 — el canal por API key publica NUEVE endpoints, en el objeto TS y en el .yaml", () => {
+  it("los dos artefactos declaran nueve paths, el mismo noveno y en la misma posición", () => {
     const clavesTs = Object.keys(openApiSpec.paths);
     const clavesYaml = pathsDelYaml();
-    expect(clavesTs).toHaveLength(10);
-    expect(clavesYaml).toHaveLength(10);
-    expect(clavesTs[9]).toBe(PATH_HABILITAR);
-    expect(clavesYaml[9]).toBe(PATH_HABILITAR);
+    expect(clavesTs).toHaveLength(9);
+    expect(clavesYaml).toHaveLength(9);
+    expect(clavesTs[8]).toBe(PATH_HABILITAR);
+    expect(clavesYaml[8]).toBe(PATH_HABILITAR);
     // Espejo exacto: el .yaml es un archivo de texto y nada más lo mantiene sincronizado.
     expect(clavesYaml).toEqual(clavesTs);
   });
 
-  it("el décimo endpoint es POST y devuelve HabilitacionResponse", () => {
+  it("el último endpoint (habilitar) es POST y devuelve HabilitacionResponse", () => {
     const operacion = openApiSpec.paths[PATH_HABILITAR];
     expect(Object.keys(operacion)).toEqual(["post"]);
     expect(operacion.post.responses["200"].content["application/json"].schema).toEqual({

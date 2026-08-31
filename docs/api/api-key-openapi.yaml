@@ -323,57 +323,6 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/ValidationError"
-  "/api/ordenes/api-key/{numGuia}":
-    parameters:
-      - name: numGuia
-        in: path
-        required: true
-        description: Número de guía de la orden (entero positivo).
-        schema:
-          type: integer
-          minimum: 1
-    get:
-      tags:
-        - Órdenes
-      summary: Detalle de una orden propia
-      operationId: detalleOrden
-      description: |-
-        Detalle de UNA orden propia por `num_guia`, con sus evidencias de entrega/rechazo
-        resueltas como URLs firmadas de corta duración (5 min). Array `evidencias` vacío si no
-        hay. Una orden inexistente o de otro dueño devuelve el mismo 404.
-      responses:
-        "200":
-          description: Detalle de la orden.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrdenDetalle"
-              examples:
-                detalle:
-                  summary: Orden entregada con una evidencia
-                  value:
-                    numGuia: 100234
-                    numRemision: "REM-0001"
-                    estado: entregada
-                    destinatario: Juan Pérez
-                    telefonoDest: "88887777"
-                    producto: Camiseta talla M
-                    direccion: "Av. Central, 200m norte del parque"
-                    montoCobrar: 25.9
-                    createdAt: "2026-07-22T14:03:11.000Z"
-                    evidencias:
-                      - resultado: entregada
-                        contentType: image/jpeg
-                        url: "https://<proyecto>.supabase.co/storage/v1/object/sign/gestion-evidencias/..."
-                        expiraEnSegundos: 300
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "422":
-          $ref: "#/components/responses/ValidationError"
   "/api/ordenes/api-key/{numGuia}/cancelar":
     parameters:
       - name: numGuia
@@ -432,8 +381,10 @@ paths:
       summary: Detalle de una orden propia por guía o remisión
       operationId: detalleOrdenPorIdentificador
       description: |-
-        Mismo detalle que `GET /api/ordenes/api-key/{numGuia}` (idéntico schema `OrdenDetalle`),
-        pero aceptando como identificador el `num_guia` **o** el `num_remision` de la orden.
+        Detalle de UNA orden propia (schema `OrdenDetalle`), con sus evidencias de entrega,
+        rechazo o incidente resueltas como URLs firmadas de corta duración (5 min); array
+        `evidencias` vacío si no hay. Acepta como identificador el `num_guia` **o** el
+        `num_remision` de la orden: es el ÚNICO endpoint de detalle del canal.
         Resolución: si el identificador es un entero positivo se busca primero por `num_guia`;
         si no hay coincidencia, se busca por `num_remision`. Nunca responde 409 por ambigüedad.
 

@@ -157,7 +157,6 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findCausasDevueltaVigentes: vi.fn().mockResolvedValue(new Map()),
     // Feature 106: canal integrador (API por key), no ejercitado por el CRUD.
     listByOwner: vi.fn().mockResolvedValue({ items: [], total: 0 }),
-    findDetalleByNumGuiaForOwner: vi.fn().mockResolvedValue(null),
     cancelarViaApi: vi.fn().mockResolvedValue({ status: "not_found" }),
     // Feature 177: consulta por identificador libre + PDF de etiquetas, no ejercitada aqui.
     findByGuiaORemisionForOwner: vi.fn().mockResolvedValue([]),
