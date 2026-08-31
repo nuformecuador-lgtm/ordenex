@@ -174,8 +174,15 @@ describe("153/R13 — eventos publicos de webhook", () => {
   //
   // El conteo va ACOMPAÑADO, nunca solo: el `it` de abajo afirma value a value que los DOCE estan,
   // asi que un intercambio (uno entra, otro sale) no puede colarse con el tamaño intacto.
-  it("EVENTOS_PUBLICOS tiene 12 elementos (10 previos + los dos que revierten 235/P4)", () => {
-    expect(EVENTOS_PUBLICOS.size).toBe(12);
+  //
+  // ⏳ 2026-08-31 — pasa de 12 a 13: entra `en_preparacion`, el evento de NACIMIENTO de las ordenes
+  // de fulfillment, que hasta hoy no producian NINGUN evento hasta llegar a `en_bodega_central` al
+  // emitirse la guia. Misma razon que la 155/R43 para `por_recolectar_en_tienda`. La igualdad value
+  // a value que ACOMPAÑA a este conteo vive en `tests/unit/types/webhook-eventos.test.ts`.
+  it("EVENTOS_PUBLICOS tiene 13 elementos (los 12 de la 268 + `en_preparacion`)", () => {
+    expect(EVENTOS_PUBLICOS.size).toBe(13);
+    // El value nuevo, afirmado aqui tambien: el conteo solo no distingue un alta de un intercambio.
+    expect(EVENTOS_PUBLICOS.has("en_preparacion")).toBe(true);
   });
 
   it("155/R43 + 268/R3: los 10 eventos previos siguen TODOS en la politica, y los 2 nuevos entran", () => {

@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
-// Feature 293 (T5.4, R34) — **«Premio del ranking» se lee así en las CUATRO superficies**: el
-// desglose del maestro, el desglose del propio mensajero (`/mis-pagos`) y los dos archivos que
-// salen de ellos.
+// Feature 293 (T5.4, R34) — **«Premio del ranking» se lee así en las DOS superficies que
+// quedan**: el desglose del maestro (`/wallet/mensajeros`) y el archivo que sale de él.
+//
+// Eran CUATRO. La ficha 336 (2026-08-30) borró `/mis-pagos`, y con ella se fueron las otras dos
+// —el desglose del propio mensajero y su descarga— junto al mapa de rótulos `mis-pagos-labels`.
+// El número está escrito aquí a propósito: si mañana vuelve a bajar sin que nadie nombre la
+// pantalla que desapareció, es que el archivo dejó de cubrir lo que dice cubrir.
 //
 // Es literalmente lo que el humano pidió ver: «que en el detalle se vea QUÉ PARTE de la cuenta
 // es premio» (decisión (d) de la ficha). Por eso la categoría es propia y no se reusó
@@ -54,11 +58,8 @@ vi.mock("@/hooks/useToast", () => ({
 }));
 
 import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
-import { DesglosePagos } from "@/app/(app)/mis-pagos/_components/DesglosePagos";
 import { filaDescargaDesgloseMensajero } from "@/app/(app)/wallet/mensajeros/_components/desglose-mensajero-descarga-columnas";
-import { filaDescargaMiPago } from "@/app/(app)/mis-pagos/_components/mis-pagos-descarga-columnas";
 import { CATEGORIA_PAGO_LABEL as CATEGORIA_MAESTRO } from "@/app/(app)/wallet/mensajeros/_components/wallet-mensajeros-labels";
-import { CATEGORIA_PAGO_LABEL as CATEGORIA_MENSAJERO } from "@/app/(app)/mis-pagos/_components/mis-pagos-labels";
 
 // --- Datos ---------------------------------------------------------------
 
@@ -191,18 +192,7 @@ describe("R34 — el desglose del MAESTRO rotula el premio y lo pone bajo su cie
   });
 });
 
-describe("R34 — el MENSAJERO lo ve igual en `/mis-pagos`", () => {
-  it("su desglose rotula el premio con el mismo texto", () => {
-    render(<DesglosePagos movimientos={[PREMIO, AJUSTE]} />);
-
-    const tabla = screen.getByRole("table");
-    expect(within(tabla).getByText(ROTULO_PREMIO)).toBeInTheDocument();
-    expect(within(tabla).getByText(ROTULO_AJUSTE_DEVENGO)).toBeInTheDocument();
-    expect(within(tabla).getByText("₡5.000")).toBeInTheDocument();
-  });
-});
-
-describe("R34 — las DOS descargas llevan el mismo rótulo", () => {
+describe("R34 — la descarga lleva el mismo rótulo que la pantalla", () => {
   it("la del desglose del maestro emite «Premio del ranking» en la columna concepto", () => {
     const fila = filaDescargaDesgloseMensajero(PREMIO);
     expect(fila.concepto).toBe(ROTULO_PREMIO);
@@ -210,28 +200,19 @@ describe("R34 — las DOS descargas llevan el mismo rótulo", () => {
     expect(fila.monto).toBe("5000.00");
   });
 
-  it("la de `/mis-pagos` emite exactamente el mismo texto", () => {
-    expect(filaDescargaMiPago(PREMIO).concepto).toBe(ROTULO_PREMIO);
-  });
-
-  it("y ninguna de las dos lo confunde con un ajuste", () => {
+  it("y no lo confunde con un ajuste", () => {
     expect(filaDescargaDesgloseMensajero(AJUSTE).concepto).toBe(ROTULO_AJUSTE_DEVENGO);
-    expect(filaDescargaMiPago(AJUSTE).concepto).toBe(ROTULO_AJUSTE_DEVENGO);
   });
 });
 
-describe("T1.6 — los DOS mapas de rótulos dicen lo mismo, y no lo que dice el ajuste", () => {
-  it.each([
-    ["wallet-mensajeros-labels", CATEGORIA_MAESTRO],
-    ["mis-pagos-labels", CATEGORIA_MENSAJERO],
-  ])("%s rotula `premio_ranking` como «Premio del ranking»", (_nombre, mapa) => {
-    expect(mapa.premio_ranking).toBe(ROTULO_PREMIO);
+describe("T1.6 — el mapa de rótulos dice «Premio del ranking», y no lo que dice el ajuste", () => {
+  // Eran DOS mapas y se comparaban entre sí; `mis-pagos-labels` se fue con la pantalla (336).
+  // El que queda se afirma contra el LITERAL, que es como estaba escrito el requisito: comparar
+  // un mapa con el otro nunca dijo cuál era el texto, solo que coincidían.
+  it("wallet-mensajeros-labels rotula `premio_ranking` como «Premio del ranking»", () => {
+    expect(CATEGORIA_MAESTRO.premio_ranking).toBe(ROTULO_PREMIO);
     // El requisito no es «tiene rótulo», es «tiene un rótulo DISTINGUIBLE del de los ajustes».
-    expect(mapa.premio_ranking).not.toBe(mapa.ajuste_devengo);
-    expect(mapa.premio_ranking).not.toBe(mapa.ajuste_pago);
-  });
-
-  it("y los dos archivos dicen EL MISMO texto: es el mismo concepto en dos pantallas", () => {
-    expect(CATEGORIA_MAESTRO.premio_ranking).toBe(CATEGORIA_MENSAJERO.premio_ranking);
+    expect(CATEGORIA_MAESTRO.premio_ranking).not.toBe(CATEGORIA_MAESTRO.ajuste_devengo);
+    expect(CATEGORIA_MAESTRO.premio_ranking).not.toBe(CATEGORIA_MAESTRO.ajuste_pago);
   });
 });

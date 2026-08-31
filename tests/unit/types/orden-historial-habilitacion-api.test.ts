@@ -74,7 +74,11 @@ describe("Feature 266 · T6.1 — la rama A SI emite evento publico (afirmado, n
   it("la emision se decide por la POLITICA, no por la familia: un destino no publico sigue sin emitir", () => {
     // El espejo del caso de arriba. Si alguien «arreglara» la emision metiendo la familia en
     // alguna lista blanca por familia, este caso se pondria rojo: la politica por ESTADO manda.
-    expect(esTransicionEmitible("en_preparacion", FAMILIA)).toBe(false);
+    //
+    // ⏳ 2026-08-31 — el primer ejemplo era `en_preparacion`, y ya no vale: desde el parche de hoy
+    // es evento publico. Se sustituye por un interno de ruteo satelite; lo que el caso ejercita es
+    // «un destino FUERA de la politica», no ese value en particular.
+    expect(esTransicionEmitible("en_bodega_satelite", FAMILIA)).toBe(false);
     expect(esTransicionEmitible("por_recoger", FAMILIA)).toBe(false);
   });
 });

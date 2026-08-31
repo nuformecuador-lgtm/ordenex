@@ -797,3 +797,14 @@ queda el registro de cierre y lo que cada una desencadenó.
 | R83 | `tests/integration/db/liquidacion-idempotencia.test.ts` — el bloqueo se toma ANTES de leer el disponible (orden de llamadas) |
 | R84 | idem — anular toma el mismo bloqueo que su pago |
 | R85 | idem — una sola adquisición por operación |
+
+<!-- @test-desaparecido tests/integration/mis-pagos-page.test.tsx: la ficha 336 borró la ruta
+     `/mis-pagos` el 2026-08-30 por decisión humana explícita, tomada con los datos delante y
+     reafirmada tras verla. R54 —«el mensajero ve el pago y su reverso»— solo se observaba en esa
+     pantalla: se buscó sustituto en el árbol y NO existe, porque hoy no queda ninguna superficie
+     donde un mensajero vea su cuenta por pagar. Repuntar la cita a otro test sería inventar una
+     cobertura que no hay, que es justamente lo que esta guardia prohíbe. La mitad de SERVIDOR de
+     R54 sigue cubierta: el contraasiento del pago y su efecto en la cuenta por pagar los afirman
+     `tests/unit/services/liquidacion-anulacion.test.ts` y
+     `tests/unit/repositories/pago-mensajero-filtro-cierre.test.ts`. Lo que se pierde y queda
+     escrito es la mitad de PANTALLA. -->

@@ -9,6 +9,7 @@ import {
 } from "@/lib/types/webhook-eventos";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
+import { TRANSICIONES } from "@/lib/types/order-status-transiciones";
 
 // Feature 239 (T1.7, R26/R27, P2 FIRMADA el 2026-08-19) — la politica de eventos publicos es un
 // `Set` PARCIAL: no rompe el build, asi que un value nuevo se queda fuera EN SILENCIO. La unica
@@ -43,10 +44,16 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
     expect(esEventoPublico("devuelta")).toBe(true);
   });
 
-  it("268/R1/R2/R3: la lista es EXACTAMENTE estos 12 values (los 10 previos + los 2 de la 268)", () => {
+  it("la lista es EXACTAMENTE estos 13 values (los 12 de la 268 + `en_preparacion`)", () => {
     // Congelada por CONTENIDO (R18), no por conteo. Si esto cambia, alguien toco el contrato
     // publico sin pasar por la puerta humana. El `size` de abajo ACOMPANA a la igualdad; jamas la
     // sustituye.
+    //
+    // ⏳ 2026-08-31 — este aserto se puso rojo A PROPOSITO, igual que en la 268, y se ACTUALIZA con
+    // la decision escrita al lado: entra `en_preparacion`, el evento de NACIMIENTO de las ordenes de
+    // fulfillment. Sigue sin relajarse a un aserto de tamano (alternativa A6, descartada en la 268):
+    // un `size` no detecta un intercambio —un value entra y otro sale— y convierte la puerta humana
+    // en un contador.
     expect([...EVENTOS_PUBLICOS].sort()).toEqual(
       [
         // Los DIEZ vigentes antes de la 268. R3: el cambio es estrictamente ADITIVO y ninguno de
@@ -64,9 +71,31 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
         // Los DOS que trae la 268.
         "ayuda_tienda", // R1
         "incidente", // R2
+        // El que trae el parche del 2026-08-31.
+        "en_preparacion",
       ].sort(),
     );
-    expect(EVENTOS_PUBLICOS.size).toBe(12);
+    expect(EVENTOS_PUBLICOS.size).toBe(13);
+  });
+
+  it("`en_preparacion` SI es evento publico, y es de NACIMIENTO: no hay arista hacia el", () => {
+    // Las dos mitades de la decision del 2026-08-31, afirmadas juntas.
+    //
+    // (1) Emite. Cierra el silencio de la rama de fulfillment: hasta hoy esa orden no producia
+    //     NINGUN evento hasta llegar a `en_bodega_central` al emitirse la guia.
+    expect(EVENTOS_PUBLICOS.has("en_preparacion")).toBe(true);
+    expect(esEventoPublico("en_preparacion")).toBe(true);
+
+    // (2) Y emite UNA sola vez por orden, no porque lo diga una politica sino porque el grafo de
+    //     transiciones no declara NINGUNA arista hacia `en_preparacion` (R28): es estado inicial y
+    //     nada mas. Esto es lo que hace que el alta no pueda generar reingresos repetidos, y por eso
+    //     se afirma aqui: si alguien abre esa arista, este test lo delata en el mismo commit.
+    for (const [origen, aristas] of Object.entries(TRANSICIONES)) {
+      const destinos = (aristas as readonly { to: string }[]).map((a) => a.to);
+      expect(destinos, `${origen} no debe declarar una arista hacia en_preparacion`).not.toContain(
+        "en_preparacion",
+      );
+    }
   });
 
   it("todos los values emitidos existen en el catalogo vigente (sin fantasmas)", () => {
@@ -127,7 +156,11 @@ describe("268 — la exencion por familia queda VACIA, pero el MECANISMO sigue e
     }
     // Y `esTransicionEmitible` sigue diciendo `false` cuando el destino NO es publico, venga de
     // la familia que venga: la politica por ESTADO no se ha tocado.
-    expect(esTransicionEmitible("en_preparacion", "gestion")).toBe(false);
+    //
+    // ⏳ 2026-08-31 — el primer ejemplo era `en_preparacion`, que YA NO SIRVE: desde el parche de
+    // hoy es evento publico. Se sustituye por otro interno de ruteo satelite, que es lo que el caso
+    // quiere ejercitar (un destino no publico), no `en_preparacion` en particular.
+    expect(esTransicionEmitible("en_bodega_satelite", "gestion")).toBe(false);
     expect(esTransicionEmitible("por_recoger", "recoleccion")).toBe(false);
   });
 

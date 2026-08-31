@@ -4,13 +4,17 @@ import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/reposi
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensajero";
 
-// Feature 44/T12 — tests unit del WalletMensajeroService (dobles de repo, sin DB). Cubre R14/R16
+// Feature 44/T12 — tests unit del WalletMensajeroService (dobles de repo, sin DB). Cubre R14
 // (cuenta por pagar derivada STRING+signo, positivo/cero, nunca negativa), R19 (maestro ve a
-// TODOS; otro rol forbidden), R20 (mensajero acotado a su mensajero_id + forbidden por rol), R22
-// (filtros en el WHERE), R3 (sin update/delete; correccion = ajuste compensatorio).
+// TODOS; otro rol forbidden), R22 (filtros en el WHERE), R3 (sin update/delete; correccion =
+// ajuste compensatorio).
+//
+// Ficha 336 (2026-08-30): se retiraron los `describe` de `verMiCuentaPorPagar` y `listarMisPagos`
+// —la vista PROPIA del mensajero (R16/R20), que se fue con `/mis-pagos`—. Sobreviven
+// `listarCuentasPorPagar`, `listarPagosDeMensajero` y el de INMUTABILIDAD (R3), que es el que
+// afirma que este servicio no tiene un solo camino de escritura.
 
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
-const OTRO_MENSAJERO: Actor = { usuarioId: "m2", rol: "mensajero" };
 const MAESTRO: Actor = { usuarioId: "adm-maestro", rol: "maestro" };
 const ADMIN: Actor = { usuarioId: "adm-admin", rol: "admin" }; // feature 94: paridad con maestro
 const ADMIN_SATELITE: Actor = { usuarioId: "adm-sat", rol: "adminSatelite" };
@@ -35,90 +39,6 @@ function fakeRepo(overrides: Partial<IPagoMensajeroMovimientoRepository> = {}): 
     ...overrides,
   };
 }
-
-describe("WalletMensajeroService.verMiCuentaPorPagar (R14/R16/R20)", () => {
-  it("R20: acota al mensajero_id del actor (= usuarioId) en la agregacion", async () => {
-    const repo = fakeRepo({ agregarCuentaPorPagar: vi.fn(async () => ({ devengado: "1000.00", pagado: "300.00" })) });
-    const svc = new WalletMensajeroService(repo);
-    const r = await svc.verMiCuentaPorPagar(MENSAJERO);
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") throw new Error("ok");
-    expect(repo.agregarCuentaPorPagar).toHaveBeenCalledWith("m1", {});
-    expect(r.cuenta).toEqual({ devengado: "1000.00", pagado: "300.00", cuentaPorPagar: "700.00", signo: "positivo" });
-  });
-
-  it("R16: cuenta por pagar CERO (todo pagado) -> '0.00' + signo cero", async () => {
-    const repo = fakeRepo({ agregarCuentaPorPagar: vi.fn(async () => ({ devengado: "500.00", pagado: "500.00" })) });
-    const svc = new WalletMensajeroService(repo);
-    const r = await svc.verMiCuentaPorPagar(MENSAJERO);
-    if (r.status !== "ok") throw new Error("ok");
-    expect(r.cuenta.cuentaPorPagar).toBe("0.00");
-    expect(r.cuenta.signo).toBe("cero");
-  });
-
-  it("R20: rol NO mensajero (maestro/adminSatelite/tienda) -> forbidden, sin tocar el repo", async () => {
-    const repo = fakeRepo();
-    const svc = new WalletMensajeroService(repo);
-    expect((await svc.verMiCuentaPorPagar(MAESTRO)).status).toBe("forbidden");
-    expect((await svc.verMiCuentaPorPagar(ADMIN_SATELITE)).status).toBe("forbidden");
-    expect((await svc.verMiCuentaPorPagar(TIENDA)).status).toBe("forbidden");
-    expect(repo.agregarCuentaPorPagar).not.toHaveBeenCalled();
-  });
-});
-
-describe("WalletMensajeroService.listarMisPagos (R20/R22)", () => {
-  it("R20: acota SIEMPRE al mensajero_id del actor; NO permite mirar otro mensajero", async () => {
-    const repo = fakeRepo();
-    const svc = new WalletMensajeroService(repo);
-    await svc.listarMisPagos({ page: 1, pageSize: 20 }, OTRO_MENSAJERO);
-    // el mensajeroId del WHERE es el del actor (m2), nunca uno provisto por el input.
-    const arg = (repo.listarPorMensajero as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(arg.mensajeroId).toBe("m2");
-  });
-
-  it("R20: aunque el input traiga otro mensajeroId, se ignora en la vista propia", async () => {
-    const repo = fakeRepo();
-    const svc = new WalletMensajeroService(repo);
-    await svc.listarMisPagos({ page: 1, pageSize: 20, mensajeroId: "m-ajeno" }, MENSAJERO);
-    const arg = (repo.listarPorMensajero as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(arg.mensajeroId).toBe("m1"); // el actor, no "m-ajeno"
-    expect(arg).not.toHaveProperty("mensajeroId", "m-ajeno");
-  });
-
-  it("R22: pasa los filtros cierre/fecha al repo (WHERE), tanto en listado como en cuenta", async () => {
-    const repo = fakeRepo({
-      listarPorMensajero: vi.fn(async () => ({ movimientos: [], total: 3 })),
-      agregarCuentaPorPagar: vi.fn(async () => ({ devengado: "1000.00", pagado: "0.00" })),
-    });
-    const svc = new WalletMensajeroService(repo);
-    const desde = new Date("2026-07-01T00:00:00.000Z");
-    const hasta = new Date("2026-07-31T00:00:00.000Z");
-
-    const r = await svc.listarMisPagos({ page: 2, pageSize: 10, cierreId: "c1", desde, hasta }, MENSAJERO);
-    if (r.status !== "ok") throw new Error("ok");
-
-    expect(repo.listarPorMensajero).toHaveBeenCalledWith({
-      mensajeroId: "m1",
-      page: 2,
-      pageSize: 10,
-      cierreId: "c1",
-      desde,
-      hasta,
-    });
-    // R22: la cuenta se agrega con los MISMOS filtros (conjunto filtrado).
-    expect(repo.agregarCuentaPorPagar).toHaveBeenCalledWith("m1", { cierreId: "c1", desde, hasta });
-    expect(r.data.total).toBe(3);
-    expect(r.data.cuenta.cuentaPorPagar).toBe("1000.00");
-    expect(r.data.page).toBe(2);
-  });
-
-  it("R20: rol NO mensajero -> forbidden, sin tocar el repo", async () => {
-    const repo = fakeRepo();
-    const svc = new WalletMensajeroService(repo);
-    expect((await svc.listarMisPagos({ page: 1, pageSize: 20 }, MAESTRO)).status).toBe("forbidden");
-    expect(repo.listarPorMensajero).not.toHaveBeenCalled();
-  });
-});
 
 describe("WalletMensajeroService.listarCuentasPorPagar (R18/R19)", () => {
   it("R18/R19: maestro ve la cuenta por pagar DERIVADA de todos los mensajeros (una fila por mensajero, con signo)", async () => {

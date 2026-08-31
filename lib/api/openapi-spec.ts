@@ -947,6 +947,10 @@ export const openApiSpec = {
           "publicables. `all` no se combina con ids: o `all`, o la lista. Un id repetido se sirve",
           "una sola vez, conservando su primera posición.",
           "",
+          "**`metricas` es opcional:** si no lo mandas (o lo mandas vacío) se sirven **todas** las",
+          "publicables, igual que con `all`. Ojo: eso vale para el parámetro entero vacío, no para",
+          "un hueco dentro de la lista — `metricas=entregas,,rechazos` sigue siendo un **422**.",
+          "",
           "**La respuesta tiene SIEMPRE la misma forma,** se pida una métrica o diez: el rango una",
           "vez en la raíz y las series en `metricas[]`, en el orden pedido (el del `enum` cuando se",
           "pidió `all`).",
@@ -957,9 +961,13 @@ export const openApiSpec = {
           "",
           "**La ventana se pide con `desde` y `hasta`, igual que en el listado.** Mismos nombres,",
           "mismo formato `YYYY-MM-DD` y misma semántica: el día se mide en hora de Costa Rica",
-          "(UTC-6) y `hasta` es **inclusivo**. Los dos son obligatorios y no hay atajos tipo",
-          "«últimos 7 días»: así el rango de una respuesta nunca depende de cuándo se llamó. La",
-          "ventana no puede superar 366 días contando ambos extremos.",
+          "(UTC-6), `desde` es **inclusivo** (`>=`) y `hasta` es **inclusivo** (`<=`). No hay",
+          "atajos tipo «últimos 7 días»: un rango que se escribe con fechas siempre significa lo",
+          "mismo, se llame cuando se llame.",
+          "",
+          "**Los dos son opcionales, y omitirlos significa «todo el histórico»:** sin `desde` la",
+          "serie arranca en el primer día del que tenemos datos, y sin `hasta` llega hasta hoy. No",
+          "hay tope de tamaño de ventana: puedes pedir el histórico completo de una vez.",
           "",
           "**`data` trae solo los días que se pueden leer, y OMITE los que no.** Un día del rango",
           "puede faltar en `data`, y falta a propósito, por una de dos razones: (a) es **el día en",
@@ -993,9 +1001,9 @@ export const openApiSpec = {
           {
             name: "metricas",
             in: "query",
-            required: true,
+            required: false,
             description:
-              "Ids separados por comas, o `all` para todas las publicables. Solo los valores del enum se publican por este canal; `all` no se combina con ids.",
+              "Ids separados por comas, o `all` para todas las publicables. Si se omite (o se manda vacío) equivale a `all`. Solo los valores del enum se publican por este canal; `all` no se combina con ids.",
             // El enum se DERIVA de la lista blanca (`lib/analytics/publicacion-api-key.ts`), la
             // fuente unica de que se publica. Copiarlo como literal aqui garantizaria que un dia
             // diverja de lo que el endpoint concede de verdad. El centinela viaja en el MISMO
@@ -1009,18 +1017,18 @@ export const openApiSpec = {
           {
             name: "desde",
             in: "query",
-            required: true,
+            required: false,
             description:
-              "Fecha calendario de Costa Rica (UTC-6), inclusiva. Formato `YYYY-MM-DD`.",
+              "Fecha calendario de Costa Rica (UTC-6), INCLUSIVA (`>=`). Formato `YYYY-MM-DD`. Si se omite, la serie arranca en el primer día del que hay datos.",
             schema: { type: "string", format: "date" },
             example: "2026-08-01",
           },
           {
             name: "hasta",
             in: "query",
-            required: true,
+            required: false,
             description:
-              "Fecha calendario de Costa Rica (UTC-6), INCLUSIVA. Formato `YYYY-MM-DD`. La ventana no puede superar 366 días contando ambos extremos.",
+              "Fecha calendario de Costa Rica (UTC-6), INCLUSIVA (`<=`). Formato `YYYY-MM-DD`. Si se omite, la serie llega hasta hoy. No hay tope de tamaño de ventana.",
             schema: { type: "string", format: "date" },
             example: "2026-08-21",
           },
@@ -1197,11 +1205,15 @@ export const openApiSpec = {
   //     pasa a ser parte del aviso a integradores, no un adorno.
   //
   // (b) POR QUE ES SEMANTICAMENTE CORRECTO. El enum NO es el catalogo entero: se DERIVA de
-  //     `EVENTOS_PUBLICOS` (`WEBHOOK_ESTADO_ENUM`, R29), que son los 12 values que este webhook
-  //     puede emitir de verdad. Los 16 de `OrdenListItem.estado` son un SUPERCONJUNTO: incluyen
-  //     estados internos (`en_preparacion`, `por_recoger`, `en_bodega_satelite`,
-  //     `en_ruta_bodega_satelite`) que nunca viajan en un evento. Documentar el superconjunto era
+  //     `EVENTOS_PUBLICOS` (`WEBHOOK_ESTADO_ENUM`, R29), que son los values que este webhook puede
+  //     emitir de verdad. Los 16 de `OrdenListItem.estado` son un SUPERCONJUNTO: incluyen estados
+  //     internos de ruteo satelite que nunca viajan en un evento. Documentar el superconjunto era
   //     lo incorrecto; no documentar nada, tambien.
+  //
+  //     ⏳ 2026-08-31 — AQUI DECIA «los 12 values» y que los internos eran «(`en_preparacion`,
+  //     `por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`)». Son 13 y `en_preparacion`
+  //     YA NO es uno de ellos: se emite como evento de NACIMIENTO de la rama de fulfillment. El
+  //     enum se DERIVA, asi que se actualizo solo; esta prosa no, y por eso se corrige a mano.
   //
   // (c) POR QUE EL GUARD SIGUE EN 4 (el miedo de la 256 era infundado; design 268 §7.5).
   //     `openapi-contrato-en-reparto.test.ts` no cuenta «enums», cuenta enums DE ESTADO con el
@@ -1309,7 +1321,7 @@ export const openApiSpec = {
                         // feature 268/R29: DERIVADO de `EVENTOS_PUBLICOS`, nunca copiado a mano.
                         enum: WEBHOOK_ESTADO_ENUM,
                         description:
-                          "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de preparación y ruteo satélite que ese catálogo documenta (`en_preparacion`, `por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error.",
+                          "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de ruteo satélite que ese catálogo documenta (`por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. `en_preparacion` SÍ viaja, y solo como evento de NACIMIENTO: es el estado inicial de las órdenes creadas con `fulfillment` (el paquete ya está en bodega), llega una única vez por orden y con `numGuia: null`, porque en esa rama la guía se emite más tarde. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error.",
                       },
                       motivo: {
                         type: ["string", "null"],

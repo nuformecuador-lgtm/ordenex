@@ -58,6 +58,96 @@ las filas en `error` siguen dentro de `filas`, porque cada fila es una respuesta
 
 ---
 
+## 2026-08-31 — NUEVO value en el webhook `orden.estado_actualizado`: `en_preparacion`
+
+**Aditivo: no rompe nada, pero llega un `estado` que antes no llegaba.** Ningún evento que hoy
+recibís deja de emitirse, y ningún campo cambia de forma. Lo que cambia es que empieza a llegar un
+evento donde antes había silencio.
+
+**Qué resuelve.** Cuando cargás una orden, el estado inicial depende del destino. Dos de las tres
+ramas ya te avisaban al nacer la orden:
+
+- recogida en tienda → nace en `por_recolectar_en_tienda`, que ya era evento público;
+- resto → nace en `en_ruta_bodega_central`, que ya era evento público;
+- **fulfillment** (el paquete ya está en nuestra bodega) → nace en `en_preparacion`, y **no te
+  llegaba nada** hasta que la orden avanzaba a `en_bodega_central` al emitirse la guía. Ese hueco
+  podía durar horas, y desde fuera se lee igual que «la orden no se creó».
+
+Desde esta entrada, esa tercera rama también avisa.
+
+```json
+{
+  "evento": "orden.estado_actualizado",
+  "data": {
+    "numGuia": null,
+    "numRemision": "REM-0002",
+    "estado": "en_preparacion",
+    "motivo": null
+  }
+}
+```
+
+**Dos detalles que importan si tu código asume cosas:**
+
+1. **`numGuia` viaja en `null`.** En la rama de fulfillment la guía se emite más tarde y nunca se
+   fabrica un número. El campo ya estaba declarado como `integer | null` en el contrato, así que
+   esto no es un cambio de forma — pero si tu handler daba por hecho «si llega evento, hay guía»,
+   revisalo. La guía te llega en el evento siguiente, `en_bodega_central`.
+2. **Es un evento de NACIMIENTO y llega una sola vez por orden.** No existe ninguna transición
+   *hacia* `en_preparacion`: es estado inicial y nada más, así que no vas a ver reingresos con este
+   value.
+
+**Qué NO cambia.** Los estados internos de ruteo satélite (`por_recoger`, `en_ruta_bodega_satelite`,
+`en_bodega_satelite`) siguen sin viajar nunca en un evento, y `devolucion_por_confirmar` tampoco.
+
+**Si no querés hacer nada:** el contrato siempre pidió tratar un `estado` desconocido como
+«ignorar», no como error. Si lo cumplís, no necesitás tocar código.
+
+---
+
+## 2026-08-31 — `GET /ordenes/api-key/analitica`: los tres parámetros pasan a ser opcionales, y se retira el tope de 366 días
+
+**Aditivo: no rompe nada.** Toda llamada que hoy funciona sigue devolviendo exactamente lo mismo.
+Lo que cambia es que ahora hay llamadas *más cortas* que antes eran un `422`.
+
+**`GET /api/ordenes/api-key/analitica` sin ningún parámetro es una llamada válida** y devuelve
+todas las métricas publicables sobre todo el histórico:
+
+```
+GET /api/ordenes/api-key/analitica
+Authorization: Bearer ordx_...
+```
+
+**Qué significa cada ausencia:**
+
+| Parámetro | Si no lo mandás (o lo mandás vacío) |
+| --- | --- |
+| `metricas` | Todas las publicables — el mismo resultado que `metricas=all`, que **no** se retira |
+| `desde` | La serie arranca en el primer día del que hay datos |
+| `hasta` | La serie llega hasta hoy (hora de Costa Rica) |
+
+`desde` es inclusivo (`>=`) y `hasta` es inclusivo (`<=`), igual que antes.
+
+**Se retira el tope de ventana de 366 días.** Ya podés pedir el histórico completo en una sola
+llamada. Era la contradicción del cambio de arriba: pasado un año de operación, la llamada sin
+fechas habría respondido `422` contra su propio caso base.
+
+**Lo que NO cambió, y conviene no darlo por relajado:**
+
+- Un hueco **dentro** de la lista sigue siendo `422`: `metricas=entregas,,rechazos`. El parámetro
+  entero vacío es «no pedí ninguna»; un vacío en medio es una lista mal escrita.
+- `all` mezclado con ids sigue siendo `422`: `metricas=all,entregas`.
+- El **rango invertido** sigue siendo `422` (`desde` posterior a `hasta`).
+- Una fecha que el calendario no tiene sigue siendo `422` (`desde=2026-02-31`).
+- `data` sigue **omitiendo** los días que no se pueden leer —el día en curso y los anteriores a
+  nuestro horizonte de histórico— y `data: []` sigue siendo un `200` correcto. **No rellenes los
+  huecos con ceros.**
+
+**Si pedís el histórico completo, contá con series largas.** Sin `desde`, `data` crece un punto
+por día de operación; este endpoint no pagina.
+
+---
+
 ## 2026-08-28 — ROMPEDOR: los importes de la cotización pasan a viajar CRUDOS
 
 **Esto SÍ puede romper tu integración** si consumes `POST /api/ordenes/api-key/cotizacion`. No

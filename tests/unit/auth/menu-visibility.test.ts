@@ -9,6 +9,7 @@ import {
   primerDestino,
   SIDEBAR_ITEMS,
   ROLES_ACCESO_ANALITICA,
+  ROLES_MI_WALLET,
   type MenuItem,
 } from "@/lib/auth/menu-visibility";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -175,7 +176,7 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Configuración");
   });
 
-  it("adminTienda ve Analítica + Órdenes + Novedades, NO Configuración ni Incidentes", () => {
+  it("adminTienda ve Analítica + Órdenes + Novedades + Mi wallet, NO Configuración ni Incidentes", () => {
     const visibles = labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminTienda")));
     // Feature 133 (T2.3, R1): "Analítica" entra en la lista del adminTienda, en la
     // posición 2 de SIDEBAR_ITEMS (justo tras "Inicio", que este rol no ve). La lista
@@ -183,7 +184,15 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     // —un ítem nuevo no declarado aquí sigue poniendo el caso rojo—, sólo incorpora el
     // ítem que esta feature le abre. Que ENTRE a la ruta no significa que vea el
     // dinero: la región financiera sigue siendo de `esAccesoTotal` (D2).
-    expect(visibles).toEqual(["Analítica", "Órdenes", "Novedades"]);
+    // Ficha 335 (R31/R35): entra «Mi wallet», y entra EL ÚLTIMO. La lista se sigue comparando
+    // por IGUALDAD y no se relaja a `toContain`: es el contrato de qué ve este rol, y un ítem
+    // nuevo no declarado aquí tiene que seguir poniendo el caso rojo.
+    //
+    // Que vaya al final tampoco es cosmético: `primerDestino` devuelve el primer visible no
+    // marcado `destinoInicial: false`, así que el aterrizaje post-login del rol sigue siendo
+    // «Órdenes» (R35). Si algún día este literal pasara a ser
+    // `["Analítica", "Mi wallet", "Órdenes", …]`, el rol habría cambiado de puerta de entrada.
+    expect(visibles).toEqual(["Analítica", "Órdenes", "Novedades", "Mi wallet"]);
     expect(visibles).not.toContain("Incidentes"); // feature 158 (R48)
     expect(visibles).not.toContain("Configuración");
     // "Ranking" es solo del maestro.
@@ -792,5 +801,79 @@ describe("Feature 279 — el fuente del menú es legible para las guardias que l
     expect(barrido).toContain('label: "Incidentes"');
     expect(barrido).toContain('"/recepcion-satelite/por-recibir"');
     expect(barrido).toContain('"/recepcion-satelite/en-bodega"');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FICHA 335 — D4 (R31/R32): la puerta a `/mi-wallet`.
+//
+// La pantalla existía desde la feature 43 y no tenía entrada de menú: se llegaba escribiendo la
+// URL, o sea que no se llegaba. Lo que se afirma aquí es que la entrada existe, que la ve UN
+// solo rol, y que su lista de roles es LA MISMA constante que lee el gate de la ruta — no una
+// copia con los mismos nombres, que es la que puede divergir en silencio.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("SIDEBAR_ITEMS — «Mi wallet», la puerta del adminTienda a su saldo (R31/R32) [335]", () => {
+  it("R31: existe exactamente UN ítem con href `/mi-wallet` y su `roles` es la CONSTANTE", () => {
+    const conEseHref = SIDEBAR_ITEMS.filter((i) => i.href === "/mi-wallet");
+    expect(conEseHref).toHaveLength(1);
+
+    const item = conEseHref[0];
+    expect(item.label).toBe("Mi wallet");
+    expect(item.iconKey).toBe("wallet");
+
+    // `toBe`, no `toEqual`: se afirma la IDENTIDAD de la tupla. Un `["adminTienda"]` escrito a
+    // mano aquí pasaría un `toEqual` y sería justo el defecto —dos listas capaces de divergir,
+    // una que muestra y otra que cierra—. Con la identidad, copiarla no compila la excusa.
+    expect(item.roles).toBe(ROLES_MI_WALLET);
+    expect(ROLES_MI_WALLET).toEqual(["adminTienda"]);
+
+    // No tiene subítems: es una pantalla, no un apartado. (Un ítem con `children` no navega, y
+    // este tiene que navegar.)
+    expect(item.children).toBeUndefined();
+  });
+
+  it("R32: ningún rol distinto de `adminTienda` lo ve, ni el actor ausente", () => {
+    // El barrido va sobre TODOS los `RolValue` del esquema, `apiKey` incluida — que hoy no se
+    // afirma en ningún otro caso de este archivo y es precisamente un rol sin persona detrás.
+    const TODOS: RolValue[] = [
+      "maestro",
+      "admin",
+      "adminSatelite",
+      "adminTienda",
+      "mensajero",
+      "apiKey",
+    ];
+    const item = SIDEBAR_ITEMS.find((i) => i.href === "/mi-wallet")!;
+
+    const loVen = TODOS.filter((rol) => puedeVer(item, actor(rol)));
+    expect(loVen).toEqual(["adminTienda"]);
+
+    // Y sin sesión no lo ve nadie: `puedeVer` con actor nulo.
+    expect(puedeVer(item, null)).toBe(false);
+
+    // Control de no-vacuidad del barrido: si `puedeVer` devolviera siempre `false`, el
+    // `toEqual` de arriba pasaría sin decir nada.
+    expect(loVen.length).toBeGreaterThan(0);
+  });
+
+  it("R35: el ítem va DESPUÉS de «Órdenes» y de «Novedades», así que no mueve el aterrizaje", () => {
+    // La posición es la que protege el aterrizaje post-login del rol, no una preferencia
+    // estética: `primerDestino` devuelve el `href` del primer visible no marcado
+    // `destinoInicial: false`. Se afirma sobre los ítems VISIBLES del rol, que es lo que esa
+    // función mira.
+    const visibles = itemsVisibles(SIDEBAR_ITEMS, actor("adminTienda"));
+    const posiciones = visibles.map((i) => i.label);
+
+    expect(posiciones.indexOf("Mi wallet")).toBeGreaterThan(posiciones.indexOf("Órdenes"));
+    expect(primerDestino(visibles)).toBe("/ordenes");
+
+    // Contraprueba directa del incidente que documentan «Analítica» (133) y «Monitoreo» (192):
+    // con el ítem colado ANTES de «Órdenes», el rol cambiaría de puerta de entrada.
+    const conElItemArriba = [
+      visibles.find((i) => i.label === "Mi wallet")!,
+      ...visibles.filter((i) => i.label !== "Mi wallet"),
+    ];
+    expect(primerDestino(conElItemArriba)).toBe("/mi-wallet");
   });
 });
