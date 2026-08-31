@@ -76,6 +76,49 @@ entrada del 2026-08-28, aquí abajo: esta retirada no toca la forma de ningún v
 
 ---
 
+## 2026-08-31 — `GET /ordenes/api-key/analitica`: los tres parámetros pasan a ser opcionales, y se retira el tope de 366 días
+
+**Aditivo: no rompe nada.** Toda llamada que hoy funciona sigue devolviendo exactamente lo mismo.
+Lo que cambia es que ahora hay llamadas *más cortas* que antes eran un `422`.
+
+**`GET /api/ordenes/api-key/analitica` sin ningún parámetro es una llamada válida** y devuelve
+todas las métricas publicables sobre todo el histórico:
+
+```
+GET /api/ordenes/api-key/analitica
+Authorization: Bearer ordx_...
+```
+
+**Qué significa cada ausencia:**
+
+| Parámetro | Si no lo mandás (o lo mandás vacío) |
+| --- | --- |
+| `metricas` | Todas las publicables — el mismo resultado que `metricas=all`, que **no** se retira |
+| `desde` | La serie arranca en el primer día del que hay datos |
+| `hasta` | La serie llega hasta hoy (hora de Costa Rica) |
+
+`desde` es inclusivo (`>=`) y `hasta` es inclusivo (`<=`), igual que antes.
+
+**Se retira el tope de ventana de 366 días.** Ya podés pedir el histórico completo en una sola
+llamada. Era la contradicción del cambio de arriba: pasado un año de operación, la llamada sin
+fechas habría respondido `422` contra su propio caso base.
+
+**Lo que NO cambió, y conviene no darlo por relajado:**
+
+- Un hueco **dentro** de la lista sigue siendo `422`: `metricas=entregas,,rechazos`. El parámetro
+  entero vacío es «no pedí ninguna»; un vacío en medio es una lista mal escrita.
+- `all` mezclado con ids sigue siendo `422`: `metricas=all,entregas`.
+- El **rango invertido** sigue siendo `422` (`desde` posterior a `hasta`).
+- Una fecha que el calendario no tiene sigue siendo `422` (`desde=2026-02-31`).
+- `data` sigue **omitiendo** los días que no se pueden leer —el día en curso y los anteriores a
+  nuestro horizonte de histórico— y `data: []` sigue siendo un `200` correcto. **No rellenes los
+  huecos con ceros.**
+
+**Si pedís el histórico completo, contá con series largas.** Sin `desde`, `data` crece un punto
+por día de operación; este endpoint no pagina.
+
+---
+
 ## 2026-08-28 — ROMPEDOR: los importes de la cotización pasan a viajar CRUDOS
 
 **Esto SÍ puede romper tu integración** si consumes `POST /api/ordenes/api-key/cotizacion`. No

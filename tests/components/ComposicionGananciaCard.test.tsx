@@ -276,10 +276,10 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
 
     expect(pares(listaIngresos())).toEqual([
       { rotulo: "Flete", importe: "₡150" },
-      { rotulo: "Flete de devolución", importe: "₡4.000" },
+      { rotulo: "Flete por rechazo", importe: "₡4.000" },
       { rotulo: "Comisión COD", importe: "₡900" },
       { rotulo: "IVA del flete", importe: "₡20" },
-      { rotulo: "IVA del flete de devolución", importe: "₡520" },
+      { rotulo: "IVA del flete por rechazo", importe: "₡520" },
       { rotulo: "IVA de la comisión", importe: "₡30" },
       { rotulo: "Ajuste (ingreso)", importe: "₡90" },
       { rotulo: "Total de ingresos", importe: "₡5.710" },
