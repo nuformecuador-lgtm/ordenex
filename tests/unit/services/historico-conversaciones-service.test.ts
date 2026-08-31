@@ -42,7 +42,7 @@ const HILO: HiloHistoricoDTO = {
   numRemision: "REM-1001",
   destinatario: "María González",
   mensajeroNombre: "Ana Zulúaga",
-  telefonoVigenteMasked: "7777",
+  telefonoVigente: "+50688887777",
   telefonosCount: 1,
   ultimaActividadAt: "2026-08-20T15:00:00.000Z",
   totalMensajes: 4,

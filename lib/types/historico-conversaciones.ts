@@ -58,11 +58,16 @@ export interface HiloHistoricoDTO {
   destinatario: string;
   mensajeroNombre: string;
   /**
-   * R43 — ultimos 4 digitos del numero con actividad MAS RECIENTE del grupo. Viaja
-   * enmascarado a proposito: esta pantalla no llama a nadie, asi que el numero completo no
-   * aporta y es PII del cliente (design §2.2, riesgo 6).
+   * R43 — numero COMPLETO (E.164) con actividad MAS RECIENTE del grupo.
+   *
+   * Pedido humano (2026-08-31): hasta hoy viajaba enmascarado a los ultimos 4 digitos por el
+   * riesgo 6 del design («esta pantalla no llama a nadie»). En la practica quien lee el
+   * historico SI necesita el numero entero —para reconocer al cliente, cruzarlo con otra
+   * conversacion y buscarlo en el propio campo de busqueda—, y la pantalla ya esta acotada a
+   * los roles de `ROLES_HISTORICO_CONVERSACIONES`, que son los mismos que ven el telefono de
+   * la orden en `/ordenes`. `""` cuando el hilo no tiene ningun numero.
    */
-  telefonoVigenteMasked: string;
+  telefonoVigente: string;
   /** R43 — `> 1` significa que el hilo fusiona varios numeros del mismo cliente. */
   telefonosCount: number;
   /** ISO 8601. `null` = el hilo existe pero todavia no tiene ni un mensaje. */
@@ -101,7 +106,11 @@ export interface FiltroHilosHistorico {
   fecha_hasta?: string;
   /** R35 — `num_guia` o `num_remision`, IGUALDAD exacta. Nunca coincidencia parcial. */
   orden?: string;
-  /** R36 — busqueda libre por destinatario, guia, remision o nombre del mensajero. */
+  /**
+   * R36 — busqueda libre por destinatario, guia, remision, nombre del mensajero y NUMERO DE
+   * TELEFONO del hilo (pedido humano 2026-08-31: el numero del chat puede no ser el que trae
+   * la orden, asi que se busca tambien contra `chat_conversacion.telefono_e164`).
+   */
   q?: string;
 }
 

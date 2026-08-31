@@ -50,7 +50,13 @@ export function Switch({
       aria-describedby={ariaDescribedBy}
       data-slot="switch"
       className={cn(
-        "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent px-0.5 outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:bg-primary data-[unchecked]:bg-input",
+        // El `disabled:` de Tailwind apunta al pseudo-selector `:disabled`, que SOLO existe en
+        // controles nativos — y Base UI pinta la raiz como un `<span role="switch">`. Las dos
+        // clases `disabled:*` que habia aqui no se aplicaban nunca: un switch bloqueado se veia
+        // exactamente igual que uno vivo. Se conservan por si la raiz volviera a ser un
+        // `<button>`, y el estado real se pinta desde `data-disabled`, que es lo que Base UI si
+        // pone (descubierto el 2026-08-28 al bloquear el interruptor de plantilla de tienda).
+        "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent px-0.5 outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[checked]:bg-primary data-[unchecked]:bg-input",
         className,
       )}
     >

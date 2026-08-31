@@ -25,8 +25,8 @@ const CATALOGO_VACIO: CatalogoFiltrosOrdenesDTO = {
 const CATALOGO_CON_MENSAJEROS: CatalogoFiltrosOrdenesDTO = {
   ...CATALOGO_VACIO,
   mensajeros: [
-    { id: "m-1", nombre: "Ana Rojas", zonaId: "z-1" },
-    { id: "m-2", nombre: "Beto Mora", zonaId: null },
+    { id: "m-1", nombre: "Ana Rojas", zonaId: "z-1", estado: "activo" },
+    { id: "m-2", nombre: "Beto Mora", zonaId: null, estado: "activo" },
   ],
 };
 

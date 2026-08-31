@@ -178,9 +178,13 @@ export function HilosLista({
   const errorPrimera = data !== undefined && data.status !== "ok";
 
   return (
+    // `h-full` + `min-h-0`: el `<section>` toma el alto (fijo) de su celda de la rejilla en vez
+    // de crecer con las paginas acumuladas, y `min-h-0` es lo que permite que el
+    // `overflow-y-auto` recorte de verdad. Sin los dos, el listado se estiraba y el unico
+    // scroll acababa siendo el de la pagina entera.
     <section
       aria-label="Conversaciones"
-      className="flex min-h-0 flex-col overflow-y-auto rounded-lg border border-border bg-card"
+      className="flex h-full min-h-0 flex-col overflow-y-auto rounded-lg border border-border bg-card"
     >
       {cargandoPrimera ? (
         <p className="p-4 text-sm text-muted-foreground">Cargando conversaciones…</p>
@@ -230,7 +234,10 @@ export function HilosLista({
                   <span className="truncate font-medium">{hilo.destinatario}</span>
                   <span className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span className="truncate">{hilo.mensajeroNombre}</span>
-                    <span className="font-mono">···{hilo.telefonoVigenteMasked}</span>
+                    {/* Pedido humano (2026-08-31): el numero COMPLETO, ya no `···1234`.
+                        Quien lee el historico lo necesita entero para reconocer al cliente y
+                        para poder buscarlo en el propio campo de busqueda. */}
+                    <span className="font-mono">{hilo.telefonoVigente}</span>
                     {hilo.telefonosCount > 1 ? (
                       <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">
                         {etiquetaNumeros(hilo.telefonosCount)}
