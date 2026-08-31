@@ -69,7 +69,7 @@ interface Medicion {
   fechaDentro: HiloHistoricoDTO[];
   fechaEsperada: { ordenDentro: string; ordenFuera: string };
   fechaFusion: HiloHistoricoDTO[];
-  fechaFusionEsperada: { orden: string; ultimos4Vigente: string };
+  fechaFusionEsperada: { orden: string; telefonoVigenteEsperado: string };
   ordenExacta: HiloHistoricoDTO[];
   ordenPrefijo: HiloHistoricoDTO[];
   guiaExacta: HiloHistoricoDTO[];
@@ -78,13 +78,17 @@ interface Medicion {
   qRemision: HiloHistoricoDTO[];
   qMensajero: HiloHistoricoDTO[];
   qSinCoincidencia: HiloHistoricoDTO[];
+  qTelefono: HiloHistoricoDTO[];
+  qTelefonoConFormato: HiloHistoricoDTO[];
+  qTelefonoAjeno: HiloHistoricoDTO[];
+  qTelefonoEsperado: { orden: string; telefono: string };
   // --- T3.1: paginacion ---------------------------------------------------------------------
   paginado: { paginas: HiloHistoricoDTO[][]; claves: string[] };
   empatados: { paginas: HiloHistoricoDTO[][]; claves: string[] };
   // --- T3.2: fusion -------------------------------------------------------------------------
   fusion: HiloHistoricoDTO[];
   fusionMensajes: ChatMensajeVista[];
-  fusionEsperada: { ids: string[]; ultimos4Vigente: string };
+  fusionEsperada: { ids: string[]; telefonoVigenteEsperado: string };
   dosMensajeros: HiloHistoricoDTO[];
   dosMensajerosEsperados: string[];
   reasignado: HiloHistoricoDTO[];
@@ -170,6 +174,22 @@ describeSiHayBase("321 / bloque 3 — HistoricoConversacionesRepository contra P
     await sembrarHilo(tx, ordenSenuelo, m4, [
       { ocurridoAt: new Date("2026-08-17T15:00:00.000Z"), direccion: "entrante" },
     ]);
+
+    // ---- Escenario TELEFONO (pedido humano 2026-08-31) --------------------------------------
+    // El numero del HILO, que puede no ser el que trae la orden: `orden.busqueda_texto` indexa
+    // el telefono de la orden, asi que este mensajero se siembra con un numero de chat que NO
+    // esta en ninguna otra columna. Si la busqueda por `q` no mirara `chat_conversacion`, este
+    // hilo seria inencontrable.
+    const m19 = await crearUsuario(tx, "Tomás", "Teléfono");
+    const ordenTelefono = await crearOrden(tx, tienda, m19, {});
+    const telHilo = `50677${digitos(6)}`;
+    await sembrarHilo(
+      tx,
+      ordenTelefono,
+      m19,
+      [{ ocurridoAt: new Date("2026-08-14T15:00:00.000Z"), direccion: "entrante" }],
+      telHilo,
+    );
 
     const alcanceBase = [m1, m2, m3];
     const alcanceOrden = [m1, m2, m3, m4];
@@ -494,7 +514,7 @@ describeSiHayBase("321 / bloque 3 — HistoricoConversacionesRepository contra P
       }),
       fechaFusionEsperada: {
         orden: ordenFechaFusion,
-        ultimos4Vigente: telFueraDeRango.slice(-4),
+        telefonoVigenteEsperado: telFueraDeRango,
       },
       ordenExacta: await listar(alcanceOrden, { orden: numRemisionM1 }),
       ordenPrefijo: await listar(alcanceOrden, { orden: numRemisionM1.slice(0, -1) }),
@@ -504,6 +524,13 @@ describeSiHayBase("321 / bloque 3 — HistoricoConversacionesRepository contra P
       qRemision: await listar(alcanceBase, { q: numRemisionM2 }),
       qMensajero: await listar(alcanceBase, { q: "zuluaga" }),
       qSinCoincidencia: await listar(alcanceBase, { q: `zzq${randomUUID().slice(0, 8)}` }),
+      // Tecleado TAL CUAL y tecleado CON FORMATO: los dos tienen que encontrar el mismo hilo.
+      qTelefono: await listar([m19], { q: telHilo }),
+      qTelefonoConFormato: await listar([m19], {
+        q: `+${telHilo.slice(0, 3)} ${telHilo.slice(3, 7)}-${telHilo.slice(7)}`,
+      }),
+      qTelefonoAjeno: await listar([m19], { q: `50755${digitos(6)}` }),
+      qTelefonoEsperado: { orden: ordenTelefono, telefono: telHilo },
       paginado: await paginarHilos([m11], 2),
       empatados: await paginarHilos([m12], 2),
       fusion: await listar([m6]),
@@ -517,7 +544,7 @@ describeSiHayBase("321 / bloque 3 — HistoricoConversacionesRepository contra P
       ).mensajes,
       fusionEsperada: {
         ids: [idAntiguoTel1, idTel2, idTel1, idRecienteTel2],
-        ultimos4Vigente: tel2.slice(-4),
+        telefonoVigenteEsperado: tel2,
       },
       dosMensajeros: await listar([m7, m8]),
       dosMensajerosEsperados: [m7, m8].sort(),
@@ -690,12 +717,13 @@ describeSiHayBase("321 / bloque 3 — HistoricoConversacionesRepository contra P
     ordenId: string,
     mensajeroId: string,
     mensajes: MensajeSembrado[],
+    telefonoE164?: string,
   ): Promise<string> {
     const conversacionId = await crearConversacion(
       tx,
       ordenId,
       mensajeroId,
-      `506${digitos(8)}`,
+      telefonoE164 ?? `506${digitos(8)}`,
     );
     for (const mensaje of mensajes) await crearMensaje(tx, conversacionId, mensaje);
     return conversacionId;
@@ -725,8 +753,10 @@ describeSiHayBase("321 / bloque 3 — HistoricoConversacionesRepository contra P
       mensajeroNombre: "Ana Zulúaga",
       ultimaActividadAt: m.baseEsperada.ultimaM1,
     });
-    // El telefono viaja ENMASCARADO: cuatro digitos, nunca el numero entero (riesgo 6).
-    expect(m.base[0]!.telefonoVigenteMasked).toHaveLength(4);
+    // Pedido humano (2026-08-31): el telefono viaja COMPLETO. La contraprueba de que ya NO se
+    // enmascara es la LONGITUD: el sembrado son 11 digitos (`506` + 8) y la forma vieja
+    // devolvia exactamente 4. Se afirma el numero entero, no que "tenga cuatro".
+    expect(m.base[0]!.telefonoVigente).toMatch(/^506\d{8}$/);
   });
 
   it("R12: el hilo de una orden borrada logicamente no aparece", () => {
@@ -788,7 +818,7 @@ describeSiHayBase("321 / bloque 3 — HistoricoConversacionesRepository contra P
 
   it("R43: la cabecera del hilo fusionado cuenta los numeros y muestra el VIGENTE", () => {
     expect(m.fusion[0]!.telefonosCount).toBe(2);
-    expect(m.fusion[0]!.telefonoVigenteMasked).toBe(m.fusionEsperada.ultimos4Vigente);
+    expect(m.fusion[0]!.telefonoVigente).toBe(m.fusionEsperada.telefonoVigenteEsperado);
     // `obtenerCabecera` devuelve la MISMA proyeccion que la fila del listado: un solo dato, una
     // sola forma de decirlo.
     expect(m.cabeceraFusion).toEqual(m.fusion[0]);
@@ -856,7 +886,7 @@ describeSiHayBase("321 / bloque 3 — HistoricoConversacionesRepository contra P
     expect(m.fechaFusion[0]!.totalMensajes).toBe(4);
     // El vigente es el numero de la fila que NO casa el rango (su actividad es posterior): otra
     // via por la que la correlacion por fila se pone roja.
-    expect(m.fechaFusion[0]!.telefonoVigenteMasked).toBe(m.fechaFusionEsperada.ultimos4Vigente);
+    expect(m.fechaFusion[0]!.telefonoVigente).toBe(m.fechaFusionEsperada.telefonoVigenteEsperado);
     // Y la ultima actividad tambien es la del hilo entero, fuera del rango filtrado.
     expect(m.fechaFusion[0]!.ultimaActividadAt).toBe("2026-07-27T15:00:00.000Z");
   });
@@ -882,6 +912,19 @@ describeSiHayBase("321 / bloque 3 — HistoricoConversacionesRepository contra P
 
   it("R36: un termino que no casa nada devuelve la lista vacia", () => {
     expect(m.qSinCoincidencia).toEqual([]);
+  });
+
+  it("la busqueda libre encuentra por el TELEFONO del hilo, tecleado con o sin formato", () => {
+    // El numero sembrado vive SOLO en `chat_conversacion.telefono_e164`: no esta en
+    // `orden.busqueda_texto` ni en el nombre del mensajero. Encontrarlo prueba la tercera
+    // mitad del criterio, y no otra.
+    expect(m.qTelefono.map((h) => h.ordenId)).toEqual([m.qTelefonoEsperado.orden]);
+    // Tecleado como lo escribe una persona (`+506 7712-3456`): la comparacion es solo-digitos
+    // en las DOS partes, asi que el formato no cambia el resultado.
+    expect(m.qTelefonoConFormato.map((h) => h.ordenId)).toEqual([m.qTelefonoEsperado.orden]);
+    // Contraprueba: otro numero no lo trae. Sin ella, un criterio que devolviera TODO tambien
+    // pasaria las dos afirmaciones de arriba.
+    expect(m.qTelefonoAjeno).toEqual([]);
   });
 
   // ==========================================================================================

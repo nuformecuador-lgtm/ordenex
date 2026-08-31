@@ -81,6 +81,13 @@ function patronLike(valor: string): string {
 /** Nombre completo del mensajero tal como se compara en R36: tres columnas de `usuario`. */
 const NOMBRE_MENSAJERO_SQL = "concat_ws(' ', u.nombre, u.primer_apellido, u.segundo_apellido)";
 
+/**
+ * El telefono del hilo en su forma SOLO-DIGITOS, para comparar con un termino tecleado de
+ * cualquier forma. `regexp_replace` con la bandera `g` quita `+`, espacios y guiones; sin ella
+ * solo caeria el primero. Es un literal de este archivo, nunca dato de fuera.
+ */
+const TELEFONO_DIGITOS_SQL = "regexp_replace(c3.telefono_e164, '[^0-9]', '', 'g')";
+
 // ---------------------------------------------------------------------------
 // Filas crudas
 // ---------------------------------------------------------------------------
@@ -228,6 +235,26 @@ function condicionesDelListado(
     alternativas.push(
       Prisma.sql`${Prisma.raw(sqlNormalizarTextoBusqueda(NOMBRE_MENSAJERO_SQL))} LIKE ${patronLike(busqueda)}`,
     );
+    // Pedido humano (2026-08-31) — TERCERA mitad: el NUMERO del hilo. No lo cubre ninguna de
+    // las dos anteriores: `orden.busqueda_texto` indexa el telefono que trae la ORDEN, y el
+    // numero del que de verdad escribe puede ser otro (es justo lo que hace que un hilo fusione
+    // dos numeros, R43). Se compara contra la forma SOLO-DIGITOS de las dos partes —columna y
+    // termino— para que `+506 8888-0000`, `88880000` y `8888 0000` encuentren lo mismo.
+    //
+    // Va como `EXISTS` sobre TODO EL GRUPO y no como condicion de fila por el MISMO motivo que
+    // el rango de fechas: la fila se descarta ANTES del `GROUP BY`, asi que un hilo fusionado
+    // del que solo casara uno de sus dos numeros saldria con `telefonosCount`, `totalMensajes`
+    // y `telefonoVigente` calculados sobre medio hilo.
+    const digitosTelefono = (busquedaDigitos ?? busqueda).replace(/\D/g, "");
+    if (digitosTelefono !== "") {
+      alternativas.push(Prisma.sql`EXISTS (
+      SELECT 1
+      FROM chat_conversacion c3
+      WHERE c3.orden_id = c.orden_id
+        AND c3.mensajero_id = c.mensajero_id
+        AND ${Prisma.raw(TELEFONO_DIGITOS_SQL)} LIKE ${patronLike(digitosTelefono)}
+    )`);
+    }
     condiciones.push(Prisma.sql`(${Prisma.join(alternativas, " OR ")})`);
   }
 
@@ -407,18 +434,6 @@ function conversacionesDelGrupo(ordenId: string, mensajeroId: string): Prisma.Sq
 // Mapeos
 // ---------------------------------------------------------------------------
 
-/**
- * R43 / riesgo 6 — el telefono viaja ENMASCARADO: solo los cuatro ultimos digitos. Esta
- * pantalla no llama a nadie, asi que el numero completo no aporta nada y es PII del cliente. Un
- * numero mas corto que cuatro digitos (dato legado) sale entero: enmascarar menos de lo que hay
- * seria mentir sobre lo que se guarda.
- */
-function enmascararTelefono(telefono: string | null): string {
-  if (telefono === null) return "";
-  const digitos = telefono.replace(/\D/g, "");
-  return digitos.slice(-4);
-}
-
 function aHiloDTO(row: HiloRaw): HiloHistoricoDTO {
   return {
     ordenId: row.orden_id,
@@ -427,7 +442,9 @@ function aHiloDTO(row: HiloRaw): HiloHistoricoDTO {
     numRemision: row.num_remision,
     destinatario: row.destinatario,
     mensajeroNombre: row.mensajero_nombre,
-    telefonoVigenteMasked: enmascararTelefono(row.telefono_vigente),
+    // Pedido humano (2026-08-31): el numero COMPLETO, ya no los cuatro ultimos digitos.
+    // `null` (hilo sin ningun numero) se normaliza a `""`, que es lo que el DTO declara.
+    telefonoVigente: row.telefono_vigente ?? "",
     telefonosCount: Number(row.telefonos_count),
     ultimaActividadAt: row.ultima_actividad_at,
     totalMensajes: Number(row.total_mensajes),

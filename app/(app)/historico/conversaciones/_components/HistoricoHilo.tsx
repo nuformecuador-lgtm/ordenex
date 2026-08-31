@@ -162,7 +162,7 @@ function CabeceraHilo({ cabecera }: Readonly<{ cabecera: HiloHistoricoDTO }>) {
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span>{cabecera.mensajeroNombre}</span>
-        <span className="font-mono">···{cabecera.telefonoVigenteMasked}</span>
+        <span className="font-mono">{cabecera.telefonoVigente}</span>
         {cabecera.telefonosCount > 1 ? (
           <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">
             {etiquetaNumeros(cabecera.telefonosCount)}
@@ -278,7 +278,7 @@ export function HistoricoHilo({
     return (
       <section
         aria-label="Conversación"
-        className="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-border bg-muted p-8 text-center"
+        className="flex h-full min-h-0 items-center justify-center rounded-lg border border-border bg-muted p-8 text-center"
       >
         <p className="text-sm text-muted-foreground">{TEXTO_SIN_HILO}</p>
       </section>
@@ -288,7 +288,7 @@ export function HistoricoHilo({
   return (
     <section
       aria-label="Conversación"
-      className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-muted"
+      className="flex h-full min-h-0 flex-col rounded-lg border border-border bg-muted"
     >
       {paginaOk === null ? null : <CabeceraHilo cabecera={paginaOk.cabecera} />}
 

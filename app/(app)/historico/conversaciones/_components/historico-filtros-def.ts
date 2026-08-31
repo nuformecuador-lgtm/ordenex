@@ -33,13 +33,14 @@ export const CLAVE_ORDEN = "orden";
 
 /**
  * Que se puede teclear en el buscador. El placeholder ES la documentacion del control:
- * sin el, nadie sabe que el campo alcanza cuatro datos —y sobre todo, que alcanza al
- * MENSAJERO, que es lo que `orden.busqueda_texto` NO cubre (design §1.2)—.
+ * sin el, nadie sabe que el campo alcanza cinco datos —y sobre todo, que alcanza al
+ * MENSAJERO, que es lo que `orden.busqueda_texto` NO cubre (design §1.2), y al TELEFONO DEL
+ * HILO, que puede no ser el que trae la orden (pedido humano 2026-08-31)—.
  *
  * Lo que NO alcanza: el CUERPO de los mensajes (A8). Por eso el texto no dice «buscar en
  * la conversacion», que prometeria algo que esta fuera de alcance.
  */
-export const PLACEHOLDER_BUSQUEDA = "Destinatario, guía, remisión o mensajero";
+export const PLACEHOLDER_BUSQUEDA = "Destinatario, teléfono, guía, remisión o mensajero";
 
 /** Placeholder del filtro de fecha, mismo texto que la barra de ordenes. */
 export const PLACEHOLDER_FECHA = "Cualquier fecha";

@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, screen, within } from "@testing-library/react"
 
 import { DEBOUNCE_MS_DEFAULT } from "@/components/shared/FilterComponent";
 import { BUSQUEDA_MIN_CHARS } from "@/lib/types/orden";
+import type { MensajeroFiltroDTO } from "@/lib/types/filtros-ordenes";
 import { HistoricoConversacionesModule } from "@/app/(app)/historico/conversaciones/_components/HistoricoConversacionesModule";
 import {
   ETIQUETA_BUSCADOR,
@@ -32,9 +33,9 @@ import {
 // se comprueba que NO se emite nada y que el aviso aparece. Cambiar el `3` por otro número
 // rompe el caso; reescribir el comentario que lo explica, no.
 
-const MENSAJEROS = [
-  { id: "m1", nombre: "Ana Mora", zonaId: null },
-  { id: "m2", nombre: "Luis Vargas", zonaId: null },
+const MENSAJEROS: MensajeroFiltroDTO[] = [
+  { id: "m1", nombre: "Ana Mora", zonaId: null, estado: "activo" },
+  { id: "m2", nombre: "Luis Vargas", zonaId: null, estado: "activo" },
 ];
 
 const listarHilos = vi.fn(async () => okHilos([hilo()]));

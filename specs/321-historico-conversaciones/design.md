@@ -202,6 +202,13 @@ que el listado no puede traerlos ni por descuido. El identificador del hilo que 
 el par `(ordenId, mensajeroId)`, no una lista de `conversacion_id`: los ids de fila son un detalle
 del almacenamiento y se resuelven de nuevo en el servidor al abrir el hilo.
 
+> ⚠️ **Revocado el 2026-08-31 (pedido humano).** El teléfono ya NO viaja enmascarado: viaja
+> **completo** y el DTO se llama `telefonoVigente`. Quien lee el histórico necesita el número
+> entero para reconocer al cliente y para poder buscarlo en el propio campo de búsqueda, y la
+> pantalla ya está acotada a los mismos roles que ven el teléfono de la orden en `/ordenes`. En
+> la misma tanda, `q` pasó a buscar también contra `chat_conversacion.telefono_e164`. Lo de
+> abajo queda como registro de la decisión original.
+
 **Teléfono:** viaja **enmascarado** (últimos 4 dígitos). Su única función aquí es distinguir hilos y
 señalar la fusión; esta pantalla no llama a nadie, así que el número completo no aporta y no sale.
 
