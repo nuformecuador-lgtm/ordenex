@@ -3,11 +3,13 @@ import type { PrismaClient } from "@prisma/client";
 
 import { ChatConversacionRepository } from "@/lib/repositories/ChatConversacionRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { CorregirDatosClienteService } from "@/lib/services/CorregirDatosClienteService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 import {
   HAY_BASE_DE_DATOS,
+  clienteConTransaccionAnidada,
   crearPrismaDeTest,
   enTransaccionRevertida,
   fksDeOrden,
@@ -106,6 +108,7 @@ describeSiHayBase("⭑ 312/G1 — corregir el telefono y el hilo de WhatsApp", (
       conversacionId: string;
       chat: ChatConversacionRepository;
       repo: OrdenRepository;
+      tarifas: TarifaVigenteRepository;
     }) => Promise<T>,
   ): Promise<T> {
     return enTransaccionRevertida(prisma, async (tx) => {
@@ -152,13 +155,20 @@ describeSiHayBase("⭑ 312/G1 — corregir el telefono y el hilo de WhatsApp", (
         },
         select: { id: true },
       });
-      const cliente = tx as unknown as PrismaClient;
+      // Ficha 327: `corregirDatosCliente` abre su propia transaccion (outbox del job de
+      // geocodificacion), y `Prisma.TransactionClient` no expone `$transaction`. El envoltorio la
+      // resuelve como pass-through SOBRE LA MISMA tx: el SQL que se mide sigue siendo el real.
+      const cliente = clienteConTransaccionAnidada(tx);
       return fn({
         tx: cliente,
         ordenId: orden.id,
         conversacionId: conversacion.id,
         chat: new ChatConversacionRepository(cliente),
         repo: new OrdenRepository(cliente),
+        // Ficha 327: el servicio pide el resolver de tarifas para el aviso del importe. Esta
+        // suite corrige el TELEFONO, asi que no llega a usarlo; se pasa el real igualmente para
+        // no montar un doble que no aporta nada.
+        tarifas: new TarifaVigenteRepository(cliente),
       });
     });
   }
@@ -168,7 +178,7 @@ describeSiHayBase("⭑ 312/G1 — corregir el telefono y el hilo de WhatsApp", (
       // ANTI-VACUIDAD: antes de corregir, el numero viejo SI es el de esta orden.
       const antes = await ctx.chat.resolverOrdenActivaPorNumero(E164_VIEJO);
 
-      const service = new CorregirDatosClienteService(ctx.repo);
+      const service = new CorregirDatosClienteService(ctx.repo, ctx.tarifas);
       const resultado = await service.corregir(
         { ordenId: ctx.ordenId, telefonoDest: TELEFONO_NUEVO },
         MAESTRO,
@@ -199,7 +209,7 @@ describeSiHayBase("⭑ 312/G1 — corregir el telefono y el hilo de WhatsApp", (
 
   it("⭑ R19: la fila de `chat_conversacion` del numero viejo sigue INTACTA, con sus 2 mensajes", async () => {
     const r = await conOrdenYHilo(async (ctx) => {
-      const service = new CorregirDatosClienteService(ctx.repo);
+      const service = new CorregirDatosClienteService(ctx.repo, ctx.tarifas);
       const resultado = await service.corregir(
         { ordenId: ctx.ordenId, telefonoDest: TELEFONO_NUEVO },
         MAESTRO,

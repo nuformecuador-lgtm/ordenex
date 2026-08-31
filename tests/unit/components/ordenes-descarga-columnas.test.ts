@@ -150,6 +150,13 @@ describe("columnas de descarga del listado de órdenes", () => {
 
   it("no expone identificadores internos ni banderas de borrado", () => {
     const fila = filaDescargaOrden(makeOrden());
+    // FICHA 314 — `telefonoDest`, `notas` y `peso` SALEN de esta lista, y solo esas tres. No
+    // son identificadores internos ni banderas de borrado: son datos de la orden que el humano
+    // decidió publicar el 2026-08-28 (requirements R11). Lo que esta lista protege de verdad
+    // —los ids de fila y de relación, `deletedAt`, `updatedAt` y el objeto `relaciones` en
+    // crudo— se queda entero, y la guardia
+    // `tests/unit/descarga/columnas-sensibles.guardia.test.ts` lo comprueba además sola, con
+    // su sonda, sobre TODOS los módulos de columnas del árbol.
     const prohibidas = [
       "id",
       "tiendaId",
@@ -160,9 +167,6 @@ describe("columnas de descarga del listado de órdenes", () => {
       "estatusId",
       "mensajeroAsignadoId",
       "deletedAt",
-      "telefonoDest",
-      "notas",
-      "peso",
       "updatedAt",
       "relaciones",
     ];
@@ -172,12 +176,16 @@ describe("columnas de descarga del listado de órdenes", () => {
       expect(fila).not.toHaveProperty(clave);
     }
 
+    // Los 22 encabezados, en su orden y escritos a mano: son CONTRATO. Es lo que el usuario
+    // recibe por correo y lo que lee quien procesa la hoja.
     expect(COLUMNAS_DESCARGA_ORDENES.map((c) => c.encabezado)).toEqual([
       "Nº Guía",
       "Nº Remisión",
       "Estado",
       "Destinatario",
+      "Teléfono del destinatario",
       "Producto",
+      "Peso (kg)",
       "Dirección",
       "Tienda",
       "Zona",
@@ -185,9 +193,14 @@ describe("columnas de descarga del listado de órdenes", () => {
       "Cantón",
       "Distrito",
       "Monto a cobrar",
+      "Flete + IVA",
+      "Comisión + IVA",
       "Mensajero",
       "Intentos",
       "Fecha de creación",
+      "Día de reparto",
+      "Fecha de reprogramación",
+      "Notas de la tienda",
     ]);
   });
 
@@ -207,6 +220,42 @@ describe("columnas de descarga del listado de órdenes", () => {
       "numRemision",
       "estatus",
       "destinatario",
+      "telefonoDest",
+      "producto",
+      "peso",
+      "direccion",
+      "tienda",
+      "zona",
+      "provincia",
+      "canton",
+      "distrito",
+      "montoCobrar",
+      "fleteConIva",
+      "comisionConIva",
+      "mensajero",
+      "intentos",
+      "fechaCreacion",
+      "fechaReparto",
+      "fechaReprogramacion",
+      "notas",
+    ]);
+  });
+
+  // -------------------------------------------------------------------------
+  // Ficha 314 — las siete columnas nuevas
+  // -------------------------------------------------------------------------
+
+  it("R17 — las quince columnas de hoy conservan su orden RELATIVO entre sí", () => {
+    // Las siete altas se intercalan por afinidad (el teléfono junto al destinatario, el peso
+    // junto al producto, los importes junto al monto, las fechas junto a la de creación), así
+    // que las posiciones ABSOLUTAS se desplazan — eso está ratificado. Lo que no puede moverse
+    // es el orden entre las que ya existían: quien lea la hoja de izquierda a derecha tiene
+    // que reconocerla. Se afirma como SUBSECUENCIA, que es exactamente lo que R17 dice.
+    const DE_HOY = [
+      "numGuia",
+      "numRemision",
+      "estatus",
+      "destinatario",
       "producto",
       "direccion",
       "tienda",
@@ -218,6 +267,109 @@ describe("columnas de descarga del listado de órdenes", () => {
       "mensajero",
       "intentos",
       "fechaCreacion",
-    ]);
+    ];
+
+    const posiciones = DE_HOY.map((clave) => CLAVES.indexOf(clave));
+    // Ninguna de las quince desapareció…
+    expect(posiciones.filter((p) => p < 0)).toEqual([]);
+    // …y sus posiciones son estrictamente crecientes: siguen en el mismo orden entre sí.
+    expect([...posiciones].sort((a, b) => a - b)).toEqual(posiciones);
+  });
+
+  it("R12 — los dos importes salen como el MISMO string que trae el servidor", () => {
+    // Feature 204: llegan derivados en el servidor con `Prisma.Decimal`, serializados como
+    // string de escala 2. Aquí solo se copian. Un `Number("1129.50")` daría `1129.5` y perdería
+    // el céntimo de escala; peor aún, derivarlos en el navegador ya costó 14 de 66 órdenes
+    // desviadas un céntimo del cierre. La celda es TEXTO y Excel no la autosuma: consecuencia
+    // aceptada por el humano el 2026-08-28, igual que en el resto de descargas de dinero.
+    const fila = filaDescargaOrden(
+      makeOrden({ fleteConIva: "1129.50", comisionConIva: "0.00" }),
+    );
+
+    expect(fila.fleteConIva).toBe("1129.50");
+    expect(typeof fila.fleteConIva).toBe("string");
+    expect(fila.fleteConIva).not.toBe(1129.5);
+    expect(fila.comisionConIva).toBe("0.00");
+    expect(typeof fila.comisionConIva).toBe("string");
+    // El "0.00" es un importe CONOCIDO (sin tarifa vigente el importe es cero), no un dato
+    // ausente: no se puede confundir con celda vacía.
+    expect(fila.comisionConIva).not.toBeNull();
+  });
+
+  it("R13 — el día de reparto y la fecha de reprogramación salen idénticos, sin construir fecha alguna", () => {
+    // El repositorio ya las serializa como `YYYY-MM-DD`. Construir aquí una fecha con un
+    // `@db.Date` —medianoche UTC— y formatearla con la hora local devuelve el día ANTERIOR en
+    // media América. Se afirma la IDENTIDAD del string, que es lo que mata esa mutación.
+    const fila = filaDescargaOrden(
+      makeOrden({
+        fechaRepartoISO: "2026-01-01",
+        fechaReprogramacion: "2026-01-01",
+      }),
+    );
+
+    expect(fila.fechaReparto).toBe("2026-01-01");
+    expect(fila.fechaReprogramacion).toBe("2026-01-01");
+    // Y no se coló un `Date` disfrazado: la celda es string, no objeto.
+    expect(typeof fila.fechaReparto).toBe("string");
+    expect(typeof fila.fechaReprogramacion).toBe("string");
+
+    // Otro día del mismo mes, para que la aserción no pase por casualidad con una constante.
+    const otra = filaDescargaOrden(makeOrden({ fechaRepartoISO: "2026-08-31" }));
+    expect(otra.fechaReparto).toBe("2026-08-31");
+  });
+
+  it("R14 — las siete columnas nuevas sin dato emiten celda vacía, nunca el guion de pantalla", () => {
+    const NUEVAS = [
+      "telefonoDest",
+      "peso",
+      "fleteConIva",
+      "comisionConIva",
+      "fechaReparto",
+      "fechaReprogramacion",
+      "notas",
+    ];
+
+    const vacia = filaDescargaOrden(
+      makeOrden({
+        telefonoDest: undefined as unknown as string,
+        peso: null,
+        notas: null,
+        fleteConIva: undefined,
+        comisionConIva: undefined,
+        fechaRepartoISO: null,
+        fechaReprogramacion: null,
+      }),
+    );
+
+    for (const clave of NUEVAS) {
+      // Premisa: la columna existe. Si alguien la retira, este caso no debe pasar por omisión.
+      expect(CLAVES, `${clave} no está declarada`).toContain(clave);
+      expect(vacia[clave], clave).toBeNull();
+      expect(vacia[clave], clave).not.toBe("—");
+      expect(vacia[clave], clave).not.toBeUndefined();
+    }
+  });
+
+  it("R11 — las siete columnas nuevas viajan con el dato de la orden, no con un id", () => {
+    // Contraste positivo del caso anterior: con dato, la celda ES el dato del DTO.
+    const orden = makeOrden({
+      telefonoDest: "0988887777",
+      peso: 2.75,
+      notas: "Entregar después de las 3",
+      fleteConIva: "560.75",
+      comisionConIva: "89.10",
+      fechaRepartoISO: "2026-08-30",
+      fechaReprogramacion: "2026-09-02",
+    });
+    const fila = filaDescargaOrden(orden);
+
+    expect(fila.telefonoDest).toBe("0988887777");
+    expect(fila.peso).toBe(2.75);
+    expect(typeof fila.peso).toBe("number"); // la unidad va en el encabezado, no en la celda
+    expect(fila.notas).toBe("Entregar después de las 3");
+    expect(fila.fleteConIva).toBe("560.75");
+    expect(fila.comisionConIva).toBe("89.10");
+    expect(fila.fechaReparto).toBe("2026-08-30");
+    expect(fila.fechaReprogramacion).toBe("2026-09-02");
   });
 });

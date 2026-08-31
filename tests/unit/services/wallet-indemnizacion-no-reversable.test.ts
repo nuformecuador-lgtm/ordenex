@@ -50,6 +50,7 @@ function buildRepo(original: WalletMovimientoDTO | null): IWalletMovimientoRepos
       sueldo: "0.00",
       indemnizacion: "0.00",
     })),
+    obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
   };
 }
 

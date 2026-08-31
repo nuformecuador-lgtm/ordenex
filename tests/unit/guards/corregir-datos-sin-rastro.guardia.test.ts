@@ -65,6 +65,16 @@ const MODULOS_DE_LA_FICHA = [
   // Bloque F — la superficie de `/novedades` (`adminTienda`, en los DOS grupos).
   "app/(app)/novedades/_components/NovedadAcciones.tsx",
   "app/(app)/novedades/_components/NovedadesModule.tsx",
+  // ⚠️ FICHA 327 / E1 — EL PANEL DEL AVISO DEL IMPORTE. La tanda de backend dejo aqui escrita la
+  // entrada que faltaba, DENTRO del array y no en una nota lejana, porque `existsSync` de abajo
+  // habria puesto la guardia roja por un archivo que aun no se habia escrito — y una guardia roja
+  // «por lo normal» es una guardia que se acaba ignorando. El archivo ya existe (2026-08-29) y la
+  // entrada entra donde tenia que entrar.
+  //
+  // Es el componente que recibe la UBICACION y los IMPORTES de una orden real, asi que es
+  // exactamente donde un `console.log(aviso)` puesto para depurar el panel volcaria la zona, el
+  // distrito y el flete al log del navegador sin romper nada.
+  "app/(app)/ordenes/_components/CorregirUbicacionAviso.tsx",
 ] as const;
 
 /** El repositorio NO entra entero (tiene medio centenar de escrituras legitimas): entra el CUERPO
@@ -223,6 +233,10 @@ describe("312 — anti-vacuidad del censo", () => {
     expect(
       porRuta.get("app/(app)/ordenes/_components/corregir-datos-cliente-error-messages.ts"),
     ).toContain("corregirDatosClienteErrorMessage");
+    // FICHA 327 — el panel del aviso, por su export y no por su nombre de archivo.
+    expect(porRuta.get("app/(app)/ordenes/_components/CorregirUbicacionAviso.tsx")).toContain(
+      "export function CorregirUbicacionAviso",
+    );
     // Los dos compartidos: se reconocen por la celda y la ventana que ESTA ficha les anadio.
     expect(porRuta.get("app/(app)/novedades/_components/NovedadAcciones.tsx")).toContain(
       "corregirDatos",
@@ -255,22 +269,55 @@ describe("312 / R14 — la correccion no escribe en ninguna otra tabla", () => {
     expect(hallazgos).toEqual([]);
   });
 
-  it("el tipo de escritura del repositorio NO admite `estatusId` ni `direccion`", () => {
-    // La defensa estructural de R5/R14, leida del archivo que la declara. Si alguien añade uno de
-    // los dos campos, R14 pasa de «no representable» a «que nadie se olvide», que es exactamente
-    // el estado que la ficha vino a evitar.
+  it("el tipo de escritura del repositorio NO admite ninguno de los SIETE prohibidos", () => {
+    // La defensa estructural de 312/R5-R14 y 327/R24, leida del archivo que la declara. Si alguien
+    // añade uno de estos campos, la garantia pasa de «no representable» a «que nadie se olvide»,
+    // que es exactamente el estado que las dos fichas vinieron a evitar.
+    //
+    // ⚠️ ACTUALIZADO POR LA FICHA 327, Y LA EXCLUSION QUEDA MAS ESTRECHA, NO MAS FLOJA. Se retira
+    // UNA sola clausula —`direccion`, que es el alcance que la 327 abre a proposito (su D1)— y se
+    // AÑADEN CUATRO: `cobraComision`, `numGuia`, `numRemision` y `mensajeroAsignado`. Este archivo
+    // pasa de documentar una exclusion vaga a documentar una lista enumerada, y sigue poniendose
+    // rojo si alguien mete `estatusId`.
     const interfaz = codigoSinComentarios("lib/interfaces/repositories/IOrdenRepository.ts");
     const inicio = interfaz.indexOf("interface CorregirDatosClienteData");
     expect(inicio, "desaparecio `CorregirDatosClienteData`").toBeGreaterThan(-1);
     const bloque = interfaz.slice(inicio, interfaz.indexOf("}", inicio));
+    // Los DIEZ que si estan (312 + 327/D1, mas la zona que DERIVA el servidor).
     expect(bloque).toContain("destinatario");
     expect(bloque).toContain("telefonoDest");
     expect(bloque).toContain("producto");
     expect(bloque).toContain("notas");
+    expect(bloque).toContain("direccion");
+    expect(bloque).toContain("provinciaId");
+    expect(bloque).toContain("cantonId");
+    expect(bloque).toContain("distritoId");
+    expect(bloque).toContain("zonaId");
+    expect(bloque).toContain("peso");
+    // Y LOS SIETE QUE NO, uno por uno.
     expect(bloque).not.toContain("estatusId");
-    expect(bloque).not.toContain("direccion");
     expect(bloque).not.toContain("tiendaId");
     expect(bloque).not.toContain("montoCobrar");
+    expect(bloque).not.toContain("cobraComision");
+    expect(bloque).not.toContain("numGuia");
+    expect(bloque).not.toContain("numRemision");
+    expect(bloque).not.toContain("mensajeroAsignado");
+  });
+
+  it("327/R5 — `zonaId` esta en el tipo del repositorio pero NO en el schema del borde", () => {
+    // La distincion entera de R5, medida en los DOS archivos a la vez. El tipo la admite porque el
+    // SERVIDOR la escribe; el borde no, porque el CLIENTE no puede mandarla. Si algun dia el
+    // `.pick()` la incluyera, la correccion pasaria a mover el flete facturado sin derivar nada del
+    // distrito — y el test de arriba, que solo mira el tipo, seguiria verde.
+    const tipos = codigoSinComentarios("lib/types/correccion-datos-cliente.ts");
+    const inicio = tipos.indexOf("corregirDatosClienteSchema = actualizarOrdenSchema");
+    expect(inicio, "desaparecio `corregirDatosClienteSchema`").toBeGreaterThan(-1);
+    const pick = tipos.slice(inicio, tipos.indexOf(".strict()", inicio));
+    // Anti-vacuidad: el recorte ES el `.pick(...)` y trae lo que tiene que traer.
+    expect(pick).toContain("distritoId");
+    expect(pick).toContain("direccion");
+    expect(pick).not.toContain("zonaId");
+    expect(pick).not.toContain("estatusId");
   });
 
   it("no hay migracion de esta ficha: no hay rastro que persistir", () => {

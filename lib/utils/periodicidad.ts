@@ -109,3 +109,74 @@ export function periodoDe(plantilla: PlantillaPeriodica, now: Date): string {
   const dia = String(hoy.getUTCDate()).padStart(2, "0");
   return `${anio}-${mes}-${dia}`;
 }
+
+/** Fecha a medianoche UTC -> `YYYY-MM-DD`. Misma construccion manual que `periodoDe`. */
+function aFechaCalendario(dia: Date): string {
+  const anio = dia.getUTCFullYear();
+  const mes = String(dia.getUTCMonth() + 1).padStart(2, "0");
+  const numero = String(dia.getUTCDate()).padStart(2, "0");
+  return `${anio}-${mes}-${numero}`;
+}
+
+/**
+ * El cobro que cae `mesesDesplazados` meses despues del ancla, con el MISMO clamping de fin de
+ * mes que `aplicaHoy`: dia = min(dia del ancla, ultimo dia del mes destino). Ancla 31 -> 28/feb
+ * (29 en bisiesto), 30/abr. `Date.UTC` normaliza el desbordamiento de mes (13 -> enero del ano
+ * siguiente), asi que no hace falta aritmetica de anos aparte.
+ */
+function cobroDelMes(ancla: Date, mesesDesplazados: number): Date {
+  const primeroDelMesDestino = new Date(
+    Date.UTC(ancla.getUTCFullYear(), ancla.getUTCMonth() + mesesDesplazados, 1),
+  );
+  const dia = Math.min(ancla.getUTCDate(), ultimoDiaDelMes(primeroDelMesDestino));
+  return new Date(
+    Date.UTC(primeroDelMesDestino.getUTCFullYear(), primeroDelMesDestino.getUTCMonth(), dia),
+  );
+}
+
+/**
+ * Feature 85 (R7-R12) — fecha calendario CR (`YYYY-MM-DD`) del PROXIMO cobro: la PRIMERA fecha,
+ * igual o posterior al dia calendario CR de `now`, en la que esta plantilla cobra.
+ *
+ * Es la hermana en cerrado de `aplicaHoy` —misma regla, sin barrer dias— y por eso su test la
+ * contrasta contra ella (barrido diferencial de 400 dias): dos implementaciones independientes de
+ * la misma regla son un oraculo de verdad, y una asercion contra la propia fuente no lo es.
+ *
+ *  - `hoy <= ancla` -> el ancla (R8: antes del primer cobro no se cobra; el dia del ancla SI, R9).
+ *  - `dias`/`semanas`: paso fijo en dias; `k = ceil(diff / paso)`, resultado `ancla + k * paso`.
+ *    Con `hoy` justo sobre un disparo, `diff % paso === 0` y `k` no avanza -> devuelve HOY (R9).
+ *  - `meses`: `k = ceil(diffEnMeses / cantidad)` y el candidato es el cobro de ese mes ya
+ *    clampeado (R10). Si cae ANTES que hoy (ancla dia 5, hoy dia 20 del mismo mes) se reintenta
+ *    con `k + 1`, y UN reintento basta: `k * cantidad >= diffEnMeses` garantiza que el candidato
+ *    nunca queda en un mes anterior al de hoy, asi que el siguiente ya cae en un mes posterior.
+ *
+ * Reloj INYECTADO como sus dos hermanas: sin `Date.now()`, sin Prisma, sin HTTP, y toda la
+ * aritmetica en la escala "medianoche UTC del dia calendario CR" (R12). NO sabe si la plantilla
+ * esta activa: eso es presentacion (R19), no aritmetica del ciclo.
+ */
+export function proximoCobro(plantilla: PlantillaPeriodica, now: Date): string {
+  const hoy = startOfDayCR(now);
+  const ancla = fechaADiaUTC(plantilla.fechaCobro);
+  if (hoy.getTime() <= ancla.getTime()) return aFechaCalendario(ancla);
+
+  const cantidad = plantilla.periodicidadCantidad;
+  // Defensa (CHECK >= 1 en la DB): con cantidad 0 el paso seria 0 y la division daria Infinity,
+  // o sea un `Invalid Date` emitido como fecha. Para esa plantilla `aplicaHoy` es false SIEMPRE,
+  // asi que no existe "proximo cobro" que devolver: se falla fuerte y con contexto.
+  if (!Number.isInteger(cantidad) || cantidad < 1) {
+    throw new RangeError(
+      `proximoCobro: periodicidadCantidad invalida (${String(cantidad)}); debe ser un entero >= 1`,
+    );
+  }
+
+  if (plantilla.periodicidadUnidad === "meses") {
+    const k = Math.ceil(diffEnMeses(hoy, ancla) / cantidad);
+    const candidato = cobroDelMes(ancla, k * cantidad);
+    if (candidato.getTime() >= hoy.getTime()) return aFechaCalendario(candidato);
+    return aFechaCalendario(cobroDelMes(ancla, (k + 1) * cantidad));
+  }
+
+  const paso = plantilla.periodicidadUnidad === "dias" ? cantidad : 7 * cantidad;
+  const k = Math.ceil(diffEnDias(hoy, ancla) / paso);
+  return aFechaCalendario(new Date(ancla.getTime() + k * paso * UN_DIA_MS));
+}

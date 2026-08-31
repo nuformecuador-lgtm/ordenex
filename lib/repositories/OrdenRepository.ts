@@ -44,6 +44,7 @@ import {
   type CreateOrdenData,
   type CreateOrdenConGuiaResultRow,
   type CreateOrdenOpciones,
+  type DistritoResueltoRow,
   type DistritoRow,
   type EtiquetaRow,
   type GenerarGuiaDecisionData,
@@ -56,6 +57,7 @@ import {
   type ManifiestoOrdenRow,
   type MensajeroLiteRow,
   type NovedadOrdenRow,
+  type OrdenParaCorreccionRow,
   type OrdenTransicionRow,
   type OrderStatusLiteRow,
   type ProvinciaRow,
@@ -1377,31 +1379,29 @@ export class OrdenRepository implements IOrdenRepository {
         });
         origenEstatusId = actual?.estatusId ?? null;
       }
-      // ── Feature 91 (R10/R11, decision Q1): GUARD LATENTE de re-geocodificacion ──────
+      // ── Feature 91 (R10/R11, decision Q1): GUARD de re-geocodificacion ─────────────
       //
-      // ESTE CODIGO NO ES ALCANZABLE HOY, Y NO ES CODIGO MUERTO A ELIMINAR.
+      // FUE LATENTE HASTA LA FICHA 327 (2026-08-28), Y YA NO LO ES.
       //
-      // Hoy la condicion `data.direccion !== undefined` NUNCA se cumple: la ruta de
-      // edicion es estructuralmente incapaz de cambiar una direccion — `actualizarOrdenSchema`
-      // (lib/types/orden.ts) es `.strict()` y no incluye `direccion`, y `toUpdateData()`
-      // tampoco la proyecta. Ampliar el CRUD para permitir editarla es OTRA feature y
-      // esta explicitamente FUERA de alcance de la 91 (design §0/C1).
+      // Lo que decia este bloque —«este codigo no es alcanzable hoy»— era cierto y hoy
+      // solo lo es A MEDIAS, asi que se reescribe en vez de dejarlo mintiendo:
       //
-      // Se implementa igualmente porque el dia que el CRUD gane el campo, sin este guard
-      // la orden quedaria con direccion NUEVA y coordenadas VIEJAS, en silencio, sin
-      // ninguna senal de inconsistencia — y nadie relacionaria ese bug con esta feature.
-      // Cuesta ~6 lineas y deja el sistema correcto por construccion.
+      //  · POR ESTE METODO (`update`) la direccion SIGUE sin poder escribirse: `toUpdateData()`
+      //    NO la proyecta, y ninguno de sus consumidores vivos (`DevolucionOrigenService`,
+      //    `EnvioDevolucionCentralService`) la informa. Aqui la condicion sigue sin cumplirse.
+      //    Lo que ya NO es cierto es la otra mitad de la frase original: `actualizarOrdenSchema`
+      //    SI incluye `direccion` desde la 327 (lib/types/orden.ts).
+      //  · QUIEN SI LA ESCRIBE es el hermano de este metodo, `corregirDatosCliente`, y por eso
+      //    el guard esta EXTRAIDO a `direccionPreviaParaGuard` + `encolarSiCambiaDireccion`
+      //    (abajo): UNA implementacion que llaman los dos. Dos copias de «vino informada Y
+      //    difiere» es la forma silenciosa de que un dia una de las dos deje de encolar.
+      //
+      // El porque del guard no cambia: sin el, la orden queda con direccion NUEVA y coordenadas
+      // VIEJAS, en silencio, sin ninguna senal de inconsistencia.
       //
       // La pre-lectura es CONDICIONAL (patron del `estatusId` de arriba) para no anadir
       // una query a cada actualizacion de orden.
-      let direccionPrevia: string | null = null;
-      if (data.direccion !== undefined) {
-        const actual = await tx.orden.findFirst({
-          where: { id, deletedAt: null },
-          select: { direccion: true },
-        });
-        direccionPrevia = actual?.direccion ?? null;
-      }
+      const direccionPrevia = await this.direccionPreviaParaGuard(tx, id, data.direccion);
       // Solo aplica si existe y no esta borrada (R36); updateMany no lanza si 0 filas.
       const result = await tx.orden.updateMany({
         where: { id, deletedAt: null },
@@ -1425,15 +1425,14 @@ export class OrdenRepository implements IOrdenRepository {
           },
         ]);
       }
-      // R10/R11 (guard latente, ver el bloque de arriba): encola SOLO si la actualizacion
-      // cambia EFECTIVAMENTE la direccion (viene informada Y difiere de la almacenada).
-      // Si no viene el campo, o la deja igual, no se encola nada.
-      if (data.direccion !== undefined && data.direccion !== direccionPrevia) {
-        await encolarGeocodificacion(this.jobRepo, tx as unknown as JobTxClient, {
-          id,
-          direccion: data.direccion,
-        });
-      }
+      // R10/R11 (ver el bloque del guard, arriba): la mitad que ENCOLA, en la misma
+      // implementacion que usa `corregirDatosCliente`.
+      await this.encolarSiCambiaDireccion(
+        tx as unknown as JobTxClient,
+        id,
+        data.direccion,
+        direccionPrevia,
+      );
       const row = await tx.orden.findFirst({
         where: { id, deletedAt: null },
         ...WITH_ESTATUS,
@@ -1443,48 +1442,150 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * FICHA 312 (design §7) — CORRECCION DE LOS DATOS DEL CLIENTE. Hermano de `update`, y no una
-   * rama suya: `update` puede escribir `estatusId` y `direccion`, y por eso arrastra el append al
-   * historial y el encolado de geocodificacion. Este camino es ESTRUCTURALMENTE INCAPAZ de
-   * dispararlos, porque `CorregirDatosClienteData` no puede expresar esos dos campos (R5/R14).
+   * ── GUARD DE RE-GEOCODIFICACION, MITAD 1 (feature 91/R10-R11, extraido por la ficha 327/B3) ──
    *
-   * UNA SOLA SENTENCIA. La ventana de estado va en el `WHERE` de la sentencia QUE MUTA —no en un
-   * `if` previo— exactamente como `OrdenNotaRepository.marcarBorrada`: asi no queda ninguna
-   * ventana entre comprobar y escribir. Un estado que se mueva entre la lectura del servicio y
-   * esta escritura hace que el `updateMany` no alcance ninguna fila, y eso es el `"conflict"` de
-   * R13 — sin efecto parcial que deshacer, porque no hubo primera escritura.
+   * Pre-lectura CONDICIONAL de la direccion almacenada. Va ANTES de la sentencia que muta —por eso
+   * el guard son DOS metodos y no uno: leer despues del `UPDATE` devolveria la direccion NUEVA y
+   * la comparacion de la mitad 2 saldria siempre «no cambio», que es el bug silencioso exacto que
+   * este guard existe para impedir.
    *
-   * `deletedAt: null` en el mismo `WHERE` cubre R12 por el mismo mecanismo: una orden borrada
+   * `direccionNueva === undefined` (el caso de casi todas las actualizaciones) NO consulta nada:
+   * no se le añade una query a cada escritura de orden que no toca la direccion.
+   *
+   * `deletedAt: null` en el `where`, igual que las sentencias que la acompañan: una orden borrada
+   * no tiene direccion previa que comparar.
+   */
+  private async direccionPreviaParaGuard(
+    tx: Pick<PrismaClient, "orden">,
+    id: string,
+    direccionNueva: string | null | undefined,
+  ): Promise<string | null> {
+    if (direccionNueva === undefined) return null;
+    const actual = await tx.orden.findFirst({
+      where: { id, deletedAt: null },
+      select: { direccion: true },
+    });
+    return actual?.direccion ?? null;
+  }
+
+  /**
+   * ── GUARD DE RE-GEOCODIFICACION, MITAD 2 ──
+   *
+   * Encola SOLO si la escritura cambia EFECTIVAMENTE la direccion: vino informada Y difiere de la
+   * almacenada. Si no viene el campo, o lo deja igual, no se encola nada (327/R20).
+   *
+   * ⚠️ UNA SOLA IMPLEMENTACION, DOS LLAMADORES (`update` y `corregirDatosCliente`). Duplicar esta
+   * condicion era la alternativa B de `design.md` §11 de la 327 y esta descartada: dos copias de
+   * «informada Y distinta» es la forma silenciosa de que un dia una de las dos deje de encolar y
+   * la orden se quede con direccion NUEVA y coordenadas VIEJAS sin ninguna señal.
+   *
+   * `tx` es SIEMPRE el cliente transaccional del writer (patron OUTBOX de la 91/R7): si la
+   * transaccion revierte, el job desaparece con ella (327/R21).
+   */
+  private async encolarSiCambiaDireccion(
+    tx: JobTxClient,
+    id: string,
+    direccionNueva: string | null | undefined,
+    direccionPrevia: string | null,
+  ): Promise<void> {
+    if (direccionNueva === undefined || direccionNueva === direccionPrevia) return;
+    await encolarGeocodificacion(this.jobRepo, tx, { id, direccion: direccionNueva });
+  }
+
+  /**
+   * FICHA 312 (design §7), AMPLIADA POR LA 327 (B4) — CORRECCION DE LOS DATOS DEL CLIENTE Y DE
+   * SU UBICACION. Hermano de `update`, y no una rama suya: `update` puede escribir `estatusId`,
+   * `tiendaId` y `zonaId` libremente, y arrastra el append al historial. Este camino sigue siendo
+   * ESTRUCTURALMENTE INCAPAZ de dispararlo, porque `CorregirDatosClienteData` no puede expresar
+   * `estatusId` (312/R5, 327/R24).
+   *
+   * LA VENTANA DE ESTADO VA EN EL `WHERE` de la sentencia QUE MUTA —no en un `if` previo—
+   * exactamente como `OrdenNotaRepository.marcarBorrada`: asi no queda ninguna ventana entre
+   * comprobar y escribir. Un estado que se mueva entre la lectura del servicio y esta escritura
+   * hace que el `updateMany` no alcance ninguna fila, y eso es el `"conflict"` de 312/R13 y
+   * 327/R29 — sin efecto parcial que deshacer.
+   *
+   * `deletedAt: null` en el mismo `WHERE` cubre 312/R12 por el mismo mecanismo: una orden borrada
    * logicamente no se corrige, y el desenlace es indistinguible del de una orden que se movio.
    *
-   * SIN `$transaction` y SIN tocar el constructor: no hay dos escrituras que coordinar. Mientras
-   * el diseño llevaba una nota automatica, este metodo necesitaba una transaccion y
-   * `OrdenRepository` un tercer parametro para inyectar el repositorio del hilo. D4 retiro la
-   * nota (2026-08-28) y con ella toda esa superficie. Este archivo NO gana ningun import del hilo
-   * de notas, y eso lo vigila una guardia.
+   * ⚠️ CON `$transaction` DESDE LA 327, Y LA 312 PRESUMIA DE NO TENERLA. El motivo esta escrito
+   * porque es un retroceso aparente: cuando la direccion cambia hay que encolar la
+   * re-geocodificacion, y ese encolado TIENE que compartir transaccion con la escritura o se
+   * rompe el invariante OUTBOX de la feature 91/R7 en las dos direcciones —un job que sobrevive
+   * a una escritura revertida, o una escritura sin job (direccion nueva, coordenadas viejas, EN
+   * SILENCIO)—. El constructor NO cambia: `jobRepo` ya venia inyectado con default desde la 91.
+   *
+   * Sigue SIN escribir en ninguna otra tabla que no sea `orden` y —solo si la direccion cambia—
+   * `jobs`: ni historial, ni hilo de notas, ni auditoria (327/R25, enmienda declarada a 312/R14).
    */
   async corregirDatosCliente(
     ordenId: string,
     data: CorregirDatosClienteData,
     estadosBloqueados: readonly string[],
   ): Promise<"ok" | "conflict"> {
-    const { count } = await this.prisma.orden.updateMany({
-      where: {
-        id: ordenId,
-        deletedAt: null,
-        estatus: { value: { notIn: [...estadosBloqueados] } },
-      },
-      // Se proyecta campo a campo (y no `...data`) para que lo que llega a Prisma sea EXACTAMENTE
-      // el cuarteto de D1 aunque el llamador ensanche el objeto en tiempo de ejecucion. Un
-      // `undefined` es «no lo toques» para Prisma, asi que la columna ni aparece en el `SET`.
-      data: {
-        destinatario: data.destinatario,
-        telefonoDest: data.telefonoDest,
-        producto: data.producto,
-        notas: data.notas,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      // Guard de re-geocodificacion, mitad 1: ANTES de mutar, y solo si la direccion viene.
+      const direccionPrevia = await this.direccionPreviaParaGuard(tx, ordenId, data.direccion);
+
+      const { count } = await tx.orden.updateMany({
+        where: {
+          id: ordenId,
+          deletedAt: null,
+          estatus: { value: { notIn: [...estadosBloqueados] } },
+        },
+        // Se proyecta campo a campo (y no `...data`) para que lo que llega a Prisma sea
+        // EXACTAMENTE la lista de D1 aunque el llamador ensanche el objeto en tiempo de
+        // ejecucion. Un `undefined` es «no lo toques» para Prisma, asi que la columna ni
+        // aparece en el `SET`.
+        //
+        // `zonaId` esta aqui y NO en el schema del borde: la DERIVA el servidor a partir del
+        // distrito (327/R5). El cliente no puede mandarla.
+        data: {
+          destinatario: data.destinatario,
+          telefonoDest: data.telefonoDest,
+          producto: data.producto,
+          notas: data.notas,
+          direccion: data.direccion,
+          provinciaId: data.provinciaId,
+          cantonId: data.cantonId,
+          distritoId: data.distritoId,
+          zonaId: data.zonaId,
+          // `peso` es `Decimal(10,3)` en la columna: se convierte igual que en `toUpdateData`.
+          peso: data.peso !== undefined ? new Prisma.Decimal(data.peso) : undefined,
+        },
+      });
+
+      // 327/R21: si la sentencia no alcanzo la fila NO hubo escritura, asi que no hay nada que
+      // geocodificar. Se sale sin encolar y la transaccion no deja rastro.
+      if (count !== 1) return "conflict";
+
+      // Guard de re-geocodificacion, mitad 2: DENTRO de la misma transaccion (OUTBOX).
+      await this.encolarSiCambiaDireccion(
+        tx as unknown as JobTxClient,
+        ordenId,
+        data.direccion,
+        direccionPrevia,
+      );
+      return "ok";
     });
-    return count === 1 ? "ok" : "conflict";
+  }
+
+  /**
+   * FICHA 327 (design §3) — EL COLAPSO DE LA N:M `zona_distrito`, EN UN SOLO SITIO.
+   *
+   * La regla no la inventa esta ficha: ya estaba viva dentro del `.map()` de
+   * `findDistritosByCantonIds`, y la carga masiva la aplica desde la feature 24.
+   *
+   *   EXACTAMENTE 1 zona -> esa zona
+   *   0 zonas            -> `null` (el distrito no tiene zona asignada: error de fila)
+   *   > 1 zonas          -> `null` (ambiguo; NO SE INVENTA UNA ZONA eligiendo la primera)
+   *
+   * Se extrae porque desde la 327 hay DOS lecturas que la necesitan. Dos copias del colapso
+   * serian dos reglas que un dia divergen, y la que divergiera elegiria la tarifa equivocada
+   * —es decir, facturaria mal— sin romper ningun test.
+   */
+  private zonaUnicaDeDistrito<T>(zonas: readonly T[]): T | null {
+    return zonas.length === 1 ? zonas[0] : null;
   }
 
   // BORRADO 2026-08-07 (tanda 2): aqui vivia tambien `existsEstatus` (la guarda de catalogo de
@@ -1631,18 +1732,130 @@ export class OrdenRepository implements IOrdenRepository {
     // Un distrito con EXACTAMENTE una zona resuelve orden.zona_id; con 0 zonas -> sin zona
     // asignada (error de fila); con >1 -> ambiguo/no derivable -> null (mismo trato seguro:
     // no se inventa una zona). El caso normal de negocio es 1 zona por distrito.
-    return rows.map((d) => ({
-      id: d.id,
-      nombre: d.nombre,
-      cantonId: d.cantonId,
-      zonaId: d.zonas.length === 1 ? d.zonas[0].zonaId : null,
-      // Feature 98/R2: `esCentral` de la unica zona; `false` si el distrito no resuelve UNA
-      // zona (0 o >1 -> `zonaId` null -> la fila no llega a tarifarse).
-      esCentral: d.zonas.length === 1 ? d.zonas[0].zona.esCentral : false,
-      // A diferencia de `esCentral`, esta NO depende de que el distrito resuelva UNA zona: la
-      // marca es del distrito, no de su zona. `=== true` porque la columna es tri-valuada.
-      esZonaEspecial: d.zonaEspecial === true,
-    }));
+    //
+    // Ficha 327/B2: el colapso ya NO se escribe aqui. Vive en `zonaUnicaDeDistrito`, y lo comparte
+    // con `findDistritoParaCorreccion`. La salida de esta lectura no cambia.
+    return rows.map((d) => {
+      const zona = this.zonaUnicaDeDistrito(d.zonas);
+      return {
+        id: d.id,
+        nombre: d.nombre,
+        cantonId: d.cantonId,
+        zonaId: zona?.zonaId ?? null,
+        // Feature 98/R2: `esCentral` de la unica zona; `false` si el distrito no resuelve UNA
+        // zona (0 o >1 -> `zonaId` null -> la fila no llega a tarifarse).
+        esCentral: zona?.zona.esCentral ?? false,
+        // A diferencia de `esCentral`, esta NO depende de que el distrito resuelva UNA zona: la
+        // marca es del distrito, no de su zona. `=== true` porque la columna es tri-valuada.
+        esZonaEspecial: d.zonaEspecial === true,
+      };
+    });
+  }
+
+  /**
+   * FICHA 327 (design §9.4) — LA LECTURA DE LA ORDEN QUE LA CORRECCION NECESITA.
+   *
+   * Sustituye al `findById` que usaba la 312. No es un capricho: `OrdenDTO` NO lleva `direccion`,
+   * ni `montoCobrar`, ni `cobraComision`, y los tres son entradas del aviso del importe (R11/R12).
+   *
+   * `deletedAt: null` en el `WHERE` es lo que da R30 gratis: una orden BORRADA sale `null` igual
+   * que una INEXISTENTE, y el servicio no puede distinguirlas ni queriendo.
+   *
+   * `montoCobrar` sale como STRING escala 2 y NUNCA como `number`: es la leccion medida de la
+   * feature 204 (14 de 66 ordenes con un centimo de desviacion al multiplicar en el navegador).
+   * `peso` SI sale como `number`: no es dinero, es un peso con 3 decimales.
+   *
+   * `yaEnUnCierre` (R16) sale de la relacion inversa `Orden.cierreDetalles` con `take: 1`, EN LA
+   * MISMA consulta: `cierre_detail` tiene `@@index([ordenId])`, que existe justo para trazar en
+   * que cierres aparecio una orden. Ni round-trip extra, ni Seq Scan.
+   */
+  async findParaCorreccion(ordenId: string): Promise<OrdenParaCorreccionRow | null> {
+    const row = await this.prisma.orden.findFirst({
+      where: { id: ordenId, deletedAt: null },
+      select: {
+        id: true,
+        tiendaId: true,
+        numGuia: true,
+        destinatario: true,
+        telefonoDest: true,
+        producto: true,
+        notas: true,
+        direccion: true,
+        peso: true,
+        montoCobrar: true,
+        cobraComision: true,
+        provinciaId: true,
+        cantonId: true,
+        distritoId: true,
+        estatus: { select: { value: true } },
+        zona: { select: { id: true, nombre: true, esCentral: true } },
+        distrito: { select: { nombre: true, zonaEspecial: true } },
+        cierreDetalles: { select: { id: true }, take: 1 },
+      },
+    });
+    if (row === null) return null;
+    return {
+      id: row.id,
+      tiendaId: row.tiendaId,
+      estatusValue: row.estatus.value,
+      numGuia: row.numGuia,
+      destinatario: row.destinatario,
+      telefonoDest: row.telefonoDest,
+      producto: row.producto,
+      notas: row.notas,
+      direccion: row.direccion,
+      peso: row.peso ? row.peso.toNumber() : null,
+      montoCobrar: row.montoCobrar ? row.montoCobrar.toFixed(2) : null,
+      cobraComision: row.cobraComision,
+      provinciaId: row.provinciaId,
+      cantonId: row.cantonId,
+      distritoId: row.distritoId,
+      distritoNombre: row.distrito?.nombre ?? null,
+      zonaId: row.zona.id,
+      zonaNombre: row.zona.nombre,
+      esCentral: row.zona.esCentral,
+      // La marca es del DISTRITO, no de la zona, y la columna es tri-valuada: `null` no es
+      // especial. Una orden sin distrito (el unico FK nullable) entra como `false`.
+      esZonaEspecial: row.distrito?.zonaEspecial === true,
+      yaEnUnCierre: row.cierreDetalles.length > 0,
+    };
+  }
+
+  /**
+   * FICHA 327 (design §9.4) — EL DISTRITO PROPUESTO, RESUELTO ENTERO EN UNA CONSULTA.
+   *
+   * Trae `provinciaId` por la relacion `canton.provinciaId` para que el servicio pueda comprobar
+   * la cadena provincia -> canton -> distrito (R6) SIN una segunda consulta, y la zona por el
+   * mismo colapso de la N:M que usa la carga masiva (R7).
+   *
+   * `zonaId: null` significa «este distrito no resuelve UNA zona» (0 o >1), y el servicio lo
+   * rechaza nombrando el motivo: `orden.zona_id` es NOT NULL y elegir una de varias seria
+   * inventar la tarifa.
+   */
+  async findDistritoParaCorreccion(distritoId: string): Promise<DistritoResueltoRow | null> {
+    const row = await this.prisma.distrito.findFirst({
+      where: { id: distritoId },
+      select: {
+        id: true,
+        nombre: true,
+        cantonId: true,
+        zonaEspecial: true,
+        canton: { select: { provinciaId: true } },
+        zonas: { select: { zonaId: true, zona: { select: { nombre: true, esCentral: true } } } },
+      },
+    });
+    if (row === null) return null;
+    const zona = this.zonaUnicaDeDistrito(row.zonas);
+    return {
+      id: row.id,
+      nombre: row.nombre,
+      cantonId: row.cantonId,
+      provinciaId: row.canton.provinciaId,
+      zonaId: zona?.zonaId ?? null,
+      zonaNombre: zona?.zona.nombre ?? null,
+      esCentral: zona?.zona.esCentral ?? false,
+      esZonaEspecial: row.zonaEspecial === true,
+    };
   }
 
   /** R27: insercion masiva en lotes de `batchSize`, tolerando carreras de num_remision. */

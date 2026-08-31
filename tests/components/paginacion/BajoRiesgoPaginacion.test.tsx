@@ -350,6 +350,7 @@ function plantilla(i: number): GastoFijoPlantillaDTO {
     periodicidadUnidad: "meses",
     periodicidadCantidad: 1,
     fechaCobro: "2026-07-01",
+    requiereAprobacion: true, // ficha 333/R1
     createdAt: "2026-07-01T00:00:00.000Z",
     updatedAt: "2026-07-01T00:00:00.000Z",
   };
@@ -663,7 +664,14 @@ const LISTADOS: Listado[] = [
         total: todos.length,
       });
       completo.plantillas.mockResolvedValue({ status: "ok", plantillas: todos });
-      envolver(<GastosFijosPlantillasPanel initialData={pagina1(todos)} />);
+      // Feature 85 (T F.6, R23): `ahoraIso` es REQUERIDA. Instante fijo: este archivo mide la
+      // paginación, no la fecha del próximo cobro.
+      envolver(
+        <GastosFijosPlantillasPanel
+          initialData={pagina1(todos)}
+          ahoraIso="2026-07-15T18:00:00.000Z"
+        />,
+      );
     },
   },
 ];

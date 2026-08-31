@@ -31,7 +31,13 @@ export type NotificacionEvento =
   // porque le rechazaron un cierre. Mismo evento para las dos causas porque piden la MISMA accion
   // («resuelve el mas antiguo»); son dos eventos y no uno frente a `cierre_dia_vencido` porque ahi
   // la pelota esta en tejados opuestos, y el evento es lo que la campana usa para agrupar.
-  | "mensajero_bloqueado_por_cierres";
+  | "mensajero_bloqueado_por_cierres"
+  // FICHA 333 (R29/R30/R31/R35/R36) — quedan cobros de gasto fijo esperando decisión. Lo emite
+  // el cron de gastos fijos AL FINAL de su corrida, una vez por día CR, mientras quede al menos
+  // un cobro `pendiente` —también los días en que no se generó ninguno nuevo—. Destinatario: el
+  // rol `maestro` y nadie más, porque el `admin` VE la cola pero no puede decidirla (R24) y un
+  // recordatorio diario que no se puede atender es ruido. El texto lleva SOLO el número (R35).
+  | "gasto_fijo_cobro_pendiente";
 
 /** Entidad de origen referenciada (referencia polimorfica, sin FK — design §1.2). */
 export type NotificacionEntidadTipo =
@@ -47,7 +53,25 @@ export type NotificacionEntidadTipo =
   // sola fila por (evento, orden, mensajero) para siempre, y `crear` absorbe el `P2002` devolviendo
   // `false`: la SEGUNDA correccion de esa orden no avisaria nunca, en silencio. Con la correccion
   // como entidad, «dos correcciones, dos avisos» (R50) es estructural.
-  | "orden_dia_reparto_cambio";
+  | "orden_dia_reparto_cambio"
+  // ⚠️ FICHA 333 (design §4.2) — LA ENTIDAD DE ESTE AVISO ES **EL DÍA CR**, NO EL COBRO, y este
+  // es el valor que lo declara: `entidad_id` es la fecha `"YYYY-MM-DD"` de la corrida. Es el
+  // PRIMER `entidad_tipo` del inventario que NO apunta a una fila de tabla, y por eso tiene
+  // valor propio en vez de reusar uno que prometa una (reusar `carga` o `usuario` sería escribir
+  // un dato falso con formato de dato, el motivo por el que la 253 no reusó `usuario`).
+  //
+  // POR QUÉ NO EL COBRO, que es la elección natural: `notificacion_dedupe_key` es UNIQUE sobre
+  // `(evento, entidad_id, destinatario_rol, destinatario_usuario_id)` con `NULLS NOT DISTINCT` y
+  // `WHERE entidad_id IS NOT NULL`, y `NotificacionRepository.crear` ABSORBE el `P2002`
+  // devolviendo `false`. Con el cobro como entidad, la clave admitiría UNA sola fila por
+  // (evento, cobro, maestro) PARA SIEMPRE y el recordatorio del día 2 no saldría NUNCA, en
+  // silencio absoluto: sin error, sin log y sin nada. Es EXACTAMENTE el fallo que la 262
+  // documentó y evitó eligiendo como entidad el CAMBIO y no la orden.
+  //
+  // Con el día: días distintos ⇒ entidades distintas ⇒ el recordatorio diario sale siempre
+  // (R30); misma corrida repetida el mismo día ⇒ misma entidad ⇒ un solo aviso (R31). Las dos
+  // propiedades son ESTRUCTURALES, no de disciplina.
+  | "gasto_fijo_cobro_dia";
 
 /**
  * DTO que viaja al cliente (design §3.1). `read` NO es una columna de `notificacion`:

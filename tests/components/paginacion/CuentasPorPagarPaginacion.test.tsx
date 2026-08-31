@@ -498,6 +498,51 @@ describe("Riesgo ALTO · «Cuentas por pagar a mensajeros» (T L.2)", () => {
     expect(conBusqueda.at(-1)?.page).toBe(1);
   });
 
+  // Ficha 326 — la GUARDA DE «SIN CAMBIO», que hasta hoy vivía escrita a mano en
+  // `CuentasPorPagarTable` y desde la migración la trae dentro `BuscadorFiltros`.
+  //
+  // Se mide DESDE LA PÁGINA 2 y no desde la 1, y no es un adorno: cuando el término no cambia,
+  // `setAplicada` recibe el mismo string y React se ahorra el render él solo — o sea que en la
+  // página 1 quitar la guarda no rompería NADA observable y el caso pasaría verde sin guarda.
+  // Lo que delata su ausencia es `setPage(1)`: sin ella, un espacio al final devuelve la tabla
+  // a la página 1 y eso sí cuesta una lectura, que en este listado es agregar el libro entero
+  // de cada mensajero. (Medido: quitando la guarda del canónico, este caso cae; el de la
+  // página 1 no.)
+  it("repetir el término ya aplicado no cuesta otra consulta ni mueve la página (326)", async () => {
+    const user = userEvent.setup();
+    montar();
+
+    // «Solís» son treinta filas: DOS páginas del conjunto filtrado, así que hay una página 2
+    // a la que ir y de la que caerse.
+    await buscar(user, "Solís");
+    await user.click(within(nav()).getByRole("button", { name: "Página siguiente" }));
+    await waitFor(() => expect(nombresVisibles()[0]).toBe(nombre(56)));
+
+    const lecturas = () => paginadoMock.mock.calls.length;
+    const antes = lecturas();
+
+    // Un espacio al final NO es un término nuevo: el campo lo acepta al instante —el usuario
+    // ve lo que escribe— pero la barra no vuelve a avisar.
+    await user.type(
+      screen.getByRole("searchbox", { name: "Buscar por mensajero" }),
+      " ",
+    );
+    await new Promise((r) => setTimeout(r, 700)); // más que el debounce (500 ms)
+
+    expect(
+      (screen.getByRole("searchbox", { name: "Buscar por mensajero" }) as HTMLInputElement)
+        .value,
+    ).toBe("Solís ");
+    // Ni una lectura más, ni la del término repetido ni la de una página reiniciada.
+    expect(lecturas()).toBe(antes);
+    // Y se sigue viendo la página 2 del conjunto filtrado, no la 1.
+    expect(nombresVisibles()[0]).toBe(nombre(56));
+    expect(within(nav()).getByRole("button", { name: "Ir a la página 2" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
   it("la descarga sigue entregando el dataset completo (R52)", async () => {
     const user = userEvent.setup();
     montar();

@@ -267,7 +267,16 @@
   --destructive: #ef4444;
   --border: #e3e8f2;
   --input: #e3e8f2;
-  --ring: #f26419;
+  /* Feature 226 — el anillo de foco es un INDICADOR de interfaz: WCAG 1.4.11 le pide 3:1
+     contra el fondo adyacente, no el 4.5 de texto. Con el naranja de marca (`--primary`,
+     que es lo que este token valia) el anillo OPACO se queda en 2.81 sobre `--secondary`,
+     2.88 sobre `--muted` y 2.99 sobre `--background`: por debajo del umbral en tres de las
+     seis superficies donde el portal monta un boton. Este token baja a `--color-brand-dark`
+     -- el mismo naranja oscuro que ya usa `--accent-foreground` -- y el peor de los seis
+     pasa a 3.68. No se toca `--primary`: la marca no cambia, cambia el indicador.
+     Medido con la aritmetica de `tests/fixtures/contraste.ts`; atado en
+     `tests/unit/guards/contraste-tokens.guardia.test.ts`. */
+  --ring: #d4530d;
   --chart-1: #f26419;
   --chart-2: #0b2545;
   --chart-3: #1a56db;
@@ -412,7 +421,7 @@
     --destructive: #ef4444;
     --border: #e3e8f2;
     --input: #e3e8f2;
-    --ring: #f26419;
+    --ring: #d4530d;
     --chart-1: #f26419;
     --chart-2: #0b2545;
     --chart-3: #1a56db;
@@ -792,7 +801,7 @@
     --destructive: #ef4444;
     --border: #e3e8f2;
     --input: #e3e8f2;
-    --ring: #f26419;
+    --ring: #d4530d;
     --chart-1: #f26419;
     --chart-2: #0b2545;
     --chart-3: #1a56db;

@@ -118,6 +118,19 @@ export interface ArchivoCensado {
 //
 // Totales: 33 → 26 tablas = 25 `<DataTable>` en 25 archivos + 1 `<table>` cruda.
 //
+// FICHA 333 (H1) — SUMA de una tabla, `fuera`: «Cobros de gasto fijo por aprobar»
+// (`app/(app)/wallet/_components/CobrosGastoFijoPendientesPanel.tsx`). Es la cola que el maestro
+// decide dentro de `/wallet`, y NO gana descarga: el motivo está en su entrada y es el mismo que
+// `design.md §7` de la ficha dejó escrito —una cola de decisión efímera, de un puñado de filas,
+// cuyo contenido aterriza en el LIBRO de la caja en cuanto se aprueba; y el libro sí descarga—.
+// Se registra aquí porque es lo que `cobertura-tablas.guardia` obliga a DECIDIR: sin esta entrada
+// la guardia se pone roja, que es exactamente el comportamiento buscado.
+//
+// Totales VIGENTES, medidos contra el árbol (no heredados del spec 170): **29 tablas = 28
+// `<DataTable>` en 28 archivos + 1 `<table>` cruda**, con 9 exclusiones (8 con `<DataTable>` + la
+// cruda). Se incrementan desde los números REALES de la feature 304 (28 = 27 + 1), no desde los
+// del spec original, que ya estaban obsoletos cuando se escribió aquélla.
+//
 // FEATURE 304 — SUMA de una tabla, `fuera`: «Órdenes con el monto redondeado (carga masiva)».
 // Dice qué filas entraron con el monto redondeado al colón más cercano (aviso de la 299) y de
 // cuánto a cuánto. No gana descarga y el motivo está escrito en su entrada: son filas del
@@ -269,6 +282,25 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
   {
     ruta: "app/(app)/recepcion-satelite/_components/SateliteOrdenesListado.tsx",
     tablas: [{ nombre: "Órdenes de la bodega satélite", estado: "con_descarga" }],
+  },
+  {
+    // FICHA 333 (H1) — la cola de decisión del gasto fijo. Va antes de
+    // `GastosFijosPlantillasPanel` porque la guardia recorre el árbol en orden alfabético.
+    ruta: "app/(app)/wallet/_components/CobrosGastoFijoPendientesPanel.tsx",
+    tablas: [
+      {
+        nombre: "Cobros de gasto fijo por aprobar",
+        estado: "fuera",
+        nota:
+          "cola de DECISIÓN efímera dentro de /wallet: un puñado de filas que existen sólo " +
+          "hasta que alguien las aprueba o las rechaza, y que desaparecen de la sección en " +
+          "cuanto se deciden. Lo aprobado aterriza en el «Libro de movimientos de la caja " +
+          "principal», que SÍ descarga con el conjunto completo y sus filtros; lo rechazado no " +
+          "produce movimiento alguno. Un archivo de esta cola sería la foto de un instante que " +
+          "nadie puede volver a reproducir. Decisión de `specs/333-gasto-fijo-autorizacion/" +
+          "design.md §7`",
+      },
+    ],
   },
   {
     ruta: "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",

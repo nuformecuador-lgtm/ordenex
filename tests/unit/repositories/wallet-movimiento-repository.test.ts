@@ -120,6 +120,44 @@ describe("crearMovimientos (R2/R6/R13/R14)", () => {
     expect(arg.data[0].fechaMovimiento).toEqual(fechaDelPago);
   });
 
+  // Ficha 334 (T B.1, design §5) — el `id` generado ARRIBA, con la MISMA forma opcional que
+  // `fechaMovimiento`: es lo que permite releer EXACTAMENTE la fila recien creada sin abrir un
+  // metodo nuevo en el repositorio ni partir el `createMany` en dos.
+  it("R28: cuando el llamador NO pasa id, la clave NO viaja (manda el @default(uuid()) de la columna)", async () => {
+    const prisma = buildPrisma();
+    prisma.walletMovimiento.createMany.mockResolvedValue({ count: 1 });
+    const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
+
+    await repo.crearMovimientos(prisma as never, [
+      { tipo: "ingreso", categoria: "ingreso_flete", monto: "1.00", origenTipo: "cierre_dia", origenId: "c1" },
+    ]);
+
+    const arg = prisma.walletMovimiento.createMany.mock.calls[0][0];
+    expect(Object.keys(arg.data[0])).not.toContain("id");
+  });
+
+  it("R28: cuando el llamador SI pasa id, viaja tal cual a la insercion", async () => {
+    const prisma = buildPrisma();
+    prisma.walletMovimiento.createMany.mockResolvedValue({ count: 1 });
+    const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
+
+    await repo.crearMovimientos(prisma as never, [
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        tipo: "egreso",
+        categoria: "egreso_gasto_variable",
+        monto: "300.00",
+        origenTipo: "gasto",
+        origenId: null,
+        descripcion: "Papeleria",
+        registradoPor: "u-maestro",
+      },
+    ]);
+
+    const arg = prisma.walletMovimiento.createMany.mock.calls[0][0];
+    expect(arg.data[0].id).toBe("11111111-1111-4111-8111-111111111111");
+  });
+
   it("R6: lista vacia -> no llama createMany, devuelve 0", async () => {
     const prisma = buildPrisma();
     const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
@@ -156,9 +194,42 @@ describe("listar (R20/R24)", () => {
       categoria: "ingreso_flete",
       fechaMovimiento: { gte: desde, lte: hasta },
     });
-    expect(arg.orderBy).toEqual({ fechaMovimiento: "desc" });
+    // Ficha 334 (R26, design §4): el orden es TOTAL. Este literal ES el contrato del libro —se
+    // reescribe entero con el array nuevo, NO se relaja a `expect.anything()` ni se deriva de
+    // la propia fuente—: es lo unico que impide que alguien vuelva a una sola columna y
+    // reintroduzca la paginacion que repite u omite filas.
+    expect(arg.orderBy).toEqual([
+      { fechaMovimiento: "desc" },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ]);
     expect(arg.skip).toBe(20); // (page 2 - 1) * 20
     expect(arg.take).toBe(20);
+  });
+
+  // Ficha 334 (R26) — el desempate, dicho aparte de la consulta de filtros para que un fallo
+  // nombre la propiedad que se rompio.
+  it("R26: el orden del libro desempata por creacion y por id — orden TOTAL, no solo por fecha", async () => {
+    const prisma = buildPrisma();
+    prisma.walletMovimiento.findMany.mockResolvedValue([]);
+    prisma.walletMovimiento.count.mockResolvedValue(0);
+    const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
+
+    await repo.listar({ page: 1, pageSize: 20 });
+
+    const { orderBy } = prisma.walletMovimiento.findMany.mock.calls[0][0];
+    // Es una LISTA, no un objeto: con `{ fechaMovimiento: "desc" }` a secas, dos filas con el
+    // mismo instante quedan en orden indefinido y `skip`/`take` puede devolver la misma fila en
+    // dos paginas o ninguna. Ya podia pasar con dos pagos a tienda del mismo dia.
+    expect(Array.isArray(orderBy)).toBe(true);
+    expect(orderBy.map((o: Record<string, string>) => Object.keys(o)[0])).toEqual([
+      "fechaMovimiento",
+      "createdAt",
+      "id",
+    ]);
+    // Y las tres van en el MISMO sentido: un desempate ascendente pondria la fila mas vieja
+    // primero dentro de su dia, que no es lo que el libro promete.
+    for (const criterio of orderBy) expect(Object.values(criterio)).toEqual(["desc"]);
   });
 
   it("sin filtros -> WHERE vacio; mapea filas a DTO con monto STRING y fecha ISO", async () => {
@@ -281,7 +352,7 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
     expect(prisma.walletMovimiento.groupBy.mock.calls[0][0].where).toEqual({});
   });
 
-  it("R47: la superficie del repositorio son CINCO metodos — ni update, ni delete, ni el viejo", () => {
+  it("R47: la superficie del repositorio son SEIS metodos — ni update, ni delete, ni el viejo", () => {
     const metodos = Object.getOwnPropertyNames(WalletMovimientoRepository.prototype)
       .filter((m) => m !== "constructor")
       .sort();
@@ -290,12 +361,16 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
     // Se afirma sobre la lista COMPLETA y CERRADA, no con cuatro `toBeUndefined()`: asi caen
     // igual un `actualizarMonto` futuro (que no se llama «update») y el agregado por `tipo` a
     // secas si alguien lo resucitara.
+    // Ficha 333 (C2): entra `obtenerPorOrigen`, y es una LECTURA por la clave
+    // `(origen_tipo, origen_id, categoria)`. El libro no gana ninguna mutacion: la asercion de
+    // abajo lo sigue afirmando, y esta lista sigue siendo CERRADA.
     expect(metodos).toEqual([
       "agregarPorCategoria",
       "agregarPorCategoriaYTipo",
       "crearMovimientos",
       "listar",
       "obtenerPorId",
+      "obtenerPorOrigen",
     ]);
     expect(metodos.some((m) => /update|delete|actualizar|eliminar|borrar/i.test(m))).toBe(false);
   });

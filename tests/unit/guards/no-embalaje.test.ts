@@ -1,10 +1,64 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
+import fsp from "fs/promises";
 import path from "path";
 
 // Feature 28 (R6, R7): guard anti-`embalaje`. Recorre el arbol del repo y falla
 // si aparece la palabra `embalaje` (case-insensitive) fuera del whitelist
 // confirmado por el humano (decisiones append-only / definicion de la feature).
+//
+// ---------------------------------------------------------------------------
+// Feature 329 (2026-08-28) — por que este archivo lee en paralelo y con su
+// propio `testTimeout`. MEDIDO, no supuesto:
+//
+// El guard abre 3.985 archivos (41 MB) uno por uno. Perfilado por etapas sobre
+// este mismo arbol, el reparto del tiempo es:
+//
+//   | etapa                          | caliente | primera pasada |
+//   |--------------------------------|----------|----------------|
+//   | readdirSync (601 directorios)  |   26 ms  |      60 ms     |
+//   | path.relative (whitelist)      |   17 ms  |      49 ms     |
+//   | **readFileSync (3.985 archivos)** | **264 ms** | **37.787 ms** |
+//   | split + regex por linea (894k) |  100 ms  |     131 ms     |
+//   | **total**                      | **430 ms** | **38.136 ms**  |
+//
+// O sea: el 99,1% del caso malo es la LATENCIA DE `open()`, y nada mas. El
+// coste por archivo pasa de 0,066 ms (caliente) a 9,48 ms (primera pasada sobre
+// un worktree recien creado, con el filtro del antivirus tocando cada archivo
+// por primera vez): un factor de 143x. Ese caso malo son 38 s y por si solo ya
+// revienta el `testTimeout` global de 20 s SIN NADA MAS CORRIENDO. Con los
+// worktrees como via normal de paralelismo, cada feature estrena arbol y paga
+// esa primera pasada; por eso el rojo salia en casi todas las tandas y siempre
+// "pasaba en aislado" a la segunda.
+//
+// Descartado que fuera contencion de CPU: la feature 203 midio el peor factor
+// de degradacion por CPU del repo en 3,35x, y 430 ms x 3,35 = 1,4 s. No llega
+// a 20 s ni de lejos. Reproducido aqui ademas con 10 procesos quemando CPU+IO:
+// el guard paso de 444 ms a 477 ms. El cuello es I/O, no CPU.
+//
+// Que se cambio, y lo que NO se cambio: el conjunto vigilado es EXACTAMENTE el
+// mismo (mismos IGNORED_DIRS, mismas extensiones, mismo whitelist, mismo
+// /embalaje/i, mismo orden de reporte). Solo cambia COMO se lee:
+//
+//   1. Las lecturas se solapan con un pool acotado en vez de ir en serie, que
+//      es lo unico que ataca una latencia de `open()`. Rodilla medida sobre
+//      3.985 archivos: 1->561 ms, 2->374, 4->212, **8->175**, 16->173, 32->168.
+//      Se fija en 8: a partir de ahi la ganancia es <2% porque el pool de hilos
+//      de libuv (UV_THREADPOOL_SIZE, 4 por defecto) es el techo real.
+//   2. Se descarta cada archivo con UN test sobre el contenido entero en vez de
+//      partirlo en lineas y correr el regex 894.000 veces. Solo se parte en
+//      lineas el archivo que YA dio positivo, que es el unico donde hacen falta
+//      numeros de linea para el reporte.
+//   3. Se busca sobre `latin1` para no decodificar 41 MB de UTF-8 a string JS
+//      por gusto. Es exacto para ESTE patron: `embalaje` es ASCII puro y en
+//      UTF-8 un byte ASCII nunca aparece dentro de una secuencia multibyte, asi
+//      que no hay ni falsos positivos ni falsos negativos posibles. El reporte
+//      si decodifica UTF-8, para que los acentos de la linea salgan bien.
+//
+// Resultado medido (mediana de 5, mismo arbol, misma maquina): **382 ms -> 175
+// ms**, 2,2x. Las cuatro variantes devuelven los mismos 117 hallazgos sobre el
+// arbol sin whitelist, que es la comprobacion de que no se afloja la cobertura.
+// ---------------------------------------------------------------------------
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 
@@ -129,34 +183,87 @@ interface Hallazgo {
   text: string;
 }
 
-function walk(dir: string, hallazgos: Hallazgo[]): void {
+// Recorre el arbol y devuelve los archivos candidatos EN ORDEN DE RECORRIDO.
+// Los `readdirSync` se dejan sincronos a proposito: son 601 directorios y 26 ms
+// medidos, no es ahi donde se va el tiempo (ver cabecera).
+function collectFiles(dir: string, archivos: string[]): void {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (IGNORED_DIRS.has(entry.name)) continue;
     const abs = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      walk(abs, hallazgos);
+      collectFiles(abs, archivos);
       continue;
     }
     if (!entry.isFile()) continue;
     const ext = path.extname(entry.name);
     if (!TEXT_EXTENSIONS.has(ext)) continue;
     if (isWhitelisted(abs)) continue;
-
-    const content = fs.readFileSync(abs, "utf8");
-    const lines = content.split(/\r?\n/);
-    lines.forEach((line, idx) => {
-      if (/embalaje/i.test(line)) {
-        hallazgos.push({ file: toRelPosix(abs), line: idx + 1, text: line.trim() });
-      }
-    });
+    archivos.push(abs);
   }
 }
 
+// Concurrencia de lectura. 8 es la rodilla medida (ver cabecera); por encima la
+// ganancia es <2% porque el techo lo pone el pool de hilos de libuv.
+const CONCURRENCIA_LECTURA = 8;
+
+function hallazgosDeArchivo(abs: string, buf: Buffer): Hallazgo[] {
+  // Descarte barato: un solo test sobre el contenido entero, sin decodificar
+  // UTF-8 ni partir en lineas. Exacto para un patron ASCII (ver cabecera).
+  if (!/embalaje/i.test(buf.toString("latin1"))) return [];
+
+  // Solo aqui, en el archivo que YA dio positivo, se paga la decodificacion
+  // UTF-8 y el corte en lineas para poder reportar linea y texto.
+  const hallazgos: Hallazgo[] = [];
+  const rel = toRelPosix(abs);
+  buf
+    .toString("utf8")
+    .split(/\r?\n/)
+    .forEach((line, idx) => {
+      if (/embalaje/i.test(line)) {
+        hallazgos.push({ file: rel, line: idx + 1, text: line.trim() });
+      }
+    });
+  return hallazgos;
+}
+
+async function buscarHallazgos(root: string): Promise<Hallazgo[]> {
+  const archivos: string[] = [];
+  collectFiles(root, archivos);
+
+  // Cada worker escribe en el hueco que le corresponde al archivo, no en una
+  // lista compartida: asi el reporte sale en el MISMO orden de recorrido que
+  // antes, aunque las lecturas terminen desordenadas.
+  const porArchivo: Hallazgo[][] = new Array(archivos.length);
+  let siguiente = 0;
+
+  async function worker(): Promise<void> {
+    for (;;) {
+      const i = siguiente++;
+      if (i >= archivos.length) return;
+      const abs = archivos[i];
+      porArchivo[i] = hallazgosDeArchivo(abs, await fsp.readFile(abs));
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCIA_LECTURA, archivos.length) }, worker),
+  );
+
+  return porArchivo.flat();
+}
+
 describe("guard anti-embalaje (R6, R7)", () => {
-  it("no queda ninguna referencia a 'embalaje' fuera del whitelist", () => {
-    const hallazgos: Hallazgo[] = [];
-    walk(REPO_ROOT, hallazgos);
+  // `testTimeout` propio (60 s) en vez del global de 20 s. El numero sale de la
+  // medicion, no de doblar a ojo: el peor caso observado de este recorrido son
+  // 38,1 s (primera pasada sobre un worktree recien creado), que ya se sale de
+  // los 20 s el solo. 60 s cubre ese peor caso medido con 1,57x de margen y son
+  // ~340x el caso normal de despues del arreglo (175 ms), asi que sigue siendo
+  // una senal util si algun dia esto se cuelga de verdad. Se queda por debajo
+  // de los 90 s de `WORKER_START_TIMEOUT` de vitest (no configurable) para no
+  // tapar el otro modo de fallo, el de "no arranco el worker".
+  it("no queda ninguna referencia a 'embalaje' fuera del whitelist", async () => {
+    const hallazgos = await buscarHallazgos(REPO_ROOT);
 
     if (hallazgos.length > 0) {
       const detalle = hallazgos
@@ -166,5 +273,5 @@ describe("guard anti-embalaje (R6, R7)", () => {
     }
 
     expect(hallazgos).toHaveLength(0);
-  });
+  }, 60_000);
 });

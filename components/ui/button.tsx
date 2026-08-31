@@ -4,8 +4,33 @@ import { Loader2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Feature 226 — LOS ANILLOS DE ESTE COMPONENTE SON OPACOS, y no es un detalle de estilo.
+ *
+ * El anillo de foco es LA señal de dónde está el teclado: quien no usa ratón depende de él
+ * enteramente, y WCAG 1.4.11 le pide 3:1 CONTRA EL FONDO ADYACENTE (no el 4.5 de texto de 1.4.3,
+ * que se mide contra la tinta y no aplica aquí).
+ *
+ * Un anillo con alfa se pinta ENCIMA de la superficie que tiene detrás y luego se mide contra esa
+ * misma superficie, así que el alfa descuenta el contraste dos veces. Medido sobre las seis
+ * superficies donde el portal monta un botón (`tests/unit/guards/contraste-tokens.guardia.test.ts`,
+ * aritmética de `tests/fixtures/contraste.ts`), lo que había daba en el peor caso:
+ *
+ *   `ring-ring/50` 1.71 claro / 2.33 oscuro · `ring-brand/30` 1.38 / 1.45 ·
+ *   `ring-destructive/20` 1.29 claro · `ring-destructive/40` 1.87 oscuro
+ *
+ * Ninguno llega a 3. Ahora: `ring-ring` 3.68 / 5.57 y `ring-destructive` 3.33 / 5.24.
+ *
+ * ── DOS COSAS QUE NO SE PUEDEN LEER COMO ADORNO
+ * 1. Subir el alfa NO bastaba: con el naranja de marca opaco el anillo se queda en 2.81 sobre
+ *    `--secondary`, 2.88 sobre `--muted` y 2.99 sobre `--background`. Por eso `--ring` baja a
+ *    `--color-brand-dark` en tema CLARO (`app/globals.css`); `--primary` no se toca.
+ * 2. `brand-outline` deja de pintar su propio anillo y hereda el de la base. `--color-brand` es
+ *    un token de paleta SIN variante por tema, así que ni opaco llegaba a 3 en claro (2.81). Su
+ *    `focus-visible:border-brand` se queda: el borde sigue siendo de marca.
+ */
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive dark:aria-invalid:border-destructive/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -15,7 +40,7 @@ const buttonVariants = cva(
         // Botón de marca en contorno: fondo del background, borde y texto naranja.
         // Introducido para el flujo de carga masiva; no altera `default`/`outline`.
         "brand-outline":
-          "border-brand bg-background text-brand hover:bg-brand-soft hover:text-brand-dark aria-expanded:bg-brand-soft aria-expanded:text-brand-dark focus-visible:border-brand focus-visible:ring-brand/30 dark:bg-transparent dark:text-brand-light dark:hover:bg-brand/15 dark:hover:text-brand-light",
+          "border-brand bg-background text-brand hover:bg-brand-soft hover:text-brand-dark aria-expanded:bg-brand-soft aria-expanded:text-brand-dark focus-visible:border-brand dark:bg-transparent dark:text-brand-light dark:hover:bg-brand/15 dark:hover:text-brand-light",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:
@@ -52,15 +77,18 @@ const buttonVariants = cva(
         //
         // El borde y el anillo de foco SIGUEN en `--destructive`: son indicadores no textuales
         // (WCAG 1.4.11), no caen bajo el 1.4.3 que esta ficha viene a cumplir, y son los mismos
-        // que la clase base usa para `aria-invalid`. Cambiarlos sería otra decisión, sin medición
-        // que la respalde en esta ficha.
+        // que la clase base usa para `aria-invalid`. La 222 los dejó ahí diciendo que cambiarlos
+        // sería otra decisión «sin medición que la respalde»; ESA MEDICIÓN LLEGÓ con la feature
+        // 226 y el anillo pasó de `ring-destructive/20` (1.29 en claro, 1.31 en oscuro, con el
+        // alfa comiéndose el contraste dos veces) a `--destructive` OPACO: 3.33 y 5.24 sobre la
+        // peor de las seis superficies. El TOKEN no cambia, cambia el alfa.
         //
         // DEUDA VIVA, la misma que dejó dicha la 210 y que esta ficha NO cierra: `destructive` y
         // `danger` quedan como dos nombres del mismo aspecto (en claro `--destructive` y
         // `--color-danger` son el mismo hex; en oscuro `--destructive` y `--danger-strong` lo
         // son). Unificarlos es limpieza de paleta, no contraste.
         destructive:
-          "bg-danger-soft text-danger-strong hover:bg-danger-strong hover:text-card focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-danger/15 dark:hover:bg-danger-strong dark:focus-visible:ring-destructive/40",
+          "bg-danger-soft text-danger-strong hover:bg-danger-strong hover:text-card focus-visible:border-destructive/40 focus-visible:ring-destructive dark:bg-danger/15 dark:hover:bg-danger-strong",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

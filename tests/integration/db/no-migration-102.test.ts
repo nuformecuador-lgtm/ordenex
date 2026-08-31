@@ -55,11 +55,24 @@ const MIGRACION_NOTIFICACIONES_146 = "_notificacion";
  * sin modelos nuevos, asi que el resto de este archivo sigue afirmando lo mismo y sigue siendo
  * cierto. (La tabla que SI crea la 262, `orden_dia_reparto_cambio`, vive en OTRA migracion que no
  * lleva la palabra «notificacion» y no es infra de campana: es el rastro de la correccion.)
+ *
+ * Cuarta entrada anadida el 2026-08-29 por la ficha 333 (design 4.1/4.2, R29/R30/R36): suma
+ * `gasto_fijo_cobro_pendiente` a `notificacion_evento` y `gasto_fijo_cobro_dia` a
+ * `notificacion_entidad_tipo` para avisar al maestro de que quedan cobros de gasto fijo esperando
+ * decision. Igual que las tres anteriores: DOS `ALTER TYPE` y nada mas. La 333 SI crea una tabla
+ * —`gasto_fijo_cobro`—, pero vive en OTRA migracion (`20260829120000_gasto_fijo_cobro`) que no
+ * lleva la palabra «notificacion» y no es infra de campana: es la cola de cobros, no el aviso.
+ * Por eso las dos aserciones de abajo sobre `schema.prisma` (los DOS modelos de la 146 y las CINCO
+ * tablas/enums con nombre de notificacion) siguen siendo EXACTAMENTE las mismas y siguen verdes.
  */
 const MIGRACIONES_NOTIFICACIONES_POSTERIORES = [
   "_notificacion_evento_postulacion_recurso", // feature 253 / D6
   "_notificacion_evento_dia_reparto_corregido", // feature 262 / D7
   "_notificacion_evento_bloqueo_cierre", // feature 271 / §9.2 (Q4, 2026-08-23)
+  // Ficha 333 / design 4.1-4.2 (2026-08-29): el aviso «hay cobros de gasto fijo por decidir».
+  // Los DOS enums de la campana ganan un valor; la tabla `gasto_fijo_cobro` va en su propia
+  // migracion, que no cae en este filtro.
+  "_notificacion_evento_gasto_fijo_cobro",
 ] as const;
 
 describe("Feature 102 · SIN migracion nueva (R3)", () => {

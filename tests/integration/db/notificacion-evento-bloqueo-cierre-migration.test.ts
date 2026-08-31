@@ -189,10 +189,21 @@ describeSiHayBase("271 / §3.2 — la base aplicada, y el DOWN ejercitado de ver
     return (filas[0]?.valores ?? "").split(",").filter((v) => v.length > 0);
   }
 
-  it("la base tiene los OCHO eventos, con los dos nuevos AL FINAL y en orden de adicion", async () => {
+  // ⚠️ ACTUALIZADO EL 2026-08-29 POR LA FICHA 333, Y SOLO ESTE CASO. Lee la BASE APLICADA —el
+  // estado de HOY—, no una foto historica, asi que crece con cada valor que se anada detras. Todo
+  // lo demas de este archivo (el UP de la 271, su DOWN con los SEIS previos y las afirmaciones
+  // sobre los `down.sql` de la 146, la 253 y la 262) son FOTOS HISTORICAS y NO se tocan.
+  it("la base tiene los NUEVE eventos, con los dos de la 271 y el de la 333 AL FINAL y en orden de adicion", async () => {
     // El orden (`enumsortorder`) es lo que demuestra que los valores se ANADIERON y no que el tipo
     // se recreo por detras.
-    expect(await valoresDe("notificacion_evento")).toEqual([...EVENTOS_PREVIOS, ...NUEVOS]);
+    expect(await valoresDe("notificacion_evento")).toEqual([
+      ...EVENTOS_PREVIOS,
+      ...NUEVOS,
+      // FICHA 333 (design 4.1/4.2, R29/R30/R36, 2026-08-29) - el aviso «quedan cobros de gasto
+      // fijo esperando decision», que la corrida del cron emite AL FINAL y repite cada dia
+      // mientras siga habiendo alguno. Migracion `20260829130000_notificacion_evento_gasto_fijo_cobro`.
+      "gasto_fijo_cobro_pendiente",
+    ]);
   });
 
   it("⭑ una notificacion con cada evento nuevo se puede ESCRIBIR de verdad", async () => {

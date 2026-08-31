@@ -47,7 +47,13 @@ describe("contrato de descarga del DataTable", () => {
     expect(fuente).not.toMatch(/\bfetch\s*\(/);
   });
 
-  it("la configuración de descarga solo expone título, columnas, obtenerFilas y formatos", () => {
+  it("la configuración de descarga solo expone título, columnas, obtenerFilas, formatos y ámbito", () => {
+    // Ficha 314 — `ambitoColumnas` entra como QUINTO miembro, y esta guardia se amplía en vez
+    // de relajarse. Es la única forma de declarar el ámbito de la preferencia de columnas: la
+    // alternativa —colgarlo de `DataTableProps`— no habría tocado este archivo, pero
+    // permitiría declarar un ámbito en una tabla que no ofrece descarga, un estado que no
+    // significa nada. A cambio se AÑADE abajo la aserción de que el miembro es un `string` sin
+    // dominio, así que la guardia queda más fuerte, no más laxa.
     const bloque = fuente.match(
       /export interface DataTableDescarga \{([\s\S]*?)\n\}/,
     );
@@ -56,12 +62,23 @@ describe("contrato de descarga del DataTable", () => {
     const miembros = [
       ...bloque![1].matchAll(/^\s{2}(\w+)\??:/gm),
     ].map((m) => m[1]);
-    expect(miembros).toEqual(["titulo", "columnas", "obtenerFilas", "formatos"]);
+    expect(miembros).toEqual([
+      "titulo",
+      "columnas",
+      "obtenerFilas",
+      "formatos",
+      "ambitoColumnas",
+    ]);
 
     // `obtenerFilas` es una FUNCIÓN sin parámetros: la tabla no le pasa filtros, ni
     // página, ni url. El consumidor cierra sobre los suyos (D4).
     expect(bloque![1]).toMatch(
       /obtenerFilas:\s*\(\)\s*=>\s*Promise<DescargaFilasResult>/,
     );
+
+    // El ámbito es un IDENTIFICADOR, no una configuración: `string` a secas, opcional, y sin
+    // ningún tipo de dominio detrás. Un `ManifiestoFlujo`, un `AmbitoDescarga` o un objeto
+    // meterían dominio justo en la interfaz que ~31 pantallas comparten.
+    expect(bloque![1]).toMatch(/\n\s{2}ambitoColumnas\?:\s*string;/);
   });
 });

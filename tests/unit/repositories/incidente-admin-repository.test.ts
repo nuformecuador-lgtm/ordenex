@@ -139,6 +139,7 @@ function buildRepo(cliente: ReturnType<typeof buildPrisma>["cliente"]) {
     agregarPorCategoriaYTipo: vi.fn(),
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
+    obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
   };
   const repo = new IncidenteAdminRepository(
     cliente as never,

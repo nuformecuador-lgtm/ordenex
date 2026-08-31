@@ -21,6 +21,10 @@ function fakeService(
     plantillasActivas: 3,
     plantillasQueAplicanHoy: 2,
     egresosGenerados: 2,
+    // Ficha 333 (R13): la corrida repartio 2 plantillas -> 1 egreso automatico y 1 cobro
+    // pendiente nuevo; y quedan 4 pendientes en total (los de dias anteriores incluidos).
+    cobrosPendientesCreados: 1,
+    cobrosPendientesTotales: 4,
   })),
 ): { service: IGeneracionGastosFijosService; spy: typeof spy } {
   return { service: { ejecutarGeneracion: spy }, spy };
@@ -67,14 +71,33 @@ describe("handleGenerarGastosFijos — autorizacion (R29)", () => {
     expect(res.status).toBe(200);
     expect(spy).toHaveBeenCalledTimes(1);
     const body = await res.json();
+    // ⚠️ LITERAL, Y ES EL CONTRATO DE LA RESPUESTA DEL CRON (R13): solo conteos + la fecha CR.
+    // Se actualiza A MANO cuando el resumen gana un campo; derivarlo del propio resumen dejaria
+    // el caso siempre verde y no impediria que manana cruzara un monto o un identificador.
     expect(body).toEqual({
       fecha: "2026-07-15",
       plantillasActivas: 3,
       plantillasQueAplicanHoy: 2,
       egresosGenerados: 2,
+      cobrosPendientesCreados: 1,
+      cobrosPendientesTotales: 4,
     });
     // R29: el cuerpo NO filtra el secreto.
     expect(JSON.stringify(body)).not.toContain(SECRET);
+    // Ficha 333 (R13): el cuerpo son SEIS claves, todas conteos o la fecha. Ni montos, ni
+    // conceptos, ni identificadores de persona: se afirma sobre las CLAVES, para que un campo
+    // nuevo con nombre de dinero no pueda entrar sin que este caso lo nombre.
+    expect(Object.keys(body).sort()).toEqual([
+      "cobrosPendientesCreados",
+      "cobrosPendientesTotales",
+      "egresosGenerados",
+      "fecha",
+      "plantillasActivas",
+      "plantillasQueAplicanHoy",
+    ]);
+    expect(Object.values(body).every((v) => typeof v === "number" || v === "2026-07-15")).toBe(
+      true,
+    );
   });
 
   it("R30: pasa `now` al service (que decide, en hora CR, que plantillas aplican hoy)", async () => {

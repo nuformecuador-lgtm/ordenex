@@ -9,6 +9,177 @@
 > `git show <rev>:progress/current.md`.
 
 
+## ✅ 2026-08-29 — wallet: LAS CUATRO FICHAS CERRADAS Y EN `dev`
+
+| # | PR | En `dev` | Gate completo |
+|---|---|---|---|
+| 85 | #609 | `48d40398` | 21.881/21.908 |
+| 332 | #610 | `b776d0da` | 21.943/21.970 |
+| 334 | #611 | `7305949a` | 22.009/22.036 |
+| 333 | #612 | `63a43463` | 22.252/22.279 |
+
+Las cuatro `done`, cada una verificada **sobre el blob remoto**, no sobre el estado del PR. `dev` no
+ganó nada ajeno entre medias, así que cada gate cubre su propio contenido.
+
+**Lo que el módulo tiene ahora y no tenía esta mañana.** La periodicidad y el día de cobro se eligen
+en pantalla y editar el monto ya **no** reescribe el ciclo en silencio; las plantillas se pueden
+**eliminar** de verdad; los gastos fijos marcados «requiere aprobación» **no se cobran solos** —crean
+un pendiente que solo el maestro aprueba, con aviso en la campana, recordatorio diario y su cola
+dentro de `/wallet`—; y mover dinero se hace desde **un** diálogo en vez de dos, con la **fecha en que
+ocurrió**.
+
+**Lo que este día enseñó, más allá de las fichas:**
+
+1. **Un PR «MERGED» no garantiza que tu trabajo esté en `dev`.** El commit del repaso de la 332
+   (`3d29842f`) se empujó después del merge y se quedó fuera **sin ninguna señal**; se rescató con
+   cherry-pick. Desde entonces cada cierre comprueba los commits uno a uno contra `origin/dev`.
+2. **Un gate rojo no prueba nada por sí solo, y uno verde tampoco.** Dos rojos fueron flakes de
+   saturación —`CrearTiendaForm` y un deadlock `40P01`—, diagnosticados aislando antes de repetir y
+   **sin** meterlos al baseline, que compara por archivo y taparía un rojo real suyo. Y al revés: la
+   guardia de superficie ya estaba baselineada, así que un backend mergeado sin su frontend habría
+   salido **verde mintiendo**; por eso se miró su CONTENIDO y las fases fueron en el mismo PR.
+3. **Los censos de inventario cerrado son el sistema funcionando.** Los cinco que rompió la 333
+   existen para que ampliar un enum sea deliberado. Se actualizaron sin relajar ninguno — y
+   aparecieron **cuatro nombres de caso que ya mentían desde la 271**.
+4. **Ver la app encontró lo que la suite no.** Dos repasos con navegador: uno probó en vivo que editar
+   el monto ya no mueve la periodicidad, otro que el `admin` ve la cola con **cero** botones de
+   decidir. Ningún test unitario cubría eso de punta a punta.
+5. **Los subagentes declararon huecos en su propio trabajo** —una mutación que no podía enrojecer lo
+   que decía el spec, un test de render que no mata `Number()`, dos casos que sobreviven a su
+   mutación— y esas confesiones se conservaron en las bitácoras.
+
+**Deuda viva, con dueño y medida:**
+
+- **`wallet_movimiento` no tiene ningún `CHECK`**: un monto **cero** entra en la tabla del dinero.
+  Medido contra producción el 2026-08-29: **0 filas** con monto cero o negativo (38 movimientos,
+  mínimo ₡312) y **0** en `wallet_tienda_movimiento` (40 filas). El borde ya valida `> 0`, así que
+  es **prevención**, no corrección. Sin ficha todavía.
+- De los tres botones de la fila de plantillas, el más llamativo es **Eliminar** y el menos visible
+  **Desactivar**: la acción segura es la que menos se ve. Anotado en la 332, sin arreglar, a decisión
+  del humano.
+- El `min` del selector de fecha (334) usa una env var no pública, así que el cliente siempre pinta la
+  ventana por defecto; el borde valida bien, solo la pista visual quedaría corrida.
+- `prisma migrate dev` está **inusable en esta máquina** por un desajuste de checksum **preexistente**
+  en `20260827160000_orden_num_remision_unico_parcial`. Se trabajó con `migrate deploy`. Ajeno a estas
+  fichas.
+
+---
+
+## 💰 2026-08-29 — repaso del módulo wallet: cuatro fichas (85, 332, 333, 334)
+
+**Estado: las cuatro `pending`, specs EN CURSO (cuatro `spec_author` en paralelo).** El alta viaja en
+el **PR #608** (solo `feature_list.json`, gate `--rapido` verde: 2449/2450, único rojo en el baseline
+conocido). Las specs van en `chore/specs-wallet`, nacida de `chore/registro-fichas-wallet`
+(`05e5e958`), que sale de `origin/dev` en `8061d816`. **Apilado declarado: #608 se mergea ANTES que
+el PR de las specs** — el precedente contrario en este repo dejó commits que nunca llegaron a `dev`
+con el hijo en verde y «merged».
+
+**Qué pidió el humano** (textual, 2026-08-29): las plantillas de gastos fijos no se pueden eliminar;
+los gastos fijos deben ser parametrizables — «poner qué día quieren que se haga el cobro» —; el cobro
+no debe ser automático sino **autorizado por un administrador**; eso debe tener **notificaciones y
+recordatorios**; y le preocupa **la simplicidad de hacer ajustes o movimientos de dinero** dentro de
+la wallet.
+
+**MEDIDO CONTRA PRODUCCIÓN antes de registrar nada** (solo lectura, 2026-08-29). Es lo que da peso a
+cada ficha, y sin ello la 333 no se justificaría hoy:
+
+- 2 plantillas de gasto fijo («Alquiler bodega» 10.000, «Alquiler camioneta» 25.000), las **dos
+  inactivas** desde el 2026-08-27, con `fecha_cobro` = 2026-08-04 en ambas.
+- **0** movimientos `egreso_gasto_fijo` emitidos **jamás**: el mecanismo nunca ha cobrado nada y
+  desactivar fue el sucedáneo del borrado que no existe.
+- **0** movimientos de ajuste sobre **38** filas del libro: nadie ha usado nunca ese diálogo.
+
+**EL FALLO MUDO que destapó el repaso, verificado leyendo el código.**
+`GastoFijoPlantillaDialog` envía solo `{id, concepto, monto}`; los defaults de `periodicidadFields`
+en `actualizarGastoFijoPlantillaSchema` rellenan `meses`/`1`/**hoy**, y
+`GastoFijoPlantillaRepository.actualizar` los escribe **sin condición**. Resultado: **editar el monto
+reescribe la periodicidad a mensual y mueve el ancla del ciclo al día de la edición.** De `semanas` a
+`meses` cambia además el formato de la clave de idempotencia (`<id>:2026-09-14` → `<id>:2026-09`),
+que es el escenario de **doble cobro** que `GeneracionGastosFijosService` advierte por escrito en su
+cabecera. En producción **aún no ha mordido**: las dos ediciones del 2026-08-27 fueron
+desactivaciones, que van por `setActiva` y no tocan `fecha_cobro`.
+
+**Las cuatro fichas.**
+
+| # | Ficha | Zona | Tamaño | Depende |
+|---|---|---|---|---|
+| 85 | periodicidad y día de cobro del gasto fijo en la UI | fullstack | media | 84 |
+| 332 | eliminar plantillas de gasto fijo | fullstack | baja | 85 |
+| 333 | el gasto fijo se cobra con autorización, aviso y recordatorio | fullstack | alta | 85 |
+| 334 | un solo diálogo para mover dinero en la wallet | fullstack | media | — |
+
+La **85 ya existía** en `pending` desde el 2026-07-17 (la mitad de frontend que la 84 dejó sin
+entregar): se **amplía**, no se duplica. Pasa de `frontend` a `fullstack` y pierde el «(frontend)»
+del nombre, que ya mentía — el arreglo honesto del reset toca el schema, no solo el diálogo.
+
+**PUERTA HUMANA del 2026-08-29: cuatro decisiones CERRADAS antes de escribir los specs.**
+
+- **Borrado (332).** La fila desaparece de la tabla de plantillas. Decisión textual: «lo importante
+  es el historial del libro, si el movimiento ya se hizo no hay problema que quede allí ese histórico
+  pero cuando ya no se necesite sí es importante poder prescindir y eliminarlo». Es viable sin perder
+  nada: `wallet_movimiento` **no tiene FK** a `gasto_fijo_plantilla` (referencia derivada
+  `origen_id = '<plantillaId>:<periodo>'`) y la descripción del movimiento ya lleva el concepto.
+  Esta ficha **revoca explícitamente** el R25 de la 45 («sin borrado»), con OK humano.
+- **Autorización (333).** Se decide **por plantilla** (cobra sola / requiere aprobación), no global.
+- **Quién aprueba (333): SOLO EL MAESTRO.** ⚠️ Es la **primera excepción** a la paridad
+  admin↔maestro que la ficha 94 dio en wallet, y al resto del CRUD de plantillas, que usa
+  `esAccesoTotal` (maestro + admin). El admin **ve** los pendientes y no los aprueba. Está pedido
+  como excepción deliberada en el spec para que nadie lo lea como descuido.
+- **Recordatorio (333).** Diario mientras siga pendiente; el pendiente **no vence solo**. No hace
+  falta cron nuevo: `generar-gastos-fijos` ya corre diario a las 6:00.
+- **Borrar con pendientes (332+333).** Se cancelan, y la confirmación lo dice con el número delante.
+  La cascada la **posee la 333** (dueña de la tabla de pendientes); la 332 solo la declara, para que
+  siga siendo implementable hoy sin la 333.
+- **Fecha del movimiento (334).** El movimiento manual **admite fecha, con tope en hoy**.
+
+**Trampas pasadas a los specs por escrito, para que no se redescubran caras.** (a) El notificador hay
+que **inyectarlo en el composition root**, no basta con importarlo — precedente: 2 de 7 notificadores
+muertos con la suite verde. (b) El recordatorio **diario** choca con `notificacion_dedupe_key` si la
+clave no incluye el día: es el mismo error que la 262 documentó, donde el segundo aviso no salía
+nunca, en silencio. (c) La guardia del reset de la 85 debe afirmar **valores literales**, no
+compararse contra los defaults del propio schema, o está verde por construcción. (d) La 334 borra dos
+componentes al fusionarlos: la cobertura de ambos tiene que sobrevivir, con los archivos de test
+nombrados — borrar un componente ya se llevó su test por delante y costó una regresión en producción.
+(e) La fecha de la 334 **no puede reutilizar `created_at`** sin enumerar antes qué consumidores del
+ledger se mueven (analítica y rollup diario incluidos).
+
+**AVANCE del 2026-08-29 (tarde).** Los cuatro specs están escritos y commiteados. El humano **retiró
+la puerta de aprobación** de los specs para esta tanda («tan pronto termines con los specs implementá
+sin preguntar»), así que se implementa en cuanto cada spec cierra.
+
+- **PR #608 — alta de las cuatro fichas: MERGEADO** en `dev` (`4eaff293`).
+- **Ficha 85 — IMPLEMENTADA, `in_progress`, PR #609 abierto y sin mergear.** Rama
+  `feature/85-gasto-fijo-periodicidad-ui`. Fase B (`backend_dev`) y fase F (`frontend_dev`),
+  secuenciadas. `./init.sh` **completo** en verde: **21.881/21.908**, `INIT_EXIT=0`. El único archivo
+  rojo es `superficie-de-uso.guardia.test.ts`, del baseline, y se verificó **su contenido**: el único
+  infractor es `lib/actions/tarifas.ts:67 obtenerTarifa`, ajeno a la ficha. Se mira el contenido y no
+  solo el nombre porque el baseline compara **por archivo** y no vería un rojo nuevo dentro de uno ya
+  listado. Siete mutaciones aplicadas con salida roja real en `progress/impl_85.md`.
+  - Una de esas mutaciones **corrigió el enunciado del propio spec**: mutar el borde no puede
+    enrojecer el test de servicio, porque ese test vive por debajo de zod. Se mutó también el
+    servicio.
+  - Los specs de la **332, 333 y 334** viajan en ese mismo PR (solo documentos).
+- **BLOQUEO ACTIVO:** el merge de #609 lo rechaza el clasificador de auto mode. Hasta que entre, la 85
+  no pasa a `done` y **fullstack sigue en su tope de 2** (321 + 85): la 332 no puede arrancar sin
+  romper la regla 1, que el gate valida.
+
+**Decisiones de producto tomadas por el leader** al retirarse la puerta, todas fuera del dinero: presets
+de periodicidad + «Personalizada»; fecha de cobro pasada **se avisa, no se bloquea**; «Monto» en vez de
+«Monto mensual»; «No se cobra» en inactivas; las dos columnas nuevas **sí** entran al Excel; el
+interruptor de la 333 nace en «requiere aprobación»; el aviso llega a maestro y admin y **decide solo el
+maestro**; desactivar **no** cancela pendientes; la cola pagina sin tope duro; y la 334 admite fecha
+hacia atrás con **ventana de 30 días configurable**.
+
+**Consecuencia declarada de esa última** (no la introduce la ficha, la hace visible): el rollup diario
+calcula **el día en curso**, así que un movimiento fechado ayer no entra solo en el agregado de ayer.
+Hay script de backfill, pero es un paso manual.
+
+**Orden restante**, serial por conflicto de archivos y por cupo: **332 → 334 → 333**.
+
+**Lo que falta.** Cerrar los cuatro specs, pasarlos por la puerta humana de aprobación y recién ahí
+tocar código. El cupo de `in_progress` en fullstack lo ocupa hoy la **321**, así que solo una de las
+cuatro puede entrar a `in_progress` a la vez hasta que la 321 cierre.
+
 ## 💬 2026-08-28 — ficha 321: histórico de conversaciones (admin y maestro leen el chat de todos)
 
 **Estado: `pending` → spec EN CURSO (`spec_author` lanzado).** Rama
@@ -282,6 +453,89 @@ pintarse como «Mensaje no compatible»; la guardia 229 congela `PUBLIC_ROUTES` 
 está mergeada en `dev`** (PRs #518 y #533) pero su ficha sigue `in_progress`: no se tocó sin
 confirmación del humano.
 
+
+## 🚀 RELEASE DESPLEGADA — 2026-08-29 madrugada. **EMPIEZA A LEER POR AQUÍ**
+
+**PR #606**, `dev` → `prod`, sobre el SHA `b954569a`. **Sin migraciones.**
+
+**Gate COMPLETO sobre el SHA exacto:** `INIT_EXIT=0`, **21.818 verdes**, un solo archivo rojo y en
+el baseline conocido. `dev` re-comprobado justo antes de abrir: no se había movido.
+
+### Lo que entra
+
+| | |
+| --- | --- |
+| **327** | corregir **dirección y ubicación** de una orden, con **aviso del importe** antes de guardar cuando el cambio mueve la tarifa |
+| **314** | elegir y **reordenar** las columnas del Excel; el catálogo pasa de 15 a **22** |
+| **325** | buscador y filtros en las dos pestañas de novedades, sobre el conjunto entero y no sobre la página |
+| **226** | el anillo de foco pasa de **1,29 a 3,33** — para quien navega con teclado, era no ver dónde está |
+| 318, 322, 323, 329 | el gate y sus guardias: el rápido ya juzga contra el baseline, un endpoint no puede nacer sin documentar, el guard de deriva deja de depender del `.env`, y un recorrido que tardaba 38 s ahora tarda 195 ms |
+| 326 | primer buscador propio retirado, con el censo de los otros dieciséis |
+
+### Verificación posterior
+
+1. **Errores de runtime: cero nuevos.** El único grupo es un aviso de obsolescencia de `pg` en el
+   corte diario, presente desde el 2026-07-27 — anterior a esta release.
+2. **Los jobs recurrentes corrieron SOLOS y se re-agendaron.** `liberar_reprogramadas` y
+   `analitica_rollup_diario` ejecutaron el 29 a sus horas y tienen ya su fila del 30. **Es la prueba
+   de que el arreglo de ayer funciona:** ayer hubo que sembrarlos a mano; hoy la serie se perpetúa
+   sola. El incidente de las reprogramadas queda cerrado por comportamiento, no por promesa.
+
+### ⚠️ Lo que sigue sin verse
+
+**El modal de corrección no lo ha mirado nadie.** El repaso de la ficha 330 cubrió el selector de
+columnas, el buscador y la navegación por teclado, pero **no consiguió abrirlo** — su disparador no
+está en la fila. Quedan sin ver a mano los cinco campos nuevos, los tres selectores encadenados y
+**el aviso del importe**, que es justo donde se confirma un cambio de dinero.
+
+Está cubierto por tests y trece mutaciones. Pero en este repo un repaso visual ya encontró siete
+textos rotos que doce mil tests daban por buenos.
+
+### Un error de proceso, anotado
+
+**Las fichas 329 y 330 no llegaron a `dev` con su rama:** se registraron y se empujaron, pero **no se
+abrió su PR**, y la rama siguiente salió de un `dev` que no las tenía. Se recuperan en este mismo
+commit. Empujar no es mergear, y una rama sin PR es trabajo que no existe para nadie más.
+
+---
+
+## 🚀 RELEASE DESPLEGADA — 2026-08-28 noche. **EMPIEZA A LEER POR AQUÍ**
+
+**PR #588**, `dev` → `prod`, sobre el SHA `f2b5b78f`. Despliegue de producción en **READY**
+(`dpl_2t8riD1i…`). **Sin migraciones**: la del monto entero (305) ya se había desplegado por la
+mañana.
+
+**Gate COMPLETO sobre el SHA exacto:** `INIT_EXIT=0`, 21.558 verdes / 26 skipped, un archivo rojo y
+en el baseline conocido. `dev` re-comprobado justo antes de abrir el PR: no se había movido.
+
+⚠️ **La primera corrida del gate murió en el paso 1** —`falta la carpeta de specs de la ficha 314`—
+antes de ejecutar un solo test. No era un falso positivo: la ficha estaba `in_progress` en `dev` y su
+spec vivía en una rama sin mergear. La validación que trajo el PR #565 esta misma mañana hizo
+exactamente su trabajo.
+
+### Lo que entra
+
+| | |
+| --- | --- |
+| **312** | corregir destinatario, teléfono, producto y notas de una orden ya cargada. Hasta hoy era SQL contra producción |
+| **319** | eliminar una orden **vuelve a ser posible**: no era una mejora, la función no alcanzaba a ninguna orden (0 de 429 medido) |
+| **320** | `DELETE /api/ordenes/api-key/orden/{id}` — el primer `DELETE` de la API pública |
+| **315** | aprobar un cierre libera sus reprogramadas **en el acto** |
+| **313** | la siembra de los jobs recurrentes cuelga del despliegue, con guardia |
+| 308, 309, 310 | tres textos que mentían a la tienda |
+| 311, 316 | el chat con el cliente: media, reacciones, contactos, y el mensajero puede enviar |
+| 317, 321 | rojos sin dueño en `dev`; histórico de conversaciones (otra sesión) |
+
+### Verificación posterior — las tres casillas de `docs/release.md` §3
+
+1. **Errores de runtime: CERO** en la ventana del despliegue.
+2. **Los jobs recurrentes tienen su primera fila**, una por tipo. Es la casilla que nació hoy del
+   incidente, y su primera ejecución real.
+3. **La idempotencia de la siembra quedó probada en producción, no en un test:** las filas vivas son
+   las que se sembraron A MANO a las 14:09, y el build de esta release corrió su siembra automática
+   **sin duplicarlas**.
+
+---
 
 ## 🚨 2026-08-28 — INCIDENTE DE PRODUCCIÓN: las reprogramadas nunca volvían a la central
 
