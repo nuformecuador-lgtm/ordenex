@@ -260,7 +260,7 @@ describe("HiloHistoricoDTO — la carga perezosa es ESTRUCTURAL (R41)", () => {
       numRemision: "REM-1001",
       destinatario: "MARIA GONZALEZ",
       mensajeroNombre: "Juan Perez",
-      telefonoVigenteMasked: "0001",
+      telefonoVigente: "+50688880001",
       telefonosCount: 1,
       ultimaActividadAt: "2026-08-28T18:00:00.000Z",
       totalMensajes: 4,

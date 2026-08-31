@@ -164,7 +164,7 @@ describe("T6.2 — cabecera del hilo fusionado (R43)", () => {
   it("rotula orden, destinatario y mensajero, y avisa de los dos números", async () => {
     const listarMensajes = vi.fn(async () =>
       okMensajes([mensaje()], {
-        cabecera: hilo({ telefonosCount: 2, telefonoVigenteMasked: "4321" }),
+        cabecera: hilo({ telefonosCount: 2, telefonoVigente: "+50688884321" }),
       }),
     );
     renderPantalla(listarMensajes);

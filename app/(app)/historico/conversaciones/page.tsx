@@ -1,6 +1,7 @@
 import type { RolValue } from "@prisma/client";
 import { notFound } from "next/navigation";
 
+import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { ROLES_HISTORICO_CONVERSACIONES } from "@/lib/auth/menu-visibility";
 import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
@@ -66,20 +67,31 @@ export default async function HistoricoConversacionesPage(
   }
 
   const catalogo = await (deps.obtenerCatalogo ?? obtenerCatalogoFiltrosOrdenes)();
+  // Pedido humano (2026-08-31): el filtro solo ofrece a los mensajeros ACTIVOS. El catalogo
+  // los trae todos —y hace bien: en `/ordenes`, esconder a un mensajero dado de baja volveria
+  // inalcanzables las ordenes que todavia tiene en la mano—, pero aqui el filtro no busca
+  // ordenes vivas sino conversaciones, y ofrecer a los `inactivo`/`bloqueado`/`pendiente`
+  // llena el desplegable de gente que ya no trabaja. El recorte se hace AQUI, en la
+  // superficie, y no en el repositorio compartido.
   const mensajeros: MensajeroFiltroDTO[] =
-    catalogo.status === "ok" ? catalogo.catalogo.mensajeros : [];
+    catalogo.status === "ok"
+      ? catalogo.catalogo.mensajeros.filter((m) => m.estado === "activo")
+      : [];
 
   // El módulo de cliente (bloques 5 y 6) recibe SÓLO datos serializables: la lista de
   // mensajeros del filtro. Ni una función ni el actor cruzan la frontera RSC — los hilos y
   // los mensajes los pide él por Server Action + SWR, que es lo que sostiene la carga
   // perezosa de R41.
+  // Pedido humano (2026-08-31): el encabezado ESTANDAR del portal, el mismo `AppPage` que usan
+  // `/ordenes`, `/incidentes` o `/monitoreo`. Antes esta ruta armaba su propio `<main>` con un
+  // `<h1>` suelto y se quedaba sin la barra superior (tema, notificaciones, salir).
+  //
+  // `contentClassName`: el `Container` por defecto apila con `gap-6` y `p-6`; esta pantalla es
+  // de dos paneles que scrollean por dentro, asi que necesita `min-h-0` (sin el, un hijo con
+  // `overflow-y-auto` crece en vez de scrollear) y un ritmo mas apretado.
   return (
-    <main
-      aria-label="Histórico de conversaciones"
-      className="flex min-h-0 flex-1 flex-col gap-3 p-3 md:p-6"
-    >
-      <h1 className="text-lg font-semibold text-foreground">Conversaciones</h1>
+    <AppPage title="Conversaciones" contentClassName="min-h-0 gap-3 p-3 md:p-6">
       <HistoricoConversacionesModule mensajeros={mensajeros} />
-    </main>
+    </AppPage>
   );
 }

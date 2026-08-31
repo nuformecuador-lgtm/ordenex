@@ -2,14 +2,19 @@ import { describe, it, expect, vi } from "vitest";
 import type { RolValue } from "@prisma/client";
 import { FiltrosOrdenesService } from "@/lib/services/FiltrosOrdenesService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { MensajeroFiltroDTO } from "@/lib/types/filtros-ordenes";
 
 // Feature 144/B2 (R47/R52/R53) — catalogo de filtros de `/ordenes`, sin DB.
 
 const ZONAS = [{ id: "z1", nombre: "GAM" }];
 const TIENDAS = [{ id: "t1", nombre: "Tienda", esApiKey: false, activa: true }];
-const MENSAJEROS = [{ id: "m1", nombre: "Ana Mora", zonaId: "z1" }];
+const MENSAJEROS: MensajeroFiltroDTO[] = [
+  { id: "m1", nombre: "Ana Mora", zonaId: "z1", estado: "activo" },
+];
 /** Los mensajeros de UNA zona: otro conjunto, no un subconjunto del de arriba. */
-const MENSAJEROS_ZONA = [{ id: "m9", nombre: "Beto Ruiz", zonaId: "z-satelite" }];
+const MENSAJEROS_ZONA: MensajeroFiltroDTO[] = [
+  { id: "m9", nombre: "Beto Ruiz", zonaId: "z-satelite", estado: "activo" },
+];
 const PROVINCIAS = [{ id: "p1", nombre: "San Jose" }];
 const CANTONES = [{ id: "c1", nombre: "Central", padreId: "p1" }];
 const DISTRITOS = [{ id: "d1", nombre: "Carmen", padreId: "c1" }];
