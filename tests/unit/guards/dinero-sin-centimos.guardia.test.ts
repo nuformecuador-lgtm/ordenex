@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { formatearValor } from "@/components/private/analytics/formato";
 import { PriceLabel } from "@/components/shared/PriceLabel";
 import { formatMonto, formatMontoString, monedaConfig, money } from "@/lib/config/moneda";
-import { formatMontoCotizacion } from "@/lib/utils/monto-cotizacion";
+import { serializarMontoCotizacion } from "@/lib/utils/monto-cotizacion";
 import { lineasSinComentarios, quitarComentarios } from "../../fixtures/sin-comentarios";
 
 /**
@@ -37,14 +37,24 @@ import { lineasSinComentarios, quitarComentarios } from "../../fixtures/sin-come
  *   5. PROSA — ningun docstring de la superficie de dinero sigue prometiendo
  *      decimales (R18, C4).
  *   6. SALIDAS DE MAQUINA — hermano explicito del diente 3, añadido por la
- *      feature 255: el formateador de la cotizacion por API key
+ *      feature 255: el serializador de la cotizacion por API key
  *      (`lib/utils/monto-cotizacion.ts`) NO es ninguno de los cinco caminos
  *      publicos, ninguna pantalla lo importa, y SI emite exactamente dos
  *      decimales a proposito porque su salida es un contrato JSON de maquina
  *      (255/R40, R41, R42).
  *
+ *      ENMIENDA DEL 2026-08-28 (ficha 319): ese modulo dejo de FORMATEAR y pasa
+ *      a servir el importe CRUDO (`1578.00`). Lo que este diente vigila NO
+ *      cambia —los dos decimales siguen ahi, que es lo que impide que la
+ *      cotizacion pierda centimos— pero el separador ya no sale de
+ *      `monedaConfig`: es el punto canonico del formato money-safe. Por eso el
+ *      regex de abajo dejo de componerse desde la configuracion, y en su lugar
+ *      se afirma explicitamente que la salida NO depende de ella.
+ *
  * El separador decimal se lee de `monedaConfig`, NO se escribe a mano: es la
- * decision Q1(b) del spec. El campo dejo de gobernar la salida y su oficio nuevo
+ * decision Q1(b) del spec. Vale para los dientes 1 a 5, que vigilan lo que se
+ * PINTA. El diente 6 es la excepcion desde la ficha 319 y explica su porque en
+ * el sitio: lo que vigila ya no es presentacion configurable. El campo dejo de gobernar la salida y su oficio nuevo
  * es exactamente este — ser el punto unico donde se declara el caracter que esta
  * guardia persigue. Escribir la coma aqui seria el hardcode de contexto que
  * `docs/architecture.md` prohibe.
@@ -600,7 +610,7 @@ const SALIDAS_DE_MAQUINA: readonly { ruta: string; porque: string }[] = [
   {
     ruta: "lib/utils/monto-cotizacion.ts",
     porque:
-      "importes del contrato JSON de la cotizacion por API key (feature 255): los lee un integrador, no una persona, y un precio servido como respuesta no puede perder centimos por el camino",
+      "importes del contrato JSON de la cotizacion por API key (feature 255, enmendada por la ficha 319): los lee un integrador, no una persona, y un precio servido como respuesta no puede perder centimos por el camino. Desde la 319 viajan CRUDOS, en money-safe de escala 2, el mismo dialecto que el `costoEnvio` de la carga",
   },
 ];
 
@@ -611,10 +621,22 @@ const IMPORTA_SALIDA_DE_MAQUINA = /from\s+["'][^"']*\/monto-cotizacion["']/;
 const EXPORTA_CAMINO_PUBLICO =
   /export\s+(?:async\s+)?(?:function|const|class)\s+(formatMontoString|money|formatMonto|PriceLabel|formatearValor)\b/;
 
-/** El separador decimal CONFIGURADO seguido de EXACTAMENTE dos digitos. Lo exigido. */
-const EXACTAMENTE_DOS_DECIMALES = new RegExp(
-  `${escaparRegex(monedaConfig.separadorDecimal)}\\d\\d$`,
-);
+/**
+ * El PUNTO money-safe seguido de EXACTAMENTE dos digitos. Lo exigido a una salida
+ * de maquina desde la ficha 319.
+ *
+ * Se escribe a mano, y aqui eso es correcto: hasta la 319 este regex se componia
+ * desde `monedaConfig.separadorDecimal` porque la salida se formateaba con el
+ * separador configurado. Ya no. El punto de un money-safe string no es
+ * configuracion de presentacion —es la forma del dato en el contrato, como el
+ * `YYYY-MM-DD` de una fecha—, asi que componerlo desde `monedaConfig` haria que
+ * este diente se pusiera verde o rojo segun una variable de entorno que ya no
+ * gobierna nada de lo que vigila.
+ */
+const EXACTAMENTE_DOS_DECIMALES = /\.\d\d$/;
+
+/** La forma COMPLETA del money-safe: signo opcional, digitos, punto, dos digitos. */
+const MONEY_SAFE_CRUDO = /^-?\d+\.\d{2}$/;
 
 describe("guardia 230 · diente 6 — las salidas de maquina SI llevan centimos (255/R41)", () => {
   it("el censo existe, vive fuera de los arboles de pantalla y no es un camino publico (R40)", () => {
@@ -660,48 +682,64 @@ describe("guardia 230 · diente 6 — las salidas de maquina SI llevan centimos 
     expect(IMPORTA_SALIDA_DE_MAQUINA.test(codigo(rutaDelCanal))).toBe(false);
   });
 
-  it("el formateador de la cotizacion SI emite exactamente dos decimales (R35, R41)", () => {
+  it("el serializador de la cotizacion SI emite exactamente dos decimales (R35, R41)", () => {
     // La afirmacion en POSITIVO, que es el punto de este diente: si alguien
     // "alinea" el modulo con las pantallas y le quita los centimos, esto se pone
     // ROJO y la cotizacion no pierde dinero en silencio.
     expect(CORPUS_STRING.length).toBeGreaterThan(100);
     const sinLosDosDecimales = CORPUS_STRING.filter(
       (entrada) =>
-        !EXACTAMENTE_DOS_DECIMALES.test(formatMontoCotizacion(new Prisma.Decimal(entrada))),
+        !EXACTAMENTE_DOS_DECIMALES.test(serializarMontoCotizacion(new Prisma.Decimal(entrada))),
     );
     expect(
       sinLosDosDecimales,
-      "el formateador de la cotizacion dejo de emitir los dos decimales del contrato",
+      "el serializador de la cotizacion dejo de emitir los dos decimales del contrato",
     ).toEqual([]);
+  });
+
+  it("y los emite CRUDOS: money-safe, sin simbolo ni miles agrupados (ficha 319)", () => {
+    // La otra mitad de la enmienda. El diente de arriba solo exige la cola de dos
+    // decimales, que un `₡13.331.832,72` tambien cumpliria; esto fija la forma
+    // ENTERA, que es lo que el integrador parsea.
+    const noCrudos = CORPUS_STRING.filter(
+      (entrada) => !MONEY_SAFE_CRUDO.test(serializarMontoCotizacion(new Prisma.Decimal(entrada))),
+    );
+    expect(
+      noCrudos,
+      "el serializador de la cotizacion volvio a formatear: el contrato JSON sirve money-safe crudo",
+    ).toEqual([]);
+
+    // Y no era un regex que aceptase cualquier cosa: la forma ANTERIOR se caza.
+    expect(MONEY_SAFE_CRUDO.test(`${monedaConfig.simbolo}13.331.832,72`)).toBe(false);
   });
 
   it("y convive con las pantallas: el MISMO importe va sin centimos por el camino publico", () => {
     // Las dos cosas a la vez y sobre el mismo numero, para que la coexistencia
     // quede escrita y no se relea como una incoherencia.
     const importe = "13331832.72";
-    expect(formatMontoCotizacion(new Prisma.Decimal(importe))).toMatch(EXACTAMENTE_DOS_DECIMALES);
+    expect(serializarMontoCotizacion(new Prisma.Decimal(importe))).toMatch(EXACTAMENTE_DOS_DECIMALES);
     expect(formatMontoString(importe)).not.toMatch(CON_DECIMAL);
   });
 
   it("CONTRAPRUEBA: un modulo que DEJARA de emitir decimales seria cazado", () => {
     // La mutacion escrita dentro del test, como la del diente 3: alguien pasa el
-    // formateador de la cotizacion por el camino publico de las pantallas para
+    // serializador de la cotizacion por el camino publico de las pantallas para
     // "unificar el aspecto del dinero". El detector dispara en todo el corpus.
-    const formateadorAlineadoConLasPantallas = (valor: Prisma.Decimal): string =>
+    const serializadorAlineadoConLasPantallas = (valor: Prisma.Decimal): string =>
       formatMontoString(valor.toFixed(2));
 
     const cazados = CORPUS_STRING.filter(
       (entrada) =>
         !EXACTAMENTE_DOS_DECIMALES.test(
-          formateadorAlineadoConLasPantallas(new Prisma.Decimal(entrada)),
+          serializadorAlineadoConLasPantallas(new Prisma.Decimal(entrada)),
         ),
     );
     expect(cazados.length).toBeGreaterThan(100);
 
     // Y el detector de imports caza a una pantalla que lo consumiera...
     const ficticio = `
-      import { formatMontoCotizacion } from "@/lib/utils/monto-cotizacion";
-      export function Celda({ monto }: { monto: Prisma.Decimal }) { return formatMontoCotizacion(monto); }
+      import { serializarMontoCotizacion } from "@/lib/utils/monto-cotizacion";
+      export function Celda({ monto }: { monto: Prisma.Decimal }) { return serializarMontoCotizacion(monto); }
     `;
     expect(IMPORTA_SALIDA_DE_MAQUINA.test(quitarComentarios(ficticio))).toBe(true);
     // ...sin denunciar un import cualquiera del modulo de moneda.
