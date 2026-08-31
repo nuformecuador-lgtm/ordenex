@@ -482,3 +482,300 @@ El arreglo de B1/B2 es bueno y no debe tocarse para arreglar B3. En particular:
 - El cierre de la siembra al primer gesto del usuario.
 
 B3 se arregla **en el archivo de test**, no en produccion.
+
+---
+---
+
+# TERCERA PASADA — cierre (2026-08-31)
+
+> Revisor: `reviewer`. Worktree `C:/w335` (la ruta fisica conserva el nombre viejo a proposito),
+> rama `feature/339-filtros-desde-url`, HEAD **`53183916`** (merge de `origin/dev`), arbol limpio.
+> Alcance acordado: **el renumerado 335 -> 339**, **B3**, **M5**, **M1**, el gate POST-merge, y
+> regresiones que el merge grande de `dev` pudiera haber metido en nuestra superficie. Lo aprobado
+> en la segunda pasada (B1, B2, B1-bis, M2, M4, R2/R3/R5/R7) NO se re-revisa desde cero.
+
+## VEREDICTO: **OK** — aprobado, sin bloqueantes
+
+Los tres hallazgos abiertos (B3 bloqueante, M5 y M1 menores) estan **cerrados y verificados por
+el revisor ejecutando, no leyendo**. El renumerado esta limpio. El gate pasa post-merge.
+
+---
+
+## 0. Herramientas: comprobadas ANTES de creerse ningun numero
+
+El aviso de la pasada anterior era real: el `PATH` de bash llega con el `PATH` de Windows
+separado por `;`, y bash lo parte por `:`, de modo que `git`, `node`, `pnpm` y hasta `grep`
+desaparecen. Se reparo exportando un `PATH` explicito con `/usr/bin`, `/bin`, `nodejs`,
+`Git/cmd` y `System32` en cada comando, y se verifico **antes** de medir nada:
+
+| Herramienta | Respuesta |
+| --- | --- |
+| `git --version` | `2.43.0.windows.1` |
+| `node -v` | `v22.13.1` |
+| `pnpm -v` | `10.10.0` |
+| `grep --version` | GNU grep 3.0 |
+
+Con esto, **ningun tramo del gate se degrado a `warn`**: mas abajo se citan el `typecheck paso` y
+el `lint paso` reales, con sus salidas. El falso verde por herramienta ausente **no ocurrio**.
+
+Nota lateral (no es un hallazgo de esta ficha, pero afecta a quien lea): con vitest 4 el reporter
+`basic` ya no existe; `--reporter=basic` aborta la corrida con `Failed to load url basic`. Quien
+mida con ese flag creera que el guardia no corre. Se midio con el reporter por defecto.
+
+---
+
+## 1. El renumerado 335 -> 339: **limpio**
+
+Se reviso como cualquier otro cambio. El renumerado viaja **dentro del merge `53183916`**.
+
+| Comprobacion | Resultado |
+| --- | --- |
+| `specs/339-filtros-desde-url/` existe; no queda `specs/335-filtros-desde-url/` | OK (el `335` que hay es `335-mi-wallet-diseno-y-puerta`, ajeno) |
+| El rename se registro como **rename** (git `-M`), no como borrado+alta | OK — `design.md` 14 lineas, `requirements.md` 2, `tasks.md` 8: solo texto renumerado |
+| `progress/review_335.md => review_339.md` conserva las dos pasadas anteriores | OK — 484 lineas, ambas cabeceras presentes |
+| **Reparto de `impl_*.md`**: `impl_335.md` = bitacora AJENA de la wallet | OK — `git diff --stat origin/dev -- progress/impl_335.md` **vacio**: byte a byte la de `dev` |
+| `impl_339.md` = la nuestra, integra | OK — 489 lineas, arranca en «339 — Bitacora de implementacion / T0.1 Baseline» |
+| Ningun `335` huerfano en nuestros archivos | OK — `grep -rn 335` sobre `specs/339`, `impl_339.md`, `review_339.md`, los guardias y `useFiltrosUrl.ts`, excluyendo `w335`: **cero** |
+| La ruta `C:/w335` sigue diciendo 335 | OK — 4 ocurrencias intactas |
+| `feature_list.json`: sin ids duplicados | OK — 336 fichas, lista de duplicados **vacia**, verificado con node |
+| La entrada ajena `335` (wallet) intacta | OK — sigue `feature/335-mi-wallet-diseno-y-puerta`, `in_progress` |
+| La nuestra renumerada | OK — `339`, `feature/339-filtros-desde-url`, zona `frontend`, `in_progress`, con `status_note` explicando el porque |
+| Cupo por zona (regla 1) | OK — `frontend` = 326 + 339 = 2; `fullstack` = 321 + 335 = 2. En el limite, no por encima |
+
+**El riesgo que se pidio mirar —una guardia que barra `specs/` o cruce rutas de ficha— no se
+materializo**, y no por lectura: el gate corrio **las 170 guardias** y la unica roja es la ajena
+de baseline. Ademas el propio `init.sh` valida el registro y lo dijo en verde:
+
+    feature_list.json: sin ids duplicados (336 fichas), cupo por zona respetado (in_progress=4)
+    y specs en su sitio
+
+(Ojo con `progress/history.md`, que avisa de que esa validacion se saltaba por falta de `jq`:
+**aqui no se salto**, se ejecuto y paso; y ademas se comprobo a mano con node.)
+
+`tests/unit/guards/filtros-url-r25.test.ts` lleva dentro la lista de archivos de la ficha
+(`ARCHIVOS`); son **rutas de codigo**, no de spec, y no contienen el numero: el renumerado no las
+toca. Su segundo caso ademas exige que ESLint devuelva **un resultado por archivo**, asi que si
+alguna de esas tres rutas hubiera dejado de existir, el guardia lo diria. Corre verde.
+
+### Un matiz sobre «FilterComponent byte a byte identico»
+
+El implementer afirma que `FilterComponent.tsx` esta **byte a byte identico** al aprobado en la
+segunda pasada. **Literalmente no lo esta**, y conviene dejarlo escrito: contra `f898b551` (el
+commit que la pasada 2 aprobo) hay 3 lineas cambiadas ahi, y otras 3 entre `BuscadorFiltros.tsx` y
+`lib/utils/filtros-url.ts`. Ahora bien, el diff completo de las tres es:
+
+    -   * antes de la ficha 335: ni lee la query ni la toca (R23). Default `true`.
+    +   * antes de la ficha 339: ...
+    -   * Feature 335 (R3, R23): siembra la seleccion inicial ...
+    +   * Feature 339 (R3, R23): ...
+    -   * Feature 335 (R10) — el rango con el que arranca un dateRange sembrado desde la URL.
+    +   * Feature 339 (R10) — ...
+    -   * Feature 335 (R3, R13): texto con el que ARRANCA el campo ...
+    +   * Feature 339 (R3, R13): ...
+    - // Feature 335 (T1.1) — el CODEC de filtros que viven en la query string.
+    + // Feature 339 (T1.1) — ...
+
+**Cinco comentarios renumerados y nada mas. Cero cambios ejecutables.** La afirmacion es correcta
+en lo que importa (no se re-abrio produccion) e imprecisa en la letra; se anota como `menor` para
+que nadie la repita sin haber mirado el diff. El renumerado lo hizo el humano, no el implementer,
+asi que tampoco es un descuido suyo.
+
+---
+
+## 2. B3 — **CERRADO**. El guardia de R25 ya no expira ni queda SKIPPED
+
+El arreglo es el correcto y ataca la causa, no el sintoma: **partir el guardia en dos** para sacar
+el arranque de ESLint de dentro de jsdom, en vez de subir el `hookTimeout` a ojo.
+
+- `tests/unit/guards/filtros-url-r25.test.ts` — mitad de **linter**, 182 lineas, **sin**
+  `@vitest-environment jsdom` (comprobado: el archivo empieza por los `import`), y con el
+  `hookTimeout` **en 60 s, sin subir**, tal como se afirma.
+- `tests/unit/guards/filtros-url-r25-propiedad.test.tsx` — mitad de **comportamiento**, 93 lineas,
+  con `@vitest-environment jsdom` y **solo** lo que necesita un DOM.
+- Los dos archivos se referencian mutuamente y llevan escrito **POR QUE NO SE VUELVEN A FUSIONAR**,
+  con el numero medido delante. Eso es lo que evita la recaida.
+
+**Medido por el revisor, 10 corridas, ninguna heredada del implementer:**
+
+| Escenario | Corridas | Resultado | Peor tiempo |
+| --- | --- | --- | --- |
+| Aislado, secuencial | 5 | `2 passed (2)` / `4 passed (4)`, **0 skipped** | 5,52 s |
+| 3 procesos vitest **en paralelo** (auto-saturacion) | 3 | `2 passed` / `4 passed`, **0 skipped** | 7,90 s |
+| Dentro del gate, con las **170 guardias** compitiendo | 2 | `filtros-url-r25.test.ts (3 tests)` + `...-propiedad.test.tsx (1 test)`, verdes | 7,60 s |
+
+**10/10 verdes, 0 timeouts, 0 SKIPPED, peor caso 7,9 s contra un `hookTimeout` de 60 s: margen de
+~7,6x.** Contra los mas de 113 s de la version fusionada, esto ya no es un guardia que dependa de
+la suerte. Y el modo de fallo que importaba —que se salte en silencio y el archivo se vea verde—
+**no aparecio ni una vez**: en las 10 corridas el conteo de casos es siempre `4` (3 del linter +
+1 de comportamiento), nunca `skipped`.
+
+El guardia conserva lo que lo hace no-decorativo: el primer caso comprueba contra la config
+resuelta que `react-hooks/set-state-in-effect` **existe y esta activa**, de modo que no puede
+pasar en vacio si la regla cambia de nombre o el plugin deja de cargarse; y el segundo exige un
+resultado de ESLint por archivo y cero mensajes fatales, para que un fuente que no parsea no se
+cuele como «limpio».
+
+---
+
+## 3. M5 — **CERRADO**. El caso de R17 es falsable, y se vio fallar
+
+Reproducido tal cual se describe. Mutacion aplicada en `components/shared/FilterComponent.tsx`
+**linea 627**:
+
+    -    const siguiente = { ...actual, ...sembrado };
+    +    const siguiente = { ...sembrado };
+
+Resultado de `vitest run tests/unit/components/filter-component-url.test.tsx -t "R17"`:
+
+    x  R17 — cuando la poda SI tiene trabajo, se lleva lo que sobra y conserva lo sembrado
+       AssertionError: expected {} to deeply equal { color: [ 'rojo' ] }
+    Tests  1 failed | 1 passed | 16 skipped (18)
+
+Es decir: **el caso nuevo se pone rojo con la mutacion, y el caso viejo (`1 passed`) la sobrevive**
+— confirmando la razon misma por la que se pidio M5: aquel montaba solo claves aun declaradas,
+`sobran` salia vacio, el efecto se iba por su `return` temprano y no tocaba estado. El comentario
+que el implementer dejo sobre el caso viejo (l. 378-383) dice esto mismo por escrito y no lo
+disfraza, que es la forma honesta de conservarlo como red contra emisiones espurias.
+
+El fuente se **restauro** de inmediato y el arbol quedo limpio (`git status --porcelain` vacio).
+Ningun archivo de produccion fue modificado por el revisor.
+
+---
+
+## 4. M1 — **CERRADO**. Solo el comentario, confirmado por el revisor
+
+`git diff f898b551 HEAD -- hooks/useFiltrosUrl.ts` = **22 lineas, todas dentro de un bloque de
+comentario de documentacion y una cabecera de fichero**. Cero lineas ejecutables. El limite ahora
+se declara con su alcance real —el `Set` de modulo **no se vacia en toda la sesion SPA**, asi que
+la supresion afecta a cualquier llegada posterior a esa ruta con ese par, no solo al boton
+ATRAS— y ademas dice lo que SI resiste (scopeado por `pathname` y por valor, crecimiento
+acotado). Un comentario que ya no subestima la trampa que documenta.
+
+---
+
+## 5. Gate re-ejecutado por el revisor, POST-merge y POST-renumerado
+
+`./init.sh --rapido` sobre `53183916`. Corrido **dos veces** entero, con la misma salida.
+
+| Tramo | Resultado |
+| --- | --- |
+| node / dependencias | `node v22.13.1`, `dependencias presentes` |
+| `feature_list.json` | `sin ids duplicados (336 fichas), cupo por zona respetado (in_progress=4) y specs en su sitio` |
+| Eleccion de modo | `el cambio no toca esquema, tipos compartidos, config ni dinero: el modo rapido basta` |
+| **typecheck** | **`typecheck paso`** — ejecutado de verdad (`> ordenex@0.1.0 typecheck C:\w335`), 0 errores |
+| **lint** | **`lint paso`** — `127 problems (0 errors, 127 warnings)`; los avisos son preexistentes y ajenos |
+| Tests relacionados | **84 archivos, 1129 passed + 17 skipped (1146), 0 rojos** |
+| Guardias | **170 archivos, 2548 passed, 1 failed** |
+| Unico rojo | `superficie-de-uso.guardia` -> `lib/actions/tarifas.ts:67 obtenerTarifa` — **el ajeno de baseline desde el 2026-08-28** |
+| Veredicto del arnes | `tests: sin rojos nuevos (1 archivo(s) rojo(s) sobre 252 ejecutado(s), todos en el baseline conocido)`, `== init OK ==`, **exit 0** |
+
+Los **17 skipped** se rastrearon: **todos** viven en `tests/components/AnaliticaPage.test.tsx`
+(`51 tests | 17 skipped`), preexistente y ajeno. **Ningun test de la ficha queda skipped.**
+
+Los 10 archivos de test de la ficha corrieron y pasaron dentro del gate:
+
+    tests/unit/utils/filtros-url.test.ts (17)
+    tests/unit/utils/filtros-url-kinds.test.ts (17)
+    tests/unit/hooks/filtros-url-hook.test.tsx (13)
+    tests/unit/components/buscador-filtros-url.test.tsx (15)
+    tests/unit/components/buscador-filtros-url-sin-router.test.tsx (1)
+    tests/unit/components/filter-component-url.test.tsx (18)
+    tests/unit/components/filtros-url-herencia.test.tsx (3)
+    tests/unit/guards/filtros-url-r25.test.ts (3)
+    tests/unit/guards/filtros-url-r25-propiedad.test.tsx (1)
+
+**Sobre el merge grande de `dev` (PRs #630, #632, #635; fichas 319/337/338):** no dejo regresion en
+nuestra superficie. `git diff --stat origin/dev...HEAD -- components/ hooks/ lib/ tests/` devuelve
+**exactamente los 13 archivos de la ficha** y nada mas; el merge no toco `components/shared/`
+fuera de nuestros cambios, y los consumidores de la barra corrieron dentro de los 84 archivos
+relacionados, todos verdes. **No hubo que aislar ningun rojo nuevo: no hubo ninguno.**
+
+---
+
+## 6. Trazabilidad: **25/25**, verificada contra los archivos, no contra la tabla
+
+No basta con que la tabla de `impl_339.md` cite un test: se comprobo **programaticamente** que
+cada uno de los 25 titulos citados existe **literalmente** en el archivo que la tabla nombra.
+
+    filas: 25   problemas: 0
+
+Cero requisitos sin test, cero ficheros inexistentes, cero titulos fantasma. Los **6 con rojo
+demostrado** son los declarados: **R2, R3, R5, R7, R17, R25**. R17 y R25, que eran justo los dos
+en disputa, quedan verificados por el revisor en esta pasada (secciones 2 y 3).
+
+---
+
+## 7. Checklist de esta pasada
+
+### Especificacion
+- [x] `specs/339-filtros-desde-url/requirements.md` con R1..R25 EARS numerados.
+- [x] `design.md` con alternativas descartadas y su porque.
+- [x] `tasks.md`: **18/18 marcadas `[x]`, 0 pendientes**.
+
+### Trazabilidad
+- [x] Cada `R<n>` mapea a un test concreto **que existe y verifica algo** (25/25, comprobado).
+- [x] `impl_339.md` contiene el mapa `R<n> -> test`.
+
+### Calidad de codigo
+- [x] `typecheck` **ejecutado** y sin errores.
+- [x] `lint` **ejecutado**, 0 errores.
+- [x] Tests: 0 rojos nuevos; el unico rojo es el ajeno de baseline.
+- [x] Guardia ejecutable de R25, en dos mitades, estable en 10 corridas.
+
+### Datos y seguridad
+- [x] Sin tablas nuevas y sin migraciones: RLS y `down.sql` **no aplican**.
+- [x] Sin secretos: nada de `process.env`, claves ni tokens en el codigo nuevo.
+- [x] Sin webhooks: firma e idempotencia **no aplican**.
+- [x] Sin hardcode de pais, moneda ni cuenta.
+
+### Patron de capas
+- [x] `lib/utils/filtros-url.ts` es un **codec puro**, sin React ni router.
+- [x] `hooks/useFiltrosUrl.ts` es la **unica** pieza que conoce `next/navigation`; los canonicos
+      compartidos no ven el router (lo prueba `buscador-filtros-url-sin-router.test.tsx`).
+- [x] Sin queries de DB ni Server Actions: la ficha es de cliente.
+
+### Verificacion final
+- [x] **`./init.sh --rapido` termina en verde (exit 0)**, post-merge y post-renumerado.
+- [ ] `./init.sh` completo: no corrido, y es correcto — obligatorio **post-merge a `dev`** y antes
+      de release a `prod`. **Tarea del leader al aterrizar, no bloqueante aqui.**
+- [x] Este archivo recoge las **tres** pasadas.
+- [ ] Entrada en `progress/history.md`: **sigue pendiente**, es del leader al mergear.
+
+---
+
+## 8. Hallazgos que quedan
+
+Ninguno bloqueante.
+
+### m6 — menor. «Byte a byte identico» no era literal
+`FilterComponent.tsx`, `BuscadorFiltros.tsx` y `lib/utils/filtros-url.ts` cambiaron en 6 lineas
+desde el commit aprobado: **5 comentarios renumerados 335 -> 339 y nada mas**. Verificado linea a
+linea (seccion 1). No hay cambio ejecutable, asi que la conclusion del implementer es correcta; la
+frase, imprecisa. **No requiere accion**; se anota para que no se cite de memoria.
+
+### m7 — menor, del leader, no del implementer. `progress/history.md` sin entrada
+El checkpoint «se anadio una entrada a `progress/history.md`» sigue sin cumplirse. Es trabajo del
+leader al aterrizar la rama, igual que la corrida completa de `./init.sh` post-merge a `dev`.
+Cuando se escriba, conviene que diga **que la ficha nacio como 335 y se renumero a 339**: el
+propio `history.md` avisa de que el ancla fiable es el slug y no el id, y esta ficha es un caso
+mas de esa serie.
+
+### m8 — menor, de entorno, ya sin efecto aqui
+El `PATH` degradado de bash (`;` frente a `:`) y la desaparicion del reporter `basic` en vitest 4
+son dos formas de leer un falso resultado en esta maquina. En esta pasada se neutralizaron ambas
+(seccion 0). Se deja escrito por si otra sesion mide sin comprobarlo.
+
+---
+
+## Cierre
+
+Los tres hallazgos abiertos estan cerrados **y verificados ejecutando**: B3 con 10 corridas del
+guardia sin un solo timeout ni SKIPPED, M5 reproduciendo la mutacion y viendo caer el caso nuevo
+donde el viejo aguantaba, M1 con el diff delante. El renumerado 335 -> 339 esta limpio: sin ids
+duplicados, sin tocar la ficha ajena, sin `335` huerfanos, con `C:/w335` preservado y sin romper
+ninguna guardia. El gate pasa en verde **despues** del merge de `dev` y **despues** del
+renumerado, con typecheck y lint ejecutados de verdad. Trazabilidad 25/25 comprobada contra los
+archivos. 18/18 tasks.
+
+**VEREDICTO: OK.** La ficha 339 queda **aprobada**. Lo unico pendiente es del leader al aterrizar:
+la entrada en `history.md` y la corrida completa de `./init.sh` tras el merge a `dev`.
