@@ -647,11 +647,18 @@ paths:
         que el escenario entregado incluye siempre `comision` e `ivaComision`. Una orden que
         acabara creándose sin comisión costaría menos que lo cotizado aquí.
 
-        **Los importes se emiten SOLO formateados.** Cada importe viene en una única forma:
-        símbolo de moneda, parte entera agrupada con separador de miles, separador decimal y
-        exactamente DOS decimales, con el signo negativo DELANTE del símbolo (`-₡1.578,00`). NO
-        hay un campo crudo de escala 2 en paralelo: el string formateado ES el contrato. Si tu
-        integración necesita operar con el número, parsealo en tu lado.
+        **Los importes se emiten CRUDOS.** Cada importe viene en una única forma: un string
+        money-safe de escala 2, sin símbolo de moneda ni separador de miles, con el punto como
+        separador decimal y exactamente DOS decimales (`1396.46`, `-1578.40`). Es el mismo
+        formato del `costoEnvio` de `POST /api/ordenes/api-key/carga`, así que todo el canal
+        habla un solo dialecto de dinero. NO hay un campo formateado en paralelo: el string
+        crudo ES el contrato. Si necesitas mostrarlo, dale formato en tu lado.
+
+        **CAMBIO INCOMPATIBLE (2026-08-28).** Hasta esa fecha estos importes se servían
+        formateados (`₡2.500,00`: símbolo, miles con punto y coma decimal). Si tu integración
+        los parseaba quitando el símbolo y los separadores, quítale ese paso: ahora el valor
+        ya es un número en texto. La moneda sigue siendo la misma; solo dejó de viajar en el
+        campo.
 
         **`totales` es una SUMA de las filas cotizadas, NO el precio del lote.** El precio
         depende de la zona de CADA fila, así que el bloque suma únicamente las filas con
@@ -723,36 +730,36 @@ paths:
                       filasSumadas: 1
                       filasExcluidas: 1
                       entregado:
-                        flete: "₡2.500,00"
-                        iva: "₡325,00"
-                        comision: "₡906,50"
-                        ivaComision: "₡117,85"
-                        fulfillment: "₡0,00"
-                        total: "₡22.050,65"
+                        flete: "2500.00"
+                        iva: "325.00"
+                        comision: "906.50"
+                        ivaComision: "117.85"
+                        fulfillment: "0.00"
+                        total: "22050.65"
                       devuelto:
-                        flete: "₡1.396,46"
-                        iva: "₡181,54"
-                        comision: "₡0,00"
-                        fulfillment: "₡0,00"
-                        total: "-₡1.578,00"
+                        flete: "1396.46"
+                        iva: "181.54"
+                        comision: "0.00"
+                        fulfillment: "0.00"
+                        total: "-1578.00"
                     filas:
                       - fila: 1
                         numRemision: "REM-0001"
                         resultado: cotizada
                         costos:
                           entregado:
-                            flete: "₡2.500,00"
-                            iva: "₡325,00"
-                            comision: "₡906,50"
-                            ivaComision: "₡117,85"
-                            fulfillment: "₡0,00"
-                            total: "₡22.050,65"
+                            flete: "2500.00"
+                            iva: "325.00"
+                            comision: "906.50"
+                            ivaComision: "117.85"
+                            fulfillment: "0.00"
+                            total: "22050.65"
                           devuelto:
-                            flete: "₡1.396,46"
-                            iva: "₡181,54"
-                            comision: "₡0,00"
-                            fulfillment: "₡0,00"
-                            total: "-₡1.578,00"
+                            flete: "1396.46"
+                            iva: "181.54"
+                            comision: "0.00"
+                            fulfillment: "0.00"
+                            total: "-1578.00"
                       - fila: 2
                         numRemision: null
                         resultado: error
@@ -1613,9 +1620,10 @@ components:
         expiraEnSegundos:
           type: integer
           description: "TTL de la URL firmada en segundos (300 por defecto)."
-    # Feature 255 — cotización previa (lectura pura). Todos los importes son STRINGS ya
-    # formateados (símbolo + miles + exactamente 2 decimales, signo delante del símbolo):
-    # NO existe un campo crudo de escala 2 en paralelo.
+    # Feature 255 — cotización previa (lectura pura). Todos los importes son STRINGS
+    # money-safe CRUDOS (sin símbolo ni miles, punto decimal, exactamente 2 decimales):
+    # NO existe un campo formateado en paralelo. Enmendado por la ficha 319 (2026-08-28),
+    # que invirtió cuál de las dos formas se sirve.
     CotizacionRequest:
       type: object
       required:
@@ -1681,22 +1689,22 @@ components:
       properties:
         flete:
           type: string
-          description: Flete de la zona del distrito, formateado.
+          description: "Flete de la zona del distrito. String money-safe de escala 2, crudo."
         iva:
           type: string
-          description: IVA del flete, formateado.
+          description: "IVA del flete. String money-safe de escala 2, crudo."
         comision:
           type: string
-          description: Comisión COD, formateada.
+          description: "Comisión COD. String money-safe de escala 2, crudo."
         ivaComision:
           type: string
-          description: IVA de la comisión, formateado.
+          description: "IVA de la comisión. String money-safe de escala 2, crudo."
         fulfillment:
           type: string
-          description: "Monto fijo del servicio de bodega por orden, formateado. Cero si tu tarifa no tiene fulfillment; nunca ausente."
+          description: "Monto fijo del servicio de bodega por orden, crudo. Cero si tu tarifa no tiene fulfillment; nunca ausente."
         total:
           type: string
-          description: Lo que recibe la tienda, formateado.
+          description: "Lo que recibe la tienda. String money-safe de escala 2, crudo; negativo si el COD no cubre lo facturado."
     CotizacionEscenarioDevuelto:
       type: object
       description: "Costo si la orden se DEVUELVE: cinco conceptos, SIN `ivaComision` (no hay comisión que gravar). `comision` es un cero EXPLÍCITO — la afirmación de que una devolución no cobra comisión COD, no un dato ausente. `fulfillment` en cambio SÍ se cobra: el servicio de bodega ya se prestó. `total` es la DEUDA de la tienda = −(flete + iva + fulfillment), y por eso es negativo."
@@ -1709,19 +1717,19 @@ components:
       properties:
         flete:
           type: string
-          description: Flete de devolución, formateado.
+          description: "Flete de devolución. String money-safe de escala 2, crudo."
         iva:
           type: string
-          description: IVA del flete de devolución, formateado.
+          description: "IVA del flete de devolución. String money-safe de escala 2, crudo."
         comision:
           type: string
-          description: "Siempre cero formateado: una devolución no cobra comisión COD."
+          description: 'Siempre "0.00": una devolución no cobra comisión COD.'
         fulfillment:
           type: string
           description: "El MISMO monto que en el escenario entregado: preparar y despachar el paquete ya costó, lo reciba el destinatario o no. Cero si tu tarifa no tiene fulfillment."
         total:
           type: string
-          description: "Deuda de la tienda, formateada (negativa)."
+          description: "Deuda de la tienda. String money-safe de escala 2, crudo y negativo."
     CotizacionCostos:
       type: object
       description: "Los DOS escenarios de una fila con cobertura. Ausente en una fila `error`."

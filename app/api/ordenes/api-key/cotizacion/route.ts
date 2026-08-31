@@ -19,7 +19,7 @@
 //
 // ESTE ARCHIVO NO CALCULA DINERO. No fija decimales a mano —lo prohibe el diente 2 de la
 // guardia 230, que barre el arbol `app` entero— ni hace aritmetica de importes: el service
-// entrega el resumen YA FORMATEADO y aqui solo se serializa tal cual. Tampoco hay ni una
+// entrega el resumen con los importes YA SERIALIZADOS y aqui solo se emiten tal cual. Tampoco hay ni una
 // query Prisma: eso vive en los repositorios.
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -144,7 +144,7 @@ export async function handleCotizacionApi(
 
     // R34/R46/R51: el resumen viaja TAL CUAL. Ya trae `total`, `cotizadas`, `conError`, el
     // bloque `totales` del lote y el detalle por fila con su indice 1-based, con cada importe
-    // UNA sola vez y SOLO formateado. Este borde no reescribe ni un campo.
+    // UNA sola vez y SOLO crudo. Este borde no reescribe ni un campo.
     return cotizacion.resumen;
   });
 
