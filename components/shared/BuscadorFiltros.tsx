@@ -16,6 +16,12 @@ import {
   avisoMinimoCaracteres,
   DEBOUNCE_MS_DEFAULT,
 } from "@/components/shared/FilterComponent";
+import { useFiltrosUrl } from "@/hooks/useFiltrosUrl";
+import {
+  activosDesdeUrl,
+  PARAM_TERMINO_DEFAULT,
+  terminoDesdeUrl,
+} from "@/lib/utils/filtros-url";
 import { cn } from "@/lib/utils";
 
 /**
@@ -95,6 +101,19 @@ export interface BuscadorFiltrosProps {
    * aplicado no se ofrece una acción que no haría nada.
    */
   hayFiltrosAplicados?: boolean;
+  /**
+   * Lee el estado inicial de la URL al entrar —término libre y qué filtros montar— y
+   * limpia SUS params al «Limpiar todo». `false` deja la barra exactamente como estaba
+   * antes de la ficha 335: ni lee la query ni la toca (R23). Default `true`.
+   */
+  leerDeUrl?: boolean;
+  /**
+   * Nombre del query param del término libre. Default `"q"`
+   * (`PARAM_TERMINO_DEFAULT`): la convención universal de la web, que además no choca
+   * con ninguna clave de filtro declarada hoy. Existe para la pantalla cuyo back llame
+   * a eso de otra forma y quiera que el enlace hable el idioma del endpoint.
+   */
+  terminoKey?: string;
   className?: string;
 }
 
@@ -145,12 +164,36 @@ export function BuscadorFiltros({
   filtrosLabel = "Filtros",
   onLimpiarTodo,
   hayFiltrosAplicados = false,
+  leerDeUrl = true,
+  terminoKey = PARAM_TERMINO_DEFAULT,
   className,
 }: BuscadorFiltrosProps) {
   const idBase = useId();
   const idAviso = `${idBase}-minimo`;
 
-  const [texto, setTexto] = useState("");
+  const { params, borrarParams } = useFiltrosUrl(leerDeUrl);
+
+  /**
+   * Lo que la URL traía AL ENTRAR, congelado en un inicializador perezoso.
+   *
+   * No es un efecto, y la diferencia no es de estilo. Congelar aquí convierte «la URL
+   * solo se lee al entrar» (R7) en una propiedad ESTRUCTURAL —un cambio posterior de los
+   * params no tiene por dónde entrar— en vez de en una promesa vigilada por una guarda
+   * que alguien puede quitar. Y de paso esquiva la regla de lint del repo que prohíbe
+   * `setState` dentro de un efecto para leer una fuente externa (R25): `useSearchParams`
+   * ya devuelve un valor de render, no una fuente mutable, así que tampoco procedería
+   * aquí el `useSyncExternalStore` que sí usan `localStorage`/`matchMedia`.
+   *
+   * Es un solo `useState` con las dos cosas porque el efecto de montaje de abajo depende
+   * de él: al ser un valor de estado su identidad es estable, y así el efecto puede
+   * declararlo como dependencia y satisfacer `exhaustive-deps` sin mentirle.
+   */
+  const [precarga] = useState(() => ({
+    termino: leerDeUrl ? terminoDesdeUrl(params, terminoKey) : "",
+    activos: leerDeUrl ? activosDesdeUrl(params, filtros) : [],
+  }));
+
+  const [texto, setTexto] = useState(precarga.termino);
   const [abierto, setAbierto] = useState(false);
 
   const hayFiltros = filtros.length > 0;
@@ -161,14 +204,19 @@ export function BuscadorFiltros({
   // `onChange` cambia de identidad en cada render del consumidor; se lee por ref para
   // que el temporizador pendiente use SIEMPRE la versión fresca sin reprogramarse.
   const onChangeRef = useRef(onChange);
+  const onActivosChangeRef = useRef(onActivosChange);
   useEffect(() => {
     onChangeRef.current = onChange;
+    onActivosChangeRef.current = onActivosChange;
   });
 
   // Último término EMITIDO. Es lo que hace fiable la guarda de "sin cambio": el texto
   // en pantalla y lo aplicado no coinciden mientras el debounce está en vuelo, así
   // que compararse contra el texto no serviría.
-  const emitido = useRef("");
+  // Arranca con el término PRECARGADO —no con `""`— para que la guarda siga diciendo la
+  // verdad: si la URL traía `?q=guia`, eso es lo que ya está aplicado, y vaciar el campo
+  // debe emitir `""` una sola vez en lugar de considerarse "sin cambio".
+  const emitido = useRef(precarga.termino);
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Al desmontar se cancela lo pendiente: emitir sobre un consumidor que ya no está
@@ -179,6 +227,26 @@ export function BuscadorFiltros({
     },
     [],
   );
+
+  /**
+   * R2, R5 — la emisión de lo precargado, UNA sola pasada y nunca más.
+   *
+   * Pintar la barra ya cargada no basta: el listado tiene que llegar acotado. Se avisa al
+   * consumidor de qué claves montar y del término, por el camino DIRECTO y no por
+   * `escribir`, que reprogramaría el debounce y retrasaría la primera consulta sin motivo.
+   *
+   * R6 — si no había nada precargado no se llama a NINGUNO de los dos. No es una
+   * elegancia: ~77 archivos de test del repo montan esta barra sin params y esperan
+   * exactamente el silencio de hoy; emitir `[]` o `""` al montar los pondría rojos, y en
+   * producción dispararía una consulta extra por pantalla.
+   */
+  const sembrado = useRef(false);
+  useEffect(() => {
+    if (sembrado.current) return;
+    sembrado.current = true;
+    if (precarga.activos.length > 0) onActivosChangeRef.current?.(precarga.activos);
+    if (precarga.termino !== "") onChangeRef.current(precarga.termino);
+  }, [precarga]);
 
   function escribir(valor: string) {
     setTexto(valor);
@@ -223,6 +291,13 @@ export function BuscadorFiltros({
    */
   function limpiarTodo() {
     escribir("");
+    // R19-R22 — se borran de la URL SOLO los params propios: el del término y los de las
+    // claves OFRECIDAS. Los ajenos (`?cierre=` en cierres-admin, `?mensajero=` en
+    // monitoreo…) no entran en la lista y sobreviven (R20). Va ANTES de avisar al
+    // consumidor porque su `onLimpiarTodo` puede remontar esta barra en el mismo
+    // manejador —`NovedadesFiltrosBarra` lo hace con su `key={filtro.reset}`—, y lo
+    // retirado tiene que estar ya apuntado cuando eso ocurra.
+    borrarParams([terminoKey, ...filtros.map((f) => f.key)]);
     onLimpiarTodo?.();
   }
 
