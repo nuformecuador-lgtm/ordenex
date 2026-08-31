@@ -374,3 +374,364 @@ es además lo que cierra el rojo esperado de `superficie-de-uso.guardia.test.ts`
 **Veredicto:** bloque A (A1–A13) completo; typecheck y lint en verde, 221 tests nombrados y 1.242
 relacionados en verde, y el alcance por tienda probado contra Postgres real con su mutación en
 rojo pegada arriba.
+
+---
+---
+
+# Ficha 335 — Bitácora de los BLOQUES B, C y D (frontend + la puerta)
+
+> Continúa la bitácora del bloque A (arriba). El bloque A ya estaba commiteado (`6f83a697`) y
+> **no se tocó una línea de `lib/` del módulo `wallet-tienda`**.
+> Orden ejecutado, que es el que pidió el humano: **B (presentación) → C (selector) → D (la
+> puerta)**. El ítem de menú entró EL ÚLTIMO, con la pantalla ya terminada.
+
+---
+
+## B/C/D.0 — Archivos creados / modificados
+
+### Producción (4 modificados, 1 creado)
+
+| Archivo | Qué |
+| --- | --- |
+| `app/(app)/mi-wallet/page.tsx` | B1: tercera lectura en el `Promise.all` + degradación (no `notFound`) + prop. D1: el gate lee `ROLES_MI_WALLET` |
+| `app/(app)/mi-wallet/_components/MiWalletModule.tsx` | B2: dos `Card` hermanas, `gap-6`, banda de filtros, `CardFooter` con la paginación |
+| `app/(app)/mi-wallet/_components/MiWalletFiltros.tsx` | B3 (bloque → barra) + C2 (el `Select` sustituye al `<Input placeholder="ID del cierre">`) |
+| `app/(app)/mi-wallet/_components/mi-wallet-cierres.ts` | **CREADO** (C1): `CierresDeLaTienda`, `CIERRE_TODOS_OPTION`, `opcionesDeCierre` |
+| `lib/auth/menu-visibility.ts` | D1: `ROLES_MI_WALLET`. D2: el ítem «Mi wallet», después de «Wallet» |
+
+### Tests creados (2)
+
+- `tests/components/MiWalletFiltros.test.tsx` (C3) — 13 casos.
+- `tests/unit/components/mi-wallet-cierres-opciones.test.ts` (C4) — 13 casos.
+
+### Tests modificados (5)
+
+- `tests/integration/mi-wallet-page.test.tsx` (B4 + D5): `listarMisCierresAction` en el `vi.mock`
+  y sembrada en `beforeEach`; 18 casos nuevos. **De 11 a 29, y los 11 originales sin tocar una
+  aserción.**
+- `tests/unit/auth/menu-visibility.test.ts` (D3 + D4): el literal del `adminTienda` a mano + 3
+  casos nuevos.
+- `tests/unit/guards/pwa-manifiesto-atajos.guardia.test.ts` (D3): `adminTienda: 3 -> 4`, a mano.
+- `tests/unit/guards/mi-wallet-335.guardia.test.ts` (D6): 5 casos nuevos de R33.
+- `tests/components/descarga/WalletDescarga.test.tsx`: le faltaba la prop `cierres`, **requerida y
+  sin default**. Lo cazó `pnpm typecheck`, no un test en rojo — ruidoso, que es como este repo lo
+  prefiere. No estaba en la lista del `tasks.md`; la lista la da el compilador.
+
+---
+
+## B/C/D.1 — Tarea por tarea
+
+### B1 — la tercera lectura, y la degradación
+
+`page.tsx` pide `listarMisCierresAction()` **sin argumentos** dentro del `Promise.all` existente y
+construye `CierresDeLaTienda`. **NO hay un tercer `notFound()`**: cuando esa lectura no responde
+`ok` la pantalla se pinta igual y lo único que se degrada es el selector. El saldo y el libro SON
+la pantalla; el filtro es una comodidad, y que se caiga una comodidad no puede esconderle a la
+tienda su dinero. Está probado en las dos direcciones (M5, abajo).
+
+`CierresDeLaTienda` vive en `mi-wallet-cierres.ts` y no en `MiWalletModule.tsx`: el filtro también
+lo necesita, y declararlo en el módulo habría creado un import circular de tipos entre módulo y
+filtro. **Consecuencia de secuencia declarada:** el archivo de C1 se creó durante B1 porque B1
+necesita ese tipo; su lógica de etiquetado (`opcionesDeCierre`) es lo que se verificó en C.
+
+### B2 — la gramática de `/wallet`, copiada; sus piezas, NO
+
+Se copió el lenguaje visual (`Card` / `CardHeader` con título / banda de filtros / `CardFooter` con
+la paginación) y **no se importó ni un componente de `/wallet`**:
+`tests/unit/guards/caja-173-alcance.guardia.test.ts` lo prohíbe y sigue verde sin editarlo.
+
+`sticky={false}` en la `Pagination` **no es cosmético**: en modo pegajoso el control devuelve un
+fragmento de DOS elementos (envoltorio + centinela de 1px) y el `display:flex` del pie los
+colocaría como dos columnas. El caso R15 lo afirma midiendo que el pie tiene **un solo hijo**.
+
+`SaldoTiendaCard` **no se tocó por dentro** (ni un byte): solo desapareció el envoltorio
+`lg:max-w-md` que la encajonaba en media pantalla. Las seis aserciones de la 172 que navegan ese
+árbol siguen verdes.
+
+### B3 / C2 — de bloque a barra, y el UUID fuera
+
+El contrato del componente (`onAplicar`/`onLimpiar`/`disabled`) no cambia; gana `cierres`,
+**requerida y sin default** en los dos eslabones. El `htmlFor` del rótulo apunta a un `id` **real**
+del trigger — el defecto que `/wallet` documentó haber arreglado y que aquí no se repite.
+
+El aviso bajo el selector **no lleva `role="note"`**. La pantalla tiene exactamente uno (el de la
+tarjeta del saldo) y `mi-wallet-page.test.tsx` lo busca en **singular**: un segundo `note` habría
+puesto rojos dos casos de la 172 sin hacer la pantalla más accesible. Se afirma explícitamente
+(`getAllByRole("note")` con longitud 1, y que el aviso del tope **no** es ese).
+
+### C1 / C4 — el etiquetado
+
+`Cierre del 2026-07-12 · 4 movimientos`. El día sale de `fechaDiaISO`, **la misma función** que usa
+la descarga y que produce el mismo día que el `slice(0, 10)` de la columna «Fecha» — se compara
+contra la función, no contra un literal escrito a mano. Trampa horaria declarada: los dos son el
+día **UTC**; un formateador de calendario local haría que la opción dijera un día y las filas de al
+lado otro.
+
+Cuando dos etiquetas base coinciden, se les añade la hora **a las dos** (no solo a la repetida:
+marcar una sola haría creer que la otra es «la del día»). **Límite declarado y con test propio:**
+la hora colapsa al minuto, así que dos cierres del mismo minuto comparten etiqueta — sus `value`
+siguen siendo distintos, así que el filtro funciona igual.
+
+**Decisión del leader, implementada sin reabrir:** la opción NO nombra al mensajero del cierre.
+
+### D1–D6 — la puerta, al final
+
+- `ROLES_MI_WALLET` es **una sola constante**, leída por el ítem (`roles:`) y por el gate de la
+  ruta. `page.tsx` no contiene **ningún** literal de rol, y D6 lo afirma con su contraprueba.
+- El ítem va **después de «Wallet»**, o sea después de «Órdenes» y de «Novedades». El aterrizaje
+  post-login del `adminTienda` sigue siendo `/ordenes`, y hay un caso que lo afirma **con su
+  contraprueba** (con el ítem arriba, `primerDestino` devolvería `/mi-wallet`). No lleva
+  `destinoInicial: false`, porque `destino-post-login.test.ts` afirma que los marcados son
+  exactamente `["/analitica","/monitoreo"]`.
+- Los **dos contratos literales** se actualizaron A MANO, con su motivo escrito al lado, y sin
+  relajarse a `toContain`.
+
+**Desvío pequeño y declarado (D1):** el ensanchado del tipo se escribe
+`readonly Actor["rol"][]` y no `readonly RolValue[]` como el precedente del histórico. Motivo
+medido: la guardia A13 de esta misma ficha prohíbe que un archivo de `/mi-wallet` importe de
+`@prisma/client` —es la vía por la que `Prisma.Decimal` llega al navegador— y ese barrido **no
+distingue un `import type`**. Se prefirió no tocar la guardia (relajarla para que pase el código
+nuevo es exactamente el anti-patrón) y usar el tipo del propio actor, que además es de lo que se
+habla. `Actor["rol"]` **es** `RolValue`: el gate no se debilita.
+
+---
+
+## B/C/D.2 — Mapa `R<n> → test`, con la salida real
+
+| R | Test | Estado |
+| --- | --- | --- |
+| R12 | `mi-wallet-page.test.tsx` «R12: el saldo y el libro son dos tarjetas hermanas…» + «R12: el saldo ya NO va encajonado…» | ✅ |
+| R13 | `mi-wallet-page.test.tsx` «R13: la tarjeta del libro lleva un título visible» | ✅ |
+| R14 | `mi-wallet-page.test.tsx` «R14: los filtros se renderizan dentro de la tarjeta…» | ✅ |
+| R15 | `mi-wallet-page.test.tsx` «R15: la paginación está en el pie…» | ✅ |
+| R16 | `liquidacion-money-safe.test.ts` (sin editar) + `mi-wallet-335.guardia.test.ts` | ✅ |
+| R17 | `mi-wallet-335.guardia.test.ts` «ningun archivo de `/mi-wallet` importa una action de mutacion» | ✅ |
+| R18 | `wallet-tienda-descarga-columnas.test.ts` (sin editar) | ✅ |
+| R19 | `mi-wallet-page.test.tsx`, bloque R55 (sin editar) | ✅ |
+| R20 | `MiWalletFiltros.test.tsx` «R20: los textos del selector están en voseo y sin jerga» + «el tuteo peninsular no se cuela» | ✅ |
+| R21 | `desglose-tienda-labels.test.ts` (sin editar) | ✅ |
+| R22 | `MiWalletFiltros.test.tsx` «R22: el filtro de cierre es un `combobox`…» + «el rótulo cuelga de un `id` REAL» | ✅ |
+| R23 | `mi-wallet-cierres-opciones.test.ts` «R23: la etiqueta lleva el día…» + «el día es el MISMO que la columna Fecha» | ✅ |
+| R24 | `mi-wallet-cierres-opciones.test.ts` «R24: dos cierres del MISMO día…» + «CONTRAPRUEBA: cuando no hay colisión, NO lleva hora» | ✅ |
+| R25 | `MiWalletFiltros.test.tsx` «R25: la primera opción es “Todos los cierres”…» | ✅ |
+| R26 | `MiWalletFiltros.test.tsx` «R26: al elegir un cierre y aplicar, se emite su `cierreId`» | ✅ |
+| R27 | `MiWalletFiltros.test.tsx` «R27: “Limpiar” devuelve el selector a “Todos los cierres”» | ✅ |
+| R28 | `mi-wallet-page.test.tsx` «R28: sin cierres, el selector queda deshabilitado y la pantalla lo dice» | ✅ |
+| R29 | `mi-wallet-page.test.tsx` «R29: … el saldo y el libro siguen en pantalla y NO hay notFound» (+ el caso `unauthenticated`) | ✅ |
+| R30 | `mi-wallet-page.test.tsx` «R30: con `hayMas`, la pantalla avisa… y sin un segundo `role=note`» | ✅ |
+| R31 | `menu-visibility.test.ts` «R31: existe exactamente UN ítem con href `/mi-wallet`…» | ✅ |
+| R32 | `menu-visibility.test.ts` «R32: ningún rol distinto de `adminTienda` lo ve, ni el actor ausente» | ✅ |
+| R33 | `mi-wallet-335.guardia.test.ts` «`page.tsx` no contiene NINGUN literal de rol» + «el `roles` del ítem es la MISMA referencia» | ✅ |
+| R34 | `mi-wallet-page.test.tsx` «R34: `<rol>` recibe notFound()…» (5 casos derivados de la constante, `apiKey` incluida) | ✅ |
+| R35 | `destino-post-login.test.ts` + `menu-historico.test.ts` (sin editar) + `menu-visibility.test.ts` «R35: el ítem va DESPUÉS…» | ✅ |
+| R36 | `rastreo-sin-ruta-nueva.guardia.test.ts` (sin editar) | ✅ |
+
+---
+
+## B/C/D.3 — LAS CINCO MUTACIONES, con su salida ROJA real
+
+Ninguna guardia se declara sin verla caer. Cada mutación se aplicó al árbol, se corrió, se anotó y
+se revirtió; al final se reverificó el verde.
+
+### M1 — el selector manda el TEXTO en vez del `cierreId`
+
+`mi-wallet-cierres.ts`: `value: cierre.cierreId` → `value: base[i]`.
+
+```
+     × CONTROL: el identificador SÍ viaja, pero en el `value`, que es lo que el filtro usa 6ms
+     × LÍMITE DECLARADO: dos cierres del mismo MINUTO … pero no el mismo valor 1ms
+     × respeta el orden del servidor (más reciente primero) … 2ms
+     × R26: al elegir un cierre y aplicar, se emite su `cierreId` 259ms
+     × R26: cada opción emite SU identificador, no siempre el primero 199ms
+AssertionError: expected 'Cierre del 2026-07-12 · 4 movimientos' to be 'c-2'
+AssertionError: expected 'Cierre del 2026-08-01 · 7 movimientos' to be 'c-1'
+ Test Files  2 failed (2)
+      Tests  5 failed | 21 passed (26)
+```
+
+### M2 — el ítem aparece para un rol que NO es `adminTienda`
+
+`ROLES_MI_WALLET = ["adminTienda", "mensajero"]`.
+
+```
+     × mensajero ve Entregas + Recolección + Ranking + Cierre del día, NO … 8ms
+     × R31: existe exactamente UN ítem con href `/mi-wallet` y su `roles` es la CONSTANTE 1ms
+     × R32: ningún rol distinto de `adminTienda` lo ve, ni el actor ausente 1ms
+     × hoy no hay ni un destino que vean todos los roles: por eso son cero atajos 9ms
+     × roles != adminTienda NO ven su wallet (notFound), sin pre-fetch de datos 729ms
+     × CONTROL DE NO-VACUIDAD: hay roles denegados y `adminTienda` no está entre ellos 1ms
+AssertionError: expected [ 'adminTienda', 'mensajero' ] to deeply equal [ 'adminTienda' ]
+AssertionError: promise resolved "{ …(10) }" instead of rejecting
+ Test Files  3 failed | 1 passed (4)
+      Tests  6 failed | 92 passed (98)
+```
+
+Cae en las **tres** capas a la vez: el menú, el contrato literal del PWA y el gate de la ruta.
+
+### M3 — el aviso del tope NO sale con `hayMas: true`
+
+`MiWalletFiltros.tsx`: se borra la rama `cierres.hayMas ? …`.
+
+```
+     × R30: con más cierres de los que caben, avisa de que solo ofrece los recientes 23ms
+     × R30: con `hayMas`, la pantalla avisa … y sin un segundo `role=note` 30ms
+TestingLibraryElementError: Unable to find an element with the text:
+  Mostramos los cierres más recientes.
+ Test Files  2 failed (2)
+      Tests  2 failed | 40 passed (42)
+```
+
+### M4 — el ítem se coloca ANTES de «Órdenes» (el incidente que el spec temía)
+
+Se mueve la entrada al principio de `SIDEBAR_ITEMS`.
+
+```
+     × adminTienda aterriza en /ordenes (NO en /analitica, aunque ese ítem le sea visible…) 5ms
+     × adminTienda ve Analítica + Órdenes + Novedades + Mi wallet, NO Configuración… 7ms
+     × R54: el aterrizaje post-login de CADA rol es el mismo que antes de añadir el ítem 2ms
+     × R35: el ítem va DESPUÉS de «Órdenes» y de «Novedades», así que no mueve el aterrizaje 0ms
+     × adminTienda sigue aterrizando en /ordenes 5ms
+AssertionError: expected '/mi-wallet' to be '/ordenes'
+ Test Files  3 failed (3)
+      Tests  5 failed | 69 passed (74)
+```
+
+**Es el cambio que el spec avisaba que ocurriría EN SILENCIO** — y hoy ya no puede: lo cazan
+`destino-post-login`, `menu-historico` y el caso propio de D4.
+
+### M5 — un tercer `notFound()` cuando la lectura de cierres falla
+
+`page.tsx`: se añade `|| cierresResult.status !== "ok"` al guard de defensa en profundidad.
+
+```
+     × R29: si la lectura de cierres no responde ok, el saldo y el libro siguen en pantalla y NO hay notFound 5ms
+     × R29: el estado `unauthenticated` de esa lectura tampoco tumba la pantalla 1ms
+AssertionError: promise rejected "NotFoundError: NEXT_NOT_FOUND" instead of resolving
+ Test Files  1 failed (1)
+      Tests  2 failed | 27 passed (29)
+```
+
+**Reversión comprobada:** tras deshacer las cinco, `git diff --stat` vuelve a 9 archivos y los 7
+archivos de test corren en verde (144/144).
+
+---
+
+## B/C/D.4 — El hueco de `superficie-de-uso.guardia`, cerrado y MEDIDO
+
+Este es el dato que cierra el trabajo, y se mide **antes y después** porque el gate compara **por
+archivo** y el archivo YA está en `tests/baseline-rojos.json`: sin esta comprobación explícita, un
+`listarMisCierresAction` olvidado habría salido **verde mintiendo**.
+
+**ANTES de B1** (el hueco esperado entre A8 y B1):
+
+```
++ [
++   "lib/actions/tarifas.ts:67 obtenerTarifa",
++   "lib/actions/wallet-tienda.ts:205 listarMisCierresAction",
++ ]
+```
+
+**DESPUÉS de B1** (`page.tsx` la importa y la llama):
+
+```
++ [
++   "lib/actions/tarifas.ts:67 obtenerTarifa",
++ ]
+```
+
+Queda **solo la deuda ajena preexistente**, que es exactamente el motivo escrito en el baseline
+(`"La guardia de superficie de uso senala lib/actions/tarifas.ts:67 obtenerTarifa. Ajeno a las
+features de chat; probablemente de la ficha 274"`, desde `2026-08-28`).
+**No se anotó `@sin-superficie` en ningún sitio**, como prohíbe el `tasks.md`.
+
+---
+
+## B/C/D.5 — Verificación
+
+### `pnpm typecheck`
+
+```
+> ordenex@0.1.0 typecheck
+> tsc --noEmit
+```
+
+Verde. En su primera pasada **mordió**, que era la señal correcta:
+
+```
+tests/components/descarga/WalletDescarga.test.tsx(293,6): error TS2741: Property 'cierres' is
+missing in type '{ … }' but required in type 'MiWalletModuleProps'.
+```
+
+Es la prop requerida sin default haciendo su trabajo: el compilador garantiza la inyección, no la
+buena voluntad de quien monte el módulo mañana.
+
+### `pnpm lint`
+
+```
+✖ 127 problems (0 errors, 127 warnings)
+```
+
+**0 errores.** Los 127 warnings son `no-unused-vars` preexistentes en archivos ajenos; un grep por
+`mi-wallet`, `MiWallet`, `menu-visibility`, `pwa-manifiesto` y `WalletDescarga` sobre esa salida
+devuelve **cero líneas**.
+
+### `pnpm exec vitest related --run` (los 5 archivos de producción tocados)
+
+```
+ Test Files  34 passed (34)
+      Tests  466 passed | 17 skipped (483)
+   Duration  26.26s
+```
+
+### Corrida explícita POR NOMBRE de los 7 archivos de test creados o modificados
+
+```
+ Test Files  7 passed (7)
+      Tests  144 passed (144)
+   Duration  10.99s
+```
+
+### D7 — los ocho que tenían que seguir verdes SIN tocarlos
+
+```
+ Test Files  8 passed (8)
+      Tests  99 passed (99)
+```
+
+`destino-post-login.test.ts`, `menu-historico.test.ts`, `rastreo-sin-ruta-nueva.guardia.test.ts`,
+`wallet-tienda-descarga-columnas.test.ts`, `desglose-tienda-labels.test.ts`,
+`caja-173-alcance.guardia.test.ts`, `mi-wallet-desglose.test.ts` y
+`liquidacion-money-safe.test.ts`. **Ninguno aparece en `git status --porcelain`**, comprobado.
+
+### Finales de línea
+
+Tres archivos quedaron en CRLF al editarlos con un script; el repo manda `* text=auto eol=lf` en
+`.gitattributes`. Se normalizaron a LF **antes** de terminar, para no dejar un diff de archivo
+entero por un cambio de tres líneas.
+
+---
+
+## B/C/D.6 — Límites y decisiones declaradas
+
+1. **La lista de cierres se lee UNA vez, en la carga.** Es el catálogo del libro, no depende de los
+   filtros vigentes, así que `recargar()` no la vuelve a pedir. Precio aceptado y escrito: un
+   cierre que entre con la pantalla abierta no aparece hasta recargar la ruta.
+2. **La hora del desempate colapsa al minuto.** Dos cierres del mismo minuto comparten etiqueta;
+   sus `value` no. Tiene test propio, para que quien quiera bajar al segundo sepa qué se decidió.
+3. **El filtro de cierre solo alcanza movimientos de origen `cierre_dia`.** Los de `pago_tienda` y
+   `manual` quedan fuera de cualquier opción — es una propiedad del filtro que ya existía
+   (`cierreId` casa contra `origen_tipo = 'cierre_dia'`), no algo que esta ficha introduzca. La
+   pregunta abierta 4 del `requirements.md` sigue abierta.
+4. **`Actor["rol"]` en vez de `RolValue`** en `page.tsx` (§B/C/D.1, D1–D6). Es el mismo tipo; el
+   motivo es la guardia de imports de la propia ficha.
+5. **`mi-wallet-cierres.ts` se creó durante B1**, no durante C1, porque B1 necesita el tipo
+   `CierresDeLaTienda` y ponerlo en `MiWalletModule.tsx` habría creado un ciclo de tipos con
+   `MiWalletFiltros.tsx`. El etiquetado (lo que C1 aporta de verdad) se verificó en el bloque C.
+6. **`WalletDescarga.test.tsx` entró en el diff sin estar en el `tasks.md`.** Lo exigió el
+   typecheck, no un test rojo. La lista de consumidores la da el compilador, igual que pasó con
+   los dobles del bloque A.
+
+**Veredicto de los bloques B, C y D:** completos (B1–B4, C1–C4, D1–D7). Typecheck y lint en verde,
+144 tests nombrados y 466 relacionados en verde, los 8 intocables verdes y fuera del diff, cinco
+mutaciones con su rojo pegado, y el hueco de `superficie-de-uso` cerrado y medido. El bloque E
+(cierre y gate) es del leader.

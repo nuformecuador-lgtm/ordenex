@@ -4,6 +4,8 @@ import { describe, it, expect } from "vitest";
 
 import { LLAMADAS_PROHIBIDAS_EN_DINERO } from "../../fixtures/money-safe";
 import { quitarComentarios } from "../../fixtures/sin-comentarios";
+// D6 (R33): la constante y el menu se leen del modulo REAL, no de una copia del texto.
+import { ROLES_MI_WALLET, SIDEBAR_ITEMS } from "@/lib/auth/menu-visibility";
 
 /**
  * FICHA 335 (A13) — GUARDIA DE ALCANCE: sin migracion, sin escritura y sin dinero convertido a
@@ -234,5 +236,89 @@ describe("335 — el censo de `/mi-wallet` se lee del disco, no de una lista esc
       expect(statSync(completo).size, `${ruta} esta vacio`).toBeGreaterThan(0);
       expect(codigo(ruta).trim().length, `${ruta} no tiene codigo`).toBeGreaterThan(0);
     }
+  });
+});
+
+// ───────────── R33 · el item de menu y el gate leen LA MISMA constante de roles ─────────────
+
+/**
+ * FICHA 335 (D6, R33). El modo de fallo que esto cierra no es teorico: con DOS listas de roles
+ * —una en el item de menu y otra escrita a mano en el gate de la pagina— ampliar una y olvidar
+ * la otra produce, o una entrada de menu que lleva a un 404, o una ruta abierta cuyo enlace no
+ * ve nadie. Ninguno de los dos rompe un test que no exista, y ninguno se nota mirando la
+ * pantalla del rol equivocado.
+ *
+ * Se afirma en las dos direcciones: que en `page.tsx` no queda NINGUN literal de rol, y que el
+ * `roles` del item es la MISMA REFERENCIA que la constante (no una copia con los mismos
+ * nombres, que es justo lo que un `toEqual` dejaria pasar).
+ */
+
+/** Todos los roles del esquema. Escritos, porque lo que se persigue es el LITERAL en el texto. */
+const ROLES_DEL_ESQUEMA = [
+  "maestro",
+  "admin",
+  "adminSatelite",
+  "adminTienda",
+  "mensajero",
+  "apiKey",
+] as const;
+
+/** Los literales de rol que aparecen en el CODIGO (sin comentarios) del archivo dado. */
+function literalesDeRolEn(fuente: string): string[] {
+  return ROLES_DEL_ESQUEMA.filter((rol) =>
+    new RegExp(`["'\`]${rol}["'\`]`).test(fuente),
+  );
+}
+
+describe("335 / R33 — una sola fuente de verdad para quien accede a `/mi-wallet`", () => {
+  it("CONTROL DE NO-VACUIDAD: `page.tsx` existe, tiene codigo y SI menciona la constante", () => {
+    const fuente = codigo(`${MI_WALLET}/page.tsx`);
+    expect(fuente.length).toBeGreaterThan(200);
+    expect(fuente).toContain("ROLES_MI_WALLET");
+  });
+
+  it("`app/(app)/mi-wallet/page.tsx` no contiene NINGUN literal de rol", () => {
+    // Se lee el CODIGO, no el texto crudo: el docstring de esa pagina nombra `adminTienda` a
+    // proposito para explicar de quien es la pantalla, y citarlo no es duplicar la lista.
+    const hallazgos = literalesDeRolEn(codigo(`${MI_WALLET}/page.tsx`));
+    expect(hallazgos, "literal de rol en el gate de /mi-wallet").toEqual([]);
+  });
+
+  it("CONTRAPRUEBA: el barrido SI caza un literal colado, y NO caza su cita en un comentario", () => {
+    // Sin esto, un detector roto (un regex que no case nunca) pasaria el caso de arriba en
+    // verde por no encontrar NADA — que es como fallan las guardias estaticas.
+    const real = codigo(`${MI_WALLET}/page.tsx`);
+    expect(literalesDeRolEn(`${real}\nif (actor.rol !== "adminTienda") notFound();`)).toEqual([
+      "adminTienda",
+    ]);
+    expect(literalesDeRolEn(`${real}\nconst r = ["maestro", "apiKey"];`)).toEqual([
+      "maestro",
+      "apiKey",
+    ]);
+    // Y la cita en un comentario NO se caza, porque el codigo se lee sin comentarios.
+    expect(
+      literalesDeRolEn(quitarComentarios(`${real}\n// solo el rol "adminTienda" entra aqui`)),
+    ).toEqual([]);
+  });
+
+  it("el `roles` del item `/mi-wallet` es la MISMA referencia que `ROLES_MI_WALLET`", () => {
+    const item = SIDEBAR_ITEMS.find((i) => i.href === "/mi-wallet");
+    expect(item, "no existe el item /mi-wallet").toBeDefined();
+
+    // `toBe`, no `toEqual`: identidad. Un `["adminTienda"]` copiado a mano pasaria un `toEqual`
+    // y seria exactamente la segunda lista que esta guardia existe para impedir.
+    expect(item!.roles).toBe(ROLES_MI_WALLET);
+    expect(ROLES_MI_WALLET).toEqual(["adminTienda"]);
+  });
+
+  it("el gate importa esa constante DEL modulo del menu, no una copia local", () => {
+    // La identidad de arriba se mide en memoria sobre el item; esto mide el otro extremo: que
+    // el import de la pagina apunta al mismo modulo. Con un `ROLES_MI_WALLET` declarado en la
+    // propia pagina, las dos capas volverian a ser dos.
+    const fuente = codigo(`${MI_WALLET}/page.tsx`);
+    expect(fuente).toMatch(
+      /import\s*\{[^}]*ROLES_MI_WALLET[^}]*\}\s*from\s*["']@\/lib\/auth\/menu-visibility["']/,
+    );
+    expect(fuente).not.toMatch(/const\s+ROLES_MI_WALLET\s*=/);
   });
 });
