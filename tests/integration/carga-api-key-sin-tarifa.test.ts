@@ -178,10 +178,12 @@ describe("carga por API key: lote MIXTO -> 200 con la fila sin tarifa en error (
     const body = await res.json();
 
     expect(body).toMatchObject({ total: 2, creadas: 1, duplicadas: 0, conError: 1 });
+    // 2026-08-31: la creada viaja en `filas` y la degradada en `errores`, con su detalle intacto.
     const ok = body.filas.find((f: { numRemision: string }) => f.numRemision === "REM-OK");
-    const sin = body.filas.find((f: { numRemision: string }) => f.numRemision === "REM-SIN");
+    const sin = body.errores.find((f: { numRemision: string }) => f.numRemision === "REM-SIN");
     expect(ok).toMatchObject({ resultado: "creada", numGuia: 1000 });
     expect(sin).toMatchObject({ resultado: "error", errores: { tarifa: [MSG_FILA_SIN_TARIFA] } });
+    expect(body.filas).toHaveLength(1);
 
     // R28: la fila sin tarifa NO llego a la persistencia.
     const persistidas = (repo.createManyOrdenesConGuia as ReturnType<typeof vi.fn>).mock
@@ -213,7 +215,9 @@ describe("carga por API key: nadie llega a resolver -> 200, no 409 (274/R30)", (
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toMatchObject({ total: 2, creadas: 0, conError: 2 });
-    for (const f of body.filas) {
+    expect(body.filas).toEqual([]); // ninguna entro: `filas` queda vacia, no a medias
+    expect(body.errores).toHaveLength(2);
+    for (const f of body.errores) {
       expect(f.errores).toHaveProperty("distrito");
       expect(f.errores).not.toHaveProperty("tarifa");
     }
