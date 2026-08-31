@@ -155,6 +155,17 @@ export const openApiSpec = {
           "o falta de tarifa). Una respuesta 200",
           "puede contener filas con",
           `error. El lote acepta entre 1 y ${MAX_CARGA_ROWS} filas.`,
+          "",
+          "**CAMBIO INCOMPATIBLE (2026-08-31): las filas con error salieron de `filas`.** `filas`",
+          "trae ahora SOLO lo que entró (`creada` y `duplicada`) y lo que falló viaja en la lista",
+          "hermana **`errores`**, con exactamente el mismo contenido de antes: su `fila` 1-based,",
+          "su `numRemision`, su `resultado: \"error\"` y su mapa de errores por campo. Ya no hace",
+          "falta recorrer el lote entero ni ramificar por `resultado` para encontrar lo que hay",
+          "que atender: `if (respuesta.errores.length)` alcanza. Los contadores no se mueven —",
+          "`total`, `creadas`, `duplicadas` y `conError` siguen contando sobre el lote completo—",
+          "y `conError` es siempre `errores.length`. **Si tu integración filtraba `filas` por",
+          "`resultado === \"error\"`, cambiá a `errores`**: ese filtro ahora devuelve vacío",
+          "SIEMPRE, incluso con filas fallidas.",
         ].join("\n"),
         requestBody: {
           required: true,
@@ -216,6 +227,8 @@ export const openApiSpec = {
                       conError: 1,
                       filas: [
                         { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 100234 },
+                      ],
+                      errores: [
                         { fila: 2, numRemision: "REM-0002", resultado: "error", errores: { telefono: ["requerido"] } },
                       ],
                       ordenes: [
@@ -240,6 +253,8 @@ export const openApiSpec = {
                       conError: 1,
                       filas: [
                         { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 100234 },
+                      ],
+                      errores: [
                         { fila: 2, numRemision: "REM-0002", resultado: "error", errores: { tarifa: [MSG_FILA_SIN_TARIFA] } },
                       ],
                       ordenes: [
@@ -1560,18 +1575,37 @@ export const openApiSpec = {
       },
       CargaRowResult: {
         type: "object",
-        description: "Resultado por fila del lote.",
+        description:
+          "Resultado de una fila que SÍ entró al sistema. Desde 2026-08-31 esta lista no contiene filas en `error`: ésas viajan en `errores` (`CargaFilaError`).",
         required: ["fila", "numRemision", "resultado"],
         properties: {
           fila: { type: "integer", description: "Índice 1-based dentro de `ordenes`." },
           numRemision: { type: "string" },
-          resultado: { type: "string", enum: ["creada", "duplicada", "error"] },
+          resultado: { type: "string", enum: ["creada", "duplicada"] },
           estatus: { type: "string", description: "Estado (en creada/duplicada); nunca ids internos." },
           numGuia: { type: "integer", description: "Número de guía asignado (solo en `creada`)." },
+        },
+      },
+      // 2026-08-31 — la fila que NO entró, publicada aparte. Es el MISMO objeto que antes
+      // viajaba dentro de `filas`; lo único que cambió es dónde se lee. Se declara como schema
+      // propio (y no reusando `CargaRowResult`) porque aquí `errores` es REQUIRED: en esta
+      // lista no existe el elemento sin detalle, y eso es justo lo que la hace fácil de
+      // consumir.
+      CargaFilaError: {
+        type: "object",
+        description: "Una fila que no se creó, con el detalle de por qué.",
+        required: ["fila", "numRemision", "resultado", "errores"],
+        properties: {
+          fila: { type: "integer", description: "Índice 1-based dentro de `ordenes`." },
+          numRemision: {
+            type: "string",
+            description: "Tu número de remisión tal como llegó (vacío si la fila no lo traía).",
+          },
+          resultado: { type: "string", const: "error" },
           errores: {
             type: "object",
             description:
-              "Errores por campo (solo en `error`). Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso la orden no se creó.",
+              "Errores por campo. Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso la orden no se creó.",
             additionalProperties: { type: "array", items: { type: "string" } },
           },
         },
@@ -1603,7 +1637,7 @@ export const openApiSpec = {
       },
       CargaResponse: {
         type: "object",
-        required: ["total", "creadas", "duplicadas", "conError", "filas", "ordenes"],
+        required: ["total", "creadas", "duplicadas", "conError", "filas", "errores", "ordenes"],
         properties: {
           // Feature 177/R45: el integrador necesita este id para llamar a
           // `POST /api/ordenes/api-key/carga/{cargaId}/generate`. Es `null` cuando el lote no
@@ -1618,7 +1652,18 @@ export const openApiSpec = {
           creadas: { type: "integer" },
           duplicadas: { type: "integer" },
           conError: { type: "integer" },
-          filas: { type: "array", items: { $ref: "#/components/schemas/CargaRowResult" } },
+          filas: {
+            type: "array",
+            description:
+              "Las filas que entraron: `creada` y `duplicada`. Nunca contiene una fila en `error`.",
+            items: { $ref: "#/components/schemas/CargaRowResult" },
+          },
+          errores: {
+            type: "array",
+            description:
+              "Las filas que NO se crearon, con su detalle por campo. Lista vacía cuando el lote entero entró; su longitud es siempre `conError`.",
+            items: { $ref: "#/components/schemas/CargaFilaError" },
+          },
           ordenes: { type: "array", items: { $ref: "#/components/schemas/CargaOrden" } },
         },
       },

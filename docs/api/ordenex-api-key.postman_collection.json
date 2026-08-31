@@ -235,7 +235,7 @@
     },
     {
       "name": "2 · Carga de órdenes",
-      "description": "`POST /api/ordenes/api-key/carga` — crea órdenes en firme. Cada una nace en `por_recolectar_en_tienda` y recibe su `num_guia` en el acto.\n\n**Éxito parcial:** un `200` puede contener filas con `error`. Cada fila se clasifica en `creada`, `duplicada` (mismo `num_remision`) o `error`. El lote acepta de 1 a 5000 filas.",
+      "description": "`POST /api/ordenes/api-key/carga` — crea órdenes en firme. Cada una nace en `por_recolectar_en_tienda` y recibe su `num_guia` en el acto.\n\n**Éxito parcial, y desde el 2026-08-31 en DOS listas.** Un `200` puede contener filas que no se crearon. `filas` trae SOLO lo que entró —`creada` y `duplicada` (mismo `num_remision`)— y lo que falló viaja aparte en **`errores`**, con el mismo contenido de siempre: `fila`, `numRemision`, `resultado: \"error\"` y el mapa por campo. Para saber si hay algo que atender alcanza con `errores.length`; ya no hay que recorrer el lote entero filtrando por `resultado`. Los contadores no cambian: `total`, `creadas`, `duplicadas` y `conError` siguen siendo del lote completo, y `conError` es siempre `errores.length`. El lote acepta de 1 a 5000 filas.",
       "item": [
         {
           "name": "lote válido (2 filas) — guarda cargaId y numGuia",
@@ -248,11 +248,17 @@
                   "const b = pm.response.json();",
                   "pm.test('200', () => pm.response.to.have.status(200));",
                   "if (b.cargaId) pm.collectionVariables.set('cargaId', b.cargaId);",
-                  "const creada = (b.resultados || []).find(r => r.resultado === 'creada');",
+                  "// `filas` es la lista de lo que ENTRO (creada/duplicada). Lo que falla vive en `errores`.",
+                  "const creada = (b.filas || []).find(r => r.resultado === 'creada');",
                   "if (creada) {",
                   "  pm.collectionVariables.set('numGuia', String(creada.numGuia));",
                   "  pm.collectionVariables.set('numRemision', creada.numRemision);",
                   "}",
+                  "pm.test('las filas con error no viajan en `filas`', () => {",
+                  "  pm.expect(b.errores, 'errores').to.be.an('array');",
+                  "  pm.expect((b.filas || []).filter(f => f.resultado === 'error')).to.have.lengthOf(0);",
+                  "  pm.expect(b.errores.length, 'conError === errores.length').to.eql(b.conError);",
+                  "});",
                   "console.log('cargaId:', pm.collectionVariables.get('cargaId'), '| numGuia:', pm.collectionVariables.get('numGuia'));"
                 ]
               }
@@ -283,12 +289,34 @@
           }
         },
         {
-          "name": "lote mixto: una válida y una inválida (200 con fila en error)",
+          "name": "lote mixto: una válida y una inválida (200 con fila en `errores`)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('la fila mala esta en `errores`, no en `filas`', () => {",
+                  "  pm.expect(b.conError).to.eql(1);",
+                  "  pm.expect(b.errores).to.have.lengthOf(1);",
+                  "  pm.expect(b.errores[0].resultado).to.eql('error');",
+                  "  pm.expect(b.errores[0].errores).to.have.property('telefono');",
+                  "  pm.expect(b.filas.every(f => f.resultado !== 'error'), '`filas` sin errores').to.be.true;",
+                  "});",
+                  "pm.test('los contadores cuadran: creadas + duplicadas + conError === total', () => {",
+                  "  pm.expect(b.creadas + b.duplicadas + b.conError).to.eql(b.total);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/carga", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "carga"] },
-            "description": "La segunda fila va sin `telefono`. Demuestra el **éxito parcial**: responde `200`, la primera sale `creada` y la segunda `error` con `errores.telefono`. Una fila mala NO aborta el lote.",
+            "description": "La segunda fila va sin `telefono`. Demuestra el **éxito parcial** y **dónde se lee cada cosa**: responde `200`, la primera sale en `filas` como `creada` y la segunda **no está en `filas`** — vuelve en la lista **`errores`** con `errores.telefono`. Una fila mala NO aborta el lote.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"ordenes\": [\n    {\n      \"num_remision\": \"REM-MIX-0001\",\n      \"destinatario\": \"Ana Jiménez\",\n      \"telefono\": \"85554444\",\n      \"provincia\": \"Heredia\",\n      \"canton\": \"Heredia\",\n      \"distrito\": \"Heredia\",\n      \"direccion\": \"Barrio María Auxiliadora, casa 12\",\n      \"producto\": \"Audífonos\",\n      \"peso\": \"0.3\",\n      \"monto_cobrar\": \"33.50\"\n    },\n    {\n      \"num_remision\": \"REM-MIX-0002\",\n      \"destinatario\": \"Sin teléfono\",\n      \"telefono\": \"\",\n      \"provincia\": \"San José\",\n      \"canton\": \"Escazú\",\n      \"distrito\": \"San Rafael\",\n      \"direccion\": \"Del cruce 300m oeste\",\n      \"producto\": \"Mochila\",\n      \"peso\": \"1.0\",\n      \"monto_cobrar\": \"12.00\"\n    }\n  ]\n}"

@@ -618,6 +618,21 @@ export class BulkOrdenService implements IBulkOrdenService {
     return { status: "ok", summary, manifiestoOrdenIds };
   }
 
+  /**
+   * 2026-08-31 — EL UNICO SITIO DONDE SE PARTE LA LISTA. Las dos vias de `cargarViaApi`
+   * (el corte por seed ausente y la carga real) siguen construyendo UNA sola lista con las
+   * tres clasificaciones —la clasificacion por fila no cambia— y es aqui, al armar el cuerpo
+   * publico, donde las filas en error se sacan de `filas` y se publican en `errores`.
+   *
+   * Se hace en este embudo y no en cada `push` a proposito: un segundo sitio que decidiera a
+   * que lista va una fila es la forma de que un dia una fila con error acabe en las dos, o en
+   * ninguna. `conError` se sigue calculando de la lista COMPLETA, asi que no puede
+   * desincronizarse del tamaño de `errores`.
+   *
+   * `cargarMasiva` (via sesion, `buildSummary`) NO cambia: su consumidor es la pantalla de
+   * carga masiva, que pinta el lote entero en orden y necesita las tres clasificaciones
+   * juntas.
+   */
   private buildViaApiSummary(
     total: number,
     filas: CargaViaApiRow[],
@@ -629,7 +644,18 @@ export class BulkOrdenService implements IBulkOrdenService {
       creadas: filas.filter((f) => f.resultado === "creada").length,
       duplicadas: filas.filter((f) => f.resultado === "duplicada").length,
       conError: filas.filter((f) => f.resultado === "error").length,
-      filas,
+      filas: filas.filter((f) => f.resultado !== "error"),
+      // El contenido viaja TAL CUAL: mismo indice, misma remision y el mismo mapa por campo.
+      // El `?? {}` es defensivo —toda fila en error se construye con su mapa— y evita que la
+      // clave que da nombre a esta lista pueda faltar en uno de sus elementos.
+      errores: filas
+        .filter((f) => f.resultado === "error")
+        .map((f) => ({
+          fila: f.fila,
+          numRemision: f.numRemision,
+          resultado: "error" as const,
+          errores: f.errores ?? {},
+        })),
       ordenes,
       cargaId,
     };
