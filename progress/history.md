@@ -4370,3 +4370,28 @@ paralelas toman el mismo número; el slug sobrevive porque el remoto no se renom
 **308** y a **311** el 28. Las dos últimas ya con commits escritos con el número viejo. Ninguna la
 detectó el gate: `jq` no está instalado y su ausencia es un `warn`, así que la validación de
 `feature_list.json` no corre —y los ids duplicados no se comprueban ni con `jq`.
+
+## 2026-08-31 — 339: la barra de filtros compartida lee su estado inicial desde la URL
+- `BuscadorFiltros` y `FilterComponent` se precargan desde los query params al entrar: la clave
+  del param es la MISMA clave del filtro que viaja al back (`?zona=Norte`), y el control se monta
+  solo. El término libre viaja en `q`. «Limpiar todo» borra los params propios y respeta los
+  ajenos. La capacidad vive en `components/shared/` + `hooks/useFiltrosUrl.ts`: **ni un archivo
+  bajo `app/`**, y las ocho pantallas la heredan sin tocarlas.
+- Requisitos cubiertos: R1..R25 (25/25 con test; **6 con rojo demostrado**: R2, R3, R5, R7, R17, R25).
+- NACIÓ COMO FICHA 335 y se renumeró a 339 el 2026-08-31: otra sesión usó el 335 para «la wallet de
+  la tienda se ve como la de admin» y llegó a `dev` antes (PR #635). Se conservó el slug.
+- Decisiones del humano: alcance en el COMPONENTE, no por vista; la URL se lee SOLO al entrar y no
+  se reescribe al filtrar. Contrato de URL: `q` para el término, coma para multi-valor (aceptando
+  la forma repetida al leer), terna posicional en un param para `dateRange`, descarte silencioso de
+  lo desconocido conservando el param ajeno.
+- DOS RECHAZOS antes del OK, y los dos enseñaron lo mismo: **un test que no puede fallar no prueba
+  nada.** (1) `/novedades` no acotaba desde un enlace —su catálogo se construye después del
+  montaje— y el test que debía cubrirlo sustituía el hook real por una maqueta con las opciones ya
+  puestas. (2) El guardia de R25 expiraba ~2 de cada 5 corridas y sus casos quedaban SKIPPED: verde
+  sin verificar nada. Se partió en dos (ESLint sin jsdom) y aguanta 10/10.
+- Deuda anotada, no tapada: la memoria de «recién borrado» (`paresBorrados`) no se vacía en toda la
+  sesión SPA, así que una llegada posterior a esa ruta con ese mismo par queda suprimida hasta
+  recargar. Y `/novedades` monta dos barras, así que un `?q=` dispara dos `listarCompleto()`
+  —decisión del leader: fuera de esta ficha—.
+- HALLAZGO DEL ARNÉS, ajeno a la ficha: con `pnpm` ausente `init.sh` degrada typecheck y lint a
+  `warn` y sale **exit 0** sin haberlos ejecutado. Falso verde; merece ficha propia.

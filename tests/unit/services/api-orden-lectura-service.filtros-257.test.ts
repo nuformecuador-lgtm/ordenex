@@ -46,7 +46,6 @@ function row(overrides: Partial<ApiOrdenRow> = {}): ApiOrdenRow {
 function fakeRepo(overrides: Record<string, unknown> = {}) {
   return {
     listByOwner: vi.fn().mockResolvedValue({ items: [row()], total: 1 }),
-    findDetalleByNumGuiaForOwner: vi.fn().mockResolvedValue(null),
     findDetalleByOrdenIdForOwner: vi.fn().mockResolvedValue(null),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-bodega"),
     ...overrides,

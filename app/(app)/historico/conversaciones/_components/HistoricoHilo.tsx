@@ -2,7 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Package } from "lucide-react";
 import useSWR from "swr";
 
 import { cn } from "@/lib/utils";
@@ -14,6 +15,7 @@ import type {
   ListarMensajesHistoricoResult,
 } from "@/lib/types/historico-conversaciones";
 import { claveDiaCR, separadorDia } from "@/lib/utils/separador-dia-cr";
+import { PARAM_TERMINO_DEFAULT } from "@/lib/utils/filtros-url";
 
 import { BurbujaContenido } from "@/app/(app)/mis-asignaciones/_components/chat/BurbujaContenido";
 import { BurbujaSistema } from "@/app/(app)/mis-asignaciones/_components/chat/BurbujaSistema";
@@ -172,6 +174,52 @@ function BotonVolver({ onVolver }: Readonly<{ onVolver: () => void }>) {
   );
 }
 
+/**
+ * Feature 341 — rotulo del enlace a `/ordenes`. Se exporta para que el test no repita el
+ * literal, igual que `ETIQUETA_VOLVER`.
+ */
+export const ETIQUETA_VER_ORDEN = "Ver en órdenes la guía";
+
+/** El nombre accesible dice a dónde va Y con qué: «Ver en órdenes la guía 12345». */
+export function etiquetaVerOrden(guia: string): string {
+  return `${ETIQUETA_VER_ORDEN} ${guia}`;
+}
+
+/**
+ * Feature 341 — la guía del hilo, llevada al buscador de `/ordenes`.
+ *
+ * Es un `<Link>`, no un `router.push`: así se abre en pestaña nueva con ctrl+clic, se copia
+ * con el botón derecho y sigue funcionando sin JS. Es una NAVEGACIÓN, no una acción.
+ *
+ * La clave del parámetro NO se escribe a mano: se importa `PARAM_TERMINO_DEFAULT`, el mismo
+ * defecto que `BuscadorFiltros` lee de la URL en `/ordenes` (feature 339, que monta el
+ * buscador SIN `terminoKey`). Escribir `"q"` aquí dejaría un enlace muerto el día que ese
+ * defecto cambie.
+ *
+ * El término es `guiaVisible(cabecera)`: si el hilo no tiene guía cae a la remisión, y el
+ * buscador de `/ordenes` indexa las dos. `numRemision` es `String` NO NULO en el esquema
+ * (`db/schema.prisma`), así que un término vacío no debería poder existir; aun así se
+ * comprueba, porque `/ordenes?q=` no acotaría NADA y un enlace que promete filtrar y no
+ * filtra miente. Sin término, no hay enlace.
+ */
+function EnlaceAOrdenes({ cabecera }: Readonly<{ cabecera: HiloHistoricoDTO }>) {
+  const termino = guiaVisible(cabecera).trim();
+  if (termino === "") return null;
+
+  const etiqueta = etiquetaVerOrden(termino);
+
+  return (
+    <Link
+      href={`/ordenes?${PARAM_TERMINO_DEFAULT}=${encodeURIComponent(termino)}`}
+      aria-label={etiqueta}
+      title={etiqueta}
+      className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+    >
+      <Package className="size-5" aria-hidden="true" />
+    </Link>
+  );
+}
+
 /** R43 — orden, destinatario, mensajero, número vigente y, si fusiona, cuántos números hay. */
 function CabeceraHilo({
   cabecera,
@@ -200,6 +248,7 @@ function CabeceraHilo({
           ) : null}
         </div>
       </div>
+      <EnlaceAOrdenes cabecera={cabecera} />
     </header>
   );
 }
