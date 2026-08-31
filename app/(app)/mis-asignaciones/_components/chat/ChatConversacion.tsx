@@ -633,6 +633,13 @@ export function ChatConversacion({
           </div>
         </div>
 
+        <div className="hidden text-right sm:block">
+          <p className="text-sm font-semibold text-foreground">
+            {formatMonto(orden.montoCobrar)}
+          </p>
+          <p className="text-[11px] text-muted-foreground">A cobrar</p>
+        </div>
+
         {/* Pedido humano 2026-08-31 — LLAMAR AL CLIENTE desde la propia conversación, sin
             volver al panel. Sale de la app hacia WhatsApp (`wa.me/<normalizado>`, el mismo
             enlace y el mismo normalizador que usa `ContactoButtons`), que es donde el
@@ -640,6 +647,10 @@ export function ChatConversacion({
             de URL que INICIE la llamada, así que lo que se puede abrir es la conversación
             con ese número ya seleccionado. Por eso el rótulo accesible dice «por WhatsApp»
             y no promete un timbre.
+
+            VA EL ÚLTIMO, después del monto y pegado a la esquina que el Dialog reserva con
+            `pr-12`: queda junto al botón de cerrar, que es lo pedido. El `-mr-1` recupera
+            un pelo de ese hueco para que el icono no quede flotando lejos del borde.
 
             No se pinta si la orden no trae teléfono: un `wa.me/` vacío abre WhatsApp en la
             nada y parece que la app se rompió. */}
@@ -649,18 +660,11 @@ export function ChatConversacion({
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Llamar por WhatsApp a ${orden.destinatario}`}
-            className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="-mr-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             <Phone className="size-5" aria-hidden="true" />
           </a>
         ) : null}
-
-        <div className="hidden text-right sm:block">
-          <p className="text-sm font-semibold text-foreground">
-            {formatMonto(orden.montoCobrar)}
-          </p>
-          <p className="text-[11px] text-muted-foreground">A cobrar</p>
-        </div>
       </header>
 
       <div
