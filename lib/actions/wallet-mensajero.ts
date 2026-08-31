@@ -8,20 +8,15 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   IWalletMensajeroService,
   ListarCuentasPorPagarServiceResult,
-  ListarMisPagosServiceResult,
   ListarPagosDeMensajeroServiceResult,
-  VerMiCuentaPorPagarServiceResult,
 } from "@/lib/interfaces/services/IWalletMensajeroService";
 import {
   listarCuentasPorPagarCompletoSchema,
   listarCuentasPorPagarPaginadoSchema,
-  listarMisPagosCompletoSchema,
   listarPagosDeMensajeroCompletoSchema,
   listarPagosDeMensajeroSchema,
-  listarPagosMensajeroSchema,
   type ListarCuentasPorPagarCompletoResult,
   type ListarCuentasPorPagarPaginadoResult,
-  type ListarMisPagosCompletoResult,
   type ListarPagosDeMensajeroCompletoResult,
 } from "@/lib/types/wallet-mensajero";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
@@ -33,15 +28,14 @@ import type { AppErrorShape } from "@/lib/errors";
 // `unauthenticated` (sin sesion) y `validation_error` (ZodError) se resuelven en el borde;
 // `forbidden`/`ok` los devuelve el service como resultado de dominio. Money-safe: los DTOs
 // exponen montos como STRING (R21/R27); el cliente nunca recibe Prisma.Decimal.
-
-export type VerMiCuentaPorPagarActionResult =
-  | VerMiCuentaPorPagarServiceResult
-  | { status: "unauthenticated" };
-
-export type ListarMisPagosActionResult =
-  | ListarMisPagosServiceResult
-  | { status: "unauthenticated" }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+//
+// Ficha 336 (2026-08-30): se RETIRARON `verMiCuentaPorPagarAction`, `listarMisPagosAction` y
+// `listarMisPagosCompletoAction`. Su unica superficie era `/mis-pagos`, borrada por decision
+// humana; se eligio retirarlas y NO anotarlas con la excusa `sin-superficie` (escrita aqui
+// SIN la arroba a proposito: `rutas-336-retiradas.guardia` cuenta las anotaciones reales de este
+// archivo y exige que sea EXACTAMENTE una), porque esa anotacion afirma
+// un motivo real para quedarse y aqui no lo hay: la capacidad desaparece. Lo que queda son las
+// CUATRO lecturas de administracion, cuya superficie viva es `/wallet/mensajeros`.
 
 export type ListarCuentasPorPagarActionResult =
   | ListarCuentasPorPagarServiceResult
@@ -80,56 +74,6 @@ function buildService(): IWalletMensajeroService {
 export interface WalletMensajeroDeps {
   service?: IWalletMensajeroService;
   getActor?: () => Promise<Actor | null>;
-}
-
-/** R16/R20/R27: cuenta por pagar total del mensajero (STRING+signo), acotada a su mensajero_id. Forbidden/unauthenticated sin exponer datos. */
-export async function verMiCuentaPorPagarAction(
-  deps: WalletMensajeroDeps = {},
-): Promise<VerMiCuentaPorPagarActionResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R20: antes de tocar el service
-    const service = deps.service ?? buildService();
-    return service.verMiCuentaPorPagar(actor);
-  });
-  // Este borde no tiene zod: el unico AppErrorShape posible es UNAUTHORIZED.
-  return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
-}
-
-/** R20/R22/R27: pagos paginados + filtros del mensajero, acotados a su mensajero_id en el WHERE. */
-export async function listarMisPagosAction(
-  input: unknown,
-  deps: WalletMensajeroDeps = {},
-): Promise<ListarMisPagosActionResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError();
-    const data = listarPagosMensajeroSchema.parse(input); // ZodError -> VALIDATION_ERROR
-    const service = deps.service ?? buildService();
-    return service.listarMisPagos(data, actor);
-  });
-  return isAppErrorShape(r) ? toWalletMensajeroActionError(r) : r;
-}
-
-/**
- * Feature 170 (T C.2, design §4) — pagos PROPIOS del mensajero, sin paginacion, para la
- * descarga. Calcado de `listarMisPagosAction`: mismo borde, mismo actor, mismo schema
- * (menos `page`/`pageSize`, y `.strict()`) y el MISMO servicio, que acota a su
- * `mensajero_id` e ignora el `mensajeroId` del input (R14/R15). Ninguna rama devuelve filas
- * junto a un error (R16/R17/R18).
- */
-export async function listarMisPagosCompletoAction(
-  input: unknown,
-  deps: WalletMensajeroDeps = {},
-): Promise<ListarMisPagosCompletoResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
-    const data = listarMisPagosCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
-    const service = deps.service ?? buildService();
-    return service.listarMisPagosCompleto(data, actor);
-  });
-  return isAppErrorShape(r) ? toWalletMensajeroActionError(r) : r;
 }
 
 /**
@@ -197,8 +141,9 @@ export async function listarCuentasPorPagarCompletoAction(
 
 /**
  * R18/R22/R27: DESGLOSE por cierre de UN mensajero (solo maestro), paginado (mas reciente primero)
- * + filtros server-side por fecha/cierre; el saldo refleja el conjunto filtrado. Espejo de
- * `listarMisPagosAction` pero SIN acotar a `actor.usuarioId`: el `mensajeroId` (REQUERIDO por
+ * + filtros server-side por fecha/cierre; el saldo refleja el conjunto filtrado. NO acota a
+ * `actor.usuarioId` (era el espejo de `listarMisPagosAction`, retirada por la ficha 336): el
+ * `mensajeroId` (REQUERIDO por
  * `listarPagosDeMensajeroSchema`) viaja en el input y el service gatea a maestro. `mensajeroId`
  * faltante/vacio -> validation_error. Montos STRING.
  */

@@ -113,8 +113,16 @@ const ARBOLES_UI = ["app", "components"] as const;
 // motivo escrito en el censo. Los números se leyeron del ÁRBOL —esta guardia se vio fallar con
 // «29 recibido / 28 esperado» antes de tocarlos—, no de una suma de escritorio. Censo total:
 // 30 = 29 `<DataTable>` + 1 cruda.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 29;
-const TOTAL_INSTANCIAS_DATATABLE = 29;
+// FICHA 336 «borrar /mis-pagos y /qr» (2026-08-30): 29 → 28 archivos y 29 → 28 instancias, y es
+// la SEGUNDA vez que estos números BAJAN (la primera fue `ZonasModule`, el 2026-08-07). La que
+// falta es «Desglose de pagos del mensajero» (`mis-pagos/_components/DesglosePagos.tsx`), que
+// desaparece con la pantalla `/mis-pagos`, borrada por decisión humana. A diferencia de
+// `ZonasModule`, ésta SÍ descargaba: es la primera descarga que este repo pierde, y se pierde a
+// propósito. Los números son los MEDIDOS —esta guardia se vio fallar con «28 recibido /
+// 29 esperado» antes de tocarlos—, no una resta de escritorio. Censo total: 29 = 28
+// `<DataTable>` + 1 cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 28;
+const TOTAL_INSTANCIAS_DATATABLE = 28;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -283,7 +291,8 @@ describe("guardia de cobertura del censo de tablas", () => {
     // FEATURE 304: 27 → 28, por la tabla del aviso de montos redondeados de la carga masiva.
     // FICHA 333 (H1): 28 → 29, por la cola de cobros de gasto fijo por aprobar.
     // FICHA 337 (segunda mitad): 29 → 30, por la cola de cobros por rechazo de tienda.
-    expect(totalCensado).toBe(30);
+    // FICHA 336: 30 → 29, por el desglose de pagos del mensajero, que se va con `/mis-pagos`.
+    expect(totalCensado).toBe(29);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -349,7 +358,13 @@ describe("guardia de cobertura del censo de tablas", () => {
     // mueven. La de mas es la cola de cobros por RECHAZO DE TIENDA, espejo de la anterior. La
     // asimetria vuelve a ser el dato: esta ficha anade otra pantalla de DECISION, no un listado
     // que alguien quiera llevarse, y ninguna descarga existente se gana ni se pierde.
-    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(20);
+    //
+    // FICHA 336 (borrar `/mis-pagos` y `/qr`): 20 -> 19 dentro de alcance, y las 10 exclusiones
+    // NO se mueven. La asimetria es, otra vez, el dato — pero invertida respecto a todas las
+    // anteriores: lo que se fue era una tabla que DESCARGABA, no una exclusion. Es la primera
+    // descarga que este censo pierde, y desaparece porque desaparecio su pantalla («Desglose de
+    // pagos del mensajero», `/mis-pagos`), no porque alguien le quitara el control.
+    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(19);
     expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(10);
   });
 
