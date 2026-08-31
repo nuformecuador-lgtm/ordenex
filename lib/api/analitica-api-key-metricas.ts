@@ -23,6 +23,15 @@ export type ResolucionMetricas =
  * Es una funcion pura y separada del schema a proposito: aqui hay CUATRO reglas de contrato que
  * un `z.string()` no expresa, y cada una tiene su motivo escrito.
  *
+ *  0. **AUSENTE O VACIO ES `all`** (2026-08-31). `metricas` dejo de ser obligatorio: no mandarlo,
+ *     o mandarlo vacio (`metricas=`, o solo espacios), significa «todas las publicables», el
+ *     MISMO resultado que `all`. Antes eso era un 422, y el 422 no compraba nada: la unica
+ *     lectura razonable de «no dije que metricas quiero» es «dame las que haya», y obligar a
+ *     escribir `all` para eso era ceremonia. `all` NO se retira: sigue siendo la forma explicita
+ *     de pedirlo, y es la que documenta el OpenAPI.
+ *     ⚠ Ojo con lo que esto NO relaja: una cadena con un elemento vacio (`a,,b`, `,`) sigue
+ *     siendo 422. Vacio ENTERO es «no pedi nada»; vacio EN MEDIO de una lista es una lista mal
+ *     escrita, y adivinar cual de los dos quiso decir el integrador es justo lo que no se hace.
  *  1. **CSV, no clave repetida.** `metricas=a,b,c` mantiene la lectura CLAVE POR CLAVE del canal
  *     (106/R8): `sp.get` sigue devolviendo un `string` y no hay que abrir la puerta al multivalor
  *     para una sola clave.
@@ -44,6 +53,9 @@ export type ResolucionMetricas =
  * la lista blanca se podria reconstruir desde fuera.
  */
 export function resolverMetricasPedidas(valor: string): ResolucionMetricas {
+  // Regla 0: la cadena vacia (o solo espacios) es «todas», igual que `all`. Se resuelve ANTES
+  // de trocear por comas para que no caiga en el rechazo de elementos vacios de abajo.
+  if (valor.trim() === "") return { ok: true, ids: [...METRICAS_API_KEY] };
   const tokens = valor.split(",").map((t) => t.trim());
   if (tokens.some((t) => t.length === 0)) {
     return { ok: false, mensaje: "`metricas` no admite elementos vacios." };

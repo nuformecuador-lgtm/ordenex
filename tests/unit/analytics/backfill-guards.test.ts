@@ -65,8 +65,18 @@ const MODULOS_125 = [
  * acota a lo minimo y va acompanada de DOS casos nuevos que la sostienen: uno prohibe que un
  * consumidor externo importe el SERVICIO o el SCRIPT del backfill (no solo el planificador
  * puro) y otro exige que cada entrada exista y siga importando la 125 de verdad.
+ *
+ * 2026-08-31 — SEGUNDO CONSUMIDOR, por el MISMO motivo. `lib/api/analitica-api-key-rango.ts`
+ * rellena las fechas que el integrador no manda en la analitica por API key, y «sin `desde`»
+ * significa DESDE EL PRINCIPIO DEL HISTORICO. Ese principio es `HORIZONTE_HISTORIAL_CR`, no una
+ * fecha elegida aparte: por debajo de el no hay filas que contar. Escribir alli un literal
+ * habria creado exactamente la segunda constante de horizonte que este guardia existe para
+ * impedir.
  */
-const CONSUMIDORES_EXTERNOS = ["lib/services/AnaliticaOperativaService.ts"];
+const CONSUMIDORES_EXTERNOS = [
+  "lib/services/AnaliticaOperativaService.ts",
+  "lib/api/analitica-api-key-rango.ts",
+];
 
 const DIRS_CODIGO = ["app", "lib", "scripts", "components", "hooks", "providers", "e2e"];
 const EXTENSIONES = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];

@@ -8,6 +8,7 @@ import type { ErrorLogger } from "@/lib/errors/logger";
 import type { IAnaliticaOperativaService } from "@/lib/interfaces/services/IAnaliticaOperativaService";
 import type { SerieOperativa } from "@/lib/types/analitica-operativa";
 import { METRICAS_API_KEY } from "@/lib/analytics/publicacion-api-key";
+import { HORIZONTE_HISTORIAL_CR } from "@/lib/analytics/backfill-rango";
 
 // Feature 267 (T7) — EL CASCARON HTTP, probado por donde duele.
 //
@@ -195,17 +196,75 @@ describe("267/R23 · usuario dedicado inactivo: 403, y tambien antes de cualquie
 /* -------------------------------------------------------------------------------------------- */
 
 describe("267/R24 · `desde`/`hasta` son `YYYY-MM-DD` CR y `hasta` es INCLUSIVO", () => {
-  it("los dos son obligatorios: falta uno => 422 en su propio campo (decision P3)", async () => {
+  // ⚠ ENMIENDA DEL 2026-08-31 — AQUI SE EXIGIA LO CONTRARIO. La decision P3 (2026-08-23) hacia
+  // OBLIGATORIOS los dos, y su motivo era que un rango con default haria que dos llamadas
+  // identicas devolvieran conjuntos distintos segun cuando se llamaron. Ese motivo se conserva
+  // donde vale —no hay presets ni atajos, y una fecha escrita significa siempre lo mismo— pero
+  // no cubre la AUSENCIA, que no es un atajo sino «dame todo». El caso que antes era un 422 hoy
+  // es el caso base del integrador que no sabe en que fecha empezo la operacion.
+  it("sin `hasta`: el limite superior es HOY, y el `desde` pedido se respeta", async () => {
     const { deps, consultar } = montar();
 
-    const sinHasta = await handleAnaliticaApiKey(pedir(`?metricas=${PUBLICABLE}&desde=2026-08-01`), deps);
-    const sinDesde = await handleAnaliticaApiKey(pedir(`?metricas=${PUBLICABLE}&hasta=2026-08-01`), deps);
+    const res = await handleAnaliticaApiKey(pedir(`?metricas=${PUBLICABLE}&desde=2026-08-01`), deps);
 
-    expect(sinHasta.status).toBe(422);
-    expect(sinDesde.status).toBe(422);
-    expect((await sinHasta.json()).details.fieldErrors).toHaveProperty("hasta");
-    expect((await sinDesde.json()).details.fieldErrors).toHaveProperty("desde");
-    expect(consultar).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    const consulta = consultar.mock.calls[0]![0];
+    expect(consulta.rango.desdeFecha).toBe("2026-08-01");
+    // El dia CR de `AHORA` (2026-08-03T15:00Z son las 09:00 en Costa Rica).
+    expect(consulta.rango.hastaFecha).toBe("2026-08-03");
+    expect((await res.json()).rango).toEqual({ desde: "2026-08-01", hasta: "2026-08-03" });
+  });
+
+  it("sin `desde`: el limite inferior es el HORIZONTE DEL HISTORIAL, no una fecha inventada", async () => {
+    const { deps, consultar } = montar();
+
+    const res = await handleAnaliticaApiKey(pedir(`?metricas=${PUBLICABLE}&hasta=2026-08-01`), deps);
+
+    expect(res.status).toBe(200);
+    const consulta = consultar.mock.calls[0]![0];
+    // Se compara contra la CONSTANTE de la 125, no contra el literal: si el horizonte se mueve,
+    // este test sigue diciendo la verdad en vez de congelar una fecha.
+    expect(consulta.rango.desdeFecha).toBe(HORIZONTE_HISTORIAL_CR);
+    expect(consulta.rango.hastaFecha).toBe("2026-08-01");
+  });
+
+  it("sin fechas: historico completo, del horizonte a hoy, y el eco lo dice", async () => {
+    const { deps, consultar } = montar();
+
+    const res = await handleAnaliticaApiKey(pedir(`?metricas=${PUBLICABLE}`), deps);
+
+    expect(res.status).toBe(200);
+    expect(consultar).toHaveBeenCalledTimes(1);
+    expect((await res.json()).rango).toEqual({
+      desde: HORIZONTE_HISTORIAL_CR,
+      hasta: "2026-08-03",
+    });
+  });
+
+  it("un `hasta` anterior al horizonte NO produce un rango invertido: sale 200", async () => {
+    // Si el default de `desde` fuera SIEMPRE el horizonte, «dame todo hasta enero» —una pregunta
+    // legitima de quien no mando ningun `desde`— saldria por el 422 de rango invertido. Sale un
+    // 200 cuyo rango es el propio `hasta`: no hay nada que contar antes del horizonte.
+    const { deps } = montar();
+
+    const res = await handleAnaliticaApiKey(pedir(`?metricas=${PUBLICABLE}&hasta=2026-01-15`), deps);
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).rango).toEqual({ desde: "2026-01-15", hasta: "2026-01-15" });
+  });
+
+  it("un parametro presente pero VACIO cuenta como ausente, no como valor invalido", async () => {
+    // `?desde=` es un cliente que construyo la URL con una variable sin valor. El 422 «fecha
+    // invalida» le hablaba de algo que nunca escribio.
+    const { deps } = montar();
+
+    const res = await handleAnaliticaApiKey(pedir("?metricas=&desde=&hasta="), deps);
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).rango).toEqual({
+      desde: HORIZONTE_HISTORIAL_CR,
+      hasta: "2026-08-03",
+    });
   });
 
   it("con reloj fijo, la consulta preparada cubre AMBOS extremos y el cuerpo los repite", async () => {
@@ -256,23 +315,33 @@ describe("267/R25 · `desde` posterior a `hasta` es 422 en `fieldErrors.hasta`, 
   });
 });
 
-describe("267/R26 · el tope de ventana", () => {
-  it("366 dias contando ambos extremos: pasa (es el tope, no lo supera)", async () => {
-    const { deps } = montar();
+// ⚠ ENMIENDA DEL 2026-08-31 — R26 (el tope de 366 dias) SE RETIRA DE ESTE CANAL. Aqui se exigia
+// un 422 a partir de 367 dias. El tope nunca fue una regla de este endpoint: era el techo que
+// `analiticaFiltroSchema` pone para proteger a la GRAFICA del canal interno, que lanza por encima
+// de `TOPE_PUNTOS_SERIE` puntos. Un integrador no pinta nada, y desde que el endpoint sirve el
+// historico completo sin fechas, el tope contradecia su propio caso base: pasado un ano de
+// operacion, `GET .../analitica` a secas habria devuelto 422. El tope SIGUE VIVO para el canal
+// interno — lo comprueba `tests/unit/analytics/filters.test.ts`, que no se toco.
+describe("el canal por API key NO tiene tope de ventana", () => {
+  it("una ventana de mas de 366 dias se sirve: 200, y el rango viaja entero", async () => {
+    const { deps, consultar } = montar();
 
     const res = await handleAnaliticaApiKey(
-      pedir(`?metricas=${PUBLICABLE}&desde=2025-08-01&hasta=2026-08-01`),
+      pedir(`?metricas=${PUBLICABLE}&desde=2024-01-01&hasta=2026-08-01`),
       deps,
     );
 
     expect(res.status).toBe(200);
+    const consulta = consultar.mock.calls[0]![0];
+    expect(consulta.rango.desdeFecha).toBe("2024-01-01");
+    expect(consulta.rango.hastaFecha).toBe("2026-08-01");
   });
 
-  it("367 dias: 422", async () => {
+  it("pero el rango invertido SIGUE siendo 422: lo que se retiro es el techo, no la coherencia", async () => {
     const { deps, consultar } = montar();
 
     const res = await handleAnaliticaApiKey(
-      pedir(`?metricas=${PUBLICABLE}&desde=2025-08-01&hasta=2026-08-02`),
+      pedir(`?metricas=${PUBLICABLE}&desde=2026-08-10&hasta=2024-01-01`),
       deps,
     );
 
@@ -554,23 +623,40 @@ describe("267/R46 · `all` trae TODA la lista blanca, y no se mezcla con ids", (
     expect(consultar).not.toHaveBeenCalled();
   });
 
-  it("un elemento vacio (`a,,b`, `metricas=`) es 422, no un lote a medias", async () => {
-    const vacioEnMedio = montar();
-    const claveVacia = montar();
+  // ⚠ ENMIENDA DEL 2026-08-31 — `metricas=` YA NO ES 422. La cadena vacia ENTERA significa «no
+  // pedi ninguna», y la unica lectura razonable de eso es «dame las que haya»: se sirven todas,
+  // igual que con `all`. Lo que NO cambia, y es la mitad del caso, es el hueco EN MEDIO de una
+  // lista: `a,,b` sigue siendo 422, porque ahi el integrador si escribio una lista y la escribio
+  // mal, y adivinar cual de los dos quiso decir es justo lo que un contrato publico no hace.
+  it("un elemento vacio en medio (`a,,b`) sigue siendo 422, no un lote a medias", async () => {
+    const { deps, consultar } = montar();
 
-    const a = await handleAnaliticaApiKey(
+    const res = await handleAnaliticaApiKey(
       pedir("?metricas=entregas,,devoluciones&desde=2026-08-01&hasta=2026-08-03"),
-      vacioEnMedio.deps,
-    );
-    const b = await handleAnaliticaApiKey(
-      pedir("?metricas=&desde=2026-08-01&hasta=2026-08-03"),
-      claveVacia.deps,
+      deps,
     );
 
-    expect(a.status).toBe(422);
-    expect(b.status).toBe(422);
-    expect(vacioEnMedio.consultar).not.toHaveBeenCalled();
-    expect(claveVacia.consultar).not.toHaveBeenCalled();
+    expect(res.status).toBe(422);
+    expect((await res.json()).details.fieldErrors).toHaveProperty("metricas");
+    expect(consultar).not.toHaveBeenCalled();
+  });
+
+  it("`metricas=` vacio y `metricas` ausente sirven las MISMAS que `all`", async () => {
+    const vacia = montar();
+    const ausente = montar();
+    const explicita = montar();
+    const rango = "desde=2026-08-01&hasta=2026-08-03";
+
+    const a = await handleAnaliticaApiKey(pedir(`?metricas=&${rango}`), vacia.deps);
+    const b = await handleAnaliticaApiKey(pedir(`?${rango}`), ausente.deps);
+    const c = await handleAnaliticaApiKey(pedir(`?metricas=all&${rango}`), explicita.deps);
+
+    const ids = async (res: Response) =>
+      (await res.json()).metricas.map((m: { metrica: string }) => m.metrica);
+    expect([a.status, b.status, c.status]).toEqual([200, 200, 200]);
+    expect(await ids(a)).toEqual([...METRICAS_API_KEY]);
+    expect(await ids(b)).toEqual([...METRICAS_API_KEY]);
+    expect(await ids(c)).toEqual([...METRICAS_API_KEY]);
   });
 
   it("mas ids que metricas publicables es 422 y NO llega a preparar consultas", async () => {
