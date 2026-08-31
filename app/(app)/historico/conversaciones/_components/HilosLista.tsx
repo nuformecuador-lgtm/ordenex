@@ -102,6 +102,13 @@ export interface HilosListaProps {
   onSeleccionar: (hilo: HiloHistoricoDTO) => void;
   /** Instante de lectura, para rotular la última actividad («hoy 10:20»). */
   ahora: Date;
+  /**
+   * Clases de presentación del `<section>`. Las pone el módulo para decidir QUIÉN se ve en
+   * móvil —la lista o el hilo, nunca los dos—: apilados, cada panel se quedaba en media
+   * pantalla de teléfono y no se podía leer ninguno. Incluye el `display`, así que quien la
+   * pasa se hace cargo también del `flex`/`hidden`.
+   */
+  className?: string;
 }
 
 export function HilosLista({
@@ -110,6 +117,7 @@ export function HilosLista({
   seleccionado,
   onSeleccionar,
   ahora,
+  className,
 }: Readonly<HilosListaProps>) {
   const claveFiltro = useMemo(() => JSON.stringify(filtro), [filtro]);
   const hayFiltro = Object.keys(filtro).length > 0;
@@ -247,7 +255,10 @@ export function HilosLista({
     <section
       ref={seccionRef}
       aria-label="Conversaciones"
-      className="flex h-full min-h-0 flex-col overflow-y-auto rounded-lg border border-border bg-card"
+      className={cn(
+        "h-full min-h-0 flex-col overflow-y-auto rounded-lg border border-border bg-card",
+        className ?? "flex",
+      )}
     >
       {cargandoPrimera ? (
         <p className="p-4 text-sm text-muted-foreground">Cargando conversaciones…</p>
