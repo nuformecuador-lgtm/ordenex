@@ -1,7 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 import {
-  verMiCuentaPorPagarAction,
-  listarMisPagosAction,
   listarCuentasPorPagarAction,
   listarCuentasPorPagarCompletoAction,
   listarCuentasPorPagarPaginadoAction,
@@ -12,9 +10,14 @@ import type { IWalletMensajeroService } from "@/lib/interfaces/services/IWalletM
 import type { CuentaPorPagarDTO } from "@/lib/types/wallet-mensajero";
 
 // Feature 44 (T13) — tests unit de las Server Actions del libro del pago por mensajero
-// (R19/R20/R21/R27). Sin sesion -> unauthenticated; rol no autorizado -> forbidden (el service
+// (R19/R21/R27). Sin sesion -> unauthenticated; rol no autorizado -> forbidden (el service
 // decide); input invalido -> validation_error (zod en el borde); DTOs con montos STRING (nunca
 // number).
+//
+// Ficha 336 (2026-08-30): se retiraron los `describe` de `verMiCuentaPorPagarAction` y
+// `listarMisPagosAction` (la vista propia del mensajero se fue con `/mis-pagos`). Lo que este
+// archivo cubre son las CUATRO acciones de administracion, cuya superficie viva es
+// `/wallet/mensajeros`.
 
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 const MAESTRO: Actor = { usuarioId: "adm-maestro", rol: "maestro" };
@@ -23,11 +26,6 @@ const CUENTA: CuentaPorPagarDTO = { devengado: "1000.00", pagado: "300.00", cuen
 
 function fakeService(overrides: Partial<IWalletMensajeroService> = {}): IWalletMensajeroService {
   return {
-    verMiCuentaPorPagar: vi.fn(async () => ({ status: "ok" as const, cuenta: CUENTA })),
-    listarMisPagos: vi.fn(async () => ({
-      status: "ok" as const,
-      data: { movimientos: [], total: 0, page: 1, pageSize: 20, cuenta: CUENTA },
-    })),
     listarCuentasPorPagar: vi.fn(async () => ({
       status: "ok" as const,
       mensajeros: [{ mensajeroId: "m1", mensajeroNombre: "Ana Mensajera", devengado: "1000.00", pagado: "300.00", cuentaPorPagar: "700.00", signo: "positivo" as const }],
@@ -44,14 +42,9 @@ function fakeService(overrides: Partial<IWalletMensajeroService> = {}): IWalletM
         cuenta: CUENTA,
       },
     })),
-    // Feature 170 (T C.1): el doble implementa la interfaz COMPLETA. Los modos sin
-    // paginacion los ejercitan `wallet-mis-pagos-descarga-action.test.ts` y
-    // `wallet-desglose-mensajero-descarga-action.test.ts`.
-    listarMisPagosCompleto: vi.fn(async () => ({
-      status: "ok" as const,
-      items: [],
-      total: 0,
-    })),
+    // Feature 170 (T C.1): el doble implementa la interfaz COMPLETA. El modo sin paginacion
+    // lo ejercita `wallet-desglose-mensajero-descarga-action.test.ts`. (La ficha 336 retiro
+    // `listarMisPagosCompleto` con `/mis-pagos`, asi que ya no forma parte de la interfaz.)
     listarPagosDeMensajeroCompleto: vi.fn(async () => ({
       status: "ok" as const,
       items: [],
@@ -76,62 +69,6 @@ function fakeService(overrides: Partial<IWalletMensajeroService> = {}): IWalletM
     ...overrides,
   };
 }
-
-describe("verMiCuentaPorPagarAction (R20/R27)", () => {
-  it("sin sesion -> unauthenticated, sin tocar el service", async () => {
-    const service = fakeService();
-    const r = await verMiCuentaPorPagarAction({ service, getActor: async () => null });
-    expect(r).toEqual({ status: "unauthenticated" });
-    expect(service.verMiCuentaPorPagar).not.toHaveBeenCalled();
-  });
-
-  it("R20: rol no autorizado -> forbidden (el service decide)", async () => {
-    const service = fakeService({ verMiCuentaPorPagar: vi.fn(async () => ({ status: "forbidden" as const })) });
-    const r = await verMiCuentaPorPagarAction({ service, getActor: async () => MAESTRO });
-    expect(r).toEqual({ status: "forbidden" });
-  });
-
-  it("R27: mensajero -> ok con cuenta por pagar STRING+signo", async () => {
-    const service = fakeService();
-    const r = await verMiCuentaPorPagarAction({ service, getActor: async () => MENSAJERO });
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") throw new Error("ok");
-    expect(typeof r.cuenta.cuentaPorPagar).toBe("string");
-    expect(r.cuenta.signo).toBe("positivo");
-  });
-});
-
-describe("listarMisPagosAction (R20/R22/R27)", () => {
-  it("sin sesion -> unauthenticated", async () => {
-    const service = fakeService();
-    const r = await listarMisPagosAction({}, { service, getActor: async () => null });
-    expect(r).toEqual({ status: "unauthenticated" });
-  });
-
-  it("input invalido (pageSize fuera de rango) -> validation_error, sin tocar el service", async () => {
-    const service = fakeService();
-    const r = await listarMisPagosAction(
-      { page: 1, pageSize: 9999 },
-      { service, getActor: async () => MENSAJERO },
-    );
-    expect(r.status).toBe("validation_error");
-    expect(service.listarMisPagos).not.toHaveBeenCalled();
-  });
-
-  it("R20: rol no autorizado -> forbidden", async () => {
-    const service = fakeService({ listarMisPagos: vi.fn(async () => ({ status: "forbidden" as const })) });
-    const r = await listarMisPagosAction({ page: 1, pageSize: 20 }, { service, getActor: async () => MAESTRO });
-    expect(r).toEqual({ status: "forbidden" });
-  });
-
-  it("R27: mensajero -> ok con cuenta STRING", async () => {
-    const service = fakeService();
-    const r = await listarMisPagosAction({ page: 1, pageSize: 20 }, { service, getActor: async () => MENSAJERO });
-    expect(r.status).toBe("ok");
-    if (r.status !== "ok") throw new Error("ok");
-    expect(typeof r.data.cuenta.cuentaPorPagar).toBe("string");
-  });
-});
 
 describe("listarCuentasPorPagarAction (R18/R19/R27)", () => {
   it("sin sesion -> unauthenticated", async () => {

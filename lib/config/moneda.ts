@@ -69,7 +69,7 @@ export const SIN_MONTO = "-";
 
 /**
  * El OTRO marcador de "sin dato" que ya vive en pantalla: la raya larga con la
- * que las tarjetas de wallet, cierres, mis-pagos, ranking y liquidacion pintan
+ * que las tarjetas de wallet, cierres, ranking y liquidacion pintan
  * un monto ausente.
  *
  * Son dos marcadores distintos a proposito y NO se unifican aqui: unificarlos
@@ -223,8 +223,8 @@ export function formatMontoString(value: string | null, sinMonto: string = SIN_M
 }
 
 /**
- * El `money()` de las pantallas de dinero (wallet, cierres, mis-pagos, ranking,
- * liquidacion), UNA sola vez.
+ * El `money()` de las pantallas de dinero (wallet, cierres, ranking, liquidacion),
+ * UNA sola vez.
  *
  * Era la misma funcion copiada byte a byte en siete archivos de etiquetas, y por
  * eso este modulo la absorbe en vez de que cada uno delegue por su cuenta: los

@@ -358,10 +358,15 @@ describe("256/R24 — el webhook orden.estado_actualizado esta publicado en el c
     expect(estadoYaml.type).toBe("string");
 
     // (2) Ese enum es un SUBCONJUNTO del catalogo: no trae `por_recoger` ni los otros internos.
+    //
+    // ⏳ 2026-08-31 — `en_preparacion` SALE de la lista de ausentes y pasa a la de presentes: desde
+    // el parche de hoy SI se emite, como evento de NACIMIENTO de la rama de fulfillment. El aserto
+    // se INVIERTE en vez de borrarse, para que el subconjunto siga estando afirmado en las dos
+    // direcciones. Los tres internos de ruteo satelite siguen ausentes.
     for (const lista of [estadoTs.enum as string[], estadoYaml.enum as string[]]) {
       expect(lista).toContain("entregada");
+      expect(lista).toContain("en_preparacion");
       expect(lista).not.toContain("por_recoger");
-      expect(lista).not.toContain("en_preparacion");
       expect(lista).not.toContain("en_bodega_satelite");
       expect(lista).not.toContain("en_ruta_bodega_satelite");
     }

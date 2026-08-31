@@ -267,3 +267,30 @@ export type ListarMovimientosDeTiendaCompletoInput = z.infer<
 // rama de error viaja con filas (R39/R40).
 export type ListarMovimientosDeTiendaCompletoResult =
   ListarCompletoResult<WalletTiendaMovimientoDTO>;
+
+// ── FICHA 335 — las opciones del selector de cierre de `/mi-wallet` ──
+
+/**
+ * Ficha 335 (design §2.5, R6/R9) — UNA opcion del selector de cierre, tal como cruza la
+ * frontera servidor → cliente.
+ *
+ * TRES datos y ni uno mas, y cada exclusion tiene motivo:
+ *  - NO lleva NINGUN importe (R9). Se pide `_count`, nunca `_sum`: money-safe por
+ *    construccion, no por disciplina de quien escriba el mapper manana.
+ *  - NO lleva el mensajero del cierre. Costaria dos consultas mas (leer `cierre_dia` y
+ *    `usuario`) y sobre todo le revelaria a la tienda QUE mensajero movio su dinero, cosa que
+ *    esta pantalla hoy no dice. Dos cierres del mismo dia se desambiguan con `movimientos` y
+ *    con la hora de `fecha`, que ya vienen en la MISMA consulta.
+ *
+ * `movimientos` es un CARDINAL, no dinero: es cuantas filas de ESE cierre hay en el libro de
+ * ESTA tienda. Por eso es `number` y no `string`.
+ */
+export type CierreTiendaOpcionDTO = {
+  /** `= wallet_tienda_movimiento.origen_id`, o sea un `cierre_dia.id`. Es el valor que viaja
+   *  como `cierreId` al filtro que ya existe (`listarMovimientosTiendaSchema`). */
+  cierreId: string;
+  /** ISO del movimiento MAS RECIENTE de ese cierre en ESTE libro. Sin transformar. */
+  fecha: string;
+  /** Cuantos movimientos de ESTA tienda trajo ese cierre. Cardinal, NO es un monto. */
+  movimientos: number;
+};

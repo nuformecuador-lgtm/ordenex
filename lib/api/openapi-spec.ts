@@ -1171,11 +1171,15 @@ export const openApiSpec = {
   //     pasa a ser parte del aviso a integradores, no un adorno.
   //
   // (b) POR QUE ES SEMANTICAMENTE CORRECTO. El enum NO es el catalogo entero: se DERIVA de
-  //     `EVENTOS_PUBLICOS` (`WEBHOOK_ESTADO_ENUM`, R29), que son los 12 values que este webhook
-  //     puede emitir de verdad. Los 16 de `OrdenListItem.estado` son un SUPERCONJUNTO: incluyen
-  //     estados internos (`en_preparacion`, `por_recoger`, `en_bodega_satelite`,
-  //     `en_ruta_bodega_satelite`) que nunca viajan en un evento. Documentar el superconjunto era
+  //     `EVENTOS_PUBLICOS` (`WEBHOOK_ESTADO_ENUM`, R29), que son los values que este webhook puede
+  //     emitir de verdad. Los 16 de `OrdenListItem.estado` son un SUPERCONJUNTO: incluyen estados
+  //     internos de ruteo satelite que nunca viajan en un evento. Documentar el superconjunto era
   //     lo incorrecto; no documentar nada, tambien.
+  //
+  //     ⏳ 2026-08-31 — AQUI DECIA «los 12 values» y que los internos eran «(`en_preparacion`,
+  //     `por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`)». Son 13 y `en_preparacion`
+  //     YA NO es uno de ellos: se emite como evento de NACIMIENTO de la rama de fulfillment. El
+  //     enum se DERIVA, asi que se actualizo solo; esta prosa no, y por eso se corrige a mano.
   //
   // (c) POR QUE EL GUARD SIGUE EN 4 (el miedo de la 256 era infundado; design 268 §7.5).
   //     `openapi-contrato-en-reparto.test.ts` no cuenta «enums», cuenta enums DE ESTADO con el
@@ -1283,7 +1287,7 @@ export const openApiSpec = {
                         // feature 268/R29: DERIVADO de `EVENTOS_PUBLICOS`, nunca copiado a mano.
                         enum: WEBHOOK_ESTADO_ENUM,
                         description:
-                          "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de preparación y ruteo satélite que ese catálogo documenta (`en_preparacion`, `por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error.",
+                          "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de ruteo satélite que ese catálogo documenta (`por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. `en_preparacion` SÍ viaja, y solo como evento de NACIMIENTO: es el estado inicial de las órdenes creadas con `fulfillment` (el paquete ya está en bodega), llega una única vez por orden y con `numGuia: null`, porque en esa rama la guía se emite más tarde. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error.",
                       },
                       motivo: {
                         type: ["string", "null"],

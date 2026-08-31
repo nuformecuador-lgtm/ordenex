@@ -1,8 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
 
 /**
- * E2E tests for "/wallet/mensajeros" and "/mis-pagos" — the PAGO A MENSAJEROS y CUENTAS POR
- * PAGAR (Feature 44, T14–T16 / R18–R22). When a `CierreDia` is approved, the pay owed to the
+ * E2E tests for "/wallet/mensajeros" — the PAGO A MENSAJEROS y CUENTAS POR PAGAR (Feature 44,
+ * T14–T16 / R18/R19/R21/R22).
+ *
+ * Ficha 336 (2026-08-30): this file also covered "/mis-pagos" (R20/R21), with two describes —
+ * the mensajero's access and the maestro's block. That route was deleted by human decision, so
+ * both describes are gone. The two describes for "/wallet/mensajeros" survive untouched. When a `CierreDia` is approved, the pay owed to the
  * mensajero (`total_pago_mensajero`, snapshot 39) and the cash he collected
  * (`total_efectivo`, snapshot 37) are frozen into an append-only LEDGER per mensajero:
  * `pago_devengado = P` and `pago_efectivo = min(P,E)`. The CUENTA POR PAGAR (what Ordenex
@@ -14,8 +18,6 @@ import { test, expect, type Page } from "@playwright/test";
  *    the cuentas por pagar of ALL mensajeros. The pay to mensajeros is an egreso of the
  *    maestro's CENTRAL cash box (F1.4-Qe/A2: adminSatelite does NOT see it). Any other role
  *    (or no session) is denied and NO amount is exposed (R19).
- *  - `/mis-pagos` (R20/R21): only a `mensajero` sees HIS OWN cuenta por pagar and pagos,
- *    ALWAYS scoped to his `mensajero_id` in the WHERE (R20); any other role is denied.
  *
  * Covers the flows the review requires (parallel to e2e/wallet.spec.ts and e2e/mi-wallet.spec.ts):
  *  1. Acceso del `maestro` a /wallet/mensajeros (R18/R21/R22): logs in → sees the CUENTAS POR
@@ -27,16 +29,13 @@ import { test, expect, type Page } from "@playwright/test";
  *  2. Bloqueo de rol NO autorizado en /wallet/mensajeros (R19): a non-maestro user (here a
  *     `mensajero`) navigates there and is denied (Next `notFound()` → no UI): the cuentas por
  *     pagar table is absent, so no financial data leaks.
- *  3. Acceso del `mensajero` a /mis-pagos (R20/R21): logs in → sees HIS OWN CUENTA POR PAGAR
- *     card (derived, STRING) + the DESGLOSE of his pagos (table), scoped to his mensajero_id.
- *  4. Bloqueo de rol NO autorizado en /mis-pagos (R20): a non-mensajero user (here the
- *     `maestro`) is denied and sees NEITHER the cuenta card NOR the desglose table.
  *
  * PRECONDITION (seed):
  * - A seeded `maestro` M (owner of the central cash box; only role for /wallet/mensajeros).
  * - A seeded `mensajero` MZ whose ledger has at least one approved-cierre feed (a
  *   `pago_devengado` + a `pago_efectivo`, R5/R10) so his cuenta por pagar is a known amount
- *   (set CUENTA_ESPERADA below) and his name is known (set MENSAJERO_NOMBRE below).
+ *   (set CUENTA_ESPERADA below) and his name is known (set MENSAJERO_NOMBRE below). His
+ *   credentials are still needed: he is the non-maestro role used to prove R19's block.
  *
  * EXECUTION NOTE:
  * These tests require:
@@ -62,7 +61,7 @@ import { test, expect, type Page } from "@playwright/test";
 const MAESTRO_EMAIL = "maestro@example.com";
 const MAESTRO_PASSWORD = "correct-password";
 
-// Seeded mensajero (owner of his own /mis-pagos view; only role authorized there).
+// Seeded mensajero: the non-maestro role used to prove the R19 block on /wallet/mensajeros.
 const MENSAJERO_EMAIL = "mensajero@example.com";
 const MENSAJERO_PASSWORD = "correct-password";
 
@@ -142,40 +141,5 @@ test.describe("Cuentas por pagar — bloqueo de rol NO autorizado (/wallet/mensa
     await expect(
       page.getByRole("table", { name: "Cuentas por pagar a mensajeros" }),
     ).toHaveCount(0);
-  });
-});
-
-test.describe("Mis pagos — acceso del mensajero (/mis-pagos)", () => {
-  test.beforeEach(async ({ page }) => {
-    await login(page, MENSAJERO_EMAIL, MENSAJERO_PASSWORD);
-    await page.goto("/mis-pagos");
-  });
-
-  test("ve su cuenta por pagar derivada y el desglose de sus pagos (acotado a su mensajero_id)", async ({
-    page,
-  }) => {
-    // R20/R21: the derived cuenta por pagar is pre-fetched server-side (scoped to his
-    // mensajero_id in the WHERE) and rendered as a STRING amount, never Prisma.Decimal.
-    const cuenta = page.getByRole("region", { name: "Cuenta por pagar" });
-    await expect(cuenta).toBeVisible();
-    await expect(cuenta.getByText(CUENTA_ESPERADA)).toBeVisible();
-
-    // R20: the DESGLOSE of his pagos (more recent first) is shown as an accessible table.
-    const desglose = page.getByRole("table", { name: "Desglose de pagos" });
-    await expect(desglose).toBeVisible();
-  });
-});
-
-test.describe("Mis pagos — bloqueo de rol NO autorizado (/mis-pagos)", () => {
-  test("el maestro es rechazado en /mis-pagos y NO ve cuenta ni desglose (R20)", async ({
-    page,
-  }) => {
-    // A non-mensajero role hits the role-aware Server Component, which calls `notFound()`.
-    await login(page, MAESTRO_EMAIL, MAESTRO_PASSWORD);
-    await page.goto("/mis-pagos");
-
-    // R20: NEITHER the derived cuenta por pagar NOR the desglose table are exposed.
-    await expect(page.getByRole("region", { name: "Cuenta por pagar" })).toHaveCount(0);
-    await expect(page.getByRole("table", { name: "Desglose de pagos" })).toHaveCount(0);
   });
 });
