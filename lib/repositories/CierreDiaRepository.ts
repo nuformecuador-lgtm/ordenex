@@ -374,11 +374,17 @@ function cierresDeMensajeroWhere(mensajeroId: string): Prisma.CierreDiaWhereInpu
  * entra por los que ya existen. Si algun dia esta consulta apareciera lenta, lo que hay que mirar
  * es un indice parcial `(gestion_orden_id) WHERE origen_tipo IN (...)`, no reescribir el predicado.
  *
- * ⚠️ CONSECUENCIA DE DINERO, EN PAUSA Y NO PERDIDA: el cobro de flete devuelto por un
- * `rechazo_tienda` (56, `cobroRechazado`) solo se materializaba AL APROBAR EL CIERRE del
- * mensajero. Con este filtro **ese cobro queda en pausa** hasta que exista su via propia de cobro
- * a la tienda (otra ficha). NO se pierde: la gestion, su `resultado = rechazada` y su tarifa
- * congelada siguen intactas en la base.
+ * ⚠️ CONSECUENCIA DE DINERO — Y SON DOS CONCEPTOS DISTINTOS, que la nota original de esta ficha
+ * nombraba juntos y no lo son:
+ *
+ *   · **Flete de devolucion + IVA** (lo que paga la TIENDA, `derivarIngresoOrden`): **RESUELTO**
+ *     por la segunda mitad de la 337. El rechazo crea un COBRO PENDIENTE (`rechazo_tienda_cobro`)
+ *     con el importe congelado y un administrador lo aprueba desde `/wallet`; los apuntes que
+ *     nacen son los MISMOS que emitia este cierre. No depende ya de este filtro.
+ *   · **`cobroRechazado` / `ingreso_bodega_rechazo`** (56, INGRESO DE LA BODEGA, de la tarifa
+ *     zona+vehiculo del mensajero): **SIGUE EN PAUSA**. Se congelaba al crear el cierre y lo
+ *     consume el cierre de BODEGA (40/56); sin cierre no se congela. NO se pierde —la gestion y su
+ *     `resultado = rechazada` siguen intactos— pero hoy nadie lo emite. Alcance de otra ficha.
  */
 function gestionesDelCierreWhere(mensajeroId: string): Prisma.GestionOrdenWhereInput {
   return {
@@ -820,11 +826,13 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         // 41 gestiones asi dentro de los 6 cierres pendientes, y una de ellas formando un cierre
         // ENTERO sin una sola gestion de su mensajero.
         //
-        // ⚠️ EL COBRO QUE ESTO PONE EN PAUSA, dicho aqui porque es aqui donde deja de ocurrir: el
-        // `cobroRechazado` (56) de un `rechazo_tienda` se emitia AL APROBAR ESTE CIERRE. Con la
-        // gestion fuera, **ese cobro queda en pausa —no se pierde—** hasta que exista su via propia
-        // de cobro a la tienda (ficha aparte). La gestion, su `resultado` y su tarifa congelada
-        // siguen en la base, intactas y recuperables.
+        // ⚠️ LOS DOS COBROS QUE ESTO TOCA, dicho aqui porque es aqui donde dejan de ocurrir:
+        //   · el FLETE DE DEVOLUCION + IVA de la TIENDA ya NO depende de este cierre: la segunda
+        //     mitad de la 337 le dio via propia (`rechazo_tienda_cobro` -> aprobacion en
+        //     `/wallet`), y los apuntes que nacen alli son los mismos que nacian aqui.
+        //   · el `cobroRechazado` / `ingreso_bodega_rechazo` (56), que es INGRESO DE LA BODEGA,
+        //     **sigue EN PAUSA**: se congelaba en este `updateMany` y lo suma el cierre de bodega.
+        //     No se pierde (la gestion y su `resultado` siguen en la base) pero hoy nadie lo emite.
         const vinculadas = await tx.gestionOrden.updateMany({
           // 💰 FICHA 337: el MISMO predicado que la lectura, y no una copia — este es el que de
           // verdad ESCRIBE. Si solo se hubiera filtrado `findGestionesPendientes`, la pantalla

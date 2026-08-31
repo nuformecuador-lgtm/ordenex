@@ -280,6 +280,11 @@ function renderCaja(movimientos: WalletMovimientoDTO[] = CAJA_PAGINA) {
       // en cero la sección ni se monta, que es exactamente el estado en el que este test la
       // quiere: si algún día ofreciera descarga, el censo de tablas lo diría antes que esto.
       cobrosPendientes={{ items: [], total: 0 }}
+      // Ficha 337: la cola de cobros por rechazo de tienda, igual de vacia y por el MISMO motivo
+      // -- tampoco ofrece descarga (cola de decision efimera; lo aprobado aterriza en los dos
+      // libros, que si descargan) y con `total` en cero ni se monta.
+      cobrosRechazoTienda={{ items: [], total: 0 }}
+      puedeDecidirCobrosRechazo
       puedeDecidirCobros
       // Feature 85 (T F.4/T F.6, R23): el instante del «Próximo cobro» viaja por la cadena de
       // props y es REQUERIDO en los dos eslabones. Fijo, para no depender del día de la corrida.
