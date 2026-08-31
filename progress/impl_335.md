@@ -75,36 +75,59 @@ falta ni `leerDeUrl={false}` en ningún consumidor ni un `Suspense` local.
 ## T6.2 — Mapa de trazabilidad `R<n> -> test`
 
 **25 de 25 requisitos tienen un test nombrado.** Ninguno dice «cubierto indirectamente».
-101 casos llevan una etiqueta `R<n>` en el nombre del `it`; la columna «Otros» cuenta los
-tests adicionales que también lo cubren.
-| Requisito | Test que lo verifica | Otros |
-| --- | --- | --- |
-| R1 | `tests/unit/utils/filtros-url.test.ts`::«R1 — el termino libre llega recortado desde su param» | 5 |
-| R2 | `tests/unit/utils/filtros-url.test.ts`::«R2 — las claves activas salen en el orden OFRECIDO, no en el de la URL» | 6 |
-| R3 | `tests/unit/components/filter-component-url.test.tsx`::«R3 — con `?color=rojo,azul` el control aparece con las dos marcadas y la seleccion se emite» | 7 |
-| R4 | `tests/unit/utils/filtros-url.test.ts`::«R4 — el nombre del param es exactamente FilterDef.key, sin prefijo ni transformacion» | 1 |
-| R5 | `tests/unit/components/buscador-filtros-url.test.tsx`::«R5 — con `?q=abc` el consumidor recibe `abc` por `onChange` exactamente una vez» | 1 |
-| R6 | `tests/unit/components/buscador-filtros-url.test.tsx`::«R1/R6 — sin params el campo aparece vacio» | 3 |
-| R7 | `tests/unit/components/buscador-filtros-url.test.tsx`::«R7 — cambiar los params DESPUES del montaje no cambia el campo» | 2 |
-| R8 | `tests/unit/utils/filtros-url.test.ts`::«R8 — parte un param por coma en una lista de valores» | 3 |
-| R9 | `tests/unit/utils/filtros-url.test.ts`::«R9 — concatena las apariciones repetidas en el orden de la URL» | — |
-| R10 | `tests/unit/utils/filtros-url-kinds.test.ts`::«R10 — acepta un atajo ofrecido en la terna `atajo,desde,hasta`» | 7 |
-| R11 | `tests/unit/utils/filtros-url-kinds.test.ts`::«R11/R16 — cualquier otro valor descarta el param» | — |
-| R12 | `tests/unit/utils/filtros-url-kinds.test.ts`::«R12 — se queda con el PRIMER valor valido y descarta el resto» | 1 |
-| R13 | `tests/unit/utils/filtros-url-kinds.test.ts`::«R13 — acepta el valor recortado cuando alcanza minChars» | 4 |
-| R14 | `tests/unit/utils/filtros-url-kinds.test.ts`::«R14 — conserva los valores declarados y descarta los que no estan en options» | 2 |
-| R15 | `tests/unit/utils/filtros-url.test.ts`::«R15 — un param que no corresponde a ningun filtro ofrecido no activa nada» | 3 |
-| R16 | `tests/unit/utils/filtros-url-kinds.test.ts`::«R14/R16 — si ningun valor esta declarado, la clave no aparece en la seleccion» | 6 |
-| R17 | `tests/unit/components/filter-component-url.test.tsx`::«R17 — tras el ciclo completo de efectos no llega ninguna emision que borre la clave sembrada» | — |
-| R18 | `tests/unit/hooks/filtros-url-hook.test.tsx`::«R18/R22 — «Limpiar todo» sin un solo param propio que borrar NO llama a replace» | 2 |
-| R19 | `tests/unit/utils/filtros-url.test.ts`::«R19 — quita el param del termino y las claves propias» | 6 |
-| R20 | `tests/unit/utils/filtros-url.test.ts`::«R20 — conserva los params ajenos con su valor y sin reordenarlos» | 4 |
-| R21 | `tests/unit/utils/filtros-url.test.ts`::«R21 — sin ningun par restante devuelve cadena vacia» | 2 |
-| R22 | `tests/unit/hooks/filtros-url-hook.test.tsx`::«R19/R20/R22 — replace recibe la ruta con SOLO los params ajenos y { scroll: false }» | 3 |
-| R23 | `tests/unit/hooks/filtros-url-hook.test.tsx`::«R23 — con activo=false los params se ven vacios y la URL no se toca» | 2 |
-| R24 | `tests/unit/hooks/filtros-url-hook.test.tsx`::«R24 — mock PARCIAL sin useSearchParams ni usePathname: no lanza y la URL se ve vacia» | 4 |
-| R25 | `tests/unit/guards/filtros-url-r25.test.ts`::«R25 — la regla que codifica el requisito existe y esta ACTIVA en la config del repo» | 2 |
----
+109 casos llevan una etiqueta `R<n>` en el nombre del `it` (sobre 86 `it` en 8 archivos);
+la columna «Otros» cuenta los tests adicionales que también lo cubren.
+
+**La columna «Rojo demostrado» es la que importa tras el rechazo.** Marca los requisitos
+cuyo test se escribió como **contraejemplo primero** y se **vio fallar contra el código
+anterior al arreglo** — no «debería fallar si se rompe», sino *falló, y aquí está la salida*.
+Verificado por mí, no solo por el subagente: restauré `FilterComponent.tsx` a su versión
+pre-arreglo (`41c774c9`) y corrí los tests nuevos.
+
+```
+Test Files  3 failed (3)
+     Tests  5 failed | 19 passed (24)
+
+× R7  — cambiar los params ANTES de declarar el filtro no siembra el valor nuevo
+× R3/R5 — un catalogo que llega DESPUES del montaje siembra la clave que quedo pendiente
+× R3/R7 — al llegar el catalogo se siembra la URL DE ENTRADA, nunca la de ahora
+× R2/R3/R5 — entrando por ?zona=… el control queda con esa zona SELECCIONADA (hook REAL)
+× R25 — mutar los query params tras el montaje no entra por la siembra: gana la foto de entrada
+```
+
+Con el arreglo puesto, esos mismos 3 archivos: **24 passed (24)**.
+
+Así que **R2, R3, R5, R7 y R25 —los cinco que el reviewer puso en duda— tienen ahora un test
+que falla de verdad si alguien deshace el arreglo.** Los otros 20 conservan la cobertura que
+el reviewer ya dio por buena («22 de 25 se sostienen»).
+
+| Requisito | Test que lo verifica | Otros | Rojo demostrado |
+| --- | --- | --- | --- |
+| R1 | `filtros-url.test.ts`::«R1 — el termino libre llega recortado desde su param» | 5 | — |
+| R2 | `filtros-url-herencia.test.tsx`::«R2/R3/R5 — entrando por `?zona=…` el control queda con esa zona SELECCIONADA cuando llega el catalogo» | 6 | **sí** |
+| R3 | `filter-component-url.test.tsx`::«R3/R5 — un catalogo que llega DESPUES del montaje siembra la clave que quedo pendiente» | 9 | **sí** |
+| R4 | `filtros-url.test.ts`::«R4 — el nombre del param es exactamente FilterDef.key, sin prefijo ni transformacion» | 1 | — |
+| R5 | `filter-component-url.test.tsx`::«R3/R5 — un catalogo que llega DESPUES del montaje siembra la clave que quedo pendiente» | 3 | **sí** |
+| R6 | `buscador-filtros-url.test.tsx`::«R1/R6 — sin params el campo aparece vacio» | 3 | — |
+| R7 | `filter-component-url.test.tsx`::«R7 — cambiar los params ANTES de declarar el filtro no siembra el valor nuevo» | 5 | **sí** |
+| R8 | `filtros-url.test.ts`::«R8 — parte un param por coma en una lista de valores» | 3 | — |
+| R9 | `filtros-url.test.ts`::«R9 — concatena las apariciones repetidas en el orden de la URL» | — | — |
+| R10 | `filtros-url-kinds.test.ts`::«R10 — acepta un atajo ofrecido en la terna `atajo,desde,hasta`» | 7 | — |
+| R11 | `filtros-url-kinds.test.ts`::«R11/R16 — cualquier otro valor descarta el param» | — | — |
+| R12 | `filtros-url-kinds.test.ts`::«R12 — se queda con el PRIMER valor valido y descarta el resto» | 1 | — |
+| R13 | `filtros-url-kinds.test.ts`::«R13 — acepta el valor recortado cuando alcanza minChars» | 4 | — |
+| R14 | `filtros-url-kinds.test.ts`::«R14 — conserva los valores declarados y descarta los que no estan en options» | 2 | — |
+| R15 | `filtros-url.test.ts`::«R15 — un param que no corresponde a ningun filtro ofrecido no activa nada» | 3 | — |
+| R16 | `filtros-url-kinds.test.ts`::«R14/R16 — si ningun valor esta declarado, la clave no aparece en la seleccion» | 6 | — |
+| R17 | `filter-component-url.test.tsx`::«R17 — tras el ciclo completo de efectos no llega ninguna emision que borre la clave sembrada» | — | — |
+| R18 | `filtros-url-hook.test.tsx`::«R18/R22 — «Limpiar todo» sin un solo param propio que borrar NO llama a replace» | 2 | — |
+| R19 | `filtros-url.test.ts`::«R19 — quita el param del termino y las claves propias» | 6 | — |
+| R20 | `filtros-url.test.ts`::«R20 — conserva los params ajenos con su valor y sin reordenarlos» | 4 | — |
+| R21 | `filtros-url.test.ts`::«R21 — sin ningun par restante devuelve cadena vacia» | 2 | — |
+| R22 | `filtros-url-hook.test.tsx`::«R19/R20/R22 — replace recibe la ruta con SOLO los params ajenos y { scroll: false }» | 3 | — |
+| R23 | `filtros-url-hook.test.tsx`::«R23 — con activo=false los params se ven vacios y la URL no se toca» | 2 | — |
+| R24 | `filtros-url-hook.test.tsx`::«R24 — mock PARCIAL sin useSearchParams ni usePathname: no lanza y la URL se ve vacia» | 4 | — |
+| R25 | `filtros-url-r25.test.ts`::«R25 — mutar los query params tras el montaje no entra por la siembra: gana la foto de entrada» | 3 | **sí** |
 
 ## T6.3 — Gate: `./init.sh --rapido` desde `C:/w335`
 
@@ -258,3 +281,91 @@ Verificado por el reviewer que **no hay envenenamiento cruzado** de la memoria d
 entre las dos barras.
 
 Queda anotado aquí precisamente para que no se descubra dos veces.
+
+---
+
+# La corrección tras la revisión (rechazo del 2026-08-31)
+
+El reviewer rechazó la ficha con **dos bloqueantes** (`progress/review_335.md`). El gate
+estaba verde y limpio: **el problema era de corrección, no de suite**. B1 y B2 resultaron ser
+**el mismo nudo** y se soltaron con un solo cambio.
+
+## El nudo, y por qué un solo cambio lo suelta
+
+| | Qué estaba mal | Consecuencia |
+| --- | --- | --- |
+| **B2** | `paramsRef` se **reescribía en cada render**, así que la siembra por crecimiento leía la URL **de ahora** | **R7 era FALSO**: montar sin params, cambiar la URL a `?color=azul` y declarar después el filtro sembraba `azul` |
+| **B1** | `sembradas` se apuntaba **por DECLARAR**, no por sembrar; y el efecto solo dependía de `clavesMontadas`, que **no cambia** cuando llegan las opciones | En `/novedades?zona=Norte` el control se montaba diciendo **«Zona: Todas»**. **R3 y R5 incumplidos**: el enlace compartido no acotaba |
+
+**La salida (decidida por el coordinador):** congelar los params **leídos al entrar** en un
+snapshot inmutable —capturado una vez, nunca reasignado— y **re-sembrar contra ESE snapshot**
+cuando aparezcan opciones para una clave todavía pendiente.
+
+> **La distinción que no hay que deshacer** —queda escrita con estas palabras en el propio
+> `FilterComponent.tsx`, porque es sutil y se ve al revés:
+> **R7 prohíbe RELEER la URL, no prohíbe TERMINAR DE APLICAR lo que ya se leyó.**
+> Lo que se aplica tarde no es información nueva: es exactamente la que traía la dirección
+> por la que el usuario entró. Volver a leer `params` en esos puntos —que es lo que parece
+> «más correcto»— reintroduce B2 entero.
+
+## Qué cambió, bloqueante a bloqueante
+
+- **B2** — Fuera `paramsRef` y fuera `params` de la línea del efecto que reescribe refs. En
+  su lugar `const [paramsIniciales] = useState(() => new URLSearchParams([...params.entries()]))`:
+  copia propia, capturada una vez. Leen **la foto** el inicializador de `seleccion`, el
+  `useMemo` de `precargaUrl` (si mirara la URL viva, el cambio se colaría hasta el valor
+  inicial de los controles no controlados y R7 sería falso **por otra puerta**) y la siembra
+  del efecto. **R7 pasa a ser estructural: ya no queda ninguna referencia viva a la URL.**
+- **B1** — `sembradas` se apunta **por SEMBRAR**: solo las claves cuya siembra produjo
+  valores. Las que no, quedan **pendientes** y se reintentan. Disparador nuevo:
+  **`firmaCatalogo`** (`clave:nº de opciones`) como segunda dependencia del efecto — sin ella
+  el reintento no existe, porque cuando el catálogo pasa de vacío a lleno **el juego de claves
+  no cambia**. Se calcula sobre *todos* los montados, no solo los pendientes, porque saber
+  cuáles están pendientes exige leer `sembradas.current` y la regla `react-hooks/refs` del
+  repo prohíbe leer una ref durante el render.
+- **Lo que NO se rompió:** siembra y poda siguen **en el mismo efecto** (R17 verde); el
+  `return` temprano sigue guardando el **silencio de R6**; y el **gesto del usuario gana** —si
+  tocó algo, la siembra queda cerrada y el catálogo que llega tarde no le pisa la selección.
+- **B1-bis** — `filtros-url-herencia.test.tsx` (T5.1) **reescrito entero**: monta el **hook
+  real** `useNovedadesFiltro("devolucion", listarCompleto)` con un `listarCompleto` **diferido**
+  (promesa que el test resuelve a mano), y afirma el ANTES («Zona: …Todas», lista sin acotar)
+  y el DESPUÉS («Zona: GAM Oeste», lista acotada). Antes sustituía el hook por una maqueta con
+  las `options` ya presentes: decía «consumidor REAL» y ejercitaba la cáscara de presentación.
+- **M2** — El guardia de R25 conserva sus tres casos de ESLint (incluido el que comprueba que
+  la regla existe y está **activa**, que es lo que impide el verde vacío) y **suma una mitad de
+  comportamiento**: renderiza, muta los params tras el montaje, hace crecer el catálogo y exige
+  que gane la foto de entrada. Hacen falta las dos: **el linter para la forma, el render para
+  la propiedad que el linter no puede ver** (no sigue la indirección `aplicar(...)`, que era
+  justo el camino de B2).
+
+## Decisiones propias durante la corrección
+
+1. **Se marca por «leído», no por «aplicado tras podar».** El efecto de montaje apunta las
+   claves de `seleccionDesdeUrl(...)` **sin** pasar por `podarSeleccion`. Marcando las de la
+   selección ya podada, una clave retirada por incoherencia con su padre quedaría pendiente y
+   se resembraría en cada cambio de firma, emitiendo de más y rompiendo el silencio de R6.
+2. **El caso «el gesto del usuario gana» usa catálogo PARCIAL** (`options: [verde]`) y no
+   vacío: con catálogo vacío el control va `disabled` por R14 y el usuario no podría tocar
+   nada — el escenario sería inejercitable.
+3. **`firmaCatalogo` y `clavesMontadas` conviven como dependencias** aunque la firma ya
+   codifica las claves: la segunda es la que el cuerpo usa para la poda, y dejarla explícita
+   hace legible que el efecto tiene dos trabajos.
+
+## Gate tras la corrección — `./init.sh --rapido`
+
+**Veredicto: `== init OK ==`.**
+
+| Tramo | Antes del rechazo | **Tras la corrección** |
+| --- | --- | --- |
+| `typecheck` | verde, 0 errores | **verde, 0 errores** |
+| `lint` | 0 errores, 127 avisos ajenos | **0 errores, 127 avisos ajenos** (0 en los archivos de la ficha) |
+| Relacionados | 83 archivos, 1122 passed | **83 archivos, 1128 passed + 17 skipped (1145)**, 0 rojos |
+| Guardias | 167 archivos, 2524 passed, 1 failed | **167 archivos, 2525 passed, 1 failed (2526)** |
+| Baseline | sin rojos nuevos | **`✓ sin rojos nuevos (1 archivo rojo sobre 249 ejecutados, todos en el baseline conocido)`** |
+
+El único rojo sigue siendo `superficie-de-uso.guardia.test.ts` → `lib/actions/tarifas.ts:67
+obtenerTarifa`, **ajeno**, inscrito en `tests/baseline-rojos.json` desde el 2026-08-28. Esta
+ficha no toca `lib/actions/`, ni Server Actions, ni `app/`. **Delta de rojos: 0.**
+
+**Sigue sin tocarse ni un archivo bajo `app/`** (verificado en el diff del arreglo: 4
+archivos, +432/−124, ninguno en `app/`).
