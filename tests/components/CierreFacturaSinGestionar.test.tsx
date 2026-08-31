@@ -519,7 +519,7 @@ describe("feature 264 — el dinero del comprobante no se mueve por la sección 
 
     expect(texto("Ingreso de Ordenex")).toContain("Flete + IVA₡2.260");
     expect(texto("Ingreso de Ordenex")).toContain("Comisión + IVA₡800");
-    expect(texto("Ingreso de Ordenex")).toContain("Flete devolución + IVA₡0");
+    expect(texto("Ingreso de Ordenex")).toContain("Flete por rechazo + IVA₡0");
     expect(texto("Ingreso de Ordenex")).toContain("Total Ordenex₡3.060");
 
     // La ganancia NEGATIVA (la deuda de Ordenex con el mensajero).

@@ -28,15 +28,20 @@
 export const TARIFA_CAMPO_LABEL = {
   valorFlete: "Valor flete",
   /**
-   * Antes «Valor flete devuelto». Este monto se cobra SOLO cuando la gestión es `rechazada`
-   * (`lib/utils/ingreso-ordenex.ts`): desde la ficha 301, una `devuelta` NO genera nada —el
-   * paquete sigue vivo en la calle y todavía puede reprogramarse—. «Devuelto» nombraba
-   * justo el caso que no cobra.
+   * Antes «Valor flete devuelto», y entre medias «Flete de retorno (solo rechazos)». Este monto
+   * se cobra SOLO cuando la gestión es `rechazada` (`lib/utils/ingreso-ordenex.ts`): desde la
+   * ficha 301, una `devuelta` NO genera nada —el paquete sigue vivo en la calle y todavía puede
+   * reprogramarse—. «Devuelto» nombraba justo el caso que no cobra.
+   *
+   * ⏳ FICHA 338 (2026-08-31): el nombre DEFINITIVO, elegido por el humano para toda la app, es
+   * «Flete por rechazo». «Flete de retorno (solo rechazos)» fue el primer intento (ficha 303):
+   * decía la verdad, pero con una aclaración entre paréntesis que el nombre nuevo ya no
+   * necesita, y no coincidía con lo que la misma cifra se llamaba en el cierre y en la wallet.
    */
-  valorFleteDevuelto: "Flete de retorno (solo rechazos)",
+  valorFleteDevuelto: "Flete por rechazo",
   valorFleteGam: "Valor flete GAM",
   /** El equivalente GAM del anterior; conserva la marca de zona porque es OTRA columna. */
-  valorFleteDevueltoGam: "Flete de retorno GAM (solo rechazos)",
+  valorFleteDevueltoGam: "Flete por rechazo GAM",
   /** NO se toca: «Fulfillment» es como lo conocen ellos (decisión del negocio). */
   fulfillment: "Fulfillment",
   /** Antes «Comisión COD (%)». La sigla no la lee nadie fuera del equipo técnico. */
