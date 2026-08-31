@@ -7,6 +7,24 @@ import type {
 } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 import { clavePar, elegirPorCascada, type ParTarifa } from "@/lib/utils/cascada-tarifa";
+import { ORIGENES_GESTION_FUERA_DEL_CIERRE } from "@/lib/types/orden-historial";
+
+// 💰 FICHA 337 (2026-08-31) — LA CUARTA CONDICION DEL PREDICADO DE PERTENENCIA AL CIERRE.
+//
+// El `where` de la lectura y el del `updateMany` que VINCULA se afirman LITERALES (`toEqual`) en
+// cinco casos de este archivo, y eso es a proposito: son EL CONTRATO, no un accidente. Lo que
+// añade la 337 es el filtro por ORIGEN, que saca del cierre las gestiones nacidas en el escritorio
+// de la tienda. Se escribe una vez aqui para que los cinco sitios no puedan divergir.
+//
+// La LISTA sale de produccion (`ORIGENES_GESTION_FUERA_DEL_CIERRE`) y NO se re-escribe a mano: lo
+// que este archivo afirma es la FORMA del predicado (que existe el `none`, sobre `historialEstados`
+// y por `origenTipo`). QUE familias contiene esa lista, y que su complemento es un conjunto
+// CERRADO, lo afirma con literales propios el guardia
+// `tests/unit/guards/origenes-admitidos-en-cierre.guardia.test.ts` — una aserción contra la misma
+// fuente que produce el valor siempre está verde, y ese error ya se pagó en este repo.
+const SIN_ORIGENES_DE_ESCRITORIO = {
+  historialEstados: { none: { origenTipo: { in: [...ORIGENES_GESTION_FUERA_DEL_CIERRE] } } },
+};
 
 // Feature 37 — tests unit del repositorio del cierre (mockea Prisma, sin DB real,
 // patron orden-repository.asignacion.test.ts). Cubre R3 (solo cierre_id IS NULL),
@@ -279,7 +297,12 @@ describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
     await repo.findGestionesPendientes("m1");
 
     const arg = prisma.gestionOrden.findMany.mock.calls[0][0];
-    expect(arg.where).toEqual({ mensajeroId: "m1", cierreId: null, anuladaAt: null });
+    expect(arg.where).toEqual({
+      mensajeroId: "m1",
+      cierreId: null,
+      anuladaAt: null,
+      ...SIN_ORIGENES_DE_ESCRITORIO,
+    });
   });
 
   it("R4/R9: mapea el detalle y serializa montoRecibido Decimal -> string toFixed(2)", async () => {
@@ -1027,7 +1050,12 @@ describe("Feature 67/R16 — crearCierre NO vincula gestiones anuladas (MONEY-CR
 
     const calls = (tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls;
     // La PRIMERA escritura de la tx es la vinculacion: propiedad + sin cierre + NO ANULADA.
-    expect(calls[0][0].where).toEqual({ mensajeroId: "m1", cierreId: null, anuladaAt: null });
+    expect(calls[0][0].where).toEqual({
+      mensajeroId: "m1",
+      cierreId: null,
+      anuladaAt: null,
+      ...SIN_ORIGENES_DE_ESCRITORIO,
+    });
     expect(calls[0][0].data).toMatchObject({ cierreId: "c1" });
   });
 
@@ -1699,7 +1727,12 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     await repo.crearCierre(INPUT_CIERRE);
 
     const vincula = (tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { where: unknown };
-    expect(vincula.where).toEqual({ mensajeroId: "m1", cierreId: null, anuladaAt: null });
+    expect(vincula.where).toEqual({
+      mensajeroId: "m1",
+      cierreId: null,
+      anuladaAt: null,
+      ...SIN_ORIGENES_DE_ESCRITORIO,
+    });
   });
 
   it("R6: congela los datos money-critical de la orden", async () => {
@@ -2082,7 +2115,12 @@ describe("Feature 69/R16 — la vista EN VIVO no depende del snapshot", () => {
 
     expect(rows).toHaveLength(1);
     const arg = prisma.gestionOrden.findMany.mock.calls[0][0];
-    expect(arg.where).toEqual({ mensajeroId: "m1", cierreId: null, anuladaAt: null });
+    expect(arg.where).toEqual({
+      mensajeroId: "m1",
+      cierreId: null,
+      anuladaAt: null,
+      ...SIN_ORIGENES_DE_ESCRITORIO,
+    });
     expect(prisma.cierreDetail.createMany).not.toHaveBeenCalled();
   });
 });
@@ -2122,7 +2160,12 @@ describe("Feature 158/R16 — crearCierre vincula tambien las gestiones `inciden
     });
 
     const where = (tx.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0].where;
-    expect(where).toEqual({ mensajeroId: "m1", cierreId: null, anuladaAt: null });
+    expect(where).toEqual({
+      mensajeroId: "m1",
+      cierreId: null,
+      anuladaAt: null,
+      ...SIN_ORIGENES_DE_ESCRITORIO,
+    });
     expect(where).not.toHaveProperty("resultado");
   });
 
