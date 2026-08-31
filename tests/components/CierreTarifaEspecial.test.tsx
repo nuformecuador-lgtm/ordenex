@@ -181,7 +181,12 @@ describe("Desglose auditable de una orden con tarifa especial", () => {
 
     // Y "Valor flete" —la columna normal que le habría tocado a esta orden (no GAM)— pierde
     // el suyo: el flete tiene UN origen, y marcar dos dejaría al admin sin saber cuál leer.
-    // El de "Flete devuelto" sigue encendido y es correcto: esa devolución no es especial.
+    //
+    // ⏳ FICHA 337 (2026-08-31): aqui decia ademas «El de "Flete devuelto" sigue encendido y es
+    // correcto: esa devolución no es especial». Era FALSO y describia el defecto: esta gestión es
+    // una ENTREGA (`fleteDevolucion: null`), asi que ninguna devolución se cobró y esa marca no
+    // debería existir. Desde la 337 la fila de devolución esta apagada; lo afirma
+    // `CierreTarifaAplicada.test.tsx`, que es donde vive ese requisito.
     const normal = screen.getByText("Valor flete").closest("div") as HTMLElement;
     expect(within(normal).queryByText(APLICADA_HINT)).toBeNull();
   });
@@ -200,6 +205,8 @@ describe("Desglose auditable de una orden con tarifa especial", () => {
     );
     expect(screen.getByRole("note")).toHaveTextContent(ESPECIAL_SIN_PACTO_BADGE_NOTA);
     // El flete SÍ salió de la columna normal: ese "← se aplicó" sigue encendido.
-    expect(screen.getAllByText(APLICADA_HINT).length).toBeGreaterThan(0);
+    // ⏳ FICHA 337: y ahora es EXACTAMENTE UNO. Antes eran dos —la entrega y una devolución que no
+    // existia—, y un `> 0` no distinguia una cosa de la otra.
+    expect(screen.getAllByText(APLICADA_HINT)).toHaveLength(1);
   });
 });
