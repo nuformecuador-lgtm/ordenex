@@ -200,3 +200,21 @@ ejecución, y los dos vuelven a ser texto UTF-8 revisable. Es la única línea d
   después del merge a `dev`.
 - **No se tocó `tests/baseline-rojos.json`**: no había nada que añadir ni nada que podar
   (el único rojo listado sigue rojo y sigue siendo ajeno).
+
+---
+
+## Aviso para quien aterrice esto: `dev` se movió mientras se implementaba
+
+La rama salió de `2f9f3f6f`. Mientras se trabajaba, **`origin/dev` avanzó 4 commits**
+(PR #624 `fix/historico-conversaciones-movil` y PR #625 `fix/nombre-completo-mensajero`),
+que tocan `lib/repositories/*`, `lib/utils/nombre-usuario.ts` y
+`app/(app)/historico/conversaciones/*`. **Ni un solo archivo se solapa con esta ficha**, así
+que no hay conflicto semántico ni textual previsible, pero **la rama está 4 commits por
+detrás** y hay que ponerla al día antes del PR.
+
+Diff real de la ficha, medido contra la base común (`git merge-base`) y no contra el `dev` ya
+movido: **17 archivos, +3122/-12**, de los cuales **0 bajo `app/`**.
+
+Recordatorio de `docs/verification.md`: el gate rápido compara `--changed` **contra** `dev`,
+así que **no ve un `dev` que ya venga rojo**. La corrida completa post-merge sigue siendo
+obligatoria.
