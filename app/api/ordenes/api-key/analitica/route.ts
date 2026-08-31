@@ -3,6 +3,12 @@
 // `GET /api/ordenes/api-key/analitica?metricas=<id>[,<id>...]|all&desde=YYYY-MM-DD&hasta=YYYY-MM-DD`
 // con `Authorization: Bearer ordx_...`.
 //
+// LOS TRES PARAMETROS SON OPCIONALES desde el 2026-08-31, y `GET .../analitica` a secas es una
+// llamada valida: sin `metricas` se sirven TODAS las publicables, y sin fechas se sirve el
+// HISTORICO COMPLETO (`desde` >= el horizonte del historial, `hasta` <= hoy). Un parametro
+// presente pero vacio (`?metricas=&desde=`) cuenta como ausente. Los dos significados viven en
+// `lib/api/analitica-api-key-metricas.ts` y `lib/api/analitica-api-key-rango.ts`, no aqui.
+//
 // QUE HACE ESTE ARCHIVO, Y NADA MAS: bearer, query, status y JSON. Los cuatro pasos de la
 // analitica (actor -> preparar -> auditar el denegado -> consultar) viven en
 // `lib/api/analitica-integrador.ts`, que es el hermano de `lib/actions/analitica-operativa.ts`
@@ -48,6 +54,7 @@ import {
 } from "@/lib/api/analitica-integrador";
 import { proyectarRespuestaApiKey } from "@/lib/api/analitica-api-key-dto";
 import { resolverMetricasPedidas } from "@/lib/api/analitica-api-key-metricas";
+import { resolverRangoApiKey } from "@/lib/api/analitica-api-key-rango";
 
 // El runtime de Node es OBLIGATORIO: Prisma y el hash de la API key no corren en edge.
 export const runtime = "nodejs";
@@ -69,31 +76,40 @@ export interface AnaliticaApiKeyDeps {
  * descuido (267/R16): si el borde rechazara con 422 las metricas no publicables, un tercero
  * podria SONDEAR desde fuera cuales existen en el catalogo comparando 422 contra 403. La lista
  * blanca la aplica `resolverAlcance`, que devuelve el MISMO 403 mudo para «existe pero no se
- * publica» y para «no existe». Por eso lo unico que este schema exige de `metricas` es que sea
- * una cadena no vacia: la FORMA la valida `resolverMetricasPedidas`, que tampoco mira el
- * catalogo.
+ * publica» y para «no existe». Por eso este schema no exige NADA de `metricas` mas alla de que
+ * sea una cadena: la FORMA la valida `resolverMetricasPedidas`, que tampoco mira el catalogo.
  *
- * `desde` y `hasta` son AMBOS OBLIGATORIOS (decision P3 del 2026-08-23) y se validan como fecha
- * CALENDARIO REAL con `esFechaCalendarioValida` —la misma funcion que la 257—, que hace el
- * round-trip que caza `2026-02-31` (V8 la rueda al 3 de marzo en silencio) y `2026-13-01`. No se
- * escribe un regex nuevo, y no hay presets: el rango de una respuesta nunca depende de cuando se
- * llamo.
+ * ⚠ ENMIENDA DEL 2026-08-31 — LAS TRES CLAVES SON OPCIONALES. La decision P3 (2026-08-23) hacia
+ * obligatorios `desde` y `hasta` con este argumento: «asi el rango de una respuesta nunca depende
+ * de cuando se llamo». El argumento era bueno para los ATAJOS que se rechazaron entonces (`7d`,
+ * `30d`, «este mes»), y sigue siendolo: NO se ha anadido ninguno. Lo que se admite ahora es la
+ * AUSENCIA, que no es un atajo sino el caso base de un integrador que quiere el historico entero
+ * y no tiene por que saber en que fecha empezo la operacion. Que significa cada ausencia se
+ * decide en `resolverRangoApiKey` (`lib/api/analitica-api-key-rango.ts`), en un solo sitio y con
+ * el reloj inyectado; aqui solo se lee la query.
  *
- * Lo que este schema NO valida, tambien a proposito: el rango invertido (267/R25) y el tope de
- * ventana (267/R26). Los aplican los cuatro `.refine` de `analiticaFiltroSchema`
- * (`lib/analytics/filters.ts`) sobre el filtro que se construye abajo, con `path: ["hasta"]` en
- * los dos casos. Duplicarlos aqui seria una segunda copia del tope de 366 dias que un dia
- * diverge de `RANGO_TOPE_DIAS`.
+ * Las tres claves siguen SIENDO EXACTAMENTE ESTAS —`.strict()` intacto— y las fechas que SI
+ * llegan se validan igual: fecha CALENDARIO REAL con `esFechaCalendarioValida` —la misma funcion
+ * que la 257—, que hace el round-trip que caza `2026-02-31` (V8 la rueda al 3 de marzo en
+ * silencio) y `2026-13-01`. No se escribe un regex nuevo y no hay presets.
+ *
+ * Lo que este schema NO valida, tambien a proposito: el rango invertido (267/R25), que aplica
+ * `analiticaFiltroSchema` (`lib/analytics/filters.ts`) sobre el filtro que se construye abajo,
+ * con `path: ["hasta"]`. El TOPE de 366 dias ya no aplica a este canal (ver
+ * `prepararConsultaAnalitica`): un historico completo no cabe en el, y el techo existia para
+ * proteger a una grafica que este canal no tiene.
  */
 const analiticaQuerySchema = z
   .object({
-    metricas: z.string().trim().min(1),
+    metricas: z.string().optional(),
     desde: z
       .string()
-      .refine(esFechaCalendarioValida, { message: "Fecha invalida (formato YYYY-MM-DD)." }),
+      .refine(esFechaCalendarioValida, { message: "Fecha invalida (formato YYYY-MM-DD)." })
+      .optional(),
     hasta: z
       .string()
-      .refine(esFechaCalendarioValida, { message: "Fecha invalida (formato YYYY-MM-DD)." }),
+      .refine(esFechaCalendarioValida, { message: "Fecha invalida (formato YYYY-MM-DD)." })
+      .optional(),
   })
   .strict();
 
@@ -120,11 +136,21 @@ export async function handleAnaliticaApiKey(
     // que es justo lo que 106/R8 impide. Y aqui compra algo mas: `tienda_id`, `zona_id` y
     // `mensajero_id` NO SE LEEN, asi que no hay forma de que lleguen al filtro (267/R9/R37).
     // No se ignoran «por politica»: es que no existe la linea que los leeria.
+    //
+    // 2026-08-31 — UN PARAMETRO VACIO ES UN PARAMETRO AUSENTE, para las tres claves. `?desde=`
+    // no es «una fecha mal escrita»: es un cliente que construyo la URL con una variable sin
+    // valor, y el 422 que devolvia antes le decia «fecha invalida» sobre algo que nunca escribio.
+    // Se decide UNA vez aqui, en la lectura, para que las tres claves se comporten igual y para
+    // que ni el schema ni `resolverMetricasPedidas` tengan que distinguir vacio de ausente.
     const sp = new URL(req.url).searchParams;
     const raw: Record<string, string> = {};
-    if (sp.has("metricas")) raw.metricas = sp.get("metricas") ?? "";
-    if (sp.has("desde")) raw.desde = sp.get("desde") ?? "";
-    if (sp.has("hasta")) raw.hasta = sp.get("hasta") ?? "";
+    const leer = (clave: "metricas" | "desde" | "hasta") => {
+      const valor = sp.get(clave)?.trim();
+      if (valor !== undefined && valor !== "") raw[clave] = valor;
+    };
+    leer("metricas");
+    leer("desde");
+    leer("hasta");
     const parsed = analiticaQuerySchema.safeParse(raw);
     if (!parsed.success) {
       const fieldErrors = z.flattenError(parsed.error).fieldErrors as Record<string, string[]>;
@@ -133,7 +159,10 @@ export async function handleAnaliticaApiKey(
 
     // 2-bis. P4-bis — LA LISTA DEL LOTE. El 422 sale con la clave publica `metricas`, la misma
     // que llego en la query, para que el integrador sepa que corregir sin adivinar.
-    const metricas = resolverMetricasPedidas(parsed.data.metricas);
+    // Sin `metricas` la cadena que se resuelve es la VACIA, que significa «todas» (regla 0 de
+    // `resolverMetricasPedidas`): la ausencia no se traduce aqui a `all` con un literal, para que
+    // el significado de «no pedi ninguna» viva en un solo sitio y tenga sus tests.
+    const metricas = resolverMetricasPedidas(parsed.data.metricas ?? "");
     if (!metricas.ok) {
       throw new ValidationError(MSG.VALIDATION_ERROR, {
         fieldErrors: { metricas: [metricas.mensaje] },
@@ -144,13 +173,24 @@ export async function handleAnaliticaApiKey(
     // contrato publico se traducen aqui a `EntradaRango.personalizado`, el vocabulario de la
     // 135. Consecuencia buscada: el filtro que viaja no tiene NI UN campo que el integrador
     // pudiera haber elegido mas alla de las dos fechas.
+    //
+    // 2026-08-31 — las fechas que faltan las pone `resolverRangoApiKey`, con EL MISMO reloj que
+    // usara el borde para todo el lote. Leer aqui un `new Date()` propio abriria la unica grieta
+    // que R48 cerro: el rango podria cruzar la medianoche de Costa Rica entre este `raw` y el
+    // instante con el que se resuelve la consulta, y la respuesta ecoaria un rango que no es el
+    // que se sirvio.
+    const ahora = deps.analitica?.now?.() ?? new Date();
+    const rango = resolverRangoApiKey(
+      { desde: parsed.data.desde, hasta: parsed.data.hasta },
+      ahora,
+    );
     const salida = await consultarAnaliticaIntegrador(
       {
         actor: auth.actor,
         metricaIds: metricas.ids,
-        raw: { rango: "personalizado", desde: parsed.data.desde, hasta: parsed.data.hasta },
+        raw: { rango: "personalizado", desde: rango.desde, hasta: rango.hasta },
       },
-      deps.analitica,
+      { ...deps.analitica, now: () => ahora },
     );
 
     // 4. Traduccion del resultado de dominio a HTTP. `forbidden` sale MUDO —sin datos y sin
