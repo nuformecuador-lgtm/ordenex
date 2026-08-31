@@ -33,6 +33,9 @@ const ALLOWED_ROLES = new Set<string>(["maestro"]);
 
 // R16: mensaje de la llave malformada en el cuerpo.
 const CUERPO_MALFORMADO = "El cuerpo tiene una llave doble malformada";
+/** Mensaje del intento de revertir una plantilla de tienda; ver el guard en `actualizar`. */
+const TIENDA_IRREVERSIBLE =
+  "Una plantilla de tienda no puede dejar de serlo: nunca se registro en WhatsApp";
 
 export class PlantillaMensajeService implements IPlantillaMensajeService {
   // Integracion WhatsApp: propagador OPCIONAL. Sin el, el CRUD local se comporta igual que
@@ -137,6 +140,19 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
 
     const actual = await this.repo.findById(id);
     if (!actual) return { status: "not_found" }; // R21
+
+    // SER PLANTILLA DE TIENDA ES DE IDA. Una plantilla de tienda nunca se registro en Meta
+    // —nace `activo` sin pasar por aprobacion, y `enviarAprobacion` la responde con
+    // `no_aplica`—, asi que apagar el interruptor la dejaria anunciandose como enviable por
+    // WhatsApp con un template que no existe al otro lado. La UI deshabilita el switch en la
+    // edicion; esto es lo que hace que la regla sea real y no cosmetica, porque la Server
+    // Action se puede llamar sin pasar por el formulario.
+    if (actual.plantillaTienda && input.plantillaTienda === false) {
+      return {
+        status: "validation_error",
+        fieldErrors: { plantillaTienda: [TIENDA_IRREVERSIBLE] },
+      };
+    }
 
     const data: UpdatePlantillaData = {};
     if (input.nombre !== undefined) data.nombre = input.nombre;

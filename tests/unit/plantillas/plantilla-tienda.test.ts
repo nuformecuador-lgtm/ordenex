@@ -203,3 +203,74 @@ describe("actualizar una plantilla de tienda", () => {
     expect(repo.updateEstado).not.toHaveBeenCalled();
   });
 });
+
+// SER PLANTILLA DE TIENDA ES DE IDA (2026-08-28). La UI deshabilita el interruptor en la
+// edicion, pero deshabilitar un control no impide la accion: la Server Action se puede llamar
+// sin pasar por el formulario. La puerta esta aqui, y lo que protege es concreto — una
+// plantilla de tienda nunca se registro en Meta, asi que apagarle el flag la dejaria
+// anunciandose como enviable por WhatsApp con un template que no existe al otro lado.
+describe("una plantilla de tienda no puede dejar de serlo", () => {
+  it("rechaza apagar el interruptor sin tocar la base", async () => {
+    const deTienda = plantilla({ estado: "activo", plantillaTienda: true });
+    const repo = repoFalso({
+      findById: vi.fn(async () => deTienda),
+    } as Partial<IPlantillaMensajeRepository>);
+    const whatsapp = propagadorFalso();
+    const service = new PlantillaMensajeService(repo, whatsapp);
+
+    const res = await service.actualizar("pl-1", { plantillaTienda: false }, MAESTRO);
+
+    expect(res.status).toBe("validation_error");
+    // Lo que de verdad se vigila: el rechazo ocurre ANTES de escribir, y sin avisar a Meta.
+    expect(repo.update).not.toHaveBeenCalled();
+    expect(repo.updateEstado).not.toHaveBeenCalled();
+    expect(whatsapp.trasActualizar).not.toHaveBeenCalled();
+  });
+
+  it("el rechazo dice en que campo esta el problema", async () => {
+    const repo = repoFalso({
+      findById: vi.fn(async () => plantilla({ estado: "activo", plantillaTienda: true })),
+    } as Partial<IPlantillaMensajeRepository>);
+    const service = new PlantillaMensajeService(repo, propagadorFalso());
+
+    const res = await service.actualizar("pl-1", { plantillaTienda: false }, MAESTRO);
+
+    if (res.status !== "validation_error") throw new Error("se esperaba validation_error");
+    expect(res.fieldErrors.plantillaTienda).toBeDefined();
+  });
+
+  // El guard no puede cobrarse ediciones legitimas: reenviar el mismo `true`, u omitir el
+  // campo, es lo que hace el formulario cada vez que se guarda una plantilla de tienda.
+  it("reenviar el mismo `true` guarda con normalidad", async () => {
+    const deTienda = plantilla({ estado: "activo", plantillaTienda: true });
+    const repo = repoFalso({
+      findById: vi.fn(async () => deTienda),
+      update: vi.fn(async () => deTienda),
+    } as Partial<IPlantillaMensajeRepository>);
+    const service = new PlantillaMensajeService(repo, propagadorFalso());
+
+    const res = await service.actualizar(
+      "pl-1",
+      { cuerpo: "Otro texto", plantillaTienda: true },
+      MAESTRO,
+    );
+
+    expect(res.status).toBe("ok");
+    expect(repo.update).toHaveBeenCalled();
+  });
+
+  // El contraste que delata un guard demasiado ancho: apagar un flag que estaba APAGADO no es
+  // una reversion, es un no-op, y tiene que seguir pasando.
+  it("apagarlo en una plantilla que no era de tienda sigue permitido", async () => {
+    const repo = repoFalso(); // findById devuelve plantillaTienda: false
+    const service = new PlantillaMensajeService(repo, propagadorFalso());
+
+    const res = await service.actualizar("pl-1", { plantillaTienda: false }, MAESTRO);
+
+    expect(res.status).toBe("ok");
+    expect(repo.update).toHaveBeenCalledWith(
+      "pl-1",
+      expect.objectContaining({ plantillaTienda: false }),
+    );
+  });
+});

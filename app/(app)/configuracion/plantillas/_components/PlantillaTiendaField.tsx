@@ -12,12 +12,25 @@ import { Switch } from "@/components/ui/switch";
 export const AYUDA_PLANTILLA_TIENDA =
   "No pasa por la aprobación de WhatsApp: queda activa de inmediato y solo se envía desde Novedades.";
 
+/**
+ * Ayuda que sustituye a la anterior cuando el interruptor está bloqueado. Una plantilla ya
+ * guardada como plantilla de tienda no puede dejar de serlo: nunca se registró en Meta, así
+ * que apagar el interruptor la dejaría prometiendo un envío por WhatsApp que no existe.
+ */
+export const AYUDA_PLANTILLA_TIENDA_FIJA =
+  "Ya se guardó como plantilla de tienda y no puede dejar de serlo. Crea una plantilla nueva si necesitas enviarla por WhatsApp.";
+
 export interface PlantillaTiendaFieldProps {
   /** Id del interruptor; enlaza el `Label htmlFor` y la ayuda. */
   id: string;
   /** Estado del interruptor (controlado por el formulario anfitrión). */
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  /**
+   * Bloquea el interruptor. Lo usa la edición cuando la plantilla YA venía guardada como
+   * plantilla de tienda: la decisión es de ida y no admite vuelta.
+   */
+  disabled?: boolean;
 }
 
 /**
@@ -34,6 +47,7 @@ export function PlantillaTiendaField({
   id,
   checked,
   onCheckedChange,
+  disabled = false,
 }: PlantillaTiendaFieldProps) {
   const ayudaId = `${id}-ayuda`;
   return (
@@ -46,10 +60,11 @@ export function PlantillaTiendaField({
           aria-describedby={ayudaId}
           checked={checked}
           onCheckedChange={onCheckedChange}
+          disabled={disabled}
         />
       </div>
       <p id={ayudaId} className="text-sm text-muted-foreground">
-        {AYUDA_PLANTILLA_TIENDA}
+        {disabled ? AYUDA_PLANTILLA_TIENDA_FIJA : AYUDA_PLANTILLA_TIENDA}
       </p>
     </div>
   );
