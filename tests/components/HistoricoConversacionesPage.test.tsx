@@ -50,7 +50,7 @@ const CATALOGO_OK: ObtenerCatalogoFiltrosOrdenesResult = {
   catalogo: {
     zonas: [],
     tiendas: [],
-    mensajeros: [{ id: "m1", nombre: "Ana Mora", zonaId: null }],
+    mensajeros: [{ id: "m1", nombre: "Ana Mora", zonaId: null, estado: "activo" }],
     provincias: [],
     cantones: [],
     distritos: [],

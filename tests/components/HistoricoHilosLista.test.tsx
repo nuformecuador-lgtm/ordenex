@@ -165,14 +165,17 @@ describe("T6.1 — carga perezosa: el listado no pide mensajes (R41)", () => {
 });
 
 describe("T6.1 — la fusión de números se ve en la fila (R43)", () => {
-  it("un hilo con dos números muestra el distintivo «2 números» y el vigente enmascarado", async () => {
+  it("un hilo con dos números muestra el distintivo «2 números» y el vigente COMPLETO", async () => {
     const listarHilos = vi.fn(async () =>
-      okHilos([hilo({ telefonosCount: 2, telefonoVigenteMasked: "4321" })]),
+      okHilos([hilo({ telefonosCount: 2, telefonoVigente: "+50688884321" })]),
     );
     renderPantalla(listarHilos);
 
     expect(await screen.findByText("2 números")).toBeInTheDocument();
-    expect(screen.getByText("···4321")).toBeInTheDocument();
+    // Pedido humano (2026-08-31): el numero ENTERO, no `···4321`. La contraprueba es la forma
+    // vieja: si volviera el enmascarado, el texto completo dejaria de estar en el DOM.
+    expect(screen.getByText("+50688884321")).toBeInTheDocument();
+    expect(screen.queryByText("···4321")).toBeNull();
   });
 
   it("un hilo con un solo número NO muestra el distintivo", async () => {

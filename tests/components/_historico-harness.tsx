@@ -45,7 +45,7 @@ export function hilo(extra: Partial<HiloHistoricoDTO> = {}): HiloHistoricoDTO {
     numRemision: "REM-1001",
     destinatario: "María González",
     mensajeroNombre: "Ana Mora",
-    telefonoVigenteMasked: "7777",
+    telefonoVigente: "+50688887777",
     telefonosCount: 1,
     ultimaActividadAt: HOY_ISO,
     totalMensajes: 4,

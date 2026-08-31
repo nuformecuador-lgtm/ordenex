@@ -125,7 +125,15 @@ export function HistoricoConversacionesModule({
         debounceMs={debounceMs}
       />
 
-      <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+      {/* ALTO FIJO (pedido humano 2026-08-31). `flex-1` + `min-h-0` NO acotan nada aqui: la
+          cadena de padres hasta el `<body>` no tiene ninguna altura fija, asi que `flex-1` se
+          resolvia por el CONTENIDO y los dos paneles crecian con cada pagina cargada —el alto
+          de la pantalla iba aumentando sin limite y el scroll era el de la pagina entera—.
+          Aqui se fija el alto de la fila UNA vez, con el hueco que queda bajo el encabezado y
+          la barra de filtros, y a partir de ahi lo que se mueve es el CONTENIDO de cada panel:
+          la lista de hilos y el hilo abierto scrollean cada uno por dentro. `min-h` para que en
+          una pantalla muy baja el hilo no quede reducido a dos lineas. */}
+      <div className="grid h-[calc(100dvh-16rem)] min-h-[24rem] gap-3 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
         <HilosLista
           key={JSON.stringify(filtro)}
           filtro={filtro}

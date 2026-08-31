@@ -5,6 +5,8 @@
 // recorrer nada. Campos MINIMOS (R54): id, nombre, padre donde aplica y dos banderas
 // booleanas en las cuentas tienda. Nada de email/telefono/cedula.
 
+import type { EstadoUsuario } from "@prisma/client";
+
 /** Opcion de catalogo: lo minimo para pintar y emitir una opcion (R48). */
 export interface OpcionCatalogo {
   id: string;
@@ -62,6 +64,15 @@ export interface GeografiaFiltrosDTO {
  */
 export interface MensajeroFiltroDTO extends OpcionCatalogo {
   zonaId: string | null;
+  /**
+   * Estado de la cuenta (`activo`, `inactivo`, `bloqueado`, `pendiente`). Viaja porque hay
+   * superficies que NO deben ofrecer a quien ya no reparte —el histórico de conversaciones
+   * filtra a `activo`— y otras que SÍ deben seguir ofreciéndolo: en `/ordenes`, esconder a un
+   * mensajero dado de baja volvería INALCANZABLES las órdenes que todavía tiene en la mano
+   * (el mismo motivo por el que `listarMensajerosParaAsignacion` los lista y solo los
+   * DESHABILITA). Por eso el dato viaja y cada superficie decide, en vez de recortarse aquí.
+   */
+  estado: EstadoUsuario;
 }
 
 /** Las colecciones del catalogo, cada una en orden determinista (`nombre asc`, R49). */

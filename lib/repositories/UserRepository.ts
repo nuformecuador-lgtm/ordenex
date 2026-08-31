@@ -169,10 +169,19 @@ export class UserRepository implements IUserRepository {
         rol: { value: "mensajero" },
         ...(zonaId !== undefined ? { zonaId } : {}),
       },
-      select: { id: true, nombre: true, zonaId: true },
+      // `estado` viaja para que cada superficie decida a quien ofrece: el historico de
+      // conversaciones se queda solo con los `activo`, mientras que `/ordenes` los ofrece a
+      // todos —esconder a un mensajero dado de baja volveria inalcanzables las ordenes que
+      // todavia tiene en la mano—.
+      select: { id: true, nombre: true, zonaId: true, estado: true },
       orderBy: { nombre: "asc" }, // R49: orden determinista
     });
-    return rows.map((r) => ({ id: r.id, nombre: r.nombre, zonaId: r.zonaId }));
+    return rows.map((r) => ({
+      id: r.id,
+      nombre: r.nombre,
+      zonaId: r.zonaId,
+      estado: r.estado,
+    }));
   }
 
   /**
