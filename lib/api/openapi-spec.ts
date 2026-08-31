@@ -1757,8 +1757,15 @@ export const openApiSpec = {
           "Costo si la orden se DEVUELVE, es decir si el paquete vuelve a tu tienda: cinco conceptos, SIN `ivaComision` (no hay comisión que gravar). `comision` es un cero EXPLÍCITO — la afirmación de que una devolución no cobra comisión COD, no un dato ausente. `fulfillment` en cambio SÍ se cobra: el servicio de bodega ya se prestó. `total` es la DEUDA de la tienda = −(flete + iva + fulfillment), y por eso es negativo. **Cuándo se cobra este escenario:** al cerrarse la orden como RECHAZADA, que es el resultado con el que el paquete regresa. Un intento de entrega fallido que aún se puede reprogramar o recuperar NO cobra nada por sí solo; los importes de aquí aparecen cuando el retorno se consuma.",
         required: ["flete", "iva", "comision", "fulfillment", "total"],
         properties: {
-          flete: { type: "string", description: "Flete de devolución, formateado." },
-          iva: { type: "string", description: "IVA del flete de devolución, formateado." },
+          flete: {
+            type: "string",
+            description:
+              "Flete por rechazo, formateado. En pantalla, en la wallet y en las descargas este concepto se llama exactamente así desde el 2026-08-31: sólo lo cobra una gestión RECHAZADA (ver `CotizacionEscenarioDevuelto`), nunca una devolución que siga viva. Antes se documentaba como «Flete de devolución».",
+          },
+          iva: {
+            type: "string",
+            description: "IVA del flete por rechazo, formateado. Antes «IVA del flete de devolución».",
+          },
           comision: {
             type: "string",
             description: "Siempre cero formateado: una devolución no cobra comisión COD.",

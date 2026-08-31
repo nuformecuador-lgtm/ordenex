@@ -100,7 +100,7 @@ export const FULFILLMENT_COL = "Fulfillment";
 // Conceptos AGRUPADOS (cada uno con su IVA incluido): así se leen en tablas y paneles.
 export const FLETE_CON_IVA_LABEL = "Flete + IVA";
 export const COMISION_CON_IVA_LABEL = "Comisión + IVA";
-export const FLETE_DEV_CON_IVA_LABEL = "Flete devolución + IVA";
+export const FLETE_DEV_CON_IVA_LABEL = "Flete por rechazo + IVA";
 export const INGRESO_TOTAL_COL = "Total Ordenex";
 // --- Feature 158 (R34/R9/R19): columnas propias del grupo `incidente` (texto i18n-ready) ---
 export const CAUSA_INCIDENTE_COL = "Causa";
