@@ -46,6 +46,15 @@ vi.mock("@/lib/actions/gasto-fijo-cobro", () => ({
   rechazarCobroGastoFijoAction: vi.fn(),
   contarCobrosPendientesDePlantillaAction: vi.fn(),
 }));
+// FICHA 337 (segunda mitad): la pagina pre-obtiene TAMBIEN la cola de cobros por rechazo de
+// tienda. Sin este `vi.mock` la action real corre, abre Prisma y el archivo entero cae con un
+// `INTERNAL` de conexion -- que es lo que paso al cablearla: el rojo apunta a la pagina, pero la
+// causa es una action sin doblar.
+vi.mock("@/lib/actions/rechazo-tienda-cobro", () => ({
+  listarCobrosRechazoTiendaAction: vi.fn(),
+  aprobarCobroRechazoTiendaAction: vi.fn(),
+  rechazarCobroRechazoTiendaAction: vi.fn(),
+}));
 
 class NotFoundError extends Error {
   constructor() {
@@ -78,6 +87,7 @@ import { listarMovimientosAction, verResumenCajaAction } from "@/lib/actions/wal
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
 import { listarPlantillasPaginadoAction } from "@/lib/actions/gasto-fijo-plantilla";
 import { listarCobrosPendientesAction } from "@/lib/actions/gasto-fijo-cobro";
+import { listarCobrosRechazoTiendaAction } from "@/lib/actions/rechazo-tienda-cobro";
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarMovimientosAction);
@@ -85,6 +95,7 @@ const resumenMock = vi.mocked(verResumenCajaAction);
 const desgloseMock = vi.mocked(verDesgloseEgresosAction);
 const plantillasMock = vi.mocked(listarPlantillasPaginadoAction);
 const cobrosMock = vi.mocked(listarCobrosPendientesAction);
+const cobrosRechazoMock = vi.mocked(listarCobrosRechazoTiendaAction);
 
 const MOVIMIENTOS_OK = {
   status: "ok" as const,
@@ -169,6 +180,13 @@ const COBROS_OK = {
   ],
 };
 
+/**
+ * FICHA 337 (segunda mitad) — la cola de cobros por RECHAZO DE TIENDA que la pagina pre-obtiene.
+ * Vacia y con `total` en cero: este archivo mide la cola de gasto fijo, y lo unico que hace falta
+ * de la otra es que su lectura exista y que su `ok` no tumbe la pagina.
+ */
+const COBROS_RECHAZO_OK = { status: "ok" as const, items: [], total: 0 };
+
 beforeEach(() => {
   vi.clearAllMocks();
   moduleCalls.length = 0;
@@ -177,6 +195,7 @@ beforeEach(() => {
   desgloseMock.mockResolvedValue(DESGLOSE_OK);
   plantillasMock.mockResolvedValue(PLANTILLAS_OK);
   cobrosMock.mockResolvedValue(COBROS_OK);
+  cobrosRechazoMock.mockResolvedValue(COBROS_RECHAZO_OK);
 });
 
 afterEach(() => {

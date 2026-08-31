@@ -321,13 +321,22 @@ export const ORIGEN_TIPOS_VISITA_REAL = [
 // dano no es de pago sino de ATRIBUCION y de CONTEO: el mensajero firma un documento de trabajo
 // que no hizo. Patron de revocacion: `specs/332-eliminar-plantilla-gasto-fijo/design.md` §0.
 //
-// ⚠️ CONSECUENCIA DE DINERO, DECLARADA Y NO RESUELTA AQUI: hoy el cobro de flete devuelto por un
-// rechazo de escritorio (`rechazo_tienda` -> `resultado = rechazada` -> `cobroRechazado`, 56) solo
-// se materializa AL APROBAR EL CIERRE DEL MENSAJERO. Al sacar esas gestiones del cierre, **ese
-// cobro queda EN PAUSA**. NO SE PIERDE —la gestion y su tarifa congelada siguen en la base, y la
-// fila se puede recuperar entera— pero deja de emitirse hasta que exista su via propia de cobro a
-// la tienda, que es OTRA ficha. Quien lea esto buscando «dónde se perdio la plata»: no se perdio,
-// esta aqui, sin documento que la emita todavia.
+// ⚠️ CONSECUENCIA DE DINERO — SON DOS CONCEPTOS Y HOY VAN POR CAMINOS DISTINTOS. La nota original
+// de esta ficha los nombraba como uno solo, y no lo son:
+//
+//   · **Flete de devolucion + su IVA**, lo que paga la TIENDA (`ingreso_flete_devolucion` y su IVA,
+//     de `derivarIngresoOrden`): **YA TIENE VIA PROPIA** desde la segunda mitad de la 337. El
+//     rechazo crea un COBRO PENDIENTE (`rechazo_tienda_cobro`) con el importe CONGELADO de la
+//     tarifa de ese instante, y un administrador lo aprueba en `/wallet`; solo entonces nacen los
+//     apuntes, que son los MISMOS que emitia la aprobacion del cierre.
+//   · **`cobroRechazado` / `ingreso_bodega_rechazo`** (56), que es INGRESO DE LA BODEGA y sale de la
+//     tarifa zona+vehiculo del mensajero: **SIGUE EN PAUSA**. Se congelaba al crear el cierre del
+//     mensajero y lo consume el cierre de BODEGA (40/56); sin cierre no hay congelado que sumar.
+//     NO SE PIERDE —la gestion y su `resultado = rechazada` siguen enteros— pero hoy nadie lo
+//     emite. Es alcance de otra ficha.
+//
+// Quien lea esto buscando «dónde se perdio la plata»: no se perdio. La de la tienda tiene ya su
+// documento; la de la bodega esta aqui, sin documento que la emita todavia.
 //
 // ⚠️ `gestion_tienda_ayuda` **SE QUEDA DENTRO** y su ausencia de esta lista es la decision, no un
 // olvido (pedido humano textual: «lo que no es ayuda»). La ayuda es trabajo que el mensajero SI

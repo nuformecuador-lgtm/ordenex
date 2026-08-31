@@ -131,6 +131,46 @@ export interface OrdenParaCorreccionRow {
 }
 
 /**
+ * FICHA 337 (segunda mitad, 2026-08-31) — LAS ENTRADAS DE `derivarIngresoOrden` PARA UNA ORDEN,
+ * LEIDAS EN EL INSTANTE DEL RECHAZO.
+ *
+ * Es exactamente lo que `cierre_detail` congela al solicitar un cierre (feature 69), pero para
+ * una gestion que YA NO va a entrar en ningun cierre: el rechazo que la tienda hace desde
+ * novedades. Sin esta lectura no hay tarifa que congelar, y sin tarifa congelada el importe
+ * tendria que recalcularse al aprobar — que es justo lo que la ficha prohibe.
+ *
+ * POR QUE NO SE REUSA `findParaCorreccion`, que trae estos mismos campos: aquella lectura existe
+ * para OTRA cosa (el aviso de la correccion de una orden) y arrastra ocho columnas descriptivas,
+ * la cadena geografica entera y un `take: 1` sobre `cierre_detail` que aqui no se mira. Reusarla
+ * ataria dos caminos que no tienen por que moverse juntos, y el dia que la correccion necesitara
+ * un campo mas lo pagaria tambien el rechazo. Son cinco columnas: se leen las cinco.
+ *
+ * `montoCobrar` y `cobraComision` viajan aunque la rama `rechazada` de `derivarIngresoOrden` NO
+ * los use hoy — solo los mira la rama `entregada`—, y eso es deliberado: son parte de
+ * `OrdenIngresoInput`, y rellenarlos con `null`/`false` seria escribir un dato falso con forma de
+ * dato. Si la formula cambiara, aqui llegarian los valores de verdad en vez de una mentira que
+ * nadie volveria a mirar.
+ *
+ * `montoCobrar` es STRING escala 2 y NUNCA `number`: leccion medida de la feature 204 (14 de 66
+ * ordenes con un centimo de desviacion al multiplicar en el navegador).
+ */
+export interface OrdenBaseCobroDevolucionRow {
+  ordenId: string;
+  /** A QUIEN se le cobra. Es lo que se CONGELA en la fila del cobro (leccion 69/R13). */
+  tiendaId: string;
+  /** La otra mitad de la cascada de tarifa (feature 274): el par es (tienda, zona). */
+  zonaId: string;
+  /** De la ZONA: elige la columna GAM del flete de devolucion. */
+  esCentral: boolean;
+  /** Del DISTRITO: elige el pacto especial. Ya normalizada (la columna de origen es tri-valuada). */
+  esZonaEspecial: boolean;
+  /** COD a recaudar, STRING 2 dec o `null`. Entrada de la formula que la rama `rechazada` no usa. */
+  montoCobrar: string | null;
+  /** Idem: entrada de la formula que la rama `rechazada` no usa. */
+  cobraComision: boolean;
+}
+
+/**
  * FICHA 327 (design §9.4) — el distrito propuesto, con su cadena geografica y su zona ya
  * colapsada. `provinciaId` viene por `canton.provinciaId` para poder comprobar la cadena de R6 en
  * UNA sola consulta.
@@ -1177,6 +1217,19 @@ export interface IOrdenRepository {
    * BORRADA y una INEXISTENTE devuelvan `null` igual — el resultado opaco de R30, gratis.
    */
   findParaCorreccion(ordenId: string): Promise<OrdenParaCorreccionRow | null>;
+
+  /**
+   * FICHA 337 (segunda mitad) — las entradas de `derivarIngresoOrden` de UNA orden, para congelar
+   * el cobro del rechazo que la tienda acaba de hacer desde novedades.
+   *
+   * `null` si la orden no existe o esta borrada (`deleted_at`), con el mismo criterio que
+   * `findById` y `findParaCorreccion`: una orden borrada cuenta como no encontrada.
+   *
+   * Es una LECTURA y no participa de la transaccion del rechazo a proposito: se hace ANTES, y el
+   * resultado es lo que se congela. Leerla dentro no la haria mas cierta — lo que congela el
+   * importe es copiarlo, no el aislamiento— y alargaria una transaccion que escribe dinero.
+   */
+  findBaseCobroDevolucion(ordenId: string): Promise<OrdenBaseCobroDevolucionRow | null>;
   /**
    * FICHA 327 (design §9.4) — resuelve UN distrito: su cadena geografica (para R6) y su zona
    * unica (para R5/R7), en una sola consulta. `null` = ese distrito no existe.
