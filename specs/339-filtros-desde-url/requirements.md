@@ -107,10 +107,17 @@ no monta su control y no altera la selección.
 orquestador la borre: una clave precargada y declarada DEBE seguir en la selección tras el
 primer ciclo de montaje.
 
-### Escritura: solo «Limpiar todo»
+### Escritura: la barra solo RESTA params
+
+**AMPLIADO el 2026-08-31 a petición del humano** («al eliminar del texto del input debería
+quitar q de la url»): el título de esta sección decía «solo «Limpiar todo»» y ha dejado de
+ser cierto. Ahora hay DOS gestos que retiran params —«Limpiar todo» (R19) y vaciar el
+campo de búsqueda (R26)—, y ninguno de los dos AÑADE ni reescribe nada: la barra solo sabe
+restar. El resto de R18 sigue intacto.
 
 **R18** — MIENTRAS el usuario escribe en el campo, marca opciones, pone o retira filtros
-desde el selector, el sistema DEBE dejar la URL intacta.
+desde el selector, el sistema DEBE dejar la URL intacta. En particular, un término escrito
+DESPUÉS de haber vaciado el campo NO vuelve a aparecer en la URL: R26 quita, nunca repone.
 
 **R19** — CUANDO el usuario pulsa «Limpiar todo», el sistema DEBE eliminar de la URL el
 param del término libre y todos los params cuyo nombre coincida con la clave de un filtro
@@ -138,6 +145,24 @@ ENTONCES el sistema DEBE comportarse como si la URL no trajera ningún param, si
 para no incumplir la regla de lint del repo que prohíbe `setState` en efecto para leer
 fuentes externas.
 
+### Vaciar el campo (añadido el 2026-08-31)
+
+**R26** — CUANDO el término EMITIDO por el buscador pasa a `""` —por la X del campo, por
+borrarlo carácter a carácter, por seleccionar todo y suprimir, o por caer bajo `minChars`—
+el sistema DEBE eliminar de la URL el param del término libre (`terminoKey`) y NINGÚN
+otro: los params de los filtros y los ajenos DEBEN conservarse.
+
+**R26.1** — SI la URL resultante de esa eliminación es idéntica a la actual —el campo ya
+estaba vacío, o la URL nunca trajo ese param— ENTONCES el sistema NO DEBE navegar. Un
+`router.replace` a la misma URL cuesta un payload RSC que hoy no se pide.
+
+**R26.2** — MIENTRAS el usuario teclea y borra deprisa, el sistema DEBE producir como
+mucho UNA navegación: la eliminación cuelga del término EMITIDO (detrás del debounce y de
+la guarda de «sin cambio»), no del `onChange` crudo del campo.
+
+**R26.3** — La eliminación de R26 NO DEBE reintroducir ninguna lectura viva de la URL: R7
+sigue vigente y la lectura sigue siendo la foto de entrada.
+
 ---
 
 ## Trazabilidad prevista
@@ -146,7 +171,8 @@ fuentes externas.
 | --- | --- |
 | R4, R8-R16 | tests unitarios del códec puro (sin React) |
 | R1-R3, R5-R7, R17, R23-R24 | tests de render de `BuscadorFiltros` + `FilterComponent` |
-| R18-R22 | tests de render con `next/navigation` simulado |
+| R18-R22, R26-R26.2 | tests de render con `next/navigation` simulado |
+| R26.3 | los dos guardias de R25 (`filtros-url-r25*.test.*`) siguen en verde |
 | R25 | lint del repo en verde sobre los archivos tocados |
 
 ---
