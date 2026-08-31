@@ -12,6 +12,7 @@ import type {
 import type { TotalesTableroDia } from "@/lib/types/tablero-dia";
 import { ESTATUS_CON_BUCKET_EXPLICITO, estatusDelBucket } from "@/lib/types/tablero-dia";
 import type { VentanaDiaCR } from "@/lib/utils/ventana-dia-cr";
+import { nombreCompletoUsuarioSql } from "@/lib/utils/nombre-usuario";
 
 // Feature 192 (B2.2/B7.2/B8.1-B8.3, design.md §5 y §5.bis) — LAS CONSULTAS DEL TABLERO.
 // Feature 258 (B3.1) añade la TERCERA: el histograma de entregas por hora (al final del archivo).
@@ -364,14 +365,14 @@ export class TableroDiaRepository implements ITableroDiaRepository {
         ORDER BY g."orden_id", g."created_at" DESC, g."id" DESC
       )
       SELECT a.mensajero_id                                        AS mensajero_id,
-             TRIM(CONCAT_WS(' ', u."nombre", u."primer_apellido")) AS mensajero_nombre,
+             ${Prisma.raw(nombreCompletoUsuarioSql("u"))}          AS mensajero_nombre,
              COUNT(*)                                              AS asignadas,
              ${filtrosDeResultado()},
              ${filtrosDeBucket()}
       FROM asignadas a
       JOIN "usuario" u ON u."id" = a.mensajero_id
       LEFT JOIN resultado_final r ON r.orden_id = a.orden_id
-      GROUP BY a.mensajero_id, u."nombre", u."primer_apellido"
+      GROUP BY a.mensajero_id, u."nombre", u."primer_apellido", u."segundo_apellido"
       ORDER BY asignadas DESC, mensajero_nombre ASC, a.mensajero_id ASC`;
 
     return filas.map((f) => ({

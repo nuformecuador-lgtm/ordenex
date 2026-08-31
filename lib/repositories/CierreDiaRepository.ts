@@ -48,6 +48,7 @@ import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
 // Feature 271 — la lista de estados RE-SOLICITABLES vive en el modulo puro de la regla, no aqui.
 import { CIERRE_ESTADOS_RESOLICITABLES } from "@/lib/utils/bloqueo-cierre";
 import type { CierreEstado } from "@/lib/types/cierre";
+import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 // El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
 // defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
@@ -551,13 +552,13 @@ export class CierreDiaRepository implements ICierreDiaRepository {
   async findCierreParaAviso(cierreId: string): Promise<CierreSolicitadoInfo | null> {
     const fila = await this.prisma.cierreDia.findUnique({
       where: { id: cierreId },
-      select: { id: true, destinoZonaId: true, mensajero: { select: { nombre: true } } },
+      select: { id: true, destinoZonaId: true, mensajero: { select: NOMBRE_USUARIO_SELECT } },
     });
     if (fila === null) return null;
     return {
       id: fila.id,
       destinoZonaId: fila.destinoZonaId ?? null,
-      mensajeroNombre: fila.mensajero?.nombre ?? null,
+      mensajeroNombre: fila.mensajero ? nombreCompletoUsuario(fila.mensajero) : null,
     };
   }
 

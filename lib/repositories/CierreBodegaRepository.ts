@@ -11,6 +11,7 @@ import {
   inicioDelDiaCREnUtc,
   inicioDelDiaSiguienteCREnUtc,
 } from "@/lib/utils/fecha-cr";
+import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 // Estados/destino relevantes (fuente de verdad en lib/types/cierre.ts). El cierre de
 // bodega se crea SIEMPRE en `solicitado`; consolida SOLO cierre_dia `aprobado`.
@@ -45,7 +46,7 @@ const CONSOLIDABLE_SELECT = {
   totalGeneral: true,
   totalPagoMensajero: true, // feature 39/R18: snapshot del pago al mensajero del cierre_dia
   totalIngresoBodegaRechazos: true, // feature 56/R17: snapshot del ingreso de bodega por rechazos del cierre_dia
-  mensajero: { select: { nombre: true } },
+  mensajero: { select: NOMBRE_USUARIO_SELECT },
 } as const;
 
 // Proyeccion de la cabecera de un cierre de bodega (join a zona/usuario + _count).
@@ -204,7 +205,7 @@ function toConsolidableRow(r: ConsolidableRow): CierreDiaConsolidableRow {
   return {
     cierreDiaId: r.id,
     mensajeroId: r.mensajeroId,
-    mensajeroNombre: r.mensajero.nombre,
+    mensajeroNombre: nombreCompletoUsuario(r.mensajero),
     totales: totalesToString(r),
     totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R18: snapshot money-safe STRING
     totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R17: snapshot money-safe STRING

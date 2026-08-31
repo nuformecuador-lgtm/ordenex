@@ -93,6 +93,19 @@ export function HistoricoConversacionesModule({
   } | null>(null);
 
   /**
+   * QUÉ PANEL SE VE EN MÓVIL. Por debajo de `md` sólo cabe uno: se entra por la lista y
+   * elegir una conversación la SUPERPONE (la lista se oculta), con la flecha de volver en su
+   * cabecera. Es el mismo recorrido del chat del mensajero (`ChatFlotante`), pero aquí NO va
+   * en un modal flotante: la barra de filtros se queda fuera y encima, usable en todo momento.
+   *
+   * No es un `useEffect` sobre `seleccionado`: cambia en el manejador del clic, que es donde
+   * ocurre el gesto. Y NO se resincroniza con el filtro —una barra con debounce puede emitir
+   * DESPUÉS de que el usuario ya haya abierto un hilo y lo sacaría de la conversación sin que
+   * él haya tocado nada—.
+   */
+  const [vistaMovil, setVistaMovil] = useState<"lista" | "hilo">("lista");
+
+  /**
    * El filtro que viaja al servidor. El término manda sobre `q` —lo emite el campo, no los
    * controles— y por debajo del mínimo la clave sencillamente no existe: el propio
    * `BuscadorFiltros` emite `""` mientras no llega al mínimo (R37).
@@ -110,6 +123,7 @@ export function HistoricoConversacionesModule({
 
   function abrirHilo(hilo: HiloHistoricoDTO) {
     setSeleccionado({ ordenId: hilo.ordenId, mensajeroId: hilo.mensajeroId });
+    setVistaMovil("hilo");
   }
 
   return (
@@ -133,7 +147,10 @@ export function HistoricoConversacionesModule({
           la barra de filtros, y a partir de ahi lo que se mueve es el CONTENIDO de cada panel:
           la lista de hilos y el hilo abierto scrollean cada uno por dentro. `min-h` para que en
           una pantalla muy baja el hilo no quede reducido a dos lineas. */}
-      <div className="grid h-[calc(100dvh-16rem)] min-h-[24rem] gap-3 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+      {/* `grid-rows-1`: en movil se pinta UN solo panel (el otro va con `hidden`, que lo saca
+          de la rejilla), y una fila implicita de alto automatico lo dejaria midiendo lo que
+          mida su contenido en vez de ocupar el alto fijo de la caja. */}
+      <div className="grid h-[calc(100dvh-16rem)] min-h-[24rem] grid-rows-1 gap-3 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
         <HilosLista
           key={JSON.stringify(filtro)}
           filtro={filtro}
@@ -141,6 +158,8 @@ export function HistoricoConversacionesModule({
           seleccionado={seleccionado}
           onSeleccionar={abrirHilo}
           ahora={instante}
+          // De `md` en adelante los dos paneles se ven SIEMPRE; por debajo manda `vistaMovil`.
+          className={vistaMovil === "hilo" ? "hidden md:flex" : "flex"}
         />
         <HistoricoHilo
           key={seleccionado === null ? "sin-hilo" : claveHilo(seleccionado)}
@@ -148,6 +167,8 @@ export function HistoricoConversacionesModule({
           listar={listarMensajes}
           ahora={instante}
           rangoFechaAplicado={rangoFechaAplicado}
+          onVolver={() => setVistaMovil("lista")}
+          className={vistaMovil === "hilo" ? "flex" : "hidden md:flex"}
         />
       </div>
     </div>
