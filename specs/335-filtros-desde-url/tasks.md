@@ -155,13 +155,13 @@ una base real) y revisar que ninguna ruta se queje por `useSearchParams`.
 `progress/impl_335.md` con su salida (`leerDeUrl={false}` o `Suspense` local).
 **Depende de:** T3.3, T4.3
 
-### T6.2 Mapa de trazabilidad R→test
+### [x] T6.2 Mapa de trazabilidad R→test
 Escribir en `progress/impl_335.md` la tabla completa R1..R25 → archivo::nombre del test.
 **Hecho:** los 25 requisitos tienen un test nombrado; ninguno dice «cubierto
 indirectamente».
 **Depende de:** todo el bloque 1-5
 
-### T6.3 Gate
+### [x] T6.3 Gate
 `./init.sh --rapido`.
 **Hecho:** verde, y el delta de rojos contra el baseline de T0.1 es **0**.
 **Depende de:** T6.2

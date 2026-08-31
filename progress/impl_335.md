@@ -160,26 +160,51 @@ módulo —sobrevive al remonte, que es justo lo que un `useRef` no hace— de l
   a `?zona=B` **sí se honra**. Solo se suprime exactamente lo que se acaba de tirar.
 - Va **scopeada por `pathname`**: limpiar `zona=A` en `/novedades` no ciega `zona=A` en
   `/ordenes`.
-- **Límite conocido, documentado en el archivo:** la memoria solo se borra al recargar la
-  página entera, así que volver atrás con el botón del navegador a esa misma query exacta
-  quedaría suprimido. Es el precio de matar un bug visible; la alternativa —no recordar
-  nada— resucita filtros que el usuario acaba de borrar, que es peor.
+- **Límite conocido — CORREGIDO tras la revisión (M1), estaba subestimado.** Lo que decía
+  esta nota era «solo afecta al botón atrás». **El límite real es más ancho:**
+  `paresBorrados` **no se vacía nunca en toda la sesión SPA**, así que CUALQUIER llegada
+  posterior a esa misma ruta con ese mismo par `nombre=valor` queda suprimida — un `Link`
+  interno, un enlace pegado en la barra de direcciones sin recarga completa, o cualquier
+  navegación cliente que reconstruya esa query—, no solo el botón atrás. Se recupera con
+  una recarga completa de la página.
+  Lo que sí resiste, y quedó **verificado por el reviewer**: el scopeado por `pathname` y
+  por **valor** evita el envenenamiento cruzado entre pantallas (limpiar `zona=A` en
+  `/novedades` no ciega `zona=A` en `/ordenes`, y `?zona=B` se honra), y el conjunto
+  crece **acotado** —unas pocas entradas por cada «Limpiar todo»—, así que no es un
+  problema práctico de memoria.
+  Se acepta a sabiendas: la alternativa —no recordar nada— resucita los filtros que el
+  usuario acaba de borrar, que es un fallo visible y seguro en vez de uno raro y latente.
 - **Cambió un assert preexistente**: `filtros-url-hook.test.tsx::"R24 — useSearchParams
   devuelve null…"` exigía un `replace` con la URL vacía, que es exactamente la navegación
   inútil que mata la guarda 1. Es el **único** test cuya expectativa cambia, y lleva el
   porqué escrito al lado.
 
-### 3. Catálogo asíncrono: un límite que NO se tapó
-Si un consumidor construye las `options` de un filtro **después** del montaje (las pide al
-servidor), la validación de R14 corre contra un catálogo todavía vacío y el valor de la URL
-se descarta; como la clave ya cuenta como sembrada, no se reintenta cuando las opciones
-llegan. **Reintentarlo chocaría de frente con R7** («la lectura ocurre una sola vez, al
-entrar»), así que no se improvisó: se deja anotado. Se revisaron los 8 consumidores y
-**ninguno está hoy en ese caso** —`/novedades`, que es el que carga su conjunto por
-cliente, declara igualmente sus `FilterDef` desde el primer render
-(`novedades-filtros.ts:304-310` devuelve los defs con `options` vacías mientras carga), así
-que la ACTIVACIÓN de la clave (R2) funciona—. **Si alguna pantalla futura lo necesita, es
-una ficha aparte y una pregunta para el humano.**
+### 3. Catálogo asíncrono — ESTA NOTA ERA FALSA. El reviewer la tumbó (B1) y se arregló
+
+**Lo que decía, y era mentira:** «se revisaron los 8 consumidores y ninguno está hoy en ese
+caso». **`/novedades` SÍ lo está**, y el reviewer lo midió con el hook real: entrando por
+`/novedades?zona=Norte` el control se montaba diciendo **«Zona: Todas»**. El enlace
+compartido no acotaba, que es la promesa entera de la ficha (R3 y R5 incumplidos).
+
+**Por qué me equivoqué**, dicho para que no se repita: comprobé que
+`novedades-filtros.ts:304-310` **declara los `FilterDef` desde el primer render** y di el
+caso por descartado. Es cierto y es irrelevante: los declara con **`options: []`** mientras
+`conjunto === null`, y `useNovedadesFiltro` pide el conjunto de forma **perezosa**. La
+clave se activaba (R2, correcto) pero su valor caía por R14 contra un catálogo vacío, se
+apuntaba como sembrada y **no se reintentaba jamás**. Miré si el filtro se DECLARABA cuando
+lo que decidía el resultado era si tenía OPCIONES.
+
+**Agravante, y la causa de que pasara inadvertido (B1-bis):** el test de herencia de T5.1
+sustituía `useNovedadesFiltro` por una maqueta con las `options` ya presentes. Decía
+«consumidor REAL» y ejercitaba la cáscara de presentación. Un test que no puede fallar por
+el fallo no vale; está reescrito contra el hook real, con el catálogo llegando **después**
+del montaje.
+
+**Cómo quedó arreglado:** ver «La corrección tras la revisión» más abajo. En una frase: se
+congelan los params de entrada en un **snapshot inmutable** y se **re-siembra contra ese
+snapshot** cuando aparecen opciones para una clave todavía no sembrada. Re-sembrar contra la
+foto de entrada **no viola R7**: R7 prohíbe **releer** la URL, no prohíbe **terminar de
+aplicar lo que ya se leyó**.
 
 ### 4. Un byte NUL crudo en el fuente
 `FilterComponent.tsx` traía desde `origin/dev` (commit `0cd040f7`, fichas 144/169) un
@@ -218,3 +243,18 @@ movido: **17 archivos, +3122/-12**, de los cuales **0 bajo `app/`**.
 Recordatorio de `docs/verification.md`: el gate rápido compara `--changed` **contra** `dev`,
 así que **no ve un `dev` que ya venga rojo**. La corrida completa post-merge sigue siendo
 obligatoria.
+
+---
+
+## M3 — `/novedades` monta DOS barras: la precarga se duplica. LÍMITE CONOCIDO, no se toca.
+
+Las dos pestañas de `/novedades` viven montadas a la vez (`keepMounted`) con el mismo
+`pathname`, así que entrar por `/novedades?q=guia` **escribe el término en los DOS campos y
+dispara DOS `listarCompleto()`**, que es la lectura cara de esa pantalla.
+
+No incumple ningún requisito escrito, y **no se corrige en esta ficha por decisión expresa
+del coordinador**: lo consulta con el humano y, si hay que acotarlo, es ficha aparte.
+Verificado por el reviewer que **no hay envenenamiento cruzado** de la memoria de borrados
+entre las dos barras.
+
+Queda anotado aquí precisamente para que no se descubra dos veces.
