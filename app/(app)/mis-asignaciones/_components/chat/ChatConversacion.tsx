@@ -11,6 +11,7 @@ import {
   Mic,
   Package,
   Paperclip,
+  Phone,
   Send,
   X,
 } from "lucide-react";
@@ -35,6 +36,7 @@ import {
   type TipoAdjuntoEnvio,
 } from "@/lib/config/chat-media-envio";
 import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
+import { normalizarTelefonoCR } from "@/lib/utils/telefono-cr";
 import { listarPlantillasActivasParaEnvio } from "@/lib/actions/whatsapp-envio";
 import { renderPlantilla } from "@/lib/utils/plantilla-mensaje";
 import { datosPlantillaDesdeAsignacion } from "@/lib/utils/whatsapp-envio-valores";
@@ -637,6 +639,32 @@ export function ChatConversacion({
           </p>
           <p className="text-[11px] text-muted-foreground">A cobrar</p>
         </div>
+
+        {/* Pedido humano 2026-08-31 — LLAMAR AL CLIENTE desde la propia conversación, sin
+            volver al panel. Sale de la app hacia WhatsApp (`wa.me/<normalizado>`, el mismo
+            enlace y el mismo normalizador que usa `ContactoButtons`), que es donde el
+            mensajero tiene el botón de llamada de voz: WhatsApp no publica ningún esquema
+            de URL que INICIE la llamada, así que lo que se puede abrir es la conversación
+            con ese número ya seleccionado. Por eso el rótulo accesible dice «por WhatsApp»
+            y no promete un timbre.
+
+            VA EL ÚLTIMO, después del monto y pegado a la esquina que el Dialog reserva con
+            `pr-12`: queda junto al botón de cerrar, que es lo pedido. El `-mr-1` recupera
+            un pelo de ese hueco para que el icono no quede flotando lejos del borde.
+
+            No se pinta si la orden no trae teléfono: un `wa.me/` vacío abre WhatsApp en la
+            nada y parece que la app se rompió. */}
+        {orden.telefonoDest.trim() !== "" ? (
+          <a
+            href={`https://wa.me/${normalizarTelefonoCR(orden.telefonoDest)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Llamar por WhatsApp a ${orden.destinatario}`}
+            className="-mr-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            <Phone className="size-5" aria-hidden="true" />
+          </a>
+        ) : null}
       </header>
 
       <div
