@@ -2,8 +2,9 @@
 
 // Feature 339 (T2.1) — la unica pieza de la ficha que toca `next/navigation`.
 //
-// Envuelve la lectura de la query string y el `router.replace` de «Limpiar todo» para que
-// los canonicos compartidos (`BuscadorFiltros`, `FilterComponent`) no conozcan al router.
+// Envuelve la lectura de la query string y el `router.replace` con el que la barra RESTA
+// params —«Limpiar todo» (R19) y vaciar el campo de busqueda (R26)— para que los canonicos
+// compartidos (`BuscadorFiltros`, `FilterComponent`) no conozcan al router.
 // Todo lo que sabe de FORMATO vive en `lib/utils/filtros-url.ts`, que es puro.
 
 import { useCallback, useMemo } from "react";
@@ -25,7 +26,7 @@ export interface FiltrosUrl {
 const SEPARADOR_TERNA = "\u0000";
 
 /**
- * MEMORIA DE LO RECIEN BORRADO — pares `ruta + nombre + valor` que «Limpiar todo» acaba de
+ * MEMORIA DE LO RECIEN BORRADO — pares `ruta + nombre + valor` que `borrarParams` acaba de
  * retirar de la URL. Vive a nivel de MODULO a proposito, y eso arregla un bug REAL, no
  * hipotetico:
  *
@@ -65,6 +66,22 @@ const SEPARADOR_TERNA = "\u0000";
  *
  * Es el precio de matar un bug visible; la alternativa —no recordar nada— resucita filtros
  * que el usuario acaba de borrar, que es peor y ademas es lo que el usuario ve.
+ *
+ * VALE TAMBIEN PARA R26 (vaciar el campo retira `q`), y se decidio mirando, no por inercia.
+ * El escenario del remonte NO se da hoy por ese camino: en `/novedades` el `reset` que
+ * remonta la barra solo lo incrementa `limpiar()` (`useNovedadesFiltro.ts:235`), no el
+ * `onChange` del termino. Lo que SI se da es el otro efecto de esta memoria, y por eso el
+ * borrado del termino pasa por aqui en vez de esquivarla: dentro de la ventana en que el
+ * `replace` viaja por una transicion, `useSearchParams` sigue devolviendo la query VIEJA,
+ * asi que un segundo vaciado —teclear y borrar otra vez, algo trivial de hacer— volveria a
+ * ver `q` presente y NAVEGARIA una segunda vez. Con la memoria, `params` ya no lo lleva, la
+ * guarda de "sin cambio" corta, y la rafaga queda en UNA navegacion. De regalo cubre al
+ * consumidor futuro que si remonte al cambiar el termino.
+ *
+ * Coste asumido, el mismo limite de arriba y ni un milimetro mas ancho: tras vaciar
+ * `?q=guia123` en `/ordenes`, una llegada POSTERIOR por navegacion cliente a esa misma ruta
+ * con ese MISMO valor exacto se ve ciega hasta recargar. Otro termino, u otra ruta, se
+ * honran.
  */
 const paresBorrados = new Set<string>();
 
@@ -84,6 +101,10 @@ function ternaPar(ruta: string, nombre: string, valor: string): string {
 
 /**
  * Los params REALES menos los que se acaban de borrar en esta misma ruta.
+ *
+ * Se llama en dos momentos distintos y los dos importan: al calcular el memo de LECTURA
+ * (una vez por render) y dentro de `borrarParams` (en el instante de escribir), porque
+ * entre dos borrados del mismo manejador no hay render que refresque el memo.
  *
  * Devuelve el objeto original cuando no hay nada que suprimir: asi se conserva su
  * identidad (los tests del hook comparan referencias) y su `toString()`. Cuando si hay
@@ -168,27 +189,38 @@ export function useFiltrosUrl(activo: boolean): FiltrosUrl {
       // R23: desactivado, la URL no se toca. Sin router o sin ruta, no-op silencioso
       // (R24): no tener donde navegar no es un error del consumidor.
       if (!activo || enrutador === null || ruta === null) return;
-      const cadena = queryTrasLimpiar(params, claves);
+
+      // Se recalcula lo VISIBLE aqui, en vez de reusar el `params` memoizado del render:
+      // dos borrados pueden ocurrir en el MISMO manejador —`BuscadorFiltros.limpiarTodo`
+      // borra sus params y ademas vacia el campo, y ese vaciado dispara el borrado del
+      // termino (R26)— y entre uno y otro no hay render que refresque el memo. Sin esto,
+      // el segundo veria la query vieja, creeria que aun queda algo que quitar y navegaria
+      // por segunda vez: dos payloads RSC para un solo gesto del usuario. Con `paresBorrados`
+      // vacio esto devuelve el MISMO objeto, asi que no cuesta nada en el caso normal.
+      const visibles =
+        paramsUrl !== null ? paramsVisibles(paramsUrl, ruta) : params;
+      const cadena = queryTrasLimpiar(visibles, claves);
 
       // Se apunta lo que se retira ANTES de navegar: el remonte del consumidor puede
       // ocurrir en este mismo manejador, antes de que `useSearchParams` se entere.
       const propias = new Set(claves);
-      for (const [nombre, valor] of params.entries()) {
+      for (const [nombre, valor] of visibles.entries()) {
         if (propias.has(nombre)) paresBorrados.add(ternaPar(ruta, nombre, valor));
       }
 
       // GUARDA: si la query no cambia, no se navega. `router.replace` a la MISMA URL no
       // es gratis en el App Router —vuelve a pedir el payload RSC de la ruta—, y el caso
-      // normal de «Limpiar todo» es precisamente ese: ocho pantallas montan esta barra y
-      // casi siempre se entra a ellas SIN un solo param que borrar.
-      const actual = params.toString();
+      // normal es precisamente ese: ocho pantallas montan esta barra y casi siempre se
+      // entra a ellas SIN un solo param que borrar, tanto al pulsar «Limpiar todo» como al
+      // vaciar el campo de busqueda (R26), que es un gesto MUCHO mas frecuente.
+      const actual = visibles.toString();
       if (cadena === actual) return;
 
       // Patron copiado de `TableroDiaModule.cerrarDetalle`: se SUSTITUYE la entrada del
       // historial y no se mueve el scroll (R21, R22).
       enrutador.replace(cadena ? `${ruta}?${cadena}` : ruta, { scroll: false });
     },
-    [activo, enrutador, ruta, params],
+    [activo, enrutador, ruta, params, paramsUrl],
   );
 
   return { params, borrarParams };

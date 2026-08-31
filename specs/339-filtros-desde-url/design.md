@@ -117,7 +117,7 @@ todas sus opciones visibles, así que su valor se acepta y la poda existente
 ### 3.1 `BuscadorFiltros` — props nuevas
 
 ```ts
-/** Lee el estado inicial de la URL al entrar y limpia sus params al «Limpiar todo». */
+/** Lee el estado inicial de la URL al entrar y RETIRA sus params al «Limpiar todo» (R19) y al vaciar el campo (R26). */
 leerDeUrl?: boolean;          // default true (R23 es el opt-out)
 /** Nombre del query param del término libre. Default PARAM_TERMINO_DEFAULT. */
 terminoKey?: string;
@@ -141,7 +141,19 @@ Implementación:
   `FilterComponent` ya usa para su poda (líneas 387-398); no es una novedad de estilo.
 - `limpiarTodo()` añade, antes de lo que ya hace, la llamada a `borrarParams([terminoKey,
   ...filtros.map(f => f.key)])` (R19-R22). Los params ajenos no entran en esa lista, así
-  que sobreviven (R20).
+  que sobreviven (R20). Esa llamada va **antes** de `escribir("")`, no después: el vaciado
+  emite `""` y eso dispara por su cuenta el borrado de R26, así que borrando primero lo
+  propio queda apuntado en la memoria del hook y el borrado del término se topa con la
+  guarda de «sin cambio» — una sola navegación por gesto.
+- **R26 (añadido el 2026-08-31)** — la emisión del término pasa por un `emitir(siguiente)`
+  que, cuando `siguiente === ""`, llama a `borrarParams([terminoKey])` antes de avisar al
+  consumidor. Cuelga de la EMISIÓN y no del `onChange` del input para heredar el debounce
+  y la guarda de «sin cambio» (R26.2), y `borrarParams` se lee por ref por el mismo motivo
+  que `onChange`: el temporizador puede haberse programado varios renders antes.
+- `borrarParams` recalcula lo VISIBLE (params reales menos lo recién borrado) **en el
+  momento de escribir**, no solo en el memo del render: dos borrados pueden ocurrir en el
+  mismo manejador —el caso de `limpiarTodo` de arriba— y entre ellos no hay render que
+  refresque el memo. Sin eso el segundo veía la query vieja y navegaba otra vez.
 
 ### 3.2 `FilterComponent` — props nuevas
 

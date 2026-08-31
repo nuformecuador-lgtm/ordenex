@@ -337,3 +337,154 @@ describe("BuscadorFiltros — «Limpiar todo» sobre una barra que su consumidor
     expect(onActivosChange).not.toHaveBeenCalled();
   });
 });
+
+describe("BuscadorFiltros — vaciar el campo retira `q` de la URL (R26)", () => {
+  /**
+   * El gesto es SIEMPRE el mismo desde el punto de vista del contrato: el termino EMITIDO
+   * pasa a `""`. Da igual si se llega por la X del campo, borrando a mano o seleccionando
+   * todo y suprimiendo —los tres desembocan en el mismo `change` del input—, por eso los
+   * casos usan indistintamente uno u otro.
+   *
+   * `debounceMs={0}` donde interesa mirar la navegacion en el acto; el caso de la rafaga
+   * usa el debounce REAL, que es justo lo que se quiere probar ahi.
+   */
+  function pulsarX() {
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar Buscar" }));
+  }
+
+  it("R26 — entrando con `?q=algo`, vaciar el campo con la X deja la URL SIN `q`", () => {
+    parametros = new URLSearchParams("q=algo");
+    render(
+      <BarraConConsumidor onChange={vi.fn()} filtros={FILTROS} debounceMs={0} />,
+    );
+    expect(campo().value).toBe("algo");
+
+    pulsarX();
+
+    expect(campo().value).toBe("");
+    expect(replaceMock).toHaveBeenCalledTimes(1);
+    expect(replaceMock).toHaveBeenCalledWith("/ordenes", { scroll: false });
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("R26 — se va SOLO `q`: los params de los filtros y los AJENOS siguen ahi", () => {
+    ruta = "/cierres-admin";
+    // `cierre` es ajeno a la barra; `mensajero_id` es de un filtro OFRECIDO, y aun asi no
+    // se toca: vaciar el buscador no es «Limpiar todo».
+    parametros = new URLSearchParams("cierre=abc&q=x&mensajero_id=A");
+    render(
+      <BarraConConsumidor onChange={vi.fn()} filtros={FILTROS} debounceMs={0} />,
+    );
+
+    fireEvent.change(campo(), { target: { value: "" } });
+
+    expect(replaceMock).toHaveBeenCalledTimes(1);
+    expect(replaceMock).toHaveBeenCalledWith("/cierres-admin?cierre=abc&mensajero_id=A", {
+      scroll: false,
+    });
+  });
+
+  it("R26 — vaciar el campo cuando la URL NO trae `q` no navega en absoluto", () => {
+    // Entra sin params —el caso normal en las ocho pantallas que montan la barra—, teclea
+    // y borra. La query resultante seria identica a la actual, asi que un `replace` aqui
+    // seria un refetch RSC donde antes no habia navegacion.
+    render(
+      <BarraConConsumidor onChange={vi.fn()} filtros={FILTROS} debounceMs={0} />,
+    );
+
+    fireEvent.change(campo(), { target: { value: "hola" } });
+    fireEvent.change(campo(), { target: { value: "" } });
+
+    expect(replaceMock).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("R26 — vaciar cuando el termino emitido YA era `\"\"` no emite ni navega", () => {
+    // Con `minChars`, teclear por debajo del minimo deja el termino emitido en `""` aunque
+    // el campo tenga texto. Borrarlo despues NO es un cambio del termino, y esa es la unica
+    // forma real de llegar aqui: un `change` de `""` a `""` React ni lo entrega.
+    parametros = new URLSearchParams("zona_id=Z");
+    const onChange = vi.fn();
+    render(
+      <BarraConConsumidor
+        onChange={onChange}
+        filtros={FILTROS}
+        minChars={3}
+        debounceMs={0}
+      />,
+    );
+
+    fireEvent.change(campo(), { target: { value: "ab" } });
+    fireEvent.change(campo(), { target: { value: "" } });
+
+    // Las dos afirmaciones miden guardas DISTINTAS y por eso van juntas: `onChange` mide la
+    // de "sin cambio" de la barra (el termino emitido no se ha movido de `""`) y
+    // `replaceMock` la del hook (la query resultante seria identica). Si un dia se quita
+    // cualquiera de las dos, la otra sigue tapando el sintoma, asi que hay que exigir ambas.
+    expect(onChange).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it("R26 — teclear y borrar rapido produce UNA navegacion, no una rafaga", () => {
+    vi.useFakeTimers();
+    try {
+      parametros = new URLSearchParams("q=abc");
+      render(<BarraConConsumidor onChange={vi.fn()} filtros={FILTROS} />);
+
+      // Cuatro cambios dentro de la misma ventana de debounce, dos de ellos a vacio.
+      fireEvent.change(campo(), { target: { value: "abcd" } });
+      fireEvent.change(campo(), { target: { value: "" } });
+      fireEvent.change(campo(), { target: { value: "z" } });
+      fireEvent.change(campo(), { target: { value: "" } });
+
+      // Antes de que venza el debounce no se ha tocado nada: la escritura cuelga de la
+      // EMISION, no del `onChange` crudo del input.
+      expect(replaceMock).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1000);
+
+      expect(replaceMock).toHaveBeenCalledTimes(1);
+      expect(replaceMock).toHaveBeenCalledWith("/ordenes", { scroll: false });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("R18/R26 — escribir un termino NUEVO despues de vaciar no vuelve a poblar la URL", () => {
+    // Asimetria deliberada y documentada en el componente: la barra RESTA de la query,
+    // nunca la escribe. Si algun dia se decide lo contrario, este caso cae y obliga a
+    // revisar el contrato en vez de dejarlo pasar como un cambio menor.
+    parametros = new URLSearchParams("q=algo");
+    render(
+      <BarraConConsumidor onChange={vi.fn()} filtros={FILTROS} debounceMs={0} />,
+    );
+
+    fireEvent.change(campo(), { target: { value: "" } });
+    expect(replaceMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(campo(), { target: { value: "termino-nuevo" } });
+
+    expect(replaceMock).toHaveBeenCalledTimes(1);
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("R19/R26 — «Limpiar todo» con el campo lleno sigue siendo UNA sola navegacion", () => {
+    // Los dos caminos de escritura se cruzan aqui: `limpiarTodo` borra sus params y
+    // ademas vacia el campo, lo que dispara el borrado de R26. Sin el orden y la guarda
+    // correctos, esto navegaria dos veces (una sin `q`, otra sin los filtros).
+    parametros = new URLSearchParams("cierre=abc&q=x&mensajero_id=A");
+    render(
+      <BarraConConsumidor
+        onChange={vi.fn()}
+        filtros={FILTROS}
+        debounceMs={0}
+        onLimpiarTodo={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar todo" }));
+
+    expect(replaceMock).toHaveBeenCalledTimes(1);
+    expect(replaceMock).toHaveBeenCalledWith("/ordenes?cierre=abc", { scroll: false });
+  });
+});

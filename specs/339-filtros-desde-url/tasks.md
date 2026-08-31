@@ -137,6 +137,18 @@ entrando con params en la URL.
 archivo bajo `app/`**; el diff de la ficha lo confirma.
 **Depende de:** T3.2, T4.1
 
+### [x] T6.1 Vaciar el campo retira `q` — R26, R26.1, R26.2, R26.3
+Añadido el 2026-08-31 sobre la ficha ya implementada, a petición del humano. `emitir()`
+llama a `borrarParams([terminoKey])` cuando el término emitido pasa a `""`.
+**Hecho:** tests de render en `tests/unit/components/buscador-filtros-url.test.tsx` —
+entrando con `?q=algo`, vaciar el campo deja la URL sin `q`; los params de filtros y los
+ajenos sobreviven; vaciar sin `q` en la URL no llama a `replace`; teclear y borrar deprisa
+produce **una** navegación; un término nuevo posterior no repuebla la URL; «Limpiar todo»
+con el campo lleno sigue siendo una sola navegación. Los dos guardias de R25 siguen verdes
+(R26.3). Los seis casos están mutación-probados: cinco mutaciones distintas del código
+tumban al menos un caso.
+**Depende de:** T3.3
+
 ### [x] T5.2 Guardia de no-escritura — R18
 Test que recorre un ciclo de uso completo (teclear, abrir el selector, marcar dos
 opciones, retirar un filtro) y afirma **cero** llamadas a `router.replace`/`push`.
