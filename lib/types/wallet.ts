@@ -159,7 +159,7 @@ export type WalletEgresoNombrado = (typeof WALLET_EGRESO_NOMBRADO_SEED)[number];
 
 /**
  * Ficha 339 (T1.1, design §2.1) — TODO egreso propio con fila propia en la columna: los cuatro
- * conceptos que `DesgloseEgresosDTO` ya abria MAS los dos que la 339 saca del cubo.
+ * conceptos que `DesgloseEgresosDTO` ya abria MAS los dos que la 343 saca del cubo.
  *
  * Se escribe como EXTENSION (spread) y no como una segunda lista a mano —el mismo patron con el
  * que `WALLET_INGRESO_PROPIO_SEED` extiende a `WALLET_INGRESO_CONCEPTO_SEED`—: el dia que un
@@ -333,10 +333,10 @@ export type ComposicionGananciaDTO = {
    */
   egresos: Record<WalletEgresoNombrado, string>;
   /**
-   * Egresos propios que NO tienen fila propia (D2 de la 231; ficha 339: el conjunto contra el
+   * Egresos propios que NO tienen fila propia (D2 de la 231; ficha 343: el conjunto contra el
    * que se complementa pasa de `WALLET_EGRESO_DESGLOSADO_SEED` a `WALLET_EGRESO_CON_FILA_SEED`).
    * Se deriva por COMPLEMENTO, no por lista, para que la columna de la tarjeta siga sumando
-   * `egresosPropios` aunque el catalogo gane un egreso propio (R26 de la 231, R11 de la 339).
+   * `egresosPropios` aunque el catalogo gane un egreso propio (R26 de la 231, R11 de la 343).
    */
   otrosEgresos: string;
   /** Σ de egresos propios. Identico a `CajaResumenDTO.egresosPropios` (R26). */

@@ -26,7 +26,7 @@ import { HAY_BASE_DE_DATOS, crearPrismaDeTest, enTransaccionRevertida } from "./
  *  6. los dos agregados NO cambiaron de SQL al ganar el repositorio la clave `categorias`.
  *
  * La mutacion exigida por T4.1 —quitar la restriccion de categoria del `WHERE`— se ejecuto y
- * se revirtio; su salida ROJA queda en `progress/impl_339.md`.
+ * se revirtio; su salida ROJA queda en `progress/impl_343.md`.
  *
  * ── Aislamiento y no-vacuidad ────────────────────────────────────────────────────────────
  *
@@ -113,7 +113,7 @@ async function sembrar(tx: Tx): Promise<{ ids: string[]; porCategoria: Map<strin
     // Los pagos a mensajeros llegan SIN descripcion en produccion (lo escribe asi
     // `WalletMensajeroFeedService`): se siembra igual, para que el detalle se mida sobre el
     // dato real y no sobre uno comodo.
-    descripcion: fila.categoria === "egreso_pago_mensajero" ? null : `ficha 339 — ${fila.monto}`,
+    descripcion: fila.categoria === "egreso_pago_mensajero" ? null : `ficha 343 — ${fila.monto}`,
     registradoPor: null,
     fechaMovimiento: instanteDelDia(fila.dia),
   }));
@@ -129,7 +129,7 @@ async function sembrar(tx: Tx): Promise<{ ids: string[]; porCategoria: Map<strin
   return { ids: movimientos.map((m) => m.id as string), porCategoria };
 }
 
-describeSiHayBase("ficha 339 — el detalle de una fila contra Postgres (R18/R19/R20/R27/R31/R33)", () => {
+describeSiHayBase("ficha 343 — el detalle de una fila contra Postgres (R18/R19/R20/R27/R31/R33)", () => {
   let prisma: PrismaClient;
 
   beforeAll(() => {

@@ -177,7 +177,7 @@ export function ComposicionGananciaCard({
           >
             {/* Ficha 339 (Q1, decisión cerrada): «cada fila se puede abrir» es CADA fila. Las
                 siete de ingreso también, y por el mismo mecanismo: una asimetría nueva entre
-                las dos columnas sería exactamente el defecto que la 339 vino a cerrar. */}
+                las dos columnas sería exactamente el defecto que la 343 vino a cerrar. */}
             {WALLET_INGRESO_PROPIO_SEED.map((categoria) => (
               <FilaComposicion
                 key={categoria}

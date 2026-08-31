@@ -253,7 +253,6 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findCausasDevueltaVigentes: vi.fn(async () => new Map()),
     // Feature 106: canal integrador (API por key), no ejercitado aqui.
     listByOwner: vi.fn(async () => ({ items: [], total: 0 })),
-    findDetalleByNumGuiaForOwner: vi.fn(async () => null),
     cancelarViaApi: vi.fn(async () => ({ status: "not_found" as const })),
     // Feature 177: consulta por identificador libre + PDF de etiquetas, no ejercitada aqui.
     findByGuiaORemisionForOwner: vi.fn(
@@ -416,8 +415,10 @@ describe("cargarViaApi — validacion de valor heredada (R13, D3 override)", () 
     const repo = buildRepo();
     const r = await buildService(repo).cargarViaApi([row({ monto_cobrar: "abc" })], APIKEY);
     if (r.status === "ok") {
-      expect(r.summary.filas[0].resultado).toBe("error");
-      expect(r.summary.filas[0].errores).toHaveProperty("monto_cobrar");
+      // 2026-08-31: la fila que falla NO esta en `filas`; se lee en `errores`.
+      expect(r.summary.filas).toHaveLength(0);
+      expect(r.summary.errores[0].resultado).toBe("error");
+      expect(r.summary.errores[0].errores).toHaveProperty("monto_cobrar");
     }
     expect(repo.createManyOrdenesConGuia).not.toHaveBeenCalled();
   });
@@ -426,7 +427,7 @@ describe("cargarViaApi — validacion de valor heredada (R13, D3 override)", () 
     const repo = buildRepo();
     const r = await buildService(repo).cargarViaApi([row({ monto_cobrar: "-5" })], APIKEY);
     if (r.status === "ok") {
-      expect(r.summary.filas[0].errores).toHaveProperty("monto_cobrar");
+      expect(r.summary.errores[0].errores).toHaveProperty("monto_cobrar");
     }
   });
 
@@ -517,7 +518,10 @@ describe("cargarViaApi — dedup y exito parcial (R7/R11/R12)", () => {
       expect(r.summary.total).toBe(2);
       expect(r.summary.creadas).toBe(1);
       expect(r.summary.conError).toBe(1);
-      expect(r.summary.filas[1].errores).toHaveProperty("provincia");
+      // La valida sigue en `filas`; la mala se lee en `errores`, conservando su indice.
+      expect(r.summary.filas).toHaveLength(1);
+      expect(r.summary.errores[0]).toMatchObject({ fila: 2, numRemision: "REM-B" });
+      expect(r.summary.errores[0].errores).toHaveProperty("provincia");
     }
     // Solo la valida se persiste.
     expect(conGuiaArg(repo)).toHaveLength(1);
@@ -532,7 +536,8 @@ describe("cargarViaApi — guarda de seed de estado", () => {
     if (r.status === "ok") {
       expect(r.summary.creadas).toBe(0);
       expect(r.summary.conError).toBe(1);
-      expect(r.summary.filas[0].errores).toHaveProperty("estatus");
+      expect(r.summary.filas).toHaveLength(0);
+      expect(r.summary.errores[0].errores).toHaveProperty("estatus");
     }
     expect(repo.createManyOrdenesConGuia).not.toHaveBeenCalled();
   });
@@ -599,7 +604,7 @@ describe("cargarViaApi — costoEnvio flete + IVA (feature 98)", () => {
     );
     if (r.status === "ok") {
       const dup = r.summary.filas.find((f) => f.resultado === "duplicada")!;
-      const err = r.summary.filas.find((f) => f.resultado === "error")!;
+      const err = r.summary.errores[0];
       // Las filas NO tienen costoEnvio (vive solo en el bloque `ordenes`).
       expect(dup).not.toHaveProperty("costoEnvio");
       expect(err).not.toHaveProperty("costoEnvio");
@@ -760,7 +765,7 @@ describe("cargarViaApi — no-regresión del contrato 88 frente a las plantillas
     // Sin `canton` propio, la fila muere donde siempre: en resolveGeo, bajo `canton`.
     if (r.status === "ok") {
       expect(r.summary.creadas).toBe(0);
-      expect(r.summary.filas[0].errores).toHaveProperty("canton");
+      expect(r.summary.errores[0].errores).toHaveProperty("canton");
     }
   });
 });
@@ -950,13 +955,14 @@ describe("cargarViaApi — lote MIXTO: unas resuelven y otras no (274/R27/R28/R3
     if (r.status !== "ok") return;
 
     const ok = r.summary.filas.find((f) => f.numRemision === "REM-OK")!;
-    const sin = r.summary.filas.find((f) => f.numRemision === "REM-SIN")!;
+    const sin = r.summary.errores.find((f) => f.numRemision === "REM-SIN")!;
     expect(ok).toMatchObject({ resultado: "creada", numGuia: 1000 });
     expect(sin).toMatchObject({ fila: 2, resultado: "error" });
     // R38: se compara contra la CONSTANTE importada, no contra un literal re-escrito.
     expect(sin.errores).toEqual({ tarifa: [MSG_FILA_SIN_TARIFA] });
-    // La fila degradada no conserva el `estatus` de "creada" que llego a tener.
-    expect(sin.estatus).toBeUndefined();
+    // La fila degradada sale de `filas` entera: no deja ahi un resto con su `estatus`.
+    expect(r.summary.filas.map((f) => f.numRemision)).toEqual(["REM-OK"]);
+    expect(sin).not.toHaveProperty("estatus");
 
     // El bloque `ordenes` solo trae la creada, con su costo real.
     expect(r.summary.ordenes).toHaveLength(1);
@@ -1010,11 +1016,16 @@ describe("cargarViaApi — lote MIXTO: unas resuelven y otras no (274/R27/R28/R3
     const r = await buildService(repo, tarifaRepo).cargarViaApi(rows, APIKEY);
 
     if (r.status !== "ok") return;
-    const { total, creadas, duplicadas, conError, filas } = r.summary;
+    const { total, creadas, duplicadas, conError, filas, errores } = r.summary;
     expect(total).toBe(rows.length); // lo RECIBIDO, no lo creado (141/R30-R33)
     expect(creadas + duplicadas + conError).toBe(total);
     expect({ creadas, duplicadas, conError }).toEqual({ creadas: 1, duplicadas: 1, conError: 2 });
-    expect(filas).toHaveLength(rows.length); // la degradada sigue siendo UNA fila
+    // 2026-08-31: el lote sigue entero, pero repartido en DOS listas. Ninguna fila se
+    // pierde ni se cuenta dos veces, y la degradada sigue siendo UNA sola fila.
+    expect(filas.length + errores.length).toBe(rows.length);
+    expect(errores).toHaveLength(conError);
+    expect(filas.every((f) => f.resultado !== "error")).toBe(true);
+    expect(errores.map((e) => e.numRemision).sort()).toEqual(["REM-GEO", "REM-SIN"]);
   });
 });
 
@@ -1065,7 +1076,9 @@ describe("cargarViaApi — nadie llega a resolver: 200, no 409 (274/R30)", () =>
     if (r.status !== "ok") return;
     expect(r.summary.conError).toBe(2);
     expect(r.summary.creadas).toBe(0);
-    for (const f of r.summary.filas) {
+    expect(r.summary.filas).toHaveLength(0); // ninguna entro
+    expect(r.summary.errores).toHaveLength(2);
+    for (const f of r.summary.errores) {
       expect(f.errores).toHaveProperty("distrito");
       expect(f.errores).not.toHaveProperty("tarifa");
     }

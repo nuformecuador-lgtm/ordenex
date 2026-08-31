@@ -328,7 +328,7 @@ export function categoriasDeFilaComposicion(
  *  - `otrosEgresos` es el COMPLEMENTO: todo egreso propio que no tenga FILA PROPIA en la
  *    columna. Por eso «los cuatro conceptos del desglose + los nombrados + otros» suman
  *    `totalEgresos` = `egresosPropios` aunque el catalogo gane manana un egreso propio (R26 de
- *    la 231, R11/R13 de la 339). Escribir aqui la lista de las categorias que hoy faltan
+ *    la 231, R11/R13 de la 343). Escribir aqui la lista de las categorias que hoy faltan
  *    dejaria esa suma a merced de que alguien se acordara de ampliarla.
  *
  * Ficha 339 (T2.2): el conjunto contra el que se complementa pasa de

@@ -134,7 +134,7 @@ function pintar({
 
 /**
  * El conjunto con el que la 45 y la 158 medían: el total de la columna es el suyo, y los DOS
- * conceptos que la 339 saca del cubo están en cero — que es exactamente el conjunto de aquellas
+ * conceptos que la 343 saca del cubo están en cero — que es exactamente el conjunto de aquellas
  * features, cuatro conceptos y nada más.
  */
 function pintarComoLa158(overrides: Partial<ComposicionGananciaDTO> = {}) {
@@ -143,7 +143,7 @@ function pintarComoLa158(overrides: Partial<ComposicionGananciaDTO> = {}) {
       ...COMPOSICION,
       egresos: { egreso_pago_mensajero: "0.00", egreso_ajuste: "0.00" },
       otrosEgresos: "0.00",
-      hayOtrosEgresos: false, // ficha 339 (R7): sin residuo, la fila «Otros» no se pinta
+      hayOtrosEgresos: false, // ficha 343 (R7): sin residuo, la fila «Otros» no se pinta
       totalEgresos: DESGLOSE.total,
       ...overrides,
     },
@@ -231,7 +231,7 @@ describe("Feature 158/R32 — la indemnización es una fila propia y suma al tot
       composicion: {
         ...COMPOSICION,
         otrosEgresos: "0.00",
-        hayOtrosEgresos: false, // ficha 339 (R7)
+        hayOtrosEgresos: false, // ficha 343 (R7)
         totalEgresos: "12345679127.49",
       },
     });
@@ -555,7 +555,7 @@ describe("ComposicionGananciaCard — qué NO entra (R29)", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
-// PROPIAS de la FICHA 339 — «Otros» deja de esconder el gasto más grande.
+// PROPIAS de la FICHA 343 — «Otros» deja de esconder el gasto más grande.
 // ─────────────────────────────────────────────────────────────────────────────────────────
 
 describe("Ficha 339 — cada gasto con su nombre (R1/R2/R3/R5)", () => {

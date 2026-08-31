@@ -48,7 +48,7 @@ export const COMPOSICION_DETALLE_ERROR =
   "No se pudieron cargar los movimientos de esta fila. Volvé a abrirla en un momento.";
 
 /**
- * R1/R2/R5 — el rotulo de las dos filas de egreso que la ficha 339 saca de «Otros gastos de
+ * R1/R2/R5 — el rotulo de las dos filas de egreso que la ficha 343 saca de «Otros gastos de
  * Ordenex», con la MISMA voz plural que sus vecinas de la columna («Gastos fijos», «Sueldos»,
  * «Indemnizaciones»).
  *

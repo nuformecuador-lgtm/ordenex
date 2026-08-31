@@ -407,7 +407,7 @@ describe("derivarComposicionGanancia — la ganancia concepto por concepto (R23/
 });
 
 // =========================================================================================
-// FICHA 339 (T2.4) — las filas nuevas, la bandera del servidor y las cifras que NO se mueven.
+// FICHA 343 (T2.4) — las filas nuevas, la bandera del servidor y las cifras que NO se mueven.
 // =========================================================================================
 
 /**
@@ -425,7 +425,7 @@ const LIBRO_CON_LAS_FILAS_NUEVAS: AgregadoCajaRow[] = [
   fila("egreso_pago_tienda", "9999.00"), // de TERCEROS: nunca entra en la ganancia
 ];
 
-describe("ficha 339 — las filas nuevas de la columna de egresos (R4/R9/R12/R14)", () => {
+describe("ficha 343 — las filas nuevas de la columna de egresos (R4/R9/R12/R14)", () => {
   it("R4: cada cubeta de `egresos` suma SOLO su categoria", () => {
     const composicion = derivarComposicionGanancia(LIBRO_CON_LAS_FILAS_NUEVAS);
 
@@ -605,7 +605,7 @@ describe("R38 — las siete cifras y los cuatro conceptos no cambian de valor", 
     // Y la consecuencia FIRMADA en D2: esos cuatro NO son `egresosPropios`. El hueco es el pago
     // al mensajero, y es exactamente lo que `otrosEgresos` recoge para que la tarjeta cuadre.
     const composicion = derivarComposicionGanancia(LIBRO_DE_NO_REGRESION);
-    // FICHA 339 (R12/R14): los 940 del pago al mensajero siguen en la columna y siguen en el
+    // FICHA 343 (R12/R14): los 940 del pago al mensajero siguen en la columna y siguen en el
     // total — lo que cambia es la CUBETA. «Otros» se queda a cero porque en este libro no hay
     // ninguna categoria sin fila propia, y por eso esa fila no se pintaria (R7).
     expect(composicion.egresos.egreso_pago_mensajero).toBe("940.00");

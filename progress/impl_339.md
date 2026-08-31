@@ -1,830 +1,489 @@
-# Ficha 339 — bitácora de implementación (BACKEND, bloques B0–B4)
+# 339 — Bitácora de implementación
 
-> Zona `fullstack`, backend primero. **Este documento cubre B0, B1, B2, B3 y B4.**
-> Los bloques **B5 (la tarjeta) y B6 (censos ajenos de frontend)** los implementa el agente de
-> frontend; lo que este bloque le deja cableado está en § 8.
->
-> **AL DÍA (2026-08-31): B5 y B6 ya están hechos y su bitácora es la SEGUNDA MITAD de este
-> archivo (§ 10 en adelante).** El párrafo de arriba se conserva tal cual porque describe el
-> estado en el que este bloque terminó, no el de hoy.
+Rama: `feature/339-filtros-desde-url` · worktree `C:/w335` · base `origin/dev` (2f9f3f6f).
 
-Rama: `fix/339-otros-gastos`. Fecha: 2026-08-31.
+## T0.1 — Baseline (2026-08-31, antes de tocar nada)
+
+- `components/shared/BuscadorFiltros.tsx` y `components/shared/FilterComponent.tsx`
+  **idénticos a `origin/dev`** (`git diff --stat origin/dev --` sin salida). La 326 no los
+  ha movido todavía.
+- `pnpm db:generate` fue necesario: el worktree recién creado no tenía cliente Prisma y el
+  typecheck daba 14 errores fantasma `Module '@prisma/client' has no exported member`.
+  **No son rojos del repo**, son árbol sin generar.
+- `pnpm typecheck` → **verde, 0 errores**.
+- Subconjunto de tests que esta ficha puede tocar
+  (`tests/unit/components`, `CierresAdminFiltros`, `HistoricoFiltros`, `NovedadesBuscador`,
+  `CierresAdminDeepLink`, `descarga/SateliteDescarga`, `tests/components/paginacion`):
+  **77 archivos / 1053 tests, 0 rojos**, 192 s.
+
+**Baseline de rojos preexistentes en el perímetro de la ficha: 0.**
 
 ---
 
-## 1 — B0: la foto de antes de tocar nada
+## Qué se construyó
 
-**T0.1 — los tres censos ajenos, en verde y con sus números anotados.**
+Cuatro piezas, ninguna bajo `app/`. La restricción dura del diseño (§6) —«la 339 no toca
+ni un archivo bajo `app/`»— **se cumplió**: el diff son 2 archivos compartidos, 2 archivos
+nuevos y sus tests.
 
-```
-$ pnpm exec vitest run tests/unit/descarga/cobertura-tablas.guardia.test.ts \
-    tests/integration/wallet-page.test.tsx \
-    tests/components/paginacion/paginacion-transversal.test.tsx
+### Archivos creados
+| Archivo | Qué es |
+| --- | --- |
+| `lib/utils/filtros-url.ts` | El **códec puro**. Sin React, sin DOM, sin router. Ahí viven R4 y R8-R16 y son verificables sin renderizar nada. |
+| `hooks/useFiltrosUrl.ts` | La **única pieza que toca `next/navigation`**. Congela la lectura y expone `borrarParams`. |
+| `tests/unit/utils/filtros-url.test.ts` | Formato de valores y borrado (R4, R8, R9, R15, R19-R21). |
+| `tests/unit/utils/filtros-url-kinds.test.ts` | Validación por `kind` (R10-R14, R16). |
+| `tests/unit/hooks/filtros-url-hook.test.tsx` | El hook: entornos sin router, borrado, las dos guardas. |
+| `tests/unit/components/buscador-filtros-url.test.tsx` | La barra: precarga, activación, «Limpiar todo», no-escritura. |
+| `tests/unit/components/buscador-filtros-url-sin-router.test.tsx` | R24 con `next/navigation` mockeado a medias (archivo aparte: el mock es por archivo). |
+| `tests/unit/components/filter-component-url.test.tsx` | El orquestador: siembra, orden de montaje, poda, controles no controlados. |
+| `tests/unit/components/filtros-url-herencia.test.tsx` | **T5.1**: `NovedadesFiltrosBarra` real hereda la capacidad sin editarlo. |
+| `tests/unit/guards/filtros-url-r25.test.ts` | **R25 como assert ejecutable**, no como «lint en verde». |
 
- Test Files  3 passed (3)
-      Tests  25 passed (25)
-   Duration  9.89s
-```
+### Archivos modificados
+| Archivo | Qué cambió |
+| --- | --- |
+| `components/shared/BuscadorFiltros.tsx` | +79/-5. Props `leerDeUrl` (default `true`) y `terminoKey` (default `"q"`). Término en inicializador perezoso; efecto de montaje de una sola pasada que emite claves y término; `limpiarTodo` borra los params propios. |
+| `components/shared/FilterComponent.tsx` | +192/-10. Prop `leerDeUrl`. Selección en inicializador perezoso; siembra por crecimiento **dentro del efecto de poda**; cierre tras el primer gesto; `valorInicial` en `TextFilter` y `defaultRange` en `DateRangeFilter` para que el control no mienta. |
+| `specs/339-filtros-desde-url/tasks.md` | Tasks marcadas `[x]`. |
 
-| censo | antes | después (backend) | quién lo mueve |
+**Las dos piezas de diseño intocables se respetaron:**
+1. **El reparto.** `BuscadorFiltros` lee el término y decide qué claves activar (es el único
+   que ve `filtros` y puede llamar a `onActivosChange`); `FilterComponent` lee los valores
+   (es el único que tiene `kind`/`options` para validarlos).
+2. **La lectura inicial va en inicializador perezoso de `useState`, no en un efecto**, en los
+   dos componentes. R25 lo verifica ahora un guardia que corre ESLint de verdad.
+
+**La poda (R17) no hizo falta desactivarla.** La siembra sucede siempre sobre claves ya
+declaradas (`montados`), así que la poda nunca las ve como sobrantes. Además la siembra por
+crecimiento se metió **dentro del mismo efecto de poda** en vez de en uno nuevo: los dos
+reaccionan al mismo disparador (`clavesMontadas`) y escriben el mismo estado, así que
+separarlos habría dejado el resultado a merced del orden en que corrieran.
+
+---
+
+## T6.1 — `Suspense` / prerender (design §4)
+
+`pnpm exec next build` (**nunca** `pnpm build`, que encadena `migrate deploy` contra una base
+real): **exit 0**, `✓ Compiled successfully in 23.3s`, `✓ Generating static pages (53/53)`.
+**Ninguna ruta se quejó** por `useSearchParams` y **las 38 rutas de `(app)` siguen marcadas
+`ƒ` (dynamic)**, que es lo que el diseño predecía: viven bajo un layout autenticado. No hizo
+falta ni `leerDeUrl={false}` en ningún consumidor ni un `Suspense` local.
+
+---
+
+## T6.2 — Mapa de trazabilidad `R<n> -> test`
+
+**25 de 25 requisitos tienen un test nombrado.** 110 casos etiquetados sobre 87 `it` en
+**9 archivos**.
+
+**«Rojo demostrado» = se vio fallar de verdad contra un árbol roto**, no «debería fallar».
+Son **6** requisitos: los 5 de la primera corrección (verificados restaurando
+`FilterComponent.tsx` a `41c774c9`) más **R17**, que la segunda revisión detectó que pasaba
+igual con y sin arreglo (M5) y que ahora cae bajo mutación.
+
+| Requisito | Test que lo verifica | Otros | Rojo demostrado |
 | --- | --- | --- | --- |
-| `TOTAL_ARCHIVOS_CON_DATATABLE` | 28 | **28 (sin cambio)** | B6.1, cuando nazca `DetalleFilaComposicion.tsx` |
-| `TOTAL_INSTANCIAS_DATATABLE` | 28 | **28 (sin cambio)** | B6.1 |
-| `totalCensado` (`censo-tablas.ts`) | 29 = 19 `con_descarga` + 10 `fuera` | **29 (sin cambio)** | B6.1 → 30 = 19 + 11 |
-| censo de paginación (`paginacion-transversal`) | 13 | **13 (sin cambio)** | nadie: el backend NO declara ninguna `PAGINACION_*_LABEL` |
+| R1 | `filtros-url.test.ts`::«R1 — el termino libre llega recortado desde su param» | 5 | — |
+| R2 | `filtros-url-herencia.test.tsx`::«R2/R3/R5 — entrando por `?zona=…` el control queda con esa zona SELECCIONADA cuando llega el catalogo» | 6 | **sí** |
+| R3 | `filter-component-url.test.tsx`::«R3/R5 — un catalogo que llega DESPUES del montaje siembra la clave que quedo pendiente» | 9 | **sí** |
+| R4 | `filtros-url.test.ts`::«R4 — el nombre del param es exactamente FilterDef.key, sin prefijo ni transformacion» | 1 | — |
+| R5 | `filter-component-url.test.tsx`::«R3/R5 — un catalogo que llega DESPUES del montaje siembra la clave que quedo pendiente» | 3 | **sí** |
+| R6 | `buscador-filtros-url.test.tsx`::«R1/R6 — sin params el campo aparece vacio» | 3 | — |
+| R7 | `filter-component-url.test.tsx`::«R7 — cambiar los params ANTES de declarar el filtro no siembra el valor nuevo» | 5 | **sí** |
+| R8 | `filtros-url.test.ts`::«R8 — parte un param por coma en una lista de valores» | 3 | — |
+| R9 | `filtros-url.test.ts`::«R9 — concatena las apariciones repetidas en el orden de la URL» | — | — |
+| R10 | `filtros-url-kinds.test.ts`::«R10 — acepta un atajo ofrecido en la terna `atajo,desde,hasta`» | 7 | — |
+| R11 | `filtros-url-kinds.test.ts`::«R11/R16 — cualquier otro valor descarta el param» | — | — |
+| R12 | `filtros-url-kinds.test.ts`::«R12 — se queda con el PRIMER valor valido y descarta el resto» | 1 | — |
+| R13 | `filtros-url-kinds.test.ts`::«R13 — acepta el valor recortado cuando alcanza minChars» | 4 | — |
+| R14 | `filtros-url-kinds.test.ts`::«R14 — conserva los valores declarados y descarta los que no estan en options» | 2 | — |
+| R15 | `filtros-url.test.ts`::«R15 — un param que no corresponde a ningun filtro ofrecido no activa nada» | 3 | — |
+| R16 | `filtros-url-kinds.test.ts`::«R14/R16 — si ningun valor esta declarado, la clave no aparece en la seleccion» | 6 | — |
+| R17 | `filter-component-url.test.tsx`::«R17 — cuando la poda SI tiene trabajo, se lleva lo que sobra y conserva lo sembrado» | 1 | **sí** |
+| R18 | `filtros-url-hook.test.tsx`::«R18/R22 — «Limpiar todo» sin un solo param propio que borrar NO llama a replace» | 2 | — |
+| R19 | `filtros-url.test.ts`::«R19 — quita el param del termino y las claves propias» | 6 | — |
+| R20 | `filtros-url.test.ts`::«R20 — conserva los params ajenos con su valor y sin reordenarlos» | 4 | — |
+| R21 | `filtros-url.test.ts`::«R21 — sin ningun par restante devuelve cadena vacia» | 2 | — |
+| R22 | `filtros-url-hook.test.tsx`::«R19/R20/R22 — replace recibe la ruta con SOLO los params ajenos y { scroll: false }» | 3 | — |
+| R23 | `filtros-url-hook.test.tsx`::«R23 — con activo=false los params se ven vacios y la URL no se toca» | 2 | — |
+| R24 | `filtros-url-hook.test.tsx`::«R24 — mock PARCIAL sin useSearchParams ni usePathname: no lanza y la URL se ve vacia» | 4 | — |
+| R25 | `filtros-url-r25-propiedad.test.tsx`::«R25 — mutar los query params tras el montaje no entra por la siembra: gana la foto de entrada» | 3 | **sí** |
 
-El backend no añade ninguna `<DataTable>` ni ninguna constante con el prefijo `PAGINACION_`, así que
-**dos de las tres guardias no se movieron**. La tercera —el barrido de STRING de
-`wallet-page.test.tsx`— sí se tocó, porque el DTO gana dos claves; está en § 5.
+## T6.3 — Gate: `./init.sh --rapido` desde `C:/w335`
 
-**T0.2 — los cuatro símbolos, leídos EN EL ARCHIVO REAL (no en el grafo).**
+**Veredicto: `== init OK ==`.**
 
-| símbolo | archivo | línea (antes de esta ficha) |
+| Tramo | Resultado |
+| --- | --- |
+| Modo | `✓ el cambio no toca esquema, tipos compartidos, config ni dinero: el modo rapido basta` |
+| `pnpm run typecheck` | **`✓ typecheck paso`** — 0 errores |
+| `pnpm run lint` | **`✓ lint paso`** — `✖ 127 problems (0 errors, 127 warnings)`. **Los 127 avisos son preexistentes de `dev`** (imports sin usar en `app/`, `<img>` en `Sidebar`, un `exhaustive-deps` en `CobroVehiculoTarifas`). Medido aparte sobre los **12 archivos de la ficha**: `exit 0`, **sin una sola línea de salida → 0 errores y 0 avisos**. |
+| Tests relacionados (`--changed origin/dev`) | **82 archivos, 1118 passed + 17 skipped (1135)** — **0 rojos** |
+| Guardias | **166 archivos, 2517 passed, 1 failed (2518)** |
+| Comparación con el baseline | **`✓ tests: sin rojos nuevos (1 archivo rojo sobre 247 ejecutados, todos en el baseline conocido)`** |
+
+**El único rojo es ajeno y estaba ya declarado.** Es
+`tests/unit/guards/superficie-de-uso.guardia.test.ts`, que señala
+`lib/actions/tarifas.ts:67 obtenerTarifa` — deuda de la cascada de tarifas (ficha 274),
+inscrita en `tests/baseline-rojos.json` con motivo y fecha desde el 2026-08-28. **No tiene
+camino causal con este diff**: esta ficha no toca `lib/actions/`, ni Server Actions, ni
+`app/`. **Delta de rojos contra el baseline de T0.1: 0.**
+
+Ningún rojo intermitente apareció en las corridas (el gate se ejecutó tres veces y el
+conjunto de rojos fue idéntico), así que no hay nada que descartar como flake de saturación
+ni nada que proponer para el baseline.
+
+---
+
+## Decisiones que hubo que tomar y no estaban en el spec
+
+Cuatro. Las dos primeras son **bugs reales que el spec no preveía** y que se arreglaron; las
+otras dos son límites que se documentan en vez de taparse.
+
+### 1. «Limpiar todo» no navega si la URL no cambia
+El caso NORMAL de las 8 pantallas es entrar **sin params**. Tal cual estaba escrito el
+diseño, pulsar «Limpiar todo» habría disparado un `router.replace` **a la misma URL** en
+todas ellas, y en el App Router eso es una navegación real (refetch del payload RSC) donde
+antes no había ninguna. `borrarParams` compara ahora la query resultante con la actual y no
+llama a `replace` si son idénticas.
+
+### 2. La memoria de lo recién borrado (el bug del remonte)
+**Verificado en el código, no supuesto.** `NovedadesFiltrosBarra.tsx:74` le pasa
+`key={filtro.reset}` a `BuscadorFiltros`, y `useNovedadesFiltro.ts:229-235` incrementa ese
+`reset` dentro del `onLimpiarTodo`. Secuencia al pulsar «Limpiar todo» con `?q=guia&zona=A`:
+`borrarParams` llama a `replace`; en el mismo manejador el consumidor incrementa `reset` y
+React **remonta la barra en ese mismo commit**; el `replace` de Next viaja por una transición
+y **todavía no ha actualizado `useSearchParams`**; la barra recién montada lee los params
+viejos y **resucita el término y el filtro que el usuario acaba de borrar**.
+
+Se arregló **en el hook, no en `app/`** (la ficha no toca `app/`): una memoria a nivel de
+módulo —sobrevive al remonte, que es justo lo que un `useRef` no hace— de los pares
+`ruta + nombre + valor` recién retirados; el `params` que el hook expone los filtra.
+- Se compara por **nombre Y valor**: limpiar `?zona=A` y llegar después por un enlace nuevo
+  a `?zona=B` **sí se honra**. Solo se suprime exactamente lo que se acaba de tirar.
+- Va **scopeada por `pathname`**: limpiar `zona=A` en `/novedades` no ciega `zona=A` en
+  `/ordenes`.
+- **Límite conocido — CORREGIDO tras la revisión (M1), estaba subestimado.** Lo que decía
+  esta nota era «solo afecta al botón atrás». **El límite real es más ancho:**
+  `paresBorrados` **no se vacía nunca en toda la sesión SPA**, así que CUALQUIER llegada
+  posterior a esa misma ruta con ese mismo par `nombre=valor` queda suprimida — un `Link`
+  interno, un enlace pegado en la barra de direcciones sin recarga completa, o cualquier
+  navegación cliente que reconstruya esa query—, no solo el botón atrás. Se recupera con
+  una recarga completa de la página.
+  Lo que sí resiste, y quedó **verificado por el reviewer**: el scopeado por `pathname` y
+  por **valor** evita el envenenamiento cruzado entre pantallas (limpiar `zona=A` en
+  `/novedades` no ciega `zona=A` en `/ordenes`, y `?zona=B` se honra), y el conjunto
+  crece **acotado** —unas pocas entradas por cada «Limpiar todo»—, así que no es un
+  problema práctico de memoria.
+  Se acepta a sabiendas: la alternativa —no recordar nada— resucita los filtros que el
+  usuario acaba de borrar, que es un fallo visible y seguro en vez de uno raro y latente.
+- **Cambió un assert preexistente**: `filtros-url-hook.test.tsx::"R24 — useSearchParams
+  devuelve null…"` exigía un `replace` con la URL vacía, que es exactamente la navegación
+  inútil que mata la guarda 1. Es el **único** test cuya expectativa cambia, y lleva el
+  porqué escrito al lado.
+
+### 3. Catálogo asíncrono — ESTA NOTA ERA FALSA. El reviewer la tumbó (B1) y se arregló
+
+**Lo que decía, y era mentira:** «se revisaron los 8 consumidores y ninguno está hoy en ese
+caso». **`/novedades` SÍ lo está**, y el reviewer lo midió con el hook real: entrando por
+`/novedades?zona=Norte` el control se montaba diciendo **«Zona: Todas»**. El enlace
+compartido no acotaba, que es la promesa entera de la ficha (R3 y R5 incumplidos).
+
+**Por qué me equivoqué**, dicho para que no se repita: comprobé que
+`novedades-filtros.ts:304-310` **declara los `FilterDef` desde el primer render** y di el
+caso por descartado. Es cierto y es irrelevante: los declara con **`options: []`** mientras
+`conjunto === null`, y `useNovedadesFiltro` pide el conjunto de forma **perezosa**. La
+clave se activaba (R2, correcto) pero su valor caía por R14 contra un catálogo vacío, se
+apuntaba como sembrada y **no se reintentaba jamás**. Miré si el filtro se DECLARABA cuando
+lo que decidía el resultado era si tenía OPCIONES.
+
+**Agravante, y la causa de que pasara inadvertido (B1-bis):** el test de herencia de T5.1
+sustituía `useNovedadesFiltro` por una maqueta con las `options` ya presentes. Decía
+«consumidor REAL» y ejercitaba la cáscara de presentación. Un test que no puede fallar por
+el fallo no vale; está reescrito contra el hook real, con el catálogo llegando **después**
+del montaje.
+
+**Cómo quedó arreglado:** ver «La corrección tras la revisión» más abajo. En una frase: se
+congelan los params de entrada en un **snapshot inmutable** y se **re-siembra contra ese
+snapshot** cuando aparecen opciones para una clave todavía no sembrada. Re-sembrar contra la
+foto de entrada **no viola R7**: R7 prohíbe **releer** la URL, no prohíbe **terminar de
+aplicar lo que ya se leyó**.
+
+### 4. Un byte NUL crudo en el fuente
+`FilterComponent.tsx` traía desde `origin/dev` (commit `0cd040f7`, fichas 144/169) un
+`join("<NUL crudo>")`, y por eso **git clasificaba el archivo como binario y no mostraba sus
+diffs**. Al copiarse el patrón, `useFiltrosUrl.ts` heredó el problema. Se extrajo a una
+constante con el byte **escapado** (`"\u0000"`) en los dos archivos: mismo valor en
+ejecución, y los dos vuelven a ser texto UTF-8 revisable. Es la única línea de
+`FilterComponent.tsx` que se toca sin pedirlo la ficha.
+
+---
+
+## Lo que este implementer NO hizo
+
+- **No se tocó ni un archivo bajo `app/`.** Confirmado en el diff.
+- **No se hizo push ni PR** (es del leader).
+- **No se corrió `./init.sh` completo** — el rápido es el gate normal y también el de PR
+  (`docs/verification.md`); el completo es obligatorio antes de una release a `prod` y
+  después del merge a `dev`.
+- **No se tocó `tests/baseline-rojos.json`**: no había nada que añadir ni nada que podar
+  (el único rojo listado sigue rojo y sigue siendo ajeno).
+
+---
+
+## Aviso para quien aterrice esto: `dev` se movió mientras se implementaba
+
+La rama salió de `2f9f3f6f`. Mientras se trabajaba, **`origin/dev` avanzó 4 commits**
+(PR #624 `fix/historico-conversaciones-movil` y PR #625 `fix/nombre-completo-mensajero`),
+que tocan `lib/repositories/*`, `lib/utils/nombre-usuario.ts` y
+`app/(app)/historico/conversaciones/*`. **Ni un solo archivo se solapa con esta ficha**, así
+que no hay conflicto semántico ni textual previsible, pero **la rama está 4 commits por
+detrás** y hay que ponerla al día antes del PR.
+
+Diff real de la ficha, medido contra la base común (`git merge-base`) y no contra el `dev` ya
+movido: **17 archivos, +3122/-12**, de los cuales **0 bajo `app/`**.
+
+Recordatorio de `docs/verification.md`: el gate rápido compara `--changed` **contra** `dev`,
+así que **no ve un `dev` que ya venga rojo**. La corrida completa post-merge sigue siendo
+obligatoria.
+
+---
+
+## M3 — `/novedades` monta DOS barras: la precarga se duplica. LÍMITE CONOCIDO, no se toca.
+
+Las dos pestañas de `/novedades` viven montadas a la vez (`keepMounted`) con el mismo
+`pathname`, así que entrar por `/novedades?q=guia` **escribe el término en los DOS campos y
+dispara DOS `listarCompleto()`**, que es la lectura cara de esa pantalla.
+
+No incumple ningún requisito escrito, y **no se corrige en esta ficha por decisión expresa
+del coordinador**: lo consulta con el humano y, si hay que acotarlo, es ficha aparte.
+Verificado por el reviewer que **no hay envenenamiento cruzado** de la memoria de borrados
+entre las dos barras.
+
+Queda anotado aquí precisamente para que no se descubra dos veces.
+
+---
+
+# La corrección tras la revisión (rechazo del 2026-08-31)
+
+El reviewer rechazó la ficha con **dos bloqueantes** (`progress/review_339.md`). El gate
+estaba verde y limpio: **el problema era de corrección, no de suite**. B1 y B2 resultaron ser
+**el mismo nudo** y se soltaron con un solo cambio.
+
+## El nudo, y por qué un solo cambio lo suelta
+
+| | Qué estaba mal | Consecuencia |
 | --- | --- | --- |
-| `WALLET_EGRESO_DESGLOSADO_SEED` | `lib/types/wallet.ts` | 132–137 (cuatro categorías) |
-| `ComposicionGananciaDTO` | `lib/types/wallet.ts` | 257–270 (cuatro claves) |
-| `NATURALEZA_POR_CATEGORIA` | `lib/utils/caja-tesoreria.ts` | 57–78 (`Record` total, 17 categorías) |
-| `derivarComposicionGanancia` | `lib/utils/caja-tesoreria.ts` | 271–304 |
+| **B2** | `paramsRef` se **reescribía en cada render**, así que la siembra por crecimiento leía la URL **de ahora** | **R7 era FALSO**: montar sin params, cambiar la URL a `?color=azul` y declarar después el filtro sembraba `azul` |
+| **B1** | `sembradas` se apuntaba **por DECLARAR**, no por sembrar; y el efecto solo dependía de `clavesMontadas`, que **no cambia** cuando llegan las opciones | En `/novedades?zona=Norte` el control se montaba diciendo **«Zona: Todas»**. **R3 y R5 incumplidos**: el enlace compartido no acotaba |
 
-Los cuatro estaban EXACTAMENTE como el diseño supone.
+**La salida (decidida por el coordinador):** congelar los params **leídos al entrar** en un
+snapshot inmutable —capturado una vez, nunca reasignado— y **re-sembrar contra ESE snapshot**
+cuando aparezcan opciones para una clave todavía pendiente.
 
----
+> **La distinción que no hay que deshacer** —queda escrita con estas palabras en el propio
+> `FilterComponent.tsx`, porque es sutil y se ve al revés:
+> **R7 prohíbe RELEER la URL, no prohíbe TERMINAR DE APLICAR lo que ya se leyó.**
+> Lo que se aplica tarde no es información nueva: es exactamente la que traía la dirección
+> por la que el usuario entró. Volver a leer `params` en esos puntos —que es lo que parece
+> «más correcto»— reintroduce B2 entero.
 
-## 2 — Archivos creados
+## Qué cambió, bloqueante a bloqueante
 
-| archivo | qué es |
-| --- | --- |
-| `lib/config/composicion-detalle.ts` | T3.1 — `DEFAULT_PAGE_SIZE = 10`, `MAX_PAGE_SIZE = 50`, molde de `lib/config/gasto-fijo.ts`. NO se registra en el censo del Anexo III (motivo escrito en el archivo) |
-| `tests/unit/config/composicion-detalle-config.test.ts` | R29/R30 |
-| `tests/unit/actions/wallet-detalle-fila-action.test.ts` | R32/R34 (el borde) |
-| `tests/integration/db/composicion-detalle-postgres.test.ts` | R18/R19/R20/R27/R31/R33 contra **Postgres real** |
+- **B2** — Fuera `paramsRef` y fuera `params` de la línea del efecto que reescribe refs. En
+  su lugar `const [paramsIniciales] = useState(() => new URLSearchParams([...params.entries()]))`:
+  copia propia, capturada una vez. Leen **la foto** el inicializador de `seleccion`, el
+  `useMemo` de `precargaUrl` (si mirara la URL viva, el cambio se colaría hasta el valor
+  inicial de los controles no controlados y R7 sería falso **por otra puerta**) y la siembra
+  del efecto. **R7 pasa a ser estructural: ya no queda ninguna referencia viva a la URL.**
+- **B1** — `sembradas` se apunta **por SEMBRAR**: solo las claves cuya siembra produjo
+  valores. Las que no, quedan **pendientes** y se reintentan. Disparador nuevo:
+  **`firmaCatalogo`** (`clave:nº de opciones`) como segunda dependencia del efecto — sin ella
+  el reintento no existe, porque cuando el catálogo pasa de vacío a lleno **el juego de claves
+  no cambia**. Se calcula sobre *todos* los montados, no solo los pendientes, porque saber
+  cuáles están pendientes exige leer `sembradas.current` y la regla `react-hooks/refs` del
+  repo prohíbe leer una ref durante el render.
+- **Lo que NO se rompió:** siembra y poda siguen **en el mismo efecto** (R17 verde); el
+  `return` temprano sigue guardando el **silencio de R6**; y el **gesto del usuario gana** —si
+  tocó algo, la siembra queda cerrada y el catálogo que llega tarde no le pisa la selección.
+- **B1-bis** — `filtros-url-herencia.test.tsx` (T5.1) **reescrito entero**: monta el **hook
+  real** `useNovedadesFiltro("devolucion", listarCompleto)` con un `listarCompleto` **diferido**
+  (promesa que el test resuelve a mano), y afirma el ANTES («Zona: …Todas», lista sin acotar)
+  y el DESPUÉS («Zona: GAM Oeste», lista acotada). Antes sustituía el hook por una maqueta con
+  las `options` ya presentes: decía «consumidor REAL» y ejercitaba la cáscara de presentación.
+- **M2** — El guardia de R25 conserva sus tres casos de ESLint (incluido el que comprueba que
+  la regla existe y está **activa**, que es lo que impide el verde vacío) y **suma una mitad de
+  comportamiento**: renderiza, muta los params tras el montaje, hace crecer el catálogo y exige
+  que gane la foto de entrada. Hacen falta las dos: **el linter para la forma, el render para
+  la propiedad que el linter no puede ver** (no sigue la indirección `aplicar(...)`, que era
+  justo el camino de B2).
 
-## 3 — Archivos modificados
+## Decisiones propias durante la corrección
 
-| archivo | qué cambió |
-| --- | --- |
-| `lib/types/wallet.ts` | T1.1–T1.4: `WALLET_EGRESO_NOMBRADO_SEED`, `WALLET_EGRESO_CON_FILA_SEED`, `COMPOSICION_FILA_OTROS`, `COMPOSICION_FILA_SEED`, `ComposicionFilaId`; `ComposicionGananciaDTO` gana `egresos` y `hayOtrosEgresos`; `listarMovimientosDeFilaSchema` derivado del schema del listado |
-| `lib/utils/caja-tesoreria.ts` | T2.1/T2.2: `categoriasDeFilaComposicion` (pura) y el reparto contra `WALLET_EGRESO_CON_FILA_SEED` + `hayOtrosEgresos = !otrosEgresos.isZero()` |
-| `lib/repositories/WalletMovimientoRepository.ts` | T3.2: `buildWhere` traduce `categorias` a `AND: [{ categoria: { in: … } }]` |
-| `lib/interfaces/repositories/IWalletMovimientoRepository.ts` | T3.2/T3.5: `categorias?` en `ListarMovimientosFiltros` y en `BalanceFiltros`, con su docstring |
-| `lib/services/WalletService.ts` | T3.3: `listarMovimientosDeFila` (guard → filtros → conjunto de la fila → `repo.listar`) |
-| `lib/interfaces/services/IWalletService.ts` | T3.5: `ListarMovimientosDeFilaServiceResult` + el método en el contrato |
-| `lib/actions/wallet.ts` | T3.4: `listarMovimientosDeFilaAction` + su tipo de resultado |
-| `tests/unit/guards/caja-composicion-exhaustiva.guardia.test.ts` | T2.3: el censo de «otros» pasa de 3 categorías a 1; la columna pasa a «4 + 2 + otros»; caso nuevo de R13 |
-| `tests/unit/utils/caja-composicion.test.ts` | T2.4: bloque nuevo R4/R9/R12/R14 y la partición actualizada |
-| `tests/unit/services/wallet-service.test.ts` | R38/R39/R40 + alcance del conjunto de la fila y `total` del servidor |
-| `tests/unit/actions/wallet-actions.test.ts` | fixture con las dos claves nuevas; el censo literal de acciones exportadas pasa de 4 a 5 (deliberado) |
-| `tests/integration/wallet-page.test.tsx` | **T6.2 hecho aquí** (§ 5): el barrido de STRING se amplía, no se afloja |
-| `tests/components/ComposicionGananciaCard.test.tsx`, `tests/components/descarga/WalletDescarga.test.tsx`, `tests/unit/components/wallet-page-cobros-pendientes.test.tsx` | SOLO las dos claves nuevas en sus fixtures, para que `tsc` siga verde. **Los literales-contrato de rótulos (T6.3) NO se tocaron**: son del frontend |
+1. **Se marca por «leído», no por «aplicado tras podar».** El efecto de montaje apunta las
+   claves de `seleccionDesdeUrl(...)` **sin** pasar por `podarSeleccion`. Marcando las de la
+   selección ya podada, una clave retirada por incoherencia con su padre quedaría pendiente y
+   se resembraría en cada cambio de firma, emitiendo de más y rompiendo el silencio de R6.
+2. **El caso «el gesto del usuario gana» usa catálogo PARCIAL** (`options: [verde]`) y no
+   vacío: con catálogo vacío el control va `disabled` por R14 y el usuario no podría tocar
+   nada — el escenario sería inejercitable.
+3. **`firmaCatalogo` y `clavesMontadas` conviven como dependencias** aunque la firma ya
+   codifica las claves: la segunda es la que el cuerpo usa para la poda, y dejarla explícita
+   hace legible que el efecto tiene dos trabajos.
 
----
+## Gate tras la corrección — `./init.sh --rapido`
 
-## 4 — Mapa `R<n> → test` (lo que cubre el backend)
+**Veredicto: `== init OK ==`.**
 
-| R | test | estado |
+| Tramo | Antes del rechazo | **Tras la corrección** |
 | --- | --- | --- |
-| R4 | `tests/unit/utils/caja-composicion.test.ts` › R4: cada cubeta de `egresos` suma SOLO su categoria | ✅ |
-| R9 | `tests/unit/utils/caja-composicion.test.ts` › R9: `hayOtrosEgresos` lo deriva el SERVIDOR… | ✅ |
-| R11 | `tests/unit/guards/caja-composicion-exhaustiva.guardia.test.ts` › R11 (ficha 339): los cuatro conceptos + los dos nombrados + «otros» suman `egresosPropios` | ✅ |
-| R12 | `tests/unit/utils/caja-composicion.test.ts` › R12: `otrosEgresos + egresos.*` es el MISMO importe que «otros» antes de la ficha | ✅ (mutación en § 6) |
-| R13 | `caja-composicion-exhaustiva.guardia.test.ts` › R13: cada categoria propia aporta a UNA sola cubeta, nunca a dos + › R13 (ficha 339): los dos egresos NOMBRADOS salieron del complemento de verdad | ✅ |
-| R14 | `tests/unit/utils/caja-composicion.test.ts` › R14: las cifras agregadas de la caja no cambian de valor… + › R38/R14 (los dos casos heredados) | ✅ |
-| R18 | `tests/integration/db/composicion-detalle-postgres.test.ts` › R18/R33 … trae SOLO su categoria + › R18: «Otros» trae el COMPLEMENTO | ✅ |
-| R19 | `…-postgres.test.ts` › R19: la Σ de TODAS las paginas del detalle es el importe de la fila | ✅ |
-| R20 | `…-postgres.test.ts` › R20: los filtros vigentes de la wallet recortan el detalle | ✅ |
-| R27 | `…-postgres.test.ts` › R27/R31: el detalle devuelve UNA pagina… | ✅ |
-| R29 | `tests/unit/config/composicion-detalle-config.test.ts` › R29 (tres casos, incluido «el BORDE toma de esta config su default y su tope») | ✅ (la mitad de «la pantalla no declara literal» es de B5) |
-| R30 | `composicion-detalle-config.test.ts` › R30 (override + basura) | ✅ |
-| R31 | `…-postgres.test.ts` › R27/R31 + `wallet-service.test.ts` › R31/R34 | ✅ (mutación en § 6) |
-| R32 | `tests/unit/actions/wallet-detalle-fila-action.test.ts` › R32 (tres casos: tope, fila fuera del catálogo, page/pageSize) | ✅ |
-| R33 | `…-postgres.test.ts` (los seis casos) | ✅ (mutación en § 6) |
-| R34 | `wallet-detalle-fila-action.test.ts` › R34: todo importe cruza la frontera como TEXTO | ✅ |
-| R37 | `tests/unit/guards/caja-derivaciones.guardia.test.ts` (sin editar; corrido y verde) | ✅ |
-| R38 | `tests/unit/services/wallet-service.test.ts` › R38/R39 | ✅ |
-| R39 | `wallet-service.test.ts` › R38/R39: … SIN tocar el repo (cero invocaciones) | ✅ |
-| R40 | `wallet-service.test.ts` › R40: el detalle usa el MISMO predicado de acceso que el listado, rol por rol | ✅ |
-| R1, R2, R3, R5, R6, R7, R8, R10, R15, R16, R17, R21–R26, R28, R35, R36, R41, R42 | pantalla (B5/B6) | ⛔ pendiente frontend |
+| `typecheck` | verde, 0 errores | **verde, 0 errores** |
+| `lint` | 0 errores, 127 avisos ajenos | **0 errores, 127 avisos ajenos** (0 en los archivos de la ficha) |
+| Relacionados | 83 archivos, 1122 passed | **83 archivos, 1128 passed + 17 skipped (1145)**, 0 rojos |
+| Guardias | 167 archivos, 2524 passed, 1 failed | **167 archivos, 2525 passed, 1 failed (2526)** |
+| Baseline | sin rojos nuevos | **`✓ sin rojos nuevos (1 archivo rojo sobre 249 ejecutados, todos en el baseline conocido)`** |
+
+El único rojo sigue siendo `superficie-de-uso.guardia.test.ts` → `lib/actions/tarifas.ts:67
+obtenerTarifa`, **ajeno**, inscrito en `tests/baseline-rojos.json` desde el 2026-08-28. Esta
+ficha no toca `lib/actions/`, ni Server Actions, ni `app/`. **Delta de rojos: 0.**
+
+**Sigue sin tocarse ni un archivo bajo `app/`** (verificado en el diff del arreglo: 4
+archivos, +432/−124, ninguno en `app/`).
 
 ---
 
-## 5 — Las tres guardias ajenas que el spec identificó
+# Segunda corrección: B3, M5 y M1 (2026-08-31)
 
-1. **Censo de tablas** (`cobertura-tablas.guardia.test.ts`): **no se movió** — el backend no añade
-   ninguna `<DataTable>`. Sigue en 28/28 y `totalCensado` 29. Corrida verde tras el cambio.
-2. **Barrido de STRING** (`tests/integration/wallet-page.test.tsx`): **ampliado, no aflojado.**
-   `egresos` se desestructura como se desestructura `ingresos` y recibe **el mismo** bucle de
-   `typeof === "string"`, con su control de no-vacuidad; `hayOtrosEgresos` se exceptúa **por
-   NOMBRE** (jamás con un `typeof !== "string" → salta`) y gana su propia aserción de booleano más
-   la de su valor (`false` con `otrosEgresos: "0.00"`). El caso espejo —importe ≠ 0 ⇒ `true`— se
-   mide donde se produce, en `caja-composicion.test.ts`.
-3. **Censo de paginación** (`paginacion-transversal.test.tsx`): **intacto en 13.** El backend NO
-   declara ninguna constante `PAGINACION_*_LABEL`; el nombre accesible de la paginación del detalle
-   es cosa de B5 y **debe** declararse como propiedad/función del módulo de textos.
+Segunda revisión: el arreglo de fondo (B1/B2) quedó **verificado y no se tocó**. Quedaban un
+bloqueante y dos residuos, **los tres de test o de comentario**. `FilterComponent.tsx` queda
+**byte a byte idéntico** (`git diff 813029d8 HEAD -- components/shared/FilterComponent.tsx`
+vacío) y de `hooks/useFiltrosUrl.ts` **solo cambia el bloque de comentario**.
 
----
+## B3 (bloqueante) — el guardia de R25 se saltaba solo y aun así se veía verde
 
-## 6 — Las tres mutaciones exigidas (ejecutadas y revertidas)
+Al fusionar la mitad de comportamiento (M2), el archivo pasó a `// @vitest-environment jsdom`
+y **el arranque de ESLint quedó corriendo dentro de jsdom**: el `beforeAll` expiraba ~2 de
+cada 5 corridas —una vez **113 s aislado, sin nada compitiendo**, o sea *no* era saturación—.
+Lo grave no era el rojo: al expirar un `beforeAll` **sus 3 casos quedan SKIPPED**, así que la
+mitad de linter de R25 dejaba de verificar nada.
 
-### 6.1 · R33 — quitar el `categoria IN (…)` del `WHERE`
+**Se partió en dos**, que es lo que devuelve la holgura en vez de depender de acertar un
+número:
 
-Mutación aplicada a `lib/repositories/WalletMovimientoRepository.ts`:
-
-```diff
--  if (f.categorias !== undefined) where.AND = [{ categoria: { in: [...f.categorias] } }];
-+  // MUTACION DELIBERADA (T4.1): se quita la restriccion de categoria del WHERE.
-```
-
-Salida REAL (recortada a lo que nombra el dinero intruso):
-
-```
- ❯ tests/integration/db/composicion-detalle-postgres.test.ts (6 tests | 5 failed) 352ms
-     × R18/R33: el detalle de «Pagos a mensajeros» trae SOLO su categoria 225ms
-     × R18: «Otros» trae el COMPLEMENTO — y ya NO trae el pago al mensajero 15ms
-     × R20: los filtros vigentes de la wallet recortan el detalle 14ms
-     × R19: la Σ de TODAS las paginas del detalle es el importe de la fila, centimo a centimo 32ms
-     × los DOS agregados no cambiaron de SQL al ganar el repositorio la clave `categorias` 14ms
-
- FAIL  … > R18/R33: el detalle de «Pagos a mensajeros» trae SOLO su categoria
- AssertionError: expected Set{ …(7) } to deeply equal Set{ …(2) }
-
- FAIL  … > R19: la Σ de TODAS las paginas del detalle es el importe de la fila, centimo a centimo
- AssertionError: egreso_pago_mensajero: la suma del detalle no es el importe de la fila:
-   expected '18611.08' to be '3333.33'
-
- FAIL  … > los DOS agregados no cambiaron de SQL …
- AssertionError: expected [ Array(6) ] to deeply equal [ [ 'egreso_gasto', '55.55' ] ]
-   +   [ "ingreso_flete", "7777.77" ],
-   +   [ "egreso_pago_tienda", "6666.66" ],
-   +   [ "egreso_pago_mensajero", "3333.33" ],
-       [ "egreso_gasto", "55.55" ],
-   +   [ "egreso_sueldo", "444.44" ],
-   +   [ "egreso_ajuste", "333.33" ],
-
- Test Files  1 failed (1)
-      Tests  5 failed | 1 passed (6)
-```
-
-**5 de 6 casos rojos, nombrando cada importe intruso.** Revertida (`grep -c MUTACION` → 0) y el
-archivo vuelve a 6/6 en verde.
-
-### 6.2 · R31 — devolver `movimientos.length` como `total`
-
-Mutación en `WalletService.listarMovimientosDeFila` (`total: movimientos.length`):
-
-```
- ❯ tests/integration/db/composicion-detalle-postgres.test.ts (6 tests | 2 failed)
-     × R27/R31: el detalle devuelve UNA pagina y el `total` es el del CONJUNTO 25ms
-     × R19: la Σ de TODAS las paginas del detalle es el importe de la fila… 13ms
-
- AssertionError: expected [ 2, 2, 1 ] to deeply equal [ 5, 5, 5 ]
-```
-
-Revertida y verde.
-
-### 6.3 · R12 — cambiar una categoría de cubeta sin tocar el total
-
-Mutación en `derivarComposicionGanancia` (`egreso_ajuste` deja de ir a su cubeta):
-
-```
- ❯ tests/unit/utils/caja-composicion.test.ts (21 tests | 4 failed)
-     × R26: la columna de egresos suma `egresosPropios`   → expected '7272.00' to be '8484.00'
-     × R4: cada cubeta de `egresos` suma SOLO su categoria → expected '0.00' to be '45.75'
-     × R12: `otrosEgresos + egresos.*` es el MISMO importe que «otros» antes de la ficha
-            → expected '227313.20' to be '227358.95'
-     × R14: las cifras agregadas de la caja no cambian de valor al repartir la columna
-            → expected '228513.20' to be '228558.95'
-```
-
-Lo que esta mutación demuestra, y es el motivo de que R12 exista: **`totalEgresos` y
-`egresosPropios` no se mueven ni un céntimo** —el dinero sigue en la suma—, y aun así la columna
-deja de cuadrar. Un test que solo mirase el total habría pasado en verde. Revertida y verde.
-
----
-
-## 7 — Verificación
-
-```
-$ pnpm typecheck
-> tsc --noEmit
-TYPECHECK_EXIT=0        (sin una sola línea de salida)
-
-$ pnpm lint
-✖ 127 problems (0 errors, 127 warnings)
-LINT_EXIT=0
-```
-
-Los 127 avisos son PREEXISTENTES (`no-unused-vars` en tests ajenos). Ninguno cae en un archivo de
-esta ficha: `pnpm lint | grep -E "composicion-detalle|caja-tesoreria|wallet\.ts|WalletService|…"`
-no devuelve nada.
-
-Corrida explícita, por nombre, de **todos** los archivos de test creados o modificados:
-
-```
-$ pnpm exec vitest run \
-    tests/unit/utils/caja-composicion.test.ts \
-    tests/unit/guards/caja-composicion-exhaustiva.guardia.test.ts \
-    tests/unit/services/wallet-service.test.ts \
-    tests/unit/actions/wallet-actions.test.ts \
-    tests/unit/actions/wallet-detalle-fila-action.test.ts \
-    tests/unit/config/composicion-detalle-config.test.ts \
-    tests/integration/db/composicion-detalle-postgres.test.ts \
-    tests/integration/wallet-page.test.tsx \
-    tests/components/ComposicionGananciaCard.test.tsx \
-    tests/components/descarga/WalletDescarga.test.tsx \
-    tests/unit/components/wallet-page-cobros-pendientes.test.tsx
-
- Test Files  11 passed (11)
-      Tests  156 passed (156)
-   Duration  13.27s
-```
-
-**La suite de Postgres CORRIÓ de verdad** (no se saltó): hay base alcanzable y los 6 casos
-ejecutaron contra el motor, dentro de una transacción revertida.
-
-Guardias completas (`pnpm exec vitest run guard`, 169 archivos):
-
-```
- Test Files  1 failed | 168 passed (169)
-      Tests  1 failed | 2561 passed (2562)
-```
-
-El único rojo es **`superficie-de-uso.guardia.test.ts` por `lib/actions/tarifas.ts:67
-obtenerTarifa`**, que es **deuda AJENA y CONOCIDA de `dev`**: está declarada en
-`tests/baseline-rojos.json` desde el 2026-08-28 con ese mismo motivo, y `git grep obtenerTarifa
-origin/dev` confirma que ya no tiene un solo importador allí. Esta ficha **no añadió nada a esa
-entrada**: ver § 8.2.
-
----
-
-## 8 — Lo que se le deja al frontend
-
-### 8.1 · El contrato
-
-```ts
-listarMovimientosDeFilaAction(input: unknown, deps?: WalletDeps)
-  → { status: "ok"; data: { movimientos: WalletMovimientoDTO[]; total: number; page: number; pageSize: number } }
-  | { status: "forbidden" }
-  | { status: "unauthenticated" }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
-```
-
-`input` = **token de fila** + los filtros vigentes del libro:
-`{ fila: ComposicionFilaId, page?, pageSize?, tipo?, categoria?, desde?, hasta? }`.
-`fila` es uno de los 14 valores de `COMPOSICION_FILA_SEED` (7 ingresos + 6 egresos +
-`"otros_egresos"`). El cliente **nunca** manda una lista de categorías.
-`page` por defecto 1; `pageSize` por defecto `composicionDetalleConfig.DEFAULT_PAGE_SIZE` (10) y
-tope `MAX_PAGE_SIZE` (50) — la pantalla **no** debe escribir ninguno de los dos como literal.
-Cada movimiento es un `WalletMovimientoDTO` ya existente: `id`, `tipo`, `categoria`, `monto`
-(STRING escala 2), `origenTipo`, `origenId`, `descripcion` (**`null` en los pagos a mensajeros**),
-`registradoPor`, `fechaMovimiento` (ISO), `dueno`.
-`total` es el del CONJUNTO y lo cuenta la base: **no uses `movimientos.length`**.
-
-`ComposicionGananciaDTO` gana `egresos: Record<"egreso_pago_mensajero" | "egreso_ajuste", string>`
-y `hayOtrosEgresos: boolean` (lo decide el servidor; la pantalla **no** compara importes).
-
-### 8.2 · Tres cosas que el frontend TIENE que hacer
-
-1. **Borrar la anotación `@sin-superficie`** del docstring de `listarMovimientosDeFilaAction` en
-   `lib/actions/wallet.ts` al cablear el desplegable. Está puesta porque hoy la acción no tiene
-   pantalla que la dispare, y **caduca sola**: `superficie-de-uso.guardia.test.ts` se pone rojo si
-   un export anotado vuelve a ser alcanzable. Sin ese borrado, el gate cae.
-2. **B6.1 — el censo de tablas**: al nacer `DetalleFilaComposicion.tsx` con su `<DataTable>`, la
-   guardia dirá «29 recibido / 28 esperado». Se deja fallar primero (convención de ese archivo) y
-   luego: archivos 28 → 29, instancias 28 → 29, `totalCensado` 29 → 30, `fuera` 10 → 11,
-   `con_descarga` sin cambio (19), con el motivo de `design.md § 8`.
-3. **B6.3 — los literales-contrato de `ComposicionGananciaCard.test.tsx`**: su fixture recibió SOLO
-   las dos claves nuevas (con las cubetas a `0.00` y los 940,00 intactos en «otros», para que la
-   tarjeta siguiera pintando exactamente lo mismo). Los `toEqual` de rótulos y de pares
-   rótulo↔importe hay que **actualizarlos deliberadamente** con las filas nuevas, no derivarlos de
-   su propia fuente.
-
----
-
-## 9 — Veredicto
-
-Backend de la 339 completo (B0–B4): «Otros» ya solo puede contener `egreso_gasto`, el detalle de
-cada fila se lee del `WHERE` con la MISMA definición que produce su importe, y las tres mutaciones
-—el `WHERE`, el `total` y la cubeta— se ejecutaron, salieron rojas nombrando el dinero y se
-revirtieron; typecheck y lint en 0, 156 tests verdes en los 11 archivos tocados.
-
----
----
-
-# Ficha 339 — bitácora de implementación (FRONTEND, bloques B5–B6)
-
-> **Este bloque AMPLÍA el documento de arriba, no lo sustituye.** Cubre **B5 (la tarjeta)** y
-> **B6 (los censos ajenos de frontend)**. Lo que el backend dejó cableado está en § 8 de arriba;
-> aquí se cuenta qué se hizo con ello.
-
-Rama: `fix/339-otros-gastos`. Fecha: 2026-08-31.
-
----
-
-## 10 — Qué se hizo, en una frase
-
-La tarjeta «Cómo se compone la ganancia de Ordenex» pasa de **cinco filas de egreso con un cubo
-anónimo de 227.300,00** a **seis filas con nombre + un cubo que sólo aparece cuando de verdad
-queda algo**, y **cada una de sus catorce filas se abre** y enseña los movimientos que componen
-su importe. El total de la columna no se mueve ni un céntimo: lo único que cambia es de qué
-cubeta sale cada importe.
-
----
-
-## 11 — Archivos creados
-
-| archivo | qué es |
-| --- | --- |
-| `app/(app)/wallet/_components/composicion-detalle-labels.ts` | T5.1 — textos del detalle (4 columnas, vacío, error), rótulos de las dos filas nuevas, pista de «Otros» y los nombres accesibles (`DETALLE_FILA_NOMBRE.abrir/region/tabla/paginacion`) |
-| `app/(app)/wallet/_components/DetalleFilaComposicion.tsx` | T5.2 — el panel: `useSWR` + `DataTable` (fecha · concepto · detalle · importe) + `Pagination`, sin subtotal y sin descarga |
-| `app/(app)/wallet/_components/FilaComposicion.tsx` | T5.3 — la fila desplegable, **una sola pieza para las dos columnas** |
-| `tests/components/DetalleFilaComposicion.test.tsx` | R15/R16/R17/R21–R26/R28/R35/R36 + la mitad de pantalla de R29 y R31 |
-
-## 12 — Archivos modificados
-
-| archivo | qué cambió |
-| --- | --- |
-| `app/(app)/wallet/_components/DesgloseEgresosLista.tsx` | T5.4 — dos filas nuevas recorriendo `WALLET_EGRESO_NOMBRADO_SEED`, «Otros» condicional a `hayOtrosEgresos` con su pista, y las filas pasan a ser desplegables. El `role="group"`, el `aria-label` y la estructura `<dt>`/`<dd>` NO cambian |
-| `app/(app)/wallet/_components/ComposicionGananciaCard.tsx` | T5.5 — recibe `filtros` y los baja a las filas; las siete de ingreso también abren (Q1); `DESCRIPCION` pasa a nombrar los **ajustes** (R41) sin tocar lo que dice que queda fuera (R42) |
-| `app/(app)/wallet/_components/WalletFiltros.tsx` | T5.6 — nace `inputDeFiltros(filtros)`, la ÚNICA función que traduce los filtros vigentes a un input de borde. Vive junto al tipo y al valor vacío que ya vivían ahí |
-| `app/(app)/wallet/_components/WalletModule.tsx` | T5.6 — pasa `filtros` a la tarjeta; `buildInput` **compone** `inputDeFiltros` con la página y `buildInputCompleto` desaparece (era la segunda copia del mismo bucle) |
-| `lib/actions/wallet.ts` | **Deber 1 del backend**: se BORRA la anotación de excepción del docstring de `listarMovimientosDeFilaAction` al cablear su pantalla |
-| `tests/unit/descarga/censo-tablas.ts` + `tests/unit/descarga/cobertura-tablas.guardia.test.ts` | **T6.1** — la tabla nueva se registra `fuera` con su motivo, y los números suben (§ 14) |
-| `tests/components/ComposicionGananciaCard.test.tsx` | **T6.3** — los literales-contrato actualizados A MANO + once casos nuevos (R1/R2/R3/R5/R6/R7/R8/R9/R10/R11-R12/R41/R42) |
-| `tests/integration/wallet-page.test.tsx`, `tests/unit/components/wallet-page-cobros-pendientes.test.tsx`, `tests/components/descarga/WalletDescarga.test.tsx` | cambio de ARNÉS: los tres montan el `WalletModule` REAL, cuyo árbol importa ahora el borde del detalle. Sin declararlo en su doble, el import no resuelve y el archivo entero se queda sin ejecutar |
-
-### 12.1 · Decisiones de forma que conviene dejar escritas
-
-- **El orden**: las cuatro filas existentes **se quedan donde están** y las dos nuevas entran
-  **justo antes de «Otros»** (decisión cerrada, distinta de la que proponía `design.md § Q2`).
-  Aparecen donde el dinero se venía mostrando, en vez de reordenar una tarjeta ya conocida.
-- **Rótulos**: «Pagos a mensajeros» y «Ajustes (egreso)», en la voz PLURAL de sus vecinas de
-  columna («Sueldos», «Indemnizaciones»). El de los ajustes es el concepto que el diálogo
-  «Registrar movimiento» promete por `nombreEnElLibro` («Ajuste (egreso)»), y está escrito **a
-  mano** en el módulo de textos: derivarlo de `CATEGORIA_LABEL` dejaría el caso de R3 comparando
-  el rótulo contra su propia fuente, es decir, siempre verde.
-- **La estructura de la fila** es un `<div>` hijo de la `<dl>` con `<dt>` (botón), `<dd>`
-  (importe) y —cuando toca— un `<dd>` para la pista y otro para el panel. Es lo que mantiene en
-  pie las aserciones heredadas de las fichas 45, 158 y 231, que leen `dt`/`dd` fila a fila.
-- **`aria-controls` va SIEMPRE puesto**, abierto o cerrado: es el precedente vivo del botón de
-  expandir de `DataTable`, y no se inventa una convención nueva para esta tarjeta.
-- **La paginación NO se llama `PAGINACION_*_LABEL`** (design § 6). Es
-  `DETALLE_FILA_NOMBRE.paginacion(fila)`, que además compone el nombre de SU fila (R24). El
-  censo de paginación sigue midiendo **13** y se corrió para comprobarlo.
-
----
-
-## 13 — Mapa `R<n> → test` (lo que cubre el frontend)
-
-| R | test | estado |
+| Archivo | Entorno | Qué vigila |
 | --- | --- | --- |
-| R1 | `ComposicionGananciaCard.test.tsx` › R1: la columna de egresos tiene fila «Pagos a mensajeros» con su importe | ✅ |
-| R2 | `ComposicionGananciaCard.test.tsx` › R2: … fila «Ajustes (egreso)» con su importe | ✅ |
-| R3 | `ComposicionGananciaCard.test.tsx` › R3: el rótulo de los ajustes usa el concepto que el diálogo promete en el libro | ✅ |
-| R5 | `ComposicionGananciaCard.test.tsx` › R5: ningún rótulo de la columna de egresos es el valor del enum (+ el heredado de la 231 para ingresos) | ✅ |
-| R6 | `ComposicionGananciaCard.test.tsx` › R28: el orden es el declarado, no el de magnitud (la columna de egresos, con su contraprueba: ni el mayor ni el menor están en los extremos) | ✅ |
-| R7 | `ComposicionGananciaCard.test.tsx` › R7: con `hayOtrosEgresos` falso, la fila «Otros gastos de Ordenex» no está en el DOM | ✅ (mutación en § 15.1) |
-| R8 | `ComposicionGananciaCard.test.tsx` › R8: con `hayOtrosEgresos` verdadero, la fila aparece con su importe | ✅ |
-| R9 | `ComposicionGananciaCard.test.tsx` › R9: la decisión es del SERVIDOR — la tarjeta no compara importes | ✅ |
-| R10 | `ComposicionGananciaCard.test.tsx` › R10: la fila «Otros» lleva su pista sobre el dinero sin clasificar | ✅ |
-| R11/R12 | `ComposicionGananciaCard.test.tsx` › R11/R12: el total de la columna no se movió al sacar dos conceptos del cubo | ✅ |
-| R15 | `DetalleFilaComposicion.test.tsx` › R15: al abrir una fila se muestran los movimientos que componen su importe | ✅ |
-| R16 | `DetalleFilaComposicion.test.tsx` › R16: cada movimiento muestra fecha, concepto, detalle e importe | ✅ |
-| R17 | `DetalleFilaComposicion.test.tsx` › R17: un movimiento sin descripción muestra su origen legible | ✅ |
-| R20 | `DetalleFilaComposicion.test.tsx` › R20: los filtros vigentes de la wallet bajan al detalle, y sólo ellos | ✅ (la mitad del `WHERE` la mide Postgres, § 6 de arriba) |
-| R21 | `DetalleFilaComposicion.test.tsx` › R21: con las filas cerradas no se lee nada | ✅ |
-| R22 | `DetalleFilaComposicion.test.tsx` › R22: abrir una fila cuesta exactamente UNA lectura, y sólo de esa fila | ✅ |
-| R23 | `DetalleFilaComposicion.test.tsx` › R23: dos filas abiertas mantienen páginas independientes | ✅ |
-| R24 | `DetalleFilaComposicion.test.tsx` › R24: el control de abrir nombra SU fila, y no hay dos que se llamen igual (+ el caso del estado del disclosure) | ✅ |
-| R25 | `DetalleFilaComposicion.test.tsx` › R25: una fila sin movimientos muestra su estado vacío | ✅ |
-| R26 | `DetalleFilaComposicion.test.tsx` › R26: un fallo de lectura se cuenta DENTRO de la fila y la tarjeta sigue en pie | ✅ |
-| R28 | `DetalleFilaComposicion.test.tsx` › R28: con más movimientos que la página se puede navegar a la siguiente | ✅ |
-| R29 (mitad de pantalla) | `DetalleFilaComposicion.test.tsx` › R29: el tamaño de página lo manda la CONFIGURACIÓN, y la pantalla no lo escribe | ✅ |
-| R31 (mitad de pantalla) | `DetalleFilaComposicion.test.tsx` › R31: el total que pagina es el del SERVIDOR, no el largo de la página pintada | ✅ (mutación en § 15.2) |
-| R35 | `DetalleFilaComposicion.test.tsx` › R35: ninguna fuente nueva opera con dinero + `ComposicionGananciaCard.test.tsx` › R12 (ampliado a `FilaComposicion.tsx`) | ✅ |
-| R36 | `DetalleFilaComposicion.test.tsx` › R36: el detalle no pinta ningún subtotal de la página visible | ✅ |
-| R41 | `ComposicionGananciaCard.test.tsx` › R41: la descripción nombra también los ajustes | ✅ |
-| R42 | `ComposicionGananciaCard.test.tsx` › R42: la descripción sigue diciendo que el dinero de las tiendas no entra | ✅ |
-| design § 10-A1 | `DetalleFilaComposicion.test.tsx` › el input de una fila es su token y su página, y ninguna lista de categorías | ✅ (mutación en § 15.3) |
+| `tests/unit/guards/filtros-url-r25.test.ts` | **node** (se le quitó la directiva jsdom) | la FORMA: ESLint con la config real; 3 casos, incluido el que exige que la regla exista y esté **activa** |
+| `tests/unit/guards/filtros-url-r25-propiedad.test.tsx` | jsdom | la PROPIEDAD que el linter no ve: mutar los params tras el montaje no entra por la siembra |
+
+Cada archivo lleva cabecera diciendo que son las dos mitades de R25, cómo se llama la otra y
+**qué costó separarlas**, para que nadie las vuelva a juntar sin saberlo.
+
+### Los números (medidos, no estimados)
+
+Sacar el linter de jsdom lo dividió por ~7. Medido en dos tandas independientes:
+
+| Tanda | Corridas | Peor | Resultado |
+| --- | --- | --- | --- |
+| Subagente (máquina con carga) | 5 | **16,8 s** (tramo `tests`) | `3 passed (3)` ×5 |
+| **Mía, verificación independiente** | 5 | **44,2 s** de reloj total (la 1.ª, aún con carga); las otras 13,5–24,0 s | `3 passed (3)` ×5 |
+| **Mía, máquina en reposo** | 3 | **5,5 s** (tramo `tests`) / 7,9 s de reloj | `3 passed (3)` ×3 |
+
+**13 corridas post-partición: 0 timeouts, 0 SKIPPED, 0 rojos.** Contra los **>113 s** de
+antes. La mitad de comportamiento va en **0,6–0,7 s**.
+
+**El `hookTimeout` se deja en 60 s y NO se sube**: ahora son ~3,5x sobre el peor caso bajo
+carga y ~11x en reposo. Queda escrito en el fuente con las cifras y con la instrucción de que,
+si algún día roza los 60 s, se **vuelva a medir** para averiguar qué se ha encarecido, en vez
+de inflar el número a ojo.
+
+## M5 — R17 pasaba con y sin el arreglo. Ahora cae bajo mutación.
+
+El diagnóstico era exacto: el caso viejo monta **solo** la clave sembrada, así que la poda
+calcula `sobran = []` y **sale por el `return` temprano sin ejercitar nunca la convivencia**.
+
+Caso nuevo: entra con `?color=rojo&acabado=brillo` y luego **retira `acabado` de `filters`**,
+de modo que la poda tiene trabajo real y `color` debe sobrevivir.
+
+**Verificado por mí**, no solo por el subagente. Mutación en `FilterComponent.tsx:627`,
+`{ ...actual, ...sembrado }` → `{ ...sembrado }`:
+
+```
+× R17 — cuando la poda SI tiene trabajo, se lleva lo que sobra y conserva lo sembrado
+  → esperado { "color": ["rojo"] } · recibido {}
+  Tests  1 failed | 1 passed | 16 skipped (18)
+```
+
+**Lo revelador: con la mutación puesta, el caso VIEJO de R17 seguía pasando.** Confirma que no
+distinguía un árbol sano de uno roto. No se borró —sigue valiendo como red contra una emisión
+espuria— pero lleva encima el aviso de lo que no cubre. Tras revertir: `2 passed`, y
+`git diff` de producción **vacío**.
+
+## M1 (residual) — el límite ya está en el CÓDIGO, no solo en la bitácora
+
+Lo había corregido en la bitácora y **no en `hooks/useFiltrosUrl.ts`**, que es donde se lee un
+límite. El comentario dice ahora que `paresBorrados` **no se vacía nunca en toda la sesión
+SPA** —así que cualquier llegada posterior a esa ruta con ese par queda suprimida: un `Link`
+interno, un enlace pegado sin recarga completa, cualquier pantalla que reconstruya la query, no
+solo el botón atrás— y dice también **lo que sí resiste**: el scopeado por `pathname` y por
+valor, y el crecimiento acotado.
+
+## Gate tras la segunda corrección — con el PATH VERIFICADO
+
+**`== init OK ==`** (exit 0).
+
+| Tramo | Resultado |
+| --- | --- |
+| `typecheck` | **verde, 0 errores** |
+| `lint` | **0 errores**, 127 avisos preexistentes de `dev` (0 en los archivos de la ficha) |
+| Relacionados | **84 archivos, 1129 passed + 17 skipped (1146)**, 0 rojos |
+| Guardias | **168 archivos, 2525 passed, 1 failed (2526)** |
+| Baseline | **`✓ sin rojos nuevos (1 archivo rojo sobre 250 ejecutados, todos en el baseline conocido)`** |
+
+El guardia de R25 **ya cuenta entre las guardias** (168 archivos, uno más que antes) y **no
+falla ni se salta**. El único rojo sigue siendo `superficie-de-uso.guardia.test.ts` →
+`lib/actions/tarifas.ts:67 obtenerTarifa`, ajeno y en el baseline desde el 2026-08-28.
+**Delta de rojos de la ficha: 0.**
 
 ---
 
-## 14 — Los tres censos ajenos, cerrados
+## ⚠️ Hallazgo de ENTORNO, fuera de la ficha: el gate se degrada a avisos
 
-1. **Censo de tablas (T6.1).** La guardia **se dejó fallar primero**, como manda la convención
-   escrita en ese propio archivo:
+No es de la 339 y **no lo he tocado** —`init.sh` está en la lista de rutas que obligan al gate
+completo, y `docs/verification.md` dice por qué: tocar el gate cambia **la medida** con la que
+se mide todo lo demás—. Pero lo dejo escrito porque me costó una hora y volverá a morder.
 
-   ```
-   FAIL  tests/unit/descarga/cobertura-tablas.guardia.test.ts
-   AssertionError: hay tablas sin registrar en tests/unit/descarga/censo-tablas.ts:
-     expected [ Array(1) ] to deeply equal []
-   +   "app/(app)/wallet/_components/DetalleFilaComposicion.tsx #1",
-   ```
-
-   Y después se registró `fuera` (motivo de `design.md § 8`, entre
-   `CobrosRechazoTiendaPendientesPanel` y `GastosFijosPlantillasPanel`, que es donde cae por el
-   orden alfabético con el que la guardia recorre el árbol) y se subieron los números:
-
-   | número | antes | después |
-   | --- | --- | --- |
-   | `TOTAL_ARCHIVOS_CON_DATATABLE` | 28 | **29** |
-   | `TOTAL_INSTANCIAS_DATATABLE` | 28 | **29** |
-   | `totalCensado` | 29 | **30** |
-   | instancias `fuera` (`excluidas.length`) | 9 | **10** |
-   | tablas censadas `fuera` | 10 | **11** |
-   | tablas censadas `con_descarga` | 19 | **19 (sin cambio)** |
-
-2. **Barrido de STRING de `wallet-page.test.tsx` (T6.2).** Ya lo hizo el backend (§ 5.2 de
-   arriba) y se corrió otra vez aquí: verde. El frontend no lo tocó — sólo añadió al doble de
-   `@/lib/actions/wallet` el export nuevo, sin el cual ese archivo no ejecuta ni un caso.
-
-3. **Censo de paginación (`paginacion-transversal.test.tsx`).** **Intacto en 13.** El nombre
-   accesible del control del detalle se declara como `DETALLE_FILA_NOMBRE.paginacion(fila)` y
-   NO como `export const PAGINACION_*_LABEL`; corrido y verde.
-
----
-
-## 15 — Las tres mutaciones exigidas (ejecutadas y revertidas)
-
-### 15.1 · R7/R9 — que «Otros» se pinte SIEMPRE, aunque valga 0,00
-
-Mutación en `DesgloseEgresosLista.tsx`: la condición `hayOtrosEgresos` del ternario que decide
-si la fila entra en el DOM se sustituye por `true`.
+**El síntoma.** El shell del agente recibe el `PATH` **de Windows** (separado por `;`) y bash
+lo parte por `:`. Resultado: **no hay `node`, ni `git`, ni siquiera `cat` o `grep`**. Lo
+comprobé al arrancar esta tanda:
 
 ```
- ❯ tests/components/ComposicionGananciaCard.test.tsx (29 tests | 3 failed) 964ms
-     × R7: con `hayOtrosEgresos` falso, la fila «Otros gastos de Ordenex» no está en el DOM
-     × R9: la decisión es del SERVIDOR — la tarjeta no compara importes
-     × R10: la fila «Otros» lleva su pista sobre el dinero sin clasificar
-
- AssertionError: expected <span class="truncate"></span> to be null
- - Expected: null
- + Received: <span class="truncate">Otros gastos de Ordenex</span>
-
- AssertionError: expected <dd …(1)></dd> to be null
- + Received: <dd class="col-span-2 …">Acá hay dinero de un concepto que esta tarjeta todavía
-             no sabe nombrar. Abrí la fila para ver de dónde viene.</dd>
-
- Test Files  1 failed (1)
-      Tests  3 failed | 26 passed (29)
+node: command not found · git: command not found · pnpm: command not found
 ```
 
-Lo que demuestra: la fila «Otros» con importe cero **no puede volver a aparecer en silencio**, y
-la pista tampoco se queda de adorno permanente. Revertida (la condición vuelve a ser la del
-servidor, comprobado en el archivo) y 29/29 en verde.
-
-### 15.2 · R31 — usar el largo de la página como `total` del detalle
-
-Mutación en `DetalleFilaComposicion.tsx`: el `total` deja de leerse de la respuesta del servidor
-y pasa a ser el número de movimientos pintados.
+**Qué hace `init.sh` en ese entorno.** Lo reproduje a propósito. `fail()` sí hace `exit 1`, así
+que **con `node` ausente el gate para en seco y no miente**. El problema es el escalón de al
+lado: cuando lo que falta es **otra** herramienta, el gate **degrada a `warn`, que es exit 0**:
 
 ```
- ❯ tests/components/DetalleFilaComposicion.test.tsx (17 tests | 4 failed) 5199ms
-     × R23: dos filas abiertas mantienen páginas independientes
-     × R28: con más movimientos que la página se puede navegar a la siguiente
-     × R31: el total que pagina es el del SERVIDOR, no el largo de la página pintada
-     × R29: el tamaño de página lo manda la CONFIGURACIÓN, y la pantalla no lo escribe
-
- AssertionError: expected "vi.fn()" to be called 3 times, but got 2 times
- TestingLibraryElementError: Unable to find an element with the text: 1-10 de 12
- TestingLibraryElementError: Unable to find an element with the text: 1-3 de 7
-
- Test Files  1 failed (1)
-      Tests  4 failed | 13 passed (17)
+! no es un repo git: no se puede clasificar el cambio   <- se salta la NEGATIVA del modo rapido
+! pnpm no disponible para correr script 'typecheck'     <- typecheck NO se ejecuta
+! pnpm no disponible para correr script 'lint'          <- lint NO se ejecuta
 ```
 
-Lo que demuestra, y es el motivo de que este caso exista: con el largo de la página como total,
-**la barra diría «1-3 de 3» y el botón de siguiente se apagaría** — los otros nueve movimientos
-de la fila quedan inalcanzables sin que nada falle ni se rompa la pantalla. Revertida y 17/17
-verde.
-
-### 15.3 · design § 10-A1 — que el navegador mande CATEGORÍAS en vez del token de fila
-
-Mutación en el fetcher de `DetalleFilaComposicion.tsx`: el cliente resuelve el complemento y
-manda la lista de categorías —las tres correctas de hoy para «Otros», y la propia para el resto—
-en lugar del token.
-
-```
- ❯ tests/components/DetalleFilaComposicion.test.tsx (17 tests | 5 failed) 2143ms
-     × R22: abrir una fila cuesta exactamente UNA lectura, y sólo de esa fila
-     × R23: dos filas abiertas mantienen páginas independientes
-     × R28: con más movimientos que la página se puede navegar a la siguiente
-     × el input de una fila es su token y su página, y ninguna lista de categorías
-     × R20: los filtros vigentes de la wallet bajan al detalle, y sólo ellos
-
- AssertionError: expected { categorias: [ …(3) ], page: 1 } to deeply equal
-                          { fila: 'otros_egresos', page: 1 }
- - "fila": "otros_egresos",
- + "categorias": [ "egreso_gasto", "egreso_pago_mensajero", "egreso_ajuste" ],
-
- AssertionError: expected { tipo: 'egreso', …(5) } to deeply equal { tipo: 'egreso', …(5) }
- + "categorias": [ "egreso_pago_mensajero" ],
- - "fila": "egreso_pago_mensajero",
-
- Test Files  1 failed (1)
-      Tests  5 failed | 12 passed (17)
-```
-
-Lo que demuestra: existe una red que impide que el navegador vuelva a tener **una segunda
-definición del complemento**. Y nótese que la mutación es *plausible* —la lista que escribe es la
-correcta HOY—: el fallo que evita no es un error de cálculo, es que esa lista y la del servidor
-puedan separarse mañana sin que nada avise. Revertida (en el archivo sólo queda la palabra
-«categorias» dentro del comentario que explica por qué no se mandan) y 17/17 verde.
-
----
-
-## 16 — Verificación (frontend)
-
-```
-$ pnpm typecheck
-> tsc --noEmit
-TYPECHECK_EXIT=0        (sin una sola línea de salida)
-
-$ pnpm lint
-✖ 127 problems (0 errors, 127 warnings)
-LINT_EXIT=0
-```
-
-Los 127 avisos son los MISMOS preexistentes que anotó el backend (`no-unused-vars` en tests
-ajenos). Ninguno cae en un archivo de este bloque: filtrar la salida de `pnpm lint` por
-`composicion`, `FilaComposicion`, `DesgloseEgresosLista`, `WalletFiltros`, `WalletModule` y
-`DetalleFila` no devuelve nada.
-
-Corrida explícita, **por nombre**, de todos los archivos de test creados o modificados en B5/B6:
-
-```
-$ pnpm exec vitest run \
-    tests/components/DetalleFilaComposicion.test.tsx \
-    tests/components/ComposicionGananciaCard.test.tsx \
-    tests/unit/descarga/cobertura-tablas.guardia.test.ts \
-    tests/integration/wallet-page.test.tsx \
-    tests/unit/components/wallet-page-cobros-pendientes.test.tsx \
-    tests/components/descarga/WalletDescarga.test.tsx \
-    tests/components/paginacion/paginacion-transversal.test.tsx \
-    tests/components/CajaComposicionBarra.test.tsx
-
- Test Files  8 passed (8)
-      Tests  106 passed (106)
-```
-
-Todo lo que toca la wallet, la composición y la caja:
-
-```
-$ pnpm exec vitest run wallet composicion caja
- Test Files  93 passed (93)
-      Tests  1281 passed (1281)
-```
-
-Guardias completas (`pnpm exec vitest run guard`, 169 archivos):
-
-```
- Test Files  1 failed | 168 passed (169)
-      Tests  1 failed | 2561 passed (2562)
-```
-
-**Los mismos números, test a test, que midió el backend en § 7.** El único rojo sigue siendo
-`superficie-de-uso.guardia.test.ts` por `lib/actions/tarifas.ts:67 obtenerTarifa`, deuda AJENA
-declarada en `tests/baseline-rojos.json` desde el 2026-08-28. Lo que sí cambió es que
-**`listarMovimientosDeFilaAction` ya NO aparece en esa lista**: al cablearse el desplegable, la
-action pasó a ser alcanzable y su anotación de excepción se borró — que es exactamente el deber
-que el backend dejó escrito.
-
----
-
-## 17 — Lo que quedó dudoso (frontend)
-
-1. **No se ha visto en el navegador.** Todo lo de arriba es jsdom. El disclosure sobre una `<dl>`
-   en rejilla (`grid-cols-[1fr_auto]` con el panel a `col-span-2`) es la primera vez que este
-   repo lo hace, y el aspecto en móvil —una `DataTable` de cuatro columnas dentro de media
-   tarjeta— no está medido. La memoria del repo dice que ver la app encuentra lo que la suite no.
-2. **`aria-controls` apunta a un id que no existe mientras la fila está cerrada.** Es el
-   precedente vivo del `DataTable`, y por eso se copió en vez de inventar otra convención; pero
-   es una elección discutible y está aquí escrita para que se pueda discutir.
-3. **«Ajustes (egreso)» en plural frente a «Ajuste (egreso)» que promete el diálogo.** Se eligió
-   la voz plural de sus vecinas de columna; si se prefiere la coincidencia byte a byte con la
-   promesa, es una línea en `composicion-detalle-labels.ts` y dos literales en su test.
-4. **Cerrar una fila olvida su página.** El estado vive dentro del panel, que se desmonta al
-   cerrar (es lo que compra el «cero lecturas» de R21). Reabrir vuelve a la primera página.
-5. **`inputDeFiltros` vive en `WalletFiltros.tsx`**, que es un componente `"use client"`. Es
-   donde ya viven el tipo y el valor vacío, pero si mañana la usara algo fuera de la wallet
-   convendría mudarla a un módulo puro.
-
----
-
-## 18 — Veredicto (frontend)
-
-B5 y B6 completos. «Otros gastos de Ordenex» sólo se pinta cuando el SERVIDOR dice que ahí queda
-dinero y, cuando se pinta, lo dice con una pista; los pagos a mensajeros y los ajustes tienen
-fila propia con su nombre; las catorce filas se abren y leen su detalle con el TOKEN de la fila,
-nunca con una lista de categorías; el total de la columna no se movió ni un céntimo. Las tres
-mutaciones se ejecutaron, salieron rojas nombrando lo que protegen y se revirtieron. Typecheck y
-lint en 0; 106 tests verdes en los ocho archivos tocados y 1.281 en todo lo que toca la wallet.
-
----
-
-# ARREGLO DEL DETALLE EN MÓVIL (2026-08-31) — cierre y verificación en navegador
-
-Continúa el trabajo que un agente anterior dejó **sin commitear y sin ver en pantalla** (cayó
-por un fallo de red a media edición). El punto 1 de «§ 17 — Lo que quedó dudoso» decía «no se ha
-visto en el navegador»; esta sección lo cierra.
-
-## 19 — El defecto, medido con el código de HEAD delante
-
-Chromium 390×844, `/wallet`, fila «Pagos a mensajeros» de la tarjeta «Cómo se compone la
-ganancia de Ordenex». El hueco útil del panel es de **284 px** y la tabla de cuatro columnas
-pide **309**. Los tres síntomas salen de ahí:
-
-1. **DINERO CORTADO.** El importe es la ÚLTIMA columna y se quedaba **25 px fuera** del área
-   visible: la pantalla decía `₡1.70` y `₡10.20` donde el DOM decía `₡1.700` y `₡10.200`. No se
-   ve roto: se ve como **otro número**, y creíble. Éste es el grave.
-2. La fecha se partía en dos renglones (`2026-` / `08-13`).
-3. Al desbordar, la `DataTable` sacaba sus dos flechas de scroll («Desplazar la tabla a la
-   izquierda/derecha»), centradas verticalmente en el cuerpo: aterrizaban **encima de la segunda
-   fila** y le tapaban el importe entero.
-
-Capturas del antes en `shots339/movil-abierta.png`.
-
-## 20 — Qué se conservó del agente anterior y qué se rehízo
-
-**CONSERVADO** (medido y confirmado por mí, no dado por bueno):
-
-- El **juego de columnas de móvil** (`COLUMNS_MOVIL`): fecha, concepto y detalle apilados en una
-  sola celda «Movimiento», y el importe con columna propia a la derecha. Funciona: los tres
-  síntomas caen a la vez porque los tres eran el mismo «cuatro columnas no caben».
-- El **corte con `useIsMobile`** (`max-width: 767px`), que es el hook con el que el Sidebar de la
-  app ya distingue teléfono de escritorio. Este panel se monta por click (nunca se renderiza en
-  servidor), así que no hay parpadeo ni desajuste de hidratación; comprobado: cero `pageerror` y
-  cero errores de React en consola.
-- La etiqueta `movimiento` en `COMPOSICION_DETALLE_COLUMNAS`, fuera del JSX e i18n-ready.
-- `ImporteCelda` con `whitespace-nowrap` + `tabular-nums`, money-safe: entra STRING, sale STRING
-  por `money`. Cero `Number(`, cero `parseFloat`, cero abreviatura.
-
-**REHECHO — se revirtió el juego de columnas de ESCRITORIO a HEAD, byte por byte.** El agente
-anterior le había metido `wrap-anywhere` a «concepto» y «detalle» y `whitespace-nowrap` a la
-fecha, con un comentario que afirmaba que así «la tabla se ENCOGE en vez de desbordar» entre 768
-y 1024 px. **Es falso, y lo desmiente su propia medición.** Medido por mí con el mismo script,
-mismo servidor, mismas filas — `scrollWidth − clientWidth` del contenedor de scroll de la
-`DataTable`:
-
-| viewport | HEAD (pristino) | con `wrap-anywhere` + `nowrap` |
-|---|---|---|
-| 768×900  | desborde **147 px** | desborde **171 px** |
-| 1024×900 | desborde **19 px**  | desborde **43 px**  |
-| 1440×950 | desborde **0**      | desborde **0**      |
-
-Es **24 px PEOR en todos los anchos donde desborda**, y siempre los mismos 24: el `nowrap` sube
-el ancho mínimo de la fecha de ~42 px (partida en «2026-» / «08-13») a ~66 px, y `wrap-anywhere`
-no compensa nada porque no es el min-content lo que decide el ancho aquí. Como el importe es la
-última columna, **empeorar el desborde es empeorar el recorte del dinero**. Además contradice la
-convención escrita de la feature 200 en `WalletLedger` («que aparezca el scroll ANTES de que las
-celdas se estrujen») y `wrap-anywhere` no se usa en ninguna otra parte del repo.
-
-Tras la reversión, el bloque `const COLUMNS` es **idéntico carácter a carácter** al de HEAD
-(comprobado con `diff` sobre el bloque extraído de las dos versiones), y los únicos símbolos
-nuevos del archivo son `ImporteCelda` y `COLUMNS_MOVIL`.
-
-## 21 — Verificación en el navegador (lo que de verdad importa)
-
-Chromium con Playwright contra `http://localhost:3003`, `admin.qa@ordenex.test`. Login tecleado
-con `pressSequentially` y **el valor confirmado con `inputValue()` antes de enviar** (con `fill`
-antes de la hidratación se envía el formulario vacío). Script: `scratchpad/mide339.mjs`.
-
-**390×844 — el texto EXACTO de cada celda de importe, leído del DOM ya pintado:**
-
-```
-cabeceras: ["Movimiento","Importe"]
-scroller:  {"clientW":284,"scrollW":284,"desborde":0}
-flechas de scroll: 0
-IMPORTES (innerText exacto de la celda): ["₡1.700","₡3.400","₡10.200"]
-  fila 0: "2026-08-13 | Pago a mensajero | Cierre del día" | "₡1.700"   fueraDcha=0 recorteInterno=0
-  fila 1: "2026-08-13 | Pago a mensajero | Cierre del día" | "₡3.400"   fueraDcha=0 recorteInterno=0
-  fila 2: "2026-08-12 | Pago a mensajero | Cierre del día" | "₡10.200"  fueraDcha=0 recorteInterno=0
-```
-
-Los tres **enteros**: `₡1.700`, `₡3.400`, `₡10.200`. Desborde 0 sobre 284 px, `fueraDcha=0` en
-todas las celdas y `recorteInterno=0` (ni el `<span>` recorta por dentro). **Cero flechas**, así
-que el síntoma 3 desaparece solo. Las fechas van en un renglón: síntoma 2, cerrado.
-
-Con una **cifra larga**, fila «Ajuste (ingreso)» a 390×844: `["₡987.654","₡12.345.679"]`,
-desborde 0, `fueraDcha=0`. No es que quepa por poco: cabe.
-
-**1440×950 — el escritorio no cambió:**
-
-```
-cabeceras: ["Fecha","Concepto","Detalle","Importe"]
-scroller:  {"clientW":498,"scrollW":498,"desborde":0}
-flechas de scroll: 0
-IMPORTES: ["₡1.700","₡3.400","₡10.200"]
-anchos de columna: 115 / 168 / 130 / 85 px   (los mismos de HEAD)
-```
-
-Y la prueba dura: se capturó el panel a 1440×950 **con HEAD** y **con el árbol final**, con el
-mismo script y la misma sesión, y las dos capturas tienen el **mismo MD5**
-(`097d505b3b1001bb5f6b9771170c0454`). El escritorio es **pixel a pixel el de antes**.
-
-Capturas en `scratchpad/shots339/`: `final-movil-abierta.png`, `final-movil-panel.png`,
-`final-escritorio-abierta.png`, `final-escritorio-panel.png`.
-
-## 22 — Test nuevo, y las dos mutaciones que prueban que no está vacío
-
-**El juego de columnas de móvil era código muerto para la suite**: el polyfill de `matchMedia` de
-`tests/setup/jest-dom.ts` devuelve siempre `matches: false`, o sea escritorio, así que los 17
-casos que ya había pintaban las cuatro columnas y ninguno llegaba a `COLUMNS_MOVIL`. Borrarlo
-entero dejaba la suite en verde. Se añaden **4 casos** a
-`tests/components/DetalleFilaComposicion.test.tsx` con un `matchMedia` que dice «sí» a
-`max-width: 767px`:
-
-- en móvil las cabeceras son exactamente `["Movimiento","Importe"]`;
-- **el importe se lee entero**: las celdas dicen `["₡1.700","₡3.400","₡10.200"]`, y `₡1.70` /
-  `₡10.20` NO están en el DOM;
-- apilar tres columnas en una no esconde ningún dato (fecha, etiqueta legible del catálogo —no el
-  enum—, origen + descripción, importe);
-- **control de no-vacuidad**: sin fingir teléfono siguen saliendo las cuatro de siempre. Este y
-  el primero no pueden pasar a la vez si `useIsMobile` deja de mirar la consulta.
-
-Los literales `₡1.700` / `₡3.400` / `₡10.200` **no son un espejo de `money`**: son lo que un
-humano leyó en pantalla, y lo que el defecto convertía en otro número.
-
-**Mutación 1** — `const esMovil = false` (el móvil nunca se activa):
-
-```
-× el importe se lee ENTERO: `₡1.700`, `₡3.400` y `₡10.200`, sin recortar ni abreviar
-  - ["₡1.700","₡3.400","₡10.200"]   + ["Pago a mensajero","Pago a mensajero","Pago a mensajero"]
-Tests  2 failed | 19 passed (21)
-```
-
-**Mutación 2** — `money(monto).slice(0, -1)` (se pierde el último dígito, que es EXACTAMENTE el
-defecto de pantalla):
-
-```
-Unable to find an element with the text: ₡1.700 …
-                    ₡1.70
-                    ₡3.40
-                    ₡10.20
-Tests  2 failed | 19 passed (21)
-```
-
-La mutación 2 reproduce en jsdom lo que se veía en Chromium, y el test la nombra. Las dos se
-revirtieron; comprobado con `grep` que no queda ni un `// MUTACION` en el árbol.
-
-## 23 — Gate (frontend)
-
-```
-$ pnpm typecheck        →  TYPECHECK_EXIT=0
-$ pnpm lint             →  ✖ 127 problems (0 errors, 127 warnings)   LINT_EXIT=0
-```
-
-Los 127 avisos son los **mismos preexistentes** de § 16 (`no-unused-vars` en tests ajenos);
-filtrar la salida por `DetalleFilaComposicion`, `composicion-detalle` y `wallet/_components` no
-devuelve **nada**.
-
-```
-$ pnpm exec vitest run tests/components/DetalleFilaComposicion.test.tsx
-  Test Files  1 passed (1)        Tests  21 passed (21)     (17 de antes + 4 nuevos)
-
-$ pnpm exec vitest run  tests/components/DetalleFilaComposicion.test.tsx \
-    tests/components/ComposicionGananciaCard.test.tsx \
-    tests/unit/descarga/cobertura-tablas.guardia.test.ts \
-    tests/integration/wallet-page.test.tsx \
-    tests/components/descarga/WalletDescarga.test.tsx \
-    tests/components/paginacion/paginacion-transversal.test.tsx
-  Test Files  6 passed (6)        Tests  86 passed (86)
-
-$ pnpm exec vitest run wallet composicion
-  Test Files  78 passed (78)      Tests  1019 passed (1019)
-
-$ pnpm exec vitest run guard guardia
-  Test Files  1 failed | 168 passed (169)     Tests  1 failed | 2561 passed (2562)
-```
-
-El único rojo es **el mismo de § 16**, cifra por cifra: `superficie-de-uso.guardia.test.ts` por
-`lib/actions/tarifas.ts:67 obtenerTarifa`, deuda AJENA declarada en `tests/baseline-rojos.json`
-(línea 42) desde el 2026-08-28. Los tres censos que vigilan este panel —cobertura de descargas,
-paginación transversal y descarga de la wallet— siguen verdes: el panel sigue teniendo **UNA**
-instancia de `<DataTable>`, no dos.
-
-`./init.sh` **no se corrió**: lo pidió así el encargo, y el commit es del leader.
-
-## 24 — Lo que queda dudoso
-
-1. **⚠️ ENTRE 768 y 1279 px EL IMPORTE SIGUE RECORTADO, y no es de esta ficha.** Medido en HEAD,
-   antes de tocar nada: desborde de **147 px a 768** y **19 px a 1024**; a 1280 y 1440 cabe. Está
-   **declarado en el comentario de `COLUMNS_MOVIL`**, no tapado. No se arregló aquí por dos
-   motivos: es preexistente (el encargo era el móvil, y «arreglar lo evidenciado, no rediseñar»),
-   y sobre todo **el corte por viewport no es el instrumento adecuado** — a 1024 px el panel mide
-   **290 px**, prácticamente los mismos 284 del teléfono, porque la tarjeta ocupa una fracción de
-   la pantalla. Quien lo cierre debería mirar el ancho del **contenedor** y no el de la ventana,
-   como ya razona `ContadoresTablero` con `@container` («los umbrales de CONTENEDOR»). Cambiar
-   el umbral de `useIsMobile` a 1280 lo taparía a costa de dar la vista de teléfono a un portátil
-   de 1024, que es una decisión de diseño y no mía.
-2. **`GET /wallet` devuelve un 500 en el servidor de desarrollo**, y el indicador de Next pinta
-   «2 Issues». **No es de esta ficha**: se reprodujo idéntico con los dos archivos restaurados a
-   HEAD (mismos cuatro mensajes de consola, mismo 500). La página termina pintando y el panel
-   funciona, pero alguien debería mirarlo aparte.
-3. **jsdom no hace layout.** Los 4 casos nuevos afirman QUÉ columnas se piden y QUÉ texto sale
-   entero; que además quepan en 284 px **sólo** lo dice la medición en Chromium de § 21. Si mañana
-   alguien estrecha la tarjeta, la suite no se enterará.
-4. **`useIsMobile` mira la ventana, no el contenedor**, y este panel vive dentro de una tarjeta
-   que cambia de ancho con la barra lateral. Es el mismo hilo del punto 1.
-5. **La tabla sigue envuelta en un `<div className="overflow-x-auto">` redundante**: la
-   `DataTable` ya trae su propio contenedor de scroll. No se tocó (no hace daño y no es de esta
-   ficha), pero es ruido que confunde a quien mida desbordes aquí.
+Es decir: en un entorno a medias, el gate **puede saltarse typecheck, lint y la regla que
+obliga al modo completo ante un cambio de cimientos**, y seguir adelante. Eso es exactamente
+«un verde que no significa nada» que `docs/verification.md` describe como el peor modo de
+fallo. **No conseguí reproducir un `== init OK ==` con exit 0 literal** —mis dos intentos
+murieron antes por `rm`/`wc` ausentes o salieron con exit 1—, así que lo reporto por lo que
+medí y no por lo que se temía: **la degradación silenciosa está confirmada; el exit 0 final
+no**.
+
+**Cómo he trabajado yo:** exportando un `PATH` POSIX correcto en **cada** comando (el estado
+del shell no persiste entre llamadas) y comprobando `node -v`, `git --version` y `pnpm -v`
+**antes** de dar por bueno cualquier número. Los del gate de arriba están medidos así.
+
+**Sugerencia para quien decida sobre el arnés** (no la aplico yo): que la falta de `pnpm` o de
+`git` sea `fail` y no `warn`, por el mismo argumento por el que `--rapido` se niega solo ante
+un cambio de cimientos — un gate que se salta sus propios pasos debería gritarlo, no
+susurrarlo.

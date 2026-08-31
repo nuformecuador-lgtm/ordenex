@@ -121,7 +121,7 @@ const ARBOLES_UI = ["app", "components"] as const;
 // propósito. Los números son los MEDIDOS —esta guardia se vio fallar con «28 recibido /
 // 29 esperado» antes de tocarlos—, no una resta de escritorio. Censo total: 29 = 28
 // `<DataTable>` + 1 cruda.
-// FICHA 339 (B6.1): 28 → 29 archivos y 28 → 29 instancias. La de más es el DESPLEGABLE de una
+// FICHA 343 (B6.1): 28 → 29 archivos y 28 → 29 instancias. La de más es el DESPLEGABLE de una
 // fila de la tarjeta «Cómo se compone la ganancia de Ordenex»
 // (`wallet/_components/DetalleFilaComposicion.tsx`), que enseña los movimientos que componen el
 // importe de esa fila. Nace `fuera` con su motivo escrito en `censo-tablas.ts`: es un recorte
@@ -270,7 +270,7 @@ describe("guardia de cobertura del censo de tablas", () => {
     // FICHA 337 (segunda mitad): 8 -> 9. La de mas es la cola de cobros por rechazo de tienda,
     // `fuera` y sin control por el mismo motivo, palabra por palabra, que su hermana de la 333: lo
     // que se aprueba se descarga desde los libros donde aterriza, no desde la cola.
-    // FICHA 339 (B6.1): 9 -> 10. La de mas es el desplegable de una fila de la tarjeta de la
+    // FICHA 343 (B6.1): 9 -> 10. La de mas es el desplegable de una fila de la tarjeta de la
     // ganancia: `fuera` y sin control, porque es un recorte del MISMO libro de la caja, que ya
     // descarga el conjunto completo con sus filtros.
     expect(excluidas.length).toBe(10);
@@ -303,7 +303,7 @@ describe("guardia de cobertura del censo de tablas", () => {
     // FICHA 333 (H1): 28 → 29, por la cola de cobros de gasto fijo por aprobar.
     // FICHA 337 (segunda mitad): 29 → 30, por la cola de cobros por rechazo de tienda.
     // FICHA 336: 30 → 29, por el desglose de pagos del mensajero, que se va con `/mis-pagos`.
-    // FICHA 339 (B6.1): 29 → 30, por el desplegable de una fila de la tarjeta de la ganancia.
+    // FICHA 343 (B6.1): 29 → 30, por el desplegable de una fila de la tarjeta de la ganancia.
     expect(totalCensado).toBe(30);
   });
 
@@ -377,7 +377,7 @@ describe("guardia de cobertura del censo de tablas", () => {
     // descarga que este censo pierde, y desaparece porque desaparecio su pantalla («Desglose de
     // pagos del mensajero», `/mis-pagos`), no porque alguien le quitara el control.
     //
-    // FICHA 339 (B6.1): 10 -> 11 fuera de alcance, y las 19 dentro de alcance NO se mueven. La
+    // FICHA 343 (B6.1): 10 -> 11 fuera de alcance, y las 19 dentro de alcance NO se mueven. La
     // de mas es el desplegable de una fila de la tarjeta de la ganancia. La asimetria vuelve a
     // ser el dato, y aqui con un motivo que ninguna de las anteriores tenia: lo que este panel
     // enseña YA SE DESCARGA por otra puerta —el libro de la caja, con sus filtros—, asi que una

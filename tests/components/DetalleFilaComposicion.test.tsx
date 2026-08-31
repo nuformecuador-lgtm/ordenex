@@ -550,7 +550,7 @@ describe("Ficha 339 — money-safe en el navegador (R35)", () => {
  * contrato de esta ficha, no una copia de `money`. Si alguien vuelve a meter `truncate`,
  * `line-clamp` o una abreviatura de miles en la celda del importe, estos tres caen.
  *
- * Lo que ESTE test no puede ver, y por eso hay medicion en navegador en `progress/impl_339.md`:
+ * Lo que ESTE test no puede ver, y por eso hay medicion en navegador en `progress/impl_343.md`:
  * jsdom no hace layout, asi que aqui no existen ni el ancho del panel, ni el desborde, ni las
  * flechas de scroll de la `DataTable`. Este caso afirma QUE COLUMNAS se piden y QUE TEXTO sale
  * entero; que ademas quepan en 284 px se midio con Playwright.

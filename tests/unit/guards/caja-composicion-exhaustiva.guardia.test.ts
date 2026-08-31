@@ -62,7 +62,7 @@ function tipoDe(categoria: string): AgregadoCajaRow["tipo"] {
  * `NATURALEZA_POR_CATEGORIA`, y eso es lo que hace el primer `it` de este archivo: la deriva y
  * la compara contra esta foto.
  *
- * FICHA 339 (T2.3) — la foto pasa de TRES categorias a UNA, y el motivo es el objeto de la
+ * FICHA 343 (T2.3) — la foto pasa de TRES categorias a UNA, y el motivo es el objeto de la
  * ficha: `egreso_pago_mensajero` y `egreso_ajuste` ganan FILA PROPIA en la columna, asi que
  * dejan de ser residuo. Queda `egreso_gasto`, categoria RESERVADA sin un solo escritor en el
  * arbol (medido: solo aparece en `lib/types/wallet.ts` y en los catalogos de
@@ -181,12 +181,12 @@ describe("R23/R26 — la particion de la ganancia cubre TODAS las categorias pro
 
     expect([...derivadas].sort()).toEqual([...OTROS_EGRESOS_DE_ORDENEX].sort());
     // Control de no-vacuidad del `toEqual`: la lista NO esta vacia — sigue habiendo un hueco,
-    // y es exactamente `egreso_gasto` (ficha 339, T2.3).
+    // y es exactamente `egreso_gasto` (ficha 343, T2.3).
     expect(derivadas.length).toBe(1);
     expect(derivadas).toEqual(["egreso_gasto"]);
   });
 
-  it("R13 (ficha 339): los dos egresos NOMBRADOS salieron del complemento de verdad", () => {
+  it("R13 (ficha 343): los dos egresos NOMBRADOS salieron del complemento de verdad", () => {
     // La afirmacion que la ficha existe para hacer cierta, medida sobre la DERIVACION y no
     // sobre una lista: las dos categorias que antes caian en «otros» ya no estan ahi, y estan
     // en el conjunto con fila. Si alguien las devolviera al cubo, este caso las nombra.
@@ -232,7 +232,7 @@ describe("R23/R26 — MEDIDO sobre el catalogo entero: las dos columnas cuadran"
     expect(caja.entradas).not.toBe(composicion.totalIngresos);
   });
 
-  it("R11 (ficha 339): los cuatro conceptos + los dos nombrados + «otros» suman `egresosPropios`", async () => {
+  it("R11 (ficha 343): los cuatro conceptos + los dos nombrados + «otros» suman `egresosPropios`", async () => {
     // La mitad de la izquierda se mide por el camino REAL de la 45/158
     // (`WalletMovimientoRepository.agregarPorCategoria`) y la de la derecha por el camino nuevo
     // (`derivarComposicionGanancia`), sobre EL MISMO libro. Es lo unico que prueba que las dos

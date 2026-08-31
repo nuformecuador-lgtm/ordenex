@@ -15,6 +15,32 @@ export interface CargaViaApiRow extends RowResult {
   numGuia?: number | null;
 }
 
+/**
+ * 2026-08-31 — LAS FILAS QUE FALLAN SALEN DE `filas` Y VIAJAN AQUI.
+ *
+ * Hasta hoy el resumen devolvia UNA lista con las tres clasificaciones mezcladas y una clave
+ * `errores` OPCIONAL dentro de la fila. Para el integrador eso significaba recorrer el lote
+ * entero y ramificar por `resultado` —o peor, por la presencia de una clave— antes de poder
+ * hacer nada: el caso que hay que atender estaba escondido dentro del caso normal. Ahora
+ * `filas` trae SOLO lo que entro (`creada`/`duplicada`) y lo que fallo se lee directo en
+ * `errores`, que es la lista que un integrador quiere mirar aparte: reintentar, avisar o
+ * corregir.
+ *
+ * LO QUE NO CAMBIA: el CONTENIDO de cada fila con error se conserva palabra por palabra —su
+ * `fila` 1-based, su `numRemision`, su `resultado: "error"` y su mapa `errores` por campo—, y
+ * los contadores `total`/`creadas`/`duplicadas`/`conError` siguen contando sobre el lote
+ * COMPLETO. `conError` sigue siendo exactamente `errores.length`.
+ */
+export interface CargaViaApiFilaError {
+  /** Indice 1-based dentro del array `ordenes` que se envio. */
+  fila: number;
+  numRemision: string;
+  /** Constante, pero se conserva: una fila movida de sitio no cambia de significado. */
+  resultado: "error";
+  /** Errores por campo, TAL CUAL los emitia la fila dentro de `filas`. */
+  errores: Record<string, string[]>;
+}
+
 // Feature 88/R10 — bloque plano que el integrador consume directo (sin filtrar `filas`):
 // una entrada por orden EFECTIVAMENTE creada, con su `numGuia` e `id`.
 export interface CargaViaApiOrden {
@@ -47,7 +73,14 @@ export interface CargaViaApiSummary {
   creadas: number;
   duplicadas: number;
   conError: number;
+  /**
+   * SOLO las filas que entraron al sistema: `creada` y `duplicada`. Desde 2026-08-31 NINGUNA
+   * fila de esta lista lleva `resultado: "error"` ni la clave `errores`; las que fallan estan
+   * en el campo hermano de abajo.
+   */
   filas: CargaViaApiRow[];
+  /** Las filas que NO entraron, con su detalle por campo. Lista vacia = ninguna fallo. */
+  errores: CargaViaApiFilaError[];
   ordenes: CargaViaApiOrden[];
   /**
    * Feature 141/R39: identificador del LOTE creado por ESTA peticion (una peticion = un

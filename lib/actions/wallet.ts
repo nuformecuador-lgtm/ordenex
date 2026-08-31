@@ -129,7 +129,7 @@ export async function listarMovimientosCompletoAction(
  * cliente manda el TOKEN de la fila; quien traduce ese token a un conjunto de categorias es el
  * servicio, con la misma definicion que produjo el importe de la fila.
  *
- * SU SUPERFICIE (bloque B5 de la 339): `DetalleFilaComposicion`, el panel que se despliega al
+ * SU SUPERFICIE (bloque B5 de la 343): `DetalleFilaComposicion`, el panel que se despliega al
  * abrir una fila de la tarjeta «Como se compone la ganancia de Ordenex». Mientras esa pantalla
  * no existio, este docstring llevo la anotacion de excepcion de
  * `superficie-de-uso.guardia.test.ts`; al cablear el desplegable se borro, que es exactamente lo

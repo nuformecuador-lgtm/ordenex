@@ -37,7 +37,7 @@ vi.mock("@/lib/actions/wallet", () => ({
   listarMovimientosCompletoAction: (...a: unknown[]) => listarMovimientosCompletoMock(...a),
   // Feature 173 (T G.3): la cabecera del libro de caja la sirve el borde de las DOS cifras.
   verResumenCajaAction: (...a: unknown[]) => verResumenCajaMock(...a),
-  // FICHA 339 (B5): la tarjeta de la ganancia monta filas desplegables y el panel de cada una
+  // FICHA 343 (B5): la tarjeta de la ganancia monta filas desplegables y el panel de cada una
   // importa el borde del detalle. Sin declararlo aqui, el import no resuelve y este archivo no
   // ejecuta ni un caso. Ninguna asercion de este archivo lo usa: la descarga es de OTRA tabla.
   listarMovimientosDeFilaAction: vi.fn(),

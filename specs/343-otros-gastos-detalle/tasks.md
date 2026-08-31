@@ -13,7 +13,7 @@
   línea: `tests/unit/descarga/cobertura-tablas.guardia.test.ts`,
   `tests/integration/wallet-page.test.tsx` y
   `tests/components/paginacion/paginacion-transversal.test.tsx`.
-  **Hecho:** los tres en verde y los números del censo de tablas anotados en `progress/impl_339.md`
+  **Hecho:** los tres en verde y los números del censo de tablas anotados en `progress/impl_343.md`
   (hoy afirmados por la guardia: archivos 28, instancias 28, `totalCensado` 29 = `con_descarga` 19 +
   `fuera` 10). Sin esta foto no se pueden distinguir después «el número que subí» de «el número que
   ya estaba mal».
@@ -129,7 +129,7 @@
   Cubre los seis hechos de `design.md § 9`: alcance de la fila, el complemento, el `total` del
   servidor, los filtros vigentes, `Σ detalle === importe de la fila`, y los agregados intactos.
   **Hecho:** con la restricción de categoría quitada a mano del `WHERE`, el test cae nombrando los
-  importes intrusos (mutación ejecutada y revertida, anotada en `progress/impl_339.md`).
+  importes intrusos (mutación ejecutada y revertida, anotada en `progress/impl_343.md`).
 
 ---
 
@@ -201,7 +201,7 @@
 
 ## B7 — Cierre
 
-- [ ] **T7.1 — Bitácora en `progress/impl_339.md`:** archivos tocados, mapa `R → test`, salidas de los
+- [ ] **T7.1 — Bitácora en `progress/impl_343.md`:** archivos tocados, mapa `R → test`, salidas de los
   tests, la mutación del `WHERE` y su resultado, y los números de censo antes/después.
   **Hecho:** el archivo está **commiteado** (en este repo el informe se ha quedado sin commitear tres
   veces en un día y un `git checkout` se lo llevó).
@@ -264,5 +264,5 @@
 **Nota sobre las mutaciones exigidas.** Tres casos de esta tabla no valen nada sin su mutación
 ejecutada y anotada: `R33` (quitar el `in` del `WHERE`), `R12` (cambiar de cubeta una categoría sin
 tocar el total) y `R31` (devolver `movimientos.length` como `total`). Las tres se corren a mano, se
-revierten y se dejan escritas en `progress/impl_339.md` con su resultado: en este repo hay un arnés de
+revierten y se dejan escritas en `progress/impl_343.md` con su resultado: en este repo hay un arnés de
 mutaciones que reportó supervivientes **sin haber ejecutado un solo test**.

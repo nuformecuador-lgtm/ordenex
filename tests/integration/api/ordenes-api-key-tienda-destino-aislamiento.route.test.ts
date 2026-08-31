@@ -14,9 +14,13 @@
 // devolviera siempre lo mismo no probaria nada.
 import { describe, it, expect, vi } from "vitest";
 import { handleListadoApi, type ListadoApiDeps } from "@/app/api/ordenes/api-key/route";
-import { handleDetalleApi, type DetalleApiDeps } from "@/app/api/ordenes/api-key/[numGuia]/route";
+import {
+  handleConsultaOrdenApi,
+  type ConsultaOrdenApiDeps,
+} from "@/app/api/ordenes/api-key/orden/[id]/route";
 import { ApiKeyAuthService } from "@/lib/services/ApiKeyAuthService";
 import { ApiOrdenLecturaService } from "@/lib/services/ApiOrdenLecturaService";
+import { ApiOrdenResolucionService } from "@/lib/services/ApiOrdenResolucionService";
 import { hashApiKey } from "@/lib/utils/api-key-hash";
 import type {
   ApiKeyAutenticada,
@@ -71,6 +75,11 @@ const UNIVERSO: FilaFalsa[] = [
   fila(U_KEY_NUFORM, 7001, "KEY-PROPIA-1"), // de la cuenta dedicada (mundo pre-302)
 ];
 
+/** `orden.id` sintetico de una fila: el detalle por `{id}` se resuelve por id, no por guia. */
+function ordenId(f: FilaFalsa): string {
+  return `o-${f.numGuia}`;
+}
+
 /**
  * Doble de `IOrdenRepository` que HONRA el `ownerId`, como hace el WHERE real
  * (`tienda_id = ownerId`). `owners` guarda cada `ownerId` recibido: es la evidencia de QUE id
@@ -88,9 +97,21 @@ function ordenRepo() {
         total: propias.length,
       };
     }),
-    findDetalleByNumGuiaForOwner: vi.fn(async (numGuia: number, ownerId: string) => {
+    // Resolucion del `{id}` de la 177: honra el owner igual que el WHERE real, y devuelve las
+    // filas SIN desempatar (el desempate `num_guia` > `num_remision` es del service).
+    findByGuiaORemisionForOwner: vi.fn(
+      async (criterio: { numGuia: number | null; numRemision: string }, ownerId: string) => {
+        owners.push(ownerId);
+        return UNIVERSO.filter(
+          (f) =>
+            f.tiendaId === ownerId &&
+            (f.numGuia === criterio.numGuia || f.numRemision === criterio.numRemision),
+        ).map((f) => ({ id: ordenId(f), numGuia: f.numGuia, numRemision: f.numRemision }));
+      },
+    ),
+    findDetalleByOrdenIdForOwner: vi.fn(async (id: string, ownerId: string) => {
       owners.push(ownerId);
-      const f = UNIVERSO.find((x) => x.numGuia === numGuia && x.tiendaId === ownerId);
+      const f = UNIVERSO.find((x) => ordenId(x) === id && x.tiendaId === ownerId);
       return f ? { ...f, evidencias: [], gestiones: [] } : null;
     }),
   };
@@ -144,9 +165,11 @@ function depsListado(key: Partial<ApiKeyAutenticada>) {
 function depsDetalle(key: Partial<ApiKeyAutenticada>) {
   const { repo, owners } = ordenRepo();
   const auth = new ApiKeyAuthService(apiKeyRepo(key));
-  const deps: DetalleApiDeps = {
+  const lectura = new ApiOrdenLecturaService(repo as never, signedUrls);
+  const deps: ConsultaOrdenApiDeps = {
     autenticar: (raw) => auth.autenticar(raw),
-    lecturaService: new ApiOrdenLecturaService(repo as never, signedUrls),
+    resolucionService: new ApiOrdenResolucionService(repo as never),
+    detallePorOrdenId: (actor, id) => lectura.detallePorOrdenId(actor, id),
   };
   return { deps, owners };
 }
@@ -213,8 +236,8 @@ describe("302 — aislamiento: ninguna key alcanza a otra tienda", () => {
   it("el detalle de una guia AJENA devuelve 404, igual que una que no existe", async () => {
     // Indistinguibilidad (106/R13/R14): el canal no puede ser un oraculo de existencia de guias de
     // la competencia. `num_guia` es UNIQUE GLOBAL, asi que la unica defensa es el owner en el WHERE.
-    const ajena = await handleDetalleApi(req(), "9001", depsDetalle(CON_NUFORM).deps);
-    const inexistente = await handleDetalleApi(req(), "999999", depsDetalle(CON_NUFORM).deps);
+    const ajena = await handleConsultaOrdenApi(req(), "9001", depsDetalle(CON_NUFORM).deps);
+    const inexistente = await handleConsultaOrdenApi(req(), "999999", depsDetalle(CON_NUFORM).deps);
 
     expect(ajena.status).toBe(404);
     expect(inexistente.status).toBe(404);
@@ -222,7 +245,7 @@ describe("302 — aislamiento: ninguna key alcanza a otra tienda", () => {
   });
 
   it("el detalle de una guia PROPIA de la tienda si responde 200 (la guarda no cierra el canal)", async () => {
-    const res = await handleDetalleApi(req(), "5002", depsDetalle(CON_NUFORM).deps);
+    const res = await handleConsultaOrdenApi(req(), "5002", depsDetalle(CON_NUFORM).deps);
     expect(res.status).toBe(200);
     expect((await res.json()).numRemision).toBe("NUF-WEB-1");
   });

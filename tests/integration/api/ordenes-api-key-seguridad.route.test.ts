@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { handleListadoApi } from "@/app/api/ordenes/api-key/route";
-import { handleDetalleApi } from "@/app/api/ordenes/api-key/[numGuia]/route";
 import { handleCancelarApi } from "@/app/api/ordenes/api-key/[numGuia]/cancelar/route";
 import type { ApiKeyAuthResult } from "@/lib/interfaces/services/IApiKeyAuthService";
 import type { IApiOrdenLecturaService } from "@/lib/interfaces/services/IApiOrdenLecturaService";
@@ -26,7 +25,6 @@ const OK: ApiKeyAuthResult = { status: "ok", actor: ACTOR, apiKeyId: "k1" };
 function lecturaQueRevienta(): IApiOrdenLecturaService {
   return {
     listar: vi.fn().mockRejectedValue(new Error("fallo interno de base de datos")),
-    detalle: vi.fn().mockRejectedValue(new Error("fallo interno de base de datos")),
     detallePorOrdenId: vi.fn().mockRejectedValue(new Error("fallo interno de base de datos")),
   };
 }
@@ -71,22 +69,9 @@ describe("canal integrador: la key nunca se filtra (R5)", () => {
     assertConsoleSinSecreto(spies);
   });
 
-  it("detalle: forbidden (403) y error interno (500) -> body y console.* sin el secreto", async () => {
-    const spies = spyConsole();
-    const url = "http://localhost/api/ordenes/api-key/10234";
-    const forb = await handleDetalleApi(reqWithKey(url, "GET"), "10234", {
-      autenticar: async () => FORBIDDEN,
-      lecturaService: lecturaQueRevienta(),
-    });
-    expect(await forb.text()).not.toContain(SECRETO);
-
-    const boom = await handleDetalleApi(reqWithKey(url, "GET"), "10234", {
-      autenticar: async () => OK,
-      lecturaService: lecturaQueRevienta(),
-    });
-    expect(await boom.text()).not.toContain(SECRETO);
-    assertConsoleSinSecreto(spies);
-  });
+  // El detalle por `{id}` (GET /api/ordenes/api-key/orden/{id}, la ÚNICA forma de consultar una
+  // orden desde la retirada del `GET /{numGuia}`) tiene su propia cobertura de R5 en
+  // `ordenes-api-key-177-key-nunca-filtrada.route.test.ts`, con los mismos 403 y 500.
 
   it("cancelar: forbidden (403) y error interno (500) -> body y console.* sin el secreto", async () => {
     const spies = spyConsole();

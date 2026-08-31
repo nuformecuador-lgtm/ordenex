@@ -39,7 +39,7 @@ import { money } from "./wallet-labels";
 // Money-safe (R12): todos los importes llegan como STRING del servidor y se pintan TAL CUAL con
 // `money`. Aqui no se suma nada — ni siquiera el total, que lo manda el servidor.
 //
-// ── FICHA 339 — «Otros gastos de Ordenex» deja de esconder el gasto mas grande ──
+// ── FICHA 343 — «Otros gastos de Ordenex» deja de esconder el gasto mas grande ──
 //
 // La 231 dejo esta lista con CUATRO conceptos y un cubo. En produccion ese cubo pinto
 // 227.300,00 —el 100 % de los egresos del periodo— y dentro habia NUEVE pagos a mensajeros: un
@@ -133,7 +133,7 @@ export interface DesgloseEgresosListaProps {
    * el pago al mensajero y el ajuste. `Record` TOTAL, sin huecos.
    */
   egresos: Record<WalletEgresoNombrado, string>;
-  /** D2 — el resto de egresos propios (tras la 339, solo el gasto reservado), en una fila. */
+  /** D2 — el resto de egresos propios (tras la 343, solo el gasto reservado), en una fila. */
   otrosEgresos: string;
   /**
    * R9 — si esa fila se pinta. Lo decide el SERVIDOR (`ComposicionGananciaDTO.hayOtrosEgresos`)
@@ -171,7 +171,7 @@ export function DesgloseEgresosLista({
         />
       ))}
 
-      {/* R1/R2 — las dos filas que la 339 saca del cubo, JUSTO ANTES de «Otros». */}
+      {/* R1/R2 — las dos filas que la 343 saca del cubo, JUSTO ANTES de «Otros». */}
       {WALLET_EGRESO_NOMBRADO_SEED.map((categoria) => (
         <FilaComposicion
           key={categoria}

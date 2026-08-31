@@ -340,7 +340,7 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     ],
   },
   {
-    // FICHA 339 (B6.1) — el desplegable de UNA fila de la tarjeta de la ganancia. Va entre
+    // FICHA 343 (B6.1) — el desplegable de UNA fila de la tarjeta de la ganancia. Va entre
     // `CobrosRechazoTiendaPendientesPanel` y `GastosFijosPlantillasPanel` porque la guardia
     // recorre el arbol en orden alfabetico.
     ruta: "app/(app)/wallet/_components/DetalleFilaComposicion.tsx",
@@ -354,7 +354,7 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
           "completo con sus filtros -- incluido el filtro por categoría, que es exactamente lo " +
           "que este panel muestra--. Una segunda descarga del mismo dinero por otra puerta " +
           "sería un segundo archivo del mismo hecho. Decisión de " +
-          "`specs/339-otros-gastos-detalle/design.md §8`",
+          "`specs/343-otros-gastos-detalle/design.md §8`",
       },
     ],
   },

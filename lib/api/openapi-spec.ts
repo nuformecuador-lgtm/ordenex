@@ -155,6 +155,17 @@ export const openApiSpec = {
           "o falta de tarifa). Una respuesta 200",
           "puede contener filas con",
           `error. El lote acepta entre 1 y ${MAX_CARGA_ROWS} filas.`,
+          "",
+          "**CAMBIO INCOMPATIBLE (2026-08-31): las filas con error salieron de `filas`.** `filas`",
+          "trae ahora SOLO lo que entró (`creada` y `duplicada`) y lo que falló viaja en la lista",
+          "hermana **`errores`**, con exactamente el mismo contenido de antes: su `fila` 1-based,",
+          "su `numRemision`, su `resultado: \"error\"` y su mapa de errores por campo. Ya no hace",
+          "falta recorrer el lote entero ni ramificar por `resultado` para encontrar lo que hay",
+          "que atender: `if (respuesta.errores.length)` alcanza. Los contadores no se mueven —",
+          "`total`, `creadas`, `duplicadas` y `conError` siguen contando sobre el lote completo—",
+          "y `conError` es siempre `errores.length`. **Si tu integración filtraba `filas` por",
+          "`resultado === \"error\"`, cambiá a `errores`**: ese filtro ahora devuelve vacío",
+          "SIEMPRE, incluso con filas fallidas.",
         ].join("\n"),
         requestBody: {
           required: true,
@@ -216,6 +227,8 @@ export const openApiSpec = {
                       conError: 1,
                       filas: [
                         { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 100234 },
+                      ],
+                      errores: [
                         { fila: 2, numRemision: "REM-0002", resultado: "error", errores: { telefono: ["requerido"] } },
                       ],
                       ordenes: [
@@ -240,6 +253,8 @@ export const openApiSpec = {
                       conError: 1,
                       filas: [
                         { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 100234 },
+                      ],
+                      errores: [
                         { fila: 2, numRemision: "REM-0002", resultado: "error", errores: { tarifa: [MSG_FILA_SIN_TARIFA] } },
                       ],
                       ordenes: [
@@ -387,65 +402,6 @@ export const openApiSpec = {
         },
       },
     },
-    "/api/ordenes/api-key/{numGuia}": {
-      parameters: [
-        {
-          name: "numGuia",
-          in: "path",
-          required: true,
-          description: "Número de guía de la orden (entero positivo).",
-          schema: { type: "integer", minimum: 1 },
-        },
-      ],
-      get: {
-        tags: ["Órdenes"],
-        summary: "Detalle de una orden propia",
-        operationId: "detalleOrden",
-        description: [
-          "Detalle de UNA orden propia por `num_guia`, con sus evidencias de entrega/rechazo",
-          "resueltas como URLs firmadas de corta duración (5 min). Array `evidencias` vacío si no",
-          "hay. Una orden inexistente o de otro dueño devuelve el mismo 404.",
-        ].join("\n"),
-        responses: {
-          "200": {
-            description: "Detalle de la orden.",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/OrdenDetalle" },
-                examples: {
-                  detalle: {
-                    summary: "Orden entregada con una evidencia",
-                    value: {
-                      numGuia: 100234,
-                      numRemision: "REM-0001",
-                      estado: "entregada",
-                      destinatario: "Juan Pérez",
-                      telefonoDest: "88887777",
-                      producto: "Camiseta talla M",
-                      direccion: "Av. Central, 200m norte del parque",
-                      montoCobrar: 25.9,
-                      createdAt: "2026-07-22T14:03:11.000Z",
-                      evidencias: [
-                        {
-                          resultado: "entregada",
-                          contentType: "image/jpeg",
-                          url: "https://<proyecto>.supabase.co/storage/v1/object/sign/gestion-evidencias/...",
-                          expiraEnSegundos: 300,
-                        },
-                      ],
-                    },
-                  },
-                },
-              },
-            },
-          },
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": { $ref: "#/components/responses/Forbidden" },
-          "404": { $ref: "#/components/responses/NotFound" },
-          "422": { $ref: "#/components/responses/ValidationError" },
-        },
-      },
-    },
     "/api/ordenes/api-key/{numGuia}/cancelar": {
       parameters: [
         {
@@ -510,8 +466,10 @@ export const openApiSpec = {
         summary: "Detalle de una orden propia por guía o remisión",
         operationId: "detalleOrdenPorIdentificador",
         description: [
-          "Mismo detalle que `GET /api/ordenes/api-key/{numGuia}` (idéntico schema `OrdenDetalle`),",
-          "pero aceptando como identificador el `num_guia` **o** el `num_remision` de la orden.",
+          "Detalle de UNA orden propia (schema `OrdenDetalle`), con sus evidencias de entrega,",
+          "rechazo o incidente resueltas como URLs firmadas de corta duración (5 min); array",
+          "`evidencias` vacío si no hay. Acepta como identificador el `num_guia` **o** el",
+          "`num_remision` de la orden: es el ÚNICO endpoint de detalle del canal.",
           "Resolución: si el identificador es un entero positivo se busca primero por `num_guia`;",
           "si no hay coincidencia, se busca por `num_remision`. Nunca responde 409 por ambigüedad.",
           "",
@@ -725,8 +683,7 @@ export const openApiSpec = {
         operationId: "cotizarOrdenes",
         description: [
           "Cotiza un lote de filas **sin crear nada**: por cada fila devuelve si hay cobertura y",
-          "cuánto costaría la orden en los DOS escenarios posibles (entregada y devuelta), más un",
-          "bloque `totales` con la suma del lote.",
+          "cuánto costaría la orden en los DOS escenarios posibles (entregada y devuelta).",
           "",
           "**Acepta el MISMO cuerpo que `POST /api/ordenes/api-key/carga`, sin recortarlo.** Las",
           "filas son pares clave/valor de TEXTO, con la geografía en columnas SEPARADAS",
@@ -760,17 +717,18 @@ export const openApiSpec = {
           "ya es un número en texto. La moneda sigue siendo la misma; solo dejó de viajar en el",
           "campo.",
           "",
-          "**`totales` es una SUMA de las filas cotizadas, NO el precio del lote.** El precio",
-          "depende de la zona de CADA fila, así que el bloque suma únicamente las filas con",
-          "resultado `cotizada` y por eso declara sus dos contadores propios, `filasSumadas` y",
-          "`filasExcluidas`, cuya suma es igual a `total`. Un total que callara las filas que dejó",
-          "fuera se leería como «esto cuesta el lote» cuando no lo es. Una fila queda excluida por",
-          "DOS motivos distintos, no uno: porque su geografía no tiene cobertura (o no valida), o",
-          "porque el par (tienda, zona de esa fila) no resuelve tarifa vigente. Quien sume",
-          "`totales` sin mirar `filasExcluidas` obtiene un número que NO es el precio del lote.",
-          "El bloque se emite SIEMPRE:",
-          "si ninguna fila resulta cotizable, llega con todos sus importes en cero,",
-          "`filasSumadas: 0` y `filasExcluidas` igual a `total`.",
+          "**La cotización es POR ORDEN: la respuesta NO trae un bloque de totales del lote.**",
+          "Hasta el 2026-08-31 se emitía un `totales` que sumaba cada fila cotizada en el escenario",
+          "entregado Y en el devuelto a la vez, es decir dos compilados bajo las premisas de «100%",
+          "entregas» y «100% rechazos»: ninguna de las dos describe un lote real, y se leían como",
+          "el precio de la operación. Se retiró. Los contadores `total`, `cotizadas` y `conError`",
+          "siguen ahí; el agregado, con la premisa de entrega que corresponda a tu operación, lo",
+          "haces con los importes de cada fila.",
+          "",
+          "**Una fila se queda sin precio por DOS motivos distintos, no uno:** porque su geografía",
+          "no tiene cobertura (o no valida), o porque el par (tienda, zona de esa fila) no resuelve",
+          "tarifa vigente. Los dos llegan por el mismo canal —`resultado: \"error\"` con sus",
+          "mensajes por campo— y los dos cuentan en `conError`.",
           "",
           "Éxito parcial: una fila sin cobertura (o que no valida) se marca `resultado: \"error\"`",
           "con sus mensajes por campo y NO trae `costos`; las demás se cotizan igual y la respuesta",
@@ -783,8 +741,8 @@ export const openApiSpec = {
           "resolución de tarifa la resuelve. Entonces no se cotiza ni una fila y la respuesta no",
           "trae ningún importe. Ya NO significa «la tienda no tiene tarifa vigente»: una fila suelta",
           "sin tarifa vuelve en `error` dentro de un `200`. Y si ninguna fila llega siquiera a",
-          "resolver tarifa (todas sin cobertura o sin validar), la respuesta es `200` con `totales`",
-          "en cero, NO `409`.",
+          "resolver tarifa (todas sin cobertura o sin validar), la respuesta es `200` con todas",
+          "las filas en `error`, NO `409`.",
           "",
           "**`/carga` aplica hoy EXACTAMENTE el mismo criterio de lote.** La asimetría que este",
           "contrato declaraba —la carga toleraba la falta de tarifa creando la orden con un costo",
@@ -836,25 +794,6 @@ export const openApiSpec = {
                       total: 2,
                       cotizadas: 1,
                       conError: 1,
-                      totales: {
-                        filasSumadas: 1,
-                        filasExcluidas: 1,
-                        entregado: {
-                          flete: "2500.00",
-                          iva: "325.00",
-                          comision: "906.50",
-                          ivaComision: "117.85",
-                          fulfillment: "0.00",
-                          total: "22050.65",
-                        },
-                        devuelto: {
-                          flete: "1396.46",
-                          iva: "181.54",
-                          comision: "0.00",
-                          fulfillment: "0.00",
-                          total: "-1578.00",
-                        },
-                      },
                       filas: [
                         {
                           fila: 1,
@@ -1579,18 +1518,37 @@ export const openApiSpec = {
       },
       CargaRowResult: {
         type: "object",
-        description: "Resultado por fila del lote.",
+        description:
+          "Resultado de una fila que SÍ entró al sistema. Desde 2026-08-31 esta lista no contiene filas en `error`: ésas viajan en `errores` (`CargaFilaError`).",
         required: ["fila", "numRemision", "resultado"],
         properties: {
           fila: { type: "integer", description: "Índice 1-based dentro de `ordenes`." },
           numRemision: { type: "string" },
-          resultado: { type: "string", enum: ["creada", "duplicada", "error"] },
+          resultado: { type: "string", enum: ["creada", "duplicada"] },
           estatus: { type: "string", description: "Estado (en creada/duplicada); nunca ids internos." },
           numGuia: { type: "integer", description: "Número de guía asignado (solo en `creada`)." },
+        },
+      },
+      // 2026-08-31 — la fila que NO entró, publicada aparte. Es el MISMO objeto que antes
+      // viajaba dentro de `filas`; lo único que cambió es dónde se lee. Se declara como schema
+      // propio (y no reusando `CargaRowResult`) porque aquí `errores` es REQUIRED: en esta
+      // lista no existe el elemento sin detalle, y eso es justo lo que la hace fácil de
+      // consumir.
+      CargaFilaError: {
+        type: "object",
+        description: "Una fila que no se creó, con el detalle de por qué.",
+        required: ["fila", "numRemision", "resultado", "errores"],
+        properties: {
+          fila: { type: "integer", description: "Índice 1-based dentro de `ordenes`." },
+          numRemision: {
+            type: "string",
+            description: "Tu número de remisión tal como llegó (vacío si la fila no lo traía).",
+          },
+          resultado: { type: "string", const: "error" },
           errores: {
             type: "object",
             description:
-              "Errores por campo (solo en `error`). Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso la orden no se creó.",
+              "Errores por campo. Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso la orden no se creó.",
             additionalProperties: { type: "array", items: { type: "string" } },
           },
         },
@@ -1622,7 +1580,7 @@ export const openApiSpec = {
       },
       CargaResponse: {
         type: "object",
-        required: ["total", "creadas", "duplicadas", "conError", "filas", "ordenes"],
+        required: ["total", "creadas", "duplicadas", "conError", "filas", "errores", "ordenes"],
         properties: {
           // Feature 177/R45: el integrador necesita este id para llamar a
           // `POST /api/ordenes/api-key/carga/{cargaId}/generate`. Es `null` cuando el lote no
@@ -1637,7 +1595,18 @@ export const openApiSpec = {
           creadas: { type: "integer" },
           duplicadas: { type: "integer" },
           conError: { type: "integer" },
-          filas: { type: "array", items: { $ref: "#/components/schemas/CargaRowResult" } },
+          filas: {
+            type: "array",
+            description:
+              "Las filas que entraron: `creada` y `duplicada`. Nunca contiene una fila en `error`.",
+            items: { $ref: "#/components/schemas/CargaRowResult" },
+          },
+          errores: {
+            type: "array",
+            description:
+              "Las filas que NO se crearon, con su detalle por campo. Lista vacía cuando el lote entero entró; su longitud es siempre `conError`.",
+            items: { $ref: "#/components/schemas/CargaFilaError" },
+          },
           ordenes: { type: "array", items: { $ref: "#/components/schemas/CargaOrden" } },
         },
       },
@@ -1828,32 +1797,14 @@ export const openApiSpec = {
           },
         },
       },
-      CotizacionTotales: {
-        type: "object",
-        description:
-          "SUMA de las filas cotizadas, NO el precio del lote: el precio depende de la zona de cada fila. Suma únicamente las filas con resultado `cotizada` y declara cuántas sumó y cuántas dejó fuera (`filasSumadas + filasExcluidas === total`). Se emite SIEMPRE, en cero si ninguna fila resultó cotizable.",
-        required: ["filasSumadas", "filasExcluidas", "entregado", "devuelto"],
-        properties: {
-          filasSumadas: {
-            type: "integer",
-            description: "Filas que aportaron a estos importes (las `cotizada`).",
-          },
-          filasExcluidas: {
-            type: "integer",
-            description: "Filas que NO aportaron nada (las `error`). El total no las cuenta.",
-          },
-          entregado: { $ref: "#/components/schemas/CotizacionEscenarioEntregado" },
-          devuelto: { $ref: "#/components/schemas/CotizacionEscenarioDevuelto" },
-        },
-      },
       CotizacionResponse: {
         type: "object",
-        required: ["total", "cotizadas", "conError", "totales", "filas"],
+        // Sin bloque `totales` (retirado el 2026-08-31): la cotización es POR ORDEN.
+        required: ["total", "cotizadas", "conError", "filas"],
         properties: {
           total: { type: "integer", description: "Filas recibidas." },
           cotizadas: { type: "integer" },
           conError: { type: "integer" },
-          totales: { $ref: "#/components/schemas/CotizacionTotales" },
           filas: { type: "array", items: { $ref: "#/components/schemas/CotizacionRowResult" } },
         },
       },
