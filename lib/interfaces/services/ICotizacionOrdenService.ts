@@ -24,7 +24,7 @@ export type CotizacionGeoRepository = Pick<
 
 /**
  * Resultado discriminado (design.md §5):
- * - `ok` -> `200` con el resumen (filas + bloque `totales` del lote).
+ * - `ok` -> `200` con el resumen (contadores + el detalle por fila; sin agregado del lote).
  * - `sin_tarifa` -> `409` con el mensaje fijo de R13. NUNCA un importe en cero: la inversion
  *   deliberada del gap D1/R8 de la feature 98 (R15).
  * - `forbidden` -> `403`. El rol se comprueba ANTES de tocar tarifa o geografia.

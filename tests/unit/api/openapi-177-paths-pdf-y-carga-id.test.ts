@@ -319,8 +319,8 @@ describe("255/R29 — la descripción del endpoint declara el supuesto", () => {
 //
 // Ojo con la asimetría: esto vale para el schema de ENTRADA. En los schemas de RESPUESTA
 // (`CotizacionEscenarioEntregado/Devuelto`, `CotizacionCostos`, `CotizacionRowResult`,
-// `CotizacionTotales`, `CotizacionResponse`) `required` SÍ es una promesa que el servidor
-// cumple siempre (R26/R27/R28/R52/R54) y quitarlo debilitaría el contrato.
+// `CotizacionResponse`) `required` SÍ es una promesa que el servidor cumple siempre
+// (R26/R27/R28) y quitarlo debilitaría el contrato.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 describe("255/R21 — CotizacionRow no declara `required`: una fila incompleta no es un 422", () => {
   const cotizacionRow: Record<string, unknown> = openApiSpec.components.schemas.CotizacionRow;
@@ -376,17 +376,15 @@ describe("255/R21 — CotizacionRow no declara `required`: una fila incompleta n
       "numRemision",
       "resultado",
     ]);
-    expect([...schemas.CotizacionTotales.required]).toEqual([
-      "filasSumadas",
-      "filasExcluidas",
-      "entregado",
-      "devuelto",
-    ]);
+    // 2026-08-31: `CotizacionTotales` ya no existe. El bloque sumaba el lote entero como si
+    // se entregara al 100% y, a la vez, como si se rechazara al 100%; la cotización es POR
+    // ORDEN y el sobre solo lleva los tres contadores y el detalle por fila.
+    expect(JSON.stringify(openApiSpec)).not.toContain("CotizacionTotales");
+    expect(yaml).not.toContain("CotizacionTotales");
     expect([...schemas.CotizacionResponse.required]).toEqual([
       "total",
       "cotizadas",
       "conError",
-      "totales",
       "filas",
     ]);
   });

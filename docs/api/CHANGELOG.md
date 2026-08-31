@@ -21,6 +21,33 @@
 
 ---
 
+## 2026-08-31 — RUPTURA: `POST /ordenes/api-key/cotizacion` ya no devuelve el bloque `totales`
+
+**Rompe si leías `totales`.** La respuesta sigue trayendo `total`, `cotizadas`, `conError` y el
+array `filas` con los dos escenarios de cada fila, exactamente igual que antes. Lo que desaparece
+es el objeto `totales` del lote:
+
+```diff
+ {
+   "total": 3, "cotizadas": 3, "conError": 0,
+-  "totales": { "filasSumadas": 3, "filasExcluidas": 0, "entregado": { ... }, "devuelto": { ... } },
+   "filas": [ ... ]
+ }
+```
+
+**Por qué se retira.** Ese bloque sumaba TODAS las filas cotizadas en el escenario `entregado` y,
+en paralelo, TODAS en el `devuelto`. Son dos compilados bajo dos premisas imposibles: «este lote se
+entrega al 100%» y «este lote se rechaza al 100%». Ningún lote real es ninguna de las dos, así que
+ninguno de los dos números es el costo del lote — y se leían justamente como eso. Lo que este
+endpoint sabe y publica es el precio **por orden**.
+
+**Qué hacer.** Si mostrabas `totales.entregado.total` o `totales.devuelto.total`, agregá vos los
+importes de las filas con `resultado: "cotizada"`, aplicando la tasa de entrega que de verdad
+esperás para tu operación. Los contadores `cotizadas` y `conError` sustituyen a `filasSumadas` y
+`filasExcluidas` uno a uno: valen lo mismo.
+
+---
+
 ## 2026-08-28 — NUEVO: `DELETE /ordenes/api-key/orden/{id}` — eliminar una orden que aún no se gestionó
 
 **Aditivo: no rompe nada.** Es un verbo nuevo sobre una URL que ya existía. Si no lo llamás, tu

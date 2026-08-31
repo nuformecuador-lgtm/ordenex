@@ -171,13 +171,14 @@ describe("274/R31 — /cotizacion deja de declarar una asimetría que ya no exis
     }
   });
 
-  it("el párrafo de `totales` declara el SEGUNDO motivo de exclusión", () => {
+  it("la descripción declara el SEGUNDO motivo por el que una fila se queda sin precio", () => {
     for (const descripcion of [descripcionCotizacionTs, descripcionCotizacionYaml]) {
       expect(descripcion).toMatch(/DOS motivos distintos/);
       expect(descripcion).toMatch(/no resuelve tarifa vigente/);
-      // El coste declarado, escrito donde lo lee quien paga: sumar `totales` sin mirar
-      // `filasExcluidas` da un numero que no es el precio del lote.
-      expect(descripcion).toMatch(/sin mirar\s+`filasExcluidas`/);
+      // 2026-08-31: el bloque `totales` se retiró, así que el motivo ya no se cuenta contra
+      // `filasExcluidas` sino contra `conError`, que es el contador que sobrevive.
+      expect(descripcion).toMatch(/cuentan en `conError`/);
+      expect(descripcion).not.toMatch(/filasExcluidas/);
     }
   });
 });

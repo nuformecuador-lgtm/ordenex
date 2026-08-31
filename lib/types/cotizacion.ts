@@ -181,32 +181,17 @@ export interface FilaCotizacionResultado {
 }
 
 /**
- * Los totales del LOTE (decision D2, R51–R56). Espeja EXACTAMENTE la forma de
- * los costos de una fila —`entregado` con seis conceptos, `devuelto` con
- * cinco— porque una suma de devoluciones tampoco lleva IVA de comision.
+ * La respuesta 200 completa (design.md §2.2).
  *
- * Los dos contadores son parte del contrato, no un extra de cortesia (R54): un
- * total que calla las filas que dejo fuera se lee como "esto cuesta el lote"
- * cuando no lo es. `filasSumadas + filasExcluidas` es siempre el total de filas
- * recibidas, y solo aportan importes las filas `"cotizada"` (R53).
- */
-export interface TotalesCotizacion {
-  filasSumadas: number;
-  filasExcluidas: number;
-  entregado: CostosEntregado;
-  devuelto: CostosDevuelto;
-}
-
-/**
- * La respuesta 200 completa (design.md §2.2). El bloque `totales` se emite
- * SIEMPRE, tambien cuando ninguna fila cotiza: entonces va en cero con
- * `filasSumadas: 0` (R56). Cero es una afirmacion; ausente seria un dato que
- * falta.
+ * NO LLEVA BLOQUE `totales` (retirado el 2026-08-31). El agregado del lote de la 255 sumaba
+ * cada fila cotizada en el escenario ENTREGADO y en el DEVUELTO al mismo tiempo: dos
+ * compilados bajo las premisas de "100% entregas" y "100% rechazos", ninguna de las cuales
+ * describe un lote real. Lo que este endpoint publica es el precio POR ORDEN; el agregado,
+ * con la premisa de entrega que corresponda, es de quien consume.
  */
 export interface CotizacionResumen {
   total: number;
   cotizadas: number;
   conError: number;
-  totales: TotalesCotizacion;
   filas: FilaCotizacionResultado[];
 }

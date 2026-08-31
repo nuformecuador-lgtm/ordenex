@@ -1,8 +1,14 @@
 // Feature 255 — Cotizacion por API key: precio y cobertura ANTES de crear la orden.
 //
 // Toma la MISMA entrada que la carga por API key, no persiste nada y devuelve, por cada
-// fila, su cobertura y cuanto cuesta en los DOS escenarios posibles (entregado y devuelto),
-// mas un bloque de totales del LOTE (decision D2).
+// fila, su cobertura y cuanto cuesta en los DOS escenarios posibles (entregado y devuelto).
+//
+// NO EMITE TOTALES DEL LOTE (retirado el 2026-08-31, ficha de esta rama). El bloque `totales`
+// de la 255 sumaba TODAS las filas cotizadas en el escenario entregado Y en el devuelto a la
+// vez, es decir bajo la premisa imposible de "100% entregas" y "100% rechazos"
+// simultaneamente: dos numeros que nunca describen el mismo lote y que se leian como el precio
+// de la operacion. La cotizacion es POR ORDEN; quien quiera un agregado lo hace con la premisa
+// de entrega que de verdad espera.
 //
 // Logica de negocio pura: sin HTTP, sin `next/*`, sin Prisma directo. La aritmetica de dinero
 // va con `Prisma.Decimal` de punta a punta y el formateo es el ULTIMO paso (R33/R55).
@@ -140,21 +146,6 @@ function cero(): Prisma.Decimal {
   return new Prisma.Decimal(0);
 }
 
-function acumuladorEntregado(): MontosEntregado {
-  return {
-    flete: cero(),
-    iva: cero(),
-    comision: cero(),
-    ivaComision: cero(),
-    fulfillment: cero(),
-    total: cero(),
-  };
-}
-
-function acumuladorDevuelto(): MontosDevuelto {
-  return { flete: cero(), iva: cero(), comision: cero(), fulfillment: cero(), total: cero() };
-}
-
 function formatearEntregado(montos: MontosEntregado): CostosEntregado {
   return {
     flete: formatMontoCotizacion(montos.flete),
@@ -239,11 +230,7 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
     if (pendientes.length > 0 && resuelven === 0) return { status: "sin_tarifa" };
 
     const filas: FilaCotizacionResultado[] = [];
-    // R55/A7: acumuladores en decimales EXACTOS, alimentados con los valores de cada fila
-    // ANTES de formatear. El bloque del lote se formatea UNA sola vez, al final.
-    const accEntregado = acumuladorEntregado();
-    const accDevuelto = acumuladorDevuelto();
-    let filasSumadas = 0;
+    let cotizadas = 0;
 
     // Paso 4: los escenarios de cada fila, con SU tarifa.
     for (const preparada of preparadas) {
@@ -256,8 +243,8 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
       if (tarifa === null) {
         // R34/R38: la fila se degrada por el MISMO camino que una fila sin cobertura —
         // `resultado: "error"` con el canal de errores por campo que ya existe, sin bloque
-        // `costos`— y cuenta en `conError` y en `totales.filasExcluidas`. Ni un `0,00`: un
-        // cero aqui seria indistinguible de un envio gratis.
+        // `costos`— y cuenta en `conError`. Ni un `0,00`: un cero aqui seria
+        // indistinguible de un envio gratis.
         filas.push({
           fila: preparada.fila,
           numRemision: preparada.numRemision,
@@ -285,12 +272,7 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
         },
       });
 
-      // R53: SOLO las filas cotizadas aportan al lote. Una fila sin cobertura —o sin tarifa—
-      // no tiene precio, asi que no puede aportar ni un cero: aportarlo la haria
-      // indistinguible de una fila gratis.
-      filasSumadas += 1;
-      sumarEntregado(accEntregado, montos.entregado);
-      sumarDevuelto(accDevuelto, montos.devuelto);
+      cotizadas += 1;
     }
 
     const total = rows.length;
@@ -298,16 +280,8 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
       status: "ok",
       resumen: {
         total,
-        cotizadas: filasSumadas,
-        conError: total - filasSumadas,
-        // R54/R56: los dos contadores SIEMPRE presentes, su suma siempre igual al total, y
-        // el bloque emitido tambien cuando ninguna fila cotiza (entonces, todo en cero).
-        totales: {
-          filasSumadas,
-          filasExcluidas: total - filasSumadas,
-          entregado: formatearEntregado(accEntregado),
-          devuelto: formatearDevuelto(accDevuelto),
-        },
+        cotizadas,
+        conError: total - cotizadas,
         filas,
       },
     };
@@ -465,21 +439,4 @@ function calcularEscenarios(
       total: fleteDevolucion.plus(ivaDevolucion).plus(fulfillment).negated(),
     },
   };
-}
-
-function sumarEntregado(acc: MontosEntregado, fila: MontosEntregado): void {
-  acc.flete = acc.flete.plus(fila.flete);
-  acc.iva = acc.iva.plus(fila.iva);
-  acc.comision = acc.comision.plus(fila.comision);
-  acc.ivaComision = acc.ivaComision.plus(fila.ivaComision);
-  acc.fulfillment = acc.fulfillment.plus(fila.fulfillment);
-  acc.total = acc.total.plus(fila.total);
-}
-
-function sumarDevuelto(acc: MontosDevuelto, fila: MontosDevuelto): void {
-  acc.flete = acc.flete.plus(fila.flete);
-  acc.iva = acc.iva.plus(fila.iva);
-  acc.comision = acc.comision.plus(fila.comision);
-  acc.fulfillment = acc.fulfillment.plus(fila.fulfillment);
-  acc.total = acc.total.plus(fila.total);
 }
