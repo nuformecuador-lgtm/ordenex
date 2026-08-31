@@ -274,11 +274,18 @@ Y **dos falsos vecinos que NO son citas** (verificados contra el detector):
 **Salida:** anotar en el propio `specs/172-liquidacion/tasks.md`, en un comentario HTML propio y
 con motivo de **≥30 caracteres**:
 
-```html
-<!-- @test-desaparecido mis-pagos-page.test.tsx: la ficha 336 borró /mis-pagos por decisión
-     humana del 2026-08-30; R54 se observaba solo en esa pantalla y no hay superficie sustituta
-     donde el mensajero vea el pago y su reverso -->
-```
+> ⚠️ **El ejemplo NO se escribe aquí con el marcador literal, a propósito.**
+> `test-citado-desaparecido.guardia` busca el marcador en todo `specs/**` y **no distingue un
+> ejemplo dentro de un bloque de código de una anotación viva**: escribirlo aquí, con el test
+> todavía en el árbol, pone el gate ROJO — y así pasó el 2026-08-31. Es una limitación de la
+> guardia, no de este spec.
+>
+> La anotación va **en `specs/172-liquidacion/tasks.md`**, en un comentario HTML propio, y sólo
+> **cuando el borrado ya ocurrió**. Su forma: el marcador de test desaparecido, el nombre del
+> archivo, y a continuación este motivo (≥30 caracteres):
+>
+> «la ficha 336 borró /mis-pagos por decisión humana del 2026-08-30; R54 se observaba sólo en esa
+> pantalla y no hay superficie sustituta donde el mensajero vea el pago y su reverso»
 
 Repuntar la cita a otro test **no es opción**: se buscó sustituto y no existe. Inventarlo sería
 justo lo que la guardia prohíbe.
