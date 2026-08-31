@@ -140,7 +140,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "A cobrar",
       "Fulfillment",
       "Motivo",
-      "Flete devolución + IVA",
+      "Flete por rechazo + IVA",
       "Total Ordenex",
       "Pago mensajero",
     ]);
@@ -180,7 +180,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "Fulfillment",
       "Motivo",
       "Tiene evidencia",
-      "Flete devolución + IVA",
+      "Flete por rechazo + IVA",
       "Total Ordenex",
       "Pago mensajero",
       "Ingreso bodega",

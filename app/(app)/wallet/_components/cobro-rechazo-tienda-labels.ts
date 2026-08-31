@@ -35,7 +35,7 @@ export const COBROS_RECHAZO_COLUMNA = {
   tienda: "Tienda",
   guia: "Guía",
   remision: "Remisión",
-  flete: "Flete devuelto",
+  flete: "Flete por rechazo",
   iva: "IVA",
   generadoEl: "Rechazado el",
   acciones: "Acciones",

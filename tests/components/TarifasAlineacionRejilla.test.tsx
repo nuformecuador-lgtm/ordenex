@@ -36,7 +36,7 @@ import { Input } from "@/components/ui/input";
  *   | fila                                                        | antes | después |
  *   |-------------------------------------------------------------|-------|---------|
  *   | «Fulfillment» / «Comisión por cobro contra entrega (%)» en 0 | 60 px | 0 px    |
- *   | «Valor flete GAM» / «Flete de retorno GAM…» en 0             | 60 px | 0 px    |
+ *   | «Valor flete GAM» / «Flete por rechazo GAM» en 0             | 60 px | 0 px    |
  *   | «IVA flete (%)» / «IVA de la comisión…» (rótulo de dos)      | 14 px | 0 px    |
  *   | «Entregado» / «Rechazado por el cliente» (ayudas desiguales)  | 40 px | 0 px    |
  *

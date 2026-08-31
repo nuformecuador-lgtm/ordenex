@@ -95,11 +95,17 @@ export const RECHAZO_TITULO = "Rechazar la orden";
  *    tapadillo**.
  *
  * D10 lo dice con todas las letras: «un número inventado en un aviso de dinero es peor que ninguno».
- * Así que el aviso dice **QUÉ** se cobra —el flete de devolución, no el cobro de bodega por rechazo,
+ * Así que el aviso dice **QUÉ** se cobra —el flete por rechazo, no el cobro de bodega por rechazo,
  * que es ingreso de la bodega— y que es irreversible, que es justo lo que no se puede deducir.
+ *
+ * ⏳ FICHA 338 (2026-08-31): el concepto se llamaba aquí «flete de devolución», y ese nombre
+ * decía justo el caso que NO cobra. Sólo un RECHAZO cobra este flete; una devolución no cobra
+ * nada (`lib/utils/ingreso-ordenex.ts`, ficha 301). El nombre en toda la app es «flete por
+ * rechazo», y en esta ventana además cierra el círculo: el botón que se está pulsando es
+ * «Rechazar».
  */
 export const RECHAZO_AVISO =
-  "Esto le cobra a tu tienda el flete de devolución y no se puede deshacer. Si preferís volver a intentar la entrega, usá «Reprogramar».";
+  "Esto le cobra a tu tienda el flete por rechazo y no se puede deshacer. Si preferís volver a intentar la entrega, usá «Reprogramar».";
 
 /** D10/D5: el motivo es OBLIGATORIO, y el rótulo lo dice sin la muleta del asterisco. */
 export const RECHAZO_MOTIVO_LABEL = "Motivo del rechazo";
