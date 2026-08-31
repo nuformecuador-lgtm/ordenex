@@ -535,3 +535,135 @@ describe("Ficha 339 — money-safe en el navegador (R35)", () => {
     }
   });
 });
+
+/**
+ * Ficha 339 (arreglo movil, 2026-08-31) — LA FORMA DE LA TABLA EN UN TELEFONO.
+ *
+ * EXISTE PORQUE SIN ESTO EL JUEGO DE COLUMNAS DE MOVIL ES CODIGO MUERTO PARA LA SUITE. El
+ * polyfill de `matchMedia` de `tests/setup/jest-dom.ts` devuelve siempre `matches: false`, o
+ * sea escritorio, asi que los 30 casos de arriba pintan las CUATRO columnas y ninguno llega a
+ * pisar `COLUMNS_MOVIL`. Borrarlo entero dejaria la suite en verde.
+ *
+ * QUE SE AFIRMA, y por que estos literales no son un espejo de la fuente: `₡1.700`, `₡3.400` y
+ * `₡10.200` son lo que un humano LEYO en Chromium a 390x844 el 2026-08-31 con el defecto
+ * delante —la pantalla decia `₡1.70` y `₡10.20`, dos numeros distintos y creibles— y son el
+ * contrato de esta ficha, no una copia de `money`. Si alguien vuelve a meter `truncate`,
+ * `line-clamp` o una abreviatura de miles en la celda del importe, estos tres caen.
+ *
+ * Lo que ESTE test no puede ver, y por eso hay medicion en navegador en `progress/impl_339.md`:
+ * jsdom no hace layout, asi que aqui no existen ni el ancho del panel, ni el desborde, ni las
+ * flechas de scroll de la `DataTable`. Este caso afirma QUE COLUMNAS se piden y QUE TEXTO sale
+ * entero; que ademas quepan en 284 px se midio con Playwright.
+ */
+describe("Ficha 339 — el detalle en un teléfono (arreglo móvil)", () => {
+  const matchMediaOriginal = window.matchMedia;
+
+  /** Un `matchMedia` que dice «sí» a la consulta de `useIsMobile` (`max-width: 767px`). */
+  function fingirTelefono() {
+    window.matchMedia = ((consulta: string) =>
+      ({
+        matches: /max-width:\s*767px/.test(consulta),
+        media: consulta,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
+  }
+
+  afterEach(() => {
+    window.matchMedia = matchMediaOriginal;
+  });
+
+  it("en móvil la tabla tiene DOS columnas: «Movimiento» e «Importe»", async () => {
+    fingirTelefono();
+    pintar();
+
+    await abrir(ABRIR_MENSAJEROS);
+    const dentro = within(await screen.findByRole("region", { name: PANEL_MENSAJEROS }));
+
+    const cabeceras = (await dentro.findAllByRole("columnheader")).map((th) =>
+      th.textContent?.trim(),
+    );
+    expect(cabeceras).toEqual(["Movimiento", "Importe"]);
+  });
+
+  it("el importe se lee ENTERO: `₡1.700`, `₡3.400` y `₡10.200`, sin recortar ni abreviar", async () => {
+    fingirTelefono();
+    // Los tres importes que se midieron en pantalla, con la escala 2 que cruza la frontera.
+    detalleMock.mockResolvedValue(
+      pagina(
+        [
+          movimiento({ id: "m-1", monto: "1700.00" }),
+          movimiento({ id: "m-2", monto: "3400.00" }),
+          movimiento({ id: "m-3", monto: "10200.00" }),
+        ],
+        3,
+      ),
+    );
+    pintar();
+
+    await abrir(ABRIR_MENSAJEROS);
+    const region = await screen.findByRole("region", { name: PANEL_MENSAJEROS });
+    const dentro = within(region);
+
+    // La celda entera, no un `getByText` que pasaria con una subcadena.
+    await dentro.findByText("₡1.700");
+    const importes = [...region.querySelectorAll("tbody tr")].map((tr) =>
+      tr.querySelectorAll("td")[1]?.textContent?.trim(),
+    );
+    expect(importes).toEqual(["₡1.700", "₡3.400", "₡10.200"]);
+
+    // Y NINGUNO de los números a medias que se leian en pantalla con el defecto.
+    expect(dentro.queryByText("₡1.70")).toBeNull();
+    expect(dentro.queryByText("₡10.20")).toBeNull();
+  });
+
+  it("apilar tres columnas en una no esconde ningún dato (R5/R16/R17)", async () => {
+    fingirTelefono();
+    detalleMock.mockResolvedValue(
+      pagina(
+        [
+          movimiento({
+            id: "m-1",
+            categoria: "egreso_ajuste",
+            origenTipo: "manual",
+            descripcion: "Faltante al cuadrar la caja",
+            fechaMovimiento: "2026-08-14T10:00:00.000Z",
+            monto: "46.00",
+          }),
+        ],
+        1,
+      ),
+    );
+    pintar();
+
+    await abrir(ABRIR_MENSAJEROS);
+    const dentro = within(await screen.findByRole("region", { name: PANEL_MENSAJEROS }));
+
+    // Fecha, concepto y detalle siguen en pantalla: viajan juntos, no desaparecen.
+    expect(await dentro.findByText("2026-08-14")).toBeInTheDocument();
+    // R5: la etiqueta legible del catálogo, nunca el valor del enum.
+    expect(dentro.getByText("Ajuste (egreso)")).toBeInTheDocument();
+    expect(dentro.queryByText("egreso_ajuste")).toBeNull();
+    // R17: el origen legible y su descripción.
+    expect(dentro.getByText(/Faltante al cuadrar la caja/)).toBeInTheDocument();
+    expect(dentro.getByText("₡46")).toBeInTheDocument();
+  });
+
+  it("en escritorio NO cambia nada: las cuatro columnas de siempre", async () => {
+    // El mismo montaje sin fingir teléfono. Es el control de no-vacuidad de los tres de arriba:
+    // si `useIsMobile` dejara de mirar la consulta, este caso y el primero no podrían pasar a la vez.
+    pintar();
+
+    await abrir(ABRIR_MENSAJEROS);
+    const dentro = within(await screen.findByRole("region", { name: PANEL_MENSAJEROS }));
+
+    const cabeceras = (await dentro.findAllByRole("columnheader")).map((th) =>
+      th.textContent?.trim(),
+    );
+    expect(cabeceras).toEqual(["Fecha", "Concepto", "Detalle", "Importe"]);
+  });
+});

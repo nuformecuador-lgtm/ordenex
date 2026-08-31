@@ -618,3 +618,213 @@ fila propia con su nombre; las catorce filas se abren y leen su detalle con el T
 nunca con una lista de categorías; el total de la columna no se movió ni un céntimo. Las tres
 mutaciones se ejecutaron, salieron rojas nombrando lo que protegen y se revirtieron. Typecheck y
 lint en 0; 106 tests verdes en los ocho archivos tocados y 1.281 en todo lo que toca la wallet.
+
+---
+
+# ARREGLO DEL DETALLE EN MÓVIL (2026-08-31) — cierre y verificación en navegador
+
+Continúa el trabajo que un agente anterior dejó **sin commitear y sin ver en pantalla** (cayó
+por un fallo de red a media edición). El punto 1 de «§ 17 — Lo que quedó dudoso» decía «no se ha
+visto en el navegador»; esta sección lo cierra.
+
+## 19 — El defecto, medido con el código de HEAD delante
+
+Chromium 390×844, `/wallet`, fila «Pagos a mensajeros» de la tarjeta «Cómo se compone la
+ganancia de Ordenex». El hueco útil del panel es de **284 px** y la tabla de cuatro columnas
+pide **309**. Los tres síntomas salen de ahí:
+
+1. **DINERO CORTADO.** El importe es la ÚLTIMA columna y se quedaba **25 px fuera** del área
+   visible: la pantalla decía `₡1.70` y `₡10.20` donde el DOM decía `₡1.700` y `₡10.200`. No se
+   ve roto: se ve como **otro número**, y creíble. Éste es el grave.
+2. La fecha se partía en dos renglones (`2026-` / `08-13`).
+3. Al desbordar, la `DataTable` sacaba sus dos flechas de scroll («Desplazar la tabla a la
+   izquierda/derecha»), centradas verticalmente en el cuerpo: aterrizaban **encima de la segunda
+   fila** y le tapaban el importe entero.
+
+Capturas del antes en `shots339/movil-abierta.png`.
+
+## 20 — Qué se conservó del agente anterior y qué se rehízo
+
+**CONSERVADO** (medido y confirmado por mí, no dado por bueno):
+
+- El **juego de columnas de móvil** (`COLUMNS_MOVIL`): fecha, concepto y detalle apilados en una
+  sola celda «Movimiento», y el importe con columna propia a la derecha. Funciona: los tres
+  síntomas caen a la vez porque los tres eran el mismo «cuatro columnas no caben».
+- El **corte con `useIsMobile`** (`max-width: 767px`), que es el hook con el que el Sidebar de la
+  app ya distingue teléfono de escritorio. Este panel se monta por click (nunca se renderiza en
+  servidor), así que no hay parpadeo ni desajuste de hidratación; comprobado: cero `pageerror` y
+  cero errores de React en consola.
+- La etiqueta `movimiento` en `COMPOSICION_DETALLE_COLUMNAS`, fuera del JSX e i18n-ready.
+- `ImporteCelda` con `whitespace-nowrap` + `tabular-nums`, money-safe: entra STRING, sale STRING
+  por `money`. Cero `Number(`, cero `parseFloat`, cero abreviatura.
+
+**REHECHO — se revirtió el juego de columnas de ESCRITORIO a HEAD, byte por byte.** El agente
+anterior le había metido `wrap-anywhere` a «concepto» y «detalle» y `whitespace-nowrap` a la
+fecha, con un comentario que afirmaba que así «la tabla se ENCOGE en vez de desbordar» entre 768
+y 1024 px. **Es falso, y lo desmiente su propia medición.** Medido por mí con el mismo script,
+mismo servidor, mismas filas — `scrollWidth − clientWidth` del contenedor de scroll de la
+`DataTable`:
+
+| viewport | HEAD (pristino) | con `wrap-anywhere` + `nowrap` |
+|---|---|---|
+| 768×900  | desborde **147 px** | desborde **171 px** |
+| 1024×900 | desborde **19 px**  | desborde **43 px**  |
+| 1440×950 | desborde **0**      | desborde **0**      |
+
+Es **24 px PEOR en todos los anchos donde desborda**, y siempre los mismos 24: el `nowrap` sube
+el ancho mínimo de la fecha de ~42 px (partida en «2026-» / «08-13») a ~66 px, y `wrap-anywhere`
+no compensa nada porque no es el min-content lo que decide el ancho aquí. Como el importe es la
+última columna, **empeorar el desborde es empeorar el recorte del dinero**. Además contradice la
+convención escrita de la feature 200 en `WalletLedger` («que aparezca el scroll ANTES de que las
+celdas se estrujen») y `wrap-anywhere` no se usa en ninguna otra parte del repo.
+
+Tras la reversión, el bloque `const COLUMNS` es **idéntico carácter a carácter** al de HEAD
+(comprobado con `diff` sobre el bloque extraído de las dos versiones), y los únicos símbolos
+nuevos del archivo son `ImporteCelda` y `COLUMNS_MOVIL`.
+
+## 21 — Verificación en el navegador (lo que de verdad importa)
+
+Chromium con Playwright contra `http://localhost:3003`, `admin.qa@ordenex.test`. Login tecleado
+con `pressSequentially` y **el valor confirmado con `inputValue()` antes de enviar** (con `fill`
+antes de la hidratación se envía el formulario vacío). Script: `scratchpad/mide339.mjs`.
+
+**390×844 — el texto EXACTO de cada celda de importe, leído del DOM ya pintado:**
+
+```
+cabeceras: ["Movimiento","Importe"]
+scroller:  {"clientW":284,"scrollW":284,"desborde":0}
+flechas de scroll: 0
+IMPORTES (innerText exacto de la celda): ["₡1.700","₡3.400","₡10.200"]
+  fila 0: "2026-08-13 | Pago a mensajero | Cierre del día" | "₡1.700"   fueraDcha=0 recorteInterno=0
+  fila 1: "2026-08-13 | Pago a mensajero | Cierre del día" | "₡3.400"   fueraDcha=0 recorteInterno=0
+  fila 2: "2026-08-12 | Pago a mensajero | Cierre del día" | "₡10.200"  fueraDcha=0 recorteInterno=0
+```
+
+Los tres **enteros**: `₡1.700`, `₡3.400`, `₡10.200`. Desborde 0 sobre 284 px, `fueraDcha=0` en
+todas las celdas y `recorteInterno=0` (ni el `<span>` recorta por dentro). **Cero flechas**, así
+que el síntoma 3 desaparece solo. Las fechas van en un renglón: síntoma 2, cerrado.
+
+Con una **cifra larga**, fila «Ajuste (ingreso)» a 390×844: `["₡987.654","₡12.345.679"]`,
+desborde 0, `fueraDcha=0`. No es que quepa por poco: cabe.
+
+**1440×950 — el escritorio no cambió:**
+
+```
+cabeceras: ["Fecha","Concepto","Detalle","Importe"]
+scroller:  {"clientW":498,"scrollW":498,"desborde":0}
+flechas de scroll: 0
+IMPORTES: ["₡1.700","₡3.400","₡10.200"]
+anchos de columna: 115 / 168 / 130 / 85 px   (los mismos de HEAD)
+```
+
+Y la prueba dura: se capturó el panel a 1440×950 **con HEAD** y **con el árbol final**, con el
+mismo script y la misma sesión, y las dos capturas tienen el **mismo MD5**
+(`097d505b3b1001bb5f6b9771170c0454`). El escritorio es **pixel a pixel el de antes**.
+
+Capturas en `scratchpad/shots339/`: `final-movil-abierta.png`, `final-movil-panel.png`,
+`final-escritorio-abierta.png`, `final-escritorio-panel.png`.
+
+## 22 — Test nuevo, y las dos mutaciones que prueban que no está vacío
+
+**El juego de columnas de móvil era código muerto para la suite**: el polyfill de `matchMedia` de
+`tests/setup/jest-dom.ts` devuelve siempre `matches: false`, o sea escritorio, así que los 17
+casos que ya había pintaban las cuatro columnas y ninguno llegaba a `COLUMNS_MOVIL`. Borrarlo
+entero dejaba la suite en verde. Se añaden **4 casos** a
+`tests/components/DetalleFilaComposicion.test.tsx` con un `matchMedia` que dice «sí» a
+`max-width: 767px`:
+
+- en móvil las cabeceras son exactamente `["Movimiento","Importe"]`;
+- **el importe se lee entero**: las celdas dicen `["₡1.700","₡3.400","₡10.200"]`, y `₡1.70` /
+  `₡10.20` NO están en el DOM;
+- apilar tres columnas en una no esconde ningún dato (fecha, etiqueta legible del catálogo —no el
+  enum—, origen + descripción, importe);
+- **control de no-vacuidad**: sin fingir teléfono siguen saliendo las cuatro de siempre. Este y
+  el primero no pueden pasar a la vez si `useIsMobile` deja de mirar la consulta.
+
+Los literales `₡1.700` / `₡3.400` / `₡10.200` **no son un espejo de `money`**: son lo que un
+humano leyó en pantalla, y lo que el defecto convertía en otro número.
+
+**Mutación 1** — `const esMovil = false` (el móvil nunca se activa):
+
+```
+× el importe se lee ENTERO: `₡1.700`, `₡3.400` y `₡10.200`, sin recortar ni abreviar
+  - ["₡1.700","₡3.400","₡10.200"]   + ["Pago a mensajero","Pago a mensajero","Pago a mensajero"]
+Tests  2 failed | 19 passed (21)
+```
+
+**Mutación 2** — `money(monto).slice(0, -1)` (se pierde el último dígito, que es EXACTAMENTE el
+defecto de pantalla):
+
+```
+Unable to find an element with the text: ₡1.700 …
+                    ₡1.70
+                    ₡3.40
+                    ₡10.20
+Tests  2 failed | 19 passed (21)
+```
+
+La mutación 2 reproduce en jsdom lo que se veía en Chromium, y el test la nombra. Las dos se
+revirtieron; comprobado con `grep` que no queda ni un `// MUTACION` en el árbol.
+
+## 23 — Gate (frontend)
+
+```
+$ pnpm typecheck        →  TYPECHECK_EXIT=0
+$ pnpm lint             →  ✖ 127 problems (0 errors, 127 warnings)   LINT_EXIT=0
+```
+
+Los 127 avisos son los **mismos preexistentes** de § 16 (`no-unused-vars` en tests ajenos);
+filtrar la salida por `DetalleFilaComposicion`, `composicion-detalle` y `wallet/_components` no
+devuelve **nada**.
+
+```
+$ pnpm exec vitest run tests/components/DetalleFilaComposicion.test.tsx
+  Test Files  1 passed (1)        Tests  21 passed (21)     (17 de antes + 4 nuevos)
+
+$ pnpm exec vitest run  tests/components/DetalleFilaComposicion.test.tsx \
+    tests/components/ComposicionGananciaCard.test.tsx \
+    tests/unit/descarga/cobertura-tablas.guardia.test.ts \
+    tests/integration/wallet-page.test.tsx \
+    tests/components/descarga/WalletDescarga.test.tsx \
+    tests/components/paginacion/paginacion-transversal.test.tsx
+  Test Files  6 passed (6)        Tests  86 passed (86)
+
+$ pnpm exec vitest run wallet composicion
+  Test Files  78 passed (78)      Tests  1019 passed (1019)
+
+$ pnpm exec vitest run guard guardia
+  Test Files  1 failed | 168 passed (169)     Tests  1 failed | 2561 passed (2562)
+```
+
+El único rojo es **el mismo de § 16**, cifra por cifra: `superficie-de-uso.guardia.test.ts` por
+`lib/actions/tarifas.ts:67 obtenerTarifa`, deuda AJENA declarada en `tests/baseline-rojos.json`
+(línea 42) desde el 2026-08-28. Los tres censos que vigilan este panel —cobertura de descargas,
+paginación transversal y descarga de la wallet— siguen verdes: el panel sigue teniendo **UNA**
+instancia de `<DataTable>`, no dos.
+
+`./init.sh` **no se corrió**: lo pidió así el encargo, y el commit es del leader.
+
+## 24 — Lo que queda dudoso
+
+1. **⚠️ ENTRE 768 y 1279 px EL IMPORTE SIGUE RECORTADO, y no es de esta ficha.** Medido en HEAD,
+   antes de tocar nada: desborde de **147 px a 768** y **19 px a 1024**; a 1280 y 1440 cabe. Está
+   **declarado en el comentario de `COLUMNS_MOVIL`**, no tapado. No se arregló aquí por dos
+   motivos: es preexistente (el encargo era el móvil, y «arreglar lo evidenciado, no rediseñar»),
+   y sobre todo **el corte por viewport no es el instrumento adecuado** — a 1024 px el panel mide
+   **290 px**, prácticamente los mismos 284 del teléfono, porque la tarjeta ocupa una fracción de
+   la pantalla. Quien lo cierre debería mirar el ancho del **contenedor** y no el de la ventana,
+   como ya razona `ContadoresTablero` con `@container` («los umbrales de CONTENEDOR»). Cambiar
+   el umbral de `useIsMobile` a 1280 lo taparía a costa de dar la vista de teléfono a un portátil
+   de 1024, que es una decisión de diseño y no mía.
+2. **`GET /wallet` devuelve un 500 en el servidor de desarrollo**, y el indicador de Next pinta
+   «2 Issues». **No es de esta ficha**: se reprodujo idéntico con los dos archivos restaurados a
+   HEAD (mismos cuatro mensajes de consola, mismo 500). La página termina pintando y el panel
+   funciona, pero alguien debería mirarlo aparte.
+3. **jsdom no hace layout.** Los 4 casos nuevos afirman QUÉ columnas se piden y QUÉ texto sale
+   entero; que además quepan en 284 px **sólo** lo dice la medición en Chromium de § 21. Si mañana
+   alguien estrecha la tarjeta, la suite no se enterará.
+4. **`useIsMobile` mira la ventana, no el contenedor**, y este panel vive dentro de una tarjeta
+   que cambia de ancho con la barra lateral. Es el mismo hilo del punto 1.
+5. **La tabla sigue envuelta en un `<div className="overflow-x-auto">` redundante**: la
+   `DataTable` ya trae su propio contenedor de scroll. No se tocó (no hace daño y no es de esta
+   ficha), pero es ruido que confunde a quien mida desbordes aquí.

@@ -20,12 +20,23 @@ import type { WalletEgresoNombrado } from "@/lib/types/wallet";
  * «14 recibido / 13 esperado» por un motivo falso.
  */
 
-/** Las CUATRO columnas del detalle, en orden (design §5.5). */
+/**
+ * Las CUATRO columnas del detalle, en orden (design §5.5), mas la cabecera con la que esas
+ * tres primeras viajan JUNTAS en un telefono (`movimiento`).
+ *
+ * `movimiento` no es una quinta columna: es el nombre de la MISMA informacion cuando la
+ * pantalla no da para repartirla en tres. Vive aqui, y no como literal dentro del componente,
+ * por el mismo motivo que sus vecinas —`docs/conventions` manda los textos de UI fuera del
+ * JSX, i18n-ready—. Por que existe, medido en Chromium a 390x844: con las cuatro columnas la
+ * tabla pedia 309 px en un hueco de 284 y el IMPORTE, que es la ultima, se quedaba 25 px fuera
+ * del area visible: «₡1.700» se leia «₡1.70». Dinero cortado no es un defecto de estetica.
+ */
 export const COMPOSICION_DETALLE_COLUMNAS = {
   fecha: "Fecha",
   concepto: "Concepto",
   detalle: "Detalle",
   importe: "Importe",
+  movimiento: "Movimiento",
 } as const;
 
 /** R25: una fila sin movimientos lo dice; no se deja una tabla muda. */
