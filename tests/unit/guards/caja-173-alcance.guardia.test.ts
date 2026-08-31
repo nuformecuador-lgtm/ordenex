@@ -543,11 +543,19 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
 // siendo este», ejecutando las funciones puras que producen los tres numeros.
 // ─────────────────────────────────────────────────────────────────────────────────────────
 
-/** Las tres pantallas que R63 congela, por su carpeta de componentes. */
+/**
+ * Las pantallas que R63 congela, por su carpeta de componentes.
+ *
+ * Eran TRES. La ficha 336 (2026-08-30) borró `/mis-pagos` por decisión humana y su carpeta salió
+ * de aquí: `fuentesDe` hace `readdirSync` sin comprobar existencia, así que una entrada muerta no
+ * falla con un diagnóstico —lanza ENOENT y tumba el archivo entero—.
+ *
+ * Los DOS umbrales de no-vacuidad de más abajo se RE-MIDIERON tras el borrado y NO se tocan:
+ * quedan 14 componentes (7 + 7) sobre un suelo de `> 12`, y 7 por carpeta sobre `> 3`.
+ */
 const PANTALLAS_CONGELADAS = [
   "app/(app)/wallet/tiendas/_components",
   "app/(app)/mi-wallet/_components",
-  "app/(app)/mis-pagos/_components",
 ];
 
 describe("R32/R35/R63 — el saldo de la tienda y el pendiente del mensajero no se mueven", () => {
@@ -616,11 +624,11 @@ describe("R32/R35/R63 — el saldo de la tienda y el pendiente del mensajero no 
     expect(saldo).toContain("derivarSaldoTienda");
   });
 
-  it("R63: ninguna de las tres pantallas congeladas sabe nada de la caja en tesoreria", () => {
+  it("R63: ninguna de las pantallas congeladas sabe nada de la caja en tesoreria", () => {
     const componentes = PANTALLAS_CONGELADAS.flatMap((carpeta) => fuentesDe(carpeta));
 
     // CONTROL DE NO-VACUIDAD, el de `T G.4`: una ausencia solo prueba algo si lo ausente
-    // existe. Las tres carpetas tienen componentes vivos; si una ruta estuviera mal escrita,
+    // existe. Las carpetas tienen componentes vivos; si una ruta estuviera mal escrita,
     // `fuentesDe` reventaria y si el filtro fallara, el bucle de abajo no miraria nada.
     expect(componentes.length).toBeGreaterThan(12);
     for (const carpeta of PANTALLAS_CONGELADAS) {

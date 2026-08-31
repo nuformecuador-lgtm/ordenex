@@ -1,15 +1,16 @@
 // @vitest-environment jsdom
-// Feature 170 (T C.4) — descarga de los CUATRO ledgers de dinero paginados: libro de caja,
-// desglose de un mensajero (maestro/admin), mi wallet (tienda) y mis pagos (mensajero).
-// Cubre R1, R3, R9, R10, R13 y R32.
+// Feature 170 (T C.4) — descarga de los ledgers de dinero paginados: libro de caja, desglose de
+// un mensajero (maestro/admin) y mi wallet (tienda). Cubre R1, R3, R9, R10, R13 y R32.
 //
-// Los cuatro son de FAMILIA A y tres de ellos son componentes de PRESENTACIÓN que reciben la
-// página por props. Eso plantea el riesgo que estos tests cierran: para descargar el ledger
-// entero hace falta la acción del modo completo CON los filtros vigentes, y la tentación es
-// que la tabla se ponga a fetchear. No lo hace: el módulo padre —que es quien conoce los
-// filtros— baja un callback (design §5). Aquí se comprueban las dos mitades: que el archivo
-// trae el ledger entero con los filtros aplicados y que los tres componentes de presentación
-// siguen sin importar una sola Server Action.
+// Eran CUATRO. La ficha 336 (2026-08-30) retiró el de mis pagos (mensajero) al borrarse
+// `/mis-pagos`; quedan TRES, y DOS de ellos son componentes de PRESENTACIÓN.
+//
+// Todos son de FAMILIA A y los de presentación reciben la página por props. Eso plantea el
+// riesgo que estos tests cierran: para descargar el ledger entero hace falta la acción del modo
+// completo CON los filtros vigentes, y la tentación es que la tabla se ponga a fetchear. No lo
+// hace: el módulo padre —que es quien conoce los filtros— baja un callback (design §5). Aquí se
+// comprueban las dos mitades: que el archivo trae el ledger entero con los filtros aplicados y
+// que los componentes de presentación siguen sin importar una sola Server Action.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -46,13 +47,9 @@ vi.mock("@/lib/actions/wallet-tienda", () => ({
     listarMisMovimientosCompletoMock(...a),
 }));
 
-const listarMisPagosMock = vi.fn();
-const listarMisPagosCompletoMock = vi.fn();
 const listarPagosDeMensajeroMock = vi.fn();
 const listarPagosDeMensajeroCompletoMock = vi.fn();
 vi.mock("@/lib/actions/wallet-mensajero", () => ({
-  listarMisPagosAction: (...a: unknown[]) => listarMisPagosMock(...a),
-  listarMisPagosCompletoAction: (...a: unknown[]) => listarMisPagosCompletoMock(...a),
   listarPagosDeMensajeroAction: (...a: unknown[]) => listarPagosDeMensajeroMock(...a),
   listarPagosDeMensajeroCompletoAction: (...a: unknown[]) =>
     listarPagosDeMensajeroCompletoMock(...a),
@@ -111,7 +108,6 @@ vi.mock("@/hooks/useToast", () => ({
 
 import { WalletModule } from "@/app/(app)/wallet/_components/WalletModule";
 import { MiWalletModule } from "@/app/(app)/mi-wallet/_components/MiWalletModule";
-import { MisPagosModule } from "@/app/(app)/mis-pagos/_components/MisPagosModule";
 import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
 // Feature 173 (T G.2/T G.3, R61/R62) — el filtro y la descarga del libro de caja.
 import {
@@ -310,23 +306,18 @@ function renderMiWallet() {
   );
 }
 
-function renderMisPagos() {
-  return envolver(
-    <MisPagosModule
-      movimientos={PAGOS_PAGINA}
-      total={60}
-      page={1}
-      pageSize={20}
-      cuenta={CUENTA}
-    />,
-  );
-}
-
 function renderDesgloseMensajero() {
   return envolver(<DesglosePagosMensajero resumen={RESUMEN_MENSAJERO} />);
 }
 
-/** Los cuatro ledgers: cómo se montan, cómo se llama su control y qué acción usan. */
+/**
+ * Los ledgers: cómo se montan, cómo se llama su control y qué acción usan.
+ *
+ * Eran CUATRO. La ficha 336 (2026-08-30) retiró el de `/mis-pagos` —pantalla borrada por
+ * decisión humana— con su `renderMisPagos`, sus dos mocks y su ruta de la lista de módulos de
+ * presentación de más abajo (que se lee con `readFileSync`: dejarla habría reventado el archivo
+ * ENTERO con ENOENT, no un caso). Quedan TRES.
+ */
 const LEDGERS = [
   {
     titulo: "Libro de movimientos",
@@ -343,14 +334,6 @@ const LEDGERS = [
     completo: listarMisMovimientosCompletoMock,
     todos: TIENDA_TODOS,
     pagina: TIENDA_PAGINA,
-  },
-  {
-    titulo: "Desglose de pagos",
-    tabla: "Desglose de pagos",
-    montar: renderMisPagos,
-    completo: listarMisPagosCompletoMock,
-    todos: PAGOS_TODOS,
-    pagina: PAGOS_PAGINA,
   },
   {
     titulo: `Desglose de ${RESUMEN_MENSAJERO.mensajeroNombre}`,
@@ -380,10 +363,6 @@ function cebarDobles() {
     status: "ok",
     data: { movimientos: TIENDA_PAGINA, total: 60, page: 1, saldo: SALDO_TIENDA },
   });
-  listarMisPagosMock.mockResolvedValue({
-    status: "ok",
-    data: { movimientos: PAGOS_PAGINA, total: 60, page: 1, cuenta: CUENTA },
-  });
   listarPagosDeMensajeroMock.mockResolvedValue({
     status: "ok",
     data: { movimientos: PAGOS_PAGINA, total: 60, page: 1, pageSize: 20, cuenta: CUENTA },
@@ -397,11 +376,6 @@ function cebarDobles() {
     status: "ok",
     items: TIENDA_TODOS,
     total: TIENDA_TODOS.length,
-  });
-  listarMisPagosCompletoMock.mockResolvedValue({
-    status: "ok",
-    items: PAGOS_TODOS,
-    total: PAGOS_TODOS.length,
   });
   listarPagosDeMensajeroCompletoMock.mockResolvedValue({
     status: "ok",
@@ -496,15 +470,18 @@ describe("Ledgers de dinero · descarga", () => {
   });
 
   it("los componentes de presentación no pasan a fetchear", () => {
-    // R32. Se comprueba de forma ESTÁTICA, que es donde vive la propiedad: los tres módulos
-    // de presentación reciben la función por props y no importan NINGUNA Server Action, así
-    // que no hay ninguna que puedan llamar —ni al pintar, ni al descargar—. Un espía solo
-    // cubriría el camino que el test recorra; esto cubre todos.
+    // R32. Se comprueba de forma ESTÁTICA, que es donde vive la propiedad: los módulos de
+    // presentación reciben la función por props y no importan NINGUNA Server Action, así que no
+    // hay ninguna que puedan llamar —ni al pintar, ni al descargar—. Un espía solo cubriría el
+    // camino que el test recorra; esto cubre todos.
+    //
+    // Eran TRES; la ficha 336 se llevó `mis-pagos/_components/DesglosePagos.tsx` con la
+    // pantalla. La ruta se quita porque este bloque hace `readFileSync`: una entrada que ya no
+    // existe no falla con un diagnóstico, revienta con ENOENT y tumba el archivo entero.
     const raiz = path.resolve(__dirname, "../../..");
     const presentacion = [
       "app/(app)/wallet/_components/WalletLedger.tsx",
       "app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx",
-      "app/(app)/mis-pagos/_components/DesglosePagos.tsx",
     ];
 
     for (const ruta of presentacion) {
@@ -524,7 +501,7 @@ describe("Ledgers de dinero · descarga", () => {
     }
   });
 
-  it("los cuatro ledgers siguen comportándose igual mientras nadie descarga", async () => {
+  it("todos los ledgers siguen comportándose igual mientras nadie descarga", async () => {
     // R3/R32: montar el control no añade ni una consulta. La acción del modo completo NO se
     // llama hasta que alguien pulsa el botón.
     for (const ledger of LEDGERS) {
@@ -688,7 +665,7 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
     expect(unaPorCategoria.length).toBe(WALLET_MOVIMIENTO_CATEGORIA_SEED.length);
     expect(unaPorCategoria.length).toBeGreaterThan(15);
 
-    // El juego de encabezados es el MISMO en los cuatro: ni las categorías de la 173 ni
+    // El juego de encabezados es el MISMO en todos: ni las categorías de la 173 ni
     // ninguna otra del catálogo añaden o quitan columna, y tampoco lo hace la tabla vacía.
     expect(conjuntos.sinLas173).toEqual(conjuntos.vacio);
     expect(conjuntos.conLas173).toEqual(conjuntos.sinLas173);

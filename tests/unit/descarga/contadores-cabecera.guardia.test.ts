@@ -15,7 +15,7 @@ import { describe, it, expect } from "vitest";
 //
 //  - PANTALLA PAGINADA = un archivo de `app/` que monta `<Pagination>`, mas los componentes
 //    de tabla que ese archivo importa (en este repo el control vive a menudo en el modulo y
-//    el `<DataTable>` en un hijo: WalletModule/WalletLedger, MisPagosModule/DesglosePagos).
+//    el `<DataTable>` en un hijo: WalletModule/WalletLedger, MiWalletModule/DesgloseTiendaLedger).
 //  - En una pantalla paginada, NINGUN `({X.length})` vale... salvo los que el Anexo IV
 //    declara: las vistas AGRUPADAS de gestiones no se paginan a proposito, y su contador por
 //    grupo sigue siendo correcto. Sin esa distincion la guardia se pondria roja en la tanda I
@@ -293,6 +293,11 @@ describe("guardia de contadores de cabecera (T H.3, R42)", () => {
     // que esta guardia los vea. T K.3 suma DOS: el modulo de la bodega satelite (monta el
     // control) y su listado (monta el `<DataTable>` y lleva el contador). T L.2 suma la tabla
     // de cuentas por pagar, que monta control, tabla y contador en el mismo archivo.
+    //
+    // ficha 336 «borrar /mis-pagos y /qr» (2026-08-30): el conjunto pierde DOS archivos
+    // (`MisPagosModule`, que montaba el control, y `DesglosePagos`, que montaba la tabla). Se
+    // MIDIO antes y despues: 34 -> 32. Sigue por encima de 30, asi que el piso NO SE TOCA — es
+    // la rama (b) de la regla de abajo, y se deja escrito para que nadie lo baje «por si acaso».
     //
     // chore «borrar codigo muerto de UI» (2026-08-07): 31 -> 30, y es la PRIMERA vez que este
     // numero BAJA. No es que el detector reconozca menos: es que hay un archivo menos.

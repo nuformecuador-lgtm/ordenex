@@ -57,6 +57,15 @@
 // que no monta `<DataTable>` y por eso nunca figuró en este censo. Totales VIGENTES:
 // **32 tablas = 26 dentro de alcance + 6 fuera**, con 31 instancias de `<DataTable>` en 30
 // archivos (los de partida son los de la 172, ver `cobertura-tablas.guardia.test.ts`).
+//
+// ficha 336 «borrar /mis-pagos y /qr» (2026-08-30) — RESTA de una tabla, por decisión humana:
+// sale `app/(app)/mis-pagos/_components/DesglosePagos.tsx` («Desglose de pagos del mensajero»,
+// censada `con_descarga`). Tercera vez que este censo baja, y por el mismo motivo que las dos
+// anteriores: el registro no puede citar un archivo borrado. A diferencia de `OrdenesApartado`
+// y `ZonasModule`, aquí SÍ se pierde la capacidad: el mensajero no tiene otra pantalla donde
+// ver lo que Ordenex le debe, y así lo decidió el humano con el dato delante. Los totales
+// VIGENTES los declara `cobertura-tablas.guardia.test.ts`, que los MIDE contra el árbol; aquí
+// no se copian para que no puedan divergir.
 
 /** Estado de una tabla censada respecto de la descarga. */
 export type EstadoDescarga = "con_descarga" | "pendiente" | "fuera";
@@ -202,10 +211,6 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     tablas: [
       { nombre: "Desglose de movimientos de la tienda", estado: "con_descarga" },
     ],
-  },
-  {
-    ruta: "app/(app)/mis-pagos/_components/DesglosePagos.tsx",
-    tablas: [{ nombre: "Desglose de pagos del mensajero", estado: "con_descarga" }],
   },
   {
     // FEATURE 258 (F3.1) — ALTA. El detalle de un mensajero del tablero del día pasó de una

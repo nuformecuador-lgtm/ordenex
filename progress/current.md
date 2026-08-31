@@ -9,6 +9,73 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🧾 2026-08-31 — cierre de sesión: seis fichas y un defecto de producción
+
+**Todo lo abierto quedó cerrado.** Ocho fichas `done`: las cuatro de la wallet planificadas el día
+anterior (85, 332, 333, 334), las dos de la wallet de la tienda (335, 336) y las dos que nacieron de
+un reporte de producción (337, 338).
+
+**Lo que empezó todo.** Una pregunta del humano: «el cierre pendiente de Kendall no concuerda con el
+número de paquetes que le asignaron». Era cierto — 30 filas contra 23 asignadas — y detrás había un
+**defecto de diseño**: las gestiones que la tienda resuelve desde novedades (`rechazo_tienda`,
+`reprogramacion_tienda`) entraban al **próximo cierre del mensajero**. 41 de ellas, en los 6 cierres
+pendientes; una formaba un cierre entero sin una sola gestión de su mensajero (Andy Cortés).
+
+No era un descuido: el código lo hacía **a propósito** —su comentario decía «entra al próximo cierre
+pero aporta 0,00»—. Una decisión que envejeció mal: un cierre no es una suma, es el documento del que
+alguien responde.
+
+**Se corrigió, se desplegó como hotfix y se limpiaron los datos**: 41 filas fuera en una sola
+operación atómica, ningún total ni pago alterado (aportaban ₡0), y el cierre vacío borrado —no
+rechazado: rechazar **bloquea al mensajero**, y Andy no había hecho nada—. Kendall pasó de 30 a 23.
+
+### Lo que este día enseñó, y conviene que sobreviva
+
+1. **El criterio estaba escrito TRES veces, no dos.** La tercera copia era la que de verdad escribe
+   el vínculo. Arreglar sólo la lectura habría quitado las filas de la pantalla **dejándolas entrar
+   al documento igual**: el bug entero, invisible.
+2. **Un hotfix a `prod` no está terminado hasta que vuelve a `dev`.** Salió por urgencia y `dev` no
+   lo tenía; la siguiente release lo habría **revertido en silencio**. Lo detectó el humano antes que
+   el leader. Se devolvió con el PR #628.
+3. **`git add` incompleto = fallo mudo propio.** Al commitear la primera mitad se escribió
+   `git add lib tests …` y se olvidó `app/`: entraron los tests del rótulo y **no el código que
+   arreglan**. Se cazó revisando qué archivos llevaba el hotfix de verdad, no fiándose del informe.
+4. **El gate encuentra censos que nadie contó.** `ControlDescargaTransversal` llevaba dos números que
+   ni el spec ni el agente tenían. Y ahí se ve el valor de una **igualdad** frente a un **suelo**: el
+   suelo se ajusta solo, la igualdad obliga a pasar por ahí y explicar.
+5. **Una guardia puede fallar por hacer bien su trabajo.** El spec de la 336 escribía el marcador de
+   «test desaparecido» como ejemplo, y la guardia lo leyó como anotación viva. Se neutralizó el
+   ejemplo **sin debilitar la guardia**: enseñarle a ignorar bloques de código abriría el agujero de
+   esconder una anotación real ahí dentro.
+6. **Los subagentes declararon sus propios huecos**: una mutación que no podía enrojecer lo que el
+   spec decía, un test de render que no mata `Number()`, dos casos que sobreviven a su mutación, y un
+   rojo que un agente descubrió **haberse causado él mismo** al solapar dos suites.
+
+### Lo que se midió contra producción, y desmintió suposiciones
+
+- **Las tarifas no se cobraban mal.** Los 4 cobros de flete de retorno salen de rechazos **reales en
+  calle**. Lo que asustaba era el rótulo: «Tarifa aplicada» sobre nueve precios, con «se aplicó»
+  marcando a la vez entrega y devolución —imposible—. Corregido en la 338.
+- **A ningún mensajero se le pagó de más**: ₡0 en las 41 gestiones ajenas.
+- **El ingreso de bodega por rechazo está en 0,00 en las 40 rechazadas**: un camino dormido, no un
+  cobro detenido.
+- **Firefox en Mac: NO REPRODUCIDO, y no se inventó causa.** Se descartaron por medición el área de
+  clic del componente, el motor de Safari (WebKit), el ancho de MacBook y Firefox como tal (funciona
+  en Windows y en Retina). Queda la combinación Gecko + macOS, que esta máquina no ejecuta.
+
+### Deuda viva, con dueño
+
+- **`LandingPoliticas` dice «Devoluciones tienen costo adicional de flete de retorno»**, y desde la
+  ficha 301 **es falso**: una devolución no cobra nada. Texto comercial → decisión de negocio.
+- **5 remisiones duplicadas entre Gameos y Nuform** (72973, 72978, 72979, 72983, 73104). No es del
+  sistema —dos cuentas distintas cargando el mismo envío, y la regla de remisión única es POR
+  TIENDA— pero en la 72973 una copia se **entregó** y la otra se **rechazó**: a Gameos se le cobra el
+  retorno de un paquete que sí llegó.
+- **`wallet_movimiento` sin `CHECK`**: un monto cero entra. 0 filas afectadas hoy; prevención.
+- **En la API se cambiaron descripciones, NO claves** (`devuelto`): renombrar una clave rompe a todo
+  integrador y necesita su propia decisión.
+- **Sin repaso visual**: el panel de cobros nuevo y la wallet de la tienda no se han visto en pantalla.
+
 ## ✅ 2026-08-29 — wallet: LAS CUATRO FICHAS CERRADAS Y EN `dev`
 
 | # | PR | En `dev` | Gate completo |
