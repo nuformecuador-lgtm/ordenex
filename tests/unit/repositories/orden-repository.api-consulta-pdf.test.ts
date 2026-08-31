@@ -268,25 +268,19 @@ describe("OrdenRepository.findDetalleByOrdenIdForOwner (feature 177, T7)", () =>
     ]);
   });
 
-  it("R17: findDetalleByNumGuiaForOwner NO cambio de firma ni de proyeccion (misma que la variante por id)", async () => {
-    // Firma: sigue recibiendo (numGuia, ownerId) y resolviendo por num_guia.
-    expect(OrdenRepository.prototype.findDetalleByNumGuiaForOwner.length).toBe(2);
-
-    const prismaGuia = buildPrisma();
-    (prismaGuia.orden.findFirst as Mock).mockResolvedValue(ordenDetalleRow());
-    const porGuia = await repoCon(prismaGuia).findDetalleByNumGuiaForOwner(100234, OWNER);
-    const callGuia = (prismaGuia.orden.findFirst as Mock).mock.calls[0][0];
-
+  // BAJA (2026-08-31) — aqui se comparaba esta variante contra `findDetalleByNumGuiaForOwner`
+  // (R17: "la 106 no cambio"). Ese gemelo se retiro con su endpoint, asi que ya no hay dos
+  // proyecciones que puedan divergir; lo que queda por vigilar es que ESTA no se mueva, y de eso
+  // se ocupa el literal congelado de `orden-repository.no-regresion-106.test.ts`.
+  it("R16: resuelve por orden.id con el scope forzado, sin rastro del identificador por guia", async () => {
     const prismaId = buildPrisma();
     (prismaId.orden.findFirst as Mock).mockResolvedValue(ordenDetalleRow());
-    const porId = await repoCon(prismaId).findDetalleByOrdenIdForOwner("o-1", OWNER);
-    const callId = (prismaId.orden.findFirst as Mock).mock.calls[0][0];
+    await repoCon(prismaId).findDetalleByOrdenIdForOwner("o-1", OWNER);
 
-    // La 106 sigue resolviendo por num_guia con su scope intacto.
-    expect(callGuia.where).toMatchObject({ numGuia: 100234, tiendaId: OWNER, deletedAt: null });
-    // Y la proyeccion es EXACTAMENTE la misma en ambas variantes (extraida a una constante).
-    expect(callId.select).toEqual(callGuia.select);
-    expect(porId).toEqual(porGuia);
+    const callId = (prismaId.orden.findFirst as Mock).mock.calls[0][0];
+    expect(callId.where).toEqual({ id: "o-1", tiendaId: OWNER, deletedAt: null });
+    expect(callId.where).not.toHaveProperty("numGuia");
+    expect(OrdenRepository.prototype.findDetalleByOrdenIdForOwner.length).toBe(2);
   });
 });
 

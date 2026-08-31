@@ -4,7 +4,6 @@ import fs from "node:fs";
 import type { PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { ApiOrdenDetalleRow, IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
-import * as detalleRoute from "@/app/api/ordenes/api-key/[numGuia]/route";
 import * as cancelarRoute from "@/app/api/ordenes/api-key/[numGuia]/cancelar/route";
 
 // Feature 177 / T21 (R17): NO-REGRESION de la feature 106. La 177 extrajo la proyeccion del
@@ -16,9 +15,11 @@ import * as cancelarRoute from "@/app/api/ordenes/api-key/[numGuia]/cancelar/rou
 // contrato se escribe AQUI como literal congelado, tal y como era ANTES de la 177.
 
 const OWNER = "store-1";
+const ORDEN_ID = "orden-1";
 
 /**
- * Proyeccion EXACTA que la feature 106 enviaba a Prisma en `findDetalleByNumGuiaForOwner`.
+ * Proyeccion EXACTA que la feature 106 enviaba a Prisma en `findDetalleByNumGuiaForOwner` (hoy
+ * retirado) y que `findDetalleByOrdenIdForOwner` heredo sin tocar.
  * Copia literal congelada: si produccion anade, quita o renombra un campo, este test cae.
  *
  * ⚠️ FEATURE 268 (T6c / R27, 2026-08-22) — AQUI DECIA `resultado: { in: ["entregada",
@@ -91,40 +92,46 @@ function verbosExportados(modulo: Record<string, unknown>): string[] {
   return VERBOS_HTTP.filter((verbo) => typeof modulo[verbo] === "function");
 }
 
-describe("Feature 106 intacta — findDetalleByNumGuiaForOwner (R17)", () => {
+// BAJA (2026-08-31) — este bloque vigilaba `findDetalleByNumGuiaForOwner`, que SE RETIRO con su
+// endpoint (`GET /api/ordenes/api-key/{numGuia}`). Lo que congelaba NO era el metodo sino la
+// PROYECCION, y esa sigue viva en `findDetalleByOrdenIdForOwner` —era la misma constante
+// (`API_ORDEN_DETALLE_SELECT`) para los dos—, asi que la vigilancia se muda ahi en vez de
+// borrarse: el literal de abajo sigue siendo el de la 106, byte a byte. Lo unico que cambia es
+// el `where`, que ahora identifica por `id` en vez de por `num_guia`.
+describe("Feature 106 — la proyeccion del detalle sigue congelada (ahora por orden.id)", () => {
   it("el metodo sigue existiendo en OrdenRepository y en el contrato IOrdenRepository", () => {
     const repo = new OrdenRepository(buildPrisma() as unknown as PrismaClient);
 
-    expect(typeof repo.findDetalleByNumGuiaForOwner).toBe("function");
+    expect(typeof repo.findDetalleByOrdenIdForOwner).toBe("function");
     expect(
       Object.prototype.hasOwnProperty.call(
         OrdenRepository.prototype,
-        "findDetalleByNumGuiaForOwner",
+        "findDetalleByOrdenIdForOwner",
       ),
     ).toBe(true);
 
     // Comprobacion de tipos: si la firma declarada en la interfaz cambiara, esta asignacion
     // (repo -> interfaz -> firma esperada) dejaria de compilar y `pnpm typecheck` fallaria.
-    const desdeLaInterfaz: IOrdenRepository["findDetalleByNumGuiaForOwner"] =
-      repo.findDetalleByNumGuiaForOwner.bind(repo);
-    const conLaFirmaDeLa106: (
-      numGuia: number,
+    const desdeLaInterfaz: IOrdenRepository["findDetalleByOrdenIdForOwner"] =
+      repo.findDetalleByOrdenIdForOwner.bind(repo);
+    const conLaFirmaDelDetalle: (
+      ordenId: string,
       ownerId: string,
     ) => Promise<ApiOrdenDetalleRow | null> = desdeLaInterfaz;
-    expect(typeof conLaFirmaDeLa106).toBe("function");
+    expect(typeof conLaFirmaDelDetalle).toBe("function");
   });
 
-  it("conserva su aridad de dos parametros (numGuia, ownerId)", () => {
+  it("conserva su aridad de dos parametros (ordenId, ownerId)", () => {
     const repo = new OrdenRepository(buildPrisma() as unknown as PrismaClient);
-    expect(repo.findDetalleByNumGuiaForOwner.length).toBe(2);
-    expect(OrdenRepository.prototype.findDetalleByNumGuiaForOwner.length).toBe(2);
+    expect(repo.findDetalleByOrdenIdForOwner.length).toBe(2);
+    expect(OrdenRepository.prototype.findDetalleByOrdenIdForOwner.length).toBe(2);
   });
 
   it("envia a Prisma exactamente la misma proyeccion que antes de la feature 177", async () => {
     const prisma = buildPrisma();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.findDetalleByNumGuiaForOwner(10234, OWNER);
+    await repo.findDetalleByOrdenIdForOwner(ORDEN_ID, OWNER);
 
     const { select } = (prisma.orden.findFirst as Mock).mock.calls[0][0];
     // Igualdad estructural contra el literal congelado: detecta campos anadidos y quitados.
@@ -136,21 +143,26 @@ describe("Feature 106 intacta — findDetalleByNumGuiaForOwner (R17)", () => {
     );
   });
 
-  it("sigue filtrando por numGuia + tiendaId + deletedAt: null y por nada mas", async () => {
+  it("sigue filtrando por el identificador + tiendaId + deletedAt: null y por nada mas", async () => {
     const prisma = buildPrisma();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.findDetalleByNumGuiaForOwner(10234, OWNER);
+    await repo.findDetalleByOrdenIdForOwner(ORDEN_ID, OWNER);
 
     const { where } = (prisma.orden.findFirst as Mock).mock.calls[0][0];
-    expect(where).toEqual({ numGuia: 10234, tiendaId: OWNER, deletedAt: null });
+    expect(where).toEqual({ id: ORDEN_ID, tiendaId: OWNER, deletedAt: null });
   });
 });
 
 describe("Feature 106 intacta — rutas y verbos de sus endpoints (R17)", () => {
-  it("el archivo de ruta GET /api/ordenes/api-key/[numGuia] sigue en su sitio", () => {
+  // BAJA (2026-08-31) — el `GET /api/ordenes/api-key/[numGuia]` de la 106 SE RETIRO: el
+  // `GET /api/ordenes/api-key/orden/{id}` de la 177 sirve el MISMO `OrdenDetalle` y ademas
+  // acepta `num_remision`, asi que la ruta por guia era un segundo camino, mas pobre, al mismo
+  // recurso. La afirmacion se INVIERTE en vez de borrarse: si alguien la repone sin pasar por el
+  // changelog del canal, este test lo caza.
+  it("el archivo de ruta GET /api/ordenes/api-key/[numGuia] YA NO existe (retirado)", () => {
     const ruta = path.join(RAIZ, "app", "api", "ordenes", "api-key", "[numGuia]", "route.ts");
-    expect(fs.existsSync(ruta)).toBe(true);
+    expect(fs.existsSync(ruta)).toBe(false);
   });
 
   it("el archivo de ruta PUT /api/ordenes/api-key/[numGuia]/cancelar sigue en su sitio", () => {
@@ -165,10 +177,6 @@ describe("Feature 106 intacta — rutas y verbos de sus endpoints (R17)", () => 
       "route.ts",
     );
     expect(fs.existsSync(ruta)).toBe(true);
-  });
-
-  it("el modulo del detalle exporta solo GET y ningun verbo nuevo", () => {
-    expect(verbosExportados(detalleRoute as unknown as Record<string, unknown>)).toEqual(["GET"]);
   });
 
   it("el modulo de cancelar exporta solo PUT y ningun verbo nuevo", () => {
