@@ -1,19 +1,27 @@
-// @vitest-environment jsdom
-import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import path from "path";
-import { createElement } from "react";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { ESLint } from "eslint";
 import type { Linter } from "eslint";
 
-import {
-  FilterComponent,
-  type FilterDef,
-  type FilterSelection,
-} from "@/components/shared/FilterComponent";
-
 // Feature 335 / R25 — GUARDIA DE PROPIEDAD: la lectura inicial de la URL no escribe
-// estado desde un efecto.
+// estado desde un efecto. ESTA ES **LA MITAD DE LINTER**.
+//
+// R25 SE VIGILA CON DOS ARCHIVOS, Y ESTAN SEPARADOS A PROPOSITO
+// -------------------------------------------------------------
+// La otra mitad —la de COMPORTAMIENTO, que renderiza el componente— vive en
+// `tests/unit/guards/filtros-url-r25-propiedad.test.tsx`. Las dos juntas son R25; ninguna
+// basta sola, y mas abajo se explica por que.
+//
+// NO LAS VUELVAS A FUSIONAR EN UN SOLO ARCHIVO. Estuvieron fusionadas y salio caro: la
+// mitad de comportamiento obliga a marcar el archivo `// @vitest-environment jsdom`, y eso
+// metia el arranque de ESLint —que es lo caro de aqui— DENTRO de jsdom. Medido por el
+// revisor: el `beforeAll` tardaba entre ~25 s y **mas de 113 s aislado, sin nada
+// compitiendo** (o sea, no era saturacion de la maquina) y cruzaba su `hookTimeout` de
+// 60 s en ~2 de cada 5 corridas. Y lo grave no era el rojo: al expirar un `beforeAll` sus
+// casos quedan **SKIPPED**, asi que en cada corrida que expiraba la mitad de linter de R25
+// **dejaba de verificar nada** mientras el archivo aun podia verse verde. Este archivo
+// corre en el entorno `node` por defecto del repo justamente para que eso no vuelva a
+// pasar: no lleva —ni debe llevar— la directiva de jsdom.
 //
 // POR QUE ESTE GUARDIA EJECUTA EL LINTER Y NO MIRA EL TEXTO DEL CODIGO
 // -------------------------------------------------------------------
@@ -44,20 +52,17 @@ import {
 // Por eso el primer caso NO linta: comprueba contra la config resuelta que la regla existe
 // y esta ACTIVA. Si algun dia deja de estarlo, este archivo se pone rojo en vez de mentir.
 //
-// POR QUE EL GUARDIA NECESITA DOS MITADES (hallazgo M2 del revisor)
-// -----------------------------------------------------------------
+// POR QUE EL LINTER NO BASTA, Y DE AHI LA OTRA MITAD (hallazgo M2 del revisor)
+// ----------------------------------------------------------------------------
 // El linter vigila la FORMA: «no hay un setter de estado llamado desde un efecto». Pero
 // R25 no existe por la forma, existe por lo que la forma protege: que la URL se lea UNA
 // vez, al entrar. Y esa propiedad el linter NO puede verla. La ficha llego a tener un
 // efecto que llamaba a `aplicar(...)` —una funcion auxiliar que por dentro hace
 // `setSeleccion`— con valores leidos de una ref reescrita en cada render; la regla no
 // sigue esa indireccion, asi que el fuente pasaba el lint mientras la propiedad estaba
-// rota (era el bloqueante B2). Un guardia que solo linta habria firmado ese codigo.
-//
-// De ahi la segunda mitad, que es de COMPORTAMIENTO: renderiza el componente, muta los
-// query params DESPUES del montaje, hace crecer `filters` —el disparador que volvia a leer
-// la URL— y exige que gane la foto de entrada. Si alguien vuelve a colar una lectura
-// tardia por una indireccion que el linter no atraviesa, este caso lo dice.
+// rota (era el bloqueante B2). Un guardia que solo linte firmaria ese codigo. Por eso
+// existe `filtros-url-r25-propiedad.test.tsx`: si se borra este archivo o aquel, R25 se
+// queda medio vigilado.
 
 const RAIZ = path.join(__dirname, "..", "..", "..");
 
@@ -96,9 +101,19 @@ describe("Feature 335 / R25 — la lectura inicial de la URL no escribe estado d
   let resultados: ESLint.LintResult[];
   let configs: Linter.Config[];
 
-  // Instanciar ESLint y resolver la config de flat config es caro (carga
-  // `eslint-config-next` entero y su cadena de plugins). Se hace UNA sola vez para los tres
-  // casos, con holgura sobre el `testTimeout` de 20s del repo.
+  // Instanciar ESLint y resolver la flat config es caro (carga `eslint-config-next` entero
+  // y su cadena de plugins). Se hace UNA sola vez para los tres casos.
+  //
+  // POR QUE 60 s SIGUEN SIENDO SUFICIENTES, con el numero medido delante: 5 corridas
+  // seguidas de este archivo el 2026-08-31, ya fuera de jsdom, dieron 16,74 / 13,80 / 16,20
+  // / 16,78 / 15,19 s de hook+casos (el hook es casi todo eso). **PEOR CASO: 16,8 s**, con
+  // el archivo entero en 25,3 s. Dentro de jsdom el mismo hook llego a 113 s. O sea: el
+  // `hookTimeout` de 60 s deja un margen de ~3,5x sobre el peor caso observado, y ese
+  // margen es lo que hace que el guardia no dependa de acertar un timeout el dia que la
+  // maquina este ocupada. Si algun dia esto se acerca a 60 s, el arreglo NO es subir el
+  // numero a ojo: es medir de nuevo y averiguar QUE se ha encarecido. El `hookTimeout`
+  // global del repo (20 s) se queda corto aqui por el arranque del linter, no por el
+  // analisis, y por eso se sobrescribe solo aca.
   beforeAll(async () => {
     eslint = new ESLint({ cwd: RAIZ });
     configs = (await Promise.all(
@@ -163,72 +178,5 @@ describe("Feature 335 / R25 — la lectura inicial de la URL no escribe estado d
       familiaHooks,
       `Reglas de hooks de React incumplidas en los archivos de la ficha 335:\n${familiaHooks.join("\n")}`,
     ).toEqual([]);
-  });
-});
-
-// -----------------------------------------------------------------------------------------
-// SEGUNDA MITAD: la propiedad que el linter no puede ver.
-// -----------------------------------------------------------------------------------------
-
-const replaceMock = vi.fn();
-
-/** La URL de la prueba. `let` porque el caso la MUTA a mitad de vida del componente. */
-let parametros = new URLSearchParams();
-
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: replaceMock, push: vi.fn(), refresh: vi.fn() }),
-  usePathname: () => "/fantasia",
-  useSearchParams: () => parametros,
-}));
-
-const COLOR: FilterDef = {
-  key: "color",
-  label: "Color",
-  kind: "multi",
-  options: [
-    { value: "rojo", label: "Rojo" },
-    { value: "azul", label: "Azul" },
-  ],
-};
-
-beforeEach(() => {
-  replaceMock.mockClear();
-  parametros = new URLSearchParams();
-});
-
-afterEach(() => {
-  cleanup();
-});
-
-describe("Feature 335 / R25 — la lectura de la URL ocurre UNA vez, al entrar (propiedad, no forma)", () => {
-  it("R25 — mutar los query params tras el montaje no entra por la siembra: gana la foto de entrada", async () => {
-    // Se entra con `?color=rojo` y el filtro declarado SIN catalogo: su valor se descarta
-    // por R14 y la clave queda pendiente de sembrar. Mientras tanto la URL cambia a `azul`
-    // —lo hace el tablero de `/analitica` y el detalle de `cierres-admin`, que reescriben la
-    // query durante la sesion— y despues llega el catalogo, que es el disparador de la
-    // siembra pendiente. Lo que se siembra debe ser `rojo`: lo que la URL traia AL ENTRAR.
-    parametros = new URLSearchParams("color=rojo");
-    const onChange = vi.fn();
-
-    const vista = render(
-      createElement(FilterComponent, {
-        filters: [{ ...COLOR, options: [] }],
-        onChange,
-        debounceMs: 0,
-      }),
-    );
-
-    parametros = new URLSearchParams("color=azul");
-    vista.rerender(
-      createElement(FilterComponent, { filters: [COLOR], onChange, debounceMs: 0 }),
-    );
-
-    await waitFor(() =>
-      expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ color: ["rojo"] }),
-    );
-    expect(onChange.mock.calls.map(([sel]) => sel as FilterSelection)).not.toContainEqual({
-      color: ["azul"],
-    });
-    expect(screen.getByRole("button", { name: /^Color:/ })).toHaveTextContent("Rojo");
   });
 });

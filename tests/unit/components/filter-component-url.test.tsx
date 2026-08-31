@@ -374,6 +374,42 @@ describe("FilterComponent — la precarga sobrevive a la poda (R17)", () => {
     expect(seleccionesSinColor).toEqual([]);
     expect(ultima(onChange)).toEqual({ color: ["rojo"] });
   });
+
+  // ⚠️ EL CASO DE ARRIBA NO SE PUEDE VER FALLAR, y conviene saberlo (hallazgo M5 del
+  // revisor): monta solo claves que siguen declaradas, asi que la poda calcula `sobran =
+  // []`, el efecto sale por su `return` temprano y NO TOCA el estado. Pasa igual con el
+  // fuente pre-arreglo. Sirve como red contra una emision espuria, no como prueba de la
+  // convivencia entre poda y siembra. El caso de abajo es el que si distingue un arbol
+  // sano de uno roto.
+  it("R17 — cuando la poda SI tiene trabajo, se lleva lo que sobra y conserva lo sembrado", async () => {
+    // Se entra con dos claves en la URL: `color` (la sembrada que debe sobrevivir) y
+    // `acabado` (la que el consumidor retirara despues). Ambas se siembran en el
+    // inicializador, asi que quedan apuntadas en `sembradas` y en las pasadas siguientes
+    // ya no hay nada que sembrar: lo unico que el efecto tiene entre manos es la PODA.
+    parametros = new URLSearchParams("color=rojo&acabado=brillo");
+
+    const { onChange, volverAMontar } = montar([COLOR, ACABADO]);
+    expect(ultima(onChange)).toEqual({ color: ["rojo"], acabado: ["brillo"] });
+
+    // El consumidor retira el control de `acabado` —lo hace la barra cuando el usuario
+    // desactiva una columna de filtro—. Ahora `sobran = ["acabado"]`, el efecto NO puede
+    // salir por el `return` temprano y tiene que escribir estado. Ese es el momento en que
+    // R17 se juega de verdad: al construir la seleccion siguiente hay que PARTIR DE LA
+    // ACTUAL y quitarle lo que sobra, no rehacerla desde lo que se siembre en esta pasada
+    // (que aqui es nada). Si alguien cambia ese `{ ...actual, ...sembrado }` por
+    // `{ ...sembrado }`, `color` desaparece y este caso se pone rojo.
+    volverAMontar([COLOR]);
+
+    await waitFor(() => expect(ultima(onChange)).toEqual({ color: ["rojo"] }));
+    // Y ninguna emision, ni siquiera transitoria, puede haber dejado a `color` fuera.
+    const sinColor = onChange.mock.calls
+      .map(([seleccion]) => seleccion as FilterSelection)
+      .filter((seleccion) => seleccion.color === undefined);
+    expect(
+      sinColor,
+      "la poda de `acabado` se llevo por delante la clave sembrada desde la URL (R17)",
+    ).toEqual([]);
+  });
 });
 
 describe("FilterComponent — el control muestra lo que se sembro (R10, R13)", () => {

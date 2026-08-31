@@ -50,11 +50,21 @@ const SEPARADOR_TERNA = "\u0000";
  * scopea por `pathname`, para que limpiar `zona=A` en `/novedades` no ciegue `zona=A` en
  * `/ordenes`.
  *
- * LIMITE CONOCIDO, asumido a sabiendas: la memoria solo se vacia al recargar la pagina
- * entera. Volver ATRAS con el boton del navegador a esa MISMA query exacta dejaria esos
- * pares suprimidos. Es el precio de matar un bug visible; la alternativa —no recordar
- * nada— resucita filtros que el usuario acaba de borrar, que es peor y ademas es lo que
- * el usuario ve.
+ * LIMITE CONOCIDO, asumido a sabiendas, y es mas ancho de lo que parece: este conjunto
+ * NO SE VACIA NUNCA en toda la sesion SPA —solo lo estrena una recarga completa de la
+ * pagina, que es la que vuelve a evaluar el modulo—. Asi que una vez borrado `zona=A` en
+ * `/ordenes`, CUALQUIER llegada posterior a esa ruta con ese mismo par queda suprimida:
+ * no solo el boton ATRAS, tambien un `<Link>` interno que lo lleve, un enlace pegado en la
+ * barra de direcciones si el navegador lo resuelve por navegacion cliente, o cualquier
+ * pantalla que reconstruya esa query. El usuario lo recupera recargando.
+ *
+ * Lo que SI resiste, y esta verificado: el scopeado por `pathname` y por VALOR evita el
+ * envenenamiento cruzado —limpiar `zona=A` en `/novedades` no ciega `zona=A` en `/ordenes`,
+ * y `zona=B` se honra igual—, y el conjunto crece ACOTADO: unas pocas entradas por cada
+ * "Limpiar todo", no una por navegacion.
+ *
+ * Es el precio de matar un bug visible; la alternativa —no recordar nada— resucita filtros
+ * que el usuario acaba de borrar, que es peor y ademas es lo que el usuario ve.
  */
 const paresBorrados = new Set<string>();
 
