@@ -126,12 +126,18 @@ describe("266/D2 — el tope de filas por lote lo aplica el schema, no solo la p
 });
 
 describe("266 — la rama B es deuda declarada: el contrato NO gana ningun evento nuevo", () => {
-  it("la seccion `webhooks:` sigue teniendo un unico evento y no menciona la habilitacion", () => {
+  it("el contrato publica UN solo evento saliente, y no menciona la habilitacion", () => {
     // La rama B no notifica y no se deja ningun gancho «por si acaso». Si alguien anadiera
     // `orden.habilitada`, este assert cae con el nombre de la decision que lo prohibe.
-    expect(Object.keys(spec.webhooks)).toEqual(["orden.estado_actualizado"]);
-    expect(JSON.stringify(spec.webhooks)).not.toContain("habilitada");
-    expect(JSON.stringify(spec.webhooks)).not.toContain("habilitacion");
+    //
+    // ⏳ 2026-09-01 — esto miraba la seccion `webhooks:`, que ya no existe: el unico evento se
+    // publica como el schema `WebhookOrdenEstadoActualizado`. La afirmacion no cambia, cambia
+    // donde se lee: los schemas de evento son EXACTAMENTE uno.
+    const schemasDeEvento = Object.keys(spec.components.schemas).filter((n) => n.startsWith("Webhook"));
+    expect(schemasDeEvento).toEqual(["WebhookOrdenEstadoActualizado"]);
+    const evento = JSON.stringify(spec.components.schemas.WebhookOrdenEstadoActualizado);
+    expect(evento).not.toContain("habilitada");
+    expect(evento).not.toContain("habilitacion");
   });
 });
 
