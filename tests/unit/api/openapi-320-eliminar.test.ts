@@ -215,8 +215,14 @@ describe("FICHA 320 — lo que el contrato NO gana", () => {
   it("no se anade ningun evento de webhook: borrar no transiciona la orden", () => {
     // Decision de la ficha: el borrado no escribe historial ni cambia el estado, asi que no hay
     // evento que emitir. Este assert existe para que quede como NO-ACCION deliberada.
-    const conWebhooks = openApiSpec as unknown as { webhooks: Record<string, unknown> };
-    expect(Object.keys(conWebhooks.webhooks)).not.toContain("orden.eliminada");
+    // ⏳ 2026-09-01 — esto miraba `openApiSpec.webhooks`, que ya no existe: el unico evento se
+    // publica como el schema `WebhookOrdenEstadoActualizado`. La afirmacion es la misma —borrar no
+    // emite nada—, medida donde ahora viven los eventos.
+    const schemas = openApiSpec.components.schemas as unknown as Record<string, unknown>;
+    expect(Object.keys(schemas).filter((n) => n.startsWith("Webhook"))).toEqual([
+      "WebhookOrdenEstadoActualizado",
+    ]);
+    expect(JSON.stringify(schemas.WebhookOrdenEstadoActualizado)).not.toContain("eliminada");
     expect(yaml).not.toContain("orden.eliminada");
   });
 });

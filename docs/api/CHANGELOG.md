@@ -50,6 +50,33 @@ schemas y sus ejemplos, pero ya no hay párrafo explicativo debajo del título.
 Todas esas reglas **siguen vigentes en el comportamiento del canal**; lo que se fue es su
 descripción publicada. Las entradas anteriores de este changelog las conservan.
 
+**El evento saliente deja de publicarse como operación.** `orden.estado_actualizado` vivía en la
+sección `webhooks:` de nivel superior, que Swagger UI pinta como un endpoint más — y no lo es: no es
+algo que vos llames, es Ordenex quien lo entrega a tu callback. Ahora se publica **solo su forma**,
+como el schema `WebhookOrdenEstadoActualizado` de `components.schemas`, con las mismas propiedades,
+los mismos enums y los mismos dos ejemplos.
+
+**La entrega no cambia en nada**: se sigue enviando igual, firmada igual, a la misma URL. Lo que
+desaparece del documento son las dos cabeceras `X-Ordenex-Signature` y `X-Ordenex-Timestamp`, que
+solo una operación puede declarar. **Siguen viajando en cada entrega**; el contrato ya no las
+enumera. Si generás tipos desde el contrato, el cuerpo lo tenés en el schema nuevo; las cabeceras
+tendrás que escribirlas a mano.
+
+**Se retira también el bloque `servers`.** Es el único punto de esta entrada que puede notarse fuera
+de la vista: el contrato ya no propone ninguna URL base, así que Swagger UI deja de pintar el
+desplegable de servidores y resuelve las rutas contra el origen que sirve el documento. **Si generás
+tu cliente desde el `.yaml`**, el generador ya no encontrará una base y la tomará relativa o te
+pedirá pasarla vos: revisá la configuración de tu cliente antes de actualizar el contrato. Las rutas
+no cambian.
+
+Del texto de la cabecera salen además dos referencias internas que nunca debieron publicarse: la
+mención a la «feature 10» junto al shape de error —que sigue descrito, y con el mismo schema
+`Error`— y la coletilla sobre ampliar el alcance «vía parámetros de la petición». La regla que
+enunciaba no cambia: un `tiendaId` u `owner` en la query **se sigue ignorando**. Y se deja de
+nombrar el prefijo `ordx_` de la key, tanto en la cabecera como en el esquema de seguridad, que
+ahora se limita a decir dónde va: `Authorization: Bearer <tu-api-key>`. **Tu key no cambia y el
+header tampoco**: se manda exactamente igual que hasta hoy.
+
 En la misma release, `docs/api/ordenex-api-key.postman_collection.json` se rehízo: **una petición
 por endpoint** (diez, sin carpetas de casos de éxito y error), el listado con la paginación y sus
 cinco filtros en una sola petición —los filtros van desactivados, se activan a mano— y se añadió la
