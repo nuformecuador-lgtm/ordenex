@@ -49,6 +49,8 @@ function fila(parcial: Partial<FilaProductoDTO> & { producto: string }): FilaPro
     unidades: 1,
     ordenes: 1,
     porStatus: [{ status: "entregada", conteo: 1 }],
+    ordenesAcompanadas: 0,
+    dinero: null,
     ...parcial,
   };
 }
@@ -58,6 +60,7 @@ function datos(filas: FilaProductoDTO[], extra: Partial<ConteoProductosDTO> = {}
     filas,
     ordenes: filas.reduce((s, f) => s + f.ordenes, 0),
     ordenesSinProducto: 0,
+    dinero: { estado: "denegado" },
     lastSync: "2026-09-01T18:30:00.000Z",
     ...extra,
   };

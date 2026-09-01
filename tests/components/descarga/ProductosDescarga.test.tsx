@@ -60,6 +60,8 @@ const FILAS: FilaProductoDTO[] = [
       { status: "rechazada", conteo: 6 },
       { status: EN_CURSO, conteo: 2 },
     ],
+    ordenesAcompanadas: 0,
+    dinero: null,
   },
   {
     tiendaId: "3f2a1c88-9b40-4d21-8e77-1c0b5a6d2e91",
@@ -72,6 +74,8 @@ const FILAS: FilaProductoDTO[] = [
       { status: "devuelta", conteo: 5 },
       { status: EN_CURSO, conteo: 4 },
     ],
+    ordenesAcompanadas: 0,
+    dinero: null,
   },
 ];
 
@@ -79,6 +83,7 @@ const DTO: ConteoProductosDTO = {
   filas: FILAS,
   ordenes: 45,
   ordenesSinProducto: 3,
+  dinero: { estado: "denegado" },
   lastSync: "2026-09-01T18:30:00.000Z",
 };
 

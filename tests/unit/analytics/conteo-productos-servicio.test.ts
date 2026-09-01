@@ -9,6 +9,7 @@ import type {
   IConteoProductosRepository,
 } from "@/lib/interfaces/repositories/IConteoProductosRepository";
 import { cacheFalsa } from "./_cache-falsa";
+import { dineroFalso } from "./_dinero-falso";
 
 // Ficha 345 / T4.3 — LA FUSION (R18, R24, R25, R26, R31, R33, R34, R35, R37, R38, R58).
 //
@@ -276,18 +277,44 @@ describe("R31 / R34 · lo que NO se emite", () => {
     expect(Number.isSafeInteger(ordenesSinProducto)).toBe(true);
   });
 
-  it("NINGUNA cifra de dinero por producto: el DTO no tiene mas campos que los declarados", () => {
-    // El limite innegociable de la ficha, escrito como asercion: si alguien añade `ingreso`,
-    // `flete` o `monto` a la fila, este caso lo dice.
+  it("el DTO de la fila no tiene mas campos que los DECLARADOS (ficha 345 + 347)", () => {
+    // ⚠ ESTE `toEqual` LITERAL **ES** EL CONTRATO, no una copia de la fuente: esta escrito a
+    // mano y comparado contra `Object.keys` del objeto REAL. Si alguien anade un campo a la
+    // fila —una cifra suelta, un id interno, un porcentaje precalculado— este caso lo dice.
+    //
+    // ⚠ POR QUE CAMBIO, y no es una relajacion. La 345 lo escribio como «NINGUNA cifra de
+    // dinero por producto», que era SU limite innegociable y venia con su motivo: sin precio
+    // unitario, repartir el flete entre los productos de una orden seria inventar una cifra. La
+    // FICHA 347 no rompe ese razonamiento: lo respeta y NO reparte nada — atribuye el importe
+    // COMPLETO de la orden a cada producto, con `ordenesAcompanadas` diciendo en cuantas de sus
+    // ordenes eso esta pasando, y con la consecuencia escrita en el contrato (la columna NO es
+    // sumable). La 345 ya habia previsto esta salida por escrito: «si algun dia se quiere
+    // ingreso por producto, es una ficha propia con su recorte dicho en pantalla».
+    //
+    // Los DOS campos nuevos, y ninguno mas:
+    //   `ordenesAcompanadas` — entero, aditivo, es la advertencia de la atribucion (R13);
+    //   `dinero`             — `DineroProductoDTO | null`, todo importe STRING escala 2 (R22).
     const { filas } = fundir([fila("1 * Base C", "entregada", 2)]);
     expect(Object.keys(filas[0]).sort()).toEqual([
+      "dinero",
       "ordenes",
+      "ordenesAcompanadas",
       "porStatus",
       "producto",
       "tienda",
       "tiendaId",
       "unidades",
     ]);
+  });
+
+  it("sin dinero fundido, la fila lo dice con `null` — NUNCA con cifras en cero (R5/R30)", () => {
+    const { filas, dinero } = fundir([fila("1 * Base C", "entregada", 2)]);
+    // `fundir` sin segundo argumento es la lectura con el dinero DENEGADO: ni una cifra.
+    expect(dinero).toEqual({ estado: "denegado" });
+    expect(filas[0].dinero).toBeNull();
+    // Y no hay ningun `"0.00"` escondido en el DTO: se comprueba sobre el JSON entero, que es
+    // lo que de verdad cruza la frontera.
+    expect(JSON.stringify(filas[0])).not.toContain("0.00");
   });
 });
 
@@ -319,6 +346,7 @@ describe("R58 · cache: clave con prefijo propio, tag propio y `lastSync` DENTRO
     const service = new ConteoProductosService(
       repoFalso([fila("1 * Base C", "entregada", 1)]),
       cache,
+      dineroFalso(),
       { now: () => AHORA },
     );
 
@@ -331,7 +359,7 @@ describe("R58 · cache: clave con prefijo propio, tag propio y `lastSync` DENTRO
   it("el segundo `consultar` sale de la cache y NO vuelve a tocar el repositorio", async () => {
     const cache = cacheFalsa();
     const repo = repoFalso([fila("1 * Base C", "entregada", 1)]);
-    const service = new ConteoProductosService(repo, cache, { now: () => AHORA });
+    const service = new ConteoProductosService(repo, cache, dineroFalso(), { now: () => AHORA });
     const consulta = consultaDe();
 
     await service.consultar(consulta);
@@ -343,7 +371,7 @@ describe("R58 · cache: clave con prefijo propio, tag propio y `lastSync` DENTRO
   it("invalidar el tag de productos vacia la entrada y la siguiente lectura vuelve a la base", async () => {
     const cache = cacheFalsa();
     const repo = repoFalso([fila("1 * Base C", "entregada", 1)]);
-    const service = new ConteoProductosService(repo, cache, { now: () => AHORA });
+    const service = new ConteoProductosService(repo, cache, dineroFalso(), { now: () => AHORA });
 
     await service.consultar(consultaDe());
     await cache.invalidar("manual", [TAG_CONTEO_PRODUCTOS]);
@@ -358,6 +386,7 @@ describe("R58 · cache: clave con prefijo propio, tag propio y `lastSync` DENTRO
     const service = new ConteoProductosService(
       repoFalso([fila("1 * Base C", "entregada", 1)]),
       cache,
+      dineroFalso(),
       { now: () => ahora },
     );
 
@@ -376,6 +405,7 @@ describe("R58 · cache: clave con prefijo propio, tag propio y `lastSync` DENTRO
     const service = new ConteoProductosService(
       repoFalso([fila("1 * Base C", "entregada", 1)]),
       cache,
+      dineroFalso(),
       { now: () => AHORA },
     );
 
@@ -391,6 +421,7 @@ describe("R58 · cache: clave con prefijo propio, tag propio y `lastSync` DENTRO
     const service = new ConteoProductosService(
       repoFalso([fila("2 * Base C", "entregada", 3)]),
       cache,
+      dineroFalso(),
       { now: () => AHORA },
     );
 

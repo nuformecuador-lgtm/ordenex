@@ -36,7 +36,7 @@ import {
   recortarFiltroConteoEntregas,
 } from "@/lib/analytics/entregas-conteo";
 import type { FiltroConteoEntregas, RecorteDeOrdenes } from "@/lib/analytics/entregas-conteo";
-import { ALCANCE_PRODUCTOS } from "@/lib/analytics/metrics";
+import { ALCANCE_PRODUCTOS, ALCANCE_PRODUCTOS_DINERO } from "@/lib/analytics/metrics";
 import { resolverRango } from "@/lib/analytics/ranges";
 import type { RolAnalitica } from "@/lib/analytics/types";
 
@@ -126,6 +126,44 @@ export function resolverAlcanceProductos(
 }
 
 /* -------------------------------------------------------------------------- */
+/* 1 bis. La concesion del DINERO (ficha 347)                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * FICHA 347 — si el actor puede VER las cifras de dinero de esta misma lectura.
+ *
+ * NO es un segundo alcance de datos: el recorte de filas ya lo decide
+ * `resolverAlcanceProductos` de arriba, y el dinero se sirve con ESE recorte y con ninguno
+ * otro (R2/R7). Esto es una CONCESION binaria: o la lectura trae dinero, o no lo trae.
+ *
+ * ⚠ POR QUE UN `denegado` DE DINERO NO DENIEGA LA LECTURA. Un `adminSatelite` tiene el volumen
+ * de productos prohibido y no llega hasta aqui; pero si manana la tabla del volumen se le
+ * abriera y la del dinero no, la respuesta correcta seria la tabla SIN columnas de dinero, no
+ * un 403. Por eso esto APAGA el dinero en vez de denegar (R6), y por eso vive fuera de
+ * `ResolucionAlcance`.
+ *
+ * ⚠ R2 SE COMPRUEBA EN UN TEST, NO AQUI. Este resolutor LEE la tabla; la invariante «prohibido
+ * o exactamente lo mismo que el volumen» se afirma rol por rol en
+ * `tests/unit/analytics/productos-dinero-alcance.test.ts` y en `alcance-dinero.guardia.test.ts`.
+ * Escribirla como un `if` aqui la convertiria en una SEGUNDA regla del mismo permiso, que es lo
+ * que R8/R37 de la 122 prohiben por escrito.
+ *
+ * TOTAL y FALLA CERRADO, igual que su hermana: entrada basura, rol desconocido o sin sesion
+ * devuelven `denegado`. Nunca se concede por defecto.
+ */
+export type ConcesionDinero = "concedido" | "denegado";
+
+export function resolverAlcanceProductosDinero(
+  actor: ActorAnalitica | null | undefined,
+): ConcesionDinero {
+  if (actor === null || typeof actor !== "object") return "denegado";
+  const { usuarioId, rol } = actor as { usuarioId?: unknown; rol?: unknown };
+  if (!idUtil(usuarioId)) return "denegado";
+  if (typeof rol !== "string" || !esRolAnalitica(rol)) return "denegado";
+  return ALCANCE_PRODUCTOS_DINERO[rol] === "prohibido" ? "denegado" : "concedido";
+}
+
+/* -------------------------------------------------------------------------- */
 /* 2. La consulta preparada                                                    */
 /* -------------------------------------------------------------------------- */
 
@@ -151,6 +189,20 @@ declare const marcaProductos: unique symbol;
  */
 export interface ConsultaProductos extends RecorteDeOrdenes {
   readonly [marcaProductos]: true;
+  /**
+   * FICHA 347 — si esta lectura trae las cifras de dinero.
+   *
+   * ⚠ SE RESUELVE EN EL SERVIDOR desde `ALCANCE_PRODUCTOS_DINERO`, y NUNCA llega del cliente
+   * (R8). El filtro es `.strict()`, asi que una clave que pretenda concederlo —`{ dinero:
+   * "concedido" }`— es un `validation_error` y no un extra inocuo. Que este campo viva DENTRO
+   * del tipo opaco es lo que lo hace inforjable: la unica forma de tener uno es haber pasado
+   * por `prepararConsultaProductos`.
+   *
+   * NO se declara un tipo opaco propio para el dinero (alternativa A9): el repositorio de
+   * dinero recibe la MISMA `ConsultaProductos`, que es lo que `alcance-obligatorio.guardia`
+   * exige, y asi no hay una segunda puerta de preparacion que pudiera divergir de la primera.
+   */
+  readonly dinero: ConcesionDinero;
 }
 
 export type PreparacionConsultaProductos =
@@ -191,11 +243,16 @@ export function prepararConsultaProductos(
   );
   if (filtro === null) return { status: "forbidden", motivo: "filtro_fuera_de_alcance" };
 
-  // El UNICO `as ConsultaProductos` del repo, y vive aqui —al final de los cuatro pasos— a
+  // FICHA 347 — QUINTO PASO: la concesion del DINERO, resuelta en el SERVIDOR y despues del
+  // alcance de datos. Un `denegado` de dinero NO deniega la lectura: la APAGA. Eso es lo que
+  // hace posible R6 (la tabla se pinta sin las columnas de dinero) sin una segunda peticion.
+  const dinero = resolverAlcanceProductosDinero(actor);
+
+  // El UNICO `as ConsultaProductos` del repo, y vive aqui —al final de los cinco pasos— a
   // proposito: es el punto donde la marca se GANA.
   return {
     status: "ok",
-    consulta: { filtro, rango, alcance: resolucion.alcance } as ConsultaProductos,
+    consulta: { filtro, rango, alcance: resolucion.alcance, dinero } as ConsultaProductos,
   };
 }
 
@@ -220,7 +277,28 @@ export const TAG_CONTEO_PRODUCTOS = "conteo-productos";
  * resuelto: una clave que no distingue el alcance no da una cifra equivocada, **filtra datos entre
  * roles**. Y lleva el rango RESUELTO y no el preset: `rango: "dia"` es un dia distinto cada dia, y
  * con el preset en la clave la lectura de hoy devolveria la de ayer durante el TTL de 15 minutos.
+ *
+ * ⚠ FICHA 347 — EL SUFIJO DE LA CONCESION DE DINERO (`$=`), Y ES EL PUNTO DONDE SE PUEDE FUGAR
+ * DINERO. MEDIDO EN EL ARCHIVO: `claveConPrefijo` compone la clave con filtro + rango + alcance
+ * y NADA MAS (`lib/analytics/entregas-conteo.ts`). Dos actores con el MISMO alcance de datos y
+ * distinta concesion de dinero —imposible hoy con la tabla vigente, pero de una linea de
+ * distancia el dia que se cierre el dinero a un rol— compartirian entrada: el primero que fuera
+ * maestro dejaria el dinero en cache y el siguiente lo recibiria. **Eso no es una cifra
+ * equivocada, es una FUGA** (R9).
+ *
+ * Se resuelve como ya se resolvio el caso del contador de hoy (`claveDeConteoHoyGestion`): SIN
+ * tocar el cuerpo compartido, componiendo un sufijo propio. La mutacion obligatoria de esta
+ * ficha (M5: quitar el sufijo) tiene que poner rojo `productos-dinero-alcance.test.ts`.
  */
 export function claveDeConteoProductos(consulta: ConsultaProductos): string {
-  return claveConPrefijo(TAG_CONTEO_PRODUCTOS, consulta);
+  return [claveConPrefijo(TAG_CONTEO_PRODUCTOS, consulta), `$=${consulta.dinero}`].join(SEP);
 }
+
+/**
+ * El separador de la clave. MISMO valor que el del cuerpo compartido (`US`, U+001F): no puede
+ * aparecer dentro de un uuid, de una fecha ni de la palabra `concedido`, asi que dos claves
+ * distintas no colapsan en una. Se declara aqui —y no se exporta desde `entregas-conteo`— por
+ * la misma razon por la que `ConteoProductosService` declara el suyo: es un caracter de
+ * composicion, no una regla de negocio que pueda divergir.
+ */
+const SEP = String.fromCharCode(31);

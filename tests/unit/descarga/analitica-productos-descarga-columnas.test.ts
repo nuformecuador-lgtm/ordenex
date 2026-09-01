@@ -41,6 +41,8 @@ const FILA: FilaProductoDTO = {
     { status: "rechazada", conteo: 6 },
     { status: EN_CURSO, conteo: 2 },
   ],
+  ordenesAcompanadas: 0,
+  dinero: null,
 };
 
 describe("FICHA 345 · columnas del archivo de productos (R48)", () => {
