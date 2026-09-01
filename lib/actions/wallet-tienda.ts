@@ -1,7 +1,10 @@
 "use server";
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import { CierreAporteRepository } from "@/lib/repositories/CierreAporteRepository";
+import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
+import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
 import { WalletTiendaService } from "@/lib/services/WalletTiendaService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -25,6 +28,15 @@ import {
   type ListarMovimientosTiendaCompletoResult,
   type ListarSaldosTiendasCompletoResult,
 } from "@/lib/types/wallet-tienda";
+import type {
+  IDetalleMovimientoService,
+  VerDetalleMovimientoCompletoServiceResult,
+  VerDetalleMovimientoServiceResult,
+} from "@/lib/interfaces/services/IDetalleMovimientoService";
+import {
+  verDetalleDeMovimientoCompletoSchema,
+  verDetalleDeMovimientoSchema,
+} from "@/lib/types/detalle-movimiento";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -98,10 +110,45 @@ function buildService(): IWalletTiendaService {
   return new WalletTiendaService(new WalletTiendaMovimientoRepository(prisma));
 }
 
+/**
+ * Ficha 344 — composition root del detalle de una fila del libro de la TIENDA. Es el MISMO
+ * servicio que sirve a la caja: lo unico que cambia es el metodo que este borde llama, y con el
+ * el guard de rol y el `tiendaId` que acota las dos lecturas.
+ */
+function buildDetalleService(): IDetalleMovimientoService {
+  const prisma = getPrismaClient();
+  return new DetalleMovimientoService(
+    new WalletMovimientoRepository(prisma),
+    new WalletTiendaMovimientoRepository(prisma),
+    new CierreAporteRepository(prisma),
+  );
+}
+
 export interface WalletTiendaDeps {
   service?: IWalletTiendaService;
   getActor?: () => Promise<Actor | null>;
 }
+
+/** Las dependencias del detalle, inyectables en test igual que las del ledger. */
+export interface DetalleMiMovimientoDeps {
+  service?: IDetalleMovimientoService;
+  getActor?: () => Promise<Actor | null>;
+}
+
+/**
+ * Ficha 344 (T4.4) — el detalle de una fila del libro de la tienda en el BORDE. `forbidden`,
+ * `not_found` y `sin_reparto` los decide el DOMINIO; `unauthenticated` y `validation_error` los
+ * decide este borde. Ninguna rama de error viaja con ordenes.
+ */
+export type VerDetalleDeMiMovimientoActionResult =
+  | VerDetalleMovimientoServiceResult
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+export type VerDetalleDeMiMovimientoCompletoActionResult =
+  | VerDetalleMovimientoCompletoServiceResult
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
 /** R17/R19: saldo total del adminTienda (STRING+signo), acotado a su tienda_id. Forbidden/unauthenticated sin exponer datos. */
 export async function verMiSaldoAction(
@@ -302,6 +349,55 @@ export async function listarMovimientosDeTiendaCompletoAction(
     const data = listarMovimientosDeTiendaCompletoSchema.parse(input); // R25
     const service = deps.service ?? buildService();
     return service.listarMovimientosDeTiendaCompleto(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
+}
+
+/**
+ * Ficha 344 (T4.4, design §3.5) — las ordenes que componen el importe de UNA fila del libro de
+ * la tienda. Mismo borde que su gemela de la caja; lo que cambia vive en el SERVICIO: el guard
+ * es el rol de tienda y `tiendaId = actor.usuarioId` entra en el `WHERE` de las DOS lecturas.
+ *
+ * El cliente manda el id del MOVIMIENTO y la pagina, y NADA mas: no hay `tiendaId` que colar
+ * —el `.strict()` del schema lo mata en el borde (R42)— asi que el alcance no es forzable desde
+ * fuera. Un movimiento de otra tienda responde `not_found` (R41).
+ *
+ * @sin-superficie el panel que la monta llega en el bloque B7 (frontend) de la ficha 344; esta
+ * tanda es solo backend. QUIEN CABLEE `DetalleMiMovimientoCierre` DEBE BORRAR ESTA LINEA: la
+ * guardia de superficie de uso falla tambien cuando una anotacion sobrevive a su motivo.
+ */
+export async function verDetalleDeMiMovimientoAction(
+  input: unknown,
+  deps: DetalleMiMovimientoDeps = {},
+): Promise<VerDetalleDeMiMovimientoActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // antes del schema y del service
+    const data = verDetalleDeMovimientoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildDetalleService();
+    return service.verDetalleDeMiMovimiento(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
+}
+
+/**
+ * Ficha 344 (T4.4, R32/R33) — el MISMO detalle de la tienda sin recorte por pagina, para la
+ * descarga. El tope lo evalua y lo aplica el SERVICIO, con el mismo acotamiento por tienda.
+ *
+ * @sin-superficie su control de descarga llega en el bloque B8 (frontend) de la ficha 344; esta
+ * tanda es solo backend. QUIEN CABLEE LA DESCARGA DEBE BORRAR ESTA LINEA, por el mismo motivo
+ * que en su hermana paginada.
+ */
+export async function verDetalleDeMiMovimientoCompletoAction(
+  input: unknown,
+  deps: DetalleMiMovimientoDeps = {},
+): Promise<VerDetalleDeMiMovimientoCompletoActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = verDetalleDeMovimientoCompletoSchema.parse(input); // R29
+    const service = deps.service ?? buildDetalleService();
+    return service.verDetalleDeMiMovimientoCompleto(data, actor);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }

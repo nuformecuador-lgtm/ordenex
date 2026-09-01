@@ -196,8 +196,23 @@ const MODULOS_DE_LA_173 = [
   "scripts/backfill-caja-tesoreria.ts",
 ];
 
-/** Modulos ANTERIORES a la 173 que nombran las categorias nuevas por ser catalogos. */
-const CATALOGOS_PREEXISTENTES = ["lib/types/wallet.ts", "lib/analytics/metrics.ts"];
+/**
+ * Modulos que nombran las categorias nuevas por ser CATALOGOS —no formulas—: los dos anteriores
+ * a la 173 y el de la ficha 344.
+ *
+ * `lib/utils/aporte-por-orden.ts` (344) declara, para CADA categoria de los dos libros, si su
+ * importe admite reparto por orden y de que fuente sale. Nombra `ingreso_cod_recaudado` para
+ * decir justamente que NO se reparte —su importe es la suma de los creditos del libro por
+ * tienda, no una acumulacion por orden— y `ingreso_reverso_pago_tienda` para decir que no nace
+ * de un cierre. Es un `Record` TOTAL sobre el union de categorias: no puede dejar ninguna fuera.
+ * No calcula dinero: la unica aritmetica que hace es acumular lo que `derivarIngresoOrden`
+ * devuelve, y el `it` de arriba comprueba que no nombra ningun insumo de las formulas.
+ */
+const CATALOGOS_PREEXISTENTES = [
+  "lib/types/wallet.ts",
+  "lib/analytics/metrics.ts",
+  "lib/utils/aporte-por-orden.ts",
+];
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
 // R66 — el pago al mensajero entra en la caja EXACTAMENTE como antes. `[P2]` = (a).

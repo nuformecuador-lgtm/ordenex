@@ -29,6 +29,8 @@ function fakeRepo(overrides: Partial<IWalletTiendaMovimientoRepository> = {}): I
     // Ficha 335: el doble sigue implementando la interfaz COMPLETA. La lectura de cierres
     // la ejercita `tests/unit/services/mi-wallet-cierres.test.ts`; aqui solo tiene que existir.
     listarCierresDeTienda: vi.fn(async () => []),
+    // Ficha 344: la lectura por id acotada a la tienda. Este doble no la ejercita.
+    obtenerPorIdDeTienda: vi.fn(async () => null),
     ...overrides,
   };
 }

@@ -1,7 +1,10 @@
 "use server";
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import { CierreAporteRepository } from "@/lib/repositories/CierreAporteRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
+import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
+import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
 import { WalletService } from "@/lib/services/WalletService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -12,6 +15,11 @@ import type {
   RegistrarMovimientoManualServiceResult,
   VerResumenCajaServiceResult,
 } from "@/lib/interfaces/services/IWalletService";
+import type {
+  IDetalleMovimientoService,
+  VerDetalleMovimientoCompletoServiceResult,
+  VerDetalleMovimientoServiceResult,
+} from "@/lib/interfaces/services/IDetalleMovimientoService";
 import {
   listarMovimientosCompletoSchema,
   listarMovimientosDeFilaSchema,
@@ -19,6 +27,10 @@ import {
   registrarMovimientoManualSchema,
   type ListarMovimientosCompletoResult,
 } from "@/lib/types/wallet";
+import {
+  verDetalleDeMovimientoCompletoSchema,
+  verDetalleDeMovimientoSchema,
+} from "@/lib/types/detalle-movimiento";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -80,10 +92,48 @@ function buildService(): IWalletService {
   return new WalletService(repo, prisma);
 }
 
+/**
+ * Ficha 344 — el composition root del detalle de una fila del libro.
+ *
+ * Las TRES dependencias se inyectan aqui y solo aqui: la lectura del movimiento de la caja, la
+ * del libro por tienda (que el detalle de `/mi-wallet` usa desde su propio borde) y el
+ * repositorio de aportes. El servicio no construye ninguna.
+ */
+function buildDetalleService(): IDetalleMovimientoService {
+  const prisma = getPrismaClient();
+  return new DetalleMovimientoService(
+    new WalletMovimientoRepository(prisma),
+    new WalletTiendaMovimientoRepository(prisma),
+    new CierreAporteRepository(prisma),
+  );
+}
+
 export interface WalletDeps {
   service?: IWalletService;
   getActor?: () => Promise<Actor | null>;
 }
+
+/** Las dependencias del detalle, inyectables en test igual que las del libro. */
+export interface DetalleMovimientoDeps {
+  service?: IDetalleMovimientoService;
+  getActor?: () => Promise<Actor | null>;
+}
+
+/**
+ * Ficha 344 (T4.4) — el detalle de una fila del libro en el BORDE. `forbidden`, `not_found` y
+ * `sin_reparto` los decide el DOMINIO; `unauthenticated` (sin sesion) y `validation_error`
+ * (ZodError: id que no es uuid, `pageSize` sobre el tope o una clave colada) se resuelven aqui.
+ * NINGUNA rama de error viaja con ordenes (R29/R42).
+ */
+export type VerDetalleDeMovimientoActionResult =
+  | VerDetalleMovimientoServiceResult
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+export type VerDetalleDeMovimientoCompletoActionResult =
+  | VerDetalleMovimientoCompletoServiceResult
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
 /** R19/R20/R25: lista el libro (solo maestro). Forbidden/unauthenticated sin exponer datos. */
 export async function listarMovimientosAction(
@@ -193,6 +243,55 @@ export async function verResumenCajaAction(
 // Con el se van `VerBalanceActionResult` y el import de `WalletBalanceDTO`, que no tenian otro
 // uso en este archivo. `WalletBalanceDTO` NO se borra del arbol: es el tipo de retorno de
 // `derivarBalance` (`lib/utils/wallet-balance.ts`), que R9 protege intacto.
+
+/**
+ * Ficha 344 (T4.4, design §3.5) — las ordenes que componen el importe de UNA fila del libro de
+ * la caja. Calcada de `listarMovimientosDeFilaAction`: resuelve el actor, lanza
+ * `UnauthenticatedError` sin sesion, valida con el schema y delega en el servicio.
+ *
+ * Lectura interna del mismo proyecto ⇒ Server Action, no ruta API (`docs/architecture.md`). El
+ * cliente manda el id del MOVIMIENTO y la pagina, y nada mas: ni el cierre, ni la categoria, ni
+ * la tienda (R42). Todo lo demas lo resuelve el servidor leyendo esa fila.
+ *
+ * @sin-superficie el panel que la monta llega en el bloque B6 (frontend) de la ficha 344; esta
+ * tanda es solo backend. QUIEN CABLEE `DetalleMovimientoCierre` DEBE BORRAR ESTA LINEA: la
+ * guardia de superficie de uso falla tambien cuando una anotacion sobrevive a su motivo.
+ */
+export async function verDetalleDeMovimientoAction(
+  input: unknown,
+  deps: DetalleMovimientoDeps = {},
+): Promise<VerDetalleDeMovimientoActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
+    const data = verDetalleDeMovimientoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildDetalleService();
+    return service.verDetalleDeMovimiento(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletActionError(r) : r;
+}
+
+/**
+ * Ficha 344 (T4.4, R32/R33) — el MISMO detalle sin recorte por pagina, para la descarga. El tope
+ * lo evalua y lo aplica el SERVICIO: el navegador no selecciona, no ordena y no recorta.
+ *
+ * @sin-superficie su control de descarga llega en el bloque B8 (frontend) de la ficha 344; esta
+ * tanda es solo backend. QUIEN CABLEE LA DESCARGA DEBE BORRAR ESTA LINEA, por el mismo motivo
+ * que en su hermana paginada.
+ */
+export async function verDetalleDeMovimientoCompletoAction(
+  input: unknown,
+  deps: DetalleMovimientoDeps = {},
+): Promise<VerDetalleDeMovimientoCompletoActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = verDetalleDeMovimientoCompletoSchema.parse(input); // R29: ZodError -> validation
+    const service = deps.service ?? buildDetalleService();
+    return service.verDetalleDeMovimientoCompleto(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletActionError(r) : r;
+}
 
 /** R15/R19: registra un movimiento manual de ajuste (solo maestro; monto>0, descripcion obligatoria). */
 export async function registrarMovimientoManualAction(
