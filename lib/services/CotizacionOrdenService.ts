@@ -45,7 +45,8 @@ import {
   filaCotizacionSchema,
   type CostosDevuelto,
   type CostosEntregado,
-  type FilaCotizacionResultado,
+  type CotizacionFilaCotizada,
+  type CotizacionFilaError,
 } from "@/lib/types/cotizacion";
 import { derivarIngresoOrden, montoFulfillmentDeTarifa } from "@/lib/utils/ingreso-ordenex";
 import { serializarMontoCotizacion } from "@/lib/utils/monto-cotizacion";
@@ -87,7 +88,7 @@ type TarifaCotizada = TarifaVigenteResuelta;
  * criterio de lote de design §3.6.
  */
 type FilaPreparada =
-  | { estado: "error"; resultado: FilaCotizacionResultado }
+  | { estado: "error"; resultado: CotizacionFilaError }
   | {
       estado: "pendiente";
       fila: number;
@@ -229,13 +230,18 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
     // "ninguna fila de este lote resolvio tarifa".
     if (pendientes.length > 0 && resuelven === 0) return { status: "sin_tarifa" };
 
-    const filas: FilaCotizacionResultado[] = [];
-    let cotizadas = 0;
+    // 2026-08-31 — DOS listas, y este bucle es el UNICO sitio donde se reparte. Lo que se
+    // cotizo va a `filas` y lo que no va a `errores`, con su contenido intacto: el integrador
+    // deja de recorrer el lote entero ramificando por `resultado` para encontrar lo que tiene
+    // que atender (`if (respuesta.errores.length)` alcanza). Los contadores salen de las
+    // longitudes de las dos listas, asi que no pueden desincronizarse de ellas.
+    const filas: CotizacionFilaCotizada[] = [];
+    const errores: CotizacionFilaError[] = [];
 
     // Paso 4: los escenarios de cada fila, con SU tarifa.
     for (const preparada of preparadas) {
       if (preparada.estado === "error") {
-        filas.push(preparada.resultado);
+        errores.push(preparada.resultado);
         continue;
       }
 
@@ -245,7 +251,7 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
         // `resultado: "error"` con el canal de errores por campo que ya existe, sin bloque
         // `costos`— y cuenta en `conError`. Ni un `0,00`: un cero aqui seria
         // indistinguible de un envio gratis.
-        filas.push({
+        errores.push({
           fila: preparada.fila,
           numRemision: preparada.numRemision,
           resultado: "error",
@@ -265,24 +271,27 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
       filas.push({
         fila: preparada.fila,
         numRemision: preparada.numRemision,
+        // El valor SOBRE EL QUE se cotizo, publicado junto a lo que se derivo de el. Es el
+        // mismo `Prisma.Decimal` que entra en la formula —el redondeado por la puerta, o cero
+        // si la fila no traia monto (R32)— serializado por el MISMO camino que los demas
+        // importes: aqui no se re-parsea ni se re-formatea un texto de entrada.
+        montoCobrar: serializarMontoCotizacion(new Prisma.Decimal(preparada.montoCobrar ?? 0)),
         resultado: "cotizada",
         costos: {
           entregado: serializarEntregado(montos.entregado),
           devuelto: serializarDevuelto(montos.devuelto),
         },
       });
-
-      cotizadas += 1;
     }
 
-    const total = rows.length;
     return {
       status: "ok",
       resumen: {
-        total,
-        cotizadas,
-        conError: total - cotizadas,
+        total: rows.length,
+        cotizadas: filas.length,
+        conError: errores.length,
         filas,
+        errores,
       },
     };
   }

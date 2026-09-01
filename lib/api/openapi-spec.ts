@@ -725,24 +725,43 @@ export const openApiSpec = {
           "siguen ahí; el agregado, con la premisa de entrega que corresponda a tu operación, lo",
           "haces con los importes de cada fila.",
           "",
+          "**CAMBIO INCOMPATIBLE (2026-08-31): las filas sin precio salieron de `filas`.** `filas`",
+          "trae ahora SOLO lo que se cotizó y lo que no se pudo cotizar viaja en la lista hermana",
+          "**`errores`**, con exactamente el mismo contenido de antes: su `fila` 1-based, su",
+          "`numRemision`, su `resultado: \"error\"` y su mapa de errores por campo. Ya no hace falta",
+          "recorrer el lote entero ni ramificar por `resultado`: `if (respuesta.errores.length)`",
+          "alcanza. Los contadores no se mueven —`total`, `cotizadas` y `conError` siguen contando",
+          "sobre el lote completo—, `cotizadas` es siempre `filas.length` y `conError` siempre",
+          "`errores.length`. **Si tu integración filtraba `filas` por `resultado === \"error\"`,",
+          "cambiá a `errores`**: ese filtro ahora devuelve vacío SIEMPRE. Es el mismo reparto que",
+          "`POST /api/ordenes/api-key/carga` adoptó ese día.",
+          "",
+          "**NUEVO (2026-08-31): cada fila cotizada dice sobre QUÉ monto se cotizó.** El campo",
+          "`montoCobrar` es el `monto_cobrar` que de verdad entró al cálculo —el que mandaste, ya",
+          "redondeado al colón como lo redondea la carga— y un cero explícito si la fila no traía",
+          "monto, que es la base que la comisión COD usó. Sin él, quien manda `11898.81` no tiene cómo",
+          "saber que la comisión salió de `11899` y lee el desglose como si no cuadrara. Viene en",
+          "el mismo formato money-safe crudo que los demás importes. Es un campo NUEVO: si tu",
+          "cliente valida en estricto, admitilo.",
+          "",
           "**Una fila se queda sin precio por DOS motivos distintos, no uno:** porque su geografía",
           "no tiene cobertura (o no valida), o porque el par (tienda, zona de esa fila) no resuelve",
-          "tarifa vigente. Los dos llegan por el mismo canal —`resultado: \"error\"` con sus",
+          "tarifa vigente. Los dos llegan por el mismo canal —una entrada en `errores` con sus",
           "mensajes por campo— y los dos cuentan en `conError`.",
           "",
-          "Éxito parcial: una fila sin cobertura (o que no valida) se marca `resultado: \"error\"`",
-          "con sus mensajes por campo y NO trae `costos`; las demás se cotizan igual y la respuesta",
-          "sigue siendo 200. No existe el resultado `duplicada`: sin persistencia no significa nada.",
-          "Una fila cuyo par (tienda, zona) no resuelve tarifa vigente se degrada por ESE MISMO",
-          `camino: \`resultado: "error"\` con \`{ "tarifa": ["${MSG_FILA_SIN_TARIFA}"] }\` y sin`,
-          "bloque `costos` —nunca un importe en cero—.",
+          "Éxito parcial: una fila sin cobertura (o que no valida) NO aparece en `filas`; sale en",
+          "`errores` con sus mensajes por campo y sin ningún `costos`. Las demás se cotizan igual y",
+          "la respuesta sigue siendo 200. No existe el resultado `duplicada`: sin persistencia no",
+          "significa nada. Una fila cuyo par (tienda, zona) no resuelve tarifa vigente se degrada",
+          `por ESE MISMO camino: \`{ "tarifa": ["${MSG_FILA_SIN_TARIFA}"] }\` dentro de \`errores\``,
+          "y sin bloque `costos` —nunca un importe en cero—.",
           "",
           "El **409** existe sólo para el caso extremo: cuando NINGUNA de las filas que llegan a la",
           "resolución de tarifa la resuelve. Entonces no se cotiza ni una fila y la respuesta no",
           "trae ningún importe. Ya NO significa «la tienda no tiene tarifa vigente»: una fila suelta",
-          "sin tarifa vuelve en `error` dentro de un `200`. Y si ninguna fila llega siquiera a",
-          "resolver tarifa (todas sin cobertura o sin validar), la respuesta es `200` con todas",
-          "las filas en `error`, NO `409`.",
+          "sin tarifa vuelve en `errores` dentro de un `200`. Y si ninguna fila llega siquiera a",
+          "resolver tarifa (todas sin cobertura o sin validar), la respuesta es `200` con `filas`",
+          "vacío y el lote entero en `errores`, NO `409`.",
           "",
           "**`/carga` aplica hoy EXACTAMENTE el mismo criterio de lote.** La asimetría que este",
           "contrato declaraba —la carga toleraba la falta de tarifa creando la orden con un costo",
@@ -798,6 +817,7 @@ export const openApiSpec = {
                         {
                           fila: 1,
                           numRemision: "REM-0001",
+                          montoCobrar: "25900.00",
                           resultado: "cotizada",
                           costos: {
                             entregado: {
@@ -817,6 +837,8 @@ export const openApiSpec = {
                             },
                           },
                         },
+                      ],
+                      errores: [
                         {
                           fila: 2,
                           numRemision: null,
@@ -1681,13 +1703,14 @@ export const openApiSpec = {
           "NINGUNA clave de la fila está en `required`, y es deliberado: el servidor NO rechaza el",
           "lote por una fila incompleta. La terna geográfica (`provincia`, `canton`, `distrito`) es",
           "NECESARIA para poder cotizar la fila, pero su ausencia NO es un 422 del lote: esa fila",
-          "vuelve con `resultado: \"error\"` y el detalle bajo la clave del campo que falta, y las",
+          "vuelve en la lista `errores` con `resultado: \"error\"` y el detalle bajo la clave del",
+          "campo que falta, y las",
           "demás filas se cotizan igual (éxito parcial). Declararla `required` haría que un cliente",
           "generado con validación estricta rechazara EN LOCAL un cuerpo que el servidor acepta y",
           "responde 200.",
           "",
           "Cuándo recibís 422: solo por el lote entero — `ordenes` vacío o por encima del tope",
-          "(o un valor que no sea texto). Cuándo recibís 200 con filas en `error`: por cualquier",
+          "(o un valor que no sea texto). Cuándo recibís 200 con entradas en `errores`: por cualquier",
           "problema de una fila concreta — terna ausente o vacía, distrito no encontrado, distrito",
           "ambiguo, distrito sin zona asignada, o `monto_cobrar` con formato inválido.",
         ].join("\n"),
@@ -1769,7 +1792,8 @@ export const openApiSpec = {
       },
       CotizacionCostos: {
         type: "object",
-        description: "Los DOS escenarios de una fila con cobertura. Ausente en una fila `error`.",
+        description:
+          "Los DOS escenarios de una fila con cobertura. Siempre presente en `filas`; las filas sin precio no lo traen porque no están en esa lista, están en `errores`.",
         required: ["entregado", "devuelto"],
         properties: {
           entregado: { $ref: "#/components/schemas/CotizacionEscenarioEntregado" },
@@ -1779,20 +1803,42 @@ export const openApiSpec = {
       CotizacionRowResult: {
         type: "object",
         description:
-          "Resultado por fila. No existe `duplicada`: sin persistencia no significa nada.",
-        required: ["fila", "numRemision", "resultado"],
+          "Una fila CON precio. No existe `duplicada`: sin persistencia no significa nada. Desde 2026-08-31 esta lista no contiene filas en `error`: ésas viajan en `errores` (`CotizacionFilaError`), y por eso `costos` dejó de ser opcional aquí.",
+        required: ["fila", "numRemision", "montoCobrar", "resultado", "costos"],
         properties: {
           fila: { type: "integer", description: "Índice 1-based dentro de `ordenes`." },
           numRemision: {
             type: ["string", "null"],
             description: "El `num_remision` que mandaste, tal cual; `null` si la fila no lo trajo.",
           },
-          resultado: { type: "string", enum: ["cotizada", "error"] },
+          montoCobrar: {
+            type: "string",
+            description:
+              "EL VALOR SOBRE EL QUE SE COTIZÓ: el `monto_cobrar` que entró al cálculo, ya redondeado al colón igual que lo redondea la carga, y `\"0.00\"` si la fila no traía monto (la base que usó la comisión COD). String money-safe de escala 2, crudo, como el resto de los importes.",
+          },
+          resultado: { type: "string", const: "cotizada" },
           costos: { $ref: "#/components/schemas/CotizacionCostos" },
+        },
+      },
+      // 2026-08-31 — la fila que NO se cotizó, publicada aparte. Mismo objeto que antes viajaba
+      // dentro de `filas`; lo único que cambió es dónde se lee. Schema propio (y no reusando
+      // `CotizacionRowResult`) porque aquí `errores` es REQUIRED: en esta lista no existe el
+      // elemento sin detalle, que es justo lo que la hace fácil de consumir.
+      CotizacionFilaError: {
+        type: "object",
+        description: "Una fila que no se pudo cotizar, con el detalle de por qué.",
+        required: ["fila", "numRemision", "resultado", "errores"],
+        properties: {
+          fila: { type: "integer", description: "Índice 1-based dentro de `ordenes`." },
+          numRemision: {
+            type: ["string", "null"],
+            description: "El `num_remision` que mandaste, tal cual; `null` si la fila no lo trajo.",
+          },
+          resultado: { type: "string", const: "error" },
           errores: {
             type: "object",
             description:
-              "Errores por campo (solo en `error`). Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso no se cotizó.",
+              "Errores por campo. Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso no se cotizó.",
             additionalProperties: { type: "array", items: { type: "string" } },
           },
         },
@@ -1800,12 +1846,23 @@ export const openApiSpec = {
       CotizacionResponse: {
         type: "object",
         // Sin bloque `totales` (retirado el 2026-08-31): la cotización es POR ORDEN.
-        required: ["total", "cotizadas", "conError", "filas"],
+        required: ["total", "cotizadas", "conError", "filas", "errores"],
         properties: {
           total: { type: "integer", description: "Filas recibidas." },
           cotizadas: { type: "integer" },
           conError: { type: "integer" },
-          filas: { type: "array", items: { $ref: "#/components/schemas/CotizacionRowResult" } },
+          filas: {
+            type: "array",
+            description:
+              "Las filas con precio. Nunca contiene una fila en `error`; su longitud es siempre `cotizadas`.",
+            items: { $ref: "#/components/schemas/CotizacionRowResult" },
+          },
+          errores: {
+            type: "array",
+            description:
+              "Las filas que NO se cotizaron, con su detalle por campo. Lista vacía cuando el lote entero se cotizó; su longitud es siempre `conError`.",
+            items: { $ref: "#/components/schemas/CotizacionFilaError" },
+          },
         },
       },
       // Feature 267 (R39) — el contrato de `GET /api/ordenes/api-key/analitica`. Es el espejo

@@ -146,9 +146,10 @@ export async function handleCotizacionApi(
     // Defensa en profundidad: el rol ya se comprobo al autenticar.
     if (cotizacion.status === "forbidden") throw new ForbiddenError();
 
-    // R34/R46: el resumen viaja TAL CUAL. Ya trae `total`, `cotizadas`, `conError` y el
-    // detalle por fila con su indice 1-based, con cada importe UNA sola vez y SOLO crudo.
-    // Este borde no reescribe ni un campo.
+    // R34/R46: el resumen viaja TAL CUAL. Ya trae `total`, `cotizadas`, `conError` y las DOS
+    // listas por fila con su indice 1-based —`filas` con lo cotizado (incluido el
+    // `montoCobrar` sobre el que se cotizo) y `errores` con lo que no se pudo cotizar—, con
+    // cada importe UNA sola vez y SOLO crudo. Este borde no reescribe ni un campo.
     return cotizacion.resumen;
   });
 

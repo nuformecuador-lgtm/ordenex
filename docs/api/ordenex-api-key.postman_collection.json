@@ -20,10 +20,10 @@
   "item": [
     {
       "name": "1 · Cotización (antes de cargar)",
-      "description": "`POST /api/ordenes/api-key/cotizacion` — dice cuánto costaría un lote **antes de crear nada**.\n\n**Lectura pura:** no crea órdenes, no consume `num_guia`, no persiste ni audita nada. Se puede llamar tantas veces como haga falta.\n\n**Mismo cuerpo que la carga**, sin recortarlo: las claves que la cotización no usa se ignoran. Dos diferencias: `num_remision` es **opcional** (aquí solo correlaciona, y **no** se deduplica ni contra el lote ni contra las órdenes existentes) y lo único que hace falta para poner precio es la terna geográfica.\n\n**Dos escenarios por fila.** `entregado`: cinco conceptos (`flete`, `iva`, `comision`, `ivaComision`, `total`), donde `total` es **lo que RECIBE la tienda** = monto a cobrar − los cuatro conceptos. `devuelto`: cuatro (sin `ivaComision`), donde `total` es **NEGATIVO** = lo que la tienda **debe** por el flete de devolución, y `comision` es un **cero explícito** (una devolución no cobra comisión COD). Se asume `cobra_comision = true`.\n\n**Importes solo CRUDOS** (`1578.00`, `-1578.00`): string money-safe de escala 2, sin símbolo ni separador de miles, punto decimal. Mismo formato que el `costoEnvio` de la carga. No hay campo formateado en paralelo. **Cambio incompatible del 2026-08-28**: antes se servían formateados (`₡2.500,00`).\n\n**`totales` es una SUMA de las filas cotizadas, no el precio del lote.** Por eso declara `filasSumadas` y `filasExcluidas`, y su suma es igual a `total`.\n\n**`422` vs `200` con filas en `error`:** el `422` es del **LOTE** (vacío, o por encima del tope de 5000). Un problema de **una fila** —terna ausente, distrito no encontrado o ambiguo, distrito sin zona, `monto_cobrar` inválido— **no** es `422`: es `200`, esa fila vuelve con `resultado: \"error\"`, y el resto del lote se cotiza igual.",
+      "description": "`POST /api/ordenes/api-key/cotizacion` — dice cuánto costaría un lote **antes de crear nada**.\n\n**Lectura pura:** no crea órdenes, no consume `num_guia`, no persiste ni audita nada. Se puede llamar tantas veces como haga falta.\n\n**Mismo cuerpo que la carga**, sin recortarlo: las claves que la cotización no usa se ignoran. Dos diferencias: `num_remision` es **opcional** (aquí solo correlaciona, y **no** se deduplica ni contra el lote ni contra las órdenes existentes) y lo único que hace falta para poner precio es la terna geográfica.\n\n**Dos escenarios por fila.** `entregado`: seis conceptos (`flete`, `iva`, `comision`, `ivaComision`, `fulfillment`, `total`), donde `total` es **lo que RECIBE la tienda** = monto a cobrar − los cinco conceptos. `devuelto`: cinco (sin `ivaComision`), donde `total` es **NEGATIVO** = lo que la tienda **debe** por el retorno, y `comision` es un **cero explícito** (una devolución no cobra comisión COD). `fulfillment` es el monto fijo de bodega: se cobra en los DOS escenarios, y vale cero si tu tarifa no lo tiene. Se asume `cobra_comision = true`.\n\n**Importes solo CRUDOS** (`1578.00`, `-1578.00`): string money-safe de escala 2, sin símbolo ni separador de miles, punto decimal. Mismo formato que el `costoEnvio` de la carga. No hay campo formateado en paralelo. **Cambio incompatible del 2026-08-28**: antes se servían formateados (`₡2.500,00`).\n\n**La cotización es POR ORDEN: no hay bloque `totales` del lote** (retirado el 2026-08-31). Quedan los tres contadores `total`, `cotizadas` y `conError`; el agregado lo hace quien consume, con la tasa de entrega que de verdad espera.\n\n**Éxito parcial, y desde el 2026-08-31 en DOS listas.** `filas` trae SOLO lo que se cotizó y lo que no viaja aparte en **`errores`**, con el mismo contenido de siempre: `fila`, `numRemision`, `resultado: \"error\"` y el mapa por campo. Alcanza con `errores.length`. `cotizadas` es siempre `filas.length` y `conError` siempre `errores.length`.\n\n**Cada fila cotizada dice sobre qué monto se cotizó** (`montoCobrar`, desde el 2026-08-31): el `monto_cobrar` que entró al cálculo, ya redondeado al colón como lo redondea la carga, y `\"0.00\"` si la fila no traía monto.\n\n**`422` vs `200` con entradas en `errores`:** el `422` es del **LOTE** (vacío, o por encima del tope de 5000). Un problema de **una fila** —terna ausente, distrito no encontrado o ambiguo, distrito sin zona, `monto_cobrar` inválido— **no** es `422`: es `200`, esa fila vuelve en `errores`, y el resto del lote se cotiza igual.",
       "item": [
         {
-          "name": "lote válido (3 filas) — desglose por fila y totales del lote",
+          "name": "lote válido (3 filas) — desglose por fila",
           "event": [
             {
               "listen": "test",
@@ -37,32 +37,36 @@
                   "  pm.expect(b.cotizadas).to.eql(3);",
                   "  pm.expect(b.conError).to.eql(0);",
                   "  pm.expect(b.filas).to.have.lengthOf(3);",
+                  "  pm.expect(b.errores, 'sin fallos, `errores` es una lista vacia').to.have.lengthOf(0);",
                   "});",
                   "pm.test('cada fila trae los DOS escenarios, y el devuelto no lleva ivaComision', () => {",
                   "  b.filas.forEach((f, i) => {",
                   "    pm.expect(f.fila, 'indice 1-based').to.eql(i + 1);",
                   "    pm.expect(f.resultado).to.eql('cotizada');",
                   "    pm.expect(f).to.not.have.property('errores');",
-                  "    pm.expect(f.costos.entregado).to.have.all.keys('flete', 'iva', 'comision', 'ivaComision', 'total');",
-                  "    pm.expect(f.costos.devuelto).to.have.all.keys('flete', 'iva', 'comision', 'total');",
+                  "    pm.expect(f.costos.entregado).to.have.all.keys('flete', 'iva', 'comision', 'ivaComision', 'fulfillment', 'total');",
+                  "    pm.expect(f.costos.devuelto).to.have.all.keys('flete', 'iva', 'comision', 'fulfillment', 'total');",
                   "  });",
                   "});",
-                  "// Los importes viajan SOLO formateados: no hay campo crudo escala 2 en paralelo.",
-                  "// No se comprueba el simbolo (sale de configuracion), sino que hay separador",
-                  "// decimal seguido de DOS digitos, que es lo que esta feature garantiza.",
-                  "pm.test('los importes van formateados, con dos decimales', () => {",
-                  "  const dosDecimales = /\\D\\d{2}$/;",
+                  "// El valor SOBRE EL QUE se cotizo, en el mismo dialecto crudo que los importes",
+                  "// derivados de el: el `monto_cobrar` enviado, ya redondeado al colon.",
+                  "pm.test('cada fila declara el monto sobre el que se cotizo', () => {",
+                  "  pm.expect(b.filas.map((f) => f.montoCobrar)).to.eql(['25900.00', '48000.00', '12500.00']);",
+                  "});",
+                  "// Los importes viajan SOLO crudos (money-safe escala 2): no hay campo formateado",
+                  "// en paralelo. Desde el 2026-08-28 el separador decimal es el punto.",
+                  "pm.test('los importes van crudos, con dos decimales', () => {",
+                  "  const crudo = /^-?\\d+\\.\\d{2}$/;",
                   "  const c = b.filas[0].costos;",
-                  "  [...Object.values(c.entregado), ...Object.values(c.devuelto)].forEach((v) => {",
-                  "    pm.expect(v, v).to.be.a('string').and.to.match(dosDecimales);",
+                  "  [b.filas[0].montoCobrar, ...Object.values(c.entregado), ...Object.values(c.devuelto)].forEach((v) => {",
+                  "    pm.expect(v, v).to.be.a('string').and.to.match(crudo);",
                   "  });",
                   "});",
-                  "pm.test('el bloque de lote cuadra: filasSumadas + filasExcluidas === total', () => {",
-                  "  pm.expect(b.totales.filasSumadas + b.totales.filasExcluidas).to.eql(b.total);",
-                  "  pm.expect(b.totales.filasSumadas).to.eql(b.cotizadas);",
-                  "  pm.expect(b.totales.filasExcluidas).to.eql(b.conError);",
-                  "});",
-                  "console.log('lote entregado:', b.totales.entregado.total, '| lote devuelto:', b.totales.devuelto.total);"
+                  "pm.test('los contadores son las longitudes de las DOS listas', () => {",
+                  "  pm.expect(b.cotizadas).to.eql(b.filas.length);",
+                  "  pm.expect(b.conError).to.eql(b.errores.length);",
+                  "  pm.expect(b.cotizadas + b.conError).to.eql(b.total);",
+                  "});"
                 ]
               }
             }
@@ -106,16 +110,20 @@
                   "  pm.expect(b.cotizadas).to.eql(1);",
                   "  pm.expect(b.conError).to.eql(1);",
                   "});",
+                  "pm.test('la fila mala esta en `errores`, no en `filas`', () => {",
+                  "  pm.expect(b.filas.every((f) => f.resultado !== 'error'), '`filas` sin errores').to.be.true;",
+                  "  pm.expect(b.errores).to.have.lengthOf(1);",
+                  "});",
                   "pm.test('la fila en error no trae costos, y el motivo va bajo su clave', () => {",
-                  "  const mala = b.filas.find((f) => f.resultado === 'error');",
+                  "  const mala = b.errores[0];",
                   "  pm.expect(mala).to.not.have.property('costos');",
                   "  pm.expect(mala.errores).to.have.property('distrito');",
                   "  console.log('motivo:', mala.errores.distrito[0]);",
                   "});",
-                  "pm.test('la fila sin cobertura NO aporta al total del lote', () => {",
-                  "  pm.expect(b.totales.filasSumadas).to.eql(1);",
-                  "  pm.expect(b.totales.filasExcluidas).to.eql(1);",
-                  "  pm.expect(b.totales.filasSumadas + b.totales.filasExcluidas).to.eql(b.total);",
+                  "pm.test('los contadores son las longitudes de las DOS listas', () => {",
+                  "  pm.expect(b.cotizadas).to.eql(b.filas.length);",
+                  "  pm.expect(b.conError).to.eql(b.errores.length);",
+                  "  pm.expect(b.cotizadas + b.conError).to.eql(b.total);",
                   "});"
                 ]
               }
@@ -125,7 +133,7 @@
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/cotizacion", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "cotizacion"] },
-            "description": "El caso que enseña los contadores. La segunda fila lleva un distrito que no existe en su cantón, así que vuelve con `resultado: \"error\"` y **no aporta ni un cero** al bloque `totales`. Un total que sumara las filas sin cobertura afirmaría un precio que nadie va a pagar; por eso `totales` declara cuántas filas sumó y cuántas dejó fuera.",
+            "description": "El caso que enseña los contadores y **dónde se lee cada cosa**. La segunda fila lleva un distrito que no existe en su cantón: **no está en `filas`** — vuelve en la lista **`errores`** con `errores.distrito`, y sin ningún importe (ni un cero: un cero ahí sería indistinguible de un envío gratis).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"ordenes\": [\n    {\n      \"num_remision\": \"REM-OK\",\n      \"provincia\": \"San José\",\n      \"canton\": \"San José\",\n      \"distrito\": \"Carmen\",\n      \"direccion\": \"Av. Central, 200m norte del parque\",\n      \"monto_cobrar\": \"25900\"\n    },\n    {\n      \"num_remision\": \"REM-SIN-COBERTURA\",\n      \"provincia\": \"San José\",\n      \"canton\": \"San José\",\n      \"distrito\": \"Distrito Que No Existe\",\n      \"direccion\": \"Dirección cualquiera\",\n      \"monto_cobrar\": \"10000\"\n    }\n  ]\n}"
@@ -138,7 +146,7 @@
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/cotizacion", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "cotizacion"] },
-            "description": "Los errores **de fila** no son `422`. La primera fila no trae la terna geográfica y la segunda manda un `monto_cobrar` que no es un decimal no negativo: las dos vuelven en `200` con `resultado: \"error\"` y el detalle bajo la clave del campo. Comparalo con los dos `422` de abajo, que sí son del **lote**.",
+            "description": "Los errores **de fila** no son `422`. La primera fila no trae la terna geográfica y la segunda manda un `monto_cobrar` que no es un decimal no negativo: las dos vuelven en `200` dentro de la lista `errores`, con el detalle bajo la clave del campo. Comparalo con los dos `422` de abajo, que sí son del **lote**.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"ordenes\": [\n    {\n      \"direccion\": \"Sin provincia, cantón ni distrito\",\n      \"monto_cobrar\": \"10000\"\n    },\n    {\n      \"provincia\": \"San José\",\n      \"canton\": \"San José\",\n      \"distrito\": \"Carmen\",\n      \"direccion\": \"Av. Central\",\n      \"monto_cobrar\": \"no-es-un-numero\"\n    }\n  ]\n}"
