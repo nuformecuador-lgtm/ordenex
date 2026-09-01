@@ -22,7 +22,6 @@ import { EVENTOS_PUBLICOS } from "@/lib/types/webhook-eventos";
 const YAML_PATH = path.join(__dirname, "..", "..", "..", "docs", "api", "api-key-openapi.yaml");
 const yaml = fs.readFileSync(YAML_PATH, "utf8");
 
-const EVENTO = "orden.estado_actualizado";
 
 // ---------------------------------------------------------------------------------------------
 // Helpers duplicados a proposito (aserto 4).
@@ -69,20 +68,27 @@ function sangria(linea: string): number {
   return linea.length - linea.trimStart().length;
 }
 
-/** Lineas de la seccion de NIVEL SUPERIOR `webhooks:` (sin su cabecera). */
-function lineasWebhooks(): string[] {
+/**
+ * Lineas del schema `WebhookOrdenEstadoActualizado` (sin su cabecera).
+ *
+ * ⏳ 2026-09-01 — esto leia la seccion de NIVEL SUPERIOR `webhooks:`, que ya no existe: el evento
+ * se publica solo como la FORMA de su cuerpo, un schema de `components.schemas`. Lo que este
+ * archivo custodia —el enum de `estado`, las causas de `motivo`, la clave opcional
+ * `evidenciasUrl`— vive igual ahi dentro, cuatro niveles mas arriba en la sangria.
+ */
+function lineasSchemaWebhook(): string[] {
   const lineas = yaml.split(/\r?\n/);
-  const inicio = lineas.indexOf("webhooks:");
-  if (inicio === -1) throw new Error("el .yaml no declara la seccion de NIVEL SUPERIOR webhooks:");
+  const inicio = lineas.indexOf("    WebhookOrdenEstadoActualizado:");
+  if (inicio === -1) throw new Error("el .yaml no declara el schema WebhookOrdenEstadoActualizado");
   const out: string[] = [];
   for (let i = inicio + 1; i < lineas.length; i++) {
-    if (lineas[i].trim() !== "" && sangria(lineas[i]) === 0) break;
+    if (lineas[i].trim() !== "" && sangria(lineas[i]) <= 4) break;
     out.push(lineas[i]);
   }
   return out;
 }
 
-const WEBHOOKS_YAML = lineasWebhooks();
+const WEBHOOKS_YAML = lineasSchemaWebhook();
 
 /**
  * Lineas del sub-bloque que cuelga de la clave `<nombre>:` con la sangria exacta `ind`,
@@ -136,15 +142,15 @@ function requiredDelBloque(bloque: string[]): string[] {
 // Accesos al objeto TS (fuente de verdad) y al .yaml (espejo publicado).
 // ---------------------------------------------------------------------------------------------
 
-const dataTs =
-  openApiSpec.webhooks[EVENTO].post.requestBody.content["application/json"].schema.properties.data;
+const dataTs = openApiSpec.components.schemas.WebhookOrdenEstadoActualizado.properties.data;
 
-// `data:` cuelga de `properties:` del schema del requestBody; en el .yaml queda con sangria 16 y
-// sus propias propiedades con sangria 20.
-const DATA_YAML = bloqueDe(WEBHOOKS_YAML, "data", 16);
-const PROPIEDADES_YAML = bloqueDe(DATA_YAML, "properties", 18);
-const ESTADO_YAML = bloqueDe(PROPIEDADES_YAML, "estado", 20);
-const MOTIVO_YAML = bloqueDe(PROPIEDADES_YAML, "motivo", 20);
+// `data:` cuelga de `properties:` del schema; en el .yaml queda con sangria 8 y sus propias
+// propiedades con sangria 12 (antes 16 y 20, cuando esto colgaba de `webhooks > post >
+// requestBody > content > application/json > schema`).
+const DATA_YAML = bloqueDe(WEBHOOKS_YAML, "data", 8);
+const PROPIEDADES_YAML = bloqueDe(DATA_YAML, "properties", 10);
+const ESTADO_YAML = bloqueDe(PROPIEDADES_YAML, "estado", 12);
+const MOTIVO_YAML = bloqueDe(PROPIEDADES_YAML, "motivo", 12);
 
 /** Las tres causas de incidente, en español y SIN traducir (73/F1.4-g y 158/Q-B). */
 const CAUSAS_INCIDENTE = ["danado", "perdido", "robado"] as const;
@@ -270,7 +276,9 @@ describe("268/R30 — el .yaml publica el MISMO bloque que el objeto TS", () => 
   });
 
   it("el .yaml declara `evidenciasUrl` como propiedad y NO la mete en `required`", () => {
-    expect(PROPIEDADES_YAML.some((l) => l === `${" ".repeat(20)}evidenciasUrl:`)).toBe(true);
+    // Sangria 12 desde el 2026-09-01 (antes 20): el cuerpo dejo de colgar de la seccion
+    // `webhooks` y es ahora un schema de `components.schemas`.
+    expect(PROPIEDADES_YAML.some((l) => l === `${" ".repeat(12)}evidenciasUrl:`)).toBe(true);
     const requeridas = requiredDelBloque(DATA_YAML);
     expect(requeridas).toEqual(["numGuia", "numRemision", "estado", "motivo"]);
     expect(requeridas).not.toContain("evidenciasUrl");
@@ -287,8 +295,8 @@ describe("268/R28 — documentar el cuerpo NO añadio un 5.º catalogo de estado
     expect(enumsDeEstado(openApiSpec)).toHaveLength(4);
   });
 
-  it("ningun enum del subarbol `webhooks` es contado como catalogo de estados", () => {
-    expect(enumsDeEstado(openApiSpec.webhooks)).toEqual([]);
+  it("ningun enum del schema del evento es contado como catalogo de estados", () => {
+    expect(enumsDeEstado(openApiSpec.components.schemas.WebhookOrdenEstadoActualizado)).toEqual([]);
     // Y la razon concreta: el enum del webhook lleva `entregada` pero no el estado interno de
     // recogida, que es la otra mitad que el predicado exige.
     expect(dataTs.properties.estado.enum).toContain("entregada");

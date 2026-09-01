@@ -36,6 +36,8 @@ const YAML_PATH = path.join(__dirname, "..", "..", "..", "docs", "api", "api-key
 const yamlTexto = fs.readFileSync(YAML_PATH, "utf8");
 
 const EVENTO = "orden.estado_actualizado";
+/** Nombre del schema que publica la FORMA del cuerpo del evento, desde el 2026-09-01. */
+const NOMBRE_SCHEMA = "WebhookOrdenEstadoActualizado";
 
 // ---------------------------------------------------------------------------------------------
 // Parseo del .yaml. js-yaml NO es resoluble desde la raiz del proyecto (vive solo en el store
@@ -149,27 +151,25 @@ function parseNodo(lineas: string[], i: number, ind: number): [unknown, number] 
   return [mapa, i];
 }
 
-/** Lineas del bloque de NIVEL SUPERIOR `<nombre>:` del .yaml (sin su cabecera). */
-function lineasDeSeccionTopLevel(nombre: string): string[] {
+/**
+ * ⏳ 2026-09-01 — el evento dejo de publicarse como seccion `webhooks:` de NIVEL SUPERIOR. Esa
+ * seccion Swagger UI la pinta como un endpoint mas, y este evento no es algo que el integrador
+ * LLAME: lo entrega Ordenex a su callback. Se publica ahora solo la FORMA del cuerpo, como el
+ * schema `WebhookOrdenEstadoActualizado` de `components.schemas`. Este lector lo aisla del .yaml
+ * y lo parsea con el MISMO subconjunto de YAML de antes.
+ */
+function schemaWebhookDelYaml(): Record<string, unknown> {
   const lineas = yamlTexto.split(/\r?\n/);
-  const inicio = lineas.findIndex((l) => l === `${nombre}:`);
-  if (inicio === -1) {
-    throw new Error(`el .yaml no declara la seccion de NIVEL SUPERIOR ${nombre}:`);
-  }
-  const out: string[] = [];
+  const inicio = lineas.findIndex((l) => l === `    ${NOMBRE_SCHEMA}:`);
+  if (inicio === -1) throw new Error(`el .yaml no declara el schema ${NOMBRE_SCHEMA}`);
+  const bloque: string[] = [];
   for (let i = inicio + 1; i < lineas.length; i++) {
-    const linea = lineas[i];
-    if (linea.trim() !== "" && sangria(linea) === 0) break;
-    out.push(linea);
+    if (lineas[i].trim() !== "" && sangria(lineas[i]) <= 4) break;
+    bloque.push(lineas[i]);
   }
-  return out;
-}
-
-function seccionWebhooksDelYaml(): Record<string, unknown> {
-  const lineas = lineasDeSeccionTopLevel("webhooks");
-  const primera = lineas.findIndex((l) => !esIgnorable(l));
-  if (primera === -1) throw new Error("la seccion `webhooks:` del .yaml esta vacia");
-  const [nodo] = parseNodo(lineas, primera, sangria(lineas[primera]));
+  const primera = bloque.findIndex((l) => !esIgnorable(l));
+  if (primera === -1) throw new Error(`el schema ${NOMBRE_SCHEMA} del .yaml esta vacio`);
+  const [nodo] = parseNodo(bloque, primera, sangria(bloque[primera]));
   return nodo as Record<string, unknown>;
 }
 
@@ -177,10 +177,9 @@ function seccionWebhooksDelYaml(): Record<string, unknown> {
 // Accesos al objeto TS (fuente de verdad) y a su espejo publicado.
 // ---------------------------------------------------------------------------------------------
 
-const webhookTs = openApiSpec.webhooks[EVENTO];
-const bodySchemaTs = webhookTs.post.requestBody.content["application/json"].schema;
+const bodySchemaTs = openApiSpec.components.schemas[NOMBRE_SCHEMA];
 const dataTs = bodySchemaTs.properties.data;
-const webhooksYaml = seccionWebhooksDelYaml();
+const schemaYaml = schemaWebhookDelYaml();
 
 /** Navega un objeto plano parseado del .yaml, lanzando si el camino no existe. */
 function porCamino(raiz: unknown, ...camino: string[]): Record<string, unknown> {
@@ -197,17 +196,7 @@ function porCamino(raiz: unknown, ...camino: string[]): Record<string, unknown> 
   return actual as Record<string, unknown>;
 }
 
-const dataYaml = porCamino(
-  webhooksYaml,
-  EVENTO,
-  "post",
-  "requestBody",
-  "content",
-  "application/json",
-  "schema",
-  "properties",
-  "data",
-);
+const dataYaml = porCamino(schemaYaml, "properties", "data");
 
 /** Recolecta todos los arrays `enum` de un subarbol del contrato. */
 function todosLosEnums(nodo: unknown, out: unknown[][] = []): unknown[][] {
@@ -247,20 +236,28 @@ function esEnumDeEstado(value: unknown): value is string[] {
 }
 
 describe("256/R24 — el webhook orden.estado_actualizado esta publicado en el contrato", () => {
-  it("256/R24: `webhooks[orden.estado_actualizado]` existe a NIVEL SUPERIOR, fuera de `paths`", () => {
-    // TS: la seccion es hermana de `paths`, no una ruta mas.
-    expect(Object.keys(openApiSpec)).toContain("webhooks");
-    expect(Object.keys(openApiSpec.webhooks)).toEqual([EVENTO]);
-    expect(webhookTs.post.operationId).toBe("webhookOrdenEstadoActualizado");
+  // ⏳ 2026-09-01 — AQUI se exigia lo contrario de lo que se exige ahora, y el cambio es
+  // DELIBERADO: el evento se publicaba como seccion `webhooks:` de nivel superior (256/R24) y hoy
+  // se publica SOLO como el schema `WebhookOrdenEstadoActualizado`. Motivo: Swagger UI pinta la
+  // seccion `webhooks` como un endpoint mas, y este evento no es algo que el integrador LLAME —lo
+  // entrega Ordenex a su callback—. Lo que se conserva es lo que el integrador necesita tipar: la
+  // FORMA del cuerpo. Lo que se pierde, y conviene que conste, son las dos cabeceras de firma
+  // (`X-Ordenex-Signature`, `X-Ordenex-Timestamp`), que ya no estan declaradas en ninguna parte
+  // del contrato.
+  it("2026-09-01: el evento se publica como SCHEMA, y no como operacion ni como ruta", () => {
+    // TS: existe el schema, y NO existe la seccion `webhooks`.
+    expect(Object.keys(openApiSpec.components.schemas)).toContain(NOMBRE_SCHEMA);
+    expect(Object.keys(openApiSpec)).not.toContain("webhooks");
+    // Y el nombre del evento no se ha colado en `paths` por la puerta de atras.
     expect(Object.keys(openApiSpec.paths)).not.toContain(EVENTO);
     expect(JSON.stringify(openApiSpec.paths)).not.toContain(EVENTO);
 
-    // .yaml: `webhooks:` empieza en la columna 0 (si colgara de `paths` iria sangrado).
-    expect(yamlTexto).toMatch(/^webhooks:$/m);
-    expect(Object.keys(webhooksYaml)).toEqual([EVENTO]);
-    expect(porCamino(webhooksYaml, EVENTO, "post").operationId).toBe(
-      "webhookOrdenEstadoActualizado",
-    );
+    // .yaml: el espejo dice lo mismo. `webhooks:` empezaba en la columna 0; ya no esta.
+    expect(yamlTexto).not.toMatch(/^webhooks:$/m);
+    expect(yamlTexto).toContain(`    ${NOMBRE_SCHEMA}:`);
+    // El `const` del schema conserva el nombre del evento: es lo que identifica el cuerpo.
+    expect(porCamino(schemaYaml, "properties", "evento").const).toBe(EVENTO);
+    expect(bodySchemaTs.properties.evento.const).toBe(EVENTO);
   });
 
   it("256/R24 + 268/R24: el schema de `data` tiene EXACTAMENTE cinco claves y las required siguen siendo las MISMAS cuatro", () => {
@@ -373,7 +370,7 @@ describe("256/R24 — el webhook orden.estado_actualizado esta publicado en el c
 
     // (3) NINGUN enum del subarbol `webhooks` es el catalogo de ESTADOS. Este es el bucle de la
     //     256 con el criterio invertido: ya no prohibe `entregada`, prohibe ser un 5.º catalogo.
-    for (const lista of [...todosLosEnums(openApiSpec.webhooks), ...todosLosEnums(webhooksYaml)]) {
+    for (const lista of [...todosLosEnums(bodySchemaTs), ...todosLosEnums(schemaYaml)]) {
       expect(esEnumDeEstado(lista)).toBe(false);
     }
 
@@ -416,28 +413,20 @@ describe("256/R24 — el webhook orden.estado_actualizado esta publicado en el c
     expect(dataTs.description).toContain("UNA clave OPCIONAL, `evidenciasUrl`");
   });
 
-  it("256/R24: se documentan las cabeceras de firma X-Ordenex-Signature y X-Ordenex-Timestamp", () => {
-    const parametrosTs: readonly Record<string, unknown>[] = webhookTs.post.parameters;
-    const parametrosYaml = porCamino(webhooksYaml, EVENTO, "post").parameters as Record<
-      string,
-      unknown
-    >[];
+  // ⏳ 2026-09-01 — AQUI VIVIA «se documentan las cabeceras de firma X-Ordenex-Signature y
+  // X-Ordenex-Timestamp», y antes que eso, dentro del mismo test, la comprobacion de que la prosa
+  // decia sobre QUE se calcula el HMAC. Las dos cosas se fueron, en dos pasos del mismo dia: la
+  // prosa con las descripciones de nivel operacion, y las cabeceras al dejar de publicarse el
+  // evento como operacion (solo una operacion puede declarar `parameters`).
+  //
+  // ESTA ES LA BAJA MAS CARA DE TODO EL CAMBIO y por eso queda escrita aqui: el contrato ya no
+  // dice NI que la entrega va firmada NI como verificarla. La firma se sigue enviando igual; lo
+  // que no existe es su documentacion publicada. Si se quiere recuperar sin volver a `webhooks`,
+  // el sitio natural es la descripcion del propio schema.
 
-    for (const parametros of [parametrosTs, parametrosYaml]) {
-      expect(parametros.map((p) => p.name)).toEqual(["X-Ordenex-Signature", "X-Ordenex-Timestamp"]);
-      for (const parametro of parametros) {
-        expect(parametro.in).toBe("header");
-        expect(parametro.required).toBe(true);
-      }
-    }
-    // ⏳ 2026-09-01 — AQUI se comprobaba que la descripcion del evento dijera sobre QUE se calcula
-    // el HMAC (`HMAC-SHA256` de `${timestamp}.${cuerpo}`). Esa prosa se retiro con todas las
-    // descripciones de nivel operacion (peticion explicita), y con ella la unica explicacion
-    // publicada de como VERIFICAR la firma: el contrato ya solo declara que las dos cabeceras
-    // viajan, no como usarlas. Lo que sigue medible son las cabeceras, arriba.
-  });
-
-  it("256/R24: paridad TS↔YAML — la seccion `webhooks` publicada es espejo EXACTO del objeto TS", () => {
-    expect(JSON.stringify(webhooksYaml)).toEqual(JSON.stringify(openApiSpec.webhooks));
+  it("2026-09-01: paridad TS↔YAML — el schema publicado es espejo EXACTO del objeto TS", () => {
+    expect(JSON.stringify(schemaYaml)).toEqual(
+      JSON.stringify(openApiSpec.components.schemas[NOMBRE_SCHEMA]),
+    );
   });
 });
