@@ -644,3 +644,466 @@ midió en un solo tipo de test.
 alcance en aislado, y ésa sigue siendo la vía por la que una mutación de una sola barrera pasa
 desapercibida si alguien solo corre integración. La red existe; está en otro sitio del que el
 informe suponía.
+
+---
+
+# Ficha 347 — bitácora de implementación (FRONTEND)
+
+> Continúa el documento de arriba, **no lo sustituye**. Cubre el bloque **F** de `tasks.md`
+> (F1, F3, F4, F5, F6) más `G1`, `G3` y `G5`. `F2` lo adelantó el backend (ver §F2).
+> `G2` **no se implementa**; el motivo, medido, está en §«Lo dudoso, dicho (frontend)».
+>
+> El MCP `codebase-memory` **sí** estaba disponible en esta sesión y se usó para localizar
+> `ProductosTabla` y la vertical de entregas; todo lo que se afirma de un símbolo está
+> confirmado leyendo el archivo real, que es lo que `CLAUDE.md` exige de todos modos.
+
+## Archivos
+
+### Creados
+
+| Archivo | Qué es |
+| --- | --- |
+| `app/(app)/analitica/_components/entregas/otros-resultados.ts` | **Entrega B**: `composicionOtrosResultados` + `textoComposicionOtrosResultados`. Módulo PURO |
+| `app/(app)/analitica/_components/entregas/etiqueta-desenlace.ts` | `etiquetaDeDesenlace`, MUDADA desde el anillo (ver §La mudanza) |
+| `app/(app)/analitica/_components/entregas/DineroProductoDetalle.tsx` | El panel de la fila abierta (F5) |
+| `app/(app)/analitica/_components/entregas/dinero-producto-swr.ts` | Clave SWR y fetcher del detalle (F5) |
+| `tests/unit/analytics/otros-resultados.test.ts` | 19 casos, con el sexto desenlace inyectado |
+| `tests/unit/analytics/dinero-producto-no-sumable.guardia.test.ts` | G3: estática + dinámica + autocomprobación, 11 casos |
+| `tests/components/ProductosTablaDinero.test.tsx` | F6: 29 casos |
+
+### Modificados
+
+| Archivo | Qué cambió |
+| --- | --- |
+| `app/(app)/analitica/_components/entregas/ProductosTabla.tsx` | 3 columnas de dinero, 2 líneas de contexto, 2 avisos, el sello de `lastSync`, la composición de «Otros resultados», la fila que se abre, la vista de teléfono y la prop `dinero` |
+| `app/(app)/analitica/_components/entregas/analitica-productos-descarga-columnas.ts` | G1: `+ otros_resultados_detalle`, `+ COLUMNAS_..._DINERO` (9 columnas), `+ columnasDescargaAnaliticaProductos(conDinero)` |
+| `app/(app)/analitica/_components/entregas/efectividad.ts` | `+ DESENLACES_CON_COLUMNA_PROPIA` (exportada, para que la composición no escriba su propia pareja) |
+| `app/(app)/analitica/_components/entregas/ConteoEntregasAnillo.tsx` | `etiquetaDeDesenlace` se muda y se RE-EXPORTA con su nombre de siempre |
+| `app/(app)/analitica/page.tsx` | **F3**: lee `recorte.productosDinero` y lo pasa como prop. Sin importar `metrics` ni `alcance` |
+| `lib/actions/detalle-dinero-producto.ts` | **`@sin-superficie` BORRADO**: la acción ya tiene consumidor de producción |
+| `tests/unit/descarga/censo-tablas.ts` + `cobertura-tablas.guardia.test.ts` | **G5**: la tabla del detalle, `fuera` con motivo |
+| `tests/unit/descarga/analitica-productos-descarga-columnas.test.ts` | los `toEqual` de las DOS constantes, reescritos a mano (11 y 20 claves) |
+| `tests/components/ProductosTabla.test.tsx` | `cifraDeCelda`: lee la CIFRA de la celda, no su `textContent`, que ahora arrastra la composición |
+
+**Ni una migración, ni un archivo de `lib/services/**`, `lib/repositories/**` ni `db/**`**: el
+diff del frontend toca `app/`, dos archivos de tests de censo y la anotación de la acción.
+
+## La mudanza de `etiquetaDeDesenlace`, y por qué hizo falta
+
+R55 exige nombrar cada desenlace «reutilizando el mecanismo de etiquetas que ya existe». Ese
+mecanismo vivía en `ConteoEntregasAnillo.tsx`, que es un componente de cliente y arrastra
+`recharts`. La composición la necesitan TRES sitios y uno es
+`analitica-productos-descarga-columnas.ts`, que es **puro por contrato** y lo **ejecuta**
+`columnas-sensibles.guardia` en un entorno de node: importar el anillo desde allí habría metido
+una gráfica dentro de un barrido de columnas.
+
+Se mudó a `etiqueta-desenlace.ts` y el anillo la **re-exporta** con su nombre de siempre, así que
+ni él ni `tests/unit/analytics/conteo-entregas-pliegue.test.ts` cambian un import. Es el mismo
+patrón con el que `money()` se mudó a `lib/config/moneda.ts`: una mudanza, no un cambio de
+comportamiento.
+
+## Las guardias, vistas FALLAR antes de tocar sus números (G5)
+
+La convención del árbol es ésa y se cumplió. Salida literal, **antes** de escribir nada en el
+censo:
+
+```
+FAIL tests/unit/descarga/cobertura-tablas.guardia.test.ts > toda tabla del árbol o declara descarga…
+AssertionError: hay tablas sin registrar en tests/unit/descarga/censo-tablas.ts:
++ [ "app/(app)/analitica/_components/entregas/DineroProductoDetalle.tsx #1" ]
+
+FAIL tests/unit/descarga/columnas-asercion-de-orden.guardia.test.ts > ninguna constante COLUMNAS_DESCARGA_*…
++ [ "COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO (app/(app)/analitica/…/analitica-productos-descarga-columnas.ts)" ]
+```
+
+Números MEDIDOS, movidos después: `TOTAL_ARCHIVOS_CON_DATATABLE` 32 → **33**,
+`TOTAL_INSTANCIAS_DATATABLE` 32 → **33**, exclusiones 10 → **11**, `totalCensado` 33 → **34**,
+`fuera` 11 → **12**. Las **22** `con_descarga` NO se mueven.
+
+Y dos guardias más se pusieron rojas por defectos REALES de este cambio, no por números:
+
+- **`flete-por-rechazo-censo.guardia`** → `DineroProductoDetalle.tsx:83`. El panel rotulaba
+  «Flete de devolución + IVA de las rechazadas». La ficha 338 renombró ese cobro a **«Flete por
+  rechazo»** en toda la app porque **sólo un RECHAZO lo cobra**: el nombre viejo decía justo el
+  caso que NO cobra. Corregido en el panel y en el encabezado del archivo.
+- **`ancla-de-carga.guardia`** → el caso de G3 esperaba con
+  `waitFor(() => expect(document.querySelectorAll("tfoot")).toHaveLength(0))`, un ancla que el
+  estado de CARGA también cumple. Reanclado al contenido (`findByText("Producto 2")`).
+
+---
+
+## Verificación en el navegador (V3) — Chromium, sesión real, cuatro anchos
+
+`pnpm dev` en `:3000` (uno solo; `.next` borrado antes de arrancar), login real de
+`admin.qa@ordenex.test`. La contraseña **no se leyó ni se rotó**: el script corre con
+`node --env-file=.env`, así que `QA_PASSWORD` entra por el entorno y no se imprime nunca.
+
+### Los cuatro anchos, con el árbol final
+
+| ancho | desborde del DOCUMENTO | scroller de la tabla (clientW / scrollW / desborde) | última columna, fuera de la ventana | flechas de scroll | palabras partidas |
+| --- | --- | --- | --- | --- | --- |
+| 390×844 | **0** | 308 / 308 / **0** | «Resultado» → **0** | 0 | 1 (`USB-C`) |
+| 768×1024 | **0** | 430 / 1226 / 796 | 755 px | 2 | **0** |
+| 1024×800 | **0** | 686 / 1226 / 540 | 499 px | 2 | **0** |
+| 1440×950 | **0** | 1102 / 1226 / **124** | **83 px** | 2 | **0** |
+
+**El documento no desborda a ningún ancho.** Lo que desborda es el scroller horizontal de la
+propia `DataTable`, que es su comportamiento declarado («si la suma de mínimos excede el ancho
+disponible, la tabla desborda y aparece el scroll horizontal — comportamiento deseado»), y por eso
+aparecen sus dos flechas. A 1440 hay que desplazar **83 px** para leer «Para la tienda».
+
+### El `innerText` real de las celdas de dinero
+
+En la base local **no hay ni un importe** (ver §«El dinero salió vacío»), así que las celdas dicen
+`—`. Para medir la caja con dinero de verdad se **inyectó el texto en el DOM** —sólo el texto, sin
+tocar la base ni el código— con dos magnitudes:
+
+**`₡393.433`** (la medida real de producción para `BASE C`, del propio spec):
+
+```
+1440: innerText de las tres celdas = "₡393.433" / "₡393.433" / "₡393.433"
+      recorteInterno = 0 en las tres · columnas 95/89/89 px · scroller 1102/1235/133
+ 390: innerText de las tres = "₡393.433" · recorteInternoMax = 0 · scroller 308/308/0
+      Producto 133 → 108 px · Resultado 151 → 176 px
+```
+
+**`₡12.345.678`** (ocho dígitos, el peor caso imaginable):
+
+```
+1440: ancho de la cifra = 81 px · recorteInterno = 0 en las tres
+```
+
+**Cero recorte interno en todos los casos.** Ninguna cifra se pinta a medias, que es el defecto
+exacto que midieron la 343 (`₡1.70` donde el DOM decía `₡1.700`) y la 344.
+
+### Lo que el navegador CAMBIÓ del diseño: fuera el `minWidth`
+
+Las tres columnas nacieron con `minWidth: "10rem"`, por la intuición de que un importe largo pide
+sitio. **El navegador dijo lo contrario**, y por eso se retiró:
+
+| | columnas de dinero | scroller a 1440 | última columna fuera | cifra completa |
+| --- | --- | --- | --- | --- |
+| con `minWidth: 10rem` | 160 / 160 / 160 px | desborde **341 px** | **300 px** | sí (81 px de 160) |
+| sin `minWidth` (final) | 95 / 84 / 84 px | desborde **124 px** | **83 px** | sí, recorte 0 |
+
+Los 160 px no los pedía el importe (ocupa 81) sino la CABECERA. Lo que protege a la cifra de
+estrujarse es el `whitespace-nowrap` de `Cifra`, que fija el mínimo de la columna en el ancho del
+propio número. **217 px menos de desborde por una línea de menos.**
+
+### La composición de «Otros resultados», leída en pantalla
+
+Legible **sin pasar el cursor** y a 390 px, que es lo que R57 pide. `innerText` real de tres
+celdas de la tabla desplegada (el `|` es el salto de línea dentro de la celda):
+
+```
+1440: "0"                     ← R54: con el cubo en cero no se pinta nada debajo
+1440: "1 | 1 reprogramadas"
+1440: "2 | 2 reprogramadas"
+ 390: "… | Otros resultados | 1 | 1 reprogramadas | En proceso | 2 | …"
+```
+
+Y los cuatro párrafos de aviso, `innerText` literal a los cuatro anchos:
+
+```
+"Las cifras de dinero son de la ORDEN completa, no del producto: una orden con varios
+ productos cuenta entera en cada uno. Estas columnas no se pueden sumar hacia abajo."
+"«Cobró Ordenex» y «Para la tienda» son solo de las órdenes ya liquidadas (cierre aprobado).
+ Lo cobrado y aún sin liquidar se muestra aparte, en la celda de Recaudado."
+"67 órdenes en el rango · 0 sin producto interpretable."
+"Actualizado 16:57"        ← R65, el sello de la lectura
+```
+
+### Palabras partidas: lo que hay, y cuánto cuesta esta ficha
+
+Con los datos reales, **1** palabra partida en toda la tabla y a un solo ancho: `USB-C` a 390 px,
+en la columna de PRODUCTO, partiendo por su guion. Con `₡393.433` inyectado en las tres columnas
+suben a **4** (`Hemorroides`, `TURKESTERONE`, `Blanqueadora`, `Inalámbrico`), todas en la misma
+columna.
+
+Está medido cuánto de eso lo trae esta ficha. Sobre el MISMO DOM, quitando lo que la 347 añade
+—la columna del control y las tres líneas de dinero de la pila—:
+
+```
+ 390 CON la 347:  Producto 133 px · partidas: ["USB-C"]
+ 390 SIN la 347:  Producto 155 px · partidas: []
+```
+
+O sea: **22 px** menos de nombre de producto a 390 px (24 son la columna del control), y con
+importes reales el nombre baja a 108 px y se parten cuatro palabras. **Es el precio declarado del
+teléfono**, y se paga en el sitio correcto: R63 prohíbe recortar un importe y R64 prohíbe enseñar
+menos datos en el teléfono, así que lo que cede es el NOMBRE —que se lee entero, en más líneas—
+y nunca la cifra. La columna de producto usa `wrap-anywhere` por decisión escrita de la 345
+(«`wrap-anywhere` y no `break-words`: el segundo no reduce el `min-content`»), así que partir es
+su comportamiento previsto a anchos estrechos, no un defecto nuevo. **Si el humano lo considera
+demasiado, la palanca más barata es quitar `(no sumable)` de las tres etiquetas de la vista de
+teléfono** —el párrafo con el aviso completo está justo encima— y es un cambio de una línea.
+
+### El panel del detalle: NO se pudo ver en el navegador
+
+**0 botones** de abrir en las 37 filas, a los cuatro anchos. No es un fallo, y está medido por
+qué — ver la sección siguiente. El panel queda cubierto por los **8 casos de componente** de
+`ProductosTablaDinero.test.tsx` (montaje bajo demanda, dos paneles a la vez, totales, enlace a la
+orden, vacío y `limite_excedido`) y **sin una sola comprobación en pantalla**. Es la deuda de
+verificación de este bloque.
+
+---
+
+## El dinero salió vacío, y por qué — MEDIDO, no supuesto
+
+El encargo avisaba de que el reparto saldría vacío y pedía medirlo antes de concluir. Medido
+contra la base local (consultas de sólo lectura y una ejecución directa del servicio):
+
+**1. Las entregas no recaudaron nada.**
+
+| resultado | gestiones vivas | con `monto_recibido > 0` | en cierre `aprobado` | con tarifa congelada |
+| --- | --- | --- | --- | --- |
+| `entregada` | 12 | **0** | **0** | 0 |
+| `rechazada` | 6 | 0 | 5 | 5 |
+| `reprogramada` | 12 | 7 | 10 | 10 |
+| `devuelta` | 7 | 0 | 5 | 5 |
+| `incidente` | 2 | 1 | 1 | 1 |
+
+`SELECT count(*) … resultado = 'entregada' AND monto_recibido > 0` → **0**, suma **0**. Así que
+`recaudado` es cero para todo producto: no hay «entrega que haya cobrado» en esta base.
+
+**2. Las rechazadas SÍ están liquidadas, y aun así su retorno es cero.** Las cuatro órdenes
+(`990001` Audifonos bluetooth, `990002` Cafetera, `990004` Set de sartenes, `990010` Perfume
+importado) tienen cierre `aprobado` y `cierre_detail` con `tarifa_id`. Pero su snapshot dice
+`es_central = true`, y para una orden central `resolverFlete` toma
+`tarifa_valor_flete_devuelto_gam`, que en esas filas vale **`0.00`** (el `valor_flete_devuelto`
+no-GAM sí vale `1000.00`, y es el que confunde al mirar por encima).
+
+**3. Ejecutado el servicio real contra la base**, sin navegador y sin caché:
+
+```
+CONCESION DE DINERO: concedido
+LECTURA DINERO: estado ok, 18 filas crudas, 17 órdenes
+repartoDeOrden de las 17: TODAS con recaudado "0.00"; las 4 rechazadas liquidadas dan
+  { ordenex: "0.00", tienda: "0.00", retorno: "0.00", hayLiquidado: true }
+DTO: dinero {"estado":"concedido"}, 37 filas, FILAS CON DINERO: 0
+```
+
+**Conclusión:** `dinero: null` en las 37 filas es **el contrato cumpliéndose**, no un fallo.
+`aporteEsCero` descarta el grupo, la pantalla pinta `—` en las tres columnas (R30) y no ofrece el
+control de abrir en una fila que no tiene nada que detallar. Lo que falta para verlo con cifras es
+**una entrega con `monto_recibido > 0` dentro de un cierre aprobado**, que en esta base no existe
+y en producción tampoco (vacía a propósito desde el 2026-08-25). **No se sembró nada**: alterar la
+base para ver una columna habría cambiado el dato de todas las demás sesiones.
+
+---
+
+## Mutaciones (V2, parte de frontend) — SEIS, con su línea de fallo REAL
+
+Cada una: aplicada al árbol, tests ejecutados, línea copiada, árbol restaurado y **re-medido
+verde** después (44 archivos / 358 casos).
+
+### 1 — pintar `0,00` donde debe ir `—` (M6 en la pantalla) · **ROJA (1)**
+`importeDeFila`: `dinero.liquidado.ordenex` → `dinero.liquidado.ordenex ?? "0.00"`.
+```
+FAIL tests/components/ProductosTablaDinero.test.tsx > R30 — sin nada liquidado se pinta «—», nunca `0,00`
+     > las dos celdas del reparto son el marcador de dato ausente
+AssertionError: expected '₡0' to be '—'
+```
+
+### 2 — quitar el aviso de que la columna no se suma · **ROJA (1)**
+```
+FAIL tests/components/ProductosTablaDinero.test.tsx > R45 — y el aviso está escrito arriba, con todas las letras
+TestingLibraryElementError: Unable to find an element with the text: Las cifras de dinero son de
+la ORDEN completa, no del producto: una orden con varios productos cuenta entera en cada uno.
+Estas columnas no se pueden sumar hacia abajo.
+```
+
+### 3 — `Number()` sobre un importe · **ROJA (1)**
+`return dinero.recaudado` → `return String(Number(dinero.recaudado))`.
+```
+FAIL tests/unit/analytics/dinero-producto-no-sumable.guardia.test.ts
+     > `app/(app)/analitica/_components/entregas/ProductosTabla.tsx` es money-safe: ni una de las cuatro llamadas
+AssertionError: expected [ '\bNumber\s*\(' ] to deeply equal []
+```
+
+### 4 — M8: la lista de desenlaces escrita a mano en la composición · **ROJA (1 de 19)**
+`new Set(DESENLACES)` → `new Set(["entregada","devuelta","rechazada","reprogramada","incidente"])`.
+```
+FAIL tests/unit/analytics/otros-resultados.test.ts
+     > un SEXTO desenlace aparece en la composición sin tocar la pantalla
+AssertionError: expected [] to deeply equal [ { …(2) } ]
+```
+⚠ Los **18 casos restantes siguen verdes**, incluido el que compara la composición contra
+`calcularEfectividad`. El caso del sexto desenlace inyectado es **lo único** que distingue
+derivar de escribir — exactamente lo que la 346 midió y por lo que la etiqueta no enumera.
+
+### 5 — M9: un total al pie de la columna de dinero · **ROJA (3, las tres mitades)**
+Un `<p>` con `visibles.reduce(… + Number(f.dinero?.recaudado ?? "0"), 0).toFixed(2)`.
+```
+FAIL … > `…/ProductosTabla.tsx` no contiene ninguna forma de total al pie
+AssertionError: expected [ "\\breduce\\s*\\([\\s\\S]{0,120}?\\b(recaudado|ordenex|liquidado|pendiente|retorno)\\b" ] to deeply equal []
+FAIL … > `…/ProductosTabla.tsx` es money-safe: ni una de las cuatro llamadas
+AssertionError: expected [ '\bNumber\s*\(', '\.toFixed\s*\(' ] to deeply equal []
+FAIL … > con tres importes en pantalla, su suma NO está en el DOM
+AssertionError: expected [ '₡1.230' ] to deeply equal []
+```
+
+### 6 — M9b: el MISMO total, pero money-safe y sin `reduce` · **solo la mitad DINÁMICA lo caza**
+Suma en céntimos con `BigInt` dentro de un `for`. **Ni `Number(`, ni `toFixed(`, ni `reduce(`, ni
+`<tfoot`**: la mitad estática pasa entera.
+```
+ 10 casos VERDES (toda la mitad estática y las dos autocomprobaciones)
+FAIL tests/unit/analytics/dinero-producto-no-sumable.guardia.test.ts
+     > con tres importes en pantalla, su suma NO está en el DOM
+AssertionError: expected [ '₡1.230' ] to deeply equal []
+```
+⚠ **Ésta es la mutación que justifica que la guardia tenga mitad dinámica.** Un barrido de texto
+sobre la fuente es fácil de esquivar sin querer —basta escribir la suma de otra manera— y el
+único predicado que no depende de CÓMO se escriba el total es «el número no está en el DOM».
+Es la respuesta ejecutable a la pregunta del encargo: si mañana alguien pone un total al pie de
+esa columna, **algo se pone rojo**, y este caso dice cuál.
+
+**Ninguna sobrevivió.** Las tres obligatorias del encargo son la 1, la 2 y la 3.
+
+---
+
+## Órdenes de verificación
+
+```
+$ npx tsc --noEmit
+TSC_EXIT=0
+
+$ npx eslint .
+✖ 145 problems (0 errors, 145 warnings)
+ESLINT_EXIT=0
+```
+Las 145 son `@typescript-eslint/no-unused-vars` sobre parámetros `_x` de dobles de test,
+heredadas de `dev` y **el mismo número exacto que midió el backend**. Cero errores.
+
+```
+$ npx vitest run tests/unit tests/components
+ Test Files  1 failed | 1369 passed (1370)
+      Tests  1 failed | 19990 passed | 26 skipped (20017)
+```
+
+**El único rojo es el heredado y tolerado:**
+```
+FAIL tests/unit/guards/superficie-de-uso.guardia.test.ts > ninguna Server Action de `lib/actions/**` es inalcanzable…
++ [ "lib/actions/tarifas.ts:67 obtenerTarifa" ]
+```
+Comprobado que `consultarDetalleDineroProducto` **ya no aparece** en esa lista: borrar su
+`@sin-superficie` fue correcto porque la acción tiene consumidor de producción
+(`ProductosTabla` → `renderExpanded` → `DineroProductoDetalle` → `dinero-producto-swr` → la
+acción). **El gate completo (`./init.sh`) lo corre el leader**: esta sesión sólo midió `tests/`.
+
+---
+
+## Trazabilidad `R<n> → test` (los requisitos del bloque F)
+
+| R | Dónde se cubre (nombre EXACTO del caso) |
+| --- | --- |
+| R6 | `ProductosTablaDinero` › «sin la prop, la tabla queda exactamente como la dejó la 346» + «con la prop pero con la respuesta DENEGADA, tampoco: el servidor manda» + «las columnas de VOLUMEN siguen ahí en los dos casos» |
+| R29 | `ProductosTablaDinero` › «R29 — dice que el reparto es SÓLO de lo ya liquidado» |
+| R30 | `ProductosTablaDinero` › «las dos celdas del reparto son el marcador de dato ausente» + «una fila SIN ninguna orden que aporte pinta «—» en las tres» (mutación 1) |
+| R31 | `ProductosTablaDinero` › «las dos celdas del reparto son el marcador de dato ausente» (no se proyecta nada: la celda queda ausente) |
+| R32 | `ProductosTablaDinero` › «R32 — abrir una fila consulta EXACTAMENTE una vez, y con SU tienda y SU producto» |
+| R33 | `ProductosTablaDinero` › «R33 — con las filas CERRADAS, el detalle no se consulta ni una vez» |
+| R34 | `ProductosTablaDinero` › «R34 — dos filas abiertas consultan LO SUYO y no se pisan» |
+| R36 | `ProductosTablaDinero` › «R38/R36/R37 — el panel enseña los totales para cotejar, y la orden con su guía» (afirma `href="/ordenes?q=77001"`) |
+| R37 | idem (`Entregadas` + la insignia «Liquidada») |
+| R38 | idem (los cuatro importes de la cabecera, que son los de la fila) |
+| R42 | `ProductosTablaDinero` › «R42 — un producto sin ninguna orden que aporte enseña su estado vacío, no un error» |
+| R45 | `ProductosTablaDinero` › «R45 — los TRES encabezados llevan la marca de no sumable» + «R45 — y el aviso está escrito arriba, con todas las letras» (mutación 2) |
+| R46 | `ProductosTablaDinero` › «R46 — no hay ningún `<tfoot>` ni total al pie» · `dinero-producto-no-sumable.guardia` › «con tres importes en pantalla, su suma NO está en el DOM» |
+| R47 | `dinero-producto-no-sumable.guardia` › «`…/ProductosTabla.tsx` no contiene ninguna forma de total al pie» + «con tres importes en pantalla, su suma NO está en el DOM» (mutaciones 5 y 6) |
+| R48 | `dinero-producto-no-sumable.guardia` › «(c) AUTOCOMPROBACIÓN — el predicado estático detecta un total introducido a propósito» + «(c) AUTOCOMPROBACIÓN — el barrido money-safe detecta una conversión introducida» + «(c) AUTOCOMPROBACIÓN — el predicado dinámico detecta el total si alguien lo pinta» |
+| R49 | `analitica-productos-descarga-columnas` › «los VEINTE encabezados salen en este orden, con la marca de no-sumable donde toca» + «R49 — las SEIS columnas de importe llevan la marca; las de conteo, no» |
+| R50 | `otros-resultados` › «la captura de la 346 se compone de sus dos desenlaces, con su cantidad» · `ProductosTablaDinero` › «R50 — la celda dice CUÁNTAS arriba y DE QUÉ debajo, sin tocar la etiqueta» |
+| R51 | `otros-resultados` › «un SEXTO desenlace aparece en la composición sin tocar la pantalla» (mutación 4) |
+| R52 | idem |
+| R53 | `otros-resultados` › «R53 — los dos desenlaces con COLUMNA PROPIA no entran en la composición» + «R53 — los status SIN desenlace tampoco: ésos son «En proceso», no un resultado» |
+| R54 | `otros-resultados` › «R54 — sin ningún otro resultado, la composición está VACÍA y el texto también» · `ProductosTablaDinero` › «R54 — con el conteo en cero, no se pinta ninguna composición» |
+| R55 | `otros-resultados` › «R55 — nombra cada desenlace con su etiqueta legible, NUNCA con el value crudo» |
+| R56 | `otros-resultados` › «R56 — el orden es conteo DESCENDENTE y, a igualdad, `status` ascendente» + «R56 — la MISMA fila produce siempre el MISMO texto, venga como venga el desglose» + «el número va CRUDO, sin separador de miles: el texto viaja al archivo» |
+| R57 | `ProductosTablaDinero` › «R57 — es legible SIN apuntar: es texto en el DOM, no un `title` ni un tooltip» · V3 (medido a 390 px) |
+| R58 | `analitica-productos-descarga-columnas` › «R58 — la composición de «Otros resultados» sale en UNA celda de texto» |
+| R59 | `ProductosTablaDinero` › «R59 — cambiar el filtro vuelve a consultar y las cifras se releen» |
+| R60 | `ProductosTabla` (345) › los casos del prefijo `CLAVE_TABLERO`; el detalle lo hereda porque `claveDetalleDineroProducto` empieza por el MISMO prefijo — **ver §Lo dudoso, punto 4** |
+| R61 | `ProductosTablaDinero` › «R61 — mientras carga no pinta ni un importe» |
+| R62 | `ProductosTablaDinero` › «R62 — un `limite_excedido` del detalle lo dice, y no como una tabla vacía» · `ProductosTabla` (345) › los cuatro estados |
+| R63 | `ProductosTablaDinero` › «pinta los tres importes con `money`, COMPLETOS y sin abreviar» + «R63 — ninguna celda de dinero lleva `truncate`, `line-clamp` ni `overflow-hidden`» · V3 (`recorteInterno = 0` a los cuatro anchos) |
+| R64 | `ProductosTablaDinero` › «las tres cifras de dinero y sus dos líneas de contexto están en la pila» |
+| R65 | `ProductosTablaDinero` › «R65 — pinta el instante en que estas cifras se leyeron de la base» |
+| R66 | `analitica-productos-descarga-columnas` › «las VEINTE claves salen en este orden y no en otro» + «R66/R67 — el selector devuelve la lista que corresponde a la concesión» |
+| R67 | `analitica-productos-descarga-columnas` › «R67 — SIN concesión, la fila no lleva NI UNA clave de dinero» |
+| R68 | `analitica-productos-descarga-columnas` › «R68 — las claves de la fila son EXACTAMENTE las columnas declaradas, en su orden» |
+| R69 | `analitica-productos-descarga-columnas` › «R69 — ninguna columna de dinero es un identificador interno» + «R49 — el uuid de la tienda NO llega al archivo por ninguna celda» |
+| R70 | `analitica-productos-descarga-columnas` › «R70 — un importe ausente es celda VACÍA, nunca `0`» + «R70 — una fila SIN ninguna orden que aporte deja las ocho celdas de dinero vacías» |
+| R71 | `ProductosDescarga` (345) › la descarga proyecta el DTO en pantalla, sin segunda consulta |
+| **R72** | **SIN CUBRIR.** Ver §Lo dudoso, punto 1 |
+| R76 | `ProductosTablaDinero` › «R76 — con el tope superado lo dice, y NO pinta columnas de dinero vacías» + «R62 — un `limite_excedido` del detalle lo dice…» |
+| R77 | `dinero-producto-swr` lleva `CLAVE_TABLERO` como primer componente de la clave — **ver §Lo dudoso, punto 4** |
+
+---
+
+## Lo dudoso, dicho (frontend)
+
+1. **R72 no está cubierto: el detalle NO se descarga, y no es un olvido.** El borde de la ficha
+   sólo sirve el detalle **paginado**: no hay un modo COMPLETO como el que la 344 le dio a su
+   hermano (`verDetalleDeMovimientoCompletoAction`). Con lo que hay, un archivo saldría **truncado
+   a una página** —lo que R76 y la doctrina de `filasDesdeResultado` prohíben, «o van todas las
+   filas o no hay archivo»— o **reconstruido con N llamadas desde el navegador**, que es
+   exactamente la MEDIA MIGRACIÓN que la feature 184 retiró del árbol y que
+   `adaptador-conjunto.guardia` vigila. Añadir ese modo es backend, y el encargo prohíbe tocarlo.
+   La bitácora del backend ya había resuelto ⟨Q5⟩ como «fuera»; esto lo confirma con el motivo
+   técnico. La tabla queda censada `fuera` **con ese motivo escrito**, así que el día que exista
+   la puerta la guardia obliga a volver a decidir.
+
+2. **El panel del detalle no se vio nunca en un navegador.** 0 filas con dinero en la base local,
+   por las razones medidas de §«El dinero salió vacío». Está cubierto por 8 casos de componente y
+   por nada más. Es la deuda de verificación más grande de este bloque.
+
+3. **La segunda línea de la celda cuesta 22 px de nombre de producto a 390 px** (155 → 133), y con
+   importes reales el nombre baja a 108 px y se parten cuatro palabras. Está medido arriba y es
+   una decisión, no un descuido: lo que cede es el nombre y nunca la cifra. La palanca barata, si
+   el humano lo ve mal, es quitar `(no sumable)` de las etiquetas de la vista de teléfono.
+
+4. **R60 y R77 (el botón «Actualizar» refresca el detalle abierto) se apoyan en el PREFIJO de la
+   clave, y eso no tiene test propio.** `claveDetalleDineroProducto` empieza por `CLAVE_TABLERO`,
+   que es lo único que `ActualizarAnalitica` mira
+   (`mutate((c) => Array.isArray(c) && c[0] === CLAVE_TABLERO)`). Es el mismo mecanismo —y el
+   mismo grado de cobertura— que tienen las otras seis lecturas de la sección, pero conviene
+   saberlo: si alguien reescribiera ese prefijo a mano, el panel abierto se quedaría con datos
+   viejos y ningún test lo diría.
+
+5. **`(c) AUTOCOMPROBACIÓN` de la mitad dinámica compara un texto sintético, no un render.**
+   Renderizar un componente que SÍ lleva el total exigiría un doble del componente entero; se
+   eligió aplicar el MISMO predicado al texto que ese total dejaría en el DOM. La mutación 6 es la
+   que demuestra que el predicado muerde sobre el render de verdad, y por eso está en la bitácora.
+
+6. **Decisión mía: el dinero se pinta sólo si la prop Y la respuesta lo conceden.** El spec sólo
+   pedía la prop (R6). Con `limite_excedido` la concesión existe pero no hay cifras, y pintar las
+   columnas con `—` en cada fila se leería como «este producto no movió dinero», que es falso.
+   Tiene su caso («R76 — con el tope superado lo dice, y NO pinta columnas de dinero vacías»).
+
+7. **Decisión mía: `Con otro producto: 3 de 5` en vez de `3 acompañadas`.** El diseño escribía
+   «N acompañadas»; una etiqueta fija delante del número evita el singular («1 acompañada») y se
+   lee mejor apilada en el teléfono. El dato es el mismo.
+
+8. **Decisión mía: el panel repite el aviso de «no sumable» dentro.** No lo pedía el spec. Va
+   porque el panel se lee abierto, con la cabecera de la tabla fuera de la vista, y sus `totales`
+   son las mismas cifras que la fila.
+
+9. **El árbol queda con el servidor de desarrollo levantado en el puerto 3000** y `.next`
+   reconstruido desde cero (se borró antes de arrancar, y no se levantó ningún segundo servidor).
+   Si otra sesión dependía de uno anterior, ya no existe.
+
+10. **No se rotó ninguna contraseña QA.** El login del navegador se hizo con
+    `node --env-file=.env`, leyendo `QA_PASSWORD` del entorno sin imprimirla. Correr
+    `seed-usuarios-qa.ts` habría rotado las CUATRO cuentas y roto el login de cualquier otra
+    sesión en marcha.
+
+## Veredicto (frontend)
+
+Bloque F cerrado con las dos entregas: las tres columnas de dinero con su aviso triple y su fila
+que se abre, y la composición de «Otros resultados» derivada del catálogo —no escrita— con el
+caso del sexto desenlace que lo demuestra. Seis mutaciones, ninguna superviviente, incluida la
+que prueba que la mitad dinámica de la guardia no es redundante. Medido en Chromium a 390, 768,
+1024 y 1440: cero desborde del documento, cero recorte de importes y el precio en ancho del
+teléfono dicho con números. Queda sin cubrir **R72** (hace falta un modo completo en el borde) y
+sin ver en pantalla el panel del detalle, porque en esta base **ninguna entrega ha cobrado**.

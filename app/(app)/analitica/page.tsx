@@ -162,6 +162,22 @@ export default async function AnaliticaPage() {
   // panel que no se pinta no es un dato que no se sirve.
   const verProductos = recorte.productos === "visible";
 
+  // ─── FICHA 347 (R6, F3) — ¿SE PINTAN LAS COLUMNAS DE DINERO DE ESA TABLA? ────────────────
+  //
+  // Segundo permiso y segunda etiqueta, no un reuso del de arriba: «ver que productos se
+  // mueven» y «ver cuanta plata movieron» son decisiones distintas, y el dia que se cierre la
+  // segunda a las tiendas —decision de producto viva, `design.md §3.4`— es UNA linea en
+  // `ALCANCE_PRODUCTOS_DINERO` sin tocar el volumen.
+  //
+  // Aqui NO se lee ninguna tabla de alcance ni se escribe un literal de rol, por el MISMO
+  // motivo, palabra por palabra, que en el bloque de arriba: la allowlist nominal del guardia
+  // de frontera deja `@/lib/analytics/metrics` fuera de las aristas de esta ruta. La decision
+  // la toma `recorteDePresentacion`, que lee la misma tabla que usa el borde para denegar.
+  //
+  // Y no sustituye a nada: la Server Action DENIEGA igual (R5) y no emite ni una cifra. Un
+  // panel que no se pinta no es un dato que no se sirve.
+  const verDineroProductos = recorte.productosDinero === "visible";
+
   // El contenedor es PRESENTACIÓN y nada más: un encabezado y los N componentes
   // que se le pasen dentro. No cambia qué se carga ni quién lo ve — esas dos
   // decisiones siguen viviendo enteras en el gate y en `esAccesoTotal` de abajo.
@@ -349,7 +365,7 @@ export default async function AnaliticaPage() {
             titulo={TITULO_PRODUCTOS}
             descripcion={DESCRIPCION_PRODUCTOS}
           >
-            <ProductosTabla />
+            <ProductosTabla dinero={verDineroProductos} />
           </ContenedorSeccion>
         </SeccionFiltrable>
       ) : null}

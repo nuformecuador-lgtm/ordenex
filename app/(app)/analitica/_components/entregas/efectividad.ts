@@ -71,6 +71,20 @@ const ENTREGADA = "entregada";
  */
 const RECHAZADA = "rechazada";
 
+/**
+ * FICHA 347 (F1) — los desenlaces que YA tienen columna propia en la tabla de productos.
+ *
+ * Se declara AQUI, junto a los dos literales, y se exporta: la composicion de «Otros
+ * resultados» (`otros-resultados.ts`) necesita saber cuales excluir, y si escribiera su propia
+ * pareja habria DOS reglas para la misma particion. Divergirian el dia que la tabla gane o
+ * pierda una columna de desenlace, y el cubo dejaria de cuadrar con su composicion sin que
+ * nada se pusiera rojo.
+ *
+ * NO es una lista de desenlaces: es la lista de los que tienen COLUMNA. Lo que se deriva de
+ * `DESENLACES` es el resto, que es donde vive el defecto que la 346 reparo.
+ */
+export const DESENLACES_CON_COLUMNA_PROPIA: readonly string[] = [ENTREGADA, RECHAZADA];
+
 export interface EfectividadEntrega {
   /** Ordenes cuyo ultimo desenlace es `entregada`. */
   readonly entregadas: number;

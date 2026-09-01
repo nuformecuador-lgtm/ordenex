@@ -56,12 +56,12 @@ export interface DetalleDineroProductoDeps {
  * el resto de la seccion de entregas y lleva `tienda_id` con EXACTAMENTE una tienda: la de la
  * fila que se abrio.
  *
- * @sin-superficie el backend de la ficha 347 va por delante del frontend: el panel que dispara
- * esta accion (`DineroProductoDetalle`, tarea F5) llega en el bloque de frontend de esta MISMA
- * ficha, contra este contrato. La anotacion se BORRA al cablearlo — esta guardia falla tambien
- * cuando una anotacion sobrevive a su motivo, y con razon: una excepcion que sobrevive a su
- * causa es basura que crece hasta que nadie lee ninguna. Es el mismo camino que recorrio
- * `consultarConteoProductos` en la ficha 345.
+ * ⚠ AQUI VIVIA UN `@sin-superficie`, y se BORRO con la tarea F5 de esta misma ficha: la accion
+ * ya tiene consumidor de produccion. La cadena es
+ * `ProductosTabla` → `renderExpanded` → `DineroProductoDetalle` → `dinero-producto-swr` → aqui.
+ * La anotacion no se deja «por si acaso»: `superficie-de-uso.guardia` falla tambien cuando una
+ * anotacion sobrevive a su motivo, y con razon — una excepcion que sobrevive a su causa es
+ * basura que crece hasta que nadie lee ninguna.
  */
 export async function consultarDetalleDineroProducto(
   raw: unknown,

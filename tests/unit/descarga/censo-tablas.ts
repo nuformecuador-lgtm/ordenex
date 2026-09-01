@@ -195,6 +195,44 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     tablas: [{ nombre: "Productos del rango (analítica)", estado: "con_descarga" }],
   },
   {
+    // FICHA 347 (F5/G5) — EL DETALLE ORDEN POR ORDEN del dinero de UNA fila de la tabla de
+    // arriba. Se despliega desde su fila (`renderExpanded`) y solo existe para el actor que
+    // tiene el dinero concedido.
+    //
+    // ⚠ NACE `fuera`, Y ES UNA DECISION CON MOTIVO, no un olvido — la guardia se vio ROJA
+    // («hay tablas sin registrar: DineroProductoDetalle.tsx #1») antes de escribir esta
+    // entrada, que es lo que obliga a decidir.
+    //
+    // El motivo NO es que sea un recorte de otro archivo —no lo es: ninguna descarga del repo
+    // enseña que ORDENES componen el dinero de un producto—. Es que hoy **no existe la puerta
+    // para servirlo entero**. Este panel pagina en el SERVIDOR, y el borde de la ficha
+    // (`consultarDetalleDineroProducto`) solo tiene modo paginado: no hay un modo COMPLETO
+    // como el que la 344 le dio a su hermano (`verDetalleDeMovimientoCompletoAction`). Con lo
+    // que hay, un archivo saldria o bien truncado a una pagina —lo que R76 y la doctrina de
+    // `filasDesdeResultado` prohiben, «o van todas las filas o no hay archivo»— o bien
+    // reconstruido con N llamadas desde el navegador, que es exactamente la MEDIA MIGRACION
+    // que la feature 184 retiro del arbol y que `adaptador-conjunto.guardia` vigila.
+    //
+    // ⟨Q5⟩ del spec de la ficha pregunta si la descarga del detalle entra, y la respuesta
+    // escrita en `progress/impl_347.md` fue que NO. La consecuencia queda dicha: **R72 no esta
+    // cubierto**. Cablearla cuesta un modo completo en el borde (backend) mas su contrato de
+    // columnas; el dia que exista, esta entrada pasa a `con_descarga` y la guardia obliga a
+    // volver aqui.
+    ruta: "app/(app)/analitica/_components/entregas/DineroProductoDetalle.tsx",
+    tablas: [
+      {
+        nombre: "Órdenes con dinero de un producto (analítica)",
+        estado: "fuera",
+        nota:
+          "el borde de la ficha 347 solo sirve el detalle PAGINADO: no hay modo completo, y " +
+          "sin el un archivo saldria truncado a una pagina o reconstruido con N llamadas desde " +
+          "el navegador --la media migracion que la feature 184 retiro--. Decision de " +
+          "`specs/347-dinero-por-producto/requirements.md` ⟨Q5⟩, registrada en " +
+          "`progress/impl_347.md`. R72 queda SIN cubrir hasta que exista esa puerta",
+      },
+    ],
+  },
+  {
     // Pedido humano del 2026-08-16: «Cierres solicitados (mensajero)» DEJÓ DE SER UNA TABLA.
     // Ver la nota de SEIS BAJAS en la cabecera de este archivo. La que queda es la del día.
     ruta: "app/(app)/cierre-dia/_components/CierreDiaModule.tsx",
