@@ -74,6 +74,15 @@ export const PRODUCTOS_TEXTOS = {
   /** R36 — el aviso que impide leer la columna «Ordenes» como si fuera sumable. */
   aviso:
     "Una orden con varios productos cuenta en cada uno: la suma de la columna Órdenes puede superar el total del rango.",
+  /**
+   * FICHA 346 — la regla de lectura del desglose, dicha en la pantalla.
+   *
+   * Va aqui porque el defecto que esta ficha repara era INVISIBLE: quien sumaba las columnas y
+   * le faltaban seis ordenes no tenia forma de saber si el error estaba en la tabla o en su
+   * cuenta. Con la frase, la igualdad es una promesa comprobable a simple vista.
+   */
+  avisoDesglose:
+    "Cada orden cuenta en un solo grupo: entregadas, rechazadas, otros resultados y en proceso suman la columna Órdenes.",
   vacioTitulo: "Sin productos en el rango",
   vacioDescripcion:
     "Ninguna orden del filtro seleccionado dejó un producto que se pueda interpretar.",
@@ -87,10 +96,20 @@ export const PRODUCTOS_COLUMNAS = {
   ordenes: "Órdenes",
   entregadas: "Entregadas",
   rechazadas: "Rechazadas",
+  /**
+   * FICHA 346 — el cubo que faltaba: los desenlaces que no son entrega ni rechazo.
+   *
+   * SE LLAMA «Otros resultados» y no «Otros», que es como se llama el cubo del anillo de al
+   * lado, porque son cosas OPUESTAS: alli «Otros» son las ordenes SIN desenlace y aqui esas
+   * mismas ordenes se llaman «En proceso». Dos rotulos iguales con significados contrarios en
+   * la misma pantalla se leen uno por el otro. Tampoco enumera («Devueltas y reprogramadas»):
+   * la etiqueta mentiria el dia que el catalogo gane un desenlace mas.
+   */
+  otrosResultados: "Otros resultados",
   enProceso: "En proceso",
   efectividad: "Efectividad de entrega",
   rechazo: "% de rechazo",
-  /** Solo en la vista de teléfono: la celda que apila las siete cifras de arriba. */
+  /** Solo en la vista de teléfono: la celda que apila las ocho cifras de arriba. */
   cifras: "Resultado",
 } as const;
 
@@ -186,16 +205,29 @@ type IdCifra =
   | "ordenes"
   | "entregadas"
   | "rechazadas"
+  | "otrosResultados"
   | "enProceso"
   | "efectividad"
   | "rechazo";
 
-/** El ORDEN de las siete cifras, declarado una vez. Es el de `design.md §7.3`. */
+/**
+ * El ORDEN de las ocho cifras, declarado una vez. Es el de `design.md §7.3` mas el cubo que
+ * anadio la ficha 346.
+ *
+ * LAS CUATRO PRIMERAS DE CONTEO SUMAN LA COLUMNA «Órdenes» —entregadas, rechazadas, otros
+ * resultados y en proceso—, y esa igualdad es el arreglo de la 346: antes eran tres y el
+ * desglose se quedaba corto. La comprueba `tests/components/ProductosTabla.test.tsx` leyendo
+ * las CELDAS pintadas, no la funcion.
+ */
 const ORDEN_CIFRAS: readonly { readonly id: IdCifra; readonly etiqueta: string }[] = [
   { id: "unidades", etiqueta: PRODUCTOS_COLUMNAS.unidades },
   { id: "ordenes", etiqueta: PRODUCTOS_COLUMNAS.ordenes },
   { id: "entregadas", etiqueta: PRODUCTOS_COLUMNAS.entregadas },
   { id: "rechazadas", etiqueta: PRODUCTOS_COLUMNAS.rechazadas },
+  // FICHA 346 — va PEGADA a las dos anteriores y antes de «En proceso»: las tres primeras son
+  // ordenes ya resueltas y la cuarta es trabajo vivo. Leidas en ese orden, la suma de las
+  // cuatro es la columna «Órdenes» sin tener que saltar de sitio.
+  { id: "otrosResultados", etiqueta: PRODUCTOS_COLUMNAS.otrosResultados },
   { id: "enProceso", etiqueta: PRODUCTOS_COLUMNAS.enProceso },
   { id: "efectividad", etiqueta: PRODUCTOS_COLUMNAS.efectividad },
   { id: "rechazo", etiqueta: PRODUCTOS_COLUMNAS.rechazo },
@@ -208,6 +240,7 @@ function cifrasDeFila(fila: FilaProductoDTO): Readonly<Record<IdCifra, string>> 
     ordenes: formatearValor(fila.ordenes, UNIDAD_CONTEO),
     entregadas: formatearValor(e.entregadas, UNIDAD_CONTEO),
     rechazadas: formatearValor(e.rechazadas, UNIDAD_CONTEO),
+    otrosResultados: formatearValor(e.otrosDesenlaces, UNIDAD_CONTEO),
     enProceso: formatearValor(e.enProceso, UNIDAD_CONTEO),
     efectividad: formatearValor(e.efectividad, UNIDAD_PORCENTAJE),
     rechazo: formatearValor(e.tasaRechazo, UNIDAD_PORCENTAJE),
@@ -270,10 +303,10 @@ function columnasEscritorio(conTienda: boolean): Column<FilaProductoDTO>[] {
  *
  * EL DEFECTO QUE ESTO EVITA, medido por las fichas 343 y 344 en Chromium a 390x844: una tabla de
  * cuatro columnas pedia 309 px en un hueco de 284 y el ultimo numero acababa fuera del area
- * visible; en la 344, 674 px fuera. Esta tabla tiene NUEVE columnas y nombres de producto de 62
+ * visible; en la 344, 674 px fuera. Esta tabla tiene DIEZ columnas y nombres de producto de 62
  * caracteres, asi que el problema seria peor por construccion.
  *
- * Se apilan: el producto (con su tienda debajo cuando hay varias) en una celda y las siete
+ * Se apilan: el producto (con su tienda debajo cuando hay varias) en una celda y las ocho
  * cifras, cada una con su etiqueta, en la otra. No se oculta ni un dato y no se abrevia ninguno.
  */
 function columnasTelefono(conTienda: boolean): Column<FilaProductoDTO>[] {
@@ -386,6 +419,8 @@ export function ProductosTabla() {
           de cero seria una cifra inventada. */}
       <div className="flex flex-col gap-1 text-xs text-muted-foreground">
         <p>{PRODUCTOS_TEXTOS.aviso}</p>
+        {/* FICHA 346 — y cómo se leen las columnas del desglose, que desde esta ficha suman. */}
+        <p>{PRODUCTOS_TEXTOS.avisoDesglose}</p>
         {datos === null ? null : (
           <p>{textoUniverso(datos.ordenes, datos.ordenesSinProducto)}</p>
         )}

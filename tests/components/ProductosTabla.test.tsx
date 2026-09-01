@@ -95,8 +95,16 @@ function celdasDeFila(nombre: string | RegExp): string[] {
   return [...(tr?.querySelectorAll("td") ?? [])].map((td) => td.textContent ?? "");
 }
 
+/**
+ * `matchMedia` REAL del entorno, guardada antes de que ningún caso la sustituya: el caso de la
+ * vista de teléfono la reemplaza para forzar `useIsMobile`, y sin reponerla los casos siguientes
+ * heredarían la vista de móvil sin pedirla.
+ */
+const MATCH_MEDIA_REAL = window.matchMedia;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  window.matchMedia = MATCH_MEDIA_REAL;
 });
 afterEach(cleanup);
 
@@ -204,7 +212,7 @@ describe("FICHA 345 · los estados de la lectura (R43/R44/R32)", () => {
 /* ========================================================================== */
 
 describe("FICHA 345 · las columnas (R46)", () => {
-  it("pinta producto, unidades, órdenes, entregadas, rechazadas, en proceso y los dos porcentajes", async () => {
+  it("pinta producto, unidades, órdenes, entregadas, rechazadas, otros resultados, en proceso y los dos porcentajes", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([fila({ producto: "Dr Melaxin", unidades: 19, ordenes: 16 })]),
@@ -218,6 +226,8 @@ describe("FICHA 345 · las columnas (R46)", () => {
       PRODUCTOS_COLUMNAS.ordenes,
       PRODUCTOS_COLUMNAS.entregadas,
       PRODUCTOS_COLUMNAS.rechazadas,
+      // FICHA 346 — el cubo que faltaba: sin él el desglose no sumaba la columna «Órdenes».
+      PRODUCTOS_COLUMNAS.otrosResultados,
       PRODUCTOS_COLUMNAS.enProceso,
       PRODUCTOS_COLUMNAS.efectividad,
       PRODUCTOS_COLUMNAS.rechazo,
@@ -291,13 +301,16 @@ describe("FICHA 345 · las columnas (R46)", () => {
     const esperado = calcularEfectividad(porStatus);
     const celdas = celdasDeFila("Spray Protector");
 
-    // producto, unidades, órdenes, entregadas, rechazadas, en proceso, efectividad, rechazo.
+    // producto, unidades, órdenes, entregadas, rechazadas, otros resultados, en proceso,
+    // efectividad, rechazo.
     expect(celdas).toEqual([
       "Spray Protector",
       "19",
       "16",
       String(esperado.entregadas),
       String(esperado.rechazadas),
+      // FICHA 346 — `Spray Protector` no tiene ningún otro desenlace: un CERO legítimo.
+      String(esperado.otrosDesenlaces),
       String(esperado.enProceso),
       // FRACCIÓN por cien, con un decimal como máximo. 0,5 => «50%»; 0,375 => «37,5%». El
       // locale es el del repo (`MONEDA_LOCALE`, es-CR), que no pone espacio antes del signo.
@@ -329,6 +342,144 @@ describe("FICHA 345 · las columnas (R46)", () => {
     await screen.findByText("Spray Protector");
     // (8 + 6) / 16 = 0,875 => «87,5%». No debe aparecer en ninguna celda.
     expect(screen.queryByText("87,5%")).toBeNull();
+  });
+});
+
+/* ========================================================================== */
+/* FICHA 346 — el desglose de la fila SUMA la columna «Órdenes»               */
+/* ========================================================================== */
+
+describe("FICHA 346 · las columnas de conteo suman la columna «Órdenes»", () => {
+  /**
+   * Los índices de las columnas se BUSCAN por su encabezado, no se escriben: si mañana alguien
+   * reordena las cifras, este caso sigue midiendo lo mismo en vez de sumar celdas ajenas.
+   */
+  function celdaPorEncabezado(nombreFila: string, encabezado: string): number {
+    const encabezados = screen
+      .getAllByRole("columnheader")
+      .map((th) => th.textContent ?? "");
+    const i = encabezados.indexOf(encabezado);
+    expect(i).toBeGreaterThanOrEqual(0);
+    // La tabla es-CR separa los miles con un punto: se quita antes de convertir.
+    return Number((celdasDeFila(nombreFila)[i] ?? "").replace(/\./g, ""));
+  }
+
+  it("`Crema Especial MLX`: 3 + 2 + otros + 13 = 24, la captura del 2026-08-29", async () => {
+    // LA CAPTURA que abrió la ficha: la pantalla decía «Órdenes 24» y debajo 3 entregadas, 2
+    // rechazadas y 13 en proceso. 3 + 2 + 13 = 18, y faltaban seis órdenes que no aparecían en
+    // ninguna columna: las que tienen un desenlace que no es entrega ni rechazo.
+    //
+    // El reparto de esas seis entre `devuelta` y `reprogramada` NO es dato medido —la captura
+    // solo dice que faltan seis— y ninguna aserción depende de él.
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos([
+        fila({
+          producto: "Crema Especial MLX",
+          unidades: 29,
+          ordenes: 24,
+          porStatus: [
+            { status: "entregada", conteo: 3 },
+            { status: "rechazada", conteo: 2 },
+            { status: "devuelta", conteo: 4 },
+            { status: "reprogramada", conteo: 2 },
+            { status: EN_CURSO, conteo: 13 },
+          ],
+        }),
+      ]),
+    });
+    renderTabla();
+
+    await screen.findByText("Crema Especial MLX");
+    const cifra = (encabezado: string) => celdaPorEncabezado("Crema Especial MLX", encabezado);
+
+    expect(cifra(PRODUCTOS_COLUMNAS.entregadas)).toBe(3);
+    expect(cifra(PRODUCTOS_COLUMNAS.rechazadas)).toBe(2);
+    expect(cifra(PRODUCTOS_COLUMNAS.enProceso)).toBe(13);
+    expect(cifra(PRODUCTOS_COLUMNAS.otrosResultados)).toBe(6);
+    // La aserción de la ficha, sobre las CELDAS PINTADAS y no sobre la función: es lo que el
+    // humano suma con el dedo. Antes del arreglo daba 18.
+    expect(
+      cifra(PRODUCTOS_COLUMNAS.entregadas) +
+        cifra(PRODUCTOS_COLUMNAS.rechazadas) +
+        cifra(PRODUCTOS_COLUMNAS.otrosResultados) +
+        cifra(PRODUCTOS_COLUMNAS.enProceso),
+    ).toBe(cifra(PRODUCTOS_COLUMNAS.ordenes));
+    // Y los dos porcentajes de la captura, intactos: 3/24 y 2/24.
+    expect(screen.getByText("12,5%")).toBeInTheDocument();
+    expect(screen.getByText("8,3%")).toBeInTheDocument();
+  });
+
+  it("y también en la vista de TELÉFONO, donde las cifras van apiladas", async () => {
+    // R46 — un teléfono no puede enseñar menos datos que un portátil. Si el arreglo se hubiera
+    // hecho solo en las columnas de escritorio, el móvil seguiría enseñando un desglose que no
+    // suma, y es la vista con la que más se mira esta pantalla.
+    //
+    // `useIsMobile` lee `window.matchMedia`, que el setup deja siempre en `matches: false`. Se
+    // fuerza a `true` en vez de mockear el hook: así el caso comprueba de verdad la rama de
+    // teléfono del componente y no una constante puesta a mano.
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
+
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos([
+        fila({
+          producto: "Crema Especial MLX",
+          unidades: 29,
+          ordenes: 24,
+          porStatus: [
+            { status: "entregada", conteo: 3 },
+            { status: "rechazada", conteo: 2 },
+            { status: "devuelta", conteo: 4 },
+            { status: "reprogramada", conteo: 2 },
+            { status: EN_CURSO, conteo: 13 },
+          ],
+        }),
+      ]),
+    });
+    renderTabla();
+
+    await screen.findByText("Crema Especial MLX");
+
+    // La prueba de que ESTAMOS en la vista de teléfono y no en la de escritorio: dos columnas,
+    // producto y la celda que apila las cifras. Sin esto el caso pasaría también en escritorio.
+    const encabezados = screen.getAllByRole("columnheader").map((th) => th.textContent);
+    expect(encabezados).toEqual([PRODUCTOS_COLUMNAS.producto, PRODUCTOS_COLUMNAS.cifras]);
+
+    // Cada cifra vive en una línea «etiqueta + valor». Se leen las ocho de la pila.
+    const linea = (etiqueta: string) => {
+      const rotulo = screen.getByText(etiqueta);
+      return (rotulo.parentElement?.textContent ?? "").replace(etiqueta, "");
+    };
+
+    expect(linea(PRODUCTOS_COLUMNAS.ordenes)).toBe("24");
+    expect(linea(PRODUCTOS_COLUMNAS.entregadas)).toBe("3");
+    expect(linea(PRODUCTOS_COLUMNAS.rechazadas)).toBe("2");
+    expect(linea(PRODUCTOS_COLUMNAS.otrosResultados)).toBe("6");
+    expect(linea(PRODUCTOS_COLUMNAS.enProceso)).toBe("13");
+    // Y las ocho etiquetas siguen ahí: el teléfono no enseña menos que el portátil.
+    for (const etiqueta of [
+      PRODUCTOS_COLUMNAS.unidades,
+      PRODUCTOS_COLUMNAS.ordenes,
+      PRODUCTOS_COLUMNAS.entregadas,
+      PRODUCTOS_COLUMNAS.rechazadas,
+      PRODUCTOS_COLUMNAS.otrosResultados,
+      PRODUCTOS_COLUMNAS.enProceso,
+      PRODUCTOS_COLUMNAS.efectividad,
+      PRODUCTOS_COLUMNAS.rechazo,
+    ]) {
+      expect(screen.getByText(etiqueta)).toBeInTheDocument();
+    }
   });
 });
 

@@ -3,6 +3,12 @@
 // Cubre R48 (exactamente las columnas declaradas y en el orden declarado) y R51 (`null` es celda
 // vacía, jamás `0`).
 //
+// FICHA 346 — las columnas pasan de NUEVE a DIEZ: entra `otros_resultados`, el cubo de los
+// desenlaces que no son entrega ni rechazo. Sin él el archivo repetía el defecto de la pantalla
+// (`entregadas + rechazadas + en_proceso` se quedaba corto frente a `ordenes`), y en una hoja de
+// cálculo es peor: la fila INVITA a sumarse. Las tres listas de abajo se han reescrito a mano,
+// que es el precio de que sean contrato.
+//
 // ⚠ LOS DOS `toEqual` DE ABAJO LLEVAN EL ESPERADO ESCRITO A MANO, y eso NO es un descuido de
 // estilo: comparar `COLUMNAS.map((c) => c.clave)` contra otro `COLUMNAS.map(...)` es comparar la
 // constante consigo misma y está SIEMPRE verde —una permutación pasaría—. La lección está medida
@@ -38,7 +44,7 @@ const FILA: FilaProductoDTO = {
 };
 
 describe("FICHA 345 · columnas del archivo de productos (R48)", () => {
-  it("las NUEVE claves salen en este orden y no en otro", () => {
+  it("las DIEZ claves salen en este orden y no en otro", () => {
     expect(COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS.map((c) => c.clave)).toEqual([
       "tienda",
       "producto",
@@ -46,13 +52,16 @@ describe("FICHA 345 · columnas del archivo de productos (R48)", () => {
       "ordenes",
       "entregadas",
       "rechazadas",
+      // FICHA 346 — entre «rechazadas» y «en proceso»: las tres primeras son órdenes ya
+      // resueltas y la cuarta es trabajo vivo.
+      "otros_resultados",
       "en_proceso",
       "efectividad",
       "rechazo",
     ]);
   });
 
-  it("los NUEVE encabezados salen en este orden y con la unidad dicha donde hace falta", () => {
+  it("los DIEZ encabezados salen en este orden y con la unidad dicha donde hace falta", () => {
     expect(COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS.map((c) => c.encabezado)).toEqual([
       "Tienda",
       "Producto",
@@ -60,6 +69,9 @@ describe("FICHA 345 · columnas del archivo de productos (R48)", () => {
       "Órdenes",
       "Entregadas",
       "Rechazadas",
+      // FICHA 346 — el MISMO rótulo que la pantalla: el archivo se abre al lado de la tabla y
+      // dos nombres para la misma cifra se leen como dos cifras distintas.
+      "Otros resultados",
       "En proceso",
       // La unidad va en el encabezado porque la celda lleva PUNTOS, no la fracción.
       "Efectividad de entrega (%)",
@@ -76,7 +88,7 @@ describe("FICHA 345 · columnas del archivo de productos (R48)", () => {
 });
 
 describe("FICHA 345 · la proyección de una fila", () => {
-  it("escribe las nueve celdas con las cifras de `calcularEfectividad`", () => {
+  it("escribe las diez celdas con las cifras de `calcularEfectividad`", () => {
     expect(filaDescargaAnaliticaProductos(FILA)).toEqual({
       tienda: "Tienda Uno",
       producto: "Spray Protector",
@@ -84,6 +96,8 @@ describe("FICHA 345 · la proyección de una fila", () => {
       ordenes: 16,
       entregadas: 8,
       rechazadas: 6,
+      // `Spray Protector` no tiene ningún otro desenlace: un CERO legítimo, no una ausencia.
+      otros_resultados: 0,
       en_proceso: 2,
       // 8/16 = 0,5 => 50 puntos. 6/16 = 0,375 => 37,5 puntos.
       efectividad: 50,
@@ -140,5 +154,50 @@ describe("FICHA 345 · la proyección de una fila", () => {
 
     // Y son NÚMEROS, no cadenas: una hoja de cálculo con la columna en texto no suma ni ordena.
     expect(typeof unTercio.efectividad).toBe("number");
+  });
+});
+
+describe("FICHA 346 · la fila del archivo SUMA", () => {
+  /**
+   * La captura del humano (2026-08-29, `Crema Especial MLX`): 24 órdenes y un desglose que se
+   * quedaba en 18. En una hoja de cálculo el defecto es peor que en la pantalla, porque la fila
+   * invita a sumarse: quien lo hiciera concluiría que el archivo está mal.
+   *
+   * El reparto de las seis entre `devuelta` y `reprogramada` NO es dato medido —la captura solo
+   * dice que faltan seis— y ninguna aserción depende de él.
+   */
+  const CREMA: FilaProductoDTO = {
+    ...FILA,
+    producto: "Crema Especial MLX",
+    unidades: 29,
+    ordenes: 24,
+    porStatus: [
+      { status: "entregada", conteo: 3 },
+      { status: "rechazada", conteo: 2 },
+      { status: "devuelta", conteo: 4 },
+      { status: "reprogramada", conteo: 2 },
+      { status: EN_CURSO, conteo: 13 },
+    ],
+  };
+
+  it("los cuatro cubos de la fila dan EXACTAMENTE la celda «ordenes»", () => {
+    const fila = filaDescargaAnaliticaProductos(CREMA);
+
+    // 3 + 2 + 6 + 13 = 24. Antes de la ficha 346 esta suma daba 18.
+    expect(
+      Number(fila.entregadas) +
+        Number(fila.rechazadas) +
+        Number(fila.otros_resultados) +
+        Number(fila.en_proceso),
+    ).toBe(fila.ordenes);
+    expect(fila.otros_resultados).toBe(6);
+  });
+
+  it("y los dos porcentajes de la captura no se mueven", () => {
+    const fila = filaDescargaAnaliticaProductos(CREMA);
+
+    // 3/24 = 12,5 puntos. 2/24 = 8,3 puntos (redondeo determinista a un decimal).
+    expect(fila.efectividad).toBe(12.5);
+    expect(fila.rechazo).toBe(8.3);
   });
 });
