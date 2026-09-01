@@ -619,3 +619,28 @@ Backend de la 347 completo y verificado: una sola lectura, importes STRING de pu
 ninguna fórmula de dinero nueva, las dos invariantes ciertas por construcción y nueve mutaciones
 —incluidas las cuatro obligatorias— con su línea de fallo real; queda pendiente todo el bloque F
 y la corrida de la 345 que sobrevive a M2a, que se reporta como agujero de cobertura.
+
+---
+
+## Corrección del leader (2026-09-01) — M2a SÍ está cubierta, y por dónde
+
+La bitácora de arriba afirma que «la afirmación de `impl_345.md` de que esa mutación deja aquel
+archivo rojo ya no es cierta». **Medido: es al revés.** El leader aplicó la mutación
+(`condicionDeAlcance`, `case "tienda"` → `` Prisma.sql`TRUE` ``) y corrió los tests:
+
+- `tests/unit/analytics/conteo-productos-sql.test.ts` → **rojo**:
+  `× el ALCANCE es la PRIMERA condicion, antes que cualquier faceta del cliente`
+- `tests/unit/analytics/dinero-productos-sql.test.ts` → **rojo**:
+  `× R7 · el ALCANCE es la PRIMERA condicion, antes que cualquier faceta del cliente`
+
+Las dos observaciones son compatibles y hay que leerlas juntas, porque cada una dice una cosa
+distinta: **los tests de INTEGRACIÓN no la cazan** (8/8 verdes) —eso el informe lo acertó, y el
+motivo es real: para un `adminTienda` el recorte viaja también en la faceta, así que hacen falta
+las dos barreras para que se filtre nada—, pero **los tests de SQL sí la cazan**, tanto en el
+camino del volumen como en el del dinero. La conclusión de que no había cobertura fue un salto: se
+midió en un solo tipo de test.
+
+**Lo que queda cierto y merece seguir escrito:** ningún test de INTEGRACIÓN mide el recorte de
+alcance en aislado, y ésa sigue siendo la vía por la que una mutación de una sola barrera pasa
+desapercibida si alguien solo corre integración. La red existe; está en otro sitio del que el
+informe suponía.
