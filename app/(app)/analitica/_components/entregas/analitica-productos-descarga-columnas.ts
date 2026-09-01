@@ -30,8 +30,13 @@ import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import { calcularEfectividad } from "./efectividad";
 
 /**
- * Las NUEVE columnas del archivo, en su orden. Todas salen de `FilaProductoDTO` o de
+ * Las DIEZ columnas del archivo, en su orden. Todas salen de `FilaProductoDTO` o de
  * `calcularEfectividad` sobre su `porStatus`: no hay ni una que exija consultar nada mas.
+ *
+ * FICHA 346 — la decima es `otros_resultados`, y no es una columna «de mas»: sin ella el
+ * archivo repetia el defecto de la pantalla —`entregadas + rechazadas + en_proceso` se quedaba
+ * corto frente a `ordenes`— y ahi es peor, porque una hoja de calculo INVITA a sumar la fila.
+ * Con las cuatro, la suma cuadra siempre.
  *
  * **La tienda va SIEMPRE** (R50), aunque la pantalla haya escondido esa columna por tener una
  * sola tienda en la respuesta. Un fichero que circula tiene que decir de quien es cada fila:
@@ -44,6 +49,10 @@ export const COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS: DescargaColumna[] = [
   { clave: "ordenes", encabezado: "Órdenes" },
   { clave: "entregadas", encabezado: "Entregadas" },
   { clave: "rechazadas", encabezado: "Rechazadas" },
+  // FICHA 346 — el resto de los desenlaces. Mismo rotulo que la pantalla, a proposito: el
+  // archivo se abre al lado de la tabla y dos nombres para la misma cifra se leen como dos
+  // cifras distintas.
+  { clave: "otros_resultados", encabezado: "Otros resultados" },
   { clave: "en_proceso", encabezado: "En proceso" },
   // La UNIDAD va en el encabezado porque la celda lleva PUNTOS porcentuales (37.5), no la
   // fraccion cruda (0.375): sin decirlo, un 37.5 se lee como cualquier cosa. ⟨Q7⟩ del spec
@@ -84,6 +93,7 @@ export function filaDescargaAnaliticaProductos(fila: FilaProductoDTO): DescargaF
     ordenes: fila.ordenes,
     entregadas: efectividad.entregadas,
     rechazadas: efectividad.rechazadas,
+    otros_resultados: efectividad.otrosDesenlaces,
     en_proceso: efectividad.enProceso,
     efectividad: puntosPorcentuales(efectividad.efectividad),
     rechazo: puntosPorcentuales(efectividad.tasaRechazo),

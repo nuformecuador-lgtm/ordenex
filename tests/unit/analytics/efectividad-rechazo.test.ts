@@ -88,11 +88,17 @@ describe("FICHA 345 · calcularEfectividad expone el rechazo (R30)", () => {
     expect(r.efectividadGestion).toBeNull();
   });
 
-  it("las cifras existentes NO se reinventan: la suma de los buckets sigue siendo el total", () => {
-    // Los cinco desenlaces del catálogo más un estado en curso. `enProceso` se define por
-    // NEGACIÓN, así que entregadas + rechazadas + enProceso NO tiene por qué dar el total:
-    // faltan devueltas, reprogramadas e incidentes. Es exactamente lo que se afirma aquí, para
-    // que nadie «arregle» la fórmula creyendo que no cuadra.
+  it("los TRES cubos de la 345 siguen significando lo mismo, y el cuarto es el resto", () => {
+    // Los cinco desenlaces del catálogo más un estado en curso.
+    //
+    // ⚠ ESTE CASO DECÍA OTRA COSA HASTA LA FICHA 346. Afirmaba que
+    // `entregadas + rechazadas + enProceso` NO tenía por qué dar el total —«faltan devueltas,
+    // reprogramadas e incidentes»— y pedía que nadie «arreglara» la fórmula creyendo que no
+    // cuadraba. La aserción era CIERTA y la conclusión estaba mal: esas cuatro órdenes no
+    // sobraban del cálculo, faltaban de la PANTALLA, y el humano las echó en falta sumando la
+    // fila de `Crema Especial MLX`. Los tres cubos originales no han cambiado (por eso el 16
+    // sigue aquí, palabra por palabra); lo que cambió es que ahora existe `otrosDesenlaces` y
+    // con él el reparto se cierra.
     const porStatus = [
       { status: "entregada", conteo: 4 },
       { status: "rechazada", conteo: 3 },
@@ -105,7 +111,11 @@ describe("FICHA 345 · calcularEfectividad expone el rechazo (R30)", () => {
 
     expect(r.total).toBe(20);
     expect(r.enProceso).toBe(9);
+    // NO-REGRESIÓN de la 345: los tres cubos de entonces valen exactamente lo que valían.
     expect(r.entregadas + r.rechazadas + r.enProceso).toBe(16);
+    // FICHA 346: y las cuatro que faltaban están en el cuarto cubo, así que el reparto cuadra.
+    expect(r.otrosDesenlaces).toBe(4);
+    expect(r.entregadas + r.rechazadas + r.otrosDesenlaces + r.enProceso).toBe(20);
     // Y `enProceso` es TODO lo que no es un desenlace, no una lista propia de estados.
     expect(DESENLACES).not.toContain(EN_CURSO);
   });

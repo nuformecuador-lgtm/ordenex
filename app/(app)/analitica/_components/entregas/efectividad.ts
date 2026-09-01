@@ -21,6 +21,36 @@
 // (Y por eso este archivo no escribe NINGUN value del catalogo salvo `entregada`, que es el
 // numerador y no se puede evitar nombrar: `censo-order-status-rename.guardia` vigila que aqui
 // no queden nombres de estados que el catalogo ya retiro.)
+//
+// ─── FICHA 346 — EL DESGLOSE SUMA, Y ANTES NO SUMABA ───────────────────────────────────────
+//
+// El defecto, medido en produccion el 2026-08-29 sobre `Crema Especial MLX`: 24 ordenes, y el
+// desglose de la tabla de productos pintaba 3 entregadas + 2 rechazadas + 13 en proceso = 18.
+// Faltaban SEIS ordenes que no aparecian en ninguna columna. No era un error de conteo: eran
+// las ordenes con uno de los OTROS TRES desenlaces —los que no son `entregada` ni `rechazada`—,
+// que no entraban en los dos cubos por igualdad y tampoco en `enProceso`, porque `enProceso` es
+// «lo que NO tiene desenlace» y ellas si lo tienen. Se evaporaban entre las dos reglas.
+//
+// La reparacion es ADITIVA (misma forma que la ficha 345 con `rechazadas`): la funcion YA sabia
+// cuales eran —lo sabe cualquiera que lea `CON_DESENLACE`— y las tiraba al volver. Ahora las
+// EXPONE en `otrosDesenlaces`, y con eso los cuatro cubos parten el universo entero:
+//
+//     entregadas + rechazadas + otrosDesenlaces + enProceso === total   (SIEMPRE)
+//
+// No es una invariante que alguien tenga que recordar sumando a mano: cada fila del desglose cae
+// en UNO y SOLO UNO de los cuatro cubos, asi que la igualdad se sostiene por construccion. La
+// vigila `tests/unit/analytics/efectividad-suma.test.ts`, que ademas recorre `DESENLACES` de
+// verdad: un desenlace nuevo del catalogo entra en el caso solo.
+//
+// ⚠ Y `otrosDesenlaces` SE DERIVA, no se escribe: es «esta en `DESENLACES` y no es ninguno de
+// los dos que ya tienen cubo propio». Escribir aqui `["devuelta", "reprogramada", "incidente"]`
+// seria exactamente la lista que prohibe el parrafo de arriba: el dia que el catalogo gane un
+// sexto desenlace, ese estado volveria a evaporarse — el mismo defecto, otra vez y en silencio.
+//
+// Los TRES PORCENTAJES NO SE TOCAN (y esa es la otra mitad de la ficha): `efectividad`,
+// `efectividadGestion` y `tasaRechazo` ya usaban el denominador correcto —el universo entero—,
+// asi que el defecto nunca estuvo en ellos. 3/24 = 12,5 % era la cifra buena; lo que faltaba era
+// la columna que explicara de donde salia el 24.
 
 import { DESENLACES } from "@/lib/types/conteo-entregas";
 
@@ -54,9 +84,32 @@ export interface EfectividadEntrega {
    * que es un rechazo, acabaria discrepando de la fila de KPIs de dos secciones mas arriba.
    */
   readonly rechazadas: number;
+  /**
+   * FICHA 346 — Ordenes con un desenlace que NO es `entregada` ni `rechazada`.
+   *
+   * ES EL CUBO QUE FALTABA, y sin el las cifras de la pantalla no sumaban: estas ordenes no
+   * eran ninguno de los dos desenlaces con cubo propio y tampoco eran `enProceso` —que se
+   * define como «sin desenlace» y ellas SI lo tienen—, asi que desaparecian de la lectura.
+   *
+   * SE DERIVA DE `DESENLACES`, nunca de una lista escrita aqui: es «tiene desenlace y no es
+   * uno de los dos que ya se cuentan aparte». Por eso un desenlace nuevo del catalogo cae aqui
+   * solo, en vez de evaporarse — que es el defecto que esta ficha repara.
+   *
+   * NO es «lo que salio mal»: mezcla una devolucion con una reprogramacion, que son cosas
+   * distintas. Es el RESTO del desglose, y su unico compromiso es que el reparto cuadre. Quien
+   * necesite el detalle de cada desenlace lo tiene en el anillo «Detalle gestión» de la misma
+   * pantalla, que los pinta por separado.
+   */
+  readonly otrosDesenlaces: number;
   /** Ordenes que todavia NO tienen desenlace: el mismo cubo «otros» del anillo. */
   readonly enProceso: number;
-  /** El universo del recorte: la suma de todos los buckets. */
+  /**
+   * El universo del recorte: la suma de todos los buckets.
+   *
+   * FICHA 346 — y «todos» son CUATRO desde esta ficha:
+   * `entregadas + rechazadas + otrosDesenlaces + enProceso === total`, siempre y por
+   * construccion, porque cada fila del desglose cae en uno y solo uno.
+   */
   readonly total: number;
   /**
    * Entregadas / total, como FRACCION (0,85 = 85 %) — que es lo que espera
@@ -96,7 +149,19 @@ export interface EfectividadEntrega {
 }
 
 /**
- * Reparte el desglose por status en las cuatro cifras de arriba.
+ * Reparte el desglose por status en las cifras de arriba.
+ *
+ * EL REPARTO ES UNA PARTICION (ficha 346): las cuatro condiciones del bucle de abajo se excluyen
+ * entre si y lo cubren todo, asi que cada orden cae en UN cubo y ninguna se queda fuera. De ahi
+ * sale la igualdad `entregadas + rechazadas + otrosDesenlaces + enProceso === total`, que la
+ * pantalla necesita para que su desglose cuadre con la columna «Órdenes».
+ *
+ * Las cuatro reglas se escriben SUELTAS y no como una cadena `else if`, para que cada una siga
+ * leyendose con su motivo al lado — sobre todo la de `enProceso`, que es la regla por NEGACION
+ * que explica la cabecera. Lo que sostiene la particion es que `ENTREGADA` y `RECHAZADA` son
+ * dos de los `DESENLACES`: si alguna vez dejaran de serlo, la igualdad se rompe. No se confia en
+ * que alguien lo recuerde — lo mide `tests/unit/analytics/efectividad-suma.test.ts` sobre las
+ * 16.384 combinaciones de conteos que se pueden armar con el catalogo de verdad.
  *
  * OJO AL DENOMINADOR, que es la decision de esta funcion: la efectividad se mide sobre el
  * universo ENTERO del recorte, incluidas las ordenes que todavia estan en proceso. No sobre
@@ -110,6 +175,7 @@ export function calcularEfectividad(
 ): EfectividadEntrega {
   let entregadas = 0;
   let rechazadas = 0;
+  let otrosDesenlaces = 0;
   let enProceso = 0;
   let total = 0;
 
@@ -117,6 +183,17 @@ export function calcularEfectividad(
     total += fila.conteo;
     if (fila.status === ENTREGADA) entregadas += fila.conteo;
     if (fila.status === RECHAZADA) rechazadas += fila.conteo;
+    // FICHA 346 — el RESTO de los desenlaces: lo que YA se resolvio y no es ninguno de los dos
+    // que tienen cubo propio. Es el cubo que faltaba, y por eso el desglose no sumaba.
+    //
+    // ⚠ SE DERIVA DE `DESENLACES` («esta en la lista y no es uno de los dos de arriba») y no se
+    // escribe: una lista literal aqui dejaria fuera al sexto desenlace que el catalogo gane, y
+    // ese estado se evaporaria en silencio — que es EXACTAMENTE el defecto que esta ficha
+    // repara, repetido. Las cuatro reglas se leen sueltas a proposito, cada una con su motivo;
+    // que formen una particion —y por tanto que los cuatro cubos sumen `total`— lo comprueba
+    // `tests/unit/analytics/efectividad-suma.test.ts` recorriendo `DESENLACES` de verdad.
+    if (CON_DESENLACE.has(fila.status) && fila.status !== ENTREGADA && fila.status !== RECHAZADA)
+      otrosDesenlaces += fila.conteo;
     // Por NEGACION: lo que no es ninguno de los cinco desenlaces sigue su curso.
     if (!CON_DESENLACE.has(fila.status)) enProceso += fila.conteo;
   }
@@ -124,6 +201,7 @@ export function calcularEfectividad(
   return {
     entregadas,
     rechazadas,
+    otrosDesenlaces,
     enProceso,
     total,
     efectividad: total > 0 ? entregadas / total : null,
