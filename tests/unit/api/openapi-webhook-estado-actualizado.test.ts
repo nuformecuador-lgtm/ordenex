@@ -430,9 +430,11 @@ describe("256/R24 — el webhook orden.estado_actualizado esta publicado en el c
         expect(parametro.required).toBe(true);
       }
     }
-    // La firma dice sobre QUE se calcula el HMAC: sin eso el integrador no puede verificarla.
-    expect(webhookTs.post.description).toContain("HMAC-SHA256");
-    expect(webhookTs.post.description).toContain("${timestamp}.${cuerpo}");
+    // ⏳ 2026-09-01 — AQUI se comprobaba que la descripcion del evento dijera sobre QUE se calcula
+    // el HMAC (`HMAC-SHA256` de `${timestamp}.${cuerpo}`). Esa prosa se retiro con todas las
+    // descripciones de nivel operacion (peticion explicita), y con ella la unica explicacion
+    // publicada de como VERIFICAR la firma: el contrato ya solo declara que las dos cabeceras
+    // viajan, no como usarlas. Lo que sigue medible son las cabeceras, arriba.
   });
 
   it("256/R24: paridad TS↔YAML — la seccion `webhooks` publicada es espejo EXACTO del objeto TS", () => {

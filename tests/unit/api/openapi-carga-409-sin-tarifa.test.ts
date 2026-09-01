@@ -28,7 +28,6 @@ const yaml = fs.readFileSync(YAML_PATH, "utf8");
 const lineasYaml = yaml.split(/\r?\n/);
 
 const PATH_CARGA = "/api/ordenes/api-key/carga";
-const PATH_COTIZACION = "/api/ordenes/api-key/cotizacion";
 
 /** Sangria (nº de espacios) de una linea; `null` si esta en blanco. */
 function indent(linea: string): number | null {
@@ -49,36 +48,15 @@ function bloqueDePath(nombre: string): string[] {
   return out;
 }
 
-/**
- * La prosa del endpoint TAL COMO SE PUBLICA en el yaml (bloque `description: |-` a sangria 6).
- *
- * Se aisla a proposito del resto del path: el `requestBody` de `/carga` trae un ejemplo con
- * `monto_cobrar: "40.00"`, asi que un `not.toContain("0.00")` sobre el path entero seria un
- * falso rojo permanente. Lo que el contrato no puede volver a decir es el CERO POR FALTA DE
- * TARIFA, y ese vive en la descripcion.
- */
-function descripcionYamlDePath(nombre: string): string {
-  const bloque = bloqueDePath(nombre);
-  const inicio = bloque.findIndex((l) => l === "      description: |-");
-  if (inicio === -1) throw new Error(`El path ${nombre} no tiene bloque description en el yaml`);
-  const out: string[] = [];
-  for (let i = inicio + 1; i < bloque.length; i++) {
-    const ind = indent(bloque[i]);
-    if (ind !== null && ind <= 6) break;
-    out.push(bloque[i]);
-  }
-  return out.join("\n");
-}
-
+// ⏳ 2026-09-01 — AQUI VIVIA `descripcionYamlDePath`, y con ella la mitad de este archivo: las
+// comprobaciones sobre la PROSA de `/carga` y `/cotizacion` (que ya no prometen un `0.00` por
+// falta de tarifa, que explican el 409 y sus DOS motivos). Las descripciones de nivel operacion
+// se retiraron del contrato por peticion explicita, en los dos artefactos, asi que no queda texto
+// publicado que medir. Lo que SI se conserva —y es lo que de verdad consume un integrador— son las
+// respuestas, los ejemplos y los literales de las constantes.
 const cargaTs = openApiSpec.paths[PATH_CARGA].post as {
-  description: string;
   responses: Record<string, unknown>;
 };
-const descripcionCargaTs = cargaTs.description;
-const descripcionCargaYaml = descripcionYamlDePath(PATH_CARGA);
-
-const descripcionCotizacionTs: string = openApiSpec.paths[PATH_COTIZACION].post.description;
-const descripcionCotizacionYaml = descripcionYamlDePath(PATH_COTIZACION);
 
 describe("274/R31 — /carga declara el 409 nuevo, en los DOS artefactos", () => {
   it("el objeto TS lista `409` entre las respuestas de la carga", () => {
@@ -107,37 +85,9 @@ describe("274/R31 — /carga declara el 409 nuevo, en los DOS artefactos", () =>
     expect(bloque.map((l) => l.trim())).toContain(`message: "${MSG_CARGA_SIN_TARIFA}"`);
   });
 
-  it("la descripción de /carga ya NO contiene la cadena `0.00`", () => {
-    // El cero por falta de tarifa era una promesa de dinero. Ya no se emite: si vuelve al
-    // documento, vuelve la contradiccion entre lo publicado y lo que la API hace.
-    expect(descripcionCargaTs).not.toContain("0.00");
-    expect(descripcionCargaYaml).not.toContain("0.00");
-  });
-
-  it("la descripción de /carga explica el 409 y la distinción con el lote que no llegó a resolver", () => {
-    for (const descripcion of [descripcionCargaTs, descripcionCargaYaml]) {
-      expect(descripcion).toContain("409");
-      // R30: un lote entero sin cobertura geografica NO es un 409. Sin esta linea, el
-      // integrador diagnostica «me falta tarifa» cuando lo que le falta es geografia.
-      expect(descripcion).toMatch(/validación, duplicidad o cobertura geográfica/);
-      expect(descripcion).toMatch(/sigue\s+siendo `200`/);
-    }
-  });
 });
 
 describe("274/R38 (mitad de contrato) — la fila en error se publica con la clave `tarifa`", () => {
-  it("las descripciones de las DOS APIs citan la clave y el literal de la constante", () => {
-    for (const descripcion of [
-      descripcionCargaTs,
-      descripcionCargaYaml,
-      descripcionCotizacionTs,
-      descripcionCotizacionYaml,
-    ]) {
-      expect(descripcion).toContain('"tarifa"');
-      expect(descripcion).toContain(MSG_FILA_SIN_TARIFA);
-    }
-  });
-
   // 2026-08-31: la fila degradada ya no vive en `filas`, sino en la lista hermana `errores`.
   // Lo que esta guardia mide no cambia: el ejemplo PUBLICADO tiene que enseñar la clave
   // `tarifa` con el literal de la constante, no con una copia re-escrita.
@@ -163,32 +113,6 @@ describe("274/R38 (mitad de contrato) — la fila en error se publica con la cla
   });
 });
 
-describe("274/R31 — /cotizacion deja de declarar una asimetría que ya no existe", () => {
-  it("su descripción ya NO contiene la cadena `costoEnvio: \"0.00\"`", () => {
-    expect(descripcionCotizacionTs).not.toContain('costoEnvio: "0.00"');
-    expect(descripcionCotizacionYaml).not.toContain('costoEnvio: "0.00"');
-    // Ni el cero suelto: la frase entera se fue, no solo el nombre del campo.
-    expect(descripcionCotizacionTs).not.toContain("0.00");
-    expect(descripcionCotizacionYaml).not.toContain("0.00");
-  });
-
-  it("su descripción ya NO describe el 409 como «la tienda no tiene tarifa vigente»", () => {
-    for (const descripcion of [descripcionCotizacionTs, descripcionCotizacionYaml]) {
-      expect(descripcion).not.toMatch(
-        /Si la tienda dueña de la key no tiene una tarifa vigente, la respuesta es \*\*409\*\*/,
-      );
-      expect(descripcion).toMatch(/NINGUNA de las filas que llegan a la\s+resolución de tarifa/);
-    }
-  });
-
-  it("la descripción declara el SEGUNDO motivo por el que una fila se queda sin precio", () => {
-    for (const descripcion of [descripcionCotizacionTs, descripcionCotizacionYaml]) {
-      expect(descripcion).toMatch(/DOS motivos distintos/);
-      expect(descripcion).toMatch(/no resuelve tarifa vigente/);
-      // 2026-08-31: el bloque `totales` se retiró, así que el motivo ya no se cuenta contra
-      // `filasExcluidas` sino contra `conError`, que es el contador que sobrevive.
-      expect(descripcion).toMatch(/cuentan en `conError`/);
-      expect(descripcion).not.toMatch(/filasExcluidas/);
-    }
-  });
-});
+// ⏳ 2026-09-01 — AQUI VIVIA el describe «274/R31 — /cotizacion deja de declarar una asimetría que
+// ya no existe», tres tests sobre la prosa de `/cotizacion`. Se fue con las descripciones de nivel
+// operacion (ver la nota de arriba): no queda documento que contradecir.

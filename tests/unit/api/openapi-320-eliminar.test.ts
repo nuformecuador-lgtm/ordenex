@@ -29,7 +29,7 @@ const spec = openApiSpec as unknown as {
     string,
     Record<
       string,
-      { summary: string; operationId: string; description: string; responses: Record<string, unknown> }
+      { summary: string; operationId: string; responses: Record<string, unknown> }
     >
   >;
   components: {
@@ -133,18 +133,10 @@ describe("FICHA 320 — el DELETE esta publicado en el objeto TS", () => {
     expect(r["409"]).toEqual({ $ref: "#/components/responses/Conflict" });
   });
 
-  it("la descripcion nombra los CUATRO estados eliminables, uno por uno", () => {
-    // El integrador tiene que poder saber CUANDO puede borrar sin leer nuestro codigo. Y se
-    // comprueba contra la fuente unica (`ESTADOS_ELIMINABLES`), no contra una lista copiada: si
-    // manana la lista cambiara, esta descripcion se queda vieja y este test lo dice.
-    for (const estado of ESTADOS_ELIMINABLES) {
-      expect(operacion.description).toContain(estado);
-    }
-    // Y dice que la etiqueta ya impresa NO impide borrar, que es el cambio de la 319.
-    expect(operacion.description).toMatch(/etiqueta/i);
-    // Y que el identificador puede ser la remision (el caso de la orden sin guia).
-    expect(operacion.description).toContain("num_remision");
-  });
+  // ⏳ 2026-09-01 — AQUI VIVIA «la descripcion nombra los CUATRO estados eliminables, uno por uno»,
+  // que era como el integrador sabia CUANDO puede borrar sin leer nuestro codigo. La prosa se
+  // retiro del contrato (peticion explicita). La lista sigue publicada, pero solo como el `enum`
+  // del `estado` en `EliminacionResponse`, que es lo que comprueba el test siguiente.
 
   it("el schema EliminacionResponse publica las TRES claves, con `numGuia` nullable", () => {
     const schema = spec.components.schemas.EliminacionResponse;
@@ -182,11 +174,6 @@ describe("FICHA 320 — el .yaml publicado dice lo MISMO", () => {
 
   it("el 200 apunta al mismo schema EliminacionResponse", () => {
     expect(bloque.join("\n")).toContain("$ref: \"#/components/schemas/EliminacionResponse\"");
-  });
-
-  it("nombra los cuatro estados eliminables en su descripcion", () => {
-    const texto = bloque.join("\n");
-    for (const estado of ESTADOS_ELIMINABLES) expect(texto).toContain(estado);
   });
 
   it("el schema EliminacionResponse del yaml es espejo del TS", () => {
@@ -280,15 +267,17 @@ describe("FICHA 320 — la coleccion de Postman publica el DELETE y sigue siendo
     }
   });
 
-  it("cubre los dos identificadores (guia y remision) y los dos rechazos (404 y 409)", () => {
-    const nombres = peticionesPlanas(coleccion.item)
-      .filter((i) => i.request?.method === "DELETE")
-      .map((i) => i.name)
-      .join(" | ");
-    expect(nombres).toMatch(/remisi/i);
-    expect(nombres).toMatch(/gu[ií]a/i);
-    expect(nombres).toContain("404");
-    expect(nombres).toContain("409");
+  // ⏳ 2026-09-01 — AQUI se exigia que el DELETE tuviera CUATRO peticiones en la coleccion: los dos
+  // identificadores (guia y remision) y los dos rechazos (404 y 409). La coleccion se rehizo con
+  // una convencion distinta y explicita —UNA peticion por endpoint, solo el camino feliz, sin
+  // carpetas de casos—, asi que el aserto se cambia por el que corresponde a esa convencion: que el
+  // DELETE esta, y una sola vez. Los rechazos siguen documentados en el contrato y en el CHANGELOG.
+  it("el DELETE aparece exactamente UNA vez (una peticion por endpoint)", () => {
+    const borrados = peticionesPlanas(coleccion.item).filter((i) => i.request?.method === "DELETE");
+    expect(borrados).toHaveLength(1);
+    // Y apunta a la orden reservada para eso, no a la que usan las peticiones anteriores: correr la
+    // coleccion entera no puede dejar sin sujeto a la mitad de sus peticiones.
+    expect(borrados[0].request?.url.raw).toContain("{{numRemisionDesechable}}");
   });
 });
 

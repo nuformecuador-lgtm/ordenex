@@ -140,14 +140,11 @@ describe("155/R42 — el contrato del canal por API key tras el retiro", () => {
     expect(ofensoras).toEqual([]);
   });
 
-  it("la descripcion del endpoint de carga anuncia el estado nuevo y el cambio incompatible", () => {
-    const descripcion = openApiSpec.paths["/api/ordenes/api-key/carga"].post.description;
-    expect(descripcion).toContain(VALUE_NACIMIENTO_API);
-    expect(descripcion).toMatch(/CAMBIO INCOMPATIBLE/);
-    // El .yaml es espejo textual: la misma nota debe estar publicada.
-    expect(yaml).toMatch(/CAMBIO INCOMPATIBLE/);
-    expect(yaml).toContain(VALUE_NACIMIENTO_API);
-  });
+  // ⏳ 2026-09-01 — AQUI VIVIA «la descripcion del endpoint de carga anuncia el estado nuevo y el
+  // cambio incompatible». Era el UNICO sitio del contrato donde el CAMBIO INCOMPATIBLE de la 155
+  // estaba anunciado en palabras; se fue con las descripciones de nivel operacion (peticion
+  // explicita). El estado nuevo sigue publicado en los enums y en los ejemplos, que son los dos
+  // tests que rodean a esta nota.
 
   it("los ejemplos publicados NO siguen mostrando el estado inicial viejo", () => {
     const ejemplo = JSON.stringify(
