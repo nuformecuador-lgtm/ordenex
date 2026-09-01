@@ -24,9 +24,13 @@ import { monedaConfig } from "@/lib/config/moneda";
 
 import { quitarComentarios } from "../fixtures/sin-comentarios";
 import { ConteoEntregasAnillo } from "@/app/(app)/analitica/_components/entregas/ConteoEntregasAnillo";
+import { ProductosTabla } from "@/app/(app)/analitica/_components/entregas/ProductosTabla";
+import { FiltroEntregasProvider } from "@/app/(app)/_components/filtro-entregas";
+import { ToastProvider } from "@/providers/ToastProvider";
 import { TEXTO_PROHIBIDO } from "@/app/(app)/analitica/_components/operativo/textos";
 import { refrescarCacheAnalitica } from "@/lib/actions/analitica-refrescar";
 import { consultarConteoEntregas } from "@/lib/actions/conteo-entregas";
+import { consultarConteoProductos } from "@/lib/actions/conteo-productos";
 import type { ConteoEntregasDTO } from "@/lib/types/conteo-entregas";
 
 vi.mock("@/lib/actions/analitica-refrescar", () => ({
@@ -35,9 +39,15 @@ vi.mock("@/lib/actions/analitica-refrescar", () => ({
 vi.mock("@/lib/actions/conteo-entregas", () => ({
   consultarConteoEntregas: vi.fn(),
 }));
+// FICHA 345 (T7.5) — la septima lectura viva de la seccion. Se mockea para poder AFIRMAR sobre
+// sus llamadas: el punto del caso de mas abajo es cuantas veces se consulta, no que consulte.
+vi.mock("@/lib/actions/conteo-productos", () => ({
+  consultarConteoProductos: vi.fn(),
+}));
 
 const refrescarMock = vi.mocked(refrescarCacheAnalitica);
 const consultarMock = vi.mocked(consultarConteoEntregas);
+const productosMock = vi.mocked(consultarConteoProductos);
 
 /** Dos instantes distintos: la lectura que ya estaba y la que trae el refresco. */
 const LECTURA_VIEJA = "2026-08-17T18:30:00.000Z";
@@ -205,5 +215,60 @@ describe("Actualizar analítica — qué hace el clic", () => {
 
     await screen.findByText(textoSello(LECTURA_VIEJA));
     await waitFor(() => expect(consultarMock).toHaveBeenCalledTimes(1));
+  });
+});
+
+/* ==========================================================================
+ * FICHA 345 (T7.5, R42) — el refresco alcanza también a la tabla de productos
+ * ========================================================================== */
+
+describe("Actualizar analítica — la séptima lectura entra sola (ficha 345)", () => {
+  // R42. El botón NO conoce esta lectura y no tiene por qué: revalida por PREFIJO
+  // (`mutate((clave) => clave[0] === CLAVE_TABLERO)`). El caso mide justo eso: que la clave de
+  // productos comparte prefijo. Escribir el prefijo a mano en `productos-swr.ts` en vez de
+  // importarlo dejaría la tabla fuera del refresco el día que la constante cambie, en silencio
+  // — el usuario pulsaría «Actualizar» y esta tabla seguiría enseñando lo de hace un cuarto de
+  // hora, que es exactamente la mentira que este botón existe para evitar.
+  it("pulsar «Actualizar» vuelve a consultar la tabla de productos", async () => {
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos(LECTURA_VIEJA) });
+    productosMock.mockResolvedValue({
+      status: "ok",
+      datos: {
+        filas: [
+          {
+            tiendaId: "t1",
+            tienda: "Tienda Uno",
+            producto: "Dr Melaxin",
+            unidades: 3,
+            ordenes: 3,
+            porStatus: [{ status: "entregada", conteo: 3 }],
+          },
+        ],
+        ordenes: 3,
+        ordenesSinProducto: 0,
+        lastSync: LECTURA_VIEJA,
+      },
+    });
+
+    render(
+      <ToastProvider>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+          <FiltroEntregasProvider>
+            <ActualizarAnalitica />
+            <ProductosTabla />
+          </FiltroEntregasProvider>
+        </SWRConfig>
+      </ToastProvider>,
+    );
+
+    await screen.findByText("Dr Melaxin");
+    await waitFor(() => expect(productosMock).toHaveBeenCalledTimes(1));
+
+    await userEvent.click(screen.getByRole("button", { name: new RegExp(ETIQUETA_ACTUALIZAR) }));
+
+    await waitFor(() => expect(productosMock).toHaveBeenCalledTimes(2));
+    // Y sigue siendo el MISMO botón que invalida la caché del servidor primero: sin eso, la
+    // segunda consulta se serviría de la entrada de 15 minutos y devolvería lo mismo.
+    expect(refrescarMock).toHaveBeenCalledTimes(1);
   });
 });

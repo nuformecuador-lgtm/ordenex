@@ -568,8 +568,23 @@ function unaArista(codigoFuente: string): AristaAnalytics {
 
 const PRESENTACION_REL = "lib/analytics/presentacion.ts";
 
-/** Los dos unicos campos que el contrato de D5 admite. */
-const CAMPOS_DE_PRESENTACION = ["alcance", "facetas"];
+/**
+ * Los unicos campos que el contrato de D5 admite.
+ *
+ * FICHA 345 (2026-09-01): entra un TERCERO, `productos`. NO es una relajacion y se puede
+ * comprobar leyendo el predicado de abajo, que NO se ha tocado: sigue exigiendo que cada campo
+ * sea una etiqueta (o una lista de etiquetas), y `productos: "visible" | "oculta"` lo es. Por eso
+ * se declaro como enum de dos valores y no como `boolean` — un `boolean` habria obligado a
+ * ensanchar `esSoloEtiquetas`, y ese predicado es justo lo que mantiene los campos de DATOS
+ * fuera de este contrato. La autocomprobacion de mas abajo sigue poniendo rojos los seis campos
+ * de datos, uno por uno.
+ *
+ * Por que el campo existe: la ruta `/analitica` no puede importar `@/lib/analytics/metrics`
+ * —esta fuera de la allowlist nominal de arriba, con su caso sintetico— asi que la decision de
+ * la ficha 345 «se pinta o no se pinta la seccion de productos» se resuelve DONDE este guardia
+ * dice que se resuelven las decisiones de presentacion, y baja a la pagina como una etiqueta.
+ */
+const CAMPOS_DE_PRESENTACION = ["alcance", "facetas", "productos"];
 
 /** `export type X = ...;` de un archivo, para resolver alias locales (p. ej. `Faceta`). */
 function aliasDeTipo(codigo: string): Record<string, string> {
@@ -627,7 +642,9 @@ function violacionesDelRetorno(codigoFuente: string): string[] {
 
   const nombres = campos.map((c) => c.nombre).sort();
   if (JSON.stringify(nombres) !== JSON.stringify([...CAMPOS_DE_PRESENTACION].sort())) {
-    violaciones.push(`los campos son [${nombres.join(", ")}] y deben ser [alcance, facetas]`);
+    violaciones.push(
+      `los campos son [${nombres.join(", ")}] y deben ser [${[...CAMPOS_DE_PRESENTACION].sort().join(", ")}]`,
+    );
   }
   for (const campo of campos) {
     if (!esSoloEtiquetas(campo.tipo, alias)) {
@@ -640,7 +657,7 @@ function violacionesDelRetorno(codigoFuente: string): string[] {
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 describe("Feature 133 (R20, R21) — lo que cruza la frontera son ETIQUETAS, no datos", () => {
-  it("RecortePresentacion declara `alcance` y `facetas`, y nada mas", () => {
+  it("RecortePresentacion declara `alcance`, `facetas` y `productos`, y nada mas", () => {
     const violaciones = violacionesDelRetorno(fs.readFileSync(path.join(REPO_ROOT, PRESENTACION_REL), "utf8"));
     expect(
       violaciones,
@@ -651,7 +668,7 @@ describe("Feature 133 (R20, R21) — lo que cruza la frontera son ETIQUETAS, no 
     ).toEqual([]);
   });
 
-  it("y en EJECUCION devuelve exactamente esas dos claves, sin un solo uuid", () => {
+  it("y en EJECUCION devuelve exactamente esas claves, sin un solo uuid", () => {
     const ZONA = "11111111-1111-4111-8111-111111111111";
     const USUARIO = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const actores: readonly (ActorAnalitica | null)[] = [
@@ -683,7 +700,8 @@ describe("Feature 133 (R20, R21) — lo que cruza la frontera son ETIQUETAS, no 
   it("autocomprobacion: un campo de DATOS en la interfaz sale ROJO", () => {
     const cabecera = 'export type Faceta = "zona" | "tienda" | "mensajero";\n';
     const cuerpoLimpio = `  readonly alcance: "global" | "zona" | "tienda" | "mensajero" | "denegado";
-  readonly facetas: readonly Faceta[];`;
+  readonly facetas: readonly Faceta[];
+  readonly productos: "visible" | "oculta";`;
 
     // El modulo tal y como esta hoy, reducido: verde.
     expect(violacionesDelRetorno(`${cabecera}export interface RecortePresentacion {\n${cuerpoLimpio}\n}\n`)).toEqual([]);

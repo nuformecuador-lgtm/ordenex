@@ -96,6 +96,14 @@ vi.mock("@/lib/actions/filtros-ordenes", () => ({
 vi.mock("@/lib/actions/usuarios-por-rol", () => ({
   listarUsuariosPorRol: vi.fn(async () => ({ status: "forbidden" as const })),
 }));
+// FICHA 345 — la sección de productos es otro trozo del árbol de CLIENTE que la página monta
+// (`ProductosTabla` → SWR → Server Action). Mismo trato y mismo motivo que los tres de arriba:
+// mockearla es lo que evita que jsdom intente arrancar Prisma al montarla. La página sigue sin
+// importar `lib/actions` — quien invoca ésta es el componente, no `page.tsx`, y el censo del
+// código fuente de más abajo lo sigue afirmando.
+vi.mock("@/lib/actions/conteo-productos", () => ({
+  consultarConteoProductos: vi.fn(async () => ({ status: "forbidden" as const })),
+}));
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const cargarMock = vi.mocked(cargarTableroFinanciero);
@@ -1159,6 +1167,93 @@ describe.skip("Feature 133 (T6.5, R23) — para un alcance acotado no aparece na
       expect(cuerpo).not.toContain(ajeno.nombre);
       expect(html).not.toContain(ajeno.nombre);
       expect(html).not.toContain(ajeno.id);
+    }
+  });
+});
+
+/* ==========================================================================
+ * FICHA 345 (R5, T7.3/T7.4) — quién ve la SECCIÓN DE PRODUCTOS
+ * ========================================================================== */
+
+/** El título de la sección que monta la ficha 345. Es también su etiqueta de búsqueda. */
+const TITULO_SECCION_PRODUCTOS = "Detalle - Productos";
+
+/**
+ * Los roles a los que `ALCANCE_PRODUCTOS` NO les dice `prohibido`. Escrito A MANO, como las
+ * tres listas de la 133 y por el mismo motivo: derivar la expectativa de la misma constante
+ * que se juzga pasaría por tautología. El contrapeso está en el caso de abajo, que exige que
+ * los cinco roles lectores queden repartidos entre esta lista y la siguiente.
+ */
+const ROLES_QUE_VEN_PRODUCTOS = ["maestro", "admin", "adminTienda"] as RolValue[];
+
+/** Los que entran a `/analitica` y NO deben ver ni el encabezado de esa sección. */
+const ROLES_SIN_PRODUCTOS = ["adminSatelite"] as RolValue[];
+
+/**
+ * ⚠ EL `adminSatelite` DE ESTE BLOQUE LLEVA `zonaId`, Y ES LA MITAD DEL CASO.
+ *
+ * Sin él, `resolverAlcance` lo DENIEGA (R13 de la 122: un satélite sin zona asignada no tiene
+ * sobre qué calcular) y el recorte cae por su rama `denegado`, que oculta la sección por otro
+ * motivo. MEDIDO: con el actor sin zona, mutar la regla de `ALCANCE_PRODUCTOS` a «siempre
+ * visible» dejaba este archivo EN VERDE — el caso pasaba por la puerta equivocada. Con la zona
+ * puesta, el satélite resuelve alcance `zona` y la única razón de que no vea la sección es la
+ * tabla de la ficha 345, que es lo que aquí se quiere medir.
+ */
+const ZONA_DEL_SATELITE = "22222222-2222-4222-8222-222222222222";
+
+function actorDeAnalitica(rol: RolValue) {
+  return rol === "adminSatelite"
+    ? { usuarioId: "u1", rol, zonaId: ZONA_DEL_SATELITE }
+    : { usuarioId: "u1", rol };
+}
+
+describe("FICHA 345 (R5) — la sección de productos se monta por alcance, no por rol escrito", () => {
+  it.each(ROLES_QUE_VEN_PRODUCTOS)("el rol `%s` SÍ ve la sección de productos", async (rol) => {
+    resolveActorMock.mockResolvedValue(actorDeAnalitica(rol));
+    await renderPage();
+
+    // Ancla anti-vacío: la página se pintó de verdad antes de afirmar sobre lo que trae.
+    afirmarCuerpoPintado();
+    expect(screen.getByText(TITULO_SECCION_PRODUCTOS)).toBeInTheDocument();
+  });
+
+  it.each(ROLES_SIN_PRODUCTOS)(
+    "el rol `%s` entra a la página pero NO ve la sección: ni encabezado, ni estado vacío",
+    async (rol) => {
+      resolveActorMock.mockResolvedValue(actorDeAnalitica(rol));
+      await renderPage();
+
+      // ENTRA —esto no es un `notFound()`— y ve el resto de la analítica.
+      afirmarCuerpoPintado();
+
+      // Y de la sección de productos no queda NADA. No es un `EmptyState` en su lugar: una
+      // sección visible y vacía le anuncia a un rol denegado que ese panel existe (mismo
+      // criterio que la región financiera del shell).
+      expect(screen.queryByText(TITULO_SECCION_PRODUCTOS)).toBeNull();
+      const cuerpo = document.body.textContent ?? "";
+      expect(cuerpo).not.toContain("Productos");
+      expect(cuerpo).not.toContain("Unidades");
+    },
+  );
+
+  it("los CINCO roles lectores quedan repartidos: ninguno sin decisión", () => {
+    // El contrapeso de las dos listas de arriba. Sin esto, quitar un rol de las dos dejaría
+    // su caso sin medir y la suite seguiría verde.
+    const repartidos = [...ROLES_QUE_VEN_PRODUCTOS, ...ROLES_SIN_PRODUCTOS] as string[];
+    // `mensajero` es el quinto lector del catálogo, y en esta pantalla ni siquiera entra
+    // (`ROLES_SIN_ENTRADA`): su denegación la mide el gate de la ruta, no esta sección.
+    expect([...repartidos, "mensajero"].sort()).toEqual([...ROLES_ANALITICA].sort());
+  });
+
+  it("la página no escribe ningún literal de rol para decidirlo", () => {
+    // T7.3. La regla por rol vive en `ALCANCE_PRODUCTOS` (`lib/analytics/metrics.ts`) y se
+    // consulta; un `if (rol === "adminSatelite")` aquí sería la segunda regla del mismo
+    // permiso, y dos reglas para un permiso divergen.
+    const ruta = join(process.cwd(), "app", "(app)", "analitica", "page.tsx");
+    const fuente = readFileSync(ruta, "utf-8");
+    for (const rol of TODOS_LOS_ROLES) {
+      expect(fuente).not.toContain(`"${rol}"`);
+      expect(fuente).not.toContain(`'${rol}'`);
     }
   });
 });
