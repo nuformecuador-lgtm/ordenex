@@ -22,6 +22,7 @@ import { HoyGestionBarras } from "./_components/entregas/HoyGestionBarras";
 import { CicloVidaKpi } from "./_components/entregas/CicloVidaKpi";
 import { DevolucionesPorCausaAnillo } from "./_components/entregas/DevolucionesPorCausaAnillo";
 import { KpisEfectividad } from "./_components/entregas/KpisEfectividad";
+import { ProductosTabla } from "./_components/entregas/ProductosTabla";
 import { cargarTableroFinanciero } from "./_components/financiero/cargar";
 // import { cargarKpisFinancieros, kpisDenegados } from "./_components/finanzas/cargar-kpis"; // sección de finanzas comentada (2026-08-18)
 // import { KpisFinancieros } from "./_components/finanzas/KpisFinancieros"; // sección de finanzas comentada (2026-08-18)
@@ -101,6 +102,12 @@ import { PanelesOperativos } from "./_components/operativo/PanelesOperativos";
 // la busqueda siguiera siendo «Entregas», teclear lo que se ve en pantalla no encontraria
 // nada. `coincideSeccion` busca por subcadena, asi que «entregas» a secas sigue valiendo.
 const TITULO_ENTREGAS = "Detalle - Movimiento de las ordenes";
+// FICHA 345 — el titulo de la seccion de productos. Mismo criterio que el de arriba: el rotulo
+// visible ES la etiqueta que registra el campo de secciones, asi que teclear lo que se ve en
+// pantalla la encuentra. `coincideSeccion` busca por subcadena: «productos» a secas vale.
+const TITULO_PRODUCTOS = "Detalle - Productos";
+const DESCRIPCION_PRODUCTOS =
+  "Que productos se movieron en el rango y con que resultado. Responde a los mismos filtros de arriba.";
 const TITULO_OPERATIVO = "Indicadores operativos";
 // Los dos rótulos de la sección de finanzas, comentados con ella (2026-08-18). Se conservan
 // aquí —y no dentro del bloque comentado— para que reactivarla sea descomentar en un sitio y
@@ -130,6 +137,30 @@ export default async function AnaliticaPage() {
   // strings y un enum. Se calcula después del gate: para quien no entra, no hay
   // nada que recortar.
   const recorte = recorteDePresentacion(actor);
+
+  // ─── FICHA 345 (R5, T7.3) — ¿SE MONTA LA SECCIÓN DE PRODUCTOS? ────────────────────────────
+  //
+  // La decisión ya viene RESUELTA en el recorte de presentación, que es quien sabe «qué control
+  // se dibuja» para este actor. Aquí no se escribe ni un literal de rol ni se lee ninguna tabla
+  // de alcance: la regla vive en `ALCANCE_PRODUCTOS` (`lib/analytics/metrics.ts`), la MISMA que
+  // usa el borde para denegar, y `recorteDePresentacion` la traduce a una etiqueta.
+  //
+  // ⚠ POR QUÉ NO SE LEE `ALCANCE_PRODUCTOS` DIRECTAMENTE AQUÍ, que es lo que escribió
+  // `specs/345-analitica-productos/design.md §7.2`: esta ruta NO puede importar
+  // `@/lib/analytics/metrics`. `tablero-operativo-frontera.guardia.test.ts` lleva una allowlist
+  // NOMINAL de las aristas de esta ruta hacia `lib/analytics/` y ese módulo está fuera, con un
+  // caso sintético que lo declara infractor. No se relaja el guardia: se pone la decisión donde
+  // el guardia dice que viven las decisiones de presentación. Mismo criterio, y con las mismas
+  // palabras, que el bloque de arriba sobre el prefetch: **el guardia manda sobre la prosa del
+  // diseño**.
+  //
+  // `oculta` ⇒ NO SE RENDERIZA NADA: ni encabezado, ni `EmptyState` en su lugar (R5). Mismo
+  // criterio, y por el mismo motivo, que la región financiera del shell: una sección visible y
+  // vacía sugiere una cifra que no existe y le anuncia a un rol denegado que ese panel existe.
+  //
+  // Y esto NO sustituye a la defensa: la Server Action deniega igual para esos roles (R4). Un
+  // panel que no se pinta no es un dato que no se sirve.
+  const verProductos = recorte.productos === "visible";
 
   // El contenedor es PRESENTACIÓN y nada más: un encabezado y los N componentes
   // que se le pasen dentro. No cambia qué se carga ni quién lo ve — esas dos
@@ -301,6 +332,27 @@ export default async function AnaliticaPage() {
           </div>
         </ContenedorSeccion>
       </SeccionFiltrable>
+      {/* FICHA 345 — LA SECCIÓN DE PRODUCTOS, hermana de la de entregas y DENTRO del mismo
+          proveedor de filtro (R40): si colgara de fuera, no sería descendiente de quien filtra
+          y la barra de arriba no la movería.
+
+          ⚠ POR QUÉ AQUÍ Y NO EN EL SLOT `operativo` DEL SHELL, que es donde uno la pondría:
+          las regiones «Filtros», «Tablero operativo» y «Tablero financiero» de `AnaliticaShell`
+          están COMENTADAS y hoy sólo se pinta `destacado`. Un panel colgado del catálogo
+          operativo no se vería, y parecería un fallo de datos en vez de un slot apagado.
+
+          Se monta como `SeccionFiltrable` propia —y no dentro del contenedor de entregas— para
+          que el campo de secciones pueda esconderla sola: es otra pregunta, sobre otro grano. */}
+      {verProductos ? (
+        <SeccionFiltrable titulo={TITULO_PRODUCTOS}>
+          <ContenedorSeccion
+            titulo={TITULO_PRODUCTOS}
+            descripcion={DESCRIPCION_PRODUCTOS}
+          >
+            <ProductosTabla />
+          </ContenedorSeccion>
+        </SeccionFiltrable>
+      ) : null}
     </FiltroEntregasProvider>
   );
 

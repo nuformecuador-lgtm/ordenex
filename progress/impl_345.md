@@ -530,3 +530,238 @@ interface FilaProductoDTO {
 7. **Los supuestos del leader sobre ⟨Q1⟩, ⟨Q2⟩, ⟨Q6⟩ están implementados tal cual**: el punto
    final se quita (`Base Dr.` → `Base Dr`), no hay vista agregada entre tiendas, no hay alias.
    ⟨Q7⟩ (porcentaje en puntos con un decimal) es del frontend y no lo he tocado.
+
+---
+---
+
+# PARTE 2 — EL FRONTEND (B6, B7, B8)
+
+> Escrito por el `frontend_dev` el 2026-09-01, **añadido al final** de la bitácora del backend, que
+> no se toca. Rama `feature/345-analitica-productos`, sobre `76616410`.
+
+## 10 — Qué se construyó
+
+| Archivo | Qué es | Tarea |
+| --- | --- | --- |
+| `app/(app)/analitica/_components/entregas/efectividad.ts` | `+ rechazadas`, `+ tasaRechazo` | T6.1 |
+| `tests/unit/analytics/efectividad-rechazo.test.ts` | los dos campos nuevos, con las cifras medidas | T6.2 |
+| `app/(app)/analitica/_components/entregas/productos-swr.ts` | clave SWR (`[CLAVE_TABLERO, "conteo-productos", filtro]`) y fetcher | T7.1 |
+| `app/(app)/analitica/_components/entregas/ProductosTabla.tsx` | la tabla, sus estados, su paginación y su descarga | T7.2 / T8.3 |
+| `app/(app)/analitica/_components/entregas/analitica-productos-descarga-columnas.ts` | las nueve columnas y la proyección | T8.1 |
+| `app/(app)/analitica/page.tsx` | monta la sección dentro del `FiltroEntregasProvider` | T7.3 |
+| `lib/analytics/presentacion.ts` | `+ productos: "visible" / "oculta"` en `RecortePresentacion` | T7.3 (ver §11) |
+| `lib/actions/conteo-productos.ts` | **se retira** la anotación `@sin-superficie` | T7.2 |
+| `tests/components/ProductosTabla.test.tsx` (21 casos) | los cuatro estados, columnas, orden, paginación, rótulo | T7.4 |
+| `tests/components/descarga/ProductosDescarga.test.tsx` (5 casos) | R47 / R49 / R50 / R52 | T8.4 |
+| `tests/unit/descarga/analitica-productos-descarga-columnas.test.ts` (8 casos) | los dos `toEqual` a mano, `null` = celda vacía, redondeo | T8.2 |
+| `tests/components/AnaliticaPage.test.tsx` | `+ 6 casos` de R5 | T7.4 |
+| `tests/components/ActualizarAnalitica.test.tsx` | `+ 1 caso` de R42 (SWR por prefijo) | T7.5 |
+| `tests/unit/analytics/presentacion.test.ts` | `+ 8 casos` del campo nuevo | T7.3 |
+| `tests/unit/descarga/censo-tablas.ts` + `cobertura-tablas.guardia.test.ts` | la tabla nueva, `con_descarga` | T8.3 |
+| `tests/unit/analytics/tablero-operativo-frontera.guardia.test.ts` | el tercer campo del contrato de presentación | §11 |
+
+**Los censos que se movieron**, con el número de partida MEDIDO (la guardia se vio fallar antes de
+tocar nada — «hay tablas sin registrar: `…/ProductosTabla.tsx #1`»):
+
+| Constante | Antes | Después |
+| --- | --- | --- |
+| `TOTAL_ARCHIVOS_CON_DATATABLE` | 31 | **32** |
+| `TOTAL_INSTANCIAS_DATATABLE` | 31 | **32** |
+| `totalCensado` (instancias + tabla cruda) | 32 | **33** |
+| tablas `con_descarga` | 21 | **22** |
+| tablas `fuera` | 11 | **11** (sin cambio) |
+
+Es la **primera `<DataTable>` de `/analitica`**: hasta hoy esa pantalla eran sólo gráficas.
+
+## 11 — La desviación del diseño, y por qué
+
+`design.md §7.2` dice que `page.tsx` decida con `ALCANCE_PRODUCTOS[rol] !== "prohibido"`. **Eso no
+pasa los guardias vivos.** Escrito así, la página se pone roja por dos sitios:
+
+```
+tablero-operativo-frontera.guardia.test.ts
+  x el tablero no reimplementa alcance ni identidad
+    -> app/(app)/analitica/page.tsx
+  x toda arista de la ruta hacia lib/analytics esta escrita en la allowlist, con sus nombres
+    -> app/(app)/analitica/page.tsx: importa "@/lib/analytics/alcance", que NO esta en la allowlist nominal
+    -> app/(app)/analitica/page.tsx: importa "@/lib/analytics/metrics", que NO esta en la allowlist nominal
+```
+
+La allowlist nominal de esa ruta tiene **dos** entradas (`types` y `presentacion`) y hay un caso
+sintético que declara `import { listarMetricas } from "@/lib/analytics/metrics";` **infractor**.
+Las tres salidas posibles:
+
+1. **Ensanchar la allowlist** con `metrics` y `alcance`. Es relajar el guardia, y además rompe su
+   propia aserción `expect(modulos).toEqual(["…/types", "…/presentacion"])`. Descartada.
+2. **Razonar en la página sobre `recorte.alcance`** (`"global" | "tienda"` = visible). Sería una
+   SEGUNDA regla del mismo permiso, que diverge el día que `ALCANCE_PRODUCTOS` cambie. Descartada.
+3. **La elegida:** la decisión baja a `lib/analytics/presentacion.ts` —el módulo cuya única razón
+   de ser es «qué control se dibuja»— como un campo más del recorte, `productos: "visible" |
+   "oculta"`, derivado de `ALCANCE_PRODUCTOS`. Cero aristas nuevas, una sola fuente de la regla, y
+   la página no escribe ni un literal de rol.
+
+`"visible" | "oculta"` y **no un `boolean`**: el bloque (b) de ese mismo guardia exige que cada
+campo del contrato sea una etiqueta o una lista de etiquetas, y esa exigencia es justo lo que
+mantiene los campos de DATOS fuera. Un enum cumple la regla sin tocarla; un `boolean` habría
+obligado a ensanchar `esSoloEtiquetas`. Lo único que se edita del guardia es
+`CAMPOS_DE_PRESENTACION` (`["alcance","facetas"]` mas `"productos"`), con su motivo escrito.
+
+Precedente literal, ya en la cabecera de `page.tsx`: **«el guardia manda sobre la prosa del
+diseño»**.
+
+## 12 — La verificación en el NAVEGADOR (T9.2)
+
+Chromium, dev server local en `:3000` (los DOS que había vivos devolvían **500** en `/`, `/login` y
+`/analitica`; se pararon, se borró `.next` y se levantó **uno**). Usuarios QA sembrados en la base
+local con `scripts/seed-usuarios-qa.ts` — no existían, y por eso el login fallaba con «Correo o
+contraseña inválidos».
+
+**La base local, medida antes de interpretar nada** (sonda de sólo lectura, ya borrada):
+**67 órdenes vivas · 41 textos de producto distintos · UNA sola tienda** (`Tania` =
+`tienda.qa@ordenex.test`, dueña de las 67). La pantalla dice `1-25 de 37`: 41 textos crudos dan 37
+productos tras el parser.
+
+### 12.1 · 390 x 844 (teléfono)
+
+- Encabezados: `["Producto", "Resultado"]` — la vista de dos columnas.
+- `innerText` de la primera fila: `Unidades 10 · Órdenes 6 · Entregadas 2 · Rechazadas 1 ·
+  En proceso 3 · Efectividad de entrega 33,3% · % de rechazo 16,7%`. Cuadra: 2+1+3 = 6 = órdenes;
+  2/6 = 33,3 %; 1/6 = 16,7 %.
+- Caja de la celda numérica más a la derecha: **x = 196, ancho = 153, borde derecho = 349** sobre
+  una ventana de **390** = **dentro del área visible**.
+- Tabla 308 px, sección 342 px. **Desborde horizontal de la sección: 0 px. Del documento: 0 px.**
+- Nombre de producto más largo pintado: `Spray Analgésico Dental l Alivio del dolor de muelas`
+  (52 caracteres), entero y sin truncar.
+
+**Ajuste hecho POR ESTA MEDICIÓN.** La primera versión ponía cada línea de cifra en
+`whitespace-nowrap` entera: «Efectividad de entrega: 33,3%» fijaba **204 px** de mínimo para la
+columna de cifras y dejaba el nombre del producto en **104 px**, partiendo palabras por la mitad
+(`Hemorroide/s`). Dejando que la ETIQUETA se parta y manteniendo `nowrap` sólo en la cifra:
+**producto 104 -> 155 px**, cifras **204 -> 153 px**, y el desborde sigue en 0.
+
+### 12.2 · 1440 x 950 (escritorio)
+
+- Encabezados: `["Producto","Unidades","Órdenes","Entregadas","Rechazadas","En proceso",
+  "Efectividad de entrega","% de rechazo"]` — ocho, **sin «Tienda»**, que es lo correcto: la
+  respuesta trae UNA sola tienda.
+- Celdas de la primera fila: `10 · 6 · 2 · 1 · 3 · 33,3% · 16,7%`.
+- Última columna numérica: **x = 1294, ancho = 105, borde derecho = 1399** sobre 1440 = dentro.
+- Tabla 1102 px, sección 1136 px. **Desborde: 0 px** en la sección y en el documento.
+
+### 12.3 · El nombre de 62 caracteres de PRODUCCIÓN
+
+La base local no tiene ninguno. Se inyectó en el DOM la cadena real
+`BASE DE COLAGENO | MAQUILLAJE HIDRATANTE | BASE DE ALTA COBERTURA` (65 caracteres con las barras)
+y se volvió a medir:
+
+| Viewport | última celda | desborde sección | desborde documento |
+| --- | --- | --- | --- |
+| 390 x 844 | x=145, ancho=204, derecha=349 (< 390) | **0 px** | **0 px** |
+| 1440 x 950 | x=1304, ancho=95, derecha=1399 (< 1440) | **0 px** | **0 px** |
+
+`wrap-anywhere` en el nombre es lo que lo sostiene: reduce el `min-content` de esa columna, que es
+la medida que aquí manda (misma lección que la 344).
+
+### 12.4 · Los roles y la descarga
+
+| Comprobación | Resultado |
+| --- | --- |
+| `adminSatelite` entra a `/analitica` | 200, ve «Detalle - Movimiento de las ordenes» |
+| `adminSatelite` ve la sección de productos | **NO**: ni el título, ni la palabra «Productos», ni «Unidades», ni el aviso. R5 medido en el navegador. |
+| `adminTienda` (`tienda.qa`) la ve | Sí, con las mismas 67 órdenes — **no es una fuga**: esa cuenta ES la dueña de las 67 |
+| Botón «Descargar Productos» | presente; descarga `productos-2026-09-01.xlsx`, 8.293 bytes |
+| El archivo, abierto con exceljs | hoja `Productos`, **38 filas** (1 cabecera + 37), **9 columnas** |
+| Cabecera del archivo | `Tienda · Producto · Unidades · Órdenes · Entregadas · Rechazadas · En proceso · Efectividad de entrega (%) · Rechazo (%)` |
+| R50 — Tienda en el archivo con la columna oculta en pantalla | **sí**: la pantalla no la pinta y el archivo trae `"Tania"` en cada fila |
+| Primera fila del archivo | `Tania · Spray Herbal… · 10 · 6 · 2 · 1 · 3 · 33.3 · 16.7` — puntos, no fracción, y NÚMEROS (no texto) |
+| Un cero legítimo | `Polvo Destapador…` sale con `Rechazo (%) = 0`, no celda vacía |
+| Errores de consola | ninguno en ninguna de las corridas |
+| OTP para `adminTienda` | **no lo pidió** (coherente con `AUTH_RISK_THRESHOLD` alto) |
+
+## 13 — Las mutaciones (seis, todas revertidas)
+
+| # | Mutación | Test que la caza | Línea de fallo REAL |
+| --- | --- | --- | --- |
+| M1 | **Reordenar las filas en el cliente**: `filas` pasa a `[...filas].sort((a,b) => a.producto.localeCompare(b.producto))` | `ProductosTabla.test.tsx › las pinta en el orden EXACTO en que llegaron` | `AssertionError: expected [ 'Alfa', 'Mu', 'Zeta' ] to deeply equal [ 'Zeta', 'Alfa', 'Mu' ]` |
+| M2 | La columna «Tienda» se decide por NOMBRE: `new Set(filas.map(f => f.tienda))` | `ProductosTabla.test.tsx › la decisión es por CONTENIDO: se cuenta por tiendaId, no por nombre` | `AssertionError: expected false to be true // Object.is equality` |
+| M3 | `tasaRechazo: total > 0 ? rechazadas/total : 0` (el `null` del universo vacío pasa a `0`) | `efectividad-rechazo.test.ts › con el universo VACÍO la tasa es null` **y** `analitica-productos-descarga-columnas.test.ts › R51` | `AssertionError: expected +0 to be null` (las dos) |
+| M4 | Permutadas las dos últimas columnas del archivo (`rechazo` antes que `efectividad`) | `analitica-productos-descarga-columnas.test.ts` (3 casos) | `AssertionError: expected [ 'tienda', 'producto', …(7) ] to deeply equal [ 'tienda', 'producto', …(7) ]` |
+| M5 | Un `forbidden` se degrada al estado vacío (`case "forbidden": return null`) | `ProductosTabla.test.tsx › R44 — forbidden enseña su mensaje y NO una tabla vacía` | `TestingLibraryElementError: Unable to find an element with the text: No tienes acceso a esta metrica…` |
+| M6 | `seccionDeProductos` ignora `ALCANCE_PRODUCTOS` y devuelve siempre `"visible"` | `presentacion.test.ts` (3 casos) + `AnaliticaPage.test.tsx` (1) | `AssertionError: expected 'visible' to be 'oculta'` · `AssertionError: expected <div data-slot="card-title" …> to be null` |
+
+### 13.1 · M6 SOBREVIVIÓ la primera vez, y eso arregló un test que mentía
+
+Con M6 aplicada, `presentacion.test.ts` se puso rojo pero **`AnaliticaPage.test.tsx` siguió VERDE**
+(`40 passed`). El motivo: la fixture del `adminSatelite` era `{ usuarioId: "u1", rol: "adminSatelite" }`
+**sin `zonaId`**, y un satélite sin zona lo DENIEGA `resolverAlcance` (R13 de la 122). El recorte
+caía por su rama `denegado`, que oculta la sección por otro motivo — el caso de R5 pasaba **por la
+puerta equivocada** y no medía la tabla de esta ficha.
+
+Corregido: la fixture de ese bloque lleva `zonaId`, así que el satélite resuelve alcance `zona` y la
+única razón de que no vea la sección es `ALCANCE_PRODUCTOS`. Con la fixture arreglada, M6 **sí** cae
+en `AnaliticaPage.test.tsx`. Queda escrito en el propio archivo, junto a la fixture.
+
+## 14 — Verificación y estado
+
+- `pnpm typecheck` — **verde**.
+- `pnpm lint` — **0 errores**, 144 warnings, ninguno en archivos de esta ficha (todos preexistentes).
+- `pnpm exec vitest run tests/unit/analytics tests/unit/descarga tests/unit/guards tests/components`
+  — **7.640 pasan, 1 falla**: `superficie-de-uso.guardia › ninguna Server Action … es inalcanzable`
+  con `lib/actions/tarifas.ts:67 obtenerTarifa`. Es el **rojo heredado de `dev`** ya anotado en §9
+  de esta bitácora por el backend; `consultarConteoProductos` **no** aparece ahí, que es la prueba de
+  que retirar su `@sin-superficie` fue correcto (el componente la importa y le da superficie).
+
+## 15 — Trazabilidad del frontend (completa el mapa de §8)
+
+| R | Test | Estado |
+| --- | --- | --- |
+| R5 | `presentacion.test.ts` › «adminSatelite: la sección de productos queda "oculta"» y «mensajero: …» · `AnaliticaPage.test.tsx` › «el rol `adminSatelite` entra a la página pero NO ve la sección» | OK |
+| R28 | `ProductosTabla.test.tsx` › «R28 — la fila pinta EXACTAMENTE lo que devuelve `calcularEfectividad`» | OK |
+| R29 | `efectividad-rechazo.test.ts` › «R29 — el denominador INCLUYE las órdenes que siguen en proceso» | OK |
+| R30 | `efectividad-rechazo.test.ts` › «reparte entregadas, rechazadas y en proceso…», «el caso MEDIDO `Spray Protector`…», «el caso MEDIDO `Bálsamo Tensor`…» | OK |
+| R32 | `ProductosTabla.test.tsx` › «R32 — sin ninguna fila hay un estado vacío EXPLÍCITO» | OK |
+| R33 (cliente) | `ProductosTabla.test.tsx` › «las pinta en el orden EXACTO en que llegaron» **(mutación M1 = rojo)** | OK |
+| R36 | `ProductosTabla.test.tsx` › «pinta el aviso de que una orden con varios productos cuenta en cada uno» | OK |
+| R40 | `ProductosTabla.test.tsx` › «la primera consulta va SIN filtro y SIN ninguna clave de más» | OK |
+| R41 | `ProductosTabla.test.tsx` › «R41 — cambiar el filtro vuelve a consultar, con el filtro nuevo» | OK |
+| R42 (SWR) | `ActualizarAnalitica.test.tsx` › «pulsar «Actualizar» vuelve a consultar la tabla de productos» | OK |
+| R43 | `ProductosTabla.test.tsx` › «R43 — mientras carga NO pinta ceros: el universo del recorte no aparece» | OK |
+| R44 | `ProductosTabla.test.tsx` › «R44 — `forbidden`/`unauthenticated` enseña su mensaje», «un filtro inválido…», «si la lectura revienta…» **(M5 = rojo)** | OK |
+| R45 | `ProductosTabla.test.tsx` › «con 30 productos enseña 25…», «la segunda página enseña las cinco restantes», «sin filas no hay barra» | OK |
+| R46 | `ProductosTabla.test.tsx` › «pinta producto, unidades, órdenes…», «con UNA sola tienda la columna Tienda NO se pinta», «con DOS tiendas aparece» **(M2 = rojo)** | OK |
+| R47 | `ProductosDescarga.test.tsx` › «R47 — la tabla ofrece su control y el archivo trae una fila por producto» | OK |
+| R48 | `analitica-productos-descarga-columnas.test.ts` › «las NUEVE claves salen en este orden» y «los NUEVE encabezados…» **(M4 = rojo)** | OK |
+| R49 | `analitica-productos-descarga-columnas.test.ts` › «R49 — el uuid de la tienda NO llega al archivo» · `columnas-sensibles.guardia` (existente) | OK |
+| R50 | `ProductosDescarga.test.tsx` › «R50 — el archivo lleva la TIENDA aunque la pantalla haya ocultado esa columna» | OK |
+| R51 | `analitica-productos-descarga-columnas.test.ts` › «R51 — sin órdenes los dos porcentajes son CELDA VACÍA» **(M3 = rojo)** | OK |
+| R52 | `ProductosDescarga.test.tsx` › «R52 — las filas salen de la pantalla: la acción NO se vuelve a llamar» | OK |
+
+**Con esto los 58 requisitos tienen un caso que existe y se ejecuta.**
+
+## 16 — Lo que quedó DUDOSO
+
+1. **La desviación de `design.md §7.2` está sin aprobar por el humano.** La decisión de dónde vive
+   `verProductos` (§11) la tomé yo contra dos guardias vivos. Toca `lib/analytics/presentacion.ts`,
+   que estrictamente está fuera de «capa de presentación de UI» aunque su nombre y su docstring
+   digan exactamente eso. **Si el leader prefiere otra salida, la alternativa es ensanchar la
+   allowlist nominal — y eso sí es relajar un guardia.**
+2. **La columna «Tienda» NO se pudo ver aparecer en el navegador.** La base local tiene UNA sola
+   tienda con órdenes, así que el camino «dos tiendas = la columna aparece» sólo está cubierto por
+   `ProductosTabla.test.tsx`. En producción hoy `Crema Especial MLX` está en 2 tiendas, así que es
+   un camino real que no he visto con mis ojos.
+3. **La descarga se abrió, pero con `exceljs` desde un script, no con Excel.** La tarea T9.2 pide
+   «abrirlo»; lo que puedo afirmar es la estructura (38 filas x 9 columnas, tipos numéricos), no
+   cómo lo pinta una hoja de cálculo real.
+4. **⟨Q7⟩ sigue sin responder** y el archivo va con la opción del diseño (puntos porcentuales con un
+   decimal: `33.3`). Si se prefiere la fracción cruda, es una línea en `puntosPorcentuales` y dos
+   aserciones.
+5. **El tamaño de página inicial (25) y las opciones (10/25/50/100) los elegí yo.** ⟨Q3⟩ no da
+   número. El tope real de la descarga NO es mío: sale de `descargaConfig.MAX_FILAS` (5.000) a
+   través del adaptador común `filasLocales`.
+6. **La fila de teléfono es alta**: siete cifras apiladas por producto. Con 25 filas la página mide
+   ~7.170 px de alto. Es legible y no recorta nada, pero es mucho scroll; si molesta, la salida
+   natural es bajar el tamaño de página por defecto en móvil, y eso es una decisión de producto.
+7. **Sembré los usuarios QA en la base LOCAL** (`scripts/seed-usuarios-qa.ts`) porque no existían y
+   sin ellos no había forma de entrar. Base `localhost:5432/ordenex`, verificada con
+   `prisma migrate status` antes de tocarla. Y **paré los dos dev servers que había vivos** (los dos
+   devolvían 500 en todas las rutas) y dejé **uno** en `:3000`, con su log en `dev.log`.

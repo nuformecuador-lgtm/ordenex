@@ -44,6 +44,16 @@ const RECHAZADA = "rechazada";
 export interface EfectividadEntrega {
   /** Ordenes cuyo ultimo desenlace es `entregada`. */
   readonly entregadas: number;
+  /**
+   * Ordenes cuyo ultimo desenlace es `rechazada`: el destinatario dijo que no.
+   *
+   * FICHA 345 (T6.1) — ESTE CAMPO NO ES UNA CIFRA NUEVA: la funcion YA lo contaba (era el
+   * sumando que separa `efectividadGestion` de `efectividad`) y lo tiraba al volver. Aqui
+   * solo se EXPONE. El motivo de exponerlo en vez de recontarlo en la pantalla de productos
+   * es el de siempre en este archivo: una segunda cuenta de rechazos, con su propia idea de
+   * que es un rechazo, acabaria discrepando de la fila de KPIs de dos secciones mas arriba.
+   */
+  readonly rechazadas: number;
   /** Ordenes que todavia NO tienen desenlace: el mismo cubo «otros» del anillo. */
   readonly enProceso: number;
   /** El universo del recorte: la suma de todos los buckets. */
@@ -68,6 +78,21 @@ export interface EfectividadEntrega {
    * no hay efectividad que medir, y un «0 %» afirmaria que se fallo cada gestion.
    */
   readonly efectividadGestion: number | null;
+  /**
+   * FICHA 345 (T6.1) — `rechazadas / total`, como FRACCION (0,375 = 37,5 %).
+   *
+   * MISMO DENOMINADOR que sus dos hermanas de arriba, y no «sobre las ya cerradas»: las tres
+   * se leen en la misma fila y con denominadores distintos su comparacion no significaria
+   * nada. El precio, dicho: con media operacion en reparto esta tasa sale mas baja de lo que
+   * acabara siendo, exactamente igual que la efectividad sale mas baja.
+   *
+   * `null` con el universo VACIO —no `0`— por el mismo motivo que sus hermanas: sin ordenes
+   * no hay tasa que medir, y un «0 %» ahi afirma que no rechazaron ninguna. Ojo a la
+   * diferencia que esto conserva, que es la unica razon de que el tipo sea `number | null`:
+   * `0` es «29 ordenes y ni un rechazo» (el caso medido de `Balsamo Tensor`) y `null` es «no
+   * hubo ordenes». Son dos hechos distintos y la pantalla los pinta distinto.
+   */
+  readonly tasaRechazo: number | null;
 }
 
 /**
@@ -98,11 +123,14 @@ export function calcularEfectividad(
 
   return {
     entregadas,
+    rechazadas,
     enProceso,
     total,
     efectividad: total > 0 ? entregadas / total : null,
     // MISMO denominador que la anterior, a proposito: las dos se leen una al lado de la otra en
     // la misma fila, y con denominadores distintos su diferencia no significaria nada.
     efectividadGestion: total > 0 ? (entregadas + rechazadas) / total : null,
+    // Y el mismo denominador otra vez (ficha 345): es el UNIVERSO del recorte, no las cerradas.
+    tasaRechazo: total > 0 ? rechazadas / total : null,
   };
 }

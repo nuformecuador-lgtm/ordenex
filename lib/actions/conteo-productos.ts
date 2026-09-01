@@ -65,11 +65,10 @@ function construirServicio(now: () => Date): ConteoProductosService {
  * desconocida es un `validation_error` y NO un extra inocuo: **el alcance nunca entra por el
  * filtro** (R8).
  *
- * @sin-superficie La ficha 345 se implementa backend-primero (`tasks.md`: B0-B5 antes que B6-B8),
- * asi que la pantalla que la dispara —`ProductosTabla` via `productos-swr.ts`, tarea T7.1/T7.2— aun
- * no existe. ES TRANSITORIA Y CADUCA: en cuanto el componente importe esta accion, la guardia
- * exigira retirar esta anotacion, y el que la retire NO tiene que pensarlo (la suite se pone roja
- * sola). Si la 345 se cerrara sin frontend, esta accion sobra entera y se borra con su vertical.
+ * SUPERFICIE (ficha 345, B7): la dispara `ProductosTabla` a traves de `productos-swr.ts`. Aqui
+ * vivio una anotacion `@sin-superficie` mientras el backend iba por delante del frontend; se
+ * retiro al llegar el componente, que es justo lo que esa guardia exige —una excepcion que
+ * sobrevive a su motivo es basura que crece hasta que nadie lee ninguna—.
  */
 export async function consultarConteoProductos(
   raw: unknown,

@@ -138,8 +138,16 @@ const ARBOLES_UI = ["app", "components"] as const;
 // Esta guardia se vio fallar primero con «hay tablas sin registrar: …DetalleMiMovimientoCierre.tsx
 // #1, …DetalleMovimientoCierre.tsx #1» antes de tocar estos números, que es la convención escrita
 // en este propio archivo. Censo total: 32 = 31 `<DataTable>` + 1 cruda.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 31;
-const TOTAL_INSTANCIAS_DATATABLE = 31;
+// FICHA 345 (T8.3): 31 → 32 archivos y 31 → 32 instancias. La de más es la tabla de PRODUCTOS de
+// `/analitica` (`analitica/_components/entregas/ProductosTabla.tsx`), y es la PRIMERA `<DataTable>`
+// que monta esa pantalla —hasta hoy sus paneles eran todos gráficas—. Nace `con_descarga`: lo que
+// enseña (unidades, órdenes y efectividad por producto) no lo produce ninguna otra descarga del
+// repo, así que no es un segundo archivo del mismo hecho. Esta guardia se vio fallar primero con
+// «hay tablas sin registrar: app/(app)/analitica/_components/entregas/ProductosTabla.tsx #1» antes
+// de tocar estos números, que es la convención escrita en este propio archivo. Censo total:
+// 33 = 32 `<DataTable>` + 1 `<table>` cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 32;
+const TOTAL_INSTANCIAS_DATATABLE = 32;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -317,7 +325,9 @@ describe("guardia de cobertura del censo de tablas", () => {
     // —el de la caja y el de la tienda—, que reparten el importe entre las órdenes que lo
     // componen. Es la primera vez que este censo sube de dos en dos, y es porque los dos libros
     // son dos pantallas distintas con dos alcances distintos (design §5.2/§11-A5).
-    expect(totalCensado).toBe(32);
+    // FICHA 345 (T8.3): 32 → 33, por la tabla de productos de `/analitica`, la primera
+    // `<DataTable>` de esa pantalla. Las 11 exclusiones NO se mueven.
+    expect(totalCensado).toBe(33);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -399,7 +409,12 @@ describe("guardia de cobertura del censo de tablas", () => {
     // primera vez que la asimetria cae del lado CONTRARIO desde la 171: lo que entra son dos
     // tablas que SI descargan. El motivo esta escrito en sus entradas del censo y es el que las
     // separa del panel de la 343 —lo que enseñan no lo produce ninguna otra descarga—.
-    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(21);
+    // FICHA 345 (T8.3): 21 -> 22 dentro de alcance, y las 11 exclusiones NO se mueven. La de más
+    // es la tabla de productos de `/analitica`, que nace descargando por el mismo motivo que las
+    // dos de la 344: lo que enseña no lo produce ninguna otra descarga del repo. `/analitica` ya
+    // exportaba —el CSV operativo de la 134 y el financiero— pero eso son series de métricas por
+    // fecha; el grano «producto» no existe en el catálogo de dimensiones.
+    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(22);
     expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(11);
   });
 

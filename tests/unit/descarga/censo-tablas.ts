@@ -180,6 +180,21 @@ export interface ArchivoCensado {
  */
 export const CENSO_DATATABLE: ArchivoCensado[] = [
   {
+    // FICHA 345 (T8.3) — LA PRIMERA TABLA DE `/analitica`. Hasta hoy esa pantalla no montaba
+    // ninguna `<DataTable>`: sus paneles son graficas y sus dos exports (el CSV operativo de la
+    // 134 y el financiero) salen de controles propios, no de una tabla.
+    //
+    // Nace `con_descarga`, y el motivo es el que separa a las dos de la ficha 344 del panel de
+    // la 343: lo que enseña —unidades, ordenes y efectividad POR PRODUCTO— no lo produce ninguna
+    // otra descarga del repo. El CSV de la analitica operativa exporta series de metricas por
+    // fecha; el grano «producto» no existe en el catalogo de dimensiones.
+    //
+    // Lo que NO lleva su archivo, dicho aqui porque es una decision y no un olvido: ni un uuid
+    // (R49) y ni una cifra de dinero — el limite innegociable de la ficha.
+    ruta: "app/(app)/analitica/_components/entregas/ProductosTabla.tsx",
+    tablas: [{ nombre: "Productos del rango (analítica)", estado: "con_descarga" }],
+  },
+  {
     // Pedido humano del 2026-08-16: «Cierres solicitados (mensajero)» DEJÓ DE SER UNA TABLA.
     // Ver la nota de SEIS BAJAS en la cabecera de este archivo. La que queda es la del día.
     ruta: "app/(app)/cierre-dia/_components/CierreDiaModule.tsx",
