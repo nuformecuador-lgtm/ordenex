@@ -504,6 +504,30 @@ function columnasEscritorio(conTienda: boolean, conDinero: boolean): Column<Fila
       }))
     : [];
 
+  // ⚠ EL DINERO VA JUSTO DETRAS DEL PRODUCTO, Y NO AL FINAL. NO ES EL ORDEN «NATURAL» —el que
+  // diseñaron la 345 y la 346 es producto → volumen → desenlace, y el dinero llegaria detras—,
+  // asi que conviene saber por que se rompe, con el numero delante.
+  //
+  // MEDIDO EN CHROMIUM a 1440x950 (la anchura de escritorio mas comun aqui): con las trece
+  // columnas la tabla pide **1226 px** y su contenedor da **1102**. Faltan 124 px y no hay forma
+  // honesta de recuperarlos —se probaron cuatro y las cuatro llegan a cero destrozando algo:
+  // `hyphens:auto` en las cabeceras las deja leyendose «Uni-da-des» y «Re-cha-za-das» en
+  // vertical; quitarle el suelo a «Producto» lo baja a 100 px y parte los nombres a mitad de
+  // palabra («Hemorroid/es», «TURKESTER/ONE»). Las cabeceras YA van plegadas al `min-content` de
+  // su palabra mas larga y en `text-xs`, asi que acortar rotulos no mueve un pixel: «Efectividad
+  // de entrega» mide 163 px en una linea y su columna 93, o sea que ya esta plegada.
+  //
+  // Si algo se queda fuera pase lo que pase, **la pregunta es QUE**. Y ahi no hay empate: el
+  // dinero es el dato que se PIDIO —«falta saber cuanto dinero se ha podido recaudar»— y
+  // «% de rechazo» es una cifra DERIVADA de dos columnas que estan a la vista. Con este orden,
+  // «Para la tienda» termina a 809 px y se lee con **cero arrastre**; el precio, dicho para que
+  // nadie lo descubra por sorpresa, es que «% de rechazo» pide **124 px** de desplazamiento
+  // horizontal — el mismo que antes pagaba el dinero.
+  //
+  // No esconde ninguna columna, no encoge ninguna cifra y no toca la vista de telefono, que
+  // apila y no tiene este problema (desborde 0 a 390 px). El orden lo fija
+  // `ProductosTablaDinero.test.tsx` › «el ORDEN de escritorio pone el dinero...»: devolverlo al
+  // final pone ese caso rojo.
   return [
     ...tienda,
     {
@@ -512,6 +536,7 @@ function columnasEscritorio(conTienda: boolean, conDinero: boolean): Column<Fila
       minWidth: "14rem",
       render: (fila) => <NombreProducto>{fila.producto}</NombreProducto>,
     },
+    ...dinero,
     ...ORDEN_CIFRAS.map<Column<FilaProductoDTO>>((cifra) => ({
       id: cifra.id,
       value: cifra.etiqueta,
@@ -523,7 +548,6 @@ function columnasEscritorio(conTienda: boolean, conDinero: boolean): Column<Fila
           <Cifra>{cifrasDeFila(fila)[cifra.id]}</Cifra>
         ),
     })),
-    ...dinero,
   ];
 }
 

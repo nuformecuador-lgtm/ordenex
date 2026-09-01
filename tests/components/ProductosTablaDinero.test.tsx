@@ -236,6 +236,59 @@ describe("FICHA 347 · las tres columnas de dinero (R45/R63)", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos([fila({ producto: "Base Dr" })]) });
   });
 
+  it("el ORDEN de escritorio pone el dinero JUSTO detrás del producto (R63)", async () => {
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    // ⚠ ANTES DE ESTA FICHA NINGÚN TEST FIJABA EL ORDEN DE LAS COLUMNAS DE ESCRITORIO: los
+    // casos de la 345 comprueban que cada encabezado ESTÁ, y el índice de una columna se busca
+    // por su rótulo, así que una permutación pasaba entera en verde. Ahora el orden es una
+    // DECISIÓN con un número detrás y por eso se ata a mano.
+    //
+    // POR QUÉ EL DINERO VA EL SEGUNDO Y NO EL ÚLTIMO, que sería el orden natural: a 1440 px la
+    // tabla pide 1226 y su contenedor da 1102, así que 124 px se quedan fuera pase lo que pase
+    // (medido en Chromium; las cuatro formas de llegar a cero destrozan las cabeceras o parten
+    // los nombres de producto). Si alguien tiene que arrastrar para leer una columna, que sea
+    // «% de rechazo» —derivada de dos columnas que están a la vista— y no el dinero, que es el
+    // dato que se pidió.
+    expect(encabezados()).toEqual([
+      // La columna del control de desglose: sin texto visible, con nombre accesible.
+      "Desglose",
+      PRODUCTOS_COLUMNAS.producto,
+      PRODUCTOS_COLUMNAS.recaudado,
+      PRODUCTOS_COLUMNAS.ordenex,
+      PRODUCTOS_COLUMNAS.paraTienda,
+      PRODUCTOS_COLUMNAS.unidades,
+      PRODUCTOS_COLUMNAS.ordenes,
+      PRODUCTOS_COLUMNAS.entregadas,
+      PRODUCTOS_COLUMNAS.rechazadas,
+      PRODUCTOS_COLUMNAS.otrosResultados,
+      PRODUCTOS_COLUMNAS.enProceso,
+      PRODUCTOS_COLUMNAS.efectividad,
+      PRODUCTOS_COLUMNAS.rechazo,
+    ]);
+  });
+
+  it("y los cuatro cubos del desglose siguen CONTIGUOS y en su orden (ficha 346)", async () => {
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    // Lo que el dinero NO puede romper: los cuatro cubos que suman la columna «Órdenes» se leen
+    // seguidos, que es lo que permite comprobar la igualdad de un vistazo. El dinero se mete
+    // ANTES del bloque de volumen, nunca EN MEDIO de él.
+    const h = encabezados();
+    const cubos = [
+      PRODUCTOS_COLUMNAS.entregadas,
+      PRODUCTOS_COLUMNAS.rechazadas,
+      PRODUCTOS_COLUMNAS.otrosResultados,
+      PRODUCTOS_COLUMNAS.enProceso,
+    ];
+    const i = h.indexOf(cubos[0]);
+    expect(h.slice(i, i + 4)).toEqual(cubos);
+    // Y «Órdenes», el total que esos cuatro suman, va justo antes de ellos.
+    expect(h[i - 1]).toBe(PRODUCTOS_COLUMNAS.ordenes);
+  });
+
   it("pinta los tres importes con `money`, COMPLETOS y sin abreviar", async () => {
     renderTabla(true);
     await screen.findByText("Base Dr");

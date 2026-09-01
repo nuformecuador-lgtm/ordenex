@@ -1107,3 +1107,100 @@ que prueba que la mitad dinámica de la guardia no es redundante. Medido en Chro
 1024 y 1440: cero desborde del documento, cero recorte de importes y el precio en ancho del
 teléfono dicho con números. Queda sin cubrir **R72** (hace falta un modo completo en el borde) y
 sin ver en pantalla el panel del detalle, porque en esta base **ninguna entrega ha cobrado**.
+
+---
+
+## Adenda (2026-09-01) — el orden de las columnas de escritorio, y por qué no es el natural
+
+Encargo del leader tras leer las mediciones de V3: a 1440 «Para la tienda» quedaba a **83 px** de
+arrastre, y es la cifra que el humano lleva toda la sesión pidiendo («sigo sin ver el dinero, si
+lo pusiste?»). Objetivo: que no haya que arrastrar nada para leerla.
+
+### Lo primero que se midió: la hipótesis de partida era falsa
+
+**Acortar rótulos no mueve un píxel.** Cada columna numérica ya está en el `min-content` de su
+**palabra más larga**, con la cabecera en `text-xs` (12 px) y plegada en varias líneas.
+«Efectividad de entrega» mide **163 px** en una línea y su columna **93**: ya está plegada a
+«Efectividad». Y los 338 px entre ventana (1440) y scroller (1102) son la barra lateral (256) más
+el `p-6` + `px-4` de la tarjeta (80): nada que reclamar sin tocar el shell de todas las páginas.
+
+Reparto de los 1226 px, con quién fija cada uno: `Producto` 224 (`minWidth: 14rem`),
+`Otros resultados` 120 (**la celda**: «reprogramadas», 116 px), `Rechazadas` 100, `Entregadas` 95,
+`Recaudado` 95, `Efectividad` 93, `Unidades` 83, `Órdenes` 76, `En proceso` 74, `% de rechazo` 74,
+`Cobró Ordenex` 84, `Para la tienda` 84 («sumable)»), `Desglose` 24.
+
+### Las cuatro vías que llegan a desborde 0, y por qué se descartaron MIRÁNDOLAS
+
+| vía | desborde @1440 | por qué no |
+| --- | --- | --- |
+| `hyphens:auto` en las cabeceras numéricas | 0 | se leen «Uni-da-des», «Ór-de-nes», «En-tre-ga-das», «Re-cha-za-das» en 3–4 líneas verticales |
+| `hyphens:auto` en todas | 0 | ídem, y parte también los rótulos de dinero |
+| `Producto` con `min-width:0; width:14rem` | 0 | el nombre cae a **100 px** y se parte a mitad de palabra: «Hemorroid/es», «TURKESTER/ONE», «Nebulizad/or Inalámbri/co» |
+| cabeceras con `overflow-wrap:anywhere` | 0 | corte seco a mitad de palabra, sin guion |
+
+⚠ **Las dos primeras se descartaron por la CAPTURA, no por el número.** La métrica decía
+«perfecto» (y hasta ensanchaba `Producto` a 242) y los píxeles decían que no. Es la lección de
+*medir en el navegador: la herramienta miente*, aplicada al revés de lo habitual — aquí mintió
+por optimista.
+
+Lo mejor sin romper nada era `Producto` a 10rem + la composición partiendo: **desborde 31**. Para
+los 31 restantes habría hecho falta cambiar «Efectividad de entrega» y la marca «(no sumable)»,
+o sea un rótulo de la 345, la marca que R45 exige y el `toEqual` del Excel. No lo vale.
+
+### La decisión: reordenar, no encoger
+
+**A 1440 algo se queda fuera pase lo que pase (124 px). La pregunta es QUÉ.** Se mueven las tres
+columnas de dinero **justo detrás de «Producto»**: no esconde ninguna columna, no encoge ninguna
+cifra y no toca la vista de teléfono. El que paga es «% de rechazo», una cifra **derivada** de dos
+columnas que están a la vista; el dinero es el dato que se pidió.
+
+Orden nuevo: `Producto → Recaudado → Cobró Ordenex → Para la tienda → Unidades → Órdenes →
+Entregadas → Rechazadas → Otros resultados → En proceso → Efectividad → % de rechazo`.
+Los cuatro cubos que suman «Órdenes» siguen **contiguos** (el dinero se mete ANTES del bloque de
+volumen, nunca en medio), y eso tiene caso propio.
+
+**El Excel NO se movió.** Pantalla y archivo ya eran listas separadas (`ORDEN_CIFRAS`/
+`ORDEN_DINERO` contra `COLUMNAS_DESCARGA_*`), así que no hubo nada que separar: `git diff` sobre
+`analitica-productos-descarga-columnas.ts` y su test sale **vacío**, y sus dos `toEqual` de 11 y
+20 claves siguen en verde.
+
+### Medición del después — arrastre por columna (px que hay que desplazar)
+
+| ancho | desborde scroller | **«Para la tienda»** | «Recaudado» | «Cobró Ordenex» | «Efectividad» | **«% de rechazo»** |
+| --- | --- | --- | --- | --- | --- | --- |
+| 390 | **0** | vista apilada, sin columnas | — | — | — | — |
+| 768 | 796 | 82 | 0 | 0 | 723 | 796 |
+| 1024 | 540 | **0** | 0 | 0 | 467 | 540 |
+| 1440 | **124** | **0** | **0** | **0** | 51 | **124** |
+
+Antes de reordenar, a 1440: «Para la tienda» **83**, «% de rechazo» 0. El intercambio es exacto y
+declarado. El desborde del scroller **no cambia** (124): esto no gana ancho, decide quién lo usa.
+
+**390 idéntico, como se exigía:** documento 0, scroller 308/308/**0**, `Producto` **133 px**, y
+las tres cabeceras siguen siendo `Desglose / Producto / Resultado`. La vista de teléfono no se
+tocó, así que la igualdad es por construcción y no por suerte.
+
+### La mutación, y un hallazgo
+
+**Antes de esta pasada NINGÚN test fijaba el orden de las columnas de escritorio.** Los casos de
+la 345 comprueban que cada encabezado *está*, y el índice de una columna se busca por su rótulo:
+una permutación pasaba entera en verde. Es información, y se cierra: se añaden dos casos.
+
+Mutación (devolver el dinero al final de la lista):
+```
+FAIL tests/components/ProductosTablaDinero.test.tsx
+     > el ORDEN de escritorio pone el dinero JUSTO detrás del producto (R63)
+AssertionError: expected [ 'Desglose', 'Producto', …(11) ] to deeply equal [ 'Desglose', 'Producto', …(11) ]
+-   "Recaudado (no sumable)",  (esperadas en la posición 3ª/4ª/5ª)
++   "Recaudado (no sumable)",  (recibidas al final)
+```
+Revertida y re-medido verde: 31/31 en ese archivo, 91/91 en los cinco archivos afectados.
+
+```
+$ npx tsc --noEmit                 TSC_EXIT=0
+$ npx eslint .                     ESLINT_EXIT=0 · 145 warnings, 0 errores (mismo número heredado)
+$ npx vitest run tests/unit tests/components
+ Test Files  1 failed | 1369 passed (1370)
+      Tests  1 failed | 19992 passed | 26 skipped (20019)
+```
+El único rojo sigue siendo el heredado `superficie-de-uso` por `lib/actions/tarifas.ts:67`.
