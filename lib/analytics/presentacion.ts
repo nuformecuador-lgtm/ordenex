@@ -19,9 +19,9 @@
 // (`alcance-fuente-unica.guardia.test.ts`) la censa en todo el repo. Aqui no se nombra
 // ni un solo rol: se pregunta a `resolverAlcance` y se razona sobre el `tipo`.
 
-import { resolverAlcance } from "@/lib/analytics/alcance";
+import { esRolAnalitica, resolverAlcance } from "@/lib/analytics/alcance";
 import type { ActorAnalitica } from "@/lib/analytics/alcance";
-import { listarMetricas } from "@/lib/analytics/metrics";
+import { ALCANCE_PRODUCTOS, listarMetricas } from "@/lib/analytics/metrics";
 import type { MetricaDominio } from "@/lib/analytics/types";
 
 /**
@@ -43,6 +43,32 @@ export interface RecortePresentacion {
   readonly alcance: "global" | "zona" | "tienda" | "mensajero" | "denegado";
   /** las facetas que la barra DEBE ofrecer (nunca contiene la fijada por el alcance) */
   readonly facetas: readonly Faceta[];
+  /**
+   * FICHA 345 (R5) — si la seccion de PRODUCTOS se pinta o no se pinta.
+   *
+   * Es una ETIQUETA y no un `boolean` a proposito: el guardia de frontera de la ruta
+   * (`tablero-operativo-frontera.guardia.test.ts`, bloque (b)) exige que TODO campo de este
+   * contrato sea una etiqueta o una lista de etiquetas, y esa exigencia es lo que mantiene
+   * fuera de aqui cualquier campo de datos. Un enum de dos valores cumple la regla sin
+   * tocarla; un `boolean` habria obligado a ensanchar el predicado del guardia, que es
+   * exactamente lo que no se hace por una comodidad de escritura.
+   *
+   * ⚠ POR QUE ESTA DECISION VIVE AQUI Y NO EN `app/(app)/analitica/page.tsx`, que es donde
+   * `specs/345-analitica-productos/design.md §7.2` la escribio: porque la pagina NO PUEDE
+   * importar `@/lib/analytics/metrics`. Ese mismo guardia lleva una ALLOWLIST NOMINAL de
+   * aristas de la ruta hacia `lib/analytics/` y `metrics` esta fuera —hasta con un caso
+   * sintetico que lo declara infractor—, igual que `alcance`. Las dos vias que quedaban eran
+   * relajar la allowlist o razonar en la pagina sobre `recorte.alcance`, que seria una
+   * SEGUNDA regla del mismo permiso. Se elige la tercera: la decision se toma donde el
+   * guardia dice que se toman las decisiones de «que control se dibuja», leyendo la MISMA
+   * tabla que usa el borde para denegar. Precedente escrito en la propia pagina: «el guardia
+   * manda sobre la prosa del diseño».
+   *
+   * Y no sustituye a nada: la Server Action deniega igual para esos roles (R4 de la 345). Un
+   * panel que no se pinta no es un dato que no se sirve — el aviso de la cabecera de este
+   * modulo se aplica aqui palabra por palabra.
+   */
+  readonly productos: "visible" | "oculta";
 }
 
 /** Las tres, en el orden en que la barra las dibuja hoy (`FiltrosOperativos.tsx:152-203`). */
@@ -133,9 +159,32 @@ export function recorteDePresentacion(actor: ActorAnalitica | null): RecortePres
   const resolucion = resolverAlcance(actor, metricaOperativaDeReferencia());
 
   if (resolucion.estado === "denegado") {
-    return { alcance: "denegado", facetas: [] };
+    return { alcance: "denegado", facetas: [], productos: "oculta" };
   }
 
   const alcance = resolucion.alcance.tipo;
-  return { alcance, facetas: FACETAS.filter((f) => facetaSeOfrece(f, alcance)) };
+  return {
+    alcance,
+    facetas: FACETAS.filter((f) => facetaSeOfrece(f, alcance)),
+    productos: seccionDeProductos(actor),
+  };
+}
+
+/**
+ * FICHA 345 (R5) — se pinta la seccion de productos MIENTRAS `ALCANCE_PRODUCTOS` no diga
+ * `prohibido` para el rol del actor.
+ *
+ * Aqui no se nombra ni un solo rol, igual que en el resto del modulo: se pregunta a la tabla
+ * que el borde ya consulta (`lib/analytics/metrics.ts`, el unico archivo del repo donde el
+ * censo de fuente unica permite que viva una regla por rol). Una lista de roles escrita en
+ * este archivo seria la segunda regla del mismo permiso, y dos reglas para un permiso
+ * divergen — es lo que R8/R37 de la 122 prohiben por escrito.
+ *
+ * Falla CERRADO: un rol que no es lector de analitica, o un actor sin sesion, no ve la
+ * seccion. Nunca se concede por defecto.
+ */
+function seccionDeProductos(actor: ActorAnalitica | null): RecortePresentacion["productos"] {
+  const rol = actor?.rol;
+  if (rol === undefined || !esRolAnalitica(rol)) return "oculta";
+  return ALCANCE_PRODUCTOS[rol] === "prohibido" ? "oculta" : "visible";
 }

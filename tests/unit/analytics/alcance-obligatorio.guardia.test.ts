@@ -112,12 +112,23 @@ function consultaTablaDeAnalitica(codigo: string): string | null {
  *    marca `unique symbol`, de modo que la unica forma de tener uno es haber pasado por su
  *    resolutor de alcance.
  *
+ *  - `ConsultaProductos` (`lib/analytics/productos-consulta.ts`) — FICHA 345, 2026-09-01: el
+ *    analisis de productos, que sale de la tabla `orden` viva y tiene preparador PROPIO porque
+ *    su alcance DIVERGE del conteo de entregas (`adminSatelite` es `zona` alli y **prohibido**
+ *    aqui). Cumple el criterio de admision de abajo: marca `unique symbol` (`marcaProductos`),
+ *    de modo que la unica forma de tener uno es haber pasado por `prepararConsultaProductos` y,
+ *    con el, por su resolutor de alcance.
+ *
  * ⚠ ESTA LISTA NO ES UN CAJON. Un tipo nuevo entra si —y solo si— esta marcado con un
  * `unique symbol` que impida construirlo a mano. Meter aqui un tipo llano (un `interface`
  * normal con `filtro` y `alcance`) desarmaria el guardia entero sin que nada se pusiera rojo:
  * cualquier repositorio podria fabricarse el alcance que quisiera y seguir pasando el censo.
+ *
+ * ⚠ Y NO VALE UN TIPO ESTRUCTURAL. `RecorteDeOrdenes` (`entregas-conteo.ts`, ficha 345) es lo que
+ * las dos consultas preparadas tienen DENTRO, y NO entra aqui a proposito: es construible a mano,
+ * asi que admitirlo dejaria pasar exactamente al repositorio que se fabrica su propio alcance.
  */
-const TIPOS_OPACOS = ["ConsultaAnalitica", "ConsultaConteoEntregas"] as const;
+const TIPOS_OPACOS = ["ConsultaAnalitica", "ConsultaConteoEntregas", "ConsultaProductos"] as const;
 
 /** `as [unknown as] <Tipo>` para cualquiera de los opacos. */
 const FORJA_LA_CONSULTA = new RegExp(
@@ -293,6 +304,38 @@ describe("R18 · autocomprobacion con fixtures sinteticos (126/127 aun no existe
     expect(violacionDeAlcanceObligatorio("forjador-directo.ts", directo)).not.toBeNull();
   });
 
+  // FICHA 345 / T2.4 — el tercer tipo opaco entra con las MISMAS dos direcciones probadas que
+  // los otros dos: recibirlo es legitimo, forjarlo NO. Sin este par, ampliar `TIPOS_OPACOS`
+  // seria ampliar la lista blanca sin comprobar que sigue mordiendo.
+  it("recibir ConsultaProductos en la firma es legitimo", () => {
+    const legitimo = `
+import type { ConsultaProductos } from "@/lib/analytics/productos-consulta";
+import { condicionesDeConsulta } from "@/lib/repositories/ConteoPorStatusRepository";
+export class ConteoProductosRepository {
+  async contarProductos(consulta: ConsultaProductos) {
+    return this.prisma.$queryRaw\`SELECT producto FROM "orden" o WHERE \${condicionesDeConsulta(consulta)}\`;
+  }
+}
+`;
+    expect(violacionDeAlcanceObligatorio("productos-legitimo.ts", legitimo)).toBeNull();
+  });
+
+  it("un repositorio que FORJA ConsultaProductos cae igual que los otros dos", () => {
+    const forjador = `
+import type { ConsultaProductos } from "@/lib/analytics/productos-consulta";
+import type { AlcanceDatos } from "@/lib/analytics/alcance";
+export class ConteoProductosRepository {
+  async contarProductos(filtro: unknown, alcance: AlcanceDatos) {
+    const c = { filtro, alcance } as unknown as ConsultaProductos;
+    return this.prisma.$queryRaw\`SELECT producto FROM "orden" o WHERE tienda_id = \${c.alcance}\`;
+  }
+}
+`;
+    const v = violacionDeAlcanceObligatorio("productos-forjador.ts", forjador);
+    expect(v, "un cast a ConsultaProductos paso el censo").not.toBeNull();
+    expect(v).toContain("SQL crudo");
+  });
+
   it("el detector del forjador DISCRIMINA: recibirla en la firma sigue siendo legitimo", () => {
     // La direccion que importa para no convertir el guardia en ruido: el consumidor legitimo
     // NOMBRA el tipo en su firma y no lo forja en ningun sitio.
@@ -319,6 +362,9 @@ describe("R18 · el segundo tipo opaco cumple lo mismo que el primero", () => {
   const FUENTES_OPACAS: Record<string, string> = {
     ConsultaAnalitica: "lib/analytics/consulta.ts",
     ConsultaConteoEntregas: "lib/analytics/entregas-conteo.ts",
+    // FICHA 345 — el tercero. Entra con la MISMA condicion que los dos anteriores y este
+    // bloque se la comprueba: marca `unique symbol` DENTRO del tipo.
+    ConsultaProductos: "lib/analytics/productos-consulta.ts",
   };
 
   // LA ASERCION QUE SOSTIENE TODO EL GUARDIA. Un tipo llano en `TIPOS_OPACOS` —una interfaz

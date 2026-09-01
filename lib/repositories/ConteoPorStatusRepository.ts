@@ -34,7 +34,7 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 
-import type { ConsultaConteoEntregas } from "@/lib/analytics/entregas-conteo";
+import type { ConsultaConteoEntregas, RecorteDeOrdenes } from "@/lib/analytics/entregas-conteo";
 import type { AlcanceDatos } from "@/lib/analytics/alcance";
 import type { IConteoPorStatusRepository } from "@/lib/interfaces/repositories/IConteoPorStatusRepository";
 import type { ConteoDeStatus } from "@/lib/types/conteo-por-status";
@@ -93,8 +93,18 @@ function enLista(columna: Prisma.Sql, ids: readonly string[] | undefined): Prism
  *
  * El orden NO es cosmetico: el alcance va PRIMERO para que se lea de un vistazo que la
  * consulta esta recortada por rol antes que por nada que haya pedido el cliente.
+ *
+ * ⚠ FICHA 345 — EL PARAMETRO SE ENSANCHO A `RecorteDeOrdenes`, y el cuerpo NO se toco. Motivo:
+ * la lectura de PRODUCTOS necesita EXACTAMENTE este `where` (mismo universo, mismas facetas,
+ * misma ventana) pero viaja en un tipo opaco propio (`ConsultaProductos`), porque su alcance
+ * DIVERGE —un `adminSatelite` obtiene `{tipo:"zona"}` en el conteo de entregas y esta PROHIBIDO
+ * en productos—. Con el parametro estrecho solo habia dos salidas, y las dos peores: FORJAR el
+ * tipo opaco del conteo con un cast dentro del repositorio nuevo (que es literalmente lo que
+ * detecta `FORJA_LA_CONSULTA` en `alcance-obligatorio.guardia.test.ts`) o una TERCERA copia de
+ * estas condiciones. `RecorteDeOrdenes` es el tipo estructural que las dos consultas preparadas
+ * cumplen; la opacidad se sigue exigiendo en la firma de cada metodo de repositorio.
  */
-export function condicionesDeConsulta(consulta: ConsultaConteoEntregas): Prisma.Sql[] {
+export function condicionesDeConsulta(consulta: RecorteDeOrdenes): Prisma.Sql[] {
   const { filtro, rango, alcance } = consulta;
 
   const condiciones: Prisma.Sql[] = [

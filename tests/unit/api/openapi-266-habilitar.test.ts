@@ -108,47 +108,36 @@ describe("266/R10 y R28 — los tres desenlaces y los cuatro codigos de error so
   });
 });
 
-describe("266/D1-D2 — la descripcion publicada dice lo que el integrador no puede adivinar", () => {
-  const descripcion = spec.paths[PATH_HABILITAR].post.description;
-
-  it("nombra los DOS estados habilitables y deja fuera `reprogramada` por su nombre", () => {
-    expect(descripcion).toContain("`ayuda_tienda` y `devuelta`");
-    expect(descripcion).toMatch(/`reprogramada`\s+\*\*NO\*\*\s+es habilitable/);
-    expect(descripcion).toContain("estado_no_habilitable");
-  });
-
-  it("declara que una `devuelta` NUNCA cambia de estado", () => {
-    // Es la mitad del contrato que no se puede deducir del schema: un integrador que mande un
-    // lote de `devuelta`s recibira `habilitada_sin_cambio_de_estado` en el 100 % de las filas.
-    expect(descripcion).toMatch(/`devuelta`\s+NUNCA cambia de estado/);
-    expect(descripcion).toContain("habilitada_sin_cambio_de_estado");
-  });
-
-  it(`declara el tope de ${TOPE_FILAS_HABILITAR} filas por lote, y el schema lo aplica`, () => {
-    expect(descripcion).toContain(`entre 1 y ${TOPE_FILAS_HABILITAR} filas`);
+// ⏳ 2026-09-01 — AQUI VIVIA el describe «la descripcion publicada dice lo que el integrador no
+// puede adivinar»: que solo `ayuda_tienda` y `devuelta` son habilitables, que una `devuelta` NUNCA
+// cambia de estado, y el tope de filas. Esa prosa se retiro del contrato con TODAS las
+// descripciones de nivel operacion (peticion explicita, en los dos artefactos). De lo que medía,
+// lo unico que sigue siendo comprobable es el tope, porque vive en el SCHEMA y no en el texto.
+describe("266/D2 — el tope de filas por lote lo aplica el schema, no solo la prosa", () => {
+  it(`el request declara minItems 1 y maxItems ${TOPE_FILAS_HABILITAR}`, () => {
     const request = spec.components.schemas.HabilitacionRequest as {
       properties: { ordenes: { minItems: number; maxItems: number } };
     };
     expect(request.properties.ordenes.minItems).toBe(1);
     expect(request.properties.ordenes.maxItems).toBe(TOPE_FILAS_HABILITAR);
-  });
-
-  it("el .yaml publica las MISMAS tres afirmaciones: si uno las dice y el otro no, uno miente", () => {
-    expect(yaml).toContain("**Solo DOS estados son habilitables: `ayuda_tienda` y `devuelta`.**");
-    expect(yaml).toMatch(/`reprogramada`\s+\*\*NO\*\*\s+es habilitable/);
-    expect(yaml).toMatch(/`devuelta`\s+NUNCA cambia de estado/);
-    expect(yaml).toContain(`**El lote acepta entre 1 y ${TOPE_FILAS_HABILITAR} filas.**`);
+    // El espejo publica el mismo tope.
     expect(yaml).toContain(`maxItems: ${TOPE_FILAS_HABILITAR}`);
   });
 });
 
 describe("266 — la rama B es deuda declarada: el contrato NO gana ningun evento nuevo", () => {
-  it("la seccion `webhooks:` sigue teniendo un unico evento y no menciona la habilitacion", () => {
+  it("el contrato publica UN solo evento saliente, y no menciona la habilitacion", () => {
     // La rama B no notifica y no se deja ningun gancho «por si acaso». Si alguien anadiera
     // `orden.habilitada`, este assert cae con el nombre de la decision que lo prohibe.
-    expect(Object.keys(spec.webhooks)).toEqual(["orden.estado_actualizado"]);
-    expect(JSON.stringify(spec.webhooks)).not.toContain("habilitada");
-    expect(JSON.stringify(spec.webhooks)).not.toContain("habilitacion");
+    //
+    // ⏳ 2026-09-01 — esto miraba la seccion `webhooks:`, que ya no existe: el unico evento se
+    // publica como el schema `WebhookOrdenEstadoActualizado`. La afirmacion no cambia, cambia
+    // donde se lee: los schemas de evento son EXACTAMENTE uno.
+    const schemasDeEvento = Object.keys(spec.components.schemas).filter((n) => n.startsWith("Webhook"));
+    expect(schemasDeEvento).toEqual(["WebhookOrdenEstadoActualizado"]);
+    const evento = JSON.stringify(spec.components.schemas.WebhookOrdenEstadoActualizado);
+    expect(evento).not.toContain("habilitada");
+    expect(evento).not.toContain("habilitacion");
   });
 });
 

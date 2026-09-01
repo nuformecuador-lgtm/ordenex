@@ -68,10 +68,6 @@ function bloqueDelGet(pathKey: string): string[] {
 const lineasGet = bloqueDelGet(PATH_LISTADO);
 /** Bloque `parameters:` del `get` del listado (las entradas `- name: ...` van a sangría 8). */
 const lineasParameters = subBloque(lineasGet, "parameters", 6);
-/** Descripción del endpoint en el yaml, ya como texto plano. */
-const descripcionYaml = subBloque(lineasGet, "description", 6)
-  .map((l) => l.trim())
-  .join("\n");
 
 /** Líneas de un parámetro concreto del bloque `parameters:` (todo lo que cuelga de `- name: X`). */
 function bloqueDeParametro(nombre: string): string[] {
@@ -193,20 +189,11 @@ describe("257/R26 — el OpenAPI publica los cuatro filtros nuevos del listado p
   });
 });
 
-describe("257/R26 — la descripción del endpoint explica el borde que más confunde al integrador", () => {
-  const descripcionTs = openApiSpec.paths[PATH_LISTADO].get.description as string;
-
-  it("R26: ambos artefactos avisan de que una guía o remisión ajena devuelve página vacía y no 404", () => {
-    for (const texto of [descripcionTs, descripcionYaml]) {
-      const plano = texto.replace(/\s+/g, " ");
-      expect(plano).toMatch(/página vacía[^]*404|404[^]*página vacía/i);
-      expect(plano).toContain("num_guia");
-      expect(plano).toContain("num_remision");
-    }
-    // El yaml no es una paráfrasis: es el mismo texto que el TS, línea a línea.
-    expect(descripcionYaml).toBe(descripcionTs);
-  });
-
+// ⏳ 2026-09-01 — AQUI VIVIA la comprobacion de que la PROSA del endpoint avisaba de que una guia
+// o remision ajena devuelve pagina vacia y no 404. Se retiro con las descripciones de nivel
+// operacion del contrato (peticion explicita): sin texto que comparar, el test no puede existir.
+// Lo que sigue cubierto es la descripcion de cada PARAMETRO, que no se toco.
+describe("257/R26 — la descripción de los parámetros explica el borde que más confunde al integrador", () => {
   it("R26: ambos artefactos dejan claro que `hasta` es INCLUSIVO y que el día se mide en hora de Costa Rica (UTC-6)", () => {
     const descripcionHastaTs = parametroTs("hasta").description;
     expect(descripcionHastaTs).toMatch(/inclusiv/i);

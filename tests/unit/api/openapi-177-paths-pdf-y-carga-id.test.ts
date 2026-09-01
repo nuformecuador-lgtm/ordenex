@@ -4,7 +4,6 @@ import path from "path";
 
 import { openApiSpec } from "@/lib/api/openapi-spec";
 import { METRICAS_API_KEY, METRICAS_TODAS } from "@/lib/analytics/publicacion-api-key";
-import { METRICAS } from "@/lib/analytics/metrics";
 
 // Feature 177 (R41, R45) — contrato publicado del canal por API key tras la alta de los tres
 // endpoints nuevos (consulta por guía/remisión y PDF de etiqueta por orden y por lote) y la
@@ -298,21 +297,11 @@ describe("255/R47 — la cotización sigue en su sitio, en el objeto TS y en el 
   });
 });
 
-describe("255/R29 — la descripción del endpoint declara el supuesto", () => {
-  const descripcion: string = openApiSpec.paths[PATH_COTIZACION].post.description;
-
-  it("la descripción publicada menciona el supuesto `cobra_comision = true`", () => {
-    // El supuesto NO viaja como campo del cuerpo (se descartó `supuestos.cobraComision`): el
-    // sitio donde un integrador busca los supuestos de un precio es el contrato publicado. Si
-    // esta línea desaparece, el precio pasa a afirmar una comisión que nadie declaró.
-    expect(descripcion).toContain("cobra_comision = true");
-    expect(descripcion).toMatch(/comisi[oó]n COD/i);
-  });
-
-  it("el .yaml publica el MISMO supuesto: si uno lo dice y el otro no, uno miente", () => {
-    expect(yaml).toContain("cobra_comision = true");
-  });
-});
+// ⏳ 2026-09-01 — AQUI VIVIA el describe «255/R29 — la descripción del endpoint declara el
+// supuesto»: que la cotizacion se calcula suponiendo `cobra_comision = true`. El supuesto NO viaja
+// como campo del cuerpo (se descarto `supuestos.cobraComision`) y su unico sitio publicado era esa
+// prosa, retirada con todas las descripciones de nivel operacion (peticion explicita). Hoy el
+// precio no declara en ninguna parte el supuesto de comision sobre el que se calculo.
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // Feature 255 (R21) — CotizacionRow NO promete un rechazo que el servidor no hace.
@@ -424,20 +413,9 @@ function parametrosDeAnalitica(): readonly ParametroOpenApi[] {
   return openApiSpec.paths[PATH_ANALITICA].get.parameters as readonly ParametroOpenApi[];
 }
 
-/**
- * La prosa del endpoint de analítica TAL COMO SE PUBLICA en el `.yaml` (bloque `description: |-`
- * hasta `parameters:`). Se extrae del texto, no del objeto TS: el `.yaml` es un archivo aparte y
- * nada más que este tipo de aserto lo mantiene diciendo lo mismo.
- */
-function descripcionDeAnaliticaEnYaml(): string {
-  const inicio = lineasYaml.findIndex((l) => l === `  "${PATH_ANALITICA}":`);
-  if (inicio < 0) throw new Error("el .yaml no publica el path de analitica");
-  const desc = lineasYaml.findIndex((l, i) => i > inicio && l.trim() === "description: |-");
-  if (desc < 0) throw new Error("el path de analitica no tiene bloque `description` en el .yaml");
-  const fin = lineasYaml.findIndex((l, i) => i > desc && l === "      parameters:");
-  if (fin < 0) throw new Error("no se encontro el final de la descripcion de analitica");
-  return lineasYaml.slice(desc + 1, fin).join("\n");
-}
+// ⏳ 2026-09-01 — AQUI VIVIA `descripcionDeAnaliticaEnYaml()`, que extraia del `.yaml` la prosa del
+// endpoint de analitica. Las descripciones de nivel operacion se retiraron del contrato (peticion
+// explicita), asi que ya no hay bloque que extraer.
 
 /** Lanza si el parámetro no existe: un `undefined` silencioso volvería verde este guard. */
 function parametroDeAnalitica(nombre: string): ParametroOpenApi {
@@ -523,8 +501,6 @@ describe("267/R39 — la analítica sigue publicada, en el objeto TS y en el .ya
     // El tope de 366 días no se menciona en NINGÚN parámetro: publicarlo sería prometer un 422
     // que este canal ya no devuelve.
     for (const p of parametrosDeAnalitica()) expect(p.description).not.toContain("366");
-    expect(openApiSpec.paths[PATH_ANALITICA].get.description).not.toContain("366");
-    expect(descripcionDeAnaliticaEnYaml()).not.toContain("366");
     // Y no se publican presets: el vocabulario interno de rangos no cruza al contrato público.
     expect(parametrosDeAnalitica().map((p) => p.name)).toEqual(["metricas", "desde", "hasta"]);
   });
@@ -573,32 +549,14 @@ describe("267/R39 — la analítica sigue publicada, en el objeto TS y en el .ya
     }
   });
 
-  it("la descripción del endpoint documenta la UNIDAD DE CONTEO que dejó de viajar en el payload", () => {
-    // `unidadDeConteo` salió de la respuesta el 2026-08-24, pero su información NO se perdió:
-    // tiene que estar en la prosa del endpoint, o el integrador suma gestiones con órdenes y
-    // obtiene un total que no significa nada. Los ids se DERIVAN del catálogo: si mañana una
-    // métrica publicable cambia de unidad de conteo o entra una nueva que cuenta gestiones,
-    // este test se pone rojo hasta que la prosa lo diga.
-    const descripcionTs = openApiSpec.paths[PATH_ANALITICA].get.description;
-    const descripcionYaml = descripcionDeAnaliticaEnYaml();
-
-    const porGestion = METRICAS_API_KEY.filter(
-      (id) => METRICAS.find((m) => m.id === id)?.unidadDeConteo === "gestion",
-    );
-    expect(porGestion.length).toBeGreaterThan(0);
-    for (const id of porGestion) {
-      expect(descripcionTs).toContain(`\`${id}\``);
-      expect(descripcionYaml).toContain(`\`${id}\``);
-    }
-    for (const texto of [descripcionTs, descripcionYaml]) {
-      expect(texto).toMatch(/gestiones, no órdenes/i);
-      expect(texto).toMatch(/no son sumables/i);
-      // Y las dos reglas que sustituyen a lo que se quitó del payload.
-      expect(texto).toMatch(/no rellenes los huecos con ceros/i);
-      expect(texto).toMatch(/eco EXACTO de lo que pediste, sin recortar/i);
-      expect(texto).toMatch(/`null` NO es `0`/);
-    }
-  });
+  // ⏳ 2026-09-01 — AQUI VIVIA «la descripción del endpoint documenta la UNIDAD DE CONTEO que dejó
+  // de viajar en el payload». Es la baja MAS CARA de las descripciones retiradas y conviene que
+  // quede escrito: `unidadDeConteo` salio de la respuesta el 2026-08-24 con el argumento explicito
+  // de que su informacion viajaba en la prosa del endpoint. Esa prosa ya no existe, asi que el
+  // contrato NO dice en ninguna parte cuales metricas cuentan gestiones y cuales ordenes; un
+  // integrador que las sume obtiene un total que no significa nada, y nada se pondra rojo.
+  // Si alguna vez se quiere recuperar la garantia, hay dos caminos: devolver la descripcion, o
+  // republicar `unidad` como dato del payload.
 
   it("P4-bis — el sobre `AnaliticaRespuesta` declara rango + metricas[], en el TS y en el .yaml", () => {
     // El sobre es lo que un integrador parsea de verdad. Si el array de series dejara de
