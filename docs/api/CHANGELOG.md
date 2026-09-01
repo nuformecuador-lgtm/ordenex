@@ -21,6 +21,42 @@
 
 ---
 
+## 2026-09-01 — El contrato retira la descripción en prosa de TODOS los endpoints (y la colección de Postman pasa a una petición por endpoint)
+
+**No cambia ni un byte de las peticiones ni de las respuestas.** Ningún path, parámetro, schema,
+código de estado ni ejemplo se ha tocado: si tu código funciona hoy, sigue funcionando mañana. Lo
+que cambia es lo que el documento *cuenta*.
+
+Se retiró el bloque `description` de nivel operación de los **diez endpoints y del webhook**, en los
+dos artefactos (`lib/api/openapi-spec.ts` y `docs/api/api-key-openapi.yaml`). En Swagger UI cada
+endpoint conserva su `summary`, sus parámetros —con sus descripciones, que **no** se tocaron—, sus
+schemas y sus ejemplos, pero ya no hay párrafo explicativo debajo del título.
+
+**Lo que dejó de estar escrito**, por si lo estabas usando como referencia:
+
+- **Webhook `orden.estado_actualizado`**: cómo verificar la firma. Las cabeceras
+  `X-Ordenex-Signature` y `X-Ordenex-Timestamp` siguen declaradas, pero el contrato ya no dice que
+  la firma es `HMAC-SHA256` sobre `${timestamp}.${cuerpo}` con el secreto de tu suscripción, ni que
+  hay que verificarla sobre el texto crudo antes de parsearlo. **Sigue siendo así**: la entrega no
+  cambió, solo la documentación.
+- **`POST /ordenes/api-key/cotizacion`**: que el precio se calcula suponiendo `cobra_comision = true`.
+- **`GET /ordenes/api-key/analitica`**: qué métricas cuentan **gestiones** y cuáles cuentan órdenes.
+  Sin ese dato, sumar dos series entre sí puede dar un total que no significa nada.
+- **`POST /ordenes/api-key/carga`**: la nota del cambio incompatible de tarifas y el comportamiento
+  con fulfillment (órdenes que nacen en `en_preparacion` y sin `num_guia`).
+- **`POST /ordenes/api-key/habilitar`**: que solo `ayuda_tienda` y `devuelta` son habilitables, y
+  que una `devuelta` nunca cambia de estado.
+
+Todas esas reglas **siguen vigentes en el comportamiento del canal**; lo que se fue es su
+descripción publicada. Las entradas anteriores de este changelog las conservan.
+
+En la misma release, `docs/api/ordenex-api-key.postman_collection.json` se rehízo: **una petición
+por endpoint** (diez, sin carpetas de casos de éxito y error), el listado con la paginación y sus
+cinco filtros en una sola petición —los filtros van desactivados, se activan a mano— y se añadió la
+analítica, que faltaba.
+
+---
+
 ## 2026-08-31 — RUPTURA: en `POST /ordenes/api-key/cotizacion`, las filas sin precio salen de `filas` y viajan en `errores` (y cada fila cotizada dice sobre qué monto se cotizó)
 
 **Rompe si buscabas los fallos dentro de `filas`.** El mismo reparto que se le hizo hoy a
