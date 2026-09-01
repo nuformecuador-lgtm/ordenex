@@ -16,8 +16,11 @@ import { openApiSpec } from "@/lib/api/openapi-spec";
 // `error` en su enum, o su propiedad `errores`, es exactamente la forma en que este cambio se
 // quedaria a medias: el documento seguiria autorizando por escrito la respuesta vieja.
 //
-// La cotizacion NO entra aqui a proposito: alli cada fila ES la respuesta (su precio), no el
-// efecto de haber creado algo, asi que sus filas en `error` siguen dentro de `filas`.
+// La cotizacion recibio el MISMO reparto el mismo dia, y tiene su propia guardia:
+// `openapi-cotizacion-errores-aparte.test.ts`. (Aqui se leia que no entraba «porque alli cada
+// fila ES la respuesta, no el efecto de haber creado algo». La distincion era cierta y la
+// conclusion no: lo que hace util separar no es que la fila sea un efecto, es que el caso a
+// atender no tenga que buscarse dentro del caso normal.)
 
 const YAML_PATH = path.join(__dirname, "..", "..", "..", "docs", "api", "api-key-openapi.yaml");
 const yaml = fs.readFileSync(YAML_PATH, "utf8");

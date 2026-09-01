@@ -378,10 +378,16 @@ describe("255/R21 — CotizacionRow no declara `required`: una fila incompleta n
       "total",
     ]);
     expect([...schemas.CotizacionCostos.required]).toEqual(["entregado", "devuelto"]);
+    // 2026-08-31: `CotizacionRowResult` es ya SOLO la fila con precio, así que `costos` deja
+    // de ser opcional —en esta lista no cabe un elemento sin costos— y se le suma
+    // `montoCobrar`, el valor sobre el que se cotizó. Los dos son promesas que el servidor
+    // cumple siempre.
     expect([...schemas.CotizacionRowResult.required]).toEqual([
       "fila",
       "numRemision",
+      "montoCobrar",
       "resultado",
+      "costos",
     ]);
     // 2026-08-31: `CotizacionTotales` ya no existe. El bloque sumaba el lote entero como si
     // se entregara al 100% y, a la vez, como si se rechazara al 100%; la cotización es POR
@@ -393,6 +399,7 @@ describe("255/R21 — CotizacionRow no declara `required`: una fila incompleta n
       "cotizadas",
       "conError",
       "filas",
+      "errores",
     ]);
   });
 });

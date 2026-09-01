@@ -21,6 +21,53 @@
 
 ---
 
+## 2026-08-31 — RUPTURA: en `POST /ordenes/api-key/cotizacion`, las filas sin precio salen de `filas` y viajan en `errores` (y cada fila cotizada dice sobre qué monto se cotizó)
+
+**Rompe si buscabas los fallos dentro de `filas`.** El mismo reparto que se le hizo hoy a
+`POST /ordenes/api-key/carga`, ahora en la cotización: `filas` trae **solo lo que se cotizó** y una
+lista nueva, `errores`, trae **solo lo que no**. El contenido de cada fila fallida no cambia ni una
+clave. Y en la misma release, cada fila cotizada gana `montoCobrar`: **el valor sobre el que se
+cotizó**.
+
+```diff
+ {
+   "total": 2, "cotizadas": 1, "conError": 1,
+   "filas": [
+-    { "fila": 1, "numRemision": "REM-0001", "resultado": "cotizada", "costos": { ... } },
+-    { "fila": 2, "numRemision": null, "resultado": "error", "errores": { "distrito": ["distrito no encontrado en el canton"] } }
++    { "fila": 1, "numRemision": "REM-0001", "montoCobrar": "25900.00", "resultado": "cotizada", "costos": { ... } }
+   ],
++  "errores": [
++    { "fila": 2, "numRemision": null, "resultado": "error", "errores": { "distrito": ["distrito no encontrado en el canton"] } }
++  ]
+ }
+```
+
+**Por qué las dos listas.** Igual que en la carga: el caso que hay que atender venía escondido
+dentro del caso normal, y para saber si algo había fallado había que recorrer el lote entero
+ramificando por `resultado` —o, peor, por la presencia de una clave opcional—. Con dos listas la
+pregunta se responde sola: `if (respuesta.errores.length)`. Además `costos` deja de ser opcional en
+`filas`: ahí ya no cabe una fila sin precio.
+
+**Por qué `montoCobrar`.** Todo lo demás de la fila se **deriva** de él, y hasta hoy no viajaba de
+vuelta. La cotización redondea el `monto_cobrar` al colón —igual que lo redondea la carga, para que
+el precio prometido sea el que se cobra—, así que quien manda `11898.81` recibe la comisión de
+`11899` y no tenía cómo saberlo: el desglose se leía como si no cuadrara. Ahora la respuesta lo
+declara. Vale `"0.00"` cuando la fila no traía monto, que es exactamente la base que usó la comisión
+COD, y viene en el mismo string money-safe crudo de escala 2 que el resto de los importes.
+
+**Qué hacer.** Donde filtrabas `filas.filter(f => f.resultado === "error")`, leé `errores`
+directamente: ese filtro **ya no devuelve nada nunca**, ni siquiera con filas fallidas — es un
+silencio, no un error. Y si tu cliente valida en estricto, admití el campo nuevo `montoCobrar`.
+
+**Lo que NO cambia:** los contadores. `total`, `cotizadas` y `conError` siguen contando sobre el lote
+**completo**; `cotizadas` es siempre `filas.length` y `conError` siempre `errores.length`. Los dos
+escenarios (`entregado`, `devuelto`) conservan sus importes concepto por concepto, el `409` conserva
+su criterio (ninguna fila que llega a resolver tarifa la resuelve) y la respuesta sigue sin traer
+bloque de totales del lote.
+
+---
+
 ## 2026-08-31 — RUPTURA: se retira `GET /ordenes/api-key/{num_guia}` (usá `GET /ordenes/api-key/orden/{id}`)
 
 **Rompe si consultabas el detalle por guía en esa URL.** El endpoint deja de existir: a partir de
@@ -108,8 +155,9 @@ silencio, no un error, así que revisalo aunque tu integración no se haya roto 
 **Lo que NO cambia:** los contadores. `total`, `creadas`, `duplicadas` y `conError` siguen contando
 sobre el lote **completo**, y `conError` es siempre `errores.length`. `ordenes`, `cargaId`,
 `etiquetasPdf` y `manifiesto` siguen igual, y `filas` conserva el orden y la forma de siempre para
-las filas que sí entraron. La cotización (`POST /ordenes/api-key/cotizacion`) **no** cambia: ahí
-las filas en `error` siguen dentro de `filas`, porque cada fila es una respuesta y no un efecto.
+las filas que sí entraron. La cotización (`POST /ordenes/api-key/cotizacion`) recibió **el mismo
+reparto** en la misma fecha —ver la entrada de arriba—: esta entrada decía al publicarse que allí no
+cambiaba nada, y esa frase quedó desactualizada el mismo día.
 
 ---
 

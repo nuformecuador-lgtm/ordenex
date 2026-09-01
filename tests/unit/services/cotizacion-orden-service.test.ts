@@ -225,9 +225,11 @@ async function cotizar(
 }
 
 function costosDe(resumen: CotizacionResumen, indice = 0): CostosCotizacion {
-  const costos = resumen.filas[indice].costos;
-  if (costos === undefined) throw new Error(`la fila ${indice + 1} no trae costos`);
-  return costos;
+  // `indice` es la posicion dentro de `filas` (las cotizadas), no el numero de fila del lote:
+  // desde el 2026-08-31 las dos cosas dejan de coincidir cuando alguna fila queda en `errores`.
+  const cotizada = resumen.filas[indice];
+  if (cotizada === undefined) throw new Error(`no hay fila cotizada en la posicion ${indice}`);
+  return cotizada.costos;
 }
 
 beforeEach(() => {
@@ -369,7 +371,9 @@ describe("CotizacionOrdenService — cobertura por fila (T6)", () => {
   it("T6.2 distrito no encontrado en el canton (R18)", async () => {
     const resumen = await cotizar([fila({ distrito: "Inexistente" })]);
 
-    expect(resumen.filas[0]).toEqual({
+    // 2026-08-31: la fila sin precio NO esta en `filas`, esta en la lista hermana `errores`.
+    expect(resumen.filas).toEqual([]);
+    expect(resumen.errores[0]).toEqual({
       fila: 1,
       numRemision: "REM-0001",
       resultado: "error",
@@ -380,13 +384,13 @@ describe("CotizacionOrdenService — cobertura por fila (T6)", () => {
   it("T6.3 distrito ambiguo en el canton (R19)", async () => {
     const resumen = await cotizar([fila({ distrito: "Doble" })]);
 
-    expect(resumen.filas[0].errores).toEqual({ distrito: ["distrito ambiguo en el canton"] });
+    expect(resumen.errores[0].errores).toEqual({ distrito: ["distrito ambiguo en el canton"] });
   });
 
   it("T6.4 el distrito X no tiene zona asignada (R20)", async () => {
     const resumen = await cotizar([fila({ distrito: "Sin Zona" })]);
 
-    expect(resumen.filas[0].errores).toEqual({
+    expect(resumen.errores[0].errores).toEqual({
       distrito: ["el distrito 'Sin Zona' no tiene zona asignada"],
     });
   });
@@ -427,16 +431,15 @@ describe("CotizacionOrdenService — cobertura por fila (T6)", () => {
     if (resultadoCarga.status !== "ok") throw new Error("la carga no devolvio ok");
 
     const mensajes = (errores: Record<string, string[]> | undefined) => errores?.distrito;
-    // ⏳ El lado de la CARGA se leia de `summary.filas`, y ahi ya no hay nada que leer: el PR 636
-    // saco las filas con error de `filas` y las mando a su propia lista `errores`, donde cada
-    // entrada conserva su `fila` 1-based y su mapa `errores` por campo. Se cambia la FUENTE, no lo
-    // que el caso afirma: los tres mensajes de geografia siguen teniendo que salir identicos
-    // caracter a caracter por los dos bordes, porque `resolveGeo` es uno solo (design.md §5.1).
-    expect(resumen.filas.map((f) => mensajes(f.errores))).toEqual(
+    // ⏳ Los DOS lados se leen ya de `errores`: la carga saco de `filas` sus filas fallidas (PR
+    // 636) y la cotizacion hizo lo mismo el mismo dia. Se cambia la FUENTE, no lo que el caso
+    // afirma: los tres mensajes de geografia siguen teniendo que salir identicos caracter a
+    // caracter por los dos bordes, porque `resolveGeo` es uno solo (design.md §5.1).
+    expect(resumen.errores.map((f) => mensajes(f.errores))).toEqual(
       resultadoCarga.summary.errores.map((f) => mensajes(f.errores)),
     );
     // Y son exactamente los tres del contrato, en el mismo orden.
-    expect(resumen.filas.map((f) => mensajes(f.errores))).toEqual([
+    expect(resumen.errores.map((f) => mensajes(f.errores))).toEqual([
       ["distrito no encontrado en el canton"],
       ["distrito ambiguo en el canton"],
       ["el distrito 'Sin Zona' no tiene zona asignada"],
@@ -446,12 +449,14 @@ describe("CotizacionOrdenService — cobertura por fila (T6)", () => {
   it("una fila en error no trae bloque costos (R22)", async () => {
     const resumen = await cotizar([fila({ distrito: "Sin Zona" }), fila()]);
 
-    expect(resumen.filas[0].resultado).toBe("error");
-    expect(resumen.filas[0].costos).toBeUndefined();
-    expect("costos" in resumen.filas[0]).toBe(false);
+    // 2026-08-31: la separacion hace el aserto mas fuerte, no mas debil. Antes se comprobaba
+    // que la fila mala no trajera `costos`; ahora ni siquiera esta en la lista que los lleva.
+    expect(resumen.errores[0].resultado).toBe("error");
+    expect("costos" in resumen.errores[0]).toBe(false);
+    expect(resumen.filas.some((f) => f.fila === 1)).toBe(false);
     // Y la simetria: una fila cotizada no trae `errores`.
-    expect(resumen.filas[1].resultado).toBe("cotizada");
-    expect("errores" in resumen.filas[1]).toBe(false);
+    expect(resumen.filas[0].resultado).toBe("cotizada");
+    expect("errores" in resumen.filas[0]).toBe(false);
     // Exito parcial (R21): la fila mala no impide cotizar la otra.
     expect(resumen.cotizadas).toBe(1);
     expect(resumen.conError).toBe(1);
@@ -673,8 +678,15 @@ describe("CotizacionOrdenService — la cotizacion es POR ORDEN, sin agregado de
     ]) {
       const resumen = await cotizar(rows);
       expect("totales" in resumen).toBe(false);
-      // Y la forma completa del resumen es exactamente esta: cuatro claves.
-      expect(Object.keys(resumen).sort()).toEqual(["conError", "cotizadas", "filas", "total"]);
+      // Y la forma completa del resumen es exactamente esta: cinco claves (`errores` es la
+      // lista hermana que naciO el 2026-08-31; su presencia es parte del contrato, no un extra).
+      expect(Object.keys(resumen).sort()).toEqual([
+        "conError",
+        "cotizadas",
+        "errores",
+        "filas",
+        "total",
+      ]);
     }
   });
 
@@ -685,8 +697,9 @@ describe("CotizacionOrdenService — la cotizacion es POR ORDEN, sin agregado de
       [fila({ distrito: "Inexistente" })],
     ]) {
       const resumen = await cotizar(rows);
-      expect(resumen.cotizadas).toBe(resumen.filas.filter((f) => f.resultado === "cotizada").length);
-      expect(resumen.conError).toBe(resumen.filas.filter((f) => f.resultado === "error").length);
+      // Cada contador es la longitud de SU lista: por construccion no pueden desincronizarse.
+      expect(resumen.cotizadas).toBe(resumen.filas.length);
+      expect(resumen.conError).toBe(resumen.errores.length);
       expect(resumen.cotizadas + resumen.conError).toBe(resumen.total);
     }
   });
@@ -701,8 +714,27 @@ describe("CotizacionOrdenService — la cotizacion es POR ORDEN, sin agregado de
     expect(resumen.cotizadas).toBe(0);
     expect(resumen.conError).toBe(3);
     expect("totales" in resumen).toBe(false);
-    // Ni un cero suelto: una fila en error no trae `costos`, y no hay nada mas donde mirar.
-    expect(resumen.filas.every((f) => !("costos" in f))).toBe(true);
+    // Ni un cero suelto: `filas` (la unica lista que lleva importes) esta vacia, y las tres
+    // entradas de `errores` no traen `costos`.
+    expect(resumen.filas).toEqual([]);
+    expect(resumen.errores.every((f) => !("costos" in f))).toBe(true);
+  });
+
+  it("una fila NO puede estar en las dos listas, y entre las dos cubren el lote entero", async () => {
+    // La invariante que hace fiable el reparto: `filas` y `errores` particionan el lote. Sin
+    // esto, duplicar una fila en las dos listas dejaria los contadores cuadrando igual.
+    const resumen = await cotizar([
+      fila(),
+      fila({ distrito: "Sin Zona" }),
+      fila({ distrito: "Centro" }),
+      fila({ provincia: "" }),
+    ]);
+
+    const cotizadas = resumen.filas.map((f) => f.fila);
+    const fallidas = resumen.errores.map((f) => f.fila);
+    expect(cotizadas).toEqual([1, 3]);
+    expect(fallidas).toEqual([2, 4]);
+    expect([...cotizadas, ...fallidas].sort()).toEqual([1, 2, 3, 4]);
   });
 
   it("estructural: el service ya no acumula el lote (ni acumuladores ni sumas entre filas)", () => {
@@ -791,8 +823,8 @@ describe("CotizacionOrdenService — tarifa por zona (feature 274, R32-R38)", ()
     expect(resumen.filas.every((f) => f.resultado === "cotizada")).toBe(true);
     expect(resumen.cotizadas).toBe(3);
     expect(resumen.conError).toBe(0);
-    // Ninguna fila trae el canal de error de tarifa.
-    expect(resumen.filas.some((f) => f.errores !== undefined)).toBe(false);
+    // Ninguna fila trae el canal de error de tarifa: la lista hermana esta vacia.
+    expect(resumen.errores).toEqual([]);
   });
 
   it("R34/R38 lote mixto: la fila sin tarifa se degrada a error, sin bloque costos y sin aportar al lote", async () => {
@@ -806,14 +838,16 @@ describe("CotizacionOrdenService — tarifa por zona (feature 274, R32-R38)", ()
 
     // R38: el MISMO canal de error por fila que ya usaba la geografia —`errores` por campo—,
     // con la clave `tarifa`. Ni un campo nuevo, ni un codigo nuevo, ni un bloque paralelo.
-    expect(resumen.filas[1]).toEqual({
+    expect(resumen.errores[0]).toEqual({
       fila: 2,
       numRemision: "REM-0002",
       resultado: "error",
       errores: { tarifa: [MSG_FILA_SIN_TARIFA] },
     });
     // R34: AUSENCIA de la clave `costos`, no un `costos` en cero. Un cero seria un precio.
-    expect("costos" in resumen.filas[1]).toBe(false);
+    expect("costos" in resumen.errores[0]).toBe(false);
+    // Y la fila degradada no se cuela en la lista de las que SI tienen precio.
+    expect(resumen.filas.map((f) => f.fila)).toEqual([1]);
 
     // Contadores: la fila degradada cuenta como error y como excluida del lote.
     expect(resumen.cotizadas).toBe(1);
@@ -859,8 +893,9 @@ describe("CotizacionOrdenService — tarifa por zona (feature 274, R32-R38)", ()
     // Y ni siquiera se consulta la tarifa: no hay un solo par que pedir.
     expect(tarifaRepo.resolveTarifas).not.toHaveBeenCalled();
     // Ninguna fila lleva el error de tarifa: los tres errores son de geografia/validacion.
-    for (const f of result.resumen.filas) {
-      expect(f.errores?.tarifa).toBeUndefined();
+    expect(result.resumen.filas).toEqual([]);
+    for (const f of result.resumen.errores) {
+      expect(f.errores.tarifa).toBeUndefined();
     }
   });
 
@@ -899,7 +934,7 @@ describe("CotizacionOrdenService — tarifa por zona (feature 274, R32-R38)", ()
   it("R38 el literal del error de fila viene de la constante compartida, no de una copia local", async () => {
     const resumen = await cotizar([fila(), fila({ distrito: "Santa Ana" })], { tarifa: SOLO_Z1 });
 
-    expect(resumen.filas[1].errores).toEqual({ tarifa: [MSG_FILA_SIN_TARIFA] });
+    expect(resumen.errores[0].errores).toEqual({ tarifa: [MSG_FILA_SIN_TARIFA] });
     // El service IMPORTA la cadena; no la escribe. Un literal inline aqui seria la segunda
     // copia que diverge a la primera errata corregida (y R38 pide justo lo contrario: que la
     // carga y la cotizacion emitan la MISMA).
@@ -973,11 +1008,14 @@ describe("CotizacionOrdenService — fulfillment (2026-08-25)", () => {
     // 2026-08-31: sin bloque de lote, lo que se afirma es lo que el contrato publica — el
     // monto por orden, en las dos filas que cotizan, y ni un importe en la que no.
     expect(resumen.cotizadas).toBe(2);
-    for (const indice of [0, 2]) {
+    // Las dos que cotizan son las filas 1 y 3 del lote; en `filas` ocupan las posiciones 0 y 1
+    // porque la que no cotiza ya no viaja entre ellas.
+    expect(resumen.filas.map((f) => f.fila)).toEqual([1, 3]);
+    for (const indice of [0, 1]) {
       expect(costosDe(resumen, indice).entregado.fulfillment).toBe("1000.00");
       expect(costosDe(resumen, indice).devuelto.fulfillment).toBe("1000.00");
     }
-    expect("costos" in resumen.filas[1]).toBe(false);
+    expect("costos" in resumen.errores[0]).toBe(false);
   });
 
   it("no se cuela en la liquidacion: `derivarIngresoOrden` nunca ve el monto", async () => {
@@ -991,5 +1029,48 @@ describe("CotizacionOrdenService — fulfillment (2026-08-25)", () => {
       expect(tarifa).not.toBeNull();
     }
     expect(FUENTE_SERVICE).toContain("montoFulfillmentDeTarifa");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2026-08-31 — EL VALOR SOBRE EL QUE SE COTIZA (`montoCobrar`).
+//
+// Todo lo demas de la fila se DERIVA del monto a cobrar, y hasta hoy ese monto no volvia. La
+// cotizacion lo redondea al colon en la puerta (ficha 305) para prometer el precio que de
+// verdad se cobrara, asi que el numero con el que se calculo y el que el integrador mando
+// pueden no ser el mismo: sin publicarlo, el desglose se lee como si no cuadrara.
+// ---------------------------------------------------------------------------
+describe("CotizacionOrdenService — el monto sobre el que se cotiza", () => {
+  it("cada fila cotizada declara el monto que entro al calculo, en el dialecto crudo", async () => {
+    const resumen = await cotizar([fila(), fila({ monto_cobrar: "48000" })]);
+
+    expect(resumen.filas.map((f) => f.montoCobrar)).toEqual(["25900.00", "48000.00"]);
+  });
+
+  it("es el monto REDONDEADO, el mismo con el que se calculo la comision (ficha 305)", async () => {
+    // El caso medido de la 299/305: `11898.81` se cobra como `11899`. Lo que este caso fija es
+    // que el campo publicado y la base de la comision son el MISMO numero — publicar el crudo
+    // recibido volveria a contar dos historias sobre el mismo dinero.
+    const resumen = await cotizar([fila({ monto_cobrar: "11898.81" })]);
+
+    expect(resumen.filas[0].montoCobrar).toBe("11899.00");
+    const [entrada] = espiaDerivar.mock.calls[0];
+    expect(entrada.montoCobrar).toBe("11899");
+  });
+
+  it("sin monto a cobrar publica el cero EXPLICITO, que es la base que uso la comision (R32)", async () => {
+    // Ni ausente ni `null`: el cero se AFIRMA, igual que lo hace `comision` en el escenario
+    // devuelto. Un campo que a veces esta y a veces no obliga a adivinar cual fue la base.
+    const resumen = await cotizar([fila({ monto_cobrar: "" })]);
+
+    expect(resumen.filas[0].montoCobrar).toBe("0.00");
+    // Y el total entregado sale negativo: no hubo COD que cubriera lo facturado.
+    expect(costosDe(resumen).entregado.total.startsWith("-")).toBe(true);
+  });
+
+  it("una fila en error no declara ningun monto: ahi no hubo cotizacion", async () => {
+    const resumen = await cotizar([fila({ distrito: "Inexistente" })]);
+
+    expect("montoCobrar" in resumen.errores[0]).toBe(false);
   });
 });
