@@ -8,6 +8,8 @@ import {
 } from "@/components/shared/DataTable";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 
+import { DetalleMiMovimientoCierre } from "./DetalleMiMovimientoCierre";
+import { DETALLE_MI_MOVIMIENTO_NOMBRE } from "./detalle-mi-movimiento-labels";
 import { COLUMNAS_DESCARGA_MI_WALLET } from "./mi-wallet-descarga-columnas";
 import { CATEGORIA_TIENDA_LABEL, TIPO_TIENDA_LABEL, money, origenLabel } from "./mi-wallet-labels";
 
@@ -63,6 +65,21 @@ const COLUMNS: Column<WalletTiendaMovimientoDTO>[] = [
 /** Nombre visible del desglose: hoja, base del archivo y nombre del control (R12/R13). */
 const TITULO_DESCARGA = "Desglose de movimientos";
 
+/**
+ * Ficha 344 (T7.2, R6) — QUÉ FILA SE PUEDE ABRIR.
+ *
+ * Sólo las que nacen del cierre del día: es de ahí de donde se llega a las órdenes que componen
+ * el importe. Un pago recibido o un ajuste manual no tienen órdenes detrás, y la columna
+ * «Origen» ya dice de dónde salen.
+ *
+ * Devolver `null` en `renderExpanded` hace que la primitiva NO pinte el botón sobre esa fila.
+ * `origenTipo` es un `string` en este DTO (no el enum), así que se compara con el valor que el
+ * esquema declara para el origen del cierre — el mismo con el que `origenLabel` lo rotula.
+ */
+function naceDeUnCierre(m: WalletTiendaMovimientoDTO): boolean {
+  return m.origenTipo === "cierre_dia";
+}
+
 export interface DesgloseTiendaLedgerProps {
   movimientos: WalletTiendaMovimientoDTO[];
   isLoading?: boolean;
@@ -91,6 +108,29 @@ export function DesgloseTiendaLedger({
         ariaLabel={TITULO_DESCARGA}
         isLoading={isLoading}
         emptyMessage="No hay movimientos que coincidan con los filtros."
+        // Ficha 344 (T7.2, R1–R6): cada fila de CIERRE despliega las órdenes de ESTA tienda que
+        // componen su importe. La LECTURA del detalle vive dentro de
+        // `DetalleMiMovimientoCierre`, así que el libro cerrado no dispara ninguna lectura de
+        // detalle (R2) y abrir una fila dispara exactamente una, sólo la de esa fila (R3).
+        // (Este componente sigue sin leer nada, y la guardia que lo comprueba lee esta fuente
+        // CRUDA —comentarios incluidos—, así que aquí ni se nombra el hook de datos.)
+        renderExpanded={(m) =>
+          naceDeUnCierre(m) ? (
+            <DetalleMiMovimientoCierre
+              movimientoId={m.id}
+              concepto={CATEGORIA_TIENDA_LABEL[m.categoria]}
+              fecha={m.fechaMovimiento.slice(0, 10)}
+            />
+          ) : null
+        }
+        // R5: el nombre accesible identifica SU fila —el concepto y la fecha—, no un genérico
+        // repetido en cada renglón.
+        expandAriaLabel={(m) =>
+          DETALLE_MI_MOVIMIENTO_NOMBRE.abrir(
+            CATEGORIA_TIENDA_LABEL[m.categoria],
+            m.fechaMovimiento.slice(0, 10),
+          )
+        }
         // Feature 170 (T C.4, R1/R9/R13/R14): el archivo es el ledger de la tienda del
         // actor y de nadie más — quien lo acota es el servicio, con el `tienda_id` del
         // actor escrito al final del where; aquí no se puede ampliar ese alcance.

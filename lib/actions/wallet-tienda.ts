@@ -362,9 +362,10 @@ export async function listarMovimientosDeTiendaCompletoAction(
  * —el `.strict()` del schema lo mata en el borde (R42)— asi que el alcance no es forzable desde
  * fuera. Un movimiento de otra tienda responde `not_found` (R41).
  *
- * @sin-superficie el panel que la monta llega en el bloque B7 (frontend) de la ficha 344; esta
- * tanda es solo backend. QUIEN CABLEE `DetalleMiMovimientoCierre` DEBE BORRAR ESTA LINEA: la
- * guardia de superficie de uso falla tambien cuando una anotacion sobrevive a su motivo.
+ * Superficie viva (ficha 344, B7): `DetalleMiMovimientoCierre`, el panel que despliega cada fila
+ * de cierre del libro de `/mi-wallet`. La anotacion `@sin-superficie` con la que nacio esta
+ * accion se BORRO al cablearlo, porque la guardia de superficie de uso falla tambien cuando una
+ * anotacion sobrevive a su motivo.
  */
 export async function verDetalleDeMiMovimientoAction(
   input: unknown,
@@ -384,9 +385,9 @@ export async function verDetalleDeMiMovimientoAction(
  * Ficha 344 (T4.4, R32/R33) — el MISMO detalle de la tienda sin recorte por pagina, para la
  * descarga. El tope lo evalua y lo aplica el SERVICIO, con el mismo acotamiento por tienda.
  *
- * @sin-superficie su control de descarga llega en el bloque B8 (frontend) de la ficha 344; esta
- * tanda es solo backend. QUIEN CABLEE LA DESCARGA DEBE BORRAR ESTA LINEA, por el mismo motivo
- * que en su hermana paginada.
+ * Superficie viva (ficha 344, B8): el control de descarga de `DetalleMiMovimientoCierre`, que la
+ * consume via `filasDesdeResultado` tras descartar la rama `sin_reparto`. Su `@sin-superficie`
+ * se borro al cablearla, por el mismo motivo que en su hermana paginada.
  */
 export async function verDetalleDeMiMovimientoCompletoAction(
   input: unknown,

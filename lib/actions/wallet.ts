@@ -253,9 +253,10 @@ export async function verResumenCajaAction(
  * cliente manda el id del MOVIMIENTO y la pagina, y nada mas: ni el cierre, ni la categoria, ni
  * la tienda (R42). Todo lo demas lo resuelve el servidor leyendo esa fila.
  *
- * @sin-superficie el panel que la monta llega en el bloque B6 (frontend) de la ficha 344; esta
- * tanda es solo backend. QUIEN CABLEE `DetalleMovimientoCierre` DEBE BORRAR ESTA LINEA: la
- * guardia de superficie de uso falla tambien cuando una anotacion sobrevive a su motivo.
+ * Superficie viva (ficha 344, B6): `DetalleMovimientoCierre`, el panel que despliega cada fila
+ * de cierre del libro de `/wallet`. La anotacion `@sin-superficie` con la que nacio esta accion
+ * se BORRO al cablearlo, porque la guardia de superficie de uso falla tambien cuando una
+ * anotacion sobrevive a su motivo.
  */
 export async function verDetalleDeMovimientoAction(
   input: unknown,
@@ -275,9 +276,9 @@ export async function verDetalleDeMovimientoAction(
  * Ficha 344 (T4.4, R32/R33) — el MISMO detalle sin recorte por pagina, para la descarga. El tope
  * lo evalua y lo aplica el SERVICIO: el navegador no selecciona, no ordena y no recorta.
  *
- * @sin-superficie su control de descarga llega en el bloque B8 (frontend) de la ficha 344; esta
- * tanda es solo backend. QUIEN CABLEE LA DESCARGA DEBE BORRAR ESTA LINEA, por el mismo motivo
- * que en su hermana paginada.
+ * Superficie viva (ficha 344, B8): el control de descarga de `DetalleMovimientoCierre`, que la
+ * consume via `filasDesdeResultado` tras descartar la rama `sin_reparto`. Su `@sin-superficie`
+ * se borro al cablearla, por el mismo motivo que en su hermana paginada.
  */
 export async function verDetalleDeMovimientoCompletoAction(
   input: unknown,
