@@ -23,7 +23,12 @@ const COLUMNAS: readonly Columna[] = [
     Icono: CreditCard,
     puntos: [
       "El flete se cobra al crear la orden.",
-      "Devoluciones tienen costo adicional de flete de retorno.",
+      // Ficha 301 (2026-08-28): una DEVOLUCION no cobra nada. Esta linea decia lo
+      // contrario y estuvo cuatro dias en produccion diciendoselo a los clientes. El
+      // unico resultado que cobra flete de retorno es `rechazada`, que es cuando el
+      // paquete vuelve de verdad a la tienda; una `devuelta` es un intento fallido que
+      // sigue vivo y se puede reprogramar. Ver `lib/utils/ingreso-ordenex.ts`.
+      "Un paquete rechazado suma el flete de retorno; un intento fallido que se reprograma, no.",
       "Reembolsos en máximo 5 días hábiles.",
       "Paquetes no reclamados se retienen hasta 15 días hábiles.",
     ],

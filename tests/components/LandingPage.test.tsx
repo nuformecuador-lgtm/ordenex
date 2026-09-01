@@ -183,3 +183,47 @@ describe("app/page.tsx — `/?guia=4321` llega hasta la nav", () => {
     expect(await guiaDeLaNav()).toBeNull();
   });
 });
+
+/**
+ * Ficha 301 (2026-08-28) sacó la `devuelta` de los conceptos de cobro: el ÚNICO resultado que
+ * cobra flete de retorno es `rechazada`. La landing siguió cuatro días diciéndole lo contrario a
+ * los clientes, porque ninguna prueba miraba el texto que ellos leen.
+ *
+ * Esta aserción NO es un espejo del literal: es NEGATIVA y codifica la regla de negocio. Si
+ * alguien devuelve la redacción vieja —o escribe cualquier otra que le cuelgue el costo a la
+ * devolución— se pone en rojo. La fuente de verdad de la regla vive en
+ * `lib/utils/ingreso-ordenex.ts`, no aquí.
+ */
+describe("app/_landing/LandingPoliticas.tsx — el flete de retorno lo cobra el RECHAZO (ficha 301)", () => {
+  it("ningún punto le dice al cliente que una devolución tiene costo", async () => {
+    const { LandingPoliticas } = await import("@/app/_landing/LandingPoliticas");
+    const { container } = render(<LandingPoliticas />);
+
+    // Punto por punto, NO sobre el `textContent` entero: concatenado, el título «Pagos y
+    // devoluciones» queda pegado al punto siguiente y cualquier regex cruza de uno a otro.
+    const puntos = [...container.querySelectorAll("li")].map((li) => li.textContent ?? "");
+    expect(puntos.length).toBeGreaterThan(0);
+
+    const culpables = puntos.filter((punto) =>
+      /devoluc\w*[^.]{0,80}(costo|cobr\w*|cargo|tarifa|flete de retorno)/i.test(punto),
+    );
+
+    expect(
+      culpables,
+      "la landing vuelve a decirle al cliente que una devolución cuesta: sólo un RECHAZO cobra flete de retorno",
+    ).toEqual([]);
+  });
+
+  it("donde se nombra el flete de retorno, se nombra el rechazo", async () => {
+    const { LandingPoliticas } = await import("@/app/_landing/LandingPoliticas");
+    const { container } = render(<LandingPoliticas />);
+    const texto = container.textContent ?? "";
+
+    const frase = texto
+      .split(/(?<=\.)\s*/)
+      .find((f) => /flete de retorno/i.test(f));
+
+    expect(frase, "la landing dejó de explicar el flete de retorno").toBeDefined();
+    expect(frase).toMatch(/rechaz/i);
+  });
+});
