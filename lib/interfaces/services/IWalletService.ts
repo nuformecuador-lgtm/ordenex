@@ -4,6 +4,7 @@ import type {
   ComposicionGananciaDTO,
   WalletMovimientoDTO,
   ListarMovimientosCompletoInput,
+  ListarMovimientosDeFilaInput,
   ListarMovimientosInput,
   RegistrarMovimientoManualInput,
 } from "@/lib/types/wallet";
@@ -52,6 +53,20 @@ export type VerResumenCajaServiceResult =
   | { status: "ok"; resumen: CajaResumenDTO; composicion: ComposicionGananciaDTO }
   | { status: "forbidden" };
 
+/**
+ * Ficha 339 (T3.3/T3.5, design §4.2) — los movimientos que componen UNA fila de la tarjeta de la
+ * ganancia, paginados.
+ *
+ * Reutiliza `ListarMovimientosPayload` —`movimientos`, `total`, `page`, `pageSize`— porque es
+ * literalmente un recorte del MISMO libro y ya viaja con los montos como STRING (R34). El
+ * `total` es el del CONJUNTO y lo cuenta la base, nunca el largo de la pagina (R31).
+ *
+ * `forbidden` NO viaja con filas (R38): quien no tiene acceso total no recibe ni un movimiento.
+ */
+export type ListarMovimientosDeFilaServiceResult =
+  | { status: "ok"; data: ListarMovimientosPayload }
+  | { status: "forbidden" };
+
 export type RegistrarMovimientoManualServiceResult =
   | { status: "ok"; movimiento: WalletMovimientoDTO }
   | { status: "forbidden" }
@@ -81,6 +96,23 @@ export interface IWalletService {
     input: ListarMovimientosInput,
     actor: Actor,
   ): Promise<VerResumenCajaServiceResult>;
+  /**
+   * Ficha 339 (T3.3, design §4.3 — R18/R20/R33/R38/R39) — el detalle de UNA fila de la tarjeta
+   * de la ganancia: los movimientos que componen su importe, paginados.
+   *
+   * El cliente manda un TOKEN de fila y jamas una lista de categorias: el conjunto lo resuelve
+   * el servidor con `categoriasDeFilaComposicion`, LA MISMA definicion con la que
+   * `derivarComposicionGanancia` deriva el importe de esa fila. Si hubiera dos definiciones, el
+   * importe y su detalle podrian discrepar y nadie lo veria.
+   *
+   * Mismo guardia de rol que el listado (`esAccesoTotal`), evaluado ANTES de tocar la base
+   * (R39), y los MISMOS filtros del libro, resueltos por el mismo metodo privado (R20). Ni una
+   * operacion de dinero nueva: esto LEE importes que ya estaban derivados.
+   */
+  listarMovimientosDeFila(
+    input: ListarMovimientosDeFilaInput,
+    actor: Actor,
+  ): Promise<ListarMovimientosDeFilaServiceResult>;
   /** R15/R19: solo maestro; registra un movimiento manual de AJUSTE (inmutable, R3). */
   registrarMovimientoManual(
     input: RegistrarMovimientoManualInput,

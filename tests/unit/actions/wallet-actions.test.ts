@@ -78,8 +78,15 @@ const COMPOSICION: ComposicionGananciaDTO = {
     ingreso_ajuste: "0.00",
   },
   totalIngresos: "1000.00",
+  // Ficha 339 (T1.3): las dos cubetas nuevas. Aqui van a 0,00 y los 300 siguen en «otros»,
+  // asi que este archivo mide exactamente lo que medía: el BORDE, no la particion.
+  egresos: {
+    egreso_pago_mensajero: "0.00",
+    egreso_ajuste: "0.00",
+  },
   otrosEgresos: "300.00",
   totalEgresos: "300.00",
+  hayOtrosEgresos: true, // 300,00 sin clasificar ⇒ el servidor manda pintar la fila
 };
 
 function fakeService(overrides: Partial<IWalletService> = {}): IWalletService {
@@ -99,6 +106,12 @@ function fakeService(overrides: Partial<IWalletService> = {}): IWalletService {
       status: "ok" as const,
       resumen: RESUMEN,
       composicion: COMPOSICION,
+    })),
+    // Ficha 339 (T3.4): el doble implementa la interfaz COMPLETA. El detalle de una fila lo
+    // ejercita `wallet-detalle-fila-action.test.ts`.
+    listarMovimientosDeFila: vi.fn(async () => ({
+      status: "ok" as const,
+      data: { movimientos: [mov()], total: 1, page: 1, pageSize: 10 },
     })),
     registrarMovimientoManual: vi.fn(async () => ({ status: "ok" as const, movimiento: mov() })),
     ...overrides,
@@ -216,10 +229,22 @@ describe("el PUENTE `verBalanceAction` ya no existe (173, Tanda H)", () => {
     // Control de no-vacuidad del `toEqual([])`: el modulo SI exporta acciones, y son las cuatro
     // que quedan. Si el import fallara o devolviera un objeto vacio, el filtro de arriba pasaria
     // sin haber mirado nada.
+    // Ficha 339 (T3.4): la lista pasa de cuatro a CINCO acciones, y el añadido es deliberado
+    // — `listarMovimientosDeFilaAction`, el detalle de una fila de la tarjeta de la ganancia.
+    // Se actualiza el literal en vez de derivarlo del propio módulo: este censo ES el contrato
+    // de superficie del borde de la wallet, y derivarlo lo dejaría siempre verde.
+    // Ficha 344 (T4.4): de CINCO a SIETE, y las dos nuevas también son deliberadas — el detalle
+    // de una fila del LIBRO (qué órdenes componen su importe) y su gemela sin paginar para la
+    // descarga. Las dos nacen anotadas `@sin-superficie` porque su panel llega en la tanda de
+    // frontend; quien lo cablee tiene que borrar esa anotación, y la guardia de superficie de
+    // uso lo exige en los dos sentidos.
     expect(Object.keys(acciones).sort()).toEqual([
       "listarMovimientosAction",
       "listarMovimientosCompletoAction",
+      "listarMovimientosDeFilaAction",
       "registrarMovimientoManualAction",
+      "verDetalleDeMovimientoAction",
+      "verDetalleDeMovimientoCompletoAction",
       "verResumenCajaAction",
     ]);
   });

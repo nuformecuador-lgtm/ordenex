@@ -500,7 +500,10 @@ describe("256/R17 — el conjunto de transiciones que emiten evento", () => {
     // proposito (10 -> 12 con `ayuda_tienda` e `incidente`, R1-R3) y vacia la lista de exencion
     // (1 -> 0, R5, revirtiendo 235/P4). Lo que el test sigue protegiendo es que NADIE mueva esos
     // numeros sin querer: cualquier alta o baja futura lo pone rojo igual que antes.
-    expect(EVENTOS_PUBLICOS.size).toBe(12);
+    //
+    // ⏳ 2026-08-31 — y eso es exactamente lo que hizo: 12 -> 13 al entrar `en_preparacion`, el
+    // evento de NACIMIENTO de la rama de fulfillment. La lista de exencion NO se toca (sigue vacia).
+    expect(EVENTOS_PUBLICOS.size).toBe(13);
     expect(ORIGENES_SIN_EVENTO_PUBLICO.length).toBe(0);
   });
 });

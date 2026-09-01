@@ -2,8 +2,12 @@
 //
 // `POST /api/ordenes/api-key/cotizacion`. Toma la MISMA entrada que
 // `POST /api/ordenes/api-key/carga` (feature 88) y NO persiste NADA: devuelve, por cada fila,
-// su cobertura y cuanto costaria en los DOS escenarios posibles (entregado y devuelto), mas un
-// bloque de totales del LOTE (decision D2).
+// su cobertura y cuanto costaria en los DOS escenarios posibles (entregado y devuelto).
+//
+// SIN TOTALES DEL LOTE (retirados el 2026-08-31): el bloque `totales` de la 255 sumaba todas
+// las filas cotizadas en el escenario entregado Y en el devuelto, o sea bajo las premisas de
+// "100% entregas" y "100% rechazos" a la vez. La cotizacion que este canal publica es POR
+// ORDEN; agregar con una premisa de entrega real es del lado que consume.
 //
 // CONVIVENCIA DE RUTAS: el segmento estatico gana al dinamico en el App Router, asi que este
 // hermano de `[numGuia]/` no necesita nada especial — mismo precedente que `carga/` y `orden/`.
@@ -142,9 +146,10 @@ export async function handleCotizacionApi(
     // Defensa en profundidad: el rol ya se comprobo al autenticar.
     if (cotizacion.status === "forbidden") throw new ForbiddenError();
 
-    // R34/R46/R51: el resumen viaja TAL CUAL. Ya trae `total`, `cotizadas`, `conError`, el
-    // bloque `totales` del lote y el detalle por fila con su indice 1-based, con cada importe
-    // UNA sola vez y SOLO crudo. Este borde no reescribe ni un campo.
+    // R34/R46: el resumen viaja TAL CUAL. Ya trae `total`, `cotizadas`, `conError` y las DOS
+    // listas por fila con su indice 1-based —`filas` con lo cotizado (incluido el
+    // `montoCobrar` sobre el que se cotizo) y `errores` con lo que no se pudo cotizar—, con
+    // cada importe UNA sola vez y SOLO crudo. Este borde no reescribe ni un campo.
     return cotizacion.resumen;
   });
 

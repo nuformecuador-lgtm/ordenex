@@ -71,6 +71,8 @@ function repoFake(): IWalletTiendaMovimientoRepository {
     // ficha 335: el doble implementa la interfaz COMPLETA. Los cierres del selector los
     // ejercita `tests/unit/services/mi-wallet-cierres.test.ts`; aqui solo tienen que existir.
     listarCierresDeTienda: vi.fn(async () => []),
+    // Ficha 344: la lectura por id acotada a la tienda. Este doble no la ejercita.
+    obtenerPorIdDeTienda: vi.fn(async () => null),
   };
 }
 

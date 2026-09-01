@@ -1,22 +1,36 @@
 "use server";
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import { CierreAporteRepository } from "@/lib/repositories/CierreAporteRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
+import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
+import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
 import { WalletService } from "@/lib/services/WalletService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   IWalletService,
+  ListarMovimientosDeFilaServiceResult,
   ListarMovimientosServiceResult,
   RegistrarMovimientoManualServiceResult,
   VerResumenCajaServiceResult,
 } from "@/lib/interfaces/services/IWalletService";
+import type {
+  IDetalleMovimientoService,
+  VerDetalleMovimientoCompletoServiceResult,
+  VerDetalleMovimientoServiceResult,
+} from "@/lib/interfaces/services/IDetalleMovimientoService";
 import {
   listarMovimientosCompletoSchema,
+  listarMovimientosDeFilaSchema,
   listarMovimientosSchema,
   registrarMovimientoManualSchema,
   type ListarMovimientosCompletoResult,
 } from "@/lib/types/wallet";
+import {
+  verDetalleDeMovimientoCompletoSchema,
+  verDetalleDeMovimientoSchema,
+} from "@/lib/types/detalle-movimiento";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -29,6 +43,17 @@ import type { AppErrorShape } from "@/lib/errors";
 
 export type ListarMovimientosActionResult =
   | ListarMovimientosServiceResult
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+/**
+ * Ficha 339 (T3.4) — el detalle de una fila en el BORDE. Se DERIVA del resultado del servicio,
+ * igual que el del listado: `forbidden` lo decide el dominio; `unauthenticated` (sin sesion) y
+ * `validation_error` (ZodError: `fila` fuera del catalogo o `pageSize` por encima del tope) se
+ * resuelven aqui. **Ninguna rama de error viaja con movimientos** (R32/R38).
+ */
+export type ListarMovimientosDeFilaActionResult =
+  | ListarMovimientosDeFilaServiceResult
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -67,10 +92,48 @@ function buildService(): IWalletService {
   return new WalletService(repo, prisma);
 }
 
+/**
+ * Ficha 344 — el composition root del detalle de una fila del libro.
+ *
+ * Las TRES dependencias se inyectan aqui y solo aqui: la lectura del movimiento de la caja, la
+ * del libro por tienda (que el detalle de `/mi-wallet` usa desde su propio borde) y el
+ * repositorio de aportes. El servicio no construye ninguna.
+ */
+function buildDetalleService(): IDetalleMovimientoService {
+  const prisma = getPrismaClient();
+  return new DetalleMovimientoService(
+    new WalletMovimientoRepository(prisma),
+    new WalletTiendaMovimientoRepository(prisma),
+    new CierreAporteRepository(prisma),
+  );
+}
+
 export interface WalletDeps {
   service?: IWalletService;
   getActor?: () => Promise<Actor | null>;
 }
+
+/** Las dependencias del detalle, inyectables en test igual que las del libro. */
+export interface DetalleMovimientoDeps {
+  service?: IDetalleMovimientoService;
+  getActor?: () => Promise<Actor | null>;
+}
+
+/**
+ * Ficha 344 (T4.4) — el detalle de una fila del libro en el BORDE. `forbidden`, `not_found` y
+ * `sin_reparto` los decide el DOMINIO; `unauthenticated` (sin sesion) y `validation_error`
+ * (ZodError: id que no es uuid, `pageSize` sobre el tope o una clave colada) se resuelven aqui.
+ * NINGUNA rama de error viaja con ordenes (R29/R42).
+ */
+export type VerDetalleDeMovimientoActionResult =
+  | VerDetalleMovimientoServiceResult
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+export type VerDetalleDeMovimientoCompletoActionResult =
+  | VerDetalleMovimientoCompletoServiceResult
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
 /** R19/R20/R25: lista el libro (solo maestro). Forbidden/unauthenticated sin exponer datos. */
 export async function listarMovimientosAction(
@@ -103,6 +166,35 @@ export async function listarMovimientosCompletoAction(
     const data = listarMovimientosCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.listarMovimientosCompleto(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletActionError(r) : r;
+}
+
+/**
+ * Ficha 339 (T3.4, design §4.5) — los movimientos que componen UNA fila de la tarjeta de la
+ * ganancia. Calcada de `listarMovimientosAction`: resuelve el actor, lanza `UnauthenticatedError`
+ * si no hay sesion, valida con el schema derivado del listado y delega en el servicio.
+ *
+ * Lectura interna del mismo proyecto ⇒ Server Action, no ruta API (`docs/architecture.md`). El
+ * cliente manda el TOKEN de la fila; quien traduce ese token a un conjunto de categorias es el
+ * servicio, con la misma definicion que produjo el importe de la fila.
+ *
+ * SU SUPERFICIE (bloque B5 de la 343): `DetalleFilaComposicion`, el panel que se despliega al
+ * abrir una fila de la tarjeta «Como se compone la ganancia de Ordenex». Mientras esa pantalla
+ * no existio, este docstring llevo la anotacion de excepcion de
+ * `superficie-de-uso.guardia.test.ts`; al cablear el desplegable se borro, que es exactamente lo
+ * que esa guardia obliga a hacer.
+ */
+export async function listarMovimientosDeFilaAction(
+  input: unknown,
+  deps: WalletDeps = {},
+): Promise<ListarMovimientosDeFilaActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
+    const data = listarMovimientosDeFilaSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarMovimientosDeFila(data, actor);
   });
   return isAppErrorShape(r) ? toWalletActionError(r) : r;
 }
@@ -151,6 +243,56 @@ export async function verResumenCajaAction(
 // Con el se van `VerBalanceActionResult` y el import de `WalletBalanceDTO`, que no tenian otro
 // uso en este archivo. `WalletBalanceDTO` NO se borra del arbol: es el tipo de retorno de
 // `derivarBalance` (`lib/utils/wallet-balance.ts`), que R9 protege intacto.
+
+/**
+ * Ficha 344 (T4.4, design §3.5) — las ordenes que componen el importe de UNA fila del libro de
+ * la caja. Calcada de `listarMovimientosDeFilaAction`: resuelve el actor, lanza
+ * `UnauthenticatedError` sin sesion, valida con el schema y delega en el servicio.
+ *
+ * Lectura interna del mismo proyecto ⇒ Server Action, no ruta API (`docs/architecture.md`). El
+ * cliente manda el id del MOVIMIENTO y la pagina, y nada mas: ni el cierre, ni la categoria, ni
+ * la tienda (R42). Todo lo demas lo resuelve el servidor leyendo esa fila.
+ *
+ * Superficie viva (ficha 344, B6): `DetalleMovimientoCierre`, el panel que despliega cada fila
+ * de cierre del libro de `/wallet`. La anotacion `@sin-superficie` con la que nacio esta accion
+ * se BORRO al cablearlo, porque la guardia de superficie de uso falla tambien cuando una
+ * anotacion sobrevive a su motivo.
+ */
+export async function verDetalleDeMovimientoAction(
+  input: unknown,
+  deps: DetalleMovimientoDeps = {},
+): Promise<VerDetalleDeMovimientoActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
+    const data = verDetalleDeMovimientoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildDetalleService();
+    return service.verDetalleDeMovimiento(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletActionError(r) : r;
+}
+
+/**
+ * Ficha 344 (T4.4, R32/R33) — el MISMO detalle sin recorte por pagina, para la descarga. El tope
+ * lo evalua y lo aplica el SERVICIO: el navegador no selecciona, no ordena y no recorta.
+ *
+ * Superficie viva (ficha 344, B8): el control de descarga de `DetalleMovimientoCierre`, que la
+ * consume via `filasDesdeResultado` tras descartar la rama `sin_reparto`. Su `@sin-superficie`
+ * se borro al cablearla, por el mismo motivo que en su hermana paginada.
+ */
+export async function verDetalleDeMovimientoCompletoAction(
+  input: unknown,
+  deps: DetalleMovimientoDeps = {},
+): Promise<VerDetalleDeMovimientoCompletoActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = verDetalleDeMovimientoCompletoSchema.parse(input); // R29: ZodError -> validation
+    const service = deps.service ?? buildDetalleService();
+    return service.verDetalleDeMovimientoCompleto(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletActionError(r) : r;
+}
 
 /** R15/R19: registra un movimiento manual de ajuste (solo maestro; monto>0, descripcion obligatoria). */
 export async function registrarMovimientoManualAction(

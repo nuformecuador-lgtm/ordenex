@@ -580,14 +580,24 @@ describe("cotizacion por API key — respuesta 200 (R21/R34/R46/R51/R56)", () =>
         costos?: unknown;
         errores?: Record<string, string[]>;
       }[];
+      errores: {
+        fila: number;
+        resultado: string;
+        costos?: unknown;
+        errores: Record<string, string[]>;
+      }[];
     };
     expect(body.total).toBe(3);
     expect(body.cotizadas).toBe(2);
     expect(body.conError).toBe(1);
-    expect(body.filas.map((f) => f.resultado)).toEqual(["cotizada", "error", "cotizada"]);
+    // 2026-08-31: las dos listas. `filas` trae SOLO lo cotizado —la fila mala ni aparece— y el
+    // fallo se lee directo en `errores`, sin recorrer el lote ramificando por `resultado`.
+    expect(body.filas.map((f) => f.fila)).toEqual([1, 3]);
+    expect(body.filas.map((f) => f.resultado)).toEqual(["cotizada", "cotizada"]);
+    expect(body.errores.map((f) => f.fila)).toEqual([2]);
     // R22: la fila en error NO trae costos; la cotizada NO trae errores.
-    expect(body.filas[1].costos).toBeUndefined();
-    expect(body.filas[1].errores?.distrito).toEqual(["distrito no encontrado en el canton"]);
+    expect(body.errores[0].costos).toBeUndefined();
+    expect(body.errores[0].errores.distrito).toEqual(["distrito no encontrado en el canton"]);
     expect(body.filas[0].errores).toBeUndefined();
   });
 
@@ -615,19 +625,26 @@ describe("cotizacion por API key — respuesta 200 (R21/R34/R46/R51/R56)", () =>
       cotizadas: number;
       conError: number;
       filas: { fila: number; numRemision: string | null }[];
+      errores: { fila: number; numRemision: string | null }[];
     };
     expect(body.total).toBe(3);
     expect(body.cotizadas + body.conError).toBe(body.total);
     // 1-BASED y en el orden del array recibido: es lo unico que le permite al integrador
-    // correlacionar cada resultado con la fila de su archivo.
-    expect(body.filas.map((f) => f.fila)).toEqual([1, 2, 3]);
+    // correlacionar cada resultado con la fila de su archivo. Desde el 2026-08-31 el indice
+    // sobrevive al reparto en dos listas —es justo lo que lo hace util—: la fila 2 no
+    // desaparece, se lee en `errores` con su numero intacto.
+    expect(body.filas.map((f) => f.fila)).toEqual([1, 3]);
+    expect(body.errores.map((f) => f.fila)).toEqual([2]);
     expect(body.filas[0].numRemision).toBe("REM-0001");
-    expect(body.filas[1].numRemision).toBe("REM-0002");
+    expect(body.errores[0].numRemision).toBe("REM-0002");
     // R9: sin `num_remision` -> `null` explicito, nunca ausente.
-    expect(body.filas[2].numRemision).toBeNull();
+    expect(body.filas[1].numRemision).toBeNull();
   });
 
-  it("la respuesta trae el bloque totales del lote con los escenarios entregado y devuelto (R51)", async () => {
+  // 2026-08-31 — LA RESPUESTA NO AGREGA EL LOTE. El bloque `totales` sumaba cada fila
+  // cotizada en el escenario entregado Y en el devuelto: dos compilados bajo "100% entregas" y
+  // "100% rechazos", premisas que ningun lote real cumple, servidos donde se lee un precio.
+  it("la respuesta NO trae bloque totales: la cotizacion es por orden", async () => {
     const { sondas, tarifaRepo, ...cotizacionDeps } = depsReales();
     void sondas;
     void tarifaRepo;
@@ -637,28 +654,48 @@ describe("cotizacion por API key — respuesta 200 (R21/R34/R46/R51/R56)", () =>
       cotizacionDeps,
     );
 
-    const body = (await res.json()) as {
-      total: number;
-      totales: {
-        filasSumadas: number;
-        filasExcluidas: number;
-        entregado: Record<string, string>;
-        devuelto: Record<string, string>;
-      };
-    };
-    // R52: el bloque de lote espeja la forma de una fila — seis conceptos entregados, cinco
-    // devueltos (una suma de devoluciones tampoco lleva IVA de comision). `fulfillment` entro
-    // en los dos el 2026-08-25.
-    expect(Object.keys(body.totales.entregado).sort()).toEqual(
-      ["comision", "flete", "fulfillment", "iva", "ivaComision", "total"].sort(),
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).not.toHaveProperty("totales");
+    // La forma completa del sobre: tres contadores y las DOS listas por fila, nada mas.
+    expect(Object.keys(body).sort()).toEqual([
+      "conError",
+      "cotizadas",
+      "errores",
+      "filas",
+      "total",
+    ]);
+    // Y los contadores de la raiz siguen cuadrando con las filas.
+    expect(body.cotizadas).toBe(1);
+    expect(body.conError).toBe(1);
+    expect((body.cotizadas as number) + (body.conError as number)).toBe(body.total);
+  });
+
+  // 2026-08-31 — EL VALOR SOBRE EL QUE SE COTIZA VIAJA EN LA RESPUESTA. Todo el desglose se
+  // deriva de el, y la puerta lo redondea al colon para que el precio prometido sea el que se
+  // cobrara (ficha 305): sin publicarlo, quien manda centimos no puede cuadrar la comision.
+  it("cada fila cotizada publica el monto sobre el que se cotizo, ya redondeado", async () => {
+    const { sondas, tarifaRepo, ...cotizacionDeps } = depsReales();
+    void sondas;
+    void tarifaRepo;
+
+    const res = await handleCotizacionApi(
+      reqConBearer(
+        {
+          ordenes: [
+            filaOk(),
+            filaOk({ monto_cobrar: "11898.81", num_remision: "REM-0003" }),
+            filaOk({ monto_cobrar: "", num_remision: "REM-0004" }),
+          ],
+        },
+        SECRETO,
+      ),
+      cotizacionDeps,
     );
-    expect(Object.keys(body.totales.devuelto).sort()).toEqual(
-      ["comision", "flete", "fulfillment", "iva", "total"].sort(),
-    );
-    // R54: los dos contadores propios del bloque, y su suma es el total recibido.
-    expect(body.totales.filasSumadas).toBe(1);
-    expect(body.totales.filasExcluidas).toBe(1);
-    expect(body.totales.filasSumadas + body.totales.filasExcluidas).toBe(body.total);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { filas: { montoCobrar: string }[] };
+    // El tercero es el cero EXPLICITO: la base que de verdad uso la comision, no una ausencia.
+    expect(body.filas.map((f) => f.montoCobrar)).toEqual(["25900.00", "11899.00", "0.00"]);
   });
 
   it("ese caso responde 200, no 409 (R56: ninguna fila cotizable)", async () => {
@@ -677,27 +714,15 @@ describe("cotizacion por API key — respuesta 200 (R21/R34/R46/R51/R56)", () =>
     const body = (await res.json()) as {
       total: number;
       cotizadas: number;
-      totales: {
-        filasSumadas: number;
-        filasExcluidas: number;
-        entregado: Record<string, string>;
-        devuelto: Record<string, string>;
-      };
+      conError: number;
+      filas: Record<string, unknown>[];
     };
     expect(body.cotizadas).toBe(0);
-    // El bloque NO se omite: cero es una AFIRMACION, ausente seria un dato que falta.
-    expect(body.totales).toBeDefined();
-    expect(body.totales.filasSumadas).toBe(0);
-    expect(body.totales.filasExcluidas).toBe(body.total);
-    for (const importe of [
-      ...Object.values(body.totales.entregado),
-      ...Object.values(body.totales.devuelto),
-    ]) {
-      expect(importe).toMatch(CRUDO_ESCALA_2);
-      // Cero SIN signo (R38): un "menos cero" no se emite nunca.
-      expect(importe.startsWith("-")).toBe(false);
-      expect(importe).toBe("0.00");
-    }
+    expect(body.conError).toBe(body.total);
+    // Sin agregado del lote y sin filas cotizadas, la respuesta no lleva NI UN importe: ni
+    // siquiera un cero, que seria indistinguible de un envio gratis.
+    expect(body).not.toHaveProperty("totales");
+    expect(body.filas.every((f) => !("costos" in f))).toBe(true);
   });
 
   it("cada importe aparece una sola vez y solo CRUDO, ningun campo formateado (R34, enmendada por la 319)", async () => {
@@ -906,7 +931,7 @@ describe("cotizacion por API key — tarifa por zona (feature 274, R32-R36)", ()
     expect(tarifaRepo.resolveTarifas).toHaveBeenCalledTimes(1);
   });
 
-  it("R33 si todas las filas resuelven: 200, todas cotizadas, conError 0 y filasExcluidas 0", async () => {
+  it("R33 si todas las filas resuelven: 200, todas cotizadas y conError 0", async () => {
     const { sondas, tarifaRepo, ...cotizacionDeps } = depsReales({
       tarifa: { z1: TARIFA, z3: TARIFA_Z3 },
     });
@@ -923,17 +948,17 @@ describe("cotizacion por API key — tarifa por zona (feature 274, R32-R36)", ()
       cotizadas: number;
       conError: number;
       filas: { resultado: string; errores?: Record<string, string[]> }[];
-      totales: { filasSumadas: number; filasExcluidas: number };
+      errores: unknown[];
     };
     expect(body.filas.map((f) => f.resultado)).toEqual(["cotizada", "cotizada", "cotizada"]);
     expect(body.cotizadas).toBe(3);
     expect(body.conError).toBe(0);
-    expect(body.totales.filasExcluidas).toBe(0);
-    expect(body.totales.filasSumadas).toBe(3);
     expect(body.filas.some((f) => f.errores !== undefined)).toBe(false);
+    // Sin fallos, `errores` es una lista VACIA y no una clave ausente.
+    expect(body.errores).toEqual([]);
   });
 
-  it("R34 lote mixto: 200, la fila sin tarifa en error y sin clave costos, y los totales son los de la otra", async () => {
+  it("R34 lote mixto: 200, la fila sin tarifa en error y sin clave costos, y la otra con su precio intacto", async () => {
     const { sondas, tarifaRepo, ...cotizacionDeps } = depsReales({
       // `z1` resuelve; `z3` no tiene ninguna tarifa en ningun nivel de la cascada.
       tarifa: { z1: TARIFA, z3: null },
@@ -959,37 +984,41 @@ describe("cotizacion por API key — tarifa por zona (feature 274, R32-R36)", ()
         costos?: Record<string, unknown>;
         errores?: Record<string, string[]>;
       }[];
-      totales: {
-        filasSumadas: number;
-        filasExcluidas: number;
-        entregado: Record<string, string>;
-        devuelto: Record<string, string>;
-      };
+      errores: {
+        fila: number;
+        numRemision: string | null;
+        resultado: string;
+        costos?: Record<string, unknown>;
+        errores: Record<string, string[]>;
+      }[];
     };
 
     expect(body.filas[0].resultado).toBe("cotizada");
     // R38: el canal de error POR FILA que ya existia, con la clave `tarifa` y el literal unico.
-    expect(body.filas[1]).toEqual({
-      fila: 2,
-      numRemision: "REM-0009",
-      resultado: "error",
-      errores: { tarifa: [MSG_FILA_SIN_TARIFA] },
-    });
+    // Desde el 2026-08-31 se lee en la lista hermana, con su contenido intacto.
+    expect(body.errores).toEqual([
+      {
+        fila: 2,
+        numRemision: "REM-0009",
+        resultado: "error",
+        errores: { tarifa: [MSG_FILA_SIN_TARIFA] },
+      },
+    ]);
     // AUSENCIA de la clave `costos`, no un `costos` en cero: el JSON serializado no la trae.
-    expect("costos" in body.filas[1]).toBe(false);
+    expect("costos" in body.errores[0]).toBe(false);
+    // Y la fila degradada no se cuela entre las que tienen precio.
+    expect(body.filas.map((f) => f.fila)).toEqual([1]);
 
     expect(body.conError).toBe(1);
     expect(body.cotizadas).toBe(1);
-    expect(body.totales.filasSumadas).toBe(1);
-    expect(body.totales.filasExcluidas).toBe(1);
-    expect(body.totales.filasSumadas + body.totales.filasExcluidas).toBe(body.total);
+    expect(body.cotizadas + body.conError).toBe(body.total);
 
-    // Los importes del lote son EXACTAMENTE los de la fila cotizada: la degradada no aporta.
-    expect(body.totales.entregado).toEqual(body.filas[0].costos?.entregado);
-    expect(body.totales.devuelto).toEqual(body.filas[0].costos?.devuelto);
+    // Sin agregado del lote: el unico precio que viaja es el de la fila que resolvio.
+    expect(body).not.toHaveProperty("totales");
+    expect(body.filas[0].costos).toBeDefined();
   });
 
-  it("R36 un lote entero sin cobertura responde 200 con totales en cero, aunque NO haya tarifa alguna", async () => {
+  it("R36 un lote entero sin cobertura responde 200 con todas las filas en error, aunque NO haya tarifa alguna", async () => {
     // El caso que decide bien o mal la implementacion ingenua: aqui no hay ni una tarifa, pero
     // tampoco hay una sola fila que llegue a pedirla. Un 409 le diria al integrador que su
     // cuenta no puede cotizar cuando lo que fallaron fueron sus direcciones.
@@ -1007,23 +1036,12 @@ describe("cotizacion por API key — tarifa por zona (feature 274, R32-R36)", ()
       cotizadas: number;
       conError: number;
       filas: { errores?: Record<string, string[]> }[];
-      totales: {
-        filasSumadas: number;
-        filasExcluidas: number;
-        entregado: Record<string, string>;
-        devuelto: Record<string, string>;
-      };
     };
     expect(body.cotizadas).toBe(0);
     expect(body.conError).toBe(2);
-    expect(body.totales.filasSumadas).toBe(0);
-    expect(body.totales.filasExcluidas).toBe(2);
-    for (const importe of [
-      ...Object.values(body.totales.entregado),
-      ...Object.values(body.totales.devuelto),
-    ]) {
-      expect(importe).toBe("0.00");
-    }
+    // Ni agregado ni importes: la respuesta no trae un solo numero de dinero.
+    expect(body).not.toHaveProperty("totales");
+    expect(JSON.stringify(body)).not.toMatch(/\d+\.\d{2}/);
     // Y el diagnostico que recibe el integrador es el CORRECTO: geografia, no tarifa.
     for (const f of body.filas) {
       expect(f.errores?.tarifa).toBeUndefined();

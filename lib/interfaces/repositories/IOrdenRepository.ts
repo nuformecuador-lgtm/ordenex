@@ -1063,15 +1063,6 @@ export interface IOrdenRepository {
     skip: number;
     take: number;
   }): Promise<ApiOrdenListResult>;
-  /**
-   * Feature 106/R12/R13/R14/R15/R18: detalle de UNA orden por `num_guia` SOLO si su
-   * `tienda_id` = `ownerId` y no esta borrada; `null` en cualquier otro caso (no existe,
-   * borrada, o de otro owner -> el service lo traduce a 404 uniforme). Incluye las gestiones
-   * con `resultado IN ('entregada','rechazada')` y `evidencia_storage_path` no nulo (evidencias);
-   * `[]` si no hay. LEE `gestion_orden`, nunca escribe.
-   */
-  findDetalleByNumGuiaForOwner(numGuia: number, ownerId: string): Promise<ApiOrdenDetalleRow | null>;
-
   // --- Feature 177: consulta por identificador libre + PDF de etiquetas por API key ---
 
   /**
@@ -1091,10 +1082,15 @@ export interface IOrdenRepository {
     ownerId: string,
   ): Promise<Array<{ id: string; numGuia: number | null; numRemision: string }>>;
   /**
-   * Feature 177/R16/R17: MISMO detalle y MISMA proyeccion que
-   * `findDetalleByNumGuiaForOwner`, pero resuelto por `orden.id` (una orden puede tener
-   * `num_guia` NULL, asi que la resolucion de la 177 devuelve el id). `null` si no existe,
-   * esta borrada o es de otro owner. El metodo de la 106 NO cambia de firma ni de resultado.
+   * Feature 177/R16/R17: detalle de UNA orden por `orden.id` SOLO si su `tienda_id` = `ownerId`
+   * y no esta borrada; `null` en cualquier otro caso (no existe, borrada, o de otro owner -> el
+   * service lo traduce a 404 uniforme). Se resuelve por id y no por `num_guia` porque una orden
+   * puede tener `num_guia` NULL. Incluye las gestiones con
+   * `resultado IN ('entregada','rechazada','incidente')` y `evidencia_storage_path` no nulo, mas
+   * las evidencias del incidente del ADMIN (`orden_incidente`); `[]` si no hay. Solo LEE.
+   *
+   * BAJA (2026-08-31): tenia un gemelo `findDetalleByNumGuiaForOwner` (106) con esta MISMA
+   * proyeccion pero resuelto por `num_guia`; se retiro con su endpoint.
    */
   findDetalleByOrdenIdForOwner(ordenId: string, ownerId: string): Promise<ApiOrdenDetalleRow | null>;
   /**

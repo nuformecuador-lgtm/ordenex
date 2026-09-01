@@ -2,13 +2,18 @@ import { Prisma } from "@prisma/client";
 import { derivarBalance } from "@/lib/utils/wallet-balance";
 import { montoEscala2 } from "@/lib/utils/monto-escala-2";
 import {
-  WALLET_EGRESO_DESGLOSADO_SEED,
+  COMPOSICION_FILA_OTROS,
+  WALLET_EGRESO_CON_FILA_SEED,
+  WALLET_EGRESO_NOMBRADO_SEED,
   WALLET_INGRESO_PROPIO_SEED,
+  WALLET_MOVIMIENTO_CATEGORIA_SEED,
   type AgregadoCajaRow,
   type CajaResumenDTO,
+  type ComposicionFilaId,
   type ComposicionGananciaDTO,
   type ModoComposicionCaja,
   type NaturalezaMovimiento,
+  type WalletEgresoNombrado,
   type WalletIngresoPropio,
   type WalletMovimientoCategoria,
 } from "@/lib/types/wallet";
@@ -237,11 +242,73 @@ function cubetasDeIngreso(): Record<WalletIngresoPropio, Prisma.Decimal> {
   ) as Record<WalletIngresoPropio, Prisma.Decimal>;
 }
 
+/** Las cubetas de los egresos con nombre propio, todas a cero: un `Record` sin huecos (R4). */
+function cubetasDeEgresoNombrado(): Record<WalletEgresoNombrado, Prisma.Decimal> {
+  // Mismo motivo que en `cubetasDeIngreso`: `Object.fromEntries` pierde el tipo de las claves.
+  return Object.fromEntries(
+    WALLET_EGRESO_NOMBRADO_SEED.map((categoria) => [categoria, new Prisma.Decimal(0)]),
+  ) as Record<WalletEgresoNombrado, Prisma.Decimal>;
+}
+
 const CATEGORIAS_DE_INGRESO_PROPIO: ReadonlySet<string> = new Set(WALLET_INGRESO_PROPIO_SEED);
-const CATEGORIAS_DE_EGRESO_DESGLOSADO: ReadonlySet<string> = new Set(WALLET_EGRESO_DESGLOSADO_SEED);
+const CATEGORIAS_DE_EGRESO_NOMBRADO: ReadonlySet<string> = new Set(WALLET_EGRESO_NOMBRADO_SEED);
+
+/**
+ * Ficha 339 — el conjunto de egresos propios CON FILA. Es LA definicion: la usan la derivacion
+ * del importe (`derivarComposicionGanancia`) y la del detalle (`categoriasDeFilaComposicion`).
+ * Escribirlo dos veces es como el importe de una fila y su lista de movimientos acabarian
+ * diciendo cosas distintas sin que nada fallara.
+ */
+const CATEGORIAS_DE_EGRESO_CON_FILA: ReadonlySet<string> = new Set(WALLET_EGRESO_CON_FILA_SEED);
 
 function esIngresoPropio(categoria: WalletMovimientoCategoria): categoria is WalletIngresoPropio {
   return CATEGORIAS_DE_INGRESO_PROPIO.has(categoria);
+}
+
+function esEgresoNombrado(categoria: WalletMovimientoCategoria): categoria is WalletEgresoNombrado {
+  return CATEGORIAS_DE_EGRESO_NOMBRADO.has(categoria);
+}
+
+/**
+ * El tipo de una categoria se lee de su PREFIJO, y no es una heuristica: el CHECK
+ * `wallet_movimiento_tipo_categoria_check` (migracion `20260803120000_caja_tesoreria`) enumera
+ * las 17 combinaciones legitimas y son exactamente esas — toda `ingreso_*` con tipo `ingreso` y
+ * toda `egreso_*` con tipo `egreso`. La base no admite ninguna otra.
+ */
+function esCategoriaDeEgreso(categoria: WalletMovimientoCategoria): boolean {
+  return categoria.startsWith("egreso_");
+}
+
+/** El COMPLEMENTO, derivado del catalogo: egresos propios que no tienen fila propia. */
+const EGRESOS_PROPIOS_SIN_FILA: readonly WalletMovimientoCategoria[] =
+  WALLET_MOVIMIENTO_CATEGORIA_SEED.filter(
+    (categoria) =>
+      NATURALEZA_POR_CATEGORIA[categoria] === "propio" &&
+      esCategoriaDeEgreso(categoria) &&
+      !CATEGORIAS_DE_EGRESO_CON_FILA.has(categoria),
+  );
+
+/**
+ * Ficha 339 (T2.1, design §3, R18) — que categorias componen el importe de UNA fila de la
+ * tarjeta de la ganancia.
+ *
+ * Para el token del complemento devuelve todo egreso PROPIO que no tenga fila propia —derivado
+ * del catalogo y de `NATURALEZA_POR_CATEGORIA`, nunca una lista escrita a mano—; para cualquier
+ * otra fila, esa sola categoria.
+ *
+ * **Esta funcion es la mitad del diseno de la ficha.** El importe de una fila y la lista de
+ * movimientos de esa fila salen de la MISMA definicion (`CATEGORIAS_DE_EGRESO_CON_FILA`). Si la
+ * lista se dedujera aparte, podrian divergir sin que nada fallara: la fila diria 227.300,00 y el
+ * detalle ensenaria otra cosa. Es el mismo error, un piso mas abajo, que esta ficha arregla.
+ *
+ * Hoy devuelve `["egreso_gasto"]` para «Otros»: la unica categoria de egreso propio que queda
+ * sin fila, y no tiene ni un escritor en el arbol.
+ */
+export function categoriasDeFilaComposicion(
+  fila: ComposicionFilaId,
+): readonly WalletMovimientoCategoria[] {
+  if (fila === COMPOSICION_FILA_OTROS) return EGRESOS_PROPIOS_SIN_FILA;
+  return [fila];
 }
 
 /**
@@ -258,11 +325,16 @@ function esIngresoPropio(categoria: WalletMovimientoCategoria): categoria is Wal
  *    tarjeta SIEMPRE suma su propio total. Que ademas coincida con `ingresosPropios` depende
  *    de que el seed cubra todas las categorias propias de ingreso, y eso lo mide en runtime
  *    `tests/unit/guards/caja-composicion-exhaustiva.guardia.test.ts`.
- *  - `otrosEgresos` es el COMPLEMENTO: todo egreso propio que no sea uno de los cuatro
- *    conceptos que `DesgloseEgresosDTO` ya abre. Por eso «los cuatro conceptos + otros» suman
- *    `totalEgresos` = `egresosPropios` aunque el catalogo gane manana un egreso propio (R26).
- *    Escribir aqui la lista de las tres categorias que hoy faltan dejaria esa suma a merced
- *    de que alguien se acordara de ampliarla.
+ *  - `otrosEgresos` es el COMPLEMENTO: todo egreso propio que no tenga FILA PROPIA en la
+ *    columna. Por eso «los cuatro conceptos del desglose + los nombrados + otros» suman
+ *    `totalEgresos` = `egresosPropios` aunque el catalogo gane manana un egreso propio (R26 de
+ *    la 231, R11/R13 de la 343). Escribir aqui la lista de las categorias que hoy faltan
+ *    dejaria esa suma a merced de que alguien se acordara de ampliarla.
+ *
+ * Ficha 339 (T2.2): el conjunto contra el que se complementa pasa de
+ * `WALLET_EGRESO_DESGLOSADO_SEED` a `WALLET_EGRESO_CON_FILA_SEED`, y los dos egresos que salen
+ * del cubo ganan su propia cubeta en `egresos`. **Ninguna cifra agregada se mueve** (R12/R14):
+ * el dinero no sale de la suma, cambia de cubeta.
  *
  * El desglose se teclea POR CATEGORIA (`ingreso_comision_cod`), nunca con las claves camelCase
  * de las formulas de ingreso: `caja-173-alcance.guardia.test.ts` prohibe que este modulo
@@ -272,6 +344,7 @@ export function derivarComposicionGanancia(
   filas: readonly AgregadoCajaRow[],
 ): ComposicionGananciaDTO {
   const ingresos = cubetasDeIngreso();
+  const egresos = cubetasDeEgresoNombrado();
   let totalIngresos = new Prisma.Decimal(0);
   let totalEgresos = new Prisma.Decimal(0);
   let otrosEgresos = new Prisma.Decimal(0);
@@ -288,7 +361,12 @@ export function derivarComposicionGanancia(
     }
 
     totalEgresos = totalEgresos.add(monto);
-    if (!CATEGORIAS_DE_EGRESO_DESGLOSADO.has(fila.categoria)) {
+    // Ficha 339 (T2.2, R13): cada categoria aporta a EXACTAMENTE una cubeta. La que tiene fila
+    // con nombre va a la suya; la que tiene fila en `DesgloseEgresosDTO` no se acumula aqui (la
+    // sirve la 45/158 por su propio camino); y solo lo que no tiene fila NINGUNA cae en «otros».
+    if (esEgresoNombrado(fila.categoria)) {
+      egresos[fila.categoria] = egresos[fila.categoria].add(monto);
+    } else if (!CATEGORIAS_DE_EGRESO_CON_FILA.has(fila.categoria)) {
       otrosEgresos = otrosEgresos.add(monto);
     }
   }
@@ -298,7 +376,13 @@ export function derivarComposicionGanancia(
       WALLET_INGRESO_PROPIO_SEED.map((categoria) => [categoria, montoEscala2(ingresos[categoria])]),
     ) as Record<WalletIngresoPropio, string>,
     totalIngresos: montoEscala2(totalIngresos),
+    egresos: Object.fromEntries(
+      WALLET_EGRESO_NOMBRADO_SEED.map((categoria) => [categoria, montoEscala2(egresos[categoria])]),
+    ) as Record<WalletEgresoNombrado, string>,
     otrosEgresos: montoEscala2(otrosEgresos),
     totalEgresos: montoEscala2(totalEgresos),
+    // R9: la decision de pintar «Otros» la toma el SERVIDOR. `isZero()` y no `.gt(0)`: un
+    // importe negativo es justo lo que mas falta haria ver, y `.gt(0)` lo esconderia.
+    hayOtrosEgresos: !otrosEgresos.isZero(),
   };
 }

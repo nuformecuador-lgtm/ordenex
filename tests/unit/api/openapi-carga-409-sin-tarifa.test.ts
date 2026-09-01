@@ -138,15 +138,25 @@ describe("274/R38 (mitad de contrato) — la fila en error se publica con la cla
     }
   });
 
+  // 2026-08-31: la fila degradada ya no vive en `filas`, sino en la lista hermana `errores`.
+  // Lo que esta guardia mide no cambia: el ejemplo PUBLICADO tiene que enseñar la clave
+  // `tarifa` con el literal de la constante, no con una copia re-escrita.
   it("el ejemplo publicado de /carga muestra una fila degradada con `errores.tarifa`", () => {
     const ejemplo = (
       openApiSpec.paths[PATH_CARGA].post.responses["200"].content["application/json"].examples as {
         filaSinTarifa: {
-          value: { filas: ReadonlyArray<{ readonly errores?: Record<string, string[]> }> };
+          value: {
+            filas: ReadonlyArray<{ readonly errores?: Readonly<Record<string, readonly string[]>> }>;
+            errores: ReadonlyArray<{
+              readonly errores?: Readonly<Record<string, readonly string[]>>;
+            }>;
+          };
         };
       }
     ).filaSinTarifa.value;
-    const enError = ejemplo.filas.find((f) => f.errores);
+    // Y la enseña APARTE: ninguna fila de `filas` trae ya el mapa de errores.
+    expect(ejemplo.filas.find((f) => f.errores)).toBeUndefined();
+    const enError = ejemplo.errores.find((f) => f.errores);
     expect(enError?.errores).toEqual({ tarifa: [MSG_FILA_SIN_TARIFA] });
     // El espejo publica el mismo literal.
     expect(yaml).toContain(`- "${MSG_FILA_SIN_TARIFA}"`);
@@ -171,13 +181,14 @@ describe("274/R31 — /cotizacion deja de declarar una asimetría que ya no exis
     }
   });
 
-  it("el párrafo de `totales` declara el SEGUNDO motivo de exclusión", () => {
+  it("la descripción declara el SEGUNDO motivo por el que una fila se queda sin precio", () => {
     for (const descripcion of [descripcionCotizacionTs, descripcionCotizacionYaml]) {
       expect(descripcion).toMatch(/DOS motivos distintos/);
       expect(descripcion).toMatch(/no resuelve tarifa vigente/);
-      // El coste declarado, escrito donde lo lee quien paga: sumar `totales` sin mirar
-      // `filasExcluidas` da un numero que no es el precio del lote.
-      expect(descripcion).toMatch(/sin mirar\s+`filasExcluidas`/);
+      // 2026-08-31: el bloque `totales` se retiró, así que el motivo ya no se cuenta contra
+      // `filasExcluidas` sino contra `conError`, que es el contador que sobrevive.
+      expect(descripcion).toMatch(/cuentan en `conError`/);
+      expect(descripcion).not.toMatch(/filasExcluidas/);
     }
   });
 });

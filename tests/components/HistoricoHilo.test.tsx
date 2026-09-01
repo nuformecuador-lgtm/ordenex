@@ -5,6 +5,8 @@ import { act, cleanup, fireEvent, screen, within } from "@testing-library/react"
 import type { ChatMensajeVista } from "@/lib/types/chat-whatsapp";
 import type { CursorMensaje } from "@/lib/types/historico-conversaciones";
 import { HistoricoConversacionesModule } from "@/app/(app)/historico/conversaciones/_components/HistoricoConversacionesModule";
+import { etiquetaVerOrden } from "@/app/(app)/historico/conversaciones/_components/HistoricoHilo";
+import { PARAM_TERMINO_DEFAULT } from "@/lib/utils/filtros-url";
 
 import {
   AHORA,
@@ -197,6 +199,39 @@ describe("T6.2 — cabecera del hilo fusionado (R43)", () => {
     expect(
       within(screen.getByTestId("historico-hilo-cabecera")).queryByText(/cambió/i),
     ).toBeNull();
+  });
+
+  // Feature 341 — el icono de la cabecera lleva a /ordenes YA FILTRADO por esta guía. Se
+  // afirma el `href` COMPLETO: si alguien cambia el parámetro, la ruta o el término, cae.
+  it("enlaza a /ordenes filtrado por la guía del hilo", async () => {
+    const listarMensajes = vi.fn(async () => okMensajes([mensaje()]));
+    renderPantalla(listarMensajes);
+    await abrirHilo();
+
+    const cabecera = screen.getByTestId("historico-hilo-cabecera");
+    const enlace = within(cabecera).getByRole("link", {
+      name: etiquetaVerOrden("12345"),
+    });
+    expect(enlace).toHaveAttribute("href", `/ordenes?${PARAM_TERMINO_DEFAULT}=12345`);
+    expect(enlace).toHaveAttribute("title", etiquetaVerOrden("12345"));
+    expect(enlace.getAttribute("href")).toContain(`?${PARAM_TERMINO_DEFAULT}=`);
+  });
+
+  // Sin guía el hilo NO se queda sin enlace: el buscador de /ordenes indexa también la
+  // remisión, y `guiaVisible` ya resuelve cuál de las dos toca.
+  it("cae a la remisión cuando el hilo no tiene guía", async () => {
+    const listarMensajes = vi.fn(async () =>
+      okMensajes([mensaje()], {
+        cabecera: hilo({ numGuia: null, numRemision: "REM-1001" }),
+      }),
+    );
+    renderPantalla(listarMensajes);
+    await abrirHilo();
+
+    const enlace = within(screen.getByTestId("historico-hilo-cabecera")).getByRole("link", {
+      name: etiquetaVerOrden("REM-1001"),
+    });
+    expect(enlace).toHaveAttribute("href", `/ordenes?${PARAM_TERMINO_DEFAULT}=REM-1001`);
   });
 });
 

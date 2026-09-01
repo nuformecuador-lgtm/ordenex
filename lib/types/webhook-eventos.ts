@@ -7,9 +7,13 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 // desde aqui, sin listas duplicadas.
 //
 // Se INCLUYEN los estados relevantes al integrador y se EXCLUYEN los internos de
-// preparacion/ruteo satelite que no consume (`en_preparacion`, `por_recoger`,
-// `en_ruta_bodega_satelite`, `en_bodega_satelite`). Lista FIJADA en el gate F1.4 (D3):
-// cambiarla es cambiar el contrato publico de la feature.
+// preparacion/ruteo satelite que no consume. Lista FIJADA en el gate F1.4 (D3): cambiarla es
+// cambiar el contrato publico de la feature.
+//
+// ⏳ 2026-08-31 — AQUI DECIA, y ya no es cierto: los excluidos eran «(`en_preparacion`,
+// `por_recoger`, `en_ruta_bodega_satelite`, `en_bodega_satelite`)». `en_preparacion` SALE de esa
+// enumeracion: desde hoy SI se emite, como evento de nacimiento de la rama de fulfillment (ver el
+// bloque inmediatamente encima de `EVENTOS_PUBLICOS`). Los otros tres siguen fuera.
 //
 // FEATURE 155/R43 (decision del humano en la puerta T0.1, 2026-07-29) — AMPLIACION ADITIVA:
 // entra `por_recolectar_en_tienda`. Hasta la 155 una orden creada por API key nacia en
@@ -57,7 +61,34 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 // `webhook_estado:<ordenId>:<estatusDestinoId>:<ISO>`): los dos eventos tienen `eventoId` DISTINTO,
 // ninguno se descarta en silencio por el `ON CONFLICT DO NOTHING`, y el consumidor deduplica por
 // ese id. Es la premisa que hace aceptable la reversion, y por eso se verifica con un test.
+//
+// ⏳ 2026-08-31 (decision del humano en la puerta) — ENTRA `en_preparacion`, por la MISMA razon
+// que justifico la entrada de `por_recolectar_en_tienda` en la 155/R43: cerrar el silencio del
+// NACIMIENTO. La creacion por API key se bifurca segun el destino (`lib/services/destino-creacion.ts`)
+// y hasta hoy solo dos ramas avisaban al integrador:
+//   (a) recogida en tienda -> nace en `por_recolectar_en_tienda` (155/R43, ya emitia).
+//   (b) el resto -> nace en `en_ruta_bodega_central` (ya estaba en esta lista).
+//   (c) `fulfillment = true`, el paquete ya esta en bodega -> nace en `en_preparacion`, y el
+//       integrador NO recibia NADA hasta que la orden avanzara a `en_bodega_central` al emitirse la
+//       guia. Ese silencio se lee igual que en la 155: «no se creo».
+//
+// ⚠️ ES UN EVENTO DE NACIMIENTO Y SOLO ESO, por una razon ESTRUCTURAL, no por politica: el grafo de
+// transiciones NO declara NINGUNA arista hacia `en_preparacion` (nota R28 en
+// `order-status-transiciones.ts`). Es estado inicial y nada mas, asi que una orden de fulfillment
+// produce EXACTAMENTE UN evento con este value, al crearse, y jamas un reingreso. Si algun dia se
+// abriera una arista de vuelta, este value empezaria a repetirse solo — y eso se decide alli, no aqui.
+//
+// El evento viaja con `numGuia: null`: en esta rama la guia se emite MAS TARDE y nunca se fabrica un
+// numero (`BulkOrdenService.ts`). El cuerpo del webhook ya declara `numGuia` como
+// `["integer","null"]`, asi que el contrato del CAMPO no cambia — pero el integrador que asumia «si
+// llega evento, hay guia» tiene que enterarse ANTES del despliegue (misma obligacion que 239 y 268:
+// bloquea el despliegue, no el codigo).
+//
+// Estrictamente ADITIVO: ningun estado que hoy emite deja de emitir. Los internos de ruteo satelite
+// (`por_recoger`, `en_ruta_bodega_satelite`, `en_bodega_satelite`) SIGUEN FUERA, y
+// `devolucion_por_confirmar` tambien (239/P2, decision firmada que esto no revisa).
 export const EVENTOS_PUBLICOS: ReadonlySet<OrderStatusValue> = new Set<OrderStatusValue>([
+  "en_preparacion", // 2026-08-31: evento de NACIMIENTO de la rama (c), fulfillment
   "por_recolectar_en_tienda", // feature 155/R43: evento de NACIMIENTO de la rama (b)
   "en_ruta_bodega_central",
   "en_bodega_central",

@@ -297,4 +297,23 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
       total: ordenadas.length, // R41: el total del CONJUNTO, no el de la pagina
     };
   }
+
+  /**
+   * Ficha 344 (R41) — una fila del ledger por su id, ACOTADA a su tienda.
+   *
+   * `findFirst` con las dos claves en el MISMO `where`, y `tiendaId` escrito AL FINAL: el
+   * acotamiento por dato del actor tiene la ultima palabra, aunque manana alguien anadiera un
+   * spread encima. La alternativa —`findUnique({ id })` y comparar `row.tiendaId` despues—
+   * habria sacado de la base el movimiento de OTRA tienda para decidir tirarlo, y ese es
+   * exactamente el filtrado en memoria que R40 prohibe.
+   */
+  async obtenerPorIdDeTienda(
+    id: string,
+    tiendaId: string,
+  ): Promise<WalletTiendaMovimientoDTO | null> {
+    const fila = await this.prisma.walletTiendaMovimiento.findFirst({
+      where: { id, tiendaId }, // `tiendaId` AL FINAL: nada lo puede pisar
+    });
+    return fila === null ? null : toDTO(fila);
+  }
 }

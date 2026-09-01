@@ -169,49 +169,79 @@ export interface CostosCotizacion {
   devuelto: CostosDevuelto;
 }
 
-/** No existe `"duplicada"` (R10): sin persistencia no significaria nada. */
-export type ResultadoCotizacionFila = "cotizada" | "error";
-
-/** El resultado de UNA fila (design.md §2.2). */
-export interface FilaCotizacionResultado {
+/**
+ * UNA fila cotizada (design.md §2.2). No existe `"duplicada"` (R10): sin
+ * persistencia no significaria nada.
+ *
+ * 2026-08-31 — ESTA LISTA YA NO MEZCLA LAS FILAS QUE FALLARON. Hasta hoy el
+ * mismo tipo servia para las dos clasificaciones, con `costos` y `errores`
+ * OPCIONALES: para saber cual de las dos tenia delante, el integrador miraba el
+ * `resultado` —o, peor, la presencia de una clave—. Ahora cada lista tiene su
+ * tipo y sus campos son OBLIGATORIOS. Es el mismo reparto que la carga por API
+ * key adopto el mismo dia (`CargaViaApiFilaError`).
+ */
+export interface CotizacionFilaCotizada {
   /** Indice 1-based dentro del array recibido (R46). */
   fila: number;
   /** R9: el `num_remision` tal cual si vino; `null` si no vino. */
   numRemision: string | null;
-  resultado: ResultadoCotizacionFila;
-  /** Solo en `"cotizada"`: una fila en error NO trae costos (R22). */
-  costos?: CostosCotizacion;
-  /** Solo en `"error"`: mensajes por campo, reusados tal cual de la carga. */
-  errores?: Record<string, string[]>;
+  /**
+   * EL VALOR SOBRE EL QUE SE COTIZO. Es el `monto_cobrar` que de verdad entro al
+   * calculo: el que se recibio, ya redondeado al colon por la puerta (ficha 305),
+   * y `"0.00"` cuando la fila no traia monto — que es exactamente la base que la
+   * comision COD uso (R32), no un dato ausente.
+   *
+   * Se publica porque el resto de la fila son importes DERIVADOS de el: sin verlo,
+   * un integrador que manda `11898.81` no tiene forma de saber que la comision se
+   * calculo sobre `11899`, y leeria el desglose como si no cuadrara. Mismo formato
+   * money-safe de escala 2 que los demas importes: un solo dialecto de dinero.
+   */
+  montoCobrar: string;
+  resultado: "cotizada";
+  costos: CostosCotizacion;
 }
 
 /**
- * Los totales del LOTE (decision D2, R51–R56). Espeja EXACTAMENTE la forma de
- * los costos de una fila —`entregado` con seis conceptos, `devuelto` con
- * cinco— porque una suma de devoluciones tampoco lleva IVA de comision.
+ * 2026-08-31 — LA FILA QUE NO SE PUDO COTIZAR, PUBLICADA APARTE.
  *
- * Los dos contadores son parte del contrato, no un extra de cortesia (R54): un
- * total que calla las filas que dejo fuera se lee como "esto cuesta el lote"
- * cuando no lo es. `filasSumadas + filasExcluidas` es siempre el total de filas
- * recibidas, y solo aportan importes las filas `"cotizada"` (R53).
+ * Su contenido no cambia ni una clave respecto a lo que viajaba dentro de
+ * `filas`: el indice 1-based, el `num_remision` de correlacion, el
+ * `resultado: "error"` y el mapa de mensajes por campo. Lo unico que cambia es
+ * DONDE se lee.
+ *
+ * No lleva `montoCobrar`: aqui no hubo cotizacion, asi que no hay «valor sobre el
+ * que se cotizo» que declarar — y uno de los motivos de error es justamente que
+ * el monto no tenia forma de numero.
  */
-export interface TotalesCotizacion {
-  filasSumadas: number;
-  filasExcluidas: number;
-  entregado: CostosEntregado;
-  devuelto: CostosDevuelto;
+export interface CotizacionFilaError {
+  fila: number;
+  numRemision: string | null;
+  /** Constante, pero se conserva: una fila movida de sitio no cambia de significado. */
+  resultado: "error";
+  /** Mensajes por campo, reusados tal cual de la carga. */
+  errores: Record<string, string[]>;
 }
 
 /**
- * La respuesta 200 completa (design.md §2.2). El bloque `totales` se emite
- * SIEMPRE, tambien cuando ninguna fila cotiza: entonces va en cero con
- * `filasSumadas: 0` (R56). Cero es una afirmacion; ausente seria un dato que
- * falta.
+ * La respuesta 200 completa (design.md §2.2).
+ *
+ * NO LLEVA BLOQUE `totales` (retirado el 2026-08-31). El agregado del lote de la 255 sumaba
+ * cada fila cotizada en el escenario ENTREGADO y en el DEVUELTO al mismo tiempo: dos
+ * compilados bajo las premisas de "100% entregas" y "100% rechazos", ninguna de las cuales
+ * describe un lote real. Lo que este endpoint publica es el precio POR ORDEN; el agregado,
+ * con la premisa de entrega que corresponda, es de quien consume.
+ *
+ * DOS LISTAS DESDE EL 2026-08-31 (espejo de `CargaViaApiSummary`): `filas` trae SOLO
+ * lo que se cotizo y `errores` SOLO lo que no. Los contadores se siguen calculando
+ * sobre el lote COMPLETO, asi que `cotizadas === filas.length` y
+ * `conError === errores.length` por construccion.
  */
 export interface CotizacionResumen {
   total: number;
   cotizadas: number;
   conError: number;
-  totales: TotalesCotizacion;
-  filas: FilaCotizacionResultado[];
+  /** Las filas con precio. Ninguna lleva `resultado: "error"` ni la clave `errores`. */
+  filas: CotizacionFilaCotizada[];
+  /** Las filas sin precio, con su detalle por campo. Lista vacia = ninguna fallo. */
+  errores: CotizacionFilaError[];
 }

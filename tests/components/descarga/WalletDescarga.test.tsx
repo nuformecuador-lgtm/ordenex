@@ -37,6 +37,10 @@ vi.mock("@/lib/actions/wallet", () => ({
   listarMovimientosCompletoAction: (...a: unknown[]) => listarMovimientosCompletoMock(...a),
   // Feature 173 (T G.3): la cabecera del libro de caja la sirve el borde de las DOS cifras.
   verResumenCajaAction: (...a: unknown[]) => verResumenCajaMock(...a),
+  // FICHA 343 (B5): la tarjeta de la ganancia monta filas desplegables y el panel de cada una
+  // importa el borde del detalle. Sin declararlo aqui, el import no resuelve y este archivo no
+  // ejecuta ni un caso. Ninguna asercion de este archivo lo usa: la descarga es de OTRA tabla.
+  listarMovimientosDeFilaAction: vi.fn(),
 }));
 
 const listarMisMovimientosMock = vi.fn();
@@ -205,7 +209,13 @@ const COMPOSICION = {
     ingreso_ajuste: "0.00",
   },
   totalIngresos: "1.00",
+  // Ficha 339 (T1.3): las dos cubetas nuevas y la bandera del servidor.
+  egresos: {
+    egreso_pago_mensajero: "0.00",
+    egreso_ajuste: "0.00",
+  },
   otrosEgresos: "0.00",
+  hayOtrosEgresos: false,
   totalEgresos: "0.00",
 };
 // Feature 201 (tanda B): era `{} as never`, y ese `as never` tapaba que el objeto NO tenía
@@ -748,7 +758,17 @@ describe("Feature 231 · el libro dice de quién es cada movimiento", () => {
     ).toEqual([...ENCABEZADOS_ANTERIORES]);
 
     // Y «Dueño» entra: una sola columna más, la ÚLTIMA de los datos —justo antes del botón—.
-    expect(encabezados).toHaveLength(ENCABEZADOS_ANTERIORES.length + 1);
+    //
+    // FICHA 344 — el conteo pasa de 7 a 8 y NINGUNA columna de datos se movió, se añadió ni se
+    // fue: las seis de arriba salen en su orden y «Dueño» sigue justo antes de «Acciones». La de
+    // más es «Desglose», la columna del control de apertura que ANTEPONE la primitiva
+    // `DataTable` en cuanto el consumidor declara `renderExpanded` —lo declara ahora el libro,
+    // para abrir las órdenes que componen el importe de una fila de cierre—. No la declara este
+    // componente y no forma parte de la secuencia que este caso protege, así que se cuenta
+    // aparte y se NOMBRA: si el número volviera a subir, ya no sería por esto.
+    const COLUMNA_DE_DESGLOSE = 1;
+    expect(encabezados[0]).toBe("Desglose");
+    expect(encabezados).toHaveLength(ENCABEZADOS_ANTERIORES.length + 1 + COLUMNA_DE_DESGLOSE);
     expect(encabezados).toContain("Dueño");
     expect(encabezados.indexOf("Dueño")).toBe(encabezados.indexOf("Acciones") - 1);
   });
