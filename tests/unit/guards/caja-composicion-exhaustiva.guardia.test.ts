@@ -11,7 +11,9 @@ import {
 import { montoEscala2 } from "@/lib/utils/monto-escala-2";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import {
+  WALLET_EGRESO_CON_FILA_SEED,
   WALLET_EGRESO_DESGLOSADO_SEED,
+  WALLET_EGRESO_NOMBRADO_SEED,
   WALLET_INGRESO_PROPIO_SEED,
   WALLET_MOVIMIENTO_CATEGORIA_SEED,
   type AgregadoCajaRow,
@@ -59,8 +61,17 @@ function tipoDe(categoria: string): AgregadoCajaRow["tipo"] {
  * aparece una categoria que nadie recoge. T3.1 exige que la lista salga de recorrer
  * `NATURALEZA_POR_CATEGORIA`, y eso es lo que hace el primer `it` de este archivo: la deriva y
  * la compara contra esta foto.
+ *
+ * FICHA 343 (T2.3) — la foto pasa de TRES categorias a UNA, y el motivo es el objeto de la
+ * ficha: `egreso_pago_mensajero` y `egreso_ajuste` ganan FILA PROPIA en la columna, asi que
+ * dejan de ser residuo. Queda `egreso_gasto`, categoria RESERVADA sin un solo escritor en el
+ * arbol (medido: solo aparece en `lib/types/wallet.ts` y en los catalogos de
+ * `lib/analytics/metrics.ts`). Consecuencia buscada: en produccion «Otros» vale 0,00 y no se
+ * pinta, y el dia que muestre un importe significara literalmente «entro dinero de un concepto
+ * que nadie ha decidido como se llama». La suma de la columna deja de ser «4 conceptos + otros»
+ * y pasa a ser «4 conceptos + 2 nombrados + otros»; el TOTAL no se mueve un centimo.
  */
-const OTROS_EGRESOS_DE_ORDENEX = ["egreso_pago_mensajero", "egreso_gasto", "egreso_ajuste"];
+const OTROS_EGRESOS_DE_ORDENEX = ["egreso_gasto"];
 
 /**
  * EL DETECTOR. Dada una lista de categorias, devuelve las de naturaleza `propio` que la
@@ -77,7 +88,9 @@ const OTROS_EGRESOS_DE_ORDENEX = ["egreso_pago_mensajero", "egreso_gasto", "egre
 function categoriasSinCubrir(categorias: readonly string[]): string[] {
   const ingresosCubiertos = new Set<string>(WALLET_INGRESO_PROPIO_SEED);
   const egresosCubiertos = new Set<string>([
-    ...WALLET_EGRESO_DESGLOSADO_SEED,
+    // Ficha 339: el conjunto CON FILA (los cuatro del desglose + los dos nombrados) mas lo
+    // que sigue cayendo en el complemento.
+    ...WALLET_EGRESO_CON_FILA_SEED,
     ...OTROS_EGRESOS_DE_ORDENEX,
   ]);
   const naturaleza = NATURALEZA_POR_CATEGORIA as Readonly<Record<string, string | undefined>>;
@@ -156,20 +169,43 @@ describe("R23/R26 — la particion de la ganancia cubre TODAS las categorias pro
   });
 
   it("T3.1: las categorias de «otros gastos» se DERIVAN del catalogo, no de una copia a mano", () => {
-    // Se recorre `NATURALEZA_POR_CATEGORIA` en runtime y se restan los cuatro conceptos que
-    // `DesgloseEgresosDTO` ya abre. El resultado tiene que ser exactamente la foto declarada
-    // arriba: si mañana el catalogo gana un egreso propio, este caso lo nombra.
+    // Se recorre `NATURALEZA_POR_CATEGORIA` en runtime y se restan los egresos propios que
+    // tienen FILA PROPIA. El resultado tiene que ser exactamente la foto declarada arriba: si
+    // mañana el catalogo gana un egreso propio sin fila, este caso lo nombra.
     const derivadas = WALLET_MOVIMIENTO_CATEGORIA_SEED.filter(
       (c) =>
         NATURALEZA_POR_CATEGORIA[c] === "propio" &&
         tipoDe(c) === "egreso" &&
-        !(WALLET_EGRESO_DESGLOSADO_SEED as readonly string[]).includes(c),
+        !(WALLET_EGRESO_CON_FILA_SEED as readonly string[]).includes(c),
     );
 
     expect([...derivadas].sort()).toEqual([...OTROS_EGRESOS_DE_ORDENEX].sort());
-    // Control de no-vacuidad del `toEqual`: la lista NO esta vacia — hay hueco de verdad, y por
-    // eso `DesgloseEgresosDTO.total` no es `egresosPropios`.
-    expect(derivadas.length).toBe(3);
+    // Control de no-vacuidad del `toEqual`: la lista NO esta vacia — sigue habiendo un hueco,
+    // y es exactamente `egreso_gasto` (ficha 343, T2.3).
+    expect(derivadas.length).toBe(1);
+    expect(derivadas).toEqual(["egreso_gasto"]);
+  });
+
+  it("R13 (ficha 343): los dos egresos NOMBRADOS salieron del complemento de verdad", () => {
+    // La afirmacion que la ficha existe para hacer cierta, medida sobre la DERIVACION y no
+    // sobre una lista: las dos categorias que antes caian en «otros» ya no estan ahi, y estan
+    // en el conjunto con fila. Si alguien las devolviera al cubo, este caso las nombra.
+    const complemento = WALLET_MOVIMIENTO_CATEGORIA_SEED.filter(
+      (c) =>
+        NATURALEZA_POR_CATEGORIA[c] === "propio" &&
+        tipoDe(c) === "egreso" &&
+        !(WALLET_EGRESO_CON_FILA_SEED as readonly string[]).includes(c),
+    );
+    for (const categoria of WALLET_EGRESO_NOMBRADO_SEED) {
+      expect(complemento, `${categoria} sigue en «otros»`).not.toContain(categoria);
+      expect(WALLET_EGRESO_CON_FILA_SEED as readonly string[]).toContain(categoria);
+    }
+    // Y el seed CON FILA es la EXTENSION de los cuatro del desglose, sin repetidos.
+    expect([...WALLET_EGRESO_CON_FILA_SEED]).toEqual([
+      ...WALLET_EGRESO_DESGLOSADO_SEED,
+      ...WALLET_EGRESO_NOMBRADO_SEED,
+    ]);
+    expect(new Set(WALLET_EGRESO_CON_FILA_SEED).size).toBe(WALLET_EGRESO_CON_FILA_SEED.length);
   });
 
   it("R23: el seed de ingresos propios es EXACTAMENTE el que dice la clasificacion", () => {
@@ -196,7 +232,7 @@ describe("R23/R26 — MEDIDO sobre el catalogo entero: las dos columnas cuadran"
     expect(caja.entradas).not.toBe(composicion.totalIngresos);
   });
 
-  it("R26: los CUATRO conceptos del desglose + «otros gastos» = `egresosPropios`", async () => {
+  it("R11 (ficha 343): los cuatro conceptos + los dos nombrados + «otros» suman `egresosPropios`", async () => {
     // La mitad de la izquierda se mide por el camino REAL de la 45/158
     // (`WalletMovimientoRepository.agregarPorCategoria`) y la de la derecha por el camino nuevo
     // (`derivarComposicionGanancia`), sobre EL MISMO libro. Es lo unico que prueba que las dos
@@ -217,16 +253,25 @@ describe("R23/R26 — MEDIDO sobre el catalogo entero: las dos columnas cuadran"
     const caja = derivarCaja(LIBRO_COMPLETO);
     const composicion = derivarComposicionGanancia(LIBRO_COMPLETO);
 
+    // Ficha 339 (T2.3): la columna ya no es «4 conceptos + otros», es «4 conceptos + los dos
+    // NOMBRADOS + otros». Las filas se toman del seed y no a mano, para que un concepto nuevo
+    // con fila entre aqui solo.
     const sumaDeLaColumna = [
       desglose.gastoFijo,
       desglose.gastoVariable,
       desglose.sueldo,
       desglose.indemnizacion,
+      ...WALLET_EGRESO_NOMBRADO_SEED.map((c) => composicion.egresos[c]),
       composicion.otrosEgresos,
     ].reduce((s, v) => s.add(new Prisma.Decimal(v)), new Prisma.Decimal(0));
 
     expect(sumaDeLaColumna.toFixed(2)).toBe(composicion.totalEgresos);
     expect(composicion.totalEgresos).toBe(caja.egresosPropios);
+    // Control de no-vacuidad de las filas nuevas: las DOS traen importe en este libro, asi que
+    // la suma de arriba no puede estar cuadrando por sumar dos ceros.
+    for (const categoria of WALLET_EGRESO_NOMBRADO_SEED) {
+      expect(new Prisma.Decimal(composicion.egresos[categoria]).gt(0), categoria).toBe(true);
+    }
 
     // Y la consecuencia FIRMADA en D2, medida: los cuatro conceptos SOLOS no llegan. Si esta
     // asercion cayera, «Otros gastos de Ordenex» habria dejado de hacer falta… o de sumar.
@@ -240,7 +285,7 @@ describe("R23/R26 — MEDIDO sobre el catalogo entero: las dos columnas cuadran"
     expect(new Prisma.Decimal(composicion.otrosEgresos).gt(0)).toBe(true);
   });
 
-  it("R23/R26: cada categoria propia aporta su importe a UNA sola cubeta, nunca a dos", () => {
+  it("R13: cada categoria propia aporta a UNA sola cubeta, nunca a dos", () => {
     // Se comprueba fila a fila: quitar una categoria del libro tiene que bajar exactamente su
     // importe de UNA de las dos columnas, y dejar la otra intacta. Un doble conteo —o una
     // categoria contada en «otros» Y en su concepto— cae aqui con el importe a la vista.
@@ -259,6 +304,22 @@ describe("R23/R26 — MEDIDO sobre el catalogo entero: las dos columnas cuadran"
       const esperado = esperadoDe(categoria, importe);
       expect(caidaIngresos.toFixed(2), `${categoria} en ingresos`).toBe(esperado.ingresos);
       expect(caidaEgresos.toFixed(2), `${categoria} en egresos`).toBe(esperado.egresos);
+
+      // Ficha 339 (R13) — y AHORA, cubeta a cubeta: quitar una categoria tiene que vaciar SU
+      // cubeta y no rozar ninguna otra. La version anterior solo miraba los dos totales, y un
+      // importe contado a la vez en su fila y en «otros» habria subido `totalEgresos` en el
+      // doble… pero tambien lo habria hecho el libro completo, asi que se compensaba. Esto no.
+      for (const nombrada of WALLET_EGRESO_NOMBRADO_SEED) {
+        const esperadaCubeta = nombrada === categoria ? "0.00" : completo.egresos[nombrada];
+        expect(sinElla.egresos[nombrada], `${categoria} movio la cubeta ${nombrada}`).toBe(
+          esperadaCubeta,
+        );
+      }
+      const otrosEsperado =
+        (OTROS_EGRESOS_DE_ORDENEX as readonly string[]).includes(categoria)
+          ? new Prisma.Decimal(completo.otrosEgresos).minus(importe).toFixed(2)
+          : completo.otrosEgresos;
+      expect(sinElla.otrosEgresos, `${categoria} movio «otros»`).toBe(otrosEsperado);
     }
   });
 });

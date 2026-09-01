@@ -34,6 +34,10 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
 vi.mock("@/lib/actions/wallet", () => ({
   listarMovimientosAction: vi.fn(),
   listarMovimientosCompletoAction: vi.fn(),
+  // FICHA 343 (B5): la tarjeta de la ganancia monta filas desplegables y el panel de cada una
+  // importa el borde del detalle. Sin declararlo aqui, el import no resuelve y este archivo no
+  // ejecuta ni un caso.
+  listarMovimientosDeFilaAction: vi.fn(),
   verResumenCajaAction: vi.fn(),
   registrarMovimientoManualAction: vi.fn(),
 }));
@@ -194,8 +198,18 @@ const RESUMEN_OK = {
       ingreso_ajuste: "0.00",
     },
     totalIngresos: "1500.00",
+    // Ficha 339 (T1.3/T6.2): un importe por egreso propio CON FILA que el desglose no abre.
+    // Van a 0,00 igual que el resto de este fixture, y el barrido de STRING de abajo los
+    // recorre uno a uno: cualquiera de los dos como `number` cae ahi.
+    egresos: {
+      egreso_pago_mensajero: "0.00",
+      egreso_ajuste: "0.00",
+    },
     otrosEgresos: "0.00",
     totalEgresos: "0.00",
+    // Ficha 339 (R9): la UNICA clave no-STRING de la composicion, y no es una cantidad: es la
+    // decision del SERVIDOR sobre si la fila «Otros gastos de Ordenex» se pinta.
+    hayOtrosEgresos: false,
   },
 };
 
@@ -387,15 +401,35 @@ describe("WalletPage — pre-fetch del maestro (R18/R21)", () => {
 
     // TODOS sus importes son STRING. Se barre el objeto entero, no tres campos elegidos a
     // mano: cualquier importe que alguien añada mañana como `number` cae aquí.
-    const { ingresos, ...totales } = props.composicion;
+    //
+    // Ficha 339 (T6.2): el barrido se AMPLÍA, no se afloja. `egresos` se desestructura igual
+    // que `ingresos` y recibe EL MISMO bucle con su propio control de no-vacuidad —es un mapa
+    // de importes más, o sea más barrido—; y `hayOtrosEgresos` se exceptúa **por NOMBRE**,
+    // nunca con un `typeof !== "string" → salta`, que es lo que dejaría pasar un importe como
+    // `number`. El precedente está en el mismo dominio: `CajaResumenDTO.periodoFiltrado` ya
+    // está exceptuado así en el barrido del resumen de aquí arriba. Una BANDERA no es una
+    // cantidad; lo que la 231 se negó a hacer fue meter una cantidad como `number`.
+    const { ingresos, egresos, hayOtrosEgresos, ...totales } = props.composicion;
     // Control de no-vacuidad: el desglose trae las siete categorías, no un objeto vacío.
     expect(Object.keys(ingresos)).toHaveLength(7);
     for (const [categoria, valor] of Object.entries(ingresos)) {
       expect(typeof valor, `composicion.ingresos.${categoria}`).toBe("string");
     }
+    // Ídem para las cubetas de egreso: el `Record` no viene vacío y cada importe es STRING.
+    expect(Object.keys(egresos).length).toBeGreaterThan(0);
+    for (const [categoria, valor] of Object.entries(egresos)) {
+      expect(typeof valor, `composicion.egresos.${categoria}`).toBe("string");
+    }
     for (const [clave, valor] of Object.entries(totales)) {
       expect(typeof valor, `composicion.${clave}`).toBe("string");
     }
+    // La excepción nominal, con su propia aserción: es un BOOLEANO, y vale `false` porque
+    // `otrosEgresos` es "0.00". El caso espejo —importe distinto de cero ⇒ `true`— se mide
+    // sobre la derivación en `tests/unit/utils/caja-composicion.test.ts`, que es quien la
+    // produce; aquí lo que se afirma es que cruza la frontera con su tipo y su valor.
+    expect(typeof hayOtrosEgresos, "composicion.hayOtrosEgresos").toBe("boolean");
+    expect(hayOtrosEgresos).toBe(false);
+    expect(props.composicion.otrosEgresos).toBe("0.00");
 
     // Y los dos campos nuevos del resumen también son STRING planos (D3).
     expect(typeof props.resumen.porcentajeTiendas).toBe("string");

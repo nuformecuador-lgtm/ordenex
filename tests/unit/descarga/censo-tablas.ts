@@ -340,6 +340,25 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     ],
   },
   {
+    // FICHA 343 (B6.1) — el desplegable de UNA fila de la tarjeta de la ganancia. Va entre
+    // `CobrosRechazoTiendaPendientesPanel` y `GastosFijosPlantillasPanel` porque la guardia
+    // recorre el arbol en orden alfabetico.
+    ruta: "app/(app)/wallet/_components/DetalleFilaComposicion.tsx",
+    tablas: [
+      {
+        nombre: "Movimientos de una fila de la composición de la ganancia",
+        estado: "fuera",
+        nota:
+          "desplegable de UNA fila de la tarjeta de la ganancia: es un recorte del MISMO libro " +
+          "que «Libro de movimientos de la caja principal», que sí descarga el conjunto " +
+          "completo con sus filtros -- incluido el filtro por categoría, que es exactamente lo " +
+          "que este panel muestra--. Una segunda descarga del mismo dinero por otra puerta " +
+          "sería un segundo archivo del mismo hecho. Decisión de " +
+          "`specs/343-otros-gastos-detalle/design.md §8`",
+      },
+    ],
+  },
+  {
     ruta: "app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx",
     tablas: [{ nombre: "Plantillas de gasto fijo", estado: "con_descarga" }],
   },

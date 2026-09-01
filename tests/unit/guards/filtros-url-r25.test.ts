@@ -67,7 +67,7 @@ import type { Linter } from "eslint";
 const RAIZ = path.join(__dirname, "..", "..", "..");
 
 /**
- * Los archivos que la ficha 339 toca. La lectura inicial vive repartida entre el hook
+ * Los archivos que la ficha 343 toca. La lectura inicial vive repartida entre el hook
  * (`useFiltrosUrl`) y los dos componentes canonicos que lo consumen, asi que la propiedad
  * hay que exigirla sobre los tres: cumplirla en el hook y romperla en la barra dejaria el
  * requisito igual de incumplido.
@@ -176,7 +176,7 @@ describe("Feature 339 / R25 — la lectura inicial de la URL no escribe estado d
     );
     expect(
       familiaHooks,
-      `Reglas de hooks de React incumplidas en los archivos de la ficha 339:\n${familiaHooks.join("\n")}`,
+      `Reglas de hooks de React incumplidas en los archivos de la ficha 343:\n${familiaHooks.join("\n")}`,
     ).toEqual([]);
   });
 });

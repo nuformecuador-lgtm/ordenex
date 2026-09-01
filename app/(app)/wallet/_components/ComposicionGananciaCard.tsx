@@ -31,6 +31,8 @@ import { WALLET_INGRESO_PROPIO_SEED } from "@/lib/types/wallet";
 import { cn } from "@/lib/utils";
 
 import { DesgloseEgresosLista } from "./DesgloseEgresosLista";
+import { FilaComposicion } from "./FilaComposicion";
+import type { WalletFiltrosValue } from "./WalletFiltros";
 import { CATEGORIA_LABEL, money } from "./wallet-labels";
 
 // Feature 231 (T6.2, design §4.3) — «Cómo se compone la ganancia de Ordenex».
@@ -69,11 +71,17 @@ const TITULO = "Cómo se compone la ganancia de Ordenex";
  * parcial de lo que entra, con el concepto más grande de los que D2 metió dentro fuera de ella
  * (940 de 3 940,50 en el libro de no-regresión), induce a error sobre dinero. O se nombra todo o
  * no se enumera; se nombra.
+ *
+ * Ficha 339 (T5.5, R41) — la enumeración gana los AJUSTES, y es la continuación literal de esa
+ * misma corrección. Con `egreso_ajuste` e `ingreso_ajuste` teniendo cada uno su fila con nombre,
+ * un texto que siguiera callándoselos volvería a ser una lista parcial de lo que entra. R42: lo
+ * que queda fuera —el dinero de las tiendas— se dice igual que hasta hoy.
  */
 const DESCRIPCION =
   "Ingresos y gastos propios del conjunto filtrado, concepto por concepto: fletes, comisiones, " +
-  "impuestos, gastos, sueldos, indemnizaciones y pagos a mensajeros. No incluye el dinero de " +
-  "las tiendas: el contra-entrega cobrado no es de Ordenex y por eso no está en la ganancia.";
+  "impuestos, gastos, sueldos, indemnizaciones, pagos a mensajeros y ajustes. No incluye el " +
+  "dinero de las tiendas: el contra-entrega cobrado no es de Ordenex y por eso no está en la " +
+  "ganancia.";
 
 const INGRESOS_TITULO = "Ingresos";
 const EGRESOS_TITULO = "Egresos";
@@ -112,28 +120,6 @@ const SIGNO_COLOR: Record<WalletBalanceSigno, string> = {
   cero: "text-muted-foreground",
 };
 
-/** Una fila de la columna de ingresos. Mismo marcado que la de egresos, con su propio color. */
-function FilaIngreso({
-  label,
-  valor,
-  icono: Icono,
-}: {
-  label: string;
-  /** STRING del servidor, pintado tal cual. */
-  valor: string;
-  icono: LucideIcon;
-}) {
-  return (
-    <div className="mx-2 flex items-center justify-between gap-4 rounded-md px-2 py-1.5 transition-colors duration-200 hover:bg-muted/50">
-      <dt className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Icono className="size-4 shrink-0" aria-hidden="true" />
-        {label}
-      </dt>
-      <dd className="text-sm font-medium tabular-nums text-success-strong">{money(valor)}</dd>
-    </div>
-  );
-}
-
 /**
  * Rótulo VISIBLE de una de las dos columnas. No es un encabezado del documento: la tarjeta vive
  * dentro de una página cuyo único `h1` es el título, y colgar aquí un `h3` sin `h2` por encima
@@ -151,12 +137,19 @@ export interface ComposicionGananciaCardProps {
   desglose: DesgloseEgresosDTO;
   /** De aquí salen `ganancia` y `signoGanancia` del pie (R27). */
   resumen: CajaResumenDTO;
+  /**
+   * Ficha 339 (T5.5/T5.6, R20) — los filtros VIGENTES de la wallet, que bajan hasta el detalle
+   * de cada fila. La tarjeta no los lee ni los interpreta: los transporta, para que el
+   * desplegable de una fila y el importe de esa fila hablen SIEMPRE del mismo conjunto.
+   */
+  filtros: WalletFiltrosValue;
 }
 
 export function ComposicionGananciaCard({
   composicion,
   desglose,
   resumen,
+  filtros,
 }: ComposicionGananciaCardProps) {
   const badge = SIGNO_BADGE[resumen.signoGanancia];
 
@@ -182,13 +175,19 @@ export function ComposicionGananciaCard({
             aria-label={INGRESOS_GRUPO_ARIA}
             className="flex flex-col gap-0.5"
           >
+            {/* Ficha 339 (Q1, decisión cerrada): «cada fila se puede abrir» es CADA fila. Las
+                siete de ingreso también, y por el mismo mecanismo: una asimetría nueva entre
+                las dos columnas sería exactamente el defecto que la 343 vino a cerrar. */}
             {WALLET_INGRESO_PROPIO_SEED.map((categoria) => (
-              <FilaIngreso
+              <FilaComposicion
                 key={categoria}
+                fila={categoria}
                 // R25: la etiqueta legible que ya existe, nunca el valor del enum.
                 label={CATEGORIA_LABEL[categoria]}
                 valor={composicion.ingresos[categoria]}
                 icono={INGRESO_ICONO[categoria]}
+                tono="ingreso"
+                filtros={filtros}
               />
             ))}
 
@@ -203,13 +202,20 @@ export function ComposicionGananciaCard({
 
         <div className="flex flex-col gap-2">
           <TituloColumna>{EGRESOS_TITULO}</TituloColumna>
-          {/* R26: los cuatro conceptos de siempre MÁS «Otros gastos de Ordenex», para que el
-              total de esta columna sea exactamente `egresosPropios`. Sin esa fila la resta de la
-              pantalla se equivocaría en el pago a los mensajeros, que no es pequeño. */}
+          {/* R26 (231): los cuatro conceptos de siempre MÁS lo que no tiene fila, para que el
+              total de esta columna sea exactamente `egresosPropios`.
+
+              Ficha 339 (R1/R2/R7/R8): los pagos a mensajeros y los ajustes dejan de ser «lo que
+              no tiene fila» y pasan a tener la suya; «Otros gastos de Ordenex» se pinta SOLO si
+              el servidor dice que ahí queda dinero. El total no se mueve ni un céntimo: lo que
+              cambia es de qué cubeta sale cada importe, no la suma. */}
           <DesgloseEgresosLista
             desglose={desglose}
+            egresos={composicion.egresos}
             otrosEgresos={composicion.otrosEgresos}
+            hayOtrosEgresos={composicion.hayOtrosEgresos}
             total={composicion.totalEgresos}
+            filtros={filtros}
           />
         </div>
       </CardContent>
