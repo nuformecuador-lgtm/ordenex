@@ -70,6 +70,40 @@ const ALCANCE_FINANCIERA = {
   mensajero: "prohibido",
 } as const satisfies Readonly<Record<RolAnalitica, AlcanceMetrica>>;
 
+/**
+ * FICHA 345 (2026-09-01) — EL ANALISIS DE PRODUCTOS. Pedido humano: «esto solo aplicaria para la
+ * analitica del maestro y el admin, y las tiendas solo ven la analitica de sus propios
+ * productos».
+ *
+ * ⚠ POR QUE ESTA TABLA VIVE AQUI Y NO JUNTO A SU VERTICAL, que es donde uno la pondria:
+ * `tests/unit/analytics/alcance-fuente-unica.guardia.test.ts` censa `app/`, `lib/`, `components/`
+ * y `scripts/` buscando el DATO (`maestro: "total"`) y FALLA si aparece fuera de este archivo.
+ * Escribirla en `lib/analytics/productos-consulta.ts` pondria rojo ese censo, y con razon: la
+ * regla por rol se declara UNA sola vez, aqui. No se relaja el guardia ni se evade con un truco
+ * de escritura.
+ *
+ * ⚠ LO QUE NO ES: una 26.ª metrica. `METRICAS` sigue congelado en 25 por decision humana fechada
+ * y esto NO entra en el catalogo — es una constante exportada mas del archivo. No lleva
+ * `dominio:`, asi que tampoco activa el censo de declaraciones de metrica
+ * (`modulo-puro.guardia.test.ts` R2). El motivo es el mismo que el del conteo de entregas
+ * (`entregas-conteo.ts:6-13`): universo `orden` viva, fecha efectiva por `COALESCE` y un grano
+ * «producto» que no existe en `DIMENSIONES` — no es expresable como `Metrica`.
+ *
+ * `adminSatelite` y `mensajero` estan PROHIBIDOS y no `acotado`: no es un cero, es una respuesta
+ * distinta (R4 de la 345). Es el unico punto en que esta tabla diverge de `ALCANCE_OPERATIVA`, y
+ * por eso la vertical tiene tipo opaco propio en vez de reusar `ConsultaConteoEntregas`.
+ *
+ * El `Record` exhaustivo hace que omitir un rol NO COMPILE (R1); que el conjunto `total` sea
+ * exactamente el de `esAccesoTotal` lo comprueba `productos-alcance.test.ts` (R6).
+ */
+export const ALCANCE_PRODUCTOS = {
+  maestro: "total",
+  admin: "total",
+  adminSatelite: "prohibido",
+  adminTienda: "acotado",
+  mensajero: "prohibido",
+} as const satisfies Readonly<Record<RolAnalitica, AlcanceMetrica>>;
+
 /* -------------------------------------------------------------------------- */
 /* Vocabularios citados (R8 / R9)                                              */
 /* -------------------------------------------------------------------------- */

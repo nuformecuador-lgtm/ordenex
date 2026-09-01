@@ -272,6 +272,32 @@ export function recortarFiltroConteoEntregas(
 /* 4. La consulta preparada                                                    */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * FICHA 345 — EL RECORTE, sin la marca. Lo que TODA consulta preparada de esta seccion tiene
+ * dentro: el filtro validado, la ventana resuelta y el alcance concedido.
+ *
+ * ⚠ NO ES UN AFLOJAMIENTO DE LA FRONTERA, y conviene entender por que. Existe porque hay DOS
+ * consultas preparadas con recorte identico y alcance DISTINTO —`ConsultaConteoEntregas` (donde
+ * un `adminSatelite` obtiene `{tipo:"zona"}`) y `ConsultaProductos` (donde esta PROHIBIDO)— y las
+ * dos necesitan pasar por el MISMO constructor de condiciones `where`
+ * (`ConteoPorStatusRepository.condicionesDeConsulta`) y por el MISMO cuerpo de clave de cache.
+ * Escribir una tercera version de cualquiera de los dos seria peor: divergirian.
+ *
+ * La opacidad se sigue exigiendo DONDE IMPORTA, que es la firma del metodo de cada repositorio
+ * (`contarPorStatus(consulta: ConsultaConteoEntregas)`, `contarProductos(consulta:
+ * ConsultaProductos)`). Un archivo que forjara un `RecorteDeOrdenes` a mano y lanzara `$queryRaw`
+ * no mencionaria ningun tipo opaco y caeria igual en el censo de
+ * `tests/unit/analytics/alcance-obligatorio.guardia.test.ts`.
+ *
+ * Este tipo NO se construye: se recibe. Nadie deberia declarar un parametro de este tipo salvo
+ * las funciones PURAS compartidas que solo LEEN el recorte ya concedido.
+ */
+export interface RecorteDeOrdenes {
+  readonly filtro: FiltroConteoEntregas;
+  readonly rango: RangoResuelto | null;
+  readonly alcance: AlcanceDatos;
+}
+
 declare const marcaConteo: unique symbol;
 
 /**
@@ -316,7 +342,7 @@ export type PreparacionConteoEntregas =
  * El filtro validado ya garantiza la coherencia preset/fechas (los cuatro `refine`), así que
  * aquí no se revalida nada: sólo se traduce.
  */
-function entradaDeRango(filtro: FiltroConteoEntregas): EntradaRango | null {
+export function entradaDeRango(filtro: FiltroConteoEntregas): EntradaRango | null {
   // Sin `rango` NO se inventa uno. Es la mitad de la decisión del 2026-08-18: caer aquí a
   // `"semana"` (o a cualquier otro preset) devolvería una cifra recortada mientras la barra
   // dice «sin filtrar», que es la clase de discrepancia que nadie detecta mirando la
@@ -432,8 +458,16 @@ export function claveDeConteoPorStatus(consulta: ConsultaConteoEntregas): string
   return claveConPrefijo(TAG_CONTEO_POR_STATUS, consulta);
 }
 
-/** El cuerpo comun de las dos claves: todo lo que RECORTA la consulta, en orden fijo. */
-function claveConPrefijo(prefijo: string, consulta: ConsultaConteoEntregas): string {
+/**
+ * El cuerpo comun de las claves: todo lo que RECORTA la consulta, en orden fijo.
+ *
+ * FICHA 345 — el parametro es `RecorteDeOrdenes` y no `ConsultaConteoEntregas` para que la
+ * septima lectura de la seccion (productos), que tiene tipo opaco PROPIO porque su alcance
+ * diverge, comparta este cuerpo en vez de escribir un septimo. Lo que distingue una lectura de
+ * otra es el PREFIJO, que sigue siendo obligatorio: sin el, dos lecturas con el mismo filtro
+ * producirian la MISMA clave con valores de forma distinta.
+ */
+export function claveConPrefijo(prefijo: string, consulta: RecorteDeOrdenes): string {
   const { filtro, rango, alcance } = consulta;
   return [
     prefijo,
