@@ -129,8 +129,17 @@ const ARBOLES_UI = ["app", "components"] as const;
 // completo con sus filtros. Esta guardia se vio fallar primero con «hay tablas sin registrar:
 // app/(app)/wallet/_components/DetalleFilaComposicion.tsx #1» antes de tocar estos números, que
 // es la convención escrita en este propio archivo. Censo total: 30 = 29 `<DataTable>` + 1 cruda.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 29;
-const TOTAL_INSTANCIAS_DATATABLE = 29;
+// FICHA 344 (B8.3): 29 → 31 archivos y 29 → 31 instancias. Las dos de más son los desplegables de
+// una fila del LIBRO de la caja (`wallet/_components/DetalleMovimientoCierre.tsx`) y del libro de
+// la TIENDA (`mi-wallet/_components/DetalleMiMovimientoCierre.tsx`), que enseñan las órdenes que
+// componen el importe de ese movimiento. Nacen las DOS `con_descarga`, a diferencia del panel de
+// la 343: aquél era un recorte de un libro que ya se descarga entero, y éstos enseñan algo que
+// ninguna otra descarga produce —el reparto de un importe entre las órdenes que lo componen—.
+// Esta guardia se vio fallar primero con «hay tablas sin registrar: …DetalleMiMovimientoCierre.tsx
+// #1, …DetalleMovimientoCierre.tsx #1» antes de tocar estos números, que es la convención escrita
+// en este propio archivo. Censo total: 32 = 31 `<DataTable>` + 1 cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 31;
+const TOTAL_INSTANCIAS_DATATABLE = 31;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -304,7 +313,11 @@ describe("guardia de cobertura del censo de tablas", () => {
     // FICHA 337 (segunda mitad): 29 → 30, por la cola de cobros por rechazo de tienda.
     // FICHA 336: 30 → 29, por el desglose de pagos del mensajero, que se va con `/mis-pagos`.
     // FICHA 343 (B6.1): 29 → 30, por el desplegable de una fila de la tarjeta de la ganancia.
-    expect(totalCensado).toBe(30);
+    // FICHA 344 (B8.3): 30 → 32, por los DOS desplegables de una fila del libro de movimientos
+    // —el de la caja y el de la tienda—, que reparten el importe entre las órdenes que lo
+    // componen. Es la primera vez que este censo sube de dos en dos, y es porque los dos libros
+    // son dos pantallas distintas con dos alcances distintos (design §5.2/§11-A5).
+    expect(totalCensado).toBe(32);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -382,7 +395,11 @@ describe("guardia de cobertura del censo de tablas", () => {
     // ser el dato, y aqui con un motivo que ninguna de las anteriores tenia: lo que este panel
     // enseña YA SE DESCARGA por otra puerta —el libro de la caja, con sus filtros—, asi que una
     // descarga propia seria un segundo archivo del mismo hecho.
-    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(19);
+    // FICHA 344 (B8.3): 19 -> 21 dentro de alcance, y las 11 exclusiones NO se mueven. Es la
+    // primera vez que la asimetria cae del lado CONTRARIO desde la 171: lo que entra son dos
+    // tablas que SI descargan. El motivo esta escrito en sus entradas del censo y es el que las
+    // separa del panel de la 343 —lo que enseñan no lo produce ninguna otra descarga—.
+    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(21);
     expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(11);
   });
 

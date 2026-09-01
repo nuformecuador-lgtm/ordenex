@@ -233,11 +233,18 @@ describe("el PUENTE `verBalanceAction` ya no existe (173, Tanda H)", () => {
     // — `listarMovimientosDeFilaAction`, el detalle de una fila de la tarjeta de la ganancia.
     // Se actualiza el literal en vez de derivarlo del propio módulo: este censo ES el contrato
     // de superficie del borde de la wallet, y derivarlo lo dejaría siempre verde.
+    // Ficha 344 (T4.4): de CINCO a SIETE, y las dos nuevas también son deliberadas — el detalle
+    // de una fila del LIBRO (qué órdenes componen su importe) y su gemela sin paginar para la
+    // descarga. Las dos nacen anotadas `@sin-superficie` porque su panel llega en la tanda de
+    // frontend; quien lo cablee tiene que borrar esa anotación, y la guardia de superficie de
+    // uso lo exige en los dos sentidos.
     expect(Object.keys(acciones).sort()).toEqual([
       "listarMovimientosAction",
       "listarMovimientosCompletoAction",
       "listarMovimientosDeFilaAction",
       "registrarMovimientoManualAction",
+      "verDetalleDeMovimientoAction",
+      "verDetalleDeMovimientoCompletoAction",
       "verResumenCajaAction",
     ]);
   });

@@ -171,4 +171,17 @@ export interface IWalletTiendaMovimientoRepository {
    * el typecheck: es ruido, no un fallo mudo.
    */
   listarCierresDeTienda(tiendaId: string, limite: number): Promise<CierreDeTiendaAgregadoRow[]>;
+  /**
+   * Ficha 344 (R41/R42) — UNA fila del ledger por su id, acotada a SU tienda.
+   *
+   * Los dos argumentos van juntos a proposito: no existe un `obtenerPorId` a secas de este
+   * libro. El `tienda_id` es parte de la IDENTIDAD de la lectura, no un filtro posterior, y va
+   * en el `WHERE` — leer primero y comparar despues significaria haber sacado de la base el
+   * movimiento de otra tienda para decidir tirarlo.
+   *
+   * `null` cuando no hay tal fila EN EL LIBRO DE ESA TIENDA. Es la MISMA respuesta para «no
+   * existe» y para «es de otra tienda», y es deliberado: distinguirlas confirmaria la existencia
+   * de un movimiento ajeno.
+   */
+  obtenerPorIdDeTienda(id: string, tiendaId: string): Promise<WalletTiendaMovimientoDTO | null>;
 }

@@ -152,6 +152,22 @@ export interface ArchivoCensado {
 // Totales VIGENTES, medidos contra el árbol: **30 tablas = 29 `<DataTable>` en 29 archivos + 1
 // `<table>` cruda**, con 10 exclusiones (9 con `<DataTable>` + la cruda).
 //
+// FICHA 344 (B8.3) — SUMA de DOS tablas, y las dos nacen `con_descarga`: los desplegables de una
+// fila del LIBRO de la caja (`wallet/_components/DetalleMovimientoCierre.tsx`) y del libro de la
+// TIENDA (`mi-wallet/_components/DetalleMiMovimientoCierre.tsx`), que enseñan las órdenes que
+// componen el importe de ese movimiento.
+//
+// LA DIFERENCIA CON LA FICHA 343, que es la que justifica el estado: aquel panel nació `fuera`
+// porque era un recorte del MISMO libro que ya se descarga entero con sus filtros. Éstos enseñan
+// algo que NINGUNA otra descarga produce —el reparto de un importe entre las órdenes que lo
+// componen—, así que no son un segundo archivo del mismo hecho.
+//
+// Totales VIGENTES: **32 tablas = 31 `<DataTable>` en 31 archivos + 1 `<table>` cruda**, con 11
+// exclusiones (las mismas que había: esta ficha no mueve ninguna). La guardia se vio FALLAR
+// primero con «hay tablas sin registrar: app/(app)/mi-wallet/_components/DetalleMiMovimientoCierre.tsx #1,
+// app/(app)/wallet/_components/DetalleMovimientoCierre.tsx #1» antes de tocar estos números, que
+// es la convención escrita en `cobertura-tablas.guardia.test.ts`.
+//
 // FEATURE 304 — SUMA de una tabla, `fuera`: «Órdenes con el monto redondeado (carga masiva)».
 // Dice qué filas entraron con el monto redondeado al colón más cercano (aviso de la 299) y de
 // cuánto a cuánto. No gana descarga y el motivo está escrito en su entrada: son filas del
@@ -210,6 +226,18 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     ruta: "app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx",
     tablas: [
       { nombre: "Desglose de movimientos de la tienda", estado: "con_descarga" },
+    ],
+  },
+  {
+    // FICHA 344 (B7/B8) — el desplegable de UNA fila del libro de la TIENDA: las órdenes de esa
+    // tienda que componen el importe de ese movimiento. Va justo después de
+    // `DesgloseTiendaLedger` porque la guardia recorre el árbol en orden alfabético.
+    ruta: "app/(app)/mi-wallet/_components/DetalleMiMovimientoCierre.tsx",
+    tablas: [
+      {
+        nombre: "Órdenes que componen un movimiento del libro de la tienda",
+        estado: "con_descarga",
+      },
     ],
   },
   {
@@ -355,6 +383,18 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
           "que este panel muestra--. Una segunda descarga del mismo dinero por otra puerta " +
           "sería un segundo archivo del mismo hecho. Decisión de " +
           "`specs/343-otros-gastos-detalle/design.md §8`",
+      },
+    ],
+  },
+  {
+    // FICHA 344 (B6/B8) — el desplegable de UNA fila del LIBRO de la caja principal: las órdenes
+    // que componen el importe de ese movimiento. Va entre `DetalleFilaComposicion` y
+    // `GastosFijosPlantillasPanel` porque la guardia recorre el árbol en orden alfabético.
+    ruta: "app/(app)/wallet/_components/DetalleMovimientoCierre.tsx",
+    tablas: [
+      {
+        nombre: "Órdenes que componen un movimiento del libro de la caja",
+        estado: "con_descarga",
       },
     ],
   },

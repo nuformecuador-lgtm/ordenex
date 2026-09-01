@@ -16,6 +16,8 @@ import { reversarEgresoAdministrativoAction } from "@/lib/actions/wallet-egresos
 import type { NaturalezaMovimiento, WalletMovimientoDTO } from "@/lib/types/wallet";
 import { cn } from "@/lib/utils";
 
+import { DetalleMovimientoCierre } from "./DetalleMovimientoCierre";
+import { DETALLE_MOVIMIENTO_NOMBRE } from "./detalle-movimiento-labels";
 import { COLUMNAS_DESCARGA_WALLET_CAJA } from "./wallet-ledger-descarga-columnas";
 import {
   CATEGORIA_LABEL,
@@ -110,6 +112,22 @@ function DuenoCelda({ dueno }: { dueno: NaturalezaMovimiento }) {
 
 /** Nombre visible del libro: hoja, base del nombre de archivo y nombre del control (R12/R13). */
 const TITULO_DESCARGA = "Libro de movimientos";
+
+/**
+ * Ficha 344 (T6.4, R6) — QUÉ FILA SE PUEDE ABRIR.
+ *
+ * Sólo las que nacen del cierre del día: es de ahí de donde se llega a las órdenes que componen
+ * el importe (`origen_id` apunta al cierre). Un ajuste manual, un gasto o un premio del ranking
+ * no tienen órdenes detrás, y la columna «Origen» ya dice de dónde salen.
+ *
+ * Devolver `null` en `renderExpanded` hace que la primitiva NO pinte el botón sobre esa fila, así
+ * que el control no aparece donde no llevaría a ninguna parte. Un movimiento de cierre cuyo
+ * concepto no se reparte SÍ se abre, y su panel dice de dónde sale el importe (R48): ése es un
+ * hueco de alcance que se ve, no uno que se esconde.
+ */
+function naceDeUnCierre(m: WalletMovimientoDTO): boolean {
+  return m.origenTipo === "cierre_dia";
+}
 
 export interface WalletLedgerProps {
   movimientos: WalletMovimientoDTO[];
@@ -279,6 +297,37 @@ export function WalletLedger({
         ariaLabel={TITULO_DESCARGA}
         isLoading={isLoading}
         emptyMessage="No hay movimientos que coincidan con los filtros."
+        // Ficha 344 (T6.4, R1–R6): cada fila de CIERRE despliega las órdenes que componen su
+        // importe. `renderExpanded` se INVOCA en cada render, pero el `DataTable` solo MONTA el
+        // elemento cuando la fila está abierta; como la LECTURA del detalle vive dentro de
+        // `DetalleMovimientoCierre`, pintar el libro entero no dispara ninguna lectura de
+        // detalle (R2) y abrir una fila dispara exactamente una, solo la de esa fila (R3).
+        // (Este componente sigue sin leer nada: no importa ninguna Server Action de lectura ni
+        // monta ningún hook de datos, y hay una guardia que lo comprueba sobre esta fuente en
+        // `tests/components/descarga/WalletDescarga.test.tsx` — que la lee CRUDA, comentarios
+        // incluidos, así que aquí ni siquiera se nombra el hook.)
+        //
+        // LAS COLUMNAS VISIBLES DEL LIBRO NO SE TOCAN: hay una aserción ajena que fija su
+        // secuencia (`tests/components/descarga/WalletDescarga.test.tsx`) y esta ficha no la
+        // mueve. La columna del control la antepone la primitiva, fuera de esa lista.
+        renderExpanded={(m) =>
+          naceDeUnCierre(m) ? (
+            <DetalleMovimientoCierre
+              movimientoId={m.id}
+              concepto={CATEGORIA_LABEL[m.categoria]}
+              fecha={m.fechaMovimiento.slice(0, 10)}
+            />
+          ) : null
+        }
+        // R5: el nombre accesible identifica SU fila —el concepto y la fecha— y no es un «Ver
+        // detalle» repetido en cada renglón del libro. El botón de la primitiva no lleva texto
+        // visible (sólo el chevron), así que éste es el único nombre que tiene.
+        expandAriaLabel={(m) =>
+          DETALLE_MOVIMIENTO_NOMBRE.abrir(
+            CATEGORIA_LABEL[m.categoria],
+            m.fechaMovimiento.slice(0, 10),
+          )
+        }
         // Feature 170 (T C.4, R1/R9/R13): el control aparece solo si el módulo bajó el
         // callback; las columnas del archivo las declara ESTA tabla, que es la que sabe
         // qué enseña. Money-safe: el monto viaja como el STRING del servidor, sin `money`

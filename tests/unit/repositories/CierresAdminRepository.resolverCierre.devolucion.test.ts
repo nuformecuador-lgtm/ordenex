@@ -54,6 +54,8 @@ function buildWalletDeps() {
     agregarDesglosePorTienda: vi.fn(), // feature 171: doble no-op, este test no lee el ledger
     // ficha 335: idem. Este camino no abre el selector de cierres de `/mi-wallet`.
     listarCierresDeTienda: vi.fn(async () => []),
+    // Ficha 344: la lectura por id acotada a la tienda. Este doble no la ejercita.
+    obtenerPorIdDeTienda: vi.fn(async () => null),
   };
   const walletTiendaFeedService: IWalletTiendaFeedService = {
     construirMovimientosPorTienda: vi.fn().mockResolvedValue([]),

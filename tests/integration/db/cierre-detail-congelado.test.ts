@@ -352,6 +352,8 @@ function aprobar(db: Db, cierreId: string) {
       agregarDesglosePorTienda: vi.fn(), // feature 171: doble no-op, este test no lee el ledger
       // ficha 335: idem. Este camino no abre el selector de cierres de `/mi-wallet`.
       listarCierresDeTienda: vi.fn(async () => []),
+      // Ficha 344: la lectura por id acotada a la tienda. Este doble no la ejercita.
+      obtenerPorIdDeTienda: vi.fn(async () => null),
     },
     new WalletTiendaFeedService(),
     // 44: fuera del alcance de estos dos casos (su libro sale de los snapshots del cierre_dia,

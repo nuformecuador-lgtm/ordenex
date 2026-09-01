@@ -181,6 +181,8 @@ function tiendaRepoQueEscribe(d: Doble) {
     agregarDesglosePorTienda: vi.fn(),
     // ficha 335: doble no-op; esta suite no abre el selector de cierres.
     listarCierresDeTienda: vi.fn(async () => []),
+    // Ficha 344: la lectura por id acotada a la tienda. Este doble no la ejercita.
+    obtenerPorIdDeTienda: vi.fn(async () => null),
   };
 }
 

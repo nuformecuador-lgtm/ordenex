@@ -49,6 +49,8 @@ function fakeRepo(
     listarSaldosTiendasPaginado: vi.fn(async () => ({ items: [], total: 0 })),
     agregarDesglosePorTienda: vi.fn(async () => []),
     listarCierresDeTienda: vi.fn(async () => []),
+    // Ficha 344: la lectura por id acotada a la tienda. Este doble no la ejercita.
+    obtenerPorIdDeTienda: vi.fn(async () => null),
     ...overrides,
   };
 }

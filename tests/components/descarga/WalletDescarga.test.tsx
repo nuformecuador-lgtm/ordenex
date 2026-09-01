@@ -758,7 +758,17 @@ describe("Feature 231 · el libro dice de quién es cada movimiento", () => {
     ).toEqual([...ENCABEZADOS_ANTERIORES]);
 
     // Y «Dueño» entra: una sola columna más, la ÚLTIMA de los datos —justo antes del botón—.
-    expect(encabezados).toHaveLength(ENCABEZADOS_ANTERIORES.length + 1);
+    //
+    // FICHA 344 — el conteo pasa de 7 a 8 y NINGUNA columna de datos se movió, se añadió ni se
+    // fue: las seis de arriba salen en su orden y «Dueño» sigue justo antes de «Acciones». La de
+    // más es «Desglose», la columna del control de apertura que ANTEPONE la primitiva
+    // `DataTable` en cuanto el consumidor declara `renderExpanded` —lo declara ahora el libro,
+    // para abrir las órdenes que componen el importe de una fila de cierre—. No la declara este
+    // componente y no forma parte de la secuencia que este caso protege, así que se cuenta
+    // aparte y se NOMBRA: si el número volviera a subir, ya no sería por esto.
+    const COLUMNA_DE_DESGLOSE = 1;
+    expect(encabezados[0]).toBe("Desglose");
+    expect(encabezados).toHaveLength(ENCABEZADOS_ANTERIORES.length + 1 + COLUMNA_DE_DESGLOSE);
     expect(encabezados).toContain("Dueño");
     expect(encabezados.indexOf("Dueño")).toBe(encabezados.indexOf("Acciones") - 1);
   });
