@@ -259,7 +259,7 @@ describe("CierreDiaModule", () => {
     renderModule({ grupos });
 
     const region = screen.getByRole("region", { name: "Entregadas" });
-    expect(within(region).getByText("₡1.251")).toBeInTheDocument();
+    expect(within(region).getByText("₡1.250,50")).toBeInTheDocument();
     expect(within(region).getByText("SINPE")).toBeInTheDocument();
   });
 
@@ -301,15 +301,17 @@ describe("CierreDiaModule", () => {
       },
     });
 
-    // Feature 230/R20: el general es el REDONDEO DEL TOTAL del servidor (`160.35`
-    // -> `₡160`), no la suma de los tres redondeados de arriba. Aquí las dos cuentas
-    // coinciden; cuando no coincidan, manda el del servidor (consecuencia A1, ya
-    // aceptada: una columna puede no cuadrar a ojo con su total por ±1/±2).
+    // El general es el del SERVIDOR, no una suma de la pantalla.
+    //
+    // FICHA 359 — Y AHORA LA CUENTA SE PUEDE LEER: 100 + 50,25 + 10,10 = 160,35, que es
+    // exactamente el total pintado. La 230 dejaba aquí escrita la consecuencia A1 («una
+    // columna puede no cuadrar a ojo con su total por ±1/±2»): con estos mismos datos pintaba
+    // ₡100, ₡50, ₡10 y ₡160, y cuadraba de casualidad. Ya no hace falta la advertencia.
     const region = screen.getByRole("region", { name: "Totales del día" });
     expect(within(region).getByText("₡100")).toBeInTheDocument();
-    expect(within(region).getByText("₡50")).toBeInTheDocument();
-    expect(within(region).getByText("₡10")).toBeInTheDocument();
-    expect(within(region).getByText("₡160")).toBeInTheDocument();
+    expect(within(region).getByText("₡50,25")).toBeInTheDocument();
+    expect(within(region).getByText("₡10,10")).toBeInTheDocument();
+    expect(within(region).getByText("₡160,35")).toBeInTheDocument();
   });
 
   it("R10: expone el pago al mensajero por orden (string, money-safe) en la sección de entregadas", () => {

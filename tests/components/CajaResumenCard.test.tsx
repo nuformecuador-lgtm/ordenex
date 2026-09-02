@@ -357,11 +357,12 @@ describe("CajaResumenCard — el rótulo condicional ([P7])", () => {
 });
 
 describe("CajaResumenCard — money-safe en el navegador (R64)", () => {
-  it("R64: redondea once dígitos EXACTO, sin recalcular nada en el navegador", () => {
-    // Un `DECIMAL(12,2)` de once dígitos no cabe exacto en un `number`. Feature 230: los
-    // céntimos ya no se pintan, pero deciden el redondeo, y ahí es donde se ve si el camino
-    // trabaja dígito a dígito: los dos importes largos ACARREAN (`,99` y `,89` suben) y el
-    // acarreo tiene que caer en el dígito correcto de once.
+  it("R64: pinta once dígitos EXACTO, sin recalcular nada en el navegador", () => {
+    // Un `DECIMAL(12,2)` de once dígitos no cabe exacto en un `number`, y ahí es donde se ve
+    // si el camino trabaja dígito a dígito. FICHA 359 — el conjunto de prueba es el mismo y lo
+    // exigente cambia de forma: con la 230 era el ACARREO (`,99` y `,89` subían y tenía que
+    // caer en el dígito correcto de once); ahora es CONSERVAR esos dos últimos dígitos sin
+    // mover ninguno de los once de delante.
     pintar({
       entradas: "12345678901.99",
       salidas: "1000.10",
@@ -369,11 +370,14 @@ describe("CajaResumenCard — money-safe en el navegador (R64)", () => {
       deTerceros: "0.10",
     });
 
-    expect(screen.getByText("₡12.345.678.902")).toBeInTheDocument();
-    expect(screen.getByText("₡1.000")).toBeInTheDocument();
-    expect(screen.getByText("₡12.345.677.902")).toBeInTheDocument();
-    // ⚠️ `0.10` de terceros se lee `₡0`: consecuencia A2, aceptada por el humano.
-    expect(screen.getByText("₡0")).toBeInTheDocument();
+    expect(screen.getByText("₡12.345.678.901,99")).toBeInTheDocument();
+    expect(screen.getByText("₡1.000,10")).toBeInTheDocument();
+    expect(screen.getByText("₡12.345.677.901,89")).toBeInTheDocument();
+    // ✅ FICHA 359 — la consecuencia A2 de la 230, dada de baja. Esta línea decía: «`0.10` de
+    // terceros se lee `₡0`, consecuencia aceptada por el humano». Un importe que existe
+    // pintado como cero es exactamente la contradicción que esta ficha mata; hoy se lee.
+    expect(screen.getByText("₡0,10")).toBeInTheDocument();
+    expect(screen.queryByText("₡0")).toBeNull();
   });
 
   it("R64: la tarjeta no tiene forma de operar con dinero", () => {

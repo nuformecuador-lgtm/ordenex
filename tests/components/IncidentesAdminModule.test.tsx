@@ -347,8 +347,14 @@ describe("Feature 158 (T2.8) — R50/R55: no se aprueba con un monto inválido",
     // constante contra sí misma: afirmaba una tautología, y por eso ningún rojo delató que el
     // mensaje hubiera pasado a anunciar `₡10.000.000.000` —un tope que la propia pantalla
     // rechaza—. Escrito el texto entero, cualquier cambio del tope pintado cae aquí.
+    //
+    // FICHA 359 — el tope anunciado pasa de `₡9.999.999.999` a `₡9.999.999.999,99`, que es la
+    // cifra EXACTA que acepta el validador. La 230 lo dejaba 99 céntimos por debajo (el lado
+    // seguro, pero en contradicción con el «(10 dígitos y 2 decimales)» de la misma frase);
+    // con la escala de presentación en 2, `moneyTope` ya puede decir el límite entero sin
+    // pasarse de él.
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "El monto no puede superar ₡9.999.999.999 (10 dígitos y 2 decimales). Revisá si sobra un dígito.",
+      "El monto no puede superar ₡9.999.999.999,99 (10 dígitos y 2 decimales). Revisá si sobra un dígito.",
     );
   });
 
@@ -357,12 +363,20 @@ describe("Feature 158 (T2.8) — R50/R55: no se aprueba con un monto inválido",
     // puede redondearse AL ALZA, porque entonces el texto ofrece como válido algo que el
     // borde rechaza. Se extrae la cifra del propio mensaje —sin escribirla otra vez— y se le
     // pasa al MISMO validador que gobierna el botón.
-    const anunciado = /₡[\d.]+/.exec(MONTO_EXCEDE)?.[0] ?? "";
+    // FICHA 359 — la extracción tiene que llevarse también la COLA, que ahora existe. Con el
+    // regex de antes (`/₡[\d.]+/`) el test seguiría verde leyendo sólo la parte entera, y
+    // dejaría de mirar justo los dos dígitos que la ficha añade.
+    const anunciado = /₡[\d.]+(?:,\d\d)?/.exec(MONTO_EXCEDE)?.[0] ?? "";
     expect(anunciado).not.toBe("");
-    const digitos = anunciado.replace(/\D/g, "");
+    expect(anunciado, "el tope anunciado perdió su cola").toContain(",");
+    // Se recompone el money-safe DESDE LO PINTADO —quitando el símbolo y los miles, y
+    // devolviendo el punto decimal— para pasárselo al validador tal cual se leería.
+    const comoSeTeclearia = anunciado.replace("₡", "").split(".").join("").replace(",", ".");
 
-    expect(montoValido(digitos, INDEMNIZACION_MONTO_MAX)).toBe(true);
-    // Y la contraprueba, con lo que el mensaje decía cuando estaba mal: el redondeo al alza
+    expect(montoValido(comoSeTeclearia, INDEMNIZACION_MONTO_MAX)).toBe(true);
+    // Y ahora, además, anuncia el límite EXACTO: ni un céntimo por encima ni por debajo.
+    expect(comoSeTeclearia).toBe(INDEMNIZACION_MONTO_MAX);
+    // La contraprueba, con lo que el mensaje decía cuando estaba mal: el redondeo al alza
     // añadía un dígito y ese monto NO pasa. Si alguien lo devuelve, la línea de arriba cae.
     expect(montoValido("10000000000", INDEMNIZACION_MONTO_MAX)).toBe(false);
     // El contrato de datos NO se toca en esta feature: sigue siendo el de la columna.
@@ -374,7 +388,7 @@ describe("Feature 158 (T2.8) — R50/R55: no se aprueba con un monto inválido",
     await abrirAprobacion(user);
     const ayuda = screen.getByText(/Mayor que 0 y hasta/);
     expect(ayuda).toHaveTextContent(
-      "Mayor que 0 y hasta ₡9.999.999.999, con hasta 2 decimales (por ejemplo 12500.00).",
+      "Mayor que 0 y hasta ₡9.999.999.999,99, con hasta 2 decimales (por ejemplo 12500.00).",
     );
   });
 
@@ -495,22 +509,27 @@ describe("Feature 158 (T2.8) — R55: los montos salen del STRING del servidor",
         }),
       ],
     });
-    // Feature 230: el `,89` no se pinta, sube la unidad. Truncar daría `₡1.234.567`.
-    expect(screen.getByText("₡1.234.568")).toBeInTheDocument();
+    // FICHA 359: el `,89` se pinta. Antes la 230 lo usaba para subir la unidad (`₡1.234.568`)
+    // y truncar habría dado `₡1.234.567`; hoy no hay que elegir entre las dos, se lee el dato.
+    expect(screen.getByText("₡1.234.567,89")).toBeInTheDocument();
   });
 
-  // ⚠️ LO QUE ESTE BLOQUE PERDIÓ CON LA 230, dicho en voz alta. Estos tres casos existían
-  // para matar una mutación concreta: renderizar con `parseFloat`, que se come los ceros de
-  // la derecha de un importe de escala 2 (`"12500.00"` -> `12500`). Desde la 230 la pantalla
-  // YA NO pinta los decimales, así que esa diferencia dejó de ser observable desde el DOM y
-  // la mutación pasaría por aquí sin que nadie la viera. No se maquilla: los tres casos
-  // pasan a afirmar el REDONDEO —que sí se ve, y distingue redondear de truncar— y el
-  // barrido money-safe del final del bloque recupera lo que se perdió, mirando el fuente.
+  // ⚠️ LO QUE ESTE BLOQUE PERDIÓ CON LA 230, dicho en voz alta, y lo que la 359 NO le
+  // devuelve. Estos tres casos existían para matar una mutación concreta: renderizar con
+  // `parseFloat`, que se come los ceros de la derecha de un importe de escala 2 (`"12500.00"`
+  // -> `12500`). La 230 dejó de pintar decimales y esa diferencia dejó de ser observable.
+  //
+  // La ficha 359 devuelve la cola a la pantalla, pero NO devuelve esta observabilidad: el
+  // formateador trata `"12500.00"` y `"12500"` como el mismo dinero —esa es su regla— y
+  // `"1200.5"` y `"1200.50"` también. O sea que la mutación seguiría pasando por aquí. No se
+  // maquilla: lo que estos tres casos afirman hoy es la REGLA DE PRESENTACIÓN —cuándo sale la
+  // cola y cuándo no—, y el barrido money-safe del final del bloque sigue siendo quien cubre
+  // el `parseFloat`, mirando el fuente.
   it.each([
-    ["12500.00", "₡12.500"],
-    ["1200.50", "₡1.201"], // el medio se aleja del cero; truncar daría ₡1.200
-    ["0.10", "₡0"], // ⚠️ una indemnización real de diez céntimos se lee «₡0» (A2)
-  ])("el monto «%s» se pinta redondeado, sin cola decimal", (valor, pintado) => {
+    ["12500.00", "₡12.500"], // redondo: la cola de ceros NO se pinta (lo que quitó la 230)
+    ["1200.50", "₡1.200,50"], // con cola: se pinta; la 230 lo subía a ₡1.201
+    ["0.10", "₡0,10"], // ✅ una indemnización real de diez céntimos ya NO se lee «₡0» (A2)
+  ])("el monto «%s» se pinta con su cola si la tiene, y sin ella si no", (valor, pintado) => {
     montar({
       historico: [
         makeIncidente({ incidenteId: "i2", estado: "aprobado", indemnizacion: valor }),

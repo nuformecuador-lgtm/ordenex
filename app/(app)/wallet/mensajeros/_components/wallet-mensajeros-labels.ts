@@ -1,4 +1,4 @@
-import { money } from "@/lib/config/moneda";
+import { money, moneyTope } from "@/lib/config/moneda";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type {
   CuentaPorPagarSigno,
@@ -318,10 +318,22 @@ export const REPARTO_PREVISUALIZACION = {
   pendienteDespues: (pendiente: string) => `Queda pendiente: ${money(pendiente)}`,
   /** R33 — la imputación PARCIAL, marcada. Solo la última puede serlo. */
   parcial: "Pago parcial",
-  /** R38 — el importe no cabe. Las dos cifras las derivó el servidor. */
+  /**
+   * R38 — el importe no cabe. Las dos cifras las derivó el servidor.
+   *
+   * FICHA 359 — el `imputable` es un MÁXIMO y se pinta con `moneyTope`, no con `money`.
+   * Cuando el formateador cuadraba al colón esto era un defecto vivo: `money("4500.35")`
+   * daba `₡4.501` y la frase anunciaba como aplicable un importe que
+   * `reparto-liquidacion-mensajero.ts` rechaza al céntimo. Hoy el formateador ya es exacto a
+   * escala 2 y las dos funciones dan la MISMA cadena para todo lo que emite el servidor
+   * (`imputable` sale de un `Decimal.toFixed(2)`), así que la identidad
+   * `imputable + sobrante = importe tecleado` sigue cerrando con lo que se lee en pantalla.
+   * `moneyTope` está aquí por lo que GARANTIZA, no por lo que cambia: si algún día llegara
+   * un importe con más cola de la que se pinta, este número seguiría quedando por debajo.
+   */
   excede: (sobrante: string, imputable: string) =>
     `El monto supera lo que se puede pagar ahora: sobran ${money(sobrante)}. ` +
-    `Como máximo se pueden aplicar ${money(imputable)}.`,
+    `Como máximo se pueden aplicar ${moneyTope(imputable)}.`,
   /**
    * R56 — el RECORTE por el tope: deuda que sí se puede pagar acá, pero en otro registro.
    * Es un aviso DISTINTO del de abajo y no se puede fundir con él: éste habla de dinero que

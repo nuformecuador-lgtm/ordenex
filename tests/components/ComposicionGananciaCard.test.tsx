@@ -193,11 +193,11 @@ describe("DesgloseEgresosCard — render (R11/R12) [re-hospedado de la 45]", () 
     expect(within(lista).getByText("Gastos fijos")).toBeInTheDocument();
     expect(within(lista).getByText("₡300")).toBeInTheDocument();
     expect(within(lista).getByText("Gastos variables")).toBeInTheDocument();
-    expect(within(lista).getByText("₡126")).toBeInTheDocument();
+    expect(within(lista).getByText("₡125,50")).toBeInTheDocument();
     expect(within(lista).getByText("Sueldos")).toBeInTheDocument();
     expect(within(lista).getByText("₡800")).toBeInTheDocument();
     expect(within(lista).getByText("Total de egresos")).toBeInTheDocument();
-    expect(within(lista).getByText("₡1.251")).toBeInTheDocument();
+    expect(within(lista).getByText("₡1.250,75")).toBeInTheDocument();
   });
 });
 
@@ -207,22 +207,30 @@ describe("Feature 158/R32 — la indemnización es una fila propia y suma al tot
 
     const lista = listaEgresos();
     expect(within(lista).getByText("Indemnizaciones")).toBeInTheDocument();
-    expect(within(lista).getByText("₡25")).toBeInTheDocument();
+    expect(within(lista).getByText("₡25,25")).toBeInTheDocument();
   });
 
   it("el total mostrado es el que llega del servidor (la tarjeta NO suma dinero)", () => {
     // 300.00 + 125.50 + 800.00 + 25.25 = 1250.75. El componente no hace la cuenta: si el
     // servidor mandara otro total, la tarjeta mostraría ESE (money-safe, un solo origen).
     //
-    // Feature 230/R20: el total que se pinta es el REDONDEO DEL TOTAL, nunca la suma de los
-    // redondeos. Aquí, con `999.99 -> ₡1.000` y las filas sumando ₡1.251, se ve que la tarjeta
-    // pinta lo que le mandan aunque no cuadre con las filas de arriba.
+    // Feature 230/R20: el total que se pinta es el del SERVIDOR, nunca una suma de la
+    // pantalla. Aquí se le manda un `999.99` que no cuadra con las filas de arriba, y la
+    // tarjeta lo pinta igual.
+    //
+    // FICHA 359 — lo que cambió: hasta ahora el caso además ilustraba «el redondeo del total,
+    // nunca la suma de los redondeos», porque `999.99` salía `₡1.000` y las cuatro filas
+    // sumaban `₡1.251` mientras el DTO decía `1250.75`. Esa segunda lectura desapareció: con
+    // la cola visible las filas suman EXACTAMENTE su total (300 + 125,50 + 800 + 25,25 =
+    // 1.250,75), que es justo la «consecuencia aceptada» de la 230 —«una columna de filas
+    // redondeadas puede no cuadrar a ojo con su total»— dada de baja. Lo que este caso sigue
+    // midiendo es lo de siempre: el origen del número.
     //
     // Feature 231: el total de esta columna ya no es `DesgloseEgresosDTO.total` sino
     // `ComposicionGananciaDTO.totalEgresos` —que incluye «Otros gastos de Ordenex»—, pero la
     // afirmación es la MISMA: el número lo manda el servidor y la pantalla no lo recalcula.
     pintarComoLa158({ totalEgresos: "999.99" });
-    expect(within(listaEgresos()).getByText("₡1.000")).toBeInTheDocument();
+    expect(within(listaEgresos()).getByText("₡999,99")).toBeInTheDocument();
   });
 
   it("un monto que no cabe en un `number` se redondea EXACTO (sin parseFloat)", () => {
@@ -240,8 +248,8 @@ describe("Feature 158/R32 — la indemnización es una fila propia y suma al tot
     // Feature 230: los dos redondean en sentidos opuestos (`,99` sube, `,49` baja) sobre once
     // dígitos, y eso solo sale bien trabajando dígito a dígito. Un `parseFloat`/`Number`
     // intermedio pondría en juego la precisión justo aquí.
-    expect(within(lista).getByText("₡12.345.678.902")).toBeInTheDocument();
-    expect(within(lista).getByText("₡12.345.679.127")).toBeInTheDocument();
+    expect(within(lista).getByText("₡12.345.678.901,99")).toBeInTheDocument();
+    expect(within(lista).getByText("₡12.345.679.127,49")).toBeInTheDocument();
   });
 });
 
@@ -278,9 +286,9 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
 
     // Los dos lados, cada uno con su grupo accesible y su total.
     expect(within(listaIngresos()).getByText("Total de ingresos")).toBeInTheDocument();
-    expect(within(listaIngresos()).getByText("₡5.710")).toBeInTheDocument();
+    expect(within(listaIngresos()).getByText("₡5.709,75")).toBeInTheDocument();
     expect(within(listaEgresos()).getByText("Total de egresos")).toBeInTheDocument();
-    expect(within(listaEgresos()).getByText("₡2.191")).toBeInTheDocument();
+    expect(within(listaEgresos()).getByText("₡2.190,75")).toBeInTheDocument();
 
     // Y la resta, en el pie de la tarjeta y no perdida entre las filas.
     const pie = container.querySelector<HTMLElement>('[data-slot="card-footer"]');
@@ -319,11 +327,11 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
       { rotulo: "Flete", importe: "₡150" },
       { rotulo: "Flete por rechazo", importe: "₡4.000" },
       { rotulo: "Comisión COD", importe: "₡900" },
-      { rotulo: "IVA del flete", importe: "₡20" },
+      { rotulo: "IVA del flete", importe: "₡19,50" },
       { rotulo: "IVA del flete por rechazo", importe: "₡520" },
-      { rotulo: "IVA de la comisión", importe: "₡30" },
+      { rotulo: "IVA de la comisión", importe: "₡30,25" },
       { rotulo: "Ajuste (ingreso)", importe: "₡90" },
-      { rotulo: "Total de ingresos", importe: "₡5.710" },
+      { rotulo: "Total de ingresos", importe: "₡5.709,75" },
     ]);
 
     // La columna de egresos, con el mismo rasero: la 45/158 afirmaba rótulo e importe por
@@ -332,17 +340,22 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
     // Ficha 339 (T6.3) — ESTE `toEqual` ES EL CONTRATO de la columna, y por eso se actualiza a
     // mano, fila a fila, en vez de sustituirse por una derivación de la propia fuente que lo
     // dejaría siempre verde. Lo que cambia: dos filas nuevas —«Pagos a mensajeros» y «Ajustes
-    // (egreso)»— JUSTO ANTES de «Otros», que baja de ₡940 a ₡194 porque lo que se le sacó ya
-    // tiene nombre. El total de la columna NO se mueve: sigue siendo ₡2.191 (R12).
+    // (egreso)»— JUSTO ANTES de «Otros», que baja de ₡940 a ₡194,25 porque lo que se le sacó
+    // ya tiene nombre. El total de la columna NO se mueve (R12).
+    //
+    // FICHA 359 — y ahora la columna CUADRA A OJO: 300 + 125,50 + 800 + 25,25 + 700 + 45,75 +
+    // 194,25 = 2.190,75, que es exactamente el total pintado. Con la 230 las siete filas
+    // sumaban ₡2.192 y el total decía ₡2.191, y eso estaba declarado como consecuencia
+    // aceptada. Ya no hace falta aceptarla.
     expect(pares(listaEgresos())).toEqual([
       { rotulo: "Gastos fijos", importe: "₡300" },
-      { rotulo: "Gastos variables", importe: "₡126" },
+      { rotulo: "Gastos variables", importe: "₡125,50" },
       { rotulo: "Sueldos", importe: "₡800" },
-      { rotulo: "Indemnizaciones", importe: "₡25" },
+      { rotulo: "Indemnizaciones", importe: "₡25,25" },
       { rotulo: "Pagos a mensajeros", importe: "₡700" },
-      { rotulo: "Ajustes (egreso)", importe: "₡46" },
-      { rotulo: "Otros gastos de Ordenex", importe: "₡194" },
-      { rotulo: "Total de egresos", importe: "₡2.191" },
+      { rotulo: "Ajustes (egreso)", importe: "₡45,75" },
+      { rotulo: "Otros gastos de Ordenex", importe: "₡194,25" },
+      { rotulo: "Total de egresos", importe: "₡2.190,75" },
     ]);
   });
 
@@ -351,9 +364,12 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
     // conceptos valieran lo mismo, ponerle a uno el importe del otro no cambiaría ni un píxel.
     // Es la misma clase de agujero que dejó sobrevivir la mutación del ORDEN (M9).
     //
-    // Y el peligro no es teórico desde la feature 230, que pinta el dinero SIN CÉNTIMOS: dos
-    // importes distintos en el DTO pueden colapsar en el mismo texto («19.50» y «20.49» se
-    // pintan los dos «₡20»). Por eso la colisión se mide DESPUÉS de formatear, no antes.
+    // El peligro dejó de ser el que era, pero no desapareció. Con la feature 230 dos importes
+    // distintos del DTO colapsaban en el mismo texto («19.50» y «20.49» se pintaban los dos
+    // «₡20»), y por eso la colisión se mide DESPUÉS de formatear y no antes. Con la ficha 359
+    // ese colapso concreto ya no ocurre —la cola distingue las dos cifras—, pero la medición
+    // se queda DONDE ESTÁ: sigue habiendo un formateador de por medio, y comprobar la
+    // unicidad sobre el DTO en vez de sobre lo pintado volvería a mirar el sitio equivocado.
     //
     // ── POR QUÉ AQUÍ SÍ SE USA `money()`, Y EN EL CASO DE ARRIBA NO ──
     // Arriba los importes van escritos a mano porque el sujeto de la prueba es LA PANTALLA, y
@@ -469,14 +485,14 @@ describe("ComposicionGananciaCard — la columna de egresos cuadra (R26)", () =>
     // mensajeros, que no es pequeño. Ficha 339: ese pago ya tiene fila propia, así que aquí
     // queda sólo lo que de verdad sigue sin clasificar (194,25).
     expect(within(lista).getByText("Otros gastos de Ordenex")).toBeInTheDocument();
-    expect(within(lista).getByText("₡194")).toBeInTheDocument();
+    expect(within(lista).getByText("₡194,25")).toBeInTheDocument();
 
     // El total de la columna es `totalEgresos`, que el servidor garantiza idéntico a
     // `egresosPropios` — NO el `total` del desglose de la 45/158, que solo suma cuatro.
     expect(COMPOSICION.totalEgresos).toBe(RESUMEN.egresosPropios);
-    expect(within(lista).getByText("₡2.191")).toBeInTheDocument();
-    // Y el de los cuatro conceptos (1 250,75 -> ₡1.251) NO se pinta como total de la columna.
-    expect(within(lista).queryByText("₡1.251")).toBeNull();
+    expect(within(lista).getByText("₡2.190,75")).toBeInTheDocument();
+    // Y el de los cuatro conceptos (₡1.250,75) NO se pinta como total de la columna.
+    expect(within(lista).queryByText("₡1.250,75")).toBeNull();
   });
 
   it("R23/R26: los dos totales son los del servidor, no una suma de la pantalla", () => {
@@ -574,7 +590,7 @@ describe("Ficha 339 — cada gasto con su nombre (R1/R2/R3/R5)", () => {
 
     const lista = listaEgresos();
     expect(within(lista).getByText("Ajustes (egreso)")).toBeInTheDocument();
-    expect(within(lista).getByText("₡46")).toBeInTheDocument();
+    expect(within(lista).getByText("₡45,75")).toBeInTheDocument();
   });
 
   it("R3: el rótulo de los ajustes usa el concepto que el diálogo promete en el libro", () => {
@@ -636,7 +652,7 @@ describe("Ficha 339 — «Otros» sólo cuando de verdad queda algo (R7/R8/R9/R1
 
     const lista = listaEgresos();
     expect(within(lista).getByText("Otros gastos de Ordenex")).toBeInTheDocument();
-    expect(within(lista).getByText("₡194")).toBeInTheDocument();
+    expect(within(lista).getByText("₡194,25")).toBeInTheDocument();
   });
 
   it("R9: la decisión es del SERVIDOR — la tarjeta no compara importes", () => {
@@ -684,7 +700,7 @@ describe("Ficha 339 — «Otros» sólo cuando de verdad queda algo (R7/R8/R9/R1
     expect(COMPOSICION.totalEgresos).toBe(RESUMEN.egresosPropios);
 
     pintar();
-    expect(within(listaEgresos()).getByText("₡2.191")).toBeInTheDocument();
+    expect(within(listaEgresos()).getByText("₡2.190,75")).toBeInTheDocument();
   });
 });
 

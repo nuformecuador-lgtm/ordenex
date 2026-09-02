@@ -211,8 +211,8 @@ describe("Ficha 339 — abrir una fila (R15/R21/R22)", () => {
     await abrir(ABRIR_MENSAJEROS);
 
     const dentro = within(await screen.findByRole("region", { name: PANEL_MENSAJEROS }));
-    expect(await dentro.findByText("₡3.333")).toBeInTheDocument();
-    expect(dentro.getByText("₡1.111")).toBeInTheDocument();
+    expect(await dentro.findByText("₡3.333,33")).toBeInTheDocument();
+    expect(dentro.getByText("₡1.111,11")).toBeInTheDocument();
   });
 
   it("R23: dos filas abiertas mantienen páginas independientes", async () => {
@@ -281,7 +281,7 @@ describe("Ficha 339 — lo que enseña cada movimiento (R16/R17/R36)", () => {
     // R5 también aquí: la etiqueta legible del catálogo, nunca el valor del enum.
     expect(dentro.getByText("Ajuste (egreso)")).toBeInTheDocument();
     expect(dentro.getByText(/Faltante al cuadrar la caja/)).toBeInTheDocument();
-    expect(dentro.getByText("₡46")).toBeInTheDocument();
+    expect(dentro.getByText("₡45,75")).toBeInTheDocument();
     expect(dentro.queryByText("egreso_ajuste")).toBeNull();
   });
 
@@ -319,7 +319,7 @@ describe("Ficha 339 — lo que enseña cada movimiento (R16/R17/R36)", () => {
     await abrir(ABRIR_MENSAJEROS);
     const region = await screen.findByRole("region", { name: PANEL_MENSAJEROS });
     const dentro = within(region);
-    await dentro.findByText("₡3.333");
+    await dentro.findByText("₡3.333,33");
 
     // Ni la palabra, ni la cifra: dentro del panel hay EXACTAMENTE tantos importes como
     // movimientos. Un subtotal de página al lado del importe de la fila es una invitación a
@@ -328,7 +328,7 @@ describe("Ficha 339 — lo que enseña cada movimiento (R16/R17/R36)", () => {
     const importes = [...region.querySelectorAll("td")]
       .map((c) => (c.textContent ?? "").trim())
       .filter((t) => t.startsWith("₡"));
-    expect(importes).toEqual(["₡3.333", "₡1.111"]);
+    expect(importes).toEqual(["₡3.333,33", "₡1.111,11"]);
   });
 });
 
@@ -395,11 +395,11 @@ describe("Ficha 339 — el nombre de cada control y sus estados (R24/R25/R26)", 
     const aviso = await dentro.findByRole("alert");
     expect(aviso.textContent ?? "").toMatch(/no se pudieron cargar los movimientos/i);
     // Ninguna rama de error viaja con movimientos: la tabla no pinta ni una fila de datos.
-    expect(dentro.queryByText("₡3.333")).toBeNull();
+    expect(dentro.queryByText("₡3.333,33")).toBeNull();
 
     // Y el resto de la tarjeta —que es lo que la persona vino a leer— sigue completo.
     expect(screen.getByText("Total de egresos")).toBeInTheDocument();
-    expect(screen.getByText("₡2.191")).toBeInTheDocument();
+    expect(screen.getByText("₡2.190,75")).toBeInTheDocument();
     expect(screen.getByText("Ganancia de Ordenex")).toBeInTheDocument();
   });
 });

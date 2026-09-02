@@ -121,7 +121,7 @@ describe("R49/R50 — el comprobante trae sus siete datos", () => {
   it("pinta fecha real, monto, método, referencia, nota, quién e instante de registro", () => {
     montar([VIGENTE]);
     const fila = filaDe("2026-07-30");
-    expect(within(fila).getByText("₡4.000")).toBeInTheDocument();
+    expect(within(fila).getByText("₡4.000,10")).toBeInTheDocument();
     expect(within(fila).getByText("SINPE")).toBeInTheDocument();
     expect(within(fila).getByText("SINPE-88112233")).toBeInTheDocument();
     expect(within(fila).getByText("Liquidación de julio")).toBeInTheDocument();
@@ -279,7 +279,7 @@ describe("R4/R81 — el control de anular solo existe para quien puede anular", 
       onAnular: vi.fn(),
     });
     expect(
-      screen.getByRole("button", { name: "Anular el pago de ₡4.000 del 2026-07-30" }),
+      screen.getByRole("button", { name: "Anular el pago de ₡4.000,10 del 2026-07-30" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Anular el pago de ₡10 del 2026-07-29" }),
@@ -368,7 +368,7 @@ describe("T F.5 — el diálogo se abre sobre SU pago y avisa a quien montó la 
     });
 
     await user.click(
-      screen.getByRole("button", { name: "Anular el pago de ₡4.000 del 2026-07-30" }),
+      screen.getByRole("button", { name: "Anular el pago de ₡4.000,10 del 2026-07-30" }),
     );
     const primero = await screen.findByRole("dialog");
     await user.type(
@@ -415,13 +415,16 @@ describe("R56 — ni un identificador interno en pantalla", () => {
 });
 
 describe("R14 — money-safe", () => {
-  it("el tope de la columna se redondea EXACTO: el acarreo cruza los diez dígitos", () => {
-    // Feature 230: el `,99` ya no se pinta y en su lugar arrastra un acarreo que
-    // añade un dígito (`9.999.999.999,99` -> `10.000.000.000`), reagrupando los
-    // miles. Que salga bien es lo que ningún `Number` intermedio garantiza; el
-    // caso de abajo lo remata mirando el fuente.
+  it("el tope de la columna se pinta EXACTO: los doce dígitos llegan enteros", () => {
+    // Con la feature 230 el `,99` no se pintaba y en su lugar arrastraba un acarreo que
+    // añadía un dígito (`9.999.999.999,99` -> `₡10.000.000.000`) y anunciaba en pantalla un
+    // importe que la propia columna `DECIMAL(12,2)` no admite.
+    //
+    // FICHA 359: la cola se pinta y la cifra NO se mueve. Que los doce dígitos salgan bien es
+    // lo que ningún `Number` intermedio garantiza; el caso de abajo lo remata mirando el fuente.
     montar([{ ...VIGENTE, monto: "9999999999.99" }]);
-    expect(within(tabla()).getByText("₡10.000.000.000")).toBeInTheDocument();
+    expect(within(tabla()).getByText("₡9.999.999.999,99")).toBeInTheDocument();
+    expect(within(tabla()).queryByText("₡10.000.000.000")).toBeNull();
   });
 
   it("el archivo de la tabla no convierte ni redondea ningún monto", () => {

@@ -218,9 +218,9 @@ describe("Regresión: las tres cifras del cuadre no se formatean con la unidad d
    * unica afirmacion del archivo sobre el texto exacto que ve un humano.
    */
   const MONEDA = {
-    snapshot: "₡1.561",
+    snapshot: "₡1.560,50",
     ledger: "₡1.500",
-    diferencia: "₡61",
+    diferencia: "₡60,50",
   } as const;
 
   it("la cabecera del DTO real declara `conteo`: la unidad de la métrica NO sirve para el cuadre", () => {
@@ -232,21 +232,20 @@ describe("Regresión: las tres cifras del cuadre no se formatean con la unidad d
     expect(datosDe(true, []).unidad).toBe(UNIDAD_DEL_DTO);
   });
 
-  it("pinta el cuadre como DINERO (₡61), no con la unidad `conteo` de la cabecera («61»)", () => {
+  it("pinta el cuadre como DINERO (₡60,50), no con la unidad `conteo` de la cabecera («61»)", () => {
     // El defecto que llego a produccion: `formatearValor(importe, datos.unidad)` con
     // `unidad = "conteo"` redondea a entero y quita la moneda. Un descuadre de ₡60,50
     // se anunciaba como «61» en la pantalla de conciliar dinero, y ₡1 560,50 como
     // «1 561».
     //
-    // ⚠️ FEATURE 230 — LA MITAD DE ESTE CASO CAMBIO DE SENTIDO, y se deja escrito.
-    // El titulo decia «con sus decimales, NO redondeado a 61». Desde la 230 el dinero
-    // TAMBIEN se redondea: el descuadre de `60.50` se lee `₡61`. O sea que el decimal
-    // ya no distingue el camino bueno del malo; lo que los distingue es lo que queda:
-    // el SIMBOLO de moneda y el separador de miles con PUNTO, frente al `Intl` de
-    // `conteo`, que no pone simbolo y agrupa con espacio duro. La regresion que este
-    // caso vigila sigue cazada —usar `datos.unidad` para el cuadre da «1 561», sin
-    // colon—, pero con un margen mas estrecho que antes. Queda anotado en
-    // `progress/impl_230_frontend.md`.
+    // ✅ FICHA 359 — ESTE CASO RECUPERA SU MARGEN. Su titulo original decia «con sus
+    // decimales, NO redondeado a 61», y la 230 lo dejo cojo: con el dinero cuadrado al
+    // colon, `60.50` se leia `₡61` y el decimal ya no distinguia el camino bueno del malo
+    // —solo quedaba el SIMBOLO y el separador de miles—. Hoy el camino bueno pinta
+    // `₡60,50` y el malo «61»: se distinguen otra vez por el decimal Y por el simbolo.
+    // Ademas es el defecto n.º1 del censo de la 359: este panel encendia la alerta «no
+    // cuadran» —que el servidor decide con `diferencia.isZero()` EXACTO— y debajo pintaba
+    // una diferencia redondeada que podia leerse como cero.
     render(<PanelConciliacion datos={datosDe(false, ["cierre-a"])} />);
 
     const seccion = screen.getByRole("region", { name: ETIQUETA });

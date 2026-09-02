@@ -554,8 +554,11 @@ describe("ordenesColumns — feature 204 (el dinero derivado llega hecho del ser
       />,
     );
     const fila = celdas("REM-204-A");
+    // FICHA 359: el flete llega redondo (`3390.00`) y se pinta pelado; la comisión
+    // llega con cola (`589.30`) y la enseña. Es el reparto que la medición de
+    // producción encontró: 0 de 577 fletes con céntimos, 577 de 577 comisiones.
     expect(fila[IDX_FLETE]).toHaveTextContent(/^₡3\.390$/);
-    expect(fila[IDX_COMISION]).toHaveTextContent(/^₡589$/);
+    expect(fila[IDX_COMISION]).toHaveTextContent(/^₡589,30$/);
   });
 
   it("NO recalcula: con la MISMA tarifa, la celda sigue al servidor aunque el número cambie", () => {
@@ -588,20 +591,23 @@ describe("ordenesColumns — feature 204 (el dinero derivado llega hecho del ser
         ariaLabel="Órdenes"
       />,
     );
-    expect(celdas("REM-204-B1")[IDX_COMISION]).toHaveTextContent(/^₡657$/);
-    // ⚠️ FEATURE 230 — AQUÍ SE PERDIÓ UNA AFIRMACIÓN, y no se disimula. Esta línea
-    // decía «y NO el 657,26 que salía de multiplicar en el navegador»: el céntimo
-    // EXACTO era la huella del cálculo del cliente, y era lo que la feature 204
-    // vino a cerrar. Desde la 230 los dos, `657.25` y `657.26`, se pintan `₡657`:
-    // esa huella ya no se ve en pantalla. Lo que sigue en pie es la otra mitad del
-    // caso —dos filas con la MISMA tarifa y el MISMO monto que pintan importes
-    // distintos porque el SERVIDOR dice cosas distintas—, y se afirma explícito.
+    // ✅ FICHA 359 — LA AFIRMACIÓN QUE LA 230 PERDIÓ, RECUPERADA. Esta línea decía
+    // originalmente «₡657,25 y NO el 657,26 que salía de multiplicar en el
+    // navegador»: el céntimo EXACTO era la huella del cálculo del cliente, y era
+    // lo que la feature 204 vino a cerrar. La 230 la degradó a `₡657` —los dos
+    // valores se pintaban igual y la huella desaparecía de la pantalla— y lo dejó
+    // escrito aquí como pérdida consciente. Con la cola visible el caso vuelve a
+    // ser el fuerte: `657.25` y `657.26` se distinguen a simple vista.
+    expect(celdas("REM-204-B1")[IDX_COMISION]).toHaveTextContent(/^₡657,25$/);
+    expect(celdas("REM-204-B1")[IDX_COMISION]).not.toHaveTextContent(/657,26/);
+    // La otra mitad del caso, intacta: dos filas con la MISMA tarifa y el MISMO
+    // monto pintan importes distintos porque el SERVIDOR dice cosas distintas.
     // El resto de la red de la 204 vive donde sí puede vivir:
     // `tests/unit/guards/ordenes-columnas-money-safe.guardia.test.ts`, que prohíbe
     // que estas tablas vuelvan a NOMBRAR los campos de la tarifa —sin nombrarlos no
     // se puede recalcular— y barre las conversiones sobre el fuente.
-    expect(celdas("REM-204-B2")[IDX_FLETE]).toHaveTextContent(/^₡1$/);
-    expect(celdas("REM-204-B2")[IDX_COMISION]).toHaveTextContent(/^₡5$/);
+    expect(celdas("REM-204-B2")[IDX_FLETE]).toHaveTextContent(/^₡1,23$/);
+    expect(celdas("REM-204-B2")[IDX_COMISION]).toHaveTextContent(/^₡4,56$/);
     expect(celdas("REM-204-B1")[IDX_COMISION].textContent).not.toBe(
       celdas("REM-204-B2")[IDX_COMISION].textContent,
     );
@@ -637,7 +643,7 @@ describe("ordenesColumns — feature 204 (el dinero derivado llega hecho del ser
     );
     const fila = celdas("REM-204-C");
     expect(fila[IDX_FLETE]).toHaveTextContent(/^₡3\.390$/);
-    expect(fila[IDX_COMISION]).toHaveTextContent(/^₡589$/);
+    expect(fila[IDX_COMISION]).toHaveTextContent(/^₡589,30$/);
   });
 
   it("un DTO viejo sin los campos cae a ₡0, no a un cálculo de emergencia", () => {
@@ -683,8 +689,8 @@ describe("ordenesColumns — feature 204 (el dinero derivado llega hecho del ser
       />,
     );
     const fila = celdas("REM-204-E");
-    expect(fila[IDX_MONTO]).toHaveTextContent(/^₡16\.618$/);
-    expect(fila[IDX_FULFILLMENT]).toHaveTextContent(/^₡251$/);
+    expect(fila[IDX_MONTO]).toHaveTextContent(/^₡16\.618,40$/);
+    expect(fila[IDX_FULFILLMENT]).toHaveTextContent(/^₡250,50$/);
   });
 });
 

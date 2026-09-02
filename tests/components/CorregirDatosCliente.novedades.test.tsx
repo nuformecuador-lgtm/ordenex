@@ -480,7 +480,7 @@ describe("327/R33 — desde `/novedades`, cambiar el distrito tampoco se guarda 
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
     expect(await screen.findByText(AVISO_TITULO)).toBeInTheDocument();
-    expect(screen.getByText("₡2.825")).toBeInTheDocument();
+    expect(screen.getByText("₡2.825,40")).toBeInTheDocument();
     expect(screen.getByText("₡4.520")).toBeInTheDocument();
     expect(entradaDeLlamada(0).confirmaCambioDeUbicacion).toBe(false);
     // No se releyó la lista: no se escribió nada.

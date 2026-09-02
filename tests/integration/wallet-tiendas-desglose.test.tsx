@@ -469,14 +469,19 @@ describe("R15/R16/R20/R21 — la lista de movimientos", () => {
     expect(within(tabla).getByText("Cierre del día · Cierre del 5")).toBeInTheDocument();
   });
 
-  it("los montos del servidor se pintan redondeados y agrupados, sin recalcular", async () => {
-    // ⚠️ Feature 230 — ESTE CASO SE QUEDO SIN PRESA Y SE LE DEVUELVE UNA. Se titulaba
+  it("los montos del servidor se pintan TAL CUAL, con su cola y agrupados, sin recalcular", async () => {
+    // ⚠️ Feature 230 — ESTE CASO SE QUEDO SIN PRESA Y SE LE DEVOLVIO UNA. Se titulaba
     // «money-safe: los montos se pintan TAL CUAL, con sus dos decimales» y afirmaba
     // `₡10.000,00` / `₡1.000,00`. Sin la cola decimal, dos importes redondos como esos salen
     // identicos con o sin un `Number(` por el medio: el titulo prometia una medida que ya no
-    // existia. Ahora el desglose responde con importes que SI discriminan —un acarreo que
-    // cambia de digito y uno de once digitos que no cabe en un `double`— y el barrido del
-    // caso siguiente cubre, sobre el FUENTE, lo que el DOM ya no puede ver.
+    // existia. Se cambio el conjunto por importes que SI discriminaban con la regla de
+    // entonces —un acarreo que cambia de digito y uno de once digitos que no cabe en un
+    // `double`—.
+    //
+    // ✅ FICHA 359 — el conjunto se QUEDA y la presa se refuerza: los mismos dos importes
+    // ahora se pintan con su cola, asi que el caso vuelve a medir lo que su titulo original
+    // prometia (que los decimales del servidor llegan a pantalla) Y ademas los once digitos.
+    // El barrido del caso siguiente sigue cubriendo, sobre el FUENTE, la conversion a numero.
     responderPorTienda({
       t1: {
         ...DESGLOSE_NORTE,
@@ -493,10 +498,12 @@ describe("R15/R16/R20/R21 — la lista de movimientos", () => {
       name: "Movimientos del desglose de Tienda Norte",
     });
     await within(tabla).findByText("2026-07-12");
-    // El acarreo añade un digito y REAGRUPA: truncar daria `₡999`.
-    expect(within(tabla).getByText("₡1.000")).toBeInTheDocument();
-    // Y el de once digitos redondea exacto: `₡12.345.678.901` seria el truncado.
-    expect(within(tabla).getByText("₡12.345.678.902")).toBeInTheDocument();
+    // Los dos se pintan enteros y sin moverse. Con la 230 el primero acarreaba a `₡1.000`
+    // y el segundo a `₡12.345.678.902`.
+    expect(within(tabla).getByText("₡999,99")).toBeInTheDocument();
+    expect(within(tabla).queryByText("₡1.000")).toBeNull();
+    // Once digitos enteros MAS la cola: un `Number(` intermedio no puede prometerlo.
+    expect(within(tabla).getByText("₡12.345.678.901,99")).toBeInTheDocument();
   });
 
   it("el panel del desglose no convierte ningun monto a numero (money-safe)", () => {

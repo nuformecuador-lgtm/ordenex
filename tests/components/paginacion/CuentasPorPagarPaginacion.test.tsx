@@ -323,12 +323,13 @@ describe("Riesgo ALTO · «Cuentas por pagar a mensajeros» (T L.2)", () => {
     expect(nombresVisibles()).toEqual(
       CONJUNTO.slice(0, PAGE_SIZE).map((m) => m.mensajeroNombre),
     );
-    // Y los montos son los del servidor: la fila 1 debe `1.25`, que la feature 230
-    // pinta `₡1`. Se añade el devengado de esa misma fila (`1001.75` -> `₡1.002`)
-    // porque ahí se ve el acarreo Y la agrupación de miles, que un importe de un
-    // solo dígito no puede mostrar.
-    expect(within(tabla()).getByText("₡1")).toBeInTheDocument();
-    expect(within(tabla()).getByText("₡1.002")).toBeInTheDocument();
+    // Y los montos son los del servidor: la fila 1 debe `1.25`. FICHA 359 — se lee
+    // `₡1,25` y no `₡1`, que es lo que la 230 pintaba de una deuda que no es de un
+    // colón. El devengado de esa misma fila (`1001.75` -> `₡1.001,75`) se conserva
+    // porque ahí se ve la agrupación de miles conviviendo con la cola, que un importe
+    // de un solo dígito no puede mostrar.
+    expect(within(tabla()).getByText("₡1,25")).toBeInTheDocument();
+    expect(within(tabla()).getByText("₡1.001,75")).toBeInTheDocument();
   });
 
   it("navega entre páginas (R43)", async () => {

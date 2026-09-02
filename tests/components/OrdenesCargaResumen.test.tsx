@@ -118,8 +118,9 @@ describe("OrdenesCargaResumen — DataTable del resumen (R12, R22)", () => {
     expect(screen.getByText("0999999999")).toBeInTheDocument();
     expect(screen.getByText("Camiseta")).toBeInTheDocument();
     // Feature 230/R13: el monto pasa por el formateador compartido. Antes esta
-    // celda pintaba `25.90` crudo —sin simbolo y sin agrupar—; ahora `₡26`.
-    expect(screen.getByText("₡26")).toBeInTheDocument();
+    // celda pintaba `25.90` crudo —sin simbolo y sin agrupar—; la 230 lo dejo en
+    // `₡26` y la ficha 359 le devuelve su cola, que es la que el monto tiene.
+    expect(screen.getByText("₡25,90")).toBeInTheDocument();
     expect(screen.getByText("Av. Amazonas")).toBeInTheDocument();
     // Sin monto ni dirección se muestra el marcador de dato ausente, no vacío.
     expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
@@ -204,24 +205,28 @@ describe("OrdenesCargaResumen — el monto lo formatea el módulo de moneda (230
     return [{ ...ORDENES[0], montoCobrar }];
   }
 
-  it("con 1234.56 la celda muestra ₡1.235: símbolo, miles y SIN céntimos", async () => {
+  it("con 1234.56 la celda muestra ₡1.234,56: símbolo, miles y la cola del dato", async () => {
     // Era la única fuga del árbol: `row.montoCobrar.toFixed(2)` pintaba `1234.56`
     // pelado. Este caso mide las tres cosas que gana a la vez —el símbolo, el
-    // separador de miles y el redondeo— y no solo la desaparición de la cola.
+    // separador de miles y el separador decimal de configuración— y que el
+    // formato ya no es el crudo del servidor.
     resumenCargaMasivaMock.mockResolvedValue({ status: "ok", ordenes: unaOrdenCon(1234.56) });
     render(<OrdenesCargaResumen numRemisiones={["REM-0001"]} />);
     await screen.findByText("REM-0001");
 
-    expect(screen.getByText("₡1.235")).toBeInTheDocument();
+    expect(screen.getByText("₡1.234,56")).toBeInTheDocument();
     expect(screen.queryByText("1234.56")).not.toBeInTheDocument();
   });
 
-  it("el medio se aleja del cero, y no queda ni un dígito tras la coma", async () => {
-    resumenCargaMasivaMock.mockResolvedValue({ status: "ok", ordenes: unaOrdenCon(1234.5) });
+  it("un monto REDONDO no arrastra cola: eso lo quitó la 230 y sigue quitado", async () => {
+    // La dirección «solo si» de la regla de la ficha 359, medida en la celda.
+    // Antes este caso afirmaba lo contrario para un `1234.5` (`₡1.235`); ahora
+    // afirma que el que NO tiene cola sigue pelado.
+    resumenCargaMasivaMock.mockResolvedValue({ status: "ok", ordenes: unaOrdenCon(1234) });
     render(<OrdenesCargaResumen numRemisiones={["REM-0001"]} />);
     await screen.findByText("REM-0001");
 
-    expect(screen.getByText("₡1.235")).toBeInTheDocument();
+    expect(screen.getByText("₡1.234")).toBeInTheDocument();
     const celdas = screen.getAllByRole("cell").map((td) => td.textContent ?? "");
     expect(celdas.some((texto) => new RegExp(`${monedaConfig.separadorDecimal}\\d`).test(texto))).toBe(
       false,
