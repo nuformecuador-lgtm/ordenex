@@ -104,6 +104,49 @@ export const ALCANCE_PRODUCTOS = {
   mensajero: "prohibido",
 } as const satisfies Readonly<Record<RolAnalitica, AlcanceMetrica>>;
 
+/**
+ * FICHA 347 (2026-09-01) — EL DINERO POR PRODUCTO. Tabla PROPIA, distinta de la del volumen.
+ *
+ * ⚠ POR QUE VIVE AQUI: el mismo motivo, palabra por palabra, que su hermana de arriba.
+ * `alcance-fuente-unica.guardia` censa `app/`, `lib/`, `components/` y `scripts/` buscando el
+ * DATO (`maestro: "total"`) y falla si aparece fuera de este archivo. Escribirla junto a su
+ * vertical pondria rojo ese censo, y con razon. No se relaja el guardia y no se evade con un
+ * truco de escritura.
+ *
+ * ⚠ POR QUE ES UNA TABLA PROPIA Y NO UN REUSO DE `ALCANCE_PRODUCTOS` (alternativa A8): serian
+ * una tabla decidiendo DOS permisos distintos, y el dia que se quiera cerrar el dinero a las
+ * tiendas —que es una decision de producto viva— habria que partirla bajo presion. Separadas,
+ * esa decision es UNA linea (`adminTienda: "prohibido"`) y no toca ni el recorte de datos ni
+ * ninguna otra pantalla.
+ *
+ * ⚠ R2 — LA INVARIANTE DE ATADURA, y es lo que cierra el choque con
+ * `tests/unit/analytics/alcance-dinero.guardia.test.ts`. Para CADA rol, el valor de esta tabla
+ * solo puede ser `"prohibido"` o EXACTAMENTE `ALCANCE_PRODUCTOS[rol]`. Ninguna otra
+ * combinacion. La consecuencia es la que cierra el agujero que aquella guardia teme: es
+ * IMPOSIBLE que el dinero se sirva con un recorte que el volumen no tenga ya, asi que nunca
+ * hara falta un `where` de dinero escrito a mano. Quien quisiera uno tendria que ensanchar
+ * primero el alcance del VOLUMEN, que es una decision visible y con su propio guardia. Se
+ * comprueba rol por rol —recorriendo `ROLES_ANALITICA`, no contra una lista escrita— en
+ * `tests/unit/analytics/productos-dinero-alcance.test.ts` y en el bloque nuevo de
+ * `alcance-dinero.guardia.test.ts`.
+ *
+ * ⚠ POR QUE UNA TIENDA VE SU DINERO AQUI (`adminTienda: "acotado"`), decision aprobada: NO es
+ * un permiso nuevo. `DetalleMovimientoService` (`ROL_TIENDA = "adminTienda"`) ya le entrega a
+ * la tienda su propio libro y el detalle por orden de sus movimientos en `/mi-wallet`, con
+ * `tiendaId` en el `WHERE`. Lo que esta ficha anade es de la MISMA naturaleza: la tienda ve SU
+ * dinero, con el MISMO recorte operativo que ya tiene concedido para el volumen.
+ *
+ * LO QUE NO ES: una 26.ª metrica. `METRICAS` sigue congelado en 25 y esto NO entra en el
+ * catalogo — es una constante exportada mas del archivo, sin `dominio:`, igual que su hermana.
+ */
+export const ALCANCE_PRODUCTOS_DINERO = {
+  maestro: "total",
+  admin: "total",
+  adminSatelite: "prohibido",
+  adminTienda: "acotado",
+  mensajero: "prohibido",
+} as const satisfies Readonly<Record<RolAnalitica, AlcanceMetrica>>;
+
 /* -------------------------------------------------------------------------- */
 /* Vocabularios citados (R8 / R9)                                              */
 /* -------------------------------------------------------------------------- */

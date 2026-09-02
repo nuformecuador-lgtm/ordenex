@@ -52,6 +52,7 @@ import {
 } from "../operativo/textos";
 
 import { claveConteoEntregas, consultarConteoEntregasSwr } from "./conteo-entregas-swr";
+import { etiquetaDeDesenlace } from "./etiqueta-desenlace";
 
 const TITULO = "Detalle gestión";
 
@@ -70,21 +71,15 @@ const TITULO = "Detalle gestión";
 const SEGMENTOS: readonly string[] = [...DESENLACES, BUCKET_OTROS];
 
 /**
- * El `value` del catalogo (`entregada`, `reprogramada`) puesto en algo que se lee en una
- * leyenda. En plural, porque cada segmento cuenta ORDENES y no una sola.
+ * FICHA 347 — la funcion se MUDO a `./etiqueta-desenlace`, un modulo puro, y aqui se
+ * RE-EXPORTA con su nombre de siempre para que ningun consumidor cambie un import.
  *
- * Sin tabla de etiquetas escrita a mano: `order_status` no tiene columna `label` —la etiqueta
- * ES el value— y una tabla propia se desincronizaria en silencio el proximo renombre del
- * catalogo. Los cinco desenlaces terminan en «a», asi que el plural es una «s».
- *
- * ⚠ LO QUE YA ESTA EN PLURAL NO SE VUELVE A PLURALIZAR. El bucket «otros» lo esta, y sin esta
- * guarda salia «Otross» en la leyenda. La regla se escribe sobre la FORMA de la palabra y no
- * como un caso especial para «otros»: cualquier value futuro acabado en «s» queda cubierto.
+ * El motivo de la mudanza esta escrito en el modulo nuevo: la ficha 347 la necesita tambien en
+ * `analitica-productos-descarga-columnas.ts`, que es PURO por contrato y lo ejecuta una guardia
+ * en node; importar este archivo desde alli habria arrastrado `recharts` a un barrido de
+ * columnas. Es una mudanza, no un cambio de comportamiento.
  */
-export function etiquetaDeDesenlace(valor: string): string {
-  const plural = valor.endsWith("s") ? valor : `${valor}s`;
-  return plural.charAt(0).toUpperCase() + plural.slice(1);
-}
+export { etiquetaDeDesenlace };
 
 /** La unidad del formateador: son ordenes contadas, no dinero ni porcentaje. */
 const UNIDAD = "conteo";

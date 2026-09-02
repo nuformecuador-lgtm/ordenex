@@ -584,7 +584,18 @@ const PRESENTACION_REL = "lib/analytics/presentacion.ts";
  * la ficha 345 «se pinta o no se pinta la seccion de productos» se resuelve DONDE este guardia
  * dice que se resuelven las decisiones de presentacion, y baja a la pagina como una etiqueta.
  */
-const CAMPOS_DE_PRESENTACION = ["alcance", "facetas", "productos"];
+/*
+ * FICHA 347 (2026-09-01): entra un CUARTO, `productosDinero`. Tampoco es una relajacion, y por
+ * el mismo motivo comprobable: el predicado de abajo NO se ha tocado y
+ * `productosDinero: "visible" | "oculta"` es una etiqueta, igual que su hermana.
+ *
+ * Por que el campo existe y no reusa `productos`: son DOS permisos distintos —quien ve el
+ * VOLUMEN de productos y quien ve su DINERO—, declarados en dos tablas atadas por R2 de esa
+ * ficha. Un solo campo obligaria a partirlo bajo presion el dia que se decida cerrar el dinero a
+ * las tiendas. Y la ruta sigue sin poder importar `metrics`: por eso la decision baja como
+ * etiqueta desde aqui, que es este punto de extension declarado.
+ */
+const CAMPOS_DE_PRESENTACION = ["alcance", "facetas", "productos", "productosDinero"];
 
 /** `export type X = ...;` de un archivo, para resolver alias locales (p. ej. `Faceta`). */
 function aliasDeTipo(codigo: string): Record<string, string> {
@@ -701,7 +712,8 @@ describe("Feature 133 (R20, R21) — lo que cruza la frontera son ETIQUETAS, no 
     const cabecera = 'export type Faceta = "zona" | "tienda" | "mensajero";\n';
     const cuerpoLimpio = `  readonly alcance: "global" | "zona" | "tienda" | "mensajero" | "denegado";
   readonly facetas: readonly Faceta[];
-  readonly productos: "visible" | "oculta";`;
+  readonly productos: "visible" | "oculta";
+  readonly productosDinero: "visible" | "oculta";`;
 
     // El modulo tal y como esta hoy, reducido: verde.
     expect(violacionesDelRetorno(`${cabecera}export interface RecortePresentacion {\n${cuerpoLimpio}\n}\n`)).toEqual([]);
