@@ -438,7 +438,12 @@ export function SateliteOrdenesListado({
         ),
       },
       // Feature 101/R8: badge "Prioritaria" sobre la primera columna de datos.
-      ...conBadgePrioridad(recibidasColumns(zonaNombre)),
+      //
+      // FICHA 349 — `recibidasColumns()` ya no recibe la zona del actor, y no es un descuido:
+      // las columnas son las de `/ordenes` tal cual, y allí el chip de estado lee la zona DE
+      // LA FILA (`relaciones.zona.nombre`), no la del actor. `zonaNombre` sigue haciendo falta
+      // más abajo, para la regla de disponibilidad del incidente (R48).
+      ...conBadgePrioridad(recibidasColumns()),
       // Feature 158 (T2.7) — «Reportar incidente» POR FILA. Antes vivía en las tablas de
       // «Recibidas» y «Asignadas (por recoger)», las dos únicas cuyo estado es un origen
       // válido; al fundirse las secciones en ESTA tabla la columna se monta siempre y la

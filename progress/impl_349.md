@@ -378,3 +378,398 @@ El único rojo es el heredado y tolerado por el encargo:
 La bodega satélite deja de tener proyección propia: entrega la misma fila que `/ordenes` —con
 mensajero, fecha de creación, tiempo y «Liberada el»— y **sin** flete, comisión ni fulfillment,
 que es una decisión firmada que dejo abierta para el humano.
+
+---
+---
+
+# Ficha 349 — frontend: la tabla de la bodega MONTA las columnas de `/ordenes`
+
+Worktree `R:\wt\349`, rama `fix/349-satelite-como-ordenes`. Sólo capa de presentación (columnas,
+call-site, un comentario de la descarga, un e2e y dos archivos de test). **Sin commit**: lo hace
+el leader. Nada de backend, base de datos ni rutas.
+
+---
+
+## F1. Qué se hizo, en una frase
+
+`recibidas-columns.tsx` dejó de **escribir** trece columnas que espejaban «el estilo» de
+`ordenes-columns.tsx` y pasó a **montar** las de `/ordenes` tal cual, quitando por identificador
+las tres que leen un dato que el alcance `zona` no recibe. **El archivo ya no declara ni una
+definición de columna**: cero `value:`, cero `render`, cero encabezados.
+
+Consecuencia directa, y son las tres cosas que pidió el humano a la vez:
+
+| lo que pidió | cómo sale |
+|---|---|
+| «no está mostrando la info completa» | +3 columnas: **Mensajero**, **Fecha de creación**, **Tiempo** (13 → 16 de datos) |
+| «los estados no los muestra en badges» | «Estado» es ahora el **`EstatusBadge`** de `/ordenes`, con su variante semántica |
+| «básicamente debe ser el mismo componente» | son **el mismo objeto** `Column`, no una copia: `recibidasColumns()` devuelve elementos de `ordenesColumns` |
+
+---
+
+## F2. Cómo se montaron las columnas
+
+```ts
+export function recibidasColumns(): Column<RecepcionSateliteDTO>[] {
+  return ordenesColumns.filter(
+    (columna) => !COLUMNAS_SIN_DATO_EN_ALCANCE_ZONA.includes(columna.id),
+  );
+}
+```
+
+Eso es **todo** el módulo. Lo que lo sostiene sin un solo `as` es lo que dejó el backend:
+`Column<OrdenListItemDTO>[]` es asignable a `Column<RecepcionSateliteDTO>[]` por contravarianza
+de `render` bajo `strictFunctionTypes`. **Comprobado, no supuesto**: `pnpm typecheck` pasa en
+verde con la anotación de retorno puesta y sin ningún cast. Mismo patrón, mismo precedente y
+misma razón que `columnasDetalle` en `/monitoreo` (260/R26).
+
+El call-site: `conBadgePrioridad(recibidasColumns())` — el parámetro `zonaNombre` desaparece de
+la firma. No es un descuido: el chip de `/ordenes` lee la zona **de la fila**
+(`relaciones.zona.nombre`), no la del actor. `zonaNombre` sigue siendo prop del listado porque
+la usa la regla de disponibilidad del incidente (R48).
+
+### F2.1 Qué se quitó por id, y por qué
+
+`flete`, `fulfillment`, `comision` — **exactamente los tres ids de `COLUMNAS_SOLO_ALCANCE_GLOBAL`
+de `/monitoreo`**, porque son los que leen `CAMPOS_SOLO_ALCANCE_GLOBAL`, que
+`recortarPorAlcance(fila, "zona")` retira en la capa de datos. `montoCobrar` **no** se quita
+(260/R17): ese importe sí viaja y el satélite ya lo veía.
+
+La lista se **declara** aquí en vez de importarse de `/monitoreo`, y la razón es concreta: este
+módulo entra en el bundle de CLIENTE y el guardia del bundle recorre imports **sin distinguir
+`import type`**, así que traerse `detalle-columnas` arrastraría `lib/types/tablero-dia` y con él
+`→ lib/analytics/alcance → lib/auth/acceso-total` (es la misma medición que motivó el módulo
+`lib/types/recorte-alcance-orden.ts` del backend). Que las dos declaraciones no puedan divergir
+lo ata un test que **las compara**.
+
+Y la exclusión no se justifica de palabra: hay un caso que **pinta** las tres columnas sobre la
+fila de verdad ya recortada y comprueba que dicen `₡0`. Ése es el «₡0 que se lee como *esta
+orden no paga flete*» de 260/R15 — la afirmación falsa que se evita retirando la COLUMNA y no
+sólo el VALOR.
+
+### F2.2 Qué NO se montó, y no es un olvido
+
+- **«Liberada el»** — se monta `ordenesColumns`, no `ordenesColumnsReprogramada`. Esa columna
+  pertenece en `/ordenes` a la pestaña acotada a `reprogramada`, y **`reprogramada` no es
+  ninguno de los cinco estados de este listado** (`ESTADOS_BODEGA_SATELITE`). Mismo criterio que
+  `/monitoreo` (260/R45), el otro listado de estados mezclados. Medido además contra la base
+  local el 2026-09-01: de las 6 filas del listado satélite, **0 tienen reprogramación vigente**.
+  Hay un caso que afirma que `reprogramada` no está entre los cinco, para que la cláusula no
+  pueda quedarse verde por vacío si mañana entrara.
+- **La descarga** (`satelite-descarga-columnas.ts`) **no gana columnas**: enumera a mano a
+  propósito (170/R5, R6). Sólo se corrigió su comentario, que decía «espejan las columnas de
+  datos de `recibidasColumns`» y desde hoy sería falso. Queda dicho ahí y en §F6.
+
+---
+
+## F3. Lo que cambió de aspecto, y lo que se retiró a sabiendas
+
+El chip **pierde el sufijo « de \<zona\>»** que esta pantalla componía (33/R9: «En bodega
+satélite de Quepos»). Es el precio de usar el mismo componente, y lo pago con dos apoyos:
+
+1. **El dato no se pierde**: la zona de la orden está en su propia columna, tres celdas más
+   allá. Verificado en el navegador y afirmado por dos casos (uno en el test de columnas, otro
+   en `RecepcionSateliteModule.test.tsx`, que además comprueba que el texto compuesto **ya no
+   aparece** — sin eso el caso pasaría igual con el render viejo).
+2. **Ya había precedente en esta misma pantalla**: el archivo descargable lo retiró en la 170/R8
+   con este motivo escrito: *«la zona ya viaja en su propia columna y repetirla en el estado
+   convierte un dato en dos»*.
+
+Aun así **lo señalo como decisión revisable** (§F6.1): es un requisito con nombre y apellido de
+otra feature, y si el humano lo quiere de vuelta la vía limpia es que `EstatusBadge` componga el
+sufijo para `en_bodega_satelite` igual que ya hace para `en_ruta_bodega_satelite` — y entonces
+cambia en las DOS pantallas a la vez, que es lo correcto.
+
+---
+
+## F4. Medidas del navegador — con números
+
+Un solo servidor de desarrollo, levantado en este worktree. **Aviso operativo:** `next dev` con
+**Turbopack no arranca aquí** (`Symlink [project]/node_modules is invalid, it points out of the
+filesystem root` — el `node_modules` del worktree es un junction al repo principal). Se levantó
+con `pnpm exec next dev --webpack`, que sí funciona. Login real como `satelite.qa@ordenex.test`
+(Sara → Quepos, el único `adminSatelite` de la base local); **no se corrió ningún seed**, así que
+no se rotó la contraseña de nadie.
+
+Medido con Playwright sobre `/recepcion-satelite/en-bodega` y, como referencia, `/ordenes` con
+el admin. Palabras partidas = una palabra cuyo `Range.getClientRects()` devuelve rectángulos con
+**distinta `top`**.
+
+| pantalla | viewport | cols | filas | scrollport | contenido | **desborde** | scroll-H de la PÁGINA | palabras partidas | `wrap-anywhere` |
+|---|---|---|---|---|---|---|---|---|---|
+| bodega satélite | 1440x900 | 18 | 6 | 1134 px | 1958 px | **824 px** | **0 px** | **0** | **0** |
+| bodega satélite | 390x844 | 18 | 6 | 340 px | 1958 px | **1618 px** | **0 px** | **0** | **0** |
+| `/ordenes` | 1440x900 | 21 | 25 | 1134 px | 2374 px | 1240 px | 0 px | 0 | 0 |
+| `/ordenes` | 390x844 | 21 | 25 | 340 px | 2374 px | 2034 px | 0 px | 0 | 0 |
+
+Lecturas que importan:
+
+- **La tabla desborda DENTRO de su scrollport, no empuja la página** en ninguno de los cuatro
+  casos (`document.scrollWidth - clientWidth = 0`). Es el comportamiento buscado del `DataTable`.
+- **La satélite desborda MENOS que `/ordenes`** (1958 px vs 2374 px), que es la pantalla que el
+  humano dio por patrón. Gana ancho, sí, pero se queda por debajo del listado ya aprobado.
+- **Cero palabras partidas** y **cero nodos con `overflow-wrap: anywhere` / `word-break:
+  break-all`** en toda la tabla, en los cuatro casos y también **después** de desplazar el scroll
+  hasta el final. El aviso de la otra ficha sobre `wrap-anywhere` **no aplica aquí**: la clase no
+  aparece.
+- **La flecha de scroll**: centro en **(1390, 450)** a 1440 y **(340, 443)** a 390 en la satélite;
+  **(1390, 450)** y **(340, 422)** en `/ordenes`. **Idéntica antes y después de desplazar la tabla
+  hasta el final** en las cuatro medidas → está pegada al scrollport (es `sticky`), no a la
+  ventana, y se comporta igual que en `/ordenes`. La X coincide exactamente entre las dos
+  pantallas; los 21 px de diferencia en Y a 390 vienen de que el cuerpo tiene 6 filas frente a 25,
+  no de un anclaje distinto.
+- **El `overflow: hidden` que rodea a la tabla es el del propio `DataTable`** (el marco con borde
+  redondeado), el mismo objeto en las dos pantallas. **No hay ningún `Card` extra** envolviendo la
+  sección satélite: `RecepcionSateliteModule` la monta en un `<section>` con
+  `flex flex-col gap-3 border-t pt-6`. Ése era el escenario que el encargo pedía descartar, y
+  queda descartado con la medida.
+
+### F4.1 Lo que se ve de verdad (primera fila, base local)
+
+```
+Nº Guía  Pendiente | Nº Remisión 111137 | Estado [chip] En bodega satélite | Intentos 0
+Destinatario Miguel - | Producto 1 * Crema anti verrugas. | Dirección Calle las brisas Granadilla
+Tienda Tania | Zona Quepos | Provincia San José | Cantón Curridabat | Distrito Granadilla
+Monto a cobrar ₡14.990 | Mensajero — | Fecha de creación 24/7/26, 5:40 p. m. | Tiempo 39d 3h
+```
+
+El chip lleva `bg-info-soft text-info-strong dark:bg-info/15` — la variante `info` que
+`ORDER_STATUS_VARIANT` asigna a `en_bodega_satelite`, la misma que en `/ordenes`. Y **ninguna
+columna de dinero de tienda** aparece.
+
+«Mensajero» sale en «—» y no está roto: **medido contra Postgres el 2026-09-01**, de las 6 filas
+del listado satélite **0 tienen mensajero** y **0 tienen reprogramación vigente** (consulta por
+`zona.es_central = false` ∧ `deleted_at IS NULL` ∧ los cinco estados; confirma el dato del
+backend de forma independiente).
+
+Errores de consola en la pantalla: **2**, los dos «*Encountered a script tag while rendering React
+component*». Rastreados a `app/layout.tsx:58` (`RESCATE_INLINE`), que es global y preexistente —
+nada que ver con esta ficha.
+
+---
+
+## F5. Mutaciones — seis, ejecutadas, con su línea real, revertidas
+
+Todas aplicadas de una en una sobre el árbol verde, corriendo los tests de verdad y restaurando
+el archivo desde copia (`md5sum` de vuelta al original comprobado). **Ninguna sobrevivió.**
+
+**M1 (obligatoria) — las columnas vuelven a escribirse a mano.** Se sustituye el módulo por
+dieciséis definiciones propias que producen **los mismos ids, los mismos encabezados y el mismo
+render**, badge incluido:
+```
+FAIL tests/unit/components/recibidas-columns.test.tsx > cada columna montada es EL MISMO OBJETO
+     que declaró `ordenesColumns`
+AssertionError: la columna `numGuia` NO sale de `ordenesColumns`: se declaró aparte:
+     expected [ { id: 'numGuia', …(2) }, …(18) ] to include { id: 'numGuia', …(2) }
+ ❯ tests/unit/components/recibidas-columns.test.tsx:149:9
+(+ «el módulo NO declara ni una definición de columna propia»: expected […(15)] to have a length
+   of +0 but got 15   ❯ :170:50)
+(+ «el chip sale de la MISMA columna que `/ordenes`»: expected {…} to be {…} // Object.is)
+```
+**El dato que da valor a esta ficha, y por eso lo pongo aparte:** con M1 aplicada,
+`RecepcionSateliteModule.test.tsx` —el test que fija la lista literal de cabeceras— se quedó
+**entero en verde (61 casos)**. Es decir: sin el caso de IDENTIDAD, volver a la lista paralela no
+lo habría notado nadie. Ése es exactamente el agujero por el que la bodega llegó a 13 columnas
+mientras `/ordenes` tenía 19.
+
+**M2 — el estado vuelve a texto plano** (se sobrescribe la columna `estatus` con
+`render: (row) => row.estatusValue`): **11 casos rojos en dos archivos**.
+```
+FAIL tests/components/RecepcionSateliteModule.test.tsx > el estado va en badge con su etiqueta,
+     y la zona en su propia columna
+TestingLibraryElementError: Unable to find an element with the text: En bodega satélite
+ ❯ tests/components/RecepcionSateliteModule.test.tsx:324:33
+FAIL tests/unit/components/recibidas-columns.test.tsx > `en_bodega_satelite` sale dentro de un
+     chip con su etiqueta
+AssertionError: el estado `en_bodega_satelite` se pintó como texto plano, no como badge:
+     expected null not to be null   ❯ :269:90
+(los cinco estados del listado, uno por uno)
+```
+
+**M3 — deja de recortar el dinero** (`return ordenesColumns` sin filtrar):
+```
+FAIL ... > ninguna cabecera de dinero restringido llega a la tabla de la bodega
+AssertionError: expected [ 'Nº Guía', 'Nº Remisión', …(17) ] to not include 'Flete + IVA'
+ ❯ tests/unit/components/recibidas-columns.test.tsx:249:29
+(+ los ids montados: expected […(19)] to deeply equal […(16)]  ❯ :157:49)
+(+ RecepcionSateliteModule.test.tsx:592 — la lista de cabeceras)
+```
+
+**M4 — la exclusión arrastra una columna que SÍ tiene dato** (`"mensajero"` añadido a la lista):
+```
+FAIL ... > las tres excluidas MENTIRÍAN sobre la fila real: pintan ₡0,00 tras el recorte
+AssertionError: la columna «Mensajero» no pinta el cero: la exclusión ya no está justificada:
+     expected 'Ana' to be '₡0'   ❯ tests/unit/components/recibidas-columns.test.tsx:238:9
+(+ «monta la columna «Mensajero»»: expected […(15)] to include 'Mensajero'  ❯ :303:34)
+(+ «es la MISMA exclusión que `/monitoreo`» y el conteo de 3)
+```
+Éste es el caso que impide que la exclusión crezca «por si acaso»: retirar una columna exige que
+esa columna mienta, y se comprueba pintándola.
+
+**M5 — la lista de exclusión queda RANCIA** (`"flete"` → `"fleteTotal"`, el escenario de un
+rename en `/ordenes`):
+```
+FAIL ... > cada id de la exclusión existe de verdad entre las columnas del listado
+AssertionError: `fleteTotal` ya no es una columna del listado de órdenes: expected false to be true
+ ❯ tests/unit/components/recibidas-columns.test.tsx:196:91
+(+ la comparación con `/monitoreo` y la justificación medida)
+```
+
+**M6 — el módulo PADRE se escribe una columna a mano** (una columna «Teléfono» añadida en
+`SateliteOrdenesListado.tsx`):
+```
+FAIL ... > el módulo padre sigue declarando SUS dos columnas y ninguna más
+AssertionError: expected [ …(3) ] to have a length of 2 but got 3
+ ❯ tests/unit/components/recibidas-columns.test.tsx:182:50
+```
+Cierra la puerta de al lado: sin esto, la lista paralela podía volver montándose en el listado
+en vez de en el módulo de columnas.
+
+### Comprobación de que las mutaciones se ejecutaron de verdad
+Tras revertir (md5 idéntico al original en los dos archivos), el mismo comando vuelve a verde:
+```
+pnpm exec vitest run tests/unit/components/recibidas-columns.test.tsx \
+  tests/components/RecepcionSateliteModule.test.tsx \
+  tests/unit/components/detalle-columnas.test.tsx \
+  tests/unit/components/ordenes-columns.test.tsx \
+  tests/unit/descarga/satelite-descarga-columnas.test.ts
+ Test Files  5 passed (5)
+      Tests  117 passed (117)
+```
+
+---
+
+## F6. Lo dudoso y lo abierto
+
+1. **El sufijo « de \<zona\>» del estado (33/R9) se retira.** Es la única decisión de esta parte
+   que cambia algo que un humano firmó, y por eso va la primera. Mi lectura del encargo es que
+   «los estados en badge como la central» y «básicamente el mismo componente» **implican** usar
+   el chip de `/ordenes`, que no compone ese sufijo; el dato sigue en la columna «Zona» y la
+   descarga de esta misma pantalla ya lo había retirado con ese argumento (170/R8). **Si el
+   humano lo quiere de vuelta**, la vía limpia NO es una columna propia aquí: es que
+   `EstatusBadge` componga el nombre de zona también para `en_bodega_satelite` —ya lo hace para
+   `en_ruta_bodega_satelite`— y entonces las dos pantallas dicen lo mismo. Son ~3 líneas en un
+   solo archivo.
+2. **El archivo descargable se queda en 13 columnas y la tabla enseña 16.** Es lo que R5/R6
+   pide, y lo dejo escrito en el propio módulo para que sea visible en vez de implícito. Pero
+   **es una divergencia real que alguien va a notar**: quien descargue no verá Mensajero, Fecha
+   de creación ni Tiempo. Ampliarlo son tres líneas + tres claves en `filaDescargaSatelite`; no
+   lo hice porque el encargo lo excluyó explícitamente y porque el criterio de qué se publica en
+   un archivo es una decisión de producto, no mía.
+3. **«Liberada el» fuera.** Argumentado en §F2.2 y medido (0 de 6 filas). Si el humano lo quiere,
+   es cambiar `ordenesColumns` por `ordenesColumnsReprogramada` en una línea — pero entonces la
+   columna sale vacía en las seis filas de hoy.
+4. **El nombre `recibidas-columns.tsx` / `recibidasColumns` ya no describe lo que hay.** La
+   sección «Recibidas» desapareció con la 170: hoy es un listado único de cinco estados. NO lo
+   renombré —es churn puro y el encargo pedía el arreglo mínimo—, pero es deuda de nombre real y
+   la anoto para que alguien la cobre cuando toque el archivo por otra razón.
+5. **El caso de «Fecha de creación» no fija el texto exacto.** Lo compone `Intl` con la zona
+   horaria de la máquina, y clavarlo aquí sería afirmar el reloj de quien corre el test. Se
+   afirma que la celda trae un dato y no el marcador de ausencia, y que «Tiempo» tiene la forma
+   `Xd Yh`. Es menos de lo que me gustaría; si alguien quiere el literal, hay que fijar `TZ` en
+   el test, y eso es una decisión que afecta a más archivos que éste.
+6. **`next dev` con Turbopack no arranca en este worktree** (junction de `node_modules`). No es
+   de esta ficha y no lo toqué, pero cualquiera que quiera ver la app desde un worktree se va a
+   dar contra ello: la salida es `pnpm exec next dev --webpack`.
+7. **La medición del navegador es de la base LOCAL**, con 6 filas y una sola zona satélite con
+   datos. El desborde en píxeles depende del CONTENIDO de las celdas (nombres largos de producto
+   o dirección ensanchan la tabla), así que 1958 px es el ancho con estos seis paquetes, no una
+   cota. Producción se vació el 2026-08-25 y desde aquí no la alcanzo.
+
+---
+
+## F7. Archivos
+
+### Creados
+- `tests/unit/components/recibidas-columns.test.tsx` — 26 casos. Los que cargan el peso: la
+  IDENTIDAD de cada columna con la de `ordenesColumns`, el conteo de `value:` en los dos
+  archivos de la pantalla, el badge por cada uno de los cinco estados del listado, y la
+  justificación MEDIDA de la exclusión (las tres columnas de dinero pintadas sobre la fila real
+  ya recortada).
+
+### Modificados
+- `app/(app)/recepcion-satelite/_components/recibidas-columns.tsx` — de 97 líneas con trece
+  definiciones de columna a un `filter` sobre `ordenesColumns`. Cero `value:`.
+- `app/(app)/recepcion-satelite/_components/SateliteOrdenesListado.tsx` — `recibidasColumns()`
+  sin argumento (una línea + su comentario). Nada más.
+- `app/(app)/recepcion-satelite/_components/satelite-descarga-columnas.ts` — **sólo comentario**:
+  decía que sus columnas espejan las de `recibidasColumns` y desde hoy sería falso. Ni una
+  columna, ni una clave, ni una línea de código.
+- `tests/components/RecepcionSateliteModule.test.tsx` — la lista literal de cabeceras crece con
+  las tres nuevas (sigue siendo literal a propósito: es el contrato de ESA pantalla), y el caso
+  de R9 pasa a afirmar el chip + la zona en su columna + la **ausencia** del texto compuesto.
+- `e2e/recepcion-satelite.spec.ts` — la aserción del estado deja de esperar el sufijo. Los e2e de
+  este repo **no se ejecutan**, así que es una corrección por lectura y no una verificación; se
+  cambia porque dejarla afirmando algo falso es peor que no tenerla.
+
+**No se tocó**: ni backend, ni `lib/**`, ni `db/**`, ni rutas, ni `satelite-descarga-columnas`
+más allá de su comentario, ni `EstatusBadge`, ni `ordenes-columns.tsx`.
+
+---
+
+## F8. Mapa petición → test
+
+| Lo que pidió el humano | Test |
+|---|---|
+| «no está mostrando la info completa» | `recibidas-columns.test.tsx` · «monta la columna «Mensajero» / «Fecha de creación» / «Tiempo»» + los dos casos de valor (nombre resuelto, «—» sin mensajero) |
+| «los estados no los muestra en badges» | `recibidas-columns.test.tsx` · «`<estado>` sale dentro de un chip», uno por cada uno de los cinco estados del listado + `RecepcionSateliteModule.test.tsx` · «el estado va en badge…» |
+| «básicamente debe ser el mismo componente» | `recibidas-columns.test.tsx` · «cada columna montada es EL MISMO OBJETO que declaró `ordenesColumns`» (M1) + «el módulo NO declara ni una definición de columna propia» + «el módulo padre sigue declarando SUS dos columnas» (M6) |
+| El dinero que el alcance no ve no se pinta | «ninguna cabecera de dinero restringido llega» (M3) + «las tres excluidas MENTIRÍAN sobre la fila real» (M4/M5) |
+| La zona no se pierde al quitar el sufijo | «el chip ya NO repite la zona, y la zona sigue en su columna» + el caso equivalente del módulo |
+| «Liberada el» no entra | «no monta la columna de la variante `reprogramada`» + «`reprogramada` de verdad NO está entre los estados» + «la cláusula NO es vacía» |
+
+---
+
+## F9. Verificación
+
+### `pnpm typecheck`
+```
+> ordenex@0.1.0 typecheck R:\wt\349
+> tsc --noEmit
+```
+Verde, sin salida. **Es también la prueba de la asignabilidad sin cast**: el `return` de
+`recibidasColumns` devuelve `Column<OrdenListItemDTO>[]` bajo una firma
+`Column<RecepcionSateliteDTO>[]`.
+
+### `pnpm lint`
+```
+✖ 145 problems (0 errors, 145 warnings)
+```
+**0 errores**, el mismo número que dejó el backend. Ninguno de mis cinco archivos aparece.
+
+### Guardias (`pnpm run test:guardias`)
+```
+ Test Files  1 failed | 172 passed (173)
+      Tests  1 failed | 2589 passed (2590)
+EXIT=1
+```
+El **único** rojo es el heredado y tolerado por el encargo:
+`superficie-de-uso.guardia.test.ts` → `lib/actions/tarifas.ts:67 obtenerTarifa`.
+(El +1 archivo / +3 casos frente al conteo del backend es su propio guardia nuevo,
+`satelite-proyeccion-compartida.guardia.test.ts`, que él corrió antes de crearlo.)
+
+### Suites de presentación, sobre el árbol FINAL
+```
+pnpm exec vitest run tests/unit/components tests/components tests/unit/descarga
+ Test Files  402 passed (402)
+      Tests  5296 passed | 26 skipped (5322)
+ Duration  369.22s
+EXIT=0
+```
+Corrida DESPUÉS de revertir las seis mutaciones y con el árbol tal como queda, no a mitad de
+edición. Ni un rojo.
+
+### Navegador
+Un solo servidor de desarrollo, `--webpack`, apagado al terminar. Medidas en §F4.
+
+**La suite COMPLETA no la corrí**: `./init.sh --rapido` se niega por diseño (el diff del backend
+toca `lib/types/**`) y la completa la corre el leader, como dice el encargo.
+
+---
+
+## F10. Veredicto
+
+La tabla de la bodega satélite deja de espejar a `/ordenes` y pasa a **montarla**: mismas
+columnas, mismo objeto, mismo chip de estado, tres columnas más de las que tenía y ninguna del
+dinero que ese alcance no puede ver. Lo que dejo abierto es el sufijo « de \<zona\>» del estado,
+que retiré con precedente pero es una decisión del humano.

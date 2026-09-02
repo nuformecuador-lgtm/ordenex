@@ -15,8 +15,15 @@ import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionS
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 
 /**
- * Columnas del archivo, en su orden. Espejan las columnas de datos de
- * `recibidasColumns` y sus encabezados, para que el archivo se lea como la pantalla.
+ * Columnas del archivo, en su orden. Espejan las TRECE PRIMERAS columnas de datos de la
+ * pantalla y sus encabezados, para que el archivo se lea como ella.
+ *
+ * FICHA 349, y conviene decirlo en vez de dejarlo implícito: desde hoy la tabla monta las
+ * columnas de `/ordenes` y muestra TRES más que este archivo —«Mensajero», «Fecha de creación»
+ * y «Tiempo»—. No es un olvido: es exactamente lo que R5/R6 pide («si el DTO gana un campo, el
+ * archivo NO lo publica hasta que se declare aquí»), y la enumeración a mano es la que hace que
+ * ampliarlo sea una decisión y no un efecto secundario. Ampliarlo es de una línea por columna
+ * —más su encabezado en `filaDescargaSatelite`— y queda para quien lo pida.
  */
 export const COLUMNAS_DESCARGA_SATELITE: DescargaColumna[] = [
   { clave: "numGuia", encabezado: "Nº Guía" },
