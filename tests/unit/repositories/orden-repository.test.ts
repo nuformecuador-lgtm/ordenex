@@ -247,8 +247,11 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ deletedAt: null, estatusId: idEstado("en_bodega_central") });
-    // Feature 101/R6: prioridad-first PRIMERO, luego la columna mapeada (R31) como desempate.
-    expect(arg.orderBy).toEqual([{ prioridad: "desc" }, { numGuia: "asc" }]);
+    // Feature 101/R6: prioridad-first PRIMERO, luego la columna mapeada (R31).
+    // FICHA 352: y CIERRA con el desempate unico por `id`, que es lo que hace TOTAL el orden.
+    // `num_guia` es unica pero NULLABLE: todas las ordenes sin guia empatan entre si, asi que
+    // ni siquiera ordenando por ella el orden seria total sin esta tercera clave.
+    expect(arg.orderBy).toEqual([{ prioridad: "desc" }, { numGuia: "asc" }, { id: "asc" }]);
     expect(arg.skip).toBe(0);
     expect(arg.take).toBe(20);
 
@@ -459,8 +462,15 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ deletedAt: null, tiendaId: "t1" });
-    // Feature 101/R6: prioridad-first PRIMERO, luego la recencia (created_at desc) como desempate.
-    expect(arg.orderBy).toEqual([{ prioridad: "desc" }, { createdAt: "desc" }]);
+    // Feature 101/R6: prioridad-first PRIMERO, luego la recencia (created_at desc).
+    // FICHA 352: y el desempate unico por `id` al final. `created_at` REPITE en masa (un lote
+    // de carga masiva entero comparte instante), asi que sin esta tercera clave el orden de
+    // las filas empatadas lo decide el plan y paginar duplica y pierde filas.
+    expect(arg.orderBy).toEqual([
+      { prioridad: "desc" },
+      { createdAt: "desc" },
+      { id: "asc" },
+    ]);
   });
 
   // Feature 101/R6: el listado de reasignacion de la bodega central encabeza por

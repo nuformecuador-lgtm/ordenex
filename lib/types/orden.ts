@@ -3,12 +3,27 @@ import { ordenesConfig } from "@/lib/config/ordenes";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import type { TarifaDTO, OrigenFlete } from "@/lib/types/tarifa";
+import {
+  DIRECCIONES_ORDEN,
+  esquemaOrdenamiento,
+  type DireccionOrden,
+} from "@/lib/types/ordenamiento-listado";
 
 // Campos ordenables permitidos (lista blanca, evita inyeccion de columnas; R31).
+//
+// FICHA 352 — es una union CERRADA de literales, y eso es la mitad del contrato: `sortBy` no
+// es «el nombre de una columna» que el cliente elija, es una CLAVE PUBLICA que el repositorio
+// traduce por su mapa (`SORT_COLUMN`, en `OrdenRepository`). El schema del listado es ademas
+// `.strict()`, asi que un cliente que escriba `orderBy` o `sort` recibe `validation_error` en
+// vez de que su clave se ignore en silencio y la tabla siga en el orden por defecto — que es,
+// vista desde la pantalla, exactamente la forma de un boton de ordenar que no ordena.
 export const SORT_FIELDS = ["created_at", "num_guia", "num_remision"] as const;
 export type SortField = (typeof SORT_FIELDS)[number];
-export const SORT_DIRS = ["asc", "desc"] as const;
-export type SortDir = (typeof SORT_DIRS)[number];
+// FICHA 352: las direcciones ya no se declaran aqui. Viven en `lib/types/ordenamiento-listado`
+// —el contrato que comparten las tablas que se sumen— y esto es un reexport para no tocar a
+// los importadores vivos de `SORT_DIRS`/`SortDir`.
+export const SORT_DIRS = DIRECCIONES_ORDEN;
+export type SortDir = DireccionOrden;
 
 // R25/R26: validacion de creacion en el borde. zona/provincia/canton obligatorios
 // (R12); distrito/notas/tienda opcionales. peso numerico estrictamente > 0
@@ -229,23 +244,33 @@ export type OrdenFilterInput = z.infer<typeof ordenFilterSchema>;
 // Feature 63/R6/R10: suma `filter` opcional (whitelist arriba); ausente u objeto
 // vacio = comportamiento previo intacto, y el `estatusId` escalar preexistente se
 // conserva (R10, sin regresion del contrato de 6/7/8).
-export const listarOrdenesSchema = z.object({
-  page: z.number().int().positive().default(1),
-  pageSize: z
-    .number()
-    .int()
-    .positive()
-    .default(ordenesConfig.DEFAULT_PAGE_SIZE)
-    .transform((n) => Math.min(n, ordenesConfig.MAX_PAGE_SIZE)),
-  estatusId: z.string().min(1).optional(),
-  filter: ordenFilterSchema.optional(),
-  sortBy: z.enum(SORT_FIELDS).default("created_at"),
-  // Pedido humano (2026-08-19): el listado va de la orden MÁS NUEVA a la más antigua
-  // (`created_at desc`). Deroga el pedido anterior (`asc`, "lo que primero entró se trabaja
-  // primero"): lo que se mira a diario es lo que acaba de entrar. Es el DEFAULT: quien pase
-  // `sortDir` explícito (la API de lectura tiene el suyo) no cambia.
-  sortDir: z.enum(SORT_DIRS).default("desc"),
-});
+//
+// FICHA 352 — `.strict()`. Hasta hoy este objeto aceptaba claves desconocidas y las DESCARTABA
+// en silencio. Con el ordenamiento llegando desde la cabecera de la tabla eso deja de ser
+// inocuo: un cliente que mande `{ sort: "fecha", dir: "asc" }` —los nombres equivocados— no
+// recibia ningun error y obtenia el listado en el orden POR DEFECTO. La pantalla enseñaria la
+// flecha puesta y las filas sin mover, y nadie tendria a donde mirar. Con `.strict()` el borde
+// responde `validation_error`. El `filter` anidado ya era `.strict()` desde la 63; esto lo
+// unifica. `listarOrdenesCompletoSchema` lo hereda por el `.omit()` de mas abajo.
+export const listarOrdenesSchema = z
+  .object({
+    page: z.number().int().positive().default(1),
+    pageSize: z
+      .number()
+      .int()
+      .positive()
+      .default(ordenesConfig.DEFAULT_PAGE_SIZE)
+      .transform((n) => Math.min(n, ordenesConfig.MAX_PAGE_SIZE)),
+    estatusId: z.string().min(1).optional(),
+    filter: ordenFilterSchema.optional(),
+    // Pedido humano (2026-08-19), INTACTO: el listado va de la orden MÁS NUEVA a la más
+    // antigua (`created_at desc`). Derogó el pedido anterior (`asc`, "lo que primero entró se
+    // trabaja primero"): lo que se mira a diario es lo que acaba de entrar. Sigue siendo el
+    // DEFAULT y la ficha 352 no lo toca — quien pase `sortDir` explícito (la cabecera de la
+    // tabla, la API de lectura) es quien cambia el orden, nunca la ausencia del parámetro.
+    ...esquemaOrdenamiento(SORT_FIELDS, "created_at", "desc"),
+  })
+  .strict();
 export type ListarOrdenesInput = z.infer<typeof listarOrdenesSchema>;
 
 // Feature 151 (design §4.2) — entrada del modo SIN paginacion (descarga del dataset
