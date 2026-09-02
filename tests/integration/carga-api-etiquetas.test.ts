@@ -14,6 +14,7 @@ import type { IManifiestoService } from "@/lib/interfaces/services/IManifiestoSe
 import { etiquetasConfig } from "@/lib/config/etiquetas";
 import { fuenteEtiqueta } from "@/lib/pdf/etiquetas-fuente";
 import { exigirCobertura } from "@/lib/pdf/etiquetas-fuente-registro";
+import { ajustarBloque, ErrorEtiquetaNoCabe } from "@/lib/pdf/etiquetas-ajuste";
 
 // Feature 136 (T3.1) — cableado del PDF de etiquetas en el endpoint de carga por
 // API. Se inyectan fakes de `autenticar`, `bulkService`, `descargaService` y
@@ -392,5 +393,82 @@ describe("R28 — un caracter no cubierto falla VISIBLE por el canal best-effort
     expect(json.ordenes[0].numGuia).toBe(1042);
     // Y lo que NO puede pasar: entregar una URL de etiqueta con el importe roto.
     expect(json.etiquetasPdf).not.toHaveProperty("url");
+  });
+});
+
+/**
+ * Feature 350 (T11, R7) — LA ETIQUETA QUE NO CABE, POR EL MISMO CANAL.
+ *
+ * El error se construye llamando al motor REAL (`ajustarBloque` con un alto
+ * imposible + el `throw` que hace el dibujo), no con un `new Error("lo que
+ * sea")`: eso probaria el canal pero no que ESTE fallo entre por el. Es el mismo
+ * criterio con el que la 282 construyo su caso de cobertura.
+ */
+describe("R7 — una etiqueta que NO CABE falla VISIBLE por el canal best-effort", () => {
+  const NUM_GUIA_QUE_NO_CABE = 19887906;
+
+  function errorDeNoCabe(): ErrorEtiquetaNoCabe {
+    // Se comprueba primero que el motor de verdad rechaza este caso: si algun
+    // dia dejara de rechazarlo, este test tiene que enterarse en vez de seguir
+    // afirmando sobre un error inventado.
+    const bloque = ajustarBloque(
+      [{ texto: "D".repeat(400), factorCuerpo: 1, cuerpoMinimoPt: 7 }],
+      88,
+      1,
+      13,
+      7,
+      (t, pt) => t.length * pt * 0.1,
+    );
+    expect(bloque.cabe, "el ajuste ya no rechaza un bloque imposible").toBe(false);
+    return new ErrorEtiquetaNoCabe(
+      NUM_GUIA_QUE_NO_CABE,
+      "100x100",
+      "bloque de destino",
+      "necesita 41,5 mm y hay 29,4 mm",
+    );
+  }
+
+  it("HTTP 200, etiquetasPdf { error } NOMBRANDO la guia y la carga NO revertida", async () => {
+    const etiquetas = fakeEtiquetas({
+      generarYPersistir: vi.fn().mockRejectedValue(errorDeNoCabe()),
+    });
+    const res = await handleCargaApi(
+      reqConBearer(BODY, SECRETO),
+      depsOk(fakeBulk(okSummary()), etiquetas),
+    );
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.etiquetasPdf).toHaveProperty("error");
+    // R7: el fallo es VISIBLE y ademas dice de que orden se trata. Sin el
+    // num_guia, el integrador no puede corregir el dato que lo provoco.
+    expect(json.etiquetasPdf.error).toContain(String(NUM_GUIA_QUE_NO_CABE));
+    expect(json.etiquetasPdf.error).toMatch(/no cabe/i);
+    // La carga sigue commiteada y los num_guia intactos.
+    expect(json.creadas).toBe(1);
+    expect(json.ordenes[0].numGuia).toBe(1042);
+    // Y lo que NO puede pasar: entregar una URL de etiqueta con un dato cortado.
+    expect(json.etiquetasPdf).not.toHaveProperty("url");
+  });
+
+  it("el log lleva el mensaje entero (num_guia incluido) y NINGUN dato de la orden", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const etiquetas = fakeEtiquetas({
+        generarYPersistir: vi.fn().mockRejectedValue(errorDeNoCabe()),
+      });
+      await handleCargaApi(
+        reqConBearer(BODY, SECRETO),
+        depsOk(fakeBulk(okSummary()), etiquetas),
+      );
+      const registrado = JSON.stringify(spy.mock.calls);
+      expect(registrado).toContain(String(NUM_GUIA_QUE_NO_CABE));
+      // El mensaje de este error es seguro POR CONSTRUCCION: numeros y nombres
+      // de bloque, nunca el texto de la direccion ni del destinatario.
+      expect(registrado).not.toContain("Del super");
+      expect(registrado).not.toContain("REM-1");
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

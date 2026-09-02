@@ -3,7 +3,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { EtiquetasGuiaModal } from "@/app/(app)/ordenes/_components/EtiquetasGuiaModal";
+import {
+  EtiquetasGuiaModal,
+  mensajeEtiquetaNoCabe,
+} from "@/app/(app)/ordenes/_components/EtiquetasGuiaModal";
+import { ErrorEtiquetaNoCabe } from "@/lib/pdf/etiquetas-ajuste";
 import { generarEtiquetas } from "@/lib/actions/etiquetas-guia";
 import { descargarEtiquetasPdf } from "@/app/(app)/ordenes/_components/etiquetas-pdf";
 import {
@@ -348,11 +352,16 @@ describe("EtiquetasGuiaModal — tamaño de hoja (feature 150)", () => {
       expect.any(Map),
       getHojaEtiqueta("a4"),
     );
+    // Feature 350 (T5): la hoja gana su REJILLA de celdas, hoy 1 x 1 en las
+    // cuatro. El literal se mantiene literal —es el contrato del catalogo, no un
+    // eco de la funcion— y se amplia con los dos campos nuevos.
     expect(descargarEtiquetasPdfMock.mock.calls[0][2]).toEqual({
       id: "a4",
       label: "A4",
       anchoMm: 210,
       altoMm: 297,
+      columnas: 1,
+      filas: 1,
     });
   });
 
@@ -611,5 +620,82 @@ describe("EtiquetasGuiaModal — la fuente de la etiqueta (feature 282)", () => 
     await screen.findAllByTestId("etiqueta-guia");
 
     expect(screen.queryByText(ERROR_FUENTE_ETIQUETA)).toBeNull();
+  });
+});
+
+/**
+ * Feature 350 (T11, R7) — LA ETIQUETA QUE NO CABE, EN EL NAVEGADOR.
+ *
+ * Los dos canales de fallo ya existian y no se inventa ninguno: aqui el mensaje
+ * del modal y NINGUNA descarga; en la carga por API, `etiquetasPdf: { error }`
+ * con HTTP 200 y sin revertir (ver `tests/integration/carga-api-etiquetas.test.ts`).
+ *
+ * Lo que este bloque añade a lo que ya afirmaba R16 es la DISTINCION: el
+ * mensaje de «no cabe» nombra la guia, porque a diferencia del fallo de la
+ * fuente este el operador si puede arreglarlo —cambiando de tamaño de hoja o
+ * corrigiendo el dato de esa orden— y para eso necesita saber cual es.
+ */
+describe("R7 (feature 350) — una etiqueta que no cabe: mensaje con la guia y CERO descargas", () => {
+  function conUnaEtiqueta(overrides: Partial<EtiquetaGuiaDTO> = {}) {
+    const etiquetas = [makeEtiqueta({ ordenId: "o1", numGuia: 11, ...overrides })];
+    generarEtiquetasMock.mockResolvedValue({
+      status: "ok",
+      etiquetas,
+      omitidas: [],
+    });
+    return etiquetas;
+  }
+
+  it("muestra el mensaje que NOMBRA la guia, distinto del de la fuente", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    conUnaEtiqueta({ numGuia: 19887906 });
+    descargarEtiquetasPdfMock.mockRejectedValue(
+      new ErrorEtiquetaNoCabe(
+        19887906,
+        "100x100",
+        "bloque de destino",
+        "necesita 41,5 mm y hay 29,4 mm",
+      ),
+    );
+
+    render(
+      <EtiquetasGuiaModal
+        open
+        ordenes={[makeOrden("o1")]}
+        onOpenChange={vi.fn()}
+        onSuccess={onSuccess}
+      />,
+    );
+    await screen.findAllByTestId("etiqueta-guia");
+
+    await user.click(screen.getByRole("button", { name: "Descargar etiquetas" }));
+
+    // El mensaje sale del MODULO de produccion, no de una copia escrita aqui:
+    // asi no puede divergir del que ve el usuario sin que nadie lo note.
+    const aviso = await screen.findByText(mensajeEtiquetaNoCabe(19887906));
+    expect(aviso.closest('[role="alert"]'), "el aviso tiene que anunciarse").not.toBeNull();
+    expect(aviso.textContent).toContain("19887906");
+
+    // Y NO es el mensaje generico de la fuente: son dos causas distintas con dos
+    // salidas distintas para el operador.
+    expect(screen.queryByText(ERROR_FUENTE_ETIQUETA)).toBeNull();
+
+    // Nada se descargo y no hubo exito.
+    expect(onSuccess).not.toHaveBeenCalled();
+    // La vista previa y el boton siguen: se puede cambiar de tamaño y reintentar.
+    expect(
+      screen.getByRole("button", { name: "Descargar etiquetas" }),
+    ).toBeInTheDocument();
+  });
+
+  it("el mensaje dice que se pruebe otro tamaño de hoja: es la salida inmediata", () => {
+    // La capacidad medida pasa de 391 caracteres de direccion en 100 x 100 a
+    // 1.765 en 4 x 6 in: la misma etiqueta que no entra en la celda base si
+    // entra en la siguiente hoja del catalogo.
+    const mensaje = mensajeEtiquetaNoCabe(19887906);
+    expect(mensaje).toContain("19887906");
+    expect(mensaje).toMatch(/tama(ñ|n)o de hoja/i);
+    expect(mensaje).toMatch(/direcci(ó|o)n/i);
   });
 });

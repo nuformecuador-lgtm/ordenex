@@ -23,6 +23,33 @@ export interface HojaEtiqueta {
   label: string;
   anchoMm: number;
   altoMm: number;
+  /**
+   * Feature 350 (T5) — Rejilla de etiquetas por hoja. `1 x 1` = una etiqueta por
+   * pagina, que es lo que hacen HOY las cuatro hojas del catalogo.
+   *
+   * Es un DATO y no un `if (hoja.id === "a4")` a proposito: la **Q1** de la
+   * ficha —cuatro etiquetas por hoja en A4 y Carta— esta ABIERTA y pendiente de
+   * firma humana. Con la rejilla como dato, firmarla es cambiar dos numeros de
+   * esta tabla; el motor de dibujo, el ajuste y los tests de geometria no se
+   * tocan. Lo unico que Q1 añadiria de codigo es la paginacion en el generador
+   * de cliente (`indice % (columnas * filas)` decide celda, `addPage` cuando
+   * toca) y —si se piden— las guias de corte.
+   *
+   * ⚠️ Dato para quien firme Q1, medido en `design.md` §3: la celda de una
+   * rejilla 2 x 2 en A4 mide 99 mm de ancho, o sea es MAS ANGOSTA que la celda
+   * base de 100. Como el ancho es lo que gobierna los caracteres por linea,
+   * "4-up" NO da capacidad por linea: da ALTO (143 frente a 100) y ahorra papel.
+   */
+  columnas: number;
+  filas: number;
+}
+
+/** El rectangulo de papel que ocupa UNA etiqueta dentro de su hoja, en mm. */
+export interface CeldaEtiqueta {
+  x0: number;
+  y0: number;
+  ancho: number;
+  alto: number;
 }
 
 /**
@@ -34,11 +61,42 @@ export interface HojaEtiqueta {
  * "casi carta" (design.md §2).
  */
 export const HOJAS_ETIQUETA: readonly HojaEtiqueta[] = [
-  { id: "100x100", label: "100 × 100 mm", anchoMm: 100, altoMm: 100 },
-  { id: "4x6in", label: "4 × 6 pulgadas", anchoMm: 101.6, altoMm: 152.4 },
-  { id: "a4", label: "A4", anchoMm: 210, altoMm: 297 },
-  { id: "carta", label: "Carta", anchoMm: 215.9, altoMm: 279.4 },
+  { id: "100x100", label: "100 × 100 mm", anchoMm: 100, altoMm: 100, columnas: 1, filas: 1 },
+  { id: "4x6in", label: "4 × 6 pulgadas", anchoMm: 101.6, altoMm: 152.4, columnas: 1, filas: 1 },
+  // Q1 (sin firmar): -> columnas: 2, filas: 2. Ver `HojaEtiqueta.columnas`.
+  { id: "a4", label: "A4", anchoMm: 210, altoMm: 297, columnas: 1, filas: 1 },
+  { id: "carta", label: "Carta", anchoMm: 215.9, altoMm: 279.4, columnas: 1, filas: 1 },
 ];
+
+/**
+ * Feature 350 (T5) — El rectangulo de papel de la etiqueta `indice` dentro de su
+ * hoja, repartiendo la hoja en la rejilla `columnas x filas` SIN hueco y SIN
+ * solape. Recorrido por filas (izquierda a derecha, arriba abajo), que es el
+ * orden en el que un operador corta y despega.
+ *
+ * Con la rejilla 1 x 1 de hoy devuelve la hoja entera (`x0 = y0 = 0`), asi que
+ * el motor de dibujo NO se entera de que existe este concepto: es exactamente el
+ * mismo criterio con el que la feature 150 justifico su `s = 1`.
+ *
+ * El indice se toma modulo el numero de celdas: quien pagina decide cuando
+ * estrena hoja, y aqui no se inventa un error para un caso que el llamador ya
+ * controla.
+ */
+export function celdaDeHoja(hoja: HojaEtiqueta, indice = 0): CeldaEtiqueta {
+  const columnas = Math.max(1, Math.trunc(hoja.columnas));
+  const filas = Math.max(1, Math.trunc(hoja.filas));
+  const ancho = hoja.anchoMm / columnas;
+  const alto = hoja.altoMm / filas;
+  const posicion = ((Math.trunc(indice) % (columnas * filas)) + columnas * filas) % (columnas * filas);
+  const columna = posicion % columnas;
+  const fila = Math.trunc(posicion / columnas);
+  return { x0: columna * ancho, y0: fila * alto, ancho, alto };
+}
+
+/** Cuantas etiquetas caben en una hoja del catalogo (1 con la rejilla de hoy). */
+export function celdasPorHoja(hoja: HojaEtiqueta): number {
+  return Math.max(1, Math.trunc(hoja.columnas)) * Math.max(1, Math.trunc(hoja.filas));
+}
 
 /** Tamaño por defecto en cada apertura del modal (R4/R7; D2: sin persistencia). */
 export const HOJA_ETIQUETA_DEFAULT_ID: HojaEtiquetaId = "100x100";

@@ -32,7 +32,13 @@ import { fuenteEtiqueta } from "@/lib/pdf/etiquetas-fuente";
 import { getHojaEtiqueta } from "@/lib/config/etiquetas-hoja";
 
 import { CORPUS_282 } from "../../fixtures/etiquetas-282";
-import { fuentesDePagina, textoLegible, textosDePagina } from "./pdf-inspector";
+import {
+  fuentesDePagina,
+  imagenesDePagina,
+  rectangulosDePagina,
+  textoLegible,
+  textosDePagina,
+} from "./pdf-inspector";
 
 interface Linea {
   x: string;
@@ -63,6 +69,35 @@ function lineasDe(bytes: Uint8Array, indice = 0): Linea[] {
   }));
 }
 
+/**
+ * Feature 350 (T14) — LOS RECTANGULOS, que es el agujero que faltaba.
+ *
+ * Hasta ahora este test comparaba `Td` + cuerpo + texto. El recuadro del importe
+ * (R15) es un `re` seguido de `S`: **un generador podria dibujarlo y el otro no,
+ * y esto seguiria verde**. Es el agujero exacto que señala `design.md` §7.1 y la
+ * razon de que el inspector aprendiera a leer rectangulos.
+ *
+ * Se comparan tambien las IMAGENES (QR y codigo de barras): sus rectangulos son
+ * geometria compartida aunque el raster lo produzca cada runtime con su libreria.
+ */
+function figurasDe(bytes: Uint8Array, indice = 0) {
+  return {
+    rectangulos: rectangulosDePagina(bytes, indice).map((r) => ({
+      x: r.x.toFixed(4),
+      y: r.y.toFixed(4),
+      w: r.w.toFixed(4),
+      h: r.h.toFixed(4),
+      operador: r.operador,
+    })),
+    imagenes: imagenesDePagina(bytes, indice).map((i) => ({
+      x: i.x.toFixed(4),
+      y: i.y.toFixed(4),
+      w: i.w.toFixed(4),
+      h: i.h.toFixed(4),
+    })),
+  };
+}
+
 beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
     PNG_1X1_DATA_URL,
@@ -75,7 +110,7 @@ describe("R22 — los dos generadores producen la MISMA etiqueta en 100 x 100", 
       const cliente = new Uint8Array(
         buildEtiquetasPdf(
           [caso.dto],
-          new Map(),
+          new Map([[caso.dto.ordenId, document.createElement("canvas")]]),
           getHojaEtiqueta("100x100"),
           fuenteEtiqueta,
         ).output("arraybuffer"),
@@ -88,6 +123,18 @@ describe("R22 — los dos generadores producen la MISMA etiqueta en 100 x 100", 
       // Sanidad: si el parseo devolviese poco, la igualdad seria trivial.
       expect(delCliente.length).toBeGreaterThanOrEqual(16);
       expect(delServidor).toEqual(delCliente);
+
+      // Feature 350 (T14): y los RECTANGULOS. Sin esto, el recuadro del importe
+      // podria existir en un generador y no en el otro con el test en verde.
+      const figurasCliente = figurasDe(cliente);
+      const figurasServidor = figurasDe(servidor);
+      // Sanidad, otra vez: la igualdad de dos listas vacias no afirma nada.
+      expect(
+        figurasCliente.rectangulos,
+        "no se leyo el recuadro del importe en el PDF de cliente",
+      ).toHaveLength(1);
+      expect(figurasCliente.imagenes, "faltan el QR y el barcode").toHaveLength(2);
+      expect(figurasServidor).toEqual(figurasCliente);
     });
   }
 

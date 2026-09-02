@@ -5,6 +5,12 @@ import { QRCodeCanvas } from "qrcode.react";
 import Barcode from "react-barcode";
 
 import { formatMonto } from "@/lib/config/moneda";
+import {
+  geografiaLegible,
+  ROTULO_PRODUCTO,
+  ROTULO_TIENDA,
+  SIN_DIRECCION,
+} from "@/lib/pdf/etiquetas-dibujo";
 import { buildPaqueteUrl } from "@/lib/utils/paquete-url";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
 
@@ -37,38 +43,50 @@ export interface EtiquetaGuiaProps {
   familiaMonto?: string | null;
 }
 
-/** Marcador cuando la geografia no tiene distrito (R4: `distritoNombre` null). */
-const SIN_DATO = "—"; // em dash
-
 /** Tamano en px del canvas del QR: alto para un raster nitido en el PDF. */
 const QR_RASTER_SIZE = 512;
-
-/** Une los tramos de geografia disponibles; omite el distrito si es null (R4). */
-function geografiaLegible(etiqueta: EtiquetaGuiaDTO): string {
-  return [
-    etiqueta.zonaNombre,
-    etiqueta.provinciaNombre,
-    etiqueta.cantonNombre,
-    etiqueta.distritoNombre,
-  ]
-    .filter((parte): parte is string => Boolean(parte))
-    .join(" / ");
-}
 
 /**
  * Feature 32 (T2.1, R9) — Etiqueta de guia presentacional: renderiza TODOS los
  * campos legibles de una orden imprimible + el QR (R7, `qrValue`) y el codigo de
  * barras (R8, `barcodeValue`). No decide que codificar: usa `qrValue`/
  * `barcodeValue` tal cual los resuelve el backend. `montoCobrar` se formatea con
- * la config de moneda (R5, sin hardcodear moneda); null -> "-". El contenedor se
- * marca a 100x100 mm para la vista previa, pero el PDF (jspdf) es la fuente de
- * verdad del tamano exacto (decision F1.4 (c)).
+ * la config de moneda (R5, sin hardcodear moneda); null -> "-".
  *
  * Feature 282 (T27, R31) — El valor del monto se pinta con `familiaMonto`, la
  * familia registrada desde los MISMOS bytes que jsPDF embebe en el PDF. Es el
  * unico campo que cambia de tipografia, porque es el unico que el PDF dibuja con
  * la fuente embebida: la paridad se afirma justo donde se compara. Sin esa
  * familia, el importe cae a la del sistema y la etiqueta se sigue viendo (R33).
+ *
+ * ---------------------------------------------------------------------------
+ * Feature 350 (T17, R23) — LA VISTA PREVIA ESPEJA EL PAPEL, O MIENTE.
+ *
+ * El principio ya estaba escrito en este archivo desde la feature 295 —«la vista
+ * previa sirve para decidir si imprimir, asi que tiene que parecerse al papel»—
+ * y era exactamente lo que se rompia al rediseñar solo el PDF: el usuario veria
+ * dos cosas distintas para el mismo papel y la primera conclusion seria que algo
+ * esta roto.
+ *
+ * Lo que cambia, punto por punto y espejando `lib/pdf/etiquetas-dibujo.ts`:
+ *
+ *  · **Las cinco bandas, en el orden de R13**: cabecera (guia + fecha + remision
+ *    + QR arriba a la derecha), destino, importe, detalle y codigo de barras a
+ *    todo el ancho.
+ *  · **Se va la rejilla `grid-cols-[auto_1fr]`** del bloque de destino (D2/R16):
+ *    en el papel ya no hay columna de rotulos y el valor usa el ancho completo.
+ *    El destino se lee como un sobre postal.
+ *  · **Jerarquia por TAMAÑO** (D3/R14): destinatario y telefono grandes; el
+ *    importe destacado y en su recuadro; producto y tienda en el cuerpo menor.
+ *    Los tamaños de pantalla siguen el mismo ORDEN que los cuerpos del PDF
+ *    (16 > 13 > 12 > 10 > 9 > 8 pt), que es lo que R23 exige comparar.
+ *  · **El QR sube a la cabecera** y el codigo de barras pasa a todo el ancho,
+ *    como en el papel.
+ *
+ * `geografiaLegible`, `SIN_DIRECCION` y los rotulos del detalle se IMPORTAN del
+ * modulo compartido en vez de reescribirse aqui: eran una copia byte a byte que
+ * podia divergir del papel sin que nadie lo viera, que es el mismo defecto que
+ * la feature 282 cerro entre los dos generadores.
  */
 export function EtiquetaGuia({
   etiqueta,
@@ -99,77 +117,40 @@ export function EtiquetaGuia({
     <article
       aria-label={`Etiqueta de la orden ${numRemision}`}
       data-testid="etiqueta-guia"
-      className="flex flex-col gap-2 overflow-hidden rounded-md border border-border bg-white p-3 text-xs text-black"
+      className="flex flex-col gap-1.5 overflow-hidden rounded-md border border-border bg-white p-3 text-xs text-black"
       style={{ width: "100mm", height: "100mm" }}
     >
+      {/* Banda 1 — cabecera: los dos numeros y la fecha a la izquierda, el QR a
+          la derecha, igual que en el papel. */}
       <header className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-[10px] uppercase tracking-wide text-neutral-500">
-            Guía
-          </p>
-          <p className="text-lg font-bold leading-tight">{numGuia}</p>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex items-baseline justify-between gap-2 text-[10px] uppercase tracking-wide text-neutral-500">
+            <span>Guía</span>
+            {/* Feature 295 — la fecha va EN LA CABECERA y entre los dos numeros,
+                que es exactamente donde la dibuja el PDF (centrada entre «GUÍA» y
+                «REMISIÓN»).
+
+                SE PINTA TAL CUAL LLEGA: `fechaCreacion` ya es la fecha de
+                calendario de Costa Rica resuelta en el servidor. Volver a
+                derivarla aqui (`new Date(...)` + `toLocale*`) la interpretaria en
+                la zona horaria del NAVEGADOR, que no tiene por que ser la de CR, y
+                podria mostrar el dia anterior o el siguiente. */}
+            <span className="flex items-baseline gap-1">
+              <span>Fecha</span>
+              <span
+                className="font-medium normal-case text-black"
+                data-testid="etiqueta-fecha"
+              >
+                {fechaCreacion}
+              </span>
+            </span>
+            <span>Remisión</span>
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-lg font-bold leading-tight">{numGuia}</p>
+            <p className="font-medium">{numRemision}</p>
+          </div>
         </div>
-        {/* Feature 295 — la fecha de creacion va EN LA CABECERA y entre los dos
-            numeros, que es exactamente donde la dibuja el PDF
-            (`drawFechaCabecera`, centrada entre "GUÍA" y "REMISIÓN"): la vista
-            previa sirve para decidir si imprimir, asi que tiene que parecerse al
-            papel. Como octavo campo del bloque de abajo se veria bien en pantalla
-            y NO coincidiria con lo impreso.
-
-            SE PINTA TAL CUAL LLEGA: `fechaCreacion` ya es la fecha de calendario
-            de Costa Rica resuelta en el servidor. Volver a derivarla aqui
-            (`new Date(...)` + `toLocale*`) la interpretaria en la zona horaria
-            del NAVEGADOR, que no tiene por que ser la de CR, y podria mostrar el
-            dia anterior o el siguiente. */}
-        <div className="text-center">
-          <p className="text-[10px] uppercase tracking-wide text-neutral-500">
-            Fecha
-          </p>
-          <p className="font-medium" data-testid="etiqueta-fecha">
-            {fechaCreacion}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-[10px] uppercase tracking-wide text-neutral-500">
-            Remisión
-          </p>
-          <p className="font-medium">{numRemision}</p>
-        </div>
-      </header>
-
-      <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 leading-tight">
-        <dt className="font-semibold">Destinatario</dt>
-        <dd>{destinatario}</dd>
-
-        <dt className="font-semibold">Teléfono</dt>
-        <dd>{telefonoDest}</dd>
-
-        <dt className="font-semibold">Dirección</dt>
-        <dd>{direccion ?? SIN_DATO}</dd>
-
-        <dt className="font-semibold">Ubicación</dt>
-        <dd>{geografiaLegible(etiqueta)}</dd>
-
-        <dt className="font-semibold">Producto</dt>
-        <dd>{producto}</dd>
-
-        <dt className="font-semibold">Monto a cobrar</dt>
-        <dd
-          data-testid="etiqueta-monto"
-          style={
-            familiaMonto
-              ? { fontFamily: `"${familiaMonto}", ${RESPALDO_FAMILIA_MONTO}` }
-              : undefined
-          }
-        >
-          {formatMonto(montoCobrar)}
-        </dd>
-
-        <dt className="font-semibold">Tienda</dt>
-        <dd>{tiendaNombre}</dd>
-      </dl>
-
-      <div className="mt-auto flex items-end justify-between gap-2">
         <QRCodeCanvas
           value={qrUrl}
           size={QR_RASTER_SIZE}
@@ -180,19 +161,63 @@ export function EtiquetaGuia({
           data-qr-value={qrUrl}
           style={{ width: "26mm", height: "26mm" }}
         />
-        <div
-          className="min-w-0 flex-1 overflow-hidden"
-          data-testid="etiqueta-barcode"
-          data-barcode-value={barcodeValue}
+      </header>
+
+      {/* Banda 2 — destino: SIN columna de rotulos (D2/R16). Se lee como un
+          sobre postal, y el valor dispone del ancho completo. */}
+      <div className="flex flex-col leading-tight" data-testid="etiqueta-destino">
+        <p className="text-base font-semibold">{destinatario}</p>
+        <p className="text-sm font-medium">{telefonoDest}</p>
+        <p className="text-xs">{direccion ?? SIN_DIRECCION}</p>
+        <p className="text-[11px]">{geografiaLegible(etiqueta)}</p>
+      </div>
+
+      {/* Banda 3 — importe: en su recuadro y en UNA linea (D3/R15). Es lo que el
+          mensajero tiene que cobrar, no una fila mas del monton. */}
+      <div
+        className="flex items-baseline justify-between gap-2 rounded border border-black px-1.5 py-1"
+        data-testid="etiqueta-importe"
+      >
+        <span className="text-[10px] font-bold uppercase tracking-wide">Cobrar</span>
+        <span
+          className="text-xl font-bold leading-none"
+          data-testid="etiqueta-monto"
+          style={
+            familiaMonto
+              ? { fontFamily: `"${familiaMonto}", ${RESPALDO_FAMILIA_MONTO}` }
+              : undefined
+          }
         >
-          <Barcode
-            value={barcodeValue}
-            format="CODE128"
-            height={40}
-            fontSize={12}
-            margin={0}
-          />
-        </div>
+          {formatMonto(montoCobrar)}
+        </span>
+      </div>
+
+      {/* Banda 4 — detalle: rotulo EN LINEA, cuerpo menor. */}
+      <div className="flex flex-col text-[10px] leading-tight">
+        <p>
+          <span className="font-semibold">{ROTULO_PRODUCTO}</span>{" "}
+          <span>{producto}</span>
+        </p>
+        <p>
+          <span className="font-semibold">{ROTULO_TIENDA}</span>{" "}
+          <span>{tiendaNombre}</span>
+        </p>
+      </div>
+
+      {/* Banda 5 — codigo de barras a TODO el ancho, como en el papel. */}
+      <div
+        className="mt-auto min-w-0 overflow-hidden"
+        data-testid="etiqueta-barcode"
+        data-barcode-value={barcodeValue}
+      >
+        <Barcode
+          value={barcodeValue}
+          format="CODE128"
+          height={40}
+          fontSize={12}
+          margin={0}
+          width={1}
+        />
       </div>
     </article>
   );
