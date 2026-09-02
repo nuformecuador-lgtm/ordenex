@@ -13,6 +13,7 @@ const saveMock = vi.fn<(nombre: string) => void>();
 const addPageMock = vi.fn();
 const addFileToVFSMock = vi.fn<(archivo: string, base64: string) => void>();
 const addFontMock = vi.fn<(archivo: string, nombre: string, estilo: string) => void>();
+const rectMock = vi.fn<(...args: unknown[]) => void>();
 
 class JsPDFDoble {
   constructor(public opciones: unknown) {}
@@ -30,10 +31,17 @@ class JsPDFDoble {
   text = () => undefined;
   addImage = () => undefined;
   splitTextToSize = (texto: string) => [texto];
-  // La maqueta mide el rotulo mas ancho para colocar la columna del valor; 1 mm
-  // por caracter basta para que el doble responda algo coherente (el ancho real
-  // se afirma con jspdf de verdad en `etiquetas-pdf.test.ts`).
-  getTextWidth = (texto: string) => texto.length;
+  // Feature 350: el recuadro del importe (R15) es un `rect` con su grosor de
+  // linea. El doble solo ANOTA que se dibujo; la geometria del rectangulo se
+  // afirma con jspdf de verdad en `etiquetas-pdf.test.ts` (V5) y la paridad
+  // entre los dos generadores en `etiquetas-dos-generadores.test.ts`.
+  rect = (...args: unknown[]) => rectMock(...args);
+  setLineWidth = () => undefined;
+  // La maqueta mide textos para repartir lineas y colocar los rotulos en linea;
+  // 0,5 mm por caracter basta para que el doble responda algo coherente Y para
+  // que el ajuste tenga que partir de verdad las direcciones largas (con 1 mm
+  // por caracter ni la mas corta cabria en 88 mm y todo acabaria en R7).
+  getTextWidth = (texto: string) => texto.length * 0.5;
 }
 
 vi.mock("jspdf", () => ({

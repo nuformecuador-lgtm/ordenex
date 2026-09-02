@@ -23,12 +23,17 @@ describe("catalogo de tamaños de hoja (R1-R5)", () => {
   });
 
   it("R2: declara las dimensiones exactas en mm y la etiqueta visible de cada tamaño", () => {
+    // Feature 350 (T5): cada hoja declara ademas su REJILLA de celdas. Hoy las
+    // cuatro van a 1 x 1 —una etiqueta por pagina, D1 de la 150— y la Q1
+    // («cuatro por hoja en A4 y Carta») sigue SIN FIRMAR: cuando se firme, este
+    // literal es el sitio donde se vera el cambio, que es justo para lo que
+    // esta escrito literal y no derivado.
     expect(HOJAS_ETIQUETA).toEqual([
-      { id: "100x100", label: "100 × 100 mm", anchoMm: 100, altoMm: 100 },
-      { id: "4x6in", label: "4 × 6 pulgadas", anchoMm: 101.6, altoMm: 152.4 },
-      { id: "a4", label: "A4", anchoMm: 210, altoMm: 297 },
+      { id: "100x100", label: "100 × 100 mm", anchoMm: 100, altoMm: 100, columnas: 1, filas: 1 },
+      { id: "4x6in", label: "4 × 6 pulgadas", anchoMm: 101.6, altoMm: 152.4, columnas: 1, filas: 1 },
+      { id: "a4", label: "A4", anchoMm: 210, altoMm: 297, columnas: 1, filas: 1 },
       // 8.5 x 11 in exactos, NO el redondeo 216 x 279 (design.md §2).
-      { id: "carta", label: "Carta", anchoMm: 215.9, altoMm: 279.4 },
+      { id: "carta", label: "Carta", anchoMm: 215.9, altoMm: 279.4, columnas: 1, filas: 1 },
     ]);
   });
 

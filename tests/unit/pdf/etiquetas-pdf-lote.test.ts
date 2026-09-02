@@ -33,15 +33,22 @@ import { buildPaqueteUrl } from "@/lib/utils/paquete-url";
 import { formatMonto } from "@/lib/config/moneda";
 import { MARCA_CORTE } from "@/lib/pdf/etiquetas-ajuste";
 import { fuenteEtiqueta } from "@/lib/pdf/etiquetas-fuente";
-import { camposYInicio, MAQUETA_BASE } from "@/lib/pdf/etiquetas-maqueta";
+import {
+  CUERPO_MINIMO_PT,
+  MAQUETA_BASE,
+  separacionBajoGuiaMm,
+} from "@/lib/pdf/etiquetas-maqueta";
+import { crearLayoutBase } from "@/lib/pdf/etiquetas-layout";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
 
 import {
   CASO_ALFABETO_REAL,
   CASO_EVIDENCIA,
+  CASO_PEOR_MEDIDO,
   CORPUS_282,
   NO_ASCII_MEDIDOS,
 } from "../../fixtures/etiquetas-282";
+import { verificarEtiqueta } from "./etiquetas-verificacion";
 import {
   cidsDe,
   fuentesDePagina,
@@ -133,54 +140,23 @@ function textosConY(bytes: Uint8Array): Array<{ y: number; texto: string }> {
   return out;
 }
 
-describe("buildEtiquetasLotePdf — el texto no invade la banda del QR", () => {
-  // El QR se dibuja en una `y` FIJA: 100 - 6 (margen) - 26 (lado) = 68 de borde
-  // superior. Antes de este arreglo el texto fluia hasta ~y=90 y los ultimos
-  // campos (PRODUCTO, MONTO, TIENDA) se imprimian ENCIMA del QR.
-  const QR_TOP_MM = 100 - 6 - 26;
-
-  it("con datos normales, ninguna linea baja del borde superior del QR", async () => {
-    const bytes = await buildEtiquetasLotePdf([etiqueta()]);
-    const textos = textosConY(bytes);
-    // Sanidad del parseo: cabecera (2) + 7 rotulos + 7 valores.
-    expect(textos.length).toBeGreaterThanOrEqual(16);
-    const masAbajo = Math.max(...textos.map((t) => t.y));
-    expect(masAbajo).toBeLessThanOrEqual(QR_TOP_MM);
-  });
-
-  it("con direccion, ubicacion y producto largos tampoco (se recorta, no se superpone)", async () => {
-    const bytes = await buildEtiquetasLotePdf([
-      etiqueta({
-        destinatario: "María Fernanda de los Ángeles Rodríguez Villalobos",
-        direccion:
-          "Avenida Siempre Viva 742, casa esquinera de dos plantas color celeste, 300 metros al norte de la escuela, portón negro",
-        producto:
-          "Juego de sartenes antiadherentes de cinco piezas con tapa de vidrio templado y mango desmontable",
-        zonaNombre: "Zona Metropolitana Ampliada Norte",
-        provinciaNombre: "Provincia de San José",
-        cantonNombre: "Cantón Central de San José",
-        distritoNombre: "Distrito Catedral",
-        tiendaNombre: "Comercializadora de Electrodomésticos del Valle S.A.",
-      }),
-    ]);
-    const textos = textosConY(bytes);
-    const masAbajo = Math.max(...textos.map((t) => t.y));
-    expect(masAbajo).toBeLessThanOrEqual(QR_TOP_MM);
-    // Y los siete rotulos siguen dibujados: el recorte quita cola de texto,
-    // nunca campos enteros.
-    const s = textoDelPdf(bytes);
-    for (const rotulo of [
-      "DESTINATARIO",
-      "DIRECCI",
-      "UBICACI",
-      "PRODUCTO",
-      "MONTO A COBRAR",
-      "TIENDA",
-    ]) {
-      expect(s).toContain(rotulo);
-    }
-  });
-});
+// ---------------------------------------------------------------------------
+// Feature 350 (T15) — RETIRADO: «el texto no invade la banda del QR» (las dos
+// aserciones) y «los siete rotulos siguen dibujados».
+//
+// Que afirmaban: que ninguna linea base bajase de `100 - 6 - 26 = 68`, la `y`
+// FIJA en la que vivia el bloque de codigos; y que los siete rotulos del bloque
+// rotulo/valor siguieran presentes despues del recorte.
+//
+// Que decision los sustituye: la banda de codigos ya no esta en una `y` fija del
+// lienzo —se ancla al borde inferior del area util (R9)— y el bloque de destino
+// ya no lleva rotulos (D2/R16). El recorte, que era la razon de la segunda
+// asercion, ha desaparecido del camino.
+//
+// Que test nuevo cubre lo mismo o mas: **V3** en «Feature 350 — V1-V6 del lado
+// del servidor», que mide sobre el PDF que ningun texto solapa el rectangulo
+// REAL de las dos imagenes, en vez de una `y` calculada a mano.
+// ---------------------------------------------------------------------------
 
 describe("buildEtiquetasLotePdf (R1-R7)", () => {
   it("genera un PDF con una pagina por etiqueta", async () => {
@@ -235,9 +211,11 @@ describe("buildEtiquetasLotePdf (R1-R7)", () => {
         distritoNombre: "DistritoTest",
       }),
     ]);
-    // R4: los NUEVE datos que exige el requisito quedan escritos como texto en el
+    // R4: los datos que exige el requisito quedan escritos como texto en el
     // content stream (guia, remision, destinatario, telefono, direccion, ubicacion
-    // geografica, producto, monto a cobrar y tienda).
+    // geografica, producto, monto a cobrar y tienda). Feature 350: la version
+    // FUERTE de esto —reconstruir cada dato caracter a caracter— es V1; este
+    // `toContain` se conserva como red de seguridad barata.
     const s = textoDelPdf(bytes);
     expect(s).toContain("1042"); // numero de guia
     expect(s).toContain("REM-1"); // numero de remision
@@ -276,32 +254,34 @@ function textosDecodificados(bytes: Uint8Array, indice = 0): string[] {
   );
 }
 
-describe("R19 — el servidor tampoco pisa la primera fila", () => {
-  it("la separacion entre lineas base es >= 1 em del cuerpo del numero de guia", async () => {
+describe("R24 (282/R19) — el servidor tampoco pisa lo que viene debajo de la guia", () => {
+  it("la separacion hasta la linea siguiente es >= 1 em del cuerpo del numero de guia", async () => {
     const bytes = await buildEtiquetasLotePdf([CASO_EVIDENCIA.dto]);
     const fuentes = fuentesDePagina(bytes);
     const textos = textosDePagina(bytes).map((t) => ({
       t,
       texto: textoLegible(t, fuentes.get(t.fuenteRes)),
+      // La pagina es cuadrada de 100 mm; la `y` del PDF crece hacia arriba.
+      y: 100 - t.y * PT_A_MM_282,
     }));
 
     const guia = textos.find((x) => x.texto === String(CASO_EVIDENCIA.dto.numGuia));
-    const destinatario = textos.find((x) => x.texto === "DESTINATARIO");
-    expect(guia).toBeDefined();
-    expect(destinatario).toBeDefined();
+    expect(guia, "no se encontro el numero de guia").toBeDefined();
 
-    // La pagina es cuadrada de 100 mm; la `y` del PDF crece hacia arriba.
-    const yGuia = 100 - guia!.t.y * PT_A_MM_282;
-    const yFila = 100 - destinatario!.t.y * PT_A_MM_282;
-    const separacion = yFila - yGuia;
+    // Feature 350: debajo de la guia ya no hay un rotulo «DESTINATARIO» —el
+    // bloque de destino perdio su columna de rotulos (D2)—, asi que se mide
+    // contra el PRIMER texto que cae por debajo, que es la lectura honesta de
+    // «no pisa lo que viene debajo».
+    const debajo = textos.filter((x) => x.y > guia!.y + 1e-6).sort((a, b) => a.y - b.y)[0];
+    expect(debajo, "no hay nada debajo del numero de guia").toBeDefined();
+
+    const separacion = debajo!.y - guia!.y;
     expect(
       separacion,
-      `${separacion.toFixed(3)} mm entre lineas base para un cuerpo de ${MAQUETA_BASE.fontGuia} pt`,
-    ).toBeGreaterThanOrEqual(MAQUETA_BASE.fontGuia * PT_A_MM_282 - 1e-6);
-    // Y el cuerpo de la guia sigue siendo el de siempre (R27).
+      `${separacion.toFixed(3)} mm hasta «${debajo!.texto}» para un cuerpo de ${MAQUETA_BASE.fontGuia} pt`,
+    ).toBeGreaterThanOrEqual(separacionBajoGuiaMm(MAQUETA_BASE.fontGuia) - 1e-6);
+    // Y el cuerpo de la guia sigue siendo el de siempre (282/R27).
     expect(guia!.t.tamano).toBeCloseTo(MAQUETA_BASE.fontGuia, 6);
-    // La primera fila arranca donde dice la maqueta compartida, no en un 18.
-    expect(yFila).toBeCloseTo(camposYInicio(), 3);
   });
 });
 
@@ -447,5 +427,47 @@ describe("R24 — el coste de la fuente es por DOCUMENTO, cero por pagina adicio
     expect((pdf.match(/\/Subtype \/Type0/g) ?? []).length).toBe(1);
     expect((pdf.match(/\/FontFile2/g) ?? []).length).toBe(1);
     expect((pdf.match(/\/Type \/Page(?![s])/g) ?? []).length).toBe(20);
+  });
+});
+
+// ===========================================================================
+// Feature 350 (T12) — V1-V6 DEL LADO DEL SERVIDOR.
+//
+// Las mismas seis aserciones que corre el generador de cliente, sobre los bytes
+// que produce ESTE generador. No es duplicacion: es la unica forma de que un
+// fallo que solo ocurriese en el camino del servidor —el que reciben los
+// integradores por API— no pase inadvertido. El modulo de aserciones es
+// compartido; lo que cambia es de donde salen los bytes.
+// ===========================================================================
+
+describe("Feature 350 — V1-V6 sobre el PDF consolidado del lote", () => {
+  for (const caso of CORPUS_282) {
+    it(`caso «${caso.id}» en la pagina de 100 x 100`, async () => {
+      const bytes = await buildEtiquetasLotePdf([caso.dto]);
+      // El `doc` es solo un medidor: se le registra la MISMA fuente embebida
+      // para que `getTextWidth` use las metricas con las que se dibujo.
+      const { jsPDF } = await import("jspdf");
+      const medidor = new jsPDF({ unit: "mm", format: [100, 100] });
+      const { registrarFuente } = await import("@/lib/pdf/etiquetas-fuente-registro");
+      registrarFuente(medidor, fuenteEtiqueta);
+      verificarEtiqueta(
+        medidor,
+        bytes,
+        0,
+        crearLayoutBase(),
+        fuenteEtiqueta,
+        caso,
+        `servidor/${caso.id}`,
+      );
+    });
+  }
+});
+
+describe("R5 — el peor caso medido tambien se emite en el PDF del lote", () => {
+  it("no lanza y ningun texto baja del suelo de legibilidad", async () => {
+    const bytes = await buildEtiquetasLotePdf([CASO_PEOR_MEDIDO.dto]);
+    const cuerpos = textosDePagina(bytes).map((t) => t.tamano);
+    expect(cuerpos.length).toBeGreaterThan(10);
+    expect(Math.min(...cuerpos)).toBeGreaterThanOrEqual(CUERPO_MINIMO_PT);
   });
 });

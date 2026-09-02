@@ -19,6 +19,8 @@ import type {
   GenerarEtiquetasResult,
 } from "@/lib/types/etiqueta-guia";
 
+import { ErrorEtiquetaNoCabe } from "@/lib/pdf/etiquetas-ajuste";
+
 import { EtiquetaGuia } from "./EtiquetaGuia";
 import {
   asegurarFuenteEnPantalla,
@@ -61,6 +63,24 @@ const OPCIONES_HOJA = HOJAS_ETIQUETA.map((h) => ({ value: h.id, label: h.label }
 
 /** Rótulo del selector; también es su nombre accesible (R6). */
 const LABEL_TAMANO_HOJA = "Tamaño de hoja";
+
+/**
+ * Feature 350 (T11, R7) — Mensaje cuando una etiqueta NO CABE en la hoja ni con
+ * el cuerpo mínimo de legibilidad.
+ *
+ * NOMBRA LA GUÍA a propósito, y ahí está toda la diferencia con el mensaje de la
+ * fuente: no cabe porque un dato de ESA orden es desmesurado —una dirección de
+ * 286 caracteres es un problema de datos, no de maqueta—, así que el operador
+ * puede arreglarlo. Un «no se pudo generar el PDF» a secas le deja sin nada que
+ * hacer y sin saber siquiera qué orden mirar.
+ *
+ * Se propone un tamaño mayor porque es la salida inmediata: la misma etiqueta
+ * que no entra en 100 × 100 sí entra en 4 × 6 pulgadas o en A4 (la capacidad
+ * medida crece de 391 caracteres de dirección a 1.765 y 8.864).
+ */
+export function mensajeEtiquetaNoCabe(numGuia: number | string): string {
+  return `La etiqueta de la guía ${numGuia} no cabe en este tamaño de hoja sin recortar datos, y ninguna etiqueta se descarga con un dato incompleto. Prueba con un tamaño de hoja mayor o acorta la dirección o el producto de esa orden.`;
+}
 
 /** Traduce un resultado no-"ok" de la action a un mensaje para el usuario. */
 function mensajeDeError(
@@ -221,12 +241,19 @@ export function EtiquetasGuiaModal({
     try {
       // R9: el PDF sale con el tamaño que esté seleccionado en este momento.
       await descargarEtiquetasPdf(etiquetas, qrCanvases.current, hoja);
-    } catch {
-      // Un solo mensaje para los dos modos de fallo del generador —la fuente no
-      // carga (R16) y el simbolo no esta en el subconjunto (R28)— porque los dos
-      // significan lo mismo para quien esta delante: la etiqueta NO se descarga
-      // en vez de salir con el importe roto. El detalle tecnico del segundo no le
-      // sirve a un operador de bodega.
+    } catch (error) {
+      // Feature 350 (R7): el caso «no cabe» SÍ se distingue, porque el operador
+      // puede hacer algo al respecto —cambiar de tamaño de hoja o corregir el
+      // dato de esa orden— y para eso necesita saber DE QUÉ orden se trata.
+      if (error instanceof ErrorEtiquetaNoCabe) {
+        setErrorDescarga(mensajeEtiquetaNoCabe(error.numGuia));
+        return;
+      }
+      // Un solo mensaje para los otros dos modos de fallo del generador —la
+      // fuente no carga (R16) y el simbolo no esta en el subconjunto (R28)—
+      // porque los dos significan lo mismo para quien esta delante: la etiqueta
+      // NO se descarga en vez de salir con el importe roto. El detalle tecnico
+      // del segundo no le sirve a un operador de bodega.
       setErrorDescarga(ERROR_FUENTE_ETIQUETA);
       return;
     }

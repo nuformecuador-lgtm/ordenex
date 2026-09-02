@@ -24,12 +24,21 @@ import {
   buildEtiquetasPdf,
   etiquetasPdfFilename,
 } from "@/app/(app)/ordenes/_components/etiquetas-pdf";
+import { crearLayout } from "@/lib/pdf/etiquetas-layout";
 import {
-  crearLayout,
-  LIENZO_BASE_MM,
+  CUERPO_MINIMO_PT,
+  GAPS_ENTRE_BANDAS,
   MAQUETA_BASE,
-} from "@/lib/pdf/etiquetas-layout";
-import { camposYInicio } from "@/lib/pdf/etiquetas-maqueta";
+  PT_A_MM as PT_A_MM_MAQUETA,
+  separacionBajoGuiaMm,
+} from "@/lib/pdf/etiquetas-maqueta";
+import {
+  ROTULO_FECHA,
+  ROTULO_GUIA,
+  ROTULO_REMISION,
+  textosConFuenteEmbebida,
+} from "@/lib/pdf/etiquetas-dibujo";
+import { seguroEnFuenteEstandar } from "@/lib/pdf/etiquetas-fuente-registro";
 import { fuenteEtiqueta } from "@/lib/pdf/etiquetas-fuente";
 import {
   HOJAS_ETIQUETA,
@@ -44,15 +53,20 @@ import { MARCA_CORTE } from "@/lib/pdf/etiquetas-ajuste";
 import {
   CASO_ALFABETO_REAL,
   CASO_EVIDENCIA,
+  CASO_MINIMOS,
+  CASO_PEOR_MEDIDO,
   CORPUS_282,
   NO_ASCII_MEDIDOS,
+  PEOR_CASO_LARGOS,
 } from "../../fixtures/etiquetas-282";
 import {
   cidsDe,
   fuentesDePagina,
+  rectangulosDePagina,
   textoLegible,
   textosDePagina,
 } from "../pdf/pdf-inspector";
+import { verificarEtiqueta } from "../pdf/etiquetas-verificacion";
 import { contorno, tieneTinta } from "../pdf/ttf-lector";
 
 const MM_A_PT = 72 / 25.4;
@@ -237,11 +251,14 @@ describe("buildEtiquetasPdf — densidad del raster del barcode (R18)", () => {
     for (const hoja of HOJAS_ETIQUETA) {
       jsBarcodeMock.mockClear();
       construir([etiqueta()], new Map(), hoja);
-      const { s } = crearLayout(hoja);
+      // Feature 350: el factor pasa a ser `k` (del ANCHO) en vez de `s` (del
+      // lado menor). Lo que esta asercion protege —que la densidad del raster
+      // no baje nunca— se conserva palabra por palabra.
+      const { k } = crearLayout(hoja);
       const opts = jsBarcodeMock.mock.calls[0][2];
-      expect(opts.width).toBeGreaterThanOrEqual(2 * s);
-      expect(opts.height).toBeGreaterThanOrEqual(60 * s);
-      expect(opts.fontSize).toBeGreaterThanOrEqual(Math.floor(18 * s));
+      expect(opts.width).toBeGreaterThanOrEqual(2 * k);
+      expect(opts.height).toBeGreaterThanOrEqual(60 * k);
+      expect(opts.fontSize).toBeGreaterThanOrEqual(Math.floor(18 * k));
     }
   });
 
@@ -298,96 +315,42 @@ function textosConY(buf: Buffer, altoMm: number): number[] {
   return out;
 }
 
-describe("buildEtiquetasPdf — el texto no invade la banda del QR", () => {
-  // El bloque QR + barcode va pegado al borde inferior del cuadrado util, en una
-  // `y` FIJA (base: 100 - 6 - 26 = 68). El texto fluye desde la cabecera, y antes
-  // de este arreglo llegaba a ~y=90: PRODUCTO / MONTO / TIENDA salian impresos
-  // ENCIMA del QR, que ademas deja de escanear (feature 33).
-  const qrTopBase =
-    LIENZO_BASE_MM - MAQUETA_BASE.margin - MAQUETA_BASE.qrSize;
+// ---------------------------------------------------------------------------
+// Feature 350 (T15) — RETIRADO: «el texto no invade la banda del QR» y «los
+// siete rotulos siguen dibujados».
+//
+// Que afirmaban: que ninguna linea base bajase del borde superior del QR, con
+// ese borde calculado como `100 - margen - qrSize` del lienzo viejo; y que los
+// siete rotulos del bloque rotulo/valor siguieran presentes tras el recorte.
+//
+// Que decision los sustituye: la banda de codigos ya no vive en una `y` fija del
+// lienzo (se ancla al borde inferior del area util, R9) y el bloque de destino
+// ya no tiene rotulos (D2/R16). Ademas el recorte ha desaparecido: no hay «cola»
+// que cortar.
+//
+// Que test nuevo cubre lo mismo o mas: **V3** en «Feature 350 — V1-V6», que mide
+// sobre el PDF que NINGUN texto solapa el rectangulo real de las imagenes del QR
+// y del codigo de barras (no una `y` calculada) y que las cinco bandas son
+// disjuntas y estan en su orden; y **V1**, que exige los DIEZ datos completos en
+// vez de la presencia de seis rotulos.
+// ---------------------------------------------------------------------------
 
-  it("en las cuatro hojas y con datos largos, ninguna linea entra en la banda", () => {
-    const larga = etiqueta({
-      destinatario: "María Fernanda de los Ángeles Rodríguez Villalobos",
-      direccion:
-        "Avenida Siempre Viva 742, casa esquinera de dos plantas color celeste, 300 metros al norte de la escuela, portón negro",
-      producto:
-        "Juego de sartenes antiadherentes de cinco piezas con tapa de vidrio templado y mango desmontable",
-      zonaNombre: "Zona Metropolitana Ampliada Norte",
-      tiendaNombre: "Comercializadora de Electrodomésticos del Valle S.A.",
-    });
-    for (const hoja of HOJAS_ETIQUETA) {
-      const layout = crearLayout(hoja);
-      const doc = construir([larga], new Map(), hoja);
-      const ys = textosConY(bytesDe(doc), hoja.altoMm);
-      expect(ys.length).toBeGreaterThanOrEqual(16); // sanidad del parseo
-      // El limite en mm de PAGINA: el borde superior del QR ya escalado y
-      // desplazado por el centrado de la hoja.
-      expect(Math.max(...ys)).toBeLessThanOrEqual(layout.y(qrTopBase) + 1e-6);
-    }
-  });
-
-  it("los siete rotulos siguen dibujados: se recorta la cola, no el campo", () => {
-    const doc = construir(
-      [etiqueta({ producto: "P".repeat(400), direccion: "D".repeat(400) })],
-      new Map(),
-      getHojaEtiqueta("100x100"),
-    );
-    const s = textoDelPdf(bytesDe(doc));
-    for (const rotulo of [
-      "DESTINATARIO",
-      "DIRECCI",
-      "UBICACI",
-      "PRODUCTO",
-      "MONTO A COBRAR",
-      "TIENDA",
-    ]) {
-      expect(s).toContain(rotulo);
-    }
-  });
-});
-
-describe("buildEtiquetasPdf — contenido de la etiqueta (R20)", () => {
-  it("los nueve datos quedan escritos en cualquier tamaño del catalogo", () => {
-    for (const hoja of HOJAS_ETIQUETA) {
-      const doc = construir([etiqueta({ numGuia: 1042 })], new Map(), hoja);
-      const s = textoDelPdf(bytesDe(doc));
-      expect(s).toContain("1042"); // numero de guia
-      expect(s).toContain("REM-1"); // numero de remision
-      expect(s).toContain("AnaDestinatario");
-      expect(s).toContain("0999999999"); // telefono
-      expect(s).toContain("CalleDireccion 123");
-      // Ubicacion geografica: los cuatro niveles.
-      expect(s).toContain("ZonaTest");
-      expect(s).toContain("ProvinciaTest");
-      expect(s).toContain("CantonTest");
-      expect(s).toContain("DistritoTest");
-      expect(s).toContain("ProductoTest");
-      expect(s).toContain("TiendaTest");
-      // Monto a cobrar: la cadena COMPLETA que produce el formateador,
-      // simbolo incluido, decodificada por el mapa a Unicode que declara el
-      // propio documento (R9). La asercion vieja miraba solo el tramo ASCII.
-      expect(textosDecodificados(bytesDe(doc))).toContain(formatMonto(1234.5));
-    }
-  });
-
-  it("el ajuste de linea usa el ancho ESCALADO: el texto no se encoge en hojas grandes", () => {
-    // Una direccion larga se parte en el mismo numero de lineas en 100x100 que en
-    // A4; si `splitTextToSize` recibiese los 88 mm sin escalar, en A4 se partiria
-    // en muchas mas (columna angosta) y el conteo cambiaria.
-    const larga = etiqueta({
-      direccion:
-        "Avenida Siempre Viva 742, casa esquinera de dos plantas frente al parque central",
-    });
-    const direccion = larga.direccion as string;
-    const lineasPorHoja = HOJAS_ETIQUETA.map((hoja) => {
-      const doc = construir([larga], new Map(), hoja);
-      return lineasDe(textoDelPdf(bytesDe(doc)), direccion);
-    });
-    expect(lineasPorHoja[0]).toBeGreaterThan(1);
-    expect(new Set(lineasPorHoja).size).toBe(1);
-  });
-});
+// ---------------------------------------------------------------------------
+// Feature 350 (T15) — RETIRADO: «los nueve datos quedan escritos» (por `toContain`
+// sobre los bytes) y «el ajuste de linea usa el ancho ESCALADO».
+//
+// Que afirmaban: que cada valor apareciese como subcadena del PDF; y que una
+// direccion larga se partiera en EL MISMO numero de lineas en las cuatro hojas.
+//
+// Que decision los sustituye: la segunda CERTIFICABA EL DEFECTO —que las cuatro
+// hojas tuvieran la misma capacidad era justo el problema (D1)—. La sustituye
+// R11, que exige lo contrario: que la capacidad CREZCA con el area
+// (`etiquetas-capacidad.test.ts`). La primera es mas debil que su relevo: un
+// `toContain` pasa aunque el dato salga partido en mitades solapadas.
+//
+// Que test nuevo cubre lo mismo o mas: **V1**, que reconstruye cada dato
+// CARACTER A CARACTER desde el PDF y lo compara con el literal del fixture.
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Feature 282 — El defecto evidenciado, medido SOBRE EL PDF.
@@ -400,8 +363,13 @@ function yEnMm(yPt: number, altoMm: number): number {
   return altoMm - yPt * PT_A_MM;
 }
 
-describe("R1/R3 — el numero de guia deja de pisar la primera fila (medido en el PDF)", () => {
-  it("en las CUATRO hojas, la separacion entre lineas base es >= 1 em del cuerpo de la guia", () => {
+describe("R24 (282/R1) — el numero de guia sigue sin pisar lo que viene debajo", () => {
+  it("en las CUATRO hojas hay >= 1 em del cuerpo de la guia hasta la linea siguiente", () => {
+    // Feature 350: la fila de abajo ya no es el rotulo «DESTINATARIO» —el bloque
+    // de destino perdio su columna de rotulos (D2)— sino el numero de remision,
+    // que comparte linea base con la guia, y despues el destinatario. Se mide
+    // contra el PRIMER texto que cae por debajo de la guia, que es la unica
+    // lectura honesta de «no pisa lo que viene debajo».
     for (const hoja of HOJAS_ETIQUETA) {
       const layout = crearLayout(hoja);
       const doc = construir([etiqueta({ numGuia: 19887906 })], new Map(), hoja);
@@ -410,25 +378,24 @@ describe("R1/R3 — el numero de guia deja de pisar la primera fila (medido en e
       const textos = textosDePagina(u8).map((t) => ({
         t,
         texto: textoLegible(t, fuentes.get(t.fuenteRes)),
+        y: yEnMm(t.y, hoja.altoMm),
       }));
 
       const guia = textos.find((x) => x.texto === "19887906");
-      const destinatario = textos.find((x) => x.texto === "DESTINATARIO");
       expect(guia, `no se encontro el numero de guia en ${hoja.id}`).toBeDefined();
-      expect(destinatario, `no se encontro el rotulo DESTINATARIO en ${hoja.id}`).toBeDefined();
 
-      const yGuia = yEnMm(guia!.t.y, hoja.altoMm);
-      const yPrimeraFila = yEnMm(destinatario!.t.y, hoja.altoMm);
-      const separacion = yPrimeraFila - yGuia;
+      const debajo = textos
+        .filter((x) => x.y > guia!.y + 1e-6)
+        .sort((a, b) => a.y - b.y)[0];
+      expect(debajo, `en ${hoja.id} no hay nada debajo del numero de guia`).toBeDefined();
 
-      // R1: al menos el cuerpo del numero de guia expresado en mm, ESCALADO por
-      // el factor de esa hoja (R3). Antes eran 2 mm para un cuerpo de 7,76.
+      const separacion = debajo!.y - guia!.y;
       expect(
         separacion,
-        `${hoja.id}: ${separacion.toFixed(3)} mm entre lineas base para un cuerpo de ${layout.fontGuia} pt`,
-      ).toBeGreaterThanOrEqual(layout.fontGuia * PT_A_MM - 1e-6);
-      // Y el cuerpo de la guia no se ha encogido para lograrlo (R27).
-      expect(guia!.t.tamano).toBeCloseTo(layout.fontGuia, 6);
+        `${hoja.id}: ${separacion.toFixed(3)} mm hasta «${debajo!.texto}» para un cuerpo de ${layout.cuerpos.guia} pt`,
+      ).toBeGreaterThanOrEqual(separacionBajoGuiaMm(layout.cuerpos.guia) - 1e-6);
+      // Y el cuerpo de la guia no se ha encogido para lograrlo (282/R27).
+      expect(guia!.t.tamano).toBeCloseTo(layout.cuerpos.guia, 6);
     }
   });
 });
@@ -470,18 +437,14 @@ function anchoMm(
   return doc.getTextWidth(texto);
 }
 
-describe("Feature 295 — la fecha de creacion se imprime y no pisa nada", () => {
+describe("R24 (feature 295) — la fecha de creacion se imprime y no pisa nada", () => {
   const FECHA = "2026-08-27";
 
   it("sale impresa en las CUATRO hojas, leida del propio PDF", () => {
     for (const hoja of HOJAS_ETIQUETA) {
-      const doc = construir(
-        [etiqueta({ fechaCreacion: FECHA })],
-        new Map(),
-        hoja,
-      );
+      const doc = construir([etiqueta({ fechaCreacion: FECHA })], new Map(), hoja);
       const textos = textosDecodificados(bytesDe(doc));
-      expect(textos, `falta el rotulo de la fecha en ${hoja.id}`).toContain("FECHA");
+      expect(textos, `falta el rotulo de la fecha en ${hoja.id}`).toContain(ROTULO_FECHA);
       expect(textos, `falta la fecha en ${hoja.id}`).toContain(FECHA);
     }
   });
@@ -501,17 +464,18 @@ describe("Feature 295 — la fecha de creacion se imprime y no pisa nada", () =>
         return encontrado!;
       };
 
-      const yGuiaRotulo = yEnMm(de("GUÍA").t.y, hoja.altoMm);
-      const yRemisionRotulo = yEnMm(de("REMISIÓN").t.y, hoja.altoMm);
-      const yFechaRotulo = yEnMm(de("FECHA").t.y, hoja.altoMm);
+      const yGuiaRotulo = yEnMm(de(ROTULO_GUIA).t.y, hoja.altoMm);
+      const yRemisionRotulo = yEnMm(de(ROTULO_REMISION).t.y, hoja.altoMm);
+      const yFechaRotulo = yEnMm(de(ROTULO_FECHA).t.y, hoja.altoMm);
       const yFechaValor = yEnMm(de(FECHA).t.y, hoja.altoMm);
 
       expect(yFechaRotulo).toBeCloseTo(yGuiaRotulo, 6);
       expect(yFechaRotulo).toBeCloseTo(yRemisionRotulo, 6);
       expect(yFechaValor).toBeCloseTo(yGuiaRotulo, 6);
       // Y con el cuerpo de los rotulos, no con uno propio.
-      expect(de("FECHA").t.tamano).toBeCloseTo(crearLayout(hoja).fontRotulo, 6);
-      expect(de(FECHA).t.tamano).toBeCloseTo(crearLayout(hoja).fontRotulo, 6);
+      const cuerpoRotulo = de(ROTULO_GUIA).t.tamano;
+      expect(de(ROTULO_FECHA).t.tamano).toBeCloseTo(cuerpoRotulo, 6);
+      expect(de(FECHA).t.tamano).toBeCloseTo(cuerpoRotulo, 6);
     }
   });
 
@@ -538,14 +502,25 @@ describe("Feature 295 — la fecha de creacion se imprime y no pisa nada", () =>
       const separacion = yGuia - yFecha;
       expect(
         separacion,
-        `${hoja.id}: ${separacion.toFixed(3)} mm sobre un numero de ${layout.fontGuia} pt`,
-      ).toBeGreaterThanOrEqual(layout.fontGuia * PT_A_MM - 1e-6);
+        `${hoja.id}: ${separacion.toFixed(3)} mm sobre un numero de ${layout.cuerpos.guia} pt`,
+      ).toBeGreaterThanOrEqual(separacionBajoGuiaMm(layout.cuerpos.guia) - 1e-6);
     }
   });
 
   it("no se solapa con «GUÍA» ni con «REMISIÓN»: los tres intervalos son disjuntos", () => {
+    // Feature 350 (T15) — Se RETIRAN dos aserciones de este test y se dice cual
+    // era cada una:
+    //   · «REMISIÓN acaba en el margen derecho de la hoja»: ahora acaba en el
+    //     borde derecho de la COLUMNA DE TEXTO de la cabecera, porque el QR pasa
+    //     a ocupar la derecha (D3). Se sustituye por esa misma igualdad medida
+    //     contra el ancho de la columna, que es la version correcta de lo mismo.
+    //   · «el par FECHA + fecha va centrado en el lienzo»: se centra en la
+    //     columna de texto, por el mismo motivo. Idem.
+    // Lo que protegian —que la fila no se apelotone y un tramo entre en otro—
+    // se conserva entero abajo, y ademas V2 exige que nada se salga del ancho.
     for (const hoja of HOJAS_ETIQUETA) {
       const layout = crearLayout(hoja);
+      const anchoColumna = layout.anchoUtil - layout.qrMm - GAPS_ENTRE_BANDAS[0];
       const doc = construir([etiqueta({ fechaCreacion: FECHA })], new Map(), hoja);
       const u8 = new Uint8Array(bytesDe(doc));
       const fuentes = fuentesDePagina(u8);
@@ -555,6 +530,7 @@ describe("Feature 295 — la fecha de creacion se imprime y no pisa nada", () =>
       }));
       const tramo = (texto: string, estilo: "bold" | "normal") => {
         const encontrado = textos.find((x) => x.texto === texto)!;
+        expect(encontrado, `no se encontro «${texto}» en ${hoja.id}`).toBeDefined();
         const inicio = encontrado.t.x * PT_A_MM;
         return {
           texto,
@@ -563,23 +539,22 @@ describe("Feature 295 — la fecha de creacion se imprime y no pisa nada", () =>
         };
       };
 
-      const guia = tramo("GUÍA", "bold");
-      const rotuloFecha = tramo("FECHA", "bold");
+      const guia = tramo(ROTULO_GUIA, "bold");
+      const rotuloFecha = tramo(ROTULO_FECHA, "bold");
       const valorFecha = tramo(FECHA, "normal");
-      const remision = tramo("REMISIÓN", "bold");
+      const remision = tramo(ROTULO_REMISION, "bold");
 
-      // Controles positivos: si la `x` del PDF no significara "borde izquierdo del
-      // texto", las comparaciones de abajo serian ruido. «GUÍA» empieza en el
-      // margen y «REMISIÓN» (dibujado con align: right) TERMINA en el margen
-      // derecho; que ambas se cumplan fija la lectura de la coordenada.
+      // Controles positivos de que la `x` del PDF significa «borde izquierdo del
+      // texto»: GUÍA empieza en el margen y REMISIÓN termina en el borde derecho
+      // de la columna de texto de la cabecera.
       expect(guia.inicio, `${hoja.id}: GUÍA no empieza en el margen`).toBeCloseTo(
-        layout.x(MAQUETA_BASE.margin),
+        layout.x(0),
         3,
       );
-      expect(remision.fin, `${hoja.id}: REMISIÓN no acaba en el margen derecho`).toBeCloseTo(
-        layout.x(LIENZO_BASE_MM - MAQUETA_BASE.margin),
-        3,
-      );
+      expect(
+        remision.fin,
+        `${hoja.id}: REMISIÓN no acaba en el borde de la columna de cabecera`,
+      ).toBeCloseTo(layout.x(anchoColumna), 3);
 
       // La fila entera, de izquierda a derecha, sin que un tramo entre en el otro.
       const fila = [guia, rotuloFecha, valorFecha, remision];
@@ -590,62 +565,36 @@ describe("Feature 295 — la fecha de creacion se imprime y no pisa nada", () =>
           `${hoja.id}: «${fila[i - 1].texto}» y «${fila[i].texto}» se solapan (${holgura.toFixed(3)} mm)`,
         ).toBeGreaterThan(0);
       }
-      // Y el par rotulo+valor va centrado en el lienzo: la holgura sobrante no se
-      // acumula toda a un lado (seria la señal de que un dia el par se come un
-      // rotulo al crecer).
+      // Y el par rotulo+valor va centrado en la columna: la holgura sobrante no
+      // se acumula toda a un lado (seria la señal de que un dia el par se come
+      // un rotulo al crecer).
       const centroPar = (rotuloFecha.inicio + valorFecha.fin) / 2;
-      expect(centroPar).toBeCloseTo(layout.x(LIENZO_BASE_MM / 2), 3);
+      expect(centroPar).toBeCloseTo(layout.x(anchoColumna / 2), 3);
     }
   });
-
-  it("la fecha NO entra en el bloque de campos: sigue habiendo siete filas y arrancan donde arrancaban", () => {
-    const hoja = getHojaEtiqueta("100x100");
-    const doc = construir([etiqueta({ fechaCreacion: FECHA })], new Map(), hoja);
-    const u8 = new Uint8Array(bytesDe(doc));
-    const fuentes = fuentesDePagina(u8);
-    const textos = textosDePagina(u8).map((t) => ({
-      t,
-      texto: textoLegible(t, fuentes.get(t.fuenteRes)),
-    }));
-
-    const yFecha = yEnMm(textos.find((x) => x.texto === FECHA)!.t.y, hoja.altoMm);
-    const yDestinatario = yEnMm(
-      textos.find((x) => x.texto === "DESTINATARIO")!.t.y,
-      hoja.altoMm,
-    );
-    // La primera fila de campos sigue en la linea base DERIVADA de la 282: la
-    // fecha no la ha empujado ni un milimetro.
-    expect(yDestinatario).toBeCloseTo(camposYInicio(), 3);
-    expect(yFecha).toBeLessThan(yDestinatario);
-    // Y el rotulo de la fecha no vive en la columna de rotulos del bloque.
-    expect(textos.filter((x) => x.texto === "FECHA")).toHaveLength(1);
-  });
 });
 
-describe("R4 — los siete campos, sus rotulos y su orden, intactos", () => {
-  it("aparecen los siete y en el mismo orden de arriba abajo", () => {
-    const hoja = getHojaEtiqueta("100x100");
-    const doc = construir([etiqueta()], new Map(), hoja);
-    const u8 = new Uint8Array(bytesDe(doc));
-    const fuentes = fuentesDePagina(u8);
-    const esperados = [
-      "DESTINATARIO",
-      "TELÉFONO",
-      "DIRECCIÓN",
-      "UBICACIÓN",
-      "PRODUCTO",
-      "MONTO A COBRAR",
-      "TIENDA",
-    ];
-    const rotulos = textosDePagina(u8)
-      .map((t) => ({ y: t.y, texto: textoLegible(t, fuentes.get(t.fuenteRes)) }))
-      .filter((x) => esperados.includes(x.texto))
-      // La `y` del PDF crece hacia ARRIBA: de mayor a menor es de arriba abajo.
-      .sort((a, b) => b.y - a.y)
-      .map((x) => x.texto);
-    expect(rotulos).toEqual(esperados);
-  });
-});
+// ---------------------------------------------------------------------------
+// Feature 350 (T15) — RETIRADO POR MANDATO: «R4 — los siete campos, sus rotulos
+// y su orden, intactos».
+//
+// Que afirmaba: que los rotulos DESTINATARIO / TELÉFONO / DIRECCIÓN / UBICACIÓN
+// / PRODUCTO / MONTO A COBRAR / TIENDA aparecieran en ese orden de arriba abajo,
+// y la 282 lo blindaba con un «NO añadir, quitar, reordenar ni renombrar».
+//
+// Que decision lo sustituye: el humano firmo el rediseño («esta perfecto, vamos
+// con ese rediseño») y con el las decisiones D2 y D3, que quitan la columna de
+// rotulos del bloque de destino y reordenan por jerarquia de tamaño. Es la misma
+// clase de revision que la 282 hizo de la D3 de la 150, y por el mismo motivo:
+// una firma posterior.
+//
+// Que test nuevo cubre lo mismo o mas: **R17** sigue exigiendo los DIEZ datos —no
+// siete rotulos, los diez datos— y **V1** los reconstruye caracter a caracter;
+// **R13** exige el orden NUEVO de arriba abajo y V3 lo mide sobre el PDF. Lo que
+// aquella asercion garantizaba (que no desaparezca informacion del papel) queda
+// cubierto con mas fuerza; lo que garantizaba de mas (que el orden no cambie
+// nunca) es justo lo que esta ficha viene a cambiar.
+// ---------------------------------------------------------------------------
 
 describe("R6/R7/R26/R34 — el corpus de referencia se imprime COMPLETO, sin recorte", () => {
   it("ningun caso del corpus sale con marca de recorte, en las cuatro hojas", () => {
@@ -802,5 +751,160 @@ describe("R12 — el resto del texto sigue con la MISMA fuente que antes", () =>
     for (const t of conType1) {
       expect(fuentes.get(t.fuenteRes)!.baseFont).toMatch(/^Helvetica/);
     }
+  });
+});
+
+// ===========================================================================
+// Feature 350 (T12) — V1-V6 SOBRE EL PDF, en las CUATRO hojas y con el corpus
+// entero. Las seis aserciones viven en `tests/unit/pdf/etiquetas-verificacion.ts`
+// porque las corren TAMBIEN el generador del servidor: si estuvieran duplicadas,
+// la primera divergencia entre las dos copias seria invisible.
+// ===========================================================================
+
+/**
+ * Los canvas del QR que el modal recolecta de la vista previa. Hacen falta para
+ * V3: sin el QR dibujado, la asercion «ningun texto invade la banda de codigos»
+ * no tendria banda contra la que medir. `toDataURL` esta estubado a un PNG 1x1
+ * valido en el `beforeEach`.
+ */
+function canvasesDe(etiquetas: EtiquetaGuiaDTO[]): Map<string, HTMLCanvasElement> {
+  return new Map(etiquetas.map((e) => [e.ordenId, document.createElement("canvas")]));
+}
+
+describe("Feature 350 — V1-V6: el corpus entero, en las cuatro hojas", () => {
+  for (const caso of CORPUS_282) {
+    for (const hoja of HOJAS_ETIQUETA) {
+      it(`caso «${caso.id}» en ${hoja.id}`, () => {
+        const doc = construir([caso.dto], canvasesDe([caso.dto]), hoja);
+        const bytes = new Uint8Array(bytesDe(doc));
+        verificarEtiqueta(
+          doc,
+          bytes,
+          0,
+          crearLayout(hoja),
+          fuenteEtiqueta,
+          caso,
+          `${caso.id}/${hoja.id}`,
+        );
+      });
+    }
+  }
+});
+
+describe("R5 — el PEOR CASO MEDIDO, con sus longitudes reales", () => {
+  it("la direccion mide 286 caracteres y el producto 138 (el maximo de produccion)", () => {
+    // Si alguien acortara el fixture «para que pase», esto lo delata.
+    expect(CASO_PEOR_MEDIDO.dto.direccion).toHaveLength(PEOR_CASO_LARGOS.direccion);
+    expect(CASO_PEOR_MEDIDO.dto.producto).toHaveLength(PEOR_CASO_LARGOS.producto);
+    expect(PEOR_CASO_LARGOS.direccion).toBe(286);
+    expect(PEOR_CASO_LARGOS.producto).toBe(138);
+  });
+
+  it("se emite en las CUATRO hojas: ni lanza ni recorta", () => {
+    for (const hoja of HOJAS_ETIQUETA) {
+      expect(() => construir([CASO_PEOR_MEDIDO.dto], new Map(), hoja)).not.toThrow();
+    }
+  });
+});
+
+describe("R10/R11 — el alto extra de la hoja se vuelve LINEAS, no letra grande", () => {
+  it("el peor caso usa MAS lineas en una hoja mayor, no un cuerpo mayor a secas", () => {
+    const contar = (hojaId: string) => {
+      const hoja = getHojaEtiqueta(hojaId);
+      const doc = construir([CASO_PEOR_MEDIDO.dto], new Map(), hoja);
+      const u8 = new Uint8Array(bytesDe(doc));
+      const fuentes = fuentesDePagina(u8);
+      const textos = textosDePagina(u8);
+      const cuerpos = textos.map((t) => t.tamano);
+      return {
+        lineas: textos.length,
+        cuerpoMin: Math.min(...cuerpos),
+        // Cuerpo del destinatario: el primer texto que reconstruye su nombre.
+        destinatario: textos.find(
+          (t) => textoLegible(t, fuentes.get(t.fuenteRes)) === CASO_PEOR_MEDIDO.dto.destinatario,
+        )?.tamano,
+      };
+    };
+    const base = contar("100x100");
+    const a4 = contar("a4");
+    // En A4 el texto respira: el cuerpo minimo sube MUY por encima del suelo,
+    // que es lo que significa «el alto sobrante es capacidad» (R10).
+    expect(base.cuerpoMin).toBe(CUERPO_MINIMO_PT);
+    expect(a4.cuerpoMin).toBeGreaterThan(CUERPO_MINIMO_PT * 2);
+    expect(a4.destinatario!).toBeGreaterThan(base.destinatario!);
+  });
+});
+
+describe("R21 — todo lo que necesita la fuente embebida pasa por exigirCobertura", () => {
+  it("los textos Type0 del PDF son EXACTAMENTE los que la necesitan", () => {
+    for (const caso of CORPUS_282) {
+      const doc = construir([caso.dto], new Map(), getHojaEtiqueta("100x100"));
+      const u8 = new Uint8Array(bytesDe(doc));
+      const fuentes = fuentesDePagina(u8);
+      const conType0 = textosDePagina(u8)
+        .filter((t) => fuentes.get(t.fuenteRes)?.subtype === "Type0")
+        .map((t) => textoLegible(t, fuentes.get(t.fuenteRes)));
+
+      // (a) Nada se dibuja con la fuente embebida sin necesitarla: o es el
+      //     importe (que lleva el simbolo de moneda) o tiene algun caracter que
+      //     la fuente estandar no sabe escribir.
+      const monto = formatMonto(caso.dto.montoCobrar);
+      for (const texto of conType0) {
+        expect(
+          texto === monto || !seguroEnFuenteEstandar(texto),
+          `caso «${caso.id}»: «${texto}» va con la fuente embebida sin necesitarla`,
+        ).toBe(true);
+      }
+
+      // (b) Y nada que la NECESITE se dibuja con la estandar, que es donde jsPDF
+      //     borraria el caracter en silencio.
+      const conEstandar = textosDePagina(u8)
+        .filter((t) => fuentes.get(t.fuenteRes)?.subtype !== "Type0")
+        .map((t) => textoLegible(t, fuentes.get(t.fuenteRes)));
+      for (const texto of conEstandar) {
+        expect(
+          seguroEnFuenteEstandar(texto),
+          `caso «${caso.id}»: «${texto}» va con la fuente estandar y lleva un caracter que esta BORRA`,
+        ).toBe(true);
+      }
+
+      // (c) Control positivo: el importe SIEMPRE esta entre los Type0.
+      expect(conType0, `caso «${caso.id}»`).toContain(monto);
+      expect(textosConFuenteEmbebida(caso.dto)).toContain(monto);
+    }
+  });
+
+  it("el marcador de «sin direccion» sale impreso: es la raya larga, no un hueco", () => {
+    // jsPDF BORRA en silencio la raya larga (U+2014) cuando dibuja con la fuente
+    // estandar —medido en esta ficha—, asi que el marcador se dibuja con la
+    // embebida. Sin esto, una orden sin direccion imprimia una linea VACIA.
+    const doc = construir([CASO_MINIMOS.dto], new Map(), getHojaEtiqueta("100x100"));
+    const textos = textosDecodificados(bytesDe(doc));
+    expect(CASO_MINIMOS.dto.direccion).toBeNull();
+    expect(textos).toContain(CASO_MINIMOS.esperado.direccion);
+    expect(CASO_MINIMOS.esperado.direccion).toBe("—");
+  });
+});
+
+describe("R15/R22 — el importe: una linea, su recuadro y sus caracteres intactos", () => {
+  it("hay UN recuadro y el importe cabe dentro sin partirse", () => {
+    for (const hoja of HOJAS_ETIQUETA) {
+      const doc = construir([CASO_PEOR_MEDIDO.dto], canvasesDe([CASO_PEOR_MEDIDO.dto]), hoja);
+      const bytes = new Uint8Array(bytesDe(doc));
+      // V5 lo comprueba dato a dato; aqui se afirma la forma: exactamente un
+      // rectangulo dibujado en toda la etiqueta.
+      const rects = rectangulosDePagina(bytes);
+      expect(rects, `${hoja.id}: se esperaba UN recuadro`).toHaveLength(1);
+      expect(rects[0].operador).toBe("S");
+    }
+  });
+
+  it("el texto del importe es EL del formateador, caracter por caracter", () => {
+    // R22: ninguna decision de maquetacion altera los caracteres del importe. El
+    // esperado sale del literal del fixture, no de `formatMonto`.
+    const doc = construir([CASO_EVIDENCIA.dto], new Map(), getHojaEtiqueta("100x100"));
+    const textos = textosDecodificados(bytesDe(doc));
+    expect(textos).toContain(CASO_EVIDENCIA.esperado.montoCobrar);
+    expect(CASO_EVIDENCIA.esperado.montoCobrar).toBe("₡18.000");
   });
 });

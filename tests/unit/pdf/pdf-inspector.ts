@@ -142,6 +142,100 @@ export function textosDePagina(bytes: Uint8Array, indice = 0): TextoDibujado[] {
   return out;
 }
 
+/** Un rectangulo dibujado (`x y w h re` + su operador de pintado). */
+export interface RectanguloDibujado {
+  /** Coordenadas del operador `re`, en puntos y con el origen del PDF. */
+  x: number;
+  y: number;
+  w: number;
+  /**
+   * Alto tal cual lo escribe el generador. jsPDF lo emite **NEGATIVO**: pone el
+   * origen en la esquina SUPERIOR izquierda (que es como maqueta) y baja. Se
+   * devuelve en crudo y no normalizado a proposito: normalizarlo aqui esconderia
+   * un cambio de convencion de uno de los dos generadores, que es justo lo que
+   * el test de paridad tiene que poder ver.
+   */
+  h: number;
+  /** Operador de pintado: `S` (contorno), `f` (relleno), `B` (ambos)… */
+  operador: string;
+}
+
+/**
+ * Feature 350 (T3) — Los rectangulos dibujados en la pagina `indice`.
+ *
+ * Por que hace falta, y no es un capricho: el recuadro del importe (R15) es un
+ * `re` seguido de `S`, y este inspector solo sabia leer TEXTO. Sin esto,
+ * `etiquetas-dos-generadores.test.ts` compararia los dos PDF sin mirar ni un
+ * rectangulo: **un generador podria dibujar el recuadro y el otro no, y el test
+ * seguiria verde**. Es el agujero exacto que señala `design.md` §7.1.
+ *
+ * Antes de buscar se neutralizan las cadenas de texto (`(...)` y `<...>`): una
+ * direccion que contuviera «12 3 4 5 re S» dentro de un literal produciria un
+ * rectangulo fantasma.
+ */
+export function rectangulosDePagina(bytes: Uint8Array, indice = 0): RectanguloDibujado[] {
+  const stream = contenidoDePagina(bytes, indice)
+    .replace(/\((?:\\[\s\S]|[^()\\])*\)/g, "()")
+    .replace(/<[0-9a-fA-F\s]*>/g, "<>");
+  const out: RectanguloDibujado[] = [];
+  const re =
+    /(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+re\s+(f\*|F|f|B\*|B|b\*|b|S|s|n|W)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(stream)) !== null) {
+    out.push({
+      x: Number(m[1]),
+      y: Number(m[2]),
+      w: Number(m[3]),
+      h: Number(m[4]),
+      operador: m[5],
+    });
+  }
+  return out;
+}
+
+/** Una imagen colocada en la pagina (`w 0 0 h x y cm` + `/Xn Do`). */
+export interface ImagenColocada {
+  /** Esquina INFERIOR izquierda, en puntos y con el origen del PDF. */
+  x: number;
+  y: number;
+  /** Ancho y alto con los que se dibuja, en puntos. */
+  w: number;
+  h: number;
+  /** Nombre del XObject (`I0`, `I1`…). */
+  recurso: string;
+}
+
+/**
+ * Feature 350 — Las imagenes colocadas en la pagina `indice`, con su rectangulo.
+ *
+ * Hace falta para dos cosas que no se pueden afirmar de otra forma: que ningun
+ * texto invada la banda del QR y del codigo de barras (R4) y que el QR se
+ * dibuje CUADRADO y el barcode conserve su relacion de aspecto (R12). Leerlo del
+ * PDF y no recalcularlo del layout es lo que hace que la asercion mida tinta y
+ * no aritmetica.
+ *
+ * Solo se entiende la forma que jsPDF emite: `q` + una matriz de escala sin
+ * rotacion + `/Xn Do` + `Q`. Con rotacion habria que resolver la matriz entera y
+ * este inspector no pretende ser un motor de PDF.
+ */
+export function imagenesDePagina(bytes: Uint8Array, indice = 0): ImagenColocada[] {
+  const stream = contenidoDePagina(bytes, indice);
+  const out: ImagenColocada[] = [];
+  const re =
+    /(-?[\d.]+)\s+0\s+0\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+cm\s+\/(\w+)\s+Do/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(stream)) !== null) {
+    out.push({
+      w: Number(m[1]),
+      h: Number(m[2]),
+      x: Number(m[3]),
+      y: Number(m[4]),
+      recurso: m[5],
+    });
+  }
+  return out;
+}
+
 /** Un recurso de fuente del `/Resources` de la pagina. */
 export interface FuentePdf {
   res: string;

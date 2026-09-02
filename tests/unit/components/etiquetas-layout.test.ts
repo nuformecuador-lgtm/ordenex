@@ -1,190 +1,247 @@
 import { describe, it, expect } from "vitest";
 
 import {
-  crearLayout,
-  LIENZO_BASE_MM,
-  MAQUETA_BASE,
-} from "@/lib/pdf/etiquetas-layout";
-import { HOJAS_ETIQUETA, getHojaEtiqueta } from "@/lib/config/etiquetas-hoja";
+  celdaDeHoja,
+  celdasPorHoja,
+  getHojaEtiqueta,
+  HOJAS_ETIQUETA,
+  type HojaEtiqueta,
+} from "@/lib/config/etiquetas-hoja";
+import { crearLayout } from "@/lib/pdf/etiquetas-layout";
+import {
+  ANCHO_UTIL_BASE_MM,
+  BARCODE_MM,
+  CUERPOS_BASE,
+  MARGEN_MM,
+  QR_MM,
+} from "@/lib/pdf/etiquetas-maqueta";
 
-// Feature 150 (T5) — Aritmetica del escalado, en Node y sin DOM. Cubre R14-R17.
+// Feature 150 (T5) — Aritmetica del escalado, en Node y sin DOM.
+//
+// Feature 350 (T7/T15) — Reescrito fila a fila segun `design.md` §11. Lo que se
+// retira y que lo sustituye:
+//
+//  | Asercion retirada                              | Sustituto                                   | ¿mas o menos fuerte? |
+//  |------------------------------------------------|---------------------------------------------|----------------------|
+//  | «el factor sale del lado MENOR» (`s`)           | `k` sale del ANCHO + monotonia de capacidad | MAS: afirma capacidad, no aritmetica |
+//  | «bloque cuadrado centrado; `offY` = 43,5 en A4» | R9: la franja sin usar es EXACTAMENTE el margen | MAS: aquello certificaba los 87 mm en blanco |
+//  | «todas las constantes escalan con `s`»          | dos escalas separadas (geometria / tipografia) | equivalente en rigor |
+//  | «encaje en la pagina, offsets >= 0»             | V3 sobre el PDF (`etiquetas-pdf.test.ts`)   | MAS: aritmetica -> tinta |
+//  | «densidad del raster nunca baja»                | se CONSERVA aqui, con `k` en vez de `s`     | igual |
 
 const HOJA_100 = getHojaEtiqueta("100x100");
 const HOJA_4X6 = getHojaEtiqueta("4x6in");
 const HOJA_A4 = getHojaEtiqueta("a4");
 const HOJA_CARTA = getHojaEtiqueta("carta");
 
-describe("crearLayout — factor de escala (R14)", () => {
-  it("el factor sale del lado MENOR de la hoja respecto del lienzo de 100 mm", () => {
-    expect(crearLayout(HOJA_100).s).toBeCloseTo(1, 10);
-    expect(crearLayout(HOJA_4X6).s).toBeCloseTo(1.016, 10);
-    expect(crearLayout(HOJA_A4).s).toBeCloseTo(2.1, 10);
-    expect(crearLayout(HOJA_CARTA).s).toBeCloseTo(2.159, 10);
-  });
-
-  it("es UN SOLO factor: X e Y escalan exactamente igual (sin deformar QR ni barcode)", () => {
-    for (const hoja of HOJAS_ETIQUETA) {
-      const l = crearLayout(hoja);
-      // Un delta en X y el mismo delta en Y producen el mismo desplazamiento.
-      for (const v of [1, 7.5, 26, 94]) {
-        const dx = l.x(v) - l.x(0);
-        const dy = l.y(v) - l.y(0);
-        expect(dx).toBeCloseTo(dy, 10);
-        expect(dx).toBeCloseTo(l.s * v, 10);
-      }
-      // El QR sigue siendo cuadrado: su lado escalado es el mismo en ambos ejes.
-      expect(l.qrSize).toBeCloseTo(MAQUETA_BASE.qrSize * l.s, 10);
-      expect(l.escala(MAQUETA_BASE.qrSize)).toBeCloseTo(l.qrSize, 10);
-    }
-  });
-
-  it("NUNCA escala por el lado mayor (eso desbordaria la pagina)", () => {
-    for (const hoja of [HOJA_4X6, HOJA_A4, HOJA_CARTA]) {
-      const l = crearLayout(hoja);
-      const factorLadoMayor = Math.max(hoja.anchoMm, hoja.altoMm) / LIENZO_BASE_MM;
-      expect(l.s).toBeLessThan(factorLadoMayor);
-      expect(l.s).toBeCloseTo(
-        Math.min(hoja.anchoMm, hoja.altoMm) / LIENZO_BASE_MM,
-        10,
-      );
-    }
-  });
-});
-
-describe("crearLayout — bloque cuadrado centrado (R15)", () => {
-  it("100x100: s = 1 y offsets 0 (el default dibuja igual que la maqueta actual)", () => {
-    const l = crearLayout(HOJA_100);
-    expect(l.s).toBe(1);
-    expect(l.offX).toBe(0);
-    expect(l.offY).toBe(0);
-    expect(l.lado).toBe(100);
-    expect(l.x(6)).toBe(6);
-    expect(l.y(6)).toBe(6);
-    expect(l.margin).toBe(MAQUETA_BASE.margin);
-    expect(l.contentWidth).toBe(88);
-  });
-
-  it("hojas no cuadradas: bloque cuadrado del lado menor, centrado en ambos ejes", () => {
-    const esperado = [
-      { hoja: HOJA_4X6, lado: 101.6, offX: 0, offY: 25.4 },
-      { hoja: HOJA_A4, lado: 210, offX: 0, offY: 43.5 },
-      { hoja: HOJA_CARTA, lado: 215.9, offX: 0, offY: 31.75 },
+describe("crearLayout — la escala TIPOGRAFICA sale del ancho (R11)", () => {
+  it("k = anchoUtil / anchoUtilBase en las cuatro hojas", () => {
+    const esperado: Array<[HojaEtiqueta, number]> = [
+      [HOJA_100, 1],
+      [HOJA_4X6, (101.6 - 12) / 88],
+      [HOJA_A4, (210 - 12) / 88],
+      [HOJA_CARTA, (215.9 - 12) / 88],
     ];
-    for (const caso of esperado) {
-      const l = crearLayout(caso.hoja);
-      expect(l.lado).toBeCloseTo(caso.lado, 10);
-      expect(l.offX).toBeCloseTo(caso.offX, 10);
-      expect(l.offY).toBeCloseTo(caso.offY, 10);
-      // Centrado: la banda sobrante de arriba mide lo mismo que la de abajo.
-      expect(caso.hoja.altoMm - l.offY - l.lado).toBeCloseTo(l.offY, 10);
-      expect(caso.hoja.anchoMm - l.offX - l.lado).toBeCloseTo(l.offX, 10);
-      // Y NO se estira hasta el lado mayor: queda banda en blanco.
-      expect(l.lado).toBeLessThan(caso.hoja.altoMm);
+    for (const [hoja, k] of esperado) {
+      expect(crearLayout(hoja).k, `k de ${hoja.id}`).toBeCloseTo(k, 10);
     }
+    // Los numeros, escritos: 1 / 1,0182 / 2,25 / 2,3170.
+    expect(crearLayout(HOJA_4X6).k).toBeCloseTo(1.0182, 4);
+    expect(crearLayout(HOJA_A4).k).toBeCloseTo(2.25, 4);
+    expect(crearLayout(HOJA_CARTA).k).toBeCloseTo(2.317, 3);
   });
 
-  it("el centrado se calcula, no se asume que el lado menor sea el ancho (hoja apaisada)", () => {
-    const apaisada = { id: "a4" as const, label: "A4 apaisada", anchoMm: 297, altoMm: 210 };
-    const l = crearLayout(apaisada);
-    expect(l.s).toBeCloseTo(2.1, 10);
-    expect(l.offX).toBeCloseTo(43.5, 10);
-    expect(l.offY).toBe(0);
-  });
-});
-
-describe("crearLayout — todas las constantes escalan (R16)", () => {
-  it("margen, ancho de contenido, tipografias, interlineado, QR y barcode usan el mismo factor", () => {
-    for (const hoja of HOJAS_ETIQUETA) {
-      const l = crearLayout(hoja);
-      expect(l.margin).toBeCloseTo(MAQUETA_BASE.margin * l.s, 10);
-      expect(l.contentWidth).toBeCloseTo(
-        (LIENZO_BASE_MM - MAQUETA_BASE.margin * 2) * l.s,
-        10,
-      );
-      expect(l.fontRotulo).toBeCloseTo(MAQUETA_BASE.fontRotulo * l.s, 10);
-      expect(l.fontValor).toBeCloseTo(MAQUETA_BASE.fontValor * l.s, 10);
-      expect(l.fontRemision).toBeCloseTo(MAQUETA_BASE.fontRemision * l.s, 10);
-      expect(l.fontGuia).toBeCloseTo(MAQUETA_BASE.fontGuia * l.s, 10);
-      expect(l.lineHeight).toBeCloseTo(MAQUETA_BASE.lineHeight * l.s, 10);
-      expect(l.fieldGap).toBeCloseTo(MAQUETA_BASE.fieldGap * l.s, 10);
-      expect(l.qrSize).toBeCloseTo(MAQUETA_BASE.qrSize * l.s, 10);
-      expect(l.barcodeHeight).toBeCloseTo(MAQUETA_BASE.barcodeHeight * l.s, 10);
-      expect(l.gapQrBarcode).toBeCloseTo(MAQUETA_BASE.gapQrBarcode * l.s, 10);
-    }
-  });
-
-  it("los numeros de design.md §3.3 salen clavados para A4 y carta", () => {
+  it("NO sale del lado menor: en A4 el factor viejo era 2,1 y ahora es 2,25", () => {
+    // La mutacion M4 revierte esto. El factor del lado menor ignoraba los 87 mm
+    // de alto sobrante; el del ancho los convierte en lineas.
     const a4 = crearLayout(HOJA_A4);
-    expect(a4.margin).toBeCloseTo(12.6, 10);
-    expect(a4.contentWidth).toBeCloseTo(184.8, 10);
-    expect(a4.fontRotulo).toBeCloseTo(16.8, 10);
-    expect(a4.fontValor).toBeCloseTo(18.9, 10);
-    expect(a4.fontRemision).toBeCloseTo(21, 10);
-    expect(a4.fontGuia).toBeCloseTo(46.2, 10);
-    expect(a4.lineHeight).toBeCloseTo(8.4, 10);
-    // fieldGap base = 1.0 (era 1.5 cuando el rotulo iba en su propia linea; ver
-    // MAQUETA_BASE): 1.0 * 2.1.
-    expect(a4.fieldGap).toBeCloseTo(2.1, 10);
-    expect(a4.qrSize).toBeCloseTo(54.6, 10);
-    expect(a4.barcodeHeight).toBeCloseTo(33.6, 10);
-    expect(a4.gapQrBarcode).toBeCloseTo(8.4, 10);
-
-    const carta = crearLayout(HOJA_CARTA);
-    expect(carta.margin).toBeCloseTo(12.954, 10);
-    expect(carta.qrSize).toBeCloseTo(56.134, 10);
-    expect(carta.fontGuia).toBeCloseTo(47.498, 10);
+    const factorLadoMenor = Math.min(HOJA_A4.anchoMm, HOJA_A4.altoMm) / 100;
+    expect(factorLadoMenor).toBeCloseTo(2.1, 10);
+    expect(a4.k).not.toBeCloseTo(factorLadoMenor, 3);
   });
-});
 
-describe("crearLayout — encaje en la pagina (R17)", () => {
-  it("para las cuatro hojas el bloque util cabe entero y los offsets no son negativos", () => {
+  it("los cuerpos base viajan a la hoja multiplicados por k, y solo por k", () => {
     for (const hoja of HOJAS_ETIQUETA) {
       const l = crearLayout(hoja);
-      expect(l.offX).toBeGreaterThanOrEqual(0);
-      expect(l.offY).toBeGreaterThanOrEqual(0);
-      // Borde derecho/inferior del contenido (margen interior incluido).
-      const derecha = l.x(LIENZO_BASE_MM - MAQUETA_BASE.margin);
-      const abajo = l.y(LIENZO_BASE_MM - MAQUETA_BASE.margin);
-      expect(derecha).toBeLessThanOrEqual(hoja.anchoMm);
-      expect(abajo).toBeLessThanOrEqual(hoja.altoMm);
-      // Y el bloque completo (sin margen) tampoco se sale.
-      expect(l.x(LIENZO_BASE_MM)).toBeLessThanOrEqual(hoja.anchoMm + 1e-9);
-      expect(l.y(LIENZO_BASE_MM)).toBeLessThanOrEqual(hoja.altoMm + 1e-9);
-      // Ni por el borde superior/izquierdo.
-      expect(l.x(MAQUETA_BASE.margin)).toBeGreaterThanOrEqual(0);
-      expect(l.y(MAQUETA_BASE.margin)).toBeGreaterThanOrEqual(0);
+      expect(l.cuerpos.rotulo).toBeCloseTo(CUERPOS_BASE.rotulo * l.k, 10);
+      expect(l.cuerpos.guia).toBeCloseTo(CUERPOS_BASE.guia * l.k, 10);
+      expect(l.cuerpos.remision).toBeCloseTo(CUERPOS_BASE.remision * l.k, 10);
+      expect(l.cuerpos.destinatario).toBeCloseTo(CUERPOS_BASE.destinatario * l.k, 10);
+      expect(l.cuerpos.telefono).toBeCloseTo(CUERPOS_BASE.telefono * l.k, 10);
+      expect(l.cuerpos.direccion).toBeCloseTo(CUERPOS_BASE.direccion * l.k, 10);
+      expect(l.cuerpos.ubicacion).toBeCloseTo(CUERPOS_BASE.ubicacion * l.k, 10);
+      expect(l.cuerpos.importe).toBeCloseTo(CUERPOS_BASE.importe * l.k, 10);
+      expect(l.cuerpos.detalle).toBeCloseTo(CUERPOS_BASE.detalle * l.k, 10);
+      expect(l.cuerpo(37)).toBeCloseTo(37 * l.k, 10);
     }
   });
 
-  it("el bloque QR + barcode de la fila inferior no invade el margen exterior", () => {
+  it("la GEOMETRIA no escala: un milimetro de la maqueta es un milimetro de papel", () => {
+    // Es la otra mitad de la separacion de escalas. Con el factor unico de la
+    // 150, `x(7,5) - x(0)` valia `7,5 * s`; ahora vale 7,5 en las cuatro hojas.
     for (const hoja of HOJAS_ETIQUETA) {
       const l = crearLayout(hoja);
-      const barcodeXBase =
-        MAQUETA_BASE.margin + MAQUETA_BASE.qrSize + MAQUETA_BASE.gapQrBarcode;
-      const anchoBarcodeBase =
-        LIENZO_BASE_MM - MAQUETA_BASE.margin - barcodeXBase;
-      expect(anchoBarcodeBase).toBeGreaterThan(0);
-      const finBarcode = l.x(barcodeXBase) + l.escala(anchoBarcodeBase);
-      expect(finBarcode).toBeLessThanOrEqual(
-        hoja.anchoMm - l.offX - l.margin + 1e-9,
-      );
-      const finQr = l.y(LIENZO_BASE_MM - MAQUETA_BASE.margin);
-      expect(finQr).toBeLessThanOrEqual(hoja.altoMm - l.offY + 1e-9);
+      for (const v of [1, 7.5, 26, 88]) {
+        expect(l.x(v) - l.x(0), `${hoja.id} deforma X`).toBeCloseTo(v, 10);
+        expect(l.y(v) - l.y(0), `${hoja.id} deforma Y`).toBeCloseTo(v, 10);
+      }
     }
   });
 });
 
-describe("crearLayout — densidad del raster del barcode (R18)", () => {
-  it("las opciones del raster nunca bajan de la densidad de 100x100", () => {
+describe("crearLayout — la celda se usa entera (R9/R10)", () => {
+  it("la franja sin usar es EXACTAMENTE el margen, no la mitad del papel", () => {
     for (const hoja of HOJAS_ETIQUETA) {
       const l = crearLayout(hoja);
-      expect(l.barcodeRaster.width).toBeGreaterThanOrEqual(2 * l.s);
-      expect(l.barcodeRaster.height).toBeGreaterThanOrEqual(60 * l.s);
+      expect(l.celda).toEqual({
+        x0: 0,
+        y0: 0,
+        ancho: hoja.anchoMm,
+        alto: hoja.altoMm,
+      });
+      expect(l.margen).toBe(MARGEN_MM);
+      expect(l.anchoUtil).toBeCloseTo(hoja.anchoMm - 2 * MARGEN_MM, 10);
+      expect(l.altoUtil).toBeCloseTo(hoja.altoMm - 2 * MARGEN_MM, 10);
+      // Las cuatro franjas de papel sin contenido miden el margen y nada mas.
+      expect(l.x(0)).toBeCloseTo(MARGEN_MM, 10);
+      expect(l.y(0)).toBeCloseTo(MARGEN_MM, 10);
+      expect(hoja.anchoMm - l.x(l.anchoUtil)).toBeCloseTo(MARGEN_MM, 10);
+      expect(hoja.altoMm - l.y(l.altoUtil)).toBeCloseTo(MARGEN_MM, 10);
+    }
+  });
+
+  it("el alto util NO se recorta al del lado menor: A4 gana 197 mm de texto", () => {
+    // Con el bloque cuadrado centrado de la 150, A4 tenia 88 mm de alto util y
+    // 43,5 mm de papel en blanco arriba y otros tantos abajo. Ahora tiene 285.
+    const a4 = crearLayout(HOJA_A4);
+    expect(a4.altoUtil).toBeCloseTo(285, 10);
+    expect(a4.altoUtil - ANCHO_UTIL_BASE_MM).toBeGreaterThan(190);
+  });
+
+  it("el alto util crece con el area de la hoja (R10, precondicion de R11)", () => {
+    const porArea = [...HOJAS_ETIQUETA].sort(
+      (a, b) => a.anchoMm * a.altoMm - b.anchoMm * b.altoMm,
+    );
+    // Lo que de verdad importa para la capacidad es el alto util MEDIDO EN
+    // LINEAS de la celda base, es decir `altoUtil / k`.
+    const enLineasBase = porArea.map((h) => {
+      const l = crearLayout(h);
+      return l.altoUtil / l.k;
+    });
+    expect(enLineasBase[0]).toBeCloseTo(88, 6);
+    for (let i = 1; i < enLineasBase.length; i++) {
+      expect(enLineasBase[i]).toBeGreaterThan(enLineasBase[0]);
+    }
+  });
+});
+
+describe("crearLayout — QR y codigo de barras (R12)", () => {
+  it("nunca encogen por debajo de los de la celda base", () => {
+    for (const hoja of HOJAS_ETIQUETA) {
+      const l = crearLayout(hoja);
+      expect(l.qrMm, `${hoja.id} encoge el QR`).toBeGreaterThanOrEqual(QR_MM);
+      expect(l.barcodeMm, `${hoja.id} encoge el barcode`).toBeGreaterThanOrEqual(BARCODE_MM);
+      expect(l.qrMm).toBeCloseTo(QR_MM * Math.max(1, l.k), 10);
+      expect(l.barcodeMm).toBeCloseTo(BARCODE_MM * Math.max(1, l.k), 10);
+    }
+  });
+
+  it("una celda mas ANGOSTA que la base tampoco los encoge", () => {
+    // Control del `max(1, k)`. Con la rejilla 2 x 2 que propone Q1 la celda de
+    // A4 sale de 105 mm y `k` queda por ENCIMA de 1 (1,057), asi que ese caso no
+    // ejerce el tope; se usa una rejilla 3 x 3 hipotetica, que da celdas de 70 mm
+    // y `k = 0,659`. Sin el tope, ahi el QR bajaria de 26 mm y R12 se violaria.
+    const a4Rejilla: HojaEtiqueta = { ...HOJA_A4, columnas: 3, filas: 3 };
+    const l = crearLayout(a4Rejilla, 0);
+    expect(l.k).toBeLessThan(1);
+    expect(l.qrMm).toBe(QR_MM);
+    expect(l.barcodeMm).toBe(BARCODE_MM);
+    expect(l.barcodeRaster).toEqual({ width: 2, height: 60, fontSize: 18 });
+    // Y con la rejilla 2 x 2 de Q1 la celda es MAS ancha que la base: dato para
+    // quien firme, porque significa que «4-up» no da capacidad por linea.
+    const q1 = crearLayout({ ...HOJA_A4, columnas: 2, filas: 2 }, 0);
+    expect(q1.celda.ancho).toBeCloseTo(105, 10);
+    expect(q1.k).toBeGreaterThan(1);
+  });
+
+  it("la densidad del raster del barcode nunca baja (se CONSERVA de la 150)", () => {
+    for (const hoja of HOJAS_ETIQUETA) {
+      const l = crearLayout(hoja);
+      expect(l.barcodeRaster.width).toBeGreaterThanOrEqual(2 * l.k);
+      expect(l.barcodeRaster.height).toBeGreaterThanOrEqual(60 * l.k);
       expect(Number.isInteger(l.barcodeRaster.width)).toBe(true);
       expect(Number.isInteger(l.barcodeRaster.height)).toBe(true);
     }
     // Con 100x100 se conservan exactamente las opciones historicas (feature 32).
-    const base = crearLayout(HOJA_100).barcodeRaster;
-    expect(base).toEqual({ width: 2, height: 60, fontSize: 18 });
+    expect(crearLayout(HOJA_100).barcodeRaster).toEqual({
+      width: 2,
+      height: 60,
+      fontSize: 18,
+    });
+  });
+});
+
+describe("celdaDeHoja — la rejilla (T5, mitad adelantada de Q1)", () => {
+  it("con 1 x 1 la celda es la hoja entera y empieza en el origen", () => {
+    for (const hoja of HOJAS_ETIQUETA) {
+      expect(hoja.columnas).toBe(1);
+      expect(hoja.filas).toBe(1);
+      expect(celdasPorHoja(hoja)).toBe(1);
+      expect(celdaDeHoja(hoja, 0)).toEqual({
+        x0: 0,
+        y0: 0,
+        ancho: hoja.anchoMm,
+        alto: hoja.altoMm,
+      });
+    }
+  });
+
+  it("con un 2 x 2 hipotetico las cuatro celdas cubren la hoja sin hueco ni solape", () => {
+    // El catalogo no lo usa todavia: esto es lo que hace que firmar Q1 sea
+    // cambiar dos numeros de una tabla y no reescribir el motor.
+    const a4: HojaEtiqueta = { ...HOJA_A4, columnas: 2, filas: 2 };
+    expect(celdasPorHoja(a4)).toBe(4);
+    const celdas = [0, 1, 2, 3].map((i) => celdaDeHoja(a4, i));
+
+    // Sin hueco: el area de las cuatro suma la de la hoja.
+    const area = celdas.reduce((s, c) => s + c.ancho * c.alto, 0);
+    expect(area).toBeCloseTo(a4.anchoMm * a4.altoMm, 6);
+
+    // Sin solape: ningun par se corta.
+    for (let i = 0; i < celdas.length; i++) {
+      for (let j = i + 1; j < celdas.length; j++) {
+        const a = celdas[i];
+        const b = celdas[j];
+        const solapa =
+          a.x0 < b.x0 + b.ancho &&
+          b.x0 < a.x0 + a.ancho &&
+          a.y0 < b.y0 + b.alto &&
+          b.y0 < a.y0 + a.alto;
+        expect(solapa, `las celdas ${i} y ${j} se solapan`).toBe(false);
+      }
+    }
+
+    // Y el recorrido es por filas: izquierda a derecha, arriba abajo.
+    expect(celdas[0]).toEqual({ x0: 0, y0: 0, ancho: 105, alto: 148.5 });
+    expect(celdas[1].x0).toBeCloseTo(105, 10);
+    expect(celdas[1].y0).toBe(0);
+    expect(celdas[2].x0).toBe(0);
+    expect(celdas[2].y0).toBeCloseTo(148.5, 10);
+  });
+
+  it("el indice se toma modulo el numero de celdas: no inventa un error", () => {
+    const a4: HojaEtiqueta = { ...HOJA_A4, columnas: 2, filas: 2 };
+    expect(celdaDeHoja(a4, 4)).toEqual(celdaDeHoja(a4, 0));
+    expect(celdaDeHoja(a4, 7)).toEqual(celdaDeHoja(a4, 3));
+  });
+
+  it("la celda de la rejilla desplaza el layout entero, margen incluido", () => {
+    const a4: HojaEtiqueta = { ...HOJA_A4, columnas: 2, filas: 2 };
+    const l = crearLayout(a4, 3);
+    expect(l.celda.x0).toBeCloseTo(105, 10);
+    expect(l.celda.y0).toBeCloseTo(148.5, 10);
+    expect(l.x(0)).toBeCloseTo(105 + MARGEN_MM, 10);
+    expect(l.y(0)).toBeCloseTo(148.5 + MARGEN_MM, 10);
+    expect(l.anchoUtil).toBeCloseTo(105 - 2 * MARGEN_MM, 10);
   });
 });

@@ -62,6 +62,7 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
 import { etiquetasConfig } from "@/lib/config/etiquetas";
+import { ErrorEtiquetaNoCabe } from "@/lib/pdf/etiquetas-ajuste";
 import { notificarCargaMasivaTerminadaReal } from "@/lib/notificaciones/notificadores";
 
 // El runtime de Node es OBLIGATORIO: Prisma, el hash de la API key y el render del
@@ -136,8 +137,31 @@ function msgLoteExcedeTope(tope: number): string {
  */
 function describirErrorSeguro(err: unknown): string {
   if (err instanceof EtiquetasLoteExcedeTopeError) return err.message;
+  // Feature 350 (R7): el mensaje de «no cabe» es seguro POR CONSTRUCCION —solo
+  // lleva el num_guia, el id de la hoja, el nombre del bloque y milimetros— y es
+  // el unico dato con el que alguien puede arreglar la orden que lo provoco.
+  // Sin el, el log diria «ErrorEtiquetaNoCabe» y nadie sabria de que guia.
+  if (err instanceof ErrorEtiquetaNoCabe) return err.message;
   if (err instanceof Error) return err.name;
   return typeof err;
+}
+
+/**
+ * Feature 350 (R7) — Mensaje de la respuesta cuando una etiqueta del lote no
+ * cabe en la hoja ni con el cuerpo minimo de legibilidad.
+ *
+ * NOMBRA LA GUIA, igual que el del modal y por el mismo motivo: la causa es un
+ * dato desmesurado de ESA orden (una direccion de 286 caracteres es un problema
+ * de datos, no de maqueta) y el integrador puede corregirlo. Se dice ademas que
+ * la carga NO se revirtio, que es la pregunta inmediata de quien recibe un
+ * `error` dentro de un 200.
+ */
+function msgEtiquetaNoCabe(err: ErrorEtiquetaNoCabe): string {
+  return (
+    `la etiqueta de la guia ${err.numGuia} no cabe en la hoja sin recortar datos, ` +
+    `asi que el PDF de etiquetas del lote no se genero: las ordenes SI se crearon ` +
+    `y conservan su num_guia (revisa la direccion o el producto de esa orden)`
+  );
 }
 
 function buildAutenticar(): (rawKey: string | null) => Promise<ApiKeyAuthResult> {
@@ -326,7 +350,12 @@ export async function handleCargaApi(req: Request, deps: CargaApiDeps = {}): Pro
           ordenes: summary.ordenes.length,
           modo: downloadType,
         });
-        etiquetasPdf = { error: MSG_ETIQUETAS_FALLO };
+        etiquetasPdf = {
+          error:
+            err instanceof ErrorEtiquetaNoCabe
+              ? msgEtiquetaNoCabe(err)
+              : MSG_ETIQUETAS_FALLO,
+        };
         urlPorOrden = new Map();
       }
     }
