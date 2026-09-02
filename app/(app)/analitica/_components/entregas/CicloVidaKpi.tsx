@@ -46,15 +46,27 @@ import {
 } from "../operativo/textos";
 import { CLAVE_TABLERO } from "../operativo/PanelOperativo";
 
+import { contarOrdenes, ORDENES_CERRADAS, rotuloConBase } from "./base-del-kpi";
+
 /** Rotulo sin denominador: mientras carga o cuando hay error, el `n` no se conoce. */
 const ETIQUETA = "Ciclo de vida promedio (órdenes cerradas)";
+
+/** El rotulo a secas, sin el parentesis, para volver a componerlo con la base dentro. */
+const ROTULO = "Ciclo de vida promedio";
 
 /**
  * El mismo rotulo CON el denominador dentro. Concuerda en singular («1 orden cerrada»):
  * el KPI de una tarjeta se lee entero como una frase, y «1 órdenes» delata que nadie la leyo.
+ *
+ * FICHA 360 — la composicion ya NO se escribe aqui: la hace `base-del-kpi`, el mismo modulo
+ * que usan los dos KPIs de porcentaje de esta MISMA fila. Antes era un `${}` local, y era la
+ * unica tarjeta con base; ahora son tres, y tres textos escritos a mano en dos archivos
+ * distintos divergen sin que nada se ponga rojo —hay que tener las tarjetas delante para verlo—.
+ * De paso la cifra pasa por `formatearValor(_, "conteo")`, asi que un periodo de 1.234 ordenes
+ * ya no se lee «(1234 órdenes cerradas)» al lado de un «1.234» de la tarjeta vecina.
  */
 function etiquetaCon(n: number): string {
-  return `Ciclo de vida promedio (${n} ${n === 1 ? "orden cerrada" : "órdenes cerradas"})`;
+  return rotuloConBase(ROTULO, contarOrdenes(n, ORDENES_CERRADAS));
 }
 
 /** La unidad del formateador: el valor son SEGUNDOS y `formato.ts` los pone legibles. */
