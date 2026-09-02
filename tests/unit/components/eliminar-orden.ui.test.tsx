@@ -227,6 +227,71 @@ describe("la acción se ofrece en CUALQUIER estado, si la orden no se ha gestion
   });
 });
 
+// ---------------------------------------------------------------------------------------
+// FICHA 358 (2026-09-02) — EL DEFECTO REPORTADO, EN LA PANTALLA: «no le aparece el checkbox
+// para seleccionar y eliminar».
+//
+// Eran DOS ausencias a la vez, y este bloque cubre la de pantalla. La otra —el campo
+// `eliminable` no viajaba al `adminTienda`— vive en `orden-service.test.ts`.
+//
+// LA DE AQUI: `selectable` colgaba de `accionesLote`, que la tienda NO recibe (no opera
+// transiciones de flujo). Sin esa prop la tabla se montaba SIN columna de casillas, así que
+// «Eliminar» no tenía cómo alcanzar ninguna fila aunque el campo hubiera viajado.
+// ---------------------------------------------------------------------------------------
+describe("la tienda: casilla y «Eliminar», sin acciones de flujo (ficha 358)", () => {
+  it("⭑ con `puedeEliminar` y SIN `accionesLote` hay casilla, y marcarla ofrece «Eliminar»", async () => {
+    const user = userEvent.setup();
+    renderConSwr(<OrdenesListado puedeEliminar />);
+
+    // La casilla existe: es literalmente lo que el humano reportó que faltaba.
+    await seleccionarFila(user, "REM-o1");
+
+    expect(await screen.findByRole("button", { name: ACCION })).toBeInTheDocument();
+  });
+
+  it("y la barra NO se le llena de acciones de flujo que el servidor le rechazaría", async () => {
+    // La contraparte imprescindible de lo anterior. Montar la selección para la tienda sin la
+    // guarda de `accionesDe` le ofrecería "Asignar mensajero", "Generar guía" y compañía: la
+    // pantalla mintiendo, que es justo lo que esta feature no puede hacer.
+    const user = userEvent.setup();
+    renderConSwr(<OrdenesListado puedeEliminar />);
+
+    await seleccionarFila(user, "REM-o1");
+    await screen.findByRole("button", { name: ACCION });
+
+    expect(screen.queryByRole("button", { name: "Asignar mensajero" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Generar guía" })).toBeNull();
+  });
+
+  it("el modal SÍ está montado para ella: confirmar llega al borde", async () => {
+    // El modal vivía dentro del bloque de `accionesLote`. Dejarlo ahí le habría dado a la tienda
+    // un botón que al pulsarlo no abre nada — un fallo MUDO, la familia de defectos más cara de
+    // este repo. Esto lo ejercita de punta a punta.
+    const user = userEvent.setup();
+    renderConSwr(<OrdenesListado puedeEliminar />);
+
+    await eliminarDesdeListado(user, "REM-o1");
+
+    await waitFor(() => expect(eliminarOrdenesMock).toHaveBeenCalledTimes(1));
+    expect(eliminarOrdenesMock).toHaveBeenCalledWith({ ordenIds: ["o1"] });
+  });
+
+  it("y sigue obedeciendo a `eliminable`: sin él, no hay ni casilla que marcar", async () => {
+    // La pantalla no decide quién es dueño de qué: el servidor le manda `eliminable` ya resuelto
+    // (estado + pertenencia). Una fila que no lo trae no lleva a ningún botón, así que la
+    // columna de casillas ni se monta.
+    listarOrdenesMock.mockResolvedValue(
+      pagina([makeOrden({ id: "o1", eliminable: false })]),
+    );
+    renderConSwr(<OrdenesListado puedeEliminar />);
+
+    await screen.findByText("REM-o1");
+
+    expect(screen.queryByRole("checkbox", { name: /Seleccionar orden/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: ACCION })).toBeNull();
+  });
+});
+
 describe("confirmación y llamada al borde", () => {
   it("una sola llamada con el lote completo, y avisa cuántas eliminó el SERVIDOR", async () => {
     listarOrdenesMock.mockResolvedValue(

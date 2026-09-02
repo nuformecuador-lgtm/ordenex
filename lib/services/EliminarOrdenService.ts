@@ -7,6 +7,7 @@ import type {
   IEliminarOrdenService,
 } from "@/lib/interfaces/services/IEliminarOrdenService";
 import { esEstadoEliminable } from "@/lib/types/order-status-eliminables";
+import { resolverAlcanceBorradoOrden } from "@/lib/services/alcance-borrado-orden";
 import {
   MSG_ORDEN_NO_ELIMINABLE,
   MSG_ORDEN_NO_EXISTE,
@@ -39,25 +40,30 @@ export class EliminarOrdenService implements IEliminarOrdenService {
     input: EliminarOrdenInput,
     actor: Actor,
   ): Promise<EliminarOrdenServiceResult> {
-    // 1. Autorizacion por ROL antes de tocar dato alguno. SOLO `maestro` (pedido humano
-    // 2026-08-27, que ESTRECHA la regla original de maestro/admin): borrar una orden la retira
-    // de TODOS los listados del sistema —incluidos los de la tienda dueña y los del mensajero
-    // asignado—, y recuperarla solo se puede desde una pantalla que tambien es suya. Con dos
-    // roles capaces de borrar, el rastro de quien lo hizo deja de ser una sola persona.
-    // `esAccesoTotal` ya NO sirve aqui a proposito: es "ve y gestiona todos los modulos", que es
-    // una pregunta distinta de "puede retirar una orden del sistema".
+    // 1. Autorizacion antes de tocar dato alguno, y NO escrita aqui: la resuelve
+    // `resolverAlcanceBorradoOrden`, la MISMA funcion que usa el canal por API key. Devuelve
+    // «todas» (maestro), «propias» (la tienda, con su `ownerId`) o «denegado».
     //
-    // ⚠️ FICHA 320 (2026-08-28) — ESTA REGLA YA NO ES LA UNICA FORMA DE BORRAR UNA ORDEN, y quien
-    // lea solo esta linea deducira lo contrario. El humano abrio el borrado al canal por API key:
-    // una tienda puede retirar LAS SUYAS con `DELETE /api/ordenes/api-key/orden/{id}`. Eso revierte
-    // en parte la decision de arriba y se acepto a sabiendas — en los cuatro estados eliminables el
-    // paquete esta quieto y la API key identifica al autor, asi que el rastro no se pierde, cambia
-    // de forma—. Lo que NO se toco es este camino: por PANTALLA sigue borrando solo el `maestro`,
-    // y sigue pudiendo borrar cualquier orden porque este service NO acota por tienda.
-    // El canal API tiene su propio servicio (`ApiOrdenEliminacionService`) justamente por eso: su
-    // autorizacion es otra —el DUEÑO, forzado dentro del `where`—. Lo unico que comparten es el
-    // predicado de ESTADO de tres lineas mas abajo.
-    if (actor.rol !== "maestro") return { status: "forbidden" };
+    // ⭑ FICHA 358 (2026-09-02) — QUE CAMBIO Y QUE NO. El humano abrio el borrado POR PANTALLA a
+    // la tienda, acotado a lo suyo. No es un permiso nuevo: es la MISMA regla que la tienda ya
+    // tenia por API desde la ficha 320 —mismo predicado de estado, mismo dueño forzado dentro del
+    // `where`— con otra forma. Lo reportado que lo motiva: «Nuform quiere eliminar NA-495 y no le
+    // aparece el checkbox».
+    //
+    // LO QUE SE CONSERVA de la decision del 2026-08-27 (que estrecho la regla de maestro/admin a
+    // solo maestro): el `admin` SIGUE sin poder borrar. Aquel motivo —«con dos roles capaces de
+    // borrar, el rastro de quien lo hizo deja de ser una sola persona»— hablaba de dos roles del
+    // EQUIPO borrando lo mismo. La tienda no entra en esa cuenta: solo alcanza lo suyo, y ya lo
+    // alcanzaba por API. `esAccesoTotal` sigue sin servir aqui a proposito.
+    //
+    // ⚠️ ESTA AUTORIZACION NO ES LA FRONTERA. Que el alcance sea «propias» no impide nada por si
+    // solo: lo que impide que la tienda A borre una orden de la tienda B es el `ownerId` que baja
+    // al `where` de `softDelete` (paso 4). El chequeo de pertenencia del bucle de abajo existe
+    // para poder decir POR QUE se rechaza, no para autorizar.
+    const alcance = resolverAlcanceBorradoOrden(actor);
+    if (alcance.alcance === "denegado") return { status: "forbidden" };
+    /** `null` = sin frontera de tienda (maestro). Viaja tal cual al `where` del repositorio. */
+    const ownerId = alcance.alcance === "propias" ? alcance.ownerId : null;
 
     const ordenIds = [...new Set(input.ordenIds)];
     if (ordenIds.length === 0) return { status: "ok", eliminadas: 0 };
@@ -72,6 +78,20 @@ export class EliminarOrdenService implements IEliminarOrdenService {
     for (const id of ordenIds) {
       const orden = ordenMap.get(id);
       if (!orden) {
+        detalle.push({ ordenId: id, motivo: MSG_ORDEN_NO_EXISTE });
+        continue;
+      }
+      // FICHA 358 — PERTENENCIA, y va ANTES que `deletedAt` a proposito. Una orden de otra
+      // tienda se rechaza con el motivo de «no existe», el MISMO que un id inventado, y por la
+      // razon que ya escribio la ficha 320 para el canal API: distinguirlos le confirmaria a una
+      // tienda que ese id existe en el sistema —y, si fuera detras del chequeo de borradas, hasta
+      // si la competencia la borro—. Colapsan los tres casos en uno solo.
+      //
+      // Esto NO es la frontera (la frontera es el `where` del paso 4): es lo que permite
+      // devolver un motivo por orden y respetar el todo-o-nada. Si esta linea desapareciera, el
+      // borrado seguiria sin ocurrir; lo que se perderia es el «conflict» y el lote saldria
+      // «ok, eliminadas: 0», que es peor de leer pero no inseguro.
+      if (ownerId !== null && orden.tiendaId !== ownerId) {
         detalle.push({ ordenId: id, motivo: MSG_ORDEN_NO_EXISTE });
         continue;
       }
@@ -101,9 +121,21 @@ export class EliminarOrdenService implements IEliminarOrdenService {
     // las N que marco.
     if (detalle.length > 0) return { status: "conflict", detalle };
 
-    // 4. El estado NO cambia y NO se registra transicion en el historial: borrar no es
-    // transicionar, y el historial de la orden se conserva intacto por si hay que auditarla.
-    const eliminadas = await this.repo.softDelete(ordenIds);
+    // 4. LA ESCRITURA, con la frontera de tienda DENTRO de su `where` (ficha 358). `ownerId`
+    // viaja al repositorio, no se comprueba aqui: una comprobacion en memoria deja ventana entre
+    // leer y escribir, y no cubre el camino nuevo que alguien enchufe mañana. Es literalmente lo
+    // que ya hacia `softDeleteViaApi` con `tiendaId: params.ownerId`.
+    //
+    // NO se le pasa ademas la lista de estados eliminables, a diferencia del canal API, y es
+    // deliberado: alli el lote es de UNA orden, asi que un estado que cambio entre la lectura y
+    // el UPDATE solo puede dar 0 o 1. Aqui el lote es de N, y filtrar por estado en el `where`
+    // podria borrar N-1 y dejar una fuera — un borrado PARCIAL, que es exactamente lo que el
+    // todo-o-nada de arriba existe para impedir. La carrera queda declarada, no tapada:
+    // `eliminadas` puede ser menor que el lote y el contrato ya lo dice.
+    //
+    // El estado NO cambia y NO se registra transicion en el historial: borrar no es transicionar,
+    // y el historial de la orden se conserva intacto por si hay que auditarla.
+    const eliminadas = await this.repo.softDelete({ ids: ordenIds, ownerId });
     return { status: "ok", eliminadas };
   }
 }

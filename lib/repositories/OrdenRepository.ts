@@ -1650,22 +1650,47 @@ export class OrdenRepository implements IOrdenRepository {
   // `findEstatusIdByValue`, que es lo que usan los servicios de dominio.
 
   /**
-   * Feature «eliminar orden» (2026-08-26) — writer de `deleted_at` en `orden` POR LOTE y sin
-   * frontera de tienda (la autoriza el rol `maestro`, ver `EliminarOrdenService`). Desde la ficha
-   * 320 NO es el unico: el canal por API key escribe la columna con `softDeleteViaApi`, que borra
-   * UNA orden y lleva el `tienda_id` del owner en su `where`. Reemplaza
-   * al `softDelete` de una sola orden que se retiro el 2026-08-07 por quedarse sin pantalla; el
-   * `deleted_at IS NULL` de TODAS las lecturas nunca dejo de aplicarse, asi que fijar la columna
-   * basta para que la orden desaparezca de los listados sin tocar ninguna de ellas.
+   * Feature «eliminar orden» (2026-08-26) — writer de `deleted_at` en `orden` POR LOTE. Desde la
+   * ficha 320 NO es el unico: el canal por API key escribe la columna con `softDeleteViaApi`, que
+   * borra UNA orden. Reemplaza al `softDelete` de una sola orden que se retiro el 2026-08-07 por
+   * quedarse sin pantalla; el `deleted_at IS NULL` de TODAS las lecturas nunca dejo de aplicarse,
+   * asi que fijar la columna basta para que la orden desaparezca de los listados sin tocar
+   * ninguna de ellas.
    *
    * `updateMany` con `deletedAt: null` en el `where` (no `update` por id): un lote en una sola
    * sentencia, idempotente y a prueba de carreras —la orden que otra sesion ya borro no entra en
    * el conteo y su instante original se conserva—.
+   *
+   * ⭑ FICHA 358 (2026-09-02) — `ownerId` ES LA FRONTERA ENTRE INQUILINOS, y esta es la linea que
+   * la sostiene. Hasta hoy este metodo no acotaba por tienda porque su unico llamador autorizado
+   * era el `maestro`; el 2026-09-02 el humano abrio el borrado por pantalla a la TIENDA, acotado
+   * a lo suyo, y sin este `tiendaId` una tienda podria borrar las ordenes de otra.
+   *
+   * Va DENTRO del `where` y en la MISMA sentencia que los ids —exactamente como
+   * `softDeleteViaApi`— y NO en una comprobacion previa en memoria del service: un `if` anterior
+   * deja una ventana entre comprobar y escribir, y no cubre el camino que alguien añada mañana.
+   * El service SI comprueba ademas la pertenencia antes, pero para poder devolver el motivo del
+   * rechazo; si esa comprobacion desapareciera, esta seguiria impidiendo el borrado.
+   *
+   * `ownerId: null` es «sin frontera» y solo lo produce el `maestro`
+   * (`resolverAlcanceBorradoOrden` -> «todas»). Medido contra Postgres en
+   * `tests/integration/db/eliminar-orden-pantalla-frontera-tienda.test.ts`: quitar `tiendaId` de
+   * este `where` pone ese archivo ROJO.
    */
-  async softDelete(ids: readonly string[]): Promise<number> {
-    if (ids.length === 0) return 0;
+  async softDelete(params: {
+    ids: readonly string[];
+    ownerId: string | null;
+  }): Promise<number> {
+    if (params.ids.length === 0) return 0;
     const { count } = await this.prisma.orden.updateMany({
-      where: { id: { in: [...ids] }, deletedAt: null },
+      where: {
+        id: { in: [...params.ids] },
+        deletedAt: null,
+        // El maestro (`ownerId: null`) no añade clave; la tienda la añade SIEMPRE. Se escribe
+        // con spread condicional y no con un `tiendaId: params.ownerId ?? undefined` para que
+        // sea imposible confundir «sin frontera» con «frontera nula».
+        ...(params.ownerId !== null ? { tiendaId: params.ownerId } : {}),
+      },
       data: { deletedAt: new Date() },
     });
     return count;
@@ -1674,10 +1699,17 @@ export class OrdenRepository implements IOrdenRepository {
   /**
    * Pedido humano (2026-08-27) — LA REVERSION de `softDelete`, y el segundo writer de
    * `deleted_at` (el tercero es `softDeleteViaApi`, ficha 320, el del canal por API key).
-   * Simetrico hasta en el `where`: alli `deletedAt: null`, aqui
+   * Simetrico en la clave que lo hace idempotente: alli `deletedAt: null`, aqui
    * `deletedAt: { not: null }`, y por el mismo motivo — idempotencia y carreras. Una orden
    * viva no entra en el conteo, asi que este metodo no puede "recuperar" nada que no estuviera
    * borrado, ni pisar el instante de un borrado ajeno.
+   *
+   * DONDE DEJA DE SER SIMETRICO (ficha 358): `softDelete` gano un `ownerId` que mete `tiendaId`
+   * en su `where` cuando quien borra es una tienda; este NO lo tiene, y no es un olvido.
+   * Recuperar sigue siendo del `maestro` y solo suyo —`RecuperarOrdenService` corta por rol, y
+   * el interruptor «Eliminadas», unica forma de alcanzar una orden borrada, tampoco se le
+   * declara a nadie mas—. El dia que se le abra a la tienda, este metodo necesita su `ownerId`
+   * igual que su gemelo, y por la misma razon.
    */
   async restore(ids: readonly string[]): Promise<number> {
     if (ids.length === 0) return 0;

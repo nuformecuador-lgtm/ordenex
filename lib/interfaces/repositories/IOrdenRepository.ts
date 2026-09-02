@@ -1221,24 +1221,50 @@ export interface IOrdenRepository {
   // `softDelete` tambien se retiro ese dia ("ninguna pantalla ofrece borrar una orden") y
   // VUELVE con la feature «eliminar orden» (2026-08-26), ahora POR LOTE y con superficie. El
   // predicado `deleted_at IS NULL` nunca se fue: sigue vivo y aplicandose en TODAS las lecturas.
-  // Desde la ficha 320 los writers de la columna son TRES —`softDelete` (app, por lote, sin
-  // frontera de tienda), `restore` (su reversion) y `softDeleteViaApi` (canal por API key, UNA
-  // orden y acotada al owner)—; el enunciado de "unico writer" que vivia aqui ya no es cierto.
+  // Desde la ficha 320 los writers de la columna son TRES —`softDelete` (app, por lote),
+  // `restore` (su reversion) y `softDeleteViaApi` (canal por API key, UNA orden y acotada al
+  // owner)—; el enunciado de "unico writer" que vivia aqui ya no es cierto.
+  // FICHA 358 (2026-09-02): la coletilla «sin frontera de tienda» que este parrafo le colgaba a
+  // `softDelete` YA NO ES CIERTA y por eso se retira. Desde hoy los DOS writers del borrado
+  // pueden aplicarla; la diferencia es que el de la app la hace OPCIONAL, porque su llamador
+  // tambien puede ser el `maestro`, que borra cualquier orden.
   /**
    * Borrado LOGICO por lote: fija `deleted_at = now()` en las ordenes de `ids` que aun NO
    * estuvieran borradas. El `where` incluye `deletedAt: null` (patron de `OrdenGeocodeRepository`
    * y del resto de escrituras guardadas del repo), de modo que es IDEMPOTENTE y seguro ante
    * carreras: dos borrados simultaneos no reescriben el instante del primero.
    *
+   * `ownerId` ES LA FRONTERA MULTI-TENANT (ficha 358) y viaja DENTRO del `where`, en la MISMA
+   * sentencia que los ids, igual que en `softDeleteViaApi`:
+   *   - `string` -> ademas de estar en `ids`, la orden tiene que ser de ESA tienda. Una orden
+   *     ajena colada en el lote NO se toca, y el conteo devuelto lo delata.
+   *   - `null`   -> SIN frontera: alcanza cualquier orden del lote. Es el caso del `maestro`, el
+   *     unico rol al que `resolverAlcanceBorradoOrden` responde «todas».
+   *
+   * El parametro es OBLIGATORIO y nullable A PROPOSITO, no opcional con default: un olvido de
+   * cableado tiene que romper el TYPECHECK, no borrar de mas en silencio (mismo criterio que
+   * `ResolverCierreInput.confirmacionFisica` y el `grupo` de `countNovedadesByTienda`). Y va
+   * DENTRO del `where` y no en un `if` previo del service porque un `if` deja ventana entre
+   * comprobar y escribir, y no cubre el camino que alguien añada mañana.
+   *
    * Devuelve CUANTAS filas cambio, que no tiene por que ser `ids.length` si otra sesion se
-   * adelanto. `ids` vacio -> `0` SIN consultar.
+   * adelanto —o si el lote traia ordenes de otra tienda—. `ids` vacio -> `0` SIN consultar.
    */
-  softDelete(ids: readonly string[]): Promise<number>;
+  softDelete(params: {
+    ids: readonly string[];
+    ownerId: string | null;
+  }): Promise<number>;
   /**
    * Pedido humano (2026-08-27) — LA REVERSION del borrado logico: devuelve `deleted_at` a NULL
-   * en las ordenes de `ids` que SI estuvieran borradas. Es el gemelo exacto de `softDelete` y
-   * el segundo writer de la columna. El TERCERO lo trae la ficha 320: `softDeleteViaApi`, el del
-   * canal por API key, que es el unico acotado por tienda.
+   * en las ordenes de `ids` que SI estuvieran borradas. Es el gemelo casi exacto de `softDelete`
+   * y el segundo writer de la columna. El TERCERO lo trae la ficha 320: `softDeleteViaApi`, el
+   * del canal por API key.
+   *
+   * DONDE DEJA DE SER GEMELO, desde la ficha 358: `restore` NO recibe `ownerId` y no acota por
+   * tienda. No es un olvido — recuperar sigue siendo del `maestro` y solo del `maestro`
+   * (`RecuperarOrdenService`, y el interruptor «Eliminadas» que es la unica forma de llegar a
+   * una orden borrada tampoco se le declara a nadie mas). El dia que se le abra a la tienda,
+   * este metodo necesita su `ownerId` igual que su gemelo, y por el mismo motivo.
    *
    * El `where` incluye `deletedAt: { not: null }` por la MISMA razon que el de `softDelete`
    * lleva `deletedAt: null`: hace la operacion idempotente y a prueba de carreras. Una orden
@@ -1981,8 +2007,13 @@ export interface IOrdenRepository {
     ownerId: string,
   ): Promise<OrdenParaEliminacionApi | null>;
   /**
-   * FICHA 320 (T2) — TERCER (y ultimo) writer de `deleted_at` en `orden`, y el unico ACOTADO POR
-   * TIENDA. Fija `deleted_at = now()` en UNA orden.
+   * FICHA 320 (T2) — TERCER (y ultimo) writer de `deleted_at` en `orden`. Fija
+   * `deleted_at = now()` en UNA orden.
+   *
+   * FICHA 358: dejo de ser «el unico acotado por tienda» —`softDelete` tambien lo esta cuando
+   * quien borra es una tienda— y sigue siendo el unico que lo exige SIEMPRE: por este canal no
+   * pasa ningun actor sin dueño, asi que aqui `ownerId` es `string` y no `string | null`. Los
+   * dos derivan ese dueño del MISMO sitio (`resolverAlcanceBorradoOrden`).
    *
    * LAS CUATRO CLAVES DEL `where` VAN JUNTAS EN LA MISMA SENTENCIA, que es lo que hace que no
    * exista ventana entre comprobar y escribir: `id` identifica, `tiendaId` es la frontera

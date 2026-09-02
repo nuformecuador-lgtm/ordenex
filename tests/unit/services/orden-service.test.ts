@@ -594,16 +594,83 @@ describe("listar / eliminable (eliminar orden)", () => {
     expect(r.items[0].eliminable).toBe(false);
   });
 
-  it("un rol que NO puede eliminar no recibe el campo", async () => {
+  it.each([
+    ["admin", { usuarioId: "a1", rol: "admin" } as Actor],
+    ["mensajero", { usuarioId: "msg1", rol: "mensajero" } as Actor],
+    // `adminSatelite` no entra: `listar` ni siquiera le responde `ok` (no esta en KNOWN_ROLES),
+    // asi que preguntarle por este campo seria medir otra cosa.
+  ])("%s: un rol que NO puede eliminar no recibe el campo", async (_nombre, actor) => {
+    // El `admin` es el que hay que vigilar: la feature nacio con maestro/admin y el humano lo
+    // estrecho el 2026-08-27. La ficha 358 abre el borrado a la TIENDA y no reabre esto.
     const { service } = conPagina([
       listItem({ id: "o1", estatusValue: "en_preparacion", tiendaId: "store1" }),
+    ]);
+
+    const r = await service.listar(PAGINA, actor);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.items[0].eliminable).toBeUndefined();
+  });
+
+  // ---------------------------------------------------------------------------------------
+  // FICHA 358 (2026-09-02) — EL CAMPO VIAJA TAMBIEN A LA TIENDA, Y SOLO EN LO SUYO.
+  //
+  // El defecto reportado era literalmente este campo: «no le aparece el checkbox para
+  // seleccionar y eliminar». La pantalla exige `=== true`, asi que un campo ausente no habilita
+  // nada — y a la tienda le llegaba ausente.
+  // ---------------------------------------------------------------------------------------
+  it("adminTienda: sobre una orden SUYA y en estado eliminable -> eliminable true", async () => {
+    const { service } = conPagina([
+      listItem({ id: "o1", estatusValue: "en_bodega_central", tiendaId: "store1" }),
     ]);
 
     const r = await service.listar(PAGINA, TIENDA);
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.items[0].eliminable).toBeUndefined();
+    expect(r.items[0].eliminable).toBe(true);
+  });
+
+  it("⭑ adminTienda: sobre una orden de OTRA tienda -> eliminable false", async () => {
+    // `construirWhere` ya acota el listado del adminTienda a sus ordenes, asi que en la practica
+    // esta fila no deberia llegar nunca. Se afirma igual: `marcarEliminable` no puede saber con
+    // que `where` se trajeron las filas, y el dia que un filtro nuevo o un bug de acotamiento le
+    // cuele una ajena, el campo diria «se puede borrar» sobre una orden que el servidor rechaza.
+    const { service } = conPagina([
+      listItem({ id: "o1", estatusValue: "en_bodega_central", tiendaId: "otra-tienda" }),
+    ]);
+
+    const r = await service.listar(PAGINA, TIENDA);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.items[0].eliminable).toBe(false);
+  });
+
+  it("adminTienda: su orden en un estado NO eliminable -> eliminable false", async () => {
+    // Cambia QUIEN puede, no QUE se puede borrar: el predicado de estado es el mismo.
+    const { service } = conPagina([
+      listItem({ id: "o1", estatusValue: "en_reparto", tiendaId: "store1" }),
+    ]);
+
+    const r = await service.listar(PAGINA, TIENDA);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.items[0].eliminable).toBe(false);
+  });
+
+  it("maestro: el recorte por tienda NO le aplica (orden de cualquier tienda -> true)", async () => {
+    const { service } = conPagina([
+      listItem({ id: "o1", estatusValue: "en_preparacion", tiendaId: "una-tienda-cualquiera" }),
+    ]);
+
+    const r = await service.listar(PAGINA, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.items[0].eliminable).toBe(true);
   });
 
   it("anotarlo NO cuesta ninguna consulta extra al historial", async () => {
