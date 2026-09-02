@@ -295,7 +295,16 @@ describe("OrdenesListado — inyección en el `filter` (R46, R58, R59)", () => {
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
 
     await waitFor(() => expect(listarOrdenesMock).toHaveBeenCalled());
-    expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
+    // FICHA 356: desde que la barra tiene el control de orden, la direccion por defecto
+    // («Mas recientes») viaja EXPLICITA en cada peticion. Lo que este caso vigila —que sin
+    // seleccion no se inyecte ninguna clave de FILTRO— sigue en pie: la igualdad es exacta,
+    // asi que una clave de mas que nadie eligio lo pone rojo igual que antes.
+    expect(listarOrdenesMock).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 25,
+      sortBy: "created_at",
+      sortDir: "desc",
+    });
     expect(ultimoFilter()).toBeUndefined();
   });
 
@@ -464,7 +473,16 @@ describe("OrdenesListado — catálogo no disponible (R64)", () => {
     expect(screen.getByRole("button", { name: /^Zona:/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^Provincia:/ })).toBeDisabled();
     expect(screen.getByRole("table", { name: "Órdenes" })).toBeInTheDocument();
-    expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
+    // FICHA 356: desde que la barra tiene el control de orden, la direccion por defecto
+    // («Mas recientes») viaja EXPLICITA en cada peticion. Lo que este caso vigila —que sin
+    // seleccion no se inyecte ninguna clave de FILTRO— sigue en pie: la igualdad es exacta,
+    // asi que una clave de mas que nadie eligio lo pone rojo igual que antes.
+    expect(listarOrdenesMock).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 25,
+      sortBy: "created_at",
+      sortDir: "desc",
+    });
   });
 
   it("R64: el filtro de ESTADO sigue operativo aunque falte el catálogo nuevo", async () => {

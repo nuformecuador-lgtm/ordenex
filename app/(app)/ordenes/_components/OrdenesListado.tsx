@@ -10,6 +10,7 @@ import {
   type FilterSelection,
 } from "@/components/shared/FilterComponent";
 import { BuscadorFiltros } from "@/components/shared/BuscadorFiltros";
+import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
 import { BLOQUEO_SIN_AVISO } from "@/components/shared/CeldaSeleccion";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
@@ -21,6 +22,7 @@ import type { Column } from "@/components/shared/DataTable";
 import { EscanerModal } from "@/components/shared/EscanerModal";
 import { BUSQUEDA_MIN_CHARS, type OrdenListItemDTO } from "@/lib/types/orden";
 import type { FechasDiaReparto } from "@/lib/utils/dia-reparto-textos";
+import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
 
 import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
@@ -53,6 +55,12 @@ import {
   CLAVE_ESTADO,
   PLACEHOLDER_BUSQUEDA,
 } from "./ordenes-filtros-def";
+import {
+  DIRECCION_ORDEN_INICIAL,
+  ETIQUETA_ORDEN_CREACION,
+  OPCIONES_ORDEN_CREACION,
+  ordenamientoCreacion,
+} from "./ordenamiento-creacion";
 import { seleccionAFilter } from "./seleccion-a-filter";
 import type { OrdenesFilterUI } from "./serializar-filtro";
 
@@ -691,6 +699,18 @@ export function OrdenesListado({
   // limpio; el estado de aquí se vacía en la misma acción.
   const [resetFiltros, setResetFiltros] = useState(0);
 
+  /**
+   * FICHA 356 — dirección del orden por fecha de creación. Arranca donde arranca el contrato
+   * (`DIRECCION_ORDEN_INICIAL`, «Más recientes»), así que entrar a la pantalla enseña
+   * exactamente el listado de siempre, con el control ya puesto en lo que se está viendo.
+   *
+   * Vive AQUÍ y no dentro de `OrdenesModule` por la misma razón que la selección de filtros:
+   * el control se pinta en la barra, la barra la monta esta superficie y el módulo recibe el
+   * resultado ya decidido.
+   */
+  const [sortDir, setSortDir] = useState<DireccionOrden>(DIRECCION_ORDEN_INICIAL);
+  const orden = useMemo(() => ordenamientoCreacion(sortDir), [sortDir]);
+
   /** Deja la barra como recién abierta: sin valores y sin filtros puestos. */
   function limpiarFiltros() {
     setSeleccionFiltros({});
@@ -698,6 +718,12 @@ export function OrdenesListado({
     // partida, y una barra que se queda con cuatro controles vacíos no lo es.
     setFiltrosActivos([]);
     setResetFiltros((n) => n + 1);
+    // EL ORDEN NO SE TOCA, y es deliberado (ficha 356). "Limpiar todo" existe para deshacer
+    // lo que ESCONDE filas: un filtro o una búsqueda. El orden no oculta ninguna —las mismas
+    // órdenes, en otra secuencia—, así que devolverlo a «Más recientes» sería mover algo que
+    // el usuario no pidió mover. Además el botón sólo aparece cuando hay filtros o búsqueda
+    // puestos: si resetear el orden fuera parte de "limpiar", quien sólo cambió el orden no
+    // tendría forma de deshacerlo — el control, que sigue a la vista, ya es esa forma.
   }
 
   // Ids marcados en el filtro de estado. Vacío = sin filtro (todas las órdenes). Ya no
@@ -1023,6 +1049,29 @@ export function OrdenesListado({
               Object.keys(seleccionFiltros).length > 0
             }
           >
+            {/* FICHA 356 — el control de ORDEN, dentro de la misma barra y SIEMPRE a la
+                vista. Es lo que faltaba: el backend sabía ordenar desde la 352 y no había
+                dónde pedirlo («no veo un botón con el cual organizar los datos de las tablas
+                por su fecha de creación»).
+
+                Va en la barra y no en la cabecera de la columna «Fecha de creación» porque
+                esa columna es la 17.ª de 18: con scroll horizontal está fuera de pantalla
+                casi siempre, y en móvil siempre. Un control que hay que buscar arrastrando la
+                tabla reproduce el problema que estamos arreglando. La barra, en cambio, es la
+                referencia que el humano señaló para «cómo deben verse y comportarse las
+                cosas».
+
+                Es el PRIMER hijo, o sea el extremo izquierdo de la fila y delante de los
+                filtros que se vayan pidiendo: un sitio fijo, que no baila según qué filtros
+                haya puestos. Y es `SegmentedToggle`, el mismo conmutador del portal del
+                mensajero y de cierres, con el alto por defecto (`h-8`) que comparten el campo
+                de búsqueda y el botón de descarga de esta misma línea. */}
+            <SegmentedToggle
+              ariaLabel={ETIQUETA_ORDEN_CREACION}
+              options={OPCIONES_ORDEN_CREACION}
+              valor={sortDir}
+              onChange={setSortDir}
+            />
             {filtrosMontados.length > 0 ? (
               <FilterComponent
                 key={resetFiltros}
@@ -1033,6 +1082,7 @@ export function OrdenesListado({
           </BuscadorFiltros>
         }
         filter={filter}
+        orden={orden}
         columns={columns}
         mostrarHistorial={mostrarHistorial}
         resetSeleccion={resetSeleccion}

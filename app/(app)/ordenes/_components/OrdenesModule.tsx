@@ -18,8 +18,13 @@ import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { ordenesConfig } from "@/lib/config/ordenes";
 import { listarOrdenes, listarOrdenesCompleto } from "@/lib/actions/ordenes";
-import type { OrdenListItemDTO } from "@/lib/types/orden";
+import type { OrdenListItemDTO, SortField } from "@/lib/types/orden";
+import {
+  claveDeOrden,
+  type OrdenamientoListado,
+} from "@/lib/types/ordenamiento-listado";
 
+import { NOTA_PRIORIDAD } from "./ordenamiento-creacion";
 import { ordenesColumns } from "./ordenes-columns";
 import {
   AMBITO_DESCARGA_ORDENES,
@@ -61,12 +66,23 @@ async function ordenesFetcher(
   page: number,
   pageSize: number,
   filter?: OrdenesFilterUI,
+  orden?: OrdenamientoListado<SortField>,
 ): Promise<OrdenesPageData> {
   // Feature 63/C2 (R15/R19): con `filter` se inyecta el `status_id` a la action
   // (whitelist server-side -> where.estatusId). Feature 144: el mismo `filter`
   // transporta zona/tienda/geografía/tiempo (misma whitelist). Sin `filter`, el
   // input es idéntico al previo (R10/R45, sin regresión).
-  const res = await listarOrdenes(filter ? { page, pageSize, filter } : { page, pageSize });
+  //
+  // FICHA 356: `orden` viaja igual de opaco. Sin la prop no se manda NADA de ordenamiento y
+  // el servidor aplica su default (`created_at desc`), que es exactamente la petición previa
+  // a esta ficha — por eso las superficies que no ofrecen el control (el listado plano del
+  // mensajero y del adminSatélite, el dashboard del adminTienda) no cambian ni una clave.
+  const res = await listarOrdenes({
+    page,
+    pageSize,
+    ...(filter ? { filter } : {}),
+    ...(orden ?? {}),
+  });
   if (res.status !== "ok") throw new Error("list_failed");
   // items incluyen tiendaNombre; total viene del backend (R25).
   return { items: res.items, total: res.total, pageSize: res.pageSize };
@@ -121,6 +137,7 @@ export function OrdenesModule({
   puedeCargarMasiva = false,
   mostrarHistorial = false,
   filter,
+  orden,
   selectable = false,
   bloqueoSeleccion,
   acciones,
@@ -152,6 +169,19 @@ export function OrdenesModule({
    * sigue siendo opaca y entra en la key de caché como cualquier otra.
    */
   filter?: OrdenesFilterUI;
+  /**
+   * FICHA 356 — el ordenamiento VIGENTE del listado (`{ sortBy, sortDir }` del contrato de
+   * `lib/types/ordenamiento-listado`). Quien lo posee es la superficie de arriba, que es
+   * quien monta el control; aquí sólo se transporta a la petición y —esto es lo importante—
+   * entra en la key de caché y reinicia la paginación.
+   *
+   * OPCIONAL Y SIN DEFAULT A PROPÓSITO. Ausente significa «esta superficie no ofrece elegir
+   * el orden»: no se manda ningún parámetro y decide el default del servidor. Ponerle aquí
+   * un `= { sortBy: "created_at", sortDir: "desc" }` haría viajar dos claves nuevas en
+   * pantallas que nadie tocó, y duplicaría en el navegador un default que ya vive —una sola
+   * vez— en `listarOrdenesSchema`.
+   */
+  orden?: OrdenamientoListado<SortField>;
   /**
    * Habilita la columna de checkbox por fila (selección por lote, solo maestro).
    *
@@ -274,12 +304,30 @@ export function OrdenesModule({
   // comparten caché en vez de refetchear en cada render.
   const filterKey = serializarFiltro(filter);
 
+  /**
+   * FICHA 356 — EL ORDEN, EN LA KEY. Es el punto que hace que el control funcione.
+   *
+   * Dos peticiones que sólo se diferencian en el orden son DOS respuestas distintas, y para
+   * SWR la key es la identidad del dato. Sin este escalar, pedir «Más antiguas» encontraría
+   * en caché la respuesta de «Más recientes», no volvería a consultar y la tabla se quedaría
+   * exactamente igual: el control puesto y las filas sin moverse. Es un fallo MUDO —ni un
+   * error, ni un hueco, ni un test rojo—, que es la familia más cara de este repo.
+   *
+   * `claveDeOrden` es la función del contrato (352) y no una plantilla escrita a mano aquí:
+   * incluye `sortBy` además de la dirección, así que el día que el control ordene por guía la
+   * caché se separa sola.
+   *
+   * Sin la prop la contribución es la cadena vacía, o sea la key de siempre: las superficies
+   * que no ofrecen el control conservan su caché tal cual.
+   */
+  const claveOrden = orden ? claveDeOrden(orden) : "";
+
   // Feature 169/R40: término de búsqueda VIGENTE, si lo hay. Viaja como escalar
   // (`seleccion-a-filter.ts`); un valor de otra forma se ignora en vez de pintarse.
   const terminoBuscado = typeof filter?.q === "string" ? filter.q : undefined;
   const { data, error, isLoading } = useSWR(
-    ["ordenes:list", filterKey, page, pageSize],
-    () => ordenesFetcher(page, pageSize, filter),
+    ["ordenes:list", filterKey, claveOrden, page, pageSize],
+    () => ordenesFetcher(page, pageSize, filter, orden),
   );
 
   // Al cambiar CUALQUIER filtro, la página actual puede no existir en el nuevo
@@ -291,6 +339,28 @@ export function OrdenesModule({
     setFilterKeyPrevio(filterKey);
     setPage(1);
     setSeleccion(new Map());
+  }
+
+  /**
+   * FICHA 356 — cambiar el ORDEN vuelve a la página 1. Mismo patrón de "ajustar estado
+   * durante el render" que el reset por filtro, y por el mismo motivo: sin efecto ni
+   * parpadeo intermedio.
+   *
+   * La página N de un orden NO es la página N del contrario: quien está en la 7 mirando las
+   * más recientes y pide las más antiguas se quedaría en un tramo arbitrario del conjunto
+   * dado la vuelta —ni el principio ni el final—, que es todavía peor que un resultado vacío,
+   * porque parece un listado legítimo.
+   *
+   * La SELECCIÓN, en cambio, NO se limpia, y la diferencia con el reset por filtro es
+   * deliberada: allí las filas marcadas dejan de pertenecer al conjunto (por eso el motivo
+   * escrito es «ya no están a la vista»); aquí el conjunto es el MISMO y sólo se reparte
+   * distinto entre páginas. La selección es acumulada entre páginas por diseño, así que
+   * vaciarla al reordenar tiraría un trabajo que sigue siendo válido.
+   */
+  const [claveOrdenPrevia, setClaveOrdenPrevia] = useState(claveOrden);
+  if (claveOrden !== claveOrdenPrevia) {
+    setClaveOrdenPrevia(claveOrden);
+    setPage(1);
   }
 
   // Ejecutada una acción por lote, la superficie incrementa `resetSeleccion` y aquí se
@@ -452,6 +522,26 @@ export function OrdenesModule({
     haySeleccion && accionesActivas.length > 0 && seleccionadas.length > 0;
 
   /**
+   * FICHA 356 — POR QUÉ LAS PRIORITARIAS SIGUEN ARRIBA AUNQUE PIDAS «MÁS ANTIGUAS».
+   *
+   * El servidor ordena `prioridad DESC` DELANTE del criterio elegido (feature 101/R6). Es
+   * correcto y no se toca —una orden prioritaria tiene que flotar a la primera página—, pero
+   * sin decirlo se lee como que el control no se aplicó, que es exactamente el reporte que
+   * esta ficha viene a arreglar.
+   *
+   * Se anuncia SÓLO cuando la página trae al menos una prioritaria (es el único caso en que
+   * la regla se ve) Y sólo donde se puede elegir el orden (`orden` presente): en una pantalla
+   * sin control, explicar la interacción entre un orden que no puedes cambiar y una marca que
+   * no ves es ruido. Va como `<caption>` de la tabla: sale justo encima de las filas, debajo
+   * de la barra de filtros, y es la pieza que HTML tiene para describir una tabla —así la
+   * explicación también existe para un lector de pantalla, no sólo para quien la ve—.
+   */
+  const notaPrioridad =
+    orden !== undefined && items.some((row) => row.prioridad === true)
+      ? NOTA_PRIORIDAD
+      : undefined;
+
+  /**
    * Feature 151 (design §7) — configuración de descarga del dataset completo.
    *
    * Se construye EN EL RENDER, no en un memo con dependencias: `obtenerFilas` cierra
@@ -476,9 +566,17 @@ export function OrdenesModule({
         // el MISMO adaptador que usan las otras 24 tablas: sin cambio funcional, y sin
         // dos caminos que puedan divergir. R34: una fila por orden del dataset
         // completo, no solo la página visible.
+        // FICHA 356: el orden vigente viaja también aquí, así que el archivo sale en el
+        // orden de la PANTALLA. Descargar «lo que estoy viendo» y abrirlo al revés es la
+        // misma sorpresa que el control ya evita en la tabla; el schema del modo completo
+        // hereda `sortBy`/`sortDir` del listado (`.omit({page,pageSize})`), no hay contrato
+        // nuevo que abrir.
         obtenerFilas: () =>
           filasDesdeResultado(
-            listarOrdenesCompleto(filter ? { filter } : {}),
+            listarOrdenesCompleto({
+              ...(filter ? { filter } : {}),
+              ...(orden ?? {}),
+            }),
             filaDescargaOrden,
           ),
       }
@@ -547,6 +645,7 @@ export function OrdenesModule({
         data={items}
         rowKey="id"
         ariaLabel="Órdenes"
+        caption={notaPrioridad}
         rowClassName={resaltarPrioridad ? resaltarFilaPrioridad : undefined}
         descarga={descarga}
         filtros={filtros}
