@@ -1,15 +1,13 @@
 import { describe, it, expect } from "vitest";
 
 import { construirFiltrosEntregas } from "@/app/(app)/_components/entregas-filtros-def";
-import {
-  CLAVE_ESTADO,
-  ESTADOS_SATELITE,
-  construirFiltrosSatelite,
-  seleccionAFiltroSatelite,
-} from "@/app/(app)/recepcion-satelite/_components/satelite-ordenes-filtros";
 import { construirFiltrosOrdenes } from "@/app/(app)/ordenes/_components/ordenes-filtros-def";
-import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
+
+// FICHA 355: aquí se importaban `CLAVE_ESTADO`, `ESTADOS_SATELITE`, `construirFiltrosSatelite`,
+// `seleccionAFiltroSatelite` y `ESTADOS_BODEGA_SATELITE` y NO se usaba ninguno: los casos de la
+// bodega satélite se mudaron y los imports se quedaron atrás. Se retiran —`ESTADOS_SATELITE` ya
+// ni existe— y los casos de esa barra viven en `satelite-filtro-estado.test.ts`.
 
 // Pedido humano (2026-08-19): la barra de filtros de órdenes NO puede ofrecerle a cada rol
 // una coordenada que su alcance ya tiene fijada.

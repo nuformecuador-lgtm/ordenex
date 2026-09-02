@@ -85,6 +85,13 @@ vi.mock("@/lib/actions/envio-devolucion-central", () => ({
 }));
 vi.mock("@/lib/actions/resolver-novedad", () => ({ recuperarABodega: vi.fn() }));
 
+// FICHA 355: el desplegable de ESTADO de esta pantalla ya no declara cinco opciones propias —
+// las toma del catálogo `order_status`, como el de `/ordenes`—, así que la lectura del catálogo
+// se dobla aquí. Sin el doble el control se monta SIN opciones y no hay nada que clicar.
+vi.mock("@/lib/actions/order-status", () => ({
+  listarOrderStatus: vi.fn(async () => listarOrderStatusOk()),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
@@ -112,6 +119,8 @@ vi.mock("@/hooks/useToast", () => ({
 // La cámara nunca se abre en estos tests; el mock evita cargar el módulo real.
 vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
 
+import { listarOrderStatusOk } from "@/tests/fixtures/order-status-catalogo";
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
 import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
@@ -479,6 +488,13 @@ afterEach(() => {
   cleanup();
 });
 
+// FICHA 355 — la etiqueta del estado en el desplegable ya NO es «Recibidas»: es la del catálogo
+// compartido (`ORDER_STATUS_LABELS.en_bodega_satelite`, «En bodega satélite»), la misma que la
+// central y la misma que el chip de la fila. Aquí el texto es el VEHÍCULO para llegar a la
+// opción, no el contrato del caso; lo que estos casos afirman es qué `estados` recibe el
+// servidor, y eso no cambia.
+const ETIQUETA_EN_BODEGA = ORDER_STATUS_LABELS.en_bodega_satelite;
+
 describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", () => {
   it("el usuario ve las mismas filas que antes en el PRIMER pintado (R44)", () => {
     // Sin `await` y a propósito: la página 1 ya viajó en la respuesta del Server Component.
@@ -665,7 +681,7 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     // Se descarga desde la PÁGINA 2 y con un filtro puesto, que es donde la degradación a
     // «descargá lo que se ves» es más fácil de no notar: el filtro de estado «Recibidas» deja
     // 30 órdenes en dos páginas, y la segunda trae CINCO.
-    await filtrarPor(user, "Estado", "Recibidas");
+    await filtrarPor(user, "Estado", ETIQUETA_EN_BODEGA);
     // El número de filas solo no distingue «la página llegó» de «la página está llegando»:
     // el `DataTable` en carga deja un `<tr>` con `role="status"` y filas skeleton, y hay
     // recuentos que cuadran a medio camino. Se exige además que no quede carga en vuelo.
@@ -715,7 +731,7 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     montar();
 
     // Con filtro puesto: 30 órdenes en dos páginas (25 + 5).
-    await filtrarPor(user, "Estado", "Recibidas");
+    await filtrarPor(user, "Estado", ETIQUETA_EN_BODEGA);
     await waitFor(() => {
       expect(remisionesVisibles()).toHaveLength(PAGE_SIZE);
       expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument();
@@ -740,7 +756,7 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     // El FILTRO sigue vigente: la barra lo dice y el servidor lo recibió en la última lectura.
     expect(
       screen.getByRole("button", { name: /^Estado:/ }).textContent,
-    ).toContain("Recibidas");
+    ).toContain(ETIQUETA_EN_BODEGA);
     expect(
       (paginadoMock.mock.calls.at(-1)?.[0] as { estados?: string[] })?.estados,
     ).toEqual(["en_bodega_satelite"]);
@@ -832,7 +848,7 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     const user = userEvent.setup();
     montar();
 
-    await filtrarPor(user, "Estado", "Recibidas");
+    await filtrarPor(user, "Estado", ETIQUETA_EN_BODEGA);
     await waitFor(() => {
       expect(remisionesVisibles()).toHaveLength(PAGE_SIZE);
       expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument();

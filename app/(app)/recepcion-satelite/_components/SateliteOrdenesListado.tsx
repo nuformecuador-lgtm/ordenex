@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,8 +21,10 @@ import {
 } from "@/components/shared/PrioridadResalte";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import { BUSQUEDA_MIN_CHARS } from "@/lib/types/orden";
+import { listarOrderStatus } from "@/lib/actions/order-status";
 import {
   CATALOGO_FILTROS_VACIO,
   CLAVE_BUSQUEDA,
@@ -41,6 +44,7 @@ import { COLUMNAS_DESCARGA_SATELITE } from "./satelite-descarga-columnas";
 import {
   CLAVE_ESTADO,
   construirFiltrosSatelite,
+  estadosFueraDelListado,
   etiquetaEstado,
   seleccionAFiltroSatelite,
   type FiltroBodegaSatelite,
@@ -80,6 +84,58 @@ const ESTADO_ASIGNABLE = "en_bodega_satelite";
 const ESTADO_POR_RECOGER = "por_recoger";
 const ESTADO_POR_DEVOLVER = "por_devolver";
 const ESTADO_DEVUELTA = "devuelta";
+
+/**
+ * FICHA 355 — el catálogo `order_status` para el desplegable de estado.
+ *
+ * MISMO fetcher que `/ordenes` (`OrdenesListado.catalogoFetcher`): la Server Action autoriza
+ * a «todos excepto mensajero», y el `adminSatelite` está dentro (feature 63/R2). Un fallo
+ * degrada a lista vacía —el control se declara sin opciones y la tabla sigue viva—, que es
+ * exactamente lo que hace la central.
+ */
+async function estatusFetcher(): Promise<OrderStatusLiteRow[]> {
+  const res = await listarOrderStatus();
+  if (res.status !== "ok") return [];
+  return res.estatus;
+}
+
+/**
+ * FICHA 355 — el vacío EXPLICADO.
+ *
+ * El desplegable ofrece el catálogo entero, así que se puede elegir un estado que este listado
+ * no alcanza nunca (`entregada`: la orden ya salió de la bodega). Ese vacío es correcto, pero
+ * una tabla en blanco con «Ninguna orden coincide con los filtros» se lee como un fallo. Aquí
+ * se dice QUÉ pasa y en qué estados, con las mismas etiquetas del desplegable.
+ *
+ * Recibe las ETIQUETAS ya resueltas —no los `value`— para que el texto no dependa del catálogo
+ * y se pueda probar y traducir en un solo sitio.
+ *
+ * DÓNDE SE PINTA, y es una decisión medida en el navegador, no una preferencia: va bajo el
+ * CONTADOR, no en el mensaje de vacío de la tabla. El vacío del `DataTable` vive en un `<td>`
+ * con `colSpan` dentro de un contenedor con scroll horizontal, y a 390 px esa celda queda fuera
+ * de la vista: la pantalla enseñaba una tabla en blanco sin ninguna explicación (comprobado con
+ * Playwright a 390×844). Bajo el contador se lee a las dos anchuras, y además cae dentro del
+ * `role="status"` de la barra, así que un lector de pantalla lo anuncia al cambiar el filtro.
+ *
+ * `todosFuera` distingue los dos casos: si TODO lo elegido es inalcanzable el resultado es cero
+ * y hay que decir por qué; si es una mezcla, el resultado es correcto y sólo hace falta avisar
+ * de que esa parte no aporta —o parecería un filtro ignorado en silencio—.
+ */
+export function mensajeEstadosFueraDelListado(
+  etiquetas: readonly string[],
+  todosFuera: boolean,
+): string {
+  const lista = etiquetas.map((e) => `«${e}»`).join(", ");
+  const uno = etiquetas.length === 1;
+  if (todosFuera) {
+    return uno
+      ? `Ninguna orden de esta bodega puede estar en ${lista}: ese estado no forma parte de este listado.`
+      : `Ninguna orden de esta bodega puede estar en ${lista}: esos estados no forman parte de este listado.`;
+  }
+  return uno
+    ? `${lista} no es un estado de este listado: no suma órdenes.`
+    : `${lista} no son estados de este listado: no suman órdenes.`;
+}
 
 export interface SateliteOrdenesListadoProps {
   /**
@@ -208,15 +264,34 @@ export function SateliteOrdenesListado({
   /** Contador de "Limpiar todo": `FilterComponent` es dueño de su selección, se remonta limpio. */
   const [resetFiltros, setResetFiltros] = useState(0);
 
+  /**
+   * FICHA 355 — el catálogo `order_status`, con la MISMA clave de SWR que `/ordenes`
+   * (`"order-status:catalogo"`): las dos pantallas leen exactamente lo mismo, así que
+   * compartir la entrada de caché es lo correcto y no una casualidad.
+   *
+   * Va aquí y no por props porque no es un dato sensible ni acotado por rol: es el catálogo
+   * de estados, legible por todo el personal interno (feature 63/R2). Mismo reparto que en
+   * la central, que también lo pide desde el cliente.
+   */
+  const { data: estatus } = useSWR<OrderStatusLiteRow[]>(
+    "order-status:catalogo",
+    estatusFetcher,
+  );
+
   // R46: las opciones salen del CATÁLOGO de la zona, no de la página visible. Elegir un
   // cantón tampoco borra los demás del desplegable: el catálogo no depende de la selección.
   // Sin catálogo, los controles se declaran igual pero deshabilitados (R64 de la 144).
+  //
+  // FICHA 355: el de ESTADO viene de OTRA fuente (`estatus`), así que ni se deshabilita con el
+  // catálogo geográfico caído ni espera a él — exactamente el reparto de `/ordenes`.
   const filtros = useMemo(
     () =>
-      construirFiltrosSatelite(catalogo ?? CATALOGO_FILTROS_VACIO).map((f) =>
+      construirFiltrosSatelite(catalogo ?? CATALOGO_FILTROS_VACIO, {
+        estatus,
+      }).map((f) =>
         catalogo === null && f.key !== CLAVE_ESTADO ? { ...f, disabled: true } : f,
       ),
-    [catalogo],
+    [catalogo, estatus],
   );
 
   /** Lo que ofrece el selector de la barra: cada filtro declarado, por su clave y su etiqueta. */
@@ -234,6 +309,25 @@ export function SateliteOrdenesListado({
   /** `true` si hay algún filtro marcado (cambia el contador y el mensaje de vacío). */
   const hayFiltros =
     termino !== "" || Object.values(seleccion).some((valores) => valores.length > 0);
+
+  /*
+   * FICHA 355 — los estados elegidos que este listado no alcanza, y qué se dice de ellos.
+   *
+   * Se derivan de la SELECCIÓN vigente, no de un estado paralelo: así lo que la pantalla
+   * explica y lo que se le pidió al servidor no pueden desincronizarse ni por un render.
+   *
+   * `soloEstadosFuera` separa los dos casos, que NO dicen lo mismo:
+   *   - MEZCLA (`entregada` + `devuelta`): el resultado es correcto —las devueltas—, pero sin
+   *     avisar parecería un filtro ignorado en silencio.
+   *   - SOLO INALCANZABLES (`entregada` a secas): el resultado es CERO y hay que decir por qué.
+   *
+   * Los dos se pintan en el MISMO sitio (bajo el contador) y con el mismo tamaño; sólo cambia
+   * el texto. El porqué de ese sitio está en `mensajeEstadosFueraDelListado`.
+   */
+  const estadosElegidos = seleccion[CLAVE_ESTADO] ?? [];
+  const etiquetasFuera = estadosFueraDelListado(seleccion).map(etiquetaEstado);
+  const soloEstadosFuera =
+    estadosElegidos.length > 0 && etiquetasFuera.length === estadosElegidos.length;
 
   function emitir(nueva: FilterSelection, terminoNuevo: string) {
     setSeleccionados(new Set());
@@ -503,6 +597,16 @@ export function SateliteOrdenesListado({
               entran en esta acción.
             </span>
           ) : null}
+          {/* FICHA 355 — la explicación de los estados que este listado no alcanza.
+              Misma forma y mismo tamaño que el aviso de Q-K7: una nota subordinada al
+              contador, no un tercer mensaje al mismo nivel. Y aquí y no en el vacío de la
+              tabla porque a 390 px aquella celda queda fuera de la vista (ver
+              `mensajeEstadosFueraDelListado`). */}
+          {etiquetasFuera.length > 0 ? (
+            <span className="mt-0.5 block text-xs">
+              {mensajeEstadosFueraDelListado(etiquetasFuera, soloEstadosFuera)}
+            </span>
+          ) : null}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {/* R48: cada acción se ofrece si hay órdenes de su estado SELECCIONADAS, y se
@@ -624,6 +728,9 @@ export function SateliteOrdenesListado({
         error={errorCarga}
         rowClassName={resaltarFilaPrioridad}
         emptyMessage={
+          /* FICHA 355: el vacío por un estado inalcanzable NO se explica aquí, sino bajo el
+             contador. Este `<td>` vive dentro del scroll horizontal de la tabla y a 390 px
+             queda fuera de la vista; ahí la explicación no llegaría a leerse nunca. */
           hayFiltros
             ? "Ninguna orden coincide con los filtros."
             : "No hay órdenes en la bodega."
