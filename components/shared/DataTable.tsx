@@ -517,7 +517,28 @@ export function DataTable<T>({
           quedar a la altura de los controles, que es su fila. */}
       {filtros || descarga ? (
         <div className="mb-2 flex flex-wrap items-start justify-end gap-2">
-          {filtros ? <div className="min-w-0 flex-1">{filtros}</div> : null}
+          {/* FICHA 356 — ANCHO MÍNIMO, y no `min-w-0`. Medido en Chromium a 390 px: con
+              `min-w-0` esta caja se quedaba en 180 px (342 de fila − 154 del control de
+              descarga − el hueco) mientras sus hijos NO pueden encogerse por debajo de su
+              contenido —el campo de búsqueda declara `min-w-[250px]`, el disparador de un
+              filtro `min-w-56` (224 px)—. El resultado no era una fila apretada: era una fila
+              que se DESBORDA hacia la derecha y se mete DEBAJO del botón de descarga. Estaba
+              pasando ya: el control de «Estado» puesto llegaba a x=248 dentro de una caja que
+              acaba en 204. No se veía porque caía en la segunda línea, sobre espacio vacío; el
+              conmutador de orden de la 356, que es el primer hijo, cayó en la MISMA línea que
+              la descarga y la tapó 93 px.
+
+              Con un mínimo, la fila hace lo que ya declaraba (`flex-wrap`): cuando no caben los
+              dos, la descarga baja a su propia línea y la barra se queda el ancho completo. El
+              mínimo es 18rem = 288 px, el ancho del hijo más ancho de esta barra, así que o hay
+              sitio de sobra o se parte la línea; no hay franja intermedia en la que algo se
+              solape. El `min()` lo acota al 100 % del contenedor para que una tabla montada en
+              una caja más estrecha que eso no herede un mínimo mayor que su propio ancho.
+
+              En escritorio no cambia NADA: a 1440 px la fila mide ~1130 y los dos caben. */}
+          {filtros ? (
+            <div className="min-w-[min(100%,18rem)] flex-1">{filtros}</div>
+          ) : null}
           {descarga ? (
             <DescargarDatasetButton
               titulo={descarga.titulo}
