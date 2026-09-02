@@ -24,24 +24,47 @@ import type { RangoPagina } from "@/lib/utils/rango-pagina";
 
 const RANGO: RangoPagina = { skip: 4, take: 2 };
 
-/** Fila tal como la devuelve el `select` de `WITH_RECEPCION_SATELITE`. */
+/**
+ * Fila tal como la devuelve el `include` de la hidratacion.
+ *
+ * FICHA 349: ese `include` es ahora el COMPARTIDO con `/ordenes` (`WITH_ESTATUS_Y_TIENDA`), no
+ * el `select` propio de quince campos que este modulo tenia. La fila del doble crece con el —es
+ * andamiaje: lo que este archivo afirma es el SQL, no la proyeccion—, y `montoCobrar` pasa a ser
+ * un `Prisma.Decimal` de verdad porque la serializacion compartida opera con `toFixed(2)` sobre
+ * el, que es lo que hace que el dinero no pierda un centimo por el camino.
+ */
 function filaPrisma(id: string) {
   return {
     id,
     numGuia: 1001,
     numRemision: `REM-${id}`,
+    estatusId: "st-1",
     destinatario: "Destinatario",
     telefonoDest: "88880000",
+    tiendaId: "t-1",
+    zonaId: "z-1",
+    provinciaId: "p-1",
+    cantonId: "c-1",
+    distritoId: "d-1",
     direccion: null,
     producto: "Caja",
-    montoCobrar: { toNumber: () => 1000 },
+    peso: null,
+    notas: null,
+    montoCobrar: new Prisma.Decimal(1000),
+    cobraComision: false,
+    mensajeroAsignadoId: null,
+    fechaReparto: null,
     prioridad: false,
-    estatus: { value: "en_bodega_satelite" },
-    tienda: { nombre: "Tienda" },
-    zona: { nombre: "Zona A" },
-    provincia: { nombre: "San José" },
-    canton: { nombre: "Escazú" },
-    distrito: { nombre: "San Rafael" },
+    createdAt: new Date("2026-03-01T12:00:00.000Z"),
+    updatedAt: new Date("2026-03-01T12:00:00.000Z"),
+    estatus: { id: "st-1", value: "en_bodega_satelite" },
+    tienda: { id: "t-1", nombre: "Tienda", email: "t@x.test", telefono: "88887777" },
+    zona: { id: "z-1", nombre: "Zona A", esCentral: false },
+    provincia: { id: "p-1", nombre: "San José" },
+    canton: { id: "c-1", nombre: "Escazú" },
+    distrito: { id: "d-1", nombre: "San Rafael", zonaEspecial: false },
+    mensajeroAsignado: null,
+    gestiones: [],
   };
 }
 

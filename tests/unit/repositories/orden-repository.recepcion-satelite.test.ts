@@ -64,23 +64,41 @@ describe("OrdenRepository.findUsuarioZonaId (R4/R5)", () => {
 });
 
 describe("OrdenRepository.findRecepcionSateliteByZona (R6/R8/R9)", () => {
+  // FICHA 349: la fila que devuelve Prisma es ahora la del `include` COMPARTIDO con `/ordenes`
+  // (`WITH_ESTATUS_Y_TIENDA`), no la del `select` propio que este modulo tenia. El doble la
+  // reproduce entera: los escalares de `orden` mas las siete relaciones y la gestion vigente.
   function ordenRow(overrides: Record<string, unknown> = {}) {
     return {
       id: "o1",
       numGuia: 10,
       numRemision: "R-1",
+      estatusId: "st-1",
       destinatario: "Ana",
       telefonoDest: "099",
+      tiendaId: "t-1",
+      zonaId: "z-limon",
+      provinciaId: "p-1",
+      cantonId: "c-1",
+      distritoId: "d-1",
       direccion: "calle 1",
       producto: "caja",
+      peso: null,
+      notas: null,
       montoCobrar: new Prisma.Decimal(25),
-      prioridad: false, // feature 101/R9: escalar de la fila que toRecepcionSateliteRow propaga
-      estatus: { value: "en_ruta_bodega_satelite" },
-      tienda: { nombre: "Tienda X" },
-      zona: { nombre: "Limon" },
-      provincia: { nombre: "Prov" },
-      canton: { nombre: "Canton" },
-      distrito: { nombre: "Distrito" },
+      cobraComision: false,
+      mensajeroAsignadoId: null,
+      fechaReparto: null,
+      prioridad: false, // feature 101/R9: escalar de la fila que la proyeccion propaga
+      createdAt: new Date("2026-03-01T12:00:00.000Z"),
+      updatedAt: new Date("2026-03-01T12:00:00.000Z"),
+      estatus: { id: "st-1", value: "en_ruta_bodega_satelite" },
+      tienda: { id: "t-1", nombre: "Tienda X", email: "tienda@x.test", telefono: "88887777" },
+      zona: { id: "z-limon", nombre: "Limon", esCentral: false },
+      provincia: { id: "p-1", nombre: "Prov" },
+      canton: { id: "c-1", nombre: "Canton" },
+      distrito: { id: "d-1", nombre: "Distrito", zonaEspecial: false },
+      mensajeroAsignado: null,
+      gestiones: [],
       ...overrides,
     };
   }
@@ -106,32 +124,69 @@ describe("OrdenRepository.findRecepcionSateliteByZona (R6/R8/R9)", () => {
     });
     // Feature 101/R7: sort prioridad-first en la QUERY (no en memoria), desempate por recencia.
     expect(arg.orderBy).toEqual([{ prioridad: "desc" }, { createdAt: "desc" }]);
-    // Feature 101/R9: el `select` pide `prioridad` explicitamente (es un select acotado).
-    expect(arg.select.prioridad).toBe(true);
-    // R9: y toRecepcionSateliteRow lo propaga a la fila (aqui la o1 es prioritaria).
+    // FICHA 349: ya no hay `select` propio. La proyeccion es el `include` COMPARTIDO con el
+    // listado de `/ordenes`, y lo que se afirma es justo eso: que trae las relaciones que la
+    // proyeccion vieja no traia (mensajero asignado y la gestion de reprogramacion vigente),
+    // que son las que alimentan las columnas «Mensajero» y «Liberada el».
+    expect(arg.select).toBeUndefined();
+    expect(arg.include.mensajeroAsignado).toBeDefined();
+    expect(arg.include.gestiones).toBeDefined();
+    // R9: y la proyeccion propaga `prioridad` a la fila (aqui la o1 es prioritaria).
+    //
+    // ⚠️ SE AÑADE AL LITERAL, NO SE RELAJA EL `toEqual`. Este literal ES el contrato de
+    // `RecepcionSateliteRow`: cambiarlo por `objectContaining` o por su propia fuente lo dejaria
+    // siempre verde y dejaria de avisar el dia que el repositorio se olvide de un campo. Con la
+    // ficha 349 el contrato CRECE —la fila es la de `/ordenes`— y lo que crece se escribe aqui.
     expect(rows[0]).toEqual({
       id: "o1",
       numGuia: 10,
       numRemision: "R-1",
+      estatusId: "st-1",
       estatusValue: "en_ruta_bodega_satelite",
       destinatario: "Ana",
       telefonoDest: "099",
-      direccion: "calle 1",
+      tiendaId: "t-1",
+      zonaId: "z-limon",
+      provinciaId: "p-1",
+      cantonId: "c-1",
+      distritoId: "d-1",
       producto: "caja",
+      peso: null,
+      notas: null,
+      mensajeroAsignadoId: null,
+      direccion: "calle 1",
       montoCobrar: 25,
+      cobraComision: false,
       tiendaNombre: "Tienda X",
       zonaNombre: "Limon",
+      zonaEsGam: false,
       provinciaNombre: "Prov",
       cantonNombre: "Canton",
       distritoNombre: "Distrito",
       prioridad: true, // feature 101/R9
+      // FICHA 349: los dos campos que la pantalla de la bodega no recibia y ahora si. El primero
+      // alimenta «Fecha de creación» y «Tiempo»; el segundo, «Liberada el» (sin gestion de
+      // reprogramacion vigente -> null, que es lo normal en esta bodega).
+      createdAt: new Date("2026-03-01T12:00:00.000Z"),
+      updatedAt: new Date("2026-03-01T12:00:00.000Z"),
+      fechaReprogramacion: null,
       // Feature 262/B8 (R16): el dia de reparto por orden, ya serializado a `YYYY-MM-DD`. Aqui la
       // fila sembrada no lo trae, asi que `toFechaISO` devuelve `null`.
-      //
-      // ⚠️ SE AÑADE AL LITERAL, NO SE RELAJA EL `toEqual`. Este literal ES el contrato de
-      // `RecepcionSateliteRow`: cambiarlo por `objectContaining` o por su propia fuente lo dejaria
-      // siempre verde y dejaria de avisar el dia que el repositorio se olvide de un campo.
       fechaRepartoISO: null,
+      // FICHA 349 — LO QUE **NO** ESTA EN ESTE LITERAL ES LA MITAD DEL CONTRATO: no hay
+      // `fleteConIva`, ni `comisionConIva`, ni `fleteOrigen`, y `relaciones.tienda` no lleva
+      // `email`, `telefono` ni una `tarifa` distinta de `null`. El `toEqual` es EXACTO, asi que
+      // si cualquiera de esos reapareciera este caso se pondria rojo — que es exactamente lo que
+      // se quiere de la mitad DATO del recorte por alcance (feature 260/R13).
+      relaciones: {
+        estatus: { id: "st-1", value: "en_ruta_bodega_satelite" },
+        tienda: { id: "t-1", nombre: "Tienda X", tarifa: null },
+        zona: { id: "z-limon", nombre: "Limon", esCentral: false },
+        provincia: { id: "p-1", nombre: "Prov" },
+        canton: { id: "c-1", nombre: "Canton" },
+        distrito: { id: "d-1", nombre: "Distrito" },
+        mensajeroAsignado: null,
+      },
     });
     // R9: estatusValue distingue "Recibidas"; distrito/monto nullable resueltos; prioridad default.
     expect(rows[1].estatusValue).toBe("en_bodega_satelite");

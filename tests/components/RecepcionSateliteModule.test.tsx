@@ -15,6 +15,7 @@ import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadg
 import { enviarACentral } from "@/lib/actions/envio-devolucion-central";
 import { recuperarABodega } from "@/lib/actions/resolver-novedad";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
 // Feature 33 (T12) — módulo de la bodega satélite. Se mockean la Server Action de
 // recepción, el toast, el router (refresh) y la lib de cámara (sin hardware en CI).
@@ -114,6 +115,8 @@ function makeOrden(
   over: Partial<RecepcionSateliteDTO> & { id: string },
 ): RecepcionSateliteDTO {
   return {
+    // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
+    ...CAMPOS_BASE_ORDEN,
     numGuia: 1001,
     numRemision: "REM-001",
     estatusValue: "en_ruta_bodega_satelite",

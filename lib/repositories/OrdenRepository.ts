@@ -25,6 +25,11 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { clavePar, elegirPorCascada, whereCascada } from "@/lib/utils/cascada-tarifa";
 import type { ParTarifa } from "@/lib/utils/cascada-tarifa";
 import type { OrdenDTO, OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
+// FICHA 349 — el recorte por alcance del listado de ordenes, en su modulo SIN dependencias.
+// La bodega satelite proyecta con `toListItemDTO` (la misma que `/ordenes`) y por tanto tiene
+// que retirar lo que un alcance de zona no puede ver, con la UNICA declaracion que existe de
+// esa lista (feature 260/R13/R43).
+import { recortarPorAlcance } from "@/lib/types/recorte-alcance-orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 import type {
@@ -892,33 +897,17 @@ function toManifiestoOrdenRow(row: OrdenManifiestoRow): ManifiestoOrdenRow {
   };
 }
 
-// Feature 33/R6/R8/R9 — proyeccion del modulo de la bodega satelite: los datos de
-// la orden + `estatus.value` (para partir "Por recibir"/"Recibidas") + los NOMBRES
-// (no IDs) de tienda/geografia via relaciones ya existentes (patron WITH_ETIQUETA).
-// `distrito` es la unica relacion opcional. No selecciona `deletedAt` ni internos;
-// el filtro `deletedAt: null` va en el `where` del findMany.
-const WITH_RECEPCION_SATELITE = {
-  select: {
-    id: true,
-    numGuia: true,
-    numRemision: true,
-    destinatario: true,
-    telefonoDest: true,
-    direccion: true,
-    producto: true,
-    montoCobrar: true,
-    prioridad: true, // feature 101/R9: se pide explicito (es un `select`) para el sort R7 + resalte R8
-    fechaReparto: true, // feature 262/B8 (R16): el dia por orden que la pantalla de correccion muestra antes de confirmar
-    estatus: { select: { value: true } },
-    tienda: { select: { nombre: true } },
-    zona: { select: { nombre: true } },
-    provincia: { select: { nombre: true } },
-    canton: { select: { nombre: true } },
-    distrito: { select: { nombre: true } },
-  },
-} as const;
-
-type OrdenRecepcionSateliteRow = Prisma.OrdenGetPayload<typeof WITH_RECEPCION_SATELITE>;
+// FICHA 349 (2026-09-01) — AQUI VIVIA `WITH_RECEPCION_SATELITE`, LA SEGUNDA PROYECCION.
+//
+// Era un `select` propio de quince columnas para el modulo de la bodega satelite, hermano
+// pobre de `WITH_ESTATUS_Y_TIENDA`. Dos proyecciones de la MISMA fila de `orden`, y ya
+// divergieron: la pantalla de `/ordenes` monta 19 columnas y la de la bodega montaba 12,
+// porque siete campos nunca se copiaron a esta segunda lista y no copiarlos no rompia nada.
+//
+// Se retira: las tres consultas del modulo satelite hidratan ahora con `WITH_ESTATUS_Y_TIENDA`
+// y proyectan con `toBodegaSateliteRow`, que envuelve la MISMA `toListItemDTO` del listado.
+// El `WHERE` no cambio ni una condicion; lo que se unifico es que columnas se leen y como se
+// serializan.
 
 /**
  * Feature 170 — FASE 2 (T K.1): lo unico que devuelve la consulta que ORDENA y recorta. El
@@ -1063,28 +1052,52 @@ function ordenBodegaSatelite(): Prisma.Sql {
     `;
 }
 
-// R6/R8/R9: serializa la fila a RecepcionSateliteRow. Resuelve los nombres
-// legibles, mapea Decimal montoCobrar -> number|null y deja distritoNombre null si
-// la orden no tiene distrito. NO expone deletedAt.
-function toRecepcionSateliteRow(row: OrdenRecepcionSateliteRow): RecepcionSateliteRow {
+/**
+ * FICHA 349 — LA PROYECCION DE LA BODEGA SATELITE, DERIVADA DE LA DEL LISTADO.
+ *
+ * Toma la fila que arma `toListItemDTO` —la MISMA funcion, el MISMO `include`, la MISMA
+ * derivacion de dinero que `/ordenes`— y hace sobre ella dos cosas, ninguna de las cuales es
+ * una segunda lista de campos:
+ *
+ *  1. **La RECORTA al alcance `zona`.** No es una decision que se tome aqui por fila: la
+ *     consulta de este modulo esta acotada SIEMPRE a UNA zona, la del `adminSatelite` que
+ *     pregunta, asi que su alcance es `zona` por construccion. Recortar en la capa de datos
+ *     —y no en el servicio— hace que ningun llamador pueda obtener los campos retirados, ni
+ *     por descuido ni a proposito. Cuales se retiran y por que: feature 260/R13, declarado en
+ *     `lib/types/recorte-alcance-orden.ts`. En una linea: flete, comision, la tarifa de la
+ *     tienda y su contacto NO viajan a un alcance de zona; `montoCobrar` si (R17).
+ *
+ *  2. **Le fija los nueve campos que `FilaBodegaSatelite` declara obligatorios.** No son datos
+ *     nuevos: `toListItemDTO` YA los envia todos —los manda como opcionales por el patron
+ *     aditivo de `OrdenListItemDTO`—, salvo los tres nombres de geografia, que alli viven solo
+ *     dentro de `relaciones` y aqui se copian tambien a la raiz porque es de donde los leen el
+ *     filtro de canton/distrito y el buscador de esta pantalla.
+ *
+ * **La tarifa no se resuelve.** Se pasa `null` a `toListItemDTO` a proposito, y no por ahorro:
+ * los dos importes que derivarian de ella (`fleteConIva`, `comisionConIva`) los retira el paso
+ * 1 acto seguido, asi que la cascada (tienda, zona) que `/ordenes` corre por pagina aqui no
+ * tendria a quien servir. Si algun dia el satelite pasa a ver esos importes, esto vuelve a ser
+ * `resolverTarifasDePagina` + `tarifaDe`, exactamente como en `findMany`.
+ */
+function toBodegaSateliteRow(row: OrdenListRow): RecepcionSateliteRow {
+  const base = recortarPorAlcance(toListItemDTO(row, null), "zona");
+  // `fleteOrigen` describe DE DONDE salio el importe de `fleteConIva`, y ese importe no viaja a
+  // este alcance. Dejarlo seria publicar una afirmacion sin referente —y ademas FALSA en el caso
+  // que el campo existe para señalar: con la tarifa sin resolver siempre diria "normal", incluso
+  // sobre un distrito marcado como zona especial sin pacto—. Se retira aqui, y no en
+  // `CAMPOS_SOLO_ALCANCE_GLOBAL`, porque no es una regla del alcance: es consecuencia de que
+  // ESTA proyeccion no resuelve la cascada de tarifa. Si algun dia la resuelve, esta linea sobra.
+  delete base.fleteOrigen;
   return {
-    id: row.id,
-    numGuia: row.numGuia,
-    numRemision: row.numRemision,
+    ...base,
     estatusValue: row.estatus.value,
-    destinatario: row.destinatario,
-    telefonoDest: row.telefonoDest,
     direccion: row.direccion,
-    producto: row.producto,
     montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
-    tiendaNombre: row.tienda.nombre,
     zonaNombre: row.zona.nombre,
     provinciaNombre: row.provincia.nombre,
     cantonNombre: row.canton.nombre,
     distritoNombre: row.distrito?.nombre ?? null,
-    prioridad: row.prioridad, // feature 101/R9: propaga el flag para el sort R7 + resalte R8
-    // Feature 262/B8 (R16/R17): el dia de reparto ya serializado a `YYYY-MM-DD`. El navegador no
-    // construye ninguna fecha; recibe el texto y lo pone en palabras con `fechaLegible`.
+    prioridad: row.prioridad,
     fechaRepartoISO: toFechaISO(row.fechaReparto),
   };
 }
@@ -3081,9 +3094,10 @@ export class OrdenRepository implements IOrdenRepository {
         estatus: { value: { in: estatusValues } },
       },
       orderBy: [{ prioridad: "desc" }, { createdAt: "desc" }], // R7: prioridad-first + recencia
-      ...WITH_RECEPCION_SATELITE,
+      // FICHA 349: la MISMA proyeccion que `/ordenes`, no una segunda.
+      ...WITH_ESTATUS_Y_TIENDA,
     });
-    return rows.map(toRecepcionSateliteRow);
+    return rows.map(toBodegaSateliteRow);
   }
 
   /**
@@ -3099,10 +3113,11 @@ export class OrdenRepository implements IOrdenRepository {
    * que ya usa `ChatConversacionRepository` cuando Prisma no puede normalizar en el WHERE:
    * `Prisma.sql` parametrizado, sin una sola interpolacion de texto.
    *
-   * **Se piden solo los `id`.** La proyeccion sigue siendo `WITH_RECEPCION_SATELITE` +
-   * `toRecepcionSateliteRow`, la MISMA del listado sin paginar: reescribirla a mano en SQL
-   * duplicaria quince columnas y sus conversiones (Decimal, nombres de relacion) para que
-   * divergieran a la primera.
+   * **Se piden solo los `id`.** La proyeccion la hace despues `hidratarSatelite`, con la MISMA
+   * `WITH_ESTATUS_Y_TIENDA` + `toListItemDTO` de `/ordenes` (ficha 349): reescribirla a mano en
+   * SQL duplicaria las columnas y sus conversiones (Decimal, nombres de relacion) para que
+   * divergieran a la primera — que es exactamente lo que le paso a la proyeccion propia que
+   * este modulo tuvo hasta la 349.
    *
    * **El total viaja en la misma consulta** (`COUNT(*) OVER ()`). No es un ahorro: es que asi
    * la pagina y el conteo NO PUEDEN mirar conjuntos distintos, que es la divergencia que R41
@@ -3159,7 +3174,7 @@ export class OrdenRepository implements IOrdenRepository {
    * dos capas y en dos lenguajes (Q-K4).
    *
    * **Dos consultas**, las mismas que la pagina: la que ordena y la que hidrata. La proyeccion
-   * sigue siendo `WITH_RECEPCION_SATELITE` por el mismo motivo que alli —reescribir quince
+   * sigue siendo la compartida con `/ordenes` por el mismo motivo que alli —reescribir esas
    * columnas en SQL crudo es garantizar que diverjan—. El tope de filas NO se evalua aqui: es
    * una regla de negocio y vive en el servicio (R6).
    */
@@ -3228,12 +3243,14 @@ export class OrdenRepository implements IOrdenRepository {
   ): Promise<RecepcionSateliteRow[]> {
     const filas = await this.prisma.orden.findMany({
       where: { id: { in: ids }, zonaId, deletedAt: null },
-      ...WITH_RECEPCION_SATELITE,
+      // FICHA 349: el MISMO `include` del listado de `/ordenes`. El `where` no se toca — es el
+      // acotamiento, y compartir la proyeccion no puede ensancharlo.
+      ...WITH_ESTATUS_Y_TIENDA,
     });
     const porId = new Map(filas.map((fila) => [fila.id, fila]));
     return ids.flatMap((id) => {
       const fila = porId.get(id);
-      return fila === undefined ? [] : [toRecepcionSateliteRow(fila)];
+      return fila === undefined ? [] : [toBodegaSateliteRow(fila)];
     });
   }
 

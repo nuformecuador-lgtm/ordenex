@@ -1,5 +1,11 @@
 import type { GestionCausaDevolucion } from "@prisma/client";
-import type { OrdenDTO, OrdenListItemDTO, SortField, SortDir } from "@/lib/types/orden";
+import type {
+  FilaBodegaSatelite,
+  OrdenDTO,
+  OrdenListItemDTO,
+  SortField,
+  SortDir,
+} from "@/lib/types/orden";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
@@ -751,41 +757,19 @@ export interface ManifiestoOrdenRow {
   mensajeroAsignadoNombre: string | null;
 }
 
-// Feature 33 — fila proyectada para el modulo de la bodega satelite ("Mis
-// asignaciones" del adminSatelite, R6/R8/R9). Trae los nombres legibles de
-// tienda/geografia (no IDs, patron EtiquetaRow) y `montoCobrar` ya como
-// number|null (Decimal->number). `estatusValue` distingue "Por recibir"
-// (en_ruta_bodega_satelite) de "Recibidas" (en_bodega_satelite); el service parte
-// en grupos. NUNCA incluye `deletedAt`: el repo YA filtra `deletedAt: null`.
-// `distritoNombre` es nullable (la orden puede no tener distrito).
-export interface RecepcionSateliteRow {
-  id: string;
-  numGuia: number | null;
-  numRemision: string;
-  estatusValue: string; // en_ruta_bodega_satelite | en_bodega_satelite
-  destinatario: string;
-  telefonoDest: string;
-  direccion: string | null;
-  producto: string;
-  montoCobrar: number | null;
-  tiendaNombre: string;
-  zonaNombre: string;
-  provinciaNombre: string;
-  cantonNombre: string;
-  distritoNombre: string | null;
-  // Feature 101/R9: flag de reasignacion prioritaria de la orden (contrato interno repo->
-  // service, siempre presente: el `select` de WITH_RECEPCION_SATELITE lo pide explicito).
-  // Alimenta el sort prioridad-first del grupo "Recibidas" (R7) y el resalte (R8).
-  prioridad: boolean;
-  /**
-   * Feature 262 (B8, R16): dia de reparto de la orden, `YYYY-MM-DD` YA SERIALIZADO. `null` = sin
-   * dia. Lo consume la pantalla de correccion del listado satelite, que necesita el MISMO dato que
-   * la de `/ordenes` — el `adminSatelite` es una de las dos bodegas que ELIGEN el dia al asignar
-   * (D1), asi que tiene que poder ver cual eligio antes de corregirlo. Nunca un `Date`: el
-   * navegador no construye fechas (R17).
-   */
-  fechaRepartoISO: string | null;
-}
+/**
+ * FICHA 349 (2026-09-01) — LA FILA DE LA BODEGA SATELITE **ES** LA DEL LISTADO DE ORDENES.
+ *
+ * Hasta hoy era una interfaz PARALELA de quince campos, con su propio `select` y su propio
+ * mapeo. Dos listas de campos para la MISMA fila, y ya divergieron: `/ordenes` mostraba 19
+ * columnas y la bodega 12. Ahora es un alias de `FilaBodegaSatelite` (`lib/types/orden.ts`),
+ * que se declara AL LADO de `OrdenListItemDTO` —del que deriva— para que no se puedan mover
+ * una sin ver la otra. El porque entero esta escrito alli.
+ *
+ * Lo que NO cambia es el `WHERE`: la proyeccion se comparte, el acotamiento por zona del actor
+ * sigue siendo el de siempre. NUNCA incluye `deletedAt`: el repo YA filtra `deletedAt: null`.
+ */
+export type RecepcionSateliteRow = FilaBodegaSatelite;
 
 /**
  * Feature 170 — FASE 2 (T K.1, R44/R45) — el conjunto del listado «Órdenes de la bodega»
