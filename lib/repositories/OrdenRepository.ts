@@ -18,6 +18,9 @@ import {
 // de Costa Rica que necesita. `created_at` de un `vencido` va UN DIA por delante de la jornada.
 import { derivarJornada } from "@/lib/utils/jornada-cierre";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
+// FICHA 352 — el constructor del orden TOTAL: exige el desempate como argumento, para que no se
+// pueda armar un `orderBy` de listado paginado sin el. Ver `DESEMPATE_UNICO` mas abajo.
+import { ordenTotal } from "@/lib/types/ordenamiento-listado";
 import { ESTADOS_USUARIO_NO_ASIGNABLES } from "@/lib/constants/estado-usuario-asignable";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 // Feature 274 — LA REGLA de resolucion de tarifa vive en un modulo PURO, compartido con el
@@ -444,6 +447,37 @@ const SORT_COLUMN: Record<string, "createdAt" | "numGuia" | "numRemision"> = {
   num_guia: "numGuia",
   num_remision: "numRemision",
 };
+
+/**
+ * FICHA 352 — EL DESEMPATE QUE HACE TOTAL EL ORDEN DEL LISTADO.
+ *
+ * Ninguna de las tres columnas ordenables es unica sobre las filas que se listan:
+ *   · `created_at` REPITE en masa — las ordenes nacen por carga masiva, en un `createMany`
+ *     dentro de una transaccion, y todas toman el `CURRENT_TIMESTAMP` de esa transaccion.
+ *     Medido en la base local el 2026-09-01: 67 ordenes, y grupos de 23 y 22 filas con el
+ *     MISMO instante al milisegundo.
+ *   · `num_guia` es unica pero NULLABLE, y toda orden que aun no tiene guia empata con las
+ *     demas sin guia.
+ *   · `num_remision` solo es unica POR TIENDA y solo entre las vivas (indice parcial de la
+ *     294): dos tiendas repiten numero sin problema.
+ *
+ * Sin desempate, el orden de las filas empatadas lo decide el plan de ejecucion, y Postgres no
+ * promete que sea el mismo para `OFFSET 0` que para `OFFSET 25`. La consecuencia es concreta y
+ * la ve el usuario: una orden sale DOS VECES (en la pagina 1 y en la 2) y otra no sale NUNCA.
+ *
+ * `id` y no `num_guia`: es la PK, es NOT NULL y es unica sobre TODAS las filas, incluidas las
+ * que no tienen guia. Un desempate «casi unico» no cierra el agujero, solo lo vuelve mas
+ * dificil de reproducir.
+ *
+ * La direccion es FIJA (`asc`) y no acompaña a `sortDir` a proposito: el id es un uuid v4, su
+ * orden no significa nada, y hacerlo cambiar de sentido sugeriria que si. Lo que la paginacion
+ * necesita no es que el desempate signifique algo, sino que sea el MISMO en las dos consultas.
+ *
+ * No pide indice ni migracion: el `orderBy` ya empezaba por `prioridad`, asi que el plan nunca
+ * pudo servirse del btree de `created_at` y añadir una tercera clave no cambia esa clase de
+ * plan.
+ */
+const DESEMPATE_UNICO: Prisma.OrdenOrderByWithRelationInput = { id: "asc" };
 
 // Fila de orden con el `value` del estatus incluido (para OrdenDTO.estatusValue).
 type OrdenRow = Prisma.OrdenGetPayload<{
@@ -1273,10 +1307,14 @@ export class OrdenRepository implements IOrdenRepository {
     // al listado pero INOCUO fuera de `en_bodega_central`: solo ahi (y en bodega satelite) hay
     // `prioridad = true`; en el resto el desempate booleano cae al criterio vigente sin
     // alterar el orden observable (R10, sin reordenar superficies ajenas).
-    const orderBy: Prisma.OrdenOrderByWithRelationInput[] = [
-      { prioridad: "desc" },
-      { [SORT_COLUMN[params.sortBy]]: params.sortDir },
-    ];
+    //
+    // FICHA 352: la lista se cierra con `DESEMPATE_UNICO`, y se cierra pasando por `ordenTotal`
+    // —que exige el desempate como argumento— para que la proxima tabla que se sume al contrato
+    // no pueda olvidarlo sin que el compilador se lo diga. El porque esta en la constante.
+    const orderBy: Prisma.OrdenOrderByWithRelationInput[] = ordenTotal(
+      [{ prioridad: "desc" }, { [SORT_COLUMN[params.sortBy]]: params.sortDir }],
+      DESEMPATE_UNICO,
+    );
 
     const [items, total] = await Promise.all([
       this.prisma.orden.findMany({
