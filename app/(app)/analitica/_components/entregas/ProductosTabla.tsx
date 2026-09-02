@@ -71,6 +71,7 @@ import { filasLocales } from "@/components/shared/descarga-resultado";
 import { Pagination } from "@/components/shared/Pagination";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { money } from "@/lib/config/moneda";
+import { cn } from "@/lib/utils";
 import type { FilaProductoDTO, ResultadoConteoProductos } from "@/lib/types/conteo-productos";
 
 import {
@@ -431,11 +432,36 @@ function Cifra({ children }: { readonly children: string }) {
 }
 
 /**
- * Una LINEA DE CONTEXTO bajo una cifra: mas pequeña, apagada y —esto es lo importante— con
- * permiso para partirse en varias lineas. Las cifras nunca se parten; los rotulos si.
+ * Una LINEA DE CONTEXTO bajo una cifra: mas pequeña y apagada.
+ *
+ * FICHA 354 — Y AHORA CON DOS FORMAS, porque la 348 solo tenia una y ahi estaba el defecto.
+ *
+ * `unaLinea` es la diferencia entre una linea de contexto que es una FRASE («Pendiente de
+ * cierre: ₡23.798 (2 órdenes)») y una que es una ENUMERACION corta («Devueltas 1 ·
+ * reprogramadas 2»). Solo la primera pide el trato de frase.
+ *
+ * ⚠ POR QUE NO ES `wrap-anywhere` AL REVES. `whitespace-nowrap` NO recorta, NO esconde y NO
+ * abrevia: sube el `min-content` de la columna de su palabra mas larga a LA FRASE ENTERA, y a
+ * partir de ahi el ancho lo decide el dato. Es lo contrario de `wrap-anywhere` —que la 348
+ * quito de aqui al lado— y por eso no reintroduce su defecto: aquel BAJABA el `min-content` a
+ * un caracter y autorizaba a partir palabras.
+ *
+ * ⚠ NO SE APLICA A `Contexto` ENTERO A PROPOSITO. La composicion de «Otros resultados» tambien
+ * es un `Contexto` y crece con el catalogo de desenlaces; forzarla a una linea la convertiria
+ * en una columna de 300 px que nadie ha pedido. Se declara donde la frase lo justifica.
  */
-function Contexto({ children }: { readonly children: ReactNode }) {
-  return <span className="text-xs text-muted-foreground">{children}</span>;
+function Contexto({
+  children,
+  unaLinea = false,
+}: {
+  readonly children: ReactNode;
+  readonly unaLinea?: boolean;
+}) {
+  return (
+    <span className={cn("text-xs text-muted-foreground", unaLinea && "whitespace-nowrap")}>
+      {children}
+    </span>
+  );
 }
 
 /**
@@ -499,6 +525,43 @@ function CeldaOtrosResultados({ fila, cifra }: { readonly fila: FilaProductoDTO;
  *
  * La linea de pendiente solo aparece cuando hay algo pendiente: un «Pendiente de cierre: ₡0 (0
  * órdenes)» en cada fila seria ruido en la fila donde todo esta liquidado, que es el caso bueno.
+ *
+ * ─── FICHA 354 · UN DATO POR RENGLON, Y EL RENGLON LO PAGA LA COLUMNA ──────────────────────
+ *
+ * LO QUE LA 348 NO ARREGLO, con el numero que lo dice. La 348 midio «cero palabras partidas» y
+ * era verdad, pero respondia a otra pregunta: ninguna PALABRA se partia y la celda seguia
+ * ilegible. Medido en Chromium a 1440 px, con la columna «Tienda» montada y el caso de la
+ * captura del humano (`₡35.697` · 4 de 33 · pendiente `₡23.798` de 2 ordenes), esta celda
+ * ocupaba **OCHO RENGLONES** para TRES datos:
+ *
+ *     ₡35.697 / Con otro / producto: 4 / de 33 / Pendiente / de cierre: / ₡23.798 (2 / órdenes)
+ *
+ * LA CAUSA, MEDIDA PIEZA A PIEZA (`min-content` y `max-content` de cada linea, clonando el nodo
+ * real con su propia fuente):
+ *
+ * | pieza                                      | palabra mas ancha | FRASE entera |
+ * | ------------------------------------------ | ----------------- | ------------ |
+ * | `₡35.697`                                  |  65 px            |  65 px       |
+ * | `Con otro producto: 4 de 33`               |  58 px            | **161 px**   |
+ * | `Pendiente de cierre: ₡23.798 (2 órdenes)` |  61 px            | **244 px**   |
+ *
+ * El minimo de la 348 (6,5rem = 104 px) se calculo sobre LA PALABRA MAS LARGA, y en esta
+ * columna la palabra mas larga es la cifra (65 px). Las lineas de apoyo no son palabras, son
+ * FRASES: piden 161 y 244. Con 104 px de columna el navegador hacia lo unico que podia —
+ * plegarlas—, y ninguna guardia lo veia porque ninguna palabra se rompia por dentro.
+ *
+ * EL ARREGLO SON DOS PIEZAS QUE SE SOSTIENEN LA UNA A LA OTRA:
+ *
+ *  1. **`unaLinea` en las dos lineas de apoyo.** Sube el `min-content` de la columna de la
+ *     palabra a la FRASE, y lo hace SOLO: el dia que el importe pendiente tenga dos digitos mas
+ *     o las ordenes pasen de 999, la columna crece con el dato sin que nadie edite un numero.
+ *     Es la garantia; el minimo declarado es el suelo.
+ *  2. **`MIN_DINERO.recaudado` medido sobre la frase** (ver la tabla de minimos mas abajo).
+ *
+ * ⚠ NO ES UN RECORTE. `whitespace-nowrap` no esconde ni una cifra —R63 sigue vigente y su
+ * guardia tambien—: lo que hace es prohibirle a la columna ser mas estrecha que su frase. El
+ * precio esta medido y se paga a sabiendas: el desborde horizontal de la tabla crece, que es
+ * exactamente el canje que este modulo ya tiene decidido («mejor deslizar que estrujar»).
  */
 function CeldaRecaudado({ fila }: { readonly fila: FilaProductoDTO }) {
   const dinero = fila.dinero;
@@ -506,9 +569,11 @@ function CeldaRecaudado({ fila }: { readonly fila: FilaProductoDTO }) {
   return (
     <span className="flex flex-col items-end gap-0.5">
       <Cifra>{money(importeDeFila(fila, "recaudado"))}</Cifra>
-      <Contexto>{textoAcompanadas(fila.ordenesAcompanadas, fila.ordenes)}</Contexto>
+      <Contexto unaLinea>{textoAcompanadas(fila.ordenesAcompanadas, fila.ordenes)}</Contexto>
       {pendiente && dinero !== null ? (
-        <Contexto>{textoPendiente(dinero.pendiente.recaudado, dinero.pendiente.ordenes)}</Contexto>
+        <Contexto unaLinea>
+          {textoPendiente(dinero.pendiente.recaudado, dinero.pendiente.ordenes)}
+        </Contexto>
       ) : null}
     </span>
   );
@@ -536,7 +601,7 @@ function celdaDinero(fila: FilaProductoDTO, id: IdDinero): ReactNode {
  * | -------------------- | ---------------------------- | --- | -------- | --------- |
  * | Tienda               | `Distribuidora` (dato)       |  90 |   114    | **8rem**  |
  * | Producto             | `PRESENTACION` (dato)        | 102 |   126    | 14rem     |
- * | Recaudado            | `Recaudado` (rotulo)         |  71 |    95    | **6.5rem**|
+ * | Recaudado            | `Recaudado` (rotulo)         |  71 |    95    | 6.5rem ⚠  |
  * | Cobró Ordenex        | `₡393.433` (cifra)           |  65 |    89    | **6rem**  |
  * | Para la tienda       | `₡393.433` (cifra)           |  65 |    89    | **6rem**  |
  * | Unidades             | `Unidades` (rotulo)          |  59 |    83    | **5.5rem**|
@@ -548,6 +613,9 @@ function celdaDinero(fila: FilaProductoDTO, id: IdDinero): ReactNode {
  * | Efectividad          | `Efectividad` (rotulo)       |  70 |    94    | **6rem**  |
  * | % de rechazo         | `rechazo` (rotulo)           |  50 |    74    | **5rem**  |
  *
+ * ⚠ LA FILA DE «Recaudado» LA DEROGO LA 354 (ver mas abajo): 6,5rem salia de la palabra mas
+ * ancha y esa columna no lleva palabras sueltas, lleva dos FRASES. Hoy declara 17rem.
+ *
  * ⚠ EL MINIMO NO RESERVA SITIO PARA UN IMPORTE MAS GRANDE, Y NO HACE FALTA: `Cifra` lleva
  * `whitespace-nowrap`, asi que un `₡12.345.678` (81 px, medido por la 347) empuja la columna el
  * solo. El minimo esta para que el ENCABEZADO se lea, no para sostener el dato.
@@ -556,11 +624,33 @@ function celdaDinero(fila: FilaProductoDTO, id: IdDinero): ReactNode {
  * nueve ya estaban EXACTAMENTE en su palabra mas larga —se midio— y su minimo es un suelo
  * declarado, no un ensanche: sirve para que el dia que un rotulo crezca no vuelva a decidirlo el
  * azar del reparto. Coste medido a 1440: el scroller pasa de 1302 a 1416 px de contenido.
+ *
+ * ─── FICHA 354 · EL MINIMO DE «Recaudado» SE RECALCULA, Y SOBRE OTRA COSA ──────────────────
+ *
+ * La tabla de arriba mide, columna a columna, LA PALABRA MAS ANCHA. Para once columnas eso es
+ * correcto: su contenido son palabras sueltas y cifras. Para «Recaudado» no lo era, y ese es el
+ * defecto que la 354 repara: su celda lleva DOS FRASES debajo de la cifra, y una frase no cabe
+ * porque quepa su palabra mas larga.
+ *
+ * | pieza de la celda                          | palabra | FRASE  | +relleno |
+ * | ------------------------------------------ | ------- | ------ | -------- |
+ * | `₡35.697`                                  |  65 px  |  65 px |    89    |
+ * | `Con otro producto: 4 de 33`               |  58 px  | 161 px |   185    |
+ * | `Pendiente de cierre: ₡23.798 (2 órdenes)` |  61 px  | 244 px | **268**  |
+ *
+ * 6,5rem = 104 px salia de la palabra (la cifra, 65 + 24 + holgura). **17rem = 272 px** sale de
+ * la frase mas larga con su relleno (268) y cuatro pixeles de holgura. Las otras dos columnas de
+ * dinero NO cambian: su celda es UNA cifra y su renglon ya era uno solo — medido, no supuesto.
+ *
+ * ⚠ ESTE NUMERO ES UN SUELO, NO LA GARANTIA. La garantia es `unaLinea` en `CeldaRecaudado`: con
+ * un importe pendiente mas largo la frase pide mas de 272 px y la columna crece sola. Si algun
+ * dia se prefiere una columna mas estrecha, lo que hay que cambiar es la FRASE —no este numero—,
+ * porque bajarlo sin acortarla devuelve el acordeon de la captura.
  */
 const MIN_TIENDA = "8rem";
 const MIN_PRODUCTO = "14rem";
 const MIN_DINERO: Readonly<Record<IdDinero, string>> = {
-  recaudado: "6.5rem",
+  recaudado: "17rem",
   ordenex: "6rem",
   paraTienda: "6rem",
 };
