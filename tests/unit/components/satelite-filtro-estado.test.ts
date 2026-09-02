@@ -38,12 +38,20 @@ import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRep
 //      Se mide por REACCIÓN al catálogo (con tres estados ofrece tres, con ninguno ofrece
 //      cero): una lista escrita a mano devolvería siempre las mismas cinco y no puede pasar
 //      los dos casos a la vez.
-//   2. ALCANCE — la selección INTERSECA la lista blanca de los cinco estados del listado y
-//      nunca la amplía. Elegir `entregada` no devuelve entregadas y tampoco devuelve «todas»:
-//      devuelve NADA, y esa nada viaja marcada (`estados: []`) para que el módulo la corte.
+//   2. ALCANCE — la selección INTERSECA la lista blanca del listado y nunca la amplía. Elegir
+//      un estado que este listado no alcanza no devuelve esas órdenes y tampoco devuelve
+//      «todas»: devuelve NADA, y esa nada viaja marcada (`estados: []`) para que el módulo la
+//      corte.
+//
+// FICHA 357 (2026-09-02) — la lista blanca dejó de ser «los cinco estados del estante» y pasó a
+// ser «los dieciséis estados que puede alcanzar una orden que pasó por esta bodega». Por eso los
+// casos de este archivo ya no pueden usar `entregada` como ejemplo de inalcanzable —hoy SÍ se
+// alcanza, y ésa es la mitad (A) de la ficha—: el ejemplo pasa a ser un estado de la CENTRAL,
+// que es lo que de verdad queda fuera. Lo que NO cambia es la propiedad afirmada.
 //
 // El recorte REAL sigue estando en el servicio (`estadosDelListado`, acotado además a la zona
-// del actor); lo que se prueba aquí es que la capa de presentación no puede pedirle más.
+// del actor Y a que la orden haya pasado por su bodega); lo que se prueba aquí es que la capa de
+// presentación no puede pedirle más.
 
 /** La declaración del filtro de estado dentro de la barra de la bodega. */
 function declaracionEstado(estatus: readonly OrderStatusLiteRow[] | null): FilterDef {
@@ -173,7 +181,8 @@ describe("bodega satélite · el filtro de estado sale del catálogo compartido"
 
 describe("bodega satélite · la selección INTERSECA la lista blanca, nunca la amplía", () => {
   it("un estado que este listado no alcanza no devuelve órdenes: devuelve NADA", () => {
-    const filtro = seleccionAFiltroSatelite({ [CLAVE_ESTADO]: ["entregada"] });
+    // `en_bodega_central` es custodia de la central: una orden ahí ya no es de esta bodega.
+    const filtro = seleccionAFiltroSatelite({ [CLAVE_ESTADO]: ["en_bodega_central"] });
 
     // La clave VIAJA, y viaja vacía. Es la diferencia que sostiene la ficha: si `estados`
     // desapareciera del filtro, el listado saldría COMPLETO —«todas» en vez de «ninguna»—, que
@@ -184,8 +193,12 @@ describe("bodega satélite · la selección INTERSECA la lista blanca, nunca la 
   });
 
   it("NINGÚN estado de fuera del listado entra en el filtro, uno por uno", () => {
-    // El catálogo entero menos los cinco: 17 estados que este listado no alcanza. Se recorren
-    // todos y no uno de muestra, porque el fallo que se teme es que UNO se cuele.
+    // El catálogo entero menos los que el listado alcanza. Se recorren todos y no uno de
+    // muestra, porque el fallo que se teme es que UNO se cuele.
+    // FICHA 357: son SEIS (los cinco de custodia central/recolección más
+    // `en_ruta_bodega_satelite`, que tiene pantalla propia). Antes eran 17, y de aquellos 17
+    // había cuatro —`entregada`, `rechazada`, `reprogramada`, `en_reparto`— que sí eran suyos:
+    // ésa era la cara (A) del defecto.
     expect(FUERA_DEL_LISTADO.length).toBeGreaterThan(0);
     for (const value of FUERA_DEL_LISTADO) {
       const filtro = seleccionAFiltroSatelite({ [CLAVE_ESTADO]: [value] });
@@ -194,7 +207,7 @@ describe("bodega satélite · la selección INTERSECA la lista blanca, nunca la 
     }
   });
 
-  it("los cinco del listado SÍ pasan, y sólo ellos", () => {
+  it("los estados del listado SÍ pasan, y sólo ellos", () => {
     for (const value of ESTADOS_BODEGA_SATELITE) {
       const filtro = seleccionAFiltroSatelite({ [CLAVE_ESTADO]: [value] });
       expect(filtro.estados).toEqual([value]);
@@ -204,7 +217,7 @@ describe("bodega satélite · la selección INTERSECA la lista blanca, nunca la 
 
   it("una selección MEZCLADA se queda con la parte alcanzable", () => {
     const filtro = seleccionAFiltroSatelite({
-      [CLAVE_ESTADO]: ["entregada", "devuelta", "ayuda_tienda"],
+      [CLAVE_ESTADO]: ["en_bodega_central", "devuelta", "recolectando"],
     });
     expect(filtro.estados).toEqual(["devuelta"]);
     // Hay algo que consultar: la mezcla NO corta la lectura.
@@ -221,13 +234,15 @@ describe("bodega satélite · la selección INTERSECA la lista blanca, nunca la 
   it("la selección imposible NO comparte clave de caché con «sin filtros»", () => {
     // Si las dos serializaran igual, la selección imposible reutilizaría la página que el
     // servidor pre-cargó sin filtros y el listado saldría entero: el mismo fallo por otra vía.
-    const imposible = seleccionAFiltroSatelite({ [CLAVE_ESTADO]: ["entregada"] });
+    const imposible = seleccionAFiltroSatelite({ [CLAVE_ESTADO]: ["en_bodega_central"] });
     expect(serializarFiltroSatelite(imposible)).not.toBe(FILTRO_SATELITE_VACIO);
   });
 
   it("nombra los estados inalcanzables para poder explicar el vacío", () => {
-    const seleccion = { [CLAVE_ESTADO]: ["entregada", "devuelta"] };
-    expect(estadosFueraDelListado(seleccion)).toEqual(["entregada"]);
+    const seleccion = { [CLAVE_ESTADO]: ["en_bodega_central", "devuelta"] };
+    expect(estadosFueraDelListado(seleccion)).toEqual(["en_bodega_central"]);
+    // Y el CONTROL de la ficha 357: `entregada` ya NO es inalcanzable, así que no se nombra.
+    expect(estadosFueraDelListado({ [CLAVE_ESTADO]: ["entregada"] })).toEqual([]);
     expect(estadosFueraDelListado({ [CLAVE_ESTADO]: [...ESTADOS_BODEGA_SATELITE] })).toEqual(
       [],
     );

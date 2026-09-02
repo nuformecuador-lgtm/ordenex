@@ -134,7 +134,18 @@ describe("RecepcionSateliteService.listarOrdenesBodegaCompleto (feature 184, T A
     if (conjuntoDeA.status !== "ok" || conjuntoDeB.status !== "ok") throw new Error("no ok");
 
     // «Escazú» existe en las dos zonas: cada actor descarga LO SUYO con el mismo filtro.
-    expect(ids(conjuntoDeA.items)).toEqual(["a-02", "a-01", "a-04", "a-07", "a-09"]);
+    // FICHA 357: a-15 (`entregada` de Escazu que SI paso por la bodega) entra; a-14, su gemela
+    // salvo por no haber pasado nunca, NO. Comparten zona, canton y distrito: lo unico que puede
+    // separarlas es el criterio nuevo.
+    expect(ids(conjuntoDeA.items)).toEqual([
+      "a-02",
+      "a-01",
+      "a-04",
+      "a-15",
+      "a-07",
+      "a-09",
+    ]);
+    expect(ids(conjuntoDeA.items)).not.toContain("a-14");
     expect(ids(conjuntoDeA.items).some((id) => id.startsWith("b-"))).toBe(false);
     // CONTRAPRUEBA: el vecino SI ve la suya. Sin esto, un servicio que devolviera vacio ante
     // cualquier canton pasaria la primera mitad.
@@ -180,14 +191,19 @@ describe("RecepcionSateliteService.listarOrdenesBodegaCompleto (feature 184, T A
 
     // Saltandose el schema del borde a proposito: la lista blanca del servicio tiene que
     // sostenerse sola, no solo detras de zod.
-    const inventado = await svc.listarOrdenesBodegaCompleto({ estados: ["entregada"] }, SAT_A);
+    // FICHA 357: el ejemplo de estado ajeno pasa a ser uno de la CENTRAL. `entregada` ya no
+    // sirve para esto —hoy SI se lista, y ese es el arreglo de la cara (A)—.
+    const inventado = await svc.listarOrdenesBodegaCompleto(
+      { estados: ["en_bodega_central"] },
+      SAT_A,
+    );
     if (inventado.status !== "ok") throw new Error("no ok");
-    // Ni las entregadas NI —lo que seria peor— «todas», por caer al caso «sin seleccion».
+    // Ni las de la central NI —lo que seria peor— «todas», por caer al caso «sin seleccion».
     expect(inventado.items).toEqual([]);
     expect(inventado.total).toBe(0);
 
     const mezcla = await svc.listarOrdenesBodegaCompleto(
-      { estados: ["entregada", "devuelta"] },
+      { estados: ["en_bodega_central", "devuelta"] },
       SAT_A,
     );
     if (mezcla.status !== "ok") throw new Error("no ok");
@@ -197,11 +213,14 @@ describe("RecepcionSateliteService.listarOrdenesBodegaCompleto (feature 184, T A
   it("las órdenes que nunca estuvieron en el listado no aparecen en el archivo", async () => {
     const r = await servicio(repoSateliteEnMemoria().repo).listarOrdenesBodegaCompleto({}, SAT_A);
     if (r.status !== "ok") throw new Error("no ok");
-    // a-13 («Por recibir», su propia seccion) y a-14 («entregada») son de la zona del actor: no
-    // las deja fuera el acotamiento, las deja fuera la lista blanca del listado.
+    // FICHA 357 — las dos quedan fuera por motivos DISTINTOS, y por eso se afirman aparte:
+    // a-13 por el ESTADO («Por recibir» tiene su propia seccion) y a-14 por el ALCANCE
+    // (`entregada` SI se lista, pero esa orden nunca paso por esta bodega). a-15 es el control:
+    // misma zona, mismo estado y misma geografia que a-14, y SI esta en el archivo.
     expect(ids(r.items)).not.toContain("a-13");
     expect(ids(r.items)).not.toContain("a-14");
-    expect(r.total).toBe(12);
+    expect(ids(r.items)).toContain("a-15");
+    expect(r.total).toBe(13);
   });
 
   it("con MAX_FILAS entrega TODAS; con una más devuelve limite_excedido y ni una fila (R6)", async () => {
@@ -257,7 +276,7 @@ describe("RecepcionSateliteService.listarOrdenesBodegaCompleto (feature 184, T A
     // consulta por fila, ni un lote por grupo.
     expect(llamadas).toEqual(["findUsuarioZonaId", "findRecepcionSateliteCompleta"]);
     expect(lotes).toHaveLength(1);
-    expect(lotes[0]).toHaveLength(12);
+    expect(lotes[0]).toHaveLength(13);
   });
 
   it("el adminSatelite SIN zona recibe un conjunto vacío y no consulta el listado", async () => {

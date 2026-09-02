@@ -7,10 +7,16 @@
 // lo que el `adminSatelite` alcanza.
 //
 // EL LÍMITE, dicho con precisión, porque es lo que hay que defender: el recorte real lo impone
-// el servicio, acotado a su zona y a los cinco estados del listado. La selección INTERSECA esa
-// lista blanca y nunca la amplía; un `estados: ["entregada"]` no devuelve entregadas y tampoco
-// devuelve «todas»: devuelve NADA. Elegir un estado inalcanzable tiene que dar CERO filas con
-// una explicación, no un listado completo y no un error.
+// el servicio, acotado a su zona y a los estados del listado. La selección INTERSECA esa lista
+// blanca y nunca la amplía; un `estados: ["en_bodega_central"]` no devuelve órdenes de la
+// central y tampoco devuelve «todas»: devuelve NADA. Elegir un estado inalcanzable tiene que dar
+// CERO filas con una explicación, no un listado completo y no un error.
+//
+// FICHA 357 (2026-09-02) — el ejemplo de «estado inalcanzable» de este archivo ERA `entregada`,
+// y ya no sirve: la ficha lo hace alcanzable a propósito (era el desenlace que la bodega perdía
+// de vista, 15 de las 17 órdenes invisibles medidas). El ejemplo pasa a ser `en_bodega_central`,
+// que es lo que de verdad queda fuera: cuando el paquete vuelve a la custodia de la central deja
+// de ser de esta bodega. La propiedad que se afirma NO cambia.
 //
 // EL DOBLE MODELA LAS TRES CAPAS DEL SERVIDOR, y sin las tres el caso no probaría nada:
 //
@@ -21,7 +27,7 @@
 //   2. EL SERVICIO (`RecepcionSateliteService`): `estatusValues: estadosDelListado(estados)`,
 //      la intersección con la lista blanca. Se REUSA la función real —no es código de la
 //      pantalla, es la regla del servidor— para que el doble no pueda divergir de ella.
-//      ⚠️ Y su regla clave: selección VACÍA o AUSENTE significa LOS CINCO. De ahí que
+//      ⚠️ Y su regla clave: selección VACÍA o AUSENTE significa TODOS los del listado. De ahí que
 //      `estados: []` no se pueda mandar al servidor y el corte tenga que ser del cliente.
 //   3. EL REPOSITORIO (`findRecepcionSatelitePaginada`): `estatusValues` vacío ⇒ conjunto
 //      vacío, cortado antes de consultar.
@@ -90,16 +96,21 @@ const ERROR_CARGA = "No se pudieron cargar las órdenes de la bodega.";
 /** Etiqueta del estado tal como la dice el catálogo compartido (la MISMA que `/ordenes`). */
 const EN_BODEGA = ORDER_STATUS_LABELS.en_bodega_satelite;
 const DEVUELTA = ORDER_STATUS_LABELS.devuelta;
-const ENTREGADA = ORDER_STATUS_LABELS.entregada;
+/**
+ * FICHA 357 — el estado que este listado NO puede alcanzar. `en_bodega_central` es custodia de
+ * la bodega central: una orden ahí ya no es de la satélite, ni ahora ni de vuelta atrás.
+ * (Hasta la 357 este papel lo hacía `entregada`, que hoy SÍ se lista.)
+ */
+const INALCANZABLE = ORDER_STATUS_LABELS.en_bodega_central;
 
 function etiqueta(i: number): string {
   return `REM-${String(i).padStart(2, "0")}`;
 }
 
 /**
- * Diez órdenes en DOS de los cinco estados del listado. Nada más: el listado real nunca
- * devuelve otra cosa, y montar aquí una `entregada` inventaría un mundo en el que el fallo
- * sería visible por una razón que en producción no existe.
+ * Diez órdenes en DOS de los estados del listado. Nada más: el listado real nunca devuelve un
+ * estado de la central, y montar aquí uno inventaría un mundo en el que el fallo sería visible
+ * por una razón que en producción no existe.
  */
 function orden(i: number): RecepcionSateliteDTO {
   return {
@@ -274,7 +285,8 @@ describe("bodega satélite · el desplegable de estado es el de la central", () 
       .map((o) => o.textContent?.trim());
 
     // Lo que el humano señaló en la captura de la central y no estaba aquí: el catálogo.
-    expect(opciones).toContain(ENTREGADA);
+    expect(opciones).toContain(INALCANZABLE);
+    expect(opciones).toContain(ORDER_STATUS_LABELS.entregada);
     expect(opciones).toContain(ORDER_STATUS_LABELS.ayuda_tienda);
     expect(opciones).toContain(ORDER_STATUS_LABELS.devolucion_por_confirmar);
     expect(opciones).toContain(ORDER_STATUS_LABELS.devolviendo_a_bodega_central);
@@ -311,7 +323,7 @@ describe("bodega satélite · ofrecer más estados NO amplía el alcance", () =>
     await waitFor(() => expect(remisionesVisibles()).toEqual(TODAS_LAS_REMISIONES));
     const lecturasAntes = paginadoMock.mock.calls.length;
 
-    await marcarEstados(user, ENTREGADA);
+    await marcarEstados(user, INALCANZABLE);
 
     // (a) Ninguna orden. Si la selección se omitiera —o se ampliara la lista blanca— aquí
     //     estarían las diez de la bodega, que es exactamente lo que no se puede permitir.
@@ -326,7 +338,7 @@ describe("bodega satélite · ofrecer más estados NO amplía el alcance", () =>
     //     fuera de la vista (medido con Playwright; ver `mensajeEstadosFueraDelListado`).
     expect(
       within(region()).getByText(
-        `Ninguna orden de esta bodega puede estar en «${ENTREGADA}»: ese estado no forma parte de este listado.`,
+        `Ninguna orden de esta bodega puede estar en «${INALCANZABLE}»: ese estado no forma parte de este listado.`,
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(ERROR_CARGA)).not.toBeInTheDocument();
@@ -337,7 +349,7 @@ describe("bodega satélite · ofrecer más estados NO amplía el alcance", () =>
       .getAllByRole("status")
       .map((n) => n.textContent ?? "");
     expect(
-      anunciadas.some((t) => t.includes(`Ninguna orden de esta bodega puede estar en «${ENTREGADA}»`)),
+      anunciadas.some((t) => t.includes(`Ninguna orden de esta bodega puede estar en «${INALCANZABLE}»`)),
       "la explicación no está en ninguna región anunciada",
     ).toBe(true);
   });
@@ -347,7 +359,7 @@ describe("bodega satélite · ofrecer más estados NO amplía el alcance", () =>
     montar();
     await waitFor(() => expect(remisionesVisibles()).toEqual(TODAS_LAS_REMISIONES));
 
-    await marcarEstados(user, ENTREGADA);
+    await marcarEstados(user, INALCANZABLE);
     await waitFor(() => expect(remisionesVisibles()).toEqual([]));
 
     // La descarga es el CONJUNTO con los filtros vigentes. Sin el mismo corte, el archivo
@@ -364,7 +376,7 @@ describe("bodega satélite · ofrecer más estados NO amplía el alcance", () =>
     montar();
     await waitFor(() => expect(remisionesVisibles()).toEqual(TODAS_LAS_REMISIONES));
 
-    await marcarEstados(user, ENTREGADA, DEVUELTA);
+    await marcarEstados(user, INALCANZABLE, DEVUELTA);
 
     // Sólo las cuatro `devuelta`: la parte inalcanzable no suma ni resta.
     await waitFor(() =>
@@ -378,7 +390,7 @@ describe("bodega satélite · ofrecer más estados NO amplía el alcance", () =>
     // como un filtro que se ignoró en silencio.
     expect(
       within(region()).getByText(
-        `«${ENTREGADA}» no es un estado de este listado: no suma órdenes.`,
+        `«${INALCANZABLE}» no es un estado de este listado: no suma órdenes.`,
       ),
     ).toBeInTheDocument();
   });

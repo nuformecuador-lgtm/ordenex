@@ -50,6 +50,16 @@ export interface FilaAlmacen {
   zonaId: string;
   /** El repositorio ordena por `created_at` pero NO lo proyecta: vive solo en el almacen. */
   createdAt: string;
+  /**
+   * FICHA 357 — «esta orden paso por una bodega satelite», que en produccion se lee del
+   * historial (`orden_historial_estado` con destino `en_ruta_bodega_satelite` /
+   * `en_bodega_satelite`) y aqui se declara como un hecho de la fila.
+   *
+   * Es la mitad NUEVA del alcance. Sin ella, este almacen no podria representar la cara (B) del
+   * defecto —una orden de la zona que NUNCA estuvo en la bodega— y los tests de servicio
+   * quedarian afirmando el criterio viejo con otro nombre.
+   */
+  pasoPorBodegaSatelite: boolean;
 }
 
 export function filaSatelite(
@@ -60,9 +70,13 @@ export function filaSatelite(
   distrito: string | null,
   dia: number,
   prioridad = false,
+  // FICHA 357: por defecto SI paso por la bodega — es el caso normal de este listado. Las filas
+  // que representan la cara (B) lo dicen EXPLICITAMENTE con `false`.
+  pasoPorBodegaSatelite = true,
 ): FilaAlmacen {
   return {
     zonaId,
+    pasoPorBodegaSatelite,
     createdAt: `2026-03-${String(dia).padStart(2, "0")}T00:00:00.000Z`,
     row: {
       // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
@@ -98,8 +112,15 @@ export function filaSatelite(
  *    de ver —o de descargar— la bodega del vecino.
  *  - **«San Rafael» existe en DOS cantones** de la misma zona (Escazú y Barva).
  *  - **hay ordenes SIN distrito** (a-05, a-10, a-12), que caen solo bajo un filtro de distrito.
- *  - **hay ordenes en estados que NO son de este listado** (a-13 «por recibir», a-14
- *    «entregada»), que ninguna combinacion de filtros puede hacer aparecer.
+ *  - **hay ordenes que NINGUNA combinacion de filtros puede hacer aparecer**, y desde la ficha
+ *    357 son de DOS clases distintas, que es justo lo que el defecto confundia:
+ *      · a-13 esta en un estado que este listado no muestra («por recibir» tiene pantalla
+ *        propia), aunque SI paso por la bodega;
+ *      · a-14 esta en un estado que el listado SI muestra (`entregada`) pero NUNCA paso por una
+ *        bodega satelite. Es la cara (B) medida en produccion: 16 devoluciones de la zona que
+ *        la satelite veia sin haberlas tenido nunca.
+ *    Y a-15 es su espejo —`entregada` que SI paso—, sin el cual «a-14 no sale» estaria verde
+ *    por la razon equivocada (porque `entregada` no se lista, en vez de porque no es suya).
  */
 export const ALMACEN_SATELITE: FilaAlmacen[] = [
   filaSatelite("a-01", "z-a", "en_bodega_satelite", "Escazú", "San Rafael", 1),
@@ -115,7 +136,8 @@ export const ALMACEN_SATELITE: FilaAlmacen[] = [
   filaSatelite("a-11", "z-a", "devuelta", "Barva", "San Pedro", 11),
   filaSatelite("a-12", "z-a", "en_bodega_satelite", "San José", null, 12),
   filaSatelite("a-13", "z-a", "en_ruta_bodega_satelite", "Escazú", "San Rafael", 13),
-  filaSatelite("a-14", "z-a", "entregada", "Escazú", "San Rafael", 14),
+  filaSatelite("a-14", "z-a", "entregada", "Escazú", "San Rafael", 14, false, false),
+  filaSatelite("a-15", "z-a", "entregada", "Escazú", "San Rafael", 15),
   filaSatelite("b-01", "z-b", "en_bodega_satelite", "Escazú", "San Rafael", 20),
   filaSatelite("b-02", "z-b", "devuelta", "Cartago", "Occidental", 21),
   filaSatelite("b-03", "z-b", "por_recoger", "Cartago", "Occidental", 22),
@@ -137,6 +159,10 @@ function conjuntoDe(filas: FilaAlmacen[], filtro: RecepcionSateliteFiltro): Fila
   const distritos = [...(filtro.distritoIds ?? [])];
   return filas
     .filter((f) => f.zonaId === filtro.zonaId)
+    // FICHA 357 — la otra mitad del acotamiento. NO es un campo del filtro a proposito (en
+    // produccion el repositorio la emite siempre, sin parametro que la apague), asi que el
+    // doble tampoco la hace opcional: se aplica a las TRES lecturas, como el `WHERE` real.
+    .filter((f) => f.pasoPorBodegaSatelite)
     .filter((f) => estados.includes(f.row.estatusValue))
     .filter((f) => cantones.length === 0 || cantones.includes(f.row.cantonNombre))
     .filter(

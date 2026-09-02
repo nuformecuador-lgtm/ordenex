@@ -889,10 +889,17 @@ describe("235/R14/R17 — la orden en ayuda no es parada de ruta ni se ofrece pa
     expect(JSON.stringify(arg.where)).not.toContain(AYUDA);
   });
 
-  it("R17(a): el listado de la bodega satelite tampoco la admite", () => {
-    // Su lista blanca esta congelada en `estados-bodega-satelite.test.ts`; aqui se afirma la
-    // consecuencia para esta feature: el paquete esta en la moto, no en el estante.
-    expect(ESTADOS_BODEGA_SATELITE as readonly string[]).not.toContain(AYUDA);
+  it("FICHA 357 — R17(a) REVISADA: el listado de la satelite SI la lista, y eso no la hace operable", () => {
+    // Este caso decia «el listado de la bodega satelite tampoco la admite», porque en la 235 el
+    // listado era «lo que tengo FISICAMENTE en el estante» y una orden en ayuda esta en la moto.
+    // La ficha 357 cambia esa premisa: el listado pasa a ser el RECORRIDO de las ordenes que
+    // pasaron por esa bodega, de principio a fin. Bajo la premisa nueva, esconder el tramo de la
+    // calle es el mismo defecto que esconder el desenlace, solo que mas corto.
+    //
+    // Lo que R17 protege NO se toca, y por eso se afirma aqui al lado: que la orden en ayuda no
+    // se pueda ASIGNAR, RUTEAR ni RECOLECTAR. Eso lo sostienen el `where` del caso de arriba y
+    // el grafo del caso de abajo, no la lista de estados de una pantalla. VER no es OPERAR.
+    expect(ESTADOS_BODEGA_SATELITE as readonly string[]).toContain(AYUDA);
   });
 
   it("R17(b): el GRAFO no ofrece salida de `ayuda_tienda` hacia asignacion, ruteo ni recoleccion", () => {
