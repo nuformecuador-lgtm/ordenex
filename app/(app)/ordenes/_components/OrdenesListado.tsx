@@ -16,7 +16,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { listarOrderStatus } from "@/lib/actions/order-status";
-import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 import { listarMensajerosParaAsignacion } from "@/lib/actions/ordenes-guia";
 import type { Column } from "@/components/shared/DataTable";
 import { EscanerModal } from "@/components/shared/EscanerModal";
@@ -28,7 +27,6 @@ import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { EscanerRecepcionOrigen } from "./EscanerRecepcionOrigen";
 import { EscanerRecepcionBodegaCentral } from "./EscanerRecepcionBodegaCentral";
-import { ORDER_STATUS_LABELS } from "./EstatusBadge";
 import {
   ordenesColumnsReprogramada,
 } from "./ordenes-columns";
@@ -61,6 +59,13 @@ import {
   OPCIONES_ORDEN_CREACION,
   ordenamientoCreacion,
 } from "./ordenamiento-creacion";
+// FICHA 355: el control de ESTADO se declara una sola vez y lo montan las dos superficies
+// (aquí y la bodega satélite). Ver la cabecera de ese módulo.
+import {
+  EXCLUDE_ESTADO_DEFAULT,
+  estadosOfrecidos,
+  filtroEstado,
+} from "./filtro-estado-def";
 import { seleccionAFilter } from "./seleccion-a-filter";
 import type { OrdenesFilterUI } from "./serializar-filtro";
 
@@ -117,18 +122,25 @@ async function mensajerosFetcher() {
 // `["pendiente"]` (borrador transitorio recién sembrado). El backend NO recibe
 // `exclude`: `listarOrderStatus()` devuelve el catálogo COMPLETO (R1) y el front
 // filtra antes de construir las opciones del filtro (aclaración del humano, R14).
-const DEFAULT_EXCLUDE = ["pendiente"];
+//
+// FICHA 355: el valor por defecto vive ahora en `filtro-estado-def.ts`, junto al resto de
+// la declaración del control, para que una superficie que lo monte sin pasar `exclude`
+// obtenga exactamente lo mismo que maestro/admin.
+const DEFAULT_EXCLUDE = [...EXCLUDE_ESTADO_DEFAULT];
 
-/**
- * Values que el código RECONOCE hoy. La tabla `order_status` conserva values ya
- * RETIRADOS del seed: su migración de retiro solo borra la fila si nadie la referencia,
- * y el historial pasado —inmutable— la referencia para siempre (caso del estado interno
- * de fulfillment en bodega, retirado por la feature 155). Esa fila sobrevive huérfana y
- * ninguna orden viva puede volver a tenerla, así que ofrecerla como filtro es ofrecer un
- * estado que nunca devuelve nada. El catálogo de la BD manda sobre los ids;
- * `ORDER_STATUS_SEED` manda sobre QUÉ existe.
+/*
+ * ── FICHA 355 (2026-09-02): AQUÍ VIVÍAN `VALUES_VIGENTES` Y EL DESPLEGABLE DE ESTADO ─────────
+ *
+ * El juego de values vigentes, el recorte «catálogo − retirados − exclude» y las seis líneas
+ * que declaraban el control se mudan a `./filtro-estado-def.ts`. La central NO cambia de
+ * comportamiento: monta la MISMA declaración, con los mismos textos y las mismas opciones.
+ *
+ * No es una mudanza por orden. La bodega satélite declaraba SU propio filtro de estado —cinco
+ * opciones escritas a mano, con sus propias etiquetas («Recibidas» donde aquí dice «En bodega
+ * satélite») y sus propios textos— y el humano puso las dos capturas lado a lado. Mientras el
+ * control se declarara DENTRO de este componente, la otra superficie no tenía forma de montar
+ * el mismo: sólo de copiarlo. El porqué entero está en la cabecera de ese módulo.
  */
-const VALUES_VIGENTES: ReadonlySet<string> = new Set(ORDER_STATUS_SEED);
 
 // Estado cuyo listado muestra ademas "Liberada el" (la fecha para la que quedo
 // reprogramada = el dia en que el cron de liberacion la desbloquea, feature 46).
@@ -172,10 +184,9 @@ const ESTADO_EN_BODEGA = "en_bodega_central";
  */
 const MOTIVO_SIN_ACCIONES = BLOQUEO_SIN_AVISO;
 
-/** Etiqueta legible del estado; cae al `value` crudo si no hay label conocido. */
-function labelDe(value: string): string {
-  return (ORDER_STATUS_LABELS as Record<string, string>)[value] ?? value;
-}
+// FICHA 355: aquí estaba `labelDe`, la tercera copia del mismo mapa de etiquetas. La
+// declaración compartida usa `estatusLabel` (`./estatus-label`), que lee ese mismo
+// `ORDER_STATUS_LABELS` y es lo que ya pinta el chip de la tabla.
 
 async function catalogoFetcher(): Promise<OrderStatusLiteRow[]> {
   const res = await listarOrderStatus();
@@ -669,11 +680,12 @@ export function OrdenesListado({
 
   // R14: opciones del filtro = catálogo − retirados − exclude (por value), en el orden
   // determinista del catálogo (R5). Se filtra en el front.
+  //
+  // FICHA 355: el recorte lo hace `estadosOfrecidos`, compartido con la bodega satélite.
+  // Aquí se conservan las FILAS (no las opciones) porque más abajo hace falta traducir el
+  // id marcado de vuelta a su `value` para decidir columnas y resalte.
   const estadosDisponibles = useMemo<OrderStatusLiteRow[]>(
-    () =>
-      (catalogo ?? []).filter(
-        (s) => VALUES_VIGENTES.has(s.value) && !exclude.includes(s.value),
-      ),
+    () => estadosOfrecidos(catalogo, exclude),
     [catalogo, exclude],
   );
 
@@ -741,9 +753,12 @@ export function OrdenesListado({
   const verEliminadas =
     (seleccionFiltros[CLAVE_ELIMINADOS] ?? [])[0] === BOOLEAN_MARCADO;
 
-  const opciones = useMemo(
+  // FICHA 355: el control de estado, con sus opciones, sus etiquetas y sus textos, tal
+  // como lo declara el módulo compartido. `estadosDisponibles` ya aplicó el recorte, así
+  // que aquí se le pasa sin volver a excluir nada.
+  const declaracionEstado = useMemo(
     () =>
-      estadosDisponibles.map((s) => ({ value: s.id, label: labelDe(s.value) })),
+      filtroEstado(estadosDisponibles, { key: CLAVE_ESTADO, exclude: [] }),
     [estadosDisponibles],
   );
 
@@ -772,15 +787,7 @@ export function OrdenesListado({
     return [
       // El estado va parametrizado como un filtro más, no por fuera: mismo control,
       // misma limpieza y misma salida agregada que zona, tienda o geografía.
-      {
-        key: CLAVE_ESTADO,
-        label: "Estado",
-        kind: "multi",
-        placeholder: "Todos",
-        searchPlaceholder: "Filtrar estados…",
-        emptyMessage: "Ningún estado coincide",
-        options: opciones,
-      },
+      declaracionEstado,
       // R64: si el catálogo geográfico no cargó, se deshabilitan SUS filtros; el de
       // estado viene de otra fuente y sigue operativo.
       ...dependenDelCatalogo.map((f) =>
@@ -793,7 +800,7 @@ export function OrdenesListado({
     incluirFiltroReasignables,
     incluirFiltroMensajero,
     puedeEliminar,
-    opciones,
+    declaracionEstado,
   ]);
 
   /** Lo que ofrece el selector: cada filtro declarado, por su clave y su etiqueta. */

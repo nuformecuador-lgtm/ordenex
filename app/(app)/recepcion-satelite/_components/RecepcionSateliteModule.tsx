@@ -13,6 +13,7 @@ import { recepcionSateliteConfig } from "@/lib/config/recepcion-satelite";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { FechasDiaReparto } from "@/lib/utils/dia-reparto-textos";
 
 import { enviarACentral } from "@/lib/actions/envio-devolucion-central";
@@ -34,6 +35,7 @@ import { CambiarDiaRepartoSateliteModal } from "./CambiarDiaRepartoSateliteModal
 import { filaDescargaSatelite } from "./satelite-descarga-columnas";
 import {
   FILTRO_SATELITE_VACIO,
+  filtroSinResultados,
   serializarFiltroSatelite,
   type FiltroBodegaSatelite,
 } from "./satelite-ordenes-filtros";
@@ -101,12 +103,21 @@ export interface OrdenesBodegaPagina {
  * Lee una página del listado. Un resultado que no sea `ok` se lanza para que SWR lo trate
  * como error (la tabla enseña el aviso) en vez de pintar una página vacía que se leería
  * como «no hay órdenes».
+ *
+ * FICHA 355 — el corte de la selección IMPOSIBLE. Desde que el desplegable de estado ofrece
+ * el catálogo entero (como el de `/ordenes`), el usuario puede elegir sólo estados que este
+ * listado no alcanza; la intersección con la lista blanca queda vacía y la respuesta correcta
+ * es CERO filas. No se le puede preguntar al servidor, porque el borde trata `estados: []`
+ * igual que la clave ausente y respondería con las órdenes de los cinco estados: justo lo
+ * contrario de lo que se pidió. El corte va aquí —y no en el borde— porque esta ficha es de
+ * presentación; y sólo puede QUITAR filas, nunca añadirlas, así que no toca el alcance.
  */
 async function leerPagina(
   filtro: FiltroBodegaSatelite,
   page: number,
   pageSize: number,
 ): Promise<OrdenesBodegaPagina> {
+  if (filtroSinResultados(filtro)) return { items: [], total: 0, pageSize };
   const res = await listarOrdenesBodegaPaginado({ ...filtro, page, pageSize });
   if (res.status !== "ok") throw new Error(res.status);
   return { items: res.items, total: res.total, pageSize: res.pageSize };
@@ -284,6 +295,12 @@ export function RecepcionSateliteModule({
    * El tope lo decide el servidor y no se replica aquí, para que no haya dos números.
    */
   async function comprobarVigencia(ids: string[]): Promise<readonly string[] | null> {
+    // FICHA 355: con la selección imposible el conjunto filtrado es VACÍO, así que ninguna
+    // marca sigue en él. Se responde sin consultar por la misma razón que en `leerPagina`:
+    // preguntarlo devolvería el conjunto de los cinco estados y conservaría marcas que ya no
+    // pertenecen a lo que se está viendo. `[]` es «ninguno vigente», no «no se pudo
+    // comprobar» (eso es `null`, R22), que es exactamente lo que corresponde aquí.
+    if (filtroSinResultados(filtro)) return [];
     const res = await listarIdsVigentesBodega({ ...filtro, ids });
     return res.status === "ok" ? res.ids : null;
   }
@@ -535,7 +552,22 @@ export function RecepcionSateliteModule({
            */
           obtenerFilasDescarga={() =>
             filasDesdeResultado(
-              listarOrdenesBodegaCompleto({ ...filtro }),
+              // FICHA 355: el archivo es el CONJUNTO con los filtros vigentes, así que con la
+              // selección imposible es un conjunto VACÍO. Mismo corte que en `leerPagina`: sin
+              // él la descarga traería las órdenes de los cinco estados mientras la tabla —que
+              // sí corta— enseña cero filas, y el archivo diría algo distinto de la pantalla.
+              //
+              // Lo que se sustituye es la LECTURA, no el adaptador: el resultado sigue pasando
+              // por `filasDesdeResultado`, que es quien traduce el tope y los errores. Fabricar
+              // aquí un `DescargaFilasResult` a mano sería saltarse ese único punto — y la
+              // guardia transversal de la descarga lo rechaza, con razón.
+              filtroSinResultados(filtro)
+                ? Promise.resolve<ListarCompletoResult<RecepcionSateliteDTO>>({
+                    status: "ok",
+                    items: [],
+                    total: 0,
+                  })
+                : listarOrdenesBodegaCompleto({ ...filtro }),
               filaDescargaSatelite,
             )
           }

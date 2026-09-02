@@ -77,6 +77,13 @@ vi.mock("@/lib/actions/envio-devolucion-central", () => ({
 }));
 vi.mock("@/lib/actions/resolver-novedad", () => ({ recuperarABodega: vi.fn() }));
 
+// FICHA 355: el desplegable de ESTADO de esta pantalla ya no declara cinco opciones propias —
+// las toma del catálogo `order_status`, como el de `/ordenes`—, así que la lectura del catálogo
+// se dobla aquí. Sin el doble el control se monta SIN opciones y no hay nada que clicar.
+vi.mock("@/lib/actions/order-status", () => ({
+  listarOrderStatus: vi.fn(async () => listarOrderStatusOk()),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
@@ -95,6 +102,8 @@ vi.mock("@/hooks/useToast", () => ({
 // La cámara nunca se abre en estos tests; el mock evita cargar el módulo real.
 vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
 
+import { listarOrderStatusOk } from "@/tests/fixtures/order-status-catalogo";
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
 import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
@@ -365,6 +374,13 @@ afterEach(() => {
   cleanup();
 });
 
+// FICHA 355 — la etiqueta del estado en el desplegable ya NO es «Recibidas»: es la del catálogo
+// compartido (`ORDER_STATUS_LABELS.en_bodega_satelite`, «En bodega satélite»), la misma que la
+// central y la misma que el chip de la fila. Aquí el texto es el VEHÍCULO para llegar a la
+// opción, no el contrato del caso; lo que estos casos afirman es qué `estados` recibe el
+// servidor, y eso no cambia.
+const ETIQUETA_EN_BODEGA = ORDER_STATUS_LABELS.en_bodega_satelite;
+
 describe("Q-K7 · aviso de selección en otras páginas (bodega satélite)", () => {
   it("no se pinta nada mientras todo lo marcado está a la vista", async () => {
     const user = userEvent.setup();
@@ -592,7 +608,7 @@ describe("Feature 184 · T A.5 — la poda de la selección", () => {
 
     // Se filtra por el estado de la página 1: el conjunto pasa a ser tres órdenes en una sola
     // página, y la selección se va entera.
-    await filtrarPor(user, "Estado", "Recibidas");
+    await filtrarPor(user, "Estado", ETIQUETA_EN_BODEGA);
     await waitFor(() => {
       expect(remisionesVisibles()).toEqual([etiqueta(1), etiqueta(2), etiqueta(3)]);
       expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument();

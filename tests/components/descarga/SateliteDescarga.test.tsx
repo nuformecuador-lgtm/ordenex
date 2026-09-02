@@ -89,6 +89,15 @@ vi.mock("@/lib/actions/recepcion-satelite", () => ({
 vi.mock("@/lib/actions/envio-devolucion-central", () => ({ enviarACentral: vi.fn() }));
 vi.mock("@/lib/actions/resolver-novedad", () => ({ recuperarABodega: vi.fn() }));
 
+// FICHA 355: el desplegable de ESTADO de esta pantalla ya no declara cinco opciones propias —
+// las toma del catálogo `order_status`, como el de `/ordenes`—, así que la lectura del catálogo
+// se dobla aquí. Sin el doble el control se monta SIN opciones y no hay nada que clicar.
+vi.mock("@/lib/actions/order-status", () => ({
+  listarOrderStatus: vi.fn(async () => listarOrderStatusOk()),
+}));
+
+import { listarOrderStatusOk } from "@/tests/fixtures/order-status-catalogo";
+import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
 import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
@@ -266,6 +275,13 @@ afterEach(() => {
   cleanup();
 });
 
+// FICHA 355 — la etiqueta del estado en el desplegable ya NO es «Recibidas»: es la del catálogo
+// compartido (`ORDER_STATUS_LABELS.en_bodega_satelite`, «En bodega satélite»), la misma que la
+// central y la misma que el chip de la fila. Aquí el texto es el VEHÍCULO para llegar a la
+// opción, no el contrato del caso; lo que estos casos afirman es qué `estados` recibe el
+// servidor, y eso no cambia.
+const ETIQUETA_EN_BODEGA = ORDER_STATUS_LABELS.en_bodega_satelite;
+
 describe("Órdenes de la bodega satélite · descarga", () => {
   it("ofrece la descarga de las órdenes de la bodega", async () => {
     const user = userEvent.setup();
@@ -318,7 +334,7 @@ describe("Órdenes de la bodega satélite · descarga", () => {
     expect(filasCanton.map((f) => f.numRemision)).toEqual(["REM-002", "REM-003"]);
 
     // Se añade el filtro de estado (AND con el de cantón): queda una sola.
-    await filtrarPor(user, "Estado", "Recibidas");
+    await filtrarPor(user, "Estado", ETIQUETA_EN_BODEGA);
     await waitFor(() => {
       expect(within(tabla).getAllByRole("row")).toHaveLength(1 + 1);
       expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
@@ -374,7 +390,7 @@ describe("Órdenes de la bodega satélite · descarga", () => {
       expect(within(tabla).getAllByRole("row")).toHaveLength(2 + 1);
       expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
     });
-    await filtrarPor(user, "Estado", "Recibidas");
+    await filtrarPor(user, "Estado", ETIQUETA_EN_BODEGA);
     await waitFor(() => {
       expect(within(tabla).getAllByRole("row")).toHaveLength(1 + 1);
       expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
