@@ -483,3 +483,167 @@ se negará por diseño. Correcto, no es un fallo.
 dadas de baja —5 mutaciones muertas, incluida la obligatoria y la reversión completa del punto 2—,
 con la separación «filtro recortado / descarga entera» fijada en un único render para que
 unificar los dos campos sea imposible sin ponerse rojo.
+
+---
+
+## 16. El rojo que mis corridas dirigidas no vieron (2026-09-01)
+
+`FiltrosCierresBarra.tsx:188` lee `catalogo.mensajerosFiltro.map(...)` sin red. El fixture de
+`tests/components/CierresAdminPage.test.tsx` servía el catálogo **sin ese campo**, así que la
+barra reventaba con `TypeError: Cannot read properties of undefined (reading 'map')` y se
+llevaba por delante **6 de los 10 casos** de esa página: los tres de acceso por rol (R1) y los
+tres de la oferta de pago (172/R6). **Ninguno de los seis va de filtros** — por eso no salieron
+en mis corridas dirigidas, que se ceñían a los archivos que toqué.
+
+La lección es de método y es mía: correr «los archivos afectados» sólo encuentra lo que ya
+sospechás. Un cambio de contrato de DTO se mide corriendo la suite.
+
+### 16.1 El censo: fue UNO, y está medido
+
+Antes de arreglar nada corrí `tests/components` + `tests/unit` enteros sobre el árbol roto, para
+tener la lista completa en vez de ir adivinando:
+
+```
+ Test Files  2 failed | 1368 passed (1370)
+      Tests  7 failed | 19995 passed | 26 skipped (20028)
+```
+
+Los dos: `CierresAdminPage.test.tsx` (6) y el `superficie-de-uso` heredado (1). **Ningún otro
+fixture del catálogo de cierres estaba incompleto en 1.370 archivos de test.** Los demás
+fixtures de este DTO (`CierresAdminFiltros`, `DescargarGestionesDialog`, los dos de descarga
+detallada) ya venían con anotación de tipo explícita, y por eso el backend los había actualizado
+sin dejarse ninguno.
+
+### 16.2 Por qué el typecheck no lo cazó: el tipo NO protegía ahí
+
+`mensajerosFiltro` **sí** es un campo requerido de `CatalogoFiltrosCierresDTO`. Lo que pasa es
+que el fixture no era un `CatalogoFiltrosCierresDTO`: era un **literal anónimo dentro de la
+factory de un `vi.mock`**.
+
+```ts
+vi.mock("@/lib/actions/cierres-admin", () => ({
+  obtenerCatalogoFiltrosCierres: vi.fn(async () => ({
+    status: "ok" as const,
+    catalogo: { zonas: [], mensajeros: [] },   // <- nadie comprueba esto contra nada
+  })),
+}));
+```
+
+La factory de `vi.mock` está tipada como `() => unknown`: **su valor de retorno no se contrasta
+nunca con el módulo real**. No hay cast ni `Partial` —que era la hipótesis—; es peor y más
+banal: no hay *ningún* punto de contacto con el tipo. Un campo obligatorio del DTO no obligaba a
+nadie en ese archivo.
+
+**Y el agujero no es de este fixture: es general.** En este repo hay **962 `vi.mock(...)` en 283
+archivos**, y cada factory es un contrato escrito a mano que el compilador no lee. Cualquier
+cambio de forma de un DTO puede dejar atrás la suya sin una palabra del typecheck. Esta ficha
+sólo cierra el caso medido; el patrón se queda ahí y da para su propia ficha.
+
+### 16.3 El arreglo: atar el fixture al tipo, no rellenar el hueco
+
+Rellenar el campo y seguir habría dejado la trampa armada para el siguiente que toque el DTO. El
+fixture pasa a declararse **con su anotación**, vía `vi.hoisted` (las factories de `vi.mock` se
+izan por encima de los imports, así que una const de módulo referenciada ahí dentro explota con
+«cannot access before initialization»; el `import type` se borra al compilar y no arrastra
+runtime):
+
+```ts
+const { CATALOGO_FILTROS } = vi.hoisted(() => {
+  const catalogo: CatalogoFiltrosCierresDTO = { zonas: [], mensajeros: [], mensajerosFiltro: [] };
+  return { CATALOGO_FILTROS: catalogo };
+});
+```
+
+Con esto, quitarle un campo obligatorio deja de ser un fallo de ejecución en seis casos ajenos y
+pasa a ser un error de compilación **en la línea del fixture**, que es donde se puede leer.
+
+### 16.4 ¿Puede pasar en producción? **No, y está comprobado, no razonado**
+
+La pregunta buena, porque este repo **sí** cachea DTOs entre despliegues: hay tres capas de
+`unstable_cache` vivas (`next-analitica-cache`, `next-conteos-publicos-cache`,
+`next-tablero-dia-cache`). Si el catálogo pasara por una de ellas, una entrada escrita ANTES del
+despliegue llegaría sin el campo y la pantalla reventaría para usuarios reales hasta que
+expirara.
+
+**No pasa por ninguna.** Lo comprobado, archivo por archivo:
+
+| Qué | Resultado |
+|---|---|
+| `app/(app)/cierres-admin/page.tsx` | sin `unstable_cache`, sin `export const revalidate`, sin `dynamic`. Es dinámica de todos modos: resuelve el actor por cookies |
+| `lib/actions/cierres-admin.ts` · `CierresAdminService` · `CierresAdminRepository` | **cero** apariciones de `cache`/`Cache` en todo el camino |
+| Las 3 capas de `unstable_cache` | sirven analítica, conteos públicos y tablero del día. Ninguna produce `CatalogoFiltrosCierresDTO` |
+| Productores del DTO | sólo dos: `CierresAdminRepository.findCatalogoFiltros:1100` (siempre lo construye) y `CATALOGO_FILTROS_CIERRES_VACIO` (lo tiene). El *fallback* de la página cuando la acción falla es el segundo |
+
+Así que el objeto se arma fresco en cada render. **No hay camino por el que el campo llegue
+ausente a producción.**
+
+Lo que sí conviene saber, porque mide la gravedad si algún día se abriera ese camino: **no hay
+un solo `error.tsx` en `app/`**, así que el fallo no degrada la pantalla, la tumba entera —
+incluida la aprobación de cierres, que es dinero—. Y afecta a los TRES módulos, no sólo al de la
+central: el literal de `FiltrosCierresBarra` se construye **antes** del
+`.filter((f) => !(sinMensajero && ...))`, de modo que `CierresBodegaAdminModule` y
+`ConsolidacionBodegaModule` —que piden la barra *sin* mensajero— evalúan igualmente el `.map` y
+caerían con ellos.
+
+### 16.5 Decisión: NO se tolera la ausencia, y por qué
+
+Se me ofreció tolerarla explícitamente. **No lo hice**, por tres razones en orden de peso:
+
+1. **No hay nada que tolerar** (§16.4). Un `?? []` sería código inalcanzable — exactamente lo que
+   esta misma ficha acaba de borrar por mentirle al lector (el sufijo «(inactiva)»). Añadir uno
+   nuevo el mismo día sería incoherente.
+2. **Convertiría un fallo ruidoso en uno mudo.** Con `?? []` el desplegable saldría vacío, y «no
+   hay mensajeros» y «el campo no llegó» se leen igual en pantalla. Un `TypeError` en la suite
+   señala el archivo y la línea; un desplegable vacío en producción no señala nada.
+3. **El riesgo real era el fixture, y ese sí se ató** (§16.3), en el sitio donde el error se
+   puede leer.
+
+Y queda dicho, porque era la instrucción: **no se cayó de vuelta a `catalogo.mensajeros`.** Eso
+habría devuelto en silencio las cuentas dadas de baja al desplegable, que es justo lo que la
+ficha quita.
+
+### 16.6 Mutación M13 — el fixture y el tipo, atados
+
+| # | Mutación | Qué cae | Línea y mensaje reales |
+|---|---|---|---|
+| **M13** | quitar `mensajerosFiltro` del fixture de `CierresAdminPage.test.tsx` | **el typecheck** y, además, los 6 casos | `tests/components/CierresAdminPage.test.tsx(52,9): error TS2741: Property 'mensajerosFiltro' is missing in type '{ zonas: never[]; mensajeros: never[]; }' but required in type 'CatalogoFiltrosCierresDTO'` — y `TypeError … FiltrosCierresBarra.tsx:188` en los 6 |
+
+Muere **dos veces**, y la que importa es la primera: antes del arreglo, quitar el campo era un
+rojo de ejecución en seis casos que no hablan de filtros; ahora es un error de compilación en la
+línea del fixture. Revertida (`MUTACION M` en el archivo devuelve 0).
+
+Con M13 son **6 mutaciones aplicadas y 6 muertas** en la mitad de frontend.
+
+### 16.7 Verificación — suite COMPLETA, no `--changed`
+
+```
+$ pnpm test
+ Test Files  1 failed | 1647 passed (1648)
+      Tests  1 failed | 23216 passed | 26 skipped (23243)
+EXIT=1
+
+$ pnpm typecheck        -> 0 errores
+$ pnpm lint             -> 145 problems (0 errors, 145 warnings)   [mismo recuento de siempre]
+```
+
+El único rojo es `tests/unit/guards/superficie-de-uso.guardia.test.ts:687` con
+`+ "lib/actions/tarifas.ts:67 obtenerTarifa"`: **es literalmente la única entrada de
+`tests/baseline-rojos.json`**, con su motivo y su fecha (2026-08-28). Ningún archivo rojo nuevo.
+
+### 16.8 Archivos de este arreglo
+
+- `tests/components/CierresAdminPage.test.tsx` — fixture del catálogo tipado con
+  `CatalogoFiltrosCierresDTO` vía `vi.hoisted`, con `mensajerosFiltro: []`, y la nota de por qué
+  no puede volver a escribirse como literal suelto.
+
+Ningún archivo de producción cambió en esta ronda: el defecto era del doble, no del componente.
+
+### 16.9 Lo que dejo abierto
+
+- **Los 962 `vi.mock` sin comprobar** (§16.2). Este arreglo tapa el caso medido; el patrón sigue
+  vivo en 283 archivos. Cualquier cambio futuro de forma de un DTO puede repetir esto sin que el
+  typecheck diga nada. Da para una ficha propia: o se tipan las factories que sirven DTOs, o al
+  menos las de los catálogos.
+- **`app/` no tiene ni un `error.tsx`.** Cualquier throw en render de un cliente tumba la pantalla
+  entera en vez de degradarla. No es de esta ficha y no lo toqué, pero es la razón por la que este
+  fallo habría sido caro si hubiera llegado a producción.
