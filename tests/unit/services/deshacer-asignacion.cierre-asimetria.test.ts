@@ -77,11 +77,10 @@ describe("T4.9(a)/R19 — DESHACER con el mensajero en cierre pendiente: `ok`", 
       deshacerAsignacionLote,
       findMensajerosBloqueadosPorCierres,
     };
-    const service = new DeshacerAsignacionService(
-      repo,
-      { findCentralZonaId: vi.fn(async () => ZONA_CENTRAL) },
-      { findOrigenesReversion: vi.fn(async () => new Map([["o1", "en_bodega_central"]])) },
-    );
+    // FICHA 363: el service ya no recibe un repo de zonas (la comparacion zona/destino se fue).
+    const service = new DeshacerAsignacionService(repo, {
+      findOrigenesReversion: vi.fn(async () => new Map([["o1", "en_bodega_central"]])),
+    });
 
     const r = await service.deshacer(
       { ordenIds: ["o1"], motivo: "el mensajero renuncio hoy, la orden vuelve a bodega" },

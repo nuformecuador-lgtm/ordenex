@@ -5,7 +5,6 @@ import {
   type OrdenTransicionRow,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IOrdenHistorialRepository } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
-import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { DetalleConflicto } from "@/lib/interfaces/services/IGuiaAsignacionService";
 import type {
@@ -15,14 +14,14 @@ import type {
   IDeshacerAsignacionService,
 } from "@/lib/interfaces/services/IDeshacerAsignacionService";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import { TRANSICIONES } from "@/lib/types/order-status-transiciones";
 import {
   MSG_CARRERA,
   MSG_CATALOGO_INCOMPLETO,
+  MSG_DESTINO_NO_DECLARADO,
   MSG_ORDEN_BORRADA,
   MSG_ORDEN_NO_EXISTE,
   MSG_SIN_HISTORIAL,
-  MSG_ZONA_CENTRAL_NO_CONFIGURADA,
-  MSG_ZONA_DESTINO_INCOHERENTE,
   msgEstadoNoReversible,
 } from "@/lib/services/mensajes-deshacer-asignacion";
 
@@ -62,6 +61,45 @@ const NORMALIZACION_DESTINO: ReadonlyMap<string, DestinoReversion> = new Map([
 
 const ROL_SATELITE = "adminSatelite";
 
+/** La familia de transiciones que ESTA accion escribe (`origen_tipo` de su fila de historial). */
+const FAMILIA_DESHACER = "deshacer_asignacion";
+
+/**
+ * FICHA 363 — CONTRA QUE SE VERIFICA LA INFERENCIA, AHORA QUE NO ES CONTRA LA ZONA.
+ *
+ * Por cada estado de origen, los destinos que el inventario CERRADO de la feature 140 declara
+ * PARA LA FAMILIA `deshacer_asignacion`. Derivado de `TRANSICIONES`, no re-escrito: una arista
+ * nueva o retirada llega aqui sola, y una segunda copia seria una segunda verdad.
+ *
+ * Hoy vale exactamente:
+ *   por_recoger              -> { en_bodega_central, en_bodega_satelite }   (#46, #47)
+ *   en_ruta_bodega_satelite  -> { en_bodega_central }                       (#45)
+ *   recolectando             -> { por_recolectar_en_tienda }                (#46 de la 157)
+ *
+ * POR QUE ESTA ES LA AUTORIDAD CORRECTA Y LA ZONA NO LO ERA:
+ *
+ *  1. La zona dice a que bodega PERTENECE la orden, NO donde esta el paquete. Una orden de zona
+ *     satelite espera en la bodega CENTRAL hasta que la rutean: ese es el flujo normal, y la
+ *     comparacion anterior lo llamaba incoherencia. Mismo malentendido que corrigio la 357.
+ *  2. Verificar el destino CONTRA EL HISTORIAL —de donde ya sale— seria una asercion contra su
+ *     propia fuente: siempre verde. Y en su version util («solo se vuelve a donde la orden
+ *     estuvo») rompe justo las dos filas que SI son inferencia: `en_fulfillment` y
+ *     `en_preparacion` normalizan a `en_bodega_central` sin que la orden haya pasado por ahi.
+ *  3. Esta comprobacion NO es redundante con la guardia de escritura. `assertTransicionValida`
+ *     (140) ignora la familia a proposito, asi que para una orden en `en_ruta_bodega_satelite`
+ *     DEJARIA PASAR el destino `en_bodega_satelite`: esa arista existe (#10), pero es la de la
+ *     RECEPCION SATELITE. Sin este filtro por familia, una inferencia equivocada no reventaria:
+ *     escribiria «recibida en la satelite» un paquete que nadie recibio, en silencio y con el
+ *     historial diciendo `deshacer_asignacion`. Falsificar la custodia de un paquete es
+ *     exactamente el riesgo que la guarda original queria cubrir.
+ */
+const DESTINOS_DECLARADOS_DESHACER: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  Object.entries(TRANSICIONES).map(([origen, destinos]) => [
+    origen,
+    new Set(destinos.filter((d) => d.via === FAMILIA_DESHACER).map((d) => d.to)),
+  ]),
+);
+
 /**
  * Metodos de repo que consume el service (inyeccion por constructor, `Pick` para dobles de test
  * sin DB). `findMensajerosBloqueadosPorCierres` NO figura A PROPOSITO (Q1 CERRADA, R19): QUITARLE
@@ -84,12 +122,19 @@ export type DeshacerAsignacionHistorialRepo = Pick<
   "findOrigenesReversion"
 >;
 
-export type DeshacerAsignacionZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
-
+/**
+ * FICHA 363 — AQUI VIVIA `DeshacerAsignacionZonaRepo`, el `Pick` de `IZonaRepository` con el
+ * que se leia el id de la zona central, Y SE VA CON LA COMPARACION QUE LO NECESITABA.
+ *
+ * Ese id tenia UN solo consumidor: la guarda de coherencia zona/destino. Retirada esa
+ * comparacion, mantener la dependencia habria dejado (i) una consulta cuyo resultado nadie lee y
+ * (ii) un `validation_error` («zona central no configurada») que bloqueaba el deshacer sin
+ * proteger nada. La zona del ACTOR (R4/R5/R6) no se toca: sale de `repo.findUsuarioZonaId` y
+ * sigue igual.
+ */
 export class DeshacerAsignacionService implements IDeshacerAsignacionService {
   constructor(
     private readonly repo: DeshacerAsignacionRepo,
-    private readonly zonaRepo: DeshacerAsignacionZonaRepo,
     private readonly historialRepo: DeshacerAsignacionHistorialRepo,
   ) {}
 
@@ -109,15 +154,9 @@ export class DeshacerAsignacionService implements IDeshacerAsignacionService {
     const zonaActor = esSatelite ? await this.repo.findUsuarioZonaId(actor.usuarioId) : null;
     if (esSatelite && zonaActor === null) return { status: "sin_zona" };
 
-    // 3. Guardia de configuracion: sin zona central no se puede evaluar la coherencia
-    // zona/destino (R14/R15). Misma guarda R4 que `GuiaAsignacionService`.
-    const centralZonaId = await this.zonaRepo.findCentralZonaId();
-    if (centralZonaId === null) {
-      return {
-        status: "validation_error",
-        fieldErrors: { zona: [MSG_ZONA_CENTRAL_NO_CONFIGURADA] },
-      };
-    }
+    // 3. FICHA 363: aqui se leia la zona central para poder compararla con la de la orden. La
+    // comparacion se fue (paso 6) y la lectura con ella; la guarda de configuracion que la
+    // acompanaba no protegia nada por si sola.
 
     // 4. R16/R17/R18 + R4: precarga (incluye borradas, para distinguir motivos).
     const ordenes = await this.repo.findByIdsForTransicion(ordenIds);
@@ -193,13 +232,18 @@ export class DeshacerAsignacionService implements IDeshacerAsignacionService {
         detalle.push({ ordenId: orden.id, motivo: MSG_SIN_HISTORIAL });
         continue;
       }
-      // R14/R15: la normalizacion es una INFERENCIA, asi que se VERIFICA contra la zona real.
-      const esCentral = orden.zonaId === centralZonaId;
-      if (
-        (destino === "en_bodega_central" && !esCentral) ||
-        (destino === "en_bodega_satelite" && esCentral)
-      ) {
-        detalle.push({ ordenId: orden.id, motivo: MSG_ZONA_DESTINO_INCOHERENTE });
+      // R14/R15 (FICHA 363): la normalizacion SIGUE SIENDO una inferencia y SIGUE VERIFICANDOSE,
+      // pero contra el inventario CERRADO de transiciones de la 140 filtrado por la familia de
+      // ESTA accion —no contra la zona de la orden, que dice a que bodega PERTENECE y no donde
+      // esta el paquete—. Ver `DESTINOS_DECLARADOS_DESHACER` para el porque de esta autoridad.
+      //
+      // Lo que caza, y que la guardia de escritura NO cazaria: una orden en
+      // `en_ruta_bodega_satelite` cuyo destino inferido fuese `en_bodega_satelite`. Nadie la ha
+      // recibido en la satelite; escribir ese estado falsificaria la custodia del paquete.
+      // Fallo CERRADO: un estado sin entrada en el mapa tampoco pasa.
+      const declarados = DESTINOS_DECLARADOS_DESHACER.get(orden.estatusValue);
+      if (declarados === undefined || !declarados.has(destino)) {
+        detalle.push({ ordenId: orden.id, motivo: MSG_DESTINO_NO_DECLARADO });
         continue;
       }
       items.push({ ordenId: orden.id, destinoEstatusId: idsCatalogo.get(destino) as string });

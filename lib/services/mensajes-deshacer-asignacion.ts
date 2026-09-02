@@ -25,11 +25,29 @@ export const MSG_SIN_HISTORIAL =
   "no se pudo derivar el estado de origen del historial de la orden";
 
 /**
- * R14/R15: la normalizacion produjo un destino incoherente con la zona de la orden
- * (`en_bodega_central` en una orden no-central, o `en_bodega_satelite` en una orden central).
+ * FICHA 363 — R14/R15 REESCRITOS. La normalizacion sigue siendo una INFERENCIA y se sigue
+ * VERIFICANDO, pero contra el INVENTARIO CERRADO DE TRANSICIONES de la 140 (las aristas cuya
+ * familia es `deshacer_asignacion`), no contra la zona de la orden.
+ *
+ * POR QUE SE FUE LA ZONA: la zona dice a que bodega PERTENECE la orden, no donde esta el
+ * paquete. Una orden de zona satelite VIVE en la bodega central mientras espera ruteo —es el
+ * flujo normal, no una anomalia—, asi que «destino `en_bodega_central` + orden no-central» es
+ * el caso COMUN y rechazarlo hacia imposible deshacer el ruteo de cualquier satelite (medido en
+ * produccion: las 94 ordenes vivas de Guanacaste, las 17 guias reportadas incluidas).
  */
-export const MSG_ZONA_DESTINO_INCOHERENTE =
-  "el destino derivado no corresponde a la zona de la orden";
+export const MSG_DESTINO_NO_DECLARADO =
+  "el destino derivado no es una reversion declarada para el estado actual de la orden";
+
+/**
+ * NOMBRE HEREDADO, MISMO VALOR. La capa de presentacion
+ * (`app/(app)/ordenes/_components/deshacer-asignacion-error-messages.ts`) compara contra ESTE
+ * identificador; renombrarlo aqui la romperia, y esa capa queda FUERA del alcance de la 363.
+ *
+ * ⚠️ DEUDA DECLARADA, no descuido: el texto de usuario que esa capa asocia a este motivo
+ * («Revisa la zona de la orden antes de deshacer») manda al operador al sitio equivocado desde
+ * esta ficha. Renombrar el identificador y reescribir esa frase es el traspaso pendiente.
+ */
+export const MSG_ZONA_DESTINO_INCOHERENTE = MSG_DESTINO_NO_DECLARADO;
 
 /** R16: prefijo del motivo de estado no reversible; `msgEstadoNoReversible` lo compone. */
 export const MSG_ESTADO_NO_REVERSIBLE = "estado no reversible";
@@ -49,7 +67,15 @@ export function msgEstadoNoReversible(estatusValue: string): string {
  */
 export const MSG_CARRERA = "la orden cambio de estado antes de completar la reversion";
 
-/** Guardia de configuracion: la zona central (GAM) no esta configurada. */
+/**
+ * Guardia de configuracion: la zona central (GAM) no esta configurada.
+ *
+ * ⚠️ FICHA 363: `DeshacerAsignacionService` YA NO LO PRODUCE. Existia unicamente para poder
+ * evaluar la comparacion contra la zona central que la 363 retira; sin esa comparacion, exigir
+ * la zona central configurada era un bloqueo que no protegia nada. Se CONSERVA exportado porque
+ * la capa de presentacion lo importa y traduce (fuera de alcance), y porque el motivo sigue
+ * siendo el vocabulario comun con `GuiaAsignacionService`.
+ */
 export const MSG_ZONA_CENTRAL_NO_CONFIGURADA = "zona central no configurada";
 
 /** Guardia de seed: falta algun `value` del catalogo de estados. */

@@ -4,7 +4,6 @@ import { z } from "zod";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
-import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { DeshacerAsignacionService } from "@/lib/services/DeshacerAsignacionService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -48,9 +47,11 @@ export interface DeshacerAsignacionDeps {
 
 function buildService(): IDeshacerAsignacionService {
   const prisma = getPrismaClient();
+  // FICHA 363: sin `ZonaRepository`. La zona central se leia SOLO para la comparacion
+  // zona/destino que la 363 retira; la zona del ACTOR (R4/R5/R6) la sigue resolviendo
+  // `OrdenRepository.findUsuarioZonaId` y no cambia.
   return new DeshacerAsignacionService(
     new OrdenRepository(prisma),
-    new ZonaRepository(prisma),
     new OrdenHistorialRepository(prisma),
   );
 }
