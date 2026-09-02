@@ -14,6 +14,7 @@ const addPageMock = vi.fn();
 const addFileToVFSMock = vi.fn<(archivo: string, base64: string) => void>();
 const addFontMock = vi.fn<(archivo: string, nombre: string, estilo: string) => void>();
 const rectMock = vi.fn<(...args: unknown[]) => void>();
+const lineMock = vi.fn<(...args: unknown[]) => void>();
 
 class JsPDFDoble {
   constructor(public opciones: unknown) {}
@@ -36,6 +37,11 @@ class JsPDFDoble {
   // afirma con jspdf de verdad en `etiquetas-pdf.test.ts` (V5) y la paridad
   // entre los dos generadores en `etiquetas-dos-generadores.test.ts`.
   rect = (...args: unknown[]) => rectMock(...args);
+  // Feature 353: la regla horizontal bajo la cabecera es un `line`. Mismo
+  // criterio que el `rect`: el doble solo ANOTA la llamada; su geometria y su
+  // grosor se afirman con jspdf de verdad en `etiquetas-diseno-353.test.ts` y la
+  // paridad entre los dos generadores en `etiquetas-dos-generadores.test.ts`.
+  line = (...args: unknown[]) => lineMock(...args);
   setLineWidth = () => undefined;
   // La maqueta mide textos para repartir lineas y colocar los rotulos en linea;
   // 0,5 mm por caracter basta para que el doble responda algo coherente Y para

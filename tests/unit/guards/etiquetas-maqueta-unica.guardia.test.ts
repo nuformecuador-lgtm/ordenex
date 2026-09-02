@@ -66,6 +66,11 @@ const CONSTANTES_PROHIBIDAS = [
   "CELDA_BASE_MM",
   "QR_MM",
   "BARCODE_MM",
+  // Feature 353 — los grosores de trazo del diseño. Son geometria compartida:
+  // el «borde grueso» del recuadro y la regla de la cabecera se ven en el papel
+  // de los DOS generadores, y un espejo a mano volveria a divergir.
+  "GROSOR_RECUADRO_MM",
+  "GROSOR_REGLA_MM",
 ];
 
 describe("R21 — ningun generador declara por su cuenta la geometria de la etiqueta", () => {
@@ -112,6 +117,9 @@ describe("R21 — ningun generador declara por su cuenta la geometria de la etiq
       "QR_MM",
       "BARCODE_MM",
       "separacionBajoGuiaMm",
+      // Feature 353, en paralelo a la lista prohibida.
+      "GROSOR_RECUADRO_MM",
+      "GROSOR_REGLA_MM",
     ]) {
       expect(maqueta, `${MAQUETA} ya no declara ${trozo}`).toContain(trozo);
     }

@@ -409,20 +409,25 @@ describe("R24 (282/R1) — el numero de guia sigue sin pisar lo que viene debajo
 // coordenadas del PDF y se comprueba que la linea nueva no toca nada, en las
 // CUATRO hojas del catalogo.
 //
-// Los dos ejes, y por que cada uno:
-//   - VERTICAL: la fecha NO estrena linea base, se sube a la de los rotulos de
-//     cabecera. Esa linea ya cumple la regla derivada de la 282 respecto del
-//     numero de guia (`guiaY - cabeceraY = 8 >= fontGuia * PT_A_MM = 7,7611`),
-//     asi que la separacion se hereda en vez de inventarse. Se mide igualmente.
-//   - HORIZONTAL: es lo unico nuevo, y en esa fila solo hay literales fijos
-//     ("GUÍA", "REMISIÓN") mas la fecha, que siempre son diez caracteres. Se
-//     exige que los tres intervalos de tinta sean disjuntos.
+// ---------------------------------------------------------------------------
+// Feature 353 (T5) — LA FILA DE LA FECHA SE MUEVE, Y ESTE BLOQUE LA SIGUE.
 //
-// Y lo que NO cambia lo siguen guardando los tests de la 282 que ya existen: el
-// bloque de campos sigue teniendo SIETE filas (R4), arranca en la misma linea
-// base (R1/R3) y el corpus se imprime sin marca de recorte (R6/R26). Meter la
-// fecha como octavo campo habria bajado el cupo de 10 lineas a 9 y el caso
-// `direccion-3-lineas` habria salido recortado: por eso va en la cabecera.
+// El diseño aprobado pone `REM <n>` y `FECHA <f>` DEBAJO del numero de guia, no
+// encima: arriba solo va el rotulo de marca. Lo que cambia y lo que no:
+//
+//   - VERTICAL: la fecha sigue SIN estrenar geometria propia —comparte fila con
+//     la remision— y sigue respetando la regla derivada de la 282 respecto del
+//     numero de guia, ahora HACIA ABAJO: 1 em del cuerpo del numero. La regla es
+//     la misma y se mide igual; lo que cambia es el lado.
+//   - HORIZONTAL: en esa fila hay ahora CUATRO tramos (`REM`, su valor, `FECHA`,
+//     su valor) y se sigue exigiendo que sean disjuntos y que la fila entera
+//     quepa en la columna de texto de la cabecera.
+//
+// Se RETIRA una asercion y se dice cual: «el par FECHA + fecha va centrado en la
+// columna». El diseño pone la fecha pegada al borde DERECHO de la columna y la
+// remision al izquierdo, con el aire en medio. La sustituye una igualdad medida
+// contra ese borde, que es la version correcta de la misma idea: la fila ocupa
+// la columna entera y la holgura no se acumula fuera de sitio.
 // ---------------------------------------------------------------------------
 
 /** Ancho de tinta de un texto, medido con las MISMAS metricas con las que se dibujo. */
@@ -439,6 +444,8 @@ function anchoMm(
 
 describe("R24 (feature 295) — la fecha de creacion se imprime y no pisa nada", () => {
   const FECHA = "2026-08-27";
+  /** El numero de remision del fixture de este archivo, para leerlo del PDF. */
+  const REMISION_FIXTURE = "REM-1";
 
   it("sale impresa en las CUATRO hojas, leida del propio PDF", () => {
     for (const hoja of HOJAS_ETIQUETA) {
@@ -449,7 +456,7 @@ describe("R24 (feature 295) — la fecha de creacion se imprime y no pisa nada",
     }
   });
 
-  it("comparte linea base con los rotulos de cabecera: no estrena geometria vertical", () => {
+  it("comparte fila con la remision: no estrena geometria vertical propia", () => {
     for (const hoja of HOJAS_ETIQUETA) {
       const doc = construir([etiqueta({ fechaCreacion: FECHA })], new Map(), hoja);
       const u8 = new Uint8Array(bytesDe(doc));
@@ -464,22 +471,26 @@ describe("R24 (feature 295) — la fecha de creacion se imprime y no pisa nada",
         return encontrado!;
       };
 
-      const yGuiaRotulo = yEnMm(de(ROTULO_GUIA).t.y, hoja.altoMm);
-      const yRemisionRotulo = yEnMm(de(ROTULO_REMISION).t.y, hoja.altoMm);
-      const yFechaRotulo = yEnMm(de(ROTULO_FECHA).t.y, hoja.altoMm);
-      const yFechaValor = yEnMm(de(FECHA).t.y, hoja.altoMm);
+      const yRotuloRemision = yEnMm(de(ROTULO_REMISION).t.y, hoja.altoMm);
+      const yValorRemision = yEnMm(de(REMISION_FIXTURE).t.y, hoja.altoMm);
+      const yRotuloFecha = yEnMm(de(ROTULO_FECHA).t.y, hoja.altoMm);
+      const yValorFecha = yEnMm(de(FECHA).t.y, hoja.altoMm);
 
-      expect(yFechaRotulo).toBeCloseTo(yGuiaRotulo, 6);
-      expect(yFechaRotulo).toBeCloseTo(yRemisionRotulo, 6);
-      expect(yFechaValor).toBeCloseTo(yGuiaRotulo, 6);
-      // Y con el cuerpo de los rotulos, no con uno propio.
-      const cuerpoRotulo = de(ROTULO_GUIA).t.tamano;
-      expect(de(ROTULO_FECHA).t.tamano).toBeCloseTo(cuerpoRotulo, 6);
-      expect(de(FECHA).t.tamano).toBeCloseTo(cuerpoRotulo, 6);
+      expect(yRotuloFecha).toBeCloseTo(yRotuloRemision, 6);
+      expect(yValorFecha).toBeCloseTo(yRotuloRemision, 6);
+      expect(yValorRemision).toBeCloseTo(yRotuloRemision, 6);
+      // Y los cuatro con el MISMO cuerpo: es una fila, no cuatro decisiones.
+      const cuerpo = de(ROTULO_REMISION).t.tamano;
+      expect(de(ROTULO_FECHA).t.tamano).toBeCloseTo(cuerpo, 6);
+      expect(de(FECHA).t.tamano).toBeCloseTo(cuerpo, 6);
+      expect(de(REMISION_FIXTURE).t.tamano).toBeCloseTo(cuerpo, 6);
+      // Control positivo de que la fila NO es la del rotulo de marca: el diseño
+      // pone la marca arriba y esta fila abajo, con el numero en medio.
+      expect(yRotuloRemision).toBeGreaterThan(yEnMm(de(ROTULO_GUIA).t.y, hoja.altoMm));
     }
   });
 
-  it("queda 1 em del cuerpo de la guia POR ENCIMA de su numero: la regla de la 282, hacia arriba", () => {
+  it("queda 1 em del cuerpo de la guia POR DEBAJO de su numero: la regla de la 282", () => {
     for (const hoja of HOJAS_ETIQUETA) {
       const layout = crearLayout(hoja);
       const doc = construir(
@@ -496,28 +507,18 @@ describe("R24 (feature 295) — la fecha de creacion se imprime y no pisa nada",
       const yFecha = yEnMm(textos.find((x) => x.texto === FECHA)!.t.y, hoja.altoMm);
       const yGuia = yEnMm(textos.find((x) => x.texto === "19887906")!.t.y, hoja.altoMm);
 
-      // El numero de guia dibuja su tinta HACIA ARRIBA desde su linea base (los
-      // digitos no tienen descendente): con la fecha un em por encima, su tinta
-      // acaba justo donde empieza la del numero, sin invadirla.
-      const separacion = yGuia - yFecha;
+      // Los digitos no tienen descendente, pero un em del cuerpo mayor es la
+      // unica cota honesta con las metricas que el repo tiene (ninguna): cubre
+      // el descendente del numero mas el ascendente de la fila de abajo.
+      const separacion = yFecha - yGuia;
       expect(
         separacion,
-        `${hoja.id}: ${separacion.toFixed(3)} mm sobre un numero de ${layout.cuerpos.guia} pt`,
+        `${hoja.id}: ${separacion.toFixed(3)} mm bajo un numero de ${layout.cuerpos.guia} pt`,
       ).toBeGreaterThanOrEqual(separacionBajoGuiaMm(layout.cuerpos.guia) - 1e-6);
     }
   });
 
-  it("no se solapa con «GUÍA» ni con «REMISIÓN»: los tres intervalos son disjuntos", () => {
-    // Feature 350 (T15) — Se RETIRAN dos aserciones de este test y se dice cual
-    // era cada una:
-    //   · «REMISIÓN acaba en el margen derecho de la hoja»: ahora acaba en el
-    //     borde derecho de la COLUMNA DE TEXTO de la cabecera, porque el QR pasa
-    //     a ocupar la derecha (D3). Se sustituye por esa misma igualdad medida
-    //     contra el ancho de la columna, que es la version correcta de lo mismo.
-    //   · «el par FECHA + fecha va centrado en el lienzo»: se centra en la
-    //     columna de texto, por el mismo motivo. Idem.
-    // Lo que protegian —que la fila no se apelotone y un tramo entre en otro—
-    // se conserva entero abajo, y ademas V2 exige que nada se salga del ancho.
+  it("los cuatro tramos de la fila META son disjuntos y ocupan la columna entera", () => {
     for (const hoja of HOJAS_ETIQUETA) {
       const layout = crearLayout(hoja);
       const anchoColumna = layout.anchoUtil - layout.qrMm - GAPS_ENTRE_BANDAS[0];
@@ -529,35 +530,35 @@ describe("R24 (feature 295) — la fecha de creacion se imprime y no pisa nada",
         texto: textoLegible(t, fuentes.get(t.fuenteRes)),
       }));
       const tramo = (texto: string, estilo: "bold" | "normal") => {
-        const encontrado = textos.find((x) => x.texto === texto)!;
+        const encontrado = textos.find((x) => x.texto === texto);
         expect(encontrado, `no se encontro «${texto}» en ${hoja.id}`).toBeDefined();
-        const inicio = encontrado.t.x * PT_A_MM;
+        const inicio = encontrado!.t.x * PT_A_MM;
         return {
           texto,
           inicio,
-          fin: inicio + anchoMm(doc, texto, estilo, encontrado.t.tamano),
+          fin: inicio + anchoMm(doc, texto, estilo, encontrado!.t.tamano),
         };
       };
 
-      const guia = tramo(ROTULO_GUIA, "bold");
+      const rotuloRemision = tramo(ROTULO_REMISION, "bold");
+      const valorRemision = tramo(REMISION_FIXTURE, "normal");
       const rotuloFecha = tramo(ROTULO_FECHA, "bold");
       const valorFecha = tramo(FECHA, "normal");
-      const remision = tramo(ROTULO_REMISION, "bold");
 
       // Controles positivos de que la `x` del PDF significa «borde izquierdo del
-      // texto»: GUÍA empieza en el margen y REMISIÓN termina en el borde derecho
-      // de la columna de texto de la cabecera.
-      expect(guia.inicio, `${hoja.id}: GUÍA no empieza en el margen`).toBeCloseTo(
-        layout.x(0),
-        3,
-      );
+      // texto»: la fila arranca en el margen y acaba en el borde derecho de la
+      // columna de texto de la cabecera, que es donde empieza el QR.
       expect(
-        remision.fin,
-        `${hoja.id}: REMISIÓN no acaba en el borde de la columna de cabecera`,
+        rotuloRemision.inicio,
+        `${hoja.id}: la fila META no empieza en el margen`,
+      ).toBeCloseTo(layout.x(0), 3);
+      expect(
+        valorFecha.fin,
+        `${hoja.id}: la fecha no acaba en el borde de la columna de cabecera`,
       ).toBeCloseTo(layout.x(anchoColumna), 3);
 
-      // La fila entera, de izquierda a derecha, sin que un tramo entre en el otro.
-      const fila = [guia, rotuloFecha, valorFecha, remision];
+      // La fila entera, de izquierda a derecha, sin que un tramo entre en otro.
+      const fila = [rotuloRemision, valorRemision, rotuloFecha, valorFecha];
       for (let i = 1; i < fila.length; i++) {
         const holgura = fila[i].inicio - fila[i - 1].fin;
         expect(
@@ -565,14 +566,14 @@ describe("R24 (feature 295) — la fecha de creacion se imprime y no pisa nada",
           `${hoja.id}: «${fila[i - 1].texto}» y «${fila[i].texto}» se solapan (${holgura.toFixed(3)} mm)`,
         ).toBeGreaterThan(0);
       }
-      // Y el par rotulo+valor va centrado en la columna: la holgura sobrante no
-      // se acumula toda a un lado (seria la señal de que un dia el par se come
-      // un rotulo al crecer).
-      const centroPar = (rotuloFecha.inicio + valorFecha.fin) / 2;
-      expect(centroPar).toBeCloseTo(layout.x(anchoColumna / 2), 3);
+
+      // Y el rotulo de MARCA, que es lo unico que queda arriba, empieza tambien
+      // en el margen: la cabecera es una columna, no dos.
+      expect(tramo(ROTULO_GUIA, "bold").inicio).toBeCloseTo(layout.x(0), 3);
     }
   });
 });
+
 
 // ---------------------------------------------------------------------------
 // Feature 350 (T15) — RETIRADO POR MANDATO: «R4 — los siete campos, sus rotulos

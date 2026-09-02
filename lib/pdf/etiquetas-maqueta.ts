@@ -113,17 +113,30 @@ export const INTERLINEADO = 1.26;
  * hace falta y suben cuando sobra sitio. Los de la cabecera son fijos.
  *
  * De donde sale cada uno:
- *  - `guia` 22 y `rotulo` 8: no se tocan (282/R27, R24).
- *  - `remision` 10: no se toca (feature 295).
+ *  - `rotulo` 8: no se toca (282/R24). Es el cuerpo de TODOS los rotulos
+ *    diminutos de la etiqueta: «ORDENEX · GUÍA», «PARA», «CONTENIDO», «TIENDA».
+ *  - `guia` **30**: feature 353. Ver la nota de abajo.
+ *  - `remision` 10: no se toca (feature 295). Gobierna la fila «REM … FECHA …».
  *  - `destinatario` 13 y `telefono` 12: D3, jerarquia por TAMAÑO.
  *  - `direccion` 10: gana ancho por D2 (se va la columna de rotulos).
  *  - `ubicacion` 9: igual que antes.
  *  - `importe` 16: es lo que el mensajero tiene que cobrar (D3).
  *  - `detalle` 8: el «cuerpo menor» de D3 para producto y tienda.
+ *
+ * FEATURE 353 — EL NUMERO DE GUIA PASA DE 22 A 30 pt, y no es una preferencia:
+ * es la medida del diseño aprobado. Sobre el lienzo de 100 mm el numero mide
+ * ~10,6 mm de alto de caja, y `10,6 / (25,4/72) = 30,0` pt. A 22 pt su caja mide
+ * 7,76 mm —el 73 % de lo aprobado— y deja de ser el elemento dominante de la
+ * etiqueta, que es literalmente lo que el humano reclamo.
+ *
+ * NO CUESTA NI UN MILIMETRO de capacidad, y esa es la razon por la que se puede
+ * hacer sin reabrir nada de la 350: el alto de la cabecera lo manda el QR
+ * (`max(QR_MM, pila de texto)`) y la pila con 30 pt mas la fila «REM … FECHA …»
+ * mide ~24,9 mm, por debajo de los 26 del QR. Medido en `progress/impl_353.md`.
  */
 export const CUERPOS_BASE = {
   rotulo: 8,
-  guia: 22,
+  guia: 30,
   remision: 10,
   destinatario: 13,
   telefono: 12,
@@ -132,6 +145,31 @@ export const CUERPOS_BASE = {
   importe: 16,
   detalle: 8,
 } as const;
+
+/**
+ * Feature 353 — GROSORES DE TRAZO de la celda base, en mm.
+ *
+ * Los dos salen del diseño aprobado y viven aqui —y no como literales dentro del
+ * dibujo— por el mismo motivo que el resto de la maqueta: son geometria
+ * compartida por los DOS generadores y la guardia
+ * `etiquetas-maqueta-unica.guardia.test.ts` prohibe que cualquiera de ellos
+ * declare un valor que el otro tambien declara.
+ *
+ * `GROSOR_RECUADRO_MM` era 0,3 antes de la 353 y el diseño pide «borde grueso»
+ * para el recuadro del importe: es el unico elemento enmarcado de la etiqueta y a
+ * 0,3 mm el marco se leia como una linea de tabla, no como un recuadro.
+ */
+export const GROSOR_RECUADRO_MM = 0.6;
+
+/**
+ * Grosor de la REGLA HORIZONTAL que separa la cabecera del resto (feature 353).
+ *
+ * Se dibuja centrada en la separacion que ya existia entre las bandas de
+ * cabecera y destino (`GAPS_ENTRE_BANDAS[0]` = 2 mm), asi que NO consume ni un
+ * milimetro del presupuesto vertical: con 0,4 mm de grosor ocupa
+ * [0,8 ; 1,2] mm dentro de ese hueco y deja 0,8 mm de aire a cada lado.
+ */
+export const GROSOR_REGLA_MM = 0.4;
 
 /** Lado del QR en la celda base, en mm. NO se comprime: ahi leen las pistolas (R12). */
 export const QR_MM = 26;
@@ -202,6 +240,8 @@ export const MAQUETA_BASE = {
   pasoAjustePt: PASO_AJUSTE_PT,
   qrSize: QR_MM,
   barcodeHeight: BARCODE_MM,
+  grosorRecuadro: GROSOR_RECUADRO_MM,
+  grosorRegla: GROSOR_REGLA_MM,
   gapCampos: GAP_CAMPOS_MM,
   gapTextoCodigos: GAP_TEXTO_CODIGOS,
   gapRotuloValor: GAP_ROTULO_VALOR,

@@ -385,10 +385,14 @@ describe("R23 — la pantalla y el papel dicen lo mismo, en el mismo orden y con
 
     expect(pantalla).toEqual(papel);
     // Y ese orden es el de R13, escrito para que se lea sin ejecutar nada.
+    // Feature 353 — el orden cambia por el diseño aprobado: la fecha baja a la
+    // fila que va DEBAJO del numero, junto a la remision, y arriba solo queda el
+    // rotulo de marca. Lo que la asercion sigue garantizando es lo de antes:
+    // que pantalla y papel digan lo mismo en el mismo orden.
     expect(papel).toEqual([
-      "fechaCreacion",
       "numGuia",
       "numRemision",
+      "fechaCreacion",
       "destinatario",
       "telefonoDest",
       "direccion",

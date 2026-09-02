@@ -36,6 +36,7 @@ import {
   fuentesDePagina,
   imagenesDePagina,
   rectangulosDePagina,
+  trazosDePagina,
   textoLegible,
   textosDePagina,
 } from "./pdf-inspector";
@@ -79,6 +80,13 @@ function lineasDe(bytes: Uint8Array, indice = 0): Linea[] {
  *
  * Se comparan tambien las IMAGENES (QR y codigo de barras): sus rectangulos son
  * geometria compartida aunque el raster lo produzca cada runtime con su libreria.
+ *
+ * Feature 353 — y los TRAZOS, por el mismo motivo un operador mas abajo: la
+ * regla horizontal bajo la cabecera es `m` + `l` + `S`, que no es un `re`. Si
+ * uno de los dos generadores dejara de dibujarla, sin esto nadie se enteraria.
+ * Se compara ademas el GROSOR: el diseño distingue «borde grueso» del recuadro
+ * de la linea fina de la regla, y dos trazos con las mismas coordenadas y
+ * distinto grosor se ven distintos en el papel.
  */
 function figurasDe(bytes: Uint8Array, indice = 0) {
   return {
@@ -88,6 +96,14 @@ function figurasDe(bytes: Uint8Array, indice = 0) {
       w: r.w.toFixed(4),
       h: r.h.toFixed(4),
       operador: r.operador,
+      grosor: r.grosor.toFixed(4),
+    })),
+    trazos: trazosDePagina(bytes, indice).map((t) => ({
+      x1: t.x1.toFixed(4),
+      y1: t.y1.toFixed(4),
+      x2: t.x2.toFixed(4),
+      y2: t.y2.toFixed(4),
+      grosor: t.grosor.toFixed(4),
     })),
     imagenes: imagenesDePagina(bytes, indice).map((i) => ({
       x: i.x.toFixed(4),
@@ -134,6 +150,10 @@ describe("R22 — los dos generadores producen la MISMA etiqueta en 100 x 100", 
         "no se leyo el recuadro del importe en el PDF de cliente",
       ).toHaveLength(1);
       expect(figurasCliente.imagenes, "faltan el QR y el barcode").toHaveLength(2);
+      expect(
+        figurasCliente.trazos,
+        "no se leyo la regla horizontal en el PDF de cliente",
+      ).toHaveLength(1);
       expect(figurasServidor).toEqual(figurasCliente);
     });
   }
