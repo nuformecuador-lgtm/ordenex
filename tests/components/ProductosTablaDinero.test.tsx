@@ -955,3 +955,129 @@ describe("FICHA 348 · `textoColumnasNoSumables` deriva la leyenda, no la escrib
     );
   });
 });
+
+/* ========================================================================== */
+/* FICHA 354 — un dato, un renglón: la celda de «Recaudado» se lee de un vistazo */
+/* ========================================================================== */
+
+describe("FICHA 354 · las líneas de apoyo de «Recaudado» son FRASES, no palabras sueltas", () => {
+  // El caso EXACTO de la captura del humano: una fila con importe, con órdenes acompañadas y
+  // con algo pendiente de cierre. Es la única forma de la celda que lleva sus TRES datos.
+  const CON_PENDIENTE = fila({ producto: "Base Dr", ordenes: 33, ordenesAcompanadas: 4 });
+
+  beforeEach(() => {
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos([CON_PENDIENTE]) });
+  });
+
+  /** Las líneas de apoyo de la celda: los `text-xs` que cuelgan bajo la cifra. */
+  function lineasDeApoyo(): HTMLElement[] {
+    const td = celda("Base Dr", PRODUCTOS_COLUMNAS.recaudado);
+    return [...td.querySelectorAll<HTMLElement>("span.text-xs")];
+  }
+
+  /** El `<th>` de una columna, por su rótulo. */
+  function encabezadoDe(rotulo: string): HTMLTableCellElement {
+    const tabla = screen.getAllByRole("table")[0];
+    const th = [...tabla.querySelectorAll<HTMLTableCellElement>("thead th")].find(
+      (c) => c.textContent === rotulo,
+    );
+    expect(th, `no existe el encabezado «${rotulo}»`).toBeDefined();
+    return th as HTMLTableCellElement;
+  }
+
+  /** El mínimo declarado de una columna, en `rem`. */
+  function minimoRem(rotulo: string): number {
+    const valor = encabezadoDe(rotulo).style.minWidth;
+    expect(valor, `«${rotulo}» → ${valor}`).toMatch(/^[\d.]+rem$/);
+    return Number.parseFloat(valor);
+  }
+
+  it("cada línea de apoyo va en UN renglón: las dos declaran `whitespace-nowrap`", async () => {
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    // EL DEFECTO QUE ESTE CASO CIERRA, medido en Chromium a 1440 px con la columna «Tienda»
+    // montada: la celda ocupaba OCHO renglones para TRES datos —«Con otro / producto: 4 / de
+    // 33 / Pendiente de / cierre: / ₡23.798 (2 / órdenes)»—. Ninguna PALABRA se partía (eso lo
+    // arregló la 348 y era cierto), pero la columna medía 104 px y las líneas de apoyo son
+    // FRASES: piden 161 y 244 px. `whitespace-nowrap` sube el `min-content` de la columna de
+    // la palabra a la frase, así que la columna no puede volver a ser más estrecha que ellas.
+    //
+    // ⚠ ES UNA GUARDIA DE FUENTE Y SE SABE: jsdom no hace layout y ninguna suite puede contar
+    // renglones. Los ocho de antes y los tres de después están medidos en el navegador y
+    // anotados en `progress/impl_354.md`. Lo que este caso impide es que la clase desaparezca
+    // sin que nada avise, que es cómo se perdería el arreglo.
+    const lineas = lineasDeApoyo();
+    expect(lineas).toHaveLength(2);
+    for (const linea of lineas) {
+      expect(linea.className, linea.textContent ?? "").toContain("whitespace-nowrap");
+    }
+  });
+
+  it("y siguen diciéndolo TODO: la frase entera, sin abreviar ni recortar", async () => {
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    // R63 en su forma de esta ficha: la columna se ensancha, el texto NO se acorta. Los dos
+    // textos se comparan contra las funciones que los producen porque son las mismas que usa
+    // la vista de teléfono; lo que este caso afirma es que están LOS DOS y ENTEROS.
+    const textos = lineasDeApoyo().map((l) => l.textContent);
+    expect(textos).toEqual([
+      textoAcompanadas(4, 33),
+      textoPendiente(DINERO.pendiente.recaudado, DINERO.pendiente.ordenes),
+    ]);
+    // Y ninguna se esconde tras un recorte: es la prohibición de R63 aplicada a la línea de
+    // apoyo y no sólo a la cifra — un «Pendiente de cierre: ₡23.79…» sería peor que no ponerlo.
+    for (const linea of lineasDeApoyo()) {
+      expect(linea.className).not.toMatch(/\btruncate\b/);
+      expect(linea.className).not.toMatch(/\bline-clamp-/);
+      expect(linea.className).not.toMatch(/\boverflow-hidden\b/);
+    }
+  });
+
+  it("el mínimo de «Recaudado» sale de la FRASE, no de su palabra más larga", async () => {
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    // DE DÓNDE SALE EL 16,75. Medido en Chromium clonando cada pieza de la celda con su propia
+    // fuente: la frase más larga («Pendiente de cierre: ₡23.798 (2 órdenes)») pide 244 px y el
+    // `<th>` añade 24 de relleno → 268 px = 16,75rem. El mínimo de la 348 era 6,5rem (104 px)
+    // porque se calculó sobre la PALABRA más ancha de la columna, que aquí es la cifra (65 px):
+    // correcto para once columnas de palabras sueltas, corto para la única que lleva frases.
+    expect(minimoRem(PRODUCTOS_COLUMNAS.recaudado)).toBeGreaterThanOrEqual(16.75);
+
+    // Y es el mayor de los tres: las otras dos columnas de dinero llevan UNA cifra por celda y
+    // su renglón ya era uno solo —medido: 1 renglón antes y después—, así que no se tocan. Si
+    // algún día una de ellas gana una línea de apoyo, este caso deja de valer y hay que
+    // remedirla, que es exactamente lo que se quiere que pase.
+    for (const otra of [PRODUCTOS_COLUMNAS.ordenex, PRODUCTOS_COLUMNAS.paraTienda]) {
+      expect(minimoRem(otra), otra).toBeLessThan(minimoRem(PRODUCTOS_COLUMNAS.recaudado));
+    }
+  });
+
+  it("pero la composición de «Otros resultados» NO se fuerza a un renglón", async () => {
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos([
+        fila({
+          producto: "Base Dr",
+          porStatus: [
+            { status: "entregada", conteo: 3 },
+            { status: "devuelta", conteo: 4 },
+            { status: "reprogramada", conteo: 2 },
+          ],
+        }),
+      ]),
+    });
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    // LA MUTACIÓN FÁCIL Y EQUIVOCADA: poner `whitespace-nowrap` dentro de `Contexto` en vez de
+    // en las dos líneas que lo piden. La composición de «Otros resultados» también es un
+    // `Contexto` y CRECE con el catálogo de desenlaces («4 devueltas · 2 reprogramadas · …»):
+    // forzarla a una línea convertiría esa columna en una de 300 px que nadie ha pedido. La
+    // decisión es por línea, no por componente.
+    const linea = screen.getByText("4 devueltas · 2 reprogramadas");
+    expect(linea.className).not.toContain("whitespace-nowrap");
+  });
+});
