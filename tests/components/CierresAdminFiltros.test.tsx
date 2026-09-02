@@ -95,6 +95,14 @@ const CATALOGO: CatalogoFiltrosCierresDTO = {
     { id: MENSAJERO_DIANA, nombre: "Diana Mora", zonaId: ZONA_A },
     { id: MENSAJERO_BETO, nombre: "Beto de Otra Zona", zonaId: ZONA_B },
   ],
+  // Ficha 351: aquí los dos están en pie, así que la lista del filtro coincide con el universo.
+  // Que sean DOS campos y no uno se comprueba donde de verdad DIVERGEN: en el último `describe`
+  // de este archivo (filtro y descarga sobre el mismo catálogo) y en
+  // `DescargarGestionesDialog.test.tsx`.
+  mensajerosFiltro: [
+    { id: MENSAJERO_DIANA, nombre: "Diana Mora", zonaId: ZONA_A },
+    { id: MENSAJERO_BETO, nombre: "Beto de Otra Zona", zonaId: ZONA_B },
+  ],
 };
 
 function cierre(cierreId: string, mensajeroNombre: string): CierreAdminResumen {
@@ -125,7 +133,13 @@ function pagina(items: CierreAdminResumen[], total = items.length) {
   return { status: "ok" as const, items, page: 1, pageSize: 25, total };
 }
 
-function montar(items: CierreAdminResumen[] = [cierre("c1", "Diana Mora")], total?: number) {
+function montar(
+  items: CierreAdminResumen[] = [cierre("c1", "Diana Mora")],
+  total?: number,
+  // Ficha 351: el catálogo se puede sustituir para montar el caso en el que `mensajeros` y
+  // `mensajerosFiltro` DIVERGEN, que es donde se ve el arreglo.
+  catalogo: CatalogoFiltrosCierresDTO = CATALOGO,
+) {
   const inicial = { items, total: total ?? items.length, pageSize: 25 };
   pendientesMock.mockResolvedValue(pagina(items, total));
   historicoMock.mockResolvedValue(pagina([]));
@@ -135,7 +149,7 @@ function montar(items: CierreAdminResumen[] = [cierre("c1", "Diana Mora")], tota
         pendientes={inicial}
         historico={{ items: [], total: 0, pageSize: 25 }}
         sinZona={false}
-        catalogoFiltros={CATALOGO}
+        catalogoFiltros={catalogo}
       />
     </SWRConfig>,
   );
@@ -359,5 +373,103 @@ describe("Filtros del listado de cierres del día", () => {
 
     expect(screen.getByRole("region", { name: "Pendientes de decisión" })).toBeInTheDocument();
     expect(screen.getByText("Diana Mora")).toBeInTheDocument();
+  });
+});
+
+/* ================================================================================================
+ * FICHA 351 — EL DESPLEGABLE NO OFRECE A LOS DADOS DE BAJA; LA DESCARGA SÍ LOS INCLUYE
+ * ================================================================================================
+ *
+ * ESTE BLOQUE ES EL CORAZÓN DE LA FICHA, y existe para impedir una «simplificación» concreta:
+ * fundir `catalogo.mensajeros` y `catalogo.mensajerosFiltro` en un solo campo.
+ *
+ * Son dos conceptos con dos nombres:
+ *
+ *  · `mensajeros` es el **universo del histórico**. Sus ids son la selección POR DEFECTO de
+ *    `DescargarGestionesDialog` («no toco nada = todos»), y viajan al servidor como
+ *    `mensajeroIds`. Recortarlo borraría del Excel, en silencio, las gestiones de todo mensajero
+ *    dado de baja — un dato perdido que nadie echa de menos hasta que lo necesita.
+ *  · `mensajerosFiltro` es la **lista de opciones del desplegable**. Ahí una cuenta de baja no
+ *    acota nada, y ofrecerla es lo que el humano señaló el 2026-09-02: «muestra tiendas o
+ *    mensajeros que tenemos desactivos y eso es información que no debe mostrarse».
+ *
+ * Los dos consumidores se montan desde el MISMO `catalogoFiltros` en `CierresAdminModule`, así
+ * que se afirman en el MISMO render y sobre el MISMO objeto: es la única forma de que unificar
+ * los campos ponga rojo algo. Con dos tests en dos archivos, quien unifique arregla el que se
+ * rompe y no se entera del otro.
+ */
+describe("Ficha 351 · filtro y descarga leen listas DISTINTAS del mismo catálogo", () => {
+  const MENSAJERO_NORA = "66666666-6666-4666-8666-666666666666";
+
+  /**
+   * Nora está en el universo (`mensajeros`) y NO entre las opciones del filtro
+   * (`mensajerosFiltro`): es la forma exacta de un mensajero dado de baja tal como lo entrega
+   * `CierresAdminRepository.findCatalogoFiltros` desde esta ficha.
+   */
+  const CATALOGO_CON_BAJA: CatalogoFiltrosCierresDTO = {
+    zonas: [{ id: ZONA_A, nombre: "Bodega Heredia" }],
+    mensajeros: [
+      { id: MENSAJERO_DIANA, nombre: "Diana Mora", zonaId: ZONA_A },
+      { id: MENSAJERO_NORA, nombre: "Nora de Baja", zonaId: ZONA_A },
+    ],
+    mensajerosFiltro: [{ id: MENSAJERO_DIANA, nombre: "Diana Mora", zonaId: ZONA_A }],
+  };
+
+  it("el desplegable de Mensajero NO ofrece a la dada de baja", async () => {
+    const user = userEvent.setup();
+    montar([cierre("c1", "Diana Mora")], undefined, CATALOGO_CON_BAJA);
+    await screen.findByRole("region", { name: "Filtros de los cierres del día" });
+
+    await pedirFiltro(user, "Mensajero");
+    const barra = screen.getByRole("region", { name: "Filtros de los cierres del día" });
+    await user.click(within(barra).getByRole("button", { name: /Mensajero/ }));
+
+    // La que está en pie sigue ahí: sin esta mitad, el caso pasaría con el desplegable vacío.
+    expect(await screen.findByRole("option", { name: "Diana Mora" })).toBeInTheDocument();
+    // Y la dada de baja no se ofrece. ⚠️ Ésta es la línea que se pone roja si
+    // `FiltrosCierresBarra` vuelve a leer `catalogo.mensajeros`.
+    expect(screen.queryByRole("option", { name: "Nora de Baja" })).not.toBeInTheDocument();
+  });
+
+  it("la descarga de gestiones SÍ la incluye, y marcada por defecto", async () => {
+    const user = userEvent.setup();
+    montar([cierre("c1", "Diana Mora")], undefined, CATALOGO_CON_BAJA);
+    await screen.findByRole("region", { name: "Filtros de los cierres del día" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar detallada por mensajero" }),
+    );
+    const dialogo = await screen.findByRole("dialog");
+
+    // Está en las casillas...
+    const casilla = within(dialogo).getByRole("checkbox", { name: "Nora de Baja" });
+    expect(casilla).toBeInTheDocument();
+    // ...y MARCADA: «no toco nada» tiene que seguir significando «todo el histórico». Si alguien
+    // enchufa este diálogo a `mensajerosFiltro`, sus gestiones se caen del archivo en silencio.
+    expect(casilla).toBeChecked();
+    expect(within(dialogo).getByRole("checkbox", { name: "Diana Mora" })).toBeChecked();
+  });
+
+  it("y las dos cosas a la vez, en el MISMO render: una lista recortada y la otra entera", async () => {
+    // El caso que hace imposible unificar los dos campos sin que nada se entere. Los dos de
+    // arriba se podrían «arreglar» por separado; éste no: el mismo objeto tiene que dar dos
+    // respuestas distintas a dos preguntas distintas.
+    const user = userEvent.setup();
+    montar([cierre("c1", "Diana Mora")], undefined, CATALOGO_CON_BAJA);
+    await screen.findByRole("region", { name: "Filtros de los cierres del día" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar detallada por mensajero" }),
+    );
+    const dialogo = await screen.findByRole("dialog");
+    expect(within(dialogo).getByRole("checkbox", { name: "Nora de Baja" })).toBeChecked();
+    await user.click(within(dialogo).getByRole("button", { name: "Cerrar" }));
+
+    await pedirFiltro(user, "Mensajero");
+    const barra = screen.getByRole("region", { name: "Filtros de los cierres del día" });
+    await user.click(within(barra).getByRole("button", { name: /Mensajero/ }));
+
+    await screen.findByRole("option", { name: "Diana Mora" });
+    expect(screen.queryByRole("option", { name: "Nora de Baja" })).not.toBeInTheDocument();
   });
 });

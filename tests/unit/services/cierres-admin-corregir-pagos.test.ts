@@ -56,7 +56,7 @@ function fakeRepo(overrides: Partial<ICierresAdminRepository> = {}): ICierresAdm
     // repositorio. Esta suite no toca esa ruta; stub neutro (ningun retornable que confirmar).
     findGestionesRetornablesDelCierre: vi.fn(async () => []),
     findGestionesPorAlcanceCompleto: vi.fn(async () => []),
-    findCatalogoFiltros: vi.fn(async () => ({ zonas: [], mensajeros: [] })),
+    findCatalogoFiltros: vi.fn(async () => ({ zonas: [], mensajeros: [], mensajerosFiltro: [] })),
     findGestionEditableEnCierre: vi.fn(async () => editable()),
     actualizarPagosGestion: vi.fn(async () => ({
       status: "updated" as const,

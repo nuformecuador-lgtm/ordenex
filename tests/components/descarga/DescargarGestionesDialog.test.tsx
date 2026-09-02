@@ -67,12 +67,23 @@ const ZONA = "33333333-3333-4333-8333-333333333333";
  */
 const HOY = fechaCalendarioCR();
 
+/**
+ * ⚠️ FICHA 351 — `mensajerosFiltro` ES A PROPÓSITO MÁS CORTO QUE `mensajeros`, Y ESO ES EL TEST.
+ *
+ * Beto está en el universo (`mensajeros`) pero NO entre las opciones del desplegable de filtro:
+ * es la forma de un mensajero dado de baja. Este diálogo tiene que seguir viéndolo, porque sus
+ * ids son la selección POR DEFECTO de la descarga y recortarla borraría del archivo las gestiones
+ * históricas de quien ya no está —en silencio—. Si alguien «arregla» el diálogo para que lea
+ * `mensajerosFiltro` (que es lo correcto en la barra de filtros y lo que invita a copiar), Beto
+ * desaparece de las casillas y de la selección por defecto, y los casos de abajo se ponen rojos.
+ */
 const CATALOGO: CatalogoFiltrosCierresDTO = {
   zonas: [{ id: ZONA, nombre: "Limón" }],
   mensajeros: [
     { id: ANA, nombre: "Ana Mensajera", zonaId: ZONA },
     { id: BETO, nombre: "Beto Mensajero", zonaId: null },
   ],
+  mensajerosFiltro: [{ id: ANA, nombre: "Ana Mensajera", zonaId: ZONA }],
 };
 
 function gestion(): CierreGestionDescargaDTO {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act, within } from "@testing-library/react";
 import { SWRConfig } from "swr";
 
 import { DEBOUNCE_MS_DEFAULT } from "@/components/shared/FilterComponent";
@@ -30,23 +30,41 @@ vi.mock("@/lib/actions/filtros-ordenes", () => ({
     catalogo: CATALOGO,
   })),
 }));
+/*
+ * ⚠️ FICHA 351 (2026-09-02) — ESTE SEGUNDO DOBLE ES UNA TRAMPA, NO UNA DEPENDENCIA. LÉELO ANTES
+ * DE BORRARLO POR «MUERTO».
+ *
+ * Hasta esta ficha la barra pedía sus mensajeros a `listarMensajerosParaAsignacion` —la lista de
+ * ASIGNACIÓN, que por diseño incluye a los dados de baja— y este doble la servía. Ya no la llama:
+ * los mensajeros salen del catálogo. Lo lógico sería retirar el doble, y sería un error medido.
+ *
+ * SE QUEDA, ENVENENADO. Devuelve a alguien que NO existe en el catálogo (`Zulema Fantasma`), y
+ * ningún caso de este archivo la espera nunca. Como `vi.mock` de un módulo que nadie importa es
+ * inerte, mientras la barra esté bien esto no hace nada; en cuanto alguien vuelva a enchufar la
+ * acción al filtro, Zulema aparece en el desplegable y el caso «ofrece al mensajero que trae el
+ * catálogo, y solo a él» se pone rojo.
+ *
+ * Por qué hace falta y no basta con la guardia de texto de `AsignacionBloqueoPorCierre.test.tsx`:
+ * se midió. Con la reversión completa aplicada (import + `useSWR` + sobrescritura del catálogo),
+ * SIN esta trampa sólo caía la guardia que lee el archivo fuente, y ningún test de conducta se
+ * enteraba — porque en jsdom la acción real falla y la barra caía de vuelta al catálogo, dando
+ * por casualidad el resultado correcto. Un agujero de cobertura de libro: verde por accidente.
+ */
 vi.mock("@/lib/actions/ordenes-guia", () => ({
   listarMensajerosParaAsignacion: vi.fn(async () => ({
     status: "ok" as const,
-    mensajeros: [{ id: "m1", nombre: "Ana" }],
+    mensajeros: [{ id: "zzz", nombre: "Zulema Fantasma" }],
   })),
 }));
-
 const CATALOGO: CatalogoFiltrosOrdenesDTO = {
-  mensajeros: [],
+  // Ficha 351: el mensajero vive DENTRO del catálogo, y con él llegan `zonaId` y `estado`.
+  mensajeros: [{ id: "m1", nombre: "Ana", zonaId: "z1", estado: "activo" }],
   zonas: [{ id: "z1", nombre: "Central" }],
   tiendas: [],
   provincias: [{ id: "p1", nombre: "San José" }],
   cantones: [{ id: "c1", nombre: "Escazú", padreId: "p1" }],
   distritos: [{ id: "d1", nombre: "San Rafael", padreId: "c1" }],
 };
-
-const MENSAJEROS = [{ id: "m1", nombre: "Ana" }];
 
 /** Fecha fija: los atajos se resuelven a rangos, y un rango sin reloj fijo no se compara. */
 const AHORA = new Date("2026-08-17T12:00:00.000Z");
@@ -55,7 +73,7 @@ afterEach(cleanup);
 
 describe("Barra de entregas — los SIETE filtros que la cifra sabe aplicar", () => {
   it("declara fecha, zona, la cadena geográfica, tienda y mensajero, y nada más", () => {
-    const defs = construirFiltrosEntregas(CATALOGO, MENSAJEROS, { ahora: AHORA });
+    const defs = construirFiltrosEntregas(CATALOGO, { ahora: AHORA });
 
     expect(defs.map((f) => f.key)).toEqual([
       CLAVE_CREACION,
@@ -84,7 +102,7 @@ describe("Barra de entregas — los SIETE filtros que la cifra sabe aplicar", ()
   // FUENTE: el conteo se lee de la tabla `orden`, que sí tiene esas tres columnas. El motivo
   // por el que no estaban desapareció.
   it("ofrece la cadena geográfica, ahora que la fuente sabe recortarla", () => {
-    const defs = construirFiltrosEntregas(CATALOGO, MENSAJEROS, { ahora: AHORA });
+    const defs = construirFiltrosEntregas(CATALOGO, { ahora: AHORA });
     const claves = defs.map((f) => f.key);
 
     expect(claves).toContain("provincia_id");
@@ -96,7 +114,7 @@ describe("Barra de entregas — los SIETE filtros que la cifra sabe aplicar", ()
   // igual que en la barra de órdenes. Sin `dependsOn`, el selector de distrito ofrecería los
   // de todo el país aunque el usuario ya hubiera elegido un cantón.
   it("encadena provincia -> cantón -> distrito con `dependsOn` y `parentValue`", () => {
-    const defs = construirFiltrosEntregas(CATALOGO, MENSAJEROS, { ahora: AHORA });
+    const defs = construirFiltrosEntregas(CATALOGO, { ahora: AHORA });
     const canton = defs.find((f) => f.key === "canton_id");
     const distrito = defs.find((f) => f.key === "distrito_id");
 
@@ -106,12 +124,42 @@ describe("Barra de entregas — los SIETE filtros que la cifra sabe aplicar", ()
     expect(distrito?.options).toEqual([{ value: "d1", label: "San Rafael", parentValue: "c1" }]);
   });
 
-  it("el filtro de mensajero se llena con la lista servida, no con el catálogo", () => {
-    const defs = construirFiltrosEntregas(CATALOGO, MENSAJEROS, { ahora: AHORA });
+  /**
+   * ⚠ ESTE CASO CAMBIÓ DE SIGNO CON LA FICHA 351 (2026-09-02), igual que el de la cadena
+   * geográfica de más arriba, y por eso se deja escrito.
+   *
+   * Decía: «el filtro de mensajero se llena con la lista servida, NO con el catálogo», y era la
+   * descripción fiel de lo que pasaba: la barra pedía sus mensajeros a
+   * `listarMensajerosParaAsignacion`. Esa lista es la de ASIGNACIÓN y por diseño incluye a los
+   * dados de baja —en un modal de asignar hay a quien deshabilitar y un motivo que enseñar—; en
+   * un desplegable de filtro eso era, con palabras del humano, «información que no debe
+   * mostrarse». La afirmación se invierte: los mensajeros salen del CATÁLOGO, que es la única
+   * fuente que ya trae el recorte de estado hecho en el `WHERE`.
+   */
+  it("ficha 351: el filtro de mensajero se llena con el CATÁLOGO, no con la lista de asignación", () => {
+    const defs = construirFiltrosEntregas(CATALOGO, { ahora: AHORA });
     const mensajero = defs.find((f) => f.key === CLAVE_MENSAJERO);
 
     expect(mensajero?.kind).toBe("multi");
     expect(mensajero?.options).toEqual([{ value: "m1", label: "Ana" }]);
+  });
+
+  /**
+   * La contraprueba de la de arriba, y la que mata la mutación de verdad: con el catálogo VACÍO
+   * de mensajeros, el desplegable se queda sin opciones. Si alguien devolviera la barra a una
+   * segunda fuente, este caso seguiría encontrando opciones que el catálogo no tiene.
+   */
+  it("con el catálogo sin mensajeros, el desplegable no ofrece ninguno", () => {
+    const defs = construirFiltrosEntregas(
+      { ...CATALOGO, mensajeros: [] },
+      { ahora: AHORA },
+    );
+    const mensajero = defs.find((f) => f.key === CLAVE_MENSAJERO);
+
+    // El control SIGUE declarado (R64: un filtro sin opciones no desaparece, se queda vacío);
+    // lo que no hay es a quién ofrecer.
+    expect(mensajero).toBeDefined();
+    expect(mensajero?.options).toEqual([]);
   });
 });
 
@@ -120,7 +168,7 @@ describe("Barra de entregas — los SIETE filtros que la cifra sabe aplicar", ()
 // cambiar aquí un `dias` dejaría los mismos cuatro nombres ofreciendo otras fechas.
 describe("Barra de entregas — la fecha usa los MISMOS rangos que órdenes", () => {
   it("el filtro de fecha ofrece atajo por atajo el mismo rango que la barra de órdenes", () => {
-    const entregas = construirFiltrosEntregas(CATALOGO, MENSAJEROS, { ahora: AHORA });
+    const entregas = construirFiltrosEntregas(CATALOGO, { ahora: AHORA });
     const ordenes = construirFiltrosOrdenes(CATALOGO, {
       incluirTienda: false,
       ahora: AHORA,
@@ -392,5 +440,80 @@ describe("«Limpiar todo» solo está cuando hay algo que limpiar", () => {
 
     expect(screen.queryByRole("button", { name: "Limpiar todo" })).toBeNull();
     vi.useRealTimers();
+  });
+});
+
+/* ========================================================================== */
+/* FICHA 351 — el desplegable de mensajero, montado de verdad                 */
+/* ========================================================================== */
+
+/**
+ * Los dos casos de arriba miran la función pura. Éste monta la barra ENTERA y recorre el camino
+ * completo —SWR → `catalogoFetcher` → `obtenerCatalogoFiltrosOrdenes` → `construirFiltrosEntregas`
+ * → opciones en pantalla—, que es donde de verdad entraba la segunda fuente: hasta la ficha 351
+ * había un `useSWR("entregas:mensajeros")` que traía la lista de asignación y ganaba a la del
+ * catálogo sin que ninguna aserción sobre la función pura se enterara.
+ */
+describe("Ficha 351 — el desplegable de mensajero se puebla desde el catálogo", () => {
+  it("ofrece al mensajero que trae el catálogo, y solo a él", async () => {
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <FiltrosEntregas />
+      </SWRConfig>,
+    );
+
+    await alternarEnSelector("Mensajero");
+    fireEvent.click(await screen.findByRole("button", { name: /^Mensajero:/ }));
+
+    // «Ana» es quien está en `CATALOGO.mensajeros`. Que aparezca prueba que la lista viajó desde
+    // el catálogo hasta la pantalla; no hay ninguna otra fuente que pudiera haberla puesto ahí.
+    expect(await screen.findByRole("option", { name: "Ana" })).toBeInTheDocument();
+    // Y no hay NADIE MÁS. Se afirma sobre la lista ENTERA —no solo «Ana está»— porque una segunda
+    // fuente añadiría opciones sin quitar ésta. «Todos» es el control de marcar/desmarcar que
+    // `FilterComponent` pone en todo filtro `multi`, no un mensajero.
+    const listbox = screen.getByRole("listbox", { name: "Mensajero" });
+    expect(within(listbox).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todos",
+      "Ana",
+    ]);
+  });
+});
+
+/* ========================================================================== */
+/* FICHA 351 — la etiqueta de tienda, sin el sufijo «(inactiva)»              */
+/* ========================================================================== */
+
+/**
+ * La barra de entregas componía la MISMA etiqueta que la de órdenes, importando su
+ * `SUFIJO_INACTIVA`: `t.activa ? t.nombre : nombre + " (inactiva)"` (decisión (e) de la 144,
+ * R51). Esa decisión está revertida desde el 2026-09-02 y la constante ya no existe.
+ *
+ * Este caso está aquí —y no solo en `ordenes-filtros-def.test.ts`— porque eran DOS sitios
+ * componiendo el sufijo, y limpiar uno y olvidar el otro es exactamente el fallo que nadie mira:
+ * las dos barras se ven en pantallas distintas.
+ */
+describe("Ficha 351 — la opción de tienda no lleva sufijo", () => {
+  it("etiqueta el nombre a secas aunque el DTO diga `activa: false`", () => {
+    const defs = construirFiltrosEntregas(
+      {
+        ...CATALOGO,
+        tiendas: [
+          { id: "t1", nombre: "Tienda Viva", esApiKey: false, activa: true },
+          // Cuenta dada de baja: hoy el servidor no la entrega, pero el DTO todavía puede
+          // expresarla. Si alguien vuelve a leer la bandera, este caso lo caza.
+          { id: "t2", nombre: "Tienda Cerrada", esApiKey: false, activa: false },
+        ],
+      },
+      { ahora: AHORA },
+    );
+    const tienda = defs.find((f) => f.key === CLAVE_TIENDA);
+
+    expect((tienda?.options ?? []).map((o) => o.label)).toEqual([
+      "Tienda Viva",
+      "Tienda Cerrada",
+    ]);
+    for (const opcion of tienda?.options ?? []) {
+      expect(opcion.label).not.toMatch(/\(inactiva\)/);
+    }
   });
 });

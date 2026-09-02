@@ -1,4 +1,5 @@
 import { Prisma, type EstadoUsuario, type PrismaClient, type RolValue } from "@prisma/client";
+import { ESTADOS_USUARIO_NO_ASIGNABLES } from "@/lib/constants/estado-usuario-asignable";
 import type { UsuarioPorRolDTO } from "@/lib/types/usuario-por-rol";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { escaparComodinesLike } from "@/lib/utils/escapar-like";
@@ -123,14 +124,36 @@ export class UserRepository implements IUserRepository {
   }
 
   /**
-   * Feature 144/B2 (R50/R54): cuentas dueñas posibles de una orden — roles
-   * `adminTienda` y `apiKey` — SIN filtrar por `estado` (las inactivas se incluyen,
-   * marcadas por la bandera `activa`). Proyeccion minima: id, nombre y dos booleanos.
-   * Nada de email/telefono/cedula/hash.
+   * Feature 144/B2 (R50/R54): cuentas dueñas posibles de una orden — roles `adminTienda` y
+   * `apiKey` — para el CATALOGO del filtro de tienda. Proyeccion minima: id, nombre y dos
+   * booleanos. Nada de email/telefono/cedula/hash. Orden determinista por nombre (R49).
+   *
+   * ⚠️ FICHA 351 (2026-08-29) — LAS DADAS DE BAJA YA NO SE OFRECEN. Hasta hoy no habia filtro
+   * de `estado`, y la decision (e) de la 144 lo justificaba asi: «una cuenta inactiva sigue
+   * siendo dueña de ordenes historicas, y excluirla las haria imposibles de filtrar». Medido en
+   * produccion el 2026-08-29 eso puso 2 cuentas dadas de baja en el desplegable —LA MITAD de la
+   * lista, 2 activas contra 2 inactivas— y el humano lo llamo «informacion que no debe
+   * mostrarse». La decision se revierte, con el matiz que la 144 no separaba:
+   *
+   *   - el CATALOGO deja de ofrecerlas (esta consulta);
+   *   - los DATOS no se tocan. `OrdenRepository.list` no mira el estado del dueño, asi que las
+   *     ordenes de una tienda dada de baja siguen saliendo en el listado y su fila sigue
+   *     pintando el nombre de esa tienda. Lo unico que se pierde es poder ACOTAR por ella.
+   *
+   * El `WHERE` puede vivir aqui porque esta consulta no es universo de datos de nadie: su unico
+   * llamador es `FiltrosOrdenesService` (comprobado en el arbol el 2026-08-29).
+   *
+   * `activa` SIGUE VIAJANDO aunque hoy sea siempre `true`: es el contrato del DTO, y quien lo
+   * lee para pintar el sufijo «(inactiva)» es UI y se limpia aparte.
    */
   async listCuentasTienda(): Promise<CuentaTiendaDTO[]> {
     const rows = await this.prisma.usuario.findMany({
-      where: { rol: { value: { in: ["adminTienda", "apiKey"] } } },
+      where: {
+        rol: { value: { in: ["adminTienda", "apiKey"] } },
+        // Ficha 351: LA MISMA lista que decide quien no puede recibir trabajo decide quien no se
+        // ofrece como opcion de filtro. `pendiente` no esta en ella, y por eso SI se ofrece.
+        estado: { notIn: [...ESTADOS_USUARIO_NO_ASIGNABLES] },
+      },
       select: { id: true, nombre: true, estado: true, rol: { select: { value: true } } },
       orderBy: { nombre: "asc" }, // R49: orden determinista
     });
@@ -167,20 +190,35 @@ export class UserRepository implements IUserRepository {
   }
 
   /**
-   * Pedido humano (2026-08-25): mensajeros del FILTRO de `/ordenes` — TODOS (tambien los
-   * inactivos, que siguen siendo el asignado de ordenes historicas), con su zona y sin PII.
+   * Pedido humano (2026-08-25): mensajeros del FILTRO de `/ordenes`, con su zona y sin PII.
    * `zonaId` acota la lista a esa zona; sin el, devuelve el pais entero.
+   *
+   * ⚠️ FICHA 351 (2026-08-29) — YA NO SON «TODOS». Nacio SIN filtro de `estado` con el mismo
+   * argumento que las cuentas tienda; medido en produccion el 2026-08-29, eso puso 1 mensajero
+   * dado de baja en el desplegable. El humano: «eso es informacion que no debe mostrarse».
+   * Se excluyen los de `ESTADOS_USUARIO_NO_ASIGNABLES` — SOLO del catalogo.
+   *
+   * LO QUE NO CAMBIA, y es el punto: los DATOS. `OrdenRepository.list` filtra por
+   * `mensajero_asignado_id` sin mirar el estado del usuario, asi que las ordenes que un
+   * mensajero dado de baja «tiene en la mano» siguen apareciendo en el listado y siguen
+   * llevando su nombre. Lo que desaparece es SU OPCION en el desplegable.
+   *
+   * ⚠️ NO CONFUNDIR CON LOS SELECTORES DE ASIGNACION. Alli el dado de baja SIGUE apareciendo,
+   * deshabilitado y con su motivo (`MOTIVO_USUARIO_NO_ASIGNABLE`): esa es la decision del
+   * 2026-08-26 y no se toca. Aqui no hay a quien deshabilitar — una opcion de filtro apagada
+   * no informa de nada—, asi que no se ofrece.
    */
   async listMensajerosParaFiltro(zonaId?: string): Promise<MensajeroFiltroDTO[]> {
     const rows = await this.prisma.usuario.findMany({
       where: {
         rol: { value: "mensajero" },
+        // Ficha 351: la MISMA lista de estados que en `listCuentasTienda`, no una segunda.
+        estado: { notIn: [...ESTADOS_USUARIO_NO_ASIGNABLES] },
         ...(zonaId !== undefined ? { zonaId } : {}),
       },
-      // `estado` viaja para que cada superficie decida a quien ofrece: el historico de
-      // conversaciones se queda solo con los `activo`, mientras que `/ordenes` los ofrece a
-      // todos —esconder a un mensajero dado de baja volveria inalcanzables las ordenes que
-      // todavia tiene en la mano—.
+      // `estado` sigue viajando en el DTO: el historico de conversaciones aprieta todavia mas y
+      // se queda SOLO con los `activo` (deja fuera tambien a los `pendiente`), y esa decision
+      // es suya. Desde la 351 este `select` ya no puede devolver `inactivo` ni `bloqueado`.
       select: { id: true, ...NOMBRE_USUARIO_SELECT, zonaId: true, estado: true },
       orderBy: { nombre: "asc" }, // R49: orden determinista
     });

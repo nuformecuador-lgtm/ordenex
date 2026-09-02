@@ -25,6 +25,40 @@ import type {
   CierreGrupos,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
+import type { CatalogoFiltrosCierresDTO } from "@/lib/types/filtros-cierres";
+
+/**
+ * ⚠️ FICHA 351 (2026-09-01) — EL CATALOGO DEL DOBLE VA TIPADO, Y ESO ES EL ARREGLO. NO LO
+ * VUELVAS A ESCRIBIR COMO OBJETO SUELTO DENTRO DEL `vi.mock`.
+ *
+ * QUE PASO: este fixture vivia como literal anonimo dentro de la factory del `vi.mock` de
+ * abajo (`catalogo: { zonas: [], mensajeros: [] }`). Cuando el DTO gano el campo REQUERIDO
+ * `mensajerosFiltro`, el literal se quedo sin el y **`pnpm typecheck` no dijo nada**: la
+ * factory de `vi.mock` esta tipada como `() => unknown`, asi que su valor de retorno NO se
+ * comprueba nunca contra el modulo real. Un campo obligatorio del DTO no protegia aqui a
+ * nadie. Se descubrio reventando en tiempo de ejecucion —`Cannot read properties of undefined
+ * (reading 'map')` en `FiltrosCierresBarra.tsx:188`— y tumbando 6 de los 10 casos de este
+ * archivo, ninguno de ellos sobre filtros.
+ *
+ * LA CURA NO ES RELLENAR EL CAMPO Y SEGUIR: es ATAR EL FIXTURE AL TIPO. Al declararlo con su
+ * anotacion, quitarle `mensajerosFiltro` deja de ser un fallo de ejecucion en seis casos
+ * ajenos y pasa a ser un error de compilacion en esta linea, que es donde se puede leer.
+ *
+ * Va por `vi.hoisted` porque las factories de `vi.mock` se izan por encima de los imports: una
+ * const de modulo referenciada ahi dentro explota con «cannot access before initialization».
+ * El `import type` se borra al compilar, asi que la anotacion no arrastra runtime.
+ */
+const { CATALOGO_FILTROS } = vi.hoisted(() => {
+  const catalogo: CatalogoFiltrosCierresDTO = {
+    zonas: [],
+    mensajeros: [],
+    // El campo que faltaba. Vacio, como los otros dos: esta pantalla no prueba filtros —lo
+    // suyo es el acceso por rol (R1) y la oferta de pago (172/R6)—, solo necesita que la barra
+    // se monte sin reventar.
+    mensajerosFiltro: [],
+  };
+  return { CATALOGO_FILTROS: catalogo };
+});
 
 // Feature 38 (T12, R1/R3) — la página resuelve el rol SOLO server-side; rol ∉
 // {maestro, adminSatelite} (o sin sesión) → `notFound`. Se mockean el resolver, la
@@ -63,7 +97,9 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   // (bodegas destino y mensajeros del alcance), en el mismo `Promise.all` que las dos páginas.
   obtenerCatalogoFiltrosCierres: vi.fn(async () => ({
     status: "ok" as const,
-    catalogo: { zonas: [], mensajeros: [] },
+    // Ficha 351: el catalogo sale de `vi.hoisted` y va TIPADO (ver la nota de arriba). Escribir
+    // aqui un literal suelto es lo que dejo pasar un DTO incompleto sin que el typecheck lo viera.
+    catalogo: CATALOGO_FILTROS,
   })),
 }));
 // Feature 40: la página, role-aware, pre-fetch los datos de cierre de bodega por rol

@@ -30,8 +30,20 @@ import type {
  *  1. **La bodega es la ZONA**, y solo se ofrecen las que pueden serlo: las que tienen admin de
  *     zona asignado, más la GAM. Eso lo resuelve el servidor
  *     (`CierresAdminRepository.findCatalogoFiltros`), no esta barra.
- *  2. **Los mensajeros son todos** —incluidos los dados de baja, que siguen siendo dueños de
- *     sus cierres pasados—.
+ *  2. **Los mensajeros del desplegable son los que están EN PIE.** Esta regla decía justo lo
+ *     contrario hasta la ficha 351 («son todos, incluidos los dados de baja, que siguen siendo
+ *     dueños de sus cierres pasados»); el humano la revirtió tras ver cuentas de baja ofrecidas
+ *     en los filtros: «muestra tiendas o mensajeros que tenemos desactivos y eso es información
+ *     que no debe mostrarse». Lo que aquel argumento protegía NO se pierde: los cierres del
+ *     mensajero dado de baja siguen listándose con su nombre —ningún listado mira el estado de
+ *     su dueño—; lo único que desaparece es su OPCIÓN para acotar.
+ *
+ *     ⚠️ POR ESO ESTA BARRA LEE `catalogo.mensajerosFiltro` Y NO `catalogo.mensajeros`. Son dos
+ *     campos con dos significados y NO se pueden fundir en uno: `mensajeros` es el UNIVERSO DEL
+ *     HISTÓRICO —la selección por defecto de `DescargarGestionesDialog`, que sí tiene que
+ *     incluir a los dados de baja o el Excel perdería sus gestiones en silencio— y
+ *     `mensajerosFiltro` es la lista de OPCIONES de este desplegable. Quien los unifique rompe
+ *     una de las dos cosas, y la que rompe callando es la descarga.
  *  3. **Elegir una bodega recorta los mensajeros a los de esa zona.** Eso sí es de aquí, y se
  *     expresa con el encadenado que `FilterComponent` ya implementa (`dependsOn` + el
  *     `parentValue` de cada opción, el mismo mecanismo con el que `/ordenes` encadena
@@ -170,7 +182,10 @@ export function FiltrosCierresBarra({
         placeholder: "Todos",
         searchPlaceholder: "Filtrar mensajeros…",
         emptyMessage: "Ningún mensajero coincide",
-        options: catalogo.mensajeros.map((m) => ({
+        // FICHA 351 — `mensajerosFiltro`, NO `mensajeros`. Ver la regla 2 de la cabecera: el
+        // segundo es el universo del histórico que consume la descarga de gestiones, y leerlo
+        // aquí es lo que ponía cuentas dadas de baja en este desplegable.
+        options: catalogo.mensajerosFiltro.map((m) => ({
           value: m.id,
           label: m.nombre,
           // Un mensajero SIN zona no cuelga de ninguna bodega: al elegir una, desaparece de la
