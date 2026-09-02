@@ -28,8 +28,10 @@ import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 // 133), que razona sobre el ALCANCE. Aquí se afirma la traducción de su respuesta a
 // controles declarados, que es lo único que estos módulos deciden.
 
+// Ficha 351: el mensajero vive DENTRO del catálogo. Antes llegaba en un segundo argumento
+// (`MENSAJEROS`) que traía la lista de asignación; ese parámetro ya no existe.
 const CATALOGO: CatalogoFiltrosOrdenesDTO = {
-  mensajeros: [],
+  mensajeros: [{ id: "m1", nombre: "Mensajero", zonaId: "z1", estado: "activo" }],
   zonas: [{ id: "z1", nombre: "GAM" }],
   tiendas: [{ id: "t1", nombre: "Tienda", esApiKey: false, activa: true }],
   provincias: [{ id: "p1", nombre: "San José" }],
@@ -37,10 +39,8 @@ const CATALOGO: CatalogoFiltrosOrdenesDTO = {
   distritos: [{ id: "d1", nombre: "Carmen", padreId: "c1" }],
 };
 
-const MENSAJEROS = [{ id: "m1", nombre: "Mensajero" }];
-
 function claves(facetas?: readonly ("zona" | "tienda" | "mensajero")[]): string[] {
-  return construirFiltrosEntregas(CATALOGO, MENSAJEROS, { facetas }).map((f) => f.key);
+  return construirFiltrosEntregas(CATALOGO, { facetas }).map((f) => f.key);
 }
 
 describe("barra de entregas — facetas acotadas por el alcance", () => {
@@ -83,7 +83,7 @@ describe("barra de entregas — facetas acotadas por el alcance", () => {
   it("un filtro que no se declara tampoco se ofrece en el selector", () => {
     // El selector de «Filtros» se construye SOBRE las declaraciones (`filtros.map`), así que
     // esta es la misma lista. Se afirma para que nadie lo reintroduzca por otra vía.
-    const declaraciones = construirFiltrosEntregas(CATALOGO, MENSAJEROS, {
+    const declaraciones = construirFiltrosEntregas(CATALOGO, {
       facetas: ["zona"],
     });
     expect(declaraciones.some((f) => f.label === "Tienda")).toBe(false);

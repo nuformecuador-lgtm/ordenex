@@ -14,8 +14,28 @@ import { ultimosNDiasCalendarioCR } from "@/lib/utils/fecha-cr";
 export const GRUPO_CUENTAS_TIENDA = "Cuentas tienda";
 export const GRUPO_INTEGRACIONES = "Integraciones (API)";
 
-/** Sufijo de las cuentas inactivas, que SI se ofrecen (decision (e), R50/R51). */
-export const SUFIJO_INACTIVA = " (inactiva)";
+/*
+ * ── FICHA 351 (2026-09-02): AQUI ESTABA `SUFIJO_INACTIVA = " (inactiva)"`, Y SE RETIRA ────────
+ *
+ * Su comentario decia: «Sufijo de las cuentas inactivas, que SI se ofrecen (decision (e),
+ * R50/R51)». LA DECISION (e) DE LA FEATURE 144 QUEDA REVERTIDA por instruccion del humano del
+ * 2026-09-02: «muestra tiendas o mensajeros que tenemos desactivos y eso es informacion que no
+ * debe mostrarse». Medido en produccion ese dia, eran 2 de las 4 tiendas del desplegable — la
+ * mitad de la lista.
+ *
+ * El sufijo se va porque YA NO HAY NADA QUE SUFIJAR, no porque estorbe: `listCuentasTienda`
+ * excluye ahora a `inactivo`/`bloqueado` (`ESTADOS_USUARIO_NO_ASIGNABLES`), asi que
+ * `CuentaTiendaDTO.activa` llega siempre en `true` y la rama del sufijo era codigo inalcanzable
+ * que le contaba al lector una regla que el sistema ya no aplica.
+ *
+ * Lo que la decision (e) protegia NO se pierde, y conviene decirlo porque su argumento era
+ * «excluirlas haria invisibles esas ordenes bajo el filtro»: la premisa era falsa.
+ * `OrdenRepository.list` no mira el estado del dueño, asi que las ordenes de una tienda dada de
+ * baja siguen listandose con su nombre; lo unico que desaparece es poder ACOTAR por ella.
+ *
+ * `activa` sigue viajando en el DTO (contrato del servidor, con sus tests) y este modulo
+ * simplemente ya no la lee: la etiqueta es el nombre a secas.
+ */
 
 /**
  * Atajos de antiguedad ofrecidos DENTRO del filtro de tiempo (R9). Sus valores siguen
@@ -133,9 +153,10 @@ export function construirFiltrosOrdenes(
           searchPlaceholder: "Buscar tienda…",
           options: cat.tiendas.map((t) => ({
             value: t.id,
-            // R51: la cuenta inactiva se distingue en el TEXTO visible; el backend
-            // solo entrega banderas (no textos), asi que la etiqueta se compone aqui.
-            label: t.activa ? t.nombre : `${t.nombre}${SUFIJO_INACTIVA}`,
+            // FICHA 351: el NOMBRE A SECAS. Aqui se componia el sufijo «(inactiva)» de R51;
+            // ver la nota de la cabecera, donde vivia la constante y donde queda escrito por
+            // que la decision (e) de la 144 esta revertida.
+            label: t.nombre,
             group: t.esApiKey ? GRUPO_INTEGRACIONES : GRUPO_CUENTAS_TIENDA,
           })),
         },

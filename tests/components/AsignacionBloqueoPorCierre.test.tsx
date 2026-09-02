@@ -254,23 +254,44 @@ describe("271/T9.4 · el modal de RECOLECCIÓN en tienda (R31/R32)", () => {
 
 /**
  * =================================================================================================
- * R33 — EL FILTRO DEL LISTADO NO DESHABILITA. ES DELIBERADO.
+ * R33 — EL FILTRO DEL LISTADO NO DESHABILITA. SIGUE SIENDO DELIBERADO, POR OTRA VÍA.
  * =================================================================================================
  *
- * `FiltrosEntregas` llama a la MISMA acción que los dos modales (misma clave de caché, para no
- * montar una segunda lista que pueda discrepar), así que `bloqueadosIds` le llega. Y no lo lee.
+ * ⚠️ ESTE BLOQUE CAMBIÓ DE FORMA CON LA FICHA 351 (2026-09-02), y hay que leer el cambio entero
+ * antes de tocarlo, porque lo que se conserva y lo que se revierte son cosas distintas.
  *
- * POR QUÉ, y por qué hace falta un test que lo fije: filtrar no es asignar. Esconder o apagar a un
- * mensajero bloqueado en el FILTRO volvería inalcanzables las órdenes que ya tiene en la mano —que
- * son justamente las que hay que mirar cuando está bloqueado—. El bloqueo prohíbe DARLE trabajo
- * nuevo, no VER el que lleva.
+ * ANTES: `FiltrosEntregas` llamaba a la MISMA acción que los dos modales
+ * (`listarMensajerosParaAsignacion`), así que le llegaban `bloqueadosIds` y `noAsignablesIds`, y
+ * no leía ninguno de los dos. Estos casos fijaban eso.
  *
- * Sin estos dos casos, el próximo lector ve que los dos modales sí lo aplican, concluye que aquí
- * falta y lo «arregla». Es la clase de arreglo que no rompe ningún test y no da ningún síntoma.
+ * AHORA: esa barra ya no llama a esa acción. Sus mensajeros salen del CATÁLOGO
+ * (`obtenerCatalogoFiltrosOrdenes`), donde el servidor ya deja fuera a las cuentas dadas de baja.
+ * Y ahí está la línea que separa las dos mitades:
+ *
+ *  · **SE REVIERTE** la mitad de `noAsignablesIds` (`inactivo`/`bloqueado` como ESTADO de la
+ *    cuenta). El humano lo pidió el 2026-09-02: «muestra tiendas o mensajeros que tenemos
+ *    desactivos y eso es información que no debe mostrarse». El recorte NO se hace aquí —esta
+ *    declaración sigue sin filtrar nada— sino en `UserRepository.listMensajerosParaFiltro`, que
+ *    es donde un `WHERE` se puede medir contra Postgres.
+ *  · **SE CONSERVA** la mitad de R33 propiamente dicha: un mensajero BLOQUEADO POR CIERRE está
+ *    `activo`, sigue en el catálogo y sigue ofreciéndose en el filtro. Filtrar no es asignar —
+ *    esconderlo volvería inalcanzables las órdenes que tiene en la mano, que son justamente las
+ *    que hay que mirar cuando está bloqueado.
+ *
+ * Sin estos casos, el próximo lector ve que los dos modales sí aplican `bloqueadosIds`, concluye
+ * que aquí falta y lo «arregla». Es la clase de arreglo que no da ningún síntoma.
  */
-describe("271/R33 · el filtro de mensajero del listado NO lo aplica", () => {
+describe("271/R33 · el filtro de mensajero del listado NO aplica el bloqueo por cierre", () => {
+  /**
+   * Ficha 351: los mensajeros llegan DENTRO del catálogo. `m2` es el bloqueado por cierre del
+   * resto del archivo y está aquí con `estado: "activo"`, que es su forma real: el bloqueo por
+   * cierre es operativo y temporal, no un estado de la cuenta.
+   */
   const CATALOGO: CatalogoFiltrosOrdenesDTO = {
-    mensajeros: [],
+    mensajeros: [
+      { id: "m1", nombre: "Ana Mensajera", zonaId: null, estado: "activo" },
+      { id: "m2", nombre: "Beto Mensajero", zonaId: null, estado: "activo" },
+    ],
     zonas: [],
     tiendas: [],
     provincias: [],
@@ -278,11 +299,12 @@ describe("271/R33 · el filtro de mensajero del listado NO lo aplica", () => {
     distritos: [],
   };
 
-  it("ofrece a TODOS los mensajeros servidos, y ninguno deshabilitado", () => {
-    const defs = construirFiltrosEntregas(CATALOGO, MENSAJEROS);
+  it("ofrece a TODOS los mensajeros del catálogo, y ninguno deshabilitado", () => {
+    const defs = construirFiltrosEntregas(CATALOGO);
     const mensajero = defs.find((f) => f.label === "Mensajero");
 
-    // El bloqueado sigue en la lista, con su nombre limpio: ni motivo entre paréntesis ni marca.
+    // El bloqueado por cierre sigue en la lista, con su nombre limpio: ni motivo entre
+    // paréntesis ni marca.
     expect(mensajero?.options).toEqual([
       { value: "m1", label: "Ana Mensajera" },
       { value: "m2", label: "Beto Mensajero" },
@@ -290,7 +312,7 @@ describe("271/R33 · el filtro de mensajero del listado NO lo aplica", () => {
   });
 
   it("guardia: `FiltrosEntregas.tsx` no LEE `bloqueadosIds` en ninguna línea de código", () => {
-    // La aserción de arriba se quedaría verde si alguien añadiera el recorte dentro del fetcher,
+    // La aserción de arriba se quedaría verde si alguien añadiera el recorte dentro de la barra,
     // que es por donde entraría de verdad. Ésta mira el archivo: la palabra sólo puede aparecer en
     // comentarios —donde está escrito POR QUÉ no se lee—, nunca en código.
     const fuente = readFileSync("app/(app)/_components/FiltrosEntregas.tsx", "utf8");
@@ -303,11 +325,24 @@ describe("271/R33 · el filtro de mensajero del listado NO lo aplica", () => {
       .join("\n");
 
     expect(codigo).not.toMatch(/bloqueadosIds/);
-    // 2026-08-26: la MISMA acción trae ahora `noAsignablesIds` y aquí tampoco se lee, por la MISMA
-    // razón: un mensajero dado de baja sigue siendo el asignado de órdenes históricas que alguien
-    // necesita buscar. Esconderlo del filtro las volvería inalcanzables.
     expect(codigo).not.toMatch(/noAsignablesIds/);
-    // Anti-vacuidad: si el archivo se renombrara o se vaciara, esto lo delata.
-    expect(codigo).toMatch(/listarMensajerosParaAsignacion/);
+
+    /*
+     * FICHA 351 — LA GUARDIA SE ENDURECE: la barra no puede volver a tocar el módulo de
+     * asignación, ni para leer sus banderas ni para poblar el filtro.
+     *
+     * La anti-vacuidad de antes era `expect(codigo).toMatch(/listarMensajerosParaAsignacion/)`, y
+     * hoy diría lo contrario de lo que queremos. La sustituye una afirmación MÁS FUERTE: el
+     * archivo no importa nada de `lib/actions/ordenes-guia`. Con esto, volver a enchufar la lista
+     * de asignación al filtro —el bug que esta ficha arregla— es imposible de escribir sin poner
+     * rojo este caso, y de paso `bloqueadosIds` no puede reaparecer por la puerta de atrás.
+     */
+    expect(codigo).not.toMatch(/listarMensajerosParaAsignacion/);
+    expect(codigo).not.toMatch(/actions\/ordenes-guia/);
+
+    // Anti-vacuidad NUEVA: la barra SÍ sigue pidiendo el catálogo. Si el archivo se vaciara o se
+    // renombrara, los tres `not.toMatch` de arriba pasarían sobre una cadena vacía.
+    expect(codigo).toMatch(/obtenerCatalogoFiltrosOrdenes/);
+    expect(codigo).toMatch(/construirFiltrosEntregas/);
   });
 });

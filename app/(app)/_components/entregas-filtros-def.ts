@@ -1,7 +1,6 @@
 import type { Faceta } from "@/lib/analytics/presentacion";
 import type { FilterDef } from "@/components/shared/FilterComponent";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
-import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 import { ultimosNDiasCalendarioCR } from "@/lib/utils/fecha-cr";
 
 // Los filtros de la barra de ENTREGAS del panel maestro, declarados sobre el mismo
@@ -18,7 +17,6 @@ import {
   CLAVE_CREACION,
   GRUPO_CUENTAS_TIENDA,
   GRUPO_INTEGRACIONES,
-  SUFIJO_INACTIVA,
 } from "@/app/(app)/ordenes/_components/ordenes-filtros-def";
 
 export { ATAJOS_CREACION, CLAVE_CREACION };
@@ -80,10 +78,21 @@ const TODAS_LAS_FACETAS: readonly Faceta[] = ["zona", "tienda", "mensajero"];
  *
  * Sin catalogo, los filtros se declaran IGUAL pero sin opciones: es el mismo fallback de
  * la barra de ordenes (R64 de la 144) — la pantalla sigue viva aunque el catalogo no cargue.
+ *
+ * ⚠ FICHA 351 (2026-09-02) — LOS MENSAJEROS SALEN DEL CATALOGO, y por eso esta funcion ya no
+ * recibe una segunda lista. Hasta hoy la firma era `(cat, mensajeros, opts)` y la barra le
+ * pasaba la respuesta de `listarMensajerosParaAsignacion`: la lista de ASIGNACION, que por
+ * diseño incluye a los dados de baja (los modales los muestran deshabilitados con su motivo, y
+ * eso sigue siendo correcto ALLI). Usarla para poblar un FILTRO es lo que metia cuentas de baja
+ * por la puerta de atras — el humano: «eso es informacion que no debe mostrarse».
+ *
+ * El parametro no se deja como opcional ni se ignora: se BORRA. Mientras exista, alguien puede
+ * volver a pasarle la lista de asignacion y nada se pondria rojo; sin el, el error no se puede
+ * ni escribir. Con esto, el catalogo (`FiltrosOrdenesService`) es la UNICA fuente de las
+ * opciones de esta barra, y su filtro de estado vive en `UserRepository.listMensajerosParaFiltro`.
  */
 export function construirFiltrosEntregas(
   cat: CatalogoFiltrosOrdenesDTO,
-  mensajeros: readonly MensajeroLiteDTO[],
   opts: { ahora?: Date; facetas?: readonly Faceta[] } = {},
 ): FilterDef[] {
   // `ahora` inyectable para poder fijar los rangos de los atajos en los tests, igual
@@ -157,21 +166,26 @@ export function construirFiltrosEntregas(
       searchPlaceholder: "Buscar tienda…",
       options: cat.tiendas.map((t) => ({
         value: t.id,
-        // La cuenta inactiva se distingue en el TEXTO visible: el backend solo entrega
-        // banderas, asi que la etiqueta se compone aqui (R51 de la 144).
-        label: t.activa ? t.nombre : `${t.nombre}${SUFIJO_INACTIVA}`,
+        // FICHA 351: la etiqueta es el NOMBRE A SECAS. Aqui se componia
+        // `t.activa ? t.nombre : nombre + " (inactiva)"` (R51 de la 144); desde que el catalogo
+        // no entrega cuentas dadas de baja, la otra rama es inalcanzable. Ver la nota de
+        // `ordenes-filtros-def.ts`, donde vivia la constante del sufijo.
+        label: t.nombre,
         group: t.esApiKey ? GRUPO_INTEGRACIONES : GRUPO_CUENTAS_TIENDA,
       })),
     },
     {
-      // Los mensajeros NO vienen del catalogo geografico: los sirve la misma accion que
-      // alimenta los selectores de asignacion de ordenes, y su gate de rol (maestro/admin)
-      // coincide exactamente con quien ve este panel.
+      // FICHA 351 — LOS MENSAJEROS SALEN DEL CATALOGO. Este comentario decia lo contrario
+      // («no vienen del catalogo geografico: los sirve la misma accion que alimenta los
+      // selectores de asignacion»), y era justo el agujero: aquella lista incluye a los dados
+      // de baja a proposito, porque en un modal de asignacion hay a quien deshabilitar y un
+      // motivo que enseñar. En un filtro no lo hay — una opcion apagada no informa de nada—,
+      // asi que la lista buena es la del catalogo, que ya los deja fuera en el `WHERE`.
       key: CLAVE_MENSAJERO,
       label: "Mensajero",
       kind: "multi",
       searchPlaceholder: "Buscar mensajero…",
-      options: mensajeros.map((m) => ({ value: m.id, label: m.nombre })),
+      options: cat.mensajeros.map((m) => ({ value: m.id, label: m.nombre })),
     },
   ];
 

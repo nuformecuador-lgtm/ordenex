@@ -207,15 +207,35 @@ describe("UserRepository.listCuentasTienda (R50/R54/R49)", () => {
     await repo.listCuentasTienda();
     expect(findMany.mock.calls[0][0].where).toEqual({
       rol: { value: { in: ["adminTienda", "apiKey"] } },
+      // Ficha 351: el filtro de estado es HERMANO del de rol (AND), no una rama de un `OR`.
+      estado: { notIn: ["inactivo", "bloqueado"] },
     });
   });
 
-  it("R50: NO filtra por `estado` — las cuentas inactivas se incluyen", async () => {
+  /**
+   * ⚠️ FICHA 351 (2026-08-29) — ESTE CASO AFIRMA LO CONTRARIO DE LO QUE AFIRMABA, Y ES A
+   * PROPÓSITO. Hasta hoy decía «R50: NO filtra por `estado` — las cuentas inactivas se
+   * incluyen», que era la decisión (e) de la feature 144. El humano la revirtió al ver 2 de 4
+   * tiendas del desplegable dadas de baja: «eso es información que no debe mostrarse».
+   *
+   * La lista de estados se escribe LITERAL (`["inactivo","bloqueado"]`) y no se importa de
+   * `ESTADOS_USUARIO_NO_ASIGNABLES`: comparar el `WHERE` contra su propia fuente lo dejaría
+   * verde para siempre. Si la constante cambia a propósito, este literal se edita a mano y se
+   * ve en el diff.
+   *
+   * Lo que este caso NO puede afirmar —porque el doble responde lo mismo se filtre como se
+   * filtre— es que Postgres realmente descarte esas filas. Eso lo mide
+   * `tests/integration/db/filtros-catalogo-sin-inactivos.test.ts` contra la base real.
+   */
+  it("R50 / ficha 351: FILTRA por `estado` y deja fuera a las cuentas dadas de baja", async () => {
     const { repo, findMany } = buildRepo(FILAS);
-    const r = await repo.listCuentasTienda();
-    expect(findMany.mock.calls[0][0].where.estado).toBeUndefined();
-    expect(r.map((c) => c.id)).toEqual(["t1", "t2", "k1", "k2"]);
-    expect(r.find((c) => c.id === "t2")?.activa).toBe(false);
+    await repo.listCuentasTienda();
+    expect(findMany.mock.calls[0][0].where.estado).toEqual({
+      notIn: ["inactivo", "bloqueado"],
+    });
+    // `pendiente` NO está en la lista: una cuenta recién creada sigue ofreciéndose, porque hoy
+    // puede tener órdenes vivas. Si alguien la añade, este caso se pone rojo.
+    expect(findMany.mock.calls[0][0].where.estado.notIn).not.toContain("pendiente");
   });
 
   it("R50/R51: expone las DOS banderas (`esApiKey`, `activa`) por cuenta", async () => {
@@ -250,5 +270,50 @@ describe("UserRepository.listCuentasTienda (R50/R54/R49)", () => {
     const { repo, findMany } = buildRepo(FILAS);
     await repo.listCuentasTienda();
     expect(findMany.mock.calls[0][0].orderBy).toEqual({ nombre: "asc" });
+  });
+});
+
+/**
+ * FICHA 351 — el mismo contrato para el catálogo de MENSAJEROS de `/ordenes`.
+ *
+ * Nació sin filtro de `estado` (pedido humano 2026-08-25) y lo gana aquí. Se mira el `where`
+ * EMITIDO, con la lista escrita literal, y en las DOS formas de llamarlo: la variante acotada a
+ * una zona es donde más fácil se cae el filtro sin que nada se ponga rojo, porque la clave de
+ * zona se compone con un `spread` condicional.
+ *
+ * Que Postgres descarte de verdad esas filas lo mide
+ * `tests/integration/db/filtros-catalogo-sin-inactivos.test.ts`: con un doble, el `WHERE` no se
+ * ejecuta.
+ */
+describe("UserRepository.listMensajerosParaFiltro (ficha 351)", () => {
+  function buildRepo() {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const repo = new UserRepository({ usuario: { findMany } } as unknown as PrismaClient);
+    return { repo, findMany };
+  }
+
+  it("sin zona: filtra por rol Y por estado, como claves hermanas (AND)", async () => {
+    const { repo, findMany } = buildRepo();
+    await repo.listMensajerosParaFiltro();
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      rol: { value: "mensajero" },
+      estado: { notIn: ["inactivo", "bloqueado"] },
+    });
+  });
+
+  it("acotado a una zona: la zona se SUMA, no sustituye al filtro de estado", async () => {
+    const { repo, findMany } = buildRepo();
+    await repo.listMensajerosParaFiltro("z-1");
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      rol: { value: "mensajero" },
+      estado: { notIn: ["inactivo", "bloqueado"] },
+      zonaId: "z-1",
+    });
+  });
+
+  it("`pendiente` sigue ofreciéndose: no está en la lista de excluidos", async () => {
+    const { repo, findMany } = buildRepo();
+    await repo.listMensajerosParaFiltro();
+    expect(findMany.mock.calls[0][0].where.estado.notIn).not.toContain("pendiente");
   });
 });
