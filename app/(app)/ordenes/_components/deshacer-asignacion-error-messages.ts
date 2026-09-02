@@ -18,7 +18,7 @@ import {
   MSG_ORDEN_NO_EXISTE,
   MSG_SIN_HISTORIAL,
   MSG_ZONA_CENTRAL_NO_CONFIGURADA,
-  MSG_ZONA_DESTINO_INCOHERENTE,
+  MSG_DESTINO_NO_DECLARADO,
 } from "@/lib/services/mensajes-deshacer-asignacion";
 
 import { estatusLabel } from "./estatus-label";
@@ -86,8 +86,8 @@ export function deshacerAsignacionConflictoMensaje(motivo: string): string {
   if (motivo === MSG_SIN_HISTORIAL) {
     return "No se pudo determinar a qué bodega vuelve alguna orden: su historial no registra desde dónde se asignó. Contacta a un administrador.";
   }
-  if (motivo === MSG_ZONA_DESTINO_INCOHERENTE) {
-    return "La bodega de origen de alguna orden no corresponde a su zona actual. Revisa la zona de la orden antes de deshacer.";
+  if (motivo === MSG_DESTINO_NO_DECLARADO) {
+    return "No se puede devolver alguna orden a su bodega: el sistema no reconoce ese paso hacia atras. No es algo que puedas corregir desde aqui; contacta a un administrador.";
   }
   if (motivo === MSG_CARRERA) {
     return "Alguna orden cambió de estado mientras confirmabas. Actualiza la lista e inténtalo de nuevo.";

@@ -38,16 +38,6 @@ export const MSG_SIN_HISTORIAL =
 export const MSG_DESTINO_NO_DECLARADO =
   "el destino derivado no es una reversion declarada para el estado actual de la orden";
 
-/**
- * NOMBRE HEREDADO, MISMO VALOR. La capa de presentacion
- * (`app/(app)/ordenes/_components/deshacer-asignacion-error-messages.ts`) compara contra ESTE
- * identificador; renombrarlo aqui la romperia, y esa capa queda FUERA del alcance de la 363.
- *
- * ⚠️ DEUDA DECLARADA, no descuido: el texto de usuario que esa capa asocia a este motivo
- * («Revisa la zona de la orden antes de deshacer») manda al operador al sitio equivocado desde
- * esta ficha. Renombrar el identificador y reescribir esa frase es el traspaso pendiente.
- */
-export const MSG_ZONA_DESTINO_INCOHERENTE = MSG_DESTINO_NO_DECLARADO;
 
 /** R16: prefijo del motivo de estado no reversible; `msgEstadoNoReversible` lo compone. */
 export const MSG_ESTADO_NO_REVERSIBLE = "estado no reversible";
