@@ -455,6 +455,36 @@ describe("Feature 129 (R24) — la página no invoca acciones/servicios/reposito
     expect(fuente).not.toContain("lib/services");
     expect(fuente).not.toContain("lib/repositories");
   });
+
+  // ─── FICHA 348 · la sección de productos no puede volver a ser un scrollport ──────────────
+  //
+  // POR QUÉ ESTO SE VIGILA LEYENDO EL FUENTE Y NO EL RENDER: lo que se afirma es una propiedad
+  // de LAYOUT (`overflow`), y jsdom no hace layout. Se comprobó: quitar ese `className` deja
+  // los 84 casos de esta página, del shell y de la tabla en VERDE. O sea que sin este caso la
+  // corrección se puede revertir sin que nada avise, y el defecto que vuelve es invisible en
+  // cualquier suite.
+  //
+  // QUÉ DEFECTO. `ContenedorSeccion` envuelve la tabla en un `Card`, y `Card` trae
+  // `overflow-hidden`. Un `overflow` distinto de `visible` CREA UN SCROLLPORT, y la flecha de
+  // scroll horizontal de `DataTable` es `position: sticky`: se pega a su scrollport más
+  // cercano. Con el `Card` de por medio se pegaba a un contenedor de 2580 px que no scrollea
+  // nunca, así que no se pegaba a nada y viajaba con la tabla. Medido en Chromium a 1440x950:
+  // el `top` calculado era **1274 px** y el centro de la flecha iba 2421 → 943 → -267 al bajar
+  // la página. En `/ordenes` —la tabla que el humano da por buena, mismo `DataTable`— el `top`
+  // es **475 px** (media ventana) y el centro se queda en 475 a todos los desplazamientos. Con
+  // `overflow-visible` esta página mide exactamente lo mismo: 475, y clavado.
+  it("FICHA 348 — la sección de productos declara `overflow-visible` (la flecha de scroll)", () => {
+    const ruta = join(process.cwd(), "app", "(app)", "analitica", "page.tsx");
+    const fuente = readFileSync(ruta, "utf-8");
+    // El bloque que monta la tabla, desde su `ContenedorSeccion` hasta el componente.
+    const bloque = fuente.slice(
+      fuente.lastIndexOf("<ContenedorSeccion", fuente.indexOf("<ProductosTabla")),
+      fuente.indexOf("<ProductosTabla"),
+    );
+    expect(bloque, "el ContenedorSeccion que envuelve ProductosTabla").toContain(
+      "overflow-visible",
+    );
+  });
 });
 
 /* ========================================================================== */

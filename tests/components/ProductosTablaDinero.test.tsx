@@ -24,8 +24,8 @@ import {
   ProductosTabla,
   PRODUCTOS_COLUMNAS,
   PRODUCTOS_TEXTOS,
-  MARCA_NO_SUMABLE,
   textoAcompanadas,
+  textoColumnasNoSumables,
   textoPendiente,
 } from "@/app/(app)/analitica/_components/entregas/ProductosTabla";
 import { DETALLE_DINERO_TEXTOS } from "@/app/(app)/analitica/_components/entregas/DineroProductoDetalle";
@@ -246,9 +246,11 @@ describe("FICHA 347 · las tres columnas de dinero (R45/R63)", () => {
     // DECISIÓN con un número detrás y por eso se ata a mano.
     //
     // POR QUÉ EL DINERO VA EL SEGUNDO Y NO EL ÚLTIMO, que sería el orden natural: a 1440 px la
-    // tabla pide 1226 y su contenedor da 1102, así que 124 px se quedan fuera pase lo que pase
-    // (medido en Chromium; las cuatro formas de llegar a cero destrozan las cabeceras o parten
-    // los nombres de producto). Si alguien tiene que arrastrar para leer una columna, que sea
+    // tabla pide 1416 y su contenedor da 1102 (ficha 348, con la columna «Tienda» montada y los
+    // trece mínimos declarados), así que 314 px se quedan fuera pase lo que pase — y crecieron a
+    // propósito desde los 200 de la 347: es lo que cuesta que ninguna palabra se parta. Las
+    // cuatro formas de llegar a cero destrozan las cabeceras o parten los nombres de producto,
+    // que es justo el defecto reparado. Si alguien tiene que arrastrar para leer una columna, que sea
     // «% de rechazo» —derivada de dos columnas que están a la vista— y no el dinero, que es el
     // dato que se pidió.
     expect(encabezados()).toEqual([
@@ -318,18 +320,52 @@ describe("FICHA 347 · las tres columnas de dinero (R45/R63)", () => {
     }
   });
 
-  it("R45 — los TRES encabezados llevan la marca de no sumable", async () => {
+  // ─── FICHA 348 · el aviso de «no sumable» se MUDÓ del encabezado a una leyenda ────────────
+  //
+  // La 347 lo escribía dentro de los tres rótulos («Recaudado (no sumable)») y el caso de aquí
+  // afirmaba justo eso. Medido en Chromium a 1440 px con la columna «Tienda» montada: en dos de
+  // esas tres columnas la palabra MÁS ANCHA del encabezado era literalmente `sumable)` (61 px),
+  // así que el aviso decidía el ancho de una columna de dinero y dejaba el rótulo en 3 y 4
+  // líneas. El aviso NO se pierde: se muda a una leyenda que además dice algo que la marca no
+  // decía — CUÁLES son, todas juntas y en su orden.
+  //
+  // ⚠ Y EL CASO NUEVO AFIRMA MÁS QUE EL VIEJO, que es la condición para cambiarlo: las columnas
+  // de dinero se DEDUCEN DEL DOM (las que aparecen al conceder el dinero y no están sin él), no
+  // de una lista escrita en el test. El día que exista una cuarta, este caso la exige en la
+  // leyenda sin que nadie lo edite. El viejo se habría quedado verde con una marca de menos.
+  it("R45 (348) — la leyenda nombra EXACTAMENTE las columnas que llevan un importe", async () => {
     renderTabla(true);
     await screen.findByText("Base Dr");
 
-    const deDinero = encabezados().filter((h) => h.includes(MARCA_NO_SUMABLE));
-    expect(deDinero).toEqual([
-      PRODUCTOS_COLUMNAS.recaudado,
-      PRODUCTOS_COLUMNAS.ordenex,
-      PRODUCTOS_COLUMNAS.paraTienda,
-    ]);
-    // Y NINGUNA columna de conteo la lleva: ésas SÍ son aditivas.
-    expect(encabezados().filter((h) => h.includes(MARCA_NO_SUMABLE))).toHaveLength(3);
+    // QUÉ ES UNA COLUMNA DE DINERO, leído del DOM y no de una lista escrita aquí: aquella cuya
+    // celda pinta un importe, o sea el símbolo de la moneda de la app. Así el caso no depende
+    // de cuántas columnas de dinero haya hoy.
+    const simbolo = money("1.00").replace(/[\d.,\s]/g, "");
+    expect(simbolo, "el símbolo de la moneda").not.toBe("");
+    const h = encabezados();
+    const conImporte = h.filter(
+      (nombre) => nombre.trim() !== "" && celda("Base Dr", nombre).textContent?.includes(simbolo),
+    );
+    expect(conImporte.length).toBeGreaterThan(0);
+
+    const leyenda = screen.getByText(textoColumnasNoSumables(conImporte));
+    expect(leyenda).toBeInTheDocument();
+
+    // …y la otra mitad: ninguna columna SIN importe se cuela en la leyenda. Las de conteo SÍ son
+    // aditivas, y decir que no lo son es tan dañino como callar que las de dinero no lo son.
+    for (const nombre of h) {
+      if (nombre.trim() === "" || conImporte.includes(nombre)) continue;
+      expect(leyenda.textContent, nombre).not.toContain(nombre);
+    }
+  });
+
+  it("R45 (348) — y ningún encabezado sigue cargando la marca en su rótulo", async () => {
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    // `sumable` era la palabra más ancha de dos de las tres columnas de dinero. Que vuelva al
+    // rótulo es exactamente la regresión que la ficha 348 repara.
+    for (const h of encabezados()) expect(h).not.toMatch(/sumable/i);
   });
 
   it("R45 — y el aviso está escrito arriba, con todas las letras", async () => {
@@ -814,5 +850,108 @@ describe("FICHA 347 · la vista de TELÉFONO lleva el mismo dinero (R64)", () =>
     expect(screen.getByText(textoPendiente("10000.00", 1))).toBeInTheDocument();
     // …y la composición de «Otros resultados» (R57).
     expect(screen.getByText("4 devueltas")).toBeInTheDocument();
+  });
+});
+
+/* ========================================================================== */
+/* FICHA 348 — que ninguna palabra se parta: los trece mínimos y el no-partido */
+/* ========================================================================== */
+
+describe("FICHA 348 · el ancho de las columnas es una DECISIÓN, no el resto del reparto", () => {
+  // Dos tiendas distintas: es lo que monta la columna «Tienda», y es el caso que la 347 NO
+  // midió —la base local tiene una sola tienda, así que la columna no se montaba y el reparto
+  // de ancho se midió sin ella—. Con ella montada, en producción, `Nuform` salía partido.
+  beforeEach(() => {
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos([
+        fila({ producto: "Base Dr", tiendaId: "t1", tienda: "Nuform" }),
+        fila({ producto: "Colágeno", tiendaId: "t2", tienda: "Distribuidora Karla" }),
+      ]),
+    });
+  });
+
+  /** Los `<th>` de DATOS: el del control de desglose no lo es (su rótulo es `sr-only`). */
+  function encabezadosDeDatos(): HTMLTableCellElement[] {
+    const tabla = screen.getAllByRole("table")[0];
+    return [...tabla.querySelectorAll<HTMLTableCellElement>("thead th")].filter(
+      (th) => th.querySelector(".sr-only") === null,
+    );
+  }
+
+  it("las TRECE columnas declaran un ancho mínimo, y ninguna se queda sin él", async () => {
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    const ths = encabezadosDeDatos();
+    // Trece: tienda + producto + tres de dinero + ocho de conteo. Si mañana hay una más, este
+    // número cambia a mano y con ello se relee la tabla de mínimos del componente.
+    expect(ths.map((th) => th.textContent)).toHaveLength(13);
+
+    // ⚠ SIN ESTE CASO NADA ATABA LOS ANCHOS. Antes de la 348, la tabla declaraba TRES mínimos
+    // para trece columnas y quitarlos no ponía nada en rojo: el navegador estrujaba las otras
+    // diez hasta partir palabras y la suite entera seguía verde. Se comprobó quitando el
+    // mínimo de «Tienda» — ningún test cayó.
+    for (const th of ths) {
+      expect(th.style.minWidth, `la columna «${th.textContent}» no declara mínimo`).not.toBe("");
+    }
+  });
+
+  it("y ninguno de esos mínimos es simbólico: por debajo de 5rem no cabe ni el rótulo", async () => {
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    // 5rem = 80 px, y el suelo está MEDIDO en Chromium: el rótulo más corto de la tabla
+    // (`Órdenes`) mide 53 px y su `<th>` añade 24 px de relleno, o sea 77. Un mínimo por debajo
+    // de eso deja de proteger nada y sólo aparenta hacerlo.
+    for (const th of encabezadosDeDatos()) {
+      const valor = th.style.minWidth;
+      expect(valor, `«${th.textContent}» → ${valor}`).toMatch(/^[\d.]+rem$/);
+      expect(Number.parseFloat(valor), `«${th.textContent}» → ${valor}`).toBeGreaterThanOrEqual(5);
+    }
+  });
+
+  it("ningún nombre —de producto o de tienda— puede partirse por dentro", async () => {
+    renderTabla(true);
+    await screen.findByText("Base Dr");
+
+    // El defecto reportado por el humano, en su forma comprobable sin navegador: `wrap-anywhere`
+    // reduce el `min-content` de la columna a UN carácter y autoriza al navegador a dejarla más
+    // estrecha que su palabra más larga. Medido a 1440 px con la columna «Tienda» montada: 66 px
+    // de columna para un dato que pedía 114, y `Nuform` partido en dos líneas (`Nufor` + `m`).
+    // `break-all` e `hyphens-auto` parten igual; `break-words` no reduce el `min-content`, pero
+    // aquí tampoco hace falta y se prefiere no tener ninguna.
+    for (const nombre of [PRODUCTOS_COLUMNAS.producto, PRODUCTOS_COLUMNAS.tienda]) {
+      const html = celda("Base Dr", nombre).outerHTML;
+      expect(html, nombre).not.toMatch(/\bwrap-anywhere\b/);
+      expect(html, nombre).not.toMatch(/\bbreak-all\b/);
+      expect(html, nombre).not.toMatch(/\bhyphens-auto\b/);
+    }
+  });
+});
+
+describe("FICHA 348 · `textoColumnasNoSumables` deriva la leyenda, no la escribe", () => {
+  it("con tres nombres los enumera en su orden, con la conjunción del español", () => {
+    expect(textoColumnasNoSumables(["A", "B", "C"])).toBe(
+      "Las columnas de dinero que no se pueden sumar hacia abajo: A, B y C.",
+    );
+  });
+
+  it("con dos, «A y B»; con una, sólo «A» y en singular", () => {
+    // Lo que este caso protege: que la leyenda siga siendo legible el día que el catálogo de
+    // columnas de dinero cambie. Escribir los tres nombres a mano pasaría el caso de arriba y
+    // se rompería aquí en silencio — que es exactamente el fallo mudo que la ficha evita.
+    expect(textoColumnasNoSumables(["A", "B"])).toBe(
+      "Las columnas de dinero que no se pueden sumar hacia abajo: A y B.",
+    );
+    expect(textoColumnasNoSumables(["A"])).toBe(
+      "La columna de dinero que no se puede sumar hacia abajo: A.",
+    );
+  });
+
+  it("con cuatro —el día que aparezca una más— la nueva entra sola", () => {
+    expect(textoColumnasNoSumables(["A", "B", "C", "D"])).toBe(
+      "Las columnas de dinero que no se pueden sumar hacia abajo: A, B, C y D.",
+    );
   });
 });

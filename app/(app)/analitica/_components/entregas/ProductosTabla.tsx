@@ -3,6 +3,7 @@
 // FICHA 345 (T7.2/T8.3) — QUE PRODUCTOS SE MUEVEN, y con que resultado.
 // FICHA 346 — el cubo que faltaba en el desglose.
 // FICHA 347 — CUANTA PLATA movio cada producto, y DE QUE se compone «Otros resultados».
+// FICHA 348 — QUE NINGUNA PALABRA SE PARTA: trece minimos medidos y el aviso fuera del rotulo.
 //
 // Es la septima lectura viva de la seccion de entregas y comparte con las otras seis todo lo
 // que se puede compartir: el mismo filtro (`FiltroEntregasProvider`), el mismo prefijo de clave
@@ -38,9 +39,9 @@
 // una orden se atribuye a CADA producto que contiene, asi que **la columna «Recaudado» NO SE
 // PUEDE SUMAR HACIA ABAJO** — sumarla cuenta la misma plata tantas veces como productos tenga
 // la orden. Por eso la advertencia se dice TRES veces y de tres formas distintas, que es lo que
-// R45 pide: en el parrafo de arriba, en la marca corta de cada encabezado de dinero
-// (`MARCA_NO_SUMABLE`) y en el encabezado del archivo descargable (R49, porque el parrafo de
-// pantalla no viaja con el `.xlsx`). Y `ordenesAcompanadas` va en la propia celda: dice en
+// R45 pide: en el parrafo de arriba (POR QUE), en la leyenda que lo sigue (CUALES columnas, ver
+// `textoColumnasNoSumables`) y en el encabezado del archivo descargable (R49, porque el parrafo
+// de pantalla no viaja con el `.xlsx`). Y `ordenesAcompanadas` va en la propia celda: dice en
 // cuantas de las ordenes de esa fila el importe se esta atribuyendo tambien a otro producto,
 // que es lo que permite calibrar cuanto pesa la advertencia en ESTA fila.
 //
@@ -143,13 +144,22 @@ export const PRODUCTOS_TEXTOS = {
 } as const;
 
 /**
- * FICHA 347 (R45) — LA MARCA CORTA que llevan los tres encabezados de dinero.
+ * FICHA 348 — LA MARCA CORTA YA NO VIVE EN LOS ENCABEZADOS, y aqui esta el numero que lo decide.
  *
- * Se declara UNA vez y la comparten la vista de escritorio, la de telefono y —con su propia
- * redaccion larga— el archivo descargable. Un literal repetido en tres sitios acabaria diciendo
- * tres cosas distintas.
+ * La 347 la escribia dentro de los tres rotulos (`Recaudado (no sumable)`). Medido en Chromium a
+ * 1440 px sobre la tabla real: en dos de esas tres columnas la palabra mas ancha del encabezado
+ * era literalmente **`sumable)` (61 px)** —ni el rotulo ni la cifra—, asi que el aviso decidia el
+ * ancho de una columna de dinero. Y como la palabra mas larga fija el ancho, el encabezado
+ * quedaba en 3 y 4 lineas: es la mitad del «apeñuscado» que reporto el humano.
+ *
+ * ⚠ EL AVISO NO SE PIERDE, SE MUDA Y AFIRMA MAS. Ahora es una leyenda sobre la tabla que NOMBRA
+ * las columnas afectadas, y las nombra DERIVANDOLAS de `ORDEN_DINERO` (ver
+ * `textoColumnasNoSumables`): el dia que aparezca una cuarta columna de dinero, la leyenda la
+ * nombra sola. La marca por encabezado no podia hacer eso —habia que acordarse de escribirla—.
+ *
+ * ⚠ Y SIGUE VIVA EN EL ARCHIVO DESCARGABLE (`MARCA_NO_SUMABLE_ARCHIVO`), que es donde de verdad
+ * hace falta: un CSV no lleva leyenda encima, y ahi el ancho no cuesta nada.
  */
-export const MARCA_NO_SUMABLE = "(no sumable)";
 
 /** Los encabezados de columna, aparte para que la vista de teléfono use LOS MISMOS. */
 export const PRODUCTOS_COLUMNAS = {
@@ -177,15 +187,17 @@ export const PRODUCTOS_COLUMNAS = {
   efectividad: "Efectividad de entrega",
   rechazo: "% de rechazo",
   /**
-   * FICHA 347 — las TRES columnas de dinero, cada una con su marca de no sumable.
+   * FICHA 347 — las TRES columnas de dinero. FICHA 348 — ya SIN la marca dentro del rotulo.
    *
    * Son tres y no siete (⟨Q6⟩ pedia los cuatro nombres de la wallet: flete, comision, IVA y
    * pago a la tienda) porque esta tabla ya lleva diez columnas y a 390 px tiene DOS arreglos de
    * ancho medidos. El desglose fino vive en el panel que se abre bajo la fila.
+   *
+   * El aviso de «no sumable» esta en la leyenda de arriba, que las nombra a las tres.
    */
-  recaudado: `Recaudado ${MARCA_NO_SUMABLE}`,
-  ordenex: `Cobró Ordenex ${MARCA_NO_SUMABLE}`,
-  paraTienda: `Para la tienda ${MARCA_NO_SUMABLE}`,
+  recaudado: "Recaudado",
+  ordenex: "Cobró Ordenex",
+  paraTienda: "Para la tienda",
   /** Solo en la vista de teléfono: la celda que apila las cifras de arriba. */
   cifras: "Resultado",
 } as const;
@@ -365,6 +377,30 @@ const ORDEN_DINERO: readonly { readonly id: IdDinero; readonly etiqueta: string 
 ];
 
 /**
+ * FICHA 348 (R45, en su forma nueva) — QUE COLUMNAS no se pueden sumar, dichas por su nombre.
+ *
+ * Es lo unico que la marca `(no sumable)` del encabezado aportaba y el aviso largo de arriba no
+ * decia: CUALES son. Se DERIVA de `ORDEN_DINERO` —la misma lista que construye las columnas— y
+ * no de tres literales escritos aparte, asi que no puede quedarse atras: una cuarta columna de
+ * dinero aparece aqui sola, en su orden. Escribir «Recaudado, Cobró Ordenex y Para la tienda» a
+ * mano es la mutacion que `ProductosTablaDinero` › «la leyenda NOMBRA las columnas de dinero…»
+ * pone en rojo, porque compara contra las columnas REALMENTE pintadas.
+ *
+ * La conjuncion es «y» sin coma antes (norma del español, no del inglés) y con la coma de
+ * separacion en el resto: con dos columnas sale «A y B» y con una, «A», sin sobras.
+ */
+export function textoColumnasNoSumables(etiquetas: readonly string[]): string {
+  const lista =
+    etiquetas.length <= 1
+      ? (etiquetas[0] ?? "")
+      : `${etiquetas.slice(0, -1).join(", ")} y ${etiquetas[etiquetas.length - 1]}`;
+  // El sujeto Y el verbo concuerdan: con una sola columna, «La columna … que no se puede».
+  const sujeto = etiquetas.length === 1 ? "La columna" : "Las columnas";
+  const verbo = etiquetas.length === 1 ? "no se puede" : "no se pueden";
+  return `${sujeto} de dinero que ${verbo} sumar hacia abajo: ${lista}.`;
+}
+
+/**
  * El importe de una fila para una de las tres cifras, o `null` si NO HAY.
  *
  * ⚠ LOS TRES CAMINOS QUE DEVUELVEN `null` SON DISTINTOS Y SE PINTAN IGUAL, y esta bien que asi
@@ -403,14 +439,29 @@ function Contexto({ children }: { readonly children: ReactNode }) {
 }
 
 /**
- * El nombre del producto. `wrap-anywhere` porque los nombres reales son LARGUISIMOS —el mas
- * largo medido en produccion tiene 62 caracteres y tres barras verticales de marketing— y sin
- * esto una sola fila fija el ancho minimo de la tabla y empuja las cifras fuera de la pantalla.
- * `wrap-anywhere` y no `break-words`: el segundo no reduce el `min-content`, que es la medida
- * que aqui manda.
+ * Un nombre de TEXTO de la tabla: el del producto y el de la tienda.
+ *
+ * ⚠ FICHA 348 — AQUI ESTABA `wrap-anywhere` Y ERA LA CAUSA DEL DEFECTO REPORTADO. La 347 lo puso
+ * a proposito («reduce el `min-content`, que es la medida que aqui manda») y ese es justo el
+ * problema: reducir el `min-content` a UN CARACTER autoriza al navegador a dejar la columna mas
+ * estrecha que su palabra mas larga, y entonces la parte por dentro.
+ *
+ * MEDIDO EN CHROMIUM a 1440 px con la columna «Tienda» montada —el caso de produccion, que la
+ * base local no reproduce sola—: la columna quedaba en **66 px** (el `min-content` de su propio
+ * encabezado) cuando su dato mas ancho pedia **114**, y el navegador partia `Nuform` en dos
+ * lineas (`Nufor` + `m`), `Distribuidora` en tres y `Ecuador` en dos. Es literalmente el
+ * `Nufor/m` de la captura del humano. A 390 px pasaba lo mismo con seis palabras del nombre de
+ * producto (`HIDROLIZADO`, `PRESENTACION`, `TURKESTERONE`, `Hemorroides`, `USB-C`,
+ * `Blanqueadora`).
+ *
+ * SIN NINGUNA CLASE DE PARTIDO —ni `wrap-anywhere` ni `break-words`— el `min-content` de la
+ * columna vuelve a ser su palabra mas larga, que es exactamente la garantia que pidio el humano:
+ * **ninguna palabra se parte a ningun ancho**. Lo que eso cuesta es ANCHO DE TABLA, y se paga a
+ * sabiendas: con los minimos declarados abajo la tabla desborda y aparece el scroll horizontal,
+ * que es el comportamiento declarado de `DataTable`. Mejor desplazar que estrujar.
  */
 function NombreProducto({ children }: { readonly children: string }) {
-  return <span className="wrap-anywhere">{children}</span>;
+  return <span>{children}</span>;
 }
 
 /**
@@ -469,6 +520,61 @@ function celdaDinero(fila: FilaProductoDTO, id: IdDinero): ReactNode {
   return <Cifra>{money(importeDeFila(fila, id))}</Cifra>;
 }
 
+/**
+ * FICHA 348 — EL ANCHO MINIMO DE CADA UNA DE LAS TRECE COLUMNAS, y de donde sale cada numero.
+ *
+ * La 347 declaraba TRES minimos para trece columnas, y `DataTable` dice en su prop `minWidth`
+ * que «el `min-width` del `<th>` gobierna toda la columna» y que «si la suma de mínimos excede
+ * el ancho disponible, la tabla desborda y aparece el scroll horizontal (comportamiento
+ * deseado: antes las columnas se estrujaban)». O sea: la via correcta era declarar, no encoger.
+ *
+ * CADA VALOR SE MIDIO, no se estimo. En Chromium a 1440 px, con la columna «Tienda» montada y
+ * nombres reales, se midio la PALABRA MAS ANCHA de cada columna —encabezado y celdas, cada una
+ * con su propia fuente— y se sumo el relleno del `<th>` (24 px):
+ *
+ * | columna              | palabra mas ancha            | px  | +relleno | declarado |
+ * | -------------------- | ---------------------------- | --- | -------- | --------- |
+ * | Tienda               | `Distribuidora` (dato)       |  90 |   114    | **8rem**  |
+ * | Producto             | `PRESENTACION` (dato)        | 102 |   126    | 14rem     |
+ * | Recaudado            | `Recaudado` (rotulo)         |  71 |    95    | **6.5rem**|
+ * | Cobró Ordenex        | `₡393.433` (cifra)           |  65 |    89    | **6rem**  |
+ * | Para la tienda       | `₡393.433` (cifra)           |  65 |    89    | **6rem**  |
+ * | Unidades             | `Unidades` (rotulo)          |  59 |    83    | **5.5rem**|
+ * | Órdenes              | `Órdenes` (rotulo)           |  53 |    77    | **5rem**  |
+ * | Entregadas           | `Entregadas` (rotulo)        |  72 |    96    | **6rem**  |
+ * | Rechazadas           | `Rechazadas` (rotulo)        |  76 |   100    | **6.5rem**|
+ * | Otros resultados     | `reprogramadas` (composicion)|  96 |   120    | **7.5rem**|
+ * | En proceso           | `proceso` (rotulo)           |  50 |    74    | **5rem**  |
+ * | Efectividad          | `Efectividad` (rotulo)       |  70 |    94    | **6rem**  |
+ * | % de rechazo         | `rechazo` (rotulo)           |  50 |    74    | **5rem**  |
+ *
+ * ⚠ EL MINIMO NO RESERVA SITIO PARA UN IMPORTE MAS GRANDE, Y NO HACE FALTA: `Cifra` lleva
+ * `whitespace-nowrap`, asi que un `₡12.345.678` (81 px, medido por la 347) empuja la columna el
+ * solo. El minimo esta para que el ENCABEZADO se lea, no para sostener el dato.
+ *
+ * ⚠ SOLO DOS COLUMNAS CRECEN DE VERDAD: «Tienda» (66 → 128) y las tres de dinero. Las otras
+ * nueve ya estaban EXACTAMENTE en su palabra mas larga —se midio— y su minimo es un suelo
+ * declarado, no un ensanche: sirve para que el dia que un rotulo crezca no vuelva a decidirlo el
+ * azar del reparto. Coste medido a 1440: el scroller pasa de 1302 a 1416 px de contenido.
+ */
+const MIN_TIENDA = "8rem";
+const MIN_PRODUCTO = "14rem";
+const MIN_DINERO: Readonly<Record<IdDinero, string>> = {
+  recaudado: "6.5rem",
+  ordenex: "6rem",
+  paraTienda: "6rem",
+};
+const MIN_CIFRA: Readonly<Record<IdCifra, string>> = {
+  unidades: "5.5rem",
+  ordenes: "5rem",
+  entregadas: "6rem",
+  rechazadas: "6.5rem",
+  otrosResultados: "7.5rem",
+  enProceso: "5rem",
+  efectividad: "6rem",
+  rechazo: "5rem",
+};
+
 /** Las columnas de ESCRITORIO. La de tienda se antepone solo cuando hace falta. */
 function columnasEscritorio(conTienda: boolean, conDinero: boolean): Column<FilaProductoDTO>[] {
   const tienda: Column<FilaProductoDTO>[] = conTienda
@@ -476,6 +582,7 @@ function columnasEscritorio(conTienda: boolean, conDinero: boolean): Column<Fila
         {
           id: "tienda",
           value: PRODUCTOS_COLUMNAS.tienda,
+          minWidth: MIN_TIENDA,
           render: (fila) => <NombreProducto>{fila.tienda}</NombreProducto>,
         },
       ]
@@ -488,18 +595,16 @@ function columnasEscritorio(conTienda: boolean, conDinero: boolean): Column<Fila
         id: cifra.id,
         value: cifra.etiqueta,
         align: "right",
-        // ⚠ SIN `minWidth`, Y ES UNA DECISION MEDIDA EN CHROMIUM, no una omision.
+        // FICHA 348 — el minimo VUELVE, y con otro numero y otro motivo que el de la 347.
         //
-        // Nacio con `minWidth: "10rem"` —la intuicion de que un importe largo necesita sitio—
-        // y el navegador dijo lo contrario: con `₡12.345.678` inyectado en las tres columnas,
-        // la cifra ocupa 81 px y `recorteInterno` es 0, asi que los 160 px del minimo no los
-        // pedia el importe sino la CABECERA. Lo que si costaban era ancho de tabla: a 1440 px
-        // el scroller desbordaba 341 px y la ultima columna quedaba 300 px fuera de la
-        // ventana. Sin el minimo, las columnas caen a 84-95 px, el desborde baja a 124 px y la
-        // ultima columna queda a 83 px —y el importe sigue COMPLETO, con recorte interno 0—.
+        // La 347 probo `minWidth: "10rem"` (160 px) «porque un importe largo necesita sitio», el
+        // navegador dijo que no —la cifra ocupa 81 px y `whitespace-nowrap` ya la protege— y se
+        // retiro entero. Retirarlo ENTERO fue pasarse: sin suelo, la columna la decidia la
+        // palabra mas ancha del encabezado, y esa palabra era `sumable)`.
         //
-        // Lo que protege la cifra de estrujarse no es el minimo: es el `whitespace-nowrap` de
-        // `Cifra`, que fija el ancho minimo de la columna en el ancho del propio numero.
+        // Ahora el suelo es el del ROTULO ya sin marca (6-6,5rem, tabla de arriba), que es la
+        // mitad de aquellos 160 px. Sigue siendo cierto que el importe no lo necesita.
+        minWidth: MIN_DINERO[cifra.id],
         render: (fila) => celdaDinero(fila, cifra.id),
       }))
     : [];
@@ -509,23 +614,26 @@ function columnasEscritorio(conTienda: boolean, conDinero: boolean): Column<Fila
   // asi que conviene saber por que se rompe, con el numero delante.
   //
   // MEDIDO EN CHROMIUM a 1440x950 (la anchura de escritorio mas comun aqui): con las trece
-  // columnas la tabla pide **1226 px** y su contenedor da **1102**. Faltan 124 px y no hay forma
-  // honesta de recuperarlos —se probaron cuatro y las cuatro llegan a cero destrozando algo:
-  // `hyphens:auto` en las cabeceras las deja leyendose «Uni-da-des» y «Re-cha-za-das» en
-  // vertical; quitarle el suelo a «Producto» lo baja a 100 px y parte los nombres a mitad de
-  // palabra («Hemorroid/es», «TURKESTER/ONE»). Las cabeceras YA van plegadas al `min-content` de
-  // su palabra mas larga y en `text-xs`, asi que acortar rotulos no mueve un pixel: «Efectividad
-  // de entrega» mide 163 px en una linea y su columna 93, o sea que ya esta plegada.
+  // columnas y los minimos de la 348 la tabla pide **1416 px** y su contenedor da **1102**. Se
+  // quedan fuera 314, y no hay forma honesta de recuperarlos: la 347 probo cuatro y las cuatro
+  // llegan a cero destrozando algo —`hyphens:auto` deja las cabeceras leyendose «Uni-da-des» en
+  // vertical, y quitarle el suelo a «Producto» parte los nombres («Hemorroid/es»)—, que es
+  // exactamente el defecto que esta ficha viene a reparar.
+  //
+  // ⚠ FICHA 348 — EL DESBORDE CRECIO A PROPOSITO, de 200 a 314 px (con la columna «Tienda»
+  // montada, que es el caso de produccion). Ese es el precio de que ninguna palabra se parta, y
+  // el humano ya eligio: «lo ideal es que la informacion sea facil de leer y no se corten
+  // palabras». Se paga en desplazamiento horizontal, que ademas ahora tiene su flecha
+  // funcionando como la de `/ordenes` (ver `app/(app)/analitica/page.tsx`).
   //
   // Si algo se queda fuera pase lo que pase, **la pregunta es QUE**. Y ahi no hay empate: el
   // dinero es el dato que se PIDIO —«falta saber cuanto dinero se ha podido recaudar»— y
   // «% de rechazo» es una cifra DERIVADA de dos columnas que estan a la vista. Con este orden,
-  // «Para la tienda» termina a 809 px y se lee con **cero arrastre**; el precio, dicho para que
-  // nadie lo descubra por sorpresa, es que «% de rechazo» pide **124 px** de desplazamiento
-  // horizontal — el mismo que antes pagaba el dinero.
+  // el que pide arrastre es «% de rechazo» y no el dinero.
   //
-  // No esconde ninguna columna, no encoge ninguna cifra y no toca la vista de telefono, que
-  // apila y no tiene este problema (desborde 0 a 390 px). El orden lo fija
+  // No esconde ninguna columna y no encoge ninguna cifra. A 390 px la vista apilada pasa de
+  // desbordar 0 a desbordar **8 px** —y por eso ahi tambien aparecen las dos flechas—: es lo
+  // que cuesta que `PRESENTACION` y `TURKESTERONE` dejen de partirse. El orden lo fija
   // `ProductosTablaDinero.test.tsx` › «el ORDEN de escritorio pone el dinero...»: devolverlo al
   // final pone ese caso rojo.
   return [
@@ -533,7 +641,7 @@ function columnasEscritorio(conTienda: boolean, conDinero: boolean): Column<Fila
     {
       id: "producto",
       value: PRODUCTOS_COLUMNAS.producto,
-      minWidth: "14rem",
+      minWidth: MIN_PRODUCTO,
       render: (fila) => <NombreProducto>{fila.producto}</NombreProducto>,
     },
     ...dinero,
@@ -541,6 +649,7 @@ function columnasEscritorio(conTienda: boolean, conDinero: boolean): Column<Fila
       id: cifra.id,
       value: cifra.etiqueta,
       align: "right",
+      minWidth: MIN_CIFRA[cifra.id],
       render: (fila) =>
         cifra.id === "otrosResultados" ? (
           <CeldaOtrosResultados fila={fila} cifra={cifrasDeFila(fila)[cifra.id]} />
@@ -567,8 +676,11 @@ function columnasTelefono(conTienda: boolean, conDinero: boolean): Column<FilaPr
     {
       id: "producto",
       value: PRODUCTOS_COLUMNAS.producto,
+      // FICHA 348 — sin `wrap-anywhere`, por lo mismo que arriba: a 390 px partia SEIS palabras
+      // del nombre (`HIDROLIZADO`, `PRESENTACION`, `TURKESTERONE`, `Hemorroides`, `USB-C`,
+      // `Blanqueadora`), medidas con `Range.getClientRects()` y no a ojo.
       render: (fila) => (
-        <div className="flex flex-col gap-0.5 wrap-anywhere">
+        <div className="flex flex-col gap-0.5">
           <NombreProducto>{fila.producto}</NombreProducto>
           {conTienda ? (
             <span className="text-xs text-muted-foreground">{fila.tienda}</span>
@@ -749,6 +861,15 @@ export function ProductosTabla({ dinero = false }: ProductosTablaProps) {
         <p>{PRODUCTOS_TEXTOS.avisoDesglose}</p>
         {/* FICHA 347 (R45/R29) — los dos avisos del dinero, solo cuando hay dinero que leer. */}
         {conDinero ? <p>{PRODUCTOS_TEXTOS.avisoDinero}</p> : null}
+        {/* FICHA 348 — LA LEYENDA que sustituye a la marca `(no sumable)` de los encabezados.
+            Va PEGADA al aviso de arriba —que dice POR QUE— porque ella dice CUALES, y las dos
+            juntas son lo que antes decia el rotulo de cada columna. Se pinta junto a la tabla y
+            no dentro (`<caption>`) a proposito: el `<caption>` vive DENTRO del scroller
+            horizontal, mide lo que mide la tabla (1416 px medidos) y su final quedaria fuera de
+            la ventana — habria que arrastrar la tabla para leer el aviso. */}
+        {conDinero ? (
+          <p>{textoColumnasNoSumables(ORDEN_DINERO.map((cifra) => cifra.etiqueta))}</p>
+        ) : null}
         {conDinero ? <p>{PRODUCTOS_TEXTOS.avisoLiquidado}</p> : null}
         {/* R76 — el tope, dicho. No es un error: el volumen de al lado es correcto. */}
         {limiteExcedido === null ? null : (
