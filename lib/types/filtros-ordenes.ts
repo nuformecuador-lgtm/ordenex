@@ -27,9 +27,17 @@ export interface OpcionConPadre extends OpcionCatalogo {
  * (rol `adminTienda`) o por integracion (rol `apiKey`, feature 88).
  *
  * `esApiKey` y `activa` son BANDERAS, no PII (R54): el mapeo a "grupo aparte" (R51) y al
- * sufijo "(inactiva)" ocurre en la capa de declaracion del cliente. Se incluyen las
- * cuentas INACTIVAS a proposito (decision (e) del spec): siguen siendo dueñas de ordenes
- * historicas, y excluirlas haria invisibles esas ordenes bajo el filtro de tienda.
+ * sufijo "(inactiva)" ocurre en la capa de declaracion del cliente.
+ *
+ * ⚠️ FICHA 351 (2026-08-29) — LAS CUENTAS DADAS DE BAJA YA NO LLEGAN AQUI. La decision (e) de
+ * la 144 las incluia a proposito («siguen siendo dueñas de ordenes historicas»); el humano
+ * pidio lo contrario tras ver 2 de 4 tiendas del desplegable dadas de baja. Lo que las hacia
+ * necesarias —que sus ordenes sigan siendo VISIBLES— no dependia de este catalogo: el listado
+ * no filtra por estado del dueño y esas ordenes salen igual, con el nombre de su tienda. El
+ * `WHERE` vive en `UserRepository.listCuentasTienda`.
+ *
+ * `activa` se conserva —hoy siempre `true`— porque es el contrato del DTO y el sufijo
+ * «(inactiva)» sigue declarado en la UI; retirarlo es limpieza de front, no de datos.
  */
 export interface CuentaTiendaDTO extends OpcionCatalogo {
   esApiKey: boolean;
@@ -58,19 +66,20 @@ export interface GeografiaFiltrosDTO {
  * de esa zona. Es NULLABLE en la tabla (`usuario.zona_id`, feature 24/R6) y por eso lo es
  * aqui: un mensajero sin zona asignada existe, y el cliente decide que hacer con el.
  *
- * Se incluyen los mensajeros INACTIVOS a proposito, por la MISMA razon que las cuentas tienda
- * inactivas: siguen siendo el mensajero asignado de ordenes historicas, y excluirlos haria
- * imposible filtrar esas ordenes por quien las llevo.
+ * ⚠️ FICHA 351 (2026-08-29): los mensajeros de `ESTADOS_USUARIO_NO_ASIGNABLES` (`inactivo` y
+ * `bloqueado`) YA NO llegan aqui. Antes se incluian a proposito, por la misma razon que las
+ * cuentas tienda inactivas; el humano pidio lo contrario. Sus ordenes siguen saliendo en el
+ * listado —eso nunca dependio del catalogo—; lo que se pierde es acotar POR ELLOS.
  */
 export interface MensajeroFiltroDTO extends OpcionCatalogo {
   zonaId: string | null;
   /**
-   * Estado de la cuenta (`activo`, `inactivo`, `bloqueado`, `pendiente`). Viaja porque hay
-   * superficies que NO deben ofrecer a quien ya no reparte —el histórico de conversaciones
-   * filtra a `activo`— y otras que SÍ deben seguir ofreciéndolo: en `/ordenes`, esconder a un
-   * mensajero dado de baja volvería INALCANZABLES las órdenes que todavía tiene en la mano
-   * (el mismo motivo por el que `listarMensajerosParaAsignacion` los lista y solo los
-   * DESHABILITA). Por eso el dato viaja y cada superficie decide, en vez de recortarse aquí.
+   * Estado de la cuenta. Desde la ficha 351 solo puede valer `activo` o `pendiente`: el
+   * repositorio ya deja fuera a `inactivo` y `bloqueado`.
+   *
+   * Sigue viajando porque hay una superficie que apreta MAS —el histórico de conversaciones
+   * se queda solo con los `activo`, o sea que descarta también a los `pendiente`— y esa es
+   * decisión suya, no de este catálogo.
    */
   estado: EstadoUsuario;
 }

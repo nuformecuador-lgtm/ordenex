@@ -205,11 +205,15 @@ export interface IUserRepository {
    *
    * Dos diferencias deliberadas con `listMensajeros`, y las dos vienen de que esto es un
    * catalogo de FILTRO y no un selector de asignacion:
-   *   - NO filtra por `estado`: un mensajero desactivado sigue siendo el asignado de ordenes
-   *     historicas, y ocultarlo haria imposible filtrarlas por el (mismo criterio que las
-   *     cuentas tienda inactivas);
+   *   - FILTRA por `estado` con `ESTADOS_USUARIO_NO_ASIGNABLES` (ficha 351), no con
+   *     `= activo`: deja fuera a `inactivo` y `bloqueado` y sigue ofreciendo a `pendiente`,
+   *     que hoy puede ser el asignado de ordenes vivas. `listMensajeros` exige `activo`
+   *     porque alimenta otra cosa (ranking y carga masiva);
    *   - acepta `zonaId` para ACOTAR la lista a una zona, que es lo que necesita el rol que
    *     solo opera la suya. Sin argumento, devuelve todos.
+   *
+   * ⚠️ Esto acota el CATALOGO, nunca los DATOS: las ordenes de un mensajero dado de baja
+   * siguen saliendo enteras en el listado (ver `OrdenRepository.list`).
    */
   listMensajerosParaFiltro(zonaId?: string): Promise<MensajeroFiltroDTO[]>;
   /**
@@ -218,15 +222,17 @@ export interface IUserRepository {
    */
   listByRol(rolValue: RolValue): Promise<UsuarioPorRolDTO[]>;
   /**
-   * Feature 144/B2 (R50/R54): TODAS las cuentas que pueden ser DUEÑAS de una orden
+   * Feature 144/B2 (R50/R54): las cuentas que pueden ser DUEÑAS de una orden
    * (`orden.tienda_id` -> `usuario`): rol `adminTienda` (por sesion) o `apiKey` (por
    * integracion, feature 88).
    *
-   * NO filtra por `estado` a proposito (decision (e) del spec): una cuenta inactiva
-   * sigue siendo dueña de ordenes historicas, y excluirla las haria imposibles de
-   * filtrar. La bandera `activa` viaja en la fila para que la UI la marque; `esApiKey`
-   * para que las agrupe aparte (R51). Proyeccion `{id, nombre}` + 2 booleanos: NUNCA
-   * email, telefono, cedula ni hash (R54). Orden determinista por nombre (R49).
+   * FICHA 351: ya NO son «todas». Se excluyen las de `ESTADOS_USUARIO_NO_ASIGNABLES`
+   * (`inactivo`/`bloqueado`), que es lo contrario de la decision (e) de la 144 y se hizo a
+   * peticion explicita del humano — con la separacion que aquella no tenia: se filtra el
+   * CATALOGO, no los DATOS. La bandera `activa` viaja en la fila para que la UI la marque
+   * (hoy siempre `true`); `esApiKey` para que las agrupe aparte (R51). Proyeccion
+   * `{id, nombre}` + 2 booleanos: NUNCA email, telefono, cedula ni hash (R54). Orden
+   * determinista por nombre (R49).
    */
   listCuentasTienda(): Promise<CuentaTiendaDTO[]>;
   /**

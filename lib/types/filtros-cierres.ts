@@ -180,16 +180,38 @@ export interface OpcionMensajeroFiltro extends OpcionFiltroCierres {
  */
 export interface CatalogoFiltrosCierresDTO {
   /**
-   * Las zonas que pueden SER una bodega: las que tienen `adminSatelite` asignado, más la
-   * central (la GAM). Acotadas al alcance del actor.
+   * Las zonas que pueden SER una bodega: las que tienen un `adminSatelite` EN PIE asignado, más
+   * la central (la GAM). Acotadas al alcance del actor.
+   *
+   * FICHA 351: una zona cuyo único admin de zona está dado de baja deja de ofrecerse, por la
+   * misma regla del 2026-08-16 que ya excluía a las zonas sin admin («una zona sin admin de zona
+   * no es una bodega satélite operativa»).
    */
   zonas: OpcionFiltroCierres[];
-  /** TODOS los mensajeros del alcance —activos o no—, cada uno con su zona. */
+  /**
+   * ⚠️ TODOS los mensajeros del alcance —dados de baja incluidos—, cada uno con su zona. **NO ES
+   * LA LISTA DEL DESPLEGABLE DE FILTRO** (esa es `mensajerosFiltro`): esto es el UNIVERSO DEL
+   * HISTÓRICO, y existe para la descarga de gestiones, cuya selección por defecto son estos ids.
+   *
+   * Recortarlo borraría del archivo las gestiones de quien ya no está, en silencio y sin poner
+   * rojo ningún test. Si necesitás «a quién se le puede ofrecer», usá `mensajerosFiltro`; si
+   * necesitás «de quién puede haber historia», es esta.
+   */
   mensajeros: OpcionMensajeroFiltro[];
+  /**
+   * FICHA 351 — los mensajeros que el DESPLEGABLE DE FILTRO ofrece: `mensajeros` menos los de
+   * `ESTADOS_USUARIO_NO_ASIGNABLES` (`inactivo`/`bloqueado`). Los `pendiente` SÍ se ofrecen: hoy
+   * se les pueden asignar órdenes, así que pueden tener trabajo vivo que alguien busque.
+   *
+   * Existe como campo aparte —y no sustituyendo a `mensajeros`— porque las dos listas tienen
+   * consumidores distintos y la otra alimenta una DESCARGA de datos históricos.
+   */
+  mensajerosFiltro: OpcionMensajeroFiltro[];
 }
 
 /** Catálogo vacío: lo que ve un `adminSatelite` sin zona, sin consultar la base. */
 export const CATALOGO_FILTROS_CIERRES_VACIO: CatalogoFiltrosCierresDTO = {
   zonas: [],
   mensajeros: [],
+  mensajerosFiltro: [],
 };
