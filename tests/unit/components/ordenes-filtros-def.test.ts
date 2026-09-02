@@ -4,7 +4,6 @@ import {
   construirFiltrosOrdenes,
   GRUPO_CUENTAS_TIENDA,
   GRUPO_INTEGRACIONES,
-  SUFIJO_INACTIVA,
 } from "@/app/(app)/ordenes/_components/ordenes-filtros-def";
 import { CREATED_PRESETS } from "@/lib/types/orden";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
@@ -180,15 +179,46 @@ describe("construirFiltrosOrdenes — cuentas tienda (R51)", () => {
     expect(opciones.find((o) => o.value === "t1")?.group).toBe(GRUPO_CUENTAS_TIENDA);
   });
 
-  it("R51: las cuentas INACTIVAS se distinguen en el texto visible", () => {
+  /**
+   * ⚠️ FICHA 351 (2026-09-02) — ESTE CASO AFIRMA LO CONTRARIO DE LO QUE AFIRMABA, Y ES A
+   * PROPÓSITO. Decía «R51: las cuentas INACTIVAS se distinguen en el texto visible» y exigía
+   * `Tienda Cerrada (inactiva)`, que era la decisión (e) de la feature 144: ofrecerlas, marcadas
+   * con un sufijo.
+   *
+   * EL HUMANO REVIRTIÓ LA DECISIÓN (e) el 2026-09-02 —«muestra tiendas o mensajeros que tenemos
+   * desactivos y eso es información que no debe mostrarse»; medido ese día, eran 2 de las 4
+   * tiendas del desplegable—. Desde entonces `listCuentasTienda` no entrega cuentas dadas de
+   * baja, así que no queda nada que sufijar y `SUFIJO_INACTIVA` se retiró del módulo.
+   *
+   * El caso NO se borra, se invierte: si alguien vuelve a componer una etiqueta a partir de
+   * `activa`, el `toBe` de abajo se pone rojo. Un test que muere sin sustituto es cobertura que
+   * se va, y aquí lo que hay que seguir vigilando es LA ETIQUETA.
+   */
+  it("ficha 351: la etiqueta es el NOMBRE A SECAS — ningún sufijo compuesto desde `activa`", () => {
     const opciones = porClave("tienda_id").options ?? [];
-    expect(opciones.find((o) => o.value === "t2")?.label).toBe(
-      `Tienda Cerrada${SUFIJO_INACTIVA}`,
-    );
+    // `t2` llega con `activa: false` (el fixture lo conserva a propósito: el DTO sigue trayendo
+    // la bandera). La declaración ya no la mira.
+    expect(opciones.find((o) => o.value === "t2")?.label).toBe("Tienda Cerrada");
     expect(opciones.find((o) => o.value === "t1")?.label).toBe("Tienda Activa");
+    // Y ninguna etiqueta, de ninguna cuenta, lleva el paréntesis que se retiró.
+    for (const opcion of opciones) {
+      expect(opcion.label).not.toMatch(/\(inactiva\)/);
+    }
   });
 
-  it("R50/R51: las inactivas y las de API key SIGUEN ofreciendose (no se filtran)", () => {
+  /**
+   * ⚠️ ESTE TAMBIÉN CAMBIÓ DE TÍTULO, Y NO DE CONDUCTA. Se llamaba «R50/R51: las inactivas y las
+   * de API key SIGUEN ofreciéndose (no se filtran)», que nombraba la decisión (e) —hoy
+   * revertida—; lo que comprueba, en cambio, sigue siendo válido y es importante que lo siga
+   * siendo: **esta declaración es PURA y no descarta filas**.
+   *
+   * El recorte de las cuentas dadas de baja vive en el servidor
+   * (`UserRepository.listCuentasTienda`), que es donde un `WHERE` se puede medir contra Postgres
+   * (`tests/integration/db/filtros-catalogo-sin-inactivos.test.ts`). Si además se filtrara aquí
+   * habría DOS reglas para lo mismo, y la del cliente escondería del desplegable lo que el
+   * servidor sí decidió entregar — el modo de fallo que nadie ve.
+   */
+  it("ficha 351: la declaración NO filtra — pinta lo que el catálogo le entrega, sea lo que sea", () => {
     const valores = (porClave("tienda_id").options ?? []).map((o) => o.value);
     expect(valores).toEqual(["t1", "t2", "t3"]);
   });

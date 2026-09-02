@@ -53,6 +53,8 @@ import { getHojaEtiqueta } from "@/lib/config/etiquetas-hoja";
 import { formatMonto } from "@/lib/config/moneda";
 import { fuenteEtiqueta } from "@/lib/pdf/etiquetas-fuente";
 
+import { CUERPOS_BASE } from "@/lib/pdf/etiquetas-maqueta";
+
 import { CASO_EVIDENCIA } from "../fixtures/etiquetas-282";
 import {
   fuentesDePagina,
@@ -277,5 +279,181 @@ describe("R32 — la familia de pantalla es la del /BaseFont con el que el PDF d
     // 14 estandar (que no tendrian el simbolo).
     expect(recurso.subtype).toBe("Type0");
     expect(recurso.fontFile2).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 350 (T17, R23) — LA VISTA PREVIA NO PUEDE MENTIR SOBRE EL PAPEL.
+//
+// Se cruzan las DOS cosas que R23 nombra —el ORDEN de los datos y la JERARQUIA
+// de tamaños— entre la pantalla y el PDF que produce el generador de verdad. No
+// son dos aserciones independientes sobre dos maquetas: es la misma secuencia
+// leida de los dos sitios y comparada.
+//
+// Sobre la jerarquia: jsdom NO computa estilos (no hay CSS de Tailwind cargado),
+// asi que el tamaño de pantalla se lee de la CLASE de utilidad y se traduce con
+// la escala documentada de Tailwind. Es indirecto y se dice: lo que se afirma es
+// el ORDEN relativo de los seis datos, que es lo que R23 exige, no un pixel.
+// ---------------------------------------------------------------------------
+
+/** La escala de Tailwind que usa la etiqueta, en px. */
+const TAMANO_DE_CLASE: Record<string, number> = {
+  "text-xl": 20,
+  "text-lg": 18,
+  "text-base": 16,
+  "text-sm": 14,
+  "text-xs": 12,
+  "text-[11px]": 11,
+  "text-[10px]": 10,
+};
+
+/** Tamaño heredado de un elemento: la primera clase `text-*` subiendo por el DOM. */
+function tamanoDe(el: HTMLElement | null): number {
+  let actual: HTMLElement | null = el;
+  while (actual) {
+    for (const clase of Array.from(actual.classList)) {
+      if (clase in TAMANO_DE_CLASE) return TAMANO_DE_CLASE[clase];
+    }
+    actual = actual.parentElement;
+  }
+  throw new Error("ningun ancestro declara un tamaño de texto");
+}
+
+describe("R23 — la pantalla y el papel dicen lo mismo, en el mismo orden y con la misma jerarquia", () => {
+  const dto = CASO_EVIDENCIA.dto;
+  const esperado = CASO_EVIDENCIA.esperado;
+
+  /** Los datos, con el valor LITERAL del fixture (nunca `geografiaLegible`). */
+  const DATOS: Array<{ id: string; valor: string }> = [
+    { id: "fechaCreacion", valor: esperado.fechaCreacion },
+    { id: "numGuia", valor: esperado.numGuia },
+    { id: "numRemision", valor: esperado.numRemision },
+    { id: "destinatario", valor: esperado.destinatario },
+    { id: "telefonoDest", valor: esperado.telefonoDest },
+    { id: "direccion", valor: esperado.direccion },
+    { id: "ubicacion", valor: esperado.ubicacion },
+    { id: "montoCobrar", valor: esperado.montoCobrar },
+    { id: "producto", valor: esperado.producto },
+    { id: "tiendaNombre", valor: esperado.tiendaNombre },
+  ];
+
+  function ordenEnPantalla(container: HTMLElement): string[] {
+    const texto = container.textContent ?? "";
+    return [...DATOS]
+      .map((d) => {
+        const posicion = texto.indexOf(d.valor);
+        expect(posicion, `«${d.id}» no aparece en la vista previa`).toBeGreaterThanOrEqual(0);
+        return { id: d.id, posicion };
+      })
+      .sort((a, b) => a.posicion - b.posicion)
+      .map((d) => d.id);
+  }
+
+  function ordenEnPapel(): string[] {
+    const doc = buildEtiquetasPdf(
+      [dto],
+      new Map([[dto.ordenId, document.createElement("canvas")]]),
+      getHojaEtiqueta("100x100"),
+      fuenteEtiqueta,
+    );
+    const u8 = new Uint8Array(Buffer.from(doc.output("arraybuffer")));
+    const fuentes = fuentesDePagina(u8);
+    const textos = textosDePagina(u8).map((t) => ({
+      texto: textoLegible(t, fuentes.get(t.fuenteRes)),
+      // La `y` del PDF crece hacia ARRIBA: se invierte para leer de arriba abajo.
+      y: -t.y,
+      x: t.x,
+    }));
+    return [...DATOS]
+      .map((d) => {
+        // La primera linea del dato: el primer texto dibujado que es prefijo del
+        // valor esperado (los datos largos se parten en varias lineas).
+        const primera = textos.find(
+          (t) => t.texto.length > 0 && d.valor.startsWith(t.texto),
+        );
+        expect(primera, `«${d.id}» no aparece en el PDF`).toBeDefined();
+        return { id: d.id, y: primera!.y, x: primera!.x };
+      })
+      .sort((a, b) => a.y - b.y || a.x - b.x)
+      .map((d) => d.id);
+  }
+
+  it("el ORDEN de los diez datos es el mismo en la pantalla y en el PDF", () => {
+    const { container } = render(<EtiquetaGuia etiqueta={dto} />);
+    const pantalla = ordenEnPantalla(container);
+    const papel = ordenEnPapel();
+
+    expect(pantalla).toEqual(papel);
+    // Y ese orden es el de R13, escrito para que se lea sin ejecutar nada.
+    expect(papel).toEqual([
+      "fechaCreacion",
+      "numGuia",
+      "numRemision",
+      "destinatario",
+      "telefonoDest",
+      "direccion",
+      "ubicacion",
+      "montoCobrar",
+      "producto",
+      "tiendaNombre",
+    ]);
+  });
+
+  it("la JERARQUIA de tamaños es la misma: el ranking de los seis datos coincide", () => {
+    render(<EtiquetaGuia etiqueta={dto} />);
+
+    // Pantalla: el tamaño heredado de cada valor.
+    const enPantalla = [
+      { id: "montoCobrar", px: tamanoDe(screen.getByTestId("etiqueta-monto")) },
+      { id: "destinatario", px: tamanoDe(screen.getByText(esperado.destinatario)) },
+      { id: "telefonoDest", px: tamanoDe(screen.getByText(esperado.telefonoDest)) },
+      { id: "direccion", px: tamanoDe(screen.getByText(esperado.direccion)) },
+      { id: "ubicacion", px: tamanoDe(screen.getByText(esperado.ubicacion)) },
+      { id: "producto", px: tamanoDe(screen.getByText(esperado.producto)) },
+    ];
+
+    // Papel: el cuerpo BASE de la maqueta compartida, que es la fuente de verdad
+    // de la jerarquia (el ajuste puede bajarlos todos, pero conserva su orden).
+    const enPapel = [
+      { id: "montoCobrar", pt: CUERPOS_BASE.importe },
+      { id: "destinatario", pt: CUERPOS_BASE.destinatario },
+      { id: "telefonoDest", pt: CUERPOS_BASE.telefono },
+      { id: "direccion", pt: CUERPOS_BASE.direccion },
+      { id: "ubicacion", pt: CUERPOS_BASE.ubicacion },
+      { id: "producto", pt: CUERPOS_BASE.detalle },
+    ];
+
+    const rankingPantalla = [...enPantalla].sort((a, b) => b.px - a.px).map((d) => d.id);
+    const rankingPapel = [...enPapel].sort((a, b) => b.pt - a.pt).map((d) => d.id);
+    expect(rankingPantalla).toEqual(rankingPapel);
+
+    // Control positivo: los tamaños de pantalla no son todos iguales (si lo
+    // fueran, dos rankings arbitrarios podrian coincidir por accidente).
+    expect(new Set(enPantalla.map((d) => d.px)).size).toBe(enPantalla.length);
+  });
+
+  it("el importe va DESTACADO en su recuadro, no como una fila mas de la lista", () => {
+    // Es la mitad de R23 que no se ve en el orden: en el papel el importe esta
+    // dentro de un rectangulo dibujado y es el cuerpo mayor. Si en pantalla
+    // fuera una fila mas, la previa mentiria sobre lo que va a imprimirse.
+    render(<EtiquetaGuia etiqueta={dto} />);
+    const recuadro = screen.getByTestId("etiqueta-importe");
+    expect(recuadro.className).toMatch(/border/);
+    expect(recuadro).toContainElement(screen.getByTestId("etiqueta-monto"));
+    const monto = tamanoDe(screen.getByTestId("etiqueta-monto"));
+    expect(monto).toBeGreaterThan(tamanoDe(screen.getByText(esperado.destinatario)));
+  });
+
+  it("el bloque de destino NO tiene columna de rotulos (D2/R16)", () => {
+    // La rejilla `dt`/`dd` era la version en pantalla de la columna que se comia
+    // el 24 % del ancho en el papel. Si volviera, la previa dejaria de parecerse.
+    const { container } = render(<EtiquetaGuia etiqueta={dto} />);
+    const destino = screen.getByTestId("etiqueta-destino");
+    expect(destino.querySelectorAll("dt")).toHaveLength(0);
+    expect(container.querySelectorAll("dl")).toHaveLength(0);
+    // Control positivo: el bloque SI tiene los cuatro valores del destino.
+    expect(destino).toHaveTextContent(esperado.destinatario);
+    expect(destino).toHaveTextContent(esperado.telefonoDest);
+    expect(destino).toHaveTextContent(esperado.ubicacion);
   });
 });

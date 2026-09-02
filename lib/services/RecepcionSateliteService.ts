@@ -399,23 +399,18 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
 
 }
 
+/**
+ * FICHA 349 — LA FILA DEL REPOSITORIO **ES** EL DTO: aqui ya no se copia campo a campo.
+ *
+ * Hasta hoy este mapeo enumeraba diecisiete asignaciones `x: row.x`, y esa enumeracion era un
+ * FILTRO SILENCIOSO: un campo que el repositorio empezara a enviar no llegaba a la pantalla
+ * hasta que alguien lo copiara aqui, y no copiarlo no rompia ningun test. Es una de las tres
+ * listas paralelas con las que la tabla de la bodega acabo mostrando 12 columnas mientras
+ * `/ordenes` mostraba 19.
+ *
+ * El unico campo que el servicio AÑADE es `intentosEntrega`, y lo añade en el sitio donde lo
+ * resuelve (el lote de `contarIntentosEnLote`), no aqui.
+ */
 function toDTO(row: RecepcionSateliteRow): RecepcionSateliteDTO {
-  return {
-    id: row.id,
-    numGuia: row.numGuia,
-    numRemision: row.numRemision,
-    estatusValue: row.estatusValue,
-    destinatario: row.destinatario,
-    telefonoDest: row.telefonoDest,
-    direccion: row.direccion,
-    producto: row.producto,
-    montoCobrar: row.montoCobrar,
-    tiendaNombre: row.tiendaNombre,
-    zonaNombre: row.zonaNombre,
-    provinciaNombre: row.provinciaNombre,
-    cantonNombre: row.cantonNombre,
-    distritoNombre: row.distritoNombre,
-    prioridad: row.prioridad, // feature 101/R9: propaga el flag al DTO (resalte de fila R8)
-    fechaRepartoISO: row.fechaRepartoISO, // feature 262/B8 (R16): el dia por orden, ya serializado por el repo
-  };
+  return { ...row };
 }

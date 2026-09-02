@@ -43,6 +43,46 @@ export function registrarFuente(doc: jsPDF, fuente: FuenteEmbebida): void {
   doc.addFont(fuente.archivoVfs, fuente.nombre, fuente.estilo);
 }
 
+/**
+ * Feature 350 — ¿Puede la fuente ESTANDAR de jsPDF escribir este code point?
+ *
+ * MEDIDO en esta sesion (jsPDF 4.2.1, Helvetica, los 216 code points imprimibles
+ * de cp1252 uno a uno, leyendo el resultado del PDF): sobreviven ASCII
+ * `0x20-0x7E` y Latin-1 `0xA0-0xFF` —los acentos y la eñe incluidos— y jsPDF
+ * **BORRA los 27 del bloque `0x80-0x9F`**:
+ * `€ ‚ ƒ „ … † ‡ ˆ ‰ Š ‹ Œ Ž ‘ ’ “ ” • – — ˜ ™ š › œ ž Ÿ`.
+ *
+ * No los sustituye por nada ni avisa: `"a—b"` acaba escrito `"ab"` en el content
+ * stream, y `getTextWidth` sigue devolviendo el ancho del caracter que no va a
+ * imprimir. Es EL MISMO fallo mudo que la feature 282 encontro con el simbolo de
+ * moneda —jsPDF borra de la cadena lo que la fuente no cubre— pero en la fuente
+ * estandar, donde nadie lo estaba mirando.
+ *
+ * Importa de verdad y no es teorico: el apostrofo tipografico `’`, las comillas
+ * `“ ”` y el guion largo `—` entran por copiar y pegar en un nombre de tienda o
+ * en una direccion. La medida del alfabeto de produccion del 2026-08-25 dice que
+ * hoy no hay ninguno, pero esa medida «es la foto de un dia y CADUCA»: por eso
+ * esto se comprueba en tiempo de ejecucion y no se queda en un test.
+ */
+export function escribibleEnFuenteEstandar(cp: number): boolean {
+  return (cp >= 0x20 && cp <= 0x7e) || (cp >= 0xa0 && cp <= 0xff);
+}
+
+/** Primer caracter que la fuente estandar NO puede escribir, o `null`. */
+export function caracterNoEscribibleEstandar(texto: string): string | null {
+  for (const caracter of texto) {
+    const cp = caracter.codePointAt(0);
+    if (cp === undefined) continue;
+    if (!escribibleEnFuenteEstandar(cp)) return caracter;
+  }
+  return null;
+}
+
+/** ¿Puede dibujarse este texto entero con la fuente estandar, sin perder nada? */
+export function seguroEnFuenteEstandar(texto: string): boolean {
+  return caracterNoEscribibleEstandar(texto) === null;
+}
+
 /** ¿Cubre el subconjunto este code point? */
 export function cubreCodePoint(fuente: FuenteEmbebida, cp: number): boolean {
   for (const [desde, hasta] of fuente.cobertura) {

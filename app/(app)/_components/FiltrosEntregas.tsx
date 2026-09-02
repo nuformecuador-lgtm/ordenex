@@ -11,9 +11,7 @@ import {
 } from "@/components/shared/FilterComponent";
 import type { Faceta } from "@/lib/analytics/presentacion";
 import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
-import { listarMensajerosParaAsignacion } from "@/lib/actions/ordenes-guia";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
-import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 
 import {
   FILTRO_ENTREGAS_INICIAL,
@@ -32,8 +30,6 @@ const CATALOGO_VACIO: CatalogoFiltrosOrdenesDTO = {
   cantones: [],
   distritos: [],
 };
-
-const SIN_MENSAJEROS: readonly MensajeroLiteDTO[] = [];
 
 /**
  * Que dice el campo que hace. Es lo unico que distingue «buscar una orden» de «saltar a
@@ -65,27 +61,35 @@ async function catalogoFetcher(): Promise<CatalogoFiltrosOrdenesDTO | null> {
 }
 
 /**
- * Los mensajeros que ofrece el filtro. Misma accion y misma clave SWR que usan los
- * modales de asignacion de ordenes, para no montar una segunda lista que pueda
- * discrepar de aquella (y para reaprovechar su cache si ya esta pedida).
+ * ⚠️ FICHA 351 (2026-09-02) — AQUI VIVIA `mensajerosFetcher`, Y SE FUE ENTERO. NO LO TRAIGAS DE
+ * VUELTA sin leer esto, porque el hueco que deja es el arreglo.
  *
- * ⚠️ FEATURE 271 (T9.4, R33) — LA MISMA ACCION TRAE `bloqueadosIds` Y AQUI NO SE LEE. ES
- * DELIBERADO, NO UN OLVIDO, y queda escrito porque es exactamente lo que el proximo lector va a
- * «arreglar» al ver que los dos modales de asignacion si lo aplican.
+ * Esta barra pedia sus mensajeros a `listarMensajerosParaAsignacion` (misma accion y misma clave
+ * SWR que los modales de asignacion, para no montar dos listas que pudieran discrepar). El
+ * problema no era la duplicidad: era el SIGNIFICADO. Esa lista es la de ASIGNACION y por diseño
+ * incluye a los dados de baja —alli hay a quien deshabilitar y un motivo que enseñar
+ * (`MOTIVO_USUARIO_NO_ASIGNABLE`), y eso no se toca—. En un desplegable de FILTRO no hay nada de
+ * eso: una opcion apagada no informa, y ofrecerla es exactamente lo que el humano señalo
+ * («muestra tiendas o mensajeros que tenemos desactivos y eso es informacion que no debe
+ * mostrarse»). Los mensajeros salen ahora del CATALOGO que esta misma barra ya pedia
+ * (`obtenerCatalogoFiltrosOrdenes` -> `UserRepository.listMensajerosParaFiltro`), donde el
+ * filtro de estado vive en el `WHERE`.
  *
- * FILTRAR NO ES ASIGNAR. Deshabilitar aqui a un mensajero bloqueado volveria INALCANZABLES las
- * ordenes que ya tiene en la mano: son las suyas, alguien tiene que poder buscarlas, y son
- * justamente las que hay que mirar cuando esta bloqueado. El bloqueo prohibe DARLE trabajo nuevo,
- * no VER el que lleva.
+ * DOS EFECTOS COLATERALES, los dos queridos y ninguno silencioso:
+ *
+ *  - **Una lectura menos por visita.** El catalogo ya viajaba; los mensajeros venian en una
+ *    segunda peticion que ahora no se hace.
+ *  - **El ALCANCE de la lista cambia de dueño.** `listarMensajerosParaAsignacion` devuelve solo
+ *    los de la zona GAM y responde `forbidden` a quien no sea `maestro`/`admin`; el catalogo lo
+ *    resuelve por ACTOR (`FiltrosOrdenesService`): al maestro y al admin les da los del pais y
+ *    al `adminSatelite` los de SU zona —que antes veia el control vacio—. Es la misma regla que
+ *    ya gobierna las otras seis facetas de esta barra, asi que el filtro deja de tener una
+ *    excepcion propia.
+ *
+ * Lo que la 271/R33 protegia SIGUE EN PIE, y conviene no confundirlo: un mensajero BLOQUEADO POR
+ * CIERRE (`bloqueadosIds`) esta `activo` y sigue apareciendo en este filtro. El bloqueo prohibe
+ * DARLE trabajo nuevo, no VER el que lleva.
  */
-async function mensajerosFetcher(): Promise<MensajeroLiteDTO[]> {
-  const res = await listarMensajerosParaAsignacion();
-  // Un fallo aqui NO rompe la barra: el filtro de mensajero se queda sin opciones y los
-  // otros tres siguen operativos, que es el mismo trato que la barra de ordenes le da a
-  // un catalogo caido. Por eso se devuelve vacio en vez de lanzar.
-  if (res.status !== "ok") return [];
-  return res.mensajeros;
-}
 
 /**
  * La barra de filtros de ordenes, montada en el panel maestro sobre las ENTREGAS: fecha (con
@@ -130,20 +134,14 @@ export interface FiltrosEntregasProps {
 }
 
 export function FiltrosEntregas({ facetas }: Readonly<FiltrosEntregasProps> = {}) {
-  // Sin la faceta de mensajero no se pide el directorio: su accion responde `forbidden` a
-  // quien no la tiene ofrecida, y pedir algo para tirarlo es un viaje al servidor por nada.
-  const ofreceMensajeros = facetas === undefined || facetas.includes("mensajero");
-  // Las dos lecturas van en la MISMA oleada, sin encadenarse: el catalogo no depende de
-  // los mensajeros ni al reves, y esperar a uno para pedir el otro haria la barra el
-  // doble de lenta sin que nada lo delatara.
+  // UNA sola lectura desde la ficha 351. Antes eran dos en la misma oleada —el catalogo y un
+  // directorio de mensajeros aparte—; la segunda desaparecio con `mensajerosFetcher` (ver la
+  // nota de arriba), y con ella el `ofreceMensajeros` que decidia si valia la pena pedirla: el
+  // catalogo ya sirve la lista ACOTADA AL ACTOR, asi que el rol que no tiene la faceta recibe
+  // una lista vacia sin ningun viaje de mas.
   const { data: catalogoCargado, isLoading } = useSWR(
     "entregas:catalogo-filtros",
     catalogoFetcher,
-    { revalidateOnFocus: false },
-  );
-  const { data: mensajeros } = useSWR(
-    ofreceMensajeros ? "entregas:mensajeros" : null,
-    mensajerosFetcher,
     { revalidateOnFocus: false },
   );
 
@@ -217,18 +215,14 @@ export function FiltrosEntregas({ facetas }: Readonly<FiltrosEntregasProps> = {}
   const [reset, setReset] = useState(0);
 
   const filtros = useMemo<FilterDef[]>(() => {
-    const declarados = construirFiltrosEntregas(
-      catalogo ?? CATALOGO_VACIO,
-      mensajeros ?? SIN_MENSAJEROS,
-      { facetas },
-    );
+    const declarados = construirFiltrosEntregas(catalogo ?? CATALOGO_VACIO, { facetas });
     // Sin catalogo, los filtros que dependen de el se deshabilitan en vez de
     // desaparecer: un filtro ausente parece que no existe, uno deshabilitado dice que
     // ahora mismo no hay opciones. El de fecha no depende del catalogo y sigue operativo.
     return catalogo === null
       ? declarados.map((f) => (f.kind === "dateRange" ? f : { ...f, disabled: true }))
       : declarados;
-  }, [catalogo, mensajeros, facetas]);
+  }, [catalogo, facetas]);
 
   const ofrecidos = useMemo(
     () => filtros.map((f) => ({ key: f.key, label: f.label })),

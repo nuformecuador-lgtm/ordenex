@@ -36,6 +36,7 @@ const MAQUETA = "lib/pdf/etiquetas-maqueta.ts";
  * `etiquetas-pdf-lote.ts` tenian escritos a mano antes de esta ficha.
  */
 const CONSTANTES_PROHIBIDAS = [
+  // Feature 282: las que los dos generadores tenian escritas a mano.
   "CAMPOS_Y_INICIO",
   "FONT_ROTULO",
   "FONT_VALOR",
@@ -49,6 +50,22 @@ const CONSTANTES_PROHIBIDAS = [
   "QR_SIZE",
   "GAP_TEXTO_CODIGOS",
   "GAP_ROTULO_VALOR",
+  // Feature 350: las que estrena el rediseño. Van aqui el MISMO dia que nacen,
+  // no cuando alguien las duplique: la prohibicion solo sirve si llega antes.
+  "CUERPO_MINIMO_PT",
+  "CUERPO_MINIMO_DESTACADO_PT",
+  "CUERPOS_BASE",
+  "PASO_AJUSTE_PT",
+  "INTERLINEADO",
+  "BANDAS",
+  "GAPS_ENTRE_BANDAS",
+  "GAP_BANDAS_TOTAL_MM",
+  "GAP_CAMPOS_MM",
+  "MARGEN_MM",
+  "ANCHO_UTIL_BASE_MM",
+  "CELDA_BASE_MM",
+  "QR_MM",
+  "BARCODE_MM",
 ];
 
 describe("R21 — ningun generador declara por su cuenta la geometria de la etiqueta", () => {
@@ -69,18 +86,32 @@ describe("R21 — ningun generador declara por su cuenta la geometria de la etiq
     const maqueta = codigoSinComentarios(MAQUETA);
     // El control positivo de esta guardia: los valores existen en algun sitio.
     for (const trozo of [
-      "margin:",
+      // Las de la 282 que siguen vivas.
+      "margen:",
       "fontRotulo:",
-      "fontValor:",
       "fontGuia:",
-      "lineHeight:",
-      "fieldGap:",
+      "fontRemision:",
       "qrSize:",
-      "guiaY:",
       "GAP_TEXTO_CODIGOS",
       "GAP_ROTULO_VALOR",
-      "camposYInicio",
       "LIENZO_BASE_MM",
+      // Feature 350: el control positivo se amplia EN PARALELO a la lista
+      // prohibida. Si no, prohibir un nombre que no existe en ningun sitio
+      // seria una prohibicion vacia — verde y sin contenido.
+      "CUERPO_MINIMO_PT",
+      "CUERPO_MINIMO_DESTACADO_PT",
+      "CUERPOS_BASE",
+      "PASO_AJUSTE_PT",
+      "INTERLINEADO",
+      "BANDAS",
+      "GAPS_ENTRE_BANDAS",
+      "GAP_CAMPOS_MM",
+      "MARGEN_MM",
+      "ANCHO_UTIL_BASE_MM",
+      "CELDA_BASE_MM",
+      "QR_MM",
+      "BARCODE_MM",
+      "separacionBajoGuiaMm",
     ]) {
       expect(maqueta, `${MAQUETA} ya no declara ${trozo}`).toContain(trozo);
     }
@@ -107,6 +138,20 @@ describe("R21 — ningun generador declara por su cuenta la geometria de la etiq
       expect(codigo, `${archivo} conserva su propio drawEtiqueta`).not.toMatch(
         /function\s+drawEtiqueta/,
       );
+    }
+  });
+
+  it("tampoco reimplementan el AJUSTE (feature 350)", () => {
+    // El motor que decide cuerpos y saltos de linea es lo mas facil de volver a
+    // escribir «solo para este caso», y seria la divergencia mas cara: uno de
+    // los dos PDF recortaria y el otro no.
+    for (const archivo of [GENERADOR_CLIENTE, GENERADOR_SERVIDOR]) {
+      const codigo = codigoSinComentarios(archivo);
+      for (const nombre of ["partirEnLineas", "ajustarBloque", "splitTextToSize"]) {
+        expect(codigo, `${archivo} maqueta texto por su cuenta (${nombre})`).not.toContain(
+          nombre,
+        );
+      }
     }
   });
 

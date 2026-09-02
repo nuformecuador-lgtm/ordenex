@@ -81,7 +81,7 @@ function fakeRepo(traza: Traza, overrides: Partial<Repo> = {}): Repo {
     findGestionesIncidenteDelCierre: vi.fn(async () => []),
     findGestionesRetornablesDelCierre: vi.fn(async () => []),
     findGestionesPorAlcanceCompleto: vi.fn(async () => []),
-    findCatalogoFiltros: vi.fn(async () => ({ zonas: [], mensajeros: [] })),
+    findCatalogoFiltros: vi.fn(async () => ({ zonas: [], mensajeros: [], mensajerosFiltro: [] })),
     findGestionEditableEnCierre: vi.fn(async () => null),
     actualizarPagosGestion: vi.fn(async () => ({ status: "conflict" as const })),
     ...overrides,

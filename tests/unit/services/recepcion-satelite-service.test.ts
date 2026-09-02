@@ -6,6 +6,7 @@ import type {
   RecepcionSateliteRow,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 import {
   fakeIntentosEnLote,
   llamadasIntentos,
@@ -49,6 +50,8 @@ function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransi
 
 function recepcionRow(overrides: Partial<RecepcionSateliteRow> = {}): RecepcionSateliteRow {
   return {
+    // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
+    ...CAMPOS_BASE_ORDEN,
     id: "o1",
     numGuia: 10,
     numRemision: "R-1",

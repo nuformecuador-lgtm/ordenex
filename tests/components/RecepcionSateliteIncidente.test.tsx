@@ -13,6 +13,7 @@ import { ORIGENES_INCIDENTE_ADMIN } from "@/lib/services/IncidenteAdminService";
 import OrdenesPage from "@/app/(app)/ordenes/page";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 import {
   PAGE_SIZE_SATELITE,
   catalogoSatelite,
@@ -91,6 +92,8 @@ function makeOrden(
   over: Partial<RecepcionSateliteDTO> & { id: string },
 ): RecepcionSateliteDTO {
   return {
+    // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
+    ...CAMPOS_BASE_ORDEN,
     numGuia: 1001,
     numRemision: "REM-001",
     estatusValue: "en_bodega_satelite",

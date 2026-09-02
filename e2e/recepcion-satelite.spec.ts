@@ -85,8 +85,12 @@ test.describe("Recepción satélite — recepción por QR (keyboard-wedge)", () 
     // Reception feedback (per-item toast) confirms success.
     await expect(page.getByText(/recibida/i)).toBeVisible();
 
-    // After router.refresh(), the order shows up under "Recibidas" as
-    // `en_bodega_satelite` (estado legible "En bodega satélite de <zona>").
-    await expect(recibidas.getByText(/En bodega satélite de/i)).toBeVisible();
+    // After router.refresh(), the order shows up under "Recibidas" as `en_bodega_satelite`.
+    //
+    // FICHA 349: the state cell is now the SAME `EstatusBadge` as `/ordenes`, so it reads
+    // "En bodega satélite" WITHOUT the " de <zona>" suffix this screen used to compose. The
+    // zone is not lost: it has its own column. **Not asserted to pass**: the e2e of this repo
+    // still do not run (see the file header); this is a correction by reading, not a check.
+    await expect(recibidas.getByText("En bodega satélite")).toBeVisible();
   });
 });

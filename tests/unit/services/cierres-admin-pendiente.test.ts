@@ -66,7 +66,7 @@ function fakeRepo(overrides: Partial<ICierresAdminRepository> = {}): ICierresAdm
     // Feature 230 (T2.1): el doble implementa la interfaz ENTERA. Estos casos no ejercitan la
     // descarga detallada; devolver el conjunto vacio deja el camino de la 38 intacto.
     findGestionesPorAlcanceCompleto: vi.fn(async () => []),
-    findCatalogoFiltros: vi.fn(async () => ({ zonas: [], mensajeros: [] })),
+    findCatalogoFiltros: vi.fn(async () => ({ zonas: [], mensajeros: [], mensajerosFiltro: [] })),
     // Pedido humano (2026-08-19): la correccion del desglose. Dobles no-op: esta suite no la
     // ejercita (vive en `cierres-admin-corregir-pagos.test.ts`).
     findGestionEditableEnCierre: vi.fn(async () => null),

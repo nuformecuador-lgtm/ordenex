@@ -77,6 +77,8 @@ const ZONA = "33333333-3333-4333-8333-333333333333";
 const CATALOGO: CatalogoFiltrosCierresDTO = {
   zonas: [{ id: ZONA, nombre: "Limón" }],
   mensajeros: [{ id: ANA, nombre: "Ana Mensajera", zonaId: ZONA }],
+  // Ficha 351: Ana está en pie, así que filtro y universo coinciden en este fixture.
+  mensajerosFiltro: [{ id: ANA, nombre: "Ana Mensajera", zonaId: ZONA }],
 };
 
 const TOTALES = {

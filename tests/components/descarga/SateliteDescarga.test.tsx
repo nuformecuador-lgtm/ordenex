@@ -90,6 +90,7 @@ vi.mock("@/lib/actions/envio-devolucion-central", () => ({ enviarACentral: vi.fn
 vi.mock("@/lib/actions/resolver-novedad", () => ({ recuperarABodega: vi.fn() }));
 
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
+import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
 const ZONA_ACTOR = "Limón";
 
@@ -97,6 +98,8 @@ function makeOrden(
   over: Partial<RecepcionSateliteDTO> & { id: string },
 ): RecepcionSateliteDTO {
   return {
+    // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
+    ...CAMPOS_BASE_ORDEN,
     numGuia: 1001,
     numRemision: "REM-001",
     estatusValue: "en_bodega_satelite",

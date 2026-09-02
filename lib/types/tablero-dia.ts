@@ -14,7 +14,8 @@ import type { MotivoDenegacion } from "@/lib/analytics/alcance";
 // asi que la cabecera de este modulo («no importa `repositories/`, `services/`, `@/lib/db` ni
 // `next/headers`») sigue siendo cierta. Es lo que permite que la fila del detalle SEA la del
 // listado sin declarar un tipo paralelo (design.md §3.2).
-import type { OrdenListItemDTO, OrdenTiendaRef } from "@/lib/types/orden";
+import type { OrdenListItemDTO } from "@/lib/types/orden";
+import type { AlcanceOrden } from "@/lib/types/recorte-alcance-orden";
 import { ORDER_STATUS_SEED, type OrderStatusValue } from "@/lib/types/order-status";
 
 /* -------------------------------------------------------------------------- */
@@ -272,8 +273,15 @@ export type OrdenDetalleDia = OrdenListItemDTO & {
   readonly asignadoAt: string;
 };
 
-/** El alcance con el que se resolvio una lectura del tablero. Lista blanca, no el rol. */
-export type AlcanceTableroDia = "global" | "zona";
+/**
+ * El alcance con el que se resolvio una lectura del tablero. Lista blanca, no el rol.
+ *
+ * FICHA 349 — es un ALIAS de `AlcanceOrden` (`lib/types/recorte-alcance-orden.ts`), no una
+ * segunda union de las mismas dos variantes: el recorte que lo consume vive alli desde que
+ * tiene dos pantallas encima. El nombre local se conserva porque es el que viaja en la
+ * respuesta del detalle (`DetalleMensajeroDia.alcance`) y lo leen sus consumidores.
+ */
+export type AlcanceTableroDia = AlcanceOrden;
 
 export interface DetalleMensajeroDia {
   readonly mensajeroId: string;
@@ -297,84 +305,24 @@ export interface DetalleMensajeroDia {
 /* -------------------------------------------------------------------------- */
 
 /**
- * FEATURE 260 (T0.3, R13/R43) — LO QUE **NO SALE** DEL ALCANCE GLOBAL. Una sola declaracion.
+ * FICHA 349 (2026-09-01) — EL RECORTE SE MUDO A `lib/types/recorte-alcance-orden.ts` Y AQUI
+ * SOLO SE REEXPORTA. Sigue habiendo UNA sola declaracion (R43); lo que cambia es donde vive.
  *
- * POR QUE EXISTE, y no es cosmetica: `/ordenes` no admite al satelite de zona
- * (`app/(app)/ordenes/page.tsx` le hace `notFound()`), asi que estas cifras y estos datos de
- * contacto son cosas que ese alcance NUNCA ha podido ver. `/monitoreo` si lo admite, y no
- * puede ser la puerta de atras. El monto a cobrar SI se conserva en los dos alcances (R17):
- * ya lo ve en su propia pantalla de recepcion.
+ * POR QUE SE MUDO: el listado «Órdenes de la bodega» del `adminSatelite` es ahora el SEGUNDO
+ * consumidor —su proyeccion pasa a ser la misma `toListItemDTO` de `/ordenes`, y sale de la
+ * capa de datos recortada por esta misma funcion—. Con dos consumidores el nombre «tablero del
+ * dia» dejaba de ser cierto, y ademas la capa de datos habria tenido que importar ESTE modulo,
+ * que arrastra `lib/analytics/alcance` -> `lib/auth/acceso-total` por un camino de tipos que el
+ * guardia del bundle de cliente recorre sin distinguir `import type` (la misma medicion que
+ * motivo `lib/types/alcance-tablero.ts`, cuya cabecera la cuenta entera).
  *
- * El recorte es COLUMNA **y** DATO. Las dos mitades, o el cero miente: sin la mitad servidor
- * el dato viaja al navegador aunque no se pinte y se lee con un `View source`; sin la mitad
- * pantalla, `PriceLabel` convierte el hueco en `₡0`, que se lee como «esta orden no paga
- * flete» — una afirmacion falsa, peor que enseñar la cifra (R15).
- *
- * El `satisfies` ata cada nombre a su tipo: un rename en `lib/types/orden.ts` deja de
- * COMPILAR aqui, en vez de filtrar el campo en silencio.
+ * Para los consumidores de aqui —`TableroDiaService`, `detalle-columnas`, sus tests— no cambia
+ * absolutamente nada: los mismos nombres, importados del mismo sitio.
  */
-export const CAMPOS_SOLO_ALCANCE_GLOBAL = {
-  orden: ["fleteConIva", "comisionConIva"],
-  tienda: ["email", "telefono", "tarifa"],
-} as const satisfies {
-  orden: readonly (keyof OrdenListItemDTO)[];
-  tienda: readonly (keyof OrdenTiendaRef)[];
-};
-
-/**
- * R13/R46 — PURA. Con `global` devuelve la orden intacta (R46: no se recorta nada por debajo
- * del techo de R18); con `zona`, sin los campos de `CAMPOS_SOLO_ALCANCE_GLOBAL`.
- *
- * Como se retira cada uno: los cuatro opcionales (`fleteConIva`, `comisionConIva`,
- * `tienda.email`, `tienda.telefono`) SE BORRAN —la clave deja de existir, asi que no viaja ni
- * como `undefined` en el JSON—; `tienda.tarifa` se pone a `null`, que es un valor legitimo del
- * tipo y el que ya tiene una tienda sin tarifa activa. Ninguna columna montada en `zona` los
- * lee, asi que ese `null` no puede leerse como una afirmacion falsa.
- */
-export function recortarPorAlcance(
-  orden: OrdenDetalleDia,
-  alcance: AlcanceTableroDia,
-): OrdenDetalleDia {
-  if (alcance === "global") return orden;
-
-  const recortada = sinClaves(orden, CAMPOS_SOLO_ALCANCE_GLOBAL.orden);
-  const relaciones = orden.relaciones;
-  if (relaciones === undefined) return recortada;
-
-  return {
-    ...recortada,
-    relaciones: {
-      ...relaciones,
-      tienda: relaciones.tienda === null ? null : recortarTienda(relaciones.tienda),
-    },
-  };
-}
-
-/**
- * Los tres campos de tienda de la lista, retirados DERIVANDOLOS de ella y no reescribiendo sus
- * nombres aqui: una segunda lista es lo que R43 prohibe.
- */
-function recortarTienda(tienda: OrdenTiendaRef): OrdenTiendaRef {
-  const recortada = sinClaves(tienda, CAMPOS_SOLO_ALCANCE_GLOBAL.tienda);
-  // `tarifa` es OBLIGATORIA en el tipo, asi que no puede desaparecer: se repone a `null`, el
-  // mismo valor que ya tiene una tienda sin tarifa activa. `email` y `telefono` si desaparecen.
-  return { ...recortada, tarifa: null };
-}
-
-/**
- * Copia sin las claves dadas. `K extends keyof T` acepta solo nombres que EXISTEN en el tipo,
- * asi que un rename en `lib/types/orden.ts` rompe la llamada en vez de filtrar en silencio; y
- * `Partial<T>` en la copia es lo que hace representable el `delete`.
- *
- * El `as T` de la salida es deliberado y esta acotado: quien retira una clave OBLIGATORIA
- * (`tarifa`) la repone inmediatamente, y quien retira opcionales no rompe nada. Sin el, cada
- * llamador tendria que volver a enumerar los campos — la segunda lista que R43 prohibe.
- */
-function sinClaves<T extends object, K extends keyof T>(objeto: T, claves: readonly K[]): T {
-  const copia: Partial<T> = { ...objeto };
-  for (const clave of claves) delete copia[clave];
-  return copia as T;
-}
+export {
+  CAMPOS_SOLO_ALCANCE_GLOBAL,
+  recortarPorAlcance,
+} from "@/lib/types/recorte-alcance-orden";
 
 /* -------------------------------------------------------------------------- */
 /* 4. Contrato de denegacion (design.md §3.4)                                  */

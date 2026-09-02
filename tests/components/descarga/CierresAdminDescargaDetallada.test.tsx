@@ -85,6 +85,11 @@ const CATALOGO: CatalogoFiltrosCierresDTO = {
     { id: ANA, nombre: "Ana Mensajera", zonaId: ZONA },
     { id: BETO, nombre: "Beto Mensajero", zonaId: ZONA },
   ],
+  // Ficha 351: los dos en pie, así que filtro y universo coinciden en este fixture.
+  mensajerosFiltro: [
+    { id: ANA, nombre: "Ana Mensajera", zonaId: ZONA },
+    { id: BETO, nombre: "Beto Mensajero", zonaId: ZONA },
+  ],
 };
 
 const TOTALES = {

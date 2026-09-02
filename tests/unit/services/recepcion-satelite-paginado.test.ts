@@ -12,6 +12,7 @@ import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
 import { normalizeName } from "@/lib/utils/normalize";
 import type { RangoPagina } from "@/lib/utils/rango-pagina";
 import { listarOrdenesBodegaPaginadoSchema } from "@/lib/types/recepcion-satelite";
+import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
 // Feature 170 — FASE 2, T K.1 (R40/R41/R44/R45/R51) — «Órdenes de la bodega» de la bodega
 // satelite: los TRES filtros pasan al servidor y el listado pagina.
@@ -72,6 +73,8 @@ function fila(
     zonaId,
     createdAt: `2026-03-${String(dia).padStart(2, "0")}T00:00:00.000Z`,
     row: {
+      // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
+      ...CAMPOS_BASE_ORDEN,
       id,
       numGuia: 1000 + dia,
       numRemision: `REM-${id}`,

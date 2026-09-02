@@ -15,6 +15,7 @@ import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadg
 import { enviarACentral } from "@/lib/actions/envio-devolucion-central";
 import { recuperarABodega } from "@/lib/actions/resolver-novedad";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
 // Feature 33 (T12) — módulo de la bodega satélite. Se mockean la Server Action de
 // recepción, el toast, el router (refresh) y la lib de cámara (sin hardware en CI).
@@ -85,12 +86,15 @@ const { refreshMock, successMock, errorMock } = vi.hoisted(() => ({
   errorMock: vi.fn(),
 }));
 
-// R9: el estado legible de "Recibidas" se COMPONE como "<etiqueta del estado> de
-// <zona>". Lo verificado es esa composición, no el texto de la etiqueta: por eso la
-// parte del estado sale del mapa de presentación (fuente de verdad) y solo el
-// " de <zona>" queda literal. Los literales del mapa los blinda
+// FICHA 349 — el estado de la tabla de la bodega es el MISMO `EstatusBadge` de `/ordenes`, así
+// que ya NO compone el sufijo " de <zona>" que la 33/R9 pedía. La etiqueta sale del mapa de
+// presentación (fuente de verdad); sus literales los blinda
 // `tests/components/EstatusLabel.test.ts`.
-const ESTADO_SATELITE_LIMON = `${ORDER_STATUS_LABELS.en_bodega_satelite} de Limón`;
+//
+// El dato no se pierde y por eso se pudo retirar el sufijo: la ZONA de la orden viaja en su
+// propia columna, que es lo que afirma el caso de abajo. Misma decisión, y por el mismo motivo,
+// que ya había tomado el archivo descargable de esta pantalla (170/R8).
+const ESTADO_SATELITE = ORDER_STATUS_LABELS.en_bodega_satelite;
 
 vi.mock("@/hooks/useToast", () => ({
   useToast: () => ({
@@ -114,6 +118,8 @@ function makeOrden(
   over: Partial<RecepcionSateliteDTO> & { id: string },
 ): RecepcionSateliteDTO {
   return {
+    // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
+    ...CAMPOS_BASE_ORDEN,
     numGuia: 1001,
     numRemision: "REM-001",
     estatusValue: "en_ruta_bodega_satelite",
@@ -297,7 +303,11 @@ describe("RecepcionSateliteModule", () => {
     expect(screen.queryByRole("region", { name: "Por recibir" })).toBeNull();
   });
 
-  it("R9: 'Recibidas' renderiza el estado legible '<etiqueta del estado> de <zona>'", () => {
+  // FICHA 349 (sustituye al caso de R9): el estado va en el CHIP compartido con `/ordenes`, con
+  // su etiqueta a secas, y la zona en su columna. Lo que se verifica es que la información de
+  // aquel texto compuesto siga entera en la pantalla — repartida en dos celdas en vez de
+  // duplicada en una.
+  it("el estado va en badge con su etiqueta, y la zona en su propia columna", () => {
     renderModule({
       recibidas: [
         makeOrden({
@@ -311,9 +321,21 @@ describe("RecepcionSateliteModule", () => {
     });
 
     const region = screen.getByRole("region", { name: LISTADO });
+    const chip = within(region).getByText(ESTADO_SATELITE);
+    expect(chip).toBeInTheDocument();
+    // Es un chip, no texto plano: es la mitad de la petición del humano.
+    expect(chip.closest('[data-slot="badge"]')).not.toBeNull();
+    // Y el sufijo compuesto ya NO se pinta: sin esto, el caso pasaría igual con el texto viejo.
     expect(
-      within(region).getByText(ESTADO_SATELITE_LIMON),
-    ).toBeInTheDocument();
+      within(region).queryByText(`${ESTADO_SATELITE} de Limón`),
+    ).toBeNull();
+    // El dato de la zona no se perdió: sigue en la tabla, en su columna.
+    const tabla = within(region).getByRole("table", { name: LISTADO });
+    const cabeceras = within(tabla)
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
+    const celdas = [...tabla.querySelectorAll("tbody td")];
+    expect(celdas[cabeceras.indexOf("Zona")]?.textContent?.trim()).toBe("Limón");
   });
 
   it("R8: 'Recibidas' lista las órdenes en_bodega_satelite de la zona", () => {
@@ -556,8 +578,14 @@ describe("RecepcionSateliteModule", () => {
     const region = screen.getByRole("region", { name: LISTADO });
     // Es una tabla, no una lista de cards.
     const tabla = within(region).getByRole("table", { name: LISTADO });
-    // Cabeceras: la de selección (checkbox "seleccionar todo", sin texto) + las de
-    // datos espejadas de ordenes-columns.
+    // Cabeceras: la de selección (checkbox "seleccionar todo", sin texto) + las de datos, que
+    // desde la FICHA 349 son las de `ordenes-columns` MONTADAS (no espejadas), + "Incidente".
+    //
+    // La lista se escribe a mano A PROPÓSITO, y es el contrato de ESTA pantalla: es la que se
+    // pone roja cuando `/ordenes` gana o pierde una columna, y obliga a decidir si la bodega
+    // también la quiere. Derivarla de `recibidasColumns()` la haría circular y siempre verde.
+    // Que salgan de `/ordenes` y no de una lista propia lo afirma
+    // `tests/unit/components/recibidas-columns.test.tsx`.
     const headers = within(tabla)
       .getAllByRole("columnheader")
       .map((h) => h.textContent);
@@ -578,6 +606,12 @@ describe("RecepcionSateliteModule", () => {
       "Cantón",
       "Distrito",
       "Monto a cobrar",
+      // FICHA 349 — las tres que la bodega no tenía y la fila ya traía. NO hay ninguna columna
+      // de dinero de la tienda entre ellas (flete, fulfillment, comisión): esos datos no viajan
+      // a un alcance de zona (260/R13) y sus columnas se retiran por id.
+      "Mensajero",
+      "Fecha de creación",
+      "Tiempo",
       // Feature 158 (T2.7, decisión del humano del 2026-07-30): acción POR FILA "Reportar
       // incidente". `en_bodega_satelite` es uno de los cinco orígenes del conjunto cerrado y
       // el adminSatelite tiene el paquete delante. Va al FINAL, como columna de acción.
@@ -589,9 +623,7 @@ describe("RecepcionSateliteModule", () => {
     expect(within(tabla).getByText("Caja grande")).toBeInTheDocument();
     expect(within(tabla).getByText("Av. Central 10")).toBeInTheDocument();
     expect(within(tabla).getByText("Tienda Z")).toBeInTheDocument();
-    expect(
-      within(tabla).getByText(ESTADO_SATELITE_LIMON),
-    ).toBeInTheDocument();
+    expect(within(tabla).getByText(ESTADO_SATELITE)).toBeInTheDocument();
     // Una fila de datos (más la de cabecera).
     expect(within(tabla).getAllByRole("row")).toHaveLength(2);
     // La cabecera de la columna de selección es un checkbox "seleccionar todo".

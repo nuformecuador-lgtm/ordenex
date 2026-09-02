@@ -1,4 +1,5 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, type EstadoUsuario, type PrismaClient } from "@prisma/client";
+import { ESTADOS_USUARIO_NO_ASIGNABLES } from "@/lib/constants/estado-usuario-asignable";
 import type {
   ActualizarPagosGestionInput,
   ActualizarPagosGestionResult,
@@ -1012,6 +1013,27 @@ export class CierresAdminRepository implements ICierresAdminRepository {
    * esa acotación, su selector le ofrecería el nombre de la bodega vecina y de su gente —que no
    * devolvería ni una fila, porque el filtro se cruza con el alcance en el `WHERE`, pero le
    * enseñaría una lista de nombres que no le corresponde ver—.
+   *
+   * ── FICHA 351 (2026-08-29) — DOS LISTAS DE MENSAJEROS, Y HAY QUE SABER POR QUÉ ────────────
+   * Este método alimenta DOS consumidores que quieren cosas distintas, y hasta hoy les daba la
+   * misma lista:
+   *
+   *   1. `FiltrosCierresBarra` — un CATÁLOGO DE FILTRO. Ofrecer a un mensajero dado de baja no
+   *      acota nada y es lo que el humano llamó «información que no debe mostrarse». Se sirve
+   *      con `mensajerosFiltro`, sin los de `ESTADOS_USUARIO_NO_ASIGNABLES`.
+   *   2. `DescargarGestionesDialog` — un UNIVERSO DE DATOS. Sus ids son la selección POR DEFECTO
+   *      de la descarga («no tocar nada = todos»), así que recortar esa lista **borraría del
+   *      archivo las gestiones históricas** de quien ya no está, en silencio y sin poner rojo
+   *      ningún test. Se sirve con `mensajeros`, que sigue siendo TODOS.
+   *
+   * Por eso no se toca `mensajeros` y se AÑADE `mensajerosFiltro`: el arreglo tenía que dejar
+   * fuera del desplegable a los dados de baja SIN esconder ni una fila del histórico, y esas
+   * dos cosas dejaron de ser la misma consulta.
+   *
+   * Las BODEGAS sí se recortan en el `WHERE`, y por la regla que ya fijó el humano en 2026-08-16:
+   * si «una zona sin admin de zona no es una bodega satélite operativa», una zona cuyo único
+   * `adminSatelite` está dado de baja tampoco lo es. Ese filtro se puede aplicar aquí porque
+   * `zonas` NO es universo de datos de nadie: su único consumidor es la barra.
    */
   async findCatalogoFiltros(alcance: Alcance): Promise<CatalogoFiltrosCierresDTO> {
     // El acceso total (`destinoZonaId === null`) ve el catálogo entero; el satélite, la suya.
@@ -1024,7 +1046,18 @@ export class CierresAdminRepository implements ICierresAdminRepository {
             : {
                 OR: [
                   { esCentral: true }, // la GAM
-                  { usuarios: { some: { rol: { value: ROL_ADMIN_SATELITE } } } },
+                  {
+                    usuarios: {
+                      some: {
+                        rol: { value: ROL_ADMIN_SATELITE },
+                        // Ficha 351: el admin de zona tiene que estar EN PIE para que la zona
+                        // cuente como bodega operativa. Con el `some` así, una zona cuyo único
+                        // adminSatelite está dado de baja deja de ofrecerse; si tiene dos y uno
+                        // sigue activo, se ofrece igual.
+                        estado: { notIn: [...ESTADOS_USUARIO_NO_ASIGNABLES] },
+                      },
+                    },
+                  },
                 ],
               },
         select: { id: true, nombre: true },
@@ -1035,22 +1068,36 @@ export class CierresAdminRepository implements ICierresAdminRepository {
           rol: { value: ROL_MENSAJERO },
           ...(zonaDelActor !== null ? { zonaId: zonaDelActor } : {}),
         },
-        // Proyección mínima: id, identidad (nombre y apellidos) y su zona. NUNCA email,
-        // teléfono, cédula ni hash.
-        select: { id: true, ...NOMBRE_USUARIO_SELECT, zonaId: true },
+        // Proyección mínima: id, identidad (nombre y apellidos), su zona y su estado. NUNCA
+        // email, teléfono, cédula ni hash. `estado` NO sale en el DTO: solo parte la lista en
+        // dos (ver el docstring), y por eso el `where` sigue trayendo a todos — el universo de
+        // la descarga tiene que seguir completo.
+        select: { id: true, ...NOMBRE_USUARIO_SELECT, zonaId: true, estado: true },
         orderBy: { nombre: "asc" },
       }),
     ]);
 
-    return {
-      zonas,
-      mensajeros: mensajeros.map((m: { id: string; nombre: string; zonaId: string | null }) => ({
+    const opciones = mensajeros.map(
+      (m: { id: string; nombre: string; zonaId: string | null }) => ({
         id: m.id,
         nombre: m.nombre,
         // `null` = mensajero sin zona asignada (la columna es nullable). Se ofrece igual: sus
         // cierres existen. Lo que no puede es colgar de ninguna bodega en el encadenado.
         zonaId: m.zonaId,
-      })),
+      }),
+    );
+    const noAsignables = new Set(
+      mensajeros
+        .filter((m: { estado: EstadoUsuario }) => ESTADOS_USUARIO_NO_ASIGNABLES.includes(m.estado))
+        .map((m: { id: string }) => m.id),
+    );
+
+    return {
+      zonas,
+      // TODOS: el universo del histórico (la descarga de gestiones parte de aquí).
+      mensajeros: opciones,
+      // Los que se OFRECEN como opción de filtro.
+      mensajerosFiltro: opciones.filter((m) => !noAsignables.has(m.id)),
     };
   }
 

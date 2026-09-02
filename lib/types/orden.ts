@@ -3,12 +3,27 @@ import { ordenesConfig } from "@/lib/config/ordenes";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import type { TarifaDTO, OrigenFlete } from "@/lib/types/tarifa";
+import {
+  DIRECCIONES_ORDEN,
+  esquemaOrdenamiento,
+  type DireccionOrden,
+} from "@/lib/types/ordenamiento-listado";
 
 // Campos ordenables permitidos (lista blanca, evita inyeccion de columnas; R31).
+//
+// FICHA 352 — es una union CERRADA de literales, y eso es la mitad del contrato: `sortBy` no
+// es «el nombre de una columna» que el cliente elija, es una CLAVE PUBLICA que el repositorio
+// traduce por su mapa (`SORT_COLUMN`, en `OrdenRepository`). El schema del listado es ademas
+// `.strict()`, asi que un cliente que escriba `orderBy` o `sort` recibe `validation_error` en
+// vez de que su clave se ignore en silencio y la tabla siga en el orden por defecto — que es,
+// vista desde la pantalla, exactamente la forma de un boton de ordenar que no ordena.
 export const SORT_FIELDS = ["created_at", "num_guia", "num_remision"] as const;
 export type SortField = (typeof SORT_FIELDS)[number];
-export const SORT_DIRS = ["asc", "desc"] as const;
-export type SortDir = (typeof SORT_DIRS)[number];
+// FICHA 352: las direcciones ya no se declaran aqui. Viven en `lib/types/ordenamiento-listado`
+// —el contrato que comparten las tablas que se sumen— y esto es un reexport para no tocar a
+// los importadores vivos de `SORT_DIRS`/`SortDir`.
+export const SORT_DIRS = DIRECCIONES_ORDEN;
+export type SortDir = DireccionOrden;
 
 // R25/R26: validacion de creacion en el borde. zona/provincia/canton obligatorios
 // (R12); distrito/notas/tienda opcionales. peso numerico estrictamente > 0
@@ -229,23 +244,33 @@ export type OrdenFilterInput = z.infer<typeof ordenFilterSchema>;
 // Feature 63/R6/R10: suma `filter` opcional (whitelist arriba); ausente u objeto
 // vacio = comportamiento previo intacto, y el `estatusId` escalar preexistente se
 // conserva (R10, sin regresion del contrato de 6/7/8).
-export const listarOrdenesSchema = z.object({
-  page: z.number().int().positive().default(1),
-  pageSize: z
-    .number()
-    .int()
-    .positive()
-    .default(ordenesConfig.DEFAULT_PAGE_SIZE)
-    .transform((n) => Math.min(n, ordenesConfig.MAX_PAGE_SIZE)),
-  estatusId: z.string().min(1).optional(),
-  filter: ordenFilterSchema.optional(),
-  sortBy: z.enum(SORT_FIELDS).default("created_at"),
-  // Pedido humano (2026-08-19): el listado va de la orden MÁS NUEVA a la más antigua
-  // (`created_at desc`). Deroga el pedido anterior (`asc`, "lo que primero entró se trabaja
-  // primero"): lo que se mira a diario es lo que acaba de entrar. Es el DEFAULT: quien pase
-  // `sortDir` explícito (la API de lectura tiene el suyo) no cambia.
-  sortDir: z.enum(SORT_DIRS).default("desc"),
-});
+//
+// FICHA 352 — `.strict()`. Hasta hoy este objeto aceptaba claves desconocidas y las DESCARTABA
+// en silencio. Con el ordenamiento llegando desde la cabecera de la tabla eso deja de ser
+// inocuo: un cliente que mande `{ sort: "fecha", dir: "asc" }` —los nombres equivocados— no
+// recibia ningun error y obtenia el listado en el orden POR DEFECTO. La pantalla enseñaria la
+// flecha puesta y las filas sin mover, y nadie tendria a donde mirar. Con `.strict()` el borde
+// responde `validation_error`. El `filter` anidado ya era `.strict()` desde la 63; esto lo
+// unifica. `listarOrdenesCompletoSchema` lo hereda por el `.omit()` de mas abajo.
+export const listarOrdenesSchema = z
+  .object({
+    page: z.number().int().positive().default(1),
+    pageSize: z
+      .number()
+      .int()
+      .positive()
+      .default(ordenesConfig.DEFAULT_PAGE_SIZE)
+      .transform((n) => Math.min(n, ordenesConfig.MAX_PAGE_SIZE)),
+    estatusId: z.string().min(1).optional(),
+    filter: ordenFilterSchema.optional(),
+    // Pedido humano (2026-08-19), INTACTO: el listado va de la orden MÁS NUEVA a la más
+    // antigua (`created_at desc`). Derogó el pedido anterior (`asc`, "lo que primero entró se
+    // trabaja primero"): lo que se mira a diario es lo que acaba de entrar. Sigue siendo el
+    // DEFAULT y la ficha 352 no lo toca — quien pase `sortDir` explícito (la cabecera de la
+    // tabla, la API de lectura) es quien cambia el orden, nunca la ausencia del parámetro.
+    ...esquemaOrdenamiento(SORT_FIELDS, "created_at", "desc"),
+  })
+  .strict();
 export type ListarOrdenesInput = z.infer<typeof listarOrdenesSchema>;
 
 // Feature 151 (design §4.2) — entrada del modo SIN paginacion (descarga del dataset
@@ -428,6 +453,74 @@ export type OrdenListItemDTO = OrdenDTO & {
   // en una query adicional por pagina. Cada relacion es nullable porque el `include`
   // puede no resolver (FK opcional o dato ausente).
   relaciones?: OrdenListItemRelaciones;
+};
+
+/**
+ * FICHA 349 (2026-09-01) — LA FILA DEL LISTADO «Órdenes de la bodega» DEL `adminSatelite`.
+ *
+ * ─── EL DEFECTO QUE CIERRA ───────────────────────────────────────────────────────────────
+ *
+ * Esa pantalla tenia su propia proyeccion: un `select` propio en el repositorio
+ * (`WITH_RECEPCION_SATELITE`), su propia interfaz de fila y un mapeo campo a campo hasta el
+ * DTO. Tres listas de campos para la MISMA fila de `orden`. Y ya divergieron: `/ordenes`
+ * declaraba 19 columnas y la bodega 12. Las siete que faltaban —mensajero, fecha de creacion,
+ * tiempo transcurrido, flete, comision, fulfillment y «Liberada el»— no faltaban por una
+ * decision de producto: faltaban porque nadie las copio a la segunda lista, y no copiarlas no
+ * ponia nada rojo. Mantener la segunda lista y añadirle cinco campos a mano habria repetido
+ * exactamente el defecto que la ficha viene a arreglar.
+ *
+ * ─── POR QUE UNA INTERSECCION Y NO UN TIPO PARALELO ──────────────────────────────────────
+ *
+ * `Column<OrdenListItemDTO>[]` es asignable a `Column<FilaBodegaSatelite>[]` porque esta fila
+ * es un SUBTIPO ESTRICTO de aquella y `render: (row: T) => ReactNode` es contravariante en su
+ * parametro bajo `strictFunctionTypes`. Es decir: la pantalla de la bodega puede montar
+ * `ordenesColumns` SIN un solo cast, que es lo que pidio el humano («basicamente debe ser el
+ * mismo componente»). Un tipo paralelo obligaria a un cast, y el cast es la costura por la que
+ * las dos pantallas vuelven a divergir sin que el compilador diga nada. Mismo mecanismo, misma
+ * razon y mismo precedente que `OrdenDetalleDia` (feature 260/T0.2, R1/R18).
+ *
+ * ─── LOS NUEVE CAMPOS PROPIOS ────────────────────────────────────────────────────────────
+ *
+ * Ninguno es un dato nuevo. Son los que esta pantalla YA leia y que `OrdenListItemDTO` declara
+ * OPCIONALES por su patron aditivo (`?`, para no romper fixtures de UI), o que alli viven
+ * dentro de `relaciones` en vez de en la raiz —los tres nombres de geografia, que aqui los leen
+ * el filtro de canton/distrito y el buscador—. Declararlos obligatorios es lo que impide que
+ * una de las tres consultas del modulo deje de enviarlos sin que nada se rompa.
+ *
+ * ─── LO QUE ESTA FILA **NO** LLEVA, Y NO ES UN OLVIDO ────────────────────────────────────
+ *
+ * `fleteConIva`, `comisionConIva` y `relaciones.tienda.tarifa` (de donde sale el fulfillment),
+ * mas el correo y el telefono de la tienda. La capa de datos los retira con
+ * `recortarPorAlcance(fila, "zona")` ANTES de devolverla, de modo que no viajan al navegador ni
+ * como `undefined`. Es la decision FIRMADA de la feature 260 (R13/R15/R17), y su motivo esta
+ * escrito en `lib/types/recorte-alcance-orden.ts`: `/ordenes` le hace `notFound()` al
+ * `adminSatelite`, asi que esas cifras son cosas que su alcance nunca ha podido ver, y ninguna
+ * pantalla que si lo admita puede ser la puerta de atras. `montoCobrar` SI se conserva (R17).
+ *
+ * El tipo NO puede expresar esa ausencia (los tres campos son opcionales en el padre), asi que
+ * la afirma la verificacion, no el compilador.
+ */
+export type FilaBodegaSatelite = OrdenListItemDTO & {
+  /** `value` del catalogo de estatus: es lo que parte los seis grupos del modulo. */
+  estatusValue: string;
+  direccion: string | null;
+  montoCobrar: number | null;
+  zonaNombre: string;
+  /**
+   * Nombres de geografia en la RAIZ, que es donde los leen el filtro de canton/distrito
+   * (`lib/utils/filtro-canton-distrito.ts`) y el buscador del modulo. Los mismos valores viajan
+   * ademas dentro de `relaciones`, que es de donde los lee `ordenesColumns`.
+   */
+  provinciaNombre: string;
+  cantonNombre: string;
+  distritoNombre: string | null;
+  /** Feature 101/R9: reasignacion prioritaria. Sort prioridad-first (R7) + resalte de fila (R8). */
+  prioridad: boolean;
+  /**
+   * Feature 262 (B8, R16/R17): dia de reparto, `YYYY-MM-DD` YA SERIALIZADO. `null` = sin dia.
+   * Nunca un `Date`: el navegador no construye fechas.
+   */
+  fechaRepartoISO: string | null;
 };
 
 // Referencia liviana (id + nombre) para relaciones a catalogos/usuarios.
