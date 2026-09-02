@@ -1,4 +1,4 @@
-import type { CreatedPreset } from "@/lib/types/orden";
+import type { CreatedPreset, FilaBodegaSatelite } from "@/lib/types/orden";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
@@ -9,51 +9,39 @@ import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 // de negocio pura (sin HTTP ni Prisma); el borde (Server Action) la traduce a
 // resultado tipado. Solo el rol `adminSatelite`, SIEMPRE acotado a su `usuario.zonaId`.
 
-// DTO de una orden del modulo satelite con el detalle para la UI (R6/R8/R9). Los
-// nombres ya resueltos (no IDs de catalogo); `montoCobrar` serializado a
-// number|null. `estatusValue` distingue "Por recibir" (en_ruta_bodega_satelite)
-// de "Recibidas" (en_bodega_satelite).
-export interface RecepcionSateliteDTO {
-  id: string;
-  numGuia: number | null;
-  numRemision: string;
-  estatusValue: string;
-  destinatario: string;
-  telefonoDest: string;
-  direccion: string | null;
-  producto: string;
-  montoCobrar: number | null;
-  tiendaNombre: string;
-  zonaNombre: string;
-  provinciaNombre: string;
-  cantonNombre: string;
-  distritoNombre: string | null;
-  // Feature 101/R9: flag de reasignacion prioritaria. Opcional (`?`, patron aditivo
-  // `zonaEsGam`): no rompe fixtures/mocks de UI que construyen el DTO sin el; el service
-  // SIEMPRE lo envia (boolean desde la fila del repo). El grupo "Recibidas" lo usa para el
-  // resalte de fila (R8); las prioritarias ademas llegan primero por el sort del repo (R7).
-  prioridad?: boolean;
-  /**
-   * Feature 160 (R11/R14/R16/R25): intentos de entrega VIGENTES de la orden, derivados del
-   * historial en UN SOLO lote para los CINCO grupos del modulo (criterio unico de
-   * `OrdenHistorialService`, design §1.1). Opcional (`?`, mismo patron aditivo que
-   * `prioridad?`): no rompe fixtures/mocks que construyen el DTO sin el; el service SIEMPRE lo
-   * envia, `0` incluido (R14).
-   */
-  intentosEntrega?: number;
-  /**
-   * FEATURE 262 (B8, R16/R17): dia de reparto de la orden, `YYYY-MM-DD` YA SERIALIZADO por el
-   * repositorio; `null` = sin dia. Es lo que la pantalla de correccion del listado satelite muestra
-   * POR ORDEN antes de confirmar («17496963 · hoy está para el 22 de agosto»), y sin ello se
-   * corregiria a ciegas un lote mixto.
-   *
-   * Opcional (`?`) por el mismo patron aditivo que `prioridad?` e `intentosEntrega?`: no rompe
-   * fixtures ni mocks de UI que construyen el DTO sin el; el service SIEMPRE lo envia. STRING y
-   * nunca `Date`: un `@db.Date` formateado con el reloj del navegador devuelve el dia anterior en
-   * media America (R17).
-   */
-  fechaRepartoISO?: string | null;
-}
+/**
+ * FICHA 349 (2026-09-01) — EL DTO DEL MODULO SATELITE **ES** LA FILA DEL REPOSITORIO, QUE A SU
+ * VEZ **ES** LA DEL LISTADO DE ORDENES (`OrdenListItemDTO`). Un alias, no una tercera lista.
+ *
+ * ─── QUE ARREGLA ─────────────────────────────────────────────────────────────────────────
+ *
+ * Habia TRES declaraciones de la misma fila —el `select` del repositorio, `RecepcionSateliteRow`
+ * y este DTO— y un mapeo campo a campo entre las dos ultimas. Ese mapeo era el filtro silencioso:
+ * un campo que el repositorio empezara a enviar no llegaba a la pantalla hasta que alguien lo
+ * copiara a mano, y no copiarlo no rompia nada. Es literalmente como la tabla de la bodega acabo
+ * con 12 columnas mientras `/ordenes` tenia 19.
+ *
+ * ─── QUE SIGNIFICA PARA LA PANTALLA (el contrato) ────────────────────────────────────────
+ *
+ * La fila trae ahora, ademas de lo que ya traia:
+ *
+ *   · `createdAt: Date`                          — «Fecha de creación» y «Tiempo»
+ *   · `relaciones.mensajeroAsignado`              — «Mensajero» (nombre ya resuelto, no el id)
+ *   · `fechaReprogramacion: string | null`        — «Liberada el» (`YYYY-MM-DD`, ya serializada)
+ *   · `relaciones.{estatus,tienda,zona,provincia,canton,distrito}` — lo mismo que `/ordenes`
+ *
+ * Y NO trae, a proposito (feature 260/R13, decision firmada): `fleteConIva`, `comisionConIva`
+ * ni `relaciones.tienda.tarifa` —de donde sale el fulfillment—, ni el correo/telefono de la
+ * tienda. La capa de datos los retira con `recortarPorAlcance(..., "zona")` ANTES de devolver
+ * la fila: no es que la pantalla no los pinte, es que no viajan. `montoCobrar` SI se conserva
+ * (R17): el satelite ya lo ve en su propia pantalla de recepcion.
+ *
+ * Consecuencia buscada: `Column<OrdenListItemDTO>[]` es asignable a `Column<RecepcionSateliteDTO>[]`
+ * sin un solo cast, asi que la tabla de la bodega puede montar `ordenesColumns` —menos las tres
+ * columnas de dinero, exactamente como hace `columnasDetalle` en `/monitoreo`— en vez de declarar
+ * una segunda lista de columnas que vuelva a quedarse atras.
+ */
+export type RecepcionSateliteDTO = FilaBodegaSatelite;
 
 // R3/R4/R5/R6/R8: dos grupos separados (por recibir vs recibidas) + nombre de la
 // zona del actor y `sinZona` (adminSatelite sin zona asignada -> listas vacias +

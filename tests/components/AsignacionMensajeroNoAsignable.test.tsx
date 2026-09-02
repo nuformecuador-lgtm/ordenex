@@ -11,6 +11,7 @@ import { MOTIVO_USUARIO_NO_ASIGNABLE } from "@/lib/constants/estado-usuario-asig
 import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
 /**
  * =================================================================================================
@@ -85,6 +86,8 @@ function makeOrden(id: string, estatusValue: string): OrdenListItemDTO {
 
 function makeOrdenSatelite(id: string): RecepcionSateliteDTO {
   return {
+    // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
+    ...CAMPOS_BASE_ORDEN,
     id,
     numGuia: 1001,
     numRemision: "REM-000",

@@ -20,6 +20,7 @@ import {
 } from "@/lib/actions/recepcion-satelite";
 import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import { PAGE_SIZE_SATELITE } from "@/tests/fixtures/satelite-bodega";
+import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
 // Feature 33 (T11) — la página resuelve el rol SOLO server-side; rol ≠
 // adminSatelite (o sin sesión) → `notFound`. Se mockean el resolver, la action de
@@ -174,6 +175,8 @@ describe("PorRecibirPage — acceso, título y contenido (R15/R19/R20/R44)", () 
       status: "ok",
       porRecibir: [
         {
+          // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
+          ...CAMPOS_BASE_ORDEN,
           id: "r1",
           numGuia: 1001,
           numRemision: "REM-R1",

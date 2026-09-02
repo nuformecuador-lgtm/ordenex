@@ -23,6 +23,7 @@ import type {
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
 import type { RangoPagina } from "@/lib/utils/rango-pagina";
+import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
 export const SAT_A: Actor = { usuarioId: "u-sat-a", rol: "adminSatelite" };
 export const SAT_B: Actor = { usuarioId: "u-sat-b", rol: "adminSatelite" };
@@ -64,6 +65,8 @@ export function filaSatelite(
     zonaId,
     createdAt: `2026-03-${String(dia).padStart(2, "0")}T00:00:00.000Z`,
     row: {
+      // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
+      ...CAMPOS_BASE_ORDEN,
       id,
       numGuia: 1000 + dia,
       numRemision: `REM-${id}`,

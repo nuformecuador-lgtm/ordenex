@@ -113,6 +113,7 @@ vi.mock("@/hooks/useToast", () => ({
 vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
 
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
+import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
 const enviarACentralMock = vi.mocked(enviarACentral);
 const recuperarABodegaMock = vi.mocked(recuperarABodega);
@@ -192,6 +193,8 @@ function geografiaDe(i: number): {
 
 function orden(i: number): RecepcionSateliteDTO {
   return {
+    // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
+    ...CAMPOS_BASE_ORDEN,
     id: `o-${i}`,
     numGuia: 1000 + i,
     numRemision: etiqueta(i),

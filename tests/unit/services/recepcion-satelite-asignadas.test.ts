@@ -6,6 +6,7 @@ import type {
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { fakeIntentosEnLote, type IntentosSvcDoble } from "@/tests/fixtures/intentos-entrega";
+import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
 // Feature 149 — T6.3 (R35/R36): bucket `asignadas` del modulo de la bodega satelite.
 //
@@ -31,6 +32,8 @@ type RepoMethods = Pick<
 
 function recepcionRow(overrides: Partial<RecepcionSateliteRow> = {}): RecepcionSateliteRow {
   return {
+    // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
+    ...CAMPOS_BASE_ORDEN,
     id: "o1",
     numGuia: 10,
     numRemision: "R-1",

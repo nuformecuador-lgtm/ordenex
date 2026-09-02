@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { AsignarSateliteModal } from "@/app/(app)/recepcion-satelite/_components/AsignarSateliteModal";
 import { asignarDesdeSatelite } from "@/lib/actions/recepcion-satelite";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
 // Feature 34 (T9) — Modal "Asignar mensajero" desde `en_bodega_satelite` (R7): un
 // único mensajero de la zona para todo el lote seleccionado.
@@ -40,6 +41,8 @@ function makeOrden(
   overrides: Partial<RecepcionSateliteDTO> & { id: string },
 ): RecepcionSateliteDTO {
   return {
+    // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
+    ...CAMPOS_BASE_ORDEN,
     numGuia: 1001,
     numRemision: "REM-000",
     estatusValue: "en_bodega_satelite",

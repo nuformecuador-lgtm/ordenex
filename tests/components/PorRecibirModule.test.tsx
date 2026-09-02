@@ -7,6 +7,7 @@ import { PorRecibirModule } from "@/app/(app)/recepcion-satelite/_components/Por
 import { AVISO_SIN_ZONA_SATELITE } from "@/app/(app)/recepcion-satelite/_components/AvisoSinZonaSatelite";
 import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import { CAMPOS_BASE_ORDEN } from "@/tests/fixtures/fila-bodega-satelite";
 
 // Feature 279 (T4.5) — pantalla «Por recibir» del portal del `adminSatelite`.
 //
@@ -61,6 +62,8 @@ function makeOrden(
   over: Partial<RecepcionSateliteDTO> & { id: string },
 ): RecepcionSateliteDTO {
   return {
+    // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
+    ...CAMPOS_BASE_ORDEN,
     numGuia: 1001,
     numRemision: "REM-001",
     estatusValue: "en_ruta_bodega_satelite",
