@@ -117,7 +117,11 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
     // claves. `zonaId` y `estatusValues` van siempre — son el alcance, no un filtro.
     return {
       zonaId,
-      estatusValues: estadosDelListado(input.estados), // la lista blanca de los cinco (R44)
+      // FICHA 357: la lista blanca son ahora los DIECISEIS estados alcanzables por una orden que
+      // paso por una bodega satelite, no los cinco de «lo que tengo en el estante» (R44). El
+      // ALCANCE no viaja por aqui: la zona va aparte (siempre del actor) y el «paso por MI
+      // bodega» lo impone el repositorio sin parametro.
+      estatusValues: estadosDelListado(input.estados),
       ...(input.mensajero_id ? { mensajeroIds: input.mensajero_id } : {}),
       ...(input.provincia_id ? { provinciaIds: input.provincia_id } : {}),
       ...(input.canton_id ? { cantonIds: input.canton_id } : {}),
@@ -210,9 +214,23 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
    *
    * **Que NO cambia.** El acotamiento: guard de rol (R3/R17) antes de tocar nada y zona
    * resuelta desde `usuario.zona_id` (R4). Los filtros solo pueden ESTRECHAR ese conjunto:
-   * `estadosDelListado` interseca contra la lista blanca de los cinco estados, asi que ni un
-   * `estados` inventado ni un canton de otra provincia amplian el alcance (R44). Sin zona no
-   * se consulta la base: pagina vacia.
+   * `estadosDelListado` interseca contra la lista blanca, asi que ni un `estados` inventado ni
+   * un canton de otra provincia amplian el alcance (R44). Sin zona no se consulta la base:
+   * pagina vacia.
+   *
+   * **FICHA 357 — que cambia el 2026-09-02.** El conjunto deja de ser «las ordenes de mi ZONA
+   * en cinco estados» y pasa a ser «las ordenes que pasaron por MI BODEGA, en cualquiera de los
+   * dieciseis estados que pueden alcanzar». Las dos mitades se mueven a la vez y por eso el
+   * cambio no ensancha el alcance de nadie:
+   *
+   *  - se AÑADEN los desenlaces (`entregada`, `rechazada`, `reprogramada`, `en_reparto`, …) —
+   *    sin ellos, la bodega perdia de vista sus propias ordenes en cuanto el mensajero las
+   *    gestionaba, y llegaba a tener un cierre pendiente por una orden que no podia consultar;
+   *  - se EXIGE la evidencia de haber pasado por una bodega satelite —sin ella, ampliar los
+   *    estados le habria enseñado 252 `entregada` de la zona que nunca tocaron su bodega—.
+   *
+   * La condicion vive en el `WHERE` del repositorio (`condicionPasoPorBodegaSatelite`) y no en
+   * este servicio a proposito: es alcance, y el alcance se impone donde se leen las filas.
    */
   async listarOrdenesBodegaPaginado(
     input: ListarOrdenesBodegaPaginadoInput,

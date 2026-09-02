@@ -779,9 +779,23 @@ export type RecepcionSateliteRow = FilaBodegaSatelite;
  * de la peticion. Los otros tres campos son los TRES filtros que hasta ahora resolvia el
  * navegador (`SateliteOrdenesListado`, `visibles`), en el mismo AND y con la misma semantica:
  * una lista VACIA no filtra, dos listas distintas se cruzan.
+ *
+ * FICHA 357 — LA OTRA MITAD DEL ACOTAMIENTO NO ESTA AQUI, Y ES DELIBERADO. El criterio «esta
+ * orden paso por una bodega satelite» (existe en su historial una transicion con destino
+ * `en_ruta_bodega_satelite` o `en_bodega_satelite`) lo emite el repositorio SIEMPRE, sin
+ * parametro que lo module. Declararlo como campo de este filtro lo convertiria en algo que un
+ * llamador puede omitir —y omitirlo devuelve el listado a «toda la zona», que es exactamente el
+ * defecto medido: 16 devoluciones ajenas visibles para una satelite que nunca las tuvo—.
  */
 export interface RecepcionSateliteFiltro {
-  /** Zona del `adminSatelite`. Se impone SIEMPRE (R44). */
+  /**
+   * Zona del `adminSatelite`. Se impone SIEMPRE (R44).
+   *
+   * FICHA 357: es la mitad del alcance que dice QUE bodega. En este modelo la bodega satelite
+   * ES la zona (no hay entidad «bodega»: `cierre_bodega` se ancla en `zona_id` y todo productor
+   * de las transiciones a satelite deriva el destino de `orden.zona_id`). La otra mitad —SI
+   * estuvo en una— la pone el repositorio.
+   */
   zonaId: string;
   /** Lista blanca de estados ya intersecada por el servicio; vacia -> pagina vacia. */
   estatusValues: readonly string[];
@@ -1631,6 +1645,11 @@ export interface IOrdenRepository {
    *  - **el orden lleva el rango de GRUPO por delante** (`ESTADOS_BODEGA_SATELITE`), que es
    *    lo que hoy produce la concatenacion de los cinco arrays en el modulo. Sin el, las
    *    filas cambiarian de pagina respecto a lo que la pantalla enseña hoy (R51).
+   *
+   * FICHA 357 — ESTE metodo (y sus dos hermanos, `findRecepcionSateliteCompleta` y
+   * `findIdsVigentesEnBodega`) acotan por «la orden paso por una bodega satelite» ADEMAS de por
+   * zona. `findRecepcionSateliteByZona` NO: sirve a «Por recibir» y a `zonaNombre`/`sinZona`, y
+   * sus filas son `en_ruta_bodega_satelite`, que ya son por definicion un ruteo a la satelite.
    *
    * `total` cuenta el conjunto entero, nunca la pagina (R41). Solo query.
    */

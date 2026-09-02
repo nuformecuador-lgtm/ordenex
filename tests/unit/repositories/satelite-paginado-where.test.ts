@@ -1,8 +1,28 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
-import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
+import {
+  ESTADOS_BODEGA_SATELITE,
+  ESTADOS_CUSTODIA_SATELITE,
+} from "@/lib/utils/estados-bodega-satelite";
 import type { RangoPagina } from "@/lib/utils/rango-pagina";
+
+/**
+ * FICHA 357 — el ACOTAMIENTO pasa de UNA condicion (zona) a DOS (zona ∧ paso por una bodega
+ * satelite), y eso mueve TODOS los indices de parametros de este archivo. Se declara aqui la
+ * aritmetica en vez de repartir numeros magicos por los `slice`:
+ *
+ *   1 (`zona_id`) + 2 (`os."value" IN (custodia)`) + 2 (el `IN` de dentro del `EXISTS`)
+ *
+ * Los DOS `IN` de custodia llevan los mismos valores a proposito: uno mira el estado ACTUAL
+ * —el paquete que esta en el estante ahora mismo— y el otro el HISTORIAL. Ver
+ * `condicionPasoPorBodegaSatelite`.
+ */
+const PARAMS_ALCANCE = 1 + ESTADOS_CUSTODIA_SATELITE.length * 2;
+/** Cuantos `?` ocupa el `IN` de la lista blanca de estados, que va justo despues del alcance. */
+const PARAMS_ESTADOS = ESTADOS_BODEGA_SATELITE.length;
+/** El primer parametro que NO es alcance ni lista blanca (geografia, tiempo, buscador…). */
+const PRIMER_PARAM_DE_FILTRO = PARAMS_ALCANCE + PARAMS_ESTADOS;
 
 // Feature 170 — FASE 2, T K.1 (R41/R44/R45/R51/R54) — el WHERE, el ORDER BY y el conteo de la
 // pagina de la bodega satelite, ahi donde de verdad viven: en el SQL.
@@ -110,10 +130,22 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
     const pagina = consultas[0]!;
     expect(texto(pagina)).toContain('WHERE o."zona_id" = ?');
     expect(texto(pagina)).toContain('o."deleted_at" IS NULL');
-    expect(texto(pagina)).toContain('os."value" IN (?,?,?,?,?)');
+    expect(texto(pagina)).toContain(`os."value" IN (${"?,".repeat(PARAMS_ESTADOS - 1)}?)`);
     // La zona es el PRIMER parametro y es la del actor, no una constante ni un literal.
     expect(pagina.values[0]).toBe("z-a");
-    expect(pagina.values.slice(1, 6)).toEqual([...ESTADOS_BODEGA_SATELITE]);
+    // FICHA 357 — LA SEGUNDA MITAD DEL ALCANCE. Va SIEMPRE, sin depender de ningun filtro, y
+    // por eso se afirma aqui, en el test del acotamiento y no en el de los filtros.
+    expect(texto(pagina)).toContain(
+      'EXISTS ( SELECT 1 FROM "orden_historial_estado" h JOIN "order_status" hos ON hos."id" = h."estatus_destino_id" WHERE h."orden_id" = o."id" AND hos."value" IN (?,?) )',
+    );
+    // Los cuatro parametros de la evidencia: el estado ACTUAL y el HISTORIAL, la misma pareja.
+    expect(pagina.values.slice(1, PARAMS_ALCANCE)).toEqual([
+      ...ESTADOS_CUSTODIA_SATELITE,
+      ...ESTADOS_CUSTODIA_SATELITE,
+    ]);
+    expect(pagina.values.slice(PARAMS_ALCANCE, PRIMER_PARAM_DE_FILTRO)).toEqual([
+      ...ESTADOS_BODEGA_SATELITE,
+    ]);
     // Sin filtros de geografia NO se emite ninguna condicion de geografia.
     expect(texto(pagina)).not.toContain('o."canton_id"');
     expect(texto(pagina)).not.toContain('o."distrito_id"');
@@ -136,21 +168,65 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
     );
 
     const sql = texto(consultas[0]!);
-    expect(sql).toContain('os."value" IN (?,?)');
     expect(sql).toContain('o."canton_id" IN (?,?)');
     expect(sql).toContain('o."distrito_id" IN (?)');
     // Hermanas con AND: cruzarlas NO puede ser un OR (mostraria mas de lo que hoy ve).
+    // FICHA 357: la clausula de alcance queda EN MEDIO y ENTRE PARENTESIS. Que su `OR` interno
+    // este cerrado es lo que impide que se coma el `AND` de la zona — el modo exacto en que
+    // este cambio podria haber ensanchado el alcance de todos a la vez.
     expect(sql).toMatch(
-      /o\."zona_id" = \? AND o\."deleted_at" IS NULL AND os\."value" IN \(\?,\?\) AND o\."canton_id" IN \(\?,\?\) AND o\."distrito_id" IN \(\?\)/,
+      /o\."zona_id" = \? AND o\."deleted_at" IS NULL AND \( os\."value" IN \(\?,\?\) OR EXISTS \([^)]*\)[^)]*\) \) AND os\."value" IN \(\?,\?\) AND o\."canton_id" IN \(\?,\?\) AND o\."distrito_id" IN \(\?\)/,
     );
-    expect(consultas[0]!.values.slice(0, 6)).toEqual([
+    expect(consultas[0]!.values.slice(0, PARAMS_ALCANCE + 5)).toEqual([
       "z-a",
+      ...ESTADOS_CUSTODIA_SATELITE,
+      ...ESTADOS_CUSTODIA_SATELITE,
       "en_bodega_satelite",
       "devuelta",
       "c-escazu",
       "c-barva",
       "d-san-rafael",
     ]);
+  });
+
+  it("FICHA 357 · el criterio «paso por MI bodega» no se puede apagar desde el filtro", async () => {
+    // El alcance NO es un campo de `RecepcionSateliteFiltro`: se emite SIEMPRE. Este caso lo
+    // afirma con el filtro MAS PEQUENO posible —solo zona y un estado— porque es ahi donde un
+    // `if` mal puesto lo dejaria fuera sin que ningun otro test lo notara.
+    const { repo, consultas } = clienteFalso(["o-1"], 1);
+
+    await repo.findRecepcionSatelitePaginada(
+      { zonaId: "z-a", estatusValues: ["entregada"] },
+      RANGO,
+    );
+
+    const sql = texto(consultas[0]!);
+    expect(sql).toContain('FROM "orden_historial_estado" h');
+    expect(sql).toContain('hos."value" IN (?,?)');
+    // Y la ZONA sigue ahi: la evidencia dice SI estuvo en una bodega satelite, la zona dice en
+    // CUAL. Sin la segunda, «mi bodega» seria «cualquier bodega».
+    expect(sql).toContain('WHERE o."zona_id" = ?');
+    expect(consultas[0]!.values[0]).toBe("z-a");
+  });
+
+  it("FICHA 357 · las tres consultas del dominio comparten el criterio, no solo la pagina", async () => {
+    // El conjunto de la descarga y la comprobacion de vigencia leen el MISMO
+    // `condicionesSatelite`. Si una de las tres se quedara sin la clausula, el archivo (o la
+    // seleccion) mostraria filas que la pantalla no enseña y ningun test de pantalla lo veria.
+    const conjunto = clienteFalso(["o-1"], 1);
+    await conjunto.repo.findRecepcionSateliteCompleta({
+      zonaId: "z-a",
+      estatusValues: ["entregada"],
+    });
+    expect(texto(conjunto.consultas[0]!)).toContain('FROM "orden_historial_estado" h');
+
+    const vigencia = clienteFalso(["o-1"], 1);
+    await vigencia.repo.findIdsVigentesEnBodega(
+      { zonaId: "z-a", estatusValues: ["entregada"] },
+      ["o-1"],
+    );
+    expect(texto(vigencia.consultas[0]!)).toContain('FROM "orden_historial_estado" h');
+    expect(texto(vigencia.consultas[0]!)).toContain('o."id" IN (?)');
   });
 
   it("la provincia filtra por id y se cruza en AND con el cantón", async () => {
@@ -171,8 +247,10 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
     // —como hasta hoy— «Central» casaba en cuatro provincias y la cadena provincia -> canton
     // no podia declararse; con ids, el desplegable encadenado dice la verdad.
     expect(sql).toContain('o."provincia_id" IN (?) AND o."canton_id" IN (?)');
-    expect(consultas[0]!.values.slice(0, 4)).toEqual([
+    expect(consultas[0]!.values.slice(0, PARAMS_ALCANCE + 3)).toEqual([
       "z-a",
+      ...ESTADOS_CUSTODIA_SATELITE,
+      ...ESTADOS_CUSTODIA_SATELITE,
       "en_bodega_satelite",
       "p-sj",
       "c-central-sj",
@@ -233,7 +311,10 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
     // `>= desde` y `< hasta`, la MISMA semantica que el `gte`/`lt` de `/ordenes`: el dia
     // «hasta» es inclusivo porque el servicio manda el inicio del dia SIGUIENTE.
     expect(sql).toContain('o."created_at" >= ? AND o."created_at" < ?');
-    expect(consultas[0]!.values.slice(2, 4)).toEqual([desde, hasta]);
+    expect(consultas[0]!.values.slice(PARAMS_ALCANCE + 1, PARAMS_ALCANCE + 3)).toEqual([
+      desde,
+      hasta,
+    ]);
   });
 
   it("el término del buscador compara la columna generada, y las dos formas van entre paréntesis", async () => {
@@ -256,7 +337,10 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
     expect(sql).toContain(
       '(o."busqueda_texto" LIKE ? OR o."busqueda_texto" LIKE ?)',
     );
-    expect(consultas[0]!.values.slice(2, 4)).toEqual(["%8888-0000%", "%88880000%"]);
+    expect(consultas[0]!.values.slice(PARAMS_ALCANCE + 1, PARAMS_ALCANCE + 3)).toEqual([
+      "%8888-0000%",
+      "%88880000%",
+    ]);
   });
 
   it("un término sin separadores emite UNA sola condición, sin OR", async () => {
@@ -269,7 +353,13 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
 
     const sql = texto(consultas[0]!);
     expect(sql).toContain('o."busqueda_texto" LIKE ?');
-    expect(sql).not.toContain(" OR ");
+    // Sin `OR` EN EL BUSCADOR — y la comprobacion se acota a el, no al SQL entero: desde la
+    // ficha 357 la clausula de alcance lleva su propio `OR` (estado actual O historial), que es
+    // otra cosa y va entre parentesis. Un `not.toContain(" OR ")` global pasaria a medir el
+    // alcance en vez del buscador, y se pondria rojo por la razon equivocada.
+    // (`LIKE ? OR` a secas seria un falso positivo: casa con el `LIKE ? ORDER BY` del final.)
+    expect(sql).not.toContain('o."busqueda_texto" LIKE ? OR o.');
+    expect(sql.match(/o\."busqueda_texto"/g)).toHaveLength(1);
   });
 
   it("los comodines de LIKE se escapan: `%` no puede devolver el listado entero", async () => {
@@ -282,7 +372,7 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
 
     // Sin escapar, `%` casaria con todo y `_` con cualquier caracter: no es precision, es una
     // fuga del filtro. El escape es el mismo (`\\`) que aplica `/ordenes`.
-    expect(consultas[0]!.values[2]).toBe("%100\\%\\_x%");
+    expect(consultas[0]!.values[PARAMS_ALCANCE + 1]).toBe("%100\\%\\_x%");
   });
 
   it("el orden lleva el rango de GRUPO delante de la prioridad y la recencia (R51)", async () => {
@@ -297,12 +387,12 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
     // `array_position` sobre la secuencia canonica: es lo que hoy produce concatenar los cinco
     // grupos en el modulo. Sin el, las filas cambian de pagina respecto a lo que se ve hoy.
     expect(sql).toContain(
-      'ORDER BY array_position(ARRAY[?,?,?,?,?]::text[], os."value") ASC, o."prioridad" DESC, o."created_at" DESC, o."id" ASC',
+      `ORDER BY array_position(ARRAY[${"?,".repeat(PARAMS_ESTADOS - 1)}?]::text[], os."value") ASC, o."prioridad" DESC, o."created_at" DESC, o."id" ASC`,
     );
     // La secuencia que viaja al ORDER BY es la CANONICA COMPLETA, no la seleccion: filtrar por
     // un estado no puede reordenar el resto.
     const valores = consultas[0]!.values;
-    expect(valores.slice(-7, -2)).toEqual([...ESTADOS_BODEGA_SATELITE]);
+    expect(valores.slice(-PARAMS_ESTADOS - 2, -2)).toEqual([...ESTADOS_BODEGA_SATELITE]);
     // El recorte, al final y en ese orden.
     expect(sql).toContain("LIMIT ? OFFSET ?");
     expect(valores.slice(-2)).toEqual([RANGO.take, RANGO.skip]);
@@ -316,7 +406,9 @@ describe("SQL de la página de la bodega satélite (T K.1)", () => {
       RANGO,
     );
 
-    expect(consultas[0]!.values.slice(-7, -2)).toEqual([...ESTADOS_BODEGA_SATELITE]);
+    expect(consultas[0]!.values.slice(-PARAMS_ESTADOS - 2, -2)).toEqual([
+      ...ESTADOS_BODEGA_SATELITE,
+    ]);
   });
 
   it("el conteo mira EXACTAMENTE el mismo conjunto que la página (R41)", async () => {

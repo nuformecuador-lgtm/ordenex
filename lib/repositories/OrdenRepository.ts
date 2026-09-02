@@ -92,7 +92,13 @@ import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 // Feature 236 (T2.1, R3/R5): la DECLARACION UNICA de los grupos de `/novedades`. El predicado de
 // cada superficie sale de aqui y de ningun otro sitio; ver `novedadWhere`.
 import { ESTATUS_POR_GRUPO, type GrupoNovedad } from "@/lib/types/novedad-grupo";
-import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
+// FICHA 357: `ESTADOS_BODEGA_SATELITE` alimenta el rango de grupo del `ORDER BY`;
+// `ESTADOS_CUSTODIA_SATELITE` alimenta el criterio de alcance («paso por MI bodega»). Son dos
+// listas distintas a proposito: una es lo que se MUESTRA, la otra es lo que se PRUEBA.
+import {
+  ESTADOS_BODEGA_SATELITE,
+  ESTADOS_CUSTODIA_SATELITE,
+} from "@/lib/utils/estados-bodega-satelite";
 import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
 // Feature 246 (T3.5, R8): la convencion `@db.Date` para las vias que reasignan SIN eleccion de
 // dia. `inicioDelDiaCREnUtc` (06:00Z) es la de las columnas `timestamp` y aqui desplazaria el dia.
@@ -954,6 +960,52 @@ interface PaginaSateliteIdRow {
 }
 
 /**
+ * FICHA 357 — «ESTA ORDEN PASO POR UNA BODEGA SATELITE». La mitad que le faltaba al alcance.
+ *
+ * Hasta hoy el listado se acotaba SOLO por `o."zona_id"`, y por eso fallaba por los dos lados:
+ * perdia el desenlace de sus propias ordenes (bastaba con que un mensajero las gestionara para
+ * que salieran de la lista blanca de cinco estados) y a la vez enseñaba ordenes de la zona que
+ * NUNCA pisaron una bodega satelite (medido en produccion: de 16 `devuelta` de la zona, CERO
+ * habian pasado por una satelite).
+ *
+ * **Las dos mitades, y por que ninguna sobra.** `zona_id` dice QUE bodega —en este modelo la
+ * bodega satelite ES la zona: no hay entidad «bodega», `cierre_bodega` se ancla en `zona_id`, el
+ * alcance del `adminSatelite` es su `usuario.zona_id`, y todo productor de estas transiciones
+ * deriva la bodega de destino de `orden.zona_id`—. Esta condicion dice SI ESTUVO en una. Juntas
+ * son «paso por MI bodega»; por separado, cada una es uno de los dos defectos medidos.
+ *
+ * **Dos disyuntos, y el segundo NO ensancha nada:**
+ *
+ *  - `EXISTS` sobre el historial es el criterio de verdad: la orden tuvo alguna vez como DESTINO
+ *    `en_ruta_bodega_satelite` o `en_bodega_satelite`. `orden_historial_estado` es append-only e
+ *    inmutable (feature 49/R2), asi que esta evidencia no se puede borrar ni reescribir.
+ *  - `os."value" IN (custodia)` cubre el ESTADO ACTUAL. Existe por una razon medida: en la base
+ *    local hay SEIS ordenes hoy en `en_bodega_satelite` SIN ninguna fila de historial que las
+ *    haya llevado ahi (datos sembrados/escritos por fuera del choke point). Sin este disyuntivo,
+ *    un paquete que esta FISICAMENTE en el estante desapareceria de la pantalla de quien lo
+ *    tiene. Y no puede ensanchar el alcance: interseca con `filtro.estatusValues`, que sale de
+ *    `ESTADOS_BODEGA_SATELITE`, donde el unico estado de custodia es `en_bodega_satelite` — que
+ *    YA se mostraba antes de esta ficha. O sea: este disyuntivo no puede hacer visible NADA que
+ *    no lo fuera ya.
+ *
+ * **Coste.** El `EXISTS` corre contra `orden_historial_estado_orden_id_estatus_destino_id_idx`
+ * (`@@index([ordenId, estatusDestinoId])`, feature 49/R24), que es exactamente esta busqueda.
+ * No hace falta migracion.
+ */
+function condicionPasoPorBodegaSatelite(): Prisma.Sql {
+  const custodia = Prisma.join([...ESTADOS_CUSTODIA_SATELITE]);
+  return Prisma.sql`(
+        os."value" IN (${custodia})
+        OR EXISTS (
+          SELECT 1
+          FROM "orden_historial_estado" h
+          JOIN "order_status" hos ON hos."id" = h."estatus_destino_id"
+          WHERE h."orden_id" = o."id" AND hos."value" IN (${custodia})
+        )
+      )`;
+}
+
+/**
  * Feature 184 — Tanda A (T A.1, R16) — el CRITERIO del listado de la bodega satelite, declarado
  * UNA sola vez.
  *
@@ -964,12 +1016,17 @@ interface PaginaSateliteIdRow {
  * fallaria nada.
  *
  * Cada condicion va HERMANA de las demas (AND), igual que el filtro de cliente que sustituyo.
- * Las tres primeras son el ACOTAMIENTO y no dependen de ningun filtro: se emiten SIEMPRE.
+ * Las CUATRO primeras son el ACOTAMIENTO y no dependen de ningun filtro: se emiten SIEMPRE.
+ *
+ * FICHA 357 — la cuarta es nueva y es la que cambia el criterio de «es de mi zona» a «paso por
+ * MI bodega». Va aqui, junto a la zona, y no como un parametro del filtro, a proposito: el
+ * alcance no puede apagarse desde fuera. Ver `condicionPasoPorBodegaSatelite`.
  */
 function condicionesSatelite(filtro: RecepcionSateliteFiltro): Prisma.Sql[] {
   const condiciones: Prisma.Sql[] = [
     Prisma.sql`o."zona_id" = ${filtro.zonaId}`,
     Prisma.sql`o."deleted_at" IS NULL`,
+    condicionPasoPorBodegaSatelite(),
     Prisma.sql`os."value" IN (${Prisma.join([...filtro.estatusValues])})`,
   ];
   // Pedido humano (2026-08-19): la geografia se compara por ID —las columnas de `orden`, sin

@@ -343,17 +343,25 @@ describe("recibidasColumns — la tabla enseña lo que la fila trae desde la 349
 /* «Liberada el» se queda fuera, como en `/monitoreo`                          */
 /* -------------------------------------------------------------------------- */
 
-describe("recibidasColumns — «Liberada el» no entra", () => {
+describe("recibidasColumns — «Liberada el» no entra (y su premisa CAMBIÓ con la ficha 357)", () => {
   it("no monta la columna de la variante `reprogramada`", () => {
-    // Este listado mezcla cinco estados y `reprogramada` no es ninguno de ellos, así que la
-    // columna hablaría de algo que aquí no se lista. Mismo criterio que `/monitoreo` (260/R45).
+    // Lo que este listado monta HOY. Ver el caso siguiente: la razón por la que se decidió así
+    // dejó de ser cierta, y eso es una decisión de pantalla que queda ABIERTA, no un hecho.
     expect(recibidasColumns().map((c) => c.id)).not.toContain("liberada");
   });
 
-  it("`reprogramada` de verdad NO está entre los estados del listado", () => {
-    // La cláusula de arriba no puede ser verde por vacío: si algún día `reprogramada` entrara
-    // en la bodega, este caso se pone rojo y obliga a rehacer la decisión.
-    expect([...ESTADOS_BODEGA_SATELITE]).not.toContain("reprogramada");
+  it("FICHA 357: `reprogramada` YA ESTÁ entre los estados del listado — la decisión se reabre", () => {
+    // Este caso existía para que la cláusula de arriba no fuera verde por vacío, y decía: «si
+    // algún día `reprogramada` entrara en la bodega, este caso se pone rojo y obliga a rehacer
+    // la decisión». Ese día es hoy: la ficha 357 cambia el alcance de «lo que tengo en el
+    // estante» a «el recorrido de mis órdenes», y `reprogramada` es uno de los desenlaces que
+    // la bodega perdía de vista (1 de las 17 órdenes invisibles medidas en producción).
+    //
+    // Se invierte la aserción en vez de borrarla: así el hecho queda AFIRMADO y no desaparece
+    // en silencio junto con la decisión que sostenía. Si «Liberada el» debe montarse ahora es
+    // una pregunta de PANTALLA —el dato (`fechaReprogramacion`) ya viaja en la fila desde la
+    // 349— y le toca a quien rehaga la tabla, no a la capa de datos.
+    expect([...ESTADOS_BODEGA_SATELITE]).toContain("reprogramada");
   });
 
   it("la cláusula NO es vacía: la variante del listado SÍ la trae", async () => {

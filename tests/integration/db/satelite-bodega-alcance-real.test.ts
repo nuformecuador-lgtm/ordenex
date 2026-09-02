@@ -77,7 +77,12 @@ interface Escenario {
   /** La orden de la zona propia que lleva TODO poblado: mensajero, tarifa y reprogramacion. */
   readonly idCompleta: string;
   readonly mensajeroNombre: string;
-  /** Ordenes de la zona propia en estados FUERA de la lista blanca del listado. */
+  /**
+   * Ordenes de la zona propia que el listado NO muestra. FICHA 357: son de DOS clases y las dos
+   * estan sembradas, porque el motivo por el que quedan fuera ya no es el mismo:
+   *  - las que NUNCA pasaron por una bodega satelite (aunque su estado SI se liste);
+   *  - la que esta en un estado de la CENTRAL (aunque haya pasado por la bodega).
+   */
   readonly idsFueraDeLaLista: readonly string[];
 }
 
@@ -201,6 +206,23 @@ async function sembrar(tx: Tx): Promise<Escenario> {
       })
     ).id;
 
+  /**
+   * FICHA 357 — el paso por la bodega satelite, escrito en el historial como lo escribe la
+   * aplicacion. Sin esto, el alcance nuevo dejaria fuera a las ordenes de esta siembra y este
+   * archivo mediria la ausencia de datos en vez de la proyeccion que vino a medir.
+   */
+  const sembrarPasoPorBodega = async (ordenId: string): Promise<void> => {
+    await tx.ordenHistorialEstado.create({
+      data: {
+        ordenId,
+        estatusOrigenId: estatus("en_ruta_bodega_satelite"),
+        estatusDestinoId: estatus("en_bodega_satelite"),
+        actorUsuarioId: adminSatelite,
+        origenTipo: "recepcion_satelite",
+      },
+    });
+  };
+
   // Zona PROPIA: tres en la lista blanca. La primera lleva todo lo que la ficha anade.
   const completa = await crearOrden("propia-completa", zonaPropia, "en_bodega_satelite", {
     mensajeroId: mensajero,
@@ -211,6 +233,7 @@ async function sembrar(tx: Tx): Promise<Escenario> {
     await crearOrden("propia-2", zonaPropia, "por_devolver"),
     await crearOrden("propia-3", zonaPropia, "devuelta"),
   ];
+  for (const id of idsPropios) await sembrarPasoPorBodega(id);
 
   // La gestion de reprogramacion VIGENTE que alimenta «Liberada el». Sin ella ese campo seria
   // `null` por falta de datos y la asercion no distinguiria «lo envia» de «no lo envia».
@@ -229,14 +252,24 @@ async function sembrar(tx: Tx): Promise<Escenario> {
     await crearOrden("ajena-1", zonaAjena, "en_bodega_satelite"),
     await crearOrden("ajena-2", zonaAjena, "por_recoger", { mensajeroId: mensajero }),
   ];
+  // Pasaron por SU bodega (la ajena): la unica cosa que las deja fuera del listado del actor es
+  // el recorte por ZONA. Sin el historial quedarian fuera por el alcance nuevo y el caso «no ve
+  // las de otra zona» estaria verde sin haber ejercido el recorte por zona.
+  for (const id of idsAjenos) await sembrarPasoPorBodega(id);
 
-  // Zona PROPIA, estados FUERA de la lista blanca: el paquete no esta en el estante del
-  // satelite (esta en la moto, o ya se entrego). Miden que la lista blanca sigue mandando.
+  // Zona PROPIA y fuera del listado. FICHA 357: `en_reparto`, `entregada` y `ayuda_tienda` YA
+  // NO estan fuera por su estado —el listado los muestra ahora, y esa es la cara A de la ficha—,
+  // asi que lo que las deja fuera aqui es el ALCANCE: nunca pasaron por una bodega satelite.
+  // La cuarta si queda fuera por el ESTADO: paso por la bodega, pero el paquete volvio a la
+  // custodia de la central.
   const idsFueraDeLaLista = [
     await crearOrden("propia-en-reparto", zonaPropia, "en_reparto", { mensajeroId: mensajero }),
     await crearOrden("propia-entregada", zonaPropia, "entregada", { mensajeroId: mensajero }),
     await crearOrden("propia-ayuda", zonaPropia, "ayuda_tienda", { mensajeroId: mensajero }),
   ];
+  const enLaCentral = await crearOrden("propia-central", zonaPropia, "en_bodega_central");
+  await sembrarPasoPorBodega(enLaCentral);
+  idsFueraDeLaLista.push(enLaCentral);
 
   return {
     adminSatelite,
@@ -315,7 +348,7 @@ describeSiHayBase("FICHA 349 · bodega satelite contra Postgres real", () => {
     expect(vigentes).toEqual({ status: "ok", ids: [] });
   });
 
-  it("la lista blanca de estados sigue mandando: lo que no esta en el estante, no sale", async () => {
+  it("lo que no es de esta bodega no sale: ni por estado ajeno ni por no haber pasado por ella", async () => {
     const { escenario, pagina } = await enTransaccionRevertida(prisma, async (tx) => {
       const sembrado = await sembrar(tx);
       const srv = servicio(tx);
@@ -331,8 +364,8 @@ describeSiHayBase("FICHA 349 · bodega satelite contra Postgres real", () => {
     expect(pagina.status).toBe("ok");
     if (pagina.status !== "ok") return;
 
-    // No-vacuidad: las tres de fuera de la lista SI se sembraron en la zona del actor.
-    expect(escenario.idsFueraDeLaLista).toHaveLength(3);
+    // No-vacuidad: las cuatro de fuera de la lista SI se sembraron en la zona del actor.
+    expect(escenario.idsFueraDeLaLista).toHaveLength(4);
     for (const fuera of escenario.idsFueraDeLaLista) {
       expect(pagina.items.map((o) => o.id)).not.toContain(fuera);
     }
