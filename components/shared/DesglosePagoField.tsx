@@ -6,11 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import {
-  formatMonto as formatMontoConfigurado,
-  monedaConfig,
-  SIN_MONTO_RAYA,
-} from "@/lib/config/moneda";
+import { montoExacto } from "@/lib/config/moneda";
 import { aCentimos } from "@/lib/utils/pagos-recaudo";
 import {
   acotarMonto,
@@ -29,47 +25,28 @@ import {
 // Feature 213 (R8/R9) — textos del editor de líneas de pago, en un solo sitio (i18n-ready) y
 // FUERA del JSX, igual que los avisos de la 158/193. Viajan CON el componente: los dos
 // consumidores tienen que llamar a las mismas cosas por el mismo nombre.
-/**
- * R8: los tres importes del resumen, con la moneda de CONFIGURACIÓN. Viaja con el campo —y no
- * se recibe por props— para que los dos consumidores enseñen el mismo número con el mismo
- * formato: aquí no se escribe ningún símbolo de moneda.
- */
-function money(monto: number): string {
-  return formatMontoConfigurado(monto, SIN_MONTO_RAYA);
-}
 
 /**
- * FEATURE 300 — el importe del resumen del cobro, EXACTO.
+ * FEATURE 300, ficha 359 — el importe del resumen del cobro, EXACTO.
  *
- * El defecto que arregla, con la captura que lo reportó: una orden de 11.898,81 pintaba «A
- * cobrar ₡11.899», «Capturado ₡11.899» y «Diferencia ₡0» —el formateador de la 230 redondea— y
- * DEBAJO el error de descuadre, porque la comparación (`capturaCuadra`) mira el valor exacto.
- * La pantalla afirmaba que cuadra y que no cuadra a la vez, y el mensajero se quedaba bloqueado
- * sin un número al que apuntar. Lo mostrado y lo comparado tienen que ser el MISMO número.
+ * El defecto que arregló la 300, con la captura que lo reportó: una orden de 11.898,81 pintaba
+ * «A cobrar ₡11.899», «Capturado ₡11.899» y «Diferencia ₡0» —el formateador de la 230 cuadraba
+ * al colón— y DEBAJO el error de descuadre, porque la comparación (`capturaCuadra`) mira el
+ * valor exacto. La pantalla afirmaba que cuadra y que no cuadra a la vez. Lo mostrado y lo
+ * comparado tienen que ser el MISMO número.
  *
- * EXCEPCIÓN DECLARADA a «el dinero se pinta sin céntimos» (feature 230), acotada A PROPÓSITO a
- * este resumen y a su aviso: cuando la cola decimal es 0 —el caso de casi todas las órdenes—
- * este formateador ES `money()`, byte a byte, así que no cambia ni una pantalla de las que hoy
- * funcionan. Solo aparece la cola cuando ESCONDERLA sería mentir, porque es exactamente lo que
- * impide cerrar la orden. Un céntimo que no se ve no es una lectura más limpia: es un bloqueo
- * sin causa visible.
+ * La 300 lo resolvió con un formateador PROPIO, declarado como excepción y acotado a esta
+ * pantalla. La ficha 359 censó otras doce contradicciones idénticas en pantallas que esa
+ * excepción no cubría y movió la regla al formateador base: la cola se pinta siempre que
+ * exista, en toda la app. Con eso, este ya no tiene cuerpo propio —vive en
+ * `@/lib/config/moneda` y entra en el censo de la guardia— y aquí solo se RE-EXPORTA, para
+ * que sus consumidores (`OrdenesConMontoAjustadoTabla`, los tests de la 300) no cambien un
+ * import. Es el mismo patrón con el que la 201 absorbió las siete copias de `money()`.
  *
- * Money-safe: se parte de los CÉNTIMOS ENTEROS (`aCentimos`) y la parte entera se pinta con el
- * formateador compartido; no hay `toFixed` ni aritmética de coma flotante sobre el importe. El
- * separador decimal sale de configuración —ese es el oficio que le queda desde la 230—, nunca
- * escrito a mano.
+ * En el sitio de llamada el nombre sigue diciendo algo cierto y por eso se conserva: aquí la
+ * cola NO se puede esconder, porque es exactamente lo que impide cerrar la orden.
  */
-export function montoExacto(monto: number): string {
-  const centimos = aCentimos(monto);
-  const negativo = centimos < 0;
-  const absolutos = negativo ? -centimos : centimos;
-  const sueltos = absolutos % 100;
-  if (sueltos === 0) return money(monto);
-  const enteros = (absolutos - sueltos) / 100;
-  const cola = sueltos < 10 ? `0${sueltos}` : `${sueltos}`;
-  // El signo va DELANTE del símbolo ("-₡0,19"), mismo criterio que `formatMontoString`.
-  return `${negativo ? "-" : ""}${money(enteros)}${monedaConfig.separadorDecimal}${cola}`;
-}
+export { montoExacto };
 
 export const DESGLOSE_TEXTOS = {
   titulo: "Método de pago",

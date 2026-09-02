@@ -167,9 +167,10 @@ describe("R74 — el diálogo dice QUÉ pago se está anulando", () => {
     montar();
     expect(screen.getByRole("dialog", { name: /Tienda Norte/ })).toBeInTheDocument();
     expect(
-      // El resumen se relee entero, no solo la cifra: el importe pierde su cola
-      // (feature 230) y el día y el método siguen exactamente donde estaban.
-      within(dialogo()).getByText("Pago de ₡4.000 del 2026-07-30, en SINPE."),
+      // El resumen se relee entero, no solo la cifra: el día y el método siguen exactamente
+      // donde estaban. FICHA 359 — el importe recupera su cola: `4000.10` se lee `₡4.000,10`,
+      // y con la 230 este diálogo decía `₡4.000` sobre un pago que no era de ₡4.000.
+      within(dialogo()).getByText("Pago de ₡4.000,10 del 2026-07-30, en SINPE."),
     ).toBeInTheDocument();
   });
 
@@ -259,13 +260,14 @@ describe("R14 — money-safe", () => {
     }
   });
 
-  it("el monto del tope de la columna se redondea EXACTO, sin pasar por un número", () => {
-    // Feature 230: el `,99` ya no se pinta, decide el acarreo. Y ese acarreo cruza
-    // los diez dígitos —`9.999.999.999,99` sube a `10.000.000.000`—, que es
-    // justo lo que un `Number` intermedio no puede prometer. El caso sigue siendo
-    // el money-safe del tope de la columna, con otra afirmación.
+  it("el monto del tope de la columna se pinta EXACTO, sin pasar por un número", () => {
+    // FICHA 359: la cola se pinta, así que el tope de la columna sale entero —diez dígitos
+    // enteros MÁS su cola— y sin moverse de sitio. Con la 230 este mismo importe subía a
+    // `₡10.000.000.000`, once dígitos: un importe que la columna NO admite, pintado como si
+    // sí. Que los doce dígitos salgan bien es lo que ningún `Number` intermedio garantiza.
     montar({ pago: { ...PAGO, monto: "9999999999.99" } });
-    expect(within(dialogo()).getByText(/₡10\.000\.000\.000/)).toBeInTheDocument();
+    expect(within(dialogo()).getByText(/₡9\.999\.999\.999,99/)).toBeInTheDocument();
+    expect(within(dialogo()).queryByText(/₡10\.000\.000\.000/)).toBeNull();
   });
 });
 

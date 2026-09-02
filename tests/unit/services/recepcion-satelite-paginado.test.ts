@@ -58,6 +58,14 @@ interface FilaAlmacen {
   zonaId: string;
   /** El repositorio ordena por `created_at` pero NO lo proyecta: vive solo en el almacen. */
   createdAt: string;
+  /**
+   * FICHA 357 — «esta orden paso por una bodega satelite». En produccion se lee del historial
+   * (`orden_historial_estado` con destino `en_ruta_bodega_satelite` / `en_bodega_satelite`) y el
+   * repositorio lo emite SIEMPRE en el `WHERE`, sin parametro que lo apague; aqui es un hecho de
+   * la fila. Es la mitad NUEVA del alcance, y sin ella este almacen no podria representar la
+   * cara (B) del defecto: una orden de la zona que nunca estuvo en la bodega.
+   */
+  pasoPorBodegaSatelite: boolean;
 }
 
 function fila(
@@ -68,9 +76,11 @@ function fila(
   distrito: string | null,
   dia: number,
   prioridad = false,
+  pasoPorBodegaSatelite = true,
 ): FilaAlmacen {
   return {
     zonaId,
+    pasoPorBodegaSatelite,
     createdAt: `2026-03-${String(dia).padStart(2, "0")}T00:00:00.000Z`,
     row: {
       // FICHA 349: los escalares de `OrdenDTO` que la fila comparte con `/ordenes`, en un solo sitio.
@@ -105,9 +115,13 @@ function fila(
  *    facil de ver la bodega del vecino.
  *  - **«San Rafael» existe en DOS cantones** de la misma zona (Escazú y Barva): el filtro de
  *    distrito compara solo el nombre, tambien hoy en el cliente.
- *  - **hay ordenes SIN distrito** (a-05, a-10, a-12) y ordenes en estados que NO son de este
- *    listado (a-13 «por recibir», a-14 «entregada»), que ninguna combinacion puede hacer
- *    aparecer.
+ *  - **hay ordenes SIN distrito** (a-05, a-10, a-12).
+ *  - **hay ordenes que ninguna combinacion de filtros puede hacer aparecer, y desde la ficha
+ *    357 por DOS motivos distintos**, que es justo lo que el defecto confundia: a-13 esta en un
+ *    estado que este listado no muestra («Por recibir» tiene pantalla propia) aunque SI paso por
+ *    la bodega; a-14 esta en un estado que el listado SI muestra (`entregada`) pero NUNCA paso
+ *    por una bodega satelite. a-15 es el espejo de a-14 —`entregada` que SI paso—, sin el cual
+ *    «a-14 no sale» estaria verde por la razon equivocada.
  */
 const ALMACEN: FilaAlmacen[] = [
   fila("a-01", "z-a", "en_bodega_satelite", "Escazú", "San Rafael", 1),
@@ -122,9 +136,13 @@ const ALMACEN: FilaAlmacen[] = [
   fila("a-10", "z-a", "devuelta", "San José", null, 10),
   fila("a-11", "z-a", "devuelta", "Barva", "San Pedro", 11),
   fila("a-12", "z-a", "en_bodega_satelite", "San José", null, 12),
-  // Fuera del listado: «Por recibir» tiene su propia seccion y `entregada` no es de aqui.
+  // Fuera del listado por el ESTADO: «Por recibir» tiene su propia seccion.
   fila("a-13", "z-a", "en_ruta_bodega_satelite", "Escazú", "San Rafael", 13),
-  fila("a-14", "z-a", "entregada", "Escazú", "San Rafael", 14),
+  // Fuera del listado por el ALCANCE (ficha 357): `entregada` de la zona que NUNCA paso por una
+  // bodega satelite. Es la cara (B) medida en produccion.
+  fila("a-14", "z-a", "entregada", "Escazú", "San Rafael", 14, false, false),
+  // Dentro (ficha 357, cara A): `entregada` que SI paso por la bodega. Hasta hoy era invisible.
+  fila("a-15", "z-a", "entregada", "Escazú", "San Rafael", 15),
   fila("b-01", "z-b", "en_bodega_satelite", "Escazú", "San Rafael", 20),
   fila("b-02", "z-b", "devuelta", "Cartago", "Occidental", 21),
   fila("b-03", "z-b", "por_recoger", "Cartago", "Occidental", 22),
@@ -170,6 +188,8 @@ function repoEnMemoria(filas: FilaAlmacen[] = ALMACEN) {
       const distritos = [...(filtro.distritoIds ?? [])];
       const conjunto = filas
         .filter((f) => f.zonaId === filtro.zonaId)
+        // FICHA 357 — la otra mitad del acotamiento, que el repositorio real emite SIEMPRE.
+        .filter((f) => f.pasoPorBodegaSatelite)
         .filter((f) => estados.includes(f.row.estatusValue))
         .filter((f) => cantones.length === 0 || cantones.includes(f.row.cantonNombre))
         .filter(
@@ -266,17 +286,32 @@ function filtroDeCliente(
 }
 
 /**
- * El conjunto que la pantalla tiene HOY, en el orden en que lo pinta: los cinco grupos que
- * devuelve `listar()`, concatenados como los concatena `RecepcionSateliteModule`
- * (`ordenesBodega`, :159-168). De aqui salen a la vez la referencia de R45 y la de R51.
+ * El conjunto ENTERO del listado, sin recorte de pagina y sin filtros: la referencia contra la
+ * que se miden el filtro (R45) y la estabilidad de la paginacion (R51).
+ *
+ * FICHA 357 — ANTES ESTO ERA `listar()`, y ya no puede serlo. Aquella funcion devuelve los CINCO
+ * grupos de la pantalla vieja (`recibidas`, `asignadas`, `porDevolver`, `enTransitoACentral`,
+ * `devueltas`), que era exactamente el alcance que la ficha corrige: ni trae los desenlaces de
+ * las ordenes de la bodega (cara A) ni sabe distinguir una orden que paso por la bodega de una
+ * que solo comparte zona (cara B). Seguir usandola como referencia dejaria estos tests
+ * afirmando el criterio VIEJO con otro nombre, en verde y sin decirlo.
+ *
+ * Lo que se mide con esto sigue siendo lo mismo: que filtrar en el servidor de un conjunto da lo
+ * mismo que filtrar ese conjunto, y que pasar paginas no reordena ni pierde filas. El CONTENIDO
+ * del conjunto no se afirma aqui —para eso estan las listas absolutas de cada caso y, sobre
+ * todo, `tests/integration/db/satelite-alcance-por-bodega-real.test.ts`, que lo mide contra
+ * Postgres—.
  */
-async function conjuntoDeLaPantalla(
+async function conjuntoSinPaginar(
   svc: RecepcionSateliteService,
   actor: Actor,
 ): Promise<RecepcionSateliteDTO[]> {
-  const r = await svc.listar(actor);
-  if (r.status !== "ok") throw new Error(`listar devolvio ${r.status}`);
-  return [...r.recibidas, ...r.asignadas, ...r.porDevolver, ...r.enTransitoACentral, ...r.devueltas];
+  const r = await svc.listarOrdenesBodegaPaginado(input({ page: 1, pageSize: 100 }), actor);
+  if (r.status !== "ok") throw new Error(`listado devolvio ${r.status}`);
+  // Anti-vacuidad: si el conjunto cupiera justo en la pagina, la referencia estaria truncada y
+  // las comparaciones de abajo compararian dos recortes.
+  if (r.items.length !== r.total) throw new Error("la referencia no cabe en una pagina");
+  return r.items;
 }
 
 /** Recorre TODAS las paginas y devuelve los ids en el orden en que el servidor los entrega. */
@@ -307,6 +342,9 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
       [],
       ["en_bodega_satelite"],
       ["devuelta"],
+      // FICHA 357: un DESENLACE entre las selecciones. Sin el, las 64 combinaciones seguirian
+      // recorriendo solo los estados del listado viejo y el filtro nuevo quedaria sin ejercer.
+      ["entregada"],
       ["en_bodega_satelite", "por_recoger", "devuelta"],
     ];
     const seleccionesCanton = [[], ["Escazú"], ["Barva"], ["Escazú", "San José"]];
@@ -322,7 +360,7 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
             canton,
           )} distrito=${JSON.stringify(distrito)}`;
 
-          const enCliente = filtroDeCliente(await conjuntoDeLaPantalla(svc, SAT_A), {
+          const enCliente = filtroDeCliente(await conjuntoSinPaginar(svc, SAT_A), {
             estado,
             canton,
             distrito,
@@ -349,8 +387,8 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
 
     // Anti-vacuidad: 64 combinaciones comprobadas y la GRAN MAYORIA con filas. Si el filtro
     // de servidor devolviera siempre vacio, el bucle pasaria entero comparando [] con [].
-    expect(combinaciones).toBe(64);
-    expect(conFilas).toBeGreaterThanOrEqual(40);
+    expect(combinaciones).toBe(80);
+    expect(conFilas).toBeGreaterThanOrEqual(45);
   });
 
   it("el filtro no amplía el alcance de zona del actor (R44)", async () => {
@@ -360,7 +398,11 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
     const escazuDeA = await recorrerPaginas(svc, SAT_A, { canton_id: ["Escazú"] }, 50);
     const escazuDeB = await recorrerPaginas(svc, SAT_B, { canton_id: ["Escazú"] }, 50);
 
-    expect(escazuDeA.recorrido).toEqual(["a-02", "a-01", "a-04", "a-07", "a-09"]);
+    // FICHA 357: a-15 (`entregada` de Escazu que SI paso por la bodega) entra; a-14, que es su
+    // gemela salvo por no haber pasado nunca, NO — y las dos comparten zona, canton y distrito,
+    // asi que lo unico que puede separarlas es el criterio nuevo.
+    expect(escazuDeA.recorrido).toEqual(["a-02", "a-01", "a-04", "a-15", "a-07", "a-09"]);
+    expect(escazuDeA.recorrido).not.toContain("a-14");
     expect(escazuDeA.recorrido.some((id) => id.startsWith("b-"))).toBe(false);
     // CONTRAPRUEBA: el vecino SI ve la suya con ese mismo valor. Sin esto, un servicio que
     // devolviera vacio ante cualquier canton pasaria la primera mitad.
@@ -379,26 +421,29 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
     const { repo } = repoEnMemoria();
     const svc = servicio(repo);
 
-    // a-13 (`en_ruta_bodega_satelite`, la seccion «Por recibir») y a-14 (`entregada`) son de
-    // la zona del actor: el acotamiento por zona NO los deja fuera, lo hace la lista blanca.
+    // FICHA 357 — LAS DOS EXCLUSIONES SON DE NATURALEZA DISTINTA, y por eso se afirman por
+    // separado: a-13 queda fuera por el ESTADO (`en_ruta_bodega_satelite` tiene pantalla propia)
+    // y a-14 por el ALCANCE (`entregada` SI se lista, pero esa orden nunca paso por la bodega).
+    // a-15 es el control: misma zona, mismo estado y mismo distrito que a-14, y SI entra.
     const todo = await recorrerPaginas(svc, SAT_A, {}, 50);
     expect(todo.recorrido).not.toContain("a-13");
     expect(todo.recorrido).not.toContain("a-14");
+    expect(todo.recorrido).toContain("a-15");
 
     // Pedido explicitamente, y saltandose el schema del borde a proposito: la lista blanca del
     // servicio tiene que sostenerse sola, no solo detras de zod.
     const inventado = await svc.listarOrdenesBodegaPaginado(
-      { page: 1, pageSize: 50, estados: ["entregada"] },
+      { page: 1, pageSize: 50, estados: ["en_bodega_central"] },
       SAT_A,
     );
     if (inventado.status !== "ok") throw new Error("no ok");
-    // Ni las entregadas NI —lo que seria peor— «todas», por caer al caso «sin seleccion».
+    // Ni las de la central NI —lo que seria peor— «todas», por caer al caso «sin seleccion».
     expect(inventado.items).toEqual([]);
     expect(inventado.total).toBe(0);
 
     // Mezclado con uno valido, se queda solo con el valido.
     const mezcla = await svc.listarOrdenesBodegaPaginado(
-      { page: 1, pageSize: 50, estados: ["entregada", "devuelta"] },
+      { page: 1, pageSize: 50, estados: ["en_bodega_central", "devuelta"] },
       SAT_A,
     );
     if (mezcla.status !== "ok") throw new Error("no ok");
@@ -440,11 +485,11 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
     if (p1.status !== "ok" || p2.status !== "ok" || p3.status !== "ok") throw new Error("no ok");
 
     expect(ids(p1.items)).toEqual(["a-02", "a-12", "a-03", "a-01", "a-05"]);
-    expect(ids(p2.items)).toEqual(["a-04", "a-07", "a-06", "a-08", "a-09"]);
-    expect(ids(p3.items)).toEqual(["a-11", "a-10"]);
+    expect(ids(p2.items)).toEqual(["a-04", "a-15", "a-07", "a-06", "a-08"]);
+    expect(ids(p3.items)).toEqual(["a-09", "a-11", "a-10"]);
 
     // R41: el total es el del CONJUNTO en las tres, y en la ultima NO coincide con la pagina.
-    for (const p of [p1, p2, p3]) expect(p.total).toBe(12);
+    for (const p of [p1, p2, p3]) expect(p.total).toBe(13);
     expect(p3.total).not.toBe(p3.items.length);
     // El recorte efectivo viaja de vuelta (la pantalla lo necesita para su control).
     expect([p1.page, p1.pageSize]).toEqual([1, 5]);
@@ -459,7 +504,7 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
     if (r.status !== "ok") throw new Error("no ok");
 
     expect(ids(r.items)).toEqual(["a-09", "a-11"]);
-    // 3 devueltas de las 12 del conjunto: ni 12 (ignorar el filtro) ni 2 (contar la pagina).
+    // 3 devueltas de las 13 del conjunto: ni 13 (ignorar el filtro) ni 2 (contar la pagina).
     expect(r.total).toBe(3);
   });
 
@@ -472,18 +517,19 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
     expect(r.pageSize).toBe(100); // recepcionSateliteConfig.MAX_PAGE_SIZE
   });
 
-  it("conserva el orden actual: los cinco grupos en el orden del flujo, prioridad y recencia dentro (R51)", async () => {
+  it("conserva el orden del flujo por grupos, con prioridad y recencia dentro (R51)", async () => {
     const svc = servicio(repoEnMemoria().repo);
 
     const { recorrido } = await recorrerPaginas(svc, SAT_A, {}, 3);
-    const enPantalla = ids(await conjuntoDeLaPantalla(svc, SAT_A));
+    const sinPaginar = ids(await conjuntoSinPaginar(svc, SAT_A));
 
-    // El orden que el usuario ve hoy no lo declara ningun `orderBy`: sale de concatenar los
-    // cinco grupos. Paginar no puede reordenarlo (R51).
-    expect(recorrido).toEqual(enPantalla);
+    // Paginar no reordena ni pierde filas (R51).
+    expect(recorrido).toEqual(sinPaginar);
 
     // Y escrito ademas de forma absoluta, para que el test no se limite a comparar dos
-    // caminos que podrian estar mal a la vez:
+    // caminos que podrian estar mal a la vez. FICHA 357: el grupo `entregada` es NUEVO y cae
+    // donde lo pone `ESTADOS_BODEGA_SATELITE` — detras de `por_recoger`, delante del retorno—,
+    // y los cinco grupos de siempre conservan su orden relativo.
     expect(recorrido).toEqual([
       // en_bodega_satelite: la prioritaria primero, luego por recencia
       "a-02",
@@ -493,6 +539,8 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
       // por_recoger
       "a-05",
       "a-04",
+      // entregada (ficha 357): la que SI paso por la bodega
+      "a-15",
       // por_devolver
       "a-07",
       "a-06",
@@ -510,7 +558,7 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
   it("con un solo estado elegido conserva el orden de ese grupo (R51)", async () => {
     const svc = servicio(repoEnMemoria().repo);
     const { recorrido } = await recorrerPaginas(svc, SAT_A, { estados: ["en_bodega_satelite"] }, 2);
-    const enCliente = filtroDeCliente(await conjuntoDeLaPantalla(svc, SAT_A), {
+    const enCliente = filtroDeCliente(await conjuntoSinPaginar(svc, SAT_A), {
       estado: ["en_bodega_satelite"],
     });
     expect(recorrido).toEqual(ids(enCliente));
@@ -527,7 +575,7 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
     expect(de2.recorrido).toEqual(de5.recorrido);
     expect(de5.recorrido).toEqual(de50.recorrido);
     expect(new Set(de2.recorrido).size).toBe(de2.recorrido.length);
-    expect(de2.recorrido).toHaveLength(12);
+    expect(de2.recorrido).toHaveLength(13);
   });
 
   it("no ejecuta más consultas que el listado sin paginar, salvo el conteo (R54)", async () => {
@@ -544,10 +592,10 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
     expect(paginado.llamadas).toEqual(["findUsuarioZonaId", "findRecepcionSatelitePaginada"]);
     await expect(
       paginado.findRecepcionSatelitePaginada.mock.results[0]!.value,
-    ).resolves.toMatchObject({ total: 12 });
+    ).resolves.toMatchObject({ total: 13 });
 
     // El derivador de intentos sigue siendo UN SOLO lote (feature 160/R12) y ahora ademas
-    // acotado a la pagina: 5 ids, no los 12 del conjunto.
+    // acotado a la pagina: 5 ids, no los 13 del conjunto.
     expect(lotes).toHaveLength(1);
     expect(lotes[0]).toHaveLength(5);
   });
@@ -559,8 +607,8 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
     // a-02 -> 2, a-12 -> 12, a-03 -> ausente del mapa -> 0, que SI se expone (no se omite).
     expect(r.items.map((i) => i.intentosEntrega)).toEqual([2, 12, 0]);
     // Y el resto del DTO es el mismo que entrega el listado sin paginar.
-    const enPantalla = await conjuntoDeLaPantalla(svc, SAT_A);
-    expect(r.items[0]).toEqual(enPantalla.find((o) => o.id === "a-02"));
+    const sinPaginar = await conjuntoSinPaginar(svc, SAT_A);
+    expect(r.items[0]).toEqual(sinPaginar.find((o) => o.id === "a-02"));
   });
 });
 

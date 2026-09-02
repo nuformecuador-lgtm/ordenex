@@ -150,11 +150,12 @@ describe("R32/R34 — se pinta lo que dice el servidor, y no se calcula nada", (
     });
     montar();
 
-    // Feature 230: `1234.56` se aplica y se lee `₡1.235`; el pendiente que queda,
-    // `2765.44`, se lee `₡2.765`. Los dos importes siguen siendo los del SERVIDOR:
-    // la pantalla no resta nada, solo pinta lo que le mandan.
-    expect(await screen.findByText("Se aplica ₡1.235")).toBeInTheDocument();
-    expect(screen.getByText(/Queda pendiente: ₡2\.765/)).toBeInTheDocument();
+    // FICHA 359: los dos importes se leen tal cual los mandó el servidor, y la resta que el
+    // usuario VE cierra: `₡4.000` (pendiente hoy) − `₡1.234,56` (se aplica) = `₡2.765,44`
+    // (queda pendiente). Con la 230 se leía 4.000 − 1.235 = 2.765, que no da. La pantalla
+    // sigue sin restar nada: solo pinta lo que le mandan.
+    expect(await screen.findByText("Se aplica ₡1.234,56")).toBeInTheDocument();
+    expect(screen.getByText(/Queda pendiente: ₡2\.765,44/)).toBeInTheDocument();
     // Y no aparece por ningún lado el total tecleado: acá nadie suma.
     expect(screen.queryByText(/₡9\.000/)).not.toBeInTheDocument();
   });

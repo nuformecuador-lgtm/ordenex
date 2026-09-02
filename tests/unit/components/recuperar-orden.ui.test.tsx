@@ -202,14 +202,14 @@ afterEach(() => {
 });
 
 describe("el interruptor «Eliminadas»", () => {
-  it("solo se le ofrece a quien puede eliminar", async () => {
+  it("solo se le ofrece a quien puede VER las eliminadas", async () => {
     const user = userEvent.setup();
-    renderConSwr(<OrdenesListado accionesLote puedeEliminar catalogoFiltros={CATALOGO} />);
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar puedeVerEliminadas catalogoFiltros={CATALOGO} />);
 
     expect(await filtrosOfrecidos(user)).toContain(FILTRO);
   });
 
-  it("sin `puedeEliminar` no se ofrece ni se puede montar", async () => {
+  it("sin `puedeVerEliminadas` no se ofrece ni se puede montar", async () => {
     const user = userEvent.setup();
     renderConSwr(<OrdenesListado accionesLote catalogoFiltros={CATALOGO} />);
 
@@ -221,9 +221,27 @@ describe("el interruptor «Eliminadas»", () => {
     expect(screen.queryByRole("checkbox", { name: FILTRO })).toBeNull();
   });
 
+  it("⭑ FICHA 358: quien puede ELIMINAR pero no VER las eliminadas tampoco lo recibe", async () => {
+    // Es la tienda. Borra lo suyo, pero el cementerio y «Recuperar» siguen siendo del maestro:
+    // `RecuperarOrdenService` corta por rol y `listar` responde `forbidden` —no una lista
+    // vacía— a quien pida `eliminados` sin serlo. Ofrecérselo sería pintar un control que el
+    // servidor rechaza, que es exactamente lo que el campo `eliminable` existe para evitar.
+    //
+    // Antes de la 358 las dos mitades colgaban de la MISMA prop: abrir «Eliminar» a la tienda
+    // sin partirla le habría dado también este interruptor.
+    const user = userEvent.setup();
+    renderConSwr(<OrdenesListado puedeEliminar catalogoFiltros={CATALOGO} />);
+
+    const ofrecidos = await filtrosOfrecidos(user);
+    expect(ofrecidos).not.toContain(FILTRO);
+
+    await ponerFiltros(user, ...ofrecidos);
+    expect(screen.queryByRole("checkbox", { name: FILTRO })).toBeNull();
+  });
+
   it("marcado, viaja al backend como `eliminados: true`", async () => {
     const user = userEvent.setup();
-    renderConSwr(<OrdenesListado accionesLote puedeEliminar catalogoFiltros={CATALOGO} />);
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar puedeVerEliminadas catalogoFiltros={CATALOGO} />);
 
     await verEliminadas(user);
 
@@ -232,7 +250,7 @@ describe("el interruptor «Eliminadas»", () => {
 
   it("desmarcado, la clave NO viaja (no se manda `false`)", async () => {
     const user = userEvent.setup();
-    renderConSwr(<OrdenesListado accionesLote puedeEliminar catalogoFiltros={CATALOGO} />);
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar puedeVerEliminadas catalogoFiltros={CATALOGO} />);
 
     await ponerFiltros(user, FILTRO);
     await screen.findByRole("checkbox", { name: FILTRO });
@@ -247,7 +265,7 @@ describe("la barra del listado de eliminadas", () => {
       pagina([makeOrden({ id: "o1", estatusValue: "en_bodega_central" })]),
     );
     const user = userEvent.setup();
-    renderConSwr(<OrdenesListado accionesLote puedeEliminar catalogoFiltros={CATALOGO} />);
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar puedeVerEliminadas catalogoFiltros={CATALOGO} />);
 
     await verEliminadas(user);
     await seleccionarFila(user, "REM-o1");
@@ -267,7 +285,7 @@ describe("la barra del listado de eliminadas", () => {
     );
     recuperarOrdenesMock.mockResolvedValue({ status: "ok", recuperadas: 2 });
     const user = userEvent.setup();
-    renderConSwr(<OrdenesListado accionesLote puedeEliminar catalogoFiltros={CATALOGO} />);
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar puedeVerEliminadas catalogoFiltros={CATALOGO} />);
 
     await verEliminadas(user);
     await seleccionarFila(user, "REM-o1");
@@ -288,7 +306,7 @@ describe("la barra del listado de eliminadas", () => {
       pagina([makeOrden({ id: "o1" }), makeOrden({ id: "o2" })]),
     );
     const user = userEvent.setup();
-    renderConSwr(<OrdenesListado accionesLote puedeEliminar catalogoFiltros={CATALOGO} />);
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar puedeVerEliminadas catalogoFiltros={CATALOGO} />);
 
     await verEliminadas(user);
     await seleccionarFila(user, "REM-o2");
@@ -302,7 +320,7 @@ describe("la barra del listado de eliminadas", () => {
 
   it("NO llama al borde hasta que se confirma (abrir el modal no recupera)", async () => {
     const user = userEvent.setup();
-    renderConSwr(<OrdenesListado accionesLote puedeEliminar catalogoFiltros={CATALOGO} />);
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar puedeVerEliminadas catalogoFiltros={CATALOGO} />);
 
     await verEliminadas(user);
     await seleccionarFila(user, "REM-o1");
@@ -319,7 +337,7 @@ describe("la barra del listado de eliminadas", () => {
     };
     recuperarOrdenesMock.mockResolvedValue(fallo);
     const user = userEvent.setup();
-    renderConSwr(<OrdenesListado accionesLote puedeEliminar catalogoFiltros={CATALOGO} />);
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar puedeVerEliminadas catalogoFiltros={CATALOGO} />);
 
     await verEliminadas(user);
     await seleccionarFila(user, "REM-o1");

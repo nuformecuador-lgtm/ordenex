@@ -770,10 +770,10 @@ describe("T E.3/R26 — columna «pendiente de liquidar» en el listado", () => 
     });
 
     const region = await verHistorico(user);
-    // El importe se PINTA, no se calcula: sale del STRING del servidor. Feature 230 de `dev`:
-    // el `,50` ya no se pinta, decide el redondeo y se aleja del cero, así que `1234.50` da
-    // `₡1.235`.
-    expect(within(region).getByText("₡1.235")).toBeInTheDocument();
+    // El importe se PINTA, no se calcula: sale del STRING del servidor. FICHA 359: el `,50`
+    // se pinta, así que la deuda se lee tal cual la mandó el servidor. Con la 230 esta misma
+    // fila decía `₡1.235`, medio colón por encima de lo que de verdad se debe.
+    expect(within(region).getByText("₡1.234,50")).toBeInTheDocument();
   });
 
   it("los TRES casos se distinguen entre sí (no es una etiqueta fija)", async () => {

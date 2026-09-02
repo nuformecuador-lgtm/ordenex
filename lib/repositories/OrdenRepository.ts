@@ -92,7 +92,13 @@ import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 // Feature 236 (T2.1, R3/R5): la DECLARACION UNICA de los grupos de `/novedades`. El predicado de
 // cada superficie sale de aqui y de ningun otro sitio; ver `novedadWhere`.
 import { ESTATUS_POR_GRUPO, type GrupoNovedad } from "@/lib/types/novedad-grupo";
-import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
+// FICHA 357: `ESTADOS_BODEGA_SATELITE` alimenta el rango de grupo del `ORDER BY`;
+// `ESTADOS_CUSTODIA_SATELITE` alimenta el criterio de alcance («paso por MI bodega»). Son dos
+// listas distintas a proposito: una es lo que se MUESTRA, la otra es lo que se PRUEBA.
+import {
+  ESTADOS_BODEGA_SATELITE,
+  ESTADOS_CUSTODIA_SATELITE,
+} from "@/lib/utils/estados-bodega-satelite";
 import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
 // Feature 246 (T3.5, R8): la convencion `@db.Date` para las vias que reasignan SIN eleccion de
 // dia. `inicioDelDiaCREnUtc` (06:00Z) es la de las columnas `timestamp` y aqui desplazaria el dia.
@@ -954,6 +960,52 @@ interface PaginaSateliteIdRow {
 }
 
 /**
+ * FICHA 357 — «ESTA ORDEN PASO POR UNA BODEGA SATELITE». La mitad que le faltaba al alcance.
+ *
+ * Hasta hoy el listado se acotaba SOLO por `o."zona_id"`, y por eso fallaba por los dos lados:
+ * perdia el desenlace de sus propias ordenes (bastaba con que un mensajero las gestionara para
+ * que salieran de la lista blanca de cinco estados) y a la vez enseñaba ordenes de la zona que
+ * NUNCA pisaron una bodega satelite (medido en produccion: de 16 `devuelta` de la zona, CERO
+ * habian pasado por una satelite).
+ *
+ * **Las dos mitades, y por que ninguna sobra.** `zona_id` dice QUE bodega —en este modelo la
+ * bodega satelite ES la zona: no hay entidad «bodega», `cierre_bodega` se ancla en `zona_id`, el
+ * alcance del `adminSatelite` es su `usuario.zona_id`, y todo productor de estas transiciones
+ * deriva la bodega de destino de `orden.zona_id`—. Esta condicion dice SI ESTUVO en una. Juntas
+ * son «paso por MI bodega»; por separado, cada una es uno de los dos defectos medidos.
+ *
+ * **Dos disyuntos, y el segundo NO ensancha nada:**
+ *
+ *  - `EXISTS` sobre el historial es el criterio de verdad: la orden tuvo alguna vez como DESTINO
+ *    `en_ruta_bodega_satelite` o `en_bodega_satelite`. `orden_historial_estado` es append-only e
+ *    inmutable (feature 49/R2), asi que esta evidencia no se puede borrar ni reescribir.
+ *  - `os."value" IN (custodia)` cubre el ESTADO ACTUAL. Existe por una razon medida: en la base
+ *    local hay SEIS ordenes hoy en `en_bodega_satelite` SIN ninguna fila de historial que las
+ *    haya llevado ahi (datos sembrados/escritos por fuera del choke point). Sin este disyuntivo,
+ *    un paquete que esta FISICAMENTE en el estante desapareceria de la pantalla de quien lo
+ *    tiene. Y no puede ensanchar el alcance: interseca con `filtro.estatusValues`, que sale de
+ *    `ESTADOS_BODEGA_SATELITE`, donde el unico estado de custodia es `en_bodega_satelite` — que
+ *    YA se mostraba antes de esta ficha. O sea: este disyuntivo no puede hacer visible NADA que
+ *    no lo fuera ya.
+ *
+ * **Coste.** El `EXISTS` corre contra `orden_historial_estado_orden_id_estatus_destino_id_idx`
+ * (`@@index([ordenId, estatusDestinoId])`, feature 49/R24), que es exactamente esta busqueda.
+ * No hace falta migracion.
+ */
+function condicionPasoPorBodegaSatelite(): Prisma.Sql {
+  const custodia = Prisma.join([...ESTADOS_CUSTODIA_SATELITE]);
+  return Prisma.sql`(
+        os."value" IN (${custodia})
+        OR EXISTS (
+          SELECT 1
+          FROM "orden_historial_estado" h
+          JOIN "order_status" hos ON hos."id" = h."estatus_destino_id"
+          WHERE h."orden_id" = o."id" AND hos."value" IN (${custodia})
+        )
+      )`;
+}
+
+/**
  * Feature 184 — Tanda A (T A.1, R16) — el CRITERIO del listado de la bodega satelite, declarado
  * UNA sola vez.
  *
@@ -964,12 +1016,17 @@ interface PaginaSateliteIdRow {
  * fallaria nada.
  *
  * Cada condicion va HERMANA de las demas (AND), igual que el filtro de cliente que sustituyo.
- * Las tres primeras son el ACOTAMIENTO y no dependen de ningun filtro: se emiten SIEMPRE.
+ * Las CUATRO primeras son el ACOTAMIENTO y no dependen de ningun filtro: se emiten SIEMPRE.
+ *
+ * FICHA 357 — la cuarta es nueva y es la que cambia el criterio de «es de mi zona» a «paso por
+ * MI bodega». Va aqui, junto a la zona, y no como un parametro del filtro, a proposito: el
+ * alcance no puede apagarse desde fuera. Ver `condicionPasoPorBodegaSatelite`.
  */
 function condicionesSatelite(filtro: RecepcionSateliteFiltro): Prisma.Sql[] {
   const condiciones: Prisma.Sql[] = [
     Prisma.sql`o."zona_id" = ${filtro.zonaId}`,
     Prisma.sql`o."deleted_at" IS NULL`,
+    condicionPasoPorBodegaSatelite(),
     Prisma.sql`os."value" IN (${Prisma.join([...filtro.estatusValues])})`,
   ];
   // Pedido humano (2026-08-19): la geografia se compara por ID —las columnas de `orden`, sin
@@ -1650,22 +1707,47 @@ export class OrdenRepository implements IOrdenRepository {
   // `findEstatusIdByValue`, que es lo que usan los servicios de dominio.
 
   /**
-   * Feature «eliminar orden» (2026-08-26) — writer de `deleted_at` en `orden` POR LOTE y sin
-   * frontera de tienda (la autoriza el rol `maestro`, ver `EliminarOrdenService`). Desde la ficha
-   * 320 NO es el unico: el canal por API key escribe la columna con `softDeleteViaApi`, que borra
-   * UNA orden y lleva el `tienda_id` del owner en su `where`. Reemplaza
-   * al `softDelete` de una sola orden que se retiro el 2026-08-07 por quedarse sin pantalla; el
-   * `deleted_at IS NULL` de TODAS las lecturas nunca dejo de aplicarse, asi que fijar la columna
-   * basta para que la orden desaparezca de los listados sin tocar ninguna de ellas.
+   * Feature «eliminar orden» (2026-08-26) — writer de `deleted_at` en `orden` POR LOTE. Desde la
+   * ficha 320 NO es el unico: el canal por API key escribe la columna con `softDeleteViaApi`, que
+   * borra UNA orden. Reemplaza al `softDelete` de una sola orden que se retiro el 2026-08-07 por
+   * quedarse sin pantalla; el `deleted_at IS NULL` de TODAS las lecturas nunca dejo de aplicarse,
+   * asi que fijar la columna basta para que la orden desaparezca de los listados sin tocar
+   * ninguna de ellas.
    *
    * `updateMany` con `deletedAt: null` en el `where` (no `update` por id): un lote en una sola
    * sentencia, idempotente y a prueba de carreras —la orden que otra sesion ya borro no entra en
    * el conteo y su instante original se conserva—.
+   *
+   * ⭑ FICHA 358 (2026-09-02) — `ownerId` ES LA FRONTERA ENTRE INQUILINOS, y esta es la linea que
+   * la sostiene. Hasta hoy este metodo no acotaba por tienda porque su unico llamador autorizado
+   * era el `maestro`; el 2026-09-02 el humano abrio el borrado por pantalla a la TIENDA, acotado
+   * a lo suyo, y sin este `tiendaId` una tienda podria borrar las ordenes de otra.
+   *
+   * Va DENTRO del `where` y en la MISMA sentencia que los ids —exactamente como
+   * `softDeleteViaApi`— y NO en una comprobacion previa en memoria del service: un `if` anterior
+   * deja una ventana entre comprobar y escribir, y no cubre el camino que alguien añada mañana.
+   * El service SI comprueba ademas la pertenencia antes, pero para poder devolver el motivo del
+   * rechazo; si esa comprobacion desapareciera, esta seguiria impidiendo el borrado.
+   *
+   * `ownerId: null` es «sin frontera» y solo lo produce el `maestro`
+   * (`resolverAlcanceBorradoOrden` -> «todas»). Medido contra Postgres en
+   * `tests/integration/db/eliminar-orden-pantalla-frontera-tienda.test.ts`: quitar `tiendaId` de
+   * este `where` pone ese archivo ROJO.
    */
-  async softDelete(ids: readonly string[]): Promise<number> {
-    if (ids.length === 0) return 0;
+  async softDelete(params: {
+    ids: readonly string[];
+    ownerId: string | null;
+  }): Promise<number> {
+    if (params.ids.length === 0) return 0;
     const { count } = await this.prisma.orden.updateMany({
-      where: { id: { in: [...ids] }, deletedAt: null },
+      where: {
+        id: { in: [...params.ids] },
+        deletedAt: null,
+        // El maestro (`ownerId: null`) no añade clave; la tienda la añade SIEMPRE. Se escribe
+        // con spread condicional y no con un `tiendaId: params.ownerId ?? undefined` para que
+        // sea imposible confundir «sin frontera» con «frontera nula».
+        ...(params.ownerId !== null ? { tiendaId: params.ownerId } : {}),
+      },
       data: { deletedAt: new Date() },
     });
     return count;
@@ -1674,10 +1756,17 @@ export class OrdenRepository implements IOrdenRepository {
   /**
    * Pedido humano (2026-08-27) — LA REVERSION de `softDelete`, y el segundo writer de
    * `deleted_at` (el tercero es `softDeleteViaApi`, ficha 320, el del canal por API key).
-   * Simetrico hasta en el `where`: alli `deletedAt: null`, aqui
+   * Simetrico en la clave que lo hace idempotente: alli `deletedAt: null`, aqui
    * `deletedAt: { not: null }`, y por el mismo motivo — idempotencia y carreras. Una orden
    * viva no entra en el conteo, asi que este metodo no puede "recuperar" nada que no estuviera
    * borrado, ni pisar el instante de un borrado ajeno.
+   *
+   * DONDE DEJA DE SER SIMETRICO (ficha 358): `softDelete` gano un `ownerId` que mete `tiendaId`
+   * en su `where` cuando quien borra es una tienda; este NO lo tiene, y no es un olvido.
+   * Recuperar sigue siendo del `maestro` y solo suyo —`RecuperarOrdenService` corta por rol, y
+   * el interruptor «Eliminadas», unica forma de alcanzar una orden borrada, tampoco se le
+   * declara a nadie mas—. El dia que se le abra a la tienda, este metodo necesita su `ownerId`
+   * igual que su gemelo, y por la misma razon.
    */
   async restore(ids: readonly string[]): Promise<number> {
     if (ids.length === 0) return 0;

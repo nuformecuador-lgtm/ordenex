@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 
 import { KpiValorAnimado } from "@/components/shared/KpiValorAnimado";
-import { formatMonto, monedaConfig } from "@/lib/config/moneda";
+import { ESCALA_PRESENTACION, formatMonto, monedaConfig } from "@/lib/config/moneda";
 
 /**
  * El doble de `react-countup` de `tests/setup/jest-dom.ts` se sustituye por otro
@@ -185,9 +185,18 @@ describe("KpiValorAnimado — prefijo y puerta de visibilidad (feature 198)", ()
 });
 
 // ---------------------------------------------------------------------------
-// Feature 230 (R14) — en modo moneda el contador anima con CERO decimales.
+// FICHA 359 (antes 230/R14) — en modo moneda el contador anima a la ESCALA DE
+// PRESENTACION, que es la misma que la del texto.
+//
+// La 230 lo forzaba a CERO decimales, y era correcto entonces: el texto del
+// dinero se cuadraba al colon y recalcular centimos por fotograma era trabajo
+// invisible. Con la regla nueva el texto SI lleva la cola cuando existe, y
+// countup.js cuadra `frameVal` a `decimalPlaces` ANTES de formatearlo —incluido
+// el ULTIMO fotograma—, asi que un cero aqui hacia que el KPI aterrizara en una
+// cifra distinta de la que la tabla de al lado enseña. Es la misma familia de
+// contradiccion que la ficha 359 vino a matar, por otra puerta.
 // ---------------------------------------------------------------------------
-describe("KpiValorAnimado — el dinero se anima sin centimos (230/R14)", () => {
+describe("KpiValorAnimado — el dinero se anima a la escala que se pinta (359)", () => {
   /**
    * El separador decimal CONFIGURADO seguido de un digito: lo que ningun
    * fotograma puede emitir. Va dentro de una clase de caracteres para no tener
@@ -202,13 +211,16 @@ describe("KpiValorAnimado — el dinero se anima sin centimos (230/R14)", () => 
     return props;
   }
 
-  it("en modo moneda el contador recibe 0 decimales, no 2", () => {
+  it("en modo moneda el contador recibe la ESCALA DE PRESENTACION, no 0", () => {
     // `decimals` no gobierna el texto —de eso se ocupa `formattingFn`— sino el
-    // VALOR de cada fotograma. Con 2 el contador seguiria recalculando centimos
-    // durante toda la animacion para una cifra que ya no los muestra.
+    // VALOR de cada fotograma, INCLUIDO EL ULTIMO. Con 0, un KPI de 3.500,75
+    // aterrizaba en `₡3.501` mientras la misma cifra se lee `₡3.500,75` al lado.
     render(<KpiValorAnimado value={3500.75} moneda />);
 
-    expect(ultimasProps().decimals).toBe(0);
+    expect(ultimasProps().decimals).toBe(ESCALA_PRESENTACION);
+    // Y el numero sale del modulo de moneda, no escrito aqui: son la misma
+    // decision y separarlas es como se desalinean.
+    expect(ESCALA_PRESENTACION).toBe(2);
   });
 
   it("el modo NO moneda sigue en 0, como siempre", () => {
@@ -227,33 +239,53 @@ describe("KpiValorAnimado — el dinero se anima sin centimos (230/R14)", () => 
     expect(ultimasProps().decimals).toBe(3);
   });
 
-  it("el dinero IGNORA la resolucion pedida y se queda en 0 (R14)", () => {
-    // La puerta no puede servir de rendija para devolver los centimos al contador de dinero:
-    // el texto ya no los muestra y recalcularlos en cada fotograma es trabajo invisible.
-    render(<KpiValorAnimado value={3500.75} moneda decimales={2} />);
+  it("el dinero IGNORA la resolucion pedida: la puerta no puede desalinearlo", () => {
+    // La puerta sirve para las cifras que viven entre 0 y 1, no para que alguien
+    // le ponga al dinero una escala distinta de la que se pinta. Se afirma con un
+    // valor que NO es la escala —3— para que la asercion no pueda pasar por
+    // casualidad.
+    render(<KpiValorAnimado value={3500.75} moneda decimales={3} />);
 
-    expect(ultimasProps().decimals).toBe(0);
+    expect(ultimasProps().decimals).toBe(ESCALA_PRESENTACION);
+    expect(ultimasProps().decimals).not.toBe(3);
   });
 
-  it("ningun fotograma —inicial, intermedio o final— lleva parte decimal", () => {
-    // Se recorre el formateador REAL que el componente le pasa al contador, con
-    // el 0 del arranque, un valor intermedio y el final: es lo que el usuario ve
-    // pasar por pantalla, no solo la cifra en la que se detiene.
+  it("el ULTIMO fotograma es exactamente el texto del formateador compartido", () => {
+    // Se recorre el formateador REAL que el componente le pasa al contador. El
+    // fotograma que importa es el ULTIMO: countup.js cuadra `frameVal` a
+    // `decimalPlaces` antes de formatearlo, asi que con la escala mal puesta la
+    // cifra final se queda en otra cosa. Los intermedios se comprueban tambien
+    // —es lo que el usuario ve pasar—, pero ahi la cola SI puede aparecer y
+    // desaparecer: son valores intermedios, no el dato.
     render(<KpiValorAnimado value={13331832.72} moneda />);
     const { formattingFn, end } = ultimasProps();
     if (formattingFn === undefined) throw new Error("el contador se monto sin formattingFn");
 
     for (const fotograma of [0, end / 3, end / 2, end * 0.99, end]) {
-      expect(formattingFn(fotograma), `fotograma ${fotograma}`).not.toMatch(CON_DECIMAL);
+      // Ningun fotograma puede llevar MAS cola de la que se pinta.
+      expect(formattingFn(fotograma), `fotograma ${fotograma}`).toMatch(
+        new RegExp(`^-?${monedaConfig.simbolo}[\\d${monedaConfig.separadorMiles}]+([${monedaConfig.separadorDecimal}]\\d\\d)?$`),
+      );
     }
+    // Y el final es, byte a byte, el del formateador compartido — CON su cola.
     expect(formattingFn(end)).toBe(formatMonto(13331832.72));
+    expect(formattingFn(end)).toMatch(CON_DECIMAL);
   });
 
-  it("el texto final en moneda es el del formateador compartido, sin cola", () => {
+  it("el texto final en moneda es el del formateador compartido, con su cola", () => {
     render(<KpiValorAnimado value={3500.75} moneda />);
 
     expect(screen.getByText(norm(formatMonto(3500.75)))).toBeInTheDocument();
-    expect(screen.getByText(norm("₡3.501"))).toBeInTheDocument();
+    expect(screen.getByText(norm("₡3.500,75"))).toBeInTheDocument();
+  });
+
+  it("y un importe REDONDO sigue sin arrastrar cola: la 230 no se deshace", () => {
+    render(<KpiValorAnimado value={3500} moneda />);
+
+    expect(screen.getByText(norm("₡3.500"))).toBeInTheDocument();
+    const { formattingFn, end } = ultimasProps();
+    if (formattingFn === undefined) throw new Error("el contador se monto sin formattingFn");
+    expect(formattingFn(end)).not.toMatch(CON_DECIMAL);
   });
 });
 

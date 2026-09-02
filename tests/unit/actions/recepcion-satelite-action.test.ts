@@ -190,14 +190,27 @@ describe("listarOrdenesBodegaPaginado — el borde (feature 170, T K.1)", () => 
     }
   });
 
-  it("un estado fuera de los cinco del listado muere en el borde (R44)", async () => {
+  it("un estado fuera del listado muere en el borde (R44)", async () => {
+    // FICHA 357: el ejemplo pasa a ser un estado de la CENTRAL. `entregada` ya NO vale para
+    // esto —hoy es un estado del listado, y ese es el arreglo de la cara (A)—, asi que dejarlo
+    // aqui convertiria este caso en verde por la razon contraria a la que dice su nombre.
     const service = buildService();
     const r = await listarOrdenesBodegaPaginado(
-      { estados: ["entregada"] },
+      { estados: ["en_bodega_central"] },
       { service, getActor: actorAdmin },
     );
     expect(r.status).toBe("validation_error");
     expect(service.listarOrdenesBodegaPaginado).not.toHaveBeenCalled();
+
+    // CONTRAPRUEBA: un desenlace SI cruza el borde. Sin ella, un `z.enum` que rechazara TODO
+    // pasaria la primera mitad y la pantalla no podria filtrar por nada.
+    const bueno = buildService();
+    const ok = await listarOrdenesBodegaPaginado(
+      { estados: ["entregada"] },
+      { service: bueno, getActor: actorAdmin },
+    );
+    expect(ok.status).toBe("ok");
+    expect(bueno.listarOrdenesBodegaPaginado).toHaveBeenCalled();
   });
 
   it("los tres filtros validos llegan al service tal cual (R45)", async () => {
@@ -285,14 +298,24 @@ describe("listarOrdenesBodegaCompleto — el borde del conjunto (feature 184, T 
     }
   });
 
-  it("un estado fuera de los cinco del listado muere en el borde", async () => {
+  it("un estado fuera del listado muere en el borde", async () => {
+    // FICHA 357, mismo motivo que en el borde de la pagina: el estado ajeno es uno de la
+    // central, y el desenlace es el control de que el borde no rechaza todo.
     const service = buildService();
     const r = await listarOrdenesBodegaCompleto(
-      { estados: ["entregada"] },
+      { estados: ["en_bodega_central"] },
       { service, getActor: actorAdmin },
     );
     expect(r.status).toBe("validation_error");
     expect(service.listarOrdenesBodegaCompleto).not.toHaveBeenCalled();
+
+    const bueno = buildService();
+    const ok = await listarOrdenesBodegaCompleto(
+      { estados: ["entregada"] },
+      { service: bueno, getActor: actorAdmin },
+    );
+    expect(ok.status).toBe("ok");
+    expect(bueno.listarOrdenesBodegaCompleto).toHaveBeenCalled();
   });
 
   it("los tres filtros vigentes llegan al service tal cual (R3)", async () => {

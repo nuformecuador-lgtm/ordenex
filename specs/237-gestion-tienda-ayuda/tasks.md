@@ -449,7 +449,7 @@ R23, R24, R25, R26, R28, R38, R39.
 | R8 | Test de servicio **(NUEVO)** — «orden sin mensajero asignado ⇒ `conflict` y el repo no se llama» |
 | R9 | Test de repositorio **(NUEVO)** — «la fila nace con `cierre_id NULL`» |
 | R10 | ídem — «`usuario.update` **no** se llama» + «el `data` del `updateMany` lleva sólo `estatusId`» |
-| R11 | `tests/unit/guards/ordenes-columnas-money-safe.guardia.test.ts` y `tests/unit/guards/dinero-sin-centimos.guardia.test.ts` **verdes sin tocarse** (T8.5) + T6.2 con importes como string |
+| R11 | `tests/unit/guards/ordenes-columnas-money-safe.guardia.test.ts` y `tests/unit/guards/dinero-centimos-cuando-existen.guardia.test.ts` **verdes sin tocarse** (T8.5) + T6.2 con importes como string |
 | R12 | Test del schema **(NUEVO)** «sin motivo o sin foto no parsea» + `tests/components/…` de la ventana **(NUEVO)** «el envío está bloqueado y dice por qué» |
 | R13 | Test del schema **(NUEVO)** (MIME, tamaño, tope de lista) + test de la action **(NUEVO)** «el borde revalida aunque la UI no» |
 | R14 | Test del schema **(NUEVO)** — «hoy y ayer no parsean; mañana sí» |

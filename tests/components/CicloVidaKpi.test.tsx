@@ -97,6 +97,21 @@ describe("KPI de ciclo de vida — la cifra y su denominador", () => {
     ).toBeInTheDocument();
   });
 
+  // FICHA 360 — la base la compone ahora `base-del-kpi`, el MISMO módulo que la de los dos KPIs
+  // de porcentaje de esta misma fila, y de ahí sale que la cifra pase por
+  // `formatearValor(_, "conteo")`. Sin él, esta tarjeta escribiría «(1234 órdenes cerradas)» al
+  // lado de un «1 234» de la tarjeta vecina: dos maneras de escribir la misma clase de número en
+  // una fila de cuatro. (El separador de `es-CR` es un espacio duro; el literal de aquí lleva el
+  // normal porque `@testing-library` normaliza los blancos antes de comparar.)
+  it("la base pasa por el formateador de la analítica, con su separador de miles", async () => {
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos(86400, 1234) });
+    renderKpi();
+
+    expect(
+      await screen.findByText("Ciclo de vida promedio (1 234 órdenes cerradas)"),
+    ).toBeInTheDocument();
+  });
+
   // Se lee como una frase, y «1 órdenes» delata que nadie la leyó.
   it("concuerda en singular con una sola orden cerrada", async () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos(3600, 1) });

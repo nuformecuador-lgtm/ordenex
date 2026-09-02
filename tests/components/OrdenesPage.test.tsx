@@ -371,6 +371,56 @@ describe("OrdenesPage", () => {
     ).toBeInTheDocument();
   });
 
+  // -------------------------------------------------------------------------------------
+  // FICHA 358 (2026-09-02) — EL CABLEADO DE LA PAGINA, que es donde vive la decision de ROL.
+  //
+  // `OrdenesListado` ya se prueba con props directas; lo que NADIE probaba es que la PAGINA le
+  // pase esas props al rol correcto. Sin estos dos casos, revertir el `puedeEliminar` de
+  // `page.tsx` a «solo maestro» dejaria toda la suite en verde y el defecto reportado —«no le
+  // aparece el checkbox»— volveria intacto a produccion.
+  // -------------------------------------------------------------------------------------
+  it("⭑ eliminar: el adminTienda recibe la casilla de selección sobre una fila eliminable", async () => {
+    listarOrdenesMock.mockResolvedValue({
+      status: "ok",
+      // `eliminable` lo resuelve el SERVIDOR (estado + pertenencia). Aquí llega ya resuelto,
+      // que es exactamente como llega en producción.
+      items: [makeOrden({ id: "a", numGuia: 3001, eliminable: true })],
+      page: 1,
+      pageSize: 25,
+      total: 1,
+    });
+    resolveActorMock.mockResolvedValueOnce({
+      usuarioId: "tienda-1",
+      rol: RolValue.adminTienda,
+    });
+
+    await renderPage();
+    await screen.findByText("3001");
+
+    expect(
+      screen.getByRole("checkbox", { name: /Seleccionar orden/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("eliminar: el `admin` NO la recibe — el estrechamiento del 2026-08-27 sigue en pie", async () => {
+    // El `admin` sí tiene acciones por lote, así que la columna de casillas existe para él por
+    // otra razón; lo que se afirma es que el servidor no le manda `eliminable` y que la página
+    // no se lo inventa. Se mide sobre una fila SIN el campo, que es como le llega.
+    listarOrdenesMock.mockResolvedValue({
+      status: "ok",
+      items: [makeOrden({ id: "a", numGuia: 3002 })],
+      page: 1,
+      pageSize: 25,
+      total: 1,
+    });
+    resolveActorMock.mockResolvedValueOnce({ usuarioId: "u", rol: RolValue.admin });
+
+    await renderPage();
+    await screen.findByText("3002");
+
+    expect(screen.queryByRole("button", { name: "Eliminar" })).toBeNull();
+  });
+
   it("carga masiva: NO se ofrece a otros roles ni sin sesión", async () => {
     listarOrdenesMock.mockResolvedValue({
       status: "ok",

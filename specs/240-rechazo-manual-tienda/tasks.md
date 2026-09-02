@@ -385,7 +385,7 @@
 | R17 | `tests/unit/services/devolucion-sla-dinero.test.ts` verde **sin tocarse** (la aritmética es la misma función) + T7.6 |
 | R18 | `gestion-orden-rechazar.test.ts` **(NUEVO)** — «la gestión nace con `cierre_id` nulo: ningún movimiento en el instante del rechazo» |
 | R19 | `tests/unit/types/orden-historial-types.test.ts` y `tests/unit/types/criterio-intento-entrega.test.ts` — el literal de `ORIGEN_TIPOS_VISITA_REAL` **sigue intacto** (**mutación T7.3**) |
-| R20 | `tests/unit/guards/ordenes-columnas-money-safe.guardia.test.ts` · `tests/unit/guards/dinero-sin-centimos.guardia.test.ts`, verdes sin tocarse |
+| R20 | `tests/unit/guards/ordenes-columnas-money-safe.guardia.test.ts` · `tests/unit/guards/dinero-centimos-cuando-existen.guardia.test.ts`, verdes sin tocarse |
 | R21 | `gestion-orden-rechazar.test.ts` **(NUEVO)** — «segundo envío» + `tests/unit/repositories/devolucion-sla-repository.test.ts` verde (la carrera con el cron, por la misma guarda) |
 | R22 | `tests/unit/utils/ingreso-ordenex.test.ts` — cubre `derivarIngresoOrden`, y esta ficha **no toca esa función**: verde **sin tocarse**. ⚠️ Su verde es *coherencia*, no evidencia de que el rechazo manual facture bien; la evidencia es T7.6 (los cinco feeds) y **M3** de T0.1, que mide el cobro repetido que esa misma función produce hoy (D2) |
 | R23 | `tests/unit/repositories/devolucion-sla-repository.test.ts` verde **sin tocarse** (el predicado del cron es `estatus = devuelta`) + T8.3 contra Postgres |

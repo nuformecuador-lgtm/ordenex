@@ -21,6 +21,10 @@ import type {
 // importaba `ESTADOS_CREACION` (los estados en los que una orden puede NACER) y se re-preguntaba
 // aqui; eran dos preguntas distintas compartiendo lista, y por eso ahora hay dos listas.
 import { esEstadoEliminable } from "@/lib/types/order-status-eliminables";
+// FICHA 358 (2026-09-02): la OTRA mitad de `eliminable` —¿de quien son las ordenes que este
+// actor puede borrar?—, leida de la misma fuente unica que usan los dos servicios que autorizan
+// el borrado. Sin esto, la pantalla y el servidor volverian a responder cosas distintas.
+import { resolverAlcanceBorradoOrden } from "@/lib/services/alcance-borrado-orden";
 import { soloDigitosSiPareceNumero } from "@/lib/utils/busqueda-orden";
 // Pedido humano (2026-08-19): el rango de creacion y el termino de busqueda los traduce el
 // util COMPARTIDO, porque la barra de este listado se aplica tambien a la bodega satelite y
@@ -295,22 +299,44 @@ export class OrdenService implements IOrdenService {
    * borrado». El nombre viaja con el significado, hasta el DTO y hasta la pantalla; si se
    * quedara, el proximo lector deduciria la regla equivocada.
    *
-   * SOLO para el `maestro`, que es el unico que puede borrar. Para el resto el campo viaja
-   * `undefined`; la UI exige `=== true`, asi que la ausencia no habilita nada. Ya no cuesta una
-   * consulta —el estado viene en la fila—, pero se sigue omitiendo: un campo que no alimenta
-   * ninguna decision suya no tiene por que viajar.
+   * SOLO para quien puede borrar. Para el resto el campo viaja `undefined`; la UI exige
+   * `=== true`, asi que la ausencia no habilita nada. Ya no cuesta una consulta —el estado viene
+   * en la fila—, pero se sigue omitiendo: un campo que no alimenta ninguna decision suya no tiene
+   * por que viajar.
    *
-   * MISMO predicado que aplica `EliminarOrdenService`, y por la MISMA funcion
-   * (`esEstadoEliminable`), no por una copia de la lista. Es la respuesta a «¿ofrezco el boton?»
-   * y tiene que coincidir con la de «¿lo autorizo?»: si divergen, la barra ofrece «Eliminar»
-   * sobre filas que el servidor rechaza.
+   * ⭑ FICHA 358 (2026-09-02) — «quien puede borrar» ya no es solo el `maestro`: tambien la
+   * TIENDA, sobre lo suyo. El defecto reportado era literalmente este campo —«no le aparece el
+   * checkbox para seleccionar y eliminar»—, porque el campo no viajaba y la pantalla exige
+   * `=== true`. El PRINCIPIO no cambia y es el que obliga a tocar esto: la pantalla no ofrece un
+   * boton que el servidor vaya a rechazar. Lo que cambia es quien puede.
+   *
+   * Y por eso el `eliminable` de la tienda lleva ADEMAS la pertenencia (`tiendaId === ownerId`),
+   * que no es redundante aunque hoy lo parezca: `construirWhere` ya acota el listado del
+   * `adminTienda` a sus ordenes, asi que en la practica todas las filas son suyas. Se escribe
+   * igualmente porque este metodo NO puede saber con que `where` se trajeron las filas —le
+   * llegan ya materializadas—, y el dia que un filtro nuevo, un listado nuevo o un bug de
+   * acotamiento le cuele una fila ajena, este campo diria «se puede borrar» sobre una orden que
+   * el servidor rechaza. Falla CERRADO por su cuenta.
+   *
+   * LAS DOS MITADES SALEN DE SUS FUENTES UNICAS, no de copias: el ESTADO de `esEstadoEliminable`
+   * (ficha 319) y el DUEÑO de `resolverAlcanceBorradoOrden` (ficha 358), las mismas dos que
+   * aplica `EliminarOrdenService` para autorizar. Es la respuesta a «¿ofrezco el boton?» y tiene
+   * que coincidir con la de «¿lo autorizo?»: si divergen, la barra ofrece «Eliminar» sobre filas
+   * que el servidor rechaza. La coincidencia esta medida estado por estado en
+   * `tests/unit/services/eliminar-criterio-unico.test.ts`, para los dos roles.
    */
   private marcarEliminable(
     items: OrdenListItemDTO[],
     actor: Actor,
   ): OrdenListItemDTO[] {
-    if (actor.rol !== "maestro" || items.length === 0) return items;
-    return items.map((o) => ({ ...o, eliminable: esEstadoEliminable(o.estatusValue) }));
+    const alcance = resolverAlcanceBorradoOrden(actor);
+    if (alcance.alcance === "denegado" || items.length === 0) return items;
+    const ownerId = alcance.alcance === "propias" ? alcance.ownerId : null;
+    return items.map((o) => ({
+      ...o,
+      eliminable:
+        esEstadoEliminable(o.estatusValue) && (ownerId === null || o.tiendaId === ownerId),
+    }));
   }
 
   async listar(

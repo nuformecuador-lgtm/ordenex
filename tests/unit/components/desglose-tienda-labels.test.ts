@@ -38,15 +38,17 @@ describe("etiquetas del desglose por tienda — R20: las MISMAS de /mi-wallet", 
 
   it("el helper de moneda es el MISMO, así que ninguno de los dos puede parsear un monto", () => {
     expect(money).toBe(miWalletLabels.money);
-    // Feature 230: la cola decide el redondeo y NO se pinta. Estas dos líneas
-    // afirmaban «el céntimo sobrevive a la pantalla» (`₡1.000,10`), y eso ya no
-    // es cierto por diseño: el céntimo sigue en el dato y en las descargas, pero
-    // no se ve. Que el camino no convierta a número se afirma ahora donde se
-    // puede afirmar de verdad —el barrido de `Number(`/`parseFloat(` sobre el
-    // fuente del módulo, en `moneda-formato` y en la guardia de la 230—.
-    // Lo que estas dos siguen midiendo es el formato compartido: el `,10` baja y
-    // el signo del negativo va DELANTE del símbolo.
-    expect(money("1000.10")).toBe("₡1.000");
+    // Esta línea ha dicho tres cosas en tres reglas. La 201: «el céntimo
+    // sobrevive a la pantalla» (`₡1.000,10`). La 230: la cola decide el redondeo
+    // y no se pinta (`₡1.000`). La FICHA 359 la devuelve a lo primero, y por el
+    // motivo de entonces: un movimiento de wallet con céntimos —40 de 152
+    // medidos en producción— es justo el caso donde esconderlos descuadra la
+    // resta que la pantalla enseña. Que el camino no convierta a número se
+    // afirma donde se puede afirmar de verdad: el barrido de
+    // `Number(`/`parseFloat(` sobre el fuente del módulo, en `moneda-formato` y
+    // en la guardia.
+    expect(money("1000.10")).toBe("₡1.000,10");
+    // Y el importe REDONDO sigue pelado, con el signo DELANTE del símbolo.
     expect(money("-452.00")).toBe("-₡452");
     // `null` = aún no cargado. NO es un cero: un cero falso en una pantalla de dinero miente.
     expect(money(null)).toBe("—");

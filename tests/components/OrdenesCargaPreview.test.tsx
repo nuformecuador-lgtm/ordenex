@@ -375,11 +375,19 @@ describe("OrdenesCargaPreview — monto redondeado (feature 304)", () => {
   }
 
   it("los dos montos NO se pintan igual: el del archivo conserva sus céntimos", () => {
-    // El punto entero de la ficha. Con el formateador general (feature 230) los dos importes
-    // salen con la MISMA cadena, y la tabla diría «de ₡11.899 a ₡11.899»: la pantalla que se
-    // contradice sola. Si esta aserción cae, el aviso dejó de informar de nada.
-    expect(formatMonto(ORIGINAL)).toBe(APLICADO_EN_PANTALLA);
+    // El punto entero de la ficha: si los dos importes salieran con la MISMA cadena, la tabla
+    // diría «de ₡11.899 a ₡11.899» y sería una pantalla que se contradice sola. Si esta
+    // aserción cae, el aviso dejó de informar de nada.
     expect(ORIGINAL_EN_PANTALLA).not.toBe(APLICADO_EN_PANTALLA);
+
+    // ✅ FICHA 359 — LO QUE CAMBIÓ AQUÍ, y es la razón por la que `montoExacto` dejó de tener
+    // cuerpo propio. Esta línea afirmaba lo CONTRARIO —`formatMonto(ORIGINAL)` era
+    // `APLICADO_EN_PANTALLA`—, o sea que el formateador GENERAL fundía los dos importes en
+    // `₡11.899` y por eso esta tabla necesitaba uno aparte. Con la regla nueva el general ya
+    // los distingue. Se reescribe en vez de borrarse para que quede escrito que la excepción
+    // de la feature 300 se cerró por arriba y no se abandonó.
+    expect(formatMonto(ORIGINAL)).not.toBe(APLICADO_EN_PANTALLA);
+    expect(formatMonto(ORIGINAL)).toBe(ORIGINAL_EN_PANTALLA);
   });
 
   it("dice cuántas se ajustaron y muestra la fila con LOS DOS montos", () => {

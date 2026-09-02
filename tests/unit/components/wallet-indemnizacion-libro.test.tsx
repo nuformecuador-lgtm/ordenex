@@ -78,11 +78,11 @@ describe("R31 — el concepto tiene etiqueta legible en el libro", () => {
     );
 
     const tabla = screen.getByRole("table", { name: "Libro de movimientos" });
-    // Feature 230: el importe se pinta sin céntimos, pero el propósito del caso
-    // NO cambia. Este monto no cabe exacto en un `double`, así que el `,99` que
-    // sube a `…902` solo sale bien si el camino trabaja dígito a dígito: un
-    // `parseFloat` intermedio sigue siendo lo que este caso caza.
-    expect(within(tabla).getByText("₡12.345.678.902")).toBeInTheDocument();
+    // FICHA 359: el propósito del caso NO cambia. Este monto no cabe exacto en un
+    // `double`, así que llevar los once dígitos enteros a pantalla CON su cola sólo
+    // sale bien si el camino trabaja dígito a dígito: un `parseFloat` intermedio
+    // sigue siendo lo que este caso caza.
+    expect(within(tabla).getByText("₡12.345.678.901,99")).toBeInTheDocument();
   });
 
   it("el origen se lee como 'Cierre del día' (de dónde salió la plata)", () => {

@@ -193,14 +193,23 @@ afterEach(() => {
 });
 
 describe("feature 300 · lo mostrado y lo comparado son el MISMO número", () => {
-  it("CONTROL DE NO-VACUIDAD: el formateador de siempre SÍ borra la diferencia de este monto", () => {
-    // De aquí venía la contradicción, y se deja medido para que nadie lea el resto del archivo
-    // como una precaución teórica: por el camino de `money()`, el monto real y el redondeo que
-    // el mensajero teclea son LA MISMA CADENA, y la diferencia entre los dos se pinta como cero.
-    expect(conMoneda(CON_CENTIMOS)).toBe(conMoneda(11899));
-    expect(conMoneda(CON_CENTIMOS - 11899)).toBe(conMoneda(0));
+  it("CONTROL DE NO-VACUIDAD: el formateador GENERAL ya no borra la diferencia de este monto", () => {
+    // ✅ FICHA 359 — ESTE CONTROL CAMBIÓ DE SIGNO, y es la mejor noticia del archivo.
+    //
+    // Decía: «por el camino de `money()`, el monto real y el redondeo que el mensajero teclea
+    // son LA MISMA CADENA, y la diferencia entre los dos se pinta como cero». De ahí venía la
+    // contradicción, y por eso la feature 300 escribió un formateador aparte SOLO para esta
+    // pantalla. La 359 movió esa regla al formateador general —las otras doce pantallas con
+    // el mismo defecto no tenían excepción propia—, así que el camino de `money()` ya no
+    // borra nada y `montoExacto` es hoy su alias.
+    //
+    // El caso se CONSERVA en vez de borrarse porque sigue siendo el control de no-vacuidad
+    // del archivo: si alguien devolviera el cuadre al colón, estas líneas caen de golpe.
+    expect(conMoneda(CON_CENTIMOS)).not.toBe(conMoneda(11899));
+    expect(conMoneda(CON_CENTIMOS - 11899)).not.toBe(conMoneda(0));
 
-    // El formateador nuevo los distingue, que es justo lo que faltaba.
+    // Y los dos caminos coinciden byte a byte, que es lo que hace que ya no haya excepción.
+    expect(montoExacto(CON_CENTIMOS)).toBe(conMoneda(CON_CENTIMOS));
     expect(montoExacto(CON_CENTIMOS)).not.toBe(montoExacto(11899));
     expect(montoExacto(CON_CENTIMOS - 11899)).not.toBe(montoExacto(0));
   });
