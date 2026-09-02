@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import CountUp from "react-countup";
 
-import { formatMonto, monedaConfig } from "@/lib/config/moneda";
+import { ESCALA_PRESENTACION, formatMonto, monedaConfig } from "@/lib/config/moneda";
 import { cn } from "@/lib/utils";
 import { toValidNumber } from "@/lib/utils/number";
 
@@ -20,7 +20,7 @@ import { toValidNumber } from "@/lib/utils/number";
 // `formatMonto`, el mismo que ya usan los otros cinco consumidores cliente. Fue
 // el de `Intl` con `style: "currency"` —que agrupa los miles con espacio duro—
 // hasta que la feature 201 unifico la agrupacion en `lib/config/moneda.ts`, y
-// desde la feature 230 ese formato ya no lleva parte decimal: «₡3.500».
+// desde la ficha 359 ese formato lleva la cola SOLO CUANDO EXISTE: «₡3.500», «₡416,47».
 //
 // Lo que este arreglo NO resuelve, y es PREEXISTENTE (no lo introduce la 130):
 // `loadMonedaConfig` lee `process.env[name]` con clave dinámica, y Next solo
@@ -138,9 +138,14 @@ export interface KpiValorAnimadoProps {
    *
    * Por defecto `0`, que es el comportamiento de siempre para conteos y magnitudes grandes.
    *
-   * ⛔ EN MODO MONEDA SE IGNORA y se fuerza a 0 (feature 230 / R14): el texto del dinero ya no
-   * lleva centimos, y recalcularlos en cada fotograma para no mostrarlos es trabajo que no se
-   * ve. Que esta puerta no pueda reabrirlos es a proposito.
+   * ⛔ EN MODO MONEDA SE IGNORA y se fuerza a `ESCALA_PRESENTACION`. La 230 lo forzaba a 0
+   * porque entonces el texto del dinero se cuadraba al colon y recalcular centimos por
+   * fotograma era trabajo invisible; con la ficha 359 el texto SI los lleva cuando existen, y
+   * countup.js cuadra `frameVal` a `decimalPlaces` ANTES de pasarlo al formateador — incluido
+   * el ULTIMO fotograma. Dejarlo en 0 haria que un KPI animado aterrizara en `₡13.331.833`
+   * mientras la misma cifra se lee `₡13.331.832,72` en la tabla de al lado, que es exactamente
+   * la contradiccion que la 359 vino a matar. Que esta puerta no pueda desalinearlo del
+   * formateador es a proposito.
    */
   decimales?: number;
   className?: string;
@@ -157,17 +162,17 @@ export function KpiValorAnimado({
   className,
 }: Readonly<KpiValorAnimadoProps>) {
   const amount = toValidNumber(value);
-  // Feature 230 (R14): CERO decimales tambien en modo moneda. El texto lo pinta
-  // `formatear` —que en moneda es `formatMonto`— y desde la 230 no emite parte
-  // decimal; pero `decimals` gobierna el valor de CADA FOTOGRAMA, asi que dejarlo
-  // en 2 haria que el contador recalculara centimos durante toda la animacion para
-  // un texto que ya no los muestra.
+  // Ficha 359 (antes 230/R14): en modo moneda los decimales del CONTADOR son los de la escala
+  // de presentacion, no cero. El texto lo pinta `formatear` —que en moneda es `formatMonto`—,
+  // pero `decimals` gobierna el valor de cada fotograma INCLUIDO EL ULTIMO, asi que con 0 el
+  // KPI aterrizaba en la cifra cuadrada al colon y contradecia a la tabla de al lado. El
+  // numero sale de `lib/config/moneda.ts` y no se escribe aqui: son la misma decision.
   //
   // Fuera del dinero manda `decimales`, que por defecto sigue siendo 0: lo unico que cambia
   // es que ahora una cifra menor que 1 puede pedir la resolucion que su cuenta necesita (ver
   // la prop). Se sanea aqui —entero y no negativo— porque countup.js lo pasa tal cual a
   // `toFixed`, que revienta con un valor absurdo.
-  const decimals = moneda ? 0 : Math.max(0, Math.trunc(decimales));
+  const decimals = moneda ? ESCALA_PRESENTACION : Math.max(0, Math.trunc(decimales));
 
   // `false` en el servidor y durante la hidratacion, `true` en cuanto corre en el navegador.
   // Va con `useSyncExternalStore` y no con un `useState` + `useEffect`: React usa el snapshot

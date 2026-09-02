@@ -316,7 +316,7 @@
 | R16 | ídem — «cierre sin retornables: mismo payload de siempre» · `tests/components/CierresAdminConfirmacionFisica.test.tsx` — «se aprueba de un click» |
 | R17 | `tests/unit/repositories/cierres-admin-confirmacion-fisica.test.ts` — «marca las gestiones esperadas dentro de la misma tx» |
 | R18 | ídem — «`count` insuficiente: lanza y revierte la aprobación entera» |
-| R19 | ídem — «el `data` lleva exactamente `confirmadaFisicaAt`» · `ordenes-columnas-money-safe.guardia.test.ts` y `dinero-sin-centimos.guardia.test.ts` verdes sin tocar |
+| R19 | ídem — «el `data` lleva exactamente `confirmadaFisicaAt`» · `ordenes-columnas-money-safe.guardia.test.ts` y `dinero-centimos-cuando-existen.guardia.test.ts` verdes sin tocar |
 | R20 | `tests/integration/db/confirmacion-fisica-migration.test.ts` — «la columna es nullable, sin default, y las filas previas quedan en NULL» |
 | R21 | `tests/unit/guards/confirmacion-sin-lectores.guardia.test.ts` (censo, con autocomprobación) |
 | R22 | `tests/integration/db/wallet-idempotencia.test.ts` — «segunda aprobación: `conflict`, una sola marca» |

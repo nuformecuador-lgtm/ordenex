@@ -42,25 +42,29 @@ describe("PriceLabel — el formato de la app (feature 201)", () => {
     expect(screen.getByText("₡1.234")).toBeInTheDocument();
   });
 
-  it("el medio se aleja del cero: 1.234,5 sube a 1.235", () => {
-    // Afirmaba «los decimales se pintan completos, incluido el cero final». Los
-    // decimales ya no se pintan: DECIDEN el redondeo y se descartan (230/R2, D1).
+  it("el medio ya no mueve la cifra: 1.234,50 se pinta entero (ficha 359)", () => {
+    // Este caso ha afirmado tres cosas en tres reglas. La 201: «los decimales se
+    // pintan completos, incluido el cero final». La 230: los decimales DECIDEN
+    // el redondeo y se descartan (`₡1.235`). La 359: la cola se pinta cuando
+    // existe, asi que la cifra no se mueve de donde la dejo el servidor.
     render(<PriceLabel value={1234.5} />);
-    expect(screen.getByText("₡1.235")).toBeInTheDocument();
+    expect(screen.getByText("₡1.234,50")).toBeInTheDocument();
   });
 
-  it("la cola decimal REDONDEA la parte entera, no se recorta", () => {
-    // Truncar daria `₡13.331.832`; el `,72` sube a `₡13.331.833`. La diferencia
-    // entre redondear y truncar es justo lo que este caso mide (230/R2).
+  it("la cola decimal se CONSERVA: ni la redondea a la parte entera ni la recorta", () => {
+    // Redondear daria `₡13.331.833` y truncar `₡13.331.832`. Las dos esconden el
+    // `,72`, y esconderlo es lo que descuadraba las restas de pantalla (359).
     render(<PriceLabel value={13331832.72} />);
-    expect(screen.getByText("₡13.331.833")).toBeInTheDocument();
+    expect(screen.getByText("₡13.331.832,72")).toBeInTheDocument();
   });
 
   it("agrupa los miles de tres en tres, con PUNTO", () => {
-    // La mutacion que este caso caza: quitar la agrupacion (`₡13331833`).
+    // La mutacion que este caso caza: quitar la agrupacion (`₡13331832,72`).
     render(<PriceLabel value={13331832.72} />);
     const texto = etiqueta().textContent ?? "";
-    expect(texto).toBe("₡13.331.833");
+    expect(texto).toBe("₡13.331.832,72");
+    // Tres grupos separados por PUNTO. La cola va tras la coma y no cuenta como
+    // grupo: si alguien agrupara tambien la cola, esto se pondria rojo.
     expect(texto.split(".")).toHaveLength(3);
     // Y el separador no se cuela delante del primer grupo (".999").
     expect(texto).not.toMatch(/^₡\./);
@@ -73,18 +77,17 @@ describe("PriceLabel — el formato de la app (feature 201)", () => {
 
   it("acepta el valor como STRING", () => {
     render(<PriceLabel value="4500.5" />);
-    expect(screen.getByText("₡4.501")).toBeInTheDocument();
+    expect(screen.getByText("₡4.500,50")).toBeInTheDocument();
   });
 
   it("acepta el valor como NUMBER", () => {
     render(<PriceLabel value={4500.5} />);
-    expect(screen.getByText("₡4.501")).toBeInTheDocument();
+    expect(screen.getByText("₡4.500,50")).toBeInTheDocument();
   });
 
-  it("un negativo lleva el signo DELANTE del simbolo", () => {
-    // Y se aleja del cero tambien hacia abajo: -1.234,5 da -₡1.235, no -₡1.234.
+  it("un negativo lleva el signo DELANTE del simbolo, y conserva su cola", () => {
     render(<PriceLabel value={-1234.5} />);
-    expect(screen.getByText("-₡1.235")).toBeInTheDocument();
+    expect(screen.getByText("-₡1.234,50")).toBeInTheDocument();
     expect(etiqueta().textContent).not.toContain("₡-");
   });
 

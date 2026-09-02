@@ -211,8 +211,8 @@ describe("Ficha 339 — abrir una fila (R15/R21/R22)", () => {
     await abrir(ABRIR_MENSAJEROS);
 
     const dentro = within(await screen.findByRole("region", { name: PANEL_MENSAJEROS }));
-    expect(await dentro.findByText("₡3.333")).toBeInTheDocument();
-    expect(dentro.getByText("₡1.111")).toBeInTheDocument();
+    expect(await dentro.findByText("₡3.333,33")).toBeInTheDocument();
+    expect(dentro.getByText("₡1.111,11")).toBeInTheDocument();
   });
 
   it("R23: dos filas abiertas mantienen páginas independientes", async () => {
@@ -281,7 +281,7 @@ describe("Ficha 339 — lo que enseña cada movimiento (R16/R17/R36)", () => {
     // R5 también aquí: la etiqueta legible del catálogo, nunca el valor del enum.
     expect(dentro.getByText("Ajuste (egreso)")).toBeInTheDocument();
     expect(dentro.getByText(/Faltante al cuadrar la caja/)).toBeInTheDocument();
-    expect(dentro.getByText("₡46")).toBeInTheDocument();
+    expect(dentro.getByText("₡45,75")).toBeInTheDocument();
     expect(dentro.queryByText("egreso_ajuste")).toBeNull();
   });
 
@@ -319,7 +319,7 @@ describe("Ficha 339 — lo que enseña cada movimiento (R16/R17/R36)", () => {
     await abrir(ABRIR_MENSAJEROS);
     const region = await screen.findByRole("region", { name: PANEL_MENSAJEROS });
     const dentro = within(region);
-    await dentro.findByText("₡3.333");
+    await dentro.findByText("₡3.333,33");
 
     // Ni la palabra, ni la cifra: dentro del panel hay EXACTAMENTE tantos importes como
     // movimientos. Un subtotal de página al lado del importe de la fila es una invitación a
@@ -328,7 +328,7 @@ describe("Ficha 339 — lo que enseña cada movimiento (R16/R17/R36)", () => {
     const importes = [...region.querySelectorAll("td")]
       .map((c) => (c.textContent ?? "").trim())
       .filter((t) => t.startsWith("₡"));
-    expect(importes).toEqual(["₡3.333", "₡1.111"]);
+    expect(importes).toEqual(["₡3.333,33", "₡1.111,11"]);
   });
 });
 
@@ -395,11 +395,11 @@ describe("Ficha 339 — el nombre de cada control y sus estados (R24/R25/R26)", 
     const aviso = await dentro.findByRole("alert");
     expect(aviso.textContent ?? "").toMatch(/no se pudieron cargar los movimientos/i);
     // Ninguna rama de error viaja con movimientos: la tabla no pinta ni una fila de datos.
-    expect(dentro.queryByText("₡3.333")).toBeNull();
+    expect(dentro.queryByText("₡3.333,33")).toBeNull();
 
     // Y el resto de la tarjeta —que es lo que la persona vino a leer— sigue completo.
     expect(screen.getByText("Total de egresos")).toBeInTheDocument();
-    expect(screen.getByText("₡2.191")).toBeInTheDocument();
+    expect(screen.getByText("₡2.190,75")).toBeInTheDocument();
     expect(screen.getByText("Ganancia de Ordenex")).toBeInTheDocument();
   });
 });
@@ -547,13 +547,20 @@ describe("Ficha 339 — money-safe en el navegador (R35)", () => {
  * QUE SE AFIRMA, y por que estos literales no son un espejo de la fuente: `₡1.700`, `₡3.400` y
  * `₡10.200` son lo que un humano LEYO en Chromium a 390x844 el 2026-08-31 con el defecto
  * delante —la pantalla decia `₡1.70` y `₡10.20`, dos numeros distintos y creibles— y son el
- * contrato de esta ficha, no una copia de `money`. Si alguien vuelve a meter `truncate`,
- * `line-clamp` o una abreviatura de miles en la celda del importe, estos tres caen.
+ * contrato de esta ficha, no una copia de `money`.
  *
- * Lo que ESTE test no puede ver, y por eso hay medicion en navegador en `progress/impl_343.md`:
- * jsdom no hace layout, asi que aqui no existen ni el ancho del panel, ni el desborde, ni las
- * flechas de scroll de la `DataTable`. Este caso afirma QUE COLUMNAS se piden y QUE TEXTO sale
- * entero; que ademas quepan en 284 px se midio con Playwright.
+ * ⚠️ ENMIENDA DE LA FICHA 359 — AQUI HABIA UNA PROMESA FALSA, Y SE MIDIO. Esta prosa decia:
+ * «si alguien vuelve a meter `truncate`, `line-clamp` o una abreviatura de miles en la celda
+ * del importe, estos tres caen». NO CAEN. Se aplico la mutacion —cambiar `whitespace-nowrap`
+ * por `truncate` en `ImporteCelda`— y los 50 casos de este archivo y de
+ * `ComposicionGananciaCard` pasaron EN VERDE: en jsdom `truncate` no toca el `textContent`, y
+ * lo que estos tres casos leen es texto. La promesa se cumple desde ahora con el caso
+ * ESTRUCTURAL del final del bloque, que si mira las clases.
+ *
+ * Lo que ESTE test no puede ver, y por eso hay medicion en navegador en `progress/impl_343.md`
+ * y en `progress/impl_359.md` §7: jsdom no hace layout, asi que aqui no existen ni el ancho del
+ * panel, ni el desborde, ni las flechas de scroll de la `DataTable`. Este caso afirma QUE
+ * COLUMNAS se piden y QUE TEXTO sale entero; que ademas quepan se mide en Chromium.
  */
 describe("Ficha 339 — el detalle en un teléfono (arreglo móvil)", () => {
   const matchMediaOriginal = window.matchMedia;
@@ -665,5 +672,62 @@ describe("Ficha 339 — el detalle en un teléfono (arreglo móvil)", () => {
       th.textContent?.trim(),
     );
     expect(cabeceras).toEqual(["Fecha", "Concepto", "Detalle", "Importe"]);
+  });
+
+  /**
+   * FICHA 359 — LA CELDA DEL IMPORTE NO PUEDE RECORTAR, y esto SÍ lo mide.
+   *
+   * Es el caso que cumple la promesa que la prosa de este bloque llevaba haciendo en falso.
+   * Se mira el FUENTE y no el DOM porque el defecto es de LAYOUT y jsdom no hace layout: en
+   * jsdom, `truncate` (`overflow:hidden` + `text-overflow:ellipsis` + `white-space:nowrap`)
+   * deja el `textContent` intacto y los tres casos de arriba en verde. Medido, no supuesto.
+   *
+   * Las dos clases que se vigilan son EXACTAMENTE las que la ficha 339 identificó como las que
+   * sostienen el arreglo, y por eso se afirman por separado:
+   *
+   *  - `whitespace-nowrap` en la celda del importe: es lo que impide que la cifra se parta por
+   *    la mitad y lo que hace que la columna EMPUJE en vez de encogerse. Sin ella, el número no
+   *    se ve roto: se ve como OTRO número.
+   *  - `wrap-anywhere` en la celda de texto: es lo que le permite encoger, y es la razón por la
+   *    que la tabla móvil cabe. La 339 midió que con `nowrap` en la fecha el desborde empeoraba
+   *    24 px, así que esta clase es la que compra el sitio del importe.
+   *
+   * Y ninguna abreviatura: `truncate`, `line-clamp`, `text-ellipsis` ni `overflow-hidden` en el
+   * fuente. La misma prohibición que ya está escrita en `cierre-factura.tsx` («un número a
+   * medias es un número FALSO, peor que uno que se sale»).
+   */
+  it("FICHA 359 — la celda del importe no puede recortar ni abreviar (mide las CLASES)", () => {
+    const fuente = codigoSinComentarios(
+      "app/(app)/wallet/_components/DetalleFilaComposicion.tsx",
+    );
+
+    // El `<span>` del importe, aislado: sin esto la aserción pasaría por el
+    // `whitespace-nowrap` de la FECHA, que es otra celda y otro oficio.
+    const celdaImporte = /function ImporteCelda[\s\S]*?\n}/.exec(fuente)?.[0] ?? "";
+    expect(celdaImporte, "`ImporteCelda` desapareció o cambió de forma").toContain("money(monto)");
+    expect(
+      celdaImporte,
+      "la celda del importe perdió `whitespace-nowrap`: la cifra puede partirse o encogerse",
+    ).toContain("whitespace-nowrap");
+
+    // La celda de texto conserva lo que le compra el sitio al importe.
+    expect(
+      fuente,
+      "la celda de texto perdió `wrap-anywhere`: deja de encoger y le come el sitio al importe",
+    ).toContain("wrap-anywhere");
+
+    // Y ninguna abreviatura, en ninguna parte del fuente.
+    for (const prohibida of [/\btruncate\b/, /\bline-clamp/, /\btext-ellipsis\b/, /\boverflow-hidden\b/]) {
+      expect(fuente, `el detalle usa ${prohibida}: un importe a medias es un importe FALSO`).not.toMatch(
+        prohibida,
+      );
+    }
+
+    // CONTRAPRUEBA — el detector no está mirando al vacío: sobre el código MUTADO (el mismo
+    // cambio que se aplicó y sobrevivió en verde a los 50 casos de arriba) dispara.
+    const mutada = celdaImporte.replace("whitespace-nowrap", "truncate");
+    expect(mutada).not.toContain("whitespace-nowrap");
+    expect(mutada).toMatch(/\btruncate\b/);
+    expect(celdaImporte).not.toMatch(/\btruncate\b/);
   });
 });

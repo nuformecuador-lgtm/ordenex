@@ -582,7 +582,7 @@ describe("327/R33 — cambiar el distrito no se guarda hasta confirmar", () => {
     expect(screen.getByText(AVISO_COL_PROPUESTA)).toBeInTheDocument();
     expect(screen.getByText("GAM Oeste")).toBeInTheDocument();
     expect(screen.getByText("Cartago")).toBeInTheDocument();
-    expect(screen.getByText("₡2.825")).toBeInTheDocument();
+    expect(screen.getByText("₡2.825,40")).toBeInTheDocument();
     expect(screen.getByText("₡4.520")).toBeInTheDocument();
     expect(screen.getAllByText("₡1.130")).toHaveLength(2);
 
@@ -691,7 +691,7 @@ describe("327/R13 — la pantalla ramifica por el DISCRIMINANTE, no por el impor
     // configuró la tarifa de ese par (tienda, zona)»: enseñarlo como precio sería mentir.
     expect(document.body.textContent).not.toContain("₡0");
     // La columna «Ahora» sigue con sus importes: el hueco es del par NUEVO, no de la orden.
-    expect(screen.getByText("₡2.825")).toBeInTheDocument();
+    expect(screen.getByText("₡2.825,40")).toBeInTheDocument();
   });
 
   it("EL CASO QUE MATA LA MUTACIÓN: tarifa RESUELTA con importe cero SÍ pinta ₡0", async () => {
@@ -713,7 +713,7 @@ describe("327/R13 — la pantalla ramifica por el DISCRIMINANTE, no por el impor
 
     expect(screen.queryByText(AVISO_SIN_TARIFA)).toBeNull();
     expect(screen.getAllByText("₡0")).toHaveLength(2);
-    expect(screen.getByText("₡2.825")).toBeInTheDocument();
+    expect(screen.getByText("₡2.825,40")).toBeInTheDocument();
     expect(screen.getByText("₡4.520")).toBeInTheDocument();
   });
 });

@@ -277,8 +277,9 @@ describe("RecogerModule — listado de solo-visualización", () => {
     expect(within(detalle).getByText("San Rafael")).toBeInTheDocument();
     expect(within(detalle).getByText("Llamar antes")).toBeInTheDocument();
     // Sección 3 — Cobro: valor a cobrar (colones) + peso en kg.
-    // 1.250,50 sube a 1.251: el medio se aleja del cero (feature 230/D1).
-    expect(within(detalle).getByText("₡1.251")).toBeInTheDocument();
+    // FICHA 359: `1250.5` se lee entero, con su cola. La 230 lo subía a `₡1.251`, medio
+    // colón por encima de lo que el mensajero va a cobrar.
+    expect(within(detalle).getByText("₡1.250,50")).toBeInTheDocument();
     expect(within(detalle).getByText("1.5 kg")).toBeInTheDocument();
     // Ya NO se muestra la Tienda ni la ubicación con zona.
     expect(within(region).queryByText("Tienda Norte")).toBeNull();

@@ -340,10 +340,14 @@ describe("CierresAdminModule", () => {
     const totales = within(dialog).getByRole("region", {
       name: "Totales del cierre",
     });
+    // FICHA 359 — LA IDENTIDAD DE LA FACTURA DEL CIERRE, AHORA LEGIBLE EN PANTALLA:
+    // 100 + 50,25 + 10,10 = 160,35. Con la 230 estos cuatro se pintaban ₡100, ₡50, ₡10 y
+    // ₡160, y la suma de los tres primeros cuadraba con el total sólo por casualidad: con
+    // otros céntimos habría dado ₡161 justo al lado de un total de ₡160.
     expect(within(totales).getByText("₡100")).toBeInTheDocument();
-    expect(within(totales).getByText("₡50")).toBeInTheDocument();
-    expect(within(totales).getByText("₡10")).toBeInTheDocument();
-    expect(within(totales).getByText("₡160")).toBeInTheDocument();
+    expect(within(totales).getByText("₡50,25")).toBeInTheDocument();
+    expect(within(totales).getByText("₡10,10")).toBeInTheDocument();
+    expect(within(totales).getByText("₡160,35")).toBeInTheDocument();
   });
 
   it("el detalle muestra el ingreso bruto y NO muestra card de ganancia cuando es ≥ 0", async () => {
@@ -368,11 +372,11 @@ describe("CierresAdminModule", () => {
     const liquidacion = within(dialog).getByRole("region", {
       name: "Liquidación",
     });
-    expect(within(liquidacion).getByText("₡3.673")).toBeInTheDocument();
+    expect(within(liquidacion).getByText("₡3.672,50")).toBeInTheDocument();
     // Ganancia positiva: no se muestra ni la ganancia ni el "Debe".
     expect(within(liquidacion).queryByText("Ganancia")).toBeNull();
     expect(within(liquidacion).queryByText("Debe")).toBeNull();
-    expect(within(liquidacion).queryByText("₡2.173")).toBeNull();
+    expect(within(liquidacion).queryByText("₡2.172,50")).toBeNull();
   });
 
   it("el detalle muestra el pago a tienda derivado server-side (sin recalcular)", async () => {
@@ -402,7 +406,9 @@ describe("CierresAdminModule", () => {
     const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
 
     const pago = within(dialog).getByRole("region", { name: "Pago a tienda" });
-    expect(within(pago).getByText("₡21.328")).toBeInTheDocument();
+    // FICHA 359: 25.000 − 2.825 − 847,50 = 21.327,50, y ahora la resta se puede LEER. Con la
+    // 230 la pantalla decía ₡21.328 y los tres operandos daban ₡21.327 al restarlos a ojo.
+    expect(within(pago).getByText("₡21.327,50")).toBeInTheDocument();
   });
 
   it("muestra 'Debe' en rojo cuando la ganancia es negativa (el pago supera el ingreso)", async () => {
@@ -458,14 +464,13 @@ describe("CierresAdminModule", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Detalle del cierre" });
     const panel = within(dialog).getByRole("region", { name: "Ingreso de Ordenex" });
-    // Cada concepto va con su IVA incluido, en un solo monto. Feature 230/R20: el
-    // total es el redondeo del total del SERVIDOR (`4802.50` -> `₡4.803`), no la
-    // suma de los tres redondeos de arriba; aquí coinciden, y cuando no coincidan
-    // manda el del servidor (A1: la columna puede no cuadrar a ojo por ±1/±2).
+    // Cada concepto va con su IVA incluido, en un solo monto, y el total es el del SERVIDOR.
+    // FICHA 359 — la advertencia A1 de la 230 («la columna puede no cuadrar a ojo por ±1/±2»)
+    // deja de aplicar aquí: 2.825 + 847,50 + 1.130 = 4.802,50, y es exactamente lo que se lee.
     expect(within(panel).getByText("₡2.825")).toBeInTheDocument();
-    expect(within(panel).getByText("₡848")).toBeInTheDocument();
+    expect(within(panel).getByText("₡847,50")).toBeInTheDocument();
     expect(within(panel).getByText("₡1.130")).toBeInTheDocument();
-    expect(within(panel).getByText("₡4.803")).toBeInTheDocument();
+    expect(within(panel).getByText("₡4.802,50")).toBeInTheDocument();
     // El monto a cobrar no es un concepto facturado: vive solo en el desglose por orden.
     expect(within(panel).queryByText("₡25.000")).not.toBeInTheDocument();
     // El IVA no se pinta como concepto aparte en el panel.
@@ -572,7 +577,7 @@ describe("CierresAdminModule", () => {
     expect(filaDe("Valor flete GAM")).toBe("₡2.500");
     expect(filaDe("Valor flete")).toBe("₡0");
     expect(filaDe("Flete por rechazo GAM")).toBe("₡0");
-    expect(filaDe("Total cobrado")).toBe("₡3.673"); // el `total` del DTO, 3672.50 redondeado
+    expect(filaDe("Total cobrado")).toBe("₡3.672,50"); // el `total` del DTO, tal cual
     // El porcentaje NO se pierde: sigue explicando el cobro real en el desglose de al lado.
     expect(within(region).getAllByText("13.00 % de ₡2.500").length).toBeGreaterThan(0);
   });
@@ -640,7 +645,7 @@ describe("CierresAdminModule", () => {
     await abrirFila(user, region, "REM-001");
     // Monto recibido y método van juntos en el desplegable de la orden.
     expect(
-      within(region).getByText("₡1.251 · SINPE"),
+      within(region).getByText("₡1.250,50 · SINPE"),
     ).toBeInTheDocument();
   });
 
