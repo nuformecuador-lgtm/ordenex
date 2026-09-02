@@ -361,9 +361,37 @@ export default async function AnaliticaPage() {
           que el campo de secciones pueda esconderla sola: es otra pregunta, sobre otro grano. */}
       {verProductos ? (
         <SeccionFiltrable titulo={TITULO_PRODUCTOS}>
+          {/* FICHA 348 — `overflow-visible`, Y ES LO QUE ARREGLA LA FLECHA DE SCROLL, con su
+              medida delante.
+
+              El humano comparo esta tabla con la de `/ordenes` («el que tenemos se mueve
+              verticalmente con la misma») y tenia razon: las DOS usan el mismo `DataTable` y las
+              dos flechas son `sticky top-1/2`, pero se comportan distinto. Medido en Chromium a
+              1440x950, desplazando la pagina de 0 a 2700 px:
+
+                /ordenes   → `top` calculado **475 px** (la mitad de la ventana) y el centro de
+                             la flecha se queda en **475** a TODOS los desplazamientos: acompaña.
+                /analitica → `top` calculado **1274 px** y el centro de la flecha viaja
+                             2421 → 2121 → 1721 → 943 → -267: no se pega a nada y se va con la
+                             tabla. Es el «pegado a mitad de tabla» del reporte.
+
+              LA CAUSA, leida en la cadena de ancestros: `ContenedorSeccion` envuelve la tabla en
+              un `Card`, y `Card` trae `overflow-hidden`. Un `overflow` distinto de `visible`
+              CREA UN SCROLLPORT, y un `position: sticky` se pega a su scrollport mas cercano —no
+              a la ventana—. Ese `Card` mide 2580 px y no scrollea nunca, asi que la flecha no se
+              pega jamas; y el `top: 50%` se resuelve contra EL (1274 ≈ (2580 - 32) / 2, y no
+              475). En `/ordenes` la tabla NO va dentro de un `Card`: cuelga de una `<section>`
+              sin overflow, su scrollport es la ventana y por eso la flecha acompaña.
+
+              Por eso el arreglo va AQUI y no en `DataTable`: `DataTable` esta bien —lo usan 30
+              listados y en `/ordenes` hace exactamente lo que el humano da por bueno—. Lo que
+              habia que quitar era el scrollport de mas, y solo en esta seccion. No se toca
+              `Card` ni `ContenedorSeccion`: las otras secciones de analitica conservan su
+              recorte. */}
           <ContenedorSeccion
             titulo={TITULO_PRODUCTOS}
             descripcion={DESCRIPCION_PRODUCTOS}
+            className="overflow-visible"
           >
             <ProductosTabla dinero={verDineroProductos} />
           </ContenedorSeccion>
