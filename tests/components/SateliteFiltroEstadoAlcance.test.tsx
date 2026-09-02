@@ -126,6 +126,21 @@ const CONJUNTO: RecepcionSateliteDTO[] = Array.from({ length: 10 }, (_, k) =>
   orden(k + 1),
 );
 
+/**
+ * Las diez remisiones del listado sin filtrar, EN ORDEN. Es el ancla de la carga inicial de
+ * los cuatro casos.
+ *
+ * ⚠️ Y es una lista, no un `toHaveLength(10)`, por una razon con historia en este repo
+ * (`tests/unit/guards/ancla-de-carga.guardia.test.ts`): durante la carga el `DataTable` pinta
+ * una fila `role="status"` («Cargando») mas skeletons `aria-hidden`, asi que hay estados
+ * TRANSITORIOS que satisfacen un conteo. Un `waitFor` anclado solo a un numero puede darse por
+ * cumplido con la tabla a medio pintar — y estos cuatro casos son los que verifican el LIMITE
+ * DE ALCANCE del `adminSatelite`, donde un verde a media carga no afirmaria lo que dice
+ * afirmar. Decir CUALES diez no tiene estado intermedio que lo cumpla, y ademas documenta el
+ * punto de partida contra el que se comparan los filtros.
+ */
+const TODAS_LAS_REMISIONES: string[] = CONJUNTO.map((o) => o.numRemision);
+
 // --- El doble del servidor ------------------------------------------------
 
 interface EntradaListado {
@@ -293,7 +308,7 @@ describe("bodega satélite · ofrecer más estados NO amplía el alcance", () =>
   it("elegir un estado que su alcance no devuelve da CERO filas, no el listado entero", async () => {
     const user = userEvent.setup();
     montar();
-    await waitFor(() => expect(remisionesVisibles()).toHaveLength(10));
+    await waitFor(() => expect(remisionesVisibles()).toEqual(TODAS_LAS_REMISIONES));
     const lecturasAntes = paginadoMock.mock.calls.length;
 
     await marcarEstados(user, ENTREGADA);
@@ -330,7 +345,7 @@ describe("bodega satélite · ofrecer más estados NO amplía el alcance", () =>
   it("y el ARCHIVO dice lo mismo que la pantalla: tampoco trae nada", async () => {
     const user = userEvent.setup();
     montar();
-    await waitFor(() => expect(remisionesVisibles()).toHaveLength(10));
+    await waitFor(() => expect(remisionesVisibles()).toEqual(TODAS_LAS_REMISIONES));
 
     await marcarEstados(user, ENTREGADA);
     await waitFor(() => expect(remisionesVisibles()).toEqual([]));
@@ -347,7 +362,7 @@ describe("bodega satélite · ofrecer más estados NO amplía el alcance", () =>
   it("una selección MEZCLADA trae la parte alcanzable, y avisa de la otra", async () => {
     const user = userEvent.setup();
     montar();
-    await waitFor(() => expect(remisionesVisibles()).toHaveLength(10));
+    await waitFor(() => expect(remisionesVisibles()).toEqual(TODAS_LAS_REMISIONES));
 
     await marcarEstados(user, ENTREGADA, DEVUELTA);
 
@@ -373,7 +388,7 @@ describe("bodega satélite · ofrecer más estados NO amplía el alcance", () =>
     // no emitiera nada.
     const user = userEvent.setup();
     montar();
-    await waitFor(() => expect(remisionesVisibles()).toHaveLength(10));
+    await waitFor(() => expect(remisionesVisibles()).toEqual(TODAS_LAS_REMISIONES));
 
     await marcarEstados(user, EN_BODEGA);
 

@@ -324,3 +324,79 @@ rehízo para que lo sustituido sea la LECTURA y el resultado siga pasando por
    producción. No se investigó — fuera del alcance de esta ficha, pero conviene mirarlo.
 4. **Turbopack no arranca en un worktree** (panic por el junction de `node_modules`). Anotado
    arriba; afecta a cualquier agente que quiera ver la app desde un worktree.
+
+---
+
+## 8. Post-gate (2026-09-02) — el ancla de carga de los cuatro casos
+
+El gate completo, tras el merge, dejó **un rojo real** que las corridas dirigidas no vieron:
+`tests/unit/guards/ancla-de-carga.guardia.test.ts` señalaba **cuatro esperas** de
+`tests/components/SateliteFiltroEstadoAlcance.test.tsx` (:296, :333, :350, :376), todas de la
+misma forma:
+
+```ts
+await waitFor(() => expect(remisionesVisibles()).toHaveLength(10));
+```
+
+**Por qué era un defecto de verdad y no una regla de estilo.** Durante la carga, el `DataTable`
+pinta un `<tr role="status">` («Cargando», sr-only) más filas skeleton `aria-hidden`. Hay
+estados TRANSITORIOS que satisfacen un conteo, así que un `waitFor` anclado sólo a un número
+puede darse por cumplido **con la tabla a medio pintar**. Y estos cuatro casos son precisamente
+los que verifican el **límite de alcance** del `adminSatelite`: un verde a media carga los
+dejaría sin afirmar lo que dicen afirmar. Es la misma familia del «verde por accidente».
+
+**Arreglo, el que pide la guardia (aserción de CONTENIDO, no ausencia de `role="status"`):**
+
+```ts
+const TODAS_LAS_REMISIONES: string[] = CONJUNTO.map((o) => o.numRemision);
+…
+await waitFor(() => expect(remisionesVisibles()).toEqual(TODAS_LAS_REMISIONES));
+```
+
+Decir **cuáles** diez es más fuerte que decir **diez** —ningún estado intermedio lo cumple— y
+además documenta el punto de partida contra el que los tres casos de filtrado comparan.
+
+### Comprobación de que el ancla nueva no tapa la prueba
+
+No basta con que la guardia pase: había que confirmar que los cuatro casos **siguen cayendo**
+cuando se rompe lo que vigilan. Se re-aplicaron dos mutaciones ya usadas en §6, ahora con el
+ancla nueva:
+
+**M1 — la selección AMPLÍA la lista blanca en vez de intersecarla** (el recorte de alcance roto):
+
+```
+× elegir un estado que su alcance no devuelve da CERO filas, no el listado entero
+  AssertionError: expected 2 to be 1                     ← la consulta SALIÓ
+× y el ARCHIVO dice lo mismo que la pantalla: tampoco trae nada
+  AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+× una selección MEZCLADA trae la parte alcanzable, y avisa de la otra
+  AssertionError: expected [] to deeply equal [ 'REM-07', 'REM-08', 'REM-09', …(1) ]
+```
+
+**Exactamente los mismos tres casos y los mismos mensajes que antes del cambio de ancla**, y en
+los tres el fallo está en la aserción de fondo, no en el ancla de la carga inicial (que M1 no
+altera: al montar todavía no hay filtro de estado). El cuarto caso —`CONTROL POSITIVO`— no cae
+bajo M1 **y no debe caer**: elige un estado que SÍ es de la lista blanca, así que ampliar no
+cambia nada; su trabajo es probar que el desplegable emite. Para verificar que su ancla tampoco
+lo tapa se re-aplicó **M4 (las opciones vuelven a escribirse a mano)**: **6 de 6 rojos**,
+`CONTROL POSITIVO` incluido.
+
+Conclusión: el arreglo del ancla no encubrió ninguna prueba.
+
+### Gate
+
+- `pnpm typecheck` — verde.
+- `tests/unit/guards/ancla-de-carga.guardia.test.ts` — **verde** (0 infractores).
+- `pnpm test` **completa**: `Test Files 1 failed | 1656 passed (1657)`,
+  `Tests 1 failed | 23404 passed | 26 skipped (23431)`. El único rojo es el heredado y tolerado:
+
+  ```
+  FAIL tests/unit/guards/superficie-de-uso.guardia.test.ts
+    + [ "lib/actions/tarifas.ts:67 obtenerTarifa" ]
+  ```
+
+  **Ni `historico-conversaciones.int` ni `CrearTiendaForm` salieron rojos** en esta corrida (el
+  `CrearTiendaForm` que sí cayó en la corrida parcial de §6 era el flake bajo carga: aquí, en la
+  suite entera, pasa).
+
+Sólo cambia `tests/components/SateliteFiltroEstadoAlcance.test.tsx`. Sin commit.
