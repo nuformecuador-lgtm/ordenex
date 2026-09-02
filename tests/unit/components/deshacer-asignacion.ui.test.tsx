@@ -26,7 +26,7 @@ import {
   MSG_ORDEN_NO_EXISTE,
   MSG_SIN_HISTORIAL,
   MSG_ZONA_CENTRAL_NO_CONFIGURADA,
-  MSG_ZONA_DESTINO_INCOHERENTE,
+  MSG_DESTINO_NO_DECLARADO,
   msgEstadoNoReversible,
 } from "@/lib/services/mensajes-deshacer-asignacion";
 
@@ -564,7 +564,7 @@ describe("R39 — mensajes accionables por causa", () => {
     ],
     [
       "incoherencia zona/destino",
-      { status: "conflict", detalle: [{ ordenId: "x", motivo: MSG_ZONA_DESTINO_INCOHERENTE }] },
+      { status: "conflict", detalle: [{ ordenId: "x", motivo: MSG_DESTINO_NO_DECLARADO }] },
     ],
     ["carrera", { status: "conflict", detalle: [{ ordenId: "x", motivo: MSG_CARRERA }] }],
   ];

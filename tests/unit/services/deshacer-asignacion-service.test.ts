@@ -13,8 +13,8 @@ import {
   MSG_ORDEN_BORRADA,
   MSG_ORDEN_NO_EXISTE,
   MSG_SIN_HISTORIAL,
+  MSG_DESTINO_NO_DECLARADO,
   MSG_ZONA_CENTRAL_NO_CONFIGURADA,
-  MSG_ZONA_DESTINO_INCOHERENTE,
   msgEstadoNoReversible,
 } from "@/lib/services/mensajes-deshacer-asignacion";
 
@@ -62,7 +62,6 @@ interface EscenarioOpts {
   /** ordenId -> `value` del estado de ORIGEN leido del historial (`null` = fila de creacion). */
   origenes?: Map<string, string | null>;
   zonaUsuario?: string | null;
-  centralZonaId?: string | null;
   catalogoIncompleto?: string; // `value` que falta en el seed
   escritura?: (items: readonly DeshacerAsignacionItem[]) => Promise<number>;
 }
@@ -90,27 +89,20 @@ function escenario(opts: EscenarioOpts = {}) {
   const findOrigenesReversion = vi.fn(
     async (_items: readonly { ordenId: string; estatusActualId: string }[]) => origenes,
   );
-  const findCentralZonaId = vi.fn(async () =>
-    opts.centralZonaId === undefined ? ZONA_CENTRAL : opts.centralZonaId,
-  );
   const repo = {
     findUsuarioZonaId,
     findByIdsForTransicion,
     findEstatusIdByValue,
     deshacerAsignacionLote,
   };
-  const service = new DeshacerAsignacionService(
-    repo,
-    { findCentralZonaId },
-    { findOrigenesReversion },
-  );
+  // FICHA 363: dos dependencias. El repo de zonas se fue con la comparacion zona/destino.
+  const service = new DeshacerAsignacionService(repo, { findOrigenesReversion });
   return {
     service,
     deshacerAsignacionLote,
     findByIdsForTransicion,
     findOrigenesReversion,
     findUsuarioZonaId,
-    findCentralZonaId,
   };
 }
 
@@ -310,20 +302,24 @@ describe("T4.5/R11/R12 — el destino se DERIVA del historial y se normaliza", (
     ]);
   });
 
-  it("R11 (testigo): una orden de zona satelite cuyo historial dice `en_bodega_central` NO va a satelite", async () => {
-    // Si el destino se dedujera de la ZONA (alternativa A, VETADA), esta orden terminaria en
-    // `en_bodega_satelite`. Como se deriva del historial, el destino es `en_bodega_central`... y
-    // la guarda de coherencia lo rechaza por incoherente con la zona (R14). Nunca se inventa.
+  it("R11 (testigo): el destino sale del HISTORIAL, no de la zona", async () => {
+    // Si el destino se dedujera de la ZONA (alternativa A, VETADA), esta orden de zona satelite
+    // terminaria en `en_bodega_satelite`. Como se deriva del historial, el destino es
+    // `en_bodega_central`. Nunca se inventa.
+    //
+    // FICHA 363: este testigo terminaba en `conflict` porque la guarda de coherencia rechazaba
+    // ese destino por «no corresponder a la zona». Ahora termina en `ok`, que es lo que la
+    // operacion real necesitaba: una orden de zona satelite que espera en la bodega central es
+    // el flujo normal, no una incoherencia.
     const e = escenario({
       ordenes: [ordenRow({ zonaId: ZONA_SATELITE })],
       origenes: new Map([["o1", "en_bodega_central"]]),
     });
     const r = await e.service.deshacer(input(), MAESTRO);
-    expect(r.status).toBe("conflict");
-    if (r.status === "conflict") {
-      expect(r.detalle).toEqual([{ ordenId: "o1", motivo: MSG_ZONA_DESTINO_INCOHERENTE }]);
-    }
-    expect(e.deshacerAsignacionLote).not.toHaveBeenCalled();
+    expect(r).toEqual({
+      status: "ok",
+      resultados: [{ ordenId: "o1", estado: "en_bodega_central" }],
+    });
   });
 });
 
@@ -350,41 +346,111 @@ describe("T4.6/R13 — fallo CERRADO: sin origen derivable no se escribe nada", 
 // ---------------------------------------------------------------------------------------
 // T4.7 — Coherencia zona/destino (R14/R15)
 // ---------------------------------------------------------------------------------------
-describe("T4.7/R14/R15 — la inferencia de la normalizacion se VERIFICA contra la zona", () => {
-  it("R14: destino en_bodega_central con orden NO central -> conflict", async () => {
+describe("T4.7/R14/R15 (FICHA 363) — la inferencia se VERIFICA contra el inventario de transiciones", () => {
+  // EL CASO DE LAS 17 GUIAS. Zona satelite (Guanacaste), estado `en_ruta_bodega_satelite`,
+  // historial `en_bodega_central` por `ruteo_satelite`. La comparacion contra la zona lo llamaba
+  // "destino incoherente" y dejaba las 94 ordenes vivas de esa zona imposibles de deshacer. Es el
+  // flujo NORMAL de toda zona satelite: la orden PERTENECE a la satelite y ESPERA en la central.
+  it("orden de zona SATELITE en en_ruta_bodega_satelite que vino de la central -> vuelve a la central", async () => {
     const e = escenario({
-      ordenes: [ordenRow({ zonaId: ZONA_SATELITE })],
-      origenes: new Map([["o1", "en_preparacion"]]),
+      ordenes: [
+        ordenRow({
+          zonaId: ZONA_SATELITE,
+          zonaEsGam: false,
+          estatusValue: "en_ruta_bodega_satelite",
+        }),
+      ],
+      origenes: new Map([["o1", "en_bodega_central"]]),
     });
     const r = await e.service.deshacer(input(), MAESTRO);
-    expect(r.status).toBe("conflict");
-    if (r.status === "conflict") {
-      expect(r.detalle).toEqual([{ ordenId: "o1", motivo: MSG_ZONA_DESTINO_INCOHERENTE }]);
-    }
-    expect(e.deshacerAsignacionLote).not.toHaveBeenCalled();
+    expect(r).toEqual({
+      status: "ok",
+      resultados: [{ ordenId: "o1", estado: "en_bodega_central" }],
+    });
+    expect(e.deshacerAsignacionLote).toHaveBeenCalledTimes(1);
+    expect(e.deshacerAsignacionLote.mock.calls[0][0]).toEqual([
+      { ordenId: "o1", destinoEstatusId: ESTATUS_ID.en_bodega_central },
+    ]);
   });
 
-  it("R15: destino en_bodega_satelite con orden central -> conflict", async () => {
+  // EL SIMETRICO: LO QUE LA GUARDA DEBIA IMPEDIR Y SIGUE IMPEDIDO.
+  //
+  // LA SITUACION, CON NOMBRE: "deshacer el ruteo de una orden EN CAMINO a la satelite no puede
+  // dejarla marcada como RECIBIDA en la satelite, porque nadie la recibio". El inventario de la
+  // 140 declara UNA sola reversion desde `en_ruta_bodega_satelite` (#45 -> `en_bodega_central`);
+  // `en_bodega_satelite` solo se alcanza desde ahi por #10, que es la RECEPCION SATELITE y la
+  // ejecuta el `adminSatelite` con el paquete delante.
+  //
+  // Y NO LO CAZA NADIE MAS: `assertTransicionValida` (la guardia de escritura de la 140) ignora
+  // la familia a proposito, asi que ve la arista #10 y DEJA PASAR. Sin esta verificacion el
+  // deshacer escribiria una custodia falsa en silencio.
+  it("en_ruta_bodega_satelite con destino inferido en_bodega_satelite -> conflict y CERO escrituras", async () => {
     const e = escenario({
-      ordenes: [ordenRow({ zonaId: ZONA_CENTRAL })],
+      ordenes: [
+        ordenRow({
+          zonaId: ZONA_SATELITE,
+          zonaEsGam: false,
+          estatusValue: "en_ruta_bodega_satelite",
+        }),
+      ],
       origenes: new Map([["o1", "en_bodega_satelite"]]),
     });
     const r = await e.service.deshacer(input(), MAESTRO);
     expect(r.status).toBe("conflict");
     if (r.status === "conflict") {
-      expect(r.detalle).toEqual([{ ordenId: "o1", motivo: MSG_ZONA_DESTINO_INCOHERENTE }]);
+      expect(r.detalle).toEqual([{ ordenId: "o1", motivo: MSG_DESTINO_NO_DECLARADO }]);
     }
     expect(e.deshacerAsignacionLote).not.toHaveBeenCalled();
   });
 
-  it("sin zona central configurada -> validation_error antes de derivar nada", async () => {
-    const e = escenario({ centralZonaId: null });
+  // LA OTRA MITAD DE LA CONDICION VIEJA, MEDIDA Y RETIRADA (ficha 363).
+  //
+  // `destino === "en_bodega_satelite" && zona central` rechazaba una orden del GAM que volveria a
+  // una bodega satelite. Es ALCANZABLE -y legitima- hoy: `ESTADOS_SIN_CORRECCION`
+  // (`lib/types/correccion-datos-cliente.ts`) son los tres terminales mas `rechazada`, asi que la
+  // ficha 327 SI permite corregir el distrito de una orden en `por_recoger`, y R5/R15 de esa
+  // ficha REESCRIBEN la zona derivada. Una orden recibida en la satelite (#10) y asignada alli
+  // (#9) a la que despues se le corrige la direccion a un distrito del GAM queda con zona central
+  // y el paquete FISICAMENTE en la bodega satelite. Devolverla a la satelite es lo correcto;
+  // rechazarla la dejaba sin ninguna via de deshacer.
+  it("orden de zona CENTRAL cuyo paquete quedo en la satelite -> vuelve a la satelite", async () => {
+    const e = escenario({
+      ordenes: [ordenRow({ zonaId: ZONA_CENTRAL, estatusValue: "por_recoger" })],
+      origenes: new Map([["o1", "en_bodega_satelite"]]),
+    });
     const r = await e.service.deshacer(input(), MAESTRO);
     expect(r).toEqual({
-      status: "validation_error",
-      fieldErrors: { zona: [MSG_ZONA_CENTRAL_NO_CONFIGURADA] },
+      status: "ok",
+      resultados: [{ ordenId: "o1", estado: "en_bodega_satelite" }],
     });
-    expect(e.findOrigenesReversion).not.toHaveBeenCalled();
+  });
+
+  // La zona de la orden NO participa: mismo estado y mismo historial, zonas distintas, mismo destino.
+  it.each([
+    ["central", ZONA_CENTRAL, true],
+    ["satelite", ZONA_SATELITE, false],
+  ])("zona %s: el destino lo fija el historial, no la zona", async (_n, zonaId, zonaEsGam) => {
+    const e = escenario({
+      ordenes: [ordenRow({ zonaId, zonaEsGam, estatusValue: "por_recoger" })],
+      origenes: new Map([["o1", "en_preparacion"]]),
+    });
+    const r = await e.service.deshacer(input(), MAESTRO);
+    expect(r).toEqual({
+      status: "ok",
+      resultados: [{ ordenId: "o1", estado: "en_bodega_central" }],
+    });
+  });
+
+  // FICHA 363: el service ya NO consulta la zona central, asi que tampoco puede fallar por que
+  // no este configurada. Este aserto es lo que impide que la dependencia vuelva por descuido.
+  it("no consulta la zona central por ningun camino: la config de zonas no bloquea el deshacer", async () => {
+    expect(DeshacerAsignacionService.length).toBe(2);
+    const fuente = fs.readFileSync(
+      path.join(__dirname, "..", "..", "..", "lib", "services", "DeshacerAsignacionService.ts"),
+      "utf8",
+    );
+    expect(fuente).not.toContain("findCentralZonaId");
+    expect(fuente).not.toContain("MSG_ZONA_CENTRAL_NO_CONFIGURADA");
   });
 
   it("catalogo de estados incompleto -> validation_error sin escribir", async () => {
@@ -515,7 +581,7 @@ describe("T4.13/R40 — ningun motivo expone UUIDs ni datos del destinatario", (
     MSG_ORDEN_NO_EXISTE,
     MSG_ORDEN_BORRADA,
     MSG_SIN_HISTORIAL,
-    MSG_ZONA_DESTINO_INCOHERENTE,
+    MSG_DESTINO_NO_DECLARADO,
     MSG_ZONA_CENTRAL_NO_CONFIGURADA,
     MSG_CATALOGO_INCOMPLETO,
     msgEstadoNoReversible("en_reparto"),
@@ -591,7 +657,6 @@ describe("T4.14(a)/R41 — esta feature NO notifica al mensajero desasignado", (
       },
       "repo",
     );
-    const zonaRepo = envolver({ findCentralZonaId: vi.fn(async () => ZONA_CENTRAL) }, "zonaRepo");
     const historialRepo = envolver(
       {
         findOrigenesReversion: vi.fn(
@@ -600,7 +665,7 @@ describe("T4.14(a)/R41 — esta feature NO notifica al mensajero desasignado", (
       },
       "historialRepo",
     );
-    return { service: new DeshacerAsignacionService(repo, zonaRepo, historialRepo), invocados };
+    return { service: new DeshacerAsignacionService(repo, historialRepo), invocados };
   }
 
   it("una reversion exitosa invoca EXACTAMENTE los metodos de repo conocidos: ninguno de aviso", async () => {
@@ -616,7 +681,7 @@ describe("T4.14(a)/R41 — esta feature NO notifica al mensajero desasignado", (
       "repo.deshacerAsignacionLote",
       "repo.findByIdsForTransicion",
       "repo.findEstatusIdByValue",
-      "zonaRepo.findCentralZonaId",
+      // FICHA 363: `zonaRepo.findCentralZonaId` sale del censo con la comparacion zona/destino.
     ]);
     // Y, explicitamente, ninguna llamada con pinta de aviso o de cola de mensajes.
     for (const nombre of invocados) {
@@ -626,7 +691,7 @@ describe("T4.14(a)/R41 — esta feature NO notifica al mensajero desasignado", (
 
   it("el service no tiene POR DONDE notificar: 3 deps y ningun canal en su fuente", () => {
     // Arity del constructor: inyectar un notificador como 4.ª dep rompe este aserto.
-    expect(DeshacerAsignacionService.length).toBe(3);
+    expect(DeshacerAsignacionService.length).toBe(2);
     const fuente = fs.readFileSync(
       path.join(__dirname, "..", "..", "..", "lib", "services", "DeshacerAsignacionService.ts"),
       "utf8",
