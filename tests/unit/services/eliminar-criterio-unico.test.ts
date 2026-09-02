@@ -24,6 +24,9 @@ import {
 // constantes: ejecuta las dos rutas de verdad.
 
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
+// FICHA 358 (2026-09-02): el SEGUNDO rol que borra. Su `usuarioId` es la `tienda_id` de las
+// ordenes que fabrican los helpers de abajo (`store1`), asi que las filas son SUYAS.
+const TIENDA: Actor = { usuarioId: "store1", rol: "adminTienda" };
 const PAGINA = { page: 1, pageSize: 20, sortBy: "created_at", sortDir: "desc" } as const;
 
 function listItem(estatusValue: string): OrdenListItemDTO {
@@ -78,20 +81,25 @@ function ordenRow(estatusValue: string): OrdenTransicionRow {
 function eliminarServiceCon(estatusValue: string): EliminarOrdenService {
   return new EliminarOrdenService({
     findByIdsForTransicion: vi.fn(async () => [ordenRow(estatusValue)]),
-    softDelete: vi.fn(async (ids: readonly string[]) => ids.length),
+    softDelete: vi.fn(
+      async (params: { ids: readonly string[]; ownerId: string | null }) => params.ids.length,
+    ),
   });
 }
 
 /** Lo que el LISTADO le dice a la pantalla sobre esa fila. */
-async function laUiOfreceElBoton(estatusValue: string): Promise<boolean> {
-  const r = await ordenServiceCon(estatusValue).listar(PAGINA, MAESTRO);
+async function laUiOfreceElBoton(estatusValue: string, actor: Actor = MAESTRO): Promise<boolean> {
+  const r = await ordenServiceCon(estatusValue).listar(PAGINA, actor);
   if (r.status !== "ok") throw new Error(`listar respondio ${r.status}`);
   return r.items[0].eliminable === true;
 }
 
 /** Lo que el SERVIDOR hace de verdad con esa fila. */
-async function elServidorLoAutoriza(estatusValue: string): Promise<boolean> {
-  const r = await eliminarServiceCon(estatusValue).eliminar({ ordenIds: ["o1"] }, MAESTRO);
+async function elServidorLoAutoriza(
+  estatusValue: string,
+  actor: Actor = MAESTRO,
+): Promise<boolean> {
+  const r = await eliminarServiceCon(estatusValue).eliminar({ ordenIds: ["o1"] }, actor);
   return r.status === "ok";
 }
 
@@ -124,6 +132,39 @@ describe("eliminar orden / la UI y el servidor responden LO MISMO (ficha 319)", 
 
       expect(await laUiOfreceElBoton(estatusValue)).toBe(esperado);
       expect(await elServidorLoAutoriza(estatusValue)).toBe(esperado);
+    },
+  );
+
+  // -------------------------------------------------------------------------------------
+  // FICHA 358 — LA MISMA PREGUNTA, PARA EL SEGUNDO ROL QUE BORRA.
+  //
+  // Desde el 2026-09-02 la tienda tambien borra, acotada a lo suyo. El invariante de este
+  // archivo no cambia de forma, cambia de alcance: si la UI y el servidor pueden divergir para
+  // el maestro, tambien pueden divergir para la tienda —y ahi ademas hay una frontera entre
+  // inquilinos de por medio—. El recorrido se repite ENTERO, no con un caso de muestra.
+  // -------------------------------------------------------------------------------------
+  it.each(ORDER_STATUS_SEED)(
+    "%s (tienda, sobre una orden SUYA): la UI ofrece exactamente lo que el servidor autoriza",
+    async (estatusValue) => {
+      const ofrecido = await laUiOfreceElBoton(estatusValue, TIENDA);
+      const autorizado = await elServidorLoAutoriza(estatusValue, TIENDA);
+
+      expect({ estatusValue, ofrecido }).toEqual({ estatusValue, ofrecido: autorizado });
+      // Y la tienda no tiene una ventana distinta de la del maestro: cambia QUIEN puede, no QUE
+      // se puede borrar.
+      expect(ofrecido).toBe(([...ELIMINABLES_ESPERADOS] as string[]).includes(estatusValue));
+    },
+  );
+
+  it.each(ELIMINABLES_ESPERADOS)(
+    "%s (tienda, sobre una orden AJENA): ni se ofrece ni se autoriza",
+    async (estatusValue) => {
+      // El caso que la ficha existe para blindar, preguntado a las DOS mitades a la vez: sobre
+      // una orden de otra tienda, el estado eliminable no basta.
+      const ajena: Actor = { usuarioId: "store-de-otro", rol: "adminTienda" };
+
+      expect(await laUiOfreceElBoton(estatusValue, ajena)).toBe(false);
+      expect(await elServidorLoAutoriza(estatusValue, ajena)).toBe(false);
     },
   );
 });

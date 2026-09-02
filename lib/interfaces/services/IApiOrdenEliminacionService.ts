@@ -19,6 +19,15 @@ import type { ApiOrdenEliminacionDTO } from "@/lib/types/api-orden";
 //   - API  : rol `apiKey`, UNA orden, con `tienda_id = ownerId` FORZADO en el `where` de las dos
 //            sentencias (lectura y escritura), nunca en un `if` posterior.
 //
+// ⭑ FICHA 358 (2026-09-02) — ESE PARRAFO YA NO ES CIERTO Y SE CORRIGE AQUI EN VEZ DE BORRARLO,
+// porque explica por que existen dos servicios. Lo que cambio: el humano abrio el borrado POR
+// PANTALLA a la tienda, acotada a lo suyo, asi que la app tambien tiene frontera de tienda
+// (`softDelete` recibe un `ownerId`) y la AUTORIZACION pasa a compartirse —los dos caminos
+// preguntan a `resolverAlcanceBorradoOrden`, que es la unica copia de «el dueño es
+// `actor.usuarioId`»—. Los dos servicios SIGUEN existiendo, pero ya no por la regla de dueño:
+// por el GRANO (una orden contra un lote), por los estados de salida (404/409 uniformes contra
+// un `conflict` con detalle por orden) y porque aqui el dueño es OBLIGATORIO.
+//
 // LO QUE ESTO REVIERTE, dicho aqui y no escondido. La feature «eliminar orden» firmo el
 // 2026-08-27 que SOLO el `maestro` borra, con este motivo: borrar retira la orden de todos los
 // listados —incluidos los de la tienda dueña— y con dos roles capaces de hacerlo el rastro deja

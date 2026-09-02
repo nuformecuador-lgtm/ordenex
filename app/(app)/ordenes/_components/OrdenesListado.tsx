@@ -225,6 +225,7 @@ export function OrdenesListado({
   puedeReportarIncidente = false,
   puedeCorregirDatos = false,
   puedeEliminar = false,
+  puedeVerEliminadas = false,
   fechasDiaReparto = SIN_FECHAS_DIA_REPARTO,
 }: Readonly<{
   exclude?: string[];
@@ -304,16 +305,34 @@ export function OrdenesListado({
    */
   puedeCorregirDatos?: boolean;
   /**
-   * Pedido humano (2026-08-27): ofrece ELIMINAR órdenes y RECUPERAR las eliminadas, más el
-   * interruptor «Eliminadas» de la barra que es la única forma de listarlas.
+   * Pedido humano (2026-08-27): ofrece ELIMINAR órdenes.
    *
-   * SOLO el `maestro`, y por eso es una prop propia y no `accionesLote` (que es maestro Y
-   * admin): borrar retira la orden de los listados de la tienda dueña y del mensajero asignado,
-   * y recuperarla solo se puede desde esta misma pantalla. El servidor revalida el rol en las
-   * dos acciones Y en el listado —pedir «Eliminadas» sin ser maestro es `forbidden`, no una
-   * lista vacía—, así que esta prop decide qué se OFRECE, nunca qué se permite.
+   * Prop propia y no `accionesLote` (que es maestro Y admin) porque el `admin` NO puede borrar:
+   * ese estrechamiento se decidió a propósito y sigue en pie. El servidor revalida el rol en la
+   * Server Action, así que esta prop decide qué se OFRECE, nunca qué se permite.
+   *
+   * ⭑ FICHA 358 (2026-09-02): ya no es «sólo el maestro». También el `adminTienda`, acotado a
+   * SUS órdenes — la misma regla que la tienda ya tenía por API key. Quién es «lo suyo» no lo
+   * decide esta pantalla: lo decide el servidor fila a fila, en el campo `eliminable` del DTO,
+   * que sólo viaja `true` sobre órdenes que ese actor puede borrar de verdad. Aquí sólo se
+   * pregunta `row.eliminable === true`.
+   *
+   * ⚠️ Encender esto para un rol SIN `accionesLote` monta la columna de casillas para él. La
+   * barra no se le llena de acciones de flujo: `accionesDe` devuelve vacío sin `accionesLote`
+   * (ver su guarda), así que lo único que alcanza la selección es «Eliminar».
    */
   puedeEliminar?: boolean;
+  /**
+   * Pedido humano (2026-08-27), separado de `puedeEliminar` por la FICHA 358: el interruptor
+   * «Eliminadas» de la barra —única forma de listar las borradas— y, con él, la acción
+   * «Recuperar».
+   *
+   * SIGUE SIENDO SÓLO DEL `maestro`. Recuperar devuelve la orden a los listados de la tienda
+   * dueña y del mensajero asignado, y `RecuperarOrdenService` corta por rol; además `listar`
+   * responde `forbidden` —no una lista vacía— a quien pida el interruptor sin serlo. Ofrecérselo
+   * a la tienda sería pintar un control que el servidor rechaza.
+   */
+  puedeVerEliminadas?: boolean;
   /**
    * Feature 246 (T4.2, R29): fechas calendario de «hoy» y «mañana» que la PÁGINA resolvió en el
    * servidor con el día de Costa Rica. Sólo se transportan: hasta `AsignarBodegaModal` (elegir
@@ -550,6 +569,17 @@ export function OrdenesListado({
   };
 
   function accionesDe(estatusValue: string | undefined): AccionLote[] {
+    // FICHA 358 — LA PUERTA DE LAS ACCIONES DE FLUJO, en el único punto por el que salen todas.
+    //
+    // Hasta hoy `accionesLote` decidía dos cosas a la vez —«hay casillas» y «hay acciones de
+    // flujo»— porque siempre coincidían. Al abrirle «Eliminar» a la tienda dejan de coincidir:
+    // la tienda necesita casillas y NO puede generar guías, asignar mensajeros ni rutear a
+    // satélite. Sin esta guarda, marcar una fila le llenaría la barra de botones que el servidor
+    // rechaza, que es exactamente lo que esta pantalla no debe hacer.
+    //
+    // Va AQUÍ y no en los tres llamadores (`haySeleccionables`, `bloqueoSeleccion`,
+    // `accionesPara`) para que no puedan divergir: los tres preguntan por esta función.
+    if (!accionesLote) return [];
     switch (estatusValue) {
       // Feature 155/R32: el estado interno de fulfillment en bodega salió del
       // catálogo y con él su `case`. `en_preparacion` queda como único origen de
@@ -772,10 +802,13 @@ export function OrdenesListado({
         incluirTienda: incluirFiltroTienda,
         incluirReasignables: incluirFiltroReasignables,
         incluirMensajero: incluirFiltroMensajero,
-        // Pedido humano (2026-08-27): el interruptor de las eliminadas se declara al MISMO rol
-        // que puede eliminarlas y recuperarlas. A los demás ni se les ofrece —y si lo pidieran a
-        // mano, el servidor responde `forbidden`.
-        incluirEliminados: puedeEliminar,
+        // Pedido humano (2026-08-27): el interruptor de las eliminadas se declara a quien puede
+        // VERLAS y recuperarlas. A los demás ni se les ofrece —y si lo pidieran a mano, el
+        // servidor responde `forbidden`, no una lista vacía.
+        //
+        // FICHA 358: cuelga de `puedeVerEliminadas` y ya NO de `puedeEliminar`. Desde hoy no son
+        // el mismo rol: la tienda borra lo suyo, pero no ve el cementerio ni recupera de él.
+        incluirEliminados: puedeVerEliminadas,
       },
     );
     // El BUSCADOR ya no es un control más del panel: lo posee `BuscadorFiltros`, que
@@ -799,7 +832,7 @@ export function OrdenesListado({
     incluirFiltroTienda,
     incluirFiltroReasignables,
     incluirFiltroMensajero,
-    puedeEliminar,
+    puedeVerEliminadas,
     declaracionEstado,
   ]);
 
@@ -844,6 +877,21 @@ export function OrdenesListado({
   if (valueUnico === ESTADO_REPROGRAMADA) {
     columns = ordenesColumnsReprogramada;
   }
+
+  /**
+   * FICHA 358 — ¿esta pantalla tiene selección por casilla, siquiera en principio?
+   *
+   * Era `accionesLote` a secas, y ahí estaba el defecto reportado: el `adminTienda` no lo recibe
+   * (no opera transiciones de flujo), así que la tabla se le montaba SIN columna de casillas y
+   * «Eliminar» no tenía cómo alcanzar ninguna fila. Es la mitad de pantalla de «no le aparece el
+   * checkbox»; la otra mitad era el campo `eliminable`, que no le viajaba desde el servidor.
+   *
+   * Las dos condiciones son de naturaleza distinta y por eso van con `||` y no fundidas en una
+   * prop nueva: `accionesLote` habilita las acciones del FLUJO, `puedeEliminar` habilita UNA
+   * acción que no cuelga de ningún estado. Qué se ofrece luego sobre lo marcado lo deciden
+   * `accionesPara` y `bloqueoSeleccion`, fila a fila.
+   */
+  const haySeleccion = accionesLote || puedeEliminar;
 
   /**
    * ¿Se monta la columna de checkbox? Solo si alguna orden de la página lleva a algún botón.
@@ -1093,9 +1141,9 @@ export function OrdenesListado({
         columns={columns}
         mostrarHistorial={mostrarHistorial}
         resetSeleccion={resetSeleccion}
-        selectable={accionesLote ? haySeleccionables : false}
-        bloqueoSeleccion={accionesLote ? bloqueoSeleccion : undefined}
-        acciones={accionesLote ? accionesPara : undefined}
+        selectable={haySeleccion ? haySeleccionables : false}
+        bloqueoSeleccion={haySeleccion ? bloqueoSeleccion : undefined}
+        acciones={haySeleccion ? accionesPara : undefined}
         resaltarPrioridad={valueUnico === ESTADO_EN_BODEGA}
         permitirDescarga={permitirDescarga}
         puedeReportarIncidente={puedeReportarIncidente}
@@ -1199,18 +1247,10 @@ export function OrdenesListado({
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />
-          {/* Feature «eliminar orden»: éxito ⇒ `handleSuccess` cierra y revalida las tablas, de
-              modo que las órdenes eliminadas desaparecen del listado (todas las lecturas
-              filtran `deleted_at IS NULL`). */}
-          <EliminarOrdenModal
-            open={modalAbierto === "eliminar"}
-            ordenes={ordenesSeleccionadas}
-            onOpenChange={cerrarModal}
-            onSuccess={handleSuccess}
-          />
           {/* Pedido humano (2026-08-27): la reversión. Éxito ⇒ `handleSuccess` revalida, y la
               orden recuperada desaparece de ESTE listado (que solo muestra borradas) y reaparece
-              en el normal, con el estado y el historial que tenía. */}
+              en el normal, con el estado y el historial que tenía. Se queda en este bloque: sólo
+              se alcanza con el interruptor «Eliminadas», que es del `maestro`. */}
           <RecuperarOrdenModal
             open={modalAbierto === "recuperar-eliminada"}
             ordenes={ordenesSeleccionadas}
@@ -1218,6 +1258,23 @@ export function OrdenesListado({
             onSuccess={handleSuccess}
           />
         </>
+      ) : null}
+
+      {/* Feature «eliminar orden»: éxito ⇒ `handleSuccess` cierra y revalida las tablas, de modo
+          que las órdenes eliminadas desaparecen del listado (todas las lecturas filtran
+          `deleted_at IS NULL`).
+
+          FICHA 358 — SALE del bloque de `accionesLote` y se monta con `haySeleccion`. Estaba
+          dentro porque hasta hoy sólo borraba el `maestro`, que también tiene acciones de lote;
+          dejándolo ahí, la tienda vería el botón «Eliminar» y al pulsarlo no se abriría nada —un
+          fallo mudo, que es la familia de defectos que más caro sale en este repo. */}
+      {haySeleccion ? (
+        <EliminarOrdenModal
+          open={modalAbierto === "eliminar"}
+          ordenes={ordenesSeleccionadas}
+          onOpenChange={cerrarModal}
+          onSuccess={handleSuccess}
+        />
       ) : null}
     </div>
   );

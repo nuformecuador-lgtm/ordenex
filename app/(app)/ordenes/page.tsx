@@ -95,8 +95,21 @@ export default async function OrdenesPage() {
   // siquiera— es SOLO del `maestro`. No es `esAccesoTotal` y no es un descuido que no lo sea:
   // el borrado retira la orden de los listados de la tienda dueña y del mensajero asignado, y
   // con dos roles capaces de hacerlo el rastro de quién lo hizo deja de ser una sola persona.
-  // Las dos Server Actions y el propio listado revalidan el rol server-side.
-  const puedeEliminar = rol === RolValue.maestro;
+  //
+  // ⭑ FICHA 358 (2026-09-02): la prop se PARTE EN DOS, porque desde hoy las dos mitades no van
+  // al mismo rol. El humano abrió ELIMINAR a la tienda, acotado a lo suyo (la misma regla que ya
+  // tenía por API key desde la 320); RECUPERAR y ver las eliminadas siguen siendo del `maestro`
+  // y solo suyas —`RecuperarOrdenService` corta por rol y `listar` responde `forbidden` a quien
+  // pida el interruptor «Eliminadas» sin serlo—. Mantenerlas en una sola prop le habría puesto a
+  // la tienda un interruptor y un botón que el servidor rechaza, que es justo lo que el campo
+  // `eliminable` del DTO existe para evitar.
+  //
+  // `admin` NO entra en ninguna de las dos: ese estrechamiento del 2026-08-27 se conserva.
+  // Las Server Actions y el propio listado revalidan el rol server-side; esto decide qué se
+  // OFRECE, nunca qué se permite.
+  const puedeEliminar =
+    rol === RolValue.maestro || rol === RolValue.adminTienda;
+  const puedeVerEliminadas = rol === RolValue.maestro;
 
   // Feature 144/TB2.5 (R47, R64): el catálogo de los filtros (zonas, cuentas tienda,
   // mensajeros y geografía) se resuelve AQUÍ, en el servidor, tras las guardias de rol; sus
@@ -152,6 +165,7 @@ export default async function OrdenesPage() {
           puedeReportarIncidente={puedeReportarIncidente}
           puedeCorregirDatos={puedeCorregirDatos}
           puedeEliminar={puedeEliminar}
+          puedeVerEliminadas={puedeVerEliminadas}
           fechasDiaReparto={fechasDiaReparto}
         />
       ) : (
