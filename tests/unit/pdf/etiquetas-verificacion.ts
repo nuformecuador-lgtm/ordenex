@@ -6,13 +6,17 @@ import type { FuenteEmbebida } from "@/lib/pdf/etiquetas-fuente-registro";
 import { MARCA_CORTE } from "@/lib/pdf/etiquetas-ajuste";
 import {
   CUERPO_MINIMO_PT,
+  GROSOR_RECUADRO_MM,
+  GROSOR_REGLA_MM,
   INTERLINEADO,
   PT_A_MM,
+  separacionBajoGuiaMm,
 } from "@/lib/pdf/etiquetas-maqueta";
 import {
   ROTULO_COBRAR,
   ROTULO_FECHA,
   ROTULO_GUIA,
+  ROTULO_PARA,
   ROTULO_PRODUCTO,
   ROTULO_REMISION,
   ROTULO_TIENDA,
@@ -25,6 +29,7 @@ import {
   rectangulosDePagina,
   textoLegible,
   textosDePagina,
+  trazosDePagina,
   type FuentePdf,
 } from "./pdf-inspector";
 
@@ -43,6 +48,15 @@ import {
 // | V4| Suelo: ningun `Tf` por debajo de `CUERPO_MINIMO_PT`              | R6           |
 // | V5| Jerarquia por tamaño + el importe dentro de su recuadro          | R14, R15     |
 // | V6| Ningun texto con marca de recorte                                | R1           |
+// | V7| La COLOCACION de los rotulos: apilados sobre su valor, o en linea | 353          |
+// | V8| El DISEÑO aprobado, en milimetros: cabecera, QR, barcode, regla,  | 353          |
+// |   | grosores y pesos                                                 |              |
+//
+// Feature 353 — V7 y V8 existen porque la 350 NO ATABA LA DISPOSICION con
+// ninguna asercion: se aprobo un spec escrito, nadie comparo el PDF con el
+// diseño y la maqueta derivo con la suite entera en verde. Corren aqui —y no en
+// una suite suelta— por el mismo motivo que las seis primeras: los DOS
+// generadores tienen que pasarlas sobre el mismo corpus.
 //
 // V1 es la que de verdad muerde. «No hay tres puntos» es una asercion debil:
 // sobreviviria a un corte sin marca o a cambiar la marca. Comparar la
@@ -76,10 +90,27 @@ export interface CajaMm {
   y1: number;
 }
 
+/** Un segmento recto ya en mm desde la esquina superior izquierda de la pagina. */
+export interface TrazoMm {
+  x0: number;
+  x1: number;
+  /** `y` del segmento, en mm desde el borde SUPERIOR. Solo trazos horizontales. */
+  yMm: number;
+  /** Grosor, en mm. */
+  grosorMm: number;
+}
+
+/** Un rectangulo dibujado, en mm, con el grosor con el que se trazó. */
+export interface RecuadroMm extends CajaMm {
+  grosorMm: number;
+}
+
 export interface EtiquetaLeida {
   textos: TextoMm[];
-  recuadros: CajaMm[];
+  recuadros: RecuadroMm[];
   imagenes: CajaMm[];
+  /** Feature 353 — los segmentos HORIZONTALES (hoy, la regla bajo la cabecera). */
+  reglas: TrazoMm[];
 }
 
 /** La familia y el estilo de jsPDF con los que se dibujo un texto. */
@@ -130,7 +161,7 @@ export function leerEtiqueta(
     };
   });
 
-  const recuadros = rectangulosDePagina(bytes, indice).map((r): CajaMm => {
+  const recuadros = rectangulosDePagina(bytes, indice).map((r): RecuadroMm => {
     const x0 = r.x * PT_A_MM;
     const yA = altoHojaMm - r.y * PT_A_MM;
     const yB = altoHojaMm - (r.y + r.h) * PT_A_MM;
@@ -139,6 +170,7 @@ export function leerEtiqueta(
       x1: Math.max(x0, x0 + r.w * PT_A_MM),
       y0: Math.min(yA, yB),
       y1: Math.max(yA, yB),
+      grosorMm: r.grosor * PT_A_MM,
     };
   });
 
@@ -153,7 +185,19 @@ export function leerEtiqueta(
     };
   });
 
-  return { textos, recuadros, imagenes };
+  // Solo los HORIZONTALES: la unica linea que la maqueta dibuja es la regla de
+  // la cabecera. Si un dia apareciera una vertical, este filtro la dejaria fuera
+  // y el test que cuenta las reglas se daria cuenta.
+  const reglas = trazosDePagina(bytes, indice)
+    .filter((t) => Math.abs(t.y1 - t.y2) < 1e-6)
+    .map((t): TrazoMm => ({
+      x0: Math.min(t.x1, t.x2) * PT_A_MM,
+      x1: Math.max(t.x1, t.x2) * PT_A_MM,
+      yMm: altoHojaMm - t.y1 * PT_A_MM,
+      grosorMm: t.grosor * PT_A_MM,
+    }));
+
+  return { textos, recuadros, imagenes, reglas };
 }
 
 /**
@@ -224,6 +268,21 @@ export interface ResultadoVerificacion {
   cuerpos: Record<keyof EsperadoEtiqueta, number>;
   /** Cuantas lineas ocupo cada dato. */
   lineas: Record<keyof EsperadoEtiqueta, number>;
+  /**
+   * Feature 353 — `true` si la etiqueta salio con los rotulos APILADOS sobre su
+   * valor (la disposicion del diseño aprobado) y `false` si cayo a la de la 350,
+   * con el rotulo en la linea de su valor y sin `PARA`.
+   *
+   * Se LEE DEL PDF, no se pregunta al codigo que lo decide: comparar contra la
+   * funcion que produce el resultado esta siempre verde.
+   */
+  apilados: boolean;
+  /** El primer texto de cada dato, ya en mm. Para las medidas del diseño. */
+  primeros: Record<keyof EsperadoEtiqueta, TextoMm>;
+  /** Los rotulos dibujados, por su texto. */
+  rotulos: Map<string, TextoMm>;
+  /** Lo leido del PDF, por si el llamador quiere medir mas. */
+  leida: EtiquetaLeida;
 }
 
 /**
@@ -271,6 +330,8 @@ export function verificarEtiqueta(
   }
 
   // Los rotulos son los unicos textos que pueden no pertenecer a ningun dato.
+  // `PARA` va aparte: es el unico CONDICIONAL, porque solo se dibuja cuando los
+  // rotulos caben apilados (feature 353). Los otros seis son obligatorios.
   const ROTULOS = [
     ROTULO_GUIA,
     ROTULO_FECHA,
@@ -279,18 +340,63 @@ export function verificarEtiqueta(
     ROTULO_PRODUCTO,
     ROTULO_TIENDA,
   ];
+  const rotulos = new Map<string, TextoMm>();
   for (let i = 0; i < textos.length; i++) {
     if (asignado[i]) continue;
     expect(
-      ROTULOS,
+      [...ROTULOS, ROTULO_PARA],
       `${contexto}: el texto ${JSON.stringify(textos[i].texto)} no es ni un dato ni un rotulo conocido`,
     ).toContain(textos[i].texto);
+    rotulos.set(textos[i].texto, textos[i]);
   }
   for (const rotulo of ROTULOS) {
     expect(
       textos.map((t) => t.texto),
       `${contexto}: falta el rotulo «${rotulo}»`,
     ).toContain(rotulo);
+  }
+
+  // --- V7 (feature 353): la DISPOSICION de los rotulos, leida del PDF ------
+  //
+  // `PARA` presente <=> rotulos apilados. No se pregunta al codigo: se deduce de
+  // la tinta y despues se comprueba que las OTRAS dos consecuencias de esa misma
+  // decision cuadran. Si `PARA` estuviera y `CONTENIDO` compartiera linea con su
+  // valor, la etiqueta seria un hibrido que nadie diseño y esto lo caza.
+  const apilados = rotulos.has(ROTULO_PARA);
+  const primeros = {} as Record<keyof EsperadoEtiqueta, TextoMm>;
+  for (const clave of claves) primeros[clave] = textos[tramos[clave][0]];
+
+  for (const [rotulo, dato] of [
+    [ROTULO_PRODUCTO, primeros.producto],
+    [ROTULO_TIENDA, primeros.tiendaNombre],
+  ] as Array<[string, TextoMm]>) {
+    const t = rotulos.get(rotulo)!;
+    if (apilados) {
+      expect(
+        t.yMm,
+        `${contexto}: «${rotulo}» (y=${t.yMm.toFixed(2)}) deberia ir ENCIMA de su valor (y=${dato.yMm.toFixed(2)}) y no en su linea`,
+      ).toBeLessThan(dato.yMm - EPS);
+      expect(
+        Math.abs(t.xMm - dato.xMm),
+        `${contexto}: apilado, «${rotulo}» y su valor arrancan en x distintas (${t.xMm.toFixed(2)} vs ${dato.xMm.toFixed(2)})`,
+      ).toBeLessThan(1e-3);
+    } else {
+      expect(
+        Math.abs(t.yMm - dato.yMm),
+        `${contexto}: sin apilar, «${rotulo}» deberia compartir linea base con su valor`,
+      ).toBeLessThan(1e-3);
+      expect(
+        t.xMm,
+        `${contexto}: sin apilar, «${rotulo}» deberia ir DELANTE de su valor`,
+      ).toBeLessThan(dato.xMm - EPS);
+    }
+  }
+  if (apilados) {
+    const para = rotulos.get(ROTULO_PARA)!;
+    expect(
+      para.yMm,
+      `${contexto}: «${ROTULO_PARA}» no va encima del destinatario`,
+    ).toBeLessThan(primeros.destinatario.yMm - EPS);
   }
 
   // --- V6: ninguna marca de recorte ---------------------------------------
@@ -353,11 +459,21 @@ export function verificarEtiqueta(
   }
 
   // --- V3: las cinco bandas, disjuntas y en su orden -----------------------
-  const extremos = (claves2: Array<keyof EsperadoEtiqueta>): CajaMm => {
+  const extremos = (
+    claves2: Array<keyof EsperadoEtiqueta>,
+    rotulosDeLaBanda: string[] = [],
+  ): CajaMm => {
     const cajas = claves2.flatMap((c) => {
       const [d, h] = tramos[c];
       return textos.slice(d, h).map(cajaDeTexto);
     });
+    // Feature 353 — los rotulos ENTRAN en la caja de su banda. Sin esto, un
+    // rotulo apilado podria caer dentro de la banda de arriba y la comprobacion
+    // de bandas disjuntas no se enteraria: mediria solo los valores.
+    for (const r of rotulosDeLaBanda) {
+      const t = rotulos.get(r);
+      if (t) cajas.push(cajaDeTexto(t));
+    }
     return {
       x0: Math.min(...cajas.map((c) => c.x0)),
       x1: Math.max(...cajas.map((c) => c.x1)),
@@ -370,11 +486,17 @@ export function verificarEtiqueta(
   const barcode = leida.imagenes.find((i) => i !== qr);
   expect(barcode, `${contexto}: no se encontro el codigo de barras`).toBeDefined();
 
-  const cabecera = extremos(["numGuia", "fechaCreacion", "numRemision"]);
-  const destino = extremos(["destinatario", "telefonoDest", "direccion", "ubicacion"]);
+  const cabecera = extremos(
+    ["numGuia", "fechaCreacion", "numRemision"],
+    [ROTULO_GUIA, ROTULO_FECHA, ROTULO_REMISION],
+  );
+  const destino = extremos(
+    ["destinatario", "telefonoDest", "direccion", "ubicacion"],
+    [ROTULO_PARA],
+  );
   expect(leida.recuadros.length, `${contexto}: se esperaba UN recuadro (el del importe)`).toBe(1);
   const importe = leida.recuadros[0];
-  const detalle = extremos(["producto", "tiendaNombre"]);
+  const detalle = extremos(["producto", "tiendaNombre"], [ROTULO_PRODUCTO, ROTULO_TIENDA]);
 
   const bandas: Array<[string, CajaMm]> = [
     ["cabecera", { ...cabecera, y1: Math.max(cabecera.y1, qr!.y1), y0: Math.min(cabecera.y0, qr!.y0) }],
@@ -438,5 +560,133 @@ export function verificarEtiqueta(
     `${contexto}: el importe no se dibujo con la fuente embebida`,
   ).toBe(true);
 
-  return { cuerpos, lineas };
+  // =========================================================================
+  // V8 (feature 353) — LA DISPOSICION DEL DISEÑO APROBADO, medida sobre el PDF.
+  //
+  // Existe porque la 350 no ataba la disposicion con NINGUNA asercion: se aprobo
+  // un spec escrito, nadie comparo el PDF con el diseño y la maqueta derivo sin
+  // que un solo test se pusiera rojo. Todo lo de aqui abajo se comprueba en los
+  // DOS generadores, en las CUATRO hojas y con el corpus entero.
+  // =========================================================================
+  const unEm = separacionBajoGuiaMm(layout.cuerpos.guia);
+  const marca = rotulos.get(ROTULO_GUIA)!;
+
+  // V8a — la cabecera: marca ARRIBA, numero en medio, `REM`/`FECHA` DEBAJO, con
+  // al menos 1 em del cuerpo del numero de separacion a cada lado (la regla
+  // derivada de la 282, que aqui se ejerce por partida doble).
+  expect(
+    primeros.numGuia.yMm - marca.yMm,
+    `${contexto}: el rotulo «${ROTULO_GUIA}» no queda 1 em (${unEm.toFixed(2)} mm) por encima del numero de guia`,
+  ).toBeGreaterThanOrEqual(unEm - 1e-3);
+  for (const clave of ["numRemision", "fechaCreacion"] as const) {
+    expect(
+      primeros[clave].yMm - primeros.numGuia.yMm,
+      `${contexto}: «${clave}» no queda 1 em (${unEm.toFixed(2)} mm) por DEBAJO del numero de guia; el diseño la pone en la fila de abajo`,
+    ).toBeGreaterThanOrEqual(unEm - 1e-3);
+  }
+  expect(
+    Math.abs(primeros.numRemision.yMm - primeros.fechaCreacion.yMm),
+    `${contexto}: remision y fecha no comparten la fila META`,
+  ).toBeLessThan(1e-3);
+  expect(
+    Math.abs(rotulos.get(ROTULO_REMISION)!.yMm - primeros.numRemision.yMm),
+    `${contexto}: «${ROTULO_REMISION}» no comparte linea con su valor`,
+  ).toBeLessThan(1e-3);
+  expect(
+    Math.abs(rotulos.get(ROTULO_FECHA)!.yMm - primeros.fechaCreacion.yMm),
+    `${contexto}: «${ROTULO_FECHA}» no comparte linea con su valor`,
+  ).toBeLessThan(1e-3);
+
+  // V8b — el numero de guia MANDA: es el texto mas grande de la pagina y se
+  // dibuja al cuerpo que declara la maqueta, sin encogerse.
+  expect(
+    cuerpos.numGuia,
+    `${contexto}: el numero de guia se dibujo a ${cuerpos.numGuia} pt y la maqueta declara ${layout.cuerpos.guia}`,
+  ).toBeCloseTo(layout.cuerpos.guia, 6);
+  for (const t of textos) {
+    if (t === primeros.numGuia) continue;
+    expect(
+      t.pt,
+      `${contexto}: ${JSON.stringify(t.texto)} se dibuja a ${t.pt} pt y el numero de guia solo a ${cuerpos.numGuia}: el numero deja de ser el elemento dominante`,
+    ).toBeLessThan(cuerpos.numGuia - 1e-9);
+  }
+
+  // V8c — el QR: CUADRADO, del lado que declara la maqueta y pegado a la esquina
+  // SUPERIOR DERECHA del area util. Esta es la que caza «devolver el QR abajo».
+  expect(qr!.x1 - qr!.x0, `${contexto}: el QR no mide el lado de la maqueta`).toBeCloseTo(
+    layout.qrMm,
+    6,
+  );
+  expect(qr!.y1 - qr!.y0).toBeCloseTo(layout.qrMm, 6);
+  expect(qr!.y0, `${contexto}: el QR no arranca en el borde SUPERIOR del area util`).toBeCloseTo(
+    arriba,
+    3,
+  );
+  expect(qr!.x1, `${contexto}: el QR no acaba en el borde DERECHO del area util`).toBeCloseTo(
+    derecha,
+    3,
+  );
+
+  // V8d — el codigo de barras: SOLO el, a todo el ancho util y pegado abajo.
+  expect(
+    barcode!.x0,
+    `${contexto}: el codigo de barras no arranca en el margen izquierdo`,
+  ).toBeCloseTo(izquierda, 3);
+  expect(barcode!.x1, `${contexto}: el codigo de barras no llega al margen derecho`).toBeCloseTo(
+    derecha,
+    3,
+  );
+  expect(barcode!.y1, `${contexto}: el codigo de barras no esta pegado al borde inferior`).toBeCloseTo(
+    abajo,
+    3,
+  );
+  expect(barcode!.y1 - barcode!.y0).toBeCloseTo(layout.barcodeMm, 6);
+
+  // V8e — la REGLA HORIZONTAL bajo la cabecera: una sola, a todo el ancho util,
+  // entre la cabecera y el destino, y con el grosor de la maqueta.
+  expect(
+    leida.reglas.length,
+    `${contexto}: se esperaba UNA regla horizontal bajo la cabecera y hay ${leida.reglas.length}`,
+  ).toBe(1);
+  const regla = leida.reglas[0];
+  expect(regla.x0, `${contexto}: la regla no arranca en el margen izquierdo`).toBeCloseTo(
+    izquierda,
+    3,
+  );
+  expect(regla.x1, `${contexto}: la regla no llega al margen derecho`).toBeCloseTo(derecha, 3);
+  expect(regla.grosorMm, `${contexto}: la regla no tiene el grosor de la maqueta`).toBeCloseTo(
+    GROSOR_REGLA_MM * Math.max(1, layout.k),
+    6,
+  );
+  expect(
+    regla.yMm,
+    `${contexto}: la regla (y=${regla.yMm.toFixed(2)}) no va DEBAJO de la cabecera (y1=${bandas[0][1].y1.toFixed(2)})`,
+  ).toBeGreaterThanOrEqual(bandas[0][1].y1 - 1e-3);
+  expect(
+    regla.yMm,
+    `${contexto}: la regla (y=${regla.yMm.toFixed(2)}) no va ENCIMA del destino (y0=${destino.y0.toFixed(2)})`,
+  ).toBeLessThanOrEqual(destino.y0 + 1e-3);
+
+  // V8f — el recuadro del importe, de BORDE GRUESO.
+  expect(
+    importe.grosorMm,
+    `${contexto}: el recuadro del importe no tiene el grosor de la maqueta`,
+  ).toBeCloseTo(GROSOR_RECUADRO_MM * Math.max(1, layout.k), 6);
+
+  // V8g — los PESOS del bloque de destino: nombre, telefono y ubicacion en
+  // negrita; la direccion en redonda. Un texto que necesite la fuente embebida
+  // no tiene version negrita y se acepta tal cual (esta declarado en el dibujo).
+  const enNegrita = (t: TextoMm) => /-Bold/i.test(t.baseFont) || t.embebida;
+  for (const clave of ["destinatario", "telefonoDest", "ubicacion"] as const) {
+    expect(
+      enNegrita(primeros[clave]),
+      `${contexto}: «${clave}» deberia ir en negrita y su fuente es ${primeros[clave].baseFont}`,
+    ).toBe(true);
+  }
+  expect(
+    /-Bold/i.test(primeros.direccion.baseFont),
+    `${contexto}: la direccion deberia ir en redonda, no en negrita`,
+  ).toBe(false);
+
+  return { cuerpos, lineas, apilados, primeros, rotulos, leida };
 }

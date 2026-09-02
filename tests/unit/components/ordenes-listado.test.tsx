@@ -164,7 +164,16 @@ describe("OrdenesListado — una sola tabla (R12)", () => {
     renderListado(<OrdenesListado />);
 
     await waitFor(() => expect(listarOrdenesMock).toHaveBeenCalled());
-    expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
+    // FICHA 356: desde que la barra tiene el control de orden, la direccion por defecto
+    // («Mas recientes») viaja EXPLICITA en cada peticion. Lo que este caso vigila —que sin
+    // seleccion no se inyecte ninguna clave de FILTRO— sigue en pie: la igualdad es exacta,
+    // asi que una clave de mas que nadie eligio lo pone rojo igual que antes.
+    expect(listarOrdenesMock).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 25,
+      sortBy: "created_at",
+      sortDir: "desc",
+    });
     expect(ultimoStatusId()).toBeUndefined();
   });
 });
@@ -343,7 +352,16 @@ describe("OrdenesListado — catálogo no autorizado (R20)", () => {
     await ponerFiltro(user, "Estado");
     expect(screen.getByRole("button", { name: /^Estado:/ })).toBeDisabled();
     // El listado sin filtro sigue consultando (ya no hay tabs que montar).
-    expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
+    // FICHA 356: desde que la barra tiene el control de orden, la direccion por defecto
+    // («Mas recientes») viaja EXPLICITA en cada peticion. Lo que este caso vigila —que sin
+    // seleccion no se inyecte ninguna clave de FILTRO— sigue en pie: la igualdad es exacta,
+    // asi que una clave de mas que nadie eligio lo pone rojo igual que antes.
+    expect(listarOrdenesMock).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 25,
+      sortBy: "created_at",
+      sortDir: "desc",
+    });
   });
 });
 

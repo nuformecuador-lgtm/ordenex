@@ -7,6 +7,7 @@ import Barcode from "react-barcode";
 import { formatMonto } from "@/lib/config/moneda";
 import {
   geografiaLegible,
+  ROTULO_PARA,
   ROTULO_PRODUCTO,
   ROTULO_TIENDA,
   SIN_DIRECCION,
@@ -120,15 +121,23 @@ export function EtiquetaGuia({
       className="flex flex-col gap-1.5 overflow-hidden rounded-md border border-border bg-white p-3 text-xs text-black"
       style={{ width: "100mm", height: "100mm" }}
     >
-      {/* Banda 1 — cabecera: los dos numeros y la fecha a la izquierda, el QR a
-          la derecha, igual que en el papel. */}
+      {/* Banda 1 — cabecera (feature 353, el diseño aprobado): rotulo de marca,
+          debajo el numero GRANDE, debajo la fila de remision y fecha; el QR
+          cuadrado a la derecha y alineado arriba. El ORDEN de los datos es el
+          mismo que en el papel y R23 lo exige medido, no de palabra. */}
       <header className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex items-baseline justify-between gap-2 text-[10px] uppercase tracking-wide text-neutral-500">
-            <span>Guía</span>
-            {/* Feature 295 — la fecha va EN LA CABECERA y entre los dos numeros,
-                que es exactamente donde la dibuja el PDF (centrada entre «GUÍA» y
-                «REMISIÓN»).
+          <span className="text-[9px] uppercase tracking-widest text-neutral-500">
+            Ordenex · Guía
+          </span>
+          <p className="text-3xl font-bold leading-none">{numGuia}</p>
+          <div className="mt-1 flex items-baseline justify-between gap-2 text-[10px] uppercase tracking-wide text-neutral-500">
+            <span className="flex items-baseline gap-1">
+              <span>Rem</span>
+              <span className="font-medium normal-case text-black">{numRemision}</span>
+            </span>
+            {/* Feature 295 — la fecha va EN LA CABECERA, y desde la 353 en la
+                fila de DEBAJO del numero, que es donde la dibuja el PDF.
 
                 SE PINTA TAL CUAL LLEGA: `fechaCreacion` ya es la fecha de
                 calendario de Costa Rica resuelta en el servidor. Volver a
@@ -144,11 +153,6 @@ export function EtiquetaGuia({
                 {fechaCreacion}
               </span>
             </span>
-            <span>Remisión</span>
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="text-lg font-bold leading-tight">{numGuia}</p>
-            <p className="font-medium">{numRemision}</p>
           </div>
         </div>
         <QRCodeCanvas
@@ -163,13 +167,20 @@ export function EtiquetaGuia({
         />
       </header>
 
-      {/* Banda 2 — destino: SIN columna de rotulos (D2/R16). Se lee como un
-          sobre postal, y el valor dispone del ancho completo. */}
+      {/* La regla horizontal que separa la cabecera del resto (feature 353). */}
+      <hr className="border-t border-black" />
+
+      {/* Banda 2 — destino: el rotulo PARA abre el bloque y los cuatro datos van
+          SIN columna de rotulos (D2/R16). Se lee como un sobre postal, y el
+          valor dispone del ancho completo. */}
       <div className="flex flex-col leading-tight" data-testid="etiqueta-destino">
-        <p className="text-base font-semibold">{destinatario}</p>
-        <p className="text-sm font-medium">{telefonoDest}</p>
+        <span className="text-[9px] uppercase tracking-widest text-neutral-500">
+          {ROTULO_PARA}
+        </span>
+        <p className="text-base font-bold">{destinatario}</p>
+        <p className="text-sm font-bold">{telefonoDest}</p>
         <p className="text-xs">{direccion ?? SIN_DIRECCION}</p>
-        <p className="text-[11px]">{geografiaLegible(etiqueta)}</p>
+        <p className="text-[11px] font-bold">{geografiaLegible(etiqueta)}</p>
       </div>
 
       {/* Banda 3 — importe: en su recuadro y en UNA linea (D3/R15). Es lo que el
@@ -192,16 +203,23 @@ export function EtiquetaGuia({
         </span>
       </div>
 
-      {/* Banda 4 — detalle: rotulo EN LINEA, cuerpo menor. */}
+      {/* Banda 4 — detalle: rotulo diminuto ENCIMA de su valor, cuerpo menor
+          (feature 353). En el papel esta es la disposicion por defecto y solo
+          cae a rotulo en linea cuando el texto no deja sitio; la previa muestra
+          la de por defecto, que es la que el operador va a ver casi siempre. */}
       <div className="flex flex-col text-[10px] leading-tight">
-        <p>
-          <span className="font-semibold">{ROTULO_PRODUCTO}</span>{" "}
+        <div className="flex flex-col">
+          <span className="text-[9px] uppercase tracking-widest text-neutral-500">
+            {ROTULO_PRODUCTO}
+          </span>
           <span>{producto}</span>
-        </p>
-        <p>
-          <span className="font-semibold">{ROTULO_TIENDA}</span>{" "}
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[9px] uppercase tracking-widest text-neutral-500">
+            {ROTULO_TIENDA}
+          </span>
           <span>{tiendaNombre}</span>
-        </p>
+        </div>
       </div>
 
       {/* Banda 5 — codigo de barras a TODO el ancho, como en el papel. */}

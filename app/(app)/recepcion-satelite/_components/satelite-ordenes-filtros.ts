@@ -4,21 +4,33 @@ import {
   type EstadoBodegaSatelite,
 } from "@/lib/utils/estados-bodega-satelite";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
+import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import {
   CLAVE_BUSQUEDA,
   construirFiltrosOrdenes,
 } from "@/app/(app)/ordenes/_components/ordenes-filtros-def";
+import { filtroEstado } from "@/app/(app)/ordenes/_components/filtro-estado-def";
+import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import { seleccionAFilter } from "@/app/(app)/ordenes/_components/seleccion-a-filter";
 
 // Barra de filtros del listado de la bodega satélite (pedido humano: "el mismo diseño
 // que en el admin"). Declaración PURA de los filtros que ofrece `FilterComponent`,
 // separada del componente para poder probarla sin montar nada.
 //
-// El filtro de ESTADO se limita a los estados que el adminSatelite ve en su pantalla;
-// ofrecer el catálogo completo de estatus mentiría (ninguna orden suya puede estar en
-// `entregada`). El listado, además, solo recibe órdenes de esos grupos, así que la
-// restricción es de coherencia, no una defensa: el scope real lo impone el servicio,
-// acotado a la zona del actor.
+// FICHA 355 (2026-09-02) — EL FILTRO DE ESTADO PASA A SER EL DE LA CENTRAL.
+//
+// Aquí decía: «El filtro de ESTADO se limita a los estados que el adminSatelite ve en su
+// pantalla; ofrecer el catálogo completo de estatus mentiría (ninguna orden suya puede estar
+// en `entregada`)». El humano puso las dos capturas lado a lado y pidió lo contrario: «las
+// satélite deberían poder filtrar por estado igual que la central, solo que con sus órdenes
+// nada más». Así que el control se monta ahora con `filtroEstado`, la MISMA declaración de
+// `/ordenes`: mismas opciones (del catálogo `order_status`), mismas etiquetas y mismos textos.
+//
+// Lo que NO cambia, y es lo que sostiene la ficha: el ALCANCE. La selección sigue INTERSECANDO
+// la lista blanca de los cinco estados y no puede ampliarla nunca (`estadosDelListado`, en el
+// servicio); un `entregada` elegido aquí no trae entregadas, no trae nada. Ver
+// `seleccionAFiltroSatelite`, que es donde esa intersección se hace del lado del cliente, y la
+// nota sobre por qué el vacío se explica en pantalla en vez de esconder la opción.
 //
 // Feature 170 — FASE 2 (T K.3): los filtros los resuelve EL SERVIDOR (T K.1) y las opciones
 // de la geografía vienen de un catálogo, no de las órdenes cargadas (T K.2, R46).
@@ -35,50 +47,43 @@ import { seleccionAFilter } from "@/app/(app)/ordenes/_components/seleccion-a-fi
 /**
  * Clave del filtro de estado dentro de la selección de `FilterComponent`.
  *
- * Es la ÚNICA clave propia que le queda a esta barra: los cinco estados de la bodega no son
- * los del catálogo `order_status` que ofrece `/ordenes`, así que este filtro no puede salir
- * de allí. Geografía, tiempo y buscador sí (ver `construirFiltrosSatelite`).
+ * Sigue siendo propia —`/ordenes` emite `status_id` (el id de catálogo) y esta barra emite
+ * `estado` (el `value`), porque es lo que espera `listarOrdenesBodegaPaginado` y lo que valida
+ * su `z.enum`—, pero YA NO es una declaración aparte: el control lo declara `filtroEstado`, y
+ * la clave es sólo el sobre en el que viaja la selección.
  */
 export const CLAVE_ESTADO = "estado";
 
-/**
- * Etiqueta visible de cada uno de los cinco estados del listado.
+/*
+ * ── FICHA 355: AQUÍ VIVÍAN `ETIQUETA_ESTADO` Y `ESTADOS_SATELITE` ────────────────────────────
  *
- * Feature 170 — FASE 2 (T K.3, traspaso §9.2): el desplegable ya NO declara sus `value`.
- * Los toma de `ESTADOS_BODEGA_SATELITE` (`lib/utils/estados-bodega-satelite.ts`), que es la
- * MISMA lista que gobierna la lista blanca del filtro en el servidor (R44) y el rango de
- * grupo del `ORDER BY` (R51). Aquí solo quedan las etiquetas, que son de presentación: así
- * el orden de los grupos y el del desplegable no pueden divergir. El `Record` es
- * exhaustivo, de modo que añadir un estado a la constante sin darle etiqueta no compila.
+ * Un `Record` con los cinco nombres propios de esta pantalla —«Recibidas», «Asignadas (por
+ * recoger)», «Por devolver», «En tránsito a central», «Devueltas»— y la lista de opciones
+ * construida sobre él. Los dos se RETIRAN.
+ *
+ * El motivo no es que estuvieran mal escritos, sino que eran un SEGUNDO nombre para un estado
+ * que ya tenía el suyo: `en_bodega_satelite` se llamaba «Recibidas» aquí y «En bodega satélite»
+ * en `/ordenes`, y el humano lo señaló con las dos pantallas delante. Las etiquetas salen ahora
+ * de `ORDER_STATUS_LABELS` vía `estatusLabel`, el mismo mapa que pinta el chip de cada fila de
+ * esta misma tabla desde la ficha 349.
+ *
+ * Lo que se pierde con eso está medido y se acepta: los nombres viejos decían el ROL del estado
+ * dentro del flujo de la bodega («Asignadas (por recoger)» es más explícito que «Por recoger»).
+ * A cambio, el desplegable, el chip de la fila y la pantalla del maestro dicen todos lo mismo.
  */
-const ETIQUETA_ESTADO: Record<EstadoBodegaSatelite, string> = {
-  en_bodega_satelite: "Recibidas",
-  por_recoger: "Asignadas (por recoger)",
-  por_devolver: "Por devolver",
-  devolviendo_a_bodega_central: "En tránsito a central",
-  devuelta: "Devueltas",
-};
-
-/**
- * Los CINCO estados del listado, en el orden del flujo de la bodega: lo que está guardado,
- * lo que ya tiene mensajero pero sigue aquí, lo que sale, lo que va en camino y lo que
- * volvió. Feature 149 (R35) añadió `por_recoger`: la orden asignada NO ha salido de la
- * bodega, así que se ve en el listado y admite "Deshacer asignación".
- */
-export const ESTADOS_SATELITE: readonly {
-  value: EstadoBodegaSatelite;
-  label: string;
-}[] = ESTADOS_BODEGA_SATELITE.map((value) => ({
-  value,
-  label: ETIQUETA_ESTADO[value],
-}));
 
 /** `value` de cada estado del listado, para acotar tipos y validar la selección. */
 export type EstadoSatelite = EstadoBodegaSatelite;
 
-/** Etiqueta legible de un estado del listado; el propio value si no es de los cinco. */
+/**
+ * Etiqueta legible de un estado; el propio value si el catálogo no lo conoce.
+ *
+ * FICHA 355: es `estatusLabel` —el catálogo compartido— y ya no un mapa propio. Se conserva la
+ * función (y no se llama a `estatusLabel` desde el componente) porque su firma es la del
+ * listado: un `value` que SIEMPRE existe, sin el caso `null` que aquel resuelve con «—».
+ */
 export function etiquetaEstado(value: string): string {
-  return ESTADOS_SATELITE.find((e) => e.value === value)?.label ?? value;
+  return estatusLabel(value);
 }
 
 /**
@@ -105,8 +110,12 @@ export function etiquetaEstado(value: string): string {
  * un padre no declarado como «sin acotar», que es justo lo que corresponde: su catálogo YA
  * viene recortado a la zona.
  *
- * Lo que SE AÑADE: el filtro de ESTADO con los cinco estados de esta pantalla, delante del
- * resto — la misma posición que ocupa en `/ordenes`.
+ * Lo que SE AÑADE: el filtro de ESTADO, delante del resto — la misma posición que ocupa en
+ * `/ordenes`. FICHA 355: ya no son «los cinco estados de esta pantalla» sino el catálogo
+ * `order_status` entero, declarado por `filtroEstado`. Las opciones llegan por parámetro
+ * (`estatus`) porque el catálogo lo pide el componente con SWR, igual que en `/ordenes`; sin
+ * él —el primer render, o un fallo de la lectura— el control se declara con cero opciones, que
+ * es lo mismo que hace la central mientras su catálogo viaja.
  *
  * La GEOGRAFÍA llega ya acotada a la zona del actor: el catálogo se pide con
  * `obtenerCatalogoFiltrosOrdenes`, que para este rol devuelve la geografía de SU zona (y ni
@@ -120,7 +129,11 @@ export function etiquetaEstado(value: string): string {
  */
 export function construirFiltrosSatelite(
   catalogo: CatalogoFiltrosOrdenesDTO,
-  opts?: { ahora?: Date },
+  opts?: {
+    /** Catálogo `order_status` para el desplegable de estado (`listarOrderStatus`). */
+    estatus?: readonly OrderStatusLiteRow[] | null;
+    ahora?: Date;
+  },
 ): FilterDef[] {
   const declarados = construirFiltrosOrdenes(catalogo, {
     incluirZona: false,
@@ -130,23 +143,30 @@ export function construirFiltrosSatelite(
   }).filter((f) => f.key !== CLAVE_BUSQUEDA);
 
   return [
-    {
-      key: CLAVE_ESTADO,
-      label: "Estado",
-      kind: "multi",
-      options: ESTADOS_SATELITE.map((e) => ({ value: e.value, label: e.label })),
-      placeholder: "Todos los estados",
-      emptyMessage: "Sin estados",
-    },
+    // FICHA 355: la MISMA declaración que monta `/ordenes`. Lo único propio es la clave y el
+    // `valor: "value"` —lo que esta Server Action espera—; etiqueta, textos, orden y opciones
+    // salen del módulo compartido y no pueden divergir de los de la central.
+    filtroEstado(opts?.estatus, { key: CLAVE_ESTADO, valor: "value" }),
     ...declarados,
   ];
 }
 
 /**
- * Los tres filtros tal como los pide la Server Action paginada (T K.1). Lista vacía —o
- * ausente— significa «todos», igual que un desplegable sin nada marcado.
+ * Los filtros tal como los pide la Server Action paginada (T K.1). Clave AUSENTE significa
+ * «todos», igual que un desplegable sin nada marcado.
  */
 export interface FiltroBodegaSatelite {
+  /**
+   * Estados elegidos, YA INTERSECADOS con los cinco del listado.
+   *
+   * ⚠️ FICHA 355 — la lista VACÍA no significa «todos», significa NADA, y por eso este filtro
+   * NO se le pasa al servidor tal cual: el borde trata `estados: []` igual que la clave
+   * ausente (`estadosDelListado([])` devuelve los cinco), así que enviarlo diría «todas» justo
+   * cuando el usuario pidió lo contrario. Quien la produce es `seleccionAFiltroSatelite`
+   * —selección no vacía cuya intersección con la lista blanca queda en cero, p. ej. sólo
+   * `entregada`— y quien la atiende es `filtroSinResultados`, que corta la consulta antes de
+   * salir. Ausente ⇒ sin filtro de estado; con elementos ⇒ ésos y sólo ésos.
+   */
   estados?: EstadoBodegaSatelite[];
   /** Mensajeros asignados elegidos: la MISMA clave que el `filter` de `/ordenes`. */
   mensajero_id?: string[];
@@ -166,17 +186,45 @@ function esEstadoDelListado(value: string): value is EstadoBodegaSatelite {
 }
 
 /**
+ * FICHA 355 — los estados ELEGIDOS que este listado no puede devolver nunca.
+ *
+ * Desde que el desplegable ofrece el catálogo entero, elegir `entregada` es posible y da
+ * cero: la orden entregada ya salió de la bodega. Esta función nombra esos estados para que
+ * la pantalla pueda EXPLICAR el vacío en vez de dejarlo pasar por un fallo. Devuelve los
+ * `value` crudos; la etiqueta la pone `etiquetaEstado`.
+ */
+export function estadosFueraDelListado(seleccion: FilterSelection): string[] {
+  return (seleccion[CLAVE_ESTADO] ?? []).filter(
+    (value) => !esEstadoDelListado(value),
+  );
+}
+
+/**
  * Traduce la selección de la barra al input de la Server Action.
  *
  * Pedido humano (2026-08-19): todo lo que esta barra comparte con `/ordenes` lo traduce
  * `seleccionAFilter`, la MISMA función que usa allí — incluido lo que no es una identidad: la
  * clave posicional del calendario (`[atajo, desde, hasta]`) que se abre en `created_preset` o
  * en `created_desde`/`created_hasta`, y el término, que baja de lista a escalar. Aquí sólo
- * queda lo propio: los ESTADOS, que se acotan a los cinco de esta pantalla porque el borde los
- * valida con `z.enum` y un valor ajeno tumbaría la consulta entera en vez de ignorarse.
+ * queda lo propio: los ESTADOS.
  *
- * Una lista vacía se OMITE en vez de viajar como `[]`, para que «sin filtros» tenga una sola
- * clave de caché y siga aprovechando la página que pre-cargó el servidor.
+ * LA INTERSECCIÓN, que es el corazón de la ficha 355 y no se toca: la selección se CRUZA con
+ * los cinco estados del listado y nunca los amplía. Ya era así —el borde los valida con
+ * `z.enum` y un valor ajeno tumbaría la consulta entera en vez de ignorarse— pero antes era una
+ * precaución teórica, porque el desplegable sólo ofrecía los cinco. Ahora ofrece el catálogo
+ * entero, así que la intersección se ejecuta de verdad en cada selección.
+ *
+ * Y CON ELLA, EL CASO QUE ANTES NO EXISTÍA: que la intersección quede VACÍA con una selección
+ * que no lo estaba (elegir sólo `entregada`). Eso NO puede caer a «todos» —sería convertir el
+ * listado en una ventana al resto de las órdenes de la zona, exactamente lo contrario de lo
+ * que el usuario pidió—, así que se emite `estados: []`, la marca de «nada puede casar», y
+ * `filtroSinResultados` corta la consulta. Con la lista de opciones anterior este camino era
+ * inalcanzable desde la UI, pero NO desde la URL: `?estado=entregada` ya llegaba aquí, y como
+ * el valor no estaba declarado, `seleccionDesdeUrl` lo descartaba y el listado salía COMPLETO.
+ *
+ * Una lista vacía de las claves COMPARTIDAS se OMITE en vez de viajar como `[]`, para que «sin
+ * filtros» tenga una sola clave de caché y siga aprovechando la página que pre-cargó el
+ * servidor.
  */
 export function seleccionAFiltroSatelite(
   seleccion: FilterSelection,
@@ -184,15 +232,33 @@ export function seleccionAFiltroSatelite(
   const compartidos: FilterSelection = { ...seleccion };
   delete compartidos[CLAVE_ESTADO]; // la unica clave que `seleccionAFilter` no conoce
   const filtro = seleccionAFilter(compartidos) as FiltroBodegaSatelite;
-  const estados = (seleccion[CLAVE_ESTADO] ?? []).filter(esEstadoDelListado);
-  if (estados.length > 0) filtro.estados = estados;
+  const elegidos = seleccion[CLAVE_ESTADO] ?? [];
+  if (elegidos.length > 0) filtro.estados = elegidos.filter(esEstadoDelListado);
   return filtro;
+}
+
+/**
+ * FICHA 355 — `true` si el filtro NO PUEDE devolver ninguna fila, y por tanto no hay ninguna
+ * consulta que hacer.
+ *
+ * Hoy tiene una sola causa: el usuario eligió estados y ninguno es de este listado. La
+ * consulta se corta EN EL CLIENTE, y eso sólo puede quitar filas, nunca añadirlas —el alcance
+ * lo sigue imponiendo el servicio, acotado a la zona y a los cinco estados—. Si algún día este
+ * corte se olvidara, el peor caso sería enseñar las órdenes de la bodega en vez de ninguna: el
+ * borde nunca deja salir de ahí.
+ */
+export function filtroSinResultados(filtro: FiltroBodegaSatelite): boolean {
+  return filtro.estados !== undefined && filtro.estados.length === 0;
 }
 
 /**
  * Clave ESCALAR y estable del filtro, para la caché de SWR: dos selecciones equivalentes
  * (en distinto orden o de distinta identidad de objeto) comparten caché en vez de
  * refetchear en cada render. Molde: `serializarFiltro` de `/ordenes` (feature 144).
+ *
+ * FICHA 355: `{ estados: [] }` serializa a `"estados="`, que NO es `FILTRO_SATELITE_VACIO`
+ * (`""`). Importa: si las dos claves colisionaran, la selección imposible reutilizaría la
+ * página sin filtros que pre-cargó el servidor y el listado saldría entero.
  */
 export function serializarFiltroSatelite(filtro: FiltroBodegaSatelite): string {
   return (Object.keys(filtro) as (keyof FiltroBodegaSatelite)[])

@@ -22,6 +22,8 @@ import {
   CUERPO_MINIMO_PT,
   GAPS_ENTRE_BANDAS,
   GAP_ROTULO_VALOR,
+  GROSOR_RECUADRO_MM,
+  GROSOR_REGLA_MM,
   INTERLINEADO,
   PASO_AJUSTE_PT,
   PT_A_MM,
@@ -72,10 +74,28 @@ export const FUENTE_BASE: FuenteTexto = { nombre: "helvetica", estilo: "normal" 
 /** La misma familia en negrita, para rotulos y para el numero de guia. */
 const FUENTE_ROTULO: FuenteTexto = { nombre: "helvetica", estilo: "bold" };
 
-/** Rotulos de la cabecera (feature 295 conserva el de la fecha y su sitio). */
-export const ROTULO_GUIA = "GUÍA";
+/**
+ * Rotulo de MARCA de la cabecera (feature 353). Es el «rotulo diminuto» que el
+ * diseño aprobado pone encima del numero de guia. Conserva el nombre
+ * `ROTULO_GUIA` —lo importan la verificacion y el generador de cliente— porque
+ * sigue siendo el rotulo QUE ANUNCIA EL NUMERO; lo que cambia es su texto.
+ *
+ * El `·` es U+00B7, dentro de Latin-1: la fuente estandar lo escribe (medido en
+ * `escribibleEnFuenteEstandar`), asi que no arrastra la fuente embebida.
+ */
+export const ROTULO_GUIA = "ORDENEX · GUÍA";
+
+/**
+ * Rotulos de la fila META, la que el diseño pone DEBAJO del numero de guia
+ * (feature 353). La feature 295 metio la fecha en la etiqueta y esta ficha no se
+ * la lleva: la mueve de la fila de encima del numero a la de debajo, que es donde
+ * el diseño aprobado la coloca, junto a la remision y en cuerpo pequeño.
+ *
+ * `REMISIÓN` pasa a `REM` por el diseño. No es un ahorro de ancho disfrazado:
+ * el rotulo largo y el corto caben los dos; el diseño escribe `REM <n>`.
+ */
 export const ROTULO_FECHA = "FECHA";
-export const ROTULO_REMISION = "REMISIÓN";
+export const ROTULO_REMISION = "REM";
 
 /**
  * Rotulo del recuadro del importe. Comparte LINEA con el importe (§4.2): puesto
@@ -85,14 +105,30 @@ export const ROTULO_REMISION = "REMISIÓN";
 export const ROTULO_COBRAR = "COBRAR";
 
 /**
- * Rotulos del detalle. Van EN LINEA y sin columna alineada: el valor arranca
- * justo detras del rotulo y las lineas de continuacion usan el ancho completo.
- * Producto y tienda son los dos datos cuyo significado no se adivina sin rotulo
- * («Caja x2» podria ser cualquier cosa); un nombre, un telefono y una direccion
- * seguidos se leen solos.
+ * Rotulo del bloque de destino (feature 353). El diseño aprobado abre el bloque
+ * con `PARA` en versalitas pequeñas y despues los cuatro datos SIN rotulo, que es
+ * la D2 de la 350 intacta: no se reintroduce ninguna columna de rotulos, se pone
+ * UNA linea que dice de quien es el bloque, como en un sobre postal.
  */
-export const ROTULO_PRODUCTO = "Producto:";
-export const ROTULO_TIENDA = "Tienda:";
+export const ROTULO_PARA = "PARA";
+
+/**
+ * Rotulos del detalle (feature 353). Cambian de texto y de SITIO: el diseño
+ * aprobado los pone ENCIMA de su valor, en rotulo diminuto, y el valor debajo en
+ * el cuerpo mas pequeño. Antes iban en linea, delante del valor.
+ *
+ * Producto y tienda siguen siendo los dos datos cuyo significado no se adivina
+ * sin rotulo («Caja x2» podria ser cualquier cosa); un nombre, un telefono y una
+ * direccion seguidos se leen solos.
+ *
+ * ⚠️ COSTE MEDIDO, y es lo unico del diseño que NO sale gratis: apilar el rotulo
+ * sobre su valor gasta una linea de mas por dato. Con `PARA`, son TRES lineas de
+ * rotulo nuevas. En la celda de 100 x 100 el peor caso medido de produccion
+ * (direccion de 286 caracteres) cabia con 0,25 mm de holgura, asi que esas tres
+ * lineas no caben ahi. Los numeros y la decision estan en `progress/impl_353.md`.
+ */
+export const ROTULO_PRODUCTO = "CONTENIDO";
+export const ROTULO_TIENDA = "TIENDA";
 
 /** Marcador cuando la orden no trae direccion. */
 export const SIN_DIRECCION = "—";
@@ -259,9 +295,17 @@ export function drawEtiqueta(
    * Es funcion PURA del texto, y eso es lo que la hace segura: el mismo texto
    * decide la misma fuente al MEDIR y al DIBUJAR, asi que el reparto de lineas y
    * el dibujo nunca usan metricas distintas.
+   *
+   * Feature 353 — `negrita` pide el PESO que el diseño aprobado da al nombre, al
+   * telefono y a la ubicacion. Se atiende SOLO cuando el texto es escribible con
+   * la fuente estandar: del artefacto embebido no hay version negrita (lo dice
+   * `exigirRotuloEscribible` mas abajo), asi que un texto que la necesite se
+   * dibuja en su unico estilo. La regla de precedencia es explicita y no un
+   * accidente: perder el peso es una diferencia visible que alguien puede ver y
+   * corregir; perder un caracter es el fallo mudo que la 282 cerro.
    */
-  const fuenteDeValor = (texto: string): FuenteTexto => {
-    if (seguroEnFuenteEstandar(texto)) return FUENTE_BASE;
+  const fuenteDeValor = (texto: string, negrita = false): FuenteTexto => {
+    if (seguroEnFuenteEstandar(texto)) return negrita ? FUENTE_ROTULO : FUENTE_BASE;
     exigirCobertura(fuente, texto, "texto de la etiqueta");
     return { nombre: fuente.nombre, estilo: fuente.estilo };
   };
@@ -318,8 +362,24 @@ export function drawEtiqueta(
   const medirFecha = medirEn(tipoFecha);
   const medirRemision = medirEn(tipoRemision);
 
+
   // =========================================================================
-  // BANDA 1 — CABECERA: guia + fecha + remision a la izquierda, QR a la derecha.
+  // BANDA 1 — CABECERA (feature 353, el diseño aprobado)
+  //
+  //   ORDENEX · GUÍA                        +-----------+
+  //   19887906                              |    QR     |
+  //   REM 2201            FECHA 2026-08-25  +-----------+
+  //   ----------------------------------------------------  (regla horizontal)
+  //
+  // Tres filas en la columna de texto y el QR CUADRADO a la derecha, alineado
+  // ARRIBA. Lo que cambia respecto de la 350: el rotulo de la cabecera pasa a
+  // ser la marca, el numero manda por tamaño (30 pt, `CUERPOS_BASE.guia`) y la
+  // fila de remision y fecha baja DEBAJO del numero en vez de ir encima.
+  //
+  // Por que se puede: el alto de esta banda lo fija el QR —`max(qrMm, pila)`— y
+  // la pila de tres filas mide ~24,9 mm contra los 26 del QR. Las tres filas
+  // caben en el hueco que el QR ya reservaba, asi que la fidelidad al diseño en
+  // la cabecera NO cuesta ni un milimetro de capacidad de texto.
   // =========================================================================
   const anchoTextoCabecera = anchoUtil - layout.qrMm - GAPS_ENTRE_BANDAS[0];
   if (anchoTextoCabecera <= 0) {
@@ -334,38 +394,33 @@ export function drawEtiqueta(
     ROTULO_FECHA,
     ROTULO_REMISION,
     ROTULO_COBRAR,
+    ROTULO_PARA,
     ROTULO_PRODUCTO,
     ROTULO_TIENDA,
   ]) {
     exigirRotuloEscribible(rotulo, `rotulo «${rotulo}»`);
   }
 
-  // Fila de rotulos: GUÍA a la izquierda, REMISIÓN a la derecha y el par
-  // FECHA + fecha centrado entre los dos. Es la fila que la feature 295 creo, y
-  // se conserva entera; lo unico que cambia es que ahora vive en la columna de
-  // texto de la cabecera, porque el QR ocupa la derecha (D3).
-  const anchoFilaRotulos = (pt: number): number =>
-    medirBold(ROTULO_GUIA, pt) +
-    medirBold(ROTULO_FECHA, pt) +
-    gapRotulo +
-    medirFecha(etiqueta.fechaCreacion, pt) +
-    medirBold(ROTULO_REMISION, pt) +
-    2 * gapRotulo;
+  // Fila 1 — el rotulo de marca, solo, a la izquierda. Es tambien el cuerpo de
+  // TODOS los rotulos diminutos de la etiqueta (`PARA`, `CONTENIDO`, `TIENDA`):
+  // se resuelve una vez aqui para que los cuatro compartan tamaño, que es lo que
+  // el diseño muestra.
   const cuerpoRotulo = mayorCuerpoQueCabe(
-    anchoFilaRotulos,
+    (pt) => medirBold(ROTULO_GUIA, pt),
     anchoTextoCabecera,
     cuerpos.rotulo,
     CUERPO_MINIMO_PT,
   );
   if (cuerpoRotulo === null) {
     noCabe(
-      "fila de rotulos de cabecera",
-      `necesita ${anchoFilaRotulos(CUERPO_MINIMO_PT).toFixed(1)} mm y hay ${anchoTextoCabecera.toFixed(1)} mm`,
+      "rotulo de cabecera",
+      `«${ROTULO_GUIA}» necesita ${medirBold(ROTULO_GUIA, CUERPO_MINIMO_PT).toFixed(1)} mm y hay ${anchoTextoCabecera.toFixed(1)} mm`,
     );
   }
 
-  // El numero de guia NO se encoge jamas (282/R27): es el dato que el operador
-  // busca de un vistazo. Quien cede ancho es el numero de remision.
+  // Fila 2 — el numero de guia. NO se encoge jamas (282/R27): es el dato que el
+  // operador busca de un vistazo y, desde la 353, el elemento dominante de la
+  // etiqueta por mandato del diseño.
   const cuerpoGuia = cuerpos.guia;
   const textoGuia = String(etiqueta.numGuia);
   exigirRotuloEscribible(textoGuia, "numero de guia");
@@ -376,22 +431,39 @@ export function drawEtiqueta(
       `${anchoGuia.toFixed(1)} mm a ${cuerpoGuia.toFixed(1)} pt en ${anchoTextoCabecera.toFixed(1)} mm, y la guia no se encoge`,
     );
   }
-  const cuerpoRemision = mayorCuerpoQueCabe(
-    (pt) => anchoGuia + gapRotulo + medirRemision(etiqueta.numRemision, pt),
+
+  // Fila 3 — `REM <n>` a la izquierda y `FECHA <f>` a la derecha de la columna.
+  // Los dos pares comparten cuerpo; quien cede es el cuerpo, no el contenido.
+  const anchoFilaMeta = (pt: number): number =>
+    medirBold(ROTULO_REMISION, pt) +
+    gapRotulo +
+    medirRemision(etiqueta.numRemision, pt) +
+    gapRotulo +
+    medirBold(ROTULO_FECHA, pt) +
+    gapRotulo +
+    medirFecha(etiqueta.fechaCreacion, pt);
+  const cuerpoMeta = mayorCuerpoQueCabe(
+    anchoFilaMeta,
     anchoTextoCabecera,
     cuerpos.remision,
     CUERPO_MINIMO_PT,
   );
-  if (cuerpoRemision === null) {
+  if (cuerpoMeta === null) {
     noCabe(
-      "numero de remision",
-      `no cabe junto al numero de guia en ${anchoTextoCabecera.toFixed(1)} mm`,
+      "fila de remision y fecha",
+      `necesita ${anchoFilaMeta(CUERPO_MINIMO_PT).toFixed(1)} mm y hay ${anchoTextoCabecera.toFixed(1)} mm`,
     );
   }
 
+  // Las tres lineas base. La separacion bajo el numero es la REGLA DERIVADA de
+  // la 282 (1 em del cuerpo de la guia), aplicada dos veces: una para separar el
+  // numero del rotulo que tiene encima y otra para la fila que tiene debajo. Si
+  // mañana cambia `CUERPOS_BASE.guia`, las dos se mueven solas.
   const yRotulos = cuerpoRotulo * PT_A_MM;
   const yGuia = yRotulos + separacionBajoGuiaMm(cuerpoGuia);
-  const altoCabecera = Math.max(layout.qrMm, yGuia);
+  const yMeta = yGuia + separacionBajoGuiaMm(cuerpoGuia);
+  const altoPilaCabecera = yMeta + cuerpoMeta * PT_A_MM * (INTERLINEADO - 1);
+  const altoCabecera = Math.max(layout.qrMm, altoPilaCabecera);
 
   // =========================================================================
   // BANDA 3 — IMPORTE: recuadro, UNA sola linea, y el texto contenido en el.
@@ -416,20 +488,27 @@ export function drawEtiqueta(
   // =========================================================================
   // BANDAS 2 y 4 — El presupuesto vertical que queda, y su orden de sacrificio.
   // =========================================================================
+  const altoLineaRotulo = cuerpoRotulo * PT_A_MM * INTERLINEADO;
   const gapsTotal = GAPS_ENTRE_BANDAS.reduce((a, b) => a + b, 0);
-  const disponible = altoUtil - altoCabecera - altoImporte - layout.barcodeMm - gapsTotal;
+  const presupuesto = altoUtil - altoCabecera - altoImporte - layout.barcodeMm - gapsTotal;
 
   const factor = (base: number) => base / CUERPOS_BASE.destinatario;
   // Cada dato lleva SU tipografia y SU medidor: un valor con un caracter que la
   // fuente estandar no sabe escribir se dibuja entero con la embebida, y medirlo
   // con las anchuras de la otra seria el fallo mudo que la 282 cerro.
+  //
+  // Feature 353 — el diseño pide NEGRITA en el nombre, el telefono y la
+  // ubicacion. `fuenteDeValor` decide por el texto: si la estandar lo escribe,
+  // negrita de verdad; si hace falta la embebida (que no tiene version negrita),
+  // se dibuja en su unico estilo. Perder el peso de un texto es una degradacion
+  // visible y reversible; perder un caracter no lo es.
   const tipoDestino = [
-    etiqueta.destinatario,
-    etiqueta.telefonoDest,
-    etiqueta.direccion ?? SIN_DIRECCION,
-    geografiaLegible(etiqueta),
-  ].map(fuenteDeValor);
-  const tipoDetalle = [etiqueta.producto, etiqueta.tiendaNombre].map(fuenteDeValor);
+    fuenteDeValor(etiqueta.destinatario, true),
+    fuenteDeValor(etiqueta.telefonoDest, true),
+    fuenteDeValor(etiqueta.direccion ?? SIN_DIRECCION),
+    fuenteDeValor(geografiaLegible(etiqueta), true),
+  ];
+  const tipoDetalle = [etiqueta.producto, etiqueta.tiendaNombre].map((t) => fuenteDeValor(t));
 
   const datosDestino: DatoBloque[] = [
     {
@@ -457,22 +536,73 @@ export function drawEtiqueta(
       medir: medirEn(tipoDestino[3]),
     },
   ];
-  const datosDetalle: DatoBloque[] = [
+  // Feature 353 — el detalle se compone de DOS formas y la eleccion se toma
+  // abajo, medida. Apilado (el diseño): el rotulo estrena su propia linea y el
+  // valor dispone del ancho util COMPLETO. En linea (la disposicion de la 350):
+  // el rotulo ocupa una sangria en la primera linea del valor y no gasta ninguna
+  // linea propia.
+  const detalleDe = (apilado: boolean): DatoBloque[] => [
     {
       texto: etiqueta.producto,
       factorCuerpo: 1,
       cuerpoMinimoPt: CUERPO_MINIMO_PT,
       medir: medirEn(tipoDetalle[0]),
-      sangriaPrimeraMm: (pt) => medirBold(ROTULO_PRODUCTO, pt) + gapRotulo,
+      sangriaPrimeraMm: apilado
+        ? undefined
+        : (pt: number) => medirBold(ROTULO_PRODUCTO, pt) + gapRotulo,
     },
     {
       texto: etiqueta.tiendaNombre,
       factorCuerpo: 1,
       cuerpoMinimoPt: CUERPO_MINIMO_PT,
       medir: medirEn(tipoDetalle[1]),
-      sangriaPrimeraMm: (pt) => medirBold(ROTULO_TIENDA, pt) + gapRotulo,
+      sangriaPrimeraMm: apilado
+        ? undefined
+        : (pt: number) => medirBold(ROTULO_TIENDA, pt) + gapRotulo,
     },
   ];
+
+  // -------------------------------------------------------------------------
+  // LA DECISION DE LA FICHA 353, tomada con numeros y no con gusto.
+  //
+  // El diseño aprobado apila cada rotulo diminuto sobre su valor: `PARA` abre el
+  // bloque de destino y `CONTENIDO` / `TIENDA` abren los suyos. Son TRES lineas
+  // de rotulo que la disposicion de la 350 no gastaba, y en la celda de
+  // 100 x 100 **no siempre caben**: MEDIDO en esta ficha, cuestan 9,1 mm netos
+  // (10,7 de lineas menos 1,6 que devuelve quitar la sangria en linea) y el peor
+  // caso de produccion —direccion de 286 caracteres— entraba con 0,25 mm de
+  // holgura. Con los rotulos apilados, ese peor caso NO se emitiria.
+  //
+  // Elegir «diseño» a secas romperia lo que la 350 pago caro (nada recortado, y
+  // el peor caso real impreso entero); elegir «capacidad» a secas devolveria la
+  // etiqueta que el humano acaba de rechazar. Se hace lo que ya hacia esta
+  // maqueta con el CUERPO tipografico: una DEGRADACION EN ORDEN DECLARADO. La
+  // etiqueta se compone apilada —el diseño— siempre que quepa; cuando el texto
+  // no deja sitio, y solo entonces, los rotulos vuelven a la linea de su valor y
+  // `PARA` se omite, que es exactamente la disposicion de la 350. Nunca se
+  // recorta un dato y nunca se deja de emitir por un rotulo.
+  //
+  // La comprobacion se hace contra los dos bloques EN SU SUELO de legibilidad,
+  // que es el minimo que van a necesitar pase lo que pase: si ni asi caben con
+  // los rotulos apilados, apilarlos solo serviria para disparar R7.
+  // -------------------------------------------------------------------------
+  const sueloDe = (datos: readonly DatoBloque[], cuerpoPt: number): number =>
+    ajustarBloque(
+      datos,
+      anchoUtil,
+      Number.POSITIVE_INFINITY,
+      cuerpoPt,
+      cuerpoPt,
+      medirEn(FUENTE_BASE),
+    ).altoMm;
+  const rotulosApilados =
+    presupuesto - 3 * altoLineaRotulo >=
+    sueloDe(datosDestino, CUERPO_MINIMO_DESTACADO_PT) +
+      sueloDe(detalleDe(true), CUERPO_MINIMO_PT) -
+      1e-9;
+  const datosDetalle = detalleDe(rotulosApilados);
+  const lineasDeRotulo = rotulosApilados ? 3 : 0;
+  const disponible = presupuesto - lineasDeRotulo * altoLineaRotulo;
 
   // Orden de sacrificio (§5.4): PRIMERO baja el detalle —producto y tienda son
   // lo menos critico de D3— y solo despues el destino. Para saber cuanto sitio
@@ -529,7 +659,8 @@ export function drawEtiqueta(
   // EXACTAMENTE el margen por los cuatro lados (R9) y el sobrante —que en A4 son
   // mas de 140 mm— queda DENTRO, en la banda de destino, que es la flexible.
   const yCodigos = altoUtil - layout.barcodeMm;
-  const yDetalle = yCodigos - GAPS_ENTRE_BANDAS[3] - detalle.altoMm;
+  const altoRotulosDetalle = rotulosApilados ? 2 * altoLineaRotulo : 0;
+  const yDetalle = yCodigos - GAPS_ENTRE_BANDAS[3] - (detalle.altoMm + altoRotulosDetalle);
   const yImporte = yDetalle - GAPS_ENTRE_BANDAS[2] - altoImporte;
   const yDestino = altoCabecera + GAPS_ENTRE_BANDAS[0];
 
@@ -538,6 +669,13 @@ export function drawEtiqueta(
    * maqueta. Linea a linea y no con `doc.text(array)` porque el avance
    * automatico de jsPDF usa el leading de la fuente y se desincronizaria del
    * interlineado con el que aqui se calculo el alto.
+   *
+   * Feature 353 — `rotulos` tiene DOS colocaciones y la elige `rotulosApilados`:
+   * apilado (el diseño) el rotulo estrena su propia linea encima del valor, en
+   * el cuerpo de los rotulos diminutos; en linea (la disposicion de la 350) el
+   * rotulo ocupa la sangria de la primera linea del valor. La sangria que se
+   * dibuja es LA MISMA que `sangriaPrimeraMm` uso al repartir las lineas: se
+   * calcula con la misma llamada, no con una copia.
    */
   const dibujarBloque = (
     lineasPorDato: string[][],
@@ -550,10 +688,14 @@ export function drawEtiqueta(
     for (let i = 0; i < lineasPorDato.length; i++) {
       const pt = cuerposPorDato[i];
       const rotulo = rotulos?.[i];
-      const sangria = rotulo ? medirBold(rotulo, pt) + gapRotulo : 0;
+      if (rotulo && rotulosApilados) {
+        escribir(rotulo, 0, y + cuerpoRotulo * PT_A_MM, cuerpoRotulo, FUENTE_ROTULO);
+        y += altoLineaRotulo;
+      }
+      const sangria = rotulo && !rotulosApilados ? medirBold(rotulo, pt) + gapRotulo : 0;
       for (let j = 0; j < lineasPorDato[i].length; j++) {
         const yBase = y + pt * PT_A_MM;
-        if (j === 0 && rotulo) escribir(rotulo, 0, yBase, pt, FUENTE_ROTULO);
+        if (j === 0 && sangria > 0) escribir(rotulo!, 0, yBase, pt, FUENTE_ROTULO);
         escribir(lineasPorDato[i][j], j === 0 ? sangria : 0, yBase, pt, tiposPorDato[i]);
         y += pt * PT_A_MM * INTERLINEADO;
       }
@@ -565,35 +707,30 @@ export function drawEtiqueta(
   // =========================================================================
 
   // --- Banda 1: cabecera ---------------------------------------------------
-  const anchoRotuloFecha = medirBold(ROTULO_FECHA, cuerpoRotulo);
-  const anchoFecha = medirFecha(etiqueta.fechaCreacion, cuerpoRotulo);
-  const anchoRotuloRemision = medirBold(ROTULO_REMISION, cuerpoRotulo);
-
   escribir(ROTULO_GUIA, 0, yRotulos, cuerpoRotulo, FUENTE_ROTULO);
-  const xPar = (anchoTextoCabecera - (anchoRotuloFecha + gapRotulo + anchoFecha)) / 2;
-  escribir(ROTULO_FECHA, xPar, yRotulos, cuerpoRotulo, FUENTE_ROTULO);
-  escribir(
-    etiqueta.fechaCreacion,
-    xPar + anchoRotuloFecha + gapRotulo,
-    yRotulos,
-    cuerpoRotulo,
-    tipoFecha,
-  );
-  escribir(
-    ROTULO_REMISION,
-    anchoTextoCabecera - anchoRotuloRemision,
-    yRotulos,
-    cuerpoRotulo,
-    FUENTE_ROTULO,
-  );
-
   escribir(textoGuia, 0, yGuia, cuerpoGuia, FUENTE_ROTULO);
+
+  // La fila meta: `REM <n>` pegado al margen izquierdo y `FECHA <f>` pegado al
+  // borde derecho de la columna de texto. El aire sobrante queda EN MEDIO, que
+  // es lo que hace legible la fila (y lo que el diseño muestra).
+  escribir(ROTULO_REMISION, 0, yMeta, cuerpoMeta, FUENTE_ROTULO);
   escribir(
     etiqueta.numRemision,
-    anchoTextoCabecera - medirRemision(etiqueta.numRemision, cuerpoRemision),
-    yGuia,
-    cuerpoRemision,
+    medirBold(ROTULO_REMISION, cuerpoMeta) + gapRotulo,
+    yMeta,
+    cuerpoMeta,
     tipoRemision,
+  );
+  const anchoValorFecha = medirFecha(etiqueta.fechaCreacion, cuerpoMeta);
+  const xRotuloFecha =
+    anchoTextoCabecera - anchoValorFecha - gapRotulo - medirBold(ROTULO_FECHA, cuerpoMeta);
+  escribir(ROTULO_FECHA, xRotuloFecha, yMeta, cuerpoMeta, FUENTE_ROTULO);
+  escribir(
+    etiqueta.fechaCreacion,
+    anchoTextoCabecera - anchoValorFecha,
+    yMeta,
+    cuerpoMeta,
+    tipoFecha,
   );
 
   if (raster.qr) {
@@ -607,11 +744,28 @@ export function drawEtiqueta(
     );
   }
 
-  // --- Banda 2: destino, SIN columna de rotulos (D2/R16) -------------------
-  dibujarBloque(destino.lineas, destino.cuerpos, tipoDestino, yDestino);
+  // --- La regla horizontal bajo la cabecera (feature 353) -------------------
+  // Va CENTRADA en la separacion que ya existia entre cabecera y destino, asi
+  // que no consume presupuesto vertical: solo ocupa aire que ya estaba vacio.
+  const yRegla = altoCabecera + GAPS_ENTRE_BANDAS[0] / 2;
+  doc.setLineWidth(GROSOR_REGLA_MM * Math.max(1, layout.k));
+  doc.line(layout.x(0), layout.y(yRegla), layout.x(anchoUtil), layout.y(yRegla));
+
+  // --- Banda 2: destino, con el rotulo PARA y SIN columna (D2/R16) ----------
+  // `PARA` es UNA linea que dice de quien es el bloque, no una columna: los
+  // cuatro datos siguen disponiendo del ancho util completo (R16 intacto).
+  if (rotulosApilados) {
+    escribir(ROTULO_PARA, 0, yDestino + cuerpoRotulo * PT_A_MM, cuerpoRotulo, FUENTE_ROTULO);
+  }
+  dibujarBloque(
+    destino.lineas,
+    destino.cuerpos,
+    tipoDestino,
+    yDestino + (rotulosApilados ? altoLineaRotulo : 0),
+  );
 
   // --- Banda 3: importe, en su recuadro y en UNA linea (R15) ---------------
-  doc.setLineWidth(0.3 * Math.max(1, layout.k));
+  doc.setLineWidth(GROSOR_RECUADRO_MM * Math.max(1, layout.k));
   doc.rect(layout.x(0), layout.y(yImporte), anchoUtil, altoImporte, "S");
   const pad = padRecuadro(cuerpoImporte);
   const yBaseImporte = yImporte + cuerpoImporte * PT_A_MM;
@@ -624,7 +778,7 @@ export function drawEtiqueta(
     tipoMonto,
   );
 
-  // --- Banda 4: detalle, con el rotulo EN LINEA ----------------------------
+  // --- Banda 4: detalle, con el rotulo ENCIMA de su valor ------------------
   dibujarBloque(detalle.lineas, detalle.cuerpos, tipoDetalle, yDetalle, [
     ROTULO_PRODUCTO,
     ROTULO_TIENDA,

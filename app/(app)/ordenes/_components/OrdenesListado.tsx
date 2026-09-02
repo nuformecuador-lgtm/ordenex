@@ -10,23 +10,23 @@ import {
   type FilterSelection,
 } from "@/components/shared/FilterComponent";
 import { BuscadorFiltros } from "@/components/shared/BuscadorFiltros";
+import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
 import { BLOQUEO_SIN_AVISO } from "@/components/shared/CeldaSeleccion";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { listarOrderStatus } from "@/lib/actions/order-status";
-import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 import { listarMensajerosParaAsignacion } from "@/lib/actions/ordenes-guia";
 import type { Column } from "@/components/shared/DataTable";
 import { EscanerModal } from "@/components/shared/EscanerModal";
 import { BUSQUEDA_MIN_CHARS, type OrdenListItemDTO } from "@/lib/types/orden";
 import type { FechasDiaReparto } from "@/lib/utils/dia-reparto-textos";
+import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
 
 import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
 import { EscanerRecepcionOrigen } from "./EscanerRecepcionOrigen";
 import { EscanerRecepcionBodegaCentral } from "./EscanerRecepcionBodegaCentral";
-import { ORDER_STATUS_LABELS } from "./EstatusBadge";
 import {
   ordenesColumnsReprogramada,
 } from "./ordenes-columns";
@@ -53,6 +53,19 @@ import {
   CLAVE_ESTADO,
   PLACEHOLDER_BUSQUEDA,
 } from "./ordenes-filtros-def";
+import {
+  DIRECCION_ORDEN_INICIAL,
+  ETIQUETA_ORDEN_CREACION,
+  OPCIONES_ORDEN_CREACION,
+  ordenamientoCreacion,
+} from "./ordenamiento-creacion";
+// FICHA 355: el control de ESTADO se declara una sola vez y lo montan las dos superficies
+// (aquí y la bodega satélite). Ver la cabecera de ese módulo.
+import {
+  EXCLUDE_ESTADO_DEFAULT,
+  estadosOfrecidos,
+  filtroEstado,
+} from "./filtro-estado-def";
 import { seleccionAFilter } from "./seleccion-a-filter";
 import type { OrdenesFilterUI } from "./serializar-filtro";
 
@@ -109,18 +122,25 @@ async function mensajerosFetcher() {
 // `["pendiente"]` (borrador transitorio recién sembrado). El backend NO recibe
 // `exclude`: `listarOrderStatus()` devuelve el catálogo COMPLETO (R1) y el front
 // filtra antes de construir las opciones del filtro (aclaración del humano, R14).
-const DEFAULT_EXCLUDE = ["pendiente"];
+//
+// FICHA 355: el valor por defecto vive ahora en `filtro-estado-def.ts`, junto al resto de
+// la declaración del control, para que una superficie que lo monte sin pasar `exclude`
+// obtenga exactamente lo mismo que maestro/admin.
+const DEFAULT_EXCLUDE = [...EXCLUDE_ESTADO_DEFAULT];
 
-/**
- * Values que el código RECONOCE hoy. La tabla `order_status` conserva values ya
- * RETIRADOS del seed: su migración de retiro solo borra la fila si nadie la referencia,
- * y el historial pasado —inmutable— la referencia para siempre (caso del estado interno
- * de fulfillment en bodega, retirado por la feature 155). Esa fila sobrevive huérfana y
- * ninguna orden viva puede volver a tenerla, así que ofrecerla como filtro es ofrecer un
- * estado que nunca devuelve nada. El catálogo de la BD manda sobre los ids;
- * `ORDER_STATUS_SEED` manda sobre QUÉ existe.
+/*
+ * ── FICHA 355 (2026-09-02): AQUÍ VIVÍAN `VALUES_VIGENTES` Y EL DESPLEGABLE DE ESTADO ─────────
+ *
+ * El juego de values vigentes, el recorte «catálogo − retirados − exclude» y las seis líneas
+ * que declaraban el control se mudan a `./filtro-estado-def.ts`. La central NO cambia de
+ * comportamiento: monta la MISMA declaración, con los mismos textos y las mismas opciones.
+ *
+ * No es una mudanza por orden. La bodega satélite declaraba SU propio filtro de estado —cinco
+ * opciones escritas a mano, con sus propias etiquetas («Recibidas» donde aquí dice «En bodega
+ * satélite») y sus propios textos— y el humano puso las dos capturas lado a lado. Mientras el
+ * control se declarara DENTRO de este componente, la otra superficie no tenía forma de montar
+ * el mismo: sólo de copiarlo. El porqué entero está en la cabecera de ese módulo.
  */
-const VALUES_VIGENTES: ReadonlySet<string> = new Set(ORDER_STATUS_SEED);
 
 // Estado cuyo listado muestra ademas "Liberada el" (la fecha para la que quedo
 // reprogramada = el dia en que el cron de liberacion la desbloquea, feature 46).
@@ -164,10 +184,9 @@ const ESTADO_EN_BODEGA = "en_bodega_central";
  */
 const MOTIVO_SIN_ACCIONES = BLOQUEO_SIN_AVISO;
 
-/** Etiqueta legible del estado; cae al `value` crudo si no hay label conocido. */
-function labelDe(value: string): string {
-  return (ORDER_STATUS_LABELS as Record<string, string>)[value] ?? value;
-}
+// FICHA 355: aquí estaba `labelDe`, la tercera copia del mismo mapa de etiquetas. La
+// declaración compartida usa `estatusLabel` (`./estatus-label`), que lee ese mismo
+// `ORDER_STATUS_LABELS` y es lo que ya pinta el chip de la tabla.
 
 async function catalogoFetcher(): Promise<OrderStatusLiteRow[]> {
   const res = await listarOrderStatus();
@@ -661,11 +680,12 @@ export function OrdenesListado({
 
   // R14: opciones del filtro = catálogo − retirados − exclude (por value), en el orden
   // determinista del catálogo (R5). Se filtra en el front.
+  //
+  // FICHA 355: el recorte lo hace `estadosOfrecidos`, compartido con la bodega satélite.
+  // Aquí se conservan las FILAS (no las opciones) porque más abajo hace falta traducir el
+  // id marcado de vuelta a su `value` para decidir columnas y resalte.
   const estadosDisponibles = useMemo<OrderStatusLiteRow[]>(
-    () =>
-      (catalogo ?? []).filter(
-        (s) => VALUES_VIGENTES.has(s.value) && !exclude.includes(s.value),
-      ),
+    () => estadosOfrecidos(catalogo, exclude),
     [catalogo, exclude],
   );
 
@@ -691,6 +711,18 @@ export function OrdenesListado({
   // limpio; el estado de aquí se vacía en la misma acción.
   const [resetFiltros, setResetFiltros] = useState(0);
 
+  /**
+   * FICHA 356 — dirección del orden por fecha de creación. Arranca donde arranca el contrato
+   * (`DIRECCION_ORDEN_INICIAL`, «Más recientes»), así que entrar a la pantalla enseña
+   * exactamente el listado de siempre, con el control ya puesto en lo que se está viendo.
+   *
+   * Vive AQUÍ y no dentro de `OrdenesModule` por la misma razón que la selección de filtros:
+   * el control se pinta en la barra, la barra la monta esta superficie y el módulo recibe el
+   * resultado ya decidido.
+   */
+  const [sortDir, setSortDir] = useState<DireccionOrden>(DIRECCION_ORDEN_INICIAL);
+  const orden = useMemo(() => ordenamientoCreacion(sortDir), [sortDir]);
+
   /** Deja la barra como recién abierta: sin valores y sin filtros puestos. */
   function limpiarFiltros() {
     setSeleccionFiltros({});
@@ -698,6 +730,12 @@ export function OrdenesListado({
     // partida, y una barra que se queda con cuatro controles vacíos no lo es.
     setFiltrosActivos([]);
     setResetFiltros((n) => n + 1);
+    // EL ORDEN NO SE TOCA, y es deliberado (ficha 356). "Limpiar todo" existe para deshacer
+    // lo que ESCONDE filas: un filtro o una búsqueda. El orden no oculta ninguna —las mismas
+    // órdenes, en otra secuencia—, así que devolverlo a «Más recientes» sería mover algo que
+    // el usuario no pidió mover. Además el botón sólo aparece cuando hay filtros o búsqueda
+    // puestos: si resetear el orden fuera parte de "limpiar", quien sólo cambió el orden no
+    // tendría forma de deshacerlo — el control, que sigue a la vista, ya es esa forma.
   }
 
   // Ids marcados en el filtro de estado. Vacío = sin filtro (todas las órdenes). Ya no
@@ -715,9 +753,12 @@ export function OrdenesListado({
   const verEliminadas =
     (seleccionFiltros[CLAVE_ELIMINADOS] ?? [])[0] === BOOLEAN_MARCADO;
 
-  const opciones = useMemo(
+  // FICHA 355: el control de estado, con sus opciones, sus etiquetas y sus textos, tal
+  // como lo declara el módulo compartido. `estadosDisponibles` ya aplicó el recorte, así
+  // que aquí se le pasa sin volver a excluir nada.
+  const declaracionEstado = useMemo(
     () =>
-      estadosDisponibles.map((s) => ({ value: s.id, label: labelDe(s.value) })),
+      filtroEstado(estadosDisponibles, { key: CLAVE_ESTADO, exclude: [] }),
     [estadosDisponibles],
   );
 
@@ -746,15 +787,7 @@ export function OrdenesListado({
     return [
       // El estado va parametrizado como un filtro más, no por fuera: mismo control,
       // misma limpieza y misma salida agregada que zona, tienda o geografía.
-      {
-        key: CLAVE_ESTADO,
-        label: "Estado",
-        kind: "multi",
-        placeholder: "Todos",
-        searchPlaceholder: "Filtrar estados…",
-        emptyMessage: "Ningún estado coincide",
-        options: opciones,
-      },
+      declaracionEstado,
       // R64: si el catálogo geográfico no cargó, se deshabilitan SUS filtros; el de
       // estado viene de otra fuente y sigue operativo.
       ...dependenDelCatalogo.map((f) =>
@@ -767,7 +800,7 @@ export function OrdenesListado({
     incluirFiltroReasignables,
     incluirFiltroMensajero,
     puedeEliminar,
-    opciones,
+    declaracionEstado,
   ]);
 
   /** Lo que ofrece el selector: cada filtro declarado, por su clave y su etiqueta. */
@@ -1023,6 +1056,29 @@ export function OrdenesListado({
               Object.keys(seleccionFiltros).length > 0
             }
           >
+            {/* FICHA 356 — el control de ORDEN, dentro de la misma barra y SIEMPRE a la
+                vista. Es lo que faltaba: el backend sabía ordenar desde la 352 y no había
+                dónde pedirlo («no veo un botón con el cual organizar los datos de las tablas
+                por su fecha de creación»).
+
+                Va en la barra y no en la cabecera de la columna «Fecha de creación» porque
+                esa columna es la 17.ª de 18: con scroll horizontal está fuera de pantalla
+                casi siempre, y en móvil siempre. Un control que hay que buscar arrastrando la
+                tabla reproduce el problema que estamos arreglando. La barra, en cambio, es la
+                referencia que el humano señaló para «cómo deben verse y comportarse las
+                cosas».
+
+                Es el PRIMER hijo, o sea el extremo izquierdo de la fila y delante de los
+                filtros que se vayan pidiendo: un sitio fijo, que no baila según qué filtros
+                haya puestos. Y es `SegmentedToggle`, el mismo conmutador del portal del
+                mensajero y de cierres, con el alto por defecto (`h-8`) que comparten el campo
+                de búsqueda y el botón de descarga de esta misma línea. */}
+            <SegmentedToggle
+              ariaLabel={ETIQUETA_ORDEN_CREACION}
+              options={OPCIONES_ORDEN_CREACION}
+              valor={sortDir}
+              onChange={setSortDir}
+            />
             {filtrosMontados.length > 0 ? (
               <FilterComponent
                 key={resetFiltros}
@@ -1033,6 +1089,7 @@ export function OrdenesListado({
           </BuscadorFiltros>
         }
         filter={filter}
+        orden={orden}
         columns={columns}
         mostrarHistorial={mostrarHistorial}
         resetSeleccion={resetSeleccion}
