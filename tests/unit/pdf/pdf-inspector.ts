@@ -158,6 +158,15 @@ export interface RectanguloDibujado {
   h: number;
   /** Operador de pintado: `S` (contorno), `f` (relleno), `B` (ambos)… */
   operador: string;
+  /**
+   * Grosor de trazo ACTIVO cuando se pinto, en puntos (el ultimo operador `w`).
+   *
+   * Feature 353 — hace falta porque el diseño pide «recuadro de BORDE GRUESO»
+   * para el importe y sin esto un cambio de grosor seria invisible para los
+   * tests: el rectangulo tiene las MISMAS coordenadas dibujado a 0,3 mm que a
+   * 0,6. El default de PDF cuando nadie ha emitido `w` es 1,0 pt.
+   */
+  grosor: number;
 }
 
 /**
@@ -173,22 +182,75 @@ export interface RectanguloDibujado {
  * direccion que contuviera «12 3 4 5 re S» dentro de un literal produciria un
  * rectangulo fantasma.
  */
-export function rectangulosDePagina(bytes: Uint8Array, indice = 0): RectanguloDibujado[] {
-  const stream = contenidoDePagina(bytes, indice)
+function streamSinTexto(bytes: Uint8Array, indice: number): string {
+  return contenidoDePagina(bytes, indice)
     .replace(/\((?:\\[\s\S]|[^()\\])*\)/g, "()")
     .replace(/<[0-9a-fA-F\s]*>/g, "<>");
+}
+
+export function rectangulosDePagina(bytes: Uint8Array, indice = 0): RectanguloDibujado[] {
+  const stream = streamSinTexto(bytes, indice);
   const out: RectanguloDibujado[] = [];
+  // Un solo recorrido para los dos operadores: el grosor de trazo es ESTADO del
+  // content stream, asi que hay que leer los `w` en el mismo orden que los `re`.
   const re =
-    /(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+re\s+(f\*|F|f|B\*|B|b\*|b|S|s|n|W)/g;
+    /(-?[\d.]+)\s+w\b|(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+re\s+(f\*|F|f|B\*|B|b\*|b|S|s|n|W)/g;
+  let grosor = 1;
   let m: RegExpExecArray | null;
   while ((m = re.exec(stream)) !== null) {
+    if (m[1] !== undefined) {
+      grosor = Number(m[1]);
+      continue;
+    }
     out.push({
-      x: Number(m[1]),
-      y: Number(m[2]),
-      w: Number(m[3]),
-      h: Number(m[4]),
-      operador: m[5],
+      x: Number(m[2]),
+      y: Number(m[3]),
+      w: Number(m[4]),
+      h: Number(m[5]),
+      operador: m[6],
+      grosor,
     });
+  }
+  return out;
+}
+
+/** Un segmento recto dibujado (`x y m` + `x y l`), con su grosor de trazo. */
+export interface TrazoDibujado {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  /** Grosor de trazo activo, en puntos. */
+  grosor: number;
+}
+
+/**
+ * Feature 353 — Los SEGMENTOS rectos de la pagina.
+ *
+ * Hace falta por la regla horizontal que el diseño aprobado pone bajo la
+ * cabecera: jsPDF la emite como `m` + `l` + `S`, que NO es un `re`, asi que
+ * `rectangulosDePagina` no la ve. Sin este lector la regla seria invisible para
+ * la verificacion y —peor— para el test de paridad entre los dos generadores:
+ * uno podria dibujarla y el otro no, y todo seguiria verde. Es el mismo agujero
+ * que la 350 tapo para los rectangulos, un operador mas abajo.
+ */
+export function trazosDePagina(bytes: Uint8Array, indice = 0): TrazoDibujado[] {
+  const stream = streamSinTexto(bytes, indice);
+  const out: TrazoDibujado[] = [];
+  const re = /(-?[\d.]+)\s+w\b|(-?[\d.]+)\s+(-?[\d.]+)\s+m\b|(-?[\d.]+)\s+(-?[\d.]+)\s+l\b/g;
+  let grosor = 1;
+  let actual: { x: number; y: number } | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(stream)) !== null) {
+    if (m[1] !== undefined) {
+      grosor = Number(m[1]);
+    } else if (m[2] !== undefined) {
+      actual = { x: Number(m[2]), y: Number(m[3]) };
+    } else if (actual !== null) {
+      const destino = { x: Number(m[4]), y: Number(m[5]) };
+      out.push({ x1: actual.x, y1: actual.y, x2: destino.x, y2: destino.y, grosor });
+      actual = destino;
+    }
   }
   return out;
 }

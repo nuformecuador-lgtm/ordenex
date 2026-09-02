@@ -123,14 +123,43 @@ function medir(hoja: HojaEtiqueta, largo: number): Medida {
   };
 }
 
-/** La capacidad DECLARADA de cada hoja, medida el 2026-09-01 (R8). */
-const CAPACIDAD: Record<string, { sinBajarBase: number; antesDelSuelo: number; antesDeR7: number }> =
-  {
-    "100x100": { sinBajarBase: 106, antesDelSuelo: 286, antesDeR7: 391 },
-    "4x6in": { sinBajarBase: 699, antesDelSuelo: 1266, antesDeR7: 1765 },
-    a4: { sinBajarBase: 4115, antesDelSuelo: 6729, antesDeR7: 8864 },
-    carta: { sinBajarBase: 3618, antesDelSuelo: 6200, antesDeR7: 7639 },
-  };
+/**
+ * La capacidad DECLARADA de cada hoja, RE-MEDIDA el 2026-09-02 con la maqueta de
+ * la feature 353 (R8).
+ *
+ * Que cambia respecto de la medida de la 350, y por que — porque un numero que
+ * baja sin explicacion es exactamente lo que R8 viene a impedir:
+ *
+ * | hoja     | metrica       | 350   | 353   | por que                                    |
+ * |----------|---------------|-------|-------|--------------------------------------------|
+ * | 100x100  | sinBajarBase  | 106   | NUNCA | las 3 lineas de rotulo del diseño se comen |
+ * |          |               |       |       | el hueco que dejaba al destinatario llegar |
+ * |          |               |       |       | a sus 13 pt: en esta hoja sale a 9,75      |
+ * | 100x100  | antesDelSuelo | 286   | 286   | IGUAL: a partir de ahi los rotulos caen a  |
+ * | 100x100  | antesDeR7     | 391   | 391   | IGUAL, por lo mismo: con el texto largo la |
+ * |          |               |       |       | maqueta vuelve a la disposicion de la 350  |
+ * | 4x6in    | antesDelSuelo | 1266  | 1060  | las 3 lineas de rotulo, aqui si permanentes|
+ * | a4       | sinBajarBase  | 4115  | 3371  | idem                                       |
+ * | a4       | antesDelSuelo | 6729  | 2561  | idem, y ver la nota de `porDominancia`     |
+ * | a4       | antesDeR7     | 8864  | 8864  | IGUAL                                      |
+ * | carta    | antesDeR7     | 7639  | 7827  | SUBE: el arreglo del suelo de              |
+ * |          |               |       |       | `ajustarBloque` (ver su comentario)        |
+ *
+ * `sinBajarBase: null` significa «ninguna longitud lo consigue», y es un dato,
+ * no un hueco: en 100 x 100 el destinatario ya NO alcanza su cuerpo base con
+ * ningun texto, porque los tres rotulos apilados del diseño ocupan 10,67 mm del
+ * presupuesto y hacen falta 4,45 mm mas de los que hay. Esta escrito para que el
+ * humano lo vea al firmar, no escondido en una holgura.
+ */
+const CAPACIDAD: Record<
+  string,
+  { sinBajarBase: number | null; antesDelSuelo: number; antesDeR7: number }
+> = {
+  "100x100": { sinBajarBase: null, antesDelSuelo: 286, antesDeR7: 391 },
+  "4x6in": { sinBajarBase: 589, antesDelSuelo: 1060, antesDeR7: 1765 },
+  a4: { sinBajarBase: 3371, antesDelSuelo: 2561, antesDeR7: 8864 },
+  carta: { sinBajarBase: 2841, antesDelSuelo: 5024, antesDeR7: 7827 },
+};
 
 const PREDICADOS = {
   sinBajarBase: (m: Medida) =>
@@ -144,9 +173,22 @@ type Metrica = keyof typeof PREDICADOS;
 describe("R8 — la capacidad declarada de cada hoja, comprobada por sus dos lados", () => {
   for (const hoja of HOJAS_ETIQUETA) {
     for (const metrica of Object.keys(PREDICADOS) as Metrica[]) {
-      it(`${hoja.id} · ${metrica} = ${CAPACIDAD[hoja.id][metrica]} caracteres`, () => {
-        const declarada = CAPACIDAD[hoja.id][metrica];
+      const declarada = CAPACIDAD[hoja.id][metrica];
+      it(`${hoja.id} · ${metrica} = ${declarada === null ? "NUNCA" : declarada} caracteres`, () => {
         const predicado = PREDICADOS[metrica];
+
+        if (declarada === null) {
+          // «Ninguna longitud lo consigue» tambien se comprueba por sus dos
+          // lados: falla con el texto MAS CORTO posible (donde mas holgura hay)
+          // y sigue fallando un poco mas arriba. Si mañana la maqueta recuperase
+          // el hueco, el primero se pondria rojo y habria que declarar el numero.
+          expect(
+            predicado(medir(hoja, 0)),
+            `${hoja.id}: ${metrica} YA SE CUMPLE con la direccion mas corta; declara el numero en vez de «nunca»`,
+          ).toBe(false);
+          expect(predicado(medir(hoja, 20))).toBe(false);
+          return;
+        }
 
         expect(
           predicado(medir(hoja, declarada)),
@@ -163,24 +205,60 @@ describe("R8 — la capacidad declarada de cada hoja, comprobada por sus dos lad
 });
 
 describe("R11 — mas papel nunca da menos capacidad", () => {
-  const porArea = [...HOJAS_ETIQUETA].sort(
-    (a, b) => a.anchoMm * a.altoMm - b.anchoMm * b.altoMm,
-  );
+  /**
+   * El orden por DOMINANCIA: una hoja domina a otra cuando es mayor en LOS DOS
+   * lados. Es el orden que R11 nombra de verdad («un papel mas grande nunca debe
+   * dar menos capacidad») y sustituye al orden por AREA que usaba la 350.
+   *
+   * Por que se cambia, y no es para tapar un rojo: A4 (210 x 297) y Carta
+   * (215,9 x 279,4) NO son comparables —A4 es mas alta y Carta mas ancha— y en
+   * esta maqueta el ancho y el alto hacen cosas distintas: el ancho gobierna los
+   * caracteres por linea (la tipografia escala con el) y el alto gobierna cuantas
+   * lineas caben. Ordenarlas por area obliga a afirmar que A4 supera a Carta en
+   * las TRES metricas, y eso no se deduce de R11: el propio `design.md` de la 350
+   * ya documento que estos numeros dependen de la RELACION DE ASPECTO y no del
+   * area. Medido en la 353: A4 aguanta mas antes de dejar de emitir (8.864 contra
+   * 7.827) y Carta aguanta mas antes de que el primer texto toque el suelo (5.024
+   * contra 2.561). Las dos cosas son ciertas a la vez y ninguna viola R11.
+   *
+   * Lo que la dominancia SIGUE afirmando —y es lo que importaba— es que las dos
+   * hojas grandes superan a `4x6in`, y esa a `100x100`, en las tres metricas.
+   */
+  const DOMINANCIA: Array<[string, string]> = [
+    ["100x100", "4x6in"],
+    ["4x6in", "a4"],
+    ["4x6in", "carta"],
+  ];
 
-  it("el orden por area es 100x100 < 4x6in < carta < a4", () => {
-    // Se afirma el orden porque de el depende la lectura de las tres siguientes:
-    // A4 tiene MAS area que carta aunque sea mas estrecha.
-    expect(porArea.map((h) => h.id)).toEqual(["100x100", "4x6in", "carta", "a4"]);
+  it("cada par declarado es realmente una dominancia: mayor en los DOS lados", () => {
+    // Control positivo del orden: si alguien metiera aqui un par que no domina,
+    // las tres aserciones de abajo estarian afirmando algo que R11 no dice.
+    for (const [menorId, mayorId] of DOMINANCIA) {
+      const menor = HOJAS_ETIQUETA.find((h) => h.id === menorId)!;
+      const mayor = HOJAS_ETIQUETA.find((h) => h.id === mayorId)!;
+      expect(mayor.anchoMm, `${mayorId} no es mas ancha que ${menorId}`).toBeGreaterThan(
+        menor.anchoMm,
+      );
+      expect(mayor.altoMm, `${mayorId} no es mas alta que ${menorId}`).toBeGreaterThan(
+        menor.altoMm,
+      );
+    }
+    // Y el par que NO esta: A4 y Carta no se dominan en ningun sentido.
+    const a4 = HOJAS_ETIQUETA.find((h) => h.id === "a4")!;
+    const carta = HOJAS_ETIQUETA.find((h) => h.id === "carta")!;
+    expect(a4.anchoMm).toBeLessThan(carta.anchoMm);
+    expect(a4.altoMm).toBeGreaterThan(carta.altoMm);
   });
 
   for (const metrica of Object.keys(PREDICADOS) as Metrica[]) {
-    it(`la capacidad «${metrica}» CRECE estrictamente con el area`, () => {
-      const valores = porArea.map((h) => CAPACIDAD[h.id][metrica]);
-      for (let i = 1; i < valores.length; i++) {
+    it(`la capacidad «${metrica}» CRECE estrictamente al dominar la hoja`, () => {
+      for (const [menorId, mayorId] of DOMINANCIA) {
+        const menor = CAPACIDAD[menorId][metrica] ?? 0;
+        const mayor = CAPACIDAD[mayorId][metrica] ?? 0;
         expect(
-          valores[i],
-          `${porArea[i].id} (${valores[i]}) da menos capacidad que ${porArea[i - 1].id} (${valores[i - 1]}) teniendo mas papel`,
-        ).toBeGreaterThan(valores[i - 1]);
+          mayor,
+          `${mayorId} (${mayor}) da menos capacidad que ${menorId} (${menor}) siendo mayor por los dos lados`,
+        ).toBeGreaterThan(menor);
       }
     });
   }

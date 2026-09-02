@@ -16,6 +16,8 @@ import {
   GAP_CAMPOS_MM,
   GAP_ROTULO_VALOR,
   GAP_TEXTO_CODIGOS,
+  GROSOR_RECUADRO_MM,
+  GROSOR_REGLA_MM,
   INTERLINEADO,
   LIENZO_BASE_MM,
   MAQUETA_BASE,
@@ -139,12 +141,62 @@ describe("R13 — las cinco bandas y su orden", () => {
   });
 });
 
-describe("R12/R24 — lo que NO se toca", () => {
-  it("el cuerpo del numero de guia sigue siendo 22 pt", () => {
-    expect(CUERPOS_BASE.guia).toBe(22);
-    expect(MAQUETA_BASE.fontGuia).toBe(22);
+describe("Feature 353 — el numero de guia es el elemento dominante", () => {
+  it("mide 30 pt, que son los ~10,6 mm de caja del diseño aprobado", () => {
+    // El numero sale del diseño, no del gusto: sobre el lienzo de 100 mm la caja
+    // del numero mide 10,6 mm y 10,6 / (25,4/72) = 30,0 pt. A los 22 pt de la
+    // 350 su caja mide 7,76 mm —el 73 % de lo aprobado— y esa es literalmente la
+    // diferencia que el humano vio y rechazo.
+    expect(CUERPOS_BASE.guia).toBe(30);
+    expect(MAQUETA_BASE.fontGuia).toBe(30);
+    expect(CUERPOS_BASE.guia * PT_A_MM).toBeCloseTo(10.58, 2);
   });
 
+  it("es el cuerpo MAYOR de toda la maqueta, con diferencia", () => {
+    // Sin esto, subir otro cuerpo por encima del de la guia pasaria inadvertido.
+    for (const [nombre, pt] of Object.entries(CUERPOS_BASE)) {
+      if (nombre === "guia") continue;
+      expect(
+        CUERPOS_BASE.guia,
+        `«${nombre}» (${pt} pt) alcanza al numero de guia`,
+      ).toBeGreaterThan(pt);
+    }
+    // Y por un factor, no por un pelo: el diseño lo quiere DOMINANTE.
+    expect(CUERPOS_BASE.guia).toBeGreaterThanOrEqual(2 * CUERPOS_BASE.destinatario);
+  });
+
+  it("la cabecera con el numero grande SIGUE cabiendo en el hueco del QR", () => {
+    // Es la razon por la que subir el numero no cuesta capacidad: el alto de la
+    // banda lo manda `max(QR_MM, pila de texto)`. La pila son tres filas —rotulo
+    // de marca, numero y la fila REM/FECHA— separadas por la regla derivada de
+    // la 282 (1 em del cuerpo del numero).
+    const pila =
+      CUERPOS_BASE.rotulo * PT_A_MM +
+      2 * separacionBajoGuiaMm(CUERPOS_BASE.guia) +
+      CUERPOS_BASE.remision * PT_A_MM * (INTERLINEADO - 1);
+    expect(pila).toBeLessThanOrEqual(QR_MM);
+    // Control positivo: no sobra tanto como para que la comprobacion sea vacia.
+    expect(pila).toBeGreaterThan(QR_MM * 0.8);
+  });
+});
+
+describe("Feature 353 — los grosores de trazo del diseño", () => {
+  it("el recuadro del importe es de borde GRUESO y la regla mas fina que el", () => {
+    expect(GROSOR_RECUADRO_MM).toBe(0.6);
+    expect(GROSOR_REGLA_MM).toBe(0.4);
+    expect(GROSOR_RECUADRO_MM).toBeGreaterThan(GROSOR_REGLA_MM);
+    expect(MAQUETA_BASE.grosorRecuadro).toBe(GROSOR_RECUADRO_MM);
+    expect(MAQUETA_BASE.grosorRegla).toBe(GROSOR_REGLA_MM);
+  });
+
+  it("la regla cabe DENTRO del hueco entre cabecera y destino: no cuesta alto", () => {
+    // Es el argumento por el que la regla es gratis. Si alguien la engordara
+    // hasta comerse el hueco, esto se pone rojo antes de que el papel lo diga.
+    expect(GROSOR_REGLA_MM).toBeLessThan(GAPS_ENTRE_BANDAS[0]);
+  });
+});
+
+describe("R12/R24 — lo que NO se toca", () => {
   it("el QR y el codigo de barras conservan sus dimensiones de siempre", () => {
     expect(QR_MM).toBe(26);
     expect(BARCODE_MM).toBe(16);

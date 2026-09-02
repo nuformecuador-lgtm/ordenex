@@ -338,14 +338,25 @@ export function ajustarBloque(
       };
     }
   }
+  // El SUELO, comprobado aparte. Feature 353 — este `componer` estaba aqui solo
+  // para devolver las lineas del caso perdido y su resultado NO se miraba:
+  // `cabe` iba a `false` sin condicion. Eso convertia en falso negativo todo
+  // bloque cuyo recorrido `cuerpoMaxPt - i * PASO` NO cae exactamente en
+  // `minimo`, que es lo normal y no un caso raro: el tope del detalle es
+  // `cuerpoTelefono - PASO` y el cuerpo del telefono sale de `cuerpo * 12/13`,
+  // que casi nunca esta en la rejilla de 0,25 pt. Medido: en A4, una direccion
+  // de 2.562 caracteres se rechazaba con «necesita 6,2 mm y hay 6,3» —el propio
+  // mensaje de error decia que cabia—, y la capacidad dejaba de ser monotona
+  // (2.561 si, 3.000 no, 4.000 si). Se evalua el suelo como un candidato mas.
   const r = componer(datos, anchoMm, minimo, medir);
+  const cabeEnElSuelo = r.entraDeAncho && r.altoMm <= altoMm + EPS;
   return {
     cuerpoPt: minimo,
     cuerpos: r.cuerpos,
     lineas: r.lineas,
     altoMm: r.altoMm,
-    cabe: false,
-    motivo: r.entraDeAncho ? "alto" : "ancho",
+    cabe: cabeEnElSuelo,
+    motivo: cabeEnElSuelo ? null : r.entraDeAncho ? "alto" : "ancho",
   };
 }
 
