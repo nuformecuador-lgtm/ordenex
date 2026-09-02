@@ -49,6 +49,8 @@ function fila(parcial: Partial<FilaProductoDTO> & { producto: string }): FilaPro
     unidades: 1,
     ordenes: 1,
     porStatus: [{ status: "entregada", conteo: 1 }],
+    ordenesAcompanadas: 0,
+    dinero: null,
     ...parcial,
   };
 }
@@ -58,6 +60,7 @@ function datos(filas: FilaProductoDTO[], extra: Partial<ConteoProductosDTO> = {}
     filas,
     ordenes: filas.reduce((s, f) => s + f.ordenes, 0),
     ordenesSinProducto: 0,
+    dinero: { estado: "denegado" },
     lastSync: "2026-09-01T18:30:00.000Z",
     ...extra,
   };
@@ -88,11 +91,28 @@ function renderTabla() {
   );
 }
 
-/** Los textos de las celdas de una fila de la tabla, en el orden en que están pintadas. */
-function celdasDeFila(nombre: string | RegExp): string[] {
+/** Las CELDAS de una fila de la tabla, en el orden en que están pintadas. */
+function tdsDeFila(nombre: string | RegExp): HTMLTableCellElement[] {
   const celda = screen.getByRole("cell", { name: nombre });
   const tr = celda.closest("tr");
-  return [...(tr?.querySelectorAll("td") ?? [])].map((td) => td.textContent ?? "");
+  return [...(tr?.querySelectorAll("td") ?? [])];
+}
+
+/** Los textos de las celdas de una fila de la tabla, en el orden en que están pintadas. */
+function celdasDeFila(nombre: string | RegExp): string[] {
+  return tdsDeFila(nombre).map((td) => td.textContent ?? "");
+}
+
+/**
+ * La CIFRA de una celda: el número que la encabeza, sin las líneas de contexto que la ficha
+ * 347 pone debajo (la composición de «Otros resultados», las acompañadas, lo pendiente).
+ *
+ * Se lee por `.tabular-nums`, que es la clase del componente `Cifra` y de nadie más: las
+ * líneas de contexto usan `Contexto`, que no la lleva. Si mañana alguien pinta una cifra sin
+ * `Cifra`, este helper cae al `textContent` entero y el caso lo dirá.
+ */
+function cifraDeCelda(td: HTMLTableCellElement): string {
+  return td.querySelector(".tabular-nums")?.textContent ?? td.textContent ?? "";
 }
 
 /**
@@ -360,8 +380,13 @@ describe("FICHA 346 · las columnas de conteo suman la columna «Órdenes»", ()
       .map((th) => th.textContent ?? "");
     const i = encabezados.indexOf(encabezado);
     expect(i).toBeGreaterThanOrEqual(0);
+    // FICHA 347 — la celda de «Otros resultados» lleva ahora DOS líneas: el conteo y, debajo,
+    // su composición («4 devueltas · 2 reprogramadas»). Se lee la CIFRA de la celda y no su
+    // `textContent` entero, que arrastraría la segunda línea. Sigue midiendo exactamente lo
+    // mismo: si el número pintado cambia, este caso cae.
     // La tabla es-CR separa los miles con un punto: se quita antes de convertir.
-    return Number((celdasDeFila(nombreFila)[i] ?? "").replace(/\./g, ""));
+    const td = tdsDeFila(nombreFila)[i];
+    return Number(cifraDeCelda(td).replace(/\./g, ""));
   }
 
   it("`Crema Especial MLX`: 3 + 2 + otros + 13 = 24, la captura del 2026-08-29", async () => {

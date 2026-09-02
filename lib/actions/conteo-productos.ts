@@ -26,6 +26,7 @@ import { crearConteoEntregasCacheDeNext } from "@/lib/cache/next-analitica-cache
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { defaultLogger, type ErrorLogger } from "@/lib/errors/logger";
 import { ConteoProductosRepository } from "@/lib/repositories/ConteoProductosRepository";
+import { DineroProductosRepository } from "@/lib/repositories/DineroProductosRepository";
 import { ConteoProductosService } from "@/lib/services/ConteoProductosService";
 import type { ResultadoConteoProductos } from "@/lib/types/conteo-productos";
 
@@ -46,12 +47,18 @@ export interface ConteoProductosDeps {
 }
 
 function construirServicio(now: () => Date): ConteoProductosService {
+  const prisma = getPrismaClient();
   return new ConteoProductosService(
-    new ConteoProductosRepository(getPrismaClient()),
+    new ConteoProductosRepository(prisma),
     // La MISMA cache que las otras seis lecturas vivas: mismo TTL de 15 min y mismo
     // kill-switch. Las entradas no se pisan porque la clave lleva prefijo propio
-    // (`claveDeConteoProductos`).
+    // (`claveDeConteoProductos`), y desde la ficha 347 con sufijo de CONCESION DE DINERO:
+    // sin el, un maestro dejaria el dinero en cache y el siguiente actor lo recibiria.
     crearConteoEntregasCacheDeNext(),
+    // FICHA 347 — el segundo repositorio. Se PASA aqui, que es el composition root de esta
+    // lectura: un servicio que lo importara por su cuenta no seria inyectable y el test que
+    // cuenta llamadas (R5: con el dinero denegado NO se llama) no podria existir.
+    new DineroProductosRepository(prisma),
     { now },
   );
 }

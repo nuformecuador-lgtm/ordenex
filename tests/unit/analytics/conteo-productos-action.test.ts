@@ -21,10 +21,13 @@ const DATOS: ConteoProductosDTO = {
       unidades: 4,
       ordenes: 4,
       porStatus: [{ status: "entregada", conteo: 4 }],
+      ordenesAcompanadas: 0,
+      dinero: null,
     },
   ],
   ordenes: 4,
   ordenesSinProducto: 0,
+  dinero: { estado: "denegado" },
   lastSync: "2026-09-01T12:00:00.000Z",
 };
 

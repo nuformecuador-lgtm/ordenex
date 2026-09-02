@@ -242,10 +242,15 @@ describe("Actualizar analítica — la séptima lectura entra sola (ficha 345)",
             unidades: 3,
             ordenes: 3,
             porStatus: [{ status: "entregada", conteo: 3 }],
+            // FICHA 347 — este caso mide el REFRESCO, no el dinero: la lectura llega sin
+            // concesion, que es tambien la forma que ve un rol sin dinero concedido (R6).
+            ordenesAcompanadas: 0,
+            dinero: null,
           },
         ],
         ordenes: 3,
         ordenesSinProducto: 0,
+        dinero: { estado: "denegado" },
         lastSync: LECTURA_VIEJA,
       },
     });

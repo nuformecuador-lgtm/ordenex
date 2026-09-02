@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { recorteDePresentacion, type Faceta } from "@/lib/analytics/presentacion";
 import { resolverAlcance, type ActorAnalitica } from "@/lib/analytics/alcance";
-import { listarMetricas } from "@/lib/analytics/metrics";
+import { ALCANCE_PRODUCTOS_DINERO, listarMetricas } from "@/lib/analytics/metrics";
 import { ROLES_ANALITICA } from "@/lib/analytics/types";
 
 // Feature 133 / T1.2 — R18: las facetas ofrecidas se DERIVAN del alcance de la 122.
@@ -129,21 +129,46 @@ describe("R18 · el tipo de alcance no depende de QUE metrica operativa se elija
 });
 
 describe("R18 · el retorno son enums y arrays de strings: ni filas, ni ids, ni nombres", () => {
-  it("las claves del recorte son exactamente alcance, facetas y productos, y sus valores son strings", () => {
+  it("las claves del recorte son exactamente alcance, facetas, productos y productosDinero", () => {
     // FICHA 345: entra `productos`, y entra como ETIQUETA («visible»/«oculta») y no como
     // `boolean`. El motivo esta escrito en `presentacion.ts` y en el guardia de frontera: el
     // contrato de este retorno solo admite etiquetas, y esa exigencia es lo que mantiene fuera
     // cualquier campo de datos.
+    //
+    // FICHA 347: entra `productosDinero`, con el MISMO criterio y por el MISMO motivo. Campo
+    // PROPIO y no un reuso: son dos permisos distintos, y separarlos es lo que permite cerrar el
+    // dinero a un rol con una linea sin tocar el volumen.
     for (const caso of [...CASOS.map((c) => c.actor), null]) {
       const recorte = recorteDePresentacion(caso);
-      expect(Object.keys(recorte).sort()).toEqual(["alcance", "facetas", "productos"]);
+      expect(Object.keys(recorte).sort()).toEqual([
+        "alcance",
+        "facetas",
+        "productos",
+        "productosDinero",
+      ]);
       expect(typeof recorte.alcance).toBe("string");
       expect(Array.isArray(recorte.facetas)).toBe(true);
       expect(["visible", "oculta"]).toContain(recorte.productos);
+      expect(["visible", "oculta"]).toContain(recorte.productosDinero);
       for (const f of recorte.facetas) {
         expect(["zona", "tienda", "mensajero"]).toContain(f);
       }
     }
+  });
+
+  it("FICHA 347 · `productosDinero` para los CINCO roles, y sin nombrar ninguno en el modulo", () => {
+    // Se afirma rol por rol contra la TABLA, no contra una lista escrita en el test: si alguien
+    // cambia `ALCANCE_PRODUCTOS_DINERO`, la presentacion lo sigue sola.
+    for (const caso of CASOS) {
+      const esperado =
+        ALCANCE_PRODUCTOS_DINERO[caso.actor.rol as keyof typeof ALCANCE_PRODUCTOS_DINERO] ===
+        "prohibido"
+          ? "oculta"
+          : "visible";
+      expect(recorteDePresentacion(caso.actor).productosDinero, caso.actor.rol).toBe(esperado);
+    }
+    // Y hoy, en concreto: los dos totales y la tienda la ven; satelite y mensajero no.
+    expect(recorteDePresentacion(null).productosDinero).toBe("oculta");
   });
 
   it("ningun valor del recorte contiene el uuid del actor ni el de su zona", () => {

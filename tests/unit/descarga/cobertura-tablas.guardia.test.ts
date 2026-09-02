@@ -146,8 +146,19 @@ const ARBOLES_UI = ["app", "components"] as const;
 // «hay tablas sin registrar: app/(app)/analitica/_components/entregas/ProductosTabla.tsx #1» antes
 // de tocar estos números, que es la convención escrita en este propio archivo. Censo total:
 // 33 = 32 `<DataTable>` + 1 `<table>` cruda.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 32;
-const TOTAL_INSTANCIAS_DATATABLE = 32;
+// FICHA 347 (F5/G5): 32 → 33 archivos y 32 → 33 instancias. La de mas es el DETALLE ORDEN POR
+// ORDEN del dinero de un producto (`analitica/_components/entregas/DineroProductoDetalle.tsx`),
+// que se despliega desde una fila de la tabla que trajo la 345. Nace `fuera`, y no por el motivo
+// de la 343 —no es un recorte de otro archivo: ninguna descarga del repo enseña que ORDENES
+// componen el dinero de un producto— sino porque el borde de la ficha solo sirve el detalle
+// PAGINADO y no hay modo completo; el motivo entero esta en su entrada de `censo-tablas.ts` y la
+// consecuencia (R72 sin cubrir) esta dicha alli y en `progress/impl_347.md`. Esta guardia se vio
+// fallar primero con «hay tablas sin registrar:
+// app/(app)/analitica/_components/entregas/DineroProductoDetalle.tsx #1» antes de tocar estos
+// numeros, que es la convencion escrita en este propio archivo. Censo total: 34 = 33
+// `<DataTable>` + 1 `<table>` cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 33;
+const TOTAL_INSTANCIAS_DATATABLE = 33;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -290,7 +301,10 @@ describe("guardia de cobertura del censo de tablas", () => {
     // FICHA 343 (B6.1): 9 -> 10. La de mas es el desplegable de una fila de la tarjeta de la
     // ganancia: `fuera` y sin control, porque es un recorte del MISMO libro de la caja, que ya
     // descarga el conjunto completo con sus filtros.
-    expect(excluidas.length).toBe(10);
+    // FICHA 347 (F5/G5): 10 -> 11. La de mas es el detalle orden por orden del dinero de un
+    // producto: `fuera` y sin control, porque el borde solo lo sirve paginado y un archivo
+    // saldria truncado a una pagina o reconstruido con N llamadas desde el navegador.
+    expect(excluidas.length).toBe(11);
     for (const inst of excluidas) {
       const tabla = registro.get(inst.ruta)!.tablas[inst.indice];
       expect(inst.declaraDescarga, `${inst.ruta} :: ${tabla.nombre}`).toBe(false);
@@ -327,7 +341,9 @@ describe("guardia de cobertura del censo de tablas", () => {
     // son dos pantallas distintas con dos alcances distintos (design §5.2/§11-A5).
     // FICHA 345 (T8.3): 32 → 33, por la tabla de productos de `/analitica`, la primera
     // `<DataTable>` de esa pantalla. Las 11 exclusiones NO se mueven.
-    expect(totalCensado).toBe(33);
+    // FICHA 347 (F5/G5): 33 → 34, por el detalle orden por orden del dinero de un producto.
+    // Las 22 con descarga NO se mueven: la que entra nace `fuera`.
+    expect(totalCensado).toBe(34);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -414,8 +430,13 @@ describe("guardia de cobertura del censo de tablas", () => {
     // dos de la 344: lo que enseña no lo produce ninguna otra descarga del repo. `/analitica` ya
     // exportaba —el CSV operativo de la 134 y el financiero— pero eso son series de métricas por
     // fecha; el grano «producto» no existe en el catálogo de dimensiones.
+    // FICHA 347 (F5/G5): 22 dentro de alcance NO se mueven y las exclusiones pasan de 11 a 12.
+    // La que entra es el detalle del dinero de un producto, y su motivo NO es el de la 343 (un
+    // recorte de algo que ya se descarga): es que no existe la puerta para servirlo entero. La
+    // diferencia importa, porque la de la 343 no se va a cablear nunca y esta si, en cuanto el
+    // borde gane su modo completo.
     expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(22);
-    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(11);
+    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(12);
   });
 
   it("una tabla compartida declara TODAS las pantallas que la montan", () => {

@@ -21,7 +21,11 @@
 
 import { esRolAnalitica, resolverAlcance } from "@/lib/analytics/alcance";
 import type { ActorAnalitica } from "@/lib/analytics/alcance";
-import { ALCANCE_PRODUCTOS, listarMetricas } from "@/lib/analytics/metrics";
+import {
+  ALCANCE_PRODUCTOS,
+  ALCANCE_PRODUCTOS_DINERO,
+  listarMetricas,
+} from "@/lib/analytics/metrics";
 import type { MetricaDominio } from "@/lib/analytics/types";
 
 /**
@@ -69,6 +73,23 @@ export interface RecortePresentacion {
    * modulo se aplica aqui palabra por palabra.
    */
   readonly productos: "visible" | "oculta";
+  /**
+   * FICHA 347 (R6) — si las columnas de DINERO de la tabla de productos se pintan o no.
+   *
+   * Etiqueta y no `boolean`, por el MISMO motivo, palabra por palabra, que su hermana de arriba:
+   * el bloque (b) de `tablero-operativo-frontera.guardia` exige que todo campo de este contrato
+   * sea una etiqueta, y esa exigencia es justo lo que mantiene los campos de DATOS fuera. Un
+   * `boolean` habria obligado a ensanchar el predicado del guardia.
+   *
+   * ⚠ CAMPO PROPIO Y NO UN REUSO DE `productos`: son DOS permisos distintos. El dia que se
+   * decida que una tienda no ve su dinero en esta pantalla —decision de producto viva—, esa
+   * separacion es lo que permite cambiarlo con una linea sin tocar el volumen.
+   *
+   * Y no sustituye a nada: la Server Action DENIEGA igual (R5) y no emite ni una cifra. Un panel
+   * que no se pinta no es un dato que no se sirve — el aviso de la cabecera de este modulo se
+   * aplica aqui palabra por palabra.
+   */
+  readonly productosDinero: "visible" | "oculta";
 }
 
 /** Las tres, en el orden en que la barra las dibuja hoy (`FiltrosOperativos.tsx:152-203`). */
@@ -159,7 +180,7 @@ export function recorteDePresentacion(actor: ActorAnalitica | null): RecortePres
   const resolucion = resolverAlcance(actor, metricaOperativaDeReferencia());
 
   if (resolucion.estado === "denegado") {
-    return { alcance: "denegado", facetas: [], productos: "oculta" };
+    return { alcance: "denegado", facetas: [], productos: "oculta", productosDinero: "oculta" };
   }
 
   const alcance = resolucion.alcance.tipo;
@@ -167,6 +188,7 @@ export function recorteDePresentacion(actor: ActorAnalitica | null): RecortePres
     alcance,
     facetas: FACETAS.filter((f) => facetaSeOfrece(f, alcance)),
     productos: seccionDeProductos(actor),
+    productosDinero: dineroDeProductos(actor),
   };
 }
 
@@ -187,4 +209,20 @@ function seccionDeProductos(actor: ActorAnalitica | null): RecortePresentacion["
   const rol = actor?.rol;
   if (rol === undefined || !esRolAnalitica(rol)) return "oculta";
   return ALCANCE_PRODUCTOS[rol] === "prohibido" ? "oculta" : "visible";
+}
+
+/**
+ * FICHA 347 (R6) — se pintan las columnas de dinero MIENTRAS `ALCANCE_PRODUCTOS_DINERO` no diga
+ * `prohibido` para el rol del actor.
+ *
+ * Se pregunta a la SEGUNDA tabla, no a la del volumen: son dos permisos distintos y el unico
+ * sitio del repo donde puede vivir una regla por rol es `lib/analytics/metrics.ts`. Aqui no se
+ * nombra ni un solo rol, igual que en el resto del modulo.
+ *
+ * Falla CERRADO: un rol que no es lector de analitica, o un actor sin sesion, no ve las columnas.
+ */
+function dineroDeProductos(actor: ActorAnalitica | null): RecortePresentacion["productosDinero"] {
+  const rol = actor?.rol;
+  if (rol === undefined || !esRolAnalitica(rol)) return "oculta";
+  return ALCANCE_PRODUCTOS_DINERO[rol] === "prohibido" ? "oculta" : "visible";
 }

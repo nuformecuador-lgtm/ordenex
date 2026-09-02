@@ -8,6 +8,7 @@ import {
   CRITERIO_DE_APORTE,
   satisfaceCriterio,
 } from "@/lib/utils/aporte-por-orden";
+import { CRITERIO_RECAUDO_ENTREGA } from "@/lib/utils/dinero-por-producto";
 import { WALLET_INGRESO_CONCEPTO_SEED } from "@/lib/types/wallet";
 
 /**
@@ -213,6 +214,55 @@ describe("ficha 344 — el criterio de aporte y la formula no pueden divergir (R
     // tarifa vigente, que es exactamente lo que hace el feed.
     expect(CRITERIO_COD_RECAUDADO.exigeTarifa).toBe(false);
     expect(CRITERIO_COD_RECAUDADO.exigeCobraComision).toBe(false);
+  });
+
+  it("FICHA 347 · el criterio del RECAUDO DE ENTREGA coincide con «esa gestion recaudo en una entrega»", () => {
+    // Las 40 combinaciones de (resultado x cobraComision x hayTarifa x hayMontoRecibido). El
+    // criterio de la 347 es MAS ESTRECHO que el del ledger (`CRITERIO_COD_RECAUDADO`): solo
+    // `entregada`. Es ⟨Q1⟩, decidida por el humano, y aqui queda escrita como comportamiento.
+    let celdas = 0;
+    for (const resultado of RESULTADOS) {
+      for (const cobraComision of [true, false]) {
+        for (const hayTarifa of [true, false]) {
+          for (const hayMontoRecibido of [true, false]) {
+            const esperado = resultado === "entregada" && hayMontoRecibido;
+            expect(
+              satisfaceCriterio(CRITERIO_RECAUDO_ENTREGA, {
+                resultado,
+                cobraComision,
+                hayTarifa,
+                hayMontoCobrar: false,
+                hayMontoRecibido,
+              }),
+              `celda recaudo_entrega / ${resultado} / com=${cobraComision} / tar=${hayTarifa} / rec=${hayMontoRecibido}`,
+            ).toBe(esperado);
+            celdas += 1;
+          }
+        }
+      }
+    }
+    expect(celdas).toBe(40);
+  });
+
+  it("FICHA 347 · donde DIVERGE del criterio del ledger, y por que se acepta", () => {
+    // Las 4 gestiones NO-entrega con recaudo: el ledger de la tienda SI las acredita
+    // (`cod_recaudado`) y esta ficha NO las muestra. Medido en produccion: CERO gestiones con
+    // recaudo que no sean entrega, asi que hoy las dos definiciones dan el mismo numero. El
+    // filtro explicito existe para que la cifra no cambie sola el dia que eso deje de ser
+    // cierto — no para cambiarla hoy.
+    const divergentes = RESULTADOS.filter((r) => r !== "entregada");
+    expect(divergentes).toEqual(["reprogramada", "devuelta", "rechazada", "incidente"]);
+    for (const resultado of divergentes) {
+      const hechos = {
+        resultado,
+        cobraComision: false,
+        hayTarifa: false,
+        hayMontoCobrar: false,
+        hayMontoRecibido: true,
+      };
+      expect(satisfaceCriterio(CRITERIO_COD_RECAUDADO, hechos), resultado).toBe(true);
+      expect(satisfaceCriterio(CRITERIO_RECAUDO_ENTREGA, hechos), resultado).toBe(false);
+    }
   });
 
   it("ningun hecho del criterio es ajeno a las columnas de `cierre_detail` y `gestion_orden`", () => {
