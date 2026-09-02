@@ -219,20 +219,139 @@ verificó el md5 al final (`765dcfcd…` para `moneda.ts`, `315564ef…` para el
 Las **tres** suites (guardia, identidades y `moneda-formato`) cazan las seis mutaciones del
 módulo de moneda de forma independiente. **Ninguna sobrevivió en verde.**
 
+### Las tres del ANCHO (2026-09-02), y la que sobrevivió antes de existir el arreglo
+
+Sobre `app/(app)/wallet/_components/DetalleFilaComposicion.tsx`, con el mismo arnés
+autocomprobado (`scratchpad/mutar-ancho.py`; md5 verificado antes y después, restaurado a
+`6779a072`):
+
+| # | mutación | ANTES del caso nuevo | DESPUÉS | línea de fallo |
+| --- | --- | --- | --- | --- |
+| **M8** | `whitespace-nowrap` → **`truncate`** en `ImporteCelda` | **SOBREVIVE — 50/50 en verde** | **muerta**, 1 rojo | `DetalleFilaComposicion.test.tsx:711:7` — `la celda del importe perdió whitespace-nowrap: la cifra puede partirse o encogerse` |
+| **M9** | la celda del importe pierde `whitespace-nowrap` | (mismo agujero) | **muerta**, 1 rojo | `DetalleFilaComposicion.test.tsx:711:7` |
+| **M10** | la celda de texto pierde `wrap-anywhere` | (mismo agujero) | **muerta**, 1 rojo | `DetalleFilaComposicion.test.tsx:717:7` — `deja de encoger y le come el sitio al importe` |
+
+M8 es la mutación que el coordinador pidió («deshacer tu arreglo de ancho tiene que poner rojo
+algo»). No hubo arreglo de ancho que deshacer —no hacía falta, §7—, así que se mutó **lo que
+sostiene el ancho**. Y la respuesta a «si nada lo caza, dilo» es que efectivamente **nada lo
+cazaba**: ese es el hallazgo, y el caso nuevo es la respuesta.
+
+⚠️ **Un primer intento de este arnés mintió y se detectó.** Escribía su plan en `/tmp`, que el
+Python nativo de Windows no ve: falló al escribirlo, ninguna mutación se aplicó y los tests
+corrieron sobre código intacto reportando «22 passed» tres veces seguidas. Los `Traceback` en la
+salida lo delataron. Es exactamente `arnes-de-mutaciones-que-miente`, y por eso la versión final
+aborta con código ≠ 0 si el md5 del fuente no cambia en disco.
+
 ---
 
 ## 7. Impacto visual — el número
 
+> ### 🛑 CORRECCIÓN DEL 2026-09-02 — LA PRIMERA VERSIÓN DE ESTA SECCIÓN ERA FALSA
+>
+> Decía: «a 390 px el desborde de `DetalleFilaComposicion` vuelve a abrirse ~16 px». **Se midió
+> en Chromium y no es cierto: el desborde a 390 px es 0, y sigue siendo 0 incluso con
+> `₡9.999.999.999,99`.** El error queda escrito, no borrado.
+>
+> **De dónde salió.** La ficha 343 dejó escrito «284 pedidos sobre 284 disponibles, desborde 0»
+> y lo leí como «el ancho mínimo de la tabla es 284, o sea margen cero». No dice eso:
+> `scrollWidth == clientWidth` sólo dice que la tabla es `w-full` y llena su caja. **El ancho
+> mínimo real de la tabla móvil es 174 px**, no 284. La 343 lo había dicho además con todas las
+> letras dos párrafos más abajo —«con una cifra larga (`₡12.345.679`): desborde 0,
+> `fueraDcha=0`. **No es que quepa por poco: cabe**»— y no lo leí.
+>
+> Es *una imposibilidad razonada en vez de medida*, y en la dirección pesimista: inventé un
+> coste que no existía y estuve a punto de hacer pagar por él un rediseño de layout.
+
 **La medida exacta y libre de fuente: +3 caracteres** (`separadorDecimal` + 2 dígitos) **y solo
 en las filas cuyo importe tiene cola.**
 
-**En píxeles: ≈ +16 px.** ⚠️ Es un número **derivado, no medido de nuevo**: el encargo prohíbe
-levantar el servidor de desarrollo, así que se deriva de las dos mediciones que la ficha 348 ya
-tomó en Chromium con esta misma fuente y tamaño (`ProductosTabla`): `₡393.433` = 65 px (8
-caracteres) y `₡12.345.678` = 81 px (11 caracteres) → **3 caracteres con la forma «separador +
-2 dígitos» = 16 px**. Lo que se añade tiene esa misma forma (coma + 2 dígitos) y las celdas
-llevan `tabular-nums`, así que los dígitos son de ancho fijo; el margen de error es el de la
-coma frente al punto, ±1–2 px.
+**En píxeles, medido en Chromium con Poppins real: +21 px** en el ancho mínimo de la tabla del
+detalle de composición (móvil 174 → 195 px con los mismos importes de la 339; escritorio
+340 → 361 px). El «≈16 px» de la versión anterior era una derivación a partir de dos medidas de
+la ficha 348 sobre OTRA tabla; este número medido lo sustituye.
+
+### El instrumento, y cómo se sabe que no miente
+
+`scratchpad/medir359.mjs` + `scratchpad/calibra359.mjs`: Chromium de Playwright, el **DOM real**
+volcado del componente y el **CSS real** (Tailwind compilado desde `app/globals.css`), con
+Poppins cargada de Google Fonts. Mide lo mismo que midió la 343: `scrollWidth − clientWidth` del
+contenedor de scroll de la `DataTable`, más `fueraDcha` y `recorteInterno` por celda.
+
+No se midió contra un servidor de desarrollo porque la base local no tiene movimientos de wallet
+sembrados: el panel saldría vacío y no habría celda de importe que medir. El banco los inyecta.
+
+**Calibración — el banco reproduce las CUATRO mediciones que la 343 hizo contra el servidor
+real, con ≤2 px de error, antes de medir nada nuevo:**
+
+| viewport | la 343 midió | el banco |
+| --- | --- | --- |
+| 390 (móvil) | scroller 284, desborde **0** | scroller 282, desborde **0** |
+| 768 | desborde **147** | **148** (caja 186 px) |
+| 1024 | desborde **19** | **20** (caja 314 px) |
+| 1440 | scroller **498**, desborde 0 | scroller **498**, desborde 0 |
+
+Las cajas de 768/1024/1440 no se supusieron: se **barrió** el ancho hasta reproducir esos
+desbordes con el DOM de entonces, y luego se midieron esos mismos anchos con los importes nuevos.
+
+### Desborde por viewport, antes y después
+
+Mismos importes de la 339 (`₡1.700` · `₡3.400` · `₡10.200`) contra los mismos con cola:
+
+| viewport | antes (339) | con cola (359) | Δ | `₡12.415,92` | `₡1.234.567,89` | `₡9.999.999.999,99` |
+| --- | --- | --- | --- | --- | --- | --- |
+| **390 (móvil)** | **0** | **0** | **0** | **0** | **0** | **0** |
+| 768 | 148 | 169 | +21 | 164 | 188 | 224 |
+| 1024 | 20 | 41 | +21 | 36 | 60 | 96 |
+| 1440 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+### A 390 px: `innerText` íntegro y holgura
+
+`fueraDcha = 0` y `recorteInterno = 0` en **todos** los casos. Leído del DOM ya pintado:
+
+```
+caja 308 px -> scroller client=282  scroll=282  DESBORDE=0  flechas=0
+  cols: Movimiento=177 / Importe=105
+  importe "₡12.415,92"          fueraDcha=0  recorteInterno=0
+  importe "₡1.234.567,89"       fueraDcha=0  recorteInterno=0
+  importe "₡9.999.999.999,99"   fueraDcha=0  recorteInterno=0
+```
+
+| juego de importes | ancho mínimo de la tabla | holgura sobre los 282 px |
+| --- | --- | --- |
+| `₡1.700` · `₡3.400` · `₡10.200` (la 339) | 174 px | **108 px** |
+| los mismos con cola | 195 px | **87 px** |
+| `₡12.415,92` | 190 px | **92 px** |
+| `₡1.234.567,89` (peor caso realista) | 214 px | **68 px** |
+| `₡9.999.999.999,99` (tope de `DECIMAL(12,2)`) | 250 px | **32 px** |
+
+**Conclusión: a 390 px no hay nada que arreglar.** El desborde ya es 0 con la cola puesta y lo
+sigue siendo con el importe más largo que la columna puede almacenar. No hizo falta
+`@container`, ni pintar la cola a cuerpo más chico, ni tocar el rótulo — y por eso no se tocó
+nada de eso.
+
+### Lo que SÍ cuesta la cola, y por qué no se amplía el alcance
+
+**768 y 1024 px: +21 px cada uno**, sobre un desborde que **ya existía antes de esta ficha**
+(148 y 20 px) y que la 339 dejó declarado como deuda abierta con su instrumento identificado
+(`@container`, no el viewport). El encargo estaba acotado a 390 px y pedía explícitamente no
+ampliar por cuenta propia: **queda como estaba, con el número medido**.
+
+### Lo que sí estaba roto: el ancho NO estaba atado por ningún test
+
+Buscando qué protegía ese ancho apareció una **promesa falsa**. El docstring del bloque móvil de
+`tests/components/DetalleFilaComposicion.test.tsx` decía: «Si alguien vuelve a meter `truncate`,
+`line-clamp` o una abreviatura de miles en la celda del importe, estos tres caen».
+
+**No caen.** Se aplicó la mutación —`whitespace-nowrap` → `truncate` en `ImporteCelda`— y los
+**50 casos** de ese archivo y de `ComposicionGananciaCard` pasaron **en verde**: en jsdom
+`truncate` no toca el `textContent`, y lo que esos tres casos leen es texto. La clase que
+sostiene todo el arreglo de la 339 no la miraba nadie.
+
+Se cierra con un caso ESTRUCTURAL en el mismo archivo (`FICHA 359 — la celda del importe no
+puede recortar ni abreviar`), que mira las clases del fuente: `whitespace-nowrap` en la celda del
+importe (aislando la función `ImporteCelda`, para que no pase por el `nowrap` de la fecha, que es
+otra celda y otro oficio), `wrap-anywhere` en la celda de texto, y cero
+`truncate`/`line-clamp`/`text-ellipsis`/`overflow-hidden` en el fuente. Con su contraprueba.
 
 ### Cuántas columnas se ensanchan
 
@@ -250,35 +369,19 @@ producción que trae la ficha:
 | **NO se ensanchan** (0 con cola en 1.575 filas medidas: 971 montos a cobrar + 577 fletes + 27 totales de cierre) | **14** — montos a cobrar, pagos al mensajero, montos recibidos, fletes, `fulfillment`, gastos fijos, pagos registrados | sin cambio |
 | **Ya mostraban cola** | **2** — `OrdenesConMontoAjustadoTabla` (usaba `montoExacto` desde la 300) | sin cambio |
 
-### ⚠️ La columna de la wallet por la que se peleó ayer: SÍ se vuelve a romper. Este es el número.
+### La columna de la wallet por la que se peleó: NO se vuelve a romper (medido)
 
 `app/(app)/wallet/_components/DetalleFilaComposicion.tsx` — la columna **Importe** del panel que
-arreglaron las fichas 339/344 el 2026-08-31. La ficha 339 dejó **medido en Chromium** (y escrito
-en el docstring del propio archivo):
+arreglaron las fichas 339/344 el 2026-08-31. Las cifras están arriba, en «Desborde por viewport»
+y «A 390 px». En una línea: **a 390 px el desborde es 0 antes y después, con 68–108 px de
+holgura**, y a 768/1024 la cola añade +21 px a un desborde que ya existía y que esta ficha no
+tiene encargo de cerrar.
 
-| viewport | antes de la 339 | después de la 339 | **con la ficha 359 (derivado)** |
-| --- | --- | --- | --- |
-| **390 px** (móvil) | 309 px pedidos / 284 disponibles → **25 px de recorte** | 284 / 284 → **desborde 0, margen cero** | 284 + 16 = **300 / 284 → ~16 px de recorte vuelve**, en las filas con cola |
-| **768 px** | desborde 147 px (declarado, no arreglado) | igual, **147 px** | **~163 px** |
-| **1024 px** | desborde 19 px (declarado) | igual, **19 px** | **~35 px** |
-| **1280 / 1440 px** | cabe | cabe | cabe (hay holgura) |
-
-Por qué el +16 px va directo al ancho mínimo de la tabla: la ficha 339 lo dejó escrito —«la
-celda de texto lleva `wrap-anywhere`, así que puede encoger hasta casi nada y **el ancho mínimo
-de la tabla pasa a ser prácticamente el del importe**»— y `ImporteCelda` es
-`whitespace-nowrap`, o sea que empuja en vez de partirse. El margen que la 339 consiguió era
-exactamente **cero** (284 sobre 284).
-
-**Consecuencia y por qué no la arreglo aquí:** es dinero recortado, que la propia 339 clasifica
-como «el punto grave — no se ve roto, se ve como OTRO número». Pero arreglarlo es rediseñar el
-layout de esa tabla, que es otra ficha (y la 339 ya dejó dicho cuál es el instrumento correcto:
-`@container`, no el viewport). **Queda declarado y con el número, no tapado.** Afecta a ~26 % de
-las filas de ese panel y solo por debajo de 1280 px.
-
-El resto de las columnas de dinero **no tienen ese problema**: `ProductosTabla` es la otra con
-mínimos declarados y ahí sobra sitio —su `minWidth` de dinero es 6 rem = 96 px y la cifra medida
-pide 89, así que con +16 px la columna crece unos 9 px por encima de su suelo y el scroller pasa
-de 1.416 a ~1.448 px de contenido a 1440—; las demás son de ancho automático y reflúyen.
+El resto de las columnas de dinero tampoco tienen problema. La otra con mínimos declarados es
+`ProductosTabla`: su `minWidth` de dinero es 6 rem = 96 px y la cifra que la 348 midió pide
+89 px, así que con la cola la columna crece unos pocos píxeles por encima de su suelo y el
+scroller pasa de los 1.416 px de contenido que midió la 348 a ~1.450 px a 1440 — donde sobra
+sitio. Las demás son de ancho automático y refluyen.
 
 ---
 
@@ -301,6 +404,10 @@ de 1.416 a ~1.448 px de contenido a 1440—; las demás son de ancho automático
 - **Renombrado + reescrito**: `tests/unit/guards/dinero-sin-centimos.guardia.test.ts` →
   `dinero-centimos-cuando-existen.guardia.test.ts` (28 casos).
 - **Reescrito**: `tests/unit/config/moneda-formato.test.ts` (40 casos).
+- **Caso nuevo + prosa corregida** (2026-09-02, encargo del ancho):
+  `tests/components/DetalleFilaComposicion.test.tsx` — cierra la promesa falsa de la 339 con un
+  caso estructural sobre las clases de la celda del importe. Es la ÚNICA modificación de código
+  del segundo encargo: no se tocó ni un componente.
 - **Aserciones actualizadas una a una** (21 archivos): `AnularPagoDialog`, `CajaResumenCard`,
   `CierreDetalleIncidente`, `CierreDiaModule`, `CierresAdminModule`, `CierresAdminPagoMensajero`,
   `ComposicionGananciaCard`, `CorregirDatosCliente.novedades`, `CorregirDatosCliente.ordenes`,
@@ -334,17 +441,30 @@ $ pnpm lint
 ```
 
 ```
-$ pnpm test
- Test Files  1 failed | 1661 passed (1662)
-      Tests  1 failed | 23516 passed | 26 skipped (23543)
-   Duration  546.17s
+$ pnpm test                                        # corrida final, 2026-09-02 12:48
+ Test Files  2 failed | 1660 passed (1662)
+      Tests  2 failed | 23516 passed | 26 skipped (23544)
+   Duration  541.14s
 ```
+
+Los **dos** rojos, y ninguno es de esta ficha:
+
+1. `superficie-de-uso.guardia` por `lib/actions/tarifas.ts:67` — **el heredado y tolerado**.
+2. `CrearTiendaForm.test.tsx` — **flake preexistente, medido**: falla **2 de 5** corridas en
+   AISLADO y con un caso distinto cada vez (`al CREAR ofrece sólo a quien no tiene ninguna
+   tarifa` en la corrida completa, `una tienda con SÓLO tarifas de zona tampoco se ofrece` en
+   aislado); `Unable to find an accessible element with the role "option"`, o sea una carrera de
+   `userEvent` con el `<select>`. **No lo toca esta ficha**: el commit `086d90b7` no modifica
+   ningún archivo de su cierre de dependencias (importa `CrearTiendaForm`, `TarifaDTO` y
+   `UsuarioPorRolDTO`, y ninguno se tocó), y salió VERDE en las corridas completas de las 11:38
+   y las 12:03 sobre este mismo árbol. Queda **declarado para el leader**, no arreglado: no es
+   de esta ficha y arreglar el flake de otro a mitad de encargo ensancharía el diff.
 
 (Corrida FINAL, del 2026-09-02 12:03, **después** de restaurar las mutaciones y con el md5 de
 los dos fuentes mutados verificado contra su copia. No se corrió el gate en paralelo con
 ninguna mutación.)
 
-**El único rojo es el heredado y tolerado:**
+El rojo heredado y tolerado, literal:
 
 ```
 FAIL tests/unit/guards/superficie-de-uso.guardia.test.ts
@@ -362,14 +482,41 @@ Tamaño real de los corpus, contado y no estimado:
 - identidades, parte A: **103 importes** de escala 2 y **2.266 identidades** suma/resta
   comprobadas parseando lo pintado.
 
-> ⚠️ **Sin E2E ni navegador**: el encargo prohíbe levantar el servidor de desarrollo (hay otros
-> agentes compartiendo la carpeta de compilación). Por eso el número de anchos de §7 es
-> **derivado** de mediciones ya hechas en el repo y no una medición nueva, y está marcado como
-> tal.
+> ⚠️ **Sin E2E y sin servidor de desarrollo.** Los anchos de §7 SÍ se midieron en Chromium, pero
+> contra un banco (DOM real volcado + CSS real compilado) y no contra la app corriendo: la base
+> local no tiene movimientos de wallet sembrados, así que el panel saldría vacío. El banco está
+> calibrado contra las cuatro mediciones que la ficha 343 sí hizo contra el servidor real, con
+> ≤2 px de error. Lo que el banco **no** puede ver es la cadena de contenedores de la página
+> real; por eso los anchos de caja se anclan a los desbordes que la 343 midió, no se deducen.
 
 ---
 
 ## 10. Lo dudoso
+
+-1. **El renombrado de la guardia rompió cuatro citas `R → test`, y no se vio hasta commitear.**
+   `test-citado-desaparecido.guardia` compara contra el HISTORIAL DE GIT, así que mientras el
+   renombrado estaba sin commitear la guardia no podía verlo y la suite salía verde. En cuanto
+   el leader commiteó `086d90b7`, cuatro `tasks.md` (237/R11, 238/R19, 239/R11, 240/R20) pasaron
+   a mapear un requisito a un archivo borrado. **Es el modo de fallo de
+   `test-que-vive-dentro-de-lo-borrado`, por la puerta del renombrado.** Se eligió la salida (1)
+   que propone la propia guardia —repuntar la cita— y no la (3) —declarar el requisito sin
+   prueba—: el archivo no desapareció, cambió de nombre, y sigue cubriendo exactamente lo que
+   esas cuatro fichas le pedían («verde sin tocarse»).
+   **Lo que NO se tocó, a propósito:** `specs/230-*`, `specs/235-*` y `specs/236-*` nombran la
+   guardia vieja en PROSA y sin ruta (`dinero-sin-centimos.guardia`, sin `.test.ts`), así que la
+   guardia no las cuenta como citas. Son documentos históricos de sus fichas y describen el
+   nombre que el archivo tenía entonces; cambiarlos sería reescribir la historia sin que ninguna
+   guardia lo pida.
+
+0. **RETRACTADO: el coste de anchos que declaré la primera vez no existe.** Dije que a 390 px
+   `DetalleFilaComposicion` volvía a recortar ~16 px. Lo medí en Chromium y es 0, con 68–108 px
+   de holgura (§7). El error fue leer una medición ajena como si dijera algo que no decía, y
+   **el sesgo fue pesimista**: inventé una deuda y la declaré con aire de rigor porque llevaba
+   un número. Que el número esté medido importa más que que exista. Lo dejo escrito arriba en
+   vez de borrarlo porque el modo de fallo —«una imposibilidad razonada no es medida», también
+   cuando la razonas en contra tuya— es más útil que la corrección.
+   **Consecuencia práctica:** el segundo encargo no tocó ni un componente. Lo único que cambió
+   es un test, y porque midiendo apareció otro agujero (§6, M8).
 
 1. **`moneyTope` cambió de comportamiento visible**, aunque el encargo decía «se queda igual».
    Interpreté «se queda» como «no lo retires, la garantía sigue haciendo falta». La garantía es

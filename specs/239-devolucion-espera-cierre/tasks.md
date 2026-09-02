@@ -275,7 +275,7 @@
 | R8 | ídem — «segunda aprobación: `count = 0`, sin append» |
 | R9 | `tests/unit/services/cierres-admin-service.test.ts` — «catálogo incompleto: la aprobación no ocurre y no hay efectos parciales» |
 | R10 | `cierres-admin-anclaje-devolucion.test.ts` (el `data` del updateMany solo lleva `estatusId`) · los cinco feeds y sus suites de idempotencia **verdes sin tocar** |
-| R11 | `tests/unit/guards/ordenes-columnas-money-safe.guardia.test.ts` y `dinero-sin-centimos.guardia.test.ts` verdes sin tocar |
+| R11 | `tests/unit/guards/ordenes-columnas-money-safe.guardia.test.ts` y `dinero-centimos-cuando-existen.guardia.test.ts` verdes sin tocar |
 | R12 | `tests/unit/services/devolucion-sla-service.test.ts` — «la ventana se mide desde la aprobación» (**mutación T5.1**) |
 | R13 | `tests/unit/repositories/devolucion-sla-repository.test.ts` — «una orden en el pre-estado no es candidata» |
 | R14 | ídem — «rama legada: sin fila de anclaje, ancla en la gestión, y sale marcada como legada» |
