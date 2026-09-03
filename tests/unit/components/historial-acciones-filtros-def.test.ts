@@ -144,7 +144,7 @@ describe("las opciones salen del CONTRATO, no de una copia local", () => {
     expect(cat?.options?.map((o) => o.value)).toEqual([...CATEGORIAS_ACCION]);
   });
 
-  it("acción: los 42 tipos, etiquetados con `ACCION_LABELS`", () => {
+  it("acción: los 43 tipos, etiquetados con `ACCION_LABELS`", () => {
     const acc = construirFiltrosHistorialAcciones([], { ahora: AHORA }).find(
       (f) => f.key === CLAVE_ACCION,
     );

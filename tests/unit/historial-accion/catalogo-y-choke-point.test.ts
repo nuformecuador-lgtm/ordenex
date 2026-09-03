@@ -68,9 +68,9 @@ function filas(tx: ReturnType<typeof txDoble>, n = 0): Record<string, unknown>[]
 // =============================================================================================
 
 describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhaustivos", () => {
-  it("son 42 tipos, 17 entidades y 3 categorias, sin repetidos", () => {
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(42);
-    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(42);
+  it("son 43 tipos, 17 entidades y 3 categorias, sin repetidos", () => {
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(43);
+    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(43);
     expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(17);
     expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(17);
     expect(CATEGORIAS_ACCION).toHaveLength(3);
@@ -111,9 +111,10 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(new Set(porCategoria).size).toBe(HISTORIAL_ACCION_TIPOS.length);
   });
 
-  it("el reparto por categoria es el del Anexo A: 25 dinero, 6 desaparicion, 11 permisos", () => {
+  it("el reparto por categoria es el del Anexo A: 26 dinero, 6 desaparicion, 11 permisos", () => {
     // Numeros DUROS: mover un tipo de categoria es una decision, y tiene que pasar por aqui.
-    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(25);
+    // 26 y no 25 desde la ficha 366: `orden_zona_reconciliada` entra en DINERO.
+    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(26);
     expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(6);
     expect(accionesDeCategoria("cambia_permisos")).toHaveLength(11);
   });
