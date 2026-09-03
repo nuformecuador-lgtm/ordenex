@@ -37,6 +37,21 @@ afirma que los dos modales importan la función del MISMO módulo. `pnpm typeche
 el leader: gate completo, review, y el resto de tasks (T9 documentación y T10 gate) si no las cerró ya
 esta sesión.
 
+**Gate completo del LEADER (T10), 4 corridas.** `./init.sh --rapido` se negó solo (toca `lib/types/`,
+regla de `CLAUDE.md`), así que el gate exigido es el completo. Cuatro corridas seguidas, cada una con
+1-2 rojos "nuevos" en un archivo DISTINTO cada vez —`TableroDiaFiltro`, `tarifa-status-retirado`,
+`CrearTiendaForm`, `PostularRecursoModal`, `cache-tags.guardia`—, ninguno relacionado con el diff de
+esta ficha ni repetido entre corridas; los cinco pasan verdes 100% al correrlos aislados. Duración
+11-22 min por corrida (máquina con 2-3 sesiones concurrentes corriendo la suite completa a la vez):
+saturación, no regresión — mismo patrón que `gate-rojo-por-timeout-bajo-carga` (memoria). El único
+rojo que SÍ se repite en las 4 corridas es `tests/unit/guards/superficie-de-uso.guardia.test.ts`
+(`lib/actions/tarifas.ts:67 obtenerTarifa` inalcanzable) — deuda ajena, ya en baseline, sin relación
+con 368. Aparte: la 1ª corrida completa detectó una colisión real (no flake) por un junction de
+`node_modules` compartido con la sesión de la 366 (cliente Prisma regenerado con su enum nuevo a
+mitad de mi gate) — resuelto dándole a este worktree su propio `node_modules`/cliente Prisma
+(memoria `base-local-compartida-rompe-gates-ajenos`, actualizada). Typecheck/lint/tests de los
+archivos propios de 368: verdes en las 4 corridas, sin excepción.
+
 ## 🧾 2026-08-31 — cierre de sesión: seis fichas y un defecto de producción
 
 **Todo lo abierto quedó cerrado.** Ocho fichas `done`: las cuatro de la wallet planificadas el día
