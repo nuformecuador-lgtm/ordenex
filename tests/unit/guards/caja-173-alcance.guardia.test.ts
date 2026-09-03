@@ -134,11 +134,20 @@ describe("R31 — ninguna escritura NUEVA en el ledger por tienda ni en el libro
 
 describe("R33 — el repositorio que sirve las dos cifras NO puede leer los otros libros", () => {
   it("su cliente Prisma es MINIMO: `walletMovimiento` y nada mas (comprobado compilando)", () => {
-    // Este objeto tiene UNA sola tabla. Que la linea de abajo compile es la prueba: si el
-    // repositorio necesitara `walletTiendaMovimiento` o `pagoMensajeroMovimiento`, `tsc` la
+    // Este objeto tiene UNA sola tabla DE DINERO. Que la linea de abajo compile es la prueba: si
+    // el repositorio necesitara `walletTiendaMovimiento` o `pagoMensajeroMovimiento`, `tsc` la
     // rechazaria y el gate caeria antes que este test.
+    //
+    // ⚠️ FICHA 362: el cliente gana TRES claves —`$transaction`, `historialAccion` y `usuario`—
+    // porque los tres movimientos que nacen de una DECISION humana registran su accion en la
+    // misma transaccion que el asiento. Ninguna de las tres es un LIBRO: `historial_accion` es
+    // auditoria (no lleva saldo de nadie) y `usuario` es de donde sale el actor congelado. R33
+    // sigue en pie y lo sigue afirmando el bucle del caso de abajo, que es el que importa.
     const clienteDeUnaSolaTabla = {
       walletMovimiento: {} as PrismaClient["walletMovimiento"],
+      $transaction: {} as PrismaClient["$transaction"],
+      historialAccion: {} as PrismaClient["historialAccion"],
+      usuario: {} as PrismaClient["usuario"],
     };
     const repo = new WalletMovimientoRepository(clienteDeUnaSolaTabla);
 
@@ -148,7 +157,17 @@ describe("R33 — el repositorio que sirve las dos cifras NO puede leer los otro
   it("y su fuente lo declara asi, sin nombrar ninguna otra tabla de dinero", () => {
     const codigo = codigoSinComentarios("lib/repositories/WalletMovimientoRepository.ts");
 
-    expect(codigo).toMatch(/Pick<PrismaClient,\s*"walletMovimiento">/);
+    // ⚠️ FICHA 362 — EL `Pick` GANA TRES CLAVES, Y NINGUNA ES UN LIBRO.
+    //
+    // Decia `Pick<PrismaClient, "walletMovimiento">` a secas. Hoy incluye ademas `$transaction`,
+    // `historialAccion` y `usuario`, porque los TRES movimientos que nacen de una DECISION humana
+    // —el ajuste manual de caja y los dos del egreso administrativo— escriben su fila de
+    // auditoria en la MISMA transaccion que el asiento (362/R9).
+    //
+    // R33 NO SE RELAJA: lo que exige es que este repositorio no pueda LEER LOS OTROS LIBROS, y eso
+    // lo mide el bucle de abajo —que no se toca—. `historial_accion` no lleva el saldo de nadie y
+    // `usuario` es de donde sale el actor congelado.
+    expect(codigo).toMatch(/Pick<\s*PrismaClient,\s*\n?\s*"walletMovimiento"/);
     for (const ajena of ["walletTiendaMovimiento", "pagoMensajeroMovimiento", "gestionOrden", "cierreDia"]) {
       expect(codigo, `WalletMovimientoRepository nombra ${ajena}`).not.toContain(ajena);
     }

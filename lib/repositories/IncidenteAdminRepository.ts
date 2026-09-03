@@ -1,3 +1,5 @@
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import { Prisma } from "@prisma/client";
 import type {
   AlcanceIncidente,
@@ -317,6 +319,35 @@ export class IncidenteAdminRepository implements IIncidenteAdminRepository {
         },
       });
       if (res.count !== 1) return "no_aplicado" as const;
+
+      // FICHA 362 (R5/R6/R9/R11) — `incidente_aprobado` / `incidente_rechazado`, DENTRO de la
+      // transaccion que ya existia y DESPUES del `res.count !== 1`: un incidente ya resuelto —o
+      // de otra zona— no deja fila de una decision que no ocurrio.
+      //
+      // La etiqueta es la GUIA de la orden del paquete, no el `motivo` del incidente: ese es
+      // texto libre y ya vive en `orden_incidente.motivo` (R5). `motivoRechazo` tampoco se copia,
+      // por lo mismo.
+      //
+      // `monto` = la indemnizacion aprobada, `Decimal`. Al RECHAZAR va `null` porque un rechazo
+      // no persiste monto (R54) y aqui se registra lo que hubo, no lo que se pidio.
+      const delIncidente = await tx.ordenIncidente.findUnique({
+        where: { id: incidenteId },
+        select: { orden: { select: { numGuia: true, numRemision: true } } },
+      });
+      const actorIncidente = await resolverActorCongelado(tx, resueltoPor);
+      await appendAccion(tx, [
+        {
+          accion: nuevoEstado === "aprobado" ? "incidente_aprobado" : "incidente_rechazado",
+          entidadTipo: "orden_incidente",
+          entidadId: incidenteId,
+          entidadEtiqueta: etiquetaDeEntidad("orden_incidente", {
+            numGuia: delIncidente?.orden.numGuia ?? null,
+            numRemision: delIncidente?.orden.numRemision ?? null,
+          }),
+          monto: monto === null ? null : new Prisma.Decimal(monto),
+          ...actorIncidente,
+        },
+      ]);
 
       if (nuevoEstado === "aprobado") {
         // R52: el feed LEE de la base lo que el `updateMany` de arriba acaba de escribir. NO

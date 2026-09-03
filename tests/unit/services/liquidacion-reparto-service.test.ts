@@ -302,6 +302,9 @@ function buildDobles(opciones: Opciones = {}) {
   } as unknown as IPagoMensajeroMovimientoRepository;
 
   const repartoRepo: ILiquidacionRepartoRepository = {
+    // ficha 362: el registro de `reparto_anulado`. No muta la tabla del reparto (su fila es
+    // inmutable): documenta las N anulaciones de sus pagos hijos, en la misma tx.
+    registrarAnulacion: vi.fn(async () => undefined),
     crear: vi.fn(async (_tx, input: CrearLiquidacionRepartoInput) => {
       log.push("crear:reparto");
       // El `UNIQUE(clave_idempotencia)`, modelado como barrera DE DATOS: no hay `SELECT` previo

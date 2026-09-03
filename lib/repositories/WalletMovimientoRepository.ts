@@ -1,3 +1,6 @@
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
+import type { HistorialAccionTipo } from "@/lib/types/historial-accion";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   BalanceFiltros,
@@ -17,7 +20,13 @@ import type {
 import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron CierresAdminRepository).
-type WalletPrismaClient = Pick<PrismaClient, "walletMovimiento">;
+// FICHA 362 (R9): los TRES movimientos que nacen de una DECISION humana —el ajuste manual de
+// caja y los dos del egreso administrativo— registran su accion en la MISMA transaccion, asi que
+// el `Pick` gana `$transaction`, `historialAccion` y `usuario`.
+type WalletPrismaClient = Pick<
+  PrismaClient,
+  "walletMovimiento" | "$transaction" | "historialAccion" | "usuario"
+>;
 
 // Money-safe: Decimal -> STRING escala 2 (nunca number/parseFloat).
 type MovimientoRow = Prisma.WalletMovimientoGetPayload<Record<string, never>>;
@@ -108,6 +117,48 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
     }));
     const res = await tx.walletMovimiento.createMany({ data, skipDuplicates: true });
     return res.count;
+  }
+
+  /**
+   * FICHA 362 (R6/R9/R11) — el escritor de los TRES movimientos que nacen de una DECISION
+   * HUMANA: el ajuste manual de caja y los dos del egreso administrativo (registro y reverso).
+   *
+   * POR QUE UN METODO APARTE Y NO INSTRUMENTAR `crearMovimientos`. Ese metodo lo comparten los
+   * feeds de la aprobacion de un cierre: instrumentarlo escribiria una fila de auditoria por CADA
+   * uno de los ~34 asientos que emite aprobar un cierre, y el design §0 lo descarta con nombre
+   * —«se registra la DECISION, no sus asientos»—. Los asientos automaticos ya son inmutables y
+   * consultables en `/wallet`.
+   *
+   * Abre su PROPIA `$transaction` (forma 2 del design §2.3) porque estos tres caminos no tenian
+   * ninguna: eran un `createMany` suelto contra el cliente de escritura. El registro va DESPUES
+   * de comprobar el `count`: un reverso que el indice unico parcial deduplica (`count === 0`,
+   * `already_reversed`) NO deja fila de auditoria de algo que no ocurrio (R11).
+   */
+  async crearMovimientoRegistrado(
+    mov: CrearMovimientoInput & { id: string },
+    registro: { accion: HistorialAccionTipo; actorUsuarioId: string | null },
+  ): Promise<number> {
+    return this.prisma.$transaction(async (tx) => {
+      const count = await this.crearMovimientos(tx, [mov]);
+      if (count === 0) return 0;
+
+      const actor = await resolverActorCongelado(tx, registro.actorUsuarioId);
+      await appendAccion(tx, [
+        {
+          accion: registro.accion,
+          entidadTipo: "wallet_movimiento",
+          entidadId: mov.id,
+          // La CATEGORIA del movimiento (un enum), no su `descripcion`: esa columna es texto
+          // libre tecleado por una persona y R5 la deja fuera.
+          entidadEtiqueta: etiquetaDeEntidad("wallet_movimiento", { categoria: mov.categoria }),
+          // `monto` llega como STRING money-safe y se convierte a `Decimal` aqui, igual que en
+          // la propia columna del libro. Ni un `Number()` en el camino (R6).
+          monto: new Prisma.Decimal(mov.monto),
+          ...actor,
+        },
+      ]);
+      return count;
+    });
   }
 
   /**

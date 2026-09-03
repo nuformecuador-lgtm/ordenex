@@ -55,7 +55,9 @@ export class WalletEgresoService implements IWalletEgresoService {
     const id = randomUUID();
     // Ficha 334 (R22/R23): con «hoy» la clave NO viaja y manda el DEFAULT de la columna.
     const fechaMovimiento = instanteDelMovimientoManual(input.fecha);
-    await this.repo.crearMovimientos(this.writeClient, [
+    // FICHA 362 (R6/R9) — `egreso_administrativo_registrado`, en la MISMA transaccion que el
+    // asiento. La abre el repositorio: el servicio no conoce Prisma.
+    await this.repo.crearMovimientoRegistrado(
       {
         id,
         tipo: "egreso",
@@ -67,7 +69,8 @@ export class WalletEgresoService implements IWalletEgresoService {
         registradoPor: actor.usuarioId,
         ...(fechaMovimiento !== undefined ? { fechaMovimiento } : {}),
       },
-    ]);
+      { accion: "egreso_administrativo_registrado", actorUsuarioId: actor.usuarioId },
+    );
 
     // Ficha 334 (R28): se relee POR ID, no «el mas reciente de esta categoria». Aquella
     // relectura funcionaba por ACCIDENTE (todo se fechaba con `now()`); registrado un gasto
@@ -100,8 +103,18 @@ export class WalletEgresoService implements IWalletEgresoService {
     // original> -> net cero en el balance. R14: append-only (el original no se toca). R15:
     // idempotencia por el indice unico parcial (gasto, <egresoId>, ingreso_ajuste): un
     // segundo intento es no-op via skipDuplicates -> count===0 -> already_reversed.
-    const count = await this.repo.crearMovimientos(this.writeClient, [
+    //
+    // FICHA 362 (R6/R9/R11) — `egreso_administrativo_reversado`. El registro va DENTRO de la
+    // misma transaccion Y solo si el asiento se escribio: cuando el indice unico parcial
+    // deduplica (segundo intento, `count === 0` -> `already_reversed`) NO queda fila de auditoria
+    // de un reverso que no ocurrio. Eso lo garantiza el repositorio, no un `if` de aqui.
+    //
+    // El `id` se genera ARRIBA porque es lo que la fila del registro apunta como entidad; no
+    // afecta a la idempotencia, que la da el indice `(origen_tipo, origen_id, categoria)`.
+    const reversoId = randomUUID();
+    const count = await this.repo.crearMovimientoRegistrado(
       {
+        id: reversoId,
         tipo: "ingreso",
         categoria: "ingreso_ajuste",
         monto: original.monto,
@@ -110,7 +123,8 @@ export class WalletEgresoService implements IWalletEgresoService {
         descripcion: `Reverso de: ${original.descripcion ?? original.id}`,
         registradoPor: actor.usuarioId,
       },
-    ]);
+      { accion: "egreso_administrativo_reversado", actorUsuarioId: actor.usuarioId },
+    );
     if (count === 0) return { status: "already_reversed" }; // R15
     return { status: "ok" };
   }

@@ -14,6 +14,13 @@ function buildTx() {
     },
     zonaDistrito: { createMany: vi.fn(), deleteMany: vi.fn() },
     tarifaZonaMensajero: { createMany: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn() },
+    // FICHA 362: el borrado registra su accion DENTRO de esta misma transaccion.
+    historialAccion: { createMany: vi.fn() },
+    usuario: {
+      findUnique: vi
+        .fn()
+        .mockResolvedValue({ nombre: "Maestra", primerApellido: "Uno", rol: { value: "maestro" } }),
+    },
   };
 }
 
@@ -319,7 +326,7 @@ describe("ZonaRepository.hardDelete", () => {
     const tx = buildTx();
     tx.zona.findUnique.mockResolvedValue({ id: "z1" });
     const prisma = buildPrisma(tx);
-    const res = await repoOf(prisma).hardDelete("z1");
+    const res = await repoOf(prisma).hardDelete("z1", "actor-1");
     expect(res).toBe("ok");
     expect(tx.tarifaZonaMensajero.deleteMany).toHaveBeenCalledWith({ where: { zonaId: "z1" } });
     expect(tx.zona.delete).toHaveBeenCalledWith({ where: { id: "z1" } });
@@ -329,7 +336,7 @@ describe("ZonaRepository.hardDelete", () => {
     const tx = buildTx();
     tx.zona.findUnique.mockResolvedValue(null);
     const prisma = buildPrisma(tx);
-    expect(await repoOf(prisma).hardDelete("zX")).toBe("not_found");
+    expect(await repoOf(prisma).hardDelete("zX", "actor-1")).toBe("not_found");
     expect(tx.zona.delete).not.toHaveBeenCalled();
   });
 
@@ -340,7 +347,7 @@ describe("ZonaRepository.hardDelete", () => {
       new Prisma.PrismaClientKnownRequestError("fk", { code: "P2003", clientVersion: "x" }),
     );
     const prisma = buildPrisma(tx);
-    expect(await repoOf(prisma).hardDelete("z1")).toBe("referenced");
+    expect(await repoOf(prisma).hardDelete("z1", "actor-1")).toBe("referenced");
   });
 });
 

@@ -218,6 +218,9 @@ function makeStore(saldoTienda: string) {
    * el repositorio por constructor, sin default.
    */
   const repartoRepo: ILiquidacionRepartoRepository = {
+    // ficha 362: el registro de `reparto_anulado`. No muta la tabla del reparto (su fila es
+    // inmutable): documenta las N anulaciones de sus pagos hijos, en la misma tx.
+    registrarAnulacion: vi.fn(async () => undefined),
     crear: vi.fn(async () => ({ status: "clave_repetida" as const })),
     obtenerPorClave: vi.fn(async () => null),
   };

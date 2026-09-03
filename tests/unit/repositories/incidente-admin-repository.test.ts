@@ -113,6 +113,17 @@ function buildPrisma(opts: DobleOpts = {}) {
       findFirst: calls.incidenteFindFirst,
       count: calls.incidenteCount,
       findMany: calls.incidenteFindMany,
+      // FICHA 362: la resolucion lee la guia de la orden para congelar la etiqueta del registro.
+      findUnique: vi.fn(async () => ({ orden: { numGuia: 100234, numRemision: "REM-1" } })),
+    },
+    // FICHA 362: el registro de la decision, en la MISMA tx que ya existia.
+    historialAccion: { createMany: vi.fn(async () => ({ count: 1 })) },
+    usuario: {
+      findUnique: vi.fn(async () => ({
+        nombre: "Admin",
+        primerApellido: "Uno",
+        rol: { value: "admin" },
+      })),
     },
     ordenIncidenteEvidencia: { createMany: calls.evidenciaCreateMany },
     ordenHistorialEstado: { createMany: calls.historialCreateMany },
@@ -139,7 +150,8 @@ function buildRepo(cliente: ReturnType<typeof buildPrisma>["cliente"]) {
     agregarPorCategoriaYTipo: vi.fn(),
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
-    obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
+    obtenerPorOrigen: vi.fn(),
+    crearMovimientoRegistrado: vi.fn().mockResolvedValue(1), // ficha 362: solo lo decidido por un humano // ficha 333: lectura por la clave del libro; este camino no la usa
   };
   const repo = new IncidenteAdminRepository(
     cliente as never,

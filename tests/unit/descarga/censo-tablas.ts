@@ -267,6 +267,20 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     tablas: [{ nombre: "Plantillas de mensaje", estado: "con_descarga" }],
   },
   {
+    // ⭑ FICHA 362 (T6.3) — SUMA de una tabla: el REGISTRO DE ACCIONES (quién hizo qué, sobre
+    // qué y cuándo). Nace `con_descarga`, que es lo que la guardia obliga a decidir, y aquí
+    // la decisión no tiene más de una respuesta razonable: es la Familia A canónica de la 170
+    // —listado paginado en el servidor, con su propia acción de dataset completo
+    // (`listarHistorialAccionesCompleto`) y el tope evaluado allí—, y un registro de
+    // auditoría que no se puede sacar de la pantalla no sirve para auditar. Declararla
+    // `fuera` habría exigido un motivo que no existe.
+    //
+    // Las diez columnas del archivo son las diez de la pantalla y NO llevan `id`, `entidadId`
+    // ni `loteId` (R38): ver `historial-acciones-descarga-columnas.ts`.
+    ruta: "app/(app)/historico/acciones/_components/HistorialAccionesModule.tsx",
+    tablas: [{ nombre: "Registro de acciones", estado: "con_descarga" }],
+  },
+  {
     ruta: "app/(app)/incidentes/_components/IncidentesAdminModule.tsx",
     tablas: [{ nombre: "Incidentes pendientes de decisión", estado: "con_descarga" }],
   },

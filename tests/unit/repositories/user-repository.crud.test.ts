@@ -1,3 +1,4 @@
+import { conRegistroDeAcciones } from "../../fixtures/registro-de-acciones";
 import { describe, it, expect, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { UserRepository } from "@/lib/repositories/UserRepository";
@@ -32,7 +33,8 @@ function listRow(overrides: Record<string, unknown> = {}) {
 }
 
 function buildPrisma(overrides: Record<string, unknown> = {}) {
-  return {
+  // FICHA 362: las escrituras de esta clase corren en `$transaction` y registran su accion.
+  return conRegistroDeAcciones({
     usuario: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
@@ -49,7 +51,7 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       findMany: vi.fn(),
     },
     ...overrides,
-  };
+  });
 }
 
 describe("UserRepository.create — fulfillment (feature 27/R3/R8/R9/R14)", () => {
@@ -66,7 +68,7 @@ describe("UserRepository.create — fulfillment (feature 27/R3/R8/R9/R14)", () =
       cedula: "1710034065",
       tipoIdentificacionId: "tipo-1",
       rolId: "rol-1",
-    });
+    }, "actor-1");
 
     const arg = prisma.usuario.create.mock.calls[0][0];
     expect(arg.data.fulfillment).toBe(false); // R3: ausente -> false, no null
@@ -88,7 +90,7 @@ describe("UserRepository.create — fulfillment (feature 27/R3/R8/R9/R14)", () =
       tipoIdentificacionId: "tipo-1",
       rolId: "rol-1",
       fulfillment: true,
-    });
+    }, "actor-1");
 
     expect(prisma.usuario.create.mock.calls[0][0].data.fulfillment).toBe(true);
     expect(dto.fulfillment).toBe(true);
@@ -107,7 +109,7 @@ describe("UserRepository.create — fulfillment (feature 27/R3/R8/R9/R14)", () =
       cedula: "1710034065",
       tipoIdentificacionId: "tipo-1",
       rolId: "rol-1",
-    });
+    }, "actor-1");
 
     const select = prisma.usuario.create.mock.calls[0][0].select;
     expect(select.fulfillment).toBe(true);
@@ -120,7 +122,7 @@ describe("UserRepository.create — fulfillment (feature 27/R3/R8/R9/R14)", () =
     prisma.usuario.findUnique.mockResolvedValue(usuarioRow({ fulfillment: true }));
     const repo = new UserRepository(prisma as unknown as PrismaClient);
 
-    const dto = await repo.update("usr-1", { fulfillment: true });
+    const dto = await repo.update("usr-1", { fulfillment: true }, "actor-1");
 
     expect(prisma.usuario.updateMany.mock.calls[0][0].data).toEqual({ fulfillment: true });
     expect(dto?.fulfillment).toBe(true);
@@ -176,7 +178,7 @@ describe("UserRepository.update (R16/R17/R18/R19)", () => {
     prisma.usuario.findUnique.mockResolvedValue(usuarioRow({ nombre: "Nuevo" }));
     const repo = new UserRepository(prisma as unknown as PrismaClient);
 
-    const dto = await repo.update("usr-1", { nombre: "Nuevo", telefono: "088" });
+    const dto = await repo.update("usr-1", { nombre: "Nuevo", telefono: "088" }, "actor-1");
 
     const arg = prisma.usuario.updateMany.mock.calls[0][0];
     expect(arg.data).toEqual({ nombre: "Nuevo", telefono: "088" });
@@ -198,7 +200,7 @@ describe("UserRepository.update (R16/R17/R18/R19)", () => {
     });
     const repo = new UserRepository(prisma as unknown as PrismaClient);
 
-    await expect(repo.update("usr-1", { rolId: "no-existe" })).rejects.toBeInstanceOf(
+    await expect(repo.update("usr-1", { rolId: "no-existe" }, "actor-1")).rejects.toBeInstanceOf(
       CatalogoInvalidoError,
     );
     expect(prisma.usuario.updateMany).not.toHaveBeenCalled();
@@ -209,7 +211,7 @@ describe("UserRepository.update (R16/R17/R18/R19)", () => {
     prisma.usuario.updateMany.mockResolvedValue({ count: 0 });
     const repo = new UserRepository(prisma as unknown as PrismaClient);
 
-    expect(await repo.update("x", { nombre: "Otro" })).toBeNull();
+    expect(await repo.update("x", { nombre: "Otro" }, "actor-1")).toBeNull();
   });
 });
 
@@ -220,13 +222,13 @@ describe("UserRepository.setEstado (R20/R21/R22)", () => {
     prisma.usuario.findUnique.mockResolvedValue(usuarioRow({ estado: "inactivo" }));
     const repo = new UserRepository(prisma as unknown as PrismaClient);
 
-    const dto = await repo.setEstado("usr-1", "inactivo");
+    const dto = await repo.setEstado("usr-1", "inactivo", "actor-1");
     const arg = prisma.usuario.updateMany.mock.calls[0][0];
     expect(arg.data).toEqual({ estado: "inactivo" });
     expect(dto?.estado).toBe("inactivo");
 
     prisma.usuario.updateMany.mockResolvedValue({ count: 0 });
-    expect(await repo.setEstado("x", "activo")).toBeNull();
+    expect(await repo.setEstado("x", "activo", "actor-1")).toBeNull();
   });
 });
 

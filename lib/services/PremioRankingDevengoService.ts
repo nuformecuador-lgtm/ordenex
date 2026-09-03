@@ -52,7 +52,9 @@ export class PremioRankingDevengoService implements IPremioRankingDevengoService
   constructor(
     private readonly snapshotRepo: Pick<
       IRankingSnapshotRepository,
-      "listarPodioDeFecha" | "obtenerFilaDelPodio"
+      // Ficha 362 (R9): `registrarAccionSobreFila` entra al `Pick` porque el registro del premio
+      // y el del devengo tienen que ir en la MISMA transaccion que ya abre este servicio.
+      "listarPodioDeFecha" | "obtenerFilaDelPodio" | "registrarAccionSobreFila"
     >,
     private readonly cierreRepo: ICierreDelDiaRepository,
     /**
@@ -235,6 +237,17 @@ export class PremioRankingDevengoService implements IPremioRankingDevengoService
           `premio-ranking: el devengo de la fila ${fila.filaId} se escribio pero su egreso de caja no`,
         );
       }
+
+      // FICHA 362 (R6/R9/R11) — `premio_ranking_registrado`, DENTRO de esta misma transaccion y
+      // DESPUES de que el devengo y el egreso hayan quedado escritos. Si el unico parcial hubiera
+      // rechazado el devengo (`escritas === 0`) se salio arriba con `ya_registrado`/`anulado` y
+      // aqui no se llega: no queda registro de un premio que no se pago.
+      await this.snapshotRepo.registrarAccionSobreFila(tx, {
+        filaId: fila.filaId,
+        accion: "premio_ranking_registrado",
+        monto,
+        actorUsuarioId: actor.usuarioId,
+      });
       return { status: "ok", monto, cierreId: cierre.cierreId };
     });
   }
@@ -297,6 +310,17 @@ export class PremioRankingDevengoService implements IPremioRankingDevengoService
           `premio-ranking: la compensacion de la fila ${fila.filaId} se escribio pero su reverso de caja no`,
         );
       }
+
+      // FICHA 362 (R6/R9/R11) — `premio_ranking_anulado`, misma transaccion y mismo criterio: si
+      // el reverso ya estaba escrito (`escritas === 0`) se salio arriba con `ya_anulado` y aqui no
+      // se llega. `input.motivo` NO viaja: es texto libre y ya vive en la `descripcion` del
+      // movimiento compensatorio (R5).
+      await this.snapshotRepo.registrarAccionSobreFila(tx, {
+        filaId: fila.filaId,
+        accion: "premio_ranking_anulado",
+        monto: premio.monto,
+        actorUsuarioId: actor.usuarioId,
+      });
       return { status: "ok" };
     });
   }

@@ -100,6 +100,11 @@ function project(row: Record<string, unknown>, select: Select | undefined): unkn
 
 function makePrisma() {
   const selects: unknown[] = [];
+  /** FICHA 362 — el congelado del actor, capturado como cualquier otra lectura del repositorio. */
+  const capturarUsuarioEnTx = (args: unknown) => {
+    selects.push((args as { select?: Select } | undefined)?.select);
+    return project(USUARIO_COMPLETO, (args as { select?: Select } | undefined)?.select);
+  };
   const capturar = (args: unknown) => {
     selects.push((args as { select?: Select } | undefined)?.select);
     return project(FILA_COMPLETA, (args as { select?: Select } | undefined)?.select);
@@ -112,9 +117,17 @@ function makePrisma() {
     update: vi.fn(async (args: unknown) => capturar(args)), // ciclo de vida: rotar/setEstado
     count: vi.fn(async () => 1),
   };
-  const tx = {
-    usuario: { create: vi.fn(async () => ({ id: "u-dedicado" })) },
+  // FICHA 362: la `tx` gana `usuario.findUnique` —el congelado del actor— y `historialAccion`.
+  // El `findUnique` se cablea al MISMO capturador de selects que el resto, y no a un `vi.fn()`
+  // mudo, a proposito: asi la lectura NUEVA que la 362 introduce en este camino queda bajo la
+  // misma guardia que las demas y tendria que demostrar tambien ella que no pide el hash.
+  const tx: Record<string, unknown> = {
+    usuario: {
+      create: vi.fn(async () => ({ id: "u-dedicado" })),
+      findUnique: vi.fn(async (args: unknown) => capturarUsuarioEnTx(args)),
+    },
     apiKey,
+    historialAccion: { createMany: vi.fn(async () => ({ count: 1 })) },
   };
   // Feature 302: `findTiendaDestino` lee `usuario` (no `api_key`). El mismo fake que proyecta
   // exactamente lo pedido, para que el guard tambien lo cubra.
@@ -159,8 +172,8 @@ const INVOCACIONES: Record<string, (r: ApiKeyRepository) => Promise<unknown>> = 
   findByKeyHash: (r) => r.findByKeyHash(KEY_HASH),
   // Ciclo de vida: ambas escriben y DEVUELVEN la forma publica; deben demostrar que su
   // proyeccion (PUBLIC_SELECT) nunca incluye el hash ni el secreto.
-  rotar: (r) => r.rotar("key-1", { keyPrefix: "ordx_nuevo12", keyHash: KEY_HASH }),
-  setEstado: (r) => r.setEstado("key-1", "inactiva"),
+  rotar: (r) => r.rotar("key-1", { keyPrefix: "ordx_nuevo12", keyHash: KEY_HASH }, "actor-1"),
+  setEstado: (r) => r.setEstado("key-1", "inactiva", "actor-1"),
   // Feature 302: lee una cuenta de tienda REAL para autorizarla como destino. No toca
   // `api_key`, pero si su `usuario`: tiene que demostrar que no se lleva el `passwordHash`.
   findTiendaDestino: (r) => r.findTiendaDestino("u-nuform"),

@@ -254,6 +254,9 @@ describeSiHayBase("333/D7 — R15: aprobar deja estado, decisor, instante y enla
         agregarPorCategoriaYTipo: libroReal.agregarPorCategoriaYTipo.bind(libroReal),
         obtenerPorId: libroReal.obtenerPorId.bind(libroReal),
         agregarPorCategoria: libroReal.agregarPorCategoria.bind(libroReal),
+        // FICHA 362: el escritor de los movimientos que nacen de una decision humana. Este camino
+        // —la aprobacion de un cobro de gasto fijo— NO lo usa: entra por `crearMovimientos`.
+        crearMovimientoRegistrado: libroReal.crearMovimientoRegistrado.bind(libroReal),
       };
       const svc = new GastoFijoCobroService(
         new GastoFijoCobroRepository(cliente),

@@ -6,6 +6,18 @@
 // Money-safe (R31): el `premioMonto` entra y sale como STRING de escala 2. Ningun
 // `Prisma.Decimal` cruza esta frontera, ni hacia el service ni hacia el cliente.
 
+import type { PrismaClient } from "@prisma/client";
+
+/**
+ * FICHA 362 (R9) — el cliente que acepta `registrarAccionSobreFila`: SOLO lo que hace falta para
+ * leer la fila del podio y escribir la fila del registro. Recortado a proposito: quien lo recibe
+ * no puede tocar nada mas.
+ */
+export type RankingSnapshotAccionTxClient = Pick<
+  PrismaClient,
+  "rankingSnapshotFila" | "historialAccion" | "usuario"
+>;
+
 /** Una fila del snapshot tal como el service la deja lista para persistir. */
 export interface FilaSnapshotInput {
   /** 1..N, contiguo. Las filas llegan YA ORDENADAS por este campo. */
@@ -120,6 +132,23 @@ export interface IRankingSnapshotRepository {
    * feature.
    */
   obtenerFilaDelPodio(filaId: string): Promise<PodioFilaConFecha | null>;
+  /**
+   * FICHA 362 (R6/R9) — registra `premio_ranking_registrado` / `premio_ranking_anulado` sobre la
+   * fila del podio, DENTRO de la `tx` que ya abre `PremioRankingDevengoService`.
+   *
+   * NO muta `ranking_snapshot_fila` —el snapshot es historia congelada y no se reescribe—: la
+   * mutacion que documenta son el devengo y el egreso de caja que el servicio acaba de escribir
+   * en esa misma transaccion. Por eso recibe `tx` y no puede abrir la suya (R10/R11).
+   */
+  registrarAccionSobreFila(
+    tx: RankingSnapshotAccionTxClient,
+    input: {
+      filaId: string;
+      accion: "premio_ranking_registrado" | "premio_ranking_anulado";
+      monto: string;
+      actorUsuarioId: string | null;
+    },
+  ): Promise<void>;
 }
 
 /** La fila del podio mas la fecha calendario de su snapshot (`@db.Date`, medianoche UTC). */

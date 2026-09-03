@@ -17,6 +17,7 @@ import type {
 import {
   CAMPOS_CORREGIBLES,
   CAMPOS_GEOGRAFIA,
+  CAMPOS_UBICACION,
   ESTADOS_SIN_CORRECCION,
   rolAdmiteCorreccion,
   type CampoCorregible,
@@ -28,12 +29,38 @@ import { normalizarTelefonoWa } from "@/lib/utils/whatsapp-telefono";
 // DE SU UBICACION. No conoce HTTP, no conoce Prisma y no conoce Next: se instancia entero con
 // dobles en los tests.
 //
-// ⚠️ SIN RASTRO (312/D4, ratificado por 327/D3). Este servicio NO publica nota, NO escribe
-// historial y NO llama a ninguna escritura del modulo de chat. Sus escrituras son
-// `corregirDatosCliente` y —solo cuando la direccion cambia— el trabajo de re-geocodificacion que
-// esa misma llamada encola, que lleva UNICAMENTE el id de la orden. Si algun dia hace falta de
-// verdad saber quien corrigio que, eso REABRE D4 y va a la puerta de aprobacion humana — no se
-// resuelve por la puerta de atras con «solo un logcito» (312/R16, 327/R26).
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ 2026-09-02 — D4 DE LA 312 QUEDA REABIERTA. APROBACION HUMANA EXPLICITA, Y POR LA PUERTA.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// Aqui decia «SIN RASTRO» y avisaba de que cambiarlo «REABRE D4 y va a la puerta de aprobacion
+// humana — no se resuelve por la puerta de atras con solo un logcito».
+//
+// QUIEN Y CUANDO LO AUTORIZO: el humano dueño del producto, el 2026-09-02, al cerrar la pregunta
+// Q1 de la ficha 362 («¿se reabre esa decision para registrar aqui un `orden_ubicacion_corregida`,
+// solo el hecho?»). La respuesta fue SI. La puerta se cruzo por delante: hubo pregunta escrita en
+// `specs/362-historial-de-acciones/requirements.md`, hubo respuesta, y hay ficha.
+//
+// QUE CAMBIA, EXACTAMENTE: cuando la UBICACION cambia (direccion, provincia, canton o distrito),
+// `corregirDatosCliente` escribe UNA fila en `historial_accion` con la accion
+// `orden_ubicacion_corregida`. Esa fila lleva QUIEN y CUANDO, el id de la orden y su GUIA como
+// etiqueta. NADA MAS.
+//
+// QUE NO CAMBIA, Y ES LA MITAD QUE IMPORTA:
+//   - NI la direccion vieja NI la nueva, NI el distrito, NI la provincia, NI el canton, NI la
+//     zona, NI el destinatario, NI el telefono, NI el producto, NI las notas entran en ese
+//     registro. `valor_anterior` y `valor_nuevo` van NULL a proposito;
+//   - corregir el NOMBRE o el TELEFONO del destinatario sigue SIN dejar rastro: no mueve dinero;
+//   - este servicio sigue sin publicar nota, sin escribir `orden_historial_estado`, sin llamar a
+//     ninguna escritura del modulo de chat y sin un solo `console.`.
+//
+// POR QUE SE REABRIO: la 327 amplio esta correccion a la direccion y al DISTRITO; el distrito
+// re-deriva la zona y la zona decide la tarifa facturada. O sea, hasta hoy se podia cambiar lo que
+// una orden va a cobrar sin dejar quien ni cuando. El motivo de D4 era proteger datos de una
+// persona, y esta fila no guarda ninguno.
+//
+// LA GUARDIA NO SE BURLO: `tests/unit/guards/corregir-datos-sin-rastro.guardia.test.ts` se
+// ACTUALIZO para afirmar la regla NUEVA —el rastro existe, es exactamente uno, y no lleva ni un
+// dato de cliente— en vez de la vieja.
 //
 // ⚠️ LO QUE LA 327 AÑADE Y NO EXISTIA: ESTA CORRECCION MUEVE DINERO. La zona decide la tarifa, y
 // la zona se deriva del distrito. Por eso, cuando el distrito cambia, el servidor NO escribe a la
@@ -276,10 +303,19 @@ export class CorregirDatosClienteService implements ICorregirDatosClienteService
     //    EXTRA del `adminTienda` (solo los grupos de `/novedades`) ya se comprobo en `autorizar` y
     //    no se puede expresar como lista de bloqueados sin enumerar el complemento del catalogo
     //    entero.
+    // ⭑ 362 / Q1 — EL RASTRO, decidido AQUI porque este es el unico sitio que tiene el diff
+    // contra los valores almacenados. `CAMPOS_GEOGRAFIA` (direccion + los tres ids) es la MISMA
+    // lista que decide arriba si hay que revalidar la cadena geografica: no nace una segunda
+    // definicion de «cambio de ubicacion» que pueda divergir de la primera.
+    //
+    // Lo que viaja al repositorio es un BOOLEANO, no los valores: el repositorio no puede
+    // escribir la direccion en el registro porque nunca la recibe para eso.
+    const ubicacionCorregida = CAMPOS_UBICACION.some((campo) => cambios.includes(campo));
     const resultado = await this.repo.corregirDatosCliente(
       input.ordenId,
       data,
       ESTADOS_SIN_CORRECCION,
+      { actorUsuarioId: actor.usuarioId, ubicacionCorregida },
     );
     return resultado === "conflict" ? { status: "conflict" } : { status: "ok", cambios };
   }

@@ -11,7 +11,11 @@ import type { PrismaClient } from "@prisma/client";
  *
  * Lo satisface tanto el `tx` de un `$transaction` interactivo como el `PrismaClient` completo.
  */
-export type LiquidacionRepartoTxClient = Pick<PrismaClient, "liquidacionReparto">;
+export type LiquidacionRepartoTxClient = Pick<
+  PrismaClient,
+  // Ficha 362 (R9): el registro del acto, en la MISMA tx que el acto.
+  "liquidacionReparto" | "historialAccion" | "usuario"
+>;
 
 /**
  * Las CUATRO columnas del acto que decide el emisor. El `id` y el instante los pone la base
@@ -65,6 +69,18 @@ export interface ILiquidacionRepartoRepository {
     tx: LiquidacionRepartoTxClient,
     input: CrearLiquidacionRepartoInput,
   ): Promise<CrearLiquidacionRepartoResult>;
+  /**
+   * FICHA 362 (R6/R9) — registra `reparto_anulado`: UNA fila por acto de deshacer un reparto.
+   *
+   * NO muta `liquidacion_reparto` —esa fila es INMUTABLE (R52)— y no puede: la mutacion que
+   * documenta son las N anulaciones de sus `liquidacion_pago` hijos, que ocurren en la MISMA
+   * transaccion que este metodo recibe. Existe para que deshacer un reparto de 12 cierres deje
+   * UNA linea de auditoria y no doce.
+   */
+  registrarAnulacion(
+    tx: LiquidacionRepartoTxClient,
+    input: { repartoId: string; anuladoPor: string; montoAnulado: string },
+  ): Promise<void>;
   /**
    * §5.1/R28 — relectura idempotente por la clave del cliente. `null` si esa clave no se uso.
    *

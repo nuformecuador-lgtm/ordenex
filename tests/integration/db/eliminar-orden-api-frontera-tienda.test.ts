@@ -136,16 +136,19 @@ describeSiHayBase("ficha 320 — una API key NO puede borrar ordenes de otra tie
           ordenId: ajena,
           ownerId: tiendaPropia.id,
           estadosPermitidos: ESTADOS_ELIMINABLES,
+          actorUsuarioId: null, // ficha 362: sin actor congelado; este caso mide el `where`
         }),
         borraEnReparto: await repo.softDeleteViaApi({
           ordenId: enReparto,
           ownerId: tiendaPropia.id,
           estadosPermitidos: ESTADOS_ELIMINABLES,
+          actorUsuarioId: null, // ficha 362: sin actor congelado; este caso mide el `where`
         }),
         borraPropia: await repo.softDeleteViaApi({
           ordenId: propia,
           ownerId: tiendaPropia.id,
           estadosPermitidos: ESTADOS_ELIMINABLES,
+          actorUsuarioId: null, // ficha 362: sin actor congelado; este caso mide el `where`
         }),
       };
       // Repetir el borrado de la propia: `deleted_at IS NULL` lo hace idempotente.
@@ -153,6 +156,7 @@ describeSiHayBase("ficha 320 — una API key NO puede borrar ordenes de otra tie
         ordenId: propia,
         ownerId: tiendaPropia.id,
         estadosPermitidos: ESTADOS_ELIMINABLES,
+        actorUsuarioId: null, // ficha 362: sin actor congelado, este caso mide el `where`
       });
 
       const filas = await tx.orden.findMany({

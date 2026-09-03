@@ -56,16 +56,39 @@ describe("R2/R3 — el ítem «Histórico» y su subítem (T1.3)", () => {
     expect(itemHistorico().roles).toBe(ROLES_HISTORICO_CONVERSACIONES);
   });
 
-  it("R3: tiene exactamente un subítem «Conversaciones» que apunta a la ruta del histórico", () => {
-    expect(itemHistorico().children).toEqual([
-      { label: "Conversaciones", href: "/historico/conversaciones" },
-    ]);
+  /**
+   * ⚠️ ACTUALIZADO POR LA FICHA 362 (2026-09-02), no burlado. Este caso afirmaba que el
+   * apartado tenia EXACTAMENTE UN subitem, y era cierto cuando se escribio: el histórico solo
+   * tenía las conversaciones. La 362 le cuelga un segundo, «Acciones», que es donde el humano
+   * pidió que viviera el registro de acciones («la navegación del maestro», como subítem del
+   * Histórico existente).
+   *
+   * Lo que R3 protegía SIGUE afirmado y no se ha debilitado: que «Conversaciones» es el PRIMER
+   * subítem, que apunta a su ruta y que NO declara `roles` propios. Lo que se retira es la
+   * cuenta cerrada, que ya no es el contrato.
+   */
+  it("R3: «Conversaciones» es el PRIMER subítem y apunta a la ruta del histórico", () => {
+    const hijos = itemHistorico().children ?? [];
+    expect(hijos[0]).toEqual({
+      label: "Conversaciones",
+      href: "/historico/conversaciones",
+    });
   });
 
-  it("R3: el subítem NO declara `roles` propios (hereda la visibilidad del padre)", () => {
+  it("R3: el subítem de conversaciones NO declara `roles` propios (hereda del padre)", () => {
     const hijos = itemHistorico().children;
     expect(hijos).toBeDefined();
     expect("roles" in (hijos as readonly object[])[0]).toBe(false);
+  });
+
+  it("362: el segundo subítem es «Acciones», y ese SÍ declara los suyos", () => {
+    // La cobertura entera de quién lo ve vive en `menu-historial-acciones.test.ts`. Aquí se
+    // deja constancia de por qué la cuenta de subítems dejó de ser uno, para que quien lea
+    // este archivo no lo tome por una regresión.
+    const hijos = itemHistorico().children ?? [];
+    expect(hijos).toHaveLength(2);
+    expect(hijos[1]?.label).toBe("Acciones");
+    expect(hijos[1]?.roles).toBeDefined();
   });
 });
 

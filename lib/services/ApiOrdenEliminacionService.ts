@@ -82,6 +82,9 @@ export class ApiOrdenEliminacionService implements IApiOrdenEliminacionService {
       ordenId: orden.id,
       ownerId,
       estadosPermitidos: ESTADOS_ELIMINABLES,
+      // FICHA 362 (R3): la cuenta dedicada de la API key. Su rol `apiKey` queda congelado en la
+      // fila y es lo que distingue este canal del borrado por pantalla.
+      actorUsuarioId: ownerId,
     });
     if (eliminadas === 0) return { status: "not_found" };
 

@@ -54,6 +54,32 @@ export type IconKey =
 export interface MenuChild {
   label: string;
   href: string;
+  /**
+   * ⭑ FICHA 362 (T5.2) — roles PROPIOS del subítem. **Opcional, y ausente por defecto**: sin
+   * él, el subítem hereda los del padre, que es la regla que fijó la 321/R3 y la que siguen
+   * todos los subítems de este archivo salvo uno.
+   *
+   * POR QUÉ NACE, y por qué no bastaba con lo que había. El apartado «Histórico» es visible a
+   * `["maestro","admin"]` y su primer subítem, «Conversaciones», tiene que seguir siéndolo. El
+   * segundo, «Acciones», lo lee SOLO el `maestro` (Q4, ver `ROLES_HISTORIAL_ACCIONES`): el
+   * registro guarda las decisiones de dinero del `admin` y no puede ser el `admin` quien revise
+   * su propio registro. Sin este campo las dos únicas salidas eran malas — enseñarle el subítem
+   * al `admin` y devolverle un 404 al entrar (un menú que ofrece lo que no se puede abrir es
+   * peor que no ofrecerlo), o sacar el módulo a un ítem de primer nivel, que obliga a decidir
+   * posición en la barra (y la posición NO es decorativa: mueve el aterrizaje post-login, ver
+   * los incidentes de «Analítica» y «Monitoreo») y a ampliar la unión cerrada `IconKey`.
+   *
+   * LO QUE ESTE CAMPO NO ES: una segunda lista de roles suelta. Apunta a una CONSTANTE, igual
+   * que el `roles` del padre, y esa misma constante la leen el `notFound()` de la ruta y el
+   * servicio. Lo vigila `tests/unit/guards/historial-acciones-roles-una-sola-fuente.guardia`.
+   *
+   * ⚠️ QUIEN LO DECLARE NO PUEDE PONERLO EN EL PRIMER SUBÍTEM. `primerDestino` devuelve el
+   * `href` del primer subítem del primer ítem visible, así que un primer subítem restringido
+   * mandaría a un 404 post-login a un rol que sí ve el padre. Es la mitad del agujero que este
+   * campo abre, y por eso está cerrada con su propio caso en
+   * `tests/unit/auth/menu-historial-acciones.test.ts`.
+   */
+  roles?: readonly RolValue[];
 }
 
 /**
@@ -207,6 +233,38 @@ export const ROLES_HISTORICO_CONVERSACIONES = [
  * ítem de menú puede REFERENCIARLA (R33 se afirma con `toBe`, no con `toEqual`).
  */
 export const ROLES_MI_WALLET = ["adminTienda"] as const satisfies readonly RolValue[];
+
+/**
+ * ⭑ FICHA 362 / Q4, CERRADA POR EL HUMANO EL 2026-09-02 — único punto de verdad de quién LEE el
+ * historial de acciones. Lo leen el `roles` del subítem «Acciones» del apartado «Histórico» y el
+ * gate `notFound()` de `app/(app)/historico/acciones/page.tsx`, más la autorización de
+ * `HistorialAccionService`. Las tres capas leen ESTA constante y no un literal copiado.
+ *
+ * ⚠️ SOLO `maestro`. Y NACE UNA LISTA NUEVA A PROPÓSITO, aunque el encargo pedía reusar la que ya
+ * existe. El motivo, con nombre:
+ *
+ *   ESTE REGISTRO GUARDA LAS DECISIONES DE DINERO QUE TOMA EL **ADMIN** —aprobar cierres,
+ *   rechazarlos, registrar pagos, anularlos, decidir cobros— Y NO PUEDE SER EL ADMIN QUIEN
+ *   REVISE SU PROPIO REGISTRO. No puede alterarlo (R2: la fila es inmutable), así que el riesgo
+ *   no es de integridad; pero un registro de auditoría que su propio auditado consulta a diario
+ *   deja de cumplir la función para la que se pidió.
+ *
+ * POR QUÉ NO SE ESTRECHA `ROLES_HISTORICO_CONVERSACIONES` (la alternativa barata, DESCARTADA):
+ * esa constante gobierna el histórico de CONVERSACIONES, que el `admin` sí debe seguir viendo —es
+ * su herramienta de trabajo diaria—. Quitarle el `admin` allí para no dárselo aquí le arrebataría
+ * una superficie que nadie decidió quitarle, y ese es exactamente el fallo mudo que la 321
+ * documenta al revés. Dos preguntas distintas, dos respuestas distintas, dos listas.
+ *
+ * EL COSTE, DECLARADO: hay una segunda lista de roles en este archivo y podría divergir de la
+ * primera. Se acepta porque divergir aquí NO es el daño —son conceptos distintos y deben poder
+ * divergir—; el daño sería que la lista y el gate de la ruta divergieran, y eso lo impide que
+ * ambos lean ESTA constante, vigilado por su guardia de fuente única.
+ *
+ * `as const satisfies` y no `readonly RolValue[]`: el `satisfies` comprueba que el nombre es un
+ * `RolValue` real del esquema SIN ensanchar el tipo, así la tupla conserva su identidad y el
+ * subítem de menú puede REFERENCIARLA (se afirma con `toBe`, no con `toEqual`).
+ */
+export const ROLES_HISTORIAL_ACCIONES = ["maestro"] as const satisfies readonly RolValue[];
 
 /**
  * Fuente de verdad del menu. Vive en este modulo server-safe (NO en el
@@ -490,15 +548,30 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     //
     // El `href` del padre NO navega: un ítem con `children` se renderiza como disparador
     // del desplegable (ver `Sidebar.tsx`), igual que "Entregas" y "Wallet". No existe
-    // ninguna página en `/historico`, sólo `/historico/conversaciones`.
+    // ninguna página en `/historico`, sólo sus dos subítems.
     //
-    // El subítem NO declara `roles` propios: hereda la visibilidad del padre, así que no
-    // hay una segunda lista que pueda divergir (R3).
+    // «Conversaciones» NO declara `roles` propios: hereda la visibilidad del padre, así que
+    // no hay una segunda lista que pueda divergir (R3). Y tiene que seguir siendo el PRIMER
+    // subítem: es el que `primerDestino` devolvería si algún día este ítem quedara el primero
+    // visible de algún rol, y el único de los dos que todos los roles del padre pueden abrir.
+    //
+    // ⭑ FICHA 362 (T5.2, R19/R20) — «Acciones» SÍ declara `roles` propios, y apunta a
+    // `ROLES_HISTORIAL_ACCIONES` (solo `maestro`). Es el único subítem del archivo que los
+    // declara; el motivo está escrito en esa constante y en `MenuChild.roles`. Va SEGUNDO y
+    // no primero: así el aterrizaje post-login no cambia para nadie (R20) y el `admin`, que
+    // ve el apartado por «Conversaciones», no ve una entrada que le devolvería un 404.
     label: "Histórico",
     href: "/historico",
     iconKey: "history",
     roles: ROLES_HISTORICO_CONVERSACIONES,
-    children: [{ label: "Conversaciones", href: "/historico/conversaciones" }],
+    children: [
+      { label: "Conversaciones", href: "/historico/conversaciones" },
+      {
+        label: "Acciones",
+        href: "/historico/acciones",
+        roles: ROLES_HISTORIAL_ACCIONES,
+      },
+    ],
   },
   // "Perfil" SALE del menú para todos los roles (pedido humano) y su página se ELIMINÓ:
   // era un placeholder sin contenido que solo ocupaba un sitio en la barra.
@@ -511,16 +584,69 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
  */
 export function puedeVer(item: MenuItem, actor: Actor | null): boolean {
   if (!actor) return false; // sesion ausente o invalida -> sin items
-  return item.roles.includes(actor.rol);
+  if (!item.roles.includes(actor.rol)) return false;
+  // FICHA 362 — un DESPLEGABLE cuyos subítems no son visibles para el actor tampoco se pinta.
+  // Hoy no cambia nada (ningún ítem se queda sin subítems para ningún rol) y por eso entra
+  // como cierre y no como arreglo: desde que `MenuChild` admite `roles` propios, la forma de
+  // equivocarse es dejar en la barra un disparador que despliega el vacío.
+  if (item.children && item.children.length > 0) {
+    return hijosVisibles(item, actor).length > 0;
+  }
+  return true;
   // TODO(permisos): sustituir/complementar por consulta a los permisos del actor.
 }
 
-/** Filtra la lista de items dejando solo los visibles para el actor. */
+/**
+ * FICHA 362 — regla de visibilidad de UN SUBÍTEM, y el ÚNICO sitio donde vive la herencia:
+ * sin `roles` propios manda el padre (321/R3), con ellos mandan los suyos.
+ *
+ * Se exporta para que la prueba pueda afirmar la regla directamente y para que nadie la
+ * reescriba en el `Sidebar`; el `Sidebar` no la llama porque no necesita hacerlo (ver
+ * `itemsVisibles`).
+ */
+export function puedeVerSubitem(
+  child: MenuChild,
+  padre: MenuItem,
+  actor: Actor | null,
+): boolean {
+  if (!actor) return false;
+  return (child.roles ?? padre.roles).includes(actor.rol);
+}
+
+/** Los subítems de `item` que `actor` puede ver. Lista vacía si el ítem no tiene subítems. */
+export function hijosVisibles(item: MenuItem, actor: Actor | null): readonly MenuChild[] {
+  if (!item.children) return [];
+  return item.children.filter((child) => puedeVerSubitem(child, item, actor));
+}
+
+/**
+ * Filtra la lista de items dejando solo los visibles para el actor.
+ *
+ * FICHA 362 — además PODA los subítems que el actor no puede ver. Se hace aquí, y no en el
+ * `Sidebar`, porque aquí pasan TODOS los consumidores: el layout (que pinta la barra) y
+ * `/dashboard` (que calcula el aterrizaje con `primerDestino`). Podarlo en el `Sidebar`
+ * habría dejado a `primerDestino` mirando la lista sin podar —la mitad callada del problema—
+ * y habría obligado a cambiarle la firma para pasarle el actor, que la usan cinco pantallas y
+ * tres suites.
+ *
+ * La IDENTIDAD del ítem se conserva cuando no hay nada que podar (el caso de todos los ítems
+ * menos uno): así este cambio no reescribe los objetos de `SIDEBAR_ITEMS` para nadie que no lo
+ * necesite, y las aserciones por referencia siguen valiendo.
+ */
 export function itemsVisibles<T extends MenuItem>(
   items: readonly T[],
   actor: Actor | null,
 ): T[] {
-  return items.filter((item) => puedeVer(item, actor));
+  return items
+    .filter((item) => puedeVer(item, actor))
+    .map((item) => {
+      if (!item.children) return item;
+      const podados = hijosVisibles(item, actor);
+      if (podados.length === item.children.length) return item;
+      // El objeto resultante es el mismo ítem con menos subítems; `T` no se puede construir
+      // genéricamente, de ahí el aserto — es el único punto del módulo que lo necesita.
+      return { ...item, children: podados } as T;
+    });
 }
 
 /**

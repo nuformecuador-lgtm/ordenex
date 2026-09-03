@@ -57,20 +57,30 @@ export interface ListTarifasResult {
 export type DeleteTarifaResult = "ok" | "not_found" | "referenced";
 
 export interface ITarifaRepository {
-  create(data: CreateTarifaData): Promise<TarifaDTO>;
+  /**
+   * FICHA 362 (R9) — `actorUsuarioId` es OBLIGATORIO en los tres escritores de esta tabla: la
+   * mutacion y su fila de registro viajan en la MISMA transaccion, y sin actor la fila no se
+   * puede congelar. `null` = el sistema (hoy ningun camino lo produce aqui, pero el tipo lo
+   * admite por simetria con el resto del registro).
+   */
+  create(data: CreateTarifaData, actorUsuarioId: string | null): Promise<TarifaDTO>;
   /** null si no existe. */
   findById(id: string): Promise<TarifaDTO | null>;
   /** orderBy created_at desc, skip/take (R18). */
   list(params: ListTarifasParams): Promise<ListTarifasResult>;
   /** Aplica cambios solo si la tarifa existe; null si no (R21). */
-  update(id: string, data: UpdateTarifaData): Promise<TarifaDTO | null>;
+  update(
+    id: string,
+    data: UpdateTarifaData,
+    actorUsuarioId: string | null,
+  ): Promise<TarifaDTO | null>;
   /**
    * Borrado FISICO. Esta tabla NO borra en logico: no hay `deleted_at` que fijar
    * (ver la migracion tarifa_zona_is_default). `referenced` = algun `cierre_detail`
    * liquido contra esta tarifa y la FK es RESTRICT, asi que la fila no se puede
    * sacar; patron `IZonaRepository.hardDelete`.
    */
-  hardDelete(id: string): Promise<DeleteTarifaResult>;
+  hardDelete(id: string, actorUsuarioId: string | null): Promise<DeleteTarifaResult>;
   /** true si `tiendaId` es un usuario existente con un rol tarifable (`ROLES_TARIFABLES`). */
   esTiendaAsignable(tiendaId: string): Promise<boolean>;
   /** true si `zonaId` corresponde a una zona existente. */

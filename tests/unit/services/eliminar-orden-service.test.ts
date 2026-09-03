@@ -90,7 +90,11 @@ describe("EliminarOrdenService", () => {
     // FICHA 358: `ownerId: null` = SIN frontera de tienda. Es lo que hace que el maestro siga
     // alcanzando ordenes de cualquier tienda, y se afirma aqui porque es la unica forma de ver
     // desde arriba que no se le colo un recorte que no le toca.
-    expect(softDelete).toHaveBeenCalledWith({ ids: ["o1", "o2"], ownerId: null });
+    expect(softDelete).toHaveBeenCalledWith({
+      ids: ["o1", "o2"],
+      ownerId: null,
+      actorUsuarioId: expect.any(String), // ficha 362 (R3): QUIEN borra, congelado en la fila
+    });
   });
 
   // Pedido humano 2026-08-27: el `admin` PIERDE la accion. Este test es el que impide que
@@ -143,7 +147,11 @@ describe("EliminarOrdenService", () => {
 
     expect(r).toEqual({ status: "ok", eliminadas: 1 });
     expect(findByIdsForTransicion).toHaveBeenCalledWith(["o1"]);
-    expect(softDelete).toHaveBeenCalledWith({ ids: ["o1"], ownerId: null });
+    expect(softDelete).toHaveBeenCalledWith({
+      ids: ["o1"],
+      ownerId: null,
+      actorUsuarioId: expect.any(String), // ficha 362 (R3): QUIEN borra, congelado en la fila
+    });
   });
 
   it("lote vacio -> ok(0) sin consultar", async () => {
@@ -199,7 +207,11 @@ describe("EliminarOrdenService / criterio por ESTADO (ficha 319)", () => {
     const r = await service.eliminar({ ordenIds: ["o1"] }, MAESTRO);
 
     expect(r).toEqual({ status: "ok", eliminadas: 1 });
-    expect(softDelete).toHaveBeenCalledWith({ ids: ["o1"], ownerId: null });
+    expect(softDelete).toHaveBeenCalledWith({
+      ids: ["o1"],
+      ownerId: null,
+      actorUsuarioId: expect.any(String), // ficha 362 (R3): QUIEN borra, congelado en la fila
+    });
   });
 
   it.each(NO_ELIMINABLES_ESPERADOS)("%s: NO se elimina", async (estatusValue) => {
@@ -279,7 +291,11 @@ describe("EliminarOrdenService / la tienda y lo suyo (ficha 358)", () => {
     expect(r).toEqual({ status: "ok", eliminadas: 1 });
     // ⭑ La frontera baja al `where`, no se queda en un `if`. Que el repositorio la APLIQUE se
     // mide contra Postgres; que el service la MANDE se mide aqui.
-    expect(softDelete).toHaveBeenCalledWith({ ids: ["o1"], ownerId: "store-1" });
+    expect(softDelete).toHaveBeenCalledWith({
+      ids: ["o1"],
+      ownerId: "store-1",
+      actorUsuarioId: expect.any(String), // ficha 362 (R3): QUIEN borra, congelado en la fila
+    });
   });
 
   it("una orden de OTRA tienda se rechaza como «no existe», y no se escribe nada", async () => {
@@ -347,6 +363,10 @@ describe("EliminarOrdenService / la tienda y lo suyo (ficha 358)", () => {
     const r = await service.eliminar({ ordenIds: ["a", "b"] }, MAESTRO);
 
     expect(r).toEqual({ status: "ok", eliminadas: 2 });
-    expect(softDelete).toHaveBeenCalledWith({ ids: ["a", "b"], ownerId: null });
+    expect(softDelete).toHaveBeenCalledWith({
+      ids: ["a", "b"],
+      ownerId: null,
+      actorUsuarioId: expect.any(String), // ficha 362 (R3): QUIEN borra, congelado en la fila
+    });
   });
 });

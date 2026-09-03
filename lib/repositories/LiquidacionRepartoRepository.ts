@@ -1,3 +1,5 @@
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad, etiquetaDePersona } from "@/lib/types/historial-accion-etiquetas";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CrearLiquidacionRepartoInput,
@@ -82,12 +84,76 @@ export class LiquidacionRepartoRepository implements ILiquidacionRepartoReposito
           montoTotal: new Prisma.Decimal(input.montoTotal), // STRING -> Decimal (money-safe)
           registradoPor: input.registradoPor,
         },
+        include: { mensajero: { select: { nombre: true, primerApellido: true } } },
       });
+
+      // FICHA 362 (R6/R9) — `reparto_mensajero_registrado`. UNA fila por ACTO, en la MISMA tx.
+      // Los `liquidacion_pago` hijos que este reparto trocea NO producen fila propia (lo corta
+      // `LiquidacionPagoRepository.crear` con su `repartoId === null`): el registro documenta la
+      // decision, no sus asientos.
+      const actor = await resolverActorCongelado(tx, input.registradoPor);
+      await appendAccion(tx, [
+        {
+          accion: "reparto_mensajero_registrado",
+          entidadTipo: "liquidacion_reparto",
+          entidadId: row.id,
+          entidadEtiqueta: etiquetaDeEntidad("liquidacion_reparto", {
+            beneficiarioNombre: etiquetaDePersona(row.mensajero),
+          }),
+          monto: row.montoTotal,
+          ...actor,
+        },
+      ]);
+
       return { status: "creado", reparto: toDTO(row) };
     } catch (error) {
       if (esChoqueDeClave(error)) return { status: "clave_repetida" };
       throw error;
     }
+  }
+
+  /**
+   * FICHA 362 (R6/R9) — `reparto_anulado`: UNA fila por ACTO de deshacer un reparto.
+   *
+   * ⚠️ ESTE METODO NO MUTA `liquidacion_reparto`, Y NO PUEDE: la fila del reparto es INMUTABLE
+   * (R52 de la 205) y deshacerlo consiste en anular sus pagos hijos uno a uno. La mutacion que
+   * este registro documenta es ESA —las N anulaciones de `liquidacion_pago`— y ocurre en la MISMA
+   * transaccion, que es la que este metodo recibe: `LiquidacionService.anularReparto` lo llama
+   * dentro de su `runTransaction`, despues de anular, y solo si anulo algo.
+   *
+   * Se declara aparte —y no dentro del bucle de `LiquidacionPagoRepository.anular`— porque el
+   * bucle produciria N filas de UNA decision. Es el mismo criterio que ya corta el registro de
+   * los pagos hijos al CREAR el reparto.
+   *
+   * Recibe `tx` y no un cliente propio: no puede abrir la suya, y por eso la atomicidad es
+   * estructural (R10/R11).
+   */
+  async registrarAnulacion(
+    tx: LiquidacionRepartoTxClient,
+    input: { repartoId: string; anuladoPor: string; montoAnulado: string },
+  ): Promise<void> {
+    const reparto = await tx.liquidacionReparto.findUnique({
+      where: { id: input.repartoId },
+      select: { mensajero: { select: { nombre: true, primerApellido: true } } },
+    });
+    const actor = await resolverActorCongelado(tx, input.anuladoPor);
+    await appendAccion(tx, [
+      {
+        accion: "reparto_anulado",
+        entidadTipo: "liquidacion_reparto",
+        entidadId: input.repartoId,
+        entidadEtiqueta: etiquetaDeEntidad("liquidacion_reparto", {
+          beneficiarioNombre:
+            reparto === null ? null : etiquetaDePersona(reparto.mensajero),
+        }),
+        // Lo EFECTIVAMENTE anulado, que puede ser menos que el total del reparto si alguna
+        // imputacion ya estaba anulada. Se registra lo alcanzado, no lo pedido (R12).
+        monto: new Prisma.Decimal(input.montoAnulado),
+        // `input.motivo` NO existe en esta firma a proposito: el motivo de la anulacion es texto
+        // libre y ya vive en `liquidacion_anulacion.motivo` (R5).
+        ...actor,
+      },
+    ]);
   }
 
   /** §5.1/R28: relectura idempotente por la clave del cliente, con el cliente PROPIO. */

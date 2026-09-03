@@ -175,6 +175,9 @@ describe("312/C2 — R8: maestro y admin, sin restriccion de tienda", () => {
       ORDEN_ID,
       { destinatario: "Ana Maria Perez" },
       ESTADOS_SIN_CORRECCION,
+      // ⭑ FICHA 362 / Q1 — el RASTRO. `ubicacionCorregida` decide si se escribe la fila del
+      // registro; el actor es QUIEN la escribe. Ni la direccion ni el distrito viajan aqui.
+      { actorUsuarioId: expect.any(String), ubicacionCorregida: expect.any(Boolean) },
     );
   });
 });
@@ -398,6 +401,9 @@ describe("312/C2 + 327/R10 — sin cambios, sin escritura", () => {
       ORDEN_ID,
       { telefonoDest: "8888-9999", notas: null, direccion: "calle nueva 10" },
       ESTADOS_SIN_CORRECCION,
+      // ⭑ FICHA 362 / Q1 — el RASTRO. `ubicacionCorregida` decide si se escribe la fila del
+      // registro; el actor es QUIEN la escribe. Ni la direccion ni el distrito viajan aqui.
+      { actorUsuarioId: expect.any(String), ubicacionCorregida: expect.any(Boolean) },
     );
   });
 });
@@ -423,6 +429,9 @@ describe("312/C2 — R18: el telefono tiene que ser utilizable", () => {
       ORDEN_ID,
       { telefonoDest: "8888-9999" }, // NO `50688889999`
       ESTADOS_SIN_CORRECCION,
+      // ⭑ FICHA 362 / Q1 — el RASTRO. `ubicacionCorregida` decide si se escribe la fila del
+      // registro; el actor es QUIEN la escribe. Ni la direccion ni el distrito viajan aqui.
+      { actorUsuarioId: expect.any(String), ubicacionCorregida: expect.any(Boolean) },
     );
   });
 
@@ -468,6 +477,9 @@ describe("327/C2 — R9: el peso, revalidado en el servidor", () => {
       ORDEN_ID,
       { peso: 3.25 },
       ESTADOS_SIN_CORRECCION,
+      // ⭑ FICHA 362 / Q1 — el RASTRO. `ubicacionCorregida` decide si se escribe la fila del
+      // registro; el actor es QUIEN la escribe. Ni la direccion ni el distrito viajan aqui.
+      { actorUsuarioId: expect.any(String), ubicacionCorregida: expect.any(Boolean) },
     );
     // El peso no entra en `derivarIngresoOrden`: no mueve dinero, no hay nada que avisar.
     expect(resolveTarifa).not.toHaveBeenCalled();
@@ -607,6 +619,9 @@ describe("327/C2 — R11: EL GATE DEL DINERO", () => {
       // `z-2` sale del DISTRITO resuelto; `p-1`/`c-1` no viajan porque no cambian.
       { distritoId: "d-2", zonaId: "z-2" },
       ESTADOS_SIN_CORRECCION,
+      // ⭑ FICHA 362 / Q1 — el RASTRO. `ubicacionCorregida` decide si se escribe la fila del
+      // registro; el actor es QUIEN la escribe. Ni la direccion ni el distrito viajan aqui.
+      { actorUsuarioId: expect.any(String), ubicacionCorregida: expect.any(Boolean) },
     );
   });
 
@@ -645,6 +660,9 @@ describe("327/C2 — R11: EL GATE DEL DINERO", () => {
       ORDEN_ID,
       { provinciaId: "p-1", cantonId: "c-1", distritoId: "d-2", zonaId: "z-2" },
       ESTADOS_SIN_CORRECCION,
+      // ⭑ FICHA 362 / Q1 — el RASTRO. `ubicacionCorregida` decide si se escribe la fila del
+      // registro; el actor es QUIEN la escribe. Ni la direccion ni el distrito viajan aqui.
+      { actorUsuarioId: expect.any(String), ubicacionCorregida: expect.any(Boolean) },
     );
   });
 });

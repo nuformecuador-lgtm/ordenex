@@ -157,8 +157,17 @@ const ARBOLES_UI = ["app", "components"] as const;
 // app/(app)/analitica/_components/entregas/DineroProductoDetalle.tsx #1» antes de tocar estos
 // numeros, que es la convencion escrita en este propio archivo. Censo total: 34 = 33
 // `<DataTable>` + 1 `<table>` cruda.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 33;
-const TOTAL_INSTANCIAS_DATATABLE = 33;
+//
+// FICHA 362 (T6.3): 33 -> 34 archivos y 33 -> 34 instancias, por el REGISTRO DE ACCIONES
+// (`app/(app)/historico/acciones/_components/HistorialAccionesModule.tsx`). Nace
+// `con_descarga` —Familia A: pagina en el servidor y tiene su propia accion de dataset
+// completo— y por eso la que sube es la cuenta de dentro de alcance, no la de exclusiones.
+// Esta guardia se vio fallar PRIMERO con «hay tablas sin registrar:
+// app/(app)/historico/acciones/_components/HistorialAccionesModule.tsx #1» antes de tocar
+// estos numeros, que es la convencion escrita en este propio archivo. Censo total: 35 = 34
+// `<DataTable>` + 1 `<table>` cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 34;
+const TOTAL_INSTANCIAS_DATATABLE = 34;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -343,7 +352,9 @@ describe("guardia de cobertura del censo de tablas", () => {
     // `<DataTable>` de esa pantalla. Las 11 exclusiones NO se mueven.
     // FICHA 347 (F5/G5): 33 → 34, por el detalle orden por orden del dinero de un producto.
     // Las 22 con descarga NO se mueven: la que entra nace `fuera`.
-    expect(totalCensado).toBe(34);
+    // FICHA 362 (T6.3): 34 → 35, por el registro de acciones. Las 12 exclusiones NO se mueven:
+    // la que entra nace `con_descarga`.
+    expect(totalCensado).toBe(35);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -435,7 +446,10 @@ describe("guardia de cobertura del censo de tablas", () => {
     // recorte de algo que ya se descarga): es que no existe la puerta para servirlo entero. La
     // diferencia importa, porque la de la 343 no se va a cablear nunca y esta si, en cuanto el
     // borde gane su modo completo.
-    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(22);
+    // FICHA 362 (T6.3): 22 -> 23 dentro de alcance, y las 12 exclusiones NO se mueven. La de
+    // mas es el registro de acciones: un registro de auditoria que no se puede sacar de la
+    // pantalla no sirve para auditar, asi que `fuera` no era una opcion con motivo.
+    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(23);
     expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(12);
   });
 

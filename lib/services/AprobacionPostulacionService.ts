@@ -72,7 +72,12 @@ export class AprobacionPostulacionService implements IAprobacionPostulacionServi
   ): Promise<DecisionServiceResult> {
     if (!ROLES_APROBADORES.has(actor.rol)) return { status: "forbidden" };
 
-    const count = await this.repo.actualizarEstadoSiPendiente(usuarioId, estadoDestino);
+    // FICHA 362 (R3/R9): QUIEN decidio, congelado en la misma transaccion que la decision.
+    const count = await this.repo.actualizarEstadoSiPendiente(
+      usuarioId,
+      estadoDestino,
+      actor.usuarioId,
+    );
     if (count > 0) {
       // R15/R19: solo cambio `estado`; el repo no toca otros campos ni documentos.
       return { status: "ok", usuarioId, estado: estadoDestino };

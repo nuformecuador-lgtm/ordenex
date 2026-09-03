@@ -1,3 +1,4 @@
+import { conRegistroDeAcciones } from "../../fixtures/registro-de-acciones";
 import { describe, it, expect, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { UserRepository } from "@/lib/repositories/UserRepository";
@@ -7,7 +8,11 @@ import { CatalogoInvalidoError } from "@/lib/interfaces/repositories/IUserReposi
 // de usuario (R10), fuera del login en si pero requerido para la consistencia
 // del modelo de datos.
 
-type MockedPrisma = Pick<PrismaClient, "usuario" | "tipoIdentificacion" | "rol">;
+// FICHA 362: el alta pasa a `$transaction` y registra su accion en ella.
+type MockedPrisma = Pick<
+  PrismaClient,
+  "usuario" | "tipoIdentificacion" | "rol" | "$transaction" | "historialAccion"
+>;
 
 const INPUT = {
   nombre: "Luis Perez",
@@ -28,7 +33,7 @@ describe("Creacion de usuario con catalogos inexistentes (T017, R10)", () => {
     } as unknown as MockedPrisma;
     const repo = new UserRepository(prisma);
 
-    await expect(repo.create(INPUT)).rejects.toBeInstanceOf(CatalogoInvalidoError);
+    await expect(repo.create(INPUT, "actor-1")).rejects.toBeInstanceOf(CatalogoInvalidoError);
     expect(prisma.usuario.create).not.toHaveBeenCalled();
   });
 
@@ -40,7 +45,7 @@ describe("Creacion de usuario con catalogos inexistentes (T017, R10)", () => {
     } as unknown as MockedPrisma;
     const repo = new UserRepository(prisma);
 
-    await expect(repo.create(INPUT)).rejects.toBeInstanceOf(CatalogoInvalidoError);
+    await expect(repo.create(INPUT, "actor-1")).rejects.toBeInstanceOf(CatalogoInvalidoError);
     expect(prisma.usuario.create).not.toHaveBeenCalled();
   });
 
@@ -54,14 +59,17 @@ describe("Creacion de usuario con catalogos inexistentes (T017, R10)", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    const prisma = {
+    const prisma = conRegistroDeAcciones({
       usuario: { create: usuarioCreate },
       tipoIdentificacion: { findUnique: vi.fn().mockResolvedValue({ id: "tipo-1", value: "cedula" }) },
       rol: { findUnique: vi.fn().mockResolvedValue({ id: "rol-1", value: "usuario" }) },
-    } as unknown as MockedPrisma;
+    }) as unknown as MockedPrisma;
     const repo = new UserRepository(prisma);
 
-    const usuario = await repo.create({ ...INPUT, tipoIdentificacionId: "tipo-1", rolId: "rol-1" });
+    const usuario = await repo.create(
+      { ...INPUT, tipoIdentificacionId: "tipo-1", rolId: "rol-1" },
+      "actor-1", // ficha 362 (R3): QUIEN dio de alta la cuenta
+    );
     expect(usuario.id).toBe("usr-1");
   });
 });

@@ -111,19 +111,23 @@ export class UsuarioService implements IUsuarioService {
     }
 
     try {
-      const usuario = await this.repo.create({
-        nombre: input.nombre,
-        email: input.email,
-        telefono: input.telefono,
-        cedula: input.cedula,
-        tipoIdentificacionId: input.tipoIdentificacionId,
-        rolId: input.rolId,
-        passwordHash,
-        estado: "activo", // R8: nace activo (a diferencia de la postulacion publica)
-        fulfillment, // R8/R9: valor efectivo ya restringido por rol
-        zonaId: zona.zonaId, // R27: null salvo mensajero/adminSatelite
-        vehiculoId: vehiculo.vehiculoId, // feature 21: null salvo mensajero
-      });
+      const usuario = await this.repo.create(
+        {
+          nombre: input.nombre,
+          email: input.email,
+          telefono: input.telefono,
+          cedula: input.cedula,
+          tipoIdentificacionId: input.tipoIdentificacionId,
+          rolId: input.rolId,
+          passwordHash,
+          estado: "activo", // R8: nace activo (a diferencia de la postulacion publica)
+          fulfillment, // R8/R9: valor efectivo ya restringido por rol
+          zonaId: zona.zonaId, // R27: null salvo mensajero/adminSatelite
+          vehiculoId: vehiculo.vehiculoId, // feature 21: null salvo mensajero
+        },
+        // FICHA 362 (R3/R9): QUIEN dio de alta la cuenta, congelado en la misma transaccion.
+        actor.usuarioId,
+      );
       // R33: contrasena en claro UNA vez solo en modo autogenerado; R35: nunca en manual.
       return generated
         ? { status: "ok", usuario, generatedPassword: plain }
@@ -278,7 +282,9 @@ export class UsuarioService implements IUsuarioService {
     }
 
     try {
-      const usuario = await this.repo.update(id, data);
+      // FICHA 362 (R7/R9): QUIEN edito. El repositorio decide QUE registrar comparando contra
+      // el estado previo, dentro de la misma transaccion.
+      const usuario = await this.repo.update(id, data, actor.usuarioId);
       if (!usuario) return { status: "not_found" }; // R17
       return { status: "ok", usuario }; // R19
     } catch (error) {
@@ -296,7 +302,8 @@ export class UsuarioService implements IUsuarioService {
   ): Promise<CambiarEstadoUsuarioServiceResult> {
     if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R3/R4
 
-    const usuario = await this.repo.setEstado(id, input.estado); // R20/R21: baja logica
+    // FICHA 362 (R9): QUIEN cambio el estado; el registro lleva el estado anterior y el nuevo.
+    const usuario = await this.repo.setEstado(id, input.estado, actor.usuarioId); // R20/R21
     if (!usuario) return { status: "not_found" }; // R22
     return { status: "ok", usuario };
   }
@@ -377,7 +384,9 @@ export class UsuarioService implements IUsuarioService {
     // R11/R16: PRIMERO revocar TODAS las sesiones del objetivo...
     const sesionesRevocadas = await sessionRepo.deleteAllByUserId(usuario.id);
     // ...y solo DESPUES el hash (R12). Ver el porque del orden en la cabecera.
-    await this.repo.updatePasswordHash(usuario.id, passwordHash);
+    // FICHA 362 (R5/R9): el restablecimiento POR UN ADMINISTRADOR deja rastro (quien y a quien),
+    // y ni el hash ni la clave entran en la fila. El auto-servicio sigue por `updatePasswordHash`.
+    await this.repo.restablecerContrasena(usuario.id, passwordHash, actor.usuarioId);
 
     // R21: la contrasena en claro viaja EXACTAMENTE una vez, aqui. No se guarda en ningun sitio,
     // no se loguea (R23/R24) y no hay forma de volver a pedirla.

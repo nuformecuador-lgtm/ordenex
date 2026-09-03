@@ -179,7 +179,7 @@ describe("AprobacionPostulacionService", () => {
     const svc = new AprobacionPostulacionService(repo, buildSignedUrls());
     const r = await svc.aprobar("usr-1", actor("maestro"));
     expect(r).toEqual({ status: "ok", usuarioId: "usr-1", estado: "activo" });
-    expect(repo.actualizarEstadoSiPendiente).toHaveBeenCalledWith("usr-1", "activo");
+    expect(repo.actualizarEstadoSiPendiente).toHaveBeenCalledWith("usr-1", "activo", expect.any(String));
     // R15: no se reconsulta ni se toca otro dato en el camino feliz.
     expect(repo.findMensajeroById).not.toHaveBeenCalled();
   });
@@ -210,7 +210,7 @@ describe("AprobacionPostulacionService", () => {
     const svc = new AprobacionPostulacionService(repo, buildSignedUrls());
     const r = await svc.rechazar("usr-1", actor("maestro"));
     expect(r).toEqual({ status: "ok", usuarioId: "usr-1", estado: "inactivo" });
-    expect(repo.actualizarEstadoSiPendiente).toHaveBeenCalledWith("usr-1", "inactivo");
+    expect(repo.actualizarEstadoSiPendiente).toHaveBeenCalledWith("usr-1", "inactivo", expect.any(String));
     // R19: el repo no expone delete; el service solo cambia estado.
     expect(repo).not.toHaveProperty("delete");
   });

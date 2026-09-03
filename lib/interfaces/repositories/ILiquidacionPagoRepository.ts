@@ -10,7 +10,11 @@ import type { AnulacionDTO, MetodoLiquidacion } from "@/lib/types/liquidacion";
  * documento y `$queryRaw` para el `SELECT … FOR UPDATE` de §4.2. Lo satisface tanto el `tx` de
  * un `$transaction` interactivo como el `PrismaClient` completo.
  */
-export type LiquidacionPagoTxClient = Pick<PrismaClient, "liquidacionPago" | "$queryRaw">;
+export type LiquidacionPagoTxClient = Pick<
+  PrismaClient,
+  // Ficha 362 (R9): el registro de la accion viaja en la MISMA tx que el documento del pago.
+  "liquidacionPago" | "$queryRaw" | "historialAccion" | "usuario"
+>;
 
 /**
  * Cliente para LEER el cierre. Va aparte del de arriba a proposito: `cierre_dia` es una tabla
@@ -26,7 +30,12 @@ export type LiquidacionCierreTxClient = Pick<PrismaClient, "cierreDia">;
  * puerta de `liquidacionPago`. Quien recibe este cliente puede insertar el contraasiento
  * documental y nada mas — en particular, no puede tocar la fila del pago (R41/R74).
  */
-export type LiquidacionAnulacionTxClient = Pick<PrismaClient, "liquidacionAnulacion">;
+export type LiquidacionAnulacionTxClient = Pick<
+  PrismaClient,
+  // Ficha 362 (R9): idem para la anulacion. `liquidacionPago` entra ademas para congelar el
+  // importe anulado en la fila del registro sin una segunda consulta fuera de la tx.
+  "liquidacionAnulacion" | "liquidacionPago" | "historialAccion" | "usuario"
+>;
 
 /**
  * §4.2 [P1] — QUE fila se bloquea, y el grano difiere a proposito:

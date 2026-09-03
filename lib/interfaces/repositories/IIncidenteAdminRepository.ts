@@ -126,7 +126,8 @@ export interface IncidenteAdminRow {
 /** Cliente Prisma acotado a lo que este repo necesita (patron `CierresAdminRepository`). */
 export type IncidenteAdminPrismaClient = Pick<
   PrismaClient,
-  "ordenIncidente" | "orden" | "$transaction"
+  // Ficha 362 (R9): el registro de la accion, en la MISMA tx que la resolucion del incidente.
+  "ordenIncidente" | "orden" | "$transaction" | "historialAccion" | "usuario"
 >;
 
 export interface IIncidenteAdminRepository {
