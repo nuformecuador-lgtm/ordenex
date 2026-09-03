@@ -3,7 +3,13 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { SIDEBAR_ITEMS, type MenuItem } from "@/lib/auth/menu-visibility";
+import {
+  SIDEBAR_ITEMS,
+  itemsVisibles,
+  puedeVerSubitem,
+  type MenuItem,
+} from "@/lib/auth/menu-visibility";
+import type { RolValue } from "@prisma/client";
 
 // Feature 284 — GUARDIA DEL MANIFIESTO, DE LOS ATAJOS Y DE LOS ICONOS.
 //
@@ -108,11 +114,41 @@ function destinosDe(item: MenuItem): string[] {
 /** Union de todos los roles que aparecen en algun item del menu. Nada de listas copiadas. */
 const rolesConMenu = new Set<string>(SIDEBAR_ITEMS.flatMap((item) => [...item.roles]));
 
-/** Roles que LLEGAN a una url, derivado de `SIDEBAR_ITEMS` (el subitem hereda del padre). */
+/**
+ * Los destinos que ESE rol alcanza por el menu.
+ *
+ * ⚠️ FICHA 362 — pasa por `itemsVisibles`, y no por un `filter` propio sobre `item.roles`,
+ * porque desde esta ficha un SUBITEM puede declarar `roles` propios («Acciones», maestro-only).
+ * El filtro propio que habia aqui contaba `/historico/acciones` como alcanzable por el `admin`,
+ * que es exactamente el fallo que esta guardia existe para impedir: un atajo del manifiesto a
+ * una ruta que devuelve `notFound()` al pulsarlo. La regla de visibilidad vive en UN sitio
+ * (`lib/auth/menu-visibility`) y aqui se consume, no se reimplementa.
+ */
+function destinosDeRol(rol: string): string[] {
+  return itemsVisibles(SIDEBAR_ITEMS, {
+    usuarioId: "guardia",
+    rol: rol as RolValue,
+  }).flatMap(destinosDe);
+}
+
+/**
+ * Roles que LLEGAN a una url. Un subitem SIN `roles` propios hereda los del padre (321/R3);
+ * uno CON ellos manda los suyos, y `puedeVerSubitem` es quien lo decide — aqui no se copia esa
+ * regla.
+ */
 function rolesQueLlegan(url: string): Set<string> {
   const roles = new Set<string>();
   for (const item of SIDEBAR_ITEMS) {
-    if (destinosDe(item).includes(url) || item.href === url) {
+    if (item.children && item.children.length > 0) {
+      for (const child of item.children) {
+        if (child.href !== url) continue;
+        for (const rol of item.roles) {
+          if (puedeVerSubitem(child, item, { usuarioId: "guardia", rol })) roles.add(rol);
+        }
+      }
+      continue;
+    }
+    if (item.href === url) {
       for (const rol of item.roles) roles.add(rol);
     }
   }
@@ -159,16 +195,36 @@ describe("pwa · los atajos del manifiesto", () => {
     expect(motivosDeRechazo([{ url: "/dashboard" }]).length).toBe(1);
   });
 
+  it("⭑ 362 — un atajo a una ruta de SUBITEM restringido se rechaza para el admin", () => {
+    // El caso que hace que el arreglo de arriba signifique algo. `/historico/acciones` la ve
+    // SOLO el maestro (subitem con `roles` propios): un atajo del manifiesto es global a la
+    // app, así que llevaría a un `notFound()` a todo el que no sea maestro. Con el cálculo
+    // viejo —que leía `item.roles` y se saltaba los del subitem— este atajo habría pasado
+    // para el admin, y el manifiesto habría publicado un enlace roto.
+    const motivos = motivosDeRechazo([{ name: "Acciones", url: "/historico/acciones" }]);
+    expect(motivos.length).toBe(1);
+    expect(motivos[0]).toContain("/historico/acciones");
+    // Se afirma sobre la LISTA de roles, no sobre el texto del motivo: «admin» es prefijo de
+    // «adminTienda» y de «adminSatelite», así que un `toContain("admin")` sobre la frase
+    // pasaría sin que el admin estuviera fuera.
+    expect([...rolesQueLlegan("/historico/acciones")].sort()).toEqual(["maestro"]);
+
+    // Y el hermano SIN `roles` propios sigue heredando del padre: a él llegan los DOS. Sin
+    // este contraste, la aserción de arriba pasaría igual con un cálculo que le negara el
+    // apartado entero al admin.
+    expect([...rolesQueLlegan("/historico/conversaciones")].sort()).toEqual([
+      "admin",
+      "maestro",
+    ]);
+  });
+
   it("hoy no hay ni un destino que vean todos los roles: por eso son cero atajos", () => {
     // LA MEDICION QUE SOSTIENE LA DECISION (humano, 2026-08-25), re-derivada aqui en vez de
     // copiada: si mañana entra una ruta universal, estos numeros cambian y la ficha del atajo
     // se puede abrir con datos. Si alguien mete un atajo antes, el caso de arriba lo caza.
     const porRol = new Map<string, Set<string>>();
     for (const rol of rolesConMenu) {
-      const destinos = SIDEBAR_ITEMS.filter((i) => i.roles.includes(rol as never)).flatMap(
-        destinosDe,
-      );
-      porRol.set(rol, new Set(destinos));
+      porRol.set(rol, new Set(destinosDeRol(rol)));
     }
 
     // Feature 321 — `maestro` 16 -> 17 y `admin` 11 -> 12, por UN destino nuevo y solo uno:
@@ -187,8 +243,15 @@ describe("pwa · los atajos del manifiesto", () => {
     // sigue vacía y por tanto siguen siendo CERO atajos. Un atajo del manifiesto es global a la
     // app —lo ve quien instale la PWA, sea cual sea su rol—, y por eso solo puede salir de la
     // intersección.
+    // ⭑ FICHA 362 — `maestro` 17 -> 18, por UN destino nuevo y solo uno: el subitem «Acciones»
+    // (`/historico/acciones`) del item «Histórico». `admin` NO se mueve, y que se quede clavado
+    // en 12 es la mitad de lo que se afirma aquí: ese subitem declara `roles` PROPIOS
+    // (`ROLES_HISTORIAL_ACCIONES`, solo maestro) porque el registro guarda las decisiones de
+    // dinero del admin. Antes de enchufar este cálculo a `itemsVisibles`, este mismo `toEqual`
+    // decía `admin: 13` — o sea, la guardia creía que el admin llegaba a una ruta que le
+    // devuelve 404, que es justo el atajo roto que este archivo existe para impedir.
     expect(Object.fromEntries([...porRol].map(([rol, d]) => [rol, d.size]))).toEqual({
-      maestro: 17,
+      maestro: 18,
       admin: 12,
       adminSatelite: 6,
       mensajero: 6,

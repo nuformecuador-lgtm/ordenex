@@ -45,11 +45,10 @@ function construirService(): IHistorialAccionService {
 /**
  * R22/R23/R26 — una pagina del registro, resuelta ENTERA en el servidor.
  *
- * @sin-superficie el backend de la ficha 362 va por delante del frontend: la pantalla
- * `app/(app)/historico/acciones/page.tsx` es la tanda T5 y la construye el agente de frontend con
- * este contrato. NO es deuda ni una accion huerfana; la anotacion se BORRA en esa tanda, cuando el
- * modulo la importe. Mismo caso, y misma anotacion temporal, que llevaron `conteo-productos` y
- * `corregir-dia-reparto` mientras su pantalla se escribia.
+ * SUPERFICIE: `app/(app)/historico/acciones/_components/HistorialAccionesModule.tsx` (T5.4). La
+ * anotacion de excepcion que este export llevo mientras la pantalla no existia se BORRO al
+ * cablearla; dejarla habria fosilizado la excepcion y `superficie-de-uso.guardia` se lo habria
+ * comido en silencio.
  */
 export async function listarHistorialAccionesPaginado(
   input: unknown,
@@ -65,7 +64,8 @@ export async function listarHistorialAccionesPaginado(
  * R30/R33 — el conjunto ENTERO de la descarga, con el MISMO filtro, el MISMO orden y el MISMO gate
  * por rol que la pantalla.
  *
- * @sin-superficie idem: la descarga la cablea la tanda T6 del frontend.
+ * SUPERFICIE: el `descarga.obtenerFilas` de `HistorialAccionesModule` (T6.2), a traves de
+ * `historial-acciones-descarga.ts`.
  */
 export async function listarHistorialAccionesCompleto(
   input: unknown,
@@ -80,7 +80,7 @@ export async function listarHistorialAccionesCompleto(
 /**
  * R29 — los actores que han actuado alguna vez, para el selector de filtros. Mismo gate.
  *
- * @sin-superficie idem: la barra de filtros la monta la tanda T5.3 del frontend.
+ * SUPERFICIE: `app/(app)/historico/acciones/page.tsx`, que la pre-carga para el selector.
  */
 export async function obtenerCatalogoActoresHistorial(
   deps: HistorialAccionesActionDeps = {},

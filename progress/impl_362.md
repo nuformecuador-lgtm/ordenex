@@ -408,3 +408,235 @@ Backend completo y medido: los 42 tipos instrumentados con su registro en la mis
 la atomicidad probada contra Postgres en los dos sentidos, nueve mutaciones puestas rojas con su
 línea (una sobrevivió, se dice y se cerró), typecheck y lint en verde y la suite entera con el
 único rojo heredado que ya vive en el baseline — **falta la pantalla, que es de otro agente.**
+
+---
+---
+
+# impl_362 — Historial de acciones · FRONTEND
+
+> Rama `feature/362-historial-pantalla`, creada de `origin/dev` y con
+> `feature/362-historial-de-acciones` mergeada dentro (merge limpio, sin conflictos).
+> **Alcance: T5.1–T5.5, T6.2, T6.3, T7.5 y T7.6.** Nada de backend, ni de base, ni de rutas de
+> API. Todo lo de arriba es del agente anterior y **no se ha tocado ni una línea**.
+
+## F1. El obstáculo del menú, resuelto: `MenuChild` gana `roles` opcional
+
+`MenuChild` no admitía `roles` propios y los subítems heredaban los del padre —hoy
+`["maestro","admin"]`—, pero Q4 dejó el historial en **maestro-only**. Las tres salidas
+posibles, y por qué se eligió la primera:
+
+| Opción | Por qué se descartó / eligió |
+| --- | --- |
+| **`MenuChild.roles?` opcional + poda en `itemsVisibles`** | **ELEGIDA.** Un campo opcional, ausente en todos los subítems menos uno; la regla de herencia (321/R3) sigue siendo el DEFECTO y no cambia para nadie. |
+| Ítem de primer nivel «Auditoría» | Descartada por design §3.2/A3: obliga a decidir posición en la barra —y la posición **mueve el aterrizaje post-login**, incidentes de «Analítica» y «Monitoreo»— y a ampliar la unión cerrada `IconKey`. Tres decisiones nuevas para algo que es otro histórico. |
+| Estrechar `ROLES_HISTORICO_CONVERSACIONES` | Ya la descartó el backend: le quitaría al `admin` el histórico de conversaciones, que sí debe seguir viendo. |
+
+**Dónde se aplica la poda, y por qué ahí.** En `itemsVisibles`, **no** en el `Sidebar`. Por ahí
+pasan **los dos** consumidores: el layout (que pinta la barra) y `/dashboard` (que calcula el
+aterrizaje con `primerDestino`). Podarlo en el `Sidebar` habría dejado a `primerDestino` mirando
+la lista sin podar —la mitad callada del problema— y habría obligado a cambiarle la firma para
+pasarle el actor, que la usan cinco pantallas y tres suites. **Ninguna firma cambió.** La
+identidad del ítem se conserva cuando no hay nada que podar, así que los objetos de
+`SIDEBAR_ITEMS` no se reescriben para nadie que no lo necesite.
+
+**Las dos mitades del agujero que abre el campo nuevo, cerradas:**
+
+1. **Un desplegable sin subítems visibles no se pinta.** `puedeVer` exige ahora, para un ítem con
+   `children`, que al menos uno sea visible. Hoy no cambia nada; existe para que un disparador
+   que despliega el vacío sea imposible por construcción.
+2. **Ningún PRIMER subítem puede declarar `roles`.** `primerDestino` devuelve `children[0].href`:
+   un primer subítem restringido mandaría a un 404 post-login a un rol que sí ve el padre. Lo
+   afirma un caso sobre **todo** el menú, no sólo sobre este ítem.
+
+### Un consumidor del menú que NO aplicaba la regla, encontrado por el gate
+
+`tests/unit/guards/pwa-manifiesto-atajos.guardia.test.ts` calculaba los destinos de cada rol con
+un `filter` propio sobre `item.roles`, ignorando los del subítem. Con el subítem nuevo pasó a
+contar **`admin: 13`** en vez de 12: la guardia creía que el `admin` llegaba a
+`/historico/acciones`. **Eso no es un número que subir**: esa guardia existe para impedir un
+atajo del manifiesto a una ruta que devuelve `notFound()` al pulsarlo, y con el cálculo viejo lo
+habría autorizado. Se enchufó a la fuente única (`itemsVisibles` / `puedeVerSubitem`) y se le
+añadió el caso que lo mide (`rolesQueLlegan("/historico/acciones")` es exactamente `["maestro"]`,
+con el contraste del hermano heredado). Resultado: `maestro` 17 a 18, **`admin` clavado en 12**.
+
+## F2. Desviación declarada de `design.md` §5.3: el orden es un conmutador, no una cabecera
+
+El design pedía «la cabecera ordenable por Fecha». Se implementó como **`SegmentedToggle`** en la
+barra («Más recientes» / «Más antiguas»), por dos razones medidas:
+
+1. **`DataTable` no tiene soporte de ordenación.** `Column` admite `renderHeader`, que sustituye
+   el CONTENIDO del `th` pero **no permite poner el `aria-sort`** que una cabecera ordenable
+   necesita para ser accesible. Dárselo obliga a tocar el componente que montan **34 tablas**,
+   por una pantalla.
+2. **La ficha 356 ya resolvió esta misma petición del humano** —«no veo un botón con el cual
+   organizar los datos de las tablas por su fecha»— con este conmutador y con el motivo escrito.
+   Dos controles distintos para «ordena esta tabla por fecha» es la divergencia que este repo
+   lleva pagando en otras piezas. Las etiquetas se **importan** de la 356; no se reescriben.
+
+## F3. Las medidas del navegador (1440 y 390)
+
+Un solo servidor de desarrollo, `next dev --webpack -p 3462`, navegando a `localhost`. Sesión
+real de maestro. **Se sembró una cuenta maestro nueva en la base local**
+(`maestro.qa362@ordenex.test`) con `scripts/seed-maestro.ts`: crea una fila, **no rota** ninguna
+credencial existente — el seed de QA sí lo habría hecho con las cuatro cuentas. El login pidió
+**OTP** (dispositivo nuevo); el código se leyó del log del servidor, que es donde queda sin
+proveedor de email.
+
+| Medida | 1440 | 390 |
+| --- | --- | --- |
+| **Desborde horizontal de la PÁGINA** | **0 px** | **0 px** |
+| Ancho de la tabla | 1616 px | 1616 px |
+| Ancho útil del contenedor de la tabla | 1134 px | 340 px |
+| **Exceso DENTRO del contenedor con `overflow-x-auto`** | **482 px** | **1276 px** |
+| **Palabras partidas** (`Range.getClientRects()`, 2+ líneas distintas) | **0** | **0** |
+| Filas pintadas | 10 | 10 |
+
+Repetido con el **estado vacío por búsqueda** (`zzzzzzz`): **0 px** de desborde de página y **0**
+palabras partidas en los dos anchos.
+
+**Lectura de los 482 / 1276 px:** no son un defecto, son el comportamiento **declarado** de
+`DataTable` («si la suma de mínimos excede el ancho disponible, la tabla desborda y aparece el
+scroll horizontal — comportamiento deseado: antes las columnas se estrujaban»). El desborde vive
+**dentro** de un contenedor con scroll propio; la página no scrollea en horizontal en ningún
+ancho. Diez columnas con fecha, actor, rol, categoría, acción, entidad, importe y dos valores no
+caben en 390 px sin partir palabras, y partirlas es peor.
+
+**Y por eso NO se usó `wrap-anywhere` en ninguna celda**: baja el `min-content` de la celda a
+**un carácter** y autoriza a partir palabras por cualquier sitio — la tabla dejaría de desbordar
+y a cambio sería ilegible. Los `minWidth` de cada columna salen de **la frase** que tiene que
+caber («Rechazó un cierre del día» pide `14rem`), no de su palabra más larga; dimensionar por la
+palabra deja cinco líneas de una palabra, que es lo que costó dos fichas.
+
+Anchos reales medidos por columna: Cuándo 176 · Quién 160 · Rol 128 · Categoría 144 · Qué 224 ·
+Tipo 144 · Sobre qué 192 · Importe 128 · Valor anterior 160 · Valor nuevo 160.
+
+**Comprobado además en el navegador:**
+
+- el menú del maestro trae los **dos** subítems (`/historico/conversaciones` y
+  `/historico/acciones`);
+- el selector de la barra **compartida** ofrece exactamente `Categoría · Acción · Persona ·
+  Tipo · Fecha`;
+- el dinero se pinta con el formato de la casa (`₡500`, `₡80.000`) y la fecha en reloj de CR.
+
+## F4. Las mutaciones — siete, con su línea real
+
+| # | Mutación | Línea del fallo |
+| --- | --- | --- |
+| 1 | **quitar `claveDeOrden` de la key de SWR** | `HistorialAccionesModule.test.tsx:250` — *«Unable to find an element with the text: Guía ANTIGUA»* (+ `:261`, `:359`). El control puesto y las filas sin moverse. |
+| 2 | **tratar `limite_excedido` como éxito** (`status ok`, `filas` vacías) | `HistorialAccionesModule.test.tsx:397` (el toast del tope no llega) · `:472` (*«expected 'ok' to be 'error'»*) · `ControlDescargaTransversal.test.tsx:645` (*«arma un DescargaFilasResult a mano»*) |
+| 3 | **dejar que el `admin` vea el ítem** (quitarle `roles` al subítem) | `menu-historial-acciones.test.ts:102` — *«expected ['Conversaciones','Acciones'] to deeply equal ['Conversaciones']»* (+ `:71`, `:112`, `:124`, `:142` y `menu-historico.test.ts:91`) |
+| 4 | pintar cadena vacía cuando `actorNombre` es `null` | `HistorialAccionesModule.test.tsx:188` — *«Unable to find an element with the text: Sistema»* |
+| 5 | formatear la fecha en **UTC** en vez de CR | `historial-acciones-descarga-columnas.test.ts:130` — *«expected '2 sept 2026, 5:30 a. m.' to contain '1 sept'»* · `HistorialAccionesModule.test.tsx:223` |
+| 6 | **escribir `minChars: 3` a mano** en vez de la constante | `historial-acciones-filtros-def.test.ts:113` — *«expected '…' to contain 'minChars: BUSQUEDA_MIN_CHARS'»* |
+| 7 | devolver el cálculo de la guardia PWA a `item.roles` | `pwa-manifiesto-atajos.guardia.test.ts:208` — *«expected ['admin','maestro'] to deeply equal ['maestro']»* |
+
+Las siete **revertidas**; typecheck y lint verdes después.
+
+### La mutación 6 SOBREVIVIÓ EN VERDE en su primer intento, y se cerró
+
+`minChars: BUSQUEDA_MIN_CHARS` cambiado a `minChars: 3` pasaba **los trece casos** del archivo,
+porque `expect(busqueda?.minChars).toBe(BUSQUEDA_MIN_CHARS)` compara el **valor** —3 contra 3— y
+no la **procedencia**. Es la familia «aserción contra su propia fuente»: mientras la constante
+valga 3, el literal y la constante son **indistinguibles por comportamiento**, y ningún test de
+conducta puede separarlos.
+
+Se cerró **mirando el fuente**, que es lo que hacen las guardias de roles de este repo: el
+archivo tiene que contener `minChars: BUSQUEDA_MIN_CHARS` y **ningún** `minChars:` seguido de un
+dígito, con anti-vacuidad y contraprueba. Con eso, la misma mutación se pone roja en
+`historial-acciones-filtros-def.test.ts:113`. **La lección vale para el resto de la ficha:** todo
+«esta constante se lee de allí» que hoy coincida en valor con su origen necesita la mitad
+estática, o no está probado.
+
+## F5. Lo dudoso, y lo que hay que saber antes de mergear
+
+1. **`entidad_etiqueta` de `rechazo_tienda_cobro` sale como un identificador interno.** En la base
+   local, la columna «Sobre qué» pinta **`R-c337mtks5qpcpar`** — un cuid, no una etiqueta legible.
+   Es **del backend** (`etiquetaDeEntidad`), no de esta tanda, y no lo caza
+   `columnas-sensibles.guardia` porque esa guardia persigue la forma **uuid** y esto es un cuid.
+   Una fila de auditoría que en «sobre qué» enseña un id no dice sobre qué. **Se reporta, no se
+   arregla**: tocarlo es backend.
+2. **El `limite_excedido` de esta ficha no puede pasar por `mensajeLimite` del adaptador común**,
+   porque el contrato declara `{ maximo }` y ese mensaje exige `(total, limite)`. Se traduce en
+   una línea en el módulo —igual que `DetalleMiMovimientoCierre` hace con su `sin_reparto`— y
+   **todo lo demás va al adaptador común `filasDesdeResultado`**. La alternativa limpia es que el
+   contrato del backend pase a `{ total, limite }`; entonces esa línea desaparece. **Inventar el
+   total —repetir `maximo`, o usar el de la página visible, que es de otro instante— estaba
+   descartado: en una descarga de auditoría un número inventado es indistinguible de uno medido.**
+3. **La tabla tiene DIEZ columnas y en 390 px scrollea 1276 px en horizontal.** Es lo que pide el
+   design (§5.3: «las columnas de §4.6, las mismas que la descarga») y el comportamiento
+   declarado de `DataTable`, pero es mucho. Si el humano prefiere una tabla móvil más corta, lo
+   barato es esconder «Rol», «Valor anterior» y «Valor nuevo» por debajo de `md` — **no** se hizo
+   porque recortar columnas en pantalla y no en el archivo es exactamente la divergencia que §5.3
+   prohíbe, y decidirlo es suyo.
+4. **`tests/unit/auth/menu-historico.test.ts` (321) se ACTUALIZÓ, no se burló.** Afirmaba que el
+   apartado tenía «exactamente un subítem» y era cierto cuando se escribió. Lo que R3 protegía
+   —que «Conversaciones» es el PRIMER subítem, apunta a su ruta y **no** declara `roles`— sigue
+   afirmado entero; lo que se retiró es la cuenta cerrada, que ya no es el contrato.
+5. **Se sembró `maestro.qa362@ordenex.test` en la base local compartida** para poder ver la
+   pantalla. Crea una fila nueva; **no rota** ninguna credencial existente. Si molesta, se borra.
+6. **El typecheck se pone rojo con errores en `.next/dev/types` tras matar el servidor de
+   desarrollo.** El error (`Type 'Record<string, unknown> | undefined' does not satisfy the
+   constraint 'PageProps'`) apunta a la firma `_props?: Record<string, unknown>`, que es
+   **idéntica byte a byte** a la de `app/(app)/historico/conversaciones/page.tsx`, en producción
+   desde la 321. `rm -rf .next/dev` y verde. No es un riesgo que introduzca esta ficha.
+7. **La búsqueda alcanza `actor_nombre` y `entidad_etiqueta`, y el placeholder lo dice.** No se
+   ofrece nada del destinatario porque en esta tabla no hay ni un dato de cliente (R5); si
+   alguien espera buscar por destinatario, no lo encontrará, y el texto es lo único que se lo
+   dice.
+8. **El catálogo de actores devuelve el nombre VIVO** (declarado por el backend en §7.5): el
+   filtro ofrece a la persona con su apellido de hoy y las filas viejas siguen mostrando el de
+   entonces. Queda escrito en la página y en la declaración del filtro, que es donde se lee.
+
+## F6. Salida real de los comandos
+
+```
+$ pnpm run typecheck
+> tsc --noEmit
+(sin salida — 0 errores)
+
+$ pnpm run lint
+✖ 147 problems (0 errors, 147 warnings)
+   — los mismos 147 del backend; NINGUNO en un archivo de esta tanda (comprobado con
+     grep 'historial|acciones|menu-visibility' sobre la salida)
+
+$ pnpm exec vitest run tests/components/ tests/unit/guards/ tests/unit/auth/ \
+      tests/unit/components/ tests/unit/descarga/
+ Test Files  1 failed | 531 passed (532)
+      Tests  1 failed | 7369 passed | 26 skipped (7396)
+
+ FAIL tests/unit/guards/superficie-de-uso.guardia.test.ts
+   → ["lib/actions/tarifas.ts:67 obtenerTarifa"]
+```
+
+**El único rojo es el heredado y tolerado**, ya en `tests/baseline-rojos.json`. Las tres Server
+Actions de la ficha **ya no aparecen ahí**: se les borró el `@sin-superficie` al importarlas, que
+era el objetivo — dejarlo habría fosilizado la excepción.
+
+## F7. Mapa `R<n>` a test de la tanda de frontend
+
+| R | Dónde se prueba |
+| --- | --- |
+| R18 (mitad de ruta) | `tests/components/HistorialAccionesPage.test.tsx` — 5 roles denegados + sesión ausente, cada uno con `not.toHaveBeenCalled()`, **más un caso nominal para el `admin`** escrito a mano y no derivado de la constante |
+| R19 | `tests/unit/guards/historial-acciones-roles-una-sola-fuente.guardia.test.ts` (página + declaración del subítem, 4 contrapruebas) · `menu-historial-acciones.test.ts` («declara `roles` PROPIOS, y son la CONSTANTE», con `toBe`) |
+| R20 | `menu-historial-acciones.test.ts › R20` (5 aterrizajes escritos a mano) · `destino-post-login.test.ts` **sigue verde sin tocarlo** |
+| R21 | `tests/unit/guards/historial-acciones-solo-lectura.guardia.test.ts` (barrido de imports de los 9 módulos + 5 contrapruebas) · `HistorialAccionesModule.test.tsx › R21` |
+| R27 | `HistorialAccionesModule.test.tsx › R27` (4 casos; el que ata la clave es *«cambiar a Más antiguas vuelve a consultar Y repinta»*) |
+| R28 | `HistorialAccionesModule.test.tsx › R28` (el campo es el `searchbox` de `BuscadorFiltros`; no hay `textbox` propio) |
+| R29 | `historial-acciones-filtros-def.test.ts › R29` (las 5 claves con `toEqual`, y su orden) |
+| R30 | `HistorialAccionesModule.test.tsx › R30` (la descarga pide el conjunto con el filtro y el orden vigentes, **sin** `page`) |
+| R32 | `historial-acciones-filtros-def.test.ts › R32` (4 casos, **incluida la mitad estática** que cerró la mutación 6) · reglas 4 de `seleccion-a-filtro` |
+| R34 | `HistorialAccionesModule.test.tsx › R34` (las diez cabeceras con `toEqual`) |
+| R35 | `HistorialAccionesModule.test.tsx › R35` · `historial-acciones-descarga-columnas.test.ts` (fila de las 23:30 CR) |
+| R36 | `HistorialAccionesModule.test.tsx › R36` (celda igual a «Sistema», no vacía) |
+| R37 | `HistorialAccionesModule.test.tsx › R37` (3 casos, con `₡13.331.832,72` para que ningún `Number` pase) |
+| R38 | `historial-acciones-descarga-columnas.test.ts › R38` · `columnas-sensibles.guardia` (descubre el módulo por convención) |
+| T6.3 | `cobertura-tablas.guardia.test.ts` — los **cuatro** números duros subidos **después** de ver la guardia fallar con «hay tablas sin registrar: `HistorialAccionesModule.tsx #1`» |
+
+## Veredicto (frontend)
+
+Pantalla completa y medida: ruta con gate antes de la primera lectura, subítem maestro-only con
+la forma decidida y justificada, barra **compartida** sin excepciones, orden en la clave de SWR,
+`limite_excedido` como error accionable, vacío que dice que el registro empieza el día del
+despliegue, descarga de diez columnas sin identificadores internos y censo al día. Siete
+mutaciones rojas con su línea —**una sobrevivió, se dice y se cerró**—, 0 px de desborde de
+página y 0 palabras partidas a 1440 y a 390, y el único rojo de la suite es el heredado.
