@@ -38,7 +38,7 @@
     "dos vuelven a verde comprobando de verdad (se midio con una mutacion: anadir un campo al",
     "DTO las pone rojas).",
     "",
-    "PODA DEL 2026-09-03 (ficha 368): sale `superficie-de-uso.guardia.test.ts`. `obtenerTarifa`",
+    "PODA DEL 2026-09-03 (ficha 369): sale `superficie-de-uso.guardia.test.ts`. `obtenerTarifa`",
     "(lib/actions/tarifas.ts) no tenia NINGUN llamador -- ni la UI de tarifas (feature 273, que",
     "edita sobre la fila ya traida por `listarTarifas`) ni ningun otro canal (script, cron, ruta) --",
     "y sus hermanas `obtenerZona`/`obtenerUsuario` SI estan enganchadas en sus modulos, asi que no",
