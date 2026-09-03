@@ -82,6 +82,9 @@ export type GenerarGuiaResult =
 
 export type AsignarBodegaResult =
   | { status: "ok"; resultados: AsignarBodegaResultadoItem[] }
+  // Feature 368 (R15) — espejo EXACTO de `AsignarBodegaServiceResult` (el server action hace
+  // passthrough directo del resultado del service, sin traducirlo: ver `lib/actions/ordenes-guia.ts`).
+  | { status: "partial"; resultados: AsignarBodegaResultadoItem[]; bloqueadas: DetalleConflicto[] }
   | { status: "unauthenticated" }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }

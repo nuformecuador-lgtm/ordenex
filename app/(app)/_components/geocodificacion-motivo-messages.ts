@@ -52,6 +52,19 @@ function motivosDe(error: unknown): string[] {
 }
 
 /**
+ * Feature 368 (R11, design §6.1): el mensaje de UN motivo de coordenadas, sin agregar —
+ * a diferencia de `geocodificacionMotivoMessage`, que agrega todos los motivos de un lote
+ * en un único mensaje "ganador". Aquí hace falta un mensaje por orden bloqueada, para el
+ * caso de éxito parcial: cada orden lleva el mensaje de SU propio motivo (R11).
+ * `null` si `motivo` no es uno de los cinco literales que emite el gate (defensivo; no
+ * debería ocurrir con `EstadoAsignabilidad`). Reusa el mismo `MOTIVO_A_MENSAJE` de arriba:
+ * un solo vocabulario, nunca dos mapas que puedan divergir.
+ */
+export function mensajeDireccionPorMotivo(motivo: string): string | null {
+  return MOTIVO_A_MENSAJE.get(motivo) ?? null;
+}
+
+/**
  * R9: mensaje de usuario si el error trae al menos un `motivo` del gate de
  * coordenadas; `null` si no aplica (el mapper llamador sigue con su switch por
  * `status`). Si conviven un motivo definitivo y uno transitorio gana el

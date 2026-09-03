@@ -4380,6 +4380,18 @@
       "spec_path": null
     },
     {
+      "id": 368,
+      "title": "asignacion por lote no debe abortar completa por una orden no geocodificable",
+      "zone": "fullstack",
+      "description": "El gate de asignabilidad por coordenadas aborta todo el lote (central y satelite) si una sola orden no pasa; debe asignar las asignables y el error debe nombrar la(s) orden(es) bloqueada(s) por guia, con su motivo.",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "media",
+      "branch": "fix/368-asignacion-parcial-geocodificacion",
+      "status_note": "REPORTADO por el humano el 2026-09-03 al ver 'Direccion no encontrada' asignando 4 ordenes en bodega satelite: 1 de 4 (NA-138) tenia geocode_status=ZERO_RESULTS por direccion sin referencia geocodificable, y el gate de asignabilidad (feature 92) aborta el LOTE ENTERO -R19/R29/R30 de GuiaAsignacionService, mismo patron en AsignacionSateliteService- aunque las otras 3 si eran asignables. || MEDIDO: solo 2/958 ordenes de los ultimos 14 dias (una sola tienda) caen en ese estado; no es un patron sistemico, no urge tratarlo como incidente de datos. || ALCANCE, decision del humano: ambos flujos, central (GuiaAsignacionService / AsignarBodegaModal / AsignarRecoleccionModal) y satelite (AsignacionSateliteService / AsignarSateliteModal), comparten el mismo gate y deben quedar consistentes. || YA EXISTE remedio operativo sin codigo nuevo para cuando vuelva a pasar: CorregirDatosClienteService re-encola la geocodificacion al cambiar `direccion` (feature 327), pero `adminSatelite` no tiene permiso para usarlo (`rolAdmiteCorreccion`, R10) -restriccion deliberada, fuera de alcance de esta ficha-. || SPEC LISTO 2026-09-03: 19 requisitos (R1-R19). Estado nuevo `partial` (no reusa `conflict`, que sigue significando cero-efectos en todo el arbol). Alcance deliberadamente acotado SOLO al motivo de coordenadas -el resto de motivos de DetalleConflicto siguen todo-o-nada, justificado en design.md S7-. Sin mecanismo transaccional nuevo: los writers ya son WHERE id IN (subset) en una transaccion. Pendiente Q1 (texto exacto de los mensajes nuevos, propuesto en design.md S6.3) en la puerta de aprobacion. || IMPLEMENTACION CERRADA 2026-09-03: backend (GuiaAsignacionService/AsignacionSateliteService, T1/T3/T4/T7) y frontend (T2/T5/T6/T8: `mensajeDireccionPorMotivo` nueva en geocodificacion-motivo-messages.ts, los dos modales suman la rama `partial` a `handleConfirm` resolviendo `numRemision` desde el snapshot `ordenes` prop, nunca de un campo inventado en la respuesta, Q1 aprobado por el humano el 2026-09-03). Guardia nueva confirma que los dos modales importan la funcion del MISMO modulo. Review OK sin hallazgos bloqueantes (progress/review_368...md): trazabilidad R1-R19 verificada test por test. typecheck/lint limpios; 923 tests dirigidos verdes (vitest related + los 8 archivos de la ficha). Gate completo corrido 4 veces por el leader: los rojos nuevos en cada corrida son flake de saturacion en archivos ajenos (detalle en progress/current.md), mas la deuda de tarifas.ts ya conocida (cerrada por la ficha 369 en paralelo). Pendiente: aprobacion y merge del PR #686 (https://github.com/nuformecuador-lgtm/ordenex/pull/686).",
+      "spec_path": "specs/368-asignacion-parcial-geocodificacion/"
+    },
+    {
       "id": 369,
       "title": "el gate completo de dev esta rojo por dos deudas ajenas",
       "zone": "backend",

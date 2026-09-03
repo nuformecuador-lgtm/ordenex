@@ -8,6 +8,49 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🗺️ 2026-09-03 — 368: asignación por lote no debe abortar completa por una orden no geocodificable
+
+**Sesión abierta**, en worktree aislado (`fix/368-asignacion-parcial-geocodificacion`, desde
+`origin/dev`) para no pisar otras dos sesiones en curso sobre las fichas 366/367.
+
+**Origen.** El humano reportó "Dirección no encontrada" al intentar asignar 4 órdenes en bodega
+satélite. Medido: solo **1 de 4** (NA-138) fallaba el gate de asignabilidad por coordenadas
+(feature 92) — `geocode_status = ZERO_RESULTS`, dirección sin referencia geocodificable — pero el
+gate aborta el **lote completo** (`GuiaAsignacionService` R19/R29/R30 y `AsignacionSateliteService`,
+mismo patrón), así que las otras 3, ya asignables, se bloquean con ella. Medido también que no es un
+patrón sistémico: 2/958 órdenes en 14 días, una sola tienda.
+
+**Alcance decidido por el humano:** ambos flujos, central y satélite, quedan consistentes.
+
+**Registrada como ficha 368** (`sdd: true`, zona `fullstack`). Spec en curso.
+
+**Cierre técnico del FRONTEND_DEV (2026-09-03), T2/T5/T6/T8 de `tasks.md`.** El backend (T1/T3/T4/T7)
+ya estaba commiteado en esta rama. `mensajeDireccionPorMotivo` nueva en
+`geocodificacion-motivo-messages.ts` (reusa `MOTIVO_A_MENSAJE`, no duplica vocabulario). Los dos
+modales (`AsignarBodegaModal.tsx`, `AsignarSateliteModal.tsx`) ganan la rama `"partial"` en
+`handleConfirm`: ya no lanzan al canal de error, resuelven `numRemision` de cada bloqueada desde el
+snapshot `ordenes` prop que ya tenían (nunca del backend), componen el toast y pintan el detalle por
+orden bloqueada con los literales de `design.md` §6.3 — Q1 resuelto por el humano el 2026-09-03: aprobó
+ese texto tal cual. Guardia nueva (`tests/unit/guards/geocodificacion-motivo-por-orden-mismo-modulo.guardia.test.ts`)
+afirma que los dos modales importan la función del MISMO módulo. `pnpm typecheck` y `pnpm lint` limpios
+(0 errores); `vitest related` sobre los 7 archivos tocados: 450 tests verdes en 36 archivos. Queda para
+el leader: gate completo, review, y el resto de tasks (T9 documentación y T10 gate) si no las cerró ya
+esta sesión.
+
+**Gate completo del LEADER (T10), 4 corridas.** `./init.sh --rapido` se negó solo (toca `lib/types/`,
+regla de `CLAUDE.md`), así que el gate exigido es el completo. Cuatro corridas seguidas, cada una con
+1-2 rojos "nuevos" en un archivo DISTINTO cada vez —`TableroDiaFiltro`, `tarifa-status-retirado`,
+`CrearTiendaForm`, `PostularRecursoModal`, `cache-tags.guardia`—, ninguno relacionado con el diff de
+esta ficha ni repetido entre corridas; los cinco pasan verdes 100% al correrlos aislados. Duración
+11-22 min por corrida (máquina con 2-3 sesiones concurrentes corriendo la suite completa a la vez):
+saturación, no regresión — mismo patrón que `gate-rojo-por-timeout-bajo-carga` (memoria). El único
+rojo que SÍ se repite en las 4 corridas es `tests/unit/guards/superficie-de-uso.guardia.test.ts`
+(`lib/actions/tarifas.ts:67 obtenerTarifa` inalcanzable) — deuda ajena, ya en baseline, sin relación
+con 368. Aparte: la 1ª corrida completa detectó una colisión real (no flake) por un junction de
+`node_modules` compartido con la sesión de la 366 (cliente Prisma regenerado con su enum nuevo a
+mitad de mi gate) — resuelto dándole a este worktree su propio `node_modules`/cliente Prisma
+(memoria `base-local-compartida-rompe-gates-ajenos`, actualizada). Typecheck/lint/tests de los
+archivos propios de 368: verdes en las 4 corridas, sin excepción.
 
 ## 🗺️ 2026-09-03 — la zona que no seguía a su configuración (366) + dos huecos de visibilidad (367)
 
