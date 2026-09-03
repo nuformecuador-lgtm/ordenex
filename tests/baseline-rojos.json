@@ -36,12 +36,15 @@
     "columna «Zona» (tabla + Excel) en un commit de respaldo que no paso el gate, y las dos",
     "listas literales de R27 se quedaron en seis claves. Se actualizaron a siete, A MANO, y las",
     "dos vuelven a verde comprobando de verdad (se midio con una mutacion: anadir un campo al",
-    "DTO las pone rojas)."
+    "DTO las pone rojas).",
+    "",
+    "PODA DEL 2026-09-03 (ficha 368): sale `superficie-de-uso.guardia.test.ts`. `obtenerTarifa`",
+    "(lib/actions/tarifas.ts) no tenia NINGUN llamador -- ni la UI de tarifas (feature 273, que",
+    "edita sobre la fila ya traida por `listarTarifas`) ni ningun otro canal (script, cron, ruta) --",
+    "y sus hermanas `obtenerZona`/`obtenerUsuario` SI estan enganchadas en sus modulos, asi que no",
+    "era un patron de CRUD sin UI: era la unica huerfana real. Se retiro la Server Action junto con",
+    "`TarifaService.obtener`, `ITarifaService.obtener` y sus tests dedicados; `findById` del",
+    "repositorio se queda porque lo siguen usando `actualizar`/`borrar`."
   ],
-  "archivos": {
-    "tests/unit/guards/superficie-de-uso.guardia.test.ts": {
-      "motivo": "La guardia de superficie de uso senala `lib/actions/tarifas.ts:67 obtenerTarifa`. Ajeno a las features de chat; probablemente de la ficha 274 (cascada de tarifas).",
-      "desde": "2026-08-28"
-    }
-  }
+  "archivos": {}
 }

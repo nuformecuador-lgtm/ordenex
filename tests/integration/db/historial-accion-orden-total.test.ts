@@ -47,6 +47,13 @@ const FILAS_ANTES = 10;
 const FILAS_DESPUES = 10;
 const TOTAL = FILAS_ANTES + FILAS_DEL_LOTE + FILAS_DESPUES;
 
+// ⚠️ RELATIVO AL RELOJ, NO FECHAS ABSOLUTAS. `FECHA_ANTES`/`FECHA_DESPUES` se calculan a partir de
+// `Date.now()` en el momento de sembrar, no de dos strings fijos: una fecha fija caduca en cuanto
+// el reloj real la alcanza (paso exactamente asi el 2026-09-03 con `2026-09-03T10:00:00.000Z`). El
+// margen es tan grande frente a la duracion de un test que "antes" queda SIEMPRE por detras del
+// `CURRENT_TIMESTAMP` que toma el lote y "despues" SIEMPRE por delante, sin importar cuando corra.
+const MARGEN_MS = 24 * 60 * 60 * 1000; // 1 dia: sobra frente a cualquier deriva de reloj proceso↔Postgres.
+
 /** El filtro que acota el corpus a ESTA corrida. */
 const FILTRO: FiltroHistorialAccionResuelto = {
   q: MARCA,
@@ -76,6 +83,12 @@ describeSiHayBase("362/T4.1 — el orden del listado es TOTAL (Postgres real)", 
    * el MISMO `CURRENT_TIMESTAMP` — no se les fija la fecha a mano: se reproduce el mecanismo real.
    */
   async function sembrar(tx: TxDeTest): Promise<void> {
+    // Se calculan aqui, justo antes de insertar, para que el margen corra desde el instante real
+    // de la siembra — no desde que se cargo el modulo.
+    const ahora = Date.now();
+    const fechaAntes = new Date(ahora - MARGEN_MS);
+    const fechaDespues = new Date(ahora + MARGEN_MS);
+
     const base = (n: number, etiqueta: string, createdAt?: Date) => ({
       id: randomUUID(),
       accion: "orden_eliminada" as const,
@@ -93,9 +106,7 @@ describeSiHayBase("362/T4.1 — el orden del listado es TOTAL (Postgres real)", 
     });
 
     await tx.historialAccion.createMany({
-      data: Array.from({ length: FILAS_ANTES }, (_, i) =>
-        base(i, "antes", new Date("2026-09-01T10:00:00.000Z")),
-      ),
+      data: Array.from({ length: FILAS_ANTES }, (_, i) => base(i, "antes", fechaAntes)),
     });
     // ⭑ EL LOTE: sin `createdAt` explicito -> lo pone el DEFAULT de la columna, que es el
     // `CURRENT_TIMESTAMP` de ESTA transaccion. Las 130 filas empatan al milisegundo.
@@ -107,9 +118,7 @@ describeSiHayBase("362/T4.1 — el orden del listado es TOTAL (Postgres real)", 
       })),
     });
     await tx.historialAccion.createMany({
-      data: Array.from({ length: FILAS_DESPUES }, (_, i) =>
-        base(i, "despues", new Date("2026-09-03T10:00:00.000Z")),
-      ),
+      data: Array.from({ length: FILAS_DESPUES }, (_, i) => base(i, "despues", fechaDespues)),
     });
   }
 
@@ -268,7 +277,7 @@ describeSiHayBase("362/T4.1 — el orden del listado es TOTAL (Postgres real)", 
       };
     });
 
-    // Las 10 «despues» son del 3 de septiembre; las 10 «antes», del 1.
+    // Las 10 «despues» quedan `MARGEN_MS` por delante de "ahora"; las 10 «antes», otro tanto detras.
     for (const etiqueta of r.desc) expect(etiqueta).toContain("despues");
     for (const etiqueta of r.asc) expect(etiqueta).toContain("antes");
   });

@@ -6,7 +6,6 @@ import type {
   CrearTarifaServiceResult,
   ITarifaService,
   ListarTarifasServiceResult,
-  ObtenerTarifaServiceResult,
 } from "@/lib/interfaces/services/ITarifaService";
 import type { ActualizarTarifaInput, CrearTarifaInput, ListarTarifasInput } from "@/lib/types/tarifa";
 
@@ -94,14 +93,6 @@ export class TarifaService implements ITarifaService {
       actor.usuarioId,
     );
     return { status: "ok", tarifa }; // R16
-  }
-
-  async obtener(id: string, actor: Actor): Promise<ObtenerTarifaServiceResult> {
-    if (!READ_ROLES.has(actor.rol)) return { status: "forbidden" }; // R11/R12/R13
-
-    const tarifa = await this.repo.findById(id); // excluye borrados (R19)
-    if (!tarifa) return { status: "not_found" }; // R17
-    return { status: "ok", tarifa };
   }
 
   async listar(input: ListarTarifasInput, actor: Actor): Promise<ListarTarifasServiceResult> {
