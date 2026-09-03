@@ -8,6 +8,21 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🗺️ 2026-09-03 — 368: asignación por lote no debe abortar completa por una orden no geocodificable
+
+**Sesión abierta**, en worktree aislado (`fix/368-asignacion-parcial-geocodificacion`, desde
+`origin/dev`) para no pisar otras dos sesiones en curso sobre las fichas 366/367.
+
+**Origen.** El humano reportó "Dirección no encontrada" al intentar asignar 4 órdenes en bodega
+satélite. Medido: solo **1 de 4** (NA-138) fallaba el gate de asignabilidad por coordenadas
+(feature 92) — `geocode_status = ZERO_RESULTS`, dirección sin referencia geocodificable — pero el
+gate aborta el **lote completo** (`GuiaAsignacionService` R19/R29/R30 y `AsignacionSateliteService`,
+mismo patrón), así que las otras 3, ya asignables, se bloquean con ella. Medido también que no es un
+patrón sistémico: 2/958 órdenes en 14 días, una sola tienda.
+
+**Alcance decidido por el humano:** ambos flujos, central y satélite, quedan consistentes.
+
+**Registrada como ficha 368** (`sdd: true`, zona `fullstack`). Spec en curso.
 
 ## 🧾 2026-08-31 — cierre de sesión: seis fichas y un defecto de producción
 
