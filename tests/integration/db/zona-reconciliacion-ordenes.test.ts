@@ -523,6 +523,26 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
     expect(new Set(medido.historial.map((f) => f.loteId)).size).toBe(1);
   });
 
+  it("R11: DOS guardados distintos producen lotes DISTINTOS", async () => {
+    // La otra mitad de R11: el lote agrupa «lo que hizo UN guardado», asi que dos guardados no
+    // pueden compartirlo. Sin esto, un `lote_id` constante pasaria el caso de arriba y volveria
+    // indistinguibles dos actos distintos en la pantalla del historial.
+    const medido = await conEscenario(async (e) => {
+      const deA = await e.crearDistrito([e.zonas.A.id]);
+      const deB = await e.crearDistrito([e.zonas.B.id]);
+      const ordenA = await e.crearOrden({ distritoId: deA, zonaId: e.zonas.C.id });
+      const ordenB = await e.crearOrden({ distritoId: deB, zonaId: e.zonas.C.id });
+
+      await e.repo.update(e.zonas.A.id, datosDeZona(e.zonas.A.nombre, [deA]), USUARIO);
+      await e.repo.update(e.zonas.B.id, datosDeZona(e.zonas.B.nombre, [deB]), USUARIO);
+
+      return { historial: await e.historialDe([ordenA, ordenB]) };
+    });
+
+    expect(medido.historial).toHaveLength(2);
+    expect(new Set(medido.historial.map((f) => f.loteId)).size).toBe(2);
+  });
+
   // ═══════════════════════════════════════════════════════════════════════════════════════════
   // R9, R13 y R14
   // ═══════════════════════════════════════════════════════════════════════════════════════════
