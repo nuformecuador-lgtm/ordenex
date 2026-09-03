@@ -285,3 +285,122 @@ Con esas dos cosas, y **sin tocar una linea de codigo**, el veredicto es **OK**.
 > Nota operativa: este informe queda escrito pero **sin commitear**; el gate del humano corre sobre
 > este mismo worktree y no conviene moverle el HEAD a mitad. En este repo ya se perdieron tres
 > informes de revision por quedarse sin commitear: incluirlo en el proximo commit de la rama.
+
+---
+---
+
+# Segunda pasada (2026-09-03) — HEAD `9b0b85f6`
+
+## VEREDICTO ACTUALIZADO: **APROBADO**
+
+Los dos bloqueantes estan resueltos y el acta de implementacion es **fiel**: no afirma nada que yo
+haya podido desmentir sobre el codigo, la cobertura o las mediciones. Quedan **5 correcciones de
+precision sobre el documento** (n1-n5), ninguna de las cuales invalida la implementacion ni la
+trazabilidad; el leader pidio expresamente que se las diera con `archivo:linea` para corregirlas
+antes del PR.
+
+Alcance de esta pasada: **solo** los dos bloqueantes y la auditoria del acta como fuente
+independiente. No repito la revision del codigo, que di por buena y sigue igual: los dos commits
+nuevos (`2cbb114a`, `9b0b85f6`) son docs-only, **cero codigo tocado** (`git show --stat`).
+
+## Los dos bloqueantes: cerrados
+
+- **B1 CERRADO.** `progress/impl_366-zona-orden-desactualizada.md` existe y esta commiteado en
+  `9b0b85f6` (150 lineas), con los archivos tocados, la tabla R -> test y la verificacion ejecutada.
+- **B2 CERRADO.** `specs/366-zona-orden-desactualizada/tasks.md`: **38 casillas `[x]`, 0 sin marcar**,
+  contadas por mi. Y el diff de ese archivo es **solo** casillas: 38 lineas `- [ ]` fuera, 38 lineas
+  `- [x]` dentro, ni una linea de texto cambiada (verificado filtrando el diff).
+- **Extra:** mi propio informe quedo commiteado en `2cbb114a`, que era el riesgo que este repo ya ha
+  pagado tres veces.
+
+**Correccion de un error MIO en la primera pasada:** escribi "0 de 30 casillas" en B2. Las casillas
+eran **38**, no 30: no las conte, las estime. El leader las conto bien.
+
+## Auditoria del acta: lo que verifique como cierto
+
+1. **Las 10 mutaciones del backend y las 2 del frontend NO estan inventadas: las declararon los
+   agentes, y consta en disco.** Nueve estan en el cuerpo del commit `1bf793d0` (incidente,
+   `resultado: { in: [...] }`, `anuladaAt: null`, `cierreDetalles`, `zonaId: { not: ... }`, union de
+   distritos, `deletedAt: null`, el UPDATE tocando otra columna, y dejar el valor nuevo en el
+   `down.sql`); la decima (`loteId` constante) esta en `5b0a73ab`. Las dos del frontend (quitar el
+   conteo del mensaje; pintarlo tambien con 0) estan en `3352cf35`. **Coinciden una a una con la
+   tabla del acta.** Matiz util: la cabecera del test solo lista SEIS; las otras cuatro viven en los
+   mensajes de commit, que es donde hay que ir a buscarlas.
+2. **La corrida del `down.sql` contra Postgres real** (43 valores -> 42 sin el nuevo -> `ROLLBACK`,
+   base intacta) es transcripcion literal de lo declarado en `a318dcc0`. No la re-ejecute a
+   proposito: escribiria DDL sobre la base local compartida. El acta no la inventa.
+3. **`183 archivos / 2196 tests` con `.env`: lo corri yo entero.** `Test Files 183 passed (183)`,
+   `Tests 2196 passed (2196)`, **cero skips**, 35,5 s. La cifra del acta es exacta.
+4. **`17 passed (17)`, 0 skips** en `zona-reconciliacion-ordenes.test.ts`: medido por mi en la
+   primera pasada. Exacto.
+5. **Las cifras del gate son internamente consistentes** (1618+78=1696; 23268+902=24170) y
+   compatibles con lo que medi: 727 de los 902 tests saltados salen de `tests/integration/db`. **No
+   corri `init.sh`**, asi que del `INIT_EXIT=0` no doy fe yo; doy fe de que nada de lo que si pude
+   medir lo contradice.
+6. **Discrepancia aparente que NO lo es:** el commit `1bf793d0` habla de "16 casos" y el acta de 17.
+   Correcto: el 17.º lo anadio `5b0a73ab` (dos guardados, dos lotes). Coincide con mis 17 medidos.
+7. **Referencias de linea verificadas una a una y correctas:** `ZonaRepository.ts:195-345` (el
+   metodo va 195-344), `:290-303` (el WHERE), `:309` (el UPDATE), `:317-330` (historial y lote),
+   `IZonaRepository.ts:44`, `ZonaService.ts:111-117`, `lib/actions/zonas.ts:131`,
+   `LiberacionReprogramadaService.ts:202` y `DevolucionSlaService.ts:241`.
+8. **La lista de archivos tocados no nombra nada que no cambiara**: los 22 archivos que enumera
+   estan todos en el diff.
+
+## Hallazgos nuevos sobre el acta (todos `menor`; corregir antes del PR)
+
+**n1 — El reparto de los 78 archivos saltados no es el que dice.**
+`progress/impl_366-zona-orden-desactualizada.md:107-110`: "Los 78 archivos saltados eran
+`tests/integration/db/` **enteros**". Lo medi reproduciendo la condicion exacta del gate —correr ese
+directorio **sin** `DATABASE_URL`— y da **`Test Files 122 passed | 61 skipped (183)`**,
+`Tests 1469 passed | 727 skipped (2196)`. O sea: **61 de los 78**, no 78; y ese directorio **no se
+salto entero**, 122 de sus 183 archivos SI corrieron en el gate (los que verifican migraciones por
+regex sobre el `.sql`, que no necesitan base). Los **17 archivos restantes** de los 78 salen de otras
+suites con la misma puerta: `tests/integration/repositories/*.int.test.ts`,
+`tests/integration/tablero-dia-*.test.ts`, `analitica-financiera-action.test.ts` y compania (20
+candidatos fuera de `tests/integration/db`). **La conclusion del acta se sostiene, y de hecho es peor
+de lo que dice**: no solo se salto el archivo clave de esta ficha, sino tambien otras 17 suites que
+tocan base. Solo hay que arreglar la atribucion de la cifra.
+
+**n2 — La tabla R -> test copia el spec en dos renglones donde el test no da lo que se le atribuye.**
+`impl_366-...md:96` (**R13**): atribuye la cobertura a "T5 `create()` no reconcilia", que es
+`tests/integration/db/zona-reconciliacion-ordenes.test.ts:576`. Ese caso **no puede ponerse en rojo**:
+el distrito acaba en DOS zonas, asi que el colapso devuelve `null` y ninguna orden se movera aunque
+`create()` empezara a reconciliar manana. Mide R3, no R13. Quien sostiene R13 es
+`tests/unit/repositories/zona-repository.test.ts:596`, que el acta **no cita**.
+`impl_366-...md:93` (**R10**): atribuye todo a "T5 caso base (forma de la fila de historial)". Ese
+caso (INT:253-258) comprueba `entidadId`, `loteId` y `valorAnterior`/`valorNuevo` NULL, pero **no
+comprueba el «quien guardo»** ni el `monto`: eso solo esta en `zona-repository.test.ts:504` (actor
+congelado y `monto` NULL) y en `zona-service.test.ts` (el actor llega como tercer argumento).
+Los dos requisitos **siguen cubiertos** —mi 14 de 14 no cambia—, pero el acta cita el test
+equivocado, que es justo lo que se pidio cazar. Y como el acta invoca mi verificacion en su linea
+99-100, conviene que ademas mencione las salvedades m2 y m3 de este informe en vez de dejar el
+respaldo en seco.
+
+**n3 — Una cita de linea del frontend apunta a otra parte.**
+`impl_366-...md:63`: `CrearZonaForm.tsx:243-269,426-438`. El primer rango encaja (el bloque nuevo va
+243-266). El segundo no: `mensajeGuardado` vive en **434-446** (JSDoc 434-439, funcion 440-446);
+426-432 es el cierre del componente, no el helper.
+
+**n4 — La lista de archivos tocados se deja uno.**
+Falta `tests/unit/guards/historial-accion-sin-datos-cliente.guardia.test.ts`, el 11.º archivo de test
+del diff. Es un cambio de solo comentarios (42 -> 43 puntos de escritura), asi que es irrelevante para
+el comportamiento, pero la lista dice "Actualizados" y ahi va. Ninguna otra ausencia, y ningun
+archivo nombrado de mas.
+
+**n5 — "Fuera de alcance" no esconde nada, pero omite el riesgo que si importa a operaciones.**
+Comprobado contra `design.md S9`: los dos items que el acta lista son ciertos, y los otros cuatro del
+design (tabla de historial de zonas, motor de reglas de re-tarifado, notificacion al mensajero o al
+adminSatelite, retarifar un `cierre_detail` ya emitido) siguen fuera con razon. **Nada que debiera
+estar dentro esta escondido.** Lo que falta es una linea sobre el riesgo aceptado de `design.md S8`:
+una orden cuyo distrito resuelve 0 o mas de 1 zonas, o que es inelegible, **se queda con la zona
+vieja y hoy no existe ninguna via manual** de corregirla (Q2 cerrada por el humano: no se cuenta esa
+deuda). Quien opere esto manana necesita saberlo, y el acta no lo dice en ningun sitio.
+
+## Cierre
+
+Con B1 y B2 cerrados y el acta auditada como fiel, el veredicto de la ficha 366 es **APROBADO**. Las
+correcciones n1-n5 son del documento, no del codigo, y no bloquean el PR mas alla de lo que el propio
+leader quiera arreglar antes de abrirlo.
+
+> Este apendice queda **sin commitear** (yo no commiteo salvo que me lo pidan). Conviene meterlo en
+> el mismo commit que las correcciones n1-n5.
