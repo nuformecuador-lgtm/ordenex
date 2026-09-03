@@ -73,21 +73,26 @@ export class TarifaService implements ITarifaService {
       return this.ZONA_NO_EXISTE;
     }
 
-    const tarifa = await this.repo.create({
-      tiendaId: input.tiendaId ?? null,
-      valorFlete: input.valorFlete,
-      valorFleteDevuelto: input.valorFleteDevuelto,
-      valorFleteGam: input.valorFleteGam,
-      valorFleteDevueltoGam: input.valorFleteDevueltoGam,
-      fulfillment: input.fulfillment ?? null, // opcional: ausente = sin fulfillment (igual que 0)
-      comisionCod: input.comisionCod,
-      ivaFlete: input.ivaFlete,
-      ivaComisionCod: input.ivaComisionCod,
-      tarifaEspecial: input.tarifaEspecial ?? null, // opcional: ausente = sin pacto especial
-      tarifaEspecialDevuelta: input.tarifaEspecialDevuelta ?? null, // idem, para la devolucion
-      zonaId: input.zonaId ?? null, // opcional: ausente = no acotada a una zona
-      isDefault: input.isDefault ?? false, // marcarla por defecto es explicito
-    });
+    const tarifa = await this.repo.create(
+      {
+        tiendaId: input.tiendaId ?? null,
+        valorFlete: input.valorFlete,
+        valorFleteDevuelto: input.valorFleteDevuelto,
+        valorFleteGam: input.valorFleteGam,
+        valorFleteDevueltoGam: input.valorFleteDevueltoGam,
+        fulfillment: input.fulfillment ?? null, // opcional: ausente = sin fulfillment (igual que 0)
+        comisionCod: input.comisionCod,
+        ivaFlete: input.ivaFlete,
+        ivaComisionCod: input.ivaComisionCod,
+        tarifaEspecial: input.tarifaEspecial ?? null, // opcional: ausente = sin pacto especial
+        tarifaEspecialDevuelta: input.tarifaEspecialDevuelta ?? null, // idem, para la devolucion
+        zonaId: input.zonaId ?? null, // opcional: ausente = no acotada a una zona
+        isDefault: input.isDefault ?? false, // marcarla por defecto es explicito
+      },
+      // FICHA 362 (R9) — QUIEN. El repositorio lo necesita para congelar el actor en la misma
+      // transaccion que la escritura; el service no conoce Prisma y solo lo transporta.
+      actor.usuarioId,
+    );
     return { status: "ok", tarifa }; // R16
   }
 
@@ -161,7 +166,7 @@ export class TarifaService implements ITarifaService {
 
     // R22: aplica solo los campos provistos, no toca id/created_at.
     const data = this.buildUpdateData(input);
-    const actualizado = await this.repo.update(id, data);
+    const actualizado = await this.repo.update(id, data, actor.usuarioId); // 362/R9: QUIEN
     if (!actualizado) return { status: "not_found" }; // carrera: borrado entre medias
     return { status: "ok", tarifa: actualizado };
   }
@@ -175,7 +180,7 @@ export class TarifaService implements ITarifaService {
     // Borrado FISICO (la tabla ya no tiene `deleted_at`). `referenced` = la tarifa
     // quedo congelada en un cierre y la FK RESTRICT no deja sacarla: es un conflicto
     // con el estado actual, no un "no existe". Patron `ZonaService.borrar`.
-    const res = await this.repo.hardDelete(id);
+    const res = await this.repo.hardDelete(id, actor.usuarioId); // 362/R4/R9: QUIEN borro ESTA
     if (res === "not_found") return { status: "not_found" }; // carrera
     if (res === "referenced") return { status: "conflict" };
     return { status: "ok" };

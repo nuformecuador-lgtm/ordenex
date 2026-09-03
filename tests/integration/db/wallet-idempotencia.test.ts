@@ -190,7 +190,13 @@ function cierreDiaFake(estadoInicial = "solicitado") {
         },
       ),
       count: vi.fn().mockResolvedValue(1), // existe en alcance -> `conflict`, no `fuera_de_alcance`
-      findUnique: vi.fn().mockResolvedValue({ mensajeroId: "m1" }),
+      // FICHA 362: la resolucion lee ademas el total y el mensajero para congelar la fila.
+      findUnique: vi.fn().mockResolvedValue({
+        mensajeroId: "m1",
+        totalGeneral: new Prisma.Decimal("0.00"),
+        solicitadoAt: new Date("2026-09-02T12:00:00Z"),
+        mensajero: { nombre: "Mensa", primerApellido: "Uno" },
+      }),
     },
   };
 }
@@ -239,7 +245,16 @@ function buildPrisma(
   const prisma = {
     cierreDia: cierreStore
       ? cierreStore.delegate
-      : { updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(1) },
+      : {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          count: vi.fn().mockResolvedValue(1),
+          // FICHA 362: la resolucion lee el total y el mensajero para congelar la fila del registro.
+          findUnique: vi.fn().mockResolvedValue({
+            totalGeneral: new Prisma.Decimal("0.00"),
+            solicitadoAt: new Date("2026-09-02T12:00:00Z"),
+            mensajero: { nombre: "Mensa", primerApellido: "Uno" },
+          }),
+        },
     gestionOrden: gestionStore.delegate,
     cierreDetail: { findMany: vi.fn().mockResolvedValue(detalle) },
     walletMovimiento: store.walletMovimiento,
@@ -247,6 +262,16 @@ function buildPrisma(
     // Feature 239 (T2.2): el anclaje registra la transicion por el choke point. El doble tiene
     // que existir o la tx muere; lo que escribe se afirma en el caso de abajo.
     ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 0 })) },
+    // FICHA 362: el registro de la decision (`cierre_dia_aprobado` / `cierre_dia_rechazado`) va
+    // en la MISMA tx. El doble tiene que responder o la transaccion muere.
+    historialAccion: { createMany: vi.fn(async () => ({ count: 1 })) },
+    usuario: {
+      findUnique: vi.fn(async () => ({
+        nombre: "Admin",
+        primerApellido: "Uno",
+        rol: { value: "admin" },
+      })),
+    },
   };
   return {
     ...prisma,

@@ -94,6 +94,11 @@ function dobles(opciones: Opciones = {}) {
   );
 
   const snapshotRepo = {
+    // ficha 362: el registro de `premio_ranking_registrado` / `premio_ranking_anulado`, en la
+    // MISMA tx que el devengo. Entra al log para que el orden de las llamadas se pueda afirmar.
+    registrarAccionSobreFila: vi.fn(async () => {
+      log.push("registrar:accion-premio");
+    }),
     listarPodioDeFecha: vi.fn(async () => {
       log.push("leer:podio");
       return opciones.podio === undefined ? [fila()] : opciones.podio;
@@ -448,6 +453,9 @@ describe("R10/R14/R15/R16/R22/R23 — lo que el registro ESCRIBE", () => {
       "tx:abrir",
       "escribir:libro",
       "escribir:caja",
+      // FICHA 362 (R9): el registro de `premio_ranking_registrado` va DENTRO de la misma
+      // transaccion y DESPUES del devengo y del egreso: registra lo que YA quedo escrito.
+      "registrar:accion-premio",
       "tx:commit",
     ]);
     expect(d.confirmadoCaja[0]).toEqual({
@@ -685,6 +693,8 @@ describe("R29/R30/R31/R33 — la anulacion", () => {
       "tx:abrir",
       "escribir:libro",
       "reversar:caja",
+      // FICHA 362 (R9): idem para `premio_ranking_anulado`.
+      "registrar:accion-premio",
       "tx:commit",
     ]);
     expect(ok.confirmadoCaja).toHaveLength(1);

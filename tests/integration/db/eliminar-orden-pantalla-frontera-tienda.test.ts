@@ -171,6 +171,10 @@ describeSiHayBase("ficha 358 — una tienda NO puede borrar por pantalla ordenes
       const filasAfectadas = await esc.repo.softDelete({
         ids: [esc.ajena],
         ownerId: esc.tiendaA,
+        // FICHA 362: sin actor congelado. Lo que este caso mide es EL `WHERE`, y el `where` no
+        // cambio: si el `UPDATE … RETURNING` de la 362 hubiera perdido el `tienda_id`, esta
+        // asercion se pondria roja.
+        actorUsuarioId: null,
       });
 
       const despues = await estadoDe(tx, [esc.propia, esc.ajena]);

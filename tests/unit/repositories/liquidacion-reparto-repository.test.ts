@@ -32,6 +32,24 @@ function repartoRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * FICHA 362 — la `tx` que este repositorio recibe gana `historialAccion` (la fila del registro de
+ * `reparto_mensajero_registrado`) y `usuario` (el congelado del actor).
+ */
+function txConRegistro(base: Record<string, unknown>) {
+  return {
+    ...base,
+    historialAccion: { createMany: vi.fn(async () => ({ count: 1 })) },
+    usuario: {
+      findUnique: vi.fn(async () => ({
+        nombre: "Admin",
+        primerApellido: "Uno",
+        rol: { value: "admin" },
+      })),
+    },
+  } as never;
+}
+
 function buildPrisma() {
   return {
     liquidacionReparto: {
@@ -99,7 +117,7 @@ describe("LiquidacionRepartoRepository.crear (R29)", () => {
     prisma.liquidacionReparto.create.mockResolvedValue(repartoRow());
     const repo = buildRepo(prisma);
 
-    const r = await repo.crear({ liquidacionReparto: prisma.liquidacionReparto } as never, INPUT);
+    const r = await repo.crear(txConRegistro({ liquidacionReparto: prisma.liquidacionReparto }), INPUT);
 
     expect(r.status).toBe("creado");
     const arg = prisma.liquidacionReparto.create.mock.calls[0][0];
@@ -128,7 +146,7 @@ describe("LiquidacionRepartoRepository.crear (R29)", () => {
     prisma.liquidacionReparto.create.mockResolvedValue(repartoRow());
     const repo = buildRepo(prisma);
 
-    const r = await repo.crear({ liquidacionReparto: prisma.liquidacionReparto } as never, INPUT);
+    const r = await repo.crear(txConRegistro({ liquidacionReparto: prisma.liquidacionReparto }), INPUT);
 
     if (r.status !== "creado") throw new Error("esperaba creado");
     expect(r.reparto).toEqual({
@@ -147,7 +165,7 @@ describe("LiquidacionRepartoRepository.crear (R29)", () => {
     prisma.liquidacionReparto.create.mockRejectedValue(p2002Nativo(["clave_idempotencia"]));
     const repo = buildRepo(prisma);
 
-    const r = await repo.crear({ liquidacionReparto: prisma.liquidacionReparto } as never, INPUT);
+    const r = await repo.crear(txConRegistro({ liquidacionReparto: prisma.liquidacionReparto }), INPUT);
 
     expect(r).toEqual({ status: "clave_repetida" });
   });
@@ -162,7 +180,7 @@ describe("LiquidacionRepartoRepository.crear (R29)", () => {
     );
     const repo = buildRepo(prisma);
 
-    const r = await repo.crear({ liquidacionReparto: prisma.liquidacionReparto } as never, INPUT);
+    const r = await repo.crear(txConRegistro({ liquidacionReparto: prisma.liquidacionReparto }), INPUT);
 
     expect(r).toEqual({ status: "clave_repetida" });
   });
@@ -172,7 +190,7 @@ describe("LiquidacionRepartoRepository.crear (R29)", () => {
     prisma.liquidacionReparto.create.mockRejectedValue(p2002SinPista());
     const repo = buildRepo(prisma);
 
-    const r = await repo.crear({ liquidacionReparto: prisma.liquidacionReparto } as never, INPUT);
+    const r = await repo.crear(txConRegistro({ liquidacionReparto: prisma.liquidacionReparto }), INPUT);
 
     expect(r).toEqual({ status: "clave_repetida" });
   });
@@ -207,7 +225,7 @@ describe("LiquidacionRepartoRepository.crear (R29)", () => {
     const repo = buildRepo(prisma);
 
     await expect(
-      repo.crear({ liquidacionReparto: prisma.liquidacionReparto } as never, INPUT),
+      repo.crear(txConRegistro({ liquidacionReparto: prisma.liquidacionReparto }), INPUT),
     ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
   });
 
@@ -217,7 +235,7 @@ describe("LiquidacionRepartoRepository.crear (R29)", () => {
     const repo = buildRepo(prisma);
 
     await expect(
-      repo.crear({ liquidacionReparto: prisma.liquidacionReparto } as never, INPUT),
+      repo.crear(txConRegistro({ liquidacionReparto: prisma.liquidacionReparto }), INPUT),
     ).rejects.toThrow("conexion caida");
   });
 
@@ -229,7 +247,7 @@ describe("LiquidacionRepartoRepository.crear (R29)", () => {
     prisma.liquidacionReparto.create.mockRejectedValue(p2002Nativo(["clave_idempotencia"]));
     const repo = buildRepo(prisma);
 
-    await repo.crear({ liquidacionReparto: prisma.liquidacionReparto } as never, INPUT);
+    await repo.crear(txConRegistro({ liquidacionReparto: prisma.liquidacionReparto }), INPUT);
 
     expect(prisma.liquidacionReparto.create).toHaveBeenCalledTimes(1);
     expect(prisma.liquidacionReparto.findUnique).not.toHaveBeenCalled();
@@ -241,7 +259,9 @@ describe("LiquidacionRepartoRepository.crear (R29)", () => {
     // fallo posterior la dejaria viva sin ninguno de sus pagos: un acto sin dinero, y la clave
     // quemada para siempre.
     const prisma = buildPrisma();
-    const tx = { liquidacionReparto: { create: vi.fn().mockResolvedValue(repartoRow()) } };
+    const tx = txConRegistro({
+      liquidacionReparto: { create: vi.fn().mockResolvedValue(repartoRow()) },
+    }) as unknown as { liquidacionReparto: { create: ReturnType<typeof vi.fn> } };
     const repo = buildRepo(prisma);
 
     await repo.crear(tx as never, INPUT);
@@ -301,7 +321,7 @@ describe("LiquidacionRepartoRepository — el acto es INMUTABLE (R52)", () => {
     prisma.liquidacionReparto.findUnique.mockResolvedValue(repartoRow());
     const repo = buildRepo(prisma);
 
-    await repo.crear({ liquidacionReparto: prisma.liquidacionReparto } as never, INPUT);
+    await repo.crear(txConRegistro({ liquidacionReparto: prisma.liquidacionReparto }), INPUT);
     await repo.obtenerPorClave(CLAVE);
 
     for (const metodo of ["update", "updateMany", "delete", "deleteMany", "upsert"] as const) {

@@ -1,4 +1,6 @@
 import type { PlantillaEstado, PrismaClient } from "@prisma/client";
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import {
   PlantillaDuplicadaError,
@@ -18,7 +20,11 @@ import {
   type UpdatePlantillaData,
 } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
 
-type PlantillaPrismaClient = Pick<PrismaClient, "plantillaMensaje" | "$transaction">;
+// FICHA 362 (R9): el borrado registra su accion en la MISMA transaccion que el soft-delete.
+type PlantillaPrismaClient = Pick<
+  PrismaClient,
+  "plantillaMensaje" | "$transaction" | "historialAccion" | "usuario"
+>;
 
 const PUBLIC_SELECT = {
   id: true,
@@ -227,12 +233,40 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
     return row === null ? null : aPlantillaPublica(row);
   }
 
-  async softDelete(id: string): Promise<boolean> {
-    const result = await this.prisma.plantillaMensaje.updateMany({
-      where: { id, ...VIGENTE }, // R29: ya borrada -> count 0
-      data: { deletedAt: new Date() }, // R27: soft delete, no borra la fila
+  /**
+   * FICHA 362 (R9/R11) — `plantilla_eliminada`. El metodo se envuelve en `$transaction` (forma 2
+   * del design §2.3: era un `updateMany` suelto de UNA fila).
+   *
+   * El registro va DESPUES de comprobar `count > 0`: si la plantilla ya estaba borrada, el
+   * `updateMany` alcanza cero filas y NO se escribe fila de registro (R11). Un segundo clic sobre
+   * «eliminar» no puede producir un segundo apunte de un borrado que no ocurrio.
+   */
+  async softDelete(id: string, actorUsuarioId: string | null): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const previa = await tx.plantillaMensaje.findFirst({
+        where: { id, ...VIGENTE },
+        select: { nombre: true },
+      });
+      const result = await tx.plantillaMensaje.updateMany({
+        where: { id, ...VIGENTE }, // R29: ya borrada -> count 0
+        data: { deletedAt: new Date() }, // R27: soft delete, no borra la fila
+      });
+      if (result.count === 0) return false;
+
+      const actor = await resolverActorCongelado(tx, actorUsuarioId);
+      await appendAccion(tx, [
+        {
+          accion: "plantilla_eliminada",
+          entidadTipo: "plantilla_mensaje",
+          entidadId: id,
+          entidadEtiqueta: etiquetaDeEntidad("plantilla_mensaje", {
+            nombre: previa?.nombre ?? "",
+          }),
+          ...actor,
+        },
+      ]);
+      return true;
     });
-    return result.count > 0;
   }
 
   // --- Integracion WhatsApp ---

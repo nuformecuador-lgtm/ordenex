@@ -75,6 +75,8 @@ describe("ApiOrdenEliminacionService — la frontera multi-tenant (R3)", () => {
       ordenId: ORDEN_ID,
       ownerId: "tienda-propia",
       estadosPermitidos: ESTADOS_ELIMINABLES,
+      // FICHA 362 (R3): la cuenta dedicada de la key. Su rol `apiKey` queda congelado en la fila.
+      actorUsuarioId: "tienda-propia",
     });
   });
 

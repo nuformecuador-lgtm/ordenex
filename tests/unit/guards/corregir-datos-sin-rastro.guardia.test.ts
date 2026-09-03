@@ -4,12 +4,39 @@ import path from "node:path";
 
 import { codigoSinComentarios, quitarComentarios } from "../../fixtures/sin-comentarios";
 
-// GUARDIA DE LA FICHA 312 — LA AUSENCIA DE RASTRO SE MIDE, NO SE SUPONE.
+// GUARDIA DE LA FICHA 312 — EL RASTRO SE MIDE, NO SE SUPONE.
 //
-// **Que decision protege.** El 2026-08-28 el humano cerro D4: corregir un dato del cliente NO deja
-// rastro. Ni nota en el hilo, ni fila de historial, ni tabla de auditoria, ni un `console.log` con
-// el telefono. El unico rastro es el `updated_at` de la fila. La alternativa —la nota automatica—
-// esta EVALUADA Y DESCARTADA en `design.md` §8/B, con lo que costaba y lo que daba.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ 2026-09-02 — ESTA GUARDIA CAMBIA DE REGLA, Y NO SE BURLA: PASA A AFIRMAR LA NUEVA.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// Hasta hoy este archivo afirmaba «corregir un dato del cliente NO deja NINGUN rastro» (D4 de la
+// 312, ratificada por la 327). El humano REABRIO esa decision el 2026-09-02, al cerrar la
+// pregunta Q1 de la ficha 362, y la respuesta fue: **SI se registra la correccion de la UBICACION,
+// y SOLO EL HECHO** — quien y cuando.
+//
+// La puerta se cruzo por delante: hubo pregunta escrita en
+// `specs/362-historial-de-acciones/requirements.md`, hubo respuesta humana y hay ficha. Es
+// exactamente lo que la cabecera de `CorregirDatosClienteService` exigia («va a la puerta de
+// aprobacion humana — no se resuelve por la puerta de atras con solo un logcito»).
+//
+// LO QUE ESTA GUARDIA AFIRMA AHORA, y es MAS que antes, no menos:
+//
+//   (a) EL RASTRO EXISTE, y es EXACTAMENTE UNO: el modulo llama a `appendAccion` con la accion
+//       `orden_ubicacion_corregida` y con nada mas. Antes solo se podia comprobar una ausencia;
+//       ahora hay una presencia que tambien se puede medir, y se mide.
+//   (b) EL RASTRO NO LLEVA NI UN DATO DE CLIENTE: ni la direccion vieja ni la nueva, ni el
+//       distrito, ni la provincia, ni el canton, ni la zona, ni el destinatario, ni el telefono.
+//       Es la mitad de D4 que SIGUE VIVA, y es la que importaba.
+//   (c) SOLO LA UBICACION lo deja. Corregir el nombre o el telefono del destinatario sigue sin
+//       dejar rastro, porque no mueve dinero.
+//   (d) TODO LO DEMAS DE D4 SIGUE INTACTO: ni nota en el hilo, ni fila en `orden_historial_estado`,
+//       ni escritura en el modulo de chat, ni un solo `console.`.
+//
+// **Por que hace falta una guardia y no basta el codigo.** Un requisito NEGATIVO sin test es
+// indistinguible de un olvido: nadie puede mirar un archivo y demostrar que algo NO ocurre en
+// ningun sitio. Eso no cambia; lo que cambia es QUE es lo negativo. La alternativa que sigue
+// DESCARTADA —la nota automatica— esta evaluada en `design.md` §8/B de la 312, con lo que costaba
+// y lo que daba.
 //
 // **Por que hace falta una guardia y no basta el codigo.** Un requisito NEGATIVO sin test es
 // indistinguible de un olvido: nadie puede mirar un archivo y demostrar que algo NO ocurre en
@@ -17,10 +44,12 @@ import { codigoSinComentarios, quitarComentarios } from "../../fixtures/sin-come
 // caso raro en produccion — sin ruido, sin romper nada y sin que ningun test rojo lo cace. Esta
 // guardia es el ruido.
 //
-// **Las tres ausencias que vigila**, y cada una tiene su motivo:
+// **Las ausencias que vigila**, y cada una tiene su motivo:
 //  - RASTRO PERSISTIDO (R14, C3): ningun modulo de la ficha importa el hilo de notas ni escribe en
 //    `orden_historial_estado`. La otra mitad de R14 —contar filas contra Postgres— vive en
 //    `tests/integration/db/corregir-datos-cliente.repo.test.ts`; esta es la mitad estructural.
+//    ⚠️ `historial_accion` (ficha 362) es OTRA tabla y OTRA decision: no entra en esta prohibicion,
+//    y su presencia se afirma aparte, mas abajo.
 //  - RASTRO EN LOGS (R16, D3): ni un `console.` en los modulos de la ficha. El destinatario, el
 //    telefono, el producto y las notas son datos de una persona; un `console.error("fallo", input)`
 //    los vuelca enteros al log de la plataforma, donde los lee quien nunca tuvo permiso, y no
@@ -333,6 +362,112 @@ describe("312 / R14 — la correccion no escribe en ninguna otra tabla", () => {
       /correccion_dato|corregir_dato|correccion_cliente|datos_cliente|auditoria/i.test(d),
     );
     expect(sospechosas).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// ⭑ 2026-09-02 / FICHA 362 · Q1 — EL RASTRO QUE **SI** EXISTE, Y EXACTAMENTE CUAL
+// ---------------------------------------------------------------------------------------------
+// Esta es la mitad NUEVA de la guardia. Antes solo se podia medir una ausencia; desde que el
+// humano aprobo el registro del HECHO, hay una presencia, y una presencia se mide mejor.
+//
+// Las cuatro cosas que afirma, y ninguna sobra:
+//   1. el rastro EXISTE (si alguien lo quita, esto se pone rojo: seria volver a la regla vieja
+//      por la puerta de atras, en la direccion contraria);
+//   2. es EXACTAMENTE UNA accion, `orden_ubicacion_corregida`, y ninguna otra del catalogo;
+//   3. NO lleva ni un dato de cliente — ni la direccion, ni el distrito, ni la zona;
+//   4. solo se escribe cuando la UBICACION cambia, no en cualquier correccion.
+
+describe("312/D4 REABIERTA por la 362/Q1 — la correccion de la UBICACION SI deja rastro", () => {
+  /** El cuerpo REAL del metodo del repositorio, recortado por llaves balanceadas. */
+  const CUERPO_REPO = cuerpoDeCorregirEnRepositorio();
+  const SERVICIO = codigoSinComentarios("lib/services/CorregirDatosClienteService.ts");
+
+  it("(1) el rastro EXISTE: el repositorio llama al punto UNICO de escritura del registro", () => {
+    // Si esto se pone rojo, alguien retiro el registro que el humano aprobo el 2026-09-02. NO se
+    // arregla borrando el caso: se arregla devolviendo la llamada, o reabriendo Q1 con el humano.
+    expect(
+      CUERPO_REPO,
+      "la correccion de la ubicacion dejo de registrarse: eso REVIERTE una decision humana",
+    ).toContain("appendAccion");
+  });
+
+  it("(2) es EXACTAMENTE UNA accion del catalogo, y es `orden_ubicacion_corregida`", () => {
+    const acciones = [...CUERPO_REPO.matchAll(/accion:\s*"([a-z_]+)"/g)].map((m) => m[1]);
+    expect(acciones).toEqual(["orden_ubicacion_corregida"]);
+  });
+
+  it("(3) NI LA DIRECCION NI EL DISTRITO NI LA ZONA cruzan a la fila del registro", () => {
+    // Se recorta el bloque del `appendAccion` —de la llamada al cierre de su array— y se barre
+    // ahi dentro. Barrer el metodo entero no valdria: el `data` del `UPDATE` SI escribe la
+    // direccion, que es su trabajo; lo prohibido es que ese dato acabe en la AUDITORIA.
+    const inicio = CUERPO_REPO.indexOf("appendAccion");
+    expect(inicio, "no se encontro el `appendAccion`: este barrido mediria la nada").toBeGreaterThan(
+      -1,
+    );
+    const bloque = CUERPO_REPO.slice(inicio, CUERPO_REPO.indexOf("]);", inicio));
+    expect(bloque.length, "el recorte del bloque salio vacio").toBeGreaterThan(80);
+
+    for (const prohibido of [
+      "direccion",
+      "distritoId",
+      "provinciaId",
+      "cantonId",
+      "zonaId",
+      "destinatario",
+      "telefonoDest",
+      "producto",
+      "notas",
+      "peso",
+    ]) {
+      expect(
+        bloque,
+        `la fila del registro lleva \`${prohibido}\`: eso NO es lo que el humano aprobo`,
+      ).not.toContain(prohibido);
+    }
+    // Y las dos columnas de vocabulario cerrado van explicitamente FUERA: ahi es donde alguien
+    // meteria la direccion vieja «para que se entienda mejor».
+    expect(bloque).not.toContain("valorAnterior");
+    expect(bloque).not.toContain("valorNuevo");
+  });
+
+  it("(3b) CONTRAPRUEBA: inyectar la direccion en la fila del registro se detecta", () => {
+    // La contraprueba en la direccion que importa: si el barrido de arriba estuviera midiendo la
+    // nada, este caso pasaria igual y no habria forma de saberlo.
+    const inicio = CUERPO_REPO.indexOf("appendAccion");
+    const bloque = CUERPO_REPO.slice(inicio, CUERPO_REPO.indexOf("]);", inicio));
+    const mutado = quitarComentarios(
+      bloque.replace("entidadEtiqueta:", "valorNuevo: data.direccion,\n entidadEtiqueta:"),
+    );
+    expect(mutado).toContain("direccion");
+    expect(mutado).toContain("valorNuevo");
+  });
+
+  it("(4) SOLO la ubicacion deja rastro: el servicio lo decide con `CAMPOS_UBICACION`", () => {
+    // El booleano viaja al repositorio; los VALORES no. Y el criterio se DERIVA de
+    // `CAMPOS_GEOGRAFIA` (mas la direccion), no se reescribe: dos listas del mismo concepto son
+    // dos verdades que un dia divergen, y la que divergiera dejaria un cambio de zona sin
+    // registrar en silencio.
+    expect(SERVICIO).toContain("CAMPOS_UBICACION");
+    expect(SERVICIO).toContain("ubicacionCorregida");
+
+    const tipos = codigoSinComentarios("lib/types/correccion-datos-cliente.ts");
+    expect(tipos).toContain("CAMPOS_UBICACION = [...CAMPOS_GEOGRAFIA, \"direccion\"]");
+  });
+
+  it("(5) el servicio manda QUIEN, y no manda ningun VALOR al rastro", () => {
+    // `actorUsuarioId` si; cualquier dato del cliente no. El argumento del rastro es un objeto de
+    // DOS claves y estan las dos escritas aqui: si alguien le añade una tercera con un valor,
+    // este caso lo obliga a pasar por aqui.
+    // Se recorta desde la ULTIMA aparicion —la del argumento que viaja al repositorio, no la de
+    // la declaracion de la variable— hasta el cierre de la llamada.
+    const inicio = SERVICIO.lastIndexOf("ubicacionCorregida");
+    expect(inicio, "desaparecio `ubicacionCorregida` del servicio").toBeGreaterThan(-1);
+    const alrededor = SERVICIO.slice(Math.max(0, inicio - 300), inicio + 100);
+    expect(alrededor).toContain("actorUsuarioId");
+    for (const prohibido of ["direccion", "distritoId", "destinatario", "telefonoDest"]) {
+      expect(alrededor, `el rastro lleva \`${prohibido}\``).not.toContain(`${prohibido}:`);
+    }
   });
 });
 

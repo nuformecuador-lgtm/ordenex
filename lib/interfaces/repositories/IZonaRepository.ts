@@ -51,7 +51,8 @@ export interface IZonaRepository {
   /** Reemplaza datos + N:M + tarifas; null si la zona no existe. */
   update(id: string, data: UpdateZonaData): Promise<ZonaDTO | null>;
   /** Borrado FISICO (cascade de zona_distrito y tarifas). */
-  hardDelete(id: string): Promise<DeleteZonaResult>;
+  /** FICHA 362 (R4/R9): `actorUsuarioId` congela QUIEN borro; la etiqueta se lee ANTES del DELETE. */
+  hardDelete(id: string, actorUsuarioId: string | null): Promise<DeleteZonaResult>;
   /** Cuenta cuantos de `ids` existen como distrito (validacion de existencia). */
   countExistingDistritos(ids: string[]): Promise<number>;
   /** Cuenta cuantos de `ids` existen como vehiculo (validacion de existencia). */

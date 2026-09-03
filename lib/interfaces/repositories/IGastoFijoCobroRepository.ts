@@ -11,7 +11,11 @@ import type { GastoFijoCobroDTO, GastoFijoCobroEstado } from "@/lib/types/gasto-
  * Cliente aceptado por los métodos transaccionales: cualquier cosa que exponga `gastoFijoCobro`
  * —el `tx` de un `$transaction` o el `PrismaClient` completo—. Mismo patrón que `WalletTxClient`.
  */
-export type GastoFijoCobroTxClient = Pick<PrismaClient, "gastoFijoCobro">;
+export type GastoFijoCobroTxClient = Pick<
+  PrismaClient,
+  // Ficha 362 (R9): el registro de la decision viaja en la MISMA tx que la decision.
+  "gastoFijoCobro" | "historialAccion" | "usuario"
+>;
 
 /**
  * Fila a insertar cuando el cron genera un cobro pendiente.

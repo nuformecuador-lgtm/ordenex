@@ -1,3 +1,5 @@
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad, etiquetaDePersona } from "@/lib/types/historial-accion-etiquetas";
 import { Prisma, type EstadoUsuario, type PrismaClient } from "@prisma/client";
 import { ESTADOS_USUARIO_NO_ASIGNABLES } from "@/lib/constants/estado-usuario-asignable";
 import type {
@@ -143,6 +145,8 @@ type CierresAdminPrismaClient = Pick<
   | "zona"
   | "usuario"
   | "$transaction"
+  // Ficha 362 (R9): el registro de la accion, en la MISMA tx que la resolucion del cierre.
+  | "historialAccion"
 >;
 
 // Feature 69/T18 (R15) — proyeccion del detalle del cierre YA CREADO: los DESCRIPTIVOS
@@ -1346,6 +1350,34 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       });
       if (actualizados.count !== 1) throw new Error("cierre no actualizado");
 
+      // FICHA 362 (R6/R9) — `cierre_dia_pagos_editados`. La entidad es la GESTION, no el cierre:
+      // lo que se edito es el desglose de pago de UNA gestion, y la pregunta que este registro
+      // tiene que contestar es «quien toco el dinero de ESTA entrega».
+      //
+      // Va al final del callback que ya existia y DESPUES de los dos `count` guardados: si el
+      // sello no se aplico se salio antes con `conflict`, y si el snapshot no se actualizo esto
+      // lanza y revierte. No hay camino por el que quede un registro de una edicion que no ocurrio.
+      //
+      // `monto` = el nuevo total general del cierre, `Decimal` de punta a punta.
+      const laGestion = await tx.gestionOrden.findUnique({
+        where: { id: gestionId },
+        select: { orden: { select: { numGuia: true, numRemision: true } } },
+      });
+      const actorEdicion = await resolverActorCongelado(tx, editadoPor);
+      await appendAccion(tx, [
+        {
+          accion: "cierre_dia_pagos_editados",
+          entidadTipo: "gestion_orden",
+          entidadId: gestionId,
+          entidadEtiqueta: etiquetaDeEntidad("gestion_orden", {
+            numGuia: laGestion?.orden.numGuia ?? null,
+            numRemision: laGestion?.orden.numRemision ?? null,
+          }),
+          monto: new Prisma.Decimal(totales.general),
+          ...actorEdicion,
+        },
+      ]);
+
       return { status: "updated" as const, totales };
     });
   }
@@ -1912,6 +1944,51 @@ export class CierresAdminRepository implements ICierresAdminRepository {
             }
           }
         }
+      }
+
+      // ═══════════════════════════════════════════════════════════════════════════════════════
+      // FICHA 362 (R6/R9/R11) — `cierre_dia_aprobado` / `cierre_dia_rechazado`.
+      //
+      // DENTRO del `res.count === 1`: si el cierre ya estaba resuelto —o quedo fuera de alcance—
+      // el `updateMany` no alcanza ninguna fila y NO se escribe registro (R11). El sitio es este,
+      // al final del callback de `$transaction` que ya existia: la decision y su rastro se
+      // guardan o se pierden juntos.
+      //
+      // UNA FILA POR DECISION, no una por asiento: aprobar un cierre emite decenas de
+      // movimientos de wallet, y esos ya son inmutables y consultables en `/wallet`. Lo que este
+      // registro documenta es QUIEN LO DECIDIO.
+      //
+      // `monto` = `total_general` del cierre, que es el SNAPSHOT congelado al crearlo. Se lee de
+      // la fila como `Prisma.Decimal` y viaja como `Decimal` hasta la columna: ni un `Number()`
+      // en el camino (R6).
+      //
+      // `motivoRechazo` NO se copia, y es la linea que separa esta tabla de un volcado: es texto
+      // libre tecleado por una persona y ya vive en `cierre_dia.motivo_rechazo` (R5).
+      // ═══════════════════════════════════════════════════════════════════════════════════════
+      if (res.count === 1) {
+        const cierre = await tx.cierreDia.findUnique({
+          where: { id: cierreId },
+          select: {
+            totalGeneral: true,
+            solicitadoAt: true,
+            mensajero: { select: { nombre: true, primerApellido: true } },
+          },
+        });
+        const actor = await resolverActorCongelado(tx, resueltoPor);
+        await appendAccion(tx, [
+          {
+            accion: nuevoEstado === "aprobado" ? "cierre_dia_aprobado" : "cierre_dia_rechazado",
+            entidadTipo: "cierre_dia",
+            entidadId: cierreId,
+            entidadEtiqueta: etiquetaDeEntidad("cierre_dia", {
+              mensajeroNombre:
+                cierre === null ? null : etiquetaDePersona(cierre.mensajero),
+              fecha: cierre?.solicitadoAt ?? new Date(),
+            }),
+            monto: cierre?.totalGeneral ?? null,
+            ...actor,
+          },
+        ]);
       }
       return res.count;
     });

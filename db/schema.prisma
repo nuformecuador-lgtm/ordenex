@@ -156,6 +156,7 @@ model Usuario {
   cobrosGastoFijo                     GastoFijoCobro[]          @relation("GastoFijoCobroDecisor") // ficha 333/R15/R21: cobros de gasto fijo que ESTE usuario aprobo o rechazo; la FK es RESTRICT (quien autorizo dinero es evidencia y no se pierde al dar de baja al usuario), mismo criterio que `orden_dia_reparto_cambio.actor_usuario_id`
   cobrosRechazoTiendaDecididos        RechazoTiendaCobro[]      @relation("RechazoTiendaCobroDecisor") // ficha 337: cobros por rechazo de tienda que ESTE usuario aprobo o rechazo. FK RESTRICT por el mismo motivo que la linea de arriba: quien autorizo un cobro es evidencia y no se pierde al dar de baja al usuario.
   cobrosRechazoTiendaComoTienda       RechazoTiendaCobro[]      @relation("RechazoTiendaCobroTienda") // ficha 337: cobros por rechazo emitidos CONTRA esta tienda. `tienda_id` va CONGELADO en la fila (leccion 69/R13), asi que esta relacion es historia y no una consulta viva sobre `orden.tienda_id`.
+  historialAcciones                   HistorialAccion[]         @relation("HistorialAccionActor") // ficha 362/R3: acciones (dinero / desaparicion / permisos) que ESTE usuario ejecuto. La FK es RESTRICT: quien borro 79 ordenes o aprobo un cierre es evidencia y no se pierde al dar de baja al usuario. `actor_nombre` y `actor_rol` van CONGELADOS en la fila, asi que esta relacion NO es la que pinta el listado.
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -2905,4 +2906,183 @@ model OrdenDiaRepartoCambio {
   @@index([ordenId, createdAt]) // la UNICA consulta prevista: «el rastro de esta orden», en orden. Cubre ademas la FK a `orden` por prefijo
   @@index([actorUsuarioId]) // la FK RESTRICT, indexada (patron `orden_nota`): sin el, borrar un usuario recorre la tabla
   @@map("orden_dia_reparto_cambio")
+}
+
+// =================================================================================================
+// FICHA 362 — HISTORIAL DE ACCIONES
+// =================================================================================================
+
+/// Ficha 362 (design §1.1, R14/R15) — el CATALOGO CERRADO de acciones que se registran. Enum
+/// NATIVO de Postgres (patron `OrdenHistorialOrigenTipo`), no tabla de catalogo: el conjunto lo
+/// fija el codigo y añadir un valor tiene que ser una migracion con nombre y fecha.
+///
+/// Criterio, tal como lo fijo el humano: entra lo que MUEVE DINERO, lo que HACE DESAPARECER ALGO
+/// y lo que CAMBIA QUIEN PUEDE HACER QUE. La clasificacion NO se guarda en la fila: se deriva de
+/// `CATEGORIA_POR_ACCION` (`lib/types/historial-accion.ts`), R17.
+enum HistorialAccionTipo {
+  // --- mueve dinero (25) ---
+  cierre_dia_aprobado
+  cierre_dia_rechazado
+  cierre_dia_pagos_editados
+  cierre_bodega_aprobado
+  cierre_bodega_rechazado
+  pago_mensajero_registrado
+  pago_tienda_registrado
+  pago_anulado
+  reparto_mensajero_registrado
+  reparto_anulado
+  wallet_movimiento_manual_registrado
+  egreso_administrativo_registrado
+  egreso_administrativo_reversado
+  tarifa_creada
+  tarifa_actualizada
+  incidente_aprobado
+  incidente_rechazado
+  cobro_gasto_fijo_aprobado
+  cobro_gasto_fijo_rechazado
+  cobro_rechazo_tienda_aprobado
+  cobro_rechazo_tienda_rechazado
+  premio_ranking_registrado
+  premio_ranking_anulado
+  /// Q1, cerrada por el humano el 2026-09-02: la correccion de la ubicacion de una orden SI deja
+  /// rastro, y SOLO EL HECHO (quien, que orden, cuando). Mueve dinero porque el distrito re-deriva
+  /// la zona y la zona decide la tarifa facturada. NUNCA lleva la direccion, el distrito ni ningun
+  /// dato del destinatario: eso es lo que D4 de la 312 sigue protegiendo.
+  orden_ubicacion_corregida
+  /// Q2, cerrada por el humano el 2026-09-02: cambiar `fulfillment` a una tienda activa un cobro
+  /// periodico de bodega, o sea mueve dinero. NO entra en «permisos»: no cambia lo que la persona
+  /// puede hacer.
+  usuario_fulfillment_cambiado
+
+  // --- hace desaparecer algo (6) ---
+  orden_eliminada
+  orden_recuperada
+  /// `tarifa_borrada` esta en «desaparicion» y no en «dinero» aunque mueva precio: R17 exige
+  /// EXACTAMENTE una categoria por tipo, y lo que la fila documenta es la desaparicion
+  /// irreversible (`tarifas` borra en FISICO).
+  tarifa_borrada
+  zona_borrada
+  vehiculo_borrado
+  plantilla_eliminada
+
+  // --- cambia quien puede hacer que (11) ---
+  usuario_creado
+  usuario_rol_cambiado
+  usuario_zona_cambiada
+  usuario_estado_cambiado
+  usuario_contrasena_restablecida
+  postulacion_aprobada
+  postulacion_rechazada
+  api_key_generada
+  api_key_rotada
+  api_key_activada
+  api_key_desactivada
+
+  @@map("historial_accion_tipo")
+}
+
+/// Ficha 362 (design §1.1) — el tipo de entidad afectada. Los 17 sujetos posibles de una accion
+/// del catalogo. Enum nativo por el mismo motivo que el de arriba.
+enum HistorialAccionEntidad {
+  orden
+  usuario
+  tarifa
+  zona
+  vehiculo
+  plantilla_mensaje
+  cierre_dia
+  cierre_bodega
+  gestion_orden
+  liquidacion_pago
+  liquidacion_reparto
+  wallet_movimiento
+  orden_incidente
+  gasto_fijo_cobro
+  rechazo_tienda_cobro
+  ranking_snapshot_fila
+  api_key
+
+  @@map("historial_accion_entidad")
+}
+
+/// Ficha 362 (design §1.2) — REGISTRO append-only de las acciones que mueven dinero, hacen
+/// desaparecer algo o cambian quien puede hacer que.
+///
+/// FILA INMUTABLE (R2): SIN `updated_at`, SIN `deleted_at`, sin soft delete. Una correccion se
+/// representa con una accion NUEVA, jamas alterando una fila previa. Mismo patron que
+/// `orden_historial_estado` (49) y `cierre_detail` (69). RLS habilitada SIN policies (solo service
+/// role, R8): va en el SQL de la migracion, Prisma no la expresa.
+///
+/// GRANO POR ENTIDAD, no por acto: la pregunta que abre la ficha es «quien borro ESTA orden». El
+/// acto se reconstruye con `lote_id` (R7), que distingue 79 borrados de un acto de 79 actos.
+///
+/// SIN columna `categoria` (R17): se deriva. SIN `motivo` (R5): es texto libre tecleado por una
+/// persona, el unico vector real de datos de cliente en esta tabla, y ya vive en su propia fila
+/// (`cierre_dia.motivo_rechazo`, `liquidacion_anulacion.motivo`). SIN indice unico de
+/// idempotencia: un reintento del usuario ES otra accion y debe verse.
+model HistorialAccion {
+  id String @id @default(uuid())
+
+  accion      HistorialAccionTipo
+  entidadTipo HistorialAccionEntidad @map("entidad_tipo")
+
+  /// OPACO y SIN FK, a proposito. Dos de las entidades registradas se borran en FISICO —`tarifas`
+  /// y `zona`— y una FK dejaria dos unicas salidas, las dos peores: `RESTRICT` haria INBORRABLE lo
+  /// que la accion registrada acaba de borrar, y `SET NULL` vaciaria el rastro en silencio, que es
+  /// justo lo que `orden_historial_estado.gestion_orden_id` documenta como corrupcion muda. Sin
+  /// FK, la fila sobrevive a su sujeto, que es el requisito.
+  entidadId String @map("entidad_id")
+
+  /// CONGELADA (R4), no resuelta por join al leer. En `tarifa_borrada` y `zona_borrada` no hay a
+  /// quien preguntar: la fila ES el unico sitio donde queda de que se trataba. Congelar ademas
+  /// elimina el N+1 del listado (25 filas de hasta 17 entidades distintas = hasta 17 consultas por
+  /// pagina) y evita meter uuid en la descarga (R38). Su fuente unica es `etiquetaDeEntidad`
+  /// (`lib/types/historial-accion-etiquetas.ts`), y NINGUNA de sus fuentes es un dato del
+  /// destinatario de una orden (R5).
+  entidadEtiqueta String @map("entidad_etiqueta") @db.VarChar(120)
+
+  /// NULL = sistema/cron (R36). Se conserva ADEMAS del nombre congelado porque es lo estable para
+  /// filtrar. FK `Restrict` explicito (no el `SetNull` por defecto de una relacion opcional):
+  /// precedente `orden_nota.autor_id` y `orden_dia_reparto_cambio.actor_usuario_id`, la autoria es
+  /// evidencia y no se pierde al dar de baja al usuario.
+  actorUsuarioId String? @map("actor_usuario_id")
+
+  /// CONGELADOS (R3). El motivo no es de rendimiento: UNO DE LOS EVENTOS QUE ESTE MODULO REGISTRA
+  /// ES EL CAMBIO DE ROL. Leer el rol vivo al pintar re-etiquetaria la historia —«el maestro
+  /// Fulano aprobo» sobre una fila de cuando Fulano era `admin`— y ese error es indetectable.
+  /// Los tres campos del actor son NULL a la vez cuando el actor es el sistema.
+  actorNombre String?   @map("actor_nombre") @db.VarChar(120)
+  actorRol    RolValue? @map("actor_rol")
+
+  /// El importe que ESA accion movio (R6). `Decimal(12,2)` como todo el dinero del repo;
+  /// `Prisma.Decimal` al escribir y STRING en el DTO — nunca `Number()`/`parseFloat`.
+  /// NULL cuando la accion no mueve un importe UNICO (una tarifa son diez importes, no uno).
+  monto Decimal? @db.Decimal(12, 2)
+
+  /// Vocabulario CERRADO y nada mas: valores de un enum del dominio. Se usan en exactamente cuatro
+  /// tipos (`usuario_rol_cambiado`, `usuario_estado_cambiado`, `usuario_fulfillment_cambiado` y el
+  /// par `api_key_activada`/`api_key_desactivada`); en todos los demas van NULL. Una guardia sobre
+  /// los puntos de escritura los mantiene asi: aqui NO se vuelca texto libre.
+  valorAnterior String? @map("valor_anterior") @db.VarChar(60)
+  valorNuevo    String? @map("valor_nuevo") @db.VarChar(60)
+
+  /// uuid POR ACCION (R7), no por fila: todas las filas de un mismo acto lo comparten. Es lo que
+  /// distingue «se borraron 79 ordenes de una vez» de «hubo 79 borrados».
+  loteId String @map("lote_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  // SIN updated_at / deleted_at: fila INMUTABLE (R2).
+
+  actor Usuario? @relation("HistorialAccionActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// El listado por defecto (el 90 % de las visitas) CON SU DESEMPATE. `id` va en el indice porque
+  /// el `orderBy` real es `created_at <dir>, id asc` (R23): sin el desempate, dos filas del mismo
+  /// lote —que comparten `created_at` al milisegundo por nacer del mismo `CURRENT_TIMESTAMP`—
+  /// quedan a merced del plan y paginar duplica una y pierde otra (defecto medido en la 352).
+  @@index([createdAt(sort: Desc), id])
+  /// «Que hizo Fulano»: igualdad -> rango, el unico orden que un btree recorre sin filtro residual.
+  @@index([actorUsuarioId, createdAt(sort: Desc)])
+  /// «Que le paso a esta entidad».
+  @@index([entidadTipo, entidadId])
+  @@map("historial_accion")
 }

@@ -77,7 +77,22 @@ function buildPrisma(
     cierreDia: {
       updateMany: vi.fn(async () => ({ count: opts.updateCierreCount ?? 1 })),
       count: vi.fn(async () => 1),
-      findUnique: vi.fn(async () => ({ mensajeroId: "m1" })),
+      // FICHA 362: `resolverCierre` lee ademas el total y el mensajero para congelar la fila.
+      findUnique: vi.fn(async () => ({
+        mensajeroId: "m1",
+        totalGeneral: new Prisma.Decimal("0.00"),
+        solicitadoAt: new Date("2026-09-02T12:00:00Z"),
+        mensajero: { nombre: "Mensa", primerApellido: "Uno" },
+      })),
+    },
+    // FICHA 362: el registro de la decision, en la MISMA tx.
+    historialAccion: { createMany: vi.fn(async () => ({ count: 1 })) },
+    usuario: {
+      findUnique: vi.fn(async () => ({
+        nombre: "Admin",
+        primerApellido: "Uno",
+        rol: { value: "admin" },
+      })),
     },
     gestionOrden: {
       // Feature 238 (T3.8): el mismo delegado lo usan DOS bloques con formas de `where`

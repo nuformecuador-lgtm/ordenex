@@ -2,6 +2,8 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { ConflictError } from "@/lib/errors";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { normalizeName } from "@/lib/utils/normalize";
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import type { TarifaZonaMensajeroDTO, ZonaDTO } from "@/lib/types/zona";
 import type {
   CreateZonaData,
@@ -16,7 +18,15 @@ import type { OpcionCatalogo } from "@/lib/types/filtros-ordenes";
 // Delegates + $transaction necesarios (permite acotar/mocakear en tests).
 type ZonaPrismaClient = Pick<
   PrismaClient,
-  "zona" | "zonaDistrito" | "tarifaZonaMensajero" | "distrito" | "vehiculo" | "$transaction"
+  | "zona"
+  | "zonaDistrito"
+  | "tarifaZonaMensajero"
+  | "distrito"
+  | "vehiculo"
+  | "$transaction"
+  // FICHA 362 (R9): el borrado registra su accion en la MISMA transaccion que el `delete`.
+  | "historialAccion"
+  | "usuario"
 >;
 
 type TarifaRow = {
@@ -203,16 +213,44 @@ export class ZonaRepository implements IZonaRepository {
     }
   }
 
-  async hardDelete(id: string): Promise<DeleteZonaResult> {
+  /**
+   * FICHA 362 (R4/R9) — `zona_borrada`. Esta escritura YA corria en `$transaction`, asi que la
+   * instrumentacion es literalmente la llamada dentro del callback que ya existia.
+   *
+   * ⚠️ LA ETIQUETA SE CONGELA CON EL `findUnique` DE ARRIBA, ANTES DEL `delete`, y esa lectura ya
+   * estaba: solo se le pide ademas el `nombre`. Despues del borrado no habria a quien preguntar
+   * —el borrado es FISICO y ademas ARRASTRA SUS TARIFAS EN CASCADA—, asi que un join al leer
+   * dejaria la fila del registro diciendo la nada sobre lo unico que documenta.
+   */
+  async hardDelete(id: string, actorUsuarioId: string | null): Promise<DeleteZonaResult> {
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const exists = await tx.zona.findUnique({ where: { id }, select: { id: true } });
+        const exists = await tx.zona.findUnique({
+          where: { id },
+          select: { id: true, nombre: true },
+        });
         if (!exists) return "not_found" as const;
+        // 362/R4: congelada ANTES de que la fila desaparezca.
+        const etiqueta = etiquetaDeEntidad("zona", { nombre: exists.nombre });
         // tarifa_zona_mensajero -> zona es FK RESTRICT: hay que borrarlas antes.
         await tx.tarifaZonaMensajero.deleteMany({ where: { zonaId: id } });
         // zona_distrito es CASCADE; lo borramos explicito por claridad/simetria.
         await tx.zonaDistrito.deleteMany({ where: { zonaId: id } });
         await tx.zona.delete({ where: { id } });
+
+        // 362/R9: DESPUES del `delete` y DENTRO del mismo callback. Si el borrado falla por la FK
+        // RESTRICT de `orden`, el error sale de la transaccion y aqui no se llega: no queda fila
+        // de un borrado que no ocurrio (R11).
+        const actor = await resolverActorCongelado(tx, actorUsuarioId);
+        await appendAccion(tx, [
+          {
+            accion: "zona_borrada",
+            entidadTipo: "zona",
+            entidadId: id,
+            entidadEtiqueta: etiqueta,
+            ...actor,
+          },
+        ]);
         return "ok" as const;
       });
     } catch (e) {

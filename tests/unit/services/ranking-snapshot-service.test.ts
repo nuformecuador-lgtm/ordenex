@@ -91,6 +91,9 @@ function buildService(datos: Datos, opts: SnapshotRepoOpts = {}) {
     obtenerPorFecha,
     listarPodioDeFecha,
     obtenerFilaDelPodio,
+    // ficha 362: el cron del congelado diario NO registra ninguna accion (el premio no nace
+    // del congelado, R3), pero el contrato lo declara y el doble tiene que cumplirlo.
+    registrarAccionSobreFila: vi.fn(async () => undefined),
   } as IRankingSnapshotRepository;
   const repos = reposDelRanking(datos);
   const config = { MIN_ASIGNADAS_PODIO: datos.minPodio ?? 1 };

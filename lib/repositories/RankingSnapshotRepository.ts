@@ -1,3 +1,5 @@
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { esP2002, textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import type {
@@ -6,6 +8,7 @@ import type {
   IRankingSnapshotRepository,
   PodioFilaConFecha,
   PodioFilaRow,
+  RankingSnapshotAccionTxClient,
   SnapshotDiaRow,
 } from "@/lib/interfaces/repositories/IRankingSnapshotRepository";
 
@@ -18,7 +21,9 @@ import type {
 // snapshot mas `$transaction` para la escritura atomica.
 type RankingSnapshotPrismaClient = Pick<
   PrismaClient,
-  "rankingSnapshotDia" | "rankingSnapshotFila" | "$transaction"
+  // Ficha 362 (R9): `registrarAccionSobreFila` escribe en `historial_accion` con el `tx` que
+  // recibe; `usuario` es lo que consulta el congelado del actor.
+  "rankingSnapshotDia" | "rankingSnapshotFila" | "$transaction" | "historialAccion" | "usuario"
 >;
 
 /**
@@ -211,5 +216,50 @@ export class RankingSnapshotRepository implements IRankingSnapshotRepository {
       premioDescripcion: f.premioDescripcion,
       fecha: f.snapshot.fecha,
     };
+  }
+
+  /**
+   * FICHA 362 (R6/R9) — `premio_ranking_registrado` / `premio_ranking_anulado`.
+   *
+   * ⚠️ ESTE METODO NO MUTA `ranking_snapshot_fila`, Y NO PUEDE: el snapshot es historia congelada
+   * (R16 de la 196) y reescribirlo seria falsificar el podio. La mutacion que este registro
+   * documenta es el DEVENGO en el libro del mensajero y su egreso de caja, que
+   * `PremioRankingDevengoService` acaba de escribir en la MISMA transaccion que aqui se recibe.
+   *
+   * Recibe `tx` y por tanto no puede abrir la suya: si el registro falla, el devengo y el egreso
+   * se van con el (R10); si el devengo no se escribio, el servicio sale antes y aqui no se llega
+   * (R11).
+   *
+   * `premio_descripcion` NO entra en la etiqueta: la fila se identifica por el mensajero
+   * CONGELADO y su puesto, que es lo que el podio significa.
+   */
+  async registrarAccionSobreFila(
+    tx: RankingSnapshotAccionTxClient,
+    input: {
+      filaId: string;
+      accion: "premio_ranking_registrado" | "premio_ranking_anulado";
+      monto: string;
+      actorUsuarioId: string | null;
+    },
+  ): Promise<void> {
+    const fila = await tx.rankingSnapshotFila.findUnique({
+      where: { id: input.filaId },
+      select: { mensajeroNombre: true, puesto: true },
+    });
+    const actor = await resolverActorCongelado(tx, input.actorUsuarioId);
+    await appendAccion(tx, [
+      {
+        accion: input.accion,
+        entidadTipo: "ranking_snapshot_fila",
+        entidadId: input.filaId,
+        entidadEtiqueta: etiquetaDeEntidad("ranking_snapshot_fila", {
+          mensajeroNombre: fila?.mensajeroNombre ?? "",
+          puesto: fila?.puesto ?? 0,
+        }),
+        // STRING money-safe -> `Decimal`, sin pasar por `number` (R6).
+        monto: new Prisma.Decimal(input.monto),
+        ...actor,
+      },
+    ]);
   }
 }

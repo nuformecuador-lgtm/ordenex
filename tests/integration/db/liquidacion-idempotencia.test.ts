@@ -401,6 +401,22 @@ function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierr
     const clavesPendientes = new Set<string>();
 
     const tx = {
+      // FICHA 362: el registro de la accion (`pago_*_registrado`, `pago_anulado`,
+      // `reparto_*`) va en la MISMA tx que el documento. El store lo apunta en el log para que
+      // su POSICION relativa a los candados y a las escrituras sea visible.
+      historialAccion: {
+        createMany: async ({ data }: { data: Array<{ accion: string }> }) => {
+          for (const fila of data) log.push(`registrar:${fila.accion}`);
+          return { count: data.length };
+        },
+      },
+      usuario: {
+        findUnique: async () => ({
+          nombre: "Mario",
+          primerApellido: "Maestro",
+          rol: { value: "maestro" },
+        }),
+      },
       $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
         const texto = strings.join("?").replace(/\s+/g, " ").trim();
         if (!/FOR UPDATE/.test(texto)) {
@@ -414,6 +430,20 @@ function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierr
         return [{ id: values[0] }];
       },
       liquidacionPago: {
+        // FICHA 362: `anular` relee el pago DENTRO de la tx para congelar el importe anulado y el
+        // nombre del beneficiario en la fila del registro. Lee de la misma instantanea que el
+        // resto del store —los pagos ya COMMITEADOS—, que es lo que ve una tx real.
+        findUnique: async ({ where }: { where: { id: string } }) => {
+          const fila = pagos.find((p) => p.id === where.id);
+          if (fila === undefined) return null;
+          return {
+            monto: fila.monto,
+            repartoId: (fila as { repartoId?: string | null }).repartoId ?? null,
+            mensajero:
+              fila.mensajeroId === null ? null : { nombre: "Mario", primerApellido: "Mensajero" },
+            tienda: fila.tiendaId === null ? null : { nombre: "Tienda", primerApellido: "Uno" },
+          };
+        },
         create: async ({ data }: { data: Record<string, unknown> }) => {
           const clave = data.claveIdempotencia as string;
           if (clavesIdempotencia.has(clave) || clavesPendientes.has(clave)) {
@@ -710,6 +740,8 @@ describe("R83 — el bloqueo se toma ANTES de leer cuanto hay disponible", () =>
       "candado-tomado:usuario:t1",
       "leer-disponible:t1",
       "crear-documento:pago-1",
+      // FICHA 362 (R9): el registro va DENTRO de la misma tx, justo despues del documento.
+      "registrar:pago_tienda_registrado",
       "crear-movimiento:1",
       "commit",
     ]);
@@ -1188,6 +1220,9 @@ describe("R46/R83/R85 [P1] — el candado del CIERRE serializa igual que el de l
       // que el tope de [P1] se lee con DOS agregaciones. Va DENTRO del candado, como la de arriba.
       "leer-premios-vivos",
       "crear-documento:pago-1",
+      // FICHA 362 (R9): el registro va DENTRO de la misma tx y JUSTO DESPUES del documento —
+      // registra lo que ya quedo escrito, no lo que se pidio.
+      "registrar:pago_mensajero_registrado",
       "crear-movimiento-mensajero:1",
       "commit",
     ]);
@@ -1494,6 +1529,8 @@ describe("T F.3/R79/R80 — MENSAJERO: pagar, anular y volver a pagar lo mismo",
       "leer-pagado-vigente", // R83: el disponible, BAJO el candado
       "leer-premios-vivos", // 293/T2.3: y sus premios vivos, con la MISMA formula
       "crear-anulacion:pago-1",
+      // FICHA 362 (R9): el registro va DENTRO de la misma tx, justo despues del contraasiento.
+      "registrar:pago_anulado",
       "crear-movimiento-mensajero:1",
       "commit",
     ]);

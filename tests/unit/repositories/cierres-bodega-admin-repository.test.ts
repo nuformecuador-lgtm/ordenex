@@ -107,8 +107,29 @@ function detalleDbRow(overrides: Record<string, unknown> = {}) {
 }
 
 function buildPrisma(overrides: Record<string, unknown> = {}) {
-  return {
-    cierreBodega: { findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
+  // FICHA 362: `$transaction` es un paso a traves que entrega EL MISMO doble, para que las
+  // aserciones sigan mirando donde ya miraban.
+  const prismaRef: { actual: unknown } = { actual: null };
+  const doble = {
+    cierreBodega: {
+      findMany: vi.fn(),
+      // FICHA 362: la resolucion lee el total y la zona para congelar la fila del registro.
+      findUnique: vi.fn().mockResolvedValue({
+        totalGeneral: new Prisma.Decimal("0.00"),
+        solicitadoAt: new Date("2026-09-02T12:00:00Z"),
+        zona: { nombre: "Central" },
+      }),
+      updateMany: vi.fn(),
+      count: vi.fn(),
+    },
+    // FICHA 362: la resolucion pasa a `$transaction` y registra su accion en ella.
+    $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(prismaRef.actual)),
+    historialAccion: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    usuario: {
+      findUnique: vi
+        .fn()
+        .mockResolvedValue({ nombre: "Maestra", primerApellido: "Uno", rol: { value: "maestro" } }),
+    },
     cierreDia: { findMany: vi.fn() },
     gestionOrden: { findMany: vi.fn() },
     // Feature 69/T23 (R15): el detalle de un cierre YA CREADO sale del SNAPSHOT.
@@ -121,6 +142,8 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     tarifas: { findMany: vi.fn(), findFirst: vi.fn() },
     ...overrides,
   };
+  prismaRef.actual = doble;
+  return doble;
 }
 
 describe("CierresBodegaAdminRepository.findCierresBodega (R15)", () => {

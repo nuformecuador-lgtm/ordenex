@@ -3,6 +3,15 @@ import type { PrismaClient } from "@prisma/client";
 
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ESTADOS_SIN_CORRECCION } from "@/lib/types/correccion-datos-cliente";
+
+/**
+ * ⭑ FICHA 362 / Q1 — el cuarto argumento de `corregirDatosCliente`: el RASTRO.
+ *
+ * `ubicacionCorregida: false` por defecto en estos casos, que miden la correccion de los DATOS DEL
+ * CLIENTE (nombre, telefono, producto, notas): eso NO deja rastro, y D4 de la 312 lo sigue
+ * protegiendo. Los casos que mueven la UBICACION lo ponen a `true` y comprueban la fila escrita.
+ */
+const RASTRO_362 = { actorUsuarioId: null, ubicacionCorregida: false };
 import type {
   EnqueueOpts,
   IJobRepository,
@@ -178,6 +187,7 @@ describeSiHayBase("⭑ 327/B6 — el guard de re-geocodificacion, contra Postgre
         ctx.ordenId,
         { direccion: DIRECCION_NUEVA },
         ESTADOS_SIN_CORRECCION,
+        RASTRO_362,
       );
       const filas = await ctx.tx.job.findMany({
         where: { tipo: "geocodificacion", dedupeKey: { contains: ctx.ordenId } },
@@ -226,6 +236,7 @@ describeSiHayBase("⭑ 327/B6 — el guard de re-geocodificacion, contra Postgre
         ctx.ordenId,
         carga,
         ESTADOS_SIN_CORRECCION,
+        RASTRO_362,
       );
       const despues = await ctx.tx.job.count({ where: { tipo: "geocodificacion" } });
       const propios = await ctx.tx.job.count({
@@ -256,6 +267,7 @@ describeSiHayBase("⭑ 327/B6 — el guard de re-geocodificacion, contra Postgre
         ctx.ordenId,
         { direccion: DIRECCION_NUEVA },
         ESTADOS_SIN_CORRECCION,
+        RASTRO_362,
       );
       return { resultado, tx: ctx.tx };
     });
@@ -282,6 +294,7 @@ describeSiHayBase("⭑ 327/B6 — el guard de re-geocodificacion, contra Postgre
           ctx.ordenId,
           { direccion: DIRECCION_NUEVA },
           ESTADOS_SIN_CORRECCION,
+          RASTRO_362,
         );
         const fila = await ctx.tx.orden.findUniqueOrThrow({
           where: { id: ctx.ordenId },
@@ -318,6 +331,7 @@ describeSiHayBase("⭑ 327/B6 — el guard de re-geocodificacion, contra Postgre
         ctx.ordenId,
         { direccion: DIRECCION_NUEVA },
         ESTADOS_SIN_CORRECCION,
+        RASTRO_362,
       );
       const fila = await ctx.tx.orden.findUniqueOrThrow({
         where: { id: ctx.ordenId },

@@ -1,3 +1,5 @@
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CrearCobroPendienteInput,
@@ -10,7 +12,7 @@ import type { GastoFijoCobroDTO } from "@/lib/types/gasto-fijo-cobro";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron WalletMovimientoRepository): no
 // puede tocar `wallet_movimiento` ni `gasto_fijo_plantilla` aunque quisiera, por el TIPO.
-type CobroPrismaClient = Pick<PrismaClient, "gastoFijoCobro">;
+type CobroPrismaClient = Pick<PrismaClient, "gastoFijoCobro" | "historialAccion" | "usuario">;
 
 type CobroRow = Prisma.GastoFijoCobroGetPayload<Record<string, never>>;
 
@@ -176,6 +178,37 @@ export class GastoFijoCobroRepository implements IGastoFijoCobroRepository {
       where: { id, estado: "pendiente" },
       data: { estado, decididoPor: actorId, decididoAt: ahora },
     });
+
+    // FICHA 362 (R6/R9/R11) — `cobro_gasto_fijo_aprobado` / `cobro_gasto_fijo_rechazado`, en la
+    // MISMA tx que la decision (el service ya la abre y este metodo la recibe).
+    //
+    // DENTRO del `count === 1`: dos administradores decidiendo a la vez producen UNA decision y
+    // UNA fila de registro; el segundo `updateMany` alcanza cero filas y no deja rastro de algo
+    // que no decidio.
+    //
+    // La etiqueta es A QUIEN se le cobra y DE QUE PERIODO. NO el `concepto`: ese texto lo teclea
+    // una persona en la plantilla y R5 lo deja fuera.
+    if (res.count === 1) {
+      const cobro = await tx.gastoFijoCobro.findUnique({
+        where: { id },
+        select: { monto: true, periodo: true, concepto: true },
+      });
+      const actor = await resolverActorCongelado(tx, actorId);
+      await appendAccion(tx, [
+        {
+          accion:
+            estado === "aprobado" ? "cobro_gasto_fijo_aprobado" : "cobro_gasto_fijo_rechazado",
+          entidadTipo: "gasto_fijo_cobro",
+          entidadId: id,
+          entidadEtiqueta: etiquetaDeEntidad("gasto_fijo_cobro", {
+            concepto: cobro?.concepto ?? "",
+            periodo: cobro?.periodo ?? "",
+          }),
+          monto: cobro?.monto ?? null,
+          ...actor,
+        },
+      ]);
+    }
     return res.count;
   }
 

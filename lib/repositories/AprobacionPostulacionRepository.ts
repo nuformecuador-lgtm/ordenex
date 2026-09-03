@@ -1,3 +1,5 @@
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import type { PrismaClient } from "@prisma/client";
 import type {
   IAprobacionPostulacionRepository,
@@ -7,7 +9,8 @@ import type {
   PostulacionRow,
 } from "@/lib/interfaces/repositories/IAprobacionPostulacionRepository";
 
-type AprobacionPrismaClient = Pick<PrismaClient, "usuario">;
+// FICHA 362 (R9): la decision registra su accion en la MISMA transaccion que la escribe.
+type AprobacionPrismaClient = Pick<PrismaClient, "usuario" | "$transaction" | "historialAccion">;
 
 const ROL_MENSAJERO = "mensajero" as const;
 const ESTADO_PENDIENTE = "pendiente" as const;
@@ -78,14 +81,45 @@ export class AprobacionPostulacionRepository implements IAprobacionPostulacionRe
     return usuario ? { id: usuario.id, estado: usuario.estado } : null;
   }
 
+  /**
+   * FICHA 362 (R9/R11) — `postulacion_aprobada` / `postulacion_rechazada`. El metodo se envuelve
+   * en `$transaction` (forma 2 del design §2.3: era un `updateMany` suelto).
+   *
+   * ⚠️ EL REGISTRO VA DENTRO DEL `count === 1`, y ese `where` con `estado: pendiente` es lo que
+   * hace la operacion idempotente: dos administradores decidiendo a la vez producen UNA decision,
+   * y la segunda —que alcanza cero filas— NO deja fila de auditoria. Si se escribiera antes de
+   * mirar el `count`, el registro diria que la postulacion se aprobo dos veces.
+   */
   async actualizarEstadoSiPendiente(
     id: string,
     estadoDestino: "activo" | "inactivo",
+    actorUsuarioId: string | null,
   ): Promise<number> {
-    const { count } = await this.prisma.usuario.updateMany({
-      where: { id, estado: ESTADO_PENDIENTE, rol: { value: ROL_MENSAJERO } },
-      data: { estado: estadoDestino },
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.usuario.updateMany({
+        where: { id, estado: ESTADO_PENDIENTE, rol: { value: ROL_MENSAJERO } },
+        data: { estado: estadoDestino },
+      });
+      if (count === 0) return 0;
+
+      const postulante = await tx.usuario.findUnique({
+        where: { id },
+        select: { nombre: true, primerApellido: true },
+      });
+      const actor = await resolverActorCongelado(tx, actorUsuarioId);
+      await appendAccion(tx, [
+        {
+          accion: estadoDestino === "activo" ? "postulacion_aprobada" : "postulacion_rechazada",
+          entidadTipo: "usuario",
+          entidadId: id,
+          entidadEtiqueta: etiquetaDeEntidad("usuario", {
+            nombre: postulante?.nombre ?? "",
+            primerApellido: postulante?.primerApellido ?? null,
+          }),
+          ...actor,
+        },
+      ]);
+      return count;
     });
-    return count;
   }
 }

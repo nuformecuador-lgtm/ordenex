@@ -181,7 +181,8 @@ export interface IUserRepository {
   findByEmailWithHash(email: string): Promise<UsuarioConHash | null>;
   findById(id: string): Promise<UsuarioPublico | null>;
   findByEmail(email: string): Promise<UsuarioPublico | null>;
-  create(input: CreateUsuarioInput): Promise<UsuarioPublico>;
+  /** FICHA 362 (R3/R9): `actorUsuarioId` congela QUIEN dio de alta la cuenta. */
+  create(input: CreateUsuarioInput, actorUsuarioId: string | null): Promise<UsuarioPublico>;
   /**
    * Feature 20/R9: persiste un nuevo hash de contrasena en `Usuario`. No
    * devuelve el hash. Usado por el reset de contrasena tras validar el OTP.
@@ -194,6 +195,17 @@ export interface IUserRepository {
    * por correo, el de la 287 exige sesion + rol `maestro` y NO toca el correo en ningun paso.
    */
   updatePasswordHash(usuarioId: string, passwordHash: string): Promise<void>;
+  /**
+   * FICHA 362 (R5/R9) — el restablecimiento que hace un ADMINISTRADOR sobre la cuenta de otro,
+   * con su fila de registro en la misma transaccion. Va aparte de `updatePasswordHash` porque
+   * ese metodo lo comparte el auto-servicio (el usuario cambia SU propia clave), que el Anexo A
+   * no lista. Ni el hash ni la clave entran en la fila.
+   */
+  restablecerContrasena(
+    usuarioId: string,
+    passwordHash: string,
+    actorUsuarioId: string | null,
+  ): Promise<void>;
   /**
    * Feature 16/R1/R2/R3: usuarios con rol `mensajero` y `estado = activo`,
    * proyectados a `{ id, nombre }` (nunca PII/hash), ordenados por `nombre`.
@@ -246,11 +258,24 @@ export interface IUserRepository {
    * Feature 25/R16/R18/R19: aplica solo los campos editables; valida las FK de
    * catalogo (CatalogoInvalidoError). `null` si el usuario no existe (R17).
    */
-  update(id: string, data: UpdateUsuarioData): Promise<UsuarioPublico | null>;
+  /**
+   * FICHA 362 (R7/R9): registra `usuario_rol_cambiado`, `usuario_zona_cambiada` y
+   * `usuario_fulfillment_cambiado` SOLO cuando el campo cambia de verdad, y las N filas
+   * comparten `lote_id`. Editar el telefono no deja rastro.
+   */
+  update(
+    id: string,
+    data: UpdateUsuarioData,
+    actorUsuarioId: string | null,
+  ): Promise<UsuarioPublico | null>;
   /**
    * Feature 25/R20/R21/R22: cambia solo el `estado`; `null` si no existe.
    */
-  setEstado(id: string, estado: EstadoUsuario): Promise<UsuarioPublico | null>;
+  setEstado(
+    id: string,
+    estado: EstadoUsuario,
+    actorUsuarioId: string | null,
+  ): Promise<UsuarioPublico | null>;
   /** Feature 25/R29: catalogo `tipo_identificacion` proyectado a id/value. */
   listTiposIdentificacion(): Promise<TipoIdentificacionItem[]>;
   /** Feature 25: catalogo `rol` proyectado a id/value, ordenado por `value`. */

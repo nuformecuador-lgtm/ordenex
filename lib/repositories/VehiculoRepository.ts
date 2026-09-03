@@ -1,8 +1,15 @@
 import type { PrismaClient, Vehiculo } from "@prisma/client";
 import type { VehiculoDTO } from "@/lib/types/vehiculos";
 import type { IVehiculoRepository } from "@/lib/interfaces/repositories/IVehiculoRepository";
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 
-type VehiculoPrismaClient = Pick<PrismaClient, "vehiculo" | "usuario" | "tarifaZonaMensajero">;
+// FICHA 362 (R9): el borrado registra su accion en la MISMA transaccion, asi que el `Pick` gana
+// `$transaction` y `historialAccion`.
+type VehiculoPrismaClient = Pick<
+  PrismaClient,
+  "vehiculo" | "usuario" | "tarifaZonaMensajero" | "$transaction" | "historialAccion"
+>;
 
 // Serializa la fila de Prisma a VehiculoDTO: solo id + name, sin campos internos.
 function toDTO(row: Vehiculo): VehiculoDTO {
@@ -38,9 +45,32 @@ export class VehiculoRepository implements IVehiculoRepository {
     return this.findById(id);
   }
 
-  async delete(id: string): Promise<boolean> {
-    const res = await this.prisma.vehiculo.deleteMany({ where: { id } });
-    return res.count > 0;
+  /**
+   * FICHA 362 (R4/R9/R11) — `vehiculo_borrado`. El metodo se envuelve en `$transaction` (forma 2
+   * del design §2.3: era un `deleteMany` suelto).
+   *
+   * ⚠️ EL NOMBRE SE LEE ANTES DEL BORRADO y el registro se escribe DESPUES de comprobar
+   * `count > 0`: si el `deleteMany` no alcanza ninguna fila —el vehiculo ya no estaba— NO se
+   * escribe fila de registro. «Se pidio borrar» y «se borro» son cosas distintas (R11/R12).
+   */
+  async delete(id: string, actorUsuarioId: string | null): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const previo = await tx.vehiculo.findUnique({ where: { id }, select: { name: true } });
+      const res = await tx.vehiculo.deleteMany({ where: { id } });
+      if (res.count === 0) return false;
+
+      const actor = await resolverActorCongelado(tx, actorUsuarioId);
+      await appendAccion(tx, [
+        {
+          accion: "vehiculo_borrado",
+          entidadTipo: "vehiculo",
+          entidadId: id,
+          entidadEtiqueta: etiquetaDeEntidad("vehiculo", { nombre: previo?.name ?? "" }),
+          ...actor,
+        },
+      ]);
+      return true;
+    });
   }
 
   async contarUsos(id: string): Promise<number> {

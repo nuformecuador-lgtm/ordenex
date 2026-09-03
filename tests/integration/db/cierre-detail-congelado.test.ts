@@ -173,6 +173,25 @@ function makeDb() {
       }),
       count: vi.fn(async () => 1),
       findFirst: vi.fn(async () => cierres[0] ?? null),
+      // FICHA 362: `resolverCierre` lee el total y el mensajero para congelar la fila del registro.
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
+        const c = cierres.find((x) => x.id === where.id);
+        if (c === undefined) return null;
+        return {
+          totalGeneral: c.totalGeneral ?? new Prisma.Decimal("0.00"),
+          solicitadoAt: c.solicitadoAt ?? new Date("2026-09-02T12:00:00Z"),
+          mensajero: { nombre: "Mensa", primerApellido: "Uno" },
+        };
+      }),
+    },
+    // FICHA 362: el registro de la decision, en la MISMA tx.
+    historialAccion: { createMany: vi.fn(async () => ({ count: 1 })) },
+    usuario: {
+      findUnique: vi.fn(async () => ({
+        nombre: "Admin",
+        primerApellido: "Uno",
+        rol: { value: "admin" },
+      })),
     },
     gestionOrden: {
       updateMany: vi.fn(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {

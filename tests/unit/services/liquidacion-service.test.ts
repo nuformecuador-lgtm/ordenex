@@ -246,6 +246,9 @@ function buildDobles(opciones: {
    * si un camino de la 172 escribiera un reparto, las comparaciones del log lo dirian.
    */
   const repartoRepo: ILiquidacionRepartoRepository = {
+    // ficha 362: el registro de `reparto_anulado`. No muta la tabla del reparto (su fila es
+    // inmutable): documenta las N anulaciones de sus pagos hijos, en la misma tx.
+    registrarAnulacion: vi.fn(async () => undefined),
     crear: vi.fn(async () => {
       log.push("crear:reparto");
       return { status: "clave_repetida" as const };

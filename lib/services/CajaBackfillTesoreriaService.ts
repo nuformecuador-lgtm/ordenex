@@ -346,6 +346,18 @@ export class RecolectorDeFilasDeCaja implements IWalletMovimientoRepository {
   obtenerPorOrigen(): Promise<WalletMovimientoDTO | null> {
     throw new ErrorDeRecolector("obtenerPorOrigen");
   }
+
+  /**
+   * FICHA 362: sexto metodo que LANZA, y aqui el motivo es MAS fuerte que en los otros cinco.
+   *
+   * `crearMovimientoRegistrado` escribe una fila de AUDITORIA ademas del asiento. El backfill de
+   * la caja no es una decision humana sobre el dinero —es un recalculo historico— y ademas este
+   * recolector no escribe nada: si alguien lo cableara aqui, estaria pidiendo que un informe de
+   * simulacion dejara filas en el registro de acciones. Lanzar es la unica respuesta honesta.
+   */
+  crearMovimientoRegistrado(): Promise<number> {
+    throw new ErrorDeRecolector("crearMovimientoRegistrado");
+  }
 }
 
 class ErrorDeRecolector extends Error {

@@ -60,7 +60,12 @@ function repoUsuarios(overrides: Partial<IUserRepository> = {}): IUserRepository
     findById: vi.fn().mockResolvedValue(usuario()),
     findByEmail: vi.fn(),
     create: vi.fn(),
-    updatePasswordHash: vi.fn().mockResolvedValue(undefined),
+    // FICHA 362: el reset POR UN ADMINISTRADOR pasa por `restablecerContrasena`, que escribe la
+    // fila del registro en la misma transaccion. `updatePasswordHash` sigue existiendo y es el
+    // del AUTO-SERVICIO (el usuario cambia su propia clave): ese camino NO deja rastro y este
+    // servicio ya no lo usa.
+    restablecerContrasena: vi.fn().mockResolvedValue(undefined),
+    updatePasswordHash: vi.fn(),
     listMensajeros: vi.fn(),
     listMensajerosParaFiltro: vi.fn(),
     listByRol: vi.fn(),
@@ -128,7 +133,7 @@ describe("287/R4 — usuario inexistente", () => {
 
     expect(r).toEqual({ status: "not_found" });
     expect(sesiones.deleteAllByUserId).not.toHaveBeenCalled();
-    expect(repo.updatePasswordHash).not.toHaveBeenCalled();
+    expect(repo.restablecerContrasena).not.toHaveBeenCalled();
   });
 });
 
@@ -147,7 +152,7 @@ describe("287/R5 — el maestro no se restablece a si mismo", () => {
     // maestro POR QUE no puede, y le mostraria el mismo mensaje que a un rol sin permiso.
     expect(r.status).not.toBe("forbidden");
     expect(sesiones.deleteAllByUserId, "R5: NO debe revocar sesion alguna").not.toHaveBeenCalled();
-    expect(repo.updatePasswordHash).not.toHaveBeenCalled();
+    expect(repo.restablecerContrasena).not.toHaveBeenCalled();
   });
 });
 
@@ -166,7 +171,7 @@ describe("287/R7/R14 — cualquier estado, y nada mas se toca", () => {
       // estado. Que ninguna otra COLUMNA cambie de verdad lo mide el test de Postgres.
       expect(repo.update).not.toHaveBeenCalled();
       expect(repo.setEstado).not.toHaveBeenCalled();
-      expect(repo.updatePasswordHash).toHaveBeenCalledTimes(1);
+      expect(repo.restablecerContrasena).toHaveBeenCalledTimes(1);
     },
   );
 });
@@ -203,10 +208,10 @@ describe("287/R8/R9/R10 — la genera el sistema, fuerte, y no entra por ningun 
 });
 
 describe("287/R12 — se persiste el hash, nunca el claro", () => {
-  it("el argumento de `updatePasswordHash` NO es la contrasena, y `verifyPassword` contra el da true", async () => {
-    const updatePasswordHash = vi.fn().mockResolvedValue(undefined);
+  it("el argumento de `restablecerContrasena` NO es la contrasena, y `verifyPassword` contra el da true", async () => {
+    const restablecerContrasena = vi.fn().mockResolvedValue(undefined);
     const service = new UsuarioService(
-      repoUsuarios({ updatePasswordHash }),
+      repoUsuarios({ restablecerContrasena }),
       undefined,
       undefined,
       revocador(),
@@ -215,7 +220,7 @@ describe("287/R12 — se persiste el hash, nunca el claro", () => {
     const r = await service.restablecerContrasena(OBJETIVO_ID, MAESTRO);
     if (r.status !== "ok") throw new Error("debia ser ok");
 
-    const [idArg, hashArg] = updatePasswordHash.mock.calls[0] as [string, string];
+    const [idArg, hashArg] = restablecerContrasena.mock.calls[0] as [string, string];
     expect(idArg).toBe(OBJETIVO_ID);
     expect(hashArg, "R12: guardar el claro es exactamente lo prohibido").not.toBe(
       r.generatedPassword,
@@ -228,11 +233,11 @@ describe("287/R12 — se persiste el hash, nunca el claro", () => {
 });
 
 describe("287/R11/R15 — revocar ANTES de escribir el hash", () => {
-  it("si `updatePasswordHash` rechaza, `deleteAllByUserId` YA se llamo, y el error no lleva contrasena", async () => {
+  it("si `restablecerContrasena` rechaza, `deleteAllByUserId` YA se llamo, y el error no lleva contrasena", async () => {
     const sesiones = revocador();
-    const updatePasswordHash = vi.fn().mockRejectedValue(new Error("boom al escribir"));
+    const restablecerContrasena = vi.fn().mockRejectedValue(new Error("boom al escribir"));
     const service = new UsuarioService(
-      repoUsuarios({ updatePasswordHash }),
+      repoUsuarios({ restablecerContrasena }),
       undefined,
       undefined,
       sesiones,
@@ -251,13 +256,13 @@ describe("287/R11/R15 — revocar ANTES de escribir el hash", () => {
     // ⭑ Mata «invertir el orden de las dos llamadas»: con hash → revocar, el revocador nunca
     //   se habria llamado en este escenario.
     expect(sesiones.deleteAllByUserId.mock.invocationCallOrder[0]).toBeLessThan(
-      updatePasswordHash.mock.invocationCallOrder[0],
+      restablecerContrasena.mock.invocationCallOrder[0],
     );
     // R15: el error se propaga TAL CUAL, sin envolverlo en nada que pudiera arrastrar el secreto.
     expect((error as Error).message).toBe("boom al escribir");
   });
 
-  it("si `deleteAllByUserId` rechaza, `updatePasswordHash` NO se llama", async () => {
+  it("si `deleteAllByUserId` rechaza, `restablecerContrasena` NO se llama", async () => {
     const sesiones = { deleteAllByUserId: vi.fn().mockRejectedValue(new Error("boom al revocar")) };
     const repo = repoUsuarios();
     const service = new UsuarioService(repo, undefined, undefined, sesiones);
@@ -269,7 +274,7 @@ describe("287/R11/R15 — revocar ANTES de escribir el hash", () => {
     // ⭑ Mata «mover la revocacion despues del hash»: ahi la contrasena quedaria rotada con las
     //   sesiones vivas, que es el unico estado intermedio inaceptable.
     expect(
-      repo.updatePasswordHash,
+      repo.restablecerContrasena,
       "R11: nunca un estado mas permisivo (contrasena rotada con sesiones vivas)",
     ).not.toHaveBeenCalled();
   });
@@ -301,7 +306,7 @@ describe("287/R20 — sin revocador inyectado, FALLA de forma visible", () => {
     await expect(service.restablecerContrasena(OBJETIVO_ID, MAESTRO)).rejects.toThrow(
       /sesiones/i,
     );
-    expect(repo.updatePasswordHash).not.toHaveBeenCalled();
+    expect(repo.restablecerContrasena).not.toHaveBeenCalled();
   });
 });
 

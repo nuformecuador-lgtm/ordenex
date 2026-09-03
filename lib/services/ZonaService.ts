@@ -115,7 +115,7 @@ export class ZonaService implements IZonaService {
 
   async borrar(id: string, actor: Actor): Promise<BorrarZonaServiceResult> {
     if (!esMaestro(actor)) return { status: "forbidden" };
-    const res = await this.repo.hardDelete(id);
+    const res = await this.repo.hardDelete(id, actor.usuarioId); // 362/R4/R9: QUIEN borro ESTA
     if (res === "not_found") return { status: "not_found" };
     if (res === "referenced") return { status: "conflict" };
     return { status: "ok" };

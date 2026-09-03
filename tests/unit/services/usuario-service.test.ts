@@ -58,6 +58,7 @@ function buildRepo(overrides: Partial<IUserRepository> = {}): IUserRepository {
     setEstado: vi.fn().mockResolvedValue(usuario({ estado: "inactivo" })),
     listTiposIdentificacion: vi.fn().mockResolvedValue([{ id: "tipo-1", value: "cedula" }]),
     listRoles: vi.fn().mockResolvedValue([{ id: "rol-1", value: "maestro" }]),
+    restablecerContrasena: vi.fn(), // ficha 362: el reset POR UN ADMIN, con su fila de registro
     ...overrides,
   };
 }
@@ -288,7 +289,7 @@ describe("cambiarEstado (R20/R21/R22)", () => {
     const r = await service.cambiarEstado("usr-1", { estado: "inactivo" }, MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status === "ok") expect(r.usuario.estado).toBe("inactivo");
-    expect(repo.setEstado).toHaveBeenCalledWith("usr-1", "inactivo");
+    expect(repo.setEstado).toHaveBeenCalledWith("usr-1", "inactivo", expect.any(String)); // 362
   });
 
   it("cambiarEstado de inexistente -> not_found (R22)", async () => {

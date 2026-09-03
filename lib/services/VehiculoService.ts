@@ -67,7 +67,7 @@ export class VehiculoService implements IVehiculoService {
     // esta comprobacion es para el MENSAJE, no para la integridad.
     if ((await this.repo.contarUsos(id)) > 0) return { status: "in_use" };
 
-    const ok = await this.repo.delete(id);
+    const ok = await this.repo.delete(id, actor.usuarioId); // 362/R4/R9: QUIEN borro ESTE
     if (!ok) return { status: "not_found" };
     return { status: "ok" };
   }

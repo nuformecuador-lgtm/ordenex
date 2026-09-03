@@ -55,5 +55,10 @@ export interface IAprobacionPostulacionRepository {
    * si el usuario es `mensajero` y sigue `pendiente`. Devuelve el numero de filas
    * afectadas (1 si aplico, 0 si no).
    */
-  actualizarEstadoSiPendiente(id: string, estadoDestino: "activo" | "inactivo"): Promise<number>;
+  /** FICHA 362 (R3/R9): `actorUsuarioId` congela QUIEN decidio la postulacion. */
+  actualizarEstadoSiPendiente(
+    id: string,
+    estadoDestino: "activo" | "inactivo",
+    actorUsuarioId: string | null,
+  ): Promise<number>;
 }

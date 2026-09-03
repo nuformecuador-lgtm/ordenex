@@ -242,7 +242,12 @@ export class WalletService implements IWalletService {
     const id = randomUUID();
     // Ficha 334 (R22/R23): con «hoy» la clave NO viaja y manda el DEFAULT de la columna.
     const fechaMovimiento = instanteDelMovimientoManual(input.fecha);
-    await this.repo.crearMovimientos(this.writeClient, [
+    // FICHA 362 (R6/R9) — `wallet_movimiento_manual_registrado`. Se usa
+    // `crearMovimientoRegistrado` y no `crearMovimientos`: el ajuste manual es una DECISION
+    // humana sobre el dinero de la casa, y el registro tiene que ir en la misma transaccion que
+    // el asiento. `this.writeClient` ya no interviene en este camino — la transaccion la abre el
+    // repositorio, que es quien conoce Prisma.
+    await this.repo.crearMovimientoRegistrado(
       {
         id,
         tipo: input.tipo,
@@ -254,7 +259,8 @@ export class WalletService implements IWalletService {
         registradoPor: actor.usuarioId,
         ...(fechaMovimiento !== undefined ? { fechaMovimiento } : {}),
       },
-    ]);
+      { accion: "wallet_movimiento_manual_registrado", actorUsuarioId: actor.usuarioId },
+    );
 
     // Ficha 334 (R28): se relee POR ID, no «el mas reciente de esta categoria».
     //

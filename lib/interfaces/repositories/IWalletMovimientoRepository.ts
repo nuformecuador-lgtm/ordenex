@@ -1,3 +1,4 @@
+import type { HistorialAccionTipo } from "@/lib/types/historial-accion";
 import type { PrismaClient } from "@prisma/client";
 import type {
   AgregadoCajaRow,
@@ -110,6 +111,23 @@ export interface IWalletMovimientoRepository {
    * (sin TOCTOU). Devuelve cuantas filas se insertaron efectivamente.
    */
   crearMovimientos(tx: WalletTxClient, movs: CrearMovimientoInput[]): Promise<number>;
+  /**
+   * FICHA 362 (R6/R9) — inserta UN movimiento nacido de una DECISION humana y registra la accion
+   * en la MISMA transaccion, que abre el propio repositorio.
+   *
+   * Los tres caminos que lo usan (ajuste manual de caja, egreso administrativo y su reverso) son
+   * los unicos movimientos del libro que alguien DECIDE. Los ~34 asientos que emite aprobar un
+   * cierre siguen entrando por `crearMovimientos` y NO dejan fila de auditoria: se registra la
+   * decision, no sus asientos.
+   *
+   * `id` es OBLIGATORIO aqui —y no opcional como en `crearMovimientos`— porque es lo que la fila
+   * del registro apunta como `entidad_id`. Devuelve `0` cuando el indice unico parcial deduplico
+   * la insercion, y en ese caso NO escribe registro.
+   */
+  crearMovimientoRegistrado(
+    mov: CrearMovimientoInput & { id: string },
+    registro: { accion: HistorialAccionTipo; actorUsuarioId: string | null },
+  ): Promise<number>;
   /**
    * R20/R24: pagina el libro (fecha_movimiento desc) con filtros en el WHERE.
    *

@@ -4,7 +4,11 @@ import { UserRepository } from "@/lib/repositories/UserRepository";
 
 // Feature 20 / R9: updatePasswordHash actualiza solo password_hash.
 
-type MockedPrisma = Pick<PrismaClient, "usuario" | "tipoIdentificacion" | "rol">;
+// FICHA 362: el alta pasa a `$transaction` y registra su accion en ella.
+type MockedPrisma = Pick<
+  PrismaClient,
+  "usuario" | "tipoIdentificacion" | "rol" | "$transaction" | "historialAccion"
+>;
 
 describe("UserRepository.updatePasswordHash (R9)", () => {
   it("actualiza password_hash del usuario indicado y no toca otros campos", async () => {

@@ -1,3 +1,4 @@
+import { conRegistroDeAcciones } from "../../fixtures/registro-de-acciones";
 import { describe, it, expect, vi } from "vitest";
 import { Prisma } from "@prisma/client";
 import { ApiKeyRepository } from "@/lib/repositories/ApiKeyRepository";
@@ -49,7 +50,19 @@ function makePrisma(opts: MockOpts = {}) {
     };
   });
 
-  const tx = { usuario: { create: usuarioCreate }, apiKey: { create: apiKeyCreate } };
+  // FICHA 362: la `tx` gana el congelado del actor y la tabla del registro.
+  const tx = {
+    usuario: {
+      create: usuarioCreate,
+      findUnique: vi.fn(async () => ({
+        nombre: "Maestra",
+        primerApellido: "Uno",
+        rol: { value: "maestro" },
+      })),
+    },
+    apiKey: { create: apiKeyCreate },
+    historialAccion: { createMany: vi.fn(async () => ({ count: 1 })) },
+  };
 
   const prisma = {
     rol: {
@@ -255,7 +268,10 @@ describe("ApiKeyRepository.rotar / setEstado — ciclo de vida (R2/R3/R4/R6)", (
       void args;
       return row;
     });
-    const prisma = { apiKey: { update } };
+    // FICHA 362: `rotar` y `setEstado` corren dentro de `$transaction` y registran su accion.
+    const prisma = conRegistroDeAcciones({
+      apiKey: { update, findUnique: vi.fn().mockResolvedValue({ estado: "activa" }) },
+    });
     return { prisma, update };
   }
 
@@ -278,7 +294,7 @@ describe("ApiKeyRepository.rotar / setEstado — ciclo de vida (R2/R3/R4/R6)", (
 
   it("R2: rotar reemplaza keyPrefix+keyHash por id, sin tocar usuario ni estado, y su select no pide keyHash (R6)", async () => {
     const { prisma, update } = makePrismaUpdate(PUBLIC_ROW);
-    const out = await repoDe(prisma).rotar("key-1", { keyPrefix: "ordx_nuevo12", keyHash: "f".repeat(64) });
+    const out = await repoDe(prisma).rotar("key-1", { keyPrefix: "ordx_nuevo12", keyHash: "f".repeat(64) }, "actor-1");
 
     const args = update.mock.calls[0][0] as {
       where: Record<string, unknown>;
@@ -300,10 +316,11 @@ describe("ApiKeyRepository.rotar / setEstado — ciclo de vida (R2/R3/R4/R6)", (
 
   it("302: si la fila trae tienda destino, el ownerUsuarioId publico es LA TIENDA", async () => {
     const { prisma } = makePrismaUpdate({ ...PUBLIC_ROW, tiendaDestinoId: "u-nuform" });
-    const out = await repoDe(prisma).rotar("key-1", {
-      keyPrefix: "ordx_nuevo12",
-      keyHash: "f".repeat(64),
-    });
+    const out = await repoDe(prisma).rotar(
+      "key-1",
+      { keyPrefix: "ordx_nuevo12", keyHash: "f".repeat(64) },
+      "actor-1",
+    );
     // Es el id del que cuelga el webhook de la key: si aqui saliera `u-dedicado`, la suscripcion
     // se colgaria de una cuenta que no recibe ninguna orden y no llegaria un solo evento.
     expect(out?.ownerUsuarioId).toBe("u-nuform");
@@ -312,12 +329,12 @@ describe("ApiKeyRepository.rotar / setEstado — ciclo de vida (R2/R3/R4/R6)", (
 
   it("R3: rotar de un id inexistente (P2025) devuelve null", async () => {
     const { prisma } = makePrismaUpdate(null, p2025());
-    expect(await repoDe(prisma).rotar("no-existe", { keyPrefix: "ordx_x", keyHash: "a".repeat(64) })).toBeNull();
+    expect(await repoDe(prisma).rotar("no-existe", { keyPrefix: "ordx_x", keyHash: "a".repeat(64) }, "actor-1")).toBeNull();
   });
 
   it("R4: setEstado escribe el estado destino por id y devuelve la forma publica sin keyHash", async () => {
     const { prisma, update } = makePrismaUpdate({ ...PUBLIC_ROW, estado: "inactiva" });
-    const out = await repoDe(prisma).setEstado("key-1", "inactiva");
+    const out = await repoDe(prisma).setEstado("key-1", "inactiva", "actor-1");
 
     const args = update.mock.calls[0][0] as {
       where: Record<string, unknown>;
@@ -332,12 +349,12 @@ describe("ApiKeyRepository.rotar / setEstado — ciclo de vida (R2/R3/R4/R6)", (
 
   it("R3: setEstado de un id inexistente (P2025) devuelve null", async () => {
     const { prisma } = makePrismaUpdate(null, p2025());
-    expect(await repoDe(prisma).setEstado("no-existe", "activa")).toBeNull();
+    expect(await repoDe(prisma).setEstado("no-existe", "activa", "actor-1")).toBeNull();
   });
 
   it("un error que NO es P2025 se re-lanza tal cual (no se disfraza de not_found)", async () => {
     const { prisma } = makePrismaUpdate(null, new Error("conexion perdida"));
-    await expect(repoDe(prisma).setEstado("key-1", "activa")).rejects.toThrow("conexion perdida");
+    await expect(repoDe(prisma).setEstado("key-1", "activa", "actor-1")).rejects.toThrow("conexion perdida");
   });
 });
 

@@ -50,25 +50,27 @@ const INSTANTE_DEL_DEFAULT = "2026-08-29T21:15:33.000Z";
  */
 function buildRepo(overrides: Partial<IWalletMovimientoRepository> = {}): IWalletMovimientoRepository {
   const creados = new Map<string, WalletMovimientoDTO>();
+  /** Guarda la fila escrita para que `obtenerPorId` la encuentre despues. */
+  const guardar = (m: CrearMovimientoInput) => {
+    if (m.id === undefined) return; // los escritores automaticos no pasan id
+    creados.set(
+      m.id,
+      mov({
+        id: m.id,
+        tipo: m.tipo,
+        categoria: m.categoria,
+        monto: m.monto,
+        origenTipo: m.origenTipo,
+        origenId: m.origenId,
+        descripcion: m.descripcion ?? null,
+        registradoPor: m.registradoPor ?? null,
+        fechaMovimiento: (m.fechaMovimiento ?? new Date(INSTANTE_DEL_DEFAULT)).toISOString(),
+      }),
+    );
+  };
   return {
     crearMovimientos: vi.fn(async (_tx: WalletTxClient, movs: CrearMovimientoInput[]) => {
-      for (const m of movs) {
-        if (m.id === undefined) continue; // los escritores automaticos no pasan id
-        creados.set(
-          m.id,
-          mov({
-            id: m.id,
-            tipo: m.tipo,
-            categoria: m.categoria,
-            monto: m.monto,
-            origenTipo: m.origenTipo,
-            origenId: m.origenId,
-            descripcion: m.descripcion ?? null,
-            registradoPor: m.registradoPor ?? null,
-            fechaMovimiento: (m.fechaMovimiento ?? new Date(INSTANTE_DEL_DEFAULT)).toISOString(),
-          }),
-        );
-      }
+      for (const m of movs) guardar(m);
       return movs.length;
     }),
     listar: vi.fn().mockResolvedValue({ movimientos: [mov()], total: 1 }),
@@ -83,14 +85,24 @@ function buildRepo(overrides: Partial<IWalletMovimientoRepository> = {}): IWalle
         indemnizacion: "0.00", // feature 158/R32
       }),
     obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
+    // FICHA 362: el escritor de los DOS movimientos del egreso administrativo (registro y
+    // reverso). Abre su propia transaccion y escribe ademas la fila de auditoria. El doble
+    // guarda la fila igual que su hermano, porque el servicio RELEE POR ID lo que acaba de
+    // escribir (R28 de la 334).
+    crearMovimientoRegistrado: vi.fn(async (m: CrearMovimientoInput & { id: string }) => {
+      guardar(m);
+      return 1;
+    }),
     ...overrides,
   };
 }
 
 const writeClient = {} as WalletTxClient;
 
+// FICHA 362: los dos caminos del egreso administrativo entran por `crearMovimientoRegistrado`,
+// que recibe UN movimiento (no un lote): un egreso es un acto, no una emision automatica.
 function crearMovCall(repo: IWalletMovimientoRepository) {
-  return (repo.crearMovimientos as ReturnType<typeof vi.fn>).mock.calls[0][1][0];
+  return (repo.crearMovimientoRegistrado as ReturnType<typeof vi.fn>).mock.calls[0][0];
 }
 
 describe("WalletEgresoService.registrarEgreso (R1/R2/R3/R7/R17)", () => {
@@ -157,15 +169,16 @@ describe("WalletEgresoService.registrarEgreso (R1/R2/R3/R7/R17)", () => {
     });
   });
 
-  it("R7: persiste con un unico crearMovimientos (un solo INSERT)", async () => {
+  it("R7: persiste con un unico INSERT registrado (ficha 362)", async () => {
     const repo = buildRepo();
     const svc = new WalletEgresoService(repo, writeClient);
     await svc.registrarEgreso(
       { tipoEgreso: "gasto_variable", monto: "10.00", descripcion: "x" },
       MAESTRO,
     );
-    expect(repo.crearMovimientos).toHaveBeenCalledTimes(1);
-    expect((repo.crearMovimientos as ReturnType<typeof vi.fn>).mock.calls[0][1]).toHaveLength(1);
+    // FICHA 362: UNA llamada, y la firma ya no admite un lote — garantia mas fuerte que contar.
+    expect(repo.crearMovimientoRegistrado).toHaveBeenCalledTimes(1);
+    expect(repo.crearMovimientos).not.toHaveBeenCalled();
   });
 });
 
@@ -231,11 +244,14 @@ describe("WalletEgresoService.reversarEgreso (R13/R15/R16/R17/R32)", () => {
     });
   });
 
-  it("R15: idempotencia — si crearMovimientos devuelve 0 (ya reversado) -> already_reversed (no-op)", async () => {
+  it("R15: idempotencia — si el INSERT registrado devuelve 0 (ya reversado) -> already_reversed", async () => {
     const original = mov({ id: "eg-9", monto: "10.00" });
     const repo = buildRepo({
       obtenerPorId: vi.fn().mockResolvedValue(original),
-      crearMovimientos: vi.fn().mockResolvedValue(0), // ON CONFLICT DO NOTHING: ya existia el reverso
+      // FICHA 362: el reverso entra por `crearMovimientoRegistrado`; `0` = ON CONFLICT DO NOTHING,
+      // o sea el reverso YA existia. Y en ese caso el repositorio TAMPOCO escribe fila de
+      // auditoria: no hubo reverso que registrar (R11).
+      crearMovimientoRegistrado: vi.fn().mockResolvedValue(0),
     });
     const svc = new WalletEgresoService(repo, writeClient);
     const r = await svc.reversarEgreso({ movimientoId: "eg-9" }, MAESTRO);

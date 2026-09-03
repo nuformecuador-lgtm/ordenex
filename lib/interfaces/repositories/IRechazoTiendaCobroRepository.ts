@@ -19,7 +19,11 @@ import type {
  * `rechazoTiendaCobro` —el `tx` de un `$transaction` o el `PrismaClient` completo—. Mismo patron
  * que `GastoFijoCobroTxClient` y `WalletTxClient`.
  */
-export type RechazoTiendaCobroTxClient = Pick<PrismaClient, "rechazoTiendaCobro">;
+export type RechazoTiendaCobroTxClient = Pick<
+  PrismaClient,
+  // Ficha 362 (R9): el registro de la decision viaja en la MISMA tx que la decision.
+  "rechazoTiendaCobro" | "historialAccion" | "usuario"
+>;
 
 /**
  * Fila a insertar cuando la tienda rechaza desde novedades.

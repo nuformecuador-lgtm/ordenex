@@ -51,6 +51,9 @@ function buildRepo(original: WalletMovimientoDTO | null): IWalletMovimientoRepos
       indemnizacion: "0.00",
     })),
     obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
+    // ficha 362: el escritor de los movimientos que nacen de una DECISION humana; registra la
+    // accion en su propia transaccion. Los feeds automaticos siguen entrando por `crearMovimientos`.
+    crearMovimientoRegistrado: vi.fn().mockResolvedValue(1),
   };
 }
 
@@ -78,7 +81,9 @@ describe("R30 — la reversa de egresos administrativos RECHAZA la indemnizacion
     const r = await svc.reversarEgreso({ movimientoId: "w1" }, MAESTRO);
 
     expect(r).toEqual({ status: "ok" });
-    expect(repo.crearMovimientos).toHaveBeenCalledTimes(1);
+    // FICHA 362: el reverso del egreso administrativo entra por `crearMovimientoRegistrado`,
+    // que escribe el asiento Y su fila de auditoria en la misma transaccion.
+    expect(repo.crearMovimientoRegistrado).toHaveBeenCalledTimes(1);
   });
 
   it("R30: tampoco se reversa si alguien le pusiera la categoria a un origen de cierre", async () => {

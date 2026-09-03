@@ -195,7 +195,8 @@ export class ApiKeyService implements IApiKeyService {
 
     // R2: reemplazo atomico del prefijo+hash. Si el id no existe -> null -> not_found (R3).
     // El secreto generado se descarta sin persistirse ni loguearse.
-    const apiKey = await this.repo.rotar(input.id, { keyPrefix, keyHash });
+    // FICHA 362 (R5/R9): QUIEN roto la key. El secreto nuevo NO viaja al registro.
+    const apiKey = await this.repo.rotar(input.id, { keyPrefix, keyHash }, actor.usuarioId);
     if (apiKey === null) return { status: "not_found" }; // R3
 
     // R2: el nuevo secreto en claro viaja exactamente UNA vez, aqui. El hash viejo ya no
@@ -210,7 +211,7 @@ export class ApiKeyService implements IApiKeyService {
   async activar(input: ApiKeyIdInput, actor: Actor): Promise<ActivarApiKeyResult> {
     if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R1
 
-    const apiKey = await this.repo.setEstado(input.id, "activa"); // R4
+    const apiKey = await this.repo.setEstado(input.id, "activa", actor.usuarioId); // R4 + 362
     if (apiKey === null) return { status: "not_found" }; // R3
     return { status: "ok", apiKey };
   }
@@ -222,7 +223,7 @@ export class ApiKeyService implements IApiKeyService {
   async desactivar(input: ApiKeyIdInput, actor: Actor): Promise<DesactivarApiKeyResult> {
     if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R1
 
-    const apiKey = await this.repo.setEstado(input.id, "inactiva"); // R4
+    const apiKey = await this.repo.setEstado(input.id, "inactiva", actor.usuarioId); // R4 + 362
     if (apiKey === null) return { status: "not_found" }; // R3
     return { status: "ok", apiKey };
   }

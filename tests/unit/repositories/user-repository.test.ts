@@ -1,3 +1,4 @@
+import { conRegistroDeAcciones } from "../../fixtures/registro-de-acciones";
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { UserRepository } from "@/lib/repositories/UserRepository";
@@ -6,7 +7,10 @@ import {
   UsuarioDuplicadoError,
 } from "@/lib/interfaces/repositories/IUserRepository";
 
-type MockedUserPrisma = Pick<PrismaClient, "usuario" | "tipoIdentificacion" | "rol">;
+type MockedUserPrisma = Pick<
+  PrismaClient,
+  "usuario" | "tipoIdentificacion" | "rol" | "$transaction" | "historialAccion"
+>;
 
 function buildMockPrisma(overrides: Partial<{
   usuarioFindUnique: ReturnType<typeof vi.fn>;
@@ -14,7 +18,8 @@ function buildMockPrisma(overrides: Partial<{
   tipoIdentificacionFindUnique: ReturnType<typeof vi.fn>;
   rolFindUnique: ReturnType<typeof vi.fn>;
 }> = {}): MockedUserPrisma {
-  return {
+  // FICHA 362: el alta corre en `$transaction` y registra `usuario_creado` en ella.
+  return conRegistroDeAcciones({
     usuario: {
       findUnique: overrides.usuarioFindUnique ?? vi.fn(),
       create: overrides.usuarioCreate ?? vi.fn(),
@@ -25,7 +30,7 @@ function buildMockPrisma(overrides: Partial<{
     rol: {
       findUnique: overrides.rolFindUnique ?? vi.fn().mockResolvedValue({ id: "rol-1", value: "usuario" }),
     },
-  } as unknown as MockedUserPrisma;
+  }) as unknown as MockedUserPrisma;
 }
 
 const CREATE_INPUT = {
@@ -55,7 +60,7 @@ describe("UserRepository", () => {
     const prisma = buildMockPrisma({ usuarioCreate });
     const repo = new UserRepository(prisma);
 
-    const usuario = await repo.create(CREATE_INPUT);
+    const usuario = await repo.create(CREATE_INPUT, "actor-1");
 
     expect(usuario.id).toBe("usr-1");
     expect(usuarioCreate).toHaveBeenCalledTimes(1);
@@ -68,7 +73,7 @@ describe("UserRepository", () => {
     });
     const repo = new UserRepository(prisma);
 
-    await expect(repo.create(CREATE_INPUT)).rejects.toBeInstanceOf(CatalogoInvalidoError);
+    await expect(repo.create(CREATE_INPUT, "actor-1")).rejects.toBeInstanceOf(CatalogoInvalidoError);
   });
 
   it("rechaza la creacion si rol_id no existe (R10)", async () => {
@@ -77,7 +82,7 @@ describe("UserRepository", () => {
     });
     const repo = new UserRepository(prisma);
 
-    await expect(repo.create(CREATE_INPUT)).rejects.toBeInstanceOf(CatalogoInvalidoError);
+    await expect(repo.create(CREATE_INPUT, "actor-1")).rejects.toBeInstanceOf(CatalogoInvalidoError);
   });
 
   it("traduce violacion de unicidad de email a UsuarioDuplicadoError (R4)", async () => {
@@ -91,7 +96,7 @@ describe("UserRepository", () => {
     const prisma = buildMockPrisma({ usuarioCreate });
     const repo = new UserRepository(prisma);
 
-    const error = await repo.create(CREATE_INPUT).catch((e: unknown) => e);
+    const error = await repo.create(CREATE_INPUT, "actor-1").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(UsuarioDuplicadoError);
     expect((error as UsuarioDuplicadoError).campo).toBe("email");
   });
@@ -107,7 +112,7 @@ describe("UserRepository", () => {
     const prisma = buildMockPrisma({ usuarioCreate });
     const repo = new UserRepository(prisma);
 
-    const error = await repo.create(CREATE_INPUT).catch((e: unknown) => e);
+    const error = await repo.create(CREATE_INPUT, "actor-1").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(UsuarioDuplicadoError);
     expect((error as UsuarioDuplicadoError).campo).toBe("cedula");
   });
@@ -136,7 +141,7 @@ describe("UserRepository", () => {
     const usuarioCreate = vi.fn().mockRejectedValue(p2002Adapter("usuario_email_key"));
     const repo = new UserRepository(buildMockPrisma({ usuarioCreate }));
 
-    const error = await repo.create(CREATE_INPUT).catch((e: unknown) => e);
+    const error = await repo.create(CREATE_INPUT, "actor-1").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(UsuarioDuplicadoError);
     expect((error as UsuarioDuplicadoError).campo).toBe("email");
   });
@@ -145,7 +150,7 @@ describe("UserRepository", () => {
     const usuarioCreate = vi.fn().mockRejectedValue(p2002Adapter("usuario_cedula_key"));
     const repo = new UserRepository(buildMockPrisma({ usuarioCreate }));
 
-    const error = await repo.create(CREATE_INPUT).catch((e: unknown) => e);
+    const error = await repo.create(CREATE_INPUT, "actor-1").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(UsuarioDuplicadoError);
     expect((error as UsuarioDuplicadoError).campo).toBe("cedula");
   });
@@ -155,7 +160,7 @@ describe("UserRepository", () => {
     const usuarioCreate = vi.fn().mockRejectedValue(original);
     const repo = new UserRepository(buildMockPrisma({ usuarioCreate }));
 
-    await expect(repo.create(CREATE_INPUT)).rejects.toBe(original);
+    await expect(repo.create(CREATE_INPUT, "actor-1")).rejects.toBe(original);
   });
 
   it("findByEmailWithHash expone passwordHash (unico metodo autorizado)", async () => {

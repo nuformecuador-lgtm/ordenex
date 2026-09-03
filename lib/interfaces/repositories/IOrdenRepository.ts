@@ -1202,6 +1202,13 @@ export interface IOrdenRepository {
     ordenId: string,
     data: CorregirDatosClienteData,
     estadosBloqueados: readonly string[],
+    /**
+     * ⭑ FICHA 362 / Q1 (aprobada por el humano el 2026-09-02) — el rastro de la correccion.
+     * `ubicacionCorregida` decide si se escribe la fila: solo la UBICACION deja rastro, porque
+     * solo ella mueve dinero. Corregir nombre o telefono sigue SIN dejarlo (D4 de la 312).
+     * La fila lleva quien y cuando; NUNCA la direccion, el distrito ni ningun dato de cliente.
+     */
+    rastro: { actorUsuarioId: string | null; ubicacionCorregida: boolean },
   ): Promise<"ok" | "conflict">;
   /**
    * FICHA 327 (design §9.4) — la lectura que alimenta la correccion Y su aviso de importe.
@@ -1267,6 +1274,12 @@ export interface IOrdenRepository {
   softDelete(params: {
     ids: readonly string[];
     ownerId: string | null;
+    /**
+     * FICHA 362 (R3/R9): QUIEN borra, para congelarlo en la fila del registro. Obligatorio y
+     * nullable por el mismo criterio que `ownerId`: un olvido de cableado rompe el TYPECHECK, no
+     * escribe un borrado anonimo en silencio.
+     */
+    actorUsuarioId: string | null;
   }): Promise<number>;
   /**
    * Pedido humano (2026-08-27) — LA REVERSION del borrado logico: devuelve `deleted_at` a NULL
@@ -1287,7 +1300,7 @@ export interface IOrdenRepository {
    *
    * Devuelve CUANTAS filas cambio; `ids` vacio -> `0` SIN consultar.
    */
-  restore(ids: readonly string[]): Promise<number>;
+  restore(ids: readonly string[], actorUsuarioId: string | null): Promise<number>;
   findEstatusIdByValue(value: string): Promise<string | null>;
   /**
    * Feature 27/R15/R16/R17: lee `usuario.fulfillment` de la tienda que realiza la
@@ -2051,6 +2064,8 @@ export interface IOrdenRepository {
     ordenId: string;
     ownerId: string;
     estadosPermitidos: readonly string[];
+    /** FICHA 362 (R3): la CUENTA DEDICADA de la API key. Su rol (`apiKey`) queda congelado. */
+    actorUsuarioId: string | null;
   }): Promise<number>;
 
   /**
