@@ -4360,7 +4360,7 @@
       "title": "asignacion por lote no debe abortar completa por una orden no geocodificable",
       "zone": "fullstack",
       "description": "El gate de asignabilidad por coordenadas aborta todo el lote (central y satelite) si una sola orden no pasa; debe asignar las asignables y el error debe nombrar la(s) orden(es) bloqueada(s) por guia, con su motivo.",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
       "branch": "fix/368-asignacion-parcial-geocodificacion",
