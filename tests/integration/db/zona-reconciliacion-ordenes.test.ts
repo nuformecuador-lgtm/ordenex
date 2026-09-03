@@ -574,25 +574,36 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
   });
 
   it("⭑ R13: `create()` de una zona nueva no reconcilia ninguna orden", async () => {
+    // Sin esto el distrito quedaba en DOS zonas a la vez tras el `create()` (la B de antes y la
+    // nueva): `zonaUnicaDeDistrito` colapsa a `null` con >1 fila, asi que NINGUNA zona resuelta
+    // quedaba disponible para estampar, y el caso pasaba en verde sin importar si `create()`
+    // reconciliaba o no. Aqui el distrito arranca SIN ninguna zona, asi que tras el `create()`
+    // resuelve exactamente una — la nueva—, distinta de la que ya lleva estampada la orden: un
+    // `create()` que reconciliara moveria la orden, y este caso lo cazaria.
     const medido = await conEscenario(async (e) => {
-      const distrito = await e.crearDistrito([e.zonas.B.id]);
+      const distrito = await e.crearDistrito([]); // sin ninguna zona todavia
       const conDeriva = await e.crearOrden({ distritoId: distrito, zonaId: e.zonas.A.id });
 
       await e.repo.create({
         nombre: `366 NUEVA ${unico()}`,
         cobroVehiculo: false,
         esCentral: false,
-        distritoIds: [distrito],
+        distritoIds: [distrito], // la zona NUEVA es la UNICA que toma este distrito
         tarifas: [],
       });
+
+      // Sin ambiguedad: el distrito tiene que resolver a UNA sola zona (la nueva).
+      const filasZonaDistrito = await e.tx.zonaDistrito.findMany({ where: { distritoId: distrito } });
 
       return {
         zonaFinal: await e.zonaDe(conDeriva),
         zonaA: e.zonas.A.id,
         historial: await e.historialDe([conDeriva]),
+        filasZonaDistrito: filasZonaDistrito.length,
       };
     });
 
+    expect(medido.filasZonaDistrito).toBe(1);
     expect(medido.zonaFinal).toBe(medido.zonaA);
     expect(medido.historial).toEqual([]);
   });
