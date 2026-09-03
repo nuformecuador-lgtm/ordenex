@@ -49,18 +49,23 @@ export function GraficaReparto({
   // leen como una operación medida, y lo que pasa es que no hubo nada. Cae al estado vacío.
   const hayDatos = puntos.some((punto) => (punto.valor ?? 0) > 0);
 
-  // El ancho de cada franja y el porcentaje que se escribe salen de la MISMA cuenta, repartida
-  // por RESTO MAYOR: la barra suma exactamente 100 % —ni se queda corta ni desborda— y lo que
-  // se ve no puede discrepar de lo que se lee.
+  // El ancho de cada franja y el porcentaje que se escribe salen de la misma llamada, pero NO
+  // son el mismo número, y las dos veces por un motivo medido:
   //
-  // ⚠ ANCHO Y PORCENTAJE YA NO SON EL MISMO NÚMERO (feature 290). Con 1, 0, 0, 1, 0 y 231 sobre
-  // 233 las dos categorías de valor 1 pesan 0,429 %, pero solo sobra UN punto que repartir: una
-  // se quedaba en 0 y usar ESE cero como anchura borraba de la barra una categoría que sí
-  // ocurrió — «1 (0 %)» en la leyenda junto a una franja inexistente, y su gemela con «1 (1 %)»
-  // y franja. Ahora `pesosDeReparto` devuelve las dos cosas: `ancho` le da su astilla
-  // a toda parte con valor, descontada del segmento mayor para que la suma siga siendo 100 %, y
-  // `textoDePeso` escribe «<1 %» donde antes salía un «0 %» que era mentira. Un cero de verdad
-  // sigue diciendo «0 %» y sigue sin ocupar nada: son dos hechos distintos.
+  // ⚠ (feature 290) ANCHO ≠ CUOTA. Con 1, 0, 0, 1, 0 y 231 sobre 233 las dos categorías de
+  // valor 1 pesan 0,429 %, y una podía quedarse con cuota 0: usar ESE cero como anchura
+  // borraba de la barra una categoría que sí ocurrió — «1 (0 %)» en la leyenda junto a una
+  // franja inexistente. `ancho` le da su astilla a toda parte con valor, descontada del
+  // segmento mayor para que la barra siga sumando 100 %.
+  //
+  // ⚠ (ficha 364) TEXTO ≠ CUOTA. El número escrito es la razón EXACTA, la misma que formatea
+  // el KPI «Efectividad de entrega» de esta pantalla: 259 de 877 se escribe 29,5 % en los dos
+  // sitios. Escribiendo la cuota del resto mayor la barra decía 30 % y el KPI 29,5 % — dos
+  // cifras del mismo hecho a un palmo de distancia. El precio, medido y escrito en la cabecera
+  // de `porcentajes.ts`: la suma de los textos puede decir 99,9 o 100,1. La BARRA sigue
+  // midiendo 100 exacto, que es donde la suma afirma algo.
+  //
+  // Un cero de verdad sigue diciendo «0 %» y sigue sin ocupar nada: son dos hechos distintos.
   const pesos = pesosDeReparto(puntos.map((punto) => punto.valor));
   const pesosFormateados = pesos.map((peso) =>
     textoDePeso(peso, (fraccion) => formatearValor(fraccion, "porcentaje")),

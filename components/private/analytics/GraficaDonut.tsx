@@ -77,14 +77,19 @@ export function GraficaDonut({
   // por el lienzo. Con dos cuentas, el numero que se ve y el que lee un lector de pantalla
   // podrian discrepar.
   //
-  // `pesosDeReparto` reparte por resto mayor (suma 100 % exacto) y `textoDePeso` lo ESCRIBE: el
-  // numero lo pone `formatearValor(_, "porcentaje")` —simbolo y locale son del formateador de la
-  // casa, aqui no se escribe ni un `%`— y el caso pequeno lleva delante el «menor que».
+  // `pesosDeReparto` mide y `textoDePeso` lo ESCRIBE: el numero lo pone
+  // `formatearValor(_, "porcentaje")` —simbolo y locale son del formateador de la casa, aqui no
+  // se escribe ni un `%`— y el caso pequeno lleva delante el «menor que».
   //
   // ⚠ POR QUE NO SE FORMATEA LA FRACCION A SECAS (feature 291). Una porcion que EXISTE pero cuyo
-  // peso exacto no llega a un punto redondea a 0, y con la fraccion redondeada salia «0 %» pegado
-  // a su propia cifra: un cero que niega el dato que tiene al lado. `textoDePeso` escribe ahi
-  // «<1 %», y el cero de verdad sigue diciendo «0 %» — son dos hechos distintos.
+  // peso es mas pequeno de lo que el formateador sabe escribir saldria como «0 %» pegado a su
+  // propia cifra: un cero que niega el dato que tiene al lado. `textoDePeso` escribe ahi
+  // «<0,1 %», y el cero de verdad sigue diciendo «0 %» — son dos hechos distintos.
+  //
+  // ⚠ Y DESDE LA 364 ESCRIBE LA RAZON EXACTA, no la cuota del resto mayor: es la misma cifra
+  // que formatea un KPI que mida esa razon. El precio —la suma de las etiquetas puede dar 99,9
+  // o 100,1— esta medido en la cabecera de `porcentajes.ts`. Aqui no cuesta geometria: el
+  // anillo lo pinta recharts con el valor CRUDO (ver abajo).
   //
   // El `ancho` que tambien devuelve el reparto no se usa AQUI, y es correcto: el anillo lo pinta
   // recharts con el VALOR CRUDO de cada punto, asi que ninguna porcion desaparece por el
