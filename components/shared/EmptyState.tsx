@@ -28,6 +28,15 @@ export interface EmptyStateProps {
   action?: ReactNode;
   /** Clases extra para el contenedor (p. ej. ajustar el padding en un caso). */
   className?: string;
+  /**
+   * Clases del disco del icono. Existe para UN caso concreto (feature 365, `ErrorState`): una
+   * pantalla de ERROR reusa esta pieza —es el vocabulario de la app para «mensaje centrado +
+   * salida»— pero no puede leerse como un estado vacio, y el `bg-muted` neutro del reposo es
+   * justo lo que la haria parecerlo. El error pasa el par semantico de `danger`
+   * (`bg-danger-soft text-danger-strong dark:bg-danger/15`, la tecnica soft-badge de
+   * DESIGN.md). Sin esta prop el render es EL MISMO de siempre: el default es el disco neutro.
+   */
+  iconClassName?: string;
 }
 
 /**
@@ -45,6 +54,7 @@ export function EmptyState({
   description,
   action,
   className,
+  iconClassName = "bg-muted text-muted-foreground",
 }: EmptyStateProps) {
   return (
     <div
@@ -56,7 +66,10 @@ export function EmptyState({
       {Icon ? (
         <span
           aria-hidden="true"
-          className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground"
+          className={cn(
+            "flex size-11 items-center justify-center rounded-full",
+            iconClassName,
+          )}
         >
           <Icon className="size-5" />
         </span>
