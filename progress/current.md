@@ -52,6 +52,74 @@ mitad de mi gate) — resuelto dándole a este worktree su propio `node_modules`
 (memoria `base-local-compartida-rompe-gates-ajenos`, actualizada). Typecheck/lint/tests de los
 archivos propios de 368: verdes en las 4 corridas, sin excepción.
 
+## 🗺️ 2026-09-03 — la zona que no seguía a su configuración (366) + dos huecos de visibilidad (367)
+
+**Sesión abierta.** Nace de cuatro cosas que el humano reportó de golpe. Dos eran fallos (fichas
+**366** y **367**), una era una urgencia de datos que ya está resuelta, y una no era un fallo.
+
+### Lo que NO era un fallo, y conviene no volver a perseguirlo
+
+**La orden 49906911 «no se libera».** Su gestión `reprogramada` vigente tiene
+`fecha_reprogramacion = 2026-09-04`, no hoy: el cron libera cuando `fecha <= hoy` (CR), así que se
+suelta sola a medianoche. **El cron está sano** —se comprobó porque este mismo mecanismo ya falló en
+agosto por falta de siembra—: el job `liberar_reprogramadas:2026-09-03` corrió `done` a las 06:00
+UTC y liberó **19** órdenes (27 el día 2, 31 el día 1), y la fila de mañana ya existe.
+
+Midiendo la población entera salió el dato que sí importa: de 24 órdenes en `reprogramada`, 18 tienen
+fecha futura y **6 están vencidas pero congeladas** porque su `cierre_dia` no está `aprobado` (regla
+de la ficha 276). Cinco en `solicitado`; una —guía **75077638**— cuelga de un cierre **`vencido`**, y
+ésa no la mueve el reloj: la liberación exige `aprobado`, y un `vencido` necesita que alguien lo
+reenvíe a aprobación. **Deuda operativa, no de código.**
+
+Deuda menor detectada al paso: el selector de «Nueva fecha» tiene mínimo *mañana* y **no hay pantalla
+para corregir la fecha de una reprogramación ya registrada**. Pendiente de decisión del humano.
+
+### La urgencia de datos, ya aplicada
+
+**42 órdenes represadas** con la zona vieja estampada. El mecanismo del atasco, que es el argumento
+entero de la ficha 366: `OrdenRepository.recibirEnSatelite` (~3523) **acota su guarda por el
+`zonaId` del actor**. Con la zona vieja, la bodega de destino no puede recibir la orden — no hay
+botón. Una zona desactualizada no es cosmética: **bloquea la operación**.
+
+Re-estampadas a mano el 2026-09-03 14:05 UTC con el OK explícito del humano. **42 filas tocadas**,
+un solo destino, `desalineadas` de 42 → **0**, `cierre_detail` intacto en 703 filas (cero
+re-tarifado hacia atrás) y los `updated_at` todos en el instante de la escritura. Las cuatro guardas
+de la sentencia —`having count(*) = 1` sobre `zona_distrito`, y `not exists` sobre `cierre_detail` y
+sobre `gestion_orden` no anulada— dejaron fuera 0 filas ese día, pero **es el criterio lo que vale,
+no el número**. Rollback de una sola sentencia guardado (las 42 compartían zona anterior).
+
+### 366 — la zona estampada no sigue a la configuración de zonas (fullstack, sdd)
+
+`orden.zona_id` se deriva **una vez**, al crear la orden. `ZonaRepository.update`
+(`deleteMany` + `createMany` sobre `zona_distrito`) no toca ninguna orden viva, y el único camino que
+re-deriva la zona —`CorregirDatosClienteService`, R5/R7— sólo entra si provincia/cantón/distrito
+**cambian de valor** (`if (cambios.length === 0) return ok`), así que re-elegir el mismo distrito es
+un no-op: **hoy no hay vía manual**.
+
+Decisiones del humano, cerradas: la propagación es **automática al guardar la zona**, y **lo ya
+facturado no se re-tarifa**. Trampa del esquema que el spec debe respetar: el UNIQUE de
+`zona_distrito` es `(zona_id, distrito_id)`, **no `distrito_id` solo** — un distrito en dos zonas es
+legal en la base, y ahí no se inventa zona (regla de `zonaUnicaDeDistrito`).
+
+### 367 — dos huecos de visibilidad en las tablas de órdenes (frontend)
+
+Los dos son de **presentación pura**: el dato ya viaja en el DTO en ambos casos.
+
+1. `fechaReprogramacion` sale en todas las filas, pero `OrdenesListado.tsx` monta la columna sólo si
+   el filtro está acotado a **exactamente** un estado y ése es `reprogramada`. Sin filtro no se ve, y
+   al liberarse la orden deja ese estado: la fecha no vuelve a verse nunca.
+2. `HistorialOrdenSheet` se monta en **un solo sitio** (`OrdenesModule`, tras `mostrarHistorial`); la
+   tabla de recepción satélite es otro componente y no lo ofrece, aunque hidrata con el mismo
+   `include` y el `adminSatelite` ya usa ese botón en `/ordenes`.
+
+### Estado
+
+- PR **#682**: alta de las dos fichas (sólo `feature_list.json`).
+- `fix/366-zona-orden-desactualizada`: spec en curso (puerta de aprobación humana pendiente).
+- `fix/367-visibilidad-tablas-ordenes`: implementación en curso.
+- Los dos primeros subagentes cayeron por **529 Overloaded** del servidor sin dejar trabajo ni
+  worktree; relanzados frescos.
+
 ## 🧾 2026-08-31 — cierre de sesión: seis fichas y un defecto de producción
 
 **Todo lo abierto quedó cerrado.** Ocho fichas `done`: las cuatro de la wallet planificadas el día

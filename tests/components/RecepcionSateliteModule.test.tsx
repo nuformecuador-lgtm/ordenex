@@ -579,7 +579,8 @@ describe("RecepcionSateliteModule", () => {
     // Es una tabla, no una lista de cards.
     const tabla = within(region).getByRole("table", { name: LISTADO });
     // Cabeceras: la de selección (checkbox "seleccionar todo", sin texto) + las de datos, que
-    // desde la FICHA 349 son las de `ordenes-columns` MONTADAS (no espejadas), + "Incidente".
+    // desde la FICHA 349 son las de `ordenes-columns` MONTADAS (no espejadas), + "Acciones"
+    // (feature 367: antes "Incidente" a secas; ahora agrupa historial + incidente).
     //
     // La lista se escribe a mano A PROPÓSITO, y es el contrato de ESTA pantalla: es la que se
     // pone roja cuando `/ordenes` gana o pierde una columna, y obliga a decidir si la bodega
@@ -612,10 +613,12 @@ describe("RecepcionSateliteModule", () => {
       "Mensajero",
       "Fecha de creación",
       "Tiempo",
-      // Feature 158 (T2.7, decisión del humano del 2026-07-30): acción POR FILA "Reportar
-      // incidente". `en_bodega_satelite` es uno de los cinco orígenes del conjunto cerrado y
-      // el adminSatelite tiene el paquete delante. Va al FINAL, como columna de acción.
-      "Incidente",
+      // FICHA 367: la columna de acción por fila pasa de "Incidente" a "Acciones" y agrupa DOS
+      // disparadores — historial (feature 49, lectura, siempre) y "Reportar incidente" (feature
+      // 158, T2.7, decisión del humano del 2026-07-30; `en_bodega_satelite` es uno de los cinco
+      // orígenes del conjunto cerrado y el adminSatelite tiene el paquete delante). Va al FINAL,
+      // como en `/ordenes`.
+      "Acciones",
     ]);
     // La fila muestra los datos de la orden en columnas.
     expect(within(tabla).getByText("REM-B1")).toBeInTheDocument();

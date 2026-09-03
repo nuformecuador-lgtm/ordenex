@@ -263,14 +263,14 @@ function bulkRow(overrides: Partial<RawRow> = {}): RawRow {
 }
 
 describe("TarifaService — adminSatelite sin permisos nuevos (R9, R11)", () => {
-  it("lectura (obtener): adminSatelite -> forbidden, no consulta el repo", async () => {
+  it("lectura (listar): adminSatelite -> forbidden, no consulta el repo", async () => {
     const repo = buildTarifaRepo();
     const service = new TarifaService(repo);
 
-    const r = await service.obtener("cob-1", ADMIN_SATELITE_TARIFA);
+    const r = await service.listar({ page: 1, pageSize: 20 }, ADMIN_SATELITE_TARIFA);
 
     expect(r.status).toBe("forbidden");
-    expect(repo.findById).not.toHaveBeenCalled();
+    expect(repo.list).not.toHaveBeenCalled();
   });
 
   it("escritura (crear): adminSatelite -> forbidden, no persiste", async () => {
@@ -290,7 +290,7 @@ describe("TarifaService — adminSatelite sin permisos nuevos (R9, R11)", () => 
     const repo = buildTarifaRepo();
     const service = new TarifaService(repo);
 
-    const rLectura = await service.obtener("cob-1", MAESTRO_TARIFA);
+    const rLectura = await service.listar({ page: 1, pageSize: 20 }, MAESTRO_TARIFA);
     expect(rLectura.status).toBe("ok");
 
     const rEscritura = await service.crear(crearTarifaInput(), MAESTRO_TARIFA);
