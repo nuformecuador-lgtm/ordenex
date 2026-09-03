@@ -365,11 +365,13 @@ describe("OrdenesListado — catálogo no autorizado (R20)", () => {
   });
 });
 
-// `reprogramada` es el ÚNICO estado que muestra "Liberada el" (el día para el que
-// quedó reprogramada la orden = cuando el cron la desbloquea, feature 46). Como una
-// sola tabla puede mezclar estados, la columna aparece solo cuando el filtro está
-// acotado EXACTAMENTE a ese estado.
-describe("OrdenesListado — columna 'Liberada el' solo con reprogramada en solitario", () => {
+// FICHA 367 — "Reprogramada para" (antes "Liberada el") es SIEMPRE visible en el
+// listado. El dato (`fechaReprogramacion`) viaja en TODAS las filas desde el repo
+// (gestión `reprogramada` vigente no anulada), así que la columna deja de estar
+// atada a que el filtro esté acotado a exactamente el estado `reprogramada`. Antes
+// de esta ficha desaparecía sin filtro, mezclando estados, y en cuanto el cron de
+// liberación sacaba la orden de `reprogramada` no se volvía a ver nunca.
+describe("OrdenesListado — columna 'Reprogramada para' siempre visible", () => {
   // Catálogo propio: el CATALOGO compartido fija el número de opciones que asertan
   // otros tests (R13/R14), así que `reprogramada` se añade solo aquí.
   const CATALOGO_CON_REPROGRAMADA = [
@@ -391,7 +393,16 @@ describe("OrdenesListado — columna 'Liberada el' solo con reprogramada en soli
     });
   });
 
-  it("filtrando solo por reprogramada muestra la columna con la fecha", async () => {
+  it("sin ningún filtro de estado ya muestra la columna con la fecha del DTO", async () => {
+    renderListado(<OrdenesListado />);
+
+    expect(
+      await screen.findByRole("columnheader", { name: "Reprogramada para" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("2026-07-20")).toBeInTheDocument();
+  });
+
+  it("filtrando solo por reprogramada también muestra la columna con la fecha", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado />);
     await abrirFiltro(user);
@@ -399,31 +410,25 @@ describe("OrdenesListado — columna 'Liberada el' solo con reprogramada en soli
     await user.click(screen.getByRole("option", { name: /reprogramada/i }));
 
     expect(
-      await screen.findByRole("columnheader", { name: "Liberada el" }),
+      await screen.findByRole("columnheader", { name: "Reprogramada para" }),
     ).toBeInTheDocument();
     expect(await screen.findByText("2026-07-20")).toBeInTheDocument();
   });
 
-  it("sin filtro NO muestra la columna", async () => {
-    renderListado(<OrdenesListado />);
-
-    await screen.findByRole("table");
-    expect(screen.queryByRole("columnheader", { name: "Liberada el" })).toBeNull();
-  });
-
-  it("mezclando reprogramada con otro estado NO muestra la columna", async () => {
+  it("mezclando reprogramada con otro estado la columna se queda", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado />);
     await abrirFiltro(user);
 
     await user.click(screen.getByRole("option", { name: /reprogramada/i }));
-    await screen.findByRole("columnheader", { name: "Liberada el" });
+    await screen.findByRole("columnheader", { name: "Reprogramada para" });
     await user.click(screen.getByRole("option", { name: OPT_ENTREGADA }));
 
+    // Ya no depende de que el filtro esté acotado a un único estado: sigue montada.
     await waitFor(() =>
       expect(
-        screen.queryByRole("columnheader", { name: "Liberada el" }),
-      ).toBeNull(),
+        screen.getByRole("columnheader", { name: "Reprogramada para" }),
+      ).toBeInTheDocument(),
     );
   });
 });
