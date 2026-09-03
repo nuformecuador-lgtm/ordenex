@@ -40,6 +40,11 @@ import type {
   HistorialContexto,
 } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+// FICHA 362 — el punto UNICO de escritura del registro de acciones, y la fuente unica de la
+// etiqueta congelada. Los cuatro escritores de esta clase que registran accion lo llaman DENTRO
+// de su propia `$transaction`.
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import type { IJobRepository, JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
 import { JobRepository } from "@/lib/repositories/JobRepository";
 import { encolarGeocodificacion } from "@/lib/services/jobs/geocodificacion-encolado";
@@ -365,7 +370,18 @@ type OrdenPrismaClient = Pick<
   | "$transaction" // feature 17: generarGuiaLote necesita transaccion (R25)
   | "$executeRaw" // feature 41/R23: anti-TOCTOU (NOT EXISTS cierre bloqueante en el lote)
   | "$queryRaw" // feature 91: lo exige `JobRepository` (encolado outbox de geocodificacion)
+  | "historialAccion" // ficha 362/R9: el registro de la accion, en la MISMA tx que la mutacion
 >;
+
+/**
+ * FICHA 362 — lo que el `RETURNING` de los tres borrados por lote trae de vuelta: el id de la
+ * orden ALCANZADA y lo justo para etiquetarla. Ni un dato del destinatario (R5).
+ */
+interface OrdenBorradaRow {
+  id: string;
+  numGuia: string | null;
+  numRemision: string | null;
+}
 
 /**
  * FEATURE 271 — LA REGLA VIGENTE, dictada por el humano el 2026-08-23. Sustituye a
@@ -1629,13 +1645,38 @@ export class OrdenRepository implements IOrdenRepository {
    * a una escritura revertida, o una escritura sin job (direccion nueva, coordenadas viejas, EN
    * SILENCIO)—. El constructor NO cambia: `jobRepo` ya venia inyectado con default desde la 91.
    *
-   * Sigue SIN escribir en ninguna otra tabla que no sea `orden` y —solo si la direccion cambia—
-   * `jobs`: ni historial, ni hilo de notas, ni auditoria (327/R25, enmienda declarada a 312/R14).
+   * ═══════════════════════════════════════════════════════════════════════════════════════════
+   * ⭑ FICHA 362 / Q1 — D4 DE LA 312 QUEDA REABIERTA, Y EL RASTRO ES SOLO EL HECHO.
+   * ═══════════════════════════════════════════════════════════════════════════════════════════
+   * Aqui decia «ni historial, ni hilo de notas, ni auditoria». **Ya no.** El 2026-09-02 el humano
+   * aprobo EXPLICITAMENTE registrar la correccion de la UBICACION en el historial de acciones de
+   * la ficha 362, y lo hizo por la puerta que este mismo comentario exigia —la de aprobacion
+   * humana—, no «por la puerta de atras con solo un logcito».
+   *
+   * QUE SE REGISTRA: quien y cuando. Nada mas. La fila lleva el id de la orden, su GUIA como
+   * etiqueta, el actor congelado y el instante.
+   *
+   * QUE **NO** SE REGISTRA, Y ESO ES LO QUE MANTIENE VIVA LA DECISION DE 2026-08-28: ni la
+   * direccion vieja ni la nueva, ni el distrito, ni la provincia, ni el canton, ni la zona, ni el
+   * destinatario, ni el telefono, ni el producto, ni las notas. `valor_anterior` y `valor_nuevo`
+   * van NULL en este tipo de accion. El motivo de D4 era proteger datos de una persona y esta
+   * fila no guarda ninguno.
+   *
+   * POR QUE SE REABRIO: la 327 amplio esta correccion a la direccion y al DISTRITO, y el distrito
+   * re-deriva la zona, que decide la tarifa que se factura. O sea, hasta hoy se podia cambiar lo
+   * que una orden va a cobrar sin dejar quien ni cuando. La guardia
+   * `tests/unit/guards/corregir-datos-sin-rastro.guardia.test.ts` NO se ha burlado: se ha
+   * ACTUALIZADO para hacer cumplir la regla nueva —el rastro EXISTE y no lleva ni un dato de
+   * cliente— en vez de la vieja.
+   *
+   * Sigue SIN escribir en `orden_historial_estado` (borrar y corregir no son transicionar) y SIN
+   * tocar el hilo de notas ni el modulo de chat.
    */
   async corregirDatosCliente(
     ordenId: string,
     data: CorregirDatosClienteData,
     estadosBloqueados: readonly string[],
+    rastro: { actorUsuarioId: string | null; ubicacionCorregida: boolean },
   ): Promise<"ok" | "conflict"> {
     return this.prisma.$transaction(async (tx) => {
       // Guard de re-geocodificacion, mitad 1: ANTES de mutar, y solo si la direccion viene.
@@ -1671,7 +1712,41 @@ export class OrdenRepository implements IOrdenRepository {
 
       // 327/R21: si la sentencia no alcanzo la fila NO hubo escritura, asi que no hay nada que
       // geocodificar. Se sale sin encolar y la transaccion no deja rastro.
+      //
+      // ⭑ 362/R11: y tampoco hay nada que REGISTRAR. Este `return` va ANTES del `appendAccion` a
+      // proposito: una correccion que no alcanzo ninguna fila no puede dejar fila de auditoria.
       if (count !== 1) return "conflict";
+
+      // ⭑ 362 / Q1 — EL RASTRO, Y SOLO EL HECHO. Se escribe en la MISMA transaccion que el
+      // `UPDATE` (R9): si el registro falla, la correccion no persiste, y al reves.
+      //
+      // Solo cuando la UBICACION cambia. Corregir el nombre o el telefono del destinatario NO
+      // mueve dinero y sigue SIN dejar rastro, que es exactamente lo que D4 de la 312 protegia.
+      // Quien decide si la ubicacion cambio es el service, que es el unico que tiene el diff
+      // contra los valores almacenados.
+      if (rastro.ubicacionCorregida) {
+        const envio = await tx.orden.findUnique({
+          where: { id: ordenId },
+          select: { numGuia: true, numRemision: true },
+        });
+        const actor = await resolverActorCongelado(tx, rastro.actorUsuarioId);
+        await appendAccion(tx, [
+          {
+            accion: "orden_ubicacion_corregida",
+            entidadTipo: "orden",
+            entidadId: ordenId,
+            // La GUIA, que es un identificador de envio de Ordenex y no un dato personal. Ni la
+            // direccion, ni el distrito, ni la zona entran en la etiqueta.
+            entidadEtiqueta: etiquetaDeEntidad("orden", {
+              numGuia: envio?.numGuia ?? null,
+              numRemision: envio?.numRemision ?? null,
+            }),
+            ...actor,
+            // `valorAnterior`/`valorNuevo` NULL, y no es un olvido: ahi iria la direccion, que es
+            // justo lo que el humano NO autorizo a guardar.
+          },
+        ]);
+      }
 
       // Guard de re-geocodificacion, mitad 2: DENTRO de la misma transaccion (OUTBOX).
       await this.encolarSiCambiaDireccion(
@@ -1737,20 +1812,55 @@ export class OrdenRepository implements IOrdenRepository {
   async softDelete(params: {
     ids: readonly string[];
     ownerId: string | null;
+    actorUsuarioId: string | null;
   }): Promise<number> {
     if (params.ids.length === 0) return 0;
-    const { count } = await this.prisma.orden.updateMany({
-      where: {
-        id: { in: [...params.ids] },
-        deletedAt: null,
-        // El maestro (`ownerId: null`) no añade clave; la tienda la añade SIEMPRE. Se escribe
-        // con spread condicional y no con un `tiendaId: params.ownerId ?? undefined` para que
-        // sea imposible confundir «sin frontera» con «frontera nula».
-        ...(params.ownerId !== null ? { tiendaId: params.ownerId } : {}),
-      },
-      data: { deletedAt: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      // ⚠️ FICHA 362 (R12) — ESTE `updateMany` PASO A `UPDATE … RETURNING`, Y NO POR GUSTO.
+      //
+      // `updateMany` devuelve un `count` y NO los ids. Registrar el borrado con los ids PEDIDOS
+      // en vez de con los ALCANZADOS escribiria filas de auditoria de ordenes que NO se borraron
+      // —las que ya estaban borradas, las de otra tienda—, y son cosas distintas en cuanto una
+      // fila no cumple el `where`. Es la misma leccion que ya esta escrita en `appendCambioEstado`
+      // sobre el mensaje de bienvenida: «el service devuelve los ids PEDIDOS y `recogerLote` tira
+      // los del RETURNING, asi que colgarlo alli mandaria un WhatsApp de una orden que no salio a
+      // reparto».
+      //
+      // ⚠️ EL `WHERE` NO CAMBIA: los mismos ids, el mismo `deleted_at IS NULL` y la MISMA frontera
+      // multi-tenant de la ficha 358 (`tienda_id = ownerId` cuando quien borra es una tienda),
+      // dentro de la MISMA sentencia. `Prisma.sql`/`Prisma.join` parametrizan: no hay
+      // interpolacion de texto.
+      //
+      // `num_guia`/`num_remision` salen del MISMO `RETURNING`: cero consultas extra y cero riesgo
+      // de etiquetar una orden que no se borro.
+      const filtroTienda =
+        params.ownerId !== null
+          ? Prisma.sql`AND o."tienda_id" = ${params.ownerId}`
+          : Prisma.empty;
+      const filas = await tx.$queryRaw<OrdenBorradaRow[]>`
+        UPDATE "orden" o
+        SET "deleted_at" = ${new Date()}
+        WHERE o."id" IN (${Prisma.join([...params.ids])})
+          AND o."deleted_at" IS NULL
+          ${filtroTienda}
+        RETURNING o."id" AS id, o."num_guia" AS "numGuia", o."num_remision" AS "numRemision"`;
+
+      const actor = await resolverActorCongelado(tx, params.actorUsuarioId);
+      await appendAccion(
+        tx,
+        filas.map((fila) => ({
+          accion: "orden_eliminada" as const,
+          entidadTipo: "orden" as const,
+          entidadId: fila.id,
+          entidadEtiqueta: etiquetaDeEntidad("orden", fila),
+          ...actor,
+        })),
+      );
+
+      // El conteo devuelto sigue siendo el de filas ALCANZADAS, asi que el contrato del service
+      // no cambia ni una coma.
+      return filas.length;
     });
-    return count;
   }
 
   /**
@@ -1768,13 +1878,34 @@ export class OrdenRepository implements IOrdenRepository {
    * declara a nadie mas—. El dia que se le abra a la tienda, este metodo necesita su `ownerId`
    * igual que su gemelo, y por la misma razon.
    */
-  async restore(ids: readonly string[]): Promise<number> {
+  async restore(ids: readonly string[], actorUsuarioId: string | null): Promise<number> {
     if (ids.length === 0) return 0;
-    const { count } = await this.prisma.orden.updateMany({
-      where: { id: { in: [...ids] }, deletedAt: { not: null } },
-      data: { deletedAt: null },
+    return this.prisma.$transaction(async (tx) => {
+      // FICHA 362 (R12) — mismo tratamiento que su gemelo `softDelete`, y por el mismo motivo: el
+      // `updateMany` no devuelve los ids y el registro tiene que decir lo ALCANZADO. El `where`
+      // no cambia: `deleted_at IS NOT NULL` sigue siendo lo que hace este metodo idempotente y a
+      // prueba de carreras (una orden viva no entra en el conteo).
+      const filas = await tx.$queryRaw<OrdenBorradaRow[]>`
+        UPDATE "orden" o
+        SET "deleted_at" = NULL
+        WHERE o."id" IN (${Prisma.join([...ids])})
+          AND o."deleted_at" IS NOT NULL
+        RETURNING o."id" AS id, o."num_guia" AS "numGuia", o."num_remision" AS "numRemision"`;
+
+      const actor = await resolverActorCongelado(tx, actorUsuarioId);
+      await appendAccion(
+        tx,
+        filas.map((fila) => ({
+          accion: "orden_recuperada" as const,
+          entidadTipo: "orden" as const,
+          entidadId: fila.id,
+          entidadEtiqueta: etiquetaDeEntidad("orden", fila),
+          ...actor,
+        })),
+      );
+
+      return filas.length;
     });
-    return count;
   }
 
   async findEstatusIdByValue(value: string): Promise<string | null> {
@@ -4388,17 +4519,44 @@ export class OrdenRepository implements IOrdenRepository {
     ordenId: string;
     ownerId: string;
     estadosPermitidos: readonly string[];
+    actorUsuarioId: string | null;
   }): Promise<number> {
-    const { count } = await this.prisma.orden.updateMany({
-      where: {
-        id: params.ordenId,
-        tiendaId: params.ownerId,
-        deletedAt: null,
-        estatus: { value: { in: [...params.estadosPermitidos] } },
-      },
-      data: { deletedAt: new Date() },
+    // Con una lista vacia el `IN` no casa y no se borra nada. Se corta antes porque
+    // `Prisma.join([])` no es una lista SQL valida.
+    if (params.estadosPermitidos.length === 0) return 0;
+    return this.prisma.$transaction(async (tx) => {
+      // FICHA 362 (R3/R9/R12) — mismo `UPDATE … RETURNING` que el borrado por pantalla, con LAS
+      // MISMAS CUATRO CONDICIONES en el `where` de ESTA sentencia (ficha 320): el id, la tienda
+      // dueña, `deleted_at IS NULL` y el estado permitido. Ninguna se movio a un `if` previo.
+      //
+      // El actor es la CUENTA DEDICADA de la API key, asi que `actor_rol` queda congelado como
+      // `apiKey` y la fila dice sola por que canal entro el borrado — que es justo el motivo por
+      // el que la tabla NO tiene una columna `canal` (design §1.4).
+      const filas = await tx.$queryRaw<OrdenBorradaRow[]>`
+        UPDATE "orden" o
+        SET "deleted_at" = ${new Date()}
+        FROM "order_status" os
+        WHERE os."id" = o."estatus_id"
+          AND o."id" = ${params.ordenId}
+          AND o."tienda_id" = ${params.ownerId}
+          AND o."deleted_at" IS NULL
+          AND os."value" IN (${Prisma.join([...params.estadosPermitidos])})
+        RETURNING o."id" AS id, o."num_guia" AS "numGuia", o."num_remision" AS "numRemision"`;
+
+      const actor = await resolverActorCongelado(tx, params.actorUsuarioId);
+      await appendAccion(
+        tx,
+        filas.map((fila) => ({
+          accion: "orden_eliminada" as const,
+          entidadTipo: "orden" as const,
+          entidadId: fila.id,
+          entidadEtiqueta: etiquetaDeEntidad("orden", fila),
+          ...actor,
+        })),
+      );
+
+      return filas.length;
     });
-    return count;
   }
 
   /**

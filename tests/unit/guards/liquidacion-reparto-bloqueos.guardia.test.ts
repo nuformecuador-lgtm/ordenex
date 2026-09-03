@@ -206,6 +206,11 @@ function montar(
   } as unknown as IPagoMensajeroMovimientoRepository;
 
   const repartoRepo: ILiquidacionRepartoRepository = {
+    // FICHA 362: el registro de `reparto_anulado`. UNA fila por acto, dentro de la MISMA
+    // transaccion que anula los pagos hijos. Entra al log para que su posicion sea visible.
+    registrarAnulacion: vi.fn(async () => {
+      log.push("registrar:reparto-anulado");
+    }),
     crear: vi.fn(async () => {
       log.push("escribir:reparto");
       return {
@@ -602,12 +607,20 @@ describe("R52 — la fila del reparto es inmutable (anular NO es editar ni borra
       );
     }
 
-    // El repositorio del acto tiene DOS métodos y ninguno más (design §1.1: la fila es inmutable).
-    // La 206 NO lo toca: la anulación escribe en `liquidacion_anulacion` y en los libros, nunca
-    // sobre `liquidacion_reparto`. Que este conteo siga en dos es lo que lo demuestra.
+    // El repositorio del acto tiene TRES métodos y ninguno más (design §1.1: la fila es
+    // inmutable). La 206 NO lo toca: la anulación escribe en `liquidacion_anulacion` y en los
+    // libros, nunca sobre `liquidacion_reparto`.
+    //
+    // ⚠️ FICHA 362 — `registrarAnulacion` ES EL TERCERO, Y NO ROMPE R52. Ese método NO MUTA
+    // `liquidacion_reparto` y no puede: escribe UNA fila en `historial_accion` —la auditoría de
+    // «se deshizo este reparto»— dentro de la transacción que ya anula sus pagos hijos. Existe
+    // para que deshacer un reparto de 12 cierres deje UNA línea de auditoría y no doce.
+    //
+    // La aserción de abajo —la que de verdad sostiene R52— sigue intacta y sigue prohibiendo
+    // `update`, `delete`, `upsert`, `updateMany` y `deleteMany` sobre la tabla del reparto.
     const repo = fuente("lib/repositories/LiquidacionRepartoRepository.ts");
     const metodos = [...repo.matchAll(/^\s{2}async\s+(\w+)\(/gm)].map((m) => m[1]);
-    expect(metodos.sort()).toEqual(["crear", "obtenerPorClave"]);
+    expect(metodos.sort()).toEqual(["crear", "obtenerPorClave", "registrarAnulacion"]);
     expect(repo).not.toMatch(/liquidacionReparto\.(update|delete|upsert|updateMany|deleteMany)/);
   });
 

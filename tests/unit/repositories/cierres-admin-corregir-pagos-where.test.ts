@@ -63,7 +63,8 @@ function clienteFalso(
       }),
       findUnique: vi.fn(async (args: Record<string, unknown>) => {
         registrar("gestionOrden", "findUnique")(args);
-        return { cierreId: CIERRE };
+        // FICHA 362: el segundo `findUnique` pide la guia de la orden para la etiqueta congelada.
+        return { cierreId: CIERRE, orden: { numGuia: 100234, numRemision: "REM-1" } };
       }),
       findMany: vi.fn(async (args: Record<string, unknown>) => {
         registrar("gestionOrden", "findMany")(args);
@@ -85,6 +86,21 @@ function clienteFalso(
         registrar("cierreDia", "updateMany")(args);
         return { count: cierreCount };
       }),
+    },
+    // FICHA 362: el registro de `cierre_dia_pagos_editados`, en la MISMA tx que la correccion.
+    // Entra al registrador de llamadas para que el orden siga siendo afirmable.
+    historialAccion: {
+      createMany: vi.fn(async (args: Record<string, unknown>) => {
+        registrar("historialAccion", "createMany")(args);
+        return { count: 1 };
+      }),
+    },
+    usuario: {
+      findUnique: vi.fn(async () => ({
+        nombre: "Admin",
+        primerApellido: "Uno",
+        rol: { value: "admin" },
+      })),
     },
   };
 

@@ -18,7 +18,17 @@ import type {
  * siquiera usa los delegados directamente —se los pasa al repositorio y al puerto de la caja, que
  * son los unicos escritores (censo de `caja-173-alcance.guardia.test.ts`)—.
  */
-export type PremioTx = Pick<PrismaClient, "pagoMensajeroMovimiento" | "walletMovimiento">;
+export type PremioTx = Pick<
+  PrismaClient,
+  // Ficha 362 (R9): el registro de la accion viaja en la MISMA transaccion que el devengo y su
+  // egreso de caja. Sin `historialAccion` aqui, el rastro tendria que escribirse fuera — que es
+  // exactamente lo que R10 y R11 prohiben.
+  | "pagoMensajeroMovimiento"
+  | "walletMovimiento"
+  | "rankingSnapshotFila"
+  | "historialAccion"
+  | "usuario"
+>;
 
 /**
  * Ejecuta `fn` dentro de UNA transaccion y revierte si lanza (R20: o quedan el devengo y su

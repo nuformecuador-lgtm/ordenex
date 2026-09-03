@@ -75,13 +75,18 @@ describe("crear — matriz de autorizacion (R9-R13/R16)", () => {
     expect(r.status).toBe("ok");
     // Los opcionales ausentes se normalizan antes de llegar al repositorio:
     // `null` los nullables, `false` el flag de tarifa por defecto.
-    expect(repo.create).toHaveBeenCalledWith({
-      ...crearInput(),
-      tarifaEspecial: null,
-      tarifaEspecialDevuelta: null,
-      zonaId: null,
-      isDefault: false,
-    });
+    expect(repo.create).toHaveBeenCalledWith(
+      {
+        ...crearInput(),
+        tarifaEspecial: null,
+        tarifaEspecialDevuelta: null,
+        zonaId: null,
+        isDefault: false,
+      },
+      // FICHA 362 (R3): el segundo argumento es QUIEN crea, que el repositorio congela en la
+      // misma transaccion que la escritura.
+      MAESTRO.usuarioId,
+    );
   });
 
   it("R11: admin no puede crear -> forbidden", async () => {
@@ -139,37 +144,31 @@ describe("crear — matriz de autorizacion (R9-R13/R16)", () => {
 
     expect(r.status).toBe("ok");
     expect(repo.esTiendaAsignable).toHaveBeenCalledWith("usuario-de-la-key");
-    expect(repo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ tiendaId: "usuario-de-la-key" }),
-    );
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ tiendaId: "usuario-de-la-key" }), expect.any(String));
   });
 
   // Tarifa especial: unico campo opcional. Ausente NO es 0 -> viaja como null.
   it("crear sin tarifa especial la persiste como null (no como 0)", async () => {
     await service.crear(crearInput(), MAESTRO);
-    expect(repo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ tarifaEspecial: null }),
-    );
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ tarifaEspecial: null }), expect.any(String));
   });
 
   it("crear con tarifa especial la persiste con su monto", async () => {
     await service.crear(crearInput({ tarifaEspecial: 1250.5 }), MAESTRO);
-    expect(repo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ tarifaEspecial: 1250.5 }),
-    );
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ tarifaEspecial: 1250.5 }), expect.any(String));
   });
 
   // zonaId es OPCIONAL: sin zona la tarifa aplica a la tienda entera.
   it("crear sin zona no comprueba la zona y persiste zonaId null", async () => {
     await service.crear(crearInput(), MAESTRO);
     expect(repo.existeZona).not.toHaveBeenCalled();
-    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ zonaId: null }));
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ zonaId: null }), expect.any(String));
   });
 
   it("crear con zona existente la persiste", async () => {
     await service.crear(crearInput({ zonaId: "zona-1" }), MAESTRO);
     expect(repo.existeZona).toHaveBeenCalledWith("zona-1");
-    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ zonaId: "zona-1" }));
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ zonaId: "zona-1" }), expect.any(String));
   });
 
   // Sin esta comprobacion un id invalido escaparia como error crudo de FK.
@@ -187,12 +186,12 @@ describe("crear — matriz de autorizacion (R9-R13/R16)", () => {
   // isDefault nace en false: marcarla por defecto es un acto explicito.
   it("crear sin isDefault la persiste como false", async () => {
     await service.crear(crearInput(), MAESTRO);
-    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ isDefault: false }));
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ isDefault: false }), expect.any(String));
   });
 
   it("crear con isDefault true lo respeta", async () => {
     await service.crear(crearInput({ isDefault: true }), MAESTRO);
-    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ isDefault: true }));
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ isDefault: true }), expect.any(String));
   });
 });
 
@@ -433,7 +432,7 @@ describe("274/R14-R16 — la tarifa debe acotar por tienda, por zona o por ambas
   it("R16: crear con tienda y sin zona -> ok", async () => {
     const r = await service.crear(crearInput({ tiendaId: "tienda-1" }), MAESTRO);
     expect(r.status).toBe("ok");
-    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ zonaId: null }));
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ zonaId: null }), expect.any(String));
   });
 
   it("R16: crear con zona y sin tienda -> ok", async () => {
@@ -443,9 +442,7 @@ describe("274/R14-R16 — la tarifa debe acotar por tienda, por zona o por ambas
     const r = await service.crear({ ...sinTienda, zonaId: "zona-1" }, MAESTRO);
 
     expect(r.status).toBe("ok");
-    expect(repo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ tiendaId: null, zonaId: "zona-1" }),
-    );
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ tiendaId: null, zonaId: "zona-1" }), expect.any(String));
   });
 
   // El caso que la decision del humano nombro explicitamente: desacotar la zona de
@@ -489,7 +486,7 @@ describe("274/R14-R16 — la tarifa debe acotar por tienda, por zona o por ambas
     const r = await service.actualizar("cob-1", { tiendaId: null }, MAESTRO);
 
     expect(r.status).toBe("ok");
-    expect(repo.update).toHaveBeenCalledWith("cob-1", { tiendaId: null });
+    expect(repo.update).toHaveBeenCalledWith("cob-1", { tiendaId: null }, expect.any(String));
   });
 
   it("R16: { zonaId: null } sobre una fila CON tienda -> ok", async () => {
@@ -501,7 +498,7 @@ describe("274/R14-R16 — la tarifa debe acotar por tienda, por zona o por ambas
     const r = await service.actualizar("cob-1", { zonaId: null }, MAESTRO);
 
     expect(r.status).toBe("ok");
-    expect(repo.update).toHaveBeenCalledWith("cob-1", { zonaId: null });
+    expect(repo.update).toHaveBeenCalledWith("cob-1", { zonaId: null }, expect.any(String));
   });
 
   it("R16: un cambio numerico sobre una fila ya acotada no dispara la guarda", async () => {
@@ -537,7 +534,7 @@ describe("borrar (R9-R13)", () => {
   it("R10: maestro borra (borrado FISICO) -> ok", async () => {
     const r = await service.borrar("cob-1", MAESTRO);
     expect(r.status).toBe("ok");
-    expect(repo.hardDelete).toHaveBeenCalledWith("cob-1");
+    expect(repo.hardDelete).toHaveBeenCalledWith("cob-1", expect.any(String));
   });
 
   it("R11: admin no puede borrar -> forbidden", async () => {

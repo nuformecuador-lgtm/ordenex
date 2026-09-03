@@ -228,7 +228,17 @@ function makeDb() {
       findUnique: async (args: Args) => {
         const { id } = args.where as { id: string };
         // El adminSatelite responsable pertenece a la zona satelite; el resto no tiene zona.
-        return { zonaId: id === ADMIN_SATELITE.usuarioId ? ZONA_SATELITE : null };
+        //
+        // ⚠️ FICHA 362: el MISMO delegado sirve ahora a DOS lecturas —el alcance por zona y el
+        // congelado del actor—, asi que devuelve las columnas de las dos. Anadir un segundo
+        // `usuario` mas abajo lo habria SOBRESCRITO y el alcance por zona se habria perdido en
+        // silencio (con el resultado observable de un `forbidden` inexplicable).
+        return {
+          zonaId: id === ADMIN_SATELITE.usuarioId ? ZONA_SATELITE : null,
+          nombre: "Admin",
+          primerApellido: "Uno",
+          rol: { value: "maestro" },
+        };
       },
     },
     zona: {
@@ -274,6 +284,8 @@ function makeDb() {
         return { count: data.length };
       },
     },
+    // FICHA 362: el registro de la decision (`cierre_dia_aprobado`), en la MISMA tx.
+    historialAccion: { createMany: async () => ({ count: 1 }) },
     // Feature 158: la aprobacion consulta las gestiones `incidente` del cierre (guardia de
     // cobertura de indemnizaciones) y las tarifa dentro de la tx. En ESTE recorrido no hay
     // ninguna: el doble responde vacio y el camino de la 139 queda intacto (R64).

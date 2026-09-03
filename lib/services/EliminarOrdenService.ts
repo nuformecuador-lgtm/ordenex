@@ -135,7 +135,13 @@ export class EliminarOrdenService implements IEliminarOrdenService {
     //
     // El estado NO cambia y NO se registra transicion en el historial: borrar no es transicionar,
     // y el historial de la orden se conserva intacto por si hay que auditarla.
-    const eliminadas = await this.repo.softDelete({ ids: ordenIds, ownerId });
+    // FICHA 362 (R3/R9/R12): QUIEN borra viaja al repositorio, que congela nombre y rol en la
+    // misma transaccion y registra UNA fila por orden EFECTIVAMENTE borrada.
+    const eliminadas = await this.repo.softDelete({
+      ids: ordenIds,
+      ownerId,
+      actorUsuarioId: actor.usuarioId,
+    });
     return { status: "ok", eliminadas };
   }
 }

@@ -352,7 +352,7 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
     expect(prisma.walletMovimiento.groupBy.mock.calls[0][0].where).toEqual({});
   });
 
-  it("R47: la superficie del repositorio son SEIS metodos — ni update, ni delete, ni el viejo", () => {
+  it("R47: la superficie del repositorio son SIETE metodos — ni update, ni delete, ni el viejo", () => {
     const metodos = Object.getOwnPropertyNames(WalletMovimientoRepository.prototype)
       .filter((m) => m !== "constructor")
       .sort();
@@ -364,9 +364,14 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
     // Ficha 333 (C2): entra `obtenerPorOrigen`, y es una LECTURA por la clave
     // `(origen_tipo, origen_id, categoria)`. El libro no gana ninguna mutacion: la asercion de
     // abajo lo sigue afirmando, y esta lista sigue siendo CERRADA.
+    // FICHA 362: entra `crearMovimientoRegistrado`, y es una ESCRITURA — la unica que se añade.
+    // No rompe el append-only: escribe UN movimiento nuevo (y su fila de auditoria en la misma
+    // transaccion), no edita ninguno existente. La asercion de abajo lo sigue afirmando, y la
+    // lista sigue siendo CERRADA: un `actualizarMonto` futuro caeria igual.
     expect(metodos).toEqual([
       "agregarPorCategoria",
       "agregarPorCategoriaYTipo",
+      "crearMovimientoRegistrado",
       "crearMovimientos",
       "listar",
       "obtenerPorId",

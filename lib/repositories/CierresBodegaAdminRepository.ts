@@ -1,3 +1,5 @@
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CierreBodegaDetalleCierreRow,
@@ -46,7 +48,15 @@ const ESTADO_SOLICITADO = "solicitado";
 // Feature 69/T23: el detalle sale del SNAPSHOT -> el cliente necesita `cierreDetail`.
 type CierresBodegaAdminPrismaClient = Pick<
   PrismaClient,
-  "cierreBodega" | "cierreDia" | "gestionOrden" | "cierreDetail"
+  | "cierreBodega"
+  | "cierreDia"
+  | "gestionOrden"
+  | "cierreDetail"
+  // Ficha 362 (R9): la resolucion pasa a `$transaction` y registra su accion en ella.
+  | "$transaction"
+  | "historialAccion"
+  | "usuario"
+  | "zona"
 >;
 
 // Proyeccion de la cabecera de un cierre_dia incluido en el detalle (mensajero +
@@ -403,23 +413,60 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
     return componerGestionesDescarga(gestiones, detalle);
   }
 
-  /** R16-R22: transicion atomica guardada; un solo UPDATE, no toca otras tablas. */
+  /**
+   * R16-R22: transicion atomica guardada; un solo UPDATE.
+   *
+   * FICHA 362 (R6/R9/R11) — `cierre_bodega_aprobado` / `cierre_bodega_rechazado`. El metodo se
+   * envuelve en `$transaction` (forma 2 del design §2.3: era un `updateMany` suelto), y el
+   * registro va DENTRO del `res.count === 1`: un cierre ya resuelto no deja rastro de una segunda
+   * resolucion que no ocurrio.
+   *
+   * `monto` = `total_general` del cierre (snapshot), `Decimal`. `motivoRechazo` NO se copia (R5).
+   */
   async resolverCierreBodega(
     input: ResolverCierreBodegaInput,
   ): Promise<ResolverCierreBodegaResult> {
     const { id, nuevoEstado, resueltoPor, motivoRechazo } = input;
 
-    // R18: aplica SOLO si sigue `solicitado` (guardia de estado en el WHERE).
-    const res = await this.prisma.cierreBodega.updateMany({
-      where: { id, estado: ESTADO_SOLICITADO },
-      data: {
-        estado: nuevoEstado,
-        resueltoPor, // R20
-        resueltoAt: new Date(), // R20
-        motivoRechazo,
-      },
+    const resultado = await this.prisma.$transaction(async (tx) => {
+      // R18: aplica SOLO si sigue `solicitado` (guardia de estado en el WHERE).
+      const res = await tx.cierreBodega.updateMany({
+        where: { id, estado: ESTADO_SOLICITADO },
+        data: {
+          estado: nuevoEstado,
+          resueltoPor, // R20
+          resueltoAt: new Date(), // R20
+          motivoRechazo,
+        },
+      });
+      if (res.count !== 1) return null;
+
+      const cierre = await tx.cierreBodega.findUnique({
+        where: { id },
+        select: {
+          totalGeneral: true,
+          solicitadoAt: true,
+          zona: { select: { nombre: true } },
+        },
+      });
+      const actor = await resolverActorCongelado(tx, resueltoPor);
+      await appendAccion(tx, [
+        {
+          accion:
+            nuevoEstado === "aprobado" ? "cierre_bodega_aprobado" : "cierre_bodega_rechazado",
+          entidadTipo: "cierre_bodega",
+          entidadId: id,
+          entidadEtiqueta: etiquetaDeEntidad("cierre_bodega", {
+            zonaNombre: cierre?.zona.nombre ?? null,
+            fecha: cierre?.solicitadoAt ?? new Date(),
+          }),
+          monto: cierre?.totalGeneral ?? null,
+          ...actor,
+        },
+      ]);
+      return "updated" as const;
     });
-    if (res.count === 1) return "updated";
+    if (resultado === "updated") return "updated";
 
     // count 0: distinguir "ya resuelto" (existe) de "no existe".
     const existe = await this.prisma.cierreBodega.count({ where: { id } });

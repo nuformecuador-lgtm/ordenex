@@ -473,7 +473,7 @@ describe("ApiKeyService.activar / desactivar (R3/R4)", () => {
   it("R4: activar fija estado='activa' y devuelve la key publica actualizada", async () => {
     const repo = makeLifecycleRepo();
     const r = await new ApiKeyService(repo).activar({ id: "key-1" }, MAESTRO);
-    expect(repo.setEstado).toHaveBeenCalledWith("key-1", "activa");
+    expect(repo.setEstado).toHaveBeenCalledWith("key-1", "activa", expect.any(String)); // 362
     expect(r.status).toBe("ok");
     if (r.status === "ok") expect(r.apiKey.estado).toBe("activa");
   });
@@ -481,7 +481,7 @@ describe("ApiKeyService.activar / desactivar (R3/R4)", () => {
   it("R4: desactivar fija estado='inactiva' y devuelve la key publica actualizada", async () => {
     const repo = makeLifecycleRepo();
     const r = await new ApiKeyService(repo).desactivar({ id: "key-1" }, MAESTRO);
-    expect(repo.setEstado).toHaveBeenCalledWith("key-1", "inactiva");
+    expect(repo.setEstado).toHaveBeenCalledWith("key-1", "inactiva", expect.any(String)); // 362
     expect(r.status).toBe("ok");
     if (r.status === "ok") expect(r.apiKey.estado).toBe("inactiva");
   });

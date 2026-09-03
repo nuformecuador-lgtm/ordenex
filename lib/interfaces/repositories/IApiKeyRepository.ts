@@ -167,14 +167,24 @@ export interface IApiKeyRepository {
    * dedicado ni el `estado`. Devuelve la forma publica actualizada, o `null` si el id no
    * existe (R3). NUNCA proyecta `keyHash` ni el secreto (R6/R19).
    */
-  rotar(id: string, data: { keyPrefix: string; keyHash: string }): Promise<ApiKeyPublico | null>;
+  /** FICHA 362 (R5/R9): `actorUsuarioId` congela QUIEN roto. Ni el secreto ni el hash ni el
+   * prefijo entran en la fila del registro. */
+  rotar(
+    id: string,
+    data: { keyPrefix: string; keyHash: string },
+    actorUsuarioId: string | null,
+  ): Promise<ApiKeyPublico | null>;
 
   /**
    * Ciclo de vida/R4: fija el `estado` propio de la key (`activa`/`inactiva`). Idempotente
    * a nivel de fila (fijar el estado que ya tiene es un no-op valido). Devuelve la forma
    * publica actualizada, o `null` si el id no existe (R3). NUNCA proyecta `keyHash`.
    */
-  setEstado(id: string, estado: EstadoApiKey): Promise<ApiKeyPublico | null>;
+  setEstado(
+    id: string,
+    estado: EstadoApiKey,
+    actorUsuarioId: string | null,
+  ): Promise<ApiKeyPublico | null>;
 
   /**
    * Feature 302: lee la cuenta `usuarioId` como CANDIDATA a tienda destino (id, nombre, rol y

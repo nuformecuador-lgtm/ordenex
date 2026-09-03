@@ -209,6 +209,38 @@ export const ROLES_HISTORICO_CONVERSACIONES = [
 export const ROLES_MI_WALLET = ["adminTienda"] as const satisfies readonly RolValue[];
 
 /**
+ * ⭑ FICHA 362 / Q4, CERRADA POR EL HUMANO EL 2026-09-02 — único punto de verdad de quién LEE el
+ * historial de acciones. Lo leen el `roles` del subítem «Acciones» del apartado «Histórico» y el
+ * gate `notFound()` de `app/(app)/historico/acciones/page.tsx`, más la autorización de
+ * `HistorialAccionService`. Las tres capas leen ESTA constante y no un literal copiado.
+ *
+ * ⚠️ SOLO `maestro`. Y NACE UNA LISTA NUEVA A PROPÓSITO, aunque el encargo pedía reusar la que ya
+ * existe. El motivo, con nombre:
+ *
+ *   ESTE REGISTRO GUARDA LAS DECISIONES DE DINERO QUE TOMA EL **ADMIN** —aprobar cierres,
+ *   rechazarlos, registrar pagos, anularlos, decidir cobros— Y NO PUEDE SER EL ADMIN QUIEN
+ *   REVISE SU PROPIO REGISTRO. No puede alterarlo (R2: la fila es inmutable), así que el riesgo
+ *   no es de integridad; pero un registro de auditoría que su propio auditado consulta a diario
+ *   deja de cumplir la función para la que se pidió.
+ *
+ * POR QUÉ NO SE ESTRECHA `ROLES_HISTORICO_CONVERSACIONES` (la alternativa barata, DESCARTADA):
+ * esa constante gobierna el histórico de CONVERSACIONES, que el `admin` sí debe seguir viendo —es
+ * su herramienta de trabajo diaria—. Quitarle el `admin` allí para no dárselo aquí le arrebataría
+ * una superficie que nadie decidió quitarle, y ese es exactamente el fallo mudo que la 321
+ * documenta al revés. Dos preguntas distintas, dos respuestas distintas, dos listas.
+ *
+ * EL COSTE, DECLARADO: hay una segunda lista de roles en este archivo y podría divergir de la
+ * primera. Se acepta porque divergir aquí NO es el daño —son conceptos distintos y deben poder
+ * divergir—; el daño sería que la lista y el gate de la ruta divergieran, y eso lo impide que
+ * ambos lean ESTA constante, vigilado por su guardia de fuente única.
+ *
+ * `as const satisfies` y no `readonly RolValue[]`: el `satisfies` comprueba que el nombre es un
+ * `RolValue` real del esquema SIN ensanchar el tipo, así la tupla conserva su identidad y el
+ * subítem de menú puede REFERENCIARLA (se afirma con `toBe`, no con `toEqual`).
+ */
+export const ROLES_HISTORIAL_ACCIONES = ["maestro"] as const satisfies readonly RolValue[];
+
+/**
  * Fuente de verdad del menu. Vive en este modulo server-safe (NO en el
  * "use client" del Sidebar): un Server Component que importa un export de un
  * modulo cliente recibe una referencia-proxy, no el valor real, y `.filter`

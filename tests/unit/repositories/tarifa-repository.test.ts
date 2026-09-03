@@ -5,6 +5,9 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { TarifaRepository } from "@/lib/repositories/TarifaRepository";
 import type { CreateTarifaData } from "@/lib/interfaces/repositories/ITarifaRepository";
 import { ROLES_TARIFABLES } from "@/lib/types/tarifa";
+// FICHA 362: los tres escritores de esta tabla corren dentro de `$transaction` y registran la
+// accion. El doble se ensancha con `$transaction`, `historialAccion` y el actor congelado.
+import { conRegistroDeAcciones } from "../../fixtures/registro-de-acciones";
 
 function tarifaRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -42,7 +45,7 @@ function baseCreateData(): CreateTarifaData {
 }
 
 function buildPrisma(overrides: Record<string, unknown> = {}) {
-  return {
+  return conRegistroDeAcciones({
     tarifa: {
       create: vi.fn(),
       findFirst: vi.fn(),
@@ -50,12 +53,13 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       count: vi.fn(),
       updateMany: vi.fn(),
       delete: vi.fn(),
+      findUnique: vi.fn().mockResolvedValue({ zona: null, tienda: null }),
     },
     usuario: {
       findFirst: vi.fn(),
     },
     ...overrides,
-  };
+  });
 }
 
 describe("TarifaRepository.create (R16/R27)", () => {
@@ -64,7 +68,7 @@ describe("TarifaRepository.create (R16/R27)", () => {
     prisma.tarifa.create.mockResolvedValue(tarifaRow());
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    const dto = await repo.create(baseCreateData());
+    const dto = await repo.create(baseCreateData(), "actor-1");
 
     const arg = prisma.tarifa.create.mock.calls[0][0];
     expect(arg.data.valorFlete).toBeInstanceOf(Prisma.Decimal);
@@ -139,7 +143,7 @@ describe("TarifaRepository.update (R21/R22)", () => {
     prisma.tarifa.findFirst.mockResolvedValue(tarifaRow({ tiendaId: "tienda-2" }));
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    const dto = await repo.update("cob-1", { tiendaId: "tienda-2", zonaId: "zona-2" });
+    const dto = await repo.update("cob-1", { tiendaId: "tienda-2", zonaId: "zona-2" }, "actor-1");
 
     const arg = prisma.tarifa.updateMany.mock.calls[0][0];
     expect(arg.where).toEqual({ id: "cob-1" });
@@ -157,7 +161,7 @@ describe("TarifaRepository.update (R21/R22)", () => {
     prisma.tarifa.findFirst.mockResolvedValue(tarifaRow());
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    await repo.update("cob-1", { valorFlete: 20, ivaFlete: 10 });
+    await repo.update("cob-1", { valorFlete: 20, ivaFlete: 10 }, "actor-1");
 
     const arg = prisma.tarifa.updateMany.mock.calls[0][0];
     expect(arg.data.valorFlete).toBeInstanceOf(Prisma.Decimal);
@@ -169,7 +173,7 @@ describe("TarifaRepository.update (R21/R22)", () => {
     prisma.tarifa.updateMany.mockResolvedValue({ count: 0 });
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    expect(await repo.update("x", { tiendaId: "tienda-2" })).toBeNull();
+    expect(await repo.update("x", { tiendaId: "tienda-2" }, "actor-1")).toBeNull();
   });
 });
 
@@ -181,7 +185,7 @@ describe("TarifaRepository.hardDelete", () => {
     prisma.tarifa.delete.mockResolvedValue(tarifaRow());
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    expect(await repo.hardDelete("cob-1")).toBe("ok");
+    expect(await repo.hardDelete("cob-1", "actor-1")).toBe("ok");
     expect(prisma.tarifa.delete).toHaveBeenCalledWith({ where: { id: "cob-1" } });
     expect(prisma.tarifa.updateMany).not.toHaveBeenCalled();
   });
@@ -196,7 +200,7 @@ describe("TarifaRepository.hardDelete", () => {
     );
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    expect(await repo.hardDelete("x")).toBe("not_found");
+    expect(await repo.hardDelete("x", "actor-1")).toBe("not_found");
   });
 
   // FK RESTRICT desde `cierre_detail.tarifa_id`: la tarifa quedo congelada en un cierre.
@@ -210,7 +214,7 @@ describe("TarifaRepository.hardDelete", () => {
     );
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    expect(await repo.hardDelete("cob-1")).toBe("referenced");
+    expect(await repo.hardDelete("cob-1", "actor-1")).toBe("referenced");
   });
 
   it("propaga cualquier otro error", async () => {
@@ -218,7 +222,7 @@ describe("TarifaRepository.hardDelete", () => {
     prisma.tarifa.delete.mockRejectedValue(new Error("boom"));
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    await expect(repo.hardDelete("cob-1")).rejects.toThrow("boom");
+    await expect(repo.hardDelete("cob-1", "actor-1")).rejects.toThrow("boom");
   });
 });
 
@@ -238,7 +242,7 @@ describe("TarifaRepository: unico (zona_id, tienda_id)", () => {
     prisma.tarifa.create.mockRejectedValue(p2002("tarifas_zona_id_tienda_id_key"));
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    await expect(repo.create(baseCreateData())).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(repo.create(baseCreateData(), "actor-1")).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
   it("update traduce el par duplicado a ConflictError", async () => {
@@ -246,7 +250,7 @@ describe("TarifaRepository: unico (zona_id, tienda_id)", () => {
     prisma.tarifa.updateMany.mockRejectedValue(p2002("tarifas_zona_id_tienda_id_key"));
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    await expect(repo.update("cob-1", { zonaId: "z-1" })).rejects.toMatchObject({
+    await expect(repo.update("cob-1", { zonaId: "z-1" }, "actor-1")).rejects.toMatchObject({
       code: "CONFLICT",
     });
   });
@@ -258,7 +262,7 @@ describe("TarifaRepository: unico (zona_id, tienda_id)", () => {
     prisma.tarifa.create.mockRejectedValue(p2002("otro_indice_key"));
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    await expect(repo.create(baseCreateData())).rejects.toMatchObject({ code: "P2002" });
+    await expect(repo.create(baseCreateData(), "actor-1")).rejects.toMatchObject({ code: "P2002" });
   });
 });
 
@@ -271,7 +275,7 @@ describe("TarifaRepository: tienda opcional", () => {
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
     const { tiendaId: _omitida, ...sinTienda } = baseCreateData();
-    const dto = await repo.create(sinTienda);
+    const dto = await repo.create(sinTienda, "actor-1");
 
     expect(prisma.tarifa.create.mock.calls[0][0].data.tiendaId).toBeNull();
     expect(dto.tiendaId).toBeNull();
@@ -385,7 +389,7 @@ describe("TarifaRepository — tarifa especial (columna opcional)", () => {
     prisma.tarifa.create.mockResolvedValue(tarifaRow());
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    await repo.create(baseCreateData());
+    await repo.create(baseCreateData(), "actor-1");
 
     expect(prisma.tarifa.create.mock.calls[0][0].data.tarifaEspecial).toBeNull();
   });
@@ -395,7 +399,7 @@ describe("TarifaRepository — tarifa especial (columna opcional)", () => {
     prisma.tarifa.create.mockResolvedValue(tarifaRow());
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    await repo.create({ ...baseCreateData(), tarifaEspecial: 1250.5 });
+    await repo.create({ ...baseCreateData(), tarifaEspecial: 1250.5 }, "actor-1");
 
     const escrito = prisma.tarifa.create.mock.calls[0][0].data.tarifaEspecial;
     expect(escrito).toBeInstanceOf(Prisma.Decimal);
@@ -408,12 +412,12 @@ describe("TarifaRepository — tarifa especial (columna opcional)", () => {
     prisma.tarifa.findFirst.mockResolvedValue(tarifaRow());
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    await repo.update("cob-1", { fulfillment: 9 });
+    await repo.update("cob-1", { fulfillment: 9 }, "actor-1");
     expect(prisma.tarifa.updateMany.mock.calls[0][0].data).not.toHaveProperty(
       "tarifaEspecial",
     );
 
-    await repo.update("cob-1", { tarifaEspecial: null });
+    await repo.update("cob-1", { tarifaEspecial: null }, "actor-1");
     expect(prisma.tarifa.updateMany.mock.calls[1][0].data.tarifaEspecial).toBeNull();
   });
 });

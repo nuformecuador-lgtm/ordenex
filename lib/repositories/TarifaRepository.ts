@@ -2,6 +2,8 @@ import { Prisma, type Tarifa, type PrismaClient } from "@prisma/client";
 import { ConflictError } from "@/lib/errors";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { ROLES_TARIFABLES, type TarifaDTO } from "@/lib/types/tarifa";
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad, etiquetaDePersona } from "@/lib/types/historial-accion-etiquetas";
 import type {
   CreateTarifaData,
   DeleteTarifaResult,
@@ -11,7 +13,43 @@ import type {
   UpdateTarifaData,
 } from "@/lib/interfaces/repositories/ITarifaRepository";
 
-type TarifaPrismaClient = Pick<PrismaClient, "tarifa" | "usuario" | "zona">;
+// FICHA 362 — los tres escritores de esta tabla registran su accion EN LA MISMA TRANSACCION que
+// la mutacion (R9). Por eso el `Pick` gana `$transaction` y `historialAccion`: sin ellos el
+// registro solo podria escribirse fuera, que es exactamente lo que R10/R11 prohiben.
+type TarifaPrismaClient = Pick<
+  PrismaClient,
+  "tarifa" | "usuario" | "zona" | "$transaction" | "historialAccion"
+>;
+
+/**
+ * FICHA 362 — la etiqueta CONGELADA de una tarifa, leida DENTRO de la transaccion y ANTES del
+ * `DELETE` cuando toca borrar. `tarifas` borra en FISICO: si se leyera despues no habria a quien
+ * preguntar, y la fila del registro diria «(sin identificar)» sobre algo que si tenia nombre.
+ *
+ * Solo se leen los NOMBRES de la zona y de la tienda. Ni un importe, ni un dato de cliente (R5).
+ */
+async function etiquetaDeTarifa(
+  tx: Pick<Prisma.TransactionClient, "tarifa">,
+  tarifaId: string,
+): Promise<string> {
+  const fila = await tx.tarifa.findUnique({
+    where: { id: tarifaId },
+    select: {
+      zona: { select: { nombre: true } },
+      tienda: { select: { nombre: true, primerApellido: true } },
+    },
+  });
+  return etiquetaDeEntidad("tarifa", {
+    zonaNombre: fila?.zona?.nombre ?? null,
+    tiendaNombre:
+      fila?.tienda == null
+        ? null
+        : etiquetaDePersona({
+            nombre: fila.tienda.nombre,
+            primerApellido: fila.tienda.primerApellido,
+          }),
+  });
+}
 
 type TarifaRow = Tarifa;
 
@@ -62,41 +100,68 @@ function translateParDuplicado(e: unknown): never {
 export class TarifaRepository implements ITarifaRepository {
   constructor(private readonly prisma: TarifaPrismaClient) {}
 
-  async create(data: CreateTarifaData): Promise<TarifaDTO> {
+  async create(data: CreateTarifaData, actorUsuarioId: string | null): Promise<TarifaDTO> {
     try {
-      return await this.createUnsafe(data);
+      return await this.createUnsafe(data, actorUsuarioId);
     } catch (e) {
       translateParDuplicado(e);
     }
   }
 
-  private async createUnsafe(data: CreateTarifaData): Promise<TarifaDTO> {
-    const row = await this.prisma.tarifa.create({
-      data: {
-        tiendaId: data.tiendaId ?? null,
-        valorFlete: new Prisma.Decimal(data.valorFlete),
-        valorFleteDevuelto: new Prisma.Decimal(data.valorFleteDevuelto),
-        valorFleteGam: new Prisma.Decimal(data.valorFleteGam),
-        valorFleteDevueltoGam: new Prisma.Decimal(data.valorFleteDevueltoGam),
-        // Ausente = NULL explicito (sin fulfillment). No se degrada a 0 al ESCRIBIR: el cero
-        // que se guarda es el que alguien tecleo, y el NULL dice que nadie lo hizo.
-        fulfillment: data.fulfillment == null ? null : new Prisma.Decimal(data.fulfillment),
-        comisionCod: new Prisma.Decimal(data.comisionCod),
-        ivaFlete: new Prisma.Decimal(data.ivaFlete),
-        ivaComisionCod: new Prisma.Decimal(data.ivaComisionCod),
-        tarifaEspecial:
-          data.tarifaEspecial == null ? null : new Prisma.Decimal(data.tarifaEspecial),
-        tarifaEspecialDevuelta:
-          data.tarifaEspecialDevuelta == null
-            ? null
-            : new Prisma.Decimal(data.tarifaEspecialDevuelta),
-        zonaId: data.zonaId ?? null,
-        // Sin `?? false` explicito quedaria en manos del default de la columna;
-        // se escribe para que el valor persistido no dependa de dos sitios.
-        isDefault: data.isDefault ?? false,
-      },
+  /**
+   * FICHA 362 (R9) — `tarifa_creada`. La creacion pasa a `$transaction` para que la fila del
+   * registro no pueda existir sin la tarifa ni al reves.
+   *
+   * `monto` va NULL a proposito: una tarifa son DIEZ importes, no uno, y elegir cual congelar
+   * seria inventar un dato. `valorAnterior`/`valorNuevo` tambien van NULL (Q3, cerrada por el
+   * humano: NO se abre el versionado de tarifas; se vive con «quien y cuando» y el valor anterior
+   * se pierde). Meter aqui un volcado de los diez importes seria texto libre en una columna de
+   * vocabulario cerrado, que es lo que R5 prohibe.
+   */
+  private async createUnsafe(
+    data: CreateTarifaData,
+    actorUsuarioId: string | null,
+  ): Promise<TarifaDTO> {
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.tarifa.create({
+        data: {
+          tiendaId: data.tiendaId ?? null,
+          valorFlete: new Prisma.Decimal(data.valorFlete),
+          valorFleteDevuelto: new Prisma.Decimal(data.valorFleteDevuelto),
+          valorFleteGam: new Prisma.Decimal(data.valorFleteGam),
+          valorFleteDevueltoGam: new Prisma.Decimal(data.valorFleteDevueltoGam),
+          // Ausente = NULL explicito (sin fulfillment). No se degrada a 0 al ESCRIBIR: el cero
+          // que se guarda es el que alguien tecleo, y el NULL dice que nadie lo hizo.
+          fulfillment: data.fulfillment == null ? null : new Prisma.Decimal(data.fulfillment),
+          comisionCod: new Prisma.Decimal(data.comisionCod),
+          ivaFlete: new Prisma.Decimal(data.ivaFlete),
+          ivaComisionCod: new Prisma.Decimal(data.ivaComisionCod),
+          tarifaEspecial:
+            data.tarifaEspecial == null ? null : new Prisma.Decimal(data.tarifaEspecial),
+          tarifaEspecialDevuelta:
+            data.tarifaEspecialDevuelta == null
+              ? null
+              : new Prisma.Decimal(data.tarifaEspecialDevuelta),
+          zonaId: data.zonaId ?? null,
+          // Sin `?? false` explicito quedaria en manos del default de la columna;
+          // se escribe para que el valor persistido no dependa de dos sitios.
+          isDefault: data.isDefault ?? false,
+        },
+      });
+
+      const actor = await resolverActorCongelado(tx, actorUsuarioId);
+      await appendAccion(tx, [
+        {
+          accion: "tarifa_creada",
+          entidadTipo: "tarifa",
+          entidadId: row.id,
+          entidadEtiqueta: await etiquetaDeTarifa(tx, row.id),
+          ...actor,
+        },
+      ]);
+
+      return toDTO(row);
     });
-    return toDTO(row);
   }
 
   async findById(id: string): Promise<TarifaDTO | null> {
@@ -124,31 +189,92 @@ export class TarifaRepository implements ITarifaRepository {
     return { items: items.map(toDTO), total };
   }
 
-  async update(id: string, data: UpdateTarifaData): Promise<TarifaDTO | null> {
-    // Solo aplica si existe (R21); updateMany no lanza si 0 filas.
-    // El try envuelve SOLO el UPDATE: reasignar zona o tienda puede chocar con el
-    // unico y eso es un conflicto, no un fallo del repositorio.
-    let result;
-    try {
-      result = await this.prisma.tarifa.updateMany({
-        where: { id },
-        data: this.toUpdateData(data),
-      });
-    } catch (e) {
-      translateParDuplicado(e);
-    }
-    if (result.count === 0) return null;
-    const row = await this.prisma.tarifa.findFirst({ where: { id } });
-    return row ? toDTO(row) : null;
+  /**
+   * FICHA 362 (R9/R11) — `tarifa_actualizada`, dentro de la MISMA transaccion que el `UPDATE`.
+   *
+   * ⚠️ EL REGISTRO VA DESPUES DE COMPROBAR `result.count`, y ese orden es el requisito: si el
+   * `updateMany` no alcanza ninguna fila (la tarifa no existe) NO se escribe ninguna fila de
+   * registro. Escribirlo antes dejaria constancia de una actualizacion que no ocurrio.
+   *
+   * La etiqueta se lee DESPUES del `UPDATE`: aqui la fila sigue existiendo y el cambio puede
+   * haber movido la zona o la tienda, o sea lo que la etiqueta nombra. Se congela lo que la
+   * tarifa ES tras el cambio.
+   */
+  async update(
+    id: string,
+    data: UpdateTarifaData,
+    actorUsuarioId: string | null,
+  ): Promise<TarifaDTO | null> {
+    return this.prisma.$transaction(async (tx) => {
+      // Solo aplica si existe (R21); updateMany no lanza si 0 filas.
+      // El try envuelve SOLO el UPDATE: reasignar zona o tienda puede chocar con el
+      // unico y eso es un conflicto, no un fallo del repositorio.
+      let result;
+      try {
+        result = await tx.tarifa.updateMany({
+          where: { id },
+          data: this.toUpdateData(data),
+        });
+      } catch (e) {
+        translateParDuplicado(e);
+      }
+      if (result.count === 0) return null;
+
+      const actor = await resolverActorCongelado(tx, actorUsuarioId);
+      await appendAccion(tx, [
+        {
+          accion: "tarifa_actualizada",
+          entidadTipo: "tarifa",
+          entidadId: id,
+          entidadEtiqueta: await etiquetaDeTarifa(tx, id),
+          ...actor,
+        },
+      ]);
+
+      const row = await tx.tarifa.findFirst({ where: { id } });
+      return row ? toDTO(row) : null;
+    });
   }
 
   // Borrado FISICO: la tabla ya no tiene `deleted_at`. Es lo que permite que el
   // unico `(zona_id, tienda_id)` sea total -una tarifa borrada deja de ocupar su
   // par y se puede volver a crear-.
-  async hardDelete(id: string): Promise<DeleteTarifaResult> {
+  /**
+   * FICHA 362 (R4/R9) — `tarifa_borrada`, EL CASO QUE JUSTIFICA CONGELAR LA ETIQUETA.
+   *
+   * ⚠️ EL ORDEN NO ES NEGOCIABLE: la etiqueta se lee ANTES del `DELETE`. El borrado es FISICO —la
+   * fila desaparece y con ella el precio que estuvo vigente—, asi que despues no habria a quien
+   * preguntar de que tarifa se trataba. Esa es exactamente la propiedad que R4 exige y la que un
+   * join al leer no puede dar.
+   *
+   * El `appendAccion` va DESPUES del `delete`: si el borrado falla (P2003, la tarifa esta
+   * congelada en un cierre) no se escribe fila de registro, porque no hubo borrado (R11). Y si el
+   * `appendAccion` fallara, la transaccion revierte y la tarifa NO se borra (R10).
+   */
+  async hardDelete(id: string, actorUsuarioId: string | null): Promise<DeleteTarifaResult> {
+    // ⚠️ EL `try` ENVUELVE LA TRANSACCION ENTERA Y NO EL `delete` SUELTO. Dentro de una
+    // transaccion de Postgres una sentencia que falla ABORTA la transaccion: capturar el P2003
+    // por dentro y seguir dejaria la tx en estado abortado y cualquier consulta posterior
+    // reventaria con `25P02`. Dejando que el error salga, la transaccion revierte limpiamente y
+    // la traduccion a `not_found`/`referenced` sigue dando exactamente el mismo contrato de antes.
     try {
-      await this.prisma.tarifa.delete({ where: { id } });
-      return "ok";
+      return await this.prisma.$transaction(async (tx) => {
+        // ANTES del DELETE: despues no hay a quien preguntar.
+        const etiqueta = await etiquetaDeTarifa(tx, id);
+        await tx.tarifa.delete({ where: { id } });
+
+        const actor = await resolverActorCongelado(tx, actorUsuarioId);
+        await appendAccion(tx, [
+          {
+            accion: "tarifa_borrada",
+            entidadTipo: "tarifa",
+            entidadId: id,
+            entidadEtiqueta: etiqueta,
+            ...actor,
+          },
+        ]);
+        return "ok" as const;
+      });
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError) {
         // P2025: la fila no existe (o se borro en la carrera).

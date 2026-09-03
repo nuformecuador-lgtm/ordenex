@@ -52,6 +52,28 @@ function anulacionRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * FICHA 362 — la `tx` que este repositorio recibe gana `historialAccion` (la fila del registro)
+ * y `usuario` (el congelado del actor). Se declara UNA vez y la usan los 16 call-sites, para que
+ * el doble no diverja entre casos.
+ *
+ * El congelado devuelve un actor con nombre y rol: asi los casos que miran la fila escrita ven lo
+ * mismo que veria produccion.
+ */
+function txConRegistro(base: Record<string, unknown>) {
+  return {
+    ...base,
+    historialAccion: { createMany: vi.fn(async () => ({ count: 1 })) },
+    usuario: {
+      findUnique: vi.fn(async () => ({
+        nombre: "Admin",
+        primerApellido: "Uno",
+        rol: { value: "admin" },
+      })),
+    },
+  } as never;
+}
+
 function buildPrisma() {
   return {
     liquidacionPago: {
@@ -164,7 +186,7 @@ describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
     prisma.liquidacionPago.create.mockResolvedValue(documentoRow());
     const repo = buildRepo(prisma);
 
-    const r = await repo.crear({ liquidacionPago: prisma.liquidacionPago } as never, INPUT);
+    const r = await repo.crear(txConRegistro({ liquidacionPago: prisma.liquidacionPago }), INPUT);
 
     expect(r.status).toBe("creado");
     const arg = prisma.liquidacionPago.create.mock.calls[0][0];
@@ -209,7 +231,7 @@ describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
     prisma.liquidacionPago.create.mockResolvedValue(documentoRow());
     const repo = buildRepo(prisma);
 
-    const r = await repo.crear({ liquidacionPago: prisma.liquidacionPago } as never, INPUT);
+    const r = await repo.crear(txConRegistro({ liquidacionPago: prisma.liquidacionPago }), INPUT);
 
     expect(r).toMatchObject({ status: "creado" });
     if (r.status !== "creado") return;
@@ -225,7 +247,7 @@ describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
     );
     const repo = buildRepo(prisma);
 
-    const r = await repo.crear({ liquidacionPago: prisma.liquidacionPago } as never, INPUT);
+    const r = await repo.crear(txConRegistro({ liquidacionPago: prisma.liquidacionPago }), INPUT);
     if (r.status !== "creado") throw new Error("esperaba creado");
     expect(r.pago.fechaPago).toBe("2026-08-02");
     expect(r.pago.registradoAt).toBe("2026-08-02T15:04:05.000Z");
@@ -236,7 +258,7 @@ describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
     prisma.liquidacionPago.create.mockResolvedValue(documentoRow());
     const repo = buildRepo(prisma);
 
-    const r = await repo.crear({ liquidacionPago: prisma.liquidacionPago } as never, INPUT);
+    const r = await repo.crear(txConRegistro({ liquidacionPago: prisma.liquidacionPago }), INPUT);
     if (r.status !== "creado") throw new Error("esperaba creado");
     expect(r.pago.registradoPorNombre).toBe("Ana Admin");
     expect(JSON.stringify(r.pago)).not.toContain("u-admin");
@@ -250,7 +272,7 @@ describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
     prisma.liquidacionPago.create.mockRejectedValue(p2002Nativo(["clave_idempotencia"]));
     const repo = buildRepo(prisma);
 
-    const r = await repo.crear({ liquidacionPago: prisma.liquidacionPago } as never, INPUT);
+    const r = await repo.crear(txConRegistro({ liquidacionPago: prisma.liquidacionPago }), INPUT);
 
     expect(r).toEqual({ status: "clave_repetida" });
   });
@@ -265,7 +287,7 @@ describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
     );
     const repo = buildRepo(prisma);
 
-    const r = await repo.crear({ liquidacionPago: prisma.liquidacionPago } as never, INPUT);
+    const r = await repo.crear(txConRegistro({ liquidacionPago: prisma.liquidacionPago }), INPUT);
 
     expect(r).toEqual({ status: "clave_repetida" });
   });
@@ -278,7 +300,7 @@ describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
     const repo = buildRepo(prisma);
 
     await expect(
-      repo.crear({ liquidacionPago: prisma.liquidacionPago } as never, INPUT),
+      repo.crear(txConRegistro({ liquidacionPago: prisma.liquidacionPago }), INPUT),
     ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
   });
 
@@ -288,7 +310,7 @@ describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
     const repo = buildRepo(prisma);
 
     await expect(
-      repo.crear({ liquidacionPago: prisma.liquidacionPago } as never, INPUT),
+      repo.crear(txConRegistro({ liquidacionPago: prisma.liquidacionPago }), INPUT),
     ).rejects.toThrow("conexion caida");
   });
 
@@ -299,7 +321,7 @@ describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
     prisma.liquidacionPago.create.mockResolvedValue(documentoRow());
     const repo = buildRepo(prisma);
 
-    await repo.crear({ liquidacionPago: prisma.liquidacionPago } as never, {
+    await repo.crear(txConRegistro({ liquidacionPago: prisma.liquidacionPago }), {
       ...INPUT,
       mensajeroId: "m1",
       tiendaId: null,
@@ -319,7 +341,7 @@ describe("LiquidacionPagoRepository.crear (R7/R9)", () => {
     prisma.liquidacionPago.create.mockResolvedValue(documentoRow());
     const repo = buildRepo(prisma);
 
-    await repo.crear({ liquidacionPago: prisma.liquidacionPago } as never, INPUT);
+    await repo.crear(txConRegistro({ liquidacionPago: prisma.liquidacionPago }), INPUT);
 
     const { data } = prisma.liquidacionPago.create.mock.calls[0][0];
     expect(data).toHaveProperty("repartoId");
@@ -865,7 +887,7 @@ describe("LiquidacionPagoRepository.anular (R73/R75)", () => {
     const repo = buildRepo(prisma);
 
     const r = await repo.anular(
-      { liquidacionAnulacion: prisma.liquidacionAnulacion } as never,
+      txConRegistro({ liquidacionAnulacion: prisma.liquidacionAnulacion, liquidacionPago: prisma.liquidacionPago }),
       ANULAR,
     );
 
@@ -898,7 +920,7 @@ describe("LiquidacionPagoRepository.anular (R73/R75)", () => {
     const store = storeDeAnulaciones();
     prisma.liquidacionAnulacion.create = store.create;
     const repo = buildRepo(prisma);
-    const tx = { liquidacionAnulacion: prisma.liquidacionAnulacion } as never;
+    const tx = txConRegistro({ liquidacionAnulacion: prisma.liquidacionAnulacion, liquidacionPago: prisma.liquidacionPago });
 
     const primera = await repo.anular(tx, ANULAR);
     const segunda = await repo.anular(tx, { ...ANULAR, motivo: "Otro motivo, otro actor" });
@@ -920,7 +942,7 @@ describe("LiquidacionPagoRepository.anular (R73/R75)", () => {
     const store = storeDeAnulaciones(true);
     prisma.liquidacionAnulacion.create = store.create;
     const repo = buildRepo(prisma);
-    const tx = { liquidacionAnulacion: prisma.liquidacionAnulacion } as never;
+    const tx = txConRegistro({ liquidacionAnulacion: prisma.liquidacionAnulacion, liquidacionPago: prisma.liquidacionPago });
 
     await repo.anular(tx, ANULAR);
     expect(await repo.anular(tx, ANULAR)).toEqual({ status: "ya_anulado" });
@@ -935,7 +957,7 @@ describe("LiquidacionPagoRepository.anular (R73/R75)", () => {
     const repo = buildRepo(prisma);
 
     await expect(
-      repo.anular({ liquidacionAnulacion: prisma.liquidacionAnulacion } as never, ANULAR),
+      repo.anular(txConRegistro({ liquidacionAnulacion: prisma.liquidacionAnulacion, liquidacionPago: prisma.liquidacionPago }), ANULAR),
     ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
   });
 
@@ -945,7 +967,7 @@ describe("LiquidacionPagoRepository.anular (R73/R75)", () => {
     const repo = buildRepo(prisma);
 
     await expect(
-      repo.anular({ liquidacionAnulacion: prisma.liquidacionAnulacion } as never, ANULAR),
+      repo.anular(txConRegistro({ liquidacionAnulacion: prisma.liquidacionAnulacion, liquidacionPago: prisma.liquidacionPago }), ANULAR),
     ).rejects.toThrow("conexion caida");
   });
 
@@ -954,10 +976,10 @@ describe("LiquidacionPagoRepository.anular (R73/R75)", () => {
     const store = storeDeAnulaciones();
     prisma.liquidacionAnulacion.create = store.create;
     const repo = buildRepo(prisma);
-    const tx = {
+    const tx = txConRegistro({
       liquidacionAnulacion: prisma.liquidacionAnulacion,
       liquidacionPago: prisma.liquidacionPago,
-    } as never;
+    });
 
     await repo.anular(tx, ANULAR);
     await repo.anular(tx, ANULAR); // y tampoco en el camino que rechaza
@@ -965,8 +987,32 @@ describe("LiquidacionPagoRepository.anular (R73/R75)", () => {
     for (const metodo of ["update", "updateMany", "delete", "deleteMany", "upsert", "create"] as const) {
       expect(prisma.liquidacionPago[metodo], `liquidacionPago.${metodo}`).not.toHaveBeenCalled();
     }
-    // Ni siquiera se LEE el pago desde aqui: el monto lo lee el servicio con `obtenerPorId`.
-    expect(prisma.liquidacionPago.findUnique).not.toHaveBeenCalled();
+    // ⚠️ FICHA 362 — ESTA LINEA CAMBIA, Y EL CAMBIO SE DECLARA EN VEZ DE ESCONDERSE.
+    //
+    // Decia: «Ni siquiera se LEE el pago desde aqui: el monto lo lee el servicio con
+    // `obtenerPorId`». Desde la 362 SI se lee, UNA vez y DENTRO de la transaccion, para congelar
+    // en la fila del registro el importe anulado y el nombre del beneficiario.
+    //
+    // POR QUE SE LEE AQUI Y NO SE PASA EL DEL SERVICIO: el servicio lo leyo FUERA de la
+    // transaccion, y entre esa lectura y esta escritura el pago pudo cambiar. Es el mismo
+    // criterio que ya sigue `IncidenteAdminRepository` con el feed de la indemnizacion —«el feed
+    // LEE de la base lo que esa misma tx acaba de escribir»—: un registro de dinero construido
+    // con el numero del request puede acabar diciendo algo que la base no dice.
+    //
+    // LO QUE **NO** CAMBIA, y es lo que R41/R74 protegen: anular sigue sin MUTAR la fila del pago.
+    // Las seis aserciones de escritura de arriba siguen intactas y son las que sostienen el
+    // requisito; leer no es tocar.
+    expect(prisma.liquidacionPago.findUnique).toHaveBeenCalled();
+    for (const llamada of prisma.liquidacionPago.findUnique.mock.calls) {
+      const args = llamada[0] as { select?: Record<string, unknown> };
+      // Y lo que lee es lo JUSTO: el importe y el beneficiario. Ni la nota, ni la referencia.
+      expect(Object.keys(args.select ?? {}).sort()).toEqual([
+        "mensajero",
+        "monto",
+        "repartoId",
+        "tienda",
+      ]);
+    }
     // Y la propia anulacion es append-only: solo `create`.
     for (const metodo of ["update", "updateMany", "delete", "deleteMany", "upsert"] as const) {
       expect(

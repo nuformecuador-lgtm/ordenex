@@ -1,3 +1,5 @@
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad, etiquetaDePersona } from "@/lib/types/historial-accion-etiquetas";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   AnularLiquidacionPagoInput,
@@ -31,6 +33,31 @@ const INCLUDE_DOCUMENTO = {
 } as const;
 
 type DocumentoRow = Prisma.LiquidacionPagoGetPayload<{ include: typeof INCLUDE_DOCUMENTO }>;
+
+/**
+ * FICHA 362 — el `include` del documento MAS el nombre del beneficiario, que es lo unico que la
+ * etiqueta congelada necesita. Se pide en la MISMA consulta del `create` (no en una segunda) para
+ * no pagar un viaje extra dentro de la transaccion mas cara del sistema.
+ */
+const INCLUDE_DOCUMENTO_CON_BENEFICIARIO = {
+  ...INCLUDE_DOCUMENTO,
+  mensajero: { select: { nombre: true, primerApellido: true } },
+  tienda: { select: { nombre: true, primerApellido: true } },
+} as const;
+
+type DocumentoConBeneficiarioRow = Prisma.LiquidacionPagoGetPayload<{
+  include: typeof INCLUDE_DOCUMENTO_CON_BENEFICIARIO;
+}>;
+
+/**
+ * FICHA 362 — a QUIEN se le pago, en texto. Es un OPERADOR (mensajero o tienda), nunca el
+ * destinatario de una orden (R5). `null` si la fila no tiene ninguno de los dos, que la base no
+ * admite pero el tipo si.
+ */
+function nombreDelBeneficiario(row: DocumentoConBeneficiarioRow): string | null {
+  const persona = row.mensajero ?? row.tienda;
+  return persona === null ? null : etiquetaDePersona(persona);
+}
 
 /**
  * §5/R80 — «VIGENTE» = SIN fila en `liquidacion_anulacion`. Se declara UNA vez y se reusa en
@@ -181,8 +208,43 @@ export class LiquidacionPagoRepository implements ILiquidacionPagoRepository {
           // suelto contra un cierre», que es un dato, no una ausencia.
           repartoId: input.repartoId,
         },
-        include: INCLUDE_DOCUMENTO,
+        include: INCLUDE_DOCUMENTO_CON_BENEFICIARIO,
       });
+
+      // ═════════════════════════════════════════════════════════════════════════════════════
+      // FICHA 362 (R6/R9) — `pago_mensajero_registrado` / `pago_tienda_registrado`.
+      //
+      // ⚠️ SOLO CUANDO EL PAGO ES SUELTO (`repartoId === null`). Un REPARTO trocea un importe
+      // entre los cierres del mensajero y crea N `liquidacion_pago` hijos: registrar cada hijo
+      // convertiria UNA decision en N filas de auditoria, que es exactamente lo que el design
+      // §0 descarta —«se registra la DECISION, no sus asientos»—. El acto queda registrado UNA
+      // vez, en `LiquidacionRepartoRepository.crear`.
+      //
+      // El tipo lo decide QUIEN cobra, que es lo mismo que decide las columnas del documento:
+      // `mensajeroId` y `tiendaId` son excluyentes por construccion de esta tabla.
+      //
+      // `monto` se congela como `Decimal` desde la fila recien escrita: ni un `Number()`.
+      // `nota` y `referencia` NO se copian — son texto libre (R5).
+      // ═════════════════════════════════════════════════════════════════════════════════════
+      if (input.repartoId === null) {
+        const actor = await resolverActorCongelado(tx, input.registradoPor);
+        await appendAccion(tx, [
+          {
+            accion:
+              row.mensajeroId !== null
+                ? "pago_mensajero_registrado"
+                : "pago_tienda_registrado",
+            entidadTipo: "liquidacion_pago",
+            entidadId: row.id,
+            entidadEtiqueta: etiquetaDeEntidad("liquidacion_pago", {
+              beneficiarioNombre: nombreDelBeneficiario(row),
+            }),
+            monto: row.monto,
+            ...actor,
+          },
+        ]);
+      }
+
       return { status: "creado", pago: toDTO(row) };
     } catch (error) {
       if (esChoqueDeClave(error)) return { status: "clave_repetida" };
@@ -325,6 +387,47 @@ export class LiquidacionPagoRepository implements ILiquidacionPagoRepository {
         },
         include: { anulador: { select: { nombre: true } } }, // R56: NOMBRE, no id
       });
+
+      // FICHA 362 (R5/R6/R9) — `pago_anulado`. La fila del contraasiento acaba de escribirse en
+      // ESTA tx; si el `UNIQUE(pago_id)` la hubiera rechazado, el `catch` de abajo devuelve
+      // `ya_anulado` y aqui no se llega: no queda registro de una anulacion que no ocurrio.
+      //
+      // ⚠️ `input.motivo` NO SE COPIA, y es el ejemplo canonico de R5: es texto libre tecleado por
+      // una persona («anulado porque el cliente Juan Perez...»), es el unico vector real de datos
+      // de cliente en esta tabla y YA VIVE en `liquidacion_anulacion.motivo`. Quien quiera leerlo
+      // abre el pago.
+      const anulado = await tx.liquidacionPago.findUnique({
+        where: { id: input.pagoId },
+        select: {
+          monto: true,
+          repartoId: true,
+          mensajero: { select: { nombre: true, primerApellido: true } },
+          tienda: { select: { nombre: true, primerApellido: true } },
+        },
+      });
+      // ⚠️ SIMETRICO CON `crear`: un pago que pertenece a un REPARTO no produce fila propia. La
+      // anulacion de un reparto es UN acto —el maestro deshace el reparto entero— y la registra
+      // `LiquidacionRepartoRepository.registrarAnulacion` con UNA fila. Sin este corte, deshacer
+      // un reparto de 12 cierres escribiria 12 filas de auditoria de una sola decision.
+      if (anulado?.repartoId == null) {
+        const actorAnulacion = await resolverActorCongelado(tx, input.anuladoPor);
+        await appendAccion(tx, [
+          {
+            accion: "pago_anulado",
+            entidadTipo: "liquidacion_pago",
+            entidadId: input.pagoId,
+            entidadEtiqueta: etiquetaDeEntidad("liquidacion_pago", {
+              // El beneficiario es un OPERADOR (mensajero o tienda), nunca el destinatario de una
+              // orden (R5). Si la relectura no resuelve, la etiqueta sale «(sin identificar)»: una
+              // etiqueta pobre no puede tumbar la anulacion de un pago.
+              beneficiarioNombre: etiquetaDePersona(anulado?.mensajero ?? anulado?.tienda),
+            }),
+            monto: anulado?.monto ?? null,
+            ...actorAnulacion,
+          },
+        ]);
+      }
+
       return {
         status: "anulado",
         anulacion: {

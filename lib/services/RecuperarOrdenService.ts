@@ -60,7 +60,9 @@ export class RecuperarOrdenService implements IRecuperarOrdenService {
     // sobre la que alguien alcanzo a trabajar.
     if (detalle.length > 0) return { status: "conflict", detalle };
 
-    const recuperadas = await this.repo.restore(ordenIds);
+    // FICHA 362 (R3/R9/R12): QUIEN recupera, congelado en la misma transaccion. El registro
+    // lleva UNA fila por orden EFECTIVAMENTE recuperada.
+    const recuperadas = await this.repo.restore(ordenIds, actor.usuarioId);
     return { status: "ok", recuperadas };
   }
 }

@@ -1,3 +1,5 @@
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CrearCobroRechazoTiendaInput,
@@ -11,7 +13,7 @@ import type { RechazoTiendaCobroDTO } from "@/lib/types/rechazo-tienda-cobro";
 // Cliente Prisma acotado a lo que este repo necesita (patron `GastoFijoCobroRepository`): no
 // puede tocar `wallet_movimiento`, `gestion_orden` ni `orden` aunque quisiera, por el TIPO. Lo
 // que si puede es LEER sus columnas por relacion, que es lo que hace la cola.
-type CobroPrismaClient = Pick<PrismaClient, "rechazoTiendaCobro">;
+type CobroPrismaClient = Pick<PrismaClient, "rechazoTiendaCobro" | "historialAccion" | "usuario">;
 
 type CobroRow = Prisma.RechazoTiendaCobroGetPayload<Record<string, never>>;
 
@@ -194,6 +196,40 @@ export class RechazoTiendaCobroRepository implements IRechazoTiendaCobroReposito
       where: { id, estado: "pendiente" },
       data: { estado, decididoPor: actorId, decididoAt: ahora },
     });
+
+    // FICHA 362 (R6/R9/R11) — `cobro_rechazo_tienda_aprobado` / `cobro_rechazo_tienda_rechazado`,
+    // en la MISMA tx que la decision. DENTRO del `count === 1`, por el mismo motivo que su gemelo
+    // del gasto fijo: la carrera entre dos administradores produce UNA decision y UNA fila.
+    //
+    // `monto` = el flete de devolucion (`monto_flete`), que es el importe que la decision mueve.
+    // El IVA va aparte en la tabla y no se suma aqui: R6 pide congelar EL importe de la accion,
+    // no inventar una aritmetica nueva sobre dinero.
+    if (res.count === 1) {
+      const cobro = await tx.rechazoTiendaCobro.findUnique({
+        where: { id },
+        select: {
+          montoFlete: true,
+          orden: { select: { numGuia: true, numRemision: true } },
+        },
+      });
+      const actor = await resolverActorCongelado(tx, actorId);
+      await appendAccion(tx, [
+        {
+          accion:
+            estado === "aprobado"
+              ? "cobro_rechazo_tienda_aprobado"
+              : "cobro_rechazo_tienda_rechazado",
+          entidadTipo: "rechazo_tienda_cobro",
+          entidadId: id,
+          entidadEtiqueta: etiquetaDeEntidad("rechazo_tienda_cobro", {
+            numGuia: cobro?.orden.numGuia ?? null,
+            numRemision: cobro?.orden.numRemision ?? null,
+          }),
+          monto: cobro?.montoFlete ?? null,
+          ...actor,
+        },
+      ]);
+    }
     return res.count;
   }
 }

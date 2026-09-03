@@ -143,9 +143,26 @@ describe("R21 — el premio no se edita ni se borra: toda correccion es una fila
     const contrato = codigoSinComentarios(
       "lib/interfaces/services/IPremioRankingDevengoService.ts",
     );
-    expect(contrato).toMatch(
-      /PremioTx = Pick<PrismaClient, "pagoMensajeroMovimiento" \| "walletMovimiento">/,
-    );
+    // ⚠️ FICHA 362 — EL `PremioTx` GANA TRES CLAVES, Y NINGUNA ES UN LIBRO NI EL SNAPSHOT.
+    //
+    // Decia `Pick<PrismaClient, "pagoMensajeroMovimiento" | "walletMovimiento">`. Hoy incluye
+    // ademas `rankingSnapshotFila` (LECTURA: el nombre congelado y el puesto que etiquetan la
+    // fila del registro), `historialAccion` (la fila del registro) y `usuario` (el actor
+    // congelado). Las tres existen porque el registro de `premio_ranking_registrado` va en la
+    // MISMA transaccion que el devengo y su egreso (362/R9).
+    //
+    // R21 NO SE RELAJA, y las DOS aserciones que lo sostienen siguen intactas: el `tx` sigue sin
+    // exponer `cierre_dia` —el snapshot del cierre— ni el ledger por tienda.
+    for (const clave of [
+      "pagoMensajeroMovimiento",
+      "walletMovimiento",
+      "rankingSnapshotFila",
+      "historialAccion",
+      "usuario",
+    ]) {
+      expect(contrato, `PremioTx no declara ${clave}`).toContain(`"${clave}"`);
+    }
+    expect(contrato).not.toMatch(/cierreDia/);
     expect(contrato).not.toMatch(/cierreDia/);
     expect(contrato).not.toMatch(/walletTiendaMovimiento/);
   });

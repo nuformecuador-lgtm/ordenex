@@ -1,17 +1,22 @@
+import { conRegistroDeAcciones } from "../../fixtures/registro-de-acciones";
 import { describe, it, expect, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { UserRepository } from "@/lib/repositories/UserRepository";
 
-type MockedUserPrisma = Pick<PrismaClient, "usuario" | "tipoIdentificacion" | "rol">;
+type MockedUserPrisma = Pick<
+  PrismaClient,
+  "usuario" | "tipoIdentificacion" | "rol" | "$transaction" | "historialAccion"
+>;
 
 function buildMockPrisma(findManyImpl?: ReturnType<typeof vi.fn>): MockedUserPrisma {
-  return {
+  // FICHA 362: el doble se ensancha con lo que el registro de acciones necesita.
+  return conRegistroDeAcciones({
     usuario: {
       findMany: findManyImpl ?? vi.fn().mockResolvedValue([]),
     },
     tipoIdentificacion: { findUnique: vi.fn() },
     rol: { findUnique: vi.fn() },
-  } as unknown as MockedUserPrisma;
+  }) as unknown as MockedUserPrisma;
 }
 
 describe("UserRepository.listMensajeros (R1, R2, R3)", () => {

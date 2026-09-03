@@ -69,6 +69,9 @@ function buildMovimientoRepo(count: number): IWalletMovimientoRepository {
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
     obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
+    // ficha 362: el escritor de los movimientos que nacen de una DECISION humana; registra la
+    // accion en su propia transaccion. Los feeds automaticos siguen entrando por `crearMovimientos`.
+    crearMovimientoRegistrado: vi.fn().mockResolvedValue(1),
   };
 }
 

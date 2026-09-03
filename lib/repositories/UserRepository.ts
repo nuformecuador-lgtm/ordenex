@@ -1,3 +1,6 @@
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import type { EntradaAccion } from "@/lib/interfaces/repositories/IHistorialAccionRepository";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import { Prisma, type EstadoUsuario, type PrismaClient, type RolValue } from "@prisma/client";
 import { ESTADOS_USUARIO_NO_ASIGNABLES } from "@/lib/constants/estado-usuario-asignable";
 import type { UsuarioPorRolDTO } from "@/lib/types/usuario-por-rol";
@@ -21,7 +24,12 @@ import {
 import type { MensajeroDTO } from "@/lib/types/mensajero";
 import type { CuentaTiendaDTO, MensajeroFiltroDTO } from "@/lib/types/filtros-ordenes";
 
-type UserPrismaClient = Pick<PrismaClient, "usuario" | "tipoIdentificacion" | "rol">;
+// FICHA 362 (R9): las cuatro escrituras instrumentadas de esta clase corren en `$transaction` y
+// registran su accion en ella.
+type UserPrismaClient = Pick<
+  PrismaClient,
+  "usuario" | "tipoIdentificacion" | "rol" | "$transaction" | "historialAccion"
+>;
 
 const PUBLIC_SELECT = {
   id: true,
@@ -75,7 +83,10 @@ export class UserRepository implements IUserRepository {
     return this.prisma.usuario.findUnique({ where: { email }, select: PUBLIC_SELECT });
   }
 
-  async create(input: CreateUsuarioInput): Promise<UsuarioPublico> {
+  async create(
+    input: CreateUsuarioInput,
+    actorUsuarioId: string | null,
+  ): Promise<UsuarioPublico> {
     // R10: se valida la FK de catalogo explicitamente en vez de depender del
     // codigo de error de Postgres, para dar un error de dominio claro (T017).
     const [tipoIdentificacion, rol] = await Promise.all([
@@ -90,10 +101,29 @@ export class UserRepository implements IUserRepository {
     }
 
     try {
-      return await this.prisma.usuario.create({
-        // Feature 27/R3: `fulfillment` ausente se persiste como `false` (no null).
-        data: { ...input, fulfillment: input.fulfillment ?? false },
-        select: PUBLIC_SELECT,
+      // FICHA 362 (R9) — `usuario_creado`. El alta pasa a `$transaction` (forma 2 del design
+      // §2.3: era un `create` suelto) para que el alta y su rastro sean atomicos.
+      return await this.prisma.$transaction(async (tx) => {
+        const usuario = await tx.usuario.create({
+          // Feature 27/R3: `fulfillment` ausente se persiste como `false` (no null).
+          data: { ...input, fulfillment: input.fulfillment ?? false },
+          select: PUBLIC_SELECT,
+        });
+
+        const actor = await resolverActorCongelado(tx, actorUsuarioId);
+        await appendAccion(tx, [
+          {
+            accion: "usuario_creado",
+            entidadTipo: "usuario",
+            entidadId: usuario.id,
+            entidadEtiqueta: etiquetaDeEntidad("usuario", {
+              nombre: usuario.nombre,
+              primerApellido: usuario.primerApellido,
+            }),
+            ...actor,
+          },
+        ]);
+        return usuario;
       });
     } catch (error) {
       throw mapDuplicadoError(error);
@@ -105,6 +135,47 @@ export class UserRepository implements IUserRepository {
     await this.prisma.usuario.update({
       where: { id: usuarioId },
       data: { passwordHash },
+    });
+  }
+
+  /**
+   * FICHA 362 (R5/R9) — `usuario_contrasena_restablecida`: el restablecimiento que hace UN
+   * ADMINISTRADOR sobre la cuenta de OTRO.
+   *
+   * Va aparte de `updatePasswordHash` a proposito. Ese metodo lo comparte el auto-servicio
+   * (`PasswordResetService`), donde el usuario cambia SU propia clave desde su correo: eso no es
+   * «alguien cambio quien puede hacer que», es higiene de cuenta propia, y el Anexo A no lo lista.
+   * Instrumentar el metodo compartido habria metido en el registro un evento que nadie pidio.
+   *
+   * ⚠️ NI EL HASH NI LA CLAVE ENTRAN EN LA FILA. La etiqueta es el NOMBRE del usuario afectado y
+   * `valor_anterior`/`valor_nuevo` van NULL: lo que se registra es que a Fulano le restablecieron
+   * la clave, no cual (R5).
+   */
+  async restablecerContrasena(
+    usuarioId: string,
+    passwordHash: string,
+    actorUsuarioId: string | null,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const usuario = await tx.usuario.update({
+        where: { id: usuarioId },
+        data: { passwordHash },
+        select: { id: true, nombre: true, primerApellido: true },
+      });
+
+      const actor = await resolverActorCongelado(tx, actorUsuarioId);
+      await appendAccion(tx, [
+        {
+          accion: "usuario_contrasena_restablecida",
+          entidadTipo: "usuario",
+          entidadId: usuario.id,
+          entidadEtiqueta: etiquetaDeEntidad("usuario", {
+            nombre: usuario.nombre,
+            primerApellido: usuario.primerApellido,
+          }),
+          ...actor,
+        },
+      ]);
     });
   }
 
@@ -304,7 +375,11 @@ export class UserRepository implements IUserRepository {
    * Feature 25/R16/R18/R19: aplica solo campos editables; valida FK de catalogo
    * (mismo patron que `create`). `null` si el usuario no existe (R17).
    */
-  async update(id: string, data: UpdateUsuarioData): Promise<UsuarioPublico | null> {
+  async update(
+    id: string,
+    data: UpdateUsuarioData,
+    actorUsuarioId: string | null,
+  ): Promise<UsuarioPublico | null> {
     // R18: valida las FK de catalogo provistas antes de tocar la fila.
     if (data.tipoIdentificacionId !== undefined) {
       const tipo = await this.prisma.tipoIdentificacion.findUnique({
@@ -317,23 +392,141 @@ export class UserRepository implements IUserRepository {
       if (!rol) throw new CatalogoInvalidoError("rolId", data.rolId);
     }
 
-    const result = await this.prisma.usuario.updateMany({
-      where: { id },
-      data: this.toUpdateData(data), // R16: solo campos editables
-    });
-    if (result.count === 0) return null; // R17
+    return this.prisma.$transaction(async (tx) => {
+      // ═══════════════════════════════════════════════════════════════════════════════════════
+      // FICHA 362 (R7/R9) — EL ESTADO PREVIO, LEIDO ANTES DEL `UPDATE` Y DENTRO DE LA MISMA
+      // TRANSACCION.
+      //
+      // Este formulario edita a la vez el rol, la zona, el `fulfillment` y media docena de datos
+      // personales. El registro solo se escribe para los TRES que cambian lo que la persona puede
+      // hacer o lo que se le cobra, y SOLO SI CAMBIAN DE VERDAD: editar el telefono no deja fila
+      // (el caso (b) de T3.1). Sin esta lectura previa no se puede distinguir «se mando el mismo
+      // rol otra vez» de «se cambio el rol», y la diferencia es la que hace util al registro.
+      // ═══════════════════════════════════════════════════════════════════════════════════════
+      const previo = await tx.usuario.findUnique({
+        where: { id },
+        select: {
+          rolId: true,
+          zonaId: true,
+          fulfillment: true,
+          rol: { select: { value: true } },
+          zona: { select: { nombre: true } },
+        },
+      });
 
-    return this.prisma.usuario.findUnique({ where: { id }, select: PUBLIC_SELECT });
+      const result = await tx.usuario.updateMany({
+        where: { id },
+        data: this.toUpdateData(data), // R16: solo campos editables
+      });
+      if (result.count === 0) return null; // R17
+
+      const usuario = await tx.usuario.findUnique({ where: { id }, select: PUBLIC_SELECT });
+
+      if (previo !== null) {
+        const despues = await tx.usuario.findUnique({
+          where: { id },
+          select: {
+            nombre: true,
+            primerApellido: true,
+            fulfillment: true,
+            rol: { select: { value: true } },
+            zona: { select: { nombre: true } },
+          },
+        });
+        const etiqueta = etiquetaDeEntidad("usuario", {
+          nombre: despues?.nombre ?? "",
+          primerApellido: despues?.primerApellido ?? null,
+        });
+        const base = { entidadTipo: "usuario" as const, entidadId: id, entidadEtiqueta: etiqueta };
+        const entradas: EntradaAccion[] = [];
+        const actor = await resolverActorCongelado(tx, actorUsuarioId);
+
+        // (1) EL ROL. `valorAnterior`/`valorNuevo` llevan el `RolValue` —vocabulario CERRADO de
+        // un enum del dominio—, nunca texto libre (design §1.3-e).
+        if (data.rolId !== undefined && data.rolId !== previo.rolId) {
+          entradas.push({
+            accion: "usuario_rol_cambiado",
+            ...base,
+            ...actor,
+            valorAnterior: previo.rol?.value ?? null,
+            valorNuevo: despues?.rol?.value ?? null,
+          });
+        }
+        // (2) LA ZONA. Aqui el valor es el NOMBRE de la zona, que es un catalogo cerrado de la
+        // casa, no un dato de ninguna persona.
+        if (data.zonaId !== undefined && data.zonaId !== previo.zonaId) {
+          entradas.push({
+            accion: "usuario_zona_cambiada",
+            ...base,
+            ...actor,
+            valorAnterior: previo.zona?.nombre ?? null,
+            valorNuevo: despues?.zona?.nombre ?? null,
+          });
+        }
+        // (3) ⭑ Q2, CERRADA POR EL HUMANO EL 2026-09-02: el `fulfillment` SI entra al catalogo,
+        // porque activa un cobro periodico de bodega — o sea, mueve dinero. Su categoria es
+        // «mueve dinero» y no «permisos», aunque se edite desde este mismo formulario: no cambia
+        // lo que la persona PUEDE HACER.
+        if (data.fulfillment !== undefined && data.fulfillment !== previo.fulfillment) {
+          entradas.push({
+            accion: "usuario_fulfillment_cambiado",
+            ...base,
+            ...actor,
+            valorAnterior: previo.fulfillment ? "true" : "false",
+            valorNuevo: despues?.fulfillment ? "true" : "false",
+          });
+        }
+
+        // UNA sola llamada con las N entradas: comparten `lote_id` (R7), asi que cambiar rol y
+        // zona a la vez se lee como UN acto de dos efectos y no como dos actos sueltos.
+        // `entradas` vacio es no-op: editar solo el telefono no escribe nada.
+        await appendAccion(tx, entradas);
+      }
+
+      return usuario;
+    });
   }
 
-  /** Feature 25/R20/R21/R22: cambia solo el estado; `null` si no existe. */
-  async setEstado(id: string, estado: EstadoUsuario): Promise<UsuarioPublico | null> {
-    const result = await this.prisma.usuario.updateMany({
-      where: { id },
-      data: { estado }, // baja logica (R20) / alta (R21): nunca borra la fila
+  /**
+   * Feature 25/R20/R21/R22: cambia solo el estado; `null` si no existe.
+   *
+   * FICHA 362 (R9/R11) — `usuario_estado_cambiado`, con el estado ANTERIOR y el NUEVO en
+   * vocabulario cerrado (`EstadoUsuario`). Solo si el estado cambia de verdad: re-enviar el mismo
+   * estado no deja fila.
+   */
+  async setEstado(
+    id: string,
+    estado: EstadoUsuario,
+    actorUsuarioId: string | null,
+  ): Promise<UsuarioPublico | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const previo = await tx.usuario.findUnique({ where: { id }, select: { estado: true } });
+      const result = await tx.usuario.updateMany({
+        where: { id },
+        data: { estado }, // baja logica (R20) / alta (R21): nunca borra la fila
+      });
+      if (result.count === 0) return null; // R22
+
+      const usuario = await tx.usuario.findUnique({ where: { id }, select: PUBLIC_SELECT });
+      if (previo !== null && previo.estado !== estado) {
+        const actor = await resolverActorCongelado(tx, actorUsuarioId);
+        await appendAccion(tx, [
+          {
+            accion: "usuario_estado_cambiado",
+            entidadTipo: "usuario",
+            entidadId: id,
+            entidadEtiqueta: etiquetaDeEntidad("usuario", {
+              nombre: usuario?.nombre ?? "",
+              primerApellido: usuario?.primerApellido ?? null,
+            }),
+            ...actor,
+            valorAnterior: previo.estado,
+            valorNuevo: estado,
+          },
+        ]);
+      }
+      return usuario;
     });
-    if (result.count === 0) return null; // R22
-    return this.prisma.usuario.findUnique({ where: { id }, select: PUBLIC_SELECT });
   }
 
   /** Feature 25/R29: catalogo `tipo_identificacion` proyectado a id/value. */

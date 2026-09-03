@@ -5,6 +5,15 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { CorregirDatosClienteService } from "@/lib/services/CorregirDatosClienteService";
 import { ESTADOS_SIN_CORRECCION } from "@/lib/types/correccion-datos-cliente";
+
+/**
+ * ⭑ FICHA 362 / Q1 — el cuarto argumento de `corregirDatosCliente`: el RASTRO.
+ *
+ * `ubicacionCorregida: false` por defecto en estos casos, que miden la correccion de los DATOS DEL
+ * CLIENTE (nombre, telefono, producto, notas): eso NO deja rastro, y D4 de la 312 lo sigue
+ * protegiendo. Los casos que mueven la UBICACION lo ponen a `true` y comprueban la fila escrita.
+ */
+const RASTRO_362 = { actorUsuarioId: null, ubicacionCorregida: false };
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 import {
@@ -148,6 +157,7 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
         ctx.ordenId,
         CORREGIDO,
         ESTADOS_SIN_CORRECCION,
+        RASTRO_362,
       );
       const fila = await ctx.tx.orden.findUniqueOrThrow({
         where: { id: ctx.ordenId },
@@ -174,6 +184,7 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
           ctx.ordenId,
           CORREGIDO,
           ESTADOS_SIN_CORRECCION,
+          RASTRO_362,
         );
         const fila = await ctx.tx.orden.findUniqueOrThrow({
           where: { id: ctx.ordenId },
@@ -211,6 +222,7 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
         ctx.ordenId,
         CORREGIDO,
         ESTADOS_SIN_CORRECCION,
+        RASTRO_362,
       );
       const fila = await ctx.tx.orden.findUniqueOrThrow({
         where: { id: ctx.ordenId },
@@ -239,6 +251,7 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
         ctx.ordenId,
         CORREGIDO,
         ESTADOS_SIN_CORRECCION,
+        RASTRO_362,
       );
       const [historialDespues, notasDespues] = await Promise.all([
         ctx.tx.ordenHistorialEstado.count({ where: { ordenId: ctx.ordenId } }),
@@ -265,6 +278,7 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
         ctx.ordenId,
         CORREGIDO,
         ESTADOS_SIN_CORRECCION,
+        RASTRO_362,
       );
       const despues = await Promise.all([
         ctx.tx.chatConversacion.count({ where: { ordenId: ctx.ordenId } }),
@@ -301,6 +315,7 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
         ctx.ordenId,
         CORREGIDO,
         ESTADOS_SIN_CORRECCION,
+        RASTRO_362,
       );
       const despues = await ctx.tx.orden.findUniqueOrThrow({ where: { id: ctx.ordenId } });
       return { resultado, antes, despues };
@@ -337,6 +352,7 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
         ctx.ordenId,
         { producto: largo, notas: largo },
         ESTADOS_SIN_CORRECCION,
+        RASTRO_362,
       );
       const fila = await ctx.tx.orden.findUniqueOrThrow({
         where: { id: ctx.ordenId },
@@ -588,6 +604,7 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
           peso: 4.25,
         },
         ESTADOS_SIN_CORRECCION,
+        RASTRO_362,
       );
       const despues = await ctx.tx.orden.findUniqueOrThrow({ where: { id: ctx.ordenId } });
       return { resultado, antes, despues };
@@ -666,6 +683,7 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
         ctx.ordenId,
         { direccion: "calle nueva 10", distritoId: ctx.geo.unaZona, zonaId: ctx.geo.zonaDestinoId },
         ESTADOS_SIN_CORRECCION,
+        RASTRO_362,
       );
 
       const despues = {
@@ -709,6 +727,7 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
             peso: 4.25,
           },
           ESTADOS_SIN_CORRECCION,
+          RASTRO_362,
         );
         const despues = await ctx.tx.orden.findUniqueOrThrow({ where: { id: ctx.ordenId } });
         return { resultado, antes, despues };
@@ -727,6 +746,7 @@ describeSiHayBase("⭑ 312/B3 — corregirDatosCliente contra Postgres real", ()
         ctx.ordenId,
         { direccion: "calle nueva 10", distritoId: ctx.geo.unaZona, zonaId: ctx.geo.zonaDestinoId },
         ESTADOS_SIN_CORRECCION,
+        RASTRO_362,
       );
       const despues = await ctx.tx.orden.findUniqueOrThrow({ where: { id: ctx.ordenId } });
       return { resultado, antes, despues };

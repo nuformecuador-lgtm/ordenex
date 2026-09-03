@@ -64,6 +64,22 @@ export const CAMPOS_GEOGRAFIA = ["provinciaId", "cantonId", "distritoId"] as con
 export type CampoGeografia = (typeof CAMPOS_GEOGRAFIA)[number];
 
 /**
+ * ⭑ FICHA 362 / Q1 — QUE CUENTA COMO «SE CORRIGIO LA UBICACION», en un solo sitio.
+ *
+ * Es `CAMPOS_GEOGRAFIA` MAS la `direccion`: los tres ids re-derivan la zona (y con ella la
+ * tarifa), y la direccion es lo que el mensajero lee para llegar. Cambiar cualquiera de los
+ * cuatro es lo que el humano aprobo registrar el 2026-09-02 — y solo eso: corregir el nombre, el
+ * telefono, el producto, las notas o el peso NO deja rastro, que es lo que D4 de la 312 sigue
+ * protegiendo.
+ *
+ * Se DERIVA de `CAMPOS_GEOGRAFIA` en vez de escribir los cuatro nombres a mano: dos listas con el
+ * mismo significado son dos verdades que un dia divergen, y la que divergiera dejaria un cambio
+ * de zona sin registrar en silencio.
+ */
+export const CAMPOS_UBICACION = [...CAMPOS_GEOGRAFIA, "direccion"] as const;
+export type CampoUbicacion = (typeof CAMPOS_UBICACION)[number];
+
+/**
  * D3 — LA VENTANA CERRADA. Se LEE de la fuente unica (`ESTADOS_TERMINALES`) y se le suma el unico
  * valor extra que el humano añadio; la lista de terminales NO se re-declara aqui, porque una
  * segunda copia es una segunda verdad que envejece sola.

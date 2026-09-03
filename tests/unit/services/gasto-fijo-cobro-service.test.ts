@@ -96,6 +96,8 @@ function buildMovRepo(
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
     obtenerPorOrigen: vi.fn().mockResolvedValue(movimiento()),
+    crearMovimientoRegistrado: vi.fn().mockResolvedValue(1), // ficha 362
+
     ...overrides,
   };
 }

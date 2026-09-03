@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 import {
   CierresAdminRepository,
@@ -66,7 +66,8 @@ function buildWalletDeps() {
     agregarPorCategoriaYTipo: vi.fn(),
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
-    obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
+    obtenerPorOrigen: vi.fn(),
+    crearMovimientoRegistrado: vi.fn().mockResolvedValue(1), // ficha 362: solo lo decidido por un humano // ficha 333: lectura por la clave del libro; este camino no la usa
   };
   const walletFeedService: IWalletFeedService = {
     construirMovimientosDeIngreso: vi.fn().mockResolvedValue([]),
@@ -186,7 +187,21 @@ function buildBase(filas: GestionFila[], estadosOrden: Record<string, string> = 
     cierreDia: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       count: vi.fn().mockResolvedValue(1),
-      findUnique: vi.fn().mockResolvedValue({ mensajeroId: "m1" }),
+      // FICHA 362: `resolverCierre` lee ademas el total y el mensajero para congelar la etiqueta
+      // y el importe de la fila del registro.
+      findUnique: vi.fn().mockResolvedValue({
+        mensajeroId: "m1",
+        totalGeneral: new Prisma.Decimal("0.00"),
+        solicitadoAt: new Date("2026-09-02T12:00:00Z"),
+        mensajero: { nombre: "Mensa", primerApellido: "Uno" },
+      }),
+    },
+    // FICHA 362: el registro de la decision, en la MISMA tx.
+    historialAccion: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    usuario: {
+      findUnique: vi
+        .fn()
+        .mockResolvedValue({ nombre: "Admin", primerApellido: "Uno", rol: { value: "admin" } }),
     },
     gestionOrden,
     orden,

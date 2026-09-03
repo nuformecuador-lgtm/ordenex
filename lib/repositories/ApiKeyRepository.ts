@@ -1,3 +1,5 @@
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import { Prisma, type EstadoApiKey, type PrismaClient } from "@prisma/client";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import {
@@ -18,7 +20,8 @@ import { resolverOwnerApiKey } from "@/lib/utils/api-key-owner";
 
 type ApiKeyPrismaClient = Pick<
   PrismaClient,
-  "apiKey" | "usuario" | "rol" | "tipoIdentificacion" | "$transaction"
+  // Ficha 362 (R9): las tres escrituras instrumentadas registran su accion en su misma tx.
+  "apiKey" | "usuario" | "rol" | "tipoIdentificacion" | "$transaction" | "historialAccion"
 >;
 
 /**
@@ -141,6 +144,23 @@ export class ApiKeyRepository implements IApiKeyRepository {
           },
           select: PUBLIC_SELECT, // R19: sin keyHash
         });
+
+        // FICHA 362 (R5/R9) — `api_key_generada`, DENTRO de la transaccion que ya existia.
+        //
+        // ⚠️ NI EL SECRETO, NI EL `key_hash`, NI EL `key_prefix` ENTRAN EN LA FILA. La etiqueta
+        // es el IDENTIFICADOR VISIBLE de la key, que es como se la nombra en pantalla. Un prefijo
+        // es media credencial y no tiene por que acabar en un archivo descargable.
+        const actor = await resolverActorCongelado(tx, data.createdById);
+        await appendAccion(tx, [
+          {
+            accion: "api_key_generada",
+            entidadTipo: "api_key",
+            entidadId: fila.id,
+            entidadEtiqueta: etiquetaDeEntidad("api_key", { identificador: data.identificador }),
+            ...actor,
+          },
+        ]);
+
         return toPublico(fila);
       });
     } catch (error) {
@@ -228,15 +248,31 @@ export class ApiKeyRepository implements IApiKeyRepository {
   async rotar(
     id: string,
     data: { keyPrefix: string; keyHash: string },
+    actorUsuarioId: string | null,
   ): Promise<ApiKeyPublico | null> {
     try {
-      return toPublico(
-        await this.prisma.apiKey.update({
+      // FICHA 362 (R5/R9) — `api_key_rotada`. El metodo pasa a `$transaction` (forma 2 del design
+      // §2.3: era un `update` suelto). Ni el secreto nuevo, ni el hash, ni el prefijo viajan a la
+      // fila del registro: solo el identificador visible.
+      return await this.prisma.$transaction(async (tx) => {
+        const fila = await tx.apiKey.update({
           where: { id },
           data: { keyPrefix: data.keyPrefix, keyHash: data.keyHash },
           select: PUBLIC_SELECT, // R6/R19: sin keyHash
-        }),
-      );
+        });
+
+        const actor = await resolverActorCongelado(tx, actorUsuarioId);
+        await appendAccion(tx, [
+          {
+            accion: "api_key_rotada",
+            entidadTipo: "api_key",
+            entidadId: fila.id,
+            entidadEtiqueta: etiquetaDeEntidad("api_key", { identificador: fila.identificador }),
+            ...actor,
+          },
+        ]);
+        return toPublico(fila);
+      });
     } catch (error) {
       if (esRegistroNoEncontrado(error)) return null;
       throw error;
@@ -248,15 +284,43 @@ export class ApiKeyRepository implements IApiKeyRepository {
    * nivel de fila (fijar el estado actual es un no-op valido en Postgres). `P2025` (fila
    * inexistente) -> `null` -> `not_found` (R3).
    */
-  async setEstado(id: string, estado: EstadoApiKey): Promise<ApiKeyPublico | null> {
+  async setEstado(
+    id: string,
+    estado: EstadoApiKey,
+    actorUsuarioId: string | null,
+  ): Promise<ApiKeyPublico | null> {
     try {
-      return toPublico(
-        await this.prisma.apiKey.update({
+      // FICHA 362 (R9) — `api_key_activada` / `api_key_desactivada`, con el estado ANTERIOR y el
+      // NUEVO en vocabulario cerrado (`EstadoApiKey`, design §1.3-e). El metodo pasa a
+      // `$transaction` por el mismo motivo que su hermano `rotar`.
+      //
+      // El registro se escribe TAMBIEN cuando el estado no cambia (fijar el estado actual es un
+      // no-op valido a nivel de fila, y el `update` no distingue): aqui la accion es la DECISION
+      // de un humano de pulsar «activar», y eso ocurrio. Es la asimetria deliberada con
+      // `setEstado` de usuario, donde el estado previo si se compara — alli hay un formulario que
+      // reenvia el objeto entero, y aqui un boton que solo se pulsa a proposito.
+      return await this.prisma.$transaction(async (tx) => {
+        const previa = await tx.apiKey.findUnique({ where: { id }, select: { estado: true } });
+        const fila = await tx.apiKey.update({
           where: { id },
           data: { estado },
           select: PUBLIC_SELECT, // R6/R19: sin keyHash
-        }),
-      );
+        });
+
+        const actor = await resolverActorCongelado(tx, actorUsuarioId);
+        await appendAccion(tx, [
+          {
+            accion: estado === "activa" ? "api_key_activada" : "api_key_desactivada",
+            entidadTipo: "api_key",
+            entidadId: fila.id,
+            entidadEtiqueta: etiquetaDeEntidad("api_key", { identificador: fila.identificador }),
+            ...actor,
+            valorAnterior: previa?.estado ?? null,
+            valorNuevo: estado,
+          },
+        ]);
+        return toPublico(fila);
+      });
     } catch (error) {
       if (esRegistroNoEncontrado(error)) return null;
       throw error;

@@ -176,7 +176,7 @@ describe("R26: cambiar estado inexistente/borrada -> not_found", () => {
 describe("R27/R29: eliminar marca deletedAt (soft) y no borra; inexistente -> not_found", () => {
   it("softDelete true -> ok", async () => {
     const r = await service.eliminar("pl-1", MAESTRO);
-    expect(repo.softDelete).toHaveBeenCalledWith("pl-1");
+    expect(repo.softDelete).toHaveBeenCalledWith("pl-1", expect.any(String)); // ficha 362: QUIEN
     expect(r.status).toBe("ok");
   });
 

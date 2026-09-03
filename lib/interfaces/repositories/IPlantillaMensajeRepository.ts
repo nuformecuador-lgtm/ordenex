@@ -220,7 +220,8 @@ export interface IPlantillaMensajeRepository {
    */
   updateEstado(id: string, estado: PlantillaEstado): Promise<PlantillaPublica | null>;
   /** R27: soft delete (fija deletedAt); `false` si no existe o ya estaba borrada. */
-  softDelete(id: string): Promise<boolean>;
+  /** FICHA 362 (R9): `actorUsuarioId` congela QUIEN elimino; va en la misma transaccion. */
+  softDelete(id: string, actorUsuarioId: string | null): Promise<boolean>;
   /**
    * Marca ESTA plantilla como el mensaje de bienvenida y desmarca cualquier otra, en UNA sola
    * transaccion. Es un `set`, no un `toggle`: pasar dos veces la misma id deja el mismo

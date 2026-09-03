@@ -71,25 +71,27 @@ const INSTANTE_DEL_DEFAULT = "2026-08-29T21:15:33.000Z";
  */
 function buildRepo(): IWalletMovimientoRepository {
   const creados = new Map<string, WalletMovimientoDTO>();
+  /** Guarda la fila escrita para que `obtenerPorId` la encuentre despues. */
+  const guardar = (m: CrearMovimientoInput) => {
+    if (m.id === undefined) return; // los escritores automaticos no pasan id
+    creados.set(
+      m.id,
+      mov({
+        id: m.id,
+        tipo: m.tipo,
+        categoria: m.categoria,
+        monto: m.monto,
+        origenTipo: m.origenTipo,
+        origenId: m.origenId,
+        descripcion: m.descripcion ?? null,
+        registradoPor: m.registradoPor ?? null,
+        fechaMovimiento: (m.fechaMovimiento ?? new Date(INSTANTE_DEL_DEFAULT)).toISOString(),
+      }),
+    );
+  };
   return {
     crearMovimientos: vi.fn(async (_tx: WalletTxClient, movs: CrearMovimientoInput[]) => {
-      for (const m of movs) {
-        if (m.id === undefined) continue; // los escritores automaticos no pasan id
-        creados.set(
-          m.id,
-          mov({
-            id: m.id,
-            tipo: m.tipo,
-            categoria: m.categoria,
-            monto: m.monto,
-            origenTipo: m.origenTipo,
-            origenId: m.origenId,
-            descripcion: m.descripcion ?? null,
-            registradoPor: m.registradoPor ?? null,
-            fechaMovimiento: (m.fechaMovimiento ?? new Date(INSTANTE_DEL_DEFAULT)).toISOString(),
-          }),
-        );
-      }
+      for (const m of movs) guardar(m);
       return movs.length;
     }),
     listar: vi.fn().mockResolvedValue({ movimientos: [mov()], total: 1 }),
@@ -99,6 +101,17 @@ function buildRepo(): IWalletMovimientoRepository {
       .fn()
       .mockResolvedValue({ gastoFijo: "0.00", gastoVariable: "0.00", sueldo: "0.00" }),
     obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
+    // FICHA 362: el escritor de los movimientos que nacen de una DECISION humana. Abre su PROPIA
+    // transaccion y escribe ademas la fila de auditoria; los feeds automaticos —los ~34 asientos
+    // que emite aprobar un cierre— siguen entrando por `crearMovimientos` y NO dejan rastro.
+    //
+    // El doble guarda la fila igual que su hermano: el servicio RELEE POR ID lo que acaba de
+    // escribir (R28 de la 334), y un doble que no guardase haria fallar esa relectura por una
+    // razon que no tiene nada que ver con lo que el caso mide.
+    crearMovimientoRegistrado: vi.fn(async (m: CrearMovimientoInput & { id: string }) => {
+      guardar(m);
+      return 1;
+    }),
   };
 }
 
@@ -162,6 +175,7 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
     expect(repo.agregarPorCategoria).not.toHaveBeenCalled();
     expect(repo.obtenerPorId).not.toHaveBeenCalled();
     expect(repo.crearMovimientos).not.toHaveBeenCalled();
+    expect(repo.crearMovimientoRegistrado).not.toHaveBeenCalled();
     // …y `forbidden` viaja SOLO: ni una cifra colgando de la respuesta.
     expect(Object.keys(r)).toEqual(["status"]);
   });
@@ -557,6 +571,7 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
     );
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.crearMovimientos).not.toHaveBeenCalled();
+    expect(repo.crearMovimientoRegistrado).not.toHaveBeenCalled();
   });
 
   it("feature 94: admin -> crea manual (paridad con maestro)", async () => {
@@ -567,7 +582,8 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
       ADMIN,
     );
     expect(r.status).toBe("ok");
-    const arg = (repo.crearMovimientos as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    // FICHA 362: el manual entra por `crearMovimientoRegistrado`, con UN movimiento.
+    const arg = [(repo.crearMovimientoRegistrado as ReturnType<typeof vi.fn>).mock.calls[0][0]];
     expect(arg[0]).toMatchObject({ registradoPor: "u-admin", origenTipo: "manual" });
   });
 
@@ -583,7 +599,8 @@ describe("WalletService.registrarMovimientoManual (R1/R3/R15/R19)", () => {
       MAESTRO,
     );
     expect(r.status).toBe("ok");
-    const arg = (repo.crearMovimientos as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    // FICHA 362: el manual entra por `crearMovimientoRegistrado`, con UN movimiento.
+    const arg = [(repo.crearMovimientoRegistrado as ReturnType<typeof vi.fn>).mock.calls[0][0]];
     expect(arg[0]).toMatchObject({
       tipo: "egreso",
       categoria: "egreso_ajuste",
@@ -644,8 +661,11 @@ describe("WalletService.registrarMovimientoManual — la fecha elegida (R22/R23/
     };
   }
 
+  // FICHA 362: el ajuste manual pasa por `crearMovimientoRegistrado` —que ademas escribe la fila
+  // de auditoria en la misma transaccion—, asi que la fila insertada se lee de ahi. Recibe UN
+  // movimiento (no un array): ese es el punto, un ajuste manual es un acto, no un lote.
   function filaInsertada(repo: IWalletMovimientoRepository): CrearMovimientoInput {
-    return (repo.crearMovimientos as ReturnType<typeof vi.fn>).mock.calls[0][1][0];
+    return (repo.crearMovimientoRegistrado as ReturnType<typeof vi.fn>).mock.calls[0][0];
   }
 
   it("R23: con la fecha de HOY, la clave fechaMovimiento NO viaja (manda el DEFAULT de la columna)", async () => {
@@ -732,7 +752,9 @@ describe("WalletService.registrarMovimientoManual — la fecha elegida (R22/R23/
 
     await svc.registrarMovimientoManual(ajuste(AYER_CR), MAESTRO);
 
-    expect(repo.crearMovimientos).toHaveBeenCalledTimes(1);
-    expect((repo.crearMovimientos as ReturnType<typeof vi.fn>).mock.calls[0][1]).toHaveLength(1);
+    // FICHA 362: UNA llamada a `crearMovimientoRegistrado`, y con UN solo movimiento — la firma
+    // ya no admite un lote, que es una garantia mas fuerte que contar la longitud del array.
+    expect(repo.crearMovimientoRegistrado).toHaveBeenCalledTimes(1);
+    expect(repo.crearMovimientos).not.toHaveBeenCalled();
   });
 });

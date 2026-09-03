@@ -978,6 +978,19 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
           mensajeroId: cierre.mensajeroId,
           totalPagoMensajero: new Prisma.Decimal(cierre.totalPagoMensajero),
           totalEfectivo: new Prisma.Decimal(cierre.totalEfectivo),
+          // FICHA 362: el total y el mensajero que la fila del registro congela.
+          totalGeneral: new Prisma.Decimal("0.00"),
+          solicitadoAt: new Date("2026-09-02T12:00:00Z"),
+          mensajero: { nombre: "Mensa", primerApellido: "Uno" },
+        })),
+      },
+      // FICHA 362: el registro de la decision, en la MISMA tx.
+      historialAccion: { createMany: vi.fn(async () => ({ count: 1 })) },
+      usuario: {
+        findUnique: vi.fn(async () => ({
+          nombre: "Admin",
+          primerApellido: "Uno",
+          rol: { value: "admin" },
         })),
       },
       // Feature 109/R20: cierre NORMAL (sin ordenes `sin_gestionar`) -> la liberacion afecta 0 filas.
@@ -1158,6 +1171,19 @@ describe("CierresAdminService.aprobarCierre — alimenta el pago al mensajero (f
           mensajeroId: cierre.mensajeroId,
           totalPagoMensajero: new Prisma.Decimal(cierre.totalPagoMensajero),
           totalEfectivo: new Prisma.Decimal(cierre.totalEfectivo),
+          // FICHA 362: el total y el mensajero que la fila del registro congela.
+          totalGeneral: new Prisma.Decimal("0.00"),
+          solicitadoAt: new Date("2026-09-02T12:00:00Z"),
+          mensajero: { nombre: "Mensa", primerApellido: "Uno" },
+        })),
+      },
+      // FICHA 362: el registro de la decision, en la MISMA tx.
+      historialAccion: { createMany: vi.fn(async () => ({ count: 1 })) },
+      usuario: {
+        findUnique: vi.fn(async () => ({
+          nombre: "Admin",
+          primerApellido: "Uno",
+          rol: { value: "admin" },
         })),
       },
       gestionOrden: { findMany: vi.fn().mockResolvedValue([]) }, // el pago no depende de gestiones (snapshot)

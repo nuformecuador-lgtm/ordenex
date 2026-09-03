@@ -19,7 +19,8 @@ export interface IVehiculoRepository {
   /** Renombra; `null` si la fila no existe. */
   update(id: string, name: string): Promise<VehiculoDTO | null>;
   /** Borra; `false` si no existia. Lanza si alguna FK lo referencia (RESTRICT). */
-  delete(id: string): Promise<boolean>;
+  /** FICHA 362 (R4/R9): `actorUsuarioId` congela QUIEN borro; el nombre se lee ANTES del borrado. */
+  delete(id: string, actorUsuarioId: string | null): Promise<boolean>;
   /**
    * Cuantas entidades referencian este tipo (mensajeros + tarifas de zona). Se
    * consulta ANTES de borrar para poder responder `in_use` con sentido, en vez de

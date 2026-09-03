@@ -54,7 +54,7 @@ describe("RecuperarOrdenService", () => {
     const r = await service.recuperar({ ordenIds: ["o1", "o2"] }, MAESTRO);
 
     expect(r).toEqual({ status: "ok", recuperadas: 2 });
-    expect(restore).toHaveBeenCalledWith(["o1", "o2"]);
+    expect(restore).toHaveBeenCalledWith(["o1", "o2"], expect.any(String)); // ficha 362: QUIEN recupera
   });
 
   it.each([
@@ -122,7 +122,7 @@ describe("RecuperarOrdenService", () => {
 
     expect(r).toEqual({ status: "ok", recuperadas: 1 });
     expect(findByIdsForTransicion).toHaveBeenCalledWith(["o1"]);
-    expect(restore).toHaveBeenCalledWith(["o1"]);
+    expect(restore).toHaveBeenCalledWith(["o1"], expect.any(String)); // ficha 362: QUIEN recupera
   });
 
   it("lote vacio -> ok(0) sin consultar", async () => {

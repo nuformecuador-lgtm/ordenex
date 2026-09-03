@@ -863,6 +863,9 @@ export class LiquidacionService implements ILiquidacionService {
 
       let anuladas = 0;
       let yaEstaban = yaAnuladas;
+      // FICHA 362 (R12): lo EFECTIVAMENTE anulado, que puede ser menos que el total del reparto
+      // si alguna imputacion ya estaba anulada. Es lo que se congela en la fila del registro.
+      let montoAnulado = new Prisma.Decimal(0);
       for (const pago of vigentes) {
         const beneficiario = beneficiarioDelPago(pago);
         if (beneficiario === null) continue; // la base lo impide; no se inventa un contraasiento
@@ -887,6 +890,21 @@ export class LiquidacionService implements ILiquidacionService {
           registradoPor: actor.usuarioId,
         });
         anuladas += 1;
+        montoAnulado = montoAnulado.plus(monto);
+      }
+
+      // FICHA 362 (R9/R11/R12) — `reparto_anulado`: UNA fila por acto, DENTRO de esta misma
+      // transaccion y SOLO si se anulo algo. Si el bucle no anulo ni una imputacion (todas
+      // estaban ya anuladas por una carrera), no hay acto que registrar.
+      //
+      // Los N `pago_anulado` de los hijos NO se escriben: los corta el propio repositorio del
+      // pago al ver que la fila pertenece a un reparto. Deshacer un reparto es UNA decision.
+      if (anuladas > 0 && pago.repartoId !== null) {
+        await this.repartoRepo.registrarAnulacion(tx, {
+          repartoId: pago.repartoId,
+          anuladoPor: actor.usuarioId,
+          montoAnulado: montoAnulado.toFixed(2),
+        });
       }
 
       return { status: "ok", anuladas, yaEstaban };

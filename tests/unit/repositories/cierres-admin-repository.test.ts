@@ -29,7 +29,8 @@ function buildWalletDeps() {
     agregarPorCategoriaYTipo: vi.fn(),
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
-    obtenerPorOrigen: vi.fn(), // ficha 333: lectura por la clave del libro; este camino no la usa
+    obtenerPorOrigen: vi.fn(),
+    crearMovimientoRegistrado: vi.fn().mockResolvedValue(1), // ficha 362: solo lo decidido por un humano // ficha 333: lectura por la clave del libro; este camino no la usa
   };
   const walletFeedService: IWalletFeedService = {
     construirMovimientosDeIngreso: vi.fn().mockResolvedValue([]),
@@ -138,7 +139,25 @@ function cierreResumenRow(overrides: Record<string, unknown> = {}) {
 
 function buildPrisma(overrides: Record<string, unknown> = {}) {
   return {
-    cierreDia: { findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
+    cierreDia: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      updateMany: vi.fn(),
+      count: vi.fn(),
+      // FICHA 362: `resolverCierre` lee el total y el mensajero para congelar la fila del registro.
+      findUnique: vi.fn().mockResolvedValue({
+        totalGeneral: new Prisma.Decimal("0.00"),
+        solicitadoAt: new Date("2026-09-02T12:00:00Z"),
+        mensajero: { nombre: "Mensa", primerApellido: "Uno" },
+      }),
+    },
+    // FICHA 362: el registro de la decision, en la MISMA tx.
+    historialAccion: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    usuario: {
+      findUnique: vi
+        .fn()
+        .mockResolvedValue({ nombre: "Admin", primerApellido: "Uno", rol: { value: "admin" } }),
+    },
     // Feature 239 (T2.2): al APROBAR, la misma tx corre ademas el bloque de ANCLAJE, que empieza
     // leyendo las gestiones `devuelta` de ESTE cierre. Sin devoluciones el bloque es no-op —que
     // es lo que estas suites quieren— pero el doble tiene que RESPONDER, o la tx muere con un
@@ -1200,9 +1219,24 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
       cierreDetail: { findMany: vi.fn().mockResolvedValue([]) },
       orden: { findMany: vi.fn(), updateMany: vi.fn() },
       ordenHistorialEstado: { createMany: vi.fn() },
+      // FICHA 362: el registro de la decision, en la MISMA tx.
+      historialAccion: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      usuario: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValue({ nombre: "Admin", primerApellido: "Uno", rol: { value: "admin" } }),
+      },
     };
     prisma.cierreDia.findUnique.mockResolvedValue(
-      opts.mensajeroId === null ? null : { mensajeroId: opts.mensajeroId ?? "m1" },
+      opts.mensajeroId === null
+        ? null
+        : {
+            mensajeroId: opts.mensajeroId ?? "m1",
+            // FICHA 362: el total y el mensajero que la fila del registro congela.
+            totalGeneral: new Prisma.Decimal("0.00"),
+            solicitadoAt: new Date("2026-09-02T12:00:00Z"),
+            mensajero: { nombre: "Mensa", primerApellido: "Uno" },
+          },
     );
     prisma.orden.findMany.mockResolvedValue(ordenes);
     // `where.id.in` es el updateMany de la LIBERACION (rutea por ids). Desde el pedido humano de

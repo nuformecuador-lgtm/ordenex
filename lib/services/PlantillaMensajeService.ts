@@ -244,7 +244,7 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
     const actual = await this.repo.findById(id);
     if (!actual) return { status: "not_found" }; // R29
 
-    const ok = await this.repo.softDelete(id); // R27: soft delete
+    const ok = await this.repo.softDelete(id, actor.usuarioId); // R27 + 362/R9: QUIEN
     if (!ok) return { status: "not_found" }; // R29 (carrera)
     // Solo tiene sentido borrar en Meta si la plantilla llego a enlazarse alli.
     if (actual.templateId !== null) {

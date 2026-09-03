@@ -117,6 +117,19 @@ function buildTx(
         mensajeroId: MENSAJERO_ID,
         totalPagoMensajero: new Prisma.Decimal("1500.00"),
         totalEfectivo: new Prisma.Decimal("10000.00"),
+        // FICHA 362: el total y el mensajero que la fila del registro congela.
+        totalGeneral: new Prisma.Decimal("11500.00"),
+        solicitadoAt: new Date("2026-09-02T12:00:00Z"),
+        mensajero: { nombre: "Mensa", primerApellido: "Uno" },
+      })),
+    },
+    // FICHA 362: el registro de la decision, en la MISMA tx.
+    historialAccion: { createMany: vi.fn(async () => ({ count: 1 })) },
+    usuario: {
+      findUnique: vi.fn(async () => ({
+        nombre: "Admin",
+        primerApellido: "Uno",
+        rol: { value: "admin" },
       })),
     },
     gestionOrden: {

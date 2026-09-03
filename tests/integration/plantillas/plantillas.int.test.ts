@@ -202,9 +202,22 @@ function makeFakePrisma() {
       return { count: targets.length };
     },
   };
-  return { plantillaMensaje: model } as unknown as ConstructorParameters<
-    typeof PlantillaMensajeRepository
-  >[0];
+  // FICHA 362: el borrado corre en `$transaction` y registra `plantilla_eliminada` en ella. El
+  // `$transaction` del doble es un PASO A TRAVES: entrega el mismo cliente, asi que las
+  // aserciones del store siguen mirando donde ya miraban.
+  const doble: Record<string, unknown> = {
+    plantillaMensaje: model,
+    historialAccion: { createMany: async () => ({ count: 1 }) },
+    usuario: {
+      findUnique: async () => ({
+        nombre: "Maestra",
+        primerApellido: "Uno",
+        rol: { value: "maestro" },
+      }),
+    },
+  };
+  doble.$transaction = async (fn: (tx: unknown) => unknown) => fn(doble);
+  return doble as unknown as ConstructorParameters<typeof PlantillaMensajeRepository>[0];
 }
 
 let service: PlantillaMensajeService;
