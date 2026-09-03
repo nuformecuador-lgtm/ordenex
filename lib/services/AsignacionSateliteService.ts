@@ -252,7 +252,18 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
 
     // 4b. Feature 92/R8: gate de asignabilidad por coordenadas, ANTES de cualquier
     // escritura. Este writer SI asigna mensajero a todo el lote, asi que se evalua entero.
-    // Todo-o-nada, con el mismo `detalle` por orden que las demas guardas de este metodo.
+    //
+    // FEATURE 368 (2026-09-03, R2/R3/R4/R6/R18) — REGLA VIGENTE: asignacion PARCIAL, solo para
+    // el motivo de coordenadas — espejo EXACTO de `GuiaAsignacionService.asignarDesdeBodega`
+    // (R5). Antes de esta ficha, `detalleCoords.length > 0` abortaba el lote COMPLETO
+    // (`conflict`); ahora se filtra: las bloqueadas por coordenadas (`bloqueadasIds`) se separan
+    // del resto (`asignables`), y solo se escribe/reporta como asignado ese subconjunto.
+    //   - `asignables.length === 0` -> `conflict` con el `detalle` completo (R3, sin cambios);
+    //   - `detalleCoords.length === 0` -> `ok` con el lote completo (R4, sin cambios);
+    //   - mezcla -> `partial`, con `resultados` (lo asignado) y `bloqueadas` (el `detalle` de
+    //     coordenadas).
+    // El resto de guardas de este metodo (zona/estado por orden, mensajero, tope de intentos,
+    // TODAS evaluadas ANTES de este gate) siguen abortando el lote completo sin cambios (R7/R8).
     const filas = await this.repo.findParaAsignabilidad(ordenIds);
     const estados = await this.asignabilidad.evaluar(filas);
     const detalleCoords: { ordenId: string; motivo: string }[] = [];
@@ -265,7 +276,9 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
         motivo: estado === undefined ? "no_encontrada" : motivoAsignabilidad(estado),
       });
     }
-    if (detalleCoords.length > 0) return { status: "conflict", detalle: detalleCoords };
+    const bloqueadasIds = new Set(detalleCoords.map((d) => d.ordenId));
+    const asignables = ordenIds.filter((id) => !bloqueadasIds.has(id));
+    if (asignables.length === 0) return { status: "conflict", detalle: detalleCoords }; // R3
 
     // 5. Resuelve estatus origen (guardia) y destino; si falta el seed -> validation_error.
     const [origenId, destinoId] = await Promise.all([
@@ -287,8 +300,12 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
     // desde que bodega te asignaron (D4)—. `?? "hoy"` = el comportamiento anterior (R4).
     const fechaReparto = resolverFechaReparto(input.dia ?? "hoy", now);
 
+    // Feature 368 (R1): escribe SOLO `asignables`, no `ordenIds` — el subconjunto que paso el
+    // gate de coordenadas. `asignarSateliteLote` no cambia de firma: sigue siendo un unico
+    // `UPDATE ... WHERE id IN (...) AND estatus_id = origen AND zona_id = zona` dentro de su
+    // propia `$transaction`, ahora sobre un array mas corto.
     const count = await this.repo.asignarSateliteLote(
-      ordenIds,
+      asignables,
       input.mensajeroId,
       zonaId,
       destinoId,
@@ -297,13 +314,27 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
       fechaReparto, // R7: en el MISMO `SET` que `asignado_at`
     );
 
-    // R14: si alguna orden cambio de estado/zona entre la lectura y la escritura, el
-    // count no cubre el lote -> re-lee y reporta conflict SIN efectos parciales.
-    if (count !== ordenIds.length) {
-      const actuales = await this.repo.findByIdsForTransicion(ordenIds);
+    // R14/R17 — FEATURE 368 (2026-09-03): la comparacion es contra `asignables.length`, NO
+    // `ordenIds.length`. Si comparara contra el lote completo, el chequeo dispararia SIEMPRE
+    // que hay bloqueadas por coordenadas en el lote (aunque no exista ninguna carrera real),
+    // porque `count` nunca cubre las que el gate ya descarto antes de escribir.
+    //
+    // Esto sigue siendo la deteccion de carrera PREEXISTENTE (alguna orden de `asignables`
+    // cambio de estado/zona entre la lectura y la escritura guardada) y NO se endurece aqui
+    // (design.md §5): `asignarSateliteLote` corre dentro de su propia `$transaction` que
+    // CONFIRMA al retornar, asi que las ordenes que ganaron la guarda ya quedaron escritas en
+    // el instante en que se compara. Esta imprecision es preexistente (feature 34/241/271), no
+    // introducida por esta ficha.
+    //
+    // R17: en el caso compuesto (bloqueadas por coordenadas Y carrera a la vez, extremadamente
+    // raro), el `detalle` COMBINA las que perdieron la carrera con las que ya venian bloqueadas
+    // por coordenadas, para no perder esa informacion. El desenlace sigue siendo `conflict`,
+    // NUNCA `partial` ni `ok`, para no reportar mas exito del que hay garantizado en ese camino.
+    if (count !== asignables.length) {
+      const actuales = await this.repo.findByIdsForTransicion(asignables);
       const actualMap = new Map(actuales.map((o) => [o.id, o]));
       const detalleCarrera: { ordenId: string; motivo: string }[] = [];
-      for (const id of ordenIds) {
+      for (const id of asignables) {
         const orden = actualMap.get(id);
         if (!orden || orden.deletedAt !== null) {
           detalleCarrera.push({ ordenId: id, motivo: "no_encontrada" });
@@ -317,16 +348,16 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
           detalleCarrera.push({ ordenId: id, motivo: "conflict" });
         }
       }
-      return { status: "conflict", detalle: detalleCarrera };
+      return { status: "conflict", detalle: [...detalleCarrera, ...detalleCoords] }; // R17
     }
 
-    // 7. R7: todas transicionadas a por_recoger.
-    return {
-      status: "ok",
-      resultados: ordenIds.map((ordenId) => ({
-        ordenId,
-        estado: ESTADO_ASIGNADA as "por_recoger",
-      })),
-    };
+    // 7. R2/R4: `partial` si quedo alguna bloqueada por coordenadas, `ok` si el lote paso completo.
+    const resultados = asignables.map((ordenId) => ({
+      ordenId,
+      estado: ESTADO_ASIGNADA as "por_recoger",
+    }));
+    return detalleCoords.length > 0
+      ? { status: "partial", resultados, bloqueadas: detalleCoords }
+      : { status: "ok", resultados };
   }
 }

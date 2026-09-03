@@ -234,6 +234,122 @@ describe("AsignarBodegaModal", () => {
   });
 });
 
+// Feature 368 (T5) — éxito parcial: el gate de coordenadas bloquea algunas órdenes del lote y
+// las demás sí se asignan. El modal ya NO lo trata como error: pasa a la fase "resultado" con
+// las asignadas Y las bloqueadas, en vez de lanzar al canal de error del Modal.
+describe("AsignarBodegaModal — asignación parcial (368/R1/R10-R14)", () => {
+  it("T5.1: partial (2 asignadas, 1 bloqueada) -> toast con los conteos y el detalle en el DOM", async () => {
+    const user = userEvent.setup();
+    asignarDesdeBodegaMock.mockResolvedValue({
+      status: "partial",
+      resultados: [
+        { ordenId: "o1", estado: "por_recoger" },
+        { ordenId: "o2", estado: "por_recoger" },
+      ],
+      bloqueadas: [{ ordenId: "o3", motivo: "direccion_no_geocodificable" }],
+    });
+
+    const ordenes = [
+      makeOrden({ id: "o1", numRemision: "REM-001" }),
+      makeOrden({ id: "o2", numRemision: "REM-002" }),
+      // El identificador visible viene de ESTE snapshot, nunca de un campo inventado en la
+      // respuesta de `bloqueadas` (que solo trae `ordenId`/`motivo`).
+      makeOrden({ id: "o3", numRemision: "NA-138" }),
+    ];
+    renderModal(ordenes);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    // El aserto no depende del literal exacto de Q1 (T5.1): solo de los números — 2 asignadas,
+    // 1 bloqueada.
+    await vi.waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+    const toastMsg = successMock.mock.calls[0]![0] as string;
+    expect(toastMsg).toContain("2");
+    expect(toastMsg).toContain("1");
+
+    // El DOM de la fase "resultado" identifica la orden bloqueada por su `numRemision` (tomado
+    // del `ordenes` prop del test) y el mensaje de SU motivo.
+    expect(await screen.findByText(/NA-138/)).toBeInTheDocument();
+    expect(screen.getByText(/Dirección no encontrada/)).toBeInTheDocument();
+  });
+
+  it("T5.2: partial NO llama al canal de error del Modal — tuvo efecto, no es un error", async () => {
+    const user = userEvent.setup();
+    asignarDesdeBodegaMock.mockResolvedValue({
+      status: "partial",
+      resultados: [{ ordenId: "o1", estado: "por_recoger" }],
+      bloqueadas: [{ ordenId: "o2", motivo: "geocodificacion_encolada" }],
+    });
+    renderModal([
+      makeOrden({ id: "o1", numRemision: "REM-001" }),
+      makeOrden({ id: "o2", numRemision: "REM-002" }),
+    ]);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await vi.waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+    expect(errorMock).not.toHaveBeenCalled();
+  });
+
+  it("T5.3: onSuccess sigue diferido al cierre del panel de resultado (feature 148, sin cambios)", async () => {
+    const user = userEvent.setup();
+    asignarDesdeBodegaMock.mockResolvedValue({
+      status: "partial",
+      resultados: [{ ordenId: "o1", estado: "por_recoger" }],
+      bloqueadas: [{ ordenId: "o2", motivo: "geocodificacion_encolada" }],
+    });
+    const ordenes = [
+      makeOrden({ id: "o1", numRemision: "REM-001" }),
+      makeOrden({ id: "o2", numRemision: "REM-002" }),
+    ];
+    const { onSuccess } = renderModal(ordenes);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await screen.findByText(/REM-002/);
+    expect(onSuccess).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole("button", { name: "Cerrar" }));
+    await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+  });
+
+  it("T5.4: no-regresión — un 'ok' puro no menciona ninguna orden bloqueada en el DOM", async () => {
+    const user = userEvent.setup();
+    asignarDesdeBodegaMock.mockResolvedValue({
+      status: "ok",
+      resultados: [{ ordenId: "o1", estado: "por_recoger" }],
+    });
+    renderModal([makeOrden({ id: "o1", numRemision: "REM-001" })]);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await screen.findByRole("button", { name: "Cerrar" });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("T5.5: no-regresión — un 'conflict' (mensajero bloqueado por cierre) sigue lanzando al canal de error, sin tocar la fase resultado", async () => {
+    const user = userEvent.setup();
+    asignarDesdeBodegaMock.mockResolvedValue({
+      status: "conflict",
+      detalle: [{ ordenId: "o1", motivo: "mensajero bloqueado por cierre pendiente" }],
+    });
+    renderModal([makeOrden({ id: "o1", numRemision: "REM-001" })]);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith(
+        "El mensajero que elegiste tiene un cierre sin resolver, así que no puede recibir órdenes nuevas. Resuelve el cierre o elige otro mensajero.",
+      ),
+    );
+    expect(screen.queryByRole("button", { name: "Cerrar" })).toBeNull();
+  });
+});
+
 // Feature 246 (T4.2/T4.4) — ELEGIR PARA QUÉ DÍA ES EL LOTE, desde bodega central (R1/R27-R29).
 //
 // Todos los textos visibles se afirman con su literal ESCRITO A MANO, nunca contra la constante
