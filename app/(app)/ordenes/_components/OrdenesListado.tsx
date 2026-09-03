@@ -142,10 +142,6 @@ const DEFAULT_EXCLUDE = [...EXCLUDE_ESTADO_DEFAULT];
  * el mismo: sólo de copiarlo. El porqué entero está en la cabecera de ese módulo.
  */
 
-// Estado cuyo listado muestra ademas "Liberada el" (la fecha para la que quedo
-// reprogramada = el dia en que el cron de liberacion la desbloquea, feature 46).
-const ESTADO_REPROGRAMADA = "reprogramada";
-
 // Feature 139/R9: `rechazada` YA NO ofrece salida manual ("Devolver a la tienda" se
 // retiró). Su única salida es la APROBACIÓN DEL CIERRE (backend), que la deja en
 // `por_devolver` (satélite) o `por_devolver_a_tienda` (central): espera pasiva, sin
@@ -864,19 +860,22 @@ export function OrdenesListado({
     return Object.keys(compuesto).length > 0 ? compuesto : undefined;
   }, [seleccionFiltros, terminoBuscador]);
 
-  // Si el filtro está acotado a EXACTAMENTE un estado, ese estado decide las columnas
-  // ("Liberada el") y el resalte de prioridad. Con varios estados mezclados —o sin
-  // filtro— no hay un estado que mande, así que se usan las columnas por defecto y no
-  // se resalta.
+  // Si el filtro está acotado a EXACTAMENTE un estado, ese estado decide el resalte de
+  // prioridad. Con varios estados mezclados —o sin filtro— no hay un estado que mande,
+  // así que no se resalta.
   const valueUnico =
     estadosMarcados.length === 1
       ? estadosDisponibles.find((s) => s.id === estadosMarcados[0])?.value
       : undefined;
 
-  let columns: Column<OrdenListItemDTO>[] | undefined;
-  if (valueUnico === ESTADO_REPROGRAMADA) {
-    columns = ordenesColumnsReprogramada;
-  }
+  // FICHA 367: el conjunto de columnas SIEMPRE incluye "Reprogramada para" (antes solo
+  // se montaba filtrando por el único estado `reprogramada`; sin filtro, con varios
+  // estados marcados, o en cuanto el cron de liberación sacaba la orden de ese estado,
+  // la fecha desaparecía del listado para siempre). No se añade la columna a
+  // `ordenesColumns` porque de ahí DERIVAN `detalle-columnas.ts` (monitoreo) y
+  // `recibidas-columns.tsx` (recepción satélite), que documentan por qué NO quieren
+  // esta columna; añadirla a la base se les colaría en silencio.
+  const columns: Column<OrdenListItemDTO>[] = ordenesColumnsReprogramada;
 
   /**
    * FICHA 358 — ¿esta pantalla tiene selección por casilla, siquiera en principio?
