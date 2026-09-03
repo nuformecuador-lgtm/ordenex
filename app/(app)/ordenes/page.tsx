@@ -132,6 +132,11 @@ export default async function OrdenesPage() {
   // de tienda: el directorio de mensajeros es del personal interno y su catálogo tampoco se lo
   // entrega, así que el control se le montaría vacío.
   const incluirFiltroMensajero = rol !== RolValue.adminTienda;
+  // FICHA 370: «Salida a reparto» parte las órdenes que están en bodega entre las que ya
+  // salieron con un mensajero y las que sólo tienen la guía generada. Es la MISMA puerta que
+  // «Reasignables» y por la misma razón: es una pregunta de DESPACHO, y el `adminTienda` no
+  // despacha. Lo que decide aquí es qué se OFRECE; el alcance lo sigue imponiendo el servicio.
+  const incluirFiltroSalioAReparto = rol !== RolValue.adminTienda;
 
   // Feature 246 (T4.2, R5/R29): las etiquetas del selector de día se resuelven AQUÍ, en el
   // servidor, con el día de Costa Rica. No bajan como `Date` ni como instante: bajan como las dos
@@ -162,6 +167,7 @@ export default async function OrdenesPage() {
           incluirFiltroTienda={incluirFiltroTienda}
           incluirFiltroReasignables={incluirFiltroReasignables}
           incluirFiltroMensajero={incluirFiltroMensajero}
+          incluirFiltroSalioAReparto={incluirFiltroSalioAReparto}
           puedeReportarIncidente={puedeReportarIncidente}
           puedeCorregirDatos={puedeCorregirDatos}
           puedeEliminar={puedeEliminar}

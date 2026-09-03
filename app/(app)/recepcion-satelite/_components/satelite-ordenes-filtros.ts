@@ -4,6 +4,7 @@ import {
   type EstadoBodegaSatelite,
 } from "@/lib/utils/estados-bodega-satelite";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
+import type { SalioARepartoValor } from "@/lib/types/orden";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import {
   CLAVE_BUSQUEDA,
@@ -110,6 +111,10 @@ export function etiquetaEstado(value: string): string {
  * un padre no declarado como «sin acotar», que es justo lo que corresponde: su catálogo YA
  * viene recortado a la zona.
  *
+ * Lo que SE AÑADE por la ficha 370: «Salida a reparto» (`incluirSalioAReparto: true`). Es la
+ * MISMA declaración de la central, con las mismas tres opciones, y aquí es donde de verdad hace
+ * falta: las órdenes que sólo tienen la guía generada están casi todas en bodegas satélite.
+ *
  * Lo que SE AÑADE: el filtro de ESTADO, delante del resto — la misma posición que ocupa en
  * `/ordenes`. FICHA 355: ya no son «los cinco estados de esta pantalla» sino el catálogo
  * `order_status` entero, declarado por `filtroEstado`. Las opciones llegan por parámetro
@@ -139,6 +144,12 @@ export function construirFiltrosSatelite(
     incluirZona: false,
     incluirTienda: false,
     incluirReasignables: false,
+    // FICHA 370: aquí SÍ. Medido el día de la ficha, 44 de las 48 órdenes que sólo tienen la
+    // guía generada están en bodegas satélite (contra 2 de 21 en la central), así que ésta es
+    // la pantalla donde la pregunta se hace de verdad. No es una clave de alcance: PARTE lo
+    // que el adminSatelite ya puede ver —su bodega—, no lo ensancha, y el servicio la atiende
+    // en los tres caminos del listado (página, descarga y vigencia de la selección).
+    incluirSalioAReparto: true,
     ahora: opts?.ahora,
   }).filter((f) => f.key !== CLAVE_BUSQUEDA);
 
@@ -178,6 +189,13 @@ export interface FiltroBodegaSatelite {
   created_desde?: string;
   created_hasta?: string;
   q?: string;
+  /**
+   * FICHA 370 — «salida a reparto»: la MISMA clave pública y los MISMOS dos valores que
+   * `/ordenes` (`SALIO_A_REPARTO_VALORES`), y la misma semántica de ausencia (no filtra,
+   * salen los dos grupos). Viaja ESCALAR, no como lista, y la produce `seleccionAFilter`
+   * —la traducción compartida—, no una rama propia de esta barra.
+   */
+  salio_a_reparto?: SalioARepartoValor;
 }
 
 /** `true` si el valor es uno de los cinco estados del listado. */
