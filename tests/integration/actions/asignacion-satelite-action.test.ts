@@ -86,6 +86,24 @@ describe("asignarDesdeSatelite — borde (R1/R15/R19)", () => {
     );
   });
 
+  // Feature 368 (R15/R16) — `"partial"` es un resultado de DOMINIO mas, igual que `ok`/`conflict`:
+  // la action no lo traduce ni lo envuelve, lo devuelve tal cual (design.md §2.1).
+  it("368/R15-R16: resultado de dominio `partial` pasa tal cual, sin envolverlo ni alterarlo", async () => {
+    const partial = {
+      status: "partial" as const,
+      resultados: [{ ordenId: ORDEN, estado: "por_recoger" as const }],
+      bloqueadas: [{ ordenId: "o-bloqueada", motivo: "direccion_no_geocodificable" }],
+    };
+    const service = buildService({
+      asignar: vi.fn(async () => partial),
+    });
+    const r = await asignarDesdeSatelite(
+      { ordenIds: [ORDEN], mensajeroId: MENSAJERO },
+      { service, getActor: actorAdmin },
+    );
+    expect(r).toEqual(partial);
+  });
+
   it("resultado de dominio del service pasa tal cual (conflict)", async () => {
     const service = buildService({
       asignar: vi.fn(async () => ({

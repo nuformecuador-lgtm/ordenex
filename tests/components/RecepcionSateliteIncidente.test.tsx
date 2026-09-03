@@ -293,13 +293,13 @@ describe("Feature 158 (T2.7 · satélite) — R41: sólo en los estados que son 
     ).toBeNull();
   });
 
-  it("caso de CONTROL: el listado SÍ monta la columna de incidente", () => {
+  it("caso de CONTROL: el listado SÍ monta la columna de incidente (hoy 'Acciones', ficha 367)", () => {
     renderModule({ recibidas: [makeOrden({ id: ORDEN_ID })] });
     const tabla = screen.getByRole("table", { name: TABLA_BODEGA });
     const headers = within(tabla)
       .getAllByRole("columnheader")
       .map((h) => h.textContent);
-    expect(headers).toContain("Incidente");
+    expect(headers).toContain("Acciones");
   });
 
   it("una orden en un estado NO reportable tampoco la ofrece", () => {
@@ -378,5 +378,45 @@ describe("Feature 158 (T2.7 · satélite) — el predicado, en aislado", () => {
 
   it("falla CERRADO con `sinZona`, aunque hubiera un nombre de zona", () => {
     expect(puedeReportarIncidenteSatelite(enZona, ZONA, true)).toBe(false);
+  });
+});
+
+// FICHA 367 — el botón de historial (feature 49) llega a la bodega satélite. Antes sólo vivía
+// en `/ordenes` (`OrdenesModule`), y esta pantalla es OTRO componente (`SateliteOrdenesListado`)
+// que no lo montaba. El enganche es barato: la fila ya trae `id` y `numRemision` (mismo include
+// `WITH_ESTATUS_Y_TIENDA`), y `obtenerHistorialOrden` ya autoriza al adminSatelite porque ese
+// mismo rol ya usa el botón desde `/ordenes` — no hay autorización nueva que tocar.
+describe("Ficha 367 — historial en la bodega satélite", () => {
+  it("la fila pinta el disparador 'Ver historial', con la referencia de la orden", () => {
+    renderModule({
+      recibidas: [makeOrden({ id: ORDEN_ID, numRemision: "REM-H1" })],
+    });
+    const tabla = screen.getByRole("table", { name: TABLA_BODEGA });
+    expect(
+      within(tabla).getByRole("button", {
+        name: "Ver historial de la orden REM-H1",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("el historial va SIEMPRE, aunque el estado de la fila NO admita reportar incidente (R41)", () => {
+    // `por_devolver` no es un origen válido (R41): el disparador de incidente no se pinta,
+    // pero el historial es de solo lectura y no depende de esa regla.
+    renderModule({
+      porDevolver: [
+        makeOrden({ id: ORDEN_ID, estatusValue: "por_devolver", numRemision: "REM-H2" }),
+      ],
+    });
+    const tabla = screen.getByRole("table", { name: TABLA_BODEGA });
+    expect(
+      within(tabla).getByRole("button", {
+        name: "Ver historial de la orden REM-H2",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(tabla).queryByRole("button", {
+        name: `${REPORTAR_INCIDENTE_ACCION_LABEL} de la orden REM-H2`,
+      }),
+    ).toBeNull();
   });
 });

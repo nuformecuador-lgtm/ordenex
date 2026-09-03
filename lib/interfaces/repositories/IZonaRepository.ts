@@ -34,6 +34,18 @@ export interface ListZonasResult {
 // provincia/orden/tarifas (FK RESTRICT), no se puede borrar.
 export type DeleteZonaResult = "ok" | "not_found" | "referenced";
 
+/**
+ * FICHA 366 (design §5.1) — lo que devuelve un guardado de zona.
+ *
+ * `ordenesReconciliadas` (R12) es cuantas ordenes CAMBIARON de zona por la re-derivacion de ESTE
+ * guardado: las alcanzadas, no las candidatas. Cero es un valor normal y esperado (R14: repetir el
+ * mismo guardado no reconcilia nada la segunda vez).
+ */
+export interface UpdateZonaResult {
+  zona: ZonaDTO;
+  ordenesReconciliadas: number;
+}
+
 export interface IZonaRepository {
   /** Crea la zona + su N:M de distritos + sus tarifas, en una transaccion. */
   create(data: CreateZonaData): Promise<ZonaDTO>;
@@ -48,8 +60,18 @@ export interface IZonaRepository {
    * lo consumen tambien `admin` y `adminTienda`, y no necesita nada de eso.
    */
   listLite(): Promise<OpcionCatalogo[]>;
-  /** Reemplaza datos + N:M + tarifas; null si la zona no existe. */
-  update(id: string, data: UpdateZonaData): Promise<ZonaDTO | null>;
+  /**
+   * Reemplaza datos + N:M + tarifas; `null` si la zona no existe.
+   *
+   * FICHA 366 (R1-R9): en la MISMA transaccion re-deriva la zona de las ordenes ELEGIBLES cuyo
+   * distrito quedo apuntando a otra zona. `actorUsuarioId` congela QUIEN disparo la
+   * reconciliacion (mismo patron que `hardDelete`, ficha 362); `null` = el sistema.
+   */
+  update(
+    id: string,
+    data: UpdateZonaData,
+    actorUsuarioId: string | null,
+  ): Promise<UpdateZonaResult | null>;
   /** Borrado FISICO (cascade de zona_distrito y tarifas). */
   /** FICHA 362 (R4/R9): `actorUsuarioId` congela QUIEN borro; la etiqueta se lee ANTES del DELETE. */
   hardDelete(id: string, actorUsuarioId: string | null): Promise<DeleteZonaResult>;

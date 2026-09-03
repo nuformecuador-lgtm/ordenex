@@ -134,7 +134,7 @@ export type ActionError =
   | { status: "validation_error"; fieldErrors: Record<string, string[]> } // R15/R23
   | { status: "unauthenticated" } // R8
   | { status: "forbidden" } // R11/R12/R13
-  | { status: "not_found" } // R17/R21
+  | { status: "not_found" } // R21
   // SI hay conflicto de unicidad, aunque el diseno original dijera que no: la
   // tabla tiene un unico `(zona_id, tienda_id)` -con NULLS NOT DISTINCT, asi que
   // dos "generales de la tienda X" tambien chocan-. Ademas cubre el borrado de
@@ -142,7 +142,6 @@ export type ActionError =
   | { status: "conflict" };
 
 export type CrearTarifaResult = { status: "ok"; tarifa: TarifaDTO } | ActionError;
-export type ObtenerTarifaResult = { status: "ok"; tarifa: TarifaDTO } | ActionError;
 export type ListarTarifasResult =
   | { status: "ok"; items: TarifaDTO[]; page: number; pageSize: number; total: number }
   | ActionError;

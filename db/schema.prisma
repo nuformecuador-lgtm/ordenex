@@ -2920,7 +2920,7 @@ model OrdenDiaRepartoCambio {
 /// y lo que CAMBIA QUIEN PUEDE HACER QUE. La clasificacion NO se guarda en la fila: se deriva de
 /// `CATEGORIA_POR_ACCION` (`lib/types/historial-accion.ts`), R17.
 enum HistorialAccionTipo {
-  // --- mueve dinero (25) ---
+  // --- mueve dinero (26) ---
   cierre_dia_aprobado
   cierre_dia_rechazado
   cierre_dia_pagos_editados
@@ -2953,6 +2953,12 @@ enum HistorialAccionTipo {
   /// periodico de bodega, o sea mueve dinero. NO entra en «permisos»: no cambia lo que la persona
   /// puede hacer.
   usuario_fulfillment_cambiado
+  /// FICHA 366: al guardar la configuracion de una zona, las ordenes vivas y elegibles cuyo
+  /// distrito paso a resolver OTRA zona se re-estampan con la zona correcta. Mueve dinero por el
+  /// mismo motivo que `orden_ubicacion_corregida`: la zona decide la tarifa que se factura. La
+  /// fila registra SOLO EL HECHO (quien guardo, que orden, cuando): ni la direccion, ni el
+  /// distrito, ni la zona anterior ni la nueva.
+  orden_zona_reconciliada
 
   // --- hace desaparecer algo (6) ---
   orden_eliminada

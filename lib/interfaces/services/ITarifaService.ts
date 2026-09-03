@@ -21,11 +21,6 @@ export type CrearTarifaServiceResult =
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "forbidden" };
 
-export type ObtenerTarifaServiceResult =
-  | { status: "ok"; tarifa: TarifaDTO }
-  | { status: "forbidden" }
-  | { status: "not_found" };
-
 export type ListarTarifasServiceResult =
   | { status: "ok"; items: TarifaDTO[]; page: number; pageSize: number; total: number }
   | { status: "forbidden" };
@@ -46,7 +41,6 @@ export type BorrarTarifaServiceResult =
 
 export interface ITarifaService {
   crear(input: CrearTarifaInput, actor: Actor): Promise<CrearTarifaServiceResult>;
-  obtener(id: string, actor: Actor): Promise<ObtenerTarifaServiceResult>;
   listar(input: ListarTarifasInput, actor: Actor): Promise<ListarTarifasServiceResult>;
   actualizar(
     id: string,

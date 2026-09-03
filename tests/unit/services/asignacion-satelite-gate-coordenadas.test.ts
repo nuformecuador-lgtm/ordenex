@@ -71,7 +71,10 @@ const NO_ASIGNABLES: EstadoAsignabilidad[] = [
 ];
 
 describe("R8 — AsignacionSateliteService.asignar", () => {
-  it.each(NO_ASIGNABLES)("motivo %s -> conflict SIN escribir", async (estado) => {
+  // Feature 368 (R2/R18) — ACTUALIZADO: una sola orden bloqueada por coordenadas YA NO aborta
+  // el lote. La asignable se asigna (`partial`), la bloqueada se reporta, y `asignarSateliteLote`
+  // se llama SOLO con la asignable.
+  it.each(NO_ASIGNABLES)("motivo %s -> partial: asigna la asignable, reporta la bloqueada", async (estado) => {
     const repo = fakeRepo();
     const service = new AsignacionSateliteService(
       repo as unknown as IOrdenRepository,
@@ -81,11 +84,21 @@ describe("R8 — AsignacionSateliteService.asignar", () => {
 
     const r = await service.asignar({ ordenIds: ["o1", "o2"], mensajeroId: "m1" }, ADMIN_SATELITE);
 
-    expect(r.status).toBe("conflict");
-    if (r.status === "conflict") {
-      expect(r.detalle).toEqual([{ ordenId: "o1", motivo: estado }]);
+    expect(r.status).toBe("partial");
+    if (r.status === "partial") {
+      expect(r.resultados).toEqual([{ ordenId: "o2", estado: "por_recoger" }]);
+      expect(r.bloqueadas).toEqual([{ ordenId: "o1", motivo: estado }]);
     }
-    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+    expect(repo.asignarSateliteLote).toHaveBeenCalledTimes(1);
+    expect(repo.asignarSateliteLote).toHaveBeenCalledWith(
+      ["o2"],
+      "m1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("TODO-O-NADA: dos ordenes no asignables producen dos entradas y cero escrituras", async () => {
@@ -106,6 +119,61 @@ describe("R8 — AsignacionSateliteService.asignar", () => {
       ]);
     }
     expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  // Feature 368 (R17) — NUEVO, el caso de carrera COMPUESTA: `o1` bloqueada por coordenadas Y,
+  // de las que SI pasaron el gate (`o2`, `o3`), `o2` pierde la carrera de concurrencia (cambia
+  // de zona entre la lectura y la escritura guardada). El resultado sigue siendo `conflict`
+  // (NUNCA `partial` ni `ok` en este camino raro) y el `detalle` combina el motivo de carrera
+  // de `o2` con el motivo de coordenadas de `o1`, para no perder esa informacion (design.md §5).
+  it("368/R17: carrera compuesta — bloqueada por coordenadas + carrera en las asignables -> conflict con ambos motivos", async () => {
+    let llamada = 0;
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async (ids: string[]) => {
+        llamada += 1;
+        if (llamada === 1) {
+          // Precarga inicial (paso 4): las tres en estado valido, para pasar las guardas de
+          // zona/estado y llegar al gate de coordenadas.
+          return [ordenRow({ id: "o1" }), ordenRow({ id: "o2" }), ordenRow({ id: "o3" })];
+        }
+        // Re-lectura tras la escritura (paso 7, solo sobre `asignables` = ["o2", "o3"]): o2
+        // cambio de zona entre la lectura y la escritura (perdio la carrera); o3 si transiciono.
+        return ids.map((id) =>
+          id === "o2"
+            ? ordenRow({ id, zonaId: "z-otra" })
+            : ordenRow({ id, estatusValue: "por_recoger" }),
+        );
+      }),
+      // Solo 1 de las 2 asignables (o2, o3) se escribio de verdad -> dispara el chequeo de carrera.
+      asignarSateliteLote: vi.fn(async () => 1),
+    });
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gate({ o1: "geocodificacion_agotada" }),
+      fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */,
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      ADMIN_SATELITE,
+    );
+
+    expect(r.status).toBe("conflict");
+    if (r.status === "conflict") {
+      const porOrden = new Map(r.detalle.map((d) => [d.ordenId, d.motivo]));
+      expect(porOrden.get("o1")).toBe("geocodificacion_agotada"); // no se pierde el motivo de coordenadas
+      expect(porOrden.get("o2")).toBe("zona_ajena"); // motivo de la carrera
+    }
+    // `asignarSateliteLote` solo se llamo con las asignables (["o2","o3"]), nunca con "o1".
+    expect(repo.asignarSateliteLote).toHaveBeenCalledWith(
+      ["o2", "o3"],
+      "m1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("todas asignables -> asigna con normalidad", async () => {

@@ -40,6 +40,7 @@ import type {
   HistorialContexto,
 } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+import { zonaUnicaDeDistrito } from "@/lib/repositories/_shared/zona-colapso";
 // FICHA 362 — el punto UNICO de escritura del registro de acciones, y la fuente unica de la
 // etiqueta congelada. Los cuatro escritores de esta clase que registran accion lo llaman DENTRO
 // de su propia `$transaction`.
@@ -1759,23 +1760,11 @@ export class OrdenRepository implements IOrdenRepository {
     });
   }
 
-  /**
-   * FICHA 327 (design §3) — EL COLAPSO DE LA N:M `zona_distrito`, EN UN SOLO SITIO.
-   *
-   * La regla no la inventa esta ficha: ya estaba viva dentro del `.map()` de
-   * `findDistritosByCantonIds`, y la carga masiva la aplica desde la feature 24.
-   *
-   *   EXACTAMENTE 1 zona -> esa zona
-   *   0 zonas            -> `null` (el distrito no tiene zona asignada: error de fila)
-   *   > 1 zonas          -> `null` (ambiguo; NO SE INVENTA UNA ZONA eligiendo la primera)
-   *
-   * Se extrae porque desde la 327 hay DOS lecturas que la necesitan. Dos copias del colapso
-   * serian dos reglas que un dia divergen, y la que divergiera elegiria la tarifa equivocada
-   * —es decir, facturaria mal— sin romper ningun test.
-   */
-  private zonaUnicaDeDistrito<T>(zonas: readonly T[]): T | null {
-    return zonas.length === 1 ? zonas[0] : null;
-  }
+  // FICHA 366: el colapso 1/0/>1 de la N:M ya NO es un metodo privado de esta clase. Vive en
+  // `lib/repositories/_shared/zona-colapso.ts` porque desde la 366 lo necesita tambien
+  // `ZonaRepository.update` (re-derivar la zona de las ordenes al guardar la configuracion de una
+  // zona). MISMA funcion, no una reimplementacion: las dos lecturas de abajo la llaman igual que
+  // antes y su salida no cambia.
 
   // BORRADO 2026-08-07 (tanda 2): aqui vivia tambien `existsEstatus` (la guarda de catalogo de
   // `OrdenService.actualizar`). Para comprobar que un estatus existe, lo vivo es
@@ -2013,7 +2002,7 @@ export class OrdenRepository implements IOrdenRepository {
     // Ficha 327/B2: el colapso ya NO se escribe aqui. Vive en `zonaUnicaDeDistrito`, y lo comparte
     // con `findDistritoParaCorreccion`. La salida de esta lectura no cambia.
     return rows.map((d) => {
-      const zona = this.zonaUnicaDeDistrito(d.zonas);
+      const zona = zonaUnicaDeDistrito(d.zonas);
       return {
         id: d.id,
         nombre: d.nombre,
@@ -2167,7 +2156,7 @@ export class OrdenRepository implements IOrdenRepository {
       },
     });
     if (row === null) return null;
-    const zona = this.zonaUnicaDeDistrito(row.zonas);
+    const zona = zonaUnicaDeDistrito(row.zonas);
     return {
       id: row.id,
       nombre: row.nombre,

@@ -1,0 +1,17 @@
+-- FICHA 366 (design §3, R10/R11) — el tipo de accion `orden_zona_reconciliada`.
+--
+-- QUE REGISTRA: que un guardado de la configuracion de una zona re-derivo la zona estampada en
+-- una orden viva (`ZonaRepository.update`). La fila documenta EL HECHO —quien guardo, cuando y
+-- que orden se vio afectada— y NUNCA la direccion, el distrito, la zona anterior ni la nueva
+-- (R10; mismo trato que `orden_ubicacion_corregida`, D4 de la 312).
+--
+-- POR QUE VA SOLA, sin backfill ni ningun uso del valor en esta misma migracion: Postgres NO
+-- permite USAR un valor de enum recien añadido en la transaccion que lo añadio (55P04, "unsafe
+-- use of new value of enum type") y Prisma Migrate corre cada `migration.sql` en su propia
+-- transaccion. Su primer uso ocurre en runtime, en transacciones posteriores. Mismo patron que
+-- `20260731120000_orden_historial_origen_asignacion_recoleccion` (feature 157) y que
+-- `20260729140000_orden_historial_origen_deshacer_asignacion` (feature 149).
+--
+-- ADITIVA: no crea ni altera tablas, columnas ni indices. `historial_accion` conserva su RLS
+-- habilitada sin policies desde la ficha 362 — un valor nuevo de enum no la toca.
+ALTER TYPE "historial_accion_tipo" ADD VALUE IF NOT EXISTS 'orden_zona_reconciliada';

@@ -17,7 +17,7 @@ import { HISTORIAL_ACCION_TIPOS } from "@/lib/types/historial-accion";
 //
 // Ninguna de las dos cosas rompe un test que no exista. Esta guardia es ese test.
 //
-// LAS TRES COSAS QUE EXIGE, por cada uno de los 42 tipos del catalogo:
+// LAS TRES COSAS QUE EXIGE, por cada uno de los 43 tipos del catalogo:
 //   1. que el metodo declarado como su productor EXISTA y su cuerpo se pueda recortar;
 //   2. que ese cuerpo llame a `appendAccion`;
 //   3. que la llamada sea ATOMICA con la mutacion, en una de las DOS formas validas:
@@ -182,6 +182,16 @@ const CENSO: EntradaCenso[] = [
     tipos: ["orden_ubicacion_corregida"],
     archivo: "lib/repositories/OrdenRepository.ts",
     metodo: "corregirDatosCliente",
+    forma: "abre_tx",
+    mutacion: /tx\.orden\.updateMany\(/,
+  },
+  {
+    // ⭑ FICHA 366 — la re-derivacion de la zona de las ordenes elegibles al guardar una zona.
+    // Comparte metodo con el resto del guardado (`update`), y por eso su `appendAccion` va dentro
+    // de la MISMA `$transaction` que ya reemplazaba la N:M y las tarifas.
+    tipos: ["orden_zona_reconciliada"],
+    archivo: "lib/repositories/ZonaRepository.ts",
+    metodo: "update",
     forma: "abre_tx",
     mutacion: /tx\.orden\.updateMany\(/,
   },
@@ -493,10 +503,11 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     expect(inventados, "el censo nombra un tipo que el catalogo no declara").toEqual([]);
   });
 
-  it("los 42 tipos del Anexo A (+ Q1 y Q2) siguen siendo 42", () => {
+  it("los 43 tipos del Anexo A (+ Q1, Q2 y la 366) siguen siendo 43", () => {
     // Numero DURO a proposito: añadir un tipo al enum obliga a pasar por aqui, y por tanto a
     // añadirlo al censo y a escribir su productor. Es el mecanismo de R14.
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(42);
+    // 43 desde la ficha 366 (`orden_zona_reconciliada`).
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(43);
   });
 });
 
@@ -504,7 +515,7 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
 // 2 — R9: el registro va en la MISMA transaccion que la mutacion
 // ---------------------------------------------------------------------------------------------
 
-describe("362/R9 — los 42 tipos se registran DENTRO de la transaccion de su accion", () => {
+describe("362/R9 — los 43 tipos se registran DENTRO de la transaccion de su accion", () => {
   it.each(CENSO.map((e) => [`${e.archivo.split("/").pop()}#${e.metodo}`, e] as const))(
     "%s registra su accion en la misma transaccion que la escribe",
     (_nombre, entrada) => {

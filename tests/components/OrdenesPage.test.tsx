@@ -178,6 +178,13 @@ describe("OrdenesPage", () => {
     // (incluye columna "Zona" propia, "Monto a cobrar", "Flete + IVA",
     // "Fulfillment", "Comisión + IVA" e "Intentos" —feature 160/R17/R22, justo
     // después de "Estado"—) + "Acciones" (feature 49/R29).
+    //
+    // Este caso renderiza SIN sesión resuelta (`resolveActorFromSession` mockeado a `null`),
+    // así que `OrdenesPage` cae al listado plano (`OrdenesModule` directo, SIN filtro de
+    // estado) y no pasa por `OrdenesListado`. Es OTRO camino de render: la columna "Reprogramada
+    // para" que la ficha 367 hizo siempre-visible vive en `OrdenesListado` (el listado con
+    // filtro por estado de maestro/admin/adminTienda), no en este. Ese camino lo cubre
+    // `tests/unit/components/ordenes-listado.test.tsx`.
     const headers = screen.getAllByRole("columnheader");
     expect(headers.map((h) => h.textContent)).toEqual([
       "Nº Guía",
@@ -262,7 +269,8 @@ describe("OrdenesPage", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveTextContent("No hay órdenes");
     // La cabecera sigue presente (19 columnas del listado del maestro —18 + "Intentos",
-    // feature 160— + "Acciones" feature 49/R29).
+    // feature 160— + "Acciones" feature 49/R29). Mismo camino de render "sin sesión" que el
+    // caso D1, arriba: no pasa por `OrdenesListado`.
     expect(screen.getAllByRole("columnheader")).toHaveLength(20);
   });
 

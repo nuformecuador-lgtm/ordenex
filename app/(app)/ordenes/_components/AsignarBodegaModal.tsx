@@ -21,6 +21,7 @@ import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 import { MOTIVO_BLOQUEADO_POR_CIERRE, toMensajeroOptions } from "./mensajero-options";
 import { MOTIVO_USUARIO_NO_ASIGNABLE } from "@/lib/constants/estado-usuario-asignable";
 import { guiaDecisionErrorMessage } from "./guia-decision-error-messages";
+import { mensajeDireccionPorMotivo } from "@/app/(app)/_components/geocodificacion-motivo-messages";
 
 export interface AsignarBodegaModalProps {
   open: boolean;
@@ -97,6 +98,12 @@ export function AsignarBodegaModal({
     mensaje: string;
     /** R28: para qué día quedó el lote, en palabras. Se congela con el lote cometido. */
     confirmacionDia: string;
+    /**
+     * Feature 368 (R10-R12): éxito parcial — órdenes que el gate de coordenadas bloqueó,
+     * identificadas por su `numRemision` (nunca por id interno ni dirección, R10/R14) con el
+     * mensaje de SU propio motivo (R11). Vacío en éxito total.
+     */
+    bloqueadas: { numRemision: string; mensaje: string }[];
   } | null>(null);
   // Reinicia la selección solo al transicionar a `open` (ajuste de estado
   // durante el render, no en un `useEffect`, para evitar el render en cascada).
@@ -159,21 +166,49 @@ export function AsignarBodegaModal({
       // Rica, y el reloj del navegador no puede decidir el día de reparto de ninguna orden.
       dia,
     });
-    if (result.status !== "ok") {
+    // Feature 368 (R1/R15): "partial" se suma a "ok" — es un resultado que SÍ tuvo efecto
+    // (las órdenes asignables se asignaron), así que no va al canal de error del `Modal`.
+    // Solo el resto de resultados no-"ok" (conflict/forbidden/validation_error) siguen
+    // lanzándose ahí, sin ningún cambio de comportamiento (R16).
+    if (result.status !== "ok" && result.status !== "partial") {
       throw result;
     }
 
-    const mensaje = `Mensajero asignado a ${result.resultados.length} orden(es).`;
+    // R10: el identificador visible sale del MISMO snapshot `ordenes` que generó los
+    // `ordenIds` enviados al servidor — nunca de un campo nuevo en la respuesta del backend
+    // (design.md §2.2/§6.2).
+    const numRemisionPorId = new Map(ordenes.map((orden) => [orden.id, orden.numRemision]));
+    const bloqueadas =
+      result.status === "partial"
+        ? result.bloqueadas.map((b) => ({
+            numRemision: numRemisionPorId.get(b.ordenId) ?? b.ordenId, // fallback defensivo
+            // R11: mensaje de SU PROPIO motivo, no el agregado del lote.
+            mensaje: mensajeDireccionPorMotivo(b.motivo) ?? "No se pudo asignar.",
+          }))
+        : [];
+
+    // R12: informa cuántas se asignaron y cuántas quedaron bloqueadas, en el mismo lugar
+    // donde hoy se confirma un lote de éxito total. Literales de design.md §6.3 (Q1
+    // aprobado por el humano el 2026-09-03), a mano — no se derivan de otra fuente.
+    const mensaje =
+      result.status === "partial"
+        ? `Mensajero asignado a ${result.resultados.length} de ${
+            result.resultados.length + bloqueadas.length
+          } orden(es). ${bloqueadas.length} bloqueada(s).`
+        : `Mensajero asignado a ${result.resultados.length} orden(es).`;
     toast.success(mensaje);
     // Feature 148 (§9.7): asignación ya cometida → fase "resultado"; `onSuccess()`
     // se difiere al cierre. La llamada de negocio, su input y su toast no cambian (R27).
     setResultado({
+      // R13: el manifiesto sigue recibiendo SOLO las órdenes efectivamente asignadas —
+      // `result.resultados` ya es ese subconjunto, tanto en "ok" como en "partial".
       ordenIds: result.resultados.map((r) => r.ordenId),
       mensaje,
       // R28: la frase se calcula con el día que se ACABA de cometer y se guarda con el
       // resultado. Derivarla del estado vivo dejaría que un cambio posterior del selector
       // reescribiera la confirmación de un lote que ya está asignado.
       confirmacionDia: confirmacionDiaReparto(dia, fechasDiaReparto),
+      bloqueadas,
     });
   }
 
@@ -227,6 +262,21 @@ export function AsignarBodegaModal({
             flujo="generacion_guia"
             seleccion={{ ordenIds: resultado.ordenIds }}
           />
+          {/* Feature 368 (R10-R12/R14): éxito parcial — una entrada por orden bloqueada, con
+              su identificador visible y el mensaje de SU propio motivo. Mismo estilo que el
+              bloque de "sinOrdenes" de más abajo. */}
+          {resultado.bloqueadas.length > 0 ? (
+            <ul
+              role="alert"
+              className="flex list-disc flex-col gap-1 overflow-auto rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 pl-8 text-sm text-destructive"
+            >
+              {resultado.bloqueadas.map((b) => (
+                <li key={b.numRemision}>
+                  {b.numRemision} — {b.mensaje}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : sinOrdenes ? (
         <p

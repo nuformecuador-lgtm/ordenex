@@ -108,9 +108,13 @@ export class ZonaService implements IZonaService {
     if (!esMaestro(actor)) return { status: "forbidden" };
     const prep = await this.prepararDatos(input);
     if (!prep.ok) return { status: "validation_error", fieldErrors: prep.fieldErrors };
-    const zona = await this.repo.update(id, prep.data);
-    if (!zona) return { status: "not_found" };
-    return { status: "ok", zona };
+    // 362/R4/R9 + 366/R10: QUIEN guarda la zona ESTA, y es quien firma cada fila de historial que
+    // produzca la reconciliacion. Mismo patron que `borrar` con `hardDelete`.
+    const res = await this.repo.update(id, prep.data, actor.usuarioId);
+    if (!res) return { status: "not_found" };
+    // 366/R12: el conteo se reenvia TAL CUAL. El service no lo interpreta ni lo redondea: quien
+    // guardo la zona tiene que ver cuantas ordenes se movieron por su guardado.
+    return { status: "ok", zona: res.zona, ordenesReconciliadas: res.ordenesReconciliadas };
   }
 
   async borrar(id: string, actor: Actor): Promise<BorrarZonaServiceResult> {

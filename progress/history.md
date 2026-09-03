@@ -4395,3 +4395,36 @@ detectó el gate: `jq` no está instalado y su ausencia es un `warn`, así que l
   —decisión del leader: fuera de esta ficha—.
 - HALLAZGO DEL ARNÉS, ajeno a la ficha: con `pnpm` ausente `init.sh` degrada typecheck y lint a
   `warn` y sale **exit 0** sin haberlos ejecutado. Falso verde; merece ficha propia.
+
+## 2026-09-03 — 368: asignación por lote no debe abortar completa por una orden no geocodificable
+- Origen: el humano reportó "Dirección no encontrada" al asignar 4 órdenes en bodega satélite;
+  medido que solo 1 de 4 (NA-138, `geocode_status = ZERO_RESULTS`) fallaba el gate de asignabilidad
+  por coordenadas (feature 92), pero `GuiaAsignacionService.asignarDesdeBodega` (bodega central) y
+  `AsignacionSateliteService.asignar` (bodega satélite) trataban el resultado del gate como
+  todo-o-nada y abortaban el lote completo. Medido que no es un patrón sistémico: 2/958 órdenes en
+  14 días, una sola tienda.
+- Backend: ambos servicios filtran las órdenes bloqueadas por coordenadas antes de escribir el
+  lote y devuelven un desenlace nuevo `"partial"` (resultados asignados + bloqueadas con motivo),
+  sin mecanismo transaccional nuevo — los writers ya eran `WHERE id IN (subset)` en una única
+  transacción. `"conflict"` conserva su significado de cero-efectos para el resto de motivos de
+  rechazo (orden borrada, zona ajena, mensajero bloqueado, tope de intentos), que siguen
+  todo-o-nada sin cambios — decisión deliberada, no generalizada sin evidencia (`design.md` §7).
+  El chequeo de carrera de la bodega satélite se ajustó para comparar contra el subconjunto
+  filtrado, no el lote original.
+- Frontend: `AsignarBodegaModal` y `AsignarSateliteModal` ya no tratan `"partial"` como error;
+  muestran cuántas órdenes se asignaron, cuántas quedaron bloqueadas, y el motivo por orden
+  (identificador `numRemision` + mensaje, ej. "NA-138 — Dirección no encontrada"), tomando el
+  identificador del snapshot que el modal ya tenía, nunca de un campo nuevo en la respuesta.
+- Requisitos cubiertos: R1–R19 (EARS), mapeados en `progress/impl_368-asignacion-parcial-geocodificacion.md`.
+  Review sin hallazgos bloqueantes (`progress/review_368-asignacion-parcial-geocodificacion.md`).
+  PR #686 mergeado a `dev` (1762b231), verificado por contenido real.
+- Ya existe un remedio operativo para cuando una dirección vuelva a fallar (fuera del alcance de
+  esta ficha, documentado como hallazgo): `CorregirDatosClienteService` re-encola la geocodificación
+  al cambiar `direccion` (feature 327), pero `adminSatelite` no tiene permiso para usarlo
+  (`rolAdmiteCorreccion`, R10 de esa feature) — restricción deliberada.
+- Hallazgo de infraestructura, no de la ficha: un junction de `node_modules` compartido con el
+  worktree de otra sesión (366) hizo que el typecheck heredara por un momento su cliente Prisma
+  regenerado, produciendo un rojo fantasma citando un símbolo ausente del árbol propio. Resuelto
+  dándole a cada worktree su propia instalación (`pnpm install` + `db:generate` con `DATABASE_URL`
+  dummy); documentado en la memoria `base-local-compartida-rompe-gates-ajenos` para no repetirlo:
+  nunca compartir `node_modules` entre worktrees con sesiones concurrentes activas.

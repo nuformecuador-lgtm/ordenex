@@ -180,17 +180,92 @@ describe("R8 — asignarDesdeBodega (todo el lote recibe mensajero)", () => {
     expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
   });
 
-  it.each(NO_ASIGNABLES)("motivo %s -> conflict SIN persistir", async (estado) => {
+  // Feature 368 (R1/R18) — ACTUALIZADO: una sola orden bloqueada por coordenadas YA NO aborta
+  // el lote. La asignable se asigna (`partial`), la bloqueada se reporta, y `asignarBodegaLote`
+  // se llama SOLO con la asignable.
+  it.each(NO_ASIGNABLES)("motivo %s -> partial: asigna la asignable, reporta la bloqueada", async (estado) => {
     const repo = repoBodega();
     const service = new GuiaAsignacionService(repo, fakeZonaRepo(), gate({ o1: estado }), fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.asignarDesdeBodega({ ordenIds: ["o1", "o2"], mensajeroId: "m1" }, MAESTRO);
 
+    expect(r.status).toBe("partial");
+    if (r.status === "partial") {
+      expect(r.resultados).toEqual([{ ordenId: "o2", estado: "por_recoger" }]);
+      expect(r.bloqueadas).toEqual([{ ordenId: "o1", motivo: estado }]);
+    }
+    expect(repo.asignarBodegaLote).toHaveBeenCalledTimes(1);
+    expect(repo.asignarBodegaLote).toHaveBeenCalledWith(
+      ["o2"],
+      "m1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  // Feature 368 (R3) — NUEVO: ninguna orden asignable por coordenadas -> sigue siendo
+  // `conflict` sin ningun efecto (no-regresion del caso ya cubierto en el archivo gemelo de
+  // satelite, "TODO-O-NADA: dos ordenes no asignables...").
+  it("368/R3: las DOS ordenes bloqueadas por coordenadas -> conflict SIN persistir", async () => {
+    const repo = repoBodega();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gate({ o1: "geocodificacion_agotada", o2: "direccion_no_geocodificable" }),
+      fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */,
+    );
+
+    const r = await service.asignarDesdeBodega({ ordenIds: ["o1", "o2"], mensajeroId: "m1" }, MAESTRO);
+
     expect(r.status).toBe("conflict");
     if (r.status === "conflict") {
-      expect(r.detalle).toEqual([{ ordenId: "o1", motivo: estado }]);
+      expect(r.detalle).toEqual([
+        { ordenId: "o1", motivo: "geocodificacion_agotada" },
+        { ordenId: "o2", motivo: "direccion_no_geocodificable" },
+      ]);
     }
     expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+  });
+
+  // Feature 368 (R1) — NUEVO: la bloqueada al MEDIO del lote no reordena nada; `resultados` y
+  // `bloqueadas` preservan el orden original de `ordenIds` (protege contra un `filter`/`Set`
+  // que reordene).
+  it("368/R1: lote de 3 con la bloqueada al medio preserva el orden en ambos arrays", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central" }),
+        ordenRow({ id: "o2", estatusValue: "en_bodega_central" }),
+        ordenRow({ id: "o3", estatusValue: "en_bodega_central" }),
+      ]),
+    });
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gate({ o2: "geocodificacion_en_curso" }),
+      fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */,
+    );
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("partial");
+    if (r.status === "partial") {
+      expect(r.resultados).toEqual([
+        { ordenId: "o1", estado: "por_recoger" },
+        { ordenId: "o3", estado: "por_recoger" },
+      ]);
+      expect(r.bloqueadas).toEqual([{ ordenId: "o2", motivo: "geocodificacion_en_curso" }]);
+    }
+    expect(repo.asignarBodegaLote).toHaveBeenCalledWith(
+      ["o1", "o3"],
+      "m1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("el gate evalua el LOTE ENTERO (aqui todas reciben mensajero)", async () => {

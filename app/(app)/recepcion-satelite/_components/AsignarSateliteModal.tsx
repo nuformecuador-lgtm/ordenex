@@ -22,6 +22,7 @@ import {
 } from "@/app/(app)/ordenes/_components/mensajero-options";
 import { MOTIVO_USUARIO_NO_ASIGNABLE } from "@/lib/constants/estado-usuario-asignable";
 import { asignacionSateliteErrorMessage } from "./asignacion-satelite-error-messages";
+import { mensajeDireccionPorMotivo } from "@/app/(app)/_components/geocodificacion-motivo-messages";
 
 export interface AsignarSateliteModalProps {
   open: boolean;
@@ -85,6 +86,12 @@ export function AsignarSateliteModal({
     mensaje: string;
     /** R28: para qué día quedó el lote, en palabras. Se congela con el lote cometido. */
     confirmacionDia: string;
+    /**
+     * Feature 368 (R10-R12, espejo de AsignarBodegaModal): éxito parcial — órdenes que el
+     * gate de coordenadas bloqueó, con su `numRemision` (nunca id interno ni dirección) y el
+     * mensaje de SU propio motivo. Vacío en éxito total.
+     */
+    bloqueadas: { numRemision: string; mensaje: string }[];
   } | null>(null);
   // Reinicia la selección solo al transicionar a `open` (ajuste de estado durante
   // el render, no en un `useEffect`, para evitar el render en cascada).
@@ -135,19 +142,43 @@ export function AsignarSateliteModal({
       // tenga `.default("hoy")`: sin este campo el olvido sería silencioso.
       dia,
     });
-    if (result.status !== "ok") {
+    // Feature 368 (R2/R15, espejo de AsignarBodegaModal): "partial" se suma a "ok" — es un
+    // resultado que SÍ tuvo efecto, así que no va al canal de error del `Modal`. El resto de
+    // resultados no-"ok" siguen lanzándose ahí, sin cambio de comportamiento (R16).
+    if (result.status !== "ok" && result.status !== "partial") {
       throw result;
     }
 
-    const mensaje = `Mensajero asignado a ${result.resultados.length} orden(es).`;
+    // R10: identificador visible desde el MISMO snapshot `ordenes` que generó los `ordenIds`
+    // enviados al servidor — nunca de un campo nuevo en la respuesta del backend.
+    const numRemisionPorId = new Map(ordenes.map((orden) => [orden.id, orden.numRemision]));
+    const bloqueadas =
+      result.status === "partial"
+        ? result.bloqueadas.map((b) => ({
+            numRemision: numRemisionPorId.get(b.ordenId) ?? b.ordenId, // fallback defensivo
+            // R11: mensaje de SU PROPIO motivo, no el agregado del lote.
+            mensaje: mensajeDireccionPorMotivo(b.motivo) ?? "No se pudo asignar.",
+          }))
+        : [];
+
+    // R12/R5: mismo criterio y mismo texto que en la bodega central (Q1 aprobado, design.md
+    // §6.3), escrito a mano.
+    const mensaje =
+      result.status === "partial"
+        ? `Mensajero asignado a ${result.resultados.length} de ${
+            result.resultados.length + bloqueadas.length
+          } orden(es). ${bloqueadas.length} bloqueada(s).`
+        : `Mensajero asignado a ${result.resultados.length} orden(es).`;
     toast.success(mensaje);
     // Feature 148 (§9.7): asignación ya cometida → fase "resultado"; `onSuccess()`
     // se difiere al cierre. Nada del contrato de negocio cambia (R27).
     setResultado({
+      // R13: el manifiesto sigue recibiendo SOLO las órdenes efectivamente asignadas.
       ordenIds: result.resultados.map((r) => r.ordenId),
       mensaje,
       // R28: se congela con el lote cometido, no se deriva del estado vivo del selector.
       confirmacionDia: confirmacionDiaReparto(dia, fechasDiaReparto),
+      bloqueadas,
     });
   }
 
@@ -199,6 +230,20 @@ export function AsignarSateliteModal({
             flujo="asignacion_satelite"
             seleccion={{ ordenIds: resultado.ordenIds }}
           />
+          {/* Feature 368 (R10-R12/R14, espejo de AsignarBodegaModal): una entrada por orden
+              bloqueada, con su identificador visible y el mensaje de SU propio motivo. */}
+          {resultado.bloqueadas.length > 0 ? (
+            <ul
+              role="alert"
+              className="flex list-disc flex-col gap-1 overflow-auto rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 pl-8 text-sm text-destructive"
+            >
+              {resultado.bloqueadas.map((b) => (
+                <li key={b.numRemision}>
+                  {b.numRemision} — {b.mensaje}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : (
       <div className="flex flex-col gap-2">
