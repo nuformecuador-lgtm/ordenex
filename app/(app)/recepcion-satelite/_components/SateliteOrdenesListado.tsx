@@ -35,6 +35,13 @@ import {
 // vive en la bodega satélite. Se IMPORTA el mismo disparador y el mismo modal de `/ordenes`;
 // esta superficie sólo aporta SU regla de disponibilidad (alcance por zona, R48).
 import { ReportarIncidenteAccion } from "@/app/(app)/ordenes/_components/ReportarIncidenteAccion";
+// FICHA 367: el botón de historial (feature 49) también vive aquí. Se IMPORTA el MISMO
+// componente que monta `/ordenes` (`OrdenesModule`, columna `acciones`) — no una copia — y la
+// fila hidrata con el mismo include (`WITH_ESTATUS_Y_TIENDA`), así que trae lo único que el
+// drawer necesita (`id`, `numRemision`). El `adminSatelite` ya usa este botón en `/ordenes`, así
+// que la Server Action `obtenerHistorialOrden` ya lo autoriza para ese rol: no hay nada nuevo
+// que autorizar aquí.
+import { HistorialOrdenSheet } from "@/app/(app)/ordenes/_components/HistorialOrdenSheet";
 // Feature 262 (F4, R13/R18): la etiqueta del botón se IMPORTA del modal que abre, para que las
 // dos superficies —ésta y `/ordenes`— no puedan llamar a la misma acción de dos maneras.
 import { CAMBIAR_DIA_ACCION } from "@/app/(app)/ordenes/_components/CambiarDiaRepartoModal";
@@ -538,23 +545,28 @@ export function SateliteOrdenesListado({
       // LA FILA (`relaciones.zona.nombre`), no la del actor. `zonaNombre` sigue haciendo falta
       // más abajo, para la regla de disponibilidad del incidente (R48).
       ...conBadgePrioridad(recibidasColumns()),
-      // Feature 158 (T2.7) — «Reportar incidente» POR FILA. Antes vivía en las tablas de
-      // «Recibidas» y «Asignadas (por recoger)», las dos únicas cuyo estado es un origen
-      // válido; al fundirse las secciones en ESTA tabla la columna se monta siempre y la
-      // decisión pasa a ser POR FILA: `puedeReportarIncidenteSatelite` exige estado origen
-      // (R41) Y zona del actor (R48), así que una `por_devolver`, una `devuelta` o una de
-      // otra zona no pintan disparador —el componente no renderiza nada cuando no está
-      // disponible—. Es la única forma posible con una tabla única, y el criterio no se
-      // relaja: es el MISMO predicado de antes, sin una segunda copia.
+      // FICHA 367 — la columna pasa de "Incidente" a "Acciones" y agrupa DOS disparadores,
+      // igual que `/ordenes` (`OrdenesModule`, columna `acciones`):
+      //
+      //   · Historial (feature 49): SIEMPRE se pinta. Es de solo lectura y no cuelga de
+      //     ninguna regla de disponibilidad por fila — la autoriza la Server Action por
+      //     visibilidad de la orden, no por estado.
+      //   · Incidente (feature 158, T2.7): la fila la ofrece siempre que el estado sea un
+      //     origen válido (R41) Y la orden esté en la zona del actor (R48).
+      //     `puedeReportarIncidenteSatelite` sigue decidiendo ESO Y SOLO ESO —la regla NO se
+      //     relaja—; el componente no renderiza nada cuando no está disponible.
       {
-        id: "incidente",
-        value: "Incidente",
+        id: "acciones",
+        value: "Acciones",
         render: (orden: RecepcionSateliteDTO) => (
-          <ReportarIncidenteAccion
-            orden={orden}
-            disponible={puedeReportarIncidenteSatelite(orden, zonaNombre, sinZona)}
-            onSuccess={onIncidenteReportado}
-          />
+          <div className="flex items-center gap-1">
+            <HistorialOrdenSheet ordenId={orden.id} referencia={orden.numRemision} />
+            <ReportarIncidenteAccion
+              orden={orden}
+              disponible={puedeReportarIncidenteSatelite(orden, zonaNombre, sinZona)}
+              onSuccess={onIncidenteReportado}
+            />
+          </div>
         ),
       },
     ],

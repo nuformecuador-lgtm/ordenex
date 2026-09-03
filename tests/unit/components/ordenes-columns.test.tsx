@@ -106,14 +106,16 @@ describe("ordenesColumns — feature 30 (R15: estado ruteado legible por zona)",
   });
 });
 
-// La tab `reprogramada` añade "Liberada el": el día para el que quedó reprogramada
-// la orden (= cuando el cron de liberación la desbloquea, feature 46). El valor
-// llega del repo ya como `YYYY-MM-DD`; se renderiza tal cual, sin reinterpretarlo
-// como Date en el cliente (eso reintroduciría el off-by-one de zona horaria).
-describe("ordenesColumnsReprogramada — columna 'Liberada el'", () => {
-  it("añade la columna al final, sin perder ninguna de las base", () => {
+// FICHA 367: la columna "Reprogramada para" (antes "Liberada el") es la fecha PARA
+// LA QUE quedó reprogramada la orden, no cuándo el cron de liberación (feature 46)
+// la desbloquea. El valor llega del repo ya como `YYYY-MM-DD`; se renderiza tal
+// cual, sin reinterpretarlo como Date en el cliente (eso reintroduciría el
+// off-by-one de zona horaria).
+describe("ordenesColumnsReprogramada — columna 'Reprogramada para'", () => {
+  it("añade la columna al final, con su encabezado, sin perder ninguna de las base", () => {
     expect(ordenesColumnsReprogramada.length).toBe(ordenesColumns.length + 1);
     expect(ordenesColumnsReprogramada.at(-1)?.id).toBe("liberada");
+    expect(ordenesColumnsReprogramada.at(-1)?.value).toBe("Reprogramada para");
     // Las base se conservan en su orden original.
     expect(ordenesColumnsReprogramada.slice(0, -1)).toEqual(ordenesColumns);
   });
@@ -151,18 +153,18 @@ describe("ordenesColumnsReprogramada — columna 'Liberada el'", () => {
     expect(celdas.at(-1)).toHaveTextContent("—");
   });
 
-  it("las columnas base NO incluyen 'Liberada el' (solo la tab reprogramada)", () => {
+  it("las columnas base NO incluyen 'Reprogramada para' (solo la variante que la añade)", () => {
     expect(ordenesColumns.some((c) => c.id === "liberada")).toBe(false);
   });
 });
 
 // ---------------------------------------------------------------------------------
 // Feature 160 (T16) — el conteo de intentos de entrega como COLUMNA propia (D6/R17),
-// insertada INMEDIATAMENTE despues de `estatus` (design §5.2) y no al final. Los tres
-// asserts de "ordenesColumnsReprogramada — columna 'Liberada el'" de mas arriba
-// (length + 1, ultima = `liberada`, `slice(0,-1)` = base) siguen verdes SIN tocarlos:
-// insertar en el medio no cambia ninguna de esas tres verdades. Esa compatibilidad es
-// una de las tres razones por las que la posicion es esa.
+// insertada INMEDIATAMENTE despues de `estatus` (design §5.2) y no al final. Los
+// asserts de "ordenesColumnsReprogramada — columna 'Reprogramada para'" de mas arriba
+// (length + 1, ultima = `liberada` con su encabezado, `slice(0,-1)` = base) siguen
+// verdes SIN tocarlos: insertar en el medio no cambia ninguna de esas verdades. Esa
+// compatibilidad es una de las tres razones por las que la posicion es esa.
 // ---------------------------------------------------------------------------------
 
 /** Ids de las 18 columnas PREEXISTENTES, en su orden original (R21). */
