@@ -24,6 +24,19 @@ patrón sistémico: 2/958 órdenes en 14 días, una sola tienda.
 
 **Registrada como ficha 368** (`sdd: true`, zona `fullstack`). Spec en curso.
 
+**Cierre técnico del FRONTEND_DEV (2026-09-03), T2/T5/T6/T8 de `tasks.md`.** El backend (T1/T3/T4/T7)
+ya estaba commiteado en esta rama. `mensajeDireccionPorMotivo` nueva en
+`geocodificacion-motivo-messages.ts` (reusa `MOTIVO_A_MENSAJE`, no duplica vocabulario). Los dos
+modales (`AsignarBodegaModal.tsx`, `AsignarSateliteModal.tsx`) ganan la rama `"partial"` en
+`handleConfirm`: ya no lanzan al canal de error, resuelven `numRemision` de cada bloqueada desde el
+snapshot `ordenes` prop que ya tenían (nunca del backend), componen el toast y pintan el detalle por
+orden bloqueada con los literales de `design.md` §6.3 — Q1 resuelto por el humano el 2026-09-03: aprobó
+ese texto tal cual. Guardia nueva (`tests/unit/guards/geocodificacion-motivo-por-orden-mismo-modulo.guardia.test.ts`)
+afirma que los dos modales importan la función del MISMO módulo. `pnpm typecheck` y `pnpm lint` limpios
+(0 errores); `vitest related` sobre los 7 archivos tocados: 450 tests verdes en 36 archivos. Queda para
+el leader: gate completo, review, y el resto de tasks (T9 documentación y T10 gate) si no las cerró ya
+esta sesión.
+
 ## 🧾 2026-08-31 — cierre de sesión: seis fichas y un defecto de producción
 
 **Todo lo abierto quedó cerrado.** Ocho fichas `done`: las cuatro de la wallet planificadas el día
