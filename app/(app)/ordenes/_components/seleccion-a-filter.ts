@@ -2,12 +2,14 @@ import type { FilterSelection } from "@/components/shared/FilterComponent";
 import type { OrdenFilterInput } from "@/lib/types/orden";
 
 import { BOOLEAN_MARCADO } from "@/components/shared/FilterComponent";
+import { SALIO_A_REPARTO_VALORES } from "@/lib/types/orden";
 
 import {
   CLAVE_BUSQUEDA,
   CLAVE_CREACION,
   CLAVE_ELIMINADOS,
   CLAVE_REASIGNABLES,
+  CLAVE_SALIO_A_REPARTO,
 } from "./ordenes-filtros-def";
 
 // Feature 144 / B3 (design.md §4.2, R58) — traduccion de la seleccion agregada del
@@ -18,7 +20,9 @@ import {
 // claves de catalogo se eligieron IGUALES a las del `filter`, asi que ahi la
 // traduccion es la identidad; las transformaciones reales son la del tiempo —que pasa
 // de una clave posicional de tres huecos a `created_preset` O `created_desde`/
-// `created_hasta`— y la del BUSCADOR (feature 169), que baja de lista a escalar.
+// `created_hasta`—, la del BUSCADOR (feature 169), que baja de lista a escalar, y la de
+// «Salida a reparto» (ficha 370), que baja a escalar y ademas DESCARTA el centinela
+// «Todas» de la UI: «no filtrar» solo se puede expresar omitiendo la clave.
 
 /**
  * `FilterSelection` -> `filter` de `listarOrdenes`.
@@ -55,6 +59,24 @@ export function seleccionAFilter(sel: FilterSelection): Partial<OrdenFilterInput
       // termino; la guarda del vacio es por si el filter se construye a mano.
       const termino = values[0] ?? "";
       if (termino !== "") out.q = termino;
+      continue;
+    }
+
+    if (key === CLAVE_SALIO_A_REPARTO) {
+      // FICHA 370 — ESCALAR, nunca lista, igual que el buscador: el borde la declara
+      // `z.enum(SALIO_A_REPARTO_VALORES)` y mandarla como `["ya_salio"]` seria
+      // `validation_error`. Todo lo que no sea uno de sus DOS valores se omite, y eso
+      // incluye al centinela «Todas» (`SALIO_A_REPARTO_TODAS`), que es una opcion de la UI
+      // y no del contrato: «no filtrar» solo se puede expresar SIN la clave, y ausente
+      // salen los dos grupos. La lista blanca sale de la misma constante que valida el
+      // servidor, asi que aqui no hay un segundo dominio que se pueda quedar atras.
+      const valor = values[0];
+      if (
+        valor !== undefined &&
+        (SALIO_A_REPARTO_VALORES as readonly string[]).includes(valor)
+      ) {
+        out.salio_a_reparto = valor;
+      }
       continue;
     }
 

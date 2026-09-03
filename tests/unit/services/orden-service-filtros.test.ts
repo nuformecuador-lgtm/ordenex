@@ -338,3 +338,37 @@ describe("filtro ELIMINADAS", () => {
     expect(() => input({ eliminados: false })).toThrow();
   });
 });
+
+/**
+ * FICHA 370 — la TRADUCCION de «salida a reparto» del vocabulario publico al del repositorio.
+ *
+ * OJO CON LO QUE ESTE BLOQUE **NO** PRUEBA: el repositorio va mockeado, asi que aqui nadie mira
+ * el SQL. Que el `WHERE` seleccione las filas correctas se prueba contra Postgres de verdad en
+ * `tests/integration/db/salida-a-reparto-sql-real.test.ts` — en este repo esta medido cuatro
+ * veces que una mutacion del `WHERE` pasa en verde con dobles. Lo que si se prueba aqui es la
+ * traduccion (dos vocabularios) y que la clave llega HERMANA del resto.
+ */
+describe("FICHA 370 — salida a reparto (traduccion al `where`)", () => {
+  it("`ya_salio` -> `salioAReparto: 'ya'` y `nunca_salio` -> `'nunca'`", async () => {
+    expect((await whereDe({ salio_a_reparto: "ya_salio" })).salioAReparto).toBe("ya");
+    expect((await whereDe({ salio_a_reparto: "nunca_salio" })).salioAReparto).toBe("nunca");
+  });
+
+  it("ausente, la clave NO se escribe: el repositorio no recibe medio filtro", async () => {
+    const where = await whereDe({ zona_id: ["z1"] });
+    expect(where.salioAReparto).toBeUndefined();
+    expect(Object.hasOwn(where, "salioAReparto")).toBe(false);
+  });
+
+  it("es una clave HERMANA (AND) y no pisa a `reasignables` ni al acotamiento por rol", async () => {
+    expect(await whereDe({ reasignables: true, salio_a_reparto: "nunca_salio" })).toEqual({
+      reasignables: true,
+      salioAReparto: "nunca",
+    });
+    // El acotamiento por rol se sigue escribiendo AL FINAL y sigue mandando.
+    expect(await whereDe({ salio_a_reparto: "ya_salio" }, MENSAJERO)).toEqual({
+      salioAReparto: "ya",
+      mensajeroAsignadoId: "msg1",
+    });
+  });
+});

@@ -217,6 +217,7 @@ export function OrdenesListado({
   incluirFiltroTienda = true,
   incluirFiltroReasignables = true,
   incluirFiltroMensajero = true,
+  incluirFiltroSalioAReparto = false,
   permitirDescarga = true,
   puedeReportarIncidente = false,
   puedeCorregirDatos = false,
@@ -275,6 +276,13 @@ export function OrdenesListado({
    * recibe en `false` —no se le entrega el directorio de mensajeros—.
    */
   incluirFiltroMensajero?: boolean;
+  /**
+   * FICHA 370: declara el filtro «Salida a reparto» (ya salió con un mensajero / nunca ha
+   * salido). Es de despacho, como «Reasignables»: lo reciben `maestro`/`admin` y el
+   * `adminTienda` no. Por defecto `false` —el mismo criterio que en
+   * `construirFiltrosOrdenes`—: ninguna superficie lo gana por descuido.
+   */
+  incluirFiltroSalioAReparto?: boolean;
   /**
    * Feature 151 (R33): ofrece la descarga del dataset COMPLETO acotado a los filtros
    * vigentes de la barra. Por defecto `true`: ésta ES la superficie del listado de
@@ -805,6 +813,10 @@ export function OrdenesListado({
         // FICHA 358: cuelga de `puedeVerEliminadas` y ya NO de `puedeEliminar`. Desde hoy no son
         // el mismo rol: la tienda borra lo suyo, pero no ve el cementerio ni recupera de él.
         incluirEliminados: puedeVerEliminadas,
+        // FICHA 370: la puerta la decide la página por rol (es de despacho, como
+        // «Reasignables»), y aquí sólo se reenvía. Va también en las dependencias del memo:
+        // sin eso el control quedaría congelado en lo que valiera la prop al primer render.
+        incluirSalioAReparto: incluirFiltroSalioAReparto,
       },
     );
     // El BUSCADOR ya no es un control más del panel: lo posee `BuscadorFiltros`, que
@@ -828,6 +840,7 @@ export function OrdenesListado({
     incluirFiltroTienda,
     incluirFiltroReasignables,
     incluirFiltroMensajero,
+    incluirFiltroSalioAReparto,
     puedeVerEliminadas,
     declaracionEstado,
   ]);

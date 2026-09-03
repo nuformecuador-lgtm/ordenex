@@ -241,12 +241,21 @@ describe("construirFiltrosOrdenes — catalogo vacio (R64)", () => {
         cantones: [],
         distritos: [],
       },
-      { incluirTienda: true },
+      // TODOS quiere decir todos: las dos claves que solo se declaran a peticion
+      // —«Eliminadas» y, desde la ficha 370, «Salida a reparto»— se piden aqui, porque si
+      // no el censo diria "todos" contando nueve de once.
+      { incluirTienda: true, incluirEliminados: true, incluirSalioAReparto: true },
     );
-    expect(defs).toHaveLength(9);
+    expect(defs).toHaveLength(11);
     for (const def of defs.filter((d) => d.kind === "multi")) {
       expect(def.options).toEqual([]);
     }
+    // «Salida a reparto» es la excepcion que confirma la regla: sus opciones NO salen del
+    // catalogo (salen de `SALIO_A_REPARTO_VALORES`), asi que con el catalogo vacio sigue
+    // teniendo las tres suyas y el control es utilizable.
+    expect(
+      defs.find((d) => d.key === "salio_a_reparto")?.options,
+    ).toHaveLength(3);
   });
 });
 

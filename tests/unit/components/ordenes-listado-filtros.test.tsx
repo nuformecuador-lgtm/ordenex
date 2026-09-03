@@ -276,6 +276,108 @@ describe("OrdenesListado — barra de filtros (R55, R63)", () => {
     expect(screen.getByRole("button", { name: /^Provincia:/ })).toBeInTheDocument();
   });
 
+  it("FICHA 370: «Salida a reparto» se ofrece a quien despacha y NO al adminTienda", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderListado(
+      <OrdenesListado catalogoFiltros={CATALOGO} incluirFiltroSalioAReparto />,
+    );
+    // Se ofrece DETRÁS de «Reasignables» y antes de nada más: la barra entera, en su orden.
+    expect(await filtrosOfrecidos(user)).toEqual([
+      "Estado",
+      "Zona",
+      "Mensajero",
+      "Tienda",
+      "Provincia",
+      "Cantón",
+      "Distrito",
+      "Fecha de creación",
+      "Reasignables",
+      "Salida a reparto",
+    ]);
+    unmount();
+    cleanup();
+
+    // El `adminTienda` (que no despacha) no lo recibe: ni se le ofrece ni puede montarlo.
+    renderListado(
+      <OrdenesListado
+        catalogoFiltros={CATALOGO}
+        incluirFiltroTienda={false}
+        incluirFiltroReasignables={false}
+        incluirFiltroMensajero={false}
+      />,
+    );
+    const ofrecidos = await filtrosOfrecidos(user);
+    expect(ofrecidos).not.toContain("Salida a reparto");
+    await ponerFiltros(user, ...ofrecidos);
+    expect(
+      screen.queryByRole("combobox", { name: "Salida a reparto" }),
+    ).toBeNull();
+  });
+
+  it("FICHA 370: el control SIGUE a la prop, no se congela en el primer render", async () => {
+    // La declaración de la barra vive en un `useMemo`. Si `incluirFiltroSalioAReparto` no
+    // estuviera en sus dependencias, el control se quedaría con lo que valiera la prop la
+    // primera vez y no aparecería nunca al concedérsela — sin que nada más lo delatara.
+    const user = userEvent.setup();
+    const { rerender } = renderListado(
+      <OrdenesListado
+        catalogoFiltros={CATALOGO}
+        incluirFiltroSalioAReparto={false}
+      />,
+    );
+    expect(await filtrosOfrecidos(user)).not.toContain("Salida a reparto");
+
+    rerender(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <ToastProvider>
+          <OrdenesListado catalogoFiltros={CATALOGO} incluirFiltroSalioAReparto />
+        </ToastProvider>
+      </SWRConfig>,
+    );
+    expect(await filtrosOfrecidos(user)).toContain("Salida a reparto");
+  });
+
+  it("FICHA 370: elegir un grupo manda el ESCALAR; «Todas» quita la clave", async () => {
+    const user = userEvent.setup();
+    renderListado(
+      <OrdenesListado catalogoFiltros={CATALOGO} incluirFiltroSalioAReparto />,
+    );
+    await ponerFiltros(user, "Salida a reparto");
+
+    // Montado y sin elegir nada, el control dice «Todas» y NO ha filtrado nada.
+    const control = await screen.findByRole("combobox", {
+      name: "Salida a reparto",
+    });
+    expect(control).toHaveTextContent("Todas");
+    expect(ultimoFilter()).toBeUndefined();
+
+    async function elegir(opcion: string) {
+      await user.click(screen.getByRole("combobox", { name: "Salida a reparto" }));
+      await user.click(
+        within(await screen.findByRole("listbox")).getByRole("option", {
+          name: opcion,
+        }),
+      );
+    }
+
+    // El valor viaja ESCALAR (una lista sería `validation_error` en el borde) y con el
+    // vocabulario del contrato, no con el de la etiqueta.
+    await elegir("Ya salió");
+    await waitFor(() =>
+      expect(ultimoFilter()).toEqual({ salio_a_reparto: "ya_salio" }),
+    );
+
+    await elegir("Nunca ha salido");
+    await waitFor(() =>
+      expect(ultimoFilter()).toEqual({ salio_a_reparto: "nunca_salio" }),
+    );
+
+    // Y la vuelta atrás sin pasar por «Limpiar todo»: «Todas» es la opción que devuelve los
+    // DOS grupos, y lo hace quitando la clave del filtro (no mandando «todas»).
+    await elegir("Todas");
+    await waitFor(() => expect(ultimoFilter()).toBeUndefined());
+  });
+
   it("R51: las cuentas por API key se ofrecen en un grupo aparte", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);

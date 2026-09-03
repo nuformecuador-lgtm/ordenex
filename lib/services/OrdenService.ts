@@ -32,6 +32,9 @@ import { soloDigitosSiPareceNumero } from "@/lib/utils/busqueda-orden";
 // separadores. Aqui se queda solo lo que es propio de `/ordenes`: la ruta rapida por guia.
 import {
   rangoCreacion,
+  // FICHA 370: la tercera traduccion compartida — el valor publico de «salida a reparto» al
+  // vocabulario del repositorio.
+  salidaAReparto,
   terminoDeBusqueda,
 } from "@/lib/utils/filtros-listado-ordenes";
 // Feature 151: el limite de filas de `listarCompleto`. `ordenesConfig` salio de este archivo
@@ -217,6 +220,14 @@ export class OrdenService implements IOrdenService {
     // FILTER_TO_COLUMN; el repositorio lo traduce. Solo acota (nunca amplia), asi que
     // convive sin conflicto con el acotamiento por rol que se escribe debajo.
     if (input.filter?.reasignables) where.reasignables = true;
+    // FICHA 370 — SALIDA A REPARTO. Tampoco es una columna (es un `EXISTS` sobre el historial),
+    // asi que no pasa por FILTER_TO_COLUMN: se traduce del vocabulario PUBLICO al del
+    // repositorio con el util COMPARTIDO con la bodega satelite, para que las dos superficies no
+    // puedan entender cosas distintas por «ya salio». Solo acota, nunca amplia: convive con el
+    // acotamiento por rol que se escribe debajo. Clave ausente -> no se escribe nada -> los dos
+    // grupos.
+    const salida = salidaAReparto(input.filter);
+    if (salida) where.salioAReparto = salida;
     // ELIMINADAS (pedido humano 2026-08-27): la unica clave que no ACOTA sino que SUSTITUYE el
     // universo del listado (`deleted_at IS NOT NULL` en vez de `IS NULL`). Tampoco es una
     // columna, asi que tampoco pasa por FILTER_TO_COLUMN. El acotamiento por rol que se escribe
