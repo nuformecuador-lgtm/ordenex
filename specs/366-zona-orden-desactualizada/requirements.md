@@ -49,7 +49,9 @@ distritos.
 
 **R6** — Una orden es ELEGIBLE para esta re-derivación automática únicamente si: (a) no está
 eliminada, (b) no tiene todavía ningún detalle congelado en un cierre, y (c) no tiene ninguna gestión
-vigente (no anulada) registrada sobre ella.
+vigente (no anulada) cuyo resultado sea `entregada`, `rechazada` o `incidente`. Una gestión vigente con
+resultado `reprogramada` o `devuelta` NO hace inelegible a la orden (enmendado el 2026-09-03; ver
+`design.md` §1).
 
 **R7** — SI una orden no es ELEGIBLE (R6) pero su distrito resuelve (R2) una zona distinta de la
 estampada, ENTONCES el sistema DEBE dejar esa orden sin cambios y sin registrar ninguna fila de
@@ -85,17 +87,12 @@ DEBE aplicarla al CREAR una zona nueva.
 orden elegible cuyo distrito difiera de su zona estampada, la cantidad informada en R12 DEBE ser cero
 y no debe registrarse ninguna fila de historial nueva.
 
-## Preguntas abiertas
+## Preguntas cerradas en la revisión de aprobación (2026-09-03)
 
-**Q1 — Nombre/etiqueta del nuevo tipo de acción del catálogo.** `design.md` propone
-`orden_zona_reconciliada` / "Actualizó la zona de una orden", eligiendo la categoría `mueve_dinero`
-por la misma razón que ya vale para `orden_ubicacion_corregida` (el distrito re-deriva la zona y la
-zona decide la tarifa). Es una constante de vocabulario, no una decisión de negocio: si el humano
-prefiere otro texto, es un cambio de una línea, no de diseño. Se deja anotado por si se quiere revisar
-antes de aprobar.
+**Q1 — Nombre/etiqueta del nuevo tipo de acción del catálogo.** CERRADA, sin objeción: se mantiene
+`orden_zona_reconciliada` / "Actualizó la zona de una orden", categoría `mueve_dinero` (`design.md`
+§7).
 
-**Q2 — ¿Hace falta contar también las órdenes NO elegibles que quedaron con drift residual?** Hoy R12
-solo informa cuántas se reconciliaron. Un segundo conteo ("N órdenes con la zona desactualizada pero
-ya facturadas o con gestión viva, sin tocar") daría visibilidad de la deuda que la automatización no
-puede resolver sola, pero exige una consulta adicional que el encargo no pidió. Se deja fuera del
-diseño por ahora; si el humano lo quiere, es una extensión menor y no un rediseño.
+**Q2 — ¿Hace falta contar también las órdenes NO elegibles que quedaron con drift residual?** CERRADA:
+NO. R12 informa únicamente cuántas órdenes se reconciliaron; no se añade un segundo conteo de deuda
+residual. Queda declarado como riesgo aceptado en `design.md` §8, no como pregunta pendiente.

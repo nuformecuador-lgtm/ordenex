@@ -28,47 +28,100 @@
   un humano mirando el aviso**; esta ficha no tiene a nadie mirando, así que el corte que elijo aquí
   es más conservador que el de esa pantalla, a propósito.
 
-## 1. El corte de "ya facturada" (R6/R7/R8)
+## 1. El corte de "ya facturada" (R6/R7/R8) — ENMENDADO en la revisión de aprobación del 2026-09-03
 
 **Elegido:** una orden es elegible si **no está borrada**, **no tiene ninguna fila en
 `cierre_detail`** (el testigo `yaEnUnCierre` ya existente, reutilizado) **y no tiene ninguna fila en
-`gestion_orden` con `anulada_at IS NULL`** ("gestión vigente", vocabulario ya usado por la feature 67).
+`gestion_orden` con `anulada_at IS NULL` cuyo `resultado` sea `entregada`, `rechazada` o
+`incidente`**. Una gestión vigente con `resultado` `reprogramada` o `devuelta` **no** hace inelegible a
+la orden.
 
-**Por qué esas dos condiciones y no una sola:**
+**Por qué `incidente` se excluye (y no es un tercer caso "gratis" como `reprogramada`/`devuelta`).**
+`GestionResultado` es un enum de CINCO valores —`entregada`, `reprogramada`, `devuelta`, `rechazada`,
+`incidente`—, así que un incidente sí puede llegar por una gestión del mensajero, con su propia fila
+en `gestion_orden` (no únicamente por el reporte de un ADMIN vía `OrdenIncidente`, que es un camino
+aparte). Esa fila tiene columna `indemnizacion` (`Decimal`, nullable "mientras no se cierra", mismo
+patrón que `pago_mensajero`): es dinero, igual que `entregada`/`rechazada`. Y a diferencia de
+`reprogramada`/`devuelta`, `incidente` es uno de los `ESTADOS_TERMINALES` — no hay liberación
+programada ni SLA de devoluciones que lo rutee después, así que no hay ningún futuro que la zona
+todavía tenga que decidir. El criterio general que queda, y que hay que defender así de explícito: **se
+excluye el resultado que puede llevar dinero; se incluye el resultado cuya bodega de destino aún está
+por decidir.** `incidente` falla las dos condiciones a la vez (lleva dinero potencial y no tiene
+destino que decidir), así que cae del lado excluido sin ambigüedad. Medido el 2026-09-03: hay **0**
+gestiones con `resultado = 'incidente'` en toda la base — se excluye por prudencia (el enum lo permite
+y la columna `indemnizacion` existe para eso), no porque la medición lo exija; que hoy no haya ni una
+no es motivo para dejarlo del lado que sí puede mover dinero en silencio.
 
-- Con **solo** `yaEnUnCierre`, el corte sería literalmente "no se retarifa hacia atrás" en su sentido
-  más estricto — y sería *suficiente* para la garantía estructural de R8, porque `cierre_detail` es
-  inmutable pase lo que pase con `orden.zona_id`. Pero una automatización SIN humano delante no tiene
-  el aviso que sí tiene `CorregirDatosClienteService`: reescribir en silencio la zona de una orden que
-  el mensajero ya entregó/rechazó/devolvió HOY, antes de que el cierre del día se solicite, cambiaría
-  qué tarifa se le va a facturar a esa gestión sin que nadie lo haya decidido explícitamente. Excluir
-  también las órdenes con gestión vigente es la manera de no tomar esa decisión por nadie.
-- Es, además, la regla que el propio leader usó el 2026-09-03 para el re-estampado manual de las 42
-  (`NOT EXISTS cierre_detail` **y** `NOT EXISTS gestion_orden no anulada`) — una decisión ya
-  contrastada contra producción, no un supuesto nuevo.
-- Es **más estrecha** que `ESTADOS_SIN_CORRECCION` (los 4 terminales de
-  `lib/types/correccion-datos-cliente.ts`) y así debe ser: una orden `reprogramada` tiene una fila de
-  gestión vigente (resultado `reprogramada`, `anulada_at` NULL) aunque `reprogramada` NO esté en
-  `ESTADOS_SIN_CORRECCION`. Esta ficha la deja fuera de la automatización — no porque esté prohibido
-  tocarla (un humano SÍ podría corregirla vía `CorregirDatosClienteService`, con su aviso), sino
-  porque nadie la está mirando en este camino automático.
-- Un `incidente` reportado por un ADMIN (no por gestión del mensajero, vía `OrdenIncidente`, no vía
-  `gestion_orden`) queda fuera de la exclusión (b) pero SÍ está cubierto: en la práctica un `incidente`
-  reportado sin que medie una gestión previa es un estado terminal poco frecuente y, si además no
-  tiene cierre, sigue siendo elegible — que es lo correcto: no hay dinero en juego (no hay
-  `cierre_detail`) y no hay una gestión del mensajero en curso que este cambio pudiera contradecir.
+**Corrección de hecho sobre la versión anterior de esta sección.** La primera versión de este
+documento excluía TODA gestión vigente, razonando que "un humano SÍ podría corregirla vía
+`CorregirDatosClienteService`, con su aviso". Eso es falso, y lo desmiente el propio §0: ese servicio
+solo re-deriva la zona cuando `provinciaId`/`cantonId`/`distritoId` **cambian de valor**
+(`CorregirDatosClienteService.corregir`, paso 5.a — `if (cambios.length === 0) return { status: "ok",
+cambios: [] }`). En el escenario de esta ficha el distrito de la orden **nunca cambia**: lo que cambió
+es el mapa `zona_distrito`. Re-elegir el mismo distrito es un no-op, así que hoy **no existe ninguna
+vía manual** para esto — es exactamente el defecto que la ficha viene a arreglar, y el corte no puede
+apoyarse en un escape que no existe.
+
+**Por qué el corte es por `resultado`, y no por "toda gestión vigente".** Medido contra el histórico
+completo de producción el 2026-09-03 (evidencia de que HOY este corte no rompe nada — **no** una
+garantía perpetua del esquema: `pago_mensajero`, `ingreso_bodega_rechazo` e `indemnizacion` son
+columnas nullable, y nada en la base impide que una `reprogramada` o una `devuelta` empiecen a llevar
+importe propio mañana):
+
+| resultado vigente | gestiones | con `pago_mensajero` | con `ingreso_bodega_rechazo` | sin cierre todavía |
+| --- | --- | --- | --- | --- |
+| `entregada` | 349 | 349 | 0 | 0 |
+| `rechazada` | 103 | 0 | 2 | 33 |
+| `reprogramada` | 160 | 0 | 0 | 34 |
+| `devuelta` | 158 | 0 | 0 | 0 |
+
+Una `reprogramada` o una `devuelta` vigente no cargan un colón hoy (0 de 160 y 0 de 158). Excluirlas de
+la reconciliación automática no solo es innecesario: es **activamente dañino**, porque las dos siguen
+ruteándose HACIA ADELANTE por `orden.zonaId`:
+
+- `lib/services/LiberacionReprogramadaService.ts:202` — `resolverDestinoCierre(orden.zonaId,
+  ctx.centralZonaId)` decide a qué bodega libera una `reprogramada` cuando llega su fecha.
+- `lib/services/DevolucionSlaService.ts:241` — la misma derivación para una `devuelta`.
+
+Con el corte anterior (excluir toda gestión vigente), una `reprogramada` con la zona vieja estampada
+se liberaría a la bodega EQUIVOCADA cuando el cron la suelta — el mismo atasco que motivó la ficha,
+y nada podría arreglarlo nunca. El riesgo real que el corte original quería evitar —reescribir en
+silencio la tarifa de algo que el mensajero ya cerró hoy y todavía no se ha facturado— vive en
+`entregada` (349 de 349 con pago ya fijado) y en `rechazada` (33 sin cierre TODAVÍA: ahí la ventana
+SÍ es real), y ahí la exclusión sigue vigente.
+
+**Por qué el criterio se formula por `resultado` y no por "la gestión no tiene un importe distinto de
+cero".** Las tres columnas de importe de la gestión (`pago_mensajero`, `ingreso_bodega_rechazo`,
+`indemnizacion`) son `NULL` para TODA gestión —cualquiera sea su `resultado`— hasta que se aprueba su
+cierre (`schema.prisma`: "NULL mientras no se cierra"). Un corte por "importe ≠ cero" sería, antes de
+cualquier cierre, indistinguible de "sin corte": nunca excluiría nada, porque nada tiene importe
+todavía en ese instante — dejaría pasar exactamente las 349 `entregada` y las 33 `rechazada` sin cierre
+que sí hay que proteger. `resultado` es la única señal que existe ANTES del cierre y que expresa la
+regla real ("una entrega o un rechazo son el momento en que el dinero de esa gestión queda decidido").
+Si algún día una `reprogramada` empezara a llevar importe propio (hoy ninguna de las 160 lo lleva), ese
+día hay que añadir `"reprogramada"` a la lista de resultados excluidos — es el cambio de una constante
+en este archivo, documentado aquí para que no sea una sorpresa.
 
 **Alternativa descartada A — usar `ESTADOS_SIN_CORRECCION` como corte.** Reutilizaría vocabulario
-existente, pero mezclaría dos preocupaciones distintas: esa lista gobierna *qué datos de cliente puede
-tocar un humano* (dirección, teléfono, producto…), no *cuándo es seguro que un proceso automático,
-sin aviso, mueva silenciosamente la zona*. Se descarta porque dejaría fuera del corte a órdenes con
-gestión vigente pero no terminal (`reprogramada`), exactamente el caso que §1 quiere evitar.
+existente, pero mezcla dos preocupaciones distintas: esa lista gobierna *qué datos de cliente puede
+tocar un humano* (dirección, teléfono, producto…), no *qué gestión ya tiene dinero decidido*. Además
+sigue sin resolver el problema de fondo: `reprogramada`/`devuelta`/`incidente` no están en
+`ESTADOS_SIN_CORRECCION` (no son terminales los dos primeros), así que ese corte por sí solo no dice
+nada de si su gestión lleva dinero o no.
 
-**Alternativa descartada B — usar solo `yaEnUnCierre`.** Es la lectura más literal de "no se retarifa
-hacia atrás" y bastaría para la garantía de inmutabilidad. Se descarta porque es *insuficiente* para
-el caso sin aviso: dejaría que la automatización reescriba la zona de una orden con una entrega/rechazo
-ya registrado hoy mismo, sin que ningún humano lo haya confirmado — el mismo dinero que
-`CorregirDatosClienteService` sí hace confirmar explícitamente (R11 de la 327) antes de tocarlo.
+**Alternativa descartada B — usar solo `yaEnUnCierre` (sin mirar `gestion_orden` en absoluto).**
+Bastaría para la garantía estructural de R8 (`cierre_detail` es inmutable pase lo que pase). Se
+descarta porque deja una ventana real: las 33 `rechazada` sin cierre todavía tienen `resultado`
+decidido y, aunque `ingreso_bodega_rechazo` hoy solo esté poblado en 2 de 103, el dato de la tienda que
+paga por ese rechazo específico (₡1.700 vs ₡1.000 en el caso medido) ya depende de la zona vigente en
+el momento de la gestión — cambiarla en silencio después mueve esa cifra sin que nadie lo decidiera.
+
+**Alternativa descartada C — cortar por "gestión con importe ≠ cero" en vez de por `resultado`.** Ver
+el párrafo de arriba: antes de que un cierre se apruebe, TODAS las gestiones —de cualquier
+`resultado`— tienen esas tres columnas en `NULL`, así que este corte sería equivalente a "ningún
+corte" en el momento exacto en que hace falta proteger algo (una `entregada`/`rechazada` recién
+registrada, todavía sin cerrar). Se descarta por inútil en el caso que importa, no por incorrecto en
+abstracto.
 
 ## 2. Alcance de distritos cubiertos por cada guardado (R5)
 
@@ -218,7 +271,7 @@ pantalla nueva, ni aviso previo, ni segunda confirmación.
 10. **[366]** Si el mapa de 9 no está vacío: `loteId = randomUUID()` (una vez, R11) y
     `actor = resolverActorCongelado(tx, actorUsuarioId)` (una vez). Para cada
     `(zonaResueltaId, distritoIds)` del mapa:
-    - `elegibles = tx.orden.findMany({ where: { distritoId: { in: distritoIds }, zonaId: { not: zonaResueltaId }, deletedAt: null, cierreDetalles: { none: {} }, gestiones: { none: { anuladaAt: null } } }, select: { id: true, numGuia: true, numRemision: true } })` (R6/R7 — Prisma expresa las dos exclusiones como `NOT EXISTS` sin SQL crudo).
+    - `elegibles = tx.orden.findMany({ where: { distritoId: { in: distritoIds }, zonaId: { not: zonaResueltaId }, deletedAt: null, cierreDetalles: { none: {} }, gestiones: { none: { anuladaAt: null, resultado: { in: ["entregada", "rechazada", "incidente"] } } } }, select: { id: true, numGuia: true, numRemision: true } })` (R6/R7 — Prisma expresa las dos exclusiones como `NOT EXISTS` sin SQL crudo; la exclusión de gestión ahora es "vigente Y con resultado entregada/rechazada/incidente", no "vigente" a secas — design §1).
     - Si `elegibles.length === 0`, siguiente grupo.
     - `tx.orden.updateMany({ where: { id: { in: elegibles.map(o => o.id) } }, data: { zonaId: zonaResueltaId } })` (R4, R9 — solo `zonaId`).
     - `appendAccion(tx, elegibles.map(o => ({ accion: "orden_zona_reconciliada", entidadTipo: "orden", entidadId: o.id, entidadEtiqueta: etiquetaDeEntidad("orden", { numGuia: o.numGuia, numRemision: o.numRemision }), ...actor })), loteId)` (R10/R11 — mismo patrón que `corregirDatosCliente`, `valorAnterior`/`valorNuevo`/`monto` van `null`).
@@ -269,11 +322,25 @@ lo evidenciado.
   correcta y deja de aparecer en la de la zona vieja, en el instante en que se guarda la zona — el
   mismo efecto que ya produce cualquier lectura acotada por `zonaId` hoy. El rastro auditable para
   reconstruir "por qué se movió" es el historial de acciones (§7), no una notificación en vivo.
-- **Deriva residual no resuelta.** Un distrito que resuelve 0 o >1 zonas, o una orden con detalle de
-  cierre o gestión vigente, se queda con la zona vieja (R3/R7) hasta que alguien la corrija a mano
-  (vía `CorregirDatosClienteService`, que sigue funcionando igual, con su aviso) o hasta que el
-  distrito vuelva a resolver una única zona en un guardado futuro. No hay conteo de esta deuda
-  residual en la respuesta (Q2 de `requirements.md`).
+- **Deriva residual no resuelta, y sin vía manual hoy.** Un distrito que resuelve 0 o >1 zonas, o una
+  orden con detalle de cierre o con una gestión vigente `entregada`/`rechazada`, se queda con la zona
+  vieja (R3/R7). A diferencia de lo que decía una versión anterior de este documento, **hoy no hay
+  ninguna vía manual** para corregir esto (§1): `CorregirDatosClienteService` solo re-deriva la zona
+  cuando el distrito cambia de VALOR, y aquí no cambia. La única forma de que se resuelva es (a) un
+  guardado futuro de alguna zona cuyo `distritosAfectados` (§2) vuelva a incluir ese distrito y este
+  ya resuelva una única zona, o (b) una intervención directa en base de datos, como la que hizo el
+  leader el 2026-09-03 fuera de esta ficha. No hay conteo de esta deuda residual en la respuesta
+  (Q2 de `requirements.md`, cerrada: no se añade).
+- **Re-estampar una `reprogramada` cambia a qué bodega la libera el cron.** Es la consecuencia
+  DIRECTA y BUSCADA de la enmienda de §1: `LiberacionReprogramadaService` y `DevolucionSlaService`
+  derivan la bodega de liberación de `orden.zonaId` EN EL MOMENTO de liberar, así que una
+  reconciliación que corrige la zona de una `reprogramada` hoy cambia a qué bodega la manda esa
+  liberación mañana. Es exactamente lo que hay que corregir (evita repetir el atasco medido). El
+  efecto que hay que declarar: si el paquete de esa `reprogramada` YA viajó físicamente a la bodega
+  vieja antes de que la liberación ocurra, el operador de esa bodega verá la orden desaparecer de su
+  bandeja de liberaciones pendientes y aparecer en la de la bodega nueva sin ningún aviso en pantalla
+  — mismo patrón, mismo canal de auditoría (historial de acciones) que el riesgo ya declarado arriba
+  para `en_ruta_bodega_satelite`.
 - **Ninguna wallet, ninguna liquidación, ningún `cierre_detail` se toca.** Estructuralmente cierto
   (§0), no solo declarado: no hay ningún `write` a esas tablas en el flujo del §6.
 
@@ -298,8 +365,9 @@ lo evidenciado.
 
 | Alternativa | Sección | Por qué se descarta |
 | --- | --- | --- |
-| Corte de elegibilidad = `ESTADOS_SIN_CORRECCION` | §1-A | Mezcla dos preocupaciones distintas; deja fuera del corte una orden `reprogramada` con gestión vigente. |
-| Corte de elegibilidad = solo `yaEnUnCierre` | §1-B | Insuficiente sin el aviso humano que sí tiene la corrección manual. |
+| Corte de elegibilidad = `ESTADOS_SIN_CORRECCION` | §1-A | Mezcla "qué dato puede tocar un humano" con "qué gestión ya tiene dinero decidido"; no dice nada de si `reprogramada`/`devuelta`/`incidente` llevan importe. |
+| Corte de elegibilidad = solo `yaEnUnCierre` (sin mirar `gestion_orden`) | §1-B | Deja sin proteger las 33 `rechazada` vigentes sin cierre todavía (dato medido 2026-09-03). |
+| Corte de elegibilidad = "gestión con importe ≠ cero" en vez de por `resultado` | §1-C | Antes de cualquier cierre, esas columnas son NULL para toda gestión sin importar el resultado: el corte sería equivalente a no tener ninguno, justo cuando hace falta. |
 | Alcance = solo el diff de distritos | §2-C | Deja fuera el caso medido: distrito sin cambio en este guardado pero con deriva de una edición anterior. |
 | Alcance = catálogo completo de distritos | §2-D | Desproporcionado; excede "automático al editar **las** zonas" tal como lo pidió el humano. |
 | `UPDATE ... RETURNING` (patrón `softDelete`) en vez de find-then-update | §6 | Correcto y más seguro ante concurrencia, pero en un camino `maestro`-only de baja frecuencia el find-then-update es más simple y ya da los tres campos (`id`, `numGuia`, `numRemision`) sin SQL crudo. Documentado como riesgo aceptado, no ignorado. |

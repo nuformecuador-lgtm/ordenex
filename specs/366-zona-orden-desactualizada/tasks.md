@@ -101,13 +101,34 @@ detalle exacto de fixtures lo decide quien implemente, pero TODOS estos casos ti
 - [ ] **R6/R7 — ya facturada:** una orden con una fila en `cierre_detail` ⇒ NO se reconcilia, aunque
   su distrito resuelva otra zona. Mutación a probar: quitar la exclusión `cierreDetalles: { none: {}
   }` del `where` debe poner este test en rojo.
-- [ ] **R6/R7 — gestión vigente:** una orden con una fila en `gestion_orden` con `anulada_at IS NULL`
-  ⇒ NO se reconcilia. Mutación a probar: quitar `gestiones: { none: { anuladaAt: null } }` debe poner
-  este test en rojo.
-- [ ] **R6 — gestión anulada SÍ es elegible:** una orden con una fila en `gestion_orden` con
-  `anulada_at` NOT NULL (anulada) ⇒ SÍ se reconcilia. Este caso es el que prueba que la condición
-  filtra por `anuladaAt: null` y no por "sin ninguna fila de gestión, punto": mutar `anuladaAt: null`
-  a "cualquier fila" debe poner este test en rojo (dejaría de reconciliar una orden que sí debería).
+- [ ] **R6/R7 — gestión vigente `entregada` NO es elegible:** una orden con una fila en
+  `gestion_orden` con `anulada_at IS NULL` y `resultado = 'entregada'` ⇒ NO se reconcilia. Mutación a
+  probar: quitar la condición `resultado: { in: [...] }` (dejando solo `anuladaAt: null`) NO debe
+  cambiar este caso (sigue en rojo) — pero SÍ debe poner en rojo el caso "reprogramada SÍ es
+  elegible" de abajo, que es el que realmente distingue las dos formulaciones.
+- [ ] **R6/R7 — gestión vigente `rechazada` NO es elegible:** mismo caso que el anterior con
+  `resultado = 'rechazada'`. Es el caso medido con ventana real en producción (33 `rechazada` sin
+  cierre todavía, 2026-09-03) — no es un caso de relleno.
+- [ ] **R6/R7 — gestión vigente `incidente` NO es elegible:** una orden con una fila en
+  `gestion_orden` con `anulada_at IS NULL` y `resultado = 'incidente'` ⇒ NO se reconcilia. Hoy no hay
+  ninguna fila así en producción (0 medidas 2026-09-03), así que este caso necesita semilla propia en
+  el fixture — no hay dato real que lo cubra. Mutación a probar: quitar `"incidente"` de la lista
+  `resultado: { in: [...] }` debe poner este test en rojo. Con este caso, T5 cubre los CINCO valores
+  del enum `GestionResultado` (`entregada`, `rechazada`, `incidente` excluidos; `reprogramada`,
+  `devuelta` incluidos) — si el enum gana un sexto valor mañana, no hay caso que lo cubra
+  automáticamente y hay que decidir de qué lado cae.
+- [ ] **R6 — gestión vigente `reprogramada` SÍ es elegible:** una orden con una fila en
+  `gestion_orden` con `anulada_at IS NULL` y `resultado = 'reprogramada'` ⇒ SÍ se reconcilia. Mutación
+  a probar: quitar `resultado: { in: [...] }` del `where` (excluir por "vigente" a secas, como en la
+  versión descartada del diseño) debe poner ESTE test en rojo — es el caso que demuestra que el corte
+  es por `resultado` y no por "toda gestión vigente".
+- [ ] **R6 — gestión vigente `devuelta` SÍ es elegible:** mismo caso que el anterior con
+  `resultado = 'devuelta'`.
+- [ ] **R6 — gestión anulada SÍ es elegible (con cualquier `resultado`):** una orden con una fila en
+  `gestion_orden` con `anulada_at` NOT NULL (anulada) y `resultado = 'entregada'` ⇒ SÍ se reconcilia.
+  Prueba que la condición filtra por `anuladaAt: null` y no por "tiene alguna fila de gestión, punto":
+  mutar `anuladaAt: null` a "cualquier fila" debe poner este test en rojo (dejaría de reconciliar una
+  orden que sí debería, aunque su resultado histórico haya sido `entregada`).
 - [ ] **Orden borrada:** `deletedAt` NOT NULL en una orden cuyo distrito resuelve otra zona ⇒ sin
   cambios.
 - [ ] **R5 — unión antes/después:** una zona A que se guarda SIN cambiar sus distritos (misma lista
@@ -130,9 +151,12 @@ detalle exacto de fixtures lo decide quien implemente, pero TODOS estos casos ti
 - [ ] **R14 — idempotencia:** llamar `update()` dos veces seguidas con el mismo payload ⇒ la segunda
   llamada informa `ordenesReconciliadas: 0` y no añade filas de historial.
 
-**Hecho cuando:** los ~13 casos de arriba están escritos, corren contra la base de test de Postgres
+**Hecho cuando:** los ~17 casos de arriba están escritos, corren contra la base de test de Postgres
 (no contra un doble de Prisma), y cada mutación descrita se probó manualmente al menos una vez durante
-el desarrollo (déjalo dicho en el PR, no hace falta un test que pruebe al test).
+el desarrollo (déjalo dicho en el PR, no hace falta un test que pruebe al test). Los cinco casos de
+`resultado` (`entregada`/`rechazada`/`incidente` no elegibles, `reprogramada`/`devuelta` sí elegibles)
+son los que prueban la enmienda del 2026-09-03 y no se pueden colapsar en uno solo: cada `resultado`
+es una rama distinta del `where`, y juntos cubren el enum `GestionResultado` completo.
 
 ## 6 — `ZonaService`, tipos y Server Action
 
@@ -183,8 +207,8 @@ existe en `CrearZonaResult`).
 | R3 | T4 | T5 casos "0 zonas" / ">1 zonas" |
 | R4 | T4 | T5 caso base |
 | R5 | T4 | T5 casos "unión antes/después" y "distrito recién quitado" |
-| R6 | T4 | T5 casos "ya facturada", "gestión vigente", "gestión anulada sí elegible", "orden borrada" |
-| R7 | T4 | T5 casos "ya facturada" / "gestión vigente" (sin fila de historial) |
+| R6 | T4 | T5 casos "ya facturada", "gestión `entregada`/`rechazada`/`incidente` NO elegible", "gestión `reprogramada`/`devuelta` SÍ elegible", "gestión anulada SÍ elegible", "orden borrada" |
+| R7 | T4 | T5 casos "ya facturada" / "gestión `entregada`/`rechazada`/`incidente` NO elegible" (sin fila de historial) |
 | R8 | T4 | T5 caso "inmutabilidad de `cierre_detail`" |
 | R9 | T4 | T5 caso "nada más cambia" |
 | R10 | T4 | T5 caso base (forma de la fila de historial) |
