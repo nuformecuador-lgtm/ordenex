@@ -17,7 +17,7 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // FICHA 362 (design §1.1, R14/R15/R17) — EL CATALOGO CERRADO del historial de acciones.
 //
 // Modulo PURO: no importa Prisma en runtime (solo los TIPOS del enum, borrados en compilacion),
-// ni React, ni `lib/services`. Lo consumen el borde (zod), el servicio, el repositorio, los 42
+// ni React, ni `lib/services`. Lo consumen el borde (zod), el servicio, el repositorio, los 43
 // puntos de escritura y la pantalla.
 //
 // LAS DOS DIRECCIONES DEL CIERRE, y por eso hay `satisfies` Y `_AsegurarExhaustivo`:
@@ -27,16 +27,17 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // Un tipo declarado en la base y ausente del catalogo seria un filtro que no se puede pedir; uno
 // en el catalogo y ausente de la base seria un `validation_error` que nadie entiende.
 //
-// LOS CUARENTA Y DOS, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y cada
-// una añade UN tipo (`orden_ubicacion_corregida`, `usuario_fulfillment_cambiado`). Los dos entran
-// en «mueve dinero» y su motivo esta escrito al lado de cada uno.
+// LOS CUARENTA Y TRES, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y cada
+// una añade UN tipo (`orden_ubicacion_corregida`, `usuario_fulfillment_cambiado`); la ficha 366
+// (2026-09-03) añade el tercero (`orden_zona_reconciliada`). Los tres entran en «mueve dinero» y su
+// motivo esta escrito al lado de cada uno.
 
 /**
- * Los 42 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
+ * Los 43 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
  * permisos) y es el que consume el selector de filtros: no se reordena por gusto.
  */
 export const HISTORIAL_ACCION_TIPOS = [
-  // --- A.1 · mueve dinero (25) ---
+  // --- A.1 · mueve dinero (26) ---
   "cierre_dia_aprobado", // cierres-admin.aprobarCierre
   "cierre_dia_rechazado", // cierres-admin.rechazarCierre
   "cierre_dia_pagos_editados", // cierres-admin.actualizarPagosGestion
@@ -71,6 +72,12 @@ export const HISTORIAL_ACCION_TIPOS = [
   // Entra en DINERO porque activa un cobro periodico de bodega. NO entra en «permisos» aunque se
   // edite desde el mismo formulario que el rol: no cambia lo que la persona PUEDE HACER.
   "usuario_fulfillment_cambiado", // usuarios.actualizarUsuario (solo si cambia `fulfillment`)
+  // ⭑ FICHA 366 — la zona estampada en una orden, re-derivada al guardar la configuracion de una
+  // zona. Entra en DINERO por el MISMO motivo textual que `orden_ubicacion_corregida`: el distrito
+  // re-deriva la zona y la zona decide la tarifa que se factura. La fila registra SOLO EL HECHO
+  // (quien guardo, que orden, cuando): ni la direccion, ni el distrito, ni la zona anterior ni la
+  // nueva (R10). Todas las filas de un mismo guardado comparten `lote_id` (R11).
+  "orden_zona_reconciliada", // zonas.actualizarZona -> ZonaRepository.update
 
   // --- A.2 · hace desaparecer algo (6) ---
   "orden_eliminada", // eliminar-orden.eliminarOrdenes Y app/api/ordenes/api-key/orden/[id]
@@ -164,6 +171,7 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   premio_ranking_anulado: "mueve_dinero",
   orden_ubicacion_corregida: "mueve_dinero",
   usuario_fulfillment_cambiado: "mueve_dinero",
+  orden_zona_reconciliada: "mueve_dinero",
   orden_eliminada: "hace_desaparecer",
   orden_recuperada: "hace_desaparecer",
   tarifa_borrada: "hace_desaparecer",
@@ -210,6 +218,7 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   premio_ranking_anulado: "Anuló un premio del ranking",
   orden_ubicacion_corregida: "Corrigió la ubicación de una orden",
   usuario_fulfillment_cambiado: "Cambió el fulfillment de una tienda",
+  orden_zona_reconciliada: "Actualizó la zona de una orden",
   orden_eliminada: "Eliminó una orden",
   orden_recuperada: "Recuperó una orden",
   tarifa_borrada: "Borró una tarifa",

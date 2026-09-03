@@ -240,9 +240,22 @@ export function CrearZonaForm({
     setErrors({});
     setGuardando(true);
     try {
-      const res = zonaIdGuardada
-        ? await actualizarZona(zonaIdGuardada, parsed.data)
-        : await crearZona(parsed.data);
+      // Ramas separadas (en vez de un `zonaIdGuardada ? A : B` con `res` único):
+      // `ActualizarZonaResult["ok"]` trae `ordenesReconciliadas` y
+      // `CrearZonaResult["ok"]` no (T6/R13); estructuralmente uno es asignable
+      // al otro (tener una propiedad de más no rompe la asignación), así que
+      // anotar `res` con la unión explícita le impide a `tsc` angostarlo por
+      // asignación: `res.status === "ok"` cae en la unión de LOS DOS "ok",
+      // no en el de la rama que de verdad corrió. Sin anotar el tipo, `tsc`
+      // sigue el tipo "evolutivo" de cada asignación y sí distingue las ramas.
+      let ordenesReconciliadas = 0;
+      let res;
+      if (zonaIdGuardada) {
+        res = await actualizarZona(zonaIdGuardada, parsed.data);
+        if (res.status === "ok") ordenesReconciliadas = res.ordenesReconciliadas;
+      } else {
+        res = await crearZona(parsed.data);
+      }
 
       if (res.status === "ok") {
         setZonaIdGuardada(res.zona.id);
@@ -250,7 +263,7 @@ export function CrearZonaForm({
         // La marca de especial se guarda con la zona ya persistida: si falla,
         // la zona sigue guardada y sólo se avisa de lo que no entró.
         await guardarEspeciales();
-        toast.success(esEditar ? "Zona actualizada" : "Zona creada");
+        toast.success(mensajeGuardado(esEditar, ordenesReconciliadas));
         onSaved();
         return;
       }
@@ -416,6 +429,20 @@ export function CrearZonaForm({
       />
     </div>
   );
+}
+
+/**
+ * Mensaje de éxito del guardado. Al crear, siempre "Zona creada": crear nunca
+ * reconcilia órdenes (R13). Al editar, si el guardado reubicó órdenes de otra
+ * bodega (su distrito ya resolvía otra zona), lo dice con el conteo exacto;
+ * con 0 el mensaje queda igual que antes de esta ficha.
+ */
+function mensajeGuardado(esEditar: boolean, ordenesReconciliadas: number): string {
+  if (!esEditar) return "Zona creada";
+  if (ordenesReconciliadas <= 0) return "Zona actualizada";
+  const sustantivo =
+    ordenesReconciliadas === 1 ? "orden reubicada" : "órdenes reubicadas";
+  return `Zona actualizada (${ordenesReconciliadas} ${sustantivo})`;
 }
 
 /** Mensaje legible para los estados de error de crear/actualizar zona. */

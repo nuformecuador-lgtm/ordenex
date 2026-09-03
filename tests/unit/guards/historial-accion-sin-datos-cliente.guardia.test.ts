@@ -20,7 +20,7 @@ import { quitarComentarios } from "../../fixtures/sin-comentarios";
 //   - `etiquetaDeEntidad` (`lib/types/historial-accion-etiquetas.ts`): es la FUENTE UNICA de la
 //     columna `entidad_etiqueta`. Si el vocabulario prohibido no aparece aqui, no puede llegar a
 //     la columna por la via normal;
-//   - los BLOQUES `appendAccion(...)` de los 42 puntos de escritura: es la via anormal — pasar la
+//   - los BLOQUES `appendAccion(...)` de los 43 puntos de escritura: es la via anormal — pasar la
 //     etiqueta a mano, o meter la direccion en `valorNuevo`. Se recorta el bloque de la llamada,
 //     no el metodo entero: el `data` del `UPDATE` de `corregirDatosCliente` SI escribe la
 //     direccion, y eso es su trabajo.
@@ -63,7 +63,7 @@ const PROHIBIDO = [
 /** `motivo` a secas, sin pegarse a `motivoRechazo` (que ya esta arriba). */
 const MOTIVO_SUELTO = /\bmotivo\b/;
 
-/** Los archivos con al menos un `appendAccion`, que son los 42 puntos de escritura. */
+/** Los archivos con al menos un `appendAccion`, que son los 43 puntos de escritura. */
 const PUNTOS_DE_ESCRITURA = [
   "lib/repositories/OrdenRepository.ts",
   "lib/repositories/UserRepository.ts",
@@ -189,7 +189,7 @@ describe("362/R5 — `etiquetaDeEntidad` no lee ni un dato de cliente", () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// R5 — las 42 llamadas al punto unico
+// R5 — las 43 llamadas al punto unico
 // ---------------------------------------------------------------------------------------------
 
 describe("362/R5 — ninguna llamada a `appendAccion` mete un dato de cliente en la fila", () => {

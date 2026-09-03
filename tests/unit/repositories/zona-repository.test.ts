@@ -12,7 +12,10 @@ function buildTx() {
       findUnique: vi.fn(),
       delete: vi.fn(),
     },
-    zonaDistrito: { createMany: vi.fn(), deleteMany: vi.fn() },
+    // FICHA 366: `findMany` por defecto NO devuelve nada, asi que ningun distrito resuelve una
+    // zona y el flujo de reconciliacion no se dispara en los casos que no lo miden.
+    zonaDistrito: { createMany: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+    orden: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn() },
     tarifaZonaMensajero: { createMany: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn() },
     // FICHA 362: el borrado registra su accion DENTRO de esta misma transaccion.
     historialAccion: { createMany: vi.fn() },
@@ -148,13 +151,11 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
     tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
     const prisma = buildPrisma(tx);
 
-    const dto = await repoOf(prisma).update("z1", {
-      nombre: "GAM",
-      cobroVehiculo: false,
-      esCentral: true,
-      distritoIds: ["d1"],
-      tarifas: [],
-    });
+    const res = await repoOf(prisma).update(
+      "z1",
+      { nombre: "GAM", cobroVehiculo: false, esCentral: true, distritoIds: ["d1"], tarifas: [] },
+      null,
+    );
 
     expect(tx.zona.updateMany).toHaveBeenCalledWith({
       where: { esCentral: true, NOT: { id: "z1" } },
@@ -163,7 +164,7 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
     expect(tx.zona.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
       tx.zona.update.mock.invocationCallOrder[0],
     );
-    expect(dto?.esCentral).toBe(true);
+    expect(res?.zona.esCentral).toBe(true);
   });
 
   it("update con esCentral=false NO desmarca ninguna central", async () => {
@@ -173,13 +174,11 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
     tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
     const prisma = buildPrisma(tx);
 
-    await repoOf(prisma).update("z1", {
-      nombre: "GAM",
-      cobroVehiculo: false,
-      esCentral: false,
-      distritoIds: ["d1"],
-      tarifas: [],
-    });
+    await repoOf(prisma).update(
+      "z1",
+      { nombre: "GAM", cobroVehiculo: false, esCentral: false, distritoIds: ["d1"], tarifas: [] },
+      null,
+    );
 
     expect(tx.zona.updateMany).not.toHaveBeenCalled();
   });
@@ -219,13 +218,11 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
     const prisma = buildPrisma(tx);
 
     await expect(
-      repoOf(prisma).update("z1", {
-        nombre: "GAM",
-        cobroVehiculo: false,
-        esCentral: true,
-        distritoIds: ["d1"],
-        tarifas: [],
-      }),
+      repoOf(prisma).update(
+        "z1",
+        { nombre: "GAM", cobroVehiculo: false, esCentral: true, distritoIds: ["d1"], tarifas: [] },
+        null,
+      ),
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
@@ -272,13 +269,11 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
     const prisma = buildPrisma(tx);
 
     await expect(
-      repoOf(prisma).update("z1", {
-        nombre: "GAM",
-        cobroVehiculo: false,
-        esCentral: true,
-        distritoIds: ["d1"],
-        tarifas: [],
-      }),
+      repoOf(prisma).update(
+        "z1",
+        { nombre: "GAM", cobroVehiculo: false, esCentral: true, distritoIds: ["d1"], tarifas: [] },
+        null,
+      ),
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
@@ -419,5 +414,217 @@ describe("ZonaRepository.findCentralZonaId (feature 54)", () => {
       zona: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), findFirst: vi.fn().mockResolvedValue(null) },
     });
     expect(await repoOf(prisma).findCentralZonaId()).toBeNull();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 366 (T4) — LA RECONCILIACION DE LA ZONA DE LAS ORDENES, con dobles.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ LO QUE ESTE BLOQUE **NO** PRUEBA, Y ESTA DICHO A PROPOSITO: el `where` de elegibilidad. Estos
+// dobles no ven el SQL —una mutacion que borre `cierreDetalles: { none: {} }` los deja a todos en
+// verde—, y este repo ya midio CUATRO veces que un `where` mutado sobrevive por arriba. Ese corte
+// se prueba donde vive: `tests/integration/db/zona-reconciliacion-ordenes.test.ts`, contra
+// Postgres real. Lo que SI se mide aqui es la ORQUESTACION: como se agrupa, que se actualiza, que
+// se cuenta y con que `lote_id` se firma.
+
+/** El estado de la N:M que ve el flujo: `previos` (antes del reemplazo) y `finales` (despues). */
+function txConNM(
+  previos: string[],
+  finales: { distritoId: string; zonaId: string }[],
+): ReturnType<typeof buildTx> {
+  const tx = buildTx();
+  tx.zonaDistrito.findMany
+    .mockResolvedValueOnce(previos.map((distritoId) => ({ distritoId })))
+    .mockResolvedValueOnce(finales);
+  tx.zona.findUnique.mockResolvedValue({ id: "zA" });
+  tx.zona.update.mockResolvedValue({
+    id: "zA",
+    nombre: "A",
+    cobroVehiculo: false,
+    esCentral: false,
+  });
+  tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+  return tx;
+}
+
+const DATOS_ZONA_A = {
+  nombre: "A",
+  cobroVehiculo: false,
+  esCentral: false,
+  distritoIds: ["d1"],
+  tarifas: [],
+};
+
+describe("366/T4 — ZonaRepository.update reconcilia la zona de las ordenes", () => {
+  it("⭑ R2/R4/R9: actualiza SOLO `zonaId` de las ordenes del distrito que resuelve otra zona", async () => {
+    const tx = txConNM(["d1"], [{ distritoId: "d1", zonaId: "zA" }]);
+    tx.orden.findMany.mockResolvedValue([
+      { id: "o1", numGuia: 100, numRemision: "R-1" },
+      { id: "o2", numGuia: null, numRemision: "R-2" },
+    ]);
+    const prisma = buildPrisma(tx);
+
+    const res = await repoOf(prisma).update("zA", DATOS_ZONA_A, "u-maestro");
+
+    expect(tx.orden.updateMany).toHaveBeenCalledTimes(1);
+    // R9: el `data` del UPDATE lleva UNA sola clave, y es `zonaId`. Escrito como igualdad literal
+    // —no como `toMatchObject`— porque lo que esta ficha promete es una AUSENCIA: que no toca
+    // ningun otro campo de la orden.
+    expect(tx.orden.updateMany.mock.calls[0][0].data).toEqual({ zonaId: "zA" });
+    expect(tx.orden.updateMany.mock.calls[0][0].where).toEqual({ id: { in: ["o1", "o2"] } });
+    expect(res?.ordenesReconciliadas).toBe(2);
+  });
+
+  it("⭑ R12: `ordenesReconciliadas` cuenta las filas ALCANZADAS, no los distritos ni los grupos", async () => {
+    const tx = txConNM(
+      ["d1", "d2"],
+      [
+        { distritoId: "d1", zonaId: "zA" },
+        { distritoId: "d2", zonaId: "zB" },
+      ],
+    );
+    // grupo zA: 1 orden; grupo zB: 3 ordenes.
+    tx.orden.findMany
+      .mockResolvedValueOnce([{ id: "o1", numGuia: 1, numRemision: "R-1" }])
+      .mockResolvedValueOnce([
+        { id: "o2", numGuia: 2, numRemision: "R-2" },
+        { id: "o3", numGuia: 3, numRemision: "R-3" },
+        { id: "o4", numGuia: 4, numRemision: "R-4" },
+      ]);
+    const prisma = buildPrisma(tx);
+
+    const res = await repoOf(prisma).update(
+      "zA",
+      { ...DATOS_ZONA_A, distritoIds: ["d1", "d2"] },
+      "u-maestro",
+    );
+
+    expect(res?.ordenesReconciliadas).toBe(4);
+  });
+
+  it("⭑ R10/R11: una fila de historial por orden, TODAS con el MISMO `lote_id` aunque haya 2 grupos", async () => {
+    const tx = txConNM(
+      ["d1", "d2"],
+      [
+        { distritoId: "d1", zonaId: "zA" },
+        { distritoId: "d2", zonaId: "zB" },
+      ],
+    );
+    tx.orden.findMany
+      .mockResolvedValueOnce([{ id: "o1", numGuia: 900, numRemision: "R-1" }])
+      .mockResolvedValueOnce([{ id: "o2", numGuia: null, numRemision: "R-2" }]);
+    const prisma = buildPrisma(tx);
+
+    await repoOf(prisma).update("zA", { ...DATOS_ZONA_A, distritoIds: ["d1", "d2"] }, "u-maestro");
+
+    const filas = tx.historialAccion.createMany.mock.calls.flatMap(
+      (c) => (c[0] as { data: Record<string, unknown>[] }).data,
+    );
+    expect(filas).toHaveLength(2);
+    expect(new Set(filas.map((f) => f.loteId)).size).toBe(1);
+    expect(filas[0]).toMatchObject({
+      accion: "orden_zona_reconciliada",
+      entidadTipo: "orden",
+      entidadId: "o1",
+      // La GUIA (o la remision si no hay guia): nunca un dato del destinatario (R10).
+      entidadEtiqueta: expect.stringContaining("900"),
+      // El actor CONGELADO, no resuelto al leer (362/design §2.4).
+      actorUsuarioId: "u-maestro",
+      actorNombre: "Maestra Uno",
+      actorRol: "maestro",
+    });
+    // R10: la fila registra el HECHO, no los valores. Ahi irian la zona vieja y la nueva.
+    expect(filas[0].valorAnterior).toBeNull();
+    expect(filas[0].valorNuevo).toBeNull();
+    expect(filas[0].monto).toBeNull();
+    expect(filas[1].entidadEtiqueta).toContain("R-2");
+  });
+
+  it("R3: un distrito que resuelve 0 o >1 zonas no mueve ninguna orden ni deja historial", async () => {
+    // d1 -> DOS zonas (ambiguo); d2 -> ninguna fila (0 zonas).
+    const tx = txConNM(
+      ["d1", "d2"],
+      [
+        { distritoId: "d1", zonaId: "zA" },
+        { distritoId: "d1", zonaId: "zB" },
+      ],
+    );
+    const prisma = buildPrisma(tx);
+
+    const res = await repoOf(prisma).update(
+      "zA",
+      { ...DATOS_ZONA_A, distritoIds: ["d1", "d2"] },
+      "u-maestro",
+    );
+
+    expect(tx.orden.findMany).not.toHaveBeenCalled();
+    expect(tx.orden.updateMany).not.toHaveBeenCalled();
+    expect(tx.historialAccion.createMany).not.toHaveBeenCalled();
+    expect(res?.ordenesReconciliadas).toBe(0);
+  });
+
+  it("⭑ R5: la segunda lectura de la N:M cubre la UNION de los distritos de antes y los de despues", async () => {
+    // `dViejo` se QUITA en este guardado y `dNuevo` entra. Los DOS tienen que re-evaluarse: si el
+    // flujo mirara solo la lista final, las ordenes de `dViejo` se quedarian apuntando a esta zona
+    // para siempre.
+    const tx = txConNM(["dViejo", "dQueSigue"], []);
+    const prisma = buildPrisma(tx);
+
+    await repoOf(prisma).update(
+      "zA",
+      { ...DATOS_ZONA_A, distritoIds: ["dQueSigue", "dNuevo"] },
+      null,
+    );
+
+    const segunda = tx.zonaDistrito.findMany.mock.calls[1][0] as {
+      where: { distritoId: { in: string[] } };
+    };
+    expect(new Set(segunda.where.distritoId.in)).toEqual(
+      new Set(["dViejo", "dQueSigue", "dNuevo"]),
+    );
+    // Y sin repetidos: `dQueSigue` esta en las dos listas y entra UNA vez.
+    expect(segunda.where.distritoId.in).toHaveLength(3);
+  });
+
+  it("R7/R14: sin ordenes elegibles no se escribe historial y el conteo es 0", async () => {
+    const tx = txConNM(["d1"], [{ distritoId: "d1", zonaId: "zA" }]);
+    tx.orden.findMany.mockResolvedValue([]);
+    const prisma = buildPrisma(tx);
+
+    const res = await repoOf(prisma).update("zA", DATOS_ZONA_A, "u-maestro");
+
+    expect(tx.orden.updateMany).not.toHaveBeenCalled();
+    expect(tx.historialAccion.createMany).not.toHaveBeenCalled();
+    expect(res?.ordenesReconciliadas).toBe(0);
+  });
+
+  it("⭑ R13: `create()` NO invoca ninguna pieza de este flujo", async () => {
+    const tx = buildTx();
+    tx.zona.create.mockResolvedValue({
+      id: "zNueva",
+      nombre: "NUEVA",
+      cobroVehiculo: false,
+      esCentral: false,
+    });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+    const prisma = buildPrisma(tx);
+
+    await repoOf(prisma).create({ ...DATOS_ZONA_A, nombre: "NUEVA" });
+
+    expect(tx.zonaDistrito.findMany).not.toHaveBeenCalled();
+    expect(tx.orden.findMany).not.toHaveBeenCalled();
+    expect(tx.orden.updateMany).not.toHaveBeenCalled();
+    expect(tx.historialAccion.createMany).not.toHaveBeenCalled();
+  });
+
+  it("la zona que no existe sigue devolviendo `null` y no reconcilia nada", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue(null);
+    const prisma = buildPrisma(tx);
+
+    expect(await repoOf(prisma).update("zX", DATOS_ZONA_A, "u-maestro")).toBeNull();
+    expect(tx.zonaDistrito.findMany).not.toHaveBeenCalled();
+    expect(tx.orden.updateMany).not.toHaveBeenCalled();
   });
 });
