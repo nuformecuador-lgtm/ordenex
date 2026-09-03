@@ -9,7 +9,6 @@ import {
   type BorrarTarifaResult,
   type CrearTarifaResult,
   type ListarTarifasResult,
-  type ObtenerTarifaResult,
 } from "@/lib/types/tarifa";
 import type { Actor, ITarifaService } from "@/lib/interfaces/services/ITarifaService";
 import { TarifaService } from "@/lib/services/TarifaService";
@@ -59,25 +58,6 @@ export async function crearTarifa(
     const data = crearTarifaSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.tarifaService ?? buildTarifaService();
     return service.crear(data, actor); // resultado tipado de dominio (R26)
-  });
-  return isAppErrorShape(r) ? toTarifaActionError(r) : r;
-}
-
-/** R8/R17: obtener tarifa por id. */
-export async function obtenerTarifa(
-  id: unknown,
-  deps: TarifaActionDeps = {},
-): Promise<ObtenerTarifaResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R8
-    const parsedId = idSchema.safeParse(id);
-    if (!parsedId.success) {
-      // conserva la clave `id` en fieldErrors.
-      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
-    }
-    const service = deps.tarifaService ?? buildTarifaService();
-    return service.obtener(parsedId.data, actor);
   });
   return isAppErrorShape(r) ? toTarifaActionError(r) : r;
 }

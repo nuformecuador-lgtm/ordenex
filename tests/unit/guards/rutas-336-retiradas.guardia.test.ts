@@ -350,10 +350,11 @@ describe("336 · 4 — el módulo de acciones del pago por mensajero no exporta 
 describe("336 · 5 — el baseline no ganó entradas de esta ficha", () => {
   it("el baseline no ganó entradas de esta ficha", () => {
     // POR QUÉ ESTE CASO EXISTE, y es la trampa que la ficha vino a esquivar: el gate compara el
-    // baseline POR ARCHIVO, no por contenido. `superficie-de-uso.guardia.test.ts` YA está
-    // listado por una deuda AJENA (`lib/actions/tarifas.ts:67 obtenerTarifa`, desde el
-    // 2026-08-28). Si esta ficha hubiera dejado sus tres acciones huérfanas dentro de esa misma
-    // entrada, el gate habría salido VERDE MINTIENDO.
+    // baseline POR ARCHIVO, no por contenido. Cuando esta ficha (336) se escribió,
+    // `superficie-de-uso.guardia.test.ts` YA estaba listado por una deuda AJENA
+    // (`lib/actions/tarifas.ts:67 obtenerTarifa`, desde el 2026-08-28, retirada por la ficha 369
+    // el 2026-09-03). Si esta ficha hubiera dejado sus tres acciones huérfanas dentro de esa
+    // misma entrada, el gate habría salido VERDE MINTIENDO.
     const crudo = readFileSync(path.join(RAIZ, "tests/baseline-rojos.json"), "utf8");
     const baseline = JSON.parse(crudo) as {
       archivos: Record<string, { motivo: string; desde: string }>;
@@ -382,7 +383,12 @@ describe("336 · 5 — el baseline no ganó entradas de esta ficha", () => {
 
     // Control de no-vacuidad: el JSON se leyó y tiene forma. Sin esto, un baseline vacío o mal
     // parseado dejaría los `false` de arriba en verde sin haber mirado nada.
-    expect(Object.keys(baseline.archivos).length).toBeGreaterThan(0);
+    // NO se exige `archivos` no vacío (ficha 369, 2026-09-03): un baseline SIN deuda conocida es
+    // un estado legítimo y deseable — es justo lo que pasó al arreglarse `obtenerTarifa`, la
+    // última entrada que quedaba. Lo que sí tiene que seguir siendo cierto es que el archivo se
+    // leyó de verdad y no vino vacío o truncado por un parseo fallido.
+    expect(baseline.archivos).toBeTypeOf("object");
+    expect(crudo.length, "el baseline se leyó vacío o truncado").toBeGreaterThan(500);
   });
 });
 

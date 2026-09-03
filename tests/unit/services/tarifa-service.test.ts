@@ -195,41 +195,6 @@ describe("crear — matriz de autorizacion (R9-R13/R16)", () => {
   });
 });
 
-describe("obtener (R9-R13/R17/R19)", () => {
-  it("R10: maestro obtiene", async () => {
-    const r = await service.obtener("cob-1", MAESTRO);
-    expect(r.status).toBe("ok");
-  });
-
-  it("R11: admin obtiene (solo lectura)", async () => {
-    const r = await service.obtener("cob-1", ADMIN);
-    expect(r.status).toBe("ok");
-  });
-
-  it("R12: adminTienda no puede obtener -> forbidden", async () => {
-    const r = await service.obtener("cob-1", TIENDA);
-    expect(r.status).toBe("forbidden");
-    expect(repo.findById).not.toHaveBeenCalled();
-  });
-
-  it("R12: mensajero no puede obtener -> forbidden", async () => {
-    const r = await service.obtener("cob-1", MENSAJERO);
-    expect(r.status).toBe("forbidden");
-  });
-
-  it("R13: rol no reconocido -> forbidden", async () => {
-    const r = await service.obtener("cob-1", DESCONOCIDO);
-    expect(r.status).toBe("forbidden");
-  });
-
-  it("R17/R19: inexistente o borrado -> not_found", async () => {
-    repo = buildRepo({ findById: vi.fn().mockResolvedValue(null) });
-    service = new TarifaService(repo);
-    const r = await service.obtener("x", MAESTRO);
-    expect(r.status).toBe("not_found");
-  });
-});
-
 describe("listar (R9-R13/R18/R19)", () => {
   it("R10/R11: maestro y admin listan", async () => {
     for (const actor of [MAESTRO, ADMIN]) {
@@ -519,10 +484,7 @@ describe("274/R12 — el DTO que devuelve el service no lleva `status`", () => {
     }
   });
 
-  it("obtener/listar tampoco la exponen", async () => {
-    const uno = await service.obtener("cob-1", MAESTRO);
-    if (uno.status === "ok") expect(uno.tarifa).not.toHaveProperty("status");
-
+  it("listar tampoco la expone", async () => {
     const varias = await service.listar({ page: 1, pageSize: 20 }, MAESTRO);
     if (varias.status === "ok") {
       for (const item of varias.items) expect(item).not.toHaveProperty("status");
