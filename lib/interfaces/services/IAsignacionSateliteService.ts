@@ -42,6 +42,14 @@ export interface BodegaBloqueadaCausa {
 
 export type AsignarSateliteServiceResult =
   | { status: "ok"; resultados: { ordenId: string; estado: "por_recoger" }[] } // R7
+  // Feature 368 (R2/R15) — espejo exacto del `"partial"` de la bodega central: solo el motivo
+  // de coordenadas del gate produce esta rama. Asigna las asignables y reporta las bloqueadas,
+  // sin tocar el significado de `conflict` (R16).
+  | {
+      status: "partial";
+      resultados: { ordenId: string; estado: "por_recoger" }[];
+      bloqueadas: { ordenId: string; motivo: string }[];
+    }
   | { status: "forbidden" } // R13
   | { status: "sin_zona" } // R3
   | { status: "bodega_bloqueada"; causa: BodegaBloqueadaCausa } // feature 41/R18: bodega bloqueada (i)||(ii)

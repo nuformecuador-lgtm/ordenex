@@ -209,6 +209,28 @@ describe("lote vacio -> validation_error en el borde, sin tocar el service", () 
   });
 });
 
+// Feature 368 (R15/R16) — `"partial"` es un resultado de DOMINIO mas, igual que `ok`/`conflict`:
+// la action no lo traduce ni lo envuelve, lo devuelve tal cual (design.md §2.1).
+describe("asignarDesdeBodega — passthrough de `partial` (368/R15-R16)", () => {
+  it("devuelve exactamente el objeto `partial` del service, sin envolverlo ni alterarlo", async () => {
+    const partial = {
+      status: "partial" as const,
+      resultados: [{ ordenId: "o2", estado: "por_recoger" }],
+      bloqueadas: [{ ordenId: "o1", motivo: "direccion_no_geocodificable" }],
+    };
+    const service = fakeGuiaService({
+      asignarDesdeBodega: vi.fn().mockResolvedValue(partial),
+    });
+
+    const r = await asignarDesdeBodega(
+      { ordenIds: ["o1", "o2"], mensajeroId: "m1" },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
+
+    expect(r).toEqual(partial);
+  });
+});
+
 describe("generarGuia — camino ok delega al service con el actor resuelto", () => {
   it("llama al service y devuelve su resultado tal cual", async () => {
     const service = fakeGuiaService({

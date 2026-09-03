@@ -68,6 +68,11 @@ export type GenerarGuiaServiceResult =
 
 export type AsignarBodegaServiceResult =
   | { status: "ok"; resultados: AsignarBodegaResultadoItem[] }
+  // Feature 368 (R1/R15) — exito parcial: el motivo de coordenadas ya no aborta el lote
+  // completo. Las asignables se asignan (`resultados`) y las bloqueadas por coordenadas se
+  // reportan (`bloqueadas`), con el mismo `DetalleConflicto` que usaba `conflict`. `conflict`
+  // no cambia de forma (R16): sigue significando "cero efectos sobre datos".
+  | { status: "partial"; resultados: AsignarBodegaResultadoItem[]; bloqueadas: DetalleConflicto[] }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "conflict"; detalle: DetalleConflicto[] };

@@ -160,8 +160,13 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
    * Feature 92 (R8) — guarda del writer de `mensajero_asignado_id` de este service.
    * Devuelve el `detalle` de las ordenes NO asignables (vacio si todas lo son).
    *
-   * TODO-O-NADA POR LOTE: es el contrato ya vigente de estos services (una sola orden
-   * conflictiva aborta el lote entero sin efectos), no se cambia aqui.
+   * FEATURE 368 (2026-09-03, R18/R19) — YA NO ES TODO-O-NADA. Hasta esta ficha, una sola
+   * orden con motivo de coordenadas abortaba el lote entero (contrato documentado aqui
+   * mismo, ahora superado). Desde la 368, el llamador (`asignarDesdeBodega`) FILTRA el
+   * `detalle` que este metodo devuelve: las asignables se asignan, las bloqueadas por
+   * coordenadas se reportan como `partial` sin abortar nada. Este metodo NO cambia de
+   * firma ni de logica interna — sigue devolviendo el `detalle` de las NO asignables, en
+   * el mismo orden que `ordenIds` — el cambio de contrato vive entero en el llamador.
    *
    * Solo se evaluan las ordenes que REALMENTE reciben mensajero. Feature 156/R12/R19:
    * tras retirar la asignacion de `generarGuia`, el UNICO consumidor de este gate en
@@ -467,8 +472,23 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     // tope es DEFINITIVO y el de coordenadas es CORREGIBLE: ensenar primero el que no tiene
     // arreglo evita que alguien salga a capturar coordenadas de una orden que no se va a asignar
     // igual.
+    //
+    // FEATURE 368 (2026-09-03, R1/R3/R4/R6/R18) — REGLA VIGENTE: asignacion PARCIAL, solo para
+    // el motivo de coordenadas. Antes de esta ficha, `detalleCoords.length > 0` abortaba el lote
+    // COMPLETO (`conflict`), aunque solo una orden estuviera bloqueada. Ahora se filtra: las
+    // bloqueadas por coordenadas (`bloqueadasIds`) se separan del resto (`asignables`), y solo se
+    // escribe/reporta como asignado el subconjunto `asignables`. Tres desenlaces (R15):
+    //   - `asignables.length === 0` -> `conflict` con el `detalle` completo (R3, sin cambios: es
+    //     el mismo camino de siempre cuando NINGUNA orden pasa el gate);
+    //   - `detalleCoords.length === 0` -> `ok` con el lote completo (R4, sin cambios);
+    //   - mezcla de las dos -> `partial`, con `resultados` (lo asignado) y `bloqueadas` (el
+    //     `detalle` de coordenadas), ambos en el orden original de `ordenIds`.
+    // El resto de motivos de este metodo (estado/pertenencia, mensajero, tope de intentos, todos
+    // evaluados ANTES de este gate) siguen abortando el lote completo sin ningun cambio (R7/R8).
     const detalleCoords = await this.gateCoordenadas(ordenIds);
-    if (detalleCoords.length > 0) return { status: "conflict", detalle: detalleCoords };
+    const bloqueadasIds = new Set(detalleCoords.map((d) => d.ordenId));
+    const asignables = ordenIds.filter((id) => !bloqueadasIds.has(id));
+    if (asignables.length === 0) return { status: "conflict", detalle: detalleCoords }; // R3
 
     const estatusEsperaId = await this.repo.findEstatusIdByValue(ESTATUS_EN_ESPERA_ACEPTACION);
     if (estatusEsperaId === null) {
@@ -487,19 +507,25 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
 
     // R26/R5: NO reasigna num_guia, ya lo tienen de "Generar guia".
     // Feature 49/#4 (R12): actor = el maestro; destino por_recoger.
+    // Feature 368 (R1): escribe SOLO `asignables`, no `ordenIds` — el subconjunto que paso el
+    // gate de coordenadas. `asignarBodegaLote` no cambia de firma: sigue siendo un unico
+    // `WHERE id IN (...)` dentro de su propia `$transaction`, ahora sobre un array mas corto.
     await this.repo.asignarBodegaLote(
-      ordenIds,
+      asignables,
       input.mensajeroId,
       estatusEsperaId,
       { actorUsuarioId: actor.usuarioId, origenTipo: "asignacion_bodega" },
       fechaReparto, // R7: en la MISMA escritura que `asignado_at`
     );
 
-    const resultados: AsignarBodegaResultadoItem[] = ordenIds.map((ordenId) => ({
+    const resultados: AsignarBodegaResultadoItem[] = asignables.map((ordenId) => ({
       ordenId,
       estado: ESTATUS_EN_ESPERA_ACEPTACION,
     }));
-    return { status: "ok", resultados };
+    // R1/R4: `partial` si quedo alguna bloqueada por coordenadas, `ok` si el lote paso completo.
+    return detalleCoords.length > 0
+      ? { status: "partial", resultados, bloqueadas: detalleCoords }
+      : { status: "ok", resultados };
   }
 
   /**
