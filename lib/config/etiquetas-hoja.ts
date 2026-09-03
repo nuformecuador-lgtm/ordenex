@@ -63,7 +63,10 @@ export interface CeldaEtiqueta {
 export const HOJAS_ETIQUETA: readonly HojaEtiqueta[] = [
   { id: "100x100", label: "100 × 100 mm", anchoMm: 100, altoMm: 100, columnas: 1, filas: 1 },
   { id: "4x6in", label: "4 × 6 pulgadas", anchoMm: 101.6, altoMm: 152.4, columnas: 1, filas: 1 },
-  // Q1 (sin firmar): -> columnas: 2, filas: 2. Ver `HojaEtiqueta.columnas`.
+  // Q1 CERRADA por el humano el 2026-09-03: A4 se queda en UNA etiqueta por hoja, ocupando
+  // la hoja entera. La propuesta de 2x2 se retira: daba alto y ahorro de papel, pero la
+  // celda de 99 mm es MAS ANGOSTA que la base de 100, asi que NO daba capacidad por linea,
+  // que era lo que se buscaba. No reabrir sin ese dato delante.
   { id: "a4", label: "A4", anchoMm: 210, altoMm: 297, columnas: 1, filas: 1 },
   { id: "carta", label: "Carta", anchoMm: 215.9, altoMm: 279.4, columnas: 1, filas: 1 },
 ];

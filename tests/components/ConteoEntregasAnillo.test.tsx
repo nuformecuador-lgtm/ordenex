@@ -128,25 +128,47 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
     expect(screen.getByText(/Incidentes: 0\s\(0\s?%\)/)).toBeInTheDocument();
   });
 
-  // ⚠ LA INVARIANTE QUE JUSTIFICA EL RESTO MAYOR: los seis pesos SUMAN 100 %. Con tres tercios
-  // —el caso clásico— redondear cada porción por su cuenta daría 33 + 33 + 33 = 99 en un anillo
-  // que dibuja un todo.
-  it("los pesos suman 100 % aunque el reparto no sea exacto", async () => {
+  // ⚠ FICHA 364 — AQUI CAMBIO EL CONTRATO, Y ES EL PRECIO QUE EL HUMANO ACEPTO.
+  //
+  // Este caso pedía que los seis pesos ESCRITOS sumaran 100: con tres tercios, el resto mayor
+  // repartía 34 + 33 + 33 en vez de los 33 + 33 + 33 = 99 del redondeo ingenuo. Pero ese
+  // reparto es justo lo que hacía que el segmento «Entregadas» dijera «30 %» mientras el KPI
+  // de la misma pantalla, midiendo la misma razón, decía «29,5 %» — 259 de 877.
+  //
+  // Desde la 364 cada peso dice su RAZON EXACTA: los tres dicen «33,3 %» y no hay uno que se
+  // lleve el punto sobrante. La contrapartida, medida y aceptada: la columna suma 99,9 % y no
+  // 100 (el desvío máximo con seis segmentos es 0,3 pp; ver `progress/impl_364.md`).
+  //
+  // LO QUE SIGUE SUMANDO 100 EXACTO ES LA BARRA, que es donde la suma afirma algo: se mide
+  // sobre las anchuras REALES de los `div`, que en jsdom sí se montan (no hay recharts aquí).
+  it("los tres tercios dicen su razón exacta, y la BARRA sigue midiendo 100 %", async () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos({ entregada: 1, devuelta: 1, rechazada: 1 }),
     });
-    renderAnillo();
+    const { container } = renderAnillo();
 
     await screen.findAllByText(/Entregadas: 1\s\(/);
-    // Se cuenta sobre la lista ACCESIBLE y no sobre todo el documento: los mismos seis pesos
-    // salen dos veces —la leyenda visible y su gemela para lectores de pantalla— y sumar las
-    // doce entradas daría 200 %.
-    const puntos = within(screen.getByRole("list", { name: /Detalle gestión/ }))
-      .getAllByText(/\((\d+)\s?%\)/)
-      .map((nodo) => Number(/\((\d+)\s?%\)/.exec(nodo.textContent ?? "")?.[1] ?? 0));
 
-    expect(puntos.reduce((s, p) => s + p, 0)).toBe(100);
+    // 1. Los tres pesos escritos: la razón exacta, la misma para los tres. Se lee sobre la
+    //    lista ACCESIBLE y no sobre todo el documento, porque los mismos seis pesos salen dos
+    //    veces —la leyenda visible y su gemela para lectores de pantalla—.
+    const lista = within(screen.getByRole("list", { name: /Detalle gestión/ }));
+    for (const categoria of ["Entregadas", "Devueltas", "Rechazadas"]) {
+      // `\s?` cubre el espacio (fino o duro) que `Intl` mete antes del símbolo.
+      const texto = new RegExp(`${categoria}: 1\\s\\(33,3\\s?%\\)`);
+      expect(lista.getByText(texto), categoria).toBeInTheDocument();
+    }
+    // Y ninguno se lleva un punto de más: con el resto mayor uno decía «34 %».
+    expect(lista.queryByText(/\(34\s?%\)/)).toBeNull();
+
+    // 2. La barra: las anchuras de las seis franjas suman exactamente el 100 %.
+    const barra = container.querySelector(".grafica-barra-crece");
+    const anchos = Array.from(barra?.children ?? []).map((nodo) =>
+      Number.parseFloat((nodo as HTMLElement).style.width),
+    );
+    expect(anchos).toHaveLength(6);
+    expect(anchos.reduce((s, w) => s + w, 0)).toBeCloseTo(100, 6);
   });
 
   // «No entregadas» era el nombre del cubo viejo. Que no vuelva por descuido: ahora ese lado

@@ -173,12 +173,16 @@ export interface AnilloProps {
    * Acompana a la cifra, no la sustituye: «50 %» a solas no dice de cuantas ordenes se habla,
    * y en un anillo de operacion la cantidad es tan dato como la proporcion.
    *
-   * Los porcentajes se calculan con `pesosDeReparto`, que reparte por RESTO MAYOR para que la
-   * columna sume exactamente 100 %. Redondear cada porcion por su cuenta daria 99 o 101, y unos
-   * porcentajes que no suman contradicen el propio dibujo.
+   * Los porcentajes salen de `pesosDeReparto` y los ESCRIBE `textoDePeso`, que dice la razon
+   * EXACTA de cada porcion —la misma cifra que formatearia un KPI que midiera esa razon, ficha
+   * 364— y no la cuota redondeada del resto mayor. Esa cuota sigue existiendo y sigue sumando
+   * 100 % exacto, pero se reserva para la GEOMETRIA de quien dibuje franjas.
    *
-   * Los ESCRIBE `textoDePeso`: una porcion que existe pero cuyo peso exacto no llega a un punto
-   * dice «<1 %» y no «0 %», que junto a su propia cifra negaba el dato (feature 291).
+   * Consecuencia dicha y medida (cabecera de `porcentajes.ts`): la columna de porcentajes puede
+   * sumar 99,9 o 100,1 en vez de 100 clavado. A cambio, ninguna porcion miente sobre su peso.
+   *
+   * Una porcion que existe pero pesa menos de lo que el formateador sabe escribir dice «<0,1 %»
+   * y no «0 %», que junto a su propia cifra negaba el dato (feature 291).
    */
   readonly mostrarPorcentaje?: boolean;
 }

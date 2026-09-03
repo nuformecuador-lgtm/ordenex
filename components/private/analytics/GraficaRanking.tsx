@@ -64,10 +64,15 @@ export function GraficaRanking({
   // El mayor manda la escala del ancho. El `|| 1` cubre el caso de que todo valga cero: las
   // barras miden 0 y las cifras siguen diciendo la verdad, en vez de dividir entre cero.
   const mayor = puntos.reduce((max, punto) => Math.max(max, punto.valor ?? 0), 0) || 1;
-  // El peso escrito sale de `pesosDeReparto` + `textoDePeso`: reparto por RESTO MAYOR —la
-  // columna suma exactamente 100 %— y «<1 %» en la categoria que EXISTE pero cuyo peso exacto no
-  // llega a un punto. Con la fraccion redondeada a secas esa fila decia «0 %» al lado de su
-  // propia cifra (feature 291); el cero de verdad sigue diciendo «0 %», que es otro hecho.
+  // El peso escrito sale de `pesosDeReparto` + `textoDePeso`: la RAZON EXACTA de cada fila
+  // sobre el total —desde la ficha 364, para que diga lo mismo que un KPI que mida esa misma
+  // razon— y «<0,1 %» en la categoria que EXISTE pero pesa menos de lo que el formateador sabe
+  // escribir. Con la fraccion redondeada a secas esa fila decia «0 %» al lado de su propia
+  // cifra (feature 291); el cero de verdad sigue diciendo «0 %», que es otro hecho.
+  //
+  // La contrapartida de la 364, medida en la cabecera de `porcentajes.ts`: la columna de pesos
+  // puede sumar 99,9 o 100,1 en vez de 100 clavado. Aqui no hay geometria que dependa de esa
+  // suma —la barra mide `valor / mayor`, ver abajo—, asi que el intercambio solo afecta al texto.
   //
   // El `ancho` del reparto no se usa: la barra mide `valor / mayor` (ver «dos escalas», arriba),
   // asi que ninguna fila desaparece por el redondeo. Aqui la 291 es solo la etiqueta.
