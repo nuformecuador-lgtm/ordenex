@@ -1,6 +1,9 @@
+import { randomUUID } from "node:crypto";
+
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { ConflictError } from "@/lib/errors";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
+import { zonaUnicaDeDistrito } from "@/lib/repositories/_shared/zona-colapso";
 import { normalizeName } from "@/lib/utils/normalize";
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
 import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
@@ -12,6 +15,7 @@ import type {
   ListZonasParams,
   ListZonasResult,
   UpdateZonaData,
+  UpdateZonaResult,
 } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { OpcionCatalogo } from "@/lib/types/filtros-ordenes";
 
@@ -175,7 +179,24 @@ export class ZonaRepository implements IZonaRepository {
     });
   }
 
-  async update(id: string, data: UpdateZonaData): Promise<ZonaDTO | null> {
+  /**
+   * ⭑ FICHA 366 (design §6) — GUARDAR UNA ZONA RECONCILIA LA ZONA DE SUS ORDENES.
+   *
+   * Hasta hoy `orden.zona_id` se derivaba UNA sola vez, al crear la orden: mover un distrito de
+   * una zona a otra desde esta pantalla dejaba a las ordenes ya creadas con la zona VIEJA
+   * estampada, y sin ninguna via manual para corregirlo (`CorregirDatosClienteService` solo
+   * re-deriva la zona cuando el distrito CAMBIA DE VALOR, y aqui el distrito no cambia: cambia el
+   * mapa `zona_distrito`). Medido en produccion el 2026-09-03: 42 ordenes desalineadas, 41 de
+   * ellas atascadas en la bodega equivocada porque `recibirEnSatelite` acota su guarda por zona.
+   *
+   * TODO OCURRE EN LA TRANSACCION QUE YA EXISTIA —la misma que reemplaza la N:M y las tarifas—,
+   * asi que o se guarda la zona Y se reconcilian sus ordenes, o no ocurre ninguna de las dos.
+   */
+  async update(
+    id: string,
+    data: UpdateZonaData,
+    actorUsuarioId: string | null,
+  ): Promise<UpdateZonaResult | null> {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const exists = await tx.zona.findUnique({ where: { id }, select: { id: true } });
@@ -194,6 +215,16 @@ export class ZonaRepository implements IZonaRepository {
           where: { id },
           data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo, esCentral: data.esCentral },
         });
+
+        // 366/R5: los distritos que la zona tenia ANTES, leidos ANTES del `deleteMany`. Sin esta
+        // lectura, un distrito que este mismo guardado ACABA DE QUITAR de la zona no se
+        // re-evaluaria: no esta en la lista final, asi que sus ordenes seguirian apuntando aqui
+        // hasta un guardado futuro que podria no llegar nunca.
+        const distritosPrevios = await tx.zonaDistrito.findMany({
+          where: { zonaId: id },
+          select: { distritoId: true },
+        });
+
         // Reemplazo completo del N:M y de las tarifas.
         await tx.zonaDistrito.deleteMany({ where: { zonaId: id } });
         if (data.distritoIds.length > 0) {
@@ -205,8 +236,107 @@ export class ZonaRepository implements IZonaRepository {
         if (data.tarifas.length > 0) {
           await tx.tarifaZonaMensajero.createMany({ data: tarifaCreateRows(id, data.tarifas) });
         }
+
+        // 366/R5 (design §2): LA UNION de los distritos de ANTES y los de DESPUES.
+        const distritosAfectados = [
+          ...new Set([...distritosPrevios.map((d) => d.distritoId), ...data.distritoIds]),
+        ];
+
+        let ordenesReconciliadas = 0;
+        if (distritosAfectados.length > 0) {
+          // El estado YA reemplazado de la N:M: es el que decide cual es la zona correcta.
+          const filas = await tx.zonaDistrito.findMany({
+            where: { distritoId: { in: distritosAfectados } },
+            select: { distritoId: true, zonaId: true },
+          });
+
+          const zonasPorDistrito = new Map<string, string[]>();
+          for (const fila of filas) {
+            const bucket = zonasPorDistrito.get(fila.distritoId);
+            if (bucket) bucket.push(fila.zonaId);
+            else zonasPorDistrito.set(fila.distritoId, [fila.zonaId]);
+          }
+
+          // 366/R2/R3: el colapso 1/0/>1 es EL MISMO que usan la carga masiva y la correccion
+          // manual (`_shared/zona-colapso`). Un distrito con 0 o con >1 zonas resuelve `null` y NO
+          // mueve ninguna orden: no se inventa una zona eligiendo la primera.
+          const distritosPorZonaResuelta = new Map<string, string[]>();
+          for (const distritoId of distritosAfectados) {
+            const zonaResuelta = zonaUnicaDeDistrito(zonasPorDistrito.get(distritoId) ?? []);
+            if (zonaResuelta === null) continue;
+            const bucket = distritosPorZonaResuelta.get(zonaResuelta);
+            if (bucket) bucket.push(distritoId);
+            else distritosPorZonaResuelta.set(zonaResuelta, [distritoId]);
+          }
+
+          if (distritosPorZonaResuelta.size > 0) {
+            // 366/R11: UN lote por GUARDADO, aunque toque varias zonas resueltas. Y UN solo
+            // `resolverActorCongelado` para todas sus filas (362/design §2.4).
+            const loteId = randomUUID();
+            const actor = await resolverActorCongelado(tx, actorUsuarioId);
+
+            for (const [zonaResueltaId, distritoIds] of distritosPorZonaResuelta) {
+              // ⭑ EL CORTE DE ELEGIBILIDAD (366/R6/R7), y vive en el `WHERE` a proposito: es una
+              // condicion sobre filas de OTRAS tablas, no un `if` que un doble pueda esquivar.
+              //   · `deletedAt: null`       — una orden borrada no se re-estampa;
+              //   · `cierreDetalles: none`  — ya tiene un detalle congelado en un cierre: eso ya
+              //     se facturo, y `cierre_detail` es INMUTABLE (R8);
+              //   · `gestiones: none {...}` — tiene una gestion VIGENTE cuyo resultado ya decidio
+              //     dinero (`entregada`, `rechazada`, `incidente`). Una `reprogramada` o una
+              //     `devuelta` vigentes NO excluyen: las dos se rutean HACIA ADELANTE por
+              //     `orden.zonaId` (`LiberacionReprogramadaService`, `DevolucionSlaService`), asi
+              //     que dejarlas con la zona vieja las liberaria a la bodega equivocada — el
+              //     mismo atasco que esta ficha viene a arreglar (design §1).
+              const elegibles = await tx.orden.findMany({
+                where: {
+                  distritoId: { in: distritoIds },
+                  zonaId: { not: zonaResueltaId },
+                  deletedAt: null,
+                  cierreDetalles: { none: {} },
+                  gestiones: {
+                    none: {
+                      anuladaAt: null,
+                      resultado: { in: ["entregada", "rechazada", "incidente"] },
+                    },
+                  },
+                },
+                select: { id: true, numGuia: true, numRemision: true },
+              });
+              if (elegibles.length === 0) continue;
+
+              // 366/R9: SOLO `zonaId`. Ni el estado, ni el mensajero, ni el monto, ni la
+              // ubicacion: esta ficha corrige la zona y nada mas.
+              await tx.orden.updateMany({
+                where: { id: { in: elegibles.map((o) => o.id) } },
+                data: { zonaId: zonaResueltaId },
+              });
+
+              // 362/R9 + 366/R10: una fila POR ORDEN ALCANZADA (no por orden candidata) y en la
+              // MISMA transaccion. La etiqueta es la guia —o la remision si no hay guia—, que es
+              // un identificador de envio de Ordenex; `valorAnterior`/`valorNuevo`/`monto` van
+              // NULL a proposito: ahi irian la zona vieja y la nueva, que R10 deja fuera.
+              await appendAccion(
+                tx,
+                elegibles.map((o) => ({
+                  accion: "orden_zona_reconciliada" as const,
+                  entidadTipo: "orden" as const,
+                  entidadId: o.id,
+                  entidadEtiqueta: etiquetaDeEntidad("orden", {
+                    numGuia: o.numGuia,
+                    numRemision: o.numRemision,
+                  }),
+                  ...actor,
+                })),
+                loteId,
+              );
+
+              ordenesReconciliadas += elegibles.length;
+            }
+          }
+        }
+
         const tarifas = await tx.tarifaZonaMensajero.findMany({ where: { zonaId: id } });
-        return toDTO(zona, data.distritoIds.length, tarifas);
+        return { zona: toDTO(zona, data.distritoIds.length, tarifas), ordenesReconciliadas };
       });
     } catch (e) {
       translateEsCentralConflict(e);

@@ -148,7 +148,12 @@ export type ZonaActionError =
 
 export type CrearZonaResult = { status: "ok"; zona: ZonaDTO } | ZonaActionError;
 export type ObtenerZonaResult = { status: "ok"; zona: ZonaDTO } | ZonaActionError;
-export type ActualizarZonaResult = { status: "ok"; zona: ZonaDTO } | ZonaActionError;
+// FICHA 366 (R12): actualizar una zona informa, en la MISMA respuesta, cuantas ordenes cambiaron
+// de zona por la re-derivacion automatica de ese guardado (0 incluido). `CrearZonaResult` NO lo
+// lleva: crear una zona no reconcilia nada (R13).
+export type ActualizarZonaResult =
+  | { status: "ok"; zona: ZonaDTO; ordenesReconciliadas: number }
+  | ZonaActionError;
 export type ListarZonasResult =
   | { status: "ok"; items: ZonaDTO[]; page: number; pageSize: number; total: number }
   | ZonaActionError;
