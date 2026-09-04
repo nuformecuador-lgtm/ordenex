@@ -1529,6 +1529,7 @@ components:
         - metrica
         - unidad
         - data
+        - cobertura
       properties:
         metrica:
           type: string
@@ -1539,7 +1540,7 @@ components:
           description: "Unidad de la cifra (p. ej. `conteo`, `porcentaje`, `dias`)."
         data:
           type: array
-          description: "Los días SERVIBLES del rango, en orden. NO trae un punto por cada día pedido: se omiten el día en curso (aún no cerrado) y los días por debajo del horizonte del histórico, porque ahí un cero sería falta de datos y no falta de operación. Puede venir vacío, y eso es un 200 correcto. No rellenes los huecos con ceros."
+          description: "Los días del rango con dato, en orden, INCLUIDO el día en curso. Antes del 2026-09-04 el día en curso se omitía; ahora viene marcado `parcial: true`. ⚠️ Si sumas `data` para obtener un total del periodo, DESCARTA primero los puntos con `parcial: true` y los días listados en `cobertura.fechasNoComparables`: no son comparables con un día cerrado. Puede venir vacío, y eso es un 200 correcto. No rellenes los huecos con ceros."
           items:
             type: object
             required:
@@ -1555,6 +1556,34 @@ components:
                   - number
                   - "null"
                 description: "`null` significa «no se sabe» (por ejemplo, denominador cero). NUNCA se sustituye por 0. Un día con `valor: null` SÍ está en `data`: está cerrado, pero su resultado es indefinido."
+              parcial:
+                type: boolean
+                enum:
+                  - true
+                description: "Presente y `true` SOLO en el día en curso, que aún no está cerrado: su cifra se lee más baja que la de un día completo y NO es comparable. Ausente en cualquier otro día (nunca llega como `false`)."
+              corteAt:
+                type: string
+                format: date-time
+                description: "Instante ISO-8601 usado como cota superior del día parcial. Solo acompaña a `parcial: true`."
+                example: "2026-08-21T18:40:00.000Z"
+        cobertura:
+          type: object
+          description: "Qué días de esta serie no son comparables, y por qué. Siempre presente."
+          required:
+            - fechasNoComparables
+            - penumbra
+          properties:
+            fechasNoComparables:
+              type: array
+              description: "Días del rango por debajo del horizonte del histórico: ahí un cero es falta de DATOS, no falta de operación. Normalmente vacío."
+              items:
+                type: string
+                format: date
+            penumbra:
+              type: string
+              enum:
+                - ordenes_vivas_al_horizonte_sin_transicion_posterior
+              description: "Limitación permanente del histórico, nunca estimada: las órdenes que ya estaban vivas cuando nació el historial y nunca volvieron a cambiar de estado no entran en ningún día."
     # Feature 266 (T7.1) — cuerpo y respuesta de la habilitación por lote.
     HabilitacionRequest:
       type: object
