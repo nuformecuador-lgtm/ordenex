@@ -128,6 +128,28 @@ describe("columnas de descarga del inventario de API keys", () => {
     expect(filaDescargaApiKey(rota).fechaCreacion).toBeNull();
   });
 
+  // FICHA 373/R37 — el DTO se ENSANCHÓ con `eliminable` y `motivoNoEliminable`. La descarga NO
+  // puede ganar columnas por eso: son estado de PANTALLA (apagar un botón y decir por qué), no
+  // datos del inventario, y `motivoNoEliminable` es además vocabulario interno del servidor.
+  it("los campos de eliminabilidad NO salen en el archivo (373/R37)", () => {
+    const bloqueada: ApiKeyListItemDTO = {
+      ...API_KEY,
+      estado: "activa",
+      eliminable: false,
+      motivoNoEliminable: "ordenes",
+    };
+
+    const fila = filaDescargaApiKey(bloqueada);
+
+    expect(Object.keys(fila)).toEqual(COLUMNAS_DESCARGA_API_KEYS.map((c) => c.clave));
+    expect(fila).not.toHaveProperty("eliminable");
+    expect(fila).not.toHaveProperty("motivoNoEliminable");
+    expect(Object.values(fila).map(String)).not.toContain("ordenes");
+    // Anti-vacuidad: la fila SÍ trae lo suyo, y el estado sigue siendo el legible de siempre.
+    expect(fila.identificador).toBe("Tienda Uno");
+    expect(fila.estado).toBe("Activa");
+  });
+
   it("un campo nuevo del DTO no aparece en el archivo hasta declararlo (R6)", () => {
     const conCampoNuevo = { ...API_KEY, ultimaIpUsada: "203.0.113.7" } as ApiKeyListItemDTO;
 

@@ -208,11 +208,11 @@ export async function desactivarApiKey(
  * `bloqueada` (R12) NO pasa por `toApiKeyLifecycleActionError`: es un RETORNO del service, no un
  * error lanzado, asi que ningun mapeador cambia.
  *
- * @sin-superficie el bloque G de esta ficha —el boton «Eliminar» y su confirmacion en
- * `ApiKeyAccionCell`— lo monta el frontend DESPUES de este backend, asi que hoy no hay pantalla
- * que la dispare. La anotacion se RETIRA al llegar ese componente: la otra mitad de la guardia de
- * superficie se pone roja si la excusa sobrevive a su motivo, que es lo que impide que esto se
- * quede aqui para siempre. Mismo camino que recorrio `consultarConteoProductos` en la ficha 345.
+ * ⚠ AQUI VIVIA UN `@sin-superficie`, y se BORRO con el bloque G de esta misma ficha: la accion ya
+ * tiene pantalla. La cadena es `configuracion/api/page.tsx` → `ApiKeysModule` →
+ * `buildApiKeysColumns` → `ApiKeyAccionCell` → el boton «Eliminar» y su confirmacion → aqui. La
+ * anotacion no se deja «por si acaso»: la otra mitad de `superficie-de-uso.guardia` se pone roja
+ * cuando una excusa sobrevive a su motivo, que es justo lo que impide que se quede para siempre.
  */
 export async function eliminarApiKey(
   input: unknown,

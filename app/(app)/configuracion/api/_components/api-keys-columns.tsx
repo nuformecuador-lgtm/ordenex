@@ -59,6 +59,12 @@ export interface ApiKeysColumnsOptions {
    * key SWR). Se pasa tal cual a `ApiKeyAccionCell`.
    */
   onMutated: () => Promise<void>;
+  /**
+   * FICHA 373/R35: aviso de que una fila DESAPARECIÓ por un borrado con éxito. Lo inyecta
+   * `ApiKeysModule` para retroceder de página cuando la que se está viendo se queda vacía y no
+   * es la primera. Se pasa tal cual a `ApiKeyAccionCell`.
+   */
+  onEliminada?: () => void;
 }
 
 /**
@@ -79,6 +85,7 @@ export interface ApiKeysColumnsOptions {
  */
 export function buildApiKeysColumns({
   onMutated,
+  onEliminada,
 }: ApiKeysColumnsOptions): Column<ApiKeyListItemDTO>[] {
   return [
     { id: "identificador", value: "Identificador" },
@@ -135,7 +142,13 @@ export function buildApiKeysColumns({
     {
       id: "acciones",
       value: "Acciones",
-      render: (row) => <ApiKeyAccionCell row={row} onMutated={onMutated} />,
+      render: (row) => (
+        <ApiKeyAccionCell
+          row={row}
+          onMutated={onMutated}
+          onEliminada={onEliminada}
+        />
+      ),
     },
   ];
 }

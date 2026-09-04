@@ -168,11 +168,27 @@ export function ApiKeysModule({ initialData }: ApiKeysModuleProps) {
     }
   }
 
+  /**
+   * FICHA 373/R35 — la última fila de una página que NO es la primera acaba de eliminarse:
+   * quedarse ahí mostraría una página vacía con una paginación que dice que hay datos. Se
+   * decide AQUÍ y no en la celda: la celda no conoce la paginación (design §7.3).
+   *
+   * Se mide sobre la página que se estaba viendo (`data.items`), que es la de antes del
+   * borrado: `onEliminada` corre justo después de `mutate()`, pero SWR revalida con la misma
+   * clave `page`, así que el número correcto para decidir es el que ya se tenía.
+   */
+  function retrocederSiPaginaVacia() {
+    if (page > 1 && (data?.items.length ?? 0) <= 1) setPage(page - 1);
+  }
+
   // Una sola fuente de verdad de la key SWR: la celda de acciones refresca el
   // listado a través de este `onMutated` (que llama a `mutate`), en vez de tocar
   // el caché SWR por su cuenta. El revelado del secreto rotado lo maneja la propia
   // celda con su `RevelarApiKeyModal`; aquí solo se reusa para el secreto generado.
-  const columns = buildApiKeysColumns({ onMutated: () => mutate().then(() => {}) });
+  const columns = buildApiKeysColumns({
+    onMutated: () => mutate().then(() => {}),
+    onEliminada: retrocederSiPaginaVacia,
+  });
 
   return (
     <section className="flex flex-col gap-4">
