@@ -16,10 +16,9 @@ import { ORIGEN_TIPOS_VISITA_REAL } from "@/lib/types/orden-historial";
 // repositorio elige; dos expresiones equivalentes serian dos filas distintas el dia que una orden
 // tenga dos gestiones `reprogramada` vivas, y la correccion arreglaria una fecha que el cron no
 // mira. Ver la cabecera de `gestion-reprogramada-vigente.ts`.
-import {
-  GESTION_REPROGRAMADA_VIGENTE,
-  RESULTADO_REPROGRAMADA,
-} from "@/lib/repositories/gestion-reprogramada-vigente";
+// El `resultado` de la gestion ya viaja DENTRO de `GESTION_REPROGRAMADA_VIGENTE.where`: importarlo
+// suelto ademas dejaria dos formas de nombrar lo mismo en este archivo.
+import { GESTION_REPROGRAMADA_VIGENTE } from "@/lib/repositories/gestion-reprogramada-vigente";
 
 // Estatus de ORIGEN de la liberacion (una orden reprogramada). Valor de catalogo ya sembrado;
 // esta feature NO agrega estados. (El `resultado` de la gestion vive en la correlacion compartida.)
