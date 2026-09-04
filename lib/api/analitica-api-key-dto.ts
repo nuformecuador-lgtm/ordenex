@@ -11,13 +11,15 @@
 // arrastrado a toda la ficha al gate largo sin comprar nada. No lo muevas alli «porque es un
 // tipo».
 //
-// ⚠ ENMIENDA DEL 2026-08-24 — EL CONTRATO PUBLICO SE SIMPLIFICO ANTES DE LA RELEASE.
-// Aqui decia, y YA NO ES CIERTO: que la serie publicaba `unidadDeConteo`, que `cobertura`
-// (`fechasNoComparables` + `penumbra`) era OBLIGATORIA en cada serie, y que el punto publicaba
-// `parcial`/`corteAt`. Nada de eso viaja ya. Lo que se publica de una serie es `metrica`,
-// `unidad` y `data`; lo que se publica de un punto es `fecha` y `valor`. Los tres campos que
-// desaparecieron NO se borraron del contrato interno de la 126: siguen existiendo dentro, y esta
-// proyeccion los LEE —ver la regla 2— para decidir que puntos son publicables.
+// ⚠ 2026-09-04 — `cobertura` Y `parcial` VUELVEN; `unidadDeConteo` NO.
+// La enmienda del 2026-08-24 retiro los tres a la vez y aqui se decia que «nada de eso viaja
+// ya». Hoy vuelven dos de los tres, y no por simetria: vuelven los que el front usa para MARCAR
+// un dia que no esta cerrado (`cobertura` en la serie, `parcial`/`corteAt` en el punto), que es
+// lo que hace posible publicar ese dia en vez de omitirlo (regla 2). `unidadDeConteo` se queda
+// fuera: es un hecho del CATALOGO, no de la respuesta, y se documenta una vez en la descripcion
+// del endpoint. Repetirlo en cada payload no lo hacia mas cierto, y eso no ha cambiado.
+// Lo que publica una serie es `metrica`, `unidad`, `data` y `cobertura`; lo que publica un punto
+// es `fecha`, `valor` y —solo el dia en curso— `parcial` y `corteAt`.
 //
 // LAS CUATRO REGLAS QUE ESTE MODULO HACE ESTRUCTURALES
 //
@@ -27,21 +29,41 @@
 //     falta. Solo una proyeccion explicita mantiene esa asimetria. Hay test que inyecta un campo
 //     extra en la serie interna y falla si aparece en la salida.
 //
-//  2. **`data` OMITE los dias que no se saben; no los pone en cero** (enmienda 2026-08-24, en
-//     sustitucion de la antigua R29). Este es el corazon del contrato nuevo y la razon de que
-//     quitar `cobertura` y `parcial` no haya sido una perdida de informacion:
-//       - un dia de `cobertura.fechasNoComparables` vale cero porque NO HAY DATOS bajo el
-//         horizonte del historial, no porque no hubiera operacion;
-//       - el dia en curso (`punto.parcial === true`) no esta cerrado en el rollup, asi que
-//         siempre se lee mas bajo que el anterior.
-//     Publicarlos sin marca convertiria dos «no se sabe» en ceros silenciosos y el integrador
-//     leeria una caida de la operacion que no existe. Sin las marcas, LA AUSENCIA es el unico
-//     signo honesto que queda: un dia sin dato no aparece en `data`, y nadie ve un cero que no
-//     ocurrio. Es la misma negativa de la 126/R34 («cero» y «no se sabe» no son el mismo numero),
-//     expresada con la forma en vez de con un campo aparte.
-//     `data` PUEDE quedar VACIO, y eso es un `200` legitimo: no es un error ni un estado
-//     imposible. No anadas un throw ahi (el unico throw de este modulo cubre otra cosa: una
-//     respuesta sin NINGUNA serie, que si es un bug nuestro).
+//  2. **`data` PUBLICA todos los dias del rango, MARCANDO los que no estan cerrados**
+//     (2026-09-04, en sustitucion de la enmienda del 2026-08-24). El canal por API key y la
+//     pantalla de analitica sirven ahora EXACTAMENTE lo mismo, que es lo que se pidio.
+//
+//     ⏳ AQUI DECIA, y ya no es cierto: «`data` OMITE los dias que no se saben; no los pone en
+//     cero (...). Sin las marcas, LA AUSENCIA es el unico signo honesto que queda: un dia sin
+//     dato no aparece en `data`, y nadie ve un cero que no ocurrio».
+//
+//     EL DIAGNOSTICO DE AQUELLA ENMIENDA SIGUE SIENDO CORRECTO y no se revierte: un dia bajo el
+//     horizonte del historial vale cero por FALTA DE DATOS, y el dia en curso se lee mas bajo
+//     porque no esta cerrado en el rollup. Publicar cualquiera de los dos SIN MARCA sigue siendo
+//     inaceptable: el integrador leeria una caida de la operacion que no ocurrio. Lo que cambia
+//     es el REMEDIO. La omision era el unico signo honesto disponible mientras el contrato no
+//     tuviera marcas; ahora las tiene, y son las MISMAS que ya recibe el front:
+//       - `parcial: true` + `corteAt` en el punto del dia en curso (`PuntoSerie`, 126/D6/R18);
+//       - `cobertura.fechasNoComparables` en la serie (126/R34, feature 125).
+//
+//     POR QUE LA MARCA ES MEJOR QUE LA AUSENCIA, medido el 2026-09-04 contra produccion: un
+//     integrador cargo 60 ordenes por la manana y la analitica no le devolvia NADA de ese dia.
+//     La ausencia es honesta solo si quien lee sabe que existe; para quien no ha leido esta
+//     cabecera, «hoy no aparece» y «hoy fue cero» son indistinguibles — el mismo fallo mudo que
+//     la omision queria evitar, movido de sitio. La marca, en cambio, dice AMBAS cosas a la vez:
+//     el numero y el hecho de que no esta cerrado. Y la pantalla lleva desde la 126 haciendo
+//     exactamente eso, sin que a nadie le parezca deshonesto.
+//
+//     `data` PUEDE seguir quedando VACIO —un rango entero sin puntos—, y eso es un `200`
+//     legitimo: no es un error ni un estado imposible. No anadas un throw ahi (el unico throw de
+//     este modulo cubre otra cosa: una respuesta sin NINGUNA serie, que si es un bug nuestro).
+//
+//     ⚠️ ES UN CAMBIO DE CONTRATO PUBLICO OBSERVABLE, y aditivo solo a medias: `parcial`,
+//     `corteAt` y `cobertura` son campos NUEVOS (nadie se rompe por recibirlos), pero `data`
+//     pasa a traer dias que antes NO venian. Un integrador que sume `data` a ciegas para «el
+//     total del periodo» empezara a incluir un dia a medias en esa suma. Hay que AVISAR A LOS
+//     INTEGRADORES ANTES DE DESPLEGAR — misma obligacion que 239, 268 y el alta de
+//     `en_preparacion`: bloquea el despliegue, no el codigo.
 //
 //  3. **Ni `BigInt` ni `Date` en la salida** (R30). `JSON.stringify` de un `BigInt` LANZA
 //     `TypeError` (`lib/types/analitica-operativa.ts:8-11`), y un `Date` crudo serializa a una
@@ -59,12 +81,12 @@
 //     no puede contener un uuid.
 //
 // EL `rango` ES EL ECO DE LO QUE SE PIDIO, Y NO SE RECORTA (decision del 2026-08-24, escrita
-// aqui para que nadie la «arregle»). Con la regla 2, es normal que el ultimo dia del rango no
-// aparezca en `data`. La tentacion es recortar `hasta` al ultimo dia servible; no se hace, y por
-// una razon concreta: quien pida `desde=hoy&hasta=hoy` —el patron exacto de un integrador que
-// consulta a diario— recibiria un rango INVERTIDO, o un 422, por haber preguntado algo
-// perfectamente legitimo. Con el eco intacto ese caso responde `200` con `data: []` en cada
-// metrica, que es la verdad: «pediste hoy, y hoy todavia no esta cerrado».
+// aqui para que nadie la «arregle»). La tentacion es recortar `hasta` al ultimo dia cerrado; no
+// se hace, y por una razon concreta: quien pida `desde=hoy&hasta=hoy` —el patron exacto de un
+// integrador que consulta a diario— recibiria un rango INVERTIDO, o un 422, por haber preguntado
+// algo perfectamente legitimo. Con el eco intacto ese caso responde `200` con el punto de hoy
+// MARCADO `parcial` (2026-09-04), que es la verdad completa: «este es el numero de hoy, y hoy
+// todavia no esta cerrado». Antes ese mismo caso respondia `data: []`, que era media verdad.
 //
 // El `rango` se publica como `desdeFecha`/`hastaFecha` (`YYYY-MM-DD` calendario de Costa Rica,
 // `hasta` INCLUSIVO), nunca como los `Date` de `RangoResuelto`: asi el eco del rango habla el
@@ -87,7 +109,7 @@
 // Modulo puro: sin `next/*`, sin Prisma, sin `process.env`, sin efectos al importarse.
 
 import type { MetricaUnidad } from "@/lib/analytics/types";
-import type { SerieOperativa } from "@/lib/types/analitica-operativa";
+import type { Penumbra, SerieOperativa } from "@/lib/types/analitica-operativa";
 
 /* -------------------------------------------------------------------------- */
 /* La forma publica                                                            */
@@ -112,16 +134,50 @@ export interface RangoApiKeyDTO {
 }
 
 /**
- * Un punto de la serie diaria. EXACTAMENTE dos campos (enmienda 2026-08-24).
+ * Un punto de la serie diaria.
  *
- * Sin `dimension`: P2 la prohibe entera en este canal. Sin `parcial` ni `corteAt`: el dia en
- * curso ya no se marca porque ya no se publica — se OMITE de `data` (regla 2 de la cabecera).
+ * Sin `dimension`: P2 la prohibe entera en este canal, y eso NO cambia.
+ *
+ * 2026-09-04 — CON `parcial` y `corteAt`, como los recibe el front: el dia en curso vuelve a
+ * publicarse (regla 2 de la cabecera) y estas dos son las marcas que impiden leerlo como un dia
+ * cerrado con poca operacion. Son OPCIONALES y solo aparecen en ese punto: un dia cerrado trae
+ * `fecha` y `valor` y nada mas, exactamente igual que antes de este cambio.
  */
 export interface PuntoApiKeyDTO {
   /** `YYYY-MM-DD` calendario CR. */
   readonly fecha: string;
   /** `null` = «no se sabe» (denominador 0). NUNCA `0` como sustituto (R30). */
   readonly valor: number | null;
+  /**
+   * `true` SOLO en el dia en curso: no esta cerrado en el rollup, asi que se lee mas bajo que un
+   * dia completo y NO es comparable con los demas puntos de la serie. Ausente en todo lo demas
+   * (nunca `false`: el contrato interno de la 126 lo declara `parcial?: true`, y publicar un
+   * `false` inventaria un tercer estado que dentro no existe).
+   */
+  readonly parcial?: true;
+  /** ISO-8601 del instante usado como cota superior. Solo acompana a `parcial: true`. */
+  readonly corteAt?: string;
+}
+
+/**
+ * 2026-09-04 — lo que la serie sabe sobre su propia cobertura, igual que el contrato interno de
+ * la 126 (R34) y que lo que ya recibe el front.
+ *
+ * Es la marca de los dias que valen cero por FALTA DE DATOS y no por falta de operacion, y su
+ * vuelta es lo que permite publicarlos en vez de omitirlos. Se proyecta campo a campo como todo
+ * lo demas: `Cobertura` interna no se reenvia con un spread.
+ */
+export interface CoberturaApiKeyDTO {
+  /**
+   * Fechas CR del rango que caen BAJO el horizonte del historial: ahi no hay filas de
+   * `orden_historial_estado`, asi que su `valor` es cero por ausencia de dato. Suele estar vacio.
+   */
+  readonly fechasNoComparables: readonly string[];
+  /**
+   * Limitacion PERMANENTE del historico, nunca estimada: las ordenes vivas el dia en que nacio
+   * el historial y que jamas volvieron a transicionar no entran en ningun cubo. Literal cerrado.
+   */
+  readonly penumbra: Penumbra;
 }
 
 /**
@@ -131,18 +187,21 @@ export interface PuntoApiKeyDTO {
  * interno. Anadir uno es una decision de contrato publico; quitarlo, una rotura.
  *
  * P4-bis — SIN `rango`: el rango es de la RESPUESTA, no de cada serie (ver `RangoApiKeyDTO`).
- * 2026-08-24 — SIN `unidadDeConteo` (es del catalogo, se documenta en el endpoint) y SIN
- * `cobertura` (su informacion la lleva ahora la OMISION de puntos en `data`).
+ * 2026-08-24 — SIN `unidadDeConteo`: es del catalogo, se documenta en el endpoint.
+ * 2026-09-04 — CON `cobertura`, que vuelve para marcar los dias no comparables en vez de
+ * omitirlos (regla 2). `unidadDeConteo` sigue fuera.
  */
 export interface AnaliticaSerieApiKeyDTO {
   /** Id de la metrica, de la lista blanca de `lib/analytics/publicacion-api-key.ts`. */
   readonly metrica: string;
   readonly unidad: MetricaUnidad;
   /**
-   * Los dias SERVIBLES del rango, en orden. Puede estar VACIO y eso es un `200` valido: se
-   * omiten el dia en curso y los dias bajo el horizonte del historial (regla 2 de la cabecera).
+   * TODOS los dias del rango con dato, en orden, incluido el dia en curso (marcado `parcial`).
+   * Puede estar VACIO y eso sigue siendo un `200` valido.
    */
   readonly data: readonly PuntoApiKeyDTO[];
+  /** Que dias del rango no son comparables, y por que. OBLIGATORIA: nunca `cobertura?`. */
+  readonly cobertura: CoberturaApiKeyDTO;
 }
 
 /**
@@ -179,11 +238,50 @@ function normalizarValor(valor: unknown): number | null {
 /* La proyeccion (R31)                                                         */
 /* -------------------------------------------------------------------------- */
 
-/** Proyecta UN punto. Campo a campo; `dimension` se descarta por P2/R36. */
+/**
+ * R30 — `corteAt` sale SIEMPRE como cadena ISO-8601, o no sale.
+ *
+ * El servicio ya lo emite asi (`AnaliticaOperativaService` hace `.toISOString()` antes de
+ * ponerlo en el punto), pero un tipo no detiene a un productor que mienta y un `Date` crudo
+ * serializa distinto segun quien lo serialice — que es justo lo que R30 prohibe. Un valor que no
+ * sea `string` ni `Date` se descarta: mejor un punto sin `corteAt` que un `corteAt` inventado.
+ */
+function normalizarCorteAt(corteAt: unknown): string | undefined {
+  if (typeof corteAt === "string") return corteAt;
+  if (corteAt instanceof Date) return corteAt.toISOString();
+  return undefined;
+}
+
+/**
+ * Proyecta UN punto. Campo a campo; `dimension` se descarta por P2/R36.
+ *
+ * 2026-09-04 — `parcial` y `corteAt` viajan, y viajan JUNTOS o no viajan: `corteAt` sin `parcial`
+ * no significa nada (todo dia cerrado tiene un corte implicito, el fin del dia) y `parcial` es lo
+ * que le da sentido. Se emiten solo cuando el punto trae `parcial === true`, exactamente la
+ * condicion con la que el contrato interno de la 126 los emite.
+ */
 function proyectarPunto(punto: SerieOperativa["puntos"][number]): PuntoApiKeyDTO {
-  return {
+  const base = {
     fecha: punto.fecha,
     valor: normalizarValor(punto.valor),
+  };
+  if (punto.parcial !== true) return base;
+  const corteAt = normalizarCorteAt(punto.corteAt);
+  return { ...base, parcial: true, ...(corteAt !== undefined ? { corteAt } : {}) };
+}
+
+/**
+ * Proyecta la cobertura. Campo a campo, por la MISMA razon que la serie (R31): `Cobertura` es
+ * contrato interno y puede ganar campos.
+ *
+ * `fechasNoComparables` se copia a un array nuevo y se filtra a cadenas: es lo unico que este
+ * canal publica de ella, y reenviar el array interno dejaria que un productor colase ahi
+ * cualquier cosa.
+ */
+function proyectarCobertura(cobertura: SerieOperativa["cobertura"]): CoberturaApiKeyDTO {
+  return {
+    fechasNoComparables: cobertura.fechasNoComparables.filter((f) => typeof f === "string"),
+    penumbra: cobertura.penumbra,
   };
 }
 
@@ -194,28 +292,21 @@ function proyectarPunto(punto: SerieOperativa["puntos"][number]): PuntoApiKeyDTO
  * funcion NO lo publica: hay que venir aqui, escribirlo y decidirlo. Ese es el punto entero de
  * que exista.
  *
- * Y aqui vive la regla 2 de la cabecera: `cobertura` y `parcial` NO se publican, pero SI SE
- * LEEN. Cada punto que cae en uno de los dos casos se DESCARTA de `data` en vez de salir como un
- * numero indistinguible de un dia cerrado con poca operacion. El orden de los que quedan se
- * conserva tal cual venia.
+ * Y aqui vive la regla 2 de la cabecera. ⏳ 2026-09-04 — ANTES DECIA: «`cobertura` y `parcial`
+ * NO se publican, pero SI SE LEEN. Cada punto que cae en uno de los dos casos se DESCARTA de
+ * `data`». Ya no se descarta ninguno: los dos casos se MARCAN y el integrador recibe lo mismo
+ * que la pantalla. `unidadDeConteo` sigue sin publicarse, y `dimension` tampoco (P2/R36): el
+ * hecho de que esta proyeccion vuelva a copiar mas campos no la convierte en un spread.
+ *
+ * El orden de los puntos se conserva tal cual venia, como siempre.
  */
 export function proyectarSerieApiKey(serie: SerieOperativa): AnaliticaSerieApiKeyDTO {
-  const noComparables = new Set(serie.cobertura.fechasNoComparables);
-  const data: PuntoApiKeyDTO[] = [];
-  for (const punto of serie.puntos) {
-    // El dia en curso no esta cerrado en el rollup: publicarlo sin marca seria publicar una
-    // caida que no ocurrio.
-    if (punto.parcial === true) continue;
-    // Bajo el horizonte del historial la cifra vale cero por falta de datos, no por falta de
-    // operacion. Tampoco se publica.
-    if (noComparables.has(punto.fecha)) continue;
-    data.push(proyectarPunto(punto));
-  }
   return {
     metrica: serie.metricaId,
     unidad: serie.unidad,
-    // Puede quedar vacio. Es un 200 legitimo, no un estado imposible: ver la cabecera.
-    data,
+    // Puede quedar vacio si la serie no trajo puntos. Sigue siendo un 200 legitimo.
+    data: serie.puntos.map(proyectarPunto),
+    cobertura: proyectarCobertura(serie.cobertura),
   };
 }
 

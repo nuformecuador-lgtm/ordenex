@@ -505,19 +505,21 @@ describe("267/R39 — la analítica sigue publicada, en el objeto TS y en el .ya
     expect(parametrosDeAnalitica().map((p) => p.name)).toEqual(["metricas", "desde", "hasta"]);
   });
 
-  it("el schema AnaliticaSerie publica TRES campos —metrica, unidad, data— en el TS y en el .yaml", () => {
-    // ENMIENDA 2026-08-24. Aquí se exigía `unidadDeConteo`, `puntos` y `cobertura`, y ya no:
-    //  - `puntos` se llama `data`;
-    //  - `unidadDeConteo` es un hecho del CATÁLOGO, no de cada respuesta: viaja una vez en la
-    //    descripción del endpoint (ver el test de abajo), no en cada payload;
-    //  - `cobertura` salió entera porque su información la lleva ahora la OMISIÓN de puntos en
-    //    `data`. La negativa de 126/R34 —«cero» y «no se sabe» no son el mismo número— sigue en
-    //    pie: se expresa con la forma (el día no aparece) en vez de con un campo aparte.
+  it("el schema AnaliticaSerie publica CUATRO campos —metrica, unidad, data, cobertura— en el TS y en el .yaml", () => {
+    // ⏳ 2026-09-04 — AQUI DECIA que la serie publicaba TRES campos y que ni `cobertura` ni
+    // `parcial`/`corteAt` se mencionaban en ninguno de los dos artefactos. `cobertura` VUELVE, y
+    // con ella el punto del día en curso vuelve a `data` marcado `parcial`: el canal por API key
+    // sirve lo mismo que la pantalla. La negativa de 126/R34 —«cero» y «no se sabe» no son el
+    // mismo número— sigue en pie; lo que cambia es que ahora se expresa con la MARCA en vez de
+    // con la ausencia del punto.
+    //
+    // `unidadDeConteo` sigue fuera (hecho del CATÁLOGO) y `puntos` se sigue llamando `data`.
     const schema = openApiSpec.components.schemas.AnaliticaSerie;
     const requeridas = [...schema.required];
     // P4-bis: sin `rango`. Es del sobre, porque las N series de un lote lo comparten por
-    // construcción (mismo `raw`, mismo instante).
-    expect(requeridas).toEqual(["metrica", "unidad", "data"]);
+    // construcción (mismo `raw`, mismo instante). `cobertura` SÍ es de la serie: dos métricas del
+    // mismo rango pueden no ser legibles en los mismos días.
+    expect(requeridas).toEqual(["metrica", "unidad", "data", "cobertura"]);
 
     const bloque = bloqueDeSchema("AnaliticaSerie");
     const requeridasYaml = subBloque(bloque, "required", 6)
@@ -529,23 +531,30 @@ describe("267/R39 — la analítica sigue publicada, en el objeto TS y en el .ya
       .map((l) => l.trim().replace(/:$/, ""));
     expect(propiedades).toEqual(requeridas);
 
-    // Y el PUNTO tiene exactamente dos campos: nada de `parcial` ni `corteAt`, que dejaron de
-    // publicarse el 2026-08-24.
+    // El PUNTO: dos campos obligatorios y dos opcionales que SOLO trae el día en curso.
     const punto = schema.properties.data.items;
     expect([...punto.required]).toEqual(["fecha", "valor"]);
-    expect(Object.keys(punto.properties)).toEqual(["fecha", "valor"]);
-    // Ni el TS ni el `.yaml` mencionan ya ninguno de los cinco campos retirados.
+    expect(Object.keys(punto.properties)).toEqual(["fecha", "valor", "parcial", "corteAt"]);
+    // `parcial` se publica como el literal `true`, nunca como un booleano libre: un `false` sería
+    // un tercer estado que el contrato interno no tiene.
+    expect(punto.properties.parcial.enum).toEqual([true]);
+
+    // Y `cobertura` declara sus dos campos, los dos obligatorios.
+    const cobertura = schema.properties.cobertura;
+    expect([...cobertura.required]).toEqual(["fechasNoComparables", "penumbra"]);
+    expect(Object.keys(cobertura.properties)).toEqual(["fechasNoComparables", "penumbra"]);
+
+    // Lo que sigue SIN mencionarse en ninguno de los dos artefactos.
     const serializadoTs = JSON.stringify(openApiSpec.paths[PATH_ANALITICA]) + JSON.stringify(schema);
     const bloqueYaml = bloque.join("\n");
-    for (const retirado of [
-      "unidadDeConteo",
-      "cobertura",
-      "fechasNoComparables",
-      "penumbra",
-      "corteAt",
-    ]) {
+    for (const retirado of ["unidadDeConteo", "dimension", "mensajero"]) {
       expect(serializadoTs).not.toContain(retirado);
       expect(bloqueYaml).not.toContain(retirado);
+    }
+    // Y lo que SÍ tiene que estar, en los DOS: el .yaml es un espejo, no un documento aparte.
+    for (const presente of ["parcial", "corteAt", "cobertura", "fechasNoComparables", "penumbra"]) {
+      expect(serializadoTs).toContain(presente);
+      expect(bloqueYaml).toContain(presente);
     }
   });
 
