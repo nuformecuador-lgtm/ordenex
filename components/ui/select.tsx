@@ -42,6 +42,19 @@ export interface SelectProps {
   "aria-describedby"?: string;
   /** Clases extra para el trigger. */
   className?: string;
+  /**
+   * FICHA 372 — rótulo VISIBLE dentro del disparador, en gris y delante del valor
+   * («Salida a reparto: Todas»). Es OPCIONAL y aditivo: sin él, el disparador
+   * renderiza exactamente el mismo marcado de siempre, así que ningún consumidor
+   * previo cambia de aspecto.
+   *
+   * Existe porque un `Select` en una BARRA DE FILTROS no tiene rótulo encima ni al
+   * lado: sin esto, el control se lee «Todas» y no dice qué filtra. NO sustituye al
+   * `aria-label` —que sigue siendo el nombre accesible—, lo acompaña para quien ve.
+   * Es el mismo tratamiento que `MultiSelectFilter` ya daba a su disparador, de modo
+   * que `multi` y `single` conviven en la misma fila sin distinguirse.
+   */
+  labelPrefix?: string;
 }
 
 /**
@@ -60,6 +73,7 @@ export function Select({
   disabled = false,
   id,
   className,
+  labelPrefix,
   ...rest
 }: SelectProps) {
   const ariaLabel = rest["aria-label"];
@@ -84,7 +98,17 @@ export function Select({
           className,
         )}
       >
-        <SelectPrimitive.Value placeholder={placeholder} />
+        {/* Sin `labelPrefix` el disparador es EL DE SIEMPRE: un `Select.Value` pelado.
+            Con él, el rótulo va delante en gris y el valor detrás, dentro del mismo
+            hueco truncable (mismo patrón que `MultiSelectFilter`). */}
+        {labelPrefix === undefined ? (
+          <SelectPrimitive.Value placeholder={placeholder} />
+        ) : (
+          <span className="min-w-0 truncate">
+            <span className="text-muted-foreground">{labelPrefix}: </span>
+            <SelectPrimitive.Value placeholder={placeholder} />
+          </span>
+        )}
         <SelectPrimitive.Icon>
           <ChevronDown className="size-4 opacity-60" aria-hidden="true" />
         </SelectPrimitive.Icon>

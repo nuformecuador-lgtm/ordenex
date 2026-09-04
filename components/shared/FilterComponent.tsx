@@ -738,10 +738,30 @@ export function FilterComponent({
 
         if (filtro.kind === "single") {
           return (
+            /**
+             * FICHA 372 — este control se pintaba SIN rotulo visible y a lo ancho de la
+             * fila. Los dos defectos llegaron a produccion juntos:
+             *
+             * 1. `aria-label` es el nombre accesible, pero NO se ve. En una barra de
+             *    filtros no hay rotulo encima ni al lado, asi que el disparador se leia
+             *    solo «Todas»: un control sin nombre para quien mira la pantalla.
+             *    `labelPrefix` mete la etiqueta DENTRO del disparador, en gris y delante
+             *    del valor —«Salida a reparto: Todas»—, que es lo que `MultiSelectFilter`
+             *    ya hacia. El `aria-label` se queda: la etiqueta visible se SUMA.
+             * 2. El trigger de `Select` trae `w-full` de fabrica (pensado para un campo de
+             *    formulario). Dentro de este contenedor —`flex flex-wrap`— un hijo al 100 %
+             *    se lleva una linea entera para el, y por eso el booleano de al lado
+             *    quedaba apilado. `w-auto` lo devuelve al ancho de su contenido y
+             *    `min-w-56` le da el MISMO minimo que el disparador del `multi`.
+             *
+             * La altura ya casaba (`h-8` en el trigger y en el `Button` del multi); lo que
+             * rompia la fila era el ancho.
+             */
             <Select
               key={filtro.key}
               aria-label={filtro.label}
-              className="min-w-56"
+              labelPrefix={filtro.label}
+              className="w-auto min-w-56"
               value={valores[0] ?? ""}
               // R7: elegir un valor SUSTITUYE al anterior (nunca coexisten dos).
               onValueChange={(v) => fijar(filtro.key, v ? [v] : [])}

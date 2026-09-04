@@ -174,3 +174,57 @@ describe("Select — grupos", () => {
     expect(within(lista).getAllByRole("option")).toHaveLength(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// FICHA 372 — `labelPrefix`: el rótulo VISIBLE dentro del disparador.
+//
+// La prop nace de un defecto en producción: en una barra de filtros el `Select` no
+// tiene rótulo encima ni al lado, así que se leía solo el valor y no decía qué
+// filtraba. `aria-label` cubría al lector de pantalla, no al ojo.
+//
+// Es ADITIVA, y estos casos lo vigilan: sin la prop, el disparador es exactamente el
+// de siempre. Este componente lo usan ~20 pantallas (formularios y diálogos incluidos)
+// y ninguna debe cambiar de aspecto.
+// ---------------------------------------------------------------------------
+describe("Select — rótulo visible en el disparador (ficha 372)", () => {
+  it("con `labelPrefix`, el disparador muestra «Etiqueta: valor»", () => {
+    renderSelect({ labelPrefix: "Mensajero", value: "m1" });
+
+    expect(
+      screen.getByRole("combobox", { name: "Mensajero" }).textContent,
+    ).toContain("Mensajero: Ana Mensajera");
+  });
+
+  it("con `labelPrefix` y sin valor, la etiqueta acompaña al placeholder", () => {
+    renderSelect({ labelPrefix: "Mensajero", placeholder: "Todos" });
+
+    expect(
+      screen.getByRole("combobox", { name: "Mensajero" }).textContent,
+    ).toContain("Mensajero: Todos");
+  });
+
+  it("el rótulo va en gris, delante del valor (mismo tratamiento que el multi)", () => {
+    renderSelect({ labelPrefix: "Mensajero", value: "m1" });
+
+    const rotulo = screen.getByText("Mensajero:", { exact: false });
+    expect(rotulo).toHaveClass("text-muted-foreground");
+  });
+
+  it("`aria-label` manda sobre el rótulo: el nombre accesible no se ensucia con el valor", () => {
+    renderSelect({ labelPrefix: "Mensajero", value: "m1" });
+
+    // Búsqueda por nombre EXACTO: si el texto visible hubiera pasado a ser el nombre
+    // accesible, aquí se leería «Mensajero: Ana Mensajera» y no habría match.
+    expect(
+      screen.getByRole("combobox", { name: "Mensajero" }),
+    ).toBeInTheDocument();
+  });
+
+  it("SIN `labelPrefix` el disparador es el de siempre: solo el valor, sin rótulo", () => {
+    renderSelect({ value: "m1" });
+
+    const trigger = screen.getByRole("combobox", { name: "Mensajero" });
+    expect(trigger.textContent).toContain("Ana Mensajera");
+    expect(trigger.textContent).not.toContain("Mensajero:");
+  });
+});
