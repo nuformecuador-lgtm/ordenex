@@ -9,30 +9,45 @@ import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 //
 // Las palabras entre comillas son las del humano el 2026-08-28.
 
-/** Los CUATRO en los que SI se puede eliminar. */
+/**
+ * Los SIETE en los que SI se puede eliminar. Cuatro son de la ficha 319 (2026-08-28) y los tres
+ * ultimos entran con el pedido humano del 2026-09-04, que amplia la lista A CAMBIO de exigir
+ * CERO INTENTOS DE ENTREGA. El orden es el mismo que el de produccion a proposito: el test que
+ * los compara usa `toEqual` sobre el array, asi que tambien fija el orden y un reordenamiento
+ * accidental se ve.
+ *
+ * ⚠️ ESTA LISTA YA NO ES EL CRITERIO COMPLETO. Un estado de aqui SOLO es eliminable si ademas la
+ * orden tiene cero intentos; los `it.each` que la consumen siembran ese cero explicitamente.
+ */
 export const ELIMINABLES_ESPERADOS = [
   "en_preparacion",
   "por_recolectar_en_tienda",
   "recolectando",
   "en_bodega_central",
+  "en_ruta_bodega_central",
+  "en_ruta_bodega_satelite",
+  "por_recoger",
 ] as const;
 
 /**
- * Los que NO. Los cuatro primeros son los que el humano nombro uno por uno —y son los que
- * importan, porque es donde un criterio demasiado ancho hace daño de verdad: son estados con el
- * paquete YA en movimiento—; el resto completa el catalogo.
+ * Los que NO. Los dos primeros son los que el humano nombro uno por uno el 2026-09-04 al ampliar
+ * la lista —y son los que importan, porque marcan la frontera exacta que se pidio—; el resto
+ * completa el catalogo.
+ *
+ * QUE SE MOVIO EL 2026-09-04, para que se vea el cambio y no haya que deducirlo: salieron de
+ * aqui `en_ruta_bodega_central`, `en_ruta_bodega_satelite` y `por_recoger`. Los dos `en_ruta_*`
+ * se rechazaban el 2026-08-28 por estar el paquete en movimiento; hoy la segunda mitad del
+ * criterio (cero intentos de entrega) cubre lo que aquel motivo protegia. La asimetria que queda
+ * es deliberada: `en_ruta_bodega_satelite` SI, `en_bodega_satelite` NO.
  */
 export const NO_ELIMINABLES_ESPERADOS = [
-  "en_reparto", // «eso esta en gestion», aunque no tenga ni un intento de entrega
-  "en_ruta_bodega_satelite", // «ya se hizo la gestion de enviarse»
-  "en_bodega_satelite", // «ya se hizo la gestion de enviarse»
-  "en_ruta_bodega_central", // un mensajero lo lleva encima
+  "en_reparto", // «eso esta en gestion»: va con el mensajero RUMBO AL CLIENTE. Se mantiene.
+  "en_bodega_satelite", // ya ATERRIZO en la satelite, el ultimo eslabon antes del cliente
   // Y todo lo demas: terminales, resultados de gestion y el flujo de devoluciones.
   "entregada",
   "devuelta",
   "devolviendo_a_tienda",
   "reprogramada",
-  "por_recoger",
   "rechazada",
   "devuelta_a_tienda",
   "sin_gestionar",

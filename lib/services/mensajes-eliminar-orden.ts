@@ -35,6 +35,22 @@ export const MSG_ORDEN_YA_BORRADA = "orden ya borrada";
 export const MSG_ORDEN_NO_ELIMINABLE = "orden en un estado que no admite eliminarla";
 
 /**
+ * La orden tiene al menos UN intento de entrega (pedido humano 2026-09-04, la segunda mitad del
+ * criterio).
+ *
+ * MOTIVO PROPIO Y NO UN `MSG_ORDEN_NO_ELIMINABLE` mas, aunque los dos acaben en el mismo
+ * `conflict`: son dos rechazos con acciones distintas para quien los lee. «Estado que no admite
+ * eliminarla» se puede resolver esperando o moviendo la orden; «ya se intento entregar» no se
+ * resuelve nunca —el conteo de intentos es MONOTONO CRECIENTE por contrato de la feature 215—.
+ * Colapsarlos haria que el operador reintentara indefinidamente sobre una orden que jamas sera
+ * borrable.
+ *
+ * No nombra el numero de intentos ni el estado: el motivo va por orden y la fila ya muestra
+ * ambos en pantalla. Sigue sin exponer identificadores internos ni datos del destinatario.
+ */
+export const MSG_ORDEN_CON_INTENTOS = "orden con intentos de entrega";
+
+/**
  * La orden NO esta borrada (`deleted_at` nulo): no hay nada que recuperar. Es el espejo
  * exacto de `MSG_ORDEN_YA_BORRADA`, y existe por la misma razon — distinguir "no existe" de
  * "no procede" en vez de devolver un `conflict` mudo.

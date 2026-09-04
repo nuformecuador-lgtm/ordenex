@@ -2,6 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { EliminarOrdenService } from "@/lib/services/EliminarOrdenService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { ESTADOS_ELIMINABLES } from "@/lib/types/order-status-eliminables";
@@ -142,6 +145,16 @@ describeSiHayBase("ficha 358 — una tienda NO puede borrar por pantalla ordenes
       propia: await sembrar("propia", tiendaA.id, estatus.eliminable),
       ajena: await sembrar("ajena", tiendaB.id, estatus.eliminable),
       repo: new OrdenRepository(tx as unknown as PrismaClient),
+      // PEDIDO HUMANO 2026-09-04 — el conteo de intentos, REAL y no un doble. Las ordenes que
+      // este archivo siembra no tienen ninguna gestion, asi que el numero es `0` y la frontera
+      // multi-tenant —lo que esta suite mide— se sigue ejercitando igual. Se construye el
+      // servicio de verdad en vez de un `vi.fn` que devuelva cero para que, si algun dia el
+      // conteo empieza a consultar otra tabla, este archivo lo recorra contra Postgres tambien.
+      historial: new OrdenHistorialService(
+        new OrdenRepository(tx as unknown as PrismaClient),
+        new OrdenHistorialRepository(tx as unknown as PrismaClient),
+        new OrdenDiaRepartoCambioRepository(tx as unknown as PrismaClient),
+      ),
     };
   }
 
@@ -160,7 +173,7 @@ describeSiHayBase("ficha 358 — una tienda NO puede borrar por pantalla ordenes
     const medido = await enTransaccionRevertida(prisma, async (tx) => {
       const esc = await sembrarEscenario(tx, "r2");
       const actorA: Actor = { usuarioId: esc.tiendaA, rol: "adminTienda" };
-      const service = new EliminarOrdenService(esc.repo);
+      const service = new EliminarOrdenService(esc.repo, esc.historial);
 
       // (a) POR EL SERVICE: rechaza, y con el motivo de «no existe» — el mismo que un id
       //     inventado, para no confirmarle a una tienda que la orden ajena existe.
@@ -204,7 +217,7 @@ describeSiHayBase("ficha 358 — una tienda NO puede borrar por pantalla ordenes
     const medido = await enTransaccionRevertida(prisma, async (tx) => {
       const esc = await sembrarEscenario(tx, "r1");
       const actorA: Actor = { usuarioId: esc.tiendaA, rol: "adminTienda" };
-      const service = new EliminarOrdenService(esc.repo);
+      const service = new EliminarOrdenService(esc.repo, esc.historial);
 
       const resultado = await service.eliminar({ ordenIds: [esc.propia] }, actorA);
       // Repetirlo: `deleted_at IS NULL` en el `where` lo hace idempotente.
@@ -230,7 +243,7 @@ describeSiHayBase("ficha 358 — una tienda NO puede borrar por pantalla ordenes
     const medido = await enTransaccionRevertida(prisma, async (tx) => {
       const esc = await sembrarEscenario(tx, "r7");
       const actorA: Actor = { usuarioId: esc.tiendaA, rol: "adminTienda" };
-      const service = new EliminarOrdenService(esc.repo);
+      const service = new EliminarOrdenService(esc.repo, esc.historial);
 
       const resultado = await service.eliminar(
         { ordenIds: [esc.propia, esc.ajena] },
@@ -257,7 +270,7 @@ describeSiHayBase("ficha 358 — una tienda NO puede borrar por pantalla ordenes
   it("R3: el `maestro` sigue borrando CUALQUIERA — las dos tiendas en el mismo lote", async () => {
     const medido = await enTransaccionRevertida(prisma, async (tx) => {
       const esc = await sembrarEscenario(tx, "r3");
-      const service = new EliminarOrdenService(esc.repo);
+      const service = new EliminarOrdenService(esc.repo, esc.historial);
 
       const resultado = await service.eliminar(
         { ordenIds: [esc.propia, esc.ajena] },
@@ -300,7 +313,7 @@ describeSiHayBase("ficha 358 — una tienda NO puede borrar por pantalla ordenes
         })
       ).id;
       const actorA: Actor = { usuarioId: esc.tiendaA, rol: "adminTienda" };
-      const service = new EliminarOrdenService(esc.repo);
+      const service = new EliminarOrdenService(esc.repo, esc.historial);
 
       const resultado = await service.eliminar({ ordenIds: [enReparto] }, actorA);
       const despues = await estadoDe(tx, [enReparto]);

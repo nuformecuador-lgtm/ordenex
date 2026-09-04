@@ -50,7 +50,7 @@ export type AlcanceBorradoOrden =
  *
  * `adminTienda` y `apiKey` -> **propias**, con el dueño en `actor.usuarioId`. Son las dos formas
  * que tiene UNA tienda de dirigirse al sistema —la sesion de su pantalla y la credencial de su
- * integracion— y la ficha 320 ya decidio, a sabiendas, que en los cuatro estados eliminables el
+ * integracion— y la ficha 320 ya decidio, a sabiendas, que en los estados eliminables el
  * paquete esta quieto y el autor esta identificado. La 358 le da a la pantalla la MISMA regla
  * que la tienda ya tenia por API: no es un permiso nuevo, es la misma con otra forma. Que las
  * dos salgan de esta linea es lo que impide que una se amplie sin la otra.
