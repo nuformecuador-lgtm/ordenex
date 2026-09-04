@@ -9,6 +9,7 @@
 // Ningún mensaje de esta capa expone UUIDs ni datos del destinatario.
 
 import {
+  MSG_ORDEN_CON_INTENTOS,
   MSG_ORDEN_NO_EXISTE,
   MSG_ORDEN_YA_BORRADA,
 } from "@/lib/services/mensajes-eliminar-orden";
@@ -35,6 +36,13 @@ export function eliminarOrdenConflictoMensaje(motivo: string): string {
   }
   if (motivo === MSG_ORDEN_YA_BORRADA) {
     return "Alguna orden ya había sido eliminada. Actualiza la lista y quítala de la selección.";
+  }
+  if (motivo === MSG_ORDEN_CON_INTENTOS) {
+    // Pedido humano 2026-09-04. NO dice «actualiza la lista e inténtalo de nuevo» como los
+    // demás, y es lo único que importa de este mensaje: el conteo de intentos es monótono
+    // creciente (215/R32), así que reintentar no va a cambiar nunca la respuesta. Decirle al
+    // operador que refresque sería mandarlo a un bucle.
+    return "Alguna orden ya tiene intentos de entrega y por eso no se puede eliminar. Quítala de la selección.";
   }
   return ELIMINAR_ERROR_MESSAGES.conflict;
 }

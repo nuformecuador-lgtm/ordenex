@@ -55,6 +55,9 @@ import { ApiOrdenResolucionService } from "@/lib/services/ApiOrdenResolucionServ
 import { ApiOrdenLecturaService } from "@/lib/services/ApiOrdenLecturaService";
 import { ApiOrdenEliminacionService } from "@/lib/services/ApiOrdenEliminacionService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { gestionConfig } from "@/lib/config/gestion";
@@ -153,7 +156,20 @@ export interface EliminarOrdenApiDeps {
 }
 
 function buildEliminacionService(): IApiOrdenEliminacionService {
-  return new ApiOrdenEliminacionService(new OrdenRepository(getPrismaClient()));
+  const prisma = getPrismaClient();
+  const ordenRepo = new OrdenRepository(prisma);
+  // PEDIDO HUMANO 2026-09-04: la segunda mitad del criterio (cero intentos de entrega) sale del
+  // MISMO `OrdenHistorialService` que usan el listado y el borrado por pantalla. Un solo
+  // criterio de «intento» en todo el sistema (feature 215/R6): si este canal derivara el suyo,
+  // la API podria borrar lo que la pantalla rechaza sobre la misma orden.
+  return new ApiOrdenEliminacionService(
+    ordenRepo,
+    new OrdenHistorialService(
+      ordenRepo,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
+  );
 }
 
 /**

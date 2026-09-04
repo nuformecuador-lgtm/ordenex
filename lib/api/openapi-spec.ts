@@ -1294,7 +1294,15 @@ export const openApiSpec = {
           estado: {
             type: "string",
             description: "Estado que la orden tenía al eliminarla (eliminar no cambia el estado).",
-            enum: ["en_preparacion", "por_recolectar_en_tienda", "recolectando", "en_bodega_central"],
+            enum: [
+              "en_preparacion",
+              "por_recolectar_en_tienda",
+              "recolectando",
+              "en_bodega_central",
+              "en_ruta_bodega_central",
+              "en_ruta_bodega_satelite",
+              "por_recoger",
+            ],
           },
         },
       },

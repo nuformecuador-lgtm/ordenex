@@ -425,3 +425,58 @@ y ésta es la factura.
 Una dirección de **3 líneas entra con holgura, 4 entra justa, y a partir de 5 corta con «…»**. Y si
 la red falla, **ya no se descarga nada** y sale un mensaje — antes salía la etiqueta con el importe
 roto.
+
+---
+
+## Release del 2026-09-04 (2.ª) — la 373, recorrida
+
+**`prod` = `84266ff5`** · desplegado y **READY** a las 20:35:30Z · PR #703 · despliegue
+`dpl_Furgjw7jmzsCYTJMwgj8xDjvTXed`.
+
+Lleva **solo la ficha 373** (eliminar una API key sin uso). Lo de las otras sesiones del día
+—analítica por API key y el arreglo del emisor de webhooks— ya había salido en el PR #701.
+
+Lo verificado, con su evidencia:
+
+- **Gate completo sobre el SHA desplegado** (`36326f38`, `dev` ya integrado en la rama antes del
+  PR): `INIT_EXIT=0` leído **dentro** del log, 1720 archivos / **24.522 tests**, 26 saltados
+  (preexistentes de AnaliticaPage/Shell), `.env` presente.
+- **`dev` no se movió** entre el gate y la release: `36326f38` en los dos momentos. Y sí se había
+  movido ANTES, durante el trabajo: entraron 4 commits de otras sesiones, se integraron en la rama
+  y se volvió a pasar el gate sobre la combinación.
+- **Re-medido lo que caduca**: las 2 API keys de producción con 0 órdenes, 0 tarifas, 0 wallet y 0
+  pagos, ambas `activa` — con la regla nueva, ninguna es borrable sin desactivarla antes.
+- **Una sola ficha `in_progress`** (la 373), cerrada en el mismo empujón.
+- **Variables de entorno**: `NEXT_PUBLIC_APP_URL=https://ordenex.co`, fijada **solo en Production**
+  tras separarla de Preview (compartían entrada). Este despliegue es el que la activa, porque
+  `NEXT_PUBLIC_*` se incrusta en build.
+- **Migración `20260904120000_historial_accion_api_key_eliminada`**, con foto antes y después:
+
+  | | Antes | Después |
+  |---|---|---|
+  | Valores en `historial_accion_tipo` | 44 | **45** |
+  | `api_key_eliminada` existe | no | **sí** |
+  | Filas en `historial_accion` | 34 | **34** |
+  | Filas en `api_key` | 2 | **2** |
+
+  Aplicada a las 20:34:04Z. En la ventana exacta de la migración: **0 órdenes, 0 usuarios y 0 api_key
+  con `updated_at`** — no tocó ni una fila de datos.
+- **Errores de runtime: cero achacables a la release.** El único grupo es un `DeprecationWarning` de
+  `pg` que existe desde el 2026-07-27, visto por última vez a las 19:39:54Z —antes del despliegue— y
+  sobre el deployment anterior.
+- **Jobs recurrentes**: una fila pendiente por tipo (`liberar_reprogramadas=1`,
+  `analitica_rollup_diario=1`).
+- **El dominio**: `ordenex.co` sirve la app nueva (movido desde el proyecto viejo este mismo día),
+  `www` conserva su 308 al apex, la app vieja sigue viva en `rapidisimo-app.vercel.app`, y el manual
+  de la API responde 200 en el dominio.
+
+### Lo que NO se cierra aquí, y por qué
+
+- **La tensión R13** queda aceptada, no resuelta: una key `activa` y con órdenes reporta motivo
+  `activa` por el camino del borrado y `ordenes` en el listado. Solo alcanzable por carrera.
+- **`TarifaRepository.hardDelete` y `ZonaRepository.hardDelete`** siguen comprobando
+  `e.code === "P2003"`, la forma que **no ocurre** con `@prisma/adapter-pg`, y sus tests la fabrican
+  a mano. Probablemente nunca devuelven `"referenced"`. No se tocó.
+- **El desbordamiento horizontal de la tabla** de API keys es preexistente: las 7 columnas de datos
+  suman 838 px de mínimo y a 1024 px hay 718. Lo que esta release arregla es **qué queda fuera**:
+  ahora la cola de datos, no los controles.

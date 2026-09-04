@@ -20,7 +20,7 @@ import type {
 // FICHA 319 (2026-08-28): el predicado de `eliminable`, leido de su fuente unica. Antes se
 // importaba `ESTADOS_CREACION` (los estados en los que una orden puede NACER) y se re-preguntaba
 // aqui; eran dos preguntas distintas compartiendo lista, y por eso ahora hay dos listas.
-import { esEstadoEliminable } from "@/lib/types/order-status-eliminables";
+import { esOrdenEliminable } from "@/lib/types/order-status-eliminables";
 // FICHA 358 (2026-09-02): la OTRA mitad de `eliminable` —¿de quien son las ordenes que este
 // actor puede borrar?—, leida de la misma fuente unica que usan los dos servicios que autorizan
 // el borrado. Sin esto, la pantalla y el servidor volverian a responder cosas distintas.
@@ -81,7 +81,7 @@ const NUM_GUIA_MAX = 2_147_483_647;
 
 // FICHA 319 (2026-08-28): aqui vivia `SET_ESTADOS_CREACION`, la copia local del conjunto de
 // estados de nacimiento con la que se resolvia la segunda mitad del predicado. La pregunta la
-// responde ahora `esEstadoEliminable`, importada arriba.
+// responde ahora `esOrdenEliminable`, importada arriba.
 
 // Feature 160 (design §3.5): el derivador de intentos EN LOTE. `Pick` para dobles de test sin
 // DB, e `import type` para que la dependencia sea SOLO de tipo (sin ciclo de modulos:
@@ -90,6 +90,10 @@ const NUM_GUIA_MAX = 2_147_483_647;
 // 2026-08-27 para resolver `sinGestion`. Ese campo pasa a llamarse `eliminable` y se decide solo
 // con el estado, asi que el listado deja de consultar el historial para esto: una consulta menos
 // por pagina, y ninguna dependencia inyectada que nadie use.
+// ⭑ PEDIDO HUMANO 2026-09-04: `eliminable` vuelve a mirar el historial, pero SIN consulta nueva.
+// Lo que necesita —los INTENTOS DE ENTREGA— es el numero que este `Pick` ya derivaba en lote
+// para el DTO desde la feature 160, asi que el criterio se sirve del dato que ya estaba en la
+// pagina. El metodo retirado (`idsConGestionPosteriorEnLote`, transiciones) sigue sin volver.
 type IntentosSvc = Pick<IOrdenHistorialService, "contarIntentosEnLote">;
 
 export class OrdenService implements IOrdenService {
@@ -329,8 +333,9 @@ export class OrdenService implements IOrdenService {
    * acotamiento le cuele una fila ajena, este campo diria «se puede borrar» sobre una orden que
    * el servidor rechaza. Falla CERRADO por su cuenta.
    *
-   * LAS DOS MITADES SALEN DE SUS FUENTES UNICAS, no de copias: el ESTADO de `esEstadoEliminable`
-   * (ficha 319) y el DUEÑO de `resolverAlcanceBorradoOrden` (ficha 358), las mismas dos que
+   * LAS TRES MITADES —el nombre se queda corto desde el 2026-09-04— SALEN DE SUS FUENTES
+   * UNICAS, no de copias: el ESTADO y los INTENTOS de `esOrdenEliminable` (ficha 319 + pedido
+   * humano 2026-09-04) y el DUEÑO de `resolverAlcanceBorradoOrden` (ficha 358), las mismas que
    * aplica `EliminarOrdenService` para autorizar. Es la respuesta a «¿ofrezco el boton?» y tiene
    * que coincidir con la de «¿lo autorizo?»: si divergen, la barra ofrece «Eliminar» sobre filas
    * que el servidor rechaza. La coincidencia esta medida estado por estado en
@@ -343,10 +348,19 @@ export class OrdenService implements IOrdenService {
     const alcance = resolverAlcanceBorradoOrden(actor);
     if (alcance.alcance === "denegado" || items.length === 0) return items;
     const ownerId = alcance.alcance === "propias" ? alcance.ownerId : null;
+    // ⭑ PEDIDO HUMANO 2026-09-04 — el criterio pasa a tener dos mitades (estado + cero intentos
+    // de entrega) y aqui se pregunta ENTERO, con `esOrdenEliminable`. El dato de intentos NO
+    // cuesta una consulta nueva: `listar` ya lo derivo en lote para el DTO (feature 160/R11) y
+    // lo trae puesto en cada item, asi que ofrecer el boton sigue sin pagar nada extra.
+    //
+    // Si esta mitad se olvidara, la barra ofreceria «Eliminar» sobre ordenes que el servidor va
+    // a rechazar con `MSG_ORDEN_CON_INTENTOS` — exactamente el fallo que este campo existe para
+    // impedir.
     return items.map((o) => ({
       ...o,
       eliminable:
-        esEstadoEliminable(o.estatusValue) && (ownerId === null || o.tiendaId === ownerId),
+        esOrdenEliminable(o.estatusValue, o.intentosEntrega) &&
+        (ownerId === null || o.tiendaId === ownerId),
     }));
   }
 

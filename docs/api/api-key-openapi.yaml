@@ -1264,6 +1264,9 @@ components:
             - por_recolectar_en_tienda
             - recolectando
             - en_bodega_central
+            - en_ruta_bodega_central
+            - en_ruta_bodega_satelite
+            - por_recoger
     PdfGenerateResponse:
       type: object
       description: "URL firmada de corta duración con el PDF de etiqueta (de una orden o de un lote). La URL se firma en cada llamada: nunca es una URL persistida."

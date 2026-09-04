@@ -40,6 +40,13 @@ import { describe, it, expect } from "vitest";
 // encontrando la nada. Por eso el bloque 0 comprueba, contra respuestas conocidas, que el
 // detector lee de verdad y que el quitador conserva el código y borra los comentarios.
 //
+// ⭑ PEDIDO HUMANO 2026-09-04 — LA GUARDIA SIGUE SIENDO LA MISMA, CON UN CRITERIO MÁS ANCHO.
+// La lista pasa de cuatro estados a siete y el criterio gana una segunda mitad: cero INTENTOS DE
+// ENTREGA. R-A cambia de forma —lo explica en su sitio— porque «ningún servicio toca el
+// historial» dejó de ser la afirmación correcta; lo que hay que impedir es que vuelva el conteo
+// de TRANSICIONES, que es otro método y otro modo de fallo. R-B se endurece: ya no basta con que
+// los servicios pregunten por el estado, tienen que preguntar por el predicado COMPLETO.
+//
 // La lectura es ESTÁTICA. La selecciona `pnpm exec vitest run guard` por el nombre del archivo.
 
 const RAIZ = path.resolve(__dirname, "../../..");
@@ -57,12 +64,16 @@ const ARCHIVOS = {
   dto: "lib/types/orden.ts",
 } as const;
 
-/** Los cuatro `value` de la decisión del humano, escritos a mano (no importados de `lib/`). */
+/** Los siete `value` de la decisión del humano, escritos a mano (no importados de `lib/`). */
 const ESTADOS_DE_LA_DECISION = [
   "en_preparacion",
   "por_recolectar_en_tienda",
   "recolectando",
   "en_bodega_central",
+  // Entran el 2026-09-04, a cambio de exigir cero intentos de entrega.
+  "en_ruta_bodega_central",
+  "en_ruta_bodega_satelite",
+  "por_recoger",
 ] as const;
 
 function leer(rel: string): string {
@@ -97,7 +108,7 @@ describe("guardia 319 / el criterio de eliminación tiene UNA sola fuente", () =
       expect(limpio).not.toContain("en_reparto");
     });
 
-    it("control POSITIVO: el módulo de la lista sí declara los cuatro estados en su código", () => {
+    it("control POSITIVO: el módulo de la lista sí declara los siete estados en su código", () => {
       // Si esto fallara, los `not.toContain` de abajo estarían pasando por no encontrar nada.
       const codigo = soloCodigo(leer(ARCHIVOS.lista));
       for (const estado of ESTADOS_DE_LA_DECISION) {
@@ -106,8 +117,24 @@ describe("guardia 319 / el criterio de eliminación tiene UNA sola fuente", () =
     });
   });
 
-  // --- R-A · el conteo de transiciones NO vuelve -----------------------------------------
-  describe("R-A · ningún servicio decide un borrado consultando el historial", () => {
+  // --- R-A · el conteo de TRANSICIONES no vuelve -----------------------------------------
+  //
+  // ⭑ PEDIDO HUMANO 2026-09-04 — ESTE BLOQUE CAMBIA DE FORMA, Y HAY QUE LEER POR QUÉ ANTES DE
+  // CREER QUE SE AFLOJÓ. Lo que la ficha 319 prohibió no fue «mirar el historial»: fue el
+  // criterio `idsConGestionPosteriorEnLote` —cualquier transición cuenta—, que descalificaba una
+  // orden por haberle impreso la etiqueta y dejó CERO eliminables de 429. Eso sigue prohibido
+  // aquí, por su nombre, en los tres servicios.
+  //
+  // Lo que ahora se permite —y se EXIGE— es `contarIntentosEnLote`: cierres aprobados con una
+  // gestión vigente de `rechazada`/`devuelta`/`reprogramada` (feature 215). Es otra pregunta y
+  // no reintroduce el modo de fallo: generar la guía, recolectar y mover el paquete entre
+  // bodegas dejan el número en `0`.
+  //
+  // La asersión de «una sola dependencia» se retira porque ya no es cierta, y en su lugar entra
+  // una MÁS FUERTE: que la segunda dependencia sea EXACTAMENTE el conteo de intentos y ninguna
+  // otra. Antes, «una sola» impedía que volviera el historial; hoy lo que hay que impedir es que
+  // vuelva EL OTRO MÉTODO, y eso se afirma por su nombre.
+  describe("R-A · ningún servicio decide un borrado contando TRANSICIONES", () => {
     it.each([
       ["el que AUTORIZA", ARCHIVOS.autoriza],
       ["el que OFRECE el botón", ARCHIVOS.ofrece],
@@ -118,12 +145,25 @@ describe("guardia 319 / el criterio de eliminación tiene UNA sola fuente", () =
       expect(soloCodigo(leer(rel))).not.toContain("idsConGestionPosteriorEnLote");
     });
 
-    it("el service del borrado recibe UNA sola dependencia", () => {
-      // Que no vuelva por la puerta de atrás: una segunda dependencia inyectada aquí sería, a
-      // día de hoy, el historial otra vez.
+    it.each([
+      ["el que AUTORIZA", ARCHIVOS.autoriza],
+      ["el que BORRA por API", ARCHIVOS.apiBorra],
+    ])("%s pide el conteo de INTENTOS, que es la otra mitad del criterio", (_quien, rel) => {
+      // Control POSITIVO, y no un adorno: si alguien retirara la segunda mitad, todos los
+      // `not.toContain` de este bloque seguirían pasando y el borrado se abriría en silencio
+      // sobre órdenes ya gestionadas. Que la mitad EXISTA se afirma aquí.
+      expect(soloCodigo(leer(rel))).toContain("contarIntentosEnLote");
+    });
+
+    it("el service del borrado recibe el repo y el conteo de intentos, y nada más", () => {
+      // Que el historial no vuelva por la puerta de atrás con su criterio viejo: la dependencia
+      // se declara como un `Pick` de UN método, escrito aquí a mano.
       const codigo = soloCodigo(leer(ARCHIVOS.autoriza));
-      expect(codigo).toContain("constructor(private readonly repo: EliminarOrdenRepo)");
-      expect(codigo).not.toContain("historial");
+      expect(codigo).toContain("private readonly repo: EliminarOrdenRepo");
+      expect(codigo).toContain("private readonly intentos: EliminarOrdenHistorial");
+      expect(codigo).toContain(
+        'export type EliminarOrdenHistorial = Pick<IOrdenHistorialService, "contarIntentosEnLote">;',
+      );
     });
   });
 
@@ -133,9 +173,12 @@ describe("guardia 319 / el criterio de eliminación tiene UNA sola fuente", () =
       ["el que AUTORIZA", ARCHIVOS.autoriza],
       ["el que OFRECE el botón", ARCHIVOS.ofrece],
       ["el que BORRA por API", ARCHIVOS.apiBorra],
-    ])("%s pregunta por `esEstadoEliminable`, no por una lista propia", (_quien, rel) => {
+    ])("%s pregunta por `esOrdenEliminable`, no por una lista propia", (_quien, rel) => {
       const codigo = soloCodigo(leer(rel));
-      expect(codigo).toContain("esEstadoEliminable");
+      // ⭑ 2026-09-04: se exige el predicado COMPLETO, no `esEstadoEliminable` a secas. Decidir
+      // un borrado con la primera mitad sola es hoy un fallo ABIERTO —deja pasar órdenes con
+      // intentos— y es la mutación más plausible de esta regla: quitar un `&&`.
+      expect(codigo).toContain("esOrdenEliminable");
       expect(codigo).toContain('from "@/lib/types/order-status-eliminables"');
       for (const estado of ESTADOS_DE_LA_DECISION) {
         // Un `value` literal en el código de un servicio es el primer paso de la divergencia.
