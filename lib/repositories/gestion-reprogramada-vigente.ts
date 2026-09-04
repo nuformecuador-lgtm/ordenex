@@ -21,8 +21,9 @@ import type { PrismaClient } from "@prisma/client";
 //
 // Compartiendo el objeto, DIVERGIR NO ES POSIBLE: cambiar el `orderBy` a `asc`, quitar el filtro de
 // anuladas o subir el `take` cambia LOS DOS CAMINOS a la vez. Lo vigila ademas
-// `tests/unit/guards/gestion-vigente-una-sola-correlacion.guardia.test.ts` (ningun consumidor
-// vuelve a escribirla en linea) y se mide contra Postgres real en
+// `tests/unit/guards/correccion-fecha-reprogramacion.guardia.test.ts` (ningun consumidor vuelve a
+// escribirla en linea, y nadie mas en `lib/**` correlaciona por su cuenta) y se mide contra
+// Postgres real en
 // `tests/integration/db/correccion-fecha-reprogramacion.int.test.ts` (los dos caminos eligen LA
 // MISMA gestion cuando hay varias).
 //
