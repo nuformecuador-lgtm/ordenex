@@ -3,9 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import useSWR from "swr";
 import {
-  Camera,
   ChevronUp,
-  ImagePlus,
   LifeBuoy,
   MessageCircle,
   Navigation,
@@ -16,10 +14,10 @@ import {
   ShieldAlert,
   Truck,
   Undo2,
-  X,
   XCircle,
 } from "lucide-react";
 
+import { EvidenciasField } from "@/components/shared/EvidenciasField";
 import { HiloNotasOrden } from "@/components/shared/HiloNotasOrden";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +38,7 @@ import { gestionarSchema } from "@/lib/types/gestion-orden";
 // y el UMBRAL no viaja con él (R10) — entra por parámetro donde hace falta, que aquí no hace falta
 // porque la decisión llega ya tomada en `orden.enElTope`.
 import { permitidoEnElTope } from "@/lib/types/tope-intentos";
-import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
+import { gestionConfig } from "@/lib/config/gestion";
 import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import {
   capturarUbicacion,
@@ -152,17 +150,6 @@ type Resultado =
 
 /** Pasos del flujo de gestión dentro del panel. */
 type Paso = "detalle" | "resultados" | "formulario";
-
-const ACCEPT_MIME = GESTION_ALLOWED_MIME.join(",");
-
-/**
- * Formatos admitidos, en la letra del usuario y DERIVADOS del mismo catálogo que valida el borde
- * (`GESTION_ALLOWED_MIME`). Escritos a mano se desincronizarían el día que entre —o salga— un
- * formato, y la zona de carga prometería algo que el servidor rechaza.
- */
-const FORMATOS_EVIDENCIA = GESTION_ALLOWED_MIME.map((mime) =>
-  mime.replace("image/", "").toUpperCase(),
-).join(" · ");
 
 // Feature 119 (R16): tope de fotos por gestion. El schema (cliente y servidor) usa el
 // mismo `gestionConfig.MAX_EVIDENCIAS_POR_GESTION`; en el navegador la env no es visible
@@ -1313,134 +1300,6 @@ function CausaIncidenteField({
         aria-label="Causa del incidente"
         aria-invalid={error ? true : undefined}
       />
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * Feature 119 (R14/R15/R16): campo de evidencias MÚLTIPLES, reusado en las 3 ramas con foto
- * (entregada/devuelta/rechazada). Vive en este archivo, como `MotivoField`/`CausaField`: un solo
- * consumidor (docs/architecture.md "sin sobre-ingeniería"). Ofrece selección múltiple, una
- * previsualización por foto y un botón para quitarla individualmente antes de enviar. El nombre
- * accesible del input lo da `ariaLabel` (mismo contrato que el input único anterior, para no
- * romper a quien lo localiza por ese nombre). El tope y la concatenación los aplica el padre en
- * `onSelect`; aquí sólo se pinta el estado (`files`) y se avisa del límite.
- */
-function EvidenciasField({
-  inputId,
-  label,
-  ariaLabel,
-  files,
-  error,
-  onSelect,
-  onRemove,
-  ayuda,
-}: {
-  inputId: string;
-  label: string;
-  ariaLabel: string;
-  files: File[];
-  error: string | undefined;
-  onSelect: (e: ChangeEvent<HTMLInputElement>) => void;
-  onRemove: (index: number) => void;
-  /**
-   * Feature 158 (Q-B): texto de ayuda de la rama que lo necesite, ENCIMA del selector. Existe
-   * porque el incidente exige foto también cuando no hay paquete que fotografiar y el
-   * mensajero necesita saber qué se espera de él, no solo que el campo es obligatorio.
-   * Omitido en las otras ramas → se comportan exactamente igual que antes.
-   */
-  ayuda?: string;
-}) {
-  // Una object URL por foto para la previsualización (R15). Se derivan con `useMemo` (sin
-  // `setState` en efecto) y sólo se recalculan cuando cambia `files` —que sólo cambia de
-  // referencia cuando el padre agrega/quita una foto, no en cada re-render—. El efecto de
-  // limpieza REVOCA el lote anterior al cambiar la lista (quitar una foto) y al desmontar, para
-  // no fugar memoria.
-  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
-  useEffect(() => {
-    return () => previews.forEach((u) => URL.revokeObjectURL(u));
-  }, [previews]);
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={inputId}>{label}</Label>
-      {ayuda ? (
-        <p id={`${inputId}-ayuda`} className="text-xs text-muted-foreground">
-          {ayuda}
-        </p>
-      ) : null}
-      {previews.length > 0 ? (
-        <ul className="flex flex-wrap gap-2" aria-label="Fotos de evidencia seleccionadas">
-          {previews.map((url, i) => (
-            <li key={url} className="relative">
-              {/* Vista previa local de un object URL: next/image no aplica a un blob del cliente. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
-                alt={`Evidencia ${i + 1}`}
-                className="size-20 rounded-md border border-border object-cover"
-              />
-              <button
-                type="button"
-                onClick={() => onRemove(i)}
-                aria-label={`Quitar evidencia ${i + 1}`}
-                className="absolute -right-1.5 -top-1.5 rounded-full border border-background bg-destructive p-0.5 text-destructive-foreground shadow-xs hover:bg-destructive/90"
-              >
-                <X className="size-3.5" aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {/* Zona de carga: el `input[type=file]` crudo pintaba un botón gris de sistema que en el
-          móvil no se lee como «aquí van las fotos». El input sigue existiendo y sigue siendo el
-          control (mismo id, mismo `aria-label`, misma validez): sólo se oculta VISUALMENTE con
-          `sr-only` —nunca con `hidden`/`display:none`, que lo sacaría del foco y del teclado— y
-          la superficie visible es su `<label>`, que le traslada el clic y el tap.
-
-          El foco vive en el input, así que el anillo se pinta con `has-[:focus-visible]` sobre
-          la zona: quien navega con teclado ve resaltado el área, no un input invisible. */}
-      <input
-        id={inputId}
-        type="file"
-        accept={ACCEPT_MIME}
-        multiple
-        onChange={onSelect}
-        aria-invalid={error ? true : undefined}
-        aria-label={ariaLabel}
-        aria-describedby={`${inputId}-limite${ayuda ? ` ${inputId}-ayuda` : ""}`}
-        className="sr-only"
-      />
-      <label
-        htmlFor={inputId}
-        className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50 ${
-          error
-            ? "border-destructive/60 bg-destructive/5"
-            : "border-input bg-muted/30 hover:border-ring hover:bg-muted/60"
-        }`}
-      >
-        <span
-          aria-hidden="true"
-          className="flex size-10 items-center justify-center rounded-full bg-background text-muted-foreground shadow-xs"
-        >
-          {files.length > 0 ? (
-            <ImagePlus className="size-5" />
-          ) : (
-            <Camera className="size-5" />
-          )}
-        </span>
-        <span className="text-sm font-medium text-foreground">
-          {files.length > 0 ? "Añadir otra foto" : "Toca para tomar o subir fotos"}
-        </span>
-        <span id={`${inputId}-limite`} className="text-xs text-muted-foreground">
-          {`${FORMATOS_EVIDENCIA} · hasta ${MAX_EVIDENCIAS} fotos (${files.length}/${MAX_EVIDENCIAS})`}
-        </span>
-      </label>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}

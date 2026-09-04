@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState, type ChangeEvent } from "react";
-import { X } from "lucide-react";
+import { useId, useState, type ChangeEvent } from "react";
 
+import { EvidenciasField } from "@/components/shared/EvidenciasField";
 import { Modal } from "@/components/shared/Modal";
 import { Label } from "@/components/ui/label";
 import { RadioGroup } from "@/components/ui/radio-group";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/useToast";
 import { reportarIncidente } from "@/lib/actions/incidentes";
 import { reportarIncidenteSchema } from "@/lib/types/incidente";
-import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
+import { gestionConfig } from "@/lib/config/gestion";
 import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
 // Feature 158 (T2.7): las etiquetas de la causa se IMPORTAN del catálogo que ya deriva del
@@ -71,7 +71,6 @@ export const FALTA_CAUSA = "la causa";
 export const FALTA_MOTIVO = "el motivo";
 export const FALTA_EVIDENCIA = "al menos una foto";
 
-const ACCEPT_MIME = GESTION_ALLOWED_MIME.join(",");
 /** Mismo tope por lista que el panel del mensajero: lo impone `evidenciasSchema` (119/158). */
 const MAX_EVIDENCIAS = gestionConfig.MAX_EVIDENCIAS_POR_GESTION;
 
@@ -271,8 +270,14 @@ export function ReportarIncidenteModal({
           ) : null}
         </div>
 
-        <EvidenciasIncidente
+        {/* El campo de fotos es el MISMO componente que usan el panel del mensajero y la ventana
+            de novedades (`components/shared/EvidenciasField`): ahí viven las dos vías —cámara y
+            galería—, el tope y la previsualización. Aquí solo entran los textos de esta pantalla. */}
+        <EvidenciasField
           inputId={evidenciasId}
+          label={EVIDENCIAS_LABEL}
+          ariaLabel={EVIDENCIAS_LABEL}
+          ayuda={EVIDENCIAS_AYUDA}
           files={evidencias}
           error={evidenciasError}
           onSelect={handleEvidenciaChange}
@@ -311,80 +316,5 @@ export function ReportarIncidenteModal({
         )}
       </div>
     </Modal>
-  );
-}
-
-/**
- * Selector de 1..N fotos con los MISMOS límites que el panel del mensajero (los impone
- * `evidenciasSchema`, compartido). Vive en este archivo por «sin sobre-ingeniería»
- * (`docs/architecture.md`): un solo consumidor.
- */
-function EvidenciasIncidente({
-  inputId,
-  files,
-  error,
-  onSelect,
-  onRemove,
-}: {
-  inputId: string;
-  files: File[];
-  error: string | undefined;
-  onSelect: (e: ChangeEvent<HTMLInputElement>) => void;
-  onRemove: (index: number) => void;
-}) {
-  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
-  useEffect(() => {
-    return () => previews.forEach((u) => URL.revokeObjectURL(u));
-  }, [previews]);
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={inputId}>{EVIDENCIAS_LABEL}</Label>
-      <p id={`${inputId}-ayuda`} className="text-xs text-muted-foreground">
-        {EVIDENCIAS_AYUDA}
-      </p>
-      {previews.length > 0 ? (
-        <ul className="flex flex-wrap gap-2" aria-label="Fotos de evidencia seleccionadas">
-          {previews.map((url, i) => (
-            <li key={url} className="relative">
-              {/* Vista previa local de un object URL: next/image no aplica a un blob. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
-                alt={`Evidencia ${i + 1}`}
-                className="size-20 rounded-md border border-border object-cover"
-              />
-              <button
-                type="button"
-                onClick={() => onRemove(i)}
-                aria-label={`Quitar evidencia ${i + 1}`}
-                className="absolute -right-1.5 -top-1.5 rounded-full border border-background bg-destructive p-0.5 text-destructive-foreground shadow-xs hover:bg-destructive/90"
-              >
-                <X className="size-3.5" aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <input
-        id={inputId}
-        type="file"
-        accept={ACCEPT_MIME}
-        multiple
-        onChange={onSelect}
-        aria-invalid={error ? true : undefined}
-        aria-label={EVIDENCIAS_LABEL}
-        aria-describedby={`${inputId}-ayuda`}
-        className="text-sm"
-      />
-      <p className="text-xs text-muted-foreground">
-        {`Podés adjuntar hasta ${MAX_EVIDENCIAS} fotos (${files.length}/${MAX_EVIDENCIAS}).`}
-      </p>
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-    </div>
   );
 }
