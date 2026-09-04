@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
+import fs from "fs";
+import path from "path";
 import {
   dedupeKeyWebhookEstado,
   emitirWebhooksEstado,
@@ -9,8 +11,14 @@ import type { IJobRepository } from "@/lib/interfaces/repositories/IJobRepositor
 import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 
 // Feature 99 (R13/R14/R15/R27) — helper de emision. Fake `tx.$queryRaw` con semantica: la
-// 1.a consulta (§5) resuelve las ordenes con owner suscrito activo y rol apiKey; la 2.a
-// resuelve el `value` del estatus destino. `repo.enqueue` va espiado.
+// 1.a consulta (§5) resuelve las ordenes con owner suscrito activo; la 2.a resuelve el `value`
+// del estatus destino. `repo.enqueue` va espiado.
+//
+// ⚠️ ESTE FAKE NO PUEDE VER EL SQL, y por eso existe el bloque `302` del final de este archivo.
+// El fallo del 2026-09-04 —el `JOIN "rol"` que la 302 dejo obsoleto y que dejo mudo el canal
+// entero— vivia en el TEXTO de la consulta, que aqui se sustituye por un `Set` de ids ya
+// resueltos. Toda suite que mockea `$queryRaw` es CIEGA a ese tipo de regresion: la unica que la
+// ve es la que lee la consulta.
 
 /** Mapa estatusDestinoId -> value del catalogo. */
 const VALUE_POR_ID: Record<string, string> = {
@@ -36,7 +44,7 @@ function buildTx(ordenesElegibles: Set<string>): WebhookEmisorTx {
       return Array.isArray(inner) ? inner : [v];
     });
     if (sql.includes("webhook_suscripcion")) {
-      // §5: solo las ordenes elegibles (owner suscrito activo Y rol apiKey).
+      // §5: solo las ordenes elegibles (owner con suscripcion activa).
       return args.filter((id) => ordenesElegibles.has(id as string)).map((id) => ({ orden_id: id }));
     }
     if (sql.includes("order_status")) {
@@ -156,7 +164,7 @@ describe("R15 — politica EVENTOS_PUBLICOS", () => {
   });
 });
 
-describe("R12 — solo ordenes elegibles (owner suscrito activo y rol apiKey)", () => {
+describe("R12 — solo ordenes elegibles (owner con suscripcion activa)", () => {
   it("no encola nada si ninguna orden del lote es elegible", async () => {
     const { repo, enqueue } = buildRepo();
     const tx = buildTx(new Set()); // sin suscripciones -> §5 vacio
@@ -368,5 +376,60 @@ describe("268/R10 — dos `en_reparto` sobre la MISMA orden producen dedupeKey D
     expect(calls[1][2].dedupeKey).toBe(
       dedupeKeyWebhookEstado("o1", "s-en-reparto", "2026-08-22T14:30:00.000Z"),
     );
+  });
+});
+
+// =================================================================================================
+// FEATURE 302 — REGRESION MEDIDA CONTRA PRODUCCION EL 2026-09-04.
+//
+// EL FALLO: la 302 permite que una API key apunte a una TIENDA REAL
+// (`api_key.tienda_destino_id`), y desde entonces `orden.tienda_id` es esa tienda, de rol
+// `adminTienda`. El paso 1 del emisor seguia exigiendo `JOIN "rol" ... AND r."value" = 'apiKey'`
+// sobre ese mismo `tienda_id`, asi que devolvia CERO elegibles y NINGUNA orden de esas keys
+// emitio jamas un evento, de ningun estado. Sintoma en prod: suscripcion activa, ordenes creadas,
+// y `jobs WHERE tipo = 'webhook_estado'` con cero filas historicas mientras `geocodificacion` de
+// la MISMA transaccion si se encolaba.
+//
+// POR QUE ESTE TEST LEE EL ARCHIVO EN VEZ DE EJECUTAR LA CONSULTA, que es la pregunta legitima:
+// la suite de vitest NO levanta Postgres (mismo limite que `webhook-suscripcion-migracion`, que
+// por eso lee el `.sql` por regex), y TODOS los tests de comportamiento de este emisor —los de
+// arriba y los de `tests/integration/repositories/orden-webhook-enqueue`— mockean `$queryRaw` con
+// un `Set` de ids YA resueltos. Ese mock es precisamente lo que hizo el fallo invisible durante
+// una semana: encodifica la intencion, no la consulta. Mientras no haya Postgres en el gate, leer
+// el texto de la consulta es la UNICA cobertura que puede ver esta clase de regresion.
+//
+// LO QUE FIJA, y por que cada assert: que la elegibilidad se decide por la SUSCRIPCION colgada de
+// `orden.tienda_id` (la fila solo existe bajo un owner que `resolverOwnerWebhook` acepto: esa es
+// la autorizacion), y que NO se re-deriva ningun predicado de rol en este SQL. Un `IN
+// ('apiKey','adminTienda')` tambien lo pondria rojo, y debe: enumerar roles aqui solo cambia cual
+// es la proxima forma de owner que se quedara muda.
+// =================================================================================================
+describe("302 — el paso 1 elige por SUSCRIPCION, no por rol del owner", () => {
+  const FUENTE = fs.readFileSync(
+    path.join(__dirname, "..", "..", "..", "lib", "services", "jobs", "webhook-estado-encolado.ts"),
+    "utf8",
+  );
+
+  /** La consulta del paso 1, sin comentarios: lo que Postgres ve, no lo que el archivo explica. */
+  const CONSULTA_PASO_1 = (() => {
+    const m = FUENTE.match(/const elegibles = await tx\.\$queryRaw<OrdenElegibleRow\[\]>`([^`]+)`/);
+    if (m === null) throw new Error("No se encontro la consulta del paso 1 en el emisor");
+    return m[1];
+  })();
+
+  it("acota por la suscripcion ACTIVA colgada de `orden.tienda_id`", () => {
+    expect(CONSULTA_PASO_1).toMatch(/"webhook_suscripcion"/);
+    expect(CONSULTA_PASO_1).toMatch(/"owner_usuario_id"\s*=\s*o\."tienda_id"/);
+    expect(CONSULTA_PASO_1).toMatch(/"activa"/);
+  });
+
+  it("no filtra por rol: ni JOIN a `rol` ni comparacion contra `apiKey`", () => {
+    expect(CONSULTA_PASO_1).not.toMatch(/"rol"/);
+    expect(CONSULTA_PASO_1).not.toMatch(/rol_id/);
+    expect(CONSULTA_PASO_1).not.toMatch(/apiKey/);
+  });
+
+  it("sigue excluyendo las borradas (una orden borrada no emite)", () => {
+    expect(CONSULTA_PASO_1).toMatch(/"deleted_at"\s+IS\s+NULL/);
   });
 });

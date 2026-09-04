@@ -89,14 +89,37 @@ export async function emitirWebhooksEstado(
 
   const ordenIds = Array.from(new Set(entradas.map((e) => e.ordenId)));
 
-  // Paso 1 (§5, R12/D3): ordenes cuyo owner tiene suscripcion ACTIVA y es rol `apiKey`. El
-  // JOIN a `rol.value = 'apiKey'` es el guard explicito de D3.
+  // Paso 1 (§5, R12/D3): ordenes cuyo owner tiene suscripcion ACTIVA.
+  //
+  // ⏳ 2026-09-04 (FEATURE 302) — AQUI DECIA, y ya no es cierto: «ordenes cuyo owner tiene
+  // suscripcion ACTIVA **y es rol `apiKey`**. El JOIN a `rol.value = 'apiKey'` es el guard
+  // explicito de D3». Ese JOIN SE CAE, y es una correccion, no una relajacion del contrato.
+  //
+  // LO QUE LO ROMPIO: hasta la 302, `orden.tienda_id` era SIEMPRE la cuenta dedicada de la key
+  // (rol `apiKey`), asi que el JOIN casaba y no estorbaba. Desde la 302 una key puede apuntar a
+  // una TIENDA REAL (`api_key.tienda_destino_id`) y el dueno de las ordenes pasa a ser esa
+  // tienda, de rol `adminTienda` (`ApiKeyAuthService`, `resolverOwnerApiKey`). El JOIN dejo de
+  // casar y este emisor devolvia CERO elegibles: ninguna orden de esas keys emitio JAMAS un
+  // evento, de NINGUN estado. Medido contra produccion el 2026-09-04: una suscripcion activa,
+  // ordenes creadas ese mismo dia, y `jobs WHERE tipo = 'webhook_estado'` con CERO filas
+  // historicas, mientras `geocodificacion` de la MISMA transaccion si se encolaba.
+  //
+  // POR QUE SE CAE ENTERO Y NO SE AMPLIA A `('apiKey','adminTienda')`: la suscripcion YA ES la
+  // autorizacion. La fila solo puede existir bajo un owner que `resolverOwnerWebhook`
+  // (`WebhookSuscripcionRepository`) acepto —una cuenta `apiKey`, o la tienda destino de una
+  // key—, y esa resolucion es la que la 302 dejo como fuente de verdad. Repetir aqui un
+  // predicado de rol es duplicar esa decision en un segundo sitio, en SQL crudo y sin tipos: es
+  // exactamente el mecanismo que produjo este fallo. Enumerar dos roles solo cambia CUAL es la
+  // proxima forma de owner que se quedara muda en silencio.
+  //
+  // Las otras dos piezas del canal ya hablaban de `orden.tienda_id` a secas: el alta cuelga la
+  // suscripcion del owner resuelto y el despachador la busca por `orden.tiendaId` sin mirar rol
+  // (`WebhookEstadoService`). Este era el unico de los tres que se quedo con el guard viejo, y
+  // el unico `JOIN "rol"` de todo `lib/`.
   const elegibles = await tx.$queryRaw<OrdenElegibleRow[]>`
     SELECT o."id" AS orden_id
     FROM "orden" o
     JOIN "webhook_suscripcion" w ON w."owner_usuario_id" = o."tienda_id" AND w."activa"
-    JOIN "usuario" u ON u."id" = o."tienda_id"
-    JOIN "rol" r ON r."id" = u."rol_id" AND r."value" = 'apiKey'
     WHERE o."id" IN (${Prisma.join(ordenIds)}) AND o."deleted_at" IS NULL`;
   // Defensivo: si el resultado no es un array (mocks de tests de call-sites que no
   // interpretan esta consulta), se trata como "sin elegibles" -> no-op.
