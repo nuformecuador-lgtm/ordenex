@@ -45,6 +45,10 @@ import {
   CAMBIAR_DIA_ACCION,
   CambiarDiaRepartoModal,
 } from "./CambiarDiaRepartoModal";
+// FICHA 371: corregir la fecha de una reprogramación ya registrada. El texto de la acción sale
+// del mismo módulo que el título del modal, por la misma razón que el de la 262.
+import { CorregirFechaReprogramacionModal } from "./CorregirFechaReprogramacionModal";
+import { CORREGIR_FECHA_ACCION } from "./corregir-fecha-reprogramacion-textos";
 import {
   construirFiltrosOrdenes,
   CATALOGO_FILTROS_VACIO,
@@ -80,6 +84,7 @@ type ModalAbierto =
   | "recuperar-bodega"
   | "deshacer-asignacion"
   | "cambiar-dia-reparto" // feature 262
+  | "corregir-fecha-reprogramacion" // ficha 371
   | "eliminar" // feature «eliminar orden»
   | "recuperar-eliminada" // pedido humano 2026-08-27: la reversión del borrado
   | null;
@@ -447,6 +452,16 @@ export function OrdenesListado({
     setModalAbierto("cambiar-dia-reparto");
   }
 
+  // FICHA 371: "Corregir fecha de reprogramación" sobre una orden que quedó esperando a la fecha
+  // equivocada. SIN filtro por zona, igual que "Cambiar día de reparto": maestro/admin corrigen
+  // órdenes de CUALQUIER zona y el service revalida el rol. El snapshot viaja ENTERO —no se
+  // recorta al primero— para que el modal pueda decir «una a la vez» en vez de corregir una de
+  // las tres marcadas en silencio, que es la familia de fallos mudos que este repo ya conoce.
+  function abrirCorregirFechaReprogramacion(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("corregir-fecha-reprogramacion");
+  }
+
   // Feature «eliminar orden»: retirar del sistema un registro creado por error. NO se filtra
   // el snapshot por estado ni por zona —a diferencia de `abrirRecuperar` / `abrirRutearSatelite`,
   // cuyas acciones sí tienen un estado de origen—: una orden se elimina esté donde esté. El
@@ -542,6 +557,20 @@ export function OrdenesListado({
     label: CAMBIAR_DIA_ACCION,
     variant: "outline",
     onRun: abrirCambiarDia,
+  };
+
+  /**
+   * FICHA 371 — la ÚNICA acción del estado `reprogramada`, que hasta hoy caía en el `default` de
+   * `accionesDe` y por tanto no ofrecía ninguna: si el mensajero elegía mal el día, la orden
+   * quedaba esperando a la fecha equivocada y no había ninguna pantalla para arreglarlo.
+   *
+   * Primaria (sin `variant: "outline"`): es lo único que se puede hacer con una orden en ese
+   * estado, así que no hay ninguna otra a la que ceder el sitio.
+   */
+  const accionCorregirFechaReprogramacion: AccionLote = {
+    key: "corregir-fecha-reprogramacion",
+    label: CORREGIR_FECHA_ACCION,
+    onRun: abrirCorregirFechaReprogramacion,
   };
 
   /**
@@ -655,6 +684,15 @@ export function OrdenesListado({
       case "en_reparto":
       case "ayuda_tienda":
         return [accionCambiarDia];
+      // FICHA 371 — la orden ya no está en circulación: espera a la fecha de su reprogramación, y
+      // esa fecha es lo ÚNICO que decide cuándo vuelve a la bodega. Si está equivocada, hasta hoy
+      // no había forma de corregirla (este `case` no existía y el estado caía en el `default`).
+      //
+      // NO se le ofrece "Cambiar día de reparto": son dos columnas distintas —aquélla mueve el día
+      // en que el mensajero sale a repartir, ésta la fecha a la que la orden está retenida— y
+      // mezclarlas dejaría al coordinador corrigiendo la que no es.
+      case "reprogramada":
+        return [accionCorregirFechaReprogramacion];
       case "en_bodega_central":
         return [
           {
@@ -1258,6 +1296,20 @@ export function OrdenesListado({
             fechasDiaReparto={fechasDiaReparto}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
+          />
+          {/* FICHA 371 — éxito ⇒ `revalidarTablas` y NO `handleSuccess`, y la diferencia es el
+              punto de esta pantalla: `handleSuccess` cerraría el modal, y con él se iría el
+              mensaje que dice qué pasó con la orden (volvió a la bodega / sigue retenida
+              esperando que se apruebe un cierre / espera a la fecha nueva). El listado se relee
+              igualmente detrás; el modal lo cierra la persona cuando ha leído el desenlace.
+              El «hoy» del campo baja de la página, que lo resolvió con el día de Costa Rica:
+              este componente sólo lo transporta. */}
+          <CorregirFechaReprogramacionModal
+            open={modalAbierto === "corregir-fecha-reprogramacion"}
+            ordenes={ordenesSeleccionadas}
+            hoyISO={fechasDiaReparto.hoy}
+            onOpenChange={cerrarModal}
+            onSuccess={revalidarTablas}
           />
           {/* Pedido humano (2026-08-27): la reversión. Éxito ⇒ `handleSuccess` revalida, y la
               orden recuperada desaparece de ESTE listado (que solo muestra borradas) y reaparece
