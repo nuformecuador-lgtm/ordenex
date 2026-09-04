@@ -176,11 +176,11 @@ describe("ApiKeysModule — listado (R14–R19)", () => {
     expect(within(table).queryByText("u1")).toBeNull();
   });
 
-  it("ficha 373: las columnas salen en el orden que deja los botones a la vista", async () => {
-    // El ORDEN es lo que arregló el desbordamiento de la tabla en portátiles (ver la nota de
-    // `api-keys-columns.tsx`): a 1024 px caben 718 y la tabla mide 1100, así que las dos
-    // columnas con botones —«Acciones» y «Webhook»— van delante, detrás del identificador que
-    // dice de qué key son y del estado que decide si el botón ofrece Activar o Desactivar.
+  it("2026-09-04: el orden histórico, con «Acciones» AL FINAL y «Eliminar» la última de la fila", async () => {
+    // Aquí hubo un reordenado (adelantar «Acciones» y «Webhook» para que los botones no
+    // quedaran fuera del área visible en portátiles) que se REVIRTIÓ: el desbordamiento
+    // horizontal lo resuelve el control de desplazamiento que `DataTable` ya trae, y aquel
+    // orden dejaba «Eliminar» en mitad de la fila. Ver la nota de `api-keys-columns.tsx`.
     //
     // La lista va escrita a mano, no derivada de `buildApiKeysColumns`: compararla contra su
     // propia fuente estaría siempre verde. Esto afirma lo que PINTA el navegador.
@@ -192,14 +192,25 @@ describe("ApiKeysModule — listado (R14–R19)", () => {
       .map((th) => th.textContent?.trim());
     expect(headers).toEqual([
       "Identificador",
-      "Estado",
-      "Acciones",
-      "Webhook",
       "Prefijo",
       "Usuario dedicado",
       "Tienda destino",
       "Fecha de creación",
+      "Estado",
+      "Webhook",
+      "Acciones",
     ]);
+    expect(headers[headers.length - 1]).toBe("Acciones");
+
+    // Y en la FILA: el «Editar» del webhook (columna de antes) precede al trío, así que
+    // «Eliminar» —lo irreversible— es la última acción de todas.
+    await within(table).findByText("integracion-erp");
+    const fila = within(table).getAllByRole("row")[1]!;
+    const acciones = within(fila)
+      .getAllByRole("button")
+      .map((b) => b.textContent?.trim());
+    expect(acciones).toEqual(["Editar", "Rotar", "Desactivar", "Eliminar"]);
+    expect(acciones[acciones.length - 1]).toBe("Eliminar");
   });
 
   it("estado y acciones: pinta el badge de estado y los botones de acción por fila", async () => {

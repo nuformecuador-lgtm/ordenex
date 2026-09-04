@@ -1,9 +1,11 @@
 import type { EstadoApiKey } from "@prisma/client";
 import type { VariantProps } from "class-variance-authority";
+import type { ReactNode } from "react";
 
 import type { Column } from "@/components/shared/DataTable";
 import { Badge, badgeVariants } from "@/components/ui/badge";
 import type { ApiKeyListItemDTO } from "@/lib/types/api-key";
+import { cn } from "@/lib/utils";
 
 import { ApiKeyAccionCell } from "./ApiKeyAccionCell";
 import { WebhookAccionCell } from "./WebhookAccionCell";
@@ -26,6 +28,36 @@ const ESTADO_VARIANT: Record<EstadoApiKey, BadgeVariant> = {
   activa: "success",
   inactiva: "secondary",
 };
+
+/**
+ * Una celda de DATO de esta tabla: su contenido va en UNA sola línea.
+ *
+ * =============================================================================================
+ * ⚠️ `whitespace-nowrap` NO RECORTA, NO ESCONDE Y NO ABREVIA (2026-09-04).
+ * =============================================================================================
+ *
+ * Lo que hace es SUBIR el `min-content` de la columna de «su palabra más larga» a «el dato
+ * entero», y a partir de ahí el ancho lo decide el dato. Es exactamente la pieza que la ficha
+ * 354 ya usa en `analitica/…/ProductosTabla` («⚠ NO ES UN RECORTE… lo que hace es prohibirle a
+ * la columna ser más estrecha que su frase»), y por eso aquí se REUSA en vez de inventar otra:
+ * ni `truncate`, ni `line-clamp`, ni `max-w` con elipsis. Un email a medias no se ve cortado,
+ * se lee como OTRO email — la misma lección medida de las fichas 343/344 sobre las cifras.
+ *
+ * El precio está medido y se paga a sabiendas: la tabla desborda más a lo ancho. Ese
+ * desbordamiento NO es un defecto y no hay que resolverlo aquí — `DataTable` ya trae el control
+ * para eso (las dos flechas circulares que aparecen SOLO cuando la tabla desborda su contenedor
+ * con scroll). El canje es el mismo que este repo ya tiene decidido en las otras tablas anchas:
+ * mejor deslizar que estrujar.
+ */
+function CeldaUnaLinea({
+  children,
+  className,
+}: {
+  readonly children: ReactNode;
+  readonly className?: string;
+}) {
+  return <span className={cn("whitespace-nowrap", className)}>{children}</span>;
+}
 
 /** Chip legible del estado de la API key: texto + color semántico (accesible). */
 export function EstadoApiKeyBadge({ value }: { value: EstadoApiKey }) {
@@ -68,50 +100,47 @@ export interface ApiKeysColumnsOptions {
 }
 
 /**
- * Columnas del listado de API keys (feature 82/R14): identificador · estado · acciones ·
- * webhook · prefijo · usuario dedicado (email sintético [D1]) · tienda destino (307) ·
- * fecha de creación.
+ * Columnas del listado de API keys (feature 82/R14): identificador · prefijo · usuario
+ * dedicado (email sintético [D1]) · tienda destino (307) · fecha de creación · estado ·
+ * webhook · acciones.
  *
  * =============================================================================================
- * ⚠️ EL ORDEN NO ES COSMÉTICO: LAS DOS COLUMNAS CON BOTONES VAN DELANTE (2026-09-04, ficha 373).
+ * EL DEFECTO ERA VERTICAL, NO HORIZONTAL (2026-09-04). Y EL ORDEN VUELVE A SER EL DE SIEMPRE.
  * =============================================================================================
  *
- * Hasta hoy «Acciones» era la ÚLTIMA columna y, con la tabla desbordando, quedaba fuera del
- * área visible en anchos de portátil. Medido en Chromium sobre el contenedor con scroll de
- * `DataTable`, con la barra lateral desplegada (256 px), que es el caso del defecto:
+ * Aquí hubo un intento previo que adelantaba «Acciones» y «Webhook» para que los botones no
+ * quedaran fuera del área visible en portátiles. Se revirtió: el desbordamiento HORIZONTAL de
+ * esta tabla no es un defecto, es una situación prevista y ya resuelta por un control que
+ * existe —las flechas de desplazamiento de `DataTable`, que solo se dibujan cuando la tabla
+ * desborda—, y a cambio aquel orden dejaba «Eliminar» en mitad de la fila, delante del
+ * «Editar» del webhook. Lo que sí estaba roto era lo VERTICAL: las celdas plegaban su
+ * contenido en varios renglones. Medido en Chromium sobre `/configuracion/api` con la barra
+ * lateral desplegada, ANTES del arreglo (líneas por celda de la primera fila):
  *
- *   | viewport | visible | tabla | desborda | «Eliminar» visible |
- *   |----------|---------|-------|----------|--------------------|
- *   | 1920     |    1614 |  1614 |        0 | 74 px              |
- *   | 1440     |    1134 |  1134 |        0 | 74 px              |
- *   | 1280     |     974 |  1100 |    126 → | −40 px (FUERA)     |
- *   | 1024     |     718 |  1100 |    382 → | −296 px (FUERA)    |
+ *   | viewport | visible | tabla | identificador | usuario dedicado | fecha |
+ *   |----------|---------|-------|---------------|------------------|-------|
+ *   | 1024     |     718 |  1100 | 3 líneas      | 3 líneas         | 2     |
+ *   | 1280     |     974 |  1100 | 3 líneas      | 3 líneas         | 2     |
+ *   | 1440     |    1134 |  1134 | 3 líneas      | 3 líneas         | 2     |
+ *   | 1920     |    1614 |  1614 | 1 línea       | 1 línea          | 1     |
  *
- * Y NO se arregla estrechando: el mínimo de contenido de las SIETE columnas de datos, sin
- * «Acciones», ya suma 838 px (identificador 104 · prefijo 133 · usuario 167 · tienda 140 ·
- * fecha 120 · estado 91 · webhook 83), o sea que a 1024 (718 px de sitio) la tabla desborda
- * aunque los botones no existieran. Acotar el email —la sospecha inicial— tampoco: aporta
- * 167 px de 1100 porque ya parte líneas por los guiones, y caparlo solo lo estropearía a
- * 1920, donde hoy se lee entero. El desbordamiento a 1024 es un hecho de esta pantalla; lo
- * que se puede decidir es QUÉ queda fuera, y lo que no puede quedar fuera son los botones.
+ * Fíjate en la fila de 1440: la tabla NO desbordaba y aun así el texto se partía en tres. Ese
+ * es el punto — el plegado no venía del scroll, venía de que a `w-full` con layout automático
+ * el navegador estruja las columnas hasta el `min-content`, y el `min-content` de un texto que
+ * puede partirse es su palabra más larga. Por eso el arreglo es `CeldaUnaLinea` (ver su nota),
+ * no mover columnas.
  *
- * Por eso las dos columnas interactivas —«Acciones» y «Webhook»— se adelantan junto a
- * «Estado», que es lo que dice si el botón del medio ofrece Activar o Desactivar. Con
- * `Identificador · Estado · Acciones · Webhook` = 540 px, las tres acciones de una fila y el
- * webhook caben enteros sin desplazar la tabla incluso a 1024. La identidad de la fila sigue
- * PRIMERA a propósito: unos botones sin saber de qué key son no sirven de nada (y además la
- * flecha de scroll izquierda de `DataTable` se dibuja encima de la primera columna, así que
- * ahí no puede ir un control).
+ * ORDEN, y por qué importa el último puesto: `Identificador · Prefijo · Usuario dedicado ·
+ * Tienda destino · Fecha de creación · Estado · Webhook · Acciones`. Primero la identidad de
+ * la fila, luego sus datos, y al final lo que se HACE con ella. Con «Webhook» delante de
+ * «Acciones», el «Editar» del webhook queda antes que el trío Rotar · Activar/Desactivar ·
+ * Eliminar, de modo que **«Eliminar» es la última acción de la fila**: lo irreversible, al
+ * final. Lo vigila `tests/unit/guards/api-keys-tabla-una-linea.guardia.test.tsx`.
  *
- * Es el mismo remedio que la feature 160 ya aplicó en `/ordenes` con el mismo motivo escrito
- * —«con 18 columnas y scroll horizontal, una columna al final quedaría permanentemente fuera
- * del viewport»— y el mismo sitio donde `OrdenesModule` antepone su columna de selección. NO
- * se tocó `components/shared/DataTable`: lo montan 55 archivos y la fila de columnas de ESTA
- * pantalla se arregla en ESTA pantalla.
- *
- * Cambia el orden y NADA más: ids, cabeceras y `render` quedan idénticos, y la descarga vive
- * en `api-keys-descarga-columnas.ts`, que no se entera. Lo vigila
- * `tests/unit/guards/api-keys-acciones-alcanzables.guardia.test.ts`.
+ * Cambia el orden y la envoltura de las celdas, y NADA más: ids, cabeceras y contenido de cada
+ * `render` quedan idénticos, y la descarga vive en `api-keys-descarga-columnas.ts`, que no se
+ * entera. NO se tocó `components/shared/DataTable`: lo montan 55 archivos y la fila de
+ * columnas de ESTA pantalla se arregla en ESTA pantalla.
  *
  * El prefijo se muestra seguido de un elipsis en `font-mono` (R15). El DTO de
  * fila (`ApiKeyListItemDTO`) no declara `keyHash` ni el secreto, así que NUNCA
@@ -129,47 +158,28 @@ export function buildApiKeysColumns({
   onEliminada,
 }: ApiKeysColumnsOptions): Column<ApiKeyListItemDTO>[] {
   return [
-    { id: "identificador", value: "Identificador" },
     {
-      id: "estado",
-      value: "Estado",
-      render: (row) => <EstadoApiKeyBadge value={row.estado} />,
-    },
-    {
-      id: "acciones",
-      value: "Acciones",
-      render: (row) => (
-        <ApiKeyAccionCell
-          row={row}
-          onMutated={onMutated}
-          onEliminada={onEliminada}
-        />
-      ),
-    },
-    {
-      id: "webhook",
-      value: "Webhook",
-      render: (row) => (
-        <WebhookAccionCell
-          ownerUsuarioId={row.usuarioId}
-          identificador={row.identificador}
-        />
-      ),
+      id: "identificador",
+      value: "Identificador",
+      // Antes salía sin `render` (acceso por clave) y era la celda que peor se plegaba: un
+      // identificador con espacios («Prueba Tienda 18:06:29») caía en 3 renglones.
+      render: (row) => <CeldaUnaLinea>{row.identificador}</CeldaUnaLinea>,
     },
     {
       id: "keyPrefix",
       value: "Prefijo",
       render: (row) => (
-        <span className="font-mono">{`${row.keyPrefix}…`}</span>
+        <CeldaUnaLinea className="font-mono">{`${row.keyPrefix}…`}</CeldaUnaLinea>
       ),
     },
     {
       id: "usuarioEmail",
       value: "Usuario dedicado",
+      // El email sintético lleva guiones, y el navegador partía por CADA uno de ellos.
       render: (row) => (
-        <span className="font-mono text-muted-foreground">
+        <CeldaUnaLinea className="font-mono text-muted-foreground">
           {row.usuarioEmail}
-        </span>
+        </CeldaUnaLinea>
       ),
     },
     {
@@ -182,14 +192,50 @@ export function buildApiKeysColumns({
        */
       id: "tiendaDestino",
       value: "Tienda destino",
-      render: (row) => row.tiendaDestinoNombre ?? SIN_DATO,
+      render: (row) => (
+        <CeldaUnaLinea>{row.tiendaDestinoNombre ?? SIN_DATO}</CeldaUnaLinea>
+      ),
       minWidth: "140px",
     },
     {
       id: "createdAt",
       value: "Fecha de creación",
-      render: (row) => formatFechaCreacion(row.createdAt),
+      // «4/9/26, 1:06 p. m.» tiene tres espacios: sin esto se partía en dos renglones.
+      render: (row) => (
+        <CeldaUnaLinea>{formatFechaCreacion(row.createdAt)}</CeldaUnaLinea>
+      ),
       minWidth: "120px",
+    },
+    {
+      // El `Badge` ya trae `whitespace-nowrap` en su variante: no necesita envoltura.
+      id: "estado",
+      value: "Estado",
+      render: (row) => <EstadoApiKeyBadge value={row.estado} />,
+    },
+    {
+      // Penúltima A PROPÓSITO: su «Editar» es la acción que va ANTES del trío de la fila,
+      // para que «Eliminar» quede la última de todas.
+      id: "webhook",
+      value: "Webhook",
+      render: (row) => (
+        <WebhookAccionCell
+          ownerUsuarioId={row.usuarioId}
+          identificador={row.identificador}
+        />
+      ),
+    },
+    {
+      // ÚLTIMA columna. Dentro, el orden es Rotar · Activar/Desactivar · Eliminar (lo pone
+      // `ApiKeyAccionCell`), así que lo irreversible cierra la fila.
+      id: "acciones",
+      value: "Acciones",
+      render: (row) => (
+        <ApiKeyAccionCell
+          row={row}
+          onMutated={onMutated}
+          onEliminada={onEliminada}
+        />
+      ),
     },
   ];
 }
