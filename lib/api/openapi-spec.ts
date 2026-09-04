@@ -2,6 +2,9 @@ import { MSG_CARGA_SIN_TARIFA, MSG_FILA_SIN_TARIFA } from "@/lib/services/mensaj
 import { EVENTOS_PUBLICOS } from "@/lib/types/webhook-eventos";
 import { METRICAS_API_KEY, METRICAS_TODAS } from "@/lib/analytics/publicacion-api-key";
 import { TOPE_FILAS_HABILITAR } from "@/lib/config/habilitacion-api";
+// El literal de `penumbra` NO se reescribe aqui: se importa del contrato interno, que es donde
+// vive (126/R20). Una segunda copia es la clasica cifra duplicada que un dia diverge.
+import { PENUMBRA } from "@/lib/types/analitica-operativa";
 
 // Feature 106 — Fuente de verdad del contrato OpenAPI 3.1 del canal integrador por API key.
 // Este objeto es lo que sirve `GET /api/docs/openapi` (como JSON) y lo que renderiza Swagger UI
@@ -1529,12 +1532,13 @@ export const openApiSpec = {
           },
         },
       },
-      // 2026-08-24 — la serie publica TRES campos. `unidadDeConteo` salió del payload (es un
-      // hecho del catálogo, y va en la descripción del endpoint) y `cobertura` salió entera: su
-      // información la lleva ahora la OMISIÓN de puntos en `data`.
+      // 2026-09-04 — la serie publica CUATRO campos. `cobertura` VUELVE (marca los días no
+      // comparables en vez de omitirlos) y con ella el día en curso vuelve a `data`, marcado
+      // `parcial`. Es el mismo dato que ve la pantalla de analítica. `unidadDeConteo` sigue
+      // FUERA: es un hecho del catálogo y va en la descripción del endpoint.
       AnaliticaSerie: {
         type: "object",
-        required: ["metrica", "unidad", "data"],
+        required: ["metrica", "unidad", "data", "cobertura"],
         properties: {
           metrica: { type: "string", description: "Id de la métrica pedida.", example: "entregas" },
           unidad: {
@@ -1544,7 +1548,7 @@ export const openApiSpec = {
           data: {
             type: "array",
             description:
-              "Los días SERVIBLES del rango, en orden. NO trae un punto por cada día pedido: se omiten el día en curso (aún no cerrado) y los días por debajo del horizonte del histórico, porque ahí un cero sería falta de datos y no falta de operación. Puede venir vacío, y eso es un 200 correcto. No rellenes los huecos con ceros.",
+              "Los días del rango con dato, en orden, INCLUIDO el día en curso. Antes del 2026-09-04 el día en curso se omitía; ahora viene marcado `parcial: true`. ⚠️ Si sumas `data` para obtener un total del periodo, DESCARTA primero los puntos con `parcial: true` y los días listados en `cobertura.fechasNoComparables`: no son comparables con un día cerrado. Puede venir vacío, y eso es un 200 correcto. No rellenes los huecos con ceros.",
             items: {
               type: "object",
               required: ["fecha", "valor"],
@@ -1554,6 +1558,37 @@ export const openApiSpec = {
                   type: ["number", "null"],
                   description: "`null` significa «no se sabe» (por ejemplo, denominador cero). NUNCA se sustituye por 0. Un día con `valor: null` SÍ está en `data`: está cerrado, pero su resultado es indefinido.",
                 },
+                parcial: {
+                  type: "boolean",
+                  enum: [true],
+                  description: "Presente y `true` SOLO en el día en curso, que aún no está cerrado: su cifra se lee más baja que la de un día completo y NO es comparable. Ausente en cualquier otro día (nunca llega como `false`).",
+                },
+                corteAt: {
+                  type: "string",
+                  format: "date-time",
+                  description: "Instante ISO-8601 usado como cota superior del día parcial. Solo acompaña a `parcial: true`.",
+                  example: "2026-08-21T18:40:00.000Z",
+                },
+              },
+            },
+          },
+          cobertura: {
+            type: "object",
+            description:
+              "Qué días de esta serie no son comparables, y por qué. Siempre presente.",
+            required: ["fechasNoComparables", "penumbra"],
+            properties: {
+              fechasNoComparables: {
+                type: "array",
+                description:
+                  "Días del rango por debajo del horizonte del histórico: ahí un cero es falta de DATOS, no falta de operación. Normalmente vacío.",
+                items: { type: "string", format: "date" },
+              },
+              penumbra: {
+                type: "string",
+                enum: [PENUMBRA],
+                description:
+                  "Limitación permanente del histórico, nunca estimada: las órdenes que ya estaban vivas cuando nació el historial y nunca volvieron a cambiar de estado no entran en ningún día.",
               },
             },
           },

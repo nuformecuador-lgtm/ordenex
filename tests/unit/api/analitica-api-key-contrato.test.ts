@@ -9,15 +9,22 @@
 // el modulo existe para impedir. Por eso las series de este archivo se construyen con campos
 // extra INYECTADOS a proposito: un fixture «limpio» no distinguiria una proyeccion de un spread.
 //
-// ⚠ ENMIENDA DEL 2026-08-24 — AQUI SE AFIRMABA LO CONTRARIO DE LO QUE HOY ES CIERTO. Este
-// archivo exigia que `cobertura` viajara SIEMPRE (R29), que la serie publicara `unidadDeConteo` y
-// que el punto del dia en curso saliera marcado `parcial: true` con su `corteAt`. Nada de eso se
-// publica ya. Los tests no se borraron: cada uno tenia un motivo, y el motivo SIGUE VIVO con otra
-// forma. `cobertura` y `parcial` se siguen LEYENDO, y lo que hacen ahora es DECIDIR QUE PUNTOS NO
-// SE PUBLICAN: un dia bajo el horizonte del historial y el dia en curso se OMITEN de `data` en
-// vez de salir como un numero indistinguible de un dia flojo. La ausencia es el unico signo
-// honesto que queda cuando no hay marcas. Los describe de abajo comprueban esa omision con la
-// misma insistencia con la que antes comprobaban la marca.
+// ⏳ 2026-09-04 — SEGUNDA VUELTA, Y CONVIENE LEER LAS DOS. Aqui decia que la enmienda del
+// 2026-08-24 habia retirado `cobertura`, `unidadDeConteo`, `parcial` y `corteAt`, y que el dia en
+// curso y los dias bajo el horizonte se OMITIAN de `data` porque «la ausencia es el unico signo
+// honesto que queda cuando no hay marcas».
+//
+// Vuelven `cobertura`, `parcial` y `corteAt` —no `unidadDeConteo`— y con ellas vuelven los puntos
+// que se omitian: el canal por API key sirve lo MISMO que la pantalla. El motivo de aquella
+// enmienda no se declara equivocado, se declara SUPERADO: la omision era honesta solo mientras el
+// contrato no tuviera con que marcar; ahora lo tiene. Y la omision tenia su propio fallo mudo,
+// medido en produccion el 2026-09-04 —un integrador cargo 60 ordenes y la analitica no le
+// devolvia nada de ese dia—: para quien no ha leido la cabecera del DTO, «hoy no aparece» y «hoy
+// fue cero» son igual de indistinguibles.
+//
+// Los tests no se borraron, otra vez: cada uno tenia un motivo y el motivo sigue vivo con otra
+// forma. Donde antes se comprobaba que el punto DESAPARECIA, ahora se comprueba que aparece CON
+// SU MARCA — y que la marca es exactamente la que distingue un dia a medias de un dia flojo.
 
 import { describe, expect, it } from "vitest";
 
@@ -39,19 +46,17 @@ const UUID_MENSAJERO = "3f7c1a2e-9b44-4d51-8a0e-2c6d5f8b1e77";
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 /**
- * Las claves que el contrato publico DEJO DE EMITIR el 2026-08-24. Ninguna puede aparecer en la
- * cadena serializada, en ningun nivel. `puntos` esta en la lista porque el array se llama `data`:
- * publicar los dos nombres a la vez seria dos contratos para lo mismo.
+ * Las claves del contrato INTERNO que siguen sin publicarse. Ninguna puede aparecer en la cadena
+ * serializada, en ningun nivel.
+ *
+ * `puntos` esta en la lista porque el array publico se llama `data`: publicar los dos nombres a la
+ * vez seria dos contratos para lo mismo. `unidadDeConteo` porque es un hecho del CATALOGO y se
+ * documenta una vez en la descripcion del endpoint. `dimension` porque P2 la prohibe entera aqui.
+ *
+ * ⏳ 2026-09-04: salen de esta lista `cobertura`, `penumbra`, `fechasNoComparables`, `parcial` y
+ * `corteAt` — ahora SI se publican, y hay tests dedicados que lo exigen mas abajo.
  */
-const CLAVES_RETIRADAS = [
-  "cobertura",
-  "penumbra",
-  "fechasNoComparables",
-  "unidadDeConteo",
-  "parcial",
-  "corteAt",
-  "puntos",
-] as const;
+const CLAVES_RETIRADAS = ["unidadDeConteo", "puntos", "dimension"] as const;
 
 /**
  * La serie interna nominal: DOS puntos servibles y NADA que deba omitirse. Los casos de omision
@@ -117,13 +122,12 @@ function fechas(dto: AnaliticaSerieApiKeyDTO): string[] {
 /* -------------------------------------------------------------------------- */
 
 describe("R28 — la respuesta 200 declara metrica, unidad y data, y nada mas", () => {
-  it("proyecta exactamente las TRES claves de nivel superior de una serie, ni una mas", () => {
-    // P4-bis: `rango` no esta aqui, es de la RESPUESTA. Enmienda 2026-08-24: tampoco estan
-    // `unidadDeConteo` (hecho del catalogo, documentado en el endpoint) ni `cobertura` (su
-    // informacion la lleva la omision de puntos).
+  it("proyecta exactamente las CUATRO claves de nivel superior de una serie, ni una mas", () => {
+    // P4-bis: `rango` no esta aqui, es de la RESPUESTA. `unidadDeConteo` sigue fuera (hecho del
+    // catalogo, documentado en el endpoint). 2026-09-04: `cobertura` vuelve.
     const dto = proyectarSerieApiKey(serieBase());
 
-    expect(Object.keys(dto).sort()).toEqual(["data", "metrica", "unidad"]);
+    expect(Object.keys(dto).sort()).toEqual(["cobertura", "data", "metrica", "unidad"]);
   });
 
   it("publica el rango del SOBRE como YYYY-MM-DD CR con `hasta` inclusivo, no como los Date internos", () => {
@@ -176,20 +180,20 @@ describe("R28 — la respuesta 200 declara metrica, unidad y data, y nada mas", 
     const dto = proyectarSerieApiKey({ ...serieBase(), puntos: [] });
 
     expect(dto.data).toEqual([]);
-    expect(Object.keys(dto).sort()).toEqual(["data", "metrica", "unidad"]);
+    expect(Object.keys(dto).sort()).toEqual(["cobertura", "data", "metrica", "unidad"]);
   });
 });
 
 /* -------------------------------------------------------------------------------------------- */
-/* ENMIENDA 2026-08-24 (en sustitucion de R29) — LA OMISION ES EL SIGNO                          */
+/* 2026-09-04 — LA MARCA ES EL SIGNO (en sustitucion de la enmienda del 2026-08-24)              */
 /*                                                                                                */
-/* Antes, `cobertura` y `parcial` viajaban para que el integrador supiera que dias no eran        */
-/* legibles. Ahora no viajan, asi que esos dias NO SE PUBLICAN: un cero silencioso se leeria como */
-/* una caida de la operacion que no ocurrio.                                                      */
+/* Antes estos casos DESAPARECIAN de `data`. Ahora se publican con la marca que los hace          */
+/* legibles, que es la misma que recibe la pantalla. Lo que estos tests protegen no ha cambiado:  */
+/* que un dia a medias NUNCA sea indistinguible de un dia cerrado con poca operacion.             */
 /* -------------------------------------------------------------------------------------------- */
 
-describe("2026-08-24 — `data` OMITE el dia en curso y los dias bajo el horizonte del historial", () => {
-  it("un punto con `parcial: true` NO aparece en `data`", () => {
+describe("2026-09-04 — `data` publica el dia en curso MARCADO, y no lo omite", () => {
+  it("un punto con `parcial: true` aparece en `data` con su marca y su `corteAt`", () => {
     const serie: SerieOperativa = {
       ...serieBase(),
       puntos: [
@@ -200,12 +204,41 @@ describe("2026-08-24 — `data` OMITE el dia en curso y los dias bajo el horizon
 
     const dto = proyectarSerieApiKey(serie);
 
-    // El dia en curso no esta cerrado en el rollup: siempre se veria mas bajo que el anterior.
-    expect(fechas(dto)).toEqual(["2026-08-20"]);
-    expect(JSON.stringify(dto)).not.toContain("2026-08-21");
+    expect(fechas(dto)).toEqual(["2026-08-20", "2026-08-21"]);
+    expect(dto.data[1]).toEqual({
+      fecha: "2026-08-21",
+      valor: 12,
+      parcial: true,
+      corteAt: "2026-08-21T18:40:00.000Z",
+    });
   });
 
-  it("un punto cuya fecha esta en `fechasNoComparables` NO aparece en `data`", () => {
+  it("un dia CERRADO no lleva `parcial` ni `corteAt`: las marcas son del dia en curso y de nadie mas", () => {
+    // El fallo que este test caza es emitir `parcial: false` en todos los puntos «por simetria».
+    // El contrato interno declara `parcial?: true`, asi que un `false` publicado inventaria un
+    // tercer estado que dentro no existe, y obligaria al integrador a distinguir dos formas de
+    // «no es parcial».
+    const dto = proyectarSerieApiKey(serieBase());
+
+    for (const punto of dto.data) {
+      expect(Object.keys(punto).sort()).toEqual(["fecha", "valor"]);
+      expect(punto).not.toHaveProperty("parcial");
+      expect(punto).not.toHaveProperty("corteAt");
+    }
+  });
+
+  it("un parcial SIN `corteAt` publica la marca igual: la ausencia del instante no borra el aviso", () => {
+    const serie: SerieOperativa = {
+      ...serieBase(),
+      puntos: [{ fecha: "2026-08-21", valor: 12, parcial: true }],
+    };
+
+    const punto = proyectarSerieApiKey(serie).data[0];
+
+    expect(punto).toEqual({ fecha: "2026-08-21", valor: 12, parcial: true });
+  });
+
+  it("un punto bajo el horizonte aparece en `data`, y `cobertura` dice cual es", () => {
     const serie: SerieOperativa = {
       ...serieBase(),
       puntos: [
@@ -218,13 +251,21 @@ describe("2026-08-24 — `data` OMITE el dia en curso y los dias bajo el horizon
 
     const dto = proyectarSerieApiKey(serie);
 
-    // Bajo el horizonte del historial la cifra vale poco por falta de DATOS, no por falta de
-    // operacion. Publicarla seria enseniar una caida que no ocurrio.
-    expect(fechas(dto)).toEqual(["2026-08-19", "2026-08-20"]);
-    expect(JSON.stringify(dto)).not.toContain("2026-08-18");
+    // El dia se publica —su cifra es la que es— y lo que impide leerlo como una caida de la
+    // operacion es que su fecha esta listada en `cobertura`.
+    expect(fechas(dto)).toEqual(["2026-08-18", "2026-08-19", "2026-08-20"]);
+    expect(dto.cobertura.fechasNoComparables).toEqual(["2026-08-18"]);
   });
 
-  it("un punto normal SI aparece, y el orden de los que quedan se conserva", () => {
+  it("`cobertura` viaja SIEMPRE, tambien cuando no hay ningun dia no comparable", () => {
+    // Que sea obligatoria es lo que permite al integrador escribir un solo camino de lectura. Una
+    // `cobertura?` opcional le obligaria a distinguir «no hay dias raros» de «no me lo dijeron».
+    const dto = proyectarSerieApiKey(serieBase());
+
+    expect(dto.cobertura).toEqual({ fechasNoComparables: [], penumbra: PENUMBRA });
+  });
+
+  it("el orden de los puntos se conserva tal cual venia, sin reordenar por fecha ni por marca", () => {
     const serie: SerieOperativa = {
       ...serieBase(),
       puntos: [
@@ -239,44 +280,20 @@ describe("2026-08-24 — `data` OMITE el dia en curso y los dias bajo el horizon
 
     const dto = proyectarSerieApiKey(serie);
 
-    // Se van el no comparable (18) y el parcial (21); los demas quedan EN SU ORDEN, no
-    // reordenados ni renumerados.
     expect(dto.data).toEqual([
       { fecha: "2026-08-17", valor: 1 },
+      { fecha: "2026-08-18", valor: 2 },
       { fecha: "2026-08-19", valor: 3 },
       { fecha: "2026-08-20", valor: 4 },
+      { fecha: "2026-08-21", valor: 5, parcial: true },
     ]);
   });
 
-  it("los dias omitidos no se rellenan con `0` ni con `null`: desaparecen", () => {
-    // El fallo que este test existe para cazar es «marcar el hueco» en vez de quitarlo: un punto
-    // con valor 0 (o null) en la fecha omitida seria indistinguible de un dia real sin actividad.
-    const serie: SerieOperativa = {
-      ...serieBase(),
-      puntos: [
-        { fecha: "2026-08-19", valor: 41 },
-        { fecha: "2026-08-20", valor: 37, parcial: true },
-      ],
-    };
-
-    const dto = proyectarSerieApiKey(serie);
-
-    expect(dto.data).toHaveLength(1);
-    expect(dto.data.some((p) => p.fecha === "2026-08-20")).toBe(false);
-  });
-
-  it("una serie en la que TODOS los puntos se omiten produce `data: []`, sin lanzar", () => {
-    // Es el caso `desde=hoy&hasta=hoy`: se pidio un dia y ese dia todavia no esta cerrado. Es un
-    // 200 legitimo, no un error ni un estado imposible. El unico throw del modulo cubre otra
-    // cosa (cero SERIES), y no debe dispararse aqui.
-    const serie: SerieOperativa = {
-      ...serieBase(),
-      puntos: [
-        { fecha: "2026-08-20", valor: 9 },
-        { fecha: "2026-08-21", valor: 12, parcial: true },
-      ],
-      cobertura: { fechasNoComparables: ["2026-08-20"], penumbra: PENUMBRA },
-    };
+  it("una serie SIN puntos sigue produciendo `data: []`, sin lanzar", () => {
+    // Ya no es el caso `desde=hoy&hasta=hoy` —ese ahora trae el punto de hoy marcado—, pero el
+    // estado sigue siendo alcanzable (un rango sin dato alguno) y sigue siendo un 200 legitimo.
+    // El unico throw del modulo cubre otra cosa (cero SERIES) y no debe dispararse aqui.
+    const serie: SerieOperativa = { ...serieBase(), puntos: [] };
 
     let dto: AnaliticaRespuestaApiKeyDTO | undefined;
     expect(() => {
@@ -285,14 +302,13 @@ describe("2026-08-24 — `data` OMITE el dia en curso y los dias bajo el horizon
 
     expect(dto?.metricas).toHaveLength(1);
     expect(dto?.metricas[0]?.data).toEqual([]);
-    // Y el sobre sigue completo: la serie existe, con su metrica y su unidad.
     expect(dto?.metricas[0]?.metrica).toBe("entregas");
   });
 
-  it("el `rango` es el ECO DE LO PEDIDO y NO se recorta al ultimo dia servible", () => {
-    // Recortar `hasta` devolveria un rango invertido —o un 422— a quien pida `desde=hoy&hasta=hoy`,
-    // que es el patron de un integrador que consulta a diario. El eco intacto responde 200 con
-    // `data: []`, que es la verdad: «pediste hoy, hoy todavia no esta cerrado».
+  it("el `rango` es el ECO DE LO PEDIDO y no se recorta al ultimo dia cerrado", () => {
+    // `desde=hoy&hasta=hoy` es el patron de un integrador que consulta a diario. Recortar `hasta`
+    // le devolveria un rango invertido —o un 422— por una pregunta legitima. Con el eco intacto
+    // responde 200, y desde el 2026-09-04 con el punto de hoy DENTRO, marcado.
     const mismoDia: SerieOperativa = {
       ...serieBase(),
       rango: {
@@ -308,21 +324,21 @@ describe("2026-08-24 — `data` OMITE el dia en curso y los dias bajo el horizon
     const dto = proyectarRespuestaApiKey([mismoDia]);
 
     expect(dto.rango).toEqual({ desde: "2026-08-21", hasta: "2026-08-21" });
-    expect(dto.metricas[0]?.data).toEqual([]);
+    expect(dto.metricas[0]?.data).toEqual([{ fecha: "2026-08-21", valor: 12, parcial: true }]);
   });
 
-  it("la lectura de `fechasNoComparables` no depende del orden ni del tamanio de la lista", () => {
+  it("`fechasNoComparables` se publica en el orden en que venia, sin ordenar ni deduplicar", () => {
+    // No se toca el contenido: es un eco de lo que decidio `esNoComparable` (feature 125), y
+    // reordenarlo aqui seria inventar una garantia que el productor no da.
     const serie: SerieOperativa = {
       ...serieBase(),
-      puntos: [
-        { fecha: "2026-08-17", valor: 1 },
-        { fecha: "2026-08-18", valor: 2 },
-        { fecha: "2026-08-19", valor: 3 },
-      ],
       cobertura: { fechasNoComparables: ["2026-08-19", "2026-08-17"], penumbra: PENUMBRA },
     };
 
-    expect(fechas(proyectarSerieApiKey(serie))).toEqual(["2026-08-18"]);
+    expect(proyectarSerieApiKey(serie).cobertura.fechasNoComparables).toEqual([
+      "2026-08-19",
+      "2026-08-17",
+    ]);
   });
 });
 
@@ -355,9 +371,9 @@ describe("R30 — todo numero es `number | null` y no sale ningun Date", () => {
     expect(() => JSON.stringify(dto)).not.toThrow();
   });
 
-  it("un `Date` colado como `corteAt` no se convierte ni se publica: el punto entero se omite", () => {
-    // Antes se normalizaba a ISO porque `corteAt` viajaba. Ya no viaja, y el punto que lo traia
-    // es justamente el parcial: no hay `Date` que normalizar porque no hay campo que emitir.
+  it("un `Date` colado como `corteAt` sale normalizado a ISO, nunca como Date", () => {
+    // `corteAt` volvio a viajar el 2026-09-04, asi que vuelve a haber un `Date` que normalizar.
+    // Un `Date` crudo serializa distinto segun quien lo serialice, que es lo que R30 prohibe.
     const serie = {
       ...serieBase(),
       puntos: [
@@ -373,9 +389,22 @@ describe("R30 — todo numero es `number | null` y no sale ningun Date", () => {
 
     const dto = proyectarSerieApiKey(serie);
 
-    expect(fechas(dto)).toEqual(["2026-08-20"]);
+    expect(dto.data[1]?.corteAt).toBe("2026-08-21T18:40:00.000Z");
     expect(recolectarTipos(dto)).toEqual([]);
-    expect(JSON.stringify(dto)).not.toContain("corteAt");
+    expect(() => JSON.stringify(dto)).not.toThrow();
+  });
+
+  it("un `corteAt` que no es ni cadena ni Date se descarta, y el punto conserva su `parcial`", () => {
+    // Mejor un punto sin instante de corte que un instante inventado: la marca que de verdad
+    // importa —«esto no esta cerrado»— no depende de que el corte sea legible.
+    const serie = {
+      ...serieBase(),
+      puntos: [{ fecha: "2026-08-21", valor: 12, parcial: true, corteAt: 1_756_000_000_000 }],
+    } as unknown as SerieOperativa;
+
+    const punto = proyectarSerieApiKey(serie).data[0];
+
+    expect(punto).toEqual({ fecha: "2026-08-21", valor: 12, parcial: true });
   });
 
   it("los `Date` del RangoResuelto se quedan dentro: el rango publico son dos cadenas", () => {
@@ -413,7 +442,7 @@ describe("R31 — un campo nuevo del contrato interno NO aparece en la respuesta
 
     expect(dto).not.toHaveProperty("costoTotalCentimos");
     expect(dto).not.toHaveProperty("diagnosticoInterno");
-    expect(Object.keys(dto).sort()).toEqual(["data", "metrica", "unidad"]);
+    expect(Object.keys(dto).sort()).toEqual(["cobertura", "data", "metrica", "unidad"]);
   });
 
   it("un campo extra inyectado en un PUNTO tampoco cruza", () => {
@@ -429,7 +458,35 @@ describe("R31 — un campo nuevo del contrato interno NO aparece en la respuesta
     expect(Object.keys(dto.data[0] ?? {}).sort()).toEqual(["fecha", "valor"]);
   });
 
-  it("un campo extra inyectado en `cobertura` no cruza: `cobertura` entera se queda dentro", () => {
+  it("un campo extra inyectado en un punto PARCIAL tampoco cruza: la marca no abre la puerta", () => {
+    const serie = {
+      ...serieBase(),
+      puntos: [
+        {
+          fecha: "2026-08-21",
+          valor: 12,
+          parcial: true,
+          corteAt: "2026-08-21T18:40:00.000Z",
+          mensajeroId: UUID_MENSAJERO,
+          campoFuturo: 1,
+        },
+      ],
+    } as unknown as SerieOperativa;
+
+    const dto = proyectarSerieApiKey(serie);
+
+    expect(Object.keys(dto.data[0] ?? {}).sort()).toEqual([
+      "corteAt",
+      "fecha",
+      "parcial",
+      "valor",
+    ]);
+  });
+
+  it("un campo extra inyectado en `cobertura` no cruza, aunque `cobertura` ya SI se publique", () => {
+    // Que un objeto entre en el contrato publico no lo convierte en un pasillo abierto: se sigue
+    // proyectando campo a campo. Este test cae si alguien sustituye `proyectarCobertura` por un
+    // `cobertura: serie.cobertura`.
     const serie = {
       ...serieBase(),
       cobertura: {
@@ -439,11 +496,10 @@ describe("R31 — un campo nuevo del contrato interno NO aparece en la respuesta
       },
     } as unknown as SerieOperativa;
 
-    const serializada = JSON.stringify(proyectarSerieApiKey(serie));
+    const dto = proyectarSerieApiKey(serie);
 
-    expect(serializada).not.toContain("horizonteInterno");
-    expect(serializada).not.toContain("cobertura");
-    expect(serializada).not.toContain("penumbra");
+    expect(JSON.stringify(dto)).not.toContain("horizonteInterno");
+    expect(Object.keys(dto.cobertura).sort()).toEqual(["fechasNoComparables", "penumbra"]);
   });
 
   it("`nota` (R35 de la 126) no se publica: `sin_gestionar` no esta en la lista blanca de P1", () => {
@@ -466,29 +522,47 @@ describe("R31 — un campo nuevo del contrato interno NO aparece en la respuesta
     } as unknown as SerieOperativa;
 
     expect([...clavesProfundas(proyectarRespuestaApiKey([serie]))].sort()).toEqual(
-      ["data", "desde", "fecha", "hasta", "metrica", "metricas", "rango", "unidad", "valor"].sort(),
+      [
+        "cobertura",
+        "corteAt",
+        "data",
+        "desde",
+        "fecha",
+        "fechasNoComparables",
+        "hasta",
+        "metrica",
+        "metricas",
+        "parcial",
+        "penumbra",
+        "rango",
+        "unidad",
+        "valor",
+      ].sort(),
     );
   });
 
-  it("la cadena serializada no contiene NINGUNA de las claves retiradas el 2026-08-24", () => {
+  it("la cadena serializada no contiene NINGUNA de las claves que siguen sin publicarse", () => {
     // Barato y contundente: un `JSON.stringify` de la respuesta completa, con una serie que trae
-    // internamente TODO lo que se dejo de publicar (unidadDeConteo, cobertura con penumbra y
-    // fechas no comparables, un punto parcial con corteAt).
-    const serie: SerieOperativa = {
+    // internamente lo que NO se publica (`unidadDeConteo`, y un punto con `dimension`).
+    const serie = {
       ...serieBase(),
       puntos: [
-        { fecha: "2026-08-19", valor: 41 },
+        { fecha: "2026-08-19", valor: 41, dimension: "ENTREGADO" },
         { fecha: "2026-08-20", valor: 37 },
         { fecha: "2026-08-21", valor: 12, parcial: true, corteAt: "2026-08-21T18:40:00.000Z" },
       ],
       cobertura: { fechasNoComparables: ["2026-08-19"], penumbra: PENUMBRA },
-    };
+    } as unknown as SerieOperativa;
 
     const serializada = JSON.stringify(proyectarRespuestaApiKey([serie]));
 
     for (const clave of CLAVES_RETIRADAS) expect(serializada).not.toContain(clave);
-    // Y lo que SI queda, queda: el array se llama `data` y trae el unico dia servible.
-    expect(JSON.parse(serializada).metricas[0].data).toEqual([{ fecha: "2026-08-20", valor: 37 }]);
+    // Y lo que SI queda, queda: los TRES dias, con el ultimo marcado.
+    expect(JSON.parse(serializada).metricas[0].data).toEqual([
+      { fecha: "2026-08-19", valor: 41 },
+      { fecha: "2026-08-20", valor: 37 },
+      { fecha: "2026-08-21", valor: 12, parcial: true, corteAt: "2026-08-21T18:40:00.000Z" },
+    ]);
   });
 });
 
@@ -580,12 +654,12 @@ describe("R45 — la respuesta 200 es SIEMPRE el sobre `{ rango, metricas[] }`",
     ]);
   });
 
-  it("cada serie del lote se omite SEGUN SU PROPIA cobertura, no segun la de la primera", () => {
-    // `fechasNoComparables` depende del historial que cada metrica necesita, asi que dos
-    // metricas del mismo rango pueden no ser legibles en los mismos dias. Aplicar la cobertura de
-    // una a todas borraria dias buenos de unas y publicaria dias malos de otras. Antes esto se
-    // comprobaba mirando la `cobertura` publicada; ahora se comprueba en lo unico que queda: QUE
-    // DIAS SOBREVIVEN en cada serie.
+  it("cada serie del lote lleva SU PROPIA cobertura, no la de la primera", () => {
+    // `fechasNoComparables` depende del historial que cada metrica necesita, asi que dos metricas
+    // del mismo rango pueden no ser legibles en los mismos dias. Publicar la cobertura de una
+    // para todas marcaria dias buenos de unas y dejaria sin marcar dias malos de otras. Por eso
+    // `cobertura` vive en la SERIE y no en el sobre —al reves que `rango`, que si es comun por
+    // construccion (R48)—.
     const dto = proyectarRespuestaApiKey([
       { ...serieBase(), metricaId: "entregas" },
       {
@@ -595,8 +669,12 @@ describe("R45 — la respuesta 200 es SIEMPRE el sobre `{ rango, metricas[] }`",
       },
     ]);
 
+    // Los dos dias se publican en AMBAS: lo que cambia es que solo la segunda marca el 19.
     expect(fechas(dto.metricas[0]!)).toEqual(["2026-08-19", "2026-08-20"]);
-    expect(fechas(dto.metricas[1]!)).toEqual(["2026-08-20"]);
+    expect(fechas(dto.metricas[1]!)).toEqual(["2026-08-19", "2026-08-20"]);
+    expect(dto.metricas[0]?.cobertura.fechasNoComparables).toEqual([]);
+    expect(dto.metricas[1]?.cobertura.fechasNoComparables).toEqual(["2026-08-19"]);
+    // Y sigue sin estar en el sobre: es de la serie.
     expect(dto).not.toHaveProperty("cobertura");
   });
 
