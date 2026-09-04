@@ -32,11 +32,12 @@ import type { ApiOrdenEliminacionDTO } from "@/lib/types/api-orden";
 // 2026-08-27 que SOLO el `maestro` borra, con este motivo: borrar retira la orden de todos los
 // listados —incluidos los de la tienda dueña— y con dos roles capaces de hacerlo el rastro deja
 // de ser una sola persona. La ficha 320 lo revierte EN PARTE y a sabiendas (decision del humano
-// del 2026-08-28): en los CUATRO estados eliminables el paquete esta quieto y la orden no esta en
+// del 2026-08-28): en los estados eliminables el paquete esta quieto y la orden no esta en
 // ningun cierre ni en la ruta de ningun mensajero, y la API key identifica al autor
 // (`apiKeyId`). El rastro no se pierde: cambia de forma —de "un usuario maestro" a "esta
-// credencial"—. Lo que NO se amplia es el predicado de estado: los cuatro de
-// `ESTADOS_ELIMINABLES` y nada mas.
+// credencial"—. Lo que NO se amplia es el predicado: los estados de `ESTADOS_ELIMINABLES` y nada
+// mas, y desde el 2026-09-04 tampoco basta con ellos —hace falta ademas que la orden no tenga
+// ningun intento de entrega (`esOrdenEliminable`)—.
 
 /**
  * Resultado de dominio del borrado por API (sin HTTP):
@@ -44,7 +45,11 @@ import type { ApiOrdenEliminacionDTO } from "@/lib/types/api-orden";
  *   - `not_found` -> no existe, YA borrada, o es de OTRA tienda. Los tres casos colapsan a
  *                    proposito: distinguirlos filtraria la existencia de ordenes ajenas, que es
  *                    exactamente lo que el 404 uniforme del canal (106/R23, 177/R11) evita.
- *   - `conflict`  -> existe y es propia, pero su estado NO esta en `ESTADOS_ELIMINABLES`.
+ *   - `conflict`  -> existe y es propia, pero NO cumple el predicado de borrado: su estado no
+ *                    esta en `ESTADOS_ELIMINABLES`, o ya tiene algun intento de entrega. Los DOS
+ *                    motivos colapsan en el mismo `conflict` a proposito (2026-09-04): decir
+ *                    cual fallo le daria al integrador informacion sobre la operacion interna de
+ *                    la orden que el 404 uniforme de este canal se cuida de no filtrar.
  */
 export type ApiOrdenEliminacionResult =
   | { status: "ok"; data: ApiOrdenEliminacionDTO }

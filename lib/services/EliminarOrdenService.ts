@@ -6,9 +6,16 @@ import type {
   EliminarOrdenServiceResult,
   IEliminarOrdenService,
 } from "@/lib/interfaces/services/IEliminarOrdenService";
-import { esEstadoEliminable } from "@/lib/types/order-status-eliminables";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
+// Las DOS: `esOrdenEliminable` DECIDE, y `esEstadoEliminable` solo sirve para elegir CUAL de los
+// dos motivos se devuelve. La decision nunca sale de la primera mitad sola.
+import {
+  esEstadoEliminable,
+  esOrdenEliminable,
+} from "@/lib/types/order-status-eliminables";
 import { resolverAlcanceBorradoOrden } from "@/lib/services/alcance-borrado-orden";
 import {
+  MSG_ORDEN_CON_INTENTOS,
   MSG_ORDEN_NO_ELIMINABLE,
   MSG_ORDEN_NO_EXISTE,
   MSG_ORDEN_YA_BORRADA,
@@ -28,13 +35,36 @@ export type EliminarOrdenRepo = Pick<
 >;
 
 // FICHA 319 (2026-08-28) — AQUI VIVIA `EliminarOrdenHistorial`, el `Pick` de
-// `idsConGestionPosteriorEnLote` con el que este service contaba las transiciones de la orden.
-// SE RETIRA con el conteo, no se deja inyectado sin uso: una dependencia que nadie consulta es
-// exactamente el cable suelto que hace creer al siguiente lector que la regla sigue mirando el
-// historial. Efecto colateral medible: el borrado pasa de DOS consultas a UNA.
+// `idsConGestionPosteriorEnLote` con el que este service contaba las TRANSICIONES de la orden.
+// Se retiro con aquel conteo, y no se deja inyectado sin uso: una dependencia que nadie consulta
+// es el cable suelto que hace creer al siguiente lector que la regla sigue mirando el historial.
+
+/**
+ * ⭑ PEDIDO HUMANO 2026-09-04 — EL HISTORIAL VUELVE, PARA OTRA PREGUNTA.
+ *
+ * Y hay que leerlo despacio, porque a un metro de distancia parece que se deshace la 319. NO ES
+ * LO MISMO:
+ *   - lo que se retiro: `idsConGestionPosteriorEnLote`, «¿esta orden se movio alguna vez?».
+ *     Contaba CUALQUIER transicion, asi que imprimir la etiqueta descalificaba la orden y dejaba
+ *     la ventana vacia (CERO eliminables de 429 vivas en produccion).
+ *   - lo que entra: `contarIntentosEnLote`, «¿se INTENTO ENTREGAR alguna vez?» (feature 215).
+ *     Cuenta cierres aprobados con una gestion vigente de `rechazada`/`devuelta`/`reprogramada`.
+ *     Generar la guia, recolectar y mover el paquete entre bodegas NO lo incrementan.
+ *
+ * El metodo retirado sigue prohibido aqui, y la guardia lo afirma por su nombre. La razon de que
+ * este si se acepte es que no reintroduce el modo de fallo: el numero se queda en `0` durante
+ * toda la ventana que la 319 abrio.
+ *
+ * `Pick` y no la interfaz entera, como en el resto del repo: este service pregunta UNA cosa al
+ * historial y no debe poder hacer nada mas con el.
+ */
+export type EliminarOrdenHistorial = Pick<IOrdenHistorialService, "contarIntentosEnLote">;
 
 export class EliminarOrdenService implements IEliminarOrdenService {
-  constructor(private readonly repo: EliminarOrdenRepo) {}
+  constructor(
+    private readonly repo: EliminarOrdenRepo,
+    private readonly intentos: EliminarOrdenHistorial,
+  ) {}
 
   async eliminar(
     input: EliminarOrdenInput,
@@ -74,6 +104,17 @@ export class EliminarOrdenService implements IEliminarOrdenService {
     const ordenes = await this.repo.findByIdsForTransicion(ordenIds);
     const ordenMap = new Map(ordenes.map((o) => [o.id, o]));
 
+    // 2b. LOS INTENTOS DE ENTREGA DEL LOTE, en UNA sola consulta (pedido humano 2026-09-04).
+    // Se pide para TODO el lote de golpe y no por orden dentro del bucle: una consulta por fila
+    // es el incumplimiento que la feature 215 (R7) existe para impedir, y aqui el lote es de N.
+    // Las ordenes sin intentos NO vienen en el Map; el `?? 0` de abajo resuelve el default, que
+    // es un valor CONOCIDO y no un dato ausente (215/R8).
+    //
+    // Se consulta ANTES del bucle y para el lote entero —incluidas las que ya sabemos que van a
+    // ser rechazadas por estado— porque el coste es el mismo (una consulta) y porque acotar la
+    // lista obligaria a un primer recorrido solo para armarla.
+    const intentosPorOrden = await this.intentos.contarIntentosEnLote(ordenIds);
+
     const detalle: DetalleConflicto[] = [];
     for (const id of ordenIds) {
       const orden = ordenMap.get(id);
@@ -112,8 +153,25 @@ export class EliminarOrdenService implements IEliminarOrdenService {
       // La lista y el porque de cada estado viven en `lib/types/order-status-eliminables.ts`, y
       // es la MISMA que consulta `OrdenService` para decidir si ofrece el boton. Sigue fallando
       // CERRADO: es una lista de INCLUSION, lo que no esta en ella no se borra.
+      //
+      // ⭑ PEDIDO HUMANO 2026-09-04 — LA REGLA PASA A TENER DOS MITADES y las dos se piden aqui,
+      // a traves de `esOrdenEliminable`. La lista de estados crece a SIETE (entran los dos
+      // `en_ruta_*` y `por_recoger`) y a cambio se exige CERO INTENTOS DE ENTREGA. No es el
+      // conteo que la 319 retiro —aquel contaba transiciones y lo rompia imprimir la etiqueta—;
+      // este cuenta cierres aprobados con gestion vigente, que es «se intento entregar». El
+      // porque completo, en la cabecera de `order-status-eliminables.ts`.
+      //
+      // LOS DOS MOTIVOS SE DISTINGUEN a proposito: el de estado se puede resolver esperando, el
+      // de intentos NO se resuelve nunca (el conteo es monotono creciente, 215/R32). Un solo
+      // motivo para los dos dejaria al operador reintentando sobre una orden que jamas sera
+      // borrable.
+      const intentos = intentosPorOrden.get(id) ?? 0;
       if (!esEstadoEliminable(orden.estatusValue)) {
         detalle.push({ ordenId: id, motivo: MSG_ORDEN_NO_ELIMINABLE });
+        continue;
+      }
+      if (!esOrdenEliminable(orden.estatusValue, intentos)) {
+        detalle.push({ ordenId: id, motivo: MSG_ORDEN_CON_INTENTOS });
       }
     }
     // Todo-o-nada por lote, como `deshacerAsignacion`: si UNA orden del lote no se puede borrar,

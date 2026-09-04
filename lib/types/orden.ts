@@ -466,16 +466,22 @@ export type OrdenListItemDTO = OrdenDTO & {
   intentosEntrega?: number;
   /**
    * `true` si esta orden SE PUEDE ELIMINAR. Lo resuelve el servidor con el mismo predicado que
-   * autoriza el borrado (`esEstadoEliminable`, de `lib/types/order-status-eliminables.ts`), de
+   * autoriza el borrado (`esOrdenEliminable`, de `lib/types/order-status-eliminables.ts`), de
    * modo que la pantalla no puede ofrecer un boton que el servidor vaya a rechazar — que es el
    * fallo que este campo existe para impedir, y no un adorno.
    *
    * FICHA 319 (2026-08-28) — se llamaba `sinGestion` y significaba «no registra gestion
    * posterior a su creacion», que era el criterio del 2026-08-27. Ese criterio se retiro (el
    * conteo de transiciones descalificaba una orden solo por haberle impreso la etiqueta: CERO
-   * eliminables de 429 vivas en produccion) y hoy manda la LISTA DE ESTADOS. El nombre cambia
+   * eliminables de 429 vivas en produccion) y paso a mandar la LISTA DE ESTADOS. El nombre cambia
    * con el: dejarlo diciendo `sinGestion` haria que quien lo leyera dedujera una regla que ya no
    * existe.
+   *
+   * ⭑ PEDIDO HUMANO 2026-09-04 — el criterio vuelve a tener DOS mitades, y el nombre `eliminable`
+   * sigue siendo el correcto justamente por eso: dice lo que el campo significa («¿se puede?») y
+   * no de que se deduce, asi que sobrevive al cambio de regla. Hoy son la LISTA DE ESTADOS
+   * (siete) y CERO INTENTOS DE ENTREGA. Ojo: los intentos NO son las transiciones que la 319
+   * retiro — ver la cabecera de `order-status-eliminables.ts`.
    *
    * Solo viaja para el rol que puede borrar (`maestro`); para el resto es `undefined`, porque el
    * dato no alimenta ninguna decision suya. Opcional (`?`) por el patron aditivo del resto del

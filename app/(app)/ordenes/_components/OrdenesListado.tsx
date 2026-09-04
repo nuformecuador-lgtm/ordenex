@@ -1045,8 +1045,9 @@ export function OrdenesListado({
     // "Eliminar" va SIEMPRE la ÚLTIMA, y al final de la barra por la misma razón por la que es
     // secundaria: es la acción que no se debe pulsar por inercia.
     //
-    // SOLO sobre las órdenes cuyo ESTADO admite borrarlas (`eliminable`, que resuelve el
-    // servidor con el MISMO predicado que autoriza el borrado). Si ninguna de las marcadas lo
+    // SOLO sobre las órdenes que ADMITEN borrarse (`eliminable`, que resuelve el servidor con el
+    // MISMO predicado que autoriza el borrado: desde el 2026-09-04 son su estado —siete valores—
+    // y que no tenga ningún intento de entrega). Si ninguna de las marcadas lo
     // está, el botón NO APARECE. Se exige `=== true`: un DTO sin el campo (rol que no lo recibe,
     // fixture antiguo) no habilita nada.
     //

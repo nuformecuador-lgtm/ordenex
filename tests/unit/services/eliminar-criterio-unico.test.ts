@@ -57,12 +57,15 @@ function listItem(estatusValue: string): OrdenListItemDTO {
  * acotado a este archivo — construir las ~40 firmas de `IOrdenRepository` para ejercitar una
  * sola es ruido que esconde lo que este test mide.
  */
-function ordenServiceCon(estatusValue: string): OrdenService {
+function ordenServiceCon(estatusValue: string, intentos = 0): OrdenService {
   const items = [listItem(estatusValue)];
   const repo = {
     list: vi.fn(async () => ({ items, total: items.length })),
   } as unknown as IOrdenRepository;
-  return new OrdenService(repo, fakeIntentosEnLote());
+  // PEDIDO HUMANO 2026-09-04: el MISMO doble de intentos alimenta a los dos servicios, con el
+  // mismo numero. Si cada lado sembrara el suyo, este archivo podria dar verde con la UI y el
+  // servidor mirando ordenes distintas — que es exactamente lo que viene a descartar.
+  return new OrdenService(repo, fakeIntentosEnLote(intentos === 0 ? {} : { o1: intentos }));
 }
 
 function ordenRow(estatusValue: string): OrdenTransicionRow {
@@ -78,18 +81,25 @@ function ordenRow(estatusValue: string): OrdenTransicionRow {
   };
 }
 
-function eliminarServiceCon(estatusValue: string): EliminarOrdenService {
-  return new EliminarOrdenService({
-    findByIdsForTransicion: vi.fn(async () => [ordenRow(estatusValue)]),
-    softDelete: vi.fn(
-      async (params: { ids: readonly string[]; ownerId: string | null }) => params.ids.length,
-    ),
-  });
+function eliminarServiceCon(estatusValue: string, intentos = 0): EliminarOrdenService {
+  return new EliminarOrdenService(
+    {
+      findByIdsForTransicion: vi.fn(async () => [ordenRow(estatusValue)]),
+      softDelete: vi.fn(
+        async (params: { ids: readonly string[]; ownerId: string | null }) => params.ids.length,
+      ),
+    },
+    fakeIntentosEnLote(intentos === 0 ? {} : { o1: intentos }),
+  );
 }
 
 /** Lo que el LISTADO le dice a la pantalla sobre esa fila. */
-async function laUiOfreceElBoton(estatusValue: string, actor: Actor = MAESTRO): Promise<boolean> {
-  const r = await ordenServiceCon(estatusValue).listar(PAGINA, actor);
+async function laUiOfreceElBoton(
+  estatusValue: string,
+  actor: Actor = MAESTRO,
+  intentos = 0,
+): Promise<boolean> {
+  const r = await ordenServiceCon(estatusValue, intentos).listar(PAGINA, actor);
   if (r.status !== "ok") throw new Error(`listar respondio ${r.status}`);
   return r.items[0].eliminable === true;
 }
@@ -98,8 +108,9 @@ async function laUiOfreceElBoton(estatusValue: string, actor: Actor = MAESTRO): 
 async function elServidorLoAutoriza(
   estatusValue: string,
   actor: Actor = MAESTRO,
+  intentos = 0,
 ): Promise<boolean> {
-  const r = await eliminarServiceCon(estatusValue).eliminar({ ordenIds: ["o1"] }, actor);
+  const r = await eliminarServiceCon(estatusValue, intentos).eliminar({ ordenIds: ["o1"] }, actor);
   return r.status === "ok";
 }
 
@@ -132,6 +143,41 @@ describe("eliminar orden / la UI y el servidor responden LO MISMO (ficha 319)", 
 
       expect(await laUiOfreceElBoton(estatusValue)).toBe(esperado);
       expect(await elServidorLoAutoriza(estatusValue)).toBe(esperado);
+    },
+  );
+
+  // -------------------------------------------------------------------------------------
+  // PEDIDO HUMANO 2026-09-04 — LA MISMA PREGUNTA, CON LA SEGUNDA MITAD DEL CRITERIO.
+  //
+  // El invariante no cambia de forma: la UI y el servidor tienen que responder lo mismo. Lo que
+  // cambia es que ahora hay DOS entradas que pueden divergir, y la nueva es la mas facil de
+  // olvidar en un solo lado —el listado tiene el numero de intentos a mano desde la feature 160,
+  // asi que es tentador no pasarselo al servidor, o al reves—. Se recorre el catalogo ENTERO con
+  // un intento sembrado: NINGUN estado debe ser eliminable.
+  // -------------------------------------------------------------------------------------
+  it.each(ORDER_STATUS_SEED)(
+    "%s con UN intento de entrega: ni la UI lo ofrece ni el servidor lo autoriza",
+    async (estatusValue) => {
+      expect(await laUiOfreceElBoton(estatusValue, MAESTRO, 1)).toBe(false);
+      expect(await elServidorLoAutoriza(estatusValue, MAESTRO, 1)).toBe(false);
+    },
+  );
+
+  it.each(ELIMINABLES_ESPERADOS)(
+    "%s: es el INTENTO lo que lo bloquea, no el estado (con cero, los dos dicen que si)",
+    async (estatusValue) => {
+      // El control POSITIVO del `it.each` de arriba. Sin el, aquel pasaria verde aunque el
+      // criterio se hubiera roto y NADA fuera eliminable nunca.
+      expect(await laUiOfreceElBoton(estatusValue, MAESTRO, 0)).toBe(true);
+      expect(await elServidorLoAutoriza(estatusValue, MAESTRO, 0)).toBe(true);
+    },
+  );
+
+  it.each(ELIMINABLES_ESPERADOS)(
+    "%s (tienda): la segunda mitad tampoco se olvida para el otro rol que borra",
+    async (estatusValue) => {
+      expect(await laUiOfreceElBoton(estatusValue, TIENDA, 1)).toBe(false);
+      expect(await elServidorLoAutoriza(estatusValue, TIENDA, 1)).toBe(false);
     },
   );
 

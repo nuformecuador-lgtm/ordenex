@@ -3,6 +3,9 @@
 import { z } from "zod";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { EliminarOrdenService } from "@/lib/services/EliminarOrdenService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -37,11 +40,24 @@ export interface EliminarOrdenDeps {
 
 function buildService(): IEliminarOrdenService {
   const prisma = getPrismaClient();
-  // FICHA 319 (2026-08-28): el service deja de recibir el historial. Se le inyectaba para
-  // contar transiciones («esta orden ya fue gestionada»), y ese conteo se retiro: hoy decide el
-  // ESTADO, que ya viene en la fila. Se retira tambien del wiring —y no solo del uso— porque una
-  // dependencia construida y nunca consultada es un cable suelto que miente sobre la regla.
-  return new EliminarOrdenService(new OrdenRepository(prisma));
+  // FICHA 319 (2026-08-28): el service dejo de recibir el historial. Se le inyectaba para
+  // contar TRANSICIONES («esta orden ya fue gestionada»), y ese conteo se retiro.
+  //
+  // ⭑ PEDIDO HUMANO 2026-09-04: vuelve a recibirlo, para OTRA pregunta —los INTENTOS DE ENTREGA
+  // (`contarIntentosEnLote`, feature 215)—. Es el MISMO servicio, con las mismas tres
+  // dependencias, que ya construye `lib/actions/ordenes.ts` para el listado: un solo criterio de
+  // «intento» en todo el sistema, que es lo que la 215/R6 exige. La dependencia es REQUERIDA a
+  // proposito: opcional, este wiring podria olvidarsela y el borrado se abriria en silencio
+  // sobre ordenes ya gestionadas.
+  const ordenRepo = new OrdenRepository(prisma);
+  return new EliminarOrdenService(
+    ordenRepo,
+    new OrdenHistorialService(
+      ordenRepo,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
+  );
 }
 
 /** Espejo de `toDeshacerActionError`: solo los dos codigos que este borde puede producir. */
