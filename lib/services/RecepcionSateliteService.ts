@@ -26,6 +26,9 @@ import { rangoDePagina } from "@/lib/utils/rango-pagina";
 // `OrdenService`. Escritas dos veces divergirian sin que nada fallara.
 import {
   rangoCreacion,
+  // FICHA 370: y desde hoy TRES — el valor publico de «salida a reparto» al vocabulario del
+  // repositorio, por la misma razon que las otras dos.
+  salidaAReparto,
   terminoDeBusqueda,
 } from "@/lib/utils/filtros-listado-ordenes";
 
@@ -112,6 +115,11 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
   ): RecepcionSateliteFiltro {
     const creacion = rangoCreacion(input, this.ahora());
     const termino = input.q ? terminoDeBusqueda(input.q) : undefined;
+    // FICHA 370: el criterio de «ya salio a reparto», traducido por el MISMO util que usa
+    // `/ordenes`. Aqui esta el grueso del valor — 44 de las 48 ordenes «nuevas» medidas en
+    // produccion viven en bodega satelite—, y llega a los TRES caminos del listado porque los
+    // tres pasan por este metodo y por `condicionesSatelite`.
+    const salida = salidaAReparto(input);
     // Las claves ausentes se OMITEN en vez de viajar como `undefined`: lo que el repositorio
     // recibe es exactamente lo que se filtra, y un doble de test puede afirmarlo mirando las
     // claves. `zonaId` y `estatusValues` van siempre — son el alcance, no un filtro.
@@ -130,6 +138,7 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
       ...(creacion?.lt ? { creadaHasta: creacion.lt } : {}),
       ...(termino ? { busqueda: termino.busqueda } : {}),
       ...(termino?.busquedaDigitos ? { busquedaDigitos: termino.busquedaDigitos } : {}),
+      ...(salida ? { salioAReparto: salida } : {}),
     };
   }
 

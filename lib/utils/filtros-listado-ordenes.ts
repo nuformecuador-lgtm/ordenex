@@ -7,7 +7,8 @@ import {
   normalizarTerminoBusqueda,
   soloDigitosSiPareceNumero,
 } from "@/lib/utils/busqueda-orden";
-import type { CreatedPreset } from "@/lib/types/orden";
+import type { CreatedPreset, SalioARepartoValor } from "@/lib/types/orden";
+import type { SalioAReparto } from "@/lib/interfaces/repositories/IOrdenRepository";
 
 /**
  * Pedido humano (2026-08-19) — las DOS traducciones que comparten las superficies que montan
@@ -96,4 +97,28 @@ export function terminoDeBusqueda(termino: string): TerminoBusqueda {
   return digitos !== null && digitos !== busqueda
     ? { busqueda, busquedaDigitos: digitos }
     : { busqueda };
+}
+
+/**
+ * FICHA 370 — la TERCERA traduccion compartida por las dos superficies de esta barra: el valor
+ * PUBLICO de «salida a reparto» (`ya_salio` / `nunca_salio`) al vocabulario del repositorio
+ * (`"ya"` / `"nunca"`).
+ *
+ * Por que aqui y no en cada servicio: `/ordenes` y el listado de la bodega satelite montan la
+ * MISMA barra sobre el MISMO criterio; escrita dos veces, un dia una superficie mandaria
+ * `"nunca"` donde la otra manda `"ya"` y no fallaria nada — solo saldrian filas distintas.
+ *
+ * `undefined` cuando la clave no viene: «no filtrar» solo se expresa OMITIENDO la clave, y por
+ * eso el mapa es exhaustivo sobre los dos valores del dominio en vez de tener un `else`.
+ */
+const SALIDA_PUBLICA_A_REPO: Record<SalioARepartoValor, SalioAReparto> = {
+  ya_salio: "ya",
+  nunca_salio: "nunca",
+};
+
+export function salidaAReparto(
+  filtro: { salio_a_reparto?: SalioARepartoValor } | undefined,
+): SalioAReparto | undefined {
+  const valor = filtro?.salio_a_reparto;
+  return valor === undefined ? undefined : SALIDA_PUBLICA_A_REPO[valor];
 }

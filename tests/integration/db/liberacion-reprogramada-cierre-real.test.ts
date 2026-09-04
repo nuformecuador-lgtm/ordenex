@@ -319,6 +319,11 @@ describeSiHayBase("276/T6 — `findOrdenesLiberables` contra Postgres real", () 
         // (`liberacion-al-aprobar-cierre-real.test.ts`); aqui solo se mide la corrida del reloj.
         findOrdenesLiberablesDeCierre: (cierreId: string, hoy: Date) =>
           ctx.repo.findOrdenesLiberablesDeCierre(cierreId, hoy),
+        // FICHA 371: el tercer alcance (una orden corregida) tiene su propio archivo contra
+        // Postgres (`correccion-fecha-reprogramacion.int.test.ts`); aqui se delega al repo REAL
+        // para que el doble no pueda tapar una divergencia.
+        findOrdenesLiberablesDeOrden: (ordenId: string, hoy: Date) =>
+          ctx.repo.findOrdenesLiberablesDeOrden(ordenId, hoy),
         liberarOrden: async (input: { ordenId: string }) => {
           liberadas.push(ctx.clavePorId.get(input.ordenId) ?? input.ordenId);
           return true;

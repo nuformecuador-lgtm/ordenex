@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
 import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
-import { esFechaCalendarioValida, mananaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { esFechaCalendarioValida, fechaCalendarioCR, mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 import { CAUSA_INCIDENTE_SEED } from "@/lib/types/causa-incidente";
 import { ubicacionSchema } from "@/lib/types/ruta-mensajero";
@@ -204,6 +204,43 @@ export const fechaFuturaSchema = z
     (v) => esFechaFutura(v),
     "la fecha debe ser mañana o posterior",
   );
+
+/**
+ * FICHA 371 — EL MINIMO DE LA CORRECCION: HOY EN ADELANTE, no mañana en adelante.
+ *
+ * ⚠️ DIVERGE DE `esFechaFutura` A PROPOSITO, y esta es la razon escrita donde se compara. El
+ * REGISTRO original de una reprogramacion exige `>= mañana` (R25 de la 36) porque reprogramar para
+ * hoy no tiene sentido: el mensajero ya salio y el dia ya esta repartido. LA CORRECCION es otra
+ * operacion —la hace un coordinador, sobre una fecha YA escrita y equivocada— y su caso mas comun
+ * es justo el que aquella regla rechaza: el caso REAL que origina la ficha es corregir del 4 al 3
+ * estando a dia 3. Con `esFechaFutura`, la unica correccion que la operacion necesitaba habria
+ * fallado en el borde.
+ *
+ * `esFechaFutura` NO SE TOCA: sigue gobernando el registro original, y las dos reglas comparten la
+ * misma maquinaria de fecha (`esFechaCalendarioValida` para el dia inexistente, el calendario de CR
+ * para el «hoy») en vez de tener cada una su propio regex. La diferencia entre ambas es EXACTAMENTE
+ * un dia: `mananaCalendarioCR(now)` es el minimo de aquella y `fechaCalendarioCR(now)` el de esta.
+ *
+ * SIN TOPE MAXIMO, igual que hoy: la reprogramacion no lo tiene y esta ficha no lo introduce.
+ *
+ * El dia INEXISTENTE (`2026-02-31`) se rechaza por el mismo ROUND-TRIP que explica
+ * `esFechaCalendarioValida`: en V8 solo el MES fuera de rango invalida; el DIA desbordado RUEDA en
+ * silencio al mes siguiente y se guardaria una fecha que nadie pidio.
+ */
+export function esFechaCorreccionValida(value: string, now: Date = new Date()): boolean {
+  if (!esFechaCalendarioValida(value)) return false;
+  // Comparacion lexicografica: `YYYY-MM-DD` ordena igual como texto que como fecha.
+  return value >= fechaCalendarioCR(now);
+}
+
+/**
+ * FICHA 371 — el mismo predicado como schema, para el borde de la correccion. Se declara aqui, al
+ * lado de `fechaFuturaSchema`, para que quien lea una se encuentre la otra en la misma pantalla.
+ */
+export const fechaCorreccionSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "fecha invalida")
+  .refine((v) => esFechaCorreccionValida(v), "la fecha debe ser hoy o posterior");
 
 /**
  * Feature 237 (T5.2, D8) — SE EXPORTA, tal cual, para el borde de la gestion desde ayuda.

@@ -11,18 +11,40 @@ import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 // intentos (`whereIntentosVigentes`). Se IMPORTA, no se copia: dos listas que se desincronizaran
 // harian que la puerta del cron y el contador dijeran cosas distintas sobre la misma gestion.
 import { ORIGEN_TIPOS_VISITA_REAL } from "@/lib/types/orden-historial";
+// FICHA 371: la correlacion de «la gestion reprogramada vigente» se IMPORTA, no se escribe aqui.
+// La correccion de la fecha (371) tiene que escribir sobre EXACTAMENTE la gestion que este
+// repositorio elige; dos expresiones equivalentes serian dos filas distintas el dia que una orden
+// tenga dos gestiones `reprogramada` vivas, y la correccion arreglaria una fecha que el cron no
+// mira. Ver la cabecera de `gestion-reprogramada-vigente.ts`.
+// El `resultado` de la gestion ya viaja DENTRO de `GESTION_REPROGRAMADA_VIGENTE.where`: importarlo
+// suelto ademas dejaria dos formas de nombrar lo mismo en este archivo.
+import { GESTION_REPROGRAMADA_VIGENTE } from "@/lib/repositories/gestion-reprogramada-vigente";
 
-// Estatus de ORIGEN de la liberacion (una orden reprogramada) y `resultado` de la
-// gestion que fija la fecha de reprogramacion (feature 36). Valores de catalogo ya
-// sembrados; esta feature NO agrega estados.
+// Estatus de ORIGEN de la liberacion (una orden reprogramada). Valor de catalogo ya sembrado;
+// esta feature NO agrega estados. (El `resultado` de la gestion vive en la correlacion compartida.)
 const ESTATUS_REPROGRAMADA = "reprogramada";
-const RESULTADO_REPROGRAMADA = "reprogramada";
 
 const UN_DIA_MS = 24 * 60 * 60 * 1000;
 
 // Feature 49/#10: `$transaction` para que el UPDATE guardado y el append del historial
 // compartan tx (R7). El `tx` del callback expone `ordenHistorialEstado` (choke point).
 type LiberacionPrismaClient = Pick<PrismaClient, "orden" | "$transaction">;
+
+/**
+ * DE DONDE SALEN LAS CANDIDATAS. Los tres disparadores comparten cuerpo, correlacion, filtro de
+ * fecha y hechos proyectados; lo unico que cambia es el alcance:
+ *
+ *   · `reloj`  — la corrida de las 00:00 CR sobre TODAS las reprogramadas vencidas (46/276);
+ *   · `cierre` — las de un cierre recien aprobado (315);
+ *   · `orden`  — UNA orden, la que un coordinador acaba de corregir a hoy (371).
+ *
+ * Es una union y no tres parametros opcionales a proposito: con `cierreId: string | null` y
+ * `ordenId: string | null` seria expresable «los dos a la vez», que no significa nada.
+ */
+type AlcanceLiberacion =
+  | { tipo: "reloj" }
+  | { tipo: "cierre"; cierreId: string }
+  | { tipo: "orden"; ordenId: string };
 
 /**
  * Feature 46 — repositorio de la liberacion programada. SOLO queries Prisma (sin logica
@@ -39,7 +61,22 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
    * `@db.Date` a medianoche UTC; `hoyCR` viene en la misma convencion (util fecha-cr).
    */
   async findOrdenesLiberables(hoyCR: Date): Promise<OrdenLiberableRow[]> {
-    return this.buscarLiberables(hoyCR, null);
+    return this.buscarLiberables(hoyCR, { tipo: "reloj" });
+  }
+
+  /**
+   * FICHA 371 — LAS MISMAS CANDIDATAS, ACOTADAS A UNA SOLA ORDEN.
+   *
+   * Tercer alcance del MISMO cuerpo, por el mismo motivo que el segundo (315): corregir la fecha de
+   * una reprogramacion a HOY tiene que soltar la orden en el acto, y «soltar» no puede ser una
+   * liberacion paralela con reglas propias. Lo unico distinto es de donde salen las candidatas.
+   *
+   * Devuelve 0 o 1 fila: 0 cuando la orden no esta en `reprogramada`, esta borrada, no tiene
+   * gestion vigente o su fecha todavia no vencio (la corregida a un dia futuro sigue esperando al
+   * calendario, que es lo correcto).
+   */
+  async findOrdenesLiberablesDeOrden(ordenId: string, hoyCR: Date): Promise<OrdenLiberableRow[]> {
+    return this.buscarLiberables(hoyCR, { tipo: "orden", ordenId });
   }
 
   /**
@@ -55,7 +92,7 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
     cierreId: string,
     hoyCR: Date,
   ): Promise<OrdenLiberableRow[]> {
-    return this.buscarLiberables(hoyCR, cierreId);
+    return this.buscarLiberables(hoyCR, { tipo: "cierre", cierreId });
   }
 
   /**
@@ -64,36 +101,43 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
    * seria una segunda regla que puede divergir de la del cron — y la divergencia mas cara aqui es
    * justo la que nadie ve, porque las dos consultas devuelven filas plausibles.
    *
-   * `cierreId === null` = la corrida COMPLETA del reloj (46/276), byte a byte la de siempre.
+   * `{ tipo: "reloj" }` = la corrida COMPLETA (46/276), byte a byte la de siempre.
    */
   private async buscarLiberables(
     hoyCR: Date,
-    cierreId: string | null,
+    alcance: AlcanceLiberacion,
   ): Promise<OrdenLiberableRow[]> {
     const rows = await this.prisma.orden.findMany({
       where: {
         deletedAt: null, // R10
         estatus: { value: ESTATUS_REPROGRAMADA }, // R10
-        // FICHA 315: prefiltro por cierre. Ausente en la corrida del reloj.
-        ...(cierreId === null
-          ? {}
-          : {
+        // FICHA 371: acotado a UNA orden. Es un filtro por PK, no una regla nueva: todo lo demas
+        // —estado, correlacion de la gestion vigente y filtro de fecha— sigue siendo el de siempre.
+        ...(alcance.tipo === "orden" ? { id: alcance.ordenId } : {}),
+        // FICHA 315: prefiltro por cierre. Ausente en los otros dos alcances.
+        ...(alcance.tipo === "cierre"
+          ? {
               gestiones: {
-                some: { cierreId, resultado: RESULTADO_REPROGRAMADA, anuladaAt: null },
+                some: {
+                  cierreId: alcance.cierreId,
+                  ...GESTION_REPROGRAMADA_VIGENTE.where,
+                },
               },
-            }),
+            }
+          : {}),
       },
       select: {
         id: true,
         zonaId: true,
         gestiones: {
-          // gestion vigente = la mas reciente. Feature 67 (design §3-#6): `anuladaAt: null`
-          // por DEFENSA, sin cambio funcional — una orden en `reprogramada` no puede tener su
-          // ultima gestion `reprogramada` anulada (deshacerla la devuelve a `en_reparto`, con
-          // lo que ya no casa el filtro de estado de arriba). Explicito > implicito.
-          where: { resultado: RESULTADO_REPROGRAMADA, anuladaAt: null },
-          orderBy: { createdAt: "desc" },
-          take: 1,
+          // LA GESTION VIGENTE = la mas reciente no anulada. La correlacion se EXPANDE del objeto
+          // compartido (`gestion-reprogramada-vigente.ts`) y no se escribe aqui: la correccion de
+          // la fecha (ficha 371) tiene que escribir sobre exactamente esta gestion, y dos
+          // expresiones equivalentes acabarian eligiendo filas distintas sin que nada se ponga
+          // rojo. Feature 67 (design §3-#6): `anuladaAt: null` entro por DEFENSA y sin cambio
+          // funcional — una orden en `reprogramada` no puede tener su ultima gestion
+          // `reprogramada` anulada (deshacerla la devuelve a `en_reparto`).
+          ...GESTION_REPROGRAMADA_VIGENTE,
           select: {
             fechaReprogramacion: true,
             // FEATURE 276 (T6.1, R12/R14/R15) — LOS TRES HECHOS NUEVOS, todos de ESTA MISMA
@@ -137,7 +181,7 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
       // FICHA 315: acotado a un cierre, la gestion VIGENTE tiene que ser la de ESE cierre. El
       // `some` de arriba solo garantiza que ALGUNA gestion lo fuera; si la ultima reprogramada es
       // de otro cierre, la que manda es aquella y esta aprobacion no dice nada sobre ella.
-      if (cierreId !== null && (gestion?.cierreId ?? null) !== cierreId) continue;
+      if (alcance.tipo === "cierre" && (gestion?.cierreId ?? null) !== alcance.cierreId) continue;
       liberables.push({
         id: r.id,
         zonaId: r.zonaId,

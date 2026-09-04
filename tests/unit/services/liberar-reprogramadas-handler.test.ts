@@ -38,6 +38,10 @@ describe("crearLiberarReprogramadasHandler (R22)", () => {
       liberarPorCierreAprobado: vi.fn(async () => {
         throw new Error("el handler del reloj no libera por cierre (315)");
       }),
+      // FICHA 371: idem con el disparador de la correccion de la fecha.
+      liberarOrdenCorregida: vi.fn(async () => {
+        throw new Error("el handler del reloj no libera por correccion (371)");
+      }),
     };
     const handler = crearLiberarReprogramadasHandler(service, () => now);
 

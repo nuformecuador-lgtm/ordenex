@@ -237,6 +237,21 @@ export interface UpdateOrdenData {
  * que el filtro hubiera puesto (R36). El repositorio no decide nada de eso: recibe el
  * `where` ya resuelto.
  */
+/**
+ * FICHA 370 — el criterio «¿la orden ya salio a reparto?» en el vocabulario del REPOSITORIO.
+ *
+ * Dos valores excluyentes, nunca un booleano: `undefined` (clave ausente) es «no filtrar», y
+ * es la unica forma de decirlo. Los valores PUBLICOS del borde son otros —`ya_salio` /
+ * `nunca_salio`, `SALIO_A_REPARTO_VALORES` en `lib/types/orden.ts`— y los traduce
+ * `salidaAReparto` (`lib/utils/filtros-listado-ordenes.ts`), el mismo util que comparten las
+ * DOS superficies que montan esta barra. Aqui dentro ya no hay clave publica.
+ *
+ * Lo consumen `ListOrdenesWhere` (el listado de `/ordenes`) y `RecepcionSateliteFiltro` (el
+ * listado de la bodega satelite): un solo tipo para que las dos rutas no puedan entender cosas
+ * distintas por «ya salio».
+ */
+export type SalioAReparto = "ya" | "nunca";
+
 export interface ListOrdenesWhere {
   // `tiendaId` escalar = scoping por rol (adminTienda); lista = filtro de tienda.
   tiendaId?: string | string[];
@@ -268,6 +283,29 @@ export interface ListOrdenesWhere {
    * que exigirla dejaba fuera a las ordenes que nunca tuvieron mensajero.
    */
   reasignables?: true;
+  /**
+   * FICHA 370 — SALIDA A REPARTO: parte el listado en los dos grupos que quien asigna necesita
+   * tratar por separado. NO es una columna (como `reasignables`): es el predicado
+   * «EXISTS una transicion de esta orden con destino `en_reparto`» sobre `orden_historial_estado`,
+   * que el repositorio traduce.
+   *
+   * `"ya"` -> las que ya salieron con un mensajero alguna vez; `"nunca"` -> las que solo tienen
+   * la guia generada. AUSENTE -> no filtra y salen los dos grupos (el listado de siempre).
+   *
+   * POR QUE ESTE CRITERIO Y NO OTRO — medido contra produccion, no razonado. Las tres señales
+   * candidatas divergen: 324 ordenes no salieron y no tienen gestion, 606 salieron y la tienen,
+   * y **76 salieron, nadie las gestiono y el cron las corto a `sin_gestionar`**. Esas 76 YA
+   * tuvieron un proceso, asi que el criterio ingenuo («¿tiene gestion?») clasificaria mal un 11%.
+   * `orden.prioridad` se descarto porque solo se enciende en 23 de las 606 con gestion y porque
+   * `deshacerAsignacionLote` devuelve la orden a bodega sin restaurarla; `intentosEntrega` se
+   * descarto porque esta declarado NO filtrable server-side, se ancla en cierres APROBADOS y no
+   * cuenta `sin_gestionar`.
+   *
+   * INAPAGABLE: `orden_historial_estado` es append-only e inmutable (feature 49/R2), asi que la
+   * evidencia no se puede borrar ni reescribir. Ver `condicionSalidaAReparto` en el repositorio
+   * para el detalle de la implementacion y de lo que se midio.
+   */
+  salioAReparto?: SalioAReparto;
   /**
    * Pedido humano (2026-08-27) — INVIERTE el `deleted_at IS NULL` de este listado, y es la
    * UNICA clave del sistema que lo hace. Ausente (el caso de siempre, y el de todas las demas
@@ -839,6 +877,17 @@ export interface RecepcionSateliteFiltro {
    * columna dentro de un `OR`, que a su vez va en AND con la zona y el resto del criterio.
    */
   busquedaDigitos?: string;
+  /**
+   * FICHA 370 — SALIDA A REPARTO, el MISMO criterio y el MISMO tipo que el listado de
+   * `/ordenes` (`ListOrdenesWhere.salioAReparto`). Aqui esta el grueso del valor: medido en
+   * produccion, 44 de las 48 ordenes «nuevas» viven en bodega satelite (en la central son 2 de
+   * 21).
+   *
+   * A diferencia del alcance «paso por MI bodega» —que el repositorio impone SIEMPRE y a
+   * proposito no es un campo de este filtro— esto SI es un filtro: no acota el alcance del
+   * actor, lo parte en dos dentro de lo que ya puede ver. Ausente = los dos grupos.
+   */
+  salioAReparto?: SalioAReparto;
 }
 
 // Feature 41 (R17/R18) -> 241 — resultado del bloqueo derivado de una bodega satelite.

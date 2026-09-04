@@ -111,6 +111,11 @@ export const ORDEN_FILTER_FIELDS = [
   // claves y `.strict()` sigue siendo la unica defensa; quien puede USARLA lo decide el service
   // (solo `maestro`), no este schema.
   "eliminados",
+  // FICHA 370: la whitelist pasa de 13 a 14. Parte el listado de la bodega en los dos grupos que
+  // quien asigna necesita tratar por separado — las que YA salieron con un mensajero y las que
+  // solo tienen la guia generada—. Es la unica clave del conjunto con DOS valores excluyentes
+  // (ver `SALIO_A_REPARTO_VALORES`); ausente = no filtra y salen los dos grupos.
+  "salio_a_reparto",
 ] as const;
 export type OrdenFilterField = (typeof ORDEN_FILTER_FIELDS)[number];
 
@@ -143,6 +148,32 @@ const fechaCalendario = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato esperad
 // una lista): `["7d","30d"]` no tiene interpretacion util y seria ambiguo.
 export const CREATED_PRESETS = ["7d", "15d", "30d", "90d"] as const;
 export type CreatedPreset = (typeof CREATED_PRESETS)[number];
+
+/**
+ * FICHA 370 — dominio CERRADO de «¿esta orden ya salio a reparto alguna vez?». UNA sola fuente,
+ * y por eso se exporta: la barra de filtros declara sus dos opciones desde aqui y no puede
+ * ofrecer un valor que el borde vaya a rechazar.
+ *
+ * ─── POR QUE ESTE NOMBRE, Y NO «INTENTOS» ──────────────────────────────────────────────────
+ *
+ * La columna «Intentos» del listado ya existe y cuenta OTRA COSA: cierres APROBADOS con un
+ * resultado de gestion vigente (`lib/types/orden-historial.ts`), lo que deja fuera a
+ * `sin_gestionar` por decision declarada. Medido en produccion: 76 ordenes salieron a reparto,
+ * nadie las gestiono y el cron las corto a `sin_gestionar` — su columna «Intentos» dice 0 y sin
+ * embargo SI salieron. Si este filtro se llamara «con intentos previos», la fila diria 0 y el
+ * filtro diria que si, y nadie sabria a cual creer. Nombrado por lo que de verdad mide —la
+ * SALIDA A REPARTO— las dos cifras dejan de contradecirse: son dos datos distintos.
+ *
+ * ─── POR QUE DOS VALORES Y NO UN BOOLEANO ──────────────────────────────────────────────────
+ *
+ * En esta barra el `false` de un filtro significa «no filtrar» (`reasignables`, `eliminados`
+ * son `z.literal(true)` justamente por eso). Un booleano cuyo `false` significara «nunca salio»
+ * seria una trampa esperando a un `?? false`: cualquier valor por defecto encenderia medio
+ * filtro en silencio. Con dos valores nombrados, «no filtrar» solo se puede expresar OMITIENDO
+ * la clave, y ausente => salen los DOS grupos.
+ */
+export const SALIO_A_REPARTO_VALORES = ["ya_salio", "nunca_salio"] as const;
+export type SalioARepartoValor = (typeof SALIO_A_REPARTO_VALORES)[number];
 
 // `status_id` acepta UN id (contrato previo, sin regresion) o una LISTA de ids
 // (filtro multi-estado del listado unico de `/ordenes`, que sustituyo a las tabs
@@ -191,6 +222,14 @@ export const ordenFilterBase = z
     // las borradas (`deleted_at IS NOT NULL`). Es la unica del sistema que lo hace, y por eso es
     // la unica que el service ademas AUTORIZA por rol antes de traducirla.
     eliminados: z.literal(true).optional(),
+    // FICHA 370 — SALIDA A REPARTO. Como `reasignables`, NO es una columna: es un predicado
+    // sobre `orden_historial_estado` («existe una transicion con destino `en_reparto`»), que el
+    // repositorio traduce. A diferencia de ella son DOS valores EXCLUYENTES, no un interruptor:
+    // `ya_salio` acota a las que ya tuvieron un proceso y `nunca_salio` a las que solo tienen la
+    // guia generada. Omitir la clave es lo unico que significa «no filtrar» — y entonces salen
+    // los dos grupos, como hasta hoy. El dominio lo cierra `SALIO_A_REPARTO_VALORES`, que es
+    // tambien de donde la UI saca sus dos opciones.
+    salio_a_reparto: z.enum(SALIO_A_REPARTO_VALORES).optional(),
     // Feature 169/R1/R3/R4 — TERMINO DE BUSQUEDA. Se llama `q` y no `search`/`texto`
     // porque es corto, es la convencion universal de un buscador y NO coincide con ningun
     // nombre de columna: deja claro que no es un filtro de columna (como si lo son
