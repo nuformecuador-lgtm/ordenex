@@ -647,3 +647,81 @@ describe("FilterComponent — emision con debounce", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// FICHA 372 — EL CONTROL `single` SE VE.
+//
+// Este bloque existe porque un defecto de PRESENTACION llego a produccion con la suite
+// entera en verde: `kind: "single"` se pintaba con `aria-label` y nada mas, asi que en
+// pantalla se leia solo el valor («Todas») y no decia QUE filtraba. Ningun test miraba
+// lo que se VE —solo el nombre accesible, que un lector de pantalla si daba—, y por eso
+// ninguno se puso rojo.
+//
+// Lo que se afirma aqui es lo que el OJO recibe: el texto visible del disparador y que
+// el control no se lleve la fila entera. No sustituye a los casos de `aria-label` de
+// arriba: la etiqueta visible se SUMA a la accesible, no la reemplaza.
+// ---------------------------------------------------------------------------
+describe("FilterComponent — el filtro UNICO dice que filtra (ficha 372)", () => {
+  it("pinta su etiqueta VISIBLE dentro del disparador, no solo en el `aria-label`", () => {
+    renderBarra([ACABADO_UNICO]);
+
+    // El texto que se LEE en pantalla, no el atributo. Sin etiqueta visible el
+    // disparador diria solo el valor y este `toHaveTextContent` cae.
+    expect(
+      screen.getByRole("combobox", { name: "Acabado" }),
+    ).toHaveTextContent("Acabado:");
+  });
+
+  it("con un valor elegido se lee «Etiqueta: Valor», no solo el valor", async () => {
+    const user = userEvent.setup();
+    renderBarra([ACABADO_UNICO]);
+
+    await user.click(screen.getByRole("combobox", { name: "Acabado" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "Mate",
+      }),
+    );
+
+    // Literal a proposito: es EXACTAMENTE lo que el humano ve en la barra.
+    expect(
+      screen.getByRole("combobox", { name: "Acabado" }).textContent,
+    ).toContain("Acabado: Mate");
+  });
+
+  it("sin elegir nada, la etiqueta acompaña al placeholder", () => {
+    renderBarra([{ ...ACABADO_UNICO, placeholder: "Todos" }]);
+
+    expect(
+      screen.getByRole("combobox", { name: "Acabado" }).textContent,
+    ).toContain("Acabado: Todos");
+  });
+
+  it("el `aria-label` SIGUE siendo el nombre accesible: la etiqueta visible no lo sustituye", () => {
+    renderBarra([ACABADO_UNICO]);
+
+    expect(screen.getByRole("combobox", { name: "Acabado" })).toHaveAttribute(
+      "aria-label",
+      "Acabado",
+    );
+  });
+
+  it("no se lleva la fila entera: el disparador NO es `w-full` (defecto (a) de la ficha)", () => {
+    renderBarra([ACABADO_UNICO, DESTACADO]);
+
+    const disparador = screen.getByRole("combobox", { name: "Acabado" });
+    // La barra es `flex flex-wrap`: un hijo al 100 % ocupa una linea para el solo y
+    // apila lo que venga detras. Ese fue el defecto reportado CON CAPTURA.
+    expect(disparador).not.toHaveClass("w-full");
+    expect(disparador).toHaveClass("w-auto");
+    // Mismo minimo que el disparador del `multi`, para que la fila no baile.
+    expect(disparador).toHaveClass("min-w-56");
+  });
+
+  it("convive con el `multi` a la misma altura: los dos disparadores son `h-8`", () => {
+    renderBarra([COLOR, ACABADO_UNICO]);
+
+    expect(screen.getByRole("button", { name: /^Color:/ })).toHaveClass("h-8");
+    expect(screen.getByRole("combobox", { name: "Acabado" })).toHaveClass("h-8");
+  });
+});
+
