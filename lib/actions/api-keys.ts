@@ -2,12 +2,14 @@
 
 import {
   apiKeyIdSchema,
+  eliminarApiKeySchema,
   generarApiKeySchema,
   listarApiKeysCompletoSchema,
   listarApiKeysSchema,
   type ActivarApiKeyResult,
   type ApiKeyActionErrorResult,
   type DesactivarApiKeyResult,
+  type EliminarApiKeyResult,
   type GenerarApiKeyResult,
   type ListarApiKeysCompletoResult,
   type ListarApiKeysResult,
@@ -190,6 +192,38 @@ export async function desactivarApiKey(
     const data = apiKeyIdSchema.parse(input);
     const service = deps.apiKeyService ?? buildApiKeyService();
     return service.desactivar(data, actor);
+  });
+  return isAppErrorShape(r) ? toApiKeyLifecycleActionError(r) : r;
+}
+
+/**
+ * FICHA 373/R18/R19/R20/R21 — elimina EN FISICO una API key ya desactivada, su cuenta dedicada y
+ * su suscripcion de webhook. IRREVERSIBLE: no hay accion de deshacer y no la habra (R7).
+ *
+ * Misma envoltura que `desactivarApiKey`, con UNA diferencia y esta escrita a proposito: el schema
+ * es `eliminarApiKeySchema` (`.strict()`) y no `apiKeyIdSchema`, porque una clave desconocida en la
+ * entrada de un BORRADO tiene que ser `validation_error` y no un campo ignorado en silencio (R20).
+ * `apiKeyIdSchema` NO se toca: lo comparten rotar/activar/desactivar.
+ *
+ * `bloqueada` (R12) NO pasa por `toApiKeyLifecycleActionError`: es un RETORNO del service, no un
+ * error lanzado, asi que ningun mapeador cambia.
+ *
+ * ⚠ AQUI VIVIA UN `@sin-superficie`, y se BORRO con el bloque G de esta misma ficha: la accion ya
+ * tiene pantalla. La cadena es `configuracion/api/page.tsx` → `ApiKeysModule` →
+ * `buildApiKeysColumns` → `ApiKeyAccionCell` → el boton «Eliminar» y su confirmacion → aqui. La
+ * anotacion no se deja «por si acaso»: la otra mitad de `superficie-de-uso.guardia` se pone roja
+ * cuando una excusa sobrevive a su motivo, que es justo lo que impide que se quede para siempre.
+ */
+export async function eliminarApiKey(
+  input: unknown,
+  deps: ApiKeyActionDeps = {},
+): Promise<EliminarApiKeyResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R19: antes de instanciar el service
+    const data = eliminarApiKeySchema.parse(input); // ZodError -> VALIDATION_ERROR (R20)
+    const service = deps.apiKeyService ?? buildApiKeyService();
+    return service.eliminar(data, actor);
   });
   return isAppErrorShape(r) ? toApiKeyLifecycleActionError(r) : r;
 }

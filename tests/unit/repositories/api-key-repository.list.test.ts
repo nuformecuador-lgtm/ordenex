@@ -158,3 +158,61 @@ describe("ApiKeyRepository.count", () => {
     expect(await new ApiKeyRepository(prisma).count()).toBe(42);
   });
 });
+
+// =================================================================================================
+// FICHA 373 / C6 (R38) — el listado no gana consultas por fila
+// =================================================================================================
+
+/** Doble que ADEMAS cuenta cada consulta que sale hacia la base, sea del modelo o cruda. */
+function makePrismaContado(rows: Row[]) {
+  const consultas: string[] = [];
+  const prisma = {
+    apiKey: {
+      findMany: vi.fn(async () => {
+        consultas.push("apiKey.findMany");
+        return rows;
+      }),
+      count: vi.fn(async () => {
+        consultas.push("apiKey.count");
+        return rows.length;
+      }),
+    },
+    $queryRaw: vi.fn(async () => {
+      consultas.push("$queryRaw");
+      return rows.map((r) => ({
+        usuarioId: r.usuarioId,
+        ordenes: false,
+        dinero: false,
+        tarifas: false,
+      }));
+    }),
+  };
+  return { prisma: prisma as never, consultas };
+}
+
+describe("ApiKeyRepository — el coste del listado no depende del tamano de pagina (373/R38)", () => {
+  it("⭑ una pagina de 25 filas hace EXACTAMENTE las mismas consultas que una de 1", async () => {
+    // La mutacion que este caso caza: resolver la eliminabilidad fila a fila. Con 25 filas
+    // apareceria un `$queryRaw` por fila y las dos listas dejarian de coincidir.
+    const una = makePrismaContado([row(1)]);
+    const repoUna = new ApiKeyRepository(una.prisma);
+    await repoUna.list({ skip: 0, take: 25 });
+    await repoUna.dependenciasDeCuentasDedicadas(["u-dedicado-1"]);
+
+    const filas25 = Array.from({ length: 25 }, (_, i) => row(i + 1));
+    const veinticinco = makePrismaContado(filas25);
+    const repo25 = new ApiKeyRepository(veinticinco.prisma);
+    await repo25.list({ skip: 0, take: 25 });
+    await repo25.dependenciasDeCuentasDedicadas(filas25.map((f) => f.usuarioId));
+
+    // Tres consultas en los dos casos: `findMany` + `count` + UNA de dependencias.
+    expect(una.consultas).toHaveLength(3);
+    expect(veinticinco.consultas.sort()).toEqual(una.consultas.sort());
+  });
+
+  it("`list` por si solo sigue costando dos consultas y ni una mas", async () => {
+    const { prisma, consultas } = makePrismaContado([row(1), row(2)]);
+    await new ApiKeyRepository(prisma).list({ skip: 0, take: 25 });
+    expect(consultas).toEqual(["apiKey.findMany", "apiKey.count"]);
+  });
+});

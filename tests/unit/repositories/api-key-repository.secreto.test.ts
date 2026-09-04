@@ -112,9 +112,12 @@ function makePrisma() {
 
   const apiKey = {
     findMany: vi.fn(async (args: unknown) => [capturar(args)]),
-    findUnique: vi.fn(async (args: unknown) => capturar(args)), // [88] findByKeyHash
+    findUnique: vi.fn(async (args: unknown) => capturar(args)), // [88] findByKeyHash / [373] eliminar
     create: vi.fn(async (args: unknown) => capturar(args)),
     update: vi.fn(async (args: unknown) => capturar(args)), // ciclo de vida: rotar/setEstado
+    // FICHA 373: el borrado fisico. Se cablea al MISMO capturador que el resto para que su
+    // proyeccion quede bajo esta guardia igual que las demas.
+    delete: vi.fn(async (args: unknown) => capturar(args)),
     count: vi.fn(async () => 1),
   };
   // FICHA 362: la `tx` gana `usuario.findUnique` —el congelado del actor— y `historialAccion`.
@@ -125,9 +128,18 @@ function makePrisma() {
     usuario: {
       create: vi.fn(async () => ({ id: "u-dedicado" })),
       findUnique: vi.fn(async (args: unknown) => capturarUsuarioEnTx(args)),
+      // FICHA 373: el borrado de la cuenta dedicada, dentro de la misma tx.
+      delete: vi.fn(async () => ({ id: "u-dedicado" })),
     },
     apiKey,
     historialAccion: { createMany: vi.fn(async () => ({ count: 1 })) },
+    // FICHA 373: la suscripcion de webhook de la cuenta dedicada.
+    webhookSuscripcion: { deleteMany: vi.fn(async () => ({ count: 1 })) },
+    // FICHA 373: el guard de eliminabilidad. Responde «sin rastro» para que el borrado siga
+    // adelante y la proyeccion de `eliminar` pueda medirse.
+    $queryRaw: vi.fn(async () => [
+      { usuarioId: "u-dedicado", ordenes: false, dinero: false, tarifas: false },
+    ]),
   };
   // Feature 302: `findTiendaDestino` lee `usuario` (no `api_key`). El mismo fake que proyecta
   // exactamente lo pedido, para que el guard tambien lo cubra.
@@ -141,6 +153,11 @@ function makePrisma() {
     rol: { findUnique: vi.fn(async () => ({ id: "rol-apikey" })) },
     tipoIdentificacion: { findUnique: vi.fn(async () => ({ id: "tipo-cedula" })) },
     $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
+    // FICHA 373: `dependenciasDeCuentasDedicadas` consulta por el cliente, no por la tx.
+    $queryRaw: vi.fn(async () => [
+      { usuarioId: "u-dedicado", ordenes: false, dinero: false, tarifas: false },
+    ]),
+    webhookSuscripcion: { deleteMany: vi.fn(async () => ({ count: 1 })) },
   };
   return { prisma: prisma as never, selects };
 }
@@ -177,6 +194,13 @@ const INVOCACIONES: Record<string, (r: ApiKeyRepository) => Promise<unknown>> = 
   // Feature 302: lee una cuenta de tienda REAL para autorizarla como destino. No toca
   // `api_key`, pero si su `usuario`: tiene que demostrar que no se lleva el `passwordHash`.
   findTiendaDestino: (r) => r.findTiendaDestino("u-nuform"),
+  // FICHA 373: el guard de eliminabilidad. No toca `api_key`, pero SI decide si una key se puede
+  // borrar: tiene que demostrar que su respuesta es un booleano por concepto y nada mas.
+  dependenciasDeCuentasDedicadas: (r) => r.dependenciasDeCuentasDedicadas(["u-dedicado"]),
+  // FICHA 373: el borrado fisico. LEE la fila de la key (identificador y estado) justo antes de
+  // borrarla y devuelve el identificador: es de las que mas cerca pasan del secreto, asi que
+  // demuestra aqui que ni el hash ni el prefijo salen por su retorno.
+  eliminar: (r) => r.eliminar("key-1", "actor-1"),
 };
 
 function metodosDelRepositorio(): string[] {

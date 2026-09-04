@@ -17,7 +17,7 @@ import { HISTORIAL_ACCION_TIPOS } from "@/lib/types/historial-accion";
 //
 // Ninguna de las dos cosas rompe un test que no exista. Esta guardia es ese test.
 //
-// LAS TRES COSAS QUE EXIGE, por cada uno de los 44 tipos del catalogo:
+// LAS TRES COSAS QUE EXIGE, por cada uno de los 45 tipos del catalogo:
 //   1. que el metodo declarado como su productor EXISTA y su cuerpo se pueda recortar;
 //   2. que ese cuerpo llame a `appendAccion`;
 //   3. que la llamada sea ATOMICA con la mutacion, en una de las DOS formas validas:
@@ -319,6 +319,16 @@ const CENSO: EntradaCenso[] = [
     forma: "abre_tx",
     mutacion: /tx\.apiKey\.update\(/,
   },
+  {
+    // FICHA 373 — el borrado FISICO. La mutacion que se exige es el `delete` de la propia key: es
+    // la fila que la accion documenta. Los otros dos borrados de la misma tx (la cuenta dedicada y
+    // la suscripcion de webhook) no llevan fila propia porque no son entidades del catalogo.
+    tipos: ["api_key_eliminada"],
+    archivo: "lib/repositories/ApiKeyRepository.ts",
+    metodo: "eliminar",
+    forma: "abre_tx",
+    mutacion: /tx\.apiKey\.delete\(/,
+  },
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -387,6 +397,18 @@ export function fallosDelPuntoDeEscritura(
   const iAppend = cuerpo.indexOf("appendAccion");
   if (iAppend === -1) fallos.push("no llama a `appendAccion`");
   if (!mutacion.test(cuerpo)) fallos.push("no contiene su sentencia de mutacion");
+
+  // EN LAS DOS FORMAS: el cliente que recibe `appendAccion` tiene que ser LA `tx`.
+  //
+  // ⚠️ ESTE CHEQUEO NACIO DE UNA MUTACION SUPERVIVIENTE (ficha 373, 2026-09-04). Estar DENTRO del
+  // callback no basta: `appendAccion(this.prisma, ...)` escrito ahi dentro compila, queda
+  // lexicamente dentro del `$transaction` y ESCRIBE FUERA DE LA TRANSACCION. En produccion eso
+  // significa que un borrado revertido puede dejar su fila de auditoria —o al reves—, que es
+  // exactamente lo que R10/R11 de la 362 prohiben. Ningun test de comportamiento lo caza: con un
+  // doble, `this.prisma` y la `tx` son el mismo objeto.
+  if (iAppend !== -1 && !/appendAccion\(\s*tx\b/.test(cuerpo)) {
+    fallos.push("no le pasa a `appendAccion` la `tx`, sino otro cliente");
+  }
 
   if (forma === "abre_tx") {
     const bloque = bloqueDeTransaccion(cuerpo);
@@ -459,6 +481,17 @@ describe("362/T7.1 — el detector se prueba a si mismo", () => {
     );
   });
 
+  it("⭑ CONTRAPRUEBA (ficha 373): DENTRO del callback pero con OTRO cliente se detecta", () => {
+    // La mutacion que sobrevivio el 2026-09-04 y que motivo este chequeo. El `appendAccion` esta
+    // donde tiene que estar, pero escribe por `this.prisma`: fuera de la transaccion. Compila,
+    // pasa los tests de comportamiento (con un doble, los dos clientes son el mismo objeto) y
+    // deja el sistema capaz de registrar lo que no ocurrio.
+    const mutado = CUERPO_SANO.replace("appendAccion(tx,", "appendAccion(this.prisma,");
+    expect(fallosDelPuntoDeEscritura(mutado, "abre_tx", MUTACION)).toContain(
+      "no le pasa a `appendAccion` la `tx`, sino otro cliente",
+    );
+  });
+
   it("CONTRAPRUEBA: en la forma `recibe_tx`, pasar OTRO cliente se detecta", () => {
     const mutado = `{
       await tx.liquidacionPago.create({ data });
@@ -514,11 +547,11 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     expect(inventados, "el censo nombra un tipo que el catalogo no declara").toEqual([]);
   });
 
-  it("los 44 tipos del Anexo A (+ Q1, Q2, la 366 y la 371) siguen siendo 44", () => {
+  it("los 45 tipos del Anexo A (+ Q1, Q2, la 366, la 371 y la 373) siguen siendo 45", () => {
     // Numero DURO a proposito: añadir un tipo al enum obliga a pasar por aqui, y por tanto a
     // añadirlo al censo y a escribir su productor. Es el mecanismo de R14.
-    // 44 desde la ficha 371 (`gestion_fecha_reprogramacion_corregida`).
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(44);
+    // 45 desde la ficha 373 (`api_key_eliminada`); 44 lo fue desde la 371.
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(45);
   });
 });
 
@@ -526,7 +559,7 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
 // 2 — R9: el registro va en la MISMA transaccion que la mutacion
 // ---------------------------------------------------------------------------------------------
 
-describe("362/R9 — los 44 tipos se registran DENTRO de la transaccion de su accion", () => {
+describe("362/R9 — los 45 tipos se registran DENTRO de la transaccion de su accion", () => {
   it.each(CENSO.map((e) => [`${e.archivo.split("/").pop()}#${e.metodo}`, e] as const))(
     "%s registra su accion en la misma transaccion que la escribe",
     (_nombre, entrada) => {

@@ -60,6 +60,9 @@ const ITEM: ApiKeyListItemDTO = {
   usuarioEmail: "apikey+integracion-erp@apikey.invalid",
   tiendaDestinoId: null, // feature 302
   tiendaDestinoNombre: null,
+  // Ficha 373: la key `activa` NO es eliminable (R11); el motivo lo calcula el servicio.
+  eliminable: false,
+  motivoNoEliminable: "activa",
   createdAt: new Date("2026-01-01T12:00:00Z"),
 };
 
@@ -171,6 +174,32 @@ describe("ApiKeysModule — listado (R14–R19)", () => {
       within(table).getByText("apikey+integracion-erp@apikey.invalid"),
     ).toBeInTheDocument();
     expect(within(table).queryByText("u1")).toBeNull();
+  });
+
+  it("ficha 373: las columnas salen en el orden que deja los botones a la vista", async () => {
+    // El ORDEN es lo que arregló el desbordamiento de la tabla en portátiles (ver la nota de
+    // `api-keys-columns.tsx`): a 1024 px caben 718 y la tabla mide 1100, así que las dos
+    // columnas con botones —«Acciones» y «Webhook»— van delante, detrás del identificador que
+    // dice de qué key son y del estado que decide si el botón ofrece Activar o Desactivar.
+    //
+    // La lista va escrita a mano, no derivada de `buildApiKeysColumns`: compararla contra su
+    // propia fuente estaría siempre verde. Esto afirma lo que PINTA el navegador.
+    renderModule(<ApiKeysModule initialData={INITIAL} />);
+
+    const table = screen.getByRole("table", { name: "API keys" });
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((th) => th.textContent?.trim());
+    expect(headers).toEqual([
+      "Identificador",
+      "Estado",
+      "Acciones",
+      "Webhook",
+      "Prefijo",
+      "Usuario dedicado",
+      "Tienda destino",
+      "Fecha de creación",
+    ]);
   });
 
   it("estado y acciones: pinta el badge de estado y los botones de acción por fila", async () => {

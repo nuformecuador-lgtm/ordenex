@@ -35,10 +35,20 @@ const ROW_ACTIVA: ApiKeyListItemDTO = {
   usuarioEmail: "apikey+integracion-erp@apikey.invalid",
   tiendaDestinoId: null, // feature 302: sin tienda destino (comportamiento historico)
   tiendaDestinoNombre: null,
+  // Ficha 373: la key `activa` NO es eliminable (R11); el motivo lo calcula el servicio.
+  eliminable: false,
+  motivoNoEliminable: "activa",
   createdAt: new Date("2026-01-01T12:00:00Z"),
 };
 
-const ROW_INACTIVA: ApiKeyListItemDTO = { ...ROW_ACTIVA, estado: "inactiva" };
+// Ficha 373: desactivada y sin rastro -> ELIMINABLE. Es el unico estado desde el que se puede
+// borrar (R11), asi que la fila inactiva del fixture lo refleja.
+const ROW_INACTIVA: ApiKeyListItemDTO = {
+  ...ROW_ACTIVA,
+  estado: "inactiva",
+  eliminable: true,
+  motivoNoEliminable: null,
+};
 
 // Secreto NUEVO que `rotarApiKey` devuelve UNA sola vez.
 const PLAIN_KEY = "ordx_zz99yy8EF456ghIJ789klMN012opQR345stUV678wx";

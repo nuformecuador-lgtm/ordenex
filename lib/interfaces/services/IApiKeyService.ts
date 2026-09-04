@@ -3,6 +3,7 @@ import type {
   ApiKeyIdInput,
   ApiKeyListItemDTO,
   DesactivarApiKeyResult,
+  EliminarApiKeyResult,
   GenerarApiKeyInput,
   GenerarApiKeyResult,
   ListarApiKeysCompletoInput,
@@ -84,4 +85,21 @@ export interface IApiKeyService {
    * `not_found` (R3). Idempotente. Devuelve la key publica actualizada.
    */
   desactivar(input: ApiKeyIdInput, actor: Actor): Promise<DesactivarApiKeyResult>;
+
+  /**
+   * FICHA 373/R2/R7/R11/R12/R18/R21 — elimina EN FISICO la key `input.id`, su cuenta dedicada y su
+   * suscripcion de webhook. IRREVERSIBLE: no existe ninguna operacion de restauracion en esta
+   * interfaz, y no la habra (R7).
+   *
+   * - Mismo `ALLOWED_ROLES` que sus cinco hermanas (solo `maestro`) y ANTES de tocar la base ->
+   *   `forbidden` (R18).
+   * - id inexistente -> `not_found` (R21).
+   * - key no eliminable -> `bloqueada` con el motivo que dicta `motivoNoEliminable` (R12/R13). Una
+   *   key `activa` SIEMPRE es `bloqueada`, tenga los datos que tenga (R11): eliminar EXIGE
+   *   desactivar antes, y desactivar sigue siendo reversible y sin borrar nada.
+   * - `ok` devuelve el identificador visible, para el aviso. Nunca el prefijo ni el hash (R36).
+   *
+   * NO conoce HTTP ni Prisma: la autenticacion (R19) la resuelve la Server Action.
+   */
+  eliminar(input: ApiKeyIdInput, actor: Actor): Promise<EliminarApiKeyResult>;
 }

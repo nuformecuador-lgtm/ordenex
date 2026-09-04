@@ -23,7 +23,7 @@ const UUID = "11111111-1111-4111-8111-111111111111";
  */
 function otrosStubs(): Pick<
   IApiKeyService,
-  "listar" | "listarCompleto" | "rotar" | "activar" | "desactivar"
+  "listar" | "listarCompleto" | "rotar" | "activar" | "desactivar" | "eliminar"
 > {
   return {
     listar: vi.fn(async (): Promise<ListarApiKeysResult> => {
@@ -41,6 +41,10 @@ function otrosStubs(): Pick<
     }),
     desactivar: vi.fn(async (): Promise<CambiarEstadoApiKeyResult> => {
       throw new Error("desactivar no debe invocarse aqui");
+    }),
+    // Ficha 373: el borrado tiene su propio archivo (`api-keys-eliminar.test.ts`).
+    eliminar: vi.fn(async (): Promise<never> => {
+      throw new Error("eliminar no debe invocarse aqui");
     }),
   };
 }

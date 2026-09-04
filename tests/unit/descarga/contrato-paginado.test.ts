@@ -87,7 +87,13 @@ const LISTADOS_YA_PAGINADOS: ListadoYaPaginado[] = [
   {
     nombre: "API keys",
     ejecutar: () =>
-      new ApiKeyService({ list: listVacio() } as unknown as IApiKeyRepository).listar(
+      // Ficha 373: el listado de API keys enriquece cada fila con su eliminabilidad, asi que el
+      // doble necesita responder tambien a esa consulta. Devuelve un `Map` vacio: la pagina va
+      // vacia y no hay nada que clasificar.
+      new ApiKeyService({
+        list: listVacio(),
+        dependenciasDeCuentasDedicadas: async () => new Map(),
+      } as unknown as IApiKeyRepository).listar(
         listarApiKeysSchema.parse({ page: 2, pageSize: 10 }),
         MAESTRO,
       ),
