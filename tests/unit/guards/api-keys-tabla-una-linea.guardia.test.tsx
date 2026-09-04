@@ -23,16 +23,21 @@
 //
 //   | viewport | visible | tabla | desborda | máx. líneas por celda | «Eliminar» tras la flecha |
 //   |----------|---------|-------|----------|-----------------------|---------------------------|
-//   | 1024     |     718 |  1177 |    459 → | 1                     | dentro, y recibe el clic  |
-//   | 1280     |     974 |  1177 |    203 → | 1                     | dentro                    |
-//   | 1440     |    1134 |  1177 |     43 → | 1                     | dentro                    |
+//   | 1024     |     718 |  1245 |    527 → | 1                     | dentro, y recibe el clic  |
+//   | 1280     |     974 |  1245 |    271 → | 1                     | dentro                    |
+//   | 1440     |    1134 |  1245 |    111 → | 1                     | dentro                    |
 //   | 1920     |    1614 |  1614 |        0 | 1                     | visible sin desplazar     |
 //
-// A 1440 SE QUEDÓ A 43 px, Y NO ES POR FALTA DE APRETAR. Acortar el email llevó su columna de
-// 394 a 133 px, que es su SUELO: el texto de la cabecera «Usuario dedicado» mide 109 px y la
-// celda tiene 24 de relleno, así que por mucho que se recorte el dato la columna no baja de ahí.
-// Los 261 px que aportó son todo lo que esta columna tenía. El resto ya no se puede sacar sin
-// tocar datos que sí importan, y eso NO se hizo a propósito.
+// A 1440 SIGUE DESBORDANDO, Y ESO ESTÁ DECIDIDO A SABIENDAS. Se probó también el presupuesto
+// corto —12 caracteres, los de un `keyPrefix`—: la tabla bajaba a 1177 y a 1440 seguía
+// desbordando 43 px. O sea que apretar no compraba lo que se pretendía comprar (1440 sin
+// desplazar) y a cambio dejaba la columna MUDA: todos estos emails empiezan por `apikey+`, así
+// que con 12 las dos filas de la base local se leían las dos `apikey+prueb…`. Se eligió que la
+// columna distinga y que a 1440 se deslice.
+//
+// El suelo de esa columna son 133 px y lo pone su CABECERA («Usuario dedicado», 109 px medidos,
+// más 24 de relleno), no el email: recortar el dato por debajo de eso no devuelve un píxel.
+// Bajar el suelo exigiría acortar la etiqueta, que es decisión de producto y no se tomó aquí.
 //
 // El desbordamiento que queda NO es un defecto: `DataTable` ya trae el control para eso (las
 // flechas que solo aparecen cuando la tabla desborda). Se pulsó de verdad en los tres anchos y
@@ -211,10 +216,15 @@ describe("API keys · la tabla no parte sus celdas y «Eliminar» cierra la fila
     const textoVisible = visible!.textContent ?? "";
     expect(textoVisible.endsWith("…"), `«${textoVisible}» no avisa con elipsis`).toBe(true);
     expect(textoVisible).not.toContain(FILA.usuarioEmail);
-    // Se acorta de verdad: 12 caracteres + el elipsis, como el `keyPrefix` de al lado. El
-    // esperado va como LITERAL, no derivado de la constante del componente: si alguien sube o
-    // baja ese presupuesto, esto se pone rojo y obliga a volver a medir la columna.
-    expect(textoVisible).toBe("apikey+prueb…");
+    // Se acorta de verdad, pero DEJANDO LO QUE DISTINGUE: 20 caracteres + el elipsis. Todos
+    // estos emails empiezan por `apikey+`, así que un presupuesto corto los volvía idénticos
+    // entre sí (con 12 las dos filas de la base local se leían las dos `apikey+prueb…`).
+    // El esperado va como LITERAL, no derivado de la constante del componente: si alguien sube
+    // o baja ese presupuesto, esto se pone rojo y obliga a volver a medir la columna.
+    expect(textoVisible).toBe("apikey+prueba-tienda…");
+    // Y lo visible tiene que servir para nombrar la fila: incluye el identificador, no solo el
+    // `apikey+` que llevan todas.
+    expect(textoVisible).toContain("prueba-tienda");
 
     // 2) El valor COMPLETO, en el tooltip.
     const conTitle = celda.querySelector<HTMLElement>("[title]");

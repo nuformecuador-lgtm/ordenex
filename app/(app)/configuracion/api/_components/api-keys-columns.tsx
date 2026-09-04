@@ -70,18 +70,27 @@ function CeldaUnaLinea({
 }
 
 /**
- * Caracteres visibles del email sintético antes del elipsis. Son 12, los mismos que tiene un
- * `keyPrefix` (`ordx_` + 7), para que las dos columnas `font-mono` se lean como una pareja y no
- * como dos criterios distintos.
+ * Caracteres visibles del email sintético antes del elipsis.
  *
- * Y 12 no es un número redondo elegido a ojo: es EL TOPE de lo que esta columna puede aportar.
- * Medido en Chromium a 1440 px, el texto de la cabecera «Usuario dedicado» mide 109 px y la
- * celda tiene 12+12 de relleno, así que la columna no puede bajar de 133 px por mucho que se
- * acorte el dato — su suelo lo pone su propia etiqueta, no el email. A 8,41 px por carácter en
- * esta fuente, 12 caracteres + el elipsis son justo esos 109 px: apretar más no devuelve ni un
- * píxel y solo escondería más dato.
+ * SON 20 PORQUE LA COLUMNA TIENE QUE DISTINGUIR UNA FILA DE OTRA. Todos estos emails empiezan
+ * por los mismos 7 caracteres (`apikey+`), así que lo que separa una key de otra son los que
+ * vienen DESPUÉS. Con 20 se lee `apikey+prueba-tienda…`, que ya nombra a su key; el
+ * presupuesto anterior (12, el mismo que un `keyPrefix`) dejaba `apikey+prueb…` en TODAS las
+ * filas cuyo identificador empezara igual — medido en la base local, las dos filas se veían
+ * idénticas. Una columna que no distingue es ruido que además cuesta ancho.
+ *
+ * ⚠️ Y NO, BAJARLO A 12 NO ARREGLABA NADA. Se probó y está medido: con 12 la tabla queda en
+ * 1177 px y a 1440 (1134 visibles) sigue desbordando 43; con 20 queda en 1245 y desborda 111.
+ * Hace falta desplazar en los DOS casos, así que apretar hasta 12 no compraba lo que se
+ * pretendía comprar —1440 sin scroll— y a cambio dejaba la columna muda. Se pagaba el ancho sin
+ * recibir el beneficio.
+ *
+ * El suelo de esta columna, por si alguien vuelve sobre esto: 133 px. Lo pone el texto de su
+ * cabecera «Usuario dedicado» (109 px medidos) más los 12+12 de relleno de la celda, NO el
+ * email. Recortar el dato por debajo de eso no devuelve ni un píxel. Acortar la ETIQUETA sí
+ * bajaría el suelo, pero eso es una decisión de producto y no se toma desde aquí.
  */
-const MAX_EMAIL_VISIBLE = 12;
+const MAX_EMAIL_VISIBLE = 20;
 
 /** Lo que se VE del email: sus primeros caracteres y un elipsis, igual que el prefijo. */
 function acortarEmailSintetico(email: string): string {
@@ -96,7 +105,8 @@ function acortarEmailSintetico(email: string): string {
  * es un valor SINTÉTICO y DERIVADO, `apikey+<identificador>@apikey.invalid`, sobre un dominio
  * `.invalid` que por definición no existe. No recibe correo, no sirve para iniciar sesión, y su
  * parte informativa es el identificador… que ya está entero en la PRIMERA columna de la misma
- * fila. Aportaba 394 px de los 1438 de la tabla a cambio de repetir el dato de al lado.
+ * fila. Aportaba 394 px de los 1438 de la tabla a cambio de repetir el dato de al lado; con el
+ * acortado se queda en 201 y la tabla en 1245.
  *
  * EL VALOR COMPLETO NO SE PIERDE, y por dos vías a la vez porque una sola no basta:
  *  - `title`, el tooltip al posarse encima (patrón de la ficha 354, `textoSelloCompleto`);
