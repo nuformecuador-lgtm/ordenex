@@ -34,6 +34,10 @@ function makeService(result?: ListarApiKeysResult) {
     desactivar: vi.fn(async () => {
       throw new Error("desactivar no debe invocarse desde listarApiKeys");
     }),
+    // Ficha 373: el borrado no se invoca al listar.
+    eliminar: vi.fn(async () => {
+      throw new Error("eliminar no debe invocarse desde listarApiKeys");
+    }),
   };
   return { service, capturado };
 }
@@ -139,6 +143,8 @@ describe("listarApiKeys (action) — el secreto no cruza al cliente (R6)", () =>
           tiendaDestinoId: null, // feature 302
           tiendaDestinoNombre: null,
           createdAt: new Date("2026-07-16T12:00:00Z"),
+          eliminable: false, // ficha 373: `activa` -> no eliminable (R11)
+          motivoNoEliminable: "activa",
         },
       ],
       page: 1,

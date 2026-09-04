@@ -20,13 +20,20 @@ const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
  * no deben invocarse nunca: stubs que fallan ruidosamente en vez de devolver un vacio
  * que haria pasar un test por la razon equivocada.
  */
-function listStubs(): Pick<IApiKeyRepository, "list" | "count"> {
+function listStubs(): Pick<
+  IApiKeyRepository,
+  "list" | "count" | "dependenciasDeCuentasDedicadas"
+> {
   return {
     list: vi.fn(async (): Promise<ListApiKeysResult> => {
       throw new Error("list no debe invocarse desde generar");
     }),
     count: vi.fn(async (): Promise<number> => {
       throw new Error("count no debe invocarse desde generar");
+    }),
+    // Ficha 373: la eliminabilidad se resuelve al LISTAR; generar y el ciclo de vida no la miran.
+    dependenciasDeCuentasDedicadas: vi.fn(async () => {
+      throw new Error("dependenciasDeCuentasDedicadas no debe invocarse aqui");
     }),
   };
 }
@@ -48,13 +55,17 @@ function tiendaDestinoStub(): Pick<IApiKeyRepository, "findTiendaDestino"> {
  * Ciclo de vida: `IApiKeyRepository` ahora exige `rotar`/`setEstado`. En los tests de
  * `generar` no deben invocarse: stubs que fallan ruidosamente.
  */
-function lifecycleStubs(): Pick<IApiKeyRepository, "rotar" | "setEstado"> {
+function lifecycleStubs(): Pick<IApiKeyRepository, "rotar" | "setEstado" | "eliminar"> {
   return {
     rotar: vi.fn(async () => {
       throw new Error("rotar no debe invocarse desde generar");
     }),
     setEstado: vi.fn(async () => {
       throw new Error("setEstado no debe invocarse desde generar");
+    }),
+    // Ficha 373: el borrado fisico no se toca desde `generar`. Lanza para delatarlo.
+    eliminar: vi.fn(async () => {
+      throw new Error("eliminar no debe invocarse desde generar");
     }),
   };
 }
@@ -415,6 +426,11 @@ function makeLifecycleRepo(opts: { notFound?: boolean } = {}) {
     setEstado: vi.fn(async (_id: string, estado: "activa" | "inactiva") =>
       opts.notFound ? null : apiKeyPublico(estado),
     ),
+    // Ficha 373: el borrado tiene su propio archivo (`api-key-service.eliminar.test.ts`); desde
+    // rotar/activar/desactivar no debe invocarse.
+    eliminar: vi.fn(async () => {
+      throw new Error("eliminar no debe invocarse desde rotar/activar/desactivar");
+    }),
   };
   return repo;
 }

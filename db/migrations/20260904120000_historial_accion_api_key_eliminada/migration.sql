@@ -1,0 +1,22 @@
+-- FICHA 373 — el tipo de accion `api_key_eliminada`.
+--
+-- QUE REGISTRA: que un maestro borro EN FISICO una API key YA DESACTIVADA, su cuenta dedicada
+-- (`usuario`, rol `apiKey`) y su suscripcion de webhook, si tenia. Es la sexta operacion del ciclo
+-- de vida de una key —generar / rotar / activar / desactivar / [listar] / ELIMINAR— y la unica
+-- irreversible: por eso deja fila.
+--
+-- ⚠️ LA FILA NUNCA LLEVA EL SECRETO, NI `key_hash`, NI `key_prefix` (R23). La key se nombra por su
+-- IDENTIFICADOR VISIBLE, que es como se la nombra en pantalla. Un prefijo es media credencial y no
+-- tiene por que acabar en un archivo descargable. Es la misma frase que ya esta escrita en
+-- `ApiKeyRepository.createConUsuario`.
+--
+-- POR QUE EL RASTRO SOBREVIVE AL BORRADO FISICO: `historial_accion.entidad_id` es opaco y SIN FK, y
+-- `entidad_etiqueta` va denormalizada. La ficha 362 ya contemplaba entidades que se borran en
+-- fisico (`tarifa`, `zona`, `vehiculo`, `plantilla_mensaje`), y esta es una mas.
+--
+-- VA SOLA: Postgres prohibe USAR un valor de enum en la misma transaccion que lo anade (55P04).
+-- Esta migracion no escribe ninguna fila con el valor nuevo; su primer uso ocurre en runtime.
+--
+-- ADITIVA: no crea ni altera tablas, columnas ni indices (R39: esta ficha NO introduce modelo de
+-- datos nuevo, ni borrado logico, ni archivado). La RLS de `historial_accion` no se toca.
+ALTER TYPE "historial_accion_tipo" ADD VALUE IF NOT EXISTS 'api_key_eliminada';

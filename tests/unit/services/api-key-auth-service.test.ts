@@ -35,6 +35,13 @@ function makeRepo(findResult: ApiKeyAutenticada | null): IApiKeyRepository {
     findTiendaDestino: vi.fn(async () => {
       throw new Error("findTiendaDestino no debe invocarse desde la autenticacion");
     }),
+    // Ficha 373: autenticar no mira la eliminabilidad ni borra nada. Lanzan para delatarlo.
+    dependenciasDeCuentasDedicadas: vi.fn(async () => {
+      throw new Error("dependenciasDeCuentasDedicadas no debe invocarse desde la autenticacion");
+    }),
+    eliminar: vi.fn(async () => {
+      throw new Error("eliminar no debe invocarse desde la autenticacion");
+    }),
   };
 }
 

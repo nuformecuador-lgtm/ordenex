@@ -3052,7 +3052,7 @@ enum HistorialAccionTipo {
   vehiculo_borrado
   plantilla_eliminada
 
-  // --- cambia quien puede hacer que (11) ---
+  // --- cambia quien puede hacer que (12) ---
   usuario_creado
   usuario_rol_cambiado
   usuario_zona_cambiada
@@ -3064,6 +3064,17 @@ enum HistorialAccionTipo {
   api_key_rotada
   api_key_activada
   api_key_desactivada
+  /// FICHA 373: un maestro borro EN FISICO una API key YA DESACTIVADA, su cuenta dedicada y su
+  /// suscripcion de webhook. Entra en «cambia quien puede hacer que», la MISMA categoria que sus
+  /// cuatro hermanas, y no en «hace desaparecer algo»: lo que la fila documenta es un cambio de
+  /// QUIEN PUEDE ENTRAR POR LA API, que es el eje de las otras cuatro. Partir el ciclo de vida de
+  /// una credencial en dos familias romperia el filtro por categoria justo donde mas se usa.
+  ///
+  /// ⚠️ NUNCA lleva el secreto, ni `key_hash`, ni `key_prefix` (R23): la key se identifica por su
+  /// IDENTIFICADOR VISIBLE. `valor_anterior` guarda el estado que tenia justo antes (siempre
+  /// `inactiva`, porque una key `activa` no es eliminable) y `valor_nuevo` va en NULL: ya no hay
+  /// estado al que apuntar.
+  api_key_eliminada
 
   @@map("historial_accion_tipo")
 }

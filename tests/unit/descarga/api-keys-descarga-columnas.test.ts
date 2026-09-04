@@ -18,6 +18,9 @@ const API_KEY: ApiKeyListItemDTO = {
   usuarioEmail: "apikey+tienda-uno@apikey.invalid",
   tiendaDestinoId: null, // feature 302
   tiendaDestinoNombre: null,
+  // Ficha 373: desactivada y sin rastro de datos -> eliminable.
+  eliminable: true,
+  motivoNoEliminable: null,
   createdAt: new Date("2026-03-15T18:30:00.000Z"),
 };
 
