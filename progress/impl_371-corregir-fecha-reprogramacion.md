@@ -153,6 +153,45 @@ Ningún `down.sql` anterior se tocó.
   estática**. El efecto de un lock no es observable en una suite secuencial; ningún test de
   comportamiento puede cazarlo, y decirlo es más honesto que fingir cobertura.
 
+## Los dos menores del reviewer que sí se atendieron
+
+### El `down.sql` se EJECUTÓ, no se leyó
+
+El reviewer lo había verificado como texto y con buen motivo para no correrlo: un `db:rollback`
+soltaría la tabla en la base local, compartida con otros árboles. Se resolvió con el patrón de la
+366: **dentro de una transacción revertida**, con `pg_advisory_xact_lock` como primera sentencia para
+no pisar otras suites.
+
+Medido: antes, la tabla existe y el enum tiene 44 valores con **0 filas usando el nuevo** (la
+precondición del `down`); dentro, la tabla ya no existe, el enum queda en **43 y es exactamente la
+lista previa en su orden**, y la columna `accion` sigue casteando sobre 56 filas reales; tras el
+`ROLLBACK`, todo byte a byte como estaba. **VERDE, y no hubo que corregir nada** — solo se añadió a
+la cabecera la frase de seguridad del precedente (revertir un `ADD VALUE` solo es seguro si ninguna
+fila usa el valor nuevo). El script vivió fuera del repo y se borró.
+
+### Un mensaje que mentía en un camino de excepción
+
+Si la liberación reventaba tras corregir a **HOY**, el desenlace caía a `espera_fecha` y la pantalla
+decía «vuelve sola cuando llegue» **sobre un día que ya llegó**. La corrección quedaba bien guardada
+y la corrida de las 00:00 lo arreglaba solo, así que el daño estaba acotado a un día — pero el
+mensaje era falso, y en esta ficha el mensaje es medio producto.
+
+Arreglado: la fecha corregida **viaja en la firma** del liberador y una sola función decide el
+residuo (`desenlaceSinLiberar`, `lib/services/liberacion-tras-corregir-fecha.ts:58-65`) — fecha futura
+→ `espera_fecha` (ahí la frase es verdad); fecha ya vencida → `espera_cierre`, que dice lo único
+cierto (todavía no vuelve) sin inventar un día futuro. Cubre también el `catch` y el residual, y el
+no-op del constructor usa la misma regla para que un doble tampoco pueda mentir.
+
+**Por qué NO se añadió un cuarto valor al discriminante, y es un hallazgo que conviene conservar:**
+`textoDesenlace` (`corregir-fecha-reprogramacion-textos.ts:147-153`) mapea con `if / if / else`, así
+que **un valor nuevo caería en el `else` y seguiría pintando la frase falsa sin romper el build**.
+Cerrarlo del todo exige tocar la pantalla. **Deuda declarada:** con la fecha vencida, `espera_cierre`
+atribuye la espera al cierre, que es la causa mayoritaria pero no la única.
+
+**Mutación que lo fija:** revertir el arreglo (`desenlaceSinLiberar` → siempre `"espera_fecha"`) pone
+en rojo **5 unitarios y 1 de integración**. Antes de esto **no había ni un test que ejercitara ese
+camino**, y por eso el texto pudo quedar mal sin que nada se pusiera rojo.
+
 ## Riesgos y lo que NO entra
 
 - **La base local queda migrada** al aplicar esto: cualquier otro worktree de la máquina verá
