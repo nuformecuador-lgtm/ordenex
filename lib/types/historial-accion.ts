@@ -17,7 +17,7 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // FICHA 362 (design §1.1, R14/R15/R17) — EL CATALOGO CERRADO del historial de acciones.
 //
 // Modulo PURO: no importa Prisma en runtime (solo los TIPOS del enum, borrados en compilacion),
-// ni React, ni `lib/services`. Lo consumen el borde (zod), el servicio, el repositorio, los 43
+// ni React, ni `lib/services`. Lo consumen el borde (zod), el servicio, el repositorio, los 44
 // puntos de escritura y la pantalla.
 //
 // LAS DOS DIRECCIONES DEL CIERRE, y por eso hay `satisfies` Y `_AsegurarExhaustivo`:
@@ -27,13 +27,14 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // Un tipo declarado en la base y ausente del catalogo seria un filtro que no se puede pedir; uno
 // en el catalogo y ausente de la base seria un `validation_error` que nadie entiende.
 //
-// LOS CUARENTA Y TRES, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y cada
-// una añade UN tipo (`orden_ubicacion_corregida`, `usuario_fulfillment_cambiado`); la ficha 366
-// (2026-09-03) añade el tercero (`orden_zona_reconciliada`). Los tres entran en «mueve dinero» y su
-// motivo esta escrito al lado de cada uno.
+// LOS CUARENTA Y CUATRO, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y
+// cada una añade UN tipo (`orden_ubicacion_corregida`, `usuario_fulfillment_cambiado`); la ficha 366
+// (2026-09-03) añade el tercero (`orden_zona_reconciliada`) y los tres entran en «mueve dinero»; la
+// ficha 371 añade el cuarto (`gestion_fecha_reprogramacion_corregida`), que entra en «hace
+// desaparecer algo». El motivo de cada uno esta escrito a su lado.
 
 /**
- * Los 43 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
+ * Los 44 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
  * permisos) y es el que consume el selector de filtros: no se reordena por gusto.
  */
 export const HISTORIAL_ACCION_TIPOS = [
@@ -79,7 +80,23 @@ export const HISTORIAL_ACCION_TIPOS = [
   // nueva (R10). Todas las filas de un mismo guardado comparten `lote_id` (R11).
   "orden_zona_reconciliada", // zonas.actualizarZona -> ZonaRepository.update
 
-  // --- A.2 · hace desaparecer algo (6) ---
+  // --- A.2 · hace desaparecer algo (7) ---
+  // ⭑ FICHA 371 — la fecha de una reprogramacion ya registrada, corregida por un coordinador.
+  // ENTRA AQUI, EN «hace desaparecer algo», PORQUE LA ORDEN PUEDE DEJAR DE ESTAR DONDE ESTABA:
+  // corregir la fecha a HOY dispara la liberacion en el mismo acto (desenlace `liberada`), asi que
+  // la orden sale de `reprogramada` y ya no esta donde el coordinador la tenia. Misma familia que
+  // `orden_eliminada`, y por eso la fila importa: es lo que explica por que esa orden ya no aparece
+  // donde alguien la dejo. (R17: exactamente una categoria por tipo.)
+  //
+  // NO en «mueve dinero», y esta medido: una gestion `reprogramada` no lleva importe (0 de 160 con
+  // pago al mensajero o ingreso por rechazo) y ni la analitica ni el ranking leen esa columna.
+  //
+  // ⚠️ Y NO PORQUE LA FECHA ANTERIOR SE PIERDA — no se pierde: queda en
+  // `gestion_fecha_reprogramacion_cambio.fecha_anterior`, fotografiada bajo `FOR UPDATE` antes de
+  // pisarla. Se dice en voz alta para que nadie concluya lo contrario y deje de usar esa tabla.
+  // Las DOS fechas viajan ademas en `valor_anterior`/`valor_nuevo`. El MOTIVO no: R5 lo deja fuera
+  // de esta tabla y vive en la propia, que no se descarga.
+  "gestion_fecha_reprogramacion_corregida", // CorreccionFechaReprogramacionRepository.corregirFecha
   "orden_eliminada", // eliminar-orden.eliminarOrdenes Y app/api/ordenes/api-key/orden/[id]
   "orden_recuperada", // recuperar-orden.recuperarOrdenes
   // `tarifa_borrada` esta AQUI y no en «dinero» aunque mueva precio: R17 exige EXACTAMENTE una
@@ -172,6 +189,7 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   orden_ubicacion_corregida: "mueve_dinero",
   usuario_fulfillment_cambiado: "mueve_dinero",
   orden_zona_reconciliada: "mueve_dinero",
+  gestion_fecha_reprogramacion_corregida: "hace_desaparecer",
   orden_eliminada: "hace_desaparecer",
   orden_recuperada: "hace_desaparecer",
   tarifa_borrada: "hace_desaparecer",
@@ -219,6 +237,7 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   orden_ubicacion_corregida: "Corrigió la ubicación de una orden",
   usuario_fulfillment_cambiado: "Cambió el fulfillment de una tienda",
   orden_zona_reconciliada: "Actualizó la zona de una orden",
+  gestion_fecha_reprogramacion_corregida: "Corrigió la fecha de una reprogramación",
   orden_eliminada: "Eliminó una orden",
   orden_recuperada: "Recuperó una orden",
   tarifa_borrada: "Borró una tarifa",

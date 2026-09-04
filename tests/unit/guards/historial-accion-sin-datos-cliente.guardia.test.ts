@@ -66,6 +66,11 @@ const MOTIVO_SUELTO = /\bmotivo\b/;
 /** Los archivos con al menos un `appendAccion`, que son los 43 puntos de escritura. */
 const PUNTOS_DE_ESCRITURA = [
   "lib/repositories/OrdenRepository.ts",
+  // ⭑ FICHA 371. Su bloque `appendAccion` lleva las DOS fechas en `valorAnterior`/`valorNuevo`, y
+  // ese es justo el sitio por el que un dia entraria el motivo escrito por una persona: el motivo
+  // de esta correccion vive en su tabla propia (`gestion_fecha_reprogramacion_cambio`), que no se
+  // descarga, y NO puede cruzarse a esta.
+  "lib/repositories/CorreccionFechaReprogramacionRepository.ts",
   "lib/repositories/UserRepository.ts",
   "lib/repositories/TarifaRepository.ts",
   "lib/repositories/ZonaRepository.ts",

@@ -152,6 +152,7 @@ model Usuario {
   ordenNotasEscritas                  OrdenNota[]               @relation("OrdenNotaAutor") // feature 227: notas del hilo que ESTE usuario publico; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
   postulacionesRecursoAtendidas       PostulacionRecurso[]      @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
   diaRepartoCambiosRealizados         OrdenDiaRepartoCambio[]   @relation("OrdenDiaRepartoCambioActor") // feature 262/R20: correcciones del dia de reparto que ESTE usuario hizo; la FK es RESTRICT (quien corrigio es evidencia y no se pierde al dar de baja al usuario)
+  fechaReprogramacionCambiosHechos    GestionFechaReprogramacionCambio[] @relation("GestionFechaReprogramacionCambioActor") // ficha 371: correcciones de la fecha de una reprogramacion que ESTE usuario hizo; FK RESTRICT por el mismo motivo que la linea de arriba
   habilitacionesApiPedidas            OrdenHabilitacionApi[]    @relation("OrdenHabilitacionApiActor") // feature 266/R21: habilitaciones pedidas por el canal integrador a nombre de ESTE usuario (302: el dueno resuelto de la key -- su cuenta dedicada, o la tienda real a la que apunta); la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
   cobrosGastoFijo                     GastoFijoCobro[]          @relation("GastoFijoCobroDecisor") // ficha 333/R15/R21: cobros de gasto fijo que ESTE usuario aprobo o rechazo; la FK es RESTRICT (quien autorizo dinero es evidencia y no se pierde al dar de baja al usuario), mismo criterio que `orden_dia_reparto_cambio.actor_usuario_id`
   cobrosRechazoTiendaDecididos        RechazoTiendaCobro[]      @relation("RechazoTiendaCobroDecisor") // ficha 337: cobros por rechazo de tienda que ESTE usuario aprobo o rechazo. FK RESTRICT por el mismo motivo que la linea de arriba: quien autorizo un cobro es evidencia y no se pierde al dar de baja al usuario.
@@ -682,6 +683,7 @@ model Orden {
   // que esta feature NO toca (R25). Son dos cosas distintas y el nombre lo dice.
   notasHilo             OrdenNota[]             @relation("OrdenNotaOrden") // feature 227/R30: hilo de notas tienda<->mensajero de esta orden; la FK es CASCADE (borrar la orden se lleva su hilo)
   diaRepartoCambios     OrdenDiaRepartoCambio[] @relation("OrdenDiaRepartoCambioOrden") // feature 262/R20-R23: rastro append-only de las correcciones del dia de reparto de esta orden
+  fechaReprogramacionCambios GestionFechaReprogramacionCambio[] @relation("GestionFechaReprogramacionCambioOrden") // ficha 371: rastro append-only de las correcciones de la fecha de reprogramacion de esta orden
   habilitacionesApi     OrdenHabilitacionApi[]  @relation("OrdenHabilitacionApiOrden") // feature 266/R23-R24: bitacora append-only de las habilitaciones pedidas por el canal por API key sobre esta orden; la FK es CASCADE (borrar la orden se lleva su bitacora)
 
   // UNICIDAD DE `num_remision`: POR TIENDA, NO GLOBAL (migracion 20260825160000).
@@ -1080,6 +1082,9 @@ model GestionOrden {
   // UNO A UNO (`rechazo_tienda_cobro_gestion_uq`): un rechazo, un cobro, en cualquier estado.
   // Opcional porque la inmensa mayoria de gestiones no son un rechazo de escritorio.
   cobroRechazoTienda      RechazoTiendaCobro?
+  // Ficha 371: rastro append-only de las correcciones de `fecha_reprogramacion` de ESTA gestion.
+  // La FK es RESTRICT: el rastro sobrevive a cualquier intento de borrar la gestion corregida.
+  fechaReprogramacionCambios GestionFechaReprogramacionCambio[] @relation("GestionFechaReprogramacionCambioGestion")
 
   @@index([ordenId]) // R7
   @@index([mensajeroId]) // R7
@@ -2908,6 +2913,69 @@ model OrdenDiaRepartoCambio {
   @@map("orden_dia_reparto_cambio")
 }
 
+/// FICHA 371 (migracion `20260903150000_correccion_fecha_reprogramacion`) — RASTRO de las
+/// correcciones de la FECHA DE UNA REPROGRAMACION ya registrada. Fila INMUTABLE, append-only: sin
+/// `updated_at`, sin `deleted_at`, sin soft delete. Una correccion posterior ANADE una fila.
+///
+/// ES LA HERMANA DE `OrdenDiaRepartoCambio` (262), sobre la otra columna: alli el dia en que el
+/// mensajero SALE con el paquete, aqui el dia en que la orden VUELVE a circular. Se copia su forma
+/// entera —las dos fechas `@db.Date`, el actor NOT NULL, el motivo obligatorio, el CHECK de fecha
+/// distinta— porque es la misma operacion y las mismas trampas.
+///
+/// POR QUE UNA TABLA PROPIA Y NO SOLO LA FILA DE `historial_accion` (ficha 362): esa tabla se
+/// descarga a un archivo y no se purga nunca, y por eso R5 de la 362 deja FUERA todo texto libre
+/// tecleado por una persona —el motivo es el vector canonico de datos del destinatario—. Sus dos
+/// columnas de valor son `VarChar(60)` de vocabulario cerrado: una fecha cabe, un motivo no. Los dos
+/// rastros conviven y contestan preguntas distintas: aqui el detalle CON motivo, alli «quien hizo
+/// que» en toda la aplicacion.
+model GestionFechaReprogramacionCambio {
+  id String @id @default(uuid())
+
+  /// LA GESTION corregida. Es la fila que de verdad se toca, y la misma que el cron de liberacion
+  /// elige como «gestion `reprogramada` vigente» de la orden.
+  gestionId String @map("gestion_id")
+
+  /// La ORDEN, desnormalizada a proposito: la lectura prevista es «el rastro de esta orden» y
+  /// llegar por la gestion obligaria a un join en la ruta mas comun. `gestion_orden.orden_id` es
+  /// inmutable, asi que no hay dos verdades que puedan divergir.
+  ordenId String @map("orden_id")
+
+  /// NOT NULL a proposito: la operacion EXIGE fecha previa (una gestion `reprogramada` sin fecha se
+  /// rechaza, no se corrige), asi que una fila que dijera «no tenia fecha» no la puede escribir
+  /// ningun productor. Nullable admitiria un estado irrepresentable.
+  fechaAnterior DateTime @map("fecha_anterior") @db.Date
+
+  /// `@db.Date` en las dos: son FECHAS, no instantes. Misma convencion que
+  /// `gestion_orden.fecha_reprogramacion` (36/46). Un `timestamp` reabriria la trampa de las seis
+  /// horas que cerro la 166.
+  fechaNueva DateTime @map("fecha_nueva") @db.Date
+
+  /// NOT NULL, al reves que `orden_historial_estado.actor_usuario_id` (donde NULL = cron): AQUI
+  /// SIEMPRE HAY UNA PERSONA —solo `maestro` y `admin`—, y quien corrigio es la evidencia. La FK es
+  /// `Restrict` por el mismo criterio que `orden_dia_reparto_cambio.actor_usuario_id`.
+  actorUsuarioId String @map("actor_usuario_id")
+
+  /// OBLIGATORIO (decision del humano, 2026-09-03: «el motivo si tiene que ir, basicamente es la
+  /// misma gestion que reprogramar»). Se valida con `motivoSchema` de `lib/types/gestion-orden.ts`,
+  /// EL MISMO que valida el motivo al reprogramar — no una regla nueva.
+  motivo String
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  gestion GestionOrden @relation("GestionFechaReprogramacionCambioGestion", fields: [gestionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  orden   Orden        @relation("GestionFechaReprogramacionCambioOrden", fields: [ordenId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  actor   Usuario      @relation("GestionFechaReprogramacionCambioActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// EL CHECK `gestion_fecha_reprogramacion_cambio_fecha_distinta` (`fecha_nueva <> fecha_anterior`)
+  /// VIVE SOLO EN LA MIGRACION: Prisma no expresa CHECK (mismo caso que
+  /// `orden_dia_reparto_cambio_dia_distinto` y `notificacion_destinatario_xor`). Es la regla puesta
+  /// en la base: una «correccion» que no corrige nada no es escribible ni por error.
+  @@index([ordenId, createdAt]) // la lectura prevista: «el rastro de esta orden», en orden. Cubre ademas la FK a `orden` por prefijo
+  @@index([gestionId, createdAt]) // la FK RESTRICT a la gestion, indexada; y «el rastro de esta gestion»
+  @@index([actorUsuarioId]) // la FK RESTRICT del actor, indexada (patron `orden_dia_reparto_cambio`)
+  @@map("gestion_fecha_reprogramacion_cambio")
+}
+
 // =================================================================================================
 // FICHA 362 — HISTORIAL DE ACCIONES
 // =================================================================================================
@@ -2960,7 +3028,20 @@ enum HistorialAccionTipo {
   /// distrito, ni la zona anterior ni la nueva.
   orden_zona_reconciliada
 
-  // --- hace desaparecer algo (6) ---
+  // --- hace desaparecer algo (7) ---
+  /// FICHA 371: corregir la fecha de una reprogramacion ya registrada. ENTRA POR «hace desaparecer
+  /// algo» porque corregir a HOY puede SACAR LA ORDEN DE `reprogramada` EN EL MISMO ACTO —la
+  /// correccion dispara la liberacion, desenlace `liberada`—, asi que la orden deja de estar donde
+  /// el coordinador la tenia. Misma familia que `orden_eliminada`: algo deja de estar donde estaba.
+  /// Y NO por «mueve dinero»: esta MEDIDO que una gestion `reprogramada` no lleva importe (0 de 160
+  /// con pago al mensajero o ingreso por rechazo) y que ni la analitica ni el ranking leen esa
+  /// columna.
+  ///
+  /// ⚠️ LA FECHA ANTERIOR NO SE PIERDE, y conviene decirlo aqui para que nadie lo suponga: queda
+  /// guardada en `gestion_fecha_reprogramacion_cambio.fecha_anterior`, fotografiada bajo
+  /// `FOR UPDATE` antes de pisarla. Esta fila guarda ademas las DOS fechas en
+  /// `valor_anterior`/`valor_nuevo`; el motivo NO va aqui (R5), va en aquella tabla.
+  gestion_fecha_reprogramacion_corregida
   orden_eliminada
   orden_recuperada
   /// `tarifa_borrada` esta en «desaparicion» y no en «dinero» aunque mueva precio: R17 exige
