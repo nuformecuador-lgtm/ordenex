@@ -16,11 +16,20 @@
 --    APENDE, asi que ese es el `enumsortorder` real de la base). Patron IDENTICO a
 --    `20260903120000_historial_accion_orden_zona_reconciliada/down.sql`.
 --
+--    IRREVERSIBILIDAD PARCIAL: el `ADD VALUE` del up no se puede deshacer con un `DROP VALUE`
+--    nativo. ESTE DOWN ES SEGURO SOLO SI NINGUNA FILA USA EL VALOR NUEVO (ver precondicion).
+--
 --    ⚠️ PRECONDICION: NINGUNA fila de "historial_accion" con
 --    accion = 'gestion_fecha_reprogramacion_corregida'. Si quedara alguna, el `USING` del
 --    `ALTER COLUMN` falla RUIDOSAMENTE al no poder castear ese valor al tipo recreado y el rollback
 --    aborta: comportamiento CORRECTO — borrar el rastro de auditoria de correcciones ya ejecutadas
 --    no es seguro; primero se decide que hacer con esas filas.
+--
+-- ⭑ ESTE DOWN SE EJECUTO, no solo se leyo (2026-09-03, patron de la ficha 366): las cinco
+-- sentencias corrieron contra la base local DENTRO de una transaccion que se revirtio. Dentro de
+-- ella la tabla dejo de existir, el enum quedo en los 43 valores de la lista previa EN SU ORDEN, y
+-- la columna "historial_accion"."accion" siguio casteando sobre sus 56 filas reales; tras el
+-- ROLLBACK la base quedo byte a byte como estaba. Leerlo no demuestra que corra.
 --
 --    NINGUN `down.sql` ANTERIOR SE TOCA: son fotos historicas de lo que habia cuando se escribieron.
 --
