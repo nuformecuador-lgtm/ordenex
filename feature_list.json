@@ -4444,10 +4444,10 @@
       "title": "una API key que ya no se usa no se puede eliminar",
       "description": "El listado de Configuracion > API solo deja activar, desactivar y rotar: una key creada para probar se queda en la tabla para siempre.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
-      "branch": null,
+      "branch": "feat/373-eliminar-api-key",
       "status_note": "PEDIDA por el humano el 2026-09-04, repasando el ciclo de vida de las keys. || MEDIDO en produccion ese dia: 2 keys ('API Nuform' activa, 'Api Pruebas' inactiva), ambas del 2026-08-28, con 0 ordenes a nombre de su cuenta dedicada y sin webhook. NO es un problema de volumen -la tabla no crece-: es que la key de prueba no hay forma de quitarla del listado. || VIABLE Y LIMPIO: ninguna FK apunta a `api_key` (consultado contra prod), y `historial_accion.entidad_id` es opaco y SIN FK, con `entidad_etiqueta` congelada (db/schema.prisma:3116), asi que el rastro sobrevive al borrado fisico -la ficha 362 ya contemplaba entidades que se borran en fisico-. || EL BORRADO DEBE LLEVARSE LA CUENTA DEDICADA: la key crea un usuario sintetico con email/cedula derivados del identificador (lib/repositories/ApiKeyRepository.ts:117); si se deja huerfana, el identificador queda quemado y volver a crear esa key da `conflict` para siempre. Una transaccion: api_key + usuario dedicado + webhook_suscripcion, mas una accion nueva `api_key_eliminada` en el historial. || FRONTERA, decidida por el humano el 2026-09-04: solo se elimina la key SIN ordenes a nombre de su cuenta dedicada -borrar una con ordenes las dejaria sin dueno-. Para esas la revocacion sigue siendo 'Desactivar' y ahi se quedan: NO se archivan ni se ocultan, fuera de alcance hasta que exista un caso real. El boton sale deshabilitado diciendo por que, no un boton que falla al pulsarlo. || OJO 302: con tienda destino las ordenes son de la tienda, no de la cuenta dedicada; por eso las dos keys de hoy serian borrables.",
       "spec_path": null
     }
