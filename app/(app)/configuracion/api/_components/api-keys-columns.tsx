@@ -48,15 +48,71 @@ const ESTADO_VARIANT: Record<EstadoApiKey, BadgeVariant> = {
  * para eso (las dos flechas circulares que aparecen SOLO cuando la tabla desborda su contenedor
  * con scroll). El canje es el mismo que este repo ya tiene decidido en las otras tablas anchas:
  * mejor deslizar que estrujar.
+ *
+ * La ÚNICA columna que sí acorta su dato es «Usuario dedicado», y con permiso explícito: ver
+ * `EmailSinteticoAcortado`. El resto se muestran enteras.
  */
 function CeldaUnaLinea({
   children,
   className,
+  title,
 }: {
   readonly children: ReactNode;
   readonly className?: string;
+  /** Valor COMPLETO cuando lo visible va acortado (patrón `title` de la ficha 354). */
+  readonly title?: string;
 }) {
-  return <span className={cn("whitespace-nowrap", className)}>{children}</span>;
+  return (
+    <span className={cn("whitespace-nowrap", className)} title={title}>
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Caracteres visibles del email sintético antes del elipsis. Son 12, los mismos que tiene un
+ * `keyPrefix` (`ordx_` + 7), para que las dos columnas `font-mono` se lean como una pareja y no
+ * como dos criterios distintos.
+ *
+ * Y 12 no es un número redondo elegido a ojo: es EL TOPE de lo que esta columna puede aportar.
+ * Medido en Chromium a 1440 px, el texto de la cabecera «Usuario dedicado» mide 109 px y la
+ * celda tiene 12+12 de relleno, así que la columna no puede bajar de 133 px por mucho que se
+ * acorte el dato — su suelo lo pone su propia etiqueta, no el email. A 8,41 px por carácter en
+ * esta fuente, 12 caracteres + el elipsis son justo esos 109 px: apretar más no devuelve ni un
+ * píxel y solo escondería más dato.
+ */
+const MAX_EMAIL_VISIBLE = 12;
+
+/** Lo que se VE del email: sus primeros caracteres y un elipsis, igual que el prefijo. */
+function acortarEmailSintetico(email: string): string {
+  if (email.length <= MAX_EMAIL_VISIBLE + 1) return email;
+  return `${email.slice(0, MAX_EMAIL_VISIBLE)}…`;
+}
+
+/**
+ * El email de la cuenta dedicada, acortado — la ÚNICA excepción a «aquí no se esconde nada».
+ *
+ * POR QUÉ SE PERMITE JUSTO EN ESTA COLUMNA (aprobado 2026-09-04). No es la dirección de nadie:
+ * es un valor SINTÉTICO y DERIVADO, `apikey+<identificador>@apikey.invalid`, sobre un dominio
+ * `.invalid` que por definición no existe. No recibe correo, no sirve para iniciar sesión, y su
+ * parte informativa es el identificador… que ya está entero en la PRIMERA columna de la misma
+ * fila. Aportaba 394 px de los 1438 de la tabla a cambio de repetir el dato de al lado.
+ *
+ * EL VALOR COMPLETO NO SE PIERDE, y por dos vías a la vez porque una sola no basta:
+ *  - `title`, el tooltip al posarse encima (patrón de la ficha 354, `textoSelloCompleto`);
+ *  - un `sr-only` con el email entero, porque un `title` en un `<span>` NO se anuncia de forma
+ *    fiable en lectores de pantalla ni existe para quien navega con teclado. Sin él, «accesible»
+ *    querría decir «visible solo con ratón». Lo visible queda `aria-hidden` para que la
+ *    tecnología asistiva no lea el dato dos veces, una de ellas a medias.
+ * Y aparte, la descarga (`api-keys-descarga-columnas.ts`) sigue exportando el email entero.
+ */
+function EmailSinteticoAcortado({ email }: { readonly email: string }) {
+  return (
+    <CeldaUnaLinea className="font-mono text-muted-foreground" title={email}>
+      <span aria-hidden="true">{acortarEmailSintetico(email)}</span>
+      <span className="sr-only">{email}</span>
+    </CeldaUnaLinea>
+  );
 }
 
 /** Chip legible del estado de la API key: texto + color semántico (accesible). */
@@ -175,12 +231,9 @@ export function buildApiKeysColumns({
     {
       id: "usuarioEmail",
       value: "Usuario dedicado",
-      // El email sintético lleva guiones, y el navegador partía por CADA uno de ellos.
-      render: (row) => (
-        <CeldaUnaLinea className="font-mono text-muted-foreground">
-          {row.usuarioEmail}
-        </CeldaUnaLinea>
-      ),
+      // El email sintético lleva guiones, y el navegador partía por CADA uno de ellos. Además
+      // es la única columna que ACORTA su dato: ver `EmailSinteticoAcortado` para el porqué.
+      render: (row) => <EmailSinteticoAcortado email={row.usuarioEmail} />,
     },
     {
       /**

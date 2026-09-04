@@ -18,19 +18,26 @@
 // La fila de 1440 es la que lo explica: la tabla NO desbordaba y aun así el texto se partía en
 // tres. El plegado no venía del scroll — venía de que a `w-full` con layout automático el
 // navegador estruja cada columna hasta su `min-content`, y el `min-content` de un texto que
-// puede partirse es su palabra más larga. DESPUÉS del arreglo, con las mismas medidas:
+// puede partirse es su palabra más larga. DESPUÉS del arreglo (una línea por celda + el email
+// sintético acortado), con las mismas medidas:
 //
 //   | viewport | visible | tabla | desborda | máx. líneas por celda | «Eliminar» tras la flecha |
 //   |----------|---------|-------|----------|-----------------------|---------------------------|
-//   | 1024     |     718 |  1438 |    720 → | 1                     | dentro, y recibe el clic  |
-//   | 1280     |     974 |  1438 |    464 → | 1                     | dentro                    |
-//   | 1440     |    1134 |  1438 |    304 → | 1                     | dentro                    |
+//   | 1024     |     718 |  1177 |    459 → | 1                     | dentro, y recibe el clic  |
+//   | 1280     |     974 |  1177 |    203 → | 1                     | dentro                    |
+//   | 1440     |    1134 |  1177 |     43 → | 1                     | dentro                    |
 //   | 1920     |    1614 |  1614 |        0 | 1                     | visible sin desplazar     |
 //
-// El desbordamiento horizontal creció y NO es un defecto: `DataTable` ya trae el control para
-// eso (las flechas que solo aparecen cuando la tabla desborda). Se pulsó de verdad en los tres
-// anchos y llevó el scroll hasta el final; a 1024 el «Eliminar» habilitado quedó dentro del área
-// visible, recibió el clic y abrió su modal de confirmación.
+// A 1440 SE QUEDÓ A 43 px, Y NO ES POR FALTA DE APRETAR. Acortar el email llevó su columna de
+// 394 a 133 px, que es su SUELO: el texto de la cabecera «Usuario dedicado» mide 109 px y la
+// celda tiene 24 de relleno, así que por mucho que se recorte el dato la columna no baja de ahí.
+// Los 261 px que aportó son todo lo que esta columna tenía. El resto ya no se puede sacar sin
+// tocar datos que sí importan, y eso NO se hizo a propósito.
+//
+// El desbordamiento que queda NO es un defecto: `DataTable` ya trae el control para eso (las
+// flechas que solo aparecen cuando la tabla desborda). Se pulsó de verdad en los tres anchos y
+// llevó el scroll hasta el final; a 1024 el «Eliminar» habilitado quedó dentro del área visible,
+// recibió el clic y abrió su modal de confirmación.
 //
 // QUÉ AFIRMA ESTE ARCHIVO, Y QUÉ NO. jsdom no tiene layout: aquí NO se miden píxeles ni líneas
 // —esa medición es la de arriba, hecha en el navegador—. Lo que se vigila es lo que sí es
@@ -38,7 +45,9 @@
 //   1. el ORDEN de las columnas, con «Acciones» LA ÚLTIMA y «Webhook» justo antes;
 //   2. el orden de los botones DENTRO de la fila, con «Eliminar» el último de todos;
 //   3. que cada celda DECLARE una línea (el `whitespace-nowrap` que produce ese
-//      `white-space: nowrap`), en TODAS las columnas y no solo en las que hoy se plegaban.
+//      `white-space: nowrap`), en TODAS las columnas y no solo en las que hoy se plegaban;
+//   4. que la ÚNICA columna que acorta su dato siga dejándolo alcanzable (`title` + `sr-only`),
+//      y que ninguna otra se contagie de la excepción.
 // Las listas van escritas a mano, no derivadas de `buildApiKeysColumns`: compararlas contra su
 // propia fuente estaría siempre verde (lección «aserción contra su propia fuente»).
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -184,6 +193,55 @@ describe("API keys · la tabla no parte sus celdas y «Eliminar» cierra la fila
             `falta ${CLASE_UNA_LINEA} en ella o en algún ancestro suyo`,
         ).not.toBeNull();
       }
+      cleanup();
+    }
+  });
+
+  it("«Usuario dedicado» acorta lo VISIBLE pero no pierde el valor: `title` + `sr-only`", () => {
+    // Es la ÚNICA columna que esconde parte de su dato (aprobado 2026-09-04: es un email
+    // sintético sobre un dominio `.invalid`, derivado del identificador que ya está entero en
+    // la primera columna). El permiso vale SOLO si el valor completo sigue alcanzable, así que
+    // eso es lo que se vigila aquí: quitar el `title` o el `sr-only` deja el dato inaccesible
+    // y pone rojo este test.
+    const celda = pintarCelda("usuarioEmail");
+
+    // 1) Lo VISIBLE va acortado y marcado como tal con el elipsis (patrón de «Prefijo»).
+    const visible = celda.querySelector<HTMLElement>('[aria-hidden="true"]');
+    expect(visible, "no hay parte visible marcada `aria-hidden` en la celda").not.toBeNull();
+    const textoVisible = visible!.textContent ?? "";
+    expect(textoVisible.endsWith("…"), `«${textoVisible}» no avisa con elipsis`).toBe(true);
+    expect(textoVisible).not.toContain(FILA.usuarioEmail);
+    // Se acorta de verdad: 12 caracteres + el elipsis, como el `keyPrefix` de al lado. El
+    // esperado va como LITERAL, no derivado de la constante del componente: si alguien sube o
+    // baja ese presupuesto, esto se pone rojo y obliga a volver a medir la columna.
+    expect(textoVisible).toBe("apikey+prueb…");
+
+    // 2) El valor COMPLETO, en el tooltip.
+    const conTitle = celda.querySelector<HTMLElement>("[title]");
+    expect(conTitle?.getAttribute("title"), "el `title` ya no lleva el email entero").toBe(
+      FILA.usuarioEmail,
+    );
+
+    // 3) Y para quien no tiene ratón: un `title` en un `<span>` no lo anuncia un lector de
+    //    pantalla, así que el email entero tiene que estar además en texto `sr-only`.
+    const soloLectores = Array.from(celda.querySelectorAll<HTMLElement>(".sr-only")).map((el) =>
+      el.textContent?.trim(),
+    );
+    expect(
+      soloLectores,
+      "sin `sr-only` el email completo solo existiría al posar el ratón encima",
+    ).toContain(FILA.usuarioEmail);
+  });
+
+  it("ninguna OTRA columna esconde su dato: la excepción es una, no una costumbre", () => {
+    for (const id of ORDEN_ESPERADO) {
+      if (id === "usuarioEmail") continue;
+      const celda = pintarCelda(id);
+      expect(
+        celda.querySelector('[aria-hidden="true"]'),
+        `la celda «${id}» empezó a esconder parte de su contenido: eso hay que medirlo y ` +
+          `justificarlo, no heredarlo del vecino`,
+      ).toBeNull();
       cleanup();
     }
   });
