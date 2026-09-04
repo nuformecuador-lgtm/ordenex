@@ -130,7 +130,10 @@ export class CorreccionFechaReprogramacionService
     //    Y NO ES UNA LIBERACIÓN PARALELA: `liberar` entra por `LiberacionReprogramadaService`, con
     //    su `puedeLiberarse` (la puerta de la 276) intacto. Por eso el desenlace puede ser
     //    `espera_cierre`, y por eso viaja en la respuesta.
-    const liberacion = await this.liberar(input.ordenId);
+    //    LA FECHA VIAJA CON LA LLAMADA: sin ella, el camino de la liberación no puede distinguir
+    //    «espera al calendario» de «no se pudo confirmar», y acabaría diciéndole al coordinador que
+    //    la orden espera a un día que ya es hoy.
+    const liberacion = await this.liberar(input.ordenId, input.fecha);
 
     return {
       status: "ok",
