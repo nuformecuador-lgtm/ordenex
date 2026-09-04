@@ -8,10 +8,23 @@ import {
   EvidenciasField,
   EVIDENCIAS_BOTON_CAMARA,
   EVIDENCIAS_BOTON_GALERIA,
+  EVIDENCIA_MOTIVO_FORMATO,
+  evidenciaMotivoTamano,
   evidenciasAriaLabelCamara,
   MAX_EVIDENCIAS,
+  mensajeEvidenciasRechazadas,
+  prepararEvidencias,
 } from "@/components/shared/EvidenciasField";
-import { GESTION_ALLOWED_MIME } from "@/lib/config/gestion";
+import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
+
+// `comprimirImagen` se MOCKEA a proposito: su propio comportamiento (canvas, EXIF, toBlob nulo)
+// esta cubierto en `tests/unit/utils/comprimir-imagen.test.ts`, y en jsdom no hay canvas. Aqui lo
+// que se prueba es CON QUE OPCIONES se le llama —que son las del chat (316/R29) y no los
+// defaults— y que su resultado se valida foto a foto antes de aceptarla.
+const comprimirImagenMock = vi.fn();
+vi.mock("@/lib/utils/comprimir-imagen", () => ({
+  comprimirImagen: (...a: unknown[]) => comprimirImagenMock(...a),
+}));
 
 // =================================================================================================
 // El campo de fotos de evidencia, ahora COMPARTIDO por las tres superficies que suben evidencia
@@ -86,6 +99,10 @@ beforeEach(() => {
   contadorBlob = 0;
   URL.createObjectURL = vi.fn(() => `blob:evidencia-${++contadorBlob}`);
   URL.revokeObjectURL = vi.fn();
+  comprimirImagenMock.mockReset();
+  // Peor caso honesto por defecto: el helper devuelve el archivo TAL CUAL (que es justo lo que
+  // hace `comprimirImagen` cuando no puede decodificar).
+  comprimirImagenMock.mockImplementation(async (f: File) => f);
 });
 
 afterEach(cleanup);
@@ -218,5 +235,98 @@ describe("EvidenciasField · las DOS vías de adjuntar (cámara y galería)", ()
 
     expect(inputGaleria()).toHaveAttribute("aria-describedby", `${INPUT_ID}-limite`);
     expect(document.getElementById(`${INPUT_ID}-ayuda`)).toBeNull();
+  });
+});
+
+// =================================================================================================
+// `prepararEvidencias` — convertir con las opciones del chat y avisar AL ELEGIR
+// =================================================================================================
+//
+// El caso de uso de la cámara es un mensajero con un móvil, y la mitad de esos móviles son
+// iPhone: si el HEIC no se convierte, el botón de cámara falla para ellos. Lo que sigue es la
+// regresión que lo impide, y el aviso que dice CUÁL foto se quedó fuera.
+
+const MB = 1024 * 1024;
+function archivo(nombre: string, type: string, size: number): File {
+  const f = new File(["x"], nombre, { type });
+  Object.defineProperty(f, "size", { value: size, configurable: true });
+  return f;
+}
+
+describe("prepararEvidencias · conversión y aviso por foto", () => {
+  it("⭑ llama a `comprimirImagen` con las MISMAS opciones que el chat, no con los defaults", async () => {
+    // ⚠️ LA MUTACIÓN QUE ESTE CASO MATA: volver a `comprimirImagen(f)` a secas (o quitar uno de
+    // los dos flags). Con `saltarSiMenorA` en su default de 1 MB, un HEIC de iPhone POR DEBAJO
+    // de 1 MB pasaría sin convertir y el borde lo rechazaría por MIME — la cámara entregada
+    // rota justo para quien más la necesita.
+    await prepararEvidencias([archivo("IMG_0045.heic", "image/heic", 200 * 1024)]);
+
+    expect(comprimirImagenMock).toHaveBeenCalledTimes(1);
+    const opciones = comprimirImagenMock.mock.calls[0][1] as Record<string, unknown>;
+    expect(opciones.saltarSiMenorA).toBe(0);
+    expect(opciones.devolverOriginalSiMayor).toBe(false);
+  });
+
+  it("un HEIC pequeño convertido a JPEG SÍ se acepta (el atajo por tamaño está apagado)", async () => {
+    comprimirImagenMock.mockResolvedValue(archivo("IMG_0045.jpg", "image/jpeg", 180 * 1024));
+
+    const { aceptadas, rechazadas } = await prepararEvidencias([
+      archivo("IMG_0045.heic", "image/heic", 200 * 1024),
+    ]);
+
+    expect(rechazadas).toHaveLength(0);
+    expect(aceptadas.map((f) => f.type)).toEqual(["image/jpeg"]);
+  });
+
+  it("⭑ un HEIC que NO se pudo convertir se rechaza NOMBRÁNDOLO, no en silencio", async () => {
+    // ⚠️ LA MUTACIÓN QUE ESTE CASO MATA: aceptar lo que devuelva el helper sin validarlo. La
+    // foto entraría en la lista, se vería su previsualización, y el rechazo llegaría al pulsar
+    // «Guardar gestión» sin decir cuál de las tres sobra.
+    const { aceptadas, rechazadas } = await prepararEvidencias([
+      archivo("IMG_0045.heic", "image/heic", 200 * 1024),
+    ]);
+
+    expect(aceptadas).toHaveLength(0);
+    expect(rechazadas).toEqual([
+      { nombre: "IMG_0045.heic", motivo: EVIDENCIA_MOTIVO_FORMATO },
+    ]);
+    expect(mensajeEvidenciasRechazadas(rechazadas)).toBe(
+      "No se adjuntó «IMG_0045.heic»: debe ser JPEG, PNG o WEBP.",
+    );
+  });
+
+  it("⭑ una foto que pasa del límite de tamaño se rechaza AL ELEGIRLA, con su nombre", async () => {
+    const limiteMb = Math.floor(gestionConfig.MAX_FILE_BYTES / MB);
+    const { aceptadas, rechazadas } = await prepararEvidencias([
+      archivo("cabe.jpg", "image/jpeg", 400 * 1024),
+      archivo("enorme.jpg", "image/jpeg", gestionConfig.MAX_FILE_BYTES + 1),
+    ]);
+
+    expect(aceptadas.map((f) => f.name)).toEqual(["cabe.jpg"]);
+    expect(mensajeEvidenciasRechazadas(rechazadas)).toBe(
+      `No se adjuntó «enorme.jpg»: supera los ${limiteMb} MB.`,
+    );
+    expect(evidenciaMotivoTamano()).toBe(`supera los ${limiteMb} MB`);
+  });
+
+  it("con varias descartadas se nombran TODAS, no solo la primera", async () => {
+    const { rechazadas } = await prepararEvidencias([
+      archivo("a.heic", "image/heic", 200 * 1024),
+      archivo("b.jpg", "image/jpeg", 9 * MB),
+    ]);
+
+    const mensaje = mensajeEvidenciasRechazadas(rechazadas) ?? "";
+    expect(mensaje).toContain("«a.heic»");
+    expect(mensaje).toContain("«b.jpg»");
+    expect(mensaje).toMatch(/^No se adjuntaron 2 fotos:/);
+  });
+
+  it("sin descartadas no hay aviso que dar", async () => {
+    const { aceptadas, rechazadas } = await prepararEvidencias([
+      archivo("a.jpg", "image/jpeg", 300 * 1024),
+    ]);
+
+    expect(aceptadas).toHaveLength(1);
+    expect(mensajeEvidenciasRechazadas(rechazadas)).toBeNull();
   });
 });

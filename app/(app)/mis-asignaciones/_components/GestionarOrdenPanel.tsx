@@ -17,7 +17,11 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { EvidenciasField } from "@/components/shared/EvidenciasField";
+import {
+  EvidenciasField,
+  mensajeEvidenciasRechazadas,
+  prepararEvidencias,
+} from "@/components/shared/EvidenciasField";
 import { HiloNotasOrden } from "@/components/shared/HiloNotasOrden";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +43,6 @@ import { gestionarSchema } from "@/lib/types/gestion-orden";
 // porque la decisión llega ya tomada en `orden.enElTope`.
 import { permitidoEnElTope } from "@/lib/types/tope-intentos";
 import { gestionConfig } from "@/lib/config/gestion";
-import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import {
   capturarUbicacion,
   type CapturaUbicacion,
@@ -441,12 +444,14 @@ export function GestionarOrdenPanel({
       motivo.trim() !== "",
   );
 
-  // Feature 119 (R14/R16): agrega las fotos SELECCIONADAS a la lista. Cada foto se comprime
+  // Feature 119 (R14/R16): agrega las fotos SELECCIONADAS a la lista. Cada foto se normaliza
   // en el cliente antes de guardarla (una foto de celular sin comprimir revienta el limite de
-  // body del Server Action, 413); `comprimirImagen` cae al archivo original ante cualquier
-  // fallo, asi que nunca bloquea la gestion. Mientras comprime, "Guardar gestion" se deshabilita.
+  // body del Server Action, 413); `prepararEvidencias` nunca lanza, asi que no bloquea la
+  // gestion. Mientras prepara, "Guardar gestion" se deshabilita.
   // La seleccion se CONCATENA a lo ya elegido (permite ir sumando en varias tandas). Si el
   // total supera el tope, se RECORTA a MAX_EVIDENCIAS y se marca el error del campo (R16).
+  // Y lo que NO cabe por si mismo —formato o peso— se dice AL ELEGIRLO y CON SU NOMBRE, en vez
+  // de esperar a que el schema lo rechace al enviar sin decir cual de las tres sobra.
   async function handleEvidenciaChange(e: ChangeEvent<HTMLInputElement>) {
     const input = e.target;
     const seleccion = Array.from(input.files ?? []);
@@ -455,21 +460,24 @@ export function GestionarOrdenPanel({
     if (seleccion.length === 0) return;
     setComprimiendo(true);
     try {
-      const comprimidas = await Promise.all(seleccion.map((f) => comprimirImagen(f)));
+      const { aceptadas, rechazadas } = await prepararEvidencias(seleccion);
       // Updater funcional: concatena sobre el estado MAS reciente (a prueba de tandas
       // solapadas). El error de tope se deriva del MISMO `prev` para que array y error nunca
       // se contradigan; setear el error aqui es idempotente (mismo mensaje ante re-invocacion).
       setEvidencias((prev) => {
-        const combinadas = [...prev, ...comprimidas];
+        const combinadas = [...prev, ...aceptadas];
         setFieldErrors((errs) => {
           const rest = { ...errs };
           delete rest.evidencias;
-          return combinadas.length > MAX_EVIDENCIAS
-            ? {
-                ...rest,
-                evidencias: [`Solo puedes adjuntar hasta ${MAX_EVIDENCIAS} fotos.`],
-              }
-            : rest;
+          // El aviso de las descartadas va PRIMERO: es la foto que el usuario cree tener y no
+          // tiene. El del tope va detras, para no perderlo si pasan las dos cosas a la vez.
+          const avisos = [
+            mensajeEvidenciasRechazadas(rechazadas),
+            combinadas.length > MAX_EVIDENCIAS
+              ? `Solo puedes adjuntar hasta ${MAX_EVIDENCIAS} fotos.`
+              : null,
+          ].filter((m): m is string => m !== null);
+          return avisos.length > 0 ? { ...rest, evidencias: avisos } : rest;
         });
         return combinadas.slice(0, MAX_EVIDENCIAS);
       });

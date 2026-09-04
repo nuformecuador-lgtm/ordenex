@@ -2,7 +2,11 @@
 
 import { useId, useState, type ChangeEvent } from "react";
 
-import { EvidenciasField } from "@/components/shared/EvidenciasField";
+import {
+  EvidenciasField,
+  mensajeEvidenciasRechazadas,
+  prepararEvidencias,
+} from "@/components/shared/EvidenciasField";
 import { Modal } from "@/components/shared/Modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +23,6 @@ import {
 // ventana solo le llega el booleano ya decidido en `orden.enElTope`.
 import { permitidoEnElTope } from "@/lib/types/tope-intentos";
 import type { NovedadDTO } from "@/lib/types/novedad";
-import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 
 // =================================================================================================
@@ -273,9 +276,10 @@ export function GestionarDesdeAyudaModal({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   /**
-   * Añade las fotos elegidas, comprimidas en el navegador (una foto de celular sin comprimir
+   * Añade las fotos elegidas, normalizadas en el navegador (una foto de celular sin comprimir
    * revienta el límite de body del Server Action con un 413). Concatena sobre lo ya elegido y
-   * recorta al tope marcando el error del campo. Calcado de `GestionarOrdenPanel` (119) y de
+   * recorta al tope marcando el error del campo; las que no valen por sí mismas se avisan AL
+   * ELEGIRLAS y con su nombre. Calcado de `GestionarOrdenPanel` (119) y de
    * `ReportarIncidenteModal` (158): el gesto de subir evidencias es el mismo en las tres.
    */
   async function handleEvidenciaChange(e: ChangeEvent<HTMLInputElement>) {
@@ -285,15 +289,19 @@ export function GestionarDesdeAyudaModal({
     if (seleccion.length === 0) return;
     setComprimiendo(true);
     try {
-      const comprimidas = await Promise.all(seleccion.map((f) => comprimirImagen(f)));
+      const { aceptadas, rechazadas } = await prepararEvidencias(seleccion);
       setEvidencias((prev) => {
-        const combinadas = [...prev, ...comprimidas];
+        const combinadas = [...prev, ...aceptadas];
         setFieldErrors((errs) => {
           const rest = { ...errs };
           delete rest.evidencias;
-          return combinadas.length > MAX_EVIDENCIAS
-            ? { ...rest, evidencias: [`Solo podés adjuntar hasta ${MAX_EVIDENCIAS} fotos.`] }
-            : rest;
+          const avisos = [
+            mensajeEvidenciasRechazadas(rechazadas),
+            combinadas.length > MAX_EVIDENCIAS
+              ? `Solo podés adjuntar hasta ${MAX_EVIDENCIAS} fotos.`
+              : null,
+          ].filter((m): m is string => m !== null);
+          return avisos.length > 0 ? { ...rest, evidencias: avisos } : rest;
         });
         return combinadas.slice(0, MAX_EVIDENCIAS);
       });

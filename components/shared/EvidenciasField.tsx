@@ -6,6 +6,8 @@ import { Camera, ImagePlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
+import { validarEvidencia } from "@/lib/types/gestion-orden";
+import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 
 // =================================================================================================
 // CAMPO DE FOTOS DE EVIDENCIA — UNA SOLA IMPLEMENTACION PARA LAS TRES SUPERFICIES
@@ -59,9 +61,10 @@ const ACCEPT_MIME = GESTION_ALLOWED_MIME.join(",");
  * (`GESTION_ALLOWED_MIME`). Escritos a mano se desincronizarian el dia que entre —o salga— un
  * formato, y la zona de carga prometeria algo que el servidor rechaza.
  */
-const FORMATOS_EVIDENCIA = GESTION_ALLOWED_MIME.map((mime) =>
+const FORMATOS_LISTA = GESTION_ALLOWED_MIME.map((mime) =>
   mime.replace("image/", "").toUpperCase(),
-).join(" · ");
+);
+const FORMATOS_EVIDENCIA = FORMATOS_LISTA.join(" · ");
 
 /**
  * Tope de fotos por gestion. El schema (cliente y servidor) usa el mismo
@@ -69,6 +72,98 @@ const FORMATOS_EVIDENCIA = GESTION_ALLOWED_MIME.map((mime) =>
  * `NEXT_PUBLIC_`), asi que cae al default 3, igual que el schema en cliente.
  */
 export const MAX_EVIDENCIAS = gestionConfig.MAX_EVIDENCIAS_POR_GESTION;
+
+// =================================================================================================
+// PREPARAR LAS FOTOS ELEGIDAS — CONVERTIR PRIMERO, AVISAR DESPUES (Y AL ELEGIR, NO AL ENVIAR)
+// =================================================================================================
+//
+// Las tres superficies llamaban a `comprimirImagen(f)` con las opciones POR DEFECTO, y eso deja
+// dos agujeros que la camara agranda, porque quien la usa es justo el mensajero con el movil:
+//
+//  1. HEIC. `saltarSiMenorA` vale 1 MB por defecto, asi que un HEIC de iPhone POR DEBAJO de 1 MB
+//     no se tocaba —y `validarEvidencia` lo rechaza por MIME—. La feature 316 (R29) ya habia
+//     aprendido esto en el chat saliente: ahi la llamada NO optimiza, CONVIERTE, y por eso apaga
+//     el atajo por tamaño y se queda con el JPEG aunque salga mas grande. Aqui se usa lo MISMO,
+//     por la misma razon: un formato que el borde rechaza no es un "quizas".
+//  2. El aviso llegaba tarde y mudo. Una foto invalida no se detectaba al elegirla sino al pulsar
+//     "Guardar gestion", con un mensaje del schema que NO dice cual de las tres sobra. Ahora se
+//     valida foto a foto AL ELEGIRLA, con el nombre del archivo en el aviso.
+//
+// La DECISION de si una foto vale sigue siendo de `validarEvidencia` —la misma funcion pura que
+// revalida el servidor—; aqui solo se traduce su "no" a un motivo con palabras.
+// =================================================================================================
+
+/** Motivos por los que una foto no se pudo adjuntar, en la letra del usuario (i18n-ready). */
+export const EVIDENCIA_MOTIVO_FORMATO = `debe ser ${new Intl.ListFormat("es", {
+  type: "disjunction",
+}).format(FORMATOS_LISTA)}`;
+export const EVIDENCIA_MOTIVO_VACIA = "llegó vacía";
+export function evidenciaMotivoTamano(maxBytes: number = gestionConfig.MAX_FILE_BYTES): string {
+  return `supera los ${Math.floor(maxBytes / (1024 * 1024))} MB`;
+}
+
+export interface EvidenciaRechazada {
+  nombre: string;
+  motivo: string;
+}
+
+export interface PreparacionEvidencias {
+  /** Las que se pueden adjuntar, ya convertidas/comprimidas. */
+  aceptadas: File[];
+  /** Las que NO, con su nombre, para poder decirlo sin adivinanzas. */
+  rechazadas: EvidenciaRechazada[];
+}
+
+/**
+ * Normaliza UNA foto con las MISMAS opciones que el chat saliente (316/R29). No inventa valores:
+ * el lado largo y la calidad siguen siendo los de `comprimirImagen`, que son los que las tres
+ * superficies llevaban usando; lo que cambia es que ya no hay atajo por tamaño ni vuelta al
+ * original cuando el re-encode sale mayor — porque aqui convertir tambien es obligatorio.
+ *
+ * NUNCA lanza (el helper tampoco): si no pudo, devuelve el original, y por eso el MIME se vuelve
+ * a mirar DESPUES, en `prepararEvidencias`.
+ */
+export function comprimirEvidencia(file: File): Promise<File> {
+  return comprimirImagen(file, { saltarSiMenorA: 0, devolverOriginalSiMayor: false });
+}
+
+/** Convierte la selección y la parte en las que valen y las que no (con motivo). */
+export async function prepararEvidencias(
+  seleccion: readonly File[],
+): Promise<PreparacionEvidencias> {
+  const preparadas = await Promise.all(seleccion.map((f) => comprimirEvidencia(f)));
+  const aceptadas: File[] = [];
+  const rechazadas: EvidenciaRechazada[] = [];
+  for (const archivo of preparadas) {
+    if (validarEvidencia(archivo) === null) {
+      aceptadas.push(archivo);
+      continue;
+    }
+    const formatoOk = (GESTION_ALLOWED_MIME as readonly string[]).includes(archivo.type);
+    const motivo = !formatoOk
+      ? EVIDENCIA_MOTIVO_FORMATO
+      : archivo.size <= 0
+        ? EVIDENCIA_MOTIVO_VACIA
+        : evidenciaMotivoTamano();
+    rechazadas.push({ nombre: archivo.name, motivo });
+  }
+  return { aceptadas, rechazadas };
+}
+
+/**
+ * El aviso de las que se quedaron fuera, NOMBRANDO el archivo. Impersonal a proposito: las tres
+ * superficies conviven con voseo y tuteo, y este texto lo comparten las tres.
+ */
+export function mensajeEvidenciasRechazadas(
+  rechazadas: readonly EvidenciaRechazada[],
+): string | null {
+  if (rechazadas.length === 0) return null;
+  if (rechazadas.length === 1) {
+    return `No se adjuntó «${rechazadas[0].nombre}»: ${rechazadas[0].motivo}.`;
+  }
+  const detalle = rechazadas.map((r) => `«${r.nombre}» (${r.motivo})`).join(", ");
+  return `No se adjuntaron ${rechazadas.length} fotos: ${detalle}.`;
+}
 
 export interface EvidenciasFieldProps {
   /** Id del input de GALERIA. El de camara deriva de el (`<inputId>-camara`). */

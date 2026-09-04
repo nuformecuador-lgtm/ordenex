@@ -2,7 +2,11 @@
 
 import { useId, useState, type ChangeEvent } from "react";
 
-import { EvidenciasField } from "@/components/shared/EvidenciasField";
+import {
+  EvidenciasField,
+  mensajeEvidenciasRechazadas,
+  prepararEvidencias,
+} from "@/components/shared/EvidenciasField";
 import { Modal } from "@/components/shared/Modal";
 import { Label } from "@/components/ui/label";
 import { RadioGroup } from "@/components/ui/radio-group";
@@ -11,7 +15,6 @@ import { useToast } from "@/hooks/useToast";
 import { reportarIncidente } from "@/lib/actions/incidentes";
 import { reportarIncidenteSchema } from "@/lib/types/incidente";
 import { gestionConfig } from "@/lib/config/gestion";
-import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
 // Feature 158 (T2.7): las etiquetas de la causa se IMPORTAN del catálogo que ya deriva del
 // SEED y que usa el panel del mensajero para capturarla (T2.1). No se duplican: las dos
@@ -126,9 +129,10 @@ export function ReportarIncidenteModal({
   }
 
   /**
-   * Añade las fotos seleccionadas, comprimidas en el navegador (una foto de celular sin
+   * Añade las fotos seleccionadas, normalizadas en el navegador (una foto de celular sin
    * comprimir revienta el límite de body del Server Action). Concatena sobre lo ya elegido y
-   * recorta al tope, marcando el error del campo. Calcado de `GestionarOrdenPanel` (119).
+   * recorta al tope, marcando el error del campo. Las que no valen por sí mismas —formato o
+   * peso— se avisan AL ELEGIRLAS y con su nombre. Calcado de `GestionarOrdenPanel` (119).
    */
   async function handleEvidenciaChange(e: ChangeEvent<HTMLInputElement>) {
     const input = e.target;
@@ -137,15 +141,19 @@ export function ReportarIncidenteModal({
     if (seleccion.length === 0) return;
     setComprimiendo(true);
     try {
-      const comprimidas = await Promise.all(seleccion.map((f) => comprimirImagen(f)));
+      const { aceptadas, rechazadas } = await prepararEvidencias(seleccion);
       setEvidencias((prev) => {
-        const combinadas = [...prev, ...comprimidas];
+        const combinadas = [...prev, ...aceptadas];
         setFieldErrors((errs) => {
           const rest = { ...errs };
           delete rest.evidencias;
-          return combinadas.length > MAX_EVIDENCIAS
-            ? { ...rest, evidencias: [`Solo podés adjuntar hasta ${MAX_EVIDENCIAS} fotos.`] }
-            : rest;
+          const avisos = [
+            mensajeEvidenciasRechazadas(rechazadas),
+            combinadas.length > MAX_EVIDENCIAS
+              ? `Solo podés adjuntar hasta ${MAX_EVIDENCIAS} fotos.`
+              : null,
+          ].filter((m): m is string => m !== null);
+          return avisos.length > 0 ? { ...rest, evidencias: avisos } : rest;
         });
         return combinadas.slice(0, MAX_EVIDENCIAS);
       });
