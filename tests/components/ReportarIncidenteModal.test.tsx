@@ -320,6 +320,48 @@ describe("Feature 158 (T2.7) — el resultado de dominio del servidor llega al u
   });
 });
 
+// El aviso de la foto que NO entró, visto por el usuario en una superficie real (el helper que
+// decide está probado aparte, en `EvidenciasField.test.tsx`). Aquí `comprimirImagen` NO se
+// mockea: en jsdom no hay canvas, así que devuelve el original — el peor caso honesto y justo el
+// que produce estos rechazos.
+describe("una foto que no vale se dice AL ELEGIRLA y con su nombre", () => {
+  it("⭑ una foto de más de 5 MB no entra en la lista y el aviso la nombra", async () => {
+    const user = userEvent.setup();
+    montar();
+
+    const enorme = new File(["x"], "IMG_9001.jpg", { type: "image/jpeg" });
+    Object.defineProperty(enorme, "size", { value: 6 * 1024 * 1024, configurable: true });
+    await user.upload(screen.getByLabelText(LABEL_FOTOS), enorme);
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("No se adjuntó «IMG_9001.jpg»: supera los 5 MB.");
+    // Y no se quedó a medias: la foto NO está en la lista (no hay previsualización).
+    expect(
+      screen.queryByRole("list", { name: "Fotos de evidencia seleccionadas" }),
+    ).toBeNull();
+    // Sigue faltando la foto para poder enviar: el bloqueo no se disimula.
+    expect(confirmar()).toBeDisabled();
+  });
+
+  it("un HEIC que no se pudo convertir se nombra igual, sin hablar de MIME", async () => {
+    montar();
+
+    // Se entrega saltando el `accept` a propósito, como hace el test del chat (316): `accept` es
+    // una SUGERENCIA para el selector del sistema —en Android se puede elegir «cualquier
+    // archivo», y la cámara de un iPhone entrega lo que entrega—, así que la lista blanca se
+    // aplica en el código y no en el atributo.
+    const input = screen.getByLabelText(LABEL_FOTOS) as HTMLInputElement;
+    Object.defineProperty(input, "files", {
+      value: [new File(["x"], "IMG_0045.heic", { type: "image/heic" })],
+      configurable: true,
+    });
+    fireEvent.change(input);
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("No se adjuntó «IMG_0045.heic»: debe ser JPEG, PNG o WEBP.");
+  });
+});
+
 describe("Feature 158 (T2.7) — la consecuencia se dice ANTES de confirmar", () => {
   it("advierte que la orden sale del flujo y que otro administrador decide", () => {
     montar();
