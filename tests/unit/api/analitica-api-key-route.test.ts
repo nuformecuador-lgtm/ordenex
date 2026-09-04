@@ -719,8 +719,8 @@ describe("267/R16 + R45 · un lote con UNA metrica no publicable no sirve NADA",
 /* comprueba que eso es lo que sale por el cable, con su status.                                  */
 /* -------------------------------------------------------------------------------------------- */
 
-describe("2026-08-24 · el cuerpo servido omite los dias no legibles y nunca los pone en cero", () => {
-  it("el dia en curso y el no comparable no viajan; el resto si, y el array se llama `data`", async () => {
+describe("2026-09-04 · el cuerpo servido publica todos los dias y MARCA los que no estan cerrados", () => {
+  it("el dia en curso viaja marcado `parcial`, y `cobertura` dice cual no es comparable", async () => {
     const { deps } = montarConSerie((consulta) => ({
       metricaId: consulta.metrica.id,
       unidad: consulta.metrica.unidad,
@@ -741,34 +741,31 @@ describe("2026-08-24 · el cuerpo servido omite los dias no legibles y nunca los
 
     expect(res.status).toBe(200);
     const texto = await res.text();
-    expect(JSON.parse(texto).metricas[0].data).toEqual([{ fecha: "2026-08-02", valor: 7 }]);
-    // Ni rastro de lo retirado.
-    for (const retirada of [
-      "cobertura",
-      "penumbra",
-      "fechasNoComparables",
-      "unidadDeConteo",
-      "parcial",
-      "corteAt",
-      '"puntos"',
-    ]) {
+    const cuerpo = JSON.parse(texto);
+
+    // ⏳ 2026-09-04 — antes esto esperaba UN solo punto (el 02) porque el 01 y el 03 se omitian.
+    // Ahora viajan los TRES, y lo que impide leer el 03 como una caida es su marca.
+    expect(cuerpo.metricas[0].data).toEqual([
+      { fecha: "2026-08-01", valor: 5 },
+      { fecha: "2026-08-02", valor: 7 },
+      { fecha: "2026-08-03", valor: 2, parcial: true, corteAt: AHORA.toISOString() },
+    ]);
+    expect(cuerpo.metricas[0].cobertura).toEqual({
+      fechasNoComparables: ["2026-08-01"],
+      penumbra: "ordenes_vivas_al_horizonte_sin_transicion_posterior",
+    });
+    // Lo que sigue sin cruzar el cable.
+    for (const retirada of ["unidadDeConteo", '"puntos"', "dimension"]) {
       expect(texto).not.toContain(retirada);
     }
-    // Y ningun cero de relleno: los dos dias caidos no estan en `data` con otro valor. (Las dos
-    // fechas SI aparecen en el cuerpo, pero solo dentro de `rango`, que es el eco de lo pedido y
-    // no se recorta: por eso se mira `data` y no la cadena entera.)
-    const dias: string[] = JSON.parse(texto).metricas[0].data.map(
-      (p: { fecha: string }) => p.fecha,
-    );
-    expect(dias).not.toContain("2026-08-01");
-    expect(dias).not.toContain("2026-08-03");
-    // El eco, en cambio, sigue siendo lo que se pidio.
-    expect(JSON.parse(texto).rango).toEqual({ desde: "2026-08-01", hasta: "2026-08-03" });
+    // El eco del rango sigue siendo lo que se pidio, sin recortar.
+    expect(cuerpo.rango).toEqual({ desde: "2026-08-01", hasta: "2026-08-03" });
   });
 
-  it("si TODOS los dias se omiten, es 200 con `data: []` y el rango pedido intacto, no un 500", async () => {
-    // `desde=hoy&hasta=hoy`: el unico dia pedido es el que esta en curso. Recortar el rango
-    // devolveria un rango invertido o un 422 a un integrador que pregunto algo legitimo.
+  it("`desde=hoy&hasta=hoy` ya no responde `data: []`: devuelve el dia de hoy, marcado", async () => {
+    // Este es EL caso que motivo el cambio (medido en produccion el 2026-09-04): un integrador
+    // que carga por la mañana y consulta el mismo dia recibia un `data: []` indistinguible de
+    // «hoy fue cero». Ahora recibe su cifra y, pegada, la advertencia de que no esta cerrada.
     const { deps } = montarConSerie((consulta) => ({
       metricaId: consulta.metrica.id,
       unidad: consulta.metrica.unidad,
@@ -790,7 +787,7 @@ describe("2026-08-24 · el cuerpo servido omite los dias no legibles y nunca los
     const cuerpo = await res.json();
     expect(cuerpo.rango).toEqual({ desde: "2026-08-03", hasta: "2026-08-03" });
     expect(cuerpo.metricas).toHaveLength(1);
-    expect(cuerpo.metricas[0].data).toEqual([]);
+    expect(cuerpo.metricas[0].data).toEqual([{ fecha: "2026-08-03", valor: 4, parcial: true }]);
   });
 
   it("`valor: null` viaja como null por el cable: no se convierte en 0 al serializar", async () => {
