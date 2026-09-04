@@ -111,10 +111,10 @@ function toCorregirFechaActionError(shape: AppErrorShape): BorderError {
  * inexistente, motivo vacio) se resuelven en el BORDE, sin construir el service ni tocar dato
  * alguno; `forbidden` (rol que no es maestro/admin) y `conflict` los devuelve el service.
  *
- * LA ANOTACION `@sin-superficie` DE ESTE EXPORT SE RETIRO al montar la pantalla (ficha 371, tanda
- * de UI): la dispara `CorregirFechaReprogramacionModal`, que monta `/ordenes` desde el estado
- * `reprogramada`. La guardia de superficie exige exactamente eso —la excepcion caduca en cuanto
- * lo anotado vuelve a ser alcanzable— y se pone roja si alguien la reescribe.
+ * LA EXCEPCION DE SUPERFICIE DE ESTE EXPORT SE RETIRO al montar la pantalla (ficha 371, tanda de
+ * UI): hoy la dispara `CorregirFechaReprogramacionModal`, que monta `/ordenes` desde el estado
+ * `reprogramada`. La guardia de superficie exige exactamente eso —la excepcion caduca en cuanto lo
+ * anotado vuelve a ser alcanzable— y se pone roja si alguien la reescribe.
  */
 export async function corregirFechaReprogramacion(
   input: unknown,

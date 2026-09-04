@@ -13,7 +13,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
-import type { ReactElement } from "react";
 
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
@@ -121,7 +120,7 @@ function makeOrden(over: Partial<OrdenListItemDTO> & { id: string }): OrdenListI
   } as OrdenListItemDTO;
 }
 
-function renderOrdenes(items: OrdenListItemDTO[]): ReactElement | void {
+function renderOrdenes(items: OrdenListItemDTO[]): void {
   listarOrdenesMock.mockResolvedValue({
     status: "ok",
     items,
