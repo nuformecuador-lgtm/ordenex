@@ -86,12 +86,12 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
   });
 
   it("⭑ FICHA 371: corregir la fecha de una reprogramacion es DESAPARICION, no dinero", () => {
-    // La escritura PISA la fecha anterior y no hay ninguna otra copia de ella en el sistema
-    // (`cierre_detail` congela zona, tarifa y destinatario, pero NO `fecha_reprogramacion`), asi
-    // que sin la fila del registro el valor viejo se pierde. Y NO es dinero: esta MEDIDO que una
-    // gestion `reprogramada` no lleva importe (0 de 160 con pago al mensajero o ingreso por
-    // rechazo) y que ni la analitica ni el ranking leen esa columna. Mismo criterio que
-    // `tarifa_borrada` en el caso de abajo.
+    // Corregir la fecha a HOY dispara la liberacion en el mismo acto, asi que la orden SALE de
+    // `reprogramada` y deja de estar donde el coordinador la tenia: misma familia que
+    // `orden_eliminada`. NO es dinero —esta MEDIDO que una gestion `reprogramada` no lleva importe
+    // (0 de 160 con pago al mensajero o ingreso por rechazo) y que ni la analitica ni el ranking
+    // leen esa columna—, y tampoco es que la fecha anterior se pierda: esa queda guardada en
+    // `gestion_fecha_reprogramacion_cambio.fecha_anterior`.
     expect(HISTORIAL_ACCION_TIPOS).toContain("gestion_fecha_reprogramacion_corregida");
     expect(CATEGORIA_POR_ACCION.gestion_fecha_reprogramacion_corregida).toBe("hace_desaparecer");
   });

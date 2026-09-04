@@ -82,15 +82,20 @@ export const HISTORIAL_ACCION_TIPOS = [
 
   // --- A.2 · hace desaparecer algo (7) ---
   // ⭑ FICHA 371 — la fecha de una reprogramacion ya registrada, corregida por un coordinador.
-  // ENTRA AQUI Y NO EN «mueve dinero», y esta medido: una gestion `reprogramada` no lleva importe
-  // (0 de 160 con pago al mensajero o ingreso por rechazo) y ni la analitica ni el ranking leen esa
-  // columna. Lo que la fila documenta es una DESAPARICION: la escritura PISA la fecha anterior y no
-  // existe ninguna otra copia de ella en el sistema —`cierre_detail` congela zona, tarifa y
-  // destinatario, pero NO `fecha_reprogramacion`—, asi que sin esta fila el valor viejo se pierde.
-  // Es el mismo criterio por el que `tarifa_borrada` esta aqui y no en dinero (R17: exactamente una
-  // categoria por tipo).
-  // Las DOS fechas viajan en `valor_anterior`/`valor_nuevo`. El MOTIVO no: R5 lo deja fuera de esta
-  // tabla y vive en `gestion_fecha_reprogramacion_cambio`, que es tabla propia y no se descarga.
+  // ENTRA AQUI, EN «hace desaparecer algo», PORQUE LA ORDEN PUEDE DEJAR DE ESTAR DONDE ESTABA:
+  // corregir la fecha a HOY dispara la liberacion en el mismo acto (desenlace `liberada`), asi que
+  // la orden sale de `reprogramada` y ya no esta donde el coordinador la tenia. Misma familia que
+  // `orden_eliminada`, y por eso la fila importa: es lo que explica por que esa orden ya no aparece
+  // donde alguien la dejo. (R17: exactamente una categoria por tipo.)
+  //
+  // NO en «mueve dinero», y esta medido: una gestion `reprogramada` no lleva importe (0 de 160 con
+  // pago al mensajero o ingreso por rechazo) y ni la analitica ni el ranking leen esa columna.
+  //
+  // ⚠️ Y NO PORQUE LA FECHA ANTERIOR SE PIERDA — no se pierde: queda en
+  // `gestion_fecha_reprogramacion_cambio.fecha_anterior`, fotografiada bajo `FOR UPDATE` antes de
+  // pisarla. Se dice en voz alta para que nadie concluya lo contrario y deje de usar esa tabla.
+  // Las DOS fechas viajan ademas en `valor_anterior`/`valor_nuevo`. El MOTIVO no: R5 lo deja fuera
+  // de esta tabla y vive en la propia, que no se descarga.
   "gestion_fecha_reprogramacion_corregida", // CorreccionFechaReprogramacionRepository.corregirFecha
   "orden_eliminada", // eliminar-orden.eliminarOrdenes Y app/api/ordenes/api-key/orden/[id]
   "orden_recuperada", // recuperar-orden.recuperarOrdenes
