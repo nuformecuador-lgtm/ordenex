@@ -68,9 +68,9 @@ function filas(tx: ReturnType<typeof txDoble>, n = 0): Record<string, unknown>[]
 // =============================================================================================
 
 describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhaustivos", () => {
-  it("son 44 tipos, 17 entidades y 3 categorias, sin repetidos", () => {
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(44);
-    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(44);
+  it("son 45 tipos, 17 entidades y 3 categorias, sin repetidos", () => {
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(45);
+    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(45);
     expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(17);
     expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(17);
     expect(CATEGORIAS_ACCION).toHaveLength(3);
@@ -94,6 +94,23 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // `gestion_fecha_reprogramacion_cambio.fecha_anterior`.
     expect(HISTORIAL_ACCION_TIPOS).toContain("gestion_fecha_reprogramacion_corregida");
     expect(CATEGORIA_POR_ACCION.gestion_fecha_reprogramacion_corregida).toBe("hace_desaparecer");
+  });
+
+  it("⭑ FICHA 373 (R25): `api_key_eliminada` es CAMBIA PERMISOS, con las otras cuatro de API key", () => {
+    // R25 de la 373: la MISMA categoria que sus cuatro hermanas. Lo que la fila documenta es un
+    // cambio de QUIEN PUEDE ENTRAR POR LA API, que es el eje del ciclo de vida de una credencial;
+    // clasificarla como «hace desaparecer algo» partiria ese ciclo en dos familias y romperia el
+    // filtro por categoria justo donde mas se usa.
+    expect(HISTORIAL_ACCION_TIPOS).toContain("api_key_eliminada");
+    expect(CATEGORIA_POR_ACCION.api_key_eliminada).toBe("cambia_permisos");
+    // Y las cinco de API key caen en la MISMA categoria: es la afirmacion de R25, no un detalle.
+    const deApiKey = HISTORIAL_ACCION_TIPOS.filter((t) => t.startsWith("api_key_"));
+    expect(deApiKey).toHaveLength(5);
+    expect(new Set(deApiKey.map((t) => CATEGORIA_POR_ACCION[t]))).toEqual(
+      new Set(["cambia_permisos"]),
+    );
+    // Etiqueta legible, y en la misma forma verbal que las demas («Eliminó una …»).
+    expect(ACCION_LABELS.api_key_eliminada).toBe("Eliminó una API key");
   });
 
   it("`tarifa_borrada` es DESAPARICION y no dinero, aunque mueva precio (R17)", () => {
@@ -122,13 +139,15 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(new Set(porCategoria).size).toBe(HISTORIAL_ACCION_TIPOS.length);
   });
 
-  it("el reparto por categoria es el del Anexo A: 26 dinero, 7 desaparicion, 11 permisos", () => {
+  it("el reparto por categoria es el del Anexo A: 26 dinero, 7 desaparicion, 12 permisos", () => {
     // Numeros DUROS: mover un tipo de categoria es una decision, y tiene que pasar por aqui.
     // 26 y no 25 desde la ficha 366: `orden_zona_reconciliada` entra en DINERO.
     // 7 y no 6 desde la ficha 371: `gestion_fecha_reprogramacion_corregida` entra en DESAPARICION.
+    // 12 y no 11 desde la ficha 373: `api_key_eliminada` entra en PERMISOS, con sus cuatro
+    // hermanas de API key, y NO en «hace desaparecer algo» (R25).
     expect(accionesDeCategoria("mueve_dinero")).toHaveLength(26);
     expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(7);
-    expect(accionesDeCategoria("cambia_permisos")).toHaveLength(11);
+    expect(accionesDeCategoria("cambia_permisos")).toHaveLength(12);
   });
 });
 

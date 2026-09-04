@@ -29,7 +29,16 @@ import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { ESTADO_API_KEY_LABEL } from "./api-key-estado-label";
 
-/** Columnas emitidas por la descarga del inventario de API keys, en su orden de pantalla. */
+/**
+ * Columnas emitidas por la descarga del inventario de API keys.
+ *
+ * Este orden ERA el de pantalla hasta el 2026-09-04 y ya no lo es: la ficha 373 adelantó en la
+ * tabla las dos columnas con botones («Acciones» y «Webhook») porque quedaban fuera del área
+ * visible en portátiles. Ese arreglo es de MAQUETACIÓN —un archivo descargado no tiene viewport
+ * ni botones— así que el export conserva su orden histórico a propósito: quien ya abre esta hoja
+ * o la lee con un script no tiene por qué recolocar sus columnas por un problema de pantalla. Lo
+ * que R24 pide es que salga lo que la tabla ENSEÑA, y sigue saliendo exactamente eso.
+ */
 export const COLUMNAS_DESCARGA_API_KEYS: DescargaColumna[] = [
   { clave: "identificador", encabezado: "Identificador" },
   { clave: "prefijo", encabezado: "Prefijo" },

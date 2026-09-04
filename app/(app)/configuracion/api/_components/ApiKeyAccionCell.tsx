@@ -9,10 +9,12 @@ import {
   rotarApiKey,
   activarApiKey,
   desactivarApiKey,
+  eliminarApiKey,
 } from "@/lib/actions/api-keys";
 import type { ApiKeyListItemDTO } from "@/lib/types/api-key";
 
 import { RevelarApiKeyModal } from "./RevelarApiKeyModal";
+import { textoNoEliminable } from "./api-key-eliminable-label";
 
 export interface ApiKeyAccionCellProps {
   /** Fila de la tabla; su `id` e `identificador` alimentan las acciones y modales. */
@@ -22,6 +24,12 @@ export interface ApiKeyAccionCellProps {
    * `mutate` de SWR, para mantener una sola fuente de verdad de la key SWR.
    */
   onMutated: () => Promise<void>;
+  /**
+   * FICHA 373/R35 — aviso de que la fila DESAPARECIÓ (no que cambió). Lo usa `ApiKeysModule`
+   * para retroceder de página cuando el borrado deja vacía una que no es la primera. Va aquí
+   * como aviso y no como decisión: **la celda no conoce la paginación** (design §7.3).
+   */
+  onEliminada?: () => void;
 }
 
 /** Secreto NUEVO revelado UNA sola vez tras rotar; `null` = sin revelar. */
@@ -32,20 +40,31 @@ interface Revelado {
 
 /**
  * Celda de la columna "Acciones" del listado de API keys (feature ciclo de vida).
- * Molde de `WebhookAccionCell`: dueña de los modales de confirmación de "Rotar" y
- * "Activar"/"Desactivar" (según `row.estado`). Al confirmar llama la Server Action
- * correspondiente; si `ok`, refresca el listado con `onMutated` y —solo al rotar—
- * abre `RevelarApiKeyModal` con el secreto nuevo (única vez que existe). Los
- * errores del backend se traducen a un toast legible. Anti-doble-submit por la fase
- * `pending` del `Modal` (`closeOnConfirm={false}`).
+ * Molde de `WebhookAccionCell`: dueña de los modales de confirmación de "Rotar",
+ * "Activar"/"Desactivar" (según `row.estado`) y —ficha 373— "Eliminar". Al confirmar
+ * llama la Server Action correspondiente; si `ok`, refresca el listado con `onMutated`
+ * y —solo al rotar— abre `RevelarApiKeyModal` con el secreto nuevo (única vez que
+ * existe). Los errores del backend se traducen a un toast legible. Anti-doble-submit
+ * por la fase `pending` del `Modal` (`closeOnConfirm={false}`).
+ *
+ * FICHA 373 — «Eliminar» es IRREVERSIBLE y solo se ofrece sobre una key que el SERVIDOR
+ * marcó `eliminable`. Cuando no lo es, el botón sale apagado DICIENDO POR QUÉ (R28): un
+ * botón que se ofrece y luego falla enseña al usuario a desconfiar de todos los botones.
  */
-export function ApiKeyAccionCell({ row, onMutated }: ApiKeyAccionCellProps) {
+export function ApiKeyAccionCell({
+  row,
+  onMutated,
+  onEliminada,
+}: ApiKeyAccionCellProps) {
   const toast = useToast();
   const [confirmRotar, setConfirmRotar] = useState(false);
   const [confirmEstado, setConfirmEstado] = useState(false);
+  const [confirmEliminar, setConfirmEliminar] = useState(false);
   const [revelado, setRevelado] = useState<Revelado | null>(null);
 
   const activa = row.estado === "activa";
+  // R28: el motivo llega RESUELTO del servidor; aquí solo se traduce a castellano.
+  const motivoTexto = textoNoEliminable(row.motivoNoEliminable);
 
   async function onConfirmRotar() {
     // El `Modal` bloquea el segundo submit mientras esta promesa corre.
@@ -75,6 +94,26 @@ export function ApiKeyAccionCell({ row, onMutated }: ApiKeyAccionCellProps) {
     }
   }
 
+  async function onConfirmEliminar() {
+    // R29/R32: solo se llega aquí desde el botón de confirmar del modal.
+    const res = await eliminarApiKey({ id: row.id });
+    if (res.status === "ok") {
+      await onMutated(); // R33: releer el listado ANTES de cerrar.
+      setConfirmEliminar(false);
+      onEliminada?.(); // R35: la fila desapareció; el módulo decide si retrocede de página.
+      toast.success("API key eliminada");
+      return;
+    }
+    setConfirmEliminar(false);
+    // R34: un mensaje distinto por caso. `bloqueada` (R12) no es un error del borde sino un
+    // retorno del servicio, y trae SU motivo: se dice ése, no un genérico.
+    toast.error(
+      res.status === "bloqueada"
+        ? textoNoEliminable(res.motivo)
+        : mensajeError(res.status),
+    );
+  }
+
   const estadoLabel = activa ? "Desactivar" : "Activar";
 
   return (
@@ -97,6 +136,27 @@ export function ApiKeyAccionCell({ row, onMutated }: ApiKeyAccionCellProps) {
           aria-label={`${estadoLabel} la API key ${row.identificador}`}
         >
           {estadoLabel}
+        </Button>
+        {/**
+         * FICHA 373/R1/R14/R28 — el tercer botón. `disabled` obedece a `row.eliminable`, que
+         * resuelve el SERVIDOR; el motivo va en el NOMBRE ACCESIBLE y en el `title` porque un
+         * botón deshabilitado no recibe foco: dejarlo solo en el tooltip lo haría invisible para
+         * media pantalla. Rotar y Activar/Desactivar siguen habilitados pase lo que pase (R14).
+         */}
+        <Button
+          type="button"
+          size="sm"
+          variant="destructive"
+          disabled={!row.eliminable}
+          title={row.eliminable ? undefined : motivoTexto}
+          aria-label={
+            row.eliminable
+              ? `Eliminar la API key ${row.identificador}`
+              : `No se puede eliminar la API key ${row.identificador}: ${motivoTexto}`
+          }
+          onClick={() => setConfirmEliminar(true)}
+        >
+          Eliminar
         </Button>
       </div>
 
@@ -138,6 +198,41 @@ export function ApiKeyAccionCell({ row, onMutated }: ApiKeyAccionCellProps) {
           ¿Seguro que quieres {estadoLabel.toLowerCase()} la API key{" "}
           <strong>{row.identificador}</strong>?
         </p>
+      </Modal>
+
+      {/**
+       * FICHA 373/R29–R32 — confirmación destructiva SIMPLE (patrón de la ficha 332): no se pide
+       * teclear el identificador. La fricción ya la puso el paso previo obligatorio de desactivar
+       * (R11), que es explícito, visible en el listado y reversible.
+       */}
+      <Modal
+        open={confirmEliminar}
+        onOpenChange={setConfirmEliminar}
+        title="Eliminar la API key"
+        confirmLabel="Sí, eliminar"
+        confirmVariant="destructive"
+        cancelLabel="Cancelar"
+        closeOnConfirm={false}
+        onConfirm={onConfirmEliminar}
+      >
+        <div className="flex flex-col gap-3 text-sm">
+          <p>
+            Vas a eliminar la API key <strong>{row.identificador}</strong>.
+          </p>
+          {/* R30: las TRES consecuencias, juntas y anunciadas. */}
+          <ul role="alert" className="list-disc pl-5 text-destructive">
+            <li>Esta acción es irreversible: no se puede deshacer.</li>
+            <li>El secreto deja de funcionar de forma definitiva.</li>
+            <li>
+              Desaparecen también su cuenta dedicada y su suscripción de webhook.
+            </li>
+          </ul>
+          {/* R31: la alternativa NO destructiva, que ya está en marcha. */}
+          <p className="text-muted-foreground">
+            La API key ya está desactivada: dejarla así revoca el acceso sin
+            borrar nada.
+          </p>
+        </div>
       </Modal>
 
       {revelado ? (

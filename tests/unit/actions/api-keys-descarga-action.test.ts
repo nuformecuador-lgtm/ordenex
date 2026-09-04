@@ -17,6 +17,9 @@ const ITEM: ApiKeyListItemDTO = {
   usuarioEmail: "apikey+tienda-uno@apikey.invalid",
   tiendaDestinoId: null, // feature 302
   tiendaDestinoNombre: null,
+  // Ficha 373: la key `activa` NO es eliminable (R11); el motivo lo calcula el servicio.
+  eliminable: false,
+  motivoNoEliminable: "activa",
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
 };
 

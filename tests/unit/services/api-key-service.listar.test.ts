@@ -6,6 +6,7 @@ import type {
   IApiKeyRepository,
   ListApiKeysParams,
 } from "@/lib/interfaces/repositories/IApiKeyRepository";
+import type { DependenciasCuentaDedicada } from "@/lib/types/api-key";
 import type { Actor } from "@/lib/interfaces/services/IApiKeyService";
 
 // Feature 82 — ApiKeyService.listar. Repositorio mockeado: sin DB (R10, CHECKPOINTS.md).
@@ -27,9 +28,29 @@ function item(n: number): ApiKeyListItem {
   };
 }
 
-function makeRepo(items: ApiKeyListItem[] = [item(1), item(2)], total = items.length) {
+/**
+ * FICHA 373 -- el doble de `dependenciasDeCuentasDedicadas`. `dependencias` mapea `usuarioId` ->
+ * lo que tiene esa cuenta; lo que no este ahi se resuelve como "sin rastro".
+ */
+function makeRepo(
+  items: ApiKeyListItem[] = [item(1), item(2)],
+  total = items.length,
+  dependencias: Record<string, DependenciasCuentaDedicada> = {},
+) {
   const capturado: ListApiKeysParams[] = [];
+  const idsPedidos: string[][] = [];
   const repo: IApiKeyRepository = {
+    dependenciasDeCuentasDedicadas: vi.fn(async (usuarioIds: readonly string[]) => {
+      idsPedidos.push([...usuarioIds]);
+      return new Map(
+        usuarioIds
+          .filter((id) => dependencias[id] !== undefined)
+          .map((id) => [id, dependencias[id]] as const),
+      );
+    }),
+    eliminar: vi.fn(async () => {
+      throw new Error("eliminar no debe invocarse desde listar");
+    }),
     createConUsuario: vi.fn(async () => {
       throw new Error("createConUsuario no debe invocarse desde listar");
     }),
@@ -55,7 +76,7 @@ function makeRepo(items: ApiKeyListItem[] = [item(1), item(2)], total = items.le
       throw new Error("setEstado no debe invocarse desde listar");
     }),
   };
-  return { repo, capturado };
+  return { repo, capturado, idsPedidos };
 }
 
 describe("ApiKeyService.listar — autorizacion (R2)", () => {
@@ -112,6 +133,8 @@ describe("ApiKeyService.listar — resultado (R4/R5/R7)", () => {
         "tiendaDestinoNombre", // feature 302
         "usuarioEmail",
         "usuarioId",
+        "eliminable", // ficha 373
+        "motivoNoEliminable", // ficha 373
       ].sort(),
     );
     expect(r.items[0].usuarioEmail).toBe("apikey+tienda-1@apikey.invalid"); // [D1]
@@ -177,5 +200,97 @@ describe("ApiKeyService.listar — paginacion (R9)", () => {
       expect(r.total).toBe(7); // el total no se falsea por pedir una pagina vacia
       expect(r.page).toBe(99);
     }
+  });
+});
+
+// =================================================================================================
+// FICHA 373 -- la eliminabilidad viaja con cada fila, y cuesta UNA consulta por pagina (R38)
+// =================================================================================================
+
+describe("ApiKeyService.listar -- eliminabilidad de cada fila (373/R38)", () => {
+  it("R38: pide las dependencias UNA vez, con la lista de ids de la pagina entera", async () => {
+    // La mutacion que este caso caza: resolver la eliminabilidad fila a fila (N+1). Con 25 filas
+    // habria 25 llamadas; el contrato dice UNA con 25 ids.
+    const items = Array.from({ length: 25 }, (_, i) => item(i + 1));
+    const { repo, idsPedidos } = makeRepo(items, 25);
+    await new ApiKeyService(repo).listar({ page: 1, pageSize: 25 }, MAESTRO);
+
+    expect(repo.dependenciasDeCuentasDedicadas).toHaveBeenCalledTimes(1);
+    expect(idsPedidos).toHaveLength(1);
+    expect(idsPedidos[0]).toEqual(items.map((i) => i.usuarioId));
+  });
+
+  it("R38: una pagina de 1 fila hace las MISMAS llamadas que una de 25", async () => {
+    const una = makeRepo([item(1)], 1);
+    await new ApiKeyService(una.repo).listar({ page: 1, pageSize: 25 }, MAESTRO);
+    const veinticinco = makeRepo(
+      Array.from({ length: 25 }, (_, i) => item(i + 1)),
+      25,
+    );
+    await new ApiKeyService(veinticinco.repo).listar({ page: 1, pageSize: 25 }, MAESTRO);
+
+    expect(una.repo.list).toHaveBeenCalledTimes(1);
+    expect(veinticinco.repo.list).toHaveBeenCalledTimes(1);
+    expect(una.repo.dependenciasDeCuentasDedicadas).toHaveBeenCalledTimes(1);
+    expect(veinticinco.repo.dependenciasDeCuentasDedicadas).toHaveBeenCalledTimes(1);
+  });
+
+  it("R11: una fila `activa` y SIN ningun dato sale NO eliminable, con motivo `activa`", async () => {
+    // Es el caso literal de "API Nuform" medido en produccion: 0 ordenes, 0 dinero, 0 tarifas y
+    // aun asi no borrable. Sin R11 el guard por datos la daria por eliminable.
+    const { repo } = makeRepo([item(1)], 1);
+    const r = await new ApiKeyService(repo).listar({ page: 1, pageSize: 25 }, MAESTRO);
+
+    if (r.status !== "ok") throw new Error("se esperaba ok");
+    expect(r.items[0].estado).toBe("activa");
+    expect(r.items[0].eliminable).toBe(false);
+    expect(r.items[0].motivoNoEliminable).toBe("activa");
+  });
+
+  it("la MISMA fila, desactivada y sin datos, sale eliminable con motivo `null`", async () => {
+    const { repo } = makeRepo([{ ...item(1), estado: "inactiva" }], 1);
+    const r = await new ApiKeyService(repo).listar({ page: 1, pageSize: 25 }, MAESTRO);
+
+    if (r.status !== "ok") throw new Error("se esperaba ok");
+    expect(r.items[0].eliminable).toBe(true);
+    expect(r.items[0].motivoNoEliminable).toBeNull();
+  });
+
+  it("cada fila recibe SUS dependencias, no las de su vecina", async () => {
+    // La mutacion que caza: aplicar la primera entrada del `Map` a todas las filas.
+    const filas = [
+      { ...item(1), estado: "inactiva" as const }, // sin rastro -> eliminable
+      { ...item(2), estado: "inactiva" as const }, // con ordenes
+      { ...item(3), estado: "inactiva" as const }, // con tarifas
+    ];
+    const { repo } = makeRepo(filas, 3, {
+      "u-dedicado-2": { ordenes: true, dinero: false, tarifas: false },
+      "u-dedicado-3": { ordenes: false, dinero: false, tarifas: true },
+    });
+    const r = await new ApiKeyService(repo).listar({ page: 1, pageSize: 25 }, MAESTRO);
+
+    if (r.status !== "ok") throw new Error("se esperaba ok");
+    expect(r.items.map((i) => i.motivoNoEliminable)).toEqual([null, "ordenes", "tarifas"]);
+    expect(r.items.map((i) => i.eliminable)).toEqual([true, false, false]);
+  });
+
+  it("R13: con ordenes Y dinero Y tarifas Y activa a la vez, el motivo que viaja es `ordenes`", async () => {
+    const { repo } = makeRepo([item(1)], 1, {
+      "u-dedicado-1": { ordenes: true, dinero: true, tarifas: true },
+    });
+    const r = await new ApiKeyService(repo).listar({ page: 1, pageSize: 25 }, MAESTRO);
+
+    if (r.status !== "ok") throw new Error("se esperaba ok");
+    expect(r.items[0].motivoNoEliminable).toBe("ordenes");
+  });
+
+  it("una pagina VACIA sigue preguntando, pero con la lista vacia", async () => {
+    // El repositorio real corta ahi sin consultar; el service no tiene que saberlo.
+    const { repo, idsPedidos } = makeRepo([], 7);
+    const r = await new ApiKeyService(repo).listar({ page: 99, pageSize: 25 }, MAESTRO);
+
+    if (r.status !== "ok") throw new Error("se esperaba ok");
+    expect(r.items).toEqual([]);
+    expect(idsPedidos).toEqual([[]]);
   });
 });

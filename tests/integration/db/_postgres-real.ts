@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PRISMA_OMIT } from "@/lib/db/prisma-client";
@@ -142,6 +144,63 @@ export function clienteConTransaccionAnidada(tx: TxDeTest): PrismaClient {
     },
   });
   return proxy as unknown as PrismaClient;
+}
+
+/**
+ * FICHA 373 — el cliente de la tx del test MAS un `$transaction` que abre un SAVEPOINT REAL.
+ *
+ * DIFERENCIA CON `clienteConTransaccionAnidada`, y es la que decide si un test miente: aquel es un
+ * PASO A TRAVES —no abre nada—, asi que un `throw` dentro del repositorio NO revierte lo que el
+ * repositorio ya escribio, y un test de «si falla, no queda nada» pasaria en verde por accidente.
+ * Este abre un savepoint de verdad y hace `ROLLBACK TO` al fallar, que es lo que Postgres hace con
+ * una transaccion abortada.
+ *
+ * Tecnica tomada de `historial-accion-atomicidad.test.ts` (ficha 362), donde nacio.
+ *
+ * `romperRegistro` sustituye `historialAccion.createMany` por una funcion que LANZA. Nada mas se
+ * toca: la mutacion, el `where`, el congelado del actor y la etiqueta son los reales. Es la unica
+ * forma de medir «si el registro falla, la accion no persiste» sin tocar codigo de produccion.
+ *
+ * El `bind` es necesario: las funciones del cliente Prisma necesitan su `this`, y devolverlas
+ * desatadas del proxy las rompe en silencio.
+ */
+export function clienteConSavepoint(tx: TxDeTest, romperRegistro = false): PrismaClient {
+  const proxy: unknown = new Proxy(tx as object, {
+    get(objetivo, prop) {
+      if (romperRegistro && prop === "historialAccion") {
+        return {
+          createMany: () => {
+            throw new RegistroCaido();
+          },
+        };
+      }
+      if (prop === "$transaction") {
+        return async (fn: (t: unknown) => unknown) => {
+          const punto = `sp_${randomUUID().replace(/-/g, "")}`;
+          await tx.$executeRawUnsafe(`SAVEPOINT ${punto}`);
+          try {
+            const salida = await fn(proxy);
+            await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${punto}`);
+            return salida;
+          } catch (error) {
+            await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${punto}`);
+            throw error;
+          }
+        };
+      }
+      const valor = Reflect.get(objetivo, prop) as unknown;
+      return typeof valor === "function" ? valor.bind(objetivo) : valor;
+    },
+  });
+  return proxy as PrismaClient;
+}
+
+/** El error con el que `clienteConSavepoint(tx, true)` fuerza el fallo del registro. */
+export class RegistroCaido extends Error {
+  constructor() {
+    super("fallo PROVOCADO del registro de acciones");
+    this.name = "RegistroCaido";
+  }
 }
 
 /** Portador del valor: se lanza para forzar el ROLLBACK sin perder lo que se calculo. */

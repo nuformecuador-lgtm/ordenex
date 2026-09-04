@@ -59,12 +59,59 @@ export interface ApiKeysColumnsOptions {
    * key SWR). Se pasa tal cual a `ApiKeyAccionCell`.
    */
   onMutated: () => Promise<void>;
+  /**
+   * FICHA 373/R35: aviso de que una fila DESAPARECIÓ por un borrado con éxito. Lo inyecta
+   * `ApiKeysModule` para retroceder de página cuando la que se está viendo se queda vacía y no
+   * es la primera. Se pasa tal cual a `ApiKeyAccionCell`.
+   */
+  onEliminada?: () => void;
 }
 
 /**
- * Columnas del listado de API keys (feature 82/R14): identificador · prefijo ·
- * usuario dedicado (email sintético [D1]) · tienda destino (307) · fecha de creación ·
- * estado · webhook · acciones.
+ * Columnas del listado de API keys (feature 82/R14): identificador · estado · acciones ·
+ * webhook · prefijo · usuario dedicado (email sintético [D1]) · tienda destino (307) ·
+ * fecha de creación.
+ *
+ * =============================================================================================
+ * ⚠️ EL ORDEN NO ES COSMÉTICO: LAS DOS COLUMNAS CON BOTONES VAN DELANTE (2026-09-04, ficha 373).
+ * =============================================================================================
+ *
+ * Hasta hoy «Acciones» era la ÚLTIMA columna y, con la tabla desbordando, quedaba fuera del
+ * área visible en anchos de portátil. Medido en Chromium sobre el contenedor con scroll de
+ * `DataTable`, con la barra lateral desplegada (256 px), que es el caso del defecto:
+ *
+ *   | viewport | visible | tabla | desborda | «Eliminar» visible |
+ *   |----------|---------|-------|----------|--------------------|
+ *   | 1920     |    1614 |  1614 |        0 | 74 px              |
+ *   | 1440     |    1134 |  1134 |        0 | 74 px              |
+ *   | 1280     |     974 |  1100 |    126 → | −40 px (FUERA)     |
+ *   | 1024     |     718 |  1100 |    382 → | −296 px (FUERA)    |
+ *
+ * Y NO se arregla estrechando: el mínimo de contenido de las SIETE columnas de datos, sin
+ * «Acciones», ya suma 838 px (identificador 104 · prefijo 133 · usuario 167 · tienda 140 ·
+ * fecha 120 · estado 91 · webhook 83), o sea que a 1024 (718 px de sitio) la tabla desborda
+ * aunque los botones no existieran. Acotar el email —la sospecha inicial— tampoco: aporta
+ * 167 px de 1100 porque ya parte líneas por los guiones, y caparlo solo lo estropearía a
+ * 1920, donde hoy se lee entero. El desbordamiento a 1024 es un hecho de esta pantalla; lo
+ * que se puede decidir es QUÉ queda fuera, y lo que no puede quedar fuera son los botones.
+ *
+ * Por eso las dos columnas interactivas —«Acciones» y «Webhook»— se adelantan junto a
+ * «Estado», que es lo que dice si el botón del medio ofrece Activar o Desactivar. Con
+ * `Identificador · Estado · Acciones · Webhook` = 540 px, las tres acciones de una fila y el
+ * webhook caben enteros sin desplazar la tabla incluso a 1024. La identidad de la fila sigue
+ * PRIMERA a propósito: unos botones sin saber de qué key son no sirven de nada (y además la
+ * flecha de scroll izquierda de `DataTable` se dibuja encima de la primera columna, así que
+ * ahí no puede ir un control).
+ *
+ * Es el mismo remedio que la feature 160 ya aplicó en `/ordenes` con el mismo motivo escrito
+ * —«con 18 columnas y scroll horizontal, una columna al final quedaría permanentemente fuera
+ * del viewport»— y el mismo sitio donde `OrdenesModule` antepone su columna de selección. NO
+ * se tocó `components/shared/DataTable`: lo montan 55 archivos y la fila de columnas de ESTA
+ * pantalla se arregla en ESTA pantalla.
+ *
+ * Cambia el orden y NADA más: ids, cabeceras y `render` quedan idénticos, y la descarga vive
+ * en `api-keys-descarga-columnas.ts`, que no se entera. Lo vigila
+ * `tests/unit/guards/api-keys-acciones-alcanzables.guardia.test.ts`.
  *
  * El prefijo se muestra seguido de un elipsis en `font-mono` (R15). El DTO de
  * fila (`ApiKeyListItemDTO`) no declara `keyHash` ni el secreto, así que NUNCA
@@ -79,9 +126,36 @@ export interface ApiKeysColumnsOptions {
  */
 export function buildApiKeysColumns({
   onMutated,
+  onEliminada,
 }: ApiKeysColumnsOptions): Column<ApiKeyListItemDTO>[] {
   return [
     { id: "identificador", value: "Identificador" },
+    {
+      id: "estado",
+      value: "Estado",
+      render: (row) => <EstadoApiKeyBadge value={row.estado} />,
+    },
+    {
+      id: "acciones",
+      value: "Acciones",
+      render: (row) => (
+        <ApiKeyAccionCell
+          row={row}
+          onMutated={onMutated}
+          onEliminada={onEliminada}
+        />
+      ),
+    },
+    {
+      id: "webhook",
+      value: "Webhook",
+      render: (row) => (
+        <WebhookAccionCell
+          ownerUsuarioId={row.usuarioId}
+          identificador={row.identificador}
+        />
+      ),
+    },
     {
       id: "keyPrefix",
       value: "Prefijo",
@@ -116,26 +190,6 @@ export function buildApiKeysColumns({
       value: "Fecha de creación",
       render: (row) => formatFechaCreacion(row.createdAt),
       minWidth: "120px",
-    },
-    {
-      id: "estado",
-      value: "Estado",
-      render: (row) => <EstadoApiKeyBadge value={row.estado} />,
-    },
-    {
-      id: "webhook",
-      value: "Webhook",
-      render: (row) => (
-        <WebhookAccionCell
-          ownerUsuarioId={row.usuarioId}
-          identificador={row.identificador}
-        />
-      ),
-    },
-    {
-      id: "acciones",
-      value: "Acciones",
-      render: (row) => <ApiKeyAccionCell row={row} onMutated={onMutated} />,
     },
   ];
 }

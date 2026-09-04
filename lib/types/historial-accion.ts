@@ -17,7 +17,7 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // FICHA 362 (design §1.1, R14/R15/R17) — EL CATALOGO CERRADO del historial de acciones.
 //
 // Modulo PURO: no importa Prisma en runtime (solo los TIPOS del enum, borrados en compilacion),
-// ni React, ni `lib/services`. Lo consumen el borde (zod), el servicio, el repositorio, los 44
+// ni React, ni `lib/services`. Lo consumen el borde (zod), el servicio, el repositorio, los 45
 // puntos de escritura y la pantalla.
 //
 // LAS DOS DIRECCIONES DEL CIERRE, y por eso hay `satisfies` Y `_AsegurarExhaustivo`:
@@ -27,14 +27,15 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // Un tipo declarado en la base y ausente del catalogo seria un filtro que no se puede pedir; uno
 // en el catalogo y ausente de la base seria un `validation_error` que nadie entiende.
 //
-// LOS CUARENTA Y CUATRO, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y
+// LOS CUARENTA Y CINCO, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y
 // cada una añade UN tipo (`orden_ubicacion_corregida`, `usuario_fulfillment_cambiado`); la ficha 366
 // (2026-09-03) añade el tercero (`orden_zona_reconciliada`) y los tres entran en «mueve dinero»; la
 // ficha 371 añade el cuarto (`gestion_fecha_reprogramacion_corregida`), que entra en «hace
-// desaparecer algo». El motivo de cada uno esta escrito a su lado.
+// desaparecer algo»; la ficha 373 añade el quinto (`api_key_eliminada`), que entra en «cambia quien
+// puede hacer que». El motivo de cada uno esta escrito a su lado.
 
 /**
- * Los 44 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
+ * Los 45 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
  * permisos) y es el que consume el selector de filtros: no se reordena por gusto.
  */
 export const HISTORIAL_ACCION_TIPOS = [
@@ -107,7 +108,7 @@ export const HISTORIAL_ACCION_TIPOS = [
   "vehiculo_borrado", // vehiculos.borrarVehiculo
   "plantilla_eliminada", // plantillas.eliminarPlantilla
 
-  // --- A.3 · cambia quien puede hacer que (11) ---
+  // --- A.3 · cambia quien puede hacer que (12) ---
   "usuario_creado", // usuarios.crearUsuario
   "usuario_rol_cambiado", // usuarios.actualizarUsuario (solo si cambia `rolId`)
   "usuario_zona_cambiada", // usuarios.actualizarUsuario (solo si cambia `zonaId`)
@@ -119,6 +120,20 @@ export const HISTORIAL_ACCION_TIPOS = [
   "api_key_rotada", // api-keys.rotarApiKey
   "api_key_activada", // api-keys.activarApiKey
   "api_key_desactivada", // api-keys.desactivarApiKey
+  // ⭑ FICHA 373 — el borrado FISICO de una API key ya desactivada, con su cuenta dedicada y su
+  // suscripcion de webhook. ENTRA AQUI, con sus cuatro hermanas, y NO en «hace desaparecer algo»:
+  // R17 de la 362 exige EXACTAMENTE una categoria por tipo, y lo que esta fila documenta es un
+  // cambio de QUIEN PUEDE ENTRAR POR LA API — el mismo eje que generar, rotar, activar y
+  // desactivar. Partir el ciclo de vida de una credencial en dos familias romperia el filtro por
+  // categoria justo donde mas se usa.
+  //
+  // ⚠️ NI EL SECRETO, NI EL `key_hash`, NI EL `key_prefix` entran en la fila (R23): la key se
+  // nombra por su IDENTIFICADOR VISIBLE. `valor_anterior` lleva el estado previo —siempre
+  // `inactiva`, porque una key `activa` no es eliminable (R11)— y `valor_nuevo` va en NULL.
+  //
+  // Y la fila SOBREVIVE a la key: `entidad_id` es opaco y sin FK, y `entidad_etiqueta` va
+  // denormalizada (R26).
+  "api_key_eliminada", // api-keys.eliminarApiKey -> ApiKeyRepository.eliminar
 ] as const satisfies readonly PrismaHistorialAccionTipo[];
 
 export type HistorialAccionTipo = (typeof HISTORIAL_ACCION_TIPOS)[number];
@@ -207,6 +222,7 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   api_key_rotada: "cambia_permisos",
   api_key_activada: "cambia_permisos",
   api_key_desactivada: "cambia_permisos",
+  api_key_eliminada: "cambia_permisos",
 };
 
 /** Etiqueta legible de cada tipo. Exhaustiva por el mismo mecanismo que la categoria. */
@@ -255,6 +271,7 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   api_key_rotada: "Rotó una API key",
   api_key_activada: "Activó una API key",
   api_key_desactivada: "Desactivó una API key",
+  api_key_eliminada: "Eliminó una API key",
 };
 
 /** Etiqueta legible de cada categoria, para el selector de filtros y la descarga. */

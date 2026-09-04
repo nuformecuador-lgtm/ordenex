@@ -1,6 +1,7 @@
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
 import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import { Prisma, type EstadoApiKey, type PrismaClient } from "@prisma/client";
+import { esViolacionDeClaveForanea } from "@/lib/repositories/_shared/prisma-fk";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import {
   CatalogoInvalidoError,
@@ -10,19 +11,95 @@ import type {
   ApiKeyAutenticada,
   ApiKeyListItem,
   CreateApiKeyConUsuarioData,
+  EliminarApiKeyRepoResult,
   IApiKeyRepository,
   ListApiKeysParams,
   ListApiKeysResult,
   TiendaDestinoCandidata,
 } from "@/lib/interfaces/repositories/IApiKeyRepository";
-import type { ApiKeyPublico } from "@/lib/types/api-key";
+import type { ApiKeyPublico, DependenciasCuentaDedicada } from "@/lib/types/api-key";
 import { resolverOwnerApiKey } from "@/lib/utils/api-key-owner";
 
 type ApiKeyPrismaClient = Pick<
   PrismaClient,
   // Ficha 362 (R9): las tres escrituras instrumentadas registran su accion en su misma tx.
-  "apiKey" | "usuario" | "rol" | "tipoIdentificacion" | "$transaction" | "historialAccion"
+  // Ficha 373: `webhookSuscripcion` (la suscripcion de la cuenta dedicada, que se borra con ella)
+  // y `$queryRaw` (los `EXISTS` del guard de eliminabilidad).
+  | "apiKey"
+  | "usuario"
+  | "rol"
+  | "tipoIdentificacion"
+  | "$transaction"
+  | "historialAccion"
+  | "webhookSuscripcion"
+  | "$queryRaw"
 >;
+
+/** Lo minimo que necesita el guard de la 373: lanzar el `EXISTS`. Lo cumplen el cliente y la `tx`. */
+type ClienteConQueryRaw = Pick<PrismaClient, "$queryRaw">;
+
+/** Fila cruda del `EXISTS` de eliminabilidad (design §4.2). */
+interface FilaDependencias {
+  usuarioId: string;
+  ordenes: boolean;
+  dinero: boolean;
+  tarifas: boolean;
+}
+
+/** Una cuenta sin ningun rastro. Tambien es lo que se asume de un id que no resuelve. */
+const SIN_DEPENDENCIAS: DependenciasCuentaDedicada = {
+  ordenes: false,
+  dinero: false,
+  tarifas: false,
+};
+
+/**
+ * FICHA 373 (design §4.1/§4.2) — LAS DEPENDENCIAS DE DATOS DE N CUENTAS DEDICADAS, EN UNA CONSULTA.
+ *
+ * ⚠️ EL `EXISTS` DE ORDENES NO FILTRA `deleted_at`, Y ES LA SUTILEZA QUE MAS IMPORTA. Las ordenes
+ * usan soft delete: la fila sigue existiendo y su FK a la tienda sigue apuntando. Contar solo las
+ * vivas dejaria eliminable una key con 40 ordenes borradas, y el `DELETE` reventaria al pulsar el
+ * boton — exactamente el «boton que falla al pulsarlo» que la ficha prohibe.
+ *
+ * POR QUE ESTAS CUATRO Y NO LAS CATORCE FK hacia `usuario` (design §4.1): las otras diez solo
+ * pueden existir si existio una orden de esa cuenta, y una orden nunca desaparece de la tabla.
+ * Comprobarlas otra vez seria coste sin informacion — y `cierre_detail` NO declara indice por
+ * `tienda_id`, asi que un `EXISTS` sin coincidencias recorreria entera una tabla que crece con
+ * cada cierre, en CADA pintado del listado. Que esa implicacion sea un RAZONAMIENTO y no una
+ * medicion es justo el motivo por el que existe la red de las FK `Restrict` (R16).
+ *
+ * `EXISTS` corta en la primera fila que casa: es un acceso por indice, no un conteo. Un `_count`
+ * recorreria las 40.000 ordenes de una cuenta para responder «si».
+ *
+ * `text[]` y no `uuid[]`: `usuario.id` es TEXT en la base (`20260716150000_api_key`).
+ *
+ * ⚠️ LA TABLA DE TARIFAS SE LLAMA `tarifas`, EN PLURAL (`@@map("tarifas")`, `db/schema.prisma`), y
+ * es la unica de las cuatro que no coincide con su modelo. El design de la ficha la nombraba en
+ * singular; Postgres respondio `42P01 no existe la relacion «tarifa»` en el primer test de
+ * integracion. Se deja escrito para que nadie lo «corrija» al reves leyendo el spec.
+ */
+async function dependenciasPorCuenta(
+  cliente: ClienteConQueryRaw,
+  usuarioIds: readonly string[],
+): Promise<Map<string, DependenciasCuentaDedicada>> {
+  // Lista vacia -> `Map` vacio SIN consultar: `unnest('{}')` seria un viaje a la base para nada.
+  if (usuarioIds.length === 0) return new Map();
+
+  const filas = await cliente.$queryRaw<FilaDependencias[]>`
+    SELECT u.id AS "usuarioId",
+           EXISTS (SELECT 1 FROM "orden" o WHERE o."tienda_id" = u.id)                     AS ordenes,
+           (EXISTS (SELECT 1 FROM "wallet_tienda_movimiento" w WHERE w."tienda_id" = u.id)
+            OR EXISTS (SELECT 1 FROM "liquidacion_pago" p WHERE p."tienda_id" = u.id))     AS dinero,
+           EXISTS (SELECT 1 FROM "tarifas" t WHERE t."tienda_id" = u.id)                   AS tarifas
+    FROM unnest(${[...usuarioIds]}::text[]) AS u(id)`;
+
+  return new Map(
+    filas.map((f) => [
+      f.usuarioId,
+      { ordenes: f.ordenes, dinero: f.dinero, tarifas: f.tarifas },
+    ]),
+  );
+}
 
 /**
  * Forma publica de la key (R19): NUNCA proyecta `key_hash`. Patron `PUBLIC_SELECT` de
@@ -339,6 +416,111 @@ export class ApiKeyRepository implements IApiKeyRepository {
     });
     if (!row) return null;
     return { id: row.id, nombre: row.nombre, rol: row.rol.value, estado: row.estado };
+  }
+
+  /**
+   * FICHA 373/R8/R9/R10/R38 — las dependencias de datos de TODA una pagina, en UNA consulta.
+   * El repositorio no clasifica: devuelve los tres booleanos crudos y el motivo lo decide el
+   * service con `motivoNoEliminable` (fuente unica, R13).
+   */
+  async dependenciasDeCuentasDedicadas(
+    usuarioIds: readonly string[],
+  ): Promise<Map<string, DependenciasCuentaDedicada>> {
+    return dependenciasPorCuenta(this.prisma, usuarioIds);
+  }
+
+  /**
+   * FICHA 373 (design §6) — EL BORRADO FISICO, EN UNA SOLA TRANSACCION Y EN ESTE ORDEN.
+   *
+   *  1. lee la key (`null` -> `not_found`, R21) y CONGELA su `identificador` y su `estado` antes
+   *     de que dejen de existir (R24);
+   *  2. RE-EVALUA EL GUARD AQUI DENTRO (R15), antes de la primera escritura: primero el `estado`
+   *     —una key `activa` sale `bloqueada` SIN consultar nada mas (R11)— y despues los `EXISTS`;
+   *  3. congela el nombre y el rol del actor, como sus cuatro hermanas;
+   *  4. borra la suscripcion de webhook de LA CUENTA DEDICADA. `deleteMany` = idempotente: cero
+   *     filas es un caso normal, no un error. Acotado a `ownerUsuarioId`: si la key tiene tienda
+   *     destino, la suscripcion de LA TIENDA no casa y sobrevive (R5);
+   *  5. borra la key ANTES que el usuario: `api_key.usuario_id` es `Restrict`;
+   *  6. borra la cuenta dedicada, que es lo que LIBERA el email y la cedula sinteticos y devuelve
+   *     el identificador al uso (R6);
+   *  7. registra la accion por el punto unico, DESPUES de la mutacion (como `createConUsuario` y
+   *     `rotar`).
+   *
+   * POR QUE ESTO CUMPLE R4 SIN NINGUN `try` DE RESCATE: dentro de una transaccion de Postgres un
+   * error de sentencia aborta la transaccion ENTERA. No hay orden de sentencias que deje la key
+   * borrada y el registro sin escribir, ni al reves. Y si `appendAccion` falla —por ejemplo porque
+   * la migracion del enum no corrio—, el borrado se deshace: no hay desaparicion sin rastro.
+   *
+   * ⚠️ LA FILA DE AUDITORIA NO LLEVA NI EL SECRETO, NI EL `key_hash`, NI EL `key_prefix`, NI EL
+   * EMAIL SINTETICO (R23). Solo el identificador visible, que es como se nombra la key en pantalla.
+   * Es la misma frase que ya esta escrita en `createConUsuario`.
+   */
+  async eliminar(id: string, actorUsuarioId: string | null): Promise<EliminarApiKeyRepoResult> {
+    try {
+      return await this.prisma.$transaction(async (tx): Promise<EliminarApiKeyRepoResult> => {
+        // 1 — la fila, con lo justo. `estado` es a la vez dato de auditoria (R24) y guard (R11).
+        const fila = await tx.apiKey.findUnique({
+          where: { id },
+          select: { id: true, identificador: true, estado: true, usuarioId: true },
+        });
+        if (fila === null) return { status: "not_found" }; // R21
+
+        // 2a — R11/R15. CORTA AQUI Y NO CONSULTA NADA MAS: una key `activa` no es eliminable
+        // tenga los datos que tenga, asi que medir sus dependencias seria trabajo sin decision.
+        // Los tres booleanos van en `false` porque NO SE MIDIERON, y con ellos
+        // `motivoNoEliminable("activa", …)` devuelve exactamente `activa`.
+        if (fila.estado === "activa") {
+          return { status: "bloqueada", estado: fila.estado, dependencias: SIN_DEPENDENCIAS };
+        }
+
+        // 2b — el guard por datos, DENTRO de la tx y ANTES de la primera escritura (R15). No se
+        // fia de la evaluacion con la que se pinto el listado.
+        const dependencias =
+          (await dependenciasPorCuenta(tx, [fila.usuarioId])).get(fila.usuarioId) ??
+          SIN_DEPENDENCIAS;
+        if (dependencias.ordenes || dependencias.dinero || dependencias.tarifas) {
+          return { status: "bloqueada", estado: fila.estado, dependencias }; // R12: cero escrituras
+        }
+
+        // 3 — actor congelado (R24), dentro de la tx, como sus hermanas.
+        const actor = await resolverActorCongelado(tx, actorUsuarioId);
+
+        // 4/5/6 — los tres borrados de R2, en el unico orden que las FK admiten.
+        await tx.webhookSuscripcion.deleteMany({ where: { ownerUsuarioId: fila.usuarioId } });
+        await tx.apiKey.delete({ where: { id: fila.id } });
+        await tx.usuario.delete({ where: { id: fila.usuarioId } });
+
+        // 7 — FICHA 362 (R5/R9) + 373 (R22/R23/R24): UNA fila, en ESTA transaccion.
+        await appendAccion(tx, [
+          {
+            accion: "api_key_eliminada",
+            entidadTipo: "api_key",
+            entidadId: fila.id,
+            entidadEtiqueta: etiquetaDeEntidad("api_key", { identificador: fila.identificador }),
+            ...actor,
+            valorAnterior: fila.estado, // R24: el estado que tenia justo antes (siempre `inactiva`)
+            valorNuevo: null, // ya no hay estado al que apuntar: la fila no existe
+          },
+        ]);
+
+        return { status: "ok", identificador: fila.identificador };
+      });
+    } catch (error) {
+      // La fila desaparecio entre la lectura y el borrado (carrera): `not_found`, no un 500.
+      if (esRegistroNoEncontrado(error)) return { status: "not_found" };
+      // RED 2 (design §4.4): algo que el guard NO mira apunta a la cuenta dedicada. Postgres lo
+      // para con una FK `Restrict`, la transaccion revierte ENTERA y esto responde `bloqueada`
+      // sin diagnostico (R16). Nunca un borrado parcial, nunca un error no controlado.
+      //
+      // ⚠️ EL DETECTOR NO ES `code === "P2003"`, y no por gusto: MEDIDO el 2026-09-04, bajo
+      // `@prisma/adapter-pg` ese error llega como `DriverAdapterError` con `cause.code = "23001"`
+      // y SIN codigo de Prisma. Con la comprobacion ingenua, este `catch` no lo veria y R16 se
+      // convertiria en un 500. El detalle esta en `_shared/prisma-fk.ts`.
+      if (esViolacionDeClaveForanea(error)) {
+        return { status: "bloqueada", estado: null, dependencias: null };
+      }
+      throw error;
+    }
   }
 }
 

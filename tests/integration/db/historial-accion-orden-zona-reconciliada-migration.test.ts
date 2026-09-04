@@ -78,10 +78,11 @@ describe("366/T1 — el `migration.sql` y el `down.sql`, como texto", () => {
   it("el catalogo de TypeScript es la lista previa MAS este valor y los posteriores", () => {
     const previos = valoresDelCreateType(sql(CARPETA_362, "migration.sql"));
     // Cada ficha que añada un valor entra AQUI, en orden de migracion. Es lo que convierte esta
-    // comparacion en una cadena verificable —«la 362, mas la 366, mas la 371»— en vez de en un
-    // numero que caduca. La 371 (`gestion_fecha_reprogramacion_corregida`) tiene ademas su propio
-    // archivo de migracion, que comprueba su `up`, su `down` y la base aplicada.
-    const POSTERIORES = ["gestion_fecha_reprogramacion_corregida"];
+    // comparacion en una cadena verificable —«la 362, mas la 366, mas la 371, mas la 373»— en vez
+    // de en un numero que caduca. La 371 (`gestion_fecha_reprogramacion_corregida`) y la 373
+    // (`api_key_eliminada`) tienen ademas su propio archivo de migracion, que comprueba su `up`,
+    // su `down` y la base aplicada.
+    const POSTERIORES = ["gestion_fecha_reprogramacion_corregida", "api_key_eliminada"];
     expect([...HISTORIAL_ACCION_TIPOS].sort()).toEqual(
       [...previos, VALOR_NUEVO, ...POSTERIORES].sort(),
     );

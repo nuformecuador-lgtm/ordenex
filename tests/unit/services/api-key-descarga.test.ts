@@ -45,6 +45,13 @@ function apiKey(over: Partial<ApiKeyListItem> & { id: string }): ApiKeyListItem 
   };
 }
 
+/**
+ * Ficha 373: la descarga enriquece cada fila con `eliminable`/`motivoNoEliminable`, asi que el
+ * doble tiene que responder a la consulta de dependencias. Devuelve un `Map` VACIO —ninguna
+ * cuenta con rastro—, que es el caso neutro: el motivo lo decide entonces el `estado`.
+ */
+const dependenciasDeCuentasDedicadas = vi.fn(async () => new Map());
+
 /** Repositorio en memoria: como el real, ordena `createdAt desc` y recorta con skip/take. */
 function repoEnMemoria(filas: ApiKeyListItem[]) {
   const list = vi.fn(async (params: ListApiKeysParams): Promise<ListApiKeysResult> => {
@@ -54,7 +61,10 @@ function repoEnMemoria(filas: ApiKeyListItem[]) {
       total: ordenadas.length,
     };
   });
-  return { repo: { list } as unknown as IApiKeyRepository, list };
+  return {
+    repo: { list, dependenciasDeCuentasDedicadas } as unknown as IApiKeyRepository,
+    list,
+  };
 }
 
 /** Stub que declara un `total` cualquiera sin materializar más de `take` filas. */
@@ -63,7 +73,10 @@ function repoStub(total: number) {
     items: Array.from({ length: Math.min(total, params.take) }, (_, i) => apiKey({ id: `k${i}` })),
     total,
   }));
-  return { repo: { list } as unknown as IApiKeyRepository, list };
+  return {
+    repo: { list, dependenciasDeCuentasDedicadas } as unknown as IApiKeyRepository,
+    list,
+  };
 }
 
 function servicio(repo: IApiKeyRepository) {

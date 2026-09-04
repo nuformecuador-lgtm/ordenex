@@ -141,10 +141,14 @@ describeSiHayBase("371/T1 — la base APLICADA", () => {
     expect(enLaBase, "la migracion no esta aplicada en esta base").toContain(VALOR_NUEVO);
     // Las DOS direcciones: ni el catalogo nombra algo que la base no tiene, ni al reves.
     expect(enLaBase.slice().sort()).toEqual([...HISTORIAL_ACCION_TIPOS].sort());
-    // El orden FISICO del enum en la base: los `ADD VALUE` apenden, asi que el ultimo es el de
-    // esta ficha y el penultimo el de la 366. Es la lista que el `down.sql` tiene que recrear.
-    expect(enLaBase[enLaBase.length - 1]).toBe(VALOR_NUEVO);
-    expect(enLaBase[enLaBase.length - 2]).toBe(VALOR_366);
+    // El orden FISICO del enum en la base: los `ADD VALUE` apenden, asi que el de esta ficha va
+    // JUSTO DESPUES del de la 366. Es la lista que el `down.sql` tiene que recrear.
+    //
+    // Se afirma la POSICION RELATIVA y no «es el ultimo»: la ficha 373 apendio despues
+    // (`api_key_eliminada`) y la siguiente volvera a hacerlo. Lo que esta ficha tiene que
+    // sostener en el tiempo es su sitio respecto al valor que la precede, no que nadie mas
+    // amplie el enum nunca.
+    expect(enLaBase.indexOf(VALOR_NUEVO)).toBe(enLaBase.indexOf(VALOR_366) + 1);
   });
 
   it("⭑ la tabla existe con sus siete columnas y sus tipos", async () => {

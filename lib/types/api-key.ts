@@ -100,8 +100,24 @@ export const listarApiKeysCompletoSchema = listarApiKeysSchema
   .strict();
 export type ListarApiKeysCompletoInput = z.infer<typeof listarApiKeysCompletoSchema>;
 
-/** R5: DTO de fila del listado; se alinea al item del repositorio (nunca `keyHash`). */
-export type ApiKeyListItemDTO = ApiKeyListItem;
+/**
+ * R5: DTO de fila del listado; se alinea al item del repositorio (nunca `keyHash`).
+ *
+ * FICHA 373 (design §5.4) — gana DOS campos, y ni uno mas: un booleano y un valor de un
+ * vocabulario cerrado. NO viajan conteos («tiene 412 ordenes» obligaria a CONTAR de verdad, y el
+ * numero no cambia ninguna decision), ni ids, ni nada que roce el secreto: la invariante 82/R6
+ * sigue siendo ESTRUCTURAL porque `LIST_SELECT` sigue sin pedir `key_hash` y `ApiKeyListItem`
+ * sigue sin declararlo.
+ *
+ * La descarga (373/R37) no cambia: `COLUMNAS_DESCARGA_API_KEYS` y `filaDescargaApiKey` enumeran
+ * columnas UNA A UNA, asi que ensanchar este tipo no anade ninguna celda.
+ */
+export type ApiKeyListItemDTO = ApiKeyListItem & {
+  /** `true` = la key esta `inactiva` y las cuatro comprobaciones del guard salieron a cero. */
+  eliminable: boolean;
+  /** El motivo que la bloquea, o `null` si es eliminable. NUNCA `otros_datos` por esta via. */
+  motivoNoEliminable: MotivoNoEliminable | null;
+};
 
 /**
  * R1/R2/R3/R4: resultado discriminado del listado. Union deliberadamente mas estrecho
@@ -178,3 +194,92 @@ export type CambiarEstadoApiKeyResult =
 /** Alias de intencion para la firma de las actions (misma forma que `CambiarEstadoApiKeyResult`). */
 export type ActivarApiKeyResult = CambiarEstadoApiKeyResult;
 export type DesactivarApiKeyResult = CambiarEstadoApiKeyResult;
+
+// ---------------------------------------------------------------------------
+// Ficha 373 — eliminar (borrado FISICO, irreversible)
+// ---------------------------------------------------------------------------
+
+/**
+ * FICHA 373 (design §4.3) — POR QUE UNA KEY NO SE PUEDE ELIMINAR. Vocabulario CERRADO: es lo unico
+ * que viaja al cliente sobre las dependencias de una cuenta dedicada, y por eso no lleva conteos
+ * ni ids.
+ *
+ * `otros_datos` NO lo produce nunca `motivoNoEliminable`: lo emite SOLO la red de las FK
+ * `Restrict` de Postgres cuando el borrado revienta con una `P2003` que el guard no preveia
+ * (design §4.4, red 2). Por eso el listado no lo muestra jamas y solo aparece tras un intento.
+ */
+export const MOTIVOS_NO_ELIMINABLE = [
+  "ordenes",
+  "dinero",
+  "tarifas",
+  "activa",
+  "otros_datos",
+] as const;
+
+export type MotivoNoEliminable = (typeof MOTIVOS_NO_ELIMINABLE)[number];
+
+/**
+ * Las tres comprobaciones de DATOS sobre la cuenta dedicada de una key (design §4.1). `dinero`
+ * agrupa las dos tablas que documentan un movimiento a su nombre (libro de tienda y pago de
+ * liquidacion): al usuario le da igual cual de las dos, y separarlas duplicaria el vocabulario sin
+ * cambiar ninguna decision.
+ *
+ * ⚠️ `ordenes` NO filtra `deleted_at`, y es la sutileza que mas importa: las ordenes usan soft
+ * delete, la fila sigue existiendo y su FK a la tienda sigue apuntando. Contar solo las vivas
+ * dejaria eliminable una key con 40 ordenes borradas y el `DELETE` reventaria al pulsar el boton.
+ */
+export interface DependenciasCuentaDedicada {
+  ordenes: boolean;
+  dinero: boolean;
+  tarifas: boolean;
+}
+
+/**
+ * FICHA 373/R13 — LA FUENTE UNICA del motivo. La usan el camino del LISTADO (para apagar el boton)
+ * y el del BORRADO (para responder `bloqueada`): dos respuestas distintas a la misma pregunta
+ * serian dos verdades capaces de divergir.
+ *
+ * PRECEDENCIA FIJA Y DECLARADA: `ordenes` > `dinero` > `tarifas` > `activa`. `null` = eliminable.
+ *
+ * POR QUE LOS MOTIVOS DE DATOS VAN ANTES QUE EL DE ESTADO, que es lo contrario de lo que sugiere
+ * el orden temporal: los de datos son TERMINALES (no hay nada que el maestro pueda hacer desde
+ * esta pantalla para desbloquearlos) y el de estado es ACCIONABLE (el boton que lo resuelve esta
+ * justo al lado). Al reves, una key `activa` CON ordenes diria «desactivala», y despues de
+ * desactivarla el boton seguiria apagado por las ordenes: dos pasos y una promesa incumplida.
+ *
+ * Modulo PURO: sin Prisma en runtime (`EstadoApiKey` es solo un tipo, borrado en compilacion).
+ */
+export function motivoNoEliminable(
+  estado: EstadoApiKey,
+  dependencias: DependenciasCuentaDedicada,
+): MotivoNoEliminable | null {
+  if (dependencias.ordenes) return "ordenes";
+  if (dependencias.dinero) return "dinero";
+  if (dependencias.tarifas) return "tarifas";
+  if (estado === "activa") return "activa"; // R11: eliminar EXIGE desactivar antes
+  return null;
+}
+
+/**
+ * FICHA 373/R20 — el borde de `eliminarApiKey`. `.strict()` PROPIO: `apiKeyIdSchema` NO se toca
+ * porque lo comparten rotar/activar/desactivar y anadirselo cambiaria el borde de sus tres
+ * consumidores actuales. Una clave desconocida es `validation_error` SIN consultar la base.
+ */
+export const eliminarApiKeySchema = apiKeyIdSchema.strict();
+
+export type EliminarApiKeyInput = z.infer<typeof eliminarApiKeySchema>;
+
+/**
+ * FICHA 373 (design §5.1) — resultado de la eliminacion.
+ *
+ * `ok` devuelve el IDENTIFICADOR VISIBLE (para el aviso de exito) y nada mas: la fila ya no
+ * existe, asi que no hay `ApiKeyPublico` que devolver, y el prefijo NO viaja (R36).
+ *
+ * `bloqueada` es un RETORNO del service, no un error lanzado: no pasa por ningun mapeador de
+ * `AppErrorShape` y por eso ninguno cambia.
+ */
+export type EliminarApiKeyResult =
+  | { status: "ok"; identificador: string }
+  | { status: "not_found" } // R21
+  | { status: "bloqueada"; motivo: MotivoNoEliminable } // R12
+  | ApiKeyActionErrorResult; // forbidden (R18) | unauthenticated (R19) | validation_error (R20)

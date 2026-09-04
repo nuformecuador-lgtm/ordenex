@@ -55,6 +55,13 @@ function makeRepo(candidata: TiendaDestinoCandidata | null = NUFORM) {
     findByKeyHash: vi.fn(async () => {
       throw new Error("findByKeyHash no debe invocarse desde generar");
     }),
+    // Ficha 373: generar no mira la eliminabilidad ni borra nada.
+    dependenciasDeCuentasDedicadas: vi.fn(async () => {
+      throw new Error("dependenciasDeCuentasDedicadas no debe invocarse desde generar");
+    }),
+    eliminar: vi.fn(async () => {
+      throw new Error("eliminar no debe invocarse desde generar");
+    }),
     rotar: vi.fn(async () => {
       throw new Error("rotar no debe invocarse desde generar");
     }),

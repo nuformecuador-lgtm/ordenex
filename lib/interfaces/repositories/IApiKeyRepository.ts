@@ -1,5 +1,5 @@
 import type { EstadoApiKey, EstadoUsuario } from "@prisma/client";
-import type { ApiKeyPublico } from "@/lib/types/api-key";
+import type { ApiKeyPublico, DependenciasCuentaDedicada } from "@/lib/types/api-key";
 
 /**
  * Feature 88/R3: proyeccion MINIMA de una `api_key` resuelta por su hash, lo justo para
@@ -127,6 +127,22 @@ export interface ListApiKeysResult {
   total: number;
 }
 
+/**
+ * FICHA 373 (design §5.3) — los cuatro desenlaces del borrado, tal y como los ve el REPOSITORIO.
+ *
+ * El repositorio NO CLASIFICA: devuelve el `estado` y las `dependencias` CRUDOS y deja el motivo
+ * al service (`docs/architecture.md`: el repositorio son queries; la regla vive en el servicio).
+ * Por eso hay DOS ramas `bloqueada`:
+ *   - la del GUARD, que sabe por que (estado + las tres comprobaciones de datos);
+ *   - la de la RED DE FK, una `P2003` inesperada de Postgres: algo que el guard no mira apunta a
+ *     la cuenta dedicada. Ahi no hay diagnostico que dar y los dos campos van en `null` (R16).
+ */
+export type EliminarApiKeyRepoResult =
+  | { status: "ok"; identificador: string }
+  | { status: "not_found" }
+  | { status: "bloqueada"; estado: EstadoApiKey; dependencias: DependenciasCuentaDedicada }
+  | { status: "bloqueada"; estado: null; dependencias: null };
+
 export interface IApiKeyRepository {
   /**
    * Feature 82/R4/R7/R10: listado paginado, ordenado por `createdAt` descendente.
@@ -192,4 +208,41 @@ export interface IApiKeyRepository {
    * candidata sirve es `ApiKeyService.generar` (rol `adminTienda` + estado `activo`).
    */
   findTiendaDestino(usuarioId: string): Promise<TiendaDestinoCandidata | null>;
+
+  /**
+   * FICHA 373/R8/R9/R10/R38 — las dependencias de DATOS de varias cuentas dedicadas, EN UNA SOLA
+   * CONSULTA. El numero de consultas es INDEPENDIENTE del numero de filas de la pagina (R38): es
+   * `findMany` + `count` + ESTA, y ni una mas.
+   *
+   * Cuatro `EXISTS` por cuenta, que cortan en la primera fila que casa (un acceso por indice, no
+   * un conteo: contar 40.000 ordenes para responder «si» seria el coste sin la informacion).
+   *
+   * ⚠️ El `EXISTS` de ordenes NO filtra `deleted_at`: las ordenes usan soft delete y su FK a la
+   * tienda sigue apuntando, asi que una key con 40 ordenes borradas NO es eliminable.
+   *
+   * Lista vacia -> `Map` vacio SIN consultar. Un id que no resuelve a ninguna cuenta no aparece en
+   * el `Map`: quien llama decide que hacer con eso (el service lo trata como «sin dependencias»,
+   * porque una cuenta que no existe no tiene datos).
+   */
+  dependenciasDeCuentasDedicadas(
+    usuarioIds: readonly string[],
+  ): Promise<Map<string, DependenciasCuentaDedicada>>;
+
+  /**
+   * FICHA 373/R2/R3/R4/R15/R21/R22 — borra EN FISICO, en UNA SOLA transaccion: la fila de
+   * `api_key`, la fila de `usuario` de su cuenta dedicada y la suscripcion de webhook de esa
+   * cuenta (si existe), y escribe en esa MISMA transaccion UNA fila de `historial_accion` con la
+   * accion `api_key_eliminada`.
+   *
+   * EL GUARD SE RE-EVALUA AQUI DENTRO (R15), antes de la primera escritura y sin fiarse de la
+   * evaluacion con la que se pinto el listado: primero el `estado` (una key `activa` sale
+   * `bloqueada` sin consultar nada mas, R11) y despues los `EXISTS`. Si algo casa, se sale sin
+   * haber escrito NADA.
+   *
+   * Sin logica de negocio: no decide el motivo ni comprueba permisos (eso es `ApiKeyService`).
+   *
+   * La fila de auditoria NUNCA lleva el secreto, ni `key_hash`, ni `key_prefix` (R23): solo el
+   * identificador visible, el actor congelado y el estado previo en `valor_anterior`.
+   */
+  eliminar(id: string, actorUsuarioId: string | null): Promise<EliminarApiKeyRepoResult>;
 }
