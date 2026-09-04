@@ -9,7 +9,12 @@ import type {
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { DesenlaceLiberacion } from "@/lib/interfaces/services/ICorreccionFechaReprogramacionService";
 import { CorreccionFechaReprogramacionService } from "@/lib/services/CorreccionFechaReprogramacionService";
-import { liberarTrasCorregirFechaCon } from "@/lib/services/liberacion-tras-corregir-fecha";
+import {
+  desenlaceSinLiberar,
+  liberarTrasCorregirFechaCon,
+  liberarTrasCorregirFechaNoOp,
+} from "@/lib/services/liberacion-tras-corregir-fecha";
+import { fechaCalendarioCR, mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import {
   MSG_CARRERA,
   MSG_CATALOGO_INCOMPLETO,
@@ -329,7 +334,9 @@ describe("371 — el resultado dice si la orden quedo liberada o sigue esperando
       const { service, liberar } = montar({ desenlace });
       const r = await service.corregir(input(), MAESTRO, NOW_2_CR);
       expect(r).toMatchObject({ status: "ok", liberacion: desenlace });
-      expect(liberar).toHaveBeenCalledWith(ORDEN_ID);
+      // ⭑ La FECHA viaja con la llamada: sin ella el camino de la liberacion no puede distinguir
+      // «espera al calendario» de «no se pudo confirmar».
+      expect(liberar).toHaveBeenCalledWith(ORDEN_ID, HOY_CR);
     },
   );
 
@@ -392,17 +399,17 @@ describe("371 — `liberarTrasCorregirFechaCon` traduce los contadores de la lib
 
   it("liberadas: 1 -> `liberada`", async () => {
     const { fn } = conResultado({ evaluadas: 1, liberadas: 1, omitidas: 0, esperandoCierre: 0 });
-    expect(await fn(ORDEN_ID)).toBe("liberada");
+    expect(await fn(ORDEN_ID, HOY_CR)).toBe("liberada");
   });
 
   it("⭑ esperandoCierre: 1 -> `espera_cierre` (la puerta de la 276, no un fallo)", async () => {
     const { fn } = conResultado({ evaluadas: 1, liberadas: 0, omitidas: 0, esperandoCierre: 1 });
-    expect(await fn(ORDEN_ID)).toBe("espera_cierre");
+    expect(await fn(ORDEN_ID, HOY_CR)).toBe("espera_cierre");
   });
 
-  it("evaluadas: 0 -> `espera_fecha` (se corrigio a un dia futuro)", async () => {
+  it("evaluadas: 0 con fecha FUTURA -> `espera_fecha` (espera al calendario, y es verdad)", async () => {
     const { fn } = conResultado({ evaluadas: 0, liberadas: 0, omitidas: 0, esperandoCierre: 0 });
-    expect(await fn(ORDEN_ID)).toBe("espera_fecha");
+    expect(await fn(ORDEN_ID, MANANA_CR)).toBe("espera_fecha");
   });
 
   it("⭑ pasa `startOfDayCR(now)`, no `new Date()` a secas", async () => {
@@ -411,7 +418,7 @@ describe("371 — `liberarTrasCorregirFechaCon` traduce los contadores de la lib
       liberadas: 1,
       omitidas: 0,
     });
-    await fn(ORDEN_ID);
+    await fn(ORDEN_ID, HOY_CR);
     // 12:00 CR del 2 -> la medianoche UTC del 2 (convencion `@db.Date`). Con `new Date()` seria
     // 18:00Z y una orden con fecha de HOY quedaria fuera del `<=` durante toda la mañana.
     expect(liberarOrdenCorregida).toHaveBeenCalledWith(
@@ -432,10 +439,98 @@ describe("371 — `liberarTrasCorregirFechaCon` traduce los contadores de la lib
       { warn: (m) => avisos.push(m) },
     );
 
-    expect(await fn(ORDEN_ID)).toBe("espera_fecha");
+    expect(await fn(ORDEN_ID, MANANA_CR)).toBe("espera_fecha");
     // No es un `catch` vacio: queda dicho, con su causa y SIN el id de la orden.
     expect(avisos).toHaveLength(1);
     expect(avisos[0]).toContain("db down");
     expect(avisos[0]).not.toContain(ORDEN_ID);
   });
+});
+
+// -------------------------------------------------------------------------------------------
+// R-F · EL TEXTO QUE MENTIA: «espera a ese dia» sobre un dia que YA es hoy
+// -------------------------------------------------------------------------------------------
+
+describe("371 — con la fecha ya vencida, NUNCA se afirma que la orden espera al calendario", () => {
+  // ⚠️ POR QUE ESTE BLOQUE EXISTE. Hasta el 2026-09-03 todo el residuo caia en `espera_fecha`, y la
+  // pantalla pintaba «La orden espera a ese dia: vuelve sola a la bodega cuando llegue» — sobre un
+  // dia que ya era HOY. La correccion se guardaba bien y la corrida de las 00:00 lo arreglaba solo,
+  // asi que el daño estaba acotado a un dia; pero el mensaje era FALSO mientras tanto, y en esta
+  // ficha el mensaje es medio producto. No habia NI UN test que ejerciera este camino: por eso pudo
+  // quedar mal sin que nada se pusiera rojo.
+
+  const NOW = () => new Date("2026-09-02T18:00:00.000Z"); // 12:00 CR del 2
+
+  it("⭑ la liberacion REVIENTA tras corregir a HOY -> `espera_cierre`, no `espera_fecha`", async () => {
+    const { fn, avisos } = conFalloDeLiberacion();
+
+    // «espera_cierre» dice lo unico cierto —la orden todavia no vuelve— sin inventar una fecha
+    // futura. La corrida de medianoche sigue siendo la red, y queda dicho en el log.
+    expect(await fn(ORDEN_ID, HOY_CR)).toBe("espera_cierre");
+    expect(avisos[0]).toContain("00:00 CR");
+  });
+
+  it("⭑ la liberacion revienta tras corregir a AYER (fecha ya vencida) -> `espera_cierre`", async () => {
+    // El servicio no admite corregir al pasado, pero el adaptador no puede suponerlo: lo que
+    // decide es si la fecha YA LLEGO, y ayer llego mas todavia.
+    const { fn } = conFalloDeLiberacion();
+    expect(await fn(ORDEN_ID, AYER_CR)).toBe("espera_cierre");
+  });
+
+  it("⭑ residual SIN excepcion (una `omitida`) con fecha de HOY -> `espera_cierre`", async () => {
+    // La orden se evaluo y no salio, pero no fue por la puerta del cierre: una carrera, un
+    // catalogo incompleto o un fallo por orden. Tampoco aqui se puede decir «espera a ese dia».
+    const { fn } = conResultado({ evaluadas: 1, liberadas: 0, omitidas: 1, esperandoCierre: 0 });
+    expect(await fn(ORDEN_ID, HOY_CR)).toBe("espera_cierre");
+  });
+
+  it("residual con fecha FUTURA sigue siendo `espera_fecha`: ahi la frase SI es verdad", async () => {
+    // El control positivo. Sin el, los tres de arriba pasarian igual con un adaptador que
+    // devolviera siempre `espera_cierre`.
+    const { fn } = conResultado({ evaluadas: 0, liberadas: 0, omitidas: 0, esperandoCierre: 0 });
+    expect(await fn(ORDEN_ID, MANANA_CR)).toBe("espera_fecha");
+  });
+
+  it("⭑ el NO-OP del constructor aplica la MISMA regla, no una suya", async () => {
+    // Un servicio construido sin cablear el liberador tampoco puede afirmar que una orden espera a
+    // un dia que ya paso. `desenlaceSinLiberar` es el unico sitio donde vive esa decision.
+    const hoy = fechaCalendarioCR();
+    const manana = mananaCalendarioCR();
+    expect(await liberarTrasCorregirFechaNoOp(ORDEN_ID, hoy)).toBe("espera_cierre");
+    expect(await liberarTrasCorregirFechaNoOp(ORDEN_ID, manana)).toBe("espera_fecha");
+  });
+
+  it("`desenlaceSinLiberar` decide por el calendario de CR, no por el UTC", async () => {
+    // 23:59 CR del 2 = 05:59Z del 3: para UTC ya es dia 3, para CR sigue siendo el 2. El dia 2
+    // TIENE que contar como ya vencido y el 3 como futuro.
+    const casiMedianocheCR = new Date("2026-09-03T05:59:00.000Z");
+    expect(desenlaceSinLiberar(HOY_CR, casiMedianocheCR)).toBe("espera_cierre");
+    expect(desenlaceSinLiberar(MANANA_CR, casiMedianocheCR)).toBe("espera_fecha");
+  });
+
+  /** Un liberador REAL cuyo servicio revienta, con su log capturado. */
+  function conFalloDeLiberacion() {
+    const avisos: string[] = [];
+    const fn = liberarTrasCorregirFechaCon(
+      {
+        liberarOrdenCorregida: vi.fn(async () => {
+          throw new Error("db down");
+        }),
+      },
+      NOW,
+      { warn: (m) => avisos.push(m) },
+    );
+    return { fn, avisos };
+  }
+
+  function conResultado(resultado: {
+    evaluadas: number;
+    liberadas: number;
+    omitidas: number;
+    esperandoCierre?: number;
+  }) {
+    return {
+      fn: liberarTrasCorregirFechaCon({ liberarOrdenCorregida: vi.fn(async () => resultado) }, NOW),
+    };
+  }
 });

@@ -668,6 +668,51 @@ describeSiHayBase("371 — corregir la fecha de una reprogramacion, contra Postg
     });
   });
 
+  it("⭑ si la LIBERACION revienta tras corregir a HOY: la correccion queda escrita y el desenlace NO miente", async () => {
+    // EL CAMINO DE EXCEPCION QUE NO TENIA NI UN TEST, y por eso el texto pudo quedar mal sin que
+    // nada se pusiera rojo: hasta el 2026-09-03 este caso devolvia `espera_fecha` y la pantalla
+    // decia «La orden espera a ese dia: vuelve sola cuando llegue» sobre un dia que YA era hoy.
+    await conEscenario({ cierre: "aprobado" }, async (ctx) => {
+      const cliente = clienteConTransaccionAnidada(ctx.tx);
+      const avisos: string[] = [];
+      const service = new CorreccionFechaReprogramacionService(
+        new CorreccionFechaReprogramacionRepository(cliente),
+        {
+          findEstatusIdByValue: async (v: string) =>
+            v === "reprogramada" ? ctx.estatusReprogramadaId : null,
+        },
+        // El adaptador REAL sobre un servicio de liberacion que revienta: es la unica forma de
+        // ejercer el `catch` sin inventarse el desenlace.
+        liberarTrasCorregirFechaCon(
+          {
+            liberarOrdenCorregida: async () => {
+              throw new Error("db down");
+            },
+          },
+          () => NOW,
+          { warn: (m) => avisos.push(m) },
+        ),
+      );
+
+      const r = await service.corregir(
+        { ordenId: ctx.ordenId, fecha: HOY_CR, motivo: MOTIVO },
+        ctx.actor,
+        NOW,
+      );
+
+      // 1. El desenlace dice lo unico cierto: la orden todavia no vuelve. NO «espera a ese dia».
+      expect(r).toMatchObject({ status: "ok", fechaNueva: HOY_CR, liberacion: "espera_cierre" });
+      // 2. Y LA CORRECCION ESTA ESCRITA: el fallo de la liberacion no revierte nada. La corrida de
+      //    las 00:00 CR es la red, y queda dicho en el log sin PII.
+      expect(await fechaDe(ctx, ctx.gestionVigenteId)).toBe(HOY_CR);
+      expect(await rastroDe(ctx)).toHaveLength(1);
+      expect(await historialDe(ctx, ctx.gestionVigenteId)).toHaveLength(1);
+      expect(await estatusDe(ctx)).toBe("reprogramada");
+      expect(avisos[0]).toContain("00:00 CR");
+      expect(avisos[0]).not.toContain(ctx.ordenId);
+    });
+  });
+
   it("una carrera perdida no deja rastro huerfano", async () => {
     await conEscenario({}, async (ctx) => {
       // Se simula la carrera moviendo la orden fuera de `reprogramada` DESPUES del pre-chequeo:
