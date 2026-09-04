@@ -1,4 +1,4 @@
-import type { CreatedPreset, FilaBodegaSatelite } from "@/lib/types/orden";
+import type { CreatedPreset, FilaBodegaSatelite, SalioARepartoValor } from "@/lib/types/orden";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
@@ -144,6 +144,17 @@ export interface ListarOrdenesBodegaCompletoInput {
   created_hasta?: string;
   /** Termino del buscador, ya validado por el borde (minimo y maximo de `/ordenes`). */
   q?: string;
+  /**
+   * FICHA 370 — «salida a reparto», la MISMA clave publica y los MISMOS dos valores que
+   * `/ordenes` (`SALIO_A_REPARTO_VALORES`): `ya_salio` para las que ya salieron con un mensajero
+   * alguna vez, `nunca_salio` para las que solo tienen la guia generada. AUSENTE = no filtra y
+   * salen los dos grupos.
+   *
+   * No es una clave de alcance: PARTE lo que el adminSatelite ya puede ver (su bodega), no lo
+   * ensancha. El servicio la traduce con el util compartido y llega a los TRES caminos del
+   * listado —pagina, descarga y vigencia de la seleccion—, que miran el mismo conjunto.
+   */
+  salio_a_reparto?: SalioARepartoValor;
 }
 
 /**

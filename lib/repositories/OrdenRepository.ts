@@ -79,6 +79,8 @@ import {
   type ProvinciaRow,
   type RecepcionSateliteFiltro,
   type RecepcionSateliteRow,
+  // FICHA 370: «¿ya salio a reparto?», el MISMO tipo para las dos rutas de consulta.
+  type SalioAReparto,
   type RechazoSlaTiendaRow,
   type UpdateOrdenData,
   type ApiOrdenListResult,
@@ -1023,6 +1025,107 @@ function condicionPasoPorBodegaSatelite(): Prisma.Sql {
 }
 
 /**
+ * FICHA 370 — «ESTA ORDEN YA SALIO A REPARTO». El hermano de `condicionPasoPorBodegaSatelite`,
+ * y con la misma forma: un `EXISTS` sobre `orden_historial_estado` por el DESTINO de la
+ * transicion. Aqui el destino es UNO, `en_reparto`.
+ *
+ * ─── EL PROBLEMA QUE RESUELVE ──────────────────────────────────────────────────────────────
+ *
+ * Quien asigna necesita listar y asignar por separado las ordenes que ya salieron con un
+ * mensajero y volvieron, de las que solo tienen la guia generada. Hoy no puede: NUEVE arcos
+ * distintos desembocan en `en_bodega_central` (`lib/types/order-status-transiciones.ts`) —unos
+ * desde `en_preparacion` al generar la guia, otros desde `reprogramada`, `devuelta` o
+ * `sin_gestionar`— y el ESTADO no lleva la historia. La lleva `orden_historial_estado`.
+ *
+ * ─── POR QUE ESTE CRITERIO, CON NUMEROS ────────────────────────────────────────────────────
+ *
+ * Medido contra produccion, no razonado. Las tres señales candidatas divergen:
+ *
+ *   | ¿salio a `en_reparto`? | ¿tiene gestion no anulada? | ordenes |
+ *   |---|---|---|
+ *   | no  | no  | 324 |
+ *   | SI  | no  |  76 |
+ *   | si  | si  | 606 |
+ *
+ * Esas 76 salieron, nadie las gestiono y el cron las corto a `sin_gestionar`: YA tuvieron un
+ * proceso. El criterio ingenuo («¿tiene gestion?») clasificaria mal un 11%. `orden.prioridad`
+ * se descarto porque sobre toda la historia solo se enciende en 23 de las 606 con gestion y
+ * porque `deshacerAsignacionLote` devuelve la orden a bodega sin restaurarla; `intentosEntrega`
+ * porque esta declarado NO filtrable server-side, se ancla en cierres APROBADOS y no cuenta
+ * `sin_gestionar`.
+ *
+ * ─── LO QUE ESTE CRITERIO ASUME, Y QUE SE MIDIO ────────────────────────────────────────────
+ *
+ * Depende de que la fila `-> en_reparto` la escriba SIEMPRE el choke point de transiciones: una
+ * orden que hubiera salido fisicamente sin dejar esa fila se clasificaria como «nunca salio», y
+ * aqui —al reves que en el alcance de la satelite— NO hay estado actual que la rescate (una
+ * orden reasignable esta de vuelta en la central por definicion). Se midio en produccion y da
+ * CERO: no existe ninguna orden con gestion no anulada y sin fila de historial con destino
+ * `en_reparto`. La evidencia append-only esta completa, asi que no hace falta un segundo
+ * disyuntivo. Si algun dia apareciera un productor que salte el choke point, este es el
+ * supuesto que habria que volver a medir.
+ *
+ * ─── `none`, NO `every` ────────────────────────────────────────────────────────────────────
+ *
+ * `none` es `NOT EXISTS` e incluye correctamente a las ordenes con CERO filas de historial —la
+ * orden recien nacida con guia, que es justo la mas «nueva» de todas—. `every` es VACUAMENTE
+ * CIERTO sobre el conjunto vacio y clasificaria a esas mismas como «ya salio», en verde y sin
+ * ruido. Hay un caso de test cuya unica razon de existir es matar esa confusion.
+ *
+ * ─── POR QUE DOS EXPRESIONES Y NO UNA (la decision, escrita) ───────────────────────────────
+ *
+ * El criterio es UNO y esta declarado en UN solo bloque —este—, pero se emite en DOS dialectos
+ * porque las dos rutas de consulta no comparten motor de generacion de SQL:
+ *
+ *   - `/ordenes` (`list()`) consulta con la API de modelo de Prisma y su `where` es un OBJETO
+ *     (`Prisma.OrdenWhereInput`). No admite un fragmento de SQL crudo.
+ *   - la bodega satelite consulta con `$queryRaw` —lo exige su `ORDER BY` por rango de grupo,
+ *     que Prisma no sabe expresar— y su `WHERE` es un `Prisma.Sql`. No admite un objeto.
+ *
+ * No hay forma de emitir uno desde el otro sin construir un traductor entero de `where` a SQL,
+ * que seria muchisimo mas codigo del que aqui se duplica y una fuente de divergencia peor. Lo
+ * que SI se comparte, y es lo que importa: el valor del estado (`ESTATUS_EN_REPARTO`, una sola
+ * constante), la forma (`EXISTS` por destino sobre el mismo indice), el tipo del parametro
+ * (`SalioAReparto`) y el vocabulario publico. Es el mismo trato que ya recibe el buscador, cuyo
+ * termino se escapa con `escaparComodinesLike` una vez y se compara en los dos dialectos.
+ *
+ * Y como «que estan escritas al lado» no es una garantia ejecutable, la garantia la da un test:
+ * `tests/integration/db/salida-a-reparto-sql-real.test.ts` corre las DOS expresiones contra el
+ * MISMO conjunto de filas en Postgres y exige el MISMO resultado. Si un dia divergen, ese test
+ * se pone rojo con nombre.
+ *
+ * ─── COSTE ─────────────────────────────────────────────────────────────────────────────────
+ *
+ * Corre contra `orden_historial_estado_orden_id_estatus_destino_id_idx`
+ * (`@@index([ordenId, estatusDestinoId])`, feature 49/R24), que es exactamente esta busqueda.
+ * Es el mismo indice que ya usa `condicionPasoPorBodegaSatelite`. SIN MIGRACION.
+ *
+ * ─── EL ORDEN NO CAMBIA ────────────────────────────────────────────────────────────────────
+ *
+ * `prioridad DESC` sigue siendo el primer criterio de ordenacion, ahora DENTRO de cada grupo.
+ * La prioridad ORDENA, este filtro PARTE: no se pisan y no es un bug que la prioridad siga
+ * mandando cuando el filtro esta puesto.
+ */
+function criterioSalidaAReparto(modo: SalioAReparto): Prisma.OrdenWhereInput {
+  const salida = { estatusDestino: { value: ESTATUS_EN_REPARTO } };
+  // `some` -> EXISTS; `none` -> NOT EXISTS (y CERO filas de historial cuenta como «nunca»).
+  return modo === "ya"
+    ? { historialEstados: { some: salida } }
+    : { historialEstados: { none: salida } };
+}
+
+/** El MISMO criterio de arriba en el dialecto del SQL crudo (la ruta de la bodega satelite). */
+function condicionSalidaAReparto(modo: SalioAReparto): Prisma.Sql {
+  const salida = Prisma.sql`EXISTS (
+          SELECT 1
+          FROM "orden_historial_estado" h
+          JOIN "order_status" hos ON hos."id" = h."estatus_destino_id"
+          WHERE h."orden_id" = o."id" AND hos."value" = ${ESTATUS_EN_REPARTO}
+        )`;
+  return modo === "ya" ? Prisma.sql`(${salida})` : Prisma.sql`(NOT ${salida})`;
+}
+
+/**
  * Feature 184 — Tanda A (T A.1, R16) — el CRITERIO del listado de la bodega satelite, declarado
  * UNA sola vez.
  *
@@ -1072,6 +1175,13 @@ function condicionesSatelite(filtro: RecepcionSateliteFiltro): Prisma.Sql[] {
     // `distrito_id` es NULLABLE y `NULL IN (...)` no es cierto: una orden SIN distrito queda
     // fuera bajo un filtro de distrito. Mismo trato que en `/ordenes`.
     condiciones.push(Prisma.sql`o."distrito_id" IN (${Prisma.join(distritoIds)})`);
+  }
+  // FICHA 370 — SALIDA A REPARTO. Va aqui, en el AND de las condiciones opcionales, y por eso
+  // llega A LAS TRES consultas del dominio (pagina, conjunto de la descarga y vigencia de la
+  // seleccion) sin escribirlo tres veces: es el motivo por el que esta funcion existe (R16).
+  // Ausente = ni una condicion emitida = los dos grupos, como hasta hoy.
+  if (filtro.salioAReparto) {
+    condiciones.push(condicionSalidaAReparto(filtro.salioAReparto));
   }
   // Pedido humano (2026-08-19) — rango de creacion: bordes ya resueltos a instantes UTC por el
   // servicio. `>= desde` y `< hasta` (superior ABIERTO), la misma semantica que el `gte`/`lt`
@@ -1357,6 +1467,14 @@ export class OrdenRepository implements IOrdenRepository {
             mensajeroAsignadoId: null,
             estatus: { value: ESTATUS_EN_BODEGA_CENTRAL },
           }
+        : {}),
+      // FICHA 370 — SALIDA A REPARTO: parte el listado en «las que ya salieron con un mensajero»
+      // y «las que solo tienen la guia generada». Clave HERMANA del resto (AND) y sobre una
+      // relacion que ningun otro filtro toca (`historialEstados`), asi que no puede pisar ni ser
+      // pisada. Ausente -> ni la clave se escribe -> salen los dos grupos. El criterio, los
+      // numeros que lo eligieron y por que `none` y no `every`: `criterioSalidaAReparto`.
+      ...(params.where.salioAReparto
+        ? criterioSalidaAReparto(params.where.salioAReparto)
         : {}),
       // Feature 169 (design §4.3/§5) — BUSCADOR. Dos claves excluyentes que el service ya
       // resolvio; las dos van HERMANAS del resto (AND), nunca dentro de un `OR`.

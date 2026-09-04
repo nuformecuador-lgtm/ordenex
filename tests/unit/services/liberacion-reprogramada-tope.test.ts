@@ -49,6 +49,7 @@ function montar(filas: OrdenLiberableRow[], over: Partial<ILiberacionReprogramad
   const repo: ILiberacionReprogramadaRepository = {
     findOrdenesLiberables: vi.fn(async () => filas),
     findOrdenesLiberablesDeCierre: vi.fn(async () => filas), // ficha 315: mismas filas
+    findOrdenesLiberablesDeOrden: vi.fn(async () => filas), // ficha 371: mismas filas
     liberarOrden: vi.fn(async () => true),
     findLiberadasHoy: vi.fn(async () => []),
     ...over,

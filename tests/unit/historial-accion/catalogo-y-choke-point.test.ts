@@ -68,9 +68,9 @@ function filas(tx: ReturnType<typeof txDoble>, n = 0): Record<string, unknown>[]
 // =============================================================================================
 
 describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhaustivos", () => {
-  it("son 43 tipos, 17 entidades y 3 categorias, sin repetidos", () => {
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(43);
-    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(43);
+  it("son 44 tipos, 17 entidades y 3 categorias, sin repetidos", () => {
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(44);
+    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(44);
     expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(17);
     expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(17);
     expect(CATEGORIAS_ACCION).toHaveLength(3);
@@ -83,6 +83,17 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(HISTORIAL_ACCION_TIPOS).toContain("usuario_fulfillment_cambiado");
     expect(CATEGORIA_POR_ACCION.orden_ubicacion_corregida).toBe("mueve_dinero");
     expect(CATEGORIA_POR_ACCION.usuario_fulfillment_cambiado).toBe("mueve_dinero");
+  });
+
+  it("⭑ FICHA 371: corregir la fecha de una reprogramacion es DESAPARICION, no dinero", () => {
+    // Corregir la fecha a HOY dispara la liberacion en el mismo acto, asi que la orden SALE de
+    // `reprogramada` y deja de estar donde el coordinador la tenia: misma familia que
+    // `orden_eliminada`. NO es dinero —esta MEDIDO que una gestion `reprogramada` no lleva importe
+    // (0 de 160 con pago al mensajero o ingreso por rechazo) y que ni la analitica ni el ranking
+    // leen esa columna—, y tampoco es que la fecha anterior se pierda: esa queda guardada en
+    // `gestion_fecha_reprogramacion_cambio.fecha_anterior`.
+    expect(HISTORIAL_ACCION_TIPOS).toContain("gestion_fecha_reprogramacion_corregida");
+    expect(CATEGORIA_POR_ACCION.gestion_fecha_reprogramacion_corregida).toBe("hace_desaparecer");
   });
 
   it("`tarifa_borrada` es DESAPARICION y no dinero, aunque mueva precio (R17)", () => {
@@ -111,11 +122,12 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(new Set(porCategoria).size).toBe(HISTORIAL_ACCION_TIPOS.length);
   });
 
-  it("el reparto por categoria es el del Anexo A: 26 dinero, 6 desaparicion, 11 permisos", () => {
+  it("el reparto por categoria es el del Anexo A: 26 dinero, 7 desaparicion, 11 permisos", () => {
     // Numeros DUROS: mover un tipo de categoria es una decision, y tiene que pasar por aqui.
     // 26 y no 25 desde la ficha 366: `orden_zona_reconciliada` entra en DINERO.
+    // 7 y no 6 desde la ficha 371: `gestion_fecha_reprogramacion_corregida` entra en DESAPARICION.
     expect(accionesDeCategoria("mueve_dinero")).toHaveLength(26);
-    expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(6);
+    expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(7);
     expect(accionesDeCategoria("cambia_permisos")).toHaveLength(11);
   });
 });

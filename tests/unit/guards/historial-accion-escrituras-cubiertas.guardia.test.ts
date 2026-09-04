@@ -17,7 +17,7 @@ import { HISTORIAL_ACCION_TIPOS } from "@/lib/types/historial-accion";
 //
 // Ninguna de las dos cosas rompe un test que no exista. Esta guardia es ese test.
 //
-// LAS TRES COSAS QUE EXIGE, por cada uno de los 43 tipos del catalogo:
+// LAS TRES COSAS QUE EXIGE, por cada uno de los 44 tipos del catalogo:
 //   1. que el metodo declarado como su productor EXISTA y su cuerpo se pueda recortar;
 //   2. que ese cuerpo llame a `appendAccion`;
 //   3. que la llamada sea ATOMICA con la mutacion, en una de las DOS formas validas:
@@ -206,6 +206,17 @@ const CENSO: EntradaCenso[] = [
   },
 
   // --- A.2 · hace desaparecer algo ---
+  {
+    // ⭑ FICHA 371 — la correccion de la fecha de una reprogramacion. La mutacion que se exige es
+    // la ESCRITURA CRUDA de la fecha: `UPDATE "gestion_orden" … RETURNING`, que es lo que permite
+    // registrar lo ALCANZADO en vez de lo PEDIDO (una carrera perdida devuelve 0 filas y no deja
+    // NI UNA fila de rastro). Si alguien la devolviera a un `updateMany`, esta linea se pone roja.
+    tipos: ["gestion_fecha_reprogramacion_corregida"],
+    archivo: "lib/repositories/CorreccionFechaReprogramacionRepository.ts",
+    metodo: "corregirFecha",
+    forma: "abre_tx",
+    mutacion: /UPDATE "gestion_orden"[\s\S]*RETURNING/,
+  },
   {
     tipos: ["orden_eliminada"],
     archivo: "lib/repositories/OrdenRepository.ts",
@@ -503,11 +514,11 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     expect(inventados, "el censo nombra un tipo que el catalogo no declara").toEqual([]);
   });
 
-  it("los 43 tipos del Anexo A (+ Q1, Q2 y la 366) siguen siendo 43", () => {
+  it("los 44 tipos del Anexo A (+ Q1, Q2, la 366 y la 371) siguen siendo 44", () => {
     // Numero DURO a proposito: añadir un tipo al enum obliga a pasar por aqui, y por tanto a
     // añadirlo al censo y a escribir su productor. Es el mecanismo de R14.
-    // 43 desde la ficha 366 (`orden_zona_reconciliada`).
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(43);
+    // 44 desde la ficha 371 (`gestion_fecha_reprogramacion_corregida`).
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(44);
   });
 });
 
@@ -515,7 +526,7 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
 // 2 — R9: el registro va en la MISMA transaccion que la mutacion
 // ---------------------------------------------------------------------------------------------
 
-describe("362/R9 — los 43 tipos se registran DENTRO de la transaccion de su accion", () => {
+describe("362/R9 — los 44 tipos se registran DENTRO de la transaccion de su accion", () => {
   it.each(CENSO.map((e) => [`${e.archivo.split("/").pop()}#${e.metodo}`, e] as const))(
     "%s registra su accion en la misma transaccion que la escribe",
     (_nombre, entrada) => {

@@ -73,6 +73,8 @@ const defaultLogger: LiberacionLogger = { warn: (m) => console.warn(m) };
  */
 const ETIQUETA_RELOJ = "liberar-reprogramadas";
 const ETIQUETA_CIERRE = "liberar-al-aprobar-cierre";
+/** FICHA 371 — el tercer disparador: la correccion de la fecha de una reprogramacion. */
+const ETIQUETA_CORRECCION = "liberar-tras-corregir-fecha";
 
 /**
  * Lo que se resuelve UNA vez por corrida y no depende de las candidatas: la zona central (para
@@ -130,6 +132,25 @@ export class LiberacionReprogramadaService implements ILiberacionReprogramadaSer
     if (ctx === null) return sinLiberacion();
     const ordenes = await this.repo.findOrdenesLiberablesDeCierre(cierreId, hoyCR);
     return this.liberarCandidatas(ordenes, ctx, ETIQUETA_CIERRE);
+  }
+
+  /**
+   * FICHA 371 — EL MISMO BUCLE, con la candidata acotada a la orden recien corregida.
+   *
+   * Tampoco re-implementa nada: mismo contexto, mismo `puedeLiberarse` —la puerta de la 276 se
+   * RESPETA, no se salta—, mismo `liberarOrden` guardado por `estatus_id = reprogramada`. Lo que
+   * cambia es de donde sale la candidata y la etiqueta del log.
+   *
+   * QUIEN LEE EL RESULTADO Y PARA QUE: la Server Action de la correccion traduce estos contadores
+   * al discriminante que la pantalla pinta. `liberadas: 1` = la orden volvio a bodega en el acto;
+   * `esperandoCierre: 1` = la fecha ya vencio pero su cierre no esta aprobado y sigue esperando;
+   * `evaluadas: 0` = se corrigio a un dia futuro y espera al calendario, que es lo correcto.
+   */
+  async liberarOrdenCorregida(ordenId: string, hoyCR: Date): Promise<LiberacionResult> {
+    const ctx = await this.resolverContexto(ETIQUETA_CORRECCION);
+    if (ctx === null) return sinLiberacion();
+    const ordenes = await this.repo.findOrdenesLiberablesDeOrden(ordenId, hoyCR);
+    return this.liberarCandidatas(ordenes, ctx, ETIQUETA_CORRECCION);
   }
 
   /**

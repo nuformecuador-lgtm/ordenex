@@ -109,6 +109,19 @@ export interface ILiberacionReprogramadaRepository {
    */
   findOrdenesLiberablesDeCierre(cierreId: string, hoyCR: Date): Promise<OrdenLiberableRow[]>;
   /**
+   * FICHA 371 — LAS MISMAS CANDIDATAS, ACOTADAS A UNA SOLA ORDEN.
+   *
+   * Existe porque «corregir la fecha a HOY libera de inmediato» tiene que disparar LA MISMA
+   * liberacion que ya existe —con su puerta 276 incluida—, no una liberacion paralela. Es
+   * `findOrdenesLiberables` con un filtro por PK: mismo estatus de origen, misma correlacion de la
+   * gestion vigente, mismos tres hechos proyectados y MISMO filtro de fecha.
+   *
+   * Devuelve 0 o 1 fila. `[]` significa «esta orden no es candidata AHORA»: o no esta en
+   * `reprogramada`, o esta borrada, o no tiene gestion vigente, o su fecha todavia no vencio —el
+   * caso de una correccion a un dia futuro, que sigue esperando al calendario—.
+   */
+  findOrdenesLiberablesDeOrden(ordenId: string, hoyCR: Date): Promise<OrdenLiberableRow[]>;
+  /**
    * R13/R17: transiciona UNA orden al destino, limpia `mensajero_asignado_id` y fija
    * `liberada_reprogramada_at = corridaAt`, con escritura GUARDADA por
    * `estatus_id = reprogramada` + no borrada (concurrencia/idempotencia: una segunda

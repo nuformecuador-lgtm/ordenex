@@ -5,6 +5,7 @@ import {
   listarOrdenesSchema,
   ordenFilterSchema,
   ORDEN_FILTER_FIELDS,
+  SALIO_A_REPARTO_VALORES,
 } from "@/lib/types/orden";
 import { ordenesConfig } from "@/lib/config/ordenes";
 
@@ -15,7 +16,7 @@ import { ordenesConfig } from "@/lib/config/ordenes";
 // el `where`: si el schema lanza, no hay consulta.
 
 describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
-  it("R30: la whitelist son exactamente estas claves (9 de la 144 + 4 ampliaciones)", () => {
+  it("R30: la whitelist son exactamente estas claves (9 de la 144 + 5 ampliaciones)", () => {
     // Este caso es un CENSO: enumera la whitelist entera para que ampliarla sea una
     // decision explicita y no un descuido. La feature 169 la amplio en UNA clave (`q`, el
     // termino de busqueda, su R1/R19) y por eso se actualiza aqui; el pedido humano del
@@ -23,7 +24,10 @@ describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
     // resto del archivo —incluido "una clave desconocida sigue fallando"— no cambia. El pedido
     // humano del 2026-08-27 la amplia en la CUARTA y ultima hasta hoy, `eliminados`, que es la
     // unica del conjunto que no acota el listado sino que le SUSTITUYE el universo (las borradas
-    // en vez de las vivas) y la unica que ademas se autoriza por rol en el servicio.
+    // en vez de las vivas) y la unica que ademas se autoriza por rol en el servicio. La FICHA
+    // 370 añade la QUINTA, `salio_a_reparto`, que es la unica del conjunto con DOS valores
+    // excluyentes en vez de un interruptor: parte el listado en «ya salio con un mensajero» y
+    // «solo tiene la guia generada», y omitirla sigue significando «los dos grupos».
     expect([...ORDEN_FILTER_FIELDS]).toEqual([
       "status_id",
       "zona_id",
@@ -38,7 +42,34 @@ describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
       "reasignables",
       "q",
       "eliminados",
+      "salio_a_reparto",
     ]);
+  });
+
+  // FICHA 370 — el borde de la clave nueva. Va en este archivo porque es donde vive el censo de
+  // la whitelist y las reglas de forma de sus vecinas (`reasignables`, `eliminados`).
+  it("`salio_a_reparto` admite EXACTAMENTE sus dos valores, y ninguna otra cosa", () => {
+    for (const valor of SALIO_A_REPARTO_VALORES) {
+      expect(listarOrdenesSchema.parse({ filter: { salio_a_reparto: valor } }).filter).toEqual({
+        salio_a_reparto: valor,
+      });
+    }
+    // Un tercer valor, el booleano de la trampa y la cadena vacia: los tres, `validation_error`
+    // antes de tocar la base.
+    expect(() =>
+      listarOrdenesSchema.parse({ filter: { salio_a_reparto: "con_intentos" } }),
+    ).toThrow();
+    expect(() => listarOrdenesSchema.parse({ filter: { salio_a_reparto: true } })).toThrow();
+    expect(() => listarOrdenesSchema.parse({ filter: { salio_a_reparto: "" } })).toThrow();
+  });
+
+  it("`salio_a_reparto` AUSENTE no deja ninguna huella en el filtro: no filtrar es omitirla", () => {
+    // Ni la clave con `undefined` ni un objeto sin ella producen nada que el service pueda leer
+    // como «medio filtro puesto».
+    expect(listarOrdenesSchema.parse({ filter: {} }).filter).toEqual({});
+    expect(
+      Object.hasOwn(listarOrdenesSchema.parse({ filter: { q: "abc" } }).filter ?? {}, "salio_a_reparto"),
+    ).toBe(false);
   });
 
   it("`eliminados` solo admite `true`, igual que `reasignables`", () => {

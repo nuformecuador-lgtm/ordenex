@@ -95,12 +95,18 @@ describe("barra de órdenes — el rol acotado no elige la coordenada que ya tie
     incluirZona?: boolean;
     incluirReasignables?: boolean;
     incluirMensajero?: boolean;
+    incluirSalioAReparto?: boolean;
   }): string[] {
     return construirFiltrosOrdenes(CATALOGO, opts).map((f) => f.key);
   }
 
   it("maestro/admin: la barra entera, con zona y con tienda", () => {
-    expect(clavesOrdenes({ incluirTienda: true })).toEqual([
+    // FICHA 370: `salio_a_reparto` entra en el censo. La pagina se lo declara con la MISMA
+    // condicion que «Reasignables» (`rol !== adminTienda`), asi que aqui va pedido: es de
+    // despacho, y quien despacha lo tiene.
+    expect(
+      clavesOrdenes({ incluirTienda: true, incluirSalioAReparto: true }),
+    ).toEqual([
       "q",
       "zona_id",
       "mensajero_id",
@@ -110,6 +116,7 @@ describe("barra de órdenes — el rol acotado no elige la coordenada que ya tie
       "distrito_id",
       "created",
       "reasignables",
+      "salio_a_reparto",
     ]);
   });
 
@@ -119,13 +126,19 @@ describe("barra de órdenes — el rol acotado no elige la coordenada que ya tie
     // de la bodega CENTRAL, y ese estado no está en los que este rol ve. Y el de MENSAJERO
     // cae por lo mismo que el de tienda: es el directorio del personal interno, que a la
     // cuenta tienda ni se le ofrece ni se le entrega.
+    //
+    // FICHA 370: «Salida a reparto» cae por lo mismo que «Reasignables» —es una pregunta de
+    // DESPACHO y este rol no despacha—, y se pide EXPLICITAMENTE en `false` para que el caso
+    // siga midiendo la puerta y no el valor por defecto de la opcion.
     const declaradas = clavesOrdenes({
       incluirTienda: false,
       incluirReasignables: false,
       incluirMensajero: false,
+      incluirSalioAReparto: false,
     });
     expect(declaradas).not.toContain("tienda_id");
     expect(declaradas).not.toContain("mensajero_id");
+    expect(declaradas).not.toContain("salio_a_reparto");
     expect(declaradas).toEqual([
       "q",
       "zona_id",

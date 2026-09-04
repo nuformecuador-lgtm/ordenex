@@ -67,6 +67,12 @@ const FILTROS_COMPARTIDOS = ordenFilterBase.pick({
   created_desde: true,
   created_hasta: true,
   q: true,
+  // FICHA 370: «salida a reparto» tambien se toma de alla, y no se reescribe. Es el mismo
+  // criterio (un `EXISTS` con destino `en_reparto` sobre el historial), los mismos dos valores
+  // y la misma semantica de ausencia; declararlo aparte seria abrir la puerta a que un dia una
+  // superficie admitiera un valor que la otra rechaza. La zona sigue saliendo del actor: esta
+  // clave PARTE lo que el adminSatelite ya puede ver, no ensancha su alcance.
+  salio_a_reparto: true,
 }).shape;
 
 /**

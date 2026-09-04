@@ -1,6 +1,10 @@
 import type { FilterDef } from "@/components/shared/FilterComponent";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
-import { BUSQUEDA_MIN_CHARS } from "@/lib/types/orden";
+import {
+  BUSQUEDA_MIN_CHARS,
+  SALIO_A_REPARTO_VALORES,
+  type SalioARepartoValor,
+} from "@/lib/types/orden";
 import { ultimosNDiasCalendarioCR } from "@/lib/utils/fecha-cr";
 
 // Feature 144 / B3 (design.md §4.1) — TODO lo especifico de ordenes vive aqui.
@@ -71,6 +75,59 @@ export const CLAVE_ESTADO = "status_id";
 export const CLAVE_REASIGNABLES = "reasignables";
 
 /**
+ * FICHA 370 — clave del filtro «Salida a reparto». Es la MISMA que espera el `filter` de
+ * `listarOrdenes` (y la del listado de la bodega satelite), asi que lo unico que hace
+ * `seleccionAFilter` con ella es bajarla de lista a ESCALAR.
+ *
+ * Parte en dos el mismo estado: las que ya salieron alguna vez con un mensajero
+ * (`ya_salio`) y las que solo tienen la guia generada (`nunca_salio`). Ausente, no filtra:
+ * salen los dos grupos.
+ */
+export const CLAVE_SALIO_A_REPARTO = "salio_a_reparto";
+
+/**
+ * FICHA 370 — CENTINELA DE UI de «Todas». NO viaja al servidor: `seleccionAFilter` lo
+ * traduce a OMITIR la clave, que es como el contrato expresa «no filtrar»
+ * (`SALIO_A_REPARTO_VALORES` tiene DOS valores, y ninguno significa «los dos grupos»).
+ *
+ * Existe por dos razones concretas, y no por simetria:
+ *
+ * 1. **Vuelta atras.** `FilterComponent` pinta el `kind: "single"` como un `Select` sin
+ *    afordancia de limpieza: elegido un grupo, la unica forma de volver a ver los dos seria
+ *    «Limpiar todo», que ademas se llevaria por delante los demas filtros y la busqueda.
+ *    Declarando «Todas» como una opcion mas, deshacer cuesta un clic y no toca nada mas.
+ * 2. **Siembra desde la URL.** `valoresValidos` (`lib/utils/filtros-url.ts`) exige que el
+ *    valor del parametro este entre las opciones DECLARADAS; sin esta opcion,
+ *    `?salio_a_reparto=todas` se descartaria y el control no se podria sembrar en «Todas».
+ *
+ * No es un invento de esta ficha: es la MISMA disciplina de `ATAJOS_CREACION`, que tambien
+ * se declaran como opciones, tampoco viajan y se resuelven aqui, en la UI.
+ *
+ * Su valor NO puede coincidir con ninguno de `SALIO_A_REPARTO_VALORES` (lo colaria en la
+ * consulta o dejaria un grupo inalcanzable); hay un test que lo vigila.
+ */
+export const SALIO_A_REPARTO_TODAS = "todas";
+
+/**
+ * FICHA 370 — las etiquetas del control, y por que NO dicen «intento».
+ *
+ * La columna «Intentos» ya existe en esta misma tabla (`ordenes-columns.tsx`) y cuenta OTRA
+ * cosa: se ancla en gestiones con cierre aprobado y deja fuera `sin_gestionar` por decision
+ * declarada. Medido en produccion, 76 ordenes salieron a reparto y tienen «Intentos» a 0. Si
+ * el filtro se llamara «con intentos previos», la fila diria 0 y el filtro diria que si, y el
+ * operador no sabria a cual creer. Nombrado por lo que de verdad mide —la SALIDA A REPARTO—
+ * las dos cifras dejan de contradecirse: son dos datos distintos.
+ *
+ * Espanol claro y sin jerga (`docs/conventions.md`): «Ya salió» / «Nunca ha salido».
+ */
+export const ETIQUETA_SALIO_A_REPARTO = "Salida a reparto";
+export const ETIQUETA_SALIO_A_REPARTO_TODAS = "Todas";
+export const ETIQUETAS_SALIO_A_REPARTO: Record<SalioARepartoValor, string> = {
+  ya_salio: "Ya salió",
+  nunca_salio: "Nunca ha salido",
+};
+
+/**
  * Pedido humano (2026-08-27) — clave del interruptor ELIMINADAS. Marcado, el listado deja de
  * mostrar las ordenes vivas y muestra EXCLUSIVAMENTE las borradas (`deleted_at IS NOT NULL`);
  * desmarcado, el filtro no existe y el listado es el de siempre.
@@ -105,9 +162,10 @@ export const CLAVE_BUSQUEDA = "q";
 export const PLACEHOLDER_BUSQUEDA = "Guía, remisión, teléfono, destinatario o producto";
 
 /**
- * Declara los NUEVE filtros de la barra de ordenes sobre el contrato del bloque A.
- * Caen claves segun el rol: sin tienda si el rol esta acotado a la suya (R62) y sin
- * REASIGNABLES si el rol no reasigna mensajeros (`adminTienda`).
+ * Declara los NUEVE filtros de la barra de ordenes sobre el contrato del bloque A —mas los
+ * DOS que solo se declaran a peticion, «Eliminadas» y «Salida a reparto», que ninguna
+ * superficie gana por descuido—. Caen claves segun el rol: sin tienda si el rol esta acotado
+ * a la suya (R62) y sin REASIGNABLES si el rol no reasigna mensajeros (`adminTienda`).
  *
  * Feature 169/R32: el BUSCADOR va PRIMERO y no cae por rol — el acotamiento por rol lo
  * impone el servicio, no la barra.
@@ -138,6 +196,13 @@ export function construirFiltrosOrdenes(
      * gana por descuido.
      */
     incluirEliminados?: boolean;
+    /**
+     * FICHA 370: declara el filtro «Salida a reparto». Por defecto `false`, por el MISMO
+     * criterio que `incluirEliminados` y por el mismo porque: ninguna superficie previa lo
+     * gana por descuido. Lo reciben las de DESPACHO —la central y la bodega satelite—, no el
+     * `adminTienda`, que no despacha.
+     */
+    incluirSalioAReparto?: boolean;
     ahora?: Date;
   },
 ): FilterDef[] {
@@ -223,6 +288,37 @@ export function construirFiltrosOrdenes(
         ]
       : [];
 
+  // FICHA 370: «Salida a reparto». Es un `single` —los dos grupos son EXCLUYENTES, no un
+  // conjunto que se acumule— y sus opciones se derivan de `SALIO_A_REPARTO_VALORES`, la
+  // MISMA constante que cierra el `z.enum` del borde. Escribirlas a mano aqui dejaria a la
+  // UI ofreciendo un dia un valor que el servidor rechaza: el usuario se comeria un
+  // `validation_error` y la pantalla se quedaria en blanco.
+  //
+  // La PRIMERA opcion es el centinela «Todas», que no viaja (ver `SALIO_A_REPARTO_TODAS`).
+  // El `placeholder` dice lo mismo porque describe el mismo estado: sin nada elegido, salen
+  // los dos grupos.
+  const salioAReparto: FilterDef[] =
+    opts.incluirSalioAReparto ?? false
+      ? [
+          {
+            key: CLAVE_SALIO_A_REPARTO,
+            label: ETIQUETA_SALIO_A_REPARTO,
+            kind: "single",
+            placeholder: ETIQUETA_SALIO_A_REPARTO_TODAS,
+            options: [
+              {
+                value: SALIO_A_REPARTO_TODAS,
+                label: ETIQUETA_SALIO_A_REPARTO_TODAS,
+              },
+              ...SALIO_A_REPARTO_VALORES.map((valor) => ({
+                value: valor,
+                label: ETIQUETAS_SALIO_A_REPARTO[valor],
+              })),
+            ],
+          },
+        ]
+      : [];
+
   const zona: FilterDef[] =
     opts.incluirZona ?? true
       ? [
@@ -295,6 +391,11 @@ export function construirFiltrosOrdenes(
       })),
     },
     ...reasignables,
+    // FICHA 370: junto a «Reasignables» porque es la otra pregunta del DESPACHO —de estas
+    // que estan en bodega, ¿cuales ya salieron y cuales no han salido nunca?— y detras de el
+    // porque es la mas nueva. Delante de «Eliminadas», que sigue siendo el ultimo por su
+    // razon ya declarada.
+    ...salioAReparto,
     // ULTIMO de la barra, detras incluso de «Reasignables»: es el interruptor que cambia el
     // universo entero del listado, no un filtro mas, y no debe quedar a mano de un clic
     // distraido mientras se afina una busqueda.

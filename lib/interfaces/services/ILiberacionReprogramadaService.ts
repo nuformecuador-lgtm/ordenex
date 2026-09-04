@@ -60,4 +60,25 @@ export interface ILiberacionReprogramadaService {
    * `findOrdenesLiberablesDeCierre`); las de fecha futura NO se tocan.
    */
   liberarPorCierreAprobado(cierreId: string, hoyCR: Date): Promise<LiberacionResult>;
+  /**
+   * FICHA 371 — EL TERCER DISPARADOR: una orden cuya fecha de reprogramacion ACABA DE CORREGIRSE.
+   *
+   * ⚠️ POR QUE PASA POR AQUI Y NO POR UNA LIBERACION PROPIA. Corregir la fecha a HOY tiene que
+   * soltar la orden en el acto (decision del humano: no esperar al cron de medianoche), pero
+   * «soltar» ya tiene DUEÑO y una regla que no se puede saltar: `puedeLiberarse` (276) exige que la
+   * gestion no sea una visita real, o que su cierre este `aprobado`. Liberar una visita real antes
+   * de aprobar su cierre devolveria la orden con el contador de intentos atrasado — el 4.º intento
+   * que la 276 cerro. Medido sobre las 31 que esperan hoy: 24 saldrian al instante (18 visita real
+   * con cierre aprobado + 6 de escritorio) y 7 seguirian esperando su cierre.
+   *
+   * Por eso este metodo NO decide nada nuevo: mismo contexto, mismo `puedeLiberarse`, mismo
+   * `liberarOrden` guardado por estado. Lo unico suyo son las candidatas (una) y la etiqueta del
+   * log.
+   *
+   * EL RESULTADO SE USA, no es observabilidad: `liberadas: 1` es «volvio a bodega» y
+   * `esperandoCierre: 1` es «sigue esperando la aprobacion de su cierre», y la pantalla TIENE que
+   * poder decir cual de las dos — si el coordinador corrige a hoy y la orden sigue bloqueada sin
+   * explicacion, habriamos cambiado una confusion por otra.
+   */
+  liberarOrdenCorregida(ordenId: string, hoyCR: Date): Promise<LiberacionResult>;
 }
