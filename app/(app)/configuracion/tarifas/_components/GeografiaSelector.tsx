@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Star } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,14 +14,17 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import type { ProvinciaArbolDTO } from "@/lib/actions/geografia";
+import { filtrarArbolGeografico } from "@/app/(app)/configuracion/_shared/filtrar-arbol-geografico";
+import {
+  estadoGeografico,
+  etiquetaEstadoGeografico,
+} from "@/app/(app)/configuracion/_shared/geografia-estado-label";
 
-// Normaliza para buscar sin distinguir mayusculas/acentos.
-function norm(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-}
+// ⚠️ FICHA 374 — AQUI VIVIA UN `norm()` PROPIO (minusculas + NFD, SIN colapsar espacios) que era la
+// TERCERA copia de una normalizacion que ya existia dos veces, y que por no colapsar los espacios
+// internos hacia que «san  jose» no encontrase «San José». Se fue con su `useMemo` de filtrado al
+// modulo compartido `_shared/filtrar-arbol-geografico.ts`, que usa `normalizeName` — la MISMA
+// funcion con la que `resolveGeo` indexa el catalogo.
 
 // Estado derivado de un grupo (provincia/canton) a partir de sus distritos hoja.
 interface TriState {
@@ -141,31 +145,17 @@ export function GeografiaSelector({
 
   // Arbol filtrado por texto (una rama sobrevive si provincia, algun canton o
   // algun distrito coincide). No afecta la selección ni la cascada.
-  const filtradas = useMemo(() => {
-    const q = norm(query.trim());
-    if (!q) return provincias;
-    return provincias
-      .map((p) => {
-        const provMatch = norm(p.nombre).includes(q);
-        const cantones = p.cantones
-          .map((c) => {
-            const cantMatch = norm(c.nombre).includes(q);
-            const distritos = c.distritos.filter(
-              (d) => provMatch || cantMatch || norm(d.nombre).includes(q),
-            );
-            if (cantMatch || distritos.length > 0) {
-              return { ...c, distritos: provMatch ? c.distritos : distritos };
-            }
-            return null;
-          })
-          .filter((c): c is NonNullable<typeof c> => c !== null);
-        if (provMatch || cantones.length > 0) {
-          return { ...p, cantones: provMatch ? p.cantones : cantones };
-        }
-        return null;
-      })
-      .filter((p): p is NonNullable<typeof p> => p !== null);
-  }, [provincias, query]);
+  //
+  // ⚠️ FICHA 374 — AQUI NO SE FILTRA POR ESTADO, y no es un olvido. `estado: "todos"` es el unico
+  // valor admisible en esta pantalla: `ZonaRepository.update` REEMPLAZA entera la N:M
+  // `zona_distrito` con lo que mande el formulario (`:230-235`), asi que esconder los distritos
+  // retirados le haria perder sus filas al siguiente guardado de la zona — y a partir de ahi ese
+  // distrito resolveria 0 zonas y toda alta futura moriria con «no tiene zona asignada», SIN
+  // ponerse rojo nada (la reconciliacion hace `continue`, `:266-267`). Ver R47/R48.
+  const filtradas = useMemo(
+    () => filtrarArbolGeografico(provincias, { texto: query, estado: "todos" }),
+    [provincias, query],
+  );
 
   // Selección derivada para el console.log: distritos hoja + padres COMPLETOS.
   const seleccion = useMemo<SeleccionData>(() => {
@@ -250,6 +240,7 @@ export function GeografiaSelector({
                     <span className="text-xs font-normal text-muted-foreground">
                       ({p.cantones.length} cantón{p.cantones.length === 1 ? "" : "es"})
                     </span>
+                    <MarcaRetirado estado={estadoGeografico({ provincia: p.activo })} />
                   </CollapsibleTrigger>
                 </div>
 
@@ -282,6 +273,12 @@ export function GeografiaSelector({
                                 : ""}
                               )
                             </span>
+                            <MarcaRetirado
+                              estado={estadoGeografico({
+                                provincia: p.activo,
+                                canton: c.activo,
+                              })}
+                            />
                           </CollapsibleTrigger>
                         </div>
 
@@ -312,6 +309,18 @@ export function GeografiaSelector({
                                     </span>
                                   ) : null}
                                 </label>
+
+                                {/* FICHA 374 (R47) — el distintivo va FUERA del `label`: marcar
+                                    que un distrito esta retirado no debe poder cambiar su casilla
+                                    de un clic accidental. Y la casilla sigue operable a proposito:
+                                    ver el comentario del `useMemo` de filtrado. */}
+                                <MarcaRetirado
+                                  estado={estadoGeografico({
+                                    provincia: p.activo,
+                                    canton: c.activo,
+                                    distrito: d.activo,
+                                  })}
+                                />
 
                                 <Button
                                   type="button"
@@ -345,5 +354,28 @@ export function GeografiaSelector({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * FICHA 374 (R47) — el distintivo de un nodo retirado dentro del selector de Tarifas.
+ *
+ * ⚠️ ES SOLO UNA MARCA VISUAL: no oculta la fila, no desmarca nada y no deshabilita la casilla.
+ * Ese es EXACTAMENTE el punto. `ZonaRepository.update` reemplaza entera la N:M `zona_distrito` con
+ * lo que el formulario mande, asi que un distrito retirado que dejara de renderizarse —o de venir
+ * marcado desde `initialSelected`— perderia su fila en el siguiente guardado de la zona, y a
+ * partir de ahi toda alta que lo nombre moriria con «no tiene zona asignada» sin poner rojo nada.
+ *
+ * Quien administra el catalogo lo hace en /configuracion/geografia, no aqui.
+ */
+function MarcaRetirado({
+  estado,
+}: Readonly<{ estado: ReturnType<typeof estadoGeografico> }>) {
+  const etiqueta = etiquetaEstadoGeografico(estado);
+  if (etiqueta === null) return null;
+  return (
+    <Badge variant={estado.tipo === "inactivo_propio" ? "secondary" : "outline"}>
+      {etiqueta}
+    </Badge>
   );
 }
