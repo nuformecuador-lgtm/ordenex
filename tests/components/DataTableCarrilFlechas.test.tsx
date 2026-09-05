@@ -39,16 +39,34 @@ import { DataTable, type Column } from "@/components/shared/DataTable";
 /** Escala de espaciado de Tailwind: cada paso son 4 px (`p-1` = 0.25rem = 4 px). */
 const PASO_TAILWIND_PX = 4;
 
-/** Lee una clase de espaciado/tamaño (`px-10`, `ml-1`, `size-9`) y la pasa a píxeles. */
-function medidaDeClase(el: Element, prefijo: string): number | null {
+/** Punto de corte de una clase de Tailwind: `null` = siempre, `"sm"` = a partir de 640 px. */
+type Corte = string | null;
+
+/**
+ * Lee una clase de espaciado/tamaño (`px-10`, `sm:px-10`, `ml-1`, `size-9`) y devuelve
+ * los píxeles Y a partir de qué punto de corte se aplican. El punto de corte importa
+ * tanto como el número: un carril sin `sm:` se cobra los 80 px también en el móvil.
+ */
+function medidaDeClase(
+  el: Element,
+  prefijo: string,
+): { px: number; corte: Corte } | null {
   const clases = el.getAttribute("class") ?? "";
-  const m = new RegExp(`(?:^|\\s)${prefijo}-(\\d+)(?:\\s|$)`).exec(clases);
-  return m ? Number(m[1]) * PASO_TAILWIND_PX : null;
+  const m = new RegExp(`(?:^|\\s)(?:([a-z0-9]+):)?${prefijo}-(\\d+)(?:\\s|$)`).exec(clases);
+  return m ? { px: Number(m[2]) * PASO_TAILWIND_PX, corte: m[1] ?? null } : null;
 }
 
 /** Padding horizontal efectivo del marco: `pl`/`pr` mandan sobre `px`; sin nada, 0. */
+function carrilCompleto(marco: Element, lado: "l" | "r"): { px: number; corte: Corte } {
+  return (
+    medidaDeClase(marco, `p${lado}`) ??
+    medidaDeClase(marco, "px") ?? { px: 0, corte: null }
+  );
+}
+
+/** Solo los píxeles del carril (lo que usan las guardias de anchura). */
 function carril(marco: Element, lado: "l" | "r"): number {
-  return medidaDeClase(marco, `p${lado}`) ?? medidaDeClase(marco, "px") ?? 0;
+  return carrilCompleto(marco, lado).px;
 }
 
 /** Huella de una flecha: lo que ocupa de borde a borde, margen incluido. */
@@ -59,7 +77,22 @@ function huella(flecha: Element, margen: "ml" | "mr"): number {
       "La flecha ya no declara su tamaño con `size-N`: hay que actualizar esta guardia.",
     );
   }
-  return (medidaDeClase(flecha, margen) ?? 0) + tamano;
+  return (medidaDeClase(flecha, margen)?.px ?? 0) + tamano.px;
+}
+
+/**
+ * ¿A partir de qué punto de corte se PINTA este carril? Se lee de las utilidades de
+ * `display`: `hidden` esconde, y `<corte>:flex` (o `<corte>:block`…) enciende. Sin
+ * `hidden` se pinta siempre (`null`); con `hidden` y sin nada que lo encienda, nunca.
+ */
+function corteDeVisibilidad(carrilEl: Element): Corte | "nunca" {
+  const clases = (carrilEl.getAttribute("class") ?? "").split(/\s+/);
+  const escondido = clases.includes("hidden");
+  const enciende = clases
+    .map((c) => /^([a-z0-9]+):(flex|block|inline-flex|grid)$/.exec(c))
+    .find((m) => m !== null);
+  if (!escondido) return null;
+  return enciende ? enciende[1] : "nunca";
 }
 
 type Fila = { id: string; nombre: string };
@@ -179,5 +212,72 @@ describe("DataTable · carril de las flechas de scroll", () => {
     // deshabilitada, que es lo que ya hacía y lo que la saca del paso del cursor.
     expect(izquierda).toBeDisabled();
     expect(derecha).toBeEnabled();
+  });
+});
+
+/**
+ * EL CARRIL NO SE COBRA EN EL MÓVIL.
+ *
+ * El carril cuesta 80 px de viewport de scroll cuando la tabla desborda. Medido en
+ * Chromium contra el dev server con la tabla de `/ordenes`: a 1440 px el ancho útil
+ * pasaba de 1134 a 1054 (−7 %), pero a 390 px pasaba de 340 a 260, **un 23 % de la
+ * pantalla**, y a cambio de un control que en táctil no pulsa nadie porque se desliza
+ * el dedo. Que deslizar funciona está medido aparte con eventos táctiles reales
+ * (`Input.dispatchTouchEvent` por CDP): los 6 casos de 390×844 y 768×1024 desplazan en
+ * los dos sentidos, `scrollLeft` 0 → 205 → 60.
+ *
+ * jsdom no aplica CSS, así que aquí no se puede medir un ancho: lo que se guarda es el
+ * CONTRATO DE CLASES, y el invariante interesante NO es «la clase dice sm» (eso sería
+ * comparar el componente consigo mismo), sino que **el punto de corte del hueco y el de
+ * la flecha coinciden**. Son dos decisiones escritas en dos elementos distintos, y las
+ * dos formas de desalinearlas son sendos defectos:
+ *   · hueco siempre + flecha desde `sm` → el móvil paga 80 px por un control que no está;
+ *   · hueco desde `sm` + flecha siempre → vuelve el solape que el carril vino a arreglar.
+ */
+describe("DataTable · el carril de las flechas no se cobra por debajo de `sm`", () => {
+  it("con desborde, ni el hueco ni la flecha se pintan por debajo de `sm`", () => {
+    restaurar = fingirDesborde(390, 1400);
+    render(<DataTable columns={COLUMNAS} data={DATOS} ariaLabel="Tabla" />);
+
+    const marco = document.querySelector('[data-slot="datatable-marco"]')!;
+    const carriles = [
+      ...document.querySelectorAll('[data-slot^="datatable-carril-"]'),
+    ];
+    expect(carriles).toHaveLength(2);
+
+    // El hueco existe, pero solo a partir de un punto de corte.
+    for (const lado of ["l", "r"] as const) {
+      const { px, corte } = carrilCompleto(marco, lado);
+      expect(px).toBeGreaterThan(0);
+      expect(corte).not.toBeNull();
+    }
+    // Y la tira de la flecha arranca escondida y se enciende en un punto de corte.
+    for (const tira of carriles) {
+      expect(corteDeVisibilidad(tira)).not.toBeNull();
+      expect(corteDeVisibilidad(tira)).not.toBe("nunca");
+    }
+  });
+
+  it("el hueco y la flecha se encienden en el MISMO punto de corte", () => {
+    restaurar = fingirDesborde(390, 1400);
+    render(<DataTable columns={COLUMNAS} data={DATOS} ariaLabel="Tabla" />);
+
+    const marco = document.querySelector('[data-slot="datatable-marco"]')!;
+    const izquierda = document.querySelector('[data-slot="datatable-carril-izquierda"]')!;
+    const derecha = document.querySelector('[data-slot="datatable-carril-derecha"]')!;
+
+    expect(carrilCompleto(marco, "l").corte).toBe(corteDeVisibilidad(izquierda));
+    expect(carrilCompleto(marco, "r").corte).toBe(corteDeVisibilidad(derecha));
+  });
+
+  it("a partir de ese punto de corte la flecha sigue cabiendo entera en su hueco", () => {
+    // El arreglo del móvil no puede aflojar la guardia de arriba: donde el carril se
+    // pinta, sigue siendo al menos tan ancho como la huella de la flecha.
+    restaurar = fingirDesborde(800, 1400);
+    render(<DataTable columns={COLUMNAS} data={DATOS} ariaLabel="Tabla" />);
+
+    const { marco, izquierda, derecha } = marcoYFlechas();
+    expect(carril(marco, "l")).toBeGreaterThanOrEqual(huella(izquierda, "ml"));
+    expect(carril(marco, "r")).toBeGreaterThanOrEqual(huella(derecha, "mr"));
   });
 });

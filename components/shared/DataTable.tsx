@@ -558,13 +558,18 @@ export function DataTable<T>({
           `overflow-hidden`: así la barra de scroll horizontal queda recortada
           DENTRO del marco en vez de asomar por debajo del borde.
 
-          `px-10` CUANDO HAY SCROLL — EL CARRIL DE LAS FLECHAS. Ver el comentario
-          extenso de las flechas, más abajo: los 40 px de cada lado son el sitio
-          PROPIO de cada flecha, y por eso ninguna se dibuja ya sobre una celda.
-          El padding va aquí, en el marco, y no en el viewport de scroll: un
-          `padding-left` DENTRO de un contenedor que desplaza se va con el
-          contenido al primer scroll y el hueco desaparece justo cuando hace
-          falta. Aquí no desplaza nada: el carril es fijo.
+          `sm:px-10` CUANDO HAY SCROLL — EL CARRIL DE LAS FLECHAS. Ver el
+          comentario extenso de las flechas, más abajo: los 40 px de cada lado
+          son el sitio PROPIO de cada flecha, y por eso ninguna se dibuja ya
+          sobre una celda. El padding va aquí, en el marco, y no en el viewport
+          de scroll: un `padding-left` DENTRO de un contenedor que desplaza se va
+          con el contenido al primer scroll y el hueco desaparece justo cuando
+          hace falta. Aquí no desplaza nada: el carril es fijo.
+
+          `sm:` Y NO A SECAS: por debajo de 640 px no hay carril porque no hay
+          flechas (ver abajo). El carril y las flechas son la misma decisión y
+          tienen que encenderse juntos, o se reservarían 80 px para un control
+          que no se pinta.
 
           Sin desborde no hay flechas y no hay padding: una tabla que cabe se
           pinta byte por byte como antes. El estado no oscila —el padding solo
@@ -576,7 +581,7 @@ export function DataTable<T>({
         data-slot="datatable-marco"
         className={cn(
           "w-full max-w-full overflow-hidden rounded-lg border border-asfalto-2",
-          scrollNav.scrollable && "px-10",
+          scrollNav.scrollable && "sm:px-10",
         )}
       >
         <div
@@ -663,10 +668,35 @@ export function DataTable<T>({
           scroll pierde 80 px, o sea que una tabla que desborda desborda 80 px
           más. Se paga solo cuando hay desborde.
 
-          ⚠ SI TOCAS ESTOS NÚMEROS: el carril (`px-10` del marco) tiene que seguir
-          siendo ≥ margen + tamaño del botón, o la flecha vuelve a asomar sobre la
-          primera/última columna y vuelve el fallo mudo. Lo fija
+          ⚠ SI TOCAS ESTOS NÚMEROS: el carril (`sm:px-10` del marco) tiene que
+          seguir siendo ≥ margen + tamaño del botón, o la flecha vuelve a asomar
+          sobre la primera/última columna y vuelve el fallo mudo. Lo fija
           `tests/components/DataTableCarrilFlechas.test.tsx`.
+
+          ⚠ NADA DE ESTO EXISTE POR DEBAJO DE `sm` (640 px) — `hidden sm:flex`.
+          El carril no es gratis: son 80 px de viewport de scroll, y eso en un
+          teléfono es una mordida, no un detalle. Medido en Chromium contra el
+          dev server, con la tabla de `/ordenes`:
+
+            1440 px → ancho útil 1134 → 1054  (−80, un 7 %)
+             390 px → ancho útil  340 →  260  (−80, un 23 %)
+
+          En táctil ese control además no lo pulsa nadie: se desliza el dedo. Y
+          antes de quitarlo se comprobó que deslizar FUNCIONA de verdad —quitar
+          la flecha sin eso dejaría la tabla inalcanzable en el móvil, que es
+          mucho peor que perder 80 px—. Medido con eventos táctiles reales por
+          CDP (`Input.dispatchTouchEvent`: touchStart + 12 touchMove + touchEnd,
+          NO `sp.scrollLeft = n`, que solo probaría que el DOM acepta la
+          asignación), en 390×844 y 768×1024 sobre `/ordenes`,
+          `/configuracion/api` y `/configuracion`: los 6 casos desplazan en los
+          dos sentidos (`scrollLeft` 0 → 205 → 60) con `touch-action: auto` y
+          `overflow-x: auto`. Testigo negativo: un `tap` sin arrastre deja el
+          `scrollLeft` en 0 en los 6.
+
+          `hidden` y no un `useMediaQuery`: `display: none` saca la flecha
+          también del árbol de accesibilidad y del tabulador, que es lo que
+          corresponde a un control que no está. Y no hay que hidratar nada para
+          decidirlo.
 
           El anillo de foco es el mismo del resto de controles de la tabla: sin él
           la flecha era alcanzable con el tabulador pero no se veía dónde estaba
@@ -675,7 +705,7 @@ export function DataTable<T>({
         <>
           <div
             data-slot="datatable-carril-izquierda"
-            className="pointer-events-none absolute left-0 z-20 flex items-start"
+            className="pointer-events-none absolute left-0 z-20 hidden items-start sm:flex"
             style={{ top: headerHeight, bottom: 0 }}
           >
             <button
@@ -690,7 +720,7 @@ export function DataTable<T>({
           </div>
           <div
             data-slot="datatable-carril-derecha"
-            className="pointer-events-none absolute right-0 z-20 flex items-start justify-end"
+            className="pointer-events-none absolute right-0 z-20 hidden items-start justify-end sm:flex"
             style={{ top: headerHeight, bottom: 0 }}
           >
             <button
