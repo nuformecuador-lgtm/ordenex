@@ -92,6 +92,18 @@ export interface FuentesEtiqueta {
    * descarga a un archivo.
    */
   api_key: { identificador: string };
+  /**
+   * FICHA 374 — los tres niveles del catalogo geografico. La etiqueta es la CADENA de nombres, de
+   * la hoja a la raiz, porque «Buenos Aires» a secas es ambiguo (canton de Puntarenas y distrito
+   * de Palmares) y una fila de auditoria que no identifica su sujeto no sirve para nada.
+   *
+   * ⚠️ NINGUNO ES UN DATO DE CLIENTE (R54): son nombres de un catalogo PUBLICO —la DTA del IGN—,
+   * del mismo genero que el nombre de una zona o de un vehiculo. No hay texto libre tecleado por
+   * una persona, ni direccion, ni destinatario.
+   */
+  provincia: { nombre: string };
+  canton: { nombre: string; provinciaNombre: string | null };
+  distrito: { nombre: string; cantonNombre: string | null; provinciaNombre: string | null };
 }
 
 /**
@@ -159,6 +171,11 @@ const CONSTRUCTORES: {
   rechazo_tienda_cobro: etiquetaDeEnvio,
   ranking_snapshot_fila: (f) => unir(f?.mensajeroNombre, f?.puesto == null ? null : `puesto ${f.puesto}`),
   api_key: (f) => limpiar(f?.identificador),
+  // FICHA 374 — la cadena de ascendientes con el separador de la casa. Una provincia no tiene
+  // ascendiente, asi que se etiqueta como `zona` y `vehiculo`: solo su nombre.
+  provincia: (f) => limpiar(f?.nombre),
+  canton: (f) => unir(f?.nombre, f?.provinciaNombre),
+  distrito: (f) => unir(f?.nombre, f?.cantonNombre, f?.provinciaNombre),
 };
 
 /**
