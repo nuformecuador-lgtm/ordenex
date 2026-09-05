@@ -21,6 +21,48 @@
 
 ---
 
+## 2026-09-06 — Un motivo de error de fila NUEVO: provincia, cantón o distrito RETIRADOS del catálogo
+
+**Qué cambia.** Ordenex pasa a poder **retirar** una provincia, un cantón o un distrito de su
+catálogo geográfico sin borrarlo. Un nodo retirado deja de admitirse en cargas y cotizaciones
+**nuevas**; las órdenes que ya lo referencian **no se tocan** y siguen consultándose y listándose
+igual que siempre.
+
+A partir de esta fecha, `POST /api/ordenes/api-key/carga` y `POST /api/ordenes/api-key/cotizacion`
+pueden devolver, **dentro de la lista `errores`**, una fila con uno de estos tres mensajes:
+
+- `la provincia esta retirada del catalogo`
+- `el canton esta retirado del catalogo`
+- `el distrito '<nombre>' esta retirado del catalogo`
+
+**Qué NO cambia, y conviene leerlo antes de tocar nada:**
+
+- **Sigue siendo `200` con éxito parcial.** La fila retirada viaja en `errores` exactamente igual
+  que «distrito no encontrado en el cantón», y **las demás filas del lote se procesan**. No hay
+  ningún `422` nuevo, ni ningún código de estado nuevo.
+- **Ningún path, ningún schema, ningún nombre de campo se ha tocado.** La forma de la respuesta es
+  la de siempre: `errores[].errores` sigue siendo un objeto de `campo -> string[]`.
+- **La clave del error es la del nivel afectado** (`provincia`, `canton` o `distrito`), como ya
+  ocurría con los motivos anteriores.
+
+**Por qué el mensaje es propio y no «no encontrado».** Porque son cosas distintas: el nodo
+**existe**, escrito exactamente como lo mandaste. Reutilizar «no encontrado» te mandaría a buscar
+una errata en una dirección correcta. Si más de un nivel de la terna está retirado, se informa
+siempre del **más alto**: primero provincia, luego cantón, luego distrito.
+
+**Qué hacer si tu código enumera los motivos de error de fila.** Si tenés un `switch`, un mapa de
+traducciones o una lista blanca de mensajes, añadí estos tres; si tu código trata cualquier entrada
+de `errores` de forma genérica —lo recomendado—, **no tenés que hacer nada**. En ningún caso hace
+falta reintentar: un nodo retirado no vuelve solo, hay que corregir la dirección de la fila o
+pedirnos que lo reactivemos.
+
+Los dos artefactos del contrato quedan actualizados (`lib/api/openapi-spec.ts` y su espejo
+`docs/api/api-key-openapi.yaml`): las descripciones de `provincia`, `canton` y `distrito` de
+`CargaRow` y `CotizacionRow` enumeran ahora este motivo, y el ejemplo de respuesta de
+`/cotizacion` lo muestra.
+
+---
+
 ## 2026-09-01 — El contrato retira la descripción en prosa de TODOS los endpoints (y la colección de Postman pasa a una petición por endpoint)
 
 **No cambia ni un byte de las peticiones ni de las respuestas.** Ningún path, parámetro, schema,

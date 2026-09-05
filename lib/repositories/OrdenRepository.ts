@@ -2298,9 +2298,10 @@ export class OrdenRepository implements IOrdenRepository {
         // FICHA 374 (R31): se proyecta la cadena entera. `provinciaId` sigue viniendo por la misma
         // relacion; el `activo` de canton y provincia viaja al lado, sin una segunda consulta.
         ...SELECT_CADENA_DISTRITO,
-        canton: {
-          select: { provinciaId: true, activo: true, provincia: { select: { activo: true } } },
-        },
+        // El `canton` de arriba se re-declara para sumarle `provinciaId`, que esta lectura ya
+        // traia. La cadena de flags entra por el fragmento compartido, NO escrita a mano: la
+        // guardia de R11 prohibe el literal `activo: true` fuera de `_shared/geografia-activa.ts`.
+        canton: { select: { provinciaId: true, ...SELECT_CADENA_CANTON } },
         zonas: { select: { zonaId: true, zona: { select: { nombre: true, esCentral: true } } } },
       },
     });

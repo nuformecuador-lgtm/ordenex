@@ -1,57 +1,41 @@
-feat(374): el predicado compartido, el repositorio y la cadena de capas del catalogo
+test(374): la evidencia del catalogo geografico, y las cuatro guardias
 
-La disponibilidad de un nodo es la conjuncion con sus ascendientes y se EVALUA al
-leer. Vive en UN solo sitio -- lib/repositories/_shared/geografia-activa.ts,
-hermano de zona-colapso.ts -- por el mismo motivo textual que su hermano: dos
-copias son dos reglas que un dia divergen, y la que divergiera dejaria fuera (o
-dentro) filas del catalogo sin romper ningun test.
+Todo lo que es un WHERE va contra Postgres real, no contra dobles: en este repo
+esta medido cuatro veces que una mutacion del WHERE pasa en verde con dobles.
+Seis archivos nuevos en tests/integration/db/ cubren el catalogo que proyecta,
+la cascada reversible, el registro de acciones, el alta, el historico intacto y
+el conteo de ordenes sin entregar.
 
-Ese modulo no importa nada de @prisma/client a proposito: sus fragmentos son
-literales que Prisma acepta estructuralmente, asi que tambien lo puede importar
-geo-resolucion.ts, que es logica pura.
+Ninguno usa `if (!fila) return;`. Cuando falta el corpus REVIENTAN CON MENSAJE, y
+cada bloque lleva su anti-vacuidad: se afirma que las filas llegaron a la base
+antes de afirmar nada sobre ellas. El de la cascada lee los flags de los tres
+distritos FILA A FILA antes y despues, porque el fallo que vigila -- una cascada
+materializada que enciende al reactivar -- no rompe nada mas.
 
-HAY UN CATALOGO, NO DOS. list*Lite NO recorta: proyecta `disponible` en el DTO y
-filtra el consumidor, igual que CuentaTiendaDTO.activa. No es la ficha 351 y por
-eso se razona en vez de copiarse: alli el id seguia siendo un filtro legitimo por
-URL; aqui nadie teclea un uuid, asi que esconder un distrito retirado dejaria
-INFILTRABLES las ordenes historicas de ese distrito. Las unicas dos lecturas que
-si recortan son los conteos publicos de la landing (es una promesa comercial) y,
-como rechazo, los dos sitios donde corregir/cargar CREA futuro.
+El de R55 usa `clienteConSavepoint`, que abre un savepoint REAL: con el
+paso-a-traves, un `throw` dentro del repositorio no revierte lo que ya escribio y
+el caso pasaria en verde por accidente. Y el del alta necesita SAVEPOINT explicito
+para poder mirar despues de una violacion de UNIQUE: en Postgres una sentencia que
+falla aborta la transaccion entera.
 
-geo-resolucion rechaza con mensaje PROPIO en vez de recortar el WHERE: recortar
-haria caer la fila en "distrito no encontrado en el canton", un mensaje que
-miente sobre un distrito que existe y manda al integrador a revisar la ortografia
-de una direccion correcta. La precedencia de R33 sale sola del orden en que la
-funcion ya resuelve. Y la comprobacion va ANTES del chequeo de zona: un distrito
-retirado suele quedarse ademas sin zona, y "no tiene zona asignada" manda a pedir
-una tarifa en vez de a corregir la direccion.
+Las cuatro guardias, cada una con contraprueba sobre un cuerpo mutado EN MEMORIA
+-- una guardia estatica rota no falla, calla:
 
-La correccion de ubicacion rechaza con su propio motivo, distinto del de "no
-existe": confundirlos manda a buscar una errata en un distrito bien escrito.
+- sin borrado fisico: el `(?<![A-Za-z])` no es decorado, sin el `zonaDistrito
+  .deleteMany` (que es legitimo) gritaria en falso todos los dias;
+- predicado unico: la regla se expresa como «ningun archivo de lib/ fuera del
+  modulo compartido escribe el literal `activo: true`». Prohibir el LITERAL es lo
+  que la hace medible: un where y un select se parecen demasiado en el texto, y
+  una guardia que tuviera que adivinar cual es cual acabaria callandose;
+- sin renombrado, con el motivo medido escrito (el duplicado que crearia el seed);
+- una sola fuente de «terminal», con el conteo importandola.
 
-El repositorio NO expone delete ni deleteMany para las tres tablas, y eso es
-estructural: la interfaz no lo declara y la clase no lo implementa. Ninguna
-escritura toca a los descendientes -- es lo que hace reversible el reactivar.
-
-El arbol corrige de paso una mentira: con `take: 1`, un distrito en DOS zonas se
-pintaba "(zona: X)" aunque la carga lo rechaza por ambiguo. Ahora usa el mismo
-colapso 1/0/>1 que la carga y la correccion. Medido en produccion: 0 distritos
-con mas de una zona, asi que hoy no cambia lo que nadie ve -- pero la marca "sin
-zona" de la pantalla nueva no se construye sobre una señal rota.
-
-El conteo de ordenes sin entregar cuenta por la columna CONGELADA de la orden y
-no enumerando descendientes: los tres niveles tienen indice propio, y ademas es
-mas correcto, porque distrito_id es el unico nullable de la terna. La lista de
-estados terminales se IMPORTA de su fuente unica.
-
-Las tres Server Actions nuevas van anotadas @sin-superficie: la pantalla es el
-bloque H y la monta frontend_dev sobre esta rama. La anotacion CADUCA -- la
-guardia exige quitarla en cuanto la pantalla las importe.
-
-Colateral: las suites que fijaban 45 tipos o "el ultimo valor del enum" se
-actualizan; la de la 373 pasa a medir la posicion RELATIVA (que es lo que su
-ficha necesitaba demostrar) en vez de "el ultimo", que caduca con cada ampliacion.
-Los fixtures geograficos de 20 suites ganan `disponible`/`activo`.
+El contrato del canal por API key cambia y por eso lleva su entrada fechada en
+docs/api/CHANGELOG.md: el aviso esta redactado para copiarse y mandarse -- que
+cambia, que NO cambia (sigue siendo 200 con exito parcial, ningun schema se toca)
+y que hacer si tu codigo enumera los motivos. Los dos artefactos lo dicen, y el
+test compara los mensajes IMPORTANDOLOS de geo-resolucion en vez de copiarlos: un
+literal a mano se queda atras a la primera errata corregida en un solo lado.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_015VSTeTwpQKai67xBECqMre

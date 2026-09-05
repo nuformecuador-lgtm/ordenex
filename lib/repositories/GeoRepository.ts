@@ -384,7 +384,7 @@ async function leerNodoParaActivacion(
   if (nivel === "provincia") {
     const fila = await tx.provincia.findUnique({
       where: { id },
-      select: { activo: true, nombre: true },
+      select: { ...SELECT_FLAG_PROPIO, nombre: true },
     });
     return fila === null
       ? null
@@ -393,7 +393,7 @@ async function leerNodoParaActivacion(
   if (nivel === "canton") {
     const fila = await tx.canton.findUnique({
       where: { id },
-      select: { activo: true, nombre: true, provincia: { select: { nombre: true } } },
+      select: { ...SELECT_FLAG_PROPIO, nombre: true, provincia: { select: { nombre: true } } },
     });
     return fila === null
       ? null
@@ -407,7 +407,7 @@ async function leerNodoParaActivacion(
   const fila = await tx.distrito.findUnique({
     where: { id },
     select: {
-      activo: true,
+      ...SELECT_FLAG_PROPIO,
       nombre: true,
       canton: { select: { nombre: true, provincia: { select: { nombre: true } } } },
     },
