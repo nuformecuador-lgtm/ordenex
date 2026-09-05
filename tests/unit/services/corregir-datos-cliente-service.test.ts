@@ -70,6 +70,9 @@ function distrito(overrides: Partial<DistritoResueltoRow> = {}): DistritoResuelt
     zonaNombre: "Zona Dos",
     esCentral: false,
     esZonaEspecial: false,
+    // FICHA 374: el distrito propuesto esta DISPONIBLE salvo que el caso diga lo contrario. El
+    // caso del distrito RETIRADO vive en `corregir-datos-cliente-geo-retirada.test.ts`.
+    disponible: true,
     ...overrides,
   };
 }

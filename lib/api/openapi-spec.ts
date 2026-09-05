@@ -563,7 +563,8 @@ export const openApiSpec = {
               schema: { $ref: "#/components/schemas/CotizacionRequest" },
               examples: {
                 dosFilas: {
-                  summary: "Dos filas (una con cobertura, una con distrito inexistente)",
+                  summary:
+                    "Tres filas (una con cobertura, una con distrito inexistente, una con distrito retirado)",
                   value: {
                     ordenes: [
                       {
@@ -581,6 +582,13 @@ export const openApiSpec = {
                         direccion: "Sin referencia",
                         monto_cobrar: "18000",
                       },
+                      {
+                        provincia: "Puntarenas",
+                        canton: "Buenos Aires",
+                        distrito: "Cabagra",
+                        direccion: "Sin referencia",
+                        monto_cobrar: "12000",
+                      },
                     ],
                   },
                 },
@@ -596,11 +604,11 @@ export const openApiSpec = {
                 schema: { $ref: "#/components/schemas/CotizacionResponse" },
                 examples: {
                   resumen: {
-                    summary: "Una cotizada (con sus dos escenarios) y una con error",
+                    summary: "Una cotizada (con sus dos escenarios) y dos con error",
                     value: {
-                      total: 2,
+                      total: 3,
                       cotizadas: 1,
-                      conError: 1,
+                      conError: 2,
                       filas: [
                         {
                           fila: 1,
@@ -632,6 +640,14 @@ export const openApiSpec = {
                           numRemision: null,
                           resultado: "error",
                           errores: { distrito: ["distrito no encontrado en el canton"] },
+                        },
+                        {
+                          fila: 3,
+                          numRemision: null,
+                          resultado: "error",
+                          errores: {
+                            distrito: ["el distrito 'Cabagra' esta retirado del catalogo"],
+                          },
                         },
                       ],
                     },
@@ -1161,9 +1177,21 @@ export const openApiSpec = {
           num_remision: { type: "string", description: "Identificador de remisión (dedup por este valor)." },
           destinatario: { type: "string" },
           telefono: { type: "string" },
-          provincia: { type: "string" },
-          canton: { type: "string" },
-          distrito: { type: "string" },
+          provincia: {
+            type: "string",
+            description:
+              "Si no se encuentra, es ambigua o está RETIRADA del catálogo, la fila sale en `errores` y el lote sigue (200 con éxito parcial).",
+          },
+          canton: {
+            type: "string",
+            description:
+              "Si no se encuentra, es ambiguo o está RETIRADO del catálogo, la fila sale en `errores` y el lote sigue (200 con éxito parcial).",
+          },
+          distrito: {
+            type: "string",
+            description:
+              "Su zona decide la tarifa. Si no se encuentra, es ambiguo, no tiene zona o está RETIRADO del catálogo, la fila sale en `errores` y el lote sigue (200 con éxito parcial).",
+          },
           direccion: { type: "string" },
           producto: { type: "string" },
           peso: { type: "string", description: "Peso en kg como texto (p. ej. \"1.5\")." },
@@ -1354,23 +1382,38 @@ export const openApiSpec = {
           "Cuándo recibís 422: solo por el lote entero — `ordenes` vacío o por encima del tope",
           "(o un valor que no sea texto). Cuándo recibís 200 con entradas en `errores`: por cualquier",
           "problema de una fila concreta — terna ausente o vacía, distrito no encontrado, distrito",
-          "ambiguo, distrito sin zona asignada, o `monto_cobrar` con formato inválido.",
+          "ambiguo, distrito sin zona asignada, algún nivel de la terna RETIRADO del catálogo, o",
+          "`monto_cobrar` con formato inválido.",
+          "",
+          "RETIRADO DEL CATÁLOGO (desde 2026-09-06). Ordenex puede retirar una provincia, un cantón",
+          "o un distrito sin borrarlo: deja de admitirse en cargas y cotizaciones nuevas, y las",
+          "órdenes que ya lo referencian no se tocan. La fila sale con `resultado: \"error\"` y un",
+          "mensaje PROPIO, distinto de «no encontrado» y de «ambiguo», para que no lo confundas con",
+          "una errata en la dirección. Los tres mensajes son:",
+          "",
+          "- `la provincia esta retirada del catalogo`",
+          "- `el canton esta retirado del catalogo`",
+          "- `el distrito '<nombre>' esta retirado del catalogo`",
+          "",
+          "Si hay más de un nivel retirado se informa del más alto, con esta PRECEDENCIA fija:",
+          "primero provincia, luego cantón, luego distrito. Sigue siendo 200 con éxito parcial:",
+          "ninguna otra fila del lote se ve afectada.",
         ].join("\n"),
         properties: {
           provincia: {
             type: "string",
             description:
-              "Necesaria para cotizar la fila. Si falta, la fila sale con `resultado: \"error\"` (no un 422 del lote).",
+              "Necesaria para cotizar la fila. Si falta, no se encuentra, es ambigua o está RETIRADA del catálogo, la fila sale con `resultado: \"error\"` (no un 422 del lote).",
           },
           canton: {
             type: "string",
             description:
-              "Necesario para cotizar la fila. Si falta, la fila sale con `resultado: \"error\"` (no un 422 del lote).",
+              "Necesario para cotizar la fila. Si falta, no se encuentra, es ambiguo o está RETIRADO del catálogo, la fila sale con `resultado: \"error\"` (no un 422 del lote).",
           },
           distrito: {
             type: "string",
             description:
-              "Su zona decide la columna de flete. Necesario para cotizar la fila: si falta, no se encuentra, es ambiguo o no tiene zona, la fila sale con `resultado: \"error\"` (no un 422 del lote).",
+              "Su zona decide la columna de flete. Necesario para cotizar la fila: si falta, no se encuentra, es ambiguo, no tiene zona o está RETIRADO del catálogo, la fila sale con `resultado: \"error\"` (no un 422 del lote).",
           },
           direccion: { type: "string", description: "Se acepta; no participa del precio." },
           monto_cobrar: {

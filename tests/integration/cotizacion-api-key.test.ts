@@ -59,8 +59,9 @@ const TARIFA: TarifaVigente = {
   tarifaEspecialDevuelta: null,
 };
 
-const PROVINCIAS = [{ id: "p1", nombre: "San José" }];
-const CANTONES = [{ id: "c1", nombre: "Escazú", provinciaId: "p1" }];
+// FICHA 374: `disponible` es la disponibilidad EFECTIVA del nodo (la cascada ya aplicada).
+const PROVINCIAS = [{ id: "p1", nombre: "San José", disponible: true }];
+const CANTONES = [{ id: "c1", nombre: "Escazú", provinciaId: "p1", disponible: true }];
 /**
  * Feature 274 — la tarifa de OTRA zona, en la MISMA columna que la de `z1` (las dos filas son
  * no-centrales). Es lo que hace visible por el borde que el precio depende del par
@@ -80,10 +81,13 @@ const TARIFA_Z3: TarifaVigente = {
 };
 
 const DISTRITOS = [
-  { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false },
-  { id: "d2", nombre: "Centro", cantonId: "c1", zonaId: "z2", esCentral: true },
+  { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false, disponible: true },
+  { id: "d2", nombre: "Centro", cantonId: "c1", zonaId: "z2", esCentral: true, disponible: true },
   // Feature 274: un distrito NO-CENTRAL en una zona distinta de `z1`.
-  { id: "d3", nombre: "Santa Ana", cantonId: "c1", zonaId: "z3", esCentral: false },
+  { id: "d3", nombre: "Santa Ana", cantonId: "c1", zonaId: "z3", esCentral: false, disponible: true },
+  // ⭑ FICHA 374: un distrito que EXISTE, tiene zona, y esta RETIRADO del catalogo. Es el unico
+  // del corpus con `disponible: false`, y sirve para el caso de extremo a extremo del canal.
+  { id: "d7", nombre: "Cabagra", cantonId: "c1", zonaId: "z1", esCentral: false, disponible: false },
 ];
 
 /** Fila cubierta, con la geografia en columnas SEPARADas (contrato publico de la 88). */
@@ -102,6 +106,11 @@ function filaOk(overrides: Record<string, string> = {}): Record<string, string> 
 /** Fila cuya terna geografica NO resuelve: el distrito no vive en ese canton (R18). */
 function filaSinCobertura(): Record<string, string> {
   return filaOk({ distrito: "Distrito Que No Existe", num_remision: "REM-0002" });
+}
+
+/** FICHA 374: fila cuyo distrito EXISTE pero fue RETIRADO del catalogo. */
+function filaRetirada(): Record<string, string> {
+  return filaOk({ distrito: "Cabagra", num_remision: "REM-0004" });
 }
 
 // ---------------------------------------------------------------------------------------
@@ -599,6 +608,46 @@ describe("cotizacion por API key — respuesta 200 (R21/R34/R46/R51/R56)", () =>
     expect(body.errores[0].costos).toBeUndefined();
     expect(body.errores[0].errores.distrito).toEqual(["distrito no encontrado en el canton"]);
     expect(body.filas[0].errores).toBeUndefined();
+  });
+
+  // ⭑ FICHA 374 / I3 (R36) — el motivo de fila NUEVO, de extremo a extremo por el canal.
+  //
+  // Es la mitad que el contrato promete y que ningun test de `resolveGeo` puede afirmar: que un
+  // distrito RETIRADO no tumba el lote. Sigue siendo 200, la otra fila se cotiza, y el motivo
+  // llega al integrador dentro de `errores` con su texto propio.
+  it("374/R36 — un lote con una fila de distrito RETIRADO: 200, una cotizada y una en `errores`", async () => {
+    const { sondas, tarifaRepo, ...cotizacionDeps } = depsReales();
+    void sondas;
+    void tarifaRepo;
+
+    const res = await handleCotizacionApi(
+      reqConBearer({ ordenes: [filaOk(), filaRetirada()] }, SECRETO),
+      cotizacionDeps,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      total: number;
+      cotizadas: number;
+      conError: number;
+      filas: { fila: number; resultado: string }[];
+      errores: { fila: number; errores: Record<string, string[]> }[];
+    };
+
+    expect(body.total).toBe(2);
+    expect(body.cotizadas).toBe(1);
+    expect(body.conError).toBe(1);
+    // La fila buena se cotiza igual: NO es un error de lote.
+    expect(body.filas.map((f) => f.fila)).toEqual([1]);
+    expect(body.filas[0].resultado).toBe("cotizada");
+    // Y la retirada viaja en `errores`, con el mensaje que el contrato publica.
+    expect(body.errores.map((f) => f.fila)).toEqual([2]);
+    expect(body.errores[0].errores.distrito).toEqual([
+      "el distrito 'Cabagra' esta retirado del catalogo",
+    ]);
+    // ⚠️ Y NO es «no encontrado»: el distrito EXISTE, escrito exactamente como llego. Confundirlos
+    // manda al integrador a buscar una errata en una direccion correcta.
+    expect(body.errores[0].errores.distrito?.[0]).not.toMatch(/no encontrad/i);
   });
 
   it("la respuesta trae total, cotizadas, conError y el indice 1-based por fila (R46)", async () => {

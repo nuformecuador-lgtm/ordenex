@@ -86,6 +86,8 @@ function distrito(overrides: Partial<DistritoResueltoRow> = {}): DistritoResuelt
     zonaNombre: "Zona Dos",
     esCentral: false,
     esZonaEspecial: false,
+    // FICHA 374: disponible salvo que el caso diga lo contrario.
+    disponible: true,
     ...overrides,
   };
 }

@@ -45,17 +45,46 @@ export interface CuentaTiendaDTO extends OpcionCatalogo {
 }
 
 /**
+ * FICHA 374 — opcion GEOGRAFICA. `disponible` es la disponibilidad EFECTIVA (la cascada ya
+ * aplicada), no el flag propio del nodo.
+ *
+ * ⚠️ POR QUE VIAJA LA BANDERA EN VEZ DE RECORTAR LA LISTA, y por que esto NO es la ficha 351.
+ * Alli las cuentas dadas de baja se sacaron del desplegable porque el id seguia siendo un filtro
+ * legitimo por URL o por enlace guardado. En geografia NADIE TECLEA UN UUID: si el distrito
+ * desaparece del desplegable, las ordenes historicas de ese distrito dejan de poder filtrarse,
+ * punto. Asi que la bandera viaja y filtra QUIEN DEBE filtrar —hoy, solo los desplegables de la
+ * correccion de ubicacion, porque corregir una orden es un alta encubierta—.
+ *
+ * Que viaje la EFECTIVA y no el flag propio tampoco es un descuido: el consumidor de estas listas
+ * PLANAS quiere saber si puede ofrecer la opcion, y obligarle a recomponer la cadena desde tres
+ * listas sueltas seria pedirle que reimplemente el predicado compartido. La pantalla de
+ * administracion, que si necesita distinguir «propio» de «heredado», usa OTRO DTO —el arbol—,
+ * donde el padre esta literalmente encima.
+ */
+export interface OpcionGeografica extends OpcionCatalogo {
+  disponible: boolean;
+}
+
+/** FICHA 374 — lo mismo, para los niveles que llevan padre (canton y distrito). */
+export interface OpcionGeograficaConPadre extends OpcionConPadre {
+  disponible: boolean;
+}
+
+/**
  * La CADENA GEOGRAFICA sola (provincias + cantones + distritos), que es la parte del
  * catalogo que se puede servir ACOTADA a una zona. Existe porque el adminSatelite recibe
  * la geografia de SU zona y nada mas: sin este tipo, el repositorio tendria que devolver
  * tres listas sueltas y el service volveria a componerlas en el mismo orden en dos sitios.
+ *
+ * FICHA 374: sus tres colecciones pasan a llevar `disponible`. Como los tipos nuevos EXTIENDEN a
+ * los anteriores, ningun consumidor actual deja de compilar.
  */
 export interface GeografiaFiltrosDTO {
-  provincias: OpcionCatalogo[];
+  provincias: OpcionGeografica[];
   /** `padreId` = provinciaId. */
-  cantones: OpcionConPadre[];
+  cantones: OpcionGeograficaConPadre[];
   /** `padreId` = cantonId. */
-  distritos: OpcionConPadre[];
+  distritos: OpcionGeograficaConPadre[];
 }
 
 /**
@@ -90,11 +119,12 @@ export interface CatalogoFiltrosOrdenesDTO {
   tiendas: CuentaTiendaDTO[];
   /** Mensajeros ofrecidos por el filtro de mensajero asignado; vacio si el rol no lo recibe. */
   mensajeros: MensajeroFiltroDTO[];
-  provincias: OpcionCatalogo[];
+  /** FICHA 374: las tres geograficas llevan `disponible` (la EFECTIVA). Ver `OpcionGeografica`. */
+  provincias: OpcionGeografica[];
   /** `padreId` = provinciaId. */
-  cantones: OpcionConPadre[];
+  cantones: OpcionGeograficaConPadre[];
   /** `padreId` = cantonId. */
-  distritos: OpcionConPadre[];
+  distritos: OpcionGeograficaConPadre[];
 }
 
 /** R52/R53: sin sesion -> `unauthenticated`; rol ajeno al listado -> `forbidden`, sin datos. */

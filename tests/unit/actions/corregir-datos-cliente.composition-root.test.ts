@@ -48,7 +48,11 @@ const filaDistrito = {
   nombre: "Distrito Dos",
   cantonId: "c-1",
   zonaEspecial: false,
-  canton: { provinciaId: "p-1" },
+  // FICHA 374: la lectura proyecta la CADENA de flags (`SELECT_CADENA_DISTRITO`). Los tres van en
+  // `true` porque este caso mide el composition root, no la retirada de un nodo; con alguno en
+  // `false` el servicio rechazaria por «distrito retirado» y este test mediria otra cosa.
+  activo: true,
+  canton: { provinciaId: "p-1", activo: true, provincia: { activo: true } },
   zonas: [{ zonaId: "z-2", zona: { nombre: "Zona Dos", esCentral: false } }],
 };
 

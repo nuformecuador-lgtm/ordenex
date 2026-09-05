@@ -250,8 +250,13 @@ describe("pwa · los atajos del manifiesto", () => {
     // dinero del admin. Antes de enchufar este cálculo a `itemsVisibles`, este mismo `toEqual`
     // decía `admin: 13` — o sea, la guardia creía que el admin llegaba a una ruta que le
     // devuelve 404, que es justo el atajo roto que este archivo existe para impedir.
+    // ⭑ FICHA 374 — `maestro` 18 -> 19, por UN destino nuevo y solo uno: el subítem «Geografía»
+    // (`/configuracion/geografia`), añadido AL FINAL de los `children` de «Configuración», que es
+    // un ítem `maestro`-only entero. Los otros cuatro roles NO se mueven, y que sigan clavados es
+    // parte de lo que se afirma aquí. La CONCLUSIÓN no cambia: el destino nuevo lo ve UN rol de
+    // cinco, la intersección sigue vacía y por tanto siguen siendo CERO atajos.
     expect(Object.fromEntries([...porRol].map(([rol, d]) => [rol, d.size]))).toEqual({
-      maestro: 18,
+      maestro: 19,
       admin: 12,
       adminSatelite: 6,
       mensajero: 6,

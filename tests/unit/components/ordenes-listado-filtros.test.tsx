@@ -50,16 +50,16 @@ const CATALOGO: CatalogoFiltrosOrdenesDTO = {
     { id: "t2", nombre: "Integración", esApiKey: true, activa: true },
   ],
   provincias: [
-    { id: "p1", nombre: "San José" },
-    { id: "p2", nombre: "Alajuela" },
+    { id: "p1", nombre: "San José", disponible: true },
+    { id: "p2", nombre: "Alajuela", disponible: true },
   ],
   cantones: [
-    { id: "c1", nombre: "Escazú", padreId: "p1" },
-    { id: "c2", nombre: "Grecia", padreId: "p2" },
+    { id: "c1", nombre: "Escazú", padreId: "p1", disponible: true },
+    { id: "c2", nombre: "Grecia", padreId: "p2", disponible: true },
   ],
   distritos: [
-    { id: "d1", nombre: "San Rafael", padreId: "c1" },
-    { id: "d2", nombre: "Puente Piedra", padreId: "c2" },
+    { id: "d1", nombre: "San Rafael", padreId: "c1", disponible: true },
+    { id: "d2", nombre: "Puente Piedra", padreId: "c2", disponible: true },
   ],
 };
 

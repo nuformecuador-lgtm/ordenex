@@ -313,6 +313,10 @@ describe("primerDestino (aterrizaje de /dashboard)", () => {
       // Ficha 273: el catalogo de tipos de vehiculo pasa a administrarse por CRUD y
       // hereda la visibilidad maestro-only del item padre.
       "/configuracion/vehiculos",
+      // Ficha 374 (R46): el catalogo geografico se administra desde la app. Va EL ULTIMO
+      // a proposito: `primerDestino` mira el primer hijo del primer item visible, asi que
+      // añadir al final no mueve el aterrizaje post-login de ningun rol.
+      "/configuracion/geografia",
     ]);
   });
 

@@ -66,10 +66,14 @@ function arbol(): ProvinciaArbolDTO[] {
     {
       id: "p1",
       nombre: "San José",
+      // FICHA 374: el flag PROPIO del nodo. Aqui todo activo: el catalogo retirado se prueba en
+      // las suites de la 374.
+      activo: true,
       cantones: [
         {
           id: "c1",
           nombre: "Central",
+          activo: true,
           distritos: [
             {
               id: "d1",
@@ -77,6 +81,7 @@ function arbol(): ProvinciaArbolDTO[] {
               zonaId: null,
               zonaNombre: null,
               zonaEspecial: false,
+              activo: true,
             },
           ],
         },

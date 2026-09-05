@@ -53,14 +53,16 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false),
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
     findAllProvincias: vi.fn().mockResolvedValue([
-      { id: "p1", nombre: "Pichincha" },
+      { id: "p1", nombre: "Pichincha", disponible: true },
     ]),
     findCantonesByProvinciaIds: vi.fn().mockResolvedValue([
-      { id: "c1", nombre: "Quito", provinciaId: "p1" },
+      { id: "c1", nombre: "Quito", provinciaId: "p1", disponible: true },
     ]),
     findDistritosByCantonIds: vi.fn().mockResolvedValue([
-      { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1" },
+      { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", disponible: true },
     ]),
+    // FICHA 374 (R60): conteo de ordenes sin entregar de un nodo; no lo ejercita la carga.
+    contarSinEntregarPorNodoGeografico: vi.fn().mockResolvedValue(0),
     createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null, omitidas: [] }), // feature 141/294
     // Feature 88: persistencia con guia inmediata (carga por API). Por defecto vacio;
     // los tests de cargarViaApi lo sobreescriben para devolver las guias asignadas.
@@ -294,8 +296,8 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
   it("canton ambiguo dentro de la provincia -> error de fila", async () => {
     const repo = buildRepo({
       findCantonesByProvinciaIds: vi.fn().mockResolvedValue([
-        { id: "c1", nombre: "Quito", provinciaId: "p1" },
-        { id: "c2", nombre: "Quito", provinciaId: "p1" },
+        { id: "c1", nombre: "Quito", provinciaId: "p1", disponible: true },
+        { id: "c2", nombre: "Quito", provinciaId: "p1", disponible: true },
       ]),
     });
     const service = new BulkOrdenService(repo, tarifaRepoStub);
@@ -358,7 +360,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
     const repo = buildRepo({
       findDistritosByCantonIds: vi
         .fn()
-        .mockResolvedValue([{ id: "d1", nombre: "Quito", cantonId: "c1", zonaId: "z1" }]),
+        .mockResolvedValue([{ id: "d1", nombre: "Quito", cantonId: "c1", zonaId: "z1", disponible: true }]),
     });
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
@@ -376,7 +378,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
     const repo = buildRepo({
       // distrito.zona_id null -> sin zona asignada.
       findDistritosByCantonIds: vi.fn().mockResolvedValue([
-        { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: null },
+        { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: null, disponible: true },
       ]),
     });
     const service = new BulkOrdenService(repo, tarifaRepoStub);
@@ -1063,14 +1065,14 @@ describe("BulkOrdenService.cargarMasiva — dry-run (validación previa)", () =>
     const repoReal = buildRepo({
       findAllProvincias: vi
         .fn()
-        .mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]),
+        .mockResolvedValue([{ id: "p1", nombre: "Pichincha", disponible: true }]),
     });
     const real = await new BulkOrdenService(repoReal, tarifaRepoStub).cargarMasiva(rows, TIENDA);
 
     const repoDry = buildRepo({
       findAllProvincias: vi
         .fn()
-        .mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]),
+        .mockResolvedValue([{ id: "p1", nombre: "Pichincha", disponible: true }]),
     });
     const dry = await new BulkOrdenService(repoDry, tarifaRepoStub).cargarMasiva(rows, TIENDA, {
       dryRun: true,

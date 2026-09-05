@@ -504,6 +504,12 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
       // CRUD del catálogo de tipos de vehículo. Misma visibilidad maestro-only
       // del ítem padre: quien ve el catálogo es quien lo administra.
       { label: "Vehículos", href: "/configuracion/vehiculos" },
+      // Ficha 374: administración del catálogo geográfico (alta y retirada de
+      // provincias, cantones y distritos). AL FINAL del array, y verificado:
+      // `primerDestino` devuelve el `href` del PRIMER hijo del PRIMER ítem
+      // visible, así que un hijo añadido al final no puede mover el aterrizaje
+      // post-login de ningún rol (R46).
+      { label: "Geografía", href: "/configuracion/geografia" },
     ],
   },
   {

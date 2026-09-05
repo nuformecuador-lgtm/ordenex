@@ -81,14 +81,14 @@ function buildRepo(opciones: {
           ? new Map<string, string>()
           : new Map<string, string>(omitidas.map((r) => [r, estatusDeLoOmitido])),
       ),
-    findAllProvincias: vi.fn().mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]),
+    findAllProvincias: vi.fn().mockResolvedValue([{ id: "p1", nombre: "Pichincha", disponible: true }]),
     findCantonesByProvinciaIds: vi
       .fn()
-      .mockResolvedValue([{ id: "c1", nombre: "Quito", provinciaId: "p1" }]),
+      .mockResolvedValue([{ id: "c1", nombre: "Quito", provinciaId: "p1", disponible: true }]),
     findDistritosByCantonIds: vi
       .fn()
       .mockResolvedValue([
-        { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false },
+        { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false, disponible: true },
       ]),
     setCargaDownloadUrl: vi.fn(async () => {}),
     setOrdenesDownloadUrl: vi.fn(async () => {}),

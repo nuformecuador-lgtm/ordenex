@@ -61,9 +61,9 @@ const CATALOGO: CatalogoFiltrosOrdenesDTO = {
   mensajeros: [{ id: "m1", nombre: "Ana", zonaId: "z1", estado: "activo" }],
   zonas: [{ id: "z1", nombre: "Central" }],
   tiendas: [],
-  provincias: [{ id: "p1", nombre: "San José" }],
-  cantones: [{ id: "c1", nombre: "Escazú", padreId: "p1" }],
-  distritos: [{ id: "d1", nombre: "San Rafael", padreId: "c1" }],
+  provincias: [{ id: "p1", nombre: "San José", disponible: true }],
+  cantones: [{ id: "c1", nombre: "Escazú", padreId: "p1", disponible: true }],
+  distritos: [{ id: "d1", nombre: "San Rafael", padreId: "c1", disponible: true }],
 };
 
 /** Fecha fija: los atajos se resuelven a rangos, y un rango sin reloj fijo no se compara. */

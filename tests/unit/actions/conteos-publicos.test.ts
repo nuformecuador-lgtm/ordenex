@@ -143,8 +143,17 @@ describe("ConteosPublicosRepository", () => {
       prisma as unknown as ConstructorParameters<typeof ConteosPublicosRepository>[0],
     ).contar();
 
+    // FICHA 374/R34: al `zonas.some` se le suma la DISPONIBILIDAD del distrito. El literal es el
+    // contrato del `WHERE` emitido: este numero es una promesa comercial en la landing, y contar
+    // distritos retirados la infla. La forma sale de `WHERE_DISTRITO_DISPONIBLE`, pero aqui se
+    // escribe expandida a proposito — compararla contra la propia constante que la genera dejaria
+    // el caso siempre verde.
     expect(distrito.count.mock.calls[0][0]).toEqual({
-      where: { zonas: { some: {} } },
+      where: {
+        zonas: { some: {} },
+        activo: true,
+        canton: { activo: true, provincia: { activo: true } },
+      },
     });
     // Y que ese numero sea el que sale por `distritosConCobertura`, no otro campo.
     expect(r.distritosConCobertura).toBe(12);

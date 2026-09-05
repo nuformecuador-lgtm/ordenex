@@ -73,11 +73,11 @@ function ordenRepo(): IOrdenRepository {
     findUsuarioFulfillment: vi.fn(async () => false),
     findEstatusIdByValue: vi.fn(async () => "os-erbp"),
     findExistingRemisiones: vi.fn(async () => new Map<string, string>()),
-    findAllProvincias: vi.fn(async () => [{ id: "p1", nombre: "Pichincha" }]),
-    findCantonesByProvinciaIds: vi.fn(async () => [{ id: "c1", nombre: "Quito", provinciaId: "p1" }]),
+    findAllProvincias: vi.fn(async () => [{ id: "p1", nombre: "Pichincha", disponible: true }]),
+    findCantonesByProvinciaIds: vi.fn(async () => [{ id: "c1", nombre: "Quito", provinciaId: "p1", disponible: true }]),
     findDistritosByCantonIds: vi.fn(async () => [
-      { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false },
-      { id: "d2", nombre: "Cumbaya", cantonId: "c1", zonaId: "z2", esCentral: false },
+      { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false, disponible: true },
+      { id: "d2", nombre: "Cumbaya", cantonId: "c1", zonaId: "z2", esCentral: false, disponible: true },
     ]),
     createManyOrdenes: vi.fn(async () => ({ inserted: 0, cargaId: null, omitidas: [] })),
     createManyOrdenesConGuia: vi.fn(async (data: CreateOrdenData[]) => ({

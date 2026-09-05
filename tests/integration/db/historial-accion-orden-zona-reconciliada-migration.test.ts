@@ -82,7 +82,15 @@ describe("366/T1 — el `migration.sql` y el `down.sql`, como texto", () => {
     // de en un numero que caduca. La 371 (`gestion_fecha_reprogramacion_corregida`) y la 373
     // (`api_key_eliminada`) tienen ademas su propio archivo de migracion, que comprueba su `up`,
     // su `down` y la base aplicada.
-    const POSTERIORES = ["gestion_fecha_reprogramacion_corregida", "api_key_eliminada"];
+    // La ficha 374 añade los DOS `nodo_geografico_*` (retirar y devolver un nodo del catalogo
+    // geografico), con su propio archivo de migracion en
+    // `tests/integration/db/geografia-registro-migration.test.ts`.
+    const POSTERIORES = [
+      "gestion_fecha_reprogramacion_corregida",
+      "api_key_eliminada",
+      "nodo_geografico_desactivado",
+      "nodo_geografico_activado",
+    ];
     expect([...HISTORIAL_ACCION_TIPOS].sort()).toEqual(
       [...previos, VALOR_NUEVO, ...POSTERIORES].sort(),
     );
