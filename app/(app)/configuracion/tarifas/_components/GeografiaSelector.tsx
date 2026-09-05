@@ -32,12 +32,6 @@ interface TriState {
   indeterminate: boolean;
 }
 
-interface SeleccionData {
-  provincias: { id: string; nombre: string }[]; // completas (todos sus distritos)
-  cantones: { id: string; nombre: string }[]; // completos
-  distritos: { id: string; nombre: string; zonaNombre: string | null }[];
-}
-
 export function GeografiaSelector({
   provincias,
   onSelectedChange,
@@ -88,11 +82,6 @@ export function GeografiaSelector({
       prov.set(p.id, pIds);
     }
     return { provDistIds: prov, cantDistIds: cant };
-  }, [provincias]);
-
-  // Log del arbol completo una sola vez, al montar (dato crudo recibido).
-  useEffect(() => {
-    console.log("[Tarifas] Arbol geografico:", provincias);
   }, [provincias]);
 
   function stateFor(ids: string[]): TriState {
@@ -157,33 +146,6 @@ export function GeografiaSelector({
     [provincias, query],
   );
 
-  // Selección derivada para el console.log: distritos hoja + padres COMPLETOS.
-  const seleccion = useMemo<SeleccionData>(() => {
-    const data: SeleccionData = { provincias: [], cantones: [], distritos: [] };
-    for (const p of provincias) {
-      if (stateFor(provDistIds.get(p.id) ?? []).checked && (provDistIds.get(p.id)?.length ?? 0) > 0) {
-        data.provincias.push({ id: p.id, nombre: p.nombre });
-      }
-      for (const c of p.cantones) {
-        if (stateFor(cantDistIds.get(c.id) ?? []).checked && (cantDistIds.get(c.id)?.length ?? 0) > 0) {
-          data.cantones.push({ id: c.id, nombre: c.nombre });
-        }
-        for (const d of c.distritos) {
-          if (selDist.has(d.id)) {
-            data.distritos.push({ id: d.id, nombre: d.nombre, zonaNombre: d.zonaNombre });
-          }
-        }
-      }
-    }
-    return data;
-    // stateFor depende de selDist; lo listamos como dep explícita.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provincias, provDistIds, cantDistIds, selDist]);
-
-  useEffect(() => {
-    if (selDist.size > 0) console.log("[Tarifas] Seleccion actual:", seleccion);
-  }, [seleccion, selDist]);
-
   // Reporta la selección de distritos al formulario contenedor (crear zona).
   useEffect(() => {
     onSelectedChange?.([...selDist]);
@@ -211,8 +173,8 @@ export function GeografiaSelector({
 
       <p className="text-sm text-muted-foreground">
         {selDist.size > 0
-          ? `Distritos seleccionados: ${selDist.size}. Revisa la consola.`
-          : "Selecciona una provincia o cantón para marcar todos sus distritos, o marca distritos sueltos. La selección se imprime en la consola."}
+          ? `Distritos seleccionados: ${selDist.size}.`
+          : "Selecciona una provincia o cantón para marcar todos sus distritos, o marca distritos sueltos."}
       </p>
 
       <div className="flex flex-col gap-1 rounded-md border border-border p-2">
