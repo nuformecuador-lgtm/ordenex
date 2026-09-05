@@ -70,16 +70,16 @@ export const WHERE_DISTRITO_DISPONIBLE = {
   canton: { activo: true, provincia: { activo: true } },
 } as const;
 
-/**
- * `select` de Prisma para las lecturas que NO recortan y tienen que PROYECTAR la cadena entera.
- * Con esto, quien lee puede componer `estaDisponible` sin una segunda consulta.
- *
- * Son los que usa la mayoria del arbol: proyectar es lo normal aqui, recortar es la excepcion.
- */
+// ── Los `select` de las lecturas que NO recortan ─────────────────────────────────────────────
+//
+// Proyectar es lo NORMAL en este arbol; recortar es la excepcion (§4 del design). Con estos
+// fragmentos, quien lee puede componer `estaDisponible` sin una segunda consulta.
+
 /**
  * Proyeccion del flag PROPIO de una fila. Es un `select`, NO un filtro — y por eso tiene nombre
  * propio aunque su valor coincida con `WHERE_PROVINCIA_DISPONIBLE`: quien lo lea en un repositorio
- * tiene que ver de un vistazo si esa consulta RECORTA o solo PROYECTA.
+ * tiene que ver de un vistazo si esa consulta RECORTA o solo PROYECTA. Sirve para los tres
+ * niveles: una provincia no tiene ascendiente, asi que su flag propio ES su disponibilidad.
  *
  * Existe ademas por una razon mecanica: la guardia de R11 prohibe el literal `activo: true` en
  * todo `lib/` fuera de este modulo, asi que hasta las proyecciones pasan por aqui. Sin eso, la
@@ -87,8 +87,6 @@ export const WHERE_DISTRITO_DISPONIBLE = {
  * guardia que adivina acaba callandose.
  */
 export const SELECT_FLAG_PROPIO = { activo: true } as const;
-
-export const SELECT_CADENA_PROVINCIA = { activo: true } as const;
 
 export const SELECT_CADENA_CANTON = {
   activo: true,
