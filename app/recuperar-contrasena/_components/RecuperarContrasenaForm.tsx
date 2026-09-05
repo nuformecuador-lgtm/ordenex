@@ -39,6 +39,17 @@ const codeSchema = z.object({
 // existencia de la cuenta (R6/R11 + seguridad).
 const GENERIC_INVALID_MESSAGE = "El código es inválido o ha expirado. Verifica e intenta de nuevo";
 
+/**
+ * ⚠️ ESTE FORMULARIO SIGUE AQUI PERO YA NADIE LO MONTA (2026-09-04). Su pagina,
+ * `app/recuperar-contrasena/page.tsx`, muestra en su lugar `RecuperacionDesactivadaAviso`.
+ * No se borro NADA —ni este componente, ni las Server Actions, ni sus tests— porque la
+ * averia no es de codigo: es del correo, y se arregla generando una contrasena de
+ * aplicacion en Google. Reponer el flujo = volver a montar este componente en la pagina y
+ * devolver el enlace del login. La causa entera esta escrita en la cabecera de
+ * `RecuperacionDesactivadaAviso.tsx`.
+ *
+ * @sin-superficie DESACTIVADO el 2026-09-04, no borrado: su paso 1 pide un OTP por correo y el SMTP de Gmail rechaza la credencial con `535-5.7.8 Username and Password not accepted`, asi que el codigo no llega nunca y la pantalla responde `ok` igualmente (fallo mudo; 12 intentos de 2 personas reales medidos en produccion). Lo sustituye `RecuperacionDesactivadaAviso`, que dice a quien acudir. Vuelve a tener superficie montandolo otra vez en `app/recuperar-contrasena/page.tsx`, y entonces esta anotacion debe borrarse.
+ */
 export function RecuperarContrasenaForm() {
   const [isPending, startTransition] = useTransition();
 
