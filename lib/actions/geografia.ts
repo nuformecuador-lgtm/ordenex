@@ -117,8 +117,6 @@ export type CrearNodoGeograficoResult =
  * UNA accion para los tres niveles, no tres: el nivel viaja como dato de un vocabulario cerrado y
  * la `discriminatedUnion` mantiene el borde igual de estricto. Tres cuerpos identicos serian dos
  * sitios mas donde olvidar la comprobacion de rol.
- *
- * @sin-superficie ficha 374, backend antes que pantalla: la pantalla /configuracion/geografia es el bloque H de tasks.md y la monta frontend_dev sobre esta rama; hasta entonces la accion existe y no tiene quien la dispare. La anotacion CADUCA: en cuanto el modulo de la pantalla la importe, esta guardia exige quitarla.
  */
 export async function crearNodoGeografico(
   input: unknown,
@@ -154,8 +152,6 @@ export type CambiarActivacionGeograficaResult =
  * `activo` es el estado DESEADO, no un toggle: pedir el estado en el que el nodo ya esta devuelve
  * `ok` sin escribir nada (R21). Esta escritura NO toca a ningun descendiente (R8) ni a
  * `zona_distrito` (R50).
- *
- * @sin-superficie ficha 374, backend antes que pantalla: la pantalla /configuracion/geografia es el bloque H de tasks.md y la monta frontend_dev sobre esta rama; hasta entonces la accion existe y no tiene quien la dispare. La anotacion CADUCA: en cuanto el modulo de la pantalla la importe, esta guardia exige quitarla.
  */
 export async function cambiarActivacionGeografica(
   input: unknown,
@@ -185,8 +181,6 @@ export type ContarOrdenesSinEntregarDeNodoResult =
  * Es informacion para decidir, no una condicion de la operacion: si esta llamada falla, la
  * pantalla lo dice y NO bloquea (R62). Un conteo caido que impidiera retirar un distrito
  * convertiria un dato de cortesia en un bloqueo.
- *
- * @sin-superficie ficha 374, backend antes que pantalla: la confirmacion de desactivar que pide este conteo es el bloque H de tasks.md y la monta frontend_dev sobre esta rama. La anotacion CADUCA: en cuanto el modulo de la pantalla la importe, esta guardia exige quitarla.
  */
 export async function contarOrdenesSinEntregarDeNodo(
   input: unknown,
