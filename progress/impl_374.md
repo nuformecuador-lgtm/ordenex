@@ -2,7 +2,7 @@
 
 > **Alcance de esta bitácora:** los bloques **0, A, B, C, D, E, F, G e I** de `tasks.md`.
 > El **bloque H (la pantalla)** y el **bloque J (cierre)** NO están hechos: los toma `frontend_dev`
-> sobre esta misma rama. Las filas de la matriz que le corresponden se marcan **`PENDIENTE (H)`**
+> sobre esta misma rama. El bloque H se completó el 2026-09-05: ya no queda ninguna fila `PENDIENTE`
 > en vez de dejarse en blanco — un `R` sin test es un fallo de la feature, y lo que aquí se afirma
 > es de quién es el turno, no que esté cubierto.
 
@@ -145,7 +145,7 @@ comodidad:
 | R26 | «el árbol trae la provincia retirada y su `activo`» | `tests/integration/db/geografia-catalogo-activo.test.ts` · `tests/unit/services/geografia-service.test.ts` |
 | R27 | «con UNA zona la muestra; con CERO `null`; **con DOS `null` también**» | `tests/integration/db/geografia-catalogo-activo.test.ts` |
 | R28 | «los tres `list*Lite` devuelven el nodo retirado con `disponible: false`» + «⭑ devuelven EXACTAMENTE lo que hay en la tabla» | `tests/integration/db/geografia-catalogo-activo.test.ts` · `tests/unit/repositories/catalogo-filtros-ordenes.test.ts` |
-| R29 | **PENDIENTE (H9)** — desplegables de la corrección | `tests/unit/components/corregir-ubicacion-inactivos.test.tsx` |
+| R29 | «374/R29 — la corrección de ubicación solo ofrece nodos disponibles» | `tests/unit/components/corregir-ubicacion-inactivos.test.tsx` |
 | R30 | «⭑ el motivo es DISTINTO del de "el distrito indicado no existe"» + «no se escribe nada» | `tests/unit/services/corregir-datos-cliente-geo-retirada.test.ts` |
 | R31 | «`findDistritosByCantonIds` y `findDistritoParaCorreccion` devuelven el retirado con su disponibilidad» | `tests/integration/db/geografia-catalogo-activo.test.ts` |
 | R32 | un caso por nivel, con su mensaje propio + «los tres NO son "no encontrado" ni "ambiguo"» | `tests/unit/services/geo-resolucion-retirados.test.ts` |
@@ -154,17 +154,17 @@ comodidad:
 | R35 | «sigue en el listado y sigue saliendo al filtrar por su `distritoId`», con la cadena entera retirada | `tests/integration/db/geografia-historico-intacto.test.ts` |
 | R36 | «lote de 2 filas con una retirada → 200, una cotizada y una en `errores`» | `tests/integration/cotizacion-api-key.test.ts` |
 | R37 | «los DOS artefactos lo dicen y dicen lo mismo» + «la entrada fechada existe y dice las tres cosas» | `tests/unit/api/openapi-374-nodo-retirado.test.ts` |
-| R38 | **PENDIENTE (H5)** | `tests/unit/components/geografia-admin-page.test.tsx` |
-| R39 | **PENDIENTE (H1/H6)** | `tests/unit/utils/filtrar-arbol-geografico.test.ts` · `tests/unit/components/geografia-admin.ui.test.tsx` |
-| R40 | **PENDIENTE (H6)** | `tests/unit/components/geografia-admin.ui.test.tsx` |
-| R41 | **PENDIENTE (H6)** | `tests/unit/components/geografia-admin.ui.test.tsx` |
-| R42 | **PENDIENTE (H6)** | `tests/unit/components/geografia-admin.ui.test.tsx` |
-| R43 | **PENDIENTE (H7)** | `tests/unit/components/geografia-admin.ui.test.tsx` |
-| R44 | **PENDIENTE (H1/H7)** | `tests/unit/utils/zonas-sin-distritos.test.ts` · `tests/unit/components/geografia-admin.ui.test.tsx` |
-| R45 | **PENDIENTE (H7)** | `tests/unit/components/geografia-admin.ui.test.tsx` |
-| R46 | **PENDIENTE (H8)** | `tests/unit/auth/menu-visibility.test.ts` · `tests/unit/auth/destino-post-login.test.ts` |
-| R47 | **PENDIENTE (H3)** | `tests/unit/components/geografia-selector-inactivos.test.tsx` |
-| R48 | **PENDIENTE (H4)** | `tests/integration/db/zona-guardado-conserva-inactivos.test.ts` |
+| R38 | «374/R38 — /configuracion/geografia solo para `maestro`» | `tests/unit/components/geografia-admin-page.test.tsx` |
+| R39 | «el buscador de la pantalla» + «⭑ el filtro extraído colapsa los espacios, que el `norm()` viejo no hacía» | `tests/unit/utils/filtrar-arbol-geografico.test.ts` · `tests/unit/components/geografia-admin.ui.test.tsx` |
+| R40 | «el distintivo de estado tiene DOS sabores» — el propio dice «Inactivo», el heredado NOMBRA al ascendiente | `tests/unit/components/geografia-admin.ui.test.tsx` |
+| R41 | «“Activar” apagado, con el motivo perceptible sin pulsarlo» | `tests/unit/components/geografia-admin.ui.test.tsx` |
+| R42 | «la marca “sin zona” del distrito» | `tests/unit/components/geografia-admin.ui.test.tsx` |
+| R43 | «el alta, con el padre que cada nivel exige» | `tests/unit/components/geografia-admin.ui.test.tsx` |
+| R44 | «la confirmación de retirar» + las zonas que se quedan sin distritos (parte pura) | `tests/unit/utils/zonas-sin-distritos.test.ts` · `tests/unit/components/geografia-admin.ui.test.tsx` |
+| R45 | «un mensaje distinto por desenlace, y relectura del árbol» | `tests/unit/components/geografia-admin.ui.test.tsx` |
+| R46 | «/configuracion/geografia» entra al final de los hijos de Configuración, sin mover el destino post-login | `tests/unit/auth/menu-visibility.test.ts` · `tests/unit/auth/destino-post-login.test.ts` |
+| R47 | «374/R47 — el selector de Tarifas SIGUE ofreciendo los nodos retirados» + «⭑ LO QUE SE MANDA AL GUARDAR conserva los retirados que llegaron en `initialSelected`» | `tests/unit/components/geografia-selector-inactivos.test.tsx` |
+| R48 | «las filas de `zona_distrito` son EXACTAMENTE las mismas antes y después del guardado» + «CONTRAPRUEBA: si la lista llega SIN el retirado, la fila desaparece de verdad» | `tests/integration/db/zona-guardado-conserva-inactivos.test.ts` |
 | R49 | «ninguna escritura de `lib/` cambia el nombre de un nodo», con contraprueba + «ni la interfaz ni el service ni la acción declaran nada que renombre» | `tests/unit/guards/geografia-sin-renombrado.guardia.test.ts` |
 | R50 | «tras un alta, una desactivación y una reactivación, la puente tiene las MISMAS filas» | `tests/integration/db/geografia-cascada-reversible.test.ts` |
 | R51 | «una fila, con la acción y la entidad del nivel» + la entrada del censo | `tests/integration/db/geografia-registro-accion.test.ts` · `tests/unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts` |
@@ -174,14 +174,14 @@ comodidad:
 | R55 | «⭑ el flag sigue como estaba, y no queda fila», con savepoint REAL y contraprueba con el registro sano | `tests/integration/db/geografia-registro-accion.test.ts` |
 | R56 | «los dos tipos en `hace_desaparecer`, con etiqueta legible y como valor de filtro», con contraprueba del borde | `tests/unit/historial-accion/catalogo-y-choke-point.test.ts` |
 | R57 | «el enum de la base ES el catálogo» + «el down devuelve los dos enums a la lista previa, valor a valor y EN ORDEN» + «con una fila que use un valor nuevo, el rollback ABORTA y no la borra» | `tests/integration/db/geografia-registro-migration.test.ts` |
-| R58 | **PENDIENTE (H1/H10)** | `tests/unit/utils/filtrar-arbol-geografico.test.ts` |
-| R59 | **PENDIENTE (H1/H10)** | `tests/unit/utils/filtrar-arbol-geografico.test.ts` |
+| R58 | «374/R58 y R59 — el filtro de estado, en la pantalla» | `tests/unit/utils/filtrar-arbol-geografico.test.ts` |
+| R59 | «texto y estado se componen: “volcan” + “Activos” no devuelve nada» | `tests/unit/utils/filtrar-arbol-geografico.test.ts` |
 | R60 | «devuelve lo que dice el repositorio» + «sin sesión / rol ajeno no consulta» + «⭑ el composition root lo PASA» | `tests/unit/services/geografia-service.test.ts` · `tests/unit/actions/geografia-action.test.ts` · `tests/unit/actions/geografia.composition-root.test.ts` · `tests/integration/db/geografia-ordenes-sin-entregar.test.ts` |
 | R61 | «una `en_reparto` cuenta; una `entregada`, una `devuelta_a_tienda`, una `incidente` y una BORRADA no» + «⭑ una orden sin `distrito_id` cuenta para su cantón» + «la lista se importa, no se declara» | `tests/integration/db/geografia-ordenes-sin-entregar.test.ts` · `tests/unit/guards/geografia-terminales-una-sola-fuente.guardia.test.ts` |
-| R62 | **PENDIENTE (H7)** | `tests/unit/components/geografia-admin.ui.test.tsx` |
-| R63 | **PENDIENTE (H7)** | `tests/unit/components/geografia-admin.ui.test.tsx` |
+| R62 | «374/R60 y R62 — el conteo de órdenes sin entregar» + «⭑ si el conteo falla, la confirmación lo dice y NO bloquea» | `tests/unit/components/geografia-admin.ui.test.tsx` |
+| R63 | «⭑ el cuerpo tiene el nodo, las zonas y el conteo, y NI UNA línea más» | `tests/unit/components/geografia-admin.ui.test.tsx` |
 
-**Cubiertos por el backend: 45 de 63.** Los 18 restantes son del bloque H y de la mitad de UI de
+**Cubiertos: 63 de 63.** El backend dejó 45 y el bloque H cerró los 18 restantes (pantalla, filtro, distintivos, confirmacion, menu y el blindaje del selector de Tarifas). Queda J4 sin hacer: la verificacion manual en la pantalla real con sesion `maestro`.
 R44/R60.
 
 ---
