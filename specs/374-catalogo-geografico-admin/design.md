@@ -310,9 +310,25 @@ zonas muestra «(zona: X)» aunque la carga lo rechace —`findDistritosByCanton
 `null` (`OrdenRepository.ts:2122-2128`)—. Esa etiqueta **miente**, y la marca «sin zona» de R42
 heredaría la mentira. Se corrige aplicando el mismo `zonaUnicaDeDistrito` de
 `_shared/zona-colapso.ts`: se piden todas las zonas del distrito y `zonaId`/`zonaNombre` pasan a
-ser las de la **zona utilizable** (`null` con 0 y también con >1). El único consumidor actual de
-ese campo es el texto «(zona: X)» del selector (`GeografiaSelector.tsx:309-313`), que con esto pasa
-a decir la verdad.
+ser las de la **zona utilizable** (`null` con 0 y también con >1). **CORRECCIÓN (2026-09-05, hallazgo de la revisión):** este párrafo afirmaba que el único
+consumidor de `d.zonaId` era el texto «(zona: X)» del selector. **Es falso.**
+`ZonasTarifasModule.tsx:110` también lo usa —`if (d.zonaId === full.id) distritoIds.push(d.id)`—
+para construir el `initialSelected` que alimenta el `deleteMany` + `createMany` de
+`ZonaRepository.update`, o sea la cadena que este mismo documento llama «el riesgo más caro».
+
+Qué cambia de verdad, dicho sin adornos: para un distrito que pertenece a **dos** zonas, antes
+`take: 1` devolvía una de las dos arbitrariamente, así que al guardar **la otra** perdía su fila;
+ahora devuelve `null` y la pierde al guardar **cualquiera** de las dos. El defecto no nace aquí
+—ya existía— pero empeora de grado.
+
+**Población medida el 2026-09-05: CERO distritos con más de una zona en producción**, así que hoy no
+afecta a nadie. En una base de desarrollo sembrada con el seed CLI sí hay tres (Quesada, San Ramón y
+Puerto Viejo), y su causa raíz es otra: la colisión `ZONA SUR` / `Zona Sur`, documentada aparte en
+`public/geografia-cr-completa-NOTAS.md`.
+
+**No se arregla en esta ficha** —el arreglo de fondo es la colisión de nombres, no este campo— y el
+caso que sí importa aquí sigue cubierto: un distrito **retirado con una sola zona** se preselecciona
+igual, que es lo que R47/R48 afirman contra Postgres. Queda anotado para la ficha de la colisión.
 
 ---
 

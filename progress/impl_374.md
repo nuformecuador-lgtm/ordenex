@@ -451,3 +451,46 @@ tareas **H1**: son módulos puros de presentación y por eso no entran en el bac
 archivos contra Postgres ejecutados y siete mutaciones muertas con su mensaje literal. Queda
 pendiente el bloque H (pantalla) y, dentro del bloque 0, **medir los duplicados en preview antes
 de aplicar la migración allí**.
+
+---
+
+## J4 — Verificación en la pantalla real (hecha el 2026-09-05)
+
+Recorrida con Playwright contra el dev server, sesión **`maestro`** (`maestro.local@ordenex.test`,
+sembrada en la base LOCAL con `db:seed:maestro`; el maestro **sí pide OTP**, leído del `dev.log`).
+**Cero errores de consola en todo el recorrido.**
+
+| Qué se probó | Resultado observado |
+|---|---|
+| La pantalla carga y el menú la ofrece | «Geografía» aparece al final de Configuración; título «Catálogo geográfico» y las 7 provincias con su número de cantones |
+| Buscador | «Cabagra» reduce el árbol a Puntarenas → Buenos Aires → **Cabagra (zona: ZONA SUR)** |
+| Filtro tri-estado | «Retirados» sin nada retirado dice «Sin resultados.» |
+| Confirmación de retirada | «Retirar del catálogo · Vas a retirar «Cabagra» (Distrito). · **Órdenes sin entregar en este nodo: 0.**» |
+| Retirar un distrito | Queda «Inactivo» con su botón «Activar» |
+| **Badge heredado** | Con el cantón retirado, Boruca dice «**Inactivo por su cantón**» y su botón queda **`disabled`** con el nombre accesible «Activar Boruca. Su cantón está retirado: primero hay que devolverlo al catálogo.» |
+| **⭑ Reactivar NO resucita** | Retirado Cabagra, retirado su cantón y **reactivado el cantón**, Cabagra **sigue retirada**. Es el requisito del humano, verificado en la app y no solo en la suite |
+| Alta | «Distrito Prueba 374» se crea bajo Buenos Aires y aparece con la marca «**Sin zona**» |
+| **Unicidad normalizada** | Crear «**cabagra**» en minúsculas responde «**Ya existe un nodo con ese nombre bajo el mismo padre.**» |
+| **(e) Tarifas conserva lo retirado** | Con la zona `ZONA SUR` abierta (36 distritos), **Volcán retirado sigue en el árbol, marcado y con su distintivo «Inactivo»**. Es el flanco que, de romperse, borraría filas de `zona_distrito` en silencio |
+| **(f) La corrección NO ofrece lo retirado** | Con Volcán retirado, el desplegable de distrito de Buenos Aires ofrece **9** opciones —las 10 menos Volcán— y **sí** incluye Cabagra |
+| **(h) Queda registrado** | `/historico/acciones` muestra «Retiró un nodo del catálogo geográfico · Distrito · Volcán · Buenos Aires · Puntarenas», con el actor y la categoría «Hace desaparecer algo» |
+| (g) Filtro «Retirados» con algo retirado | Encuentra Volcán de un vistazo, sin recorrer el árbol |
+| Homónimos | El árbol muestra a la vez «Buenos Aires» distrito de Palmares (Alajuela) y el cantón Buenos Aires de Puntarenas con sus **10 distritos** |
+
+Limpieza: el distrito de prueba se borró de la base local por SQL (la app no borra, solo retira) y
+todos los nodos tocados quedaron activos.
+
+### UN DEFECTO REAL ENCONTRADO AQUÍ, y arreglado
+
+`GeografiaSelector` (el de Tarifas) pintaba al usuario **texto de depuración**: «Distritos
+seleccionados: 36. **Revisa la consola.**» y «La selección **se imprime en la consola**», junto con
+dos `console.log` y el `useMemo`/`interface SeleccionData` que solo existían para alimentarlos.
+Andamiaje de desarrollo visible en la pantalla del maestro, en producción. **Ningún test lo
+afirmaba**, así que la suite entera lo daba por bueno: es exactamente lo que sólo aparece al abrir
+la app. Retirado en esta misma rama; los 15 tests del selector siguen verdes.
+
+### Lo otro anotado, y no es bloqueante
+
+Con el buscador activo, el contador del nodo padre muestra **los hijos que han pasado el filtro**,
+no el total: buscando «Cabagra» se lee «Puntarenas (1 cantón)» cuando tiene 13. Es coherente con lo
+que se está viendo, pero puede leerse como el total. No se cambia en esta ficha; queda dicho.
