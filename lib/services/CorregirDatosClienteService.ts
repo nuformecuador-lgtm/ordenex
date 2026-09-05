@@ -261,6 +261,21 @@ export class CorregirDatosClienteService implements ICorregirDatosClienteService
       if (distrito === null) {
         return this.rechazoDeUbicacion("El distrito indicado no existe");
       }
+      // FICHA 374/R30 — LA PUERTA REAL contra un distrito RETIRADO del catalogo.
+      //
+      // El filtro del desplegable es comodidad; sin este rechazo, cualquiera que reenvie la
+      // peticion mete la orden en un distrito retirado. Corregir una orden hacia un distrito es un
+      // ALTA ENCUBIERTA —crea futuro, no consulta pasado—, asi que aqui SI se recorta, al reves
+      // que en las lecturas del catalogo.
+      //
+      // ⚠️ EL MOTIVO ES PROPIO Y DISTINTO del de arriba a proposito: «no existe» y «fue retirado»
+      // son dos cosas distintas, y confundirlas manda a quien corrige a buscar una errata en un
+      // distrito que esta escrito bien.
+      if (!distrito.disponible) {
+        return this.rechazoDeUbicacion(
+          "Ese distrito fue retirado del catalogo: elige otro o pide que lo reactiven",
+        );
+      }
       // R6 — LA CADENA, en sus dos eslabones. Sin esto la fila puede quedar con un canton que no
       // pertenece a su provincia: nada rompe, y las lecturas por jerarquia dejan de encontrarla.
       if (distrito.cantonId !== cantonId || distrito.provinciaId !== provinciaId) {

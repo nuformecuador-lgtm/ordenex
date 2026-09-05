@@ -17,7 +17,7 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // FICHA 362 (design §1.1, R14/R15/R17) — EL CATALOGO CERRADO del historial de acciones.
 //
 // Modulo PURO: no importa Prisma en runtime (solo los TIPOS del enum, borrados en compilacion),
-// ni React, ni `lib/services`. Lo consumen el borde (zod), el servicio, el repositorio, los 45
+// ni React, ni `lib/services`. Lo consumen el borde (zod), el servicio, el repositorio, los 47
 // puntos de escritura y la pantalla.
 //
 // LAS DOS DIRECCIONES DEL CIERRE, y por eso hay `satisfies` Y `_AsegurarExhaustivo`:
@@ -27,15 +27,17 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // Un tipo declarado en la base y ausente del catalogo seria un filtro que no se puede pedir; uno
 // en el catalogo y ausente de la base seria un `validation_error` que nadie entiende.
 //
-// LOS CUARENTA Y CINCO, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y
+// LOS CUARENTA Y SIETE, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y
 // cada una añade UN tipo (`orden_ubicacion_corregida`, `usuario_fulfillment_cambiado`); la ficha 366
 // (2026-09-03) añade el tercero (`orden_zona_reconciliada`) y los tres entran en «mueve dinero»; la
 // ficha 371 añade el cuarto (`gestion_fecha_reprogramacion_corregida`), que entra en «hace
 // desaparecer algo»; la ficha 373 añade el quinto (`api_key_eliminada`), que entra en «cambia quien
-// puede hacer que». El motivo de cada uno esta escrito a su lado.
+// puede hacer que»; la ficha 374 añade el sexto y el septimo
+// (`nodo_geografico_desactivado`/`nodo_geografico_activado`), que entran los DOS en «hace
+// desaparecer algo». El motivo de cada uno esta escrito a su lado.
 
 /**
- * Los 45 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
+ * Los 47 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
  * permisos) y es el que consume el selector de filtros: no se reordena por gusto.
  */
 export const HISTORIAL_ACCION_TIPOS = [
@@ -81,7 +83,7 @@ export const HISTORIAL_ACCION_TIPOS = [
   // nueva (R10). Todas las filas de un mismo guardado comparten `lote_id` (R11).
   "orden_zona_reconciliada", // zonas.actualizarZona -> ZonaRepository.update
 
-  // --- A.2 · hace desaparecer algo (7) ---
+  // --- A.2 · hace desaparecer algo (9) ---
   // ⭑ FICHA 371 — la fecha de una reprogramacion ya registrada, corregida por un coordinador.
   // ENTRA AQUI, EN «hace desaparecer algo», PORQUE LA ORDEN PUEDE DEJAR DE ESTAR DONDE ESTABA:
   // corregir la fecha a HOY dispara la liberacion en el mismo acto (desenlace `liberada`), asi que
@@ -107,6 +109,23 @@ export const HISTORIAL_ACCION_TIPOS = [
   "zona_borrada", // zonas.borrarZona — fisico, y arrastra sus tarifas en cascada
   "vehiculo_borrado", // vehiculos.borrarVehiculo
   "plantilla_eliminada", // plantillas.eliminarPlantilla
+  // ⭑ FICHA 374 — retirar (y devolver) un nodo del catalogo geografico: provincia, canton o
+  // distrito. ENTRAN LOS DOS AQUI, en «hace desaparecer algo», y no es una excepcion: es el
+  // precedente LITERAL de `orden_eliminada` y `orden_recuperada`, que estan las dos en esta
+  // categoria. R17 de la 362 exige EXACTAMENTE una categoria por tipo, y lo que las dos filas
+  // documentan es el mismo eje: que territorio esta disponible.
+  //
+  // POR QUE SE AUDITA ESTO Y NO EL ALTA (R53). El precedente de vehiculos audita
+  // `vehiculo_borrado` y no `vehiculo_creado`; lo que decide no es el nombre de la operacion sino
+  // su PAPEL: aqui desactivar ES la operacion que quita. El alta es aditiva, inocua y visible en
+  // la propia pantalla.
+  //
+  // ⚠️ `valor_anterior` y `valor_nuevo` van en NULL a proposito: el PAR de tipos ya dice la
+  // transicion, asi que el comentario de `db/schema.prisma` sobre «se usan en exactamente cuatro
+  // tipos» sigue siendo cierto sin tocarlo. Y la etiqueta es la cadena de nombres del catalogo
+  // publico (`Cabagra · Buenos Aires · Puntarenas`): ni un dato de destinatario, ni texto libre.
+  "nodo_geografico_desactivado", // GeoRepository.cambiarActivacion (activo: false)
+  "nodo_geografico_activado", // GeoRepository.cambiarActivacion (activo: true)
 
   // --- A.3 · cambia quien puede hacer que (12) ---
   "usuario_creado", // usuarios.crearUsuario
@@ -138,7 +157,15 @@ export const HISTORIAL_ACCION_TIPOS = [
 
 export type HistorialAccionTipo = (typeof HISTORIAL_ACCION_TIPOS)[number];
 
-/** Los 17 tipos de entidad que una accion del catalogo puede afectar. */
+/**
+ * Los 20 tipos de entidad que una accion del catalogo puede afectar.
+ *
+ * ⭑ FICHA 374 — `provincia`, `canton` y `distrito` son la PRIMERA ampliacion de este enum: nacio
+ * con 17 valores en `20260902120000_historial_accion` y ninguna migracion posterior lo habia
+ * tocado. Entran TRES y no una entidad sintetica `nodo_geografico`: los 17 valores previos mapean
+ * 1:1 con tablas y este seria el primero que no; ademas, con tres, «que le paso a este distrito»
+ * se resuelve por el `@@index([entidadTipo, entidadId])` que ya existe.
+ */
 export const HISTORIAL_ACCION_ENTIDADES = [
   "orden",
   "usuario",
@@ -157,6 +184,9 @@ export const HISTORIAL_ACCION_ENTIDADES = [
   "rechazo_tienda_cobro",
   "ranking_snapshot_fila",
   "api_key",
+  "provincia",
+  "canton",
+  "distrito",
 ] as const satisfies readonly PrismaHistorialAccionEntidad[];
 
 export type HistorialAccionEntidad = (typeof HISTORIAL_ACCION_ENTIDADES)[number];
@@ -211,6 +241,9 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   zona_borrada: "hace_desaparecer",
   vehiculo_borrado: "hace_desaparecer",
   plantilla_eliminada: "hace_desaparecer",
+  // FICHA 374: los DOS en la misma categoria, igual que `orden_eliminada`/`orden_recuperada`.
+  nodo_geografico_desactivado: "hace_desaparecer",
+  nodo_geografico_activado: "hace_desaparecer",
   usuario_creado: "cambia_permisos",
   usuario_rol_cambiado: "cambia_permisos",
   usuario_zona_cambiada: "cambia_permisos",
@@ -260,6 +293,8 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   zona_borrada: "Borró una zona",
   vehiculo_borrado: "Borró un vehículo",
   plantilla_eliminada: "Eliminó una plantilla",
+  nodo_geografico_desactivado: "Retiró un nodo del catálogo geográfico",
+  nodo_geografico_activado: "Devolvió un nodo al catálogo geográfico",
   usuario_creado: "Creó un usuario",
   usuario_rol_cambiado: "Cambió el rol de un usuario",
   usuario_zona_cambiada: "Cambió la zona de un usuario",
@@ -300,6 +335,9 @@ export const ENTIDAD_LABELS: Record<HistorialAccionEntidad, string> = {
   rechazo_tienda_cobro: "Cobro por rechazo",
   ranking_snapshot_fila: "Fila del ranking",
   api_key: "API key",
+  provincia: "Provincia",
+  canton: "Cantón",
+  distrito: "Distrito",
 };
 
 /** Los tipos de UNA categoria. Es la traduccion `categoria -> accion IN (…)` del borde (R17). */

@@ -53,14 +53,22 @@ export function catalogoSatelite(
     mensajeros: [],
     zonas: [],
     tiendas: [],
+    // FICHA 374: `disponible` es la disponibilidad EFECTIVA del nodo. Esta semilla monta un
+    // catalogo sin nada retirado, asi que las tres van en `true`; los casos de nodo retirado
+    // viven en las suites de la 374 y no aqui.
     provincias: unicos(
-      ordenes.map((o) => ({ id: o.provinciaNombre, nombre: o.provinciaNombre })),
+      ordenes.map((o) => ({
+        id: o.provinciaNombre,
+        nombre: o.provinciaNombre,
+        disponible: true,
+      })),
     ),
     cantones: unicos(
       ordenes.map((o) => ({
         id: o.cantonNombre,
         nombre: o.cantonNombre,
         padreId: o.provinciaNombre,
+        disponible: true,
       })),
     ),
     distritos: unicos(
@@ -70,6 +78,7 @@ export function catalogoSatelite(
           id: o.distritoNombre as string,
           nombre: o.distritoNombre as string,
           padreId: o.cantonNombre,
+          disponible: true,
         })),
     ),
   };

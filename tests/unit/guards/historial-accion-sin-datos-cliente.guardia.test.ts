@@ -87,6 +87,12 @@ const PUNTOS_DE_ESCRITURA = [
   "lib/repositories/GastoFijoCobroRepository.ts",
   "lib/repositories/RechazoTiendaCobroRepository.ts",
   "lib/repositories/RankingSnapshotRepository.ts",
+  // ⭑ FICHA 374. Su bloque `appendAccion` lleva la CADENA DE NOMBRES del nodo geografico
+  // (`Cabagra · Buenos Aires · Puntarenas`). Son nombres de un catalogo PUBLICO —la DTA del IGN—,
+  // del mismo genero que el nombre de una zona: ni un dato de destinatario, ni texto libre. Entra
+  // en la lista aunque esta guardia no sea obligatoria, porque un punto de escritura FUERA de la
+  // lista es un punto sin vigilar.
+  "lib/repositories/GeoRepository.ts",
 ] as const;
 
 const FUENTE_ETIQUETAS = "lib/types/historial-accion-etiquetas.ts";

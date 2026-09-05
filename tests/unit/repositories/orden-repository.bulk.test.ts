@@ -97,12 +97,14 @@ describe("OrdenRepository.findExistingRemisiones (R25)", () => {
 describe("OrdenRepository — resolucion geografica batch (R19)", () => {
   it("findAllProvincias trae TODAS (sin filtrar por nombre; el match normalizado lo hace el service)", async () => {
     const prisma = buildPrisma();
-    prisma.provincia.findMany.mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]);
+    prisma.provincia.findMany.mockResolvedValue([{ id: "p1", nombre: "Pichincha", activo: true }]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findAllProvincias();
 
-    expect(rows).toEqual([{ id: "p1", nombre: "Pichincha" }]);
+    // FICHA 374: la fila gana `disponible` (la EFECTIVA). El `WHERE` NO cambia, y eso lo
+    // afirma el aserto de abajo: sigue sin haber `where` (R31).
+    expect(rows).toEqual([{ id: "p1", nombre: "Pichincha", disponible: true }]);
     // No hay `where`: se traen todas y el service resuelve el match normalizando
     // (insensible a acentos), evitando descartar "Bogotá" cuando llega "Bogota".
     const arg = prisma.provincia.findMany.mock.calls[0][0];
@@ -111,12 +113,16 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
 
   it("findCantonesByProvinciaIds filtra por provinciaId in", async () => {
     const prisma = buildPrisma();
-    prisma.canton.findMany.mockResolvedValue([{ id: "c1", nombre: "Quito", provinciaId: "p1" }]);
+    prisma.canton.findMany.mockResolvedValue([
+      { id: "c1", nombre: "Quito", provinciaId: "p1", activo: true, provincia: { activo: true } },
+    ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findCantonesByProvinciaIds(["p1"]);
 
-    expect(rows).toEqual([{ id: "c1", nombre: "Quito", provinciaId: "p1" }]);
+    expect(rows).toEqual([
+      { id: "c1", nombre: "Quito", provinciaId: "p1", disponible: true },
+    ]);
     const arg = prisma.canton.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ provinciaId: { in: ["p1"] } });
   });
@@ -127,14 +133,14 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
   it("findDistritosByCantonIds filtra por cantonId in y deriva zonaId de la N:M zona_distrito", async () => {
     const prisma = buildPrisma();
     prisma.distrito.findMany.mockResolvedValue([
-      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonas: [{ zonaId: "z1", zona: { esCentral: false } }] },
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", activo: true, canton: { activo: true, provincia: { activo: true } }, zonas: [{ zonaId: "z1", zona: { esCentral: false } }] },
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findDistritosByCantonIds(["c1"]);
 
     expect(rows).toEqual([
-      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false, esZonaEspecial: false },
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false, esZonaEspecial: false, disponible: true },
     ]);
     const arg = prisma.distrito.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ cantonId: { in: ["c1"] } });
@@ -149,7 +155,7 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
   it("findDistritosByCantonIds: distrito sin zonas -> zonaId null (no se inventa zona)", async () => {
     const prisma = buildPrisma();
     prisma.distrito.findMany.mockResolvedValue([
-      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonas: [] },
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", activo: true, canton: { activo: true, provincia: { activo: true } }, zonas: [] },
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
@@ -157,7 +163,7 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
 
     // Feature 98/R2: sin zona -> esCentral false (no se tarifa: la fila falla arriba por zonaId null).
     expect(rows).toEqual([
-      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null, esCentral: false, esZonaEspecial: false },
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null, esCentral: false, esZonaEspecial: false, disponible: true },
     ]);
   });
 
@@ -168,6 +174,8 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
         id: "d1",
         nombre: "San Rafael",
         cantonId: "c1",
+        activo: true,
+        canton: { activo: true, provincia: { activo: true } },
         zonas: [
           { zonaId: "z1", zona: { esCentral: true } },
           { zonaId: "z2", zona: { esCentral: false } },
@@ -180,7 +188,7 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
 
     // Ambiguo: ni "z1" (la primera) ni "z2". Null y esCentral false; la fila falla arriba.
     expect(rows).toEqual([
-      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null, esCentral: false, esZonaEspecial: false },
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null, esCentral: false, esZonaEspecial: false, disponible: true },
     ]);
   });
 
@@ -188,14 +196,14 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
   it("findDistritosByCantonIds: distrito en zona CENTRAL -> esCentral true", async () => {
     const prisma = buildPrisma();
     prisma.distrito.findMany.mockResolvedValue([
-      { id: "d1", nombre: "Centro", cantonId: "c1", zonas: [{ zonaId: "z1", zona: { esCentral: true } }] },
+      { id: "d1", nombre: "Centro", cantonId: "c1", activo: true, canton: { activo: true, provincia: { activo: true } }, zonas: [{ zonaId: "z1", zona: { esCentral: true } }] },
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findDistritosByCantonIds(["c1"]);
 
     expect(rows).toEqual([
-      { id: "d1", nombre: "Centro", cantonId: "c1", zonaId: "z1", esCentral: true, esZonaEspecial: false },
+      { id: "d1", nombre: "Centro", cantonId: "c1", zonaId: "z1", esCentral: true, esZonaEspecial: false, disponible: true },
     ]);
   });
 });

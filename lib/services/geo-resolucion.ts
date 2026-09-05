@@ -78,6 +78,29 @@ export type GeoResult =
   | { ok: true; geo: ResolvedGeo }
   | { ok: false; fieldErrors: Record<string, string[]> };
 
+// ── FICHA 374 (R32/R33) — LOS TRES MENSAJES DE NODO RETIRADO ─────────────────────────────────
+//
+// POR QUE EL RECHAZO VIVE AQUI Y NO EN EL `WHERE` DE LA LECTURA. Recortar los retirados en la
+// consulta haria caer la fila en «distrito no encontrado en el canton», un mensaje que MIENTE
+// sobre un distrito que existe: el integrador saldria a revisar la ortografia de una direccion
+// correcta, y eso genera tickets. El rechazo va donde ya viven sus tres hermanos.
+//
+// SON ERRORES DE FILA, NO DE LOTE (R36): salen por la misma via que
+// «distrito no encontrado en el canton», que el contrato publico ya declara dentro de `errores`.
+// Un lote con una fila retirada sigue devolviendo 200 y cotizando las demas.
+//
+// ⚠️ CAMBIAN EL CONTRATO DE UNA API PARA TERCEROS: `resolveGeo` lo comparten la carga masiva por
+// sesion y la cotizacion por API key. Por eso la ficha 374 anota los dos artefactos del canal y
+// una entrada fechada en `docs/api/CHANGELOG.md`.
+
+export const MSG_PROVINCIA_RETIRADA = "la provincia esta retirada del catalogo";
+export const MSG_CANTON_RETIRADO = "el canton esta retirado del catalogo";
+
+/** El distrito se nombra en el mensaje, igual que hace «no tiene zona asignada». */
+export function msgDistritoRetirado(nombre: string): string {
+  return `el distrito '${nombre}' esta retirado del catalogo`;
+}
+
 // R19/R20/R21: resuelve provincia -> canton (dentro de la provincia) -> distrito
 // (dentro del canton) por nombre. El distrito es OBLIGATORIO y de el se deriva
 // zonaId (modelo por-distrito, feature 24/R4/R11 decision b); una fila sin distrito,
@@ -102,6 +125,12 @@ export function resolveGeo(
     };
   }
   const provincia = provinciaResult.row;
+  // FICHA 374 (R32/R33): la comprobacion va DETRAS de su `lookup`, en el orden en que la funcion
+  // ya resuelve. De ahi sale la precedencia declarada —provincia, luego canton, luego distrito—
+  // sin ninguna regla extra: con los tres niveles retirados a la vez, gana la provincia.
+  if (!provincia.disponible) {
+    return { ok: false, fieldErrors: { provincia: [MSG_PROVINCIA_RETIRADA] } };
+  }
 
   const cantonResult = lookup(cantonIndex, `${provincia.id}::${normalize(raw.canton)}`);
   if (cantonResult.status !== "found") {
@@ -117,6 +146,9 @@ export function resolveGeo(
     };
   }
   const canton = cantonResult.row;
+  if (!canton.disponible) {
+    return { ok: false, fieldErrors: { canton: [MSG_CANTON_RETIRADO] } };
+  }
 
   // Feature 24/R4/R11: la zona de la orden se deriva del DISTRITO, que pasa a ser
   // obligatorio. Sin distrito no hay forma de resolver orden.zona_id (NOT NULL).
@@ -143,6 +175,12 @@ export function resolveGeo(
     };
   }
   const distrito = distritoResult.row;
+  // FICHA 374 (R32): ANTES del chequeo de zona, y es deliberado. Un distrito retirado suele
+  // ademas quedarse sin zona, y decirle al integrador «no tiene zona asignada» le manda a pedir
+  // que le configuren una tarifa en vez de a corregir la direccion. «Retirado» es mas concreto.
+  if (!distrito.disponible) {
+    return { ok: false, fieldErrors: { distrito: [msgDistritoRetirado(raw.distrito.trim())] } };
+  }
   // Feature 24/R4/R11 (reconciliacion feature 54): la zona de la orden se deriva
   // del DISTRITO (orden.zona_id es NOT NULL). Un distrito sin zona -> error de fila.
   if (distrito.zonaId === null) {

@@ -108,17 +108,19 @@ const TARIFA_Z3: TarifaVigente = {
   tarifaEspecialDevuelta: null,
 };
 
-const PROVINCIAS = [{ id: "p1", nombre: "San José" }];
-const CANTONES = [{ id: "c1", nombre: "Escazú", provinciaId: "p1" }];
+// FICHA 374: `disponible` es la EFECTIVA. Todo disponible aqui: el caso del nodo RETIRADO vive
+// en `tests/unit/services/geo-resolucion-retirados.test.ts`.
+const PROVINCIAS = [{ id: "p1", nombre: "San José", disponible: true }];
+const CANTONES = [{ id: "c1", nombre: "Escazú", provinciaId: "p1", disponible: true }];
 const DISTRITOS = [
-  { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false, esZonaEspecial: false },
-  { id: "d2", nombre: "Centro", cantonId: "c1", zonaId: "z2", esCentral: true, esZonaEspecial: false },
-  { id: "d3", nombre: "Sin Zona", cantonId: "c1", zonaId: null, esCentral: false, esZonaEspecial: false },
+  { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false, esZonaEspecial: false, disponible: true },
+  { id: "d2", nombre: "Centro", cantonId: "c1", zonaId: "z2", esCentral: true, esZonaEspecial: false, disponible: true },
+  { id: "d3", nombre: "Sin Zona", cantonId: "c1", zonaId: null, esCentral: false, esZonaEspecial: false, disponible: true },
   // Dos filas con el MISMO nombre dentro del canton -> distrito ambiguo (R19).
-  { id: "d4", nombre: "Doble", cantonId: "c1", zonaId: "z1", esCentral: false, esZonaEspecial: false },
-  { id: "d5", nombre: "Doble", cantonId: "c1", zonaId: "z2", esCentral: true, esZonaEspecial: false },
+  { id: "d4", nombre: "Doble", cantonId: "c1", zonaId: "z1", esCentral: false, esZonaEspecial: false, disponible: true },
+  { id: "d5", nombre: "Doble", cantonId: "c1", zonaId: "z2", esCentral: true, esZonaEspecial: false, disponible: true },
   // Feature 274: un tercer distrito NO-CENTRAL en una zona distinta de `z1`.
-  { id: "d6", nombre: "Santa Ana", cantonId: "c1", zonaId: "z3", esCentral: false, esZonaEspecial: false },
+  { id: "d6", nombre: "Santa Ana", cantonId: "c1", zonaId: "z3", esCentral: false, esZonaEspecial: false, disponible: true },
 ];
 
 function buildGeoRepo(overrides: Partial<CotizacionGeoRepository> = {}): CotizacionGeoRepository {

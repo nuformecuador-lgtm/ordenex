@@ -17,7 +17,10 @@ import {
   corregirDatosClienteSchema,
   type CorregirDatosClienteEntrada,
 } from "@/lib/types/correccion-datos-cliente";
-import type { GeografiaFiltrosDTO, OpcionConPadre } from "@/lib/types/filtros-ordenes";
+import type {
+  GeografiaFiltrosDTO,
+  OpcionGeograficaConPadre,
+} from "@/lib/types/filtros-ordenes";
 
 import { corregirDatosClienteErrorMessage } from "./corregir-datos-cliente-error-messages";
 import { CorregirUbicacionAviso } from "./CorregirUbicacionAviso";
@@ -252,11 +255,23 @@ async function geografiaFetcher(): Promise<GeografiaFiltrosDTO | null> {
 /** Estado de la lectura de precarga (R31). */
 type EstadoPrecarga = "cargando" | "listo" | "fallo";
 
-/** Opciones de un nivel geografico, acotadas a su padre. Lista PLANA + `padreId`: para eso existe. */
-function hijosDe(opciones: readonly OpcionConPadre[], padreId: string): SelectOption[] {
+/**
+ * Opciones de un nivel geografico, acotadas a su padre. Lista PLANA + `padreId`: para eso existe.
+ *
+ * ⚠️ FICHA 374 (R29) — AQUI SE RECORTA LO RETIRADO, y es de los POCOS sitios donde eso es lo
+ * correcto. El catalogo de filtros sigue trayendo los nodos retirados a proposito (R28): sin ellos,
+ * las ordenes historicas de un distrito retirado dejarian de poder filtrarse, porque en geografia
+ * NADIE TECLEA UN UUID. Pero corregir la ubicacion de una orden es un ALTA ENCUBIERTA —crea
+ * futuro, no consulta pasado—, asi que un nodo que ya no se puede usar no debe ofrecerse.
+ *
+ * Y este filtro es COMODIDAD, no la puerta: `CorregirDatosClienteService` rechaza en el servidor
+ * una correccion hacia un distrito retirado (R30), asi que quien reenvie la peticion a mano
+ * tampoco entra.
+ */
+function hijosDe(opciones: readonly OpcionGeograficaConPadre[], padreId: string): SelectOption[] {
   if (padreId === "") return [];
   return opciones
-    .filter((o) => o.padreId === padreId)
+    .filter((o) => o.padreId === padreId && o.disponible)
     .map((o) => ({ value: o.id, label: o.nombre }));
 }
 
@@ -445,10 +460,10 @@ export function CorregirDatosClienteModal({
   // hasta entonces vale lo que trajo la fila. `null` = sin guia = sin aviso.
   const guiaImpresa = guiaPrecargada ?? orden.numGuia ?? null;
 
-  const provincias: SelectOption[] = (geografia?.provincias ?? []).map((p) => ({
-    value: p.id,
-    label: p.nombre,
-  }));
+  // FICHA 374 (R29): los tres desplegables ofrecen SOLO nodos disponibles. Ver `hijosDe`.
+  const provincias: SelectOption[] = (geografia?.provincias ?? [])
+    .filter((p) => p.disponible)
+    .map((p) => ({ value: p.id, label: p.nombre }));
   const cantones = hijosDe(geografia?.cantones ?? [], provincia);
   const distritos = hijosDe(geografia?.distritos ?? [], canton);
 

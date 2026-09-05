@@ -12,9 +12,9 @@ const CATALOGO: CatalogoFiltrosOrdenesDTO = {
   mensajeros: [],
   zonas: [{ id: "z1", nombre: "GAM" }],
   tiendas: [{ id: "t1", nombre: "Tienda", esApiKey: false, activa: true }],
-  provincias: [{ id: "p1", nombre: "San Jose" }],
-  cantones: [{ id: "c1", nombre: "Central", padreId: "p1" }],
-  distritos: [{ id: "d1", nombre: "Carmen", padreId: "c1" }],
+  provincias: [{ id: "p1", nombre: "San Jose", disponible: true }],
+  cantones: [{ id: "c1", nombre: "Central", padreId: "p1", disponible: true }],
+  distritos: [{ id: "d1", nombre: "Carmen", padreId: "c1", disponible: true }],
 };
 
 function fakeService(resultado: unknown): IFiltrosOrdenesService {

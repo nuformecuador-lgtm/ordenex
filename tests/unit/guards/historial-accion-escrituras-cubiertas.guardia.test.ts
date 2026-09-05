@@ -17,7 +17,7 @@ import { HISTORIAL_ACCION_TIPOS } from "@/lib/types/historial-accion";
 //
 // Ninguna de las dos cosas rompe un test que no exista. Esta guardia es ese test.
 //
-// LAS TRES COSAS QUE EXIGE, por cada uno de los 45 tipos del catalogo:
+// LAS TRES COSAS QUE EXIGE, por cada uno de los 47 tipos del catalogo:
 //   1. que el metodo declarado como su productor EXISTA y su cuerpo se pueda recortar;
 //   2. que ese cuerpo llame a `appendAccion`;
 //   3. que la llamada sea ATOMICA con la mutacion, en una de las DOS formas validas:
@@ -329,6 +329,23 @@ const CENSO: EntradaCenso[] = [
     forma: "abre_tx",
     mutacion: /tx\.apiKey\.delete\(/,
   },
+  {
+    // FICHA 374 — retirar y devolver un nodo del catalogo geografico. Un solo metodo produce los
+    // DOS tipos: el flag es el mismo y la transaccion es la misma; lo que cambia es cual de los
+    // dos valores se escribe.
+    //
+    // La mutacion que se exige es el `update` del flag —la unica escritura del metodo (R8)—, y se
+    // acepta cualquiera de los tres niveles porque el nivel viaja como dato: no hay tres metodos,
+    // hay uno con tres delegados.
+    //
+    // ⚠️ ES EL METODO DONDE MAS FACIL SERIA SACAR EL `appendAccion` FUERA DE LA `$transaction`,
+    // porque la tx ya hace cinco cosas. Ahi esta el valor de esta entrada.
+    tipos: ["nodo_geografico_desactivado", "nodo_geografico_activado"],
+    archivo: "lib/repositories/GeoRepository.ts",
+    metodo: "cambiarActivacion",
+    forma: "abre_tx",
+    mutacion: /tx\.(provincia|canton|distrito)\.update\(/,
+  },
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -547,11 +564,11 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     expect(inventados, "el censo nombra un tipo que el catalogo no declara").toEqual([]);
   });
 
-  it("los 45 tipos del Anexo A (+ Q1, Q2, la 366, la 371 y la 373) siguen siendo 45", () => {
+  it("los 47 tipos del Anexo A (+ Q1, Q2, la 366, la 371, la 373 y la 374) siguen siendo 47", () => {
     // Numero DURO a proposito: añadir un tipo al enum obliga a pasar por aqui, y por tanto a
     // añadirlo al censo y a escribir su productor. Es el mecanismo de R14.
-    // 45 desde la ficha 373 (`api_key_eliminada`); 44 lo fue desde la 371.
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(45);
+    // 47 desde la ficha 374 (los dos `nodo_geografico_*`); 45 lo fue desde la 373.
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(47);
   });
 });
 
@@ -559,7 +576,7 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
 // 2 — R9: el registro va en la MISMA transaccion que la mutacion
 // ---------------------------------------------------------------------------------------------
 
-describe("362/R9 — los 45 tipos se registran DENTRO de la transaccion de su accion", () => {
+describe("362/R9 — los 47 tipos se registran DENTRO de la transaccion de su accion", () => {
   it.each(CENSO.map((e) => [`${e.archivo.split("/").pop()}#${e.metodo}`, e] as const))(
     "%s registra su accion en la misma transaccion que la escribe",
     (_nombre, entrada) => {

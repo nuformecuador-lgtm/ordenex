@@ -15,15 +15,18 @@ const MENSAJEROS: MensajeroFiltroDTO[] = [
 const MENSAJEROS_ZONA: MensajeroFiltroDTO[] = [
   { id: "m9", nombre: "Beto Ruiz", zonaId: "z-satelite", estado: "activo" },
 ];
-const PROVINCIAS = [{ id: "p1", nombre: "San Jose" }];
-const CANTONES = [{ id: "c1", nombre: "Central", padreId: "p1" }];
-const DISTRITOS = [{ id: "d1", nombre: "Carmen", padreId: "c1" }];
+// FICHA 374: las tres colecciones geograficas llevan `disponible` (la EFECTIVA). Aqui va en
+// `true` porque este servicio no filtra por ella —y no debe—: la bandera viaja en el DTO y filtra
+// el consumidor.
+const PROVINCIAS = [{ id: "p1", nombre: "San Jose", disponible: true }];
+const CANTONES = [{ id: "c1", nombre: "Central", padreId: "p1", disponible: true }];
+const DISTRITOS = [{ id: "d1", nombre: "Carmen", padreId: "c1", disponible: true }];
 
 /** La cadena geografica de UNA zona: otro conjunto, no un subconjunto del de arriba. */
 const GEO_ZONA = {
-  provincias: [{ id: "p9", nombre: "Limon" }],
-  cantones: [{ id: "c9", nombre: "Pococi", padreId: "p9" }],
-  distritos: [{ id: "d9", nombre: "Guapiles", padreId: "c9" }],
+  provincias: [{ id: "p9", nombre: "Limon", disponible: true }],
+  cantones: [{ id: "c9", nombre: "Pococi", padreId: "p9", disponible: true }],
+  distritos: [{ id: "d9", nombre: "Guapiles", padreId: "c9", disponible: true }],
 };
 
 function actor(rol: string, zonaId?: string | null): Actor {

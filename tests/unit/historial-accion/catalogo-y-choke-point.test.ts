@@ -10,6 +10,7 @@ import {
   HISTORIAL_ACCION_ENTIDADES,
   HISTORIAL_ACCION_TIPOS,
   accionesDeCategoria,
+  filtroHistorialAccionSchema,
 } from "@/lib/types/historial-accion";
 import {
   ACTOR_SISTEMA,
@@ -68,11 +69,14 @@ function filas(tx: ReturnType<typeof txDoble>, n = 0): Record<string, unknown>[]
 // =============================================================================================
 
 describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhaustivos", () => {
-  it("son 45 tipos, 17 entidades y 3 categorias, sin repetidos", () => {
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(45);
-    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(45);
-    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(17);
-    expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(17);
+  it("son 47 tipos, 20 entidades y 3 categorias, sin repetidos", () => {
+    // 47 desde la ficha 374 (los dos `nodo_geografico_*`); 45 lo fue desde la 373.
+    // 20 entidades desde la ficha 374: `provincia`, `canton` y `distrito` son la PRIMERA
+    // ampliacion de ese enum, que llevaba 17 desde la 362.
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(47);
+    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(47);
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(20);
+    expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(20);
     expect(CATEGORIAS_ACCION).toHaveLength(3);
   });
 
@@ -113,6 +117,67 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(ACCION_LABELS.api_key_eliminada).toBe("Eliminó una API key");
   });
 
+  it("⭑ FICHA 374 (R56): los dos `nodo_geografico_*` son DESAPARICION, con etiqueta y como filtro", () => {
+    // Los DOS en la misma categoria, incluido el que devuelve: es el precedente LITERAL de
+    // `orden_eliminada`/`orden_recuperada`, que estan las dos en «hace desaparecer algo». R17 de la
+    // 362 exige exactamente una categoria por tipo, y lo que las dos filas documentan es el mismo
+    // eje: que territorio esta disponible.
+    expect(HISTORIAL_ACCION_TIPOS).toContain("nodo_geografico_desactivado");
+    expect(HISTORIAL_ACCION_TIPOS).toContain("nodo_geografico_activado");
+    expect(CATEGORIA_POR_ACCION.nodo_geografico_desactivado).toBe("hace_desaparecer");
+    expect(CATEGORIA_POR_ACCION.nodo_geografico_activado).toBe("hace_desaparecer");
+    // Y son valores DISTINTOS: saber cual de las dos ocurrio no puede depender de ningun campo
+    // adicional (R52). Literales a proposito: el texto ES el contrato de la pantalla.
+    expect(ACCION_LABELS.nodo_geografico_desactivado).toBe(
+      "Retiró un nodo del catálogo geográfico",
+    );
+    expect(ACCION_LABELS.nodo_geografico_activado).toBe(
+      "Devolvió un nodo al catálogo geográfico",
+    );
+    expect(ACCION_LABELS.nodo_geografico_desactivado).not.toBe(ACCION_LABELS.nodo_geografico_activado);
+    // Las tres entidades nuevas, con su etiqueta legible.
+    expect(HISTORIAL_ACCION_ENTIDADES).toEqual(
+      expect.arrayContaining(["provincia", "canton", "distrito"]),
+    );
+    expect(ENTIDAD_LABELS.provincia).toBe("Provincia");
+    expect(ENTIDAD_LABELS.canton).toBe("Cantón");
+    expect(ENTIDAD_LABELS.distrito).toBe("Distrito");
+    // R56 — «admitirlas como valor de filtro»: el borde del listado las acepta.
+    const filtro = filtroHistorialAccionSchema.safeParse({
+      accion: ["nodo_geografico_desactivado", "nodo_geografico_activado"],
+      entidadTipo: ["provincia", "canton", "distrito"],
+    });
+    expect(filtro.success).toBe(true);
+    // Contraprueba del mismo borde: un valor inventado NO pasa.
+    expect(
+      filtroHistorialAccionSchema.safeParse({ accion: ["nodo_geografico_movido"] }).success,
+    ).toBe(false);
+  });
+
+  it("⭑ FICHA 374 (R54): la etiqueta geografica es la CADENA de ascendientes", () => {
+    // Literal, y el literal ES el contrato: es lo que se lee en `/historico/acciones` y lo que el
+    // spec fija como ejemplo. Compararlo contra `unir(...)` seria compararlo con su propia fuente.
+    expect(
+      etiquetaDeEntidad("distrito", {
+        nombre: "Cabagra",
+        cantonNombre: "Buenos Aires",
+        provinciaNombre: "Puntarenas",
+      }),
+    ).toBe("Cabagra · Buenos Aires · Puntarenas");
+    expect(
+      etiquetaDeEntidad("canton", { nombre: "Buenos Aires", provinciaNombre: "Puntarenas" }),
+    ).toBe("Buenos Aires · Puntarenas");
+    expect(etiquetaDeEntidad("provincia", { nombre: "Puntarenas" })).toBe("Puntarenas");
+    // Un ascendiente que no resuelve NO deja el separador suelto ni escribe "null".
+    expect(
+      etiquetaDeEntidad("distrito", {
+        nombre: "Cabagra",
+        cantonNombre: null,
+        provinciaNombre: null,
+      }),
+    ).toBe("Cabagra");
+  });
+
   it("`tarifa_borrada` es DESAPARICION y no dinero, aunque mueva precio (R17)", () => {
     // R17 exige EXACTAMENTE una categoria. Lo que la fila documenta es la desaparicion
     // irreversible: `tarifas` borra en FISICO.
@@ -139,14 +204,16 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(new Set(porCategoria).size).toBe(HISTORIAL_ACCION_TIPOS.length);
   });
 
-  it("el reparto por categoria es el del Anexo A: 26 dinero, 7 desaparicion, 12 permisos", () => {
+  it("el reparto por categoria es el del Anexo A: 26 dinero, 9 desaparicion, 12 permisos", () => {
     // Numeros DUROS: mover un tipo de categoria es una decision, y tiene que pasar por aqui.
     // 26 y no 25 desde la ficha 366: `orden_zona_reconciliada` entra en DINERO.
     // 7 y no 6 desde la ficha 371: `gestion_fecha_reprogramacion_corregida` entra en DESAPARICION.
     // 12 y no 11 desde la ficha 373: `api_key_eliminada` entra en PERMISOS, con sus cuatro
     // hermanas de API key, y NO en «hace desaparecer algo» (R25).
+    // 9 y no 7 desde la ficha 374: los DOS `nodo_geografico_*` entran en DESAPARICION —tambien el
+    // que devuelve—, igual que `orden_eliminada` y `orden_recuperada`.
     expect(accionesDeCategoria("mueve_dinero")).toHaveLength(26);
-    expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(7);
+    expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(9);
     expect(accionesDeCategoria("cambia_permisos")).toHaveLength(12);
   });
 });

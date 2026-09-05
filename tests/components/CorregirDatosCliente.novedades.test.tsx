@@ -146,16 +146,16 @@ const CATALOGO_OK = {
     tiendas: [],
     mensajeros: [],
     provincias: [
-      { id: "prov-sj", nombre: "San José" },
-      { id: "prov-al", nombre: "Alajuela" },
+      { id: "prov-sj", nombre: "San José", disponible: true },
+      { id: "prov-al", nombre: "Alajuela", disponible: true },
     ],
     cantones: [
-      { id: "can-escazu", nombre: "Escazú", padreId: "prov-sj" },
-      { id: "can-desamp", nombre: "Desamparados", padreId: "prov-sj" },
+      { id: "can-escazu", nombre: "Escazú", padreId: "prov-sj", disponible: true },
+      { id: "can-desamp", nombre: "Desamparados", padreId: "prov-sj", disponible: true },
     ],
     distritos: [
-      { id: "dis-san-rafael", nombre: "San Rafael", padreId: "can-escazu" },
-      { id: "dis-patarra", nombre: "Patarrá", padreId: "can-desamp" },
+      { id: "dis-san-rafael", nombre: "San Rafael", padreId: "can-escazu", disponible: true },
+      { id: "dis-patarra", nombre: "Patarrá", padreId: "can-desamp", disponible: true },
     ],
   },
 };

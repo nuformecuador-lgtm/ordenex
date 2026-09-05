@@ -41,6 +41,17 @@ import type {
 } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { zonaUnicaDeDistrito } from "@/lib/repositories/_shared/zona-colapso";
+// FICHA 374: el predicado de la disponibilidad geografica vive en UN solo sitio; aqui solo se
+// PROYECTA (R31). Y `ESTADOS_TERMINALES` se importa de su fuente unica para el conteo de R61.
+import {
+  SELECT_CADENA_CANTON,
+  SELECT_CADENA_DISTRITO,
+  SELECT_FLAG_PROPIO,
+  disponibleDesdeCadena,
+  disponibleDesdeCadenaCanton,
+} from "@/lib/repositories/_shared/geografia-activa";
+import { ESTADOS_TERMINALES } from "@/lib/types/order-status-transiciones";
+import type { NivelGeografico } from "@/lib/types/geografia-nodo";
 // FICHA 362 — el punto UNICO de escritura del registro de acciones, y la fuente unica de la
 // etiqueta congelada. Los cuatro escritores de esta clase que registran accion lo llaman DENTRO
 // de su propia `$transaction`.
@@ -2080,9 +2091,14 @@ export class OrdenRepository implements IOrdenRepository {
    * acentos, y descartaría "Bogotá" cuando el archivo trae "Bogota".
    */
   async findAllProvincias(): Promise<ProvinciaRow[]> {
-    return this.prisma.provincia.findMany({
-      select: { id: true, nombre: true },
+    // FICHA 374 (R31): PROYECTA el flag, NO recorta. Un `where` aqui haria caer la fila en
+    // «provincia no encontrada», que MIENTE sobre una provincia que existe; el rechazo con
+    // mensaje propio vive en `resolveGeo`.
+    const rows = await this.prisma.provincia.findMany({
+      select: { id: true, nombre: true, ...SELECT_FLAG_PROPIO },
     });
+    // Una provincia no tiene ascendiente: su flag propio ES su disponibilidad efectiva.
+    return rows.map((r) => ({ id: r.id, nombre: r.nombre, disponible: r.activo }));
   }
 
   /** R19: cantones de las provincias resueltas (todo el universo, el service filtra por jerarquia). */
@@ -2090,9 +2106,15 @@ export class OrdenRepository implements IOrdenRepository {
     if (provinciaIds.length === 0) return [];
     const rows = await this.prisma.canton.findMany({
       where: { provinciaId: { in: provinciaIds } },
-      select: { id: true, nombre: true, provinciaId: true },
+      // FICHA 374 (R31): se proyecta la cadena; el `WHERE` no gana ni una condicion.
+      select: { id: true, nombre: true, provinciaId: true, ...SELECT_CADENA_CANTON },
     });
-    return rows;
+    return rows.map((r) => ({
+      id: r.id,
+      nombre: r.nombre,
+      provinciaId: r.provinciaId,
+      disponible: disponibleDesdeCadenaCanton(r),
+    }));
   }
 
   /** R19: distritos de los cantones resueltos. */
@@ -2110,6 +2132,8 @@ export class OrdenRepository implements IOrdenRepository {
         nombre: true,
         cantonId: true,
         zonaEspecial: true,
+        // FICHA 374 (R31): la cadena se PROYECTA. El `WHERE` sigue siendo el de siempre.
+        ...SELECT_CADENA_DISTRITO,
         zonas: { select: { zonaId: true, zona: { select: { esCentral: true } } } },
       },
     });
@@ -2132,6 +2156,8 @@ export class OrdenRepository implements IOrdenRepository {
         // A diferencia de `esCentral`, esta NO depende de que el distrito resuelva UNA zona: la
         // marca es del distrito, no de su zona. `=== true` porque la columna es tri-valuada.
         esZonaEspecial: d.zonaEspecial === true,
+        // FICHA 374: la disponibilidad EFECTIVA, ya compuesta con canton y provincia.
+        disponible: disponibleDesdeCadena(d),
       };
     });
   }
@@ -2269,7 +2295,13 @@ export class OrdenRepository implements IOrdenRepository {
         nombre: true,
         cantonId: true,
         zonaEspecial: true,
-        canton: { select: { provinciaId: true } },
+        // FICHA 374 (R31): se proyecta la cadena entera. `provinciaId` sigue viniendo por la misma
+        // relacion; el `activo` de canton y provincia viaja al lado, sin una segunda consulta.
+        ...SELECT_CADENA_DISTRITO,
+        // El `canton` de arriba se re-declara para sumarle `provinciaId`, que esta lectura ya
+        // traia. La cadena de flags entra por el fragmento compartido, NO escrita a mano: la
+        // guardia de R11 prohibe el literal `activo: true` fuera de `_shared/geografia-activa.ts`.
+        canton: { select: { provinciaId: true, ...SELECT_CADENA_CANTON } },
         zonas: { select: { zonaId: true, zona: { select: { nombre: true, esCentral: true } } } },
       },
     });
@@ -2284,7 +2316,48 @@ export class OrdenRepository implements IOrdenRepository {
       zonaNombre: zona?.zona.nombre ?? null,
       esCentral: zona?.zona.esCentral ?? false,
       esZonaEspecial: row.zonaEspecial === true,
+      // FICHA 374 (R30): la disponibilidad EFECTIVA. El servicio la usa para rechazar la
+      // correccion con un motivo PROPIO —«el distrito fue retirado»— distinto del de «no existe».
+      disponible: disponibleDesdeCadena(row),
     };
+  }
+
+  /**
+   * FICHA 374 (R60/R61) — cuantas ordenes SIN ENTREGAR cuelgan de un nodo geografico.
+   *
+   * SE CUENTA POR LA COLUMNA CONGELADA DE LA ORDEN, no enumerando los descendientes del nodo. La
+   * orden lleva `provincia_id`, `canton_id` y `distrito_id`, y los tres tienen indice propio, asi
+   * que un `count` por nivel es un acceso por indice en vez de un `IN` de hasta 123 ids. Y es
+   * ademas MAS CORRECTO: `distrito_id` es el UNICO nullable de la terna, asi que una orden sin
+   * distrito CUENTA al desactivar su canton y NO cuenta al desactivar un distrito.
+   *
+   * «SIN ENTREGAR» = `deleted_at IS NULL` + estatus fuera de `ESTADOS_TERMINALES`. Los otros dos
+   * candidatos del repo estan descartados con motivo:
+   *   - `ESTADOS_PENDIENTES` (`CierreDiaService`) es una lista LOCAL de tres estados del cierre del
+   *     dia: deja fuera ordenes vivas que no estan en ninguno de los tres, y contarlas de menos es
+   *     peor que no contarlas;
+   *   - «sin gestionar» (`ConteosPublicosRepository`) daria por resuelta una orden REPROGRAMADA,
+   *     que tiene gestion y sigue sin entregarse.
+   *
+   * `ESTADOS_TERMINALES` se IMPORTA de su fuente unica y NO se declara aqui (lo vigila
+   * `tests/unit/guards/geografia-terminales-una-sola-fuente.guardia.test.ts`): dos listas de
+   * estados terminales son dos definiciones de «entregado» que un dia divergen, y la que divergiera
+   * contaria mal justo en la pantalla que decide retirar territorio.
+   */
+  async contarSinEntregarPorNodoGeografico(nivel: NivelGeografico, id: string): Promise<number> {
+    const porNivel =
+      nivel === "provincia"
+        ? { provinciaId: id }
+        : nivel === "canton"
+          ? { cantonId: id }
+          : { distritoId: id };
+    return this.prisma.orden.count({
+      where: {
+        ...porNivel,
+        deletedAt: null,
+        estatus: { value: { notIn: [...ESTADOS_TERMINALES] } },
+      },
+    });
   }
 
   /** R27: insercion masiva en lotes de `batchSize`, tolerando carreras de num_remision. */

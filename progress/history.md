@@ -4428,3 +4428,30 @@ detectó el gate: `jq` no está instalado y su ausencia es un `warn`, así que l
   dándole a cada worktree su propia instalación (`pnpm install` + `db:generate` con `DATABASE_URL`
   dummy); documentado en la memoria `base-local-compartida-rompe-gates-ajenos` para no repetirlo:
   nunca compartir `node_modules` entre worktrees con sesiones concurrentes activas.
+
+## 2026-09-05 — 374: el catálogo geográfico se administra desde la app
+
+- Nace de un reporte de operaciones: faltaba el distrito **Cabagra** en Puntarenas. Faltaban tres
+  (491 en la base, 494 en la DTA 2026 del IGN). El arreglo salió por migración el mismo día, pero la
+  causa de fondo era que el catálogo solo se poblaba por migración o por el seed CLI: cada cambio de
+  la División Territorial Administrativa exigía desarrollador y despliegue. Ahora el rol `maestro`
+  añade y retira provincias, cantones y distritos desde `/configuracion/geografia`.
+- Requisitos cubiertos: **R1–R63**, matriz completa en `progress/impl_374.md`.
+- Decisiones del humano: (1) quitar es **desactivar**, nunca borrado físico — y el repositorio ni
+  siquiera expone `delete` para estas tres tablas, con guardia que lo vigila; (2) los 148 distritos
+  sin zona son intencionales y no se tocan; (3) se audita activar/desactivar en `historial_accion`,
+  no el alta: en esta pantalla retirar ocupa el lugar que el borrado ocupa en las demás.
+- La cascada se **evalúa** (`distrito.activo AND canton.activo AND provincia.activo`), no se
+  materializa: por eso reactivar un cantón no resucita los distritos que estaban retirados por su
+  cuenta. Verificado en la app, no solo en la suite.
+- El catálogo de **alta** excluye lo retirado; el de **filtro** no, porque en geografía el
+  desplegable es la única vía y ocultarlo dejaría infiltrables las órdenes históricas.
+- Encontrado al abrir la app: el selector de Tarifas pintaba al usuario «Revisa la consola» con dos
+  `console.log` detrás. Ningún test lo afirmaba. Retirado.
+- **DEUDA declarada, no resuelta:** (a) los tres `GROUP BY` de duplicados de nombre **no se han
+  medido en preview** — hay que correrlos allí antes de aplicar la migración o el `CREATE UNIQUE
+  INDEX` falla; (b) el **renombrado** queda fuera a propósito: `seed-zonas.ts` resuelve por nombre y
+  si no encuentra crea, así que sin `codigo_dta` como clave estable renombrar duplicaría el nodo en
+  silencio — es la ficha siguiente; (c) la colisión `ZONA SUR` / `Zona Sur` entre la migración y el
+  seed CLI (3 distritos afectados en desarrollo, **cero en producción**), documentada en
+  `public/geografia-cr-completa-NOTAS.md`.
