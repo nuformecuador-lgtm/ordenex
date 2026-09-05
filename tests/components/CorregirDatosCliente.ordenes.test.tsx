@@ -110,20 +110,23 @@ function orden(over: Partial<OrdenListItemDTO> = {}): OrdenListItemDTO {
 // sola rama, «elegir provincia recorta los cantones» pasaria en verde con un componente que no
 // recorta nada. El encadenamiento solo se puede medir si hay algo que dejar fuera.
 
+// FICHA 374: las tres listas del catalogo llevan `disponible` (la disponibilidad EFECTIVA, con la
+// cascada ya aplicada). Aqui van todas en `true` porque este archivo mide OTRA cosa; el caso del
+// nodo retirado vive en `tests/unit/components/corregir-ubicacion-inactivos.test.tsx` (R29).
 const PROVINCIAS = [
-  { id: "prov-sj", nombre: "San José" },
-  { id: "prov-al", nombre: "Alajuela" },
+  { id: "prov-sj", nombre: "San José", disponible: true },
+  { id: "prov-al", nombre: "Alajuela", disponible: true },
 ];
 const CANTONES = [
-  { id: "can-escazu", nombre: "Escazú", padreId: "prov-sj" },
-  { id: "can-desamp", nombre: "Desamparados", padreId: "prov-sj" },
-  { id: "can-alajuela", nombre: "Alajuela centro", padreId: "prov-al" },
+  { id: "can-escazu", nombre: "Escazú", padreId: "prov-sj", disponible: true },
+  { id: "can-desamp", nombre: "Desamparados", padreId: "prov-sj", disponible: true },
+  { id: "can-alajuela", nombre: "Alajuela centro", padreId: "prov-al", disponible: true },
 ];
 const DISTRITOS = [
-  { id: "dis-san-rafael", nombre: "San Rafael", padreId: "can-escazu" },
-  { id: "dis-san-antonio", nombre: "San Antonio", padreId: "can-escazu" },
-  { id: "dis-patarra", nombre: "Patarrá", padreId: "can-desamp" },
-  { id: "dis-la-garita", nombre: "La Garita", padreId: "can-alajuela" },
+  { id: "dis-san-rafael", nombre: "San Rafael", padreId: "can-escazu", disponible: true },
+  { id: "dis-san-antonio", nombre: "San Antonio", padreId: "can-escazu", disponible: true },
+  { id: "dis-patarra", nombre: "Patarrá", padreId: "can-desamp", disponible: true },
+  { id: "dis-la-garita", nombre: "La Garita", padreId: "can-alajuela", disponible: true },
 ];
 
 const CATALOGO_OK = {
