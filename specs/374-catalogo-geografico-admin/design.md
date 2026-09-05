@@ -1,8 +1,17 @@
 # Ficha 374 — Administrar el catálogo geográfico desde la app · design
 
-> Cubre `requirements.md` R1–R50. Todo lo que sigue se apoya en el árbol leído el 2026-09-05; las
+> Cubre `requirements.md` R1–R63. Todo lo que sigue se apoya en el árbol leído el 2026-09-05; las
 > referencias `archivo:línea` son verificables y las tres que **no** cuadraban con el encargo están
 > declaradas en `requirements.md §0.3` en vez de repetidas.
+>
+> **R51–R63 entraron el 2026-09-05**, al cerrar las cinco preguntas abiertas: el registro de
+> acciones de activar/desactivar (§5.5), el conteo de órdenes sin entregar (§5.6) y el filtro
+> tri-estado de la pantalla (§7.5).
+>
+> **La implementación va BACKEND PRIMERO, FRONTEND DESPUÉS**: bloques A–G e I de `tasks.md` antes
+> que el bloque H, sin solaparse. No es preferencia de estilo — el frontend consume DTOs, acciones y
+> textos que el backend estrena en esta misma ficha, y en este repo el gate leído sobre un árbol
+> mutado por otro agente no vale.
 
 ## 0. La decisión, en una frase
 
@@ -31,6 +40,8 @@ Provincia  activo=false  ──┐
 | `scripts/seed-zonas.ts` | No se toca **y no hace falta**: cuando encuentra la fila por nombre devuelve su id y **no escribe** (`:110-111,121,134`), así que nunca reactiva lo desactivado ni duplica lo existente |
 | Los `down.sql` anteriores | Son fotos históricas |
 | `GeografiaSelector` como componente | Se **extiende** (R47), no se extrae ni se reescribe. Ver §7.3 |
+| `valor_anterior` / `valor_nuevo` de `historial_accion` | Se dejan en `NULL`. El **par** de tipos ya dice la transición (R52), así que el comentario de `db/schema.prisma:3160-3163` —«se usan en exactamente cuatro tipos»— **sigue siendo cierto sin tocarlo** |
+| El alta, en el registro de acciones | R53: no se audita. Es aditiva, inocua y visible en la propia pantalla, igual que `vehiculo_creado`, que tampoco existe |
 
 ---
 
@@ -127,6 +138,52 @@ model Distrito {
   @@map("distrito")
 }
 ```
+
+### 2.2.b La segunda migración: los cinco valores de enum del registro (R51/R52/R56/R57)
+
+Va **aparte** de la anterior, siguiendo literalmente el precedente de la 373: Postgres no permite
+**usar** un valor de enum en la misma transacción que lo añade (55P04), y separar deja cada
+`down.sql` con una sola cosa que revertir.
+
+`db/migrations/<ts+1>_historial_accion_nodo_geografico/migration.sql`:
+
+```sql
+-- FICHA 374 — el rastro de retirar y devolver un nodo del catalogo geografico.
+--
+-- QUE REGISTRA: que un maestro RETIRO (o devolvio) una provincia, un canton o un distrito. El alta
+-- NO se registra (R53): es aditiva e inocua, igual que `vehiculo_creado`, que tampoco existe.
+--
+-- DOS TIPOS Y NO UNO CON UN BOOLEANO: con un solo valor habria que abrir el detalle de la fila para
+-- saber que paso. El par se lee en el listado.
+--
+-- TRES ENTIDADES Y NO UNA: `historial_accion_entidad` mapea 1:1 con tablas en sus 17 valores
+-- actuales, y esto no es la excepcion. Ademas deja filtrar «que le paso a este distrito» por el
+-- indice ([entidad_tipo, entidad_id]) que ya existe.
+-- ⚠️ ES LA PRIMERA AMPLIACION DE `historial_accion_entidad`: nacio con 17 valores en
+-- `20260902120000_historial_accion` y ninguna migracion posterior lo habia tocado.
+ALTER TYPE "historial_accion_tipo"    ADD VALUE IF NOT EXISTS 'nodo_geografico_desactivado';
+ALTER TYPE "historial_accion_tipo"    ADD VALUE IF NOT EXISTS 'nodo_geografico_activado';
+ALTER TYPE "historial_accion_entidad" ADD VALUE IF NOT EXISTS 'provincia';
+ALTER TYPE "historial_accion_entidad" ADD VALUE IF NOT EXISTS 'canton';
+ALTER TYPE "historial_accion_entidad" ADD VALUE IF NOT EXISTS 'distrito';
+```
+
+**`down.sql`** — Postgres no tiene `DROP VALUE`, así que **recrea los dos tipos** con su lista
+previa y recastea las dos columnas de `historial_accion` que los usan (`accion` y `entidad_tipo`).
+De dónde salen las listas, sin lugar a duda:
+
+> **Los 45 de `historial_accion_tipo`:** los **44** del `CREATE TYPE` de
+> `20260904120000_historial_accion_api_key_eliminada/down.sql` **más** `'api_key_eliminada'`, que es
+> el valor que aquella migración añadió y que su propio `down` no podía listar. `ADD VALUE` sin
+> `BEFORE`/`AFTER` **apende**, así que ese es el `enumsortorder` real.
+>
+> **Los 17 de `historial_accion_entidad`:** los del `CREATE TYPE` original
+> (`20260902120000_historial_accion/migration.sql:136-154`), **tal cual**: ninguna migración lo ha
+> ampliado desde entonces, así que no hay nada que sumarle.
+
+Con la misma precondición ruidosa que la 373 (R57): si queda una fila con cualquiera de los cinco
+valores, el `USING` del `ALTER COLUMN` **aborta el rollback**, y eso es lo correcto — borrar el
+rastro de quién retiró un distrito no es seguro. **Ningún `down.sql` anterior se toca.**
 
 **El nombre de la columna es `activo` en las tres, también en `provincia`.** Gramaticalmente
 tocaría `activa`; se elige la uniformidad porque el predicado compartido y los fragmentos `where`
@@ -313,6 +370,24 @@ export async function cambiarActivacionGeografica(
   input: unknown,
   deps: GeografiaActionDeps = {},
 ): Promise<CambiarActivacionGeograficaResult>;
+
+// --- El dato de la confirmacion (R60): mismo `{nivel, id}` que arriba, sin `activo`. ---
+export const nodoGeograficoSchema = z
+  .object({ nivel: z.enum(NIVELES_GEOGRAFICOS), id: z.string().min(1) })
+  .strict();
+
+export type ContarOrdenesSinEntregarResult =
+  | { status: "ok"; ordenes: number }
+  | { status: "not_found" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" }
+  | { status: "forbidden" };
+
+/** SOLO LECTURA: alimenta la confirmacion de desactivar. Nunca escribe. */
+export async function contarOrdenesSinEntregarDeNodo(
+  input: unknown,
+  deps: GeografiaActionDeps = {},
+): Promise<ContarOrdenesSinEntregarResult>;
 ```
 
 Cuerpo calcado de `crearVehiculo` (`lib/actions/vehiculos.ts:64-82`): actor → sin actor,
@@ -337,12 +412,24 @@ Prisma, y que gana `deps` opcional para poder probarse sin base.
 const READ_ROLES = new Set<string>(["maestro"]);
 const WRITE_ROLES = new Set<string>(["maestro"]);
 
+/**
+ * El segundo repositorio entra por `Pick`, como `CorregirDatosClienteRepo`
+ * (`CorregirDatosClienteService.ts:81-84`): el conteo de R60 es una lectura de ORDENES y vive donde
+ * viven las ordenes. Un servicio que lo recibe `undefined` compila igual y muere en produccion, asi
+ * que la tarea D3 exige comprobar que el composition root lo PASA, no solo que lo importa.
+ */
+export type GeografiaOrdenesRepo = Pick<IOrdenRepository, "contarSinEntregarPorNodoGeografico">;
+
 export class GeografiaService implements IGeografiaService {
-  constructor(private readonly repo: IGeoRepository) {}
+  constructor(
+    private readonly repo: IGeoRepository,
+    private readonly ordenes: GeografiaOrdenesRepo,
+  ) {}
 
   listarArbol(actor: Actor): Promise<ListarArbolServiceResult>;
   crear(input: CrearNodoGeograficoInput, actor: Actor): Promise<CrearNodoGeograficoServiceResult>;
   cambiarActivacion(input: CambiarActivacionInput, actor: Actor): Promise<CambiarActivacionServiceResult>;
+  contarOrdenesSinEntregar(input: NodoGeograficoInput, actor: Actor): Promise<ContarServiceResult>;
 }
 ```
 
@@ -359,9 +446,12 @@ export class GeografiaService implements IGeografiaService {
    exactamente el fallo que el renombrado quedó fuera de alcance para no provocar—;
 4. `repo.crear(nivel, nombreNormalizadoParaGuardar, padreId)` → el id.
 
-`cambiarActivacion`: rol → `repo.cambiarActivacion(nivel, id, activo)` → `false` = `not_found`
-(R22). Idempotente por construcción (R21): poner `true` sobre `true` es un `UPDATE` que afecta a una
-fila y la deja igual.
+`cambiarActivacion`: rol → `repo.cambiarActivacion(nivel, id, activo, actor.usuarioId)` →
+`"no_existe"` = `not_found` (R22). Los tres desenlaces del repositorio están en §5.5: el nodo no
+existe, el flag **ya estaba así** (no se escribe nada, R53) y el cambio real (que audita, R51/R52).
+
+`contarOrdenesSinEntregar`: rol → `repo.findHermanos`-no; aquí basta comprobar que el nodo existe
+—se resuelve dentro del propio conteo (§5.6)— y devolver el número.
 
 ### 5.3 Repositorio — `GeoRepository` (+ `IGeoRepository`)
 
@@ -395,12 +485,21 @@ findHermanos(
 /** Crea el nodo. Deja escapar la violacion de UNIQUE: la traduce el borde (R18). */
 crear(nivel: NivelGeografico, nombre: string, padreId: string | null): Promise<string>;
 
-/** `updateMany` (no lanza si no existe): `false` = ninguna fila alcanzada -> `not_found`. */
-cambiarActivacion(nivel: NivelGeografico, id: string, activo: boolean): Promise<boolean>;
+/**
+ * Cambia el flag Y registra la accion en la MISMA transaccion (§5.5). Tres desenlaces, y son
+ * tres a proposito: «no existe» != «ya estaba asi» != «cambio», porque solo el tercero audita.
+ */
+cambiarActivacion(
+  nivel: NivelGeografico,
+  id: string,
+  activo: boolean,
+  actorUsuarioId: string | null,
+): Promise<"no_existe" | "sin_cambio" | "cambiado">;
 ```
 
-`updateMany` y no `update` es el patrón que ya usa `VehiculoRepository.update` (`:41-46`), con su
-comentario: no lanza si la fila no existe, devuelve `count 0`.
+Su `Pick` del cliente Prisma gana `$transaction`, `historialAccion` y `usuario` —lo que
+`appendAccion` y `resolverActorCongelado` necesitan—, exactamente como lo hizo
+`VehiculoPrismaClient` en la ficha 362 (`VehiculoRepository.ts:7-12`).
 
 **El repositorio no expone `delete` ni `deleteMany` para ninguna de las tres tablas, y eso es una
 propiedad estructural, no una promesa** (R5): la interfaz no lo declara, la clase no lo implementa
@@ -414,6 +513,117 @@ y una guardia recorre `lib/` para que nadie lo añada por otro camino.
 | `lib/services/geo-resolucion.ts:91-153` | Tres comprobaciones nuevas, una por nivel, cada una justo detrás de su `lookup` (§6) |
 | `lib/services/CorregirDatosClienteService.ts:260-269` | Un rechazo más, hermano de «El distrito indicado no existe», con su propio texto (R30) |
 | `lib/repositories/ConteosPublicosRepository.ts:33-35` | `where: { zonas: { some: {} }, ...WHERE_DISTRITO_DISPONIBLE }` (R34) |
+
+### 5.5 El registro de acciones (R51–R57)
+
+**Qué se audita y qué no.** Desactivar y reactivar, sí; el alta, no. El precedente de vehículos
+audita `vehiculo_borrado` y no `vehiculo_creado`, y lo que hay que mirar no es el nombre de la
+operación sino su papel: **en esta pantalla, desactivar ocupa el lugar que el borrado ocupa en las
+demás**. La asimetría cierra la decisión: auditar de más cuesta un `ALTER TYPE`; **no auditar y
+necesitarlo después es irrecuperable**, y el efecto de retirar un distrito aparece semanas más tarde
+—una tienda cuyas cargas empiezan a rechazarse— sin nada que diga quién lo decidió.
+
+**Las tres ediciones del catálogo cerrado** (`lib/types/historial-accion.ts`), que se cierra solo en
+las dos direcciones (`satisfies` + `_AsegurarExhaustivo`, así que olvidar una **no compila**):
+
+1. `HISTORIAL_ACCION_TIPOS`: `nodo_geografico_desactivado` y `nodo_geografico_activado` al final del
+   bloque **A.2 · hace desaparecer algo**. La cabecera pasa de «45 tipos» a **47**.
+2. `HISTORIAL_ACCION_ENTIDADES`: `provincia`, `canton`, `distrito`. De 17 a **20**.
+3. `CATEGORIA_POR_ACCION`: los dos en `"hace_desaparecer"`, y `ACCION_LABELS`: «Retiró un nodo del
+   catálogo geográfico» / «Devolvió un nodo al catálogo geográfico».
+
+**Por qué los dos en la MISMA categoría, incluido el que devuelve.** No es una excepción: es el
+precedente literal de `orden_eliminada` **y** `orden_recuperada`, que están las dos en «hace
+desaparecer algo» (`historial-accion.ts:208-209`). R17 de la 362 exige exactamente una categoría por
+tipo, y lo que las dos filas documentan es el mismo eje —qué territorio está disponible—.
+
+**Tres entidades y no una.** Los 17 valores de `HISTORIAL_ACCION_ENTIDADES` mapean 1:1 con tablas;
+un `nodo_geografico` sintético sería el primero que no. Además, con tres, «qué le pasó a este
+distrito» se resuelve por el `@@index([entidadTipo, entidadId])` que ya existe
+(`db/schema.prisma:3184`). Sus etiquetas usan el helper `unir` con el separador de la casa:
+
+| entidad | constructor | ejemplo |
+| --- | --- | --- |
+| `provincia` | `limpiar(f?.nombre)` — como `zona` y `vehiculo` | `Puntarenas` |
+| `canton` | `unir(f?.nombre, f?.provinciaNombre)` | `Buenos Aires · Puntarenas` |
+| `distrito` | `unir(f?.nombre, f?.cantonNombre, f?.provinciaNombre)` | `Cabagra · Buenos Aires · Puntarenas` |
+
+Ninguna puede contener datos de un destinatario: son nombres de un catálogo público (R54), y la
+guardia `historial-accion-sin-datos-cliente` lo vigila sobre el archivo nuevo.
+
+**La transacción** (forma `abre_tx` del censo), en este orden:
+
+| # | Sentencia | Por qué ahí |
+| --- | --- | --- |
+| 1 | `tx.<nivel>.findUnique({ where:{id}, select:{ activo, nombre, …ascendientes } })` | `null` → `"no_existe"` (R22). Captura de una vez el estado previo **y** las piezas de la etiqueta |
+| 2 | `fila.activo === activo` → `"sin_cambio"`, **sin escribir nada** | R53 y R21. Es el precedente literal de `VehiculoRepository.delete` (`:52-60`): «se pidió» y «se hizo» son cosas distintas |
+| 3 | `tx.<nivel>.update({ where:{id}, data:{ activo } })` | La única escritura del flag (R8) |
+| 4 | `resolverActorCongelado(tx, actorUsuarioId)` | Congela nombre y rol, dentro de la tx, como sus hermanas |
+| 5 | `appendAccion(tx, [{ accion, entidadTipo:<nivel>, entidadId:id, entidadEtiqueta, ...actor, monto:null, valorAnterior:null, valorNuevo:null }])` | Punto único. **Dentro** del callback: escrito fuera, el test no lo ve fallar (lección de la 373) |
+
+**R55 sale gratis y sin ningún `try` de rescate:** dentro de una transacción de Postgres un error de
+sentencia aborta la transacción entera, así que no hay orden posible que deje el flag cambiado y el
+registro sin escribir. Y si `appendAccion` falla —por ejemplo porque la migración del enum no
+corrió— **el flag se deshace**.
+
+`valor_anterior`/`valor_nuevo` van en `NULL` a propósito: el **par** de tipos ya dice la transición,
+así que el comentario de `db/schema.prisma:3160-3163` sigue siendo cierto sin editarlo.
+
+**Las dos guardias que hay que tocar, y son dos por motivos distintos:**
+
+- `historial-accion-escrituras-cubiertas.guardia.test.ts` — **obligatoria**: su censo recorre el
+  **enum**, así que dos valores nuevos sin entrada la ponen roja. Entrada:
+  `lib/repositories/GeoRepository.ts`, método `cambiarActivacion`, forma `abre_tx`, con la regex de
+  la mutación. Y su `toHaveLength(45)` pasa a 47.
+- `historial-accion-sin-datos-cliente.guardia.test.ts` — **no** obligatoria (su lista
+  `PUNTOS_DE_ESCRITURA:67-90` es manual y nadie comprueba que esté completa, verificado el
+  2026-09-05: el único aserto es que los listados **sí** llaman a `appendAccion`, `:158-164`). Se
+  añade igual, porque el punto de esa guardia es que **ningún** punto de escritura vuelque datos del
+  cliente, y un punto fuera de la lista es un punto sin vigilar.
+
+### 5.6 El conteo de órdenes sin entregar (R60–R62)
+
+```ts
+// IOrdenRepository
+/**
+ * Cuantas ordenes SIN ENTREGAR cuelgan de un nodo geografico (R60/R61).
+ * `nivel` elige la columna CONGELADA de la orden, que es la que tiene indice propio.
+ */
+contarSinEntregarPorNodoGeografico(nivel: NivelGeografico, id: string): Promise<number>;
+```
+
+```ts
+where: {
+  ...(nivel === "provincia" ? { provinciaId: id }
+    : nivel === "canton"    ? { cantonId: id }
+    :                         { distritoId: id }),
+  deletedAt: null,
+  estatus: { value: { notIn: ESTADOS_TERMINALES } },
+}
+```
+
+**Se cuenta por la columna congelada de la ORDEN, no por sus descendientes.** La orden lleva
+`provincia_id`, `canton_id` y `distrito_id` (`db/schema.prisma:576-579`) y los tres tienen índice
+propio (`:755-757`), así que un `count` por nivel es un acceso por índice y no una enumeración de
+hasta 123 distritos. Consecuencia que hay que decir en voz alta: `distrito_id` es el **único
+nullable** de la terna, así que una orden sin distrito **cuenta** al desactivar su cantón y **no**
+cuenta al desactivar un distrito — que es exactamente lo correcto.
+
+**«Sin entregar»: hay tres candidatos en el repo y se elige uno, con motivo** (lo pidió el humano):
+
+| Candidato | Dónde vive | Por qué NO |
+| --- | --- | --- |
+| `ESTADOS_PENDIENTES = ["por_recoger","en_reparto","ayuda_tienda"]` | `CierreDiaService.ts:68` | Es una lista **local** del cierre del día, con tres estados del flujo; deja fuera órdenes vivas que no están en ninguno de los tres, y contarlas de menos es peor que no contarlas |
+| «sin gestionar» (`gestiones: { none: { anuladaAt: null } }`) | `ConteosPublicosRepository.ts:54-58` | Una orden **reprogramada** tiene gestión y sigue sin entregarse: este criterio la daría por resuelta |
+| **`deletedAt: null` + `estatus.value NOT IN ESTADOS_TERMINALES`** | `lib/types/order-status-transiciones.ts:491-495` + el `where` del listado | **ELEGIDO.** Es el criterio de la pantalla de órdenes: `deleted_at IS NULL` es lo que decide que la orden existe, y `ESTADOS_TERMINALES` es la **fuente única** de «ya terminó» que consumen la analítica, el ciclo de vida y la corrección |
+
+La lista se **importa**, no se declara (una guardia lo vigila): dos listas de estados terminales son
+dos definiciones de «entregado» que un día divergen, y la que divergiera contaría mal justo en la
+pantalla que decide retirar territorio.
+
+**Fail-open (R62).** Si el conteo falla, la confirmación lo dice y **no** bloquea: es información
+para decidir, no una condición de la operación. Un conteo caído que impidiera retirar un distrito
+convertiría un dato de cortesía en un bloqueo.
 
 ---
 
@@ -516,10 +726,45 @@ export function zonasQueQuedarianSinDistritos(
 ): string[];
 ```
 
-**Avisa; no bloquea.** Vetar la desactivación del único distrito de una zona **está descartado**
-(§8, A4) y la decisión se deja escrita para que no vuelva: una zona sin distritos **ya es
-representable** —`ZonaRepository.update` acepta `distritoIds: []` (`:231`)—, desactivar no toca
-`zona_distrito` (R50), y el veto acoplaría una regla de Tarifas dentro de Geografía.
+Y, al abrirse, pide el conteo de órdenes sin entregar (R60) con
+`contarOrdenesSinEntregarDeNodo({ nivel, id })`. **Tres líneas y ni una más** (R63): el nodo, las
+zonas que se quedarían sin distritos, y el número de órdenes vivas. La cuarta línea candidata
+—«este nodo tiene cobertura»— **está descartada**: con la zona y el número delante no añade
+información y sí ruido, y una confirmación que avisa de todo no avisa de nada.
+
+Los dos avisos se resuelven por vías distintas **a propósito**: las zonas se derivan del árbol que
+el cliente ya tiene (función pura, cero consultas) y el conteo necesita el servidor, porque las
+órdenes no están en el árbol ni deben estarlo.
+
+**Avisa; no bloquea.** Ni el aviso de zonas (§8, A4) ni el conteo (R62, fail-open) impiden nada.
+Vetar la desactivación del único distrito de una zona **está descartado** y la decisión se deja
+escrita para que no vuelva: una zona sin distritos **ya es representable** —`ZonaRepository.update`
+acepta `distritoIds: []` (`:231`)—, desactivar no toca `zona_distrito` (R50), y el veto acoplaría
+una regla de Tarifas dentro de Geografía.
+
+### 7.5 El filtro de estado (R58/R59)
+
+Un `SegmentedToggle` de tres opciones —**Todos / Activos / Retirados**— junto al buscador. Sin él,
+encontrar un puñado de retirados entre 494 distritos exige recorrer el árbol entero o saber ya el
+nombre: la pantalla serviría para retirar y no para **revisar** lo retirado.
+
+No añade **ni una consulta**: el árbol completo ya está en memoria (R26), así que el filtro es un
+argumento más del módulo puro extraído en §7.2:
+
+```ts
+export type FiltroEstadoGeografico = "todos" | "activos" | "retirados";
+
+export function filtrarArbolGeografico(
+  arbol: readonly ProvinciaArbolDTO[],
+  filtros: { texto: string; estado: FiltroEstadoGeografico },
+): ProvinciaArbolDTO[];
+```
+
+«Retirado» aquí es la **disponibilidad efectiva** —el mismo `estaDisponible` de §3—, no el flag
+propio: quien busca lo retirado quiere ver también el distrito que cayó por su cantón. Y un padre
+sobrevive al filtro si él o alguno de sus descendientes casa, igual que ya hace el filtro de texto,
+para que un distrito retirado no quede escondido bajo un cantón activo. Texto y estado se componen
+con **AND** (R59).
 
 ### 7.4 El menú
 
@@ -613,6 +858,33 @@ renombrado y llegará en la ficha siguiente. **Descartada aquí** porque el reno
 alcance por decisión del humano: sin renombrado, `codigo_dta` no resuelve ningún problema de esta
 ficha y obligaría a un backfill de 585 filas contra el PDF del IGN.
 
+> Las cuatro siguientes salen de cerrar las preguntas abiertas el **2026-09-05**.
+
+**A10 · No auditar nada, siguiendo `vehiculo_creado`.** Era la propuesta del borrador, y verificado
+el 2026-09-05 **no** pondría roja ninguna guardia: el censo de escrituras recorre el enum, no las
+mutaciones. **Descartada por el humano**: el precedente se aplica mal si se mira el nombre de la
+operación en vez de su papel — aquí desactivar **es** la operación que quita, el lugar que ocupa
+`vehiculo_borrado`. Y la asimetría del coste manda: auditar de más cuesta un `ALTER TYPE`; no
+auditar y necesitarlo después es irrecuperable, porque el pasado no se reconstruye.
+
+**A11 · Un solo tipo (`nodo_geografico_activacion_cambiada`) con el estado en `valor_nuevo`.** Un
+valor de enum en vez de dos, y las dos columnas de vocabulario cerrado ya existen para eso.
+**Descartada por el humano**: obligaría a abrir el detalle de cada fila para saber qué pasó, cuando
+lo que se lee es el listado. Con dos tipos, «Retiró» y «Devolvió» se distinguen de un vistazo y el
+filtro por acción sirve para lo que sirve.
+
+**A12 · Contar las órdenes enumerando los distritos descendientes del nodo.** Es lo que haría falta
+si la orden no supiera dónde está. **Descartada**: la orden lleva su terna **congelada** y los tres
+niveles tienen índice propio (`db/schema.prisma:755-757`), así que contar por la columna del nivel
+es un acceso por índice en vez de un `IN` de hasta 123 ids — y además es **más correcto**, porque
+una orden sin `distrito_id` sigue contando para su cantón.
+
+**A13 · Una entidad sintética `nodo_geografico` en vez de tres.** Un valor de enum en vez de tres y
+un solo constructor de etiqueta. **Descartada**: los 17 valores de `HISTORIAL_ACCION_ENTIDADES`
+mapean 1:1 con tablas y este sería el primero que no; y con tres, «qué le pasó a este distrito» se
+resuelve por el `@@index([entidadTipo, entidadId])` que ya existe. El coste de migración es el
+mismo: el `down.sql` recrea el tipo igual con uno que con tres.
+
 ---
 
 ## 10. Riesgos
@@ -627,12 +899,19 @@ ficha y obligaría a un backfill de 585 filas contra el PDF del IGN.
 | Los tests de `WHERE` se escriben con dobles y pasan en verde con el filtro mutado | Todo lo que es `WHERE` va a `tests/integration/db/**` (matriz de `requirements.md §3`), y cada uno se mata con una mutación antes de creerlo |
 | Un test de integración que reporta `passed` sin datos | Ningún `if (!fila) return;`: el molde es `filtros-catalogo-sin-inactivos.test.ts`, que **revienta con mensaje** si falta el corpus |
 | El cambio del contrato público sale sin avisar | R37: entrada fechada en `docs/api/CHANGELOG.md` **antes** de la release, con su test |
+| El `down.sql` del enum copia la lista equivocada | Las dos listas de partida están nombradas con archivo y línea (§2.2.b), y el test de migración compara el enum de la base contra el catálogo |
+| El composition root instancia `GeografiaService` sin pasarle el repositorio de órdenes | Compila igual y muere en producción. La tarea **D3** exige comprobar que alguien lo **pasa**, no solo que lo importa |
+| El `appendAccion` acaba fuera de la `$transaction` «porque la tx quedaba larga» | El censo de `historial-accion-escrituras-cubiertas` exige la forma `abre_tx` con el `appendAccion` **dentro** del callback, y el test de R55 fuerza el fallo |
+| Alguien declara una segunda lista de estados terminales para el conteo | Guardia de R61: la lista se importa de su fuente única |
 | Producción vacía desde el 2026-08-25 | Un cero medido hoy significa «aún no ha pasado». El diseño no se justifica en los números de hoy sino en el esquema |
 
 ---
 
 ## 11. Verificación
 
+- **Secuencia: backend primero, frontend después.** Bloques A–G e I antes que H, sin solaparse. Con
+  el gate corriendo **después** de cada bloque y nunca en paralelo con un agente que muta el árbol:
+  un veredicto leído sobre un árbol mutado a la vez no vale.
 - Gate: la migración toca `db/schema.prisma`, así que **el modo rápido se negará** y mandará al
   completo. `./init.sh` entero antes de la release, y eso es lo esperado.
 - Los tests de `tests/integration/db/**` **necesitan `.env`**: si salen `skipped`, el veredicto no
@@ -644,4 +923,7 @@ ficha y obligaría a un backfill de 585 filas contra el PDF del IGN.
   suite no): dar de alta un distrito de prueba; desactivar su cantón y comprobar que el distrito
   aparece como *inactivo por su cantón* con *Activar* deshabilitado; reactivar el cantón y
   comprobar que el distrito vuelve como estaba; abrir Tarifas y ver que el distrito retirado sigue
-  ahí, marcado y con su casilla; guardar la zona sin tocar nada y volver a mirar sus distritos.
+  ahí, marcado y con su casilla; guardar la zona sin tocar nada y volver a mirar sus distritos. Y en
+  `/historico/acciones`, ver la fila «Retiró un nodo del catálogo geográfico» con su etiqueta
+  completa (`Cabagra · Buenos Aires · Puntarenas`) y su actor congelado — que es la mitad de la
+  decisión 1 que ninguna suite puede afirmar por ti.

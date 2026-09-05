@@ -1,7 +1,10 @@
 # Ficha 374 — Administrar el catálogo geográfico desde la app · tasks
 
-> **Orden de ejecución:** los bloques **0–G** y el **I** los hace `backend_dev`; el bloque **H**,
-> después y sobre lo ya mergeado en la rama, `frontend_dev`. El bloque **J** cierra.
+> **Orden de ejecución: BACKEND PRIMERO, FRONTEND DESPUÉS, sin solaparse.** Los bloques **0–G** y el
+> **I** los hace `backend_dev`; el bloque **H**, después y sobre lo ya mergeado en la rama,
+> `frontend_dev`. El bloque **J** cierra.
+> No es preferencia de estilo: el frontend consume DTOs, acciones y textos que el backend estrena en
+> esta misma ficha, y un gate leído sobre un árbol que otro agente está mutando no vale.
 > `[P]` = puede correr en paralelo con las tareas de su mismo bloque marcadas igual.
 > Cada tarea nombra los `R<n>` que cubre; el mapa completo `R → test` está en
 > `requirements.md §3` y el implementer lo confirma en `progress/impl_374.md`.
@@ -87,6 +90,49 @@
       *Cubre:* R3, R19
       *Depende de:* A3
 
+- [ ] **A6 — Migración de los cinco valores de enum del registro.**
+      `db/migrations/<ts+1>_historial_accion_nodo_geografico/migration.sql`, **aparte** de A1
+      (55P04): dos `ADD VALUE` en `historial_accion_tipo` y tres en `historial_accion_entidad`, con
+      el comentario de `design.md §2.2.b`.
+      *Hecho cuando:* aplica en local y `\dT+` lista **47** tipos y **20** entidades.
+      *Cubre:* R51, R52, R56
+      *Depende de:* A1
+
+- [ ] **A7 — `down.sql` de esa migración.**
+      Recrea **los dos** tipos con su lista previa y recastea las **dos** columnas de
+      `historial_accion`. Las listas: los 44 del `down.sql` de
+      `20260904120000_historial_accion_api_key_eliminada` **más** `'api_key_eliminada'` (=45), y los
+      17 del `CREATE TYPE` de `20260902120000_historial_accion` **tal cual** (nunca se amplió).
+      Con la nota de precondición ruidosa. **Ningún `down.sql` anterior se toca.**
+      *Hecho cuando:* `pnpm run db:rollback` revierte en una base sin filas de esas acciones y
+      **aborta ruidosamente** si se inserta una antes.
+      *Cubre:* R57
+      *Depende de:* A6
+
+- [ ] **A8 — `db/schema.prisma`: los cinco valores en los dos enums de Prisma.**
+      *Hecho cuando:* `prisma generate` pasa y el cliente los conoce.
+      *Cubre:* R56
+      *Depende de:* A6
+
+- [ ] **A9 — Catálogo cerrado y etiquetas.**
+      `lib/types/historial-accion.ts`: los dos tipos al final del bloque **A.2 · hace desaparecer
+      algo**, las tres entidades, `CATEGORIA_POR_ACCION` (`hace_desaparecer` para los dos, con el
+      precedente `orden_eliminada`/`orden_recuperada` escrito al lado) y `ACCION_LABELS`. Cabecera
+      de 45 a 47 tipos y de 17 a 20 entidades. `historial-accion-etiquetas.ts`: las tres fuentes y
+      sus tres constructores con `unir`.
+      *Hecho cuando:* `tsc` pasa (los dos cierres `satisfies`/`_AsegurarExhaustivo` no se quejan) y
+      `tests/unit/historial-accion/catalogo-y-choke-point.test.ts` verde tras subir sus conteos.
+      *Cubre:* R54, R56
+      *Depende de:* A8
+
+- [ ] **A10 [P] — Test de la migración del registro.**
+      `tests/integration/db/geografia-registro-migration.test.ts`: (a) los dos enums de la base
+      coinciden exactamente con el catálogo; (b) el `down.sql` recrea 45 y 17 y **no** incluye los
+      valores nuevos; (c) con una fila que use un valor nuevo, el rollback **falla**.
+      *Hecho cuando:* los tres casos pasan contra Postgres real.
+      *Cubre:* R57
+      *Depende de:* A7, A9
+
 ---
 
 ## Bloque B · Contratos y tipos (backend)
@@ -141,13 +187,17 @@
 
 - [ ] **C2 — `GeoRepository`: las escrituras.**
       `findHermanos` (devuelve `null` si el padre no existe; trae **activos e inactivos**), `crear`
-      (deja escapar la violación de UNIQUE) y `cambiarActivacion` (`updateMany`, `false` = no
-      alcanzada). Ampliar el `Pick` del cliente Prisma solo con lo necesario.
+      (deja escapar la violación de UNIQUE) y `cambiarActivacion` con sus **tres** desenlaces
+      (`no_existe` / `sin_cambio` / `cambiado`) y los cinco pasos de `design.md §5.5` dentro de UNA
+      `$transaction`: leer (estado previo + piezas de la etiqueta) → cortar si no cambia → `update`
+      → `resolverActorCongelado` → `appendAccion` **dentro** del callback. Ampliar el `Pick` con
+      `$transaction`, `historialAccion` y `usuario`.
       *Hecho cuando:* `tests/unit/repositories/geo-repository.escrituras.test.ts` verifica con un
-      doble que `cambiarActivacion` toca **una** tabla y **una** fila, y que ninguno de los tres
-      métodos llama a `delete`/`deleteMany`.
-      *Cubre:* R8, R12, R20, R22
-      *Depende de:* C1
+      doble el **orden** de llamadas (el corte por `sin_cambio` ocurre antes de cualquier escritura),
+      que `cambiarActivacion` toca **una** tabla y **una** fila, y que ninguno de los tres métodos
+      llama a `delete`/`deleteMany`.
+      *Cubre:* R8, R12, R20, R22, R51, R52
+      *Depende de:* C1, A9
 
 - [ ] **C3 — Test de la cascada reversible.**
       `tests/integration/db/geografia-cascada-reversible.test.ts`: con un cantón de 3 distritos,
@@ -156,6 +206,17 @@
       los flags previos → y `zona_distrito` tiene las mismas filas al principio y al final.
       *Hecho cuando:* pasa, y una mutación que añada un `updateMany` a los hijos lo pone rojo.
       *Cubre:* R8, R9, R20, R50
+      *Depende de:* C2
+
+- [ ] **C4 — Test de integración del registro de acciones.**
+      `tests/integration/db/geografia-registro-accion.test.ts`: desactivar un distrito escribe
+      **exactamente una** fila con `nodo_geografico_desactivado`, entidad `distrito`, etiqueta
+      `Cabagra · Buenos Aires · Puntarenas`, actor congelado y `valor_anterior`/`valor_nuevo` en
+      NULL; reactivar escribe `nodo_geografico_activado`; **un alta no escribe ninguna fila**;
+      pedir desactivar lo ya inactivo **no escribe ni el `update` ni la fila**; y un fallo forzado
+      de `appendAccion` deja el flag **como estaba**.
+      *Hecho cuando:* los cinco casos pasan y ninguno se salta por falta de datos.
+      *Cubre:* R51, R52, R53, R54, R55
       *Depende de:* C2
 
 ---
@@ -185,6 +246,17 @@
       *Cubre:* R12, R13, R15, R16, R18
       *Depende de:* D1
 
+- [ ] **D3 — El conteo en el service, y que alguien lo INYECTE.**
+      `GeografiaService` gana el segundo parámetro (`GeografiaOrdenesRepo`, un `Pick` de
+      `IOrdenRepository`) y el método `contarOrdenesSinEntregar`, con la misma puerta de rol.
+      *Hecho cuando:* el test cubre rol ≠ `maestro` → `forbidden` sin consultar; **y** un caso
+      afirma que el composition root (`buildGeografiaService`) construye el service **pasándole** un
+      `OrdenRepository` real — no que lo importe. Un servicio que recibe `undefined` compila igual y
+      muere en producción.
+      *Cubre:* R24, R60
+      *Depende de:* D1, **F6** — ⚠️ F6 vive en un bloque posterior pero su única dependencia es B3,
+      así que se adelanta hasta aquí. El orden de los bloques es de lectura, no una cadena.
+
 ---
 
 ## Bloque E · Borde (backend)
@@ -201,6 +273,14 @@
       delegación correcta en el caso feliz.
       *Cubre:* R18, R23, R25
       *Depende de:* D1
+
+- [ ] **E2 — La cuarta Server Action: `contarOrdenesSinEntregarDeNodo`.**
+      Solo lectura, mismo `deps`, `nodoGeograficoSchema.strict()`.
+      *Hecho cuando:* el test de acciones cubre sin sesión → `unauthenticated` sin instanciar el
+      service, y entrada inválida → `validation_error` sin llamarlo. Con esto son **cuatro** los
+      casos de R23 y R25.
+      *Cubre:* R23, R25, R60
+      *Depende de:* D3
 
 ---
 
@@ -251,6 +331,18 @@
       *Cubre:* R35
       *Depende de:* C1
 
+- [ ] **F6 — `OrdenRepository.contarSinEntregarPorNodoGeografico`.**
+      Un `count` por la columna **congelada** del nivel (`provinciaId`/`cantonId`/`distritoId`, cada
+      una con su índice), `deletedAt: null` y `estatus.value NOT IN ESTADOS_TERMINALES`, con la
+      lista **importada** de `lib/types/order-status-transiciones.ts` y los otros dos candidatos
+      descartados por escrito en el comentario (`design.md §5.6`).
+      *Hecho cuando:* `tests/integration/db/geografia-ordenes-sin-entregar.test.ts` (Postgres real)
+      cubre: una `en_reparto` cuenta; una `entregada`, una `devuelta_a_tienda`, una `incidente` y
+      una **borrada** no; y una orden **sin `distrito_id`** cuenta para su cantón y no para ningún
+      distrito. Y una mutación que quite `deletedAt: null` lo pone rojo.
+      *Cubre:* R61
+      *Depende de:* B3
+
 ---
 
 ## Bloque G · Guardias (backend)
@@ -279,20 +371,43 @@
       *Cubre:* R49
       *Depende de:* C2
 
+- [ ] **G4 — Las dos guardias del registro.**
+      (a) `historial-accion-escrituras-cubiertas.guardia.test.ts`: entrada de censo para los dos
+      tipos nuevos (`lib/repositories/GeoRepository.ts`, método `cambiarActivacion`, forma
+      `abre_tx`, con la regex de la mutación) y su `toHaveLength(45)` a **47**. **Obligatoria**: sin
+      ella el enum nuevo la pone roja.
+      (b) `historial-accion-sin-datos-cliente.guardia.test.ts`: añadir `GeoRepository.ts` a
+      `PUNTOS_DE_ESCRITURA`. **No** es obligatoria (nadie comprueba que esa lista esté completa) y
+      por eso se hace a propósito: un punto de escritura fuera de la lista es un punto sin vigilar.
+      *Hecho cuando:* (a) pasa **y** falla si se quita el `appendAccion` del método; (b) pasa con el
+      archivo nuevo dentro.
+      *Cubre:* R51, R54
+      *Depende de:* C2, A9
+
+- [ ] **G5 [P] — Una sola fuente de «terminal».**
+      `tests/unit/guards/geografia-terminales-una-sola-fuente.guardia.test.ts`: el conteo de F6
+      **importa** `ESTADOS_TERMINALES` y no declara ninguna lista de estados propia. Contraprueba
+      con un literal inyectado en memoria.
+      *Hecho cuando:* pasa y la contraprueba lo pone rojo.
+      *Cubre:* R61
+      *Depende de:* F6
+
 ---
 
 ## Bloque H · Pantalla (`frontend_dev`, después del backend)
 
 - [ ] **H1 — Módulos puros primero.**
       `geografia-estado-label.ts` (los tres textos: activo / inactivo propio / inactivo por su
-      `<nivel>`), `filtrar-arbol-geografico.ts` (extraído de `GeografiaSelector.tsx:144-168` y con
-      `normalizeName` en lugar de su `norm()` de `:18-23`) y `zonasQueQuedarianSinDistritos`.
-      Ninguno importa React.
+      `<nivel>`), `filtrar-arbol-geografico.ts` (extraído de `GeografiaSelector.tsx:144-168`, con
+      `normalizeName` en lugar de su `norm()` de `:18-23` **y** con el argumento `estado`
+      —`todos`/`activos`/`retirados`, evaluado con `estaDisponible`, no con el flag propio—) y
+      `zonasQueQuedarianSinDistritos`. Ninguno importa React.
       *Hecho cuando:* `tests/unit/utils/filtrar-arbol-geografico.test.ts` afirma que `perez
-      zeledon` encuentra `Pérez Zeledón` y `san  jose` encuentra `San José`;
+      zeledon` encuentra `Pérez Zeledón`, que `san  jose` encuentra `San José`, que `retirados`
+      incluye al distrito caído **por su cantón**, y que texto + estado se componen con AND;
       `tests/unit/utils/zonas-sin-distritos.test.ts` cubre distrito / cantón / provincia y el caso
       «no deja ninguna zona vacía».
-      *Cubre:* R39, R44 (parte)
+      *Cubre:* R39, R44 (parte), R58, R59
       *Depende de:* E1
 
 - [ ] **H2 — `GeografiaSelector` usa el filtro extraído.**
@@ -341,14 +456,17 @@
 
 - [ ] **H7 — Alta, confirmación y desenlaces.**
       Formulario de alta oculto por nivel (patrón `VehiculosModule.tsx:41-109`); `Modal` con
-      `closeOnConfirm={false}` para desactivar, que nombra el nodo y las zonas que quedarían sin
-      distritos disponibles **sin bloquear**; relectura del árbol y un mensaje por desenlace.
+      `closeOnConfirm={false}` para desactivar, que nombra el nodo, las zonas que quedarían sin
+      distritos disponibles y —pidiéndolo al abrirse con `contarOrdenesSinEntregarDeNodo`— el número
+      de órdenes sin entregar. **Tres líneas y ni una más.** Relectura del árbol y un mensaje por
+      desenlace.
       *Hecho cuando:* el test cubre: el alta de cantón exige provincia y la de distrito exige
-      cantón (R43); abrir la confirmación no llama a la acción y Cancelar tampoco; la confirmación
-      nombra las zonas y el botón sigue habilitado (R44); los seis mensajes de desenlace y la
-      relectura (R45).
-      *Cubre:* R43, R44, R45
-      *Depende de:* H6
+      cantón (R43); abrir la confirmación no llama a la acción de desactivar y Cancelar tampoco; la
+      confirmación nombra las zonas y el botón sigue habilitado (R44); muestra el conteo (R60); si
+      el conteo falla, lo dice y **no** bloquea (R62); el cuerpo no lleva ninguna otra línea de
+      aviso (R63); y los seis mensajes de desenlace con la relectura (R45).
+      *Cubre:* R43, R44, R45, R60, R62, R63
+      *Depende de:* H6, E2
 
 - [ ] **H8 — El menú.**
       `{ label: "Geografía", href: "/configuracion/geografia" }` **al final** del array de
@@ -365,6 +483,14 @@
       nodo retirado no se ofrece y que los demás sí (contraprueba primero).
       *Cubre:* R29
       *Depende de:* H5
+
+- [ ] **H10 — El filtro de estado en la pantalla.**
+      `SegmentedToggle` de tres opciones (Todos / Activos / Retirados) junto al buscador, cableado
+      al módulo puro de H1. **Sin ninguna llamada al servidor.**
+      *Hecho cuando:* el test cubre los tres estados sobre el mismo árbol y afirma que cambiar el
+      toggle **no** dispara ninguna Server Action (espía sobre las acciones inyectadas).
+      *Cubre:* R58, R59
+      *Depende de:* H6
 
 ---
 
@@ -400,16 +526,18 @@
 ## Bloque J · Cierre
 
 - [ ] **J1 — Mapa `R → test` en `progress/impl_374.md`.**
-      Las 50 filas con el nombre real del test y del archivo. Un `R` sin test es un fallo de la
+      Las **63** filas con el nombre real del test y del archivo. Un `R` sin test es un fallo de la
       feature.
-      *Hecho cuando:* el archivo existe, está **commiteado** (no solo escrito) y las 50 filas
+      *Hecho cuando:* el archivo existe, está **commiteado** (no solo escrito) y las 63 filas
       apuntan a tests que existen.
-      *Depende de:* H9, I3, G3
+      *Depende de:* H10, I3, G5
 
 - [ ] **J2 — Matar las mutaciones que el spec exige.**
-      Las cinco declaradas: el `WHERE` de un `list*Lite`, el `WHERE` de `findDistritosByCantonIds`,
-      un `updateMany` a los hijos al desactivar, el filtro de `initialSelected` en el selector de
-      Tarifas, y el `WHERE` de los conteos públicos.
+      Las siete declaradas: el `WHERE` de un `list*Lite`, el `WHERE` de
+      `findDistritosByCantonIds`, un `updateMany` a los hijos al desactivar, el filtro de
+      `initialSelected` en el selector de Tarifas, el `WHERE` de los conteos públicos, el
+      `deletedAt: null` del conteo de órdenes sin entregar, y sacar el `appendAccion` fuera de la
+      `$transaction`.
       *Hecho cuando:* cada mutación deja **rojo** el test que la vigila, y queda anotado en
       `progress/impl_374.md` **qué test** cayó en cada caso (no «pasó la mutación»).
       *Depende de:* J1
@@ -428,7 +556,10 @@
       deshabilitado con el motivo; (d) reactivar el cantón → el distrito vuelve como estaba; (e) en
       Tarifas, el distrito retirado sigue ahí, marcado, con su casilla operable, y guardar la zona
       sin tocar nada no cambia sus distritos; (f) en la corrección de ubicación de una orden, el
-      distrito retirado **no** se ofrece.
-      *Hecho cuando:* los seis puntos quedan anotados en `progress/impl_374.md` con **lo que se
+      distrito retirado **no** se ofrece; (g) la confirmación de desactivar muestra el número de
+      órdenes sin entregar y el toggle **Retirados** encuentra el distrito de un vistazo; (h) en
+      `/historico/acciones` aparece «Retiró un nodo del catálogo geográfico» con la etiqueta
+      completa y el actor congelado.
+      *Hecho cuando:* los ocho puntos quedan anotados en `progress/impl_374.md` con **lo que se
       vio**, no con lo que se esperaba.
       *Depende de:* J3

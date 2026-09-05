@@ -43,6 +43,24 @@ dice con todas las letras: *«el catalogo en si es de solo lectura»*.
 | El par Badge + Activar/Desactivar ya existe, con su módulo puro de texto | `app/(app)/wallet/_components/GastosFijosPlantillasPanel.tsx:362-394` |
 | Los conteos de la landing cuentan «distritos con cobertura» | `lib/repositories/ConteosPublicosRepository.ts:33-35` |
 
+### 0.2.b Verificado el 2026-09-05, al cerrar las preguntas abiertas (§5)
+
+| Afirmación | Dónde se confirmó |
+| --- | --- |
+| `historial_accion_tipo` tiene hoy **45** valores y `historial_accion_entidad` **17**, los dos enums nativos de Postgres | `lib/types/historial-accion.ts:41-137,142-160` · `db/migrations/20260902120000_historial_accion/migration.sql:136-154` |
+| `historial_accion_entidad` **nunca se ha ampliado**: sus 17 valores siguen siendo los del `CREATE TYPE` original | `db/migrations/20260902120000_historial_accion/migration.sql:136-154` (ninguna migración posterior lo toca) |
+| Un valor nuevo entra con `ALTER TYPE … ADD VALUE`; el `down.sql` **recrea el tipo con la lista previa** y **falla ruidosamente** si hay filas con el valor nuevo | `db/migrations/20260904120000_historial_accion_api_key_eliminada/down.sql:1-81` |
+| La lista previa de 45 es: los **44** del `down.sql` de la 373 **más** `api_key_eliminada`, que es el valor que aquella migración añadió y su propio `down` no podía listar | ídem, `:9-14` |
+| Una operación y su inversa van en la **misma** categoría: `orden_eliminada` y `orden_recuperada` están las dos en «hace desaparecer algo» | `lib/types/historial-accion.ts:208-209` |
+| `valor_anterior`/`valor_nuevo` son vocabulario **cerrado**, usados hoy en exactamente cuatro tipos y `NULL` en todos los demás | `db/schema.prisma:3160-3165` |
+| El registro se escribe SIEMPRE en la misma `$transaction` de la mutación, por el punto único `appendAccion`, y una guardia lo vigila con un **censo cerrado** por valor del enum | `lib/repositories/registrar-accion.ts` · `tests/unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts:20-90` |
+| Hay una **segunda** guardia con una lista manual de los archivos que llaman a `appendAccion`, que comprueba que ninguno vuelca datos del cliente | `tests/unit/guards/historial-accion-sin-datos-cliente.guardia.test.ts:66-90,158-164` |
+| El precedente de «se pidió» ≠ «se hizo»: si la mutación no alcanza ninguna fila, **no se escribe** fila de registro | `lib/repositories/VehiculoRepository.ts:52-60` |
+| El helper `unir` compone etiquetas con el separador de la casa (` · `) y `limpiar` trunca a 120 | `lib/types/historial-accion-etiquetas.ts:106-114` |
+| «Terminal» tiene **una** fuente única: `ESTADOS_TERMINALES = ["entregada", "devuelta_a_tienda", "incidente"]` | `lib/types/order-status-transiciones.ts:491-495` |
+| `orden` lleva **congelada** su terna geográfica y tiene índice propio en los tres niveles | `db/schema.prisma:576-579,755-757` |
+| `orden.distrito_id` es el **único** FK nullable de la terna; `provincia_id` y `canton_id` son NOT NULL | `db/schema.prisma:576-579` |
+
 ### 0.3 Tres cosas del encargo que el código **no** confirma tal cual
 
 Se dejan escritas en vez de repetirse:
@@ -274,6 +292,57 @@ Se dejan escritas en vez de repetirse:
 - **R50** — El sistema NO DEBE escribir en `zona_distrito` como consecuencia de dar de alta,
   desactivar o reactivar un nodo.
 
+> Los requisitos **R51–R63** entraron el 2026-09-05, al cerrar las cinco preguntas abiertas de §5.
+> Van al final para no renumerar nada: la trazabilidad de R1–R50 no se mueve.
+
+### K · El registro de acciones (decisión 1)
+
+- **R51** — CUANDO el sistema **desactiva** un nodo, DEBE registrar en el registro de acciones
+  EXACTAMENTE UNA fila, con una acción propia de desactivación, sobre la entidad del nivel de ese
+  nodo, dentro de la MISMA transacción en la que escribe el flag.
+
+- **R52** — CUANDO el sistema **reactiva** un nodo, DEBE registrar EXACTAMENTE UNA fila con una
+  acción propia de reactivación, **distinta** de la de desactivación y sin depender de ningún campo
+  adicional para saber cuál de las dos ocurrió.
+
+- **R53** — El sistema NO DEBE registrar ninguna fila del registro de acciones al **dar de alta** un
+  nodo, ni al pedir un cambio de activación que deje el flag como ya estaba.
+
+- **R54** — La fila de R51/R52 DEBE identificar el nodo por su nombre y por la cadena de sus
+  ascendientes, y NO DEBE contener datos de ningún destinatario ni texto libre escrito por una
+  persona.
+
+- **R55** — SI la escritura de la fila de R51/R52 falla, ENTONCES el cambio del flag NO DEBE quedar
+  persistido.
+
+- **R56** — El sistema DEBE clasificar las dos acciones nuevas en la categoría «hace desaparecer
+  algo», DEBE ofrecerlas con etiqueta legible y DEBE admitirlas como valor de filtro del registro.
+
+- **R57** — SI se revierte la migración que añade esos valores, ENTONCES la reversión DEBE fallar
+  ruidosamente mientras exista alguna fila del registro que los use, y NO DEBE borrar ni reescribir
+  esas filas.
+
+### L · Revisar y decidir antes de retirar (decisiones 2, 3 y 4)
+
+- **R58** — La pantalla DEBE ofrecer un filtro de estado con exactamente tres opciones —todos,
+  activos, retirados— y resolverlo sin ninguna consulta adicional al servidor.
+
+- **R59** — CUANDO el filtro de estado y el buscador de texto están activos a la vez, la pantalla
+  DEBE mostrar únicamente los nodos que cumplen **ambos**.
+
+- **R60** — CUANDO un usuario pide desactivar un nodo, la confirmación DEBE decir cuántas órdenes
+  **sin entregar** hay en ese nodo antes de que el usuario confirme.
+
+- **R61** — El sistema DEBE resolver «sin entregar» excluyendo las órdenes borradas y las que están
+  en un estado terminal, tomando los estados terminales de su fuente única y sin declarar una lista
+  propia.
+
+- **R62** — SI el conteo de R60 no se puede obtener, ENTONCES la confirmación DEBE decirlo y NO DEBE
+  impedir la desactivación.
+
+- **R63** — La confirmación de desactivación DEBE limitarse a nombrar el nodo, las zonas de R44 y el
+  conteo de R60, y NO DEBE añadir ningún otro aviso sobre la cobertura de ese nodo.
+
 ---
 
 ## 3. Trazabilidad `R<n>` → test
@@ -306,11 +375,11 @@ este repo está medido cuatro veces que una mutación de un `WHERE` pasa en verd
 | R20 | «maestro desactiva y reactiva en los tres niveles» | `tests/integration/db/geografia-cascada-reversible.test.ts` |
 | R21 | «desactivar lo ya inactivo y activar lo ya activo devuelven `ok` y dejan el mismo estado» | `tests/unit/services/geografia-service.test.ts` |
 | R22 | «id inexistente → `not_found`, sin escrituras» | `tests/unit/services/geografia-service.test.ts` |
-| R23 | «sin sesión → `unauthenticated` sin instanciar el service» (una por acción) | `tests/unit/actions/geografia-action.test.ts` |
-| R24 | «rol ≠ `maestro` → `forbidden` sin llamar al repositorio» (una por operación) | `tests/unit/services/geografia-service.test.ts` |
+| R23 | «sin sesión → `unauthenticated` sin instanciar el service», un caso por cada una de las **cuatro** acciones | `tests/unit/actions/geografia-action.test.ts` |
+| R24 | «rol ≠ `maestro` → `forbidden` sin llamar al repositorio», un caso por cada una de las **cuatro** operaciones | `tests/unit/services/geografia-service.test.ts` |
 | R25 | «nivel desconocido, padre ausente, nombre corto y clave desconocida → `validation_error` sin tocar el service» | `tests/unit/actions/geografia-action.test.ts` |
 | R26 | «el árbol trae el distrito inactivo y su `activo` en los tres niveles» | `tests/integration/db/geografia-catalogo-activo.test.ts` |
-| R27 | «un distrito con 0 zonas y otro con 2 salen los dos como sin zona utilizable; el de 1 sale con su zona» | `tests/integration/db/geografia-catalogo-activo.test.ts` |
+| R27 | «un distrito con 0 zonas y otro con **2** salen los dos como sin zona utilizable —el de 2 **no** devuelve la primera— y el de 1 sale con su zona» | `tests/integration/db/geografia-catalogo-activo.test.ts` |
 | R28 | «`listProvinciasLite`/`listCantonesLite`/`listDistritosLite` devuelven el nodo retirado, con `disponible: false`», y una mutación que meta el filtro en el `WHERE` pone el test rojo | `tests/integration/db/geografia-catalogo-activo.test.ts` |
 | R29 | «los tres desplegables de la ventana de corrección no ofrecen los nodos con `disponible: false` y sí los demás» | `tests/unit/components/corregir-ubicacion-inactivos.test.tsx` |
 | R30 | «corregir hacia un distrito retirado → rechazo con el motivo de retirada, distinto del de inexistente, y sin escritura» | `tests/unit/services/corregir-datos-cliente-geo-retirada.test.ts` |
@@ -334,6 +403,19 @@ este repo está medido cuatro veces que una mutación de un `WHERE` pasa en verd
 | R48 | «guardar una zona sin tocar el selector deja `zona_distrito` con exactamente las mismas filas, incluida la del distrito retirado» | `tests/integration/db/zona-guardado-conserva-inactivos.test.ts` |
 | R49 | «no existe ninguna acción, método de service ni método de repositorio que cambie el nombre de un nodo» | `tests/unit/guards/geografia-sin-renombrado.guardia.test.ts` |
 | R50 | «tras un alta, una desactivación y una reactivación, `zona_distrito` tiene exactamente las mismas filas» | `tests/integration/db/geografia-cascada-reversible.test.ts` |
+| R51 | «desactivar un distrito escribe **exactamente una** fila con `nodo_geografico_desactivado`, entidad `distrito`, en la misma transacción del `update`» + el censo del punto único | `tests/integration/db/geografia-registro-accion.test.ts` · `tests/unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts` |
+| R52 | «reactivar escribe `nodo_geografico_activado`, y las dos acciones son valores distintos del catálogo» | `tests/integration/db/geografia-registro-accion.test.ts` |
+| R53 | «un alta no escribe ninguna fila de registro» + «pedir desactivar lo ya inactivo no escribe ni el `update` ni la fila» | `tests/integration/db/geografia-registro-accion.test.ts` |
+| R54 | «la etiqueta es `Cabagra · Buenos Aires · Puntarenas`» + la guardia de datos del cliente sobre el archivo nuevo | `tests/integration/db/geografia-registro-accion.test.ts` · `tests/unit/guards/historial-accion-sin-datos-cliente.guardia.test.ts` |
+| R55 | «si `appendAccion` falla, el flag sigue como estaba» (fallo forzado dentro de la tx) | `tests/integration/db/geografia-registro-accion.test.ts` |
+| R56 | «los dos tipos están en el catálogo, en `hace_desaparecer`, con etiqueta legible y como valor de filtro» | `tests/unit/historial-accion/catalogo-y-choke-point.test.ts` |
+| R57 | «el enum de la base coincide con el catálogo» + «el `down.sql` recrea la lista previa de 45 y aborta si existe una fila con los valores nuevos» | `tests/integration/db/geografia-registro-migration.test.ts` |
+| R58 | «el toggle en Retirados deja solo los no disponibles; en Activos, solo los disponibles; en Todos, los dos» + «no se dispara ninguna llamada al servidor al cambiarlo» | `tests/unit/components/geografia-admin.ui.test.tsx` · `tests/unit/utils/filtrar-arbol-geografico.test.ts` |
+| R59 | «con texto `cabagra` y estado Retirados solo queda Cabagra si está retirada, y nada si no lo está» | `tests/unit/utils/filtrar-arbol-geografico.test.ts` |
+| R60 | «la confirmación pide el conteo y lo muestra antes de habilitar Confirmar» | `tests/unit/components/geografia-admin.ui.test.tsx` |
+| R61 | «una orden `entregada`, una `devuelta_a_tienda`, una `incidente` y una borrada NO cuentan; una `en_reparto` sí» —contra Postgres— y «la lista de terminales se importa, no se declara» | `tests/integration/db/geografia-ordenes-sin-entregar.test.ts` · `tests/unit/guards/geografia-terminales-una-sola-fuente.guardia.test.ts` |
+| R62 | «si el conteo devuelve error, la confirmación lo dice y el botón sigue habilitado» | `tests/unit/components/geografia-admin.ui.test.tsx` |
+| R63 | «el cuerpo de la confirmación contiene el nodo, las zonas y el conteo, y ninguna otra línea de aviso» | `tests/unit/components/geografia-admin.ui.test.tsx` |
 
 ---
 
@@ -362,27 +444,45 @@ Decidido por el humano el 2026-09-05. **No se amplía sin una ficha nueva.**
 
 ---
 
-## 5. Preguntas abiertas
+## 5. Preguntas abiertas — **RESUELTAS el 2026-09-05**
 
-No se inventa respuesta para ninguna. Las cuatro bloquean detalles acotados, no la ficha entera.
+Las cuatro que quedaron abiertas en el borrador, más el hallazgo del spec_author, las cerró el
+humano el mismo día. Se dejan escritas con su decisión y su motivo —no se borran— para que la
+próxima ficha no las vuelva a abrir.
 
-1. **¿El alta y la desactivación se registran en `historial_accion`?** El catálogo de acciones de
-   la ficha 362 audita hoy lo **destructivo o irreversible** (`vehiculo_borrado`, `zona_borrada`,
-   `tarifa_borrada`, `plantilla_eliminada`) y **no** audita el alta ni el renombrado de vehículos
-   (`lib/types/historial-accion.ts:106-109`), que es el precedente más cercano a esta pantalla.
-   Siguiendo ese precedente, esta ficha **no** registra acciones, y verificado el 2026-09-05 eso no
-   pone roja ninguna guardia: `historial-accion-escrituras-cubiertas.guardia.test.ts` recorre el
-   **enum** y exige productor para cada valor, no lo contrario. **Pero** desactivar un distrito
-   tiene consecuencia comercial (deja de poder cargarse), y eso lo acerca más a `zona_borrada` que
-   a `vehiculo_creado`. Si la respuesta es «sí», el coste es aditivo: un `ALTER TYPE … ADD VALUE`
-   por tipo nuevo, sus entradas de catálogo y de censo, y `appendAccion` dentro de la transacción.
-2. **¿La pantalla ofrece un filtro «ver solo los retirados»?** Con 494 distritos y unos pocos
-   inactivos, encontrarlos exige recorrer el árbol o saber su nombre. No está pedido y no se
-   inventa.
-3. **¿Qué pasa con las órdenes VIVAS de un distrito que se retira?** R35 fija que el histórico se
-   sigue viendo y filtrando, y esta ficha no las toca. Queda por decidir si la confirmación de R44
-   debe además decir cuántas órdenes **sin entregar** hay en ese distrito. Es una consulta más y una
-   decisión de producto.
-4. **¿Hace falta un aviso cuando se retira un nodo que hoy tiene cobertura?** R44 avisa por zonas
-   que se quedan sin distritos. No cubre el caso «este distrito tiene zona y se está retirando»,
-   que quizá merezca su propia línea en la confirmación.
+1. **¿El alta y la desactivación se registran en `historial_accion`?**
+   → **SÍ para activar/desactivar. NO para el alta.** → **R51–R57**, **§K**.
+   El precedente de vehículos audita `vehiculo_borrado` y no `vehiculo_creado`. Lo que decide no es
+   el nombre de la operación sino **su papel**: en esta pantalla, desactivar ocupa el lugar que el
+   borrado ocupa en las demás —es la operación que quita—, así que auditarla **sigue** el
+   precedente en vez de hacerle una excepción. Y la asimetría lo cierra: auditar de más cuesta un
+   `ALTER TYPE` y unas entradas de catálogo; **no auditar y necesitarlo después es irrecuperable**,
+   porque el pasado no se reconstruye — y el efecto de desactivar aparece lejos (una tienda cuyas
+   cargas empiezan a rechazarse semanas más tarde) sin nada que diga quién lo decidió. El alta se
+   queda fuera: es aditiva, inocua y visible en la propia pantalla.
+   **Dos valores, no uno** (R52): un único tipo con un campo booleano obligaría a abrir el detalle
+   para saber qué pasó.
+2. **¿La pantalla ofrece un filtro «ver solo los retirados»?**
+   → **SÍ, tres estados: Todos / Activos / Retirados.** → **R58, R59**, **§L**.
+   Sin él, encontrar un puñado de inactivos entre 494 distritos exige recorrer el árbol entero o
+   saber ya el nombre: la pantalla serviría para retirar pero no para **revisar** lo retirado. Es un
+   toggle sobre datos que el cliente ya tiene en memoria y no añade ni una consulta.
+3. **¿La confirmación dice cuántas órdenes sin entregar hay en ese nodo?**
+   → **SÍ.** → **R60, R61, R62**, **§L**.
+   Es una consulta más y es justo el dato que convierte la decisión en informada: retirar un
+   distrito con 40 órdenes en reparto y retirar uno con cero no son el mismo acto, y hoy quien pulsa
+   no puede distinguirlos. El criterio de «sin entregar» **no se inventa**: sale de
+   `ESTADOS_TERMINALES` (`lib/types/order-status-transiciones.ts:491-495`) más `deleted_at IS NULL`,
+   que es lo que usa el listado de órdenes. Los otros dos candidatos se descartan y se dice por qué
+   en `design.md §6.3`.
+4. **¿Hace falta un aviso propio para «este nodo tiene cobertura»?**
+   → **NO: queda cubierto por la decisión 3.** → **R63**.
+   Con la zona y el número de órdenes vivas delante, una tercera línea no añade información y sí
+   ruido. Una confirmación que avisa de todo no avisa de nada.
+5. **El hallazgo del spec_author: la etiqueta «(zona: X)» miente con un distrito en dos zonas.**
+   → **Se corrige.** → **R27**, `design.md §4.2`.
+   `take: 1` pinta «con zona» un distrito que la carga rechaza por tener dos. Medido en producción
+   el 2026-09-05: **0 distritos con más de una zona**, así que hoy no afecta a nadie —pero la marca
+   «sin zona» de R42 heredaría la mentira, y estaríamos construyendo una señal nueva sobre una rota.
+   Se aplica `zonaUnicaDeDistrito` y un test cubre el caso de dos zonas: debe leerse **sin zona
+   única**, nunca «(zona: la primera)».
