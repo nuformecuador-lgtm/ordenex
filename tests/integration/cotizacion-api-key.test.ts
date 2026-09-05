@@ -59,8 +59,9 @@ const TARIFA: TarifaVigente = {
   tarifaEspecialDevuelta: null,
 };
 
-const PROVINCIAS = [{ id: "p1", nombre: "San José" }];
-const CANTONES = [{ id: "c1", nombre: "Escazú", provinciaId: "p1" }];
+// FICHA 374: `disponible` es la disponibilidad EFECTIVA del nodo (la cascada ya aplicada).
+const PROVINCIAS = [{ id: "p1", nombre: "San José", disponible: true }];
+const CANTONES = [{ id: "c1", nombre: "Escazú", provinciaId: "p1", disponible: true }];
 /**
  * Feature 274 — la tarifa de OTRA zona, en la MISMA columna que la de `z1` (las dos filas son
  * no-centrales). Es lo que hace visible por el borde que el precio depende del par
@@ -80,10 +81,10 @@ const TARIFA_Z3: TarifaVigente = {
 };
 
 const DISTRITOS = [
-  { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false },
-  { id: "d2", nombre: "Centro", cantonId: "c1", zonaId: "z2", esCentral: true },
+  { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false, disponible: true },
+  { id: "d2", nombre: "Centro", cantonId: "c1", zonaId: "z2", esCentral: true, disponible: true },
   // Feature 274: un distrito NO-CENTRAL en una zona distinta de `z1`.
-  { id: "d3", nombre: "Santa Ana", cantonId: "c1", zonaId: "z3", esCentral: false },
+  { id: "d3", nombre: "Santa Ana", cantonId: "c1", zonaId: "z3", esCentral: false, disponible: true },
 ];
 
 /** Fila cubierta, con la geografia en columnas SEPARADas (contrato publico de la 88). */

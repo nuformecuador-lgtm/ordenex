@@ -32,7 +32,15 @@ describe("GeoRepository — la geografia de UNA zona", () => {
       id,
       nombre,
       cantonId: canton.id,
-      canton: { ...canton, provinciaId: provincia.id, provincia },
+      // FICHA 374: la lectura proyecta la cadena de flags en los tres niveles. Aqui todo activo:
+      // lo que este archivo mide es el recorte por zona, no la retirada de un nodo.
+      activo: true,
+      canton: {
+        ...canton,
+        provinciaId: provincia.id,
+        activo: true,
+        provincia: { ...provincia, activo: true },
+      },
     };
   }
 
@@ -63,16 +71,16 @@ describe("GeoRepository — la geografia de UNA zona", () => {
     expect(prisma.canton.findMany).not.toHaveBeenCalled();
     expect(prisma.provincia.findMany).not.toHaveBeenCalled();
 
-    expect(r.provincias).toEqual([{ id: "p9", nombre: "Limon" }]);
+    expect(r.provincias).toEqual([{ id: "p9", nombre: "Limon", disponible: true }]);
     // Deduplicado (Pococi aparece en dos distritos) y en orden alfabetico.
     expect(r.cantones).toEqual([
-      { id: "c8", nombre: "Guacimo", padreId: "p9" },
-      { id: "c9", nombre: "Pococi", padreId: "p9" },
+      { id: "c8", nombre: "Guacimo", padreId: "p9", disponible: true },
+      { id: "c9", nombre: "Pococi", padreId: "p9", disponible: true },
     ]);
     expect(r.distritos).toEqual([
-      { id: "d1", nombre: "Cariari", padreId: "c9" },
-      { id: "d2", nombre: "Guapiles", padreId: "c9" },
-      { id: "d3", nombre: "Rio Jimenez", padreId: "c8" },
+      { id: "d1", nombre: "Cariari", padreId: "c9", disponible: true },
+      { id: "d2", nombre: "Guapiles", padreId: "c9", disponible: true },
+      { id: "d3", nombre: "Rio Jimenez", padreId: "c8", disponible: true },
     ]);
   });
 
@@ -97,50 +105,68 @@ describe("GeoRepository — catalogo plano (R48/R49)", () => {
     };
   }
 
-  it("R49: las provincias se piden `{id,nombre}` ordenadas por nombre asc", async () => {
+  // ⚠️ FICHA 374: los tres `select` ganan la CADENA de flags (`activo`, y el de los ascendientes)
+  // y las tres filas ganan `disponible`. El `WHERE` NO cambia y eso se sigue afirmando aqui: la
+  // ausencia de `where` en los tres literales ES el contrato de R28 —estas lecturas PROYECTAN la
+  // disponibilidad, no recortan por ella—.
+  it("R49: las provincias se piden con su flag, ordenadas por nombre asc y SIN `where`", async () => {
     const prisma = buildPrisma();
     prisma.provincia.findMany.mockResolvedValue([
-      { id: "p1", nombre: "Alajuela" },
-      { id: "p2", nombre: "San Jose" },
+      { id: "p1", nombre: "Alajuela", activo: true },
+      { id: "p2", nombre: "San Jose", activo: false },
     ]);
     const repo = new GeoRepository(prisma as unknown as PrismaClient);
 
     const r = await repo.listProvinciasLite();
 
     expect(prisma.provincia.findMany).toHaveBeenCalledWith({
-      select: { id: true, nombre: true },
+      select: { id: true, nombre: true, activo: true },
       orderBy: { nombre: "asc" },
     });
+    // La provincia retirada SIGUE SALIENDO, con `disponible: false`.
     expect(r).toEqual([
-      { id: "p1", nombre: "Alajuela" },
-      { id: "p2", nombre: "San Jose" },
+      { id: "p1", nombre: "Alajuela", disponible: true },
+      { id: "p2", nombre: "San Jose", disponible: false },
     ]);
   });
 
-  it("R48: cada canton trae su PADRE (provincia) como `padreId`", async () => {
+  it("R48: cada canton trae su PADRE (provincia) como `padreId` y su disponibilidad", async () => {
     const prisma = buildPrisma();
     prisma.canton.findMany.mockResolvedValue([
-      { id: "c1", nombre: "Central", provinciaId: "p1" },
-      { id: "c2", nombre: "Escazu", provinciaId: "p1" },
+      { id: "c1", nombre: "Central", provinciaId: "p1", activo: true, provincia: { activo: true } },
+      // Canton ACTIVO bajo provincia RETIRADA: sale igual, y NO disponible.
+      { id: "c2", nombre: "Escazu", provinciaId: "p1", activo: true, provincia: { activo: false } },
     ]);
     const repo = new GeoRepository(prisma as unknown as PrismaClient);
 
     const r = await repo.listCantonesLite();
 
     expect(prisma.canton.findMany).toHaveBeenCalledWith({
-      select: { id: true, nombre: true, provinciaId: true },
+      select: {
+        id: true,
+        nombre: true,
+        provinciaId: true,
+        activo: true,
+        provincia: { select: { activo: true } },
+      },
       orderBy: { nombre: "asc" },
     });
     expect(r).toEqual([
-      { id: "c1", nombre: "Central", padreId: "p1" },
-      { id: "c2", nombre: "Escazu", padreId: "p1" },
+      { id: "c1", nombre: "Central", padreId: "p1", disponible: true },
+      { id: "c2", nombre: "Escazu", padreId: "p1", disponible: false },
     ]);
   });
 
   it("R48: cada distrito trae su PADRE (canton) como `padreId`, sin la zona", async () => {
     const prisma = buildPrisma();
     prisma.distrito.findMany.mockResolvedValue([
-      { id: "d1", nombre: "Carmen", cantonId: "c1" },
+      {
+        id: "d1",
+        nombre: "Carmen",
+        cantonId: "c1",
+        activo: true,
+        canton: { activo: true, provincia: { activo: true } },
+      },
     ]);
     const repo = new GeoRepository(prisma as unknown as PrismaClient);
 
@@ -148,18 +174,24 @@ describe("GeoRepository — catalogo plano (R48/R49)", () => {
 
     // Sin `zonas`: la zona de la ORDEN esta congelada en `orden.zona_id`.
     expect(prisma.distrito.findMany).toHaveBeenCalledWith({
-      select: { id: true, nombre: true, cantonId: true },
+      select: {
+        id: true,
+        nombre: true,
+        cantonId: true,
+        activo: true,
+        canton: { select: { activo: true, provincia: { select: { activo: true } } } },
+      },
       orderBy: { nombre: "asc" },
     });
-    expect(r).toEqual([{ id: "d1", nombre: "Carmen", padreId: "c1" }]);
-    expect(Object.keys(r[0]).sort()).toEqual(["id", "nombre", "padreId"]);
+    expect(r).toEqual([{ id: "d1", nombre: "Carmen", padreId: "c1", disponible: true }]);
+    expect(Object.keys(r[0]).sort()).toEqual(["disponible", "id", "nombre", "padreId"]);
   });
 
   it("R49: la misma entrada produce el mismo orden (determinista)", async () => {
     const prisma = buildPrisma();
     const filas = [
-      { id: "c1", nombre: "Alajuelita", provinciaId: "p1" },
-      { id: "c2", nombre: "Belen", provinciaId: "p2" },
+      { id: "c1", nombre: "Alajuelita", provinciaId: "p1", activo: true, provincia: { activo: true } },
+      { id: "c2", nombre: "Belen", provinciaId: "p2", activo: true, provincia: { activo: true } },
     ];
     prisma.canton.findMany.mockResolvedValue(filas);
     const repo = new GeoRepository(prisma as unknown as PrismaClient);

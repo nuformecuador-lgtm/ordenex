@@ -129,10 +129,11 @@ function resolverReal(filas: readonly FilaTarifa[]): TarifaVigenteRepository {
 // Geografia comun a los dos bordes de API: el distrito `d1` vive en la zona `z1`.
 // ---------------------------------------------------------------------------------------
 
-const PROVINCIAS = [{ id: "p1", nombre: "San José" }];
-const CANTONES = [{ id: "c1", nombre: "Escazú", provinciaId: "p1" }];
+// FICHA 374: `disponible` es la disponibilidad EFECTIVA del nodo (la cascada ya aplicada).
+const PROVINCIAS = [{ id: "p1", nombre: "San José", disponible: true }];
+const CANTONES = [{ id: "c1", nombre: "Escazú", provinciaId: "p1", disponible: true }];
 const DISTRITOS = [
-  { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: ZONA, esCentral: false },
+  { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: ZONA, esCentral: false, disponible: true },
 ];
 
 function filaApi(numRemision: string): Record<string, string> {

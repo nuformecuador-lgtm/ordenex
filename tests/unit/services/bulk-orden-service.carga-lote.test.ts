@@ -85,14 +85,14 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-1"),
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
-    findAllProvincias: vi.fn().mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]),
+    findAllProvincias: vi.fn().mockResolvedValue([{ id: "p1", nombre: "Pichincha", disponible: true }]),
     findCantonesByProvinciaIds: vi
       .fn()
-      .mockResolvedValue([{ id: "c1", nombre: "Quito", provinciaId: "p1" }]),
+      .mockResolvedValue([{ id: "c1", nombre: "Quito", provinciaId: "p1", disponible: true }]),
     findDistritosByCantonIds: vi
       .fn()
       .mockResolvedValue([
-        { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false },
+        { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false, disponible: true },
       ]),
     // Feature 141 (R47/R48): persistencia de las URLs de descarga de etiquetas.
     setCargaDownloadUrl: vi.fn(async () => {}),

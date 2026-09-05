@@ -158,13 +158,15 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-erbp"),
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false),
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
-    findAllProvincias: vi.fn().mockResolvedValue([{ id: "p1", nombre: "Pichincha" }]),
-    findCantonesByProvinciaIds: vi.fn().mockResolvedValue([{ id: "c1", nombre: "Quito", provinciaId: "p1" }]),
+    findAllProvincias: vi.fn().mockResolvedValue([{ id: "p1", nombre: "Pichincha", disponible: true }]),
+    findCantonesByProvinciaIds: vi.fn().mockResolvedValue([{ id: "c1", nombre: "Quito", provinciaId: "p1", disponible: true }]),
     findDistritosByCantonIds: vi
       .fn()
       .mockResolvedValue([
-        { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false },
+        { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false, disponible: true },
       ]),
+    // FICHA 374 (R60): conteo de ordenes sin entregar de un nodo; no lo ejercita la carga.
+    contarSinEntregarPorNodoGeografico: vi.fn().mockResolvedValue(0),
     createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null, omitidas: [] }),
     // Feature 141 (R47/R48): persistencia de las URLs de descarga de etiquetas.
     setCargaDownloadUrl: vi.fn(async () => {}),
@@ -551,7 +553,7 @@ describe("cargarViaApi — costoEnvio flete + IVA (feature 98)", () => {
     findDistritosByCantonIds: vi
       .fn()
       .mockResolvedValue([
-        { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: true },
+        { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: true, disponible: true },
       ]),
   };
 
@@ -825,8 +827,8 @@ const DOS_ZONAS = {
   findDistritosByCantonIds: vi
     .fn()
     .mockResolvedValue([
-      { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false },
-      { id: "d2", nombre: "Cumbaya", cantonId: "c1", zonaId: "z2", esCentral: false },
+      { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false, disponible: true },
+      { id: "d2", nombre: "Cumbaya", cantonId: "c1", zonaId: "z2", esCentral: false, disponible: true },
     ]),
 };
 

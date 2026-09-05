@@ -23,6 +23,8 @@ import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { FiltroAlcanceTablero } from "@/lib/types/alcance-tablero";
 // Feature 236 (T2.2, R5): el grupo de novedad viaja en la firma de los dos metodos del listado.
 import type { GrupoNovedad } from "@/lib/types/novedad-grupo";
+// FICHA 374: el nivel del catalogo geografico, como vocabulario cerrado compartido.
+import type { NivelGeografico } from "@/lib/types/geografia-nodo";
 // Feature 271 — el conteo N/V y el detalle del bloqueo viven en un modulo PURO
 // (`lib/utils/bloqueo-cierre.ts`), no en este puerto: los importan a la vez la capa de datos y el
 // formateador de textos que la UI consume, y este puerto arrastra `@prisma/client`.
@@ -191,6 +193,14 @@ export interface DistritoResueltoRow {
   zonaNombre: string | null;
   esCentral: boolean;
   esZonaEspecial: boolean;
+  /**
+   * FICHA 374 — la disponibilidad EFECTIVA del distrito (con canton y provincia). Se PROYECTA sin
+   * tocar el `WHERE` (R31): el rechazo de una correccion hacia un distrito retirado vive en
+   * `CorregirDatosClienteService`, con su motivo propio y DISTINTO del de «no existe» (R30). Si se
+   * recortara aqui, un distrito retirado y uno inexistente darian el mismo mensaje y el usuario no
+   * sabria cual de las dos cosas pasa.
+   */
+  disponible: boolean;
 }
 
 // Campos actualizables a nivel de datos (ya filtrados por rol en el servicio).
@@ -697,18 +707,29 @@ export interface ProvinciaRow {
   nombre: string;
   // feature 54: la zona de la orden ya NO se deriva de la provincia (provincia.zona_id
   // fue eliminada en la migracion de zonas); se deriva del distrito. Ver BulkOrdenService.
+  /**
+   * FICHA 374 — la disponibilidad EFECTIVA del nodo (la cascada ya aplicada). Se PROYECTA; el
+   * `WHERE` de estas lecturas NO cambia (R31). Recortar aqui haria caer la fila en «provincia no
+   * encontrada», un mensaje que MIENTE sobre una provincia que existe; el rechazo por retirada
+   * vive en `resolveGeo`, con su mensaje propio.
+   */
+  disponible: boolean;
 }
 
 export interface CantonRow {
   id: string;
   nombre: string;
   provinciaId: string;
+  /** FICHA 374 — ver `ProvinciaRow.disponible`. Aqui incluye el flag de su provincia. */
+  disponible: boolean;
 }
 
 export interface DistritoRow {
   id: string;
   nombre: string;
   cantonId: string;
+  /** FICHA 374 — ver `ProvinciaRow.disponible`. Aqui incluye los flags de canton y provincia. */
+  disponible: boolean;
   zonaId: string | null; // feature 24/R4: la zona de la orden se deriva del distrito (carga masiva).
   // Feature 98 (design §3.3, R2): flag `esCentral` de la zona del distrito, para elegir la
   // columna del flete (`valorFleteGam` si central) al tarifar la carga por API SIN N+1. `false`
@@ -1379,6 +1400,23 @@ export interface IOrdenRepository {
   findCantonesByProvinciaIds(provinciaIds: string[]): Promise<CantonRow[]>;
   /** R19: distritos de los cantones resueltos. */
   findDistritosByCantonIds(cantonIds: string[]): Promise<DistritoRow[]>;
+  /**
+   * FICHA 374 (R60/R61) — cuantas ordenes SIN ENTREGAR cuelgan de un nodo geografico. Alimenta la
+   * confirmacion de desactivar: retirar un distrito con 40 ordenes en reparto y retirar uno con
+   * cero no son el mismo acto, y hoy quien pulsa no puede distinguirlos.
+   *
+   * `nivel` elige la columna CONGELADA de la ORDEN (`provincia_id`/`canton_id`/`distrito_id`), que
+   * es la que tiene indice propio: un `count` por nivel es un acceso por indice y no un `IN` de
+   * hasta 123 ids. Ademas es MAS CORRECTO — `distrito_id` es el unico nullable de la terna, asi
+   * que una orden sin distrito CUENTA al desactivar su canton y NO cuenta al desactivar un
+   * distrito.
+   *
+   * «Sin entregar» = `deleted_at IS NULL` + estatus fuera de `ESTADOS_TERMINALES`, que se IMPORTA
+   * de su fuente unica (`lib/types/order-status-transiciones.ts`). Dos listas de estados
+   * terminales serian dos definiciones de «entregado» que un dia divergen, y la que divergiera
+   * contaria mal justo en la pantalla que decide retirar territorio.
+   */
+  contarSinEntregarPorNodoGeografico(nivel: NivelGeografico, id: string): Promise<number>;
   /**
    * R27: inserta en lotes de `batchSize` con `skipDuplicates`; devuelve el total insertado.
    * Feature 49/#1 (R9/R8/R20): por cada orden EFECTIVAMENTE insertada (no las duplicadas que

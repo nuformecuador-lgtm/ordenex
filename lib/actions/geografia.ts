@@ -4,109 +4,210 @@ import { z } from "zod";
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
+import { GeoRepository } from "@/lib/repositories/GeoRepository";
+import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { GeografiaService } from "@/lib/services/GeografiaService";
+import type { Actor } from "@/lib/interfaces/services/IVehiculoService";
+import type {
+  CambiarActivacionGeograficaServiceResult,
+  ContarOrdenesSinEntregarServiceResult,
+  CrearNodoGeograficoServiceResult,
+  IGeografiaService,
+  ListarArbolGeograficoServiceResult,
+} from "@/lib/interfaces/services/IGeografiaService";
+import {
+  cambiarActivacionGeograficaSchema,
+  crearNodoGeograficoSchema,
+  nodoGeograficoSchema,
+} from "@/lib/types/geografia-nodo";
 
-// Catalogo geografico global (provincia -> canton -> distrito) para la gestion
-// de zonas dentro de Tarifas. Se sirve el arbol completo en una sola query para
-// que el cliente lo navegue en un accordion sin round-trips. La unica escritura
-// es la marca `distrito.zona_especial` (al final del archivo); el catalogo en si
-// es de solo lectura.
+// Catalogo geografico global (provincia -> canton -> distrito).
+//
+// ⚠️ FICHA 374 — YA NO ES DE SOLO LECTURA. La cabecera anterior decia, con todas sus letras, que
+// «el catalogo en si es de solo lectura» y que por eso se toleraba el Prisma directo. Esa premisa
+// muere con la primera escritura: desde esta ficha el catalogo se administra desde la app, asi que
+// la lectura del arbol tambien pasa por la cadena de siempre —Server Action -> `GeografiaService`
+// -> `GeoRepository`— y este archivo deja de tocar Prisma para eso.
+//
+// ⚠️ LA UNICA EXCEPCION QUE QUEDA, Y SE DECLARA EN VEZ DE ESCONDERSE:
+// `actualizarDistritosEspeciales`, al final del archivo, sigue yendo contra Prisma directo. Es una
+// escritura VIVA del flujo de Tarifas, ya probada, que no pertenece a esta ficha; moverla no le da
+// nada a la 374 y si pone en riesgo algo que funciona. Queda fuera de alcance a proposito.
+//
+// ⚠️ NO HAY NINGUNA ACCION DE BORRADO (R5) NI DE RENOMBRADO (R49). Quitar un nodo es
+// DESACTIVARLO. Ver el porque en `lib/interfaces/repositories/IGeoRepository.ts`.
 
-export interface DistritoArbolDTO {
-  id: string;
-  nombre: string;
-  /** Zona a la que ya pertenece el distrito (N:M via zona_distrito), o null. */
-  zonaId: string | null;
-  zonaNombre: string | null;
-  /**
-   * Marca de zona especial. La columna es `BOOLEAN NULL` (null = nadie lo
-   * decidio todavia), pero hacia la UI se normaliza a dos valores con la unica
-   * lectura correcta: `zona_especial IS TRUE`. La marca es del DISTRITO, no de
-   * la zona: si el distrito pertenece a varias zonas, la ven todas.
-   */
-  zonaEspecial: boolean;
-}
-
-export interface CantonArbolDTO {
-  id: string;
-  nombre: string;
-  distritos: DistritoArbolDTO[];
-}
-
-export interface ProvinciaArbolDTO {
-  id: string;
-  nombre: string;
-  cantones: CantonArbolDTO[];
-}
-
-export type ArbolGeograficoResult =
-  | { status: "ok"; provincias: ProvinciaArbolDTO[] }
-  | { status: "unauthenticated" }
-  | { status: "forbidden" };
+// Los DTO del arbol viven en `lib/types/geografia-nodo.ts` desde la ficha 374 —los produce
+// `GeoRepository`, y un repositorio no puede importar un modulo `"use server"`—. Se RE-EXPORTAN
+// aqui para que ningun consumidor tenga que cambiar su import.
+export type {
+  CantonArbolDTO,
+  DistritoArbolDTO,
+  ProvinciaArbolDTO,
+} from "@/lib/types/geografia-nodo";
 
 /**
- * Devuelve el arbol geografico completo ordenado alfabeticamente en cada nivel.
- * Autoriza solo al rol `maestro` (misma puerta que /configuracion). El distrito
- * expone su zona actual (primera relacion en zona_distrito) para que la UI marque
- * los ya asignados.
+ * Dependencias inyectables del borde (patron `VehiculoActionDeps`). Existen para poder probar las
+ * cuatro acciones SIN base y sin sesion, no para cambiar el comportamiento en produccion.
  */
-export async function listarArbolGeografico(): Promise<ArbolGeograficoResult> {
-  const actor = await resolveActorFromSession();
-  if (!actor) return { status: "unauthenticated" };
-  if (actor.rol !== "maestro") return { status: "forbidden" };
+export interface GeografiaActionDeps {
+  geografiaService?: IGeografiaService;
+  getActor?: () => Promise<Actor | null>;
+}
 
+/**
+ * EL COMPOSITION ROOT. Es el UNICO sitio del sistema que construye el servicio, y por tanto el
+ * unico que le pasa sus DOS repositorios.
+ *
+ * ⚠️ EL SEGUNDO ARGUMENTO NO ES DECORATIVO: sin `OrdenRepository`, el conteo de ordenes sin
+ * entregar de R60 reventaria en la primera confirmacion de desactivar, en produccion y no en
+ * ningun test —los tests de servicio inyectan sus propios dobles—. Comprobar que el modulo lo
+ * IMPORTA no basta; hay que comprobar que alguien lo PASA, y eso lo fija
+ * `tests/unit/actions/geografia.composition-root.test.ts`.
+ */
+function buildGeografiaService(): IGeografiaService {
   const prisma = getPrismaClient();
-  const provincias = await prisma.provincia.findMany({
-    orderBy: { nombre: "asc" },
-    select: {
-      id: true,
-      nombre: true,
-      cantones: {
-        orderBy: { nombre: "asc" },
-        select: {
-          id: true,
-          nombre: true,
-          distritos: {
-            orderBy: { nombre: "asc" },
-            select: {
-              id: true,
-              nombre: true,
-              zonaEspecial: true,
-              zonas: {
-                take: 1,
-                select: { zona: { select: { id: true, nombre: true } } },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
+  return new GeografiaService(new GeoRepository(prisma), new OrdenRepository(prisma));
+}
 
-  const arbol: ProvinciaArbolDTO[] = provincias.map((p) => ({
-    id: p.id,
-    nombre: p.nombre,
-    cantones: p.cantones.map((c) => ({
-      id: c.id,
-      nombre: c.nombre,
-      distritos: c.distritos.map((d) => {
-        const zona = d.zonas[0]?.zona ?? null;
-        return {
-          id: d.id,
-          nombre: d.nombre,
-          zonaId: zona?.id ?? null,
-          zonaNombre: zona?.nombre ?? null,
-          // `=== true` y no `!!`: con `null` los dos dan false, pero esto deja
-          // dicho que la columna es tri-valuada y que null NO es "no especial".
-          zonaEspecial: d.zonaEspecial === true,
-        };
-      }),
-    })),
-  }));
+/** Traduce el ZodError del borde a `validation_error` con los errores por campo. */
+function errorDeValidacion(error: z.ZodError): {
+  status: "validation_error";
+  fieldErrors: Record<string, string[]>;
+} {
+  return {
+    status: "validation_error",
+    fieldErrors: error.flatten().fieldErrors as Record<string, string[]>,
+  };
+}
 
-  return { status: "ok", provincias: arbol };
+// ── Lectura del arbol ────────────────────────────────────────────────────────────────────────
+
+export type ArbolGeograficoResult =
+  | ListarArbolGeograficoServiceResult
+  | { status: "unauthenticated" };
+
+/**
+ * Devuelve el arbol geografico COMPLETO —activos e inactivos— ordenado alfabeticamente en cada
+ * nivel. Autoriza solo al rol `maestro` (misma puerta que /configuracion).
+ *
+ * CONSERVA SU FIRMA: lo llaman `app/(app)/configuracion/tarifas/page.tsx` y
+ * `ZonasTarifasModule.tsx` sin argumentos, y siguen compilando. `deps` es opcional y solo sirve
+ * para probarlo sin base.
+ */
+export async function listarArbolGeografico(
+  deps: GeografiaActionDeps = {},
+): Promise<ArbolGeograficoResult> {
+  const actor = await (deps.getActor ?? resolveActorFromSession)();
+  if (!actor) return { status: "unauthenticated" };
+  const service = deps.geografiaService ?? buildGeografiaService();
+  return service.listarArbol(actor);
+}
+
+// ── Alta ─────────────────────────────────────────────────────────────────────────────────────
+
+export type CrearNodoGeograficoResult =
+  | CrearNodoGeograficoServiceResult
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };
+
+/**
+ * Alta de una provincia, un canton o un distrito (solo `maestro`).
+ *
+ * UNA accion para los tres niveles, no tres: el nivel viaja como dato de un vocabulario cerrado y
+ * la `discriminatedUnion` mantiene el borde igual de estricto. Tres cuerpos identicos serian dos
+ * sitios mas donde olvidar la comprobacion de rol.
+ *
+ * @sin-superficie ficha 374, backend antes que pantalla: la pantalla /configuracion/geografia es el bloque H de tasks.md y la monta frontend_dev sobre esta rama; hasta entonces la accion existe y no tiene quien la dispare. La anotacion CADUCA: en cuanto el modulo de la pantalla la importe, esta guardia exige quitarla.
+ */
+export async function crearNodoGeografico(
+  input: unknown,
+  deps: GeografiaActionDeps = {},
+): Promise<CrearNodoGeograficoResult> {
+  const actor = await (deps.getActor ?? resolveActorFromSession)();
+  if (!actor) return { status: "unauthenticated" }; // R23
+
+  const parsed = crearNodoGeograficoSchema.safeParse(input);
+  if (!parsed.success) return errorDeValidacion(parsed.error); // R25
+
+  const service = deps.geografiaService ?? buildGeografiaService();
+  try {
+    return await service.crear(parsed.data, actor);
+  } catch {
+    // R18 — El UNIQUE de la base es la ultima palabra: si dos altas simultaneas pasan la
+    // comprobacion del service, una de las dos falla aqui y se cuenta como conflict en vez de
+    // escapar como error crudo de Postgres.
+    return { status: "conflict" };
+  }
+}
+
+// ── Activacion ───────────────────────────────────────────────────────────────────────────────
+
+export type CambiarActivacionGeograficaResult =
+  | CambiarActivacionGeograficaServiceResult
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };
+
+/**
+ * Desactiva o reactiva un nodo del catalogo (solo `maestro`).
+ *
+ * `activo` es el estado DESEADO, no un toggle: pedir el estado en el que el nodo ya esta devuelve
+ * `ok` sin escribir nada (R21). Esta escritura NO toca a ningun descendiente (R8) ni a
+ * `zona_distrito` (R50).
+ *
+ * @sin-superficie ficha 374, backend antes que pantalla: la pantalla /configuracion/geografia es el bloque H de tasks.md y la monta frontend_dev sobre esta rama; hasta entonces la accion existe y no tiene quien la dispare. La anotacion CADUCA: en cuanto el modulo de la pantalla la importe, esta guardia exige quitarla.
+ */
+export async function cambiarActivacionGeografica(
+  input: unknown,
+  deps: GeografiaActionDeps = {},
+): Promise<CambiarActivacionGeograficaResult> {
+  const actor = await (deps.getActor ?? resolveActorFromSession)();
+  if (!actor) return { status: "unauthenticated" };
+
+  const parsed = cambiarActivacionGeograficaSchema.safeParse(input);
+  if (!parsed.success) return errorDeValidacion(parsed.error);
+
+  const service = deps.geografiaService ?? buildGeografiaService();
+  return service.cambiarActivacion(parsed.data, actor);
+}
+
+// ── El dato de la confirmacion (R60) ─────────────────────────────────────────────────────────
+
+export type ContarOrdenesSinEntregarDeNodoResult =
+  | ContarOrdenesSinEntregarServiceResult
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };
+
+/**
+ * SOLO LECTURA: cuantas ordenes sin entregar cuelgan del nodo. Alimenta la confirmacion de
+ * desactivar y NUNCA escribe.
+ *
+ * Es informacion para decidir, no una condicion de la operacion: si esta llamada falla, la
+ * pantalla lo dice y NO bloquea (R62). Un conteo caido que impidiera retirar un distrito
+ * convertiria un dato de cortesia en un bloqueo.
+ *
+ * @sin-superficie ficha 374, backend antes que pantalla: la confirmacion de desactivar que pide este conteo es el bloque H de tasks.md y la monta frontend_dev sobre esta rama. La anotacion CADUCA: en cuanto el modulo de la pantalla la importe, esta guardia exige quitarla.
+ */
+export async function contarOrdenesSinEntregarDeNodo(
+  input: unknown,
+  deps: GeografiaActionDeps = {},
+): Promise<ContarOrdenesSinEntregarDeNodoResult> {
+  const actor = await (deps.getActor ?? resolveActorFromSession)();
+  if (!actor) return { status: "unauthenticated" };
+
+  const parsed = nodoGeograficoSchema.safeParse(input);
+  if (!parsed.success) return errorDeValidacion(parsed.error);
+
+  const service = deps.geografiaService ?? buildGeografiaService();
+  return service.contarOrdenesSinEntregar(parsed.data, actor);
 }
 
 // ── Marca de zona especial ─────────────────────────────────────────────────
+//
+// ⚠️ FICHA 374: ESTA ACCION NO SE TOCA, y queda declarado por que. Va contra Prisma directo desde
+// la ficha que la creo; es una escritura VIVA del flujo de Tarifas, ya probada, y no pertenece al
+// alcance de la 374. Moverla a la cadena de capas no le da nada a esta ficha y si arriesga algo
+// que funciona. Cuando le toque su ficha, se mueve entera.
 
 const distritosEspecialesSchema = z.object({
   /** Distritos que pasan a `zona_especial = true`. */

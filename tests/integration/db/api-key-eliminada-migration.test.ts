@@ -150,14 +150,28 @@ describeSiHayBase("373/A5 — el enum en la base APLICADA", () => {
     expect(enLaBase, "la migracion no esta aplicada en esta base").toContain(VALOR_NUEVO);
     // Las DOS direcciones: ni el catalogo nombra algo que la base no tiene, ni al reves.
     expect(enLaBase.slice().sort()).toEqual([...HISTORIAL_ACCION_TIPOS].sort());
-    expect(enLaBase).toHaveLength(45);
+    // ⚠️ EL CONTEO SE COMPARA CONTRA EL CATALOGO, NO CONTRA UN NUMERO CONGELADO. Aqui decia 45, y
+    // la ficha 374 lo dejo obsoleto al añadir dos tipos. Un literal en este sitio obliga a que
+    // CADA ficha que amplie el enum venga a editar la suite de la ficha anterior — y lo que este
+    // caso quiere afirmar no es «son 45», es «la base y el catalogo dicen lo mismo». El numero
+    // duro sigue existiendo, en el sitio que le corresponde:
+    // `historial-accion-escrituras-cubiertas.guardia.test.ts`, que ademas obliga a censar el
+    // productor del tipo nuevo.
+    expect(enLaBase).toHaveLength(HISTORIAL_ACCION_TIPOS.length);
   });
 
-  it("el valor nuevo va AL FINAL: `ADD VALUE` sin BEFORE/AFTER apende", async () => {
-    // Es de donde saldra la lista previa del `down.sql` de la SIGUIENTE ficha que amplie el enum.
+  it("el valor nuevo va DESPUES del de la 371: `ADD VALUE` sin BEFORE/AFTER apende", async () => {
+    // Es de donde sale la lista previa del `down.sql` de la SIGUIENTE ficha que amplie el enum.
+    //
+    // ⚠️ SE MIDE LA POSICION RELATIVA Y NO «el ultimo», y ese cambio lo forzo la ficha 374, que
+    // apendio dos valores detras. Lo que la 373 necesitaba demostrar es que `ADD VALUE` APENDE
+    // —o sea, que su valor quedo justo detras del de la 371—, y eso sigue siendo cierto y sigue
+    // siendo lo que sostiene la lista previa de cualquier `down.sql` posterior.
     const enLaBase = await etiquetasDelEnum();
-    expect(enLaBase[enLaBase.length - 1]).toBe(VALOR_NUEVO);
-    expect(enLaBase[enLaBase.length - 2]).toBe(ANADIDO_POR_LA_371);
+    const iNuevo = enLaBase.indexOf(VALOR_NUEVO);
+    const i371 = enLaBase.indexOf(ANADIDO_POR_LA_371);
+    expect(i371).toBeGreaterThanOrEqual(0);
+    expect(iNuevo).toBe(i371 + 1);
   });
 
   it("una fila con el valor nuevo se puede escribir (el enum lo acepta de verdad)", async () => {

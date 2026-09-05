@@ -32,9 +32,9 @@ const CATALOGO: CatalogoFiltrosOrdenesDTO = {
   mensajeros: [{ id: "m1", nombre: "Mensajero", zonaId: "z1", estado: "activo" }],
   zonas: [{ id: "z1", nombre: "GAM" }],
   tiendas: [{ id: "t1", nombre: "Tienda", esApiKey: false, activa: true }],
-  provincias: [{ id: "p1", nombre: "San José" }],
-  cantones: [{ id: "c1", nombre: "Central", padreId: "p1" }],
-  distritos: [{ id: "d1", nombre: "Carmen", padreId: "c1" }],
+  provincias: [{ id: "p1", nombre: "San José", disponible: true }],
+  cantones: [{ id: "c1", nombre: "Central", padreId: "p1", disponible: true }],
+  distritos: [{ id: "d1", nombre: "Carmen", padreId: "c1", disponible: true }],
 };
 
 function claves(facetas?: readonly ("zona" | "tienda" | "mensajero")[]): string[] {

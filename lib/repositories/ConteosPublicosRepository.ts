@@ -2,6 +2,8 @@ import type { PrismaClient } from "@prisma/client";
 
 import type { IConteosPublicosRepository } from "@/lib/interfaces/repositories/IConteosPublicosRepository";
 import type { ConteosPublicos } from "@/lib/types/conteos-publicos";
+// FICHA 374 (R11/R34): el predicado de disponibilidad vive en UN solo sitio.
+import { WHERE_DISTRITO_DISPONIBLE } from "@/lib/repositories/_shared/geografia-activa";
 
 // Feature 198 — los tres conteos publicos contra Postgres.
 
@@ -30,8 +32,13 @@ export class ConteosPublicosRepository implements IConteosPublicosRepository {
         //
         // ⚠️ El camino es por la tabla puente y no hay atajo: `Distrito` no tiene `zonaId`
         // —la columna escalar se elimino en `20260713000000` (feature 24)—.
+        //
+        // FICHA 374/R34: ademas de tener zona, el distrito tiene que estar DISPONIBLE. Es una de
+        // las DOS unicas lecturas del arbol que recortan por disponibilidad, y el motivo es que
+        // este numero es una PROMESA COMERCIAL en la landing: contar distritos retirados lo
+        // infla. El predicado no se escribe a mano — se importa del unico sitio donde vive.
         this.prisma.distrito.count({
-          where: { zonas: { some: {} } },
+          where: { zonas: { some: {} }, ...WHERE_DISTRITO_DISPONIBLE },
         }),
 
         // Gestionadas: ordenes con al menos UNA gestion vigente.

@@ -235,9 +235,10 @@ describe("362/R17 — `categoria` se traduce a `accion IN (…)` en el borde", (
       categoria: ["hace_desaparecer", "cambia_permisos"],
     });
     // 7 desapariciones desde la ficha 371 (`gestion_fecha_reprogramacion_corregida`) y 12
-    // permisos desde la 373 (`api_key_eliminada`).
-    expect(tipos).toHaveLength(7 + 12);
-    expect(new Set(tipos).size).toBe(19);
+    // permisos desde la 373 (`api_key_eliminada`); 9 desapariciones desde la ficha 374, que añade
+    // los DOS `nodo_geografico_*` a esa categoria.
+    expect(tipos).toHaveLength(9 + 12);
+    expect(new Set(tipos).size).toBe(21);
   });
 
   it("categoria Y accion a la vez se INTERSECAN (design §4.2)", () => {
