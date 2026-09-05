@@ -142,3 +142,44 @@ inconsistente entre sus tablas, se optó por la forma oficial acentuada:
 - 494 filas de datos (desnormalizado: provincia y cantón repetidos por distrito).
   Cada distrito va junto a sus hermanos, dentro del bloque de su cantón.
 - Codificación UTF-8; tildes y ñ preservadas.
+
+## Deuda abierta: dos familias de nombre de zona (medido el 2026-09-05)
+
+`canonicalZonaNombre('ZONA SUR')` (`lib/geo/normalize.ts`) devuelve `'Zona Sur'`,
+y `zona.nombre` es único **por texto exacto**. Como consecuencia, las dos vías que
+crean zonas producen filas distintas para la misma zona:
+
+- la migración `20260713010000_seed_zonas_pago_distrito` inserta los nombres en
+  mayúsculas (`ZONA SUR`, `SAN RAMÓN`, `LIMÓN ABAJO`, `GUANACASTE`, …);
+- `scripts/seed-zonas.ts` inserta la forma canónica (`Zona Sur`, `San Ramón`,
+  `Limón Abajo`, `Guanacaste`, …).
+
+Un distrito alcanzado por ambas vías acaba con **2 filas en `zona_distrito`**, y
+`zonaUnicaDeDistrito` (`lib/repositories/_shared/zona-colapso.ts`) colapsa más de
+una zona a `null`: el distrito queda inservible **pareciendo configurado**.
+
+Medición sobre una base **desechable y limpia**, secuencia
+`prisma migrate deploy` → `pnpm exec tsx scripts/seed-zonas.ts`:
+
+- tabla `zona`: **13 filas**. `GAM` (151 distritos) es la única sin pareja, porque
+  es acrónimo y su forma canónica coincide. Las otras seis van en pareja:
+  `ZONA SUR` 36 / `Zona Sur` 0 · `PUNTARENAS` 27 / `Puntarenas` 22 ·
+  `GUANACASTE` 15 / `Guanacaste` 1 · `SAN RAMÓN` 12 / `San Ramón` 21 ·
+  `LIMÓN ABAJO` 8 / `Limón Abajo` 4 · `QUEPOS` 7 / `Quepos` 0.
+- distritos con más de una zona: **3** — Quesada (San Carlos, Alajuela) y
+  San Ramón (San Ramón, Alajuela) con `San Ramón | SAN RAMÓN`, y Puerto Viejo
+  (Sarapiquí, Heredia) con `Limón Abajo | LIMÓN ABAJO`.
+- **Producción está limpia: 0 distritos con más de una zona** (medido 2026-09-05).
+
+Esto obligó a una decisión en `public/mapa-geografico-costa-rica.xlsx`. Con una
+fila `Puntarenas | Buenos Aires | Cabagra | ZONA SUR` en la hoja
+`Jerarquía (revisar)`, la medición daba **Cabagra con 2 zonas**
+(`Zona Sur | ZONA SUR`) y el total de distritos afectados subía a **4**: la
+migración `20260905175156` le hereda `ZONA SUR` de sus 9 hermanos y el seed CLI le
+añadía encima `Zona Sur`. **Esa fila se quitó**; sin ella Cabagra queda con **1**
+zona (`ZONA SUR`) y el total vuelve a **3**. La fila de **Pijije sí se conserva**:
+Bagaces no tiene zona en la migración de zonas, así que el seed es su única vía y
+acaba con **1** (`Guanacaste`), sin colisión.
+
+Queda como deuda a decidir aparte: unificar las dos familias de nombre. **No se
+arregla aquí** — tocaría datos ya editados a mano por el maestro en producción.
