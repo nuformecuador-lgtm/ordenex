@@ -139,8 +139,16 @@ export function buildPageItems(
   return out;
 }
 
+/**
+ * `pointer-events-auto` NO es decorativo: en modo pegajoso el envoltorio va con
+ * `pointer-events-none` (ver el comentario del `return`) y son los controles los que
+ * vuelven a capturar el puntero, uno por uno. Sin esta clase, los botones de la barra
+ * dejarían de responder. `disabled:pointer-events-none` sigue mandando sobre ella:
+ * `&:disabled` tiene más especificidad, así que un botón deshabilitado ni responde ni
+ * se queda con el clic de lo que tenga debajo.
+ */
 const buttonClass =
-  "inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground";
+  "pointer-events-auto inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground";
 
 /**
  * Componente de paginación genérico, controlado y desacoplado (R1, R2). No obtiene
@@ -334,7 +342,9 @@ export function Pagination({
           disabled={disabled}
           onChange={(event) => onPageSizeChange?.(Number(event.target.value))}
           className={cn(
-            "h-8 rounded-lg border border-border bg-background px-2 text-sm outline-none",
+            // `pointer-events-auto`: mismo motivo que en `buttonClass`. Este selector es
+            // un control real de la barra y tiene que seguir capturando el puntero.
+            "pointer-events-auto h-8 rounded-lg border border-border bg-background px-2 text-sm outline-none",
             "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
             "disabled:pointer-events-none disabled:opacity-50",
           )}
@@ -365,10 +375,44 @@ export function Pagination({
           contenedor de scroll.
 
           `-mt-4`: anula el `gap-4` del contenedor padre SOLO en esta junta, así la barra
-          queda pegada a la tabla (gap 0) sin tocar la separación del resto de bloques. */}
+          queda pegada a la tabla (gap 0) sin tocar la separación del resto de bloques.
+
+          ⚠ `pointer-events-none` AQUÍ, Y `pointer-events-auto` EN CADA CONTROL — arregla
+          un fallo MUDO, de la misma familia que el carril de las flechas de `DataTable`.
+
+          Esta caja flota sobre las filas y ocupa TODO el ancho, pero solo una parte
+          pequeña de ella es pulsable: el resto es fondo. Mientras capturaba el puntero,
+          ese fondo se quedaba con el clic que iba a la fila de debajo.
+
+          Medido en Chromium contra el dev server con clics de RATÓN REALES
+          (`page.mouse.click` sobre las coordenadas del botón; `locator.click` NO sirve,
+          porque desplaza el elemento a la vista antes de pulsar y esconde justo esto),
+          en 390/768/1024/1280/1440/1920 sobre `/ordenes`, `/configuracion/api` y
+          `/configuracion`: 26 controles robados, 0 de 26 abrieron lo suyo. Y quién
+          recibía cada clic dice exactamente qué sobraba:
+
+            19  el fondo del propio `<nav>`
+             4  el hueco entre botones del grupo (`gap-1`)
+             1  el texto del rango («1-10 de 10»)
+             1  el selector de tamaño de página   ← control REAL
+             1  el botón «Ir a la página 1»       ← control REAL
+
+          O sea: 24 de 26 los robaba algo que NO era pulsable. Con la caja transparente
+          al puntero, esos clics atraviesan y llegan a la fila; los controles siguen
+          respondiendo porque cada uno declara `pointer-events-auto`.
+
+          Los otros 2 son IRREDUCIBLES por esta vía: ahí un botón de verdad de la barra
+          está justo encima de un botón de verdad de una fila, y no hay forma de que un
+          píxel pertenezca a los dos. Se quedan medidos en el informe, no escondidos.
+
+          La sombra (`<span>` de arriba) ya iba con `pointer-events-none`, y el centinela
+          vive FUERA de esta caja y en flujo: ninguno de los dos robaba nada. Comprobado
+          además que esta caja no es más alta que la barra visible.
+
+          Lo fija `tests/components/PaginacionNoRobaElClic.test.tsx`. */}
       <div
         className={cn(
-          "sticky bottom-0 z-10 bg-background/70 backdrop-blur-md",
+          "pointer-events-none sticky bottom-0 z-10 bg-background/70 backdrop-blur-md",
           contenedorClassName,
         )}
       >

@@ -335,7 +335,29 @@ describe("ZonaRepository.hardDelete", () => {
     expect(tx.zona.delete).not.toHaveBeenCalled();
   });
 
-  it("FK RESTRICT (P2003) -> referenced", async () => {
+  // ⚠️ ESTOS CASOS FABRICAN EL ERROR, Y ESA ES SU LIMITACION. Hasta el 2026-09-04 aqui solo
+  // estaba el `P2003` de abajo, y por eso la suite estuvo verde mientras el codigo NO devolvia
+  // `referenced` NUNCA en produccion: bajo `@prisma/adapter-pg` la violacion de FK llega como
+  // `DriverAdapterError` con `cause.code === "23001"`, no como `PrismaClientKnownRequestError`.
+  // LA EVIDENCIA REAL, provocando la violacion contra Postgres (una orden apuntando a la zona),
+  // vive en `tests/integration/db/tarifa-zona-borrado-fk-real.test.ts`.
+  it("FK RESTRICT en la forma REAL del adapter (DriverAdapterError, 23001) -> referenced", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.delete.mockRejectedValue(
+      Object.assign(
+        new Error(
+          'update or delete on table "zona" violates RESTRICT setting of foreign key ' +
+            'constraint "orden_zona_id_fkey" on table "orden"',
+        ),
+        { name: "DriverAdapterError", cause: { code: "23001" } },
+      ),
+    );
+    const prisma = buildPrisma(tx);
+    expect(await repoOf(prisma).hardDelete("z1", "actor-1")).toBe("referenced");
+  });
+
+  it("FK RESTRICT en la forma nativa (P2003) -> referenced, por si el adapter la traduce", async () => {
     const tx = buildTx();
     tx.zona.findUnique.mockResolvedValue({ id: "z1" });
     tx.zona.delete.mockRejectedValue(
@@ -343,6 +365,22 @@ describe("ZonaRepository.hardDelete", () => {
     );
     const prisma = buildPrisma(tx);
     expect(await repoOf(prisma).hardDelete("z1", "actor-1")).toBe("referenced");
+  });
+
+  it("un SQLSTATE del adapter que NO es de FK se propaga (no se disfraza de `referenced`)", async () => {
+    // `40001` es un fallo de serializacion: reintentable, y desde luego no «esta en uso».
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.delete.mockRejectedValue(
+      Object.assign(new Error("could not serialize access"), {
+        name: "DriverAdapterError",
+        cause: { code: "40001" },
+      }),
+    );
+    const prisma = buildPrisma(tx);
+    await expect(repoOf(prisma).hardDelete("z1", "actor-1")).rejects.toThrow(
+      "could not serialize access",
+    );
   });
 });
 

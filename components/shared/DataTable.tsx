@@ -556,10 +556,37 @@ export function DataTable<T>({
           encogerse (`min-w-0`), si no el overflow nunca se activa.
           El marco (borde + esquinas redondeadas) va en un contenedor APARTE con
           `overflow-hidden`: así la barra de scroll horizontal queda recortada
-          DENTRO del marco en vez de asomar por debajo del borde. */}
-      <div className="w-full max-w-full overflow-hidden rounded-lg border border-asfalto-2">
+          DENTRO del marco en vez de asomar por debajo del borde.
+
+          `sm:px-10` CUANDO HAY SCROLL — EL CARRIL DE LAS FLECHAS. Ver el
+          comentario extenso de las flechas, más abajo: los 40 px de cada lado
+          son el sitio PROPIO de cada flecha, y por eso ninguna se dibuja ya
+          sobre una celda. El padding va aquí, en el marco, y no en el viewport
+          de scroll: un `padding-left` DENTRO de un contenedor que desplaza se va
+          con el contenido al primer scroll y el hueco desaparece justo cuando
+          hace falta. Aquí no desplaza nada: el carril es fijo.
+
+          `sm:` Y NO A SECAS: por debajo de 640 px no hay carril porque no hay
+          flechas (ver abajo). El carril y las flechas son la misma decisión y
+          tienen que encenderse juntos, o se reservarían 80 px para un control
+          que no se pinta.
+
+          Sin desborde no hay flechas y no hay padding: una tabla que cabe se
+          pinta byte por byte como antes. El estado no oscila —el padding solo
+          ESTRECHA el viewport, así que «desborda» nunca puede volverse falso por
+          haberlo aplicado— aunque sí tiene histéresis en la franja en la que el
+          contenido cabe sin carril y no cabe con él: ahí el estado depende de
+          por dónde se entró, y como los dos son estables no parpadea. */}
+      <div
+        data-slot="datatable-marco"
+        className={cn(
+          "w-full max-w-full overflow-hidden rounded-lg border border-asfalto-2",
+          scrollNav.scrollable && "sm:px-10",
+        )}
+      >
         <div
           ref={scrollRef}
+          data-slot="datatable-scrollport"
           onScroll={actualizarScroll}
           className="w-full max-w-full overflow-x-auto scroll-smooth"
         >
@@ -608,11 +635,77 @@ export function DataTable<T>({
           absolutas a cada borde de la tabla (no de las columnas); el botón usa
           position: sticky para quedar al 50% de la pantalla mientras la tabla
           está a la vista, clamped dentro de la tira, que arranca bajo el <thead>
-          para no tapar la cabecera. */}
+          para no tapar la cabecera.
+
+          ⚠ EL CARRIL, Y POR QUÉ EXISTE — fallo MUDO que estuvo en producción.
+
+          Estas dos tiras están por ENCIMA de la tabla (`z-20`) y el botón tiene
+          `pointer-events-auto`. Mientras se dibujaban sobre las celdas, la flecha
+          HABILITADA se quedaba con el clic que iba al contenido de debajo. Medido
+          en Chromium contra el dev server, `/configuracion/api` a 1280×900 con la
+          barra lateral desplegada, con un clic de RATÓN real sobre el centro del
+          botón «Editar webhook» (x=1222, y=302):
+
+            el clic lo recibió  → «Desplazar la tabla a la derecha»
+            scrollLeft          → 0 → 271
+            modal esperado      → NO abrió
+
+          El segundo clic sí funcionaba, porque para entonces la tabla ya estaba
+          en el extremo y la flecha se había deshabilitado (y `disabled` trae
+          `pointer-events-none`). Ese es el patrón entero: no falla, APARENTA.
+          Nadie abre una incidencia por «he tenido que pulsar dos veces». Y no era
+          una pantalla: el solape medía 36 px —el ancho exacto de la flecha—
+          contra la primera y la última columna en TODAS las tablas que desbordan,
+          y `DataTable` lo montan 35 pantallas. La ficha 339 ya lo había visto en
+          `/wallet` desde un móvil y lo resolvió allí, en su consumidor.
+
+          EL ARREGLO: las flechas dejan de ser una capa sobre el contenido y pasan
+          a tener SITIO PROPIO. El marco reserva 40 px a cada lado (`px-10`, ver
+          arriba) y el botón cabe justo dentro: `ml-1`/`mr-1` (4 px) + `size-9`
+          (36 px) = 40 px. No hay celda debajo de una flecha, así que ya no hay
+          clic que robar ni texto que tapar, y no depende de acertar con qué había
+          debajo. La contrapartida está medida y es la que hay: el viewport de
+          scroll pierde 80 px, o sea que una tabla que desborda desborda 80 px
+          más. Se paga solo cuando hay desborde.
+
+          ⚠ SI TOCAS ESTOS NÚMEROS: el carril (`sm:px-10` del marco) tiene que
+          seguir siendo ≥ margen + tamaño del botón, o la flecha vuelve a asomar
+          sobre la primera/última columna y vuelve el fallo mudo. Lo fija
+          `tests/components/DataTableCarrilFlechas.test.tsx`.
+
+          ⚠ NADA DE ESTO EXISTE POR DEBAJO DE `sm` (640 px) — `hidden sm:flex`.
+          El carril no es gratis: son 80 px de viewport de scroll, y eso en un
+          teléfono es una mordida, no un detalle. Medido en Chromium contra el
+          dev server, con la tabla de `/ordenes`:
+
+            1440 px → ancho útil 1134 → 1054  (−80, un 7 %)
+             390 px → ancho útil  340 →  260  (−80, un 23 %)
+
+          En táctil ese control además no lo pulsa nadie: se desliza el dedo. Y
+          antes de quitarlo se comprobó que deslizar FUNCIONA de verdad —quitar
+          la flecha sin eso dejaría la tabla inalcanzable en el móvil, que es
+          mucho peor que perder 80 px—. Medido con eventos táctiles reales por
+          CDP (`Input.dispatchTouchEvent`: touchStart + 12 touchMove + touchEnd,
+          NO `sp.scrollLeft = n`, que solo probaría que el DOM acepta la
+          asignación), en 390×844 y 768×1024 sobre `/ordenes`,
+          `/configuracion/api` y `/configuracion`: los 6 casos desplazan en los
+          dos sentidos (`scrollLeft` 0 → 205 → 60) con `touch-action: auto` y
+          `overflow-x: auto`. Testigo negativo: un `tap` sin arrastre deja el
+          `scrollLeft` en 0 en los 6.
+
+          `hidden` y no un `useMediaQuery`: `display: none` saca la flecha
+          también del árbol de accesibilidad y del tabulador, que es lo que
+          corresponde a un control que no está. Y no hay que hidratar nada para
+          decidirlo.
+
+          El anillo de foco es el mismo del resto de controles de la tabla: sin él
+          la flecha era alcanzable con el tabulador pero no se veía dónde estaba
+          el foco. */}
       {scrollNav.scrollable ? (
         <>
           <div
-            className="pointer-events-none absolute left-0 z-20 flex items-start"
+            data-slot="datatable-carril-izquierda"
+            className="pointer-events-none absolute left-0 z-20 hidden items-start sm:flex"
             style={{ top: headerHeight, bottom: 0 }}
           >
             <button
@@ -620,13 +713,14 @@ export function DataTable<T>({
               onClick={() => desplazar(-1)}
               disabled={!scrollNav.canLeft}
               aria-label="Desplazar la tabla a la izquierda"
-              className="pointer-events-auto sticky top-1/2 ml-2 flex size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-neutral-900 bg-neutral-900 text-white shadow-md backdrop-blur-sm transition hover:bg-neutral-800 dark:border-white dark:bg-white dark:text-black dark:hover:bg-white/85 disabled:pointer-events-none disabled:opacity-30"
+              className="pointer-events-auto sticky top-1/2 ml-1 flex size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-neutral-900 bg-neutral-900 text-white shadow-md backdrop-blur-sm transition outline-none hover:bg-neutral-800 focus-visible:ring-3 focus-visible:ring-ring/50 dark:border-white dark:bg-white dark:text-black dark:hover:bg-white/85 disabled:pointer-events-none disabled:opacity-30"
             >
               <ChevronLeft className="size-5" aria-hidden="true" />
             </button>
           </div>
           <div
-            className="pointer-events-none absolute right-0 z-20 flex items-start justify-end"
+            data-slot="datatable-carril-derecha"
+            className="pointer-events-none absolute right-0 z-20 hidden items-start justify-end sm:flex"
             style={{ top: headerHeight, bottom: 0 }}
           >
             <button
@@ -634,7 +728,7 @@ export function DataTable<T>({
               onClick={() => desplazar(1)}
               disabled={!scrollNav.canRight}
               aria-label="Desplazar la tabla a la derecha"
-              className="pointer-events-auto sticky top-1/2 mr-2 flex size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-neutral-900 bg-neutral-900 text-white shadow-md backdrop-blur-sm transition hover:bg-neutral-800 dark:border-white dark:bg-white dark:text-black dark:hover:bg-white/85 disabled:pointer-events-none disabled:opacity-30"
+              className="pointer-events-auto sticky top-1/2 mr-1 flex size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-neutral-900 bg-neutral-900 text-white shadow-md backdrop-blur-sm transition outline-none hover:bg-neutral-800 focus-visible:ring-3 focus-visible:ring-ring/50 dark:border-white dark:bg-white dark:text-black dark:hover:bg-white/85 disabled:pointer-events-none disabled:opacity-30"
             >
               <ChevronRight className="size-5" aria-hidden="true" />
             </button>

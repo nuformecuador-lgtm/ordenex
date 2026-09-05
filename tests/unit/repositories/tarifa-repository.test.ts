@@ -204,7 +204,30 @@ describe("TarifaRepository.hardDelete", () => {
   });
 
   // FK RESTRICT desde `cierre_detail.tarifa_id`: la tarifa quedo congelada en un cierre.
-  it("referenced si un cierre liquido contra esa tarifa (P2003)", async () => {
+  //
+  // ⚠️ ESTE `describe` FABRICA EL ERROR, Y ESA ES SU LIMITACION. Hasta el 2026-09-04 aqui solo
+  // habia el caso `P2003` de abajo, y por eso la suite estuvo verde mientras el codigo NO
+  // devolvia `referenced` NUNCA en produccion: bajo `@prisma/adapter-pg` la violacion de FK
+  // llega como `DriverAdapterError` con `cause.code === "23001"`, no como un
+  // `PrismaClientKnownRequestError`. LA EVIDENCIA REAL, provocando la violacion contra Postgres,
+  // vive en `tests/integration/db/tarifa-zona-borrado-fk-real.test.ts`. Estos dos casos son la
+  // red rapida: cubren las DOS formas que el codigo tiene que reconocer.
+  it("referenced con la forma REAL del adapter (DriverAdapterError, SQLSTATE 23001)", async () => {
+    const comoLlegaDeVerdad = Object.assign(
+      new Error(
+        'update or delete on table "tarifas" violates RESTRICT setting of foreign key ' +
+          'constraint "cierre_detail_tarifa_id_fkey" on table "cierre_detail"',
+      ),
+      { name: "DriverAdapterError", cause: { code: "23001" } },
+    );
+    const prisma = buildPrisma();
+    prisma.tarifa.delete.mockRejectedValue(comoLlegaDeVerdad);
+    const repo = new TarifaRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.hardDelete("cob-1", "actor-1")).toBe("referenced");
+  });
+
+  it("referenced tambien con la forma nativa (P2003), por si el adapter vuelve a traducirlo", async () => {
     const prisma = buildPrisma();
     prisma.tarifa.delete.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError("fk", {
@@ -223,6 +246,22 @@ describe("TarifaRepository.hardDelete", () => {
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
     await expect(repo.hardDelete("cob-1", "actor-1")).rejects.toThrow("boom");
+  });
+
+  it("un SQLSTATE del adapter que NO es de FK se propaga (no se disfraza de `referenced`)", async () => {
+    // `40001` es un fallo de serializacion: reintentable, y desde luego no «esta en uso».
+    // Tragarselo como `referenced` seria cambiar un fallo mudo por otro.
+    const otro = Object.assign(new Error("could not serialize access"), {
+      name: "DriverAdapterError",
+      cause: { code: "40001" },
+    });
+    const prisma = buildPrisma();
+    prisma.tarifa.delete.mockRejectedValue(otro);
+    const repo = new TarifaRepository(prisma as unknown as PrismaClient);
+
+    await expect(repo.hardDelete("cob-1", "actor-1")).rejects.toThrow(
+      "could not serialize access",
+    );
   });
 });
 

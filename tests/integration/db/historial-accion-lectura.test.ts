@@ -35,6 +35,8 @@ const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
 
 const MARCA = `362-lec-${Date.now().toString(36)}`;
 const ORDEN: OrdenHistorialAccion = { sortBy: "created_at", sortDir: "desc" };
+/** Tamaño de pagina del recorrido de `listar`. NO es un supuesto sobre la tabla: ver `listar`. */
+const PAGINA = 100;
 
 /** El filtro «sin nada», del que parten todos los casos. */
 function sinFiltro(): FiltroHistorialAccionResuelto {
@@ -158,28 +160,63 @@ describeSiHayBase("362/T4.2 — el `WHERE` del historial, contra Postgres", () =
     };
   }
 
-  /** Los ids devueltos por el listado, acotados al corpus de esta corrida. */
+  /**
+   * Los ids devueltos por el listado, acotados al corpus de esta corrida.
+   *
+   * ⚠️ POR QUE RECORRE LAS PAGINAS Y NO PIDE UNA SOLA. `historial_accion` es una tabla COMPARTIDA
+   * de la base local, y **CRECE con cada corrida del gate**: dos suites que necesitan COMMITEAR
+   * —`gasto-fijo-cobro-aprobacion` y `rechazo-tienda-cobro.int`— barren lo suyo pero NO la fila de
+   * auditoria que su propia accion escribe, porque sus barridos se escribieron antes de que el
+   * registro de acciones existiera. Medido el 2026-09-04: **97 filas ajenas**, +47 en un solo dia.
+   * Con una sola pagina, esas filas ajenas EMPUJAN a las del corpus fuera del recorte y este
+   * archivo se pone rojo por lo que otros dejaron, no por lo que prueba.
+   *
+   * Y NO SE ARREGLA SUBIENDO EL `pageSize`: cualquier numero fijo se vuelve a quedar corto en
+   * cuanto la tabla crezca otro tanto — solo aplaza el rojo—. Se recorre hasta el `total` que
+   * reporta LA PROPIA CONSULTA, que no asume ningun tamaño de tabla.
+   *
+   * POR QUE NO SE ACOTA EL CORPUS CON UN FILTRO, como hace `historial-accion-orden-total`: alli el
+   * corpus se aisla con `q: MARCA`, pero aqui **cada dimension del filtro ES lo que se mide** (y un
+   * `q` de marca sobreescribiria el `q` que R31 esta probando). El recorte se hace en memoria,
+   * contra los ids sembrados, y el recorrido garantiza que llega hasta ellos.
+   *
+   * El recorrido es seguro porque el orden del repositorio es TOTAL —`created_at <dir>, id ASC`,
+   * con la PK de desempate (ficha 352)—. Si ese desempate desapareciera, paginar duplicaria unas
+   * filas y perderia otras; esto lo delataria, porque el conteo del corpus dejaria de cuadrar.
+   */
   async function listar(
     c: Corpus,
     filtro: Partial<FiltroHistorialAccionResuelto>,
   ): Promise<string[]> {
-    const pagina = await c.repo.list({
-      filtro: { ...sinFiltro(), ...filtro },
-      orden: ORDEN,
-      page: 1,
-      pageSize: 100,
-    });
+    const args = { filtro: { ...sinFiltro(), ...filtro }, orden: ORDEN, pageSize: PAGINA };
     const mios = new Set(Object.values(c.ids));
-    return pagina.items.filter((f) => mios.has(f.id)).map((f) => f.id);
+    const primera = await c.repo.list({ ...args, page: 1 });
+    const encontrados = primera.items.filter((f) => mios.has(f.id)).map((f) => f.id);
+    const paginas = Math.ceil(primera.total / PAGINA);
+    for (let page = 2; page <= paginas; page += 1) {
+      const siguiente = await c.repo.list({ ...args, page });
+      for (const fila of siguiente.items) if (mios.has(fila.id)) encontrados.push(fila.id);
+    }
+    return encontrados;
   }
 
   it("ANTI-VACUIDAD: el corpus se sembro y sin filtros salen las SEIS filas", async () => {
+    // ⚠️ QUE AFIRMA ESTE CASO Y QUE NO. El `6` es el tamaño del CORPUS —lo que `sembrar` inserta—,
+    // NO un conteo de `historial_accion`: esta tabla es compartida y lo que haya en ella no es
+    // asunto de esta ficha. Lo que se exige es que el listado SIN FILTROS traiga las seis filas
+    // sembradas, y que sean EXACTAMENTE esas seis.
+    //
+    // Sigue siendo la guarda anti-vacuidad de todo el archivo: si `sembrar` dejara de insertar, o
+    // si el `WHERE` sin filtros dejara de devolver lo sembrado, `salida` viene vacia (o corta) y
+    // esto se pone rojo — que es lo unico que impide que los casos de abajo, todos del tipo «y
+    // NADA MAS», esten verdes sobre la nada.
     const r = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       const c = await sembrar(tx);
-      return listar(c, {});
+      return { salida: await listar(c, {}), sembradas: Object.values(c.ids) };
     });
-    expect(r).toHaveLength(6);
+    expect(r.salida, "el listado sin filtros no trajo las seis filas del corpus").toHaveLength(6);
+    expect(r.salida.sort()).toEqual(r.sembradas.sort());
   });
 
   it("⭑ R29 (1/5) filtro por ACTOR: solo las filas de ese actor", async () => {
@@ -362,11 +399,15 @@ describeSiHayBase("362/T4.2 — el `WHERE` del historial, contra Postgres", () =
       await serializarEscriturasReales(tx);
       const c = await sembrar(tx);
       const filtro = { ...sinFiltro(), actorId: [c.actorA] };
-      const pantalla = await c.repo.list({ filtro, orden: ORDEN, page: 1, pageSize: 100 });
-      const descarga = await c.repo.listAll({ filtro, orden: ORDEN, limite: 500 });
+      // El tope de la descarga se MIDE con el `total` de la propia consulta en vez de fijarlo a
+      // ojo: `actorA` es un usuario REAL de la base y arrastra las filas que otras corridas le
+      // dejaron —42 el 2026-09-04—, asi que un `limite` fijo acabaria truncando la descarga y el
+      // rojo no diria nada de R30. La pantalla se recorre por paginas por el mismo motivo.
+      const { total } = await c.repo.list({ filtro, orden: ORDEN, page: 1, pageSize: 1 });
+      const descarga = await c.repo.listAll({ filtro, orden: ORDEN, limite: total + 1 });
       const mios = new Set(Object.values(c.ids));
       return {
-        pantalla: pantalla.items.filter((f) => mios.has(f.id)).map((f) => f.id),
+        pantalla: await listar(c, { actorId: [c.actorA] }),
         descarga: descarga.filter((f) => mios.has(f.id)).map((f) => f.id),
       };
     });

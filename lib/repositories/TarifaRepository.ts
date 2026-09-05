@@ -1,5 +1,6 @@
 import { Prisma, type Tarifa, type PrismaClient } from "@prisma/client";
 import { ConflictError } from "@/lib/errors";
+import { esViolacionDeClaveForanea } from "@/lib/repositories/_shared/prisma-fk";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { ROLES_TARIFABLES, type TarifaDTO } from "@/lib/types/tarifa";
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
@@ -247,16 +248,16 @@ export class TarifaRepository implements ITarifaRepository {
    * preguntar de que tarifa se trataba. Esa es exactamente la propiedad que R4 exige y la que un
    * join al leer no puede dar.
    *
-   * El `appendAccion` va DESPUES del `delete`: si el borrado falla (P2003, la tarifa esta
+   * El `appendAccion` va DESPUES del `delete`: si el borrado falla (la FK, la tarifa esta
    * congelada en un cierre) no se escribe fila de registro, porque no hubo borrado (R11). Y si el
    * `appendAccion` fallara, la transaccion revierte y la tarifa NO se borra (R10).
    */
   async hardDelete(id: string, actorUsuarioId: string | null): Promise<DeleteTarifaResult> {
     // ⚠️ EL `try` ENVUELVE LA TRANSACCION ENTERA Y NO EL `delete` SUELTO. Dentro de una
-    // transaccion de Postgres una sentencia que falla ABORTA la transaccion: capturar el P2003
-    // por dentro y seguir dejaria la tx en estado abortado y cualquier consulta posterior
-    // reventaria con `25P02`. Dejando que el error salga, la transaccion revierte limpiamente y
-    // la traduccion a `not_found`/`referenced` sigue dando exactamente el mismo contrato de antes.
+    // transaccion de Postgres una sentencia que falla ABORTA la transaccion: capturar la
+    // violacion de FK por dentro y seguir dejaria la tx en estado abortado y cualquier consulta
+    // posterior reventaria con `25P02`. Dejando que el error salga, la transaccion revierte
+    // limpiamente y la traduccion a `not_found`/`referenced` sigue dando el mismo contrato.
     try {
       return await this.prisma.$transaction(async (tx) => {
         // ANTES del DELETE: despues no hay a quien preguntar.
@@ -276,14 +277,27 @@ export class TarifaRepository implements ITarifaRepository {
         return "ok" as const;
       });
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError) {
-        // P2025: la fila no existe (o se borro en la carrera).
-        if (e.code === "P2025") return "not_found";
-        // P2003: FK RESTRICT desde `cierre_detail.tarifa_id`. La tarifa quedo
-        // congelada en un cierre y sacarla romperia la auditoria de esa deuda;
-        // NO se fuerza aqui. El service lo traduce a `conflict`.
-        if (e.code === "P2003") return "referenced";
+      // P2025: la fila no existe (o se borro en la carrera). Este SI conserva su codigo bajo el
+      // driver adapter —lo produce Prisma, no Postgres—: MEDIDO el 2026-09-04 contra la base,
+      // `ctor: PrismaClientKnownRequestError · code: "P2025"`. Por eso aqui la comprobacion
+      // directa vale, y la de abajo NO.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
+        return "not_found";
       }
+      // FK RESTRICT desde `cierre_detail.tarifa_id`. La tarifa quedo congelada en un cierre y
+      // sacarla romperia la auditoria de esa deuda; NO se fuerza aqui. El service lo traduce a
+      // `conflict`.
+      //
+      // ⚠️ EL DETECTOR NO ES `e.code === "P2003"`, y esto NO es preferencia de estilo: MEDIDO el
+      // 2026-09-04 borrando una tarifa con un `cierre_detail` apuntando, el error llega asi:
+      //   ctor: DriverAdapterError · code: undefined · meta: null · cause.code: "23001"
+      //   isKnownRequestError: false
+      //   message: 'update or delete on table "tarifas" violates RESTRICT setting of foreign key
+      //             constraint "cierre_detail_tarifa_id_fkey" on table "cierre_detail"'
+      // Con la comprobacion vieja este `catch` NO devolvia `referenced` NUNCA: el error crudo
+      // escapaba hasta `withErrorHandler` y el maestro veia un error interno en vez de «esta
+      // tarifa esta en uso». Ver `_shared/prisma-fk.ts` (ficha 373) para las dos formas.
+      if (esViolacionDeClaveForanea(e)) return "referenced";
       throw e;
     }
   }

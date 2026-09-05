@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState, type ChangeEvent } from "react";
-import { X } from "lucide-react";
+import { useId, useState, type ChangeEvent } from "react";
 
+import {
+  EvidenciasField,
+  mensajeEvidenciasRechazadas,
+  prepararEvidencias,
+} from "@/components/shared/EvidenciasField";
 import { Modal } from "@/components/shared/Modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
+import { gestionConfig } from "@/lib/config/gestion";
 import { gestionarDesdeAyuda } from "@/lib/actions/gestion-desde-ayuda";
 import {
   gestionarDesdeAyudaSchema,
@@ -19,7 +23,6 @@ import {
 // ventana solo le llega el booleano ya decidido en `orden.enElTope`.
 import { permitidoEnElTope } from "@/lib/types/tope-intentos";
 import type { NovedadDTO } from "@/lib/types/novedad";
-import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 
 // =================================================================================================
@@ -212,7 +215,6 @@ export const GESTION_AYUDA_ERROR_FORBIDDEN =
   "No tenés permiso para resolver esta orden.";
 export const GESTION_AYUDA_ERROR_SESION = "Tu sesión expiró. Iniciá sesión de nuevo.";
 
-const ACCEPT_MIME = GESTION_ALLOWED_MIME.join(",");
 /** Mismo tope por lista que las otras dos vías: lo impone `evidenciasSchema`, compartido. */
 const MAX_EVIDENCIAS = gestionConfig.MAX_EVIDENCIAS_POR_GESTION;
 
@@ -274,9 +276,10 @@ export function GestionarDesdeAyudaModal({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   /**
-   * Añade las fotos elegidas, comprimidas en el navegador (una foto de celular sin comprimir
+   * Añade las fotos elegidas, normalizadas en el navegador (una foto de celular sin comprimir
    * revienta el límite de body del Server Action con un 413). Concatena sobre lo ya elegido y
-   * recorta al tope marcando el error del campo. Calcado de `GestionarOrdenPanel` (119) y de
+   * recorta al tope marcando el error del campo; las que no valen por sí mismas se avisan AL
+   * ELEGIRLAS y con su nombre. Calcado de `GestionarOrdenPanel` (119) y de
    * `ReportarIncidenteModal` (158): el gesto de subir evidencias es el mismo en las tres.
    */
   async function handleEvidenciaChange(e: ChangeEvent<HTMLInputElement>) {
@@ -286,15 +289,19 @@ export function GestionarDesdeAyudaModal({
     if (seleccion.length === 0) return;
     setComprimiendo(true);
     try {
-      const comprimidas = await Promise.all(seleccion.map((f) => comprimirImagen(f)));
+      const { aceptadas, rechazadas } = await prepararEvidencias(seleccion);
       setEvidencias((prev) => {
-        const combinadas = [...prev, ...comprimidas];
+        const combinadas = [...prev, ...aceptadas];
         setFieldErrors((errs) => {
           const rest = { ...errs };
           delete rest.evidencias;
-          return combinadas.length > MAX_EVIDENCIAS
-            ? { ...rest, evidencias: [`Solo podés adjuntar hasta ${MAX_EVIDENCIAS} fotos.`] }
-            : rest;
+          const avisos = [
+            mensajeEvidenciasRechazadas(rechazadas),
+            combinadas.length > MAX_EVIDENCIAS
+              ? `Solo podés adjuntar hasta ${MAX_EVIDENCIAS} fotos.`
+              : null,
+          ].filter((m): m is string => m !== null);
+          return avisos.length > 0 ? { ...rest, evidencias: avisos } : rest;
         });
         return combinadas.slice(0, MAX_EVIDENCIAS);
       });
@@ -460,8 +467,14 @@ export function GestionarDesdeAyudaModal({
           </div>
         ) : null}
 
-        <EvidenciasDesdeAyuda
+        {/* El campo de fotos es el MISMO componente que usan el panel del mensajero y el reporte
+            de incidente (`components/shared/EvidenciasField`): ahí viven las dos vías —cámara y
+            galería—, el tope y la previsualización. Aquí solo entran los textos de esta ventana. */}
+        <EvidenciasField
           inputId={evidenciasId}
+          label={GESTION_AYUDA_EVIDENCIAS_LABEL}
+          ariaLabel={GESTION_AYUDA_EVIDENCIAS_LABEL}
+          ayuda={GESTION_AYUDA_EVIDENCIAS_AYUDA}
           files={evidencias}
           error={evidenciasError}
           onSelect={handleEvidenciaChange}
@@ -511,83 +524,5 @@ export function GestionarDesdeAyudaModal({
         )}
       </div>
     </Modal>
-  );
-}
-
-/**
- * Selector de 1..N fotos con los MISMOS límites que las otras dos vías (los impone
- * `evidenciasSchema`, compartido). Vive en este archivo por «sin sobre-ingeniería»
- * (`docs/architecture.md`): un solo consumidor. Es el gemelo del de `ReportarIncidenteModal`, que
- * es el molde de esta ventana.
- */
-function EvidenciasDesdeAyuda({
-  inputId,
-  files,
-  error,
-  onSelect,
-  onRemove,
-}: {
-  inputId: string;
-  files: File[];
-  error: string | undefined;
-  onSelect: (e: ChangeEvent<HTMLInputElement>) => void;
-  onRemove: (index: number) => void;
-}) {
-  // Una object URL por foto para la previsualización. Se derivan con `useMemo` y el efecto de
-  // limpieza REVOCA el lote anterior al cambiar la lista y al desmontar, para no fugar memoria.
-  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
-  useEffect(() => {
-    return () => previews.forEach((u) => URL.revokeObjectURL(u));
-  }, [previews]);
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={inputId}>{GESTION_AYUDA_EVIDENCIAS_LABEL}</Label>
-      <p id={`${inputId}-ayuda`} className="text-xs text-muted-foreground">
-        {GESTION_AYUDA_EVIDENCIAS_AYUDA}
-      </p>
-      {previews.length > 0 ? (
-        <ul className="flex flex-wrap gap-2" aria-label="Fotos de evidencia seleccionadas">
-          {previews.map((url, i) => (
-            <li key={url} className="relative">
-              {/* Vista previa local de un object URL: next/image no aplica a un blob. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
-                alt={`Evidencia ${i + 1}`}
-                className="size-20 rounded-md border border-border object-cover"
-              />
-              <button
-                type="button"
-                onClick={() => onRemove(i)}
-                aria-label={`Quitar evidencia ${i + 1}`}
-                className="absolute -right-1.5 -top-1.5 rounded-full border border-background bg-destructive p-0.5 text-destructive-foreground shadow-xs hover:bg-destructive/90"
-              >
-                <X className="size-3.5" aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <input
-        id={inputId}
-        type="file"
-        accept={ACCEPT_MIME}
-        multiple
-        onChange={onSelect}
-        aria-invalid={error ? true : undefined}
-        aria-label={GESTION_AYUDA_EVIDENCIAS_LABEL}
-        aria-describedby={`${inputId}-ayuda ${inputId}-limite`}
-        className="text-sm"
-      />
-      <p id={`${inputId}-limite`} className="text-xs text-muted-foreground">
-        {`Podés adjuntar hasta ${MAX_EVIDENCIAS} fotos (${files.length}/${MAX_EVIDENCIAS}).`}
-      </p>
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-    </div>
   );
 }
