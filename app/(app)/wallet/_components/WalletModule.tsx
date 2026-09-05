@@ -389,10 +389,11 @@ export function WalletModule({
               bg-muted/50`) apoyada en el borde inferior — el mismo cierre que la tanda 2 le
               dio al panel de gastos fijos.
 
-              `compacta`: en un pie de tarjeta la barra es una fila más, no el pie de un
-              listado. Aquí decía `sticky={false}` porque el modo pegajoso devolvía envoltorio +
-              centinela de 1px y el `display:flex` del pie los colocaba como dos columnas; ese
-              modo ya no existe (flotaba sobre las filas y se comía su clic). */}
+              `sticky={false}`: en modo pegajoso el control devuelve un fragmento de DOS
+              elementos (envoltorio + centinela de 1px) y el `display:flex` del pie los
+              colocaría como dos columnas, con el centinela `w-full` empujando la barra.
+              Además el `Card` tiene `overflow-hidden`, así que ya era el contenedor contra el
+              que se pegaba: flotar sobre el viewport nunca ocurrió aquí. */}
           <CardFooter>
             <Pagination
               page={page}
@@ -401,7 +402,7 @@ export function WalletModule({
               onPageChange={cambiarPagina}
               disabled={loading}
               ariaLabel="Paginación del libro"
-              compacta
+              sticky={false}
               className="w-full justify-between gap-3 py-0"
             />
           </CardFooter>

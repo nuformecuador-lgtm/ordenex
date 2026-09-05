@@ -422,7 +422,7 @@ export function DesglosePagosMensajero({ resumen, id }: DesglosePagosMensajeroPr
         // Sub-lista desplegada DENTRO de una fila de la tabla de cuentas por pagar: su
         // barra tiene que quedarse dentro del desglose, no flotar sobre toda la pantalla
         // como si paginara el listado principal.
-        compacta
+        sticky={false}
       />
     </section>
   );

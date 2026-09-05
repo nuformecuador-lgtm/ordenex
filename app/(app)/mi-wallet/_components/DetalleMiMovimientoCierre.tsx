@@ -330,9 +330,7 @@ export function DetalleMiMovimientoCierre({
       </div>
 
       {/* R24/R25/R28 — paginación SERVER-SIDE: el total es el del conjunto, no el de la página.
-          `compacta` porque este panel vive dentro de una fila de otra tabla: la barra es
-          una fila mas, no el pie de un listado. (Aqui decia `sticky={false}`; la barra ya
-          no flota nunca, se comia el clic de los botones de debajo.) */}
+          `sticky={false}` porque este panel vive dentro de una fila de otra tabla. */}
       <Pagination
         page={page}
         pageSize={pageSize}
@@ -340,7 +338,7 @@ export function DetalleMiMovimientoCierre({
         onPageChange={setPage}
         disabled={isLoading}
         ariaLabel={DETALLE_MI_MOVIMIENTO_NOMBRE.paginacion(concepto, fecha)}
-        compacta
+        sticky={false}
         className="w-full justify-between gap-3 py-0"
       />
     </section>

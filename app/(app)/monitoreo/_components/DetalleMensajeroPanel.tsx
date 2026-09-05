@@ -221,9 +221,8 @@ export function DetalleMensajeroPanel({
               escribirlo seria una segunda fuente de verdad que se desincroniza el dia que
               alguien mueva `ORDENES_DEFAULT_PAGE_SIZE`.
 
-              `compacta`: dentro de un dialogo con caja propia la barra es una fila mas. Aqui
-              decia `sticky={false}` porque el modo pegajoso la sacaba de su caja; ese modo ya
-              no existe (flotaba sobre las filas y se comia su clic).
+              `sticky={false}`: dentro de un dialogo con caja propia, una barra pegada al
+              viewport se saldria de su caja.
             */}
             {cargando ? null : (
               <Pagination
@@ -231,7 +230,7 @@ export function DetalleMensajeroPanel({
                 pageSize={detalle?.pageSize ?? ordenes.length}
                 total={detalle?.total ?? ordenes.length}
                 onPageChange={irAPagina}
-                compacta
+                sticky={false}
               />
             )}
           </>

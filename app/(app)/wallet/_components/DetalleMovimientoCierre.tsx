@@ -399,10 +399,9 @@ export function DetalleMovimientoCierre({
       </div>
 
       {/* R24/R25/R28 — paginación SERVER-SIDE: el total es el del conjunto, no el de la página.
-          `compacta` porque este panel vive dentro de una fila de otra tabla: la barra es una
-          fila más. Aquí decía `sticky={false}`, que además evitaba el fragmento de DOS
-          elementos del modo pegajoso; ese modo ya no existe (flotaba sobre las filas y se
-          comía su clic). */}
+          `sticky={false}` porque este panel vive dentro de una fila de otra tabla: en modo
+          pegajoso el control devuelve un fragmento de DOS elementos y el `flex` del contenedor
+          los colocaría como dos columnas, con el centinela empujando la barra. */}
       <Pagination
         page={page}
         pageSize={pageSize}
@@ -410,7 +409,7 @@ export function DetalleMovimientoCierre({
         onPageChange={setPage}
         disabled={isLoading}
         ariaLabel={DETALLE_MOVIMIENTO_NOMBRE.paginacion(concepto, fecha)}
-        compacta
+        sticky={false}
         className="w-full justify-between gap-3 py-0"
       />
     </section>

@@ -287,9 +287,9 @@ export function DetalleFilaComposicion({
       </div>
 
       {/* R27/R28/R31 — paginacion SERVER-SIDE: el total es el del conjunto, no el de la pagina.
-          `compacta` porque este panel vive dentro de una tarjeta: la barra es una fila mas.
-          Aqui decia `sticky={false}`, que ademas evitaba el fragmento de DOS elementos del
-          modo pegajoso; ese modo ya no existe (flotaba sobre las filas y se comia su clic). */}
+          `sticky={false}` porque este panel vive dentro de una tarjeta: en modo pegajoso el
+          control devuelve un fragmento de DOS elementos y el `flex` del contenedor los
+          colocaria como dos columnas, con el centinela empujando la barra. */}
       <Pagination
         page={page}
         pageSize={pageSize}
@@ -297,7 +297,7 @@ export function DetalleFilaComposicion({
         onPageChange={setPage}
         disabled={isLoading}
         ariaLabel={DETALLE_FILA_NOMBRE.paginacion(etiqueta)}
-        compacta
+        sticky={false}
         className="w-full justify-between gap-3 py-0"
       />
     </section>

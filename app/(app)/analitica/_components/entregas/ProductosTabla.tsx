@@ -1045,7 +1045,7 @@ export function ProductosTabla({ dinero = false }: ProductosTablaProps) {
             setPage(1);
           }}
           pageSizeOptions={PAGE_SIZE_OPTIONS}
-          compacta
+          sticky={false}
         />
       )}
     </div>
