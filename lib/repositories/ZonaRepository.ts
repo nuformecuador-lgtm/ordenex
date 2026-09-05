@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { ConflictError } from "@/lib/errors";
+import { esViolacionDeClaveForanea } from "@/lib/repositories/_shared/prisma-fk";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { zonaUnicaDeDistrito } from "@/lib/repositories/_shared/zona-colapso";
 import { normalizeName } from "@/lib/utils/normalize";
@@ -388,9 +389,17 @@ export class ZonaRepository implements IZonaRepository {
       // de `tarifas` cuando alguna ya se liquido) -> la zona esta en uso.
       // `tarifas` ya NO llega hasta aqui por si sola: su FK es CASCADE desde la migracion
       // 20260826160000_tarifa_fk_cascade.
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
-        return "referenced";
-      }
+      //
+      // ⚠️ EL DETECTOR NO ES `e.code === "P2003"`, y esto NO es preferencia de estilo: MEDIDO el
+      // 2026-09-04 borrando una zona con una orden apuntando, el error llega asi:
+      //   ctor: DriverAdapterError · code: undefined · meta: null · cause.code: "23001"
+      //   isKnownRequestError: false
+      //   message: 'update or delete on table "zona" violates RESTRICT setting of foreign key
+      //             constraint "orden_zona_id_fkey" on table "orden"'
+      // Con la comprobacion vieja este `catch` NO devolvia `referenced` NUNCA: el error crudo
+      // escapaba hasta `withErrorHandler` y el maestro veia un error interno en vez de «esta zona
+      // esta en uso». Ver `_shared/prisma-fk.ts` (ficha 373) para las dos formas del error.
+      if (esViolacionDeClaveForanea(e)) return "referenced";
       throw e;
     }
   }
