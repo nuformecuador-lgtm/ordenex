@@ -299,6 +299,32 @@ export function LoginForm({ redirectParam }: LoginFormProps) {
             </div>
         */}
 
+        {/*
+          LA LÍNEA DE ABAJO OCUPA EL HUECO QUE DEJÓ ESE ENLACE, y las dos son la MISMA pieza en
+          dos estados: mientras el correo esté caído, aquí hay TEXTO PLANO que dice a quién
+          acudir; cuando vuelva a enviar, este párrafo se BORRA y en su sitio se repone el bloque
+          comentado de arriba, tal cual. Nunca conviven: o el enlace, o esta línea.
+
+          POR QUÉ EXISTE (feature 373): al retirar el enlace, el login se quedó sin ninguna
+          pista. El callejón sin salida no desapareció, se MOVIÓ del formulario de recuperación
+          a la puerta de la app: quien olvida su contraseña mira la pantalla y no sabe qué hacer.
+          Un enlace roto era peor que nada, pero nada es peor que una salida escrita.
+
+          POR QUÉ TEXTO Y NO ENLACE: no hay ningún destino que funcione. La vía real es humana
+          —un administrador restablece la contraseña desde Configuración → Usuarios (ficha
+          287)— y no es una URL que esta persona pueda abrir: si no puede entrar, no puede
+          llegar a Configuración. `tests/integration/login-form-reset-link.test.tsx` vigila
+          justamente eso: que de aquí no vuelva a colgar un `href` a `/recuperar-contrasena`.
+
+          POR QUÉ UN `<p>` PELADO Y NO UN `<Alert>`: esto es una ayuda, no un error. Además,
+          `role="alert"`/`role="status"` en el render inicial rompería la suite de LoginForm,
+          que exige CERO regiones vivas en la pantalla de credenciales para que el
+          `findByRole("alert")` en singular de los tests de error no se vuelva ambiguo.
+        */}
+        <p className="text-center text-sm text-muted-foreground">
+          ¿Olvidaste tu contraseña? Pídele a un administrador que te la restablezca.
+        </p>
+
         {/* Enlace a la postulación pública de mensajero (feature 21, afordancia) */}
         <div className="text-center">
           <Link

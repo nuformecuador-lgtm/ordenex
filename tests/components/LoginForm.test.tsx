@@ -490,3 +490,54 @@ describe("LoginForm — distinguibilidad de mensajes de error (R27)", () => {
     expect(seenTexts.size).toBe(cases.length);
   });
 });
+
+describe("LoginForm — la salida escrita para quien olvidó su contraseña (feature 373)", () => {
+  /**
+   * PAR CON `tests/integration/login-form-reset-link.test.tsx`. Aquel exige que NO haya enlace
+   * a `/recuperar-contrasena`; este exige que, en su lugar, SÍ haya una salida escrita. Los dos
+   * juntos son la afirmación completa —«el enlace se fue Y la pista se quedó»—, y separados
+   * dejan cada uno un agujero: sin este, borrar la línea deja el login mudo y todo verde.
+   *
+   * Cuando el correo de recuperación vuelva a funcionar, ESTE bloque se borra y aquel se
+   * revierte a su caso original: o el enlace, o esta línea, nunca las dos.
+   */
+  it("muestra a quién acudir, en texto plano y sin enlace a ninguna parte", () => {
+    render(<LoginForm redirectParam={null} />);
+
+    // NO-VACUIDAD: si el componente no montara, los `queryBy...` de abajo saldrían todos
+    // negativos y el test pasaría con la pantalla de login caída.
+    expect(screen.getByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
+
+    const aviso = screen.getByText(
+      "¿Olvidaste tu contraseña? Pídele a un administrador que te la restablezca.",
+    );
+    expect(aviso).toBeInTheDocument();
+
+    // Y es TEXTO, no una afordancia que prometa un destino: ni es un enlace ni cuelga de uno.
+    // Esta aserción no depende del `href`, así que caza también un enlace a cualquier OTRA ruta,
+    // que el guard de `/recuperar-contrasena` dejaría pasar.
+    expect(aviso.closest("a")).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /Olvidaste tu contraseña/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("tiene peso visual de ayuda: ni es un error ni estrena una región viva", () => {
+    render(<LoginForm redirectParam={null} />);
+
+    const aviso = screen.getByText(
+      "¿Olvidaste tu contraseña? Pídele a un administrador que te la restablezca.",
+    );
+
+    // Un `<Alert>` (role="alert") aquí sería mentir sobre la gravedad Y rompería el
+    // `findByRole("alert")` en singular de la suite de errores de más arriba.
+    expect(aviso.closest("[role='alert']")).toBeNull();
+    expect(aviso.closest("[role='status']")).toBeNull();
+    expect(screen.queryAllByRole("alert")).toHaveLength(0);
+    expect(screen.queryAllByRole("status")).toHaveLength(0);
+
+    // Tono secundario, el mismo que el resto de textos de apoyo de esta tarjeta.
+    expect(aviso.className).toContain("text-muted-foreground");
+    expect(aviso.className).toContain("text-sm");
+  });
+});
