@@ -214,10 +214,12 @@ export function MiWalletModule({
           {/* R15 — la paginación baja al PIE, que la primitiva ya pinta como banda apoyada en
               el borde inferior, y en FLUJO NORMAL.
 
-              `sticky={false}` no es cosmético: en modo pegajoso `Pagination` devuelve un
-              fragmento de DOS elementos (envoltorio + centinela de 1px) y el `display:flex` del
-              pie los colocaría como dos columnas, con el centinela `w-full` empujando la barra.
-              El `ariaLabel` NO cambia: es el nombre por el que ya se la encuentra. */}
+              `compacta`: en el pie de una tarjeta la barra es una fila más, sin el aire del pie
+              de un listado. Aquí decía `sticky={false}`, que además evitaba el fragmento de DOS
+              elementos (envoltorio + centinela) que el modo pegajoso devolvía; ese modo ya no
+              existe —flotaba sobre las filas y se comía su clic—, así que el control es un solo
+              `<nav>` siempre. El `ariaLabel` NO cambia: es el nombre por el que ya se la
+              encuentra. */}
           <CardFooter>
             <Pagination
               page={page}
@@ -226,7 +228,7 @@ export function MiWalletModule({
               onPageChange={cambiarPagina}
               disabled={loading}
               ariaLabel="Paginación del desglose"
-              sticky={false}
+              compacta
               className="w-full justify-between gap-3 py-0"
             />
           </CardFooter>

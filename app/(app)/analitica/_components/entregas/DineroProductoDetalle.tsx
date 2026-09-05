@@ -331,7 +331,7 @@ export function DineroProductoDetalle({
           onPageChange={setPage}
           disabled={isLoading}
           ariaLabel={DETALLE_DINERO_TEXTOS.paginacion(producto)}
-          sticky={false}
+          compacta
         />
       )}
     </section>

@@ -490,11 +490,11 @@ export function GastosFijosPlantillasPanel({
           censo de `tests/unit/descarga/censo-tablas.ts` vigila POR RUTA—, con su descarga del
           conjunto completo y su paginación server-side.
 
-          `sticky={false}`: el `Card` tiene `overflow-hidden`, así que ya era el contenedor
-          contra el que se pegaba la barra —flotar sobre el viewport nunca ocurrió aquí—, y en
-          un pie con `display:flex` su envoltorio pegajoso y su centinela de 1px se colocarían
-          como dos columnas. Es el mismo motivo por el que la usan así los paneles de
-          `DetalleMensajeroPanel` y `DesglosePagosMensajero`. */}
+          `compacta`: en un pie de tarjeta la barra es una fila más, no el pie de un listado.
+          Aquí decía `sticky={false}` porque el modo pegajoso devolvía envoltorio + centinela y
+          el `display:flex` del pie los colocaba como dos columnas; ese modo ya no existe (la
+          barra flotaba sobre las filas y se comía su clic). Es el mismo motivo por el que la
+          usan así los paneles de `DetalleMensajeroPanel` y `DesglosePagosMensajero`. */}
       <CardFooter>
         <Pagination
           page={page}
@@ -510,7 +510,7 @@ export function GastosFijosPlantillasPanel({
             setPage(1);
           }}
           pageSizeOptions={PAGE_SIZE_OPTIONS}
-          sticky={false}
+          compacta
           className="w-full justify-between gap-3 py-0"
         />
       </CardFooter>

@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
 import { cn } from "@/lib/utils";
 
 /**
@@ -72,17 +70,15 @@ export interface PaginationProps {
    */
   className?: string;
   /**
-   * Mientras su sitio natural (al pie de la lista) cae por debajo del viewport, la barra
-   * se pega al borde inferior de la pantalla; al alcanzarlo con el scroll se queda ahí.
-   * Es el comportamiento por defecto de TODAS las tablas; `false` la deja en flujo normal
-   * (útil cuando va dentro de un diálogo o de una caja con scroll propio).
+   * Densidad de la fila. Por defecto la barra es el PIE del listado: centrada y con
+   * aire (`py-4`). En `compacta` se pinta como una fila más del contenedor —alineada
+   * al inicio y sin aire extra—, que es lo que quieren las listas que viven dentro
+   * de una tarjeta, un diálogo o una fila desplegada de otra tabla.
+   *
+   * Es solo APARIENCIA. Aquí estuvo la prop `sticky` (por defecto `true`), que además
+   * pegaba la barra al borde inferior de la pantalla; ver el comentario del `return`.
    */
-  sticky?: boolean;
-  /**
-   * Clases extra del contenedor pegajoso (solo con `sticky`). Sirve sobre todo para
-   * ajustar el margen negativo que anula el `gap` del contenedor padre.
-   */
-  contenedorClassName?: string;
+  compacta?: boolean;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -160,27 +156,8 @@ export function Pagination({
   ariaLabel = "Paginación",
   labels,
   className,
-  sticky = true,
-  contenedorClassName,
+  compacta = false,
 }: PaginationProps) {
-  // ¿La barra está FLOTANDO sobre la lista (pegada al borde inferior) o ya llegó a su sitio
-  // al pie? Solo cambia la sombra. Se deduce de un centinela de 1px que va justo debajo de
-  // ella: si no está en pantalla, la barra flota. Sin listeners de scroll (un
-  // IntersectionObserver no se dispara en cada píxel) y sin medir alturas a mano.
-  const [pegada, setPegada] = useState(false);
-  const centinelaRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const centinela = centinelaRef.current;
-    // Sin soporte (jsdom, navegador viejo) la barra se queda sin sombra: es decoración.
-    if (!centinela || typeof IntersectionObserver === "undefined") return;
-    const observador = new IntersectionObserver(
-      ([entrada]) => setPegada(!entrada.isIntersecting),
-      { threshold: 1 },
-    );
-    observador.observe(centinela);
-    return () => observador.disconnect();
-  }, []);
-
   const totalPages = Math.max(1, Math.ceil(total / pageSize)); // R3, R13
   const safePage = clamp(page, 1, totalPages); // R9
   const emptyDataset = total === 0; // R13
@@ -240,14 +217,49 @@ export function Pagination({
     ? buildPageItems(safePage, totalPages, siblingCount)
     : [];
 
-  const nav = (
+  return (
+    /* ⚠ ESTA BARRA NO FLOTA, Y ESO ES EL ARREGLO — mismo fallo MUDO que el de las
+       flechas de `DataTable`, y la misma familia.
+
+       Aquí había un envoltorio `sticky bottom-0 z-10 bg-background/70 backdrop-blur-md`
+       (más un centinela de 1 px y un `IntersectionObserver` para la sombra): mientras su
+       sitio natural al pie de la lista caía por debajo del viewport, la barra se pegaba
+       al borde inferior de la pantalla. Es decir, era una CAPA ENCIMA DE LAS FILAS, y se
+       quedaba con el clic de los botones que quedaran debajo.
+
+       Medido en Chromium contra el dev server con clics de RATÓN REALES
+       (`page.mouse.click` sobre las coordenadas del botón; `locator.click` no sirve
+       porque desplaza el elemento a la vista antes de pulsar y esconde justo esto), en
+       390/768/1024/1280/1440/1920 sobre `/ordenes`, `/configuracion/api` y
+       `/configuracion`: **26 controles robados en 13 de las 16 pantallas medidas**, los
+       26 con `abrió = false`. El clic lo recibía la barra —`nav:Paginación`, su fondo, o
+       incluso `button:Ir a la página 1`—, así que además de no abrir lo suyo podía
+       CAMBIAR DE PÁGINA. Ejemplos: `Editar` / `Inactivar` / `Restablecer contraseña` de
+       la última fila de `/configuracion` a 1280×800, y `Ver historial de la orden …` en
+       `/ordenes` a 1440×900. El solape medía los 64 px de alto de la barra (108 en 390 px,
+       donde va a dos líneas) contra la tabla en TODAS las pantallas con listado.
+
+       POR QUÉ NO SE ARREGLÓ COMO LAS FLECHAS, con un carril: el carril funciona porque
+       la flecha se ancla a una caja cuyo ancho controlamos, así que se le puede recortar
+       un hueco propio con `padding`. La barra se ancla al BORDE INFERIOR DEL VIEWPORT, y
+       el viewport es el scrollport del documento: no hay caja a la que recortarle nada.
+       Un `padding-bottom` al final de la página solo despeja el ÚLTIMO píxel del
+       documento; a media página las filas siguen pasando por debajo de la barra. Una
+       barra fija abajo sobre un documento que scrollea SIEMPRE tapa contenido: la única
+       forma de darle sitio propio sería que la zona de contenido fuese un scrollport más
+       bajo que la ventana, y eso es el armazón de la aplicación (`app/(app)/layout.tsx`),
+       no este control —lo montan 32 pantallas y la barra la pinta cada módulo—.
+
+       Así que la barra deja de flotar y su sitio propio es el que le corresponde: el pie
+       del listado, en flujo normal. Lo que se pierde está medido y es esto: para paginar
+       hay que llegar al final de la lista. Lo fija `tests/components/PaginacionSinCapa.test.tsx`. */
     <nav
       aria-label={ariaLabel}
       className={cn(
         "flex flex-wrap items-center gap-2 py-2",
-        // Pegada al borde inferior la barra es un elemento de navegación flotante: más
-        // alta y centrada para que se lea como tal y no como el pie de la tabla.
-        sticky && "justify-center gap-3 py-4",
+        // Pie del listado: más alto y centrado, que es como se ha leído siempre en las
+        // pantallas de tabla. `compacta` lo devuelve a una fila más del contenedor.
+        !compacta && "justify-center gap-3 py-4",
         className,
       )}
     >
@@ -347,53 +359,5 @@ export function Pagination({
         </select>
       ) : null}
     </nav>
-  );
-
-  if (!sticky) return nav;
-
-  return (
-    <>
-      {/* `position: sticky` con `bottom: 0`: la barra se queda DONDE ESTABA (al pie de la
-          lista), pero mientras su sitio natural cae por debajo del viewport flota sobre el
-          borde inferior de la pantalla — así se pagina sin bajar hasta el final de una
-          tabla larga—. Sin JS ni listeners de scroll.
-
-          Fondo semitransparente + `backdrop-blur`: mientras flota, las filas pasan por
-          debajo; sin él se leerían encima, y con el desenfoque se intuye que hay contenido
-          detrás en vez de parecer un corte opaco. Los ancestros no pueden recortarla:
-          `SidebarInset` usa `overflow-x-clip` (no `hidden`) justo para no crear un
-          contenedor de scroll.
-
-          `-mt-4`: anula el `gap-4` del contenedor padre SOLO en esta junta, así la barra
-          queda pegada a la tabla (gap 0) sin tocar la separación del resto de bloques. */}
-      <div
-        className={cn(
-          "sticky bottom-0 z-10 bg-background/70 backdrop-blur-md",
-          contenedorClassName,
-        )}
-      >
-        {/* Sombra SOLO mientras flota, y SOLO hacia arriba. No es un `box-shadow`: ese se
-            desborda también por los lados y se veía asomar en los costados de la barra.
-            Es una franja propia justo ENCIMA (`bottom-full`) y del MISMO ancho
-            (`inset-x-0`), que se difumina hacia arriba: no hay nada que pueda salirse por
-            los flancos. Sin bordes: la separación la da la franja.
-            Feature 208: la franja iba en `navy/10` fijo y en modo oscuro sombreaba
-            en un azul MÁS oscuro que la página (una mancha, no una sombra).
-            `foreground/10` gira: oscurece en claro y aclara en oscuro. */}
-        <span
-          aria-hidden="true"
-          className={cn(
-            "pointer-events-none absolute inset-x-0 bottom-full h-6 bg-gradient-to-t from-foreground/10 to-transparent transition-opacity",
-            pegada ? "opacity-100" : "opacity-0",
-          )}
-        />
-        {nav}
-      </div>
-      {/* Centinela del "¿sigue pegada?": va JUSTO debajo de la barra, en flujo normal. Si
-          no se ve, es que la barra está flotando sobre el contenido; en cuanto entra en
-          pantalla, la barra ya alcanzó su sitio. CSS no sabe distinguir esos dos estados
-          (`:stuck` no existe), así que se observa este 1px en vez de escuchar el scroll. */}
-      <div ref={centinelaRef} aria-hidden="true" className="h-px w-full" />
-    </>
   );
 }
