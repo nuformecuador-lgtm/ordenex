@@ -37,12 +37,51 @@ import { desgloseDescarga } from "@/app/(app)/cierres-admin/_components/desglose
  * archivo usa la de la pantalla que lo produce (R8).
  */
 export const GANANCIA_COL = "Ganancia";
+
+/**
+ * Identificadores de ÁMBITO de la preferencia de columnas de esta pantalla (314/R1, R10).
+ *
+ * Los cinco de sección van POR RESULTADO —lo que decide qué columnas hay es el resultado— y son
+ * distintos de los del detalle del admin (`cierre-gestiones-…`) porque los catálogos son
+ * distintos: aquí no salen ni el ingreso de Ordenex ni la indemnización, y una clave compartida
+ * mezclaría dos juegos de columnas que ni siquiera coinciden.
+ *
+ * El del histórico no se llama `cierres-solicitados` a secas para no confundirse con
+ * `cierres-bodega-solicitados`: éste es «los MÍOS», el conjunto de un solo mensajero.
+ */
+export const AMBITO_DESCARGA_DIA_ENTREGADAS = "cierre-dia-entregadas";
+export const AMBITO_DESCARGA_DIA_REPROGRAMADAS = "cierre-dia-reprogramadas";
+export const AMBITO_DESCARGA_DIA_DEVUELTAS = "cierre-dia-devueltas";
+export const AMBITO_DESCARGA_DIA_RECHAZADAS = "cierre-dia-rechazadas";
+export const AMBITO_DESCARGA_DIA_INCIDENTES = "cierre-dia-incidentes";
+export const AMBITO_DESCARGA_DIA_CIERRES_PASADOS = "mis-cierres-solicitados";
+
 /** Marca de evidencia: dice SI la hay, nunca dónde está (R22). */
 export const TIENE_EVIDENCIA_COL = "Tiene evidencia";
 export const TIENE_EVIDENCIA_SI = "Sí";
 export const TIENE_EVIDENCIA_NO = "No";
 
-/** Columnas comunes a las cinco secciones, en el orden de `COLUMNAS_COMUNES` del módulo. */
+/**
+ * Pedido humano del 2026-09-05 — día calendario en que se REGISTRÓ la gestión
+ * (`gestion_orden.created_at`, serializado al calendario de Costa Rica por el repositorio).
+ *
+ * SÍ le llega al mensajero, y no por descuido: `created_at` es un dato de SU gestión —cuándo la
+ * hizo él—, no del ingreso de la empresa ni de otro actor, así que no cae en lo que R24 manda
+ * ocultar en esta pantalla. Mismo criterio que `causaIncidente`.
+ *
+ * El literal se declara aquí, igual que `TIENE_EVIDENCIA_COL` de arriba, en vez de importarlo de
+ * las hojas del admin: este módulo existe precisamente para no atar la pantalla del mensajero a
+ * las del admin.
+ */
+export const FECHA_GESTION_COL = "Fecha de gestión";
+
+/**
+ * Columnas comunes a las cinco secciones, en el orden de `COLUMNAS_COMUNES` del módulo.
+ *
+ * «Fecha de gestión» va AL FINAL del bloque común (2026-09-05), el mismo sitio que ocupa en las
+ * cinco hojas del admin, para que las dos salidas del mismo cierre se lean igual. Las siete de
+ * siempre no cambian de posición entre sí.
+ */
 const COMUNES: DescargaColumna[] = [
   { clave: "numGuia", encabezado: "Nº Guía" },
   { clave: "numRemision", encabezado: "Nº Remisión" },
@@ -51,6 +90,7 @@ const COMUNES: DescargaColumna[] = [
   { clave: "ubicacion", encabezado: "Ubicación" },
   { clave: "producto", encabezado: "Producto" },
   { clave: "tienda", encabezado: "Tienda" },
+  { clave: "fechaGestion", encabezado: FECHA_GESTION_COL },
 ];
 
 /** Jerarquía geográfica en una línea, misma composición que la columna "Ubicación". */
@@ -74,6 +114,9 @@ function celdasComunes(gestion: CierreDetalleGestion): DescargaFila {
     ubicacion: ubicacion(gestion),
     producto: gestion.producto,
     tienda: gestion.tiendaNombre,
+    // Ya viene como día calendario `YYYY-MM-DD` de Costa Rica desde el servidor: aquí no se
+    // recorta ni se convierte. Ver la nota gemela en las hojas del admin.
+    fechaGestion: gestion.fechaGestion,
   };
 }
 

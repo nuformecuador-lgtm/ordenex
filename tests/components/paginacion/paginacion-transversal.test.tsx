@@ -531,6 +531,7 @@ function gestion(i: number, resultado: CierreResultado): CierreDetalleGestion {
   return {
     gestionId: `g-${String(i).padStart(3, "0")}`,
     ordenId: `o-${i}`,
+    fechaGestion: "2026-07-11",
     numGuia: 1000 + i,
     numRemision: `REM-${i}`,
     destinatario: `Destinatario ${String(i).padStart(3, "0")}`,

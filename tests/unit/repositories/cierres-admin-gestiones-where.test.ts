@@ -177,10 +177,24 @@ describe("WHERE/orden/proyección de las gestiones de «Cierres del día» (feat
     // `cierreId` no es una celda (R42): es la clave del join contra `cierre_detail`, cuyo grano
     // es (cierre_id, orden_id). Al cruzar cierres, emparejar sólo por orden cogería la fila
     // congelada del cierre equivocado.
+    //
+    // `orden` entra el 2026-09-05 y es la ÚNICA lectura de la orden VIVA de toda esta
+    // proyección: `orden.fecha_reparto` no está en el snapshot congelado, así que o se lee de
+    // ahí o la columna «Día de reparto» no existe. Está acotada a esa sola columna a propósito
+    // —abrirla a más campos volvería a mezclar datos de HOY con datos congelados, que es el
+    // camino de lectura que la feature 69 vino a matar—, y este caso se pone rojo si alguien la
+    // ensancha.
     expect([...deLaDescarga].filter((k) => !delDetalle.has(k)).sort()).toEqual([
       "cierre",
       "cierreId",
+      "orden",
     ]);
+    expect(GESTION_DESCARGA_SELECT.orden).toEqual({ select: { fechaReparto: true } });
+    // Y `createdAt` NO aparece en ninguna de las dos listas de diferencias: lo leen LAS DOS
+    // proyecciones. Es lo que hace que la hoja fundida y las cinco por sección puedan emitir la
+    // MISMA «Fecha de gestión» en vez de una sí y otra no.
+    expect(GESTION_ADMIN_SELECT.createdAt).toBe(true);
+    expect(GESTION_DESCARGA_SELECT.createdAt).toBe(true);
   });
 
   it("sin gestiones no se consulta el snapshot: cero filas es un desenlace normal (R38)", async () => {

@@ -13,6 +13,7 @@ import { RechazadoBloqueanteBadge } from "./cierre-detalle-shared";
 import { CierreFacturaResumen } from "./cierre-factura";
 import { ListaComprobantes } from "./ListaComprobantes";
 import {
+  AMBITO_DESCARGA_CIERRES_HISTORICO,
   COLUMNAS_DESCARGA_CIERRES_HISTORICO,
   filaDescargaCierreHistorico,
 } from "./cierres-admin-descarga-columnas";
@@ -101,6 +102,9 @@ export function descargaHistoricoCierres(filtros: FiltrosCierres): DataTableDesc
   return {
     titulo: TITULO_DESCARGA,
     columnas: COLUMNAS_DESCARGA_CIERRES_HISTORICO,
+    // Ficha 314: enciende el selector de columnas. El ámbito es el del HISTÓRICO y no el de la
+    // cola: son dos catálogos distintos y una sola clave los haría pisarse (R10).
+    ambitoColumnas: AMBITO_DESCARGA_CIERRES_HISTORICO,
     obtenerFilas: () =>
       filasDesdeResultado(
         listarHistoricoCierresAdminCompleto({ filtros }),

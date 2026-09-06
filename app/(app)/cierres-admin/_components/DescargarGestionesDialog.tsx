@@ -34,7 +34,7 @@ import {
  * cierres de bodega del maestro es la Server Action, que llega por prop (`accion`). No es un
  * lujo: los dos listados cubren conjuntos DISJUNTOS (design §2.6 — el maestro solo ve la GAM en
  * cierres del día, y lo satélite solo consolidado en cierres de bodega), así que hacen falta dos
- * bordes; pero las 27 columnas, la proyección y esta interacción son las mismas, y duplicarlas
+ * bordes; pero las 29 columnas, la proyección y esta interacción son las mismas, y duplicarlas
  * sería garantizar que divergen (R26).
  *
  * **El conjunto lo redacta ESTE diálogo, no la pantalla** (D11, R34/R35). El componente no
@@ -306,6 +306,26 @@ export function DescargarGestionesDialog({
             {/* El diálogo NO se cierra al descargar: el binario se arma en el navegador dentro
                 de este control, y desmontarlo a mitad del vuelo sería cortar la generación del
                 archivo que el usuario acaba de pedir. Se cierra cuando el usuario cierra. */}
+            {/* FICHA 314 — ESTA descarga se queda SIN `ambitoColumnas`, y es una decisión, no
+                un olvido. Las quince descargas de cierres encendieron su selector; ésta no,
+                porque el selector es INDIVISIBLE: `ColumnasPopover` ofrece ocultar Y reordenar
+                a la vez, a propósito (R21, decisión del humano del 2026-08-28 — un selector con
+                dos comportamientos según quién lo monta es la bifurcación que nadie recuerda al
+                mes). Ocultar aquí sería seguro; reordenar, no.
+
+                Por qué no: en las demás hojas todas las columnas se pueblan siempre, así que
+                moverlas cambia el sitio de un dato y nada más. Ésta emite SIEMPRE 29 columnas y
+                solo `ESPECIFICAS_POR_RESULTADO` decide cuáles se llenan: su orden ES el agrupado
+                que la hace legible —las doce que siempre traen dato primero, las diecisiete
+                condicionales después (`cierres-gestiones-fundida-descarga-columnas` §6)—.
+                Intercalarlas deja una hoja donde una celda vacía ya no dice «este resultado no
+                tiene ese dato», sino nada.
+
+                Y el daño sería MUDO: la preferencia vive en el navegador del usuario, así que ni
+                `cierres-gestiones-paridad` —que afirma sobre la CONSTANTE— ni ninguna otra
+                prueba se pondría roja; solo se degradaría el archivo de quien reordenó. El día
+                que el selector sepa ofrecer solo la mitad de ocultar, ésta es la primera
+                candidata. */}
             <DescargarDatasetButton
               titulo={titulo}
               columnas={COLUMNAS_DESCARGA_GESTIONES_FUNDIDA}

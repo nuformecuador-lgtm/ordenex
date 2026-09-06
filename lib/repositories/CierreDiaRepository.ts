@@ -49,6 +49,11 @@ import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
 import { CIERRE_ESTADOS_RESOLICITABLES } from "@/lib/utils/bloqueo-cierre";
 import type { CierreEstado } from "@/lib/types/cierre";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
+// Pedido humano del 2026-09-05: serializar `gestion_orden.created_at` (un `timestamp`) al DIA
+// calendario de Costa Rica. Nada que ver con el `startOfDayCR` que la 261 desterro de aqui: esto
+// no decide ningun dia de reparto ni lee el reloj del proceso — convierte un instante que ya
+// existe en la fila. `now` no se usa nunca sin argumento.
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 
 // El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
 // defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
@@ -189,6 +194,11 @@ export const WITH_DETALLE = {
   select: {
     id: true,
     ordenId: true,
+    // Pedido humano del 2026-09-05: CUANDO se registro la gestion, para la columna «Fecha de
+    // gestion» de la descarga del cierre del dia. Columna INMUTABLE de la propia gestion —no es
+    // un dato de la orden viva ni del cierre—, asi que la vista en vivo del mensajero la tiene
+    // tan bien como los detalles de admin.
+    createdAt: true,
     resultado: true,
     montoRecibido: true,
     metodoPago: true,
@@ -241,6 +251,10 @@ export function toPendienteRow(
   return {
     gestionId: row.id,
     ordenId: row.ordenId,
+    // Dia calendario de CR del `created_at`. `fechaCalendarioCR` y NO el recorte del ISO que se
+    // usa dos lineas mas abajo para `fechaReprogramacion`: aquella es `@db.Date` (medianoche
+    // UTC) y esta es un `timestamp`, donde recortar adelanta un dia a partir de las 18:00 CR.
+    fechaGestion: fechaCalendarioCR(row.createdAt),
     numGuia: row.orden.numGuia,
     numRemision: row.orden.numRemision,
     destinatario: row.orden.destinatario,

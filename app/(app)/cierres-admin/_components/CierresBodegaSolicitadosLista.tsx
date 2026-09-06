@@ -17,6 +17,7 @@ import type { CierreBodegaResumen } from "@/lib/interfaces/services/ICierreBodeg
 import { CierreBodegaFacturaResumen } from "./cierre-factura";
 import { ListaComprobantes } from "./ListaComprobantes";
 import {
+  AMBITO_DESCARGA_BODEGA_SOLICITADOS,
   COLUMNAS_DESCARGA_BODEGA_SOLICITADOS,
   filaDescargaBodegaSolicitado,
 } from "./cierres-bodega-descarga-columnas";
@@ -89,6 +90,8 @@ export function descargaBodegaSolicitados(filtros: FiltrosCierresBodega): DataTa
   return {
     titulo: TITULO_DESCARGA,
     columnas: COLUMNAS_DESCARGA_BODEGA_SOLICITADOS,
+    // Ficha 314: enciende el selector de columnas de esta descarga (ámbito propio, R10).
+    ambitoColumnas: AMBITO_DESCARGA_BODEGA_SOLICITADOS,
     obtenerFilas: () =>
       filasDesdeResultado(
         listarCierresBodegaSolicitadosCompleto({ filtros }),

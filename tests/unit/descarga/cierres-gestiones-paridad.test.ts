@@ -62,6 +62,11 @@ function gestion(over: Partial<CierreGestionDescargaDTO> = {}): CierreGestionDes
   return {
     mensajeroNombre: "Ana Mensajera",
     cierreSolicitadoAt: "2026-07-11T10:00:00.000Z",
+    // 2026-09-05: las dos fechas nuevas. Van con valores DISTINTOS entre sí y distintos del día
+    // del cierre a propósito — si la proyección confundiera una con otra, la paridad seguiría
+    // siendo cierta y no se vería; con tres días distintos, cualquier cruce se lee en el diff.
+    fechaGestion: "2026-07-12",
+    diaReparto: "2026-07-10",
     numGuia: 1001,
     numRemision: "REM-1",
     destinatario: "Ana Pérez",

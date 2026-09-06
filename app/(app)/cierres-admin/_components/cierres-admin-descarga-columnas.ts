@@ -36,6 +36,18 @@ function destino(cierre: CierreAdminResumen): string {
   return destinoCierre(cierre);
 }
 
+/**
+ * Identificadores de ÁMBITO de la preferencia de columnas de estas dos descargas (314/R1, R10).
+ *
+ * Son DOS y no uno por el mismo motivo por el que hay dos catálogos: las dos tablas no enseñan
+ * lo mismo (la cola no tiene motivo; el histórico no tiene fecha de solicitud). Compartir ámbito
+ * les daría la misma clave de `localStorage` y ocultar «Motivo» en el histórico movería en
+ * silencio la preferencia de la cola. `tests/unit/descarga/ambito-columnas.guardia.test.ts`
+ * vigila que ningún identificador se repita en dos módulos.
+ */
+export const AMBITO_DESCARGA_CIERRES_PENDIENTES = "cierres-pendientes";
+export const AMBITO_DESCARGA_CIERRES_HISTORICO = "cierres-resueltos";
+
 /** Columnas de la COLA de pendientes de decisión, en el orden de la pantalla. */
 export const COLUMNAS_DESCARGA_CIERRES_PENDIENTES: DescargaColumna[] = [
   { clave: "estado", encabezado: "Estado" },

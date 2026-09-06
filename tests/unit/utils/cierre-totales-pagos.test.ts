@@ -33,6 +33,7 @@ function gestion(
     {
       gestionId,
       ordenId: `o-${gestionId}`,
+      fechaGestion: "2026-07-11",
       numGuia: 1,
       numRemision: `R-${gestionId}`,
       destinatario: "Ana",
