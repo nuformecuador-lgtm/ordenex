@@ -289,6 +289,10 @@ function gestion(
 ): CierreDetalleGestion {
   return {
     ordenId: `o-${over.gestionId}`,
+    // Obligatoria desde el 2026-09-05 (la descarga dice CUANDO se gestiono). Aqui es un valor
+    // fijo cualquiera: este archivo mide el SELECTOR DE COLUMNAS, no la fecha; quien afirma que
+    // es la de la gestion y no la del cierre es `cierre-descarga-fechas-sql-real.test.ts`.
+    fechaGestion: "2026-03-11",
     numGuia: 1001,
     numRemision: `REM-${over.gestionId}`,
     destinatario: "Ana Pérez",
