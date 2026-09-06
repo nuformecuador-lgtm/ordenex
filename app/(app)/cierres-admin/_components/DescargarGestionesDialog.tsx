@@ -34,7 +34,7 @@ import {
  * cierres de bodega del maestro es la Server Action, que llega por prop (`accion`). No es un
  * lujo: los dos listados cubren conjuntos DISJUNTOS (design §2.6 — el maestro solo ve la GAM en
  * cierres del día, y lo satélite solo consolidado en cierres de bodega), así que hacen falta dos
- * bordes; pero las 27 columnas, la proyección y esta interacción son las mismas, y duplicarlas
+ * bordes; pero las 29 columnas, la proyección y esta interacción son las mismas, y duplicarlas
  * sería garantizar que divergen (R26).
  *
  * **El conjunto lo redacta ESTE diálogo, no la pantalla** (D11, R34/R35). El componente no
@@ -314,9 +314,9 @@ export function DescargarGestionesDialog({
                 mes). Ocultar aquí sería seguro; reordenar, no.
 
                 Por qué no: en las demás hojas todas las columnas se pueblan siempre, así que
-                moverlas cambia el sitio de un dato y nada más. Ésta emite SIEMPRE 27 columnas y
+                moverlas cambia el sitio de un dato y nada más. Ésta emite SIEMPRE 29 columnas y
                 solo `ESPECIFICAS_POR_RESULTADO` decide cuáles se llenan: su orden ES el agrupado
-                que la hace legible —las diez que siempre traen dato primero, las diecisiete
+                que la hace legible —las doce que siempre traen dato primero, las diecisiete
                 condicionales después (`cierres-gestiones-fundida-descarga-columnas` §6)—.
                 Intercalarlas deja una hoja donde una celda vacía ya no dice «este resultado no
                 tiene ese dato», sino nada.

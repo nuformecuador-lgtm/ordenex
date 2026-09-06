@@ -1135,7 +1135,8 @@ describe("Cierres · elección de columnas de la descarga", () => {
       await screen.findByRole("button", { name: "Descargar Gestiones de cierres" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: DISPARADOR_SELECTOR })).toBeNull();
-    // Ni preferencia que aplicar: no hay ámbito, así que salen las 27 declaradas.
+    // Ni preferencia que aplicar: no hay ámbito, así que salen las 29 declaradas
+    // (27 originales + «Fecha de gestión» y «Día de reparto», añadidas el 2026-09-05).
     expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.length).toBeGreaterThan(1);
   });
 });
