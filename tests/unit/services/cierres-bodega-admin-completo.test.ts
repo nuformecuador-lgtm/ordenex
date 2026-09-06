@@ -105,6 +105,7 @@ function gestionConEvidencia(): CierreGestionPendienteRow {
   return conPagos({
     gestionId: "g-1",
     ordenId: "o-1",
+    fechaGestion: "2026-07-11",
     numGuia: 10,
     numRemision: "REM-1",
     destinatario: "Ana",

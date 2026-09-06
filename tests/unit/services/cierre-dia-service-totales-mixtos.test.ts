@@ -44,6 +44,7 @@ function entregaMixta(): CierreGestionPendienteRow {
     {
       gestionId: "g-mixta",
       ordenId: "o-1",
+      fechaGestion: "2026-07-11",
       numGuia: 1,
       numRemision: "REM-1",
       destinatario: "Ana",

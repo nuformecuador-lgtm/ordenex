@@ -109,6 +109,7 @@ function gestion(
   return {
     gestionId: `g-${pagos.map((p) => p.metodo).join("-")}-${resultado}`,
     ordenId: "o-1",
+    fechaGestion: "2026-07-11",
     numGuia: 1,
     numRemision: "R-1",
     destinatario: "D",

@@ -48,6 +48,19 @@ export interface CierreSinGestionRow {
 export interface CierreGestionPendienteRow {
   gestionId: string;
   ordenId: string;
+  /**
+   * Pedido humano del 2026-09-05 — dia calendario de COSTA RICA (`YYYY-MM-DD`) de
+   * `gestion_orden.created_at`, YA serializado por el repositorio con `fechaCalendarioCR`.
+   *
+   * Viaja como DIA y no como instante ISO a proposito: `created_at` es un `timestamp`, y el
+   * `toISOString().slice(0, 10)` con el que se serializan las columnas `@db.Date` de esta misma
+   * fila (`fechaReprogramacion`) devolveria el dia SIGUIENTE para toda gestion registrada
+   * despues de las 18:00 de CR. La conversion vive UNA vez, aqui abajo, donde esta el `Date`.
+   *
+   * NOT NULL en la base y en los tres repositorios que producen esta fila: no hay gestion sin
+   * fecha de gestion.
+   */
+  fechaGestion: string;
   numGuia: number | null;
   numRemision: string;
   destinatario: string;

@@ -106,6 +106,7 @@ function gestion(n: number): CierreGestionPendienteRow {
   return conPagos({
     gestionId: `g-${n}`,
     ordenId: `o-${n}`,
+    fechaGestion: "2026-07-11",
     numGuia: n,
     numRemision: `R-${n}`,
     destinatario: `Destinatario ${n}`,
