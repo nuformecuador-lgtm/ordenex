@@ -8,12 +8,16 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
-import { DataTable, type Column } from "@/components/shared/DataTable";
+import {
+  DataTable,
+  type Column,
+  type DataTableDescarga,
+} from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
 import { useToast } from "@/hooks/useToast";
 import { cierreConfig } from "@/lib/config/cierre";
 import { money } from "@/lib/config/moneda";
-import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
+import type { DescargaFila } from "@/lib/types/descarga";
 import {
   deshacerGestion,
   listarCierresPasadosCompleto,
@@ -64,6 +68,12 @@ import {
   filasDesdeResultado,
 } from "@/components/shared/descarga-resultado";
 import {
+  AMBITO_DESCARGA_DIA_CIERRES_PASADOS,
+  AMBITO_DESCARGA_DIA_DEVUELTAS,
+  AMBITO_DESCARGA_DIA_ENTREGADAS,
+  AMBITO_DESCARGA_DIA_INCIDENTES,
+  AMBITO_DESCARGA_DIA_RECHAZADAS,
+  AMBITO_DESCARGA_DIA_REPROGRAMADAS,
   COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS,
   COLUMNAS_DESCARGA_DIA_DEVUELTAS,
   COLUMNAS_DESCARGA_DIA_ENTREGADAS,
@@ -318,27 +328,41 @@ const ORDEN_RESULTADOS: CierreResultado[] = [
  */
 const DESCARGA_POR_RESULTADO: Record<
   CierreResultado,
-  { columnas: DescargaColumna[]; fila: (g: CierreDetalleGestion) => DescargaFila }
+  /**
+   * Ficha 314 — las dos propiedades se toman del CONTRATO de la descarga en vez de reescribir
+   * sus tipos: `Required` las deja obligatorias, así que un resultado nuevo no puede nacer sin
+   * ámbito. Y de paso evita escribir la anotación `ambitoColumnas: string`, que
+   * `ambito-columnas.guardia` —que lee el árbol como TEXTO— confundiría con la declaración de
+   * un ámbito que no sabe resolver.
+   */
+  Required<Pick<DataTableDescarga, "columnas" | "ambitoColumnas">> & {
+    fila: (g: CierreDetalleGestion) => DescargaFila;
+  }
 > = {
   entregada: {
     columnas: COLUMNAS_DESCARGA_DIA_ENTREGADAS,
     fila: filaDescargaDiaEntregada,
+    ambitoColumnas: AMBITO_DESCARGA_DIA_ENTREGADAS,
   },
   reprogramada: {
     columnas: COLUMNAS_DESCARGA_DIA_REPROGRAMADAS,
     fila: filaDescargaDiaReprogramada,
+    ambitoColumnas: AMBITO_DESCARGA_DIA_REPROGRAMADAS,
   },
   devuelta: {
     columnas: COLUMNAS_DESCARGA_DIA_DEVUELTAS,
     fila: filaDescargaDiaDevuelta,
+    ambitoColumnas: AMBITO_DESCARGA_DIA_DEVUELTAS,
   },
   rechazada: {
     columnas: COLUMNAS_DESCARGA_DIA_RECHAZADAS,
     fila: filaDescargaDiaRechazada,
+    ambitoColumnas: AMBITO_DESCARGA_DIA_RECHAZADAS,
   },
   incidente: {
     columnas: COLUMNAS_DESCARGA_DIA_INCIDENTES,
     fila: filaDescargaDiaIncidente,
+    ambitoColumnas: AMBITO_DESCARGA_DIA_INCIDENTES,
   },
 };
 
@@ -347,6 +371,26 @@ const TITULO_DESCARGA_PASADOS = "Cierres solicitados";
 /** Nombre accesible del control de paginación (R43). */
 export const PAGINACION_PASADOS_LABEL = "Paginación de los cierres solicitados";
 const ERROR_PASADOS = "No se pudieron cargar tus cierres solicitados.";
+
+/**
+ * La configuración de descarga del HISTÓRICO de cierres solicitados del mensajero.
+ *
+ * Pasa a ser un objeto con nombre —antes eran cuatro props sueltas en el JSX— por una razón
+ * concreta: el ámbito de la ficha 314 tiene que viajar como una PROPIEDAD `ambitoColumnas:`
+ * para que `ambito-columnas.guardia` lo vea y compruebe que no se repite. Como atributo JSX
+ * (`ambitoColumnas={…}`) sería un ámbito real e invisible para la guardia, que es justo el
+ * fallo mudo que ella existe para cerrar. El comportamiento no cambia: son las mismas props.
+ */
+const DESCARGA_CIERRES_PASADOS: DataTableDescarga = {
+  titulo: TITULO_DESCARGA_PASADOS,
+  columnas: COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS,
+  ambitoColumnas: AMBITO_DESCARGA_DIA_CIERRES_PASADOS,
+  obtenerFilas: () =>
+    filasDesdeResultado(
+      listarCierresPasadosCompleto(),
+      filaDescargaDiaCierrePasado,
+    ),
+};
 
 // R40: el tamaño sale de la config del dominio (T H.1), nunca de un literal de pantalla.
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter((s) => s <= cierreConfig.MAX_PAGE_SIZE);
@@ -680,6 +724,8 @@ export function CierreDiaModule({
         const filas = grupos[resultado] ?? [];
         // Pedido: no mostrar las secciones sin registros (p. ej. reprogramadas con 0).
         if (filas.length === 0) return null;
+        const { columnas, fila, ambitoColumnas } =
+          DESCARGA_POR_RESULTADO[resultado];
         return (
           <section
             key={resultado}
@@ -712,9 +758,17 @@ export function CierreDiaModule({
                  */
                 descarga={{
                   titulo: RESULTADO_LABEL[resultado],
-                  columnas: DESCARGA_POR_RESULTADO[resultado].columnas,
-                  obtenerFilas: () =>
-                    filasLocales(filas, DESCARGA_POR_RESULTADO[resultado].fila),
+                  columnas,
+                  obtenerFilas: () => filasLocales(filas, fila),
+                  /**
+                   * Ficha 314 — el selector de columnas de esta sección, con ámbito POR
+                   * RESULTADO: lo que decide qué columnas hay es el resultado. Se pasa con la
+                   * forma ABREVIADA porque la declaración vive en el mapa de arriba; escrito
+                   * aquí como `MAPA[resultado].ambitoColumnas` sería un ámbito que
+                   * `ambito-columnas.guardia` no sabría resolver, y un ámbito irresoluble es
+                   * un ámbito cuya unicidad nadie comprueba.
+                   */
+                  ambitoColumnas,
                 }}
               />
             </div>
@@ -761,16 +815,7 @@ export function CierreDiaModule({
             (T C.2, R1/R2/R6/R9): ese conjunto lo entrega una lectura DEDICADA, que cuesta una
             consulta, cero firmas de evidencia y con el tope de filas evaluado en el servidor. */}
         <div className="flex flex-wrap items-start justify-end gap-2">
-          <DescargarDatasetButton
-            titulo={TITULO_DESCARGA_PASADOS}
-            columnas={COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS}
-            obtenerFilas={() =>
-              filasDesdeResultado(
-                listarCierresPasadosCompleto(),
-                filaDescargaDiaCierrePasado,
-              )
-            }
-          />
+          <DescargarDatasetButton {...DESCARGA_CIERRES_PASADOS} />
         </div>
         {/* Cada cierre solicitado se lee como su COMPROBANTE, la misma hoja que el mensajero
             ya veía al abrir el detalle —y la que el admin mira para decidirlo—. El botón

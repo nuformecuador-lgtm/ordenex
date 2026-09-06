@@ -6,11 +6,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/shared/Modal";
-import { DataTable, type Column } from "@/components/shared/DataTable";
+import {
+  DataTable,
+  type Column,
+  type DataTableDescarga,
+} from "@/components/shared/DataTable";
 import { filasLocales } from "@/components/shared/descarga-resultado";
 import { money, moneyTope } from "@/lib/config/moneda";
 import { cn } from "@/lib/utils";
-import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
+import type { DescargaFila } from "@/lib/types/descarga";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -49,6 +53,11 @@ import {
 // el orden de los medios y el monto de cada uno, que es lo que estas tablas pintan por columna.
 import { CLAVE_MEDIO_PAGO, MEDIOS_PAGO, montoPorMetodo } from "./desglose-pago";
 import {
+  AMBITO_DESCARGA_GESTIONES_DEVUELTAS,
+  AMBITO_DESCARGA_GESTIONES_ENTREGADAS,
+  AMBITO_DESCARGA_GESTIONES_INCIDENTES,
+  AMBITO_DESCARGA_GESTIONES_RECHAZADAS,
+  AMBITO_DESCARGA_GESTIONES_REPROGRAMADAS,
   COLUMNAS_DESCARGA_GESTIONES_DEVUELTAS,
   COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS,
   COLUMNAS_DESCARGA_GESTIONES_INCIDENTES,
@@ -1412,27 +1421,41 @@ export function TotalesIngresoPanel({
  */
 const DESCARGA_POR_RESULTADO: Record<
   CierreResultado,
-  { columnas: DescargaColumna[]; fila: (g: CierreDetalleGestion) => DescargaFila }
+  /**
+   * Ficha 314 — las dos propiedades se toman del CONTRATO de la descarga en vez de reescribir
+   * sus tipos: `Required` las deja obligatorias, así que un resultado nuevo no puede nacer sin
+   * ámbito. Y de paso evita escribir la anotación `ambitoColumnas: string`, que
+   * `ambito-columnas.guardia` —que lee el árbol como TEXTO— confundiría con la declaración de
+   * un ámbito que no sabe resolver.
+   */
+  Required<Pick<DataTableDescarga, "columnas" | "ambitoColumnas">> & {
+    fila: (g: CierreDetalleGestion) => DescargaFila;
+  }
 > = {
   entregada: {
     columnas: COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS,
     fila: filaDescargaGestionEntregada,
+    ambitoColumnas: AMBITO_DESCARGA_GESTIONES_ENTREGADAS,
   },
   reprogramada: {
     columnas: COLUMNAS_DESCARGA_GESTIONES_REPROGRAMADAS,
     fila: filaDescargaGestionReprogramada,
+    ambitoColumnas: AMBITO_DESCARGA_GESTIONES_REPROGRAMADAS,
   },
   devuelta: {
     columnas: COLUMNAS_DESCARGA_GESTIONES_DEVUELTAS,
     fila: filaDescargaGestionDevuelta,
+    ambitoColumnas: AMBITO_DESCARGA_GESTIONES_DEVUELTAS,
   },
   rechazada: {
     columnas: COLUMNAS_DESCARGA_GESTIONES_RECHAZADAS,
     fila: filaDescargaGestionRechazada,
+    ambitoColumnas: AMBITO_DESCARGA_GESTIONES_RECHAZADAS,
   },
   incidente: {
     columnas: COLUMNAS_DESCARGA_GESTIONES_INCIDENTES,
     fila: filaDescargaGestionIncidente,
+    ambitoColumnas: AMBITO_DESCARGA_GESTIONES_INCIDENTES,
   },
 };
 
@@ -1465,7 +1488,11 @@ export function DetalleSecciones({
         const filas = grupos[resultado] ?? [];
         // Pedido: no mostrar las secciones sin registros (p. ej. reprogramadas con 0).
         if (filas.length === 0) return null;
-        const descarga = DESCARGA_POR_RESULTADO[resultado];
+        // Se desestructura para poder pasar el ámbito con la forma ABREVIADA de abajo. Escribir
+        // `ambitoColumnas: descarga.ambitoColumnas` compilaría igual, pero dejaría en el árbol
+        // una declaración de ámbito que la guardia no sabe resolver y que por tanto pondría roja
+        // su comprobación de «todo ámbito se resuelve». La declaración vive en el mapa.
+        const { columnas, fila, ambitoColumnas } = DESCARGA_POR_RESULTADO[resultado];
         const tituloDescarga = contexto
           ? `${RESULTADO_LABEL[resultado]} · ${contexto}`
           : RESULTADO_LABEL[resultado];
@@ -1503,8 +1530,17 @@ export function DetalleSecciones({
                  */
                 descarga={{
                   titulo: tituloDescarga,
-                  columnas: descarga.columnas,
-                  obtenerFilas: () => filasLocales(filas, descarga.fila),
+                  columnas,
+                  obtenerFilas: () => filasLocales(filas, fila),
+                  /**
+                   * Ficha 314 — el selector de columnas de esta sección. El ámbito va POR
+                   * RESULTADO y no por montaje: este modal pinta las mismas cinco secciones una
+                   * vez por mensajero incluido, así que un ámbito con el `contexto` dentro daría
+                   * una preferencia distinta por mensajero para el MISMO juego de columnas. El
+                   * `contexto` sigue distinguiendo el NOMBRE del control y el del archivo (R13),
+                   * que es para lo que está.
+                   */
+                  ambitoColumnas,
                 }}
                 // Solo el detalle de admin trae `ingresoOrdenex`. Sin él se devuelve `null`
                 // (y no un componente que renderiza vacío): así la tabla no pinta el botón

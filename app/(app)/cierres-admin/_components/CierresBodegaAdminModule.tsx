@@ -58,6 +58,7 @@ import {
 } from "./CierresBodegaResueltosLista";
 import { FiltrosCierresBarra } from "./FiltrosCierresBarra";
 import {
+  AMBITO_DESCARGA_BODEGA_PENDIENTES,
   COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
   filaDescargaBodegaPendiente,
 } from "./cierres-bodega-descarga-columnas";
@@ -170,6 +171,8 @@ function descargaColaBodega(filtros: FiltrosCierresBodega): DataTableDescarga {
   return {
     titulo: TITULO_DESCARGA_PENDIENTES,
     columnas: COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
+    // Ficha 314: enciende el selector de columnas de esta descarga (ámbito propio, R10).
+    ambitoColumnas: AMBITO_DESCARGA_BODEGA_PENDIENTES,
     obtenerFilas: () =>
       filasDesdeResultado(
         listarPendientesCierresBodegaCompleto({ filtros }),

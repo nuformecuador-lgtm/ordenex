@@ -31,6 +31,19 @@ import {
   PAGO_MENSAJERO_COL,
 } from "./cierre-labels";
 
+/**
+ * Identificadores de ÁMBITO de la preferencia de columnas de las CUATRO descargas (314/R1, R10).
+ *
+ * Uno por tabla, igual que los catálogos: las cuatro publican juegos distintos, así que una
+ * clave compartida haría que ocultar «Motivo» en los resueltos moviera la preferencia de los
+ * solicitados. Cada identificador es la mitad de una clave de `localStorage`
+ * (`ordenex:descarga-columnas:<ámbito>`), y `ambito-columnas.guardia` vigila que no se repita.
+ */
+export const AMBITO_DESCARGA_BODEGA_PENDIENTES = "cierres-bodega-pendientes";
+export const AMBITO_DESCARGA_BODEGA_RESUELTOS = "cierres-bodega-resueltos";
+export const AMBITO_DESCARGA_CONSOLIDABLES = "cierres-consolidables";
+export const AMBITO_DESCARGA_BODEGA_SOLICITADOS = "cierres-bodega-solicitados";
+
 // ---------------------------------------------------------------------------
 // E.2 — Cierres de bodega del maestro/admin
 // ---------------------------------------------------------------------------
