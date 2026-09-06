@@ -67,6 +67,7 @@ describe("orden de las columnas de descarga del cierre del día (mensajero)", ()
       "ubicacion",
       "producto",
       "tienda",
+      "fechaGestion",
       "monto",
       "metodo",
       "ganancia",
@@ -79,6 +80,7 @@ describe("orden de las columnas de descarga del cierre del día (mensajero)", ()
       "Ubicación",
       "Producto",
       "Tienda",
+      "Fecha de gestión",
       "Monto",
       "Método",
       "Ganancia",
@@ -94,6 +96,7 @@ describe("orden de las columnas de descarga del cierre del día (mensajero)", ()
       "ubicacion",
       "producto",
       "tienda",
+      "fechaGestion",
       "nuevaFecha",
       "motivo",
       "ganancia",
@@ -106,6 +109,7 @@ describe("orden de las columnas de descarga del cierre del día (mensajero)", ()
       "Ubicación",
       "Producto",
       "Tienda",
+      "Fecha de gestión",
       "Nueva fecha",
       "Motivo",
       "Ganancia",
@@ -123,6 +127,7 @@ describe("orden de las columnas de descarga del cierre del día (mensajero)", ()
       "ubicacion",
       "producto",
       "tienda",
+      "fechaGestion",
       "motivo",
       "ganancia",
     ]);
@@ -134,6 +139,7 @@ describe("orden de las columnas de descarga del cierre del día (mensajero)", ()
       "Ubicación",
       "Producto",
       "Tienda",
+      "Fecha de gestión",
       "Motivo",
       "Ganancia",
     ]);
@@ -151,6 +157,7 @@ describe("orden de las columnas de descarga del cierre del día (mensajero)", ()
       "ubicacion",
       "producto",
       "tienda",
+      "fechaGestion",
       "motivo",
       "tieneEvidencia",
       "ganancia",
@@ -163,6 +170,7 @@ describe("orden de las columnas de descarga del cierre del día (mensajero)", ()
       "Ubicación",
       "Producto",
       "Tienda",
+      "Fecha de gestión",
       "Motivo",
       "Tiene evidencia",
       "Ganancia",
@@ -181,6 +189,7 @@ describe("orden de las columnas de descarga del cierre del día (mensajero)", ()
       "ubicacion",
       "producto",
       "tienda",
+      "fechaGestion",
       "causa",
       "motivo",
       "tieneEvidencia",
@@ -193,10 +202,48 @@ describe("orden de las columnas de descarga del cierre del día (mensajero)", ()
       "Ubicación",
       "Producto",
       "Tienda",
+      "Fecha de gestión",
       "Causa",
       "Motivo",
       "Tiene evidencia",
     ]);
+  });
+
+  it("las cinco secciones llevan «Fecha de gestión» y el histórico NO (2026-09-05)", () => {
+    // La columna va en el bloque COMÚN de las cinco secciones por resultado, cuyo grano es la
+    // GESTIÓN. El histórico de cierres pasados tiene otro grano —el CIERRE— y ya lleva su
+    // «Fecha»: meterle una segunda columna de fecha sería un dato que esa fila no tiene.
+    const secciones = {
+      entregadas: COLUMNAS_DESCARGA_DIA_ENTREGADAS,
+      reprogramadas: COLUMNAS_DESCARGA_DIA_REPROGRAMADAS,
+      devueltas: COLUMNAS_DESCARGA_DIA_DEVUELTAS,
+      rechazadas: COLUMNAS_DESCARGA_DIA_RECHAZADAS,
+      incidentes: COLUMNAS_DESCARGA_DIA_INCIDENTES,
+    };
+    for (const [nombre, columnas] of Object.entries(secciones)) {
+      const claves = columnas.map((c) => c.clave);
+      expect(claves, nombre).toContain("fechaGestion");
+      expect(claves.indexOf("fechaGestion"), nombre).toBe(claves.indexOf("tienda") + 1);
+    }
+    expect(COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS.map((c) => c.clave)).not.toContain(
+      "fechaGestion",
+    );
+  });
+
+  it("el archivo del mensajero SÍ lleva la fecha de su propia gestión (R24)", () => {
+    // R24 manda que el archivo no publique lo que la pantalla oculta, y lo que aquí se oculta
+    // es el dinero de la EMPRESA (flete, comisión, IVA, indemnización). `created_at` de la
+    // gestión es un dato SUYO —cuándo la hizo él—, así que sale, igual que la causa del
+    // incidente. Este caso fija esa lectura para que nadie la revierta «por prudencia».
+    const fila = filaDescargaDiaEntregada({
+      ...gestionEntregada([{ metodo: "efectivo", monto: "8000.00" }]),
+      fechaGestion: "2026-03-09",
+    });
+    expect(fila.fechaGestion).toBe("2026-03-09");
+    expect(String(fila.fechaGestion)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // Y sigue sin llevar nada de la empresa por esta puerta.
+    expect(Object.keys(fila)).not.toContain("ingresoTotal");
+    expect(Object.keys(fila)).not.toContain("indemnizacion");
   });
 });
 
@@ -221,6 +268,7 @@ function gestionEntregada(
   return {
     gestionId: "g-1",
     ordenId: "o-1",
+    fechaGestion: "2026-07-11",
     numGuia: 1234,
     numRemision: "REM-1234",
     destinatario: "Ana Rojas",

@@ -22,6 +22,21 @@ export type CierreResultado = GestionResultado;
 export interface CierreDetalleGestion {
   gestionId: string;
   ordenId: string;
+  /**
+   * Pedido humano del 2026-09-05 — dia calendario de COSTA RICA (`YYYY-MM-DD`) de
+   * `gestion_orden.created_at`: CUANDO se registro la gestion.
+   *
+   * Es el reloj CANONICO e INMUTABLE de la gestion (el schema le pone indice por eso), y por
+   * eso es el que sale a las descargas. Lo pueblan LOS TRES caminos —la vista en vivo del
+   * mensajero y los dos detalles de admin—, porque la columna existe y no es nullable en
+   * ninguno: no hay camino donde «no se sepa cuando se gestiono».
+   *
+   * Passthrough puro desde `CierreGestionPendienteRow`, YA serializado a dia calendario CR por
+   * el repositorio. El servicio no toca zonas horarias, y la proyeccion de la descarga tampoco:
+   * `created_at` es un `timestamp`, y recortar su ISO da el dia SIGUIENTE despues de las 18:00
+   * de CR.
+   */
+  fechaGestion: string;
   numGuia: number | null;
   numRemision: string;
   destinatario: string;

@@ -20,6 +20,7 @@ function fila(over: Partial<CierreGestionPendienteRow> = {}): CierreGestionPendi
   return {
     gestionId: "g1",
     ordenId: "o1",
+    fechaGestion: "2026-07-11",
     numGuia: 1,
     numRemision: "R-1",
     destinatario: "D",

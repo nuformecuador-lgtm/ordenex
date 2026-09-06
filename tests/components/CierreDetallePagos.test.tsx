@@ -48,6 +48,7 @@ function makeGestion(
 ): CierreDetalleGestion {
   return {
     ordenId: `o-${over.gestionId}`,
+    fechaGestion: "2026-07-11",
     numGuia: 1001,
     numRemision: "REM-001",
     destinatario: "Ana Pérez",

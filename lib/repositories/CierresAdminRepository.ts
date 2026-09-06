@@ -39,7 +39,11 @@ import type {
   FiltrosCierres,
   FiltrosDescargaGestiones,
 } from "@/lib/types/filtros-cierres";
-import { inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } from "@/lib/utils/fecha-cr";
+import {
+  fechaCalendarioCR,
+  inicioDelDiaCREnUtc,
+  inicioDelDiaSiguienteCREnUtc,
+} from "@/lib/utils/fecha-cr";
 import { ESTADOS_COLA_CIERRE_DIA } from "@/lib/utils/colas-cierre";
 // Feature 238 (T1.3/T3.3): el PUNTO UNICO de «que paquete vuelve a bodega». Lo leen las DOS
 // consultas de esta feature —la del conjunto esperado y la de la marca— para que no puedan
@@ -207,6 +211,11 @@ const FAMILIAS_DERIVADAS_DEL_HISTORIAL: OrdenHistorialOrigenTipo[] = [
 export const GESTION_ADMIN_SELECT = {
   id: true,
   ordenId: true,
+  // Pedido humano del 2026-09-05: CUANDO se registro la gestion. Columna INMUTABLE —nada la
+  // reescribe— y con indice propio en el schema, que es justo lo que la hace el reloj canonico
+  // de la gestion. Se lee aqui Y en `GESTION_DESCARGA_SELECT`: las dos proyecciones alimentan
+  // descargas que ahora llevan la columna «Fecha de gestion».
+  createdAt: true,
   resultado: true,
   montoRecibido: true,
   metodoPago: true,
@@ -365,6 +374,10 @@ export function toPendienteRowDesdeSnapshot(
   return {
     gestionId: g.id,
     ordenId: g.ordenId,
+    // Dia calendario de CR del `created_at` de la gestion. `fechaCalendarioCR` y NO
+    // `toISOString().slice(0, 10)`: esto es un `timestamp`, no un `@db.Date`, y recortar su ISO
+    // adelantaria un dia toda gestion registrada despues de las 18:00 de CR.
+    fechaGestion: fechaCalendarioCR(g.createdAt),
     numGuia: d.numGuia,
     numRemision: d.numRemision,
     destinatario: d.destinatario,
@@ -628,6 +641,19 @@ function colaWhere(alcance: Alcance, filtros?: FiltrosCierres): Prisma.CierreDia
 export const GESTION_DESCARGA_SELECT = {
   id: true,
   ordenId: true,
+  // Pedido humano del 2026-09-05 — el reloj CANONICO de la gestion, para la columna «Fecha de
+  // gestion». Ver `GESTION_ADMIN_SELECT`, que lo lee por el mismo motivo.
+  createdAt: true,
+  // Pedido humano del 2026-09-05 — el DIA DE REPARTO («¿es para hoy o para mañana?»), para su
+  // columna. Es el UNICO dato de la orden VIVA que esta proyeccion lee, y se hace a sabiendas:
+  // `cierre_detail` es el snapshot congelado al SOLICITAR y no lo contiene, asi que o se lee de
+  // `orden` o no existe. Que el valor pueda haberse ANULADO despues (deshacer asignacion,
+  // liberar a satelite, aprobar un cierre de orden sin gestionar) es exactamente por lo que la
+  // celda vacia es legitima y no se rellena con nada.
+  //
+  // Coste: UNA consulta mas por descarga (Prisma resuelve la relacion con un `IN` sobre los
+  // ids), no una por fila.
+  orden: { select: { fechaReparto: true } },
   // El grano de `cierre_detail` es (cierre_id, orden_id): una MISMA orden puede aparecer en
   // varios cierres. Al cruzar cierres, emparejar solo por `orden_id` cogeria la fila congelada
   // del cierre equivocado. NO se emite: es la clave del join, no una celda (R42).
@@ -682,6 +708,15 @@ export function toGestionDescargaDTO(
   return {
     mensajeroNombre: nombreCompletoUsuario(g.cierre.mensajero),
     cierreSolicitadoAt: g.cierre.solicitadoAt.toISOString(),
+    // Dia calendario de CR del `created_at` de la gestion: `timestamp`, asi que `fechaCalendarioCR`
+    // y NUNCA `toISOString().slice(0, 10)` (ese daria el dia siguiente pasadas las 18:00 CR).
+    fechaGestion: fechaCalendarioCR(g.createdAt),
+    // `orden.fecha_reparto` es `@db.Date` —Prisma la devuelve a MEDIANOCHE UTC del dia
+    // calendario—, asi que aqui el recorte del ISO SI es correcto: es el mismo tratamiento que
+    // recibe `fechaReprogramacion` unas lineas mas abajo. `null` se emite tal cual: la columna
+    // se anula al deshacer una asignacion o al cerrar una orden sin gestionar, y una celda
+    // vacia es la lectura honesta de un dato que ya no existe.
+    diaReparto: g.orden.fechaReparto ? g.orden.fechaReparto.toISOString().slice(0, 10) : null,
     numGuia: d.numGuia,
     numRemision: d.numRemision,
     destinatario: d.destinatario,

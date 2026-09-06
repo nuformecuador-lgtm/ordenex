@@ -36,6 +36,11 @@ function gestionEntregada(over: Record<string, unknown> = {}) {
     id: "g-1",
     ordenId: "o-1",
     cierreId: "c-1",
+    // 2026-09-05 — el reloj de la gestión, un `timestamp`. 18:30 UTC son las 12:30 del MISMO
+    // día en CR; el caso de las 18:00 CR (que en UTC ya es el día siguiente) tiene el suyo.
+    createdAt: new Date("2026-02-11T18:30:00.000Z"),
+    // La única lectura de la orden VIVA de esta proyección: el día de reparto.
+    orden: { fechaReparto: new Date("2026-02-09T00:00:00.000Z") },
     resultado: "entregada",
     montoRecibido: dec("15000.50"),
     metodoPago: "efectivo",
@@ -124,6 +129,47 @@ describe("DTO de la hoja fundida (feature 230, T2.1/T7.1)", () => {
 
     expect(fila.mensajeroNombre).toBe("Ana");
     expect(fila.cierreSolicitadoAt).toBe("2026-02-10T18:30:00.000Z");
+  });
+
+  it("la fecha de gestión sale de `created_at` y NO de la fecha del cierre (2026-09-05)", async () => {
+    // El cierre se solicitó el 10 de febrero y la gestión se registró el 11: son días distintos,
+    // que es lo que pasa en el 29 % de los casos medidos en producción. Cada celda trae el suyo.
+    const fila = await filaAdmin([gestionEntregada()], [detalle()]);
+
+    expect(fila.fechaGestion).toBe("2026-02-11");
+    expect(fila.cierreSolicitadoAt).toBe("2026-02-10T18:30:00.000Z");
+    expect(fila.fechaGestion).not.toBe(fila.cierreSolicitadoAt.slice(0, 10));
+  });
+
+  it("la fecha de gestión es el día de COSTA RICA, no el del UTC (2026-09-05)", async () => {
+    // Éste es el off-by-one que la ficha vino a evitar: `2026-02-12T02:00:00Z` son las 20:00 del
+    // 11 de febrero en Costa Rica. `toISOString().slice(0, 10)` diría «2026-02-12» y le
+    // adelantaría el día a TODA gestión registrada después de las 18:00 CR — es decir, a las de
+    // última hora de la tarde, que son muchas.
+    const fila = await filaAdmin(
+      [gestionEntregada({ createdAt: new Date("2026-02-12T02:00:00.000Z") })],
+      [detalle()],
+    );
+
+    expect(fila.fechaGestion).toBe("2026-02-11");
+    expect(fila.fechaGestion).not.toBe("2026-02-12");
+  });
+
+  it("el día de reparto sale de `orden.fecha_reparto` tal cual, y vacío si se anuló (2026-09-05)", async () => {
+    const conReparto = await filaAdmin([gestionEntregada()], [detalle()]);
+    expect(conReparto.diaReparto).toBe("2026-02-09");
+    // No se contamina con ninguna de las otras dos fechas de la fila.
+    expect(conReparto.diaReparto).not.toBe(conReparto.fechaGestion);
+
+    // `fecha_reparto` se ANULA al deshacer una asignación, al liberar a bodega satélite y al
+    // aprobar el cierre de una orden sin gestionar. `null` es entonces legítimo, y NO se
+    // sustituye por la fecha del cierre ni por la de la gestión: eso inventaría el dato.
+    const sinReparto = await filaAdmin(
+      [gestionEntregada({ orden: { fechaReparto: null } })],
+      [detalle()],
+    );
+    expect(sinReparto.diaReparto).toBeNull();
+    expect(sinReparto.fechaGestion).toBe("2026-02-11"); // la otra celda no se cae con ella
   });
 
   it("no emite NINGÚN campo de evidencia, ni siquiera derivado (R22/R41)", async () => {

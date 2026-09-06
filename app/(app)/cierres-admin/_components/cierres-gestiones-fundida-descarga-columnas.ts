@@ -4,17 +4,45 @@
  *
  * **Una sola declaración para las DOS pantallas** (R26). Los dos puntos de entrada —los cierres
  * del día de `cierres-admin` y los cierres de bodega del maestro— cubren conjuntos DISJUNTOS
- * (design §2.6) y cada uno llama a su propia Server Action, pero las 27 columnas y la función
+ * (design §2.6) y cada uno llama a su propia Server Action, pero las 29 columnas y la función
  * que las puebla son estas, y solo estas: dos declaraciones «iguales» son dos declaraciones que
  * divergen a la primera columna nueva.
  *
- * **27 columnas** (D6/D8/D9, `design.md §6`, más las tres de medios de pago que sustituyeron a la
- * celda única «Método», el fulfillment congelado, y menos el par partido del flete de devolución). Las diez primeras se
+ * **29 columnas** (D6/D8/D9, `design.md §6`, más las tres de medios de pago que sustituyeron a la
+ * celda única «Método», el fulfillment congelado, las dos FECHAS del pedido del 2026-09-05, y
+ * menos el par partido del flete de devolución). Las doce primeras se
  * pueblan SIEMPRE; las diecisiete restantes son específicas del resultado de la fila y, cuando no
  * aplican, la celda queda VACÍA —`null`, nunca el «—» de pantalla ni un relleno— y la columna NO
  * se omite (R9/R10/R46). Que la hoja tenga celdas vacías es el coste que el humano vio y aceptó
  * al pedir UN archivo en vez de cinco (D3); ver la cabecera de
  * `cierre-gestiones-descarga-columnas.ts`, que sigue explicando por qué allí son cinco.
+ *
+ * ── LAS DOS FECHAS NUEVAS, Y LA TERCERA QUE NO EXISTE (pedido humano del 2026-09-05) ──────
+ *
+ * El encargo fue «la fecha de la gestión y la fecha de asignación», con la sospecha de que la
+ * de asignación y el «para hoy o para mañana» eran el mismo dato. **Se midió contra producción
+ * antes de escribir una línea, y salieron TRES hechos que deciden estas columnas:**
+ *
+ *  1. `orden.asignado_at` y `orden.fecha_reparto` son **el mismo dato**: el día de `asignado_at`
+ *     coincide con `fecha_reparto` en **1.063 de 1.063** gestiones medidas (100 %).
+ *  2. La **fecha de gestión NO** coincide con ellas: difiere en **312 de 1.063** (**29 %**). Es
+ *     un dato distinto y es el que faltaba de verdad.
+ *  3. `asignado_at` y `fecha_reparto` **no son históricos: se pisan y se borran.** Se
+ *     sobrescriben en cada reasignación, se anulan al deshacer una asignación, al liberar la
+ *     orden a una bodega satélite y al aprobar el cierre de una orden sin gestionar. De ahí que
+ *     266 gestiones dieran una «asignación» POSTERIOR a su propia gestión: son órdenes con
+ *     varias gestiones (2,8 de media) donde el campo ya se había pisado.
+ *
+ * **Por eso NO hay —ni debe haber— una columna «Fecha de asignación».** Sería una tercera
+ * columna con el contenido de la segunda (idénticas en el 100 % de lo medido) y peor fiabilidad
+ * (un instante que se reescribe, frente a un día que al menos se lee como lo que es). Esto está
+ * escrito aquí y no en un `progress/` porque la tentación de «completar la pareja» vuelve cada
+ * pocos meses y el archivo es donde se mira. Si algún día hace falta el historial de
+ * asignaciones, el sitio es `orden_historial`, que sí es inmutable — no una columna que se pisa.
+ *
+ * Y de ahí también que **`diaReparto` pueda venir vacío y eso esté BIEN**: la celda vacía dice
+ * «esta orden ya no conserva su día de reparto», que es la verdad. Rellenarla con la fecha del
+ * cierre inventaría un dato que nadie escribió.
  *
  * **NO HAY COLUMNA DE EVIDENCIA, en ningún resultado** (D8, R40/R41). No es que quede vacía: se
  * retiró entera, y el DTO que la alimenta tampoco trae nada de evidencia —ni la URL firmada ni
@@ -61,29 +89,53 @@ import { COLUMNAS_MEDIOS_PAGO } from "./medios-pago-descarga-columnas";
 
 // --- Encabezados propios de la fundida (texto separado de la lógica, i18n-ready) ---
 //
-// Los tres nombran datos que NINGUNA de las cinco descargas por sección tenía que nombrar: el
-// archivo era de UN cierre y de UNA sección, así que el mensajero iba en el NOMBRE del archivo,
-// la fecha era la del cierre abierto y el resultado, el de la sección. Al cruzar cierres, sin
-// estas tres columnas las filas no se distinguen (R7/R8).
+// Los tres primeros nombran datos que NINGUNA de las cinco descargas por sección tenía que
+// nombrar: el archivo era de UN cierre y de UNA sección, así que el mensajero iba en el NOMBRE
+// del archivo, la fecha era la del cierre abierto y el resultado, el de la sección. Al cruzar
+// cierres, sin estas tres columnas las filas no se distinguen (R7/R8).
+//
+// Los dos de FECHA son del pedido del 2026-09-05 y su porqué está en la cabecera. `FECHA_GESTION_COL`
+// tiene gemela en las descargas por sección y en la del mensajero (allí se declara aparte, porque
+// esas hojas no importan de aquí); `DIA_REPARTO_COL` es solo de la fundida — es el único camino
+// cuyo DTO trae `orden.fecha_reparto`.
 /** Dueño del cierre al que pertenece la gestión (R8). */
 export const MENSAJERO_COL = "Mensajero";
 /** Día calendario de SOLICITUD del cierre, que es por el que el conjunto se ordena (R11). */
 export const FECHA_CIERRE_COL = "Fecha del cierre";
+/**
+ * Día calendario en que se REGISTRÓ la gestión (`gestion_orden.created_at`). Distinta de la del
+ * cierre en el 29 % de los casos medidos; ver la cabecera.
+ */
+export const FECHA_GESTION_COL = "Fecha de gestión";
+/**
+ * Día para el que la orden estaba repartida (`orden.fecha_reparto`), el «para hoy o para
+ * mañana». Puede venir VACÍA y es legítimo; ver la cabecera.
+ */
+export const DIA_REPARTO_COL = "Día de reparto";
 /** Resultado de la gestión de esta fila, en singular y como etiqueta legible (R7/R45). */
 export const RESULTADO_COL = "Resultado";
 
 /**
- * Las 27 columnas de la hoja fundida, en el orden decidido (`design.md §6`), con las tres de
- * MEDIOS DE PAGO donde antes iba la celda única «Método».
+ * Las 29 columnas de la hoja fundida, en el orden decidido (`design.md §6`), con las tres de
+ * MEDIOS DE PAGO donde antes iba la celda única «Método» y las dos FECHAS del pedido del
+ * 2026-09-05 junto a la del cierre.
+ *
+ * Las dos nuevas van EN TERCERA Y CUARTA POSICIÓN, pegadas a «Fecha del cierre», y no al final:
+ * quien abre la hoja lee las tres fechas de un vistazo y ahí es donde la diferencia entre ellas
+ * salta (que es todo el punto de haberlas añadido). Ninguna columna existente cambia de orden
+ * relativo — las aserciones literales de `cierres-gestiones-fundida-descarga-columnas.test.ts`
+ * lo atornillan.
  *
  * Los encabezados que ya existían se LEEN de `cierre-labels` y no se teclean: es lo que hace
  * cierto que la pantalla y el archivo digan lo mismo, en vez de que hoy coincidan dos literales
  * escritos en dos archivos.
  */
 export const COLUMNAS_DESCARGA_GESTIONES_FUNDIDA: DescargaColumna[] = [
-  // --- 1-10: se pueblan SIEMPRE ---
+  // --- 1-12: se pueblan SIEMPRE (salvo `diaReparto`, que puede venir vacío: ver cabecera) ---
   { clave: "mensajero", encabezado: MENSAJERO_COL },
   { clave: "fechaCierre", encabezado: FECHA_CIERRE_COL },
+  { clave: "fechaGestion", encabezado: FECHA_GESTION_COL },
+  { clave: "diaReparto", encabezado: DIA_REPARTO_COL },
   { clave: "numGuia", encabezado: "Nº Guía" },
   { clave: "numRemision", encabezado: "Nº Remisión" },
   { clave: "destinatario", encabezado: "Destinatario" },
@@ -92,7 +144,7 @@ export const COLUMNAS_DESCARGA_GESTIONES_FUNDIDA: DescargaColumna[] = [
   { clave: "producto", encabezado: "Producto" },
   { clave: "tienda", encabezado: "Tienda" },
   { clave: "resultado", encabezado: RESULTADO_COL },
-  // --- 11-27: específicas del resultado; vacías donde no aplican (R10) ---
+  // --- 13-29: específicas del resultado; vacías donde no aplican (R10) ---
   { clave: "montoCobrar", encabezado: MONTO_COBRAR_COL },
   { clave: "fulfillment", encabezado: FULFILLMENT_COL },
   { clave: "recibido", encabezado: "Recibido" },
@@ -201,11 +253,19 @@ function ubicacion(gestion: CierreGestionDescargaDTO): string | null {
   return partes.length === 0 ? null : partes.join(" · ");
 }
 
-/** Las diez celdas que TODA fila lleva, sea cual sea su resultado. Valores CRUDOS. */
+/** Las doce celdas que TODA fila lleva, sea cual sea su resultado. Valores CRUDOS. */
 function celdasComunes(gestion: CierreGestionDescargaDTO): DescargaFila {
   return {
     mensajero: gestion.mensajeroNombre,
     fechaCierre: fechaDiaISO(gestion.cierreSolicitadoAt),
+    // Las dos fechas nuevas llegan YA como día calendario `YYYY-MM-DD` del servidor, así que
+    // aquí NO se les aplica `fechaDiaISO` ni ningún recorte: no hay nada que recortar, y pasar
+    // un día por un extractor de días sugeriría que puede ser un instante, que es justo la
+    // confusión que hizo falta evitar. `fechaCierre` sí lo necesita: ése viaja como ISO
+    // completo desde antes de esta ficha y se emite como día, igual que en la pantalla.
+    fechaGestion: gestion.fechaGestion,
+    // `null` es una celda vacía legítima (ver cabecera): la orden perdió su día de reparto.
+    diaReparto: gestion.diaReparto,
     numGuia: gestion.numGuia,
     numRemision: gestion.numRemision,
     destinatario: gestion.destinatario,
@@ -270,7 +330,7 @@ function celdasEspecificas(
 }
 
 /**
- * Proyecta UNA gestión a UNA fila de la hoja fundida: las 27 claves declaradas, siempre las
+ * Proyecta UNA gestión a UNA fila de la hoja fundida: las 29 claves declaradas, siempre las
  * mismas y siempre todas (R9), con las que no aplican a su resultado en VACÍO (R10).
  *
  * El `??` sobre `ESPECIFICAS_POR_RESULTADO` no es un caso de negocio: el mapa es exhaustivo

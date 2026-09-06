@@ -45,6 +45,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "ubicacion",
       "producto",
       "tienda",
+      "fechaGestion",
       "montoCobrar",
       "fulfillment",
       "recibido",
@@ -64,6 +65,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "Ubicación",
       "Producto",
       "Tienda",
+      "Fecha de gestión",
       "A cobrar",
       "Fulfillment",
       "Recibido",
@@ -88,6 +90,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "ubicacion",
       "producto",
       "tienda",
+      "fechaGestion",
       "montoCobrar",
       "fulfillment",
       "nuevaFecha",
@@ -102,6 +105,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "Ubicación",
       "Producto",
       "Tienda",
+      "Fecha de gestión",
       "A cobrar",
       "Fulfillment",
       "Nueva fecha",
@@ -122,6 +126,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "ubicacion",
       "producto",
       "tienda",
+      "fechaGestion",
       "montoCobrar",
       "fulfillment",
       "motivo",
@@ -137,6 +142,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "Ubicación",
       "Producto",
       "Tienda",
+      "Fecha de gestión",
       "A cobrar",
       "Fulfillment",
       "Motivo",
@@ -157,6 +163,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "ubicacion",
       "producto",
       "tienda",
+      "fechaGestion",
       "origenRechazo",
       "montoCobrar",
       "fulfillment",
@@ -175,6 +182,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "Ubicación",
       "Producto",
       "Tienda",
+      "Fecha de gestión",
       "Origen",
       "A cobrar",
       "Fulfillment",
@@ -198,6 +206,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "ubicacion",
       "producto",
       "tienda",
+      "fechaGestion",
       "montoCobrar",
       "fulfillment",
       "causa",
@@ -213,6 +222,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "Ubicación",
       "Producto",
       "Tienda",
+      "Fecha de gestión",
       "A cobrar",
       "Fulfillment",
       "Causa",
@@ -220,6 +230,47 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "Tiene evidencia",
       "Indemnización",
     ]);
+  });
+
+  it("las cinco secciones llevan «Fecha de gestión» y ninguna lleva «Día de reparto» (2026-09-05)", () => {
+    // La columna de la fecha va en el bloque COMÚN, así que entra en las CINCO o en ninguna: una
+    // hoja de un cierre que la tuviera sólo en «entregadas» sería justo la incoherencia que el
+    // bloque común existe para impedir.
+    //
+    // «Día de reparto» NO está aquí y no es un olvido: este DTO se compone del snapshot
+    // congelado en `cierre_detail`, que no guarda `orden.fecha_reparto`. Sólo la hoja fundida
+    // —cuya proyección sí lee la orden— la lleva. Afirmarlo evita que alguien la añada leyendo
+    // un dato VIVO en una hoja que promete datos congelados.
+    const secciones = {
+      entregadas: COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS,
+      reprogramadas: COLUMNAS_DESCARGA_GESTIONES_REPROGRAMADAS,
+      devueltas: COLUMNAS_DESCARGA_GESTIONES_DEVUELTAS,
+      rechazadas: COLUMNAS_DESCARGA_GESTIONES_RECHAZADAS,
+      incidentes: COLUMNAS_DESCARGA_GESTIONES_INCIDENTES,
+    };
+    for (const [nombre, columnas] of Object.entries(secciones)) {
+      const claves = columnas.map((c) => c.clave);
+      expect(claves, nombre).toContain("fechaGestion");
+      expect(claves, nombre).not.toContain("diaReparto");
+      // Va justo detrás de «Tienda», cerrando el bloque común, en las cinco por igual.
+      expect(claves.indexOf("fechaGestion"), nombre).toBe(claves.indexOf("tienda") + 1);
+      expect(columnas.map((c) => c.encabezado), nombre).toContain("Fecha de gestión");
+    }
+  });
+
+  it("la celda de fecha de gestión sale del campo de la GESTIÓN, como día calendario", () => {
+    // La proyección no puede inventarse la fecha ni tomarla de otro campo: se le da un día
+    // concreto y se exige ése, sin hora y sin reformatear.
+    const fila = filaDescargaGestionEntregada({
+      ...gestionEntregada([{ metodo: "efectivo", monto: "8000.00" }]),
+      // Distinto del día por defecto del fixture: si la proyección emitiera una constante o
+      // leyera otro campo, este caso lo diría.
+      fechaGestion: "2026-03-09",
+    });
+    expect(fila.fechaGestion).toBe("2026-03-09");
+    expect(String(fila.fechaGestion)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // Y no es el `numRemision` ni ningún otro campo del fixture colado por error.
+    expect(fila.fechaGestion).not.toBe(fila.numRemision);
   });
 });
 
@@ -248,6 +299,7 @@ function gestionEntregada(
   return {
     gestionId: "g-1",
     ordenId: "o-1",
+    fechaGestion: "2026-07-11",
     numGuia: 1234,
     numRemision: "REM-1234",
     destinatario: "Ana Rojas",

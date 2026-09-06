@@ -67,6 +67,11 @@ function gestion(
   return {
     mensajeroNombre: "Ana Mensajera",
     cierreSolicitadoAt: "2026-07-11T10:00:00.000Z",
+    // 2026-09-05 — TRES días DISTINTOS entre sí (cierre 11, gestión 12, reparto 10), y es
+    // deliberado: con los tres iguales, una proyección que emitiera la fecha del cierre en la
+    // celda de la gestión pasaría en verde. Es el caso que el humano pidió poder distinguir.
+    fechaGestion: "2026-07-12",
+    diaReparto: "2026-07-10",
     numGuia: 1001,
     numRemision: "REM-1",
     destinatario: "Ana Pérez",
@@ -105,10 +110,12 @@ const LOS_CINCO: CierreResultado[] = [
 // --- T3.2: orden y censo --------------------------------------------------
 
 describe("orden de las columnas de la hoja fundida (T3.2)", () => {
-  it("declara las 27 columnas en el orden decidido (design §6)", () => {
+  it("declara las 29 columnas en el orden decidido (design §6)", () => {
     expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.clave)).toEqual([
       "mensajero",
       "fechaCierre",
+      "fechaGestion",
+      "diaReparto",
       "numGuia",
       "numRemision",
       "destinatario",
@@ -138,6 +145,8 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
     expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.encabezado)).toEqual([
       "Mensajero",
       "Fecha del cierre",
+      "Fecha de gestión",
+      "Día de reparto",
       "Nº Guía",
       "Nº Remisión",
       "Destinatario",
@@ -165,8 +174,44 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
       "Indemnización",
     ]);
     // El número es parte de la decisión (D6), no una consecuencia: si alguien añade una
-    // columna 28 sin reabrirla, esto lo dice con el número en la mano.
-    expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA).toHaveLength(27);
+    // columna 30 sin reabrirla, esto lo dice con el número en la mano.
+    expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA).toHaveLength(29);
+  });
+
+  it("NO declara una columna de fecha de asignación (decisión medida del 2026-09-05)", () => {
+    // El encargo humano pedía «fecha de gestión y fecha de asignación». Se midió contra
+    // producción: el día de `orden.asignado_at` coincide con `orden.fecha_reparto` en 1.063 de
+    // 1.063 casos, así que una columna aparte sería la MISMA columna dos veces —y peor, porque
+    // `asignado_at` es un instante que se sobrescribe en cada reasignación y se anula al
+    // deshacer una asignación o al cerrar una orden sin gestionar.
+    //
+    // Un requisito que se cumple «porque la columna no existe» necesita su test igual: sin él,
+    // la próxima persona la añade sin enterarse de que hay una decisión detrás. El motivo, con
+    // los números, vive en la cabecera del módulo.
+    const claves = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.clave);
+    const encabezados = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.encabezado);
+    expect(claves).not.toContain("fechaAsignacion");
+    expect(claves).not.toContain("asignadoAt");
+    for (const encabezado of encabezados) {
+      expect(encabezado, encabezado).not.toMatch(/asignaci[oó]n|asignad/i);
+    }
+    // Y la proyección tampoco la emite por otra puerta: ninguna celda sale de `asignado_at`.
+    for (const resultado of LOS_CINCO) {
+      expect(Object.keys(filaDescargaGestionFundida(gestion({ resultado })))).not.toContain(
+        "fechaAsignacion",
+      );
+    }
+    // La decisión está ESCRITA donde se mira, con sus números: si alguien retira el párrafo, el
+    // siguiente no tiene forma de saber que esto se midió.
+    const modulo = readFileSync(
+      resolve(
+        __dirname,
+        "../../../app/(app)/cierres-admin/_components/cierres-gestiones-fundida-descarga-columnas.ts",
+      ),
+      "utf8",
+    );
+    expect(modulo).toContain("1.063 de 1.063");
+    expect(modulo).toContain("312 de 1.063");
   });
 
   it("del flete de devolución queda UNA columna, la agrupada (2026-08-19, revierte D7)", () => {
@@ -190,7 +235,7 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
 // --- T3.3: proyección por resultado --------------------------------------
 
 describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () => {
-  it("las 27 columnas salen en el orden declarado sea cual sea el resultado (R9)", () => {
+  it("las 29 columnas salen en el orden declarado sea cual sea el resultado (R9)", () => {
     for (const resultado of LOS_CINCO) {
       const fila = filaDescargaGestionFundida(gestion({ resultado }));
       // Mismas claves, mismo orden de inserción y NINGUNA de más: la hoja es rectangular.
@@ -222,6 +267,57 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     }
   });
 
+  it("la fecha de gestión es la de la GESTIÓN y no la del cierre (2026-09-05)", () => {
+    // El caso que motivó la ficha: medido contra producción, las dos difieren en 312 de 1.063
+    // gestiones (29 %). Aquí se fuerza esa diferencia —cierre el 11, gestión el 12— y se exige
+    // que cada celda traiga la suya. Si la proyección leyera `cierreSolicitadoAt` para poblar
+    // «Fecha de gestión», las dos celdas saldrían iguales y este caso lo dice.
+    for (const resultado of LOS_CINCO) {
+      const fila = filaDescargaGestionFundida(
+        gestion({
+          resultado,
+          cierreSolicitadoAt: "2026-07-11T10:00:00.000Z",
+          fechaGestion: "2026-07-12",
+        }),
+      );
+      expect(fila.fechaGestion, resultado).toBe("2026-07-12");
+      expect(fila.fechaCierre, resultado).toBe("2026-07-11");
+      expect(fila.fechaGestion, resultado).not.toBe(fila.fechaCierre);
+    }
+  });
+
+  it("las dos fechas nuevas salen como día calendario YYYY-MM-DD, sin hora", () => {
+    // El archivo lo abre una hoja de cálculo: una hora dentro de la celda la convierte en texto
+    // y rompe el orden. El servidor ya entrega el día; aquí se afirma que la proyección no le
+    // añade nada ni lo reformatea.
+    const fila = filaDescargaGestionFundida(
+      gestion({ resultado: "entregada", fechaGestion: "2026-12-31", diaReparto: "2026-01-01" }),
+    );
+    expect(fila.fechaGestion).toBe("2026-12-31");
+    expect(fila.diaReparto).toBe("2026-01-01");
+    for (const celda of [fila.fechaGestion, fila.diaReparto]) {
+      expect(String(celda)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(String(celda)).not.toMatch(/[T:Z]/);
+    }
+  });
+
+  it("un día de reparto ausente deja la celda VACÍA y nunca la fecha del cierre (2026-09-05)", () => {
+    // `orden.fecha_reparto` se ANULA al deshacer una asignación, al liberar la orden a una
+    // bodega satélite y al aprobar el cierre de una orden sin gestionar. `null` es entonces un
+    // desenlace legítimo, y la tentación es «arreglarlo» poniendo la fecha del cierre o la de
+    // la gestión: eso inventaría un día de reparto que nadie escribió.
+    const fila = filaDescargaGestionFundida(
+      gestion({ resultado: "devuelta", diaReparto: null, fechaGestion: "2026-07-12" }),
+    );
+    expect(fila.diaReparto).toBeNull();
+    expect(fila.diaReparto).not.toBe(fila.fechaCierre);
+    expect(fila.diaReparto).not.toBe(fila.fechaGestion);
+    expect(fila.diaReparto).not.toBe("");
+    expect(fila.diaReparto).not.toBe("—");
+    // Y la clave SIGUE estando: la hoja es rectangular (R10).
+    expect(Object.keys(fila)).toContain("diaReparto");
+  });
+
   it("emite una fila por gestión y ninguna fila agregada (R5/D2)", () => {
     // El grano es la GESTIÓN: tres gestiones del mismo cierre y del mismo mensajero son TRES
     // filas, cada una con su remisión, y no un resumen por mensajero ni por resultado.
@@ -249,6 +345,10 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     expect(fila).toEqual({
       mensajero: "Ana Mensajera",
       fechaCierre: "2026-07-11",
+      // Las tres fechas son TRES días distintos: cada celda trae la suya y ninguna se
+      // contamina con la de al lado.
+      fechaGestion: "2026-07-12",
+      diaReparto: "2026-07-10",
       numGuia: 1001,
       numRemision: "REM-1",
       destinatario: "Ana Pérez",
