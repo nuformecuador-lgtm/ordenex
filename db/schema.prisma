@@ -524,6 +524,23 @@ model Provincia {
   /// tres niveles. Queda dicho para que no se «corrija».
   activo Boolean @default(true)
 
+  /// FICHA 375 — LA CLAVE ESTABLE. El codigo oficial de la Division Territorial Administrativa del
+  /// IGN: 1 digito la provincia, 3 el canton (provincia + 2), 5 el distrito (canton + 2). Es
+  /// jerarquico, asi que el codigo del padre es SIEMPRE el prefijo del hijo.
+  ///
+  /// ⚠️ ES NULLABLE, Y ESO CONTRASTA A PROPOSITO CON `activo`, que esta justo encima y es NOT NULL.
+  /// No es una incoherencia: son dos reglas distintas porque `NULL` significa cosas distintas.
+  /// En `activo` no significaria NADA —todo nodo esta operativo o retirado— y obligaria a cada
+  /// lectura a escribir `activo IS NOT FALSE`. Aqui SI significa algo: «este nodo no tiene codigo
+  /// oficial todavia». Un nodo dado de alta a mano desde /configuracion/geografia no lo tiene hasta
+  /// que el IGN se lo asigne, y un `NOT NULL` obligaria a INVENTARLO — que es peor que no tenerlo,
+  /// porque un codigo inventado colisiona con el real el dia que llegue. Es el mismo razonamiento
+  /// que sostiene `Distrito.zonaEspecial`.
+  ///
+  /// EL NOMBRE PASA A SER UNA ETIQUETA MUTABLE: el cruce del seed (`scripts/seed-zonas.ts`) va por
+  /// este codigo, y por eso renombrar dejo de crear duplicados.
+  codigoDta String? @unique @map("codigo_dta")
+
   cantones Canton[]
   ordenes  Orden[]
 
@@ -539,6 +556,8 @@ model Canton {
   provinciaId String @map("provincia_id")
   /// FICHA 374 — ver `Provincia.activo`: mismo contrato, misma cascada evaluada al leer.
   activo      Boolean @default(true)
+  /// FICHA 375 — ver `Provincia.codigoDta`. Tres digitos: el de su provincia + dos.
+  codigoDta   String? @unique @map("codigo_dta")
 
   provincia Provincia  @relation(fields: [provinciaId], references: [id])
   distritos Distrito[]
@@ -564,6 +583,8 @@ model Distrito {
   /// encima: aquella es `Boolean?` PORQUE `null` significa «nadie lo decidio»; esta es de dos
   /// valores y `null` no significaria nada.
   activo       Boolean  @default(true)
+  /// FICHA 375 — ver `Provincia.codigoDta`. Cinco digitos: el de su canton + dos.
+  codigoDta    String?  @unique @map("codigo_dta")
 
   canton  Canton         @relation(fields: [cantonId], references: [id])
   ordenes Orden[]
@@ -3089,6 +3110,14 @@ enum HistorialAccionTipo {
   /// con un solo tipo habria que abrir el detalle de cada fila para saber que paso, y lo que se
   /// lee es el listado.
   nodo_geografico_activado
+  /// FICHA 375: un maestro RENOMBRO un nodo del catalogo geografico. Entra en esta misma categoria
+  /// y no en otra: no mueve dinero (el nombre no participa de ninguna tarifa) y no cambia quien
+  /// puede hacer que; lo que hace es HACER DESAPARECER EL NOMBRE VIEJO —desde ese momento toda
+  /// carga masiva que lo mencione muere con «distrito no encontrado en el canton»—. Ademas
+  /// mantiene el eje geografico entero en una categoria: partirlo romperia el filtro justo donde
+  /// se usa, «que le paso a este distrito».
+  /// El nombre anterior y el nuevo viajan en `valor_anterior`/`valor_nuevo`.
+  nodo_geografico_renombrado
 
   // --- cambia quien puede hacer que (12) ---
   usuario_creado
@@ -3203,10 +3232,18 @@ model HistorialAccion {
   /// NULL cuando la accion no mueve un importe UNICO (una tarifa son diez importes, no uno).
   monto Decimal? @db.Decimal(12, 2)
 
-  /// Vocabulario CERRADO y nada mas: valores de un enum del dominio. Se usan en exactamente cuatro
-  /// tipos (`usuario_rol_cambiado`, `usuario_estado_cambiado`, `usuario_fulfillment_cambiado` y el
-  /// par `api_key_activada`/`api_key_desactivada`); en todos los demas van NULL. Una guardia sobre
-  /// los puntos de escritura los mantiene asi: aqui NO se vuelca texto libre.
+  /// Vocabulario CERRADO y nada mas. Nacio para valores de un enum del dominio
+  /// (`usuario_rol_cambiado`, `usuario_estado_cambiado`, `usuario_fulfillment_cambiado` y el par
+  /// `api_key_activada`/`api_key_desactivada`) y se ha ampliado tres veces, siempre con dato de
+  /// CATALOGO y nunca con texto libre: las dos fechas de `gestion_fecha_reprogramacion_corregida`
+  /// (ficha 371), el estado previo de `api_key_eliminada` (373) y —ficha 375— el nombre anterior y
+  /// el nuevo de `nodo_geografico_renombrado`, que son etiquetas de la DTA del IGN, un catalogo
+  /// PUBLICO del mismo genero que el nombre de una zona. En todos los demas tipos van NULL.
+  /// ⚠️ LA REGLA NO CAMBIA: aqui NO se vuelca texto libre tecleado por una persona ni un dato del
+  /// destinatario de una orden. Una guardia sobre los puntos de escritura lo mantiene asi.
+  /// ⚠️ ANCHURA 60: quien escriba aqui un texto que pueda ser mas largo TIENE que recortarlo en su
+  /// origen (Postgres no trunca, ABORTA). `GeoRepository.renombrar` lo hace, igual que
+  /// `appendAccion` recorta `entidad_etiqueta` a 120.
   valorAnterior String? @map("valor_anterior") @db.VarChar(60)
   valorNuevo    String? @map("valor_nuevo") @db.VarChar(60)
 

@@ -59,6 +59,9 @@ function repoDoble(overrides: Partial<IGeoRepository> = {}) {
     findHermanos: vi.fn(async () => [] as { id: string; nombre: string }[] | null),
     crear: vi.fn(async () => "id-nuevo"),
     cambiarActivacion: vi.fn(async () => "cambiado" as const),
+    // FICHA 375
+    findHermanosDeNodo: vi.fn(async () => [] as { id: string; nombre: string }[] | null),
+    renombrar: vi.fn(async () => "renombrado" as const),
     ...overrides,
   };
   return repo as unknown as IGeoRepository & typeof repo;
@@ -101,6 +104,16 @@ describe("374/R24 — rol distinto de `maestro` -> forbidden SIN llamar al repos
     );
     expect(r).toEqual({ status: "forbidden" });
     expect(repo.cambiarActivacion).not.toHaveBeenCalled();
+  });
+
+  // FICHA 375 — la quinta operacion pasa por la MISMA puerta. Cinco cuerpos con la comprobacion
+  // repetida serian cuatro sitios donde olvidarla; este caso es lo que lo impide.
+  it.each(OTROS_ROLES)("renombrar con rol $rol", async (actor) => {
+    const { service, repo } = build();
+    const r = await service.renombrar({ nivel: "distrito", id: "d1", nombre: "Otro" }, actor);
+    expect(r).toEqual({ status: "forbidden" });
+    expect(repo.findHermanosDeNodo).not.toHaveBeenCalled();
+    expect(repo.renombrar).not.toHaveBeenCalled();
   });
 
   it.each(OTROS_ROLES)("contarOrdenesSinEntregar con rol $rol", async (actor) => {
@@ -266,5 +279,105 @@ describe("374/R60 — el conteo pasa el nivel y el id, y devuelve el numero", ()
       status: "ok",
       ordenes: 0,
     });
+  });
+});
+
+// =================================================================================================
+// FICHA 375 — el renombrado: la regla de unicidad y el caso «guardar sin cambios»
+// =================================================================================================
+//
+// ⚠️ LO QUE ESTE BLOQUE NO AFIRMA: que el `update` toque solo `nombre`, que el UNIQUE de la base
+// rechace el homonimo literal ni que el registro vaya en la misma transaccion. Todo eso depende de
+// un `WHERE` o del motor y vive en `tests/integration/db/geografia-renombrado.test.ts`. Aqui se
+// mide la comparacion por forma NORMALIZADA y la exclusion del propio nodo, que son logica pura.
+
+describe("375 — renombrar: el conflicto se decide por la clave NORMALIZADA", () => {
+  const HERMANOS = [
+    { id: "d1", nombre: "Cabagra" },
+    { id: "d2", nombre: "Pérez Zeledón" },
+  ];
+
+  it.each([
+    ["perez zeledon", "sin acentos ni mayusculas"],
+    ["PÉREZ ZELEDÓN", "en mayusculas"],
+    ["Pérez   Zeledón", "con espacios de sobra"],
+    ["Perez Zeledon", "sin acentos"],
+  ])("«%s» (%s) choca con el hermano y devuelve conflict", async (nombre) => {
+    const { service, repo } = build({
+      findHermanosDeNodo: vi.fn(async () => HERMANOS),
+    });
+    expect(await service.renombrar({ nivel: "distrito", id: "d1", nombre }, MAESTRO)).toEqual({
+      status: "conflict",
+    });
+    // Y NO se intenta escribir: el UNIQUE de la base es la ultima palabra, no la primera. Ademas
+    // ese UNIQUE compara LITERALES, asi que «Perez Zeledon» le pasaria por delante.
+    expect(repo.renombrar).not.toHaveBeenCalled();
+  });
+
+  it("⭑ renombrarlo a SU PROPIO nombre NO es conflicto: guardar sin cambios funciona", async () => {
+    const { service, repo } = build({ findHermanosDeNodo: vi.fn(async () => HERMANOS) });
+    const r = await service.renombrar({ nivel: "distrito", id: "d1", nombre: "Cabagra" }, MAESTRO);
+    expect(r).toEqual({ status: "ok", nivel: "distrito", id: "d1", nombre: "Cabagra" });
+    expect(repo.renombrar).toHaveBeenCalledWith("distrito", "d1", "Cabagra", "u-maestro");
+  });
+
+  it("⭑ ni una variante que se normaliza IGUAL que el suyo: «cabagra» -> `ok`", async () => {
+    // Es un cambio REAL de la etiqueta (cambian las mayusculas) y no choca con nadie mas.
+    const { service, repo } = build({ findHermanosDeNodo: vi.fn(async () => HERMANOS) });
+    const r = await service.renombrar({ nivel: "distrito", id: "d1", nombre: "cabagra" }, MAESTRO);
+    expect(r).toEqual({ status: "ok", nivel: "distrito", id: "d1", nombre: "cabagra" });
+    expect(repo.renombrar).toHaveBeenCalledWith("distrito", "d1", "cabagra", "u-maestro");
+  });
+
+  it("un nombre libre entre los hermanos pasa", async () => {
+    const { service, repo } = build({ findHermanosDeNodo: vi.fn(async () => HERMANOS) });
+    expect(
+      await service.renombrar({ nivel: "distrito", id: "d1", nombre: "Cabagrita" }, MAESTRO),
+    ).toEqual({ status: "ok", nivel: "distrito", id: "d1", nombre: "Cabagrita" });
+    expect(repo.renombrar).toHaveBeenCalledTimes(1);
+  });
+
+  it("un hermano INACTIVO tambien produce conflicto: el nombre sigue ocupado", async () => {
+    // El repositorio devuelve activos e inactivos; el servicio no distingue, y no debe: el UNIQUE
+    // de la base tampoco lo hace, y reactivar el viejo despues chocaria con el nuevo.
+    const { service } = build({
+      findHermanosDeNodo: vi.fn(async () => [
+        { id: "d1", nombre: "Cabagra" },
+        { id: "d9", nombre: "Boruca" }, // retirado, pero sigue en la lista
+      ]),
+    });
+    expect(
+      await service.renombrar({ nivel: "distrito", id: "d1", nombre: "boruca" }, MAESTRO),
+    ).toEqual({ status: "conflict" });
+  });
+});
+
+describe("375 — renombrar: el nodo que no existe", () => {
+  it("`null` del repositorio -> not_found, y NO se escribe nada", async () => {
+    const { service, repo } = build({ findHermanosDeNodo: vi.fn(async () => null) });
+    expect(
+      await service.renombrar({ nivel: "distrito", id: "fantasma", nombre: "Otro" }, MAESTRO),
+    ).toEqual({ status: "not_found" });
+    expect(repo.renombrar).not.toHaveBeenCalled();
+  });
+
+  it("una carrera (existia al leer, ya no al escribir) tambien acaba en not_found", async () => {
+    const { service } = build({
+      findHermanosDeNodo: vi.fn(async () => [{ id: "d1", nombre: "Cabagra" }]),
+      renombrar: vi.fn(async () => "no_existe" as const),
+    });
+    expect(
+      await service.renombrar({ nivel: "distrito", id: "d1", nombre: "Cabagrita" }, MAESTRO),
+    ).toEqual({ status: "not_found" });
+  });
+
+  it("`sin_cambio` del repositorio se cuenta como ok: pedir lo que ya esta es exito", async () => {
+    const { service } = build({
+      findHermanosDeNodo: vi.fn(async () => [{ id: "d1", nombre: "Cabagra" }]),
+      renombrar: vi.fn(async () => "sin_cambio" as const),
+    });
+    expect(
+      await service.renombrar({ nivel: "distrito", id: "d1", nombre: "Cabagra" }, MAESTRO),
+    ).toEqual({ status: "ok", nivel: "distrito", id: "d1", nombre: "Cabagra" });
   });
 });

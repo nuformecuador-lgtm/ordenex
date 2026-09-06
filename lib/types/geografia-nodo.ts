@@ -100,6 +100,24 @@ export const cambiarActivacionGeograficaSchema = z
 
 export type CambiarActivacionGeograficaInput = z.infer<typeof cambiarActivacionGeograficaSchema>;
 
+/**
+ * FICHA 375 — el RENOMBRADO. Mismo `{nivel, id}` que el resto, mas el nombre nuevo.
+ *
+ * REUSA `nombreGeoSchema`, el MISMO del alta, a proposito: recorta, colapsa espacios y exige las
+ * mismas cotas. Un segundo esquema de nombre seria un segundo contrato capaz de admitir por
+ * renombrado lo que el alta rechaza —y al reves—, y la base tiene UN solo `@@unique` para los dos
+ * caminos. `.strict()` no es decorativo: una clave desconocida se rechaza, no se descarta.
+ */
+export const renombrarNodoGeograficoSchema = z
+  .object({
+    nivel: z.enum(NIVELES_GEOGRAFICOS),
+    id: z.string().min(1),
+    nombre: nombreGeoSchema,
+  })
+  .strict();
+
+export type RenombrarNodoGeograficoInput = z.infer<typeof renombrarNodoGeograficoSchema>;
+
 /** Un nodo, sin mas: lo que necesita el conteo de la confirmacion (R60). */
 export const nodoGeograficoSchema = z
   .object({ nivel: z.enum(NIVELES_GEOGRAFICOS), id: z.string().min(1) })

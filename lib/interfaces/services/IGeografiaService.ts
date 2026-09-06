@@ -5,6 +5,7 @@ import type {
   NivelGeografico,
   NodoGeograficoInput,
   ProvinciaArbolDTO,
+  RenombrarNodoGeograficoInput,
 } from "@/lib/types/geografia-nodo";
 
 // FICHA 374 (design §5.2) — el contrato del servicio que administra el catalogo geografico.
@@ -17,7 +18,9 @@ import type {
 // `unauthenticated` NO aparece en ningun resultado de aqui: lo resuelve la Server Action ANTES de
 // instanciar el servicio (R23), igual que en vehiculos.
 //
-// ⚠️ NINGUN METODO BORRA NI RENOMBRA (R5/R49). Ver el porque en `IGeoRepository`.
+// ⚠️ NINGUN METODO BORRA (R5): quitar un nodo es DESACTIVARLO. Ver el porque en `IGeoRepository`.
+// El RENOMBRADO si existe desde la ficha 375, y solo porque `codigo_dta` le dio al catalogo una
+// clave estable: sin ella, renombrar duplicaba el nodo en la siguiente corrida del seed.
 
 export type ListarArbolGeograficoServiceResult =
   | { status: "ok"; provincias: ProvinciaArbolDTO[] }
@@ -34,6 +37,14 @@ export type CrearNodoGeograficoServiceResult =
 export type CambiarActivacionGeograficaServiceResult =
   | { status: "ok"; nivel: NivelGeografico; id: string; activo: boolean }
   /** El nodo indicado no existe (R22). No se modifica ninguna fila. */
+  | { status: "not_found" }
+  | { status: "forbidden" };
+
+export type RenombrarNodoGeograficoServiceResult =
+  | { status: "ok"; nivel: NivelGeografico; id: string; nombre: string }
+  /** Otro HERMANO ya se llama asi, comparado por su forma NORMALIZADA. Nunca el nodo consigo mismo. */
+  | { status: "conflict" }
+  /** El nodo indicado no existe. No se modifica ninguna fila. */
   | { status: "not_found" }
   | { status: "forbidden" };
 
@@ -66,6 +77,22 @@ export interface IGeografiaService {
     input: CambiarActivacionGeograficaInput,
     actor: Actor,
   ): Promise<CambiarActivacionGeograficaServiceResult>;
+
+  /**
+   * FICHA 375 — cambia el NOMBRE de un nodo. Solo `maestro`.
+   *
+   * NO toca `codigo_dta`, que es la clave estable: el nombre es una etiqueta y el codigo es la
+   * identidad. Esa separacion es lo que hace que el seed no duplique el nodo despues.
+   *
+   * Renombrarlo a SU PROPIO nombre devuelve `ok` (guardar sin cambios tiene que seguir
+   * funcionando); renombrarlo al de un HERMANO devuelve `conflict`, comparado por la clave
+   * normalizada —sin mayusculas ni acentos— porque es la que usa `resolveGeo` y el UNIQUE literal
+   * de la base dejaria entrar «San Jose» junto a «San José».
+   */
+  renombrar(
+    input: RenombrarNodoGeograficoInput,
+    actor: Actor,
+  ): Promise<RenombrarNodoGeograficoServiceResult>;
 
   /**
    * SOLO LECTURA — cuantas ordenes SIN ENTREGAR cuelgan del nodo (R60). Alimenta la confirmacion
