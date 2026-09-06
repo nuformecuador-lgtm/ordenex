@@ -41,6 +41,7 @@ import {
 } from "./CierresBodegaSolicitadosLista";
 import { FiltrosCierresBarra } from "./FiltrosCierresBarra";
 import {
+  AMBITO_DESCARGA_CONSOLIDABLES,
   COLUMNAS_DESCARGA_CONSOLIDABLES,
   filaDescargaConsolidable,
 } from "./cierres-bodega-descarga-columnas";
@@ -174,6 +175,8 @@ function descargaConsolidables(filtros: FiltrosCierresBodega): DataTableDescarga
   return {
     titulo: TITULO_DESCARGA_CONSOLIDABLES,
     columnas: COLUMNAS_DESCARGA_CONSOLIDABLES,
+    // Ficha 314: enciende el selector de columnas de esta descarga (ámbito propio, R10).
+    ambitoColumnas: AMBITO_DESCARGA_CONSOLIDABLES,
     obtenerFilas: () =>
       filasDesdeResultado(
         listarConsolidablesCompleto({ filtros }),

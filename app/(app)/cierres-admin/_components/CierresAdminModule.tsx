@@ -87,6 +87,7 @@ import {
   type CierresAdminHistoricoPagina,
 } from "./CierresAdminHistoricoLista";
 import {
+  AMBITO_DESCARGA_CIERRES_PENDIENTES,
   COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
   filaDescargaCierrePendiente,
 } from "./cierres-admin-descarga-columnas";
@@ -225,6 +226,10 @@ function descargaColaCierres(filtros: FiltrosCierres): DataTableDescarga {
   return {
     titulo: TITULO_DESCARGA_PENDIENTES,
     columnas: COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
+    // Ficha 314: enciende el selector de columnas de esta descarga. Es un IDENTIFICADOR de
+    // ámbito y nada más — aquí no se lee ni se escribe almacenamiento; de eso se encarga el
+    // control común, que es quien conoce la clave.
+    ambitoColumnas: AMBITO_DESCARGA_CIERRES_PENDIENTES,
     obtenerFilas: () =>
       filasDesdeResultado(
         listarPendientesCierresAdminCompleto({ filtros }),

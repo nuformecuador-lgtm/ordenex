@@ -50,6 +50,25 @@ import {
 } from "./cierre-labels";
 import { celdasMediosPago, COLUMNAS_MEDIOS_PAGO } from "./medios-pago-descarga-columnas";
 
+/**
+ * Identificadores de ÁMBITO de la preferencia de columnas de las cinco secciones (314/R1, R10).
+ *
+ * UNO POR RESULTADO, no uno por montaje. El detalle de un cierre de bodega monta estas mismas
+ * secciones una vez POR MENSAJERO incluido, así que un ámbito derivado del montaje daría una
+ * preferencia distinta por mensajero para el MISMO juego de columnas: quien oculta «Ubicación»
+ * en las entregadas de Ana la vería volver en las de Beto, sin ningún error. Lo que decide qué
+ * columnas hay es el resultado; el ámbito sigue a las columnas.
+ *
+ * Y son distintos de los de `/cierre-dia` (`cierre-dia-…`) porque los catálogos son distintos:
+ * el mensajero no ve el ingreso de Ordenex ni la indemnización. Misma sección, otro juego de
+ * columnas, otra preferencia.
+ */
+export const AMBITO_DESCARGA_GESTIONES_ENTREGADAS = "cierre-gestiones-entregadas";
+export const AMBITO_DESCARGA_GESTIONES_REPROGRAMADAS = "cierre-gestiones-reprogramadas";
+export const AMBITO_DESCARGA_GESTIONES_DEVUELTAS = "cierre-gestiones-devueltas";
+export const AMBITO_DESCARGA_GESTIONES_RECHAZADAS = "cierre-gestiones-rechazadas";
+export const AMBITO_DESCARGA_GESTIONES_INCIDENTES = "cierre-gestiones-incidentes";
+
 /** Encabezado de la marca de evidencia: dice SI la hay, nunca dónde está (R22). */
 export const TIENE_EVIDENCIA_COL = "Tiene evidencia";
 /** Valores de esa marca (texto separado de la lógica, i18n-ready). */

@@ -37,6 +37,25 @@ import { desgloseDescarga } from "@/app/(app)/cierres-admin/_components/desglose
  * archivo usa la de la pantalla que lo produce (R8).
  */
 export const GANANCIA_COL = "Ganancia";
+
+/**
+ * Identificadores de ÁMBITO de la preferencia de columnas de esta pantalla (314/R1, R10).
+ *
+ * Los cinco de sección van POR RESULTADO —lo que decide qué columnas hay es el resultado— y son
+ * distintos de los del detalle del admin (`cierre-gestiones-…`) porque los catálogos son
+ * distintos: aquí no salen ni el ingreso de Ordenex ni la indemnización, y una clave compartida
+ * mezclaría dos juegos de columnas que ni siquiera coinciden.
+ *
+ * El del histórico no se llama `cierres-solicitados` a secas para no confundirse con
+ * `cierres-bodega-solicitados`: éste es «los MÍOS», el conjunto de un solo mensajero.
+ */
+export const AMBITO_DESCARGA_DIA_ENTREGADAS = "cierre-dia-entregadas";
+export const AMBITO_DESCARGA_DIA_REPROGRAMADAS = "cierre-dia-reprogramadas";
+export const AMBITO_DESCARGA_DIA_DEVUELTAS = "cierre-dia-devueltas";
+export const AMBITO_DESCARGA_DIA_RECHAZADAS = "cierre-dia-rechazadas";
+export const AMBITO_DESCARGA_DIA_INCIDENTES = "cierre-dia-incidentes";
+export const AMBITO_DESCARGA_DIA_CIERRES_PASADOS = "mis-cierres-solicitados";
+
 /** Marca de evidencia: dice SI la hay, nunca dónde está (R22). */
 export const TIENE_EVIDENCIA_COL = "Tiene evidencia";
 export const TIENE_EVIDENCIA_SI = "Sí";
