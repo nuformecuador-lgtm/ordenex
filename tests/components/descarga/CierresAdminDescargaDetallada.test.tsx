@@ -4,9 +4,14 @@
 // Cubre R1, R4, R6, R33, R38 y R51.
 //
 // Qué vigila que no vigile `DescargarGestionesDialog.test.tsx`: aquél prueba el diálogo aislado;
-// éste prueba que la PANTALLA lo monta bien — que el control nuevo convive con el general sin
-// pisarlo, que descargar no mueve nada de lo que el usuario tenía delante, y que el archivo que
-// sale es el que el diálogo pidió.
+// éste prueba que la PANTALLA lo monta bien — que descargar no mueve nada de lo que el usuario
+// tenía delante, y que el archivo que sale es el que el diálogo pidió.
+//
+// ACTUALIZADO el 2026-09-05: ya no hay un botón «Descargar detallada» junto al general. Hay UNO,
+// y el detalle es un NIVEL de su selector; por eso cada caso empieza eligiéndolo. Lo que este
+// archivo afirma no cambia —el conjunto lo redacta el diálogo, el archivo es el que pidió—; lo
+// que cambia es cómo se llega. Que sea UNO y que el nivel mande sobre las columnas lo cubre
+// `CierresDescargaNiveles.test.tsx`.
 //
 // La no-regresión de la descarga GENERAL (R2) vive en `CierresDescarga.test.tsx`, que NO se ha
 // tocado: si hubiera hecho falta tocarlo, sería un hallazgo y no un ajuste.
@@ -72,6 +77,10 @@ import {
 } from "@/lib/actions/cierres-admin";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import { CierresAdminModule } from "@/app/(app)/cierres-admin/_components/CierresAdminModule";
+import {
+  NIVEL_DETALLE_LABEL,
+  SELECTOR_DISPARADOR,
+} from "@/app/(app)/cierres-admin/_components/DescargarCierresButton";
 
 // --- Datos ----------------------------------------------------------------
 
@@ -199,14 +208,28 @@ function montar() {
   );
 }
 
+/** El nombre accesible del botón único cuando el nivel elegido es «Detalle». */
+const BOTON_DETALLE = "Descargar detallada por mensajero";
+
 /**
- * Abre el diálogo y deja elegida SOLO a Ana.
+ * Pone el botón en el nivel «Detalle». Es el primer paso de TODA descarga detallada desde que
+ * los dos botones se fundieron en uno: se abre el selector, se elige el nivel y se cierra.
+ */
+async function elegirNivelDetalle(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: SELECTOR_DISPARADOR }));
+  await user.click(await screen.findByRole("radio", { name: NIVEL_DETALLE_LABEL }));
+  await user.keyboard("{Escape}");
+  return screen.findByRole("button", { name: BOTON_DETALLE });
+}
+
+/**
+ * Elige el nivel, abre el diálogo y deja elegida SOLO a Ana.
  *
  * Desde el 2026-08-19 el diálogo abre con TODOS marcados, así que «elegir a Ana» ya no es un
  * clic sobre Ana —eso la desmarcaría—: es apagar la lista desde «Todos» y encenderla a ella.
  */
 async function abrirYElegirAAna(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: "Descargar detallada por mensajero" }));
+  await user.click(await elegirNivelDetalle(user));
   await user.click(await screen.findByRole("checkbox", { name: "Todos" }));
   await user.click(screen.getByRole("checkbox", { name: "Ana Mensajera" }));
 }
@@ -229,34 +252,32 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("descarga detallada en cierres del día (T5.1)", () => {
-  it("la pantalla ofrece un control de descarga detallada además del general (R1)", async () => {
+  it("la descarga detallada se ofrece en las DOS pestañas, como un nivel del botón único (R1)", async () => {
     montar();
+    const user = userEvent.setup();
 
-    // DOS controles, no uno con dos modos: el general baja una fila por CIERRE de lo que la
-    // pestaña enseña; el detallado, una fila por GESTIÓN de lo que su diálogo diga.
+    // UN control con dos niveles: «Resumen» baja una fila por CIERRE de lo que la pestaña
+    // enseña; «Detalle», una fila por GESTIÓN de lo que su diálogo diga.
     expect(
       await screen.findByRole("button", { name: "Descargar Cierres pendientes de decisión" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Descargar detallada por mensajero" }),
-    ).toBeInTheDocument();
+    expect(await elegirNivelDetalle(user)).toBeInTheDocument();
 
     // Y también en la otra pestaña: el conjunto del detallado no depende de cuál esté abierta.
-    await userEvent.click(screen.getByRole("button", { name: /^Resueltos/ }));
-    expect(
-      screen.getByRole("button", { name: "Descargar detallada por mensajero" }),
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Resueltos/ }));
+    expect(screen.getByRole("button", { name: BOTON_DETALLE })).toBeInTheDocument();
   });
 
-  it("los controles de la pantalla tienen nombres accesibles distintos y el archivo se llama distinto (R51)", async () => {
+  it("cada nivel tiene su nombre accesible y su nombre de archivo (R51)", async () => {
     montar();
     const user = userEvent.setup();
 
     const general = await screen.findByRole("button", {
       name: "Descargar Cierres pendientes de decisión",
     });
-    const detallada = screen.getByRole("button", { name: "Descargar detallada por mensajero" });
-    expect(general.getAttribute("aria-label")).not.toBe(detallada.getAttribute("aria-label"));
+    const nombreGeneral = general.getAttribute("aria-label");
+    const detallada = await elegirNivelDetalle(user);
+    expect(nombreGeneral).not.toBe(detallada.getAttribute("aria-label"));
 
     // El nombre del ARCHIVO también los distingue: `cierres-pendientes-…` vs `gestiones-…`.
     vi.mocked(listarGestionesCierresAdminCompleto).mockResolvedValue({
@@ -312,7 +333,7 @@ describe("descarga detallada en cierres del día (T5.1)", () => {
       total: 1,
     });
 
-    await user.click(screen.getByRole("button", { name: "Descargar detallada por mensajero" }));
+    await user.click(await elegirNivelDetalle(user));
     await user.click(await screen.findByRole("checkbox", { name: "Todos" }));
     await user.click(screen.getByRole("checkbox", { name: "Beto Mensajero" }));
     await ponerFecha(user, "Desde", "2026-07-01");

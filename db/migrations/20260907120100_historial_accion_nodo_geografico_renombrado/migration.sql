@@ -1,0 +1,34 @@
+-- FICHA 375 — el rastro de RENOMBRAR un nodo del catalogo geografico.
+--
+-- QUE REGISTRA: que un maestro cambio el NOMBRE de una provincia, un canton o un distrito, con el
+-- nombre anterior y el nuevo. La ficha 374 ya audita retirar y devolver; renombrar cambia como se
+-- llama algo que aparece en ordenes, en descargas y en el contrato publico de la carga masiva, asi
+-- que se audita por el mismo motivo y con el mismo patron.
+--
+-- UN TIPO NUEVO Y NINGUNA ENTIDAD NUEVA: `provincia`, `canton` y `distrito` ya entraron en
+-- `historial_accion_entidad` con la 374 (`20260906120100`), que fue su primera ampliacion. Aqui
+-- solo se amplia `historial_accion_tipo`.
+--
+-- POR QUE ENTRA EN «hace desaparecer algo» Y NO EN OTRA CATEGORIA. R17 de la 362 exige EXACTAMENTE
+-- una categoria por tipo, y las otras dos no encajan: renombrar no mueve dinero (el nombre no entra
+-- en ninguna tarifa; la zona sigue siendo la misma) y no cambia quien puede hacer que. Lo que si
+-- hace es HACER DESAPARECER EL NOMBRE VIEJO: desde ese momento toda carga masiva y toda cotizacion
+-- que lo mencione muere con «distrito no encontrado en el canton». Ademas mantiene el eje
+-- geografico ENTERO en una sola categoria, junto a `nodo_geografico_desactivado` y
+-- `nodo_geografico_activado`: partirlo en dos familias romperia el filtro por categoria justo donde
+-- se usa —«que le paso a este distrito»—. Es el mismo argumento que la 373 escribio para dejar
+-- `api_key_eliminada` con sus cuatro hermanas.
+--
+-- LOS DOS NOMBRES VIAJAN EN `valor_anterior`/`valor_nuevo`, y eso es lo que esas columnas son:
+-- vocabulario CERRADO de catalogo, no texto libre. Un nombre de la DTA es del mismo genero que el
+-- nombre de una zona (que ya viaja en `entidad_etiqueta`): no es un dato de destinatario ni un
+-- texto tecleado por una persona sobre una transaccion. La 371 ya metio ahi las dos fechas de una
+-- correccion y la 373 el estado previo de una API key; esta es la tercera ampliacion de ese uso y
+-- se declara, no se cuela.
+--
+-- VA APARTE de `20260907120000_geografia_codigo_dta`: Postgres prohibe USAR un valor de enum en la
+-- misma transaccion que lo añade (55P04), y separarlas deja cada `down.sql` con una sola cosa que
+-- revertir.
+--
+-- ADITIVA: no crea ni altera tablas, columnas ni indices. La RLS de `historial_accion` no se toca.
+ALTER TYPE "historial_accion_tipo" ADD VALUE IF NOT EXISTS 'nodo_geografico_renombrado';

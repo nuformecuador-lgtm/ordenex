@@ -16,6 +16,7 @@ import {
   contarOrdenesSinEntregarDeNodo,
   crearNodoGeografico,
   listarArbolGeografico,
+  renombrarNodoGeografico,
 } from "@/lib/actions/geografia";
 import {
   GEO_NOMBRE_MAX,
@@ -51,9 +52,16 @@ import { zonasQueQuedarianSinDistritos } from "./zonas-sin-distritos";
 // `_shared/filtrar-arbol-geografico.ts` y ahora con `normalizeName` en vez de la tercera copia de
 // una normalizacion que ya existia dos veces.
 //
-// ⚠️ QUITAR NO ES BORRAR. No hay ninguna accion de borrado ni de renombrado (R5/R49): retirar un
-// nodo es apagar SU flag, y ni siquiera toca a sus descendientes (R8) ni a `zona_distrito` (R50).
-// Por eso reactivar devuelve el arbol exactamente como estaba (R9).
+// ⚠️ QUITAR NO ES BORRAR. No hay ninguna accion de borrado (R5): retirar un nodo es apagar SU
+// flag, y ni siquiera toca a sus descendientes (R8) ni a `zona_distrito` (R50). Por eso reactivar
+// devuelve el arbol exactamente como estaba (R9).
+//
+// ⭑ FICHA 375 — RENOMBRAR YA EXISTE. La 374 lo dejo fuera por una causa medida, no por gusto:
+// mientras `scripts/seed-zonas.ts` cruzara por NOMBRE, renombrar un distrito hacia que la
+// siguiente corrida del seed creara un DUPLICADO ACTIVO con el nombre viejo, y a partir de ahi
+// toda carga masiva que lo mencionara moria con «distrito ambiguo en el canton». La 375 le da al
+// catalogo una clave estable (`codigo_dta`), el seed cruza por ella y el nombre pasa a ser una
+// ETIQUETA. Por eso el boton de esta pantalla puede existir.
 
 type FieldErrors = Record<string, string[]>;
 
@@ -104,6 +112,14 @@ export function GeografiaAdminModule({
   const [nombre, setNombre] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [guardando, setGuardando] = useState(false);
+
+  // FICHA 375 — el renombrado. Estado APARTE del alta y no reutilizado: son dos formularios con
+  // dos desenlaces distintos, y compartir el suyo obligaria a un `modo` que hay que leer dos veces
+  // para saber que hace el boton Guardar.
+  const [renombrado, setRenombrado] = useState<NodoObjetivo | null>(null);
+  const [nombreNuevo, setNombreNuevo] = useState("");
+  const [erroresRenombrado, setErroresRenombrado] = useState<FieldErrors>({});
+  const [renombrando, setRenombrando] = useState(false);
 
   const [alternando, setAlternando] = useState<string | null>(null);
   const [objetivo, setObjetivo] = useState<NodoObjetivo | null>(null);
@@ -201,6 +217,17 @@ export function GeografiaAdminModule({
     });
     setNombre("");
     setErrors({});
+    // Los dos formularios son excluyentes: dos paneles abiertos con dos botones «Guardar» son dos
+    // formas de equivocarse de fila.
+    setRenombrado(null);
+  }
+
+  /** FICHA 375 — abre el formulario de renombrado con el nombre ACTUAL ya escrito. */
+  function abrirRenombrado(nodo: NodoObjetivo) {
+    setRenombrado(nodo);
+    setNombreNuevo(nodo.nombre);
+    setErroresRenombrado({});
+    setAlta(null);
   }
 
   /** El cuerpo que espera el borde. Cada nivel manda EXACTAMENTE las claves que su schema admite:
@@ -248,6 +275,54 @@ export function GeografiaAdminModule({
       toast.error(mensajeDeDesenlace("error"));
     } finally {
       setGuardando(false);
+    }
+  }
+
+  /**
+   * FICHA 375 — guarda el nombre nuevo.
+   *
+   * NO PIDE CONFIRMACION, y es deliberado: renombrar es reversible con otro renombrado y no deja
+   * de ofrecer nada. La confirmacion se reserva para retirar, que es lo que si quita.
+   *
+   * GUARDAR SIN CAMBIOS FUNCIONA: el servidor devuelve `ok` cuando el nombre es el mismo (no
+   * escribe ni audita), asi que aqui no hay ninguna comprobacion local que lo impida.
+   */
+  async function guardarRenombrado() {
+    if (renombrado === null) return;
+    const limpio = normalizarNombreGeografico(nombreNuevo);
+    if (limpio === "") {
+      setErroresRenombrado({ nombre: ["Este campo es obligatorio."] });
+      return;
+    }
+
+    setRenombrando(true);
+    try {
+      const res = await renombrarNodoGeografico({
+        nivel: renombrado.nivel,
+        id: renombrado.id,
+        nombre: limpio,
+      });
+      if (res.status === "ok") {
+        toast.success(`${NIVEL_LABELS[renombrado.nivel]} «${renombrado.nombre}» ahora es «${limpio}».`);
+        setRenombrado(null);
+        await refetch();
+        return;
+      }
+      if (res.status === "validation_error") {
+        setErroresRenombrado(res.fieldErrors);
+        toast.error(mensajeDeDesenlace("validation_error"));
+        await refetch();
+        return;
+      }
+      if (res.status === "conflict") {
+        setErroresRenombrado({ nombre: [mensajeDeDesenlace("conflict")] });
+      }
+      toast.error(mensajeDeDesenlace(res.status));
+      await refetch();
+    } catch {
+      toast.error(mensajeDeDesenlace("error"));
+    } finally {
+      setRenombrando(false);
     }
   }
 
@@ -348,6 +423,48 @@ export function GeografiaAdminModule({
         </div>
       ) : null}
 
+      {/* FICHA 375 — el formulario de renombrado. El nombre es una ETIQUETA: cambiarlo no mueve el
+          nodo ni toca su `codigo_dta`, que es su identidad para el seed y para las cargas. */}
+      {renombrado !== null ? (
+        <div className="flex flex-col gap-4 rounded-md border border-border p-4">
+          <h3 className="text-sm font-semibold">
+            Renombrar {NIVEL_LABELS[renombrado.nivel].toLowerCase()}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Se llama «{renombrado.nombre}». Cambiar el nombre no lo mueve ni lo retira: las órdenes
+            que ya lo tienen siguen apuntando al mismo lugar.
+          </p>
+
+          <FormField
+            id="geografia-nombre-nuevo"
+            label="Nombre"
+            error={erroresRenombrado.nombre}
+            required
+          >
+            <Input
+              value={nombreNuevo}
+              maxLength={GEO_NOMBRE_MAX}
+              onChange={(e) => setNombreNuevo(e.target.value)}
+              placeholder="Cabagra, Buenos Aires, Puntarenas…"
+            />
+          </FormField>
+
+          <div className="flex items-center gap-2">
+            <Button type="button" onClick={() => void guardarRenombrado()} loading={renombrando}>
+              {renombrando ? "Guardando…" : "Guardar"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRenombrado(null)}
+              disabled={renombrando}
+            >
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-3">
         <Input
           type="search"
@@ -401,6 +518,13 @@ export function GeografiaAdminModule({
                       nombre: provincia.nombre,
                     })
                   }
+                  onRenombrar={() =>
+                    abrirRenombrado({
+                      nivel: "provincia",
+                      id: provincia.id,
+                      nombre: provincia.nombre,
+                    })
+                  }
                   onAgregarHijo={() =>
                     abrirAlta("canton", { id: provincia.id, nombre: provincia.nombre })
                   }
@@ -443,6 +567,13 @@ export function GeografiaAdminModule({
                                 nombre: canton.nombre,
                               })
                             }
+                            onRenombrar={() =>
+                              abrirRenombrado({
+                                nivel: "canton",
+                                id: canton.id,
+                                nombre: canton.nombre,
+                              })
+                            }
                             onAgregarHijo={() =>
                               abrirAlta("distrito", { id: canton.id, nombre: canton.nombre })
                             }
@@ -479,6 +610,13 @@ export function GeografiaAdminModule({
                                     }
                                     onRetirar={() =>
                                       abrirConfirmacion({
+                                        nivel: "distrito",
+                                        id: distrito.id,
+                                        nombre: distrito.nombre,
+                                      })
+                                    }
+                                    onRenombrar={() =>
+                                      abrirRenombrado({
                                         nivel: "distrito",
                                         id: distrito.id,
                                         nombre: distrito.nombre,
@@ -552,6 +690,7 @@ function FilaNodo({
   onExpandir,
   onActivar,
   onRetirar,
+  onRenombrar,
   onAgregarHijo,
   etiquetaAgregarHijo,
   textoAgregarHijo,
@@ -568,6 +707,8 @@ function FilaNodo({
   onExpandir?: () => void;
   onActivar: () => void;
   onRetirar: () => void;
+  /** FICHA 375. */
+  onRenombrar: () => void;
   onAgregarHijo?: () => void;
   etiquetaAgregarHijo?: string;
   textoAgregarHijo?: string;
@@ -624,6 +765,19 @@ function FilaNodo({
       )}
 
       <div className="ml-auto flex items-center gap-2">
+        {/* FICHA 375 — RENOMBRAR. Va disponible tambien en un nodo RETIRADO: el nombre es una
+            etiqueta y corregirla no depende de que el nodo se este ofreciendo. */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          aria-label={`Renombrar ${nombre}`}
+          disabled={alternando}
+          onClick={onRenombrar}
+        >
+          Renombrar
+        </Button>
+
         {onAgregarHijo === undefined ? null : (
           <Button
             type="button"

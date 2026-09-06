@@ -6,6 +6,10 @@ import { SWRConfig } from "swr";
 
 import { CierresAdminModule } from "@/app/(app)/cierres-admin/_components/CierresAdminModule";
 import {
+  NIVEL_DETALLE_LABEL,
+  SELECTOR_DISPARADOR,
+} from "@/app/(app)/cierres-admin/_components/DescargarCierresButton";
+import {
   listarHistoricoCierresAdminPaginado,
   listarPendientesCierresAdminPaginado,
   listarPendientesCierresAdminCompleto,
@@ -160,6 +164,19 @@ function montar(
  * pantalla heredó al montar `BuscadorFiltros` (pedido humano del 2026-08-16): los filtros no
  * están puestos de entrada, se piden uno a uno. Sin este paso el control no existe.
  */
+/**
+ * Deja abierta la ventana de la descarga detallada.
+ *
+ * Desde el 2026-09-05 la pantalla tiene UN solo botón de descarga y el grano se elige en su
+ * selector: primero el nivel «Detalle», y entonces el botón abre esta ventana.
+ */
+async function abrirDescargaDetallada(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: SELECTOR_DISPARADOR }));
+  await user.click(await screen.findByRole("radio", { name: NIVEL_DETALLE_LABEL }));
+  await user.keyboard("{Escape}");
+  return screen.findByRole("button", { name: "Descargar detallada por mensajero" });
+}
+
 async function pedirFiltro(user: ReturnType<typeof userEvent.setup>, label: string) {
   // El selector se queda ABIERTO tras marcar una opción (se pueden pedir varios de una vez),
   // así que pulsar el disparador otra vez lo cerraría. Se abre solo si hace falta.
@@ -436,9 +453,7 @@ describe("Ficha 351 · filtro y descarga leen listas DISTINTAS del mismo catálo
     montar([cierre("c1", "Diana Mora")], undefined, CATALOGO_CON_BAJA);
     await screen.findByRole("region", { name: "Filtros de los cierres del día" });
 
-    await user.click(
-      screen.getByRole("button", { name: "Descargar detallada por mensajero" }),
-    );
+    await user.click(await abrirDescargaDetallada(user));
     const dialogo = await screen.findByRole("dialog");
 
     // Está en las casillas...
@@ -458,9 +473,7 @@ describe("Ficha 351 · filtro y descarga leen listas DISTINTAS del mismo catálo
     montar([cierre("c1", "Diana Mora")], undefined, CATALOGO_CON_BAJA);
     await screen.findByRole("region", { name: "Filtros de los cierres del día" });
 
-    await user.click(
-      screen.getByRole("button", { name: "Descargar detallada por mensajero" }),
-    );
+    await user.click(await abrirDescargaDetallada(user));
     const dialogo = await screen.findByRole("dialog");
     expect(within(dialogo).getByRole("checkbox", { name: "Nora de Baja" })).toBeChecked();
     await user.click(within(dialogo).getByRole("button", { name: "Cerrar" }));

@@ -44,6 +44,16 @@ function makeFakePrisma() {
         state[name].push(row);
         return row;
       }),
+      // FICHA 375: la unica escritura nueva del seed es la ADOPCION del codigo por un nodo que se
+      // resolvio por nombre y no lo tenia.
+      update: vi.fn(
+        async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+          const row = state[name].find((r) => r.id === where.id);
+          if (!row) throw new Error(`update sobre ${name} inexistente: ${where.id}`);
+          Object.assign(row, data);
+          return row;
+        },
+      ),
     };
   }
 
@@ -98,6 +108,14 @@ function geoWorksheet(rows: string[][]): ExcelJS.Worksheet {
   for (const r of rows) ws.addRow(r);
   return ws;
 }
+/** FICHA 375: la hoja con la columna nueva, tal y como quedo `geografia-cr-completa.xlsx`. */
+function geoWorksheetConCodigo(rows: string[][]): ExcelJS.Worksheet {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Geo");
+  ws.addRow(["Provincia", "Cantón", "Distrito", "Codigo DTA"]);
+  for (const r of rows) ws.addRow(r);
+  return ws;
+}
 function zonaWorksheet(rows: string[][]): ExcelJS.Worksheet {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Jerarquía (revisar)");
@@ -123,7 +141,24 @@ const ZONA_ROWS = [
 describe("parsers XLSX (R34/R35)", () => {
   it("parseGeografiaRows lee provincia/canton/distrito con cabeceras acentuadas", () => {
     const rows = parseGeografiaRows(geoWorksheet(GEO_ROWS));
-    expect(rows).toContainEqual({ provincia: "San José", canton: "Central", distrito: "Carmen" });
+    // FICHA 375: `codigoDta` viaja siempre en la fila; vacio cuando la hoja no trae la columna,
+    // que es el caso de este fixture y el respaldo declarado del seed.
+    expect(rows).toContainEqual({
+      provincia: "San José",
+      canton: "Central",
+      distrito: "Carmen",
+      codigoDta: "",
+    });
+  });
+
+  it("⭑ FICHA 375: parseGeografiaRows lee la columna `Codigo DTA` cuando la hoja la trae", () => {
+    const ws = geoWorksheetConCodigo([
+      ["San José", "Central", "Carmen", "10101"],
+      ["Limón", "Central", "Limón", "70101"],
+    ]);
+    const rows = parseGeografiaRows(ws);
+    expect(rows[0].codigoDta).toBe("10101");
+    expect(rows[1].codigoDta).toBe("70101");
   });
 
   it("parseZonaHintRows lee la columna Zona e ignora metadatos", () => {

@@ -138,10 +138,45 @@ inconsistente entre sus tablas, se optó por la forma oficial acentuada:
 ## Formato del archivo
 
 - `public/geografia-cr-completa.xlsx`, una sola hoja **Geografia**.
-- Fila 1 encabezados: `Provincia | Canton | Distrito`.
+- Fila 1 encabezados: `Provincia | Canton | Distrito | Codigo DTA`.
 - 494 filas de datos (desnormalizado: provincia y cantón repetidos por distrito).
   Cada distrito va junto a sus hermanos, dentro del bloque de su cantón.
 - Codificación UTF-8; tildes y ñ preservadas.
+
+### La columna `Codigo DTA` (ficha 375, añadida el 2026-09-05)
+
+**Qué es.** El código oficial de la División Territorial Administrativa del IGN,
+**del distrito**: 5 dígitos. Es jerárquico por construcción, así que los otros dos
+niveles salen por **prefijo** y no necesitan columna propia:
+
+| nivel | dígitos | de dónde sale | ejemplo |
+|-------|:-------:|---------------|---------|
+| provincia | 1 | `codigo.slice(0, 1)` | Puntarenas = `6` |
+| cantón | 3 | `codigo.slice(0, 3)` | Buenos Aires = `603` |
+| distrito | 5 | la celda | Cabagra = `60310` |
+
+**Para qué existe.** Hasta la ficha 375 la única clave del catálogo era el
+**nombre**, y el nombre no es una clave: `scripts/seed-zonas.ts` resolvía la
+geografía por nombre y, si no la encontraba, **creaba**. Por eso la ficha 374 dejó
+el renombrado fuera de alcance — renombrar un distrito habría hecho que la
+siguiente corrida del seed creara un **duplicado activo** con el nombre viejo, y a
+partir de ahí `resolveGeo` respondía «distrito ambiguo en el cantón» a toda carga
+masiva que lo mencionara. Con esta columna el seed cruza por **código**, el nombre
+pasa a ser una **etiqueta mutable** y el renombrado es seguro.
+
+**Cómo se derivaron los 494.** Del orden oficial de este mismo archivo (que va 1:1
+con la tabla distrital del PDF del IGN) más la numeración de la DTA, respetando los
+**tres códigos vacantes** documentados arriba: Grecia salta el `20306`, el cantón
+Puntarenas el `60109` y Golfito el `60702`. Una derivación que asumiera
+secuencialidad saldría mal a partir de cada hueco. Verificados contra el encargo:
+Cabagra `60310`, Pijije `50405`, Duacarí `70605`, provincia Puntarenas `6`, cantón
+Buenos Aires `603`.
+
+**Quién lo vigila.** `tests/unit/scripts/seed-zonas-codigo-dta.test.ts` lee este
+archivo y comprueba las 494 filas, los 494 códigos distintos, los tres huecos y la
+coherencia de los prefijos. Si alguien regenerara el `.xlsx` sin la columna, el seed
+caería al respaldo por nombre **sin un solo error** — y ese test es lo único que lo
+diría.
 
 ## Deuda abierta: dos familias de nombre de zona (medido el 2026-09-05)
 

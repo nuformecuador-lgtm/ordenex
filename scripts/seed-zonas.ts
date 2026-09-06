@@ -12,11 +12,42 @@ import type { PrismaClient } from "@prisma/client";
 import { canonicalZonaNombre, normalizeZonaKey } from "@/lib/geo/normalize";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 375 — EL CRUCE VA POR `codigo_dta`, NO POR NOMBRE.
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//
+// LO QUE ESTABA MAL, Y ES LA RAZON DE SER DE LA FICHA. Hasta hoy este seed resolvia la geografia
+// por NOMBRE EXACTO dentro del padre y, si no la encontraba, CREABA. El nombre hacia de clave sin
+// serlo: en cuanto un maestro renombrara un distrito desde /configuracion/geografia, la siguiente
+// corrida de este script no lo encontraria y crearia un DUPLICADO ACTIVO con el nombre viejo. A
+// partir de ahi `resolveGeo` responderia «distrito ambiguo en el canton» a TODA carga masiva que
+// lo mencione, y el `@@unique([canton_id, nombre])` NO lo atraparia: los nombres difieren. Por eso
+// la ficha 374 dejo el renombrado fuera de alcance a proposito.
+//
+// LO QUE HACE AHORA. Cada fila del .xlsx trae su `Codigo DTA` (5 digitos del distrito), del que se
+// derivan por PREFIJO el del canton (3) y el de la provincia (1) — la DTA es jerarquica por
+// construccion. La resolucion es, en este orden:
+//   1. por `codigo_dta` si la fila lo trae;
+//   2. si no lo trae, o si ningun nodo lo tiene todavia, por NOMBRE dentro del padre (el respaldo
+//      de siempre, para lo que no tiene codigo oficial: un nodo dado de alta a mano);
+//   3. si tampoco, se CREA — con su codigo si la fila lo traia.
+//
+// ⚠️ EL NOMBRE ES AHORA UNA ETIQUETA MUTABLE: cuando el nodo se resuelve por codigo, este script
+// NO reescribe su `nombre` con el del .xlsx. Es deliberado y es lo que hace seguro el renombrado:
+// el .xlsx es la foto de la DTA, y el nombre vigente lo decide el maestro en la pantalla.
+//
+// LA UNICA ESCRITURA NUEVA es la ADOPCION del codigo (paso 2): a un nodo resuelto por nombre y con
+// `codigo_dta` NULL se le pone el de la fila. Sin ella el respaldo por nombre no converge nunca —un
+// nodo creado a mano al que el IGN le asigne codigo despues seguiria sin clave estable, y su primer
+// renombrado volveria a duplicarlo—. Nunca PISA un codigo ya puesto.
+
 // --- Tipos de fila de cada fuente ---
 export interface GeoRow {
   provincia: string;
   canton: string;
   distrito: string;
+  /** FICHA 375: el codigo DTA del DISTRITO (5 digitos). Cadena vacia si el .xlsx no lo trae. */
+  codigoDta: string;
 }
 
 export interface ZonaHintRow {
@@ -26,6 +57,19 @@ export interface ZonaHintRow {
   zona: string;
 }
 
+/**
+ * FICHA 375 — como se resolvio cada nodo. Se cuenta para poder AFIRMAR que el cruce fue por codigo
+ * en vez de suponerlo: una corrida con `porNombre` alto sobre un catalogo ya backfilleado significa
+ * que algo no cuadra entre el .xlsx y la base.
+ */
+export interface ResolucionGeoStats {
+  porCodigo: number;
+  porNombre: number;
+  creados: number;
+  /** Nodos resueltos por nombre a los que se les puso el codigo que no tenian. */
+  codigosAdoptados: number;
+}
+
 export interface SeedZonasSummary {
   distritosPoblados: number; // desde el mapa completo (R38)
   distritosConZona: number; // cruzados con exito (R38)
@@ -33,6 +77,8 @@ export interface SeedZonasSummary {
   zonasCreadas: number; // zonas deducidas y deduplicadas (R35/R38)
   ternasSinCorrespondencia: number; // hints sin distrito en el mapa completo (R38)
   filasOmitidas: number; // filas incompletas de cualquiera de las fuentes (R38)
+  /** FICHA 375: el desglose de la resolucion, sumado sobre los TRES niveles. */
+  resolucion: ResolucionGeoStats;
 }
 
 // Clientes Prisma acotados (permite mockear en tests sin la conexion real).
@@ -85,13 +131,51 @@ export function rowsFromWorksheet(ws: ExcelJS.Worksheet): Record<string, string>
   return rows;
 }
 
-/** Fuente GEOGRAFIA (mapa oficial completo): columnas Provincia/Canton/Distrito. */
+/**
+ * Fuente GEOGRAFIA (mapa oficial completo): columnas Provincia/Canton/Distrito y —desde la ficha
+ * 375— `Codigo DTA`.
+ *
+ * La cabecera se busca por su clave normalizada (`codigo dta`), como todas las demas, asi que
+ * tolera acentos y mayusculas. Un .xlsx SIN esa columna sigue leyendose: `codigoDta` queda vacio y
+ * la resolucion cae al nombre, que es el respaldo declarado.
+ */
 export function parseGeografiaRows(ws: ExcelJS.Worksheet): GeoRow[] {
   return rowsFromWorksheet(ws).map((r) => ({
     provincia: r["provincia"] ?? "",
     canton: r["canton"] ?? "",
     distrito: r["distrito"] ?? "",
+    codigoDta: r["codigo dta"] ?? "",
   }));
+}
+
+// --- FICHA 375: los tres codigos de una terna, derivados por prefijo ---
+
+/** Longitud del codigo DTA de cada nivel. Jerarquico: el del padre es el prefijo del hijo. */
+export const LARGO_CODIGO_DTA = { provincia: 1, canton: 3, distrito: 5 } as const;
+
+export interface CodigosTerna {
+  provincia: string;
+  canton: string;
+  distrito: string;
+}
+
+/**
+ * Los codigos de los TRES niveles a partir del codigo del distrito. `null` cuando la fila no trae
+ * codigo o cuando no es un codigo DTA valido.
+ *
+ * SE VALIDA LA FORMA (5 digitos exactos) en vez de confiar en el archivo: un codigo mal escrito
+ * —cuatro digitos, un espacio, una letra— cruzaria con el nodo equivocado o con ninguno, y en el
+ * segundo caso CREARIA un duplicado, que es justo el defecto que esta ficha cierra. Ante la duda,
+ * `null`: se cae al nombre, que es el respaldo conocido.
+ */
+export function codigosDeLaTerna(codigoDistrito: string | null | undefined): CodigosTerna | null {
+  const limpio = (codigoDistrito ?? "").trim();
+  if (!/^\d{5}$/.test(limpio)) return null;
+  return {
+    provincia: limpio.slice(0, LARGO_CODIGO_DTA.provincia),
+    canton: limpio.slice(0, LARGO_CODIGO_DTA.canton),
+    distrito: limpio,
+  };
 }
 
 /** Fuente ZONA (Excel original): columnas Provincia/Canton/Distrito/Zona (+ ignoradas). */
@@ -104,39 +188,156 @@ export function parseZonaHintRows(ws: ExcelJS.Worksheet): ZonaHintRow[] {
   }));
 }
 
-// --- Upserts manuales por nombre dentro del padre (no hay unique compuesto) ---
+// --- FICHA 375: upserts por CODIGO, con el nombre dentro del padre como respaldo ---
 
-async function upsertProvincia(prisma: GeoPrisma, nombre: string): Promise<string> {
-  const found = await prisma.provincia.findFirst({ where: { nombre }, select: { id: true } });
-  if (found) return found.id;
-  const created = await prisma.provincia.create({ data: { nombre }, select: { id: true } });
-  return created.id;
+/** Un nodo tal y como lo devuelven las dos busquedas. */
+interface NodoResuelto {
+  id: string;
+  codigoDta: string | null;
 }
 
-async function upsertCanton(prisma: GeoPrisma, provinciaId: string, nombre: string): Promise<string> {
-  const found = await prisma.canton.findFirst({
-    where: { provinciaId, nombre },
-    select: { id: true },
-  });
-  if (found) return found.id;
-  const created = await prisma.canton.create({
-    data: { provinciaId, nombre },
-    select: { id: true },
-  });
-  return created.id;
+/**
+ * Las cuatro operaciones que el resolutor necesita de UN nivel. Se pasan como funciones y no como
+ * el delegado de Prisma para no tener que ensanchar (ni castear) sus tipos generados: cada nivel
+ * las construye con SU delegado, ya tipado.
+ */
+interface PuertoNivel {
+  buscarPorCodigo(codigo: string): Promise<NodoResuelto | null>;
+  buscarPorNombre(): Promise<NodoResuelto | null>;
+  adoptarCodigo(id: string, codigo: string): Promise<void>;
+  crear(codigo: string | null): Promise<string>;
 }
 
-async function upsertDistrito(prisma: GeoPrisma, cantonId: string, nombre: string): Promise<string> {
-  const found = await prisma.distrito.findFirst({
-    where: { cantonId, nombre },
-    select: { id: true },
-  });
-  if (found) return found.id;
-  const created = await prisma.distrito.create({
-    data: { cantonId, nombre },
-    select: { id: true },
-  });
-  return created.id;
+/**
+ * EL RESOLUTOR, uno para los tres niveles.
+ *
+ *   1. POR CODIGO. Si la fila trae codigo, se busca por `codigo_dta`, que es unico en toda la
+ *      tabla. Es lo que hace seguro el renombrado: el nodo se encuentra AUNQUE se llame distinto,
+ *      y su `nombre` NO se toca —el .xlsx es la foto de la DTA; el nombre vigente lo decide el
+ *      maestro en la pantalla—.
+ *   2. POR NOMBRE dentro del padre. El respaldo de siempre, para lo que no tiene codigo. Si el
+ *      nodo encontrado no tiene codigo y la fila si lo trae, lo ADOPTA: sin eso el respaldo no
+ *      converge nunca y el primer renombrado de ese nodo volveria a duplicarlo. NUNCA pisa un
+ *      codigo ya puesto — ese caso lo habria resuelto el paso 1.
+ *   3. CREAR, con su codigo si lo hay.
+ */
+async function resolverNodo(
+  puerto: PuertoNivel,
+  codigo: string | null,
+  stats: ResolucionGeoStats,
+): Promise<string> {
+  if (codigo !== null) {
+    const porCodigo = await puerto.buscarPorCodigo(codigo);
+    if (porCodigo !== null) {
+      stats.porCodigo += 1;
+      return porCodigo.id;
+    }
+  }
+
+  const porNombre = await puerto.buscarPorNombre();
+  if (porNombre !== null) {
+    stats.porNombre += 1;
+    if (codigo !== null && porNombre.codigoDta === null) {
+      await puerto.adoptarCodigo(porNombre.id, codigo);
+      stats.codigosAdoptados += 1;
+    }
+    return porNombre.id;
+  }
+
+  const id = await puerto.crear(codigo);
+  stats.creados += 1;
+  return id;
+}
+
+const SELECT_NODO = { id: true, codigoDta: true } as const;
+
+async function upsertProvincia(
+  prisma: GeoPrisma,
+  nombre: string,
+  codigo: string | null,
+  stats: ResolucionGeoStats,
+): Promise<string> {
+  return resolverNodo(
+    {
+      buscarPorCodigo: (c) =>
+        prisma.provincia.findFirst({ where: { codigoDta: c }, select: SELECT_NODO }),
+      buscarPorNombre: () => prisma.provincia.findFirst({ where: { nombre }, select: SELECT_NODO }),
+      adoptarCodigo: async (id, c) => {
+        await prisma.provincia.update({ where: { id }, data: { codigoDta: c }, select: { id: true } });
+      },
+      crear: async (c) => {
+        const fila = await prisma.provincia.create({
+          data: { nombre, codigoDta: c },
+          select: { id: true },
+        });
+        return fila.id;
+      },
+    },
+    codigo,
+    stats,
+  );
+}
+
+async function upsertCanton(
+  prisma: GeoPrisma,
+  provinciaId: string,
+  nombre: string,
+  codigo: string | null,
+  stats: ResolucionGeoStats,
+): Promise<string> {
+  return resolverNodo(
+    {
+      buscarPorCodigo: (c) =>
+        prisma.canton.findFirst({ where: { codigoDta: c }, select: SELECT_NODO }),
+      buscarPorNombre: () =>
+        prisma.canton.findFirst({ where: { provinciaId, nombre }, select: SELECT_NODO }),
+      adoptarCodigo: async (id, c) => {
+        await prisma.canton.update({ where: { id }, data: { codigoDta: c }, select: { id: true } });
+      },
+      crear: async (c) => {
+        const fila = await prisma.canton.create({
+          data: { provinciaId, nombre, codigoDta: c },
+          select: { id: true },
+        });
+        return fila.id;
+      },
+    },
+    codigo,
+    stats,
+  );
+}
+
+async function upsertDistrito(
+  prisma: GeoPrisma,
+  cantonId: string,
+  nombre: string,
+  codigo: string | null,
+  stats: ResolucionGeoStats,
+): Promise<string> {
+  return resolverNodo(
+    {
+      buscarPorCodigo: (c) =>
+        prisma.distrito.findFirst({ where: { codigoDta: c }, select: SELECT_NODO }),
+      buscarPorNombre: () =>
+        prisma.distrito.findFirst({ where: { cantonId, nombre }, select: SELECT_NODO }),
+      adoptarCodigo: async (id, c) => {
+        await prisma.distrito.update({
+          where: { id },
+          data: { codigoDta: c },
+          select: { id: true },
+        });
+      },
+      crear: async (c) => {
+        const fila = await prisma.distrito.create({
+          data: { cantonId, nombre, codigoDta: c },
+          select: { id: true },
+        });
+        return fila.id;
+      },
+    },
+    codigo,
+    stats,
+  );
 }
 
 export interface GeografiaResult {
@@ -144,16 +345,33 @@ export interface GeografiaResult {
   distritoByTerna: Map<string, string>;
   distritosPoblados: number;
   filasOmitidas: number;
+  /** FICHA 375: como se resolvio cada nodo, sumado sobre los tres niveles. */
+  resolucion: ResolucionGeoStats;
 }
 
 /**
- * R34/R39: puebla provincia -> canton -> distrito por nombre dentro del padre, sin
- * duplicar en re-corridas (upsert manual por nombre). Filas incompletas se omiten.
+ * R34/R39: puebla provincia -> canton -> distrito y devuelve el indice del cruce, sin duplicar en
+ * re-corridas.
+ *
+ * ⚠️ FICHA 375 — LA RESOLUCION VA POR `codigo_dta` Y EL NOMBRE ES EL RESPALDO. Ver la cabecera del
+ * archivo: mientras cruzara por nombre, un renombrado desde la pantalla creaba un duplicado activo
+ * en la siguiente corrida.
+ *
+ * EL INDICE DEL CRUCE (`distritoByTerna`) SIGUE SIENDO POR NOMBRE, y eso NO es una incoherencia:
+ * su clave se compara contra el OTRO .xlsx —`mapa-geografico-costa-rica.xlsx`, la fuente de las
+ * zonas—, que no tiene codigos. Las dos fuentes hablan el mismo idioma (los nombres de la DTA), asi
+ * que el cruce entre ellas sigue funcionando aunque la base llame al nodo de otra forma.
  */
 export async function seedGeografia(prisma: GeoPrisma, rows: GeoRow[]): Promise<GeografiaResult> {
   const distritoByTerna = new Map<string, string>();
   const provinciaIdByKey = new Map<string, string>();
   const cantonIdByKey = new Map<string, string>();
+  const resolucion: ResolucionGeoStats = {
+    porCodigo: 0,
+    porNombre: 0,
+    creados: 0,
+    codigosAdoptados: 0,
+  };
   let distritosPoblados = 0;
   let filasOmitidas = 0;
 
@@ -166,25 +384,46 @@ export async function seedGeografia(prisma: GeoPrisma, rows: GeoRow[]): Promise<
       continue;
     }
 
+    // FICHA 375: los tres codigos salen del codigo del distrito por prefijo. `null` cuando la fila
+    // no lo trae o no es un codigo DTA valido -> los tres niveles caen al nombre.
+    const codigos = codigosDeLaTerna(row.codigoDta);
+
     let provinciaId = provinciaIdByKey.get(pk);
     if (provinciaId === undefined) {
-      provinciaId = await upsertProvincia(prisma, row.provincia);
+      provinciaId = await upsertProvincia(
+        prisma,
+        row.provincia,
+        codigos?.provincia ?? null,
+        resolucion,
+      );
       provinciaIdByKey.set(pk, provinciaId);
     }
 
     const cantonMapKey = `${pk}::${ck}`;
     let cantonId = cantonIdByKey.get(cantonMapKey);
     if (cantonId === undefined) {
-      cantonId = await upsertCanton(prisma, provinciaId, row.canton);
+      cantonId = await upsertCanton(
+        prisma,
+        provinciaId,
+        row.canton,
+        codigos?.canton ?? null,
+        resolucion,
+      );
       cantonIdByKey.set(cantonMapKey, cantonId);
     }
 
-    const distritoId = await upsertDistrito(prisma, cantonId, row.distrito);
+    const distritoId = await upsertDistrito(
+      prisma,
+      cantonId,
+      row.distrito,
+      codigos?.distrito ?? null,
+      resolucion,
+    );
     distritoByTerna.set(`${pk}::${ck}::${dk}`, distritoId);
     distritosPoblados += 1;
   }
 
-  return { distritoByTerna, distritosPoblados, filasOmitidas };
+  return { distritoByTerna, distritosPoblados, filasOmitidas, resolucion };
 }
 
 /**
@@ -290,6 +529,7 @@ export async function seedZonasCompleto(
     zonasCreadas: zonaByKey.size,
     ternasSinCorrespondencia: cruce.ternasSinCorrespondencia,
     filasOmitidas: geo.filasOmitidas + cruce.filasOmitidas,
+    resolucion: geo.resolucion,
   };
 }
 

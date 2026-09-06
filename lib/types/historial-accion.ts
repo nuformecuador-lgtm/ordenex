@@ -27,17 +27,18 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // Un tipo declarado en la base y ausente del catalogo seria un filtro que no se puede pedir; uno
 // en el catalogo y ausente de la base seria un `validation_error` que nadie entiende.
 //
-// LOS CUARENTA Y SIETE, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y
+// LOS CUARENTA Y OCHO, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y
 // cada una añade UN tipo (`orden_ubicacion_corregida`, `usuario_fulfillment_cambiado`); la ficha 366
 // (2026-09-03) añade el tercero (`orden_zona_reconciliada`) y los tres entran en «mueve dinero»; la
 // ficha 371 añade el cuarto (`gestion_fecha_reprogramacion_corregida`), que entra en «hace
 // desaparecer algo»; la ficha 373 añade el quinto (`api_key_eliminada`), que entra en «cambia quien
 // puede hacer que»; la ficha 374 añade el sexto y el septimo
 // (`nodo_geografico_desactivado`/`nodo_geografico_activado`), que entran los DOS en «hace
-// desaparecer algo». El motivo de cada uno esta escrito a su lado.
+// desaparecer algo»; la ficha 375 añade el octavo (`nodo_geografico_renombrado`), que entra en la
+// MISMA categoria que sus dos hermanos. El motivo de cada uno esta escrito a su lado.
 
 /**
- * Los 47 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
+ * Los 48 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
  * permisos) y es el que consume el selector de filtros: no se reordena por gusto.
  */
 export const HISTORIAL_ACCION_TIPOS = [
@@ -126,6 +127,19 @@ export const HISTORIAL_ACCION_TIPOS = [
   // publico (`Cabagra · Buenos Aires · Puntarenas`): ni un dato de destinatario, ni texto libre.
   "nodo_geografico_desactivado", // GeoRepository.cambiarActivacion (activo: false)
   "nodo_geografico_activado", // GeoRepository.cambiarActivacion (activo: true)
+  // ⭑ FICHA 375 — renombrar un nodo del catalogo geografico. ENTRA AQUI, con sus dos hermanos, y
+  // no en otra categoria: R17 exige EXACTAMENTE una por tipo y las otras dos no encajan —renombrar
+  // no mueve dinero (el nombre no participa de ninguna tarifa) ni cambia quien puede hacer que—.
+  // Lo que SI hace es HACER DESAPARECER EL NOMBRE VIEJO: desde ese instante toda carga masiva y
+  // toda cotizacion que lo mencione muere con «distrito no encontrado en el canton». Y mantiene el
+  // eje geografico entero en UNA categoria: partirlo romperia el filtro justo donde se usa, «que
+  // le paso a este distrito».
+  //
+  // ⚠️ AQUI SI SE USAN `valor_anterior`/`valor_nuevo`, al reves que en sus dos hermanos: llevan el
+  // nombre ANTERIOR y el NUEVO, que es lo unico que hace util la fila —«renombro un distrito» sin
+  // decir de que a que no sirve para nada—. Son etiquetas de la DTA del IGN, un catalogo PUBLICO
+  // del mismo genero que el nombre de una zona: ni un dato de destinatario, ni texto libre.
+  "nodo_geografico_renombrado", // GeoRepository.renombrar
 
   // --- A.3 · cambia quien puede hacer que (12) ---
   "usuario_creado", // usuarios.crearUsuario
@@ -244,6 +258,8 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   // FICHA 374: los DOS en la misma categoria, igual que `orden_eliminada`/`orden_recuperada`.
   nodo_geografico_desactivado: "hace_desaparecer",
   nodo_geografico_activado: "hace_desaparecer",
+  // FICHA 375: el tercero del eje geografico, en la misma categoria que sus dos hermanos.
+  nodo_geografico_renombrado: "hace_desaparecer",
   usuario_creado: "cambia_permisos",
   usuario_rol_cambiado: "cambia_permisos",
   usuario_zona_cambiada: "cambia_permisos",
@@ -295,6 +311,7 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   plantilla_eliminada: "Eliminó una plantilla",
   nodo_geografico_desactivado: "Retiró un nodo del catálogo geográfico",
   nodo_geografico_activado: "Devolvió un nodo al catálogo geográfico",
+  nodo_geografico_renombrado: "Renombró un nodo del catálogo geográfico",
   usuario_creado: "Creó un usuario",
   usuario_rol_cambiado: "Cambió el rol de un usuario",
   usuario_zona_cambiada: "Cambió la zona de un usuario",

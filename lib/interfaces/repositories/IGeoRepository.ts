@@ -22,10 +22,13 @@ import type { NivelGeografico, ProvinciaArbolDTO } from "@/lib/types/geografia-n
 // `tests/unit/guards/geografia-sin-borrado-fisico.guardia.test.ts` recorre `lib/` para que nadie
 // lo añada por otro camino.
 //
-// ⚠️ TAMPOCO DECLARA NINGUN RENOMBRADO (R49), y el motivo esta medido: `scripts/seed-zonas.ts`
-// resuelve el padre por nombre EXACTO y, si no lo encuentra, CREA. Renombrar sin una clave estable
-// haria que la proxima corrida del seed creara un duplicado ACTIVO, y a partir de ahi `resolveGeo`
-// respponderia «distrito ambiguo en el canton» a toda carga que lo mencione.
+// ⚠️ FICHA 375 — YA SI DECLARA EL RENOMBRADO, y solo porque la clave estable existe. La 374 lo
+// dejo fuera con un motivo medido: `scripts/seed-zonas.ts` resolvia la geografia por NOMBRE y, si
+// no la encontraba, CREABA, asi que renombrar habria hecho que la siguiente corrida del seed creara
+// un duplicado ACTIVO con el nombre viejo —y a partir de ahi `resolveGeo` responderia «distrito
+// ambiguo en el canton» a toda carga que lo mencione—. El `@@unique` no lo atrapaba: los nombres
+// difieren. Con `codigo_dta` el seed cruza por CODIGO y el nombre pasa a ser una ETIQUETA MUTABLE.
+// El renombrado NO se puede reactivar sin esa columna: son la misma decision.
 export interface IGeoRepository {
   // --- Feature 144/B2: proyecciones PLANAS para el catalogo de filtros de ordenes ---
   //
@@ -110,4 +113,45 @@ export interface IGeoRepository {
     activo: boolean,
     actorUsuarioId: string | null,
   ): Promise<"no_existe" | "sin_cambio" | "cambiado">;
+
+  // --- FICHA 375: el renombrado ---
+
+  /**
+   * Los hermanos del nodo `id` —TODOS, activos e inactivos, INCLUIDO EL PROPIO NODO—, o `null` si
+   * el nodo NO EXISTE.
+   *
+   * ES DISTINTO DE `findHermanos`, y por eso son dos metodos y no uno: aquel parte del PADRE (lo
+   * que sabe un alta) y este del PROPIO NODO (lo que sabe un renombrado, que no recibe el padre).
+   * Con una sola consulta se resuelven las dos preguntas del renombrado: si el nodo existe (R22) y
+   * si el nombre nuevo ya esta cogido por un hermano.
+   *
+   * SE DEVUELVE EL NODO DENTRO de la lista a proposito: quien compara necesita poder EXCLUIRLO por
+   * su `id` —renombrar un nodo a su propio nombre no es un conflicto—, y filtrarlo aqui dejaria al
+   * service sin forma de distinguir «choca consigo mismo» de «choca con otro».
+   */
+  findHermanosDeNodo(
+    nivel: NivelGeografico,
+    id: string,
+  ): Promise<{ id: string; nombre: string }[] | null>;
+
+  /**
+   * Cambia el `nombre` de UNA fila Y registra la accion en la MISMA transaccion.
+   *
+   * ⚠️ NO TOCA `codigo_dta`: es la clave estable y renombrar es justo la operacion que existe
+   * PORQUE el nombre no lo es. Si esta escritura tocara el codigo, la siguiente corrida del seed
+   * volveria a duplicar el nodo y la ficha entera no serviria para nada.
+   *
+   * TRES desenlaces, por el mismo motivo que `cambiarActivacion`: «no existe» != «ya se llamaba
+   * asi» != «cambio», porque SOLO EL TERCERO audita. Guardar sin cambios devuelve `sin_cambio` y no
+   * escribe ni el `update` ni la fila de registro.
+   *
+   * DEJA ESCAPAR la violacion de UNIQUE: la traduce el borde a `conflict`. La comprobacion por
+   * clave NORMALIZADA es del service; la base es la ultima palabra ante una carrera.
+   */
+  renombrar(
+    nivel: NivelGeografico,
+    id: string,
+    nombre: string,
+    actorUsuarioId: string | null,
+  ): Promise<"no_existe" | "sin_cambio" | "renombrado">;
 }

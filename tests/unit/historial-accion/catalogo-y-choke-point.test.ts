@@ -69,12 +69,13 @@ function filas(tx: ReturnType<typeof txDoble>, n = 0): Record<string, unknown>[]
 // =============================================================================================
 
 describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhaustivos", () => {
-  it("son 47 tipos, 20 entidades y 3 categorias, sin repetidos", () => {
-    // 47 desde la ficha 374 (los dos `nodo_geografico_*`); 45 lo fue desde la 373.
+  it("son 48 tipos, 20 entidades y 3 categorias, sin repetidos", () => {
+    // 48 desde la ficha 375 (`nodo_geografico_renombrado`); 47 lo fue desde la 374 (los dos
+    // `nodo_geografico_*` de activacion); 45 desde la 373.
     // 20 entidades desde la ficha 374: `provincia`, `canton` y `distrito` son la PRIMERA
-    // ampliacion de ese enum, que llevaba 17 desde la 362.
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(47);
-    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(47);
+    // ampliacion de ese enum, que llevaba 17 desde la 362. La 375 NO lo amplia.
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(48);
+    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(48);
     expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(20);
     expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(20);
     expect(CATEGORIAS_ACCION).toHaveLength(3);
@@ -204,7 +205,37 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(new Set(porCategoria).size).toBe(HISTORIAL_ACCION_TIPOS.length);
   });
 
-  it("el reparto por categoria es el del Anexo A: 26 dinero, 9 desaparicion, 12 permisos", () => {
+  it("⭑ FICHA 375: `nodo_geografico_renombrado` es DESAPARICION, con los otros dos del eje", () => {
+    // POR QUE ESTA CATEGORIA Y NO OTRA. R17 de la 362 exige EXACTAMENTE una por tipo, y las otras
+    // dos no encajan: renombrar no mueve dinero (el nombre no participa de ninguna tarifa) y no
+    // cambia quien puede hacer que. Lo que SI hace es hacer desaparecer EL NOMBRE VIEJO: desde ese
+    // instante toda carga masiva que lo mencione muere con «distrito no encontrado en el canton».
+    // Y mantiene el eje geografico entero en UNA categoria, que es lo que hace util el filtro.
+    expect(HISTORIAL_ACCION_TIPOS).toContain("nodo_geografico_renombrado");
+    expect(CATEGORIA_POR_ACCION.nodo_geografico_renombrado).toBe("hace_desaparecer");
+    // Literal a proposito: el texto ES el contrato de la pantalla.
+    expect(ACCION_LABELS.nodo_geografico_renombrado).toBe(
+      "Renombró un nodo del catálogo geográfico",
+    );
+    // Y es un valor DISTINTO de sus dos hermanos: el listado tiene que poder distinguirlos.
+    expect(ACCION_LABELS.nodo_geografico_renombrado).not.toBe(
+      ACCION_LABELS.nodo_geografico_desactivado,
+    );
+    expect(ACCION_LABELS.nodo_geografico_renombrado).not.toBe(
+      ACCION_LABELS.nodo_geografico_activado,
+    );
+    // Se admite como valor de filtro del listado, y un inventado NO.
+    expect(
+      filtroHistorialAccionSchema.safeParse({ accion: ["nodo_geografico_renombrado"] }).success,
+    ).toBe(true);
+    expect(
+      filtroHistorialAccionSchema.safeParse({ accion: ["nodo_geografico_renumerado"] }).success,
+    ).toBe(false);
+    // La 375 NO amplia el enum de entidades: los tres niveles ya entraron con la 374.
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(20);
+  });
+
+  it("el reparto por categoria es el del Anexo A: 26 dinero, 10 desaparicion, 12 permisos", () => {
     // Numeros DUROS: mover un tipo de categoria es una decision, y tiene que pasar por aqui.
     // 26 y no 25 desde la ficha 366: `orden_zona_reconciliada` entra en DINERO.
     // 7 y no 6 desde la ficha 371: `gestion_fecha_reprogramacion_corregida` entra en DESAPARICION.
@@ -212,8 +243,9 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // hermanas de API key, y NO en «hace desaparecer algo» (R25).
     // 9 y no 7 desde la ficha 374: los DOS `nodo_geografico_*` entran en DESAPARICION —tambien el
     // que devuelve—, igual que `orden_eliminada` y `orden_recuperada`.
+    // 10 y no 9 desde la ficha 375: `nodo_geografico_renombrado`, el tercero del mismo eje.
     expect(accionesDeCategoria("mueve_dinero")).toHaveLength(26);
-    expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(9);
+    expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(10);
     expect(accionesDeCategoria("cambia_permisos")).toHaveLength(12);
   });
 });

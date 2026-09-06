@@ -25,6 +25,25 @@ import type { HistorialAccionEntidad } from "@/lib/types/historial-accion";
 /** Anchura de la columna `entidad_etiqueta`. Se trunca AQUI, en la fuente. */
 export const ETIQUETA_MAX_CHARS = 120;
 
+/**
+ * FICHA 375 — anchura de `valor_anterior` / `valor_nuevo` (`VarChar(60)`).
+ *
+ * ⚠️ POSTGRES NO TRUNCA: un valor mas largo ABORTA la sentencia, y con ella la transaccion entera
+ * de la accion. Por eso quien escriba ahi algo que pueda pasarse tiene que recortarlo EN LA FUENTE,
+ * exactamente como `appendAccion` recorta `entidad_etiqueta` a 120. Los cinco tipos que nacieron
+ * usando estas columnas escriben valores de enum (nunca mas de 20 caracteres) y no lo necesitaban;
+ * el nombre de un nodo geografico admite hasta `GEO_NOMBRE_MAX` (80) y si.
+ */
+export const VALOR_MAX_CHARS = 60;
+
+/**
+ * Recorta un valor de CATALOGO a la anchura de su columna. No es un saneador de texto libre: lo que
+ * entra aqui ya tiene que ser vocabulario cerrado o una etiqueta de catalogo publico (R5).
+ */
+export function valorDeCatalogo(texto: string): string {
+  return texto.trim().replace(/\s+/g, " ").slice(0, VALOR_MAX_CHARS);
+}
+
 /** Lo que se pinta cuando una orden no tiene ni guia ni remision. Nunca cadena vacia. */
 export const ETIQUETA_ORDEN_SIN_GUIA = "(sin guía)";
 
