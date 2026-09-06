@@ -4455,3 +4455,26 @@ detectó el gate: `jq` no está instalado y su ausencia es un `warn`, así que l
   silencio — es la ficha siguiente; (c) la colisión `ZONA SUR` / `Zona Sur` entre la migración y el
   seed CLI (3 distritos afectados en desarrollo, **cero en producción**), documentada en
   `public/geografia-cr-completa-NOTAS.md`.
+
+## 2026-09-06 — 375: renombrar geografia sin duplicarla, y una sola descarga en cierres
+
+- **`codigo_dta` como clave estable.** La 374 dejo el renombrado fuera porque `seed-zonas.ts`
+  resolvia por NOMBRE y, si no encontraba, creaba: renombrar habria duplicado el nodo en silencio y
+  la carga masiva habria empezado a rechazar filas por «distrito ambiguo en el canton». Ahora las
+  tres tablas llevan el codigo oficial de la Division Territorial Administrativa, con indice unico,
+  y el seed cruza por el; el nombre queda como etiqueta mutable. Con eso, el boton «Renombrar».
+- Backfill: **7 provincias, 84 cantones y 494 distritos, cero nulos y cero duplicados**, contados
+  dentro de una transaccion revertida ANTES de crear el indice unico. La columna es nullable a
+  proposito: un nodo creado a mano desde la pantalla no tiene codigo oficial hasta que el IGN se lo
+  de, y un NOT NULL obligaria a inventarlo.
+- **Los tres huecos de la numeracion, respetados**: Grecia salta el `20306` (Rio Cuarto se hizo
+  canton), el canton Puntarenas el `60109` (Monteverde) y Golfito el `60702` (Puerto Jimenez). Una
+  de las mutaciones fue justamente asumir numeracion secuencial.
+- **Una sola descarga en cierres.** Los dos botones («Descargar» y «Descargar detallada») se funden
+  en uno: el nivel de detalle —resumen por cierre o detalle por gestion— se elige dentro del propio
+  selector, y las columnas se guardan por nivel. Medido: con 4 cierres pendientes el resumen da 4
+  filas y el detalle 118, o sea que no eran el mismo dato con mas columnas sino dos granos.
+- En el nivel «detalle» se puede ocultar pero NO reordenar: esa hoja emite siempre sus 29 columnas y
+  su orden ES el agrupado que la hace legible. `ColumnasPopover` gana esa capacidad en vez de
+  duplicarse.
+- **DEUDA:** ninguna de las dos partes se ha visto en la pantalla real con sesion `maestro`.

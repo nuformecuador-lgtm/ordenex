@@ -14,21 +14,29 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import type { DescargaFilasResult } from "@/components/shared/DataTable";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
+import type { DescargaColumna } from "@/lib/types/descarga";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type {
   CatalogoFiltrosCierresDTO,
   FiltrosDescargaGestiones,
 } from "@/lib/types/filtros-cierres";
 
-import {
-  COLUMNAS_DESCARGA_GESTIONES_FUNDIDA,
-  filaDescargaGestionFundida,
-} from "./cierres-gestiones-fundida-descarga-columnas";
+import { filaDescargaGestionFundida } from "./cierres-gestiones-fundida-descarga-columnas";
 
 /**
  * Feature 230 (T4.1, design §7) — el DIÁLOGO de la descarga DETALLADA de cierres: elegir uno o
  * varios mensajeros y, opcionalmente, un rango de fechas, y bajarse la hoja fundida (una fila
  * por GESTIÓN).
+ *
+ * ── DÓNDE ENCAJA HOY (unificación de la descarga de cierres) ──────────────────────────────
+ * Ya no lo dispara un botón propio junto al general. Las dos pantallas montan UN solo botón
+ * «Descargar» (`DescargarCierresButton`) cuyo selector elige primero el NIVEL DE DETALLE; este
+ * diálogo es lo que ese botón abre cuando el nivel elegido es «Detalle». De ahí que las
+ * columnas lleguen por prop: quien las elige es el selector del botón, y esta ventana es el
+ * paso siguiente —el CONJUNTO de filas—, no un segundo sitio donde volver a decidir columnas.
+ *
+ * Lo que ese cambio NO toca: los filtros de mensajero y rango siguen siendo suyos y siguen sin
+ * heredar nada de la barra de la pantalla (D11, R34/R35).
  *
  * **UN componente para las DOS pantallas.** Lo único que cambia entre `cierres-admin` y los
  * cierres de bodega del maestro es la Server Action, que llega por prop (`accion`). No es un
@@ -81,7 +89,15 @@ export type AccionGestionesDescarga = (
 
 /** Nombre de la hoja, base del nombre de archivo y nombre accesible del control (R51). */
 const TITULO_DESCARGA = "Gestiones de cierres";
-const DISPARADOR_LABEL = "Descargar detallada";
+/**
+ * El texto VISIBLE del disparador es «Descargar» a secas: desde la unificación no hay un segundo
+ * botón del que distinguirlo — es EL botón de la pantalla, con el nivel «Detalle» elegido.
+ *
+ * El nombre ACCESIBLE sí dice qué va a pasar («por mensajero»), porque este disparador no
+ * descarga: abre la ventana donde se elige el conjunto. Empieza por la palabra visible, así que
+ * quien navega por voz sigue pudiendo decir «Descargar» (WCAG 2.5.3).
+ */
+const DISPARADOR_LABEL = "Descargar";
 const DISPARADOR_ARIA = "Descargar detallada por mensajero";
 const MODAL_TITULO = "Descargar gestiones por mensajero";
 const MODAL_DESCRIPCION =
@@ -107,6 +123,15 @@ export interface DescargarGestionesDialogProps {
   catalogo: CatalogoFiltrosCierresDTO;
   /** El ÚNICO punto de entrada de servidor de esta descarga en esta pantalla (R13). */
   accion: AccionGestionesDescarga;
+  /**
+   * Las columnas que salen en el archivo: las MARCADAS en el selector del botón, ya resueltas.
+   *
+   * OBLIGATORIA, sin valor por defecto, y a sabiendas de que un default («todas») sería cómodo:
+   * ese default convertiría un cableado olvidado en un archivo con las 29 columnas y la
+   * preferencia del usuario ignorada EN SILENCIO — nada fallaría, nadie se enteraría. Exigirla
+   * hace que el compilador cace al montaje que no la pasa.
+   */
+  columnas: DescargaColumna[];
   /** Nombre de la hoja y base del nombre del archivo. Distinto del de la general (R51). */
   titulo?: string;
   /** Texto del disparador. */
@@ -120,6 +145,7 @@ export interface DescargarGestionesDialogProps {
 export function DescargarGestionesDialog({
   catalogo,
   accion,
+  columnas,
   titulo = TITULO_DESCARGA,
   label = DISPARADOR_LABEL,
   ariaLabel = DISPARADOR_ARIA,
@@ -306,29 +332,22 @@ export function DescargarGestionesDialog({
             {/* El diálogo NO se cierra al descargar: el binario se arma en el navegador dentro
                 de este control, y desmontarlo a mitad del vuelo sería cortar la generación del
                 archivo que el usuario acaba de pedir. Se cierra cuando el usuario cierra. */}
-            {/* FICHA 314 — ESTA descarga se queda SIN `ambitoColumnas`, y es una decisión, no
-                un olvido. Las quince descargas de cierres encendieron su selector; ésta no,
-                porque el selector es INDIVISIBLE: `ColumnasPopover` ofrece ocultar Y reordenar
-                a la vez, a propósito (R21, decisión del humano del 2026-08-28 — un selector con
-                dos comportamientos según quién lo monta es la bifurcación que nadie recuerda al
-                mes). Ocultar aquí sería seguro; reordenar, no.
+            {/* SIN `ambitoColumnas`, y ahora por un motivo distinto al de la ficha 314.
+                Entonces esta hoja se quedó sin selector porque `ColumnasPopover` era
+                indivisible —ofrecía ocultar Y reordenar— y reordenar estas 29 columnas rompe el
+                agrupado que las hace legibles. Hoy el selector SÍ sabe ofrecer solo la mitad
+                (`permitirReordenar={false}`) y esta hoja fue su primera candidata, tal como
+                aquel comentario anticipaba.
 
-                Por qué no: en las demás hojas todas las columnas se pueblan siempre, así que
-                moverlas cambia el sitio de un dato y nada más. Ésta emite SIEMPRE 29 columnas y
-                solo `ESPECIFICAS_POR_RESULTADO` decide cuáles se llenan: su orden ES el agrupado
-                que la hace legible —las doce que siempre traen dato primero, las diecisiete
-                condicionales después (`cierres-gestiones-fundida-descarga-columnas` §6)—.
-                Intercalarlas deja una hoja donde una celda vacía ya no dice «este resultado no
-                tiene ese dato», sino nada.
-
-                Y el daño sería MUDO: la preferencia vive en el navegador del usuario, así que ni
-                `cierres-gestiones-paridad` —que afirma sobre la CONSTANTE— ni ninguna otra
-                prueba se pondría roja; solo se degradaría el archivo de quien reordenó. El día
-                que el selector sepa ofrecer solo la mitad de ocultar, ésta es la primera
-                candidata. */}
+                Lo que cambia es DÓNDE vive el selector, no si existe: vive en el botón que abre
+                esta ventana, junto a la elección del nivel de detalle, y de allí bajan las
+                columnas ya resueltas por la prop. Declarar aquí el ámbito montaría un SEGUNDO
+                selector dentro del diálogo —dos sitios para la misma decisión— y, peor, haría
+                que dos módulos asignaran el mismo identificador de ámbito, que es justo lo que
+                `ambito-columnas.guardia` prohíbe. */}
             <DescargarDatasetButton
               titulo={titulo}
-              columnas={COLUMNAS_DESCARGA_GESTIONES_FUNDIDA}
+              columnas={columnas}
               obtenerFilas={obtenerFilas}
             />
           </div>

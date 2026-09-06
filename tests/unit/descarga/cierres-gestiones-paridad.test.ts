@@ -111,16 +111,29 @@ describe("paridad de los dos caminos de la descarga detallada (R26)", () => {
     expect(modulo.match(/export const COLUMNAS_DESCARGA_GESTIONES_/g) ?? []).toHaveLength(1);
     expect(modulo.match(/export function filaDescargaGestion/g) ?? []).toHaveLength(1);
 
-    // (c) Las dos pantallas montan el MISMO componente de diálogo, que es quien las consume.
-    // Ninguna importa la declaración por su cuenta para «ajustarla».
+    // (c) Las dos pantallas montan el MISMO control de descarga, y es ÉL quien monta el MISMO
+    // diálogo y consume la ÚNICA declaración de columnas. Ninguna pantalla la importa por su
+    // cuenta para «ajustarla».
+    //
+    // Desde la unificación del 2026-09-05 hay un eslabón más —el botón único, donde se elige el
+    // nivel de detalle—, y por eso la cadena se afirma entera: si mañana una pantalla se saltara
+    // el control y montara el diálogo por su cuenta, tendría que elegir columnas por su cuenta,
+    // que es exactamente la divergencia que R26 vino a impedir.
     for (const pantalla of [
       "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
       "app/(app)/cierres-admin/_components/CierresBodegaAdminModule.tsx",
     ]) {
       const texto = fuente(pantalla);
-      expect(texto, pantalla).toMatch(/import \{ DescargarGestionesDialog \} from "\.\/DescargarGestionesDialog";/);
+      expect(texto, pantalla).toMatch(/from "\.\/DescargarCierresButton";/);
+      expect(texto, pantalla).toMatch(/<DescargarCierresButton\b/);
       expect(texto, pantalla).not.toMatch(/COLUMNAS_DESCARGA_GESTIONES_FUNDIDA/);
+      expect(texto, pantalla).not.toMatch(/<DescargarGestionesDialog\b/);
     }
+
+    const control = fuente("app/(app)/cierres-admin/_components/DescargarCierresButton.tsx");
+    expect(control).toMatch(/from "\.\/DescargarGestionesDialog";/);
+    expect(control).toMatch(/<DescargarGestionesDialog\b/);
+    expect(control).toMatch(/COLUMNAS_DESCARGA_GESTIONES_FUNDIDA/);
   });
 
   it("una gestión con destino bodega central sale por el camino de cierres del día (R27)", () => {

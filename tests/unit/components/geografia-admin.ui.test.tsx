@@ -24,12 +24,15 @@ const listarArbolGeograficoMock = vi.fn();
 const crearNodoGeograficoMock = vi.fn();
 const cambiarActivacionGeograficaMock = vi.fn();
 const contarOrdenesSinEntregarDeNodoMock = vi.fn();
+const renombrarNodoGeograficoMock = vi.fn();
 vi.mock("@/lib/actions/geografia", () => ({
   listarArbolGeografico: (...a: unknown[]) => listarArbolGeograficoMock(...a),
   crearNodoGeografico: (...a: unknown[]) => crearNodoGeograficoMock(...a),
   cambiarActivacionGeografica: (...a: unknown[]) => cambiarActivacionGeograficaMock(...a),
   contarOrdenesSinEntregarDeNodo: (...a: unknown[]) =>
     contarOrdenesSinEntregarDeNodoMock(...a),
+  // FICHA 375
+  renombrarNodoGeografico: (...a: unknown[]) => renombrarNodoGeograficoMock(...a),
 }));
 
 const toastMock = {
@@ -138,6 +141,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   listarArbolGeograficoMock.mockResolvedValue({ status: "ok", provincias: arbol() });
   contarOrdenesSinEntregarDeNodoMock.mockResolvedValue({ status: "ok", ordenes: 0 });
+  renombrarNodoGeograficoMock.mockResolvedValue({
+    status: "ok",
+    nivel: "distrito",
+    id: "d-cab",
+    nombre: "Cabagrita",
+  });
 });
 
 afterEach(() => {
@@ -726,5 +735,174 @@ describe("374/R58 y R59 — el filtro de estado, en la pantalla", () => {
       "aria-pressed",
       "false",
     );
+  });
+});
+
+// -------------------------------------------------------------------------------------------------
+// FICHA 375 — RENOMBRAR
+// -------------------------------------------------------------------------------------------------
+
+describe("375 — el botón «Renombrar» de cada fila", () => {
+  it("está en los TRES niveles, y no en un solo sitio", async () => {
+    const user = montar();
+    await expandirTodo(user);
+    expect(within(fila("provincia", "p-pu")).getByRole("button", { name: "Renombrar Puntarenas" }))
+      .toBeInTheDocument();
+    expect(
+      within(fila("canton", "c-ba")).getByRole("button", { name: "Renombrar Buenos Aires" }),
+    ).toBeInTheDocument();
+    expect(within(fila("distrito", "d-cab")).getByRole("button", { name: "Renombrar Cabagra" }))
+      .toBeInTheDocument();
+  });
+
+  it("⭑ también en un nodo RETIRADO: el nombre es una etiqueta, no depende de estar disponible", async () => {
+    const user = montar();
+    await expandirTodo(user);
+    // Volcán está retirado por su cuenta; Puerto Cortés lo está por herencia de su cantón.
+    expect(within(fila("distrito", "d-vol")).getByRole("button", { name: "Renombrar Volcán" }))
+      .toBeEnabled();
+    expect(
+      within(fila("distrito", "d-cortes")).getByRole("button", {
+        name: "Renombrar Puerto Cortés",
+      }),
+    ).toBeEnabled();
+  });
+
+  it("abrirlo NO llama a ninguna acción: solo despliega el formulario, con el nombre actual", async () => {
+    const user = montar();
+    await expandirTodo(user);
+    await user.click(
+      within(fila("distrito", "d-cab")).getByRole("button", { name: "Renombrar Cabagra" }),
+    );
+    expect(renombrarNodoGeograficoMock).not.toHaveBeenCalled();
+    // El campo llega relleno: renombrar es corregir un texto, no escribirlo desde cero.
+    const campo = screen.getByLabelText(/^Nombre/);
+    expect(campo).toHaveValue("Cabagra");
+    expect(screen.getByText("Renombrar distrito")).toBeInTheDocument();
+  });
+
+  it("guardar manda `{nivel, id, nombre}` con el nombre RECORTADO y avisa del éxito", async () => {
+    const user = montar();
+    await expandirTodo(user);
+    await user.click(
+      within(fila("distrito", "d-cab")).getByRole("button", { name: "Renombrar Cabagra" }),
+    );
+    const campo = screen.getByLabelText(/^Nombre/);
+    await user.clear(campo);
+    await user.type(campo, "  Cabagrita  ");
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(renombrarNodoGeograficoMock).toHaveBeenCalledWith({
+        nivel: "distrito",
+        id: "d-cab",
+        nombre: "Cabagrita",
+      }),
+    );
+    // R45 — un mensaje propio por desenlace, y una relectura del árbol.
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith("Distrito «Cabagra» ahora es «Cabagrita»."),
+    );
+    expect(listarArbolGeograficoMock).toHaveBeenCalled();
+  });
+
+  it("⭑ guardar SIN cambios llama igual y sale por éxito: no hay veto local", async () => {
+    // El servidor devuelve `ok` sin escribir ni auditar cuando el nombre es el mismo. Si la
+    // pantalla lo bloqueara por su cuenta, «guardar sin cambios» dejaría de funcionar.
+    renombrarNodoGeograficoMock.mockResolvedValue({
+      status: "ok",
+      nivel: "distrito",
+      id: "d-cab",
+      nombre: "Cabagra",
+    });
+    const user = montar();
+    await expandirTodo(user);
+    await user.click(
+      within(fila("distrito", "d-cab")).getByRole("button", { name: "Renombrar Cabagra" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+    await waitFor(() =>
+      expect(renombrarNodoGeograficoMock).toHaveBeenCalledWith({
+        nivel: "distrito",
+        id: "d-cab",
+        nombre: "Cabagra",
+      }),
+    );
+  });
+
+  it("un nombre en blanco no llega al servidor: se pide aquí y se dice por qué", async () => {
+    const user = montar();
+    await expandirTodo(user);
+    await user.click(
+      within(fila("distrito", "d-cab")).getByRole("button", { name: "Renombrar Cabagra" }),
+    );
+    const campo = screen.getByLabelText(/^Nombre/);
+    await user.clear(campo);
+    await user.type(campo, "   ");
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(renombrarNodoGeograficoMock).not.toHaveBeenCalled();
+    expect(await screen.findByText("Este campo es obligatorio.")).toBeInTheDocument();
+  });
+
+  it("`conflict` se pinta en el campo con su mensaje propio, no con uno genérico", async () => {
+    renombrarNodoGeograficoMock.mockResolvedValue({ status: "conflict" });
+    const user = montar();
+    await expandirTodo(user);
+    await user.click(
+      within(fila("distrito", "d-cab")).getByRole("button", { name: "Renombrar Cabagra" }),
+    );
+    const campo = screen.getByLabelText(/^Nombre/);
+    await user.clear(campo);
+    await user.type(campo, "Volcán");
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(
+      await screen.findByText("Ya existe un nodo con ese nombre bajo el mismo padre."),
+    ).toBeInTheDocument();
+    expect(toastMock.success).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["not_found", "Ese nodo ya no está en el catálogo."],
+    ["forbidden", "No tienes permiso para esta acción."],
+    ["unauthenticated", "Tu sesión expiró."],
+  ])("«%s» muestra su propio mensaje", async (status, mensaje) => {
+    renombrarNodoGeograficoMock.mockResolvedValue({ status });
+    const user = montar();
+    await expandirTodo(user);
+    await user.click(
+      within(fila("distrito", "d-cab")).getByRole("button", { name: "Renombrar Cabagra" }),
+    );
+    const campo = screen.getByLabelText(/^Nombre/);
+    await user.clear(campo);
+    await user.type(campo, "Cabagrita");
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(mensaje));
+  });
+
+  it("abrir el alta cierra el renombrado: dos «Guardar» a la vez son dos formas de equivocarse", async () => {
+    const user = montar();
+    await expandirTodo(user);
+    await user.click(
+      within(fila("distrito", "d-cab")).getByRole("button", { name: "Renombrar Cabagra" }),
+    );
+    expect(screen.getByText("Renombrar distrito")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Crear provincia" }));
+    expect(screen.queryByText("Renombrar distrito")).not.toBeInTheDocument();
+    expect(screen.getByText("Nuevo provincia")).toBeInTheDocument();
+  });
+
+  it("«Cancelar» cierra el formulario sin llamar a nada", async () => {
+    const user = montar();
+    await expandirTodo(user);
+    await user.click(
+      within(fila("distrito", "d-cab")).getByRole("button", { name: "Renombrar Cabagra" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByText("Renombrar distrito")).not.toBeInTheDocument();
+    expect(renombrarNodoGeograficoMock).not.toHaveBeenCalled();
   });
 });

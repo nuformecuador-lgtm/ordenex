@@ -7,11 +7,13 @@ import type {
   CrearNodoGeograficoServiceResult,
   IGeografiaService,
   ListarArbolGeograficoServiceResult,
+  RenombrarNodoGeograficoServiceResult,
 } from "@/lib/interfaces/services/IGeografiaService";
 import type {
   CambiarActivacionGeograficaInput,
   CrearNodoGeograficoInput,
   NodoGeograficoInput,
+  RenombrarNodoGeograficoInput,
 } from "@/lib/types/geografia-nodo";
 import { padreDeAlta } from "@/lib/types/geografia-nodo";
 import { normalizeName } from "@/lib/utils/normalize";
@@ -111,6 +113,54 @@ export class GeografiaService implements IGeografiaService {
     );
     if (desenlace === "no_existe") return { status: "not_found" };
     return { status: "ok", nivel: input.nivel, id: input.id, activo: input.activo };
+  }
+
+  /**
+   * FICHA 375 — el renombrado, en los cuatro pasos donde vive TODA la regla:
+   *
+   *   1. el rol, ANTES de tocar la base;
+   *   2. `findHermanosDeNodo` — UNA consulta que resuelve las DOS preguntas: `null` significa «el
+   *      nodo no existe» (`not_found`), y la lista es contra la que se compara el nombre nuevo;
+   *   3. la comparacion por `normalizeName`, EXCLUYENDO AL PROPIO NODO. Las dos mitades importan:
+   *        - se excluye el nodo porque renombrarlo a su propio nombre —o a una variante que se
+   *          normaliza igual, «san jose» -> «San José»— NO es un conflicto: guardar sin cambios
+   *          tiene que seguir funcionando;
+   *        - se compara NORMALIZADO, y no literal, por lo mismo que el alta: el UNIQUE de la base
+   *          compara literales, pero `resolveGeo` indexa por `normalizeName` —minusculas Y sin
+   *          acentos—, asi que «San José» y «San Jose» serian dos filas legales para la base y UNA
+   *          SOLA COSA AMBIGUA para la carga masiva. Es exactamente el defecto que esta ficha viene
+   *          a cerrar: no puede introducirlo por la puerta de al lado;
+   *   4. el renombrado, con el nombre recortado y colapsado pero con SUS mayusculas y SUS acentos.
+   *
+   * Se reusa `normalizeName` —la MISMA funcion con la que indexa la carga masiva— en vez de
+   * declarar una segunda normalizacion: dos claves son dos reglas que un dia divergen, y la que
+   * divergiera dejaria entrar el duplicado ambiguo sin romper ningun test.
+   */
+  async renombrar(
+    input: RenombrarNodoGeograficoInput,
+    actor: Actor,
+  ): Promise<RenombrarNodoGeograficoServiceResult> {
+    if (!WRITE_ROLES.has(actor.rol)) return { status: "forbidden" };
+
+    const hermanos = await this.repo.findHermanosDeNodo(input.nivel, input.id);
+    if (hermanos === null) return { status: "not_found" };
+
+    const clave = normalizeName(input.nombre);
+    const chocaConOtro = hermanos.some(
+      (h) => h.id !== input.id && normalizeName(h.nombre) === clave,
+    );
+    if (chocaConOtro) return { status: "conflict" };
+
+    const desenlace = await this.repo.renombrar(
+      input.nivel,
+      input.id,
+      input.nombre,
+      actor.usuarioId,
+    );
+    // `no_existe` solo puede llegar aqui por una carrera: el nodo estaba al leer los hermanos y ya
+    // no esta al escribir. Se traduce igual que arriba en vez de inventar un desenlace nuevo.
+    if (desenlace === "no_existe") return { status: "not_found" };
+    return { status: "ok", nivel: input.nivel, id: input.id, nombre: input.nombre };
   }
 
   /**

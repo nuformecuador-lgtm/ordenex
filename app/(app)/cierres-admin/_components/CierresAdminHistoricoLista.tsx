@@ -7,7 +7,7 @@ import { cierreConfig } from "@/lib/config/cierre";
 import { listarHistoricoCierresAdminCompleto } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type { FiltrosCierres } from "@/lib/types/filtros-cierres";
-import type { DataTableDescarga } from "@/components/shared/DataTable";
+import type { DescargaResumenCierres } from "./DescargarCierresButton";
 
 import { RechazadoBloqueanteBadge } from "./cierre-detalle-shared";
 import { CierreFacturaResumen } from "./cierre-factura";
@@ -98,7 +98,9 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50].filter((s) => s <= cierreConfig.MAX_PAGE_
  * ALCANCE no viaja, lo pone el servidor desde la sesión, y un `adminSatelite` sigue descargando
  * solo los cierres de su zona por mucho que filtre (R14/R44).
  */
-export function descargaHistoricoCierres(filtros: FiltrosCierres): DataTableDescarga {
+export function descargaHistoricoCierres(
+  filtros: FiltrosCierres,
+): DescargaResumenCierres {
   return {
     titulo: TITULO_DESCARGA,
     columnas: COLUMNAS_DESCARGA_CIERRES_HISTORICO,

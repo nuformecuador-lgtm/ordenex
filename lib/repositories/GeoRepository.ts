@@ -21,7 +21,7 @@ import {
 } from "@/lib/repositories/_shared/geografia-activa";
 import { zonaUnicaDeDistrito } from "@/lib/repositories/_shared/zona-colapso";
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
-import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
+import { etiquetaDeEntidad, valorDeCatalogo } from "@/lib/types/historial-accion-etiquetas";
 
 // FICHA 374: el `Pick` gana `$transaction`, `historialAccion` y `usuario` porque
 // `cambiarActivacion` registra su accion en la MISMA transaccion del `update` — igual que lo hizo
@@ -43,6 +43,12 @@ type GeoPrismaClient = Pick<
 // DESACTIVARLO. La interfaz no lo declara, esta clase no lo implementa, y
 // `tests/unit/guards/geografia-sin-borrado-fisico.guardia.test.ts` recorre `lib/` para que nadie
 // lo añada por otro camino.
+//
+// ⚠️ FICHA 375 — `renombrar` ES EL UNICO SITIO DE `lib/` QUE ESCRIBE `nombre` SOBRE ESTAS TRES
+// TABLAS, y eso lo vigila `tests/unit/guards/geografia-renombrado-punto-unico.guardia.test.ts`. No
+// es celo: un `update` con `nombre` en cualquier otro sitio se saltaria la comprobacion de
+// unicidad por clave NORMALIZADA del service (la del UNIQUE literal de la base no basta) y ademas
+// no dejaria rastro en el registro de acciones.
 //
 // ⚠️ NINGUNA ESCRITURA TOCA A LOS DESCENDIENTES (R8). La disponibilidad efectiva se EVALUA al leer
 // (`_shared/geografia-activa.ts`); materializarla romperia la reversibilidad de R9.
@@ -362,6 +368,103 @@ export class GeoRepository implements IGeoRepository {
         },
       ]);
       return "cambiado";
+    });
+  }
+
+  /**
+   * Los hermanos del nodo `id` —INCLUIDO EL— o `null` si el nodo no existe. UNA consulta resuelve
+   * las dos preguntas del renombrado: si el nodo existe y si el nombre nuevo esta cogido.
+   *
+   * PARTE DEL NODO Y NO DEL PADRE, que es lo que lo distingue de `findHermanos`: un renombrado
+   * recibe `{nivel, id}` y no sabe quien es el padre. Sube al padre por la relacion y baja a sus
+   * hijos en la misma consulta.
+   */
+  async findHermanosDeNodo(
+    nivel: NivelGeografico,
+    id: string,
+  ): Promise<{ id: string; nombre: string }[] | null> {
+    if (nivel === "provincia") {
+      // La provincia no tiene padre: sus hermanas son TODAS las provincias. Aun asi hay que
+      // comprobar que existe, o un id inventado devolveria la lista entera y el renombrado
+      // contestaria `conflict`/`ok` sobre un nodo que no esta.
+      const existe = await this.prisma.provincia.findUnique({ where: { id }, select: { id: true } });
+      if (existe === null) return null;
+      return this.prisma.provincia.findMany({ select: { id: true, nombre: true } });
+    }
+
+    if (nivel === "canton") {
+      const fila = await this.prisma.canton.findUnique({
+        where: { id },
+        select: { provincia: { select: { cantones: { select: { id: true, nombre: true } } } } },
+      });
+      return fila === null ? null : fila.provincia.cantones;
+    }
+
+    const fila = await this.prisma.distrito.findUnique({
+      where: { id },
+      select: { canton: { select: { distritos: { select: { id: true, nombre: true } } } } },
+    });
+    return fila === null ? null : fila.canton.distritos;
+  }
+
+  /**
+   * FICHA 375 — cambia el NOMBRE de UNA fila y registra la accion en la MISMA transaccion.
+   *
+   * Calcado de `cambiarActivacion`, y a proposito: son la misma forma (`abre_tx`) y el censo de
+   * `historial-accion-escrituras-cubiertas` las mide igual.
+   *
+   *   1. leer el nodo -> `null` es «no existe», y de paso captura el nombre previo Y las piezas de
+   *      la etiqueta en una sola consulta;
+   *   2. si ya se llamaba EXACTAMENTE asi, `sin_cambio` SIN ESCRIBIR NADA. Guardar sin cambios
+   *      tiene que funcionar, y «se pidio» no es «se hizo»;
+   *   3. el `update` — la UNICA escritura, y SOLO de `nombre`;
+   *   4. congelar el actor dentro de la tx;
+   *   5. `appendAccion` DENTRO del callback.
+   *
+   * ⚠️ EL `data` DEL `update` LLEVA `nombre` Y NADA MAS. En particular NO lleva `codigoDta`: el
+   * codigo es la identidad y el nombre la etiqueta. Tocarlo aqui reabriria el defecto que esta
+   * ficha cierra —el seed volveria a no reconocer el nodo y lo duplicaria—.
+   *
+   * LA ETIQUETA DE LA FILA ES LA CADENA CON EL NOMBRE NUEVO (asi el registro identifica al nodo tal
+   * y como se llama despues del acto, que es como el maestro lo ve en la pantalla) y el par
+   * anterior/nuevo viaja en `valorAnterior`/`valorNuevo`, recortado a la anchura de esas columnas:
+   * Postgres NO trunca, ABORTA.
+   *
+   * Deja escapar la violacion de UNIQUE: el borde la traduce a `conflict`.
+   */
+  async renombrar(
+    nivel: NivelGeografico,
+    id: string,
+    nombre: string,
+    actorUsuarioId: string | null,
+  ): Promise<"no_existe" | "sin_cambio" | "renombrado"> {
+    return this.prisma.$transaction(async (tx) => {
+      const previo = await leerNodoParaActivacion(tx, nivel, id);
+      if (previo === null) return "no_existe";
+      if (previo.nombre === nombre) return "sin_cambio";
+
+      if (nivel === "provincia") {
+        await tx.provincia.update({ where: { id }, data: { nombre } });
+      } else if (nivel === "canton") {
+        await tx.canton.update({ where: { id }, data: { nombre } });
+      } else {
+        await tx.distrito.update({ where: { id }, data: { nombre } });
+      }
+
+      const actor = await resolverActorCongelado(tx, actorUsuarioId);
+      await appendAccion(tx, [
+        {
+          accion: "nodo_geografico_renombrado",
+          entidadTipo: nivel,
+          entidadId: id,
+          entidadEtiqueta: etiquetaDelNodo(nivel, { ...previo, nombre }),
+          ...actor,
+          monto: null,
+          valorAnterior: valorDeCatalogo(previo.nombre),
+          valorNuevo: valorDeCatalogo(nombre),
+        },
+      ]);
+      return "renombrado";
     });
   }
 }

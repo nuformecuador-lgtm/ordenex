@@ -14,11 +14,13 @@ import type {
   CrearNodoGeograficoServiceResult,
   IGeografiaService,
   ListarArbolGeograficoServiceResult,
+  RenombrarNodoGeograficoServiceResult,
 } from "@/lib/interfaces/services/IGeografiaService";
 import {
   cambiarActivacionGeograficaSchema,
   crearNodoGeograficoSchema,
   nodoGeograficoSchema,
+  renombrarNodoGeograficoSchema,
 } from "@/lib/types/geografia-nodo";
 
 // Catalogo geografico global (provincia -> canton -> distrito).
@@ -34,8 +36,12 @@ import {
 // escritura VIVA del flujo de Tarifas, ya probada, que no pertenece a esta ficha; moverla no le da
 // nada a la 374 y si pone en riesgo algo que funciona. Queda fuera de alcance a proposito.
 //
-// ⚠️ NO HAY NINGUNA ACCION DE BORRADO (R5) NI DE RENOMBRADO (R49). Quitar un nodo es
-// DESACTIVARLO. Ver el porque en `lib/interfaces/repositories/IGeoRepository.ts`.
+// ⚠️ NO HAY NINGUNA ACCION DE BORRADO (R5): quitar un nodo es DESACTIVARLO. Ver el porque en
+// `lib/interfaces/repositories/IGeoRepository.ts`.
+//
+// ⚠️ FICHA 375 — EL RENOMBRADO YA EXISTE (`renombrarNodoGeografico`), y solo porque el catalogo
+// gano una clave estable (`codigo_dta`). Mientras el nombre hacia de clave, renombrar duplicaba el
+// nodo en la siguiente corrida de `scripts/seed-zonas.ts`.
 
 // Los DTO del arbol viven en `lib/types/geografia-nodo.ts` desde la ficha 374 —los produce
 // `GeoRepository`, y un repositorio no puede importar un modulo `"use server"`—. Se RE-EXPORTAN
@@ -165,6 +171,47 @@ export async function cambiarActivacionGeografica(
 
   const service = deps.geografiaService ?? buildGeografiaService();
   return service.cambiarActivacion(parsed.data, actor);
+}
+
+// ── Renombrado (ficha 375) ───────────────────────────────────────────────────────────────────
+
+export type RenombrarNodoGeograficoResult =
+  | RenombrarNodoGeograficoServiceResult
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };
+
+/**
+ * FICHA 375 — cambia el NOMBRE de un nodo del catalogo (solo `maestro`).
+ *
+ * POR QUE ESTA ACCION NO EXISTIA HASTA HOY, y no era una omision: la ficha 374 la dejo fuera porque
+ * `scripts/seed-zonas.ts` resolvia la geografia por NOMBRE y creaba lo que no encontraba, asi que
+ * renombrar habria hecho que la siguiente corrida del seed creara un duplicado ACTIVO con el nombre
+ * viejo — y a partir de ahi toda carga masiva que lo mencionara moriria con «distrito ambiguo en el
+ * canton». Lo que lo desbloquea es `codigo_dta`: con una clave estable el seed cruza por codigo y
+ * el nombre pasa a ser una etiqueta mutable.
+ *
+ * Renombrar a SU PROPIO nombre devuelve `ok` —guardar sin cambios tiene que seguir funcionando—;
+ * al de un HERMANO devuelve `conflict`.
+ */
+export async function renombrarNodoGeografico(
+  input: unknown,
+  deps: GeografiaActionDeps = {},
+): Promise<RenombrarNodoGeograficoResult> {
+  const actor = await (deps.getActor ?? resolveActorFromSession)();
+  if (!actor) return { status: "unauthenticated" };
+
+  const parsed = renombrarNodoGeograficoSchema.safeParse(input);
+  if (!parsed.success) return errorDeValidacion(parsed.error);
+
+  const service = deps.geografiaService ?? buildGeografiaService();
+  try {
+    return await service.renombrar(parsed.data, actor);
+  } catch {
+    // El UNIQUE de la base es la ultima palabra: si dos renombrados simultaneos pasan la
+    // comprobacion del service, uno de los dos falla aqui y se cuenta como conflict en vez de
+    // escapar como error crudo de Postgres. Mismo `catch` que el alta.
+    return { status: "conflict" };
+  }
 }
 
 // ── El dato de la confirmacion (R60) ─────────────────────────────────────────────────────────

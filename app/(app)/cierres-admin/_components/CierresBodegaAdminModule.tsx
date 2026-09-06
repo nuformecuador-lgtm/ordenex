@@ -8,8 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { Pagination } from "@/components/shared/Pagination";
 import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
-import { DescargarDatasetButton } from "@/components/shared/DescargarDatasetButton";
-import type { DataTableDescarga } from "@/components/shared/DataTable";
 import {
   CATALOGO_FILTROS_CIERRES_VACIO,
   type CatalogoFiltrosCierresDTO,
@@ -48,7 +46,10 @@ import {
   VisorEvidencia,
 } from "./cierre-detalle-shared";
 import { CierreBodegaFacturaResumen } from "./cierre-factura";
-import { DescargarGestionesDialog } from "./DescargarGestionesDialog";
+import {
+  DescargarCierresButton,
+  type DescargaResumenCierres,
+} from "./DescargarCierresButton";
 import { ListaComprobantes } from "./ListaComprobantes";
 import { PanelConmutado } from "./PanelConmutado";
 import {
@@ -167,7 +168,7 @@ interface DetalleAbierto {
  * Pedido humano del 2026-08-16 — con los mismos filtros que la página: el archivo es «esto que
  * estoy viendo, entero».
  */
-function descargaColaBodega(filtros: FiltrosCierresBodega): DataTableDescarga {
+function descargaColaBodega(filtros: FiltrosCierresBodega): DescargaResumenCierres {
   return {
     titulo: TITULO_DESCARGA_PENDIENTES,
     columnas: COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
@@ -410,20 +411,20 @@ export function CierresBodegaAdminModule({
           ariaLabel={TABS_BODEGA_LABEL}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <DescargarDatasetButton
-            {...(tab === TAB_PENDIENTES
-              ? descargaColaBodega(filtros)
-              : descargaBodegaResueltos(filtros))}
-          />
-          {/* Feature 230 (T7.4, R23/R24): la descarga DETALLADA de este listado. Es el MISMO
-              componente que monta `CierresAdminModule` y la MISMA declaración de columnas
-              (R26); lo único que cambia es la Server Action, porque el conjunto es otro: acá
-              salen las gestiones de los cierres del día ya CONSOLIDADOS en un cierre de bodega
-              —las bodegas satélite—, que en la otra pantalla el maestro no ve (design §2.6).
+          {/* UN SOLO botón, el mismo control que monta `CierresAdminModule` y con la MISMA
+              declaración de columnas para el detalle (R26); lo único que cambia es la Server
+              Action, porque el conjunto es otro: acá salen las gestiones de los cierres del día
+              ya CONSOLIDADOS en un cierre de bodega —las bodegas satélite—, que en la otra
+              pantalla el maestro no ve (design §2.6).
 
-              Los cuatro controles de descarga que esta pantalla ya tenía no se tocan: éste es
-              uno mas, con su propio nombre accesible y su propio nombre de archivo (R51). */}
-          <DescargarGestionesDialog
+              Los controles de descarga de los OTROS listados de esta pantalla no se tocan: no
+              tienen equivalente detallado, así que no hay nada que unificar en ellos. */}
+          <DescargarCierresButton
+            resumen={
+              tab === TAB_PENDIENTES
+                ? descargaColaBodega(filtros)
+                : descargaBodegaResueltos(filtros)
+            }
             catalogo={catalogoFiltros}
             accion={listarGestionesCierresBodegaCompleto}
             disabled={pendientesCargando}

@@ -5,6 +5,7 @@ import {
   contarOrdenesSinEntregarDeNodo,
   crearNodoGeografico,
   listarArbolGeografico,
+  renombrarNodoGeografico,
 } from "@/lib/actions/geografia";
 import type { IGeografiaService } from "@/lib/interfaces/services/IGeografiaService";
 import type { Actor } from "@/lib/interfaces/services/IVehiculoService";
@@ -28,12 +29,20 @@ function serviceDoble(overrides: Partial<IGeografiaService> = {}) {
       activo: false,
     })),
     contarOrdenesSinEntregar: vi.fn(async () => ({ status: "ok" as const, ordenes: 3 })),
+    // FICHA 375
+    renombrar: vi.fn(async () => ({
+      status: "ok" as const,
+      nivel: "distrito" as const,
+      id: "d1",
+      nombre: "Cabagrita",
+    })),
     ...overrides,
   } as unknown as IGeografiaService & {
     listarArbol: ReturnType<typeof vi.fn>;
     crear: ReturnType<typeof vi.fn>;
     cambiarActivacion: ReturnType<typeof vi.fn>;
     contarOrdenesSinEntregar: ReturnType<typeof vi.fn>;
+    renombrar: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -70,6 +79,16 @@ describe("374/R23 — sin sesion -> unauthenticated, sin instanciar el service",
     );
     expect(r).toEqual({ status: "unauthenticated" });
     expect(service.cambiarActivacion).not.toHaveBeenCalled();
+  });
+
+  it("renombrarNodoGeografico (ficha 375)", async () => {
+    const service = serviceDoble();
+    const r = await renombrarNodoGeografico(
+      { nivel: "distrito", id: "d1", nombre: "Cabagrita" },
+      { getActor: sinSesion, geografiaService: service },
+    );
+    expect(r).toEqual({ status: "unauthenticated" });
+    expect(service.renombrar).not.toHaveBeenCalled();
   });
 
   it("contarOrdenesSinEntregarDeNodo", async () => {
@@ -246,5 +265,65 @@ describe("374/R18 — el borde traduce la violacion de UNIQUE a `conflict`", () 
         { getActor: conSesion, geografiaService: service },
       ),
     ).rejects.toThrow("la base se cayo");
+  });
+});
+
+// =================================================================================================
+// FICHA 375 — el borde del renombrado
+// =================================================================================================
+
+describe("375 — el borde del renombrado: validacion y traduccion del UNIQUE", () => {
+  it.each([
+    ["nivel desconocido", { nivel: "region", id: "d1", nombre: "Cabagrita" }],
+    ["sin id", { nivel: "distrito", nombre: "Cabagrita" }],
+    ["id vacio", { nivel: "distrito", id: "", nombre: "Cabagrita" }],
+    ["sin nombre", { nivel: "distrito", id: "d1" }],
+    ["nombre vacio", { nivel: "distrito", id: "d1", nombre: "" }],
+    ["nombre de un caracter", { nivel: "distrito", id: "d1", nombre: "A" }],
+    ["nombre de solo espacios", { nivel: "distrito", id: "d1", nombre: "   " }],
+    ["clave desconocida", { nivel: "distrito", id: "d1", nombre: "Cabagrita", codigoDta: "1" }],
+  ])("%s -> validation_error SIN llegar al service", async (_caso, entrada) => {
+    const service = serviceDoble();
+    const r = await renombrarNodoGeografico(entrada, {
+      getActor: conSesion,
+      geografiaService: service,
+    });
+    expect(r.status).toBe("validation_error");
+    expect(service.renombrar).not.toHaveBeenCalled();
+  });
+
+  it("⭑ el nombre llega al service RECORTADO y con los espacios colapsados", async () => {
+    // Mismo contrato que el alta: se persiste «San José», no «  San   José  ».
+    const service = serviceDoble();
+    await renombrarNodoGeografico(
+      { nivel: "distrito", id: "d1", nombre: "  San   José  " },
+      { getActor: conSesion, geografiaService: service },
+    );
+    expect(service.renombrar).toHaveBeenCalledWith(
+      { nivel: "distrito", id: "d1", nombre: "San José" },
+      MAESTRO,
+    );
+  });
+
+  it("una violacion de UNIQUE que escape del service se traduce a `conflict`", async () => {
+    const service = serviceDoble({
+      renombrar: vi.fn(async () => {
+        throw new Error("Unique constraint failed on the fields: (`canton_id`,`nombre`)");
+      }),
+    });
+    const r = await renombrarNodoGeografico(
+      { nivel: "distrito", id: "d1", nombre: "Boruca" },
+      { getActor: conSesion, geografiaService: service },
+    );
+    expect(r).toEqual({ status: "conflict" });
+  });
+
+  it("una entrada valida devuelve lo que devuelve el service", async () => {
+    const service = serviceDoble();
+    const r = await renombrarNodoGeografico(
+      { nivel: "distrito", id: "d1", nombre: "Cabagrita" },
+      { getActor: conSesion, geografiaService: service },
+    );
+    expect(r).toEqual({ status: "ok", nivel: "distrito", id: "d1", nombre: "Cabagrita" });
   });
 });
