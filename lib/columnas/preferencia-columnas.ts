@@ -63,6 +63,27 @@ export interface PreferenciaColumnas {
 export type DireccionMovimiento = "arriba" | "abajo";
 
 /**
+ * Ficha 314 — prefijo de la clave de preferencia de columnas de un LISTADO. Estrena el suyo a
+ * propósito: la clave del manifiesto (`ordenex:manifiesto-columnas:<flujo>`) no se toca, porque
+ * es superficie viva en producción y moverla huerfanaría en silencio lo ya guardado (R10).
+ */
+const PREFIJO_CLAVE_DESCARGA = "ordenex:descarga-columnas:";
+
+/**
+ * La clave de almacenamiento de un ámbito de descarga.
+ *
+ * VIVE AQUÍ Y NO EN `DescargarDatasetButton` desde la unificación de la descarga de cierres.
+ * Antes era una constante privada de ese componente, que era el único que armaba la clave; hoy
+ * el control de cierres elige el ámbito ANTES de montar el botón —porque el nivel de detalle
+ * cambia el juego de columnas— y necesita la misma clave. Escribir el prefijo dos veces sería
+ * el fallo mudo de siempre: dos superficies del MISMO ámbito leyendo dos claves distintas, sin
+ * error, sin test rojo, y con la preferencia del usuario perdida a mitad de camino.
+ */
+export function claveDeAmbitoDescarga(ambito: string): string {
+  return `${PREFIJO_CLAVE_DESCARGA}${ambito}`;
+}
+
+/**
  * Lectura BRUTA del almacenamiento: devuelve el string tal cual quedó guardado.
  *
  * Es el "snapshot" estable del hook (design §5): `useSyncExternalStore` compara por identidad,

@@ -116,6 +116,25 @@ export const DIA_REPARTO_COL = "Día de reparto";
 export const RESULTADO_COL = "Resultado";
 
 /**
+ * Identificador de ÁMBITO de la preferencia de columnas de ESTA hoja (314/R10).
+ *
+ * UNO SOLO para las dos pantallas, y es lo correcto: `cierres-admin` y los cierres de bodega
+ * cubren conjuntos disjuntos de gestiones, pero descargan la MISMA hoja con las MISMAS columnas
+ * (R26). Un ámbito por pantalla partiría la preferencia de un solo juego de columnas en dos, y
+ * quien ocultara «Indemnización» en una la seguiría viendo en la otra sin entender por qué.
+ *
+ * Se declara junto a las columnas —como los otros dieciséis— y se ASIGNA en un único módulo, el
+ * control de descarga de cierres. `tests/unit/descarga/ambito-columnas.guardia.test.ts` vigila
+ * que ningún identificador se repita en dos módulos, y por eso la asignación no puede
+ * duplicarse en las dos pantallas.
+ *
+ * Su selector OCULTA pero NO REORDENA: el orden de estas 29 columnas es el agrupado que hace
+ * legible la hoja (ver §6 abajo), y quien monta el selector lo declara con
+ * `permitirReordenar={false}`.
+ */
+export const AMBITO_DESCARGA_GESTIONES_FUNDIDA = "cierres-gestiones";
+
+/**
  * Las 29 columnas de la hoja fundida, en el orden decidido (`design.md §6`), con las tres de
  * MEDIOS DE PAGO donde antes iba la celda única «Método» y las dos FECHAS del pedido del
  * 2026-09-05 junto a la del cierre.

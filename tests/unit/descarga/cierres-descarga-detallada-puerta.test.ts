@@ -17,6 +17,14 @@ import { describe, it, expect } from "vitest";
 const RAIZ = path.resolve(__dirname, "../../..");
 
 const DIALOGO = "app/(app)/cierres-admin/_components/DescargarGestionesDialog.tsx";
+/**
+ * El eslabón que la unificación del 2026-09-05 metió entre la pantalla y el diálogo: el botón
+ * único, donde se elige el nivel de detalle. Entra en esta guardia porque la propiedad que se
+ * vigila es de la CADENA entera —«las filas salen de la acción de esa pantalla y de ninguna otra
+ * fuente»—, y un intermediario que importara una acción por su cuenta la rompería sin que ni el
+ * diálogo ni las pantallas dejaran de cumplir lo suyo.
+ */
+const CONTROL = "app/(app)/cierres-admin/_components/DescargarCierresButton.tsx";
 const PANTALLA_CIERRES_DIA = "app/(app)/cierres-admin/_components/CierresAdminModule.tsx";
 const PANTALLA_BODEGA = "app/(app)/cierres-admin/_components/CierresBodegaAdminModule.tsx";
 
@@ -44,6 +52,12 @@ describe("puerta única de la descarga detallada de cierres (R13/R36)", () => {
     expect(dialogo.match(/\baccion\(/g) ?? []).toHaveLength(1);
     // (c) Las filas del archivo se derivan de ESE resultado, con el adaptador común.
     expect(dialogo).toMatch(/filasDesdeResultado\(\s*accion\(/);
+
+    // (c bis) El control intermedio tampoco conoce ninguna acción: la recibe por prop y la
+    // reenvía tal cual al diálogo, en un único sitio.
+    const control = sinComentarios(fuente(CONTROL));
+    expect(control).not.toMatch(/from\s+["']@\/lib\/actions\//);
+    expect(control.match(/accion=\{accion\}/g) ?? []).toHaveLength(1);
 
     // (d) Cada pantalla le pasa la acción de SU listado, y ninguna le pasa la de la otra: los
     // dos conjuntos son disjuntos (design §2.6) y cruzarlos daría un archivo fuera de alcance.

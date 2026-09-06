@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { FiltrosCierresBodega } from "@/lib/types/filtros-cierres";
-import type { DataTableDescarga } from "@/components/shared/DataTable";
+import type { DescargaResumenCierres } from "./DescargarCierresButton";
 import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
@@ -85,7 +85,9 @@ async function leerPagina(
  * que el actor podía ver (R44). Pedido humano del 2026-08-16: «el CONJUNTO» pasa a significar
  * «el conjunto FILTRADO» — los `filtros` viajan porque el usuario los puso; el alcance, nunca.
  */
-export function descargaBodegaResueltos(filtros: FiltrosCierresBodega): DataTableDescarga {
+export function descargaBodegaResueltos(
+  filtros: FiltrosCierresBodega,
+): DescargaResumenCierres {
   return {
     titulo: TITULO_DESCARGA,
     columnas: COLUMNAS_DESCARGA_BODEGA_RESUELTOS,
