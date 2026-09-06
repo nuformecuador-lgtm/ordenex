@@ -50,13 +50,55 @@ import {
 } from "./cierre-labels";
 import { celdasMediosPago, COLUMNAS_MEDIOS_PAGO } from "./medios-pago-descarga-columnas";
 
+/**
+ * Identificadores de ÁMBITO de la preferencia de columnas de las cinco secciones (314/R1, R10).
+ *
+ * UNO POR RESULTADO, no uno por montaje. El detalle de un cierre de bodega monta estas mismas
+ * secciones una vez POR MENSAJERO incluido, así que un ámbito derivado del montaje daría una
+ * preferencia distinta por mensajero para el MISMO juego de columnas: quien oculta «Ubicación»
+ * en las entregadas de Ana la vería volver en las de Beto, sin ningún error. Lo que decide qué
+ * columnas hay es el resultado; el ámbito sigue a las columnas.
+ *
+ * Y son distintos de los de `/cierre-dia` (`cierre-dia-…`) porque los catálogos son distintos:
+ * el mensajero no ve el ingreso de Ordenex ni la indemnización. Misma sección, otro juego de
+ * columnas, otra preferencia.
+ */
+export const AMBITO_DESCARGA_GESTIONES_ENTREGADAS = "cierre-gestiones-entregadas";
+export const AMBITO_DESCARGA_GESTIONES_REPROGRAMADAS = "cierre-gestiones-reprogramadas";
+export const AMBITO_DESCARGA_GESTIONES_DEVUELTAS = "cierre-gestiones-devueltas";
+export const AMBITO_DESCARGA_GESTIONES_RECHAZADAS = "cierre-gestiones-rechazadas";
+export const AMBITO_DESCARGA_GESTIONES_INCIDENTES = "cierre-gestiones-incidentes";
+
 /** Encabezado de la marca de evidencia: dice SI la hay, nunca dónde está (R22). */
 export const TIENE_EVIDENCIA_COL = "Tiene evidencia";
 /** Valores de esa marca (texto separado de la lógica, i18n-ready). */
 export const TIENE_EVIDENCIA_SI = "Sí";
 export const TIENE_EVIDENCIA_NO = "No";
 
-/** Las columnas comunes a las cinco secciones, en el orden de `COLUMNAS_COMUNES`. */
+/**
+ * Pedido humano del 2026-09-05 — día calendario en que se REGISTRÓ la gestión
+ * (`gestion_orden.created_at`, ya serializado al calendario de Costa Rica por el repositorio).
+ *
+ * El literal se declara AQUÍ y no se importa de la hoja fundida, aunque el texto coincida: este
+ * módulo no depende de aquél en ningún otro sitio y crear la dependencia por una cadena ataría
+ * cinco hojas de un cierre abierto a la evolución de otra pantalla. Si algún día divergen, lo
+ * dicen las aserciones literales de sus dos tests, que es donde se decide.
+ *
+ * **NO hay aquí «Día de reparto»**, y no es un olvido: este DTO (`CierreDetalleGestion`) se
+ * compone del snapshot congelado en `cierre_detail`, que NO guarda `orden.fecha_reparto`. El
+ * porqué de esa columna —y de por qué no existe una «Fecha de asignación» en ninguna hoja—
+ * está escrito una sola vez, en la cabecera de `cierres-gestiones-fundida-descarga-columnas.ts`.
+ */
+export const FECHA_GESTION_COL = "Fecha de gestión";
+
+/**
+ * Las columnas comunes a las cinco secciones, en el orden de `COLUMNAS_COMUNES`.
+ *
+ * «Fecha de gestión» se añade AL FINAL del bloque común (2026-09-05) y no al principio: estas
+ * cinco hojas son de UN cierre abierto y se leen buscando la guía, así que la fecha va después
+ * de la identidad y antes de lo específico del resultado. Las siete de siempre no se mueven ni
+ * una posición entre sí.
+ */
 const COMUNES: DescargaColumna[] = [
   { clave: "numGuia", encabezado: "Nº Guía" },
   { clave: "numRemision", encabezado: "Nº Remisión" },
@@ -65,6 +107,7 @@ const COMUNES: DescargaColumna[] = [
   { clave: "ubicacion", encabezado: "Ubicación" },
   { clave: "producto", encabezado: "Producto" },
   { clave: "tienda", encabezado: "Tienda" },
+  { clave: "fechaGestion", encabezado: FECHA_GESTION_COL },
 ];
 
 /**
@@ -92,6 +135,10 @@ function celdasComunes(gestion: CierreDetalleGestion): DescargaFila {
     ubicacion: ubicacion(gestion),
     producto: gestion.producto,
     tienda: gestion.tiendaNombre,
+    // Llega ya como día calendario `YYYY-MM-DD` de Costa Rica: aquí no se recorta ni se
+    // convierte nada. La conversión desde el `timestamp` vive en el repositorio, que es donde
+    // está el `Date` y donde `toISOString().slice(0, 10)` habría adelantado un día.
+    fechaGestion: gestion.fechaGestion,
   };
 }
 

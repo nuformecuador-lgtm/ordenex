@@ -90,6 +90,8 @@ function gestion(): CierreGestionDescargaDTO {
   return {
     mensajeroNombre: "Ana Mensajera",
     cierreSolicitadoAt: "2026-07-11T10:00:00.000Z",
+    fechaGestion: "2026-07-11",
+    diaReparto: "2026-07-11",
     numGuia: 1001,
     numRemision: "REM-1",
     destinatario: "Ana Pérez",
@@ -299,7 +301,7 @@ describe("diálogo de descarga detallada de gestiones (T4.1)", () => {
     expect(descargarBlobMock).not.toHaveBeenCalled();
   });
 
-  it("confirmar con selección produce el archivo detallado con sus 27 columnas", async () => {
+  it("confirmar con selección produce el archivo detallado con sus 29 columnas", async () => {
     const accion = accionOk();
     montar(accion);
     await userEvent.click(disparador());
@@ -316,9 +318,12 @@ describe("diálogo de descarga detallada de gestiones (T4.1)", () => {
     expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1);
     const [columnas, filas, hoja] = buildXlsxRowsMock.mock.calls[0];
     const encabezados = columnas.map((c) => c.header);
-    expect(encabezados).toHaveLength(27);
+    // 29 desde el 2026-09-05: las 27 de la 230 más «Fecha de gestión» y «Día de reparto».
+    expect(encabezados).toHaveLength(29);
     expect(encabezados[0]).toBe("Mensajero");
     expect(encabezados).toContain("Resultado");
+    expect(encabezados).toContain("Fecha de gestión");
+    expect(encabezados).toContain("Día de reparto");
     // D8/R40: la columna de evidencia no existe en la fundida, en ningun resultado.
     expect(encabezados).not.toContain("Tiene evidencia");
     // UNA hoja, y su nombre es el titulo de la descarga detallada (R6/R51).

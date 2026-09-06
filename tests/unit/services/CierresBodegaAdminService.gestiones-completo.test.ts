@@ -35,6 +35,8 @@ function dto(numRemision: string): CierreGestionDescargaDTO {
   return {
     mensajeroNombre: "Ana",
     cierreSolicitadoAt: "2026-02-10T12:00:00.000Z",
+    fechaGestion: "2026-02-10",
+    diaReparto: "2026-02-10",
     numGuia: null,
     numRemision,
     destinatario: "Bea",

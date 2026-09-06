@@ -8,7 +8,7 @@
 // las bodegas satélite le llegan ÚNICAMENTE consolidados, y por aquí. Un solo botón no cubriría
 // las dos mitades, y por eso cada uno llama a SU borde.
 //
-// Lo que sí es común, y también se afirma: el componente del diálogo, las 27 columnas y la
+// Lo que sí es común, y también se afirma: el componente del diálogo, las 29 columnas y la
 // proyección son los MISMOS que en la otra pantalla (R26).
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
@@ -120,6 +120,8 @@ function gestionConsolidada(): CierreGestionDescargaDTO {
   return {
     mensajeroNombre: "Ana Mensajera",
     cierreSolicitadoAt: "2026-07-11T10:00:00.000Z",
+    fechaGestion: "2026-07-11",
+    diaReparto: "2026-07-11",
     numGuia: 2002,
     numRemision: "REM-B1",
     destinatario: "Ana Pérez",
@@ -219,12 +221,17 @@ describe("descarga detallada en cierres de bodega (T7.4)", () => {
     // El listado general de esta pantalla NO se toca: son dos bordes distintos y dos granos.
     expect(listarPendientesCierresBodegaCompleto).not.toHaveBeenCalled();
 
-    // R26: mismas 27 columnas, mismo orden y misma proyección que en la otra pantalla, porque
-    // salen de la MISMA declaración.
+    // R26: mismas 29 columnas, mismo orden y misma proyección que en la otra pantalla, porque
+    // salen de la MISMA declaración. (27 hasta el 2026-09-05, cuando entraron «Fecha de
+    // gestión» y «Día de reparto»: que este número suba a la vez que el de la otra pantalla es
+    // precisamente lo que R26 promete.)
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
     const [columnas, filas, hoja] = buildXlsxRowsMock.mock.calls[0];
-    expect(columnas.map((c) => c.header)).toHaveLength(27);
+    expect(columnas.map((c) => c.header)).toHaveLength(29);
     expect(columnas[0].header).toBe("Mensajero");
+    // Las dos fechas nuevas llegan también por ESTE borde, sin declaración propia de bodega.
+    expect(columnas.map((c) => c.header)).toContain("Fecha de gestión");
+    expect(columnas.map((c) => c.header)).toContain("Día de reparto");
     expect(columnas.map((c) => c.header)).not.toContain("Tiene evidencia");
     expect(hoja).toBe("Gestiones de cierres");
     expect(filas).toHaveLength(1);

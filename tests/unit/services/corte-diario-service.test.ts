@@ -31,6 +31,7 @@ function gestion(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGest
   const fila: Omit<CierreGestionPendienteRow, "pagos"> = {
     gestionId: "g1",
     ordenId: "o1",
+    fechaGestion: "2026-07-11",
     numGuia: 1,
     numRemision: "R1",
     destinatario: "Ana",

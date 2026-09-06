@@ -61,6 +61,8 @@ function dto(g: GestionAlmacen): CierreGestionDescargaDTO {
   return {
     mensajeroNombre: g.mensajeroId,
     cierreSolicitadoAt: `${g.dia}T12:00:00.000Z`,
+    fechaGestion: g.dia,
+    diaReparto: g.dia,
     numGuia: null,
     numRemision: g.numRemision,
     destinatario: "Bea",

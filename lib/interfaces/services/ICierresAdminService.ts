@@ -179,6 +179,28 @@ export interface CierreGestionDescargaDTO {
   mensajeroNombre: string;
   /** ISO del `solicitado_at` del cierre; la fila lo emite como dia calendario. */
   cierreSolicitadoAt: string;
+  // --- CUANDO paso lo que la fila cuenta (pedido humano del 2026-09-05) ---
+  /**
+   * Dia calendario de COSTA RICA (`YYYY-MM-DD`) de `gestion_orden.created_at`: CUANDO el
+   * mensajero registro la gestion. NO es la fecha del cierre — medido contra produccion el
+   * 2026-09-05, difieren en 312 de 1.063 gestiones (29 %).
+   *
+   * Llega YA SERIALIZADO a dia calendario CR desde el repositorio, no como instante ISO: la
+   * columna es un `timestamp`, y `toISOString().slice(0, 10)` sobre un `timestamp` devuelve el
+   * dia SIGUIENTE despues de las 18:00 CR. Serializar en el borde de datos —donde esta el
+   * `Date`— es lo unico que deja a la proyeccion sin ninguna decision de zona horaria que tomar.
+   */
+  fechaGestion: string;
+  /**
+   * Dia calendario `YYYY-MM-DD` de `orden.fecha_reparto`: el «para hoy o para mañana» de la
+   * asignacion. `@db.Date`, asi que no tiene hora que desplazar.
+   *
+   * `null` ES UN RESULTADO LEGITIMO, no un fallo: la columna se ANULA al deshacer una
+   * asignacion, al liberar la orden a una bodega satelite y al aprobar el cierre de una orden
+   * sin gestionar. Una gestion vieja puede haber perdido su dia de reparto. NO se rellena con
+   * la fecha del cierre ni con ninguna otra: la celda queda VACIA.
+   */
+  diaReparto: string | null;
   // --- identidad de negocio de la gestion (SIN uuid, R42) ---
   numGuia: number | null;
   numRemision: string;

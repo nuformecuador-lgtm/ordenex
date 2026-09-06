@@ -82,7 +82,14 @@ export function Calendar({
         weekday:
           "w-8 pb-1 text-[0.7rem] font-normal text-muted-foreground capitalize",
         week: "flex w-full",
-        day: "p-0 text-center",
+        // `w-8` EN LA CELDA, no solo en el boton. La fila es `flex` y los dias que no
+        // pertenecen al mes se renderizan como celda SIN boton (`showOutsideDays={false}`):
+        // sin ancho propio esa celda colapsa a 0 px y CORRE todo el mes a la izquierda,
+        // de modo que el 1 de septiembre de 2026 (martes) aparecia bajo «Lu». El DOM estaba
+        // bien —el hueco existe y jsdom lo cuenta—, asi que ningun test de render lo veia:
+        // era un fallo de LAYOUT, visible solo en un navegador de verdad.
+        // El ancho debe seguir siendo el mismo que el de `weekday` y `day_button`.
+        day: "w-8 p-0 text-center",
         day_button:
           "size-8 cursor-pointer rounded-md text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-40",
         today: "[&>button]:font-semibold [&>button]:text-brand",

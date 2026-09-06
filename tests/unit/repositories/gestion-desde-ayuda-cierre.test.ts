@@ -489,6 +489,7 @@ describe("💰 R30 — los movimientos son IDENTICOS venga la gestion del mensaj
     return {
       gestionId,
       ordenId: `o-${gestionId}`,
+      fechaGestion: "2026-07-11",
       numGuia: 1,
       numRemision: "R-1",
       destinatario: "D",

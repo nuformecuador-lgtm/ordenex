@@ -805,6 +805,10 @@ export function toDetalleDTO(
   return {
     gestionId: g.gestionId,
     ordenId: g.ordenId,
+    // Pedido humano del 2026-09-05: passthrough puro del dia calendario CR de la gestion, ya
+    // serializado por el repositorio. El servicio no convierte zonas horarias — la unica
+    // conversion vive donde esta el `Date`, que es la proyeccion de cada repositorio.
+    fechaGestion: g.fechaGestion,
     numGuia: g.numGuia,
     numRemision: g.numRemision,
     destinatario: g.destinatario,

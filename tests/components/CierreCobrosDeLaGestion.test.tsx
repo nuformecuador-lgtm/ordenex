@@ -124,6 +124,7 @@ function gestion(
   return {
     gestionId: "g1",
     ordenId: "o1",
+    fechaGestion: "2026-07-11",
     resultado,
     numGuia: 1001,
     numRemision: "REM-338",

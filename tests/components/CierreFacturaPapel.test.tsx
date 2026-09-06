@@ -49,6 +49,7 @@ function gestion(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion
   return {
     gestionId: "g1",
     ordenId: "o1",
+    fechaGestion: "2026-07-11",
     numGuia: 1001,
     numRemision: "REM-001",
     destinatario: "Ana Pérez",
