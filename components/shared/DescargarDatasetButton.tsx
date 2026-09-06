@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ColumnasPopover } from "@/components/shared/ColumnasPopover";
 import { descargarBlob } from "@/components/shared/descargar-blob";
 import { usePreferenciaColumnas } from "@/hooks/usePreferenciaColumnas";
+import { claveDeAmbitoDescarga } from "@/lib/columnas/preferencia-columnas";
 import { useToast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import type { DescargaColumna, DescargaTipo } from "@/lib/types/descarga";
@@ -51,13 +52,6 @@ const ETIQUETA_FORMATO: Record<DescargaTipo, string> = {
 const FORMATO_POR_DEFECTO: DescargaTipo = "xlsx";
 
 /**
- * Ficha 314 — prefijo de la clave de preferencia de columnas de un LISTADO. Estrena el suyo a
- * propósito: la clave del manifiesto (`ordenex:manifiesto-columnas:<flujo>`) no se toca, porque
- * es superficie viva en producción y moverla huerfanaría en silencio lo ya guardado (R10).
- */
-const PREFIJO_CLAVE_COLUMNAS = "ordenex:descarga-columnas:";
-
-/**
  * Accesores del ámbito «descarga de listado». A NIVEL DE MÓDULO, no inline: son dependencias
  * de los `useMemo` del hook, y una función creada en el render cambia de identidad cada vez.
  */
@@ -93,9 +87,7 @@ export function DescargarDatasetButton({
   // ámbito la clave es `null`: el hook no lee, no escribe y devuelve las columnas declaradas
   // tal cual, así que las 24 tablas restantes no cambian ni una línea (R33).
   const claveColumnas =
-    ambitoColumnas === undefined
-      ? null
-      : `${PREFIJO_CLAVE_COLUMNAS}${ambitoColumnas}`;
+    ambitoColumnas === undefined ? null : claveDeAmbitoDescarga(ambitoColumnas);
   const { visibles } = usePreferenciaColumnas(
     claveColumnas,
     columnas,

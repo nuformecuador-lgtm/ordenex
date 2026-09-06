@@ -68,6 +68,10 @@ import {
 } from "@/lib/actions/cierre-bodega";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import { CierresBodegaAdminModule } from "@/app/(app)/cierres-admin/_components/CierresBodegaAdminModule";
+import {
+  NIVEL_DETALLE_LABEL,
+  SELECTOR_DISPARADOR,
+} from "@/app/(app)/cierres-admin/_components/DescargarCierresButton";
 
 // --- Datos ----------------------------------------------------------------
 
@@ -179,6 +183,20 @@ function montar() {
   );
 }
 
+/** El nombre accesible del botón único cuando el nivel elegido es «Detalle». */
+const BOTON_DETALLE = "Descargar detallada por mensajero";
+
+/**
+ * Pone el botón en el nivel «Detalle». Desde el 2026-09-05 esta pantalla tiene UN solo botón de
+ * descarga y el grano se elige en su selector; llegar al detalle empieza siempre por aquí.
+ */
+async function elegirNivelDetalle(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: SELECTOR_DISPARADOR }));
+  await user.click(await screen.findByRole("radio", { name: NIVEL_DETALLE_LABEL }));
+  await user.keyboard("{Escape}");
+  return screen.findByRole("button", { name: BOTON_DETALLE });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   buildXlsxRowsMock.mockResolvedValue(new ArrayBuffer(8));
@@ -186,15 +204,14 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("descarga detallada en cierres de bodega (T7.4)", () => {
-  it("el listado de cierres de bodega ofrece el control de descarga detallada (R23)", async () => {
+  it("el listado de cierres de bodega ofrece la descarga detallada como nivel de su botón (R23)", async () => {
     montar();
+    const user = userEvent.setup();
 
     expect(
       await screen.findByRole("button", { name: "Descargar Cierres de bodega pendientes" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Descargar detallada por mensajero" }),
-    ).toBeInTheDocument();
+    expect(await elegirNivelDetalle(user)).toBeInTheDocument();
   });
 
   it("descargar aquí llama al borde de BODEGA y no al de cierres del día (R24/R26)", async () => {
@@ -206,7 +223,7 @@ describe("descarga detallada en cierres de bodega (T7.4)", () => {
       total: 1,
     });
 
-    await user.click(screen.getByRole("button", { name: "Descargar detallada por mensajero" }));
+    await user.click(await elegirNivelDetalle(user));
     // Desde el 2026-08-19 el diálogo abre con TODOS marcados y con el rango en el día de hoy
     // (ver `DescargarGestionesDialog`). Para afirmar el borde con un conjunto EXACTO hay que
     // apagar la lista desde «Todos», encender a Ana y vaciar las dos fechas.
@@ -240,8 +257,9 @@ describe("descarga detallada en cierres de bodega (T7.4)", () => {
     expect(descargarBlobMock).toHaveBeenCalledTimes(1);
   });
 
-  it("los cuatro controles de descarga que ya existían siguen en su sitio", async () => {
-    // R2/R3 en esta pantalla: la feature añade UNO, no reemplaza ninguno.
+  it("las descargas de cada pestaña siguen en su sitio, y el detalle también", async () => {
+    // La unificación funde los DOS botones de esta fila en uno; lo que no toca es qué archivo
+    // baja cada pestaña, ni retira ninguno de los listados de la pantalla.
     montar();
     const user = userEvent.setup();
 
@@ -252,9 +270,7 @@ describe("descarga detallada en cierres de bodega (T7.4)", () => {
     expect(
       screen.getByRole("button", { name: "Descargar Cierres de bodega resueltos" }),
     ).toBeInTheDocument();
-    // Y el detallado sigue estando, sea cual sea la pestaña: su conjunto no depende de ella.
-    expect(
-      screen.getByRole("button", { name: "Descargar detallada por mensajero" }),
-    ).toBeInTheDocument();
+    // Y el detallado sigue alcanzable, sea cual sea la pestaña: su conjunto no depende de ella.
+    expect(await elegirNivelDetalle(user)).toBeInTheDocument();
   });
 });

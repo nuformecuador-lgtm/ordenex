@@ -23,6 +23,7 @@ import { ToastProvider } from "@/providers/ToastProvider";
 import { descargarBlob } from "@/components/shared/descargar-blob";
 import { buildXlsxRows } from "@/lib/utils/xlsx-template";
 import { DescargarGestionesDialog } from "@/app/(app)/cierres-admin/_components/DescargarGestionesDialog";
+import { COLUMNAS_DESCARGA_GESTIONES_FUNDIDA } from "@/app/(app)/cierres-admin/_components/cierres-gestiones-fundida-descarga-columnas";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
@@ -130,7 +131,14 @@ function accionOk() {
 function montar(accion: ReturnType<typeof accionOk>) {
   return render(
     <ToastProvider>
-      <DescargarGestionesDialog catalogo={CATALOGO} accion={accion} />
+      {/* Las columnas llegan por prop desde el botón que abre esta ventana (su selector es
+          quien las elige). Aquí se le pasan TODAS: lo que este archivo mide es el diálogo, no
+          la preferencia de columnas — ésa vive en `CierresDescargaNiveles.test.tsx`. */}
+      <DescargarGestionesDialog
+        catalogo={CATALOGO}
+        accion={accion}
+        columnas={COLUMNAS_DESCARGA_GESTIONES_FUNDIDA}
+      />
     </ToastProvider>,
   );
 }
@@ -441,6 +449,7 @@ describe("independencia de la barra de filtros de la pantalla (T4.2, R34/R35)", 
             ],
           }}
           accion={accion}
+          columnas={COLUMNAS_DESCARGA_GESTIONES_FUNDIDA}
         />
       </ToastProvider>,
     );

@@ -154,6 +154,7 @@ import { ConsolidacionBodegaModule } from "@/app/(app)/cierres-admin/_components
 import { DetalleSecciones } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
 import { CierreDiaModule } from "@/app/(app)/cierre-dia/_components/CierreDiaModule";
 import { DescargarGestionesDialog } from "@/app/(app)/cierres-admin/_components/DescargarGestionesDialog";
+import { SELECTOR_DISPARADOR } from "@/app/(app)/cierres-admin/_components/DescargarCierresButton";
 import { COLUMNAS_DESCARGA_GESTIONES_FUNDIDA } from "@/app/(app)/cierres-admin/_components/cierres-gestiones-fundida-descarga-columnas";
 import {
   AMBITO_DESCARGA_CIERRES_HISTORICO,
@@ -641,18 +642,28 @@ interface Superficie {
    * esto, `getByRole` encontraría seis disparadores llamados igual y no diría cuál es cuál.
    */
   readonly region?: string;
+  /**
+   * Nombre accesible del disparador del selector, cuando no es el de siempre.
+   *
+   * Lo estrenan las cuatro superficies que la unificación de la descarga de cierres metió bajo
+   * UN solo botón: allí el popover no elige solo columnas, elige antes el NIVEL DE DETALLE, y
+   * el disparador lo dice. Las otras trece siguen con el suyo.
+   */
+  readonly disparador?: string;
 }
 
 const SUPERFICIES: readonly Superficie[] = [
   {
     control: "Cierres pendientes de decisión",
     ambito: AMBITO_DESCARGA_CIERRES_PENDIENTES,
+    disparador: SELECTOR_DISPARADOR,
     columnas: COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
     montar: renderCierresAdmin,
   },
   {
     control: "Cierres del día resueltos",
     ambito: AMBITO_DESCARGA_CIERRES_HISTORICO,
+    disparador: SELECTOR_DISPARADOR,
     columnas: COLUMNAS_DESCARGA_CIERRES_HISTORICO,
     montar: renderCierresAdmin,
     pestana: /^Resueltos/,
@@ -660,12 +671,14 @@ const SUPERFICIES: readonly Superficie[] = [
   {
     control: "Cierres de bodega pendientes",
     ambito: AMBITO_DESCARGA_BODEGA_PENDIENTES,
+    disparador: SELECTOR_DISPARADOR,
     columnas: COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
     montar: renderCierresBodega,
   },
   {
     control: "Cierres de bodega resueltos",
     ambito: AMBITO_DESCARGA_BODEGA_RESUELTOS,
+    disparador: SELECTOR_DISPARADOR,
     columnas: COLUMNAS_DESCARGA_BODEGA_RESUELTOS,
     montar: renderCierresBodega,
     pestana: /^Resueltos/,
@@ -779,7 +792,9 @@ function disparadorDe(superficie: Superficie): HTMLElement {
   const ambito = superficie.region
     ? within(screen.getByRole("region", { name: superficie.region }))
     : screen;
-  return ambito.getByRole("button", { name: DISPARADOR_SELECTOR });
+  return ambito.getByRole("button", {
+    name: superficie.disparador ?? DISPARADOR_SELECTOR,
+  });
 }
 
 function botonDescargaDe(superficie: Superficie): HTMLElement {
@@ -1099,15 +1114,15 @@ describe("Cierres · elección de columnas de la descarga", () => {
     );
   });
 
-  it("la descarga DETALLADA se queda sin selector, y es una decisión escrita", async () => {
-    // Las quince descargas de cierres encendieron el suyo; ésta no. Motivo, en el propio
-    // componente: el selector es INDIVISIBLE —ofrece ocultar Y reordenar (R21)— y el orden de
-    // esta hoja ES su agrupado semántico: diez columnas que siempre traen dato y diecisiete que
-    // solo se llenan según el resultado. Intercalarlas deja celdas vacías sin significado, y el
-    // daño sería MUDO (la preferencia vive en el navegador; ninguna prueba se pondría roja).
+  it("la ventana de la descarga DETALLADA no monta un selector propio", async () => {
+    // La hoja fundida SÍ tiene selector desde la unificación, pero vive en el BOTÓN que abre
+    // esta ventana —junto a la elección del nivel—, no dentro de ella. Que aquí no haya un
+    // segundo selector es lo que evita dos sitios para la misma decisión; y declarar el ámbito
+    // aquí, además, lo declararía en un segundo módulo, que es lo que `ambito-columnas.guardia`
+    // prohíbe.
     //
-    // Este caso existe para que quitarlo sea un acto deliberado y no un descuido de paso: quien
-    // encienda el ámbito aquí tiene que venir a borrarlo, y al hacerlo leerá el motivo.
+    // Este caso existe para que montar un selector aquí sea un acto deliberado y no un descuido
+    // de paso: quien lo encienda tiene que venir a borrarlo, y al hacerlo leerá el motivo.
     const catalogo: CatalogoFiltrosCierresDTO = {
       zonas: [],
       mensajeros: [
@@ -1123,6 +1138,7 @@ describe("Cierres · elección de columnas de la descarga", () => {
     envolver(
       <DescargarGestionesDialog
         catalogo={catalogo}
+        columnas={COLUMNAS_DESCARGA_GESTIONES_FUNDIDA}
         accion={async () => ({
           status: "ok" as const,
           items: [],
@@ -1134,13 +1150,15 @@ describe("Cierres · elección de columnas de la descarga", () => {
     await user.click(
       screen.getByRole("button", { name: "Descargar detallada por mensajero" }),
     );
-    // El diálogo abre y su control de descarga está: lo que no está es el selector.
+    // El diálogo abre y su control de descarga está: lo que no está es ningún selector, ni el
+    // de siempre ni el unificado.
     expect(
       await screen.findByRole("button", { name: "Descargar Gestiones de cierres" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: DISPARADOR_SELECTOR })).toBeNull();
-    // Ni preferencia que aplicar: no hay ámbito, así que salen las 29 declaradas
-    // (27 originales + «Fecha de gestión» y «Día de reparto», añadidas el 2026-09-05).
+    expect(screen.queryByRole("button", { name: SELECTOR_DISPARADOR })).toBeNull();
+    // Las columnas que emite son las que RECIBE, sin ámbito propio que aplicar
+    // (29 el 2026-09-05: 27 originales + «Fecha de gestión» y «Día de reparto»).
     expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.length).toBeGreaterThan(1);
   });
 });

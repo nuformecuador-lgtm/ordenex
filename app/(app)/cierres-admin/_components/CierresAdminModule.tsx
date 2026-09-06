@@ -10,8 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/shared/Modal";
 import { Pagination } from "@/components/shared/Pagination";
 import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
-import { DescargarDatasetButton } from "@/components/shared/DescargarDatasetButton";
-import type { DataTableDescarga } from "@/components/shared/DataTable";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { cierreConfig } from "@/lib/config/cierre";
@@ -72,7 +70,10 @@ import {
   CierreFacturaResumen,
   CierreFacturaDetalle,
 } from "./cierre-factura";
-import { DescargarGestionesDialog } from "./DescargarGestionesDialog";
+import {
+  DescargarCierresButton,
+  type DescargaResumenCierres,
+} from "./DescargarCierresButton";
 import { ListaComprobantes } from "./ListaComprobantes";
 import { FiltrosCierresBarra } from "./FiltrosCierresBarra";
 import { PanelConmutado } from "./PanelConmutado";
@@ -222,7 +223,7 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50].filter((s) => s <= cierreConfig.MAX_PAGE_
  * El título no repite el del otro listado: dos controles en la misma pantalla necesitan nombres
  * accesibles distintos (R13).
  */
-function descargaColaCierres(filtros: FiltrosCierres): DataTableDescarga {
+function descargaColaCierres(filtros: FiltrosCierres): DescargaResumenCierres {
   return {
     titulo: TITULO_DESCARGA_PENDIENTES,
     columnas: COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
@@ -1007,22 +1008,24 @@ export function CierresAdminModule({
           ariaLabel={TABS_CIERRES_LABEL}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <DescargarDatasetButton
-            {...(tab === TAB_PENDIENTES
-              ? descargaColaCierres(filtros)
-              : descargaHistoricoCierres(filtros))}
-          />
-          {/* Feature 230 (T5.1, R1/R23): la descarga DETALLADA, junto a la general y en las DOS
-              pestañas. Son dos controles distintos y no dos modos del mismo: la general es una
-              fila por CIERRE y sale de lo que la pestaña enseña, filtros incluidos; ésta es una
-              fila por GESTIÓN y su conjunto lo redacta su propio diálogo, sin heredar nada de la
-              barra (D11, R34/R35). Por eso NO se le pasa `filtros`.
+          {/* UN SOLO botón (pedido humano del 2026-09-05). Hasta hoy había dos —«Descargar» y
+              «Descargar detallada»— con el mismo verbo y sin decir en qué se diferenciaban; no
+              eran dos archivos, eran el mismo con dos GRANOS. Ahora el grano se elige DENTRO
+              del selector: «Resumen» es una fila por CIERRE y sale de lo que la pestaña enseña,
+              filtros incluidos; «Detalle» es una fila por GESTIÓN y su conjunto lo sigue
+              redactando el diálogo de mensajeros y rango, sin heredar nada de la barra (D11,
+              R34/R35). Por eso al detalle NO se le pasan `filtros`.
 
               Desde aquí se cubre la GAM: en esta pantalla el maestro solo ve los cierres con
               destino `bodega_central`, y los de las bodegas satélite le llegan únicamente
               consolidados, por el control gemelo de `CierresBodegaAdminModule`. Los dos
               conjuntos son DISJUNTOS y su unión es el total (design §2.6). */}
-          <DescargarGestionesDialog
+          <DescargarCierresButton
+            resumen={
+              tab === TAB_PENDIENTES
+                ? descargaColaCierres(filtros)
+                : descargaHistoricoCierres(filtros)
+            }
             catalogo={catalogoFiltros}
             accion={listarGestionesCierresAdminCompleto}
             disabled={pendientesCargando || historicoCargando}
