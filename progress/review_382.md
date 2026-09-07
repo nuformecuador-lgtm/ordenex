@@ -346,3 +346,207 @@ Dicho sin ambigüedad, porque la distinción importa:
   sus tests. Vuelve al implementador solo para eso.
 - Con ese archivo escrito (y la línea de `history.md` al cerrar), la 382 pasa a `done` sin más
   revisión de código. `menor 2` merece las tres líneas de test que pide; es la ruta del importe.
+
+---
+
+## 8. Re-revisión del cierre — 2026-09-07 (segunda pasada)
+
+Se revisa **solo lo nuevo**: `35b6c0f2` («docs(382): la bitacora que faltaba, y la linea del dinero
+clavada»), un commit sobre el informe `81390410`, con 5 archivos (+338/−15). El código de
+`c77ac23c` ya revisado arriba **no se toca**, salvo una función nueva de 3 líneas en el modal.
+La rama queda: `origin/dev` → `c77ac23c` → `81390410` → `35b6c0f2`.
+
+### 8.1 El bloqueante — CERRADO
+
+`progress/impl_382.md` existe (171 líneas) y enuncia **R1** y **R2**.
+
+**Enuncian lo que el código hace, no lo que suena bien.** Contrastado línea a línea:
+
+- **R1** («el error sabe de qué orden es»): pide abortar sin emitir PDF y lanzar un error **tipado**
+  con guía, carácter, code point y campo, y dice explícitamente que aplica a las **dos** llamadas de
+  `drawEtiqueta`, importe incluido. Es exactamente lo que hace `exigirCobertura` y lo que llevan las
+  dos líneas 309 y 354 de `etiquetas-dibujo.ts`. *Omisión menor:* el error también carga
+  `fuenteNombre`, que R1 no lista. No cambia nada de lo que se afirma.
+- **R2** («el aviso dice qué orden, qué carácter y qué hacer»): las cuatro cláusulas (a·b·c·d) más
+  «los otros dos conservan su mensaje» y «los tres distinguibles» describen el `catch` tal y como
+  está. La (d) —no mandar reintentar— viene con su porqué, que es el argumento de la ficha.
+- Se declara explícitamente que R28 (282) y R7 (350) siguen vigentes y sin tocar. Correcto.
+
+**El mapa `R → test` se sostiene, comprobado test por test.** No me fié de la tabla: enumeré los
+`it(` reales de los tres archivos y **los 13 nombres citados existen con ese nombre exacto** en
+`etiquetas-caracter-no-cubierto.test.ts` (7), `etiquetas-fuente.test.ts` (3) y
+`EtiquetasGuiaModal.test.tsx` (8 del bloque 382 + el R28 preexistente). Los tres archivos corren y
+pasan: **51 tests** (eran 46 antes de esta entrega — los **+5** que la bitácora declara).
+
+*Pega menor de la tabla:* la fila «R1 (control positivo)» cita, entre otros, el test llamado
+`382 (control negativo)` de `etiquetas-fuente.test.ts`. El test existe y es el correcto; lo que
+baila es la etiqueta de la fila.
+
+### 8.2 `menor 2`, la línea del dinero — CERRADO, y con el número medido
+
+**Apliqué yo la mutación**, la misma de la primera pasada y sobre el mismo alcance de 13 archivos:
+
+```
+exigirCobertura(fuente, monto, "Monto a cobrar", etiqueta.numGuia)  ->  ..., 0)
+```
+
+| | Antes (`c77ac23c`) | Ahora (`35b6c0f2`) |
+| --- | --- | --- |
+| Resultado | **SOBREVIVE** — 268 passed, 0 failed | **MUERTA** — 271 passed, **2 failed** |
+
+Los 2 rojos son «el simbolo de moneda fuera del subconjunto lanza desde el campo del IMPORTE» y «y
+la guia que viaja cambia con la orden». **El número que pidió el coordinador: 2.**
+
+**Y lo consigue sin tocar producción**, como declaró: el caso declara una cobertura estrecha
+(`cobertura: [[0x20, 0x7e]]`) sobre los **mismos bytes de fuente reales** —`registrarFuente` sigue
+recibiendo `fuenteEtiqueta`—, así que lo que cambia es la **declaración** que `cubreCodePoint` lee,
+que es justo el escenario que R28 vigila (un despliegue cuyo símbolo de moneda no está en el
+subconjunto). No hay mocks.
+
+**Y las dos llamadas quedan pinchadas por separado**, que es lo que hace que el test valga: medido,
+mutar el call site del **texto** da 3 rojos y **los del importe siguen verdes**; mutar el del
+**importe** da 2 rojos y los del texto siguen verdes. La aserción `campo === "Monto a cobrar"` es lo
+que produce esa discriminación, y funciona.
+
+El **control positivo** («con la cobertura REAL, ese mismo importe se dibuja sin lanzar») descarta
+que los dos de arriba estén verdes porque el dibujo lance por cualquier otro motivo.
+
+### 8.3 `menor 3`, la red del test R28 — CERRADO
+
+El test preexistente ya no se conforma con «se anuncia algo»: añade `toContain("U+20BF")` y
+`queryByText(ERROR_FUENTE_ETIQUETA)).toBeNull()`.
+
+Medido con la mutación que anula la rama del `catch` (la **M3** de la primera pasada):
+
+| | Antes | Ahora |
+| --- | --- | --- |
+| Rojos | 1 (`382 (a)`) | **2** — `382 (a)` **y** «R28: un caracter fuera del subconjunto tampoco se descarga en silencio» |
+
+Es el 2 que se pedía. *Nota sin consecuencia:* de las tres aserciones nuevas, la que hace el trabajo
+bajo esta mutación es `U+20BF` junto al `toBeNull()`; el `toContain("11")` es débil por sí solo.
+
+### 8.4 `menor 4`, el aislante bidi — CERRADO, con el residual escrito
+
+- **Está en la ruta que pinta el aviso, no solo en una función pura.** `aislado()` se aplica dentro
+  de `mensajeCaracterNoImprimible`, que es lo que el `catch` mete en `setErrorDescarga`. Lo confirma
+  la mutación, no la lectura: sustituir el cuerpo por `return caracter` da **2 rojos**, y uno de
+  ellos es `382 (a)`, que afirma sobre el **DOM renderizado** (`findByText`), no sobre la función.
+  El otro es el caso nuevo del `U+202E`, cuyo esperado es un literal escrito a mano con los
+  aislantes dentro.
+- **Escapados de verdad, en los tres sitios.** Verificado leyendo los bytes: **cero caracteres
+  invisibles crudos** (`U+2068`, `U+2069`, `U+202E`, `U+200B`) en el componente, en los dos archivos
+  de test, en `impl_382.md` y en `history.md`. Todos van como `\u2068` o como notación. El único
+  no-ASCII crudo que queda es el «𝕠», que es visible a propósito.
+- **El residual está escrito** en los dos sitios que importan: en el docstring de `aislado()` («Lo
+  que NO cierra… `U+200B` se sigue viendo como unas comillas vacías») y en `impl_382.md` §«Lo que
+  queda vivo» punto 2, con su porqué (pintar solo la notación quitaría el reconocimiento visual del
+  sosia de una letra, que es el caso común). Y tiene **su propio test**, que afirma que la notación
+  `U+XXXX` sigue ahí cuando el carácter no se ve.
+
+### 8.5 La declaración sobre los `.md` escritos después del gate
+
+El implementador declaró que escribió `impl_382.md` y `history.md` **después** del gate y que ningún
+test los lee. **Lo verifiqué, y el veredicto es: la conclusión es correcta, el motivo no del todo.**
+
+- **Sí hay una guardia que escanea `progress/`**: `tests/unit/analytics/catalogo-produccion.guardia.test.ts:405`
+  hace `readdirSync(progress)`. Lo que la salva es el **filtro**: `/^decision.*\.md$/`. Ni
+  `impl_382.md` ni `history.md` casan.
+- Otras tres guardias leen bitácoras, pero **por nombre fijo**: `impl_180.md`, `impl_127.md` e
+  `impl_186.md`. Ninguna es la nuestra.
+- `init.sh` **no** toca `progress/` (sus únicas coincidencias con «progress» son `in_progress` de la
+  regla de cupo). `tsconfig.json` incluye solo `**/*.ts(x)`, y `eslint.config.mjs` no tiene
+  procesador de markdown. Así que typecheck y lint tampoco.
+
+O sea: la regla que de verdad protege es **«ningún fichero `progress/decision_*.md` nuevo puede
+escribirse después del gate»**, no «los `.md` no los lee nadie». Queda escrito aquí porque el
+próximo que añada un `decision_XXX.md` tras correr el gate se apoyaría en la frase equivocada.
+
+**Y en cualquier caso queda medido, no razonado:** mi corrida del gate (§8.6) es **posterior** a los
+dos `.md` y los tenía en disco.
+
+### 8.6 Gate del cierre — corrido por el revisor
+
+`./init.sh` **completo**, sobre `35b6c0f2` y con los dos `.md` ya en disco:
+
+```
+Test Files  1770 passed (1770)
+     Tests  25279 passed | 26 skipped (25305)
+  Duration  845.20 s
+tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1770 ejecutado(s))
+DATABASE_URL resuelta: los 132 archivos de tests contra Postgres SI se ejecutan
+.env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+- Reproduce **exactamente** los números que declaró el implementador (1770 / 25 279 / 26).
+- Los 26 `skipped` siguen siendo los mismos y ajenos: **17** en `AnaliticaPage.test.tsx`, **9** en
+  `AnaliticaShell.test.tsx`. Ninguno de los dos está en el diff.
+- **+5 tests** sobre mi corrida de la primera pasada (25 274), que son exactamente los cinco casos
+  nuevos: 3 del importe, 2 del aislante y la notación.
+- Sin flakes: ni un `Test timed out`, ni una repetición.
+
+### 8.7 Mutaciones de esta segunda pasada — 4 aplicadas, 4 muertas
+
+Aplicadas al árbol real, verificadas con `git diff --stat`, revertidas con `git checkout --`, y con
+`git diff HEAD` **vacío** al terminar (el árbol coincide con `35b6c0f2`).
+
+| # | Mutación | Antes (`c77ac23c`) | Ahora |
+| --- | --- | --- | --- |
+| M4b | `0` como guía en el call site del **importe** | SOBREVIVE (268 verdes) | **MUERTA — 2 rojos** |
+| M3 | anular la rama `instanceof ErrorCaracterNoImprimible` del `catch` | MUERTA — 1 rojo | **MUERTA — 2 rojos** (entra el R28 preexistente) |
+| M-bidi | `aislado()` devuelve el carácter sin envolver | (no existía) | **MUERTA — 2 rojos**, uno sobre el DOM renderizado |
+| M4 | `0` como guía en el call site del **texto** | MUERTA — 3 rojos | **MUERTA — 3 rojos**, y los del importe **siguen verdes** (discriminación) |
+
+### 8.8 Hallazgos de esta pasada
+
+Ninguno bloqueante. Los cuatro de la primera pasada que quedaban abiertos —`menor 1`, `menor 2`,
+`menor 3` y `menor 4`— están cerrados y medidos.
+
+### `menor 7` — el test del importe queda atado a `MONEDA_SIMBOLO`
+
+`expect(error.caracter).toBe("₡")` y `toBe(0x20a1)` fijan el símbolo **por defecto** de
+`monedaConfig` (`lib/config/moneda.ts:78`, `readNonEmpty("MONEDA_SIMBOLO", "₡")`). En un entorno que
+exporte `MONEDA_SIMBOLO=$`, el símbolo pasa a ser ASCII, la cobertura estrecha lo cubriría y el test
+fallaría con «drawEtiqueta no lanzo» — por una razón que no tiene nada que ver con lo que vigila.
+
+**No es un defecto de hoy** y el literal está bien elegido: la alternativa —compararlo contra
+`monedaConfig.simbolo`— sería la aserción-contra-su-propia-fuente que este repo tiene medida como
+siempre verde, y el comentario del test lo dice. Las dos aserciones que sostienen la ficha
+(`campo` y `numGuia`) **no** están acopladas. Si algún día se configura otra moneda, la forma de
+cerrarlo es elegir el carácter no cubierto desde un campo de texto y dejar el importe con `campo`.
+
+### `menor 8` (observación) — la frase sobre los `.md` es más ancha que la regla real
+
+Ver §8.5. La declaración lleva a la conclusión correcta por un camino que no se sostiene tal cual
+está escrito; queda aquí el enunciado preciso.
+
+### Heredados, sin cambios
+
+- `menor 5` (el `campo` no se pinta): sigue siendo la decisión correcta y ahora está **justificada
+  por escrito** en `impl_382.md` §Decisiones 2, y además es lo que clava la línea del dinero.
+- `menor 6` (índice del grafo rancio en `lib/pdf/`): el implementador lo heredó y lo dejó anotado.
+  Sigue vivo; conviene reindexar.
+
+### Lo que la bitácora declara abierto, y hace bien en declararlo
+
+`impl_382.md` §«Lo que queda vivo» deja cuatro cosas escritas en vez de esconderlas: la decisión de
+**normalizar** (sin firma del humano, sin código, con opinión razonada y su contraargumento), el
+residual del `U+200B`, que **la orden 11081885 sigue rota en producción** hasta que se corrija su
+dato, y que **nadie ha visto el aviso en la app real**. Ese último es el pendiente de verdad: 28
+casos en jsdom no son una pantalla, y en este repo eso está medido.
+
+### 8.9 Veredicto de la re-revisión
+
+**APROBADA.** Cero bloqueantes vivos.
+
+- El bloqueante documental está cerrado con un `impl_382.md` que **no es de trámite**: enuncia R1 y
+  R2 en términos verificables, y su mapa resiste abrir los tests uno por uno.
+- El `menor 2` no se cerró con una promesa sino con dos casos que **matan la mutación que yo medí
+  viva**, y que además demuestran de qué llamada salió el error. De 268 verdes a 2 rojos.
+- El `menor 3` y el `menor 4` están cerrados con mutación propia, y el `menor 4` con el residual
+  escrito en vez de disimulado.
+- Gate completo verde corrido por el revisor, con los `.md` en disco.
+
+Queda como **reserva no bloqueante para el cierre de la ficha**: nadie ha visto el aviso en la
+pantalla real, y la orden 11081885 sigue rota en producción hasta que alguien corrija su dato.
