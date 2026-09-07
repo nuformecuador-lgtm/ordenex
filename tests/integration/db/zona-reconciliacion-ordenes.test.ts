@@ -2,7 +2,10 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { GestionResultado, PrismaClient } from "@prisma/client";
 
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
-import type { UpdateZonaData } from "@/lib/interfaces/repositories/IZonaRepository";
+import type {
+  UpdateZonaData,
+  UpdateZonaResult,
+} from "@/lib/interfaces/repositories/IZonaRepository";
 
 import {
   HAY_BASE_DE_DATOS,
@@ -51,6 +54,15 @@ function unico(): string {
 /** La forma que `update` espera. El nombre se repite tal cual para no chocar con el UNIQUE. */
 function datosDeZona(nombre: string, distritoIds: string[]): UpdateZonaData {
   return { nombre, cobroVehiculo: false, esCentral: false, distritoIds, tarifas: [] };
+}
+
+/**
+ * FICHA 376: el desenlace de `update` viaja NOMBRADO. Falla RUIDOSAMENTE si no es `ok` — devolver
+ * `undefined` dejaria pasar por vacuidad un `sin_zona_central` que nadie esperaba aqui.
+ */
+function reconciliadasDe(res: UpdateZonaResult): number {
+  if (res.estado !== "ok") throw new Error(`se esperaba \`ok\` y llego \`${res.estado}\``);
+  return res.ordenesReconciliadas;
 }
 
 interface Escenario {
@@ -240,7 +252,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
       );
 
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaFinal: await e.zonaDe(orden),
         zonaA: e.zonas.A.id,
         historial: await e.historialDe([orden]),
@@ -271,7 +283,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
         USUARIO,
       );
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaFinal: await e.zonaDe(orden),
         zonaC: e.zonas.C.id,
         historial: await e.historialDe([orden]),
@@ -295,7 +307,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
         USUARIO,
       );
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaFinal: await e.zonaDe(orden),
         zonaC: e.zonas.C.id,
         historial: await e.historialDe([orden]),
@@ -326,7 +338,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
       );
 
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaFacturada: await e.zonaDe(facturada),
         zonaLibre: await e.zonaDe(libre),
         zonaA: e.zonas.A.id,
@@ -364,7 +376,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
           USUARIO,
         );
         return {
-          reconciliadas: res?.ordenesReconciliadas,
+          reconciliadas: reconciliadasDe(res),
           zonaConGestion: await e.zonaDe(conGestion),
           zonaLibre: await e.zonaDe(libre),
           zonaA: e.zonas.A.id,
@@ -398,7 +410,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
           USUARIO,
         );
         return {
-          reconciliadas: res?.ordenesReconciliadas,
+          reconciliadas: reconciliadasDe(res),
           zonaFinal: await e.zonaDe(orden),
           zonaA: e.zonas.A.id,
           historial: await e.historialDe([orden]),
@@ -424,7 +436,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
         USUARIO,
       );
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaFinal: await e.zonaDe(orden),
         zonaA: e.zonas.A.id,
       };
@@ -450,7 +462,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
         USUARIO,
       );
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaBorrada: await e.zonaDe(borrada),
         zonaViva: await e.zonaDe(viva),
         zonaA: e.zonas.A.id,
@@ -480,7 +492,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
         USUARIO,
       );
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaFinal: await e.zonaDe(derivada),
         zonaA: e.zonas.A.id,
       };
@@ -506,7 +518,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
         USUARIO,
       );
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaDelQuitado: await e.zonaDe(ordenQuitado),
         zonaDelQueSigue: await e.zonaDe(ordenQueSigue),
         zonaA: e.zonas.A.id,
@@ -584,13 +596,16 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
       const distrito = await e.crearDistrito([]); // sin ninguna zona todavia
       const conDeriva = await e.crearOrden({ distritoId: distrito, zonaId: e.zonas.A.id });
 
-      await e.repo.create({
-        nombre: `366 NUEVA ${unico()}`,
-        cobroVehiculo: false,
-        esCentral: false,
-        distritoIds: [distrito], // la zona NUEVA es la UNICA que toma este distrito
-        tarifas: [],
-      });
+      await e.repo.create(
+        {
+          nombre: `366 NUEVA ${unico()}`,
+          cobroVehiculo: false,
+          esCentral: false,
+          distritoIds: [distrito], // la zona NUEVA es la UNICA que toma este distrito
+          tarifas: [],
+        },
+        USUARIO,
+      );
 
       // Sin ambiguedad: el distrito tiene que resolver a UNA sola zona (la nueva).
       const filasZonaDistrito = await e.tx.zonaDistrito.findMany({ where: { distritoId: distrito } });
@@ -619,8 +634,8 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
       const segunda = await e.repo.update(e.zonas.A.id, datos, USUARIO);
 
       return {
-        primera: primera?.ordenesReconciliadas,
-        segunda: segunda?.ordenesReconciliadas,
+        primera: reconciliadasDe(primera),
+        segunda: reconciliadasDe(segunda),
         historialTrasPrimera: historialTrasPrimera.length,
         historialTrasSegunda: (await e.historialDe([orden])).length,
       };

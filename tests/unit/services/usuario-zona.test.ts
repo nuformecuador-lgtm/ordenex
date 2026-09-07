@@ -81,6 +81,8 @@ function buildZonaRepo(exists: boolean): IZonaRepository {
     countExistingDistritos: vi.fn(),
     countExistingVehiculos: vi.fn(),
     findCentralZonaId: vi.fn().mockResolvedValue(null),
+    // FICHA 376 (Q4): lectura de solo lectura; este archivo no la ejercita.
+    contarOrdenesVivasPorZona: vi.fn().mockResolvedValue([]),
   };
 }
 
