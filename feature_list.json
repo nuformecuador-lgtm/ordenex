@@ -4500,11 +4500,11 @@
       "title": "149 distritos activos sin zona: se ofrecen en el catalogo y se rechazan al cargar",
       "description": "Un distrito activo sin zona se ofrece como disponible pero rechaza toda orden, y la reconciliacion no puede repararlo.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "cancelled",
       "sdd": false,
       "complexity": "baja",
       "branch": "",
-      "status_note": "AUDITADA el 2026-09-07 (H6 del barrido de zona/bodega). MEDIDO en prod: 149 de 494 distritos sin fila en zona_distrito, y los 149 estan `activo` en provincia, canton y distrito -- o sea, el catalogo los ofrece como disponibles. || Reparto: San Jose 44, Cartago 29, Alajuela 28, Limon 23, Puntarenas 16, Guanacaste 8, Heredia 1. CERO ordenes historicas en los 149, consistente con que siempre se rechazaron. || Toda orden para ellos muere en geo-resolucion.ts:186 con «el distrito 'X' no tiene zona asignada». NO es un fallo mudo (mensaje claro y por fila), es una contradiccion de configuracion. || La reconciliacion de la 366 NO puede repararlo: R3 exige que el distrito resuelva EXACTAMENTE una zona, y cero nunca resuelve. || BLOQUEADA EN DECISION DEL HUMANO: 44 distritos de San Jose sin zona, con la GAM ya cubriendo 143, apunta a hueco de configuracion y no a falta de cobertura -- pero eso lo decide el negocio, no el leader. Puede terminar sin una linea de codigo."
+      "status_note": "CERRADA SIN CODIGO el 2026-09-07 por decision del humano, dicha dos veces: «si los distritos no tienen zona asignada es porque no tenemos cobertura por ende esta bien asi» y «no toques los distritos que ya estan habilitados». NO se asigna ninguna zona, NO se desactiva ningun distrito, NO se toca un solo dato. || AUDITADA el 2026-09-07 (H6 del barrido de zona/bodega). MEDIDO en prod: 149 de 494 distritos sin fila en zona_distrito, y los 149 estan `activo` en provincia, canton y distrito -- o sea, el catalogo los ofrece como disponibles. || Reparto: San Jose 44, Cartago 29, Alajuela 28, Limon 23, Puntarenas 16, Guanacaste 8, Heredia 1. CERO ordenes historicas en los 149, consistente con que siempre se rechazaron. || Toda orden para ellos muere en geo-resolucion.ts:186 con «el distrito 'X' no tiene zona asignada». NO es un fallo mudo (mensaje claro y por fila), es una contradiccion de configuracion. || La reconciliacion de la 366 NO puede repararlo: R3 exige que el distrito resuelva EXACTAMENTE una zona, y cero nunca resuelve. || BLOQUEADA EN DECISION DEL HUMANO: 44 distritos de San Jose sin zona, con la GAM ya cubriendo 143, apunta a hueco de configuracion y no a falta de cobertura -- pero eso lo decide el negocio, no el leader. Puede terminar sin una linea de codigo. || CONSECUENCIA PARA OTRAS FICHAS: la «deriva residual» que el design.md §8 de la 366 declaraba como deuda -- un distrito con 0 zonas que se queda sin reconciliar y sin via manual -- YA NO ES DEUDA: es el comportamiento correcto. Que nadie la vuelva a perseguir. || Lo unico verificado antes de cerrar, y no implica accion: el catalogo acotado por zona (listGeografiaLitePorZona) ya solo devuelve distritos CON zona, y una carga que nombre uno de los 149 recibe el rechazo claro y por fila que ya existe en geo-resolucion.ts:186."
     },
     {
       "id": 379,
@@ -4527,6 +4527,17 @@
       "complexity": "baja",
       "branch": "fix/380-tarifa-zona-mensajero-sin-rastro",
       "status_note": "ENCONTRADA el 2026-09-07 escribiendo el spec de la 376 (su Q1). El catalogo de historial_accion tiene tarifa_creada/tarifa_actualizada/tarifa_borrada, pero apuntan a tarifas.crearTarifa/actualizarTarifa/borrarTarifa: la tabla `tarifas` (flete tienda/zona). || Las filas de `tarifa_zona_mensajero` -- el PAGO AL MENSAJERO por zona y vehiculo -- las reescribe ZonaRepository.update con deleteMany + createMany en cada guardado de zona, y ese camino NO llama a appendAccion: solo escribe orden_zona_reconciliada. Cero rastro de un cambio que decide lo que cobra una persona. || DELIBERADAMENTE FUERA DE LA 376: la 376 arregla lo evidenciado (la marca es_central). Esto se noto al escribirla, no lo evidencio un incidente. || BARATO DE FUSIONAR si el humano prefiere: es la MISMA transaccion y el mismo mecanismo, y ahorraria tocar ZonaRepository.ts dos veces. || CHOCA EN ARCHIVO con 376 y 377 (ZonaRepository.ts): las tres hay que secuenciarlas."
+    },
+    {
+      "id": 381,
+      "title": "cargar un costo a una tienda desde «Registrar movimiento»",
+      "description": "El dialogo de registrar movimiento solo escribe en la caja principal: no hay forma de cargarle un costo a una tienda.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "branch": "feat/381-cargo-manual-a-tienda",
+      "status_note": "PEDIDA por el humano el 2026-09-07: «en la wallet, a la hora de registrar un movimiento desde el boton de registrar movimiento, debe haber la posibilidad de cargarle costos a las tiendas». || EL MODELO YA EXISTE Y LE FALTA PANTALLA: wallet_tienda_movimiento tiene la categoria `ajuste_debito`, ya clasificada como cargo en desglose-tienda.ts y con etiqueta en mi-wallet, pero con CERO productores en el codigo. Su gemela `ajuste_credito` si se emite (LiquidacionService al anular un pago a tienda), asi que el camino esta trillado. || HOY: RegistrarMovimientoCajaDialog (ficha 334) ofrece cuatro conceptos -- gasto variable, sueldo, ajuste que suma, ajuste que resta -- y los CUATRO escriben en wallet_movimiento (la caja). Ninguno pregunta a que tienda. || DECISIONES DEL LEADER, reversibles: no reversable (los ajustes son inmutables y se corrigen con un ajuste compensatorio, que ya existe); mismo permiso que el resto del dialogo; sin linea de IVA aparte (un cargo manual es un importe que alguien decide, no una tarifa). || ABIERTA Y ES DE DINERO: ¿el cargo entra TAMBIEN en la caja como ingreso_ajuste? Los 6 debitos automaticos son espejo 1:1 de los 6 ingresos de la caja. Recomendacion del leader: SI entra, o los dos libros divergen a proposito. Pendiente de la palabra del humano. || SUPERFICIE ALTERNATIVA que el humano NO pidio y no se toca sin que lo diga: /wallet/tiendas ya tiene acciones por tienda (PagoTiendaAcciones), y ahi un boton «cobrar» junto al de pagar seria mas natural."
     }
   ]
 }
