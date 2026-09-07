@@ -52,29 +52,55 @@ import { filaDescargaGestionFundida } from "./cierres-gestiones-fundida-descarga
  * RECONSTRUYE ningún criterio de pantalla —no hay ninguno que replicar—, y el diálogo es
  * explícito sobre qué se va a llevar.
  *
- * **Los controles de fecha no son una comodidad** (R31): sin ellos el conjunto por defecto sería
- * todo el histórico del mensajero, que a grano de gestión choca contra el tope de 5000 filas casi
- * siempre y convierte el botón en uno que solo sabe fallar.
+ * **Los controles de fecha no son una comodidad** (R31): sin ellos NO HABRÍA forma de acotar, y
+ * el conjunto sería siempre el histórico entero del mensajero. Que EXISTAN es R31; que vengan
+ * RELLENOS es otra cosa, y desde la ficha 384 vienen vacíos (dos párrafos más abajo).
  *
- * **LOS VALORES POR DEFECTO (pedido humano 2026-08-19)**: se abre con TODOS los mensajeros del
- * alcance marcados y con el rango puesto en el DÍA DE HOY (calendario de Costa Rica) en sus dos
- * extremos. Es la descarga que se pide a diario —el cierre del día de toda la flota— y antes
- * costaba dos clics de fecha más uno por cada mensajero.
+ * El «choca contra el tope de 5000 filas casi siempre» que decía este párrafo se escribió en
+ * agosto de 2026 y NO se ha vuelto a medir; lo que sí está medido es que el 2026-09-07 producción
+ * tenía 52 cierres en total, así que el tope queda lejos. Y cuando no quede lejos, el que avisa
+ * es el servidor, con el total, el tope y qué acotar.
  *
- * Lo que ese defecto NO cambia: siguen siendo controles, no una decisión tomada por el diálogo.
- * Se pueden desmarcar todos (y entonces R39 corta, como siempre) y se puede vaciar cualquiera de
- * las dos fechas para ensanchar la ventana; una fecha vacía sigue significando «sin ese extremo»
- * y no viaja al borde. Y el defecto de fechas hace MÁS cierto el párrafo de arriba: el conjunto
- * inicial ya no es todo el histórico de nadie.
+ * **LOS VALORES POR DEFECTO**: se abre con TODOS los mensajeros del alcance marcados (pedido
+ * humano 2026-08-19) y con el rango de fechas **VACÍO** (ficha 384, 2026-09-07).
+ *
+ * **FICHA 384 — POR QUÉ EL RANGO YA NO ARRANCA EN HOY.** Entre el 2026-08-19 y el 2026-09-07
+ * esta ventana abría con el rango puesto en el DÍA DE HOY en sus dos extremos. Era cómodo, y
+ * produjo el fallo que reportó el humano el 2026-09-07: «si no tengo filtros aplicados no me
+ * deja descargar lo que se está mostrando en los cierres». Tenía razón: no había aplicado
+ * ningún filtro —se lo aplicó el diálogo—. Medido contra producción ese día: 52 cierres,
+ * CERO solicitados hoy, el último del 2026-09-06. El archivo salía vacío y el aviso le echaba
+ * la culpa a unos filtros que no puso.
+ *
+ * Se quita el defecto en vez de solo mejorar el texto porque **el texto ya estaba**: la ayuda de
+ * abajo decía «Arranca en el día de hoy» y aun así el usuario no lo leyó como un recorte suyo.
+ * Un filtro que se aplica solo y solo se anuncia en letra pequeña es un fallo mudo. Y el modo de
+ * fallo contrario sale más barato: pedir demasiado choca contra el tope de 5000 filas que aplica
+ * el SERVIDOR (`CierresAdminService`, `descargaConfig.MAX_FILAS`), y ese aviso sí es ruidoso y
+ * accionable —dice el total, dice el tope y dice que acotes el rango—. Se cambia un resultado
+ * callado y equivocado por un aviso correcto.
+ *
+ * Lo que NO se pierde del pedido del 2026-08-19: la descarga que se pide a diario —el cierre del
+ * día de toda la flota— sigue estando a UN clic, el del atajo «Hoy», que es menos que los «dos
+ * clics de fecha» que aquel defecto vino a ahorrar. Lo que cambia es de quién es el rango.
+ *
+ * Siguen siendo controles y no una decisión del diálogo: se pueden desmarcar todos (y entonces
+ * R39 corta, como siempre) y se puede vaciar cualquiera de las dos fechas; una fecha vacía
+ * significa «sin ese extremo» y no viaja al borde.
  *
  * **Sin mensajeros elegidos no se llama al servidor** (R39): «ninguno» no es «todos», es una
  * llamada que no debió ocurrir. Se corta aquí, y el borde lo corta otra vez con su lista blanca.
  *
- * La generación del archivo, el tope, los mensajes accionables y el binario los pone
- * `DescargarDatasetButton` + `filasDesdeResultado`, exactamente igual que la descarga general.
- * De ahí sale D12/R38 gratis: «este mensajero no tiene cierres en el rango» y «este mensajero no
- * es de tu alcance» llegan los dos como `{ ok, items: [] }` y el control dice lo MISMO, porque no
- * hay ninguna rama que los distinga.
+ * La generación del archivo, el tope y el binario los pone `DescargarDatasetButton` +
+ * `filasDesdeResultado`, exactamente igual que la descarga general. Los mensajes también, salvo
+ * UNO: el de «no hay filas», que desde la ficha 384 se redacta aquí porque el compartido culpa a
+ * unos filtros que en esta ventana pueden no existir (ver `MENSAJE_SIN_DATOS_EN_RANGO`).
+ *
+ * D12/R38 sigue saliendo gratis, y ese mensaje propio no lo debilita: «este mensajero no tiene
+ * cierres en el rango» y «este mensajero no es de tu alcance» llegan los dos como
+ * `{ ok, items: [] }` y no hay ninguna rama que los distinga. La única que existe mira las
+ * FECHAS QUE PUSO EL USUARIO —estado del cliente, idéntico en las dos llamadas— y nunca la
+ * respuesta del servidor.
  */
 
 /**
@@ -107,8 +133,20 @@ const TODOS_LABEL = "Todos";
 const SIN_MENSAJEROS_EN_ALCANCE = "No hay mensajeros en tu alcance.";
 const DESDE_LABEL = "Desde";
 const HASTA_LABEL = "Hasta";
+/**
+ * FICHA 384: la ayuda ya no anuncia un recorte —no hay ninguno hasta que el usuario lo ponga—.
+ * Dice qué recortan estos controles y qué significa dejarlos vacíos, que es el estado inicial.
+ */
 const RANGO_AYUDA =
-  "Recorta por la fecha de solicitud del cierre. Arranca en el día de hoy; vaciá una fecha para quitar ese extremo.";
+  "Recorta por la fecha de solicitud del cierre. Vacías no recortan nada: se lleva todo el historial de los mensajeros elegidos.";
+/** Atajo al caso diario (ficha 384): el cierre del día de toda la flota, en un clic. */
+const HOY_LABEL = "Hoy";
+/**
+ * «Hoy» a secas no nombra una acción; el nombre accesible sí dice qué va a pasar (WCAG 2.4.6).
+ * EMPIEZA por la palabra visible, igual que `DISPARADOR_ARIA` y por el mismo motivo: quien
+ * navega por voz tiene que poder decir «Hoy» y que el control responda (WCAG 2.5.3).
+ */
+const HOY_ARIA = "Hoy: poner el rango de fechas en el día de hoy";
 const CERRAR_LABEL = "Cerrar";
 
 /** R39: el aviso accionable de confirmar sin nadie elegido. No se llama al servidor. */
@@ -117,6 +155,26 @@ const MENSAJE_SIN_MENSAJERO =
 /** R32: el rango invertido se corta acá; el borde lo vuelve a rechazar con su schema. */
 const MENSAJE_RANGO_INVERTIDO =
   "El rango de fechas está invertido: «Desde» tiene que ser anterior o igual a «Hasta».";
+
+/**
+ * FICHA 384 — el aviso de «no hay nada», redactado AQUÍ y no en `DescargarDatasetButton`.
+ *
+ * El control común dice «No hay datos que descargar con los filtros aplicados. Ajusta los
+ * filtros», y ese texto lo comparten las ~26 tablas del árbol: cambiarlo allí las cambiaría
+ * todas, y para la mayoría es correcto —descargan con la barra de filtros de su pantalla—. En
+ * ESTA ventana el usuario puede no haber puesto ningún recorte de fecha, y entonces «ajusta los
+ * filtros» le manda a arreglar algo que no rompió. Se entra por la puerta que el propio control
+ * ya ofrece: el mensaje que venga de `obtenerFilas` tiene prioridad sobre el suyo.
+ *
+ * ⚠️ La variante se elige por lo que el USUARIO puso en el diálogo, JAMÁS por lo que devolvió el
+ * servidor: «este mensajero no tiene cierres» y «este mensajero no es de tu alcance» siguen
+ * llegando los dos como `{ ok, items: [] }` y produciendo el MISMO texto (D12/R38). Distinguirlos
+ * filtraría información sobre el alcance ajeno.
+ */
+const MENSAJE_SIN_DATOS_EN_RANGO =
+  "No hay gestiones de cierre en el rango de fechas elegido para esos mensajeros. Ampliá el rango o vaciá las fechas y volvé a intentarlo.";
+const MENSAJE_SIN_DATOS =
+  "Los mensajeros elegidos no tienen gestiones de cierre. Elegí otros mensajeros y volvé a intentarlo.";
 
 export interface DescargarGestionesDialogProps {
   /** Opciones YA acotadas al alcance del actor, resueltas en el servidor (R29). */
@@ -172,13 +230,14 @@ export function DescargarGestionesDialog({
   const [seleccion, setSeleccion] = useState<string[] | null>(null);
   const elegidos = seleccion ?? idsCatalogo;
 
-  // El rango arranca en HOY, los dos extremos. Calendario de Costa Rica y no `toISOString()`:
-  // aquél emite la fecha en UTC, así que a partir de las 18:00 CR ya devuelve el día siguiente y
-  // el diálogo abriría con un rango de mañana a mañana, vacío de cierres.
-  const [desde, setDesde] = useState(() => fechaCalendarioCR());
-  const [hasta, setHasta] = useState(() => fechaCalendarioCR());
+  // FICHA 384: los dos extremos arrancan VACÍOS. El rango que recorte el archivo lo pone quien
+  // descarga; esta ventana no aplica ninguno por su cuenta (ver la cabecera).
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
 
   const rangoInvertido = desde !== "" && hasta !== "" && desde > hasta;
+  /** ¿El usuario acotó por fecha? Elige CUÁL de los dos avisos de «no hay nada» se dice. */
+  const conRango = desde !== "" || hasta !== "";
 
   function alternar(mensajeroId: string, marcado: boolean) {
     setSeleccion(
@@ -194,6 +253,20 @@ export function DescargarGestionesDialog({
    */
   function alternarTodos(marcado: boolean) {
     setSeleccion(marcado ? [...idsCatalogo] : []);
+  }
+
+  /**
+   * FICHA 384 — el atajo del caso diario: el cierre del día de toda la flota, en un clic.
+   *
+   * `fechaCalendarioCR` y no `toISOString().slice(0,10)`: aquél emite la fecha en UTC, así que a
+   * partir de las 18:00 de CR devolvería el día SIGUIENTE y el atajo pondría un rango de mañana
+   * a mañana, vacío de cierres. Y se calcula AL PULSAR, no al montar: una pestaña abierta desde
+   * ayer pondría el día de ayer si el valor se hubiera congelado en el primer render.
+   */
+  function ponerHoy() {
+    const hoy = fechaCalendarioCR();
+    setDesde(hoy);
+    setHasta(hoy);
   }
 
   /**
@@ -221,7 +294,20 @@ export function DescargarGestionesDialog({
     if (rangoInvertido) {
       return { status: "error", mensaje: MENSAJE_RANGO_INVERTIDO };
     }
-    return filasDesdeResultado(accion(recorteElegido()), filaDescargaGestionFundida);
+    const resultado = await filasDesdeResultado(
+      accion(recorteElegido()),
+      filaDescargaGestionFundida,
+    );
+    // FICHA 384: el conjunto VACÍO se redacta aquí (ver `MENSAJE_SIN_DATOS_EN_RANGO`). El
+    // comportamiento no cambia —no había archivo antes y no lo hay ahora—: cambia el texto, que
+    // deja de culpar a unos filtros que el usuario pudo no haber puesto.
+    if (resultado.status === "ok" && resultado.filas.length === 0) {
+      return {
+        status: "error",
+        mensaje: conRango ? MENSAJE_SIN_DATOS_EN_RANGO : MENSAJE_SIN_DATOS,
+      };
+    }
+    return resultado;
   }
 
   return (
@@ -319,6 +405,18 @@ export function DescargarGestionesDialog({
                 aria-invalid={rangoInvertido || undefined}
               />
             </div>
+            {/* El atajo va CON los controles de fecha y no en el pie: es una forma de rellenarlos
+                y se ve al mismo golpe de vista que lo que rellena. `self-end` lo alinea con los
+                dos campos (h-8, igual que el botón) y no con sus etiquetas. */}
+            <Button
+              type="button"
+              variant="outline"
+              className="self-end"
+              onClick={ponerHoy}
+              aria-label={HOY_ARIA}
+            >
+              {HOY_LABEL}
+            </Button>
           </div>
           <p className="text-xs text-muted-foreground">{RANGO_AYUDA}</p>
 

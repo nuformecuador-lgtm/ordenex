@@ -234,7 +234,11 @@ async function abrirYElegirAAna(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("checkbox", { name: "Ana Mensajera" }));
 }
 
-/** Escribe una fecha en un control que YA trae la de hoy: sin vaciarlo primero se concatenaría. */
+/**
+ * Escribe una fecha. El `clear` es defensivo: desde la ficha 384 (2026-09-07) los controles abren
+ * VACÍOS —el rango hoy-hoy del 2026-08-19 se retiró porque era un filtro que nadie puso—, pero
+ * escribir dos veces sobre el mismo control sin vaciarlo concatenaría los valores.
+ */
 async function ponerFecha(
   user: ReturnType<typeof userEvent.setup>,
   label: string,
