@@ -111,6 +111,45 @@ export function cubreTexto(fuente: FuenteEmbebida, texto: string): boolean {
   return caracterNoCubierto(fuente, texto) === null;
 }
 
+/** `U+1D560`: el code point con la notacion con la que se busca en una tabla Unicode. */
+export function notacionCodePoint(cp: number): string {
+  return `U+${cp.toString(16).toUpperCase().padStart(4, "0")}`;
+}
+
+/**
+ * Feature 382 — El texto lleva un caracter que el subconjunto embebido NO puede
+ * imprimir, y se sabe DE QUE ORDEN es.
+ *
+ * Es una clase propia, y no el `Error` pelado que se lanzaba antes, por la misma
+ * razon por la que existe `ErrorEtiquetaNoCabe`: quien recoge esto es una
+ * pantalla, y una pantalla no puede distinguir dos causas leyendo subcadenas de
+ * un mensaje. Sin el tipo, el modal metia este fallo en el mismo saco que «la
+ * fuente no cargo» y mandaba REINTENTAR — que aqui no funciona nunca, porque el
+ * caracter va a seguir sin estar en la fuente el segundo intento y el tercero.
+ *
+ * Medido en produccion el 2026-09-07: la orden de la guia 11081885 traia el
+ * destinatario y la direccion en caracteres matematicos double-struck (bloque
+ * U+1D400, los de los generadores de «letras bonitas»; el medido, U+1D560). UNA
+ * sola orden en todo el sistema, y tumbaba la descarga del LOTE ENTERO sin decir
+ * cual era. Por eso la guia y el caracter viajan en el error: son justo los dos
+ * datos que hacen falta para arreglarlo, y hasta esta ficha morian dentro de un
+ * texto que el modal tiraba a la basura.
+ */
+export class ErrorCaracterNoImprimible extends Error {
+  constructor(
+    readonly numGuia: number | string,
+    readonly caracter: string,
+    readonly codePoint: number,
+    readonly campo: string,
+    readonly fuenteNombre: string,
+  ) {
+    super(
+      `La etiqueta de la guia ${numGuia} no se puede imprimir: el caracter «${caracter}» (${notacionCodePoint(codePoint)}) del campo «${campo}» no esta en el subconjunto embebido de la fuente «${fuenteNombre}»; la etiqueta no se genera para no imprimirlo roto.`,
+    );
+    this.name = "ErrorCaracterNoImprimible";
+  }
+}
+
 /**
  * Exige que el texto quepa en el subconjunto, o LANZA (R28).
  *
@@ -125,17 +164,27 @@ export function cubreTexto(fuente: FuenteEmbebida, texto: string): boolean {
  * Los dos canales de fallo ya existen y no se inventa ninguno: en el navegador,
  * el mensaje del modal y ninguna descarga; en la API de carga, el camino
  * best-effort (`etiquetasPdf: { error }`, HTTP 200, carga no revertida).
+ *
+ * Feature 382 — `numGuia` es OBLIGATORIO a proposito, por el mismo criterio que
+ * `hoja` y `fuente` en el generador: un caracter no imprimible SIEMPRE es el
+ * dato de una orden concreta, y quien lo recibe tiene que poder ir a esa orden a
+ * corregirlo. Con un parametro opcional, un llamador que lo olvidara volveria a
+ * producir el fallo de esta ficha —«algo no se pudo imprimir», sin decir de
+ * quien— sin romper ni un tipo ni un test. Asi lo caza el compilador.
  */
 export function exigirCobertura(
   fuente: FuenteEmbebida,
   texto: string,
   campo: string,
+  numGuia: number | string,
 ): void {
   const falta = caracterNoCubierto(fuente, texto);
   if (falta === null) return;
-  const cp = falta.codePointAt(0) ?? 0;
-  const hex = cp.toString(16).toUpperCase().padStart(4, "0");
-  throw new Error(
-    `El caracter «${falta}» (U+${hex}) del campo «${campo}» no esta en el subconjunto embebido de la fuente «${fuente.nombre}»; la etiqueta no se genera para no imprimirlo roto.`,
+  throw new ErrorCaracterNoImprimible(
+    numGuia,
+    falta,
+    falta.codePointAt(0) ?? 0,
+    campo,
+    fuente.nombre,
   );
 }
