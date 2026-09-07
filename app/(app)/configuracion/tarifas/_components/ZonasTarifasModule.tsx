@@ -207,17 +207,29 @@ export function ZonasTarifasModule({
           await refetch();
           // Éxito: el Modal cierra solo (closeOnConfirm) -> onOpenChange limpia target.
         }}
-        onError={(e) => {
-          const status = (e as { status?: string } | null)?.status;
-          toast.error(
-            status === "conflict"
-              ? "No se puede eliminar: la zona está en uso."
-              : "No se pudo eliminar la zona.",
-          );
-        }}
+        onError={(e) => toast.error(mensajeBorradoFallido(e))}
       />
     </section>
   );
+}
+
+/**
+ * ⭑ FICHA 376 (R24) — POR QUÉ EL `conflict` DE BORRAR YA NO TIENE UN SOLO TEXTO.
+ *
+ * Hasta hoy cualquier `conflict` decía «la zona está en uso», y con la guarda de R10 esa frase
+ * pasó a ser MENTIRA en un caso: la zona central se rechaza aunque no tenga ni una orden ni un
+ * usuario apuntando. Los dos rechazos piden salidas OPUESTAS —vaciar la zona frente a marcar otra
+ * como central—, así que quien lo lee tiene que poder distinguirlos sin inferirlo.
+ *
+ * El `motivo` viaja tipado desde `BorrarZonaResult`; aquí llega por el `throw` del `onConfirm`,
+ * que el Modal entrega como `unknown` a `onError`.
+ */
+function mensajeBorradoFallido(error: unknown): string {
+  const res = error as { status?: string; motivo?: string } | null;
+  if (res?.status !== "conflict") return "No se pudo eliminar la zona.";
+  return res.motivo === "es_central"
+    ? "No se puede eliminar la zona central. Marca otra zona como central antes de eliminarla."
+    : "No se puede eliminar: la zona está en uso.";
 }
 
 /** Listado simple de zonas con acciones Editar/Eliminar. */

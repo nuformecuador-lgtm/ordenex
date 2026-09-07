@@ -244,22 +244,49 @@ menos una vez (dejarlo dicho en el PR).
 
 **Depende de:** T9.
 
-- [ ] `CrearZonaForm.tsx` — **R20:** rama simétrica de la confirmación de `:293`: si la zona que se
+- [x] `CrearZonaForm.tsx` — **R20:** rama simétrica de la confirmación de `:293`: si la zona que se
       edita ES la central y la casilla queda apagada, modal que la nombra y advierte que tiene que
-      existir una zona central. Al confirmar, se envía (design §8 y Q2).
-- [ ] **R21:** la confirmación al marcar ya existe y ya nombra la zona en conflicto (`:420`); se
-      conserva y **pasa a tener test**, que hoy no tiene.
-- [ ] **R23:** `<FieldError messages={errors.esCentral} />` bajo la casilla «Zona Central»
-      (`:320-329`). Sin él, el motivo llega al cliente y no se pinta en ningún sitio.
-- [ ] `ZonasTarifasModule.tsx:210-217` — **R24:** distinguir por `motivo`: `"es_central"` → «No se
+      existir una zona central. Al confirmar, se envía (design §8 y Q2). Las dos direcciones
+      comparten UN modal, con el estado `ConfirmacionCentral` como discriminante.
+- [x] **R21:** la confirmación al marcar ya existe y ya nombra la zona en conflicto (`:420`); se
+      conserva y **pasa a tener test**, que hoy no tiene. El texto de su descripción se conserva
+      LITERAL y así queda afirmado.
+- [x] **R23:** `<FieldError messages={errors.esCentral} />` bajo la casilla «Zona Central»
+      (`:320-329`). Sin él, el motivo llega al cliente y no se pinta en ningún sitio. La casilla lo
+      enlaza por `aria-describedby` (+ `aria-invalid`), y el toast deja de decir «el formulario
+      está incompleto» —era falso: el formulario estaba completo— y repite el motivo del servidor.
+- [x] `ZonasTarifasModule.tsx:210-217` — **R24:** distinguir por `motivo`: `"es_central"` → «No se
       puede eliminar la zona central. Marca otra zona como central antes de eliminarla.»;
       `"en_uso"` → el texto de hoy, intacto.
+- [x] **Q4 FIRMADA POR EL HUMANO — la confirmación DICE EL IMPACTO.** Los dos modales piden
+      `impactoZonaCentral` para las zonas del traslado (la que pierde la marca y la que la gana) y
+      dicen cuántas órdenes sin cerrar pasarían a cobrarse con otra tarifa de flete. El borde
+      devuelve NÚMEROS; el texto se compone en el formulario. Mientras se cuenta, «Continuar» está
+      bloqueado —nadie confirma un impacto que no ha visto—; si la consulta falla, se dice y se
+      desbloquea, porque un fallo de LECTURA no puede dejar atrapado un guardado.
+- [x] La anotación `@sin-superficie` de `impactoZonaCentral` (`lib/actions/zonas.ts`) se **borró**:
+      caducó en cuanto el formulario importó la acción, y `superficie-de-uso.guardia` se pone roja
+      si sobrevive a su motivo (comprobado a mano volviéndola a poner).
 
 **Hecho cuando (component tests, sobre el arnés ya montado de
 `tests/components/CrearZonaFormReconciliacion.test.tsx`):** desmarcar abre el modal y **no** llama a
 `actualizarZona` hasta confirmar; cancelar no llama a nada (R22); marcar con otra central abre el
 modal con el NOMBRE de la otra zona; un `validation_error` con `fieldErrors.esCentral` se pinta junto
 a la casilla; y el modal de borrado dice el texto de la central cuando el motivo es `es_central`.
+
+**Hecho, y con qué se comprobó que los tests MIDEN algo** (cuatro mutaciones, corridas a mano una
+vez cada una y revertidas):
+
+| Mutación aplicada | Qué se puso rojo |
+| --- | --- |
+| La rama de R20 en `guardar()` pasa a `else if (false)` | 9 de 15 casos de `ZonaCentralConfirmacion.test.tsx` |
+| Se borra el `<FieldError>` de la casilla | solo el caso de R23 (1 de 15) |
+| `confirmDisabled={false}` en el modal | solo el caso de «mientras se cuenta no se puede confirmar» |
+| `mensajeBorradoFallido` deja de mirar el `motivo` | solo el caso de `es_central` (1 de 4) |
+| Se vuelve a poner `@sin-superficie` en `impactoZonaCentral` | `superficie-de-uso.guardia`, caso «ninguna anotación sobrevive a su motivo» |
+
+Ficheros: `tests/components/ZonaCentralConfirmacion.test.tsx` (15 casos, R20-R23 + Q4) y
+`tests/components/ZonaBorradoMotivo.test.tsx` (4 casos, R24).
 
 ## Coordinación y orden sugerido
 
@@ -298,8 +325,9 @@ T4 ── T5 ──┼─ T6 ─┬─ T10
 | R17 | T6, T10 | `historial-accion-escrituras-cubiertas.guardia.test.ts` (censo nuevo) + T11 «atomicidad» |
 | R18 | T6, T7 | T11 «idempotencia» + «crear sin la marca ⇒ cero filas» |
 | R19 | T6, T8 | T11 «y no deja fila» (rechazo de R5) + el rechazo de R10 no escribe nada |
-| R20 | T12 | component test: desmarcar abre el modal y no envía hasta confirmar |
-| R21 | T12 | component test: marcar con otra central abre el modal con el NOMBRE de la otra zona |
-| R22 | T12 | component test: cancelar no llama a `actualizarZona` ni a `crearZona` |
-| R23 | T12 | component test: `fieldErrors.esCentral` se pinta junto a la casilla |
-| R24 | T12 | component test del modal de borrado: texto propio cuando el motivo es `es_central` |
+| R20 | T12 | `ZonaCentralConfirmacion.test.tsx` › «abre el modal nombrando la zona y NO llama a actualizarZona todavía» + «al confirmar SÍ envía, con la marca apagada» |
+| R21 | T12 | `ZonaCentralConfirmacion.test.tsx` › «el modal dice el NOMBRE de la zona que perderá la marca» + «al confirmar envía con la marca encendida» |
+| R22 | T12 | `ZonaCentralConfirmacion.test.tsx` › «cancelar el modal de desmarcar no llama a ninguna acción de guardado» + «cancelar el modal de marcar tampoco envía» |
+| R23 | T12 | `ZonaCentralConfirmacion.test.tsx` › «fieldErrors.esCentral aparece bajo «Zona Central» y la casilla lo referencia» + «el toast repite el motivo del servidor» |
+| R24 | T12 | `ZonaBorradoMotivo.test.tsx` › «motivo `es_central` dice que hay que marcar otra zona, no que esté en uso» + «motivo `en_uso` conserva EXACTAMENTE el texto de antes de esta ficha» |
+| Q4 | T12 | `ZonaCentralConfirmacion.test.tsx` › «pregunta por las DOS zonas del traslado y suma el impacto», «una sola orden usa el singular», «cero órdenes NO se dice igual que “no lo pude contar”», «mientras se cuenta no se puede confirmar» y «si la consulta falla, lo dice y NO deja el guardado atrapado» |

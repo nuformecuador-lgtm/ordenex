@@ -175,7 +175,9 @@ export async function borrarZona(
  * pequeño. Devuelve una entrada POR ZONA PEDIDA —con cero si no tiene ninguna—: quien lo consuma
  * compone el texto, este borde no lo redacta.
  *
- * @sin-superficie La pantalla que la consume es la T12 de esta MISMA ficha (la confirmacion de `CrearZonaForm`), que va aparte por reparto de trabajo. La anotacion CADUCA SOLA: en cuanto el formulario la importe, `superficie-de-uso.guardia` exige borrarla.
+ * Su superficie es la confirmacion de `CrearZonaForm` (T12). La excepcion de accion sin pantalla
+ * que vivia en este bloque se borro al llegar esa pantalla: `superficie-de-uso.guardia` exige que
+ * ninguna excepcion sobreviva a su motivo.
  */
 export async function impactoZonaCentral(
   zonaIds: unknown,
