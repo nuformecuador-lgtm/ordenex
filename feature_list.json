@@ -4544,7 +4544,7 @@
       "title": "una orden con un caracter que la fuente no imprime tumba el lote y no dice cual",
       "description": "El generador sabe que caracter y de que orden rompe la etiqueta, y el modal lo sustituye por un aviso que manda reintentar.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "baja",
       "branch": "fix/382-etiqueta-caracter-no-cubierto",
