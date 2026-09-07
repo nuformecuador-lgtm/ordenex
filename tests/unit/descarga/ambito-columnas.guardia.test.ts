@@ -18,6 +18,20 @@ import { quitarComentarios } from "../../fixtures/sin-comentarios";
  * ámbito NO DEBE alterar la de ningún otro». Por construcción se cumple mientras los
  * identificadores sean únicos, así que lo que hay que vigilar es la unicidad.
  *
+ * ── Y DA IGUAL DÓNDE VIVAN ESAS DOS TABLAS (FICHA 391) ────────────────────────────────────
+ * Hasta la ficha 388 ningún módulo declaraba DOS ámbitos, y esta guardia se escribió mirando
+ * solo el cruce ENTRE módulos: agrupaba por valor metiendo la RUTA en un `Set` y denunciaba
+ * `rutas.size > 1`. N declaraciones idénticas DENTRO del mismo archivo colapsaban a un `Set` de
+ * tamaño 1 y no se veían. Medido en A/B: igualar los dos ámbitos de
+ * `analitica-productos-descarga-columnas.ts` dejaba esta guardia en 4 passed (4), VERDE,
+ * mientras caían los casos de la 388 que sí miran esos dos identificadores.
+ *
+ * Y el daño no depende de en qué archivo estén: `usePreferenciaColumnas` SANEA la preferencia
+ * contra las columnas publicadas y PERSISTE el saneo, así que con un ámbito compartido entre el
+ * juego con dinero y el de sin, un clic estando sin la concesión BORRA de lo guardado las claves
+ * de dinero. Dos tablas del mismo módulo comparten `localStorage` exactamente igual que dos de
+ * módulos distintos, así que lo que se cuenta aquí son DECLARACIONES, no rutas distintas.
+ *
  * ── NO CENSA UNA LISTA DE TABLAS, Y ES DELIBERADO ─────────────────────────────────────────
  * Encender el selector en la siguiente tabla tiene que seguir costando UNA línea en su módulo.
  * Si esta guardia llevara una lista de tablas con ámbito, costaría dos —y la segunda se
@@ -122,18 +136,38 @@ export function ambitosDeclarados(
   return declarados;
 }
 
-/** Identificadores declarados en MÁS DE UN módulo: el fallo mudo que esto vigila. */
+/**
+ * `["a", "a", "b"]` → `["a ×2", "b"]`, en orden.
+ *
+ * La cuenta no es adorno: sin ella, el mensaje de dos declaraciones en el MISMO archivo diría
+ * su nombre una sola vez y se leería como si no hubiera ningún duplicado.
+ */
+function conCuenta(sitios: readonly string[]): string[] {
+  const veces = new Map<string, number>();
+  for (const sitio of sitios) veces.set(sitio, (veces.get(sitio) ?? 0) + 1);
+  return [...veces.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([sitio, n]) => (n === 1 ? sitio : `${sitio} ×${n}`));
+}
+
+/**
+ * Identificadores declarados MÁS DE UNA VEZ, estén donde estén: el fallo mudo que esto vigila.
+ *
+ * Lo que se agrupa son DECLARACIONES y no rutas distintas (ficha 391): dos `ambitoColumnas:` que
+ * resuelven al mismo identificador comparten clave de `localStorage` tanto si viven en dos
+ * archivos como si viven en el mismo, y un `Set` de rutas hacía invisible el segundo caso.
+ */
 export function ambitosRepetidos(
   declarados: readonly AmbitoDeclarado[],
 ): Array<{ valor: string; rutas: string[] }> {
-  const porValor = new Map<string, Set<string>>();
+  const porValor = new Map<string, string[]>();
   for (const { valor, ruta } of declarados) {
     if (valor === null) continue;
-    porValor.set(valor, (porValor.get(valor) ?? new Set()).add(ruta));
+    porValor.set(valor, [...(porValor.get(valor) ?? []), ruta]);
   }
   return [...porValor.entries()]
-    .filter(([, rutas]) => rutas.size > 1)
-    .map(([valor, rutas]) => ({ valor, rutas: [...rutas].sort() }));
+    .filter(([, sitios]) => sitios.length > 1)
+    .map(([valor, sitios]) => ({ valor, rutas: conCuenta(sitios) }));
 }
 
 const MODULOS = modulosDeUi();
@@ -171,6 +205,33 @@ describe("guardia: los ámbitos de preferencia de columnas son únicos y con for
     ).toEqual([
       { valor: "envios", rutas: ["app/dos/Tabla.tsx", "app/uno/Tabla.tsx"] },
     ]);
+
+    // (b bis) NEGATIVO 1 bis (FICHA 391) — y el MISMO módulo declarándolo dos veces, también.
+    // Éste es el caso que la versión anterior daba por bueno: metía las rutas en un `Set`, así
+    // que dos declaraciones del mismo archivo colapsaban a un elemento y `size > 1` era falso.
+    const mismoModulo: Modulo[] = [
+      {
+        ruta: "app/uno/Tabla.tsx",
+        fuente:
+          'const SIN = { ambitoColumnas: "envios" };\nconst CON = { ambitoColumnas: "envios" };',
+      },
+    ];
+    expect(
+      ambitosRepetidos(ambitosDeclarados(mismoModulo, new Map())),
+      "DETECTOR DEMASIADO LAXO: dos tablas del MISMO módulo compartiendo ámbito —y con él la misma clave de `localStorage`— pasaron sin denunciarse.",
+    ).toEqual([{ valor: "envios", rutas: ["app/uno/Tabla.tsx ×2"] }]);
+
+    // (b ter) Y UNA declaración no es un duplicado. Sin este contrario, un detector que
+    // denunciara cualquier cosa pasaría el caso de arriba y pondría rojo el árbol entero.
+    expect(
+      ambitosRepetidos(
+        ambitosDeclarados(
+          [{ ruta: "app/uno/Tabla.tsx", fuente: 'ambitoColumnas: "envios",' }],
+          new Map(),
+        ),
+      ),
+      "DETECTOR DEMASIADO ÁVIDO: un único ámbito, declarado una sola vez, se denunció como repetido.",
+    ).toEqual([]);
 
     // (c) NEGATIVO 2 — un identificador con forma inválida se ve como tal.
     const invalido = ambitosDeclarados(
@@ -223,7 +284,7 @@ describe("guardia: los ámbitos de preferencia de columnas son únicos y con for
     ).toEqual([]);
   });
 
-  it("ningún identificador de ámbito se repite en dos módulos", () => {
+  it("ningún identificador de ámbito se declara dos veces, ni entre módulos ni dentro de uno", () => {
     const repetidos = ambitosRepetidos(DECLARADOS).map(
       ({ valor, rutas }) => `${valor} → ${rutas.join(" + ")}`,
     );
@@ -231,7 +292,8 @@ describe("guardia: los ámbitos de preferencia de columnas son únicos y con for
       repetidos,
       "dos tablas comparten identificador de ámbito y, con él, la MISMA preferencia de columnas " +
         "en el navegador del usuario: ocultar una columna en una la ocultaría en la otra, en otra " +
-        "pantalla, sin ningún error. Dale a cada una el suyo (R10).",
+        "pantalla, sin ningún error. Da igual que sean dos archivos o dos declaraciones del mismo " +
+        "—el `×N` lo dice—: la clave de `localStorage` es la misma. Dale a cada una el suyo (R10).",
     ).toEqual([]);
   });
 
