@@ -4472,6 +4472,50 @@
       "complexity": "media",
       "branch": "feat/renombrado-y-descarga-unificada",
       "status_note": "PEDIDA por el humano el 2026-09-05 como continuacion directa de la 374, que salio a produccion sin el renombrado A PROPOSITO: seed-zonas.ts resolvia por NOMBRE y, si no encontraba, CREABA, asi que renombrar duplicaba el nodo en silencio y la carga masiva empezaba a responder 'distrito ambiguo en el canton'. || LO QUE LO HACE SEGURO: codigo_dta como clave estable en los tres niveles y el seed cruzando por codigo; el nombre pasa a etiqueta mutable. || MEDIDO: backfill de 7 provincias, 84 cantones y 494 distritos con CERO nulos y CERO duplicados (contados dentro de una transaccion revertida antes de crear el indice unico). Respetados los tres huecos de la numeracion oficial: Grecia salta 20306, Puntarenas 60109, Golfito 60702. || El renombrado se audita en historial_accion con nombre anterior y nuevo, con appendAccion DENTRO de la transaccion. || QUEDA VIVO: sin verificacion en la pantalla real con sesion maestro; el boton esta cubierto por 12 casos de componente pero nadie lo abrio."
+    },
+    {
+      "id": 376,
+      "title": "la zona central se apaga sin querer, y apagarla no deja rastro",
+      "description": "La marca de zona central se puede apagar omitiendo el campo, sin confirmacion y sin rastro, y es la que elige la columna de flete.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "branch": "fix/376-zona-central-guarda-y-rastro",
+      "status_note": "AUDITADA el 2026-09-07 (H2+H3 del barrido de zona/bodega). `esCentral: z.boolean().default(false)` en `zonaFields` (lib/types/zona.ts:26) lo comparten CREAR y ACTUALIZAR: un payload de update que OMITA el campo llega como false y ZonaRepository.update lo escribe. Se apaga la central por AUSENCIA. || El formulario solo confirma al MARCAR (CrearZonaForm.tsx:293, `if (esCentral)`); al desmarcar no pregunta. Ningun guard de servidor impide quedarse en CERO centrales, y hardDelete tampoco protege a la central. || CON centralZonaId null los consumidores DISCREPAN: GuiaAsignacionService falla cerrado; CierreDia/LiberacionReprogramada/DevolucionSla/RecuperacionBodega/CorteDiario caen a satelite EN SILENCIO; costosListadoOrden cobra valorFlete en vez de valorFleteGam. || esCentral es entrada de la formula del flete (lib/utils/ingreso-ordenex.ts) y se lee VIVA hasta congelarse en cierre_detail. Es la unica edicion del area sin rastro: historial_accion solo tiene `zona_borrada`, y el design.md §7 de la 366 lo mando a ficha aparte -- esta. || MEDIDO en prod 2026-09-07: 1 central (GAM), 850 ordenes vivas en ella, 0 adminSatelite. Si GAM deja de ser central, sus 19 reprogramada + 8 devuelta se liberan a en_bodega_satelite de una zona sin adminSatelite: invisibles y sin salida (ver 377). || ASUNCION DEL LEADER, NO FIRMADA POR EL HUMANO: el rastro cubre SOLO el cambio de es_central, no toda edicion de zona. Reversible. || TRAMPA: anadir un valor al enum de historial_accion es MIGRACION; no se tocan los down.sql previos y hay que correr tests/integration/db."
+    },
+    {
+      "id": 377,
+      "title": "una orden en bodega satelite puede quedarse sin dueno al cambiar de zona",
+      "description": "Reconciliar la zona de una orden que ya esta en el estante de una satelite la deja invisible para quien la tiene y sin transicion de salida.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "branch": "fix/377-bodega-satelite-sin-dueno",
+      "status_note": "AUDITADA el 2026-09-07 (H1 del barrido de zona/bodega). La reconciliacion de la 366 (ZonaRepository.ts:292-311) NO filtra por estado. Una orden `en_bodega_satelite` en la zona A cuya zona pase a B: desaparece del listado de A (OrdenRepository.ts:1157, `o.zona_id = <zona del actor>`), A no puede asignarla (AsignacionSateliteService.ts:206 -> `zona_ajena`), B la ve pero no tiene el paquete. || Y NO HAY SALIDA: desde en_bodega_satelite las unicas aristas son por_recoger (solo el adminSatelite DE LA ZONA), en_reparto e incidente (order-status-transiciones.ts:170). Ni maestro ni admin pueden devolverla a central. || MEDIDO en prod 2026-09-07: 47 ordenes en en_bodega_satelite (39 Zona Sur, 8 San Ramon) y 215 en en_ruta_bodega_satelite. || SIN COBERTURA: tests/integration/db/zona-reconciliacion-ordenes.test.ts crea TODAS las ordenes con un unico FKS.estatusId; el eje del estado nunca se varia. || CONFLICTO DE ARCHIVOS con la 376 (ZonaRepository.ts): las dos son fullstack y NO pueden estar in_progress a la vez."
+    },
+    {
+      "id": 378,
+      "title": "149 distritos activos sin zona: se ofrecen en el catalogo y se rechazan al cargar",
+      "description": "Un distrito activo sin zona se ofrece como disponible pero rechaza toda orden, y la reconciliacion no puede repararlo.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "",
+      "status_note": "AUDITADA el 2026-09-07 (H6 del barrido de zona/bodega). MEDIDO en prod: 149 de 494 distritos sin fila en zona_distrito, y los 149 estan `activo` en provincia, canton y distrito -- o sea, el catalogo los ofrece como disponibles. || Reparto: San Jose 44, Cartago 29, Alajuela 28, Limon 23, Puntarenas 16, Guanacaste 8, Heredia 1. CERO ordenes historicas en los 149, consistente con que siempre se rechazaron. || Toda orden para ellos muere en geo-resolucion.ts:186 con «el distrito 'X' no tiene zona asignada». NO es un fallo mudo (mensaje claro y por fila), es una contradiccion de configuracion. || La reconciliacion de la 366 NO puede repararlo: R3 exige que el distrito resuelva EXACTAMENTE una zona, y cero nunca resuelve. || BLOQUEADA EN DECISION DEL HUMANO: 44 distritos de San Jose sin zona, con la GAM ya cubriendo 143, apunta a hueco de configuracion y no a falta de cobertura -- pero eso lo decide el negocio, no el leader. Puede terminar sin una linea de codigo."
+    },
+    {
+      "id": 379,
+      "title": "cambiar la zona de un usuario puede dejar dinero sin consolidar",
+      "description": "Cambiar la zona de un adminSatelite no tiene ninguna guarda, y solo un adminSatelite de esa zona viva puede consolidar sus cierres.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "branch": "fix/379-zona-usuario-cierres-huerfanos",
+      "status_note": "AUDITADA el 2026-09-07 (H5 del barrido de zona/bodega). UsuarioService.resolverZona solo valida que la zona EXISTA: no mira cierres abiertos, ni ordenes asignadas, ni CierreBodega solicitado. || CierreBodegaService autoriza SOLO a adminSatelite sobre su zona VIVA (ROL_AUTORIZADO, lineas 149/248/418). Un cierre_dia aprobado con destino_zona_id = Z y cierre_bodega_id IS NULL solo lo consolida un adminSatelite con zona Z: NI maestro NI admin pueden. Si esa zona se queda sin adminSatelite, ese dinero no se consolida nunca. || Las dos mitades del alcance DIVERGEN a proposito: las ordenes van por orden.zona_id (mutable) y el dinero por usuario.zona_id congelado en cierre_dia.destino_zona_id (snapshot). || MEDIDO en prod 2026-09-07: 0 cierres aprobados sin consolidar y todas las satelites con >=1 adminSatelite. LATENTE, no vivo: esta a un cambio de rol de distancia."
     }
   ]
 }
