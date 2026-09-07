@@ -43,13 +43,38 @@ async function esperarCatalogo() {
   await waitFor(() => expect(selectorTienda()).not.toBeDisabled());
 }
 
+/**
+ * Abre el desplegable de tienda destino y ESPERA a que esté realmente abierto.
+ *
+ * FICHA 390 — el click NO abre el popup en el mismo tick, y por eso hay que
+ * esperar en vez de leer el DOM en la línea siguiente. `useClick` de Base UI
+ * (`@base-ui/react/floating-ui-react/hooks/useClick`) difiere el `setOpen(true)`
+ * a un `frame.request(...)` —un `requestAnimationFrame`, para que el puntero no
+ * dispare `:focus-visible`—, y el `Select` es el único consumidor del repo que
+ * pide `event: "mousedown"`, que es la rama que toma ese rAF. En jsdom ese rAF
+ * es un timer de ~16 ms, mientras que `userEvent.click` resuelve en cuanto
+ * encadena sus `setTimeout(0)`: cuando el reloj cae del lado malo el disparador
+ * sigue en `aria-expanded="false"` y una lectura SÍNCRONA de las opciones no
+ * encuentra ninguna. Medido antes del arreglo: 1 rojo de 10 corridas AISLADAS de
+ * este archivo, con «Unable to find an accessible element with the role "option"».
+ *
+ * Quien escriba otro test contra este `Select`: ábrelo por aquí, y lee las
+ * opciones con `findAllByRole`/`findByRole`. Un `getAllByRole` pegado al click
+ * es la carrera, no un atajo.
+ */
+async function abrirTiendas(user: ReturnType<typeof userEvent.setup>) {
+  const disparador = selectorTienda();
+  await user.click(disparador);
+  await waitFor(() => expect(disparador).toHaveAttribute("aria-expanded", "true"));
+}
+
 /** Abre el desplegable y elige la opción con ese texto. */
 async function elegirTienda(
   user: ReturnType<typeof userEvent.setup>,
   nombre: string | RegExp,
 ) {
   await esperarCatalogo();
-  await user.click(selectorTienda());
+  await abrirTiendas(user);
   await user.click(await screen.findByRole("option", { name: nombre }));
 }
 
@@ -163,9 +188,12 @@ describe("GenerarApiKeyForm — tienda destino (feature 307)", () => {
     renderForm(<GenerarApiKeyForm />);
 
     await esperarCatalogo();
-    await user.click(selectorTienda());
+    await abrirTiendas(user);
 
-    const opciones = screen.getAllByRole("option").map((o) => o.textContent?.trim());
+    // `findAllByRole` y no `getAllByRole`: ver el porqué en `abrirTiendas`. Lo que
+    // se afirma no cambia —sigue siendo la lista completa del popup, y sigue siendo
+    // un fallo que esté vacía—, solo el momento en que se lee.
+    const opciones = (await screen.findAllByRole("option")).map((o) => o.textContent?.trim());
     expect(opciones).toContain("Tienda Norte");
     expect(opciones).toContain("Tienda Sur");
   });
