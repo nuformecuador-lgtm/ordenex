@@ -2,7 +2,9 @@ import type { RolValue } from "@prisma/client";
 import type {
   ActualizarZonaInput,
   CrearZonaInput,
+  ImpactoZonaCentralDTO,
   ListarZonasInput,
+  MotivoConflictoBorrado,
   ZonaDTO,
 } from "@/lib/types/zona";
 
@@ -38,7 +40,20 @@ export type BorrarZonaServiceResult =
   | { status: "ok" }
   | { status: "forbidden" }
   | { status: "not_found" }
-  | { status: "conflict" };
+  // ⭑ FICHA 376 (R11): el motivo viaja TIPADO hasta la pantalla. `en_uso` es el de siempre (FK
+  // RESTRICT desde orden/usuario/tarifa liquidada); `es_central` es el rechazo nuevo de R10, que
+  // pide una salida distinta —marcar otra zona como central— y por eso no puede compartir palabra.
+  | { status: "conflict"; motivo: MotivoConflictoBorrado };
+
+/**
+ * ⭑ FICHA 376 (Q4) — el impacto de mover la marca de zona central, para la confirmacion.
+ *
+ * Lo pide la pantalla ANTES de enviar nada, para poder decir cuantas ordenes cambian de columna de
+ * flete. No participa de ningun guardado y no muta nada.
+ */
+export type ImpactoZonaCentralServiceResult =
+  | { status: "ok"; impacto: ImpactoZonaCentralDTO[] }
+  | { status: "forbidden" };
 
 export interface IZonaService {
   crear(input: CrearZonaInput, actor: Actor): Promise<CrearZonaServiceResult>;
@@ -50,4 +65,9 @@ export interface IZonaService {
     actor: Actor,
   ): Promise<ActualizarZonaServiceResult>;
   borrar(id: string, actor: Actor): Promise<BorrarZonaServiceResult>;
+  /** FICHA 376 (Q4): cuantas ordenes vivas re-tarifaria mover la marca, por zona. Solo lectura. */
+  impactoZonaCentral(
+    zonaIds: string[],
+    actor: Actor,
+  ): Promise<ImpactoZonaCentralServiceResult>;
 }

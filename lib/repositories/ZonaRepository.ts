@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient, type RolValue } from "@prisma/client";
 import { ConflictError } from "@/lib/errors";
 import { esViolacionDeClaveForanea } from "@/lib/repositories/_shared/prisma-fk";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
@@ -8,7 +8,7 @@ import { zonaUnicaDeDistrito } from "@/lib/repositories/_shared/zona-colapso";
 import { normalizeName } from "@/lib/utils/normalize";
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
 import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
-import type { TarifaZonaMensajeroDTO, ZonaDTO } from "@/lib/types/zona";
+import type { ImpactoZonaCentralDTO, TarifaZonaMensajeroDTO, ZonaDTO } from "@/lib/types/zona";
 import type {
   CreateZonaData,
   DeleteZonaResult,
@@ -32,7 +32,47 @@ type ZonaPrismaClient = Pick<
   // FICHA 362 (R9): el borrado registra su accion en la MISMA transaccion que el `delete`.
   | "historialAccion"
   | "usuario"
+  // FICHA 376 (Q4): el conteo de ordenes vivas que re-tarifaria mover la marca de zona central.
+  | "orden"
 >;
+
+/** Una zona nombrada, tal como la necesita una fila del historial (376/R12/R13). */
+interface ZonaConNombre {
+  id: string;
+  nombre: string;
+}
+
+/**
+ * ⭑ FICHA 376 (R12/R13/R15) — LAS FILAS DEL CAMBIO DE MARCA, UNA POR ZONA AFECTADA.
+ *
+ * `centralPrevia` es la zona que PIERDE la marca sin que nadie la haya nombrado en el payload —el
+ * caso que hoy no deja ningun rastro— y puede no existir (R8: la base puede no tener central).
+ * `zonaQueLaGana` es la que se guardo o se acaba de crear.
+ *
+ * `valorAnterior`/`valorNuevo` en `"true"`/`"false"` es el precedente LITERAL de
+ * `usuario_fulfillment_cambiado` (`UserRepository`): sin ellos la fila diria «alguien toco la
+ * marca» sin decir en que direccion. `monto` va a `null` por defecto en `appendAccion`: lo que se
+ * mueve no es un importe, son dos tarifas por cada tienda de dos zonas enteras.
+ */
+function filasDeCambioDeMarca(
+  centralPrevia: ZonaConNombre | null,
+  zonaQueLaGana: ZonaConNombre,
+  actor: { actorUsuarioId: string | null; actorNombre: string | null; actorRol: RolValue | null },
+) {
+  const entrada = (zona: ZonaConNombre, anterior: boolean) => ({
+    accion: "zona_central_cambiada" as const,
+    entidadTipo: "zona" as const,
+    entidadId: zona.id,
+    entidadEtiqueta: etiquetaDeEntidad("zona", { nombre: zona.nombre }),
+    valorAnterior: anterior ? "true" : "false",
+    valorNuevo: anterior ? "false" : "true",
+    ...actor,
+  });
+  return [
+    ...(centralPrevia === null ? [] : [entrada(centralPrevia, true)]),
+    entrada(zonaQueLaGana, false),
+  ];
+}
 
 type TarifaRow = {
   id: string;
@@ -99,9 +139,27 @@ function tarifaCreateRows(zonaId: string, tarifas: CreateZonaData["tarifas"]) {
 export class ZonaRepository implements IZonaRepository {
   constructor(private readonly prisma: ZonaPrismaClient) {}
 
-  async create(data: CreateZonaData): Promise<ZonaDTO> {
+  /**
+   * ⭑ FICHA 376 (R12) — CREAR UNA ZONA CENTRAL TAMBIEN ES UN TRASLADO, Y TAMBIEN DEJA RASTRO.
+   *
+   * `create` con la marca encendida le quita la marca a la central anterior EXACTAMENTE igual que
+   * `update` (el `updateMany` de abajo, que estaba aqui desde la feature 55). Que crear una zona
+   * no tenga tipo propio en el catalogo no es motivo para que el traslado que provoca sea
+   * invisible: las dos filas que escribe son las MISMAS que las de un guardado.
+   */
+  async create(data: CreateZonaData, actorUsuarioId: string | null): Promise<ZonaDTO> {
     try {
       return await this.prisma.$transaction(async (tx) => {
+        // 376/R12: la central previa se lee ANTES del `updateMany` que la apaga. Despues ya no
+        // habria a quien preguntar: el `updateMany` no devuelve las filas que toco.
+        const centralPrevia =
+          data.esCentral === true
+            ? await tx.zona.findFirst({
+                where: { esCentral: true },
+                select: { id: true, nombre: true },
+              })
+            : null;
+
         // Feature 55/R5/R6 (F1.4-A = reasignar): si esta zona sera central, desmarca
         // cualquier central previa ANTES de crear, para no violar el indice unico parcial.
         if (data.esCentral === true) {
@@ -118,6 +176,18 @@ export class ZonaRepository implements IZonaRepository {
         if (data.tarifas.length > 0) {
           await tx.tarifaZonaMensajero.createMany({ data: tarifaCreateRows(zona.id, data.tarifas) });
         }
+
+        // 376/R12-R17: DENTRO del callback y con la `tx`, nunca `this.prisma`. Una zona creada SIN
+        // la marca no entra aqui y no deja ni una fila (R18).
+        if (data.esCentral === true) {
+          const actor = await resolverActorCongelado(tx, actorUsuarioId);
+          await appendAccion(
+            tx,
+            filasDeCambioDeMarca(centralPrevia, { id: zona.id, nombre: zona.nombre }, actor),
+            randomUUID(), // 376/R15: UN lote por creacion, aunque produzca dos filas.
+          );
+        }
+
         const tarifas = await tx.tarifaZonaMensajero.findMany({ where: { zonaId: zona.id } });
         return toDTO(zona, data.distritoIds.length, tarifas);
       });
@@ -197,11 +267,36 @@ export class ZonaRepository implements IZonaRepository {
     id: string,
     data: UpdateZonaData,
     actorUsuarioId: string | null,
-  ): Promise<UpdateZonaResult | null> {
+  ): Promise<UpdateZonaResult> {
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const exists = await tx.zona.findUnique({ where: { id }, select: { id: true } });
-        if (!exists) return null;
+        // 376/R5: la lectura que ya existia gana UNA columna. No hace falta contar zonas: el
+        // indice unico parcial `zona_es_central_unico` garantiza «a lo sumo una», asi que «esta
+        // zona ES la central» equivale a «quitarle la marca deja el sistema sin ninguna».
+        const exists = await tx.zona.findUnique({
+          where: { id },
+          select: { id: true, esCentral: true },
+        });
+        if (!exists) return { estado: "not_found" as const };
+
+        // ⭑ 376/R5 — EL RECHAZO SALE ANTES DE LA PRIMERA ESCRITURA, y por eso no se aplica NADA
+        // del guardado: ni el nombre, ni los distritos, ni las tarifas, ni la marca. Solo un
+        // `false` EXPLICITO llega aqui; `undefined` (el campo ausente) NO es una peticion de
+        // apagar y no entra (R1/R3).
+        if (data.esCentral === false && exists.esCentral) {
+          return { estado: "sin_zona_central" as const };
+        }
+
+        // 376/R12: ¿la marca va a LLEGAR a esta zona? Entonces la central previa se lee ANTES del
+        // `updateMany` que la apaga: despues ya no habria a quien preguntar. Es la zona que pierde
+        // la marca sin aparecer en ningun payload — la fila que hoy no existe.
+        const laMarcaLlega = data.esCentral === true && !exists.esCentral;
+        const centralPrevia = laMarcaLlega
+          ? await tx.zona.findFirst({
+              where: { esCentral: true, NOT: { id } },
+              select: { id: true, nombre: true },
+            })
+          : null;
 
         // Feature 55/R5/R6 (F1.4-A = reasignar): si esta zona pasa a central, desmarca
         // cualquier OTRA central antes de actualizar, para no violar el indice unico parcial.
@@ -214,6 +309,10 @@ export class ZonaRepository implements IZonaRepository {
 
         const zona = await tx.zona.update({
           where: { id },
+          // ⚠️ 376/R1 — `esCentral: undefined` NO ESCRIBE LA COLUMNA. Es una propiedad de Prisma
+          // («campo no provisto»), no una casualidad, y es lo que hace que un payload sin la marca
+          // deje la marca como estaba. Un doble de Prisma NO distingue esto de escribir `false`:
+          // por eso R1 se mide contra Postgres real.
           data: { nombre: data.nombre, cobroVehiculo: data.cobroVehiculo, esCentral: data.esCentral },
         });
 
@@ -336,8 +435,33 @@ export class ZonaRepository implements IZonaRepository {
           }
         }
 
+        // ⭑ 376/R12-R17 — EL RASTRO DEL CAMBIO DE MARCA. Va DESPUES de las escrituras y DENTRO del
+        // mismo callback, recibiendo la `tx` y nunca `this.prisma`: escribir por `this.prisma`
+        // aqui dentro compila, parece correcto y escribe FUERA de la transaccion (la mutacion que
+        // sobrevivio en la ficha 373).
+        //
+        // ⚠️ EL `loteId` ES PROPIO Y DISTINTO del de la reconciliacion de la 366, aunque los dos
+        // ocurran en el mismo guardado: son dos hechos de naturaleza distinta —«se movio la marca»
+        // y «se re-estamparon N ordenes»— y el lote existe para agrupar filas HOMOGENEAS.
+        // Compartirlo haria que filtrar por lote devolviera una mezcla que nadie pidio.
+        //
+        // R18: si la marca NO cambia —porque el payload la omite, o porque reenvia el valor que la
+        // zona ya tenia— `laMarcaLlega` es `false` y no se escribe ni una fila.
+        if (laMarcaLlega) {
+          const actorDeLaMarca = await resolverActorCongelado(tx, actorUsuarioId);
+          await appendAccion(
+            tx,
+            filasDeCambioDeMarca(centralPrevia, { id, nombre: zona.nombre }, actorDeLaMarca),
+            randomUUID(),
+          );
+        }
+
         const tarifas = await tx.tarifaZonaMensajero.findMany({ where: { zonaId: id } });
-        return { zona: toDTO(zona, data.distritoIds.length, tarifas), ordenesReconciliadas };
+        return {
+          estado: "ok" as const,
+          zona: toDTO(zona, data.distritoIds.length, tarifas),
+          ordenesReconciliadas,
+        };
       });
     } catch (e) {
       translateEsCentralConflict(e);
@@ -358,9 +482,17 @@ export class ZonaRepository implements IZonaRepository {
       return await this.prisma.$transaction(async (tx) => {
         const exists = await tx.zona.findUnique({
           where: { id },
-          select: { id: true, nombre: true },
+          select: { id: true, nombre: true, esCentral: true },
         });
         if (!exists) return "not_found" as const;
+        // ⭑ 376/R10 — ANTES DEL PRIMER `deleteMany`, asi que no se borra nada: ni las tarifas, ni
+        // la N:M, ni la zona. Es el unico rechazo que las FK NO cubren: una zona central sin
+        // ninguna orden y sin ningun usuario apuntando se borraba sin mas hasta esta ficha, y con
+        // ella se iba la unica zona que `findCentralZonaId()` puede devolver.
+        //
+        // 376/R19: sale ANTES del `appendAccion` de `zona_borrada`, asi que un borrado rechazado
+        // no deja ninguna fila.
+        if (exists.esCentral) return "es_central" as const;
         // 362/R4: congelada ANTES de que la fila desaparezca.
         const etiqueta = etiquetaDeEntidad("zona", { nombre: exists.nombre });
         // tarifa_zona_mensajero -> zona es FK RESTRICT: hay que borrarlas antes.
@@ -420,5 +552,31 @@ export class ZonaRepository implements IZonaRepository {
       select: { id: true },
     });
     return z?.id ?? null;
+  }
+
+  /**
+   * ⭑ FICHA 376 (Q4) — CUANTAS ORDENES RE-TARIFA MOVER LA MARCA, POR ZONA.
+   *
+   * EL CORTE VIVE EN EL `WHERE` a proposito, igual que el de la 366: es una condicion sobre filas
+   * de OTRA tabla, no un `if` que un doble pueda esquivar.
+   *   · `deletedAt: null`      — una orden borrada no se factura;
+   *   · `cierreDetalles: none` — ya tiene un detalle congelado en un cierre, y ese detalle
+   *     fotografio `es_central` (`cierre_detail.es_central`, INMUTABLE): pase lo que pase con la
+   *     marca, su flete ya no cambia. Contarla seria inflar el numero que se le enseña a quien
+   *     esta a punto de confirmar.
+   *
+   * Solo lectura y UNA consulta agrupada, no una por zona. Un id sin ordenes vivas sale igual, con
+   * cero: «no afecta a ninguna» y «no lo sé» no pueden verse iguales en la confirmacion.
+   */
+  async contarOrdenesVivasPorZona(zonaIds: string[]): Promise<ImpactoZonaCentralDTO[]> {
+    const ids = [...new Set(zonaIds)];
+    if (ids.length === 0) return [];
+    const filas = await this.prisma.orden.groupBy({
+      by: ["zonaId"],
+      where: { zonaId: { in: ids }, deletedAt: null, cierreDetalles: { none: {} } },
+      _count: { _all: true },
+    });
+    const conteo = new Map(filas.map((f) => [f.zonaId, f._count._all]));
+    return ids.map((zonaId) => ({ zonaId, ordenesVivas: conteo.get(zonaId) ?? 0 }));
   }
 }

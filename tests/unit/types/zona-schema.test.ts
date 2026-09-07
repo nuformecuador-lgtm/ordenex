@@ -65,12 +65,71 @@ describe("crearZonaSchema (R19)", () => {
 });
 
 describe("actualizarZonaSchema (R19/R22)", () => {
-  it("comparte forma con crearZonaSchema (reemplazo completo, id viaja aparte)", () => {
+  it("acepta el mismo payload que crear (reemplazo completo, id viaja aparte)", () => {
     expect(actualizarZonaSchema.safeParse(validCrear).success).toBe(true);
   });
 
   it("rechaza campos desconocidos (strict)", () => {
     expect(actualizarZonaSchema.safeParse({ ...validCrear, hack: 1 }).success).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 376 / R1-R3 — «AUSENTE» Y «APAGADO» DEJAN DE SER LO MISMO EN EL BORDE
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ POR QUE EL CASO DE ARRIBA NO BASTA, Y ES LA RAZON DE QUE ESTE BLOQUE EXISTA: `validCrear`
+// OMITE `esCentral`, y ese caso solo mira `.success`. Con el defecto VIVO
+// (`actualizarZonaSchema = crearZonaSchema`) tambien era `true` — el `default(false)` parsea
+// perfectamente—. Lo que distingue las dos versiones no es el exito: es el VALOR que sale.
+
+describe("376/R1-R3 — la marca de zona central: crear pone default, actualizar no", () => {
+  it("⭑ R1: al ACTUALIZAR, el campo ausente sale como `undefined` (no como `false`)", () => {
+    // ESTA es la aserción que se pone roja si alguien devuelve
+    // `export const actualizarZonaSchema = crearZonaSchema`. Probado a mano el 2026-09-07.
+    const salida = actualizarZonaSchema.parse(validCrear);
+    expect(salida.esCentral).toBeUndefined();
+    expect(salida).not.toHaveProperty("esCentral", false);
+  });
+
+  it("⭑ R2: al CREAR, el campo ausente sigue saliendo como `false`", () => {
+    // La otra mitad: la separacion de esquemas NO puede llevarse por delante el default de crear.
+    // Una zona nueva sin la marca es exactamente lo que un payload sin el campo esta pidiendo.
+    expect(crearZonaSchema.parse(validCrear).esCentral).toBe(false);
+  });
+
+  it("R3: un `false` EXPLICITO parsea a `false` en los DOS esquemas", () => {
+    // «No lo mandé» y «lo mandé apagado» tienen que llegar distintos al servidor: uno se ignora,
+    // el otro se rechaza con motivo (R5/R6).
+    expect(actualizarZonaSchema.parse({ ...validCrear, esCentral: false }).esCentral).toBe(false);
+    expect(crearZonaSchema.parse({ ...validCrear, esCentral: false }).esCentral).toBe(false);
+  });
+
+  it("R3: `esCentral: true` explicito parsea a `true` en los DOS esquemas", () => {
+    expect(actualizarZonaSchema.parse({ ...validCrear, esCentral: true }).esCentral).toBe(true);
+    expect(crearZonaSchema.parse({ ...validCrear, esCentral: true }).esCentral).toBe(true);
+  });
+
+  it("`esCentral: null` se RECHAZA en los dos (seria un NULL en una columna NOT NULL)", () => {
+    // `optional()` admite ausente, no admite nulo. Sin este caso, cambiar `optional()` por
+    // `nullish()` pasaria desapercibido y Prisma intentaria escribir NULL.
+    expect(actualizarZonaSchema.safeParse({ ...validCrear, esCentral: null }).success).toBe(false);
+    expect(crearZonaSchema.safeParse({ ...validCrear, esCentral: null }).success).toBe(false);
+  });
+
+  it("los dos esquemas siguen siendo `.strict()` y siguen aplicando la regla de tarifas", () => {
+    // La separacion no puede haber perdido nada por el camino.
+    expect(actualizarZonaSchema.safeParse({ ...validCrear, hack: 1 }).success).toBe(false);
+    expect(
+      actualizarZonaSchema.safeParse({ ...validCrear, cobroVehiculo: true, tarifas: [] }).success,
+    ).toBe(false);
+    expect(
+      actualizarZonaSchema.safeParse({
+        ...validCrear,
+        cobroVehiculo: false,
+        tarifas: [{ cobroEntregado: 10, cobroRechazado: 5, vehiculoId: "v1" }],
+      }).success,
+    ).toBe(false);
   });
 });
 

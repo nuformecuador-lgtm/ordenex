@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
+import type { UpdateZonaResult } from "@/lib/interfaces/repositories/IZonaRepository";
 
 // tx mock que reciben las operaciones dentro de $transaction.
 function buildTx() {
@@ -10,6 +11,9 @@ function buildTx() {
       update: vi.fn(),
       updateMany: vi.fn(),
       findUnique: vi.fn(),
+      // FICHA 376: la lectura de la central PREVIA, antes del `updateMany` que la apaga. Por
+      // defecto no hay ninguna: los casos que la necesitan la fijan.
+      findFirst: vi.fn().mockResolvedValue(null),
       delete: vi.fn(),
     },
     // FICHA 366: `findMany` por defecto NO devuelve nada, asi que ningun distrito resuelve una
@@ -42,6 +46,16 @@ function repoOf(prisma: unknown) {
   return new ZonaRepository(prisma as unknown as PrismaClient);
 }
 
+/**
+ * FICHA 376: el desenlace de `update` viaja NOMBRADO. Este helper estrecha a la rama `ok` y FALLA
+ * RUIDOSAMENTE si no lo es — un `as` silencioso convertiria un `sin_zona_central` inesperado en un
+ * `undefined` y las aserciones de abajo pasarian por vacuidad.
+ */
+function soloOk(res: UpdateZonaResult): Extract<UpdateZonaResult, { estado: "ok" }> {
+  if (res.estado !== "ok") throw new Error(`se esperaba \`ok\` y llego \`${res.estado}\``);
+  return res;
+}
+
 describe("ZonaRepository.create", () => {
   it("crea zona + N:M + tarifas en transaccion y devuelve el DTO", async () => {
     const tx = buildTx();
@@ -55,7 +69,7 @@ describe("ZonaRepository.create", () => {
       esCentral: false,
       distritoIds: ["d1", "d2"],
       tarifas: [],
-    });
+    }, null);
 
     expect(tx.zona.create).toHaveBeenCalledWith({
       data: { nombre: "GAM", cobroVehiculo: false, esCentral: false },
@@ -89,7 +103,7 @@ describe("ZonaRepository.create", () => {
       esCentral: false,
       distritoIds: ["d1"],
       tarifas: [{ cobroEntregado: 10, cobroRechazado: 5, vehiculoId: "v1" }],
-    });
+    }, null);
 
     const arg = tx.tarifaZonaMensajero.createMany.mock.calls[0][0];
     expect(arg.data[0].cobroEntregado).toBeInstanceOf(Prisma.Decimal);
@@ -113,7 +127,7 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
       esCentral: true,
       distritoIds: ["d1"],
       tarifas: [],
-    });
+    }, null);
 
     // sin id propio aun: desmarca TODAS las centrales previas
     expect(tx.zona.updateMany).toHaveBeenCalledWith({
@@ -139,14 +153,14 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
       esCentral: false,
       distritoIds: ["d1"],
       tarifas: [],
-    });
+    }, null);
 
     expect(tx.zona.updateMany).not.toHaveBeenCalled();
   });
 
   it("update con esCentral=true desmarca cualquier OTRA central (NOT id propio) antes de actualizar", async () => {
     const tx = buildTx();
-    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.findUnique.mockResolvedValue({ id: "z1", esCentral: false });
     tx.zona.update.mockResolvedValue({ id: "z1", nombre: "GAM", cobroVehiculo: false, esCentral: true });
     tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
     const prisma = buildPrisma(tx);
@@ -164,12 +178,12 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
     expect(tx.zona.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
       tx.zona.update.mock.invocationCallOrder[0],
     );
-    expect(res?.zona.esCentral).toBe(true);
+    expect(soloOk(res).zona.esCentral).toBe(true);
   });
 
   it("update con esCentral=false NO desmarca ninguna central", async () => {
     const tx = buildTx();
-    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.findUnique.mockResolvedValue({ id: "z1", esCentral: false });
     tx.zona.update.mockResolvedValue({ id: "z1", nombre: "GAM", cobroVehiculo: false, esCentral: false });
     tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
     const prisma = buildPrisma(tx);
@@ -201,13 +215,13 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
         esCentral: true,
         distritoIds: ["d1"],
         tarifas: [],
-      }),
+      }, null),
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
   it("update: P2002 sobre es_central se traduce a ConflictError", async () => {
     const tx = buildTx();
-    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.findUnique.mockResolvedValue({ id: "z1", esCentral: false });
     tx.zona.update.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError("unique", {
         code: "P2002",
@@ -258,13 +272,13 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
         esCentral: true,
         distritoIds: ["d1"],
         tarifas: [],
-      }),
+      }, null),
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
   it("adapter: update con P2002 de es_central (sin meta.target) -> ConflictError", async () => {
     const tx = buildTx();
-    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.findUnique.mockResolvedValue({ id: "z1", esCentral: false });
     tx.zona.update.mockRejectedValue(p2002Adapter("zona_es_central_unico"));
     const prisma = buildPrisma(tx);
 
@@ -290,7 +304,7 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
         esCentral: false,
         distritoIds: ["d1"],
         tarifas: [],
-      }),
+      }, null),
     ).rejects.toBe(original);
   });
 
@@ -311,7 +325,7 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
         esCentral: false,
         distritoIds: ["d1"],
         tarifas: [],
-      }),
+      }, null),
     ).rejects.toBe(original);
   });
 });
@@ -319,7 +333,7 @@ describe("ZonaRepository — invariante 'una central' (feature 55/R5/R6)", () =>
 describe("ZonaRepository.hardDelete", () => {
   it("borra tarifas + N:M + zona y devuelve ok", async () => {
     const tx = buildTx();
-    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.findUnique.mockResolvedValue({ id: "z1", esCentral: false });
     const prisma = buildPrisma(tx);
     const res = await repoOf(prisma).hardDelete("z1", "actor-1");
     expect(res).toBe("ok");
@@ -343,7 +357,7 @@ describe("ZonaRepository.hardDelete", () => {
   // vive en `tests/integration/db/tarifa-zona-borrado-fk-real.test.ts`.
   it("FK RESTRICT en la forma REAL del adapter (DriverAdapterError, 23001) -> referenced", async () => {
     const tx = buildTx();
-    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.findUnique.mockResolvedValue({ id: "z1", esCentral: false });
     tx.zona.delete.mockRejectedValue(
       Object.assign(
         new Error(
@@ -359,7 +373,7 @@ describe("ZonaRepository.hardDelete", () => {
 
   it("FK RESTRICT en la forma nativa (P2003) -> referenced, por si el adapter la traduce", async () => {
     const tx = buildTx();
-    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.findUnique.mockResolvedValue({ id: "z1", esCentral: false });
     tx.zona.delete.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError("fk", { code: "P2003", clientVersion: "x" }),
     );
@@ -370,7 +384,7 @@ describe("ZonaRepository.hardDelete", () => {
   it("un SQLSTATE del adapter que NO es de FK se propaga (no se disfraza de `referenced`)", async () => {
     // `40001` es un fallo de serializacion: reintentable, y desde luego no «esta en uso».
     const tx = buildTx();
-    tx.zona.findUnique.mockResolvedValue({ id: "z1" });
+    tx.zona.findUnique.mockResolvedValue({ id: "z1", esCentral: false });
     tx.zona.delete.mockRejectedValue(
       Object.assign(new Error("could not serialize access"), {
         name: "DriverAdapterError",
@@ -475,7 +489,7 @@ function txConNM(
   tx.zonaDistrito.findMany
     .mockResolvedValueOnce(previos.map((distritoId) => ({ distritoId })))
     .mockResolvedValueOnce(finales);
-  tx.zona.findUnique.mockResolvedValue({ id: "zA" });
+  tx.zona.findUnique.mockResolvedValue({ id: "zA", esCentral: false });
   tx.zona.update.mockResolvedValue({
     id: "zA",
     nombre: "A",
@@ -511,7 +525,7 @@ describe("366/T4 — ZonaRepository.update reconcilia la zona de las ordenes", (
     // ningun otro campo de la orden.
     expect(tx.orden.updateMany.mock.calls[0][0].data).toEqual({ zonaId: "zA" });
     expect(tx.orden.updateMany.mock.calls[0][0].where).toEqual({ id: { in: ["o1", "o2"] } });
-    expect(res?.ordenesReconciliadas).toBe(2);
+    expect(soloOk(res).ordenesReconciliadas).toBe(2);
   });
 
   it("⭑ R12: `ordenesReconciliadas` cuenta las filas ALCANZADAS, no los distritos ni los grupos", async () => {
@@ -538,7 +552,7 @@ describe("366/T4 — ZonaRepository.update reconcilia la zona de las ordenes", (
       "u-maestro",
     );
 
-    expect(res?.ordenesReconciliadas).toBe(4);
+    expect(soloOk(res).ordenesReconciliadas).toBe(4);
   });
 
   it("⭑ R10/R11: una fila de historial por orden, TODAS con el MISMO `lote_id` aunque haya 2 grupos", async () => {
@@ -599,7 +613,7 @@ describe("366/T4 — ZonaRepository.update reconcilia la zona de las ordenes", (
     expect(tx.orden.findMany).not.toHaveBeenCalled();
     expect(tx.orden.updateMany).not.toHaveBeenCalled();
     expect(tx.historialAccion.createMany).not.toHaveBeenCalled();
-    expect(res?.ordenesReconciliadas).toBe(0);
+    expect(soloOk(res).ordenesReconciliadas).toBe(0);
   });
 
   it("⭑ R5: la segunda lectura de la N:M cubre la UNION de los distritos de antes y los de despues", async () => {
@@ -634,7 +648,7 @@ describe("366/T4 — ZonaRepository.update reconcilia la zona de las ordenes", (
 
     expect(tx.orden.updateMany).not.toHaveBeenCalled();
     expect(tx.historialAccion.createMany).not.toHaveBeenCalled();
-    expect(res?.ordenesReconciliadas).toBe(0);
+    expect(soloOk(res).ordenesReconciliadas).toBe(0);
   });
 
   it("⭑ R13: `create()` NO invoca ninguna pieza de este flujo", async () => {
@@ -648,7 +662,7 @@ describe("366/T4 — ZonaRepository.update reconcilia la zona de las ordenes", (
     tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
     const prisma = buildPrisma(tx);
 
-    await repoOf(prisma).create({ ...DATOS_ZONA_A, nombre: "NUEVA" });
+    await repoOf(prisma).create({ ...DATOS_ZONA_A, nombre: "NUEVA" }, null);
 
     expect(tx.zonaDistrito.findMany).not.toHaveBeenCalled();
     expect(tx.orden.findMany).not.toHaveBeenCalled();
@@ -656,13 +670,356 @@ describe("366/T4 — ZonaRepository.update reconcilia la zona de las ordenes", (
     expect(tx.historialAccion.createMany).not.toHaveBeenCalled();
   });
 
-  it("la zona que no existe sigue devolviendo `null` y no reconcilia nada", async () => {
+  it("la zona que no existe devuelve el desenlace `not_found` y no reconcilia nada", async () => {
     const tx = buildTx();
     tx.zona.findUnique.mockResolvedValue(null);
     const prisma = buildPrisma(tx);
 
-    expect(await repoOf(prisma).update("zX", DATOS_ZONA_A, "u-maestro")).toBeNull();
+    expect(await repoOf(prisma).update("zX", DATOS_ZONA_A, "u-maestro")).toEqual({
+      estado: "not_found",
+    });
     expect(tx.zonaDistrito.findMany).not.toHaveBeenCalled();
     expect(tx.orden.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 376 / T6-T8 — LA GUARDA Y EL RASTRO DE LA MARCA DE ZONA CENTRAL, EN FORMA
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ LO QUE ESTE BLOQUE **NO** PRUEBA, Y ESTA DICHO A PROPOSITO:
+//   · que `esCentral: undefined` NO ESCRIBA la columna (R1). Con un doble, `data.esCentral` llega
+//     como `undefined` y el doble no escribe nada de nada: la propiedad es de Prisma, no de este
+//     codigo, y un test con dobles la daria por buena aunque no existiera. Se mide contra Postgres
+//     real en `tests/integration/db/zona-central-guarda-y-rastro.test.ts`.
+//   · la ATOMICIDAD del `appendAccion` con la mutacion (R17). Con un doble, `tx` y `this.prisma`
+//     son el mismo objeto. Lo mide la guardia estatica
+//     `tests/unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts` y el caso de
+//     savepoint del archivo de integracion.
+// Lo que SI se mide aqui es la FORMA: cuantas entradas, con que valores, con que lote y en que
+// orden respecto de las escrituras.
+
+/** Las filas que `appendAccion` mando a `historialAccion.createMany` en la llamada `n`. */
+function filasDeHistorial(tx: ReturnType<typeof buildTx>, n = 0): Record<string, unknown>[] {
+  const args = tx.historialAccion.createMany.mock.calls[n]?.[0] as
+    | { data: Record<string, unknown>[] }
+    | undefined;
+  if (args === undefined) throw new Error(`no hubo una llamada ${n} a historialAccion.createMany`);
+  return args.data;
+}
+
+const DATOS_BASE = { nombre: "B", cobroVehiculo: false, distritoIds: ["d1"], tarifas: [] };
+
+describe("376/T6 — la guarda de `update` (R5) y el desenlace nombrado", () => {
+  it("⭑ R5: `esCentral: false` sobre la zona QUE ES la central -> `sin_zona_central`, sin escribir NADA", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "zA", esCentral: true });
+    const prisma = buildPrisma(tx);
+
+    const res = await repoOf(prisma).update("zA", { ...DATOS_BASE, esCentral: false }, "u-maestro");
+
+    expect(res).toEqual({ estado: "sin_zona_central" });
+    // R5: el rechazo sale ANTES de la primera escritura. Ninguna de las cuatro ocurre.
+    expect(tx.zona.update).not.toHaveBeenCalled();
+    expect(tx.zona.updateMany).not.toHaveBeenCalled();
+    expect(tx.zonaDistrito.deleteMany).not.toHaveBeenCalled();
+    expect(tx.tarifaZonaMensajero.deleteMany).not.toHaveBeenCalled();
+    // R19: y no deja ninguna fila de historial.
+    expect(tx.historialAccion.createMany).not.toHaveBeenCalled();
+  });
+
+  it("⭑ R8: `esCentral: false` sobre una zona que NO es la central se acepta", async () => {
+    // La guarda es «no quedarse sin», no «la marca no se apaga nunca». Sin este caso, quitar el
+    // `&& exists.esCentral` de la condicion pasaria desapercibido.
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "zB", esCentral: false });
+    tx.zona.update.mockResolvedValue({
+      id: "zB",
+      nombre: "B",
+      cobroVehiculo: false,
+      esCentral: false,
+    });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+    const prisma = buildPrisma(tx);
+
+    const res = await repoOf(prisma).update("zB", { ...DATOS_BASE, esCentral: false }, "u-maestro");
+
+    expect(soloOk(res).zona.esCentral).toBe(false);
+    expect(tx.zona.update).toHaveBeenCalled();
+    expect(tx.historialAccion.createMany).not.toHaveBeenCalled(); // R18: no cambio nada
+  });
+
+  it("⭑ R1/R3: el campo AUSENTE no dispara la guarda ni el rastro, ni siquiera en la central", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "zA", esCentral: true });
+    tx.zona.update.mockResolvedValue({
+      id: "zA",
+      nombre: "B",
+      cobroVehiculo: false,
+      esCentral: true,
+    });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+    const prisma = buildPrisma(tx);
+
+    const res = await repoOf(prisma).update("zA", DATOS_BASE, "u-maestro");
+
+    expect(res.estado).toBe("ok");
+    // El `data` del update lleva `esCentral: undefined`: es lo que Prisma lee como «no provisto».
+    // Que eso NO escriba la columna es cosa de Prisma y se mide contra Postgres (ver cabecera).
+    expect(tx.zona.update.mock.calls[0][0].data).toEqual({
+      nombre: "B",
+      cobroVehiculo: false,
+      esCentral: undefined,
+    });
+    expect(tx.historialAccion.createMany).not.toHaveBeenCalled(); // R18
+  });
+
+  it("R18: reenviar `esCentral: true` en la zona que YA es la central no deja fila", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "zA", esCentral: true });
+    tx.zona.update.mockResolvedValue({
+      id: "zA",
+      nombre: "B",
+      cobroVehiculo: false,
+      esCentral: true,
+    });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+    const prisma = buildPrisma(tx);
+
+    await repoOf(prisma).update("zA", { ...DATOS_BASE, esCentral: true }, "u-maestro");
+
+    expect(tx.historialAccion.createMany).not.toHaveBeenCalled();
+    // Y tampoco se molesta en preguntar por la central previa: no la hay que apagar.
+    expect(tx.zona.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe("376/T6 — el rastro de `update` (R12/R13/R15)", () => {
+  /** A es la central; B la gana. Deja el doble listo para el traslado. */
+  function txDeTraslado(): ReturnType<typeof buildTx> {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "zB", esCentral: false });
+    tx.zona.findFirst.mockResolvedValue({ id: "zA", nombre: "GAM" });
+    tx.zona.update.mockResolvedValue({
+      id: "zB",
+      nombre: "B",
+      cobroVehiculo: false,
+      esCentral: true,
+    });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+    return tx;
+  }
+
+  it("⭑ R12: un traslado escribe DOS entradas — la que PIERDE la marca y la que la gana", async () => {
+    const tx = txDeTraslado();
+    await repoOf(buildPrisma(tx)).update("zB", { ...DATOS_BASE, esCentral: true }, "u-maestro");
+
+    const filas = filasDeHistorial(tx);
+    expect(filas).toHaveLength(2);
+    // La PRIMERA es la zona que nadie nombro en el payload: es la fila que hoy no existe.
+    expect(filas[0]).toMatchObject({
+      accion: "zona_central_cambiada",
+      entidadTipo: "zona",
+      entidadId: "zA",
+      entidadEtiqueta: "GAM",
+      valorAnterior: "true",
+      valorNuevo: "false",
+    });
+    expect(filas[1]).toMatchObject({
+      accion: "zona_central_cambiada",
+      entidadTipo: "zona",
+      entidadId: "zB",
+      entidadEtiqueta: "B",
+      valorAnterior: "false",
+      valorNuevo: "true",
+    });
+  });
+
+  it("⭑ R13: la fila congela al actor y NO lleva monto", async () => {
+    const tx = txDeTraslado();
+    await repoOf(buildPrisma(tx)).update("zB", { ...DATOS_BASE, esCentral: true }, "u-maestro");
+
+    for (const fila of filasDeHistorial(tx)) {
+      expect(fila.actorUsuarioId).toBe("u-maestro");
+      expect(fila.actorNombre).toBe("Maestra Uno");
+      expect(fila.actorRol).toBe("maestro");
+      expect(fila.monto).toBeNull();
+    }
+  });
+
+  it("⭑ R15: las dos filas comparten `lote_id`", async () => {
+    const tx = txDeTraslado();
+    await repoOf(buildPrisma(tx)).update("zB", { ...DATOS_BASE, esCentral: true }, "u-maestro");
+
+    const lotes = new Set(filasDeHistorial(tx).map((f) => f.loteId));
+    expect(lotes.size, "un traslado es UN acto de dos efectos, no dos actos sueltos").toBe(1);
+    expect([...lotes][0]).toBeTypeOf("string");
+  });
+
+  it("⭑ R12: la central previa se lee ANTES del `updateMany` que la apaga", async () => {
+    // Si se leyera despues, `findFirst` no encontraria nada y la zona que PIERDE la marca se
+    // quedaria sin fila: justo el agujero que la ficha viene a tapar.
+    const tx = txDeTraslado();
+    await repoOf(buildPrisma(tx)).update("zB", { ...DATOS_BASE, esCentral: true }, "u-maestro");
+
+    expect(tx.zona.findFirst.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.zona.updateMany.mock.invocationCallOrder[0],
+    );
+    // Y el registro va DESPUES de las escrituras.
+    expect(tx.historialAccion.createMany.mock.invocationCallOrder[0]).toBeGreaterThan(
+      tx.zona.update.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("R8: si no habia ninguna central, se escribe UNA sola fila (la que la gana)", async () => {
+    const tx = txDeTraslado();
+    tx.zona.findFirst.mockResolvedValue(null); // base sin central
+    await repoOf(buildPrisma(tx)).update("zB", { ...DATOS_BASE, esCentral: true }, "u-maestro");
+
+    const filas = filasDeHistorial(tx);
+    expect(filas).toHaveLength(1);
+    expect(filas[0]).toMatchObject({ entidadId: "zB", valorAnterior: "false", valorNuevo: "true" });
+  });
+
+  it("⭑ design §7.1: el lote del cambio de marca es DISTINTO del de la reconciliacion de la 366", async () => {
+    // Dos hechos de naturaleza distinta en el MISMO guardado. Compartir lote haria que filtrar por
+    // lote devolviera una mezcla que nadie pidio.
+    const tx = txDeTraslado();
+    tx.zonaDistrito.findMany
+      .mockReset()
+      .mockResolvedValueOnce([{ distritoId: "d1" }])
+      .mockResolvedValueOnce([{ distritoId: "d1", zonaId: "zB" }]);
+    tx.orden.findMany.mockResolvedValue([{ id: "o1", numGuia: 7, numRemision: "R-7" }]);
+
+    await repoOf(buildPrisma(tx)).update("zB", { ...DATOS_BASE, esCentral: true }, "u-maestro");
+
+    expect(tx.historialAccion.createMany).toHaveBeenCalledTimes(2);
+    const loteReconciliacion = filasDeHistorial(tx, 0)[0].loteId;
+    const loteMarca = filasDeHistorial(tx, 1)[0].loteId;
+    expect(filasDeHistorial(tx, 0)[0].accion).toBe("orden_zona_reconciliada");
+    expect(filasDeHistorial(tx, 1)[0].accion).toBe("zona_central_cambiada");
+    expect(loteMarca).not.toBe(loteReconciliacion);
+  });
+});
+
+describe("376/T7 — el rastro de `create`", () => {
+  function txDeCreacion(): ReturnType<typeof buildTx> {
+    const tx = buildTx();
+    tx.zona.findFirst.mockResolvedValue({ id: "zA", nombre: "GAM" });
+    tx.zona.create.mockResolvedValue({
+      id: "zNueva",
+      nombre: "NUEVA",
+      cobroVehiculo: false,
+      esCentral: true,
+    });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+    return tx;
+  }
+
+  it("⭑ R12: crear CON la marca habiendo otra central escribe DOS filas con el mismo lote", async () => {
+    const tx = txDeCreacion();
+    await repoOf(buildPrisma(tx)).create(
+      { ...DATOS_BASE, nombre: "NUEVA", esCentral: true },
+      "u-maestro",
+    );
+
+    const filas = filasDeHistorial(tx);
+    expect(filas).toHaveLength(2);
+    expect(filas[0]).toMatchObject({ entidadId: "zA", valorAnterior: "true", valorNuevo: "false" });
+    expect(filas[1]).toMatchObject({
+      entidadId: "zNueva",
+      valorAnterior: "false",
+      valorNuevo: "true",
+    });
+    expect(new Set(filas.map((f) => f.loteId)).size).toBe(1);
+    // Y la central previa se leyo ANTES de apagarla.
+    expect(tx.zona.findFirst.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.zona.updateMany.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("R18: crear SIN la marca no escribe ninguna fila ni pregunta por la central previa", async () => {
+    const tx = txDeCreacion();
+    tx.zona.create.mockResolvedValue({
+      id: "zNueva",
+      nombre: "NUEVA",
+      cobroVehiculo: false,
+      esCentral: false,
+    });
+
+    await repoOf(buildPrisma(tx)).create(
+      { ...DATOS_BASE, nombre: "NUEVA", esCentral: false },
+      "u-maestro",
+    );
+
+    expect(tx.historialAccion.createMany).not.toHaveBeenCalled();
+    expect(tx.zona.findFirst).not.toHaveBeenCalled();
+    expect(tx.zona.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("376/T8 — `hardDelete` rechaza la zona central con motivo propio (R10/R11)", () => {
+  it("⭑ R10: la zona central NO se borra, y el rechazo sale antes del primer `deleteMany`", async () => {
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "zA", nombre: "GAM", esCentral: true });
+    const prisma = buildPrisma(tx);
+
+    expect(await repoOf(prisma).hardDelete("zA", "u-maestro")).toBe("es_central");
+
+    expect(tx.tarifaZonaMensajero.deleteMany).not.toHaveBeenCalled();
+    expect(tx.zonaDistrito.deleteMany).not.toHaveBeenCalled();
+    expect(tx.zona.delete).not.toHaveBeenCalled();
+    // R19: un borrado rechazado no deja fila de `zona_borrada`.
+    expect(tx.historialAccion.createMany).not.toHaveBeenCalled();
+  });
+
+  it("R11: una zona NO central se sigue borrando y registrando igual que antes", async () => {
+    // El control positivo. Sin el, un `return "es_central"` incondicional pasaria el caso de arriba.
+    const tx = buildTx();
+    tx.zona.findUnique.mockResolvedValue({ id: "zB", nombre: "Sur", esCentral: false });
+    const prisma = buildPrisma(tx);
+
+    expect(await repoOf(prisma).hardDelete("zB", "u-maestro")).toBe("ok");
+    expect(tx.zona.delete).toHaveBeenCalledWith({ where: { id: "zB" } });
+    expect(filasDeHistorial(tx)[0]).toMatchObject({
+      accion: "zona_borrada",
+      entidadId: "zB",
+      entidadEtiqueta: "Sur",
+    });
+  });
+});
+
+describe("376/Q4 — `contarOrdenesVivasPorZona`", () => {
+  it("devuelve una entrada por zona PEDIDA, con cero para las que no traen filas", async () => {
+    const groupBy = vi.fn().mockResolvedValue([{ zonaId: "zA", _count: { _all: 850 } }]);
+    const prisma = buildPrisma(buildTx(), { orden: { groupBy } });
+
+    const r = await repoOf(prisma).contarOrdenesVivasPorZona(["zA", "zB"]);
+
+    expect(r).toEqual([
+      { zonaId: "zA", ordenesVivas: 850 },
+      { zonaId: "zB", ordenesVivas: 0 },
+    ]);
+  });
+
+  it("⭑ el corte excluye borradas y ya congeladas en un cierre, y va en el `where`", async () => {
+    // El `where` se afirma aqui por FORMA; que Postgres lo aplique se mide en integracion.
+    const groupBy = vi.fn().mockResolvedValue([]);
+    const prisma = buildPrisma(buildTx(), { orden: { groupBy } });
+
+    await repoOf(prisma).contarOrdenesVivasPorZona(["zA", "zA", "zB"]);
+
+    expect(groupBy.mock.calls[0][0].where).toEqual({
+      zonaId: { in: ["zA", "zB"] }, // deduplicado
+      deletedAt: null,
+      cierreDetalles: { none: {} },
+    });
+  });
+
+  it("lista vacia: ni consulta", async () => {
+    const groupBy = vi.fn();
+    const prisma = buildPrisma(buildTx(), { orden: { groupBy } });
+    expect(await repoOf(prisma).contarOrdenesVivasPorZona([])).toEqual([]);
+    expect(groupBy).not.toHaveBeenCalled();
   });
 });

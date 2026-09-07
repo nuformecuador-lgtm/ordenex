@@ -69,13 +69,15 @@ function filas(tx: ReturnType<typeof txDoble>, n = 0): Record<string, unknown>[]
 // =============================================================================================
 
 describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhaustivos", () => {
-  it("son 48 tipos, 20 entidades y 3 categorias, sin repetidos", () => {
-    // 48 desde la ficha 375 (`nodo_geografico_renombrado`); 47 lo fue desde la 374 (los dos
-    // `nodo_geografico_*` de activacion); 45 desde la 373.
+  it("son 49 tipos, 20 entidades y 3 categorias, sin repetidos", () => {
+    // 49 desde la ficha 376 (`zona_central_cambiada`); 48 lo fue desde la 375
+    // (`nodo_geografico_renombrado`); 47 desde la 374 (los dos `nodo_geografico_*` de activacion);
+    // 45 desde la 373.
     // 20 entidades desde la ficha 374: `provincia`, `canton` y `distrito` son la PRIMERA
-    // ampliacion de ese enum, que llevaba 17 desde la 362. La 375 NO lo amplia.
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(48);
-    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(48);
+    // ampliacion de ese enum, que llevaba 17 desde la 362. Ni la 375 ni la 376 lo amplian: `zona`
+    // ya estaba entre los 17 originales (la usa `zona_borrada`).
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(49);
+    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(49);
     expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(20);
     expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(20);
     expect(CATEGORIAS_ACCION).toHaveLength(3);
@@ -235,7 +237,32 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(20);
   });
 
-  it("el reparto por categoria es el del Anexo A: 26 dinero, 10 desaparicion, 12 permisos", () => {
+  it("⭑ FICHA 376: `zona_central_cambiada` es DINERO, y su entidad `zona` ya existia", () => {
+    // POR QUE DINERO Y NO OTRA CATEGORIA (R16 de la 376). `es_central` elige la columna de flete en
+    // `resolverFlete` (`valorFleteGam` frente a `valorFlete`) y esa columna se factura, en vivo,
+    // hasta que `cierre_detail.es_central` la fotografia. No es «hace desaparecer algo» —la zona
+    // sigue ahi— ni «cambia quien puede hacer que» —ningun permiso cambia—.
+    expect(HISTORIAL_ACCION_TIPOS).toContain("zona_central_cambiada");
+    expect(CATEGORIA_POR_ACCION.zona_central_cambiada).toBe("mueve_dinero");
+    // Literal a proposito: el texto ES el contrato de la pantalla `/historial-de-acciones`.
+    expect(ACCION_LABELS.zona_central_cambiada).toBe("Cambió la marca de zona central");
+    // Y es DISTINTO del de `zona_borrada`, la otra accion sobre la misma entidad: el listado tiene
+    // que poder distinguir «le quitaron la marca» de «la borraron».
+    expect(ACCION_LABELS.zona_central_cambiada).not.toBe(ACCION_LABELS.zona_borrada);
+    expect(CATEGORIA_POR_ACCION.zona_central_cambiada).not.toBe(CATEGORIA_POR_ACCION.zona_borrada);
+    // Se admite como valor de filtro del listado, y un inventado NO.
+    expect(
+      filtroHistorialAccionSchema.safeParse({ accion: ["zona_central_cambiada"] }).success,
+    ).toBe(true);
+    expect(
+      filtroHistorialAccionSchema.safeParse({ accion: ["zona_central_cambiado"] }).success,
+    ).toBe(false);
+    // La 376 NO amplia el enum de entidades: `zona` esta ahi desde los 17 originales de la 362.
+    expect(HISTORIAL_ACCION_ENTIDADES).toContain("zona");
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(20);
+  });
+
+  it("el reparto por categoria es el del Anexo A: 27 dinero, 10 desaparicion, 12 permisos", () => {
     // Numeros DUROS: mover un tipo de categoria es una decision, y tiene que pasar por aqui.
     // 26 y no 25 desde la ficha 366: `orden_zona_reconciliada` entra en DINERO.
     // 7 y no 6 desde la ficha 371: `gestion_fecha_reprogramacion_corregida` entra en DESAPARICION.
@@ -244,7 +271,9 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // 9 y no 7 desde la ficha 374: los DOS `nodo_geografico_*` entran en DESAPARICION —tambien el
     // que devuelve—, igual que `orden_eliminada` y `orden_recuperada`.
     // 10 y no 9 desde la ficha 375: `nodo_geografico_renombrado`, el tercero del mismo eje.
-    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(26);
+    // 27 y no 26 desde la ficha 376: `zona_central_cambiada` entra en DINERO porque `es_central`
+    // elige la columna de flete que se factura (`resolverFlete`), no porque «suene a dinero».
+    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(27);
     expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(10);
     expect(accionesDeCategoria("cambia_permisos")).toHaveLength(12);
   });
