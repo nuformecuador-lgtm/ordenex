@@ -27,7 +27,7 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // Un tipo declarado en la base y ausente del catalogo seria un filtro que no se puede pedir; uno
 // en el catalogo y ausente de la base seria un `validation_error` que nadie entiende.
 //
-// LOS CUARENTA Y OCHO, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y
+// LOS CUARENTA Y NUEVE, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y
 // cada una añade UN tipo (`orden_ubicacion_corregida`, `usuario_fulfillment_cambiado`); la ficha 366
 // (2026-09-03) añade el tercero (`orden_zona_reconciliada`) y los tres entran en «mueve dinero»; la
 // ficha 371 añade el cuarto (`gestion_fecha_reprogramacion_corregida`), que entra en «hace
@@ -35,14 +35,15 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // puede hacer que»; la ficha 374 añade el sexto y el septimo
 // (`nodo_geografico_desactivado`/`nodo_geografico_activado`), que entran los DOS en «hace
 // desaparecer algo»; la ficha 375 añade el octavo (`nodo_geografico_renombrado`), que entra en la
-// MISMA categoria que sus dos hermanos. El motivo de cada uno esta escrito a su lado.
+// MISMA categoria que sus dos hermanos; la ficha 376 añade el noveno (`zona_central_cambiada`),
+// que vuelve a «mueve dinero». El motivo de cada uno esta escrito a su lado.
 
 /**
- * Los 48 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
+ * Los 49 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
  * permisos) y es el que consume el selector de filtros: no se reordena por gusto.
  */
 export const HISTORIAL_ACCION_TIPOS = [
-  // --- A.1 · mueve dinero (26) ---
+  // --- A.1 · mueve dinero (27) ---
   "cierre_dia_aprobado", // cierres-admin.aprobarCierre
   "cierre_dia_rechazado", // cierres-admin.rechazarCierre
   "cierre_dia_pagos_editados", // cierres-admin.actualizarPagosGestion
@@ -83,6 +84,20 @@ export const HISTORIAL_ACCION_TIPOS = [
   // (quien guardo, que orden, cuando): ni la direccion, ni el distrito, ni la zona anterior ni la
   // nueva (R10). Todas las filas de un mismo guardado comparten `lote_id` (R11).
   "orden_zona_reconciliada", // zonas.actualizarZona -> ZonaRepository.update
+  // ⭑ FICHA 376 — la MARCA DE ZONA CENTRAL cambio de sitio. Entra en DINERO, y no es una eleccion
+  // de gusto: `esCentral` elige la columna de flete en `resolverFlete`
+  // (`valorFleteGam`/`valorFleteDevueltoGam` frente a `valorFlete`/`valorFleteDevuelto`), esa
+  // columna se factura, y se lee VIVA hasta que `cierre_detail.es_central` la fotografia. Mismo
+  // motivo textual con el que la 366 clasifico `orden_zona_reconciliada`.
+  //
+  // ⚠️ UNA FILA POR CADA ZONA CUYA MARCA CAMBIO, no una por acto: un traslado escribe DOS con el
+  // MISMO `lote_id` —la que la pierde y la que la gana—. La primera es la que hoy no existe: el
+  // repositorio apaga la central anterior con un `updateMany` que no la nombra en ninguna
+  // respuesta, y esa zona no aparece en ningun payload.
+  //
+  // `valor_anterior`/`valor_nuevo` llevan `"true"`/`"false"`, calcado de
+  // `usuario_fulfillment_cambiado`: son valores de un booleano, no texto libre. `monto` va NULL.
+  "zona_central_cambiada", // zonas.crearZona/actualizarZona -> ZonaRepository.create/update
 
   // --- A.2 · hace desaparecer algo (9) ---
   // ⭑ FICHA 371 — la fecha de una reprogramacion ya registrada, corregida por un coordinador.
@@ -248,6 +263,8 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   orden_ubicacion_corregida: "mueve_dinero",
   usuario_fulfillment_cambiado: "mueve_dinero",
   orden_zona_reconciliada: "mueve_dinero",
+  // FICHA 376: la marca de zona central decide la columna de flete que se factura.
+  zona_central_cambiada: "mueve_dinero",
   gestion_fecha_reprogramacion_corregida: "hace_desaparecer",
   orden_eliminada: "hace_desaparecer",
   orden_recuperada: "hace_desaparecer",
@@ -302,6 +319,7 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   orden_ubicacion_corregida: "Corrigió la ubicación de una orden",
   usuario_fulfillment_cambiado: "Cambió el fulfillment de una tienda",
   orden_zona_reconciliada: "Actualizó la zona de una orden",
+  zona_central_cambiada: "Cambió la marca de zona central",
   gestion_fecha_reprogramacion_corregida: "Corrigió la fecha de una reprogramación",
   orden_eliminada: "Eliminó una orden",
   orden_recuperada: "Recuperó una orden",

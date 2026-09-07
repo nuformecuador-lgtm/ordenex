@@ -88,12 +88,16 @@ describe("366/T1 — el `migration.sql` y el `down.sql`, como texto", () => {
     // La ficha 375 añade `nodo_geografico_renombrado` (renombrar ese mismo nodo, que su clave
     // estable `codigo_dta` hizo seguro), con su propio archivo en
     // `tests/integration/db/geografia-renombrado-migration.test.ts`.
+    // La ficha 376 añade `zona_central_cambiada` (mover la marca de zona central, que elige la
+    // columna de flete que se factura), con su propio archivo en
+    // `tests/integration/db/historial-accion-zona-central-migration.test.ts`.
     const POSTERIORES = [
       "gestion_fecha_reprogramacion_corregida",
       "api_key_eliminada",
       "nodo_geografico_desactivado",
       "nodo_geografico_activado",
       "nodo_geografico_renombrado",
+      "zona_central_cambiada",
     ];
     expect([...HISTORIAL_ACCION_TIPOS].sort()).toEqual(
       [...previos, VALOR_NUEVO, ...POSTERIORES].sort(),

@@ -17,7 +17,7 @@ import { HISTORIAL_ACCION_TIPOS } from "@/lib/types/historial-accion";
 //
 // Ninguna de las dos cosas rompe un test que no exista. Esta guardia es ese test.
 //
-// LAS TRES COSAS QUE EXIGE, por cada uno de los 48 tipos del catalogo:
+// LAS TRES COSAS QUE EXIGE, por cada uno de los 49 tipos del catalogo:
 //   1. que el metodo declarado como su productor EXISTA y su cuerpo se pueda recortar;
 //   2. que ese cuerpo llame a `appendAccion`;
 //   3. que la llamada sea ATOMICA con la mutacion, en una de las DOS formas validas:
@@ -578,12 +578,13 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     expect(inventados, "el censo nombra un tipo que el catalogo no declara").toEqual([]);
   });
 
-  it("los 48 tipos del Anexo A (+ Q1, Q2, la 366, la 371, la 373, la 374 y la 375) siguen siendo 48", () => {
+  it("los 49 tipos del Anexo A (+ Q1, Q2, la 366, la 371, la 373, la 374, la 375 y la 376) siguen siendo 49", () => {
     // Numero DURO a proposito: añadir un tipo al enum obliga a pasar por aqui, y por tanto a
     // añadirlo al censo y a escribir su productor. Es el mecanismo de R14.
-    // 48 desde la ficha 375 (`nodo_geografico_renombrado`); 47 lo fue desde la 374 (los dos
-    // `nodo_geografico_*` de activacion); 45 desde la 373.
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(48);
+    // 49 desde la ficha 376 (`zona_central_cambiada`); 48 lo fue desde la 375
+    // (`nodo_geografico_renombrado`); 47 desde la 374 (los dos `nodo_geografico_*` de activacion);
+    // 45 desde la 373.
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(49);
   });
 });
 
@@ -591,7 +592,7 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
 // 2 — R9: el registro va en la MISMA transaccion que la mutacion
 // ---------------------------------------------------------------------------------------------
 
-describe("362/R9 — los 48 tipos se registran DENTRO de la transaccion de su accion", () => {
+describe("362/R9 — los 49 tipos se registran DENTRO de la transaccion de su accion", () => {
   it.each(CENSO.map((e) => [`${e.archivo.split("/").pop()}#${e.metodo}`, e] as const))(
     "%s registra su accion en la misma transaccion que la escribe",
     (_nombre, entrada) => {

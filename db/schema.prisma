@@ -3036,7 +3036,7 @@ model GestionFechaReprogramacionCambio {
 /// y lo que CAMBIA QUIEN PUEDE HACER QUE. La clasificacion NO se guarda en la fila: se deriva de
 /// `CATEGORIA_POR_ACCION` (`lib/types/historial-accion.ts`), R17.
 enum HistorialAccionTipo {
-  // --- mueve dinero (26) ---
+  // --- mueve dinero (27) ---
   cierre_dia_aprobado
   cierre_dia_rechazado
   cierre_dia_pagos_editados
@@ -3075,6 +3075,20 @@ enum HistorialAccionTipo {
   /// fila registra SOLO EL HECHO (quien guardo, que orden, cuando): ni la direccion, ni el
   /// distrito, ni la zona anterior ni la nueva.
   orden_zona_reconciliada
+  /// FICHA 376: la marca de ZONA CENTRAL cambio de sitio. Mueve dinero, y no es una eleccion de
+  /// gusto: `es_central` elige la columna de flete en `resolverFlete` (`valor_flete_gam` frente a
+  /// `valor_flete`) y esa columna se factura, en vivo, hasta que `cierre_detail.es_central` la
+  /// fotografia. Mismo motivo textual con el que la 366 clasifico `orden_zona_reconciliada`.
+  ///
+  /// ⚠️ UNA FILA POR CADA ZONA CUYA MARCA CAMBIO, no una por acto: un traslado escribe DOS con el
+  /// mismo `lote_id` —la que la pierde y la que la gana—. La primera es la que hoy no existe: es
+  /// el cambio que nadie pidio, sobre una zona que no aparece en ningun payload.
+  ///
+  /// `valor_anterior`/`valor_nuevo` llevan `"true"`/`"false"` (precedente literal:
+  /// `usuario_fulfillment_cambiado`); sin ellos la fila diria «alguien toco la marca» sin decir en
+  /// que direccion, que es justo el defecto que esta ficha viene a arreglar. `monto` va NULL: lo
+  /// que se mueve no es un importe, son dos tarifas por cada tienda de dos zonas enteras.
+  zona_central_cambiada
 
   // --- hace desaparecer algo (7) ---
   /// FICHA 371: corregir la fecha de una reprogramacion ya registrada. ENTRA POR «hace desaparecer
