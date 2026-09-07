@@ -32,6 +32,32 @@ export interface OrdenMontoAjustado {
   aplicado: number;
 }
 
+/**
+ * FICHA 383 — una fila CREADA cuyo texto entró REPARADO (aviso `textoNormalizado` del backend).
+ *
+ * Tampoco es un cuarto grupo: como `OrdenMontoAjustado`, es una vista de las creadas y sigue
+ * contada en `numRemisionesNuevas`. Una entrada por CAMPO reparado, así que una misma fila puede
+ * aportar varias (el backend emite un aviso por campo).
+ *
+ * Por qué tiene que verse: la etiqueta no puede imprimir el carácter que traía el archivo, así
+ * que Ordenex guarda un nombre que la tienda NO escribió. Repararlo en silencio es el mismo
+ * género de fallo mudo que las fichas 282/294/299 vinieron a matar.
+ */
+export interface OrdenTextoNormalizado {
+  fila: number | null;
+  numRemision: string;
+  /**
+   * Clave de la COLUMNA DEL ARCHIVO (`destinatario`, `telefono`, `producto`, `direccion`).
+   * Se transporta como `string` a propósito: el navegador no guarda una segunda copia de la
+   * lista de campos evaluados —esa decisión vive en el servidor—, solo pinta lo que llegó.
+   */
+  campo: string;
+  /** Lo que traía el archivo de la tienda (`𝕠rfirio`). */
+  original: string;
+  /** Lo que se guardará, y lo único que la etiqueta sabe imprimir (`orfirio`). */
+  aplicado: string;
+}
+
 /** Resultado de clasificar `BulkSummary.filas` (design D2). */
 export interface ClasificacionCarga {
   numRemisionesNuevas: string[]; // resultado === "creada"
@@ -43,11 +69,23 @@ export interface ClasificacionCarga {
    * pinta exactamente igual que antes de esta ficha.
    */
   ajustadas: OrdenMontoAjustado[];
+  /**
+   * Ficha 383: las creadas cuyo texto se reparó para que la etiqueta pueda imprimirlo. Vacío en
+   * una carga normal —ningún carácter fuera de la fuente—, que es el caso de todas menos una
+   * medida en producción: sin reparaciones el paso se pinta exactamente igual que antes.
+   */
+  normalizadas: OrdenTextoNormalizado[];
 }
 
 /** Grupos vacíos: forma canónica para `data`/`filas` inesperados (R2). */
 function clasificacionVacia(): ClasificacionCarga {
-  return { numRemisionesNuevas: [], existentes: [], errores: [], ajustadas: [] };
+  return {
+    numRemisionesNuevas: [],
+    existentes: [],
+    errores: [],
+    ajustadas: [],
+    normalizadas: [],
+  };
 }
 
 /** Narrowing a `Record<string, unknown>` sin `any`. */
@@ -84,6 +122,33 @@ function toMontoAjustado(value: unknown): { original: number; aplicado: number }
   return { original, aplicado };
 }
 
+/**
+ * Ficha 383: toma los avisos de reparación de la fila (`textoNormalizado`) solo si son una lista
+ * de entradas con `campo`, `original` y `aplicado` como strings, y solo si `original` y
+ * `aplicado` son DISTINTOS.
+ *
+ * Lo de «distintos» es la misma cautela que `toMontoAjustado`, y aquí es literalmente R21: un
+ * aviso con los dos textos iguales pintaría «se cargará corregida («Ana» → «Ana»)», o sea una
+ * carga normal ganando una línea que no informa de ningún cambio. Ante cualquier otra forma no
+ * se lanza: la entrada se descarta y la fila sigue siendo una creada normal.
+ */
+function toTextosNormalizados(
+  value: unknown,
+): Array<{ campo: string; original: string; aplicado: string }> {
+  if (!Array.isArray(value)) return [];
+  const salida: Array<{ campo: string; original: string; aplicado: string }> = [];
+  for (const entrada of value) {
+    const record = asRecord(entrada);
+    if (record === null) continue;
+    const { campo, original, aplicado } = record;
+    if (typeof campo !== "string" || campo === "") continue;
+    if (typeof original !== "string" || typeof aplicado !== "string") continue;
+    if (original === aplicado) continue;
+    salida.push({ campo, original, aplicado });
+  }
+  return salida;
+}
+
 /** Toma `errores` solo si es objeto de arrays de strings; si no, `{}` (R3, R19). */
 function toErrores(value: unknown): Record<string, string[]> {
   const record = asRecord(value);
@@ -106,6 +171,9 @@ function toErrores(value: unknown): Record<string, string[]> {
  *
  * Feature 304: además saca a la luz `ajustadas`, que NO es un cuarto grupo sino una vista de
  * las creadas que traían céntimos. Los tres grupos y sus conteos no cambian.
+ *
+ * Ficha 383: y `normalizadas`, con el mismo criterio — una vista de las creadas cuyo texto se
+ * reparó para que la etiqueta lo pueda imprimir. Tampoco toca los tres conteos.
  */
 export function clasificarBulkSummary(data: unknown): ClasificacionCarga {
   const record = asRecord(data);
@@ -133,6 +201,11 @@ export function clasificarBulkSummary(data: unknown): ClasificacionCarga {
       const ajuste = toMontoAjustado(row.montoAjustado);
       if (ajuste !== null) {
         resultado.ajustadas.push({ fila: toFila(row.fila), numRemision, ...ajuste });
+      }
+      // Ficha 383: y lo mismo con el aviso de texto reparado, que viaja EN la fila creada por el
+      // mismo canal. Una fila puede traer varios (un campo reparado = un aviso).
+      for (const texto of toTextosNormalizados(row.textoNormalizado)) {
+        resultado.normalizadas.push({ fila: toFila(row.fila), numRemision, ...texto });
       }
     } else if (row.resultado === "duplicada") {
       resultado.existentes.push({

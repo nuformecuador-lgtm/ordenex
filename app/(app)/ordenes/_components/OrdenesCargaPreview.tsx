@@ -53,6 +53,10 @@ export interface OrdenesCargaPreviewProps {
  * Feature 304: y las filas que se cargarán con el monto REDONDEADO (aviso de la 299). Se
  * dicen aquí, antes de confirmar, y aparte de los errores y de las duplicadas: esas filas sí
  * se cargan, así que mezclarlas con las que no entran sería otra mentira más.
+ *
+ * Ficha 383: y las que se cargarán con el TEXTO reparado, porque traían un carácter que la
+ * fuente de la etiqueta no sabe imprimir. Mismo sitio y mismo criterio que el monto: entran,
+ * pero no tal como venían.
  */
 export function OrdenesCargaPreview({
   clasificacion,
@@ -61,8 +65,22 @@ export function OrdenesCargaPreview({
   progresoTexto,
   onConfirmar,
 }: OrdenesCargaPreviewProps) {
-  const { numRemisionesNuevas, existentes, errores, ajustadas } = clasificacion;
+  const { numRemisionesNuevas, existentes, errores, ajustadas, normalizadas } =
+    clasificacion;
   const nuevas = numRemisionesNuevas.length;
+
+  /**
+   * Ficha 383 — cuántas ÓRDENES se reparan, no cuántos avisos hay. `normalizadas` trae una
+   * entrada por CAMPO reparado, así que una sola fila con el nombre y la dirección rotos
+   * generaría dos: decir «2 traen caracteres…» de una única orden sería otro número que no
+   * cuadra con lo que la tienda tiene delante.
+   */
+  const ordenesNormalizadas = useMemo(
+    () => new Set(normalizadas.map((n) => n.numRemision)).size,
+    [normalizadas],
+  );
+  /** El primer aviso, que es el que se enseña como ejemplo de la línea. */
+  const ejemploNormalizado = normalizadas[0] ?? null;
 
   const [chipActivo, setChipActivo] = useState<string | null>(null);
   const [generandoErrores, setGenerandoErrores] = useState(false);
@@ -153,6 +171,28 @@ export function OrdenesCargaPreview({
               {ajustadas.length === 1
                 ? "1 traía céntimos y se cargará con el monto redondeado al colón más cercano."
                 : `${ajustadas.length} traían céntimos y se cargarán con el monto redondeado al colón más cercano.`}
+            </span>
+          ) : null}
+          {/* Ficha 383: la reparación de caracteres que la etiqueta no sabe imprimir. Va en la
+              MISMA alerta y por el mismo motivo que la línea de arriba: estas filas SÍ se cargan,
+              solo que con un texto que la tienda no escribió, y eso hay que decirlo ANTES de
+              confirmar —que es el único momento en el que alguien tiene la orden delante—.
+              Sin reparaciones no se pinta nada (R21).
+
+              Los dos textos van en `<bdi>` (isolate bidireccional del HTML): el dato viene del
+              archivo de la tienda y, sin aislarlo, un carácter de control podría reordenar el
+              aviso que lo denuncia — la lección de la 382, aquí resuelta con el elemento que el
+              estándar tiene para esto en vez de con caracteres invisibles en el código. */}
+          {ejemploNormalizado !== null ? (
+            <span className="block">
+              {ordenesNormalizadas === 1
+                ? "1 trae caracteres que la etiqueta no puede imprimir y se cargará corregida"
+                : `${ordenesNormalizadas} traen caracteres que la etiqueta no puede imprimir y se cargarán corregidas`}
+              {" («"}
+              <bdi>{ejemploNormalizado.original}</bdi>
+              {"» → «"}
+              <bdi>{ejemploNormalizado.aplicado}</bdi>
+              {"»)."}
             </span>
           ) : null}
         </AlertDescription>

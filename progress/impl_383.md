@@ -233,9 +233,8 @@ del 2026-08-14. Esta ficha **no añade ninguna migración**.
 
 ## Lo que queda vivo (para el reviewer y para el frontend)
 
-1. **T7 entero, sin empezar** — es del `frontend_dev`: `carga-masiva-clasificacion.ts` con la
-   vista `normalizadas`, la línea del preview en `OrdenesCargaPreview.tsx` y el round-trip de
-   T7.3. El backend ya emite `textoNormalizado` y la clave solo aparece cuando hubo reparación.
+1. ~~**T7 entero, sin empezar**~~ — **HECHO el 2026-09-07** por el `frontend_dev`, en la misma
+   rama. Ver §«T7 — la mitad de pantalla» al final de este archivo.
 2. **T9, la comprobación humana**, sin hacer (no la hace el agente). Doce mil tests no sustituyen
    a mirar la app: subir un XLSX de tres filas —una normal, una con el destinatario en
    double-struck y una con un emoji en la dirección—, leer el preview, confirmar y luego imprimir
@@ -244,6 +243,7 @@ del 2026-08-14. Esta ficha **no añade ninguna migración**.
    va entre comillas **simples**, y este mensaje lleva el carácter entre `«…»`: dos filas con dos
    emojis distintos producen **dos** chips en vez de uno. No rompe nada y no es un requisito de
    esta ficha; queda escrito para que no se descubra en producción.
+   → **Decidido en T7.3 (2026-09-07): no se toca, y se mide.** Ver §T7, «Los chips».
 4. **El riesgo del design §8.1 sigue en pie**: la reparación puede **alargar** el texto (`ﬁ` →
    `fi`) y una dirección al límite podría disparar `ErrorEtiquetaNoCabe` (ficha 350). Hay un caso
    de test que lo afirma (`r.valor.length === r.original.length + 1`), pero no es una puerta:
@@ -251,3 +251,145 @@ del 2026-08-14. Esta ficha **no añade ninguna migración**.
 5. **Q3 sigue abierta y es real**: el nombre de la tienda y los de geografía llegan a la etiqueta
    y esta ficha no los toca (ficha **392**). Un maestro que registre «𝕋ienda» vuelve a tumbar el
    lote, y esta vez el aviso apuntará a una orden cuyo dato está bien.
+
+---
+
+# T7 — la mitad de pantalla (2026-09-07, `frontend_dev`)
+
+> Alcance: **T7.1, T7.2 y T7.3**, y nada más. No se tocó `lib/services/`, `lib/repositories/`,
+> `lib/pdf/`, ninguna migración ni la base.
+
+## El hueco que cerraba
+
+R10 estaba **a medias**: el backend emitía `textoNormalizado` y el aviso viajaba por las dos vías,
+pero **la pantalla no lo pintaba**. La reparación ocurría en silencio — justo lo que la ficha vino
+a evitar («si se normaliza, tiene que verse»). Con T7, **R10 queda completo**.
+
+## Qué ve exactamente el usuario
+
+**Cuando una fila se REPARA** (validación previa, antes de confirmar, con nada escrito todavía):
+una línea más en la **misma alerta** que ya cuenta las duplicadas y los céntimos —nunca junto a
+las filas con error, porque estas SÍ se cargan—:
+
+```
+1 trae caracteres que la etiqueta no puede imprimir y se cargará corregida («𝕠rfirio» → «orfirio»).
+2 traen caracteres que la etiqueta no puede imprimir y se cargarán corregidas («𝕠rfirio» → «orfirio»).
+```
+
+- El número son **órdenes**, no avisos: una fila con el nombre **y** la dirección rotos dice «1»,
+  no «2» (`normalizadas` trae una entrada por CAMPO).
+- El ejemplo es el **primer** aviso del lote. Residual declarado: con varias reparaciones distintas
+  solo se enseña una; el resto viven en el conteo. Es lo que pide T7.2 («un ejemplo»).
+- Los dos textos van dentro de un **`<bdi>`** (isolate bidireccional del HTML). El dato viene del
+  archivo de la tienda y es, por definición, texto que la fuente no cubre: sin aislarlo, un
+  carácter de control podría dar la vuelta a la frase que lo denuncia. Es la lección de la 382
+  resuelta con el elemento que el estándar tiene para esto, **sin** importar nada de `lib/pdf/` en
+  un componente de cliente (R3 intacta).
+- **Sin reparaciones no se pinta nada** (R21), y un aviso con `original === aplicado` se descarta
+  antes de llegar a la pantalla.
+
+**Gramática:** el design proponía «se cargarán **corregidos**»; se usa el **femenino** («corregida»
+/ «corregidas») para concordar con las otras cuatro líneas de la misma alerta («1 nueva lista para
+cargar», «1 ya existe … y se omitirá», «1 con error y no se cargará», «1 traía céntimos y se
+cargará…»), que eliden el sustantivo femenino. Única desviación del literal del design.
+
+**Cuando una fila se RECHAZA** (carácter sin reparación posible): **no cambia nada de lo que ya
+había**, y eso es el hallazgo de T7.3, no una omisión. El backend emite el error bajo la clave de
+la columna del archivo, así que la fila cae en la tabla de «Órdenes con error» con este motivo:
+
+```
+El campo «destinatario» lleva un carácter que la etiqueta no puede imprimir: «⁨🙂⁩» (U+1F642).
+Reintentar no lo cambia: corrige esa celda y escríbela con letras y números normales.
+```
+
+…produce su **chip** filtrable, y viaja al XLSX de errores como
+`Fila 7 — destinatario: <ese mismo mensaje>`, con el emoji y los dos aislantes bidi **intactos**
+(medido: el par suplente y los U+2068/U+2069 sobreviven al ida y vuelta por `exceljs`, tanto por el
+parser del servidor como por el del navegador). Corregida la celda, la fila re-subida vuelve a
+validar.
+
+## Los chips: la decisión, y por qué
+
+El aviso que dejó el backend es correcto y **se midió**: `canonizarMensaje` agrupa reemplazando lo
+que va entre comillas **simples**, y este mensaje lleva el carácter entre `«…»` **y además su
+`U+XXXX`**. Dos filas con dos emojis distintos dan **dos** chips. Mil filas con mil caracteres
+distintos darían mil chips y la fila de filtros sería ilegible.
+
+**Decisión: no se toca `carga-masiva-error-chips.ts`, y la limitación se convierte en medición.**
+Motivos, en orden:
+
+1. **T7.3 lo congela explícitamente**: «sin cambiar `carga-masiva-error-chips.ts` ni
+   `carga-masiva-export-errores.ts`», y su criterio de hecho es que el `git diff` de esos dos
+   archivos esté **vacío**. Lo está.
+2. **El arreglo obvio no arregla — medido, no razonado.** Se aplicó como mutación (M9) canonizar
+   también `«…»`: los dos chips **siguen siendo dos**, porque el `U+1F642` y el `U+1F600` siguen
+   distinguiéndolos. Agruparlos de verdad obliga a canonizar **también** la notación del code
+   point, y eso hace que el chip de `«destinatario»` y el de `«direccion»` queden con la **misma
+   etiqueta** y distinta clave: dos chips idénticos a la vista. Es rediseño del agrupador, no un
+   remiendo.
+3. **El caso patológico es real pero improbable**: un archivo roto suele traer el **mismo**
+   carácter repetido (una exportación, un copiar-pegar), y ese caso colapsa hoy en **un** chip.
+
+Queda un test que lo **fija y lo explica** (`tests/integration/carga-masiva-errores-roundtrip.test.ts`
+› «HOY: un chip por CARÁCTER, no por tipo — limitación MEDIDA, no un requisito»), con el aviso
+escrito dentro: si alguien lo arregla, ese test se pone rojo **a propósito** y se actualiza. Si el
+humano quiere el agrupado, es **otra ficha** sobre el agrupador.
+
+## Archivos
+
+### Modificados (producción)
+
+| Archivo | Cambio |
+| --- | --- |
+| `app/(app)/ordenes/_components/carga-masiva-clasificacion.ts` | **T7.1.** `OrdenTextoNormalizado`, `ClasificacionCarga.normalizadas`, `toTextosNormalizados` (guardas defensivos, mismos que `toMontoAjustado`) y el transporte en la rama `creada`. |
+| `app/(app)/ordenes/_components/OrdenesCargaPreview.tsx` | **T7.2.** La línea en el mismo `Alert`, el conteo por ÓRDENES y los dos `<bdi>`. |
+| `app/(app)/ordenes/_components/OrdenesCargaMasivaButton.tsx` | `CLASIFICACION_VACIA` gana `normalizadas: []` (el tipo lo exige). |
+
+### Modificados (tests)
+
+| Archivo | Cambio |
+| --- | --- |
+| `tests/components/CargaMasivaClasificacion.test.ts` | +9 casos (T7.1) y `normalizadas` añadido al barrido de `data` basura. |
+| `tests/components/OrdenesCargaPreview.test.tsx` | +6 casos (T7.2), literales completos del texto renderizado. |
+| `tests/integration/carga-masiva-errores-roundtrip.test.ts` | +6 casos (T7.3): ancla del mensaje, chip, round-trip XLSX por los DOS parsers, re-subida, y la limitación medida de los chips. |
+| `tests/components/OrdenesCargaMasivaButton.test.tsx`, `tests/components/OrdenesCargaMasivaNotificacion.test.tsx` | Solo el campo nuevo en sus literales de `ClasificacionCarga`. |
+
+### NO tocados, a propósito
+
+- `carga-masiva-error-chips.ts` y `carga-masiva-export-errores.ts` — **`git diff` vacío** (T7.3).
+- Todo el backend (`lib/services/`, `lib/repositories/`, `lib/pdf/`), `lib/types/carga-masiva.ts`,
+  migraciones y base.
+- `OrdenesCargaResumen.tsx` (paso 3, tras la carga real): el spec pone la línea en el **preview**,
+  que es la puerta humana. **Residual declarado**: quien cierre el modal y vuelva al resumen ya no
+  ve qué se reparó — el mismo residual que `montoAjustado` ya tenía antes de la 304, y en la vía
+  API key no hay preview en absoluto (design §5.5).
+
+## T7 — las mutaciones (aplicadas al árbol real, revertidas **desde copia**)
+
+Cada una: `cp` del archivo al scratchpad → mutación → suite → `cp` de vuelta. **Nunca
+`git checkout`.** Baseline antes de empezar: `5 archivos, 76 tests passed`.
+
+| # | Mutación | Archivo | Qué se puso rojo |
+| --- | --- | --- | --- |
+| M1 | Quitar el guarda `original === aplicado` | `carga-masiva-clasificacion.ts` | **1**: «una reparación que no cambia el texto NO se anuncia» (R21) |
+| M2 | No transportar nunca el aviso (`toTextosNormalizados` → `[]`) | idem | **4**, entre ellos «una fila creada con `textoNormalizado` llega con campo, original y aplicado» |
+| M3 | Transportar el aviso también en las filas `duplicada` | idem | **1**: «solo cuenta la reparación de las CREADAS…» (la lección de la 294) |
+| M4 | Quitar la comprobación de que `aplicado` es string | idem | **1**: el barrido de `textoNormalizado` basura (salía `aplicado: undefined`) |
+| M5 | Descartar la lista ENTERA ante una entrada rota (`continue` → `return []`) | idem | **1**: «una lista MIXTA conserva los avisos buenos…» |
+| M6 | Contar `normalizadas.length` en vez de remisiones distintas | `OrdenesCargaPreview.tsx` | **1**: «cuenta ÓRDENES, no avisos: dos campos reparados de la MISMA fila siguen siendo 1» |
+| M7 | `<bdi>` → `<span>` | idem | **1**: «los dos textos van AISLADOS en `<bdi>`…» |
+| M8 | No pintar nunca la línea | idem | **4**: los tres literales (singular, plural, dos-campos) y el de los `<bdi>` |
+| M9 | Canonizar también `«…»` en los chips | `carga-masiva-error-chips.ts` *(revertida)* | **1**: «R13: produce su chip…». Y lo que **NO** se puso rojo es el hallazgo: «un chip por CARÁCTER» siguió verde → canonizar `«…»` **no** agrupa, hace falta el `U+XXXX`. |
+| M10 | Quitar el prefijo `Fila N — ` del `motivo_error` | `carga-masiva-export-errores.ts` *(revertida)* | **2**: los dos round-trips del XLSX (servidor y navegador) |
+
+Tras revertir las diez: `Test Files 7 passed (7) · Tests 102 passed (102)` y `git diff` vacío en
+los dos archivos congelados.
+
+## Mapa R → test (lo que T7 añade)
+
+| R | Test |
+| --- | --- |
+| R10 | `CargaMasivaClasificacion.test.ts` › «una fila creada con `textoNormalizado` llega con campo, original y aplicado», «una fila con DOS campos reparados aporta DOS avisos…» · `OrdenesCargaPreview.test.tsx` › «una fila reparada: lo dice y enseña «lo que venía» → «lo que se guardará»», «dos órdenes reparadas lo dicen en plural» |
+| R11 | (backend) — el preview y la carga real pasan por el mismo `resolveFila`; la pantalla pinta lo que llega |
+| R13 | `carga-masiva-errores-roundtrip.test.ts` › «R13: produce su chip…», «R13: llega al XLSX de errores con su `motivo_error`, y el carácter sobrevive», «…y el parser del NAVEGADOR…», «…corregida la celda, la fila re-subida vuelve a validar» |
+| R21 | `CargaMasivaClasificacion.test.ts` › «una reparación que no cambia el texto NO se anuncia», «una carga NORMAL no gana ninguna reparación» · `OrdenesCargaPreview.test.tsx` › «sin reparaciones el paso se ve EXACTAMENTE como antes: ni una palabra de más» |

@@ -36,6 +36,8 @@ const CLASIFICACION_VACIA: ClasificacionCarga = {
   existentes: [],
   errores: [],
   ajustadas: [],
+  // Ficha 383: sin reparaciones de texto, igual que sin ajustes de monto.
+  normalizadas: [],
 };
 
 /**
