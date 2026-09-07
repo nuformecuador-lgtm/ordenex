@@ -355,8 +355,22 @@ describe("FICHA 347 · columnas del archivo con dinero concedido (R66/R68)", () 
 
 describe("FICHA 388 · los ámbitos de preferencia de columnas", () => {
   it("cada juego de columnas viaja con SU ámbito, y no con el del otro", () => {
-    // Es el emparejamiento entero: si alguien cruza los ámbitos dentro de los objetos, la
-    // preferencia del archivo sin dinero acabaría aplicándose al de dinero y al revés.
+    // Caza el CRUCE: si alguien intercambia los ámbitos dentro de los objetos, la preferencia
+    // del archivo sin dinero acabaría aplicándose al de dinero y al revés. Medido: cruzar uno
+    // de los dos pone este caso rojo.
+    //
+    // ⚠ LO QUE ESTE CASO **NO** CAZA, dicho para que nadie lo lea como una red que no es: el
+    // COLAPSO de los dos ámbitos en un mismo identificador. El esperado se construye con las
+    // MISMAS constantes que devuelve la función, así que si alguien iguala los dos literales
+    // los dos lados colapsan a la vez y esto sigue VERDE — medido, no razonado: con los
+    // ámbitos colapsados caen los DOS casos siguientes y éste no. La red contra el colapso son
+    // ellos («los dos ámbitos son DISTINTOS» y «los identificadores son los literales»), más
+    // «EL CASO DE LA CONCESIÓN» de `ProductosDescargaColumnas.test.tsx`, que es el que lo mide
+    // por comportamiento.
+    //
+    // No se refuerza aquí a propósito: añadirle la desigualdad haría que un colapso pusiera
+    // rojos dos casos con el mismo nombre a medias, y el nombre del caso rojo es lo que dice
+    // qué propiedad se rompió.
     expect(descargaAnaliticaProductos(true)).toEqual({
       columnas: COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO,
       ambitoColumnas: AMBITO_DESCARGA_ANALITICA_PRODUCTOS_DINERO,
