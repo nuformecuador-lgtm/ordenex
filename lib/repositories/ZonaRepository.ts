@@ -5,6 +5,7 @@ import { ConflictError } from "@/lib/errors";
 import { esViolacionDeClaveForanea } from "@/lib/repositories/_shared/prisma-fk";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { zonaUnicaDeDistrito } from "@/lib/repositories/_shared/zona-colapso";
+import { ESTADOS_PAQUETE_EN_ESTANTE } from "@/lib/utils/estados-bodega-satelite";
 import { normalizeName } from "@/lib/utils/normalize";
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
 import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
@@ -136,6 +137,46 @@ function tarifaCreateRows(zonaId: string, tarifas: CreateZonaData["tarifas"]) {
   }));
 }
 
+/**
+ * ⭑ EL CORTE DE ELEGIBILIDAD DE LA RECONCILIACION (366/R6/R7/R8), EN UNA SOLA DECLARACION.
+ *
+ * Vive en el `WHERE` a proposito: son condiciones sobre filas de OTRAS tablas (`cierre_detail` y
+ * `gestion_orden`), no `if`s que un doble pueda esquivar. Sus cuatro cortes, sin ninguno de
+ * estado:
+ *   · `deletedAt: null`       — una orden borrada no se re-estampa;
+ *   · `cierreDetalles: none`  — ya tiene un detalle congelado en un cierre: eso ya se facturo, y
+ *     `cierre_detail` es INMUTABLE (366/R8);
+ *   · `gestiones: none {...}` — tiene una gestion VIGENTE cuyo resultado ya decidio dinero
+ *     (`entregada`, `rechazada`, `incidente`). Una `reprogramada` o una `devuelta` vigentes NO
+ *     excluyen: las dos se rutean HACIA ADELANTE por `orden.zonaId`
+ *     (`LiberacionReprogramadaService`, `DevolucionSlaService`), asi que dejarlas con la zona
+ *     vieja las liberaria a la bodega equivocada — el mismo atasco que la 366 vino a arreglar.
+ *
+ * ⭑ FICHA 377 (design §3.3) — POR QUE ES UNA FUNCION Y NO DOS `where` ESCRITOS DOS VECES. La 377
+ * lo lee DOS veces en cada grupo: una para las ordenes que SE MUEVEN (`notIn` estante) y otra
+ * para CONTAR las que se quedan (`in` estante). Si las dos copiaran el corte, el dia que cambie
+ * uno de los cuatro cortes de arriba el conteo se quedaria contando otra cosa y nada fallaria —
+ * es la misma leccion que `OrdenRepository`/184-R16, donde el `WHERE` de la pagina y el del
+ * conjunto no pueden despegarse.
+ *
+ * El estado NO entra aqui: cada consumidor le añade su clausula COMPLEMENTARIA, y esa
+ * complementariedad es lo que hace que los dos conjuntos sean disjuntos por construccion.
+ */
+function whereBaseElegible(distritoIds: string[], zonaResueltaId: string): Prisma.OrdenWhereInput {
+  return {
+    distritoId: { in: distritoIds },
+    zonaId: { not: zonaResueltaId },
+    deletedAt: null,
+    cierreDetalles: { none: {} },
+    gestiones: {
+      none: {
+        anuladaAt: null,
+        resultado: { in: ["entregada", "rechazada", "incidente"] },
+      },
+    },
+  };
+}
+
 export class ZonaRepository implements IZonaRepository {
   constructor(private readonly prisma: ZonaPrismaClient) {}
 
@@ -262,6 +303,12 @@ export class ZonaRepository implements IZonaRepository {
    *
    * TODO OCURRE EN LA TRANSACCION QUE YA EXISTIA —la misma que reemplaza la N:M y las tarifas—,
    * asi que o se guarda la zona Y se reconcilian sus ordenes, o no ocurre ninguna de las dos.
+   *
+   * ⭑ FICHA 377 (R2/R8) — Y LA ORDEN QUE YA ESTA EN EL ESTANTE SE QUEDA DONDE ESTA. La 366 no
+   * miraba el estado, asi que una orden `en_bodega_satelite` podia cambiar de zona: desaparecia
+   * del listado de la bodega que TIENE el paquete, esa bodega ya no podia asignarla y no existe
+   * ninguna transicion de salida hacia otra bodega. Ahora esas ordenes quedan fuera del corte y
+   * se informan aparte, en `ordenesRetenidasEnBodegaSatelite`, para que el guardado no sea mudo.
    */
   async update(
     id: string,
@@ -343,6 +390,9 @@ export class ZonaRepository implements IZonaRepository {
         ];
 
         let ordenesReconciliadas = 0;
+        // 377/R8: las que HABRIAN cambiado de zona y no lo hacen porque su paquete ya esta en el
+        // estante de una satelite. Se devuelve en la misma respuesta del guardado (R8/R10).
+        let ordenesRetenidasEnBodegaSatelite = 0;
         if (distritosAfectados.length > 0) {
           // El estado YA reemplazado de la N:M: es el que decide cual es la zona correcta.
           const filas = await tx.zonaDistrito.findMany({
@@ -376,30 +426,42 @@ export class ZonaRepository implements IZonaRepository {
             const actor = await resolverActorCongelado(tx, actorUsuarioId);
 
             for (const [zonaResueltaId, distritoIds] of distritosPorZonaResuelta) {
-              // ⭑ EL CORTE DE ELEGIBILIDAD (366/R6/R7), y vive en el `WHERE` a proposito: es una
-              // condicion sobre filas de OTRAS tablas, no un `if` que un doble pueda esquivar.
-              //   · `deletedAt: null`       — una orden borrada no se re-estampa;
-              //   · `cierreDetalles: none`  — ya tiene un detalle congelado en un cierre: eso ya
-              //     se facturo, y `cierre_detail` es INMUTABLE (R8);
-              //   · `gestiones: none {...}` — tiene una gestion VIGENTE cuyo resultado ya decidio
-              //     dinero (`entregada`, `rechazada`, `incidente`). Una `reprogramada` o una
-              //     `devuelta` vigentes NO excluyen: las dos se rutean HACIA ADELANTE por
-              //     `orden.zonaId` (`LiberacionReprogramadaService`, `DevolucionSlaService`), asi
-              //     que dejarlas con la zona vieja las liberaria a la bodega equivocada — el
-              //     mismo atasco que esta ficha viene a arreglar (design §1).
+              // El corte de elegibilidad de la 366 (los cuatro cortes que NO miran el estado) vive
+              // en `whereBaseElegible`, arriba, y lo leen las DOS consultas de este bloque.
+              const base = whereBaseElegible(distritoIds, zonaResueltaId);
+
+              // ══════════════════════════════════════════════════════════════════════════════
+              // ⭑ FICHA 377 (R2/R8) — LO QUE SE QUEDA, Y POR QUE SE CUENTA
+              // ══════════════════════════════════════════════════════════════════════════════
+              //
+              // EN TRANSITO SI, EN EL ESTANTE NO. `orden.zona_id` hace dos trabajos a la vez
+              // (377/design §1): dice a que zona GEOGRAFICA pertenece la direccion —de ahi la
+              // tarifa— y dice QUE BODEGA tiene el paquete —de ahi el permiso: el listado
+              // (`OrdenRepository.condicionesSatelite`), la asignacion
+              // (`AsignacionSateliteService`, motivo `zona_ajena`) y el deshacer—. El estado dice
+              // cual de los dos manda:
+              //
+              //   · `en_ruta_bodega_satelite` — el paquete lo tiene la CENTRAL, que aun decide
+              //     adonde lo manda. Reconciliar es CORRECTO y ademas DESBLOQUEA la recepcion,
+              //     porque `recibirEnSatelite` acota su guarda por `zonaId` (366/design §8: 41 de
+              //     42 ordenes represadas el 2026-09-03). NO SE TOCA.
+              //   · `en_bodega_satelite` — el paquete esta en el estante de una bodega concreta,
+              //     que lo recibio con su propia transicion. Moverle la zona le quita el permiso a
+              //     quien LO TIENE sin darselo a nadie que pueda usarlo: desaparece del listado de
+              //     su bodega, esa bodega ya no puede asignarlo (`zona_ajena`), la otra lo ve pero
+              //     no tiene el paquete, y desde ese estado NO HAY transicion de salida hacia otra
+              //     bodega. Por eso se queda como esta.
+              //
+              // El conteo se hace SIEMPRE, tambien cuando no haya nada que mover: R8 no depende de
+              // que este guardado reconcilie algo. Y se hace en SQL —no filtrando en JS lo que ya
+              // se trajo— porque un corte que decide quien se mueve tiene que poder matarse con
+              // una mutacion y que un test contra Postgres lo note (design §3.2).
+              ordenesRetenidasEnBodegaSatelite += await tx.orden.count({
+                where: { ...base, estatus: { value: { in: [...ESTADOS_PAQUETE_EN_ESTANTE] } } },
+              });
+
               const elegibles = await tx.orden.findMany({
-                where: {
-                  distritoId: { in: distritoIds },
-                  zonaId: { not: zonaResueltaId },
-                  deletedAt: null,
-                  cierreDetalles: { none: {} },
-                  gestiones: {
-                    none: {
-                      anuladaAt: null,
-                      resultado: { in: ["entregada", "rechazada", "incidente"] },
-                    },
-                  },
-                },
+                where: { ...base, estatus: { value: { notIn: [...ESTADOS_PAQUETE_EN_ESTANTE] } } },
                 select: { id: true, numGuia: true, numRemision: true },
               });
               if (elegibles.length === 0) continue;
@@ -461,6 +523,9 @@ export class ZonaRepository implements IZonaRepository {
           estado: "ok" as const,
           zona: toDTO(zona, data.distritoIds.length, tarifas),
           ordenesReconciliadas,
+          // 377/R7/R8: los dos numeros viajan por separado y son DISJUNTOS. `create` no devuelve
+          // ninguno de los dos (R13: crear una zona ni reconcilia ni retiene).
+          ordenesRetenidasEnBodegaSatelite,
         };
       });
     } catch (e) {

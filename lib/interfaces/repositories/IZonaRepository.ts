@@ -65,9 +65,23 @@ export type DeleteZonaResult = "ok" | "not_found" | "referenced" | "es_central";
  * ⭑ 376: `null` DEJA DE SER EL «no existe». Los tres desenlaces son explicitos y estan nombrados,
  * porque ahora hay DOS formas de no guardar y confundirlas seria devolver `not_found` cuando lo
  * que pasa es que se pidio quitarle la marca a la unica zona central.
+ *
+ * ⭑ FICHA 377 (design §5.1) — `ordenesRetenidasEnBodegaSatelite` (R8) es cuantas HABRIAN cambiado
+ * de zona pero se quedan como estaban porque su paquete ya esta en el estante de una bodega
+ * satelite. Cero es lo normal.
+ *
+ * ⚠️ NO es un subconjunto de `ordenesReconciliadas`: los dos conjuntos son DISJUNTOS por
+ * construccion —salen del MISMO `where` base con clausulas de estado complementarias (`notIn` /
+ * `in` sobre `ESTADOS_PAQUETE_EN_ESTANTE`)—, asi que sumarlos da «las que este guardado habria
+ * movido de no existir la 377» y nunca cuenta una orden dos veces.
  */
 export type UpdateZonaResult =
-  | { estado: "ok"; zona: ZonaDTO; ordenesReconciliadas: number }
+  | {
+      estado: "ok";
+      zona: ZonaDTO;
+      ordenesReconciliadas: number;
+      ordenesRetenidasEnBodegaSatelite: number;
+    }
   | { estado: "not_found" }
   /** 376/R5: se pidio EXPLICITAMENTE quitar la marca a la zona que hoy es la central. */
   | { estado: "sin_zona_central" };
@@ -103,6 +117,10 @@ export interface IZonaRepository {
    *
    * FICHA 376 (R5/R12): rechaza el guardado COMPLETO antes de la primera escritura si dejaria al
    * sistema sin zona central, y registra una fila por CADA zona cuya marca cambie.
+   *
+   * FICHA 377 (R2/R8): la orden cuyo paquete ya esta en el estante de una satelite queda FUERA de
+   * esa re-derivacion —moverle la zona la dejaria sin bodega que pueda asignarla y sin transicion
+   * de salida— y se informa aparte, en `ordenesRetenidasEnBodegaSatelite`.
    */
   update(
     id: string,

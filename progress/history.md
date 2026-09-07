@@ -4479,6 +4479,58 @@ detectó el gate: `jq` no está instalado y su ausencia es un `warn`, así que l
   duplicarse.
 - **DEUDA:** ninguna de las dos partes se ha visto en la pantalla real con sesion `maestro`.
 
+## 2026-09-07 — 377: una orden en bodega satélite deja de quedarse sin dueño al cambiar de zona
+
+- La reconciliación de zona de la 366 (`ZonaRepository.update`) no miraba el estado: una orden cuyo
+  paquete **ya estaba en el estante** de una bodega satélite podía cambiar de zona y desaparecer del
+  listado de la bodega que lo tiene —`condicionesSatelite` acota por `orden.zona_id`—, esa bodega ya
+  no podía asignarla (`zona_ajena`), la otra la veía sin tener el paquete, y desde
+  `en_bodega_satelite` **no hay transición de salida** hacia otra bodega. Ahora esas órdenes se
+  **excluyen** del corte de elegibilidad y se **cuentan aparte**. En tránsito
+  (`en_ruta_bodega_satelite`) se sigue reconciliando **intacto**: es lo que desatascó 41 de 42
+  órdenes represadas el 2026-09-03, y esa distinción —quién tiene HOY el paquete— es la ficha entera.
+- Requisitos cubiertos: **R1–R16**, mapa `R<n> → test` en
+  `progress/impl_377-bodega-satelite-sin-dueno.md` y en `specs/377-bodega-satelite-sin-dueno/tasks.md`.
+- El toast de guardar zona dice ahora **las dos cifras**, sin jerga y sin decir «sin dueño» (describe
+  un defecto que este cambio ya impide). El cero se **calla** (`> 0`, no `>= 0`): con 0 retenidas el
+  texto queda **literal** como antes de la ficha, para que el mensaje no se aprenda a ignorar.
+- **El hueco de verificación por el que entró el defecto, cerrado:** el fixture de
+  `tests/integration/db/zona-reconciliacion-ordenes.test.ts` creaba todas sus órdenes con un
+  `estatusId` sacado de un `findFirst` **sin `orderBy`** —arbitrario y no determinista—, así que el
+  eje del estado no se varía nunca y la suite estaba verde. Ahora `crearOrden` acepta `estatusValue`
+  y lo resuelve con `findUniqueOrThrow` (fallo RUIDOSO, nunca un `if (!x) return;`). El archivo pasa
+  de **17 a 28** tests **sin tocar un solo `expect`** de los previos.
+- **El corte vive en el `WHERE`, no en un `filter` de JS, y se puede matar:** quitarlo → **6** rojos;
+  invertirlo (`notIn` → `in`) → **24** (14 de la 366 + 9 de la 377 + 1 unit). Los dos casos R2/R3
+  juntos son los que impiden que el corte se quite **o** se invierta en silencio.
+- **Decisión del LEADER, NO firmada por el humano (Q3):** se cerró también **la segunda puerta** al
+  mismo `orden.zona_id`. `CorregirDatosClienteService` rechaza la corrección manual que **movería de
+  zona** una orden en el estante —compara la zona DERIVADA contra la ESTAMPADA, no
+  `cambios.includes("distritoId")`—. Prohibir y no solo avisar: el aviso que ya existía habla de
+  importes, y consentir el desenlace con un clic convierte un fallo mudo en uno consentido. **NO** se
+  tocó `ESTADOS_SIN_CORRECCION`: nombre, teléfono, producto, notas, peso y **dirección** se siguen
+  corrigiendo con el paquete en el estante. Esto **deroga a propósito** el «ni una línea en
+  `CorregirDatosClienteService`» del `design.md` §7/§10, y la derogación queda anotada **ahí mismo**.
+  Vuelta atrás: quitar un `if`.
+- **Q2 = sí se informa** el conteo de retenidas, lo que **diverge del precedente de la 366** (que dijo
+  que no a un segundo conteo): dejar órdenes con la zona vieja a propósito y callarlo es la familia de
+  fallo mudo que ya costó cinco fichas aquí.
+- **Medición previa al despliegue (T9), 2026-09-07, producción en solo lectura: LUZ VERDE.**
+  **37** en estante · **215** en tránsito · **0** desalineadas · **0** desalineadas en el estante. Con
+  deriva 0 no hay nada que parar ni que reparar: este cambio **congela, no repara**. La cifra vieja de
+  **47** en estante queda caducada.
+- **Revisión independiente: OK, 0 bloqueantes y 9 menores** (`progress/review_377.md`), con el gate y
+  las mutaciones reproducidos por el revisor. Los 9 se cerraron el mismo día: tasks marcadas, T9
+  actualizada, dos cifras corregidas, la derogación anotada en el `design.md`, el texto del rechazo de
+  Q3 reescrito **en español con tildes** (lo lee un maestro en el modal) y un caso nuevo —corregir
+  **solo la dirección** de una orden en el estante— que le pone red a lo que antes solo era correcto
+  «por construcción».
+- **Sin migración, sin columnas, sin índices, sin RLS y sin una arista nueva en `TRANSICIONES`.**
+- **DEUDA declarada, no resuelta:** (a) **Q4** — `por_recoger` sigue expuesto: una orden asignada desde
+  una satélite y aún no recogida se reconcilia igual y esa bodega pierde el deshacer; cubrirlo exige
+  leer la custodia del historial, más superficie que este arreglo mínimo; (b) la orden retenida
+  **conserva la tarifa de la zona vieja** hasta que se gestiona — consecuencia buscada y explicada;
+  (c) **Q1 sigue abierta y es del humano**, y **la decisión Q3 sigue sin su firma**.
 ## 2026-09-07 — 382: el caracter que la fuente no imprime dice de que orden es
 
 - Una sola orden de produccion (guia **11081885**) con el destinatario y la direccion en caracteres

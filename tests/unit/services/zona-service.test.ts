@@ -23,8 +23,13 @@ function dto(overrides: Partial<ZonaDTO> = {}): ZonaDTO {
  * FICHA 366: `update` ya no devuelve el DTO pelado, sino el DTO MAS el conteo de R12.
  * FICHA 376: y el desenlace viaja NOMBRADO en `estado`, porque ahora hay DOS formas de no guardar.
  */
-function resultadoUpdate(zona: ZonaDTO = dto(), ordenesReconciliadas = 0): UpdateZonaResult {
-  return { estado: "ok", zona, ordenesReconciliadas };
+function resultadoUpdate(
+  zona: ZonaDTO = dto(),
+  ordenesReconciliadas = 0,
+  ordenesRetenidasEnBodegaSatelite = 0,
+): UpdateZonaResult {
+  // FICHA 377: y el conteo de las RETENIDAS, que es un numero distinto y disjunto del anterior.
+  return { estado: "ok", zona, ordenesReconciliadas, ordenesRetenidasEnBodegaSatelite };
 }
 
 function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
@@ -287,6 +292,40 @@ describe("actualizar", () => {
     const r = await service.actualizar("z1", crearInput(), MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status === "ok") expect(r.ordenesReconciliadas).toBe(0);
+  });
+
+  // ⭑ FICHA 377 (T6, R7/R8) — LOS DOS NUMEROS, SIN MEZCLARSE.
+  it("⭑ 377/R7/R8: reenvia los DOS conteos del repo TAL CUAL y por separado", async () => {
+    // Numeros DISTINTOS entre si a proposito: si el service devolviera dos veces el mismo campo
+    // —o la suma— este caso lo caza. Con `{5, 5}` no lo cazaria.
+    repo = buildRepo({ update: vi.fn().mockResolvedValue(resultadoUpdate(dto(), 5, 3)) });
+    service = new ZonaService(repo);
+
+    const r = await service.actualizar("z1", crearInput(), MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.ordenesReconciliadas).toBe(5);
+      expect(r.ordenesRetenidasEnBodegaSatelite).toBe(3);
+    }
+  });
+
+  it("⭑ 377/R10: sin nada retenido, el service reenvia CERO (no lo omite)", async () => {
+    // R10 pide que el numero exista y valga 0, no que desaparezca: la pantalla decide callarse
+    // mirando el cero, y no puede decidirlo sobre un `undefined`.
+    repo = buildRepo({ update: vi.fn().mockResolvedValue(resultadoUpdate(dto(), 2, 0)) });
+    service = new ZonaService(repo);
+
+    const r = await service.actualizar("z1", crearInput(), MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.ordenesRetenidasEnBodegaSatelite).toBe(0);
+      expect(Object.keys(r).sort()).toEqual([
+        "ordenesReconciliadas",
+        "ordenesRetenidasEnBodegaSatelite",
+        "status",
+        "zona",
+      ]);
+    }
   });
 
   it("⭑ R10: `actor.usuarioId` llega al repo como TERCER argumento de `update`", async () => {

@@ -114,6 +114,19 @@ nueva: crear una zona sigue sin reconciliar y sin retener ninguna orden.
 el conjunto de salidas declaradas de `en_bodega_satelite` DEBE quedar exactamente igual que antes de
 esta ficha.
 
+### La segunda puerta al mismo agujero (añadidos en implementación — ver «Decisiones del leader»)
+
+**R15** — MIENTRAS una orden esté en el estado `en_bodega_satelite`, la corrección manual de datos
+del cliente NO DEBE cambiar su zona: SI el distrito propuesto resuelve una zona distinta de la que la
+orden tiene estampada, ENTONCES el sistema DEBE rechazar la corrección, nombrando la bodega que tiene
+el paquete, y NO DEBE escribir ningún campo de la orden — ni siquiera con la confirmación de importes
+ya dada.
+
+**R16** — El rechazo de R15 DEBE ser el mínimo que cierra el daño: el sistema DEBE seguir admitiendo,
+sobre una orden en `en_bodega_satelite`, la corrección de cualquier campo que no cambie su zona
+—incluido un distrito distinto que resuelva la MISMA zona— y NO DEBE ampliar la lista de estados sin
+corrección.
+
 ## Preguntas abiertas (decisión humana — no las resuelve el spec_author)
 
 **Q1 — ¿El paquete tiene que MOVERSE físicamente cuando su distrito cambia de zona?**
@@ -160,3 +173,31 @@ bodega se asignó** (también se llega a él desde `en_bodega_central` vía `asi
 cubrirlo exige mirar el historial de custodia, no el estado — más superficie de la que este arreglo
 mínimo toca. Decisión: (i) fuera, ficha propia; (ii) dentro, ampliando el corte con la evidencia de
 custodia; (iii) dentro, pero arreglando la autorización del deshacer en vez del corte.
+
+---
+
+## Decisiones del leader al mandar implementar (2026-09-07) — ⚠️ NINGUNA FIRMADA POR EL HUMANO
+
+Se escriben aquí, y no como si fueran respuestas del dueño del producto, porque **no lo son**. Si el
+humano decide otra cosa, cada una tiene su vuelta atrás anotada.
+
+- **Q1 — SIGUE ABIERTA, y es del humano.** ¿El paquete tiene que MOVERSE físicamente cuando su
+  distrito cambia de zona? NO se decidió y NO se implementó nada que la presuponga. La salida (a) no
+  depende de ella: mientras no exista una transición de traspaso, no se puede orfanar a nadie.
+- **Q2 — SÍ SE INFORMA** el conteo de órdenes retenidas (R8-R11 quedan vivos). **Diverge del
+  precedente de la 366**, que cerró su propia `Q2` con un NO a un segundo conteo en esa respuesta. El
+  motivo del cambio: dejar órdenes deliberadamente con la zona vieja y no decirlo es la familia de
+  fallo mudo que ya costó cinco fichas en este repo, y el toast ya existe («N órdenes reubicadas»),
+  así que es una frase más. **Vuelta atrás:** quitar el campo del resultado y su frase del toast; el
+  arreglo (R1-R7, R12-R14) se sostiene solo, callado.
+- **Q3 — SE CIERRA DENTRO DE ESTA FICHA, por la salida (iii) acotada**: se PROHÍBE la corrección
+  manual que cambiaría la zona de una orden en el estante (R15), y solo esa (R16). No se eligió (i)
+  «no tocarlo» —un arreglo que cierra una de las dos puertas al mismo agujero no es un arreglo— ni
+  (ii) «avisar en el gate del dinero» —avisar no evita nada: si quien corrige confirma, la orden
+  queda igual de inalcanzable y ahora con una firma encima, que es la mitad bloqueante de (c) que el
+  propio `design.md` §2 descarta—. Y NO se metió `en_bodega_satelite` en `ESTADOS_SIN_CORRECCION`,
+  que habría bloqueado también el nombre, el teléfono, el producto, las notas, el peso y la dirección
+  de las órdenes que hoy están en estante. **Vuelta atrás:** un solo `if` en
+  `CorregirDatosClienteService`, paso 6.
+- **Q4 — FUERA.** El colateral de `por_recoger` en `DeshacerAsignacionService` va a ficha aparte. No
+  se tocó ni una línea de ese servicio.
