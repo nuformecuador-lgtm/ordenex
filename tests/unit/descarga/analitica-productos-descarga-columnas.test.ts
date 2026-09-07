@@ -22,9 +22,11 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  AMBITO_DESCARGA_ANALITICA_PRODUCTOS,
+  AMBITO_DESCARGA_ANALITICA_PRODUCTOS_DINERO,
   COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS,
   COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO,
-  columnasDescargaAnaliticaProductos,
+  descargaAnaliticaProductos,
   filaDescargaAnaliticaProductos,
   MARCA_NO_SUMABLE_ARCHIVO,
 } from "@/app/(app)/analitica/_components/entregas/analitica-productos-descarga-columnas";
@@ -334,10 +336,10 @@ describe("FICHA 347 · columnas del archivo con dinero concedido (R66/R68)", () 
   });
 
   it("R66/R67 — el selector devuelve la lista que corresponde a la concesión", () => {
-    expect(columnasDescargaAnaliticaProductos(true)).toBe(
+    expect(descargaAnaliticaProductos(true).columnas).toBe(
       COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO,
     );
-    expect(columnasDescargaAnaliticaProductos(false)).toBe(
+    expect(descargaAnaliticaProductos(false).columnas).toBe(
       COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS,
     );
   });
@@ -348,6 +350,51 @@ describe("FICHA 347 · columnas del archivo con dinero concedido (R66/R68)", () 
     expect(claves).not.toContain("tiendaId");
     expect(claves).not.toContain("orden_id");
     expect(claves).not.toContain("id");
+  });
+});
+
+describe("FICHA 388 · los ámbitos de preferencia de columnas", () => {
+  it("cada juego de columnas viaja con SU ámbito, y no con el del otro", () => {
+    // Es el emparejamiento entero: si alguien cruza los ámbitos dentro de los objetos, la
+    // preferencia del archivo sin dinero acabaría aplicándose al de dinero y al revés.
+    expect(descargaAnaliticaProductos(true)).toEqual({
+      columnas: COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO,
+      ambitoColumnas: AMBITO_DESCARGA_ANALITICA_PRODUCTOS_DINERO,
+    });
+    expect(descargaAnaliticaProductos(false)).toEqual({
+      columnas: COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS,
+      ambitoColumnas: AMBITO_DESCARGA_ANALITICA_PRODUCTOS,
+    });
+  });
+
+  it("los dos ámbitos son DISTINTOS: el juego con dinero no comparte clave con el de sin", () => {
+    // El fallo que esto caza es MUDO y vive en el `localStorage` del usuario: con un solo
+    // ámbito, el primer clic del selector estando sin dinero reescribe la preferencia ya
+    // saneada contra las once columnas base y borra en silencio lo que se hubiera ocultado de
+    // las nueve de dinero. Al volver la concesión —o al pasar el `limite_excedido`— esas
+    // columnas REAPARECEN sin que nadie las haya vuelto a marcar.
+    expect(AMBITO_DESCARGA_ANALITICA_PRODUCTOS_DINERO).not.toBe(
+      AMBITO_DESCARGA_ANALITICA_PRODUCTOS,
+    );
+    expect(descargaAnaliticaProductos(true).ambitoColumnas).not.toBe(
+      descargaAnaliticaProductos(false).ambitoColumnas,
+    );
+  });
+
+  it("los identificadores son los literales que ya viven en el navegador", () => {
+    // Escritos A MANO, igual que las listas de columnas de arriba y por el mismo motivo: un
+    // ámbito es la mitad de una clave de `localStorage`, así que renombrarlo no rompe nada
+    // —huérfana en silencio la preferencia que el usuario ya había guardado—. Compararlo
+    // contra su propia constante estaría siempre verde.
+    expect(AMBITO_DESCARGA_ANALITICA_PRODUCTOS).toBe("analitica-productos");
+    expect(AMBITO_DESCARGA_ANALITICA_PRODUCTOS_DINERO).toBe("analitica-productos-dinero");
+  });
+
+  it("devuelve la MISMA instancia para la misma concesión", () => {
+    // La identidad es dependencia de los `useMemo` de `usePreferenciaColumnas`: un objeto nuevo
+    // en cada render lo haría recalcular el orden efectivo en cada pasada.
+    expect(descargaAnaliticaProductos(true)).toBe(descargaAnaliticaProductos(true));
+    expect(descargaAnaliticaProductos(false)).toBe(descargaAnaliticaProductos(false));
   });
 });
 
