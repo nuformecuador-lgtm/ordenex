@@ -306,7 +306,7 @@ export function drawEtiqueta(
    */
   const fuenteDeValor = (texto: string, negrita = false): FuenteTexto => {
     if (seguroEnFuenteEstandar(texto)) return negrita ? FUENTE_ROTULO : FUENTE_BASE;
-    exigirCobertura(fuente, texto, "texto de la etiqueta");
+    exigirCobertura(fuente, texto, "texto de la etiqueta", etiqueta.numGuia);
     return { nombre: fuente.nombre, estilo: fuente.estilo };
   };
 
@@ -351,7 +351,7 @@ export function drawEtiqueta(
   // Ninguna decision de maquetacion altera sus caracteres.
   // -------------------------------------------------------------------------
   const monto = formatMonto(etiqueta.montoCobrar);
-  exigirCobertura(fuente, monto, "Monto a cobrar");
+  exigirCobertura(fuente, monto, "Monto a cobrar", etiqueta.numGuia);
   const tipoMonto: FuenteTexto = { nombre: fuente.nombre, estilo: fuente.estilo };
 
   // La tipografia de CADA valor, decidida una sola vez y usada tanto al medir

@@ -20,6 +20,10 @@ import type {
 } from "@/lib/types/etiqueta-guia";
 
 import { ErrorEtiquetaNoCabe } from "@/lib/pdf/etiquetas-ajuste";
+import {
+  ErrorCaracterNoImprimible,
+  notacionCodePoint,
+} from "@/lib/pdf/etiquetas-fuente-registro";
 
 import { EtiquetaGuia } from "./EtiquetaGuia";
 import {
@@ -82,6 +86,54 @@ export function mensajeEtiquetaNoCabe(numGuia: number | string): string {
   return `La etiqueta de la guía ${numGuia} no cabe en este tamaño de hoja sin recortar datos, y ninguna etiqueta se descarga con un dato incompleto. Prueba con un tamaño de hoja mayor o acorta la dirección o el producto de esa orden.`;
 }
 
+/**
+ * Feature 382 (R2) — El carácter culpable, encerrado para que no reordene el
+ * aviso que lo contiene.
+ *
+ * El conjunto «no cubierto» es todo lo que queda fuera de cp1252, y ahí no solo
+ * hay glifos: `U+202E` (RIGHT-TO-LEFT OVERRIDE) invertiría el orden de lo que va
+ * DETRÁS de él dentro del propio mensaje —incluido el número de guía, que es el
+ * dato por el que existe este texto—. `U+2068` (FIRST STRONG ISOLATE) y `U+2069`
+ * (POP DIRECTIONAL ISOLATE) acotan su efecto a sí mismo: es la construcción
+ * estándar de Unicode para interpolar texto de dirección desconocida.
+ *
+ * Lo que NO cierra, y por eso la notación `U+XXXX` va siempre al lado: un
+ * carácter de ancho cero (`U+200B`) se sigue viendo como unas comillas vacías.
+ * Ahí la notación es la única lectura posible, y por eso no es opcional.
+ */
+function aislado(caracter: string): string {
+  // Escapados a proposito: son invisibles, y un literal invisible en el codigo
+  // es un literal que alguien borra sin darse cuenta.
+  return `\u2068${caracter}\u2069`;
+}
+
+/**
+ * Feature 382 (R2) — Mensaje cuando un dato de UNA orden trae un carácter que la
+ * tipografía de la etiqueta no puede imprimir.
+ *
+ * NOMBRA LA GUÍA por el mismo motivo que el mensaje de «no cabe», y aquí con más
+ * razón: el lote entero se queda sin descargar por culpa de una sola orden, y
+ * sin su número el operador no tiene por dónde empezar (medido el 2026-09-07: una
+ * orden entre todas las de producción, con el destinatario y la dirección
+ * escritos en caracteres double-struck de un generador de «letras bonitas»).
+ *
+ * DICE EL CARÁCTER, y no solo que «hay uno raro», porque el culpable suele ser el
+ * sosia de una letra normal —«𝕠» se lee como una o— y sin verlo escrito al lado
+ * de su code point no hay forma de saber cuál de los caracteres del nombre hay
+ * que reescribir.
+ *
+ * Y NO MANDA REINTENTAR: reintentar no puede funcionar. El carácter va a seguir
+ * fuera de la fuente el segundo intento y el tercero; lo único que cambia el
+ * resultado es corregir el dato de esa orden.
+ */
+export function mensajeCaracterNoImprimible(
+  numGuia: number | string,
+  caracter: string,
+  codePoint: number,
+): string {
+  return `La etiqueta de la guía ${numGuia} lleva un carácter que la tipografía de la etiqueta no puede imprimir: «${aislado(caracter)}» (${notacionCodePoint(codePoint)}). Reintentar no lo cambia, y ninguna etiqueta del lote se descarga mientras siga ahí: corrige ese dato en la orden ${numGuia} y escríbelo con letras y números normales.`;
+}
+
 /** Traduce un resultado no-"ok" de la action a un mensaje para el usuario. */
 function mensajeDeError(
   status: Exclude<GenerarEtiquetasResult["status"], "ok">,
@@ -140,8 +192,9 @@ export function EtiquetasGuiaModal({
   // que es el caso de R33: la vista previa se pinta igual.
   const [familiaMonto, setFamiliaMonto] = useState<string | null>(null);
   // Feature 282 (T9, R16/R28): lo que salio mal AL DESCARGAR. Va aparte de
-  // `estado` para no tirar la vista previa: el mensaje dice «Inténtalo de
-  // nuevo», asi que el boton de descarga tiene que seguir ahi.
+  // `estado` para no tirar la vista previa: unos mensajes invitan a reintentar y
+  // otros —382— a corregir el dato de una orden que se está viendo en la propia
+  // vista previa, y en los dos casos el botón de descarga tiene que seguir ahí.
   const [errorDescarga, setErrorDescarga] = useState<string | null>(null);
   // Canvas del QR por `ordenId`, recolectados de la vista previa para rasterizar
   // al PDF (qrcode.react reenvia la ref al canvas nativo).
@@ -249,11 +302,33 @@ export function EtiquetasGuiaModal({
         setErrorDescarga(mensajeEtiquetaNoCabe(error.numGuia));
         return;
       }
-      // Un solo mensaje para los otros dos modos de fallo del generador —la
-      // fuente no carga (R16) y el simbolo no esta en el subconjunto (R28)—
-      // porque los dos significan lo mismo para quien esta delante: la etiqueta
-      // NO se descarga en vez de salir con el importe roto. El detalle tecnico
-      // del segundo no le sirve a un operador de bodega.
+      // Feature 382 (R1/R2) — Y el caso «ese carácter no se puede imprimir»
+      // TAMBIÉN se distingue, por el argumento de tres líneas más arriba.
+      //
+      // Hasta esta ficha caía en el mensaje de la fuente, con este razonamiento
+      // escrito aquí: «los dos significan lo mismo para quien está delante… el
+      // detalle técnico del segundo no le sirve a un operador de bodega». Ese
+      // razonamiento es el defecto que la 382 cierra, y NO se vuelve a juntar:
+      //
+      //  · la fuente no carga (R16) es un fallo de RED o de bundle, y por eso su
+      //    mensaje manda reintentar — reintentar puede funcionar;
+      //  · un carácter fuera del subconjunto (R28) es un DATO de una orden
+      //    concreta, y reintentar no va a funcionar NUNCA. Mandar reintentar
+      //    ante esto no es un detalle de redacción: es enviar al operador a un
+      //    bucle que no tiene salida, con el lote entero sin descargar y sin
+      //    saber siquiera qué orden mirar (medido en producción el 2026-09-07).
+      //
+      // El error trae la guía y el carácter porque el generador ya los conocía;
+      // lo que antes pasaba es que este `catch` los tiraba.
+      if (error instanceof ErrorCaracterNoImprimible) {
+        setErrorDescarga(
+          mensajeCaracterNoImprimible(error.numGuia, error.caracter, error.codePoint),
+        );
+        return;
+      }
+      // Lo que queda: la fuente no llegó (R16) y cualquier fallo no previsto del
+      // generador. Aquí sí vale «Inténtalo de nuevo», porque es lo único que el
+      // operador puede hacer y a veces funciona.
       setErrorDescarga(ERROR_FUENTE_ETIQUETA);
       return;
     }
