@@ -39,8 +39,18 @@ function gestionEntregada(over: Record<string, unknown> = {}) {
     // 2026-09-05 — el reloj de la gestión, un `timestamp`. 18:30 UTC son las 12:30 del MISMO
     // día en CR; el caso de las 18:00 CR (que en UTC ya es el día siguiente) tiene el suyo.
     createdAt: new Date("2026-02-11T18:30:00.000Z"),
-    // La única lectura de la orden VIVA de esta proyección: el día de reparto.
-    orden: { fechaReparto: new Date("2026-02-09T00:00:00.000Z") },
+    // Las lecturas de la orden VIVA de esta proyección: el día de reparto (2026-09-05) y, desde
+    // la ficha 385, cuándo nació la orden y cuántas veces la intentó LA TIENDA.
+    //
+    // `createdAt` va a las 03:00 UTC del 6 de febrero A PROPÓSITO: en Costa Rica eso son las
+    // 21:00 del DÍA 5. Un `toISOString().slice(0, 10)` diría «2026-02-06» y le adelantaría el
+    // día a toda orden creada de tarde-noche. Con una hora del mediodía, las dos formas
+    // coincidirían y el caso pasaría en verde sin comprobar nada.
+    orden: {
+      fechaReparto: new Date("2026-02-09T00:00:00.000Z"),
+      createdAt: new Date("2026-02-06T03:00:00.000Z"),
+      intentosContacto: 4,
+    },
     resultado: "entregada",
     montoRecibido: dec("15000.50"),
     metodoPago: "efectivo",
@@ -164,13 +174,77 @@ describe("DTO de la hoja fundida (feature 230, T2.1/T7.1)", () => {
     // `fecha_reparto` se ANULA al deshacer una asignación, al liberar a bodega satélite y al
     // aprobar el cierre de una orden sin gestionar. `null` es entonces legítimo, y NO se
     // sustituye por la fecha del cierre ni por la de la gestión: eso inventaría el dato.
+    // Solo se anula `fecha_reparto`: los otros dos campos de la orden siguen ahí, que es lo que
+    // pasa en la base. Sustituir el objeto entero mediría además otra cosa.
     const sinReparto = await filaAdmin(
-      [gestionEntregada({ orden: { fechaReparto: null } })],
+      [
+        gestionEntregada({
+          orden: {
+            fechaReparto: null,
+            createdAt: new Date("2026-02-06T03:00:00.000Z"),
+            intentosContacto: 4,
+          },
+        }),
+      ],
       [detalle()],
     );
     expect(sinReparto.diaReparto).toBeNull();
     expect(sinReparto.fechaGestion).toBe("2026-02-11"); // la otra celda no se cae con ella
+    // Y las dos de la ficha 385 tampoco se caen con ella: son campos independientes.
+    expect(sinReparto.fechaCreacionOrden).toBe("2026-02-05");
+    expect(sinReparto.intentosContactoTienda).toBe(4);
   });
+
+  it("la fecha de creación de la orden es el día de COSTA RICA, no el del UTC (ficha 385)", async () => {
+    // `orden.created_at` es un `timestamp`, igual que el de la gestión: le toca el MISMO
+    // tratamiento (`fechaCalendarioCR`) y no el recorte del ISO que sí vale para `fecha_reparto`,
+    // que es `@db.Date`. El fixture la pone a las 03:00 UTC del 6 de febrero = 21:00 del 5 en
+    // CR: si alguien cambia esta línea por `toISOString().slice(0, 10)`, sale «2026-02-06».
+    const fila = await filaAdmin([gestionEntregada()], [detalle()]);
+
+    expect(fila.fechaCreacionOrden).toBe("2026-02-05");
+    expect(fila.fechaCreacionOrden).not.toBe("2026-02-06");
+    // Y no se contamina con ninguna de las otras tres fechas de la fila, que son otros días.
+    expect(fila.fechaCreacionOrden).not.toBe(fila.fechaGestion);
+    expect(fila.fechaCreacionOrden).not.toBe(fila.diaReparto);
+    expect(fila.fechaCreacionOrden).not.toBe(fila.cierreSolicitadoAt.slice(0, 10));
+    expect(fila.fechaCreacionOrden).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("los intentos son los de LA TIENDA y el cero viaja como cero (ficha 385)", async () => {
+    // `orden.intentos_contacto`: el contador que sube la tienda desde /novedades. NO son los
+    // intentos de ENTREGA del mensajero, que no son columna de `orden` sino un conteo sobre
+    // `orden_historial` — y que esta proyección no consulta.
+    const conIntentos = await filaAdmin([gestionEntregada()], [detalle()]);
+    expect(conIntentos.intentosContactoTienda).toBe(4);
+    expect(typeof conIntentos.intentosContactoTienda).toBe("number");
+
+    // NOT NULL DEFAULT 0: el cero es un hecho («la tienda no lo intentó nunca»), no un hueco.
+    const sinIntentos = await filaAdmin(
+      [
+        gestionEntregada({
+          orden: {
+            fechaReparto: new Date("2026-02-09T00:00:00.000Z"),
+            createdAt: new Date("2026-02-06T03:00:00.000Z"),
+            intentosContacto: 0,
+          },
+        }),
+      ],
+      [detalle()],
+    );
+    expect(sinIntentos.intentosContactoTienda).toBe(0);
+    expect(sinIntentos.intentosContactoTienda).not.toBeNull();
+    expect(sinIntentos.intentosContactoTienda).not.toBeUndefined();
+
+    // Y el DTO no trae el OTRO contador por ninguna puerta: si mañana alguien lo añade, tiene
+    // que ser una columna con su propio nombre, no un cambio de fuente de ésta.
+    expect(conIntentos).not.toHaveProperty("intentosEntrega");
+    expect(conIntentos).not.toHaveProperty("intentos");
+  });
+
+  // Que los DOS campos se PIDAN de verdad en el `select` que llega a Prisma —y no salgan de un
+  // valor fijo ni del snapshot congelado— se afirma donde se lee la consulta:
+  // `cierres-admin-gestiones-where.test.ts`.
 
   it("no emite NINGÚN campo de evidencia, ni siquiera derivado (R22/R41)", async () => {
     const fila = await filaAdmin([gestionEntregada()], [detalle()]);

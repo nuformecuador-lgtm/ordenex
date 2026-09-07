@@ -42,7 +42,7 @@ import { filaDescargaGestionFundida } from "./cierres-gestiones-fundida-descarga
  * cierres de bodega del maestro es la Server Action, que llega por prop (`accion`). No es un
  * lujo: los dos listados cubren conjuntos DISJUNTOS (design §2.6 — el maestro solo ve la GAM en
  * cierres del día, y lo satélite solo consolidado en cierres de bodega), así que hacen falta dos
- * bordes; pero las 29 columnas, la proyección y esta interacción son las mismas, y duplicarlas
+ * bordes; pero las 31 columnas, la proyección y esta interacción son las mismas, y duplicarlas
  * sería garantizar que divergen (R26).
  *
  * **El conjunto lo redacta ESTE diálogo, no la pantalla** (D11, R34/R35). El componente no
@@ -127,7 +127,7 @@ export interface DescargarGestionesDialogProps {
    * Las columnas que salen en el archivo: las MARCADAS en el selector del botón, ya resueltas.
    *
    * OBLIGATORIA, sin valor por defecto, y a sabiendas de que un default («todas») sería cómodo:
-   * ese default convertiría un cableado olvidado en un archivo con las 29 columnas y la
+   * ese default convertiría un cableado olvidado en un archivo con las 31 columnas y la
    * preferencia del usuario ignorada EN SILENCIO — nada fallaría, nadie se enteraría. Exigirla
    * hace que el compilador cace al montaje que no la pasa.
    */
@@ -334,7 +334,7 @@ export function DescargarGestionesDialog({
                 archivo que el usuario acaba de pedir. Se cierra cuando el usuario cierra. */}
             {/* SIN `ambitoColumnas`, y ahora por un motivo distinto al de la ficha 314.
                 Entonces esta hoja se quedó sin selector porque `ColumnasPopover` era
-                indivisible —ofrecía ocultar Y reordenar— y reordenar estas 29 columnas rompe el
+                indivisible —ofrecía ocultar Y reordenar— y reordenar estas 31 columnas rompe el
                 agrupado que las hace legibles. Hoy el selector SÍ sabe ofrecer solo la mitad
                 (`permitirReordenar={false}`) y esta hoja fue su primera candidata, tal como
                 aquel comentario anticipaba.
