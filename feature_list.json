@@ -4533,7 +4533,7 @@
       "title": "cargar un costo a una tienda desde «Registrar movimiento»",
       "description": "El dialogo de registrar movimiento solo escribe en la caja principal: no hay forma de cargarle un costo a una tienda.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
       "branch": "feat/381-cargo-manual-a-tienda",
