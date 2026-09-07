@@ -24,6 +24,11 @@ import {
 } from "@/lib/types/correccion-datos-cliente";
 import { paqueteEnEstanteSatelite } from "@/lib/utils/estados-bodega-satelite";
 import { costosListadoOrden } from "@/lib/utils/ingreso-ordenex";
+import {
+  mensajeCorreccionCaracterNoImprimible,
+  mensajeCorreccionSugerencia,
+} from "@/lib/utils/mensaje-caracter-no-imprimible";
+import { evaluarTextoDeEtiqueta } from "@/lib/utils/texto-imprimible-etiqueta";
 import { normalizarTelefonoWa } from "@/lib/utils/whatsapp-telefono";
 
 // FICHA 312, AMPLIADA POR LA 327 — logica de negocio de LA CORRECCION DE LOS DATOS DEL CLIENTE Y
@@ -103,6 +108,24 @@ export type CorregirDatosClienteTarifas = Pick<ITarifaVigenteRepository, "resolv
  * caza la cadena vacia y este barrido caza la de solo espacios, igual para todos.
  */
 const CAMPOS_NO_VACIABLES = ["destinatario", "telefonoDest", "producto", "direccion"] as const;
+
+/**
+ * FICHA 383 (R17/R19) — Los campos de esta correccion que ACABAN IMPRESOS en la etiqueta.
+ *
+ * Son los mismos cuatro de arriba, y NO se reusa aquella constante a proposito: coinciden hoy por
+ * casualidad —«no puede quedar vacio» y «tiene que poder imprimirse» son dos propiedades
+ * distintas— y fundirlas ataria una a la otra. Si mañana un campo mas pasara a ser obligatorio
+ * sin llegar al papel, la lista compartida lo rechazaria por un motivo que no es el suyo.
+ *
+ * `notas` queda FUERA (R19): no se imprime en la etiqueta. `peso` y los tres ids de geografia no
+ * son texto libre.
+ *
+ * ⚠️ ESTA CORRECCION ES LA UNICA SUPERFICIE MANUAL de estos campos: el alta manual de ordenes NO
+ * existe desde el 2026-08-07 (`IOrdenService` es «SOLO LECTURAS»), asi que las unicas escrituras
+ * son las dos vias de carga masiva y esta. Sin este bloque, la puerta que cierra la 383 se queda
+ * abierta por aqui.
+ */
+const CAMPOS_TEXTO_ETIQUETA = ["destinatario", "telefonoDest", "producto", "direccion"] as const;
 
 /**
  * Valores normalizados de una orden, en la forma en que se comparan y se guardan. Es
@@ -248,6 +271,46 @@ export class CorregirDatosClienteService implements ICorregirDatosClienteService
     // segunda puerta no puede DEPENDER de la primera (R28).
     if (cambios.includes("peso") && !(typeof valores.peso === "number" && valores.peso > 0)) {
       fieldErrors.peso = ["El peso tiene que ser mayor que cero"];
+    }
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    // ⭑ FICHA 383 (R17/R18/A2) — LO QUE LA ETIQUETA NO PODRA IMPRIMIR NO SE GUARDA
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    //
+    // La decision es RECHAZAR, no reparar, y es lo contrario de lo que hace la carga masiva. No es
+    // capricho: es el MISMO criterio que este repo ya aplica al dinero en estas dos mismas
+    // superficies —la carga ajusta el monto y lo dice (299), la correccion pregunta antes de
+    // escribir (327/R11)—. El motivo esta escrito en el propio codigo de arriba: en la carga NO
+    // HAY NADIE DELANTE de 500 filas en el instante en que se decide; aqui SI hay una persona
+    // mirando ESTA orden. La version barata y honesta de «preguntar» es no escribir y devolver el
+    // texto bueno para que lo pegue, y asi Ordenex nunca guarda un nombre que nadie tecleo.
+    //
+    // Va en 5.b, o sea ANTES de la geografia y de cualquier escritura, y por el canal de
+    // `fieldErrors` que el modal ya sabe pintar: si algo se rechaza, NO se guarda NINGUN campo de
+    // la correccion (R17) — ni los que estaban bien. Cero contrato nuevo, cero UI nueva.
+    //
+    // Solo sobre los campos que EFECTIVAMENTE cambian, misma disciplina que el resto de 5.b: un
+    // dato viejo con un caracter raro —cargado antes de esta ficha— no puede bloquear la
+    // correccion de otro campo de esa misma orden.
+    for (const campo of CAMPOS_TEXTO_ETIQUETA) {
+      if (!cambios.includes(campo)) continue;
+      const valor = valores[campo];
+      if (valor === undefined) continue; // no puede pasar: `cambios` sale de `valores`
+      const veredicto = evaluarTextoDeEtiqueta(valor);
+      if (veredicto.estado === "irreparable") {
+        fieldErrors[campo] = [
+          mensajeCorreccionCaracterNoImprimible(campo, veredicto.culpable, veredicto.codePoint),
+        ];
+      } else if (veredicto.estado === "reparado") {
+        // R18: el texto reparado viaja como SUGERENCIA dentro del mensaje. No se guarda.
+        fieldErrors[campo] = [
+          mensajeCorreccionSugerencia(
+            campo,
+            veredicto.culpable,
+            veredicto.codePoint,
+            veredicto.valor,
+          ),
+        ];
+      }
     }
     if (Object.keys(fieldErrors).length > 0) return { status: "validation_error", fieldErrors };
 

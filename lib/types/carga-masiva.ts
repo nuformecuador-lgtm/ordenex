@@ -4,6 +4,31 @@ import { normalizarMontoCobrar, type MontoAjustado } from "@/lib/utils/monto-cob
 
 export type RowResultado = "creada" | "duplicada" | "error";
 
+/**
+ * FICHA 383 (R10) — LA REPARACION DE UN TEXTO, DICHA.
+ *
+ * Un caracter que la etiqueta no puede imprimir y que SI tiene arreglo (`𝕠` -> `o`) entra
+ * reparado, porque rechazar la fila entera por una «letra bonita» es desproporcionado cuando se
+ * puede arreglar. Pero **si se repara, tiene que verse**: reescribir el nombre de un destinatario
+ * en silencio es el mismo genero de fallo mudo que este repo lleva cuatro fichas persiguiendo
+ * (282, 294, 299/304). Por eso viaja el campo, lo que la tienda mando y lo que se guardo.
+ *
+ * `campo` es la clave de la COLUMNA DEL ARCHIVO, no el nombre de la columna de la base: es la
+ * celda que hay que mirar. `num_remision` NO esta en la lista y no puede estarlo (R12): es el
+ * identificador que Ordenex comparte con la tienda, y repararlo dejaria a los dos sistemas con
+ * dos claves distintas para la misma orden.
+ *
+ * Este archivo NO importa nada de `lib/pdf/`: viaja al navegador (`OrdenesCargaUpload` importa
+ * `findMissingHeaders` de forma estatica), y el artefacto de fuente son 22.592 caracteres de
+ * datos incrustados. La decision de que es imprimible vive en `BulkOrdenService`, del lado del
+ * servidor. Lo blinda `tests/unit/guards/etiqueta-fuente-diferida.guardia.test.ts`.
+ */
+export interface TextoNormalizado {
+  campo: "destinatario" | "telefono" | "producto" | "direccion";
+  original: string;
+  aplicado: string;
+}
+
 /** R30: resultado por fila del archivo. */
 export interface RowResult {
   fila: number; // 1-based sobre las filas de datos (sin contar cabecera)
@@ -22,6 +47,17 @@ export interface RowResult {
    * en ninguna de las dos existentes.
    */
   montoAjustado?: MontoAjustado;
+  /**
+   * FICHA 383 (R10/R21) — los textos que hubo que reparar en ESTA fila para que la etiqueta
+   * pudiera imprimirlos. Presente SOLO en una fila `creada` y SOLO cuando hubo reparacion,
+   * exactamente con la disciplina de `montoAjustado`: una carga sin un solo caracter fuera de
+   * cobertura devuelve el mismo resumen que antes de esta ficha, byte a byte.
+   *
+   * Y se CAE con la fila si la fila se cae: `reclasificarOmitidas` la borra al reclasificar una
+   * creada a `duplicada`. Decir «se reparo el nombre» de una orden que no se creo es la mentira
+   * exacta que mato la 294.
+   */
+  textoNormalizado?: TextoNormalizado[];
 }
 
 /** R30: resumen devuelto por el endpoint. */

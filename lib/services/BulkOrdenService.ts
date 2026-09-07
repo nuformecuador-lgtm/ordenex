@@ -10,7 +10,14 @@ import {
   type CargaMasivaNotificador,
 } from "@/lib/notificaciones/notificadores";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
-import { filaCargaSchema, type BulkSummary, type RowResult } from "@/lib/types/carga-masiva";
+import {
+  filaCargaSchema,
+  type BulkSummary,
+  type RowResult,
+  type TextoNormalizado,
+} from "@/lib/types/carga-masiva";
+import { evaluarTextoDeEtiqueta } from "@/lib/utils/texto-imprimible-etiqueta";
+import { mensajeCargaCaracterNoImprimible } from "@/lib/utils/mensaje-caracter-no-imprimible";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
 import type {
   CantonRow,
@@ -83,6 +90,24 @@ function geoInputDesdeCantonDistrito(raw: RawRow): GeoInput {
     direccion: (raw.direccion ?? "").trim(),
   };
 }
+
+/**
+ * FICHA 383 (R9/R16) — LOS CAMPOS DE LA FILA QUE ACABAN EN EL PAPEL Y SE PUEDEN REPARAR.
+ *
+ * La etiqueta imprime DIEZ datos (`datosDeEtiqueta`, `lib/pdf/etiquetas-dibujo.ts`). De ellos, la
+ * guia y la fecha las pone el servidor, el monto es un numero que formatea el servidor, y la
+ * ubicacion y el nombre de la tienda salen del CATALOGO y del usuario —no de esta fila— (ese es
+ * el agujero declarado de la ficha 392, no de esta). Quedan estos cuatro y `num_remision`.
+ *
+ * QUE NO ESTA, Y ES DELIBERADO (R16/A4):
+ *  · `notas` NO se imprime en la etiqueta. Tumbar una carga por un emoji en un campo que nunca
+ *    llega al papel es coste sin ninguna ganancia.
+ *  · `monto_cobrar` es un numero.
+ *  · `provincia` y `canton_distrito` son nombres que se RESUELVEN contra el catalogo: lo que se
+ *    imprime es el nombre del catalogo, y un nombre con un caracter raro ya falla antes por no
+ *    casar con ninguno.
+ */
+const CAMPOS_TEXTO_ETIQUETA = ["destinatario", "telefono", "producto", "direccion"] as const;
 
 interface PreloadedContext {
   existingMap: Map<string, string>;
@@ -177,6 +202,10 @@ export class BulkOrdenService implements IBulkOrdenService {
         // Feature 299: la clave solo aparece cuando HUBO ajuste. Una carga normal devuelve
         // exactamente el mismo resumen que antes de esta ficha, byte a byte.
         ...(result.montoAjustado !== null ? { montoAjustado: result.montoAjustado } : {}),
+        // Ficha 383/R10/R21: misma disciplina, y por el mismo motivo.
+        ...(result.textoNormalizado.length > 0
+          ? { textoNormalizado: result.textoNormalizado }
+          : {}),
       });
     });
 
@@ -280,6 +309,9 @@ export class BulkOrdenService implements IBulkOrdenService {
       // Feature 299: y el aviso de redondeo se CAE con ella. Esta fila no creo ninguna orden,
       // asi que no se ajusto ningun monto: mismo criterio que el `estatus` de arriba.
       delete fila.montoAjustado;
+      // Ficha 383/R21: y el aviso de reparacion de texto, IGUAL. Decir «se reparo el nombre» de
+      // una orden que no llego a existir es exactamente la mentira que mato la 294.
+      delete fila.textoNormalizado;
     }
   }
 
@@ -399,6 +431,14 @@ export class BulkOrdenService implements IBulkOrdenService {
         // Feature 299: mismo aviso y por el mismo canal que la via sesion. El integrador lo
         // necesita MAS todavia: su sistema tiene el monto original y el nuestro el redondeado.
         ...(result.montoAjustado !== null ? { montoAjustado: result.montoAjustado } : {}),
+        // Ficha 383/R15: la comprobacion es la MISMA porque el punto es el mismo
+        // (`resolveFila`), y el aviso viaja por el mismo canal. Aqui no hay preview que lo
+        // pinte: el integrador que ignore el cuerpo de la respuesta no lo vera. Es el mismo
+        // residual que ya tiene `montoAjustado` —que cambia DINERO, y es mas grave—; se hereda
+        // con su precedente, no se inventa nada.
+        ...(result.textoNormalizado.length > 0
+          ? { textoNormalizado: result.textoNormalizado }
+          : {}),
       });
     });
 
@@ -698,6 +738,9 @@ export class BulkOrdenService implements IBulkOrdenService {
         // Feature 299: el aviso de redondeo del monto, o `null` si no hubo. Lo emite el
         // schema —la puerta COMPARTIDA por las dos vias—, asi que las dos lo reciben igual.
         montoAjustado: MontoAjustado | null;
+        // Ficha 383 (R10): los textos que hubo que reparar para que la etiqueta los pueda
+        // imprimir. VACIO en el caso normal, y entonces la fila no gana ninguna clave (R21).
+        textoNormalizado: TextoNormalizado[];
       } {
     const numRemisionRaw = (raw.num_remision ?? "").trim();
 
@@ -707,6 +750,64 @@ export class BulkOrdenService implements IBulkOrdenService {
       return { status: "error", numRemision: numRemisionRaw, errores: fieldErrors };
     }
     const data = parsed.data;
+
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    // ⭑ FICHA 383 — LA PUERTA DE LOS CARACTERES QUE LA ETIQUETA NO PUEDE IMPRIMIR
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    //
+    // POR QUE AQUI Y NO EN `filaCargaSchema`, pese al precedente de la 299 (que puso el redondeo
+    // del monto en el schema «porque es la puerta compartida»): aquel `.transform` no necesitaba
+    // la fuente, y este SI. `lib/types/carga-masiva.ts` VIAJA AL NAVEGADOR —`OrdenesCargaUpload`
+    // importa `findMissingHeaders` de forma estatica y por valor—, asi que colgar de ahi la
+    // validacion meteria los 22.592 caracteres del programa de fuente en el bundle inicial de
+    // `/ordenes` SIN PONER NADA ROJO: la guardia de 282/R13 solo busca el especificador literal
+    // del artefacto dentro de `app/` y `components/`, y no ve una llegada transitiva. Este
+    // servicio no viaja al navegador.
+    //
+    // Y SIGUE CERRANDO LAS DOS VIAS DE UNA VEZ (R15), que es lo que se le pedia al schema:
+    // `resolveFila` es el punto que `cargarMasiva` (sesion) y `cargarViaApi` (key) ya comparten.
+    //
+    // Va sobre `parsed.data`, o sea sobre el texto YA RECORTADO: lo que se evalua es exactamente
+    // lo que se va a almacenar, no el crudo del archivo.
+    //
+    // Se evaluan TODOS los campos antes de decidir, para que una fila con dos problemas los liste
+    // los dos (misma disciplina que el `fieldErrors` de la geografia).
+    const erroresTexto: Record<string, string[]> = {};
+    const textoNormalizado: TextoNormalizado[] = [];
+    const reparados: Partial<Record<(typeof CAMPOS_TEXTO_ETIQUETA)[number], string>> = {};
+
+    // R12/A3 — `num_remision` NO SE REPARA NUNCA, solo se juzga. Es el identificador que Ordenex
+    // COMPARTE con la tienda: por el se deduplica (R25/R26) y por el vuelve el XLSX de errores
+    // (ficha 143). Repararlo crearia una orden con una remision distinta de la del archivo, y los
+    // dos sistemas se quedarian con dos claves para la misma orden — peor que rechazar la fila.
+    const remision = evaluarTextoDeEtiqueta(data.num_remision, { reparar: false });
+    if (remision.estado === "irreparable") {
+      erroresTexto.num_remision = [
+        mensajeCargaCaracterNoImprimible("num_remision", remision.culpable, remision.codePoint),
+      ];
+    }
+
+    for (const campo of CAMPOS_TEXTO_ETIQUETA) {
+      const veredicto = evaluarTextoDeEtiqueta(data[campo]);
+      if (veredicto.estado === "irreparable") {
+        // R13/R14: la clave es la de la COLUMNA DEL ARCHIVO, que es lo que hace que los chips y
+        // el export de `motivo_error` sigan funcionando sin tocarlos.
+        erroresTexto[campo] = [
+          mensajeCargaCaracterNoImprimible(campo, veredicto.culpable, veredicto.codePoint),
+        ];
+        continue;
+      }
+      if (veredicto.estado === "reparado") {
+        // R9/R10: la fila entra REPARADA y lo dice. Lo que se guarda sale de aqui, no del crudo.
+        reparados[campo] = veredicto.valor;
+        textoNormalizado.push({ campo, original: veredicto.original, aplicado: veredicto.valor });
+      }
+    }
+
+    if (Object.keys(erroresTexto).length > 0) {
+      // R13: esta fila no se crea; las demas del lote siguen su camino.
+      return { status: "error", numRemision: data.num_remision, errores: erroresTexto };
+    }
 
     // Feature 142/R29 (276/R26): si el extractor de la via falla (p. ej. formato
     // invalido de `canton_distrito`), la fila va a error con SU clave, sin llegar a
@@ -749,22 +850,30 @@ export class BulkOrdenService implements IBulkOrdenService {
       // Feature 299: viene YA calculado del schema; aqui solo se transporta a la fila del
       // resumen. `null` en el caso normal (monto entero, o sin monto).
       montoAjustado: data.monto_cobrar_ajuste,
+      textoNormalizado, // ficha 383/R10: vacio en el caso normal
       createData: {
-        numRemision: data.num_remision,
+        numRemision: data.num_remision, // ficha 383/R12: JAMAS reparada
         estatusId: "", // el llamador lo completa (ya resuelto una sola vez, R7)
-        destinatario: data.destinatario,
-        telefonoDest: data.telefono,
+        // Ficha 383/R9: lo REPARADO es lo que se guarda. `??` y no un `if`: sin reparacion el
+        // valor es el de siempre y esta rama no existe (R21).
+        destinatario: reparados.destinatario ?? data.destinatario,
+        telefonoDest: reparados.telefono ?? data.telefono,
         tiendaId: "", // el llamador lo completa (R24)
         zonaId: geo.zonaId,
         provinciaId: geo.provinciaId,
         cantonId: geo.cantonId,
         distritoId: geo.distritoId,
-        producto: data.producto,
+        producto: reparados.producto ?? data.producto,
         peso: null, // R4: la carga masiva no trae peso
+        // Ficha 383/R16: `notas` NO se evalua y se guarda TAL CUAL, emoji incluido: no se
+        // imprime en la etiqueta.
         notas: data.notas === "" ? null : data.notas,
         // R37: la direccion literal se persiste en el mismo campo de siempre;
         // vacia -> null (igual que la columna `direccion` vacia de hoy, R26).
-        direccion: direccionLiteral === "" ? null : direccionLiteral,
+        // Ficha 383: el literal de la via y `data.direccion` son el MISMO `.trim()` del mismo
+        // crudo; si hubo reparacion, lo que se escribe es lo reparado.
+        direccion:
+          reparados.direccion ?? (direccionLiteral === "" ? null : direccionLiteral),
         montoCobrar: data.monto_cobrar,
       },
     };
