@@ -284,10 +284,18 @@ export function CrearZonaForm({
       // no en el de la rama que de verdad corrió. Sin anotar el tipo, `tsc`
       // sigue el tipo "evolutivo" de cada asignación y sí distingue las ramas.
       let ordenesReconciliadas = 0;
+      // FICHA 377 (R8): el segundo conteo. Las que NO se movieron porque su
+      // paquete ya está recibido en una bodega; el servidor las deja con su zona
+      // anterior a propósito (R2) y la pantalla tiene que decirlo — informar y no
+      // pintarlo sería el mismo fallo mudo que el conteo de arriba vino a cerrar.
+      let ordenesRetenidas = 0;
       let res;
       if (zonaIdGuardada) {
         res = await actualizarZona(zonaIdGuardada, parsed.data);
-        if (res.status === "ok") ordenesReconciliadas = res.ordenesReconciliadas;
+        if (res.status === "ok") {
+          ordenesReconciliadas = res.ordenesReconciliadas;
+          ordenesRetenidas = res.ordenesRetenidasEnBodegaSatelite;
+        }
       } else {
         res = await crearZona(parsed.data);
       }
@@ -298,7 +306,9 @@ export function CrearZonaForm({
         // La marca de especial se guarda con la zona ya persistida: si falla,
         // la zona sigue guardada y sólo se avisa de lo que no entró.
         await guardarEspeciales();
-        toast.success(mensajeGuardado(esEditar, ordenesReconciliadas));
+        toast.success(
+          mensajeGuardado(esEditar, ordenesReconciliadas, ordenesRetenidas),
+        );
         onSaved();
         return;
       }
@@ -578,16 +588,50 @@ function textoImpacto(impacto: ImpactoCentral): string {
 
 /**
  * Mensaje de éxito del guardado. Al crear, siempre "Zona creada": crear nunca
- * reconcilia órdenes (R13). Al editar, si el guardado reubicó órdenes de otra
- * bodega (su distrito ya resolvía otra zona), lo dice con el conteo exacto;
- * con 0 el mensaje queda igual que antes de esta ficha.
+ * reconcilia órdenes ni retiene ninguna (R13). Al editar, si el guardado
+ * reubicó órdenes de otra bodega (su distrito ya resolvía otra zona), lo dice
+ * con el conteo exacto; con 0 el mensaje queda igual que antes de la 366.
+ *
+ * ⭑ FICHA 377 (R8/R10) — LA SEGUNDA FRASE, Y POR QUE SOLO APARECE A VECES.
+ *
+ * `ordenesRetenidas` son las que el servidor dejó a propósito con su zona
+ * anterior porque su paquete ya está recibido en una bodega (R2): moverlas de
+ * zona las sacaría del listado de quien las tiene y las dejaría sin transición
+ * de salida. Decir «se reubicaron 12» y callar que otras 39 no se movieron es
+ * el fallo mudo que R8 cierra, así que la frase se añade a la de arriba en vez
+ * de sustituirla: los dos conjuntos son DISJUNTOS y los dos números importan.
+ *
+ * Con `0` retenidas NO se dice nada (R10): un «0 órdenes» en el caso normal
+ * —que es la enorme mayoría de los guardados— sería ruido que enseña a ignorar
+ * el mensaje justo cuando el número deja de ser 0. Por eso la guarda es
+ * `> 0` y no `<= 0`: el texto de antes de esta ficha se conserva LITERAL.
+ *
+ * Y la causa se nombra en términos de lo que pasa en la bodega, no del modelo:
+ * ni «retenidas», ni «custodia», ni «sin dueño» —eso último describe un defecto
+ * que este cambio precisamente impide—.
  */
-function mensajeGuardado(esEditar: boolean, ordenesReconciliadas: number): string {
+function mensajeGuardado(
+  esEditar: boolean,
+  ordenesReconciliadas: number,
+  ordenesRetenidas: number,
+): string {
   if (!esEditar) return "Zona creada";
-  if (ordenesReconciliadas <= 0) return "Zona actualizada";
-  const sustantivo =
-    ordenesReconciliadas === 1 ? "orden reubicada" : "órdenes reubicadas";
-  return `Zona actualizada (${ordenesReconciliadas} ${sustantivo})`;
+
+  const base =
+    ordenesReconciliadas > 0
+      ? `Zona actualizada (${ordenesReconciliadas} ${
+          ordenesReconciliadas === 1 ? "orden reubicada" : "órdenes reubicadas"
+        })`
+      : "Zona actualizada";
+
+  if (!(ordenesRetenidas > 0)) return base;
+
+  const retenidas =
+    ordenesRetenidas === 1
+      ? "1 orden no cambió de zona porque su paquete ya está en una bodega."
+      : `${ordenesRetenidas} órdenes no cambiaron de zona porque su paquete ya está en una bodega.`;
+
+  return `${base}. ${retenidas}`;
 }
 
 /** Mensaje legible para los estados de error de crear/actualizar zona. */

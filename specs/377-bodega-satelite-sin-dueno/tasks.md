@@ -177,17 +177,56 @@ service y la action devuelven los dos números sin tocarlos.
 
 **Depende de:** T6.
 
-- [ ] `app/(app)/configuracion/tarifas/_components/CrearZonaForm.tsx`: `mensajeGuardado` pasa a recibir
+- [x] `app/(app)/configuracion/tarifas/_components/CrearZonaForm.tsx`: `mensajeGuardado` pasa a recibir
       también las retenidas y cubre la tabla de `design.md` §5.4.
-- [ ] Texto en español, sin jerga. **No puede decir «sin dueño»** (describe un defecto que este cambio
+- [x] Texto en español, sin jerga. **No puede decir «sin dueño»** (describe un defecto que este cambio
       ya impide) y tiene que nombrar la causa en términos operativos, del estilo «se quedaron en la
       bodega que ya las tiene». Con `0` retenidas, el mensaje queda **exactamente igual que hoy**.
-- [ ] **Sin modal, sin confirmación previa, sin bloqueo** (R11). No se toca el modal de conflicto de
+- [x] **Sin modal, sin confirmación previa, sin bloqueo** (R11). No se toca el modal de conflicto de
       zona central que ya existe.
 
 **Hecho cuando (component test):** guardar con `{ reconciliadas: 12, retenidas: 3 }` pinta las dos
 frases; con `{ 12, 0 }` pinta solo la de reubicadas (texto idéntico al de hoy); con `{ 0, 0 }` pinta
 `Zona actualizada`; crear zona nunca pinta ninguna de las dos.
+
+### El texto que quedó (2026-09-07)
+
+La segunda frase se **suma** a la de la 366, no la sustituye: los dos conjuntos son disjuntos y los
+dos números importan.
+
+| reconciliadas | retenidas | toast |
+| --- | --- | --- |
+| 12 | 3 | `Zona actualizada (12 órdenes reubicadas). 3 órdenes no cambiaron de zona porque su paquete ya está en una bodega.` |
+| 0 | 3 | `Zona actualizada. 3 órdenes no cambiaron de zona porque su paquete ya está en una bodega.` |
+| 1 | 1 | `Zona actualizada (1 orden reubicada). 1 orden no cambió de zona porque su paquete ya está en una bodega.` |
+| 12 | 0 | `Zona actualizada (12 órdenes reubicadas)` — **literal, igual que antes de esta ficha** |
+| 0 | 0 | `Zona actualizada` — **literal** |
+| crear | — | `Zona creada` — **literal** |
+
+La causa se nombra por lo que pasa en la bodega, no por el modelo: ni «retenidas», ni «custodia», ni
+«sin dueño». La guarda es `> 0` y no `<= 0` para que el cero NO se diga (R10): un «0 órdenes» en el
+caso normal —la enorme mayoría de los guardados— enseña a ignorar el mensaje justo cuando el número
+deja de ser 0.
+
+**Los 4 casos de la 366 en `tests/components/CrearZonaFormReconciliacion.test.tsx` quedan intactos**
+(son el ancla del texto viejo). Los 7 nuevos comparan el texto **literal**, nunca contra
+`mensajeGuardado`: una aserción contra su propia fuente está siempre verde.
+
+**Mutaciones ejecutadas (11 casos en el archivo):**
+
+| Mutación | Rojos | Casos que se caen |
+| --- | --- | --- |
+| M1 — quitar la frase de retenidas de `mensajeGuardado` | 3 | los tres de R8 |
+| M2 — no leer `ordenesRetenidasEnBodegaSatelite` de la respuesta (el cableado) | 3 | los tres de R8 |
+| M3 — guarda `> 0` → `>= 0` (el cero habla) | 2 | los dos de R10 |
+| M4 — forzar siempre el plural | 1 | «1 retenida va en singular» |
+| M5 — `return` antes de `onSaved()` cuando hay retenidas (bloquear) | 1 | el de R11 |
+| M6 — leer el campo sin mirar el modo **y** poner la frase antes del `esEditar` | 4 | los tres de R8 + el de R13 |
+
+**Un hallazgo honesto:** el caso de R13 **no** se cae con una mutación de un solo punto. La rama de
+crear no asigna nunca `ordenesRetenidas` *y además* `mensajeGuardado` corta en `esEditar`: cada
+guarda basta por su cuenta, así que hay que romper las dos (M6) para verlo en rojo. Mide la
+combinación, no cada mitad; quien lo lea que no le pida más de lo que da.
 
 ## T8 — Guardias: demostrar que lo que no se toca, no se tocó
 
@@ -253,7 +292,7 @@ caso de R16).
 | T4 | hecha | `whereBaseElegible` + `notIn`/`count`; 5 casos unit nuevos |
 | T5 | hecha | 11 casos nuevos contra Postgres real (9 pedidos + el humo de T2 + el de R4) |
 | T6 | hecha | interfaz, service, `lib/types/zona.ts` y la Server Action (que ya reenviaba tal cual) |
-| **T7** | **NO hecha — fuera del alcance del backend_dev** | El mensaje del toast vive en `CrearZonaForm.tsx` (UI). El campo YA llega hasta la Server Action y su test lo mide; falta pintarlo. **Sin T7, R8 está a medias: el servidor informa y la pantalla todavía calla.** |
+| T7 | hecha (frontend, 2026-09-07) | `mensajeGuardado` gana el tercer argumento y la segunda frase; 7 casos nuevos en `tests/components/CrearZonaFormReconciliacion.test.tsx`, 6 mutaciones medidas. **R8 y R11 dejan de estar a medias: la pantalla ya no calla.** El texto de antes de la ficha se conserva LITERAL en los tres casos sin retenidas |
 | T8 | hecha | los cuatro archivos siguen verdes y NINGUNO aparece en el diff |
 | **T9** | **NO hecha — es previa al despliegue, no a la implementación** | Re-medir en producción los tres números (en estante / en tránsito / con deriva). La cifra del 2026-09-07 (47 / 215 / 0) queda **CADUCADA** |
 | T10 | hecha | Q3, decisión del leader |
@@ -267,7 +306,8 @@ Los títulos son los REALES de los tests escritos. `db/zona` =
 `tests/unit/repositories/zona-repository.test.ts`; `unit/svc` =
 `tests/unit/services/zona-service.test.ts`; `action` =
 `tests/integration/actions/zonas-action.test.ts`; `unit/q3` =
-`tests/unit/services/corregir-datos-cliente-bodega-satelite.test.ts`.
+`tests/unit/services/corregir-datos-cliente-bodega-satelite.test.ts`; `form` =
+`tests/components/CrearZonaFormReconciliacion.test.tsx` (T7, jsdom).
 
 | Requisito | Task | Test que lo prueba |
 | --- | --- | --- |
@@ -278,12 +318,12 @@ Los títulos son los REALES de los tests escritos. `db/zona` =
 | R5 | T4, T5 | `db/zona` «⭑ 377/R5: el corte viejo sigue vivo bajo el nuevo» + los 17 casos de la 366, verdes sin editar un solo `expect` |
 | R6 | T4, T5 | `db/zona` «⭑ 377/R2/R6 …» (cero filas de `historial_accion` por la retenida) + `unit/repo` «⭑ R8: el conteo se hace TAMBIEN cuando no hay ninguna orden que mover» |
 | R7 | T4, T6 | `db/zona` «⭑ 377/R7: los dos conteos son DISJUNTOS» + `unit/repo` «⭑ R7: … el retenido ACUMULA por grupo» + `unit/svc` «⭑ 377/R7/R8: reenvia los DOS conteos del repo TAL CUAL» |
-| R8 | T4, T6, **T7 (pendiente)** | `db/zona` «⭑ 377/R7 …» + `action` «⭑ 366/R12 + 377/R8: actualizar ok reenvia LOS DOS conteos». ⚠️ La mitad de pantalla es T7 y **no está hecha** |
+| R8 | T4, T6, T7 | `db/zona` «⭑ 377/R7 …» + `action` «⭑ 366/R12 + 377/R8: actualizar ok reenvia LOS DOS conteos» + **`form` «⭑ R8: con retenidas > 0 el toast dice las DOS cosas, no solo las reubicadas», «⭑ R8: sin ninguna reubicada, la frase de las retenidas aparece igual» y «⭑ R8: 1 retenida va en singular»** (mutaciones medidas: quitar la frase → 3 rojos; no leer el campo de la respuesta → 3 rojos) |
 | R9 | T4, T5 | `db/zona` «⭑ 377/R9: el conteo … cuenta EXACTAMENTE lo que dice contar» (los cuatro sub-casos) + `unit/repo` «⭑ R2/R9: las dos consultas comparten el `where` base» |
-| R10 | T4, T6 | `db/zona` «⭑ 377/R10: sin ninguna orden en el estante, las retenidas son 0» + `unit/svc` «⭑ 377/R10: … reenvia CERO (no lo omite)» |
-| R11 | T4 | `db/zona` «⭑ 377/R2/R6 …»: el `update` devuelve `ok` y guarda la zona con retenidas > 0 — no hay rama que bloquee ni que pida confirmar. **La mitad de pantalla (no abrir modal) es T7 y está pendiente** |
+| R10 | T4, T6, T7 | `db/zona` «⭑ 377/R10: sin ninguna orden en el estante, las retenidas son 0» + `unit/svc` «⭑ 377/R10: … reenvia CERO (no lo omite)» + `form` «⭑ R10: con retenidas = 0 el mensaje es EXACTAMENTE el de antes de esta ficha» y «⭑ R10: sin reubicar y sin retener, «Zona actualizada» a secas» (mutación medida: guarda `> 0` → `>= 0` → 2 rojos) |
+| R11 | T4, T7 | `db/zona` «⭑ 377/R2/R6 …»: el `update` devuelve `ok` y guarda la zona con retenidas > 0 — no hay rama que bloquee ni que pida confirmar. La mitad de pantalla es `form` «⭑ R11: retener NO bloquea el guardado, no abre ningún modal y avisa al padre» (mutación medida: `return` antes de `onSaved()` con retenidas > 0 → 1 rojo) |
 | R12 | T4, T5 | `db/zona` «⭑ 377/R12: repetir el guardado informa las MISMAS retenidas y 0 reconciliadas» |
-| R13 | T4, T5 | `db/zona` «⭑ 377/R13: `create()` ni reconcilia ni retiene» + `unit/repo` «⭑ R13: `create()` no cuenta retenidas» |
+| R13 | T4, T5, T7 | `db/zona` «⭑ 377/R13: `create()` ni reconcilia ni retiene» + `unit/repo` «⭑ R13: `create()` no cuenta retenidas» + `form` «⭑ R13: crear zona no pinta el conteo aunque la respuesta lo trajera» (mutación medida: M6, y **solo** M6 — mide la combinación de las dos guardas, ver T7) |
 | R14 | T1, T8 | `tests/unit/utils/estados-bodega-satelite.test.ts` y el inventario de transiciones, verdes **sin aparecer en el diff de la rama** |
 | R15 | T10 | `unit/q3` «⭑ rechaza y NO escribe, aunque la peticion venga CONFIRMADA», «⭑ sin confirmar, el rechazo GANA al aviso de importes» y «el motivo nombra la BODEGA» (mutación medida: apagar el gate → 3 rojos) |
 | R16 | T10 | `unit/q3` «⭑ corregir el distrito DENTRO de la misma zona sigue permitido» y «⭑ corregir el nombre o el telefono … sigue permitido» (mutación medida: quitar la comparación de zona → 1 rojo) |
