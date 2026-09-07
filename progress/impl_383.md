@@ -393,3 +393,36 @@ los dos archivos congelados.
 | R11 | (backend) — el preview y la carga real pasan por el mismo `resolveFila`; la pantalla pinta lo que llega |
 | R13 | `carga-masiva-errores-roundtrip.test.ts` › «R13: produce su chip…», «R13: llega al XLSX de errores con su `motivo_error`, y el carácter sobrevive», «…y el parser del NAVEGADOR…», «…corregida la celda, la fila re-subida vuelve a validar» |
 | R21 | `CargaMasivaClasificacion.test.ts` › «una reparación que no cambia el texto NO se anuncia», «una carga NORMAL no gana ninguna reparación» · `OrdenesCargaPreview.test.tsx` › «sin reparaciones el paso se ve EXACTAMENTE como antes: ni una palabra de más» |
+
+## T7 — el gate completo
+
+Corrido sobre el commit `7cd54446`, con el `.env` copiado de la raíz **antes** de lanzarlo, con
+`INIT_EXIT=$?` escrito **dentro** del log y en su propia línea, y **sin** `tail` en la tubería:
+
+```
+✓ typecheck paso
+✓ lint paso (0 errores; los mismos 160 warnings de siempre, ni uno nuevo)
+✓ DATABASE_URL resuelta: los 132 archivos de tests contra Postgres SI se ejecutan
+
+ Test Files  1776 passed (1776)
+      Tests  25401 passed | 26 skipped (25427)
+   Duration  802.75s
+
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1776 ejecutado(s), todos en el baseline conocido)
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+**Los `skipped`, mirados uno a uno:** los **26** son exactamente los del backend —
+`AnaliticaPage.test.tsx` (17, línea 1040 del log) y `AnaliticaShell.test.tsx` (9, línea 8808)—,
+ajenos y anteriores a esta ficha. **T7 no añade ni un `skipped`.**
+
+**La cuenta cuadra:** el backend dejó **25.380** tests; T7 añade **21** (9 en
+`CargaMasivaClasificacion`, 6 en `OrdenesCargaPreview`, 6 en el round-trip) → **25.401**. Los tres
+archivos corrieron DENTRO del gate (líneas 7074, 7997 y 8055 del log), y con ellos los dos de los
+módulos congelados: `CargaMasivaErrorChips` (7) y `CargaMasivaExportErrores` (19).
+
+El `!` de las migraciones sin `down.sql` es **anterior y ajeno** (tres migraciones de rutas del
+2026-08-14). Esta ficha sigue sin añadir ninguna migración.
