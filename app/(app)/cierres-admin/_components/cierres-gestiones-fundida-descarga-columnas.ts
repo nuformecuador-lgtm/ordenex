@@ -4,18 +4,55 @@
  *
  * **Una sola declaración para las DOS pantallas** (R26). Los dos puntos de entrada —los cierres
  * del día de `cierres-admin` y los cierres de bodega del maestro— cubren conjuntos DISJUNTOS
- * (design §2.6) y cada uno llama a su propia Server Action, pero las 29 columnas y la función
+ * (design §2.6) y cada uno llama a su propia Server Action, pero las 31 columnas y la función
  * que las puebla son estas, y solo estas: dos declaraciones «iguales» son dos declaraciones que
  * divergen a la primera columna nueva.
  *
- * **29 columnas** (D6/D8/D9, `design.md §6`, más las tres de medios de pago que sustituyeron a la
- * celda única «Método», el fulfillment congelado, las dos FECHAS del pedido del 2026-09-05, y
- * menos el par partido del flete de devolución). Las doce primeras se
+ * **31 columnas** (D6/D8/D9, `design.md §6`, más las tres de medios de pago que sustituyeron a la
+ * celda única «Método», el fulfillment congelado, las dos FECHAS del pedido del 2026-09-05, las
+ * DOS de la ficha 385 del 2026-09-07, y menos el par partido del flete de devolución). Las
+ * catorce primeras se
  * pueblan SIEMPRE; las diecisiete restantes son específicas del resultado de la fila y, cuando no
  * aplican, la celda queda VACÍA —`null`, nunca el «—» de pantalla ni un relleno— y la columna NO
  * se omite (R9/R10/R46). Que la hoja tenga celdas vacías es el coste que el humano vio y aceptó
  * al pedir UN archivo en vez de cinco (D3); ver la cabecera de
  * `cierre-gestiones-descarga-columnas.ts`, que sigue explicando por qué allí son cinco.
+ *
+ * ── LOS INTENTOS SON DE LA TIENDA, Y POR ESO EL ENCABEZADO LO DICE (ficha 385, 2026-09-07) ──
+ *
+ * El encargo fue «los intentos y la fecha de creación de la orden». «Los intentos», a secas, no
+ * nombra un dato: en este árbol hay **DOS contadores distintos, de dos dueños distintos**, y el
+ * archivo de «Ayuda solicitada» los lleva como dos columnas separadas precisamente porque se
+ * confunden (`app/(app)/novedades/_components/ayuda-descarga-columnas.ts`):
+ *
+ *  - **«Intentos de contacto»** = `orden.intentos_contacto`. Los de **LA TIENDA**: el contador
+ *    que sube con el botón «+1 intento de contacto» de /novedades mientras la tienda resuelve
+ *    una orden con ayuda pedida. Es CUMULATIVO, solo sube (el único escritor del árbol es un
+ *    `{ increment: 1 }`) y sobrevive a que la solicitud de ayuda se retire.
+ *  - **«Intentos de entrega»** = los del **MENSAJERO**. NO es una columna de `orden`: se DERIVA
+ *    contando `orden_historial` (`whereIntentosVigentes`), y es el contador que gobierna el tope
+ *    de intentos de la feature 276.
+ *
+ * **Esta hoja lleva el PRIMERO**, que es el que la ficha nombró. Y el encabezado dice de quién
+ * es —«Intentos de contacto de la tienda», no «Intentos»— por dónde acaba leído: cada fila de
+ * esta hoja es una GESTIÓN DEL MENSAJERO, con su resultado y su dinero al lado, así que un
+ * «Intentos» pelado en esa vecindad se lee como los del mensajero. Sería un número correcto
+ * contestando a otra pregunta, que es el peor género de dato: nadie lo mira dos veces.
+ *
+ * Si algún día se quiere ADEMÁS el del mensajero, es una columna MÁS y no un cambio de fuente en
+ * ésta: obliga a un conteo sobre `orden_historial` por descarga, y las dos tienen que salir con
+ * sus dos nombres completos, como en «Ayuda solicitada».
+ *
+ * ── LA CUARTA FECHA (ficha 385) ────────────────────────────────────────────────────────────
+ *
+ * `fechaCreacionOrden` es `orden.created_at` en día calendario de COSTA RICA, y va con las otras
+ * tres por el mismo motivo por el que aquéllas van juntas. Las cuatro, en el orden en que
+ * ocurren: creación → reparto → gestión → cierre.
+ *
+ * Es la SEGUNDA lectura de la orden VIVA de esta hoja (la primera es `fecha_reparto`), y es
+ * segura por una razón que `montoCobrar` no tiene: `created_at` es INMUTABLE. No se reescribe
+ * nunca, así que no puede enseñar un valor de HOY disfrazado de congelado — que es lo que la
+ * feature 69 vino a matar y por lo que el dinero se lee del snapshot y no de la orden.
  *
  * ── LAS DOS FECHAS NUEVAS, Y LA TERCERA QUE NO EXISTE (pedido humano del 2026-09-05) ──────
  *
@@ -112,6 +149,28 @@ export const FECHA_GESTION_COL = "Fecha de gestión";
  * mañana». Puede venir VACÍA y es legítimo; ver la cabecera.
  */
 export const DIA_REPARTO_COL = "Día de reparto";
+/**
+ * Ficha 385 — día calendario CR en que la orden se registró en Ordenex (`orden.created_at`).
+ *
+ * Dice «de la orden» porque en esta hoja hay CUATRO fechas y tres de ellas son de otra cosa (del
+ * cierre, de la gestión, del reparto): «Fecha de creación» a secas obligaría a adivinar de qué
+ * se creó. En el catálogo de plantillas el mismo dato se llama «Fecha de creación»
+ * (`lib/types/plantilla-datos.ts`), pero allí no compite con otras tres.
+ */
+export const FECHA_CREACION_ORDEN_COL = "Fecha de creación de la orden";
+/**
+ * Ficha 385 — los intentos que registra LA TIENDA (`orden.intentos_contacto`).
+ *
+ * El «de la tienda» NO es ruido: es lo que impide que se lea como los intentos del MENSAJERO,
+ * que son otro dato (derivado de `orden_historial`) y el que uno espera en una hoja donde cada
+ * fila es una gestión del mensajero. El porqué largo, con los dos contadores enfrentados, está
+ * en la cabecera del módulo.
+ *
+ * No se reusa el «Intentos de contacto» de `ayuda-descarga-columnas.ts` a propósito: allí la
+ * columna viaja PEGADA a «Intentos de entrega», y esa vecindad ya dice de quién es cada una.
+ * Aquí viaja sola.
+ */
+export const INTENTOS_CONTACTO_TIENDA_COL = "Intentos de contacto de la tienda";
 /** Resultado de la gestión de esta fila, en singular y como etiqueta legible (R7/R45). */
 export const RESULTADO_COL = "Resultado";
 
@@ -128,33 +187,46 @@ export const RESULTADO_COL = "Resultado";
  * que ningún identificador se repita en dos módulos, y por eso la asignación no puede
  * duplicarse en las dos pantallas.
  *
- * Su selector OCULTA pero NO REORDENA: el orden de estas 29 columnas es el agrupado que hace
+ * Su selector OCULTA pero NO REORDENA: el orden de estas 31 columnas es el agrupado que hace
  * legible la hoja (ver §6 abajo), y quien monta el selector lo declara con
  * `permitirReordenar={false}`.
  */
 export const AMBITO_DESCARGA_GESTIONES_FUNDIDA = "cierres-gestiones";
 
 /**
- * Las 29 columnas de la hoja fundida, en el orden decidido (`design.md §6`), con las tres de
- * MEDIOS DE PAGO donde antes iba la celda única «Método» y las dos FECHAS del pedido del
- * 2026-09-05 junto a la del cierre.
+ * Las 31 columnas de la hoja fundida, en el orden decidido (`design.md §6`), con las tres de
+ * MEDIOS DE PAGO donde antes iba la celda única «Método», las dos FECHAS del pedido del
+ * 2026-09-05 junto a la del cierre y las DOS de la ficha 385.
  *
- * Las dos nuevas van EN TERCERA Y CUARTA POSICIÓN, pegadas a «Fecha del cierre», y no al final:
- * quien abre la hoja lee las tres fechas de un vistazo y ahí es donde la diferencia entre ellas
- * salta (que es todo el punto de haberlas añadido). Ninguna columna existente cambia de orden
- * relativo — las aserciones literales de `cierres-gestiones-fundida-descarga-columnas.test.ts`
- * lo atornillan.
+ * Las del 2026-09-05 van EN TERCERA Y CUARTA POSICIÓN, pegadas a «Fecha del cierre», y no al
+ * final: quien abre la hoja lee las fechas de un vistazo y ahí es donde la diferencia entre
+ * ellas salta (que es todo el punto de haberlas añadido).
+ *
+ * Las de la ficha 385 siguen ese mismo criterio, que es «cada columna con las de su especie» y
+ * no «al final, que es donde caben»:
+ *  - `fechaCreacionOrden` en QUINTA, cerrando el bloque de fechas. Las cuatro juntas se leen
+ *    como la línea de tiempo que son (creación → reparto → gestión → cierre); suelta al final,
+ *    habría que ir y volver por la fila para compararla con las otras tres.
+ *  - `intentosContactoTienda` en DECIMOTERCERA, entre «Tienda» y «Resultado». Es un dato de la
+ *    ORDEN y de su relación con la tienda, así que va tras «Tienda»; y va ANTES de «Resultado»
+ *    porque «Resultado» cierra el bloque de lo que siempre se puebla y es la celda que decide
+ *    cuáles de las diecisiete siguientes traen dato. Meter una columna después de él partiría
+ *    esa lectura en dos.
+ *
+ * Ninguna columna existente cambia de orden RELATIVO — las aserciones literales de
+ * `cierres-gestiones-fundida-descarga-columnas.test.ts` lo atornillan.
  *
  * Los encabezados que ya existían se LEEN de `cierre-labels` y no se teclean: es lo que hace
  * cierto que la pantalla y el archivo digan lo mismo, en vez de que hoy coincidan dos literales
  * escritos en dos archivos.
  */
 export const COLUMNAS_DESCARGA_GESTIONES_FUNDIDA: DescargaColumna[] = [
-  // --- 1-12: se pueblan SIEMPRE (salvo `diaReparto`, que puede venir vacío: ver cabecera) ---
+  // --- 1-14: se pueblan SIEMPRE (salvo `diaReparto`, que puede venir vacío: ver cabecera) ---
   { clave: "mensajero", encabezado: MENSAJERO_COL },
   { clave: "fechaCierre", encabezado: FECHA_CIERRE_COL },
   { clave: "fechaGestion", encabezado: FECHA_GESTION_COL },
   { clave: "diaReparto", encabezado: DIA_REPARTO_COL },
+  { clave: "fechaCreacionOrden", encabezado: FECHA_CREACION_ORDEN_COL },
   { clave: "numGuia", encabezado: "Nº Guía" },
   { clave: "numRemision", encabezado: "Nº Remisión" },
   { clave: "destinatario", encabezado: "Destinatario" },
@@ -162,8 +234,9 @@ export const COLUMNAS_DESCARGA_GESTIONES_FUNDIDA: DescargaColumna[] = [
   { clave: "ubicacion", encabezado: "Ubicación" },
   { clave: "producto", encabezado: "Producto" },
   { clave: "tienda", encabezado: "Tienda" },
+  { clave: "intentosContactoTienda", encabezado: INTENTOS_CONTACTO_TIENDA_COL },
   { clave: "resultado", encabezado: RESULTADO_COL },
-  // --- 13-29: específicas del resultado; vacías donde no aplican (R10) ---
+  // --- 15-31: específicas del resultado; vacías donde no aplican (R10) ---
   { clave: "montoCobrar", encabezado: MONTO_COBRAR_COL },
   { clave: "fulfillment", encabezado: FULFILLMENT_COL },
   { clave: "recibido", encabezado: "Recibido" },
@@ -272,7 +345,7 @@ function ubicacion(gestion: CierreGestionDescargaDTO): string | null {
   return partes.length === 0 ? null : partes.join(" · ");
 }
 
-/** Las doce celdas que TODA fila lleva, sea cual sea su resultado. Valores CRUDOS. */
+/** Las catorce celdas que TODA fila lleva, sea cual sea su resultado. Valores CRUDOS. */
 function celdasComunes(gestion: CierreGestionDescargaDTO): DescargaFila {
   return {
     mensajero: gestion.mensajeroNombre,
@@ -285,6 +358,10 @@ function celdasComunes(gestion: CierreGestionDescargaDTO): DescargaFila {
     fechaGestion: gestion.fechaGestion,
     // `null` es una celda vacía legítima (ver cabecera): la orden perdió su día de reparto.
     diaReparto: gestion.diaReparto,
+    // Ficha 385. Igual que las dos de arriba: el servidor ya la entrega como día calendario CR
+    // (`orden.created_at` es un `timestamp`, así que allí pasa por `fechaCalendarioCR`), y aquí
+    // no se recorta ni se reformatea nada.
+    fechaCreacionOrden: gestion.fechaCreacionOrden,
     numGuia: gestion.numGuia,
     numRemision: gestion.numRemision,
     destinatario: gestion.destinatario,
@@ -292,6 +369,10 @@ function celdasComunes(gestion: CierreGestionDescargaDTO): DescargaFila {
     ubicacion: ubicacion(gestion),
     producto: gestion.producto,
     tienda: gestion.tiendaNombre,
+    // Ficha 385 — los de LA TIENDA. El `0` se EMITE: es un valor conocido («la tienda no lo
+    // intentó nunca»), no un hueco, así que aquí no hay `|| null` ni `?? ""` que lo escondan.
+    // Que la celda diga `0` y no quede vacía es lo que distingue «no hizo falta» de «no se sabe».
+    intentosContactoTienda: gestion.intentosContactoTienda,
     // R45: SIEMPRE la etiqueta legible, JAMÁS el value del enum. El mapa es exhaustivo sobre
     // `CierreResultado`, así que no hay caída a un `?? gestion.resultado` que emitiera el slug.
     resultado: RESULTADO_FILA_LABEL[gestion.resultado],
@@ -349,7 +430,7 @@ function celdasEspecificas(
 }
 
 /**
- * Proyecta UNA gestión a UNA fila de la hoja fundida: las 29 claves declaradas, siempre las
+ * Proyecta UNA gestión a UNA fila de la hoja fundida: las 31 claves declaradas, siempre las
  * mismas y siempre todas (R9), con las que no aplican a su resultado en VACÍO (R10).
  *
  * El `??` sobre `ESPECIFICAS_POR_RESULTADO` no es un caso de negocio: el mapa es exhaustivo

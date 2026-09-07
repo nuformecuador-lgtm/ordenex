@@ -166,6 +166,24 @@ describe("WHERE/orden/proyección de las gestiones de «Cierres del día» (feat
     expect(JSON.stringify(select).toLowerCase()).not.toContain("evidencia");
   });
 
+  it("la consulta PIDE de verdad la creación y los intentos de la orden (ficha 385)", async () => {
+    // Se lee el `select` que LLEGÓ a Prisma, no la constante: la aserción sobre
+    // `GESTION_DESCARGA_SELECT` de más abajo fija el contrato, pero un repositorio que pasara
+    // otro objeto la dejaría verde igual. Aquí se mide lo que se envía.
+    //
+    // Y es lo que separa «la celda trae el dato» de «la celda trae algo plausible»: sin estos
+    // dos campos en la consulta, la fecha de creación sólo podría salir de otra fecha de la
+    // fila y los intentos de un cero fijo — las dos, mentiras con formato de dato.
+    const prisma = prismaFalso();
+
+    await repositorio(prisma).findGestionesPorAlcanceCompleto(MAESTRO, FILTROS);
+
+    const select = prisma.gestionOrden.findMany.mock.calls[0]![0]!.select!;
+    expect(select.orden).toEqual({
+      select: { fechaReparto: true, createdAt: true, intentosContacto: true },
+    });
+  });
+
   it("la proyección es la del detalle menos la evidencia, más la identidad del cierre (R8/R11/R41)", async () => {
     // Este caso es el que se pone rojo el día que `GESTION_ADMIN_SELECT` gane un campo: obliga a
     // DECIDIR si la hoja fundida también lo quiere, en vez de que las dos proyecciones se
@@ -178,18 +196,25 @@ describe("WHERE/orden/proyección de las gestiones de «Cierres del día» (feat
     // es (cierre_id, orden_id). Al cruzar cierres, emparejar sólo por orden cogería la fila
     // congelada del cierre equivocado.
     //
-    // `orden` entra el 2026-09-05 y es la ÚNICA lectura de la orden VIVA de toda esta
+    // `orden` entra el 2026-09-05 y es la única relación a la orden VIVA de toda esta
     // proyección: `orden.fecha_reparto` no está en el snapshot congelado, así que o se lee de
-    // ahí o la columna «Día de reparto» no existe. Está acotada a esa sola columna a propósito
-    // —abrirla a más campos volvería a mezclar datos de HOY con datos congelados, que es el
-    // camino de lectura que la feature 69 vino a matar—, y este caso se pone rojo si alguien la
-    // ensancha.
+    // ahí o la columna «Día de reparto» no existe. Sigue acotada a una LISTA CERRADA de campos
+    // a propósito —abrirla a discreción volvería a mezclar datos de HOY con datos congelados,
+    // que es el camino de lectura que la feature 69 vino a matar—, y este caso se pone rojo si
+    // alguien la ensancha sin decidirlo.
     expect([...deLaDescarga].filter((k) => !delDetalle.has(k)).sort()).toEqual([
       "cierre",
       "cierreId",
       "orden",
     ]);
-    expect(GESTION_DESCARGA_SELECT.orden).toEqual({ select: { fechaReparto: true } });
+    // FICHA 385 (2026-09-07) — la lista pasa de uno a TRES campos, y la decisión es que los tres
+    // son SEGUROS de leer vivos porque ninguno se reescribe con otro valor: `created_at` es
+    // inmutable e `intentos_contacto` sólo sube (el único escritor del árbol es un
+    // `{ increment: 1 }`). Un monto no cumpliría eso, y por eso el dinero sigue viniendo del
+    // snapshot. Cualquier campo nuevo aquí tiene que pasar esa prueba antes de entrar.
+    expect(GESTION_DESCARGA_SELECT.orden).toEqual({
+      select: { fechaReparto: true, createdAt: true, intentosContacto: true },
+    });
     // Y `createdAt` NO aparece en ninguna de las dos listas de diferencias: lo leen LAS DOS
     // proyecciones. Es lo que hace que la hoja fundida y las cinco por sección puedan emitir la
     // MISMA «Fecha de gestión» en vez de una sí y otra no.

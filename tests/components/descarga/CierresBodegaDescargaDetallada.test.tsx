@@ -126,6 +126,7 @@ function gestionConsolidada(): CierreGestionDescargaDTO {
     cierreSolicitadoAt: "2026-07-11T10:00:00.000Z",
     fechaGestion: "2026-07-11",
     diaReparto: "2026-07-11",
+    fechaCreacionOrden: "2026-07-05",
     numGuia: 2002,
     numRemision: "REM-B1",
     destinatario: "Ana Pérez",
@@ -136,6 +137,7 @@ function gestionConsolidada(): CierreGestionDescargaDTO {
     distritoNombre: null,
     producto: "Caja",
     tiendaNombre: "Tienda X",
+    intentosContactoTienda: 2,
     resultado: "rechazada",
     montoRecibido: null,
     pagos: [],
@@ -238,21 +240,28 @@ describe("descarga detallada en cierres de bodega (T7.4)", () => {
     // El listado general de esta pantalla NO se toca: son dos bordes distintos y dos granos.
     expect(listarPendientesCierresBodegaCompleto).not.toHaveBeenCalled();
 
-    // R26: mismas 29 columnas, mismo orden y misma proyección que en la otra pantalla, porque
+    // R26: mismas 31 columnas, mismo orden y misma proyección que en la otra pantalla, porque
     // salen de la MISMA declaración. (27 hasta el 2026-09-05, cuando entraron «Fecha de
-    // gestión» y «Día de reparto»: que este número suba a la vez que el de la otra pantalla es
-    // precisamente lo que R26 promete.)
+    // gestión» y «Día de reparto»; 31 desde la ficha 385, con «Fecha de creación de la orden» e
+    // «Intentos de contacto de la tienda»: que este número suba a la vez que el de la otra
+    // pantalla es precisamente lo que R26 promete.)
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
     const [columnas, filas, hoja] = buildXlsxRowsMock.mock.calls[0];
-    expect(columnas.map((c) => c.header)).toHaveLength(29);
+    expect(columnas.map((c) => c.header)).toHaveLength(31);
     expect(columnas[0].header).toBe("Mensajero");
     // Las dos fechas nuevas llegan también por ESTE borde, sin declaración propia de bodega.
     expect(columnas.map((c) => c.header)).toContain("Fecha de gestión");
     expect(columnas.map((c) => c.header)).toContain("Día de reparto");
+    // Y las dos de la ficha 385, por el mismo camino: bodega no declara columnas propias.
+    expect(columnas.map((c) => c.header)).toContain("Fecha de creación de la orden");
+    expect(columnas.map((c) => c.header)).toContain("Intentos de contacto de la tienda");
     expect(columnas.map((c) => c.header)).not.toContain("Tiene evidencia");
     expect(hoja).toBe("Gestiones de cierres");
     expect(filas).toHaveLength(1);
     expect(filas[0].numRemision).toBe("REM-B1");
+    // La celda, no solo el encabezado: el dato cruza el borde de bodega con su valor.
+    expect(filas[0].fechaCreacionOrden).toBe("2026-07-05");
+    expect(filas[0].intentosContactoTienda).toBe(2);
     expect(filas[0].origenRechazo).toBe("Automático");
     expect(descargarBlobMock).toHaveBeenCalledTimes(1);
   });

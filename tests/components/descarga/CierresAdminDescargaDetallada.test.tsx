@@ -141,6 +141,7 @@ function gestion(resultado: CierreResultado, numRemision: string): CierreGestion
     cierreSolicitadoAt: "2026-07-11T10:00:00.000Z",
     fechaGestion: "2026-07-11",
     diaReparto: "2026-07-11",
+    fechaCreacionOrden: "2026-07-05",
     numGuia: 1001,
     numRemision,
     destinatario: "Ana Pérez",
@@ -151,6 +152,7 @@ function gestion(resultado: CierreResultado, numRemision: string): CierreGestion
     distritoNombre: null,
     producto: "Caja",
     tiendaNombre: "Tienda X",
+    intentosContactoTienda: 2,
     resultado,
     montoRecibido: null,
     pagos: [],
@@ -311,8 +313,10 @@ describe("descarga detallada en cierres del día (T5.1)", () => {
     expect(descargarBlobMock).toHaveBeenCalledTimes(1);
     const [columnas, filas, hoja] = buildXlsxRowsMock.mock.calls[0];
     expect(hoja).toBe("Gestiones de cierres");
-    // 29 desde el 2026-09-05: las 27 de la 230 más «Fecha de gestión» y «Día de reparto».
-    expect(columnas).toHaveLength(29);
+    // 31 desde la ficha 385 (2026-09-07): las 29 anteriores más «Fecha de creación de la orden»
+    // e «Intentos de contacto de la tienda». Aquéllas eran las 27 de la 230 más «Fecha de
+    // gestión» y «Día de reparto» (2026-09-05).
+    expect(columnas).toHaveLength(31);
     // Cinco resultados distintos, CINCO filas, en la misma hoja y con la columna que los nombra.
     expect(filas).toHaveLength(5);
     expect(filas.map((f) => f.resultado)).toEqual([

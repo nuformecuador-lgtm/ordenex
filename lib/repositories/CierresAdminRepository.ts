@@ -653,7 +653,19 @@ export const GESTION_DESCARGA_SELECT = {
   //
   // Coste: UNA consulta mas por descarga (Prisma resuelve la relacion con un `IN` sobre los
   // ids), no una por fila.
-  orden: { select: { fechaReparto: true } },
+  //
+  // FICHA 385 (2026-09-07) — la misma lectura gana DOS campos mas de la orden viva:
+  // `createdAt` (cuando nacio la orden) e `intentosContacto` (cuantas veces la TIENDA la
+  // intento). Ninguno esta en el snapshot congelado, asi que valen las mismas dos frases de
+  // arriba: o se leen de `orden` o las columnas no existen, y el coste sigue siendo esa MISMA
+  // consulta —tres campos en el mismo `select`, no una consulta por campo—.
+  //
+  // Que sean datos VIVOS y no congelados importa y esta asumido: los dos son INMUTABLES o
+  // MONOTONOS, que es lo que los hace seguros aqui. `created_at` no se reescribe nunca;
+  // `intentos_contacto` solo sube (+1 por clic de la tienda, sin decremento en todo el arbol),
+  // asi que una descarga vieja puede quedarse CORTA pero nunca contradice lo que paso. No es el
+  // caso de un monto, que si cambia de valor y por eso se lee congelado (feature 69).
+  orden: { select: { fechaReparto: true, createdAt: true, intentosContacto: true } },
   // El grano de `cierre_detail` es (cierre_id, orden_id): una MISMA orden puede aparecer en
   // varios cierres. Al cruzar cierres, emparejar solo por `orden_id` cogeria la fila congelada
   // del cierre equivocado. NO se emite: es la clave del join, no una celda (R42).
@@ -717,6 +729,11 @@ export function toGestionDescargaDTO(
     // se anula al deshacer una asignacion o al cerrar una orden sin gestionar, y una celda
     // vacia es la lectura honesta de un dato que ya no existe.
     diaReparto: g.orden.fechaReparto ? g.orden.fechaReparto.toISOString().slice(0, 10) : null,
+    // FICHA 385 — `orden.created_at` es un `timestamp`, NO un `@db.Date`: va por
+    // `fechaCalendarioCR` como `fechaGestion`, y no por el recorte del ISO como `diaReparto`.
+    // Las dos lineas de arriba tienen tratamientos DISTINTOS a proposito y esta se apunta a la
+    // primera; copiar la segunda le adelantaria el dia a toda orden creada tras las 18:00 CR.
+    fechaCreacionOrden: fechaCalendarioCR(g.orden.createdAt),
     numGuia: d.numGuia,
     numRemision: d.numRemision,
     destinatario: d.destinatario,
@@ -727,6 +744,14 @@ export function toGestionDescargaDTO(
     distritoNombre: d.distritoNombre,
     producto: d.producto,
     tiendaNombre: d.tiendaNombre,
+    // FICHA 385 — los intentos de LA TIENDA (`orden.intentos_contacto`), NO los del mensajero.
+    // El nombre del campo del DTO lo dice para que nadie cablee aqui `intentosEntrega`, que es
+    // otro dato y se deriva de `orden_historial`. Ver el TSDoc del DTO.
+    //
+    // `NOT NULL DEFAULT 0`: se emite el numero tal cual, cero incluido. Un `|| null` convertiria
+    // «la tienda no lo intento nunca» —que es un hecho— en una celda vacia, que se lee como «no
+    // se sabe».
+    intentosContactoTienda: g.orden.intentosContacto,
     resultado: g.resultado,
     montoRecibido: decimalToString(g.montoRecibido),
     pagos: toLineasPago(g.pagos),

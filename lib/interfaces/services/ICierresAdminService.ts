@@ -201,6 +201,20 @@ export interface CierreGestionDescargaDTO {
    * la fecha del cierre ni con ninguna otra: la celda queda VACIA.
    */
   diaReparto: string | null;
+  /**
+   * FICHA 385 (2026-09-07) — dia calendario de COSTA RICA (`YYYY-MM-DD`) de `orden.created_at`:
+   * CUANDO NACIO LA ORDEN en Ordenex. Es la CUARTA fecha de la fila y la mas antigua de las
+   * cuatro: creacion -> reparto -> gestion -> cierre.
+   *
+   * Mismo tratamiento que `fechaGestion` y por el mismo motivo: `orden.created_at` es un
+   * `timestamp` (no `@db.Date`), asi que se serializa con `fechaCalendarioCR` en el borde de
+   * datos. `toISOString().slice(0, 10)` le adelantaria el dia a TODA orden creada despues de
+   * las 18:00 CR. El que SI puede recortarse por ISO es `diaReparto`, que es `@db.Date`.
+   *
+   * NUNCA `null`: `orden.created_at` es NOT NULL con default `now()`, y la orden de una gestion
+   * de cierre existe siempre (la relacion es obligatoria en el modelo).
+   */
+  fechaCreacionOrden: string;
   // --- identidad de negocio de la gestion (SIN uuid, R42) ---
   numGuia: number | null;
   numRemision: string;
@@ -212,6 +226,29 @@ export interface CierreGestionDescargaDTO {
   distritoNombre: string | null;
   producto: string;
   tiendaNombre: string;
+  /**
+   * FICHA 385 (2026-09-07) — `orden.intentos_contacto`: cuantas veces LA TIENDA registro un
+   * intento de contacto sobre esta orden desde /novedades, con el boton «+1 intento de
+   * contacto». Contador CUMULATIVO que sobrevive a que la solicitud de ayuda se retire.
+   *
+   * ⚠️ NO SON LOS INTENTOS DEL MENSAJERO. En este arbol conviven DOS contadores con nombres
+   * parecidos y duenos distintos, y el archivo de «Ayuda solicitada» los lleva como DOS
+   * columnas separadas justamente para que no se confundan
+   * (`app/(app)/novedades/_components/ayuda-descarga-columnas.ts`):
+   *
+   *   - `intentos_contacto`  -> «Intentos de contacto»: los de la TIENDA. Es ESTE campo.
+   *   - `intentosEntrega`    -> «Intentos de entrega»: los del MENSAJERO. NO es una columna:
+   *     no existe como columna en `orden`, se DERIVA contando `orden_historial`
+   *     (`OrdenHistorialRepository.contarIntentosVigentesEnLote` / `whereIntentosVigentes`).
+   *
+   * Por eso el encabezado de la hoja dice de QUIEN son (ver `INTENTOS_CONTACTO_TIENDA_COL`):
+   * un «Intentos» a secas en una hoja de cierres —donde cada fila es una gestion del
+   * mensajero— se lee como los del mensajero, que es el dato equivocado.
+   *
+   * NUNCA `null` y el `0` es un valor CONOCIDO («la tienda no lo intento nunca»), no un hueco:
+   * la columna es `NOT NULL DEFAULT 0`.
+   */
+  intentosContactoTienda: number;
   resultado: CierreResultado;
   // --- datos POR RAMA; money-safe STRING del snapshot, tal cual (R43/R44) ---
   montoRecibido: string | null;

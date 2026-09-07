@@ -93,6 +93,7 @@ function gestion(): CierreGestionDescargaDTO {
     cierreSolicitadoAt: "2026-07-11T10:00:00.000Z",
     fechaGestion: "2026-07-11",
     diaReparto: "2026-07-11",
+    fechaCreacionOrden: "2026-07-05",
     numGuia: 1001,
     numRemision: "REM-1",
     destinatario: "Ana Pérez",
@@ -103,6 +104,7 @@ function gestion(): CierreGestionDescargaDTO {
     distritoNombre: null,
     producto: "Caja",
     tiendaNombre: "Tienda X",
+    intentosContactoTienda: 2,
     resultado: "entregada",
     montoRecibido: "1000.10",
     pagos: [{ metodo: "SINPE", monto: "1000.10" }],
@@ -309,7 +311,7 @@ describe("diálogo de descarga detallada de gestiones (T4.1)", () => {
     expect(descargarBlobMock).not.toHaveBeenCalled();
   });
 
-  it("confirmar con selección produce el archivo detallado con sus 29 columnas", async () => {
+  it("confirmar con selección produce el archivo detallado con sus 31 columnas", async () => {
     const accion = accionOk();
     montar(accion);
     await userEvent.click(disparador());
@@ -326,12 +328,16 @@ describe("diálogo de descarga detallada de gestiones (T4.1)", () => {
     expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1);
     const [columnas, filas, hoja] = buildXlsxRowsMock.mock.calls[0];
     const encabezados = columnas.map((c) => c.header);
-    // 29 desde el 2026-09-05: las 27 de la 230 más «Fecha de gestión» y «Día de reparto».
-    expect(encabezados).toHaveLength(29);
+    // 31 desde la ficha 385 (2026-09-07): las 29 anteriores más «Fecha de creación de la orden»
+    // e «Intentos de contacto de la tienda». Aquéllas eran las 27 de la 230 más «Fecha de
+    // gestión» y «Día de reparto» (2026-09-05).
+    expect(encabezados).toHaveLength(31);
     expect(encabezados[0]).toBe("Mensajero");
     expect(encabezados).toContain("Resultado");
     expect(encabezados).toContain("Fecha de gestión");
     expect(encabezados).toContain("Día de reparto");
+    expect(encabezados).toContain("Fecha de creación de la orden");
+    expect(encabezados).toContain("Intentos de contacto de la tienda");
     // D8/R40: la columna de evidencia no existe en la fundida, en ningun resultado.
     expect(encabezados).not.toContain("Tiene evidencia");
     // UNA hoja, y su nombre es el titulo de la descarga detallada (R6/R51).

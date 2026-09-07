@@ -28,12 +28,12 @@ import type { CatalogoFiltrosCierresDTO } from "@/lib/types/filtros-cierres";
 //  · QUE SEA UNO. Que el segundo botón no esté, en las dos pantallas y en las dos pestañas.
 //  · QUE EL NIVEL MANDE SOBRE LAS COLUMNAS. Elegir «Detalle» cambia el juego que el selector
 //    ofrece, y lo que sale en el archivo es el del nivel elegido.
-//  · QUE EL DETALLE NO SE PUEDA REORDENAR. Esa hoja emite siempre sus 29 columnas y solo el
+//  · QUE EL DETALLE NO SE PUEDA REORDENAR. Esa hoja emite siempre sus 31 columnas y solo el
 //    resultado de la fila decide cuáles se pueblan: su orden ES el agrupado que la hace legible.
 //    Es el caso que hay que mirar dos veces, porque el daño de permitirlo sería MUDO — la
 //    preferencia vive en el `localStorage` del usuario y ninguna prueba de la hoja se pondría
 //    roja: solo se degradaría el archivo de quien reordenó.
-//  · QUE LA PREFERENCIA SEA POR NIVEL. Son juegos de columnas distintos (7 y 29): una sola clave
+//  · QUE LA PREFERENCIA SEA POR NIVEL. Son juegos de columnas distintos (7 y 31): una sola clave
 //    haría que ocultar en uno moviera en silencio lo guardado del otro.
 //
 // Ninguna aserción escribe a mano una lista de encabezados ni un total de columnas: todo se
@@ -202,6 +202,7 @@ function gestion(): CierreGestionDescargaDTO {
     cierreSolicitadoAt: "2026-07-11T10:00:00.000Z",
     fechaGestion: "2026-07-11",
     diaReparto: "2026-07-11",
+    fechaCreacionOrden: "2026-07-05",
     numGuia: 1001,
     numRemision: "REM-1",
     destinatario: "Ana Pérez",
@@ -212,6 +213,7 @@ function gestion(): CierreGestionDescargaDTO {
     distritoNombre: null,
     producto: "Caja",
     tiendaNombre: "Tienda X",
+    intentosContactoTienda: 2,
     resultado: "entregada",
     montoRecibido: "1000.10",
     pagos: [],
@@ -529,7 +531,7 @@ describe("Cierres · un solo botón de descarga con nivel de detalle", () => {
         ),
       );
 
-      // Ni un solo control de mover, para ninguna de las 29.
+      // Ni un solo control de mover, para ninguna de las 31.
       expect(
         screen.queryAllByRole("button", { name: /^(Subir|Bajar) / }).map((boton) =>
           boton.getAttribute("aria-label"),
@@ -537,7 +539,7 @@ describe("Cierres · un solo botón de descarga con nivel de detalle", () => {
         `${pantalla.nombre}: la hoja fundida ofrece reordenar, y su orden es contrato de legibilidad`,
       ).toEqual([]);
 
-      // Pero ocultar sí: las 29 casillas están, marcadas, y se pueden desmarcar.
+      // Pero ocultar sí: las 31 casillas están, marcadas, y se pueden desmarcar.
       const ultima = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.at(-1)!;
       const casilla = screen.getByRole("checkbox", { name: ultima.encabezado });
       expect(casilla).toHaveAttribute("aria-checked", "true");

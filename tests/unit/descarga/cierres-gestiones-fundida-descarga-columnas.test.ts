@@ -20,9 +20,16 @@ import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 
 import {
+  AMBITO_DESCARGA_GESTIONES_FUNDIDA,
   COLUMNAS_DESCARGA_GESTIONES_FUNDIDA,
   filaDescargaGestionFundida,
 } from "@/app/(app)/cierres-admin/_components/cierres-gestiones-fundida-descarga-columnas";
+import {
+  AMBITO_DESCARGA_CIERRES_HISTORICO,
+  AMBITO_DESCARGA_CIERRES_PENDIENTES,
+  COLUMNAS_DESCARGA_CIERRES_HISTORICO,
+  COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
+} from "@/app/(app)/cierres-admin/_components/cierres-admin-descarga-columnas";
 import {
   TIENE_EVIDENCIA_COL,
   TIENE_EVIDENCIA_SI,
@@ -72,6 +79,10 @@ function gestion(
     // celda de la gestión pasaría en verde. Es el caso que el humano pidió poder distinguir.
     fechaGestion: "2026-07-12",
     diaReparto: "2026-07-10",
+    // Ficha 385 — la CUARTA fecha, y también distinta de las otras tres (creación el 8, reparto
+    // el 10, cierre el 11, gestión el 12). Mismo motivo que arriba: con dos fechas iguales, una
+    // proyección que confundiera una celda con otra pasaría en verde.
+    fechaCreacionOrden: "2026-07-08",
     numGuia: 1001,
     numRemision: "REM-1",
     destinatario: "Ana Pérez",
@@ -82,6 +93,9 @@ function gestion(
     distritoNombre: "Limón",
     producto: "Caja mediana",
     tiendaNombre: "Tienda X",
+    // Ficha 385 — un valor NO cero y NO uno: un `1` se confundiría con cualquier contador
+    // ambiental y un `0` no distinguiría «emitido» de «vacío».
+    intentosContactoTienda: 3,
     montoRecibido: null,
     pagos: [],
     motivo: null,
@@ -96,7 +110,7 @@ function gestion(
   };
 }
 
-/** Las 26 claves declaradas, para afirmar el censo de CADA fila proyectada (R9). */
+/** Las 31 claves declaradas, para afirmar el censo de CADA fila proyectada (R9). */
 const CLAVES_DECLARADAS = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.clave);
 
 const LOS_CINCO: CierreResultado[] = [
@@ -110,12 +124,13 @@ const LOS_CINCO: CierreResultado[] = [
 // --- T3.2: orden y censo --------------------------------------------------
 
 describe("orden de las columnas de la hoja fundida (T3.2)", () => {
-  it("declara las 29 columnas en el orden decidido (design §6)", () => {
+  it("declara las 31 columnas en el orden decidido (design §6)", () => {
     expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.clave)).toEqual([
       "mensajero",
       "fechaCierre",
       "fechaGestion",
       "diaReparto",
+      "fechaCreacionOrden",
       "numGuia",
       "numRemision",
       "destinatario",
@@ -123,6 +138,7 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
       "ubicacion",
       "producto",
       "tienda",
+      "intentosContactoTienda",
       "resultado",
       "montoCobrar",
       "fulfillment",
@@ -147,6 +163,7 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
       "Fecha del cierre",
       "Fecha de gestión",
       "Día de reparto",
+      "Fecha de creación de la orden",
       "Nº Guía",
       "Nº Remisión",
       "Destinatario",
@@ -154,6 +171,7 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
       "Ubicación",
       "Producto",
       "Tienda",
+      "Intentos de contacto de la tienda",
       "Resultado",
       "A cobrar",
       "Fulfillment",
@@ -174,8 +192,8 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
       "Indemnización",
     ]);
     // El número es parte de la decisión (D6), no una consecuencia: si alguien añade una
-    // columna 30 sin reabrirla, esto lo dice con el número en la mano.
-    expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA).toHaveLength(29);
+    // columna 32 sin reabrirla, esto lo dice con el número en la mano.
+    expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA).toHaveLength(31);
   });
 
   it("NO declara una columna de fecha de asignación (decisión medida del 2026-09-05)", () => {
@@ -235,7 +253,7 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
 // --- T3.3: proyección por resultado --------------------------------------
 
 describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () => {
-  it("las 29 columnas salen en el orden declarado sea cual sea el resultado (R9)", () => {
+  it("las 31 columnas salen en el orden declarado sea cual sea el resultado (R9)", () => {
     for (const resultado of LOS_CINCO) {
       const fila = filaDescargaGestionFundida(gestion({ resultado }));
       // Mismas claves, mismo orden de inserción y NINGUNA de más: la hoja es rectangular.
@@ -345,10 +363,11 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     expect(fila).toEqual({
       mensajero: "Ana Mensajera",
       fechaCierre: "2026-07-11",
-      // Las tres fechas son TRES días distintos: cada celda trae la suya y ninguna se
+      // Las CUATRO fechas son CUATRO días distintos: cada celda trae la suya y ninguna se
       // contamina con la de al lado.
       fechaGestion: "2026-07-12",
       diaReparto: "2026-07-10",
+      fechaCreacionOrden: "2026-07-08",
       numGuia: 1001,
       numRemision: "REM-1",
       destinatario: "Ana Pérez",
@@ -356,6 +375,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
       ubicacion: "Limón · Limón · Central · Limón",
       producto: "Caja mediana",
       tienda: "Tienda X",
+      intentosContactoTienda: 3,
       resultado: "Entregada",
       montoCobrar: "1000.10",
       // El fixture de `ingreso()` trae `tarifa: null` (gap R9): sin tarifa congelada no hay
@@ -554,6 +574,193 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     expect(fila.indemnizacion).not.toBe(0);
     expect(fila.indemnizacion).not.toBe("0");
     expect(fila.indemnizacion).not.toBe("0.00");
+  });
+});
+
+// --- Ficha 385: los intentos de LA TIENDA y la fecha de creación de la orden ---------------
+
+describe("las dos columnas de la ficha 385 (2026-09-07)", () => {
+  /** La declaración, como pares (clave, encabezado), para poder afirmar sobre la pareja. */
+  const DECLARADAS = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => [c.clave, c.encabezado]);
+
+  it("el encabezado de los intentos dice DE QUIÉN son, y no es un «Intentos» a secas", () => {
+    // ESTE es el requisito de la ficha, y no es cosmético: en el árbol hay DOS contadores con
+    // dueños distintos —`orden.intentos_contacto` (la TIENDA) y los intentos de entrega del
+    // MENSAJERO, derivados de `orden_historial`— y esta hoja lleva UNA fila por gestión DEL
+    // MENSAJERO. Un «Intentos» pelado en esa vecindad se lee como los del mensajero: número
+    // correcto, pregunta equivocada.
+    const columna = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.find(
+      (c) => c.clave === "intentosContactoTienda",
+    );
+    expect(columna).toBeDefined();
+    expect(columna!.encabezado).toBe("Intentos de contacto de la tienda");
+
+    // Se afirma el TEXTO y además la propiedad que lo hace útil: nombra al dueño. Sin esto, un
+    // renombrado a «Intentos» o a «Intentos de contacto» pasaría la aserción de arriba en cuanto
+    // alguien la "actualizara" al valor nuevo, que es como mueren estos contratos.
+    expect(columna!.encabezado.toLowerCase()).toContain("tienda");
+    expect(columna!.encabezado).not.toBe("Intentos");
+
+    // Y NINGUNA otra columna de la hoja habla de intentos: no hay dos que se puedan confundir.
+    const deIntentos = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.filter((c) =>
+      /intento/i.test(c.encabezado),
+    );
+    expect(deIntentos.map((c) => c.clave)).toEqual(["intentosContactoTienda"]);
+  });
+
+  it("la hoja NO lleva los intentos de ENTREGA, que son otro dato y de otro dueño", () => {
+    // Un requisito que hoy se cumple «porque no existe» necesita su test igual: sin él, la
+    // próxima persona conecta `intentosEntrega` a esta columna creyendo que la arregla, y la
+    // celda pasaría a contar otra cosa bajo el mismo encabezado.
+    const claves = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.clave);
+    expect(claves).not.toContain("intentosEntrega");
+    expect(claves).not.toContain("intentos");
+    for (const resultado of LOS_CINCO) {
+      const fila = filaDescargaGestionFundida(gestion({ resultado }));
+      expect(Object.keys(fila)).not.toContain("intentosEntrega");
+      expect(Object.keys(fila)).not.toContain("intentos");
+    }
+  });
+
+  it("los intentos salen tal cual, y el CERO se emite en vez de dejar la celda vacía", () => {
+    // `orden.intentos_contacto` es NOT NULL DEFAULT 0. El `0` es un HECHO —«la tienda no lo
+    // intentó nunca»— y una celda vacía diría «no se sabe». Un `|| null` o un `?? ""` en la
+    // proyección pone rojo esto.
+    const conIntentos = filaDescargaGestionFundida(
+      gestion({ resultado: "entregada", intentosContactoTienda: 7 }),
+    );
+    expect(conIntentos.intentosContactoTienda).toBe(7);
+
+    const sinIntentos = filaDescargaGestionFundida(
+      gestion({ resultado: "devuelta", intentosContactoTienda: 0 }),
+    );
+    expect(sinIntentos.intentosContactoTienda).toBe(0);
+    expect(sinIntentos.intentosContactoTienda).not.toBeNull();
+    expect(sinIntentos.intentosContactoTienda).not.toBe("");
+    expect(sinIntentos.intentosContactoTienda).not.toBeUndefined();
+    // Número, no texto: quien abre la hoja ordena y suma por esta columna.
+    expect(typeof sinIntentos.intentosContactoTienda).toBe("number");
+  });
+
+  it("la fecha de creación es la de la ORDEN y no ninguna de las otras tres", () => {
+    // Las cuatro fechas del fixture son cuatro días distintos a propósito (creación 8, reparto
+    // 10, cierre 11, gestión 12). Si la proyección leyera la celda de al lado, dos de ellas
+    // saldrían iguales y este caso lo dice; con las cuatro iguales pasaría en verde.
+    for (const resultado of LOS_CINCO) {
+      const fila = filaDescargaGestionFundida(gestion({ resultado }));
+      expect(fila.fechaCreacionOrden, resultado).toBe("2026-07-08");
+      expect(fila.fechaCreacionOrden, resultado).not.toBe(fila.fechaCierre);
+      expect(fila.fechaCreacionOrden, resultado).not.toBe(fila.fechaGestion);
+      expect(fila.fechaCreacionOrden, resultado).not.toBe(fila.diaReparto);
+    }
+  });
+
+  it("la fecha de creación sale como día calendario, sin hora que rompa la hoja", () => {
+    // El servidor ya la entrega como día CR; aquí se afirma que la proyección no le añade nada.
+    // Una hora dentro de la celda la convierte en texto y rompe el orden de la columna.
+    const fila = filaDescargaGestionFundida(
+      gestion({ resultado: "entregada", fechaCreacionOrden: "2026-12-31" }),
+    );
+    expect(fila.fechaCreacionOrden).toBe("2026-12-31");
+    expect(String(fila.fechaCreacionOrden)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(String(fila.fechaCreacionOrden)).not.toMatch(/[T:Z]/);
+  });
+
+  it("las dos nuevas van en su sitio y NINGUNA existente cambia de orden relativo", () => {
+    // (a) Posición declarada: la fecha cierra el bloque de fechas (5.ª) y los intentos van
+    // entre «Tienda» y «Resultado» (13.ª). No es cosmética: las cuatro fechas juntas se leen
+    // como la línea de tiempo que son, y «Resultado» tiene que quedar cerrando el bloque de lo
+    // que siempre se puebla, porque es la celda que decide cuáles de las 17 siguientes traen
+    // dato.
+    const claves = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.clave);
+    expect(claves.indexOf("fechaCreacionOrden")).toBe(4);
+    expect(claves.indexOf("intentosContactoTienda")).toBe(12);
+    expect(claves[claves.indexOf("intentosContactoTienda") + 1]).toBe("resultado");
+
+    // (b) El orden RELATIVO de las 29 de antes se conserva entero. Se compara contra la lista
+    // literal previa a la ficha —no contra la constante filtrada por sí misma, que siempre
+    // estaría verde—: una permuta de dos columnas viejas pone esto rojo aunque el censo cuadre.
+    const ANTES_DE_LA_385 = [
+      "mensajero",
+      "fechaCierre",
+      "fechaGestion",
+      "diaReparto",
+      "numGuia",
+      "numRemision",
+      "destinatario",
+      "direccion",
+      "ubicacion",
+      "producto",
+      "tienda",
+      "resultado",
+      "montoCobrar",
+      "fulfillment",
+      "recibido",
+      "pago_efectivo",
+      "pago_SINPE",
+      "pago_transferencia",
+      "nuevaFecha",
+      "origenRechazo",
+      "causa",
+      "motivo",
+      "fleteConIva",
+      "comisionConIva",
+      "fleteDevolucionConIva",
+      "ingresoTotal",
+      "pagoMensajero",
+      "ingresoBodega",
+      "indemnizacion",
+    ];
+    expect(ANTES_DE_LA_385).toHaveLength(29); // no-vacuidad: la lista de contraste es la de antes
+    expect(claves.filter((c) => ANTES_DE_LA_385.includes(c))).toEqual(ANTES_DE_LA_385);
+  });
+
+  it("las dos nuevas se pueblan SIEMPRE: no dependen del resultado de la fila", () => {
+    // Son datos de la ORDEN, no del desenlace de la gestión. Si alguien las metiera en
+    // `CLAVES_ESPECIFICAS`, quedarían vacías en cuatro de los cinco resultados.
+    for (const resultado of LOS_CINCO) {
+      const fila = filaDescargaGestionFundida(
+        gestion({ resultado, fechaCreacionOrden: "2026-05-01", intentosContactoTienda: 2 }),
+      );
+      expect(fila.fechaCreacionOrden, resultado).toBe("2026-05-01");
+      expect(fila.intentosContactoTienda, resultado).toBe(2);
+    }
+  });
+
+  it("los encabezados nuevos no se pisan con ninguno de los 29 anteriores", () => {
+    // Dos columnas con el mismo encabezado son indistinguibles en la hoja y en el selector.
+    const encabezados = DECLARADAS.map(([, encabezado]) => encabezado);
+    expect(new Set(encabezados).size).toBe(encabezados.length);
+  });
+
+  it("la hoja de RESUMEN no se toca: es otro nivel y otro ámbito", () => {
+    // El encargo fue sobre el DETALLE. El resumen tiene grano CIERRE (una fila por cierre, no
+    // por gestión), así que «los intentos de la orden» ni siquiera tendría dónde leerse, y su
+    // preferencia de columnas vive en ámbitos aparte (`cierres-pendientes`/`cierres-resueltos`).
+    // Sin este caso, añadir las columnas también allí «por simetría» no rompería nada.
+    for (const columnas of [
+      COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
+      COLUMNAS_DESCARGA_CIERRES_HISTORICO,
+    ]) {
+      const claves = columnas.map((c) => c.clave);
+      expect(claves).not.toContain("intentosContactoTienda");
+      expect(claves).not.toContain("fechaCreacionOrden");
+      for (const columna of columnas) {
+        expect(columna.encabezado).not.toMatch(/intento/i);
+        expect(columna.encabezado).not.toMatch(/creaci[oó]n/i);
+      }
+    }
+    // No-vacuidad: el resumen conserva su tamaño de siempre, 7 y 8 columnas.
+    expect(COLUMNAS_DESCARGA_CIERRES_PENDIENTES).toHaveLength(7);
+    expect(COLUMNAS_DESCARGA_CIERRES_HISTORICO).toHaveLength(8);
+    // Y los tres ámbitos siguen siendo tres: la preferencia es POR NIVEL.
+    expect(
+      new Set([
+        AMBITO_DESCARGA_GESTIONES_FUNDIDA,
+        AMBITO_DESCARGA_CIERRES_PENDIENTES,
+        AMBITO_DESCARGA_CIERRES_HISTORICO,
+      ]).size,
+    ).toBe(3);
   });
 });
 
