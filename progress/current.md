@@ -67,6 +67,55 @@ escritas aquí para que no se pierdan:
   COMPARTIDA. Se esquiva escribiendo la carpeta de la migración a mano y aplicándola con
   `prisma migrate deploy`. No es de esta sesión y sigue ahí.
 
+### Cierre de la jornada del 2026-09-07
+
+- **376 CERRADA y en `dev`** (PR #724, merge `2a34c577`). El humano probó la pantalla en la app
+  real —el único riesgo residual que declaraba `impl_376.md`— y funciona. Gate post-merge sobre
+  `dev` en verde: `INIT_EXIT=0`, 1769/1769 archivos, 25 263 tests, 132 de `integration/db`
+  ejecutados.
+- **378 CERRADA SIN CÓDIGO** por decisión del humano: los 149 distritos sin zona no tienen
+  cobertura, y los que están habilitados no se tocan.
+- **377** en implementación (worktree aislado), desbloqueada por el merge de la 376.
+- **381** con el spec revisado a las decisiones del humano (43 requisitos). Espera turno: pide DOS
+  migraciones y la base local es compartida.
+
+### ⚠️ Dos trampas de la base local que costaron una tarde, y las dos son de la MISMA familia
+
+Un gate post-merge salió rojo con **7 tests en 6 archivos**, todos del tipo «el enum de la base ES el
+catálogo» y todos ajenos a lo que se estaba tocando. `dev` estaba sano; la base local no.
+
+1. **Una migración huérfana de un agente detenido.** Al parar a media escritura al implementador de
+   la 381, su migración **ya estaba aplicada** a la base local compartida. La carpeta se fue con su
+   rama; los valores del enum se quedaron. Ver [base local compartida rompe gates ajenos].
+2. **El `down.sql` se llevó por delante un valor AJENO.** Al revertir esa migración, su `down.sql`
+   —que *recrea el tipo con la lista completa*, porque Postgres no sabe borrar un valor suelto—
+   restauró la lista **de su punto de ramificación**, anterior al merge de la 376. Resultado:
+   `zona_central_cambiada` desapareció de la base **sin un solo error**. Los tests siguieron rojos,
+   pero ya por otro motivo.
+
+**La receta, para la próxima:**
+- antes de revertir, compara la lista del `down.sql` con el catálogo de `dev` **de hoy**, no con el
+  de la rama;
+- después de revertir, reaplica los `migration.sql` de las fichas mergeadas **después** de esa rama
+  (`ADD VALUE IF NOT EXISTS` es idempotente):
+  `pnpm exec prisma db execute --file ./db/migrations/<carpeta>/migration.sql`;
+- la verificación que no miente es correr los propios archivos de `tests/integration/db` que afirman
+  «el enum de la base es el catálogo»: si pasan, la base está bien por construcción;
+- y `pnpm run db:rollback` revierte **la última carpeta por nombre**, así que en `dev` apunta a la
+  ficha recién mergeada, no a la que quieres deshacer. Hay que estar en la rama correcta.
+
+### Reportado por el humano y sin ficha todavía
+
+**El modal «Imprimir etiquetas» avisa «No se pudo preparar la tipografía de la etiqueta».** Visto en
+PRODUCCIÓN (guías 77234159 y 70159914, confirmadas en la base). Lo lanza `cargarFuenteEtiqueta()`
+cuando falla el `import()` diferido del artefacto. Descartado que el artefacto no se despliegue
+(está versionado y no ignorado) y no hay rastro en los logs de Vercel —correcto: un
+`ChunkLoadError` es del navegador y nunca llega al servidor—. La vista previa se degrada a
+propósito (R33) y **la descarga sí falla** (R16). Pendiente de que el humano recargue con
+Ctrl+Shift+R para distinguir chunk caducado de fallo vivo. **Defecto independiente de la causa: el
+aviso dice «Inténtalo de nuevo», que es justo lo único que no puede funcionar si el chunk ya no
+existe.**
+
 ## 🗺️ 2026-09-03 — la zona que no seguía a su configuración (366) + dos huecos de visibilidad (367)
 
 **Sesión abierta.** Nace de cuatro cosas que el humano reportó de golpe. Dos eran fallos (fichas
