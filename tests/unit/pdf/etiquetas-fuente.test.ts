@@ -11,6 +11,7 @@ import {
 import {
   caracterNoCubierto,
   cubreTexto,
+  ErrorCaracterNoImprimible,
   exigirCobertura,
 } from "@/lib/pdf/etiquetas-fuente-registro";
 import { monedaConfig } from "@/lib/config/moneda";
@@ -112,10 +113,47 @@ describe("R29 — la cobertura declarada no miente", () => {
   });
 
   it("R28 — un caracter no cubierto LANZA, con el code point en el mensaje", () => {
-    expect(() => exigirCobertura(fuenteEtiqueta, "₡18.000", "Monto a cobrar")).not.toThrow();
-    expect(() => exigirCobertura(fuenteEtiqueta, "₹18.000", "Monto a cobrar")).toThrow(
-      /U\+20B9[\s\S]*Monto a cobrar/,
-    );
+    expect(() =>
+      exigirCobertura(fuenteEtiqueta, "₡18.000", "Monto a cobrar", 1042),
+    ).not.toThrow();
+    expect(() =>
+      exigirCobertura(fuenteEtiqueta, "₹18.000", "Monto a cobrar", 1042),
+    ).toThrow(/U\+20B9[\s\S]*Monto a cobrar/);
+  });
+
+  // Feature 382 — El error LLEVA ENCIMA la guia y el caracter, no solo dentro de
+  // su texto. Es lo que permite que el modal lo distinga del «la fuente no
+  // cargo» y diga que orden hay que corregir: leer subcadenas de un mensaje no
+  // es distinguir, es adivinar.
+  it("382 — el error es tipado y trae la guia, el caracter y su code point", () => {
+    let capturado: unknown;
+    try {
+      exigirCobertura(fuenteEtiqueta, "Porfirio 𝕠", "texto de la etiqueta", 11081885);
+    } catch (e) {
+      capturado = e;
+    }
+    expect(capturado).toBeInstanceOf(ErrorCaracterNoImprimible);
+    const error = capturado as ErrorCaracterNoImprimible;
+    expect(error.numGuia).toBe(11081885);
+    // El caracter medido en la orden real de produccion (2026-09-07).
+    expect(error.caracter).toBe("𝕠");
+    expect(error.codePoint).toBe(0x1d560);
+    expect(error.campo).toBe("texto de la etiqueta");
+    expect(error.name).toBe("ErrorCaracterNoImprimible");
+    // Y sigue siendo un Error de verdad: el canal best-effort de la carga por
+    // API publica `error.message` tal cual.
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain("U+1D560");
+    expect(error.message).toContain("11081885");
+  });
+
+  it("382 (control negativo) — un texto cubierto no lanza nada, y el astral SI esta fuera", () => {
+    expect(() =>
+      exigirCobertura(fuenteEtiqueta, "Porfirio Rodriguez", "texto de la etiqueta", 11081885),
+    ).not.toThrow();
+    // La cobertura del subconjunto es la que decide; nada de listas paralelas.
+    expect(caracterNoCubierto(fuenteEtiqueta, "Porfirio Rodriguez")).toBeNull();
+    expect(caracterNoCubierto(fuenteEtiqueta, "Porfirio 𝕠")).toBe("𝕠");
   });
 });
 

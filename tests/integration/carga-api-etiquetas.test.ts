@@ -365,7 +365,7 @@ describe("R28 — un caracter no cubierto falla VISIBLE por el canal best-effort
   function errorDeCobertura(): Error {
     try {
       // U+20B9 (rupia india) no esta en el subconjunto cp1252 + colon.
-      exigirCobertura(fuenteEtiqueta, "₹18.000", "Monto a cobrar");
+      exigirCobertura(fuenteEtiqueta, "₹18.000", "Monto a cobrar", 1042);
     } catch (e) {
       return e as Error;
     }

@@ -5,9 +5,11 @@ import userEvent from "@testing-library/user-event";
 
 import {
   EtiquetasGuiaModal,
+  mensajeCaracterNoImprimible,
   mensajeEtiquetaNoCabe,
 } from "@/app/(app)/ordenes/_components/EtiquetasGuiaModal";
 import { ErrorEtiquetaNoCabe } from "@/lib/pdf/etiquetas-ajuste";
+import { ErrorCaracterNoImprimible } from "@/lib/pdf/etiquetas-fuente-registro";
 import { generarEtiquetas } from "@/lib/actions/etiquetas-guia";
 import { descargarEtiquetasPdf } from "@/app/(app)/ordenes/_components/etiquetas-pdf";
 import {
@@ -567,12 +569,16 @@ describe("EtiquetasGuiaModal — la fuente de la etiqueta (feature 282)", () => 
     const user = userEvent.setup();
     const onSuccess = vi.fn();
     conUnaEtiqueta();
-    // El generador lanza con SU mensaje tecnico (code point incluido). El modal
-    // muestra el suyo, que es el que un operador de bodega puede leer: lo que
-    // R28 exige es que falle de forma VISIBLE y que no salga ningun PDF.
+    // El generador lanza su error tipado (feature 382). Lo que R28 exige y aqui
+    // se afirma es lo de siempre: falla de forma VISIBLE y no sale ningun PDF.
+    // QUE dice el mensaje se mide abajo, en el bloque de la 382.
     descargarEtiquetasPdfMock.mockRejectedValue(
-      new Error(
-        "El caracter «₿» (U+20BF) del campo «Monto a cobrar» no esta en el subconjunto embebido de la fuente",
+      new ErrorCaracterNoImprimible(
+        11,
+        "₿",
+        0x20bf,
+        "Monto a cobrar",
+        "EtiquetaMonto",
       ),
     );
 
@@ -589,7 +595,7 @@ describe("EtiquetasGuiaModal — la fuente de la etiqueta (feature 282)", () => 
       screen.getByRole("button", { name: "Descargar etiquetas" }),
     );
 
-    expect(await screen.findByText(ERROR_FUENTE_ETIQUETA)).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(onSuccess).not.toHaveBeenCalled();
   });
 
@@ -697,5 +703,152 @@ describe("R7 (feature 350) — una etiqueta que no cabe: mensaje con la guia y C
     expect(mensaje).toContain("19887906");
     expect(mensaje).toMatch(/tama(ñ|n)o de hoja/i);
     expect(mensaje).toMatch(/direcci(ó|o)n/i);
+  });
+});
+
+/**
+ * Feature 382 (R1/R2) — EL CARACTER QUE NO SE PUEDE IMPRIMIR, Y DE QUE ORDEN ES.
+ *
+ * El defecto que este bloque cierra no era un fallo mudo: era un mensaje que
+ * decia lo que no era. Los dos modos de fallo del generador —«la fuente no
+ * cargo» y «este caracter no esta en la fuente»— compartian el mismo aviso, que
+ * manda REINTENTAR. Para el segundo, reintentar no funciona nunca: el caracter
+ * va a seguir fuera de la fuente, y lo que hay que cambiar es el dato de una
+ * orden concreta (medido en produccion el 2026-09-07: guia 11081885, con el
+ * destinatario y la direccion en caracteres double-struck U+1D5xx).
+ *
+ * Los mensajes se afirman como LITERALES. Compararlos contra las funciones que
+ * los generan estaria verde con cualquier redaccion —incluida la de ayer, la que
+ * mandaba reintentar—, que es exactamente el fallo que no se puede repetir.
+ */
+describe("Feature 382 — tres fallos, tres mensajes distinguibles", () => {
+  /** El caracter medido en la orden real: double-struck small o. */
+  const CARACTER = "\u{1D560}";
+
+  /** LITERAL de lo que ve el operador ante el caracter no imprimible. */
+  const MENSAJE_CARACTER =
+    "La etiqueta de la guía 11081885 lleva un carácter que la tipografía de la etiqueta no puede imprimir: «\u{1D560}» (U+1D560). Reintentar no lo cambia, y ninguna etiqueta del lote se descarga mientras siga ahí: corrige ese dato en la orden 11081885 y escríbelo con letras y números normales.";
+
+  /** LITERAL del mensaje de HOY para la fuente que no carga. No cambia. */
+  const MENSAJE_FUENTE =
+    "No se pudo preparar la tipografía de la etiqueta. Inténtalo de nuevo.";
+
+  function conUnaEtiqueta(overrides: Partial<EtiquetaGuiaDTO> = {}) {
+    generarEtiquetasMock.mockResolvedValue({
+      status: "ok",
+      etiquetas: [makeEtiqueta({ ordenId: "o1", numGuia: 11081885, ...overrides })],
+      omitidas: [],
+    });
+  }
+
+  function errorDeCobertura() {
+    return new ErrorCaracterNoImprimible(
+      11081885,
+      CARACTER,
+      0x1d560,
+      "texto de la etiqueta",
+      "EtiquetaMonto",
+    );
+  }
+
+  it("(a) muestra la guia y el caracter, y NO manda reintentar", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    conUnaEtiqueta();
+    descargarEtiquetasPdfMock.mockRejectedValue(errorDeCobertura());
+
+    render(
+      <EtiquetasGuiaModal
+        open
+        ordenes={[makeOrden("o1")]}
+        onOpenChange={vi.fn()}
+        onSuccess={onSuccess}
+      />,
+    );
+    await screen.findAllByTestId("etiqueta-guia");
+    await user.click(screen.getByRole("button", { name: "Descargar etiquetas" }));
+
+    const aviso = await screen.findByText(MENSAJE_CARACTER);
+    expect(aviso.closest('[role="alert"]'), "el aviso tiene que anunciarse").not.toBeNull();
+    // Los dos datos que hacen falta para arreglarlo, uno a uno.
+    expect(aviso.textContent).toContain("11081885");
+    expect(aviso.textContent).toContain(CARACTER);
+    expect(aviso.textContent).toContain("U+1D560");
+    // Y lo que NO puede decir: ni el mensaje generico de la fuente, ni un
+    // «Inténtalo de nuevo» que aqui es una instruccion imposible de cumplir.
+    expect(screen.queryByText(MENSAJE_FUENTE)).toBeNull();
+    expect(aviso.textContent).not.toMatch(/int[ée]ntalo de nuevo/i);
+    // Nada se descargo.
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("(b) la fuente que no carga CONSERVA su mensaje de hoy, palabra por palabra", async () => {
+    const user = userEvent.setup();
+    conUnaEtiqueta();
+    // Este modo de fallo NO cambia con la 382: reintentar puede funcionar (es
+    // red o bundle), asi que el mensaje sigue diciendolo.
+    descargarEtiquetasPdfMock.mockRejectedValue(new Error(ERROR_FUENTE_ETIQUETA));
+
+    render(
+      <EtiquetasGuiaModal open ordenes={[makeOrden("o1")]} onOpenChange={vi.fn()} />,
+    );
+    await screen.findAllByTestId("etiqueta-guia");
+    await user.click(screen.getByRole("button", { name: "Descargar etiquetas" }));
+
+    expect(await screen.findByText(MENSAJE_FUENTE)).toBeInTheDocument();
+    expect(screen.queryByText(MENSAJE_CARACTER)).toBeNull();
+    // El literal ES el de produccion: si alguien reescribe la constante, esto se
+    // entera (y la comparacion no se hace contra la propia constante).
+    expect(ERROR_FUENTE_ETIQUETA).toBe(MENSAJE_FUENTE);
+  });
+
+  it("(b bis) un fallo NO previsto del generador sigue cayendo en el mensaje generico", async () => {
+    const user = userEvent.setup();
+    conUnaEtiqueta();
+    descargarEtiquetasPdfMock.mockRejectedValue(new Error("kaboom inesperado"));
+
+    render(
+      <EtiquetasGuiaModal open ordenes={[makeOrden("o1")]} onOpenChange={vi.fn()} />,
+    );
+    await screen.findAllByTestId("etiqueta-guia");
+    await user.click(screen.getByRole("button", { name: "Descargar etiquetas" }));
+
+    expect(await screen.findByText(MENSAJE_FUENTE)).toBeInTheDocument();
+  });
+
+  it("(c) `ErrorEtiquetaNoCabe` sigue con el suyo, intacto", async () => {
+    const user = userEvent.setup();
+    conUnaEtiqueta();
+    descargarEtiquetasPdfMock.mockRejectedValue(
+      new ErrorEtiquetaNoCabe(11081885, "100x100", "bloque de destino", "no entra"),
+    );
+
+    render(
+      <EtiquetasGuiaModal open ordenes={[makeOrden("o1")]} onOpenChange={vi.fn()} />,
+    );
+    await screen.findAllByTestId("etiqueta-guia");
+    await user.click(screen.getByRole("button", { name: "Descargar etiquetas" }));
+
+    // LITERAL, por el mismo motivo que los otros dos.
+    const aviso = await screen.findByText(
+      "La etiqueta de la guía 11081885 no cabe en este tamaño de hoja sin recortar datos, y ninguna etiqueta se descarga con un dato incompleto. Prueba con un tamaño de hoja mayor o acorta la dirección o el producto de esa orden.",
+    );
+    expect(aviso.closest('[role="alert"]')).not.toBeNull();
+    expect(screen.queryByText(MENSAJE_CARACTER)).toBeNull();
+    expect(screen.queryByText(MENSAJE_FUENTE)).toBeNull();
+  });
+
+  it("los tres mensajes son DISTINTOS entre si: ninguno es el saco de los demas", () => {
+    const tres = [
+      ERROR_FUENTE_ETIQUETA,
+      mensajeEtiquetaNoCabe(11081885),
+      mensajeCaracterNoImprimible(11081885, CARACTER, 0x1d560),
+    ];
+    expect(new Set(tres).size).toBe(3);
+    // Y solo el de la fuente manda reintentar: es el unico donde reintentar
+    // puede resolver algo.
+    expect(tres.filter((m) => /int[ée]ntalo de nuevo/i.test(m))).toEqual([
+      ERROR_FUENTE_ETIQUETA,
+    ]);
   });
 });
