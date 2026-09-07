@@ -226,9 +226,12 @@ describe("descarga detallada en cierres de bodega (T7.4)", () => {
     });
 
     await user.click(await elegirNivelDetalle(user));
-    // Desde el 2026-08-19 el diálogo abre con TODOS marcados y con el rango en el día de hoy
-    // (ver `DescargarGestionesDialog`). Para afirmar el borde con un conjunto EXACTO hay que
-    // apagar la lista desde «Todos», encender a Ana y vaciar las dos fechas.
+    // El diálogo abre con TODOS marcados (2026-08-19) y con el rango VACÍO (ficha 384,
+    // 2026-09-07: aquel rango hoy-hoy era un filtro que el usuario no puso). Para afirmar el
+    // borde con un conjunto EXACTO basta apagar la lista desde «Todos» y encender a Ana; los
+    // `clear` de las fechas quedan como red: si alguien reintrodujera un defecto de fecha, el
+    // conjunto seguiría siendo el de este caso y sería ESTA línea la que lo estaría tapando —por
+    // eso el defecto lo vigila `DescargarGestionesDialog.test.tsx`, que no las vacía.
     await user.click(await screen.findByRole("checkbox", { name: "Todos" }));
     await user.click(screen.getByRole("checkbox", { name: "Ana Mensajera" }));
     await user.clear(screen.getByLabelText("Desde"));

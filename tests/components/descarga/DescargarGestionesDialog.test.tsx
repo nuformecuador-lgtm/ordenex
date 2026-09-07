@@ -1,8 +1,16 @@
 // @vitest-environment jsdom
 // Feature 230 (T4.1 · T4.2) — el DIÁLOGO de la descarga DETALLADA de cierres.
 //
-// Cubre R28, R29, R30, R31, R32 (mitad de cliente), R34, R35 y R39, más los valores por defecto
-// pedidos el 2026-08-19 (todos los mensajeros marcados, «Todos» y el rango en el día de hoy).
+// Cubre R28, R29, R30, R31, R32 (mitad de cliente), R34, R35 y R39, los valores por defecto
+// —todos los mensajeros marcados (pedido humano 2026-08-19) y el rango VACÍO (ficha 384)— y los
+// dos avisos de conjunto vacío que la ficha 384 trajo.
+//
+// ⚠️ FICHA 384 (2026-09-07): hasta esa fecha el diálogo abría con el rango puesto en HOY-HOY, y
+// este archivo lo afirmaba. Era un filtro que el usuario no puso y que se comía su descarga en
+// silencio; el humano lo reportó como «si no tengo filtros aplicados no me deja descargar».
+// Ahora el rango arranca vacío y el atajo «Hoy» lo pone en un clic. Los casos de abajo miden las
+// dos mitades: que abrir y descargar SIN TOCAR NADA no recorta por fecha, y que cuando no hay
+// filas el aviso no culpa a unos filtros inexistentes.
 //
 // Lo que este archivo vigila, y por qué cada caso está: el diálogo es lo ÚNICO que decide el
 // conjunto del archivo (D11). Si se le colara un filtro de la pantalla, o si llamara al borde
@@ -62,9 +70,10 @@ const BETO = "22222222-2222-4222-8222-222222222222";
 const ZONA = "33333333-3333-4333-8333-333333333333";
 
 /**
- * El día que el diálogo pone por defecto en los dos extremos del rango. Se calcula con la MISMA
- * función que el componente y no con un literal: un literal ataría la suite a la fecha en que se
- * escribió, y `toISOString().slice(0,10)` la pondría roja cada tarde a partir de las 18:00 CR.
+ * El día que el atajo «Hoy» pone en los dos extremos del rango (ficha 384; hasta entonces era el
+ * DEFECTO del diálogo). Se calcula con la MISMA función que el componente y no con un literal:
+ * un literal ataría la suite a la fecha en que se escribió, y `toISOString().slice(0,10)` la
+ * pondría roja cada tarde a partir de las 18:00 CR.
  */
 const HOY = fechaCalendarioCR();
 
@@ -130,6 +139,19 @@ function accionOk() {
   }));
 }
 
+/**
+ * El borde que responde SIN FILAS. `{ ok, items: [] }` es la respuesta de las dos situaciones que
+ * D12/R38 obliga a no distinguir: «este mensajero no tiene cierres» y «este mensajero no es de tu
+ * alcance». El servicio nunca devuelve `forbidden` para la segunda.
+ */
+function accionVacia() {
+  return vi.fn(async (_recorte: FiltrosDescargaGestiones) => ({
+    status: "ok" as const,
+    items: [] as CierreGestionDescargaDTO[],
+    total: 0,
+  }));
+}
+
 function montar(accion: ReturnType<typeof accionOk>) {
   return render(
     <ToastProvider>
@@ -169,11 +191,24 @@ async function elegirSolo(nombre: string) {
   await userEvent.click(checkbox(nombre));
 }
 
-/** Escribe una fecha en un control que YA trae la de hoy: sin vaciarlo primero se concatenaría. */
+/**
+ * Escribe una fecha. El `clear` es defensivo: desde la ficha 384 los controles abren vacíos, pero
+ * varios casos escriben DOS veces sobre el mismo y sin vaciarlo el valor se concatenaría.
+ */
 async function ponerFecha(label: string, valor: string) {
   const control = screen.getByLabelText(label);
   await userEvent.clear(control);
   if (valor !== "") await userEvent.type(control, valor);
+}
+
+/** El atajo que rellena el rango con el día de hoy (ficha 384). */
+function atajoHoy() {
+  return screen.getByRole("button", { name: "Hoy: poner el rango de fechas en el día de hoy" });
+}
+
+/** Su contrapartida: el que lo vacía (ficha 384). */
+function atajoLimpiar() {
+  return screen.getByRole("button", { name: "Limpiar: quitar el rango de fechas" });
 }
 
 beforeEach(() => {
@@ -352,10 +387,14 @@ describe("diálogo de descarga detallada de gestiones (T4.1)", () => {
 /* ========================================================================== */
 
 describe("valores por defecto del diálogo", () => {
-  // El pedido literal: abrir y descargar sin tocar nada tiene que llevarse el día de hoy de toda
-  // la flota. Se afirma sobre lo que VIAJA al borde y no sólo sobre el pixel: un checkbox pintado
-  // en marcado que no entra en `mensajeroIds` sería una mentira más cara que un checkbox vacío.
-  it("abre con todos los mensajeros marcados y el rango en el día de hoy", async () => {
+  // FICHA 384 — EL CASO QUE FALLABA ANTES DE LA FICHA, y el que reportó el humano: abrir y
+  // descargar SIN TOCAR NADA tiene que llevarse lo que la pantalla enseña, no el día de hoy.
+  //
+  // Se afirma sobre lo que VIAJA al borde y no sólo sobre el píxel: un control pintado en blanco
+  // que aun así mandara `desde` sería exactamente el fallo mudo que la ficha viene a cerrar. Y se
+  // afirma con `Object.keys`, porque `desde: undefined` NO es «sin fecha» —es una clave de más
+  // contra la lista blanca `.strict()` del borde—.
+  it("abre con todos los mensajeros marcados y SIN rango de fechas (ficha 384)", async () => {
     const accion = accionOk();
     montar(accion);
     await userEvent.click(disparador());
@@ -364,6 +403,29 @@ describe("valores por defecto del diálogo", () => {
     expect(checkbox("Todos")).toBeChecked();
     expect(checkbox("Ana Mensajera")).toBeChecked();
     expect(checkbox("Beto Mensajero")).toBeChecked();
+    expect(screen.getByLabelText("Desde")).toHaveValue("");
+    expect(screen.getByLabelText("Hasta")).toHaveValue("");
+
+    await userEvent.click(botonDescargar());
+
+    await waitFor(() => expect(accion).toHaveBeenCalledTimes(1));
+    expect(accion).toHaveBeenCalledWith({ mensajeroIds: [ANA, BETO] });
+    const enviado = accion.mock.calls[0][0] as Record<string, unknown>;
+    expect(Object.keys(enviado)).toEqual(["mensajeroIds"]);
+  });
+
+  // La otra mitad de la ficha 384: lo que el defecto de hoy-hoy ahorraba sigue estando, pero a un
+  // clic del USUARIO. El pedido del 2026-08-19 —el cierre del día de toda la flota— se sirve así.
+  it("el atajo «Hoy» pone el día en los dos extremos, y entonces sí viaja (ficha 384)", async () => {
+    const accion = accionOk();
+    montar(accion);
+    await userEvent.click(disparador());
+    await screen.findByRole("dialog");
+
+    await userEvent.click(atajoHoy());
+
+    // Los DOS extremos: con uno solo el rango sería abierto por un lado y el archivo traería
+    // histórico que nadie pidió.
     expect(screen.getByLabelText("Desde")).toHaveValue(HOY);
     expect(screen.getByLabelText("Hasta")).toHaveValue(HOY);
 
@@ -375,6 +437,53 @@ describe("valores por defecto del diálogo", () => {
       desde: HOY,
       hasta: HOY,
     });
+  });
+
+  // `menor 2` de la revisión: un filtro que se pone en un clic tiene que quitarse en un clic. Sin
+  // esto «Hoy» sería de ida y no de vuelta, y volver a «todo el historial» exigiría enfocar los dos
+  // `input type="date"` y borrarlos a mano — que es adivinar, no deshacer.
+  it("«Limpiar» deshace el atajo y el rango deja de viajar (ficha 384)", async () => {
+    const accion = accionOk();
+    montar(accion);
+    await userEvent.click(disparador());
+    await screen.findByRole("dialog");
+
+    await userEvent.click(atajoHoy());
+    expect(screen.getByLabelText("Desde")).toHaveValue(HOY);
+    expect(screen.getByLabelText("Hasta")).toHaveValue(HOY);
+
+    await userEvent.click(atajoLimpiar());
+
+    expect(screen.getByLabelText("Desde")).toHaveValue("");
+    expect(screen.getByLabelText("Hasta")).toHaveValue("");
+
+    await userEvent.click(botonDescargar());
+
+    // Vaciado DE VERDAD, y se afirma sobre lo que viaja: `desde: ""` no sería «sin fecha», sería
+    // una clave de más contra la lista blanca `.strict()` del borde.
+    await waitFor(() => expect(accion).toHaveBeenCalledTimes(1));
+    expect(accion).toHaveBeenCalledWith({ mensajeroIds: [ANA, BETO] });
+    const enviado = accion.mock.calls[0][0] as Record<string, unknown>;
+    expect(Object.keys(enviado)).toEqual(["mensajeroIds"]);
+  });
+
+  // `menor 5` de la revisión: este copy es el que el usuario LEE, esta ficha lo cambió y ningún
+  // caso lo fijaba — editarlo mañana para que vuelva a mentir no pondría nada rojo, que es
+  // exactamente el fallo mudo que la ficha vino a cerrar. Se clava como LITERAL.
+  //
+  // ⚠️ Si hay que reescribirlo, lo que NO puede desaparecer es la instrucción de CÓMO se quita un
+  // extremo: sin ella el atajo vuelve a ser de ida y no de vuelta. Ese es el contrato; la
+  // redacción exacta es negociable, y este caso es el sitio donde se negocia a la vista.
+  it("la ayuda dice qué recorta, qué es estar vacío y cómo volver atrás (ficha 384)", async () => {
+    montar(accionOk());
+    await userEvent.click(disparador());
+    await screen.findByRole("dialog");
+
+    expect(
+      screen.getByText(
+        "Recorta por la fecha de solicitud del cierre. Vacías no recortan nada: se lleva todo el historial de los mensajeros elegidos. Vaciá una fecha para quitar ese extremo, o «Limpiar» para quitar las dos.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("«Todos» desmarca y vuelve a marcar la lista entera", async () => {
@@ -463,5 +572,97 @@ describe("independencia de la barra de filtros de la pantalla (T4.2, R34/R35)", 
     await userEvent.click(botonDescargar());
     await waitFor(() => expect(accion).toHaveBeenCalledTimes(1));
     expect(accion).toHaveBeenCalledWith({ mensajeroIds: [ANA] });
+  });
+});
+
+/* ========================================================================== */
+/* El aviso de «no hay nada» (ficha 384)                                       */
+/* ========================================================================== */
+
+// La SEGUNDA mitad de lo reportado el 2026-09-07: cuando el conjunto vuelve vacío, el aviso del
+// control común —«No hay datos que descargar con los filtros aplicados. Ajusta los filtros»— le
+// pedía al usuario arreglar unos filtros que no había puesto. Ese texto lo comparten ~26 tablas y
+// NO se toca; lo que cambia es que este diálogo redacta el suyo por la puerta que el control ya
+// ofrece (el mensaje de `obtenerFilas` tiene prioridad).
+//
+// Los textos se afirman como LITERALES y no contra las constantes del componente: una aserción
+// contra su propia fuente está verde por construcción, diga lo que diga el texto.
+describe("aviso de conjunto vacío (ficha 384)", () => {
+  const CULPA_A_LOS_FILTROS = "con los filtros aplicados";
+
+  it("sin rango puesto, el aviso no culpa a ningún filtro de fecha", async () => {
+    const accion = accionVacia();
+    montar(accion as unknown as ReturnType<typeof accionOk>);
+    await userEvent.click(disparador());
+    await screen.findByRole("dialog");
+
+    await userEvent.click(botonDescargar());
+
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledTimes(1));
+    const aviso = errorToastMock.mock.calls[0][0] as string;
+    expect(aviso).toBe(
+      "Los mensajeros elegidos no tienen gestiones de cierre. Elegí otros mensajeros y volvé a intentarlo.",
+    );
+    // Lo que NO puede decir: el usuario no aplicó ningún filtro que ajustar.
+    expect(aviso).not.toContain(CULPA_A_LOS_FILTROS);
+    // Sigue sin producirse archivo: cambia el texto, no el comportamiento.
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+  });
+
+  it("con rango puesto, el aviso dice que es EL RANGO lo que no trae nada", async () => {
+    const accion = accionVacia();
+    montar(accion as unknown as ReturnType<typeof accionOk>);
+    await userEvent.click(disparador());
+    await screen.findByRole("dialog");
+
+    // UN SOLO extremo, a propósito: «desde el 1 de julio» ya es un recorte, y con él el aviso
+    // tiene que hablar del rango. Si la condición fuera «los dos extremos», este caso se pone
+    // rojo — que es justo lo que se quiere vigilar.
+    await ponerFecha("Desde", "2026-07-01");
+    await userEvent.click(botonDescargar());
+
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledTimes(1));
+    expect(errorToastMock.mock.calls[0][0]).toBe(
+      "No hay gestiones de cierre en el rango de fechas elegido para esos mensajeros. Ampliá el rango o vaciá las fechas y volvé a intentarlo.",
+    );
+
+    // Y con los dos extremos, el mismo aviso.
+    await ponerFecha("Hasta", "2026-07-31");
+    await userEvent.click(botonDescargar());
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledTimes(2));
+    expect(errorToastMock.mock.calls[1][0]).toBe(errorToastMock.mock.calls[0][0]);
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+  });
+
+  // ⚠️ D12/R38 NO se debilita con el aviso propio. La rama nueva mira las fechas que puso el
+  // USUARIO —estado del cliente— y jamás la respuesta del servidor, así que dos mensajeros con
+  // respuestas idénticas (`{ ok, items: [] }`) siguen produciendo el MISMO texto: distinguirlos
+  // filtraría quién está y quién no está en el alcance del actor.
+  it("dos mensajeros distintos con cero filas producen el mismo aviso (D12/R38)", async () => {
+    const accion = accionVacia();
+    montar(accion as unknown as ReturnType<typeof accionOk>);
+    await userEvent.click(disparador());
+    await screen.findByRole("checkbox", { name: "Ana Mensajera" });
+
+    await elegirSolo("Ana Mensajera");
+    await userEvent.click(botonDescargar());
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledTimes(1));
+
+    // Ahora solo Beto: el servidor responde lo mismo, así que la pantalla no puede decir otra cosa.
+    await userEvent.click(checkbox("Ana Mensajera"));
+    await userEvent.click(checkbox("Beto Mensajero"));
+    await userEvent.click(botonDescargar());
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledTimes(2));
+
+    expect(accion.mock.calls[0][0].mensajeroIds).toEqual([ANA]);
+    expect(accion.mock.calls[1][0].mensajeroIds).toEqual([BETO]);
+    // `menor 4` de la revisión: se CLAVA el texto y no solo su igualdad. Comparar `calls[1]` con
+    // `calls[0]` a secas pasaría también si los dos fueran `undefined` — un caso que se
+    // auto-aprueba. Con el literal delante, «iguales» significa «iguales Y correctos».
+    expect(errorToastMock.mock.calls[0][0]).toBe(
+      "Los mensajeros elegidos no tienen gestiones de cierre. Elegí otros mensajeros y volvé a intentarlo.",
+    );
+    expect(errorToastMock.mock.calls[1][0]).toBe(errorToastMock.mock.calls[0][0]);
+    expect(descargarBlobMock).not.toHaveBeenCalled();
   });
 });
