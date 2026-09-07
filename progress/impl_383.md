@@ -171,7 +171,63 @@ Tras revertir las siete: `Test Files 5 passed (5) · Tests 81 passed (81)`.
 
 ## Verificación
 
-<!-- GATE -->
+### `pnpm run typecheck`
+
+```
+> tsc --noEmit
+TYPECHECK_EXIT=0
+```
+
+### `pnpm run lint`
+
+```
+✖ 160 problems (0 errors, 160 warnings)
+LINT_EXIT=0
+```
+
+Los 160 son los de siempre (`no-unused-vars` sobre parámetros con `_`, `no-img-element`). Tres son
+de `corregir-datos-cliente-texto-etiqueta.test.ts` y son **el mismo patrón que ya tiene**
+`corregir-datos-cliente-service.test.ts`: los parámetros del doble se declaran aunque no se usen
+para que `mock.calls[0][1]` tenga tipo. **Cero errores.**
+
+### `./init.sh` completo (T8.2)
+
+Corrido sobre el commit `14728b0b`, con el `.env` copiado de la raíz **antes** de lanzarlo. El
+`INIT_EXIT` se escribió **dentro** del log, en su propia línea, y sin `tail` en la tubería:
+
+```
+== Arnes SDD :: init (modo: completo) ==
+✓ node v24.13.0
+✓ dependencias presentes
+✓ feature_list.json: sin ids duplicados (387 fichas), cupo por zona respetado (in_progress=4) …
+✓ typecheck paso
+✓ lint paso (0 errores)
+
+ Test Files  1776 passed (1776)
+      Tests  25380 passed | 26 skipped (25406)
+   Duration  665.72s
+
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1776 ejecutado(s), todos en el baseline conocido)
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+**Los `skipped`, mirados uno a uno (que es donde el gate sabe mentir):**
+
+- Los **26** salen de **dos** archivos de componente y son de antes de esta ficha:
+  `AnaliticaPage.test.tsx` (17) y `AnaliticaShell.test.tsx` (9).
+- **`tests/integration/db` NO saltó**: corrieron los **210** archivos que hay en el directorio
+  (`ls tests/integration/db/*.test.ts | wc -l` = 210, y 210 distintos aparecen ejecutados en el
+  log). Sin el `.env` copiado, esos 210 se saltan y el gate «pasa» en verde sin haber tocado
+  Postgres.
+- Los cuatro archivos nuevos de esta ficha corrieron dentro del gate:
+  `bulk-orden-service.texto-etiqueta` (17), `texto-imprimible-etiqueta` (20),
+  `corregir-datos-cliente-texto-etiqueta` (8), `mensaje-caracter-no-imprimible` (8).
+
+El `!` de las migraciones sin `down.sql` es **anterior y ajeno**: son tres migraciones de rutas
+del 2026-08-14. Esta ficha **no añade ninguna migración**.
 
 ---
 
