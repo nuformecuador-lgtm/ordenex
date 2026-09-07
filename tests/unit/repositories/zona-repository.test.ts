@@ -19,7 +19,9 @@ function buildTx() {
     // FICHA 366: `findMany` por defecto NO devuelve nada, asi que ningun distrito resuelve una
     // zona y el flujo de reconciliacion no se dispara en los casos que no lo miden.
     zonaDistrito: { createMany: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
-    orden: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn() },
+    // FICHA 377: `count` es el conteo de las RETENIDAS (R8). Por defecto 0, para que los casos que
+    // no lo miden no tengan que fijarlo.
+    orden: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn(), count: vi.fn().mockResolvedValue(0) },
     tarifaZonaMensajero: { createMany: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn() },
     // FICHA 362: el borrado registra su accion DENTRO de esta misma transaccion.
     historialAccion: { createMany: vi.fn() },
@@ -680,6 +682,136 @@ describe("366/T4 — ZonaRepository.update reconcilia la zona de las ordenes", (
     });
     expect(tx.zonaDistrito.findMany).not.toHaveBeenCalled();
     expect(tx.orden.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 377 (T4) — LA ORQUESTACION DEL CORTE POR ESTADO Y DEL CONTEO DE RETENIDAS, con dobles.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ LO QUE ESTE BLOQUE **NO** PRUEBA, Y ES LA MITAD QUE IMPORTA: que el corte por estado FILTRE
+// de verdad. Estos dobles devuelven lo que se les dice devolver, asi que un `where` que no
+// excluyera nada los dejaria a todos en verde. Eso vive contra Postgres real, en
+// `tests/integration/db/zona-reconciliacion-ordenes.test.ts` (T5), donde la mutacion se nota.
+// Lo que SI se mide aqui: que las dos consultas SALGAN, que salgan con las clausulas
+// COMPLEMENTARIAS sobre el MISMO `where` base, y que los dos numeros lleguen al retorno separados.
+
+describe("377/T4 — el corte por estado y el conteo de retenidas", () => {
+  /** El `where` base de elegibilidad (366), tal cual, sin nada de estado. */
+  const BASE_D1_ZA = {
+    distritoId: { in: ["d1"] },
+    zonaId: { not: "zA" },
+    deletedAt: null,
+    cierreDetalles: { none: {} },
+    gestiones: { none: { anuladaAt: null, resultado: { in: ["entregada", "rechazada", "incidente"] } } },
+  };
+
+  it("⭑ R2/R9: las dos consultas comparten el `where` base y solo difieren en el estado", async () => {
+    // Escrito como igualdad LITERAL de los dos `where` completos —y no comparando una consulta
+    // contra la otra— a proposito: comparar las dos entre si estaria siempre en verde, porque las
+    // produce el mismo codigo. Aqui, quitar cualquiera de los cuatro cortes de la 366, o invertir
+    // el `notIn`, se cae.
+    const tx = txConNM(["d1"], [{ distritoId: "d1", zonaId: "zA" }]);
+    tx.orden.findMany.mockResolvedValue([{ id: "o1", numGuia: 1, numRemision: "R-1" }]);
+    tx.orden.count.mockResolvedValue(0);
+    const prisma = buildPrisma(tx);
+
+    await repoOf(prisma).update("zA", DATOS_ZONA_A, "u-maestro");
+
+    expect(tx.orden.count.mock.calls[0][0].where).toEqual({
+      ...BASE_D1_ZA,
+      estatus: { value: { in: ["en_bodega_satelite"] } },
+    });
+    expect(tx.orden.findMany.mock.calls[0][0].where).toEqual({
+      ...BASE_D1_ZA,
+      estatus: { value: { notIn: ["en_bodega_satelite"] } },
+    });
+  });
+
+  it("⭑ R8: el conteo se hace TAMBIEN cuando no hay ninguna orden que mover", async () => {
+    // El caso que un `if (elegibles.length === 0) continue;` puesto antes del `count` se comeria:
+    // un guardado que SOLO retiene tiene que informar sus retenidas igual.
+    const tx = txConNM(["d1"], [{ distritoId: "d1", zonaId: "zA" }]);
+    tx.orden.findMany.mockResolvedValue([]);
+    tx.orden.count.mockResolvedValue(4);
+    const prisma = buildPrisma(tx);
+
+    const res = await repoOf(prisma).update("zA", DATOS_ZONA_A, "u-maestro");
+
+    expect(tx.orden.count).toHaveBeenCalledTimes(1);
+    expect(soloOk(res).ordenesReconciliadas).toBe(0);
+    expect(soloOk(res).ordenesRetenidasEnBodegaSatelite).toBe(4);
+    // R6: y sin mover nada no se escribe ni una fila de historial por las retenidas.
+    expect(tx.orden.updateMany).not.toHaveBeenCalled();
+    expect(tx.historialAccion.createMany).not.toHaveBeenCalled();
+  });
+
+  it("⭑ R7: los dos numeros viajan por separado y el retenido ACUMULA por grupo", async () => {
+    // Dos zonas resueltas en el mismo guardado: 1 + 3 movidas y 2 + 5 retenidas. Numeros distintos
+    // entre si para que sumar el par equivocado, o quedarse con el ultimo grupo, se caiga.
+    const tx = txConNM(
+      ["d1", "d2"],
+      [
+        { distritoId: "d1", zonaId: "zA" },
+        { distritoId: "d2", zonaId: "zB" },
+      ],
+    );
+    tx.orden.findMany
+      .mockResolvedValueOnce([{ id: "o1", numGuia: 1, numRemision: "R-1" }])
+      .mockResolvedValueOnce([
+        { id: "o2", numGuia: 2, numRemision: "R-2" },
+        { id: "o3", numGuia: 3, numRemision: "R-3" },
+        { id: "o4", numGuia: 4, numRemision: "R-4" },
+      ]);
+    tx.orden.count.mockResolvedValueOnce(2).mockResolvedValueOnce(5);
+    const prisma = buildPrisma(tx);
+
+    const res = await repoOf(prisma).update(
+      "zA",
+      { ...DATOS_ZONA_A, distritoIds: ["d1", "d2"] },
+      "u-maestro",
+    );
+
+    expect(soloOk(res).ordenesReconciliadas).toBe(4);
+    expect(soloOk(res).ordenesRetenidasEnBodegaSatelite).toBe(7);
+  });
+
+  it("⭑ R13: `create()` no cuenta retenidas (ni abre el flujo)", async () => {
+    const tx = buildTx();
+    tx.zona.create.mockResolvedValue({
+      id: "zNueva",
+      nombre: "NUEVA",
+      cobroVehiculo: false,
+      esCentral: false,
+    });
+    tx.tarifaZonaMensajero.findMany.mockResolvedValue([]);
+    const prisma = buildPrisma(tx);
+
+    const dtoCreado = await repoOf(prisma).create({ ...DATOS_ZONA_A, nombre: "NUEVA" }, null);
+
+    expect(tx.orden.count).not.toHaveBeenCalled();
+    // Y el DTO de crear sigue sin ninguno de los dos conteos: `CrearZonaResult` no los lleva.
+    expect(dtoCreado).not.toHaveProperty("ordenesRetenidasEnBodegaSatelite");
+    expect(dtoCreado).not.toHaveProperty("ordenesReconciliadas");
+  });
+
+  it("R3: sin ninguna zona resuelta no se cuenta nada y las retenidas son 0", async () => {
+    // `d1` en DOS zonas (ambiguo) -> `zonaUnicaDeDistrito` colapsa a null -> ni `count` ni
+    // `findMany`. Sin esto, un `count` colocado fuera del bucle contaria ordenes de distritos que
+    // este guardado no puede reubicar.
+    const tx = txConNM(
+      ["d1"],
+      [
+        { distritoId: "d1", zonaId: "zA" },
+        { distritoId: "d1", zonaId: "zB" },
+      ],
+    );
+    const prisma = buildPrisma(tx);
+
+    const res = await repoOf(prisma).update("zA", DATOS_ZONA_A, "u-maestro");
+
+    expect(tx.orden.count).not.toHaveBeenCalled();
+    expect(soloOk(res).ordenesRetenidasEnBodegaSatelite).toBe(0);
   });
 });
 

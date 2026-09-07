@@ -66,6 +66,52 @@ export const ESTADOS_CUSTODIA_SATELITE = [
 export type EstadoCustodiaSatelite = (typeof ESTADOS_CUSTODIA_SATELITE)[number];
 
 /**
+ * ⭑ FICHA 377 (design §3.1) — LOS ESTADOS EN LOS QUE EL PAQUETE ESTA FISICAMENTE EN EL ESTANTE
+ * DE UNA BODEGA SATELITE.
+ *
+ * OJO, NO CONFUNDIR CON `ESTADOS_CUSTODIA_SATELITE`, dos declaraciones arriba: aquella es la
+ * EVIDENCIA de haber PASADO por una satelite (se lee del historial, es para siempre) y ESTA es
+ * la custodia FISICA ACTUAL (se lee del estado de la orden, y se acaba en cuanto el paquete
+ * sale). Confundirlas excluiria de la reconciliacion a toda orden que ALGUNA VEZ estuvo en una
+ * bodega satelite, incluidas las que ya se entregaron: justo lo que la 366 vino a desatascar.
+ *
+ * `en_ruta_bodega_satelite` NO esta aqui, y esa ausencia ES la ficha: en transito el paquete lo
+ * tiene la CENTRAL —lo dice `order-status-transiciones.ts` por su cuenta, «el paquete sigue bajo
+ * custodia de la central, por eso el destino es la central»— y por eso reconciliar su zona es
+ * correcto y DESBLOQUEA la recepcion (366/design §8: 41 de 42 ordenes represadas el 2026-09-03,
+ * porque `recibirEnSatelite` acota su guarda por `zonaId`).
+ *
+ * QUIEN LA CONSUME: el `WHERE` de elegibilidad de `ZonaRepository.update` —sus dos mitades: las
+ * que se mueven y el conteo de las que se quedan— y el gate de `CorregirDatosClienteService`
+ * (377/R15, la segunda puerta al mismo agujero). Vive aqui, y no como literal en el repositorio,
+ * porque su justificacion es de DOMINIO: el dia que aparezca un segundo estado de estante, este
+ * es el unico sitio donde añadirlo.
+ *
+ * NO mueve `alcanceDerivadoDelGrafo()` ni `ESTADOS_BODEGA_SATELITE` (377/R14): es una lista
+ * nueva, no una arista.
+ */
+export const ESTADOS_PAQUETE_EN_ESTANTE = [
+  "en_bodega_satelite",
+] as const satisfies readonly OrderStatusValue[];
+
+/** `value` de estatus cuyo paquete esta en el estante de una bodega satelite (377/R2). */
+export type EstadoPaqueteEnEstante = (typeof ESTADOS_PAQUETE_EN_ESTANTE)[number];
+
+/**
+ * 377/R15 — ¿el paquete de esta orden esta AHORA MISMO en el estante de una satelite?
+ *
+ * Fallo CERRADO al reves que `estadoAdmiteCorreccion`: `null`/`undefined` devuelve `false`
+ * porque «no se sabe» no puede AFIRMAR que el paquete este en un estante. Quien necesite
+ * fallar cerrado en el otro sentido tiene que comprobar la ausencia del dato aparte, y de hecho
+ * `CorregirDatosClienteService` ya la comprueba antes (`rolAdmiteCorreccion` rechaza el
+ * `estatusValue` ausente).
+ */
+export function paqueteEnEstanteSatelite(estatusValue: string | null | undefined): boolean {
+  if (estatusValue === null || estatusValue === undefined) return false;
+  return (ESTADOS_PAQUETE_EN_ESTANTE as readonly string[]).includes(estatusValue);
+}
+
+/**
  * Los estados que el listado NO ofrece aunque el grafo diga que una orden puede llegar a ellos.
  * Se declaran APARTE —y con su motivo— porque son la unica parte del contrato que es una
  * DECISION y no una derivacion: `ESTADOS_BODEGA_SATELITE` es el cierre del grafo menos esto.

@@ -31,7 +31,16 @@ export type ListarZonasServiceResult =
 export type ActualizarZonaServiceResult =
   // FICHA 366 (R12): `ordenesReconciliadas` es cuantas ordenes cambiaron de zona por la
   // re-derivacion de ESTE guardado. Cero es un valor normal (R14), no una ausencia de dato.
-  | { status: "ok"; zona: ZonaDTO; ordenesReconciliadas: number }
+  //
+  // FICHA 377 (R7/R8): `ordenesRetenidasEnBodegaSatelite` es cuantas se quedaron con su zona
+  // anterior porque su paquete ya esta en el estante de una bodega satelite. Los dos conjuntos
+  // son DISJUNTOS y el service los reenvia sin interpretarlos.
+  | {
+      status: "ok";
+      zona: ZonaDTO;
+      ordenesReconciliadas: number;
+      ordenesRetenidasEnBodegaSatelite: number;
+    }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "forbidden" }
   | { status: "not_found" };

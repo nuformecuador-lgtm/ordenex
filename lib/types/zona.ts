@@ -203,8 +203,18 @@ export type ObtenerZonaResult = { status: "ok"; zona: ZonaDTO } | ZonaActionErro
 // FICHA 366 (R12): actualizar una zona informa, en la MISMA respuesta, cuantas ordenes cambiaron
 // de zona por la re-derivacion automatica de ese guardado (0 incluido). `CrearZonaResult` NO lo
 // lleva: crear una zona no reconcilia nada (R13).
+//
+// FICHA 377 (R8/R10): y cuantas se quedaron con su zona anterior porque su paquete ya esta en el
+// estante de una bodega satelite. Va en la MISMA respuesta y por el mismo motivo: un guardado que
+// deja ordenes atras deliberadamente y no lo dice es un fallo mudo. `CrearZonaResult` tampoco lo
+// lleva (R13: crear una zona ni reconcilia ni retiene).
 export type ActualizarZonaResult =
-  | { status: "ok"; zona: ZonaDTO; ordenesReconciliadas: number }
+  | {
+      status: "ok";
+      zona: ZonaDTO;
+      ordenesReconciliadas: number;
+      ordenesRetenidasEnBodegaSatelite: number;
+    }
   | ZonaActionError;
 export type ListarZonasResult =
   | { status: "ok"; items: ZonaDTO[]; page: number; pageSize: number; total: number }

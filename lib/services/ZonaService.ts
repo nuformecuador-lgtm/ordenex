@@ -147,9 +147,15 @@ export class ZonaService implements IZonaService {
     if (res.estado === "sin_zona_central") {
       return { status: "validation_error", fieldErrors: { esCentral: [MSG_SIN_ZONA_CENTRAL] } };
     }
-    // 366/R12: el conteo se reenvia TAL CUAL. El service no lo interpreta ni lo redondea: quien
-    // guardo la zona tiene que ver cuantas ordenes se movieron por su guardado.
-    return { status: "ok", zona: res.zona, ordenesReconciliadas: res.ordenesReconciliadas };
+    // 366/R12 + 377/R7/R8: LOS DOS conteos se reenvian TAL CUAL. El service no los interpreta, no
+    // los suma y no los redondea: quien guardo la zona tiene que ver cuantas ordenes se movieron
+    // por su guardado y cuantas se quedaron en la bodega que ya las tiene.
+    return {
+      status: "ok",
+      zona: res.zona,
+      ordenesReconciliadas: res.ordenesReconciliadas,
+      ordenesRetenidasEnBodegaSatelite: res.ordenesRetenidasEnBodegaSatelite,
+    };
   }
 
   async borrar(id: string, actor: Actor): Promise<BorrarZonaServiceResult> {

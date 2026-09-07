@@ -41,7 +41,13 @@ function fakeService(over: Partial<IZonaService> = {}): IZonaService {
     obtener: vi.fn().mockResolvedValue({ status: "ok", zona: dto() }),
     listar: vi.fn().mockResolvedValue({ status: "ok", items: [dto()], page: 1, pageSize: 25, total: 1 }),
     // FICHA 366 (R12): la rama "ok" de actualizar lleva ademas el conteo de reconciliadas.
-    actualizar: vi.fn().mockResolvedValue({ status: "ok", zona: dto(), ordenesReconciliadas: 0 }),
+    // FICHA 377 (R8): y el de las retenidas en bodega satelite, que es un numero aparte.
+    actualizar: vi.fn().mockResolvedValue({
+      status: "ok",
+      zona: dto(),
+      ordenesReconciliadas: 0,
+      ordenesRetenidasEnBodegaSatelite: 0,
+    }),
     borrar: vi.fn().mockResolvedValue({ status: "ok" }),
     // FICHA 376 (Q4): la lectura de impacto que la confirmacion consulta antes de enviar.
     impactoZonaCentral: vi.fn().mockResolvedValue({ status: "ok", impacto: [] }),
@@ -151,13 +157,20 @@ describe("DTO nuevo (esCentral, sin campos internos)", () => {
     }
   });
 
-  it("⭑ 366/R12: actualizar ok reenvia `ordenesReconciliadas` hasta la Server Action", async () => {
-    // La accion no lo calcula ni lo toca: solo tiene que NO perderlo. Si lo perdiera, la pantalla
-    // no podria decir cuantas ordenes se movieron y el guardado se veria igual que antes.
+  it("⭑ 366/R12 + 377/R8: actualizar ok reenvia LOS DOS conteos hasta la Server Action", async () => {
+    // La accion no los calcula ni los toca: solo tiene que NO perderlos. Si perdiera el primero,
+    // la pantalla no podria decir cuantas ordenes se movieron; si perdiera el segundo, el
+    // guardado volveria a ser mudo sobre las que dejo atras a proposito (377/R8).
+    //
+    // 12 y 3 son numeros DISTINTOS: con dos iguales, una accion que devolviera dos veces el mismo
+    // campo pasaria en verde.
     const service = fakeService({
-      actualizar: vi
-        .fn()
-        .mockResolvedValue({ status: "ok", zona: dto(), ordenesReconciliadas: 12 }),
+      actualizar: vi.fn().mockResolvedValue({
+        status: "ok",
+        zona: dto(),
+        ordenesReconciliadas: 12,
+        ordenesRetenidasEnBodegaSatelite: 3,
+      }),
     });
     const r = await actualizarZona("z1", validCrear, {
       zonaService: service,
@@ -166,7 +179,13 @@ describe("DTO nuevo (esCentral, sin campos internos)", () => {
     expect(r.status).toBe("ok");
     if (r.status === "ok") {
       expect(r.ordenesReconciliadas).toBe(12);
-      expect(Object.keys(r).sort()).toEqual(["ordenesReconciliadas", "status", "zona"]);
+      expect(r.ordenesRetenidasEnBodegaSatelite).toBe(3);
+      expect(Object.keys(r).sort()).toEqual([
+        "ordenesReconciliadas",
+        "ordenesRetenidasEnBodegaSatelite",
+        "status",
+        "zona",
+      ]);
     }
   });
 
@@ -208,7 +227,12 @@ function repoConGuarda(): IZonaRepository {
     update: vi.fn(async (id: string, data: UpdateZonaData) =>
       data.esCentral === false && id === ZONA_CENTRAL
         ? { estado: "sin_zona_central" as const }
-        : { estado: "ok" as const, zona: dto({ id, esCentral: true }), ordenesReconciliadas: 0 },
+        : {
+            estado: "ok" as const,
+            zona: dto({ id, esCentral: true }),
+            ordenesReconciliadas: 0,
+            ordenesRetenidasEnBodegaSatelite: 0,
+          },
     ),
     hardDelete: vi.fn().mockResolvedValue("ok"),
     countExistingDistritos: vi.fn(async (ids: string[]) => ids.length),
