@@ -334,13 +334,29 @@ y aceptada por la 366 (§6), y esta ficha no la ensancha.
 - **`OrdenRepository.recibirEnSatelite`** — ni una línea. La reconciliación en tránsito, que es lo que
   lo desbloquea, se conserva íntegra (R3).
 - **`CorregirDatosClienteService`** — ni una línea (Q3).
+  > ⚠️ **DEROGADO el 2026-09-07 por la task T10** (`tasks.md`), que cierra Q3 DENTRO de esta
+  > ficha. **Decisión del leader, NO firmada por el humano** (`requirements.md` §Decisiones).
+  > **Motivo:** este servicio es **la segunda puerta al mismo `orden.zona_id`** —
+  > `en_bodega_satelite` no está en `ESTADOS_SIN_CORRECCION`, así que un maestro podía cambiar el
+  > distrito de una orden en estante y re-derivar la zona igual, con el MISMO desenlace que esta
+  > ficha arregla. Un arreglo que cierra una de las dos puertas al mismo agujero no es un arreglo.
+  > **Lo que se tocó: un `if`** (rechazo si el paquete está en el estante *y* la zona derivada
+  > difiere de la estampada), antes del gate del dinero; vuelta atrás: quitarlo. NO se tocó
+  > `ESTADOS_SIN_CORRECCION` (R16), así que nombre, teléfono, producto, notas, peso y **dirección**
+  > se siguen corrigiendo con el paquete en el estante. Cubierto por 8 casos en
+  > `tests/unit/services/corregir-datos-cliente-bodega-satelite.test.ts`.
+  > Se anota **aquí** —y no solo en los otros cuatro sitios— porque este es el documento al que
+  > deroga, y es donde el próximo lector va a buscar si el diseño se incumplió (menor-5 de
+  > `progress/review_377.md`). Lo de arriba se conserva sin borrar: es lo que se decidió el día
+  > que se escribió el diseño.
 - **La guardia `tests/unit/guards/zona-reconciliacion-no-retarifa.guardia.test.ts`** (T8 de la 366)
   tiene que seguir verde sin editarla: esta ficha reduce lo que la reconciliación toca, nunca lo
   amplía.
 
 ## 8. El hueco de verificación, y cómo se cierra
 
-`tests/integration/db/zona-reconciliacion-ordenes.test.ts` tiene 17 casos y **ninguno varía el
+`tests/integration/db/zona-reconciliacion-ordenes.test.ts` tiene 17 casos —medido el 2026-09-07:
+12 `it(` mas 2 `it.each` que expanden a 3 y a 2— y **ninguno varía el
 estado**: `crearOrden` escribe siempre `FKS.estatusId`, tomado de un `findFirst` sin `orderBy` sobre
 `orden`. Es decir, las 17 órdenes semilla comparten un estado **arbitrario y no determinista**. Ese es
 el motivo exacto por el que este defecto llegó a `dev` con la suite en verde, y es lo primero que hay
@@ -349,7 +365,8 @@ que reparar: mientras `crearOrden` no acepte un estado, ningún test de esta fic
 El eje nuevo se abre así (T5): `crearOrden` acepta `estatusValue?: OrderStatusValue`, lo resuelve con
 `tx.orderStatus.findUniqueOrThrow({ where: { value } })` —fallo RUIDOSO si el catálogo no está
 sembrado, nunca un `if (!x) return;` que reporte `passed` sin comprobar nada— y cae a `FKS.estatusId`
-si no se pasa, de modo que **los 17 casos existentes no se tocan**.
+si no se pasa, de modo que **los 17 casos existentes no se tocan**. (Comprobado al cerrar: el
+archivo pasa de **17** tests a **28**, y el `git diff` de esos 17 no toca ni un `expect`.)
 
 Y el corte se prueba matándolo: quitar `estatus: { value: { notIn: ESTANTE } }` del `where` tiene que
 poner en rojo el caso «en el estante NO se mueve», y cambiar `notIn` por `in` tiene que poner en rojo
@@ -370,6 +387,10 @@ dejan dichas en el PR (T5).
   decisión legítima; queda escrita aquí para que no parezca un olvido.
 - **Los números de producción caducan.** 47 en estante / 215 en tránsito / 0 de deriva, medido el
   2026-09-07. Hay que re-medir antes de desplegar (T9), no citar estas cifras como vigentes.
+  > **RE-MEDIDO el 2026-09-07 por el leader (T9), en solo lectura: 37 en estante / 215 en tránsito
+  > / 0 desalineadas / 0 desalineadas EN EL ESTANTE.** La cifra de **47** de arriba queda
+  > **CADUCADA**; la vigente es **37**. Deriva 0 = luz verde: no hay orden huérfana que este
+  > cambio vaya a congelar. Detalle en `tasks.md` T9.
 
 ## 10. Fuera de alcance (y por qué)
 
@@ -382,6 +403,10 @@ dejan dichas en el PR (T5).
 - **Backfill o reparación de datos** — 0 órdenes con deriva medidas; nada que reparar (§4).
 - **`ZonaRepository.create`** — 366/R13 sigue vigente: crear una zona no reconcilia (R13).
 - **`CorregirDatosClienteService`** y **`DeshacerAsignacionService`** — Q3 y Q4.
+  > ⚠️ **La mitad de Q3 quedó DEROGADA el 2026-09-07 por la task T10**: `CorregirDatosClienteService`
+  > **sí se tocó** —un `if`— y ya NO está fuera de alcance. Motivo y vuelta atrás, en §7.
+  > Decisión del leader, **no firmada por el humano**. `DeshacerAsignacionService` (Q4) sigue
+  > intacto, y esa mitad del «fuera de alcance» sigue vigente.
 
 ## 11. Alternativas descartadas (resumen, con su sección)
 

@@ -91,18 +91,25 @@ tiene la central y reconciliar es correcto —desbloquea la recepción: 41 de 42
 - `tests/unit/repositories/zona-repository.test.ts` — 5 casos de orquestación (T4).
 - `tests/unit/services/zona-service.test.ts`, `tests/integration/actions/zonas-action.test.ts` — el
   campo nuevo, con números distintos entre sí (T6).
-- `tests/unit/services/corregir-datos-cliente-bodega-satelite.test.ts` (nuevo) — 7 casos (T10/Q3).
+- `tests/unit/services/corregir-datos-cliente-bodega-satelite.test.ts` (nuevo) — **8** casos
+  (T10/Q3); el octavo entra al cerrar la revisión (menor-6, ver el final de este archivo).
 
 **Sin migración, sin columnas, sin RLS, sin índices, sin una arista nueva en `TRANSICIONES`.**
 
 ## El hueco de verificación que esta ficha cierra
 
-`tests/integration/db/zona-reconciliacion-ordenes.test.ts` creaba **las 17 órdenes con el mismo
+`tests/integration/db/zona-reconciliacion-ordenes.test.ts` creaba **todas sus órdenes con el mismo
 `FKS.estatusId`** —un `findFirst` sin `orderBy`, arbitrario y no determinista—: el eje del estado
 nunca se variaba, y por eso este defecto entró en `dev` con la suite en verde. Ahora `crearOrden`
 acepta `estatusValue` y lo resuelve con `findUniqueOrThrow` (revienta con nombre y apellido si el
 catálogo no está sembrado; nunca un `if (!x) return;` que reporte `passed`). Los 17 casos previos
 **no cambiaron ni un `expect`**.
+
+**Precisión del 2026-09-07 (menor-4 de la revisión), medida:** esos **17 son los casos que el
+archivo EJECUTA** en `dev` — **12 `it(` mas 2 `it.each`** que expanden a 3 y a 2 (19 llamadas a
+`crearOrden`). O sea que 17 y 12 miden cosas distintas y las dos son ciertas según lo que se cuente;
+aquí se dice cuál es cuál para que nadie tenga que adivinarlo. Con los 11 casos de esta ficha el
+archivo pasa a correr **28** — verificado ejecutándolo: `Tests 28 passed (28)`.
 
 ## Cómo se verificó
 
@@ -119,7 +126,7 @@ catálogo no está sembrado; nunca un `if (!x) return;` que reporte `passed`). L
   | Mutación | Rojos | Casos que se caen |
   | --- | --- | --- |
   | quitar `estatus.value notIn ESTANTE` del `findMany` | 6 | «en el estante NO se mueve», «la bodega que TIENE el paquete lo sigue viendo» |
-  | `notIn` → `in` en ese `findMany` | 24 | los 11 de la 366 **y** 8 de la 377: el corte no se puede invertir a costa de la 366 |
+  | `notIn` → `in` en ese `findMany` | 24 | **14 de la 366 + 9 de la 377 + 1 unit** («⭑ R2/R9: las dos consultas comparten el `where` base»): el corte no se puede invertir a costa de la 366. ⚠️ Aquí decía «11 de la 366 y 8 de la 377» (= 19): el total (24) era bueno, el reparto no. **Re-medido y contado uno a uno el 2026-09-07** al cerrar `progress/review_377.md` (menor-3) |
   | quitar `estatus.value in ESTANTE` del `count` | 8 | «sin nada en el estante, 0», «los dos conteos son DISJUNTOS» |
   | `ESTADOS_CUSTODIA_SATELITE` en vez de `ESTADOS_PAQUETE_EN_ESTANTE` | 3 | «en tránsito SÍ se reconcilia» — la confusión que el docstring avisa |
   | quitar `cierreDetalles: { none: {} }` de `whereBaseElegible` | 3 | el «YA FACTURADA» de la 366: el refactor no dejó ningún corte sin vigilar |
@@ -179,7 +186,7 @@ también en `specs/377-bodega-satelite-sin-dueno/requirements.md`.
 | R2 | `db/zona` «⭑ 377/R2/R6: una orden EN EL ESTANTE …» |
 | R3 | `db/zona` «⭑ 377/R3: una orden EN TRANSITO … SI se reconcilia» |
 | R4 | `db/zona` «⭑ 377/R4: cuenta el estado ACTUAL, no el historico» |
-| R5 | `db/zona` «⭑ 377/R5: el corte viejo sigue vivo bajo el nuevo» + los 17 casos de la 366 |
+| R5 | `db/zona` «⭑ 377/R5: el corte viejo sigue vivo bajo el nuevo» + los 17 casos de la 366 (12 `it(` + 2 `it.each`) |
 | R6 | `db/zona` «⭑ 377/R2/R6 …» (cero filas de historial) + `unit/repo` «⭑ R8: el conteo se hace TAMBIEN cuando no hay nada que mover» |
 | R7 | `db/zona` «⭑ 377/R7: los dos conteos son DISJUNTOS» + `unit/repo` «⭑ R7 … ACUMULA por grupo» + `unit/svc` «⭑ 377/R7/R8» |
 | R8 | `db/zona` «⭑ 377/R7 …» + `action` «⭑ 366/R12 + 377/R8 … LOS DOS conteos». **Mitad de pantalla: T7, pendiente** |
@@ -190,7 +197,7 @@ también en `specs/377-bodega-satelite-sin-dueno/requirements.md`.
 | R13 | `db/zona` «⭑ 377/R13: `create()` ni reconcilia ni retiene» + `unit/repo` «⭑ R13 …» |
 | R14 | `tests/unit/utils/estados-bodega-satelite.test.ts` y el inventario de transiciones, verdes **sin aparecer en el diff** |
 | R15 | `unit/q3` «⭑ rechaza y NO escribe, aunque venga CONFIRMADA», «⭑ el rechazo GANA al aviso de importes», «el motivo nombra la BODEGA» |
-| R16 | `unit/q3` «⭑ … DENTRO de la misma zona sigue permitido», «⭑ … el nombre o el telefono sigue permitido» |
+| R16 | `unit/q3` «⭑ … DENTRO de la misma zona sigue permitido», «⭑ … el nombre o el telefono sigue permitido», «⭑ corregir SOLO la DIRECCION de una orden en el estante sigue permitido» |
 
 **T8 comprobado:** ninguno de los cuatro archivos que el `design.md` §7 declara intocables
 (`estados-bodega-satelite.test.ts`, `zona-reconciliacion-no-retarifa.guardia.test.ts`, el inventario
@@ -214,3 +221,85 @@ pnpm run lint        -> 157 problems (0 errors, 157 warnings) — todas preexist
 Backend completo y medido contra Postgres real, con las dos puertas cerradas y el gate completo en
 verde; **queda pendiente T7 (la frase del toast, UI) —sin ella R8 informa por dentro y calla por
 fuera— y T9, la re-medición en producción antes de desplegar.**
+
+---
+
+## ⭑ CIERRE DE LA REVISIÓN — 2026-09-07, los 9 menores de `progress/review_377.md`
+
+La revisión independiente dio **OK con 0 bloqueantes y 9 menores**, con el gate y las mutaciones
+**reproducidos por el revisor**, no creídos. Siete de los nueve eran bitácora; **dos tocaban código**.
+
+### Lo que tocó código
+
+**menor-9 — el texto del rechazo de Q3, en español de verdad.** Es el único texto de usuario que
+estrena esta ficha y lo lee un **maestro** en el modal de corrección; iba sin tildes. Queda:
+
+> El paquete de esta orden ya está en la bodega de {zona}, y ese distrito pertenece a otra zona:
+> moverla ahí la sacaría del listado de la bodega que la tiene y nadie podría asignarla.
+> Despáchala desde esa bodega o corrige el distrito dentro de su misma zona.
+
+**Ningún test afirmaba el literal completo**, así que no hubo que actualizar ninguno: los tres
+`expect` que lo tocan son fragmentos sin acentos (`toContain("Zona Uno")`, `toMatch(/bodega/i)` y
+`not.toMatch(/sin due/i)`) y siguen valiendo. Se comprobó en el árbol, no de memoria: la cadena solo
+aparece en `lib/services/CorregirDatosClienteService.ts`. Los otros cuatro rechazos del mismo método
+se dejan como estaban — no es una regresión de esta ficha y arreglarlos es otra tanda.
+
+**menor-6 — el caso que faltaba: corregir SOLO la dirección de una orden en el estante.** El revisor
+verificó **a mano** que el gate no dispara ahí (`CAMPOS_GEOGRAFIA` son los tres ids; `direccion` vive
+en `CAMPOS_UBICACION`, que solo decide el rastro). Correcto **por construcción** —y por eso mismo,
+sin red—. Octavo caso en `tests/unit/services/corregir-datos-cliente-bodega-satelite.test.ts`:
+«⭑ corregir SOLO la DIRECCION de una orden en el estante sigue permitido». Afirma `ok`, que **no se
+consulta** el catálogo de distritos, y que lo escrito es `{ direccion }` **y nada más** con un
+`toEqual` literal — `zonaId` no puede colarse.
+
+**Muerto con mutación antes de darlo por bueno** (ejecutadas y revertidas el 2026-09-07):
+
+| Mutación | Rojos | Qué cae |
+| --- | --- | --- |
+| añadir `"direccion"` a `CAMPOS_GEOGRAFIA` (`lib/types/correccion-datos-cliente.ts`) | **1** en este archivo (**3** en toda la familia `corregir…`) | el caso nuevo: entra al bloque de geografía sin los tres ids y sale con «Indica provincia, canton y distrito juntos» |
+| meter `en_bodega_satelite` en `ESTADOS_SIN_CORRECCION` (la «solución fácil» que R16 prohíbe) | **6 de 8** | el caso nuevo entre ellos |
+
+⚠️ **Honestidad sobre el alcance, medida:** la primera mutación pone **3** rojos en total; los otros
+dos viven en `tests/unit/services/corregir-datos-cliente-service.test.ts` y miden lo mismo pero con
+la orden **`en_reparto`**. El caso nuevo es el único que lo mide **con el paquete en el estante**,
+que es el único estado en el que el gate de R15 puede morder. Dicho de otro modo: el camino no
+estaba del todo a oscuras, pero **el escenario que esta ficha promete no bloquear** no tenía
+aserción propia.
+
+### Lo que fue bitácora
+
+| Menor | Qué se hizo |
+| --- | --- |
+| **menor-1** | `tasks.md`: T1–T6, T8 y T9 pasan a `[x]`. Las 34 casillas sueltas del archivo estaban todas en esas tasks; ahora no queda ninguna sin marcar |
+| **menor-2** | La fila T9 de `tasks.md` deja de decir «NO hecha»: pasa a **hecha, LUZ VERDE**, con los números del leader (**37** en estante / **215** en tránsito / **0** desalineadas / **0** desalineadas EN EL ESTANTE) y la cifra vieja de **47** marcada como caducada. Se añadió la misma nota al §9 del `design.md`, que también citaba 47 |
+| **menor-3** | El desglose de los 24 rojos de `notIn`→`in` **re-medido y contado uno a uno**: **14 de la 366 + 9 de la 377 + 1 unit**, no «11 + 8» (que sumaba 19). El total, 24, ya era bueno |
+| **menor-4** | Los «17 casos»: **medido**, 17 es el número de casos que el archivo EJECUTA en `dev` — **12 `it(` mas 2 `it.each`** que expanden a 3 y a 2. El «12» del revisor cuenta `it(` literales; los dos números son ciertos y miden cosas distintas, así que ahora se dice cuál es cuál en `design.md` §8, en `tasks.md` y aquí. Comprobación independiente: el archivo corre **28** tests tras esta ficha (17 + 11) |
+| **menor-5** | La derogación del «ni una línea en `CorregirDatosClienteService`» queda anotada **en el propio `design.md` §7 y §10**, con su motivo y su vuelta atrás, y **sin borrar lo viejo**: era el único de los cinco sitios donde faltaba, y es donde alguien va a buscar si el diseño se incumplió |
+| **menor-7** | Entrada de la 377 añadida a `progress/history.md` |
+| **menor-8** | **NO se tocó** `feature_list.json`. Que en esta rama la 377 figure `pending` es solo que la rama va por detrás de `dev`, donde ya está `in_progress`. Ese archivo lo lleva el leader **en `dev`**: escribirlo desde una rama de feature ya revirtió cierres dos veces en este repo |
+
+### Gate del cierre — `./init.sh` completo
+
+Se corrió el **completo** (no `--rapido`) porque el cierre toca código. Con el `.env` copiado de la
+raíz al worktree: sin él los 132 archivos contra Postgres se saltan y **el gate miente en verde**.
+
+| medida | valor **leído DENTRO del log** |
+| --- | --- |
+| `INIT_EXIT` | **0** (línea 12141, escrito dentro del fichero — no el exit code del shell, que puede ser el de un `echo`) |
+| archivos | **1770 passed (1770)** |
+| tests | **25 296 passed, 26 skipped (25 322)** — exactamente **+1** sobre los 25 295 de antes: el caso nuevo |
+| `skipped` | los **26 de siempre**: 17 en `AnaliticaPage.test.tsx` + 9 en `AnaliticaShell.test.tsx`, preexistentes y ajenos. **Los únicos dos archivos con `skipped` en todo el log** |
+| Postgres | `DATABASE_URL resuelta: los 132 archivos de tests contra Postgres SI se ejecutan` (línea 332). **Cero saltados en `integration/db`** |
+| baseline | `tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1770 ejecutado(s))` |
+| typecheck | `typecheck paso`, sin una línea de salida |
+| lint | `157 problems (0 errors, 157 warnings)` — **el mismo número que antes del cierre**: ni una advertencia nueva |
+| aviso | `migraciones sin down.sql: 20260814…` — tres migraciones de agosto, **preexistentes y ajenas**. Esta ficha no trae ninguna migración |
+
+`git status --short` tras revertir las mutaciones: solo los archivos del cierre. Ni
+`lib/types/correccion-datos-cliente.ts` ni `lib/repositories/ZonaRepository.ts` quedan modificados.
+
+### Veredicto del cierre
+
+**8 de los 9 menores cerrados; el noveno (menor-8) queda deliberadamente sin tocar** porque su cierre
+es del leader y **en `dev`**, no aquí. Lo que sigue vivo no es un menor: **la decisión Q3 sigue sin
+la firma del humano**, con su vuelta atrás medida (un `if`) y los tests que caen si se quita.

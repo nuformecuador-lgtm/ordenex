@@ -330,10 +330,10 @@ export class CorregirDatosClienteService implements ICorregirDatosClienteService
       // la 366), y ese caso escribe `zona_id` igual.
       if (paqueteEnEstanteSatelite(orden.estatusValue) && distrito.zonaId !== orden.zonaId) {
         return this.rechazoDeUbicacion(
-          `El paquete de esta orden ya esta en la bodega de ${orden.zonaNombre}, y ese distrito ` +
-            "pertenece a otra zona: moverla ahi la sacaria del listado de la bodega que la tiene " +
-            "y nadie podria asignarla. Despachala desde esa bodega o corrige el distrito dentro " +
-            "de su misma zona.",
+          `El paquete de esta orden ya está en la bodega de ${orden.zonaNombre}, y ese ` +
+            "distrito pertenece a otra zona: moverla ahí la sacaría del listado de la bodega " +
+            "que la tiene y nadie podría asignarla. Despáchala desde esa bodega o corrige el " +
+            "distrito dentro de su misma zona.",
         );
       }
 

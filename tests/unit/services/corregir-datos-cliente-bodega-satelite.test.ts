@@ -227,4 +227,43 @@ describe("377/R16 — lo que el gate NO bloquea, y por eso no se toco `ESTADOS_S
     expect(findDistritoParaCorreccion).not.toHaveBeenCalled();
     expect(corregirDatosCliente).toHaveBeenCalledTimes(1);
   });
+
+  it("⭑ corregir SOLO la DIRECCION de una orden en el estante sigue permitido", async () => {
+    // LA RED DE `CAMPOS_GEOGRAFIA`, que hasta hoy no existia. El gate de R15 vive DENTRO de
+    // `if (CAMPOS_GEOGRAFIA.some((campo) => cambios.includes(campo)))`, y esa lista son los TRES
+    // ids: `direccion` NO esta ahi —vive en `CAMPOS_UBICACION`, que solo decide el rastro—.
+    //
+    // POR QUE HACE FALTA EL CASO. Que la direccion no dispare el gate es correcto por
+    // CONSTRUCCION, y eso es justo lo que lo hace fragil: la ficha nombra la direccion entre lo
+    // que NO queria bloquear —es lo que hace falta para poder despachar el paquete que ya esta
+    // en la bodega— y ese camino no tenia ni una asercion CON LA ORDEN EN EL ESTANTE.
+    //
+    // MUTACIONES EJECUTADAS EL 2026-09-07, con lo medido, no con lo supuesto:
+    //   · añadir `"direccion"` a `CAMPOS_GEOGRAFIA` (`lib/types/correccion-datos-cliente.ts`) ->
+    //     este caso entra al bloque de geografia sin los tres ids y sale con «Indica provincia,
+    //     canton y distrito juntos». Rojo. Honestidad sobre el alcance: esa mutacion pone 3
+    //     rojos en los archivos de `corregir…`, y los otros dos
+    //     (`corregir-datos-cliente-service.test.ts`) miden lo mismo con la orden `en_reparto`.
+    //     ESTE es el unico que lo mide EN EL ESTANTE, que es el unico estado en el que el gate
+    //     de R15 puede morder.
+    //   · meter `en_bodega_satelite` en `ESTADOS_SIN_CORRECCION` —la «solucion facil» que R16
+    //     existe para prohibir— -> 6 de los 8 casos de este archivo, este incluido.
+    const { service, corregirDatosCliente, findDistritoParaCorreccion } =
+      escenario("en_bodega_satelite");
+
+    const r = await service.corregir(
+      { ordenId: ORDEN_ID, direccion: "avenida siempre viva 743, casa azul" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+    // Ni consulta el catalogo de distritos: no hay ubicacion que re-derivar.
+    expect(findDistritoParaCorreccion).not.toHaveBeenCalled();
+    expect(corregirDatosCliente).toHaveBeenCalledTimes(1);
+    // Y lo que se escribe es la direccion Y NADA MAS. El `toEqual` es literal a proposito:
+    // `zona_id` es el campo por el que la orden se quedaria sin dueño, y aqui no puede aparecer.
+    expect(corregirDatosCliente.mock.calls[0][1]).toEqual({
+      direccion: "avenida siempre viva 743, casa azul",
+    });
+  });
 });
