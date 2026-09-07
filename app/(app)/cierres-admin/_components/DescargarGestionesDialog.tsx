@@ -135,10 +135,16 @@ const DESDE_LABEL = "Desde";
 const HASTA_LABEL = "Hasta";
 /**
  * FICHA 384: la ayuda ya no anuncia un recorte —no hay ninguno hasta que el usuario lo ponga—.
- * Dice qué recortan estos controles y qué significa dejarlos vacíos, que es el estado inicial.
+ * Dice tres cosas y las tres hacen falta: qué recortan estos controles, qué significa dejarlos
+ * vacíos (el estado inicial) y CÓMO se vuelve a ese estado.
+ *
+ * Esa tercera parte venía del texto anterior —«vaciá una fecha para quitar ese extremo»— y se
+ * había perdido al reescribirlo. Es la instrucción más necesaria justo ahora: con un atajo que
+ * llena los dos extremos de un clic y un `input type="date"` nativo que no ofrece ningún aspa,
+ * quien pulse «Hoy» y quiera volver a «todo» tendría que adivinar.
  */
 const RANGO_AYUDA =
-  "Recorta por la fecha de solicitud del cierre. Vacías no recortan nada: se lleva todo el historial de los mensajeros elegidos.";
+  "Recorta por la fecha de solicitud del cierre. Vacías no recortan nada: se lleva todo el historial de los mensajeros elegidos. Vaciá una fecha para quitar ese extremo, o «Limpiar» para quitar las dos.";
 /** Atajo al caso diario (ficha 384): el cierre del día de toda la flota, en un clic. */
 const HOY_LABEL = "Hoy";
 /**
@@ -147,6 +153,13 @@ const HOY_LABEL = "Hoy";
  * navega por voz tiene que poder decir «Hoy» y que el control responda (WCAG 2.5.3).
  */
 const HOY_ARIA = "Hoy: poner el rango de fechas en el día de hoy";
+/**
+ * La CONTRAPARTIDA del atajo: un filtro que se pone en un clic tiene que quitarse en un clic. Sin
+ * esto, «Hoy» sería de ida y no de vuelta, y volver a «todo el historial» exigiría enfocar los dos
+ * campos y borrarlos a mano — que es adivinar, no deshacer.
+ */
+const LIMPIAR_LABEL = "Limpiar";
+const LIMPIAR_ARIA = "Limpiar: quitar el rango de fechas";
 const CERRAR_LABEL = "Cerrar";
 
 /** R39: el aviso accionable de confirmar sin nadie elegido. No se llama al servidor. */
@@ -267,6 +280,12 @@ export function DescargarGestionesDialog({
     const hoy = fechaCalendarioCR();
     setDesde(hoy);
     setHasta(hoy);
+  }
+
+  /** La vuelta del atajo: deja el rango como lo encontró, sin recorte por fecha. */
+  function limpiarRango() {
+    setDesde("");
+    setHasta("");
   }
 
   /**
@@ -405,18 +424,29 @@ export function DescargarGestionesDialog({
                 aria-invalid={rangoInvertido || undefined}
               />
             </div>
-            {/* El atajo va CON los controles de fecha y no en el pie: es una forma de rellenarlos
-                y se ve al mismo golpe de vista que lo que rellena. `self-end` lo alinea con los
-                dos campos (h-8, igual que el botón) y no con sus etiquetas. */}
-            <Button
-              type="button"
-              variant="outline"
-              className="self-end"
-              onClick={ponerHoy}
-              aria-label={HOY_ARIA}
-            >
-              {HOY_LABEL}
-            </Button>
+            {/* Los dos atajos van CON los controles de fecha y no en el pie: son formas de
+                rellenarlos y de vaciarlos, y se ven al mismo golpe de vista que lo que cambian.
+                Van EN PAREJA a propósito —poner y quitar— y en su propio contenedor para que al
+                envolverse la fila no se separe uno del otro. `items-end` los alinea con los dos
+                campos (h-8, igual que los botones) y no con sus etiquetas. */}
+            <div className="flex items-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={ponerHoy}
+                aria-label={HOY_ARIA}
+              >
+                {HOY_LABEL}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={limpiarRango}
+                aria-label={LIMPIAR_ARIA}
+              >
+                {LIMPIAR_LABEL}
+              </Button>
+            </div>
           </div>
           <p className="text-xs text-muted-foreground">{RANGO_AYUDA}</p>
 

@@ -204,6 +204,11 @@ function atajoHoy() {
   return screen.getByRole("button", { name: "Hoy: poner el rango de fechas en el día de hoy" });
 }
 
+/** Su contrapartida: el que lo vacía (ficha 384). */
+function atajoLimpiar() {
+  return screen.getByRole("button", { name: "Limpiar: quitar el rango de fechas" });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   buildXlsxRowsMock.mockResolvedValue(new ArrayBuffer(8));
@@ -428,6 +433,53 @@ describe("valores por defecto del diálogo", () => {
     });
   });
 
+  // `menor 2` de la revisión: un filtro que se pone en un clic tiene que quitarse en un clic. Sin
+  // esto «Hoy» sería de ida y no de vuelta, y volver a «todo el historial» exigiría enfocar los dos
+  // `input type="date"` y borrarlos a mano — que es adivinar, no deshacer.
+  it("«Limpiar» deshace el atajo y el rango deja de viajar (ficha 384)", async () => {
+    const accion = accionOk();
+    montar(accion);
+    await userEvent.click(disparador());
+    await screen.findByRole("dialog");
+
+    await userEvent.click(atajoHoy());
+    expect(screen.getByLabelText("Desde")).toHaveValue(HOY);
+    expect(screen.getByLabelText("Hasta")).toHaveValue(HOY);
+
+    await userEvent.click(atajoLimpiar());
+
+    expect(screen.getByLabelText("Desde")).toHaveValue("");
+    expect(screen.getByLabelText("Hasta")).toHaveValue("");
+
+    await userEvent.click(botonDescargar());
+
+    // Vaciado DE VERDAD, y se afirma sobre lo que viaja: `desde: ""` no sería «sin fecha», sería
+    // una clave de más contra la lista blanca `.strict()` del borde.
+    await waitFor(() => expect(accion).toHaveBeenCalledTimes(1));
+    expect(accion).toHaveBeenCalledWith({ mensajeroIds: [ANA, BETO] });
+    const enviado = accion.mock.calls[0][0] as Record<string, unknown>;
+    expect(Object.keys(enviado)).toEqual(["mensajeroIds"]);
+  });
+
+  // `menor 5` de la revisión: este copy es el que el usuario LEE, esta ficha lo cambió y ningún
+  // caso lo fijaba — editarlo mañana para que vuelva a mentir no pondría nada rojo, que es
+  // exactamente el fallo mudo que la ficha vino a cerrar. Se clava como LITERAL.
+  //
+  // ⚠️ Si hay que reescribirlo, lo que NO puede desaparecer es la instrucción de CÓMO se quita un
+  // extremo: sin ella el atajo vuelve a ser de ida y no de vuelta. Ese es el contrato; la
+  // redacción exacta es negociable, y este caso es el sitio donde se negocia a la vista.
+  it("la ayuda dice qué recorta, qué es estar vacío y cómo volver atrás (ficha 384)", async () => {
+    montar(accionOk());
+    await userEvent.click(disparador());
+    await screen.findByRole("dialog");
+
+    expect(
+      screen.getByText(
+        "Recorta por la fecha de solicitud del cierre. Vacías no recortan nada: se lleva todo el historial de los mensajeros elegidos. Vaciá una fecha para quitar ese extremo, o «Limpiar» para quitar las dos.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("«Todos» desmarca y vuelve a marcar la lista entera", async () => {
     const accion = accionOk();
     montar(accion);
@@ -598,6 +650,12 @@ describe("aviso de conjunto vacío (ficha 384)", () => {
 
     expect(accion.mock.calls[0][0].mensajeroIds).toEqual([ANA]);
     expect(accion.mock.calls[1][0].mensajeroIds).toEqual([BETO]);
+    // `menor 4` de la revisión: se CLAVA el texto y no solo su igualdad. Comparar `calls[1]` con
+    // `calls[0]` a secas pasaría también si los dos fueran `undefined` — un caso que se
+    // auto-aprueba. Con el literal delante, «iguales» significa «iguales Y correctos».
+    expect(errorToastMock.mock.calls[0][0]).toBe(
+      "Los mensajeros elegidos no tienen gestiones de cierre. Elegí otros mensajeros y volvé a intentarlo.",
+    );
     expect(errorToastMock.mock.calls[1][0]).toBe(errorToastMock.mock.calls[0][0]);
     expect(descargarBlobMock).not.toHaveBeenCalled();
   });
