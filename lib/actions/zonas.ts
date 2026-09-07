@@ -174,6 +174,8 @@ export async function borrarZona(
  * flete (`resolverFlete`) de todo lo que aun no esta congelado en un cierre, y ese numero no es
  * pequeño. Devuelve una entrada POR ZONA PEDIDA —con cero si no tiene ninguna—: quien lo consuma
  * compone el texto, este borde no lo redacta.
+ *
+ * @sin-superficie La pantalla que la consume es la T12 de esta MISMA ficha (la confirmacion de `CrearZonaForm`), que va aparte por reparto de trabajo. La anotacion CADUCA SOLA: en cuanto el formulario la importe, `superficie-de-uso.guardia` exige borrarla.
  */
 export async function impactoZonaCentral(
   zonaIds: unknown,

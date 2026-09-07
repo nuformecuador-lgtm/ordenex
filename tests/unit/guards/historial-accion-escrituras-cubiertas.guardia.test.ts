@@ -196,6 +196,33 @@ const CENSO: EntradaCenso[] = [
     mutacion: /tx\.orden\.updateMany\(/,
   },
   {
+    // ⭑ FICHA 376 — mover la marca de zona central. ENTRADA APARTE de la de la 366 aunque
+    // comparta archivo y metodo, y no es duplicacion: el censo mide UNA mutacion por entrada, y
+    // estas dos escriben cosas distintas dentro de la misma `$transaction` (`tx.orden.updateMany`
+    // re-estampa ordenes; `tx.zona.updateMany` apaga la central anterior). El `it.each` las corre
+    // por separado y cada una exige SU sentencia.
+    //
+    // ⚠️ LA MUTACION QUE SE EXIGE ES EL APAGADO SILENCIOSO DE LA CENTRAL ANTERIOR, que es
+    // exactamente lo que la fila documenta: `tx.zona.updateMany({ where: { esCentral: true,
+    // NOT: { id } } })` toca una zona que NO aparece en el payload y que hasta esta ficha no
+    // dejaba huella en ninguna parte.
+    tipos: ["zona_central_cambiada"],
+    archivo: "lib/repositories/ZonaRepository.ts",
+    metodo: "update",
+    forma: "abre_tx",
+    mutacion: /tx\.zona\.updateMany\(/,
+  },
+  {
+    // ⭑ FICHA 376 — el MISMO traslado, por la via de crear una zona ya marcada como central. Que
+    // crear no tenga tipo propio en el catalogo no exime al traslado que provoca: `create` apaga
+    // la central anterior igual que `update`.
+    tipos: ["zona_central_cambiada"],
+    archivo: "lib/repositories/ZonaRepository.ts",
+    metodo: "create",
+    forma: "abre_tx",
+    mutacion: /tx\.zona\.create\(/,
+  },
+  {
     // ⭑ Q2 (`usuario_fulfillment_cambiado`) comparte punto de escritura con el rol y la zona: es
     // el MISMO formulario, y las N filas salen con el MISMO `lote_id`.
     tipos: ["usuario_rol_cambiado", "usuario_zona_cambiada", "usuario_fulfillment_cambiado"],
@@ -414,6 +441,31 @@ function bloqueDeTransaccion(cuerpo: string): string | null {
 }
 
 /**
+ * Las posiciones de TODAS las llamadas a `appendAccion(` de `cuerpo`, no solo la primera.
+ *
+ * ⚠️ NACIO DE UNA MUTACION SUPERVIVIENTE MEDIDA EL 2026-09-07 (ficha 376). `ZonaRepository.update`
+ * es el primer metodo del censo con DOS `appendAccion` en el mismo cuerpo (la reconciliacion de la
+ * 366 y el cambio de marca de la 376). Con `indexOf` —que devuelve la PRIMERA— borrar entero el
+ * bloque de la 376 dejaba la guardia EN VERDE: la primera llamada seguia ahi, dentro de la `tx`, y
+ * el detector no miraba mas alla. Se probo: 48/48 en verde con el registro nuevo borrado.
+ */
+function llamadasAAppendAccion(cuerpo: string): number[] {
+  const posiciones: number[] = [];
+  const patron = /appendAccion\s*\(/g;
+  let encontrado: RegExpExecArray | null = patron.exec(cuerpo);
+  while (encontrado !== null) {
+    posiciones.push(encontrado.index);
+    encontrado = patron.exec(cuerpo);
+  }
+  return posiciones;
+}
+
+/** ¿ESA llamada concreta —la que empieza en `i`— recibe la `tx`? */
+function recibeLaTx(cuerpo: string, i: number): boolean {
+  return /^appendAccion\s*\(\s*tx\b/.test(cuerpo.slice(i));
+}
+
+/**
  * EL DETECTOR, en una sola funcion, para que la contraprueba pueda ejercerlo sobre un cuerpo
  * MUTADO EN MEMORIA y no solo sobre el archivo real.
  *
@@ -425,11 +477,13 @@ export function fallosDelPuntoDeEscritura(
   mutacion: RegExp,
 ): string[] {
   const fallos: string[] = [];
-  const iAppend = cuerpo.indexOf("appendAccion");
-  if (iAppend === -1) fallos.push("no llama a `appendAccion`");
+  const llamadas = llamadasAAppendAccion(cuerpo);
+  if (llamadas.length === 0) fallos.push("no llama a `appendAccion`");
   if (!mutacion.test(cuerpo)) fallos.push("no contiene su sentencia de mutacion");
 
-  // EN LAS DOS FORMAS: el cliente que recibe `appendAccion` tiene que ser LA `tx`.
+  // EN LAS DOS FORMAS: el cliente que recibe `appendAccion` tiene que ser LA `tx`. Y se exige de
+  // TODAS las llamadas del cuerpo, no de una: basta con que UNA escriba por otro cliente para que
+  // esa fila caiga fuera de la transaccion.
   //
   // ⚠️ ESTE CHEQUEO NACIO DE UNA MUTACION SUPERVIVIENTE (ficha 373, 2026-09-04). Estar DENTRO del
   // callback no basta: `appendAccion(this.prisma, ...)` escrito ahi dentro compila, queda
@@ -437,24 +491,25 @@ export function fallosDelPuntoDeEscritura(
   // significa que un borrado revertido puede dejar su fila de auditoria —o al reves—, que es
   // exactamente lo que R10/R11 de la 362 prohiben. Ningun test de comportamiento lo caza: con un
   // doble, `this.prisma` y la `tx` son el mismo objeto.
-  if (iAppend !== -1 && !/appendAccion\(\s*tx\b/.test(cuerpo)) {
+  if (llamadas.some((i) => !recibeLaTx(cuerpo, i))) {
     fallos.push("no le pasa a `appendAccion` la `tx`, sino otro cliente");
   }
 
   if (forma === "abre_tx") {
     const bloque = bloqueDeTransaccion(cuerpo);
     if (bloque === null) fallos.push("no abre ninguna `$transaction`");
-    else if (iAppend !== -1) {
+    else {
       const iBloque = cuerpo.indexOf(bloque);
-      const dentro = iAppend > iBloque && iAppend < iBloque + bloque.length;
-      if (!dentro) fallos.push("el `appendAccion` cae FUERA del callback de `$transaction`");
+      // TODAS las llamadas dentro del callback, no solo la primera (ficha 376).
+      const fuera = llamadas.filter((i) => !(i > iBloque && i < iBloque + bloque.length));
+      if (fuera.length > 0) fallos.push("el `appendAccion` cae FUERA del callback de `$transaction`");
     }
   } else {
     // `recibe_tx`: la primera cosa que el metodo hace con el registro es usar EL `tx` que le
     // dieron. Que el primer parametro se llame `tx` no lo garantiza por si solo —lo garantiza el
     // TIPO, que no admite `$transaction`—, pero si alguien renombrara el parametro este chequeo
     // obligaria a pasar por aqui y a mirar el tipo.
-    if (!/appendAccion\(\s*tx\b/.test(cuerpo)) {
+    if (llamadas.length === 0 || llamadas.some((i) => !recibeLaTx(cuerpo, i))) {
       fallos.push("no pasa a `appendAccion` la `tx` que recibio");
     }
   }
@@ -520,6 +575,53 @@ describe("362/T7.1 — el detector se prueba a si mismo", () => {
     const mutado = CUERPO_SANO.replace("appendAccion(tx,", "appendAccion(this.prisma,");
     expect(fallosDelPuntoDeEscritura(mutado, "abre_tx", MUTACION)).toContain(
       "no le pasa a `appendAccion` la `tx`, sino otro cliente",
+    );
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────────────────────
+  // ⭑ FICHA 376 — DOS `appendAccion` EN EL MISMO CUERPO. Es lo que hace `ZonaRepository.update`
+  // desde esta ficha: el registro de la reconciliacion (366) y el del cambio de marca (376).
+  // Con el detector de antes —que miraba `indexOf`, o sea LA PRIMERA— la segunda llamada quedaba
+  // SIN VIGILAR: medido el 2026-09-07, sacarla del callback o pasarle `this.prisma` dejaba la
+  // guardia en 48/48 verde.
+  // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+  const CUERPO_DOS_REGISTROS = `{
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.usuario.updateMany({ where: { id }, data: { estado } });
+      await appendAccion(tx, [{ accion: "usuario_estado_cambiado" }]);
+      await appendAccion(tx, [{ accion: "usuario_rol_cambiado" }], loteId);
+      return count;
+    });
+  }`;
+
+  it("⭑ CONTRAPRUEBA (376): un cuerpo con DOS registros correctos NO produce fallos", () => {
+    // Control positivo: sin el, los dos casos de abajo podrian estar pasando por otra cosa.
+    expect(fallosDelPuntoDeEscritura(CUERPO_DOS_REGISTROS, "abre_tx", MUTACION)).toEqual([]);
+  });
+
+  it("⭑ CONTRAPRUEBA (376): la SEGUNDA llamada con OTRO cliente se detecta", () => {
+    const mutado = CUERPO_DOS_REGISTROS.replace(
+      'appendAccion(tx, [{ accion: "usuario_rol_cambiado" }], loteId)',
+      'appendAccion(this.prisma, [{ accion: "usuario_rol_cambiado" }], loteId)',
+    );
+    expect(fallosDelPuntoDeEscritura(mutado, "abre_tx", MUTACION)).toContain(
+      "no le pasa a `appendAccion` la `tx`, sino otro cliente",
+    );
+  });
+
+  it("⭑ CONTRAPRUEBA (376): la SEGUNDA llamada FUERA del callback se detecta", () => {
+    const mutado = `{
+      const r = await this.prisma.$transaction(async (tx) => {
+        const { count } = await tx.usuario.updateMany({ where: { id }, data: { estado } });
+        await appendAccion(tx, [{ accion: "usuario_estado_cambiado" }]);
+        return count;
+      });
+      await appendAccion(tx, [{ accion: "usuario_rol_cambiado" }], loteId);
+      return r;
+    }`;
+    expect(fallosDelPuntoDeEscritura(mutado, "abre_tx", MUTACION)).toContain(
+      "el `appendAccion` cae FUERA del callback de `$transaction`",
     );
   });
 
