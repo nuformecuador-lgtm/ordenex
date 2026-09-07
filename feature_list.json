@@ -4637,6 +4637,17 @@
       "complexity": "baja",
       "branch": "fix/390-flake-crear-tienda-form",
       "status_note": "ENCONTRADO el 2026-09-07 por el gate post-merge de la 382, que salio ROJO por este unico test sin que la 382 tenga nada que ver (toco lib/pdf/ y el modal de etiquetas; esto es el selector de tiendas). || EL TEST: tests/components/CrearTiendaForm.test.tsx > «una tienda con SOLO tarifas de zona tampoco se ofrece». Falla con TestingLibraryElementError: Unable to find an accessible element with the role \"option\". || MEDIDO, no supuesto: 3 fallos de 9 corridas AISLADAS = 33%. Es el SEGUNDO modo de flake que este repo ya tiene documentado -- la asercion de Radix que tambien falla aislada--, no el de timeout por saturacion. || NO esta en tests/baseline-rojos.json, que esta vacio: asi que enrojece el gate de cualquiera, al azar, sin culpable. Ese es el dano real -- ya nos hizo perder una investigacion hoy. || El archivo no se toca desde el 2026-08-25 (e4bd0973), o sea que el flake es previo a todo el trabajo de hoy. || NO se arregla metiendolo en el baseline: eso taparia un test que SI vigila algo (que una tienda con solo tarifas de zona no se ofrezca). Hay que arreglar la espera del portal de Radix."
+    },
+    {
+      "id": 391,
+      "title": "la guardia de ambitos de descarga no ve dos iguales en el mismo modulo",
+      "description": "Promete que los ambitos son unicos y comprueba que no se repiten entre modulos, que no es lo mismo.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "fix/391-guardia-ambitos-intra-modulo",
+      "status_note": "ENCONTRADO el 2026-09-07 por el implementador de la 388 y CONFIRMADO por su reviewer con una medicion A/B, no razonado. ||  hace porValor.set(valor, Set.add(ruta)) y filtra rutas.size > 1: N declaraciones identicas DENTRO de un archivo colapsan a un Set de tamano 1 y la guardia no las ve. || MEDIDO: dos ambitos colapsados en el MISMO modulo -> guardia 4 passed (4), VERDE, mientras caen 3 tests de la 388. El mismo literal repartido en DOS modulos -> ROJA. || POR QUE IMPORTA AHORA y no antes: es deuda de la ficha 314, pero hasta la 388 ningun modulo declaraba DOS ambitos. A partir de ahora el agujero es alcanzable, y lo que se cuela por el es un borrado silencioso de la preferencia de columnas del usuario. || MENOR HERMANO, del mismo informe: analitica-productos-descarga-columnas.test.ts:359-367 compara la salida de la funcion contra las MISMAS constantes que devuelve, asi que NO caza el colapso; si caza el cruce, que es lo que su comentario dice. Medido por el reviewer."
     }
   ]
 }
