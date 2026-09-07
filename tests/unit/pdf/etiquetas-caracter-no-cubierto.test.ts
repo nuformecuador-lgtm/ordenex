@@ -7,6 +7,7 @@ import { fuenteEtiqueta } from "@/lib/pdf/etiquetas-fuente";
 import {
   ErrorCaracterNoImprimible,
   registrarFuente,
+  type FuenteEmbebida,
 } from "@/lib/pdf/etiquetas-fuente-registro";
 import { crearLayout } from "@/lib/pdf/etiquetas-layout";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
@@ -56,22 +57,21 @@ function dto(overrides: Partial<EtiquetaGuiaDTO> = {}): EtiquetaGuiaDTO {
   };
 }
 
-function dibujar(etiqueta: EtiquetaGuiaDTO): void {
+function dibujar(etiqueta: EtiquetaGuiaDTO, fuente: FuenteEmbebida = fuenteEtiqueta): void {
   const hoja = getHojaEtiqueta("100x100");
   const doc = new jsPDF({ unit: "mm", format: [hoja.anchoMm, hoja.altoMm] });
+  // Se registran SIEMPRE los bytes reales: lo que un caso puede estrechar es la
+  // COBERTURA declarada, no el programa de fuente que jsPDF parsea.
   registrarFuente(doc, fuenteEtiqueta);
-  drawEtiqueta(
-    doc,
-    crearLayout(hoja),
-    etiqueta,
-    { qr: PNG_1X1, barcode: PNG_1X1 },
-    fuenteEtiqueta,
-  );
+  drawEtiqueta(doc, crearLayout(hoja), etiqueta, { qr: PNG_1X1, barcode: PNG_1X1 }, fuente);
 }
 
-function errorAlDibujar(etiqueta: EtiquetaGuiaDTO): unknown {
+function errorAlDibujar(
+  etiqueta: EtiquetaGuiaDTO,
+  fuente: FuenteEmbebida = fuenteEtiqueta,
+): unknown {
   try {
-    dibujar(etiqueta);
+    dibujar(etiqueta, fuente);
   } catch (e) {
     return e;
   }
@@ -115,5 +115,68 @@ describe("Feature 382 — un caracter que la fuente no imprime dice DE QUE ORDEN
     // Sin esto, los tres de arriba podrian estar verdes porque el dibujo lanza
     // siempre por cualquier otro motivo.
     expect(() => dibujar(dto({ destinatario: NOMBRE_NORMAL }))).not.toThrow();
+  });
+});
+
+/**
+ * Feature 382 (R1) — LA LINEA DEL DINERO, CLAVADA.
+ *
+ * `drawEtiqueta` llama a `exigirCobertura` en dos sitios y el otro —«texto de la
+ * etiqueta»— ya estaba cubierto arriba. Este, el del IMPORTE, no lo estaba:
+ * medido por el reviewer el 2026-09-07, colar un `0` como guia en esa llamada
+ * dejaba 268 tests verdes en 13 archivos. Es la unica de las dos llamadas que
+ * toca el monto a cobrar, y es justo donde nacio la feature 282.
+ *
+ * Como se dispara sin inventar nada: el texto del importe sale de `formatMonto`,
+ * asi que siempre trae el SIMBOLO DE MONEDA configurado, y el colon (U+20A1) no
+ * esta en cp1252 — es el unico caracter que el subconjunto añade a mano. Aqui se
+ * declara una cobertura estrecha (solo ASCII) sobre los MISMOS bytes de fuente,
+ * que es exactamente el escenario que R28 vigila: un despliegue cuyo simbolo de
+ * moneda no esta en el subconjunto embebido. Nada de mocks ni de reescribir la
+ * configuracion global.
+ */
+describe("Feature 382 — el caracter no imprimible del IMPORTE tambien dice la guia", () => {
+  /**
+   * Los bytes reales con la cobertura DECLARADA estrechada a ASCII imprimible.
+   * `cubreCodePoint` lee esta declaracion y solo esta.
+   */
+  const SOLO_ASCII: FuenteEmbebida = {
+    ...fuenteEtiqueta,
+    cobertura: [[0x20, 0x7e]],
+  };
+
+  it("el simbolo de moneda fuera del subconjunto lanza desde el campo del IMPORTE", () => {
+    const etiqueta = dto({ montoCobrar: 18000, destinatario: NOMBRE_NORMAL });
+    const capturado = errorAlDibujar(etiqueta, SOLO_ASCII);
+
+    expect(capturado).toBeInstanceOf(ErrorCaracterNoImprimible);
+    const error = capturado as ErrorCaracterNoImprimible;
+    // `campo` es lo que demuestra DE QUE LLAMADA salio: si saliera de la otra
+    // diria «texto de la etiqueta» y este test no estaria vigilando nada.
+    expect(error.campo).toBe("Monto a cobrar");
+    // Y lo que la mutacion del reviewer rompia: la guia REAL de la orden.
+    expect(error.numGuia).toBe(GUIA_AFECTADA);
+    // El caracter culpable, como LITERAL: es el simbolo de moneda con el que la
+    // etiqueta imprime hoy, no lo que devuelva el formateador (compararlo contra
+    // `formatMonto` estaria verde con cualquier simbolo, tambien con uno roto).
+    expect(error.caracter).toBe("₡");
+    expect(error.codePoint).toBe(0x20a1);
+  });
+
+  it("y la guia que viaja cambia con la orden: no es una constante del archivo", () => {
+    // Con un solo caso, `numGuia` podria estar clavado a un literal y seguir
+    // verde. Dos ordenes distintas obligan a que salga del DTO.
+    const guias = [GUIA_AFECTADA, 19887906];
+    const vistas = guias.map((numGuia) => {
+      const error = errorAlDibujar(dto({ numGuia }), SOLO_ASCII) as ErrorCaracterNoImprimible;
+      return error.numGuia;
+    });
+    expect(vistas).toEqual(guias);
+  });
+
+  it("control positivo: con la cobertura REAL, ese mismo importe se dibuja sin lanzar", () => {
+    // Prueba que lo que lanza es la cobertura estrecha y no el importe en si:
+    // sin esto, los dos de arriba podrian estar verdes por cualquier otro motivo.
+    expect(() => dibujar(dto({ montoCobrar: 18000 }))).not.toThrow();
   });
 });

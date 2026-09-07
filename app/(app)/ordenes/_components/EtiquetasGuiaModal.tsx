@@ -87,6 +87,27 @@ export function mensajeEtiquetaNoCabe(numGuia: number | string): string {
 }
 
 /**
+ * Feature 382 (R2) — El carácter culpable, encerrado para que no reordene el
+ * aviso que lo contiene.
+ *
+ * El conjunto «no cubierto» es todo lo que queda fuera de cp1252, y ahí no solo
+ * hay glifos: `U+202E` (RIGHT-TO-LEFT OVERRIDE) invertiría el orden de lo que va
+ * DETRÁS de él dentro del propio mensaje —incluido el número de guía, que es el
+ * dato por el que existe este texto—. `U+2068` (FIRST STRONG ISOLATE) y `U+2069`
+ * (POP DIRECTIONAL ISOLATE) acotan su efecto a sí mismo: es la construcción
+ * estándar de Unicode para interpolar texto de dirección desconocida.
+ *
+ * Lo que NO cierra, y por eso la notación `U+XXXX` va siempre al lado: un
+ * carácter de ancho cero (`U+200B`) se sigue viendo como unas comillas vacías.
+ * Ahí la notación es la única lectura posible, y por eso no es opcional.
+ */
+function aislado(caracter: string): string {
+  // Escapados a proposito: son invisibles, y un literal invisible en el codigo
+  // es un literal que alguien borra sin darse cuenta.
+  return `\u2068${caracter}\u2069`;
+}
+
+/**
  * Feature 382 (R2) — Mensaje cuando un dato de UNA orden trae un carácter que la
  * tipografía de la etiqueta no puede imprimir.
  *
@@ -110,7 +131,7 @@ export function mensajeCaracterNoImprimible(
   caracter: string,
   codePoint: number,
 ): string {
-  return `La etiqueta de la guía ${numGuia} lleva un carácter que la tipografía de la etiqueta no puede imprimir: «${caracter}» (${notacionCodePoint(codePoint)}). Reintentar no lo cambia, y ninguna etiqueta del lote se descarga mientras siga ahí: corrige ese dato en la orden ${numGuia} y escríbelo con letras y números normales.`;
+  return `La etiqueta de la guía ${numGuia} lleva un carácter que la tipografía de la etiqueta no puede imprimir: «${aislado(caracter)}» (${notacionCodePoint(codePoint)}). Reintentar no lo cambia, y ninguna etiqueta del lote se descarga mientras siga ahí: corrige ese dato en la orden ${numGuia} y escríbelo con letras y números normales.`;
 }
 
 /** Traduce un resultado no-"ok" de la action a un mensaje para el usuario. */

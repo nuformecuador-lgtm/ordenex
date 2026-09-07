@@ -4478,3 +4478,36 @@ detectó el gate: `jq` no está instalado y su ausencia es un `warn`, así que l
   su orden ES el agrupado que la hace legible. `ColumnasPopover` gana esa capacidad en vez de
   duplicarse.
 - **DEUDA:** ninguna de las dos partes se ha visto en la pantalla real con sesion `maestro`.
+
+## 2026-09-07 — 382: el caracter que la fuente no imprime dice de que orden es
+
+- Una sola orden de produccion (guia **11081885**) con el destinatario y la direccion en caracteres
+  **double-struck** (bloque U+1D400; el medido, **U+1D560**) tumbaba la descarga del **lote entero**,
+  y el modal respondia «No se pudo preparar la tipografia de la etiqueta. **Intentalo de nuevo.**»
+  — una instruccion imposible de cumplir y sin decir que orden mirar. `exigirCobertura` hacia lo
+  correcto al negarse a imprimir; **el defecto era el mensaje**.
+- El `catch` de `EtiquetasGuiaModal` unia dos modos de fallo con un razonamiento escrito («los dos
+  significan lo mismo para quien esta delante»). **Ese razonamiento se revierte con su motivo al
+  lado:** si la fuente no carga, reintentar puede servir; si el caracter no esta cubierto, lo unico
+  que cambia el resultado es corregir el dato de esa orden.
+- Nuevo error tipado `ErrorCaracterNoImprimible` (guia, caracter, code point, campo, fuente), al
+  estilo de `ErrorEtiquetaNoCabe`. `exigirCobertura` recibe `numGuia` como parametro **obligatorio**,
+  para que el compilador cace a quien no lo pase.
+- Requisitos cubiertos: **R1** (el error lleva la guia y el caracter, en las **dos** llamadas del
+  dibujo, importe incluido) y **R2** (el aviso nombra la orden, muestra el caracter con su `U+XXXX`,
+  pide corregir el dato y **no** manda reintentar). Definidos y mapeados a test en
+  `progress/impl_382.md` — la ficha es `sdd: false` y no hay `specs/382/`.
+- Lo que **no** cambia: `exigirCobertura` sigue negandose a imprimir el caracter; `ERROR_FUENTE_ETIQUETA`
+  y el mensaje de «no cabe» quedan intactos y los tres son distinguibles; la vista previa se sigue
+  degradando a proposito (R33).
+- El caracter culpable va envuelto en aislante bidi (`U+2068`/`U+2069`): sin eso, un `U+202E` —
+  alcanzable desde el dato — invertiria el orden del propio aviso, guia incluida.
+- Verificacion: `./init.sh` completo, `INIT_EXIT=0` leido **de dentro** del log, 1770 archivos,
+  25 279 tests, 26 `skipped` (17 + 9 de Analitica, preexistentes). **16 mutaciones, 16 muertas**,
+  incluida la que el reviewer encontro viva: colar un `0` como guia en la llamada del **importe**
+  dejaba 268 tests verdes y ahora mata 2.
+- **ABIERTA, sin firma del humano:** si hay que **normalizar** estos caracteres al entrar
+  (double-struck → ASCII) en la carga masiva y en el alta. No se implemento nada. Opinion razonada
+  en `progress/impl_382.md`.
+- **DEUDA:** nadie ha visto el aviso en la app real, y la orden 11081885 sigue rota en produccion
+  hasta que se corrija su dato (pantalla de correccion de datos del cliente, fichas 312/327).

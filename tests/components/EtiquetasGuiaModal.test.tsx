@@ -571,7 +571,11 @@ describe("EtiquetasGuiaModal — la fuente de la etiqueta (feature 282)", () => 
     conUnaEtiqueta();
     // El generador lanza su error tipado (feature 382). Lo que R28 exige y aqui
     // se afirma es lo de siempre: falla de forma VISIBLE y no sale ningun PDF.
-    // QUE dice el mensaje se mide abajo, en el bloque de la 382.
+    // El texto EXACTO se mide abajo, en el bloque de la 382; aqui se conserva la
+    // red que este test tenia antes —que el aviso sea EL DE ESTA CAUSA y no el
+    // generico— porque sin ella «se anuncia algo» tambien es verde con la rama
+    // del catch anulada, que es la regresion de la ficha (medido por el
+    // reviewer el 2026-09-07).
     descargarEtiquetasPdfMock.mockRejectedValue(
       new ErrorCaracterNoImprimible(
         11,
@@ -595,7 +599,11 @@ describe("EtiquetasGuiaModal — la fuente de la etiqueta (feature 282)", () => 
       screen.getByRole("button", { name: "Descargar etiquetas" }),
     );
 
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    const aviso = await screen.findByRole("alert");
+    expect(aviso).toBeInTheDocument();
+    expect(aviso.textContent).toContain("11");
+    expect(aviso.textContent).toContain("U+20BF");
+    expect(screen.queryByText(ERROR_FUENTE_ETIQUETA)).toBeNull();
     expect(onSuccess).not.toHaveBeenCalled();
   });
 
@@ -725,9 +733,13 @@ describe("Feature 382 — tres fallos, tres mensajes distinguibles", () => {
   /** El caracter medido en la orden real: double-struck small o. */
   const CARACTER = "\u{1D560}";
 
-  /** LITERAL de lo que ve el operador ante el caracter no imprimible. */
+  /**
+   * LITERAL de lo que ve el operador ante el caracter no imprimible. El
+   * `U+2068`/`U+2069` que envuelve al caracter es el aislante bidi: va escrito
+   * aqui, en el esperado, para que quitarlo del codigo se vea.
+   */
   const MENSAJE_CARACTER =
-    "La etiqueta de la guía 11081885 lleva un carácter que la tipografía de la etiqueta no puede imprimir: «\u{1D560}» (U+1D560). Reintentar no lo cambia, y ninguna etiqueta del lote se descarga mientras siga ahí: corrige ese dato en la orden 11081885 y escríbelo con letras y números normales.";
+    "La etiqueta de la guía 11081885 lleva un carácter que la tipografía de la etiqueta no puede imprimir: «\u2068\u{1D560}\u2069» (U+1D560). Reintentar no lo cambia, y ninguna etiqueta del lote se descarga mientras siga ahí: corrige ese dato en la orden 11081885 y escríbelo con letras y números normales.";
 
   /** LITERAL del mensaje de HOY para la fuente que no carga. No cambia. */
   const MENSAJE_FUENTE =
@@ -850,5 +862,28 @@ describe("Feature 382 — tres fallos, tres mensajes distinguibles", () => {
     expect(tres.filter((m) => /int[ée]ntalo de nuevo/i.test(m))).toEqual([
       ERROR_FUENTE_ETIQUETA,
     ]);
+  });
+
+  it("un caracter de control no puede reordenar el aviso que lo denuncia", () => {
+    // `U+202E` (RIGHT-TO-LEFT OVERRIDE) esta dentro del conjunto «no cubierto»
+    // —`seguroEnFuenteEstandar` solo deja pasar 0x20-0x7E y 0xA0-0xFF—, o sea que
+    // puede llegar aqui desde el dato de una orden. Sin aislarlo, invertiria el
+    // orden de TODO lo que va detras dentro del propio mensaje, incluida la guia
+    // que es el dato por el que este texto existe.
+    //
+    // El esperado es un LITERAL escrito aqui: comparar contra la funcion que lo
+    // genera estaria verde tambien sin los aislantes.
+    expect(mensajeCaracterNoImprimible(11081885, "\u202E", 0x202e)).toBe(
+      "La etiqueta de la guía 11081885 lleva un carácter que la tipografía de la etiqueta no puede imprimir: «\u2068\u202E\u2069» (U+202E). Reintentar no lo cambia, y ninguna etiqueta del lote se descarga mientras siga ahí: corrige ese dato en la orden 11081885 y escríbelo con letras y números normales.",
+    );
+  });
+
+  it("y la notacion U+XXXX sigue ahi cuando el caracter no se ve: es la unica lectura", () => {
+    // `U+200B` (espacio de ancho cero) se pinta como unas comillas vacias. El
+    // aislante no arregla eso —y no pretende—: quien salva al operador es la
+    // notacion al lado, asi que se afirma que esta.
+    const mensaje = mensajeCaracterNoImprimible(11081885, "\u200B", 0x200b);
+    expect(mensaje).toContain("U+200B");
+    expect(mensaje).toContain("11081885");
   });
 });
