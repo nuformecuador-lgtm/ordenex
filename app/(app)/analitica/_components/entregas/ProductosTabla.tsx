@@ -86,7 +86,7 @@ import { DineroProductoDetalle } from "./DineroProductoDetalle";
 import { calcularEfectividad } from "./efectividad";
 import { textoComposicionOtrosResultados } from "./otros-resultados";
 import {
-  columnasDescargaAnaliticaProductos,
+  descargaAnaliticaProductos,
   filaDescargaAnaliticaProductos,
 } from "./analitica-productos-descarga-columnas";
 import { claveConteoProductos, consultarConteoProductosSwr } from "./productos-swr";
@@ -939,6 +939,23 @@ export function ProductosTabla({ dinero = false }: ProductosTablaProps) {
   const obtenerFilas = () =>
     filasLocales(filas, (f) => filaDescargaAnaliticaProductos(f, conDinero));
 
+  /**
+   * FICHA 388 — QUE columnas ofrece el archivo y BAJO QUE ÁMBITO recuerda cuáles se quisieron.
+   *
+   * Las dos cosas salen del MISMO objeto —el juego de columnas y su ámbito viajan emparejados,
+   * elegidos por el mismo `conDinero` que ya decide la proyección de las filas—, así que la
+   * preferencia de un juego no puede acabar aplicada al otro.
+   *
+   * Se DESESTRUCTURA aquí y baja al `descarga` como propiedad abreviada. No es estilo:
+   * `ambito-columnas.guardia` lee el árbol como texto y solo resuelve literales e
+   * identificadores; escribir `ambitoColumnas: descargaArchivo.ambitoColumnas` —o un ternario—
+   * le saldría sin resolver y la pondría roja, y con razón, porque un ámbito que no puede leer
+   * es un ámbito cuya unicidad no puede comprobar. La declaración que sí lee vive junto a las
+   * columnas, que es donde se puede contrastar contra el resto del árbol.
+   */
+  const { columnas: columnasArchivo, ambitoColumnas } =
+    descargaAnaliticaProductos(conDinero);
+
   return (
     <div className="flex w-full flex-col gap-3">
       {/* R36/R35/R45 — los avisos y, debajo, el universo del recorte. Van ARRIBA y no al pie:
@@ -1024,7 +1041,11 @@ export function ProductosTabla({ dinero = false }: ProductosTablaProps) {
             ? undefined
             : {
                 titulo: PRODUCTOS_TEXTOS.descarga,
-                columnas: columnasDescargaAnaliticaProductos(conDinero),
+                columnas: columnasArchivo,
+                // FICHA 388 — el parámetro que enciende el selector de columnas del control
+                // común. Sin él la clave es `null` y el hook «no lee, no escribe y devuelve las
+                // columnas declaradas tal cual» (R33 de la 314), que es como estaba esta tabla.
+                ambitoColumnas,
                 obtenerFilas,
               }
         }

@@ -138,17 +138,69 @@ export const COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO: DescargaColumna[] = [
 ];
 
 /**
- * R66/R67 — que columnas lleva el archivo de ESTE actor.
+ * FICHA 388 — los DOS ambitos de preferencia de columnas de esta descarga, uno por juego.
+ *
+ * ── POR QUE SON DOS Y NO UNO ───────────────────────────────────────────────────────────────
+ * Un ambito es la mitad de una clave de `localStorage` y su catalogo es lo que `usePreferencia
+ * Columnas` usa para SANEAR lo guardado: `sanearPreferencia` descarta toda clave que ya no
+ * corresponda a una columna publicada (R29 de la 314). Con UN solo ambito para los dos juegos,
+ * el primer clic del selector estando SIN dinero reescribiria la preferencia ya saneada contra
+ * las once columnas base y se llevaria por delante, en silencio, lo que el usuario hubiera
+ * ocultado de las nueve de dinero: al recuperar la concesion esas columnas REAPARECERIAN.
+ *
+ * Y no es un caso hipotetico de «le quitaron el permiso»: `conDinero` tambien es `false` cuando
+ * la respuesta llega con `limite_excedido` (R76), que es un estado TRANSITORIO del servidor. El
+ * mismo actor, en la misma pantalla, salta de un juego a otro entre dos consultas.
+ *
+ * Es exactamente el motivo por el que la descarga de cierres le da un ambito propio a cada
+ * nivel de detalle (`DescargarCierresButton`): juegos distintos, claves distintas.
+ *
+ * Consecuencia declarada: lo que se oculta con dinero NO se hereda sin dinero, ni al reves.
+ * Son dos archivos distintos y cada uno recuerda lo suyo. A cambio, ninguna preferencia puede
+ * hacer reaparecer una columna que el otro juego habia ocultado, y ninguna puede colar una
+ * columna de dinero en el archivo de quien no lo tiene concedido: el control comun solo emite
+ * columnas PUBLICADAS, y sin concesion las nueve no se publican.
+ *
+ * Los identificadores se escriben como `export const … = "…"` porque `ambito-columnas.guardia`
+ * lee el arbol COMO TEXTO: solo resuelve literales e identificadores, y lo que no resuelve no
+ * puede comprobarlo unico.
+ */
+export const AMBITO_DESCARGA_ANALITICA_PRODUCTOS = "analitica-productos";
+export const AMBITO_DESCARGA_ANALITICA_PRODUCTOS_DINERO = "analitica-productos-dinero";
+
+/**
+ * Cada juego con SU ambito, emparejados en un objeto y a nivel de modulo.
+ *
+ * Emparejados y no elegidos por separado a proposito: dos ternarios independientes —uno para
+ * las columnas, otro para el ambito— se pueden desincronizar, y el resultado seria la
+ * preferencia de un juego aplicada al otro, que es justo lo que estos dos ambitos evitan.
+ *
+ * A NIVEL DE MODULO porque la identidad de `columnas` es dependencia de los `useMemo` del hook
+ * de preferencia: un array nuevo en cada render lo haria recalcular siempre.
+ */
+const DESCARGA_SIN_DINERO = {
+  columnas: COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS,
+  ambitoColumnas: AMBITO_DESCARGA_ANALITICA_PRODUCTOS,
+};
+
+const DESCARGA_CON_DINERO = {
+  columnas: COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO,
+  ambitoColumnas: AMBITO_DESCARGA_ANALITICA_PRODUCTOS_DINERO,
+};
+
+/**
+ * R66/R67 — que columnas lleva el archivo de ESTE actor, y bajo que ambito recuerda cuales
+ * quiso ver (FICHA 388).
  *
  * Sin la concesion, el archivo NO contiene NINGUNA columna de dinero: ni vacia, ni en cero.
  * Es la misma regla que la pantalla, y sale de la misma decision — la pantalla le pasa a esta
  * funcion exactamente el mismo `conDinero` con el que decide sus columnas, asi que el archivo y
  * la tabla no pueden discrepar sobre quien ve el dinero.
+ *
+ * Devuelve la MISMA instancia para el mismo `conDinero`: ver arriba.
  */
-export function columnasDescargaAnaliticaProductos(conDinero: boolean): DescargaColumna[] {
-  return conDinero
-    ? COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO
-    : COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS;
+export function descargaAnaliticaProductos(conDinero: boolean) {
+  return conDinero ? DESCARGA_CON_DINERO : DESCARGA_SIN_DINERO;
 }
 
 /**
