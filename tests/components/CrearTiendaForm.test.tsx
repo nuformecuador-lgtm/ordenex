@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { CrearTiendaForm } from "@/app/(app)/configuracion/tarifas/_components/CrearTiendaForm";
@@ -87,10 +87,34 @@ function renderForm(props: Partial<Parameters<typeof CrearTiendaForm>[0]> = {}) 
   );
 }
 
-/** Nombres de las opciones del select del dueño, con la lista abierta. */
+/**
+ * Nombres de las opciones del select del dueño, con la lista abierta.
+ *
+ * FICHA 390 — el click NO abre el popup de forma síncrona, y por eso este helper
+ * ESPERA en vez de leer el DOM en el instante siguiente. `useClick` de Base UI
+ * (`@base-ui/react/floating-ui-react/hooks/useClick`) difiere el `setOpen(true)`
+ * a un `frame.request(...)` —un `requestAnimationFrame`, para que el puntero no
+ * dispare `:focus-visible`—. En jsdom ese rAF es un timer de ~16 ms, mientras que
+ * `userEvent.click` resuelve en cuanto encadena sus `setTimeout(0)`: cuando el
+ * reloj del rAF cae del lado malo, el disparador sigue en `aria-expanded="false"`
+ * y un `getAllByRole` síncrono revienta con «Unable to find an accessible element
+ * with the role "option"». Medido sobre `dev` limpio: 1 rojo de 10 corridas
+ * AISLADAS de este archivo, sin tocar nada.
+ *
+ * Lo que el test AFIRMA no cambia: se sigue devolviendo la lista COMPLETA de
+ * opciones del popup, y sigue siendo un fallo que la lista esté vacía —`findAllByRole`
+ * lanza igual que `getAllByRole`, solo que tras reintentar—. Lo único que cambia es
+ * el momento en que se lee.
+ */
 async function opcionesDelSelect(): Promise<string[]> {
-  await userEvent.click(screen.getByRole("combobox", { name: /administrador de tienda/i }));
-  return screen.getAllByRole("option").map((o) => o.textContent?.trim() ?? "");
+  const combo = screen.getByRole("combobox", { name: /administrador de tienda/i });
+  await userEvent.click(combo);
+  // El estado que fallaba era exactamente este: el popup cerrado. Se espera al
+  // atributo del disparador antes de leer, para no confundir «aún no ha abierto»
+  // con «abrió y no ofrece a nadie».
+  await waitFor(() => expect(combo).toHaveAttribute("aria-expanded", "true"));
+  const opciones = await screen.findAllByRole("option");
+  return opciones.map((o) => o.textContent?.trim() ?? "");
 }
 
 afterEach(() => cleanup());
