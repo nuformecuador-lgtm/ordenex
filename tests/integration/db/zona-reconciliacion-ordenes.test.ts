@@ -59,15 +59,24 @@ import {
  * reportar `passed`. Sin `estatusValue` el comportamiento es el de siempre, asi que los 17 casos
  * de la 366 no se editan.
  *
- * MUTACIONES PROBADAS A MANO DURANTE EL DESARROLLO (2026-09-07), contra este archivo:
- *   · quitar `estatus: { value: { notIn: ESTANTE } }` del `findMany` -> rojo en «en el estante NO
- *     se mueve» y en «el listado y la asignacion».
- *   · `notIn` -> `in` en ese mismo `findMany`                        -> rojo en «en transito SI se
- *     mueve» (y en otros seis casos de la 366, que es justo lo que protege a la 366).
- *   · quitar `estatus: { value: { in: ESTANTE } }` del `count`       -> rojo en «el conteo cuenta
- *     lo que dice contar».
- *   · usar `ESTADOS_CUSTODIA_SATELITE` en vez de `ESTADOS_PAQUETE_EN_ESTANTE` -> rojo en «en
- *     transito SI se mueve».
+ * MUTACIONES EJECUTADAS A MANO DURANTE EL DESARROLLO (2026-09-07), cada una contra este archivo
+ * MAS `tests/unit/repositories/zona-repository.test.ts`. Los conteos son los medidos, no los
+ * esperados:
+ *   · quitar `estatus: { value: { notIn: ESTANTE } }` del `findMany` -> 6 rojos, entre ellos «en
+ *     el estante NO se mueve» y «la bodega que TIENE el paquete lo sigue viendo».
+ *   · `notIn` -> `in` en ese mismo `findMany` -> 24 rojos: los 11 de la 366 (que es exactamente
+ *     lo que impide que este corte se invierta a costa de la 366) y los 8 de la 377.
+ *   · quitar `estatus: { value: { in: ESTANTE } }` del `count` -> 8 rojos, entre ellos «sin nada
+ *     en el estante, las retenidas son 0» y «los dos conteos son DISJUNTOS».
+ *     ⚠️ «el conteo cuenta lo que dice contar» NO se cae con esta mutacion, y es correcto: sus
+ *     cuatro ordenes estan TODAS en el estante, asi que el `where` base ya deja 1 sola con o sin
+ *     la clausula. Ese caso mide el `where` BASE del conteo, no su clausula de estado.
+ *   · usar `ESTADOS_CUSTODIA_SATELITE` en vez de `ESTADOS_PAQUETE_EN_ESTANTE` -> 3 rojos, entre
+ *     ellos «en transito SI se reconcilia»: es la confusion que el docstring de la constante
+ *     avisa, y aqui se cae.
+ *   · quitar `cierreDetalles: { none: {} }` de `whereBaseElegible` (el refactor de la 377) -> 3
+ *     rojos, entre ellos el «YA FACTURADA» de la 366: extraer el `where` a una funcion no dejo
+ *     ningun corte sin vigilar.
  */
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;

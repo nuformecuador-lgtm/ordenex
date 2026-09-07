@@ -218,26 +218,75 @@ frases; con `{ 12, 0 }` pinta solo la de reubicadas (texto idéntico al de hoy);
 **Hecho cuando:** los tres números están escritos en el PR con su fecha, y la cifra del 2026-09-07
 (47 / 215 / 0) queda marcada como **caducada**, no como vigente.
 
+## T10 — La segunda puerta: la corrección manual de ubicación (Q3, decisión del LEADER)
+
+**Depende de:** T1. **Añadida el 2026-09-07 al mandar implementar.** ⚠️ La decisión de cerrar Q3
+dentro de esta ficha es **del leader y NO está firmada por el humano** (ver la sección de decisiones
+al final de `requirements.md`). El `design.md` §7 y §10 dicen que `CorregirDatosClienteService` no se
+toca: **esta task los deroga a propósito**, y esa derogación es la decisión.
+
+- [x] `lib/services/CorregirDatosClienteService.ts`, paso 6 (justo antes de `data.zonaId =
+      distrito.zonaId`): si el paquete está en el estante (`paqueteEnEstanteSatelite`) **y** la zona
+      derivada difiere de la estampada, rechazo por `distritoId` nombrando la bodega. Va ANTES del
+      gate del dinero: no se ofrece confirmar lo que se va a rechazar igual.
+- [x] La condición compara **zona derivada contra zona estampada**, no `cambios.includes("distritoId")`:
+      el distrito puede ser el mismo y resolver hoy otra zona —es el escenario de la 366— y ese caso
+      también escribe `zona_id`.
+- [x] NO se toca `ESTADOS_SIN_CORRECCION` (R16): eso habría bloqueado el nombre, el teléfono, el
+      producto, las notas, el peso y la dirección de las órdenes que hoy están en estante.
+- [x] `lib/utils/estados-bodega-satelite.ts` exporta `paqueteEnEstanteSatelite()` para que el
+      servicio no repita la lista ni la lea al revés.
+
+**Hecho cuando (unit, `tests/unit/services/corregir-datos-cliente-bodega-satelite.test.ts`):** 7
+casos. Mutaciones ejecutadas: apagar el gate → 3 rojos; quitar la comparación de zona → 1 rojo (el
+caso de R16).
+
+---
+
+## Estado real al terminar la implementación (2026-09-07)
+
+| Task | Estado | Nota |
+| --- | --- | --- |
+| T1 | hecha | `ESTADOS_PAQUETE_EN_ESTANTE` + `paqueteEnEstanteSatelite()`; el test del grafo sigue verde sin editarlo |
+| T2 | hecha | `crearOrden` acepta `estatusValue`; los 17 casos de la 366 no cambiaron ni un `expect` |
+| T3 | hecha | `UpdateZonaResult` gana el campo en su rama `ok` (la forma real es la unión NOMBRADA de la 376, no el `{zona, conteo}` del design §5.1) |
+| T4 | hecha | `whereBaseElegible` + `notIn`/`count`; 5 casos unit nuevos |
+| T5 | hecha | 11 casos nuevos contra Postgres real (9 pedidos + el humo de T2 + el de R4) |
+| T6 | hecha | interfaz, service, `lib/types/zona.ts` y la Server Action (que ya reenviaba tal cual) |
+| **T7** | **NO hecha — fuera del alcance del backend_dev** | El mensaje del toast vive en `CrearZonaForm.tsx` (UI). El campo YA llega hasta la Server Action y su test lo mide; falta pintarlo. **Sin T7, R8 está a medias: el servidor informa y la pantalla todavía calla.** |
+| T8 | hecha | los cuatro archivos siguen verdes y NINGUNO aparece en el diff |
+| **T9** | **NO hecha — es previa al despliegue, no a la implementación** | Re-medir en producción los tres números (en estante / en tránsito / con deriva). La cifra del 2026-09-07 (47 / 215 / 0) queda **CADUCADA** |
+| T10 | hecha | Q3, decisión del leader |
+
 ---
 
 ## Trazabilidad R → test
 
+Los títulos son los REALES de los tests escritos. `db/zona` =
+`tests/integration/db/zona-reconciliacion-ordenes.test.ts` (contra Postgres real); `unit/repo` =
+`tests/unit/repositories/zona-repository.test.ts`; `unit/svc` =
+`tests/unit/services/zona-service.test.ts`; `action` =
+`tests/integration/actions/zonas-action.test.ts`; `unit/q3` =
+`tests/unit/services/corregir-datos-cliente-bodega-satelite.test.ts`.
+
 | Requisito | Task | Test que lo prueba |
 | --- | --- | --- |
-| R1 | T4, T5 | T5 «el listado y la asignación» (la orden sigue con `zonaId = A`, que es lo que comparan `condicionesSatelite` y `AsignacionSateliteService:206`) |
-| R2 | T4 | T5 «en el estante NO se mueve» (+ mutación: quitar el `notIn` lo pone rojo) |
-| R3 | T4 | T5 «en tránsito SÍ se mueve» (+ mutación: `notIn`→`in` lo pone rojo) |
-| R4 | T4 | T5 «cuenta el estado ACTUAL, no el histórico» |
-| R5 | T4 | T5 «el corte viejo sigue vivo bajo el nuevo» + los 17 casos previos de la 366, verdes sin editar |
-| R6 | T4 | T5 «en el estante NO se mueve» (aserción de cero filas de `historial_accion`) |
-| R7 | T4, T6 | T5 «los dos conteos son disjuntos» + T6 unit (el service reenvía sin tocar) |
-| R8 | T4, T6, T7 | T5 «los dos conteos son disjuntos» + T7 component test (las dos frases) |
-| R9 | T4 | T5 «el conteo cuenta lo que dice contar» (los cuatro sub-casos) |
-| R10 | T4, T7 | T5 «sin nada en estante, cero» + T7 (`{0,0}` deja el mensaje de hoy) |
-| R11 | T7 | T7 component test: guardar con retenidas > 0 no abre ningún modal ni bloquea el envío |
-| R12 | T4 | T5 «estable ante repeticiones» |
-| R13 | T4 | T5 «`create()` no retiene ni reconcilia» + unit de T4 |
-| R14 | T1, T8 | T8: `estados-bodega-satelite.test.ts` e inventario de transiciones verdes **sin aparecer en el diff** |
+| R1 | T4, T5 | `db/zona` «⭑ 377/R1: la bodega que TIENE el paquete lo sigue viendo en su listado, y la otra no» — ejercita el SQL REAL de `condicionesSatelite` vía `findRecepcionSatelitePaginada`, en las dos zonas |
+| R2 | T4, T5 | `db/zona` «⭑ 377/R2/R6: una orden EN EL ESTANTE …» (mutación medida: quitar el `notIn` → 6 rojos) |
+| R3 | T4, T5 | `db/zona` «⭑ 377/R3: una orden EN TRANSITO … SI se reconcilia» (mutación medida: `notIn`→`in` → 24 rojos) |
+| R4 | T4, T5 | `db/zona` «⭑ 377/R4: cuenta el estado ACTUAL, no el historico» |
+| R5 | T4, T5 | `db/zona` «⭑ 377/R5: el corte viejo sigue vivo bajo el nuevo» + los 17 casos de la 366, verdes sin editar un solo `expect` |
+| R6 | T4, T5 | `db/zona` «⭑ 377/R2/R6 …» (cero filas de `historial_accion` por la retenida) + `unit/repo` «⭑ R8: el conteo se hace TAMBIEN cuando no hay ninguna orden que mover» |
+| R7 | T4, T6 | `db/zona` «⭑ 377/R7: los dos conteos son DISJUNTOS» + `unit/repo` «⭑ R7: … el retenido ACUMULA por grupo» + `unit/svc` «⭑ 377/R7/R8: reenvia los DOS conteos del repo TAL CUAL» |
+| R8 | T4, T6, **T7 (pendiente)** | `db/zona` «⭑ 377/R7 …» + `action` «⭑ 366/R12 + 377/R8: actualizar ok reenvia LOS DOS conteos». ⚠️ La mitad de pantalla es T7 y **no está hecha** |
+| R9 | T4, T5 | `db/zona` «⭑ 377/R9: el conteo … cuenta EXACTAMENTE lo que dice contar» (los cuatro sub-casos) + `unit/repo` «⭑ R2/R9: las dos consultas comparten el `where` base» |
+| R10 | T4, T6 | `db/zona` «⭑ 377/R10: sin ninguna orden en el estante, las retenidas son 0» + `unit/svc` «⭑ 377/R10: … reenvia CERO (no lo omite)» |
+| R11 | T4 | `db/zona` «⭑ 377/R2/R6 …»: el `update` devuelve `ok` y guarda la zona con retenidas > 0 — no hay rama que bloquee ni que pida confirmar. **La mitad de pantalla (no abrir modal) es T7 y está pendiente** |
+| R12 | T4, T5 | `db/zona` «⭑ 377/R12: repetir el guardado informa las MISMAS retenidas y 0 reconciliadas» |
+| R13 | T4, T5 | `db/zona` «⭑ 377/R13: `create()` ni reconcilia ni retiene» + `unit/repo` «⭑ R13: `create()` no cuenta retenidas» |
+| R14 | T1, T8 | `tests/unit/utils/estados-bodega-satelite.test.ts` y el inventario de transiciones, verdes **sin aparecer en el diff de la rama** |
+| R15 | T10 | `unit/q3` «⭑ rechaza y NO escribe, aunque la peticion venga CONFIRMADA», «⭑ sin confirmar, el rechazo GANA al aviso de importes» y «el motivo nombra la BODEGA» (mutación medida: apagar el gate → 3 rojos) |
+| R16 | T10 | `unit/q3` «⭑ corregir el distrito DENTRO de la misma zona sigue permitido» y «⭑ corregir el nombre o el telefono … sigue permitido» (mutación medida: quitar la comparación de zona → 1 rojo) |
 
 ## Dependencias, de un vistazo
 

@@ -29,6 +29,12 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 // LO QUE ESTE ARCHIVO PRUEBA QUE **NO** SE ROMPIO, y es la mitad que justifica no haber metido
 // `en_bodega_satelite` en `ESTADOS_SIN_CORRECCION`: corregir el nombre, el telefono o el distrito
 // DENTRO DE SU MISMA ZONA sigue permitido con el paquete en el estante.
+//
+// MUTACIONES EJECUTADAS A MANO (2026-09-07), con los conteos medidos:
+//   · apagar el `if` del gate entero -> 3 rojos (los tres casos de R15).
+//   · quitar la comparacion `distrito.zonaId !== orden.zonaId` (bloquear por estado a secas) ->
+//     1 rojo: «corregir el distrito DENTRO de la misma zona sigue permitido». Es el caso que
+//     impide que este gate se convierta en el `ESTADOS_SIN_CORRECCION` que se descarto.
 
 const ORDEN_ID = "8b1a2c3d-4e5f-4a6b-8c9d-0e1f2a3b4c5d";
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
