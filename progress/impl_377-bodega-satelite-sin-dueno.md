@@ -1,5 +1,57 @@
 # Ficha 377 — informe de implementación (BACKEND)
 
+## ⭑ ESTADO FINAL — 2026-09-07, escrito por el LEADER
+
+> **Todo lo que viene después de esta sección se escribió a mitad de camino**, cuando el backend
+> había terminado y faltaban T7 y T9. Donde diga «T7 pendiente», «R8 a medias» o «T9 no se pudo
+> hacer», **está caducado**. Se conserva sin editar porque es el rastro honesto de cómo se cerró
+> la ficha, no porque siga siendo cierto.
+
+**La ficha está COMPLETA.** Las dos mitades que faltaban se cerraron el mismo día:
+
+### T7 — hecha (commit `f8d33d3a`)
+El toast de guardar zona dice ahora las dos cifras. **R8 y R11 dejan de estar a medias: la
+pantalla ya no calla.** Textos finales, con el cero callado (`> 0`, no `>= 0`) y sin jerga
+—ni «retenidas», ni «custodia», ni «sin dueño»—:
+
+| reconciliadas / retenidas | toast |
+| --- | --- |
+| 12 / 3 | `Zona actualizada (12 órdenes reubicadas). 3 órdenes no cambiaron de zona porque su paquete ya está en una bodega.` |
+| 0 / 3 | `Zona actualizada. 3 órdenes no cambiaron de zona porque su paquete ya está en una bodega.` |
+| 1 / 1 | `Zona actualizada (1 orden reubicada). 1 orden no cambió de zona porque su paquete ya está en una bodega.` |
+| 12 / 0 | `Zona actualizada (12 órdenes reubicadas)` — **literal, como antes de la ficha** |
+| 0 / 0 | `Zona actualizada` — **literal** |
+
+Cubierto por `tests/components/CrearZonaFormReconciliacion.test.tsx`, describe «Toast de guardar
+zona — órdenes que se quedaron en su bodega (377/T7)». Los 4 casos de la 366 quedan intactos.
+Once casos en el archivo, seis mutaciones aplicadas y revertidas.
+
+**Hallazgo honesto del implementador, que se conserva:** el caso de R13 **no** cae con una
+mutación de un solo punto —la rama de crear nunca asigna el campo *y además* `mensajeGuardado`
+corta en `esEditar`—, así que mide la combinación, no cada mitad.
+
+### T9 — hecha por el LEADER, y es LUZ VERDE
+La re-medición que el implementador no pudo hacer (no tiene acceso a la base). **Medido contra
+producción en solo lectura el 2026-09-07:**
+
+| | valor |
+| --- | --- |
+| Órdenes `en_bodega_satelite` | **37** (la cifra vieja de 47 está caducada) |
+| Órdenes `en_ruta_bodega_satelite` | **215** |
+| Órdenes desalineadas (total) | **0** |
+| **Órdenes desalineadas EN EL ESTANTE** | **0** |
+
+**Por qué importaba y por qué es un go:** este cambio **congela, no repara**. Si hubiera habido
+alguna orden ya en el estante con la zona vieja estampada, excluirla de la reconciliación la
+dejaría así para siempre. No hay ninguna.
+
+### Gate final
+`./init.sh` completo, **`INIT_EXIT=0` leído de dentro del log**: 1770/1770 archivos,
+**25 295 tests**, 26 `skipped` preexistentes y ajenos (17 de `AnaliticaPage` + 9 de
+`AnaliticaShell`), cero saltados en `integration/db` y los 132 archivos contra Postgres
+ejecutados. Los +7 tests exactos sobre la medida del backend son los de T7.
+
+
 > `CHECKPOINTS.md > Trazabilidad` exige este archivo con el mapa `R<n> → test`. La tabla completa
 > vive además en `specs/377-bodega-satelite-sin-dueno/tasks.md`; aquí está consolidada junto a lo
 > que se midió, lo que se decidió y lo que queda vivo.
