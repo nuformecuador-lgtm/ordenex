@@ -182,6 +182,10 @@ function conDetalleDe(cierre: CierreAdminResumen) {
     desgloseIngresoBodegaRechazos: { sla: "0.00", manual: "0.00", total: "0.00" },
     ganancia: "0.00",
     pagoTienda: "0.00",
+    cobradoSobreRecaudado: "0.00",
+    netoOrdenex: "0.00",
+    ganaLaTienda: "0.00",
+    fleteRechazoYaCobradoATienda: false,
   });
 }
 
@@ -611,6 +615,10 @@ describe("T E.2/R19 — el detalle de un cierre APROBADO ofrece registrar el pag
       desgloseIngresoBodegaRechazos: { sla: "0.00", manual: "0.00", total: "0.00" },
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
 
     await user.click(within(dialogo).getByRole("button", { name: "Registrar pago" }));

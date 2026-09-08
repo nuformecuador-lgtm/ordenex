@@ -416,6 +416,10 @@ describe("CierresAdminPage — Feature 172 [P3]/R6: quién recibe la oferta de p
       desgloseIngresoBodegaRechazos: { sla: "0.00", manual: "0.00", total: "0.00" },
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     aprobarMock.mockResolvedValue({
       status: "ok",

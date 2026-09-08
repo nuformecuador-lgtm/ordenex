@@ -330,6 +330,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -363,6 +367,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso({ total: "3672.50" }),
       ganancia: "2172.50", // 3672.50 - 1500.00, derivado server-side (positiva)
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -400,6 +408,12 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso({ fleteConIva: "2825.00", comisionConIva: "847.50" }),
       ganancia: "0.00",
       pagoTienda: "21327.50", // 25000.00 - 2825.00 - 847.50, derivado server-side
+      // Ficha 395: la MISMA resta, dicha por su eslabon. Aqui NO puede ir "0.00" como en el
+      // resto de fixturas: esta si lleva importes, y un cero mentiria sobre la resta de arriba.
+      cobradoSobreRecaudado: "3672.50", // 2825.00 + 847.50
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -424,6 +438,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(), // total "0.00": p.ej. puras reprogramaciones
       ganancia: "-1500.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -458,6 +476,10 @@ describe("CierresAdminModule", () => {
       }),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -532,6 +554,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -599,6 +625,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -634,6 +664,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -675,6 +709,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -721,6 +759,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -763,6 +805,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -797,6 +843,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -830,6 +880,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -885,6 +939,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -923,6 +981,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -962,6 +1024,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     aprobarMock.mockResolvedValue({
       status: "ok",
@@ -996,6 +1062,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
 
@@ -1029,6 +1099,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     rechazarMock.mockResolvedValue({
       status: "ok",
@@ -1074,6 +1148,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({
       historico: [
@@ -1108,6 +1186,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     aprobarMock.mockResolvedValue({ status: "conflict" });
     renderModule({ pendientes: [makeResumen({ cierreId: "c1" })] });
@@ -1203,6 +1285,10 @@ describe("CierresAdminModule", () => {
       totalesIngreso: zeroIngreso(),
       ganancia: "0.00",
       pagoTienda: "0.00",
+      cobradoSobreRecaudado: "0.00",
+      netoOrdenex: "0.00",
+      ganaLaTienda: "0.00",
+      fleteRechazoYaCobradoATienda: false,
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "cv", estado: "vencido" })] });
 

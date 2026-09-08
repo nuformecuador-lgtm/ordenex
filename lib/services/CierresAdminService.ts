@@ -51,7 +51,10 @@ import { excesoIndemnizacion } from "@/lib/utils/tope-indemnizacion";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { toDetalleDTO } from "@/lib/services/CierreDiaService";
 import {
+  cobradoSobreRecaudado,
+  ganaLaTienda,
   gananciaOrdenex,
+  netoOrdenex,
   pagoTiendaOrdenex,
   totalesIngresoOrdenex,
 } from "@/lib/utils/ingreso-ordenex";
@@ -675,6 +678,52 @@ export class CierresAdminService implements ICierresAdminService {
       totalesIngreso.comisionConIva,
     );
 
+    // FEATURE 395 — LAS DOS LINEAS QUE LE FALTABAN A ESTE DETALLE. La ficha 393 monto las dos
+    // cascadas del dinero SOLO en los cierres de bodega; este —el que se mira todos los dias—
+    // se quedo con las tarjetas sueltas y sin la resta que las une.
+    //
+    // Se derivan con las MISMAS funciones que el cierre de bodega, nunca con una suma o una
+    // resta escrita aqui: si divergieran, la misma plata se leeria distinta segun por que
+    // pantalla se entra. Ese motivo esta escrito en los docstrings de las dos funciones.
+
+    // LA LINEA PUENTE: lo que Ordenex cobra SOBRE LO RECAUDADO. Se emite SIEMPRE, tambien con
+    // el flete por rechazo en "0.00": no es una linea condicional, es la que hace que
+    // «recaudado − esto = para la tienda» de en TODOS los cierres, con rechazos o sin ellos.
+    const cobradoSobreLoRecaudado = cobradoSobreRecaudado(
+      totalesIngreso.fleteConIva,
+      totalesIngreso.comisionConIva,
+    );
+
+    // EL NETO: lo facturado menos los DOS pagos de Ordenex. NO es `ganancia` y NO se encadena
+    // con ella —`gananciaOrdenex` resta solo el pago al mensajero—: coinciden cuando el ingreso
+    // de bodega por rechazos vale "0.00" y divergen en cuanto hay un rechazo. `ganancia` sigue
+    // saliendo intacta en este mismo DTO; esta es OTRA resta, no su sustituta.
+    //
+    // Los dos snapshots salen del `resumen` del propio cierre (R4: leidos, no recomputados).
+    const neto = netoOrdenex(
+      totalesIngreso.total,
+      resumen.totalPagoMensajero,
+      resumen.totalIngresoBodegaRechazos,
+    );
+
+    // LA PARTICION DE LO RECAUDADO: lo que la tienda gana EN TOTAL. NO es `pagoTienda` —aquel
+    // es lo que se le paga de ESTE dinero, sin restar el flete por rechazo, que se le cobra
+    // aparte contra su wallet—. Este cierra la identidad que la pantalla tiene que hacer
+    // evidente: `ganaLaTienda + totalesIngreso.total === totales.general`.
+    const ganaTienda = ganaLaTienda(resumen.totales.general, totalesIngreso.total);
+
+    // ¿Ese flete por rechazo YA esta cobrado, o se cobrara? El cargo a la wallet de la tienda
+    // lo emite `WalletTiendaFeedService` DENTRO de la transaccion de aprobacion
+    // (`CierresAdminRepository.resolverCierre`), asi que en un cierre `solicitado`, `vencido` o
+    // `rechazado` todavia NO ha ocurrido y decir «se le cargo» seria falso.
+    //
+    // Exige LAS DOS condiciones: sin flete por rechazo no hay cargo ninguno que narrar, por
+    // aprobado que este el cierre. La comparacion del monto va con Prisma.Decimal y no con
+    // `!== "0.00"`: es dinero, y una comparacion de texto se rompe el dia que cambie la escala.
+    const fleteRechazoYaCobradoATienda =
+      resumen.estado === "aprobado" &&
+      new Prisma.Decimal(totalesIngreso.fleteDevolucionConIva).gt(0);
+
     // Feature 102/R4-R8/R10: desglose SLA/manual del ingreso de bodega por rechazos, particionando
     // los montos por gestion YA snapshoteados por su clasificacion (esRechazoSla). SOLO LECTURA
     // (R6/R16): el `total` se LEE del snapshot del cierre (no se recomputa); la particion asegura
@@ -694,6 +743,12 @@ export class CierresAdminService implements ICierresAdminService {
       desgloseIngresoBodegaRechazos,
       ganancia,
       pagoTienda,
+      // Feature 395: las tres lineas derivadas arriba (STRING con su signo) y el booleano que
+      // dice en que TIEMPO VERBAL se puede hablar del cargo del flete por rechazo.
+      cobradoSobreRecaudado: cobradoSobreLoRecaudado,
+      netoOrdenex: neto,
+      ganaLaTienda: ganaTienda,
+      fleteRechazoYaCobradoATienda,
       // FEATURE 264 (B5, R7/R9/R27) — MAPEO DIRECTO, y deliberadamente aburrido.
       //
       // Passthrough puro de lo que el repositorio congelo: sin firmar URLs (no hay evidencia que

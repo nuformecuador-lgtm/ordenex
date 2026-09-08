@@ -460,6 +460,340 @@ describe("CierresAdminService.verCierreDetalle — ingreso y ganancia", () => {
   });
 });
 
+/**
+ * 💰 FICHA 395 — LAS DOS LINEAS QUE LE FALTABAN AL DETALLE DEL CIERRE DE MENSAJERO.
+ *
+ * La ficha 393 monto las dos cascadas del dinero SOLO en los cierres de BODEGA. Este detalle
+ * —el que se mira todos los dias— se quedo con las tarjetas sueltas y sin las dos restas que
+ * las unen. Aqui se sujeta el SERVIDOR: que las emite, con que valor y con que signo.
+ *
+ * TODOS los casos llevan CENTIMOS a proposito, por el mismo motivo que
+ * `tests/unit/utils/cascadas-cierre-bodega.test.ts`: con cifras redondas estas restas cierran
+ * igual con `Number` que con `Decimal` y el caso no probaria nada.
+ */
+describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el neto", () => {
+  /** Desglose por orden como lo emite el repo. `total` = suma de los conceptos presentes. */
+  function conIngreso(over: Partial<IngresoOrdenexDTO>): IngresoOrdenexDTO {
+    return {
+      montoCobrar: null,
+      cobraComision: false,
+      esCentral: false,
+      esZonaEspecial: false,
+      fleteOrigen: "normal",
+      fleteDevolucionOrigen: "normal",
+      flete: null,
+      ivaFlete: null,
+      fleteDevolucion: null,
+      ivaFleteDevolucion: null,
+      comisionCod: null,
+      ivaComisionCod: null,
+      fleteConIva: null,
+      fleteDevolucionConIva: null,
+      comisionConIva: null,
+      total: "0.00",
+      tarifa: null,
+      ...over,
+    };
+  }
+
+  /** La entregada de todos los casos: flete 2500.55 + IVA, comision 700.02 + IVA. */
+  const ENTREGADA = conIngreso({
+    flete: "2500.55",
+    ivaFlete: "325.07",
+    comisionCod: "700.02",
+    ivaComisionCod: "91.00",
+    fleteConIva: "2825.62",
+    comisionConIva: "791.02",
+    total: "3616.64", // 2825.62 + 791.02
+  });
+
+  /** La rechazada: factura flete de devolucion + IVA, y NO recauda un colon. */
+  const RECHAZADA = conIngreso({
+    fleteDevolucion: "1200.45",
+    ivaFleteDevolucion: "156.06",
+    fleteDevolucionConIva: "1356.51",
+    total: "1356.51",
+  });
+
+  function repoCon(
+    cierre: Partial<CierreAdminResumenRow>,
+    gestiones: Array<{ gestionId: string; resultado: "entregada" | "rechazada" | "reprogramada"; ingresoOrdenex?: IngresoOrdenexDTO }>,
+  ): Repo {
+    return fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
+        cierre: resumenRow(cierre),
+        gestiones: gestiones.map((g) => gestionRow(g)),
+      })),
+    });
+  }
+
+  it("CON un rechazo: la puente NO es el total facturado, y es la que hace cuadrar el pago a la tienda", async () => {
+    const { service } = newService({
+      repo: repoCon(
+        {
+          totales: {
+            efectivo: "20000.55",
+            simpe: "0.00",
+            transferencia: "0.00",
+            general: "20000.55",
+          },
+          totalPagoMensajero: "3600.35",
+          totalIngresoBodegaRechazos: "450.25",
+        },
+        [
+          { gestionId: "a", resultado: "entregada", ingresoOrdenex: ENTREGADA },
+          { gestionId: "b", resultado: "rechazada", ingresoOrdenex: RECHAZADA },
+        ],
+      ),
+    });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // Lo FACTURADO incluye el flete por rechazo; lo DEDUCIBLE de lo recaudado, no.
+    expect(r.totalesIngreso.total).toBe("4973.15"); // 3616.64 + 1356.51
+    expect(r.cobradoSobreRecaudado).toBe("3616.64"); // 2825.62 + 791.02
+    expect(r.cobradoSobreRecaudado).not.toBe(r.totalesIngreso.total);
+
+    // Y ESTE es el motivo de que la linea exista: `recaudado − puente = para la tienda`. Con
+    // `total` en su lugar la resta daria 15027.40, que no es lo que se le paga a la tienda.
+    expect(r.pagoTienda).toBe("16383.91"); // 20000.55 − 3616.64
+    expect(
+      new Prisma.Decimal(r.cierre.totales.general).minus(r.cobradoSobreRecaudado).toFixed(2),
+    ).toBe(r.pagoTienda);
+  });
+
+  it("CON un rechazo: el neto resta TAMBIEN el ingreso de bodega, y por eso no es la ganancia", async () => {
+    const { service } = newService({
+      repo: repoCon(
+        {
+          totales: {
+            efectivo: "20000.55",
+            simpe: "0.00",
+            transferencia: "0.00",
+            general: "20000.55",
+          },
+          totalPagoMensajero: "3600.35",
+          totalIngresoBodegaRechazos: "450.25",
+        },
+        [
+          { gestionId: "a", resultado: "entregada", ingresoOrdenex: ENTREGADA },
+          { gestionId: "b", resultado: "rechazada", ingresoOrdenex: RECHAZADA },
+        ],
+      ),
+    });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // `ganancia` resta SOLO el pago al mensajero y sigue viajando intacta (no la absorbe nadie).
+    expect(r.ganancia).toBe("1372.80"); // 4973.15 − 3600.35
+    // El neto resta ademas la bodega. Implementarlo encadenando `ganancia` daria 1372.80.
+    expect(r.netoOrdenex).toBe("922.55"); // 4973.15 − 3600.35 − 450.25
+    expect(r.netoOrdenex).not.toBe(r.ganancia);
+    expect(typeof r.netoOrdenex).toBe("string"); // money-safe
+  });
+
+  it("SIN rechazos: la linea puente se emite IGUAL, no desaparece cuando el flete por rechazo es 0.00", async () => {
+    const { service } = newService({
+      repo: repoCon(
+        {
+          totales: {
+            efectivo: "20000.55",
+            simpe: "0.00",
+            transferencia: "0.00",
+            general: "20000.55",
+          },
+          totalPagoMensajero: "3600.35",
+          totalIngresoBodegaRechazos: "0.00",
+        },
+        [{ gestionId: "a", resultado: "entregada", ingresoOrdenex: ENTREGADA }],
+      ),
+    });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    expect(r.totalesIngreso.fleteDevolucionConIva).toBe("0.00"); // no hubo ni un rechazo
+    // La linea NO es condicional: sin ella la cascada perderia su eslabon justo en el cierre
+    // mas comun, y la pantalla tendria que decidir si pintarla o no.
+    expect(r).toHaveProperty("cobradoSobreRecaudado");
+    expect(r.cobradoSobreRecaudado).toBe("3616.64");
+    expect(typeof r.cobradoSobreRecaudado).toBe("string"); // money-safe
+
+    // Y con la bodega en 0.00 el neto SI coincide con la ganancia: si divergieran aqui, alguien
+    // estaria restando dos veces.
+    expect(r.netoOrdenex).toBe("16.29"); // 3616.64 − 3600.35 − 0.00
+    expect(r.netoOrdenex).toBe(r.ganancia);
+  });
+
+  it("el neto NEGATIVO sale con su signo, nunca recortado a 0.00", async () => {
+    const { service } = newService({
+      repo: repoCon(
+        {
+          totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+          totalPagoMensajero: "1500.35",
+          totalIngresoBodegaRechazos: "450.25",
+        },
+        // Una reprogramacion no aporta a ningun concepto: no factura, y aun asi se paga.
+        [{ gestionId: "a", resultado: "reprogramada" }],
+      ),
+    });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    expect(r.totalesIngreso.total).toBe("0.00");
+    // Un "0.00" aqui diria «Ordenex no perdio nada en este cierre», que es falso.
+    expect(r.netoOrdenex).toBe("-1950.60"); // 0 − 1500.35 − 450.25
+    expect(r.ganancia).toBe("-1500.35"); // la ganancia tampoco se recorta, y no es el neto
+    // La puente de un cierre sin entregas es cero DE VERDAD (no hay nada facturado sobre lo
+    // recaudado), y aun asi se emite.
+    expect(r.cobradoSobreRecaudado).toBe("0.00");
+  });
+
+  // ── LA PARTICION DE LO RECAUDADO (la cuarta linea) ──────────────────────────────────────
+  //
+  // El humano se confundio con esta pantalla y dijo: «si yo me confundo, no quiero imaginar
+  // los operarios». Lo que intentaba calcular a mano cada vez era este numero, que no existia
+  // en ninguna pantalla.
+
+  it("CON un rechazo: lo que la tienda GANA no es lo que se le PAGA, y difieren en el flete por rechazo", async () => {
+    const { service } = newService({
+      repo: repoCon(
+        {
+          totales: {
+            efectivo: "20000.55",
+            simpe: "0.00",
+            transferencia: "0.00",
+            general: "20000.55",
+          },
+          totalPagoMensajero: "3600.35",
+          totalIngresoBodegaRechazos: "450.25",
+        },
+        [
+          { gestionId: "a", resultado: "entregada", ingresoOrdenex: ENTREGADA },
+          { gestionId: "b", resultado: "rechazada", ingresoOrdenex: RECHAZADA },
+        ],
+      ),
+    });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    expect(r.ganaLaTienda).toBe("15027.40"); // 20000.55 − 4973.15
+    // Los dos numeros conviven en la misma pantalla y NO son el mismo: se le pagan 16383.91
+    // hoy, pero gana 15027.40, porque el flete por rechazo se le cobra aparte.
+    expect(r.pagoTienda).toBe("16383.91");
+    expect(r.ganaLaTienda).not.toBe(r.pagoTienda);
+    expect(
+      new Prisma.Decimal(r.pagoTienda)
+        .minus(r.totalesIngreso.fleteDevolucionConIva)
+        .toFixed(2),
+    ).toBe(r.ganaLaTienda);
+
+    // LA IDENTIDAD que hace evidente la pantalla: lo que gana la tienda + lo que factura
+    // Ordenex = lo recaudado. Es la particion, y va ANTES del desglose en la cascada.
+    expect(
+      new Prisma.Decimal(r.ganaLaTienda).plus(r.totalesIngreso.total).toFixed(2),
+    ).toBe(r.cierre.totales.general);
+    expect(typeof r.ganaLaTienda).toBe("string"); // money-safe
+  });
+
+  it("SIN rechazos: lo que gana y lo que se le paga coinciden EXACTAMENTE", async () => {
+    const { service } = newService({
+      repo: repoCon(
+        {
+          totales: {
+            efectivo: "20000.55",
+            simpe: "0.00",
+            transferencia: "0.00",
+            general: "20000.55",
+          },
+          totalPagoMensajero: "3600.35",
+          totalIngresoBodegaRechazos: "0.00",
+        },
+        [{ gestionId: "a", resultado: "entregada", ingresoOrdenex: ENTREGADA }],
+      ),
+    });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // Sin flete por rechazo no hay nada que cobrar aparte, asi que las dos preguntas tienen la
+    // misma respuesta. Si divergieran AQUI, una de las dos estaria restando de mas.
+    expect(r.ganaLaTienda).toBe("16383.91"); // 20000.55 − 3616.64
+    expect(r.ganaLaTienda).toBe(r.pagoTienda);
+  });
+
+  it("puros rechazos: lo que gana la tienda sale NEGATIVO, con su signo", async () => {
+    const { service } = newService({
+      repo: repoCon(
+        {
+          totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+          totalPagoMensajero: "0.00",
+          totalIngresoBodegaRechazos: "450.25",
+        },
+        [{ gestionId: "b", resultado: "rechazada", ingresoOrdenex: RECHAZADA }],
+      ),
+    });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // Un rechazo factura y no recauda: la tienda no gana, DEBE. Un "0.00" aqui diria «no gana
+    // ni pierde», que es justo la lectura que esta ficha viene a impedir.
+    expect(r.ganaLaTienda).toBe("-1356.51"); // 0.00 − 1356.51
+  });
+
+  // ── EL TIEMPO VERBAL DEL CARGO A LA WALLET ──────────────────────────────────────────────
+  //
+  // El cargo lo emite `WalletTiendaFeedService` DENTRO de la transaccion de aprobacion. En un
+  // cierre que aun no se aprueba, «se le cargo a su wallet» es FALSO. El cierre que el humano
+  // miro estaba VENCIDO.
+
+  it("aprobado y CON flete por rechazo: el cargo YA ocurrio", async () => {
+    const { service } = newService({
+      repo: repoCon({ estado: "aprobado" }, [
+        { gestionId: "b", resultado: "rechazada", ingresoOrdenex: RECHAZADA },
+      ]),
+    });
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.fleteRechazoYaCobradoATienda).toBe(true);
+  });
+
+  it.each(["solicitado", "vencido", "rechazado"] as const)(
+    "%s y CON flete por rechazo: el cargo NO ha ocurrido todavia",
+    async (estado) => {
+      const { service } = newService({
+        repo: repoCon({ estado }, [
+          { gestionId: "b", resultado: "rechazada", ingresoOrdenex: RECHAZADA },
+        ]),
+      });
+      const r = await service.verCierreDetalle("c1", MAESTRO);
+      if (r.status !== "ok") throw new Error("esperaba ok");
+      expect(r.fleteRechazoYaCobradoATienda).toBe(false);
+    },
+  );
+
+  it("aprobado pero SIN un solo rechazo: no hay cargo del que hablar", async () => {
+    const { service } = newService({
+      repo: repoCon({ estado: "aprobado" }, [
+        { gestionId: "a", resultado: "entregada", ingresoOrdenex: ENTREGADA },
+      ]),
+    });
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.totalesIngreso.fleteDevolucionConIva).toBe("0.00");
+    // `estado === "aprobado"` a secas daria `true` y la pantalla escribiria «se le cargo el
+    // flete por rechazo» sobre un cierre donde no hubo ninguno.
+    expect(r.fleteRechazoYaCobradoATienda).toBe(false);
+  });
+});
+
 describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9/R13/R16)", () => {
   it("R6/R9: agrupa las gestiones por resultado con montos string escala 2", async () => {
     const repo = fakeRepo({
