@@ -58,6 +58,22 @@ export function mensajeCorreccionCaracterNoImprimible(
 }
 
 /**
+ * ¿Estos dos textos se PINTAN igual?
+ *
+ * Dos cadenas con el mismo NFD son «canonicamente equivalentes»: son la MISMA secuencia de
+ * caracteres escrita de dos maneras (`"ñ"` frente a `"n"` + U+0303), y Unicode EXIGE a quien las
+ * muestre que las muestre igual. O sea que la respuesta no es una heuristica sobre glifos ni un
+ * parecido: es lo unico que se puede afirmar de verdad sobre dos textos sin abrir una fuente.
+ *
+ * No vale mirar solo el caracter culpable. El culpable que se reporta es el PRIMERO fuera de
+ * cobertura, y en `"n" + U+0303 + " 𝕠rfirio"` es la marca combinante aunque el texto reparado SI
+ * se vea distinto por culpa del `𝕠` de mas atras. La pregunta es sobre el texto entero.
+ */
+export function seVenIgual(a: string, b: string): boolean {
+  return a.normalize("NFD") === b.normalize("NFD");
+}
+
+/**
  * Correccion de datos del cliente, texto REPARABLE (R18/A2).
  *
  * Aqui el sistema NO repara por su cuenta: devuelve el texto bueno para que la persona que esta
@@ -66,12 +82,34 @@ export function mensajeCorreccionCaracterNoImprimible(
  * (327/R11)—, y el motivo es el mismo: en la carga no hay nadie delante de 500 filas en el
  * instante en que se decide; aqui SI hay una persona mirando. Asi Ordenex nunca guarda un nombre
  * que el humano no haya tecleado.
+ *
+ * ── EL CASO EN EL QUE «ESCRIBELO ASI» NO DICE NADA (revision del 2026-09-07, menor 1) ────────
+ *
+ * Con una `ñ` DESCOMPUESTA —`"n"` + U+0303, lo que produce macOS al copiar— el texto reparado es
+ * `"Nuñez"`... que se pinta EXACTAMENTE igual que el `"Nuñez"` que la persona acaba de teclear.
+ * El mensaje decia «Escribelo asi: «Nuñez»» enseñando lo mismo que ya estaba en pantalla: un
+ * mensaje que no se puede obedecer, y ademas justo donde SI hay alguien mirando.
+ *
+ * Lo que cambia no son los pixeles, son los code points, asi que eso es lo que hay que decir. En
+ * ese caso el mensaje NO repite el texto —repetirlo es el defecto— y da la unica instruccion que
+ * funciona: volver a teclear esa letra. Copiar y pegar la trae otra vez descompuesta.
+ *
+ * La sugerencia de R18 sigue viajando entera cuando SI se distingue (`𝕠rfirio` -> `orfirio`), que
+ * es el caso para el que se escribio. Y esto NO toca A2: se sigue rechazando y no se guarda nada.
+ * Aceptar la composicion canonica sin preguntar seria otra decision —razonable, y el reviewer la
+ * recomienda— pero es de la familia de las que estan esperando firma humana, no de las que se
+ * cuelan en un arreglo de redaccion.
  */
 export function mensajeCorreccionSugerencia(
   campo: string,
   caracter: string,
   codePoint: number,
   sugerencia: string,
+  original: string,
 ): string {
-  return `«${campo}» lleva un carácter que la etiqueta no puede imprimir: ${fraseCaracterNoImprimible(caracter, codePoint)}. Escríbelo así: «${sugerencia}».`;
+  const diagnostico = `«${campo}» lleva un carácter que la etiqueta no puede imprimir: ${fraseCaracterNoImprimible(caracter, codePoint)}.`;
+  if (seVenIgual(original, sugerencia)) {
+    return `${diagnostico} Aquí no hay nada que se vea mal: esa letra está escrita en dos piezas —la letra por un lado y su acento por otro—, y así no se puede imprimir. Bórrala y vuelve a teclearla; copiar y pegar el mismo texto la trae otra vez partida.`;
+  }
+  return `${diagnostico} Escríbelo así: «${sugerencia}».`;
 }

@@ -308,6 +308,12 @@ export class CorregirDatosClienteService implements ICorregirDatosClienteService
             veredicto.culpable,
             veredicto.codePoint,
             veredicto.valor,
+            // Revision del 2026-09-07 (menor 1): el mensaje necesita el texto TAL COMO se tecleo
+            // para saber si la sugerencia se distingue de el. Con una `ñ` descompuesta no se
+            // distingue —son canonicamente equivalentes— y «escribelo asi» no dice nada. El
+            // parametro es OBLIGATORIO a proposito: si fuera opcional, un llamador nuevo se
+            // quedaria con el mensaje inutil sin que nada se pusiera rojo.
+            veredicto.original,
           ),
         ];
       }

@@ -455,4 +455,41 @@ describe("383/R15 (T5.6) — la via API KEY, espejo", () => {
     expect(res.summary.errores[0].errores.num_remision).toHaveLength(1);
     expect(persistido(repo)).toEqual([]);
   });
+
+  /**
+   * ⭑ REVISION DEL 2026-09-07, menor 4 — EL INVARIANTE DE LA DIRECCION, CLAVADO POR ESTA VIA.
+   *
+   * `createData.direccion` se escribe desde `direccionLiteral` —el literal que sale del resolutor
+   * de geografia— mientras que la REPARACION se calcula desde `data.direccion`, el del schema.
+   * Que los dos sean «el MISMO `.trim()` del mismo crudo» vivia solo en un comentario del
+   * servicio, y por la via API KEY —que resuelve la geografia con TRES columnas separadas, no con
+   * `canton_distrito`— no habia ni un caso que lo tocara.
+   *
+   * Si manana un extractor recortara distinto, se repararia un texto y se escribiria otro **sin
+   * poner nada rojo**. Estos dos casos son las dos mitades del invariante: con reparacion manda
+   * lo reparado, y sin reparacion lo persistido es exactamente lo que el schema dejo en `data`.
+   */
+  it("con reparacion, la direccion persistida es la REPARADA (el literal de la via no la pisa)", async () => {
+    const repo = buildRepo();
+    const res = await buildService(repo).cargarViaApi(
+      [rowApi({ direccion: `avenida \u{1D55A}nvierno` })],
+      APIKEY,
+    );
+    if (res.status !== "ok") throw new Error("caso mal montado");
+
+    expect(res.summary.creadas).toBe(1);
+    expect(persistido(repo)[0].direccion).toBe("avenida invierno");
+  });
+
+  it("sin reparacion, la direccion persistida es la del archivo con el MISMO recorte", async () => {
+    const repo = buildRepo();
+    const res = await buildService(repo).cargarViaApi(
+      [rowApi({ direccion: "  avenida siempre viva 742  " })],
+      APIKEY,
+    );
+    if (res.status !== "ok") throw new Error("caso mal montado");
+
+    expect(res.summary.creadas).toBe(1);
+    expect(persistido(repo)[0].direccion).toBe("avenida siempre viva 742");
+  });
 });

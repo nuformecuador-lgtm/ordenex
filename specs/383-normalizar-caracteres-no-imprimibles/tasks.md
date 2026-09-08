@@ -9,7 +9,7 @@
 
 ## T0 — La medición que justifica el diseño (bloquea T2)
 
-- [ ] **T0.1 — Medir qué hace `NFKC` sobre los 219 code points cubiertos.**
+- [x] **T0.1 — Medir qué hace `NFKC` sobre los 219 code points cubiertos.**
   Script de un solo uso (o test que imprime): recorrer `COBERTURA` code point a code point, aplicar
   `String.fromCodePoint(cp).normalize("NFKC")` y listar los que **dejan de estar cubiertos**.
   **Hecho cuando:** la lista está pegada en `progress/impl_383.md` con su conteo, y confirma o
@@ -17,7 +17,7 @@
   justificación de A1 se cae y hay que **parar y avisar al humano** antes de seguir.
   *(evidencia de R4/R8)*
 
-- [ ] **T0.2 [P] — Medir el bloque U+1D400–U+1D7FF.** Cuántos code points del bloque reparan a un
+- [x] **T0.2 [P] — Medir el bloque U+1D400–U+1D7FF.** Cuántos code points del bloque reparan a un
   carácter cubierto y cuántos no (los griegos).
   **Hecho cuando:** los dos conteos están en `progress/impl_383.md`, y `𝕠` (U+1D560) figura entre los
   reparables y `𝛂` (U+1D6C2) entre los no reparables.
@@ -27,7 +27,7 @@
 
 ## T1 — Partir el artefacto de fuente (bloquea T2)
 
-- [ ] **T1.1 — `scripts/fuente-etiqueta-a-base64.ts` emite dos archivos.**
+- [x] **T1.1 — `scripts/fuente-etiqueta-a-base64.ts` emite dos archivos.**
   `lib/pdf/etiquetas-fuente-cobertura.ts` (solo `export const COBERTURA`, con la cabecera «ARCHIVO
   GENERADO — NO EDITAR A MANO») y `lib/pdf/etiquetas-fuente.ts` (importa `COBERTURA`, conserva
   `PESO_DECLARADO_*` y `fuenteEtiqueta`).
@@ -35,13 +35,13 @@
   `toEqual` a la de hoy) y `git diff` de `etiquetas-fuente.ts` solo muestra el import y la línea
   borrada. *(R2)*
 
-- [ ] **T1.2 — Abrir el predicado por su parámetro.** En `lib/pdf/etiquetas-fuente-registro.ts`:
+- [x] **T1.2 — Abrir el predicado por su parámetro.** En `lib/pdf/etiquetas-fuente-registro.ts`:
   `type Cobertura`, `cubreCodePointEn`, `caracterNoCubiertoEn`, `cubreTextoEn`; los tres actuales
   quedan como envoltorios de una línea sobre `fuente.cobertura`.
   **Hecho cuando:** **cero** call sites tocados y `tests/unit/pdf/etiquetas-fuente.test.ts` verde sin
   modificarlo. *(R1)* · **depende de T1.1**
 
-- [ ] **T1.3 — Ampliar la guardia de carga diferida.**
+- [x] **T1.3 — Ampliar la guardia de carga diferida.**
   `tests/unit/guards/etiqueta-fuente-diferida.guardia.test.ts` gana una aserción: ni
   `lib/utils/texto-imprimible-etiqueta.ts` ni `lib/types/carga-masiva.ts` nombran el ARTEFACTO
   (`'"@/lib/pdf/etiquetas-fuente"'`), y `lib/pdf/etiquetas-fuente-cobertura.ts` **no contiene**
@@ -53,13 +53,13 @@
 
 ## T2 — El módulo puro (bloquea T3, T5, T6)
 
-- [ ] **T2.1 — `lib/utils/texto-imprimible-etiqueta.ts`.** `evaluarTextoDeEtiqueta(texto, { reparar })`
+- [x] **T2.1 — `lib/utils/texto-imprimible-etiqueta.ts`.** `evaluarTextoDeEtiqueta(texto, { reparar })`
   con el contrato de `design.md §4`. Recorrido **por code point** (`for…of`). Sin listas propias de
   caracteres, sin Prisma, sin React.
   **Hecho cuando:** typecheck verde y existen los tests de T2.2/T2.3. *(R4, R5, R6)* · **depende de
   T1.2**
 
-- [ ] **T2.2 — Tests de la regla, con literales.**
+- [x] **T2.2 — Tests de la regla, con literales.**
   Casos: (a) `"\u{1D560}rfirio"` → `"orfirio"`; (b) `"ﬁn"` → `"fin"`; (c) `"½"` → **intacto**;
   (d) `"™"`, `"…"`, `"m²"` → **intactos**; (e) `"🙂"` → irreparable, `codePoint === 0x1F642`;
   (f) `"Ана"` (cirílico) → irreparable; (g) `"ñ"` precompuesta → intacta; (h) `reparar: false` sobre
@@ -67,14 +67,14 @@
   **Hecho cuando:** los 8 casos verdes y los esperados son **literales escapados**, nunca el
   resultado de llamar a la propia función. *(R4, R5, R6, R12)* · **depende de T2.1**
 
-- [ ] **T2.3 [P] — Los dos barridos, sin salida temprana.**
+- [x] **T2.3 [P] — Los dos barridos, sin salida temprana.**
   (a) los **219** code points cubiertos entran y salen idénticos, y el test afirma que evaluó 219;
   (b) el bloque U+1D400–U+1D7FF completo: cada code point o repara a algo cubierto o se rechaza, con
   los dos conteos de T0.2 como aserción, más los casos nombrados `𝕠` y `𝛂`.
   **Hecho cuando:** verdes, sin ningún `if (…) return;` dentro, y con el conteo aseverado.
   *(R7, R8)* · **depende de T2.1, T0.1, T0.2**
 
-- [ ] **T2.4 [P] — Par suplente.** `"\u{1D560}"` se trata como **un** carácter: el `culpable` de un
+- [x] **T2.4 [P] — Par suplente.** `"\u{1D560}"` se trata como **un** carácter: el `culpable` de un
   texto irreparable con un emoji tiene `length === 2` y su `codePointAt(0)` es el real.
   **Hecho cuando:** verde, y una mutación que cambie el `for…of` por `split("")` lo pone rojo.
   *(R6)* · **depende de T2.1**
@@ -83,12 +83,12 @@
 
 ## T3 — El mensaje, en un solo sitio (bloquea T5, T6)
 
-- [ ] **T3.1 — `lib/utils/mensaje-caracter-no-imprimible.ts`.** `aislado(caracter)` (con `⁨` y
+- [x] **T3.1 — `lib/utils/mensaje-caracter-no-imprimible.ts`.** `aislado(caracter)` (con `⁨` y
   `⁩` **escapados**) y `fraseCaracterNoImprimible(caracter, codePoint)`.
   **Hecho cuando:** test que afirma los dos aislantes y la notación `U+XXXX` sobre un carácter de
   ancho cero (`U+200B`). *(R14)*
 
-- [ ] **T3.2 — El modal de la 382 compone desde el fragmento compartido.**
+- [x] **T3.2 — El modal de la 382 compone desde el fragmento compartido.**
   `EtiquetasGuiaModal.tsx` deja de tener su propio `aislado` y usa el de `lib/`.
   **Hecho cuando:** `tests/components/EtiquetasGuiaModal.test.tsx` sigue **verde sin tocarlo**: el
   literal de la 382 no cambia ni un byte. *(R20)* · **depende de T3.1**
@@ -102,16 +102,22 @@
   carga?) y confirmar o revocar **A2** (la corrección rechaza) y **A3** (`num_remision` no se
   repara). T5 y T6 dependen de esa respuesta.
   **Hecho cuando:** la respuesta está escrita en `progress/current.md`. · **depende de T2, T3**
+  > ⛔ **SIN MARCAR — no está hecho, y es el bloqueante 1 de la revisión del 2026-09-07.** La
+  > puerta se cruzó **sin firma del humano**: Q1 (y de paso Q2, A2, A3) las respondió el *leader*,
+  > y la respuesta acabó en el `status_note` de `feature_list.json`, no en `progress/current.md`.
+  > El código está escrito bajo esas respuestas y la vuelta atrás de cada una es barata (tabla de
+  > asunciones de `requirements.md`: Q1 cambia R9/R10, A2 un retorno, A3 una constante). **Lo
+  > está resolviendo el leader con el humano; no se marca hasta que haya firma.**
 
 ---
 
 ## T5 — Carga masiva, las dos vías (backend)
 
-- [ ] **T5.1 — Contrato de salida.** `lib/types/carga-masiva.ts`: `TextoNormalizado` y
+- [x] **T5.1 — Contrato de salida.** `lib/types/carga-masiva.ts`: `TextoNormalizado` y
   `RowResult.textoNormalizado?`. Sin importar nada de `lib/pdf/`.
   **Hecho cuando:** typecheck verde y T1.3 sigue verde. *(R10)* · **depende de T4.1**
 
-- [ ] **T5.2 — El corte en `resolveFila`.** Tras `filaCargaSchema.safeParse`, sobre `parsed.data`:
+- [x] **T5.2 — El corte en `resolveFila`.** Tras `filaCargaSchema.safeParse`, sobre `parsed.data`:
   `num_remision` con `reparar: false`; `destinatario`/`telefono`/`producto`/`direccion` con
   `reparar: true`. Se evalúan **todos** antes de decidir. Los reparados entran en `createData`.
   **Hecho cuando:** tests unitarios de `BulkOrdenService` con dobles: (a) fila con `𝕠` en
@@ -120,35 +126,35 @@
   (d) lote de 3 con la del medio rota → 2 creadas + 1 error; (e) fila con dos campos rotos → **dos**
   claves en `errores`. *(R9, R12, R13)* · **depende de T5.1**
 
-- [ ] **T5.3 — El aviso viaja en la fila.** La fila `creada` reparada trae `textoNormalizado` con
+- [x] **T5.3 — El aviso viaja en la fila.** La fila `creada` reparada trae `textoNormalizado` con
   `campo`, `original` y `aplicado`.
   **Hecho cuando:** test que lo afirma como literal, y **mutación**: borrar la emisión del aviso →
   rojo. *(R10)* · **depende de T5.2**
 
-- [ ] **T5.4 — `reclasificarOmitidas` borra también el aviso.** Añadir
+- [x] **T5.4 — `reclasificarOmitidas` borra también el aviso.** Añadir
   `delete fila.textoNormalizado` junto al `delete fila.montoAjustado` existente.
   **Hecho cuando:** test «una fila reparada que resulta omitida por carrera queda `duplicada` y
   **sin** `textoNormalizado`». Es la lección de la 294 y **no** es opcional. *(R21)* · **depende de
   T5.3**
 
-- [ ] **T5.5 [P] — Campos NO evaluados.** Test: fila con un emoji **solo** en `notas` → `creada`, y
+- [x] **T5.5 [P] — Campos NO evaluados.** Test: fila con un emoji **solo** en `notas` → `creada`, y
   las notas se guardan con el emoji **intacto**. Ídem `provincia`/`canton_distrito` no evaluados por
   este camino.
   **Hecho cuando:** verde, y una mutación que añada `notas` a la lista lo pone rojo. *(R16)* ·
   **depende de T5.2**
 
-- [ ] **T5.6 [P] — Vía API key, espejo.** Los mismos casos de T5.2/T5.3 sobre `cargarViaApi`: los
+- [x] **T5.6 [P] — Vía API key, espejo.** Los mismos casos de T5.2/T5.3 sobre `cargarViaApi`: los
   errores salen en `summary.errores[]` y el aviso en `summary.filas[]`.
   **Hecho cuando:** verde. **Mutación obligatoria** (la lección M4b de la 382): aplicar la
   comprobación **solo** en `cargarMasiva` → el test de la vía API tiene que ponerse rojo. *(R15)* ·
   **depende de T5.2**
 
-- [ ] **T5.7 [P] — Dry-run = carga real.** Test que corre el **mismo** lote con `dryRun: true` y
+- [x] **T5.7 [P] — Dry-run = carga real.** Test que corre el **mismo** lote con `dryRun: true` y
   `dryRun: false` y afirma que la clasificación por fila y los avisos son **iguales**.
   **Hecho cuando:** verde, y una mutación que salte la comprobación cuando `dryRun` lo pone rojo.
   *(R11)* · **depende de T5.2**
 
-- [ ] **T5.8 [P] — No regresión.** Test con un lote **sin** ningún carácter fuera de cobertura: el
+- [x] **T5.8 [P] — No regresión.** Test con un lote **sin** ningún carácter fuera de cobertura: el
   `BulkSummary` es idéntico al de antes (ninguna clave nueva en ninguna fila).
   **Hecho cuando:** verde con `toEqual` sobre el objeto completo. *(R21)* · **depende de T5.2**
 
@@ -156,7 +162,7 @@
 
 ## T6 — Corrección de datos del cliente (backend)
 
-- [ ] **T6.1 — El rechazo en el bloque 5.b.** En `CorregirDatosClienteService.corregir`, junto a
+- [x] **T6.1 — El rechazo en el bloque 5.b.** En `CorregirDatosClienteService.corregir`, junto a
   `CAMPOS_NO_VACIABLES`: solo sobre los campos que **cambian**, solo
   `destinatario`/`telefonoDest`/`producto`/`direccion`, **antes** de la geografía y de cualquier
   escritura.
@@ -164,15 +170,15 @@
   campo, y (b) **que el doble no recibió ninguna llamada de escritura** — no basta con mirar el
   status. *(R17)* · **depende de T4.1**
 
-- [ ] **T6.2 — La sugerencia en el mensaje.** Texto reparable → `validation_error` cuyo mensaje
+- [x] **T6.2 — La sugerencia en el mensaje.** Texto reparable → `validation_error` cuyo mensaje
   contiene el valor reparado (`orfirio`), y **nada** se guarda.
   **Hecho cuando:** verde con el literal, y mutación «aplicar la reparación y devolver `ok`» → rojo.
   *(R18)* · **depende de T6.1**
 
-- [ ] **T6.3 [P] — `notas` fuera.** Corregir **solo** `notas` con un emoji → `ok` y se guarda.
+- [x] **T6.3 [P] — `notas` fuera.** Corregir **solo** `notas` con un emoji → `ok` y se guarda.
   **Hecho cuando:** verde. *(R19)* · **depende de T6.1**
 
-- [ ] **T6.4 [P] — Nada más cambia.** Los tests vivos de las fichas 312/327/362 siguen verdes sin
+- [x] **T6.4 [P] — Nada más cambia.** Los tests vivos de las fichas 312/327/362 siguen verdes sin
   tocarlos, incluida `tests/unit/guards/corregir-datos-sin-rastro.guardia.test.ts`.
   **Hecho cuando:** verdes. · **depende de T6.1**
 
@@ -180,18 +186,18 @@
 
 ## T7 — Frontend (después de T5)
 
-- [ ] **T7.1 — `carga-masiva-clasificacion.ts` transporta el aviso.** Nueva vista `normalizadas`,
+- [x] **T7.1 — `carga-masiva-clasificacion.ts` transporta el aviso.** Nueva vista `normalizadas`,
   con los mismos guardas defensivos que `ajustadas` (descartar si `original === aplicado`, si falta
   alguno o si no son strings). **No** es un cuarto grupo: los tres conteos no cambian.
   **Hecho cuando:** test con `data` basura (no-objeto, `filas` no-array, entrada incompleta) → grupos
   vacíos y sin lanzar. *(R10)* · **depende de T5.3**
 
-- [ ] **T7.2 — La línea del preview.** `OrdenesCargaPreview.tsx`, dentro del mismo `Alert` del aviso
+- [x] **T7.2 — La línea del preview.** `OrdenesCargaPreview.tsx`, dentro del mismo `Alert` del aviso
   de céntimos: singular y plural, con un ejemplo `«original» → «aplicado»`. Vacío ⇒ no se pinta nada.
   **Hecho cuando:** test de componente que afirma el texto renderizado con una fila normalizada, y
   que **no** aparece nada con cero. *(R10, R11, R21)* · **depende de T7.1**
 
-- [ ] **T7.3 [P] — Los chips y el export no se tocan.** Verificar que una fila en error por carácter
+- [x] **T7.3 [P] — Los chips y el export no se tocan.** Verificar que una fila en error por carácter
   no imprimible produce chip y aparece en el XLSX de errores con su `motivo_error`, **sin** cambiar
   `carga-masiva-error-chips.ts` ni `carga-masiva-export-errores.ts`.
   **Hecho cuando:** test de round-trip verde y el `git diff` de esos dos archivos **vacío**. *(R13)* ·
@@ -201,7 +207,7 @@
 
 ## T8 — Cierre
 
-- [ ] **T8.1 — Mutaciones.** Aplicar al árbol real, correr la suite relevante, revertir **desde
+- [x] **T8.1 — Mutaciones.** Aplicar al árbol real, correr la suite relevante, revertir **desde
   copia** (nunca `git checkout`): (1) `NFKC` a la cadena entera; (2) quitar la comprobación de la vía
   API; (3) borrar el `delete fila.textoNormalizado`; (4) `split("")` en el recorrido; (5) devolver
   `ok` en la corrección reparando; (6) añadir `notas` a los campos evaluados; (7) quitar los
@@ -210,7 +216,7 @@
   escritos en `progress/impl_383.md`. Un arnés que reporte supervivientes sin haber ejecutado nada no
   vale: pegar la salida real.
 
-- [ ] **T8.2 — Gate.** `./init.sh` completo, con `INIT_EXIT=$?` escrito **dentro** del log y en su
+- [x] **T8.2 — Gate.** `./init.sh` completo, con `INIT_EXIT=$?` escrito **dentro** del log y en su
   propia línea, sin `tail` en la tubería. Contar los `skipped` y comprobar que
   `integration/db` **no** salta (si salta, falta `.env` y la corrida no vale).
   **Hecho cuando:** `INIT_EXIT=0` con los números pegados en `progress/impl_383.md`.
@@ -218,11 +224,21 @@
 - [ ] **T8.3 — Informe y trazabilidad.** `progress/impl_383.md` con la tabla `R → test` de abajo ya
   rellenada con los nombres reales, las mediciones de T0 y las asunciones que el humano firmó o
   revocó en T4.1. **Commitearlo** (un informe sin commitear se lo lleva el primer `git checkout`).
+  > ⛔ **SIN MARCAR, y con una sola cosa pendiente.** La tabla `R → test` con los nombres reales
+  > (dos: backend y T7), las cuatro mediciones de T0 y las mutaciones **están escritas y
+  > commiteadas** en `progress/impl_383.md`. Lo que falta es lo único que no puede existir
+  > todavía: **las asunciones que el humano firmó o revocó**, porque T4.1 sigue sin firma. Se
+  > marca cuando se marque T4.1, escribiendo ahí lo que el humano decida.
 
 - [ ] **T9 — Comprobación humana (no la hace el agente).** Subir un XLSX con tres filas: una normal,
   una con el destinatario en double-struck y una con un emoji en la dirección. Leer el preview,
   confirmar, y luego imprimir la etiqueta de la orden reparada. **Doce mil tests no sustituyen a
   mirar la app** — está medido en este repo.
+  > ⛔ **SIN MARCAR — no la hace un agente, y lo dice el propio título de la tarea.** Nadie ha
+  > mirado la app todavía. Es además la ÚNICA verificación de aplicación real que tiene esta
+  > ficha: no hay harness E2E en este repo, así que el checkpoint de Playwright es inaplicable y
+  > T9 es su sustituto. Sigue viva como deuda en `progress/impl_383.md` y en la entrada de
+  > `progress/history.md`.
 
 ---
 

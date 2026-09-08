@@ -224,14 +224,25 @@ describe("383 — lo que NO cambia sigue funcionando igual", () => {
     expect(corregirDatosCliente.mock.calls[0][1]).toEqual({ producto: "caja grande" });
   });
 
-  it("y la `ñ` descompuesta tambien se rechaza, con su sugerencia compuesta", async () => {
+  it("y la `ñ` descompuesta se rechaza SIN repetirle a la persona el mismo texto", async () => {
     const { service, corregirDatosCliente } = escenario();
 
     const r = await service.corregir(entrada({ destinatario: "Nun\u0303ez" }), MAESTRO);
 
     expect(r.status).toBe("validation_error");
     if (r.status !== "validation_error") throw new Error("caso mal montado");
-    expect(r.fieldErrors.destinatario?.[0]).toContain("Escríbelo así: «Nuñez»");
+    // Revision del 2026-09-07 (menor 1). El texto reparado es la `ñ` COMPUESTA, que se pinta
+    // igual que lo que la persona acaba de teclear: «Escribelo asi: «Nuñez»» era un mensaje
+    // imposible de obedecer. Ahora se dice QUE cambia —los code points, no los pixeles— y se da
+    // la unica instruccion que sirve.
+    const motivo = r.fieldErrors.destinatario?.[0] ?? "";
+    expect(motivo).toContain("U+0303");
+    expect(motivo).toContain("está escrita en dos piezas");
+    expect(motivo).toContain("Bórrala y vuelve a teclearla");
+    expect(motivo).not.toContain("Escríbelo así");
+    // Y lo que NO puede volver a aparecer: el texto compuesto enseñado como si fuera otro.
+    expect(motivo).not.toContain(String.fromCodePoint(0x004e, 0x0075, 0x00f1, 0x0065, 0x007a));
+    // A2 intacta: sigue siendo un rechazo y no se escribe nada.
     expect(corregirDatosCliente).not.toHaveBeenCalled();
   });
 });

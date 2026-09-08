@@ -426,3 +426,127 @@ módulos congelados: `CargaMasivaErrorChips` (7) y `CargaMasivaExportErrores` (1
 
 El `!` de las migraciones sin `down.sql` es **anterior y ajeno** (tres migraciones de rutas del
 2026-08-14). Esta ficha sigue sin añadir ninguna migración.
+
+---
+
+# Vuelta de revisión (2026-09-07, tras `review_383.md`)
+
+> El reviewer **rechazó sin un solo fallo de código**: nueve mutaciones suyas, ninguna viva. Los
+> dos bloqueantes eran de proceso. Aquí está lo que se cerró de este lado.
+
+## B1 — `tasks.md` marcado: **28 de 31**
+
+Tres siguen **sin marcar, con su motivo escrito dentro de la propia tarea**, no por descuido:
+
+| Tarea | Por qué no se marca |
+| --- | --- |
+| **T4.1** | La puerta humana se cruzó **sin firma**: Q1/Q2/A2/A3 las respondió el leader y la respuesta acabó en el `status_note` de `feature_list.json`, no en `progress/current.md`. Es el bloqueante 2 y **lo está resolviendo el leader con el humano**. |
+| **T8.3** | Todo lo suyo está escrito y commiteado —las dos tablas `R → test`, las cuatro mediciones de T0, las mutaciones— salvo lo único que no puede existir aún: **las asunciones que el humano firme o revoque**. Se marca con T4.1. |
+| **T9** | La comprobación en la app real. **No la hace un agente**, lo dice el título de la tarea. Y es la única verificación de aplicación que tiene la ficha: sin harness E2E, T9 es el sustituto del checkpoint de Playwright. |
+
+## menor 1 — «Escríbelo así» enseñando lo mismo que hay en pantalla
+
+**El defecto, dicho como lo vive quien lo lee:** con una `ñ` **descompuesta** (`"n"` + U+0303, lo
+que produce macOS al copiar) la corrección respondía *«Escríbelo así: «Nuñez»»* … y ese «Nuñez» se
+**pinta exactamente igual** que el que la persona acababa de teclear. Un mensaje imposible de
+obedecer, y en la única superficie donde hay alguien mirando la pantalla.
+
+**Cómo se resolvió, y por qué así.** Lo que cambia no son los píxeles, son los **code points**, así
+que es lo que el mensaje dice ahora. Cuando el texto reparado **no se distingue** del tecleado, el
+mensaje **deja de repetirlo** —repetirlo *era* el defecto— y da la única instrucción que funciona:
+
+> `«destinatario» lleva un carácter que la etiqueta no puede imprimir: «⁨◌̃⁩» (U+0303). Aquí no hay
+> nada que se vea mal: esa letra está escrita en dos piezas —la letra por un lado y su acento por
+> otro—, y así no se puede imprimir. Bórrala y vuelve a teclearla; copiar y pegar el mismo texto la
+> trae otra vez partida.`
+
+Cuando **sí** se distingue (`𝕠rfirio` → `orfirio`), el mensaje es **byte a byte el de antes**, con
+su sugerencia: ese es el caso para el que R18 se escribió y no se toca.
+
+**El predicado no es una heurística.** `seVenIgual(a, b)` es `a.normalize("NFD") === b.normalize("NFD")`:
+dos cadenas con el mismo NFD son **canónicamente equivalentes**, o sea la misma secuencia de
+caracteres escrita de dos maneras, y Unicode **exige** a quien las muestre que las muestre igual.
+Es lo único que se puede afirmar de dos textos sin abrir una fuente.
+
+**Y no vale mirar solo el carácter culpable**, que era el atajo tentador: el culpable que se
+reporta es el **primero** fuera de cobertura, así que en `"Nuñez 𝕠rfirio"` (con la ñ descompuesta)
+sigue siendo la marca combinante **aunque el texto reparado sí se vea distinto** por culpa del `𝕠`
+de más atrás. La pregunta es sobre el texto entero, y hay un test que mata ese atajo.
+
+**Lo que NO se hizo, a propósito.** El reviewer recomienda además **aceptar** la composición
+canónica sin preguntar (NFC no cambia la identidad de ningún carácter, así que seguiría siendo «el
+nombre que el humano tecleó»). Es razonable y probablemente lo correcto — pero **cambia A2**, que
+es una de las asunciones **esperando firma humana** en T4.1. Un arreglo de redacción no es sitio
+para colar una decisión de comportamiento. **A2 queda intacta: se sigue rechazando y no se escribe
+nada.** Si el humano firma que sí, es un cambio de una línea.
+
+**⚠️ Una línea de backend, declarada.** El mensaje necesita el texto **tal como se tecleó** para
+saber si la sugerencia se distingue de él, y eso obliga a un argumento más en la llamada de
+`CorregirDatosClienteService.ts` (línea 306). Es un **parámetro nuevo en una llamada**, sin lógica
+ni comportamiento nuevos: la decisión de rechazar y no escribir es la misma. Se declara aquí porque
+el encargo decía «no toques el backend, y si hace falta, para y dilo»: hace falta, es esto, y no
+hay forma de resolver menor 1 sin ello. El parámetro es **obligatorio** a propósito —si fuera
+opcional, un llamador nuevo se quedaría con el mensaje inútil sin que nada se pusiera rojo.
+
+## menor 4 — el invariante de la dirección, **clavado**
+
+`createData.direccion` se escribe desde `direccionLiteral` (el literal que sale del resolutor de
+geografía) mientras que la **reparación** se calcula desde `data.direccion` (el del schema). Que
+los dos sean «el mismo `.trim()` del mismo crudo» vivía **solo en un comentario**, y por la vía
+**API key** —que resuelve la geografía con tres columnas separadas, no con `canton_distrito`— no
+había ni un caso que lo tocara.
+
+Se cierra con **dos** casos espejo en `cargarViaApi`, las dos mitades del invariante: con
+reparación manda lo reparado, y **sin** reparación lo persistido es exactamente lo que el schema
+dejó en `data`. Los dos mueren con su mutación (ver tabla). Se eligió clavarlo en vez de dejarlo
+dicho porque el modo de fallo es mudo: repararía un texto y escribiría otro sin poner nada rojo.
+
+## menor 5 — un rechazo de texto tapa el error de geografía: **se deja, y se dice**
+
+Una fila con un emoji **y** una provincia inválida reporta hoy **solo** el error de texto, porque
+el bloque nuevo retorna antes de resolver la geografía. **Decisión: se queda así.** Los motivos, en
+orden de peso:
+
+1. **Dentro de su bloque, el rechazo ya es exhaustivo:** una fila con el nombre y la dirección
+   rotos lista **las dos** claves (T5.2e). Lo que no se cruza son las dos *familias* de error.
+2. **Cambiarlo es lógica de `resolveFila`**, o sea backend cerrado y con gate verde, y obliga a
+   resolver la geografía —una consulta de catálogo— de una fila que **no se va a crear igual**.
+3. **El coste real está acotado a un caso raro**: la fila tiene que traer los dos problemas a la
+   vez, y el precio es **una** vuelta más de corregir-y-resubir, con el XLSX de errores que ya
+   existe (ficha 143). Antes de esta ficha ese caso ni existía: el emoji entraba.
+
+**La vuelta atrás, si el humano la quiere:** en `resolveFila`, no retornar en el bloque de texto y
+fusionar sus claves con las de `fieldErrors` de geografía antes de decidir. Es pequeño y medible;
+lo que no es, es un arreglo de esta vuelta de revisión.
+
+## menor 2 — `design.md §7` decía lo contrario de la verdad
+
+Afirmaba que `--rapido` «no se debería negar … no toca `lib/types/` **de dominio**». **Es falso:**
+el diseño escribe en `lib/types/carga-masiva.ts`, y `docs/verification.md:78` pone `lib/types/**`
+—sin matiz de «de dominio»— entre las rutas ante las que el modo rápido **falla**. Sin consecuencia
+práctica (el completo se corrió tres veces), pero es la clase de frase que el siguiente lee como
+permiso. Corregida en el sitio, diciendo lo que decía antes y por qué era mentira.
+
+## menor 7 — `progress/history.md`
+
+Escrita la entrada de la 383, con el hallazgo del `µ`, los conteos del bloque U+1D400, la partición
+del artefacto, la mitad de pantalla y las cuatro deudas declaradas.
+
+## Las tres mutaciones de esta vuelta (árbol real, revertidas desde copia)
+
+| # | Mutación | Archivo | Qué se puso rojo |
+| --- | --- | --- | --- |
+| M11 | Simular un recorte divergente: escribir `` `${direccionLiteral} ` `` | `lib/services/BulkOrdenService.ts` | **1**: «sin reparacion, la direccion persistida es la del archivo con el MISMO recorte» — el invariante de menor 4 ya no es un comentario |
+| M12 | Quitar `reparados.direccion ??` de la escritura | idem | **2**: «y los otros tres campos reparables, igual» (sesión) y «con reparacion, la direccion persistida es la REPARADA» (API key) |
+| M13 | `seVenIgual` devuelve siempre `false` | `lib/utils/mensaje-caracter-no-imprimible.ts` | **4** en 2 archivos, incluido «y la `ñ` descompuesta se rechaza SIN repetirle a la persona el mismo texto» — sin el predicado, vuelve el mensaje imposible de obedecer |
+
+Con estas, el total de la ficha va por **26 mutaciones, 26 muertas** (7 del backend + 10 de T7 + 3
+de esta vuelta, más las 9 del reviewer).
+
+## Una nota sobre cómo se escribieron estos tests
+
+Los literales del caso de la `ñ` **no** se escriben con los caracteres de verdad: van por
+`String.fromCodePoint`. `"Nuñez"` compuesta y descompuesta se pintan **igual** en el archivo, en el
+editor y en el diff, así que escritas tal cual el test sería indistinguible a la vista del bug que
+persigue — y la marca combinante suelta es además invisible, o sea de las que alguien borra sin
+darse cuenta. Primer intento escrito con los caracteres crudos, revertido por eso mismo.
