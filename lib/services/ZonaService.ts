@@ -13,6 +13,7 @@ import type {
   ObtenerZonaServiceResult,
 } from "@/lib/interfaces/services/IZonaService";
 import type { ActualizarZonaInput, CrearZonaInput, ListarZonasInput } from "@/lib/types/zona";
+import { rechazoDeNombreDeEtiqueta } from "@/lib/utils/nombre-imprimible-etiqueta";
 
 /**
  * ⭑ FICHA 376 (R6) — EL MOTIVO DEL RECHAZO DE R5, EN ESPAÑOL Y ACCIONABLE.
@@ -54,6 +55,18 @@ export class ZonaService implements IZonaService {
     input: CrearZonaInput | ActualizarZonaInput,
   ): Promise<PrepararResult> {
     const fieldErrors: Record<string, string[]> = {};
+
+    // ⭑ FICHA 392 — el nombre de la zona SE IMPRIME en la etiqueta: es la primera parte de
+    // `geografiaLegible` (`zona / provincia / canton / distrito`), que va al dato `ubicacion`.
+    //
+    // Va AQUI, en `prepararDatos`, y no en `crear` y `actualizar` por separado, porque es el
+    // punto que los DOS caminos ya comparten: un solo sitio cierra las dos escrituras y no hay
+    // forma de que una gane la comprobacion y la otra la pierda. Mismo criterio con el que la 383
+    // eligio `BulkOrdenService.resolveFila` para cerrar las dos vias de carga de una vez.
+    //
+    // Y NO se cuelga del zod de `lib/types/zona.ts` por el motivo de siempre: ese modulo viaja al
+    // navegador y la decision de «que es imprimible» se toma con la cobertura de la fuente.
+    Object.assign(fieldErrors, rechazoDeNombreDeEtiqueta(input.nombre) ?? {});
 
     const distritoIds = distinct(input.distritoIds);
     const distritosExistentes = await this.repo.countExistingDistritos(distritoIds);

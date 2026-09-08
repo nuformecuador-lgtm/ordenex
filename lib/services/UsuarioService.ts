@@ -33,6 +33,7 @@ import type {
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { IVehiculoRepository } from "@/lib/interfaces/repositories/IVehiculoRepository";
 import { descargaConfig } from "@/lib/config/descarga";
+import { rechazoDeNombreDeEtiqueta } from "@/lib/utils/nombre-imprimible-etiqueta";
 import { hashPassword } from "@/lib/utils/password";
 import { generateStrongPassword } from "@/lib/utils/password-generator";
 
@@ -108,6 +109,32 @@ export class UsuarioService implements IUsuarioService {
 
   async crear(input: CrearUsuarioInput, actor: Actor): Promise<CrearUsuarioServiceResult> {
     if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R3/R4
+
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    // ⭑ FICHA 392 — EL NOMBRE DE LA TIENDA SE IMPRIME EN LA ETIQUETA
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    //
+    // `usuario.nombre` de la tienda es uno de los diez datos que la etiqueta pone en el papel
+    // (`datosDeEtiqueta`, dato `tiendaNombre`), y `exigirCobertura` aborta el LOTE ENTERO si la
+    // fuente no lo cubre. La ficha 383 cerro los campos de la ORDEN y dejo este fuera (su Q3).
+    //
+    // ⚠️ POR QUE SE COMPRUEBA PARA TODOS LOS ROLES Y NO SOLO PARA `adminTienda`, que es el unico
+    // cuyo nombre se imprime: porque el rol NO es una propiedad fija de la fila. `actualizar`
+    // acepta `rolId`, asi que un mensajero llamado «𝕄ario» ascendido a tienda meses despues
+    // llevaria su nombre no imprimible al papel SIN volver a pasar por aqui —nadie toco el
+    // nombre—. Acotar la comprobacion al rol dejaria justo esa rendija abierta, y a cambio de
+    // nada: ningun nombre de persona legitimo necesita un caracter fuera de la fuente.
+    //
+    // ⚠️ LO QUE ESTO NO CIERRA, declarado en vez de escondido: un nombre escrito por OTRA puerta
+    // —`PostulacionRepository.crearMensajeroConDocumentos` (postulacion publica de mensajero) o
+    // `ApiKeyRepository` (cuenta tecnica de integracion)— y promovido despues a `adminTienda` sin
+    // que nadie edite el nombre. Cerrarlo pedia rechazar el cambio de ROL por un dato viejo, que
+    // es una decision sobre los nombres YA GUARDADOS y esta ficha no la toma (ni hace backfill).
+    //
+    // Va ANTES del hash de la contrasena a proposito: no se paga un bcrypt por un alta que se va
+    // a rechazar.
+    const rechazoNombre = rechazoDeNombreDeEtiqueta(input.nombre);
+    if (rechazoNombre) return { status: "validation_error", fieldErrors: rechazoNombre };
 
     // R30: resuelve la contrasena segun el modo. Nunca se loguea (R25/R34).
     const generated = input.passwordMode === "generate";
@@ -271,6 +298,15 @@ export class UsuarioService implements IUsuarioService {
     actor: Actor,
   ): Promise<ActualizarUsuarioServiceResult> {
     if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R3/R4
+
+    // ⭑ FICHA 392 — la otra mitad de la puerta de `crear`, con el mismo motivo escrito alli. Solo
+    // cuando el nombre EFECTIVAMENTE cambia (`.partial()`: ausente = no se toca), misma disciplina
+    // que la correccion de datos del cliente (383): un nombre viejo con un caracter raro —escrito
+    // antes de esta ficha— no puede bloquear la edicion del telefono de esa misma cuenta.
+    if (input.nombre !== undefined) {
+      const rechazoNombre = rechazoDeNombreDeEtiqueta(input.nombre);
+      if (rechazoNombre) return { status: "validation_error", fieldErrors: rechazoNombre };
+    }
 
     // Feature 27/R12/R4a: se recalcula `fulfillment` con el rol resultante, por lo
     // que se necesita el usuario actual (rol e/o valor previo). `null` -> not_found.

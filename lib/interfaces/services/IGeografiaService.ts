@@ -28,6 +28,17 @@ export type ListarArbolGeograficoServiceResult =
 
 export type CrearNodoGeograficoServiceResult =
   | { status: "ok"; id: string; nivel: NivelGeografico }
+  /**
+   * ⭑ FICHA 392 — el nombre lleva un caracter que la ETIQUETA no puede imprimir.
+   *
+   * Sale del SERVICIO y no del zod del borde a proposito: la decision de «que es imprimible» se
+   * toma con la cobertura de la fuente del PDF, y `lib/types/geografia-nodo.ts` viaja al
+   * navegador (mismo criterio que la 383 aplico a `filaCargaSchema`, design §5.1).
+   *
+   * La forma es la MISMA que ya produce el borde ante un ZodError, asi que la Server Action no
+   * cambia una linea y la pantalla lo pinta bajo el campo `nombre` con el codigo que ya tiene.
+   */
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   /** El nombre ya existe bajo ese padre, comparado por su forma NORMALIZADA (R17). */
   | { status: "conflict" }
   /** El padre indicado no existe (R14). No se crea ninguna fila. */
@@ -42,6 +53,14 @@ export type CambiarActivacionGeograficaServiceResult =
 
 export type RenombrarNodoGeograficoServiceResult =
   | { status: "ok"; nivel: NivelGeografico; id: string; nombre: string }
+  /**
+   * ⭑ FICHA 392 — el nombre NUEVO lleva un caracter que la ETIQUETA no puede imprimir.
+   *
+   * Esta rama es la que cierra el agujero que abrio la 375: hasta ella el catalogo no se podia
+   * renombrar, asi que sus nombres eran los del seed oficial. Desde que se puede renombrar, la
+   * unica cosa que separa al catalogo de un caracter no imprimible es esta comprobacion.
+   */
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   /** Otro HERMANO ya se llama asi, comparado por su forma NORMALIZADA. Nunca el nodo consigo mismo. */
   | { status: "conflict" }
   /** El nodo indicado no existe. No se modifica ninguna fila. */
