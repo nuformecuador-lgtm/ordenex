@@ -3,6 +3,7 @@ import {
   COLUMNAS_DESCARGA_MI_WALLET,
   filaDescargaMiWallet,
 } from "@/app/(app)/mi-wallet/_components/mi-wallet-descarga-columnas";
+import { filaDescargaDesgloseTienda } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-descarga-columnas";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 
 // Feature 170 / T C.3 (R5/R7/R8/R23) — columnas de export del ledger de la tienda.
@@ -82,5 +83,58 @@ describe("columnas de descarga del ledger de la tienda", () => {
         expect(celda).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
       }
     }
+  });
+});
+
+// ⭑ FICHA 381 (T I.2, R39) — EL COBRO EN LA DESCARGA DEL LIBRO DE LA TIENDA.
+//
+// R39 pide que el nombre del archivo sea el MISMO que el de pantalla, en las dos vistas. No se
+// prueba comparando el archivo contra el diccionario del que sale —eso sería una aserción
+// contra su propia fuente, siempre verde—: se prueba con el LITERAL que la tienda lee en la
+// tabla, y se afirma además que la descarga del ADMINISTRADOR emite exactamente ese mismo
+// texto para el mismo movimiento. Si alguien desviara una de las dos, la igualdad cruzada cae.
+describe("⭑ FICHA 381 (R39) — el cobro sale en el archivo con el nombre de pantalla", () => {
+  const COBRO: WalletTiendaMovimientoDTO = {
+    id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    tiendaId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    tipo: "debito",
+    categoria: "cobro_manual",
+    monto: "15000.00",
+    origenTipo: "manual",
+    origenId: null,
+    descripcion: "Material de despacho entregado en bodega",
+    fechaMovimiento: "2026-09-08T14:30:00.000Z",
+  };
+
+  it("la columna «Concepto» dice «Cobro de Ordenex», no el valor del enum", () => {
+    const fila = filaDescargaMiWallet(COBRO);
+    expect(fila.concepto).toBe("Cobro de Ordenex");
+    expect(fila.concepto).not.toBe("cobro_manual");
+    expect(fila.tipo).toBe("Débito");
+  });
+
+  it("emite el importe TAL CUAL y arrastra el motivo tecleado en la columna de origen", () => {
+    const fila = filaDescargaMiWallet(COBRO);
+    expect(fila.monto).toBe("15000.00");
+    expect(typeof fila.monto).toBe("string");
+    expect(fila.origen).toBe("Manual · Material de despacho entregado en bodega");
+    expect(fila.fecha).toBe("2026-09-08");
+  });
+
+  it("las DOS descargas —la de la tienda y la del admin— emiten el mismo nombre", () => {
+    // El archivo del administrador sale del MISMO diccionario reexportado. Si un día se
+    // duplicara el mapa, esta igualdad sería lo primero en caer.
+    expect(filaDescargaMiWallet(COBRO).concepto).toBe(
+      filaDescargaDesgloseTienda(COBRO).concepto,
+    );
+    expect(filaDescargaMiWallet(COBRO).concepto).toBe("Cobro de Ordenex");
+  });
+
+  it("un cobro y un ajuste NO se confunden en el archivo (R33/D2)", () => {
+    const ajuste = { ...COBRO, categoria: "ajuste_debito" as const };
+    expect(filaDescargaMiWallet(ajuste).concepto).toBe("Ajuste (débito)");
+    expect(filaDescargaMiWallet(COBRO).concepto).not.toBe(
+      filaDescargaMiWallet(ajuste).concepto,
+    );
   });
 });

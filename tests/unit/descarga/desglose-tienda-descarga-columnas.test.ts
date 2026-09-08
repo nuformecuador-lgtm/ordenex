@@ -135,3 +135,47 @@ describe("columnas de descarga del desglose por tienda", () => {
     ]);
   });
 });
+
+// ⭑ FICHA 381 (T I.2, R39) — EL COBRO EN EL ARCHIVO QUE DESCARGA QUIEN LIQUIDA.
+//
+// La otra mitad de R39. Aquí se mide el literal que sale en el archivo del ADMINISTRADOR; la
+// igualdad cruzada con el archivo de la tienda vive en `wallet-tienda-descarga-columnas.test.ts`.
+describe("⭑ FICHA 381 (R39) — el cobro en la descarga del desglose por tienda", () => {
+  const COBRO: WalletTiendaMovimientoDTO = {
+    ...MOV,
+    id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    tipo: "debito",
+    categoria: "cobro_manual",
+    monto: "15000.00",
+    origenTipo: "manual",
+    origenId: null,
+    descripcion: "Material de despacho entregado en bodega",
+    fechaMovimiento: "2026-09-08T14:30:00.000Z",
+  };
+
+  it("dice «Cobro de Ordenex» y no el valor interno del enum", () => {
+    const fila = filaDescargaDesgloseTienda(COBRO);
+    expect(fila.concepto).toBe("Cobro de Ordenex");
+    expect(fila.concepto).not.toBe("cobro_manual");
+    expect(fila.tipo).toBe("Débito");
+  });
+
+  it("el importe sale TAL CUAL y el motivo tecleado acompaña al origen manual", () => {
+    const fila = filaDescargaDesgloseTienda(COBRO);
+    expect(fila.monto).toBe("15000.00");
+    expect(fila.origen).toBe("Manual · Material de despacho entregado en bodega");
+    expect(fila.fecha).toBe("2026-09-08");
+  });
+
+  it("sigue sin filtrar identificadores internos aunque el origen sea nulo", () => {
+    const fila = filaDescargaDesgloseTienda(COBRO);
+    expect(fila).not.toHaveProperty("origenId");
+    for (const celda of Object.values(fila)) {
+      if (typeof celda === "string") {
+        expect(celda).not.toMatch(
+          /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+        );
+      }
+    }
+  });
+});
