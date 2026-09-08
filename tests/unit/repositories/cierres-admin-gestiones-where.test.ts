@@ -41,7 +41,12 @@ interface Consulta {
 }
 
 function prismaFalso(gestiones: unknown[] = []) {
-  const gestionOrden = { findMany: vi.fn(async (_args?: Consulta) => gestiones) };
+  const gestionOrden = {
+    findMany: vi.fn(async (_args?: Consulta) => gestiones),
+    // FICHA 394: la tercera consulta de la descarga, el derivador en lote de los intentos de
+    // entrega. Sin grupos: aqui se miden `where`/`orderBy`/`select`, no el conteo.
+    groupBy: vi.fn(async (_args?: { by?: unknown; where?: Record<string, unknown> }) => []),
+  };
   const cierreDetail = { findMany: vi.fn(async (_args?: Consulta) => []) };
   return { gestionOrden, cierreDetail };
 }

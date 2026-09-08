@@ -116,6 +116,10 @@ export interface ICierresBodegaAdminRepository {
    * MISMA proyeccion, MISMO orden y MISMO compositor que el camino de «cierres del dia» (R26):
    * las dos salidas tienen que producir la misma fila o el mismo mensajero saldria distinto
    * segun desde donde se descargue.
+   *
+   * FICHA 394 (2026-09-08) — y el MISMO derivador en lote de `intentosEntrega`
+   * (`contarIntentosVigentesEnLoteCon`), por ese mismo R26: si esta hoja contara los intentos
+   * de otra forma que la de «cierres del dia», la misma orden saldria con dos numeros.
    */
   findGestionesDeCierresBodegaCompleto(
     filtros: FiltrosDescargaGestiones,

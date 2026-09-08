@@ -30,6 +30,10 @@ import {
   filtrosWhere,
   toPendienteRowDesdeSnapshot,
 } from "@/lib/repositories/CierresAdminRepository";
+// FICHA 394 (2026-09-08): + el derivador EN LOTE de los intentos de entrega vigentes, el mismo
+// que consumen la analitica y el tope de la 276. Se IMPORTA, no se reescribe: es el numero con
+// el que el sistema cobra, y dos agregaciones «iguales» divergen a la primera correccion.
+import { contarIntentosVigentesEnLoteCon } from "@/lib/repositories/OrdenHistorialRepository";
 import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
 import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 import { CierreDetalleFaltanteError } from "@/lib/utils/cierre-detalle";
@@ -406,11 +410,19 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
     if (gestiones.length === 0) return [];
 
     const cierreIds = [...new Set(gestiones.map((g) => g.cierreId).filter((id) => id !== null))];
-    const detalle = await this.prisma.cierreDetail.findMany({
-      where: { cierreId: { in: cierreIds } },
-      select: DETALLE_DESCARGA_SELECT,
-    });
-    return componerGestionesDescarga(gestiones, detalle);
+    // FICHA 394 — ids DEDUPLICADOS de las ordenes: una orden puede traer varias gestiones y su
+    // conteo de intentos es UNO.
+    const ordenIds = [...new Set(gestiones.map((g) => g.ordenId))];
+    const [detalle, intentosPorOrden] = await Promise.all([
+      this.prisma.cierreDetail.findMany({
+        where: { cierreId: { in: cierreIds } },
+        select: DETALLE_DESCARGA_SELECT,
+      }),
+      // FICHA 394 — el MISMO derivador en lote que el camino A (R26: las dos hojas emiten la
+      // misma fila). Una consulta para todo el conjunto, no una por gestion.
+      contarIntentosVigentesEnLoteCon(this.prisma.gestionOrden, ordenIds),
+    ]);
+    return componerGestionesDescarga(gestiones, detalle, intentosPorOrden);
   }
 
   /**

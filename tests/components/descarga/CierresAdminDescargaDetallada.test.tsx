@@ -153,6 +153,10 @@ function gestion(resultado: CierreResultado, numRemision: string): CierreGestion
     producto: "Caja",
     tiendaNombre: "Tienda X",
     intentosContactoTienda: 2,
+    // FICHA 394 — el otro contador, el del MENSAJERO. Va con un valor DISTINTO del de la tienda
+    // a propósito: con los dos iguales, una celda que cogiera el contador equivocado pasaría en
+    // verde, que es exactamente el fallo que esta ficha vino a corregir.
+    intentosEntrega: 5,
     resultado,
     montoRecibido: null,
     pagos: [],

@@ -218,6 +218,52 @@ export function whereIntentosVigentes(
 }
 
 /**
+ * El delegado de `gestion_orden` acotado a lo UNICO que el derivador en lote necesita. Se pide el
+ * delegado y no el cliente entero para que cualquier repositorio cuyo `Pick` ya incluya
+ * `gestionOrden` pueda reusarlo sin ensanchar su cliente ni inyectar este repositorio.
+ */
+type GestionOrdenGroupBy = Pick<PrismaClient["gestionOrden"], "groupBy">;
+
+/**
+ * FICHA 394 (2026-09-08) — el DERIVADOR EN LOTE de los intentos de entrega, extraido a funcion
+ * para que quien no pueda inyectar este repositorio lo REUSE en vez de reescribirlo.
+ *
+ * ES EL CUERPO DE `OrdenHistorialRepository.contarIntentosVigentesEnLote`, no una segunda
+ * version: el metodo delega aqui, asi que el `groupBy` que corre para la analitica, para el
+ * panel del mensajero y para la hoja de cierres es literalmente el mismo. Mismo motivo y mismo
+ * patron que `appendCambioEstado` (`registrar-cambio-estado.ts`): un choke point que tres repos
+ * usan SIN instanciar la clase.
+ *
+ * Por que hizo falta: la hoja fundida de cierres (230) la componen DOS repositorios
+ * —`CierresAdminRepository` y `CierresBodegaAdminRepository`— cuyos `Pick` del cliente NO
+ * incluyen `ordenHistorialEstado` ni `$queryRaw`, de modo que no pueden construir
+ * `OrdenHistorialRepository`; y anadirles una dependencia de constructor obligaria a tocar los
+ * ~30 sitios que los instancian. Lo que NO se hizo, a proposito: copiar el `groupBy` alli. Dos
+ * agregaciones «iguales» divergen a la primera correccion, y este numero es el que gobierna el
+ * tope de intentos (276) y con el que se cobra.
+ *
+ * El contrato es el del metodo, palabra por palabra (215/R7/R8/R29/R30):
+ *   - `groupBy` por el par `(ordenId, cierreId)`: cada grupo es un CIERRE APROBADO distinto de
+ *     esa orden, asi que contar grupos por `ordenId` es contar cierres, no gestiones (R29);
+ *   - las ordenes sin filas que cumplan el criterio NO aparecen en el Map (Postgres no emite
+ *     grupos vacios): el llamador aplica `?? 0` (R8);
+ *   - `ordenIds` vacio -> Map vacio SIN emitir consulta (R7).
+ */
+export async function contarIntentosVigentesEnLoteCon(
+  gestionOrden: GestionOrdenGroupBy,
+  ordenIds: string[],
+): Promise<Map<string, number>> {
+  if (ordenIds.length === 0) return new Map(); // R7: ni una consulta
+  const rows = await gestionOrden.groupBy({
+    by: ["ordenId", "cierreId"],
+    where: whereIntentosVigentes({ in: ordenIds }),
+  });
+  const porOrden = new Map<string, number>();
+  for (const r of rows) porOrden.set(r.ordenId, (porOrden.get(r.ordenId) ?? 0) + 1);
+  return porOrden;
+}
+
+/**
  * Feature 49 — repositorio del HISTORIAL de estados. SOLO queries Prisma; sin logica de
  * negocio (la autorizacion por rol vive en `OrdenHistorialService`, R27).
  *
@@ -290,16 +336,14 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
    * Las ordenes sin filas que cumplan el criterio NO aparecen en el Map (Postgres no emite
    * grupos vacios); el llamador aplica `?? 0` (R8). Guarda temprana con `ids` vacio: Map vacio
    * SIN query (R7), patron `OrdenRepository.findMensajerosBloqueadosPorCierres`.
+   *
+   * FICHA 394 (2026-09-08): el cuerpo vive en `contarIntentosVigentesEnLoteCon`, arriba en este
+   * mismo archivo. No es una capa de mas — es lo que permite que la hoja fundida de cierres,
+   * cuyos repositorios no pueden construir esta clase, ejecute EXACTAMENTE esta consulta en vez
+   * de una copia suya. El metodo publico no cambia de contrato ni de comportamiento.
    */
   async contarIntentosVigentesEnLote(ordenIds: string[]): Promise<Map<string, number>> {
-    if (ordenIds.length === 0) return new Map(); // R7: ni una consulta
-    const rows = await this.prisma.gestionOrden.groupBy({
-      by: ["ordenId", "cierreId"],
-      where: whereIntentosVigentes({ in: ordenIds }),
-    });
-    const porOrden = new Map<string, number>();
-    for (const r of rows) porOrden.set(r.ordenId, (porOrden.get(r.ordenId) ?? 0) + 1);
-    return porOrden;
+    return contarIntentosVigentesEnLoteCon(this.prisma.gestionOrden, ordenIds);
   }
 
   /**

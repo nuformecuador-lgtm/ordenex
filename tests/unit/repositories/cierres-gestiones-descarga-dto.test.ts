@@ -102,9 +102,25 @@ function detalle(over: Record<string, unknown> = {}) {
   };
 }
 
-function prismaFalso(gestiones: unknown[], detalles: unknown[]) {
+/**
+ * FICHA 394 — los GRUPOS que `contarIntentosVigentesEnLoteCon` recibe de Postgres: un grupo por
+ * par `(orden, cierre aprobado con gestión contable vigente)`. El conteo de una orden es cuántos
+ * grupos suyos hay, así que el doble se escribe en la misma forma que la base devuelve, no como
+ * un número ya sumado. Un `Map` prefabricado aquí probaría la suma del test, no la del código.
+ */
+function grupos(...pares: [ordenId: string, cierreId: string][]) {
+  return pares.map(([ordenId, cierreId]) => ({ ordenId, cierreId }));
+}
+
+function prismaFalso(gestiones: unknown[], detalles: unknown[], intentos: unknown[] = []) {
   return {
-    gestionOrden: { findMany: vi.fn(async () => gestiones) },
+    gestionOrden: {
+      findMany: vi.fn(async () => gestiones),
+      // FICHA 394: la TERCERA consulta de la descarga — el derivador en lote de los intentos de
+      // entrega. Por defecto no devuelve grupos: es el caso de la orden sin ningún intento
+      // contable, que tiene que salir con `0` y no con un hueco.
+      groupBy: vi.fn(async (_args?: { by?: unknown; where?: Record<string, unknown> }) => intentos),
+    },
     cierreDetail: { findMany: vi.fn(async () => detalles) },
   };
 }
@@ -125,11 +141,10 @@ function repoAdmin(prisma: ReturnType<typeof prismaFalso>) {
 const repoBodega = (prisma: ReturnType<typeof prismaFalso>) =>
   new CierresBodegaAdminRepository(prisma as unknown as PrismaClient);
 
-async function filaAdmin(gestiones: unknown[], detalles: unknown[]) {
-  const filas = await repoAdmin(prismaFalso(gestiones, detalles)).findGestionesPorAlcanceCompleto(
-    ALCANCE,
-    FILTROS,
-  );
+async function filaAdmin(gestiones: unknown[], detalles: unknown[], intentos: unknown[] = []) {
+  const filas = await repoAdmin(
+    prismaFalso(gestiones, detalles, intentos),
+  ).findGestionesPorAlcanceCompleto(ALCANCE, FILTROS);
   return filas[0]!;
 }
 
@@ -236,10 +251,115 @@ describe("DTO de la hoja fundida (feature 230, T2.1/T7.1)", () => {
     expect(sinIntentos.intentosContactoTienda).not.toBeNull();
     expect(sinIntentos.intentosContactoTienda).not.toBeUndefined();
 
-    // Y el DTO no trae el OTRO contador por ninguna puerta: si mañana alguien lo añade, tiene
-    // que ser una columna con su propio nombre, no un cambio de fuente de ésta.
-    expect(conIntentos).not.toHaveProperty("intentosEntrega");
+    // ⚠️ FICHA 394 (2026-09-08) — AQUÍ HABÍA LO CONTRARIO, y el cambio es el encargo, no una
+    // relajación. La 385 afirmaba `expect(conIntentos).not.toHaveProperty("intentosEntrega")`
+    // con este razonamiento: «si mañana alguien lo añade, tiene que ser una columna con su
+    // propio nombre, no un cambio de fuente de ésta». El humano midió que lo que había pedido
+    // eran los intentos de ENTREGA y firmó SUSTITUIR la columna, así que el DTO lleva los DOS
+    // números —cada uno con su nombre completo, que es la mitad del razonamiento que SÍ sigue
+    // viva— y la hoja se queda con el del mensajero.
+    //
+    // Lo que NO cambia: un «intentos» a secas sigue prohibido. Es el nombre ambiguo que dejó
+    // pasar la confusión, y ninguno de los dos contadores puede reclamarlo.
+    expect(conIntentos).toHaveProperty("intentosEntrega");
     expect(conIntentos).not.toHaveProperty("intentos");
+  });
+
+  // --- FICHA 394 (2026-09-08): los intentos de ENTREGA -----------------------------------
+
+  it("los intentos de ENTREGA cuentan CIERRES aprobados, no gestiones (ficha 394)", async () => {
+    // Tres grupos, y DOS de ellos son del mismo cierre `c-9`: son dos gestiones contables de la
+    // misma orden dentro de un mismo cierre aprobado, y eso es UN intento (215/R29). El conteo
+    // correcto es 2 —`c-9` y `c-8`—, no 3. Un `count()` de gestiones diría 3, escalaría antes de
+    // tiempo y cobraría de más.
+    const fila = await filaAdmin(
+      [gestionEntregada()],
+      [detalle()],
+      grupos(["o-1", "c-9"], ["o-1", "c-8"]),
+    );
+
+    expect(fila.intentosEntrega).toBe(2);
+    expect(typeof fila.intentosEntrega).toBe("number");
+  });
+
+  it("una orden sin ningún intento contable sale con CERO, no con un hueco (ficha 394)", async () => {
+    // Postgres no emite grupos vacíos: la orden simplemente no está en el Map. El `?? 0` vive en
+    // el compositor porque el DTO promete un número — un `undefined` aquí saldría a la hoja como
+    // celda vacía, que se lee «no se sabe» en vez de «nadie la ha intentado».
+    const fila = await filaAdmin([gestionEntregada()], [detalle()], grupos(["OTRA-ORDEN", "c-9"]));
+
+    expect(fila.intentosEntrega).toBe(0);
+    expect(fila.intentosEntrega).not.toBeNull();
+    expect(fila.intentosEntrega).not.toBeUndefined();
+  });
+
+  it("los DOS contadores viajan a la vez y no se contaminan (ficha 394)", async () => {
+    // El fallo que la ficha corrige: la hoja traía el de la tienda donde se pedía el del
+    // mensajero. Con los dos números DISTINTOS en la misma fila, cruzarlos se ve.
+    const fila = await filaAdmin(
+      [gestionEntregada()], // `orden.intentosContacto: 4` en el fixture
+      [detalle()],
+      grupos(["o-1", "c-9"], ["o-1", "c-8"], ["o-1", "c-7"]),
+    );
+
+    expect(fila.intentosContactoTienda).toBe(4); // la TIENDA
+    expect(fila.intentosEntrega).toBe(3); // el MENSAJERO
+    expect(fila.intentosEntrega).not.toBe(fila.intentosContactoTienda);
+  });
+
+  it("el conteo pide los VIGENTES, no todos los que hubo (ficha 394)", async () => {
+    // El `where` que llega a Prisma es el predicado ÚNICO de la 215, no uno escrito aquí. Es la
+    // mitad firmada del encargo: «vigentes» significa gestión no anulada, en un cierre APROBADO
+    // y con un resultado de la lista de inclusión. Si alguien cambiara el conteo a «todos», este
+    // caso se pone rojo antes de que ninguna hoja salga mal.
+    const prisma = prismaFalso([gestionEntregada()], [detalle()]);
+
+    await repoAdmin(prisma).findGestionesPorAlcanceCompleto(ALCANCE, FILTROS);
+
+    const args = prisma.gestionOrden.groupBy.mock.calls[0]![0]!;
+    // El grano: por el PAR, que es lo que hace que el conteo sea de cierres y no de gestiones.
+    expect(args.by).toEqual(["ordenId", "cierreId"]);
+    const where = args.where as Record<string, unknown>;
+    expect(where.anuladaAt).toBeNull(); // la deshecha no cuenta
+    expect(where.cierre).toEqual({ estado: "aprobado" }); // el cierre sin aprobar tampoco
+    expect(where.cierreId).toEqual({ not: null });
+    expect(where.resultado).toEqual({ in: ["rechazada", "devuelta", "reprogramada"] });
+    // Lista de INCLUSIÓN: un `notIn` haría que un `resultado` futuro del enum empezara a contar
+    // solo, que es exactamente lo que la 215 prohíbe.
+    expect(JSON.stringify(where)).not.toContain("notIn");
+  });
+
+  it("pide el conteo UNA sola vez, con los ids de orden sin repetir (ficha 394)", async () => {
+    // Anti N+1, que es el motivo de que el gemelo en lote exista: la descarga puede traer miles
+    // de gestiones. Y las dos filas son de la MISMA orden en dos cierres, así que el id viaja
+    // una vez: su conteo es uno solo.
+    const prisma = prismaFalso(
+      [
+        gestionEntregada({ id: "g-1", cierreId: "c-1" }),
+        gestionEntregada({ id: "g-2", cierreId: "c-2" }),
+      ],
+      [detalle({ cierreId: "c-1" }), detalle({ cierreId: "c-2" })],
+      grupos(["o-1", "c-9"]),
+    );
+
+    const filas = await repoAdmin(prisma).findGestionesPorAlcanceCompleto(ALCANCE, FILTROS);
+
+    expect(prisma.gestionOrden.groupBy).toHaveBeenCalledTimes(1);
+    const where = prisma.gestionOrden.groupBy.mock.calls[0]![0]!.where as {
+      ordenId: { in: string[] };
+    };
+    expect(where.ordenId).toEqual({ in: ["o-1"] });
+    // Y las dos filas de esa orden llevan el MISMO número: es un dato de la ORDEN, no de la fila.
+    expect(filas.map((f) => f.intentosEntrega)).toEqual([1, 1]);
+  });
+
+  it("sin gestiones tampoco se pide el conteo: cero filas no cuesta una consulta (ficha 394)", async () => {
+    const prisma = prismaFalso([], []);
+
+    const filas = await repoAdmin(prisma).findGestionesPorAlcanceCompleto(ALCANCE, FILTROS);
+
+    expect(filas).toEqual([]);
+    expect(prisma.gestionOrden.groupBy).not.toHaveBeenCalled();
   });
 
   // Que los DOS campos se PIDAN de verdad en el `select` que llega a Prisma —y no salgan de un
@@ -333,15 +453,35 @@ describe("DTO de la hoja fundida (feature 230, T2.1/T7.1)", () => {
   it("los DOS caminos producen la MISMA fila para la misma gestión (R26)", async () => {
     const gestiones = [gestionEntregada()];
     const detalles = [detalle()];
+    // FICHA 394: los MISMOS grupos a los dos lados. Con el conteo en cero por ambos lados la
+    // paridad seguiría siendo cierta aunque uno de los dos caminos no consultara nada — que es
+    // el modo de fallo que R26 existe para cazar.
+    const intentos = grupos(["o-1", "c-9"], ["o-1", "c-8"]);
 
     const porCierresDelDia = await repoAdmin(
-      prismaFalso(gestiones, detalles),
+      prismaFalso(gestiones, detalles, intentos),
     ).findGestionesPorAlcanceCompleto(ALCANCE, FILTROS);
     const porBodega = await repoBodega(
-      prismaFalso(gestiones, detalles),
+      prismaFalso(gestiones, detalles, intentos),
     ).findGestionesDeCierresBodegaCompleto(FILTROS);
 
     expect(porBodega).toEqual(porCierresDelDia);
+    expect(porBodega[0]!.intentosEntrega).toBe(2);
+  });
+
+  it("los DOS caminos piden el conteo con el MISMO criterio (R26, ficha 394)", async () => {
+    // No basta con que las dos filas coincidan sobre el mismo doble: lo que R26 protege es que
+    // los dos caminos no diverjan, y el conteo es una consulta PROPIA de cada uno. Se comparan
+    // los argumentos que cada repositorio manda a Prisma, no dos constantes que hoy coinciden.
+    const admin = prismaFalso([gestionEntregada()], [detalle()]);
+    const bodega = prismaFalso([gestionEntregada()], [detalle()]);
+
+    await repoAdmin(admin).findGestionesPorAlcanceCompleto(ALCANCE, FILTROS);
+    await repoBodega(bodega).findGestionesDeCierresBodegaCompleto(FILTROS);
+
+    expect(bodega.gestionOrden.groupBy.mock.calls[0]![0]).toEqual(
+      admin.gestionOrden.groupBy.mock.calls[0]![0],
+    );
   });
 
   it("una gestión de un cierre con destino bodega central sale por el camino A sin trato especial (R27)", async () => {

@@ -65,7 +65,10 @@ import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 // 💰 FEATURE 276 (T9, R21/R33): el PREDICADO UNICO del conteo de intentos, IMPORTADO y no
 // reescrito. R33 prohibe que esta ficha toque el criterio; importarlo es lo que hace imposible
 // tener aqui una segunda definicion que divergiera del numero que ven las demas superficies.
-import { whereIntentosVigentes } from "@/lib/repositories/OrdenHistorialRepository";
+import {
+  contarIntentosVigentesEnLoteCon,
+  whereIntentosVigentes,
+} from "@/lib/repositories/OrdenHistorialRepository";
 
 /**
  * 💰 FEATURE 276 (T9, R23/R38) — el `motivo` de la gestion SINTETICA del rechazo por agotamiento.
@@ -709,6 +712,13 @@ type GestionDescargaRow = Prisma.GestionOrdenGetPayload<{
 export function toGestionDescargaDTO(
   g: GestionDescargaRow,
   d: DetalleAdminRow,
+  /**
+   * FICHA 394 — los intentos de ENTREGA vigentes de `g.ordenId`, ya derivados por
+   * `contarIntentosVigentesEnLoteCon`. Llega RESUELTO (con su `?? 0` aplicado) y OBLIGATORIO:
+   * un parametro con default seria un cero silencioso el dia que alguien anada un tercer
+   * llamador y se olvide del lote.
+   */
+  intentosEntrega: number,
 ): CierreGestionDescargaDTO {
   // `cierre` es nullable en el modelo (una gestion del dia aun sin cerrar tiene `cierre_id`
   // NULL), pero los DOS caminos de esta feature exigen el cierre en su WHERE. Si llega null,
@@ -752,6 +762,14 @@ export function toGestionDescargaDTO(
     // «la tienda no lo intento nunca» —que es un hecho— en una celda vacia, que se lee como «no
     // se sabe».
     intentosContactoTienda: g.orden.intentosContacto,
+    // FICHA 394 — los intentos de ENTREGA, que son los del MENSAJERO y los que la columna de la
+    // hoja pide desde el 2026-09-08. Vienen del derivador unico de la 215 (un `groupBy` en LOTE
+    // sobre `gestion_orden`, no una consulta por fila) y NO de `orden`: no existe tal columna.
+    //
+    // Deliberadamente PEGADO al de arriba en el DTO: los dos numeros conviven, tienen duenos
+    // distintos y en produccion ya se confundieron una vez. Quien lea este archivo los ve juntos
+    // y con sus dos nombres completos.
+    intentosEntrega,
     resultado: g.resultado,
     montoRecibido: decimalToString(g.montoRecibido),
     pagos: toLineasPago(g.pagos),
@@ -803,12 +821,21 @@ type DetalleDescargaRow = Prisma.CierreDetailGetPayload<{
 export function componerGestionesDescarga(
   gestiones: GestionDescargaRow[],
   detalle: DetalleDescargaRow[],
+  /**
+   * FICHA 394 — los intentos de entrega vigentes POR ORDEN, del derivador unico de la 215.
+   * Obligatorio, y por la misma razon que el parametro de `toGestionDescargaDTO`: un default
+   * `new Map()` dejaria la columna entera en cero sin romper nada.
+   *
+   * Las ordenes sin intentos contables NO estan en el Map (Postgres no emite grupos vacios): el
+   * `?? 0` se resuelve aqui, que es el borde donde el DTO promete un numero y nunca `null`.
+   */
+  intentosPorOrden: ReadonlyMap<string, number>,
 ): CierreGestionDescargaDTO[] {
   const porCierreYOrden = new Map(detalle.map((d) => [`${d.cierreId}:${d.ordenId}`, d]));
   return gestiones.map((g) => {
     const d = porCierreYOrden.get(`${g.cierreId}:${g.ordenId}`);
     if (d === undefined) throw new CierreDetalleFaltanteError(g.cierreId ?? "", g.ordenId);
-    return toGestionDescargaDTO(g, d);
+    return toGestionDescargaDTO(g, d, intentosPorOrden.get(g.ordenId) ?? 0);
   });
 }
 
@@ -1281,11 +1308,21 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     if (gestiones.length === 0) return [];
 
     const cierreIds = [...new Set(gestiones.map((g) => g.cierreId).filter((id) => id !== null))];
-    const detalle = await this.prisma.cierreDetail.findMany({
-      where: { cierreId: { in: cierreIds } },
-      select: DETALLE_DESCARGA_SELECT,
-    });
-    return componerGestionesDescarga(gestiones, detalle);
+    // FICHA 394 — los ids DEDUPLICADOS de las ordenes del conjunto. Una misma orden puede
+    // aparecer en varias filas (N gestiones, en cierres distintos) y su conteo es UNO: mandar el
+    // id repetido a un `IN` no cambia el resultado, pero engorda la consulta sin motivo.
+    const ordenIds = [...new Set(gestiones.map((g) => g.ordenId))];
+    const [detalle, intentosPorOrden] = await Promise.all([
+      this.prisma.cierreDetail.findMany({
+        where: { cierreId: { in: cierreIds } },
+        select: DETALLE_DESCARGA_SELECT,
+      }),
+      // FICHA 394 — UNA consulta para todo el conjunto, sea de diez filas o de miles: es el
+      // gemelo en LOTE del derivador, y existe justamente para que esto no sea un N+1. Va en el
+      // MISMO `Promise.all` que el snapshot, asi que la descarga paga un round-trip mas, no dos.
+      contarIntentosVigentesEnLoteCon(this.prisma.gestionOrden, ordenIds),
+    ]);
+    return componerGestionesDescarga(gestiones, detalle, intentosPorOrden);
   }
 
   /**
