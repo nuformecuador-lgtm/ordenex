@@ -26,6 +26,7 @@ import type { ICierresAdminService } from "@/lib/interfaces/services/ICierresAdm
 import {
   cierreIdSchema,
   actualizarPagosGestionSchema,
+  corregirResultadoGestionSchema,
   aprobarCierreSchema,
   rechazarCierreSchema,
   forzarSolicitudVencidoSchema,
@@ -44,6 +45,7 @@ import {
   type RechazarCierreResult,
   type ForzarSolicitudVencidoResult,
   type ActualizarPagosGestionResult,
+  type CorregirResultadoGestionResult,
 } from "@/lib/types/cierres-admin";
 import { filtrosDescargaGestionesSchema } from "@/lib/types/filtros-cierres";
 import type { CatalogoFiltrosCierresDTO } from "@/lib/types/filtros-cierres";
@@ -359,6 +361,34 @@ export async function actualizarPagosGestion(
     const data = actualizarPagosGestionSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.actualizarPagosGestion(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
+}
+
+/**
+ * 💰 FICHA 398 — corrige EN SITIO el RESULTADO de una gestion de un cierre ABIERTO
+ * (`entregada -> rechazada`). Mutacion interna del mismo proyecto -> Server Action, no route
+ * handler (patron aprobar/rechazar/corregir-pagos).
+ *
+ * El borde resuelve el actor y valida la FORMA (`validation_error` de zod, incluido el `.strict()`
+ * que rechaza un `nuevoResultado` colado). El ROL, el ALCANCE, el estado del cierre y el resultado
+ * vigente los decide el service, que es quien puede mirar la base.
+ *
+ * SU SUPERFICIE YA EXISTE (T4.2, R16): `CorregirResultadoDialog`, montado en
+ * `CierresAdminModule` sobre las filas `entregada` de un cierre abierto. La anotacion
+ * `@sin-superficie` que llevaba esta accion se borro en ese mismo commit, que es lo que su propio
+ * motivo decia: una excepcion que sobrevive a su motivo la pone roja la guardia sola.
+ */
+export async function corregirResultadoGestion(
+  input: unknown,
+  deps: CierresAdminDeps = {},
+): Promise<CorregirResultadoGestionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = corregirResultadoGestionSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.corregirResultadoGestion(data, actor);
   });
   return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
 }

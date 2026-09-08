@@ -106,6 +106,8 @@ describe("366/T1 — el `migration.sql` y el `down.sql`, como texto", () => {
       "zona_central_cambiada",
       "zona_pago_mensajero_cambiado",
       "cobro_tienda_registrado",
+      // ficha 398 (2026-09-08): la correccion en sitio del resultado de una gestion
+      "cierre_dia_gestion_corregida",
     ];
     expect([...HISTORIAL_ACCION_TIPOS].sort()).toEqual(
       [...previos, VALOR_NUEVO, ...POSTERIORES].sort(),

@@ -7,6 +7,8 @@ import type {
   ActualizarPagosGestionResult,
   Alcance,
   CierreAdminResumenRow,
+  CorregirResultadoGestionInput,
+  CorregirResultadoGestionResult,
   GestionEditableDelCierre,
   GestionIncidenteDelCierre,
   GestionRetornableDelCierre,
@@ -81,7 +83,19 @@ export const MOTIVO_RECHAZO_TOPE_INTENTOS =
   "rechazada al aprobar el cierre: sin gestionar y sin intentos de entrega disponibles";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
-import { computeTotales } from "@/lib/utils/cierre-totales";
+// FICHA 398: `computeTotales` recalcula los CUATRO totales del recaudo (la MISMA funcion que los
+// congelo al solicitar) y `sumarSnapshotsCongelados` rehace los DOS por gestion SUMANDO lo ya
+// escrito — nunca re-derivando con la tarifa viva, que moveria dinero de las otras gestiones.
+import { computeTotales, sumarSnapshotsCongelados } from "@/lib/utils/cierre-totales";
+// FICHA 398: el resolver de la tarifa del pago al mensajero, como FUNCION sobre el delegado, para
+// resolverla DENTRO de la transaccion de la correccion sin instanciar su repositorio ni ensanchar
+// el `Pick` de este. Es el cuerpo del resolver de la 39, no una copia.
+import { resolvePagoTarifaCon } from "@/lib/repositories/TarifaZonaMensajeroRepository";
+// FICHA 398: los dos derivadores PUROS del importe por gestion (39 y 56). Se llaman aunque el
+// resultado sea conocido ("0.00" para el pago de un rechazo) para que la regla siga viviendo en un
+// solo sitio.
+import { pagoPorResultado } from "@/lib/utils/pago-mensajero";
+import { ingresoBodegaPorResultado } from "@/lib/utils/ingreso-bodega";
 // Feature 264 (B4): la proyeccion y el ORDEN de la lista de ordenes sin gestionar, declarados
 // una sola vez y compartidos con el detalle propio del mensajero (misma pantalla, mismo dato).
 import {
@@ -115,6 +129,10 @@ const ESTADOS_ABIERTOS: CierreEstado[] = ["solicitado", "vencido"];
 
 // El unico resultado con desglose que corregir: los otros cuatro no cobran nada (R8/R25).
 const RESULTADO_ENTREGADA = "entregada" as const;
+// FICHA 398: el UNICO destino que esta ficha concede. La pareja `entregada -> rechazada` esta
+// escrita con dos constantes y no se acepta como dato: `nuevoResultado` no viaja en la peticion
+// justamente para que aceptar el destino desde el cliente no abra las otras por accidente.
+const RESULTADO_RECHAZADA = "rechazada" as const;
 const ESTADO_SOLICITADO: CierreEstado = "solicitado";
 
 /**
@@ -1487,6 +1505,214 @@ export class CierresAdminRepository implements ICierresAdminRepository {
           }),
           monto: new Prisma.Decimal(totales.general),
           ...actorEdicion,
+        },
+      ]);
+
+      return { status: "updated" as const, totales };
+    });
+  }
+
+  /**
+   * 💰 FICHA 398 — CORRIGE EN SITIO el resultado de una gestion de un cierre ABIERTO.
+   *
+   * EL CASO, y ocurrio: un mensajero marco `entregada` una orden que fue `rechazada` y ya habia
+   * solicitado el cierre. No habia NINGUNA via de corregirlo, asi que el cierre cobraba flete y
+   * comision sobre un cobro inexistente y su `total_general` incluia efectivo que nadie tenia. El
+   * 2026-09-08 hubo que arreglarlo A MANO en la base de produccion.
+   *
+   * ⚠️ METODO NUEVO Y NO UNA RAMA DE `actualizarPagosGestion`: la guardia del censo del historial
+   * mide POR METODO, y metida ahi dentro borrar el `appendAccion` nuevo dejaria la guardia verde
+   * (ese metodo ya llama a `appendAccion` por `cierre_dia_pagos_editados`).
+   *
+   * ⚠️ SE CORRIGE, NO SE ANULA. Anular exige `cierre_id IS NULL` —la guardia money-critical de la
+   * 67— y dejaria HUERFANA la fila de `cierre_detail` de esa orden, que es INMUTABLE. Corregir en
+   * sitio no toca `cierre_detail`: la orden sigue en el cierre, con su tarifa congelada intacta,
+   * porque nada de lo que esa tabla guarda depende del `resultado`.
+   */
+  async corregirResultadoGestionEnCierre(
+    input: CorregirResultadoGestionInput,
+  ): Promise<CorregirResultadoGestionResult> {
+    const { gestionId, alcance, motivo, corregidoPor, estatusEntregadaId, estatusRechazadaId } =
+      input;
+    const alcanceGuard = alcanceWhere(alcance);
+
+    return this.prisma.$transaction(async (tx) => {
+      // (0) LECTURA PREVIA, dentro de la tx. Trae el DATO que hace falta para resolver la tarifa
+      // del rechazo y para etiquetar el rastro; NO es la guardia.
+      //
+      // ⚠️ SOLO FILTRA POR ALCANCE, Y ES DELIBERADO. El `resultado`, la vigencia y el estado del
+      // cierre NO se filtran aqui: si se filtraran, esta lectura DECIDIRIA y el `WHERE` del sello
+      // quedaria de adorno —una mutacion que le quitara `resultado: 'entregada'` no cambiaria
+      // nada observable, y eso se MIDIO el 2026-09-08: sobrevivio—. La lectura obtiene el dato;
+      // el SELLO decide. El alcance si va aqui, y por otro motivo: sin el, esta consulta leeria
+      // la guia y la zona de un cierre ajeno aunque despues no escribiera nada.
+      const previa = await tx.gestionOrden.findFirst({
+        where: {
+          id: gestionId,
+          cierre: { is: alcanceGuard },
+        },
+        select: {
+          cierreId: true,
+          orden: { select: { id: true, numGuia: true, numRemision: true } },
+          cierre: {
+            select: {
+              // La zona CONGELADA del cierre (la del mensajero al solicitarlo), no la viva.
+              destinoZonaId: true,
+              mensajero: { select: { vehiculoId: true } },
+            },
+          },
+        },
+      });
+      if (previa === null || previa.cierreId === null || previa.cierre === null) {
+        const existe = await tx.gestionOrden.count({ where: { id: gestionId } });
+        return { status: existe > 0 ? ("conflict" as const) : ("fuera_de_alcance" as const) };
+      }
+      const cierreId = previa.cierreId;
+      const ordenId = previa.orden.id;
+
+      // 💰 Los DOS snapshots POR GESTION (design §2.2).
+      //
+      // `pago_mensajero` es determinista y no consulta nada: `pagoPorResultado('rechazada', …)`
+      // es "0.00" con cualquier tarifa, incluida `null`. Se llama a la funcion igual —en vez de
+      // escribir el literal— para que la regla siga viviendo en un solo sitio.
+      //
+      // `ingreso_bodega_rechazo` sale de la tarifa de la zona CONGELADA del cierre + el vehiculo
+      // del mensajero, resuelta con `resolvePagoTarifaCon`, que ES el cuerpo del resolver de la
+      // 39 (no una copia). ⚠️ ES LA TARIFA DE HOY: `cierre_dia` congela `destino_zona_id` pero NO
+      // la fila de `tarifa_zona_mensajero` que uso, asi que si esa tarifa cambio entre la
+      // solicitud y la correccion, este importe PUEDE DIFERIR del que se habria congelado aquel
+      // dia. Puerta H2 de la ficha, resuelta MIDIENDO produccion el 2026-09-08: el ingreso es 0
+      // en los 149 rechazos con destino `bodega_central` y vale 1.000 (6 veces) o 1.700 (1) en
+      // los de `bodega_satelite`. La divergencia es conocida y ACEPTADA; la alternativa —dejarlo
+      // en 0.00— subestimaria el ingreso de la bodega en un importe real.
+      const tarifa = await resolvePagoTarifaCon(
+        tx.tarifaZonaMensajero,
+        previa.cierre.destinoZonaId,
+        previa.cierre.mensajero.vehiculoId,
+      );
+      const pagoMensajero = pagoPorResultado(RESULTADO_RECHAZADA, tarifa); // "0.00"
+      const ingresoBodegaRechazo = ingresoBodegaPorResultado(RESULTADO_RECHAZADA, tarifa);
+
+      // (1) EL SELLO — LA UNICA GUARDIA QUE DECIDE. Aqui viven las CUATRO condiciones, y ninguna
+      // esta repetida arriba: la gestion existe y es esta, esta VIGENTE, su resultado ES
+      // `entregada` y su cierre esta ABIERTO y dentro del alcance. `count !== 1` -> no se toca ni
+      // una fila mas.
+      //
+      // Es tambien el anti-TOCTOU: entre la lectura de arriba y esta escritura cabe una
+      // aprobacion de otro admin, y lo que decide es esta condicion, no aquella.
+      //
+      // `monto_recibido` y `metodo_pago` van a NULL porque el cobro NO EXISTIO: dejarlos seria
+      // mantener en la fila el importe que la correccion viene a negar.
+      const sello = await tx.gestionOrden.updateMany({
+        where: {
+          id: gestionId,
+          anuladaAt: null,
+          resultado: RESULTADO_ENTREGADA,
+          cierre: { is: { estado: { in: ESTADOS_ABIERTOS }, ...alcanceGuard } },
+        },
+        data: {
+          resultado: RESULTADO_RECHAZADA,
+          motivo,
+          montoRecibido: null,
+          metodoPago: null,
+          pagoMensajero: new Prisma.Decimal(pagoMensajero),
+          ingresoBodegaRechazo: new Prisma.Decimal(ingresoBodegaRechazo),
+        },
+      });
+      if (sello.count !== 1) {
+        // No se distingue «se cerro entre medias» de «no es tuyo»: la lectura previa ya decidio
+        // eso con informacion fresca, y aqui cualquiera de los dos es lo mismo.
+        const existe = await tx.gestionOrden.count({ where: { id: gestionId } });
+        return { status: existe > 0 ? ("conflict" as const) : ("fuera_de_alcance" as const) };
+      }
+
+      // (2) EL DESGLOSE DEL COBRO QUE NO HUBO. Sin este `deleteMany`, `computeTotales` seguiria
+      // sin sumarlo (ignora todo lo que no sea `entregada`) pero el cierre quedaria con lineas de
+      // pago colgando de una gestion rechazada: el total dejaria de cuadrar con la suma de las
+      // lineas, que es una de las tres identidades que el humano verifico a mano el 2026-09-08.
+      await tx.gestionOrdenPago.deleteMany({ where: { gestionId } });
+
+      // (3) LA ORDEN, al estado destino del resultado nuevo. Guardada por su estatus de ORIGEN:
+      // si otra via la movio entre medias, esto afecta 0 filas y la transaccion entera revierte.
+      const movida = await tx.orden.updateMany({
+        where: { id: ordenId, estatusId: estatusEntregadaId, deletedAt: null },
+        data: { estatusId: estatusRechazadaId },
+      });
+      if (movida.count !== 1) throw new Error("orden no transicionada por la correccion");
+
+      // (4) EL HISTORIAL DE ESTADOS, por el choke point (que ademas valida la transicion contra
+      // `TRANSICIONES` y es de fallo cerrado). Familia PROPIA: quien decidio el rechazo fue un
+      // admin desde una oficina, no el mensajero en la calle, y esta fila es la unica evidencia.
+      await appendCambioEstado(tx, [
+        {
+          ordenId,
+          estatusOrigenId: estatusEntregadaId,
+          estatusDestinoId: estatusRechazadaId,
+          actorUsuarioId: corregidoPor,
+          origenTipo: "correccion_resultado_gestion",
+          motivo,
+          gestionOrdenId: gestionId,
+        },
+      ]);
+
+      // (5) LOS SEIS TOTALES DEL SNAPSHOT, sobre las gestiones VIGENTES de ESE cierre leidas
+      // DESPUES del paso 1.
+      const gestiones = await tx.gestionOrden.findMany({
+        where: { cierreId, anuladaAt: null },
+        select: {
+          resultado: true,
+          pagoMensajero: true,
+          ingresoBodegaRechazo: true,
+          pagos: { select: { metodo: true, monto: true } },
+        },
+      });
+      // Los CUATRO del recaudo: la MISMA funcion que los congelo al solicitar. Recalcular (y no
+      // restar un delta) es lo que garantiza que snapshot y lineas no puedan divergir.
+      const totales = computeTotales(
+        gestiones.map((g) => ({ resultado: g.resultado, pagos: toLineasPago(g.pagos) })),
+      );
+      // ⚠️ LOS DOS POR GESTION: SUMA DE LOS SNAPSHOTS CONGELADOS, jamas `derivarPagos` /
+      // `derivarIngresoBodega`. Aquellas re-derivarian TODAS las gestiones con la tarifa de hoy y
+      // reescribirian el pago congelado de las OTRAS del cierre —gestiones que nadie corrigio—.
+      const totalPagoMensajero = sumarSnapshotsCongelados(gestiones.map((g) => g.pagoMensajero));
+      const totalIngresoBodegaRechazos = sumarSnapshotsCongelados(
+        gestiones.map((g) => g.ingresoBodegaRechazo),
+      );
+
+      const actualizados = await tx.cierreDia.updateMany({
+        where: { id: cierreId, estado: { in: ESTADOS_ABIERTOS }, ...alcanceGuard },
+        data: {
+          totalEfectivo: new Prisma.Decimal(totales.efectivo),
+          totalSimpe: new Prisma.Decimal(totales.simpe),
+          totalTransferencia: new Prisma.Decimal(totales.transferencia),
+          totalGeneral: new Prisma.Decimal(totales.general),
+          totalPagoMensajero: new Prisma.Decimal(totalPagoMensajero),
+          totalIngresoBodegaRechazos: new Prisma.Decimal(totalIngresoBodegaRechazos),
+        },
+      });
+      if (actualizados.count !== 1) throw new Error("cierre no actualizado por la correccion");
+
+      // (6) EL RASTRO. Va al final y DESPUES de los tres `count` guardados: si el sello no se
+      // aplico se salio antes con `conflict`, y si la orden o el snapshot no se escribieron esto
+      // ni se alcanza. No hay camino por el que quede el registro de una correccion que no ocurrio.
+      //
+      // `monto` = el `total_general` NUEVO del cierre (precedente literal:
+      // `cierre_dia_pagos_editados`). `valorAnterior`/`valorNuevo` son valores del enum del
+      // dominio. El porque de la correccion NO entra aqui (362/R5): vive en `gestion_orden`.
+      const actorCorreccion = await resolverActorCongelado(tx, corregidoPor);
+      await appendAccion(tx, [
+        {
+          accion: "cierre_dia_gestion_corregida",
+          entidadTipo: "gestion_orden",
+          entidadId: gestionId,
+          entidadEtiqueta: etiquetaDeEntidad("gestion_orden", {
+            numGuia: previa.orden.numGuia,
+            numRemision: previa.orden.numRemision,
+          }),
+          monto: new Prisma.Decimal(totales.general),
+          valorAnterior: RESULTADO_ENTREGADA,
+          valorNuevo: RESULTADO_RECHAZADA,
+          ...actorCorreccion,
         },
       ]);
 

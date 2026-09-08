@@ -82,6 +82,26 @@ const CENSO: EntradaCenso[] = [
     mutacion: /tx\.gestionOrden\.updateMany\(/,
   },
   {
+    // ⭑ FICHA 398 — LA CORRECCION EN SITIO del RESULTADO de una gestion de un cierre abierto.
+    //
+    // ⚠️ ENTRADA PROPIA CON METODO PROPIO, y ESE es el punto de la ficha. Si la escritura viviera
+    // dentro de `actualizarPagosGestion` —que ya llama a `appendAccion` por
+    // `cierre_dia_pagos_editados`— borrar el `appendAccion` nuevo dejaria esta guardia VERDE: mide
+    // POR METODO, no por escritura. Medido dos veces en este repo (fichas 376 y 380).
+    //
+    // ⚠️ Y NO BASTA CON ESTA LINEA: lo que comprueba que la fila SE ESCRIBE de verdad, con su
+    // `monto`, su `valor_anterior` y su `valor_nuevo`, es
+    // `tests/integration/db/correccion-resultado-gestion.int.test.ts`, contra Postgres real.
+    //
+    // La mutacion exigida es el SELLO de la gestion —el `updateMany` guardado que convierte la
+    // `entregada` en `rechazada`—, que es exactamente lo que la fila documenta.
+    tipos: ["cierre_dia_gestion_corregida"],
+    archivo: "lib/repositories/CierresAdminRepository.ts",
+    metodo: "corregirResultadoGestionEnCierre",
+    forma: "abre_tx",
+    mutacion: /tx\.gestionOrden\.updateMany\(/,
+  },
+  {
     tipos: ["cierre_bodega_aprobado", "cierre_bodega_rechazado"],
     archivo: "lib/repositories/CierresBodegaAdminRepository.ts",
     metodo: "resolverCierreBodega",
@@ -796,14 +816,14 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     expect(inventados, "el censo nombra un tipo que el catalogo no declara").toEqual([]);
   });
 
-  it("los 51 tipos del Anexo A (+ Q1, Q2, la 366, la 371, la 373, la 374, la 375, la 376, la 380 y la 381) siguen siendo 51", () => {
+  it("los 52 tipos del Anexo A (+ Q1, Q2, la 366, la 371, la 373, la 374, la 375, la 376, la 380, la 381 y la 398) siguen siendo 52", () => {
     // Numero DURO a proposito: añadir un tipo al enum obliga a pasar por aqui, y por tanto a
     // añadirlo al censo y a escribir su productor. Es el mecanismo de R14.
-    // 51 desde la ficha 381 (`cobro_tienda_registrado`); 50 lo fue desde la 380
-    // (`zona_pago_mensajero_cambiado`); 49 desde la 376 (`zona_central_cambiada`); 48 desde la 375
-    // (`nodo_geografico_renombrado`); 47 desde la 374 (los dos `nodo_geografico_*` de activacion);
-    // 45 desde la 373.
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(51);
+    // 52 desde la ficha 398 (`cierre_dia_gestion_corregida`); 51 lo fue desde la 381
+    // (`cobro_tienda_registrado`); 50 desde la 380 (`zona_pago_mensajero_cambiado`); 49 desde la
+    // 376 (`zona_central_cambiada`); 48 desde la 375 (`nodo_geografico_renombrado`); 47 desde la
+    // 374 (los dos `nodo_geografico_*` de activacion); 45 desde la 373.
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(52);
   });
 });
 

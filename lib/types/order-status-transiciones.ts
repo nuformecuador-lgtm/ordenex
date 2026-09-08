@@ -244,6 +244,24 @@ export const TRANSICIONES = {
   entregada: [
     // TERMINAL (Q1). Conserva UNA salida legitima: deshacer la gestion del dia (#31).
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #31
+    // ⭑ FICHA 398 — LA CORRECCION EN SITIO. Un maestro/admin corrige, desde el detalle de un
+    // cierre ABIERTO, una gestion que el mensajero declaro `entregada` y que fue `rechazada`.
+    //
+    // ⚠️ ESTA ARISTA NO LA PEDIA EL DISEÑO DE LA 398, Y SIN ELLA LA FICHA NO FUNCIONA: la
+    // correccion escribe la transicion por el choke point (`appendCambioEstado`), que valida
+    // TODO lote contra este mapa y es de FALLO CERRADO (Q7). Sin declararla aqui, la unica via
+    // para sacar del cierre un cobro inexistente moriria con `TransicionIlegalError` y la
+    // transaccion revertiria entera. Se declara CON su productor
+    // (`CierresAdminRepository.corregirResultadoGestionEnCierre`, mismo commit).
+    //
+    // `entregada` SIGUE EN `ESTADOS_TERMINALES` y eso es COMPATIBLE: ese conjunto EXIME de tener
+    // salida, no la prohibe (:236-237) — es el argumento con el que `incidente` sostiene sus seis.
+    // Y esta salida no continua ningun flujo de negocio: deshace un error humano dentro de una
+    // ventana controlada (`cierre.estado IN ('solicitado','vencido')`), igual que #31.
+    //
+    // NO se abre la inversa `rechazada -> entregada`: esta FUERA del alcance de la 398 y
+    // reintroduciria el cobro. La vuelta atras de una correccion es rechazar el cierre.
+    { to: "rechazada", via: "correccion_resultado_gestion", rol: "maestro/admin" }, // #69 (398)
   ],
   reprogramada: [
     { to: "en_bodega_central", via: "liberacion_reprogramada", rol: "sistema/cron" }, // #25

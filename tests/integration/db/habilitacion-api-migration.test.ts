@@ -187,7 +187,7 @@ describe("266 / enum — el DOWN recrea el tipo SIN la familia y aborta si algui
     // ⏳ 2026-08-24 (merge de la 276) — EL DIA LLEGO, y se resuelve como dice la nota del final de
     // este caso: `rechazo_tope_intentos` (0824, POSTERIOR a esta migracion) entra en POSTERIORES y
     // la foto historica de la 266 no se toca ni una linea.
-    const POSTERIORES = ["rechazo_tope_intentos"]; // feature 276 (2026-08-24)
+    const POSTERIORES = ["rechazo_tope_intentos", "correccion_resultado_gestion"]; // 276 (2026-08-24) · 398 (2026-09-08)
     expect(new Set(valores)).toEqual(
       new Set(
         (ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).filter(

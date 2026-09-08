@@ -25,11 +25,15 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CierreGrupos } from "@/lib/interfaces/services/ICierreDiaService";
-import type { ActualizarPagosGestionInput } from "@/lib/types/cierres-admin";
+import type {
+  ActualizarPagosGestionInput,
+  CorregirResultadoGestionInput,
+} from "@/lib/types/cierres-admin";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type {
   ActualizarPagosGestionServiceResult,
   AprobarCierreServiceResult,
+  CorregirResultadoGestionServiceResult,
   CierreAdminResumen,
   CierreDetalleAdminServiceResult,
   ForzarSolicitudVencidoServiceResult,
@@ -59,7 +63,12 @@ import {
   totalesIngresoOrdenex,
 } from "@/lib/utils/ingreso-ordenex";
 import { desglosarIngresoBodegaPorOrigen } from "@/lib/utils/desglose-rechazos-sla";
-import { ESTATUS_DEVOLUCION_POR_CONFIRMAR } from "@/lib/types/gestion-destino";
+// FICHA 398: el destino de la orden corregida sale del PUNTO UNICO de la regla `resultado ->
+// estado` (239/R3), no de un literal escrito en el servicio.
+import {
+  ESTATUS_DEVOLUCION_POR_CONFIRMAR,
+  ESTATUS_POR_RESULTADO,
+} from "@/lib/types/gestion-destino";
 // FEATURE 271 (R48/R10): la regla del bloqueo se CONSULTA, no se re-deriva aqui.
 import { SIN_CIERRES_ABIERTOS, estaBloqueadoPorCierres } from "@/lib/utils/bloqueo-cierre";
 // FEATURE 271 (T6.6, R42/R47): el aviso de «quedaste BLOQUEADO» que emite el RECHAZO. Mismo
@@ -94,6 +103,13 @@ const ESTADOS_CIERRE_ABIERTO: CierreEstado[] = ["solicitado", "vencido"];
 const MSG_PAGOS_SOLO_ENTREGA = "Solo una entrega tiene desglose de pago que corregir.";
 const MSG_PAGOS_SIN_COBRO = "Esta orden no tiene cobro asociado: no hay nada que repartir.";
 const msgDescuadre = (total: string) => `El desglose debe sumar exactamente ${total}.`;
+
+// FICHA 398 — mensajes de la CORRECCION DEL RESULTADO. Texto fijo, i18n-ready y SIN PII: dicen
+// QUE esta mal, que es lo unico que el admin necesita para arreglarlo. Nunca nombran al
+// mensajero, al destinatario ni al monto.
+const MSG_CORRECCION_SOLO_ENTREGA =
+  "Solo una entrega se puede corregir a rechazo: los demás resultados no cobran nada.";
+const MSG_MOTIVO_CORRECCION = "El motivo de la corrección es obligatorio.";
 
 // Feature 158 (R19/R20/R21) — mensajes accionables de la captura de indemnizaciones. Texto
 // fijo i18n-ready y SIN PII: nombran la gestion por su id (que el admin ya tiene en pantalla),
@@ -1266,6 +1282,94 @@ export class CierresAdminService implements ICierresAdminService {
       return { status: "ok", gestionId: input.gestionId, totales: res.totales };
     }
     if (res.status === "conflict") return { status: "conflict" };
+    return { status: "no_encontrada" };
+  }
+
+  /**
+   * 💰 FICHA 398 — CORRECCION EN SITIO del RESULTADO de una gestion de un cierre ABIERTO:
+   * `entregada -> rechazada`. Solo maestro/admin.
+   *
+   * Las CINCO guardias, en este orden y TODAS antes de escribir (R1-R5). El orden no es estetico:
+   * va de lo mas barato y menos revelador a lo mas caro.
+   *
+   *  1. **Rol** (R1). `esAccesoTotal` y nada mas. El `adminSatelite` tiene alcance para VER los
+   *     cierres de su bodega y aqui se le niega A PROPOSITO, igual que en la correccion del
+   *     desglose; y el mensajero menos todavia — esto mueve dinero y quien se equivoco fue el
+   *     (H4, decision del LEADER pendiente de confirmacion, firmada por el humano el 2026-09-08:
+   *     «el que va a hacer el movimiento es el maestro o el admin»).
+   *  2. **Alcance** (R2). Lo impone el repositorio en el WHERE. Fuera de alcance, inexistente y
+   *     anulada son el MISMO desenlace: distinguirlos revelaria cierres ajenos.
+   *  3. **Estado** (R3). El cierre tiene que estar ABIERTO. Se comprueba aqui para dar un
+   *     `conflict` legible, y OTRA VEZ dentro de la transaccion (anti-TOCTOU, R12): entre este
+   *     `if` y la escritura cabe una aprobacion de otro admin.
+   *     ⚠️ La restriccion a `solicitado`/`vencido` cubre por construccion el «no consolidado» —la
+   *     consolidacion en un `cierre_bodega` solo toma cierres `aprobado`—, pero eso es un
+   *     razonamiento: quien lo MIDE con datos reales es `correccion-resultado-gestion.int.test.ts`.
+   *  4. **Resultado** (R4). Solo una `entregada` se corrige. Cualquier otro resultado ya no cobra
+   *     nada, asi que «corregirlo» a `rechazada` no arreglaria ningun dinero y si abriria parejas
+   *     que esta ficha no concede.
+   *  5. **Motivo** (R5). El borde ya lo valido con zod; el servicio lo re-exige recortado, como
+   *     `rechazarCierre` con el suyo.
+   */
+  async corregirResultadoGestion(
+    input: CorregirResultadoGestionInput,
+    actor: Actor,
+  ): Promise<CorregirResultadoGestionServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // guardia 1 (R1)
+
+    const scope = await this.resolveAlcance(actor);
+    // Acceso total siempre resuelve alcance; las otras dos ramas son inalcanzables tras el guard
+    // de rol y se tratan como «aqui no hay nada tuyo» en vez de asumirlo.
+    if (scope.status !== "ok") return { status: "forbidden" };
+
+    const gestion = await this.repo.findGestionEditableEnCierre(input.gestionId, scope.alcance);
+    if (gestion === null) return { status: "no_encontrada" }; // guardia 2 (R2)
+
+    if (!ESTADOS_CIERRE_ABIERTO.includes(gestion.cierreEstado)) {
+      return { status: "conflict" }; // guardia 3 (R3)
+    }
+
+    if (gestion.resultado !== "entregada") {
+      // guardia 4 (R4)
+      return {
+        status: "validation_error",
+        fieldErrors: { resultado: [MSG_CORRECCION_SOLO_ENTREGA] },
+      };
+    }
+
+    const motivoLimpio = input.motivo.trim();
+    if (motivoLimpio.length === 0) {
+      // guardia 5 (R5)
+      return { status: "validation_error", fieldErrors: { motivo: [MSG_MOTIVO_CORRECCION] } };
+    }
+
+    // Los DOS ids del catalogo se resuelven AQUI y bajan como dato, igual que
+    // `devolucionRechazadas` en `aprobarCierre`: la capa de datos no lee catalogos. El destino
+    // sale de `ESTATUS_POR_RESULTADO`, el punto UNICO de la regla «que estado le toca a este
+    // resultado» (239/R3), y no de un literal escrito aqui.
+    const [estatusEntregadaId, estatusRechazadaId] = await Promise.all([
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.entregada),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.rechazada),
+    ]);
+    // FALLO CERRADO: sin los dos ids no se puede escribir la transicion, y un catalogo incompleto
+    // no es «sigue adelante sin mover la orden» — eso dejaria la gestion rechazada con la orden
+    // todavia en `entregada`, que es peor que no haber corregido.
+    if (estatusEntregadaId === null || estatusRechazadaId === null) {
+      return { status: "conflict" };
+    }
+
+    const res = await this.repo.corregirResultadoGestionEnCierre({
+      gestionId: input.gestionId,
+      alcance: scope.alcance,
+      motivo: motivoLimpio,
+      corregidoPor: actor.usuarioId, // el rastro: quien convirtio una entrega en un rechazo
+      estatusEntregadaId,
+      estatusRechazadaId,
+    });
+    if (res.status === "updated") {
+      return { status: "ok", gestionId: input.gestionId, totales: res.totales };
+    }
+    if (res.status === "conflict") return { status: "conflict" }; // R12
     return { status: "no_encontrada" };
   }
 

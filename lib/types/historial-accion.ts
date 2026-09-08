@@ -39,14 +39,16 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // que vuelve a «mueve dinero»; la ficha 380 añade el decimo
 // (`zona_pago_mensajero_cambiado`), que tambien es dinero; la ficha 381 añade el UNDECIMO
 // (`cobro_tienda_registrado`), que es dinero en el sentido mas directo: baja el disponible de una
-// tienda por una decision humana. El motivo de cada uno esta escrito a su lado.
+// tienda por una decision humana; y la ficha 398 añade el DUODECIMO (`cierre_dia_gestion_corregida`),
+// que tambien es dinero: saca de un cierre abierto un cobro que nadie recaudo y deja en cero el pago
+// de esa gestion al mensajero. El motivo de cada uno esta escrito a su lado.
 
 /**
- * Los 51 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
+ * Los 52 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
  * permisos) y es el que consume el selector de filtros: no se reordena por gusto.
  */
 export const HISTORIAL_ACCION_TIPOS = [
-  // --- A.1 · mueve dinero (29) ---
+  // --- A.1 · mueve dinero (30) ---
   "cierre_dia_aprobado", // cierres-admin.aprobarCierre
   "cierre_dia_rechazado", // cierres-admin.rechazarCierre
   "cierre_dia_pagos_editados", // cierres-admin.actualizarPagosGestion
@@ -141,6 +143,27 @@ export const HISTORIAL_ACCION_TIPOS = [
   // La fila lleva `monto` (el importe cobrado) y se etiqueta por el NOMBRE DE LA TIENDA. La
   // `descripcion` del cobro NO entra (R43): es texto libre tecleado por una persona.
   "cobro_tienda_registrado", // wallet-tienda.registrarCobroTiendaAction -> WalletTiendaMovimientoRepository.registrarCobroEnHistorial
+  // ⭑ FICHA 398 — UN MAESTRO/ADMIN CORRIGIO EL RESULTADO de una gestion que ya estaba dentro de un
+  // cierre ABIERTO: `entregada -> rechazada`. Entra en DINERO y no admite discusion — la fila
+  // documenta que del cierre SALIO un cobro que nadie recaudo (baja `total_general` y el balde de
+  // su metodo), que el `pago_mensajero` de esa gestion quedo en 0.00 y que la bodega gano su
+  // ingreso por rechazo. Es la clase de acto que el 2026-09-08 hubo que hacer a mano en produccion.
+  //
+  // ⚠️ TIPO PROPIO Y NO `cierre_dia_pagos_editados`, y las tres razones son concretas:
+  //   1. la etiqueta de aquel es «Editó los pagos de una gestión», y aqui no se corrigio un
+  //      desglose: se corrigio SI HUBO ENTREGA. Una frase falsa en el historial es el defecto que
+  //      la 362 persigue;
+  //   2. su productor censado es `actualizarPagosGestion` —que YA llama a `appendAccion`—, asi que
+  //      reusar el tipo dejaria la escritura nueva SIN VIGILAR: la guardia del censo mide POR
+  //      METODO, no por escritura;
+  //   3. filtrar «quien cambio un resultado» quedaria mezclado con correcciones de reparto que no
+  //      mueven ni un colon del total.
+  //
+  // `monto` = el `total_general` NUEVO del cierre (precedente literal: `cierre_dia_pagos_editados`).
+  // `valor_anterior`/`valor_nuevo` = `"entregada"`/`"rechazada"`, valores de un enum del dominio,
+  // que es el vocabulario cerrado que esa columna admite (precedente: `usuario_fulfillment_cambiado`).
+  // El MOTIVO NO ENTRA (R5): es texto libre tecleado por una persona y vive en `gestion_orden.motivo`.
+  "cierre_dia_gestion_corregida", // CierresAdminRepository.corregirResultadoGestionEnCierre
 
   // --- A.2 · hace desaparecer algo (10) ---
   // ⭑ FICHA 371 — la fecha de una reprogramacion ya registrada, corregida por un coordinador.
@@ -319,6 +342,10 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   // FICHA 381 (R41): un cobro manual BAJA el disponible de una tienda. No hay lectura mas directa
   // de «mueve dinero», y R17 exige exactamente una categoria por tipo.
   cobro_tienda_registrado: "mueve_dinero",
+  // FICHA 398: la correccion saca del cierre un cobro que nadie recaudo y pone en cero el pago
+  // de esa gestion al mensajero. No hay lectura mas directa de «mueve dinero», y R17 exige
+  // exactamente una categoria por tipo.
+  cierre_dia_gestion_corregida: "mueve_dinero",
   gestion_fecha_reprogramacion_corregida: "hace_desaparecer",
   orden_eliminada: "hace_desaparecer",
   orden_recuperada: "hace_desaparecer",
@@ -376,6 +403,7 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   zona_central_cambiada: "Cambió la marca de zona central",
   zona_pago_mensajero_cambiado: "Cambió el pago al mensajero de una zona",
   cobro_tienda_registrado: "Cobró un costo a una tienda",
+  cierre_dia_gestion_corregida: "Corrigió el resultado de una gestión",
   gestion_fecha_reprogramacion_corregida: "Corrigió la fecha de una reprogramación",
   orden_eliminada: "Eliminó una orden",
   orden_recuperada: "Recuperó una orden",

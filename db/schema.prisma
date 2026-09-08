@@ -100,64 +100,64 @@ model Usuario {
   createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime      @updatedAt @map("updated_at")
 
-  tipoIdentificacion                  TipoIdentificacion        @relation(fields: [tipoIdentificacionId], references: [id])
-  rol                                 Rol                       @relation(fields: [rolId], references: [id])
-  vehiculo                            Vehiculo?                 @relation(fields: [vehiculoId], references: [id]) // feature 21
-  zona                                Zona?                     @relation(fields: [zonaId], references: [id]) // feature 24/R6/R8: ON DELETE RESTRICT
-  ordenEnGestion                      Orden?                    @relation("UsuarioOrdenEnGestion", fields: [ordenEnGestionId], references: [id], onDelete: SetNull) // feature 36/R19-R21
+  tipoIdentificacion                  TipoIdentificacion                 @relation(fields: [tipoIdentificacionId], references: [id])
+  rol                                 Rol                                @relation(fields: [rolId], references: [id])
+  vehiculo                            Vehiculo?                          @relation(fields: [vehiculoId], references: [id]) // feature 21
+  zona                                Zona?                              @relation(fields: [zonaId], references: [id]) // feature 24/R6/R8: ON DELETE RESTRICT
+  ordenEnGestion                      Orden?                             @relation("UsuarioOrdenEnGestion", fields: [ordenEnGestionId], references: [id], onDelete: SetNull) // feature 36/R19-R21
   loginAttempts                       LoginAttempt[]
   trustedDevices                      TrustedDevice[]
   otpChallenges                       EmailOtpChallenge[]
   documentos                          MensajeroDocumento[] // feature 21
-  ordenesTienda                       Orden[]                   @relation("OrdenTienda")
-  ordenesAsignadas                    Orden[]                   @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
-  gestionesRealizadas                 GestionOrden[]            @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
-  gestionesAnuladas                   GestionOrden[]            @relation("GestionAnuladaPor") // feature 67/R11: gestiones que este usuario DESHIZO (rastro de la anulacion)
-  gestionesPagosEditados              GestionOrden[]            @relation("GestionPagosEditadosPor") // gestiones cuyo desglose de pago CORRIGIO este usuario
-  tarifasTienda                       Tarifa[]                  @relation("TarifaTienda") // tarifas cuya tienda es este usuario (adminTienda)
-  cierresRealizados                   CierreDia[]               @relation("CierreMensajero") // feature 37: cierres del dia solicitados por este mensajero
-  cierresResueltos                    CierreDia[]               @relation("CierreResueltoPor") // feature 38: cierres que este admin aprobo/rechazo
-  cierresBodegaSolicitados            CierreBodega[]            @relation("CierreBodegaSolicitadoPor") // feature 40: cierres de bodega solicitados por este adminSatelite
-  cierresBodegaResueltos              CierreBodega[]            @relation("CierreBodegaResueltoPor") // feature 40: cierres de bodega que este maestro aprobo/rechazo
-  walletMovimientosRegistrados        WalletMovimiento[]        @relation("WalletMovimientoRegistrador") // feature 42/R2/R15: movimientos manuales que este usuario (maestro) registro
-  walletTiendaMovimientos             WalletTiendaMovimiento[]  @relation("WalletTiendaMovimientoTienda") // feature 43/R1/R2: movimientos del ledger de ESTA tienda (rol adminTienda)
-  walletTiendaMovimientosRegistrados  WalletTiendaMovimiento[]  @relation("WalletTiendaMovimientoRegistrador") // feature 43/R2: movimientos manuales del ledger de tienda que este usuario registro
-  pagoMensajeroMovimientos            PagoMensajeroMovimiento[] @relation("PagoMensajeroMovimientoMensajero") // feature 44/R1/R2: movimientos del libro del pago a ESTE mensajero (rol mensajero)
-  pagoMensajeroMovimientosRegistrados PagoMensajeroMovimiento[] @relation("PagoMensajeroMovimientoRegistrador") // feature 44/R2: movimientos manuales del libro del pago que este usuario registro
-  historialEstadosActuados            OrdenHistorialEstado[]    @relation("HistorialActor") // feature 49/R21: transiciones de estado que este usuario (actor) origino
-  cierreDetallesTienda                CierreDetail[]            @relation("CierreDetailTienda") // feature 69/R6: snapshots que congelaron a esta tienda como destinataria
-  apiKey                              ApiKey?                   @relation("ApiKeyUsuario") // feature 81/[D6]: la key dedicada a ESTA cuenta sintetica (1:1)
-  apiKeysCreadas                      ApiKey[]                  @relation("ApiKeyCreadaPor") // feature 81/R21: keys que este usuario (maestro) genero
-  apiKeysComoTiendaDestino            ApiKey[]                  @relation("ApiKeyTiendaDestino") // feature 302: keys que cargan A NOMBRE de esta tienda (rol adminTienda); la FK es RESTRICT
-  rutaOptimizada                      RutaOptimizada?           @relation("RutaOptimizadaMensajero") // feature 92/R26: ruta optimizada vigente de ESTE mensajero (1:1)
-  plantillasCreadas                   PlantillaMensaje[]        @relation("PlantillaMensajeCreador") // feature 107/R8: plantillas de mensaje que este usuario (maestro) creo
-  webhookSuscripcion                  WebhookSuscripcion?       @relation("WebhookSuscripcionOwner") // feature 99/R1: suscripcion de webhook de ESTE owner (usuario dedicado de la API key); 1:1
-  ordenMensajeroMetas                 OrdenMensajeroMeta[]      @relation("OrdenMensajeroMetaMensajero") // feature 115: marcas privadas ("gestionar mas tarde") de ESTE mensajero sobre sus ordenes
-  chatConversaciones                  ChatConversacion[]        @relation("ChatConversacionMensajero") // feature 120/R13/R16: hilos de chat asignados a ESTE mensajero
-  notificacionesRecibidas             Notificacion[]            @relation("NotificacionDestinatario") // feature 146/R1: notificaciones dirigidas a ESTE usuario (D4)
-  notificacionesDeSuTienda            Notificacion[]            @relation("NotificacionTienda") // feature 146/F1.4-1: notificaciones ACOTADAS a esta tienda (el adminTienda ES la tienda)
+  ordenesTienda                       Orden[]                            @relation("OrdenTienda")
+  ordenesAsignadas                    Orden[]                            @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
+  gestionesRealizadas                 GestionOrden[]                     @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
+  gestionesAnuladas                   GestionOrden[]                     @relation("GestionAnuladaPor") // feature 67/R11: gestiones que este usuario DESHIZO (rastro de la anulacion)
+  gestionesPagosEditados              GestionOrden[]                     @relation("GestionPagosEditadosPor") // gestiones cuyo desglose de pago CORRIGIO este usuario
+  tarifasTienda                       Tarifa[]                           @relation("TarifaTienda") // tarifas cuya tienda es este usuario (adminTienda)
+  cierresRealizados                   CierreDia[]                        @relation("CierreMensajero") // feature 37: cierres del dia solicitados por este mensajero
+  cierresResueltos                    CierreDia[]                        @relation("CierreResueltoPor") // feature 38: cierres que este admin aprobo/rechazo
+  cierresBodegaSolicitados            CierreBodega[]                     @relation("CierreBodegaSolicitadoPor") // feature 40: cierres de bodega solicitados por este adminSatelite
+  cierresBodegaResueltos              CierreBodega[]                     @relation("CierreBodegaResueltoPor") // feature 40: cierres de bodega que este maestro aprobo/rechazo
+  walletMovimientosRegistrados        WalletMovimiento[]                 @relation("WalletMovimientoRegistrador") // feature 42/R2/R15: movimientos manuales que este usuario (maestro) registro
+  walletTiendaMovimientos             WalletTiendaMovimiento[]           @relation("WalletTiendaMovimientoTienda") // feature 43/R1/R2: movimientos del ledger de ESTA tienda (rol adminTienda)
+  walletTiendaMovimientosRegistrados  WalletTiendaMovimiento[]           @relation("WalletTiendaMovimientoRegistrador") // feature 43/R2: movimientos manuales del ledger de tienda que este usuario registro
+  pagoMensajeroMovimientos            PagoMensajeroMovimiento[]          @relation("PagoMensajeroMovimientoMensajero") // feature 44/R1/R2: movimientos del libro del pago a ESTE mensajero (rol mensajero)
+  pagoMensajeroMovimientosRegistrados PagoMensajeroMovimiento[]          @relation("PagoMensajeroMovimientoRegistrador") // feature 44/R2: movimientos manuales del libro del pago que este usuario registro
+  historialEstadosActuados            OrdenHistorialEstado[]             @relation("HistorialActor") // feature 49/R21: transiciones de estado que este usuario (actor) origino
+  cierreDetallesTienda                CierreDetail[]                     @relation("CierreDetailTienda") // feature 69/R6: snapshots que congelaron a esta tienda como destinataria
+  apiKey                              ApiKey?                            @relation("ApiKeyUsuario") // feature 81/[D6]: la key dedicada a ESTA cuenta sintetica (1:1)
+  apiKeysCreadas                      ApiKey[]                           @relation("ApiKeyCreadaPor") // feature 81/R21: keys que este usuario (maestro) genero
+  apiKeysComoTiendaDestino            ApiKey[]                           @relation("ApiKeyTiendaDestino") // feature 302: keys que cargan A NOMBRE de esta tienda (rol adminTienda); la FK es RESTRICT
+  rutaOptimizada                      RutaOptimizada?                    @relation("RutaOptimizadaMensajero") // feature 92/R26: ruta optimizada vigente de ESTE mensajero (1:1)
+  plantillasCreadas                   PlantillaMensaje[]                 @relation("PlantillaMensajeCreador") // feature 107/R8: plantillas de mensaje que este usuario (maestro) creo
+  webhookSuscripcion                  WebhookSuscripcion?                @relation("WebhookSuscripcionOwner") // feature 99/R1: suscripcion de webhook de ESTE owner (usuario dedicado de la API key); 1:1
+  ordenMensajeroMetas                 OrdenMensajeroMeta[]               @relation("OrdenMensajeroMetaMensajero") // feature 115: marcas privadas ("gestionar mas tarde") de ESTE mensajero sobre sus ordenes
+  chatConversaciones                  ChatConversacion[]                 @relation("ChatConversacionMensajero") // feature 120/R13/R16: hilos de chat asignados a ESTE mensajero
+  notificacionesRecibidas             Notificacion[]                     @relation("NotificacionDestinatario") // feature 146/R1: notificaciones dirigidas a ESTE usuario (D4)
+  notificacionesDeSuTienda            Notificacion[]                     @relation("NotificacionTienda") // feature 146/F1.4-1: notificaciones ACOTADAS a esta tienda (el adminTienda ES la tienda)
   notificacionLecturas                NotificacionLectura[] // feature 146/R2/R3: lectura/descarte de ESTE usuario, aislado de los demas del mismo rol
-  cargasRealizadas                    Carga[]                   @relation("CargaUsuario") // feature 141/R2: lotes de carga masiva que ESTE usuario realizo (adminTienda o usuario dedicado de la API key)
-  incidentesReportados                OrdenIncidente[]          @relation("IncidenteReportadoPor") // feature 158/R39/R51: incidentes que este admin REPORTO (y que por tanto NO puede aprobar)
-  incidentesResueltos                 OrdenIncidente[]          @relation("IncidenteResueltoPor") // feature 158/R52/R54: incidentes que este admin aprobo/rechazo
-  analyticsDailyComoTienda            AnalyticsDaily[]          @relation("AnalyticsDailyTienda") // feature 123/R31: filas del rollup diario cuya TIENDA (de la orden) es este usuario
-  analyticsDailyComoMensajero         AnalyticsDaily[]          @relation("AnalyticsDailyMensajero") // feature 123/R32: filas del rollup diario de este mensajero (el cubo sin_asignar NO cuelga de aqui: es NULL)
-  liquidacionPagosComoMensajero       LiquidacionPago[]         @relation("LiquidacionPagoMensajero") // feature 172/R21: pagos (liquidaciones) recibidos por ESTE mensajero
-  liquidacionPagosComoTienda          LiquidacionPago[]         @relation("LiquidacionPagoTienda") // feature 172/R29: pagos recibidos por ESTA tienda (contra su saldo acumulado)
-  liquidacionPagosRegistrados         LiquidacionPago[]         @relation("LiquidacionPagoRegistrador") // feature 172/R7: pagos que este usuario (maestro/admin) registro
-  liquidacionAnulacionesRealizadas    LiquidacionAnulacion[]    @relation("LiquidacionAnulacionActor") // feature 172/R73: anulaciones de pago que este usuario realizo
-  liquidacionRepartosComoMensajero    LiquidacionReparto[]      @relation("LiquidacionRepartoMensajero") // feature 205/R29: repartos (un importe troceado entre sus cierres) recibidos por ESTE mensajero
-  liquidacionRepartosRegistrados      LiquidacionReparto[]      @relation("LiquidacionRepartoRegistrador") // feature 205/R29: repartos que este usuario (maestro/admin) registro
-  rankingSnapshotFilas                RankingSnapshotFila[]     @relation("RankingSnapshotFilaMensajero") // feature 196/R17: filas del ranking CONGELADO de este mensajero; la FK es RESTRICT (borrar el usuario con historia falla)
-  ordenNotasEscritas                  OrdenNota[]               @relation("OrdenNotaAutor") // feature 227: notas del hilo que ESTE usuario publico; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
-  postulacionesRecursoAtendidas       PostulacionRecurso[]      @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
-  diaRepartoCambiosRealizados         OrdenDiaRepartoCambio[]   @relation("OrdenDiaRepartoCambioActor") // feature 262/R20: correcciones del dia de reparto que ESTE usuario hizo; la FK es RESTRICT (quien corrigio es evidencia y no se pierde al dar de baja al usuario)
+  cargasRealizadas                    Carga[]                            @relation("CargaUsuario") // feature 141/R2: lotes de carga masiva que ESTE usuario realizo (adminTienda o usuario dedicado de la API key)
+  incidentesReportados                OrdenIncidente[]                   @relation("IncidenteReportadoPor") // feature 158/R39/R51: incidentes que este admin REPORTO (y que por tanto NO puede aprobar)
+  incidentesResueltos                 OrdenIncidente[]                   @relation("IncidenteResueltoPor") // feature 158/R52/R54: incidentes que este admin aprobo/rechazo
+  analyticsDailyComoTienda            AnalyticsDaily[]                   @relation("AnalyticsDailyTienda") // feature 123/R31: filas del rollup diario cuya TIENDA (de la orden) es este usuario
+  analyticsDailyComoMensajero         AnalyticsDaily[]                   @relation("AnalyticsDailyMensajero") // feature 123/R32: filas del rollup diario de este mensajero (el cubo sin_asignar NO cuelga de aqui: es NULL)
+  liquidacionPagosComoMensajero       LiquidacionPago[]                  @relation("LiquidacionPagoMensajero") // feature 172/R21: pagos (liquidaciones) recibidos por ESTE mensajero
+  liquidacionPagosComoTienda          LiquidacionPago[]                  @relation("LiquidacionPagoTienda") // feature 172/R29: pagos recibidos por ESTA tienda (contra su saldo acumulado)
+  liquidacionPagosRegistrados         LiquidacionPago[]                  @relation("LiquidacionPagoRegistrador") // feature 172/R7: pagos que este usuario (maestro/admin) registro
+  liquidacionAnulacionesRealizadas    LiquidacionAnulacion[]             @relation("LiquidacionAnulacionActor") // feature 172/R73: anulaciones de pago que este usuario realizo
+  liquidacionRepartosComoMensajero    LiquidacionReparto[]               @relation("LiquidacionRepartoMensajero") // feature 205/R29: repartos (un importe troceado entre sus cierres) recibidos por ESTE mensajero
+  liquidacionRepartosRegistrados      LiquidacionReparto[]               @relation("LiquidacionRepartoRegistrador") // feature 205/R29: repartos que este usuario (maestro/admin) registro
+  rankingSnapshotFilas                RankingSnapshotFila[]              @relation("RankingSnapshotFilaMensajero") // feature 196/R17: filas del ranking CONGELADO de este mensajero; la FK es RESTRICT (borrar el usuario con historia falla)
+  ordenNotasEscritas                  OrdenNota[]                        @relation("OrdenNotaAutor") // feature 227: notas del hilo que ESTE usuario publico; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
+  postulacionesRecursoAtendidas       PostulacionRecurso[]               @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
+  diaRepartoCambiosRealizados         OrdenDiaRepartoCambio[]            @relation("OrdenDiaRepartoCambioActor") // feature 262/R20: correcciones del dia de reparto que ESTE usuario hizo; la FK es RESTRICT (quien corrigio es evidencia y no se pierde al dar de baja al usuario)
   fechaReprogramacionCambiosHechos    GestionFechaReprogramacionCambio[] @relation("GestionFechaReprogramacionCambioActor") // ficha 371: correcciones de la fecha de una reprogramacion que ESTE usuario hizo; FK RESTRICT por el mismo motivo que la linea de arriba
-  habilitacionesApiPedidas            OrdenHabilitacionApi[]    @relation("OrdenHabilitacionApiActor") // feature 266/R21: habilitaciones pedidas por el canal integrador a nombre de ESTE usuario (302: el dueno resuelto de la key -- su cuenta dedicada, o la tienda real a la que apunta); la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
-  cobrosGastoFijo                     GastoFijoCobro[]          @relation("GastoFijoCobroDecisor") // ficha 333/R15/R21: cobros de gasto fijo que ESTE usuario aprobo o rechazo; la FK es RESTRICT (quien autorizo dinero es evidencia y no se pierde al dar de baja al usuario), mismo criterio que `orden_dia_reparto_cambio.actor_usuario_id`
-  cobrosRechazoTiendaDecididos        RechazoTiendaCobro[]      @relation("RechazoTiendaCobroDecisor") // ficha 337: cobros por rechazo de tienda que ESTE usuario aprobo o rechazo. FK RESTRICT por el mismo motivo que la linea de arriba: quien autorizo un cobro es evidencia y no se pierde al dar de baja al usuario.
-  cobrosRechazoTiendaComoTienda       RechazoTiendaCobro[]      @relation("RechazoTiendaCobroTienda") // ficha 337: cobros por rechazo emitidos CONTRA esta tienda. `tienda_id` va CONGELADO en la fila (leccion 69/R13), asi que esta relacion es historia y no una consulta viva sobre `orden.tienda_id`.
-  historialAcciones                   HistorialAccion[]         @relation("HistorialAccionActor") // ficha 362/R3: acciones (dinero / desaparicion / permisos) que ESTE usuario ejecuto. La FK es RESTRICT: quien borro 79 ordenes o aprobo un cierre es evidencia y no se pierde al dar de baja al usuario. `actor_nombre` y `actor_rol` van CONGELADOS en la fila, asi que esta relacion NO es la que pinta el listado.
+  habilitacionesApiPedidas            OrdenHabilitacionApi[]             @relation("OrdenHabilitacionApiActor") // feature 266/R21: habilitaciones pedidas por el canal integrador a nombre de ESTE usuario (302: el dueno resuelto de la key -- su cuenta dedicada, o la tienda real a la que apunta); la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
+  cobrosGastoFijo                     GastoFijoCobro[]                   @relation("GastoFijoCobroDecisor") // ficha 333/R15/R21: cobros de gasto fijo que ESTE usuario aprobo o rechazo; la FK es RESTRICT (quien autorizo dinero es evidencia y no se pierde al dar de baja al usuario), mismo criterio que `orden_dia_reparto_cambio.actor_usuario_id`
+  cobrosRechazoTiendaDecididos        RechazoTiendaCobro[]               @relation("RechazoTiendaCobroDecisor") // ficha 337: cobros por rechazo de tienda que ESTE usuario aprobo o rechazo. FK RESTRICT por el mismo motivo que la linea de arriba: quien autorizo un cobro es evidencia y no se pierde al dar de baja al usuario.
+  cobrosRechazoTiendaComoTienda       RechazoTiendaCobro[]               @relation("RechazoTiendaCobroTienda") // ficha 337: cobros por rechazo emitidos CONTRA esta tienda. `tienda_id` va CONGELADO en la fila (leccion 69/R13), asi que esta relacion es historia y no una consulta viva sobre `orden.tienda_id`.
+  historialAcciones                   HistorialAccion[]                  @relation("HistorialAccionActor") // ficha 362/R3: acciones (dinero / desaparicion / permisos) que ESTE usuario ejecuto. La FK es RESTRICT: quien borro 79 ordenes o aprobo un cierre es evidencia y no se pierde al dar de baja al usuario. `actor_nombre` y `actor_rol` van CONGELADOS en la fila, asi que esta relacion NO es la que pinta el listado.
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -192,23 +192,23 @@ enum PlantillaEstado {
 // 3; R27/R28): los listados filtran `deletedAt IS NULL`. El conjunto de variables usadas
 // por el cuerpo se persiste como ARRAY de claves (Decision humana 4; R15), text[] nativo.
 model PlantillaMensaje {
-  id             String          @id @default(uuid())
-  nombre         String          @unique // R10: identificador unico
-  cuerpo         String // texto con placeholders {{clave}}
+  id               String          @id @default(uuid())
+  nombre           String          @unique // R10: identificador unico
+  cuerpo           String // texto con placeholders {{clave}}
   // `@default([])` NO es cosmetico: la migracion `20260722130000_plantilla_mensaje` creo la
   // columna `text[] NOT NULL DEFAULT '{}'` como REQUISITO escrito (R12/R15/R27: "nunca null").
   // Sin declararlo aqui, todo `migrate dev` proponia `DROP DEFAULT` y habria roto ese requisito.
-  variables      String[]        @default([]) // R15: claves detectadas en el cuerpo (text[]), sin duplicados, sincronizadas con `cuerpo`
+  variables        String[]        @default([]) // R15: claves detectadas en el cuerpo (text[]), sin duplicados, sincronizadas con `cuerpo`
   /// Snapshot `clave -> nombre legible` tomado del catalogo (`CAMPOS_PLANTILLA`) en el
   /// ultimo guardado. Es PRESENTACION: ningun camino de envio lo lee. `{}` = fila anterior
   /// a la feature 282 (se deriva del catalogo al pintar, R21), NUNCA null.
-  variablesNombres Json          @default("{}") @map("variables_nombres")
+  variablesNombres Json            @default("{}") @map("variables_nombres")
   // El DEFAULT sigue siendo `pending` y NO se mueve a `saved_not_aprobation`: Postgres prohibe
   // USAR un valor de enum en la misma transaccion en que se anade, asi que el `SET DEFAULT`
   // habria abortado la migracion. Quien fija el estado inicial es el service (que es donde
   // vive la politica) pasandolo explicito en el `create`; el default de columna no lo decide
   // nadie hoy porque ninguna escritura lo omite.
-  estado         PlantillaEstado @default(pending) // R12 (Decision humana 1)
+  estado           PlantillaEstado @default(pending) // R12 (Decision humana 1)
   /// Marca la plantilla que se envia automaticamente al cliente cuando el paquete es recogido.
   /// Como mucho UNA vigente puede tenerlo en `true`, y quien lo garantiza es la BASE con un
   /// UNIQUE PARCIAL —`plantilla_mensaje_welcome_message_key`, `WHERE welcome_message = true AND
@@ -217,7 +217,7 @@ model PlantillaMensaje {
   /// `@unique` aqui: eso pediria un indice TOTAL y solo dejaria una fila en `false` en toda la
   /// tabla. Toda lectura de la bienvenida filtra `deletedAt IS NULL`: una borrada conserva su
   /// `true` historico pero queda fuera del indice y del negocio.
-  welcomeMessage Boolean         @default(false) @map("welcome_message")
+  welcomeMessage   Boolean         @default(false) @map("welcome_message")
   /// PLANTILLA DE TIENDA: el texto NO sale de casa. Se usa por los caminos que no pasan por
   /// Meta (el flujo wa.me del mensajero), asi que no hay Message Template que crear ni
   /// aprobacion que esperar: nace `activo` y el service se NIEGA a enviarla a aprobacion.
@@ -225,17 +225,17 @@ model PlantillaMensaje {
   /// la revision de Meta esta?" y esta responde "¿participa en esa revision siquiera?". Son
   /// dos preguntas y fundirlas dejaria a una plantilla de tienda sin poder decir que esta
   /// activa. `NOT NULL DEFAULT false`: toda fila existente contesta hoy, y contesta que no.
-  plantillaTienda Boolean        @default(false) @map("plantilla_tienda")
+  plantillaTienda  Boolean         @default(false) @map("plantilla_tienda")
   // Integracion WhatsApp: enlace al Message Template de Meta. NULL = todavia no propagada a
   // Meta (o Meta no la ha devuelto en la sincronizacion). El envio usa `nombre` + `templateIdioma`
   // (Meta manda por name+language, no por id); `templateId` es la referencia/traza a Meta y el
   // marcador de "enviable" (no NULL + estado activo).
-  templateId     String?         @map("template_id")
-  templateIdioma String?         @map("template_idioma") // code de idioma del template en Meta (p. ej. "es", "es_CO")
-  createdBy      String?         @map("created_by") // FK -> usuario (maestro actor); SET NULL al borrar el usuario
-  deletedAt      DateTime?       @map("deleted_at") // R27: soft delete; NULL = vigente
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
+  templateId       String?         @map("template_id")
+  templateIdioma   String?         @map("template_idioma") // code de idioma del template en Meta (p. ej. "es", "es_CO")
+  createdBy        String?         @map("created_by") // FK -> usuario (maestro actor); SET NULL al borrar el usuario
+  deletedAt        DateTime?       @map("deleted_at") // R27: soft delete; NULL = vigente
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
 
   creador Usuario? @relation("PlantillaMensajeCreador", fields: [createdBy], references: [id], onDelete: SetNull)
 
@@ -325,37 +325,37 @@ model ChatConversacion {
 // de Meta (R7). `waMessageId` es UNICO (indice parcial en la migracion) para el dedupe
 // (R8) y para localizar el saliente al llegar un status (R7). RLS habilitada sin policies.
 model ChatMensaje {
-  id             String               @id @default(uuid())
-  conversacionId String               @map("conversacion_id") // FK -> chat_conversacion; ON DELETE CASCADE
-  direccion      ChatMensajeDireccion
-  tipo           ChatMensajeTipo
-  cuerpo         String? // texto plano; NULL para tipos sin cuerpo
-  plantillaId    String?              @map("plantilla_id") // solo salientes de tipo plantilla; ON DELETE SET NULL
-  waMessageId    String?              @map("wa_message_id") // id de Meta; UNICO (parcial) para dedupe (R8)
-  estado         ChatMensajeEstado? // solo salientes (R7)
-  latitud        Float?               @map("latitud") // Feature 121: solo entrantes tipo `ubicacion`; NULL en el resto
-  longitud       Float?               @map("longitud") // Feature 121: solo entrantes tipo `ubicacion`; NULL en el resto
+  id                      String               @id @default(uuid())
+  conversacionId          String               @map("conversacion_id") // FK -> chat_conversacion; ON DELETE CASCADE
+  direccion               ChatMensajeDireccion
+  tipo                    ChatMensajeTipo
+  cuerpo                  String? // texto plano; NULL para tipos sin cuerpo
+  plantillaId             String?              @map("plantilla_id") // solo salientes de tipo plantilla; ON DELETE SET NULL
+  waMessageId             String?              @map("wa_message_id") // id de Meta; UNICO (parcial) para dedupe (R8)
+  estado                  ChatMensajeEstado? // solo salientes (R7)
+  latitud                 Float?               @map("latitud") // Feature 121: solo entrantes tipo `ubicacion`; NULL en el resto
+  longitud                Float?               @map("longitud") // Feature 121: solo entrantes tipo `ubicacion`; NULL en el resto
   // Motivo del fallo que Meta reporta en el status `failed` (`errors[0]`). Solo se pueblan
   // en salientes fallidos; NULL en todo lo demas. Sin ellos un `failed` es mudo y obliga a
   // entrar al panel de Meta para saber por que no se entrego.
-  errorCodigo    Int?                 @map("error_codigo") // p. ej. 131026 (indeliverable), 130429 (cuota)
-  errorTitulo    String?              @map("error_titulo")
-  errorDetalle   String?              @map("error_detalle") // texto de Meta SOBRE EL ERROR, nunca el destino
+  errorCodigo             Int?                 @map("error_codigo") // p. ej. 131026 (indeliverable), 130429 (cuota)
+  errorTitulo             String?              @map("error_titulo")
+  errorDetalle            String?              @map("error_detalle") // texto de Meta SOBRE EL ERROR, nunca el destino
   // Feature 311 (design §1.2): columnas NULLABLE que sostienen los tipos entrantes nuevos.
   // Cada grupo lo puebla SOLO su tipo; el resto queda NULL. El binario de la media NUNCA se
   // guarda (D1/R15): aqui solo vive el identificador de Meta y sus metadatos, y el proxy
   // (`/api/chat/media/<id>`) lo baja bajo demanda con el token del servidor.
-  mediaId                 String?  @map("media_id") // id de media de Meta (R1); nunca sale al navegador
-  mediaMime               String?  @map("media_mime") // mime_type de Meta (R1); decide inline vs descarga (R25)
-  mediaNombre             String?  @map("media_nombre") // filename de documentos (R1/R29)
-  mediaTamanoBytes        Int?     @map("media_tamano_bytes") // file_size SI Meta lo manda; normalmente NULL (P2)
-  reaccionAWaMessageId    String?  @map("reaccion_a_wa_message_id") // reaction.message_id: mensaje reaccionado (R4)
-  reaccionEmoji           String?  @map("reaccion_emoji") // emoji; NULL = reaccion RETIRADA (R5)
-  contactosJson           Json?    @map("contactos_json") // payload normalizado de `contacts` (R7); se valida con zod al leer
-  sistemaTelefonoAnterior String?  @map("sistema_telefono_anterior") // numero previo del cambio (R9/R18)
-  sistemaTelefonoNuevo    String?  @map("sistema_telefono_nuevo") // numero nuevo del cambio (R9/R18)
-  ocurridoAt     DateTime             @map("ocurrido_at") // timestamp del evento (de Meta en entrantes)
-  createdAt      DateTime             @default(now()) @map("created_at")
+  mediaId                 String?              @map("media_id") // id de media de Meta (R1); nunca sale al navegador
+  mediaMime               String?              @map("media_mime") // mime_type de Meta (R1); decide inline vs descarga (R25)
+  mediaNombre             String?              @map("media_nombre") // filename de documentos (R1/R29)
+  mediaTamanoBytes        Int?                 @map("media_tamano_bytes") // file_size SI Meta lo manda; normalmente NULL (P2)
+  reaccionAWaMessageId    String?              @map("reaccion_a_wa_message_id") // reaction.message_id: mensaje reaccionado (R4)
+  reaccionEmoji           String?              @map("reaccion_emoji") // emoji; NULL = reaccion RETIRADA (R5)
+  contactosJson           Json?                @map("contactos_json") // payload normalizado de `contacts` (R7); se valida con zod al leer
+  sistemaTelefonoAnterior String?              @map("sistema_telefono_anterior") // numero previo del cambio (R9/R18)
+  sistemaTelefonoNuevo    String?              @map("sistema_telefono_nuevo") // numero nuevo del cambio (R9/R18)
+  ocurridoAt              DateTime             @map("ocurrido_at") // timestamp del evento (de Meta en entrantes)
+  createdAt               DateTime             @default(now()) @map("created_at")
 
   conversacion ChatConversacion  @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
   plantilla    PlantillaMensaje? @relation("ChatMensajePlantilla", fields: [plantillaId], references: [id], onDelete: SetNull)
@@ -506,7 +506,7 @@ model Zona {
 }
 
 model Provincia {
-  id     String @id @default(uuid())
+  id     String  @id @default(uuid())
   nombre String
   // feature 55 (F1.4-C): `provincia.zona_id` fue ELIMINADO en la DB (la zona ya no
   // cuelga de la provincia; la asignacion vive en distrito.zona_id + N:M ZonaDistrito).
@@ -551,9 +551,9 @@ model Provincia {
 }
 
 model Canton {
-  id          String @id @default(uuid())
+  id          String  @id @default(uuid())
   nombre      String
-  provinciaId String @map("provincia_id")
+  provinciaId String  @map("provincia_id")
   /// FICHA 374 — ver `Provincia.activo`: mismo contrato, misma cascada evaluada al leer.
   activo      Boolean @default(true)
   /// FICHA 375 — ver `Provincia.codigoDta`. Tres digitos: el de su provincia + dos.
@@ -718,21 +718,25 @@ model Orden {
   mensajeroAsignado Usuario?    @relation("OrdenMensajeroAsignado", fields: [mensajeroAsignadoId], references: [id], onDelete: SetNull) // feature 17/R7
   carga             Carga?      @relation("OrdenCarga", fields: [cargaId], references: [id], onDelete: Restrict) // feature 141/R4: un lote con ordenes no se puede borrar
 
-  gestiones             GestionOrden[] // feature 36: gestiones registradas sobre esta orden
-  mensajerosGestionando Usuario[]               @relation("UsuarioOrdenEnGestion") // feature 36: lado inverso del puntero de bloqueo 1-a-1
-  historialEstados      OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
-  cierreDetalles        CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
-  cierresSinGestion     CierreSinGestion[] // feature 264/R1: cierres en cuyo corte esta orden fue barrida a `sin_gestionar`
-  rutaParadas           RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
-  mensajeroMetas        OrdenMensajeroMeta[]    @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
-  chatConversaciones    ChatConversacion[] // feature 120/R13: hilos de chat colgados de esta orden
-  incidentesAdmin       OrdenIncidente[] // feature 158/R38: incidentes reportados por un ADMIN sobre esta orden (a lo sumo UNO vivo, indice parcial R47)
+  gestiones                  GestionOrden[] // feature 36: gestiones registradas sobre esta orden
+  mensajerosGestionando      Usuario[]                          @relation("UsuarioOrdenEnGestion") // feature 36: lado inverso del puntero de bloqueo 1-a-1
+  historialEstados           OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
+  cierreDetalles             CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
+  cierresSinGestion          CierreSinGestion[] // feature 264/R1: cierres en cuyo corte esta orden fue barrida a `sin_gestionar`
+  rutaParadas                RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
+  mensajeroMetas             OrdenMensajeroMeta[]               @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
+  chatConversaciones         ChatConversacion[] // feature 120/R13: hilos de chat colgados de esta orden
+  incidentesAdmin            OrdenIncidente[] // feature 158/R38: incidentes reportados por un ADMIN sobre esta orden (a lo sumo UNO vivo, indice parcial R47)
   // NO se llama `notas`: ese nombre ya lo ocupa la nota de la TIENDA (`orden.notas`, R14a),
   // que esta feature NO toca (R25). Son dos cosas distintas y el nombre lo dice.
-  notasHilo             OrdenNota[]             @relation("OrdenNotaOrden") // feature 227/R30: hilo de notas tienda<->mensajero de esta orden; la FK es CASCADE (borrar la orden se lleva su hilo)
-  diaRepartoCambios     OrdenDiaRepartoCambio[] @relation("OrdenDiaRepartoCambioOrden") // feature 262/R20-R23: rastro append-only de las correcciones del dia de reparto de esta orden
+  notasHilo                  OrdenNota[]                        @relation("OrdenNotaOrden") // feature 227/R30: hilo de notas tienda<->mensajero de esta orden; la FK es CASCADE (borrar la orden se lleva su hilo)
+  diaRepartoCambios          OrdenDiaRepartoCambio[]            @relation("OrdenDiaRepartoCambioOrden") // feature 262/R20-R23: rastro append-only de las correcciones del dia de reparto de esta orden
   fechaReprogramacionCambios GestionFechaReprogramacionCambio[] @relation("GestionFechaReprogramacionCambioOrden") // ficha 371: rastro append-only de las correcciones de la fecha de reprogramacion de esta orden
-  habilitacionesApi     OrdenHabilitacionApi[]  @relation("OrdenHabilitacionApiOrden") // feature 266/R23-R24: bitacora append-only de las habilitaciones pedidas por el canal por API key sobre esta orden; la FK es CASCADE (borrar la orden se lleva su bitacora)
+  habilitacionesApi          OrdenHabilitacionApi[]             @relation("OrdenHabilitacionApiOrden") // feature 266/R23-R24: bitacora append-only de las habilitaciones pedidas por el canal por API key sobre esta orden; la FK es CASCADE (borrar la orden se lleva su bitacora)
+  // Ficha 337: los cobros a la tienda por rechazo desde novedades de ESTA orden. Coleccion y
+  // no 1-1: la unicidad es por GESTION, y una orden podria acumular mas de un rechazo a lo
+  // largo de su vida (cada uno con su gestion sintetica y su cobro).
+  cobrosRechazoTienda        RechazoTiendaCobro[]
 
   // UNICIDAD DE `num_remision`: POR TIENDA, NO GLOBAL (migracion 20260825160000).
   //
@@ -812,11 +816,6 @@ model Orden {
   // aplicado SI lo cualifica (`extensions.gin_trgm_ops`), que es lo que importa para que
   // la creacion no dependa del `search_path`.
   @@index([busquedaTexto(ops: raw("gin_trgm_ops"))], type: Gin, map: "orden_busqueda_texto_trgm_idx")
-  // Ficha 337: los cobros a la tienda por rechazo desde novedades de ESTA orden. Coleccion y
-  // no 1-1: la unicidad es por GESTION, y una orden podria acumular mas de un rechazo a lo
-  // largo de su vida (cada uno con su gestion sintetica y su cobro).
-  cobrosRechazoTienda RechazoTiendaCobro[]
-
   @@map("orden")
 }
 
@@ -1110,26 +1109,26 @@ model GestionOrden {
   pagosEditadosPor     String?                   @map("pagos_editados_por")
   createdAt            DateTime                  @default(now()) @map("created_at")
 
-  orden                   Orden                   @relation(fields: [ordenId], references: [id])
-  mensajero               Usuario                 @relation("GestionMensajero", fields: [mensajeroId], references: [id])
-  cierre                  CierreDia?              @relation(fields: [cierreId], references: [id]) // feature 37/R13: cierre que agrupa esta gestion
+  orden                      Orden                              @relation(fields: [ordenId], references: [id])
+  mensajero                  Usuario                            @relation("GestionMensajero", fields: [mensajeroId], references: [id])
+  cierre                     CierreDia?                         @relation(fields: [cierreId], references: [id]) // feature 37/R13: cierre que agrupa esta gestion
   // Feature 67/R11: quien deshizo la gestion. ON DELETE SET NULL como el actor del historial
   // (49/R21): borrar al usuario no borra el rastro de la anulacion.
-  anuladaPorUsuario       Usuario?                @relation("GestionAnuladaPor", fields: [anuladaPor], references: [id], onDelete: SetNull)
+  anuladaPorUsuario          Usuario?                           @relation("GestionAnuladaPor", fields: [anuladaPor], references: [id], onDelete: SetNull)
   // SetNull como el actor de la anulacion (67) y el del historial (49): borrar al usuario no
   // borra el rastro de que la correccion ocurrio.
-  pagosEditadosPorUsuario Usuario?                @relation("GestionPagosEditadosPor", fields: [pagosEditadosPor], references: [id], onDelete: SetNull)
-  historialEstados        OrdenHistorialEstado[] // feature 49: transiciones de estado causadas por esta gestion (familia gestion)
+  pagosEditadosPorUsuario    Usuario?                           @relation("GestionPagosEditadosPor", fields: [pagosEditadosPor], references: [id], onDelete: SetNull)
+  historialEstados           OrdenHistorialEstado[] // feature 49: transiciones de estado causadas por esta gestion (familia gestion)
   // Feature 119 (R1): evidencias 1..N de esta gestion (la portada = indice 0 se conserva
   // ademas denormalizada en evidencia_storage_path/_content_type por retro-compat, R12).
-  evidencias              GestionOrdenEvidencia[]
+  evidencias                 GestionOrdenEvidencia[]
   // Feature 212 (R1): desglose del recaudo al cliente, 0..N lineas (metodo, monto).
   // `monto_recibido` se conserva como TOTAL snapshot (R5).
-  pagos                   GestionOrdenPago[]
+  pagos                      GestionOrdenPago[]
   // Ficha 337: el COBRO a la tienda que nace de esta gestion cuando es un `rechazo_tienda`.
   // UNO A UNO (`rechazo_tienda_cobro_gestion_uq`): un rechazo, un cobro, en cualquier estado.
   // Opcional porque la inmensa mayoria de gestiones no son un rechazo de escritorio.
-  cobroRechazoTienda      RechazoTiendaCobro?
+  cobroRechazoTienda         RechazoTiendaCobro?
   // Ficha 371: rastro append-only de las correcciones de `fecha_reprogramacion` de ESTA gestion.
   // La FK es RESTRICT: el rastro sobrevive a cualquier intento de borrar la gestion corregida.
   fechaReprogramacionCambios GestionFechaReprogramacionCambio[] @relation("GestionFechaReprogramacionCambioGestion")
@@ -1429,9 +1428,13 @@ model Tarifa {
   // a su tienda/zona la dejaria colgando de una FK muerta. La traza historica NO se pierde:
   // `cierre_detail.tarifa_id` sigue siendo RESTRICT a proposito, de modo que una tarifa YA
   // LIQUIDADA bloquea la cascada entera y el borrado falla en vez de borrar la auditoria.
-  tienda         Usuario?       @relation("TarifaTienda", fields: [tiendaId], references: [id], onDelete: Cascade)
-  zona           Zona?          @relation("TarifaZona", fields: [zonaId], references: [id], onDelete: Cascade)
-  cierreDetalles CierreDetail[] // feature 69/R8: cierres que liquidaron contra ESTA fila de tarifa (hace auditable la deuda (g))
+  tienda              Usuario?             @relation("TarifaTienda", fields: [tiendaId], references: [id], onDelete: Cascade)
+  zona                Zona?                @relation("TarifaZona", fields: [zonaId], references: [id], onDelete: Cascade)
+  cierreDetalles      CierreDetail[] // feature 69/R8: cierres que liquidaron contra ESTA fila de tarifa (hace auditable la deuda (g))
+  // Ficha 337: los cobros por rechazo cuyos importes salieron de ESTA fila de tarifa. La FK es
+  // SET NULL: la traza de auditoria es deseable, pero no puede impedir para siempre borrar una
+  // tarifa; los importes ya viajan COPIADOS en la fila del cobro.
+  cobrosRechazoTienda RechazoTiendaCobro[]
 
   // Una sola tarifa por par (zona, tienda), con las dos dimensiones opcionales. El indice
   // en SQL usa NULLS NOT DISTINCT (PG15+) para que dos NULL cuenten como el MISMO par:
@@ -1446,11 +1449,6 @@ model Tarifa {
   @@index([createdAt])
   @@index([tiendaId])
   @@index([zonaId])
-  // Ficha 337: los cobros por rechazo cuyos importes salieron de ESTA fila de tarifa. La FK es
-  // SET NULL: la traza de auditoria es deseable, pero no puede impedir para siempre borrar una
-  // tarifa; los importes ya viajan COPIADOS en la fila del cobro.
-  cobrosRechazoTienda RechazoTiendaCobro[]
-
   @@map("tarifas")
 }
 
@@ -1590,7 +1588,7 @@ model WalletMovimiento {
   createdAt       DateTime                  @default(now()) @map("created_at")
   // SIN updatedAt / deletedAt: la fila es INMUTABLE (R3). No hay soft-delete.
 
-  registrador Usuario? @relation("WalletMovimientoRegistrador", fields: [registradoPor], references: [id])
+  registrador    Usuario?        @relation("WalletMovimientoRegistrador", fields: [registradoPor], references: [id])
   // Ficha 333 (design 1.3): el cobro de gasto fijo que ESTA fila del libro salda, si lo hay.
   // Anadir el campo de relacion NO cambia la tabla `wallet_movimiento`: sigue sin `updated_at`,
   // sin `deleted_at` y sin `update`/`delete` expuestos en su repositorio (R3 de la 42). La FK
@@ -2167,6 +2165,26 @@ enum OrdenHistorialOrigenTipo {
   rechazo_tienda // feature 240 (D8/R6): EL RECHAZO MANUAL — devuelta -> rechazada, decidido por el adminTienda dueño. Enlaza gestion sintetica. NO es visita real (R19): la orden ya tiene contada su `devuelta`, como `reprogramacion_tienda`
   habilitacion_api // feature 266 (D5/R16): LA HABILITACION POR API KEY — ayuda_tienda -> en_reparto, pedida por el integrador en lote. Familia propia y NO `rescate_ayuda_tienda` (design §7, A3): `actor_usuario_id` no distingue las vias, porque el usuario dedicado de la key ES la tienda. NO es visita real (R26): nadie fue a ninguna puerta. No enlaza gestion. NO exceptuada de webhook (R27): la rama A emite `en_reparto`
   rechazo_tope_intentos // feature 276 (R22, Q5): EL TOPE DE INTENTOS — al APROBAR el cierre, sin_gestionar -> rechazada sobre una orden que ya agoto sus intentos (actor admin). Enlaza gestion sintetica. NO es visita real: contarla subiria su propio contador y cobraria de mas
+  /// FICHA 398 (§4.1): LA CORRECCION EN SITIO — `entregada -> rechazada` sobre una gestion que ya
+  /// esta dentro de un cierre ABIERTO, decidida por un maestro/admin desde el detalle del cierre.
+  /// Enlaza la gestion corregida (`gestion_orden_id` poblado). Productor UNICO:
+  /// `CierresAdminRepository.corregirResultadoGestionEnCierre`, en ESTE MISMO commit.
+  ///
+  /// FAMILIA PROPIA, y las dos alternativas baratas se descartan por lo que ROMPEN:
+  ///   - `gestion` significa «el mensajero registro un desenlace en la calle», y esto lo decidio
+  ///     un admin desde una oficina. Esta fila es la UNICA evidencia de quien decidio el rechazo
+  ///     que se cobra (`cobroRechazado`, 56).
+  ///   - `ajuste_estado` tenia por productor `OrdenService.actualizar`, borrado el 2026-08-07.
+  ///
+  /// ⚠️ NO ENTRA en `ORIGEN_TIPOS_VISITA_REAL`: la visita YA esta contada por la fila de familia
+  /// `gestion` de la entrega original, que es la que satisface el `EXISTS` de
+  /// `whereIntentosVigentes`. Mismo argumento, palabra por palabra, que `rechazo_tienda` (240).
+  /// El conteo de intentos SI cambia, pero por la otra puerta: el `resultado` pasa a estar en
+  /// `RESULTADOS_QUE_CUENTAN_COMO_INTENTO` (398/R15).
+  ///
+  /// NO entra en `ORIGEN_TIPOS_CON_GESTION` aunque su fila nazca CON `gestion_orden_id` poblado:
+  /// mismo caso declarado que `escalado_devuelta_sla`, `anclaje_devolucion` y `rechazo_tienda`.
+  correccion_resultado_gestion
 
   @@map("orden_historial_origen_tipo")
 }
@@ -3048,7 +3066,10 @@ model GestionFechaReprogramacionCambio {
 /// y lo que CAMBIA QUIEN PUEDE HACER QUE. La clasificacion NO se guarda en la fila: se deriva de
 /// `CATEGORIA_POR_ACCION` (`lib/types/historial-accion.ts`), R17.
 enum HistorialAccionTipo {
-  // --- mueve dinero (28) ---
+  // --- mueve dinero (30) ---
+  // ⏳ FICHA 398 (2026-09-08): decia «(28)» y ya eran 29 desde que la ficha 381 añadio
+  // `cobro_tienda_registrado` sin actualizar el numero. Con `cierre_dia_gestion_corregida` son 30.
+  // El total del catalogo (52) vive en `lib/types/historial-accion.ts`, que si estaba al dia.
   cierre_dia_aprobado
   cierre_dia_rechazado
   cierre_dia_pagos_editados
@@ -3133,6 +3154,21 @@ enum HistorialAccionTipo {
   /// el NOMBRE DE LA TIENDA. NUNCA la `descripcion` del cobro: texto libre tecleado por una
   /// persona, que R5 de la 362 deja fuera de esta tabla.
   cobro_tienda_registrado
+  /// FICHA 398 (§4.2): un maestro/admin CORRIGIO EL RESULTADO de una gestion que ya estaba dentro
+  /// de un cierre ABIERTO (`entregada -> rechazada`). Mueve dinero en el sentido mas directo: saca
+  /// del cierre un cobro que nadie recaudo —bajan `total_general` y el balde de su metodo—, pone
+  /// el `pago_mensajero` de esa gestion en 0.00 y le atribuye a la bodega el ingreso por rechazo.
+  ///
+  /// ⚠️ TIPO PROPIO Y NO `cierre_dia_pagos_editados`: aquel dice «Editó los pagos de una gestión»
+  /// y aqui no se corrigio un desglose, se corrigio SI HUBO ENTREGA. Ademas su productor censado
+  /// es `actualizarPagosGestion`, y la guardia del censo exige que el tipo lo escriba el metodo
+  /// declarado: reusarlo dejaria la escritura nueva sin vigilar.
+  ///
+  /// `monto` = el `total_general` NUEVO del cierre (precedente literal: `cierre_dia_pagos_editados`).
+  /// `valor_anterior`/`valor_nuevo` llevan `"entregada"`/`"rechazada"`, que son valores de un enum
+  /// del dominio (precedente: `usuario_fulfillment_cambiado`). El MOTIVO no entra (R5 de la 362):
+  /// es texto libre tecleado por una persona y vive en `gestion_orden.motivo`.
+  cierre_dia_gestion_corregida
 
   // --- hace desaparecer algo (10) ---
   /// FICHA 371: corregir la fecha de una reprogramacion ya registrada. ENTRA POR «hace desaparecer

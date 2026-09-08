@@ -101,6 +101,8 @@ describe("Feature 106 · DOWN — reversible con irreversibilidad parcial docume
       // agotamiento de intentos al aprobar el cierre. La foto historica de ESTE `down.sql`
       // sigue SIN TOCARSE; lo que crece es el conjunto que se le descuenta al SEED vigente.
       "rechazo_tope_intentos",
+      // ficha 398 (2026-09-08): la correccion en sitio del resultado de una gestion
+      "correccion_resultado_gestion",
 ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_106.has(v))),

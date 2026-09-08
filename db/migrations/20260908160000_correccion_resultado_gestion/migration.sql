@@ -1,0 +1,53 @@
+-- FICHA 398 — CORREGIR EN SITIO el resultado de una gestion que ya esta dentro de un cierre.
+--
+-- EL CASO, y ocurrio: un mensajero marco `entregada` una orden que fue `rechazada` y ya habia
+-- solicitado el cierre. No existia NINGUNA via para corregirlo —anular exige `cierre_id IS NULL`
+-- (feature 67), la correccion de admin solo toca el reparto por metodo y reabrir el cierre no
+-- vuelve a fotografiar los totales—, asi que el cierre cobraba flete y comision sobre un cobro
+-- inexistente y su `total_general` incluia efectivo que el mensajero no tenia. El 2026-09-08 hubo
+-- que arreglarlo A MANO en la base de produccion.
+--
+-- DOS VALORES DE ENUM, uno por cada rastro que la correccion deja, y NINGUNA tabla ni columna
+-- nueva. Los dos llegan CON su productor
+-- (`CierresAdminRepository.corregirResultadoGestionEnCierre`, en este mismo commit): la convencion
+-- que la 154 rompio —declarar un valor de enum antes que su productor— costo el tren 154+155+156.
+--
+-- (1) `orden_historial_origen_tipo` += `correccion_resultado_gestion`
+--     La FAMILIA de la transicion `entregada -> rechazada`. FAMILIA PROPIA, y las dos alternativas
+--     baratas se descartan por lo que ROMPEN:
+--       - `gestion` significa «el mensajero registro un desenlace en la calle»; esto lo decidio un
+--         admin desde una oficina, y esta fila es la unica evidencia de quien decidio el rechazo
+--         que se cobra (`cobroRechazado`, feature 56).
+--       - `ajuste_estado` tenia por productor `OrdenService.actualizar`, borrado el 2026-08-07.
+--     ⚠️ NO entra en `ORIGEN_TIPOS_VISITA_REAL` (`lib/types/orden-historial.ts`): la visita YA esta
+--     contada por la fila de familia `gestion` de la entrega original. Mismo argumento, palabra por
+--     palabra, que `rechazo_tienda` (240). El conteo de intentos SI sube, pero por la OTRA puerta:
+--     el `resultado` pasa a estar en `RESULTADOS_QUE_CUENTAN_COMO_INTENTO` (R15 de esta ficha, que
+--     es la correccion funcionando, no un efecto lateral).
+--     NO entra en `ORIGEN_TIPOS_CON_GESTION` aunque su fila nazca CON `gestion_orden_id` poblado:
+--     mismo caso declarado que `escalado_devuelta_sla`, `anclaje_devolucion` y `rechazo_tienda`.
+--
+-- (2) `historial_accion_tipo` += `cierre_dia_gestion_corregida`
+--     Categoria «mueve dinero» (R17 de la 362 exige EXACTAMENTE una por tipo): saca del cierre un
+--     cobro que nadie recaudo. Entidad `gestion_orden`, que YA existe en `historial_accion_entidad`
+--     desde `20260902120000_historial_accion` — este `up` NO amplia ese enum.
+--     ⚠️ TIPO PROPIO Y NO `cierre_dia_pagos_editados`: su etiqueta es «Editó los pagos de una
+--     gestión» y aqui no se corrigio un desglose, se corrigio SI HUBO ENTREGA. Ademas su productor
+--     censado es `actualizarPagosGestion`, que YA llama a `appendAccion` por otro motivo: reusar el
+--     tipo dejaria la escritura nueva sin vigilar por la guardia del censo, que mide POR METODO.
+--
+-- VA SOLA, sin ningun USO de los valores nuevos: Postgres prohibe USAR un valor de enum en la
+-- misma transaccion que lo añade (55P04) y Prisma Migrate corre cada `migration.sql` en la suya.
+-- Su primer uso ocurre en runtime, en transacciones posteriores. Mismo patron que
+-- `20260908140100_wallet_tienda_check_cobro_manual`, `20260908120000_historial_accion_zona_pago_mensajero`
+-- y `20260824120000_orden_historial_origen_rechazo_tope_intentos`.
+--
+-- SIN `BEFORE`/`AFTER`: los dos APENDEN, y ese es el `enumsortorder` que el `down.sql` reproduce.
+--
+-- ADITIVA: no crea ni altera tablas, columnas ni indices, y no escribe ni borra datos. La RLS de
+-- `orden_historial_estado` (feature 49) y la de `historial_accion` (ficha 362) no se tocan: un
+-- valor nuevo de enum no las afecta. NO HAY BACKFILL y no puede haberlo — la unica correccion
+-- anterior es la que se hizo a mano el 2026-09-08, cuyo rastro se escribio con `ajuste_estado`
+-- porque este valor todavia no existia, y esa fila NO se reescribe: es historia.
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'correccion_resultado_gestion';
+ALTER TYPE "historial_accion_tipo" ADD VALUE IF NOT EXISTS 'cierre_dia_gestion_corregida';

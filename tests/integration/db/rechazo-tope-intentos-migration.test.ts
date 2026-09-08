@@ -123,7 +123,9 @@ describe("276/T2 · enum — la forma de `rechazo_tope_intentos` (R22/R36)", () 
     // manana llega una familia nueva, este `down.sql` NO se toca (es una foto historica): lo que se
     // amplia es el conjunto que se le descuenta al SEED vigente, como hicieron las cuatro fichas
     // anteriores con el down de la 239.
-    const POSTERIORES = new Set<string>([FAMILIA]);
+    // Ficha 398 (2026-09-08): `correccion_resultado_gestion` llega DESPUES, asi que este
+    // `down.sql` NO se toca —es una foto historica— y lo que crece es este conjunto.
+    const POSTERIORES = new Set<string>([FAMILIA, "correccion_resultado_gestion"]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !POSTERIORES.has(v))),
     );

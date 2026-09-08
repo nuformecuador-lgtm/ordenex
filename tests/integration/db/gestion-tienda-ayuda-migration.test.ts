@@ -147,7 +147,13 @@ describe("Feature 237 · el DOWN deja la base legible por el codigo anterior (R4
     // ⏳ 2026-08-23 (feature 266) y 2026-08-24 (feature 276) — segunda y tercera vez que pasa
     // lo mismo, y se resuelve igual: los valores nuevos entran en POSTERIORES y el `down.sql`
     // de la 237 sigue sin tocarse. Lo que crece es el conjunto que se descuenta del SEED vigente.
-    const POSTERIORES = ["rechazo_tienda", "habilitacion_api", "rechazo_tope_intentos"]; // 240 (2026-08-20) · 266 (2026-08-23) · 276 (2026-08-24)
+    const POSTERIORES = [
+      "rechazo_tienda",
+      "habilitacion_api",
+      "rechazo_tope_intentos",
+      // ficha 398 (2026-09-08): la correccion en sitio del resultado de una gestion
+      "correccion_resultado_gestion",
+    ]; // 240 (2026-08-20) · 266 (2026-08-23) · 276 (2026-08-24) · 398 (2026-09-08)
     expect(new Set(valores)).toEqual(
       new Set(
         (ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).filter(

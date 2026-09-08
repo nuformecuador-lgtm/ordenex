@@ -221,6 +221,17 @@ export default async function CierresAdminPage() {
          * la caja. El servicio le responde `forbidden` aunque alguien invoque la acción a mano.
          */
         puedeCorregirPagos={esAccesoTotal(actor.rol)}
+        /**
+         * FICHA 398 (R16) — el permiso de CORREGIR EL RESULTADO de una gestión, resuelto
+         * server-side con el MISMO predicado que exige `CierresAdminService.corregirResultadoGestion`
+         * para no responder `forbidden`. Son las dos mitades del control de acceso: ocultar el
+         * botón no basta, y la guardia del servicio tampoco basta sola.
+         *
+         * Al `adminSatelite` le da `false`, igual que su vecina y por una razón más fuerte: esta
+         * corrección borra un cobro, pone el pago del mensajero en cero y manda el paquete a
+         * devolución. Y al mensajero no le llega ni la pantalla.
+         */
+        puedeCorregirResultado={esAccesoTotal(actor.rol)}
       />
         }
       />

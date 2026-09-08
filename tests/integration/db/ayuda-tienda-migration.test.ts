@@ -202,6 +202,8 @@ describe("Feature 235 · enum — las DOS familias del viaje (R10/P2)", () => {
       // agotamiento de intentos al aprobar el cierre. La foto historica de ESTE `down.sql`
       // sigue SIN TOCARSE; lo que crece es el conjunto que se le descuenta al SEED vigente.
       "rechazo_tope_intentos",
+      // ficha 398 (2026-09-08): la correccion en sitio del resultado de una gestion
+      "correccion_resultado_gestion",
     ]);
     expect(new Set(valores)).toEqual(
       new Set(
