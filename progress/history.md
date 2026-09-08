@@ -4673,3 +4673,20 @@ Cerrada. Dos PR: #741 (servidor) y #743 (columna). Sin migracion.
 - **Un rojo que parecia contencion y no lo era:** un worktree sin `node_modules` propio se
   resolvia por ancestros -- suficiente para tsc, eslint y vitest, pero no para una guardia que
   busca una ruta literal bajo el cwd. Medido antes de concluir.
+
+
+## 386 — filtrar los cierres por estado (2026-09-08)
+
+Cerrada. Dos PR: #744 (servidor) y #746 (control). Sin migracion.
+
+- **Acotada por el humano: «solo el estado».** Los otros filtros no se tocaron.
+- **Las listas ya separaban, pero en grueso:** pendientes mezclaba `solicitado` con `vencido`
+  --uno espera aprobacion, el otro lo creo el corte nocturno y necesita que alguien lo reenvie--
+  e historico mezclaba `aprobado` con `rechazado`, que son desenlaces opuestos.
+- **El filtro interseca, no sustituye.** Pedir un estado del historico dentro de pendientes
+  devuelve vacio, y hay un test contra Postgres que lo mide con una fila real.
+- **Matiz honesto medido en produccion:** 51 aprobado y 1 vencido; cero solicitado y cero
+  rechazado. Hoy separa 51 de 0 y 1 de 0. Gana valor segun crezca la operacion.
+- **Dos correcciones al encargo del leader:** el corte de las listas no estaba donde el dijo, y
+  la barra la montan tres pantallas, no una -- a dos de ellas el control les habria dado error
+  de validacion en cuanto alguien lo tocara.

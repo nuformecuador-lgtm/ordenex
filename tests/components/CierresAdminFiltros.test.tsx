@@ -217,9 +217,16 @@ afterEach(() => {
 });
 
 describe("Filtros del listado de cierres del día", () => {
-  it("la barra ofrece los tres filtros del pedido: fecha, bodega y mensajero", async () => {
+  it("la barra ofrece los filtros del pedido: fecha, bodega, mensajero y estado", async () => {
     // Es la MISMA barra de `/ordenes`: los filtros se piden en el selector, no están puestos de
-    // entrada. Lo que este caso fija es QUÉ se ofrece —los tres del pedido humano, y solo esos—.
+    // entrada. Lo que este caso fija es QUÉ se ofrece —los tres del pedido humano del 2026-08-16
+    // más el ESTADO de la ficha 386, y solo esos—.
+    //
+    // FICHA 386: el literal se ACTUALIZA, no se relaja. Es el contrato de lo que esta pantalla
+    // ofrece, y su valor está justo en que un filtro nuevo (o uno que desaparezca) lo ponga rojo
+    // y obligue a decidir; cambiarlo por un `arrayContaining` lo dejaría verde para siempre.
+    // El estado va al FINAL porque se declara al final: así los tres de agosto siguen en el mismo
+    // sitio del selector que tenían.
     const user = userEvent.setup();
     montar();
     const barra = await screen.findByRole("region", {
@@ -230,7 +237,12 @@ describe("Filtros del listado de cierres del día", () => {
     const opciones = within(screen.getByRole("listbox", { name: "Filtros" }))
       .getAllByRole("option")
       .map((o) => o.textContent);
-    expect(opciones).toEqual(["Fecha de solicitud", "Bodega", "Mensajero"]);
+    expect(opciones).toEqual([
+      "Fecha de solicitud",
+      "Bodega",
+      "Mensajero",
+      "Estado",
+    ]);
   });
 
   it("elegir una bodega recorta los mensajeros a los de esa zona (encadenado)", async () => {
@@ -390,6 +402,105 @@ describe("Filtros del listado de cierres del día", () => {
 
     expect(screen.getByRole("region", { name: "Pendientes de decisión" })).toBeInTheDocument();
     expect(screen.getByText("Diana Mora")).toBeInTheDocument();
+  });
+});
+
+/* ================================================================================================
+ * FICHA 386 — EL FILTRO POR ESTADO, DESDE LA PANTALLA ENTERA
+ * ================================================================================================
+ *
+ * Lo que el control emite —la clave en plural, el `[]` que nunca sale, la etiqueta en vez del
+ * enum, el agrupado— vive en `tests/components/FiltrosCierresBarraEstado.test.tsx`, que monta la
+ * barra sola y puede mirar el objeto emitido.
+ *
+ * Aquí se afirma lo que solo se ve con la PANTALLA montada, y es lo mismo que el pedido de agosto
+ * ya exigía para sus tres filtros: que el recorte VIAJA a las dos lecturas y a la descarga —no se
+ * aplica en el cliente sobre la página ya recibida— y que el usuario recibe la explicación del
+ * vacío ANTES de quedarse mirándolo.
+ */
+describe("Ficha 386 · el estado recorta las dos listas y la descarga", () => {
+  it("(386-1) el estado elegido VIAJA al servidor en las dos lecturas", async () => {
+    const user = userEvent.setup();
+    montar();
+    await screen.findByRole("region", { name: "Filtros de los cierres del día" });
+
+    await elegir(user, "Estado", "Vencido");
+
+    // La clave del servidor es `estados`, en PLURAL y como lista, aunque el usuario haya marcado
+    // uno solo: el contrato no cambia de forma según cuántos elija.
+    await waitFor(() => {
+      expect(pendientesMock).toHaveBeenCalledWith(
+        expect.objectContaining({ filtros: { estados: ["vencido"] } }),
+      );
+    });
+    // Y va también al histórico, que es el coste de compartir una barra: los DOS listados quedan
+    // recortados, y el que no tiene ese estado se ve vacío. Es la semántica que el servidor fijó
+    // (el filtro INTERSECA con cada lista) y la que el aviso de abajo explica.
+    expect(historicoMock).toHaveBeenCalledWith(
+      expect.objectContaining({ filtros: { estados: ["vencido"] } }),
+    );
+  });
+
+  it("(386-2) el estado se lleva a la descarga: el archivo sigue siendo lo que se está viendo", async () => {
+    const user = userEvent.setup();
+    montar();
+    await screen.findByRole("region", { name: "Filtros de los cierres del día" });
+
+    await elegir(user, "Estado", "Solicitado");
+    await waitFor(() =>
+      expect(pendientesMock).toHaveBeenCalledWith(
+        expect.objectContaining({ filtros: { estados: ["solicitado"] } }),
+      ),
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres pendientes de decisión" }),
+    );
+
+    await waitFor(() =>
+      expect(pendientesCompletoMock).toHaveBeenCalledWith({
+        filtros: { estados: ["solicitado"] },
+      }),
+    );
+  });
+
+  it("(386-3) con el estado puesto, el aviso explica por qué una de las dos listas se ve vacía", async () => {
+    // La otra mitad de la decisión documentada en la cabecera de `FiltrosCierresBarra`: se
+    // ofrecen los cuatro estados en las dos pestañas y el vacío se EXPLICA, en vez de recortar el
+    // desplegable según la pestaña activa (que obligaría a borrarle al usuario el filtro que
+    // acaba de poner cada vez que cambia de pestaña).
+    //
+    // El texto se afirma con literales propios y no importando la constante que lo genera: una
+    // aserción contra su propia fuente está siempre verde y no prueba que la frase se pinte.
+    const user = userEvent.setup();
+    montar();
+    const barra = await screen.findByRole("region", {
+      name: "Filtros de los cierres del día",
+    });
+
+    // Con OTRO filtro puesto, el aviso es el de siempre y NO habla de estados: la frase nueva
+    // solo viene a cuento cuando hay un estado elegido.
+    await elegir(user, "Mensajero", "Diana Mora");
+    await user.keyboard("{Escape}");
+    const soloMensajero = await within(barra).findByRole("note");
+    expect(soloMensajero).toHaveTextContent(/los dos listados/i);
+    expect(soloMensajero).not.toHaveTextContent(/una sola de las dos listas/i);
+
+    await elegir(user, "Estado", "Aprobado");
+    await user.keyboard("{Escape}");
+
+    // `waitFor` y no una lectura seca: la nota YA está en pantalla (la puso el filtro de
+    // mensajero), así que sin esperar se leería la de antes del debounce de `FilterComponent` y
+    // el caso sería rojo por carrera, no por conducta.
+    await waitFor(() => {
+      const nota = within(barra).getByRole("note");
+      // Sigue diciendo lo de siempre…
+      expect(nota).toHaveTextContent(/los dos listados/i);
+      // …y ahora además dice por qué la otra lista está vacía, y dónde mirar para saber a cuál
+      // pertenece cada estado.
+      expect(nota).toHaveTextContent(/cada estado vive en una sola de las dos listas/i);
+      expect(nota).toHaveTextContent(/el desplegable dice a cuál pertenece cada uno/i);
+    });
   });
 });
 
