@@ -4654,11 +4654,11 @@
       "title": "el nombre de la tienda y la geografia tambien se imprimen y nadie los valida",
       "description": "Un maestro que registre una tienda con letras bonitas vuelve a tumbar el lote de etiquetas.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "baja",
       "branch": "feat/392-validar-nombres-que-van-a-la-etiqueta",
-      "status_note": "ENCONTRADO el 2026-09-07 por el spec_author de la 383 (su Q3), y NINGUNO DE LOS DOS lo habia visto. || La etiqueta no solo imprime datos de la orden: imprime el NOMBRE DE LA TIENDA y los nombres de la GEOGRAFIA (zona / provincia / canton / distrito). La ficha 383 valida los campos de la ORDEN y deja esos fuera, asi que el agujero sigue abierto por el otro lado: un maestro que registre «𝕋ienda» -- o renombre un distrito con caracteres no imprimibles desde /configuracion/geografia, que la ficha 375 hizo posible-- vuelve a tumbar el LOTE ENTERO de etiquetas. || SE SEPARA de la 383 a proposito para no inflarla, no porque sea menos real. Sin esta, la 383 pone la puerta y deja una ventana abierta. || AL IMPLEMENTAR: reusar la MISMA definicion de imprimible que el PDF (COBERTURA / cubreTexto), nunca una copia -- si la validacion de entrada usa otra definicion, las dos se desalinean el dia que la fuente cambie. Y ojo a la misma trampa de bundle que midio la 383."
+      "status_note": "EN CURSO desde el 2026-09-08, en worktree aislado. Sin migracion. || ENCONTRADO el 2026-09-07 por el spec_author de la 383 (su Q3), y NINGUNO DE LOS DOS lo habia visto. || La etiqueta no solo imprime datos de la orden: imprime el NOMBRE DE LA TIENDA y los nombres de la GEOGRAFIA (zona / provincia / canton / distrito). La ficha 383 valida los campos de la ORDEN y deja esos fuera, asi que el agujero sigue abierto por el otro lado: un maestro que registre «𝕋ienda» -- o renombre un distrito con caracteres no imprimibles desde /configuracion/geografia, que la ficha 375 hizo posible-- vuelve a tumbar el LOTE ENTERO de etiquetas. || SE SEPARA de la 383 a proposito para no inflarla, no porque sea menos real. Sin esta, la 383 pone la puerta y deja una ventana abierta. || AL IMPLEMENTAR: reusar la MISMA definicion de imprimible que el PDF (COBERTURA / cubreTexto), nunca una copia -- si la validacion de entrada usa otra definicion, las dos se desalinean el dia que la fuente cambie. Y ojo a la misma trampa de bundle que midio la 383."
     },
     {
       "id": 393,
@@ -4676,11 +4676,11 @@
       "title": "el Excel de cierres cuenta los intentos que no son",
       "description": "El nivel Detalle trae los intentos de contacto de la tienda; deben ser los intentos de entrega vigentes de la orden.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "branch": "fix/394-intentos-entrega-en-detalle-cierres",
-      "status_note": "EN CURSO desde el 2026-09-08, en worktree aislado. Sin migracion. || FIRMADA por el humano el 2026-09-08: se SUSTITUYE la columna, no se anaden las dos, y se cuentan los intentos VIGENTES. || La columna sale hoy de orden.intentos_contacto, que es la gestion de la tienda desde /novedades. El numero correcto ya existe y esta probado: contarIntentosVigentesEnLote (features 160/215), el mismo derivador que usan la analitica y la pantalla de reprogramadas, donde se llama intentosEntrega. Se pide EN LOTE para las ordenes de la descarga. Sin migracion. || Vigentes y no totales porque es el numero con el que el sistema decide el tope y con el que cobra: asi la hoja y la analitica dicen lo mismo. || Corrige a la 385, ya desplegada, y una lectura del leader: la pregunta «de la tienda o del mensajero» quedo abierta y se implemento sin respuesta."
+      "status_note": "CERRADA el 2026-09-08. Servidor PR #741, columna PR #743. Sin migracion. || El Excel «Detalle» dice ahora «Intentos de entrega», 13a de 31, literal identico al de las otras tres hojas del repo. Se SUSTITUYO una columna, no se anadio. El numero son los intentos VIGENTES, via contarIntentosVigentesEnLote, la misma funcion que ejecuta la analitica -- verificado siguiendo las dos cadenas de llamadas, asi que no hay dos definiciones. || 9 mutaciones muertas entre las dos mitades. Dos reproducen el defecto original de la 385: la celda vuelve al contador de la tienda y pone 5 rojos. El 0 se emite como 0 y no como nulo: es un dato conocido, no una casilla vacia. || QUEDA HUERFANO y NO SE BORRA: el campo intentosContactoTienda del DTO de cierres se queda sin consumidor de produccion. Cinco archivos de test lo afirman y su cobertura es ajena. La columna orden.intentos_contacto sigue viva en /novedades: lo huerfano es el campo del DTO, no el dato. || NO se paso el reviewer. Queda dicho."
     }
   ]
 }
