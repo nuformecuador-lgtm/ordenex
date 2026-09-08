@@ -552,6 +552,47 @@ del artefacto, la mitad de pantalla y las cuatro deudas declaradas.
 Con estas, el total de la ficha va por **26 mutaciones, 26 muertas** (7 del backend + 10 de T7 + 3
 de esta vuelta, más las 9 del reviewer).
 
+## El gate de esta vuelta — y la corrida roja que hubo por el medio
+
+Verde sobre el commit final, `INIT_EXIT=0` leído **dentro** del log, en su propia línea y sin
+`tail`:
+
+```
+✓ typecheck paso
+✓ lint paso (0 errores; los mismos 160 warnings, ni uno nuevo)
+✓ DATABASE_URL resuelta: los 132 archivos de tests contra Postgres SI se ejecutan
+
+ Test Files  1776 passed (1776)
+      Tests  25407 passed | 26 skipped (25433)
+
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1776 ejecutado(s))
+== init OK ==
+INIT_EXIT=0
+```
+
+Los **26 `skipped`** son los de siempre y siguen siendo ajenos: `AnaliticaPage.test.tsx` (17) y
+`AnaliticaShell.test.tsx` (9). Los tres archivos tocados corrieron dentro del gate:
+`bulk-orden-service.texto-etiqueta` (19), `mensaje-caracter-no-imprimible` (12) y
+`corregir-datos-cliente-texto-etiqueta` (8). **25.401 + 6 = 25.407**, que es la cuenta exacta de lo
+añadido en esta vuelta.
+
+**Y hubo una corrida ROJA antes, que se cuenta porque pasó.** `INIT_EXIT=1`, un archivo:
+`tests/integration/repositories/historico-conversaciones.int.test.ts` › «R36: un termino que no
+casa nada devuelve la lista vacia» — la búsqueda con un término aleatorio (`zzq…`) devolvió **dos
+hilos**. Lo que se midió antes de darlo por ajeno, que es lo que el propio gate exige:
+
+- Las dos filas devueltas son **fixtures de ese mismo archivo** (`numRemision: "rem-321-…"`), o sea
+  datos sembrados por otra corrida de la misma suite, no por el caso que estaba comprobando.
+- **Aislado pasa, cuatro veces seguidas** (27/27 cada una).
+- La corrida completa **anterior**, sobre el mismo árbol menos el commit de redacción, fue
+  **verde** con 1776/1776; y la **siguiente**, sobre el árbol final, también.
+- Nada de este diff puede alcanzar `HistoricoConversacionesRepository`: se tocan un compositor de
+  mensajes, un argumento en una llamada y tests.
+
+Es la base local **compartida** entre worktrees, que este repo ya tiene catalogada como modo de
+fallo. **No se ha tocado `tests/baseline-rojos.json`**: meter ahí un rojo para que el gate pase es
+justo lo que ese archivo dice que no se haga, y esto no es deuda medida de nadie — es interferencia.
+
 ## Una nota sobre cómo se escribieron estos tests
 
 Los literales del caso de la `ñ` **no** se escriben con los caracteres de verdad: van por
