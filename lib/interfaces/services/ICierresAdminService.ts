@@ -241,9 +241,11 @@ export interface CierreGestionDescargaDTO {
    *     no existe como columna en `orden`, se DERIVA contando `orden_historial`
    *     (`OrdenHistorialRepository.contarIntentosVigentesEnLote` / `whereIntentosVigentes`).
    *
-   * Por eso el encabezado de la hoja dice de QUIEN son (ver `INTENTOS_CONTACTO_TIENDA_COL`):
-   * un «Intentos» a secas en una hoja de cierres —donde cada fila es una gestion del
-   * mensajero— se lee como los del mensajero, que es el dato equivocado.
+   * Por eso la hoja llevo del 2026-09-07 al 2026-09-08 un encabezado que decia de QUIEN eran
+   * («Intentos de contacto de la tienda», constante `INTENTOS_CONTACTO_TIENDA_COL`): un
+   * «Intentos» a secas en una hoja de cierres —donde cada fila es una gestion del mensajero— se
+   * lee como los del mensajero, que es el dato equivocado. Esa constante ya NO existe; la ficha
+   * 394 sustituyo la columna, y el aviso de aqui abajo dice por que.
    *
    * NUNCA `null` y el `0` es un valor CONOCIDO («la tienda no lo intento nunca»), no un hueco:
    * la columna es `NOT NULL DEFAULT 0`.

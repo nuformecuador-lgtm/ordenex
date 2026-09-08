@@ -93,13 +93,16 @@ function gestion(
     distritoNombre: "Limón",
     producto: "Caja mediana",
     tiendaNombre: "Tienda X",
-    // Ficha 385 — un valor NO cero y NO uno: un `1` se confundiría con cualquier contador
-    // ambiental y un `0` no distinguiría «emitido» de «vacío».
+    // Ficha 385 — el contador de LA TIENDA. Ya NO es el de la columna (lo sustituyó la 394),
+    // pero sigue viajando en el DTO y por eso el fixture lo trae: es el señuelo que hace que el
+    // fallo original se pueda detectar. Valor NO cero y NO uno, para que no se confunda con
+    // cualquier contador ambiental.
     intentosContactoTienda: 3,
-    // Ficha 394 — el OTRO contador: los intentos de ENTREGA del MENSAJERO, que es el que el
-    // humano pidió el 2026-09-08. Valor DISTINTO del de la tienda por el mismo motivo por el que
-    // las cuatro fechas son cuatro días distintos: con los dos iguales, una celda que cogiera el
-    // contador equivocado pasaría en verde — que es justo lo que ocurrió en la 385.
+    // Ficha 394 — el contador de la COLUMNA: los intentos de ENTREGA del MENSAJERO, que es el
+    // que el humano pidió y firmó el 2026-09-08. Valor DISTINTO del de la tienda por el mismo
+    // motivo por el que las cuatro fechas son cuatro días distintos: con los dos iguales, una
+    // celda que cogiera el contador equivocado pasaría en verde — que es justo lo que ocurrió en
+    // la 385.
     intentosEntrega: 5,
     montoRecibido: null,
     pagos: [],
@@ -143,7 +146,7 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
       "ubicacion",
       "producto",
       "tienda",
-      "intentosContactoTienda",
+      "intentosEntrega",
       "resultado",
       "montoCobrar",
       "fulfillment",
@@ -176,7 +179,7 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
       "Ubicación",
       "Producto",
       "Tienda",
-      "Intentos de contacto de la tienda",
+      "Intentos de entrega",
       "Resultado",
       "A cobrar",
       "Fulfillment",
@@ -380,7 +383,10 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
       ubicacion: "Limón · Limón · Central · Limón",
       producto: "Caja mediana",
       tienda: "Tienda X",
-      intentosContactoTienda: 3,
+      // Los del MENSAJERO (5), no los de la TIENDA (3): los dos viajan en el DTO y el fixture
+      // les da valores DISTINTOS, así que una celda que cogiera el contador equivocado pone
+      // rojo este `toEqual` con el número en la mano.
+      intentosEntrega: 5,
       resultado: "Entregada",
       montoCobrar: "1000.10",
       // El fixture de `ingreso()` trae `tarifa: null` (gap R9): sin tarifa congelada no hay
@@ -582,69 +588,78 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
   });
 });
 
-// --- Ficha 385: los intentos de LA TIENDA y la fecha de creación de la orden ---------------
+// --- Fichas 385 y 394: los intentos de ENTREGA y la fecha de creación de la orden ----------
+//
+// La 385 (2026-09-07) añadió DOS columnas: la fecha de creación de la orden y los intentos de
+// contacto de LA TIENDA. La 394 (2026-09-08) SUSTITUYÓ la segunda por los intentos de ENTREGA,
+// que era el dato que el humano había pedido. Este bloque afirma el contrato tal como quedó, y
+// afirma también —con test propio— que el contador de la tienda NO volvió a colarse.
 
-describe("las dos columnas de la ficha 385 (2026-09-07)", () => {
+describe("las dos columnas de la ficha 385, con la de intentos sustituida por la 394", () => {
   /** La declaración, como pares (clave, encabezado), para poder afirmar sobre la pareja. */
   const DECLARADAS = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => [c.clave, c.encabezado]);
 
-  it("el encabezado de los intentos dice DE QUIÉN son, y no es un «Intentos» a secas", () => {
-    // ESTE es el requisito de la ficha, y no es cosmético: en el árbol hay DOS contadores con
-    // dueños distintos —`orden.intentos_contacto` (la TIENDA) y los intentos de entrega del
-    // MENSAJERO, derivados de `orden_historial`— y esta hoja lleva UNA fila por gestión DEL
-    // MENSAJERO. Un «Intentos» pelado en esa vecindad se lee como los del mensajero: número
-    // correcto, pregunta equivocada.
-    const columna = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.find(
-      (c) => c.clave === "intentosContactoTienda",
-    );
+  it("la columna de intentos es la de ENTREGA y se llama igual que en las otras tres hojas", () => {
+    // ESTE es el requisito de la 394. El literal se escribe A MANO y no se lee de
+    // `INTENTOS_ENTREGA_COL`: comparar un encabezado contra la constante que lo genera está
+    // siempre verde y no prueba nada. Es el mismo texto que llevan `novedades-descarga-columnas`,
+    // `ayuda-descarga-columnas` y `lib/manifiesto/etiquetas-columnas` — que la misma cosa se
+    // llame igual en las cuatro hojas es lo que impide compararlas y creer que son dos datos.
+    const columna = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.find((c) => c.clave === "intentosEntrega");
     expect(columna).toBeDefined();
-    expect(columna!.encabezado).toBe("Intentos de contacto de la tienda");
+    expect(columna!.encabezado).toBe("Intentos de entrega");
 
-    // Se afirma el TEXTO y además la propiedad que lo hace útil: nombra al dueño. Sin esto, un
-    // renombrado a «Intentos» o a «Intentos de contacto» pasaría la aserción de arriba en cuanto
-    // alguien la "actualizara" al valor nuevo, que es como mueren estos contratos.
-    expect(columna!.encabezado.toLowerCase()).toContain("tienda");
-    expect(columna!.encabezado).not.toBe("Intentos");
-
-    // Y NINGUNA otra columna de la hoja habla de intentos: no hay dos que se puedan confundir.
+    // Y NINGUNA otra columna de la hoja habla de intentos: la de la tienda se SUSTITUYÓ, no se
+    // dejó al lado, precisamente porque dos columnas de «intentos» en la misma hoja es lo que
+    // hizo falta desenredar.
     const deIntentos = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.filter((c) =>
       /intento/i.test(c.encabezado),
     );
-    expect(deIntentos.map((c) => c.clave)).toEqual(["intentosContactoTienda"]);
+    expect(deIntentos.map((c) => c.clave)).toEqual(["intentosEntrega"]);
   });
 
-  it("la hoja NO lleva los intentos de ENTREGA, que son otro dato y de otro dueño", () => {
-    // Un requisito que hoy se cumple «porque no existe» necesita su test igual: sin él, la
-    // próxima persona conecta `intentosEntrega` a esta columna creyendo que la arregla, y la
-    // celda pasaría a contar otra cosa bajo el mismo encabezado.
+  it("la hoja YA NO lleva los intentos de contacto de LA TIENDA (ficha 394)", () => {
+    // La columna que la 385 puso aquí contaba `orden.intentos_contacto`: el contador que sube la
+    // TIENDA desde /novedades, que es un dato de otro dueño y contesta a otra pregunta. El campo
+    // sigue viajando en el DTO —y el fixture lo trae con valor 3—, así que sin este caso nada
+    // impediría que alguien lo recableara a la hoja «arreglándola».
     const claves = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.clave);
-    expect(claves).not.toContain("intentosEntrega");
+    expect(claves).not.toContain("intentosContactoTienda");
     expect(claves).not.toContain("intentos");
+    expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.encabezado)).not.toContain(
+      "Intentos de contacto de la tienda",
+    );
     for (const resultado of LOS_CINCO) {
       const fila = filaDescargaGestionFundida(gestion({ resultado }));
-      expect(Object.keys(fila)).not.toContain("intentosEntrega");
-      expect(Object.keys(fila)).not.toContain("intentos");
+      expect(Object.keys(fila), resultado).not.toContain("intentosContactoTienda");
+      expect(Object.keys(fila), resultado).not.toContain("intentos");
+      // Y el VALOR tampoco: el fixture da 5 al mensajero y 3 a la tienda, así que una celda que
+      // leyera el campo equivocado saldría con un 3 bajo el encabezado «Intentos de entrega».
+      expect(fila.intentosEntrega, resultado).toBe(5);
+      expect(fila.intentosEntrega, resultado).not.toBe(3);
     }
   });
 
   it("los intentos salen tal cual, y el CERO se emite en vez de dejar la celda vacía", () => {
-    // `orden.intentos_contacto` es NOT NULL DEFAULT 0. El `0` es un HECHO —«la tienda no lo
-    // intentó nunca»— y una celda vacía diría «no se sabe». Un `|| null` o un `?? ""` en la
-    // proyección pone rojo esto.
+    // El DTO promete un número y NUNCA `null`: el `?? 0` lo resolvió el borde de datos. El `0`
+    // es un HECHO —«nadie ha intentado entregarla todavía»— y una celda vacía diría «no se
+    // sabe». Un `|| null` o un `?? ""` en la proyección pone rojo esto.
     const conIntentos = filaDescargaGestionFundida(
-      gestion({ resultado: "entregada", intentosContactoTienda: 7 }),
+      gestion({ resultado: "entregada", intentosEntrega: 7 }),
     );
-    expect(conIntentos.intentosContactoTienda).toBe(7);
+    expect(conIntentos.intentosEntrega).toBe(7);
 
     const sinIntentos = filaDescargaGestionFundida(
-      gestion({ resultado: "devuelta", intentosContactoTienda: 0 }),
+      gestion({ resultado: "devuelta", intentosEntrega: 0 }),
     );
-    expect(sinIntentos.intentosContactoTienda).toBe(0);
-    expect(sinIntentos.intentosContactoTienda).not.toBeNull();
-    expect(sinIntentos.intentosContactoTienda).not.toBe("");
-    expect(sinIntentos.intentosContactoTienda).not.toBeUndefined();
+    expect(sinIntentos.intentosEntrega).toBe(0);
+    expect(sinIntentos.intentosEntrega).not.toBeNull();
+    expect(sinIntentos.intentosEntrega).not.toBe("");
+    expect(sinIntentos.intentosEntrega).not.toBeUndefined();
     // Número, no texto: quien abre la hoja ordena y suma por esta columna.
-    expect(typeof sinIntentos.intentosContactoTienda).toBe("number");
+    expect(typeof sinIntentos.intentosEntrega).toBe("number");
+    // Y el cero de ENTREGA no se rellena con el contador de la tienda, que aquí vale 3.
+    expect(sinIntentos.intentosEntrega).not.toBe(3);
   });
 
   it("la fecha de creación es la de la ORDEN y no ninguna de las otras tres", () => {
@@ -679,8 +694,10 @@ describe("las dos columnas de la ficha 385 (2026-09-07)", () => {
     // dato.
     const claves = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.clave);
     expect(claves.indexOf("fechaCreacionOrden")).toBe(4);
-    expect(claves.indexOf("intentosContactoTienda")).toBe(12);
-    expect(claves[claves.indexOf("intentosContactoTienda") + 1]).toBe("resultado");
+    // La 394 SUSTITUYÓ la columna de intentos en su sitio: la 13.ª sigue siendo la de intentos y
+    // sigue pegada a «Resultado». Cambió de qué contador sale, no dónde va.
+    expect(claves.indexOf("intentosEntrega")).toBe(12);
+    expect(claves[claves.indexOf("intentosEntrega") + 1]).toBe("resultado");
 
     // (b) El orden RELATIVO de las 29 de antes se conserva entero. Se compara contra la lista
     // literal previa a la ficha —no contra la constante filtrada por sí misma, que siempre
@@ -725,10 +742,10 @@ describe("las dos columnas de la ficha 385 (2026-09-07)", () => {
     // `CLAVES_ESPECIFICAS`, quedarían vacías en cuatro de los cinco resultados.
     for (const resultado of LOS_CINCO) {
       const fila = filaDescargaGestionFundida(
-        gestion({ resultado, fechaCreacionOrden: "2026-05-01", intentosContactoTienda: 2 }),
+        gestion({ resultado, fechaCreacionOrden: "2026-05-01", intentosEntrega: 2 }),
       );
       expect(fila.fechaCreacionOrden, resultado).toBe("2026-05-01");
-      expect(fila.intentosContactoTienda, resultado).toBe(2);
+      expect(fila.intentosEntrega, resultado).toBe(2);
     }
   });
 
@@ -749,6 +766,7 @@ describe("las dos columnas de la ficha 385 (2026-09-07)", () => {
     ]) {
       const claves = columnas.map((c) => c.clave);
       expect(claves).not.toContain("intentosContactoTienda");
+      expect(claves).not.toContain("intentosEntrega");
       expect(claves).not.toContain("fechaCreacionOrden");
       for (const columna of columnas) {
         expect(columna.encabezado).not.toMatch(/intento/i);

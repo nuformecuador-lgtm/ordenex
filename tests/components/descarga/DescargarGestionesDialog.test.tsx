@@ -366,15 +366,18 @@ describe("diálogo de descarga detallada de gestiones (T4.1)", () => {
     const [columnas, filas, hoja] = buildXlsxRowsMock.mock.calls[0];
     const encabezados = columnas.map((c) => c.header);
     // 31 desde la ficha 385 (2026-09-07): las 29 anteriores más «Fecha de creación de la orden»
-    // e «Intentos de contacto de la tienda». Aquéllas eran las 27 de la 230 más «Fecha de
-    // gestión» y «Día de reparto» (2026-09-05).
+    // y una de intentos. Aquéllas eran las 27 de la 230 más «Fecha de gestión» y «Día de
+    // reparto» (2026-09-05). La ficha 394 (2026-09-08) SUSTITUYÓ la de intentos —era la de la
+    // TIENDA y el humano pedía las de ENTREGA—, así que el número no se mueve: 31.
     expect(encabezados).toHaveLength(31);
     expect(encabezados[0]).toBe("Mensajero");
     expect(encabezados).toContain("Resultado");
     expect(encabezados).toContain("Fecha de gestión");
     expect(encabezados).toContain("Día de reparto");
     expect(encabezados).toContain("Fecha de creación de la orden");
-    expect(encabezados).toContain("Intentos de contacto de la tienda");
+    expect(encabezados).toContain("Intentos de entrega");
+    // Ficha 394: la de la tienda se sustituyó, no se dejó al lado.
+    expect(encabezados).not.toContain("Intentos de contacto de la tienda");
     // D8/R40: la columna de evidencia no existe en la fundida, en ningun resultado.
     expect(encabezados).not.toContain("Tiene evidencia");
     // UNA hoja, y su nombre es el titulo de la descarga detallada (R6/R51).
