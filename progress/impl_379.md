@@ -217,19 +217,37 @@ Los dos rojos, y qué era cada uno:
    de sistema de archivos sobre `app/ lib/ tests/ e2e/` leyendo cada archivo. **Aislado pasa en
    1,69 s**, y ese recorrido incluye mis archivos nuevos, así que su contenido está medido.
 
-**Segunda corrida (la que vale):** ver abajo.
+**Segunda corrida — la que vale**, sobre el árbol final (`42593924`):
+
+```
+== Arnes SDD :: init (modo: completo) ==
+Test Files  1776 passed (1776)
+     Tests  25389 passed | 26 skipped (25415)
+Duration  909.73s
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1776 ejecutado(s))
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado …   ← deuda ajena, preexistente
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+`censo-simpe.test.ts` pasó en **477 ms** en esta corrida (contra los 27.672 ms del timeout de la
+primera): flake de saturación confirmado, no contenido.
 
 **Los `skipped` no esconden nada.** Los 26 son 17 + 9 de `AnaliticaPage.test.tsx` y
 `AnaliticaShell.test.tsx` (condicionales preexistentes). **No** hay ningún
 «sin `DATABASE_URL` … NO se van a ejecutar»: se copió el `.env` de la raíz y los ~78 archivos de
-`integration/db` corrieron. Confirmado archivo a archivo en el log:
+`integration/db` corrieron. Confirmado archivo a archivo en el log de la corrida verde:
 
 ```
-✓ tests/integration/db/historial-accion-atomicidad.test.ts (22 tests) 1190ms
-✓ tests/integration/db/usuario-contar-adminsatelites.test.ts (2 tests) 840ms
-✓ tests/integration/db/cierre-bodega-resumen-pendientes.test.ts (6 tests) 1032ms
-✓ tests/unit/guards/379-maestro-sin-bloqueo.guardia.test.ts (11 tests) 57ms
+✓ tests/integration/db/historial-accion-atomicidad.test.ts (22 tests) 973ms
+✓ tests/integration/db/cierre-bodega-resumen-pendientes.test.ts (6 tests) 521ms
+✓ tests/integration/db/usuario-contar-adminsatelites.test.ts (2 tests) 669ms
+✓ tests/unit/guards/379-maestro-sin-bloqueo.guardia.test.ts (11 tests) 23ms
 ✓ tests/unit/services/usuario-impacto-zona.test.ts (16 tests) 38ms
+✓ tests/unit/services/usuario-zona.test.ts (12 tests) 25ms
+✓ tests/unit/actions/usuarios-composition.test.ts (2 tests) 497ms
+✓ tests/unit/services/usuario-restablecer-contrasena.test.ts (26 tests) 1598ms
 ```
 
 ---
