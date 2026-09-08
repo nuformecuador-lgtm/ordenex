@@ -194,11 +194,26 @@ describe("feature 393 — «Para la central» en el archivo de los cierres de bo
     expect(String(fila.paraLaCentral)).not.toContain("₡");
   });
 
-  it("un «Para la central» NEGATIVO llega al archivo con su signo (R36)", () => {
+  it("un «Para la central» NEGATIVO llega al archivo con su signo en LAS TRES (R36)", () => {
     // Medido contra produccion el 2026-09-08: 1 de 14 cierres de bodega. Recortarlo a cero en
     // la hoja diria «no hay que entregar nada» y omitiria que la central pone la diferencia.
-    const fila = filaDescargaBodegaSolicitado({ ...CIERRE, paraLaCentral: "-1000.05" });
-    expect(fila.paraLaCentral).toBe("-1000.05");
+    //
+    // LAS TRES, y no solo la de los solicitados: son TRES asignaciones independientes en el
+    // archivo de columnas, no una compartida. Medido el 2026-09-08 por el reviewer (MR6):
+    // recortar el negativo a "0.00" en `filaDescargaBodegaPendiente` dejaba 487 tests de
+    // descarga y 2914 de guardias en verde, porque este caso solo ejercitaba una de las tres.
+    const negativo: CierreBodegaResumen = { ...CIERRE, paraLaCentral: "-1000.05" };
+    const proyecciones = [
+      ["cola de pendientes del maestro", filaDescargaBodegaPendiente(negativo)],
+      ["historico de resueltos", filaDescargaBodegaResuelto(negativo)],
+      ["solicitados de la satelite", filaDescargaBodegaSolicitado(negativo)],
+    ] as const;
+    expect(proyecciones).toHaveLength(3);
+    for (const [donde, fila] of proyecciones) {
+      expect(fila.paraLaCentral, `${donde}: el negativo llego recortado a la hoja`).toBe(
+        "-1000.05",
+      );
+    }
   });
 
   it("`efectivoCubreDescuentos` NO va al archivo: es un aviso, no una cifra", () => {
