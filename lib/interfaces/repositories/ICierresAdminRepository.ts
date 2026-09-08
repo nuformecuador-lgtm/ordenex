@@ -423,6 +423,14 @@ export interface ICierresAdminRepository {
    *
    * Conjunto vacio si el alcance y los recortes no se cruzan — que es el MISMO desenlace que
    * «ese mensajero no tiene cierres en el rango», y eso es deliberado (R38).
+   *
+   * FICHA 394 (2026-09-08) — la fila lleva ademas `intentosEntrega`: los intentos de entrega
+   * VIGENTES de la orden, del derivador unico de la 215
+   * (`contarIntentosVigentesEnLoteCon`), que se pide EN LOTE para todas las ordenes del
+   * conjunto y en el MISMO `Promise.all` que el snapshot. Una llamada por fila seria un N+1
+   * sobre una descarga que puede traer miles de gestiones: es exactamente el motivo de que el
+   * gemelo en lote exista. Las ordenes sin intentos contables no vienen en el Map y el
+   * compositor resuelve `?? 0` — el cero es un valor conocido, no un hueco.
    */
   findGestionesPorAlcanceCompleto(
     alcance: Alcance,

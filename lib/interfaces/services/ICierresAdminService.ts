@@ -247,8 +247,45 @@ export interface CierreGestionDescargaDTO {
    *
    * NUNCA `null` y el `0` es un valor CONOCIDO («la tienda no lo intento nunca»), no un hueco:
    * la columna es `NOT NULL DEFAULT 0`.
+   *
+   * ⚠️ FICHA 394 (2026-09-08) — ESTE CAMPO YA NO ES EL DE LA COLUMNA. El humano midio que lo
+   * que se pidio en la 385 eran los intentos de ENTREGA, y firmo SUSTITUIR la columna (no tener
+   * las dos: en una hoja ya ancha, la de mas no se lee, se confunde con la buena). El dato de la
+   * hoja pasa a ser `intentosEntrega`, aqui debajo.
+   *
+   * SE CONSERVA EN EL DTO A PROPOSITO. Sale de la MISMA consulta que `fechaCreacionOrden`
+   * —`GESTION_DESCARGA_SELECT.orden`, tres campos en un solo `select`—, asi que no cuesta ni un
+   * round-trip, y su contrato esta atornillado por tests que valen: quitarlo se llevaria por
+   * delante cobertura ajena a esta ficha. Si algun dia se decide retirarlo, se retira con su
+   * columna del `select`, sus tests y una medida de quien lo consume, no de paso.
    */
   intentosContactoTienda: number;
+  /**
+   * FICHA 394 (2026-09-08) — los INTENTOS DE ENTREGA VIGENTES de la orden: cuantos CIERRES
+   * APROBADOS distintos registran una gestion contable y vigente sobre ella. Es el numero del
+   * MENSAJERO, y el que la hoja detallada de cierres pide en su columna.
+   *
+   * NO SE CUENTA AQUI. Sale del derivador unico de las features 160/215
+   * (`contarIntentosVigentesEnLote` / `whereIntentosVigentes`), el mismo que alimentan la
+   * analitica operativa, el rollup, el tope de intentos de la 276 y la pantalla de liberacion de
+   * reprogramadas —donde el campo se llama igual—. Que sea el mismo derivador es el requisito:
+   * es el numero con el que el sistema decide el tope y con el que cobra, asi que la hoja y la
+   * analitica tienen que decir lo mismo o una de las dos miente.
+   *
+   * **VIGENTES, no todos los que hubo.** Una gestion ANULADA no cuenta, un cierre `solicitado`,
+   * `vencido` o `rechazado` no cuenta, y dos gestiones contables de la misma orden en el MISMO
+   * cierre aprobado suman UNA (el grano es la orden dentro del cierre). El criterio completo,
+   * con su porque, esta en `IOrdenHistorialRepository.contarIntentosVigentes`.
+   *
+   * **Es de la ORDEN, no de la fila.** Dos gestiones de la misma orden en cierres distintos
+   * llevan el MISMO numero, y ese numero incluye intentos de otros mensajeros y de dias fuera
+   * del rango descargado: es el historial de la orden, no un contador de esta hoja.
+   *
+   * NUNCA `null`: las ordenes sin intentos contables no vienen en el Map del derivador y el
+   * borde de datos resuelve `?? 0`. El `0` es un valor CONOCIDO («nadie la ha intentado
+   * todavia»), no un hueco.
+   */
+  intentosEntrega: number;
   resultado: CierreResultado;
   // --- datos POR RAMA; money-safe STRING del snapshot, tal cual (R43/R44) ---
   montoRecibido: string | null;

@@ -82,6 +82,10 @@ function gestion(over: Partial<CierreGestionDescargaDTO> = {}): CierreGestionDes
     // Ficha 385: los intentos de LA TIENDA. Viajan por el DTO común, así que la paridad de los
     // dos caminos los cubre igual que a las demás celdas.
     intentosContactoTienda: 3,
+    // Ficha 394: los intentos de ENTREGA, los del MENSAJERO. Viajan por el MISMO DTO común, así
+    // que la paridad los cubre igual. Valor DISTINTO del de la tienda: con los dos iguales, un
+    // camino que cogiera el contador equivocado seguiría dando paridad y no se vería.
+    intentosEntrega: 5,
     resultado: "entregada",
     montoRecibido: "1000.10",
     pagos: [{ metodo: "SINPE", monto: "1000.10" }],
