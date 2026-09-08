@@ -4681,6 +4681,17 @@
       "complexity": "baja",
       "branch": "fix/394-intentos-entrega-en-detalle-cierres",
       "status_note": "CERRADA el 2026-09-08. Servidor PR #741, columna PR #743. Sin migracion. || El Excel «Detalle» dice ahora «Intentos de entrega», 13a de 31, literal identico al de las otras tres hojas del repo. Se SUSTITUYO una columna, no se anadio. El numero son los intentos VIGENTES, via contarIntentosVigentesEnLote, la misma funcion que ejecuta la analitica -- verificado siguiendo las dos cadenas de llamadas, asi que no hay dos definiciones. || 9 mutaciones muertas entre las dos mitades. Dos reproducen el defecto original de la 385: la celda vuelve al contador de la tienda y pone 5 rojos. El 0 se emite como 0 y no como nulo: es un dato conocido, no una casilla vacia. || QUEDA HUERFANO y NO SE BORRA: el campo intentosContactoTienda del DTO de cierres se queda sin consumidor de produccion. Cinco archivos de test lo afirman y su cobertura es ajena. La columna orden.intentos_contacto sigue viva en /novedades: lo huerfano es el campo del DTO, no el dato. || NO se paso el reviewer. Queda dicho."
+    },
+    {
+      "id": 395,
+      "title": "el detalle del cierre del mensajero tampoco dice que plata es para quien",
+      "description": "La 393 puso las dos cascadas en los cierres de bodega y dejo fuera el detalle del cierre de mensajero.",
+      "zone": "fullstack",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "feat/395-cascadas-en-cierre-mensajero",
+      "status_note": "EN CURSO desde el 2026-09-08. URGENTE: el humano dice que ya van a usarlo. Sin migracion. || FALLO DE ALCANCE DE LA 393, del leader: las cascadas se montaron solo en CierresBodegaAdminModule y cierre-factura. CierresAdminModule -- el detalle del cierre de MENSAJERO, que es el que se mira todos los dias -- NO monta CascadaDinero en ningun sitio y sigue con tarjetas sueltas. Verificado por grep. || EL SERVICIO YA CALCULA gananciaOrdenex y pagoTiendaOrdenex para ese detalle (CierresAdminService:668,672) y ya tiene totalesIngreso. LE FALTAN TRES LINEAS: cobradoSobreRecaudado (la puente), netoOrdenex y lo que el mensajero entrega (recaudado - pago mensajero - ingreso bodega). || SE REUSAN LAS MISMAS FUNCIONES de lib/utils/ingreso-ordenex.ts y el MISMO componente CascadaDinero, nunca una copia: si divergieran, la misma plata se leeria distinta segun por que pantalla se entra."
     }
   ]
 }
