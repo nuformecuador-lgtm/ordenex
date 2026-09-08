@@ -96,6 +96,11 @@ function gestion(
     // Ficha 385 — un valor NO cero y NO uno: un `1` se confundiría con cualquier contador
     // ambiental y un `0` no distinguiría «emitido» de «vacío».
     intentosContactoTienda: 3,
+    // Ficha 394 — el OTRO contador: los intentos de ENTREGA del MENSAJERO, que es el que el
+    // humano pidió el 2026-09-08. Valor DISTINTO del de la tienda por el mismo motivo por el que
+    // las cuatro fechas son cuatro días distintos: con los dos iguales, una celda que cogiera el
+    // contador equivocado pasaría en verde — que es justo lo que ocurrió en la 385.
+    intentosEntrega: 5,
     montoRecibido: null,
     pagos: [],
     motivo: null,
