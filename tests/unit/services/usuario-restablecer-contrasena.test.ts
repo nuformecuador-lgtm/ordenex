@@ -70,6 +70,7 @@ function repoUsuarios(overrides: Partial<IUserRepository> = {}): IUserRepository
     listMensajerosParaFiltro: vi.fn(),
     listByRol: vi.fn(),
     listCuentasTienda: vi.fn(),
+    obtenerCuentaTienda: vi.fn().mockResolvedValue(null), // exigido por IUserRepository (ficha 381); no ejercitado aqui
     list: vi.fn(),
     count: vi.fn(),
     update: vi.fn(),

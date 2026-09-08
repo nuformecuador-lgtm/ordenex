@@ -277,6 +277,18 @@ describe("ficha 344 — el aporte por orden (R22/R46/R49)", () => {
     }
   });
 
+  it("⭑ FICHA 381: un cobro manual NO nace de un cierre, y lo declara", () => {
+    // Abrir el detalle de un cobro tiene que responder «no nace de un cierre» en vez de irse a
+    // buscar un cierre inexistente: `origen_id` es NULL por construccion (R20).
+    expect(FUENTE_TIENDA.cobro_manual).toEqual({
+      tipo: "sin_reparto",
+      motivo: "no_nace_de_un_cierre",
+    });
+    // Discriminador: los seis debitos del feed SI se reparten. Sin esto, un catalogo entero en
+    // `sin_reparto` pasaria el `toEqual` de arriba.
+    expect(FUENTE_TIENDA.flete).toEqual({ tipo: "concepto_ordenex", concepto: "ingreso_flete" });
+  });
+
   it("una fuente sin reparto no deriva ningun aporte", () => {
     const orden = CONJUNTO[0];
     expect(

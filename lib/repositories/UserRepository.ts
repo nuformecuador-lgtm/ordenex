@@ -11,6 +11,7 @@ import {
   CatalogoInvalidoError,
   UsuarioDuplicadoError,
   type CreateUsuarioInput,
+  type CuentaTiendaValidacion,
   type IUserRepository,
   type ListUsuariosParams,
   type ListUsuariosResult,
@@ -234,6 +235,30 @@ export class UserRepository implements IUserRepository {
       esApiKey: r.rol.value === "apiKey",
       activa: r.estado === "activo",
     }));
+  }
+
+  /**
+   * FICHA 381 (R17) — UNA cuenta por su id, proyectada a `{ rol, estado }` y nada mas.
+   *
+   * Es la lectura que decide si un cobro manual puede escribirse: la tienda tiene que EXISTIR, ser
+   * una cuenta `adminTienda` y estar `activo`. Quien lo COMPRUEBA es `CobroTiendaService`; aqui solo
+   * se lee — el repositorio no clasifica.
+   *
+   * Molde: `ApiKeyRepository.findTiendaDestino`, que resuelve el mismo problema (validar UNA tienda
+   * destino) con la misma proyeccion minima. No se reusa aquel porque vive en el repositorio de
+   * API keys y arrastraria ese contrato entero a un servicio de dinero.
+   *
+   * Sin filtro de estado ni de rol en el `WHERE`, A PROPOSITO: los tres rechazos posibles
+   * —inexistente, no es tienda, no esta activa— tienen mensajes DISTINTOS bajo el mismo campo, y un
+   * `WHERE` que los mezclara devolveria `null` para los tres, dejando a quien registra sin saber
+   * cual arreglar.
+   */
+  async obtenerCuentaTienda(id: string): Promise<CuentaTiendaValidacion | null> {
+    const fila = await this.prisma.usuario.findUnique({
+      where: { id },
+      select: { estado: true, rol: { select: { value: true } } },
+    });
+    return fila === null ? null : { rol: fila.rol.value, estado: fila.estado };
   }
 
   /**

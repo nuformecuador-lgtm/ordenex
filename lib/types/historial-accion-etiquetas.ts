@@ -91,6 +91,20 @@ export interface FuentesEtiqueta {
    * columna es texto libre y R5 la deja fuera.
    */
   wallet_movimiento: { categoria: string };
+  /**
+   * FICHA 381 — el ASIENTO del cobro manual en el libro de UNA tienda, etiquetado por el NOMBRE DE
+   * ESA TIENDA.
+   *
+   * ⚠️ LA `descripcion` DEL COBRO NO ENTRA, Y ES EL PUNTO (R43): es texto libre tecleado por una
+   * persona en el momento de cobrar, exactamente el genero que R5 de la 362 deja fuera de esta
+   * tabla —al lado de `motivo`, `notas` y `concepto` de un rechazo—. El nombre de la tienda SI
+   * entra: es una etiqueta de CATALOGO de un OPERADOR, del mismo genero que
+   * `liquidacion_pago: { beneficiarioNombre }`, que ya se usa para tiendas.
+   *
+   * Admite `null` por el mismo motivo que las demas fuentes por relacion: una lectura que no
+   * resuelve el nombre no puede TUMBAR el cobro. `unir` lo convierte en «(sin identificar)».
+   */
+  wallet_tienda_movimiento: { tiendaNombre: string | null };
   orden_incidente: FuenteEnvio;
   /**
    * El cobro de gasto fijo se etiqueta por su CONCEPTO y su PERIODO («Alquiler bodega · 2026-09»).
@@ -185,6 +199,8 @@ const CONSTRUCTORES: {
   liquidacion_pago: (f) => unir(f?.beneficiarioNombre),
   liquidacion_reparto: (f) => unir(f?.beneficiarioNombre),
   wallet_movimiento: (f) => limpiar(f?.categoria),
+  // FICHA 381: el nombre de la TIENDA a la que se le cobro, y nada mas. Nunca la `descripcion`.
+  wallet_tienda_movimiento: (f) => unir(f?.tiendaNombre),
   orden_incidente: etiquetaDeEnvio,
   gasto_fijo_cobro: (f) => unir(f?.concepto, f?.periodo),
   rechazo_tienda_cobro: etiquetaDeEnvio,

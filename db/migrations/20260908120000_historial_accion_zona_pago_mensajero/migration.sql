@@ -1,0 +1,50 @@
+-- FICHA 380 — el rastro de CAMBIAR EL PAGO AL MENSAJERO DE UNA ZONA.
+--
+-- QUE REGISTRA: que el conjunto de pagos al mensajero de una zona quedo DISTINTO tras guardarla.
+-- `ZonaRepository.update` reemplaza por completo las filas de `tarifa_zona_mensajero` de la zona
+-- (`deleteMany` + `createMany`) en CADA guardado, y hasta esta ficha no dejaba una sola linea de
+-- historial: cero rastro de un cambio que decide lo que cobra una persona. UNA fila por GUARDADO
+-- que deje el pago distinto, colgada de la ZONA (`entidad_tipo = 'zona'`), no de la fila de
+-- tarifa: los `id` de `tarifa_zona_mensajero` no sobreviven al siguiente guardado y una fila de
+-- auditoria anclada a un id que se destruye es una fila que nadie puede seguir.
+--
+-- UN TIPO NUEVO Y NINGUNA ENTIDAD NUEVA: `zona` ya esta en `historial_accion_entidad` desde
+-- `20260902120000_historial_accion` (la usan `zona_borrada` y `zona_central_cambiada`). Aqui solo
+-- se amplia `historial_accion_tipo`.
+--
+-- POR QUE ENTRA EN «mueve dinero» Y NO EN OTRA CATEGORIA. R17 de la 362 exige EXACTAMENTE una
+-- categoria por tipo. `tarifa_zona_mensajero` es la entrada de `resolvePagoTarifa` (feature 39),
+-- o sea LO QUE SE LE PAGA A UN MENSAJERO por cada entrega y por cada rechazo. No es «hace
+-- desaparecer algo» (la zona sigue ahi) ni «cambia quien puede hacer que» (ningun permiso cambia).
+--
+-- POR QUE UN TIPO PROPIO Y NO `tarifa_creada`/`tarifa_actualizada`/`tarifa_borrada` (Q1, firmada
+-- por el humano el 2026-09-08, A FAVOR de la recomendacion del leader): esos tres apuntan a la
+-- tabla `tarifas` —el FLETE que se le cobra a la TIENDA—. Reutilizarlos meteria ids de DOS tablas
+-- distintas bajo el mismo `entidad_tipo = 'tarifa'` y `@@index([entidadTipo, entidadId])` dejaria
+-- de poder responder «¿que le paso a esta tarifa?» sin decir que ha dejado de hacerlo. Ademas
+-- `FuentesEtiqueta.tarifa` es `{ zonaNombre, tiendaNombre }`, y un pago al mensajero no tiene
+-- tienda.
+--
+-- ⚠️ LA FILA NO LLEVA IMPORTES: `monto`, `valor_anterior` y `valor_nuevo` van NULL (Q2, firmada
+-- por el humano el 2026-09-08 EN CONTRA de la recomendacion del leader, que era guardar el antes y
+-- el despues). Consecuencia ACEPTADA y escrita donde se ve: como el guardado DESTRUYE las filas
+-- viejas de `tarifa_zona_mensajero`, el historial dira que el pago de una zona cambio, en cual,
+-- quien lo cambio y cuando — y NUNCA de cuanto a cuanto. Precedente adoptado: `tarifa_actualizada`
+-- registra el hecho y nada mas sobre una tabla con diez columnas de dinero.
+--
+-- ⚠️ SOLO LA EDICION (Q3, firmada por el humano el 2026-09-08 EN CONTRA de la recomendacion del
+-- leader, que era cerrar tambien la creacion): `ZonaRepository.create` NO escribe este tipo, y
+-- `hardDelete` tampoco —`zona_borrada` ya documenta la desaparicion de la zona y de sus pagos—.
+-- Es coherente con el catalogo que ya existe: hay `zona_borrada` y no `zona_creada`, igual que hay
+-- `vehiculo_borrado` y no `vehiculo_creado`.
+--
+-- VA SOLA: Postgres prohibe USAR un valor de enum en la misma transaccion que lo añade (55P04) y
+-- Prisma Migrate corre cada `migration.sql` en su propia transaccion. Mismo patron que
+-- `20260907130000_historial_accion_zona_central_cambiada` y que las cinco ampliaciones anteriores.
+--
+-- ADITIVA: no crea ni altera tablas, columnas ni indices, no escribe ni borra datos, y no amplia
+-- `historial_accion_entidad`. La RLS de `historial_accion` —habilitada y sin policies desde la 362,
+-- solo service role— no se toca: un valor nuevo de enum no la afecta. NO HAY BACKFILL y no puede
+-- haberlo: nadie registro los cambios de pago anteriores, no existe la fuente. El rastro empieza el
+-- dia del despliegue.
+ALTER TYPE "historial_accion_tipo" ADD VALUE IF NOT EXISTS 'zona_pago_mensajero_cambiado';

@@ -4708,3 +4708,42 @@ Cerrada. Dos PR: #745 (servidor) y #747 (aviso). Sin migracion, sin backfill.
   zod en ingles en el aviso del caso mas frecuente, el nombre en blanco.
 - **Sigue abierta la A2 de la 383** --si la correccion manual debe reparar o rechazar--, y esta
   ficha eligio rechazar por coherencia con el formulario mas cercano, no por firma.
+
+
+## 380 — el guardado de zona reescribia el pago al mensajero sin rastro (2026-09-08)
+
+Cerrada. PR #749. **Lleva migracion**: un valor de enum, aditivo.
+
+- **El agujero:** `ZonaRepository.update` reemplazaba las filas de `tarifa_zona_mensajero` en
+  cada guardado sin una sola linea de historial. Cero rastro de un cambio que decide lo que
+  cobra una persona.
+- **Tres firmas del humano, dos contra la recomendacion del leader.** La fila NO lleva importes
+  (Q2) y solo se audita la edicion (Q3). La consecuencia de Q2 esta escrita donde se ve: el
+  historial nunca podra reconstruir de cuanto a cuanto, porque el guardado destruye las filas
+  viejas.
+- **Q3 tenia mejor precedente que el consejo del leader:** el catalogo ya es asimetrico a
+  proposito -- `zona_borrada` sin `zona_creada`, `vehiculo_borrado` sin `vehiculo_creado`.
+- **La trampa del down.sql, atajada midiendo:** la lista salio de consultar el catalogo real, no
+  de razonarlo, y el aviso vive dentro del archivo con un test que comprueba que sigue ahi.
+- **Hallazgo mayor:** la guardia estatica del historial NO caza que esta escritura desaparezca.
+  Mide por metodo, y `update` conserva las otras dos llamadas. Quien protege el requisito aqui
+  es Postgres, no el censo.
+
+
+## 381 — cobrarle un costo a una tienda desde «Registrar movimiento» (2026-09-08)
+
+Cerrada. Dos PR: #750 (servidor) y #751 (pantalla). **Lleva dos migraciones.**
+
+- **Lo que el humano acoto, y es el corazon:** «mas que marcar como ingreso es QUITAR DEL DINERO
+  DISPONIBLE de esa tienda […] si no hay, el disponible debe verse EN NEGATIVO y cobrarse solo
+  cuando mediante la gestion se le deba dinero» · «ese cobro deben tambien verlo las tiendas en
+  su propia wallet».
+- **Las tres cosas estan sujetas por mutaciones que mueren:** marcarlo como ingreso de Ordenex,
+  recortar el negativo a cero y esconderselo a la tienda.
+- **Visto en la app:** +₡126.512,79 menos un cobro de ₡150.000 deja -₡23.487,21, con su signo,
+  en las dos vistas, y la caja de Ordenex sin tocar.
+- **NO se reanudo el trabajo a medias** de la rama vieja: construia un puerto a la caja que la
+  decision del humano elimino. Se rearranco desde el spec revisado.
+- **Confirma el hallazgo de la 380:** borrar la escritura del historial deja la guardia del censo
+  verde. Mide por metodo, no por escritura.
+- **Queda sin firmar la Q1:** los tres textos que ve el usuario.

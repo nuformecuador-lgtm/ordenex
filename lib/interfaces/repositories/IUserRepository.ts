@@ -31,6 +31,15 @@ export interface UsuarioPublico {
   updatedAt: Date;
 }
 
+/**
+ * FICHA 381 (R17) — lo MINIMO para decidir si a una cuenta se le puede cobrar: su rol y su estado.
+ * Dos campos y ni uno mas; en particular NADA de PII (email, telefono, cedula, hash).
+ */
+export interface CuentaTiendaValidacion {
+  rol: RolValue;
+  estado: EstadoUsuario;
+}
+
 /** Solo para el flujo interno de verificacion de credenciales (AuthService). */
 export interface UsuarioConHash extends UsuarioPublico {
   passwordHash: string;
@@ -247,6 +256,21 @@ export interface IUserRepository {
    * determinista por nombre (R49).
    */
   listCuentasTienda(): Promise<CuentaTiendaDTO[]>;
+  /**
+   * FICHA 381 (R17) — UNA cuenta por su id, con lo MINIMO para decidir si se le puede cobrar: su
+   * rol y su estado. `null` si no existe.
+   *
+   * ⚠️ NO REUSA `listCuentasTienda`, y no es duplicacion: aquel devuelve el CATALOGO entero para un
+   * desplegable —dos roles, sin `apiKey` distinguible por estado— y su docstring declara que su
+   * unico llamador es `FiltrosOrdenesService`, que es justamente lo que le permite tener ese
+   * `WHERE` ahi. Validar una tienda concreta traendose la lista completa seria leer N filas para
+   * mirar una, y ataria dos decisiones que no tienen por que moverse juntas.
+   *
+   * PROYECCION MINIMA (R43 del catalogo de PII): rol y estado. NUNCA email, telefono, cedula ni
+   * hash. El `nombre` tampoco: quien lo necesita es la fila del historial, y ese lo lee DENTRO de
+   * la transaccion para congelarlo.
+   */
+  obtenerCuentaTienda(id: string): Promise<CuentaTiendaValidacion | null>;
   /**
    * Feature 25/R13/R14/R15: listado paginado con `rolValue`, ordenado por una
    * columna de lista blanca. Nunca proyecta `passwordHash` (R24).

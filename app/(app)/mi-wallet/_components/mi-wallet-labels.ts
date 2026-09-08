@@ -42,7 +42,12 @@ export const DESGLOSE_MI_WALLET_LABEL = {
   aFavor: "A tu favor",
   aFavorHint: "COD recaudado y ajustes",
   cargos: "Cargos de Ordenex",
-  cargosHint: "Fletes, comisión e IVA",
+  // FICHA 381 (R37) — la enumeración deja de ser solo de conceptos AUTOMÁTICOS. Desde esta
+  // ficha, dentro de este importe puede haber un cobro decidido por una persona, y la tienda
+  // tiene que poder relacionarlo con la fila que va a leer en su libro: allí ese concepto se
+  // rotula «Cobro de Ordenex», y por eso aquí se nombra con esa misma palabra en plural. Sin
+  // esto, la aclaración diría que el importe son fletes, comisión e IVA cuando ya no lo es.
+  cargosHint: "Fletes, comisión, IVA y cobros de Ordenex",
   pagado: "Ya pagado",
   pagadoHint: "Lo que Ordenex ya te entregó",
   saldo: "Saldo a favor",
@@ -84,6 +89,11 @@ export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, str
   pago_tienda: "Pago a la tienda",
   ajuste_credito: "Ajuste (crédito)",
   ajuste_debito: "Ajuste (débito)",
+  // FICHA 381 (R33/R34) — el cobro manual, con un nombre que DICE que es un cobro y que es
+  // DISTINTO del de `ajuste_debito`. Lo lee la tienda en `/mi-wallet` y el administrador en
+  // `/wallet/tiendas` (que reexporta este mismo diccionario), y las dos descargas salen de aqui:
+  // un solo texto para las cuatro superficies.
+  cobro_manual: "Cobro de Ordenex",
 };
 
 /** Etiqueta legible del origen de un movimiento (WalletOrigenTipo, subconjunto de la 43). */

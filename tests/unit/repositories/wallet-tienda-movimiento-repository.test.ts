@@ -549,3 +549,144 @@ describe("WalletTiendaMovimientoRepository.listarCierresDeTienda (ficha 335, R1/
     expect(await repo.listarCierresDeTienda("t1", 200)).toEqual([]);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 381 / T A.1 + D.3 — el `id` opcional y el rastro del cobro manual.
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+
+describe("381/A.1 — `crearMovimientos` y el `id` OPCIONAL", () => {
+  it("sin `id`, la clave NO viaja: los escritores de siempre caen en el `@default(uuid())`", async () => {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.createMany.mockResolvedValue({ count: 1 });
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+
+    await repo.crearMovimientos({ walletTiendaMovimiento: prisma.walletTiendaMovimiento } as never, [
+      { tiendaId: "t1", tipo: "debito", categoria: "flete", monto: "1000.00", origenTipo: "cierre_dia", origenId: "c1" },
+    ]);
+
+    const arg = prisma.walletTiendaMovimiento.createMany.mock.calls[0][0];
+    // `not.toHaveProperty` y no `toBeUndefined`: emitir `id: undefined` es distinto de no emitir la
+    // clave, y solo lo segundo deja actuar al default de la columna.
+    expect(arg.data[0]).not.toHaveProperty("id");
+  });
+
+  it("con `id`, viaja tal cual: es lo que permite nombrar el asiento despues de escribirlo", async () => {
+    const prisma = buildPrisma();
+    prisma.walletTiendaMovimiento.createMany.mockResolvedValue({ count: 1 });
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+
+    await repo.crearMovimientos({ walletTiendaMovimiento: prisma.walletTiendaMovimiento } as never, [
+      { id: "cobro-1", tiendaId: "t1", tipo: "debito", categoria: "cobro_manual", monto: "1500.00", origenTipo: "manual", origenId: null, descripcion: "Cintas", registradoPor: "u-1" },
+    ]);
+
+    const arg = prisma.walletTiendaMovimiento.createMany.mock.calls[0][0];
+    expect(arg.data[0].id).toBe("cobro-1");
+    expect(arg.data[0].categoria).toBe("cobro_manual");
+    expect(arg.data[0].origenTipo).toBe("manual");
+    expect(arg.data[0].origenId).toBeNull();
+    expect(arg.data[0].monto).toBeInstanceOf(Prisma.Decimal);
+    expect(arg.data[0].monto.toFixed(2)).toBe("1500.00");
+  });
+});
+
+describe("381/D.3 — `registrarCobroEnHistorial` (R40/R41/R43)", () => {
+  function txDeHistorial(tienda: { nombre: string } | null = { nombre: "Tienda Uno" }) {
+    return {
+      usuario: {
+        findUnique: vi.fn(async ({ where }: { where: { id: string } }) =>
+          where.id === "t1"
+            ? tienda
+            : { nombre: "Ana", primerApellido: "Torres", rol: { value: "maestro" } },
+        ),
+      },
+      historialAccion: { createMany: vi.fn(async () => ({ count: 1 })) },
+    };
+  }
+
+  /** La UNICA fila que el metodo mando escribir. */
+  function filaDeHistorial(tx: ReturnType<typeof txDeHistorial>): Record<string, unknown> {
+    const arg = (tx.historialAccion.createMany.mock.calls as unknown as unknown[][])[0][0] as {
+      data: Record<string, unknown>[];
+    };
+    expect(arg.data).toHaveLength(1);
+    return arg.data[0];
+  }
+
+  const ENTRADA = {
+    cobroId: "cobro-1",
+    tiendaId: "t1",
+    monto: "1500.00",
+    actorUsuarioId: "u-1",
+  };
+
+  it("escribe UNA fila con el tipo, la entidad, el id del asiento y el monto como Decimal", async () => {
+    const prisma = buildPrisma();
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+    const tx = txDeHistorial();
+
+    await repo.registrarCobroEnHistorial(tx as never, ENTRADA);
+
+    expect(tx.historialAccion.createMany).toHaveBeenCalledTimes(1);
+    const fila = filaDeHistorial(tx);
+    // Literales, y son EL CONTRATO del rastro: el filtro «lo que movio dinero» y el indice
+    // `[entidad_tipo, entidad_id]` dependen exactamente de estos dos valores.
+    expect(fila.accion).toBe("cobro_tienda_registrado");
+    expect(fila.entidadTipo).toBe("wallet_tienda_movimiento");
+    expect(fila.entidadId).toBe("cobro-1");
+    expect(fila.entidadEtiqueta).toBe("Tienda Uno");
+    // R18: STRING -> Decimal, sin pasar por `number`.
+    expect(fila.monto).toBeInstanceOf(Prisma.Decimal);
+    expect((fila.monto as Prisma.Decimal).toFixed(2)).toBe("1500.00");
+  });
+
+  it("congela el actor DENTRO de la transaccion", async () => {
+    const prisma = buildPrisma();
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+    const tx = txDeHistorial();
+
+    await repo.registrarCobroEnHistorial(tx as never, ENTRADA);
+
+    const fila = filaDeHistorial(tx);
+    expect(fila.actorUsuarioId).toBe("u-1");
+    expect(fila.actorNombre).toBe("Ana Torres");
+    expect(fila.actorRol).toBe("maestro");
+    // Las DOS lecturas van por el `tx` recibido, no por el cliente del repositorio.
+    expect(tx.usuario.findUnique).toHaveBeenCalledTimes(2);
+    expect(prisma.usuario.findMany).not.toHaveBeenCalled();
+  });
+
+  it("R43: la fila NO lleva la descripcion del cobro ni ningun texto libre", async () => {
+    const prisma = buildPrisma();
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+    const tx = txDeHistorial();
+
+    await repo.registrarCobroEnHistorial(tx as never, ENTRADA);
+
+    const fila = filaDeHistorial(tx);
+    // `valor_anterior`/`valor_nuevo` van NULL: el par «cobro registrado» + su monto ya lo dice todo.
+    expect(fila.valorAnterior).toBeNull();
+    expect(fila.valorNuevo).toBeNull();
+    // Y la etiqueta es SOLO el nombre de la tienda. Nada de la descripcion.
+    expect(fila.entidadEtiqueta).not.toMatch(/Cintas|Reposicion/);
+  });
+
+  it("una tienda sin nombre resoluble no TUMBA el cobro: etiqueta de respaldo", async () => {
+    const prisma = buildPrisma();
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+    const tx = txDeHistorial(null);
+
+    await repo.registrarCobroEnHistorial(tx as never, ENTRADA);
+
+    expect(filaDeHistorial(tx).entidadEtiqueta).toBe("(sin identificar)");
+  });
+
+  it("el `tx` que recibe NO expone `$transaction`: no puede abrir la suya", async () => {
+    // La atomicidad de R25/R42 es del TIPO, no de la disciplina. Si alguien ensanchara el tipo y
+    // abriera una transaccion aqui dentro, este objeto la haria estallar — que es lo que se quiere.
+    const prisma = buildPrisma();
+    const repo = new WalletTiendaMovimientoRepository(prisma as unknown as PrismaClient);
+    const tx = txDeHistorial();
+    await expect(repo.registrarCobroEnHistorial(tx as never, ENTRADA)).resolves.toBeUndefined();
+    expect(tx).not.toHaveProperty("$transaction");
+  });
+});

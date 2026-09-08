@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import type {
   WalletTiendaMovimientoDTO,
   WalletTiendaMovimientoTipo,
@@ -15,8 +15,52 @@ import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 // `walletTiendaMovimiento` (el `tx` de un $transaction, o el PrismaClient completo).
 export type WalletTiendaTxClient = Pick<PrismaClient, "walletTiendaMovimiento">;
 
+/**
+ * FICHA 381 — la transaccion que necesita UN COBRO MANUAL: el asiento del ledger MAS su fila de
+ * historial (que lee el nombre de la tienda para congelar la etiqueta y el actor para congelarlo).
+ *
+ * Se declara sobre `Prisma.TransactionClient` y no sobre `PrismaClient` A PROPOSITO: es el tipo que
+ * `appendAccion` y `resolverActorCongelado` aceptan, y —lo que importa— NO expone `$transaction`.
+ * Quien reciba esto no puede abrir la suya, asi que la atomicidad de R25/R42 es del TIPO, no de la
+ * disciplina de quien escriba el proximo metodo.
+ */
+export type CobroTiendaTxClient = Pick<
+  Prisma.TransactionClient,
+  "walletTiendaMovimiento" | "historialAccion" | "usuario"
+>;
+
+/**
+ * FICHA 381 — lo que `registrarCobroEnHistorial` necesita, y ni un delegado mas: la tabla del
+ * registro y la de usuarios (para el nombre de la tienda y el congelado del actor).
+ */
+export type WalletTiendaHistorialTxClient = Pick<
+  Prisma.TransactionClient,
+  "historialAccion" | "usuario"
+>;
+
+/** FICHA 381 — los datos del cobro que la fila de historial congela. Sin `descripcion` (R43). */
+export interface RegistrarCobroEnHistorialInput {
+  /** El id del ASIENTO recien escrito. Es la `entidad_id` de la fila. */
+  cobroId: string;
+  /** La tienda a la que se le cobro: de ella sale la etiqueta congelada. */
+  tiendaId: string;
+  /** STRING escala 2, money-safe. Se convierte a `Prisma.Decimal` en la implementacion. */
+  monto: string;
+  actorUsuarioId: string | null;
+}
+
 // Fila a insertar en el ledger. `monto` STRING (money-safe); origenId NULL solo en manual.
 export interface CrearMovimientoTiendaInput {
+  /**
+   * FICHA 381 (design §1.1) — el `id` de la fila, OPCIONAL, generado por el SERVICIO cuando hace
+   * falta poder nombrar el asiento despues de escribirlo (la fila de historial lo necesita como
+   * `entidad_id`). `createMany` sobre Postgres NO devuelve los ids generados.
+   *
+   * Es opcional A PROPOSITO y la implementacion la pasa SOLO si viene: quien no la manda sigue
+   * cayendo en el `@default(uuid())` de la columna y su comportamiento no cambia ni un byte.
+   * Precedente literal: `CrearMovimientoInput.id` del libro de la caja (ficha 334).
+   */
+  id?: string;
   tiendaId: string;
   tipo: WalletTiendaMovimientoTipo;
   categoria: WalletTiendaMovimientoCategoria;
@@ -184,4 +228,22 @@ export interface IWalletTiendaMovimientoRepository {
    * de un movimiento ajeno.
    */
   obtenerPorIdDeTienda(id: string, tiendaId: string): Promise<WalletTiendaMovimientoDTO | null>;
+  /**
+   * FICHA 381 (R40/R41/R42/R43) — deja en `historial_accion` la fila de `cobro_tienda_registrado`.
+   *
+   * RECIBE LA `tx` COMO PRIMER PARAMETRO, y ese es el requisito, no un detalle de firma: el tipo no
+   * expone `$transaction`, asi que este metodo NO PUEDE abrir la suya ni escribir fuera. Si el
+   * asiento no llega a escribirse, esta fila no existe (R42); si esta fila falla, el asiento se va
+   * con ella (R25). Las dos propiedades son ESTRUCTURALES, no una promesa que alguien recuerde.
+   *
+   * Lee el nombre de la tienda DENTRO de la transaccion para CONGELAR la etiqueta: resolverlo al
+   * leer re-etiquetaria la historia el dia que la tienda se renombre.
+   *
+   * `monto` entra como STRING y se convierte a `Prisma.Decimal` aqui, igual que en la columna del
+   * ledger. Ni un `Number()` en el camino (R18).
+   */
+  registrarCobroEnHistorial(
+    tx: WalletTiendaHistorialTxClient,
+    input: RegistrarCobroEnHistorialInput,
+  ): Promise<void>;
 }
