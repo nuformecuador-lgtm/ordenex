@@ -1,6 +1,12 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
+import {
+  forwardRef,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import useSWR from "swr";
 import { Copy } from "lucide-react";
 
@@ -14,6 +20,7 @@ import { PasswordInput } from "@/components/shared/PasswordInput";
 import {
   actualizarUsuarioSchema,
   crearUsuarioSchema,
+  type ActualizarUsuarioInput,
   type ActualizarUsuarioResult,
   type CrearUsuarioResult,
 } from "@/lib/types/usuario";
@@ -26,6 +33,7 @@ import {
 import { listarZonas } from "@/lib/actions/zonas";
 import { listarVehiculos } from "@/lib/actions/vehiculos";
 import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
+import type { CambioUsuarioEvaluable } from "@/lib/interfaces/services/IUsuarioService";
 
 /**
  * Rol que este formulario NUNCA asigna: `apiKey` identifica la cuenta de máquina de una
@@ -44,6 +52,40 @@ export type UsuarioFormResult = CrearUsuarioResult | ActualizarUsuarioResult;
 /** Handle imperativo: el Modal anfitrión dispara el submit async (R27). */
 export interface UsuarioFormHandle {
   submit: () => Promise<UsuarioFormResult>;
+  /**
+   * FICHA 379 (T9) — valida (pintando los errores de campo como siempre) y devuelve el
+   * cambio PENDIENTE de rol/zona en modo edición, para que el anfitrión pueda EVALUAR su
+   * impacto antes de aplicarlo (R21).
+   *
+   * `null` = no hay nada que evaluar: modo crear (el usuario aún no existe, así que no
+   * puede dejar ninguna zona sin nadie) o la validación de cliente falló y el maestro ya
+   * está viendo el error de campo.
+   *
+   * ⚠️ Sale del MISMO `validate()` que construye el payload del submit, no de una segunda
+   * lectura del estado. Es lo que garantiza que lo evaluado y lo enviado sean el mismo
+   * cambio: dos formas de leer los mismos campos se separan a la primera, y ése es
+   * literalmente el defecto que esta ficha vino a cerrar.
+   */
+  cambioPendiente: () => CambioUsuarioEvaluable | null;
+  /**
+   * ⭑ FICHA 392 — el motivo QUE DIO EL SERVIDOR para el campo «nombre» en el último `submit()`,
+   * o `null` si no dio ninguno.
+   *
+   * El nombre de una tienda SE IMPRIME en la etiqueta, así que el servidor rechaza el que la
+   * fuente no puede imprimir y redacta él el motivo (qué carácter es, su `U+XXXX` y cómo
+   * escribirlo bien). El anfitrión lo repite en el toast en vez del genérico: decir «revisa los
+   * datos» a quien tiene el formulario COMPLETO lo manda a buscar un hueco que no existe.
+   *
+   * ⚠️ Es «del servidor» de verdad, no un texto que se parezca: solo se llena en la rama que
+   * llegó a llamar a la acción. La validación de cliente corre ANTES y devuelve sin tocar el
+   * servidor, y sus mensajes de `nombre` los redacta zod en inglés («Too small: expected string
+   * to have >=1 characters») — reenviar ESO al toast sería cambiar un mensaje pobre por uno
+   * peor. Distinguirlo aquí, donde se sabe cuál de las dos ramas corrió, es lo que impide que el
+   * anfitrión tenga que adivinarlo por el texto.
+   *
+   * Sale del MISMO `res` que `submit()` devuelve, y se fija antes de devolverlo.
+   */
+  motivoDelNombreDelServidor: () => string | null;
 }
 
 export interface UsuarioFormProps {
@@ -103,6 +145,10 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
       null,
     );
     const [copiado, setCopiado] = useState(false);
+    // FICHA 392: el motivo del servidor para «nombre» del último `submit()`. Es un ref y no un
+    // estado a propósito: no se pinta (de eso ya se encarga `errors.nombre`), solo lo lee el
+    // anfitrión justo después de que `submit()` resuelva, y no debe provocar un re-render.
+    const motivoDelNombreDelServidor = useRef<string | null>(null);
 
     const { data: tipos } = useSWR("usuarios:tipos-identificacion", async () => {
       const res = await listarTiposIdentificacion();
@@ -192,7 +238,17 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
       setForm((prev) => ({ ...prev, [key]: value }));
     }
 
-    function validate(): { input: unknown; result?: UsuarioFormResult } {
+    function validate(): {
+      input: unknown;
+      /**
+       * FICHA 379 — EL MISMO objeto que `input`, ya tipado, y solo en la rama de edición.
+       * Existe para que `cambioPendiente()` lea el payload que se va a enviar sin un cast
+       * y sin volver a leer el estado del formulario: lo que se evalúa y lo que se envía
+       * son literalmente el mismo valor, no dos lecturas equivalentes.
+       */
+      edicion?: ActualizarUsuarioInput;
+      result?: UsuarioFormResult;
+    } {
       // Feature 24/R27: la zona es OBLIGATORIA para mensajero/adminSatelite. Se
       // valida en cliente para feedback inmediato; el service la revalida (fuente
       // de verdad, defensa en profundidad).
@@ -241,7 +297,7 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
           const fieldErrors = parsed.error.flatten().fieldErrors as FieldErrors;
           return { input: null, result: { status: "validation_error", fieldErrors } };
         }
-        return { input: parsed.data };
+        return { input: parsed.data, edicion: parsed.data };
       }
 
       const base = {
@@ -273,9 +329,15 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
     }
 
     async function submit(): Promise<UsuarioFormResult> {
+      // FICHA 392: se limpia SIEMPRE al empezar, para que el anfitrión no pueda repetir en el
+      // toast el motivo de un intento anterior ya corregido.
+      motivoDelNombreDelServidor.current = null;
+
       const { input, result } = validate();
       if (result) {
         setErrors(result.status === "validation_error" ? result.fieldErrors : {});
+        // Salida por la rama del CLIENTE: el servidor no llegó a hablar, así que aquí no hay
+        // ningún motivo suyo que reenviar (ver `motivoDelNombreDelServidor` en el handle).
         return result;
       }
 
@@ -286,6 +348,10 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
 
       if (res.status === "validation_error") {
         setErrors(res.fieldErrors);
+        // FICHA 392: el rechazo del nombre que la etiqueta no puede imprimir llega por aquí, con
+        // su motivo ya redactado. Se guarda TAL CUAL —entero, sin recortar— para que el anfitrión
+        // lo repita en el toast en vez del genérico.
+        motivoDelNombreDelServidor.current = res.fieldErrors.nombre?.[0] ?? null;
       } else if (res.status === "conflict") {
         setErrors({ [res.campo]: ["Ya está en uso por otro usuario"] });
       } else {
@@ -298,7 +364,38 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
       return res;
     }
 
-    useImperativeHandle(ref, () => ({ submit }));
+    /**
+     * FICHA 379 (T9/R21) — el cambio de rol/zona que este formulario está a punto de
+     * enviar, para que el anfitrión lo EVALÚE antes de aplicarlo.
+     *
+     * No decide nada ni bloquea nada: solo dice qué va a cambiar. Y no duplica una sola
+     * regla —sale del mismo `validate()` que arma el payload—, así que el criterio de
+     * `esRolConZona` que decide si `zonaId` viaja o no es el de arriba, uno solo.
+     */
+    function cambioPendiente(): CambioUsuarioEvaluable | null {
+      // Crear no puede dejar ninguna zona sin nadie: el usuario todavía no existe.
+      if (!isEditar) return null;
+
+      const { edicion, result } = validate();
+      if (result) {
+        // Misma reacción que `submit`: se pintan los errores de campo. No hay cambio que
+        // evaluar porque tampoco va a haber cambio que aplicar.
+        setErrors(result.status === "validation_error" ? result.fieldErrors : {});
+        return null;
+      }
+      if (!edicion) return null;
+
+      return {
+        ...(edicion.rolId !== undefined ? { rolId: edicion.rolId } : {}),
+        ...(edicion.zonaId !== undefined ? { zonaId: edicion.zonaId } : {}),
+      };
+    }
+
+    useImperativeHandle(ref, () => ({
+      submit,
+      cambioPendiente,
+      motivoDelNombreDelServidor: () => motivoDelNombreDelServidor.current,
+    }));
 
     async function copiar() {
       if (!generatedPassword) return;

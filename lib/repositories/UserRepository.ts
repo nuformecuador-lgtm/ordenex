@@ -372,6 +372,33 @@ export class UserRepository implements IUserRepository {
   }
 
   /**
+   * FICHA 379/R17/R22 — cuantos `adminSatelite` ACTIVOS le quedan a una zona si el usuario que
+   * se esta evaluando deja de serlo.
+   *
+   * ⚠️ LOS CUATRO CORTES VAN EN EL `WHERE`, no en memoria. Es la regla del repositorio y aqui
+   * ademas es la unica forma de que el numero sea el que Postgres ve: un filtrado en JS sobre
+   * una lista traida a medias diria otro. Y no se proyecta ni una columna de persona — este
+   * metodo devuelve un numero, nunca filas (R22).
+   *
+   * `excluirUsuarioId` no es un detalle: contar al usuario que esta a punto de irse haria que
+   * la zona pareciera cubierta justo cuando se esta quedando sola. Es exactamente el fallo que
+   * el aviso existe para evitar.
+   */
+  async contarAdminSatelitesActivos(
+    zonaId: string,
+    excluirUsuarioId: string,
+  ): Promise<number> {
+    return this.prisma.usuario.count({
+      where: {
+        zonaId,
+        estado: "activo",
+        id: { not: excluirUsuarioId },
+        rol: { value: "adminSatelite" },
+      },
+    });
+  }
+
+  /**
    * Feature 25/R16/R18/R19: aplica solo campos editables; valida FK de catalogo
    * (mismo patron que `create`). `null` si el usuario no existe (R17).
    */

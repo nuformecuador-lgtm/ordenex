@@ -42,14 +42,14 @@ Un commit por task (`fix(379): …` / `test(379): …`), no un mega-commit al fi
 
 **Depende de:** nada.
 
-- [ ] `lib/services/UsuarioService.ts:259` — la condición pasa a
+- [x] `lib/services/UsuarioService.ts:259` — la condición pasa a
       `if (input.zonaId !== undefined || input.rolId !== undefined)` y el deseado a
       `input.zonaId !== undefined ? input.zonaId : actual.zonaId`. **Forma idéntica** a la del
       vehículo en `:271`, que está doce líneas más abajo en el mismo método.
-- [ ] **NO se toca `resolverZona`** (`:448-473`) ni `crear` (`:98-101`) ni `ZONA_ROLES` (`:42`).
-- [ ] Comentario corto encima citando la ficha y el porqué: la zona y el vehículo son campos
+- [x] **NO se toca `resolverZona`** (`:448-473`) ni `crear` (`:98-101`) ni `ZONA_ROLES` (`:42`).
+- [x] Comentario corto encima citando la ficha y el porqué: la zona y el vehículo son campos
       hermanos con la misma invariante por rol; tenerlos con dos reglas fue el defecto.
-- [ ] Tests nuevos en `tests/unit/services/usuario-zona.test.ts`, dentro del `describe` que ya
+- [x] Tests nuevos en `tests/unit/services/usuario-zona.test.ts`, dentro del `describe` que ya
       existe (`"actualizar — zona por rol (R27/R28)"`), con nombres de comportamiento:
   - `R1` · «cambiar el rol de adminSatelite a admin deja la zona en null aunque no se envíe zonaId»
   - `R2` · «cambiar el rol de mensajero a adminSatelite sin enviar zonaId conserva la zona actual»
@@ -75,11 +75,11 @@ ninguna aserción **borrada**.
 
 **Depende de:** T1.
 
-- [ ] `tests/unit/services/usuario-service.test.ts:170-175` — el literal pasa a
+- [x] `tests/unit/services/usuario-service.test.ts:170-175` — el literal pasa a
       `{ nombre: "Nuevo", rolId: "rol-2", fulfillment: false, vehiculoId: null, zonaId: null }`.
-- [ ] En el comentario que ya explica el vehículo, añadir la línea de la zona: **por qué** `zonaId`
+- [x] En el comentario que ya explica el vehículo, añadir la línea de la zona: **por qué** `zonaId`
       aparece ahora (rol-2 no lleva zona → se fuerza null, ficha 379/R1).
-- [ ] **PROHIBIDO** relajarlo a `toMatchObject`, a `expect.objectContaining` o a una comparación
+- [x] **PROHIBIDO** relajarlo a `toMatchObject`, a `expect.objectContaining` o a una comparación
       derivada de `data`: ese literal **es** el contrato de «qué campos escribe una edición», y
       cambiarlo por su propia fuente lo deja verde para siempre.
 
@@ -90,13 +90,13 @@ el campo se escribe de verdad y no de que la aserción se aflojó).
 
 **Depende de:** T1.
 
-- [ ] Caso nuevo en `tests/integration/db/historial-accion-atomicidad.test.ts` (o el archivo hermano
+- [x] Caso nuevo en `tests/integration/db/historial-accion-atomicidad.test.ts` (o el archivo hermano
       que ya cubre `usuario_zona_cambiada`; **no crear uno nuevo si ya hay sitio**):
   - `R5` · cambiar el rol de un `adminSatelite` **con zona** a `admin`, **sin enviar zonaId**, escribe
     `usuario_zona_cambiada` con `valor_anterior = <nombre de la zona>` y `valor_nuevo = NULL`, y
     **comparte `lote_id`** con la fila `usuario_rol_cambiado` del mismo acto.
   - `R6` · editar solo el teléfono de un usuario **que tiene zona** no escribe ninguna fila de zona.
-- [ ] Los datos los crea el propio test y **falla ruidosamente** si el catálogo no está sembrado.
+- [x] Los datos los crea el propio test y **falla ruidosamente** si el catálogo no está sembrado.
 
 **Mutaciones:** revertir T1 → R5 rojo (hoy no se escribe nada). Forzar `data.zonaId = null` en toda
 edición → R6 rojo.
@@ -114,14 +114,14 @@ edición → R6 rojo.
 
 **Depende de:** nada.
 
-- [ ] `lib/interfaces/repositories/ICierreBodegaRepository.ts`: `ResumenConsolidablesPendientes`
+- [x] `lib/interfaces/repositories/ICierreBodegaRepository.ts`: `ResumenConsolidablesPendientes`
       (`{ cantidad: number; totalGeneral: string }`) + `resumirConsolidablesPendientes(zonaId)`, con
       el docstring de `design.md` §4.1.
-- [ ] `lib/repositories/CierreBodegaRepository.ts`: implementación con
+- [x] `lib/repositories/CierreBodegaRepository.ts`: implementación con
       `aggregate({ where: consolidablesWhere(zonaId), _count, _sum })`. **Reusa `consolidablesWhere`
       (`:147`), no una copia.** `_sum` nulo → `"0.00"`. Money-safe: `Prisma.Decimal.toFixed(2)`,
       nunca `Number`/`parseFloat`.
-- [ ] Test en `tests/integration/db/` (archivo nuevo `cierre-bodega-resumen-pendientes.test.ts` si no
+- [x] Test en `tests/integration/db/` (archivo nuevo `cierre-bodega-resumen-pendientes.test.ts` si no
       hay sitio natural):
   - `R18` · sobre el MISMO dataset, `resumirConsolidablesPendientes` devuelve exactamente la cuenta y
     la suma de lo que `findCierresDiaConsolidables` lista — **comparación cruzada de las dos
@@ -139,11 +139,11 @@ dos** (el del resumen y el de la consolidación), que es la prueba de que compar
 
 **Depende de:** nada.
 
-- [ ] `lib/interfaces/repositories/IUserRepository.ts` + `lib/repositories/UserRepository.ts`:
+- [x] `lib/interfaces/repositories/IUserRepository.ts` + `lib/repositories/UserRepository.ts`:
       `contarAdminSatelitesActivos(zonaId, excluirUsuarioId)`. Corte **en el `WHERE`**
       (`rol: { value: "adminSatelite" }`, `estado: "activo"`, `zonaId`, `id: { not }`), nunca en
       memoria. Devuelve número; no proyecta ni una columna de persona (R22).
-- [ ] Test en `tests/integration/db/`:
+- [x] Test en `tests/integration/db/`:
   - `R17` · no se cuenta a sí mismo; no cuenta inactivos; no cuenta otras zonas; no cuenta otros roles.
 
 **Mutaciones:** quitar `id: { not: … }` → rojo; quitar `estado: "activo"` → rojo; quitar el filtro de
@@ -155,10 +155,10 @@ rol → rojo.
 
 **Depende de:** nada (solo tipos).
 
-- [ ] `lib/interfaces/services/IUsuarioService.ts`: `CambioUsuarioEvaluable`,
+- [x] `lib/interfaces/services/IUsuarioService.ts`: `CambioUsuarioEvaluable`,
       `ImpactoSalidaAdminSatelite`, `ConsultarImpactoCambioServiceResult` y la firma en
       `IUsuarioService`, con los docstrings de `design.md` §4.3.
-- [ ] `ActualizarUsuarioServiceResult` y `CambiarEstadoUsuarioServiceResult` **no se tocan**: esta
+- [x] `ActualizarUsuarioServiceResult` y `CambiarEstadoUsuarioServiceResult` **no se tocan**: esta
       ficha **no** añade ninguna rama de bloqueo (R14).
 
 **Hecho cuando:** `tsc` limpio; `git diff` de este archivo no toca ninguno de los dos unions de
@@ -168,16 +168,27 @@ escritura.
 
 **Depende de:** T4, T5, T6 (y T1: comparte el helper de zona resultante).
 
-- [ ] Implementar los 7 pasos de `design.md` §4.3, **en ese orden** (permiso antes de leer nada).
-- [ ] Extraer el helper privado que responde «¿qué rol/zona/estado le quedan tras este cambio?» y
+- [x] Implementar los 7 pasos de `design.md` §4.3, **en ese orden** (permiso antes de leer nada).
+- [x] Extraer el helper privado que responde «¿qué rol/zona/estado le quedan tras este cambio?» y
       usarlo **también** desde `actualizar` (T1). Una regla, un sitio.
-- [ ] Sexto parámetro del constructor: `ICierreBodegaRepository` opcional que **LANZA** con mensaje
-      explícito si `consultarImpactoCambio` se ejecuta sin él (patrón de `sessionRepo`, `:369-377`).
-      Nunca devolver «no hay dinero» cuando lo que pasa es que no se puede leer.
-- [ ] Tests en `tests/unit/services/usuario-impacto-zona.test.ts` (dobles, sin DB):
+- [x] **QUINTO** parámetro del constructor: `ICierreBodegaRepository` opcional que **LANZA** con
+      mensaje explícito si `consultarImpactoCambio` se ejecuta sin él (patrón de `sessionRepo`,
+      `:369-377`). Nunca devolver «no hay dinero» cuando lo que pasa es que no se puede leer.
+      ⚠️ **Este número NO es un detalle de redacción**: es la trampa de aridad de la ficha 287
+      (`expect(UsuarioService.length).toBe(5)`, literal exacto). Los cuatro previos son `repo`,
+      `zonaRepo`, `vehiculoRepo` y `sessionRepo`. *(Esta task decía «sexto», igual que
+      `design.md` §4.3; se corrigió al cerrar la revisión — un spec que dice un número distinto
+      del test invita a la siguiente persona a creer que falta un parámetro, y ahí es donde la
+      trampa se desarma.)*
+- [x] Tests en `tests/unit/services/usuario-impacto-zona.test.ts` (dobles, sin DB):
   - `R9`/`R10` · adminSatelite activo único de Z + cambio de rol → impacto con zona, cuenta e importe
   - `R10` · lo mismo cambiando la zona, y lo mismo pasando a `inactivo` — **los tres casos, uno por
     puerta (D1/D2/D3)**
+  - ⚠️ `R10`/**D2** · el cambio de rol tiene que ir a **`mensajero` conservando la zona**, no solo
+    a `admin`: `admin` no lleva zona, así que el aviso sale por la regla del bloque A y el caso
+    queda verde aunque la comparación de rol desaparezca. *(Añadido al cerrar la revisión: la
+    mutación `valorDelRol(cambio.rolId ?? actual.rolId)` → `valorDelRol(actual.rolId)` sobrevivía
+    a los tres casos originales.)*
   - `R15` · con otro adminSatelite activo en Z → `impacto: null`
   - `R16` · usuario `mensajero` → `impacto: null`; usuario sin zona → `impacto: null`;
     usuario adminSatelite **ya inactivo** → `impacto: null`
@@ -197,14 +208,14 @@ cuando falta el repo → el caso de inyección rojo.
 
 **Depende de:** T7.
 
-- [ ] `lib/types/usuario.ts`: `consultarImpactoCambioUsuarioSchema` **derivado** de
+- [x] `lib/types/usuario.ts`: `consultarImpactoCambioUsuarioSchema` **derivado** de
       `actualizarUsuarioSchema.pick({rolId, zonaId})` + el `estado` de
       `cambiarEstadoUsuarioSchema`, `.strict()`. Y `ConsultarImpactoCambioUsuarioResult`.
       **`actualizarUsuarioSchema` no gana ni un campo.**
-- [ ] `lib/actions/usuarios.ts`: `consultarImpactoCambioUsuario(id, cambio, deps)` con el patrón
+- [x] `lib/actions/usuarios.ts`: `consultarImpactoCambioUsuario(id, cambio, deps)` con el patrón
       idéntico a las otras ocho (`withErrorHandler` + `resolveActorFromSession` + `idSchema` +
       `toUsuarioActionError`). `buildUsuarioService()` construye y pasa `CierreBodegaRepository`.
-- [ ] Tests en `tests/unit/actions/usuarios.test.ts`: sin sesión → `unauthenticated` **antes** de
+- [x] Tests en `tests/unit/actions/usuarios.test.ts`: sin sesión → `unauthenticated` **antes** de
       tocar el service; `id` inválido → `validation_error`; clave desconocida en `cambio` →
       `validation_error` (prueba del `.strict()`).
 
@@ -214,10 +225,10 @@ cuando falta el repo → el caso de inyección rojo.
 
 **Depende de:** T6.
 
-- [ ] `UsuarioForm.tsx`: `UsuarioFormHandle` gana `cambioPendiente()`, apoyado en el `validate()` que
+- [x] `UsuarioForm.tsx`: `UsuarioFormHandle` gana `cambioPendiente()`, apoyado en el `validate()` que
       ya existe (`:195-273`). **Cero reglas duplicadas.** Devuelve `null` en modo crear y cuando la
       validación de cliente falla (el maestro ya está viendo el error de campo).
-- [ ] Test en `tests/unit/components/usuario-form.test.tsx`: lo devuelto coincide **campo a campo**
+- [x] Test en `tests/unit/components/usuario-form.test.tsx`: lo devuelto coincide **campo a campo**
       con lo que el mismo formulario enviaría a `actualizarUsuario` (mismo criterio de `esRolConZona`
       de `:235`).
 
@@ -227,9 +238,9 @@ cuando falta el repo → el caso de inyección rojo.
 
 **Depende de:** T8.
 
-- [ ] Extender `tests/unit/actions/usuarios-composition.test.ts`: `buildUsuarioService()` construye
+- [x] Extender `tests/unit/actions/usuarios-composition.test.ts`: `buildUsuarioService()` construye
       el servicio **con** el repositorio de cierres en la posición correcta.
-- [ ] Motivo escrito en el test: el parámetro es opcional, así que olvidarlo **no rompe el
+- [x] Motivo escrito en el test: el parámetro es opcional, así que olvidarlo **no rompe el
       typecheck** y el aviso saldría a producción lanzando en cuanto alguien pulsara el botón.
 
 **Mutación:** quitar el argumento del composition root → rojo.
@@ -238,13 +249,20 @@ cuando falta el repo → el caso de inyección rojo.
 
 **Depende de:** T8, T9.
 
-- [ ] `UsuariosModule.tsx`: estado del aviso + acción diferida + `Modal` (el compartido, con el texto
+- [x] `UsuariosModule.tsx`: estado del aviso + acción diferida + `Modal` (el compartido, con el texto
       en `description` para que cuelgue de `aria-describedby`), y los dos puntos de llamada de
       `design.md` §4.5.
-- [ ] Copy **exacto** de `design.md` §4.6. Etiqueta del rol desde `ROL_LABELS`
+- [x] Copy **exacto** de `design.md` §4.6. Etiqueta del rol desde `ROL_LABELS`
       (`lib/auth/rol-label.ts`), importe con `formatMontoString` (`lib/config/moneda.ts:282`).
       Singular/plural en función pura, al lado de `mensajeSesionesRevocadas` (`:496-504`).
-- [ ] Tests en `tests/unit/components/usuarios-module.test.tsx` (o
+      ⚠️ **Con TRES desvíos del copy, decididos por el frontend_dev de la tanda y escritos con su
+      vuelta atrás en `progress/impl_379_frontend.md` > «Las tres decisiones que tomé YO»:**
+      (D1) «un admin» pasa a «un Administrador» y «el maestro» a «el Maestro», los tres roles
+      desde `ROL_LABELS`, porque `admin` **es** el valor del enum y R23 lo prohíbe;
+      (D2) la rama de R20 lleva título propio, porque el del §4.6 afirma lo que ahí no se sabe;
+      (D3) en esa misma rama la zona se nombra con lo que pinta la fila, porque el servidor no
+      llegó a decirlo.
+- [x] Tests en `tests/unit/components/usuarios-module.test.tsx` (o
       `usuarios-aviso-zona.test.tsx` si el archivo crece demasiado):
   - `R9`/`R21` · la consulta se llama **antes** que `cambiarEstadoUsuario`, y antes que
     `actualizarUsuario` — se afirma el **orden**, no solo que se llamó
@@ -264,10 +282,10 @@ escribir el literal del rol → R23 rojo.
 
 **Depende de:** T7, T11.
 
-- [ ] Test de servicio: con dinero pendiente y **cero** administradores restantes, `actualizar` y
+- [x] Test de servicio: con dinero pendiente y **cero** administradores restantes, `actualizar` y
       `cambiarEstado` devuelven `ok` y escriben — es decir, los caminos de **escritura** no consultan
       el impacto ni miran el repositorio de cierres.
-- [ ] Guardia estática (`tests/unit/guards/379-maestro-sin-bloqueo.guardia.test.ts`) sobre
+- [x] Guardia estática (`tests/unit/guards/379-maestro-sin-bloqueo.guardia.test.ts`) sobre
       `UsuarioService.ts` **sin comentarios** (`tests/fixtures/sin-comentarios.ts`, el quitador único
       del repo): los cuerpos de `actualizar` y `cambiarEstado` no mencionan el repositorio de cierres
       ni `consultarImpactoCambio`. **Con contraprueba**: aplicar la mutación en memoria y exigir que
@@ -286,11 +304,11 @@ escribir el literal del rol → R23 rojo.
 
 **Depende de:** T11.
 
-- [ ] Entrar a Configuración > Usuarios con un maestro y, contra datos locales sembrados:
+- [x] Entrar a Configuración > Usuarios con un maestro y, contra datos locales sembrados:
       (a) inactivar al único administrador de bodega de una zona → **ver el diálogo**, cancelarlo,
       repetir y confirmarlo; (b) cambiarle el rol; (c) cambiarle la zona; (d) hacer lo mismo con una
       zona que tiene dos → **no debe aparecer nada**.
-- [ ] Comprobar el texto con los ojos: acentos, plural, el importe con su símbolo, y que no aparece
+- [x] Comprobar el texto con los ojos: acentos, plural, el importe con su símbolo, y que no aparece
       ni `adminSatelite` ni ninguna sigla.
 
 **Hecho cuando:** los cuatro casos vistos en pantalla y anotados en `progress/impl_379.md` con lo que
@@ -300,14 +318,34 @@ se vio, no con lo que se esperaba. *(RS2: nadie ha visto este diálogo fuera de 
 
 **Depende de:** todo.
 
-- [ ] `./init.sh` **completo** (el rápido se niega, §9 del design). Escribir `INIT_EXIT=$?` **dentro**
+- [x] `./init.sh` **completo** (el rápido se niega, §9 del design). Escribir `INIT_EXIT=$?` **dentro**
       del log: un `echo` posterior tapa el código de salida.
-- [ ] Mirar los `skipped`, no solo el `INIT_EXIT`: sin `.env` se saltan ~78 archivos de
+- [x] Mirar los `skipped`, no solo el `INIT_EXIT`: sin `.env` se saltan ~78 archivos de
       `integration/db` y el gate dice «OK» igual. Los tests de T3, T4 y T5 **tienen que haber
       corrido**.
-- [ ] `progress/impl_379.md` con el mapa R→test completo, y **commitearlo** (un informe sin commitear
+- [x] `progress/impl_379.md` con el mapa R→test completo, y **commitearlo** (un informe sin commitear
       se lo lleva el primer `git checkout`).
-- [ ] PR a `dev`. Marcar en la descripción que el Bloque A es independiente, por si hay que partirlo.
+- [x] PR a `dev`. Marcar en la descripción que el Bloque A es independiente, por si hay que partirlo.
+
+---
+
+## Cómo se marcaron estas casillas
+
+Las once que faltaban (**T1-T8, T10, T12, T14**) las marqué al cerrar la revisión, **comprobando
+una por una que su trabajo está en el árbol**, no a ojo. Lo que miré de cada una: la rama de la zona
+y el `git diff` que enseña que `resolverZona`/`crear`/`ZONA_ROLES` no se tocaron (T1); el `toEqual`
+literal con `zonaId: null` (T2); los casos `R5`/`R6` en `historial-accion-atomicidad` (T3); el
+`aggregate` con `consolidablesWhere` y `Prisma.Decimal.toFixed(2)` (T4); los cuatro cortes en el
+`WHERE` de `contarAdminSatelitesActivos` (T5); los tres tipos y la firma en `IUsuarioService` (T6);
+los siete pasos y el helper compartido (T7); el schema derivado con `.strict()` y la acción (T8);
+`expect(args[4]).toBeInstanceOf(CierreBodegaRepository)` (T10); la guardia con contraprueba y los
+tres casos de comportamiento (T12); y las dos bitácoras commiteadas con sus gates (T14).
+**Ninguna quedó sin marcar**: las once estaban hechas. La tanda de servidor sencillamente no marcó
+las suyas.
+
+Y **T14 tiene una corrida más**, la del cierre: `./init.sh` completo, `INIT_EXIT=0`,
+`Test Files 1782 passed`, `Tests 25520 passed | 26 skipped`, con los 134 archivos de `integration/db`
+ejecutados. Está en `progress/impl_379.md` > «Tercera corrida».
 
 ---
 
@@ -324,7 +362,7 @@ se vio, no con lo que se esperaba. *(RS2: nadie ha visto este diálogo fuera de 
 | R7 | `usuario-zona.test.ts:164` (existente, **sin editar**) | T1 |
 | R8 | El resto de la suite verde; `git diff` de `tests/` solo toca lo declarado en T1-T3 | T1-T3 |
 | R9 | `usuarios-module`: orden de llamadas (consulta antes de escribir), en las dos puertas | T11 |
-| R10 | `usuario-impacto-zona` (3 casos, uno por puerta) + `usuarios-module` (contenido del diálogo) | T7, T11 |
+| R10 | `usuario-impacto-zona` (3 casos, uno por puerta) **+ el 4.º, «⭑ D2 de verdad»: adminSatelite → mensajero en la MISMA zona**, que es el único que muerde la comparación de rol | T7, T11 |
 | R11 | `usuarios-module`: cero escrituras con el diálogo abierto | T11 |
 | R12 | `usuarios-module`: confirmar → mismos argumentos exactos | T11 |
 | R13 | `usuarios-module`: cancelar → cero escrituras | T11 |

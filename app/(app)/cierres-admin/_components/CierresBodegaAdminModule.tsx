@@ -31,20 +31,33 @@ import type {
 import type { TotalesIngresoOrdenex } from "@/lib/interfaces/services/ICierreDiaService";
 import {
   DetalleSecciones,
-  PagoMensajeroTotal,
-  IngresoBodegaRechazosTotal,
   TotalesIngresoPanel,
-  MontoDerivadoCard,
-  INGRESO_BRUTO_LABEL,
-  INGRESO_BRUTO_NOTA,
-  GANANCIA_LABEL,
-  PAGO_TIENDA_LABEL,
-  PAGO_TIENDA_NOTA,
-  GANANCIA_NOTA,
-  GANANCIA_NOTA_BODEGA,
   TotalesPanel,
+  TOTAL_GENERAL_LABEL,
   VisorEvidencia,
+  // Feature 393 (F5, design §5) — los rotulos y las notas de las dos cascadas. Los mismos que
+  // lee la tarjeta (R23): el texto vive en el modulo PURO `cierre-labels` y se pide por esta
+  // puerta, que es donde este modulo ya pedia el resto.
+  CASCADA_CENTRAL_TITULO,
+  CASCADA_DUENO_TITULO,
+  PARA_LA_CENTRAL_LABEL,
+  PARA_LA_TIENDA_LABEL,
+  NETO_ORDENEX_LABEL,
+  COBRADO_SOBRE_RECAUDADO_LABEL,
+  FACTURADO_ORDENEX_LABEL,
+  GANA_BODEGA_SATELITE_LABEL,
+  PAGO_MENSAJERO_LABEL,
+  FLETE_CON_IVA_LABEL,
+  COMISION_CON_IVA_LABEL,
+  FLETE_DEV_CON_IVA_LABEL,
+  PARA_LA_CENTRAL_NOTA,
+  PARA_LA_CENTRAL_NEGATIVO_NOTA,
+  EFECTIVO_NO_CUBRE_NOTA,
+  GANA_BODEGA_SATELITE_NOTA,
+  FLETE_RECHAZO_NO_DEDUCIBLE_NOTA,
+  esMontoNegativo,
 } from "./cierre-detalle-shared";
+import { CascadaDinero, type LineaCascada } from "./CascadaDinero";
 import { CierreBodegaFacturaResumen } from "./cierre-factura";
 import {
   DescargarCierresButton,
@@ -150,10 +163,119 @@ interface DetalleAbierto {
   cierres: CierreBodegaDetalleCierre[];
   /** Ingreso de Ordenex agregado de toda la bodega, por concepto (derivado del snapshot). */
   totalesIngreso: TotalesIngresoOrdenex;
-  /** Ingreso bruto agregado menos el pago a mensajeros (puede ser negativo). */
-  ganancia: string;
   /** Total general agregado menos flete + IVA y comisión + IVA (puede ser negativo). */
   pagoTienda: string;
+  /**
+   * Feature 393 — los cuatro derivados AGREGADOS de las dos cascadas, tal como los emite el
+   * servidor. `ganancia` ya no se guarda: en esta superficie la absorbió `netoOrdenex`, que
+   * resta ADEMÁS lo que gana la bodega satélite (las dos sólo coinciden cuando esa cifra es 0).
+   * El servicio la sigue devolviendo —la lee el detalle del cierre de MENSAJERO (R30)—, aquí
+   * simplemente no se pinta.
+   */
+  cobradoSobreRecaudado: string;
+  netoOrdenex: string;
+  paraLaCentral: string;
+  efectivoCubreDescuentos: boolean;
+}
+
+/**
+ * Feature 393 (§4) — LAS LÍNEAS DE LA CASCADA «lo que va a la central», en un solo sitio.
+ *
+ * Es la cascada que la bodega satélite necesita para operar: de lo que se recaudó, cuánto le
+ * entrega a la central. Los cuatro importes llegan YA DERIVADOS del servidor; aquí sólo se
+ * eligen los rótulos, el orden y las notas. Ni una resta (R13).
+ *
+ * Vive en una función y no escrito dos veces porque el modal la monta una vez para el agregado
+ * y otra por cada `cierre_dia`: dos copias es como dos superficies acaban diciendo cosas
+ * distintas de la misma cifra (R23).
+ */
+function lineasCascadaCentral(nivel: {
+  general: string;
+  totalPagoMensajero: string;
+  totalIngresoBodegaRechazos: string;
+  paraLaCentral: string;
+  efectivoCubreDescuentos: boolean;
+}): LineaCascada[] {
+  // R26/R36/R37: la nota fija dice de qué resta sale; las dos condicionales, qué pasa cuando el
+  // número no es tranquilo. Van SUELTAS y no unidas en un párrafo: cada una está o no está, y
+  // fundirlas dejaría sin poder distinguir cuál se puso.
+  const notas = [PARA_LA_CENTRAL_NOTA];
+  if (esMontoNegativo(nivel.paraLaCentral)) notas.push(PARA_LA_CENTRAL_NEGATIVO_NOTA);
+  if (!nivel.efectivoCubreDescuentos) notas.push(EFECTIVO_NO_CUBRE_NOTA);
+
+  return [
+    // D5: la primera línea reusa el rótulo del total que YA está en esta pantalla («Total
+    // general», el del panel de arriba). Estrenar un «Lo recaudado» sería dar dos nombres a la
+    // misma cifra en la misma superficie, que es el defecto que esta ficha viene a arreglar.
+    { label: TOTAL_GENERAL_LABEL, monto: nivel.general, signo: "neutro" },
+    { label: PAGO_MENSAJERO_LABEL, monto: nivel.totalPagoMensajero, signo: "resta" },
+    {
+      label: GANA_BODEGA_SATELITE_LABEL,
+      monto: nivel.totalIngresoBodegaRechazos,
+      signo: "resta",
+      notas: [GANA_BODEGA_SATELITE_NOTA],
+    },
+    {
+      label: PARA_LA_CENTRAL_LABEL,
+      monto: nivel.paraLaCentral,
+      signo: "neutro",
+      destacado: true,
+      notas,
+    },
+  ];
+}
+
+/**
+ * Feature 393 (§3) — LAS LÍNEAS DE LA CASCADA «de quién es el dinero».
+ *
+ * Sólo en el detalle, que sólo abre el maestro (R39): la satélite ve lo suyo y nadie ve un
+ * margen que no le toca.
+ *
+ * La LÍNEA PUENTE («Cobrado sobre lo recaudado») no es decorativa y va SIEMPRE, también con el
+ * flete por rechazo en cero (R10): ese cobro se le factura a la tienda pero NO sale de lo
+ * recaudado —un rechazo no cobra contra entrega—, así que sin ella la pantalla enseñaría
+ * «recaudado − facturado = para la tienda», que no da en cuanto hay un rechazo.
+ */
+function lineasCascadaDueno(nivel: {
+  general: string;
+  totalesIngreso: TotalesIngresoOrdenex;
+  totalPagoMensajero: string;
+  totalIngresoBodegaRechazos: string;
+  pagoTienda: string;
+  cobradoSobreRecaudado: string;
+  netoOrdenex: string;
+}): LineaCascada[] {
+  return [
+    { label: TOTAL_GENERAL_LABEL, monto: nivel.general, signo: "neutro" },
+    { label: FLETE_CON_IVA_LABEL, monto: nivel.totalesIngreso.fleteConIva, signo: "resta" },
+    {
+      label: COMISION_CON_IVA_LABEL,
+      monto: nivel.totalesIngreso.comisionConIva,
+      signo: "resta",
+    },
+    { label: PARA_LA_TIENDA_LABEL, monto: nivel.pagoTienda, signo: "neutro", destacado: true },
+    // La línea puente: lo mismo que se acaba de restar, ahora leído como lo que Ordenex cobró.
+    {
+      label: COBRADO_SOBRE_RECAUDADO_LABEL,
+      monto: nivel.cobradoSobreRecaudado,
+      signo: "neutro",
+    },
+    {
+      label: FLETE_DEV_CON_IVA_LABEL,
+      monto: nivel.totalesIngreso.fleteDevolucionConIva,
+      signo: "suma",
+      notas: [FLETE_RECHAZO_NO_DEDUCIBLE_NOTA],
+    },
+    { label: FACTURADO_ORDENEX_LABEL, monto: nivel.totalesIngreso.total, signo: "neutro" },
+    { label: PAGO_MENSAJERO_LABEL, monto: nivel.totalPagoMensajero, signo: "resta" },
+    {
+      label: GANA_BODEGA_SATELITE_LABEL,
+      monto: nivel.totalIngresoBodegaRechazos,
+      signo: "resta",
+      notas: [GANA_BODEGA_SATELITE_NOTA],
+    },
+    { label: NETO_ORDENEX_LABEL, monto: nivel.netoOrdenex, signo: "neutro", destacado: true },
+  ];
 }
 
 /**
@@ -262,8 +384,13 @@ export function CierresBodegaAdminModule({
         cierre: result.cierre,
         cierres: result.cierres,
         totalesIngreso: result.totalesIngreso,
-        ganancia: result.ganancia,
         pagoTienda: result.pagoTienda,
+        // Feature 393 (R12/R20): los cuatro llegan derivados del servidor con aritmética
+        // decimal exacta. La pantalla no resta nada.
+        cobradoSobreRecaudado: result.cobradoSobreRecaudado,
+        netoOrdenex: result.netoOrdenex,
+        paraLaCentral: result.paraLaCentral,
+        efectivoCubreDescuentos: result.efectivoCubreDescuentos,
       });
       return;
     }
@@ -526,46 +653,46 @@ export function CierresBodegaAdminModule({
               title="Totales del cierre de bodega"
             />
 
-            {/* Primero los ingresos: qué facturó Ordenex y qué le queda. Recién después,
-                lo que se paga o se debe (mismo orden que el detalle del cierre de mensajero). */}
+            {/* Feature 393 (design §7.2) — LAS DOS CASCADAS, separadas y rotuladas. Sustituyen
+                a las cinco tarjetas sueltas que estaban aquí («Ingreso bruto», «Pago a
+                mensajeros», «Ganancia», «Ingreso de bodega por rechazos» y «Pago a tienda»):
+                eran las mismas cifras, sueltas, sin cascada y con nombres que no son los que usa
+                quien las lee. Los componentes NO se borran —los monta el detalle del cierre de
+                MENSAJERO (R30)—; aquí se deja de montarlos (R34/D4).
+
+                LA CASCADA B VA PRIMERO, y no es un detalle de maquetación: es el número
+                operativo —lo que la satélite le entrega a la central— y es con el que cierra la
+                tarjeta, así que el detalle empieza por lo mismo (R23). */}
+            <CascadaDinero
+              titulo={CASCADA_CENTRAL_TITULO}
+              ariaLabel={`${CASCADA_CENTRAL_TITULO} · cierre de bodega`}
+              lineas={lineasCascadaCentral({
+                general: detalle.cierre.totales.general,
+                totalPagoMensajero: detalle.cierre.totalPagoMensajero,
+                totalIngresoBodegaRechazos: detalle.cierre.totalIngresoBodegaRechazos,
+                paraLaCentral: detalle.paraLaCentral,
+                efectivoCubreDescuentos: detalle.efectivoCubreDescuentos,
+              })}
+            />
+
+            <CascadaDinero
+              titulo={CASCADA_DUENO_TITULO}
+              ariaLabel={`${CASCADA_DUENO_TITULO} · cierre de bodega`}
+              lineas={lineasCascadaDueno({
+                general: detalle.cierre.totales.general,
+                totalesIngreso: detalle.totalesIngreso,
+                totalPagoMensajero: detalle.cierre.totalPagoMensajero,
+                totalIngresoBodegaRechazos: detalle.cierre.totalIngresoBodegaRechazos,
+                pagoTienda: detalle.pagoTienda,
+                cobradoSobreRecaudado: detalle.cobradoSobreRecaudado,
+                netoOrdenex: detalle.netoOrdenex,
+              })}
+            />
+
+            {/* El desglose por concepto de la línea «Lo que Ordenex facturó»: sin cambios. */}
             <TotalesIngresoPanel
               totales={detalle.totalesIngreso}
               ariaLabel="Ingreso de Ordenex del cierre de bodega"
-            />
-
-            {/* Bruto y ganancia agregados: el mismo cálculo que en el cierre de mensajero. */}
-            <MontoDerivadoCard
-              value={detalle.totalesIngreso.total}
-              label={INGRESO_BRUTO_LABEL}
-              nota={INGRESO_BRUTO_NOTA}
-              ariaLabel="Ingreso bruto del cierre de bodega"
-            />
-            {/* Feature 39/R20: agregado a pagar a mensajeros, separado del dinero recibido.
-                Va encima de la ganancia: es el sustraendo. */}
-            <PagoMensajeroTotal
-              value={detalle.cierre.totalPagoMensajero}
-              ariaLabel="Pago a mensajeros del cierre de bodega"
-              label="Total a pagar a mensajeros"
-            />
-            <MontoDerivadoCard
-              value={detalle.ganancia}
-              label={GANANCIA_LABEL}
-              nota={GANANCIA_NOTA_BODEGA}
-              ariaLabel="Ganancia del cierre de bodega"
-            />
-
-            {/* Feature 56/R17: agregado del ingreso de bodega por rechazos, separado. */}
-            <IngresoBodegaRechazosTotal
-              value={detalle.cierre.totalIngresoBodegaRechazos}
-              ariaLabel="Ingreso de bodega por rechazos del cierre de bodega"
-            />
-
-            {/* Cierra el detalle agregado: lo que se les paga a las tiendas. */}
-            <MontoDerivadoCard
-              value={detalle.pagoTienda}
-              label={PAGO_TIENDA_LABEL}
-              nota={PAGO_TIENDA_NOTA}
-              ariaLabel="Pago a tienda del cierre de bodega"
             />
 
             {/* Motivo de rechazo si el cierre de bodega del histórico fue rechazado. */}
@@ -594,39 +721,38 @@ export function CierresBodegaAdminModule({
                   ariaLabel={`Totales · ${cierreDia.mensajeroNombre}`}
                   title="Totales del cierre del día"
                 />
-                {/* Primero los ingresos de ESTE cierre_dia; después lo que se le paga. */}
+                {/* Feature 393 (R15/R23) — las MISMAS dos cascadas, con los MISMOS rótulos,
+                    para ESTE cierre_dia. Cada una sale de los snapshots de su propio nivel: el
+                    día NO usa el pago agregado ni el agregado se corrige para cuadrar con la
+                    suma de los días (R17). */}
+                <CascadaDinero
+                  titulo={CASCADA_CENTRAL_TITULO}
+                  ariaLabel={`${CASCADA_CENTRAL_TITULO} · ${cierreDia.mensajeroNombre}`}
+                  lineas={lineasCascadaCentral({
+                    general: cierreDia.totales.general,
+                    totalPagoMensajero: cierreDia.totalPagoMensajero,
+                    totalIngresoBodegaRechazos: cierreDia.totalIngresoBodegaRechazos,
+                    paraLaCentral: cierreDia.paraLaCentral,
+                    efectivoCubreDescuentos: cierreDia.efectivoCubreDescuentos,
+                  })}
+                />
+                <CascadaDinero
+                  titulo={CASCADA_DUENO_TITULO}
+                  ariaLabel={`${CASCADA_DUENO_TITULO} · ${cierreDia.mensajeroNombre}`}
+                  lineas={lineasCascadaDueno({
+                    general: cierreDia.totales.general,
+                    totalesIngreso: cierreDia.totalesIngreso,
+                    totalPagoMensajero: cierreDia.totalPagoMensajero,
+                    totalIngresoBodegaRechazos: cierreDia.totalIngresoBodegaRechazos,
+                    pagoTienda: cierreDia.pagoTienda,
+                    cobradoSobreRecaudado: cierreDia.cobradoSobreRecaudado,
+                    netoOrdenex: cierreDia.netoOrdenex,
+                  })}
+                />
+                {/* El desglose por concepto de ESTE cierre_dia: sin cambios. */}
                 <TotalesIngresoPanel
                   totales={cierreDia.totalesIngreso}
                   ariaLabel={`Ingreso de Ordenex · ${cierreDia.mensajeroNombre}`}
-                />
-                <MontoDerivadoCard
-                  value={cierreDia.totalesIngreso.total}
-                  label={INGRESO_BRUTO_LABEL}
-                  nota={INGRESO_BRUTO_NOTA}
-                  ariaLabel={`Ingreso bruto · ${cierreDia.mensajeroNombre}`}
-                />
-                {/* Feature 39/R20: pago snapshot a este mensajero, separado del dinero recibido. */}
-                <PagoMensajeroTotal
-                  value={cierreDia.totalPagoMensajero}
-                  ariaLabel={`Pago al mensajero · ${cierreDia.mensajeroNombre}`}
-                />
-                <MontoDerivadoCard
-                  value={cierreDia.ganancia}
-                  label={GANANCIA_LABEL}
-                  nota={GANANCIA_NOTA}
-                  ariaLabel={`Ganancia · ${cierreDia.mensajeroNombre}`}
-                />
-                {/* Feature 56/R19: ingreso de bodega por rechazos de este cierre_dia, separado. */}
-                <IngresoBodegaRechazosTotal
-                  value={cierreDia.totalIngresoBodegaRechazos}
-                  ariaLabel={`Ingreso de bodega por rechazos · ${cierreDia.mensajeroNombre}`}
-                />
-                {/* Cierra el sub-detalle: lo que se le paga a la tienda por este cierre_dia. */}
-                <MontoDerivadoCard
-                  value={cierreDia.pagoTienda}
-                  label={PAGO_TIENDA_LABEL}
-                  nota={PAGO_TIENDA_NOTA}
-                  ariaLabel={`Pago a tienda · ${cierreDia.mensajeroNombre}`}
                 />
                 {/* Feature 170 (T E.5/R13): el `contexto` da nombre ÚNICO a la descarga de
                     cada sección — este modal monta las mismas cinco secciones una vez por

@@ -353,9 +353,13 @@ describe("R23 — el rechazo del servidor se pinta JUNTO a la casilla", () => {
   });
 
   it("un validation_error de OTRO campo conserva el mensaje genérico", async () => {
+    // ⚠️ FICHA 392: este caso usaba `nombre` como «otro campo», y desde esta ficha `nombre` YA NO
+    // lo es —su motivo también se reenvía, por el mismo argumento de R23—. El campo del fixture
+    // pasa a ser `distritoIds`, que sigue siendo uno que el toast no reenvía; lo que el caso mide
+    // —que el genérico NO desaparece para el resto de campos— es exactamente lo mismo.
     actualizarZonaMock.mockResolvedValue({
       status: "validation_error",
-      fieldErrors: { nombre: ["nombre invalido"] },
+      fieldErrors: { distritoIds: ["uno o mas distritoIds no existen"] },
     });
     const user = userEvent.setup();
     renderForm({

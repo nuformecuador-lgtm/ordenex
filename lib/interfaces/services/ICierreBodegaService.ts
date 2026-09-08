@@ -33,6 +33,27 @@ export interface CierreBodegaResumen {
   solicitadoAt: string; // ISO
   resueltoAt: string | null; // ISO; null si solicitado (R20)
   motivoRechazo: string | null; // solo rechazado (R17)
+  /**
+   * Feature 393 (R9/R18/R20/R38) — DERIVADO (STRING money-safe escala 2): `totales.general` −
+   * `totalPagoMensajero` − `totalIngresoBodegaRechazos`.
+   *
+   * LO QUE LA BODEGA SATELITE LE ENTREGA A LA CENTRAL — el numero que el humano pidio el
+   * 2026-09-08 y que no existia en ninguna pantalla. Resuelto en el SERVIDOR porque la tarjeta
+   * no hace aritmetica (R13/R20), y en el mapper del repositorio porque las cuatro lecturas de
+   * esta cabecera lo comparten (R38). Puede ser NEGATIVO: se emite con su signo, nunca
+   * recortado a "0.00" (R36).
+   *
+   * REQUERIDO, no opcional, a proposito: opcional dejaria que una superficie nueva naciera sin
+   * el y el compilador callase.
+   */
+  paraLaCentral: string;
+  /**
+   * Feature 393 (R37) — DERIVADO: ¿los dos descuentos caben en el EFECTIVO recaudado? `false`
+   * enciende el aviso de que parte de lo recaudado entro por SINPE o transferencia. Es un
+   * booleano y no un importe a proposito: la pantalla necesita un aviso, no un cuarto numero
+   * que nadie pidio.
+   */
+  efectivoCubreDescuentos: boolean;
 }
 
 // Cabecera de un `cierre_dia` consolidable (aprobado, sin cierre de bodega): mensajero
@@ -64,6 +85,29 @@ export interface CierreBodegaDetalleCierre {
   // DERIVADO: `totales.general` - `fleteConIva` - `comisionConIva` de ESTE cierre_dia
   // (STRING money-safe). Lo que se le paga a la tienda. Puede ser NEGATIVO.
   pagoTienda: string;
+  /**
+   * Feature 393 (R7/R10) — LA LINEA PUENTE: `fleteConIva` + `comisionConIva` de ESTE
+   * cierre_dia, o sea lo que Ordenex cobra SOBRE LO RECAUDADO. Se emite SIEMPRE, tambien
+   * cuando el flete por rechazo vale "0.00": es lo que enlaza «para la tienda» con «lo que
+   * Ordenex facturo» y sin ella la resta de la cascada no da en cuanto hay un rechazo.
+   */
+  cobradoSobreRecaudado: string;
+  /**
+   * Feature 393 (R8) — DERIVADO: `totalesIngreso.total` − `totalPagoMensajero` −
+   * `totalIngresoBodegaRechazos` de ESTE cierre_dia. NO es `ganancia`: aquella no resta la
+   * bodega, y por eso los dos numeros solo coinciden cuando la bodega es 0. Puede ser NEGATIVO.
+   */
+  netoOrdenex: string;
+  /**
+   * Feature 393 (R9/R15) — DERIVADO: `totales.general` − `totalPagoMensajero` −
+   * `totalIngresoBodegaRechazos` de ESTE cierre_dia, desde SUS PROPIOS snapshots (nunca desde
+   * los del agregado). Puede ser NEGATIVO; se emite con su signo (R36).
+   */
+  paraLaCentral: string;
+  /**
+   * Feature 393 (R37) — DERIVADO: ¿los dos descuentos caben en el EFECTIVO de ESTE cierre_dia?
+   */
+  efectivoCubreDescuentos: boolean;
 }
 
 // R1/R3-R7: consolidacion pendiente + totales agregados + gate de "Solicitar" +

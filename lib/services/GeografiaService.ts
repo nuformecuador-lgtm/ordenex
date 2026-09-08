@@ -16,6 +16,7 @@ import type {
   RenombrarNodoGeograficoInput,
 } from "@/lib/types/geografia-nodo";
 import { padreDeAlta } from "@/lib/types/geografia-nodo";
+import { rechazoDeNombreDeEtiqueta } from "@/lib/utils/nombre-imprimible-etiqueta";
 import { normalizeName } from "@/lib/utils/normalize";
 
 // FICHA 374 (design §5.2) — la administracion del catalogo geografico.
@@ -77,6 +78,13 @@ export class GeografiaService implements IGeografiaService {
     actor: Actor,
   ): Promise<CrearNodoGeograficoServiceResult> {
     if (!WRITE_ROLES.has(actor.rol)) return { status: "forbidden" };
+
+    // ⭑ FICHA 392 — el nombre de este nodo SE IMPRIME en la etiqueta (`geografiaLegible` lo une
+    // en el dato `ubicacion`), asi que uno que la fuente no cubra tumba el LOTE ENTERO de un
+    // golpe. Va ANTES de la primera consulta y por tanto muy antes de escribir: si se rechaza,
+    // no se ha leido ni se ha tocado nada.
+    const rechazo = rechazoDeNombreDeEtiqueta(input.nombre);
+    if (rechazo) return { status: "validation_error", fieldErrors: rechazo };
 
     const padreId = padreDeAlta(input);
     const hermanos = await this.repo.findHermanos(input.nivel, padreId);
@@ -141,6 +149,12 @@ export class GeografiaService implements IGeografiaService {
     actor: Actor,
   ): Promise<RenombrarNodoGeograficoServiceResult> {
     if (!WRITE_ROLES.has(actor.rol)) return { status: "forbidden" };
+
+    // ⭑ FICHA 392 — el renombrado es LA puerta que abrio la 375, y por aqui entra el mismo
+    // caracter que la 383 cerro por el lado de la orden. Se comprueba ANTES de leer los hermanos:
+    // un nombre que no se puede imprimir no llega a competir por el UNIQUE.
+    const rechazo = rechazoDeNombreDeEtiqueta(input.nombre);
+    if (rechazo) return { status: "validation_error", fieldErrors: rechazo };
 
     const hermanos = await this.repo.findHermanosDeNodo(input.nivel, input.id);
     if (hermanos === null) return { status: "not_found" };

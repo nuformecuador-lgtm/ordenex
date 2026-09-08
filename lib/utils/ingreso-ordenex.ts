@@ -357,6 +357,109 @@ export function pagoTiendaOrdenex(
   return new Prisma.Decimal(totalGeneral).minus(fleteConIva).minus(comisionConIva).toFixed(2);
 }
 
+/**
+ * Feature 393 (R7/R10, design §3) — LA LINEA PUENTE de la cascada «de quien es el dinero»:
+ * lo que Ordenex cobra SOBRE LO RECAUDADO, o sea el subconjunto DEDUCIBLE de lo facturado
+ * (flete + IVA y comision COD + IVA, los dos de las entregadas).
+ *
+ * Existe porque `total` de `totalesIngresoOrdenex` NO es deducible entero: incluye el flete
+ * por rechazo + IVA, que se le factura a la tienda pero NO sale de `total_general` —un rechazo
+ * no cobra contra entrega, asi que ese dinero nunca entro—. Sin esta linea la pantalla
+ * ensenaria «recaudado − facturado = para la tienda», que NO da en cuanto hay un rechazo.
+ *
+ * Se deriva aca, y no sumando dos celdas en el navegador, por R13: la tarjeta y el detalle
+ * reciben cada linea ya derivada y solo la formatean.
+ *
+ * Money-safe: suma con Prisma.Decimal sobre STRING, salida STRING escala 2.
+ */
+export function cobradoSobreRecaudado(fleteConIva: string, comisionConIva: string): string {
+  return new Prisma.Decimal(fleteConIva).plus(comisionConIva).toFixed(2);
+}
+
+/**
+ * Feature 393 (R8, design §2.2) — NETO de Ordenex: lo FACTURADO menos lo que Ordenex paga,
+ * que son DOS pagos y no uno: a los mensajeros y a la bodega satelite por los rechazos.
+ *
+ * **NO es `gananciaOrdenex`, y por eso no se implementa encadenandola.** `gananciaOrdenex`
+ * resta solo el pago al mensajero; este resta ademas el ingreso de bodega por rechazos. Los
+ * dos coinciden EXACTAMENTE cuando la bodega vale "0.00" —que es el caso del cierre que el
+ * humano midio el 2026-09-08— y divergen en cuanto hay un rechazo. Que la identidad de R8
+ * viva en un solo sitio auditable vale mas que ahorrar una resta.
+ *
+ * `gananciaOrdenex` NO se toca: la sigue leyendo el detalle del cierre de MENSAJERO (R30).
+ *
+ * Puede ser NEGATIVO (un cierre de puras reprogramaciones no factura nada y aun asi paga);
+ * se devuelve con su signo, nunca recortado.
+ *
+ * Money-safe: resta con Prisma.Decimal sobre STRING, salida STRING escala 2.
+ */
+export function netoOrdenex(
+  ingresoTotal: string,
+  pagoMensajero: string,
+  ganaBodegaSatelite: string,
+): string {
+  return new Prisma.Decimal(ingresoTotal)
+    .minus(pagoMensajero)
+    .minus(ganaBodegaSatelite)
+    .toFixed(2);
+}
+
+/**
+ * Feature 393 (R9/R36, H3 del humano del 2026-09-08) — LO QUE LA BODEGA SATELITE LE ENTREGA
+ * A LA CENTRAL: lo recaudado menos los DOS descuentos que esa bodega registra —el pago a los
+ * mensajeros y lo que ella misma gana por los rechazos—.
+ *
+ * No es «lo que queda en caja» (lo recaudado incluye SINPE y transferencia) ni «lo que queda
+ * tras los pagos»: es el numero con el que la satelite cuadra con la central, y hasta esta
+ * ficha no se veia en ninguna pantalla, ni en la de la central ni en la de la satelite.
+ *
+ * **PUEDE SER NEGATIVO, y no es un dato raro: sale de la estructura de la formula.**
+ * `pagoPorResultado` (`lib/utils/pago-mensajero.ts:13-23`) paga un importe FIJO por cada
+ * `entregada`, independiente de lo recaudado; una entrega prepagada (`monto_cobrar` nulo)
+ * aporta CERO al total general y aun asi paga. Medido contra produccion el 2026-09-08: 1 de
+ * 14 cierres de bodega ya tenia «Para la central» negativo. Se devuelve CON SU SIGNO —nunca
+ * recortado a "0.00"—: un cero diria «no hay que entregar nada» y omitiria que la diferencia
+ * la pone la central.
+ *
+ * Money-safe: resta con Prisma.Decimal sobre STRING, salida STRING escala 2.
+ */
+export function paraLaCentral(
+  totalGeneral: string,
+  pagoMensajero: string,
+  ganaBodegaSatelite: string,
+): string {
+  return new Prisma.Decimal(totalGeneral)
+    .minus(pagoMensajero)
+    .minus(ganaBodegaSatelite)
+    .toFixed(2);
+}
+
+/**
+ * Feature 393 (R37, design §12.2) — ¿los dos descuentos caben en el EFECTIVO recaudado?
+ *
+ * Distinto de que «Para la central» sea positivo, y MAS FRECUENTE: los descuentos se pagan en
+ * efectivo, pero parte de lo recaudado pudo entrar por SINPE o transferencia. Compara contra
+ * `totales.efectivo`, NUNCA contra `general` — comparar contra el general responde otra
+ * pregunta (la de `paraLaCentral`) y dejaria el aviso mudo justo en el caso que lo motiva.
+ * Medido contra produccion el 2026-09-08: 2 de 14 cierres de bodega, el peor por −₡2.000.
+ *
+ * Devuelve un BOOLEANO y no un importe a proposito: lo que la pantalla necesita es un AVISO
+ * (R37), no un cuarto numero que nadie pidio. Cuantificar «cuanto falta» es el reparto de
+ * efectivo que vive en la consolidacion (`CierreBodegaService.repartirEfectivo`) y esta ficha
+ * declara que no lo hace (Q7).
+ *
+ * Money-safe: comparacion con Prisma.Decimal sobre STRING; no emite ningun importe.
+ */
+export function efectivoCubreDescuentos(
+  totalEfectivo: string,
+  pagoMensajero: string,
+  ganaBodegaSatelite: string,
+): boolean {
+  return new Prisma.Decimal(totalEfectivo).gte(
+    new Prisma.Decimal(pagoMensajero).plus(ganaBodegaSatelite),
+  );
+}
+
 // Un concepto de ingreso a insertar (categoria + monto STRING). El feed OMITE los que
 // tengan total "0.00" (R10).
 export interface ConceptoIngresoAgregado {

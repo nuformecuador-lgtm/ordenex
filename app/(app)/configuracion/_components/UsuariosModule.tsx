@@ -18,14 +18,21 @@ import { useToast } from "@/hooks/useToast";
 import { usuariosConfig } from "@/lib/config/usuarios";
 import {
   cambiarEstadoUsuario,
+  consultarImpactoCambioUsuario,
   obtenerUsuario,
   listarUsuarios,
   listarUsuariosCompleto,
   restablecerContrasenaUsuario,
 } from "@/lib/actions/usuarios";
+import { ROL_LABELS } from "@/lib/auth/rol-label";
+import { formatMontoString } from "@/lib/config/moneda";
 import type { UsuarioListItemDTO } from "@/lib/types/usuario";
 import { USUARIO_BUSQUEDA_MIN_CHARS } from "@/lib/types/usuario";
 import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
+import type {
+  CambioUsuarioEvaluable,
+  ImpactoSalidaAdminSatelite,
+} from "@/lib/interfaces/services/IUsuarioService";
 
 import { buildUsuariosColumns } from "./usuarios-columns";
 import {
@@ -102,6 +109,33 @@ async function usuariosFetcher(
   return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
 
+/**
+ * FICHA 379 (R10-R13, R20) — un cambio EVALUADO y todavía SIN APLICAR, esperando la decisión
+ * del maestro.
+ *
+ * ⚠️ `impacto: null` aquí NO significa «no hay nada que avisar»: ese caso ni siquiera abre el
+ * diálogo (R15, se aplica directo). Significa que la consulta previa **no se pudo resolver**
+ * (R20), y entonces se dice eso mismo y se deja continuar: ni silencio ni bloqueo.
+ *
+ * ⚠️ Y el aviso NO es una guarda (R14). Lo único que cambia respecto de hoy es que el maestro
+ * lo sabe antes de decidir; el cambio que pidió sigue estando a un clic.
+ */
+interface AvisoZonaPendiente {
+  /** Lo que dijo el servidor, o `null` si no se pudo comprobar (R20). */
+  impacto: ImpactoSalidaAdminSatelite | null;
+  /**
+   * Nombre de la zona SEGÚN LA FILA del listado, y solo para la rama de R20: cuando la
+   * consulta falla, el servidor no llega a decir de qué zona hablamos, y la fila sí lo pinta.
+   * Con impacto manda siempre el nombre que vino del servidor. `null` = la fila no tiene zona.
+   */
+  zonaNombreFila: string | null;
+  /**
+   * El cambio, SIN aplicar. R11: mientras este objeto exista y el diálogo esté en pantalla,
+   * esta función no se ha ejecutado ni una vez.
+   */
+  aplicar: () => Promise<void>;
+}
+
 type FormMode = "crear" | "editar";
 
 /**
@@ -117,7 +151,14 @@ export function UsuariosModule({ initialData }: UsuariosModuleProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>("crear");
   const [editUsuario, setEditUsuario] = useState<UsuarioPublico | null>(null);
+  // FICHA 379 — el nombre de la zona que la FILA ya pintaba cuando se abrió el editor.
+  // `UsuarioPublico` trae el `zonaId` pero no el nombre, y para la rama de R20 (la consulta
+  // previa falló) hace falta poder nombrar la zona sin una lectura nueva.
+  const [editZonaNombre, setEditZonaNombre] = useState<string | null>(null);
   const [estadoPendienteId, setEstadoPendienteId] = useState<string | null>(null);
+  // FICHA 379 (R11) — el aviso pendiente de decisión. Mientras no sea `null`, el cambio que
+  // guarda dentro NO se ha aplicado.
+  const [aviso, setAviso] = useState<AvisoZonaPendiente | null>(null);
   const formRef = useRef<UsuarioFormHandle>(null);
 
   // Feature 287 (T10). Tres estados, y ninguno de los tres guarda nada fuera de React:
@@ -215,10 +256,68 @@ export function UsuariosModule({ initialData }: UsuariosModuleProps) {
     }
     setFormMode("editar");
     setEditUsuario(res.usuario);
+    setEditZonaNombre(row.zonaNombre);
     setFormOpen(true);
   }
 
-  async function onConfirmForm() {
+  /**
+   * FICHA 379 (R9/R15/R20/R21) — la consulta PREVIA, y la única puerta por la que pasan los
+   * tres cambios que pueden dejar una zona satélite sin quien consolide su dinero.
+   *
+   * Se pregunta SIEMPRE y decide el SERVIDOR (AS5). La alternativa —que la pantalla filtre
+   * por el rol de la fila— metería literales de rol aquí dentro y reabriría el modo de fallo
+   * de esta ficha: quien olvidara una rama produciría un cambio silencioso.
+   *
+   * ⚠️ NINGUNA de sus tres salidas impide nada (R14): con impacto abre el aviso, sin impacto
+   * aplica con los mismos clics de siempre (R15), y si la consulta falla lo DICE y deja
+   * continuar (R20). Lo que cambia no es lo que el maestro puede hacer, es lo que sabe.
+   */
+  async function evaluarYAplicar(
+    id: string,
+    cambio: CambioUsuarioEvaluable,
+    zonaNombreFila: string | null,
+    aplicar: () => Promise<void>,
+  ): Promise<void> {
+    let impacto: ImpactoSalidaAdminSatelite | null = null;
+    let sePudoComprobar = false;
+    try {
+      const res = await consultarImpactoCambioUsuario(id, cambio);
+      if (res.status === "ok") {
+        sePudoComprobar = true;
+        impacto = res.impacto;
+      }
+    } catch {
+      // R20 — «no se puede resolver» incluye que la llamada REVIENTE (red caída, sesión
+      // perdida). Tragarse esto dejaría un cambio que el maestro pidió, que no se aplicó y
+      // del que nadie se entera: el fallo mudo exacto que esta ficha combate. Cae en la
+      // misma rama que un error del borde y se dice en pantalla.
+      sePudoComprobar = false;
+    }
+
+    // R15: nada que avisar es el caso normal — ni un clic de más.
+    if (sePudoComprobar && impacto === null) {
+      await aplicar();
+      return;
+    }
+
+    // R10 (hay impacto) y R20 (no se pudo comprobar) salen por el MISMO punto, que es lo que
+    // R20 pide: se dice justo donde se diría el aviso. `impacto` es null en el segundo caso.
+    setAviso({ impacto, zonaNombreFila, aplicar });
+  }
+
+  /** R12 — confirmar aplica el cambio pedido, con el mismo resultado que si el aviso no existiera. */
+  async function confirmarAviso() {
+    const pendiente = aviso;
+    if (!pendiente) return;
+    setAviso(null);
+    await pendiente.aplicar();
+  }
+
+  /**
+   * El guardado de siempre. FICHA 379: se extrae tal cual para poder DIFERIRLO detrás del
+   * aviso sin cambiarle una línea — R12 pide el mismo resultado, no uno equivalente.
+   */
+  async function guardarFormulario() {
     const res = await formRef.current?.submit();
     if (!res) return;
     if (res.status === "ok") {
@@ -231,15 +330,58 @@ export function UsuariosModule({ initialData }: UsuariosModuleProps) {
       // mostrarla una vez; el usuario lo cierra manualmente.
       if (!conPassword) setFormOpen(false);
     } else {
-      toast.error(mensajeError(res.status));
+      // ⭑ FICHA 392 — si el servidor rechazó el NOMBRE, el toast repite SU motivo.
+      //
+      // El nombre de una tienda se imprime en la etiqueta, así que el servidor rechaza el que la
+      // fuente no puede imprimir y redacta él el aviso: qué carácter es, su `U+XXXX` y cómo
+      // escribirlo bien. El genérico de aquí —«Revisa los datos e inténtalo de nuevo.»— manda a
+      // revisar unos datos que están bien: el formulario está COMPLETO y lo que falla es un
+      // carácter concreto que ni siquiera se distingue a simple vista.
+      //
+      // Es la forma que la 376/R23 ya usó en el formulario de zonas: reenviar el motivo del
+      // servidor TAL CUAL en vez de un texto propio. Entero, además: el caso de la letra
+      // descompuesta es largo porque explica algo que no se ve en pantalla.
+      //
+      // Viene del formulario y no de `res` a propósito: `submit()` devuelve con la MISMA forma
+      // los rechazos de la validación de cliente, cuyos mensajes de `nombre` los redacta zod en
+      // inglés. El formulario sabe cuál de las dos ramas corrió; aquí solo se vería el texto.
+      toast.error(
+        formRef.current?.motivoDelNombreDelServidor() ??
+          mensajeError(res.status),
+      );
     }
   }
 
-  async function cambiarEstado(row: UsuarioListItemDTO) {
-    const destino = row.estado === "activo" ? "inactivo" : "activo";
-    setEstadoPendienteId(row.id);
+  async function onConfirmForm() {
+    // FICHA 379 (R21): en edición se evalúa ANTES de escribir. `cambioPendiente()` devuelve
+    // `null` cuando no hay nada que evaluar —modo crear— o cuando la validación de cliente
+    // acaba de fallar; en ese segundo caso el guardado sigue el camino de siempre y tampoco
+    // escribe nada, así que no hay cambio aplicado sin evaluar.
+    const cambio =
+      formMode === "editar" ? formRef.current?.cambioPendiente() : null;
+    if (formMode === "editar" && editUsuario && cambio) {
+      await evaluarYAplicar(
+        editUsuario.id,
+        cambio,
+        editZonaNombre,
+        guardarFormulario,
+      );
+      return;
+    }
+    await guardarFormulario();
+  }
+
+  /**
+   * La escritura del cambio de estado, sin ninguna comprobación dentro: es EXACTAMENTE lo
+   * que se aplica, con aviso de por medio o sin él (R12).
+   */
+  async function aplicarCambioEstado(
+    id: string,
+    destino: "activo" | "inactivo",
+  ) {
+    setEstadoPendienteId(id);
     try {
-      const res = await cambiarEstadoUsuario(row.id, { estado: destino });
+      const res = await cambiarEstadoUsuario(id, { estado: destino });
       if (res.status === "ok") {
         await mutate();
         toast.success(
@@ -248,6 +390,20 @@ export function UsuariosModule({ initialData }: UsuariosModuleProps) {
       } else {
         toast.error(mensajeError(res.status));
       }
+    } finally {
+      setEstadoPendienteId(null);
+    }
+  }
+
+  async function cambiarEstado(row: UsuarioListItemDTO) {
+    const destino = row.estado === "activo" ? "inactivo" : "activo";
+    // La fila queda en curso ya durante la consulta previa: es un viaje al servidor, y sin
+    // esto el botón parecería no haber hecho nada hasta que apareciera el diálogo.
+    setEstadoPendienteId(row.id);
+    try {
+      await evaluarYAplicar(row.id, { estado: destino }, row.zonaNombre, () =>
+        aplicarCambioEstado(row.id, destino),
+      );
     } finally {
       setEstadoPendienteId(null);
     }
@@ -464,6 +620,28 @@ export function UsuariosModule({ initialData }: UsuariosModuleProps) {
         onConfirm={confirmarRestablecer}
       />
 
+      {/* FICHA 379 (R10/R11/R12/R13/R20) — el aviso, antes de tocar nada.
+
+          Va en `description` y no en el cuerpo por lo mismo que la confirmación de arriba:
+          ahí el Modal lo cuelga de `aria-describedby`, así que quien usa lector de pantalla
+          lo OYE al abrirse.
+
+          El confirmar NO es `destructive`: no se está destruyendo nada, se está avisando. */}
+      <Modal
+        open={aviso !== null}
+        onOpenChange={(next) => {
+          // R13: Cancelar, Escape o clic fuera descartan el cambio sin ejecutar nada y sin
+          // dejar rastro — la función diferida se va con el estado.
+          if (!next) setAviso(null);
+        }}
+        title={aviso ? tituloAvisoZona(aviso) : null}
+        description={aviso ? textoAvisoZona(aviso) : null}
+        confirmLabel="Continuar"
+        cancelLabel="Cancelar"
+        closeOnConfirm={false}
+        onConfirm={confirmarAviso}
+      />
+
       {/* R28/R29 — la contraseña, una sola vez. Al cerrar, el estado se descarta y no queda
           ningún control que la reponga: el único camino de vuelta es restablecer OTRA. */}
       <Modal
@@ -493,6 +671,80 @@ export function UsuariosModule({ initialData }: UsuariosModuleProps) {
  * suposición del cliente, y se dice siempre: revocar el acceso de otra persona no puede ser un
  * efecto que solo se vea en la base de datos.
  */
+/**
+ * FICHA 379/R23 — LOS TRES ROLES QUE EL AVISO NOMBRA salen de `ROL_LABELS`, la misma fuente que
+ * usa la tabla de usuarios y el pie del sidebar. Nunca el identificador técnico del enum ni jerga
+ * interna: el aviso lo lee quien administra usuarios, no quien escribió el `RolValue`.
+ *
+ * ⚠️ El copy de `design.md` §4.6 decía «ni el maestro ni un admin». `admin` **es** el valor del
+ * enum, y el texto de cara al usuario de esta app no lo usa en ningún sitio: las dos frases del
+ * árbol que mencionan ese rol dicen «un administrador»
+ * (`ExportarVistaFinanciera.tsx:92`, `cierre-confirmacion-fisica.tsx:66`). Se toma la etiqueta
+ * porque es lo que pide R23 al pie de la letra y porque es la casa; la decisión es del
+ * frontend_dev de esta tanda, no del humano, y la vuelta atrás es escribir el literal aquí.
+ */
+const ETIQUETA_ADMIN_SATELITE = ROL_LABELS.adminSatelite;
+const ETIQUETA_MAESTRO = ROL_LABELS.maestro;
+const ETIQUETA_ADMIN = ROL_LABELS.admin;
+
+/**
+ * FICHA 379/R10 — «1 cierre aprobado» / «N cierres aprobados». Función pura y al lado de
+ * `mensajeSesionesRevocadas` por el mismo motivo que aquélla: un plural que depende de un
+ * número que viene del servidor se prueba solo, sin montar la pantalla entera.
+ */
+function cierresAprobados(cantidad: number): string {
+  return cantidad === 1 ? "1 cierre aprobado" : `${cantidad} cierres aprobados`;
+}
+
+/**
+ * FICHA 379/R10 — el título. Con impacto nombra la zona que se queda sin nadie; sin él (R20)
+ * dice lo único que se sabe, que es que no se pudo comprobar. Afirmar la primera frase cuando
+ * la consulta falló sería inventarse el dato que precisamente falta.
+ */
+function tituloAvisoZona(aviso: AvisoZonaPendiente): string {
+  if (!aviso.impacto) return "No se pudo comprobar el impacto de este cambio";
+  return `La zona ${aviso.impacto.zonaNombre} se queda sin ${ETIQUETA_ADMIN_SATELITE}`;
+}
+
+/**
+ * FICHA 379/R10/R19/R20/R23 — el cuerpo del aviso, en tres ramas.
+ *
+ * El importe se pinta con `formatMontoString`, que formatea DESDE EL STRING y no pasa por
+ * `Number` en ningún punto (R19): el `Decimal(12,2)` que llega del servidor sigue siendo el
+ * mismo cuando se pinta.
+ *
+ * La rama de cero cierres existe a propósito (AS1): el daño no es el dinero de hoy, es que la
+ * zona se queda sin nadie que pueda cerrarla, así que todo lo que entre después queda retenido.
+ */
+function textoAvisoZona(aviso: AvisoZonaPendiente): string {
+  const { impacto } = aviso;
+
+  // R20 — ni silencio ni bloqueo: se dice que no se pudo comprobar, y se deja continuar.
+  if (!impacto) {
+    const zona = aviso.zonaNombreFila
+      ? `la zona ${aviso.zonaNombreFila}`
+      : "la zona de este usuario";
+    return `No se pudo comprobar si ${zona} se queda sin ${ETIQUETA_ADMIN_SATELITE} ni cuánto dinero tiene sin consolidar. Puedes continuar de todas formas.`;
+  }
+
+  const cabeza =
+    `Es el único ${ETIQUETA_ADMIN_SATELITE} activo de la zona ${impacto.zonaNombre}. ` +
+    "Si continúas, esa zona se queda sin nadie que pueda consolidar sus cierres: " +
+    `ni el ${ETIQUETA_MAESTRO} ni un ${ETIQUETA_ADMIN} pueden hacerlo desde otra zona.`;
+
+  if (impacto.cierresSinConsolidar === 0) {
+    return (
+      `${cabeza} Ahora mismo no hay cierres pendientes, pero los que entren después ` +
+      `quedarán retenidos hasta que la zona vuelva a tener un ${ETIQUETA_ADMIN_SATELITE}.`
+    );
+  }
+
+  return (
+    `${cabeza} Ahora mismo hay ${cierresAprobados(impacto.cierresSinConsolidar)} sin ` +
+    `consolidar, por ${formatMontoString(impacto.totalSinConsolidar)}.`
+  );
+}
+
 function mensajeSesionesRevocadas(sesiones: number): string {
   if (sesiones === 0) {
     return "Contraseña restablecida. No había sesiones abiertas.";

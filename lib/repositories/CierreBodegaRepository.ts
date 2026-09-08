@@ -4,6 +4,7 @@ import type {
   CierreDiaConsolidableRow,
   CrearCierreBodegaInput,
   ICierreBodegaRepository,
+  ResumenConsolidablesPendientes,
 } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { FiltrosCierresBodega } from "@/lib/types/filtros-cierres";
@@ -12,6 +13,9 @@ import {
   inicioDelDiaSiguienteCREnUtc,
 } from "@/lib/utils/fecha-cr";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
+// Feature 393 (design §2.3): las dos derivaciones de la cascada «lo que va a la central».
+// La resta vive en la funcion pura; el repositorio solo la llama.
+import { efectivoCubreDescuentos, paraLaCentral } from "@/lib/utils/ingreso-ordenex";
 
 // Estados/destino relevantes (fuente de verdad en lib/types/cierre.ts). El cierre de
 // bodega se crea SIEMPRE en `solicitado`; consolida SOLO cierre_dia `aprobado`.
@@ -75,7 +79,20 @@ type BodegaResumenRow = Prisma.CierreBodegaGetPayload<{ select: typeof BODEGA_RE
 
 // Mapper cabecera cruda -> fila de dominio (totales STRING, fechas ISO). Exportado
 // para reuso por CierresBodegaAdminRepository.
+//
+// Feature 393 (R20/R38, design §2.3): aqui —y SOLO aqui— se derivan `paraLaCentral` y
+// `efectivoCubreDescuentos`. Este mapper lo reusan las CUATRO lecturas de la cabecera de un
+// cierre de bodega (cola del maestro, historico del maestro, solicitados de la zona y los
+// conjuntos completos de las descargas), asi que derivar una vez es lo que hace que la
+// tarjeta del maestro y la del adminSatelite NO PUEDAN decir cosas distintas. Escribirlo en
+// cada servicio serian cuatro copias y una de ellas se quedaria atras.
+//
+// La RESTA no se escribe aqui: la hacen las funciones puras de `lib/utils/ingreso-ordenex.ts`.
+// El `.toFixed(2)` de los snapshots es la frontera del dinero (Decimal -> STRING), no logica.
 export function toBodegaResumenRow(r: BodegaResumenRow): CierreBodegaResumenRow {
+  const totales = totalesToString(r);
+  const pagoMensajero = r.totalPagoMensajero.toFixed(2);
+  const ganaBodega = r.totalIngresoBodegaRechazos.toFixed(2);
   return {
     cierreBodegaId: r.id,
     zonaId: r.zonaId,
@@ -83,13 +100,17 @@ export function toBodegaResumenRow(r: BodegaResumenRow): CierreBodegaResumenRow 
     solicitadoPorId: r.solicitadoPor,
     solicitadoPorNombre: r.solicitadoPorUsuario.nombre,
     estado: r.estado,
-    totales: totalesToString(r),
-    totalPagoMensajero: r.totalPagoMensajero.toFixed(2), // R19/R20: snapshot money-safe STRING
-    totalIngresoBodegaRechazos: r.totalIngresoBodegaRechazos.toFixed(2), // feature 56/R18/R19: snapshot money-safe STRING
+    totales,
+    totalPagoMensajero: pagoMensajero, // R19/R20: snapshot money-safe STRING
+    totalIngresoBodegaRechazos: ganaBodega, // feature 56/R18/R19: snapshot money-safe STRING
     cantidadCierres: r._count.cierresDia,
     solicitadoAt: r.solicitadoAt.toISOString(),
     resueltoAt: r.resueltoAt ? r.resueltoAt.toISOString() : null,
     motivoRechazo: r.motivoRechazo,
+    // Feature 393 (R9/R38): lo que esta bodega le entrega a la central. Puede ser NEGATIVO.
+    paraLaCentral: paraLaCentral(totales.general, pagoMensajero, ganaBodega),
+    // Feature 393 (R37): contra el EFECTIVO, no contra el general.
+    efectivoCubreDescuentos: efectivoCubreDescuentos(totales.efectivo, pagoMensajero, ganaBodega),
   };
 }
 
@@ -274,6 +295,37 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
       this.prisma.cierreDia.count({ where }), // R41: el total del CONJUNTO
     ]);
     return { items: rows.map(toConsolidableRow), total };
+  }
+
+  /**
+   * FICHA 379/R18/R19 — cuantos cierre_dia consolidables tiene la zona y por cuanto dinero.
+   *
+   * ⚠️ REUSA `consolidablesWhere`, NO una copia parecida. Es el mismo argumento con el que este
+   * archivo extrajo esa funcion (ver su cabecera) y `ORDEN_CONSOLIDABLES`: el numero que el
+   * aviso dice tiene que ser EL MISMO que la pantalla de consolidacion ensena. Con dos `where`
+   * gemelos, el dia que alguien anada un predicado a uno, el aviso empieza a contar otra cosa y
+   * nada se pone rojo. Su test cruzado compara las dos lecturas sobre el mismo dataset.
+   *
+   * Se llama SIN `filtros`: el aviso mira toda la cola de la bodega.
+   *
+   * `aggregate` no materializa filas (`COUNT` + `SUM` en Postgres) y los dos indices que
+   * necesita ya existen: `@@index([destinoTipo, destinoZonaId])` y `@@index([cierreBodegaId])`.
+   *
+   * Money-safe: `Prisma.Decimal.toFixed(2)`, nunca `Number`/`parseFloat`. Cero filas -> `_sum`
+   * nulo -> `"0.00"`.
+   */
+  async resumirConsolidablesPendientes(
+    zonaId: string,
+  ): Promise<ResumenConsolidablesPendientes> {
+    const r = await this.prisma.cierreDia.aggregate({
+      where: consolidablesWhere(zonaId),
+      _count: { _all: true },
+      _sum: { totalGeneral: true },
+    });
+    return {
+      cantidad: r._count._all,
+      totalGeneral: (r._sum.totalGeneral ?? new Prisma.Decimal(0)).toFixed(2),
+    };
   }
 
   /** R6: cierre_dia de la zona aun `solicitado` (sin resolver por el adminSatelite). */

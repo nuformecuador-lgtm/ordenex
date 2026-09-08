@@ -10,38 +10,54 @@
  *
  * **31 columnas** (D6/D8/D9, `design.md §6`, más las tres de medios de pago que sustituyeron a la
  * celda única «Método», el fulfillment congelado, las dos FECHAS del pedido del 2026-09-05, las
- * DOS de la ficha 385 del 2026-09-07, y menos el par partido del flete de devolución). Las
- * catorce primeras se
+ * DOS de la ficha 385 del 2026-09-07 —la de intentos, SUSTITUIDA por la ficha 394 el
+ * 2026-09-08—, y menos el par partido del flete de devolución). Las catorce primeras se
  * pueblan SIEMPRE; las diecisiete restantes son específicas del resultado de la fila y, cuando no
  * aplican, la celda queda VACÍA —`null`, nunca el «—» de pantalla ni un relleno— y la columna NO
  * se omite (R9/R10/R46). Que la hoja tenga celdas vacías es el coste que el humano vio y aceptó
  * al pedir UN archivo en vez de cinco (D3); ver la cabecera de
  * `cierre-gestiones-descarga-columnas.ts`, que sigue explicando por qué allí son cinco.
  *
- * ── LOS INTENTOS SON DE LA TIENDA, Y POR ESO EL ENCABEZADO LO DICE (ficha 385, 2026-09-07) ──
+ * ── LOS INTENTOS DE LA COLUMNA SON LOS DE ENTREGA (ficha 394, 2026-09-08) ───────────────────
  *
- * El encargo fue «los intentos y la fecha de creación de la orden». «Los intentos», a secas, no
- * nombra un dato: en este árbol hay **DOS contadores distintos, de dos dueños distintos**, y el
- * archivo de «Ayuda solicitada» los lleva como dos columnas separadas precisamente porque se
- * confunden (`app/(app)/novedades/_components/ayuda-descarga-columnas.ts`):
+ * **Qué había aquí y por qué cambió.** Del 2026-09-07 al 2026-09-08 esta hoja llevó una columna
+ * «Intentos de contacto de la tienda» que leía `orden.intentos_contacto`. La ficha 385 entendió
+ * el encargo «los intentos» como los de LA TIENDA; el humano midió que lo que pedía eran los
+ * intentos de **ENTREGA** de la orden, y el 2026-09-08 firmó **SUSTITUIR** la columna. El rastro
+ * se deja escrito a propósito: quien vea el nombre viejo en un archivo descargado en septiembre
+ * tiene que poder averiguar aquí qué pasó, en vez de creer que se le perdió un dato.
+ *
+ * En este árbol conviven **DOS contadores distintos, de dos dueños distintos**, y el archivo de
+ * «Ayuda solicitada» los lleva como dos columnas separadas precisamente porque se confunden
+ * (`app/(app)/novedades/_components/ayuda-descarga-columnas.ts`):
  *
  *  - **«Intentos de contacto»** = `orden.intentos_contacto`. Los de **LA TIENDA**: el contador
  *    que sube con el botón «+1 intento de contacto» de /novedades mientras la tienda resuelve
  *    una orden con ayuda pedida. Es CUMULATIVO, solo sube (el único escritor del árbol es un
  *    `{ increment: 1 }`) y sobrevive a que la solicitud de ayuda se retire.
- *  - **«Intentos de entrega»** = los del **MENSAJERO**. NO es una columna de `orden`: se DERIVA
- *    contando `orden_historial` (`whereIntentosVigentes`), y es el contador que gobierna el tope
- *    de intentos de la feature 276.
+ *    **Esta hoja YA NO lo lleva.**
+ *  - **«Intentos de entrega»** = los del **MENSAJERO**, y son los de ESTA columna. NO es una
+ *    columna de `orden`: se DERIVA contando cuántos CIERRES APROBADOS registran una gestión
+ *    contable y VIGENTE sobre la orden (`contarIntentosVigentesEnLote` / `whereIntentosVigentes`,
+ *    features 160/215). Es el mismo número con el que la feature 276 decide el tope y con el que
+ *    el sistema cobra, y el mismo que consume la analítica: que la hoja use ese derivador y no un
+ *    conteo propio es lo que impide que las dos digan cosas distintas.
  *
- * **Esta hoja lleva el PRIMERO**, que es el que la ficha nombró. Y el encabezado dice de quién
- * es —«Intentos de contacto de la tienda», no «Intentos»— por dónde acaba leído: cada fila de
- * esta hoja es una GESTIÓN DEL MENSAJERO, con su resultado y su dinero al lado, así que un
- * «Intentos» pelado en esa vecindad se lee como los del mensajero. Sería un número correcto
- * contestando a otra pregunta, que es el peor género de dato: nadie lo mira dos veces.
+ * **Se SUSTITUYE, no se pone al lado.** Dejar las dos se consideró y se descartó: en una hoja de
+ * 31 columnas, la que nadie pidió no se ignora — se confunde con la buena, que es literalmente lo
+ * que acaba de pasar. El campo `intentosContactoTienda` SIGUE en el DTO y eso es correcto (sale
+ * de la misma consulta que `fechaCreacionOrden` y su contrato está atornillado por tests ajenos a
+ * esta ficha), pero ya no tiene consumidor en esta hoja.
  *
- * Si algún día se quiere ADEMÁS el del mensajero, es una columna MÁS y no un cambio de fuente en
- * ésta: obliga a un conteo sobre `orden_historial` por descarga, y las dos tienen que salir con
- * sus dos nombres completos, como en «Ayuda solicitada».
+ * **El encabezado es «Intentos de entrega»**, el MISMO literal que ya usan
+ * `novedades-descarga-columnas.ts`, `ayuda-descarga-columnas.ts` y
+ * `lib/manifiesto/etiquetas-columnas.ts`. No se inventa un sinónimo: que la misma cosa se llame
+ * igual en las cuatro hojas es lo que impide que alguien las compare y concluya que son dos datos
+ * distintos. Aquí no compite con ningún otro «Intentos», porque la de la tienda ya no está.
+ *
+ * **Es un dato de la ORDEN, no de la fila.** Dos gestiones de la misma orden en dos cierres
+ * llevan el MISMO número, y ese número incluye intentos de otros mensajeros y de días fuera del
+ * rango descargado: es el historial de la orden, no un contador de esta hoja.
  *
  * ── LA CUARTA FECHA (ficha 385) ────────────────────────────────────────────────────────────
  *
@@ -159,18 +175,21 @@ export const DIA_REPARTO_COL = "Día de reparto";
  */
 export const FECHA_CREACION_ORDEN_COL = "Fecha de creación de la orden";
 /**
- * Ficha 385 — los intentos que registra LA TIENDA (`orden.intentos_contacto`).
+ * Ficha 394 — los intentos de ENTREGA VIGENTES de la orden, los del MENSAJERO
+ * (`CierreGestionDescargaDTO.intentosEntrega`, derivado de los cierres aprobados).
  *
- * El «de la tienda» NO es ruido: es lo que impide que se lea como los intentos del MENSAJERO,
- * que son otro dato (derivado de `orden_historial`) y el que uno espera en una hoja donde cada
- * fila es una gestión del mensajero. El porqué largo, con los dos contadores enfrentados, está
- * en la cabecera del módulo.
+ * SUSTITUYE a `INTENTOS_CONTACTO_TIENDA_COL` («Intentos de contacto de la tienda»), que vivió
+ * aquí del 2026-09-07 al 2026-09-08 leyendo `orden.intentos_contacto`. El porqué del cambio, con
+ * los dos contadores enfrentados, está en la cabecera del módulo.
  *
- * No se reusa el «Intentos de contacto» de `ayuda-descarga-columnas.ts` a propósito: allí la
- * columna viaja PEGADA a «Intentos de entrega», y esa vecindad ya dice de quién es cada una.
- * Aquí viaja sola.
+ * El literal se comparte a la letra con `novedades-descarga-columnas.ts`,
+ * `ayuda-descarga-columnas.ts` y `lib/manifiesto/etiquetas-columnas.ts`: es el MISMO dato en las
+ * cuatro hojas y tiene que llamarse igual en las cuatro. No se importa de ninguna de ellas porque
+ * esas hojas no exportan sus encabezados y esta declaración no debe depender de la de novedades;
+ * lo que ata los cuatro textos es la aserción literal de
+ * `cierres-gestiones-fundida-descarga-columnas.test.ts`, no un import.
  */
-export const INTENTOS_CONTACTO_TIENDA_COL = "Intentos de contacto de la tienda";
+export const INTENTOS_ENTREGA_COL = "Intentos de entrega";
 /** Resultado de la gestión de esta fila, en singular y como etiqueta legible (R7/R45). */
 export const RESULTADO_COL = "Resultado";
 
@@ -209,11 +228,11 @@ export const AMBITO_DESCARGA_GESTIONES_FUNDIDA = "cierres-gestiones";
  *  - `fechaCreacionOrden` en QUINTA, cerrando el bloque de fechas. Las cuatro juntas se leen
  *    como la línea de tiempo que son (creación → reparto → gestión → cierre); suelta al final,
  *    habría que ir y volver por la fila para compararla con las otras tres.
- *  - `intentosContactoTienda` en DECIMOTERCERA, entre «Tienda» y «Resultado». Es un dato de la
- *    ORDEN y de su relación con la tienda, así que va tras «Tienda»; y va ANTES de «Resultado»
- *    porque «Resultado» cierra el bloque de lo que siempre se puebla y es la celda que decide
- *    cuáles de las diecisiete siguientes traen dato. Meter una columna después de él partiría
- *    esa lectura en dos.
+ *  - `intentosEntrega` en DECIMOTERCERA, entre «Tienda» y «Resultado» — la posición que la 385
+ *    dio a la columna que ésta sustituye, y que sigue siendo la correcta. Es un dato de la ORDEN
+ *    que siempre se puebla, así que va en el primer bloque; y va ANTES de «Resultado» porque
+ *    «Resultado» cierra ese bloque y es la celda que decide cuáles de las diecisiete siguientes
+ *    traen dato. Meter una columna después de él partiría esa lectura en dos.
  *
  * Ninguna columna existente cambia de orden RELATIVO — las aserciones literales de
  * `cierres-gestiones-fundida-descarga-columnas.test.ts` lo atornillan.
@@ -236,7 +255,7 @@ export const COLUMNAS_DESCARGA_GESTIONES_FUNDIDA: DescargaColumna[] = [
   { clave: "ubicacion", encabezado: "Ubicación" },
   { clave: "producto", encabezado: "Producto" },
   { clave: "tienda", encabezado: "Tienda" },
-  { clave: "intentosContactoTienda", encabezado: INTENTOS_CONTACTO_TIENDA_COL },
+  { clave: "intentosEntrega", encabezado: INTENTOS_ENTREGA_COL },
   { clave: "resultado", encabezado: RESULTADO_COL },
   // --- 15-31: específicas del resultado; vacías donde no aplican (R10) ---
   { clave: "montoCobrar", encabezado: MONTO_COBRAR_COL },
@@ -371,10 +390,15 @@ function celdasComunes(gestion: CierreGestionDescargaDTO): DescargaFila {
     ubicacion: ubicacion(gestion),
     producto: gestion.producto,
     tienda: gestion.tiendaNombre,
-    // Ficha 385 — los de LA TIENDA. El `0` se EMITE: es un valor conocido («la tienda no lo
-    // intentó nunca»), no un hueco, así que aquí no hay `|| null` ni `?? ""` que lo escondan.
-    // Que la celda diga `0` y no quede vacía es lo que distingue «no hizo falta» de «no se sabe».
-    intentosContactoTienda: gestion.intentosContactoTienda,
+    // Ficha 394 — los de ENTREGA, los del MENSAJERO, y NO `gestion.intentosContactoTienda`, que
+    // sigue viajando en el DTO y es el contador de la tienda: leerlo aquí es exactamente el
+    // defecto que esta ficha corrige.
+    //
+    // El `0` se EMITE: es un valor conocido («nadie ha intentado entregarla todavía»), no un
+    // hueco, así que aquí no hay `|| null` ni `?? ""` que lo escondan. Que la celda diga `0` y no
+    // quede vacía es lo que distingue «no se ha intentado» de «no se sabe». El `?? 0` ya lo
+    // resolvió el borde de datos: el DTO promete un número.
+    intentosEntrega: gestion.intentosEntrega,
     // R45: SIEMPRE la etiqueta legible, JAMÁS el value del enum. El mapa es exhaustivo sobre
     // `CierreResultado`, así que no hay caída a un `?? gestion.resultado` que emitiera el slug.
     resultado: RESULTADO_FILA_LABEL[gestion.resultado],

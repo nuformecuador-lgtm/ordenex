@@ -8,7 +8,7 @@
 // las bodegas satélite le llegan ÚNICAMENTE consolidados, y por aquí. Un solo botón no cubriría
 // las dos mitades, y por eso cada uno llama a SU borde.
 //
-// Lo que sí es común, y también se afirma: el componente del diálogo, las 29 columnas y la
+// Lo que sí es común, y también se afirma: el componente del diálogo, las 31 columnas y la
 // proyección son los MISMOS que en la otra pantalla (R26).
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
@@ -110,6 +110,10 @@ function cierreBodega(
     solicitadoAt: "2026-07-11T10:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,
+    // Feature 393: derivados del snapshot de esta cabecera. 1000.10 - 100.10 - 5.00 = 895.00;
+    // el efectivo (1000.10) cubre los dos descuentos (105.10).
+    paraLaCentral: "895.00",
+    efectivoCubreDescuentos: true,
     ...over,
   };
 }
@@ -138,6 +142,9 @@ function gestionConsolidada(): CierreGestionDescargaDTO {
     producto: "Caja",
     tiendaNombre: "Tienda X",
     intentosContactoTienda: 2,
+    // FICHA 394 — los del MENSAJERO, y con un valor DISTINTO del de la tienda: dos números
+    // iguales dejarían pasar en verde una celda que cogiera el contador equivocado.
+    intentosEntrega: 5,
     resultado: "rechazada",
     montoRecibido: null,
     pagos: [],
@@ -246,8 +253,9 @@ describe("descarga detallada en cierres de bodega (T7.4)", () => {
     // R26: mismas 31 columnas, mismo orden y misma proyección que en la otra pantalla, porque
     // salen de la MISMA declaración. (27 hasta el 2026-09-05, cuando entraron «Fecha de
     // gestión» y «Día de reparto»; 31 desde la ficha 385, con «Fecha de creación de la orden» e
-    // «Intentos de contacto de la tienda»: que este número suba a la vez que el de la otra
-    // pantalla es precisamente lo que R26 promete.)
+    // «Intentos de contacto de la tienda», y esta última SUSTITUIDA por «Intentos de entrega» en
+    // la ficha 394 del 2026-09-08: que el cambio llegue a las dos pantallas a la vez, sin tocar
+    // nada de bodega, es precisamente lo que R26 promete.)
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
     const [columnas, filas, hoja] = buildXlsxRowsMock.mock.calls[0];
     expect(columnas.map((c) => c.header)).toHaveLength(31);
@@ -255,16 +263,22 @@ describe("descarga detallada en cierres de bodega (T7.4)", () => {
     // Las dos fechas nuevas llegan también por ESTE borde, sin declaración propia de bodega.
     expect(columnas.map((c) => c.header)).toContain("Fecha de gestión");
     expect(columnas.map((c) => c.header)).toContain("Día de reparto");
-    // Y las dos de la ficha 385, por el mismo camino: bodega no declara columnas propias.
+    // Y las de la ficha 385/394, por el mismo camino: bodega no declara columnas propias.
     expect(columnas.map((c) => c.header)).toContain("Fecha de creación de la orden");
-    expect(columnas.map((c) => c.header)).toContain("Intentos de contacto de la tienda");
+    expect(columnas.map((c) => c.header)).toContain("Intentos de entrega");
+    // Ficha 394: la de la tienda se SUSTITUYÓ, no se dejó al lado. Si volviera, serían dos
+    // columnas de «intentos» en la misma hoja, que es la confusión que la ficha vino a cerrar.
+    expect(columnas.map((c) => c.header)).not.toContain("Intentos de contacto de la tienda");
     expect(columnas.map((c) => c.header)).not.toContain("Tiene evidencia");
     expect(hoja).toBe("Gestiones de cierres");
     expect(filas).toHaveLength(1);
     expect(filas[0].numRemision).toBe("REM-B1");
-    // La celda, no solo el encabezado: el dato cruza el borde de bodega con su valor.
+    // La celda, no solo el encabezado: el dato cruza el borde de bodega con su valor. El fixture
+    // da 5 al mensajero y 2 a la tienda, así que un `5` prueba que la celda leyó el contador
+    // bueno y no el de al lado.
     expect(filas[0].fechaCreacionOrden).toBe("2026-07-05");
-    expect(filas[0].intentosContactoTienda).toBe(2);
+    expect(filas[0].intentosEntrega).toBe(5);
+    expect(filas[0].intentosEntrega).not.toBe(2);
     expect(filas[0].origenRechazo).toBe("Automático");
     expect(descargarBlobMock).toHaveBeenCalledTimes(1);
   });

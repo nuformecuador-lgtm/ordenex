@@ -4603,3 +4603,108 @@ detectó el gate: `jq` no está instalado y su ausencia es un `warn`, así que l
   (3) el nombre de tienda y los de geografia llegan a la etiqueta y esta ficha **no** los toca
   (ficha 392); (4) **T9 sin hacer**: nadie ha mirado la app, y en este repo esta medido que mirarla
   encuentra lo que la suite no.
+
+
+## 379 — cambiar la zona de un usuario podia dejar dinero sin consolidar (2026-09-08)
+
+Cerrada. Tres PR: #736 (servidor), #738 (pantalla), #740 (los bloqueantes de la revision).
+Sin migracion.
+
+- **Lo que resuelve:** al inactivar a alguien, cambiarle el rol o cambiarle la zona, si eso deja
+  una zona sin quien consolide, sale un aviso **con el numero delante**. Es aviso y NO bloqueo:
+  el humano firmo «no, no quiero danos» y nada corta al maestro. El reviewer enumero los cinco
+  caminos de escritura y no encontro ni una rama que impidiera guardar.
+- **La puerta que no estaba en la ficha:** cambiar el rol omitia `zonaId`, asi que la fila
+  conservaba una zona que ese rol ya no puede consolidar -- mientras `vehiculoId` SI se
+  recalculaba doce lineas mas abajo. Misma familia que la 376.
+- **El reviewer la rechazo, y acerto.** Una mutacion suya sobrevivia a 206 tests: los casos que
+  decian cubrir esa puerta cambiaban el rol a `admin`, que no lleva zona, asi que la comparacion
+  de zona fallaba sola y el aviso salia aunque la del rol no existiera. El caso que faltaba es
+  `adminSatelite -> mensajero en la MISMA zona`.
+- **Una afirmacion falsa, corregida:** «R19 no se puede probar con datos» confundia una fila con
+  la SUMA. Con 7.038 filas al maximo el double ya pierde el centimo. Es caro, no imposible, y el
+  comentario que decia «para que nadie lo reintente» esta fuera.
+- **Sin re-revision tras el arreglo:** los bloqueantes se cerraron con evidencia medida, pero el
+  reviewer no volvio a pasar. Queda dicho.
+
+
+## 393 — el cierre de bodega no decia cuanto entrega la satelite a la central (2026-09-08)
+
+Cerrada. Tres PR: #737 (servidor), #739 (pantalla), #742 (los bloqueantes de la revision).
+Sin migracion.
+
+- **Por que existia:** no era claridad, era un numero que hace falta para operar. Las satelites
+  descuentan de lo que entregan a la central el pago a los mensajeros, y esa resta no se veia en
+  ningun cierre, ni en la central ni en las satelite.
+- **Dos cascadas separadas y rotuladas**, elegidas por el humano: «asi la gente sabe que plata es
+  para quien». Una dice de quien es el dinero; la otra, que efectivo sale.
+- **El negativo es estructural**, no un error: el pago al mensajero es fijo por entrega e
+  independiente de lo recaudado, asi que una jornada prepagada da recaudado menor que el pago.
+  Ya habia ocurrido en produccion en 1 de 14 cierres. Se pinta con su signo y con su nota.
+- **La linea puente es obligatoria:** el flete por rechazo se factura pero NO sale de lo
+  recaudado, asi que sin ella la pantalla ensenaria una resta que no da. El leader le habia
+  ensenado al humano la formula rota; el spec la corrigio.
+- **El reviewer la rechazo con cuatro mutaciones supervivientes, y acerto en las cuatro.** La
+  peor: la guardia de vocabulario recortaba dos trozos del archivo de la tarjeta, y la funcion
+  que formatea cada linea de dinero caia fuera de los dos.
+- **Un punto del informe era falso**, y se desmintio midiendo: «Central debe» y «Para la central»
+  no conviven -- viven en pestanas mutuamente excluyentes, y no son el mismo numero.
+- **Falta medida:** no se pudo ver el caso de linea puente distinta de cero, porque la base local
+  no tiene gestiones entregadas. Dicho como falta, no como aprobado.
+
+
+## 394 — el Excel de cierres contaba los intentos que no eran (2026-09-08)
+
+Cerrada. Dos PR: #741 (servidor) y #743 (columna). Sin migracion.
+
+- **El fallo:** la columna salia de `orden.intentos_contacto`, el contador que la TIENDA registra
+  desde /novedades, cuando lo pedido eran los intentos de ENTREGA de la orden. Lo detecto el
+  humano usando la hoja, no un test.
+- **De donde viene:** al implementar la 385 quedo abierta la pregunta «de la tienda o del
+  mensajero» y se implemento sin respuesta. La ficha existe por eso.
+- **Sin COUNT propio:** se reusa `contarIntentosVigentesEnLote`. Su repositorio no comparte el
+  `Pick` del cliente Prisma con los dos de la descarga, asi que se extrajo el cuerpo a una
+  funcion que ambos llaman: la analitica y la hoja ejecutan literalmente el mismo `groupBy`.
+- **Vigentes y no totales**, firmado por el humano: es el numero con el que el sistema decide el
+  tope y con el que cobra.
+- **Una asercion actualizada, no relajada:** un test afirmaba que el campo NO existia -- era el
+  contrato de la 385, y es justo lo que se revirtio. La otra mitad de aquel razonamiento sigue
+  viva: un «intentos» a secas sigue prohibido por ambiguo.
+- **Un rojo que parecia contencion y no lo era:** un worktree sin `node_modules` propio se
+  resolvia por ancestros -- suficiente para tsc, eslint y vitest, pero no para una guardia que
+  busca una ruta literal bajo el cwd. Medido antes de concluir.
+
+
+## 386 — filtrar los cierres por estado (2026-09-08)
+
+Cerrada. Dos PR: #744 (servidor) y #746 (control). Sin migracion.
+
+- **Acotada por el humano: «solo el estado».** Los otros filtros no se tocaron.
+- **Las listas ya separaban, pero en grueso:** pendientes mezclaba `solicitado` con `vencido`
+  --uno espera aprobacion, el otro lo creo el corte nocturno y necesita que alguien lo reenvie--
+  e historico mezclaba `aprobado` con `rechazado`, que son desenlaces opuestos.
+- **El filtro interseca, no sustituye.** Pedir un estado del historico dentro de pendientes
+  devuelve vacio, y hay un test contra Postgres que lo mide con una fila real.
+- **Matiz honesto medido en produccion:** 51 aprobado y 1 vencido; cero solicitado y cero
+  rechazado. Hoy separa 51 de 0 y 1 de 0. Gana valor segun crezca la operacion.
+- **Dos correcciones al encargo del leader:** el corte de las listas no estaba donde el dijo, y
+  la barra la montan tres pantallas, no una -- a dos de ellas el control les habria dado error
+  de validacion en cuanto alguien lo tocara.
+
+
+## 392 — el nombre de la tienda y la geografia tambien se imprimen (2026-09-08)
+
+Cerrada. Dos PR: #745 (servidor) y #747 (aviso). Sin migracion, sin backfill.
+
+- **La ventana que quedaba abierta:** la 383 validaba los campos de la ORDEN, pero la etiqueta
+  imprime tambien el nombre de la tienda y los de la geografia. Un maestro que registrara
+  «𝕋ienda» o renombrara un distrito volvia a tumbar el LOTE ENTERO de etiquetas.
+- **Cinco escrituras, no cuatro:** la ficha no contaba el nombre de la ZONA.
+- **La misma definicion que el PDF, nunca una copia.** Si la validacion de entrada usara otra,
+  las dos se desalinearian el dia que cambie la fuente.
+- **Medido en produccion:** 632 nombres guardados, CERO romperian la etiqueta. No hace falta
+  backfill, y esta medido, no supuesto.
+- **El atajo que no se tomo:** reenviar el mensaje del servidor a ciegas habria puesto texto de
+  zod en ingles en el aviso del caso mas frecuente, el nombre en blanco.
+- **Sigue abierta la A2 de la 383** --si la correccion manual debe reparar o rechazar--, y esta
+  ficha eligio rechazar por coherencia con el formulario mas cercano, no por firma.

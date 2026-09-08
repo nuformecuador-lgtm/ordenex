@@ -160,6 +160,14 @@ describe("383/R3 — la validacion de entrada no puede arrastrar el programa de 
     "lib/types/carga-masiva.ts",
     "lib/services/BulkOrdenService.ts",
     "lib/services/CorregirDatosClienteService.ts",
+    // ⭑ FICHA 392 — la MISMA cobertura, ahora tambien sobre los nombres de catalogo que la
+    // etiqueta imprime (la tienda y los cuatro de geografia). Entran en esta lista por el mismo
+    // motivo que los de arriba: la guardia de R13 solo mira `app/` y `components/`, asi que una
+    // llegada transitiva del artefacto desde un servicio no la veria nadie.
+    "lib/utils/nombre-imprimible-etiqueta.ts",
+    "lib/services/GeografiaService.ts",
+    "lib/services/ZonaService.ts",
+    "lib/services/UsuarioService.ts",
     MODULO_COBERTURA,
   ];
 
