@@ -891,3 +891,137 @@ describe("UsuarioForm — el ojito de la contraseña (286: R1, R4, R14)", () => 
     expect(screen.getByLabelText("Contraseña")).toHaveValue("Abcd1234$");
   });
 });
+
+/* ==========================================================================
+ * FICHA 379 (T9) — `cambioPendiente()`: el cambio de rol/zona que este
+ * formulario está a punto de enviar, expuesto para que el anfitrión lo pueda
+ * EVALUAR antes de aplicarlo (R21).
+ *
+ * Lo que estos casos vigilan, y ningún test de backend puede vigilar: que lo
+ * EVALUADO y lo ENVIADO sean el mismo cambio. Si se separaran, el aviso
+ * hablaría de una cosa y el guardado escribiría otra — que es exactamente la
+ * forma del defecto que esta ficha vino a cerrar (la zona y el vehículo,
+ * campos hermanos con dos reglas distintas).
+ *
+ * Por eso cada caso afirma DOS cosas: el valor literal (el contrato) y la
+ * coincidencia campo a campo con el payload real que salió hacia
+ * `actualizarUsuario` (la cruz). Cualquiera de las dos por separado se podría
+ * satisfacer derivando la expectativa de su propia fuente; las dos juntas, no.
+ * ========================================================================== */
+
+const USUARIO_ADMIN_SATELITE: UsuarioPublico = {
+  ...USUARIO,
+  rolId: "rol-admin-satelite",
+  zonaId: "z2",
+};
+
+describe("UsuarioForm — cambio pendiente de rol/zona (ficha 379/T9)", () => {
+  it("T9: en edición devuelve rolId y zonaId, y son EXACTAMENTE los que se envían a actualizarUsuario", async () => {
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_ZONA] });
+    actualizarUsuarioMock.mockResolvedValue({
+      status: "ok",
+      usuario: { ...USUARIO_ADMIN_SATELITE },
+    });
+
+    const ref = createRef<UsuarioFormHandle>();
+    renderIsolated(
+      <UsuarioForm ref={ref} mode="editar" usuario={USUARIO_ADMIN_SATELITE} />,
+    );
+    // Sin el catálogo de roles cargado, `esRolConZona` todavía es falso: se espera al
+    // select de zona, que es la señal de que el rol ya se resolvió.
+    await screen.findByRole("combobox", { name: "Zona" });
+
+    let cambio: unknown;
+    await act(async () => {
+      cambio = ref.current!.cambioPendiente();
+    });
+
+    // El contrato, escrito a mano.
+    expect(cambio).toEqual({ rolId: "rol-admin-satelite", zonaId: "z2" });
+
+    // Y la cruz: lo mismo que el formulario manda de verdad.
+    await act(async () => {
+      await ref.current!.submit();
+    });
+    const enviado = actualizarUsuarioMock.mock.calls[0][1] as Record<string, unknown>;
+    expect({ rolId: enviado.rolId, zonaId: enviado.zonaId }).toEqual(cambio);
+  }, 20000);
+
+  it("T9: con un rol que no lleva zona, ni lo evaluado ni lo enviado incluyen zonaId", async () => {
+    const user = userEvent.setup();
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_ZONA] });
+    actualizarUsuarioMock.mockResolvedValue({
+      status: "ok",
+      usuario: { ...USUARIO_ADMIN_SATELITE },
+    });
+
+    const ref = createRef<UsuarioFormHandle>();
+    renderIsolated(
+      <UsuarioForm ref={ref} mode="editar" usuario={USUARIO_ADMIN_SATELITE} />,
+    );
+    await screen.findByRole("combobox", { name: "Zona" });
+
+    // El cambio de rol que abre el agujero de la ficha: de Admin satélite a un rol que
+    // no puede consolidar nada.
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "maestro",
+      }),
+    );
+
+    let cambio: unknown;
+    await act(async () => {
+      cambio = ref.current!.cambioPendiente();
+    });
+
+    expect(cambio).toEqual({ rolId: "rol-maestro" });
+
+    await act(async () => {
+      await ref.current!.submit();
+    });
+    const enviado = actualizarUsuarioMock.mock.calls[0][1] as Record<string, unknown>;
+    expect(enviado).not.toHaveProperty("zonaId");
+    expect({ rolId: enviado.rolId }).toEqual(cambio);
+  }, 20000);
+
+  it("T9: en modo crear no hay nada que evaluar (el usuario todavía no existe)", async () => {
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_ZONA] });
+
+    const ref = createRef<UsuarioFormHandle>();
+    renderIsolated(<UsuarioForm ref={ref} mode="crear" />);
+    await waitFor(() => expect(listarRolesMock).toHaveBeenCalled());
+
+    let cambio: unknown;
+    await act(async () => {
+      cambio = ref.current!.cambioPendiente();
+    });
+    expect(cambio).toBeNull();
+  }, 15000);
+
+  it("T9: si la validación de cliente falla, no hay cambio que evaluar y el error de campo se pinta", async () => {
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_ZONA] });
+
+    const ref = createRef<UsuarioFormHandle>();
+    renderIsolated(
+      <UsuarioForm
+        ref={ref}
+        mode="editar"
+        usuario={{ ...USUARIO_ADMIN_SATELITE, zonaId: null }}
+      />,
+    );
+    await screen.findByRole("combobox", { name: "Zona" });
+
+    let cambio: unknown;
+    await act(async () => {
+      cambio = ref.current!.cambioPendiente();
+    });
+
+    expect(cambio).toBeNull();
+    expect(
+      await screen.findByText("La zona es obligatoria para este rol"),
+    ).toBeInTheDocument();
+    // Y no ha salido ninguna escritura por el camino: evaluar no escribe.
+    expect(actualizarUsuarioMock).not.toHaveBeenCalled();
+  }, 15000);
+});
