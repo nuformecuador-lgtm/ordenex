@@ -24,6 +24,7 @@ import {
   NETO_ORDENEX_LABEL,
   PARA_LA_CENTRAL_LABEL,
   PARA_LA_CENTRAL_NEGATIVO_NOTA,
+  PARA_LA_CENTRAL_NOTA,
   PARA_LA_TIENDA_LABEL,
 } from "@/app/(app)/cierres-admin/_components/cierre-labels";
 import {
@@ -359,6 +360,24 @@ describe("393 · F6 — las dos cascadas del detalle", () => {
     // La tarjeta de la cola pinta el mismo `paraLaCentral` de la misma cabecera: el detalle
     // empieza por lo mismo con lo que la tarjeta cierra.
     expect(importeTras(central(), PARA_LA_CENTRAL_LABEL)).toBe(money(CABECERA.paraLaCentral));
+  });
+
+  it("«Para la central» lleva su NOTA FIJA también aquí, y en cada día (R26)", async () => {
+    // R26 pide la nota en las DOS superficies. Estaba afirmada solo en la tarjeta: medido el
+    // 2026-09-08 por el reviewer (MR3), quitar `PARA_LA_CENTRAL_NOTA` de `lineasCascadaCentral`
+    // dejaba todo en verde. El número sin la resta de la que sale vuelve a ser un número solo,
+    // que es con lo que empezó la ficha.
+    await abrirDetalle();
+
+    expect(within(central()).getByText(PARA_LA_CENTRAL_NOTA)).toBeInTheDocument();
+    // Y NO es un accidente del agregado: cada `cierre_dia` monta la misma cascada, así que la
+    // nota va con ella. Sin esto, la mitad de las cascadas de la pantalla quedaría sin cubrir.
+    for (const dia of [DIA_ANA, DIA_BETO]) {
+      const suCentral = screen.getByRole("region", {
+        name: `${CASCADA_CENTRAL_TITULO} · ${dia.mensajeroNombre}`,
+      });
+      expect(within(suCentral).getByText(PARA_LA_CENTRAL_NOTA)).toBeInTheDocument();
+    }
   });
 
   it("las TRES restas dan, leyendo las cadenas pintadas (R6/R8/R9)", async () => {

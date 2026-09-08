@@ -58,8 +58,30 @@ devuelve de más.
 
 **Lo que NO se tocó:** ni `lib/`, ni `db/`, ni un contrato, ni las otras tres superficies del
 comprobante, ni `ConsolidacionBodegaModule.tsx`, ni `CierresAdminModule.tsx`.
-`MontoDerivadoCard`, `PagoMensajeroTotal` e `IngresoBodegaRechazosTotal` **siguen exportados y
-siguen montados por el detalle del cierre de mensajero** (R30).
+
+> ### ⛔ CORRECCIÓN (2026-09-08) — esta frase era falsa DOS VECES
+>
+> Lo que decía aquí, y se deja escrito para que se vea qué pasó:
+>
+> > «`MontoDerivadoCard`, `PagoMensajeroTotal` e `IngresoBodegaRechazosTotal` **siguen exportados
+> > y siguen montados por el detalle del cierre de mensajero** (R30).»
+>
+> Lo medido, `git grep` en `app`, `lib`, `components` y `tests`:
+>
+> 1. **`MontoDerivadoCard` no lo monta NADIE.** `git grep` devuelve **sólo su declaración**
+>    (`cierre-detalle-shared.tsx:626`) y la regex de la guardia G2. Antes de la ficha tenía
+>    exactamente un consumidor —`CierresBodegaAdminModule.tsx`, 6 usos— y las cinco tarjetas
+>    sueltas que esta ficha retira eran esos seis usos. **Queda muerto**, y se declara aquí abajo
+>    junto a `GANANCIA_NOTA_BODEGA` para que dentro de un año no parezca un misterio.
+> 2. **A los otros dos no los monta el detalle del cierre de mensajero, sino
+>    `ConsolidacionBodegaModule.tsx` (`:342` y `:349`)** — la pantalla de consolidación de la
+>    satélite. El detalle del cierre de mensajero usa `TarjetaTotal`/`Renglon`, que viven en
+>    `cierre-factura.tsx`. Lo que sí es cierto, y es lo que R30 protege: **los tres siguen
+>    exportados y no se borra ninguno**.
+>
+> Lo encontró el reviewer. Lo que la frase escondía no era un defecto del código —R30 no se rompe,
+> el detalle del mensajero está intacto y sus tests lo prueban— sino un **criterio de HECHO de F5
+> escrito contra una premisa falsa**, que ya está corregido en `tasks.md`.
 
 ---
 
@@ -192,6 +214,33 @@ número pintado** — y eso es exactamente por lo que este repo tiene guardias q
 El caso de F2 se queda porque sí mata otras cosas (un redondeo al colón, un formateador propio),
 pero **no se le atribuye una cobertura que no tiene**.
 
+> ### ⛔ CORRECCIÓN (2026-09-08) — esa conclusión era cierta A MEDIAS, y la mitad falsa era la que importaba
+>
+> La frase de arriba **se queda escrita**, porque el razonamiento es correcto y la medición de los
+> 200.000 importes también. Lo que estaba mal es el alcance: **la guardia no leía el archivo donde
+> la TARJETA pinta el dinero.**
+>
+> `cierre-bodega-vocabulario.guardia` recortaba dos trozos de `cierre-factura.tsx` (la `<section>`
+> de la cascada y el cuerpo de `CierreBodegaFacturaResumen`). **`LineaMonto` y `conOperador`
+> —líneas 441-495, la función que formatea CADA línea de dinero de la cascada B en la tarjeta—
+> quedaban FUERA de los dos trozos**, y por tanto fuera del barrido money-safe.
+>
+> La mutación que lo demostró (**MR1b**, del reviewer): `money(String(Number(monto)))` en el
+> importe de «Para la central» dejaba **197 archivos de guardias y 2914 tests en verde**. La única
+> red que llegaba ahí era la guardia de la ficha 359, que sólo persigue `.toFixed(`.
+>
+> Así que la conclusión honesta, corregida: era cierta para `CascadaDinero.tsx` —censado entero— y
+> **falsa para la tarjeta**, que es justo la superficie que la satélite ve y la única que R38 exige
+> en dos pantallas.
+>
+> **Arreglado el 2026-09-08:** el barrido money-safe de G2 lee ahora `cierre-factura.tsx` **entero**
+> (`SUPERFICIES_MONEY_SAFE`), con un caso de autocomprobación que afirma las dos mitades —que los
+> trozos NO alcanzan a `LineaMonto`/`conOperador` y que el barrido SÍ—. El censo del vocabulario
+> sigue leyendo los dos trozos, y esa asimetría está razonada en el docstring: las otras tres
+> superficies del comprobante dicen «Ajustes» a propósito (R21), pero la prohibición de hacer
+> aritmética de dinero no tiene excepción por superficie. **MR1b re-medida contra el árbol real:
+> `Tests 1 failed | 23 passed (24)` — MUERE.**
+
 **Lo que la escritura de F6 me encontró.** Las tres notas del resultado salían en un solo nodo de
 texto, así que `getByText` de cada una fallaba. No era un problema del test: era un problema de la
 pantalla —quien la lee no puede distinguir cuál nota está puesta—. De ahí sale FE5.
@@ -209,7 +258,14 @@ pantalla —quien la lee no puede distinguir cuál nota está puesta—. De ahí
   - `✓ feature_list.json: sin ids duplicados (388 fichas), cupo por zona respetado (in_progress=2)
     y specs en su sitio`
   - `✓ typecheck paso` · `✓ lint paso` (**0 errores**, 161 warnings, **todos preexistentes**: el
-    mismo número que midió la mitad de servidor, y ni uno en un archivo de este diff)
+    mismo número que midió la mitad de servidor).
+    ⛔ **CORRECCIÓN (2026-09-08):** aquí decía además «**y ni uno en un archivo de este diff**
+    (comprobado por nombre de archivo)», y eso **no es exacto**.
+    `tests/components/DineroIdentidadesEnPantalla.test.tsx` **está** en el diff y **tiene uno**
+    (`Unused eslint-disable directive`). Lo midió el reviewer restaurando el archivo base y
+    pasándole eslint: el warning **ya estaba** (en la línea 476 de la versión previa), así que
+    **no se introdujo ninguno** y el total sigue en 161. Lo que estaba mal era la frase, no el
+    código: lo cierto es «**ni un warning NUEVO**», que es una afirmación distinta y más débil.
   - **`✓ DATABASE_URL resuelta: los 134 archivos de tests contra Postgres SI se ejecutan`** — la
     línea que hay que citar: sin ella el gate termina verde sin haber tocado la capa de datos.
   - `Test Files  1786 passed (1786)`
@@ -240,27 +296,230 @@ pantalla —quien la lee no puede distinguir cuál nota está puesta—. De ahí
 
 - **V4 · sin migración**: `git diff --name-only -- db/` → **vacío**. Esta mitad no toca ni `lib/`.
 
-- **V2 · verificación humana en la app real: PENDIENTE.** No hay E2E en este repo y no se inventa
-  uno aquí. Lo que sí hay, y no lo sustituye pero se le acerca: F4 y F6 montan las pantallas de
-  verdad —las dos listas del comprobante y el modal del detalle— y leen **del DOM**, y G1 vuelve a
-  hacerlo con su propio parseador independiente. **Falta que una persona lo mire**, con el guion
-  que `tasks.md § V2` deja escrito.
+- **V2 · verificación en la app real: HECHA el 2026-09-08.** Ver la sección siguiente. Lo que
+  había aquí antes —«PENDIENTE, falta que una persona lo mire»— se cierra con la app levantada y
+  conducida, no con jsdom.
+
+---
+
+## V2 — la pantalla, mirada (2026-09-08)
+
+**Cómo, para que se pueda repetir.** Servidor propio en el **puerto 3021** y `.next` propio (el
+worktree es su propio directorio, así que no comparte `.next` con nadie: dos `pnpm dev` sobre la
+misma carpeta se tumban). Base local **sembrada** con dos usuarios propios —`admin.393` y
+`satelite.393`, para **no rotar las cuentas QA de nadie**— y dos cierres de bodega en la zona GAM;
+**todo restaurado al terminar** (`cierre_bodega` vuelve a 0, los `cierre_dia` vuelven a estar sin
+consolidar, los usuarios y su rastro de sesión borrados). El OTP se lee del log del servidor
+(`asunto="Tu codigo de verificacion: NNNNNN"`), que es la vía que este repo ya tiene medida.
+
+### 1 · La tarjeta de la SATÉLITE (`adminSatelite`, pestaña Bodega → Solicitados)
+
+Texto copiado de la pantalla, no parafraseado:
+
+```
+LO QUE VA A LA CENTRAL
+Total                      ₡1.234,50
+Pago al mensajero         -₡2.000
+Gana la bodega satélite   -₡234,55
+Para la central           -₡1.000,05
+  Lo recaudado menos el pago a los mensajeros y menos lo que gana la bodega satélite por los rechazos.
+  Los descuentos superan lo recaudado en este cierre: la satélite no entrega nada y la central pone la diferencia.
+  El efectivo recaudado no cubre los descuentos: parte de lo recaudado entró por SINPE o transferencia.
+```
+
+- La columna del medio **dice «Lo que va a la central»**, no «Ajustes» (R19). ✔
+- **La resta da sumando a mano**: 1.234,50 − 2.000,00 − 234,55 = **−1.000,05**. ✔
+- **NO aparece** «Para la tienda» ni «Neto de Ordenex» en la tarjeta (R39). ✔
+- El HTML del resultado, leído del DOM (el tono se comprueba por la clase, no por el píxel):
+  `<span class="tabular-nums font-semibold text-danger-strong">-₡1.000,05</span>`. **Sólo el
+  resultado va en rojo**; los sustraendos, no.
+
+### 2 · El caso NEGATIVO, que era la pregunta
+
+Sale **`-₡1.000,05`**, con el signo delante del símbolo, en `text-danger-strong`, **con sus tres
+notas debajo** y **sin tratarse como un fallo**: no hay aviso de error, no se oculta la fila, y los
+botones **Aprobar / Rechazar** del detalle siguen ahí como en cualquier otro cierre. El rótulo
+**no cambia** por ser negativo: sigue diciendo «Para la central».
+
+### 3 · El maestro ve el MISMO número (R38)
+
+En `/cierres-admin` → Bodega, la misma tarjeta `#ADB5F3AF` pinta **`-₡1.000,05`**, carácter por
+carácter lo mismo que la satélite. Y la otra, `#023D5E37`: `140.400 − 13.600 − 0 = **₡126.800**`. ✔
+
+### 4 · El detalle: las dos cascadas, separadas
+
+```
+Lo que va a la central          De quién es el dinero
+Total general   ₡1.234,50       Total general        ₡1.234,50
+Pago al mensajero  -₡2.000      Flete + IVA               -₡0
+Gana la bodega sat. -₡234,55    Comisión + IVA            -₡0
+Para la central -₡1.000,05      Para la tienda      ₡1.234,50
+                                Cobrado sobre lo recaudado ₡0
+                                Flete por rechazo + IVA   +₡0
+                                Lo que Ordenex facturó     ₡0
+                                Pago al mensajero     -₡2.000
+                                Gana la bodega sat.   -₡234,55
+                                Neto de Ordenex     -₡2.234,55
+```
+
+Las tres restas **dan**: 1.234,50 − 0 − 0 = 1.234,50 · 0 − 2.000 − 234,55 = −2.234,55 ·
+1.234,50 − 2.000 − 234,55 = −1.000,05. Y el «Neto de Ordenex» negativo (R11) se pinta con su signo.
+El agregado y cada `cierre_dia` traen **sus** dos cascadas con los mismos rótulos.
+
+### 5 · «Central debe» y «Para la central» — LO QUE EL REVIEWER SUPUSO NO ES LO QUE PASA
+
+El informe de revisión dice que los dos rótulos «conviven ahora en la MISMA página de la satélite …
+a un palmo el uno del otro». **Medido en el navegador: nunca se ven a la vez.** Viven en dos
+pestañas **mutuamente excluyentes** de `ConsolidacionBodegaModule`, y `PanelConmutado` esconde la
+que no se mira con el atributo `hidden` —que la saca de la vista **y del árbol de accesibilidad**—:
+
+| Pestaña activa | «Para la central» | «Central debe» | «Total a pagar a mensajeros» |
+| --- | --- | --- | --- |
+| **Solicitados** | 1 en el DOM, **1 visible** | 1 en el DOM, **0 visibles** | 1 en el DOM, **0 visibles** |
+| **A consolidar** | 1 en el DOM, **0 visibles** | 1 en el DOM, **1 visible** | 1 en el DOM, **1 visible** |
+
+(La medición se hizo con «Central debe» **presente y con valor** —₡5.000, sembrado a propósito—,
+para que el cero no la regalara. Y hay un segundo filtro: `CentralDebeTotal` sólo se monta cuando
+la deuda **no** es `"0.00"`.)
+
+**¿Son el mismo número con dos nombres? No.** Son dos cosas distintas y cada una lleva su nota:
+
+- **«Central debe» (₡5.000)** — *«El efectivo no alcanzó para pagarle a todos los mensajeros (el
+  pago no puede ser parcial)»*. Se calcula sobre los `cierre_dia` **a consolidar**, repartiendo el
+  EFECTIVO de menor a mayor pago (`CierreBodegaService.repartirEfectivo`), **antes** de solicitar.
+- **«Para la central» (−₡1.000,05)** — *«Lo recaudado menos el pago a los mensajeros y menos lo que
+  gana la bodega satélite por los rechazos»*. Se deriva sobre un cierre de bodega **ya solicitado**.
+
+Distinta población, distinta fórmula, distinto momento del flujo. **No es un cambio de alcance ni
+hay nada que arreglar**; se deja medido para que la decisión sea del humano y no de una suposición.
+
+### 6 · Lo que NO se pudo mirar, dicho como falta y no como aprobado
+
+El caso «un cierre con al menos una `rechazada` y la línea puente explicando la diferencia»
+**quedó a cero**: los `cierre_dia` de la base local no tienen ninguna gestión `entregada` y sus
+`cierre_detail` no traen tarifa congelada, así que `totalesIngreso` es todo `0.00` y la línea
+puente sale **₡0**. Lo que sí se vio en pantalla es el **caso cero de R10** —«Cobrado sobre lo
+recaudado ₡0» y «Flete por rechazo + IVA +₡0» **están las dos, no se omiten**—, que es precisamente
+lo que R10 exige. El caso con flete por rechazo distinto de cero **sólo está cubierto por tests**
+(F6 › «la LÍNEA PUENTE explica la diferencia exacta», que mide el hueco en vez de afirmarlo).
+
+### 7 · Una observación de la pantalla, para el humano
+
+Una línea de resta con importe cero se pinta **`-₡0`** («Gana la bodega satélite -₡0»), y la de
+suma, `+₡0`. Es **deliberado** —el operador va pegado al importe para que la guardia de identidades
+pueda leer la resta del DOM (FE1), y un cero explícito dice «aquí no hubo rechazos» donde un hueco
+obligaría a deducirlo—, y hay un test que lo fija (`+${money("0.00")}`). Se anota porque es dinero
+en pantalla y se lee raro; **no se cambia por cuenta propia**: cambiarlo es decisión de quien manda
+en el vocabulario, no del que implementa.
 
 ---
 
 ## Lo que queda vivo
+2. **DOS SÍMBOLOS MUERTOS, declarados y NO borrados.**
+   - **`GANANCIA_NOTA_BODEGA`** (`cierre-detalle-shared.tsx:337`). Era la nota de la tarjeta
+     «Ganancia» del detalle de bodega, que esta ficha absorbe.
+   - **`MontoDerivadoCard`** (`cierre-detalle-shared.tsx:626`). Su único consumidor eran los seis
+     usos de `CierresBodegaAdminModule` que esta ficha retira; `git grep` en `app`, `lib`,
+     `components` y `tests` devuelve hoy **sólo su declaración**. Lo encontró el reviewer; la
+     bitácora decía lo contrario y está corregido arriba.
 
-1. **V2 sin hacer.** Ver arriba. Es lo único de mi alcance que no puedo cerrar yo.
-2. **`GANANCIA_NOTA_BODEGA` se queda sin consumidor.** Era la nota de la tarjeta «Ganancia» del
-   detalle de bodega, que esta ficha absorbe. No se borra —borrar una constante exportada es tocar
-   `cierre-detalle-shared.tsx` por algo que no es de esta ficha— pero **queda muerta**, y lo digo
-   aquí para que no se descubra dentro de un año como si fuera un misterio.
-3. **Q4 sigue abierta** (`INGRESO_BODEGA_RECHAZOS_LABEL` no se renombró en toda la app): conviven
-   «Gana la bodega satélite» en el cierre de bodega e «Ingreso de bodega por rechazos» en el del
-   mensajero. La guardia G2 lo **fija**: el segundo nombre está prohibido en las superficies de
-   bodega y sigue vivo en las del mensajero.
+   **Ninguno de los dos se borra, y el motivo no es pereza:** borrar un componente exportado borra
+   su test, y con él cobertura de fichas ajenas — en este árbol eso ya costó una regresión en
+   producción. Se declaran aquí para que dentro de un año no parezcan un misterio, y el borrado,
+   si se quiere, va en ficha aparte con su propio censo.
+3. **Q4 sigue abierta y ES UNA DECISIÓN DEL LEADER, no del humano** (`INGRESO_BODEGA_RECHAZOS_LABEL`
+   no se renombró en toda la app): conviven «Gana la bodega satélite» en el cierre de bodega e
+   «Ingreso de bodega por rechazos» en el del mensajero. El `status_note` de la ficha registra
+   «DECIDIDO POR EL LEADER: Q4 = sí, el rename va en su fuente al estilo de la 338».
+   El reviewer lo marcó como **riesgo**, no como fallo, y el riesgo concreto ya está cerrado: desde
+   el 2026-09-08 el VALOR de `GANA_BODEGA_SATELITE_LABEL` está anclado contra un literal escrito a
+   mano en G2, **y también la regla de R25** (no repetir el vocabulario de la columna), así que un
+   buscar-y-reemplazar del rename se pondría rojo en vez de pasar callando.
+3b. **Q6 también la decidió el LEADER, no el humano.** La misma cifra (`total_general`) se llama
+   **«Total»** en la tarjeta (`RESUMEN_TOTAL_LABEL`) y **«Total general»** en el detalle
+   (`TOTAL_GENERAL_LABEL`) — verificado en pantalla el 2026-09-08, las dos superficies dicen eso—,
+   mientras que el `status_note` registra «DECIDIDO POR EL LEADER: … Q6 = se unifican “Total” y
+   “Total general”». **La contradicción entre el spec y lo implementado sigue abierta y se deja
+   anotada**: es vocabulario de pantalla y lo decide quien manda en el vocabulario, no este rol.
 4. **Q7 y Q8**, como las dejó el spec. La nota del efectivo (R37) va **en las dos** tarjetas, como
    R38 pide; si el maestro la encuentra ruidosa, se recorta por `audiencia`, que es un mecanismo
    que ya existe.
 5. **El riesgo declarado de D7** (el archivo de descarga cambia de encabezados) es de la mitad de
    servidor y sigue sin medir: no hay forma de medirlo desde el repo.
+
+---
+
+# Segunda tanda (2026-09-08) — cerrar los bloqueantes de la revisión
+
+> `progress/review_393.md` **rechazó** la ficha: el código de producción estaba bien y el reviewer
+> lo recorrió punto por punto, pero **la red que lo sujeta tenía cuatro agujeros medidos con
+> mutaciones que sobrevivieron**. Esta tanda no toca ni una línea de producción: **los cuatro
+> arreglos son tests**, más las correcciones de las dos bitácoras y las 35 casillas de `tasks.md`.
+
+## Archivos de esta tanda
+
+| Archivo | Qué cambia |
+| --- | --- |
+| `tests/unit/guards/cierre-bodega-vocabulario.guardia.test.ts` | **B1** — el barrido money-safe lee `cierre-factura.tsx` ENTERO (`SUPERFICIES_MONEY_SAFE`), con su autocomprobación. **B2** — bloque nuevo que ancla el VALOR de los **8 rótulos** y las **5 notas** contra literales escritos a mano, más la REGLA de R25 (no repetir el vocabulario de la columna). De 8 casos a **24**. |
+| `tests/unit/descarga/cierres-bodega-descarga-columnas.test.ts` | **m1** — el caso del negativo recorre **las tres** proyecciones, no sólo la de solicitados. |
+| `tests/components/CierreBodegaDetalleCascadas.test.tsx` | **m2** — la nota fija de «Para la central» (R26) se afirma también en el DETALLE: en el agregado y en cada `cierre_dia`. |
+| `tests/unit/guards/cascada-central-en-las-dos-pantallas.guardia.test.ts` | **m8** — el mensaje de fallo estaba roto (restos de una concatenación dentro de un template literal: imprimía `" +` y comillas justo cuando la guardia cae, que es cuando importa leerlo). |
+| `specs/393-cierre-bodega-dos-cascadas/tasks.md` | **B4** — las 35 casillas marcadas contra el árbol, con una tabla de «cómo se comprobó» y ⚠️ en las **cinco** que terminaron con un resultado distinto del previsto (T0.4, C3, F5, F7, G4/G5). El criterio de HECHO de **F5**, reescrito: estaba apoyado en una premisa falsa. |
+| `progress/impl_393_frontend.md` | esta bitácora: las tres correcciones de lo que decía y no era, V2 hecha, y Q4/Q6 anotadas como **decisiones del leader**. |
+
+## Las cuatro mutaciones supervivientes, re-medidas — LAS CUATRO MUEREN
+
+Arnés propio con **autocomprobación**: aborta si el texto a mutar no aparece **exactamente una
+vez**; exige ver una línea `Tests …` en la salida de vitest (sin ella el resultado se marca
+SIN-EJECUTAR y no cuenta); restaura desde la copia en memoria y **relee el archivo** para
+comprobar que volvió byte a byte. Tras las cuatro, `git status --short` sólo lista los archivos
+de test de esta tanda: **ni un archivo de producción quedó tocado**.
+
+| # | Mutación | Antes | Ahora |
+| --- | --- | --- | --- |
+| **MR1b** | `cierre-factura.tsx:493` → `money(String(Number(monto)))` | ⛔ sobrevivía (2914/2914 guardias verdes) | ✅ **MUERE.** `Tests 1 failed \| 23 passed (24)` · G2 › «money-safe …» — `expected [ Array(1) ] to deeply equal []` |
+| **MR3** | `lineasCascadaCentral` deja de emitir `PARA_LA_CENTRAL_NOTA` | ⛔ sobrevivía (58/58) | ✅ **MUERE.** `Tests 1 failed \| 37 passed (38)` · F6 › ««Para la central» lleva su NOTA FIJA también aquí, y en cada día (R26)» — `Unable to find an element with the text: Lo recaudado menos el pago a los mensajeros…` |
+| **MR4** | `GANA_BODEGA_SATELITE_LABEL` → «Ingreso bodega rechazos» | ⛔ sobrevivía (68/68 + 2914/2914) | ✅ **MUERE, con DOS rojos.** `Tests 2 failed \| 22 passed (24)` · «GANA_BODEGA_SATELITE_LABEL dice exactamente lo aprobado» — `expected 'Ingreso bodega rechazos' to be 'Gana la bodega satélite'` · y «… NO repite el vocabulario de la columna (R25)» |
+| **MR6** | `filaDescargaBodegaPendiente` recorta el negativo a `"0.00"` | ⛔ sobrevivía (487/487) | ✅ **MUERE, con DOS rojos.** `Tests 2 failed \| 8 passed (10)` · «los TRES listados … sin recalcularlo (R22)» — `expected '0.00' to be '77777.77'` · y «un «Para la central» NEGATIVO llega al archivo con su signo en LAS TRES (R36)» |
+
+## El gate de esta tanda
+
+`./init.sh` **completo** (el rápido se niega: el diff toca archivos con nombre de dinero), con el
+`.env` copiado de la raíz **antes** y **borrado antes de commitear**, log propio
+(`gate-393-a8fa1c.log`, fuera del árbol al terminar), **sin `tail` en la tubería** y con
+`INIT_EXIT=$?` escrito **DENTRO** del log y en su propia línea. Antes, `pnpm run db:generate`.
+
+```
+✓ feature_list.json: sin ids duplicados (389 fichas), cupo por zona respetado (in_progress=2)
+✓ typecheck paso
+✓ lint paso            → 161 problems (0 errors, 161 warnings)  ← el MISMO número de antes
+✓ DATABASE_URL resuelta: los 134 archivos de tests contra Postgres SI se ejecutan
+ Test Files  1787 passed (1787)
+      Tests  25598 passed | 26 skipped (25624)      Duration  898.63s
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1787 ejecutado(s), todos en el baseline)
+! migraciones sin down.sql: 20260814120000_… 20260814140000_… 20260814160000_…   (preexistente)
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+- **Los 26 `skipped` son EXACTAMENTE los conocidos**, contados en el log: 17 en
+  `AnaliticaPage.test.tsx` y 9 en `AnaliticaShell.test.tsx`, los dos `describe.skip`/`it.skip` de
+  Analítica. **Ni uno más**: ningún archivo se cayó a mitad y no hubo contención con la otra
+  sesión (cero rojos raros en `integration/db`, cero deadlocks `40P01`).
+- **+17 tests míos, contados uno a uno en el log**: `cierre-bodega-vocabulario.guardia` de 8 a
+  **24** y `CierreBodegaDetalleCascadas` de 16 a **17**. (El +18 que sale contra la corrida del
+  reviewer incluye **uno que no es mío**: su base era `dev@88ce9977` con 388 fichas y aquí hay
+  389 — la 394 arrancó por medio y `feature_list` tiene un caso por ficha.)
+- **Los 161 warnings son los mismos que antes**, incluido el de
+  `DineroIdentidadesEnPantalla.test.tsx:508` que el reviewer señaló: preexistente, no introducido.
+
+## Lo del informe de revisión que NO es cierto
+
+Una sola cosa, y es la de B3.1: **«Central debe» y «Para la central» NO conviven en la misma
+pantalla.** El informe lo da por hecho («a un palmo el uno del otro») y de ahí sale la duda de si
+confunden. Medido en el navegador con las dos etiquetas presentes y con valor: **0 visibles a la
+vez, en las dos direcciones**. Viven en pestañas mutuamente excluyentes que `PanelConmutado`
+esconde con `hidden`. La tabla y los números están arriba, en «V2 · 5». Todo lo demás del informe
+—los tres agujeros de red, las dos frases falsas de esta bitácora y las 35 casillas— **era cierto y
+está arreglado**.

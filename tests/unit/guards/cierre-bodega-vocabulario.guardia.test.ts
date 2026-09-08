@@ -5,6 +5,21 @@ import { describe, expect, it } from "vitest";
 
 import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import { LLAMADAS_PROHIBIDAS_EN_DINERO } from "../../fixtures/money-safe";
+import {
+  CASCADA_CENTRAL_TITULO,
+  CASCADA_DUENO_TITULO,
+  COBRADO_SOBRE_RECAUDADO_LABEL,
+  EFECTIVO_NO_CUBRE_NOTA,
+  FACTURADO_ORDENEX_LABEL,
+  FLETE_RECHAZO_NO_DEDUCIBLE_NOTA,
+  GANA_BODEGA_SATELITE_LABEL,
+  GANA_BODEGA_SATELITE_NOTA,
+  NETO_ORDENEX_LABEL,
+  PARA_LA_CENTRAL_LABEL,
+  PARA_LA_CENTRAL_NEGATIVO_NOTA,
+  PARA_LA_CENTRAL_NOTA,
+  PARA_LA_TIENDA_LABEL,
+} from "@/app/(app)/cierres-admin/_components/cierre-labels";
 
 /**
  * 💰 FICHA 393 (2026-09-08) — GUARDIA PERENNE DEL VOCABULARIO DEL CIERRE DE BODEGA.
@@ -29,6 +44,25 @@ import { LLAMADAS_PROHIBIDAS_EN_DINERO } from "../../fixtures/money-safe";
  * Y una cuarta, de la familia money-safe (R14): en las superficies de las cascadas no hay
  * `Number(`, `parseFloat(`, `parseInt(` ni `.toFixed(` — el navegador no hace aritmética de
  * dinero.
+ *
+ * ── EL BARRIDO MONEY-SAFE LEE `cierre-factura.tsx` ENTERO, Y EL DEL VOCABULARIO NO
+ * Corregido el 2026-09-08 tras la revisión de la ficha (BLOQUEANTE 1), con la mutación que lo
+ * demostró: `money(String(Number(monto)))` en el importe de «Para la central» dejaba **197
+ * archivos de guardias y 2914 tests en verde**. El motivo era que los dos trozos de bodega que
+ * se cortan más abajo NO contienen `LineaMonto` ni `conOperador` —viven arriba, fuera de la
+ * `<section>` y fuera del componente— y son justo la función que formatea CADA línea de dinero
+ * de la cascada B en la tarjeta.
+ *
+ * Las dos mitades de esta guardia leen cosas distintas A PROPÓSITO, y la asimetría no es un
+ * descuido:
+ *
+ *  · El **censo del vocabulario** (Ajustes / cifra suelta / Central debe) se queda en los DOS
+ *    TROZOS: el archivo sirve a cuatro superficies y las otras tres siguen diciendo «Ajustes»
+ *    a propósito (R21). Barrer el archivo entero lo pondría rojo por un motivo legítimo.
+ *  · El barrido **money-safe** lee el ARCHIVO ENTERO: «no se hace aritmética de dinero en el
+ *    navegador» vale para las cuatro superficies por igual, no hay ninguna a la que se le
+ *    permita, y los formateadores son COMPARTIDOS. Hoy sale verde sin excepciones: el archivo
+ *    no tiene ni un `Number(` ni un `.toFixed(` en sus 2.000 líneas.
  *
  * ── QUÉ ES «UNA SUPERFICIE DEL CIERRE DE BODEGA», Y QUÉ NO
  * Decisión del frontend_dev, escrita aquí porque de ella depende el veredicto:
@@ -129,16 +163,41 @@ function trozosDeBodegaEnLaHoja(fuente: string): Superficie[] {
   return trozos;
 }
 
-/** El censo entero: los cuatro archivos completos + los dos trozos del comprobante. */
+/** El código de un componente de `cierres-admin`, ya sin comentarios. */
+function leer(archivo: string): string {
+  return quitarComentarios(readFileSync(path.join(COMPONENTES, archivo), "utf8"));
+}
+
+/** Los cuatro archivos que son ENTEROS del cierre de bodega, ya leídos. */
+function superficiesEnteras(): Superficie[] {
+  return SUPERFICIES_ENTERAS.map((archivo) => ({ nombre: archivo, codigo: leer(archivo) }));
+}
+
+/** El censo del VOCABULARIO: los cuatro archivos completos + los dos trozos del comprobante. */
 function superficies(): Superficie[] {
-  const enteras = SUPERFICIES_ENTERAS.map((archivo) => ({
-    nombre: archivo,
-    codigo: quitarComentarios(readFileSync(path.join(COMPONENTES, archivo), "utf8")),
-  }));
-  return [...enteras, ...trozosDeBodegaEnLaHoja(quitarComentarios(readFileSync(HOJA, "utf8")))];
+  return [...superficiesEnteras(), ...trozosDeBodegaEnLaHoja(quitarComentarios(readFileSync(HOJA, "utf8")))];
+}
+
+/**
+ * El censo MONEY-SAFE: los cuatro archivos completos + `cierre-factura.tsx` **entero**.
+ *
+ * No los dos trozos: `LineaMonto` y `conOperador` —las funciones que pintan CADA importe de la
+ * cascada B en la tarjeta— quedan fuera de ellos, y ahí es donde se pierde un céntimo. La
+ * prohibición de hacer aritmética de dinero en el navegador no tiene excepción por superficie,
+ * así que aquí el recorte no se justifica y no se hace.
+ */
+function superficiesMoneySafe(): Superficie[] {
+  return [
+    ...superficiesEnteras(),
+    {
+      nombre: "cierre-factura.tsx › el archivo ENTERO",
+      codigo: quitarComentarios(readFileSync(HOJA, "utf8")),
+    },
+  ];
 }
 
 const SUPERFICIES = superficies();
+const SUPERFICIES_MONEY_SAFE = superficiesMoneySafe();
 
 /** Las líneas de un código que casan un patrón (los comentarios ya están fuera). */
 function lineasQueCasan(codigo: string, patron: RegExp): number[] {
@@ -204,6 +263,29 @@ describe("393 — autocomprobación del censo (una guardia estática rota no fal
     expect(trozos[1].codigo).toMatch(/cascadaCentral/);
   });
 
+  it("el barrido money-safe SÍ ve `LineaMonto` y `conOperador`, que los dos trozos no alcanzan", () => {
+    // La autocomprobación que faltaba, y que costó un bloqueante: los dos trozos de arriba
+    // dejan fuera precisamente la función que formatea cada importe de la cascada B en la
+    // tarjeta, así que un `Number(monto)` puesto ahí no lo veía nadie. Se afirman las DOS
+    // cosas: que el trozo NO llega y que el barrido money-safe SÍ.
+    const trozos = trozosDeBodegaEnLaHoja(quitarComentarios(readFileSync(HOJA, "utf8")));
+    for (const trozo of trozos) {
+      expect(
+        trozo.codigo,
+        `${trozo.nombre} pasó a contener el formateador; si eso es a propósito, este caso hay ` +
+          "que reescribirlo, no borrarlo",
+      ).not.toMatch(/function (?:LineaMonto|conOperador)\(/);
+    }
+
+    const hoja = SUPERFICIES_MONEY_SAFE.find((s) => s.nombre.startsWith("cierre-factura.tsx"));
+    expect(hoja, "el barrido money-safe dejó de leer el comprobante").toBeDefined();
+    expect(hoja?.codigo).toMatch(/function LineaMonto\(/);
+    expect(hoja?.codigo).toMatch(/function conOperador\(/);
+    // Y lee el archivo ENTERO, no un recorte: los dos trozos juntos son una fracción de él.
+    const recortado = trozos.reduce((n, t) => n + t.codigo.length, 0);
+    expect(hoja?.codigo.length ?? 0).toBeGreaterThan(recortado * 2);
+  });
+
   it("el MISMO extractor encuentra los rótulos NUEVOS: sí lee código, y el cambio está puesto", () => {
     // Si esto sale vacío, el censo de abajo no prueba nada: o el barrido no lee, o las cascadas
     // no están montadas. En cualquiera de los dos casos, el verde de abajo es falso.
@@ -264,7 +346,7 @@ describe("393 — censo: el vocabulario del cierre de bodega (R23/R24/R34/R35)",
 
   it("money-safe: el navegador no hace aritmética de dinero en estas superficies (R14)", () => {
     const infractoras: string[] = [];
-    for (const s of SUPERFICIES) {
+    for (const s of SUPERFICIES_MONEY_SAFE) {
       for (const prohibida of LLAMADAS_PROHIBIDAS_EN_DINERO) {
         for (const linea of lineasQueCasan(s.codigo, prohibida)) {
           infractoras.push(`${s.nombre}:${linea} (${prohibida.source})`);
@@ -274,7 +356,108 @@ describe("393 — censo: el vocabulario del cierre de bodega (R23/R24/R34/R35)",
     expect(
       infractoras,
       "una superficie de las cascadas convierte un importe a número. Los importes viajan como " +
-        "STRING de punta a punta y llegan YA derivados del servidor: aquí sólo se formatean.",
+        "STRING de punta a punta y llegan YA derivados del servidor: aquí sólo se formatean. " +
+        "`cierre-factura.tsx` se lee ENTERO (no los dos trozos de bodega): sus formateadores " +
+        "—`LineaMonto`, `conOperador`— los comparten las cuatro superficies del comprobante.",
     ).toEqual([]);
+  });
+});
+
+/**
+ * ── EL VALOR DE LOS RÓTULOS, ESCRITO A MANO
+ *
+ * Añadido el 2026-09-08 tras la revisión de la ficha (BLOQUEANTE 2). Todos los tests que tocan
+ * estas líneas importaban la constante y la comparaban CONSIGO MISMA, así que su valor no
+ * estaba anclado en ningún sitio: cambiar `GANA_BODEGA_SATELITE_LABEL` a «Ingreso bodega
+ * rechazos» —el vocabulario de columna que **R25 prohíbe expresamente**— dejaba 68 tests de las
+ * tres superficies y 2914 de las 197 guardias **en verde**.
+ *
+ * Aquí los esperados se escriben A MANO, nunca derivados de la constante: es el mismo patrón
+ * con el que `cierres-bodega-descarga-columnas.test.ts` ancla «Para la central» como encabezado
+ * del archivo, y el único que hace que un renombrado se note. Cambiar uno de estos literales es
+ * legítimo —el vocabulario lo decide el humano—, pero entonces se cambia AQUÍ también, a mano y
+ * a la vista, que es justo lo que se quiere que pase.
+ *
+ * Y no es una hipótesis: **Q4 sigue abierta** (renombrar `INGRESO_BODEGA_RECHAZOS_LABEL` en
+ * toda la app). Si alguien ejecuta ese rename con un buscar-y-reemplazar, esta es la red que
+ * distingue «la línea del cierre de bodega» de «la del cierre de mensajero».
+ */
+describe("393 — el VALOR de los rótulos y las notas, escrito a mano (R19/R23/R25/R33)", () => {
+  it.each([
+    ["CASCADA_DUENO_TITULO", CASCADA_DUENO_TITULO, "De quién es el dinero"],
+    ["CASCADA_CENTRAL_TITULO", CASCADA_CENTRAL_TITULO, "Lo que va a la central"],
+    ["PARA_LA_TIENDA_LABEL", PARA_LA_TIENDA_LABEL, "Para la tienda"],
+    ["PARA_LA_CENTRAL_LABEL", PARA_LA_CENTRAL_LABEL, "Para la central"],
+    ["NETO_ORDENEX_LABEL", NETO_ORDENEX_LABEL, "Neto de Ordenex"],
+    ["COBRADO_SOBRE_RECAUDADO_LABEL", COBRADO_SOBRE_RECAUDADO_LABEL, "Cobrado sobre lo recaudado"],
+    ["FACTURADO_ORDENEX_LABEL", FACTURADO_ORDENEX_LABEL, "Lo que Ordenex facturó"],
+    ["GANA_BODEGA_SATELITE_LABEL", GANA_BODEGA_SATELITE_LABEL, "Gana la bodega satélite"],
+  ])("%s dice exactamente lo aprobado", (_nombre, constante, literal) => {
+    expect(constante).toBe(literal);
+  });
+
+  it.each([
+    [
+      "PARA_LA_CENTRAL_NOTA",
+      PARA_LA_CENTRAL_NOTA,
+      "Lo recaudado menos el pago a los mensajeros y menos lo que gana la bodega satélite por los rechazos.",
+    ],
+    [
+      "PARA_LA_CENTRAL_NEGATIVO_NOTA",
+      PARA_LA_CENTRAL_NEGATIVO_NOTA,
+      "Los descuentos superan lo recaudado en este cierre: la satélite no entrega nada y la central pone la diferencia.",
+    ],
+    [
+      "EFECTIVO_NO_CUBRE_NOTA",
+      EFECTIVO_NO_CUBRE_NOTA,
+      "El efectivo recaudado no cubre los descuentos: parte de lo recaudado entró por SINPE o transferencia.",
+    ],
+    [
+      "GANA_BODEGA_SATELITE_NOTA",
+      GANA_BODEGA_SATELITE_NOTA,
+      "Lo que se le reconoce a la bodega satélite por los rechazos. No es un movimiento de caja registrado.",
+    ],
+    [
+      "FLETE_RECHAZO_NO_DEDUCIBLE_NOTA",
+      FLETE_RECHAZO_NO_DEDUCIBLE_NOTA,
+      "Se le factura a la tienda, pero no sale de lo recaudado: un rechazo no cobra contra entrega.",
+    ],
+  ])("%s dice exactamente lo aprobado", (_nombre, constante, literal) => {
+    // Las notas son la mitad del requisito, no adorno: R26 pide que se diga de qué resta sale
+    // el número, R36 qué significa el negativo y R37 por qué el efectivo puede no alcanzar.
+    // Una nota vaciada o cambiada por otra deja el número igual de solo que antes de la ficha.
+    expect(constante).toBe(literal);
+  });
+
+  it("«Gana la bodega satélite» NO repite el vocabulario de la columna (R25)", () => {
+    // R25 no pide UN texto concreto: pide que la línea se nombre desde el punto de vista de
+    // quien mira y NO repitiendo el nombre de la columna `total_ingreso_bodega_rechazos`. El
+    // caso de arriba fija el texto de hoy; éste fija la REGLA, así que el siguiente rótulo que
+    // se proponga tiene que cumplirla también.
+    const prohibidos = [
+      "Ingreso de bodega por rechazos", // el rótulo del cierre de MENSAJERO, que sigue vivo allí
+      "Ingreso bodega rechazos",
+      "total_ingreso_bodega_rechazos",
+      "ingreso_bodega_rechazos",
+    ];
+    for (const prohibido of prohibidos) {
+      expect(
+        GANA_BODEGA_SATELITE_LABEL.toLowerCase(),
+        `la línea del cierre de bodega volvió a llamarse «${prohibido}»: es el nombre de la ` +
+          "COLUMNA, no el de lo que la satélite lee. Y colisiona con el rótulo del cierre de " +
+          "mensajero, donde la bodega puede ser la central y por eso allí sí se llama así.",
+      ).not.toContain(prohibido.toLowerCase());
+    }
+    // Y sigue diciendo QUIÉN gana: sin sujeto, el número vuelve a no tener dueño.
+    expect(GANA_BODEGA_SATELITE_LABEL.toLowerCase()).toContain("satélite");
+  });
+
+  it("los dos resultados RIMAN, y ninguno reusa «Central debe» (D2′/D6)", () => {
+    // «Para la tienda» y «Para la central» son la misma pregunta contestada dos veces; que
+    // tengan la misma forma es lo que hace que las dos cascadas se lean como una sola historia.
+    expect(PARA_LA_TIENDA_LABEL.startsWith("Para la")).toBe(true);
+    expect(PARA_LA_CENTRAL_LABEL.startsWith("Para la")).toBe(true);
+    expect(PARA_LA_CENTRAL_LABEL).not.toBe("Central debe");
+    expect(PARA_LA_CENTRAL_LABEL).not.toBe(PARA_LA_TIENDA_LABEL);
   });
 });
