@@ -4588,11 +4588,11 @@
       "title": "filtrar los cierres por estado",
       "description": "Las dos listas de cierres mezclan estados que significan cosas distintas y no se pueden separar.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "branch": "feat/386-filtro-estado-cierres",
-      "status_note": "EN CURSO desde el 2026-09-08, en worktree aislado. Sin migracion. || PEDIDA por el humano el 2026-09-07, y ACOTADA POR EL: «solo el estado». Los otros filtros no se tocan. || HOY se filtra por cuatro claves: `desde`/`hasta` (sobre la fecha de SOLICITUD), `destinoZonaIds` y `mensajeroIds`. El ESTADO no esta. || Y las dos listas ya separan por estado, pero EN GRUESO: PENDIENTES mezcla `solicitado` con `vencido` -- un solicitado espera aprobacion, un vencido lo creo el corte nocturno y necesita que alguien lo REENVIE-- y HISTORICO mezcla `aprobado` con `rechazado`, que son desenlaces opuestos. El filtro va DENTRO de cada lista, no en lugar de ellas. || MATIZ HONESTO, medido en produccion el 2026-09-07: hay 51 `aprobado` y 1 `vencido`; CERO `solicitado` y CERO `rechazado`. Hoy el filtro separaria 51 de 0 y 1 de 0. Tiene valor estructural y lo gana segun crezca la operacion, pero NO es urgente y asi se le dijo al humano. || `ESTADOS_CIERRE_ABIERTO = ['solicitado','vencido']` (CierresAdminService.ts:87) es quien decide hoy en que lista cae cada uno."
+      "status_note": "CERRADA el 2026-09-08. Servidor PR #744, control PR #746. Sin migracion. || Clave `estados` en el bloque de filtros, tupla no vacia de CierreEstado, misma forma que mensajeroIds. «Todos» se dice OMITIENDO la clave; el array vacio lo rechaza el borde. INTERSECA, no sustituye: pedir aprobado en pendientes devuelve vacio, medido con una fila real contra Postgres. || DECISION DEL IMPLEMENTADOR: se ofrecen los cuatro estados agrupados por lista, no se recorta el desplegable por pestana -- recortarlo obligaria a podar la seleccion al cambiar de pestana, o sea a borrarle al usuario el filtro que acaba de poner. El grupo sale del MISMO corte que el repositorio escribe en el WHERE. Vuelta atras escrita en el archivo. || EVITO UN FALLO QUE EL LEADER NO VIO: esa barra la montan TRES pantallas, y el schema de las dos de bodega es estricto y no declara `estados`; el control va apagado por defecto y esas dos no cambian ni un byte. || 7 mutaciones muertas entre las dos mitades. || CORRIGE AL LEADER: ESTADOS_CIERRE_ABIERTO no parte las listas; el corte real es ESTADOS_COLA_CIERRE_DIA, en otro archivo. || NO se paso el reviewer. Queda dicho."
     },
     {
       "id": 387,
