@@ -17,7 +17,7 @@ import { HISTORIAL_ACCION_TIPOS } from "@/lib/types/historial-accion";
 //
 // Ninguna de las dos cosas rompe un test que no exista. Esta guardia es ese test.
 //
-// LAS TRES COSAS QUE EXIGE, por cada uno de los 49 tipos del catalogo:
+// LAS TRES COSAS QUE EXIGE, por cada uno de los 50 tipos del catalogo:
 //   1. que el metodo declarado como su productor EXISTA y su cuerpo se pueda recortar;
 //   2. que ese cuerpo llame a `appendAccion`;
 //   3. que la llamada sea ATOMICA con la mutacion, en una de las DOS formas validas:
@@ -221,6 +221,28 @@ const CENSO: EntradaCenso[] = [
     metodo: "create",
     forma: "abre_tx",
     mutacion: /tx\.zona\.create\(/,
+  },
+  {
+    // ⭑ FICHA 380 — la reescritura del PAGO AL MENSAJERO de una zona. TERCERA entrada sobre
+    // `ZonaRepository.update`, junto a las de la 366 y la 376, y no es duplicacion: el censo mide
+    // UNA mutacion por entrada, y las tres escriben cosas DISTINTAS dentro de la misma
+    // `$transaction` (`tx.orden.updateMany` re-estampa ordenes; `tx.zona.updateMany` apaga la
+    // central anterior; `tx.tarifaZonaMensajero.deleteMany` destruye los pagos vigentes). El
+    // `it.each` las corre por separado y cada una exige SU sentencia.
+    //
+    // ⚠️ LA MUTACION QUE SE EXIGE ES EL `deleteMany` DE LOS PAGOS, que es exactamente lo que la
+    // fila documenta: `deleteMany` + `createMany` borra y recrea entero lo que cobra una persona
+    // por entregar y por recibir un rechazo, y hasta esta ficha no dejaba ni una linea de rastro.
+    //
+    // ⚠️ NO HAY ENTRADA PARA `create`, y NO es un olvido: la firma de Q3 (2026-09-08, EN CONTRA de
+    // la recomendacion del leader) dejo fuera la creacion. Crear una zona con pagos sigue sin
+    // rastro propio, igual que hay `zona_borrada` y no `zona_creada`. Añadir aqui una entrada de
+    // `create` para este tipo seria ensanchar el alcance firmado.
+    tipos: ["zona_pago_mensajero_cambiado"],
+    archivo: "lib/repositories/ZonaRepository.ts",
+    metodo: "update",
+    forma: "abre_tx",
+    mutacion: /tx\.tarifaZonaMensajero\.deleteMany\(/,
   },
   {
     // ⭑ Q2 (`usuario_fulfillment_cambiado`) comparte punto de escritura con el rol y la zona: es
@@ -625,6 +647,83 @@ describe("362/T7.1 — el detector se prueba a si mismo", () => {
     );
   });
 
+  // ─────────────────────────────────────────────────────────────────────────────────────────────
+  // ⭑ FICHA 380 — TRES `appendAccion` EN EL MISMO CUERPO. Es lo que hace `ZonaRepository.update`
+  // desde esta ficha: la reconciliacion de ordenes (366), el cambio de marca de zona central (376)
+  // y la reescritura del pago al mensajero (380).
+  //
+  // POR QUE ESTE BLOQUE Y NO SE DA POR BUENO EL DE LA 376. El detector recorre TODAS las llamadas
+  // desde la 376 (`llamadasAAppendAccion` es generico sobre N), pero SU AUTO-PRUEBA SOLO ENUMERA
+  // DOS. Una guardia que nunca se ha ejercido en la forma que va a vigilar no esta probada: es
+  // exactamente el razonamiento con el que la 376 nacio —«recorre todas» era cierto y la
+  // auto-prueba con UNA dejo pasar una mutacion viva—. Esta ficha es la que lleva el metodo a tres,
+  // asi que es la que tiene que demostrarlo con tres.
+  // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+  const CUERPO_TRES_REGISTROS = `{
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.usuario.updateMany({ where: { id }, data: { estado } });
+      await appendAccion(tx, [{ accion: "usuario_estado_cambiado" }]);
+      await appendAccion(tx, [{ accion: "usuario_rol_cambiado" }], loteId);
+      await appendAccion(tx, [{ accion: "usuario_zona_cambiada" }], randomUUID());
+      return count;
+    });
+  }`;
+
+  it("⭑ CONTRAPRUEBA (380): un cuerpo con TRES registros correctos NO produce fallos", () => {
+    // Control positivo del bloque. Sin el, los dos casos de abajo podrian estar pasando porque el
+    // detector se atraganta con tres llamadas y falla por cualquier otra cosa.
+    expect(fallosDelPuntoDeEscritura(CUERPO_TRES_REGISTROS, "abre_tx", MUTACION)).toEqual([]);
+  });
+
+  it("⭑ CONTRAPRUEBA (380): la TERCERA llamada con OTRO cliente se detecta", () => {
+    // La mutacion que el encargo de la 380 exige probar: `appendAccion(this.prisma, ...)` escrito
+    // dentro del callback compila, queda lexicamente dentro del `$transaction` y ESCRIBE FUERA DE
+    // LA TRANSACCION. Ningun test de comportamiento con dobles lo caza: ahi los dos clientes son
+    // el mismo objeto.
+    const mutado = CUERPO_TRES_REGISTROS.replace(
+      'appendAccion(tx, [{ accion: "usuario_zona_cambiada" }], randomUUID())',
+      'appendAccion(this.prisma, [{ accion: "usuario_zona_cambiada" }], randomUUID())',
+    );
+    // Anti-vacuidad de la MUTACION: si el `replace` no hubiera sustituido nada, el caso pasaria
+    // midiendo el cuerpo sano.
+    expect(mutado).not.toBe(CUERPO_TRES_REGISTROS);
+    expect(fallosDelPuntoDeEscritura(mutado, "abre_tx", MUTACION)).toContain(
+      "no le pasa a `appendAccion` la `tx`, sino otro cliente",
+    );
+  });
+
+  it("⭑ CONTRAPRUEBA (380): la TERCERA llamada FUERA del callback se detecta", () => {
+    const mutado = `{
+      const r = await this.prisma.$transaction(async (tx) => {
+        const { count } = await tx.usuario.updateMany({ where: { id }, data: { estado } });
+        await appendAccion(tx, [{ accion: "usuario_estado_cambiado" }]);
+        await appendAccion(tx, [{ accion: "usuario_rol_cambiado" }], loteId);
+        return count;
+      });
+      await appendAccion(tx, [{ accion: "usuario_zona_cambiada" }], randomUUID());
+      return r;
+    }`;
+    expect(fallosDelPuntoDeEscritura(mutado, "abre_tx", MUTACION)).toContain(
+      "el `appendAccion` cae FUERA del callback de `$transaction`",
+    );
+  });
+
+  it("⭑ CONTRAPRUEBA (380): BORRAR la tercera —dejando dos sanas— tambien se ve", () => {
+    // El modo de fallo REAL de esta ficha: alguien quita el bloque nuevo y las dos llamadas
+    // anteriores siguen ahi, dentro de la `tx`. El detector no puede darse por satisfecho con
+    // «hay al menos una»; lo que lo salva aqui es la MUTACION exigida por la entrada del censo,
+    // que en el arbol real es `tx.tarifaZonaMensajero.deleteMany(`.
+    const mutado = CUERPO_TRES_REGISTROS.replace(
+      '      await appendAccion(tx, [{ accion: "usuario_zona_cambiada" }], randomUUID());\n',
+      "",
+    ).replace("tx.usuario.updateMany", "tx.usuario.findMany");
+    expect(mutado).not.toBe(CUERPO_TRES_REGISTROS);
+    expect(fallosDelPuntoDeEscritura(mutado, "abre_tx", MUTACION)).toContain(
+      "no contiene su sentencia de mutacion",
+    );
+  });
+
   it("CONTRAPRUEBA: en la forma `recibe_tx`, pasar OTRO cliente se detecta", () => {
     const mutado = `{
       await tx.liquidacionPago.create({ data });
@@ -680,13 +779,13 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     expect(inventados, "el censo nombra un tipo que el catalogo no declara").toEqual([]);
   });
 
-  it("los 49 tipos del Anexo A (+ Q1, Q2, la 366, la 371, la 373, la 374, la 375 y la 376) siguen siendo 49", () => {
+  it("los 50 tipos del Anexo A (+ Q1, Q2, la 366, la 371, la 373, la 374, la 375, la 376 y la 380) siguen siendo 50", () => {
     // Numero DURO a proposito: añadir un tipo al enum obliga a pasar por aqui, y por tanto a
     // añadirlo al censo y a escribir su productor. Es el mecanismo de R14.
-    // 49 desde la ficha 376 (`zona_central_cambiada`); 48 lo fue desde la 375
-    // (`nodo_geografico_renombrado`); 47 desde la 374 (los dos `nodo_geografico_*` de activacion);
-    // 45 desde la 373.
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(49);
+    // 50 desde la ficha 380 (`zona_pago_mensajero_cambiado`); 49 lo fue desde la 376
+    // (`zona_central_cambiada`); 48 desde la 375 (`nodo_geografico_renombrado`); 47 desde la 374
+    // (los dos `nodo_geografico_*` de activacion); 45 desde la 373.
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(50);
   });
 });
 
@@ -694,7 +793,7 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
 // 2 — R9: el registro va en la MISMA transaccion que la mutacion
 // ---------------------------------------------------------------------------------------------
 
-describe("362/R9 — los 49 tipos se registran DENTRO de la transaccion de su accion", () => {
+describe("362/R9 — los 50 tipos se registran DENTRO de la transaccion de su accion", () => {
   it.each(CENSO.map((e) => [`${e.archivo.split("/").pop()}#${e.metodo}`, e] as const))(
     "%s registra su accion en la misma transaccion que la escribe",
     (_nombre, entrada) => {

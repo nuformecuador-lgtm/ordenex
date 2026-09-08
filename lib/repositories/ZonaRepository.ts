@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { Prisma, type PrismaClient, type RolValue } from "@prisma/client";
 import { ConflictError } from "@/lib/errors";
+import { cambioElPagoAlMensajero } from "@/lib/repositories/_shared/pago-mensajero-cambio";
 import { esViolacionDeClaveForanea } from "@/lib/repositories/_shared/prisma-fk";
 import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import { zonaUnicaDeDistrito } from "@/lib/repositories/_shared/zona-colapso";
@@ -372,6 +373,19 @@ export class ZonaRepository implements IZonaRepository {
           select: { distritoId: true },
         });
 
+        // ⭑ 380/R1/R3 — LOS PAGOS AL MENSAJERO QUE LA ZONA TENIA, LEIDOS ANTES DEL `deleteMany`,
+        // y POR EL MISMO MOTIVO que `distritosPrevios` de aqui arriba: dos lineas mas abajo esas
+        // filas ya no existen y no habria a quien preguntar. Es la unica foto del «antes» que va a
+        // haber — el reemplazo la destruye y no queda copia en ninguna otra parte (R18/design §1).
+        //
+        // ⚠️ EL `select` NO PIDE `id`, y no es una omision: el guardado lo REGENERA en cada
+        // reemplazo, asi que compararlo daria «cambio» siempre. No se puede mirar lo que no se
+        // leyo (R3).
+        const pagosPrevios = await tx.tarifaZonaMensajero.findMany({
+          where: { zonaId: id },
+          select: { vehiculoId: true, cobroEntregado: true, cobroRechazado: true },
+        });
+
         // Reemplazo completo del N:M y de las tarifas.
         await tx.zonaDistrito.deleteMany({ where: { zonaId: id } });
         if (data.distritoIds.length > 0) {
@@ -383,6 +397,15 @@ export class ZonaRepository implements IZonaRepository {
         if (data.tarifas.length > 0) {
           await tx.tarifaZonaMensajero.createMany({ data: tarifaCreateRows(id, data.tarifas) });
         }
+
+        // 380/design §1: la lectura del «despues». ES LA MISMA CONSULTA que ya existia al final del
+        // metodo para construir el DTO, movida hasta aqui: la sigue consumiendo `toDTO` (R17) y
+        // ahora tambien el comparador. Cero consultas nuevas por este lado.
+        //
+        // Se comparan DOS ESTADOS DE LA TABLA, no «lo que pedi» contra «lo que habia»: asi la
+        // escala de los decimales es la misma en los dos lados por construccion (`Decimal(12,2)`),
+        // y el veredicto describe la base y no el payload.
+        const tarifas = await tx.tarifaZonaMensajero.findMany({ where: { zonaId: id } });
 
         // 366/R5 (design §2): LA UNION de los distritos de ANTES y los de DESPUES.
         const distritosAfectados = [
@@ -518,7 +541,64 @@ export class ZonaRepository implements IZonaRepository {
           );
         }
 
-        const tarifas = await tx.tarifaZonaMensajero.findMany({ where: { zonaId: id } });
+        // ═══════════════════════════════════════════════════════════════════════════════════════
+        // ⭑ FICHA 380 (R1/R8/R9/R10/R11) — EL RASTRO DE LA REESCRITURA DEL PAGO AL MENSAJERO.
+        // ═══════════════════════════════════════════════════════════════════════════════════════
+        //
+        // Es el hueco que la ficha cierra: este metodo ya llamaba DOS veces a `appendAccion` —la
+        // reconciliacion de ordenes de la 366 y la marca de zona central de la 376— pero el
+        // `deleteMany` + `createMany` de `tarifa_zona_mensajero`, que decide LO QUE COBRA UNA
+        // PERSONA por cada entrega y por cada rechazo, no dejaba ni una linea.
+        //
+        // ⚠️ DENTRO del callback y recibiendo la `tx`, JAMAS `this.prisma`: escribir por
+        // `this.prisma` aqui dentro compila, parece correcto y escribe FUERA de la transaccion (la
+        // mutacion que sobrevivio en la ficha 373). Con `tx`, R11 es una propiedad ESTRUCTURAL: o
+        // se escriben los pagos Y su fila, o no ocurre ninguna de las dos.
+        //
+        // ⚠️ EL `loteId` ES PROPIO — el TERCERO distinto de este mismo guardado, junto al de la 366
+        // y al de la 376. El lote agrupa filas HOMOGENEAS de un mismo hecho, y estos son tres
+        // hechos de naturaleza distinta: «se re-estamparon N ordenes», «se movio la marca» y «se
+        // reescribio el pago al mensajero». Compartirlo haria que filtrar por lote devolviera una
+        // mezcla que nadie pidio.
+        //
+        // ⚠️ QUE NO LLEVA LA FILA, Y QUE SE PIERDE CON ELLO (Q2, firmada por el humano el
+        // 2026-09-08 EN CONTRA de la recomendacion del leader, que era guardar el antes y el
+        // despues): NI `monto`, NI `valorAnterior`, NI `valorNuevo` — los tres van a `null` por
+        // defecto en `appendAccion`. Como `pagosPrevios` muere con esta transaccion y las filas
+        // viejas ya no existen, EL REGISTRO NUNCA PODRA RECONSTRUIR DE CUANTO A CUANTO. Si mañana
+        // un mensajero reclama, el rastro dira que hubo un cambio, en que zona, quien y cuando, y
+        // ahi se acaba. Limite CONOCIDO y ACEPTADO, con el precedente de `tarifa_actualizada`
+        // (`TarifaRepository.update`) delante.
+        //
+        // ⚠️ SOLO AQUI, EN LA EDICION (Q3, firmada el 2026-09-08 tambien en contra de la
+        // recomendacion): `create` NO registra este tipo aunque escriba pagos, y `hardDelete`
+        // tampoco —`zona_borrada` ya documenta que la zona y sus pagos desaparecieron—. Las dos
+        // ausencias estan PROBADAS en `tests/integration/db/zona-pago-mensajero-rastro.test.ts`
+        // para que nadie las ensanche por su cuenta ni las pierda sin querer.
+        //
+        // El `resolverActorCongelado` se deja LOCAL y no se iza al principio del metodo: son como
+        // mucho tres lecturas por clave primaria dentro de la misma transaccion, y solo cuando hay
+        // algo que escribir. Izarlo lo ejecutaria en TODOS los guardados, incluidos los que no
+        // registran nada.
+        if (cambioElPagoAlMensajero(pagosPrevios, tarifas)) {
+          const actorDelPago = await resolverActorCongelado(tx, actorUsuarioId);
+          await appendAccion(
+            tx,
+            [
+              {
+                accion: "zona_pago_mensajero_cambiado",
+                entidadTipo: "zona",
+                entidadId: id,
+                // La zona DESPUES del guardado, igual que hace `zona_central_cambiada`. Sale de
+                // `etiquetaDeEntidad` y nunca de una interpolacion a mano.
+                entidadEtiqueta: etiquetaDeEntidad("zona", { nombre: zona.nombre }),
+                ...actorDelPago,
+              },
+            ],
+            randomUUID(),
+          );
+        }
+
         return {
           estado: "ok" as const,
           zona: toDTO(zona, data.distritoIds.length, tarifas),
