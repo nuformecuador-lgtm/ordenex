@@ -112,6 +112,7 @@ import {
 } from "./PagoMensajeroSeccion";
 import { RegistrarPagoMensajeroDialog } from "./RegistrarPagoMensajeroDialog";
 import { CorregirPagosDialog } from "./CorregirPagosDialog";
+import { CorregirResultadoDialog } from "./CorregirResultadoDialog";
 
 // Feature 38 (T13, R3-R11): módulo cliente de "Cierres del día" del admin. Recibe
 // del Server Component padre los cierres del alcance ya resueltos (pendientes de
@@ -173,6 +174,19 @@ export interface CierresAdminModuleProps {
    * `false` — FALLA CERRADO, igual que su vecina.
    */
   puedeCorregirPagos?: boolean;
+  /**
+   * FICHA 398 (R16) — permiso de CORREGIR EL RESULTADO de una gestión de un cierre abierto (una
+   * entrega que nunca ocurrió pasa a rechazo). Lo resuelve el Server Component padre con el MISMO
+   * predicado que exige el servicio (`esAccesoTotal`): maestro y admin, y nadie más. El mensajero
+   * NUNCA, y menos éste: mueve dinero y quien se equivocó fue él.
+   *
+   * Es una TERCERA prop y no `puedeCorregirPagos`, siguiendo el argumento que ya dejó escrito su
+   * vecina: repartir entre métodos un dinero que sí entró y borrar un cobro que no existió son
+   * dos permisos distintos, y fundirlos aquí obligaría a desenredar la pantalla el día que se
+   * separen. Opcional y con default `false` — FALLA CERRADO: un montaje que se olvide de pasarla
+   * no se lo ofrece a nadie.
+   */
+  puedeCorregirResultado?: boolean;
   /**
    * Pedido humano del 2026-08-16 — opciones de los filtros (bodegas destino y mensajeros), ya
    * acotadas al alcance del actor y resueltas por el Server Component: es una lectura de solo
@@ -395,6 +409,7 @@ export function CierresAdminModule({
   sinZona,
   puedeRegistrarPago = false,
   puedeCorregirPagos = false,
+  puedeCorregirResultado = false,
   catalogoFiltros = CATALOGO_FILTROS_CIERRES_VACIO,
 }: Readonly<CierresAdminModuleProps>) {
   const router = useRouter();
@@ -413,6 +428,11 @@ export function CierresAdminModule({
   // cerrado. Va aquí, con el resto de los hooks, y no junto al bloque que lo usa: los hooks se
   // llaman todos, siempre y en el mismo orden.
   const [corrigiendo, setCorrigiendo] = useState<CierreDetalleGestion | null>(null);
+  // FICHA 398 (R16): la gestión cuyo RESULTADO se está corrigiendo; `null` = diálogo cerrado.
+  // Estado propio y no compartido con el de arriba: son dos diálogos distintos y abrir uno no
+  // puede abrir el otro.
+  const [corrigiendoResultado, setCorrigiendoResultado] =
+    useState<CierreDetalleGestion | null>(null);
   // Sub-modal de rechazo (R11): true = abierto.
   const [rechazando, setRechazando] = useState(false);
   // Motivo del rechazo (obligatorio, R11) + su error de validación.
@@ -984,6 +1004,19 @@ export function CierresAdminModule({
   const ofrecerCorreccionPagos =
     puedeCorregirPagos &&
     (cierreAbierto?.estado === "solicitado" || cierreAbierto?.estado === "vencido");
+  /**
+   * FICHA 398 (R16): el RESULTADO se corrige únicamente desde el detalle de un cierre ABIERTO
+   * —`solicitado` o `vencido`—, que es el mismo par que exige el servicio.
+   *
+   * Ese par cubre por construcción el «no consolidado» y no hace falta preguntarlo aparte: la
+   * consolidación en un `cierre_bodega` sólo toma cierres `aprobado`, así que un cierre abierto
+   * no puede estar consolidado. Un `aprobado` o un `rechazado` no entran por aquí, y si el cierre
+   * cambia de estado mientras el diálogo está abierto, el servidor responde `conflict` y no
+   * escribe nada: esto sólo decide si se OFRECE.
+   */
+  const ofrecerCorreccionResultado =
+    puedeCorregirResultado &&
+    (cierreAbierto?.estado === "solicitado" || cierreAbierto?.estado === "vencido");
 
   return (
     // `gap-4` y no `gap-8` (pedido humano del 2026-08-16): entre la barra de filtros y las
@@ -1210,6 +1243,11 @@ export function CierresAdminModule({
               // Ausente cuando no se puede corregir: la hoja vuelve a ser de solo lectura sin
               // que la fila tenga que saber nada de roles ni de estados.
               onCorregirPagos={ofrecerCorreccionPagos ? setCorrigiendo : undefined}
+              // FICHA 398 (R16): ausente cuando el cierre no está abierto o el rol no corrige
+              // resultados. La fila no sabe nada de estados ni de roles: recibe el callback o no.
+              onCorregirResultado={
+                ofrecerCorreccionResultado ? setCorrigiendoResultado : undefined
+              }
             />
 
             {/* Pedido humano (2026-08-19): el editor del desglose, el MISMO que usa el
@@ -1220,6 +1258,22 @@ export function CierresAdminModule({
               gestion={corrigiendo}
               onOpenChange={(open) => {
                 if (!open) setCorrigiendo(null);
+              }}
+              onCorregido={async () => {
+                if (cierreAbierto) await abrirDetalle(cierreAbierto.cierreId);
+                refrescarListas();
+              }}
+            />
+
+            {/* FICHA 398 (T4.2, R16): la corrección del RESULTADO de una entrega que nunca
+                ocurrió. Mismo trato que su hermano de arriba: tras corregir se RELEE el detalle
+                del servidor —los seis totales del cierre los recalculó él en la misma
+                transacción— y se refrescan las listas, porque el total del cierre también cambia
+                en la tabla de la que se abrió. */}
+            <CorregirResultadoDialog
+              gestion={corrigiendoResultado}
+              onOpenChange={(open) => {
+                if (!open) setCorrigiendoResultado(null);
               }}
               onCorregido={async () => {
                 if (cierreAbierto) await abrirDetalle(cierreAbierto.cierreId);

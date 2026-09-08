@@ -374,7 +374,10 @@ export async function actualizarPagosGestion(
  * que rechaza un `nuevoResultado` colado). El ROL, el ALCANCE, el estado del cierre y el resultado
  * vigente los decide el service, que es quien puede mirar la base.
  *
- * @sin-superficie el backend de la ficha 398 va por delante de su pantalla: la accion aterriza en la tanda de `backend_dev` y el dialogo que la dispara (`CorregirResultadoDialog`, T4.1, montado en `CierresAdminModule` por T4.2) es tarea de `frontend_dev`, que trabaja despues y en otra rama. NO ES DEUDA NI EXCEPCION PERMANENTE: esta linea se BORRA en el commit que monte el dialogo, y la guardia lo exige sola —una anotacion que sobrevive a su motivo se pone roja—. Precedentes del mismo caso: `conteo-productos.ts` y `corregir-dia-reparto.ts`.
+ * SU SUPERFICIE YA EXISTE (T4.2, R16): `CorregirResultadoDialog`, montado en
+ * `CierresAdminModule` sobre las filas `entregada` de un cierre abierto. La anotacion
+ * `@sin-superficie` que llevaba esta accion se borro en ese mismo commit, que es lo que su propio
+ * motivo decia: una excepcion que sobrevive a su motivo la pone roja la guardia sola.
  */
 export async function corregirResultadoGestion(
   input: unknown,
