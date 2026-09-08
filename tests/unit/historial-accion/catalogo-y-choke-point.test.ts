@@ -69,8 +69,8 @@ function filas(tx: ReturnType<typeof txDoble>, n = 0): Record<string, unknown>[]
 // =============================================================================================
 
 describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhaustivos", () => {
-  it("son 51 tipos, 21 entidades y 3 categorias, sin repetidos", () => {
-    // 51 desde la ficha 381 (`cobro_tienda_registrado`); 50 lo fue desde la 380
+  it("son 52 tipos, 21 entidades y 3 categorias, sin repetidos", () => {
+    // 52 desde la ficha 398 (`cierre_dia_gestion_corregida`); 51 lo fue desde la ficha 381 (`cobro_tienda_registrado`); 50 lo fue desde la 380
     // (`zona_pago_mensajero_cambiado`); 49 desde la 376 (`zona_central_cambiada`); 48 desde la 375
     // (`nodo_geografico_renombrado`); 47 desde la 374 (los dos `nodo_geografico_*` de activacion);
     // 45 desde la 373.
@@ -78,8 +78,8 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // 20 lo fue desde la 374 (`provincia`, `canton` y `distrito`, la PRIMERA ampliacion), que
     // llevaba 17 desde la 362. Ni la 375, ni la 376, ni la 380 lo amplian: `zona` ya estaba entre
     // los 17 originales (la usa `zona_borrada`).
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(51);
-    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(51);
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(52);
+    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(52);
     expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(21);
     expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(21);
     expect(CATEGORIAS_ACCION).toHaveLength(3);
@@ -341,7 +341,7 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(HISTORIAL_ACCION_TIPOS).not.toContain("abono_tienda_registrado");
   });
 
-  it("el reparto por categoria es el del Anexo A: 29 dinero, 10 desaparicion, 12 permisos", () => {
+  it("el reparto por categoria es el del Anexo A: 30 dinero, 10 desaparicion, 12 permisos", () => {
     // Numeros DUROS: mover un tipo de categoria es una decision, y tiene que pasar por aqui.
     // 26 y no 25 desde la ficha 366: `orden_zona_reconciliada` entra en DINERO.
     // 7 y no 6 desde la ficha 371: `gestion_fecha_reprogramacion_corregida` entra en DESAPARICION.
@@ -357,7 +357,9 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // entregar y por recibir un rechazo (`resolvePagoTarifa`, feature 39)—.
     // 29 y no 28 desde la ficha 381: `cobro_tienda_registrado` baja el disponible de una tienda por
     // una decision humana, y puede dejarlo negativo.
-    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(29);
+    // 30 y no 29 desde la ficha 398: `cierre_dia_gestion_corregida` saca de un cierre ABIERTO un
+    // cobro que nadie recaudo y deja en cero el pago de esa gestion al mensajero.
+    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(30);
     expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(10);
     expect(accionesDeCategoria("cambia_permisos")).toHaveLength(12);
   });

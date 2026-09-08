@@ -181,6 +181,20 @@ describe("R13 — nadie escribe `cierre_dia.total_pago_mensajero` fuera de donde
     expect(escritores.sort()).toEqual([
       "lib/repositories/CierreBodegaRepository.ts", // tabla `cierre_bodega`, no `cierre_dia`
       "lib/repositories/CierreDiaRepository.ts", // el SOLICITAR del cierre del dia
+      // ⭑ FICHA 398 (2026-09-08) — EL TERCER ESCRITOR, y entra por decision, no por descuido: esta
+      // guardia existe para que añadir uno cueste pasar por aqui y escribir el motivo.
+      //
+      // QUE ESCRIBE: `corregirResultadoGestionEnCierre` rehace los SEIS totales del snapshot de un
+      // cierre ABIERTO al corregir `entregada -> rechazada`. Sin tocar este total, el cierre
+      // seguiria diciendo que hay que pagarle al mensajero una entrega que no ocurrio.
+      //
+      // ⚠️ Y COMO LO ESCRIBE, que es lo que hace que R13 siga protegiendo lo que protegia: SUMANDO
+      // los `gestion_orden.pago_mensajero` YA CONGELADOS (`sumarSnapshotsCongelados`), NUNCA
+      // re-derivando con `derivarPagos` y la tarifa viva. Re-derivar reescribiria, con la tarifa de
+      // HOY, el pago congelado de las OTRAS gestiones del cierre —gestiones que nadie corrigio— y
+      // una edicion de tarifa posterior a la solicitud moveria dinero ajeno en silencio. Eso lo
+      // mata `correccion-resultado-gestion.int.test.ts` contra Postgres real.
+      "lib/repositories/CierresAdminRepository.ts",
     ]);
   });
 

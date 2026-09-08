@@ -327,7 +327,13 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("381/B.7 (a) — los enums de la base SON el
     // Es de donde saldran las listas previas del `down.sql` de la SIGUIENTE ficha que los amplie.
     const tipos = await valoresDeEnum(admin, "public", "historial_accion_tipo");
     expect(tipos.indexOf(TIPO_NUEVO)).toBeGreaterThan(tipos.indexOf("zona_pago_mensajero_cambiado"));
-    expect(tipos.at(-1)).toBe(TIPO_NUEVO);
+    // ⏳ 2026-09-08 (ficha 398): YA NO ES EL ULTIMO, y esa es la señal que este caso existe para
+    // dar. `cierre_dia_gestion_corregida` se apendio DESPUES, y al hacerlo tuvo que pasar por
+    // aqui. Se afirma la POSICION RELATIVA —que es el invariante real, «`ADD VALUE` APENDE»— en
+    // vez de «es el ultimo», que caduca con cada ficha nueva. La afirmacion es MAS estrecha, no
+    // menos: inmediatamente antes del siguiente. Mismo cambio que la 380 hizo cuando la 381 la
+    // desplazo.
+    expect(tipos.indexOf("cierre_dia_gestion_corregida")).toBe(tipos.indexOf(TIPO_NUEVO) + 1);
     const entidades = await valoresDeEnum(admin, "public", "historial_accion_entidad");
     expect(entidades.indexOf(ENTIDAD_NUEVA)).toBeGreaterThan(entidades.indexOf("distrito"));
     expect(entidades.at(-1)).toBe(ENTIDAD_NUEVA);
@@ -378,8 +384,15 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("381/B.7 (b) — el down recrea 50 tipos y 2
   it("⭑ el estado previo reconstruido ES el catalogo de HOY menos los dos valores nuevos", () => {
     // El cierre del circulo: si el catalogo de TypeScript y las migraciones discreparan, no hay
     // forma de que esto y el caso de arriba cuadren a la vez por casualidad.
+    // ⚠️ CADA FICHA QUE AMPLIE EL ENUM DESPUES DE ESTA ENTRA AQUI, en orden de migracion. Es lo
+    // que convierte la comparacion en una cadena verificable —«el catalogo de hoy menos la 381
+    // menos la 398»— en vez de en algo que caduca en silencio. Cada una tiene ademas su archivo:
+    //   · 398 — `cierre_dia_gestion_corregida`, en `correccion-resultado-gestion-migration.test.ts`.
+    const POSTERIORES = ["cierre_dia_gestion_corregida"];
     expect([...tiposAntes].sort()).toEqual(
-      [...HISTORIAL_ACCION_TIPOS].filter((t) => t !== TIPO_NUEVO).sort(),
+      [...HISTORIAL_ACCION_TIPOS]
+        .filter((t) => t !== TIPO_NUEVO && !POSTERIORES.includes(t))
+        .sort(),
     );
     expect([...entidadesAntes].sort()).toEqual(
       [...HISTORIAL_ACCION_ENTIDADES].filter((e) => e !== ENTIDAD_NUEVA).sort(),

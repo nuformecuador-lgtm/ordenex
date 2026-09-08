@@ -3,6 +3,7 @@ import { ORDER_STATUS_SEED, type OrderStatusValue } from "@/lib/types/order-stat
 import {
   TRANSICIONES,
   ESTADOS_CREACION,
+  ESTADOS_TERMINALES,
   TransicionIlegalError,
   assertTransicionValida,
   esOrderStatusValue,
@@ -27,7 +28,7 @@ describe("R8 — la guardia acepta TODAS las transiciones del inventario", () =>
     },
   );
 
-  it("el inventario de flujo tiene las 59 aristas y 57 pares unicos (A.3 + #43/#44 - #4/#6/#7c - #1/#2/#3/#7b + 149 #45-#47 + 158 #53 + 158 admin #48-#52/#54-#58 + 157 #45b/#46b + 239 #59/#60/#61 - #14 + 235 #62/#63/#64)", () => {
+  it("el inventario de flujo cuadra con el RECUENTO declarado (A.3 + #43/#44 - #4/#6/#7c - #1/#2/#3/#7b + 149 #45-#47 + 158 #53 + 158 admin #48-#52/#54-#58 + 157 #45b/#46b + 239 #59/#60/#61 - #14 + 235 #62/#63/#64 + 237 #65/#66 + 240 #67 + 276 #68 + 398 #69)", () => {
     expect(INVENTARIO_FLUJO).toHaveLength(RECUENTO_INVENTARIO.aristasFlujo);
     const pares = new Set(INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino}`));
     expect(pares.size).toBe(RECUENTO_INVENTARIO.paresUnicos);
@@ -122,6 +123,51 @@ describe("235+237 — el estatus de ayuda: sus CUATRO salidas, y ni una mas (235
 
   it("235: no se puede NACER en el estatus de ayuda (no esta en ESTADOS_CREACION)", () => {
     expect(() => assertTransicionValida(null, "ayuda_tienda")).toThrow(TransicionIlegalError);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// ⭑ FICHA 398 — LA CORRECCION EN SITIO (#69). `entregada -> rechazada`, decidida por un
+// maestro/admin sobre una gestion que ya vive dentro de un cierre ABIERTO.
+//
+// QUE PROTEGE, y no es teorico: la correccion escribe su transicion por el choke point
+// (`appendCambioEstado`), que valida contra `TRANSICIONES` y es de FALLO CERRADO. Si alguien
+// retira esta arista «porque `entregada` es terminal», la unica via de sacar de un cierre un cobro
+// que nadie recaudo muere con `TransicionIlegalError` y la transaccion revierte entera — el mismo
+// agujero que obligo a corregir a mano la base de produccion el 2026-09-08.
+// ---------------------------------------------------------------------------------------------
+describe("398 — la correccion en sitio: `entregada` gana UNA salida, y ni una mas", () => {
+  it("398/R9: `entregada -> rechazada` es LEGAL (#69, la correccion del maestro/admin)", () => {
+    expect(() => assertTransicionValida("entregada", "rechazada")).not.toThrow();
+  });
+
+  it("las salidas de `entregada` son EXACTAMENTE dos, enumeradas enteras", () => {
+    // Censo CERRADO sobre el mapa real: una salida de mas aqui es una arista sin productor (el
+    // fallo de la 154); una de menos deja la correccion sin poder escribir su historial.
+    const salidas = TRANSICIONES.entregada.map((d) => `${d.to} (${d.via})`).sort();
+    expect(salidas).toEqual([
+      "en_reparto (deshacer_gestion)",
+      "rechazada (correccion_resultado_gestion)",
+    ]);
+  });
+
+  it("398: la INVERSA `rechazada -> entregada` sigue siendo ILEGAL (fuera de alcance)", () => {
+    // La 398 corrige UNA pareja. La vuelta atras reintroduciria el cobro, y su via es rechazar el
+    // cierre. Si alguien la abre sin productor, este caso lo dice por su nombre.
+    expect(() => assertTransicionValida("rechazada", "entregada")).toThrow(TransicionIlegalError);
+  });
+
+  it("398: `entregada` sigue siendo TERMINAL y el resto del catalogo sigue ilegal desde ahi", () => {
+    // Barrido completo, como el de `incidente`: solo las DOS salidas declaradas pasan.
+    const permitidos = new Set<OrderStatusValue>(["en_reparto", "rechazada"]);
+    for (const value of ORDER_STATUS_SEED) {
+      if (permitidos.has(value)) continue;
+      expect(
+        () => assertTransicionValida("entregada", value),
+        `salida no declarada aceptada: entregada -> ${value}`,
+      ).toThrow(TransicionIlegalError);
+    }
+    expect([...ESTADOS_TERMINALES]).toContain("entregada");
   });
 });
 
@@ -468,8 +514,11 @@ describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea
     // Feature 276 (2026-08-24): 62 -> 63 y 59 -> 60. Suma #68 (`sin_gestionar -> rechazada`, el
     // rechazo por agotamiento de intentos al aprobar el cierre) y NO retira ninguna. Es par NUEVO:
     // de `sin_gestionar` solo se salia a las dos bodegas.
-    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(63); // +2: 157; +3 -1: 239; +3: 235; +2: 237; +1: 240; +1: 276
-    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(60); // ... +1: 276 (par nuevo)
+    // Ficha 398 (2026-09-08): 63 -> 64 y 60 -> 61. Suma #69 (`entregada -> rechazada`, la
+    // correccion en sitio de una entrega mal declarada dentro de un cierre abierto) y NO retira
+    // ninguna. Es par NUEVO: de `entregada` solo se salia deshaciendo la gestion del dia.
+    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(64); // +2: 157; +3 -1: 239; +3: 235; +2: 237; +1: 240; +1: 276; +1: 398
+    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(61); // ... +1: 276 (par nuevo); +1: 398 (par nuevo)
   });
 });
 
@@ -667,10 +716,12 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
   // Feature 237 (2026-08-20): 59/57/2 -> 61/59/2 con #65/#66 (pares nuevos), sin bajas.
   // Feature 240 (2026-08-20): 61/59/2 -> 62/59/2 con #67, que REPITE el par de #21 (`devuelta ->
   // rechazada`): sube la arista y NO sube el par. Es el tercer duplicado historico del inventario.
-  it("los recuentos del inventario son 63 flujo / 60 pares / 2 creacion", () => {
+  // Ficha 398 (2026-09-08): 63/60/2 -> 64/61/2 con #69 (`entregada -> rechazada`, la correccion
+  // en sitio), que es un par NUEVO: de `entregada` solo se salia deshaciendo la gestion.
+  it("los recuentos del inventario son 64 flujo / 61 pares / 2 creacion", () => {
     expect(RECUENTO_INVENTARIO).toEqual({
-      aristasFlujo: 63, // feature 276 (2026-08-24): 62 -> 63, una alta y ninguna baja
-      paresUnicos: 60, // feature 276: la alta es un par NUEVO, asi que los pares suben con ella
+      aristasFlujo: 64, // ficha 398 (2026-09-08): 63 -> 64, una alta y ninguna baja
+      paresUnicos: 61, // ficha 398: la alta es un par NUEVO, asi que los pares suben con ella
       aristasCreacion: 2,
     });
   });

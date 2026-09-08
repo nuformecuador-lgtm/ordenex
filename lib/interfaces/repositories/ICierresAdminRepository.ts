@@ -204,6 +204,45 @@ export type ActualizarPagosGestionResult =
   | { status: "conflict" }
   | { status: "fuera_de_alcance" };
 
+/**
+ * FICHA 398 — entrada de la CORRECCION EN SITIO del resultado de una gestion.
+ *
+ * `nuevoResultado` NO viaja, y no es un olvido: esta ficha corrige UNA y solo una pareja
+ * (`entregada -> rechazada`). Aceptar el destino como dato abriria las demas por accidente.
+ *
+ * Los DOS `estatus*Id` los resuelve el SERVICIO contra el catalogo (`findEstatusIdByValue`) y
+ * bajan como dato, exactamente igual que `devolucionRechazadas` en `resolverCierre`: la capa de
+ * datos no lee catalogos, y asi la guardia del `WHERE` («la orden sigue en `entregada`») es un
+ * id concreto y no una sub-consulta.
+ */
+export interface CorregirResultadoGestionInput {
+  gestionId: string;
+  alcance: Alcance;
+  /** El porque del rechazo. Va a `gestion_orden.motivo`, JAMAS al historial de acciones (362/R5). */
+  motivo: string;
+  /** Actor de la correccion: queda como `actor_usuario_id` del historial de estados y de acciones. */
+  corregidoPor: string;
+  /** `order_status.id` de `entregada`: el estado de ORIGEN esperado, guardia del `WHERE`. */
+  estatusEntregadaId: string;
+  /** `order_status.id` de `rechazada`: el destino que le corresponde al resultado nuevo. */
+  estatusRechazadaId: string;
+}
+
+/**
+ * `updated` con los CUATRO totales del recaudo ya recalculados (los otros dos —pago al mensajero e
+ * ingreso de bodega— se escriben en la misma transaccion sumando los snapshots congelados, §2.2);
+ * `conflict` si el cierre dejo de estar abierto o la gestion dejo de ser una `entregada` vigente
+ * entre la lectura y la escritura; `fuera_de_alcance` si no existe o no es del alcance del actor
+ * —indistinguibles a proposito, como en `actualizarPagosGestion`—.
+ *
+ * ESPEJO EXACTO de `ActualizarPagosGestionResult`, para que el servicio trate los desenlaces con
+ * el mismo codigo.
+ */
+export type CorregirResultadoGestionResult =
+  | { status: "updated"; totales: CierreTotales }
+  | { status: "conflict" }
+  | { status: "fuera_de_alcance" };
+
 // Datos de la transicion guardada (aprobar/rechazar). `motivoRechazo` = null al
 // aprobar; el motivo (ya validado) al rechazar.
 //
@@ -472,6 +511,32 @@ export interface ICierresAdminRepository {
   actualizarPagosGestion(
     input: ActualizarPagosGestionInput,
   ): Promise<ActualizarPagosGestionResult>;
+  /**
+   * FICHA 398 — CORRIGE EN SITIO el resultado de UNA gestion de un cierre ABIERTO,
+   * `entregada -> rechazada`, y rehace los SEIS totales del snapshot. Todo en UNA transaccion.
+   *
+   * ⚠️ METODO NUEVO Y NO UNA RAMA DE `actualizarPagosGestion`, y NO es higiene: la guardia del
+   * censo del historial de acciones mide POR METODO. Metida ahi dentro, borrar el `appendAccion`
+   * nuevo dejaria la guardia VERDE, porque ese metodo ya llama a `appendAccion` por el tipo
+   * `cierre_dia_pagos_editados`. Medido dos veces en este repo.
+   *
+   * Los SEIS pasos, en este orden y con estas guardias:
+   *  1. **La gestion** (`resultado='rechazada'`, `motivo`, `monto_recibido=NULL`,
+   *     `metodo_pago=NULL`, `pago_mensajero='0.00'`, `ingreso_bodega_rechazo=<tarifa>`), con un
+   *     `updateMany` GUARDADO por `anulada_at IS NULL`, `resultado='entregada'`, estado del cierre
+   *     y alcance: es el anti-TOCTOU y el SELLO. `count !== 1` -> nada de lo de abajo ocurre.
+   *  2. **Las lineas de pago**: `deleteMany`. El cobro no existio, asi que su desglose tampoco.
+   *  3. **La orden** al estatus del rechazo, guardada por su estatus de ORIGEN.
+   *  4. **El historial de estados**, por el choke point, con la familia propia de la ficha.
+   *  5. **Los SEIS totales del cierre**: los cuatro del recaudo con `computeTotales` (la MISMA
+   *     funcion que los congelo al solicitar) y los dos por gestion SUMANDO LOS SNAPSHOTS
+   *     CONGELADOS —nunca re-derivando con la tarifa viva, que reescribiria el pago de las OTRAS
+   *     gestiones del cierre—.
+   *  6. **El rastro** (`cierre_dia_gestion_corregida`), en la MISMA tx.
+   */
+  corregirResultadoGestionEnCierre(
+    input: CorregirResultadoGestionInput,
+  ): Promise<CorregirResultadoGestionResult>;
   resolverCierre(input: ResolverCierreInput): Promise<ResolverCierreResult>;
   /**
    * Feature 111/R16 — VALVULA DE ESCAPE: destraba un `vencido` ABANDONADO transicionandolo

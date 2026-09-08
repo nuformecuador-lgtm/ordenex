@@ -380,7 +380,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("380/T3 (b) — el down recrea la lista PREV
     // convierte la comparacion en una cadena verificable —«el catalogo de hoy menos la 380 menos la
     // 381»— en vez de en algo que caduca en silencio. Cada una tiene ademas su propio archivo:
     //   · 381 — `cobro_tienda_registrado`, en `historial-accion-cobro-tienda-migration.test.ts`.
-    const POSTERIORES = ["cobro_tienda_registrado"];
+    const POSTERIORES = ["cobro_tienda_registrado", "cierre_dia_gestion_corregida"];
     const catalogoPrevio = HISTORIAL_ACCION_TIPOS.filter(
       (t) => t !== VALOR_NUEVO && !POSTERIORES.includes(t),
     );

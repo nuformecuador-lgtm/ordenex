@@ -139,7 +139,12 @@ describe("Feature 240 · el DOWN deja la base legible por el codigo anterior (R4
     // historica de la 240 no se toca ni una linea.
     // ⏳ 2026-08-24 (feature 276) — tercera vez, mismo remedio: `rechazo_tope_intentos` se suma
     // a POSTERIORES y el `down.sql` de la 240 sigue intacto.
-    const POSTERIORES = ["habilitacion_api", "rechazo_tope_intentos"]; // 266 (2026-08-23) · 276 (2026-08-24)
+    const POSTERIORES = [
+      "habilitacion_api",
+      "rechazo_tope_intentos",
+      // ficha 398 (2026-09-08): la correccion en sitio del resultado de una gestion
+      "correccion_resultado_gestion",
+    ]; // 266 (2026-08-23) · 276 (2026-08-24) · 398 (2026-09-08)
     expect(new Set(valores)).toEqual(
       new Set(
         (ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).filter(
