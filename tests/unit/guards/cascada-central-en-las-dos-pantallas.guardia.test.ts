@@ -191,10 +191,10 @@ describe("393 — la cascada a la central llega a las DOS pantallas (R38)", () =
       expect(valor, `\`cierre\` en ${archivo} no se pasa como expresión`).toBeTruthy();
       expect(
         (valor ?? "").trim(),
-        `${archivo} compone el \`cierre\` a mano en vez de pasar la fila del servidor. El " +
-          "compilador exigiría \`paraLaCentral\` campo a campo, y quien lo escriba pondrá un " +
+        `${archivo} compone el \`cierre\` a mano en vez de pasar la fila del servidor. El ` +
+          "compilador exigiría `paraLaCentral` campo a campo, y quien lo escriba pondrá un " +
           "«0.00» para que compile: un cero inventado en una pantalla de dinero es peor que no " +
-          "tener el número.`,
+          "tener el número.",
       ).toMatch(/^[A-Za-z_$][\w$]*(?:\.[\w$]+)*$/);
     },
   );
