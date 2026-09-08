@@ -456,12 +456,21 @@ que es lo que el mensaje dice ahora. Cuando el texto reparado **no se distingue*
 mensaje **deja de repetirlo** —repetirlo *era* el defecto— y da la única instrucción que funciona:
 
 > `«destinatario» lleva un carácter que la etiqueta no puede imprimir: «⁨◌̃⁩» (U+0303). Aquí no hay
-> nada que se vea mal: esa letra está escrita en dos piezas —la letra por un lado y su acento por
-> otro—, y así no se puede imprimir. Bórrala y vuelve a teclearla; copiar y pegar el mismo texto la
-> trae otra vez partida.`
+> nada que se vea mal: ese carácter se ve igual que el de siempre pero está escrito de otra forma
+> —lo normal es que la letra y su acento vayan por separado—, y así no se puede imprimir. Bórralo
+> y vuelve a teclearlo; copiar y pegar el mismo texto lo trae otra vez igual.`
 
 Cuando **sí** se distingue (`𝕠rfirio` → `orfirio`), el mensaje es **byte a byte el de antes**, con
 su sugerencia: ese es el caso para el que R18 se escribió y no se toca.
+
+**Por qué «está escrito de otra forma» y no «está escrito en dos piezas»**, que fue la primera
+redacción y se descartó: «dos piezas» es cierto para la familia que importa —letra + acento, que es
+el 99 % de lo que va a pasar— pero **falso** para los singletons canónicos, donde el reparado no es
+una letra descompuesta sino **otro code point equivalente** (`U+212B` ANGSTROM SIGN → `Å`, que el
+`NFC` previo compone igual y también cae en esta rama). Un mensaje que explica el problema con algo
+que en ese caso no es verdad es la misma clase de fallo que la ficha persigue, así que la frase
+afirma lo que siempre es cierto y deja «la letra y su acento por separado» como **lo normal**, no
+como la definición.
 
 **El predicado no es una heurística.** `seVenIgual(a, b)` es `a.normalize("NFD") === b.normalize("NFD")`:
 dos cadenas con el mismo NFD son **canónicamente equivalentes**, o sea la misma secuencia de

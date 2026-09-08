@@ -109,7 +109,7 @@ export function mensajeCorreccionSugerencia(
 ): string {
   const diagnostico = `«${campo}» lleva un carácter que la etiqueta no puede imprimir: ${fraseCaracterNoImprimible(caracter, codePoint)}.`;
   if (seVenIgual(original, sugerencia)) {
-    return `${diagnostico} Aquí no hay nada que se vea mal: esa letra está escrita en dos piezas —la letra por un lado y su acento por otro—, y así no se puede imprimir. Bórrala y vuelve a teclearla; copiar y pegar el mismo texto la trae otra vez partida.`;
+    return `${diagnostico} Aquí no hay nada que se vea mal: ese carácter se ve igual que el de siempre pero está escrito de otra forma —lo normal es que la letra y su acento vayan por separado—, y así no se puede imprimir. Bórralo y vuelve a teclearlo; copiar y pegar el mismo texto lo trae otra vez igual.`;
   }
   return `${diagnostico} Escríbelo así: «${sugerencia}».`;
 }

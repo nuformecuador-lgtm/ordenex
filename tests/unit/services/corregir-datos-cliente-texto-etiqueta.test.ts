@@ -237,8 +237,8 @@ describe("383 — lo que NO cambia sigue funcionando igual", () => {
     // la unica instruccion que sirve.
     const motivo = r.fieldErrors.destinatario?.[0] ?? "";
     expect(motivo).toContain("U+0303");
-    expect(motivo).toContain("está escrita en dos piezas");
-    expect(motivo).toContain("Bórrala y vuelve a teclearla");
+    expect(motivo).toContain("está escrito de otra forma");
+    expect(motivo).toContain("Bórralo y vuelve a teclearlo");
     expect(motivo).not.toContain("Escríbelo así");
     // Y lo que NO puede volver a aparecer: el texto compuesto enseñado como si fuera otro.
     expect(motivo).not.toContain(String.fromCodePoint(0x004e, 0x0075, 0x00f1, 0x0065, 0x007a));
