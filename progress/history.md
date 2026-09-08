@@ -4626,3 +4626,28 @@ Sin migracion.
   comentario que decia «para que nadie lo reintente» esta fuera.
 - **Sin re-revision tras el arreglo:** los bloqueantes se cerraron con evidencia medida, pero el
   reviewer no volvio a pasar. Queda dicho.
+
+
+## 393 — el cierre de bodega no decia cuanto entrega la satelite a la central (2026-09-08)
+
+Cerrada. Tres PR: #737 (servidor), #739 (pantalla), #742 (los bloqueantes de la revision).
+Sin migracion.
+
+- **Por que existia:** no era claridad, era un numero que hace falta para operar. Las satelites
+  descuentan de lo que entregan a la central el pago a los mensajeros, y esa resta no se veia en
+  ningun cierre, ni en la central ni en las satelite.
+- **Dos cascadas separadas y rotuladas**, elegidas por el humano: «asi la gente sabe que plata es
+  para quien». Una dice de quien es el dinero; la otra, que efectivo sale.
+- **El negativo es estructural**, no un error: el pago al mensajero es fijo por entrega e
+  independiente de lo recaudado, asi que una jornada prepagada da recaudado menor que el pago.
+  Ya habia ocurrido en produccion en 1 de 14 cierres. Se pinta con su signo y con su nota.
+- **La linea puente es obligatoria:** el flete por rechazo se factura pero NO sale de lo
+  recaudado, asi que sin ella la pantalla ensenaria una resta que no da. El leader le habia
+  ensenado al humano la formula rota; el spec la corrigio.
+- **El reviewer la rechazo con cuatro mutaciones supervivientes, y acerto en las cuatro.** La
+  peor: la guardia de vocabulario recortaba dos trozos del archivo de la tarjeta, y la funcion
+  que formatea cada linea de dinero caia fuera de los dos.
+- **Un punto del informe era falso**, y se desmintio midiendo: «Central debe» y «Para la central»
+  no conviven -- viven en pestanas mutuamente excluyentes, y no son el mismo numero.
+- **Falta medida:** no se pudo ver el caso de linea puente distinta de cero, porque la base local
+  no tiene gestiones entregadas. Dicho como falta, no como aprobado.
