@@ -254,11 +254,25 @@ export class UsuarioService implements IUsuarioService {
 
     const data = await this.buildUpdateData(input, actual); // R16: solo campos editables
 
-    // Feature 24/R27/R28: si se edita la zona, se valida y se aplica la invariante
-    // por rol (con el rol resultante). Si no viene `zonaId`, no se toca.
-    if (input.zonaId !== undefined) {
-      const rolIdResultante = input.rolId ?? actual.rolId;
-      const zona = await this.resolverZona(rolIdResultante, input.zonaId);
+    // Feature 24/R27/R28: si se edita la zona, se valida y se aplica la invariante por rol
+    // (con el rol resultante).
+    //
+    // FICHA 379/R1 — LA ZONA TAMBIEN SE RECALCULA CUANDO CAMBIA EL ROL, no solo cuando se
+    // envia el campo. Hasta hoy la condicion era `input.zonaId !== undefined` a secas, y por
+    // ahi se colaba el defecto: el formulario OMITE `zonaId` cuando el rol nuevo no lleva zona
+    // (`UsuarioForm`, spread condicional), asi que un adminSatelite degradado a admin CONSERVABA
+    // su `zona_id` con un rol que ya no puede consolidar nada de esa bodega.
+    //
+    // La zona y el vehiculo son campos HERMANOS: los dos tienen la misma invariante por rol y
+    // `crear` (:98) ya la aplicaba a la zona. Tener dos reglas para dos campos iguales —una que
+    // mira el rol y otra que no— ERA el defecto; esta rama adopta la forma exacta de la del
+    // vehiculo, doce lineas mas abajo en este mismo metodo.
+    //
+    // ⚠️ Esto NO bloquea nada (R14): limpia dato sucio. Ademas CREA rastro donde hoy no habia
+    // ninguno — `UserRepository.update` escribe `usuario_zona_cambiada` en cuanto `data.zonaId`
+    // difiere del previo, y hasta hoy llegaba `undefined` y no se escribia nada (R5).
+    if (input.zonaId !== undefined || input.rolId !== undefined) {
+      const zona = await this.resolverZonaDeEdicion(input, actual);
       if (!zona.ok) {
         return { status: "validation_error", fieldErrors: { zonaId: [zonaErrorMessage(zona.reason)] } };
       }
@@ -438,6 +452,35 @@ export class UsuarioService implements IUsuarioService {
     const roles = await this.repo.listRoles();
     const rolValue = roles.find((r) => r.id === rolId)?.value;
     return rolValue === "adminTienda";
+  }
+
+  /**
+   * FICHA 379 — LA ZONA QUE LE QUEDA A UN USUARIO TRAS UNA EDICION, calculada en UN solo sitio.
+   *
+   * Dos caminos preguntan exactamente esto y tienen que responder lo mismo:
+   *   - `actualizar`, para decidir que `zonaId` escribe (R1/R2/R3);
+   *   - `consultarImpactoCambio`, para decidir si el cambio deja a una zona sin Admin satelite
+   *     (R9/R10) — y ahi la pregunta es literalmente «¿sigue siendo adminSatelite de Z?».
+   *
+   * ⚠️ NO SE DUPLICA, Y EL MOTIVO ES ESTA MISMA FICHA. El defecto que la abre es exactamente
+   * dos copias de una regla que se separaron: la zona miraba solo `input.zonaId` y el vehiculo
+   * miraba ademas `input.rolId`. Una segunda copia de esto se separaria igual, y entonces el
+   * aviso hablaria de una zona distinta de la que la escritura acaba dejando.
+   *
+   * La regla, en dos lineas: el rol resultante es el enviado o el actual; la zona DESEADA es la
+   * enviada si viene el campo, y si no la que el usuario ya tiene (conservarla, R2). Con ese par
+   * decide `resolverZona`, que es la MISMA funcion que usa el alta (R4).
+   */
+  private async resolverZonaDeEdicion(
+    input: { rolId?: string; zonaId?: string | null },
+    actual: Pick<UsuarioPublico, "rolId" | "zonaId">,
+  ): Promise<
+    | { ok: true; zonaId: string | null }
+    | { ok: false; reason: "required" | "not_found" }
+  > {
+    const rolIdResultante = input.rolId ?? actual.rolId;
+    const deseado = input.zonaId !== undefined ? input.zonaId : actual.zonaId;
+    return this.resolverZona(rolIdResultante, deseado);
   }
 
   // Feature 24/R27/R28: resuelve el `zonaId` efectivo. Solo mensajero/adminSatelite

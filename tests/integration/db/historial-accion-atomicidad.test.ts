@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient, RolValue } from "@prisma/client";
 
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { TarifaRepository } from "@/lib/repositories/TarifaRepository";
 import { UserRepository } from "@/lib/repositories/UserRepository";
+// FICHA 379/T3: los casos de la zona van por el SERVICIO (es quien calcula el `zonaId: null`
+// que dispara el registro), asi que hace falta el servicio real y su repo de zonas.
+import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
+import { UsuarioService } from "@/lib/services/UsuarioService";
+import type { Actor } from "@/lib/interfaces/services/IUsuarioService";
 import {
   HAY_BASE_DE_DATOS,
   crearPrismaDeTest,
@@ -442,7 +447,14 @@ describeSiHayBase("362/T8.1 — la accion y su registro son atomicos (Postgres r
 
   describe("familia 3/3 · cambia quien puede hacer que (`usuario_estado_cambiado`)", () => {
     /** Un usuario desechable, clonado de los catalogos que ya existen. */
-    async function sembrarUsuario(tx: TxDeTest, marca: string): Promise<string> {
+    async function sembrarUsuario(
+      tx: TxDeTest,
+      marca: string,
+      // FICHA 379: rol y zona explicitos para los casos que necesitan un `adminSatelite` CON
+      // zona. Sin overrides el comportamiento es el de antes (clona la plantilla), asi que los
+      // ocho usos previos no cambian.
+      overrides: { rolId?: string; zonaId?: string | null } = {},
+    ): Promise<string> {
       const plantilla = await tx.usuario.findFirstOrThrow({
         select: { tipoIdentificacionId: true, rolId: true },
       });
@@ -456,7 +468,8 @@ describeSiHayBase("362/T8.1 — la accion y su registro son atomicos (Postgres r
           cedula: `${SUFIJO}-${marca}`,
           estado: "activo",
           tipoIdentificacionId: plantilla.tipoIdentificacionId,
-          rolId: plantilla.rolId,
+          rolId: overrides.rolId ?? plantilla.rolId,
+          ...(overrides.zonaId !== undefined ? { zonaId: overrides.zonaId } : {}),
         },
         select: { id: true },
       });
@@ -623,6 +636,157 @@ describeSiHayBase("362/T8.1 — la accion y su registro son atomicos (Postgres r
       expect(r.telefono).toBe("88887777");
       // … y NO dejo rastro.
       expect(r.registro).toEqual([]);
+    });
+
+    // ═════════════════════════════════════════════════════════════════════════════════════════
+    // FICHA 379 / T3 (R5/R6) — **EL ARREGLO NO BORRA LA PISTA: LA CREA**, medido en Postgres.
+    // ═════════════════════════════════════════════════════════════════════════════════════════
+    //
+    // Estos casos van por el SERVICIO, no por el repositorio, y esa es toda su razon de ser: el
+    // `zonaId: null` que hace falta para que `UserRepository.update` escriba
+    // `usuario_zona_cambiada` lo calcula `UsuarioService.actualizar`. Llamando al repositorio a
+    // pelo habria que pasarle el `null` a mano, y entonces el test afirmaria sobre lo que el
+    // propio test escribio, no sobre lo que la aplicacion decide.
+    //
+    // Lo que estaba roto antes de la ficha: al cambiar el rol sin enviar `zonaId`, a `update` le
+    // llegaba `undefined` -> `data.zonaId !== undefined` es falso -> CERO filas, y la zona vieja
+    // se quedaba pegada a un rol que ya no puede consolidar. O sea que no habia ninguna pista que
+    // perder: no habia ninguna.
+    describe("FICHA 379 · la zona sigue al rol, y el rastro llega a la base (R5/R6)", () => {
+      const MAESTRO: Actor = { usuarioId: "", rol: "maestro" };
+
+      /** El servicio real cableado sobre la tx del test (con savepoint para el `$transaction`). */
+      function servicioDeTest(tx: TxDeTest): UsuarioService {
+        const cliente = clienteConSavepoint(tx);
+        return new UsuarioService(new UserRepository(cliente), new ZonaRepository(cliente));
+      }
+
+      async function rolPorValor(tx: TxDeTest, value: RolValue): Promise<string> {
+        const fila = await tx.rol.findFirstOrThrow({ where: { value }, select: { id: true } });
+        return fila.id;
+      }
+
+      it("⭑ R5: cambiar el rol de un adminSatelite CON zona, SIN enviar zonaId, registra la zona anterior en el MISMO lote", async () => {
+        const r = await enTransaccionRevertida(prisma, async (tx) => {
+          await serializarEscriturasReales(tx);
+          const [rolSat, rolAdmin] = await Promise.all([
+            rolPorValor(tx, "adminSatelite"),
+            rolPorValor(tx, "admin"),
+          ]);
+          const zona = await tx.zona.findUniqueOrThrow({
+            where: { id: FKS!.zonaId },
+            select: { nombre: true },
+          });
+          const usuarioId = await sembrarUsuario(tx, "379-r5", {
+            rolId: rolSat,
+            zonaId: FKS!.zonaId,
+          });
+
+          // La peticion NO trae `zonaId`: es literalmente lo que manda el formulario cuando el
+          // rol nuevo no lleva zona.
+          const salida = await servicioDeTest(tx).actualizar(
+            usuarioId,
+            { rolId: rolAdmin },
+            { ...MAESTRO, usuarioId: FKS!.tiendaId },
+          );
+
+          const fila = await tx.usuario.findUniqueOrThrow({
+            where: { id: usuarioId },
+            select: { zonaId: true },
+          });
+          return {
+            salida: salida.status,
+            zonaIdFinal: fila.zonaId,
+            zonaNombre: zona.nombre,
+            registro: await tx.historialAccion.findMany({
+              where: { entidadId: usuarioId },
+              select: { accion: true, loteId: true, valorAnterior: true, valorNuevo: true },
+              orderBy: { accion: "asc" },
+            }),
+          };
+        });
+
+        expect(r.salida).toBe("ok");
+        // (1) Control positivo: la zona se solto de verdad en la fila viva.
+        expect(r.zonaIdFinal, "el rol cambio pero la zona se quedo pegada").toBeNull();
+        // (2) Y quedan DOS filas: el rol y la zona.
+        expect(r.registro.map((f) => f.accion)).toEqual([
+          "usuario_rol_cambiado",
+          "usuario_zona_cambiada",
+        ]);
+        // (3) La de la zona dice de CUAL se salio. Es la pista que antes no existia.
+        const zonaFila = r.registro.find((f) => f.accion === "usuario_zona_cambiada");
+        expect(zonaFila?.valorAnterior).toBe(r.zonaNombre);
+        expect(zonaFila?.valorNuevo).toBeNull();
+        // (4) UN acto de dos efectos, no dos actos: mismo `lote_id`.
+        expect(
+          new Set(r.registro.map((f) => f.loteId)).size,
+          "el cambio de rol y el de zona salieron en lotes distintos: se leen como dos actos",
+        ).toBe(1);
+      });
+
+      it("R6: editar solo el telefono de un usuario CON zona no escribe ninguna fila de zona", async () => {
+        const r = await enTransaccionRevertida(prisma, async (tx) => {
+          await serializarEscriturasReales(tx);
+          const rolSat = await rolPorValor(tx, "adminSatelite");
+          const usuarioId = await sembrarUsuario(tx, "379-r6", {
+            rolId: rolSat,
+            zonaId: FKS!.zonaId,
+          });
+
+          const salida = await servicioDeTest(tx).actualizar(
+            usuarioId,
+            { telefono: "88886666" },
+            { ...MAESTRO, usuarioId: FKS!.tiendaId },
+          );
+
+          const fila = await tx.usuario.findUniqueOrThrow({
+            where: { id: usuarioId },
+            select: { telefono: true, zonaId: true },
+          });
+          return {
+            salida: salida.status,
+            telefono: fila.telefono,
+            zonaId: fila.zonaId,
+            registro: await registroDe(tx, [usuarioId]),
+          };
+        });
+
+        expect(r.salida).toBe("ok");
+        // Control positivo: la edicion ocurrio …
+        expect(r.telefono).toBe("88886666");
+        // … la zona sigue donde estaba (esta ficha no la toca si nadie toca el rol) …
+        expect(r.zonaId).toBe(FKS!.zonaId);
+        // … y no hay ni una fila de registro.
+        expect(r.registro, "una edicion de telefono escribio registro de zona").toEqual([]);
+      });
+
+      it("R6: cambiar el rol de un usuario que YA estaba sin zona no escribe fila de zona (sin ruido)", async () => {
+        // La otra mitad del «sin ruido»: forzar `data.zonaId = null` sobre quien ya lo tenia en
+        // null no puede inventar una fila. `null !== null` es falso, y el registro se queda con
+        // la unica fila que corresponde: la del rol.
+        const r = await enTransaccionRevertida(prisma, async (tx) => {
+          await serializarEscriturasReales(tx);
+          const [rolAdmin, rolTienda] = await Promise.all([
+            rolPorValor(tx, "admin"),
+            rolPorValor(tx, "adminTienda"),
+          ]);
+          const usuarioId = await sembrarUsuario(tx, "379-r6b", {
+            rolId: rolAdmin,
+            zonaId: null,
+          });
+
+          const salida = await servicioDeTest(tx).actualizar(
+            usuarioId,
+            { rolId: rolTienda },
+            { ...MAESTRO, usuarioId: FKS!.tiendaId },
+          );
+          return { salida: salida.status, registro: await registroDe(tx, [usuarioId]) };
+        });
+
+        expect(r.salida).toBe("ok");
+        expect(r.registro.map((f) => f.accion)).toEqual(["usuario_rol_cambiado"]);
+      });
     });
   });
 });

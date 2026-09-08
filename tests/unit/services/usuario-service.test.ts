@@ -167,11 +167,23 @@ describe("actualizar (R16/R17/R18/R19)", () => {
     // adminTienda en el catalogo por defecto -> fulfillment false, R4a).
     // feature 21: el cambio de rol tambien recalcula el vehiculo (rol-2 no es
     // mensajero -> null, aunque no se haya enviado).
+    // FICHA 379/R1: y por el mismo motivo aparece ahora `zonaId: null`. `rol-2` no esta en el
+    // catalogo de roles del doble, asi que no es de los que llevan zona -> se fuerza null,
+    // exactamente igual que el vehiculo y exactamente igual que hace el alta. Hasta esta ficha
+    // la zona era el UNICO de los tres campos con invariante por rol que NO se recalculaba al
+    // cambiar el rol, y por ahi se quedaba pegada la zona de un adminSatelite degradado.
+    //
+    // ⚠️ ESTE LITERAL ES EL CONTRATO de «que campos escribe una edicion», y por eso se compara
+    // con `toEqual` contra una lista escrita a mano. NO se relaja a `toMatchObject` ni a
+    // `expect.objectContaining`, y NO se deriva de `data`: una asercion comparada contra su
+    // propia fuente esta verde para siempre y dejaria de ver el siguiente campo que aparezca
+    // —o desaparezca— sin que nadie lo decida.
     expect(data).toEqual({
       nombre: "Nuevo",
       rolId: "rol-2",
       fulfillment: false,
       vehiculoId: null,
+      zonaId: null,
     });
   });
 
@@ -258,9 +270,12 @@ describe("fulfillment — invariante por rol (feature 27/R4/R4a/R8/R9/R12)", () 
       findById: vi.fn().mockResolvedValue(usuario({ rolId: "rol-tienda", fulfillment: true })),
     });
     // feature 21: pasar a `mensajero` exige vehiculo, igual que zona.
+    // FICHA 379/R3: y desde esta ficha la zona lo exige DE VERDAD tambien en la edicion, no solo
+    // en el alta — antes la rama de la zona ni se ejecutaba si el campo no venia—. Se pasa por
+    // el mismo motivo que el vehiculo: para aislar la asercion al invariante del `fulfillment`.
     await service.actualizar(
       "usr-1",
-      { rolId: "rol-msg", vehiculoId: "v1" },
+      { rolId: "rol-msg", vehiculoId: "v1", zonaId: "z1" },
       MAESTRO,
     );
     expect(updateArg()).toMatchObject({ rolId: "rol-msg", fulfillment: false });
