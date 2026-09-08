@@ -1055,6 +1055,14 @@ const CENSO: readonly { ruta: string; identidad: string }[] = [
     ruta: "app/(app)/cierres-admin/_components/CierresBodegaAdminModule.tsx",
     identidad: "las dos cascadas: para la tienda, neto de Ordenex y para la central",
   },
+  // FICHA 395 — la superficie que estrena el detalle del cierre de MENSAJERO. Entra en el censo
+  // porque pinta dinero derivado y porque sus identidades son justo las que el humano no podía
+  // hacer a ojo; las lee del DOM `tests/components/CierreMensajeroDetalleCascadas.test.tsx`.
+  {
+    ruta: "app/(app)/cierres-admin/_components/CascadasCierreMensajero.tsx",
+    identidad:
+      "recaudado − facturado = gana la tienda; puente + flete por rechazo = facturado; recaudado − puente = pago a tienda",
+  },
 ];
 
 /** Un uso del formateador compartido, por cualquiera de sus nombres. */
@@ -1089,19 +1097,20 @@ function importadosPor(rutaRelativa: string): string[] {
 }
 
 describe("ficha 359 · D — el censo de las pantallas de dinero", () => {
-  it("las quince existen, no se repiten y cada una declara su identidad", () => {
+  it("las dieciséis existen, no se repiten y cada una declara su identidad", () => {
     // Trece hasta la ficha 393, que añade las dos superficies de las cascadas del
-    // cierre de bodega. El número es una FOTO a propósito: una pantalla de dinero
-    // nueva tiene que pasar por aquí, no colarse en silencio.
-    expect(CENSO.length).toBe(15);
-    expect(new Set(CENSO.map((c) => c.ruta)).size).toBe(15);
+    // cierre de bodega; dieciséis desde la 395, que añade la del cierre de MENSAJERO.
+    // El número es una FOTO a propósito: una pantalla de dinero nueva tiene que pasar
+    // por aquí, no colarse en silencio.
+    expect(CENSO.length).toBe(16);
+    expect(new Set(CENSO.map((c) => c.ruta)).size).toBe(16);
     for (const { ruta, identidad } of CENSO) {
       expect(existsSync(path.join(RAIZ, ruta)), `${ruta} no existe`).toBe(true);
       expect(identidad.length, `${ruta} está censada sin identidad`).toBeGreaterThan(15);
     }
   });
 
-  it("las quince pintan su dinero con el formateador compartido, no con uno propio", () => {
+  it("las dieciséis pintan su dinero con el formateador compartido, no con uno propio", () => {
     const sinFormateador: string[] = [];
     for (const { ruta } of CENSO) {
       const propio = USA_EL_FORMATEADOR.test(readFileSync(path.join(RAIZ, ruta), "utf8"));
