@@ -4708,3 +4708,23 @@ Cerrada. Dos PR: #745 (servidor) y #747 (aviso). Sin migracion, sin backfill.
   zod en ingles en el aviso del caso mas frecuente, el nombre en blanco.
 - **Sigue abierta la A2 de la 383** --si la correccion manual debe reparar o rechazar--, y esta
   ficha eligio rechazar por coherencia con el formulario mas cercano, no por firma.
+
+
+## 380 — el guardado de zona reescribia el pago al mensajero sin rastro (2026-09-08)
+
+Cerrada. PR #749. **Lleva migracion**: un valor de enum, aditivo.
+
+- **El agujero:** `ZonaRepository.update` reemplazaba las filas de `tarifa_zona_mensajero` en
+  cada guardado sin una sola linea de historial. Cero rastro de un cambio que decide lo que
+  cobra una persona.
+- **Tres firmas del humano, dos contra la recomendacion del leader.** La fila NO lleva importes
+  (Q2) y solo se audita la edicion (Q3). La consecuencia de Q2 esta escrita donde se ve: el
+  historial nunca podra reconstruir de cuanto a cuanto, porque el guardado destruye las filas
+  viejas.
+- **Q3 tenia mejor precedente que el consejo del leader:** el catalogo ya es asimetrico a
+  proposito -- `zona_borrada` sin `zona_creada`, `vehiculo_borrado` sin `vehiculo_creado`.
+- **La trampa del down.sql, atajada midiendo:** la lista salio de consultar el catalogo real, no
+  de razonarlo, y el aviso vive dentro del archivo con un test que comprueba que sigue ahi.
+- **Hallazgo mayor:** la guardia estatica del historial NO caza que esta escritura desaparezca.
+  Mide por metodo, y `update` conserva las otras dos llamadas. Quien protege el requisito aqui
+  es Postgres, no el censo.
