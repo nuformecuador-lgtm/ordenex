@@ -154,4 +154,70 @@ describe("WHERE de los filtros de cierres del dia", () => {
       { solicitadoAt: { lt: inicioDelDiaSiguienteCREnUtc("2026-08-16") } },
     ]);
   });
+
+  // ── FICHA 386 (2026-09-07) — el recorte por ESTADO ──────────────────────────────────────────
+  //
+  // La propiedad que lo define, y la unica que puede romperse en silencio: el estado del FILTRO
+  // no sustituye al estado de la LISTA, se le suma. Escrito como clave hermana del `estado` que
+  // ya lleva `colaWhere`/`historicoWhere`, la ultima gana y pedir `aprobado` en pendientes
+  // devolveria aprobados — con toda la suite de servicios en verde, porque sus dobles no ven el
+  // objeto que Prisma recibe. Estos cuatro casos miran ESE objeto; las filas que salen se miden
+  // aparte, contra Postgres, en `tests/integration/db/cierres-filtro-estado-sql-real.test.ts`.
+
+  it("(386) en la COLA, el estado pedido se SUMA al de la lista: los dos criterios viajan", async () => {
+    const d = delegado();
+    await repo(d).findColaPaginada(ALCANCE_MAESTRO, RANGO, { estados: ["vencido"] });
+
+    const where = whereDe(d);
+    // El corte de la lista, intacto y donde estaba: sigue siendo `in` de la cola.
+    expect(where.estado, "el filtro pisó el corte cola/histórico").toEqual({
+      in: [...ESTADOS_COLA_CIERRE_DIA],
+    });
+    // Y el recorte, DENTRO del `AND` — que es lo que hace que se exijan A LA VEZ.
+    expect(where.AND).toEqual([{ estado: { in: ["vencido"] } }]);
+    // El conteo cuenta el MISMO conjunto que la pagina muestra.
+    expect(d.count.mock.calls[0]![0]!.where).toEqual(where);
+  });
+
+  it("(386) en el HISTORICO, idem: el `notIn` de la lista sobrevive junto al `in` del filtro", async () => {
+    const d = delegado();
+    await repo(d).findHistoricoPaginado(ALCANCE_SATELITE_A, RANGO, { estados: ["rechazado"] });
+
+    const where = whereDe(d);
+    expect(where.estado).toEqual({ notIn: [...ESTADOS_COLA_CIERRE_DIA] });
+    expect(where.AND).toEqual([{ estado: { in: ["rechazado"] } }]);
+    // Y el alcance tampoco se movio: filtrar por estado no reabre la zona.
+    expect(where.destinoZonaId).toBe(ZONA_A);
+  });
+
+  it("(386) pedir un estado de la OTRA lista deja el `where` contradictorio, que es lo correcto", async () => {
+    // `estado NOT IN (solicitado, vencido)` Y `estado IN (solicitado)`: ninguna fila puede
+    // cumplir las dos, asi que el historico devuelve VACIO. Lo que NO puede pasar es que el
+    // filtro reemplace el corte y saque de pendientes los cierres ya resueltos.
+    const d = delegado();
+    await repo(d).findHistoricoCompleto(ALCANCE_MAESTRO, { estados: ["solicitado"] });
+
+    const where = whereDe(d);
+    expect(where.estado, "el filtro sustituyó al corte de la lista en vez de recortarlo").toEqual({
+      notIn: [...ESTADOS_COLA_CIERRE_DIA],
+    });
+    expect(where.AND).toEqual([{ estado: { in: ["solicitado"] } }]);
+  });
+
+  it("(386) el estado convive con los otros tres recortes: cuatro condiciones, todas exigidas", async () => {
+    const d = delegado();
+    await repo(d).findColaCompleta(ALCANCE_MAESTRO, {
+      desde: "2026-08-01",
+      destinoZonaIds: [ZONA_A, ZONA_B],
+      mensajeroIds: [MENSAJERO],
+      estados: ["solicitado", "vencido"],
+    });
+
+    expect(whereDe(d).AND).toEqual([
+      { solicitadoAt: { gte: inicioDelDiaCREnUtc("2026-08-01") } },
+      { destinoZonaId: { in: [ZONA_A, ZONA_B] } },
+      { mensajeroId: { in: [MENSAJERO] } },
+      { estado: { in: ["solicitado", "vencido"] } },
+    ]);
+  });
 });

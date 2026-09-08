@@ -1,6 +1,6 @@
 // Pedido humano del 2026-08-16 — FILTROS de los listados de cierres del día del admin
-// (fecha, bodega destino, mensajero). Módulo del BORDE: solo zod y utilidades de fecha; sin
-// Prisma, sin servicios, sin React.
+// (fecha, bodega destino, mensajero), más el ESTADO desde la ficha 386 (2026-09-07). Módulo del
+// BORDE: solo zod, tipos y utilidades de fecha; sin Prisma, sin servicios, sin React.
 //
 // LA DISTINCIÓN QUE SOSTIENE TODO ESTE ARCHIVO, y que no se puede perder de vista al leerlo:
 // **un filtro NO es un alcance**. El alcance —qué cierres puede ver este actor— lo resuelve el
@@ -13,7 +13,8 @@
 // comentario nombraba a `destinoZonaId` como LA clave peligrosa —«el alcance de esta pantalla
 // es rol + zona DESTINO, así que una clave de alcance que el servicio llegara a leer algún día
 // abriría el dinero de la bodega vecina»—. Ese `.strict()` sigue vivo: lo que cambia es que
-// ahora hay una lista blanca EXPLÍCITA de cuatro claves de filtro, y `destinoZonaIds` está en
+// ahora hay una lista blanca EXPLÍCITA de claves de filtro (cuatro desde el 2026-08-16, CINCO
+// desde la ficha 386), y `destinoZonaIds` está en
 // ella **como recorte y en plural**, no como el escalar de alcance que aquel comentario temía.
 // Un `adminSatelite` que pida la zona del vecino no ve la zona del vecino: ve VACÍO, porque su
 // alcance ya lo había acotado a la suya y el filtro solo puede quitar filas, nunca añadirlas.
@@ -21,6 +22,7 @@
 
 import { z } from "zod";
 
+import type { CierreEstado } from "@/lib/types/cierre";
 import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 
 /** Tope de ids por lista. Un filtro es un recorte, no un canal para mandar un dataset. */
@@ -70,11 +72,56 @@ const MENSAJE_RANGO = {
 };
 
 /**
+ * FICHA 386 (pedido humano del 2026-09-07, ACOTADO POR ÉL a «solo el estado») — los valores que
+ * el filtro de ESTADO acepta: los CUATRO del cierre del día, ni uno más.
+ *
+ * **Por qué los cuatro y no los dos de cada lista.** Este bloque es UNO solo y lo comparten los
+ * cuatro puntos de entrada (las dos páginas y sus dos archivos), como exige la afirmación (c) de
+ * `filtros-cierres-alcance.guardia.test.ts`; partirlo en dos listas blancas obligaría a partir
+ * también el bloque, y con él los cuatro schemas. Pedir un estado que no vive en esa lista NO es
+ * un error: es la INTERSECCIÓN, y da VACÍO — exactamente lo mismo que ya hace `destinoZonaIds`
+ * con la zona del vecino. El repositorio compone este recorte con `AND` junto al `estado` de la
+ * lista (`in` en la cola, `notIn` en el histórico), así que pedir `aprobado` dentro de
+ * pendientes no puede devolver aprobados.
+ *
+ * **Por qué se escriben aquí y no se importa `CIERRE_ESTADO_SEED`.** Este módulo es del BORDE y
+ * lo importa un componente `"use client"` (`FiltrosCierresBarra.tsx`); `lib/types/cierre.ts`
+ * arrastra `cierreConfig`, que lee `process.env` con clave dinámica, y hoy TODAS las importaciones
+ * de ese módulo desde `app/` son `import type` (o sea: se borran al compilar). Traer el seed como
+ * VALOR metería esa lectura en el bundle del navegador para ahorrar cuatro literales. El
+ * `satisfies` de abajo impide que aquí entre un estado que el enum no tenga, y la guardia compara
+ * esta lista contra `CIERRE_ESTADO_SEED` como CONJUNTO: si el enum gana un estado, se pone roja y
+ * alguien decide si el filtro debe ofrecerlo.
+ *
+ * El orden es el de las DOS listas en que viven —primero la cola, después el histórico—, no el
+ * del enum. La guardia compara conjuntos justamente para no fijar este orden.
+ */
+export const ESTADOS_FILTRO_CIERRES = [
+  "solicitado",
+  "vencido",
+  "aprobado",
+  "rechazado",
+] as const satisfies readonly CierreEstado[];
+
+/**
+ * FICHA 386 — el recorte por ESTADO. En PLURAL y como lista, igual que sus dos hermanos de ids:
+ * un desplegable de una sola opción emite `["vencido"]` y uno de varias emite varias, sin que el
+ * contrato del servidor cambie.
+ *
+ * `[]` NO es «sin filtro» —sería «los cierres de cero estados», que es siempre nada—: se rechaza
+ * en el borde, y la pantalla emite `undefined` para decir «todos». Sin tope de longitud: el
+ * universo son cuatro valores y `z.enum` ya los cierra, así que `MAX_IDS_POR_FILTRO` no pinta
+ * nada aquí.
+ */
+const listaDeEstados = z.array(z.enum(ESTADOS_FILTRO_CIERRES)).nonempty().optional();
+
+/**
  * Los filtros de los listados de CIERRES DEL DÍA: los comunes más el mensajero, que es de quien
- * es el cierre. TODOS opcionales: sin ninguno, el listado es exactamente el de antes.
+ * es el cierre, más el ESTADO (ficha 386). TODOS opcionales: sin ninguno, el listado es
+ * exactamente el de antes.
  */
 export const filtrosCierresSchema = z
-  .object({ ...camposComunes, mensajeroIds: listaDeIds })
+  .object({ ...camposComunes, mensajeroIds: listaDeIds, estados: listaDeEstados })
   .strict()
   .refine(rangoCoherente, MENSAJE_RANGO);
 
@@ -111,7 +158,10 @@ export function sinFiltros(filtros: FiltrosCierres | undefined): boolean {
     filtros.desde === undefined &&
     filtros.hasta === undefined &&
     filtros.destinoZonaIds === undefined &&
-    filtros.mensajeroIds === undefined
+    filtros.mensajeroIds === undefined &&
+    // FICHA 386: si esta línea faltara, con SOLO el estado puesto la pantalla se creería «sin
+    // filtros» y escondería el «limpiar» de un recorte que sí está aplicado.
+    filtros.estados === undefined
   );
 }
 
