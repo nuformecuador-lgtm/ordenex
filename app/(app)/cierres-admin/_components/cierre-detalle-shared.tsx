@@ -48,6 +48,23 @@ import {
   INDEMNIZACION_COL,
   METODO_LABEL,
   FULFILLMENT_COL,
+  // Feature 393 (C1) — los trece rotulos de las DOS CASCADAS del cierre de bodega. Se importan
+  // aqui SOLO para re-exportarlos: este archivo es la puerta por la que los modulos de cierre
+  // piden sus etiquetas desde la tanda E de la 170, y `CascadaDinero` / `CierresBodegaAdminModule`
+  // no tienen por que saber que hoy viven un archivo mas alla.
+  CASCADA_DUENO_TITULO,
+  CASCADA_CENTRAL_TITULO,
+  PARA_LA_TIENDA_LABEL,
+  PARA_LA_CENTRAL_LABEL,
+  NETO_ORDENEX_LABEL,
+  COBRADO_SOBRE_RECAUDADO_LABEL,
+  FACTURADO_ORDENEX_LABEL,
+  GANA_BODEGA_SATELITE_LABEL,
+  PARA_LA_CENTRAL_NOTA,
+  PARA_LA_CENTRAL_NEGATIVO_NOTA,
+  EFECTIVO_NO_CUBRE_NOTA,
+  GANA_BODEGA_SATELITE_NOTA,
+  FLETE_RECHAZO_NO_DEDUCIBLE_NOTA,
 } from "./cierre-labels";
 // Feature 213 (T6/T7): el desglose de pago vive en UN solo sitio (R25). De ahí salen también
 // el orden de los medios y el monto de cada uno, que es lo que estas tablas pintan por columna.
@@ -101,6 +118,22 @@ export {
   INGRESO_TOTAL_COL,
   CAUSA_INCIDENTE_COL,
   INDEMNIZACION_COL,
+  // Feature 393 (C1/R33) — las trece de las dos cascadas, por el mismo camino y por el mismo
+  // motivo: el texto vive en el modulo PURO (lo necesita el archivo de la descarga, que no puede
+  // arrastrar `Card`/`Badge`/`DataTable`) y las pantallas lo piden aqui, donde ya piden el resto.
+  CASCADA_DUENO_TITULO,
+  CASCADA_CENTRAL_TITULO,
+  PARA_LA_TIENDA_LABEL,
+  PARA_LA_CENTRAL_LABEL,
+  NETO_ORDENEX_LABEL,
+  COBRADO_SOBRE_RECAUDADO_LABEL,
+  FACTURADO_ORDENEX_LABEL,
+  GANA_BODEGA_SATELITE_LABEL,
+  PARA_LA_CENTRAL_NOTA,
+  PARA_LA_CENTRAL_NEGATIVO_NOTA,
+  EFECTIVO_NO_CUBRE_NOTA,
+  GANA_BODEGA_SATELITE_NOTA,
+  FLETE_RECHAZO_NO_DEDUCIBLE_NOTA,
 };
 
 export const RESULTADO_VACIO: Record<CierreResultado, string> = {
@@ -260,6 +293,17 @@ export const RECHAZO_MANUAL_BADGE_NOTA =
   "Rechazo registrado manualmente por el mensajero.";
 // --- Neto DERIVADO (total general - lo pagado a mensajeros): texto separado, i18n-ready ---
 export const NETO_LABEL = "Total neto";
+/**
+ * Feature 393 (D5) — el rótulo del TOTAL RECAUDADO en el detalle, promovido de un valor por
+ * defecto a una constante. No cambia ni un carácter de lo que se pinta: era el `labelGeneral`
+ * por defecto de `TotalesPanel` y lo sigue siendo.
+ *
+ * Existe porque la primera línea de las dos cascadas del cierre de bodega REUSA este rótulo en
+ * vez de estrenar un «Lo recaudado» (D5): dos nombres para la misma cifra en la misma pantalla
+ * es exactamente el defecto que la ficha 393 viene a arreglar (R24). Escribirlo dos veces —una
+ * aquí y otra en el módulo de bodega— dejaría abierta la puerta a que se separaran.
+ */
+export const TOTAL_GENERAL_LABEL = "Total general";
 // --- Deuda de la central: el pago a mensajeros que el efectivo no cubrió (i18n-ready) ---
 export const CENTRAL_DEBE_LABEL = "Central debe";
 export const CENTRAL_DEBE_NOTA =
@@ -508,7 +552,7 @@ export function TotalesPanel({
   totales,
   ariaLabel,
   title,
-  labelGeneral = "Total general",
+  labelGeneral = TOTAL_GENERAL_LABEL,
   neto,
 }: {
   totales: CierreTotales;
