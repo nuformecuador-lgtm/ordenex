@@ -4603,3 +4603,26 @@ detectó el gate: `jq` no está instalado y su ausencia es un `warn`, así que l
   (3) el nombre de tienda y los de geografia llegan a la etiqueta y esta ficha **no** los toca
   (ficha 392); (4) **T9 sin hacer**: nadie ha mirado la app, y en este repo esta medido que mirarla
   encuentra lo que la suite no.
+
+
+## 379 — cambiar la zona de un usuario podia dejar dinero sin consolidar (2026-09-08)
+
+Cerrada. Tres PR: #736 (servidor), #738 (pantalla), #740 (los bloqueantes de la revision).
+Sin migracion.
+
+- **Lo que resuelve:** al inactivar a alguien, cambiarle el rol o cambiarle la zona, si eso deja
+  una zona sin quien consolide, sale un aviso **con el numero delante**. Es aviso y NO bloqueo:
+  el humano firmo «no, no quiero danos» y nada corta al maestro. El reviewer enumero los cinco
+  caminos de escritura y no encontro ni una rama que impidiera guardar.
+- **La puerta que no estaba en la ficha:** cambiar el rol omitia `zonaId`, asi que la fila
+  conservaba una zona que ese rol ya no puede consolidar -- mientras `vehiculoId` SI se
+  recalculaba doce lineas mas abajo. Misma familia que la 376.
+- **El reviewer la rechazo, y acerto.** Una mutacion suya sobrevivia a 206 tests: los casos que
+  decian cubrir esa puerta cambiaban el rol a `admin`, que no lleva zona, asi que la comparacion
+  de zona fallaba sola y el aviso salia aunque la del rol no existiera. El caso que faltaba es
+  `adminSatelite -> mensajero en la MISMA zona`.
+- **Una afirmacion falsa, corregida:** «R19 no se puede probar con datos» confundia una fila con
+  la SUMA. Con 7.038 filas al maximo el double ya pierde el centimo. Es caro, no imposible, y el
+  comentario que decia «para que nadie lo reintente» esta fuera.
+- **Sin re-revision tras el arreglo:** los bloqueantes se cerraron con evidencia medida, pero el
+  reviewer no volvio a pasar. Queda dicho.
