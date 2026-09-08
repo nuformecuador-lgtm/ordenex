@@ -27,7 +27,7 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // Un tipo declarado en la base y ausente del catalogo seria un filtro que no se puede pedir; uno
 // en el catalogo y ausente de la base seria un `validation_error` que nadie entiende.
 //
-// LOS CUARENTA Y NUEVE, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y
+// LOS CINCUENTA, y no los cuarenta del Anexo A: el humano cerro Q1 y Q2 el 2026-09-02 y
 // cada una añade UN tipo (`orden_ubicacion_corregida`, `usuario_fulfillment_cambiado`); la ficha 366
 // (2026-09-03) añade el tercero (`orden_zona_reconciliada`) y los tres entran en «mueve dinero»; la
 // ficha 371 añade el cuarto (`gestion_fecha_reprogramacion_corregida`), que entra en «hace
@@ -36,14 +36,16 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // (`nodo_geografico_desactivado`/`nodo_geografico_activado`), que entran los DOS en «hace
 // desaparecer algo»; la ficha 375 añade el octavo (`nodo_geografico_renombrado`), que entra en la
 // MISMA categoria que sus dos hermanos; la ficha 376 añade el noveno (`zona_central_cambiada`),
-// que vuelve a «mueve dinero». El motivo de cada uno esta escrito a su lado.
+// que vuelve a «mueve dinero»; la ficha 380 añade el decimo
+// (`zona_pago_mensajero_cambiado`), que tambien es dinero. El motivo de cada uno esta escrito a su
+// lado.
 
 /**
- * Los 49 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
+ * Los 50 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
  * permisos) y es el que consume el selector de filtros: no se reordena por gusto.
  */
 export const HISTORIAL_ACCION_TIPOS = [
-  // --- A.1 · mueve dinero (27) ---
+  // --- A.1 · mueve dinero (28) ---
   "cierre_dia_aprobado", // cierres-admin.aprobarCierre
   "cierre_dia_rechazado", // cierres-admin.rechazarCierre
   "cierre_dia_pagos_editados", // cierres-admin.actualizarPagosGestion
@@ -98,8 +100,29 @@ export const HISTORIAL_ACCION_TIPOS = [
   // `valor_anterior`/`valor_nuevo` llevan `"true"`/`"false"`, calcado de
   // `usuario_fulfillment_cambiado`: son valores de un booleano, no texto libre. `monto` va NULL.
   "zona_central_cambiada", // zonas.crearZona/actualizarZona -> ZonaRepository.create/update
+  // ⭑ FICHA 380 — EL PAGO AL MENSAJERO DE UNA ZONA CAMBIO. Entra en DINERO, y es el sentido mas
+  // literal de la categoria: `tarifa_zona_mensajero` es lo que se le paga a una persona por cada
+  // entrega y por cada rechazo (`TarifaZonaMensajeroRepository.resolvePagoTarifa`, feature 39).
+  // Hasta esta ficha, `ZonaRepository.update` borraba y recreaba esas filas en CADA guardado sin
+  // dejar una sola linea de historial.
+  //
+  // ⚠️ TIPO PROPIO Y NO UNO DE LOS `tarifa_*` (Q1, firmada por el humano el 2026-09-08 A FAVOR de
+  // la recomendacion del leader): aquellos apuntan a la tabla `tarifas` —el flete que se le cobra
+  // a la TIENDA— y reutilizarlos meteria ids de dos tablas distintas bajo
+  // `entidad_tipo = 'tarifa'`, rompiendo `@@index([entidadTipo, entidadId])`.
+  //
+  // ⚠️ LAS DOS FIRMAS QUE DEFINEN SU ALCANCE, las dos EN CONTRA de la recomendacion del leader:
+  //   · Q2 — SOLO EL HECHO: `monto`, `valor_anterior` y `valor_nuevo` van NULL. Como el guardado
+  //     DESTRUYE las filas viejas (`deleteMany` + `createMany`), el registro dira QUE el pago de
+  //     una zona cambio, en cual, quien y cuando, y NUNCA de cuanto a cuanto. Limite conocido y
+  //     ACEPTADO, con el precedente de `tarifa_actualizada` delante.
+  //   · Q3 — SOLO LA EDICION: CREAR una zona con pagos NO deja fila, y borrarla tampoco (ya lo
+  //     dice `zona_borrada`). Coherente con el catalogo que ya existe —hay `zona_borrada` y no
+  //     `zona_creada`, igual que `vehiculo_borrado` sin `vehiculo_creado`— por el motivo escrito
+  //     mas abajo: lo que decide no es el nombre de la operacion sino su PAPEL.
+  "zona_pago_mensajero_cambiado", // zonas.actualizarZona -> ZonaRepository.update (SOLO update)
 
-  // --- A.2 · hace desaparecer algo (9) ---
+  // --- A.2 · hace desaparecer algo (10) ---
   // ⭑ FICHA 371 — la fecha de una reprogramacion ya registrada, corregida por un coordinador.
   // ENTRA AQUI, EN «hace desaparecer algo», PORQUE LA ORDEN PUEDE DEJAR DE ESTAR DONDE ESTABA:
   // corregir la fecha a HOY dispara la liberacion en el mismo acto (desenlace `liberada`), asi que
@@ -265,6 +288,9 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   orden_zona_reconciliada: "mueve_dinero",
   // FICHA 376: la marca de zona central decide la columna de flete que se factura.
   zona_central_cambiada: "mueve_dinero",
+  // FICHA 380: `tarifa_zona_mensajero` ES lo que cobra un mensajero por entregar y por recibir un
+  // rechazo. No hay lectura mas literal de «mueve dinero».
+  zona_pago_mensajero_cambiado: "mueve_dinero",
   gestion_fecha_reprogramacion_corregida: "hace_desaparecer",
   orden_eliminada: "hace_desaparecer",
   orden_recuperada: "hace_desaparecer",
@@ -320,6 +346,7 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   usuario_fulfillment_cambiado: "Cambió el fulfillment de una tienda",
   orden_zona_reconciliada: "Actualizó la zona de una orden",
   zona_central_cambiada: "Cambió la marca de zona central",
+  zona_pago_mensajero_cambiado: "Cambió el pago al mensajero de una zona",
   gestion_fecha_reprogramacion_corregida: "Corrigió la fecha de una reprogramación",
   orden_eliminada: "Eliminó una orden",
   orden_recuperada: "Recuperó una orden",

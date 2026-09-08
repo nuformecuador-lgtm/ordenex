@@ -69,15 +69,15 @@ function filas(tx: ReturnType<typeof txDoble>, n = 0): Record<string, unknown>[]
 // =============================================================================================
 
 describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhaustivos", () => {
-  it("son 49 tipos, 20 entidades y 3 categorias, sin repetidos", () => {
-    // 49 desde la ficha 376 (`zona_central_cambiada`); 48 lo fue desde la 375
-    // (`nodo_geografico_renombrado`); 47 desde la 374 (los dos `nodo_geografico_*` de activacion);
-    // 45 desde la 373.
+  it("son 50 tipos, 20 entidades y 3 categorias, sin repetidos", () => {
+    // 50 desde la ficha 380 (`zona_pago_mensajero_cambiado`); 49 lo fue desde la 376
+    // (`zona_central_cambiada`); 48 desde la 375 (`nodo_geografico_renombrado`); 47 desde la 374
+    // (los dos `nodo_geografico_*` de activacion); 45 desde la 373.
     // 20 entidades desde la ficha 374: `provincia`, `canton` y `distrito` son la PRIMERA
-    // ampliacion de ese enum, que llevaba 17 desde la 362. Ni la 375 ni la 376 lo amplian: `zona`
-    // ya estaba entre los 17 originales (la usa `zona_borrada`).
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(49);
-    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(49);
+    // ampliacion de ese enum, que llevaba 17 desde la 362. Ni la 375, ni la 376, ni la 380 lo
+    // amplian: `zona` ya estaba entre los 17 originales (la usa `zona_borrada`).
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(50);
+    expect(new Set(HISTORIAL_ACCION_TIPOS).size).toBe(50);
     expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(20);
     expect(new Set(HISTORIAL_ACCION_ENTIDADES).size).toBe(20);
     expect(CATEGORIAS_ACCION).toHaveLength(3);
@@ -262,7 +262,44 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(20);
   });
 
-  it("el reparto por categoria es el del Anexo A: 27 dinero, 10 desaparicion, 12 permisos", () => {
+  it("⭑ FICHA 380: `zona_pago_mensajero_cambiado` es DINERO, y NO se reutilizo ningun `tarifa_*`", () => {
+    // POR QUE DINERO (design §3). `tarifa_zona_mensajero` es la entrada de `resolvePagoTarifa`
+    // (feature 39): LO QUE SE LE PAGA A UN MENSAJERO por cada entrega y por cada rechazo. No es
+    // «hace desaparecer algo» —la zona sigue ahi— ni «cambia quien puede hacer que».
+    expect(HISTORIAL_ACCION_TIPOS).toContain("zona_pago_mensajero_cambiado");
+    expect(CATEGORIA_POR_ACCION.zona_pago_mensajero_cambiado).toBe("mueve_dinero");
+    // Literal a proposito: el texto ES el contrato de la pantalla `/historial-de-acciones`.
+    expect(ACCION_LABELS.zona_pago_mensajero_cambiado).toBe(
+      "Cambió el pago al mensajero de una zona",
+    );
+    // ⭑ Q1, FIRMADA POR EL HUMANO EL 2026-09-08 A FAVOR DE LA RECOMENDACION DEL LEADER: tipo
+    // PROPIO, no uno de los `tarifa_*`. Aquellos apuntan a la tabla `tarifas` —el flete que se le
+    // cobra a la TIENDA— y reutilizarlos meteria ids de dos tablas bajo `entidad_tipo = 'tarifa'`.
+    // Si alguien retirara el tipo nuevo para «ahorrarse la migracion», esto cae antes que nada.
+    for (const hermano of ["tarifa_creada", "tarifa_actualizada", "tarifa_borrada"] as const) {
+      expect(ACCION_LABELS.zona_pago_mensajero_cambiado).not.toBe(ACCION_LABELS[hermano]);
+    }
+    // Y es DISTINTO de las otras dos acciones sobre la MISMA entidad: el listado tiene que poder
+    // distinguir «le cambiaron el pago al mensajero» de «le movieron la marca» y de «la borraron».
+    expect(ACCION_LABELS.zona_pago_mensajero_cambiado).not.toBe(ACCION_LABELS.zona_central_cambiada);
+    expect(ACCION_LABELS.zona_pago_mensajero_cambiado).not.toBe(ACCION_LABELS.zona_borrada);
+    // Se admite como valor de filtro del listado, y un inventado NO.
+    expect(
+      filtroHistorialAccionSchema.safeParse({ accion: ["zona_pago_mensajero_cambiado"] }).success,
+    ).toBe(true);
+    expect(
+      filtroHistorialAccionSchema.safeParse({ accion: ["zona_pago_mensajero_cambiada"] }).success,
+    ).toBe(false);
+    // ⭑ Q3, FIRMADA EL 2026-09-08 EN CONTRA DE LA RECOMENDACION DEL LEADER: SOLO LA EDICION. No
+    // existe —ni debe existir— un tipo para la creacion de una zona, igual que hay `zona_borrada`
+    // y no `zona_creada`. Es alcance firmado, no un olvido.
+    expect(HISTORIAL_ACCION_TIPOS).not.toContain("zona_creada");
+    // La 380 NO amplia el enum de entidades: `zona` esta ahi desde los 17 originales de la 362.
+    expect(HISTORIAL_ACCION_ENTIDADES).toContain("zona");
+    expect(HISTORIAL_ACCION_ENTIDADES).toHaveLength(20);
+  });
+
+  it("el reparto por categoria es el del Anexo A: 28 dinero, 10 desaparicion, 12 permisos", () => {
     // Numeros DUROS: mover un tipo de categoria es una decision, y tiene que pasar por aqui.
     // 26 y no 25 desde la ficha 366: `orden_zona_reconciliada` entra en DINERO.
     // 7 y no 6 desde la ficha 371: `gestion_fecha_reprogramacion_corregida` entra en DESAPARICION.
@@ -273,7 +310,10 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // 10 y no 9 desde la ficha 375: `nodo_geografico_renombrado`, el tercero del mismo eje.
     // 27 y no 26 desde la ficha 376: `zona_central_cambiada` entra en DINERO porque `es_central`
     // elige la columna de flete que se factura (`resolverFlete`), no porque «suene a dinero».
-    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(27);
+    // 28 y no 27 desde la ficha 380: `zona_pago_mensajero_cambiado` entra en DINERO en el sentido
+    // mas literal de la categoria —`tarifa_zona_mensajero` ES lo que cobra un mensajero por
+    // entregar y por recibir un rechazo (`resolvePagoTarifa`, feature 39)—.
+    expect(accionesDeCategoria("mueve_dinero")).toHaveLength(28);
     expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(10);
     expect(accionesDeCategoria("cambia_permisos")).toHaveLength(12);
   });
