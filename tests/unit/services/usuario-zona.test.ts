@@ -60,6 +60,7 @@ function buildRepo(over: Partial<IUserRepository> = {}): IUserRepository {
     setEstado: vi.fn(),
     listTiposIdentificacion: vi.fn(),
     listRoles: vi.fn().mockResolvedValue(ROLES),
+    contarAdminSatelitesActivos: vi.fn().mockResolvedValue(0), // ficha 379: exigido por IUserRepository
     restablecerContrasena: vi.fn(), // ficha 362
     ...over,
   };

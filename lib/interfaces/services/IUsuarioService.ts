@@ -71,6 +71,49 @@ export type ListarRolesServiceResult =
  * la contrasena que solo se ve una vez—, y la UI necesita poder decirle por que, no un «no puedes»
  * indistinguible del de un rol sin permiso.
  */
+/**
+ * FICHA 379 — el cambio que se esta EVALUANDO, no el estado que quedaria.
+ *
+ * Los tres campos son opcionales y representan la INTENCION: lo que no viene, no cambia. Es la
+ * misma semantica que `ActualizarUsuarioInput`, reducida a los tres campos que pueden dejar una
+ * zona satelite sin Admin satelite (las tres puertas: cambiar la zona, cambiar el rol, desactivar
+ * la cuenta).
+ */
+export interface CambioUsuarioEvaluable {
+  rolId?: string;
+  zonaId?: string | null;
+  estado?: "activo" | "inactivo";
+}
+
+/**
+ * FICHA 379/R10 — lo que el aviso necesita decir, y NADA mas.
+ *
+ * Sin ningun dato personal del usuario evaluado ni de ningun otro (R22): el aviso dice CUANTOS
+ * quedan, no QUIENES. `totalSinConsolidar` viaja como STRING de escala 2 y no se convierte a
+ * coma flotante en ningun punto del camino (R19).
+ *
+ * `adminSatelitesActivosRestantes` es siempre 0 cuando el impacto existe —si fuera >0 no habria
+ * impacto (R15)—: viaja para que la pantalla pueda decirlo sin recalcular nada y para que el
+ * test lo pueda afirmar.
+ */
+export interface ImpactoSalidaAdminSatelite {
+  zonaNombre: string;
+  cierresSinConsolidar: number;
+  totalSinConsolidar: string; // STRING escala 2 (R19)
+  adminSatelitesActivosRestantes: number;
+}
+
+/**
+ * FICHA 379 — resultado de la consulta PREVIA. Es de SOLO LECTURA: no puede romper nada aunque
+ * falle, y por eso el borde puede permitir continuar cuando falla (R20).
+ *
+ * `impacto: null` significa «no hay nada que avisar», y es el caso normal.
+ */
+export type ConsultarImpactoCambioServiceResult =
+  | { status: "ok"; impacto: ImpactoSalidaAdminSatelite | null }
+  | { status: "forbidden" } // R22
+  | { status: "not_found" };
+
 export type RestablecerContrasenaServiceResult =
   | { status: "ok"; usuarioId: string; generatedPassword: string; sesionesRevocadas: number } // R19/R21
   | { status: "forbidden" } // R2/R3
@@ -112,4 +155,20 @@ export interface IUsuarioService {
    * reversion acotada de la Decision 5 de la feature 25 en `IUserRepository.ts`.
    */
   restablecerContrasena(id: string, actor: Actor): Promise<RestablecerContrasenaServiceResult>;
+  /**
+   * FICHA 379 (R9-R23) — ¿este cambio deja a una zona satelite SIN Admin satelite activo?
+   *
+   * ⚠️ ES UNA LECTURA, Y NO CAMBIA NADA. No forma parte del camino de escritura: `actualizar` y
+   * `cambiarEstado` siguen sin consultarla y sin ninguna rama de bloqueo nueva. Eso es R14, la
+   * decision del humano del 2026-09-08 —«no, no quiero daños»— escrita en el tipo: el aviso
+   * INFORMA, no impide, y nada de lo que devuelva este metodo puede detener al maestro.
+   *
+   * `impacto: null` = no hay nada que avisar (el caso normal). Cuando hay impacto, el maestro
+   * decide igual; lo unico que cambia es que lo sabe.
+   */
+  consultarImpactoCambio(
+    id: string,
+    cambio: CambioUsuarioEvaluable,
+    actor: Actor,
+  ): Promise<ConsultarImpactoCambioServiceResult>;
 }

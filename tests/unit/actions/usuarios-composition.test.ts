@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { SessionRepository } from "@/lib/repositories/SessionRepository";
+// FICHA 379 (T10): el quinto cable, con el mismo riesgo estructural que el cuarto.
+import { CierreBodegaRepository } from "@/lib/repositories/CierreBodegaRepository";
 import type { Actor } from "@/lib/interfaces/services/IUsuarioService";
 
 /**
@@ -81,5 +83,43 @@ describe("287/T8 · `buildUsuarioService` cablea el revocador de sesiones (R20)"
     for (const i of [0, 1, 2]) {
       expect(args[i], `el argumento ${i} de UsuarioService se perdio`).toBeDefined();
     }
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════════════════════
+  // FICHA 379 / T10 — **EL COMPOSITION ROOT *PASA* EL REPOSITORIO DE CIERRES DE BODEGA.**
+  // ═════════════════════════════════════════════════════════════════════════════════════════
+  //
+  // ⚠️ MISMO RIESGO ESTRUCTURAL, UN PARAMETRO MAS ABAJO. El quinto argumento de `UsuarioService`
+  // tambien es OPCIONAL —tiene que serlo, por las mismas decenas de `new UsuarioService(repo)`—,
+  // asi que olvidarlo en `buildUsuarioService()` NO rompe el typecheck y NO pone rojo ningun test
+  // de servicio (todos inyectan su propio doble). El unico sitio donde se notaria seria
+  // produccion, la primera vez que el maestro tocara el rol de alguien: `consultarImpactoCambio`
+  // LANZA sin el, a proposito, porque devolver «no hay dinero» cuando lo que pasa es que no se
+  // puede leer es exactamente el fallo mudo que la ficha 379 combate.
+  it("379/R10: el objeto construido trae un `CierreBodegaRepository` en la quinta posicion", async () => {
+    argumentosCapturados.length = 0;
+    const { restablecerContrasenaUsuario } = await import("@/lib/actions/usuarios");
+
+    // SIN `deps.usuarioService`, igual que arriba: la accion pasa por `buildUsuarioService()`.
+    // Se usa esta accion y no la del aviso porque lo que se mide es el CABLEADO del servicio,
+    // que es el mismo para todas.
+    await restablecerContrasenaUsuario("usr-1", { getActor: async () => MAESTRO });
+
+    expect(argumentosCapturados).toHaveLength(1);
+    const args = argumentosCapturados[0];
+
+    expect(
+      args.length,
+      "379/R10: el composition root no paso el quinto argumento. El aviso saldria a produccion " +
+        "lanzando en cuanto alguien pulsara Guardar, con la suite entera en verde.",
+    ).toBeGreaterThanOrEqual(5);
+    expect(args[4]).toBeInstanceOf(CierreBodegaRepository);
+    // Y expone el metodo que el servicio llama: un `Pick` recortado o un doble de conveniencia
+    // quedarian delatados aqui.
+    expect(
+      typeof (args[4] as CierreBodegaRepository).resumirConsolidablesPendientes,
+    ).toBe("function");
+    // El cuarto sigue siendo el suyo: nadie se ha corrido de sitio.
+    expect(args[3]).toBeInstanceOf(SessionRepository);
   });
 });

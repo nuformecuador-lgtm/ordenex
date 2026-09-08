@@ -10,6 +10,8 @@ import type {
   Actor,
   ActualizarUsuarioServiceResult,
   CambiarEstadoUsuarioServiceResult,
+  CambioUsuarioEvaluable,
+  ConsultarImpactoCambioServiceResult,
   CrearUsuarioServiceResult,
   IUsuarioService,
   ListarRolesServiceResult,
@@ -19,6 +21,7 @@ import type {
   ObtenerUsuarioServiceResult,
   RestablecerContrasenaServiceResult,
 } from "@/lib/interfaces/services/IUsuarioService";
+import type { ICierreBodegaRepository } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
 import type { ISessionRepository } from "@/lib/interfaces/repositories/ISessionRepository";
 import type {
   ActualizarUsuarioInput,
@@ -40,6 +43,12 @@ const ALLOWED_ROLES = new Set<string>(["maestro"]);
 // Feature 24/R27: roles que pueden (y DEBEN) llevar una zona asignada. Para el
 // resto el `zonaId` se fuerza a null (misma politica que el `fulfillment` de adminTienda).
 const ZONA_ROLES = new Set<string>(["mensajero", "adminSatelite"]);
+
+// FICHA 379: el rol que ADMINISTRA una bodega satelite. Es el unico que puede consolidar los
+// cierres de SU zona (`CierreBodegaService.ROL_AUTORIZADO`), y por eso dejar una zona sin
+// ninguno activo deja su dinero sin nadie que pueda cerrarlo. Se escribe una vez aqui para que
+// el aviso y la invariante de zona hablen del mismo rol.
+const ROL_ADMIN_SATELITE = "adminSatelite";
 
 // Feature 21: roles que pueden llevar un vehiculo asociado. Solo `mensajero`: es el
 // unico que conduce. Para el resto el `vehiculoId` se fuerza a null, igual que la zona.
@@ -79,6 +88,22 @@ export class UsuarioService implements IUsuarioService {
     // dos notificadores muertos con la suite entera en verde. Quien lo pasa de verdad esta
     // probado en `tests/unit/actions/usuarios-composition.test.ts`.
     private readonly sessionRepo?: Pick<ISessionRepository, "deleteAllByUserId">,
+    // FICHA 379 (R10/R18): el repositorio del cierre de bodega, que es quien sabe cuanto dinero
+    // tiene una zona sin consolidar — con el MISMO criterio con el que la consolidacion elige lo
+    // que puede cerrar.
+    //
+    // ⚠️ OPCIONAL EN EL CONSTRUCTOR, OBLIGATORIO EN EL USO, por el mismo motivo que `sessionRepo`
+    // y con la misma disciplina: hay decenas de `new UsuarioService(repo)` en los tests, asi que
+    // el parametro TIENE que ser opcional, y por eso olvidarlo en el composition root NO rompe
+    // el typecheck. `consultarImpactoCambio` LANZA si no esta. Devolver «no hay dinero» cuando
+    // lo que pasa es que no se puede leer es exactamente el fallo mudo que esta ficha combate —y
+    // en este repo un colaborador opcional ignorado en silencio ya dejo dos notificadores
+    // muertos con la suite entera en verde—. Que se PASA de verdad lo prueba
+    // `tests/unit/actions/usuarios-composition.test.ts`.
+    private readonly cierresRepo?: Pick<
+      ICierreBodegaRepository,
+      "resumirConsolidablesPendientes"
+    >,
   ) {}
 
   async crear(input: CrearUsuarioInput, actor: Actor): Promise<CrearUsuarioServiceResult> {
@@ -405,6 +430,125 @@ export class UsuarioService implements IUsuarioService {
     // R21: la contrasena en claro viaja EXACTAMENTE una vez, aqui. No se guarda en ningun sitio,
     // no se loguea (R23/R24) y no hay forma de volver a pedirla.
     return { status: "ok", usuarioId: usuario.id, generatedPassword: plain, sesionesRevocadas };
+  }
+
+  /**
+   * FICHA 379 (R9-R23) — ¿ESTE CAMBIO DEJA A UNA ZONA SATELITE SIN ADMIN SATELITE ACTIVO?
+   *
+   * ⚠️ NO BLOQUEA NADA, Y ESO ES EL REQUISITO R14, no un detalle de implementacion. Este metodo
+   * es una LECTURA que nadie del camino de escritura llama: `actualizar` y `cambiarEstado` no
+   * lo consultan y no ganan ninguna rama nueva. El humano lo cerro el 2026-09-08 —«no, no quiero
+   * daños»—: el aviso INFORMA, el maestro decide, y lo unico que cambia es que lo sabe. Si algun
+   * dia alguien conecta esto a una escritura para impedir un cambio, hay una guardia estatica
+   * que se pone roja (`tests/unit/guards/379-maestro-sin-bloqueo.guardia.test.ts`).
+   *
+   * POR QUE VIVE AQUI Y NO EN UN SERVICIO NUEVO: el modulo de usuarios tiene UNA lista de
+   * permisos (`ALLOWED_ROLES`) y este mismo archivo ya dejo escrito el motivo al anadir
+   * `restablecerContrasena` — dos listas de permisos para el mismo modulo divergen en cuanto
+   * alguien toque una. Un servicio aparte tendria que declarar la suya.
+   *
+   * EL PREDICADO, UNA SOLA VEZ, y cubre las TRES puertas del agujero:
+   *
+   *   avisa ⇔ el usuario ES HOY `adminSatelite` activo con zona Z
+   *           ∧ el cambio pedido hace que deje de serlo para Z
+   *           ∧ en Z no queda NINGUN otro `adminSatelite` activo
+   *
+   *   D1 cambiar la zona · D2 cambiar el rol · D3 desactivar la cuenta — las tres «dejan de
+   *   serlo», asi que no hay tres ramas ni una lista de casos que alguien pueda dejar incompleta.
+   *   Lo que NO avisa sale solo del mismo predicado: un mensajero (sus cierres ya congelaron
+   *   `destino_zona_id` y los consolida la zona de origen), un usuario sin zona, una activacion,
+   *   o una zona donde quede alguien.
+   *
+   * EL ORDEN DE LOS PASOS NO ES DECORATIVO: el permiso va ANTES de leer nada (R22), y las salidas
+   * baratas van antes de tocar la base — una pantalla de administracion no tiene que pagar dos
+   * consultas por editar un telefono.
+   */
+  async consultarImpactoCambio(
+    id: string,
+    cambio: CambioUsuarioEvaluable,
+    actor: Actor,
+  ): Promise<ConsultarImpactoCambioServiceResult> {
+    // (1) R22: el MISMO `ALLOWED_ROLES` del resto del modulo. Antes de leer una sola fila.
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" };
+
+    // (2) R20: sin el repositorio del dinero NO se responde. Va aqui arriba y no junto a la
+    // lectura del paso 7 a proposito: un cableado olvidado tiene que reventar en TODAS las
+    // llamadas, no solo en la de cada N que llega hasta el final. Si solo fallara en el caso
+    // raro, el fallo se descubriria el dia que importa —con el maestro delante— en vez de en la
+    // primera prueba de humo.
+    const cierresRepo = this.cierresRepo;
+    const zonaRepo = this.zonaRepo;
+    if (!cierresRepo || !zonaRepo) {
+      throw new Error(
+        "UsuarioService.consultarImpactoCambio requiere el repositorio de cierres de bodega y el " +
+          "de zonas: sin ellos no se puede saber cuanto dinero queda sin consolidar ni como se " +
+          "llama la zona, y responder «no hay nada que avisar» seria una mentira (379/R20)",
+      );
+    }
+
+    const actual = await this.repo.findById(id);
+    if (!actual) return { status: "not_found" };
+
+    // (3) Sin zona no hay ninguna zona que se pueda quedar sola.
+    const zonaId = actual.zonaId;
+    if (zonaId === null || zonaId === undefined) return { status: "ok", impacto: null };
+
+    // (4) R16: solo un `adminSatelite` ACTIVO sostiene hoy la consolidacion de su zona. Un
+    // mensajero que cambia de zona no atrapa dinero, y una cuenta ya inactiva no lo sostenia.
+    const roles = await this.repo.listRoles();
+    const valorDelRol = (rolId: string) => roles.find((r) => r.id === rolId)?.value;
+    if (valorDelRol(actual.rolId) !== ROL_ADMIN_SATELITE) return { status: "ok", impacto: null };
+    if (actual.estado !== "activo") return { status: "ok", impacto: null };
+
+    // (5) El estado RESULTANTE, con la MISMA regla que aplica la escritura (bloque A): misma
+    // funcion, no una copia. Si siguiera siendo adminSatelite activo de Z, no pasa nada.
+    const zonaResultante = await this.resolverZonaDeEdicion(cambio, actual);
+    const rolResultante = valorDelRol(cambio.rolId ?? actual.rolId);
+    const estadoResultante = cambio.estado ?? actual.estado;
+    const sigueSiendoAdminDeLaZona =
+      zonaResultante.ok &&
+      zonaResultante.zonaId === zonaId &&
+      rolResultante === ROL_ADMIN_SATELITE &&
+      estadoResultante === "activo";
+    // `!zonaResultante.ok` = la escritura RECHAZARIA este cambio (R3): no va a ocurrir, asi que
+    // avisar de sus consecuencias seria avisar de algo que no pasa.
+    if (sigueSiendoAdminDeLaZona || !zonaResultante.ok) return { status: "ok", impacto: null };
+
+    // (6) R15/R17/AS2: si queda alguien, ese dinero es alcanzable. Avisar ahi seria ruido, y el
+    // ruido mata avisos. El recuento EXCLUYE al usuario evaluado: contarlo seria contar a quien
+    // esta a punto de irse.
+    const restantes = await this.repo.contarAdminSatelitesActivos(zonaId, id);
+    if (restantes > 0) return { status: "ok", impacto: null };
+
+    // (7) Y solo aqui se pregunta por el dinero. El importe es el TOTAL GENERAL de los
+    // consolidables (AS3): es lo que la consolidacion arrastra y lo que el maestro reconoce como
+    // «el dinero de esa bodega». Viaja como STRING de escala 2 y no pasa por `Number` (R19).
+    const [zona, resumen] = await Promise.all([
+      zonaRepo.findById(zonaId, false),
+      cierresRepo.resumirConsolidablesPendientes(zonaId),
+    ]);
+    if (!zona) {
+      // La FK lo hace practicamente imposible; si pasa, es un dato roto y se dice, no se disfraza
+      // de «no hay nada que avisar» (R20: ni silencio ni bloqueo).
+      throw new Error(
+        `379: el usuario ${id} apunta a la zona ${zonaId}, que no existe: no se puede nombrar la ` +
+          "zona del aviso",
+      );
+    }
+
+    return {
+      status: "ok",
+      impacto: {
+        zonaNombre: zona.nombre,
+        cierresSinConsolidar: resumen.cantidad,
+        totalSinConsolidar: resumen.totalGeneral,
+        // AS1: el aviso aparece TAMBIEN con cero pendiente. Con el umbral en el dinero hoy no
+        // aparecia nunca (0 en las 7 zonas, medido en produccion el 2026-09-08) y la ficha
+        // entregaria una funcion invisible; ademas el dano real no es el dinero de hoy, es que
+        // lo que entre despues queda retenido.
+        adminSatelitesActivosRestantes: restantes,
+      },
+    };
   }
 
   // R9/R10/R11: traduce los errores de dominio del repositorio a resultados

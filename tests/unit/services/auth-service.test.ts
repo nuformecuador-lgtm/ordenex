@@ -47,6 +47,7 @@ function buildMocks() {
     setEstado: vi.fn(),
     listTiposIdentificacion: vi.fn(),
     listRoles: vi.fn(),
+    contarAdminSatelitesActivos: vi.fn().mockResolvedValue(0), // ficha 379: exigido por IUserRepository
   };
   const loginAttemptRepo: ILoginAttemptRepository = {
     registrar: vi.fn(),

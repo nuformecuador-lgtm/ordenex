@@ -4,12 +4,14 @@ import { z } from "zod";
 import {
   actualizarUsuarioSchema,
   cambiarEstadoUsuarioSchema,
+  consultarImpactoCambioUsuarioSchema,
   crearUsuarioSchema,
   listarUsuariosCompletoSchema,
   listarUsuariosSchema,
   type ActionError,
   type ActualizarUsuarioResult,
   type CambiarEstadoUsuarioResult,
+  type ConsultarImpactoCambioUsuarioResult,
   type CrearUsuarioResult,
   type ListarRolesResult,
   type ListarTiposIdentificacionResult,
@@ -24,6 +26,7 @@ import { UserRepository } from "@/lib/repositories/UserRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { VehiculoRepository } from "@/lib/repositories/VehiculoRepository";
 import { SessionRepository } from "@/lib/repositories/SessionRepository";
+import { CierreBodegaRepository } from "@/lib/repositories/CierreBodegaRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
@@ -57,11 +60,17 @@ function buildUsuarioService(): IUsuarioService {
   // el cuarto parametro es opcional (tiene que serlo), asi que olvidarlo NO rompe el typecheck
   // y el servicio saldria a produccion lanzando en cuanto alguien pulsara el boton. Que este
   // argumento se PASA de verdad lo prueba `tests/unit/actions/usuarios-composition.test.ts`.
+  // FICHA 379 (R10/R18/R20): el repositorio del cierre de bodega, que sabe cuanto dinero tiene
+  // una zona sin consolidar. Mismo argumento que el anterior, y por eso se repite: el quinto
+  // parametro tambien es opcional, olvidarlo NO rompe el typecheck, y `consultarImpactoCambio`
+  // lanzaria en produccion la primera vez que el maestro tocara el rol de alguien. Lo prueba
+  // el mismo `usuarios-composition.test.ts`.
   return new UsuarioService(
     new UserRepository(prisma),
     new ZonaRepository(prisma),
     new VehiculoRepository(prisma),
     new SessionRepository(prisma),
+    new CierreBodegaRepository(prisma),
   );
 }
 
@@ -227,6 +236,49 @@ export async function restablecerContrasenaUsuario(
     }
     const service = deps.usuarioService ?? buildUsuarioService();
     return service.restablecerContrasena(parsedId.data, actor);
+  });
+  return isAppErrorShape(r) ? toUsuarioActionError(r) : r;
+}
+
+/**
+ * FICHA 379 (R9/R21/R22) — ¿este cambio deja a una zona satelite sin Admin satelite activo?
+ *
+ * ⚠️ ES UNA ACCION DE SOLO LECTURA: no escribe nada y no puede romper nada aunque falle. Por eso
+ * el aviso vive aqui y no dentro de `actualizarUsuario` como un `requiere_confirmacion`: esa
+ * variante convertiria la primera llamada de cualquier consumidor en un no-op silencioso —un
+ * cambio que parece hecho y no lo esta—, que es justo la familia de fallo que la ficha combate.
+ *
+ * ⚠️ Y NO BLOQUEA (R14). Lo que devuelva no impide nada: la pantalla lo dice y el maestro decide.
+ * Si la consulta falla, el borde devuelve un `ActionError` y la pantalla lo trata como «no se
+ * pudo comprobar, puedes continuar» (R20).
+ *
+ * Se pregunta SIEMPRE antes de un cambio de rol/zona/estado, y es el SERVIDOR quien decide si
+ * hay algo que avisar (AS5). La alternativa —que la pantalla filtre por el rol de la fila— mete
+ * literales de rol en un componente y reabre el modo de fallo de esta ficha: quien olvide una
+ * rama produce un cambio silencioso.
+ *
+ * El resto es el patron identico a las otras ocho acciones del archivo.
+ *
+ * @sin-superficie el aviso de la ficha 379 se cablea en `UsuariosModule` en la tanda de frontend
+ * (T11); mientras tanto la accion existe sin pantalla que la dispare, igual que le paso a
+ * `restablecerContrasenaUsuario` entre su backend y su pantalla. Esta anotacion CADUCA: en cuanto
+ * la pantalla la llame, la guardia exige quitarla.
+ */
+export async function consultarImpactoCambioUsuario(
+  id: unknown,
+  cambio: unknown,
+  deps: UsuarioActionDeps = {},
+): Promise<ConsultarImpactoCambioUsuarioResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R22: antes de instanciar el service
+    const parsedId = idSchema.safeParse(id);
+    if (!parsedId.success) {
+      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
+    }
+    const data = consultarImpactoCambioUsuarioSchema.parse(cambio ?? {}); // ZodError -> VALIDATION_ERROR
+    const service = deps.usuarioService ?? buildUsuarioService();
+    return service.consultarImpactoCambio(parsedId.data, data, actor);
   });
   return isAppErrorShape(r) ? toUsuarioActionError(r) : r;
 }

@@ -10,6 +10,9 @@ import type {
   UsuarioListItem,
   UsuarioPublico,
 } from "@/lib/interfaces/repositories/IUserRepository";
+// FICHA 379: la forma del aviso la define el servicio; el borde la reexporta tal cual para que
+// no haya dos declaraciones del mismo objeto.
+import type { ImpactoSalidaAdminSatelite } from "@/lib/interfaces/services/IUsuarioService";
 
 // Feature 25. Zod en el borde (R5/R6). NO se duplica la politica de contrasena:
 // se importa `strongPasswordSchema` de la feature 20 (Decision 3).
@@ -91,6 +94,30 @@ export const cambiarEstadoUsuarioSchema = z
   })
   .strict();
 export type CambiarEstadoUsuarioInput = z.infer<typeof cambiarEstadoUsuarioSchema>;
+
+/**
+ * FICHA 379 (R9/R22) — entrada de la consulta PREVIA del aviso: los tres campos que pueden dejar
+ * una zona satelite sin Admin satelite (cambiar la zona, cambiar el rol, desactivar la cuenta).
+ *
+ * ⚠️ SE DERIVA de los dos schemas que ya existen, no se escribe a mano. Mismo patron que
+ * `listarUsuariosCompletoSchema`, que se deriva del listado: reusarlo es lo que garantiza que
+ * esta consulta no admita una forma de `rolId`/`zonaId` que la EDICION rechazaria, ni al reves.
+ * Dos definiciones del mismo campo se separan a la primera, y entonces el aviso evaluaria un
+ * cambio distinto del que se va a aplicar.
+ *
+ * ⚠️ `actualizarUsuarioSchema` NO GANA NI UN CAMPO por esto. Su contrato —«solo campos editables,
+ * nunca email/cedula/password»— esta protegido por su propio test y no lo toca esta ficha; por eso
+ * el aviso no se resolvio con un `confirmado: true` dentro de la edicion (design §7, A4).
+ *
+ * `.strict()`: una clave desconocida es `validation_error`, no un campo que se ignora en silencio.
+ */
+export const consultarImpactoCambioUsuarioSchema = actualizarUsuarioSchema
+  .pick({ rolId: true, zonaId: true })
+  .extend({ estado: cambiarEstadoUsuarioSchema.shape.estado.optional() })
+  .strict();
+export type ConsultarImpactoCambioUsuarioInput = z.infer<
+  typeof consultarImpactoCambioUsuarioSchema
+>;
 
 // Feature 285 (design §2.1/§7) — limites del termino de busqueda del listado de usuarios.
 // Se EXPORTAN porque el minimo lo consume TAMBIEN el campo de la barra: un solo origen del
@@ -203,6 +230,17 @@ export type ListarTiposIdentificacionResult =
   | { status: "ok"; tipos: { id: string; value: string }[] }
   | ActionError;
 export type ListarRolesResult = { status: "ok"; roles: RolItem[] } | ActionError;
+
+/**
+ * FICHA 379 — resultado de la consulta PREVIA en el BORDE.
+ *
+ * `impacto: null` significa «no hay nada que avisar» y es el caso normal: la pantalla aplica el
+ * cambio con los mismos clics de siempre (R15). Cualquier rama de `ActionError` significa «no se
+ * pudo comprobar», y ahi la pantalla lo DICE y deja continuar (R20): ni silencio ni bloqueo.
+ */
+export type ConsultarImpactoCambioUsuarioResult =
+  | { status: "ok"; impacto: ImpactoSalidaAdminSatelite | null }
+  | ActionError;
 
 /**
  * Feature 287/R15/R21 — resultado del restablecimiento de contrasena EN EL BORDE.

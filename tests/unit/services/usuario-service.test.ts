@@ -58,6 +58,7 @@ function buildRepo(overrides: Partial<IUserRepository> = {}): IUserRepository {
     setEstado: vi.fn().mockResolvedValue(usuario({ estado: "inactivo" })),
     listTiposIdentificacion: vi.fn().mockResolvedValue([{ id: "tipo-1", value: "cedula" }]),
     listRoles: vi.fn().mockResolvedValue([{ id: "rol-1", value: "maestro" }]),
+    contarAdminSatelitesActivos: vi.fn().mockResolvedValue(0), // ficha 379: exigido por IUserRepository
     restablecerContrasena: vi.fn(), // ficha 362: el reset POR UN ADMIN, con su fila de registro
     ...overrides,
   };
