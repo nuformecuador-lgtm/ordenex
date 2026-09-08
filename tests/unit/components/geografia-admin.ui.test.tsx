@@ -906,3 +906,111 @@ describe("375 — el botón «Renombrar» de cada fila", () => {
     expect(renombrarNodoGeograficoMock).not.toHaveBeenCalled();
   });
 });
+
+// -------------------------------------------------------------------------------------------------
+// ⭑ FICHA 392 — EL AVISO DE UN NOMBRE QUE LA ETIQUETA NO PUEDE IMPRIMIR
+//
+// Los nombres de provincia, cantón y distrito SE IMPRIMEN en la etiqueta (van al dato `ubicacion`),
+// así que desde la mitad de servidor de esta ficha las dos escrituras de esta pantalla —el alta y
+// el renombrado— rechazan el nombre que la fuente no cubre, con un motivo YA REDACTADO.
+//
+// Lo que se mide aquí es una sola cosa: que ese motivo llegue a la pantalla ENTERO y en lugar del
+// genérico. Hasta hoy el toast decía «Revisa los campos: el formulario está incompleto» y mandaba a
+// buscar un campo vacío que no existe: el formulario está COMPLETO y lo que falla es un carácter
+// que ni siquiera se distingue a simple vista.
+//
+// **LOS TRES TEXTOS SON LITERALES ESCRITOS A MANO**, copiados del mensaje que produce el servidor y
+// no importados de él. Compararlos contra la función que los genera estaría siempre verde: recortar
+// la frase cambiaría las dos mitades a la vez.
+// -------------------------------------------------------------------------------------------------
+
+/** El genérico que esta ficha viene a QUITAR de en medio cuando el motivo es del nombre. */
+const GENERICO = "Revisa los campos: el formulario está incompleto.";
+
+/** Irreparable: ninguna normalización lo arregla, así que el mensaje NO manda reintentar. */
+const MOTIVO_IRREPARABLE =
+  "«nombre» lleva un carácter que la etiqueta no puede imprimir: «⁨🙂⁩» (U+1F642). " +
+  "Reintentar no lo cambia: escríbelo con letras y números normales.";
+
+/**
+ * El largo: una «ñ» escrita como «n» + tilde suelta. Se PINTA igual que la de siempre, así que el
+ * mensaje no puede limitarse a sugerir un texto que se ve idéntico — tiene que explicar lo que no
+ * se ve. Es el que más tienta a resumir y el que menos se puede resumir.
+ */
+const MOTIVO_DESCOMPUESTO =
+  "«nombre» lleva un carácter que la etiqueta no puede imprimir: «⁨̃⁩» (U+0303). " +
+  "Aquí no hay nada que se vea mal: ese carácter se ve igual que el de siempre pero está " +
+  "escrito de otra forma —lo normal es que la letra y su acento vayan por separado—, y así no " +
+  "se puede imprimir. Bórralo y vuelve a teclearlo; copiar y pegar el mismo texto lo trae otra " +
+  "vez igual.";
+
+describe("392 — el nombre que la etiqueta no puede imprimir se avisa con SU motivo", () => {
+  it("el ALTA repite el motivo del servidor en el toast, no «el formulario está incompleto»", async () => {
+    crearNodoGeograficoMock.mockResolvedValue({
+      status: "validation_error",
+      fieldErrors: { nombre: [MOTIVO_IRREPARABLE] },
+    });
+    const user = montar();
+
+    await user.click(screen.getByRole("button", { name: "Crear provincia" }));
+    await user.type(screen.getByLabelText(/^Nombre/), "Puntarenas 🙂");
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(MOTIVO_IRREPARABLE));
+    expect(toastMock.error).not.toHaveBeenCalledWith(GENERICO);
+    expect(toastMock.success).not.toHaveBeenCalled();
+  });
+
+  it("el ALTA lo pinta TAMBIÉN junto al campo del nombre", async () => {
+    // El toast se va solo; el error de campo se queda mientras se corrige. Los dos, no uno.
+    crearNodoGeograficoMock.mockResolvedValue({
+      status: "validation_error",
+      fieldErrors: { nombre: [MOTIVO_IRREPARABLE] },
+    });
+    const user = montar();
+
+    await user.click(screen.getByRole("button", { name: "Crear provincia" }));
+    await user.type(screen.getByLabelText(/^Nombre/), "Puntarenas 🙂");
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(await screen.findByText(MOTIVO_IRREPARABLE)).toBeInTheDocument();
+  });
+
+  it("el RENOMBRADO repite el motivo LARGO entero: ni recortado ni resumido", async () => {
+    renombrarNodoGeograficoMock.mockResolvedValue({
+      status: "validation_error",
+      fieldErrors: { nombre: [MOTIVO_DESCOMPUESTO] },
+    });
+    const user = montar();
+    await expandirTodo(user);
+    await user.click(
+      within(fila("distrito", "d-cab")).getByRole("button", { name: "Renombrar Cabagra" }),
+    );
+    const campo = screen.getByLabelText(/^Nombre/);
+    await user.clear(campo);
+    await user.type(campo, "Cabagrina");
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    // Igualdad EXACTA contra el literal: cualquier recorte, cualquier «…» y cualquier reescritura
+    // de la explicación rompen aquí.
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(MOTIVO_DESCOMPUESTO));
+    expect(toastMock.error).not.toHaveBeenCalledWith(GENERICO);
+    expect(await screen.findByText(MOTIVO_DESCOMPUESTO)).toBeInTheDocument();
+  });
+
+  it("un validation_error de OTRO campo conserva el mensaje genérico", async () => {
+    // La ficha no borra el genérico: lo aparta cuando hay un motivo del nombre. Un cantón colgado
+    // de una provincia que no existe SÍ es «revisa los campos».
+    crearNodoGeograficoMock.mockResolvedValue({
+      status: "validation_error",
+      fieldErrors: { provinciaId: ["La provincia no existe."] },
+    });
+    const user = montar();
+
+    await user.click(screen.getByRole("button", { name: "Crear provincia" }));
+    await user.type(screen.getByLabelText(/^Nombre/), "Puntarenas");
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(GENERICO));
+  });
+});

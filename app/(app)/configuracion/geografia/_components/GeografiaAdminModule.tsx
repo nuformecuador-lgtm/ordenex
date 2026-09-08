@@ -262,7 +262,7 @@ export function GeografiaAdminModule({
       }
       if (res.status === "validation_error") {
         setErrors(res.fieldErrors);
-        toast.error(mensajeDeDesenlace("validation_error"));
+        toast.error(mensajeDeValidacion(res.fieldErrors));
         await refetch();
         return;
       }
@@ -310,7 +310,7 @@ export function GeografiaAdminModule({
       }
       if (res.status === "validation_error") {
         setErroresRenombrado(res.fieldErrors);
-        toast.error(mensajeDeDesenlace("validation_error"));
+        toast.error(mensajeDeValidacion(res.fieldErrors));
         await refetch();
         return;
       }
@@ -852,4 +852,28 @@ function mensajeDeDesenlace(status: string): string {
     default:
       return "No se pudo completar la acción.";
   }
+}
+
+/**
+ * ⭑ FICHA 392 — el toast de un rechazo de validacion DEL NOMBRE repite el motivo del servidor.
+ *
+ * Los nombres de provincia, canton y distrito SE IMPRIMEN en la etiqueta (van al dato
+ * `ubicacion`), asi que el servidor rechaza el que la fuente no puede imprimir y redacta el el
+ * motivo: que caracter es, su `U+XXXX` y como escribirlo bien. Decirle «revisa los campos: el
+ * formulario esta incompleto» a quien tiene el formulario COMPLETO lo manda a buscar un hueco
+ * que no existe — el mismo fallo que la 376/R23 ya corrigio en el formulario de zonas, y esta es
+ * su misma forma: reenviar el motivo TAL CUAL en vez de un texto propio.
+ *
+ * Se reenvia ENTERO, sin recortar ni resumir: el caso de la letra descompuesta —la que se pinta
+ * igual que la de siempre pero esta escrita de otra forma— es largo porque explica algo que no se
+ * ve en pantalla, y acortarlo se lleva por delante la unica instruccion que sirve.
+ *
+ * Y se repite en el toast aunque el `FieldError` ya lo pinte junto al input, por el motivo de la
+ * 376: el campo puede haber quedado fuera de la pantalla.
+ *
+ * Solo `nombre`: cualquier otro campo (un `provinciaId` que no existe, por ejemplo) sigue con el
+ * generico, que para eso es un fallo de otra clase.
+ */
+function mensajeDeValidacion(fieldErrors: FieldErrors): string {
+  return fieldErrors.nombre?.[0] ?? mensajeDeDesenlace("validation_error");
 }
