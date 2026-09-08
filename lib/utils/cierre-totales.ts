@@ -48,6 +48,37 @@ export function derivarIngresoBodega(
   return { ingresoByGestionId, total: total.toFixed(2) };
 }
 
+/**
+ * 💰 FICHA 398 (design §2.2) — SUMA LOS SNAPSHOTS YA CONGELADOS, uno por gestion.
+ *
+ * ⚠️ ESTO NO ES `derivarPagos` NI `derivarIngresoBodega`, Y LA DIFERENCIA ES DINERO AJENO. Aquellas
+ * dos RE-DERIVAN el importe de TODAS las gestiones con la tarifa que se les pase; esta SUMA lo que
+ * ya esta escrito en cada fila.
+ *
+ * Por que hace falta: al corregir el resultado de UNA gestion dentro de un cierre ya solicitado hay
+ * que rehacer `total_pago_mensajero` y `total_ingreso_bodega_rechazos`, y el cierre NO congela la
+ * fila de `tarifa_zona_mensajero` que uso. Re-derivar aqui reescribiria, con la tarifa de HOY, el
+ * pago congelado de las OTRAS gestiones del cierre —gestiones que nadie corrigio—, asi que una
+ * edicion de tarifa posterior a la solicitud moveria dinero ajeno en silencio. Sumando los
+ * snapshots se toca exactamente una fila y las demas se quedan como estaban.
+ *
+ * `null` cuenta como cero: es el valor de una gestion que aun no entro en ningun cierre (39/R12,
+ * 56/R11), y dentro de un cierre no deberia haber ninguna. Se trata como cero en vez de lanzar
+ * porque el total tiene que poder recalcularse aunque el historico traiga un hueco.
+ *
+ * Money-safe: `Prisma.Decimal` de punta a punta, salida STRING escala 2. Nunca `number`.
+ */
+export function sumarSnapshotsCongelados(
+  valores: readonly (Prisma.Decimal | null)[],
+): string {
+  let total = new Prisma.Decimal(0);
+  for (const valor of valores) {
+    if (valor === null) continue;
+    total = total.plus(valor);
+  }
+  return total.toFixed(2);
+}
+
 // R7/R8/R9: suma con Prisma.Decimal (exacto). Solo `entregada` aporta;
 // reprogramada/devuelta/rechazada cuentan $0 (R8). Serializa a STRING (R9).
 //

@@ -30,7 +30,7 @@ import { ORIGENES_GESTION_DE_LA_TIENDA } from "@/lib/utils/gestion-de-la-tienda-
  */
 
 /**
- * Las 31 familias que SI pueden pertenecer al cierre de un mensajero, escritas a mano.
+ * Las 32 familias que SI pueden pertenecer al cierre de un mensajero, escritas a mano.
  *
  * LA MAYORIA NI SIQUIERA PUEDE ENLAZAR UNA GESTION (`generacion_guia`, `carga_masiva`, …), y
  * estan igual: el criterio de esta lista NO es «¿produce gestiones hoy?» —que es una propiedad
@@ -81,6 +81,12 @@ const ORIGENES_ADMITIDOS_EN_CIERRE = [
   "gestion_tienda_ayuda", // ⚠️ DENTRO por pedido humano explicito (ver arriba)
   "habilitacion_api",
   "rechazo_tope_intentos", // ⚠️ sintetica y ADMITIDA a sabiendas (ver arriba)
+  // ⭑ FICHA 398 — la CORRECCION EN SITIO de una entrega mal declarada. ADMITIDA, y no por
+  // omision: su fila nace sobre una gestion que YA pertenece al cierre y que sigue siendo
+  // trabajo de ese mensajero. Corregirla en sitio (en vez de anularla) es justamente lo que
+  // evita dejar huerfana su fila de `cierre_detail`, que es INMUTABLE. Meterla en la lista de
+  // exclusion sacaria del cierre la gestion que la correccion acaba de arreglar.
+  "correccion_resultado_gestion",
 ] as const satisfies readonly OrdenHistorialOrigenTipo[];
 
 const orden = (xs: readonly string[]) => [...xs].sort();

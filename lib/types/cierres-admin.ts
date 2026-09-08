@@ -2,6 +2,9 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { montoPositivoSchema } from "@/lib/types/wallet";
 import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
+// FICHA 398: el MISMO `motivo` que exige una gestion `rechazada` real (feature 36). Se IMPORTA y
+// no se reescribe: dos declaraciones del mismo requisito divergen a la primera correccion.
+import { motivoSchema } from "@/lib/types/gestion-orden";
 import { cierreConfig } from "@/lib/config/cierre";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
@@ -16,6 +19,7 @@ import type {
   RechazarCierreServiceResult,
   ForzarSolicitudVencidoServiceResult,
   ActualizarPagosGestionServiceResult,
+  CorregirResultadoGestionServiceResult,
 } from "@/lib/interfaces/services/ICierresAdminService";
 
 // Feature 38 — schemas zod del borde de las Server Actions "Cierres del dia" del
@@ -167,6 +171,34 @@ export const actualizarPagosGestionSchema = z
   });
 
 export type ActualizarPagosGestionInput = z.infer<typeof actualizarPagosGestionSchema>;
+
+/**
+ * FICHA 398 — CORRECCION EN SITIO del RESULTADO de una gestion de un cierre ABIERTO
+ * (`entregada -> rechazada`), por un maestro o un admin.
+ *
+ * **`nuevoResultado` NO viaja, y es la mitad del contrato.** Esta ficha corrige UNA y solo una
+ * pareja. Aceptar el destino desde el cliente abriria las otras por accidente —`entregada ->
+ * devuelta`, `rechazada -> entregada`— y cada una mueve dinero en una direccion distinta. El
+ * `.strict()` convierte en `validation_error` cualquier intento de colarlo, en vez de descartarlo
+ * en silencio (leccion de la 352).
+ *
+ * **El `motivo` es el MISMO `motivoSchema` que exige una gestion `rechazada` real** (feature 36,
+ * `lib/types/gestion-orden.ts`), importado y no reescrito: dos declaraciones del mismo requisito
+ * son dos requisitos que un dia divergen, y este texto es lo unico que explica por que una entrega
+ * cobrada dejo de serlo. `.trim().min(1)` rechaza el string en blanco; el servicio lo re-valida.
+ *
+ * **La EVIDENCIA no se pide** (H3, decision del LEADER y no firma humana): una correccion hecha
+ * desde la central no puede tener una foto del rechazo, y ya hay un rechazo en produccion sin
+ * ninguna. La gestion CONSERVA la foto de la entrega, que es la prueba del error.
+ */
+export const corregirResultadoGestionSchema = z
+  .object({
+    gestionId: z.string().uuid(),
+    motivo: motivoSchema,
+  })
+  .strict();
+
+export type CorregirResultadoGestionInput = z.infer<typeof corregirResultadoGestionSchema>;
 
 export type CierreIdInput = z.infer<typeof cierreIdSchema>;
 export type RechazarCierreInput = z.infer<typeof rechazarCierreSchema>;
@@ -339,6 +371,15 @@ export type RechazarCierreResult =
  */
 export type ActualizarPagosGestionResult =
   | ActualizarPagosGestionServiceResult
+  | { status: "unauthenticated" };
+
+/**
+ * FICHA 398: resultado de la Server Action que corrige EN SITIO el resultado de una gestion
+ * (dominio del service + `validation_error` de zod / `unauthenticated` sin sesion). El
+ * `validation_error` de zod cabe en el del dominio: los dos son `Record<string, string[]>`.
+ */
+export type CorregirResultadoGestionResult =
+  | CorregirResultadoGestionServiceResult
   | { status: "unauthenticated" };
 
 // Feature 111/R16: resultado de la Server Action de la valvula de escape (dominio del service

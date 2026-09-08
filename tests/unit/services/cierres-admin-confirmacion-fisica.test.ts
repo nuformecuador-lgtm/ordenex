@@ -67,6 +67,9 @@ function fakeRepo(overrides: Partial<ICierresAdminRepository> = {}): ICierresAdm
     // por verde.
     findGestionEditableEnCierre: vi.fn(async () => null),
     actualizarPagosGestion: vi.fn(async () => ({ status: "fuera_de_alcance" as const })),
+    // FICHA 398: la correccion en sitio del resultado. Doble MUDO: este archivo no la ejercita,
+    // y devolver `conflict` deja constancia de que nadie la esta midiendo aqui.
+    corregirResultadoGestionEnCierre: vi.fn(async () => ({ status: "conflict" as const })),
     ...overrides,
   };
 }

@@ -67,6 +67,10 @@ function fakeRepo(overrides: Partial<ICierresAdminRepository> = {}): ICierresAdm
         general: "10000.00",
       },
     })),
+    // FICHA 398: la correccion EN SITIO del resultado. Doble MUDO en esta suite —la de la
+    // correccion del DESGLOSE—: son dos escrituras distintas y mezclarlas escondería cuál se
+    // llamó. La suya vive en `cierres-admin-corregir-resultado.test.ts`.
+    corregirResultadoGestionEnCierre: vi.fn(async () => ({ status: "conflict" as const })),
     ...overrides,
   };
 }

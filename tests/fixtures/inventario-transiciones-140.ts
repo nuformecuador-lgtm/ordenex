@@ -109,6 +109,10 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "29", origen: "en_bodega_central", destino: "devolviendo_a_tienda", via: "cancelacion_api", callSite: "OrdenRepository.cancelarViaApi" },
   { n: "30", origen: "en_ruta_bodega_central", destino: "devolviendo_a_tienda", via: "cancelacion_api", callSite: "cancelarViaApi" },
   { n: "31", origen: "entregada", destino: "en_reparto", via: "deshacer_gestion", callSite: "CierreDiaService.deshacerGestion" },
+  // ⭑ FICHA 398 (#69) — LA CORRECCION EN SITIO de una entrega mal declarada dentro de un cierre
+  // ABIERTO. Es la SEGUNDA salida de `entregada`, y la unica que no es un deshacer del
+  // mensajero. Llega CON su productor, que es lo que 235/R12 exige de toda arista nueva.
+  { n: "69", origen: "entregada", destino: "rechazada", via: "correccion_resultado_gestion", callSite: "CierresAdminRepository.corregirResultadoGestionEnCierre (398)" },
   { n: "32", origen: "reprogramada", destino: "en_reparto", via: "deshacer_gestion", callSite: "deshacerGestion" },
   { n: "33", origen: "rechazada", destino: "en_reparto", via: "deshacer_gestion", callSite: "deshacerGestion" },
   { n: "34", origen: "en_bodega_central", destino: "en_reparto", via: "deshacer_gestion", callSite: "deshacerGestion (rama devuelta)" },
@@ -262,7 +266,8 @@ export const RECUENTO_INVENTARIO = {
   // 2026-08-20 (feature 237): 59 -> 61. Suma DOS (#65/#66) y NO retira NINGUNA.
   // 2026-08-20 (feature 240): 61 -> 62. Suma UNA (#67) y NO retira NINGUNA.
   // 2026-08-24 (feature 276): 62 -> 63. Suma UNA (#68) y NO retira ninguna.
-  aristasFlujo: 63, // +2 (157); +3 -1 (239); +3 (235); +2 (237); +1 (240); +1 (276)
+  // 2026-09-08 (ficha 398): 63 -> 64. Suma UNA (#69) y NO retira ninguna.
+  aristasFlujo: 64, // +2 (157); +3 -1 (239); +3 (235); +2 (237); +1 (240); +1 (276); +1 (398)
   // 52 -> 54 (239) -> 57 (235) -> 59 (237): las dos altas de la 237 son pares NUEVOS
   // (`ayuda_tienda -> reprogramada` y `ayuda_tienda -> rechazada`; ninguno estaba declarado, y
   // hasta la 237 de `ayuda_tienda` solo se salia rescatando o por el corte), igual que las tres de
@@ -282,6 +287,10 @@ export const RECUENTO_INVENTARIO = {
   // NUEVO —de `sin_gestionar` solo se salia a las dos bodegas—, asi que la aritmetica de pares
   // vuelve a seguir a la de aristas y la diferencia `aristas - pares` se queda en 3 (los
   // duplicados #19/#23, #20/#24 y #21/#67).
-  paresUnicos: 60,
+  // 2026-09-08 (ficha 398): 60 -> 61. La arista #69 (`entregada -> rechazada`) es un par NUEVO —de
+  // `entregada` solo se salia deshaciendo la gestion—, asi que la aritmetica de pares sigue a la de
+  // aristas y la diferencia `aristas - pares` se queda en 3 (los duplicados #19/#23, #20/#24 y
+  // #21/#67).
+  paresUnicos: 61,
   aristasCreacion: 2,
 } as const;

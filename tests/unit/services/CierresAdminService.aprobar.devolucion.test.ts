@@ -54,6 +54,9 @@ function fakeRepo(): ICierresAdminRepository {
   // ejercita (vive en `cierres-admin-corregir-pagos.test.ts`).
   findGestionEditableEnCierre: vi.fn(async () => null),
   actualizarPagosGestion: vi.fn(async () => ({ status: "conflict" as const })),
+  // FICHA 398: la correccion en sitio del resultado. Doble MUDO: este archivo no la ejercita,
+  // y devolver `conflict` deja constancia de que nadie la esta midiendo aqui.
+  corregirResultadoGestionEnCierre: vi.fn(async () => ({ status: "conflict" as const })),
   };
 }
 

@@ -185,6 +185,44 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   //
   // NO entra en `ORIGENES_SIN_EVENTO_PUBLICO`: el integrador recibe `rechazada` igual que hoy.
   "rechazo_tope_intentos",
+  // FICHA 398 (T1.3, design §4.1) — LA CORRECCION EN SITIO: `entregada -> rechazada` sobre una
+  // gestion que YA esta dentro de un cierre ABIERTO (`solicitado`/`vencido`), decidida por un
+  // maestro o un admin desde el detalle del cierre. Productor UNICO:
+  // `CierresAdminRepository.corregirResultadoGestionEnCierre`, en el MISMO commit que este valor.
+  //
+  // POR QUE EXISTE: hasta esta ficha no habia NINGUNA via de corregir una entrega mal declarada
+  // dentro de un cierre —anular exige `cierre_id IS NULL` (67), la correccion de admin solo toca
+  // el reparto por metodo y reabrir el cierre no vuelve a fotografiar los totales—. El 2026-09-08
+  // hubo que arreglarlo a mano en la base de produccion.
+  //
+  // FAMILIA PROPIA, y las dos alternativas mas baratas se descartan por lo que ROMPEN:
+  //   - `gestion` (36) atribuiria al MENSAJERO una decision que tomo un admin desde una oficina, y
+  //     esta fila es la unica evidencia de quien decidio el rechazo que se cobra (`cobroRechazado`,
+  //     56). Es el mismo argumento con el que la 240 rechazo reusar `gestion`.
+  //   - `ajuste_estado` (6) tenia por productor `OrdenService.actualizar`, BORRADO el 2026-08-07:
+  //     reusarlo colgaria la unica correccion que mueve dinero de una familia sin dueño.
+  //
+  // 💰 ⚠️ NO ENTRA EN `ORIGEN_TIPOS_VISITA_REAL`, y la ausencia es deliberada: la orden YA tiene su
+  // fila de familia `gestion` de la visita original, que es la que satisface el `EXISTS` de
+  // `whereIntentosVigentes` (`OrdenHistorialRepository`). Meterla ahi no cambiaria el numero pero
+  // si la semantica —diria que hubo dos visitas donde hubo una—, y el argumento es el mismo,
+  // palabra por palabra, que ya esta escrito para `rechazo_tienda`: la visita ESTA CONTADA.
+  //
+  // El conteo de intentos SI sube, y por la OTRA puerta: al pasar el `resultado` a `rechazada`, la
+  // gestion entra en `RESULTADOS_QUE_CUENTAN_COMO_INTENTO` (mas abajo en este archivo). Eso es
+  // 398/R15 — la correccion funcionando, no un efecto lateral— y esta declarado en su spec.
+  //
+  // NO entra en `ORIGEN_TIPOS_CON_GESTION` aunque su fila nazca CON `gestion_orden_id` poblado:
+  // esa lista solo desambigua la NULIDAD del enlace (67/R25-R26). Mismo caso declarado que
+  // `escalado_devuelta_sla`, `anclaje_devolucion`, `rechazo_tienda` y `rechazo_tope_intentos`.
+  //
+  // NO entra en `ORIGENES_GESTION_FUERA_DEL_CIERRE`: la gestion corregida SIGUE siendo trabajo de
+  // ese mensajero y sigue perteneciendo a ESE cierre —corregirla en sitio es justamente lo que
+  // evita dejar huerfana su fila de `cierre_detail`—.
+  //
+  // NO entra en `ORIGENES_SIN_EVENTO_PUBLICO`: esa lista esta VACIA desde la 268 y el integrador
+  // recibe `rechazada` igual que por cualquier otra via.
+  "correccion_resultado_gestion",
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];

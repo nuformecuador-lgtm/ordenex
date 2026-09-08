@@ -6,7 +6,10 @@ import type {
   FiltrosDescargaGestiones,
 } from "@/lib/types/filtros-cierres";
 import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
-import type { ActualizarPagosGestionInput } from "@/lib/types/cierres-admin";
+import type {
+  ActualizarPagosGestionInput,
+  CorregirResultadoGestionInput,
+} from "@/lib/types/cierres-admin";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
@@ -508,6 +511,29 @@ export type ActualizarPagosGestionServiceResult =
   | { status: "conflict" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
+/**
+ * FICHA 398 — desenlaces de la CORRECCION EN SITIO del RESULTADO de una gestion
+ * (`entregada -> rechazada`) desde el detalle de un cierre abierto.
+ *
+ * ESPEJO EXACTO de `ActualizarPagosGestionServiceResult`, a proposito: la pantalla trata los
+ * cinco desenlaces con el mismo codigo que ya tiene para la correccion del desglose.
+ *
+ *  - `forbidden` (R1): el rol no corrige resultados. Son maestro y admin, y NADIE mas — ni
+ *    siquiera el `adminSatelite`, que si tiene alcance para VER los cierres de su bodega. Y NUNCA
+ *    el mensajero: mueve dinero y quien se equivoco fue el.
+ *  - `no_encontrada` (R2): la gestion no existe, esta anulada, no esta en un cierre, o su cierre
+ *    no es del alcance. Los cuatro van juntos: distinguirlos revelaria cierres ajenos.
+ *  - `conflict` (R3/R12): el cierre no esta ABIERTO, o dejo de estarlo entre la lectura y la
+ *    escritura. La correccion NO se aplica.
+ *  - `validation_error` (R4/R5): la gestion no es una `entregada`, o el motivo llega vacio.
+ */
+export type CorregirResultadoGestionServiceResult =
+  | { status: "ok"; gestionId: string; totales: CierreTotales }
+  | { status: "forbidden" }
+  | { status: "no_encontrada" }
+  | { status: "conflict" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
 export interface ICierresAdminService {
   /**
    * R2-R5/R8/R9: lista los cierres del alcance del actor (rol+zona), partidos en
@@ -641,6 +667,29 @@ export interface ICierresAdminService {
     input: ActualizarPagosGestionInput,
     actor: Actor,
   ): Promise<ActualizarPagosGestionServiceResult>;
+  /**
+   * FICHA 398 — corrige EN SITIO el RESULTADO de UNA gestion de un cierre ABIERTO,
+   * `entregada -> rechazada`. Solo maestro/admin (H4, decision del leader).
+   *
+   * Lo que hace, y por que existe: hasta esta ficha no habia NINGUNA via de sacar de un cierre ya
+   * solicitado un cobro que nadie recaudo. Anular exige `cierre_id IS NULL`, la correccion del
+   * desglose solo reparte por metodo y reabrir el cierre no vuelve a fotografiar los totales.
+   *
+   * `nuevoResultado` NO viaja en la peticion: esta ficha concede UNA pareja y aceptar el destino
+   * desde el cliente abriria las demas por accidente.
+   *
+   * ⚠️ CONSECUENCIA DECLARADA (R15): la gestion pasa a contar como INTENTO DE ENTREGA de esa orden
+   * en cuanto el cierre se apruebe (`RESULTADOS_QUE_CUENTAN_COMO_INTENTO` incluye `rechazada` y
+   * excluye `entregada`). No es un efecto lateral: es la correccion funcionando.
+   *
+   * ⚠️ HUECO CONOCIDO Y DECLARADO (H5, decision del LEADER, no firma humana): al mensajero NO se
+   * le avisa, aunque esta correccion le baje el pago de esa gestion a 0.00. Emitir el aviso pide
+   * otro tipo de notificacion y otra migracion, y es ficha aparte.
+   */
+  corregirResultadoGestion(
+    input: CorregirResultadoGestionInput,
+    actor: Actor,
+  ): Promise<CorregirResultadoGestionServiceResult>;
   aprobarCierre(
     cierreId: string,
     actor: Actor,

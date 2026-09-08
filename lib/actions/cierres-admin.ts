@@ -26,6 +26,7 @@ import type { ICierresAdminService } from "@/lib/interfaces/services/ICierresAdm
 import {
   cierreIdSchema,
   actualizarPagosGestionSchema,
+  corregirResultadoGestionSchema,
   aprobarCierreSchema,
   rechazarCierreSchema,
   forzarSolicitudVencidoSchema,
@@ -44,6 +45,7 @@ import {
   type RechazarCierreResult,
   type ForzarSolicitudVencidoResult,
   type ActualizarPagosGestionResult,
+  type CorregirResultadoGestionResult,
 } from "@/lib/types/cierres-admin";
 import { filtrosDescargaGestionesSchema } from "@/lib/types/filtros-cierres";
 import type { CatalogoFiltrosCierresDTO } from "@/lib/types/filtros-cierres";
@@ -359,6 +361,31 @@ export async function actualizarPagosGestion(
     const data = actualizarPagosGestionSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.actualizarPagosGestion(data, actor);
+  });
+  return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
+}
+
+/**
+ * 💰 FICHA 398 — corrige EN SITIO el RESULTADO de una gestion de un cierre ABIERTO
+ * (`entregada -> rechazada`). Mutacion interna del mismo proyecto -> Server Action, no route
+ * handler (patron aprobar/rechazar/corregir-pagos).
+ *
+ * El borde resuelve el actor y valida la FORMA (`validation_error` de zod, incluido el `.strict()`
+ * que rechaza un `nuevoResultado` colado). El ROL, el ALCANCE, el estado del cierre y el resultado
+ * vigente los decide el service, que es quien puede mirar la base.
+ *
+ * @sin-superficie el backend de la ficha 398 va por delante de su pantalla: la accion aterriza en la tanda de `backend_dev` y el dialogo que la dispara (`CorregirResultadoDialog`, T4.1, montado en `CierresAdminModule` por T4.2) es tarea de `frontend_dev`, que trabaja despues y en otra rama. NO ES DEUDA NI EXCEPCION PERMANENTE: esta linea se BORRA en el commit que monte el dialogo, y la guardia lo exige sola —una anotacion que sobrevive a su motivo se pone roja—. Precedentes del mismo caso: `conteo-productos.ts` y `corregir-dia-reparto.ts`.
+ */
+export async function corregirResultadoGestion(
+  input: unknown,
+  deps: CierresAdminDeps = {},
+): Promise<CorregirResultadoGestionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = corregirResultadoGestionSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.corregirResultadoGestion(data, actor);
   });
   return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
 }
