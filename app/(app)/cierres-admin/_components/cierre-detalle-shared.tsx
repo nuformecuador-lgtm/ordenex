@@ -65,6 +65,21 @@ import {
   EFECTIVO_NO_CUBRE_NOTA,
   GANA_BODEGA_SATELITE_NOTA,
   FLETE_RECHAZO_NO_DEDUCIBLE_NOTA,
+  // FICHA 395 — los rotulos y las notas de las TRES cascadas del cierre de MENSAJERO. Mismo
+  // camino y mismo motivo que los de la 393: el texto vive en el modulo PURO y las pantallas lo
+  // piden por esta puerta, que es donde ya piden el resto.
+  GANA_LA_TIENDA_LABEL,
+  GANA_LA_TIENDA_NOTA,
+  GANA_LA_TIENDA_NEGATIVO_NOTA,
+  PAGO_TIENDA_HOY_NOTA,
+  COBRADO_SOBRE_RECAUDADO_NOTA,
+  NETO_ORDENEX_NOTA,
+  NETO_ORDENEX_NEGATIVO_NOTA,
+  FLETE_RECHAZO_YA_COBRADO_NOTA,
+  FLETE_RECHAZO_AUN_NO_COBRADO_NOTA,
+  FLETE_RECHAZO_NO_SE_COBRARA_NOTA,
+  CASCADA_FACTURA_TIENDA_TITULO,
+  CASCADA_NETO_ORDENEX_TITULO,
 } from "./cierre-labels";
 // Feature 213 (T6/T7): el desglose de pago vive en UN solo sitio (R25). De ahí salen también
 // el orden de los medios y el monto de cada uno, que es lo que estas tablas pintan por columna.
@@ -134,6 +149,19 @@ export {
   EFECTIVO_NO_CUBRE_NOTA,
   GANA_BODEGA_SATELITE_NOTA,
   FLETE_RECHAZO_NO_DEDUCIBLE_NOTA,
+  // FICHA 395 — las doce de las tres cascadas del cierre de MENSAJERO, por el mismo camino.
+  GANA_LA_TIENDA_LABEL,
+  GANA_LA_TIENDA_NOTA,
+  GANA_LA_TIENDA_NEGATIVO_NOTA,
+  PAGO_TIENDA_HOY_NOTA,
+  COBRADO_SOBRE_RECAUDADO_NOTA,
+  NETO_ORDENEX_NOTA,
+  NETO_ORDENEX_NEGATIVO_NOTA,
+  FLETE_RECHAZO_YA_COBRADO_NOTA,
+  FLETE_RECHAZO_AUN_NO_COBRADO_NOTA,
+  FLETE_RECHAZO_NO_SE_COBRARA_NOTA,
+  CASCADA_FACTURA_TIENDA_TITULO,
+  CASCADA_NETO_ORDENEX_TITULO,
 };
 
 export const RESULTADO_VACIO: Record<CierreResultado, string> = {
@@ -512,6 +540,20 @@ export { moneyTope };
  */
 export function esMontoNegativo(value: string | null): boolean {
   return value !== null && value.trimStart().startsWith("-");
+}
+
+/**
+ * ¿El monto (STRING money-safe) es cero? Comparación TEXTUAL ("0", "0.00", "-0.00"), no
+ * aritmética: nada de `Number`/`parseFloat` (R13), igual que `esMontoNegativo`.
+ *
+ * FICHA 395 — vivía privada dentro de `cierre-factura.tsx`, donde apaga el renglón de un
+ * concepto que no se cobró. La necesita también el detalle del cierre de mensajero, para decidir
+ * si hay un flete por rechazo del que hablar antes de escribir su tiempo verbal. Se MUEVE aquí
+ * en vez de copiarse: dos lectores del cero que se separen es la misma plata leída distinta
+ * según por qué pantalla se entre.
+ */
+export function esMontoCero(monto: string): boolean {
+  return /^-?0(\.0+)?$/.test(monto.trim());
 }
 
 /** Une la jerarquía geográfica en una línea legible (omite los vacíos). */

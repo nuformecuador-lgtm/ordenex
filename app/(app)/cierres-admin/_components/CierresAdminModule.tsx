@@ -66,6 +66,10 @@ import {
 // `moneyTope` lo usan los mensajes de la indemnizacion (feature 230 de `dev`); los tres
 // simbolos de tabla que `dev` importaba aqui se fueron con la tira de comprobantes.
 import { money, moneyTope } from "./cierre-detalle-shared";
+// FICHA 395: las tres cascadas del detalle («de quién es el dinero», lo que Ordenex le factura a
+// la tienda y lo que le queda a Ordenex). Viven en su propio archivo para que la pantalla de
+// dinero tenga nombre en el censo de identidades (`DineroIdentidadesEnPantalla`).
+import { CascadasCierreMensajero } from "./CascadasCierreMensajero";
 import {
   CierreFacturaResumen,
   CierreFacturaDetalle,
@@ -321,6 +325,19 @@ interface DetalleAbierto {
   ganancia: string;
   /** Total general menos flete + IVA y comisión + IVA, derivado server-side (puede ser negativo). */
   pagoTienda: string;
+  /**
+   * FICHA 395 — los cuatro derivados de las tres cascadas, tal como los emite el servidor. Los
+   * tres importes son STRING con su signo y NINGUNO se recorta a cero.
+   *
+   * `ganancia` y `pagoTienda` siguen aquí arriba, intactos y con el mismo significado: nadie los
+   * absorbió. `netoOrdenex` NO es `ganancia` (resta ADEMÁS el ingreso de bodega) y `ganaLaTienda`
+   * NO es `pagoTienda` (aquel no descuenta el flete por rechazo, que nunca entró en lo
+   * recaudado). Los cuatro se pasan tal cual a `CascadasCierreMensajero`: aquí no se deriva nada.
+   */
+  cobradoSobreRecaudado: string;
+  netoOrdenex: string;
+  ganaLaTienda: string;
+  fleteRechazoYaCobradoATienda: boolean;
   /**
    * Feature 264 (R7/R13) — las órdenes que el corte del día barrió a `sin_gestionar` al crear
    * ESTE cierre. Sin un solo campo de dinero: no tienen gestión, así que no hay nada que sumar.
@@ -600,6 +617,12 @@ export function CierresAdminModule({
         desgloseIngresoBodegaRechazos: result.desgloseIngresoBodegaRechazos,
         ganancia: result.ganancia,
         pagoTienda: result.pagoTienda,
+        // FICHA 395: los cuatro llegan DERIVADOS del servidor y se guardan tal cual. Ni una
+        // resta aquí: el navegador no hace aritmética de dinero.
+        cobradoSobreRecaudado: result.cobradoSobreRecaudado,
+        netoOrdenex: result.netoOrdenex,
+        ganaLaTienda: result.ganaLaTienda,
+        fleteRechazoYaCobradoATienda: result.fleteRechazoYaCobradoATienda,
         // Feature 264 (R30): los dos campos viajan JUNTOS desde el servicio hasta la hoja. No
         // se derivan ni se rellenan aquí: `[]` y `false` significan cosas distintas y sólo el
         // servidor sabe cuál es cuál.
@@ -1143,6 +1166,28 @@ export function CierresAdminModule({
       >
         {detalle ? (
           <div className="flex max-h-[70vh] flex-col gap-6 overflow-y-auto pr-1">
+            {/* FICHA 395 — DE QUIÉN ES EL DINERO, ANTES QUE NADA.
+                Va ARRIBA DEL TODO, y el sitio es la mitad del arreglo: lo primero que se leía al
+                abrir este detalle era «Pago a tienda» junto a «Total Ordenex», dos cifras sueltas
+                que invitan a una resta que NO da. Ahora lo primero es la partición —recaudado
+                menos lo facturado igual a lo que gana la tienda—, que cierra siempre, y sólo
+                después el desglose de lo facturado y el pago de hoy. El comprobante entero sigue
+                justo debajo, sin tocar ni una línea.
+                Las tres cascadas no derivan nada: los cuatro campos llegan del servidor. */}
+            <CascadasCierreMensajero
+              mensajeroNombre={detalle.cierre.mensajeroNombre}
+              estado={detalle.cierre.estado}
+              general={detalle.cierre.totales.general}
+              totalesIngreso={detalle.totalesIngreso}
+              totalPagoMensajero={detalle.cierre.totalPagoMensajero}
+              totalIngresoBodegaRechazos={detalle.cierre.totalIngresoBodegaRechazos}
+              pagoTienda={detalle.pagoTienda}
+              cobradoSobreRecaudado={detalle.cobradoSobreRecaudado}
+              netoOrdenex={detalle.netoOrdenex}
+              ganaLaTienda={detalle.ganaLaTienda}
+              fleteRechazoYaCobradoATienda={detalle.fleteRechazoYaCobradoATienda}
+            />
+
             {/* El detalle es UNA sola lectura: el comprobante. Reemplazó a los paneles
                 sueltos + las 4 tablas por resultado (R6-R8) sin perder ningún dato: los
                 totales snapshot, el ingreso de Ordenex, la liquidación y las gestiones
