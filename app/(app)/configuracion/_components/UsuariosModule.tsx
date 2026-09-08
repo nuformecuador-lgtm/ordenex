@@ -330,7 +330,25 @@ export function UsuariosModule({ initialData }: UsuariosModuleProps) {
       // mostrarla una vez; el usuario lo cierra manualmente.
       if (!conPassword) setFormOpen(false);
     } else {
-      toast.error(mensajeError(res.status));
+      // ⭑ FICHA 392 — si el servidor rechazó el NOMBRE, el toast repite SU motivo.
+      //
+      // El nombre de una tienda se imprime en la etiqueta, así que el servidor rechaza el que la
+      // fuente no puede imprimir y redacta él el aviso: qué carácter es, su `U+XXXX` y cómo
+      // escribirlo bien. El genérico de aquí —«Revisa los datos e inténtalo de nuevo.»— manda a
+      // revisar unos datos que están bien: el formulario está COMPLETO y lo que falla es un
+      // carácter concreto que ni siquiera se distingue a simple vista.
+      //
+      // Es la forma que la 376/R23 ya usó en el formulario de zonas: reenviar el motivo del
+      // servidor TAL CUAL en vez de un texto propio. Entero, además: el caso de la letra
+      // descompuesta es largo porque explica algo que no se ve en pantalla.
+      //
+      // Viene del formulario y no de `res` a propósito: `submit()` devuelve con la MISMA forma
+      // los rechazos de la validación de cliente, cuyos mensajes de `nombre` los redacta zod en
+      // inglés. El formulario sabe cuál de las dos ramas corrió; aquí solo se vería el texto.
+      toast.error(
+        formRef.current?.motivoDelNombreDelServidor() ??
+          mensajeError(res.status),
+      );
     }
   }
 

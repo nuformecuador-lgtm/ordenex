@@ -642,7 +642,21 @@ function mensajeDeError(err: ZonaActionError): string {
       // incompleto» —el formulario estaba completo, la regla lo rechazó—. El motivo lo redacta el
       // servidor y se reenvía TAL CUAL: la casilla lo pinta (FieldError) y el toast lo repite,
       // porque la casilla puede haber quedado fuera de la pantalla al hacer scroll.
+      //
+      // ⭑ FICHA 392 — el nombre de la zona entra por la MISMA puerta y por el mismo motivo. La
+      // zona se imprime en la etiqueta (es la primera parte de `ubicacion`), así que el servidor
+      // rechaza el nombre que la fuente no puede imprimir y redacta él el motivo: qué carácter
+      // es, su `U+XXXX` y cómo escribirlo bien. Mandar a «revisar los campos» a quien tiene el
+      // formulario COMPLETO lo pone a buscar un hueco que no existe.
+      //
+      // El motivo se reenvía ENTERO, sin recortar: el caso de la letra descompuesta —la que se
+      // pinta igual que la de siempre pero está escrita de otra forma— es largo porque explica
+      // algo que no se ve en pantalla, y resumirlo lo deja sin la única instrucción que sirve.
+      //
+      // `nombre` va antes que `esCentral` porque el servidor nunca los devuelve juntos: el corte
+      // del nombre vive en `prepararDatos` y la marca de zona central se decide después.
       return (
+        err.fieldErrors.nombre?.[0] ??
         err.fieldErrors.esCentral?.[0] ??
         "Revisa los campos: el formulario está incompleto."
       );

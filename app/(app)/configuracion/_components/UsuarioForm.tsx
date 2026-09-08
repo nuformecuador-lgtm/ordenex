@@ -1,6 +1,12 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
+import {
+  forwardRef,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import useSWR from "swr";
 import { Copy } from "lucide-react";
 
@@ -61,6 +67,25 @@ export interface UsuarioFormHandle {
    * literalmente el defecto que esta ficha vino a cerrar.
    */
   cambioPendiente: () => CambioUsuarioEvaluable | null;
+  /**
+   * ⭑ FICHA 392 — el motivo QUE DIO EL SERVIDOR para el campo «nombre» en el último `submit()`,
+   * o `null` si no dio ninguno.
+   *
+   * El nombre de una tienda SE IMPRIME en la etiqueta, así que el servidor rechaza el que la
+   * fuente no puede imprimir y redacta él el motivo (qué carácter es, su `U+XXXX` y cómo
+   * escribirlo bien). El anfitrión lo repite en el toast en vez del genérico: decir «revisa los
+   * datos» a quien tiene el formulario COMPLETO lo manda a buscar un hueco que no existe.
+   *
+   * ⚠️ Es «del servidor» de verdad, no un texto que se parezca: solo se llena en la rama que
+   * llegó a llamar a la acción. La validación de cliente corre ANTES y devuelve sin tocar el
+   * servidor, y sus mensajes de `nombre` los redacta zod en inglés («Too small: expected string
+   * to have >=1 characters») — reenviar ESO al toast sería cambiar un mensaje pobre por uno
+   * peor. Distinguirlo aquí, donde se sabe cuál de las dos ramas corrió, es lo que impide que el
+   * anfitrión tenga que adivinarlo por el texto.
+   *
+   * Sale del MISMO `res` que `submit()` devuelve, y se fija antes de devolverlo.
+   */
+  motivoDelNombreDelServidor: () => string | null;
 }
 
 export interface UsuarioFormProps {
@@ -120,6 +145,10 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
       null,
     );
     const [copiado, setCopiado] = useState(false);
+    // FICHA 392: el motivo del servidor para «nombre» del último `submit()`. Es un ref y no un
+    // estado a propósito: no se pinta (de eso ya se encarga `errors.nombre`), solo lo lee el
+    // anfitrión justo después de que `submit()` resuelva, y no debe provocar un re-render.
+    const motivoDelNombreDelServidor = useRef<string | null>(null);
 
     const { data: tipos } = useSWR("usuarios:tipos-identificacion", async () => {
       const res = await listarTiposIdentificacion();
@@ -300,9 +329,15 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
     }
 
     async function submit(): Promise<UsuarioFormResult> {
+      // FICHA 392: se limpia SIEMPRE al empezar, para que el anfitrión no pueda repetir en el
+      // toast el motivo de un intento anterior ya corregido.
+      motivoDelNombreDelServidor.current = null;
+
       const { input, result } = validate();
       if (result) {
         setErrors(result.status === "validation_error" ? result.fieldErrors : {});
+        // Salida por la rama del CLIENTE: el servidor no llegó a hablar, así que aquí no hay
+        // ningún motivo suyo que reenviar (ver `motivoDelNombreDelServidor` en el handle).
         return result;
       }
 
@@ -313,6 +348,10 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
 
       if (res.status === "validation_error") {
         setErrors(res.fieldErrors);
+        // FICHA 392: el rechazo del nombre que la etiqueta no puede imprimir llega por aquí, con
+        // su motivo ya redactado. Se guarda TAL CUAL —entero, sin recortar— para que el anfitrión
+        // lo repita en el toast en vez del genérico.
+        motivoDelNombreDelServidor.current = res.fieldErrors.nombre?.[0] ?? null;
       } else if (res.status === "conflict") {
         setErrors({ [res.campo]: ["Ya está en uso por otro usuario"] });
       } else {
@@ -352,7 +391,11 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
       };
     }
 
-    useImperativeHandle(ref, () => ({ submit, cambioPendiente }));
+    useImperativeHandle(ref, () => ({
+      submit,
+      cambioPendiente,
+      motivoDelNombreDelServidor: () => motivoDelNombreDelServidor.current,
+    }));
 
     async function copiar() {
       if (!generatedPassword) return;
