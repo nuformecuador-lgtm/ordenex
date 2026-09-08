@@ -28,11 +28,12 @@ import type { CatalogoFiltrosCierresDTO } from "@/lib/types/filtros-cierres";
 //  · QUE SEA UNO. Que el segundo botón no esté, en las dos pantallas y en las dos pestañas.
 //  · QUE EL NIVEL MANDE SOBRE LAS COLUMNAS. Elegir «Detalle» cambia el juego que el selector
 //    ofrece, y lo que sale en el archivo es el del nivel elegido.
-//  · QUE EL DETALLE NO SE PUEDA REORDENAR. Esa hoja emite siempre sus 31 columnas y solo el
-//    resultado de la fila decide cuáles se pueblan: su orden ES el agrupado que la hace legible.
-//    Es el caso que hay que mirar dos veces, porque el daño de permitirlo sería MUDO — la
-//    preferencia vive en el `localStorage` del usuario y ninguna prueba de la hoja se pondría
-//    roja: solo se degradaría el archivo de quien reordenó.
+//  · QUE EL DETALLE TAMBIÉN SE REORDENE, y que el orden elegido llegue al ARCHIVO. Ficha 387,
+//    pedido del humano del 2026-09-07, que revierte la decisión del 2026-09-05 de dejar esa hoja
+//    en solo-ocultar. Se prueba de punta a punta —selector, preferencia, ventana de mensajeros,
+//    cabecera del archivo— porque los botones podrían estar pintados sin llegar al generador. Lo
+//    que NO cambia es el orden POR DEFECTO: el agrupado del catálogo (14 columnas que siempre
+//    traen dato, 17 condicionales), que es lo que recibe quien no toca nada.
 //  · QUE LA PREFERENCIA SEA POR NIVEL. Son juegos de columnas distintos (7 y 31): una sola clave
 //    haría que ocultar en uno moviera en silencio lo guardado del otro.
 //
@@ -505,19 +506,20 @@ describe("Cierres · un solo botón de descarga con nivel de detalle", () => {
     }
   });
 
-  it("en «Detalle» el selector OCULTA pero NO REORDENA; en «Resumen» sí reordena", async () => {
-    // El caso que hay que mirar dos veces. Reordenar la hoja fundida intercala las columnas
-    // condicionales entre las que siempre traen dato, y una celda vacía deja de significar
-    // «este resultado no tiene ese dato» para no significar nada. El daño sería MUDO: vive en
-    // el `localStorage` del usuario y ninguna prueba de la hoja se pondría roja.
+  it("los DOS niveles ocultan y reordenan: el detalle ya no es la excepción (ficha 387)", async () => {
+    // Ficha 387, pedido del humano del 2026-09-07: «en descarga detallada no pusiste el control
+    // que ya tenemos en ese componente, que es para ordenar las columnas antes de hacer la
+    // descarga». Del 2026-09-05 al 2026-09-07 el detalle se montó con `permitirReordenar={false}`
+    // porque su orden agrupado se creyó contrato de legibilidad; el humano lo revirtió sabiéndolo.
+    //
+    // Se comprueban las DOS mitades. Sin la del resumen, el caso pasaría con un selector que
+    // reordenase en el nivel equivocado; sin la del detalle, no probaría la ficha.
     for (const pantalla of PANTALLAS) {
       const user = userEvent.setup();
       pantalla.montar();
       await screen.findByRole("button", { name: pantalla.botonResumen });
       await abrirSelector(user);
 
-      // En «Resumen» reordenar sigue estando, como hasta hoy. Sin esta mitad, el caso pasaría
-      // igual con un selector que no supiera reordenar en ningún nivel.
       const primeraDelResumen = pantalla.columnasResumen[0]!.encabezado;
       expect(
         screen.getByRole("button", { name: `Bajar ${primeraDelResumen}` }),
@@ -525,21 +527,19 @@ describe("Cierres · un solo botón de descarga con nivel de detalle", () => {
       ).toBeInTheDocument();
 
       await elegirNivel(user, NIVEL_DETALLE_LABEL);
-      await waitFor(() =>
-        expect(columnasEnElSelector()).toEqual(
-          encabezadosDe(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA),
-        ),
-      );
+      const catalogo = encabezadosDe(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA);
+      // El ORDEN POR DEFECTO del detalle es el agrupado del catálogo, y eso NO cambia: lo que
+      // se revierte es la imposición, no el punto de partida.
+      await waitFor(() => expect(columnasEnElSelector()).toEqual(catalogo));
 
-      // Ni un solo control de mover, para ninguna de las 31.
+      // Un control de mover por columna y sentido, para las 31. Se afirma el TOTAL y no una
+      // fila: un interruptor que solo apagara la primera pasaría un caso de una sola fila.
       expect(
-        screen.queryAllByRole("button", { name: /^(Subir|Bajar) / }).map((boton) =>
-          boton.getAttribute("aria-label"),
-        ),
-        `${pantalla.nombre}: la hoja fundida ofrece reordenar, y su orden es contrato de legibilidad`,
-      ).toEqual([]);
+        screen.getAllByRole("button", { name: /^(Subir|Bajar) / }),
+        `${pantalla.nombre}: el detalle no ofrece reordenar sus columnas`,
+      ).toHaveLength(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.length * 2);
 
-      // Pero ocultar sí: las 31 casillas están, marcadas, y se pueden desmarcar.
+      // Y ocultar sigue estando: no se cambió una capacidad por la otra.
       const ultima = COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.at(-1)!;
       const casilla = screen.getByRole("checkbox", { name: ultima.encabezado });
       expect(casilla).toHaveAttribute("aria-checked", "true");
@@ -561,6 +561,68 @@ describe("Cierres · un solo botón de descarga con nivel de detalle", () => {
       window.localStorage.clear();
       buildXlsxRowsMock.mockResolvedValue(new ArrayBuffer(8));
     }
+  });
+
+  it("el orden elegido en «Detalle» es el de la cabecera del archivo detallado (ficha 387)", async () => {
+    // La mitad que de verdad prueba la ficha: los botones podrían estar pintados y no llegar al
+    // archivo. El recorrido es el de producción entero —selector → preferencia → ventana de
+    // mensajeros → generador—, y solo se aísla el codificador binario.
+    //
+    // Se mueve la PRIMERA columna un puesto abajo, que es el caso que la decisión revertida
+    // prohibía: mete una del bloque «siempre con dato» dentro del orden que se creía intocable.
+    for (const pantalla of PANTALLAS) {
+      const user = userEvent.setup();
+      pantalla.montar();
+      await screen.findByRole("button", { name: pantalla.botonResumen });
+
+      const catalogo = encabezadosDe(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA);
+      const esperado = [catalogo[1]!, catalogo[0]!, ...catalogo.slice(2)];
+
+      await abrirSelector(user);
+      await elegirNivel(user, NIVEL_DETALLE_LABEL);
+      await waitFor(() => expect(columnasEnElSelector()).toEqual(catalogo));
+      await user.click(screen.getByRole("button", { name: `Bajar ${catalogo[0]}` }));
+      await waitFor(() =>
+        expect(
+          columnasEnElSelector(),
+          `${pantalla.nombre}: mover en el detalle no reordenó el selector`,
+        ).toEqual(esperado),
+      );
+      await cerrarSelector(user);
+
+      await user.click(screen.getByRole("button", { name: BOTON_DETALLE }));
+      await user.click(await screen.findByRole("button", { name: BOTON_DETALLE_ARCHIVO }));
+      await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
+
+      // Ni una columna de menos: mover no oculta nada (R24). Y en el orden elegido.
+      expect(encabezadosDelArchivo(), `${pantalla.nombre}: detalle reordenado`).toEqual(esperado);
+
+      cleanup();
+      vi.clearAllMocks();
+      window.localStorage.clear();
+      buildXlsxRowsMock.mockResolvedValue(new ArrayBuffer(8));
+    }
+  });
+
+  it("el selector del detalle ya no dice que su orden sea fijo", async () => {
+    // El texto que la decisión revertida mostraba al usuario bajo la lista de columnas. Dejarlo
+    // sería mentirle en pantalla: se retiró con la prop que lo pintaba. Se busca por su parte
+    // invariable —no por la frase entera— para que un retoque de redacción no lo resucite mudo.
+    const pantalla = PANTALLAS[0]!;
+    const user = userEvent.setup();
+    pantalla.montar();
+    await screen.findByRole("button", { name: pantalla.botonResumen });
+    await abrirSelector(user);
+    await elegirNivel(user, NIVEL_DETALLE_LABEL);
+    await waitFor(() =>
+      expect(columnasEnElSelector()).toEqual(
+        encabezadosDe(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA),
+      ),
+    );
+    expect(
+      screen.queryByText(/orden de esta hoja es fijo/i),
+      "el selector del detalle sigue diciendo que su orden es fijo",
+    ).toBeNull();
   });
 
   it("en «Detalle» el botón abre la ventana de mensajeros y rango, y no descarga sola", async () => {

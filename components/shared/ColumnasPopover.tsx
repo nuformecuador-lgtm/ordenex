@@ -36,33 +36,6 @@ export interface ColumnasPopoverProps<T> {
    * estado. Sin este prop, el popover es exactamente el de antes.
    */
   encabezado?: ReactNode;
-  /**
-   * `false` ⇒ el selector OCULTA pero NO REORDENA. Por defecto `true`.
-   *
-   * ── POR QUÉ ESTA PROP EXISTE (y por qué no es una bifurcación gratuita) ────────────────────
-   * R21 (decisión del humano del 2026-08-28) juntó ocultar y reordenar a propósito: un selector
-   * con dos comportamientos según quién lo monta es la bifurcación que nadie recuerda al mes. Se
-   * mantiene el fondo de esa decisión —el DEFECTO sigue siendo «las dos cosas»— y se abre una
-   * sola excepción, declarada por quien la necesita en vez de deducida de su ámbito.
-   *
-   * La excepción es la hoja FUNDIDA de gestiones de cierres. Esa hoja emite SIEMPRE sus columnas
-   * y solo el resultado de cada fila decide cuáles se pueblan: su orden ES el agrupado que la
-   * hace legible —las que siempre traen dato primero, las condicionales después—. Intercalarlas
-   * deja celdas vacías que ya no dicen «este resultado no tiene ese dato», sino nada. Ocultar
-   * ahí es seguro; reordenar, no.
-   *
-   * Y el daño de permitirlo sería MUDO: la preferencia vive en el `localStorage` del usuario, así
-   * que ninguna prueba de la hoja se pondría roja — solo se degradaría el archivo de quien
-   * reordenó. Por eso la capacidad se apaga en el COMPONENTE, con esta prop, y no duplicando el
-   * selector: dos copias divergen, y la copia sin arreglar sería justo la del archivo de dinero.
-   */
-  permitirReordenar?: boolean;
-  /**
-   * Nota al pie que explica por qué el orden es fijo. Se muestra solo cuando `permitirReordenar`
-   * es `false`: una capacidad que falta sin decir por qué se lee como un fallo del selector.
-   * El texto lo pone quien monta —el motivo es suyo—, igual que `titulo`.
-   */
-  notaOrden?: ReactNode;
 }
 
 /**
@@ -73,10 +46,16 @@ export interface ColumnasPopoverProps<T> {
  * aparece en los dos a la vez (R21, decisión 3 del humano del 2026-08-28). Un selector con dos
  * comportamientos según quién lo monta es la clase de bifurcación que nadie recuerda al mes.
  *
- * Reordenar sigue siendo el DEFECTO, y hoy tiene UNA excepción: `permitirReordenar={false}` deja
- * el selector en solo-ocultar para las hojas cuyo orden de columnas es contrato de legibilidad
- * (la fundida de gestiones de cierres). El porqué completo está en la prop; lo que importa aquí
- * es que la excepción la declara quien monta, se ve en el JSX, y no se deduce del ámbito.
+ * REORDENAR ES INCONDICIONAL, y volvió a serlo el 2026-09-07 (ficha 387). Del 2026-09-05 al
+ * 2026-09-07 hubo una prop de escape —`permitirReordenar={false}`— con un único cliente: la hoja
+ * FUNDIDA de gestiones de cierres, cuyo orden agrupado (las columnas que siempre traen dato
+ * primero, las condicionales después) se consideró contrato de legibilidad. El humano lo revirtió
+ * avisado del motivo: ese agrupado sigue siendo el orden POR DEFECTO del catálogo y «Restablecer»
+ * devuelve a él, pero deja de ser una imposición. Sin clientes, la prop se retiró entera en vez de
+ * quedarse como un interruptor muerto documentando una decisión que ya no rige.
+ *
+ * Consecuencia buscada: hoy NO hay dos selectores de columnas con comportamientos distintos. Las
+ * diecisiete superficies que lo montan ofrecen exactamente lo mismo, que es lo que R21 quería.
  *
  * Control PARALELO al botón de descarga, no un paso de su camino: abrirlo no descarga nada y
  * el botón sigue descargando en un click con lo ya guardado (R6).
@@ -102,8 +81,6 @@ export function ColumnasPopover<T>({
   titulo,
   etiquetaDisparador,
   encabezado,
-  permitirReordenar = true,
-  notaOrden,
 }: Readonly<ColumnasPopoverProps<T>>) {
   const { ordenadas, clavesVisibles, alternar, mover, restablecer } =
     usePreferenciaColumnas(claveAlmacenamiento, publicadas, claveDe);
@@ -204,47 +181,34 @@ export function ColumnasPopover<T>({
                     >
                       {etiqueta}
                     </Label>
-                    {/* Sin `permitirReordenar` no se pintan: la columna se puede ocultar y su
-                        SITIO es el que el catálogo le dio. No se rinden `disabled` porque un
-                        botón apagado en todas las filas invita a buscar cómo encenderlo. */}
-                    {permitirReordenar ? (
-                      <>
-                        <Button
-                          id={idBoton(clave, "arriba")}
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          // R22: la primera de la lista no sube.
-                          disabled={esPrimera}
-                          aria-label={`Subir ${etiqueta}`}
-                          onClick={() => alMover(clave, "arriba")}
-                        >
-                          <ChevronUp aria-hidden="true" />
-                        </Button>
-                        <Button
-                          id={idBoton(clave, "abajo")}
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          // R23: la última de la lista no baja.
-                          disabled={esUltima}
-                          aria-label={`Bajar ${etiqueta}`}
-                          onClick={() => alMover(clave, "abajo")}
-                        >
-                          <ChevronDown aria-hidden="true" />
-                        </Button>
-                      </>
-                    ) : null}
+                    <Button
+                      id={idBoton(clave, "arriba")}
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      // R22: la primera de la lista no sube.
+                      disabled={esPrimera}
+                      aria-label={`Subir ${etiqueta}`}
+                      onClick={() => alMover(clave, "arriba")}
+                    >
+                      <ChevronUp aria-hidden="true" />
+                    </Button>
+                    <Button
+                      id={idBoton(clave, "abajo")}
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      // R23: la última de la lista no baja.
+                      disabled={esUltima}
+                      aria-label={`Bajar ${etiqueta}`}
+                      onClick={() => alMover(clave, "abajo")}
+                    >
+                      <ChevronDown aria-hidden="true" />
+                    </Button>
                   </li>
                 );
               })}
             </ul>
-
-            {!permitirReordenar && notaOrden !== undefined ? (
-              <p className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
-                {notaOrden}
-              </p>
-            ) : null}
 
             <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-3">
               {enElMinimo ? (
