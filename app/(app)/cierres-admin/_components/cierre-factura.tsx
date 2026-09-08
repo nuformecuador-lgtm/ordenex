@@ -1083,6 +1083,16 @@ export interface CierreFacturaDetalleProps {
    */
   onCorregirPagos?: (g: CierreDetalleGestion) => void;
   /**
+   * FICHA 398 (R16): abre la corrección del RESULTADO de una gestión —una entrega que nunca
+   * ocurrió pasa a rechazo—. Ausente = no se ofrece, que es lo que pasa en un cierre que ya no
+   * está abierto, para el rol que no corrige y en la vista del mensajero.
+   *
+   * Es otra prop y no `onCorregirPagos`: repartir entre métodos un dinero que sí entró y borrar
+   * un cobro que no existió son dos actos distintos, y sólo el segundo cambia el estado de la
+   * orden.
+   */
+  onCorregirResultado?: (g: CierreDetalleGestion) => void;
+  /**
    * Feature 264 (R13) — las órdenes que el corte del día barrió a `sin_gestionar` al crear ESTE
    * cierre. Ni una lleva monto: no tienen gestión, así que no hay nada que sumar (R10).
    */
@@ -1106,6 +1116,12 @@ export interface CierreFacturaDetalleProps {
  * calle, no una preferencia—, y nombra los MÉTODOS porque el total no se toca.
  */
 const FILA_CORREGIR_METODOS = "Corregir métodos de pago";
+
+/**
+ * FICHA 398 (R16) — rótulo del acceso a la corrección del RESULTADO. Nombra el resultado y no
+ * el dinero: lo que se arregla es una entrega que no ocurrió, y el dinero se va detrás.
+ */
+const FILA_CORREGIR_RESULTADO = "Corregir el resultado";
 
 /**
  * Feature 263 (R7–R10, R14) — la plantilla de la rejilla de órdenes, en UN solo sitio.
@@ -1370,6 +1386,7 @@ function FilaGestion({
   esMensajero = false,
   onVerEvidencia,
   onCorregirPagos,
+  onCorregirResultado,
 }: Readonly<{
   g: CierreDetalleGestion;
   /** Vista del mensajero: las dos cifras de la fila son lo RECIBIDO y SU pago. */
@@ -1381,6 +1398,11 @@ function FilaGestion({
    * vista del mensajero. Igual que `onVerEvidencia`: el permiso no se decide aquí, se recibe.
    */
   onCorregirPagos?: (g: CierreDetalleGestion) => void;
+  /**
+   * FICHA 398 (R16): abre la corrección del RESULTADO de ESTA gestión. Mismo trato que las dos
+   * de arriba — el permiso y el estado del cierre no se deciden aquí, se reciben.
+   */
+  onCorregirResultado?: (g: CierreDetalleGestion) => void;
 }>) {
   const [open, setOpen] = useState(false);
   const ing = g.ingresoOrdenex ?? null;
@@ -1564,6 +1586,23 @@ function FilaGestion({
                 {FILA_CORREGIR_METODOS}
               </Button>
             ) : null}
+            {/* FICHA 398 (R16) — SÓLO sobre una `entregada`, que es la única pareja que esta
+                ficha concede (`entregada -> rechazada`). Y sin exigir que haya cobrado: una
+                entrega declarada sin dinero también puede no haber ocurrido, y el servidor solo
+                mira el `resultado` (R4). Que el cierre esté ABIERTO lo decide el padre, que es
+                quien conoce su estado: aquí llega como la ausencia del callback. */}
+            {onCorregirResultado && g.resultado === "entregada" ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-fit"
+                aria-label={`${FILA_CORREGIR_RESULTADO} de la orden ${g.numRemision} · ${g.destinatario}`}
+                onClick={() => onCorregirResultado(g)}
+              >
+                {FILA_CORREGIR_RESULTADO}
+              </Button>
+            ) : null}
           </div>
 
           {/* Desglose auditable de la orden: de qué tarifa CONGELADA salió cada monto y
@@ -1731,6 +1770,7 @@ export function CierreFacturaDetalle({
   audiencia = "admin",
   onVerEvidencia,
   onCorregirPagos,
+  onCorregirResultado,
   ordenesSinGestion = [],
   // Feature 264 (R28): el default es `true` —«registrado»— porque es lo que vale para todo
   // cierre nacido después de la migración, y porque el estado que MIENTE es el otro: presentar
@@ -1996,6 +2036,7 @@ export function CierreFacturaDetalle({
                 esMensajero={esMensajero}
                 onVerEvidencia={onVerEvidencia}
                 onCorregirPagos={onCorregirPagos}
+                onCorregirResultado={onCorregirResultado}
               />
             ))
           )}
