@@ -120,6 +120,12 @@ beforeEach(() => {
 
 describe("379 · consultarImpactoCambio — las TRES puertas (R9/R10)", () => {
   it("R9/R10 · D2: cambiar el ROL del unico Admin satelite activo devuelve el impacto con zona, cuenta e importe", async () => {
+    // ⚠️ ESTE CASO NO MUERDE LA COMPARACION DE ROL, y conviene saberlo antes de creerse su
+    // nombre: `admin` NO lleva zona, asi que la zona resultante es `null`, la comparacion
+    // `zonaResultante.zonaId === zonaId` ya falla por si sola y el aviso saldria igual aunque
+    // el rol resultante se calculara mal. Lo que este caso prueba de verdad es la FORMA del
+    // impacto (las cuatro claves, la cuenta, el importe y la zona por la que se pregunta).
+    // Quien muerde el rol es el caso de abajo, con `mensajero`.
     const cierres = buildCierresRepo(4, "987654.32");
     const r = await servicio(repo, cierres).consultarImpactoCambio(
       "usr-1",
@@ -137,6 +143,54 @@ describe("379 · consultarImpactoCambio — las TRES puertas (R9/R10)", () => {
     });
     // El dinero se pregunta por la zona VIVA del usuario, no por la que el cambio pide.
     expect(cierres.resumirConsolidablesPendientes).toHaveBeenCalledWith("z1");
+  });
+
+  it("⭑ R9/R10 · D2 de verdad: pasar de Admin satelite a MENSAJERO en la MISMA zona tambien avisa", async () => {
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // EL CASO QUE FALTABA, Y POR QUE FALTABA. Los tres casos que decian cubrir esta puerta
+    // cambiaban el rol a `admin`, que no lleva zona: con la zona resultante en `null` el aviso
+    // sale por la regla del BLOQUE A —la zona cambia— y no por la del rol. Medido con una
+    // mutacion en `UsuarioService.consultarImpactoCambio` (paso 5):
+    //
+    //     const rolResultante = valorDelRol(cambio.rolId ?? actual.rolId);
+    //     const rolResultante = valorDelRol(actual.rolId);              // <- la mutacion
+    //
+    // sobrevivia a 206 tests en 13 archivos: nada se ponia rojo, ni la guardia de R14 ni los
+    // tres de `integration/db`. Y NO es un mutante equivalente: cambia el comportamiento en
+    // este escenario exacto.
+    //
+    // `mensajero` es el OTRO rol que SI lleva zona (`ZONA_ROLES`), asi que aqui la zona
+    // resultante sigue siendo `z1` y el estado sigue siendo `activo`: lo UNICO que mueve el
+    // veredicto es el rol resultante. Con la mutacion, `rolResultante` vuelve a ser
+    // `adminSatelite`, `sigueSiendoAdminDeLaZona` sale `true` y el impacto llega `null` — este
+    // caso se pone rojo.
+    //
+    // Y es exactamente el escenario para el que la ficha existe: la zona conserva a la persona
+    // y pierde a quien puede consolidar su dinero.
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    const zonaRepo = buildZonaRepo();
+    const cierres = buildCierresRepo(4, "987654.32");
+    const r = await servicio(repo, cierres, zonaRepo).consultarImpactoCambio(
+      "usr-1",
+      { rolId: "rol-msg" }, // mensajero, y NO se envia `zonaId`: la zona se conserva (R2)
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.impacto).toEqual({
+      zonaNombre: "San Carlos",
+      cierresSinConsolidar: 4,
+      totalSinConsolidar: "987654.32",
+      adminSatelitesActivosRestantes: 0,
+    });
+    // Control de que el escenario es el que se dice: NINGUNA zona distinta de `z1` entro en
+    // juego. Si el aviso saliera porque la zona cambia —como en el caso de `admin`— este
+    // control no lo detectaria, pero deja escrito y ejecutable que aqui la zona NO se mueve.
+    for (const [zonaConsultada] of vi.mocked(zonaRepo.findById).mock.calls) {
+      expect(zonaConsultada, "el caso perderia su sentido si mirara otra zona").toBe("z1");
+    }
+    expect(repo.contarAdminSatelitesActivos).toHaveBeenCalledWith("z1", "usr-1");
   });
 
   it("R9/R10 · D1: cambiar la ZONA del unico Admin satelite activo tambien avisa", async () => {

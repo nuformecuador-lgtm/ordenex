@@ -259,12 +259,18 @@ export async function restablecerContrasenaUsuario(
  *
  * El resto es el patron identico a las otras ocho acciones del archivo.
  *
- * ⚠ AQUI VIVIA UN `@sin-superficie`, y se BORRO con T11 de esta misma ficha: la accion nacio en
- * la tanda de backend sin pantalla que la disparara, y `UsuariosModule` ya la llama en los dos
- * puntos de cambio (guardar la edicion y activar/inactivar la fila). La anotacion decia que
- * CADUCABA en cuanto eso pasara, y la guardia de superficie de uso exige quitarla: una excepcion
- * que sobrevive a su motivo deja de significar nada. Es lo mismo que le paso a
+ * ⚠ AQUI VIVIA LA MARCA TRANSITORIA DE EXCEPCION DE SUPERFICIE, y se BORRO con T11 de esta misma
+ * ficha: la accion nacio en la tanda de backend sin pantalla que la disparara, y `UsuariosModule`
+ * ya la llama en los dos puntos de cambio (guardar la edicion y activar/inactivar la fila). La
+ * marca decia que CADUCABA en cuanto eso pasara, y la guardia de superficie de uso exige quitarla:
+ * una excepcion que sobrevive a su motivo deja de significar nada. Es lo mismo que le paso a
  * `restablecerContrasenaUsuario` entre su backend y su pantalla.
+ *
+ * Y su NOMBRE no se escribe aqui, ni siquiera entre comillas invertidas: la guardia lo busca por
+ * texto en el comentario pegado al export, asi que escribirlo la reactivaria — hoy no lo hacia
+ * solo porque las comillas invertidas se comen el espacio que el patron exige, que es una red
+ * demasiado fina para dejarla puesta. El docstring de `restablecerContrasenaUsuario`, mas arriba
+ * en este mismo archivo, ya lo habia dejado dicho; esta linea lo incumplia hasta la revision.
  */
 export async function consultarImpactoCambioUsuario(
   id: unknown,
