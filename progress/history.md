@@ -4728,3 +4728,22 @@ Cerrada. PR #749. **Lleva migracion**: un valor de enum, aditivo.
 - **Hallazgo mayor:** la guardia estatica del historial NO caza que esta escritura desaparezca.
   Mide por metodo, y `update` conserva las otras dos llamadas. Quien protege el requisito aqui
   es Postgres, no el censo.
+
+
+## 381 — cobrarle un costo a una tienda desde «Registrar movimiento» (2026-09-08)
+
+Cerrada. Dos PR: #750 (servidor) y #751 (pantalla). **Lleva dos migraciones.**
+
+- **Lo que el humano acoto, y es el corazon:** «mas que marcar como ingreso es QUITAR DEL DINERO
+  DISPONIBLE de esa tienda […] si no hay, el disponible debe verse EN NEGATIVO y cobrarse solo
+  cuando mediante la gestion se le deba dinero» · «ese cobro deben tambien verlo las tiendas en
+  su propia wallet».
+- **Las tres cosas estan sujetas por mutaciones que mueren:** marcarlo como ingreso de Ordenex,
+  recortar el negativo a cero y esconderselo a la tienda.
+- **Visto en la app:** +₡126.512,79 menos un cobro de ₡150.000 deja -₡23.487,21, con su signo,
+  en las dos vistas, y la caja de Ordenex sin tocar.
+- **NO se reanudo el trabajo a medias** de la rama vieja: construia un puerto a la caja que la
+  decision del humano elimino. Se rearranco desde el spec revisado.
+- **Confirma el hallazgo de la 380:** borrar la escritura del historial deja la guardia del censo
+  verde. Mide por metodo, no por escritura.
+- **Queda sin firmar la Q1:** los tres textos que ve el usuario.
