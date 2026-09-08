@@ -4690,3 +4690,21 @@ Cerrada. Dos PR: #744 (servidor) y #746 (control). Sin migracion.
 - **Dos correcciones al encargo del leader:** el corte de las listas no estaba donde el dijo, y
   la barra la montan tres pantallas, no una -- a dos de ellas el control les habria dado error
   de validacion en cuanto alguien lo tocara.
+
+
+## 392 — el nombre de la tienda y la geografia tambien se imprimen (2026-09-08)
+
+Cerrada. Dos PR: #745 (servidor) y #747 (aviso). Sin migracion, sin backfill.
+
+- **La ventana que quedaba abierta:** la 383 validaba los campos de la ORDEN, pero la etiqueta
+  imprime tambien el nombre de la tienda y los de la geografia. Un maestro que registrara
+  «𝕋ienda» o renombrara un distrito volvia a tumbar el LOTE ENTERO de etiquetas.
+- **Cinco escrituras, no cuatro:** la ficha no contaba el nombre de la ZONA.
+- **La misma definicion que el PDF, nunca una copia.** Si la validacion de entrada usara otra,
+  las dos se desalinearian el dia que cambie la fuente.
+- **Medido en produccion:** 632 nombres guardados, CERO romperian la etiqueta. No hace falta
+  backfill, y esta medido, no supuesto.
+- **El atajo que no se tomo:** reenviar el mensaje del servidor a ciegas habria puesto texto de
+  zod en ingles en el aviso del caso mas frecuente, el nombre en blanco.
+- **Sigue abierta la A2 de la 383** --si la correccion manual debe reparar o rechazar--, y esta
+  ficha eligio rechazar por coherencia con el formulario mas cercano, no por firma.
