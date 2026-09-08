@@ -29,8 +29,12 @@ import { esColaSolicitado } from "@/lib/utils/colas-cierre";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { toDetalleDTO } from "@/lib/services/CierreDiaService";
 import {
+  cobradoSobreRecaudado,
+  efectivoCubreDescuentos,
   gananciaOrdenex,
+  netoOrdenex,
   pagoTiendaOrdenex,
+  paraLaCentral,
   totalesIngresoOrdenex,
 } from "@/lib/utils/ingreso-ordenex";
 
@@ -310,6 +314,29 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
           totalesIngreso.fleteConIva,
           totalesIngreso.comisionConIva,
         ),
+        // Feature 393 (R15): los cuatro derivados de ESTE cierre_dia salen de SUS PROPIOS
+        // snapshots y de SU propio desglose. Ninguno se deriva de un agregado ni de otro
+        // nivel: si el dia usara el pago AGREGADO, el neto del dia mentiria y la suma de los
+        // dias dejaria de dar el agregado (R16).
+        cobradoSobreRecaudado: cobradoSobreRecaudado(
+          totalesIngreso.fleteConIva,
+          totalesIngreso.comisionConIva,
+        ),
+        netoOrdenex: netoOrdenex(
+          totalesIngreso.total,
+          cd.resumen.totalPagoMensajero,
+          cd.resumen.totalIngresoBodegaRechazos,
+        ),
+        paraLaCentral: paraLaCentral(
+          cd.resumen.totales.general,
+          cd.resumen.totalPagoMensajero,
+          cd.resumen.totalIngresoBodegaRechazos,
+        ),
+        efectivoCubreDescuentos: efectivoCubreDescuentos(
+          cd.resumen.totales.efectivo,
+          cd.resumen.totalPagoMensajero,
+          cd.resumen.totalIngresoBodegaRechazos,
+        ),
       };
     });
 
@@ -328,8 +355,35 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
       totalesIngreso.comisionConIva,
     );
 
+    // Feature 393 (R15/R17) — los tres derivados AGREGADOS salen de los snapshots AGREGADOS
+    // del propio cierre de bodega, NO de sumar los de sus `cierre_dia`. Que las dos vias den
+    // lo mismo se midio contra produccion el 2026-09-08 (14 cierres, 14 cuadran, 0
+    // descuadran), pero eso es una MEDICION, no una regla: si un dia un snapshot agregado
+    // dejara de ser la suma de sus dias, esta pantalla ensena el descuadre en vez de
+    // maquillarlo. `paraLaCentral` y `efectivoCubreDescuentos` ya vienen del mapper (R38).
+    const cobradoSobreRecaudadoAgregado = cobradoSobreRecaudado(
+      totalesIngreso.fleteConIva,
+      totalesIngreso.comisionConIva,
+    );
+    const netoOrdenexAgregado = netoOrdenex(
+      totalesIngreso.total,
+      resumen.totalPagoMensajero,
+      resumen.totalIngresoBodegaRechazos,
+    );
+
     // R11/R13: cabecera con totales agregados snapshot.
-    return { status: "ok", cierre: resumen, cierres, totalesIngreso, ganancia, pagoTienda };
+    return {
+      status: "ok",
+      cierre: resumen,
+      cierres,
+      totalesIngreso,
+      ganancia,
+      pagoTienda,
+      cobradoSobreRecaudado: cobradoSobreRecaudadoAgregado,
+      netoOrdenex: netoOrdenexAgregado,
+      paraLaCentral: resumen.paraLaCentral,
+      efectivoCubreDescuentos: resumen.efectivoCubreDescuentos,
+    };
   }
 
   async aprobarCierreBodega(
@@ -394,5 +448,11 @@ function toResumen(row: CierreBodegaResumenRow): CierreBodegaResumen {
     solicitadoAt: row.solicitadoAt,
     resueltoAt: row.resueltoAt,
     motivoRechazo: row.motivoRechazo,
+    // Feature 393 (R20/R38): los dos derivados llegan YA HECHOS del mapper del repositorio,
+    // que es el mismo para las cuatro lecturas. Aqui NO se recalculan: si este mapper hiciera
+    // su propia resta habria dos formulas para el mismo numero y la del adminSatelite —que
+    // pasa por otro servicio— podria quedarse atras.
+    paraLaCentral: row.paraLaCentral,
+    efectivoCubreDescuentos: row.efectivoCubreDescuentos,
   };
 }

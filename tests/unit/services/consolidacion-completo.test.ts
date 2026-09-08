@@ -124,6 +124,11 @@ function cierreBodega(
       solicitadoAt: `2026-03-${String(dia).padStart(2, "0")}T00:00:00.000Z`,
       resueltoAt: null,
       motivoRechazo: null,
+      // Feature 393: 300.00 - 30.00 - 0.00 = 270.00; el efectivo cubre los descuentos.
+      // NO entra en la lista de claves vigiladas: esta suite mide QUE campos LEE la descarga
+      // hoy, y meterlo ahi cambiaria lo que el test afirma, no solo el fixture.
+      paraLaCentral: "270.00",
+      efectivoCubreDescuentos: true,
     },
     ["totales", "totalPagoMensajero", "totalIngresoBodegaRechazos"],
     lecturas,
@@ -253,6 +258,9 @@ function cierresPlanos(n: number): CierreBodegaResumenRow[] {
     solicitadoAt: "2026-03-01T00:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,
+    // Feature 393: 1.00 - 1.00 - 0.00 = 0.00; el efectivo (1.00) cubre justo el descuento.
+    paraLaCentral: "0.00",
+    efectivoCubreDescuentos: true,
   }));
 }
 

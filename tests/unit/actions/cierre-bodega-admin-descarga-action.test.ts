@@ -34,6 +34,9 @@ const CIERRE: CierreBodegaResumen = {
   solicitadoAt: "2026-02-05T00:00:00.000Z",
   resueltoAt: "2026-02-06T00:00:00.000Z",
   motivoRechazo: null,
+  // Feature 393: 500.00 - 50.00 - 0.00 = 450.00; el efectivo (500.00) cubre los descuentos.
+  paraLaCentral: "450.00",
+  efectivoCubreDescuentos: true,
 };
 
 function fakeService(metodo: string, resultado: unknown) {

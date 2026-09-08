@@ -37,6 +37,23 @@ export interface CierreBodegaResumenRow {
   solicitadoAt: string; // ISO
   resueltoAt: string | null; // ISO
   motivoRechazo: string | null;
+  /**
+   * Feature 393 (R9/R20/R38) — DERIVADO en el MAPPER, no en un servicio: `totales.general` −
+   * `totalPagoMensajero` − `totalIngresoBodegaRechazos` (STRING money-safe escala 2).
+   *
+   * LO QUE LA BODEGA SATELITE LE ENTREGA A LA CENTRAL. Vive aqui, en la fila del repositorio,
+   * porque `toBodegaResumenRow` lo reusan las CUATRO lecturas de esta familia (cola del
+   * maestro, historico del maestro, solicitados de la zona y los conjuntos completos de las
+   * descargas): derivarlo una vez es lo que hace que la tarjeta del maestro y la del
+   * adminSatelite NO PUEDAN discrepar. Puede ser NEGATIVO; se emite con su signo.
+   */
+  paraLaCentral: string;
+  /**
+   * Feature 393 (R37) — DERIVADO: ¿los dos descuentos caben en el EFECTIVO recaudado?
+   * `false` enciende el aviso de pantalla. Booleano y no importe a proposito: la pantalla
+   * necesita un aviso, no un cuarto numero.
+   */
+  efectivoCubreDescuentos: boolean;
 }
 
 // Datos para crear la solicitud de cierre de bodega (R9/R10). Totales snapshot

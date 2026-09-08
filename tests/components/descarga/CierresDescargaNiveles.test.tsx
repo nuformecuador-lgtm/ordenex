@@ -193,6 +193,10 @@ function cierreBodega(
     solicitadoAt: "2026-07-11T10:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,
+    // Feature 393: derivados del snapshot de esta cabecera. 1000.10 - 100.10 - 5.00 = 895.00;
+    // el efectivo (1000.10) cubre los dos descuentos (105.10).
+    paraLaCentral: "895.00",
+    efectivoCubreDescuentos: true,
     ...over,
   };
 }

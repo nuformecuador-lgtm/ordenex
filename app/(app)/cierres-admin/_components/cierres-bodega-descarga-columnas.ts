@@ -29,7 +29,32 @@ import {
   ESTADO_LABEL,
   INGRESO_BODEGA_RECHAZOS_COL,
   PAGO_MENSAJERO_COL,
+  PARA_LA_CENTRAL_LABEL,
 } from "./cierre-labels";
+
+/**
+ * Feature 393 (R22, D7) — «Para la central» en el archivo de los TRES listados de cierre de
+ * bodega, y no en el cuarto.
+ *
+ * Va porque la persona usa ese número para CUADRAR CON LA CENTRAL, y cuadrar se hace en una
+ * hoja, no mirando una pantalla: dejarlo sólo en la tarjeta lo deja justo fuera de donde se
+ * usa. Va la ÚLTIMA de cada listado y ninguna columna existente se mueve, así que un consumidor
+ * que lea por posición no se rompe.
+ *
+ * El listado de `cierre_dia` CONSOLIDABLES no la gana (R21): ahí no hay cierre de bodega
+ * todavía y el número no tiene sujeto — `CierreBodegaResumenLite` ni siquiera lo lleva.
+ *
+ * `efectivoCubreDescuentos` NO va al archivo: es un aviso de pantalla, no una cifra, y una
+ * columna booleana en una hoja de dinero se acaba sumando.
+ *
+ * MONEY-SAFE: la proyección LEE el STRING ya derivado por el servidor. No recalcula la resta —
+ * hacerlo aquí sería una segunda fórmula para el mismo número, y el archivo podría acabar
+ * diciendo algo distinto de la tarjeta.
+ */
+const PARA_LA_CENTRAL_COLUMNA = {
+  clave: "paraLaCentral",
+  encabezado: PARA_LA_CENTRAL_LABEL,
+} as const;
 
 /**
  * Identificadores de ÁMBITO de la preferencia de columnas de las CUATRO descargas (314/R1, R10).
@@ -57,6 +82,7 @@ export const COLUMNAS_DESCARGA_BODEGA_PENDIENTES: DescargaColumna[] = [
   { clave: "general", encabezado: "Total general" },
   { clave: "pagoMensajero", encabezado: PAGO_MENSAJERO_COL },
   { clave: "ingresoBodega", encabezado: INGRESO_BODEGA_RECHAZOS_COL },
+  PARA_LA_CENTRAL_COLUMNA, // feature 393/R22: la última, sin mover ninguna
 ];
 
 /**
@@ -73,6 +99,7 @@ export function filaDescargaBodegaPendiente(cierre: CierreBodegaResumen): Descar
     general: cierre.totales.general, // STRING tal cual (money-safe)
     pagoMensajero: cierre.totalPagoMensajero,
     ingresoBodega: cierre.totalIngresoBodegaRechazos,
+    paraLaCentral: cierre.paraLaCentral, // feature 393/R22: STRING del DTO, sin recalcular
   };
 }
 
@@ -86,6 +113,7 @@ export const COLUMNAS_DESCARGA_BODEGA_RESUELTOS: DescargaColumna[] = [
   { clave: "pagoMensajero", encabezado: PAGO_MENSAJERO_COL },
   { clave: "ingresoBodega", encabezado: INGRESO_BODEGA_RECHAZOS_COL },
   { clave: "motivo", encabezado: "Motivo" },
+  PARA_LA_CENTRAL_COLUMNA, // feature 393/R22: la última, sin mover ninguna
 ];
 
 /**
@@ -102,6 +130,7 @@ export function filaDescargaBodegaResuelto(cierre: CierreBodegaResumen): Descarg
     pagoMensajero: cierre.totalPagoMensajero,
     ingresoBodega: cierre.totalIngresoBodegaRechazos,
     motivo: cierre.motivoRechazo,
+    paraLaCentral: cierre.paraLaCentral, // feature 393/R22: STRING del DTO, sin recalcular
   };
 }
 
@@ -142,6 +171,7 @@ export const COLUMNAS_DESCARGA_BODEGA_SOLICITADOS: DescargaColumna[] = [
   { clave: "pagoMensajero", encabezado: PAGO_MENSAJERO_COL },
   { clave: "ingresoBodega", encabezado: INGRESO_BODEGA_RECHAZOS_COL },
   { clave: "motivo", encabezado: "Motivo" },
+  PARA_LA_CENTRAL_COLUMNA, // feature 393/R22: la última, sin mover ninguna
 ];
 
 /**
@@ -158,5 +188,6 @@ export function filaDescargaBodegaSolicitado(cierre: CierreBodegaResumen): Desca
     pagoMensajero: cierre.totalPagoMensajero,
     ingresoBodega: cierre.totalIngresoBodegaRechazos,
     motivo: cierre.motivoRechazo,
+    paraLaCentral: cierre.paraLaCentral, // feature 393/R22: STRING del DTO, sin recalcular
   };
 }

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { Prisma } from "@prisma/client";
 import { CierresBodegaAdminService } from "@/lib/services/CierresBodegaAdminService";
 import type { CierreBodegaResumenRow } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
 import type {
@@ -11,6 +12,10 @@ import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlPro
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IngresoOrdenexDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import { conPagos } from "@/tests/fixtures/cierre-pagos";
+// Feature 393: el doble de la fila del repositorio deriva sus dos campos nuevos con las MISMAS
+// funciones puras que usa el mapper real, para que un caso que cambie los snapshots no deje el
+// doble diciendo un numero que el mapper nunca produciria.
+import { efectivoCubreDescuentos, paraLaCentral } from "@/lib/utils/ingreso-ordenex";
 
 // Feature 40 — tests unit del CierresBodegaAdminService (lado maestro; dobles de
 // repo/signedUrls, sin DB/red). Cubre R2 (rol), R11 (detalle por cierre_dia con grupos
@@ -26,13 +31,13 @@ const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 function bodegaResumenRow(
   overrides: Partial<CierreBodegaResumenRow> = {},
 ): CierreBodegaResumenRow {
-  return {
+  const base = {
     cierreBodegaId: "cb1",
     zonaId: "z-cartago",
     zonaNombre: "Cartago",
     solicitadoPorId: "adm-sat",
     solicitadoPorNombre: "Sara Satelite",
-    estado: "solicitado",
+    estado: "solicitado" as const,
     totales: { efectivo: "10.00", simpe: "5.00", transferencia: "0.00", general: "15.00" },
     totalPagoMensajero: "5.00", // feature 39/R20: snapshot agregado del pago a mensajeros
     totalIngresoBodegaRechazos: "0.00", // feature 56/R19: snapshot agregado del ingreso de bodega
@@ -41,6 +46,23 @@ function bodegaResumenRow(
     resueltoAt: null,
     motivoRechazo: null,
     ...overrides,
+  };
+  // Feature 393 (R38): el doble reproduce lo que hace el MAPPER real
+  // (`toBodegaResumenRow`), que es donde vive la derivacion — el servicio solo la deja pasar.
+  // Se deriva y no se fija en un literal porque varios casos de esta suite sobreescriben
+  // `totales` y `totalPagoMensajero`, y un literal quedaria mintiendo en cuanto lo hacen.
+  return {
+    ...base,
+    paraLaCentral:
+      overrides.paraLaCentral ??
+      paraLaCentral(base.totales.general, base.totalPagoMensajero, base.totalIngresoBodegaRechazos),
+    efectivoCubreDescuentos:
+      overrides.efectivoCubreDescuentos ??
+      efectivoCubreDescuentos(
+        base.totales.efectivo,
+        base.totalPagoMensajero,
+        base.totalIngresoBodegaRechazos,
+      ),
   };
 }
 
@@ -719,5 +741,347 @@ describe("Feature 238 (R39) — aprobar un CierreBodega NO pide confirmacion fis
         );
       }
     }
+  });
+});
+
+/**
+ * Feature 393 (B6) — LAS DOS CASCADAS que el servicio deriva: la de «de quien es el dinero»
+ * (detalle) y la de «lo que va a la central» (tarjeta y detalle).
+ *
+ * DOS `cierre_dia` y CENTIMOS en todas las cifras. Con montos redondos estas identidades
+ * cierran igual sin el arreglo y el caso no probaria nada; y R16 —que el agregado sea, AL
+ * CENTIMO, la suma de los dias— es justo donde un redondeo intermedio se notaria.
+ *
+ * Los valores esperados van como LITERAL, no llamando a la funcion que el servicio usa: eso
+ * seria una asercion contra su propia fuente y estaria siempre verde.
+ */
+describe("CierresBodegaAdminService.verCierreBodegaDetalle — las dos cascadas (feature 393)", () => {
+  function conIngreso(over: Partial<IngresoOrdenexDTO>): IngresoOrdenexDTO {
+    return {
+      montoCobrar: null,
+      cobraComision: false,
+      esCentral: false,
+      esZonaEspecial: false,
+      fleteOrigen: "normal",
+      fleteDevolucionOrigen: "normal",
+      flete: null,
+      ivaFlete: null,
+      fleteDevolucion: null,
+      ivaFleteDevolucion: null,
+      comisionCod: null,
+      ivaComisionCod: null,
+      fleteConIva: null,
+      fleteDevolucionConIva: null,
+      comisionConIva: null,
+      total: "0.00",
+      tarifa: null,
+      ...over,
+    };
+  }
+
+  // --- Los dos dias -------------------------------------------------------
+  // cd1 (Ana): solo entregadas, sin rechazos y sin ingreso de bodega.
+  const DIA_1 = {
+    totales: {
+      efectivo: "60000.35",
+      simpe: "5000.10",
+      transferencia: "0.00",
+      general: "65000.45",
+    },
+    totalPagoMensajero: "8000.55",
+    totalIngresoBodegaRechazos: "0.00",
+  };
+  // cd2 (Beto): una entregada Y UN RECHAZO — el que hace que la linea puente importe — mas
+  // ingreso de bodega, que es el sustraendo que `ganancia` no conoce.
+  const DIA_2 = {
+    totales: {
+      efectivo: "40000.20",
+      simpe: "0.00",
+      transferencia: "1088.52",
+      general: "41088.72",
+    },
+    totalPagoMensajero: "6000.45",
+    totalIngresoBodegaRechazos: "1250.45",
+  };
+  // El snapshot AGREGADO es la suma exacta de los dos dias (que es lo que se midio contra
+  // produccion el 2026-09-08: 14 cierres, 14 cuadran, 0 descuadran).
+  const AGREGADO = {
+    totales: {
+      efectivo: "100000.55",
+      simpe: "5000.10",
+      transferencia: "1088.52",
+      general: "106089.17",
+    },
+    totalPagoMensajero: "14001.00",
+    totalIngresoBodegaRechazos: "1250.45",
+  };
+
+  function repoDeDosDias(
+    cierre: Partial<CierreBodegaResumenRow> = {},
+    dia1: Partial<typeof DIA_1> = {},
+  ) {
+    return fakeRepo({
+      findCierreBodegaConDetalle: vi.fn(async () => ({
+        cierre: bodegaResumenRow({ ...AGREGADO, ...cierre }),
+        cierresDia: [
+          {
+            resumen: detalleCierreRow({ cierreDiaId: "cd1", ...DIA_1, ...dia1 }),
+            gestiones: [
+              gestionRow({
+                gestionId: "g1",
+                resultado: "entregada",
+                ingresoOrdenex: conIngreso({
+                  flete: "2500.55",
+                  ivaFlete: "325.07",
+                  fleteConIva: "2825.62",
+                  comisionCod: "1200.33",
+                  ivaComisionCod: "156.04",
+                  comisionConIva: "1356.37",
+                  total: "4181.99",
+                }),
+              }),
+            ],
+          },
+          {
+            resumen: detalleCierreRow({
+              cierreDiaId: "cd2",
+              mensajeroId: "m2",
+              mensajeroNombre: "Beto",
+              ...DIA_2,
+            }),
+            gestiones: [
+              gestionRow({
+                gestionId: "g2",
+                resultado: "entregada",
+                ingresoOrdenex: conIngreso({
+                  flete: "1800.35",
+                  ivaFlete: "234.05",
+                  fleteConIva: "2034.40",
+                  comisionCod: "900.11",
+                  ivaComisionCod: "117.01",
+                  comisionConIva: "1017.12",
+                  total: "3051.52",
+                }),
+              }),
+              gestionRow({
+                gestionId: "g3",
+                resultado: "rechazada",
+                ingresoOrdenex: conIngreso({
+                  fleteDevolucion: "1200.45",
+                  ivaFleteDevolucion: "156.06",
+                  fleteDevolucionConIva: "1356.51",
+                  total: "1356.51",
+                }),
+              }),
+            ],
+          },
+        ],
+      })),
+    });
+  }
+
+  const suma = (...xs: string[]) =>
+    xs.reduce((a, x) => a.plus(x), new Prisma.Decimal(0)).toFixed(2);
+
+  it("1 · las cuatro identidades cierran con las cifras del AGREGADO (R6/R7/R8/R9)", async () => {
+    const { service } = newService({ repo: repoDeDosDias() });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // Lo facturado, por concepto.
+    expect(r.totalesIngreso.fleteConIva).toBe("4860.02");
+    expect(r.totalesIngreso.comisionConIva).toBe("2373.49");
+    expect(r.totalesIngreso.fleteDevolucionConIva).toBe("1356.51");
+    expect(r.totalesIngreso.total).toBe("8590.02");
+
+    // R6 — lo recaudado menos los DOS deducibles = para la tienda.
+    expect(r.pagoTienda).toBe("98855.66");
+    expect(suma(r.pagoTienda, r.totalesIngreso.fleteConIva, r.totalesIngreso.comisionConIva)).toBe(
+      r.cierre.totales.general,
+    );
+
+    // R7 — la linea puente mas el flete por rechazo = lo que Ordenex facturo.
+    expect(r.cobradoSobreRecaudado).toBe("7233.51");
+    expect(suma(r.cobradoSobreRecaudado, r.totalesIngreso.fleteDevolucionConIva)).toBe(
+      r.totalesIngreso.total,
+    );
+
+    // R8 — lo facturado menos los dos pagos de Ordenex = neto. Sale NEGATIVO en este cierre, y
+    // se emite con su signo. NO es `ganancia`: la diferencia entre las dos es, al centimo, el
+    // ingreso de bodega.
+    expect(r.netoOrdenex).toBe("-6661.43");
+    expect(r.ganancia).toBe("-5410.98");
+    expect(suma(r.netoOrdenex, r.cierre.totalIngresoBodegaRechazos)).toBe(r.ganancia);
+    expect(
+      suma(r.netoOrdenex, r.cierre.totalPagoMensajero, r.cierre.totalIngresoBodegaRechazos),
+    ).toBe(r.totalesIngreso.total);
+
+    // R9 — lo recaudado menos los dos descuentos de la bodega = para la central.
+    expect(r.paraLaCentral).toBe("90837.72");
+    expect(
+      suma(r.paraLaCentral, r.cierre.totalPagoMensajero, r.cierre.totalIngresoBodegaRechazos),
+    ).toBe(r.cierre.totales.general);
+
+    // R37 — aqui el efectivo SI cubre los dos descuentos.
+    expect(r.efectivoCubreDescuentos).toBe(true);
+  });
+
+  it("2 · la suma de los cuatro derivados por dia es, AL CENTIMO, el derivado agregado (R15/R16)", async () => {
+    const { service } = newService({ repo: repoDeDosDias() });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    const [cd1, cd2] = r.cierres;
+
+    // Cada dia, desde SUS PROPIOS snapshots.
+    expect(cd1.cobradoSobreRecaudado).toBe("4181.99");
+    expect(cd1.pagoTienda).toBe("60818.46");
+    expect(cd1.netoOrdenex).toBe("-3818.56");
+    expect(cd1.paraLaCentral).toBe("56999.90");
+
+    expect(cd2.cobradoSobreRecaudado).toBe("3051.52");
+    expect(cd2.pagoTienda).toBe("38037.20");
+    expect(cd2.netoOrdenex).toBe("-2842.87");
+    expect(cd2.paraLaCentral).toBe("33837.82");
+
+    // Y la suma de los dos da el agregado, sin un centimo de deriva.
+    expect(suma(cd1.cobradoSobreRecaudado, cd2.cobradoSobreRecaudado)).toBe(
+      r.cobradoSobreRecaudado,
+    );
+    expect(suma(cd1.pagoTienda, cd2.pagoTienda)).toBe(r.pagoTienda);
+    expect(suma(cd1.netoOrdenex, cd2.netoOrdenex)).toBe(r.netoOrdenex);
+    expect(suma(cd1.paraLaCentral, cd2.paraLaCentral)).toBe(r.paraLaCentral);
+  });
+
+  it("3 · con un rechazo, «para la tienda» NO es «recaudado − facturado», y la linea puente explica la diferencia exacta (R7/R10)", async () => {
+    const { service } = newService({ repo: repoDeDosDias() });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    const cd2 = r.cierres[1];
+
+    // (a) El dia con el rechazo: empezar por el bruto NO da «para la tienda».
+    const brutoDelDia = new Prisma.Decimal(cd2.totales.general)
+      .minus(cd2.totalesIngreso.total)
+      .toFixed(2);
+    expect(brutoDelDia).toBe("36680.69");
+    expect(brutoDelDia).not.toBe(cd2.pagoTienda);
+    // El hueco es, al centimo, el flete por rechazo + IVA: se factura pero no sale de lo
+    // recaudado, que es lo que la linea puente tiene que decir.
+    expect(new Prisma.Decimal(cd2.pagoTienda).minus(brutoDelDia).toFixed(2)).toBe(
+      cd2.totalesIngreso.fleteDevolucionConIva,
+    );
+    // Y con la linea puente SI da.
+    expect(new Prisma.Decimal(cd2.totales.general).minus(cd2.cobradoSobreRecaudado).toFixed(2)).toBe(
+      cd2.pagoTienda,
+    );
+
+    // (b) Lo mismo en el AGREGADO, que es donde se pinta la cascada A.
+    const brutoAgregado = new Prisma.Decimal(r.cierre.totales.general)
+      .minus(r.totalesIngreso.total)
+      .toFixed(2);
+    expect(brutoAgregado).toBe("97499.15");
+    expect(brutoAgregado).not.toBe(r.pagoTienda);
+    expect(new Prisma.Decimal(r.pagoTienda).minus(brutoAgregado).toFixed(2)).toBe(
+      r.totalesIngreso.fleteDevolucionConIva,
+    );
+
+    // (c) El dia SIN rechazos tiene la linea puente igual: vale lo mismo que el bruto, y se
+    // emite de todas formas — un cero explicito dice «aqui no hubo rechazos».
+    const cd1 = r.cierres[0];
+    expect(cd1.totalesIngreso.fleteDevolucionConIva).toBe("0.00");
+    expect(cd1.cobradoSobreRecaudado).toBe(cd1.totalesIngreso.total);
+  });
+
+  it("4 · si el snapshot agregado NO es la suma de los dias, el agregado sigue saliendo del agregado y el dia del dia (R17)", async () => {
+    // Un agregado deliberadamente descuadrado. Esto NO ocurre hoy —se midio— pero si ocurriera,
+    // la pantalla tiene que ENSEÑAR el descuadre, no maquillarlo: cada nivel se lee de su
+    // propio snapshot.
+    const { service } = newService({
+      repo: repoDeDosDias({
+        totales: { efectivo: "900.99", simpe: "0.00", transferencia: "99.00", general: "999.99" },
+        totalPagoMensajero: "111.11",
+        totalIngresoBodegaRechazos: "22.22",
+      }),
+    });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // El agregado sale de SUS numeros: 999.99 - 111.11 - 22.22.
+    expect(r.paraLaCentral).toBe("866.66");
+    expect(r.netoOrdenex).toBe("8456.69"); // 8590.02 - 111.11 - 22.22
+
+    // Los dias NO se han tocado: siguen valiendo lo de su propio snapshot.
+    expect(r.cierres[0].paraLaCentral).toBe("56999.90");
+    expect(r.cierres[1].paraLaCentral).toBe("33837.82");
+
+    // Y nadie ha corregido a nadie para que cuadren: la suma de los dias NO da el agregado.
+    expect(suma(r.cierres[0].paraLaCentral, r.cierres[1].paraLaCentral)).not.toBe(r.paraLaCentral);
+    expect(suma(r.cierres[0].netoOrdenex, r.cierres[1].netoOrdenex)).not.toBe(r.netoOrdenex);
+  });
+
+  it("5 · el aviso del efectivo mira el EFECTIVO agregado, no el general (R37)", async () => {
+    // «Para la central» POSITIVO y aun asi la bodega sin efectivo con que pagar: lo recaudado
+    // entro casi todo por SINPE. Es el caso mas frecuente de los dos raros — medido contra
+    // produccion el 2026-09-08: 2 de 14 cierres de bodega.
+    const { service } = newService({
+      repo: repoDeDosDias({
+        totales: {
+          efectivo: "1000.00",
+          simpe: "104000.55",
+          transferencia: "1088.62",
+          general: "106089.17",
+        },
+      }),
+    });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    expect(r.paraLaCentral).toBe("90837.72"); // positivo: el general no cambio
+    expect(r.efectivoCubreDescuentos).toBe(false); // 1000.00 < 14001.00 + 1250.45
+  });
+
+  it("5b · y el aviso POR DIA tambien mira el efectivo DE ESE DIA, no su general (R15/R37)", async () => {
+    // EL CASO DISCRIMINANTE del aviso por dia, que es el que el SERVICIO deriva: cd1 recauda
+    // lo mismo pero casi todo por SINPE, asi que su efectivo (100.00) no cubre su pago
+    // (8000.55) aunque su general (65000.45) lo cubriria de sobra. cd2 no cambia y sigue
+    // pudiendo pagar: si los dos dieran lo mismo, este caso no separaria nada.
+    const { service } = newService({
+      repo: repoDeDosDias(
+        {},
+        {
+          totales: {
+            efectivo: "100.00",
+            simpe: "64900.45",
+            transferencia: "0.00",
+            general: "65000.45",
+          },
+        },
+      ),
+    });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    expect(r.cierres[0].efectivoCubreDescuentos).toBe(false); // 100.00 < 8000.55
+    expect(r.cierres[1].efectivoCubreDescuentos).toBe(true); // 40000.20 >= 7250.90
+    // Y el «Para la central» del dia NO cambia: el general es el mismo.
+    expect(r.cierres[0].paraLaCentral).toBe("56999.90");
+  });
+
+  it("6 · `pagoTienda` y `ganancia` siguen valiendo lo mismo que antes de la ficha (R31)", async () => {
+    // Esta ficha AÑADE lineas, las agrupa y las renombra; no recalcula dinero existente. Los
+    // dos derivados que ya existian se siguen devolviendo con la formula de siempre.
+    const { service } = newService({ repo: repoDeDosDias() });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // `ganancia` = facturado - mensajeros (SIN la bodega), como desde la feature 40.
+    expect(r.ganancia).toBe("-5410.98");
+    expect(r.cierres[0].ganancia).toBe("-3818.56"); // 4181.99 - 8000.55
+    expect(r.cierres[1].ganancia).toBe("-1592.42"); // 4408.03 - 6000.45
+    // `pagoTienda` = recaudado - flete+IVA - comision+IVA (SIN el flete por rechazo).
+    expect(r.pagoTienda).toBe("98855.66");
+    expect(r.cierres[0].pagoTienda).toBe("60818.46");
+    expect(r.cierres[1].pagoTienda).toBe("38037.20");
   });
 });

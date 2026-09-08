@@ -171,6 +171,10 @@ describe("CierresBodegaAdminRepository.findCierresBodega (R15)", () => {
       solicitadoAt: "2026-07-12T10:00:00.000Z",
       resueltoAt: null,
       motivoRechazo: null,
+      // Feature 393 (R38): el maestro lee del MISMO mapper que la satelite, asi que ve el
+      // MISMO numero. 15.50 - 7.50 - 6.50 = 1.50; el efectivo (10.00) no cubre 14.00.
+      paraLaCentral: "1.50",
+      efectivoCubreDescuentos: false,
     });
     expect(typeof rows[0].totales.general).toBe("string");
   });

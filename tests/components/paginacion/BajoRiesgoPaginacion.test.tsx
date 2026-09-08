@@ -293,6 +293,10 @@ function cierreBodega(i: number): CierreBodegaResumen {
     solicitadoAt: "2026-07-11T10:00:00.000Z",
     resueltoAt: "2026-07-12T10:00:00.000Z",
     motivoRechazo: `Motivo ${etiqueta(i)}`,
+    // Feature 393: derivados del snapshot. Todo en cero: 0.00 - 0.00 - 0.00 = 0.00, y el
+    // efectivo (0.00) cubre unos descuentos que tambien son cero.
+    paraLaCentral: "0.00",
+    efectivoCubreDescuentos: true,
   };
 }
 
