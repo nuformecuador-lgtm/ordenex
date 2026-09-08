@@ -4,8 +4,8 @@
 > desglose y las mutaciones, en `tasks.md`. Cada `R<n>` termina mapeado a un test concreto
 > (`tasks.md § Trazabilidad`).
 >
-> **Revisión 2 (2026-09-08).** Las seis preguntas abiertas de la revisión 1 están **firmadas**. El
-> alcance CRECIÓ: entra el cierre de bodega. Ver «Decisiones firmadas».
+> **Revisión 3 (2026-09-08).** Las ocho preguntas abiertas están **firmadas** y las dos mediciones
+> bloqueantes **hechas**. No queda ninguna pregunta abierta.
 
 ## Lo primero, porque cambia cómo se lee todo lo demás
 
@@ -35,17 +35,18 @@ mismo defecto es mayor.
 
 ## Decisiones firmadas por el humano (2026-09-08)
 
-Estas seis cerraron las preguntas abiertas de la revisión 1. **Se acatan tal cual; no se
-reabren.**
+Ocho firmas. **Se acatan tal cual; no se reabren.**
 
 | | Pregunta | Firma |
 |---|---|---|
-| **Q1** | ¿Qué se desglosa? | **Lo recaudado Y lo que se le paga, por tienda.** Dos cifras. Ni una sola, ni la cascada entera |
-| **Q2** | ¿Pago al mensajero e ingreso de bodega? | **Quedan AGREGADOS.** Repartirlos sería inventar un criterio que nadie ha decidido — **decisión del leader**, no corregida por el humano |
-| **Q3** | ¿La descarga? | **NO se toca.** Se acepta entero el hallazgo: el Excel ya va desagregado y ahí no hay defecto |
-| **Q4** | ¿También el cierre de bodega? | **SÍ, LAS DOS A LA VEZ** |
+| **Q1** | ¿Qué se desglosa? | **Lo recaudado y lo que se le paga**, por tienda. Ampliada por Q7 |
+| **Q2** | ¿Pago al mensajero e ingreso de bodega? | **Quedan AGREGADOS.** Repartirlos sería inventar un criterio que nadie ha decidido — **decisión del leader**, no corregida |
+| **Q3** | ¿La descarga? | **NO se toca.** Se acepta entero el hallazgo: el Excel ya va desagregado |
+| **Q4** | ¿También el cierre de bodega? | **SÍ, LAS DOS A LA VEZ** — *en contra de la recomendación del leader*, ver abajo |
 | **Q5** | ¿Umbral? | **Sólo con DOS O MÁS tiendas.** Con una sola, la pantalla se queda exactamente como está |
-| **Q6** | ¿Orden de las tiendas? | **Por importe, de mayor a menor** — **decisión del leader**, no corregida por el humano |
+| **Q6** | ¿Orden de las tiendas? | **Por importe, de mayor a menor** — **decisión del leader**, no corregida |
+| **Q7** | ¿`pagoTienda` o `ganaLaTienda`? | **LAS DOS.** Tres cifras por tienda: lo recaudado, lo que se le paga hoy, y lo que gana en total |
+| **Q8** | ¿Matriz tienda × mensajero en el agregado de bodega? | **NO.** Una fila por tienda. El detalle por mensajero ya existe un nivel más abajo |
 
 ### El rastro de Q4, porque explica el tamaño de esta ficha
 
@@ -57,8 +58,50 @@ El humano prefirió arreglar los dos de una vez. Su motivo, con sus palabras:
 **«necesito que esto que son cierres quede perfecto»**.
 
 Es su decisión y se acata. **Consecuencia directa y medida:** el alcance pasa de **1 superficie** a
-**3** (detalle del mensajero + los dos niveles del detalle de bodega), y con ello la complejidad de
-la ficha deja de ser `media`. Dentro de un año, esto explica por qué la ficha es del tamaño que es.
+**3** (detalle del mensajero + los dos niveles del detalle de bodega). Dentro de un año, esto
+explica por qué la ficha es del tamaño que es.
+
+### El rastro de Q7, porque deroga una guardia de este mismo documento
+
+La revisión 2 escribió **R5 prohibiendo una tercera cifra por tienda**, para que el desglose no
+creciera solo. **Q7 firma exactamente esa tercera.**
+
+**La guardia no se relajó: se movió, y se movió por firma.** El humano dio su motivo, y coincide con
+el del leader: *desglosar una cifra y dejar la otra agregada es exactamente el fallo que estamos
+arreglando, un nivel más abajo.* R5 sigue viva y sigue haciendo su trabajo — ahora prohibiendo la
+**cuarta**, con la misma fuerza con la que ayer prohibía la tercera. Un tope se mueve **cuando
+alguien lo firma y queda escrito**, nunca de paso.
+
+---
+
+## Las dos mediciones bloqueantes: HECHAS (2026-09-08, contra producción)
+
+### M-A — Cardinales de los cierres de bodega
+
+**14 cierres de bodega. Máximo 2 tiendas (media 1,29) y máximo 2 mensajeros (media 1,14).**
+
+Por debajo del umbral de 4 que el spec había puesto para escalar la decisión, así que **la tanda de
+bodega sigue adelante sin volver a consultar**.
+
+⚠️ **Son cardinales JÓVENES y hay que decirlo.** Producción se vació a propósito el 2026-08-25, así
+que ese «máximo 2» es **lo que ha pasado hasta hoy, no una garantía**. Nada en el modelo impide un
+cierre de bodega con seis tiendas.
+
+**¿Depende el diseño de que sean pocos?** La **corrección no**: la derivación es una partición y da
+igual que haya 2 tiendas o 20. La **legibilidad sí**: el modal de bodega ya monta dos cascadas por
+nivel y por mensajero, y con seis tiendas por nivel se vuelve un muro. Por eso el umbral de revisión
+**se queda escrito como aviso permanente** (`tasks.md § T0.4`): si un día el máximo llega a 4, se
+mira la pantalla antes de seguir añadiendo.
+
+### M-B — ¿El snapshot agregado de bodega es la suma de sus días?
+
+**CERO cierres** donde `cierre_bodega.total_general` difiera de la suma de sus `cierre_dia`. La
+identidad se sostiene en los 14, igual que midió la ficha 393.
+
+⚠️ **Sigue siendo una MEDICIÓN, no una regla**, exactamente como lo dejó escrito la 393
+(`CierresBodegaAdminService.ts:358-363`). Si un día dejara de cuadrar, **es un descuadre real que la
+pantalla debe enseñar (R21), no un fallo del desglose que haya que corregir forzando el minuendo**.
+La consulta de comprobación se queda a mano en `tasks.md § T0.5`.
 
 ---
 
@@ -70,7 +113,7 @@ Leído en disco el 2026-09-08, **después** de que la mitad de servidor de la fi
 ### El detalle del cierre del mensajero
 
 1. **`lib/services/CierresAdminService.ts:662-763`** — `verCierreDetalle` deriva `totalesIngreso`
-   (:664), `ganancia` (:671) y `pagoTienda` (:675-679). El `pagoTienda` es
+   (:664), `ganancia` (:671) y `pagoTienda` (:675-679), este último con
    `pagoTiendaOrdenex(resumen.totales.general, totalesIngreso.fleteConIva,
    totalesIngreso.comisionConIva)`: **un solo número para todo el cierre**.
 2. **LA 395 YA ESTÁ AHÍ** (:681-751): añadió `cobradoSobreRecaudado` (:692), `netoOrdenex` (:703),
@@ -78,7 +121,9 @@ Leído en disco el 2026-09-08, **después** de que la mitad de servidor de la fi
    el DTO (`ICierresAdminService.ts:350-403`). **Esta ficha se apoya en ellos; no los reinventa.**
 3. **`lib/utils/ingreso-ordenex.ts:390` — `ganaLaTienda` es NUEVA de la 395**:
    `total_general − ingresoTotal`. Su docstring dice, con estas palabras, que **NO es
-   `pagoTiendaOrdenex` y que confundirlas es el fallo que la 395 arregla**. Ver Q7.
+   `pagoTiendaOrdenex` y que confundirlas es el fallo que la 395 arregla**. Con las cifras reales de
+   producción del 2026-09-08 la diferencia entre las dos es **₡10.848,00**. **Q7 firma que las dos
+   se desglosan.**
 4. **`lib/utils/ingreso-ordenex.ts:352-358` — `pagoTiendaOrdenex`** sigue intacta, pura y
    money-safe. Su docstring dice por qué NO descuenta el flete por rechazo.
 
@@ -90,10 +135,9 @@ Leído en disco el 2026-09-08, **después** de que la mitad de servidor de la fi
      **exactamente el mismo caso** que el detalle del mensajero.
    - **Agregado de toda la bodega** (:352-356): un `pagoTienda` que suma **todas las tiendas de
      todos los mensajeros**. Es el peor de los tres.
-6. **`CierresBodegaAdminModule.tsx:666-756`** monta `CascadaDinero` **dos veces por nivel** (la
-   cascada «Lo que va a la central» y la «De quién es el dinero»), una vez para el agregado y una
-   vez **por cada mensajero**. El `pagoTienda` entra por `lineasCascadaDueno` (:244-256) con el
-   rótulo `PARA_LA_TIENDA_LABEL`.
+6. **`CierresBodegaAdminModule.tsx:666-756`** monta `CascadaDinero` **dos veces por nivel**, una vez
+   para el agregado y una vez **por cada mensajero**. El `pagoTienda` entra por `lineasCascadaDueno`
+   (:244-256) con el rótulo `PARA_LA_TIENDA_LABEL`.
 7. **`CierresBodegaAdminRepository.ts:353-356` usa `DETALLE_ADMIN_SELECT`** —el mismo `select` que
    el detalle del mensajero— y el mismo mapper. **Lo que se arregle en la proyección sirve para los
    dos, gratis.**
@@ -120,7 +164,7 @@ Leído en disco el 2026-09-08, **después** de que la mitad de servidor de la fi
     (`cierres-admin-descarga-columnas.ts:52-89`): Estado · Mensajero · Fecha · Destino · Total
     general · Pago mensajero · Ingreso bodega · Motivo — **ninguna columna «Pago a tienda»**. Nivel
     Detalle (`cierres-gestiones-fundida-descarga-columnas.ts:244-276`): una fila **por gestión**,
-    con **«Tienda»** en la 12ª. **Ya está desagregada.** Por eso Q3 se firmó como «no se toca».
+    con **«Tienda»** en la 12ª. **Ya está desagregada.** Por eso Q3 se firmó «no se toca».
 
 ## Alcance
 
@@ -132,9 +176,10 @@ Leído en disco el 2026-09-08, **después** de que la mitad de servidor de la fi
 
 **FUERA (y dicho a propósito):**
 - El ledger, las wallets y los movimientos: no se toca ni una fila. El dinero ya está bien.
-- La vista del mensajero (`CierreDiaModule`): no pinta «Pago a tienda» (punto 6 de la revisión 1;
-  el corte `esMensajero` sigue en `cierre-factura.tsx:1810`).
+- La vista del mensajero (`CierreDiaModule`): no pinta «Pago a tienda» (el corte `esMensajero` sigue
+  en `cierre-factura.tsx:1810`).
 - Las descargas (Q3, punto 14).
+- La matriz tienda × mensajero en el agregado de bodega (Q8).
 - La tarjeta del listado de cierres de bodega que ve la satélite: pinta «Para la central», no
   «Pago a tienda».
 - **Meter el flete por rechazo dentro del cierre.** Ver «Consecuencia» al final.
@@ -158,10 +203,15 @@ literal escrito en el componente.
 ### B. El desglose por tienda
 
 **R4.** SI un cierre tiene órdenes de **dos o más** tiendas, ENTONCES el sistema DEBE mostrar, por
-cada una de esas tiendas y con su nombre, **dos** cifras: **lo recaudado** de esa tienda y **lo que
-se le paga** a esa tienda.
+cada una de esas tiendas y con su nombre, **tres** cifras: **lo recaudado** de esa tienda, **lo que
+se le paga** a esa tienda, y **lo que esa tienda gana en total**.
 
-**R5.** El sistema NO DEBE mostrar por tienda ninguna cifra de dinero distinta de esas dos.
+**R5.** El sistema NO DEBE mostrar por tienda ninguna cifra de dinero distinta de esas tres.
+
+> ⚠️ **Esta guardia nació prohibiendo la TERCERA cifra** (revisión 2). La tercera —«lo que gana en
+> total»— entró el **2026-09-08 por firma explícita del humano (Q7)**, no porque la guardia se
+> relajara. Hoy prohíbe la **cuarta** con la misma fuerza. Una guardia que se ensancha en silencio
+> deja de ser una guardia: el tope se mueve cuando alguien lo firma y queda escrito.
 
 **R6.** El sistema DEBE agrupar las gestiones por la **tienda congelada en el snapshot del cierre**
 (`cierre_detail`), nunca por la tienda VIVA de la orden.
@@ -173,79 +223,87 @@ nombre congelado únicamente para mostrarlo.
 les paga, de mayor a menor**, con un criterio de desempate declarado que haga la secuencia
 reproducible.
 
+> Q6 firmó «por importe». De las tres cifras, la que ordena es **lo que se le paga**: es la del
+> rótulo que da nombre a la ficha. **Decisión del leader**, declarada aquí para que no quede
+> ambigua.
+
+**R9.** SI una tienda aparece en el cierre **sin haber recaudado nada** (por ejemplo, sólo con
+rechazos), ENTONCES el sistema DEBE incluirla igualmente en el desglose y contarla para el umbral de
+R1/R2, con su recaudado en cero y sus otras dos cifras con el signo que les corresponda.
+
 ### C. Las identidades — lo que impide que esto se rompa sin que nadie se entere
 
-**R9.** El sistema DEBE garantizar que la **suma de lo que se paga a cada tienda es exactamente
+**R10.** El sistema DEBE garantizar que la **suma de lo que se paga a cada tienda es exactamente
 igual** al importe agregado «Pago a tienda» de ese mismo nivel, sin diferencia de ningún céntimo.
 
-**R10.** El sistema DEBE garantizar que la **suma de lo recaudado atribuido a cada tienda es
+**R11.** El sistema DEBE garantizar que la **suma de lo que gana cada tienda es exactamente igual**
+al importe agregado «lo que gana la tienda» de ese mismo nivel.
+
+**R12.** El sistema DEBE garantizar que la **suma de lo recaudado atribuido a cada tienda es
 exactamente igual** al `total general` de ese mismo nivel.
 
-**R11.** El sistema DEBE atribuir a cada tienda lo recaudado con **exactamente el mismo criterio**
+**R13.** El sistema DEBE atribuir a cada tienda lo recaudado con **exactamente el mismo criterio**
 con el que se calcula el total general (mismas gestiones, misma fuente del importe), de modo que
-R10 sea cierta por construcción y no por coincidencia.
+R12 sea cierta por construcción y no por coincidencia.
 
-**R12.** El sistema DEBE calcular todo importe del desglose con **aritmética exacta en el
+**R14.** El sistema DEBE calcular todo importe del desglose con **aritmética exacta en el
 servidor** y entregarlo como cadena de escala 2. NINGÚN importe del desglose puede sumarse,
 restarse ni redondearse en el navegador.
 
-**R13.** El sistema DEBE derivar cada cifra por tienda con **la misma función** que produce su
+**R15.** El sistema DEBE derivar cada cifra por tienda con **la misma función** que produce su
 equivalente agregado, aplicada al subconjunto de esa tienda, y NO con una fórmula escrita aparte.
 
 ### D. Lo que NO es por tienda
 
-**R14.** El sistema NO DEBE repartir entre las tiendas el **pago al mensajero** ni el **ingreso de
+**R16.** El sistema NO DEBE repartir entre las tiendas el **pago al mensajero** ni el **ingreso de
 bodega por rechazos**: son del cierre entero y no existe un reparto decidido.
 
-**R15.** MIENTRAS se muestre el desglose por tienda, el sistema DEBE indicar que esos dos importes
+**R17.** MIENTRAS se muestre el desglose por tienda, el sistema DEBE indicar que esos dos importes
 **no están repartidos** y son del cierre completo.
 
-**R16.** El sistema NO DEBE alterar ningún importe hoy visible. En particular DEBEN seguir dando
+**R18.** El sistema NO DEBE alterar ningún importe hoy visible. En particular DEBEN seguir dando
 exactamente el mismo valor: `total general`, `Total Ordenex`, `Pago al mensajero`, `Ganancia`,
 `Ingreso de bodega por rechazos`, el agregado «Pago a tienda», y los cuatro campos que la ficha 395
 acaba de añadir (`cobradoSobreRecaudado`, `netoOrdenex`, `ganaLaTienda`,
 `fleteRechazoYaCobradoATienda`).
 
-### E. El cierre de bodega (Q4)
+### E. El cierre de bodega (Q4, Q8)
 
-**R17.** MIENTRAS el detalle de un cierre de bodega esté abierto, el sistema DEBE aplicar R1-R15 al
+**R19.** MIENTRAS el detalle de un cierre de bodega esté abierto, el sistema DEBE aplicar R1-R17 al
 **nivel por mensajero** de cada cierre del día incluido, con el mismo criterio de umbral: dos o más
 tiendas **de ese mensajero**.
 
-**R18.** MIENTRAS el detalle de un cierre de bodega esté abierto, el sistema DEBE aplicar R1-R15 al
+**R20.** MIENTRAS el detalle de un cierre de bodega esté abierto, el sistema DEBE aplicar R1-R17 al
 **nivel agregado de toda la bodega**, agrupando por tienda **a través de todos los mensajeros
-incluidos**.
+incluidos**, y emitiendo **una sola fila por tienda** (Q8: no hay cruce tienda × mensajero).
 
-**R19.** El sistema DEBE garantizar que, en el nivel agregado, la **suma de lo que se paga a cada
-tienda es exactamente igual** al «Pago a tienda» agregado de la bodega.
-
-**R20.** El sistema DEBE derivar el desglose de cada nivel de **sus propias gestiones**, y NUNCA de
+**R21.** El sistema DEBE derivar el desglose de cada nivel de **sus propias gestiones**, y NUNCA de
 sumar el de otro nivel ni de repartir el de un nivel superior. SI las dos vías dieran distinto,
 ENTONCES la pantalla DEBE mostrar el descuadre, no maquillarlo.
 
-**R21.** El sistema DEBE usar **los mismos rótulos y el mismo componente** en las tres superficies:
+**R22.** El sistema DEBE usar **los mismos rótulos y el mismo componente** en las tres superficies:
 la misma plata no puede leerse distinta según por qué pantalla se entre.
 
 ### F. Alcance, permisos y no regresión
 
-**R22.** El sistema NO DEBE exponer a ningún rol un dato que no viera ya en esa misma pantalla: el
+**R23.** El sistema NO DEBE exponer a ningún rol un dato que no viera ya en esa misma pantalla: el
 nombre de la tienda de cada orden ya se muestra por fila en los dos detalles, y el desglose sólo lo
 agrega.
 
-**R23.** El sistema DEBE mantener intactas las dos puertas de alcance: la del detalle del mensajero
+**R24.** El sistema DEBE mantener intactas las dos puertas de alcance: la del detalle del mensajero
 (fuera de alcance → «no encontrada») y la del detalle de bodega (rol sin acceso total →
 «forbidden»). El desglose no puede consultarse por ningún otro camino.
 
-**R24.** El sistema NO DEBE modificar el esquema de la base de datos: esta ficha **no lleva
+**R25.** El sistema NO DEBE modificar el esquema de la base de datos: esta ficha **no lleva
 migración**.
 
-**R25.** El sistema DEBE dejar la vista del cierre del **mensajero** (`/cierre-dia`) sin cambios
+**R26.** El sistema DEBE dejar la vista del cierre del **mensajero** (`/cierre-dia`) sin cambios
 visibles.
 
-**R26.** El sistema DEBE dejar las **descargas de cierres** (ambos niveles, las dos pantallas) sin
+**R27.** El sistema DEBE dejar las **descargas de cierres** (ambos niveles, las dos pantallas) sin
 cambios: ni una columna nueva, ni una que cambie de sitio o de encabezado.
 
-**Total: 26 requisitos.**
+**Total: 27 requisitos.**
 
 ---
 
@@ -260,53 +318,12 @@ dentro del cierre se lo estaría quitando a la otra tienda. Está escrito en el 
 prerrequisito**: sin saber qué parte del bote es de cada tienda, no se le puede descontar a la que
 corresponde. Queda dicho como consecuencia, no como alcance.
 
+Con Q7 dentro, además, la pantalla ya enseña por tienda **las dos caras de ese flete**: lo que se le
+paga hoy (que no lo descuenta) y lo que gana en total (que sí). Quien un día tome esa decisión
+tendrá el número delante.
+
 ---
 
-## Preguntas abiertas — las dos que abre la revisión 2
+## Preguntas abiertas
 
-Las seis de la revisión 1 están firmadas (ver arriba). Estas dos nacen de lo que se midió al
-ajustar el spec, y **no las contesto yo**.
-
-### Q7 — ¿«lo que se le paga» es `pagoTienda` o `ganaLaTienda`?
-
-**No es una duda tipográfica: la ficha 395 acaba de separar esas dos cifras y de decir, en el
-docstring de `ganaLaTienda` (`ingreso-ordenex.ts:360-392`), que confundirlas es el fallo que ella
-viene a arreglar.** Son dos preguntas distintas sobre el mismo cierre:
-
-- **`pagoTienda`** = lo que se le paga **de este dinero**. No resta el flete por rechazo, porque
-  ese flete nunca entró en lo recaudado: se le cobra aparte, contra su wallet.
-- **`ganaLaTienda`** = lo que le queda **después** de que también le cobren aquel flete.
-
-Con las cifras reales de producción del 2026-09-08 la diferencia es **₡10.848,00**.
-
-Q1 se firmó con las palabras **«lo que se le paga»**, y la ficha entera nace del rótulo
-**«Pago a tienda»**. Por eso **este spec toma `pagoTienda`**, y sólo esa.
-
-Lo que queda por decidir es la consecuencia: **tras la 395, la pantalla muestra las DOS cifras
-agregadas.** Si se desglosa una y la otra se queda agregada, ¿confunde? Las opciones son (a)
-desglosar sólo `pagoTienda` —lo que este spec asume—, (b) desglosar las dos (pasa de 2 a 3 cifras
-por tienda y contradice R5), o (c) desglosar sólo `pagoTienda` y **rotular** que la otra sigue
-siendo del cierre entero.
-
-**No bloquea la tanda de servidor** (`design.md §5`: el contrato emite las cifras; la pantalla
-decide cuáles pinta).
-
-### Q8 — En el nivel AGREGADO de la bodega, ¿hace falta decir qué mensajero trajo cada parte?
-
-**Aquí SÍ aparece una dimensión nueva, y es la que Q4 trae consigo.** En el detalle del mensajero
-el desglose tiene una sola dimensión (tienda). En el **nivel agregado de la bodega** hay dos, y se
-cruzan: **una misma tienda puede venir de varios mensajeros**.
-
-R18 dice que se agrupa por tienda a través de todos los mensajeros — o sea, **una fila por tienda**.
-Lo que no está decidido es si además hace falta **«de esta tienda, cuánto trajo cada mensajero»**:
-
-| | Qué se ve | Coste |
-|---|---|---|
-| **a) Sólo por tienda** (lo que R18 asume) | Una fila por tienda en el agregado | Ninguno extra. Pero el cruce tienda×mensajero no se puede leer en ningún sitio |
-| **b) Tienda × mensajero** | Por cada tienda, cuánto puso cada mensajero | El desglose pasa a ser una matriz; el modal ya monta 2 cascadas por nivel y por mensajero |
-
-**No la resuelvo.** Si la respuesta es (b), el alcance de esta ficha vuelve a crecer y hay que
-volver a hablar del tamaño.
-
-**Nota:** el nivel **por mensajero** de la bodega no tiene esta duda — ahí la dimensión mensajero
-está fijada por la sección, así que es el mismo caso que el detalle del mensajero (R17).
+**Ninguna.** Las ocho están firmadas y las dos mediciones bloqueantes, hechas.
