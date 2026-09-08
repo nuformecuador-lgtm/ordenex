@@ -316,71 +316,19 @@ describe("ColumnasPopover — reordenar", () => {
 });
 
 // ---------------------------------------------------------------------------
-// `permitirReordenar={false}` — el selector OCULTA pero NO REORDENA.
+// El bloque de ENCABEZADO: lo único que quien monta puede meter dentro del popup.
 //
-// La excepción que abre la unificación de la descarga de cierres: la hoja fundida de gestiones
-// emite siempre sus columnas y solo el resultado de cada fila decide cuáles se pueblan, así que
-// su ORDEN es el agrupado que la hace legible. Intercalarlas deja celdas vacías que ya no dicen
-// «este resultado no tiene ese dato», sino nada.
+// Aquí vivió, del 2026-09-05 al 2026-09-07, la excepción `permitirReordenar={false}` y su nota al
+// pie («el orden de esta hoja es fijo»), con un único cliente: la hoja fundida de gestiones de
+// cierres. La ficha 387 la revirtió por pedido del humano y la retiró ENTERA —prop, nota y casos—
+// en vez de dejar un interruptor sin clientes documentando una decisión que ya no rige. Reordenar
+// vuelve a ser incondicional, que es lo que R18/R19/R21 afirman arriba sin condicionales; el orden
+// agrupado de aquella hoja sigue vivo, pero como ORDEN POR DEFECTO de su catálogo.
 //
-// Se prueba en el COMPONENTE y con un catálogo sintético a propósito: la capacidad es suya, no
-// de la pantalla de cierres, y el día que otra hoja la necesite no debería reescribirse nada.
+// Que la nota ya no se pinta en el selector del detalle lo comprueba
+// `tests/components/descarga/CierresDescargaNiveles.test.tsx`, que es donde se montaba.
 // ---------------------------------------------------------------------------
-describe("ColumnasPopover — sin reordenar", () => {
-  const NOTA = "El orden de esta hoja es fijo.";
-
-  it("no ofrece subir ni bajar en NINGUNA fila, y sigue ofreciendo ocultar", async () => {
-    montar({ permitirReordenar: false, notaOrden: NOTA });
-    const user = await abrir();
-
-    // Ni un solo control de mover. Se afirma sobre la lista ENTERA y no sobre una fila: un
-    // `permitirReordenar` que solo apagara la primera pasaría un caso de una sola fila.
-    expect(
-      screen.queryAllByRole("button", { name: /^(Subir|Bajar) / }),
-      "la hoja de orden fijo ofrece reordenar",
-    ).toEqual([]);
-
-    // Y la lista está entera y marcada: apagar el movimiento no apaga el selector.
-    expect(etiquetasEnPantalla()).toEqual(PUBLICADAS.map(etiquetaDe));
-    await user.click(screen.getByRole("checkbox", { name: etiquetaDe(PUBLICADAS[3]!) }));
-    expect(
-      JSON.parse(window.localStorage.getItem(CLAVE_DESCARGA)!).ocultas,
-    ).toEqual(["delta"]);
-    // Ocultar NO escribe un orden: `guardar` omite la clave `orden` cuando está vacía, así que
-    // lo persistido sigue diciendo «manda el catálogo».
-    expect(ordenGuardado()).toBeNull();
-  });
-
-  it("dice por qué el orden es fijo, y solo cuando lo es", async () => {
-    // Una capacidad que falta sin decir por qué se lee como un fallo del selector.
-    montar({ permitirReordenar: false, notaOrden: NOTA });
-    await abrir();
-    expect(screen.getByText(NOTA)).toBeInTheDocument();
-
-    cleanup();
-
-    // Con reordenar encendido la nota no aparece, aunque se pase: es la explicación de una
-    // limitación que ahí no existe.
-    montar({ notaOrden: NOTA });
-    await abrir();
-    expect(screen.queryByText(NOTA)).toBeNull();
-    expect(
-      screen.getByRole("button", { name: `Bajar ${etiquetaDe(PUBLICADAS[0]!)}` }),
-    ).toBeInTheDocument();
-  });
-
-  it("por defecto SÍ reordena: la excepción hay que pedirla", async () => {
-    // R21 sigue en pie. Si el defecto se invirtiera, los quince selectores de cierres y el del
-    // manifiesto perderían el reordenar sin que nadie lo pidiera.
-    montar();
-    await abrir();
-    for (const columna of PUBLICADAS) {
-      expect(
-        screen.getByRole("button", { name: `Subir ${etiquetaDe(columna)}` }),
-      ).toBeInTheDocument();
-    }
-  });
-
+describe("ColumnasPopover — encabezado", () => {
   it("el encabezado se pinta dentro del popup, sobre la lista de columnas", async () => {
     // Es donde vive la elección del nivel de detalle en la descarga de cierres: la misma
     // decisión encadenada, en el mismo sitio.

@@ -187,9 +187,11 @@ export const RESULTADO_COL = "Resultado";
  * que ningún identificador se repita en dos módulos, y por eso la asignación no puede
  * duplicarse en las dos pantallas.
  *
- * Su selector OCULTA pero NO REORDENA: el orden de estas 31 columnas es el agrupado que hace
- * legible la hoja (ver §6 abajo), y quien monta el selector lo declara con
- * `permitirReordenar={false}`.
+ * Su selector OCULTA **y REORDENA**, como los otros dieciséis (ficha 387, 2026-09-07). El orden
+ * agrupado de estas 31 columnas —las catorce que siempre traen dato primero, las diecisiete
+ * condicionales después— sigue siendo el ORDEN POR DEFECTO, el que recibe quien no toca nada y al
+ * que vuelve «Restablecer»; lo que ya no es es obligatorio. Entre el 2026-09-05 y el 2026-09-07 se
+ * montó con un `permitirReordenar={false}` que el humano revirtió avisado del motivo.
  */
 export const AMBITO_DESCARGA_GESTIONES_FUNDIDA = "cierres-gestiones";
 

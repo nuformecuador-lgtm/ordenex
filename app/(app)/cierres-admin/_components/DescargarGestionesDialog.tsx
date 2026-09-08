@@ -461,11 +461,10 @@ export function DescargarGestionesDialog({
                 de este control, y desmontarlo a mitad del vuelo sería cortar la generación del
                 archivo que el usuario acaba de pedir. Se cierra cuando el usuario cierra. */}
             {/* SIN `ambitoColumnas`, y ahora por un motivo distinto al de la ficha 314.
-                Entonces esta hoja se quedó sin selector porque `ColumnasPopover` era
-                indivisible —ofrecía ocultar Y reordenar— y reordenar estas 31 columnas rompe el
-                agrupado que las hace legibles. Hoy el selector SÍ sabe ofrecer solo la mitad
-                (`permitirReordenar={false}`) y esta hoja fue su primera candidata, tal como
-                aquel comentario anticipaba.
+                Entonces esta hoja se quedó sin selector porque reordenar sus 31 columnas se
+                creía incompatible con el agrupado que las hace legibles. La ficha 387
+                (2026-09-07) cerró esa discusión: el agrupado es el orden POR DEFECTO, no una
+                imposición, y esta hoja ofrece ocultar Y reordenar como las demás.
 
                 Lo que cambia es DÓNDE vive el selector, no si existe: vive en el botón que abre
                 esta ventana, junto a la elección del nivel de detalle, y de allí bajan las
