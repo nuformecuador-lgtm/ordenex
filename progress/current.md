@@ -17,7 +17,7 @@ Canceladas por decisión del humano: **378** y **389**.
 
 ## ⚠️ LO PRIMERO QUE HAY QUE MIRAR
 
-**La release #758 estaba todavía construyendo al cerrar la sesión.** `prod` apunta a
+**RESUELTO.** La release #758 se habia mergeado SIN crear despliegue: se redisparo con un commit vacio en `prod` (`c359b08e`) y quedo verificada -- migracion aplicada, catalogos en 52 y 34, cero errores de runtime. Lo que sigue es el historico de como se detecto. `prod` apunta a
 `0c0d3312`, pero el catálogo de producción seguía en **51 / 33** y debe quedar en
 **52 / 34**. Comprobar también que no hay errores de runtime.
 
