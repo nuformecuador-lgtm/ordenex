@@ -1,10 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import useSWR from "swr";
 import {
   ChevronUp,
   LifeBuoy,
+  MapPinOff,
   MessageCircle,
   Navigation,
   PackageCheck,
@@ -23,6 +31,7 @@ import {
   prepararEvidencias,
 } from "@/components/shared/EvidenciasField";
 import { HiloNotasOrden } from "@/components/shared/HiloNotasOrden";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,6 +56,14 @@ import {
   capturarUbicacion,
   type CapturaUbicacion,
 } from "@/lib/utils/capturar-ubicacion";
+// Feature 399: QUÉ se dice cuando el permiso está denegado depende de CÓMO esté abierta la app.
+// El desenlace `denegado` de arriba no cambia; cambia el texto que se le da a la persona.
+import {
+  avisoUbicacionDenegada,
+  detectarContextoDeApertura,
+  leerPermisoUbicacion,
+  type AvisoUbicacion,
+} from "@/lib/utils/aviso-ubicacion-denegada";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
@@ -81,9 +98,12 @@ import { useSeccionColapsable } from "@/hooks/useSeccionColapsable";
 // El mensaje dice DÓNDE se reactiva, no solo que falta. Es toda la diferencia entre un
 // bloqueo con salida y una llamada a soporte: el mensajero está en la calle, la denegación la
 // revierte él mismo, y nadie recuerda dónde vive ese ajuste sin que se lo digan.
-const MSG_UBICACION_DENEGADA =
-  "Para registrar la gestión hace falta tu ubicación. Activá el permiso desde el candado " +
-  "de la barra de direcciones (Permisos del sitio → Ubicación) y volvé a intentarlo.";
+//
+// Feature 399 — pero «dónde» NO ES EL MISMO SITIO en todas las pantallas: con Ordenex abierta
+// desde su ícono (el manifest declara `display: standalone`) no hay barra de direcciones ni
+// candado, y el texto único mandaba a tocar algo que no existía. El texto lo elige ahora
+// `avisoUbicacionDenegada` a partir de dos señales estándar, y vive en `lib/utils` con su
+// razonamiento entero. Aquí solo se pide y se pinta.
 
 // Feature 227 (T3.4) — textos del bloque del hilo, en un solo sitio y fuera del JSX
 // (i18n-ready, mismo criterio que `DESGLOSE_TEXTOS`).
@@ -414,6 +434,17 @@ export function GestionarOrdenPanel({
   // Feature 193/R21: la captura tarda (hasta 10 s). Sin este estado el CTA parecería muerto y
   // el mensajero volvería a pulsarlo, disparando dos gestiones de la misma orden.
   const [ubicando, setUbicando] = useState(false);
+  // Feature 399: los pasos para reactivar el permiso, YA elegidos para esta pantalla. `null`
+  // mientras no haya habido una denegación. Se guardan en estado —y no se derivan al
+  // renderizar— porque las dos señales que los eligen solo existen en el navegador: pintarlos
+  // en el primer render obligaría a adivinar en el servidor.
+  const [avisoUbicacion, setAvisoUbicacion] = useState<AvisoUbicacion | null>(
+    null,
+  );
+  // El bloque de pasos es un `role="alert"` más entre varios de esta pantalla (los errores por
+  // campo, el fallo del hilo de notas). Con su título como nombre accesible, un lector de
+  // pantalla dice de qué alerta se trata en vez de leer un texto suelto.
+  const avisoUbicacionTituloId = useId();
   const [cancelando, setCancelando] = useState(false);
 
   // Feature 284 (B1 de la revisión, 2026-08-25) — MIENTRAS HAYA GESTIÓN A MEDIAS, EL AVISO DE
@@ -706,6 +737,9 @@ export function GestionarOrdenPanel({
     // Feature 193 (R16/R22): la ubicación se pide AQUÍ, al confirmar, y no al abrir el panel
     // ni al navegar. Pedir el permiso sin una acción que lo justifique es como se consigue
     // que la persona lo deniegue para siempre — y aquí denegarlo tiene consecuencias (R19).
+    // Feature 399: el aviso anterior se retira ANTES de volver a intentarlo. Si el permiso ya
+    // se arregló, dejarlo puesto diría que sigue roto; y si no, se vuelve a poner en seguida.
+    setAvisoUbicacion(null);
     setUbicando(true);
     let captura: CapturaUbicacion;
     try {
@@ -719,7 +753,17 @@ export function GestionarOrdenPanel({
     // técnico, en cambio, sigue adelante (R18): en una bodega sin señal no hay nada que el
     // mensajero pueda hacer, y trabarlo ahí le impediría cerrar el día.
     if (captura.estado === "denegado") {
-      toast.error(MSG_UBICACION_DENEGADA);
+      // Feature 399: el contexto se lee AQUÍ, con el dedo del mensajero todavía en la
+      // pantalla, no al montar el panel. `leerPermisoUbicacion` nunca lanza ni deja colgado:
+      // sin Permissions API resuelve `desconocido` y el texto lo decide el contexto.
+      const aviso = avisoUbicacionDenegada(
+        detectarContextoDeApertura(),
+        await leerPermisoUbicacion(),
+      );
+      // El toast se ve enseguida pero se va solo; los pasos se quedan en la pantalla, que es
+      // lo que hace falta para ir a los Ajustes del teléfono y volver.
+      setAvisoUbicacion(aviso);
+      toast.error(aviso.resumen);
       return;
     }
 
@@ -1185,6 +1229,30 @@ export function GestionarOrdenPanel({
               />
               <MotivoField value={motivo} onChange={setMotivo} error={motivoError} />
             </>
+          ) : null}
+
+          {/* Feature 399: los pasos para reactivar el permiso, PEGADOS al botón que acaba de
+              fallar y en la instrucción que sirve en ESTA pantalla. Se quedan puestos: un
+              toast se va solo, y esto hay que leerlo yendo a los Ajustes del teléfono y
+              volviendo. El `Alert` de shadcn ya trae `role="alert"`, así que un lector de
+              pantalla lo anuncia al aparecer. */}
+          {avisoUbicacion ? (
+            <Alert variant="destructive" aria-labelledby={avisoUbicacionTituloId}>
+              <MapPinOff aria-hidden="true" />
+              <AlertTitle id={avisoUbicacionTituloId}>
+                {avisoUbicacion.titulo}
+              </AlertTitle>
+              <AlertDescription>
+                <ol className="list-decimal space-y-1 pl-4">
+                  {avisoUbicacion.pasos.map((paso) => (
+                    <li key={paso}>{paso}</li>
+                  ))}
+                </ol>
+                {avisoUbicacion.nota ? (
+                  <p className="pt-1">{avisoUbicacion.nota}</p>
+                ) : null}
+              </AlertDescription>
+            </Alert>
           ) : null}
 
           <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
