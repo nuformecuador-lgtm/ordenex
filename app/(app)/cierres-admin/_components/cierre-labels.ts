@@ -58,6 +58,25 @@ export const ESTADO_LABEL: Record<CierreEstado, string> = {
 };
 
 /**
+ * FICHA 386 — los nombres de las DOS listas en que `/cierres-admin` parte los cierres del día:
+ * las pestañas «Pendientes» y «Resueltos».
+ *
+ * Vivían como literales privados de `CierresAdminModule`. Salen aquí —el módulo PURO de textos
+ * de cierres, y por el mismo motivo por el que salió `DESTINO_TIPO_LABEL`— porque desde esta
+ * ficha los necesita un SEGUNDO archivo: `FiltrosCierresBarra` agrupa las opciones del filtro de
+ * estado por la lista en la que ese estado aparece, y el rótulo de cada grupo tiene que ser LA
+ * MISMA palabra que el usuario lee en la pestaña. Dos literales iguales escritos en dos archivos
+ * se separan en cuanto alguien renombre una pestaña, y entonces el filtro mandaría al usuario a
+ * una lista que ya no se llama así.
+ *
+ * ⚠️ NO son los nombres de las pestañas de las pantallas de BODEGA (`CierresBodegaAdminModule`
+ * dice «Pendientes»/«Resueltos» pero `ConsolidacionBodegaModule` dice «A consolidar»/
+ * «Solicitados»): esos siguen siendo suyos, porque parten otro conjunto por otro criterio.
+ */
+export const TAB_PENDIENTES_LABEL = "Pendientes";
+export const TAB_RESUELTOS_LABEL = "Resueltos";
+
+/**
  * Destino de un cierre. Estaba DUPLICADA palabra por palabra en `CierresAdminModule` y en
  * `CierreDiaModule`; los dos la leen ahora de aquí, que es lo que hace cierto que el archivo
  * y las dos pantallas digan lo mismo (R8).
