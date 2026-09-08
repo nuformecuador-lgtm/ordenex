@@ -71,6 +71,8 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     cantonNombre: "Central",
     distritoNombre: "Oriental",
     producto: "Caja",
+    // Ficha 396: la clave por la que el cierre se parte por tienda (el nombre es solo para mostrar).
+    tiendaId: "tienda-1",
     tiendaNombre: "Tienda X",
     resultado: "entregada",
     montoRecibido: "12.50",
@@ -2120,5 +2122,289 @@ describe("264/B5 — verCierreDetalle emite las ordenes sin gestionar", () => {
 
     expect(r).toEqual({ status: "no_encontrada" });
     expect(Object.keys(r)).toEqual(["status"]); // ni `ordenesSinGestion` ni `sinGestionRegistrado`
+  });
+});
+
+/**
+ * 💰 FICHA 396 (C1) — EL DETALLE DEL CIERRE DEL MENSAJERO DICE DE QUIÉN ES CADA PARTE.
+ *
+ * ⚠️ **NO ES UN DEFECTO DE DINERO.** `wallet_tienda_movimiento` lleva los movimientos separados
+ * por tienda desde siempre, con sus propias cifras: a nadie se le paga mal, y esta ficha no
+ * toca ni una fila del ledger. Lo que faltaba era DECIRLO en la pantalla.
+ *
+ * El cierre es del MENSAJERO, no de la tienda: puede llevar órdenes de varias (medido en
+ * producción el 2026-09-08: de 56 cierres, 17 tienen DOS), y `pagoTienda` era la suma de todas
+ * sin que nada lo indicara.
+ *
+ * **Todos los importes de aquí abajo están escritos a mano.** Ninguno sale de llamar a
+ * `partesPorTienda`, que es la función bajo prueba; comparar un total contra la función que lo
+ * genera deja el test siempre verde.
+ */
+describe("396 — `verCierreDetalle` emite el desglose por tienda", () => {
+  /** Desglose por orden como lo emite el repositorio (ya derivado del snapshot congelado). */
+  function ingreso(over: Partial<IngresoOrdenexDTO>): IngresoOrdenexDTO {
+    return {
+      montoCobrar: null,
+      cobraComision: false,
+      esCentral: false,
+      esZonaEspecial: false,
+      fleteOrigen: "normal",
+      fleteDevolucionOrigen: "normal",
+      flete: null,
+      ivaFlete: null,
+      fleteDevolucion: null,
+      ivaFleteDevolucion: null,
+      comisionCod: null,
+      ivaComisionCod: null,
+      fleteConIva: null,
+      fleteDevolucionConIva: null,
+      comisionConIva: null,
+      total: "0.00",
+      tarifa: null,
+      ...over,
+    };
+  }
+
+  /**
+   * UN cierre de UN mensajero con órdenes de DOS tiendas, y a propósito **una con rechazo y la
+   * otra sin él**: si las dos tuvieran flete por rechazo cero, la identidad que ata `pagoTienda`
+   * con `ganaLaTienda` por tienda daría `0.00 === 0.00` en las dos y no comprobaría nada.
+   *
+   * Los totales del `resumen` son los del snapshot del cierre y **cuadran con las gestiones**,
+   * igual que en producción (el snapshot ES ese total congelado). Esa coherencia no es un
+   * detalle del fixture: es lo que hace que las identidades R10-R12 signifiquen algo aquí.
+   */
+  const GESTIONES_DOS_TIENDAS = () => [
+    gestionRow({
+      gestionId: "g-norte-entrega",
+      ordenId: "o-1",
+      tiendaId: "t-norte",
+      tiendaNombre: "Tienda Norte",
+      resultado: "entregada",
+      montoRecibido: "100000.00",
+      metodoPago: "efectivo",
+      ingresoOrdenex: ingreso({
+        flete: "2500.00",
+        ivaFlete: "325.00",
+        fleteConIva: "2825.00",
+        comisionCod: "3000.00",
+        ivaComisionCod: "390.00",
+        comisionConIva: "3390.00",
+        total: "6215.00",
+      }),
+    }),
+    gestionRow({
+      gestionId: "g-norte-rechazo",
+      ordenId: "o-2",
+      tiendaId: "t-norte",
+      tiendaNombre: "Tienda Norte",
+      resultado: "rechazada",
+      montoRecibido: null,
+      metodoPago: null,
+      ingresoOrdenex: ingreso({
+        fleteDevolucion: "1500.00",
+        ivaFleteDevolucion: "195.00",
+        fleteDevolucionConIva: "1695.00",
+        total: "1695.00",
+      }),
+    }),
+    gestionRow({
+      gestionId: "g-sur-entrega",
+      ordenId: "o-3",
+      tiendaId: "t-sur",
+      tiendaNombre: "Tienda Sur",
+      resultado: "entregada",
+      montoRecibido: "40000.00",
+      metodoPago: "SINPE",
+      ingresoOrdenex: ingreso({
+        flete: "2000.00",
+        ivaFlete: "260.00",
+        fleteConIva: "2260.00",
+        comisionCod: "1200.00",
+        ivaComisionCod: "156.00",
+        comisionConIva: "1356.00",
+        total: "3616.00",
+      }),
+    }),
+  ];
+
+  const RESUMEN_DOS_TIENDAS = () =>
+    resumenRow({
+      totales: {
+        efectivo: "100000.00",
+        simpe: "40000.00",
+        transferencia: "0.00",
+        general: "140000.00",
+      },
+      totalPagoMensajero: "3000.00",
+      totalIngresoBodegaRechazos: "500.00",
+    });
+
+  function repoDeDosTiendas() {
+    return fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
+        cierre: RESUMEN_DOS_TIENDAS(),
+        gestiones: GESTIONES_DOS_TIENDAS(),
+      })),
+    });
+  }
+
+  it("R4/R7/R8: una fila por tienda, con sus TRES cifras y ordenadas por lo que se les paga", async () => {
+    const { service } = newService({ repo: repoDeDosTiendas() });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    expect(r.partesPorTienda).toEqual([
+      {
+        tiendaId: "t-norte",
+        tiendaNombre: "Tienda Norte",
+        recaudado: "100000.00",
+        // 100.000,00 − 2.825,00 − 3.390,00
+        pagoTienda: "93785.00",
+        // 100.000,00 − (6.215,00 + 1.695,00)
+        ganaLaTienda: "92090.00",
+      },
+      {
+        tiendaId: "t-sur",
+        tiendaNombre: "Tienda Sur",
+        recaudado: "40000.00",
+        // 40.000,00 − 2.260,00 − 1.356,00
+        pagoTienda: "36384.00",
+        // 40.000,00 − 3.616,00 — sin rechazos, coincide con lo que se le paga
+        ganaLaTienda: "36384.00",
+      },
+    ]);
+  });
+
+  it("R10/R11/R12: la suma de las partes ES cada agregado del MISMO detalle, al céntimo", async () => {
+    const { service } = newService({ repo: repoDeDosTiendas() });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    const suma = (montos: string[]) =>
+      montos.reduce((a, m) => a.plus(new Prisma.Decimal(m)), new Prisma.Decimal(0)).toFixed(2);
+
+    // Los DOS lados anclados a literales escritos a mano: la suma de las partes y el agregado
+    // que el propio DTO emite. Si cualquiera de los dos se moviera, esto se entera.
+    expect(suma(r.partesPorTienda.map((p) => p.pagoTienda))).toBe("130169.00");
+    expect(r.pagoTienda).toBe("130169.00"); // R10
+
+    expect(suma(r.partesPorTienda.map((p) => p.ganaLaTienda))).toBe("128474.00");
+    expect(r.ganaLaTienda).toBe("128474.00"); // R11
+
+    expect(suma(r.partesPorTienda.map((p) => p.recaudado))).toBe("140000.00");
+    expect(r.cierre.totales.general).toBe("140000.00"); // R12
+  });
+
+  it("la CUARTA identidad, por tienda: lo que se le paga − lo que gana = SU flete por rechazo", async () => {
+    // Es la que hace imposible derivar una de las dos con el subconjunto equivocado sin que se
+    // note. Norte tuvo un rechazo (1.695,00) y Sur no (0,00): si las dos dieran cero, este test
+    // pasaría sin comprobar nada.
+    const { service } = newService({ repo: repoDeDosTiendas() });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    const dif = (p: { pagoTienda: string; ganaLaTienda: string }) =>
+      new Prisma.Decimal(p.pagoTienda).minus(p.ganaLaTienda).toFixed(2);
+
+    const norte = r.partesPorTienda.find((p) => p.tiendaId === "t-norte")!;
+    const sur = r.partesPorTienda.find((p) => p.tiendaId === "t-sur")!;
+    expect(dif(norte)).toBe("1695.00");
+    expect(dif(sur)).toBe("0.00");
+  });
+
+  it("R18: ni un importe ya visible cambia de valor por añadir el desglose", async () => {
+    const { service } = newService({ repo: repoDeDosTiendas() });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    expect(r.cierre.totales.general).toBe("140000.00");
+    expect(r.totalesIngreso.total).toBe("11526.00"); // 6.215,00 + 1.695,00 + 3.616,00
+    expect(r.totalesIngreso.fleteConIva).toBe("5085.00"); // 2.825,00 + 2.260,00
+    expect(r.totalesIngreso.comisionConIva).toBe("4746.00"); // 3.390,00 + 1.356,00
+    expect(r.totalesIngreso.fleteDevolucionConIva).toBe("1695.00");
+    expect(r.ganancia).toBe("8526.00"); // 11.526,00 − 3.000,00
+    expect(r.pagoTienda).toBe("130169.00");
+    // Los CUATRO campos que dejó la ficha 395, intactos.
+    expect(r.cobradoSobreRecaudado).toBe("9831.00"); // 5.085,00 + 4.746,00
+    expect(r.netoOrdenex).toBe("8026.00"); // 11.526,00 − 3.000,00 − 500,00
+    expect(r.ganaLaTienda).toBe("128474.00");
+    expect(r.fleteRechazoYaCobradoATienda).toBe(false); // el cierre está `solicitado`
+  });
+
+  it("con UNA sola tienda el campo se emite igual, con un elemento (el umbral es de pantalla)", async () => {
+    // Un contrato que a veces trae la lista y a veces no obliga a cada consumidor a distinguir
+    // dos formas del mismo dato: el error que la 264 ya documentó.
+    const repo = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
+        cierre: resumenRow({
+          totales: {
+            efectivo: "0.00",
+            simpe: "40000.00",
+            transferencia: "0.00",
+            general: "40000.00",
+          },
+          totalPagoMensajero: "0.00",
+        }),
+        gestiones: [GESTIONES_DOS_TIENDAS()[2]], // sólo la de Tienda Sur
+      })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    expect(r.partesPorTienda).toEqual([
+      {
+        tiendaId: "t-sur",
+        tiendaNombre: "Tienda Sur",
+        recaudado: "40000.00",
+        pagoTienda: "36384.00",
+        ganaLaTienda: "36384.00",
+      },
+    ]);
+    // Y sus tres cifras son EXACTAMENTE las agregadas del mismo detalle.
+    expect(r.partesPorTienda[0].pagoTienda).toBe(r.pagoTienda);
+    expect(r.partesPorTienda[0].ganaLaTienda).toBe(r.ganaLaTienda);
+    expect(r.partesPorTienda[0].recaudado).toBe(r.cierre.totales.general);
+  });
+
+  it("R16: no reparte el pago al mensajero ni el ingreso de bodega — no viajan por tienda", async () => {
+    const { service } = newService({ repo: repoDeDosTiendas() });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    for (const parte of r.partesPorTienda) {
+      expect(Object.keys(parte).sort()).toEqual([
+        "ganaLaTienda",
+        "pagoTienda",
+        "recaudado",
+        "tiendaId",
+        "tiendaNombre",
+      ]);
+    }
+    // Siguen siendo del cierre entero, agregados y sin repartir.
+    expect(r.cierre.totalPagoMensajero).toBe("3000.00");
+    expect(r.desgloseIngresoBodegaRechazos.total).toBe("500.00");
+  });
+
+  it("R24: el desglose no se cuela por las puertas de alcance — un rol sin acceso no lo ve", async () => {
+    const repo = repoDeDosTiendas();
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c1", MENSAJERO);
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(Object.keys(r)).toEqual(["status"]); // ni `partesPorTienda`, ni nada más
+    expect(repo.findCierreByIdEnAlcance).not.toHaveBeenCalled();
   });
 });

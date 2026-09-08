@@ -152,6 +152,10 @@ function detalleOk(cierreId: string, mensajeroNombre = "Zoe del Histórico") {
     netoOrdenex: "0.00",
     ganaLaTienda: "0.00",
     fleteRechazoYaCobradoATienda: false,
+    // Ficha 396: el desglose por tienda viaja SIEMPRE en el DTO, tambien con una sola
+    // tienda. Estas pruebas no lo miran, asi que aqui va vacio; las suyas estan en
+    // `tests/unit/utils/partes-por-tienda.test.ts` y en las de la pantalla del desglose.
+    partesPorTienda: [],
     // Feature 264: el contrato del detalle trae SIEMPRE el par (lista, marca). Aqui van en su
     // valor neutro —«registrado, y no hubo ninguna»— porque esta suite mide enlaces profundos,
     // no la seccion; los casos de la seccion viven en su propio archivo.

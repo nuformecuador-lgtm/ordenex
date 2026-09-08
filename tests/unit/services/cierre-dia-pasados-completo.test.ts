@@ -116,6 +116,8 @@ function gestion(n: number): CierreGestionPendienteRow {
     cantonNombre: "Central",
     distritoNombre: null,
     producto: "Producto",
+    // Ficha 396: la clave por la que el cierre se parte por tienda (el nombre es solo para mostrar).
+    tiendaId: "tienda-1",
     tiendaNombre: "Tienda",
     resultado: "entregada",
     montoRecibido: "10.00",

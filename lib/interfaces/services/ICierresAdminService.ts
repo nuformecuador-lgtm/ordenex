@@ -21,6 +21,11 @@ import type {
   IngresoOrdenexDTO,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
+// Ficha 396 — la parte de UNA tienda se DECLARA junto a la funcion que la produce
+// (`partesPorTienda`), donde viven las identidades que particiona, y se importa aqui como TIPO.
+// Mismo camino que `OrigenFlete`, que ya viaja asi desde ese mismo modulo: un `import type` se
+// borra al compilar, asi que esto no arrastra ni un byte de `lib/utils/` al bundle.
+import type { ParteDeTienda } from "@/lib/utils/ingreso-ordenex";
 
 // Feature 38 — contrato del servicio "Cierres del dia" del admin (maestro /
 // adminSatelite). Logica de negocio pura (sin HTTP ni Prisma); el borde (Server
@@ -404,6 +409,44 @@ export type CierreDetalleAdminServiceResult =
        * pasado: todavia no se aprueba, o no hay nada que cobrar.
        */
       fleteRechazoYaCobradoATienda: boolean;
+      /**
+       * 💰 Ficha 396 — DE QUIEN ES CADA PARTE de `pagoTienda` y de `ganaLaTienda`.
+       *
+       * **El cierre es del MENSAJERO, no de la tienda.** Un mensajero reparte para quien le
+       * toque ese dia, asi que un cierre puede llevar ordenes de varias tiendas — medido en
+       * produccion el 2026-09-08: de 56 cierres, 39 tienen UNA y 17 tienen DOS. Hasta esta ficha
+       * `pagoTienda` era la SUMA de todas ellas y la pantalla no lo decia en ninguna parte.
+       *
+       * ⚠️ **NO ES UNA CORRECCION DE DINERO.** `wallet_tienda_movimiento` lleva los movimientos
+       * separados por tienda desde siempre, con sus propias cifras: a nadie se le paga mal, y
+       * esta ficha no emite, borra ni corrige ni una fila del ledger. `pagoTienda` y
+       * `ganaLaTienda` —aqui al lado— siguen valiendo EXACTAMENTE lo mismo que antes (R18).
+       *
+       * TRES cifras por tienda, y ni una mas: la tercera (`ganaLaTienda`) entro el 2026-09-08 por
+       * firma explicita del humano (Q7 del spec); la cuarta necesitara otra firma.
+       *
+       * SE EMITE SIEMPRE, tambien con UNA sola tienda —un elemento, cuyas cifras son iguales a
+       * las agregadas—. El UMBRAL de «ensenarlo solo con dos o mas» es de PRESENTACION y vive en
+       * la pantalla: un contrato que a veces trae la lista y a veces no obliga a CADA consumidor
+       * a distinguir dos formas del mismo dato, que es el error que la 264 ya documento con
+       * `ordenesSinGestion` / `sinGestionRegistrado`.
+       *
+       * ORDENADO POR EL SERVIDOR (R8): por `pagoTienda` descendente, con el desempate declarado
+       * en `partesPorTienda`. La pantalla pinta en el orden que recibe.
+       *
+       * INVARIANTES, ciertas por construccion y con test propio:
+       *   Σ `.pagoTienda`   === `pagoTienda`               (R10)
+       *   Σ `.ganaLaTienda` === `ganaLaTienda`             (R11)
+       *   Σ `.recaudado`    === `cierre.totales.general`   (R12)
+       * y, POR TIENDA, `.pagoTienda − .ganaLaTienda` === el flete por rechazo + IVA de ESA
+       * tienda — la que hace imposible derivar una de las dos con el subconjunto equivocado sin
+       * que se note.
+       *
+       * LO QUE NO SE REPARTE (R16): el pago al mensajero y el ingreso de bodega por rechazos son
+       * del cierre ENTERO y se quedan agregados. Repartirlos exigiria inventar un criterio que
+       * nadie ha firmado, y un numero repartido con un criterio inventado miente con precision.
+       */
+      partesPorTienda: ParteDeTienda[];
       /**
        * Feature 264 (R7) — las ordenes que el corte barrio al crear ESTE cierre y ningun otro.
        * `[]` significa «no hubo ninguna» SOLO si `sinGestionRegistrado` es `true`.
