@@ -36,17 +36,31 @@ const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
 const SUFIJO = `379-res-${Date.now().toString(36)}`;
 
 // ---------------------------------------------------------------------------------------------
-// R19 — LA MITAD QUE NINGUN DATO PUEDE PROBAR, Y ESTA MEDIDO
+// R19 — LA MITAD QUE CON DATOS SALE CARA, NO IMPOSIBLE
 // ---------------------------------------------------------------------------------------------
 //
-// ⚠️ Se intento probar R19 con datos y NO SE PUEDE, y conviene que quede escrito para que nadie
-// lo reintente: la columna es `Decimal(12,2)`, o sea como mucho 9.999.999.999,99. A esa escala
-// el error de un `double` es del orden de 1e-6, y `toFixed(2)` lo redondea de vuelta al valor
-// exacto — haria falta un importe del orden de 4,5e13 para que la diferencia se viera en los
-// centimos, y esa fila no cabe en la columna. Medido con la mutacion
-// `Number(_sum.totalGeneral).toFixed(2)`: los tres casos de datos de abajo pasaron en VERDE.
+// ⚠️ CORRECCION (cierre de la revision de la ficha). Aqui ponia que probar R19 con datos «no se
+// puede», y lo ponia «para que nadie lo reintente». Era FALSO, y de la peor manera: confundia una
+// FILA con la SUMA. Lo que se lee no es una fila, es un `SUM`, y un `SUM` **no** esta acotado por
+// `Decimal(12,2)`. Con una sola fila al maximo de la columna (9.999.999.999,99) el error del
+// `double` es ~1e-6 y `toFixed(2)` lo redondea de vuelta al valor exacto — eso si es cierto, y
+// por eso los tres casos de datos de abajo pasaron en verde con la mutacion
+// `Number(_sum.totalGeneral).toFixed(2)`. Pero sumando filas la escala crece sin tope.
 //
-// Asi que la unica evidencia honesta de R19 es ESTRUCTURAL: el camino del importe no llama a
+// MEDIDO (aritmetica exacta en enteros de centimos, remedida al cerrar la revision):
+//
+//     primer N que rompe : 7038 filas al maximo de la columna
+//     suma exacta        : 70379999999929.62
+//     via Number()       : 70379999999929.63     <- un centimo de mas
+//
+// O sea: la prueba con datos es ALCANZABLE. No se escribe por COSTE —sembrar ~7.000 `cierre_dia`
+// en una transaccion revertida por un centimo—, no por imposibilidad, y esa es una decision, no
+// una ley de la aritmetica. Si alguien la quiere, que la escriba: no hay nada que se lo impida.
+//
+// Un comentario que afirma una imposibilidad falsa es peor que no tener comentario: convierte un
+// limite de presupuesto en un dogma, y el siguiente lector ni lo comprueba.
+//
+// La evidencia que R19 tiene HOY es ESTRUCTURAL, y muerde: el camino del importe no llama a
 // `Number`/`parseFloat`/`parseInt`. El barrido va sobre el fuente SIN COMENTARIOS, porque la
 // prosa de este repo nombra a proposito lo que el codigo tiene prohibido; y lleva su propia
 // contraprueba, porque una guardia estatica rota no falla, calla.

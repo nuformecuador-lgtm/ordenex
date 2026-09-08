@@ -222,13 +222,20 @@ sin ser adminSatelite de Z?» y la pregunta «¿qué zona le queda tras este cam
 función. Se extrae un helper privado y las dos lo usan; dos copias de esa regla se separan a la
 primera (es literalmente el defecto que esta ficha arregla, con la zona y el vehículo).
 
-**Inyección:** `ICierreBodegaRepository` entra como **sexto parámetro del constructor**, opcional por
+**Inyección:** `ICierreBodegaRepository` entra como **quinto parámetro del constructor** —detrás de
+`repo`, `zonaRepo`, `vehiculoRepo` y `sessionRepo`—, opcional por
 la misma razón que `sessionRepo` (hay decenas de `new UsuarioService(repo)` en tests) y con la misma
 disciplina: **`consultarImpactoCambio` LANZA si no está**, con mensaje explícito. Un colaborador
 opcional que se ignora en silencio ya dejó dos notificadores muertos en este repo con la suite
 entera en verde; y aquí «no puedo leer el dinero» devuelto como «no hay dinero» es exactamente el
 fallo mudo que la ficha combate. Que se **pasa de verdad** lo prueba
 `tests/unit/actions/usuarios-composition.test.ts` (T10).
+
+⚠️ **El ordinal no es cosmético.** `UsuarioService.length` pasa de 4 a 5 y eso es lo que mide la
+trampa de aridad de la ficha 287 (`expect(UsuarioService.length).toBe(5)`, un literal exacto que
+existe para que nadie cuele un colaborador nuevo por el constructor sin mirarlo). Este párrafo decía
+**«sexto»** hasta el cierre de la revisión: un spec que dice un número y un test que dice otro
+invitan a la siguiente persona a creer que falta un parámetro, y ahí la trampa deja de saltar.
 
 ### 4.4 Borde — Server Action, no route handler
 

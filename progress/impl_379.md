@@ -108,13 +108,81 @@ no lo usa (el caso de al lado sigue construyendo con cuatro argumentos y complet
 camino de escritura lo toca. **Sigue siendo un literal exacto**: relajarlo a `toBeGreaterThan`
 desarmaría la trampa para el sexto.
 
-**4. R19 no se puede probar con datos, y está medido.**
-La columna es `Decimal(12,2)`: como mucho 9.999.999.999,99. A esa escala el error de un `double` es
-~1e-6 y `toFixed(2)` lo redondea de vuelta al valor exacto; haría falta un importe del orden de
-4,5e13 para verlo en los céntimos, y esa fila no cabe. **Medido**: con la mutación
-`Number(_sum.totalGeneral).toFixed(2)` los tres casos de datos pasaron en **verde**. La evidencia
-honesta de R19 es por tanto estructural (barrido sobre el cuerpo sin comentarios, con
-contraprueba) y así está escrito en el propio archivo para que nadie lo reintente.
+**4. R19 con datos sale CARO, no imposible.** ⚠️ **Este punto decía otra cosa, y era falso.**
+
+Lo que decía: «R19 no se puede probar con datos», porque la columna es `Decimal(12,2)` (máximo
+9.999.999.999,99), a esa escala el error de un `double` es ~1e-6, `toFixed(2)` lo redondea de vuelta
+al valor exacto, y «haría falta un importe del orden de 4,5e13 para verlo en los céntimos, y esa
+fila no cabe». Y lo dejaba escrito **«para que nadie lo reintente»**.
+
+**El error: confundir una FILA con la SUMA.** `resumirConsolidablesPendientes` devuelve un `SUM`, y
+un `SUM` no está acotado por `Decimal(12,2)`. Lo levantó el reviewer y lo **remedí yo** con
+aritmética exacta en enteros de céntimos:
+
+```
+primer N que rompe : 7038 filas al máximo de la columna (9.999.999.999,99)
+suma exacta        : 70379999999929.62
+vía Number()       : 70379999999929.63      ← un céntimo de más
+una sola fila      : 9999999999.99 -> Number().toFixed(2) = 9999999999.99   (idéntico: por eso
+                                                             los 3 casos de datos pasaban verdes)
+```
+
+Así que la prueba con datos **es alcanzable**; lo que es, es **cara** (sembrar ~7.000 `cierre_dia`
+en una transacción revertida para cazar un céntimo). **Decisión mía al cerrar la revisión: no se
+escribe, por coste** — R19 ya tiene evidencia que muerde (el barrido estructural sobre el cuerpo sin
+comentarios, con contraprueba: con `Number(...)` se pone rojo, remedido por el reviewer como MUT-E1).
+Lo que sí se corrigió es **el texto**, aquí y en
+`tests/integration/db/cierre-bodega-resumen-pendientes.test.ts`, y se quitó el «para que nadie lo
+reintente»: un comentario que afirma una imposibilidad falsa convierte un límite de presupuesto en
+un dogma, y es peor que no tener comentario.
+
+---
+
+## El hueco de D2 — lo que esta bitácora declaró cubierto y no lo estaba
+
+**Esto es una corrección, no un añadido.** La tabla de abajo daba `R10 · D1/D2/D3` por cubierto con
+un tick verde. **No lo estaba**: la puerta D2 —el cambio de **rol**— no la mordía ningún test, y la
+bitácora lo declaraba completo. El reviewer lo midió (`progress/review_379.md`, bloqueante 1) con
+una mutación en el paso 5 de `consultarImpactoCambio`:
+
+```ts
+const rolResultante = valorDelRol(cambio.rolId ?? actual.rolId);   // real
+const rolResultante = valorDelRol(actual.rolId);                   // MUT-B2
+```
+
+**Por qué se colaba, que es lo que había que arreglar de verdad:** los tres casos que decían cubrir
+D2 cambiaban el rol a `admin`, y **`admin` no lleva zona**. Con la zona resultante en `null`, la
+comparación `zonaResultante.zonaId === zonaId` ya falla sola y el aviso sale **aunque la comparación
+de rol no existiera**. Estaban verdes por la regla del bloque A, no por la del rol.
+
+`mensajero` es el **otro** rol que sí lleva zona, y `adminSatelite → mensajero en la misma zona` es
+exactamente el escenario para el que la ficha existe: la zona conserva a la persona y pierde a quien
+puede consolidar su dinero.
+
+**El caso nuevo** vive donde vive la regla —`tests/unit/services/usuario-impacto-zona.test.ts`,
+`«⭑ R9/R10 · D2 de verdad: pasar de Admin satelite a MENSAJERO en la MISMA zona tambien avisa»`— y
+exige el impacto completo (zona, cuenta e importe) con un `toEqual` contra literales escritos a mano.
+Al caso viejo de `admin` **no se le quitó nada**: se le añadió el comentario que dice qué prueba de
+verdad (la forma del impacto) y qué no (el rol).
+
+**La demostración, remedida sobre el árbol final** (arnés con autocomprobación: aborta si el texto a
+mutar no aparece exactamente una vez, exige verde y línea de resultados de vitest antes de mutar,
+restaura releyendo y comparando byte a byte, y vuelve a correr):
+
+```
+=== (1) BASELINE, sin mutar ===         Test Files 15 passed (15) · Tests 270 passed (270) · exit 0
+=== (2) MUTADO (MUT-B2) ===             Test Files  1 failed | 14 passed (15)
+                                        Tests      1 failed | 269 passed (270) · exit 1
+  × ⭑ R9/R10 · D2 de verdad: pasar de Admin satelite a MENSAJERO en la MISMA zona tambien avisa
+  AssertionError: expected null to deeply equal { zonaNombre: 'San Carlos', …(3) }
+=== (3) RESTAURADO, byte a byte ===     Test Files 15 passed (15) · Tests 270 passed (270) · exit 0
+```
+
+La selección son los 15 archivos de la ficha, integración incluida (`.env` copiado). **El único rojo
+es el caso nuevo**: los otros 269 tests siguen verdes con la mutación puesta, que es la medida
+independiente de que el hueco era real y de que nada más lo tapaba.
+
+**La implementación no se tocó.** El bloqueante era la red, no el código.
 
 ---
 
@@ -131,7 +199,7 @@ contraprueba) y así está escrito en el propio archivo para que nadie lo reinte
 | R7 | `unit/services/usuario-zona.test.ts` «no enviar zonaId no toca la zona» (**existente, sin editar**) | ✅ |
 | R8 | suite completa verde; el diff de `tests/` solo toca lo declarado arriba | ✅ |
 | R9 | `unit/services/usuario-impacto-zona.test.ts` (las 3 puertas) + `unit/actions/usuarios.test.ts` (el borde). **La aserción de ORDEN de llamadas es de pantalla (T11)** | ⚠️ mitad de pantalla pendiente |
-| R10 | `unit/services/usuario-impacto-zona.test.ts` D1/D2/D3, con zona, cuenta e importe | ✅ (el contenido del diálogo, T11) |
+| R10 | `unit/services/usuario-impacto-zona.test.ts` D1/D2/D3 + **«⭑ D2 de verdad: adminSatelite → MENSAJERO en la MISMA zona»** | ✅ **corregido** (ver «El hueco de D2») |
 | R11 | — | ⛔ T11 (frontend) |
 | R12 | — | ⛔ T11 (frontend) |
 | R13 | — | ⛔ T11 (frontend) |
@@ -250,9 +318,59 @@ primera): flake de saturación confirmado, no contenido.
 ✓ tests/unit/services/usuario-restablecer-contrasena.test.ts (26 tests) 1598ms
 ```
 
+### Tercera corrida — el CIERRE de la revisión, sobre el árbol de esta tanda
+
+`./init.sh` **completo** (el rápido se sigue negando: el diff toca `lib/`), con el `.env` de la raíz
+copiado antes y borrado después, log propio y `INIT_EXIT=$?` escrito **dentro**, sin `tail`:
+
+```
+== Arnes SDD :: init (modo: completo) ==
+✓ feature_list.json: sin ids duplicados (388 fichas), cupo por zona respetado (in_progress=2)
+✓ typecheck paso
+✓ lint paso                       ✖ 161 problems (0 errors, 161 warnings)
+✓ DATABASE_URL resuelta: los 134 archivos de tests contra Postgres SI se ejecutan
+ Test Files  1782 passed (1782)
+      Tests  25520 passed | 26 skipped (25546)
+   Duration  944.11s
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1782 ejecutado(s))
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+**Los `skipped` siguen siendo 26**, los conocidos: `AnaliticaPage.test.tsx (58 tests | 17 skipped)` y
+`AnaliticaShell.test.tsx (15 tests | 9 skipped)`. Ni uno más, o sea que ningún archivo se cayó a
+mitad.
+
+**Los dos rojos que vio el reviewer salieron VERDES aquí**, y sin trato especial (no se tocaron, no
+se añadieron al baseline): `ranking-snapshot-migration.test.ts (49 tests) 1792ms` —entero, **sin los
+14 `skipped`** que tuvo en su corrida— y `seed-zonas-cruza-por-codigo.test.ts (8 tests) 834ms`. Es la
+medida que confirma su diagnóstico: contención de la base local compartida, no regresión.
+
+Los 15 archivos de la ficha —los mismos que corre el arnés de mutación—, verdes en esta misma
+corrida (leídos línea a línea en el log):
+
+```
+✓ tests/unit/services/usuario-impacto-zona.test.ts (17 tests)      ← 16 + el caso nuevo de D2
+✓ tests/unit/services/usuario-zona.test.ts (12 tests)
+✓ tests/unit/services/usuario-service.test.ts (29 tests)
+✓ tests/unit/services/usuario-restablecer-contrasena.test.ts (26 tests)
+✓ tests/unit/actions/usuarios.test.ts (32 tests)
+✓ tests/unit/actions/usuarios-composition.test.ts (2 tests)
+✓ tests/unit/components/usuario-form.test.tsx (29 tests)
+✓ tests/unit/components/usuarios-module.test.tsx (22 tests)
+✓ tests/unit/components/usuarios-aviso-zona.test.tsx (18 tests)
+✓ tests/unit/components/usuarios-restablecer.test.tsx (24 tests)
+✓ tests/unit/guards/379-maestro-sin-bloqueo.guardia.test.ts (11 tests)
+✓ tests/unit/guards/superficie-de-uso.guardia.test.ts (18 tests)
+✓ tests/integration/db/historial-accion-atomicidad.test.ts (22 tests)
+✓ tests/integration/db/cierre-bodega-resumen-pendientes.test.ts (6 tests)
+✓ tests/integration/db/usuario-contar-adminsatelites.test.ts (2 tests)
+```
+
 ---
 
-## Lo que queda, y es de frontend
+## Lo que quedaba de frontend — HECHO (PR #738, `progress/impl_379_frontend.md`)
 
 - **T9** — `UsuarioForm.tsx`: `cambioPendiente()` en el handle, apoyado en el `validate()` que ya
   existe.
@@ -260,12 +378,18 @@ primera): flake de saturación confirmado, no contenido.
   llamada y R11/R12/R13/R20/R21/R23.
 - **T13** — verlo en la app (RS2: nadie ha visto este diálogo fuera de jsdom).
 
-⚠️ **Para quien haga T11:** la Server Action lleva una anotación `@sin-superficie` en
-`lib/actions/usuarios.ts` porque hoy no la llama ninguna pantalla. Esa anotación **caduca**: en
-cuanto `UsuariosModule` la llame, la guardia de superficie de uso **exige quitarla**. Es
-exactamente lo que le pasó a `restablecerContrasenaUsuario` entre su backend y su pantalla.
+⚠️ **El aviso que dejé aquí para quien hiciera T11** decía que la Server Action llevaba la marca
+transitoria de excepción de superficie y que **caducaba** en cuanto `UsuariosModule` la llamara.
+Ocurrió: T11 la cableó y la marca se retiró. **Este párrafo escribía el nombre de esa marca entre
+comillas invertidas**, que es justo lo que el docstring de `restablecerContrasenaUsuario` pide no
+hacer —la guardia la busca por texto—; se quitó al cerrar la revisión, igual que en
+`lib/actions/usuarios.ts:262`. Aquí no reactivaba nada (la guardia lee `lib/actions/**` y
+`components/**`, no `progress/**`), pero el nombre no se escribe por costumbre, no por alcance.
 
 ## Veredicto
 
 Bloque A completo y mergeable solo; bloque B entero por el lado del servidor, con el aviso listo
-para que la pantalla lo pinte y sin una sola rama que impida nada al maestro.
+para que la pantalla lo pinte y sin una sola rama que impida nada al maestro. **Tras la revisión:**
+el hueco de D2 tapado con un test que muerde (mutación roja medida arriba), las 14 tasks marcadas una
+por una contra el árbol, y tres textos corregidos —el de R19, que afirmaba una imposibilidad falsa;
+el del ordinal del constructor en el spec; y el nombre de la marca de superficie escrito en prosa—.
