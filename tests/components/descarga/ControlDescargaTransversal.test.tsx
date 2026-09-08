@@ -54,6 +54,9 @@ vi.mock("@/lib/actions/usuarios", () => ({
   listarUsuariosCompleto: (...a: unknown[]) => listarUsuariosCompletoMock(...a),
   obtenerUsuario: vi.fn(),
   cambiarEstadoUsuario: vi.fn(),
+  // FICHA 379: `UsuariosModule` importa la consulta previa del aviso. Aqui no se dispara
+  // ningun cambio de rol/zona/estado, pero sin el doble el modulo no se puede montar.
+  consultarImpactoCambioUsuario: vi.fn(),
 }));
 
 // El desglose expandible de cuentas por pagar tiene su propio fetch y sus propios tests; lo

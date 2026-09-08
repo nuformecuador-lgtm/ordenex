@@ -259,10 +259,12 @@ export async function restablecerContrasenaUsuario(
  *
  * El resto es el patron identico a las otras ocho acciones del archivo.
  *
- * @sin-superficie el aviso de la ficha 379 se cablea en `UsuariosModule` en la tanda de frontend
- * (T11); mientras tanto la accion existe sin pantalla que la dispare, igual que le paso a
- * `restablecerContrasenaUsuario` entre su backend y su pantalla. Esta anotacion CADUCA: en cuanto
- * la pantalla la llame, la guardia exige quitarla.
+ * ⚠ AQUI VIVIA UN `@sin-superficie`, y se BORRO con T11 de esta misma ficha: la accion nacio en
+ * la tanda de backend sin pantalla que la disparara, y `UsuariosModule` ya la llama en los dos
+ * puntos de cambio (guardar la edicion y activar/inactivar la fila). La anotacion decia que
+ * CADUCABA en cuanto eso pasara, y la guardia de superficie de uso exige quitarla: una excepcion
+ * que sobrevive a su motivo deja de significar nada. Es lo mismo que le paso a
+ * `restablecerContrasenaUsuario` entre su backend y su pantalla.
  */
 export async function consultarImpactoCambioUsuario(
   id: unknown,
