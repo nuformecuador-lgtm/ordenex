@@ -80,6 +80,10 @@ import {
   PARA_LA_CENTRAL_NOTA,
   PARA_LA_CENTRAL_NEGATIVO_NOTA,
   EFECTIVO_NO_CUBRE_NOTA,
+  // FICHA 395: el lector del cero SALIO de aqui y vive junto a `esMontoNegativo`, su hermano.
+  // Lo necesita tambien el detalle del cierre de mensajero, y dos copias del mismo criterio se
+  // separan a la primera correccion.
+  esMontoCero,
 } from "./cierre-detalle-shared";
 // Feature 213 (T6/T7): el desglose de pago se formatea en UN solo sitio (R25).
 import { desglosePantalla } from "./desglose-pago";
@@ -420,14 +424,6 @@ function HojaFactura({
 /* ------------------------------------------------------------------ *
  * Resumen (cola + histórico) como comprobante
  * ------------------------------------------------------------------ */
-
-/**
- * ¿El monto STRING es cero? Comparación TEXTUAL ("0", "0.00"), no aritmética: sirve para
- * apagar visualmente un renglón sin romper el money-safe (nada de `Number`/`parseFloat`).
- */
-function esMontoCero(monto: string): boolean {
-  return /^-?0(\.0+)?$/.test(monto.trim());
-}
 
 /**
  * Feature 393 (F3/R5) — el importe de una linea de cascada, con su OPERADOR delante.

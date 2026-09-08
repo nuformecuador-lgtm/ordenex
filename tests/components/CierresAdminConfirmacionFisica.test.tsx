@@ -236,6 +236,10 @@ function conGrupos(grupos: Partial<CierreGrupos>) {
     totalesIngreso: zeroIngreso(),
     ganancia: "0.00",
     pagoTienda: "0.00",
+    cobradoSobreRecaudado: "0.00",
+    netoOrdenex: "0.00",
+    ganaLaTienda: "0.00",
+    fleteRechazoYaCobradoATienda: false,
   });
 }
 

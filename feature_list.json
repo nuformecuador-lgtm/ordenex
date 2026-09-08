@@ -4681,6 +4681,39 @@
       "complexity": "baja",
       "branch": "fix/394-intentos-entrega-en-detalle-cierres",
       "status_note": "CERRADA el 2026-09-08. Servidor PR #741, columna PR #743. Sin migracion. || El Excel «Detalle» dice ahora «Intentos de entrega», 13a de 31, literal identico al de las otras tres hojas del repo. Se SUSTITUYO una columna, no se anadio. El numero son los intentos VIGENTES, via contarIntentosVigentesEnLote, la misma funcion que ejecuta la analitica -- verificado siguiendo las dos cadenas de llamadas, asi que no hay dos definiciones. || 9 mutaciones muertas entre las dos mitades. Dos reproducen el defecto original de la 385: la celda vuelve al contador de la tienda y pone 5 rojos. El 0 se emite como 0 y no como nulo: es un dato conocido, no una casilla vacia. || QUEDA HUERFANO y NO SE BORRA: el campo intentosContactoTienda del DTO de cierres se queda sin consumidor de produccion. Cinco archivos de test lo afirman y su cobertura es ajena. La columna orden.intentos_contacto sigue viva en /novedades: lo huerfano es el campo del DTO, no el dato. || NO se paso el reviewer. Queda dicho."
+    },
+    {
+      "id": 395,
+      "title": "el detalle del cierre del mensajero tampoco dice que plata es para quien",
+      "description": "La 393 puso las dos cascadas en los cierres de bodega y dejo fuera el detalle del cierre de mensajero.",
+      "zone": "fullstack",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "feat/395-cascadas-en-cierre-mensajero",
+      "status_note": "DECISION DEL HUMANO el 2026-09-08, y DEROGA la R39 de la 393: el adminSatelite SI ve el neto de Ordenex. Sus palabras: «la idea es que la satelite tambien sepa como debe pagar, no le podemos ocultar detalles pues el lio esta pasando tambien desde alla». NO se recorta en el servidor. || EN CURSO desde el 2026-09-08. URGENTE: el humano dice que ya van a usarlo. Sin migracion. || FALLO DE ALCANCE DE LA 393, del leader: las cascadas se montaron solo en CierresBodegaAdminModule y cierre-factura. CierresAdminModule -- el detalle del cierre de MENSAJERO, que es el que se mira todos los dias -- NO monta CascadaDinero en ningun sitio y sigue con tarjetas sueltas. Verificado por grep. || EL SERVICIO YA CALCULA gananciaOrdenex y pagoTiendaOrdenex para ese detalle (CierresAdminService:668,672) y ya tiene totalesIngreso. LE FALTAN TRES LINEAS: cobradoSobreRecaudado (la puente), netoOrdenex y lo que el mensajero entrega (recaudado - pago mensajero - ingreso bodega). || SE REUSAN LAS MISMAS FUNCIONES de lib/utils/ingreso-ordenex.ts y el MISMO componente CascadaDinero, nunca una copia: si divergieran, la misma plata se leeria distinta segun por que pantalla se entra."
+    },
+    {
+      "id": 396,
+      "title": "el cierre suma varias tiendas en un solo numero y no dice de quien es cada parte",
+      "description": "«Pago a tienda» es la suma de hasta dos tiendas distintas, y la pantalla no lo dice en ninguna parte.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "alta",
+      "branch": "feat/396-desglose-por-tienda-en-cierres",
+      "status_note": "SPEC rev.2 EL 2026-09-08: 26 requisitos, complejidad ALTA (era media), 5 tandas. Sin migracion. || CUATRO FIRMAS: Q1 se desglosan DOS cifras por tienda (recaudado y lo que se le paga), Q5 solo con DOS O MAS tiendas, Q3 la descarga NO se toca -- ya va desagregada, y Q4 ENTRA TAMBIEN EL CIERRE DE BODEGA, EN CONTRA de la recomendacion del leader. Q2 y Q6 son decisiones del leader no corregidas: lo que no es por tienda queda agregado, y se ordena por importe descendente. || COSTE DE Q4, medido en el codigo: el servicio de bodega sufre el defecto en DOS niveles (por mensajero y agregado), asi que son TRES superficies en dos modulos con tres umbrales distintos. Lo bueno: el desglose entra con el mismo argumento en el mismo sitio y la capa de datos sale gratis. || DOS BLOQUEANTES DE MEDICION, YA RESUELTOS POR EL LEADER contra produccion el 2026-09-08: T0.4 -> 14 cierres de bodega, MAXIMO 2 tiendas (media 1,29) y MAXIMO 2 mensajeros (media 1,14), por debajo del umbral de 4 que obligaba a escalar. T0.5 -> CERO cierres donde el snapshot agregado difiera de la suma de sus dias. Aviso: produccion se vacio el 2026-08-25, asi que son cardinales jovenes. || DOS PREGUNTAS NUEVAS SIN FIRMAR: Q7 -- si el desglose usa pagoTienda o ganaLaTienda, que difieren en 10.848 y que la 395 acaba de separar a proposito; Q8 -- si en el nivel agregado hace falta ademas «de esta tienda, cuanto trajo cada mensajero», que convierte el desglose en matriz. || PEDIDA por el humano el 2026-09-08: «necesito que esto que son cierres quede perfecto». Sigue PENDING mientras se escribe el spec: nadie toca codigo, asi que no ocupa hueco del tope. || CHOCA EN ARCHIVO con la 395 (CierresAdminService y CierresAdminModule): NO pueden correr a la vez, va detras. || MEDIDO EN PRODUCCION el 2026-09-08: de 56 cierres, 39 tienen UNA tienda y 17 tienen DOS. El cierre es del MENSAJERO, no de la tienda. || EL DINERO ESTA BIEN, verificado en un cierre de dos tiendas: la wallet tiene movimientos SEPARADOS por tienda con sus propias cifras (cod_recaudado, flete, comision, los dos IVA). A nadie se le paga mal. Lo que falla es la PANTALLA, que suma y no desglosa. El total pooled es correcto como total; lo que no dice es de quien es cada parte. || RELACION CON LA 395: la 395 arregla que no se entienda que plata es para quien ENTRE tienda y Ordenex; esta arregla que no se entienda entre UNA TIENDA Y OTRA. || Y ojo al que se descubrio de paso: el flete por rechazo NO se descuenta en el cierre precisamente porque el bote es comun -- descontarlo se lo quitaria a la otra tienda. Si algun dia se quiere meter dentro, ESTA ficha es el prerrequisito."
+    },
+    {
+      "id": 397,
+      "title": "la satelite ve el margen de Ordenex en el cierre del mensajero pero no en el de bodega",
+      "description": "La decision del humano derogo la R39 de la 393, y ahora la pantalla inconsistente es la de bodega.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "feat/397-satelite-ve-el-neto-en-bodega",
+      "status_note": "NACE de una decision del humano del 2026-09-08 que DEROGA la R39 de la 393. Sus palabras: «la idea es que la satelite tambien sepa como debe pagar, no le podemos ocultar detalles pues el lio esta pasando tambien desde alla». || La 393 decidio que la satelite ve lo suyo y NO el margen de Ordenex, y asi quedo el cierre de BODEGA. La 395 lo deja visible en el cierre del MENSAJERO por decision del humano. Resultado: las dos pantallas dicen cosas distintas al mismo rol. || TRABAJO: quitar el recorte por rol en el cierre de bodega, y revisar si la 393 dejo alguna guardia o test que AFIRME que la satelite no lo ve -- si existe, es un contrato y se actualiza con el motivo escrito, nunca se relaja en silencio. || CHOCA EN ARCHIVO con la 396, que tambien toca el cierre de bodega: hay que secuenciarlas."
     }
   ]
 }

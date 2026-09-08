@@ -223,3 +223,98 @@ export const GANA_BODEGA_SATELITE_NOTA =
 /** R10 — por qué esa línea SUMA a lo facturado pero no se resta de lo recaudado. */
 export const FLETE_RECHAZO_NO_DEDUCIBLE_NOTA =
   "Se le factura a la tienda, pero no sale de lo recaudado: un rechazo no cobra contra entrega.";
+
+// ---------------------------------------------------------------------------
+// FICHA 395 (2026-09-08) — LAS TRES CASCADAS DEL CIERRE DE **MENSAJERO**.
+//
+// El detalle del cierre de mensajero —el que se mira todos los días— enseñaba «Pago a tienda»
+// y «Total Ordenex» sueltos e invitaba a restarlos. Esa resta NO da: los dos números no salen
+// de la misma bolsa. El humano se confundió leyendo su propia pantalla y lo dijo así: «si yo
+// me confundo, no quiero imaginar los operarios».
+//
+// Estas constantes viven aquí, en el módulo PURO, por el mismo motivo que las de la 393: es la
+// puerta única del texto de los cierres, y `cierre-detalle-shared` las re-exporta.
+//
+// ⚠️ NO se toca ni un rótulo de los que ya existían. `PAGO_TIENDA_LABEL` sigue diciendo «Pago a
+// tienda» y sigue significando `pagoTienda`; `INGRESO_BODEGA_RECHAZOS_LABEL` sigue siendo el de
+// esta superficie —en un cierre de MENSAJERO la bodega puede ser la central, así que
+// `GANA_BODEGA_SATELITE_LABEL` sería falso aquí—. Lo que la ficha añade son los nombres de lo
+// que ANTES NO TENÍA NOMBRE.
+// ---------------------------------------------------------------------------
+
+/**
+ * FICHA 395 — el resultado de la PARTICIÓN: lo que le queda a la tienda EN TOTAL.
+ *
+ * Rima con `GANA_BODEGA_SATELITE_LABEL` («Gana la bodega satélite») a propósito: mismo verbo,
+ * misma forma, misma familia de preguntas. Y NO se reusa `PARA_LA_TIENDA_LABEL` («Para la
+ * tienda»), que en el cierre de BODEGA nombra `pagoTienda`: darle aquí un segundo significado
+ * haría que la misma etiqueta valiera dos cifras distintas según por qué pantalla se entre, que
+ * es exactamente el defecto que la 393 cerró (R24).
+ *
+ * Elección de redacción del `frontend_dev`; el encargo la escribió «La tienda gana», con el
+ * mismo verbo y el orden invertido.
+ */
+export const GANA_LA_TIENDA_LABEL = "Gana la tienda";
+
+/**
+ * FICHA 395 — la frase que impide confundirlo con «Pago a tienda». Las dos notas son un PAR y
+ * se leen juntas: una dice «no es lo que se le paga hoy», la otra «no es lo que gana en total».
+ */
+export const GANA_LA_TIENDA_NOTA =
+  "Lo recaudado menos todo lo que Ordenex le factura, incluido el flete por rechazo. No es lo que se le paga hoy.";
+
+/** FICHA 395 — la otra mitad del par: por qué el pago de hoy no es lo que la tienda gana. */
+export const PAGO_TIENDA_HOY_NOTA =
+  "Es lo que se le paga de este dinero hoy. No es lo que gana en total: el flete por rechazo se le cobra aparte.";
+
+/**
+ * FICHA 395 — qué significa que la tienda gane un NEGATIVO. Mismo criterio que
+ * `PARA_LA_CENTRAL_NEGATIVO_NOTA`: un «−₡3.400» sin explicación en una pantalla de dinero es
+ * peor que no tener el número.
+ */
+export const GANA_LA_TIENDA_NEGATIVO_NOTA =
+  "Ordenex le factura más de lo que se recaudó en este cierre: a la tienda no le queda nada y pasa a deber la diferencia.";
+
+/** FICHA 395 — de qué se compone la línea puente, dicho sin jerga contable. */
+export const COBRADO_SOBRE_RECAUDADO_NOTA =
+  "Flete + IVA y comisión + IVA de lo que sí se entregó: sale del dinero que el mensajero recaudó.";
+
+/** FICHA 395 — de qué resta sale el neto de Ordenex, en el idioma de quien la hace. */
+export const NETO_ORDENEX_NOTA =
+  "Lo que Ordenex facturó menos el pago al mensajero y menos el ingreso de bodega por rechazos.";
+
+/** FICHA 395 — qué significa un neto NEGATIVO: no es un fallo, es una pérdida del cierre. */
+export const NETO_ORDENEX_NEGATIVO_NOTA =
+  "Ordenex pagó más de lo que facturó en este cierre: ese neto es una pérdida, no una ganancia.";
+
+/**
+ * FICHA 395 — EL TIEMPO VERBAL DEL CARGO DEL FLETE POR RECHAZO, y es una trampa real.
+ *
+ * El cargo se escribe en el saldo de la tienda **al APROBAR** el cierre (`WalletTiendaFeedService`,
+ * dentro de la transacción de `CierresAdminRepository.resolverCierre`). Medido contra producción
+ * el 2026-09-08: de 37 cierres aprobados con rechazos, los 37 lo tienen; los `solicitado` y el
+ * `vencido`, ninguno. Escribir «se le cargó» en un cierre que todavía no se aprueba es MENTIRA, y
+ * el cierre que abrió esta ficha estaba «Vencido».
+ *
+ * Cuál de las tres se pinta NO se infiere del estado a ojo: `fleteRechazoYaCobradoATienda` viaja
+ * ya resuelto del servidor —exige aprobado Y flete por rechazo mayor que cero— y el `estado` sólo
+ * distingue «todavía no» de «ya no».
+ *
+ * Se dice «al saldo de la tienda» y no «a su wallet»: «Saldo a favor» y «Cargos de Ordenex» es lo
+ * que la tienda lee en su propia pantalla (`mi-wallet-labels`). Elección del `frontend_dev`.
+ */
+export const FLETE_RECHAZO_YA_COBRADO_NOTA =
+  "Ya se le cargó al saldo de la tienda: ese cargo se hace al aprobar el cierre.";
+export const FLETE_RECHAZO_AUN_NO_COBRADO_NOTA =
+  "Todavía no se le ha cargado al saldo de la tienda: ese cargo se hace al aprobar el cierre.";
+export const FLETE_RECHAZO_NO_SE_COBRARA_NOTA =
+  "Este cierre se rechazó, así que ese cargo no se le hizo a la tienda ni se le va a hacer.";
+
+/**
+ * FICHA 395 — los títulos de las dos cascadas que la ficha ESTRENA. La primera —la partición—
+ * reusa `CASCADA_DUENO_TITULO` («De quién es el dinero»): es literalmente la misma pregunta que
+ * responde en el cierre de bodega, y estrenar un segundo título para ella sería dar dos nombres a
+ * la misma sección según por qué pantalla se entre.
+ */
+export const CASCADA_FACTURA_TIENDA_TITULO = "Lo que Ordenex le factura a la tienda";
+export const CASCADA_NETO_ORDENEX_TITULO = "Lo que le queda a Ordenex";

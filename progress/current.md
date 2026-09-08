@@ -1,57 +1,61 @@
-# Estado de la sesión — 2026-09-08
+# Estado — madrugada del 2026-09-08
 
-## Desplegado en producción y verificado
+**La cola está vacía.** Las siete fichas que traíamos están cerradas y **en producción**.
 
-**Release #733** (`7f6455c7`) y **release #735** (`1d2e6c4e`), las dos READY y con
-los errores de runtime comprobados: solo el `DeprecationWarning` de `pg`,
-preexistente desde el 2026-07-27 y asociado al despliegue anterior. Cero errores
-nuevos.
+## Dos releases, las dos verificadas
 
-Fichas dentro: **376, 377, 382, 383, 384, 385, 387, 388, 390, 391**.
-La **378** y la **389** se cancelaron por decisión del humano.
-
-## En curso
-
-| Ficha | Zona | Dónde está |
+| | commit | qué llevó |
 |---|---|---|
-| **379** | fullstack | servidor mergeado (PR #736). Pantalla en curso: T9, T11, T13. |
-| **393** | fullstack | servidor mergeado (PR #737). Pantalla en curso: F1–F7, G1–G3. |
+| **#748** | `8a68b5db` | 379, 386, 392, 393, 394 — sin migraciones |
+| **#752** | `7381b54c` | 380, 381 — **con tres migraciones** |
 
-Las dos ocupan el cupo de `fullstack`, que está a tope.
+Las dos con despliegue en verde y **cero errores de runtime**.
 
-## En cola, y por qué esperan
+## Las migraciones, comprobadas contra la base de producción
 
-- **386** (filtrar cierres por estado) y **392** (validar nombre de tienda y
-  geografía) — listas, esperan hueco de `fullstack`.
-- **381** (cargar un costo a una tienda) — **va sola**: lleva dos migraciones y
-  la base local es compartida entre worktrees.
-- **380** (rastro del pago al mensajero) — spec firmado, 18 requisitos.
-  **Va sola y detrás de la 381**, por lo mismo.
+Medido **antes** y **después**, no supuesto:
 
-## Deuda escrita que hay que recoger
+| | antes | después | esperado |
+|---|---|---|---|
+| tipos de historial | 49 | **51** | 51 |
+| entidades de historial | 20 | **21** | 21 |
+| categorías de wallet de tienda | 10 | **11** | 11 |
 
-- **379:** `lib/actions/usuarios.ts` lleva una anotación `@sin-superficie` que
-  **caduca** en cuanto `UsuariosModule` llame a la acción; la guardia de
-  superficie de uso exige quitarla entonces.
-- **393:** falta re-exportar trece constantes desde `cierre-detalle-shared.tsx`;
-  y F7 se quedó sin trabajo — los cinco `aria-label` que iba a retirar no los
-  sujeta ningún test.
-- **383:** siguen sin firma A1, A2, A3, A4, A5, A6 y Q3/Q4/Q5. La firma de Q1
-  **no** arrastra a A2, que es la corrección manual rechazando en vez de
-  reparar — al revés que la carga masiva.
+Los cuatro valores nuevos son los correctos, las tres migraciones figuran aplicadas
+y ninguna revertida, y el CHECK admite `cobro_manual` **solo en la rama de débito**.
 
-## Preguntas abiertas al humano, no bloqueantes
+## Lo que queda abierto, y es de verdad
 
-- Los «intentos» del Excel de cierres: ¿son los de la tienda o los del mensajero?
-  Si son los del mensajero, es una columna más.
-- La **A2** de la 383, arriba.
+- **La Q1 de la 381 sigue SIN FIRMAR**: los tres textos que ve el usuario en el
+  diálogo de cobro. Se implementó la propuesta del diseño para no bloquear.
+  Cambiarlos cuesta una línea cada uno; el valor interno del enum costaría otra
+  migración.
+- **La A2 de la 383 sigue sin firmar**: la corrección manual de datos *rechaza* el
+  carácter en vez de repararlo, al revés que la carga masiva. La 392 eligió
+  rechazar por coherencia con el formulario más cercano, **no por firma**.
+- **De la 393 no se pudo ver el caso de línea puente distinta de cero**: la base
+  local no tiene gestiones entregadas ni tarifa congelada. Dicho como falta, no
+  como aprobado.
+- **Cinco fichas (394, 386, 392, 380, 381) no pasaron por reviewer.** Pasaron su
+  gate completo y sus mutaciones. Queda dicho.
 
-## Lo firmado hoy que cambia el diseño de la 380
+## Dos hallazgos que valen más que sus fichas
 
-- **Q1 a favor:** tipo nuevo `zona_pago_mensajero_cambiado`, con migración.
-- **Q2 en contra de la recomendación del leader:** solo el hecho, sin importes.
-  El historial **nunca podrá reconstruir de cuánto a cuánto**. Límite aceptado.
-- **Q3 en contra de la recomendación del leader:** solo la edición. Y la firma
-  resultó tener mejor precedente que el consejo: el catálogo ya es asimétrico a
-  propósito (`zona_borrada` sin `zona_creada`), con el motivo escrito en
-  `lib/types/historial-accion.ts`.
+1. **La guardia del historial NO caza que una escritura desaparezca.** Mide por
+   *método*: si el método conserva sus otras llamadas a `appendAccion`, borrar una
+   entera deja el censo **verde**. Medido dos veces, en la 380 y en la 381. Quien
+   protege esos requisitos es Postgres, no el censo.
+2. **El deadlock `40P01` que ensució gates toda la noche es contención entre tests
+   de migración** que aplican DDL sin tomar un bloqueo de aviso compartido. Se
+   reproduce corriendo `tests/integration/db/` **sin el archivo de nadie**. Es
+   arreglable y no está arreglado.
+
+## Deuda menor, con dueño
+
+- El error **bajo el campo** de la validación de cliente sigue en inglés en el
+  formulario de usuarios (anterior a la 392).
+- El select de Rol pinta los valores crudos del enum (`adminSatelite`…).
+- `MontoDerivadoCard` y `GANANCIA_NOTA_BODEGA` quedan **muertos y declarados**, no
+  borrados: borrarlos se llevaría cobertura ajena.
+- El campo `intentosContactoTienda` del DTO de cierres queda **sin consumidor** y
+  no se borra, por lo mismo.
