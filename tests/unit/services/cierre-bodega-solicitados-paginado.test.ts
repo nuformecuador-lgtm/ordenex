@@ -57,6 +57,9 @@ function fila(
     solicitadoAt: `2026-03-${String(dia).padStart(2, "0")}T00:00:00.000Z`,
     resueltoAt: null,
     motivoRechazo: null,
+    // Feature 393: 300.00 - 30.00 - 0.00 = 270.00; el efectivo (300.00) cubre los descuentos.
+    paraLaCentral: "270.00",
+    efectivoCubreDescuentos: true,
   };
 }
 

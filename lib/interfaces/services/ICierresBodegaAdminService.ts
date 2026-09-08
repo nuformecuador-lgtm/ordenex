@@ -79,6 +79,25 @@ export type CierreBodegaDetalleServiceResult =
       // DERIVADO: `cierre.totales.general` - `fleteConIva` - `comisionConIva` (STRING
       // money-safe). Lo que se le paga a las tiendas. Puede ser NEGATIVO.
       pagoTienda: string;
+      /**
+       * Feature 393 (R7/R10) — LA LINEA PUENTE agregada: `fleteConIva` + `comisionConIva` de
+       * TODO el cierre de bodega. Se emite SIEMPRE, tambien con flete por rechazo en "0.00".
+       */
+      cobradoSobreRecaudado: string;
+      /**
+       * Feature 393 (R8) — DERIVADO: `totalesIngreso.total` − `cierre.totalPagoMensajero` −
+       * `cierre.totalIngresoBodegaRechazos`. NO es `ganancia` (que no resta la bodega). Puede
+       * ser NEGATIVO.
+       */
+      netoOrdenex: string;
+      /**
+       * Feature 393 (R9/R15/R17) — DERIVADO desde los snapshots AGREGADOS del propio cierre de
+       * bodega, nunca sumando los de sus `cierre_dia`: cada nivel se lee de su propio snapshot
+       * y ninguno se corrige para que cuadre con el otro. Puede ser NEGATIVO (R36).
+       */
+      paraLaCentral: string;
+      /** Feature 393 (R37) — DERIVADO: ¿los descuentos caben en el EFECTIVO agregado? */
+      efectivoCubreDescuentos: boolean;
     }
   | { status: "forbidden" } // rol != maestro (R2)
   | { status: "no_encontrada" }; // id inexistente (R19)

@@ -5,6 +5,7 @@ import type { CierreBodegaResumenRow } from "@/lib/interfaces/repositories/ICier
 import type { ICierresBodegaAdminRepository } from "@/lib/interfaces/repositories/ICierresBodegaAdminRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { efectivoCubreDescuentos, paraLaCentral } from "@/lib/utils/ingreso-ordenex";
 import type { CierreBodegaResumen } from "@/lib/interfaces/services/ICierreBodegaService";
 import type { RangoPagina } from "@/lib/utils/rango-pagina";
 import { ESTADOS_COLA_SOLICITADO } from "@/lib/utils/colas-cierre";
@@ -55,6 +56,12 @@ function fila(
     solicitadoAt: `2026-01-${String(dia).padStart(2, "0")}T00:00:00.000Z`,
     resueltoAt: estado === "solicitado" ? null : "2026-02-01T00:00:00.000Z",
     motivoRechazo: estado === "rechazado" ? "faltan comprobantes" : null,
+    // Feature 393: esta fila es PARAMETRICA (`general` y `pago` vienen por argumento), asi que
+    // un literal se quedaria rancio en cuanto alguien cambie un caso. El doble reproduce lo
+    // que hace el mapper real, que es de lo que este test depende. Ninguna asercion de esta
+    // suite lee estos dos campos: solo existen para que el tipo cierre.
+    paraLaCentral: paraLaCentral(general, pago, "1.00"),
+    efectivoCubreDescuentos: efectivoCubreDescuentos(general, pago, "1.00"),
   };
 }
 
