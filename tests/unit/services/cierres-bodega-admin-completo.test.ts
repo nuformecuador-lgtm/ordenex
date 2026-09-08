@@ -72,6 +72,9 @@ function fila(
     resueltoAt:
       estado === "solicitado" ? null : `2026-02-${String(dia).padStart(2, "0")}T12:00:00.000Z`,
     motivoRechazo: estado === "rechazado" ? "Faltó efectivo" : null,
+    // Feature 393: 500.00 - 50.00 - 0.00 = 450.00; el efectivo (500.00) cubre los descuentos.
+    paraLaCentral: "450.00",
+    efectivoCubreDescuentos: true,
   };
 }
 
