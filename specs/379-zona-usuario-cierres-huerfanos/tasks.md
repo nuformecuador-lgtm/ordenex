@@ -214,10 +214,10 @@ cuando falta el repo → el caso de inyección rojo.
 
 **Depende de:** T6.
 
-- [ ] `UsuarioForm.tsx`: `UsuarioFormHandle` gana `cambioPendiente()`, apoyado en el `validate()` que
+- [x] `UsuarioForm.tsx`: `UsuarioFormHandle` gana `cambioPendiente()`, apoyado en el `validate()` que
       ya existe (`:195-273`). **Cero reglas duplicadas.** Devuelve `null` en modo crear y cuando la
       validación de cliente falla (el maestro ya está viendo el error de campo).
-- [ ] Test en `tests/unit/components/usuario-form.test.tsx`: lo devuelto coincide **campo a campo**
+- [x] Test en `tests/unit/components/usuario-form.test.tsx`: lo devuelto coincide **campo a campo**
       con lo que el mismo formulario enviaría a `actualizarUsuario` (mismo criterio de `esRolConZona`
       de `:235`).
 
@@ -238,13 +238,20 @@ cuando falta el repo → el caso de inyección rojo.
 
 **Depende de:** T8, T9.
 
-- [ ] `UsuariosModule.tsx`: estado del aviso + acción diferida + `Modal` (el compartido, con el texto
+- [x] `UsuariosModule.tsx`: estado del aviso + acción diferida + `Modal` (el compartido, con el texto
       en `description` para que cuelgue de `aria-describedby`), y los dos puntos de llamada de
       `design.md` §4.5.
-- [ ] Copy **exacto** de `design.md` §4.6. Etiqueta del rol desde `ROL_LABELS`
+- [x] Copy **exacto** de `design.md` §4.6. Etiqueta del rol desde `ROL_LABELS`
       (`lib/auth/rol-label.ts`), importe con `formatMontoString` (`lib/config/moneda.ts:282`).
       Singular/plural en función pura, al lado de `mensajeSesionesRevocadas` (`:496-504`).
-- [ ] Tests en `tests/unit/components/usuarios-module.test.tsx` (o
+      ⚠️ **Con TRES desvíos del copy, decididos por el frontend_dev de la tanda y escritos con su
+      vuelta atrás en `progress/impl_379_frontend.md` > «Las tres decisiones que tomé YO»:**
+      (D1) «un admin» pasa a «un Administrador» y «el maestro» a «el Maestro», los tres roles
+      desde `ROL_LABELS`, porque `admin` **es** el valor del enum y R23 lo prohíbe;
+      (D2) la rama de R20 lleva título propio, porque el del §4.6 afirma lo que ahí no se sabe;
+      (D3) en esa misma rama la zona se nombra con lo que pinta la fila, porque el servidor no
+      llegó a decirlo.
+- [x] Tests en `tests/unit/components/usuarios-module.test.tsx` (o
       `usuarios-aviso-zona.test.tsx` si el archivo crece demasiado):
   - `R9`/`R21` · la consulta se llama **antes** que `cambiarEstadoUsuario`, y antes que
     `actualizarUsuario` — se afirma el **orden**, no solo que se llamó
@@ -286,11 +293,11 @@ escribir el literal del rol → R23 rojo.
 
 **Depende de:** T11.
 
-- [ ] Entrar a Configuración > Usuarios con un maestro y, contra datos locales sembrados:
+- [x] Entrar a Configuración > Usuarios con un maestro y, contra datos locales sembrados:
       (a) inactivar al único administrador de bodega de una zona → **ver el diálogo**, cancelarlo,
       repetir y confirmarlo; (b) cambiarle el rol; (c) cambiarle la zona; (d) hacer lo mismo con una
       zona que tiene dos → **no debe aparecer nada**.
-- [ ] Comprobar el texto con los ojos: acentos, plural, el importe con su símbolo, y que no aparece
+- [x] Comprobar el texto con los ojos: acentos, plural, el importe con su símbolo, y que no aparece
       ni `adminSatelite` ni ninguna sigla.
 
 **Hecho cuando:** los cuatro casos vistos en pantalla y anotados en `progress/impl_379.md` con lo que

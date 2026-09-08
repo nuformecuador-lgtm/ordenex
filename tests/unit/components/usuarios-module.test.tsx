@@ -28,10 +28,17 @@ const listarRolesMock = vi.fn();
 // Feature 287 (T10): el modulo cablea la accion del restablecimiento. El doble va aqui para
 // que el modulo pueda importarla; su comportamiento se prueba en `usuarios-restablecer.test.tsx`.
 const restablecerContrasenaUsuarioMock = vi.fn();
+// FICHA 379 (T11): el modulo pregunta SIEMPRE por el impacto antes de un cambio de
+// rol/zona/estado. El doble va aqui para que el modulo pueda importarla; su comportamiento
+// —el diálogo, el orden de llamadas y las ramas de R11/R12/R13/R20— vive en
+// `usuarios-aviso-zona.test.tsx`.
+const consultarImpactoCambioUsuarioMock = vi.fn();
 vi.mock("@/lib/actions/usuarios", () => ({
   listarUsuarios: (...a: unknown[]) => listarUsuariosMock(...a),
   listarUsuariosCompleto: (...a: unknown[]) => listarUsuariosCompletoMock(...a),
   cambiarEstadoUsuario: (...a: unknown[]) => cambiarEstadoUsuarioMock(...a),
+  consultarImpactoCambioUsuario: (...a: unknown[]) =>
+    consultarImpactoCambioUsuarioMock(...a),
   obtenerUsuario: (...a: unknown[]) => obtenerUsuarioMock(...a),
   crearUsuario: (...a: unknown[]) => crearUsuarioMock(...a),
   actualizarUsuario: (...a: unknown[]) => actualizarUsuarioMock(...a),
@@ -113,6 +120,9 @@ beforeEach(() => {
     roles: [{ id: "rol-mensajero", value: "mensajero" }],
   });
   obtenerUsuarioMock.mockResolvedValue({ status: "ok", usuario: USUARIO });
+  // FICHA 379/R15: el fixture es un `mensajero`, asi que el servidor no tiene nada que
+  // avisar y la pantalla aplica el cambio con los mismos clics de siempre.
+  consultarImpactoCambioUsuarioMock.mockResolvedValue({ status: "ok", impacto: null });
 });
 
 afterEach(() => {

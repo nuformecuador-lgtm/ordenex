@@ -14,6 +14,7 @@ import { PasswordInput } from "@/components/shared/PasswordInput";
 import {
   actualizarUsuarioSchema,
   crearUsuarioSchema,
+  type ActualizarUsuarioInput,
   type ActualizarUsuarioResult,
   type CrearUsuarioResult,
 } from "@/lib/types/usuario";
@@ -26,6 +27,7 @@ import {
 import { listarZonas } from "@/lib/actions/zonas";
 import { listarVehiculos } from "@/lib/actions/vehiculos";
 import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
+import type { CambioUsuarioEvaluable } from "@/lib/interfaces/services/IUsuarioService";
 
 /**
  * Rol que este formulario NUNCA asigna: `apiKey` identifica la cuenta de máquina de una
@@ -44,6 +46,21 @@ export type UsuarioFormResult = CrearUsuarioResult | ActualizarUsuarioResult;
 /** Handle imperativo: el Modal anfitrión dispara el submit async (R27). */
 export interface UsuarioFormHandle {
   submit: () => Promise<UsuarioFormResult>;
+  /**
+   * FICHA 379 (T9) — valida (pintando los errores de campo como siempre) y devuelve el
+   * cambio PENDIENTE de rol/zona en modo edición, para que el anfitrión pueda EVALUAR su
+   * impacto antes de aplicarlo (R21).
+   *
+   * `null` = no hay nada que evaluar: modo crear (el usuario aún no existe, así que no
+   * puede dejar ninguna zona sin nadie) o la validación de cliente falló y el maestro ya
+   * está viendo el error de campo.
+   *
+   * ⚠️ Sale del MISMO `validate()` que construye el payload del submit, no de una segunda
+   * lectura del estado. Es lo que garantiza que lo evaluado y lo enviado sean el mismo
+   * cambio: dos formas de leer los mismos campos se separan a la primera, y ése es
+   * literalmente el defecto que esta ficha vino a cerrar.
+   */
+  cambioPendiente: () => CambioUsuarioEvaluable | null;
 }
 
 export interface UsuarioFormProps {
@@ -192,7 +209,17 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
       setForm((prev) => ({ ...prev, [key]: value }));
     }
 
-    function validate(): { input: unknown; result?: UsuarioFormResult } {
+    function validate(): {
+      input: unknown;
+      /**
+       * FICHA 379 — EL MISMO objeto que `input`, ya tipado, y solo en la rama de edición.
+       * Existe para que `cambioPendiente()` lea el payload que se va a enviar sin un cast
+       * y sin volver a leer el estado del formulario: lo que se evalúa y lo que se envía
+       * son literalmente el mismo valor, no dos lecturas equivalentes.
+       */
+      edicion?: ActualizarUsuarioInput;
+      result?: UsuarioFormResult;
+    } {
       // Feature 24/R27: la zona es OBLIGATORIA para mensajero/adminSatelite. Se
       // valida en cliente para feedback inmediato; el service la revalida (fuente
       // de verdad, defensa en profundidad).
@@ -241,7 +268,7 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
           const fieldErrors = parsed.error.flatten().fieldErrors as FieldErrors;
           return { input: null, result: { status: "validation_error", fieldErrors } };
         }
-        return { input: parsed.data };
+        return { input: parsed.data, edicion: parsed.data };
       }
 
       const base = {
@@ -298,7 +325,34 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
       return res;
     }
 
-    useImperativeHandle(ref, () => ({ submit }));
+    /**
+     * FICHA 379 (T9/R21) — el cambio de rol/zona que este formulario está a punto de
+     * enviar, para que el anfitrión lo EVALÚE antes de aplicarlo.
+     *
+     * No decide nada ni bloquea nada: solo dice qué va a cambiar. Y no duplica una sola
+     * regla —sale del mismo `validate()` que arma el payload—, así que el criterio de
+     * `esRolConZona` que decide si `zonaId` viaja o no es el de arriba, uno solo.
+     */
+    function cambioPendiente(): CambioUsuarioEvaluable | null {
+      // Crear no puede dejar ninguna zona sin nadie: el usuario todavía no existe.
+      if (!isEditar) return null;
+
+      const { edicion, result } = validate();
+      if (result) {
+        // Misma reacción que `submit`: se pintan los errores de campo. No hay cambio que
+        // evaluar porque tampoco va a haber cambio que aplicar.
+        setErrors(result.status === "validation_error" ? result.fieldErrors : {});
+        return null;
+      }
+      if (!edicion) return null;
+
+      return {
+        ...(edicion.rolId !== undefined ? { rolId: edicion.rolId } : {}),
+        ...(edicion.zonaId !== undefined ? { zonaId: edicion.zonaId } : {}),
+      };
+    }
+
+    useImperativeHandle(ref, () => ({ submit, cambioPendiente }));
 
     async function copiar() {
       if (!generatedPassword) return;

@@ -28,9 +28,14 @@ const actualizarUsuarioMock = vi.fn();
 const listarTiposIdentificacionMock = vi.fn();
 const listarRolesMock = vi.fn();
 const restablecerContrasenaUsuarioMock = vi.fn();
+// FICHA 379 (T11): el modulo importa tambien la consulta previa del aviso. Sin este doble el
+// modulo no puede montarse; aqui no se ejercita ninguna de sus ramas.
+const consultarImpactoCambioUsuarioMock = vi.fn();
 vi.mock("@/lib/actions/usuarios", () => ({
   listarUsuarios: (...a: unknown[]) => listarUsuariosMock(...a),
   cambiarEstadoUsuario: (...a: unknown[]) => cambiarEstadoUsuarioMock(...a),
+  consultarImpactoCambioUsuario: (...a: unknown[]) =>
+    consultarImpactoCambioUsuarioMock(...a),
   obtenerUsuario: (...a: unknown[]) => obtenerUsuarioMock(...a),
   crearUsuario: (...a: unknown[]) => crearUsuarioMock(...a),
   actualizarUsuario: (...a: unknown[]) => actualizarUsuarioMock(...a),
@@ -111,6 +116,9 @@ beforeEach(() => {
     generatedPassword: CLARO,
     sesionesRevocadas: 3,
   });
+  // FICHA 379: el fixture es un `mensajero`, asi que no hay nada que avisar. Aqui no se
+  // ejercita ninguna rama del aviso; el doble existe para que el modulo pueda montarse.
+  consultarImpactoCambioUsuarioMock.mockResolvedValue({ status: "ok", impacto: null });
 });
 
 afterEach(() => {
