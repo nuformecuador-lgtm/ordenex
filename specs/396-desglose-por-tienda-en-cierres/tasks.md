@@ -1,249 +1,363 @@
 # Ficha 396 — Tareas
 
 > Checklist ejecutable. Cada task tiene **criterio de hecho** verificable. `[P]` = paralelizable
-> con las de su misma tanda. Las tandas van **en orden**: A antes que B antes que C.
+> con las de su misma tanda. Las tandas van **en orden**.
 >
-> **Regla del gate (AGENTS.md):** `backend_dev` / `frontend_dev` corren `pnpm typecheck`, `pnpm lint`
-> y **sólo sus archivos** (`pnpm exec vitest related --run <archivos>`). `./init.sh --rapido` y el
-> completo los corre **el leader**, nunca un subagente.
+> **Revisión 3 (2026-09-08):** ocho firmas cerradas, **las dos mediciones bloqueantes HECHAS**.
+> 5 tandas, complejidad **alta** (`design.md §11`).
+>
+> **Regla del gate (AGENTS.md):** `backend_dev` / `frontend_dev` corren `pnpm typecheck`,
+> `pnpm lint` y **sólo sus archivos** (`pnpm exec vitest related --run <archivos>`).
+> `./init.sh --rapido` y el completo los corre **el leader**, nunca un subagente.
 
 ---
 
-## T0 — Puerta. NO se escribe una línea de producción antes de esto
+## T0 — Puerta
 
-### T0.1 — La ficha 395 tiene que estar `done` y mergeada en `dev`
+### T0.1 — La ficha 395 tiene que estar cerrada
 
-**BLOQUEANTE. Esta ficha CHOCA EN ARCHIVO con la 395**, que está `in_progress` ahora mismo sobre
-los tres archivos que esta ficha también toca:
+**Situación medida el 2026-09-08:** la **mitad de servidor de la 395 YA ESTÁ MERGEADA** (PR #753) —
+sus cuatro campos viven en `CierresAdminService.ts:681-751` y en `ICierresAdminService.ts:350-403`,
+y `ganaLaTienda` en `ingreso-ordenex.ts:390`—. **Su pantalla está en curso.** El choque de archivos
+**se resuelve solo**: cuando esta ficha arranque, la 395 estará `done`.
 
-| Archivo | Qué hace la 395 ahí | Qué hace la 396 ahí |
-|---|---|---|
-| `lib/services/CierresAdminService.ts` | Añade `cobradoSobreRecaudado`, `netoOrdenex` y lo que el mensajero entrega al detalle | Añade `partesPorTienda` al mismo `verCierreDetalle` |
-| `app/(app)/cierres-admin/_components/cierre-factura.tsx` | Monta `CascadaDinero` en el detalle del mensajero | Añade la marca de agregación y (según Q1) el desglose |
-| `app/(app)/cierres-admin/_components/CierresAdminModule.tsx` | Pasa las líneas nuevas al detalle | Pasa el desglose al detalle |
+- [ ] **Hecho cuando:** la 395 está `done` y su PR de pantalla mergeado; la rama de esta ficha nace
+      de un `origin/dev` que lo contiene.
+- [ ] **Hecho cuando:** se han **leído** los cuatro campos de la 395 y `ganaLaTienda`, y se ha
+      anotado en `progress/impl_396.md` qué se **reusa** (`design.md §1`) en vez de duplicarlo.
+      **Toda la aritmética que esta ficha necesita ya existe**; lo único nuevo es la partición.
+- [ ] **Hecho cuando:** se ha anotado **qué rótulos dejó la 395 para `ganaLaTienda` agregado**. Si
+      no dejó ninguno, se crean en C2 (`design.md §8.3`).
 
-**Van en secuencia, nunca a la vez.** Y el diseño **se apoya en lo que la 395 deje montado**
-(`CascadaDinero` en el detalle del mensajero, §7.2 del `design.md`): **no se reinventa** ni se copia.
+### T0.2 — Confirmar en el archivo real los 14 puntos de `requirements.md § Lo confirmado`
 
-- [ ] **Hecho cuando:** la 395 está `done` en `feature_list.json`, su PR mergeado en `dev`, y la
-      rama de esta ficha nace de un `origin/dev` que ya la contiene
-      (`git log origin/dev --oneline | grep 395` devuelve el merge).
-- [ ] **Hecho cuando:** se ha leído lo que la 395 dejó en `cierre-factura.tsx` y en
-      `CierresAdminService.ts`, y se ha anotado en `progress/impl_396.md` **qué se reusa de ella**
-      (líneas de cascada, rótulos, props) en vez de duplicarlo.
+El índice del MCP miente en las dos direcciones, y **la 395 acaba de mover dos de esos archivos**.
 
-### T0.2 — Q1, Q2, Q5 y Q6 firmadas por el humano
-
-`requirements.md § Preguntas abiertas`. **Q1 bloquea la tanda B, no la A** (`design.md §5`: el
-contrato de servidor está cerrado sin esa respuesta).
-
-- [ ] **Hecho cuando:** la respuesta a cada una está escrita en `progress/impl_396.md` con la fecha
-      y las palabras del humano, no parafraseada.
-
-### T0.3 — Confirmar en el archivo real los 11 puntos de `requirements.md § Lo confirmado`
-
-El índice del MCP miente en las dos direcciones (devuelve símbolos borrados y no conoce símbolos
-vivos), y **la 395 acaba de mover dos de esos archivos**.
-
-- [ ] **Hecho cuando:** los 11 puntos están verificados a mano en disco. **Si alguno es falso,
+- [ ] **Hecho cuando:** los 14 puntos están verificados a mano en disco. **Si alguno es falso,
       PARAR** y decírselo al humano antes de escribir nada.
 
+### T0.3 — ✅ RESUELTA · Las ocho preguntas están firmadas (2026-09-08)
+
+Tabla completa en `requirements.md § Decisiones firmadas`. Las dos últimas:
+
+- **Q7 — LAS DOS.** Tres cifras por tienda: recaudado, `pagoTienda`, `ganaLaTienda`. **Deroga la R5
+  de la revisión 2**, que prohibía la tercera; R5 se reescribió para prohibir la **cuarta**, con el
+  rastro de la firma escrito (`requirements.md § El rastro de Q7`).
+- **Q8 — NO hay matriz.** Una fila por tienda en el nivel agregado de bodega.
+
+### T0.4 — ✅ RESUELTA · Cardinales de los cierres de bodega (medido contra producción, 2026-09-08)
+
+**14 cierres de bodega. Máximo 2 tiendas (media 1,29) y máximo 2 mensajeros (media 1,14).**
+
+Por debajo del umbral de 4, así que **la tanda D sigue adelante sin volver a consultar**.
+
+⚠️ **Cardinales JÓVENES.** Producción se vació a propósito el 2026-08-25: ese «máximo 2» es **lo que
+ha pasado hasta hoy, no una garantía**. La **corrección** del desglose no depende del cardinal (es
+una partición); la **legibilidad** sí — el modal ya monta dos cascadas por nivel y por mensajero.
+
+- [ ] **Aviso permanente, no tarea:** si un día el máximo de tiendas por cierre de bodega llega a
+      **4**, se mira la pantalla antes de seguir añadiendo. La consulta queda a mano:
+
+```sql
+SELECT cb.id,
+       COUNT(DISTINCT cd.id)          AS mensajeros,
+       COUNT(DISTINCT det.tienda_id)  AS tiendas
+FROM cierre_bodega cb
+JOIN cierre_dia     cd  ON cd.cierre_bodega_id = cb.id
+JOIN cierre_detail  det ON det.cierre_id       = cd.id
+GROUP BY cb.id
+ORDER BY tiendas DESC, mensajeros DESC;
+```
+
+### T0.5 — ✅ RESUELTA · El snapshot agregado de bodega ES la suma de sus días (2026-09-08)
+
+**CERO cierres** donde `cierre_bodega.total_general` difiera de la suma de sus `cierre_dia`. Se
+sostiene en los 14, igual que midió la 393.
+
+⚠️ **Sigue siendo una MEDICIÓN, no una regla** (`design.md §6`). Si un día dejara de cuadrar, la
+suma de las partes no daría el agregado, y **eso es un descuadre real que la pantalla debe enseñar
+(R21)**, no un fallo del desglose que haya que corregir forzando el minuendo. La consulta queda a
+mano para el día que alguien dude:
+
+```sql
+SELECT cb.id,
+       cb.total_general                                       AS snapshot_agregado,
+       COALESCE(SUM(cd.total_general), 0)                     AS suma_de_dias,
+       cb.total_general - COALESCE(SUM(cd.total_general), 0)  AS diferencia
+FROM cierre_bodega cb
+LEFT JOIN cierre_dia cd ON cd.cierre_bodega_id = cb.id
+GROUP BY cb.id, cb.total_general
+HAVING cb.total_general <> COALESCE(SUM(cd.total_general), 0);
+```
+
 ---
 
-## Tanda A — Servidor: el dato sube y se parte (`backend_dev`)
+## Tanda A — Datos: el `tiendaId` sube (`backend_dev`)
 
 ### A1 — `DETALLE_ADMIN_SELECT` lee `tienda_id`
 
-`lib/repositories/CierresAdminRepository.ts:164-194`. Añadir `tiendaId: true` junto a
-`tiendaNombre: true`.
+`lib/repositories/CierresAdminRepository.ts:164-194`. Añadir `tiendaId: true`.
 
 - [ ] **Hecho cuando:** `pnpm typecheck` verde y el `select` proyecta la columna.
-- [ ] **Hecho cuando:** no se ha tocado ninguna otra clave del `select` (el diff son 1 línea).
+- [ ] **Hecho cuando:** el diff es **una línea** y no se ha tocado ninguna otra clave.
+- [ ] **Hecho cuando:** se ha comprobado que `CierresBodegaAdminRepository.ts:353-356` usa **ese
+      mismo `select`** — la bodega queda servida sin tocar nada más.
 
 ### A2 — `CierreGestionPendienteRow` gana `tiendaId: string` — depende de A1
 
-`lib/interfaces/repositories/ICierreDiaRepository.ts:48-…`, campo **requerido** (no opcional:
-`design.md §3`). Rellenarlo en los **tres** mappers:
+`lib/interfaces/repositories/ICierreDiaRepository.ts:48-…`, **requerido** (`design.md §3`).
 
 | Mapper | Valor |
 |---|---|
-| `CierresAdminRepository.toPendienteRowDesdeSnapshot` (:373) | `d.tiendaId` (**congelado**, R6) |
-| `CierresBodegaAdminRepository` (:323, reusa el mismo mapper) | idem |
+| `CierresAdminRepository.toPendienteRowDesdeSnapshot` (:373) | `d.tiendaId` (**congelado**, R6) — sirve al detalle del mensajero **y a los dos niveles de bodega** |
 | `CierreDiaRepository.toPendienteRow` (:247) | `row.orden.tiendaId` — vista EN VIVO, el cierre aún no existe |
 
 - [ ] **Hecho cuando:** `pnpm typecheck` verde **sin un solo `as`, `any` ni `@ts-expect-error`**
       nuevo en los dobles de test.
-- [ ] **Hecho cuando:** el docstring del campo dice **de dónde sale en cada caso y por qué**
-      (congelado vs vivo), no sólo qué es.
-- [ ] **Medir antes de empezar:** `pnpm typecheck` tras el cambio de tipo, para saber cuántos
-      archivos hay que tocar (estimado: 20 tipan el DTO; hay fixture central en
-      `tests/fixtures/cierre-pagos.ts`). Anotar el número real en `progress/impl_396.md`.
+- [ ] **Hecho cuando:** el docstring dice **de dónde sale en cada caso y por qué** (congelado vs
+      vivo).
+- [ ] **Medir y anotar:** cuántos archivos de test hubo que tocar de verdad (estimado: 20 tipan el
+      DTO; fixture central en `tests/fixtures/cierre-pagos.ts`).
 
-### A3 — `partesPorTienda` en `lib/utils/ingreso-ordenex.ts` — depende de A2
+---
+
+## Tanda B — El derivador (`backend_dev`) — depende de A
+
+### B1 — `partesPorTienda` en `lib/utils/ingreso-ordenex.ts`
 
 Firma y comportamiento en `design.md §4`. **Ni una fórmula de dinero nueva**: particiona por
-`tiendaId` y llama a `computeTotales`, `totalesIngresoOrdenex` y `pagoTiendaOrdenex` sobre cada
-subconjunto.
+`tiendaId` y llama a `computeTotales`, `totalesIngresoOrdenex`, `pagoTiendaOrdenex` y `ganaLaTienda`
+sobre cada subconjunto.
 
-- [ ] **Hecho cuando:** la función es **pura** (sin Prisma Client, sin repos, sin reloj, sin
-      efectos al importarse) y toda salida es STRING escala 2.
+- [ ] **Hecho cuando:** emite **TRES** cifras por tienda (`recaudado`, `pagoTienda`, `ganaLaTienda`)
+      y **no cuatro** (R5, `design.md §9.5`).
+- [ ] **Hecho cuando:** la función es **pura** (sin Prisma Client, sin repos, sin reloj, sin efectos
+      al importarse) y toda salida es STRING escala 2.
 - [ ] **Hecho cuando:** no aparece `Number(`, `parseFloat(`, `parseInt(` ni `.toFixed(` sobre nada
       que no sea un `Prisma.Decimal`.
-- [ ] **Hecho cuando:** el docstring explica **por qué vive ahí y no duplicada en cada servicio**,
-      cita el precedente `dinero-por-producto.ts:200-273` y **escribe las dos invariantes**
-      (R10, R11) con el argumento de por qué son ciertas por construcción.
-- [ ] **Hecho cuando:** se ha comprobado que el import de `cierre-totales.ts` **no crea ciclo**
-      (`cierre-totales.ts` no importa `ingreso-ordenex.ts`). Si lo creara: caer a
-      `design.md §8.5` y anotarlo.
-- [ ] **Hecho cuando:** el orden del array es el que decida Q6, declarado en **un solo sitio**.
+- [ ] **Hecho cuando:** el orden es **`pagoTienda` descendente**, con el desempate declarado en un
+      solo sitio (R8, Q6).
+- [ ] **Hecho cuando:** el docstring explica por qué vive ahí, cita el precedente
+      `dinero-por-producto.ts:200-273`, **escribe las cuatro identidades** (R10, R11, R12 y la que
+      ata `pagoTienda` con `ganaLaTienda` por tienda, `design.md §4.4`), **dice que la usan las tres
+      superficies** (R22), y **deja escrito que la tercera cifra entró por firma del humano del
+      2026-09-08 (Q7)**.
+- [ ] **Hecho cuando:** se ha comprobado que el import de `cierre-totales.ts` **no crea ciclo**. Si
+      lo creara: caer a `design.md §9.7` y anotarlo.
 
-### A4 — `verCierreDetalle` emite `partesPorTienda` — depende de A3
+### B2 `[P]` — Tests unitarios del derivador — depende de B1
 
-`lib/services/CierresAdminService.ts` (hoy :661-707, **verificar tras la 395**) y
-`lib/interfaces/services/ICierresAdminService.ts:331-368`.
+`tests/unit/utils/` (nuevo). **Afirmando contra literales escritos a mano**: los importes del test
+son el CONTRATO, no la salida de la función.
 
-- [ ] **Hecho cuando:** el campo se emite **SIEMPRE**, también con una sola tienda
-      (`design.md §5`).
-- [ ] **Hecho cuando:** `pagoTienda`, `ganancia`, `totalesIngreso` y
-      `desgloseIngresoBodegaRechazos` **no cambian ni una línea** (R17).
-- [ ] **Hecho cuando:** el comentario del campo dice la invariante R10 en una frase.
-
-### A5 `[P]` — Tests unitarios del derivador — depende de A3
-
-`tests/unit/utils/` (archivo nuevo). **Afirmando contra literales escritos a mano**, nunca contra la
-función que los genera.
-
-- [ ] Un cierre de **dos tiendas** con importes distintos → dos partes, cada una con **sus** cuatro
-      cifras, escritas a mano en el test (R5).
-- [ ] Un cierre de **una tienda** → una parte, `pagoTienda` igual al agregado (R9).
-- [ ] **R10**: la suma de las partes es **exactamente** el agregado. Literal, al céntimo.
-- [ ] **R11**: la suma de `recaudado` es **exactamente** `computeTotales(todas).general`.
-- [ ] **R12**: una gestión **no `entregada`** con líneas de pago **no aporta** al `recaudado` de su
-      tienda (mismo criterio que el total general).
-- [ ] Una tienda cuyo `pagoTienda` sale **negativo** se emite con su signo, sin recortar a `0.00`.
+- [ ] Dos tiendas con importes distintos → dos partes con **sus tres** cifras, escritas a mano (R4).
+- [ ] Una tienda → una parte, cuyas tres cifras son iguales a las agregadas.
+- [ ] **R10**: Σ `pagoTienda` = agregado. Literal, al céntimo.
+- [ ] **R11**: Σ `ganaLaTienda` = agregado. Literal, al céntimo.
+- [ ] **R12**: Σ `recaudado` = `computeTotales(todas).general`.
+- [ ] **La cuarta identidad, POR TIENDA** (`design.md §4.4`):
+      `pagoTienda(t) − ganaLaTienda(t) === flete por rechazo + IVA de esa tienda`. Con un cierre
+      donde una tienda tenga rechazos y la otra no, para que la resta no sea cero en las dos.
+- [ ] **R13**: una gestión **no `entregada`** con líneas de pago **no aporta** al `recaudado` de su
+      tienda.
+- [ ] **R9 — la tienda que sólo trajo rechazos** (`design.md §4.5`): aparece en el desglose, con
+      `recaudado` = `"0.00"`, `pagoTienda` = `"0.00"` y `ganaLaTienda` **negativo con su signo**. Y
+      **cuenta** para el cardinal de tiendas.
+- [ ] **R8**: tres tiendas con `pagoTienda` 100 / 300 / 200 salen 300, 200, 100; y dos con el
+      **mismo** importe salen en el orden de desempate declarado.
+- [ ] **R5**: el objeto emitido tiene **exactamente cinco** claves; ni `fleteConIva` ni
+      `comisionConIva` se filtran.
 - [ ] Una gestión **sin tarifa congelada** (gap R9 de la 69) no rompe: su tienda aparece con los
       conceptos en cero, no ausente.
-- [ ] **Hecho cuando:** las **mutaciones** de abajo (§ Mutaciones) ponen estos tests en rojo.
+- [ ] **Hecho cuando:** las mutaciones M1-M9 ponen estos tests en rojo.
 
-### A6 — Test de integración contra Postgres real — depende de A2
+### B3 — Test de integración contra Postgres real — depende de A2
 
-`tests/integration/db/` (archivo nuevo; precedente y vecinos: `cierre-detail-congelado.test.ts`,
+`tests/integration/db/` (nuevo; vecinos: `cierre-detail-congelado.test.ts`,
 `cierre-sin-gestion-sql-real.test.ts`).
 
-**Los tests de servicio usan dobles y no ven el SQL.** El requisito de **qué filas se agrupan** (R6)
-sólo se puede probar aquí.
+**Los tests de servicio usan dobles y no ven el SQL.** R6 sólo se puede probar aquí.
 
-- [ ] **Siembra** un cierre con órdenes de **dos tiendas distintas** y sus filas `cierre_detail`.
-      No se apoya en datos que estén en la base local.
+- [ ] **Siembra** un cierre con órdenes de **dos tiendas distintas** y sus filas `cierre_detail`. No
+      se apoya en datos que estén.
 - [ ] **Control positivo obligatorio:** afirma primero el **cardinal** (2 tiendas, N gestiones) y
-      **falla si es cero**. Prohibido `if (!filas) return;` — reporta `passed` sin comprobar nada.
-- [ ] Afirma que la agrupación usa **`cierre_detail.tienda_id`** (el congelado) y **no**
-      `orden.tienda_id`: re-apuntar la orden a otra tienda después de crear el cierre **no** cambia
-      el desglose (R6).
-- [ ] **Hecho cuando:** el test **no se salta** por falta de `.env`. Si la corrida lo reporta
-      `skipped`, no está hecho — mirar los `skipped`, no sólo el `INIT_EXIT`.
+      **falla si es cero**. Prohibido `if (!filas) return;`.
+- [ ] Afirma que la agrupación usa **`cierre_detail.tienda_id`** y **no** `orden.tienda_id`:
+      re-apuntar la orden a otra tienda después de crear el cierre **no** cambia el desglose (R6).
+- [ ] **Hecho cuando:** el test **no se salta** por falta de `.env`. Si sale `skipped`, no está
+      hecho.
 
 ---
 
-## Tanda B — Pantalla (`frontend_dev`) — depende de la tanda A y de Q1
+## Tanda C — Superficie 1: el detalle del mensajero (`backend_dev` → `frontend_dev`)
 
-### B1 `[P]` — Constantes de texto nuevas
+### C1 — `verCierreDetalle` emite `partesPorTienda` — depende de B1
 
-`app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx`, junto a `PAGO_TIENDA_LABEL` (:324)
-y `PAGO_TIENDA_NOTA` (:334). **Esas dos NO se tocan** (R17).
+`lib/services/CierresAdminService.ts` (hoy :662-763) y `ICierresAdminService.ts:331-…`.
 
-- [ ] **Hecho cuando:** ni un literal de texto queda escrito dentro del componente (R4).
-- [ ] **Hecho cuando:** el texto no usa siglas ni jerga; lenguaje claro, en español.
-- [ ] **Hecho cuando:** el texto de R16 dice explícitamente que **el pago al mensajero y el ingreso
+- [ ] **Hecho cuando:** el campo se emite **SIEMPRE**, también con una sola tienda
+      (`design.md §5.1`): el umbral de Q5 es de **presentación**.
+- [ ] **Hecho cuando:** `pagoTienda`, `ganancia`, `totalesIngreso`, `desgloseIngresoBodegaRechazos`
+      y **los cuatro campos de la 395** no cambian ni una línea (R18).
+
+### C2 `[P]` — Rótulos nuevos en `cierre-labels.ts`
+
+El módulo **PURO** (`:128-138`), **no** `cierre-detalle-shared.tsx`: con Q4 dentro los necesitan las
+**dos** pantallas.
+
+- [ ] **Hecho cuando:** ni un literal de texto queda dentro de un componente (R3).
+- [ ] **Hecho cuando:** los rótulos de **«lo que se le paga»** y **«lo que gana en total»** se
+      **distinguen sin ambigüedad**, con una nota que diga la diferencia en una frase (el flete por
+      rechazo se cobra aparte, contra la wallet). Confundirlas es el fallo que la 395 arregla.
+- [ ] **Hecho cuando:** `PAGO_TIENDA_LABEL`, `PAGO_TIENDA_NOTA` y `PARA_LA_TIENDA_LABEL` **no se
+      tocan** (R18).
+- [ ] **Hecho cuando:** el texto de R17 dice explícitamente que **el pago al mensajero y el ingreso
       de bodega por rechazos son del cierre entero y no están repartidos**.
+- [ ] **Hecho cuando:** lenguaje claro, en español, sin siglas.
 
-### B2 — La marca de agregación (R1-R4) — depende de B1
+### C3 — Marca + desglose en el detalle del mensajero — depende de C1, C2
 
-`cierre-factura.tsx:1810-1818`, **dentro** del corte `esMensajero` que ya existe (R21).
+`cierre-factura.tsx`, **dentro** del corte `esMensajero` de `:1810` (R26).
 
-- [ ] **Hecho cuando:** con **una** tienda se ve **su nombre** (R2).
-- [ ] **Hecho cuando:** con **dos o más** se ve que es un total agregado y **de cuántas** (R1, R3).
-- [ ] **Hecho cuando:** el importe de la tarjeta **no cambia** (R17).
+- [ ] **Hecho cuando:** con **≥2** tiendas se ve la marca de agregado **y de cuántas** (R1) y una
+      `CascadaDinero` por tienda con **tres líneas** (R4, `design.md §8.2`).
+- [ ] **Hecho cuando:** con **1** tienda **no aparece nada nuevo**: la pantalla queda **exactamente
+      como está hoy** (R2, Q5).
+- [ ] **Hecho cuando:** se reusa `CascadaDinero` tal cual, con `ariaLabel` **propio y distinto** por
+      tienda. **Ni una copia, ni un componente gemelo** (R22).
+- [ ] **Hecho cuando:** el componente **no hace ni una operación aritmética** (R14).
+- [ ] **Hecho cuando:** las tiendas se pintan en el orden que emite el servidor (R8).
 
-### B3 — El desglose por tienda (R5-R9) — depende de B2 y de Q1
+### C4 `[P]` — Tests de componente de la superficie 1 — depende de C3
 
-Alcance **según la respuesta a Q1** (A / B / C / D de `requirements.md`). Si Q1 = **B** o **C**: una
-`CascadaDinero` por tienda, con `ariaLabel` **propio y distinto** por tienda.
-
-- [ ] **Hecho cuando:** se reusa `CascadaDinero` tal cual — **ni una copia, ni un componente
-      gemelo**.
-- [ ] **Hecho cuando:** el componente **no hace ni una operación aritmética**: no aparece `Number(`,
-      `parseFloat(`, `parseInt(` ni `.toFixed(` sobre un importe (R13).
-- [ ] **Hecho cuando:** las tiendas se pintan en el orden que emite el servidor, sin reordenar en el
-      cliente (R8).
-
-### B4 `[P]` — Tests de componente — depende de B2/B3
-
-`tests/components/` (archivo nuevo).
-
-- [ ] Un cierre de **dos** tiendas: los dos nombres y los dos importes están en el DOM, **afirmados
-      contra literales escritos a mano** (R5).
-- [ ] Un cierre de **una** tienda: el nombre está y la lectura **no es más larga** que hoy (R2, R9).
-- [ ] La marca de «total de varias tiendas» aparece con 2 y **no** aparece con 1 (R1, R3).
-- [ ] La nota de R16 está presente siempre que se pinte el desglose.
-- [ ] **Vista del mensajero** (`audiencia="mensajero"`): **ni el agregado ni el desglose** aparecen
-      (R21).
+- [ ] Dos tiendas: los dos nombres y las **seis** cifras en el DOM, **literales a mano** (R4).
+- [ ] Una tienda: **ni marca ni desglose** (R2).
+- [ ] La tienda de sólo rechazos pinta su `ganaLaTienda` **negativo con su signo** y en tono de
+      atención (R9).
+- [ ] Los rótulos de las dos cifras de pago **son distintos** y la nota que los separa está presente
+      (C2).
+- [ ] La nota de R17 está siempre que se pinte el desglose.
+- [ ] `audiencia="mensajero"`: **ni el agregado ni el desglose** (R26).
 
 ---
 
-## Tanda C — Cierre (`backend_dev` + `frontend_dev`, luego leader)
+## Tanda D — Superficies 2 y 3: el cierre de bodega (`backend_dev` → `frontend_dev`)
 
-### C1 `[P]` — No regresión de las descargas (R22)
+**Depende de la tanda C cerrada.** La forma se prueba primero en una superficie y luego se lleva a
+las otras dos: es la secuencia que el leader recomendaba entre fichas, aplicada dentro de la ficha.
 
-- [ ] **Hecho cuando:** `tests/unit/descarga/cierres-gestiones-fundida-descarga-columnas.test.ts`,
+### D1 — `verCierreBodegaDetalle`: el agregado que falta **y** el desglose — depende de C1
+
+`lib/services/CierresBodegaAdminService.ts` y `ICierresBodegaAdminService.ts`.
+
+⚠️ **PRIMERO la asimetría, que es un hallazgo del diseño (`design.md §5.2`):** el DTO de bodega
+(`ICierresBodegaAdminService.ts:77-92`) trae `pagoTienda`, `cobradoSobreRecaudado` y `netoOrdenex`,
+pero **NO `ganaLaTienda`** — la 395 lo puso sólo en el detalle del mensajero. Sin él, R11 no es
+comprobable en bodega y el desglose sumaría hacia un total que no está en pantalla.
+
+- [ ] **Hecho cuando:** los **dos niveles** de bodega emiten `ganaLaTienda` agregado, con la función
+      que ya existe (`ingreso-ordenex.ts:390`), cada uno desde **sus propios** `totales.general` y
+      `totalesIngreso.total`.
+- [ ] **Hecho cuando:** el nivel por mensajero emite `partesPorTienda(cd.gestiones)`, **al lado** de
+      su `totalesIngresoOrdenex(cd.gestiones)` de `:298`.
+- [ ] **Hecho cuando:** el agregado emite
+      `partesPorTienda(found.cierresDia.flatMap(cd => cd.gestiones))`, **al lado** del de
+      `:346-348`, con **una fila por tienda** (Q8 se cumple por construcción al agrupar por
+      `tiendaId`).
+- [ ] **Hecho cuando:** cada nivel sale de **sus propias gestiones**; ninguno se deriva del otro ni
+      se corrige para cuadrar (R21, regla ya escrita en `:358-363`).
+- [ ] **Hecho cuando:** `pagoTienda`, `ganancia`, `paraLaCentral`, `efectivoCubreDescuentos`,
+      `cobradoSobreRecaudado` y `netoOrdenex` de **los dos niveles** no cambian (R18).
+
+### D2 — Pantalla de bodega, los dos niveles — depende de D1, C2, C3
+
+`CierresBodegaAdminModule.tsx` (agregado: `:666-690`; por mensajero: `:728-751`).
+
+- [ ] **Hecho cuando:** se usa **el mismo componente y los mismos rótulos** que la superficie 1
+      (R22).
+- [ ] **Hecho cuando:** el umbral del nivel por mensajero se evalúa **sobre las tiendas DE ESE
+      MENSAJERO**, no sobre las de la bodega (`design.md §8.1`).
+- [ ] **Hecho cuando:** cada `ariaLabel` es único en el modal — que ya monta las mismas cascadas una
+      vez por mensajero.
+
+### D3 `[P]` — Tests de componente de las superficies 2 y 3 — depende de D2
+
+- [ ] Bodega con **2 mensajeros × 2 tiendas**: desglose en el agregado y en los dos mensajeros.
+- [ ] ⚠️ **El caso que separa los umbrales:** bodega con **2 mensajeros que llevaron UNA tienda cada
+      uno** → **ningún** nivel de mensajero enseña desglose y el **agregado sí** (R19 vs R20).
+- [ ] **R10/R11 en el agregado**: Σ `pagoTienda` y Σ `ganaLaTienda` = sus agregados, literal al
+      céntimo.
+- [ ] Una tienda que aparece en **dos mensajeros** sale como **una** fila en el agregado (R20, Q8).
+
+### D4 — Test de los tres puntos de llamada — depende de D1
+
+**El composition root que no inyecta:** en este repo ya hubo 2 de 7 notificadores muertos con la
+suite verde.
+
+- [ ] **Hecho cuando:** un test comprueba que **los tres** sitios (detalle del mensajero, nivel
+      mensajero de bodega, agregado de bodega) **pasan de verdad** por `partesPorTienda`, no sólo
+      que la importan.
+
+---
+
+## Tanda E — Cierre (`backend_dev` + `frontend_dev`, luego leader)
+
+### E1 `[P]` — No regresión de las descargas (R27, Q3)
+
+- [ ] **Hecho cuando:** `cierres-gestiones-fundida-descarga-columnas.test.ts`,
       `cierres-admin-descarga-columnas` y `cierres-gestiones-paridad` pasan **sin tocarlos**.
-- [ ] **Hecho cuando:** el diff no contiene ninguno de los archivos de `*descarga-columnas*`.
+- [ ] **Hecho cuando:** el diff no contiene ningún archivo `*descarga-columnas*`.
 
-### C2 `[P]` — No regresión de las identidades ya pintadas
+### E2 `[P]` — No regresión de las identidades ya pintadas
 
-- [ ] **Hecho cuando:** `tests/components/DineroIdentidadesEnPantalla.test.tsx` pasa sin
-      modificarse (bloques 393·B4 y 393·B5, y el censo D).
+- [ ] **Hecho cuando:** `tests/components/DineroIdentidadesEnPantalla.test.tsx` pasa **sin
+      modificarse** (bloques 393·B4, 393·B5, el censo D, y lo que la 395 le haya añadido).
 
-### C3 — Mutaciones (§ Mutaciones) — depende de A5, A6, B4
+### E3 — Mutaciones — depende de B2, B3, C4, D3
 
-- [ ] **Hecho cuando:** cada mutación de la lista ha puesto **al menos un test en rojo**, con el
-      nombre del test anotado en `progress/impl_396.md`.
-- [ ] **Hecho cuando:** la salida de cada corrida está pegada en `progress/impl_396.md`. Un arnés de
-      mutaciones que dice «9/9 supervivientes» sin haber ejecutado un test ya mintió dos veces en
+- [ ] **Hecho cuando:** cada mutación ha puesto **al menos un test en rojo**, con el nombre del test
+      anotado.
+- [ ] **Hecho cuando:** la **salida** de cada corrida está pegada en `progress/impl_396.md`. Un
+      arnés de mutaciones que dice «9/9 supervivientes» sin ejecutar un test ya mintió dos veces en
       este repo: **la evidencia es la salida, no el resumen**.
 
-### C4 — `progress/impl_396.md` — depende de todas
+### E4 — `progress/impl_396.md` — depende de todas
 
-- [ ] Archivos tocados, mapa `R<n> → test`, salida de los tests, las respuestas de Q1/Q2/Q5/Q6, el
-      número real de archivos de test tocados por A2, y **cualquier cosa que al mirar el código
-      resultara distinta de lo escrito aquí**.
+- [ ] Archivos tocados, mapa `R<n> → test`, salida de los tests, el número real de archivos de test
+      tocados por A2, y **cualquier cosa que al mirar el código resultara distinta de lo escrito
+      aquí**.
 - [ ] **COMMITEADO.** El informe describe el disco, no un commit; en este repo se ha perdido tres
       veces por un `git checkout`.
 
-### C5 — Gate (lo corre **el leader**, no un subagente)
+### E5 — Gate (lo corre **el leader**, no un subagente)
 
 - [ ] `./init.sh --rapido` verde al cerrar cada tanda.
-- [ ] `./init.sh` **completo** antes del PR. Escribir `INIT_EXIT=$?` **dentro** del log: un `echo`
-      posterior ya tapó un gate rojo como «exit code 0».
+- [ ] `./init.sh` **completo** antes del PR. Escribir `INIT_EXIT=$?` **dentro** del log.
 - [ ] Mirar los **`skipped`**, no sólo el `INIT_EXIT`: sin `.env` se saltan los 78 archivos de
-      `integration/db` y aun así dice «init OK» — y A6 vive justo ahí.
+      `integration/db` y aun así dice «init OK» — y B3 vive justo ahí.
 
 ---
 
-## Mutaciones (C3) — cada una tiene que poner algo en rojo
+## Mutaciones (E3) — cada una tiene que poner algo en rojo
 
 | # | Mutación | Debe romper |
 |---|---|---|
-| M1 | Agrupar por `tiendaNombre` en vez de por `tiendaId` | A6 (dos tiendas con el mismo nombre / re-apuntada) |
-| M2 | Leer la tienda **viva** de la orden en vez de la congelada | A6 (R6) |
-| M3 | Quitar el filtro `resultado === "entregada"` del recaudo por tienda | A5 (R11, R12) |
-| M4 | Sumar el flete por rechazo (`fleteDevolucionConIva`) al cobrado de cada tienda | A5 (R10) |
-| M5 | Devolver el array vacío cuando el cierre tiene una sola tienda | A5 (R9) + B4 |
-| M6 | Recortar a `"0.00"` un `pagoTienda` negativo | A5 |
-| M7 | Cambiar el orden del array (invertirlo) | A5 (R8) |
-| M8 | Cambiar un céntimo en una parte sin tocar el agregado | A5 (R10) |
-| M9 | Pintar la marca de «varias tiendas» también con una sola | B4 (R2, R3) |
-| M10 | Pintar el desglose en la vista del mensajero | B4 (R21) |
+| M1 | Agrupar por `tiendaNombre` en vez de por `tiendaId` | B3 |
+| M2 | Leer la tienda **viva** de la orden en vez de la congelada | B3 (R6) |
+| M3 | Quitar el filtro `resultado === "entregada"` del recaudo por tienda | B2 (R12, R13) |
+| M4 | Sumar el flete por rechazo al cobrado de cada tienda (`pagoTienda`) | B2 (R10 + la cuarta identidad) |
+| M5 | Derivar `ganaLaTienda(t)` con el `total` **agregado** en vez del de su tienda | B2 (R11 + la cuarta identidad) |
+| M6 | Recortar a `"0.00"` un `ganaLaTienda` negativo | B2 (R9) · C4 |
+| M7 | Invertir el orden del array | B2 (R8) |
+| M8 | Cambiar un céntimo en una parte sin tocar el agregado | B2 (R10/R11) |
+| M9 | Emitir también `fleteConIva` en `ParteDeTienda` | B2 (R5) |
+| M10 | Omitir del desglose la tienda que no recaudó nada | B2 (R9) |
+| M11 | Enseñar el desglose también con **una** tienda | C4 (R2) |
+| M12 | Pintar el desglose en la vista del mensajero | C4 (R26) |
+| M13 | Usar el mismo rótulo para `pagoTienda` y `ganaLaTienda` | C4 (C2) |
+| M14 | Evaluar el umbral del nivel-mensajero de bodega sobre las tiendas de **toda la bodega** | D3 |
+| M15 | Derivar el desglose agregado de bodega **sumando** el de sus mensajeros | D3 (R21) |
+| M16 | Dejar de llamar a `partesPorTienda` en uno de los tres sitios | D4 |
 
 ---
 
@@ -251,28 +365,33 @@ Alcance **según la respuesta a Q1** (A / B / C / D de `requirements.md`). Si Q1
 
 | R | Qué exige | Test |
 |---|---|---|
-| R1 | Dice de cuántas tiendas se compone | B4 |
-| R2 | Una tienda → su nombre | B4 |
-| R3 | Dos o más → marca de agregado | B4 |
-| R4 | Rótulos desde constante exportada | B4 (importa la constante; no teclea el texto) |
-| R5 | Importe por cada tienda | A5 + B4 |
-| R6 | Agrupa por la tienda **congelada** | **A6** (SQL real) |
-| R7 | Identifica por id, muestra el nombre | A5 + A6 |
-| R8 | Orden determinista | A5 (M7) |
-| R9 | Una sola tienda: coherente y no peor | A5 + B4 |
-| R10 | Σ partes = agregado | A5 (M4, M8) |
-| R11 | Σ recaudado = total general | A5 (M3) |
-| R12 | Mismo criterio que el total general | A5 (M3) |
-| R13 | Aritmética en el servidor, STRING escala 2 | A3 (criterio de hecho) + B3 (sin `Number(`) |
-| R14 | Misma función que el agregado, por subconjunto | A5 (M4) |
-| R15 | No reparte pago al mensajero ni bodega | A5 (esas cifras no están en `ParteDeTienda`) |
-| R16 | Lo dice en pantalla | B4 |
-| R17 | Nada de lo visible cambia de valor | C2 + A5 (agregado intacto) |
-| R18 | Sin exposición nueva | A4 (mismo alcance, sin ruta nueva) |
-| R19 | Puerta de alcance intacta | tests de alcance existentes de `cierres-admin-service` |
-| R20 | Sin migración | C5 (el diff no toca `db/`; el gate rápido **se niega solo** si tocara) |
-| R21 | Vista del mensajero sin cambios | B4 (M10) |
-| R22 | Descargas sin cambios | C1 |
+| R1 | Marca de agregado y de cuántas (≥2) | C4 · D3 |
+| R2 | Con 1 tienda, todo como hoy | C4 (M11) |
+| R3 | Texto desde constante exportada | C4 (importa la constante; no teclea el texto) |
+| R4 | Tres cifras por tienda | B2 · C4 · D3 |
+| R5 | Ninguna cifra de más (la cuarta) | B2 (M9) |
+| R6 | Agrupa por la tienda **congelada** | **B3** (SQL real, M1/M2) |
+| R7 | Identifica por id, muestra el nombre | B2 · B3 |
+| R8 | Orden por `pagoTienda` descendente | B2 (M7) |
+| R9 | La tienda sin recaudo entra y cuenta | B2 (M10) · C4 (M6) |
+| R10 | Σ `pagoTienda` = agregado | B2 (M4, M8) · D3 |
+| R11 | Σ `ganaLaTienda` = agregado | B2 (M5, M8) · D3 · **D1** (el agregado que faltaba en bodega) |
+| R12 | Σ `recaudado` = total general | B2 (M3) |
+| R13 | Mismo criterio que el total general | B2 (M3) |
+| R14 | Aritmética en el servidor, escala 2 | B1 (criterio de hecho) · C3 (sin `Number(`) |
+| R15 | Misma función que el agregado, por subconjunto | B2 (M4, M5) |
+| R16 | No reparte pago al mensajero ni bodega | B2 (`ParteDeTienda` no tiene esas claves, M9) |
+| R17 | Lo dice en pantalla | C4 · D3 |
+| R18 | Nada visible cambia de valor (incl. los 4 campos de la 395) | E2 · C1 · D1 |
+| R19 | Bodega, nivel por mensajero | D3 (M14) |
+| R20 | Bodega, nivel agregado, una fila por tienda | D3 |
+| R21 | Cada nivel de sus propias gestiones | D3 (M15) · **T0.5** (condición medida) |
+| R22 | Mismos rótulos y componente en las 3 superficies | D4 (M16) · C2 (constante única) |
+| R23 | Sin exposición nueva | C1 · D1 (mismo alcance, sin ruta nueva) |
+| R24 | Las dos puertas de alcance intactas | tests de alcance existentes de `cierres-admin-service` y `cierres-bodega-admin-service` |
+| R25 | Sin migración | E5 (el diff no toca `db/`; el gate rápido **se niega solo** si tocara) |
+| R26 | Vista del mensajero sin cambios | C4 (M12) |
+| R27 | Descargas sin cambios | E1 |
 
 ---
 
@@ -283,14 +402,18 @@ Alcance **según la respuesta a Q1** (A / B / C / D de `requirements.md`). Si Q1
 - `lib/repositories/CierreDiaRepository.ts`
 - `lib/interfaces/repositories/ICierreDiaRepository.ts`
 - `lib/interfaces/services/ICierresAdminService.ts`
+- `lib/interfaces/services/ICierresBodegaAdminService.ts`
 - `lib/services/CierresAdminService.ts`
+- `lib/services/CierresBodegaAdminService.ts`
 - `lib/utils/ingreso-ordenex.ts`
-- `app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx`
+- `app/(app)/cierres-admin/_components/cierre-labels.ts`
 - `app/(app)/cierres-admin/_components/cierre-factura.tsx`
 - `app/(app)/cierres-admin/_components/CierresAdminModule.tsx`
+- `app/(app)/cierres-admin/_components/CierresBodegaAdminModule.tsx`
 
-**Tests:** `tests/unit/utils/` (nuevo), `tests/integration/db/` (nuevo), `tests/components/`
-(nuevo), + los ~20 archivos que tipan `CierreGestionPendienteRow` (ajuste mecánico de A2).
+**Tests:** `tests/unit/utils/` (nuevo), `tests/integration/db/` (nuevo), `tests/components/` (dos
+nuevos: superficie 1 y superficies 2-3), + los ~20 archivos que tipan `CierreGestionPendienteRow`
+(ajuste mecánico de A2).
 
-**NO se tocan:** `db/`, `*descarga-columnas*`, `CierresBodegaAdminService.ts`,
-`WalletTiendaFeedService.ts`, `WalletFeedService.ts`.
+**NO se tocan:** `db/`, `*descarga-columnas*`, `WalletTiendaFeedService.ts`, `WalletFeedService.ts`,
+`CierreDiaModule.tsx`, `ConsolidacionBodegaModule.tsx`.
