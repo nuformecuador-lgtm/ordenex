@@ -348,6 +348,60 @@ export type CierreDetalleAdminServiceResult =
       // money-safe). Lo que se le paga a la tienda. Puede ser NEGATIVO.
       pagoTienda: string;
       /**
+       * Feature 395 — LA LINEA PUENTE de la cascada «de quien es el dinero recaudado»:
+       * `totalesIngreso.fleteConIva` + `totalesIngreso.comisionConIva`, o sea el subconjunto
+       * DEDUCIBLE de lo facturado. Se emite SIEMPRE, tambien cuando el flete por rechazo vale
+       * "0.00": sin ella la pantalla ensena «recaudado − facturado = para la tienda», que NO da
+       * en cuanto hay un rechazo —ese flete se factura pero nunca salio de lo recaudado—.
+       *
+       * Es la MISMA linea que ya emite el cierre de BODEGA (`ICierresBodegaAdminService`), por la
+       * misma funcion (`cobradoSobreRecaudado`) y con los mismos dos sumandos: la ficha 393 la
+       * monto solo alli, y este detalle —el que se mira todos los dias— se quedo sin ella.
+       */
+      cobradoSobreRecaudado: string;
+      /**
+       * Feature 395 — DERIVADO: `totalesIngreso.total` − `cierre.totalPagoMensajero` −
+       * `cierre.totalIngresoBodegaRechazos`.
+       *
+       * **NO es `ganancia`**, que sigue viva y sigue viajando en este mismo DTO: aquella resta
+       * SOLO el pago al mensajero. Las dos coinciden exactamente cuando el ingreso de bodega por
+       * rechazos vale "0.00" y divergen en cuanto hay un rechazo. Puede ser NEGATIVO y se emite
+       * CON SU SIGNO, nunca recortado a "0.00".
+       */
+      netoOrdenex: string;
+      /**
+       * Feature 395 — DERIVADO: `cierre.totales.general` − `totalesIngreso.total`. LO QUE LA
+       * TIENDA GANA EN TOTAL con este cierre.
+       *
+       * **NO es `pagoTienda`**, que viaja aqui al lado y sigue significando lo mismo: aquel es
+       * lo que se le paga DE ESTE DINERO (no resta el flete por rechazo, que nunca entro en lo
+       * recaudado); este es lo que le queda DESPUES de que tambien le cobren aquel flete. La
+       * diferencia entre los dos es exactamente `totalesIngreso.fleteDevolucionConIva`.
+       *
+       * Cierra la identidad que la pantalla tiene que hacer evidente:
+       * `ganaLaTienda + totalesIngreso.total === cierre.totales.general`.
+       *
+       * Puede ser NEGATIVO y se emite CON SU SIGNO, nunca recortado a "0.00".
+       */
+      ganaLaTienda: string;
+      /**
+       * Feature 395 — ¿el flete por rechazo YA esta cobrado en la wallet de la tienda?
+       *
+       * MEDIDO en el codigo y contra produccion (2026-09-08): el cargo lo emite
+       * `WalletTiendaFeedService` DENTRO de la transaccion de aprobacion
+       * (`CierresAdminRepository.resolverCierre`, tras `res.count === 1 && nuevoEstado ===
+       * "aprobado"`). De los 37 cierres aprobados con rechazos, los 37 tienen su cargo; los 5
+       * `solicitado` y el 1 `vencido`, ninguno.
+       *
+       * Viaja como BOOLEANO y no se deja inferir al navegador a proposito. `cierre.estado` ya
+       * va en el DTO, pero «aprobado» y «el cargo ya ocurrio» NO son la misma frase: en un
+       * cierre sin ningun rechazo no hay nada que cobrar y decir «se le cargo» seria falso
+       * igualmente. Por eso `true` exige LAS DOS cosas —cierre `aprobado` Y flete por rechazo
+       * mayor que cero— y `false` cubre los dos casos en que la frase no se puede escribir en
+       * pasado: todavia no se aprueba, o no hay nada que cobrar.
+       */
+      fleteRechazoYaCobradoATienda: boolean;
+      /**
        * Feature 264 (R7) — las ordenes que el corte barrio al crear ESTE cierre y ningun otro.
        * `[]` significa «no hubo ninguna» SOLO si `sinGestionRegistrado` es `true`.
        */

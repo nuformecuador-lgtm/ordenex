@@ -358,6 +358,40 @@ export function pagoTiendaOrdenex(
 }
 
 /**
+ * Feature 395 — LO QUE LA TIENDA GANA EN TOTAL con un cierre: lo recaudado menos TODO lo que
+ * Ordenex le factura (`totalesIngresoOrdenex().total`), incluido el flete por rechazo + IVA.
+ *
+ * **NO ES `pagoTiendaOrdenex`, y confundirlas es exactamente el fallo que esta ficha arregla.**
+ * Son dos preguntas distintas sobre el mismo cierre:
+ *
+ *   `pagoTiendaOrdenex`  = lo que se le paga DE ESTE DINERO. No resta el flete por rechazo
+ *                          porque ese flete nunca entro en lo recaudado (un rechazo no cobra
+ *                          COD): se le cobra APARTE, contra su wallet.
+ *   `ganaLaTienda`       = lo que le queda DESPUES de que tambien le cobren aquello. Es el
+ *                          resultado, no el desembolso de hoy.
+ *
+ * Con las cifras reales de produccion del 2026-09-08 la diferencia son ₡10.848,00:
+ * se le pagan 225.176,33 y gana 214.328,33, sobre 285.275,00 recaudados.
+ *
+ * EXISTE POR LA IDENTIDAD QUE HACE EVIDENTE LA PANTALLA, y que hasta hoy no se podia leer en
+ * ningun sitio —el humano la estaba calculando a mano cada vez que miraba el cierre—:
+ *
+ *   lo que gana la tienda  +  lo que factura Ordenex  =  lo recaudado
+ *        214.328,33        +        70.946,67         =    285.275,00
+ *
+ * Se deriva aca, y no restando dos celdas en el navegador, por el mismo motivo que sus
+ * hermanas: si divergieran, la misma plata se leeria distinta segun por que pantalla se entra.
+ *
+ * Puede ser NEGATIVO —un cierre de puros rechazos factura y no recauda— y se devuelve CON SU
+ * SIGNO, nunca recortado a "0.00": un cero diria «no gana ni pierde», que es falso.
+ *
+ * Money-safe: resta con Prisma.Decimal sobre STRING, salida STRING escala 2.
+ */
+export function ganaLaTienda(totalGeneral: string, ingresoTotal: string): string {
+  return new Prisma.Decimal(totalGeneral).minus(ingresoTotal).toFixed(2);
+}
+
+/**
  * Feature 393 (R7/R10, design §3) — LA LINEA PUENTE de la cascada «de quien es el dinero»:
  * lo que Ordenex cobra SOBRE LO RECAUDADO, o sea el subconjunto DEDUCIBLE de lo facturado
  * (flete + IVA y comision COD + IVA, los dos de las entregadas).
