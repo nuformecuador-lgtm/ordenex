@@ -96,8 +96,13 @@ const RAIZ = path.resolve(__dirname, "../..");
  * de "arreglarse" por el camino.
  */
 function centimosPintados(pintado: string): bigint {
-  const negativo = pintado.trimStart().startsWith("-");
-  const sinSigno = negativo ? pintado.trimStart().slice(1) : pintado.trim();
+  const texto = pintado.trim();
+  const negativo = texto.startsWith("-");
+  // FICHA 393: una línea de cascada pinta su OPERADOR pegado al importe, y uno de
+  // ellos es el `+` de la línea que suma (`+₡500,75`). Se le quita igual que al
+  // `-`, pero sólo el segundo cambia el valor. Sin esto el parseador rechazaría
+  // una cadena que la app SÍ pinta, y el caso caería por el motivo equivocado.
+  const sinSigno = negativo || texto.startsWith("+") ? texto.slice(1) : texto;
   expect(sinSigno.startsWith(monedaConfig.simbolo), `«${pintado}» no es un importe`).toBe(true);
   const cuerpo = sinSigno.slice(monedaConfig.simbolo.length);
 
@@ -473,8 +478,62 @@ vi.mock("@/lib/actions/liquidacion", () => ({
   previsualizarRepartoMensajeroAction: (...args: unknown[]) => previsualizarMock(...args),
   registrarRepartoMensajeroAction: vi.fn(),
 }));
+// FICHA 393 — las dos superficies del cierre de bodega que entran al censo (B4 y B5). Los
+// bordes se doblan porque lo que se mide aquí es lo PINTADO, no de dónde viene el dato.
+vi.mock("@/lib/actions/cierre-bodega", () => ({
+  verCierreBodegaDetalle: vi.fn(),
+  aprobarCierreBodega: vi.fn(),
+  rechazarCierreBodega: vi.fn(),
+  listarPendientesCierresBodegaPaginado: vi.fn(),
+  listarPendientesCierresBodegaCompleto: vi.fn(),
+  listarHistoricoCierresBodegaPaginado: vi.fn(),
+  listarHistoricoCierresBodegaCompleto: vi.fn(),
+  listarGestionesCierresBodegaCompleto: vi.fn(),
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+  usePathname: () => "/cierres-admin",
+  useSearchParams: () => new URLSearchParams(),
+}));
+vi.mock("@/hooks/useToast", () => ({
+  useToast: () => ({
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    show: vi.fn(),
+    dismiss: vi.fn(),
+  }),
+}));
 // eslint-disable-next-line import/first
 import { RepartoPrevisualizacion } from "@/app/(app)/wallet/mensajeros/_components/RepartoPrevisualizacion";
+import userEvent from "@testing-library/user-event";
+import {
+  verCierreBodegaDetalle,
+  listarHistoricoCierresBodegaPaginado,
+  listarPendientesCierresBodegaPaginado,
+} from "@/lib/actions/cierre-bodega";
+import { CierreBodegaFacturaResumen } from "@/app/(app)/cierres-admin/_components/cierre-factura";
+import { CierresBodegaAdminModule } from "@/app/(app)/cierres-admin/_components/CierresBodegaAdminModule";
+import {
+  CASCADA_CENTRAL_TITULO,
+  CASCADA_DUENO_TITULO,
+  COBRADO_SOBRE_RECAUDADO_LABEL,
+  FACTURADO_ORDENEX_LABEL,
+  GANA_BODEGA_SATELITE_LABEL,
+  NETO_ORDENEX_LABEL,
+  PARA_LA_CENTRAL_LABEL,
+  PARA_LA_TIENDA_LABEL,
+} from "@/app/(app)/cierres-admin/_components/cierre-labels";
+import {
+  COMISION_CON_IVA_LABEL,
+  FLETE_CON_IVA_LABEL,
+  FLETE_DEV_CON_IVA_LABEL,
+  PAGO_MENSAJERO_LABEL,
+  TOTAL_GENERAL_LABEL,
+} from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
+import type { CierreBodegaResumen } from "@/lib/interfaces/services/ICierreBodegaService";
+import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 
 /**
  * El reparto que EXCEDE: se teclean 9.000 y el imputable real es 4.500,35. El
@@ -565,6 +624,232 @@ describe("ficha 359 · B3 — reparto al mensajero: el máximo que se anuncia es
       [tras("Queda pendiente"), tras("Se aplica")],
       tras("Pendiente hoy"),
       "reparto: pendiente − aplicado",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FICHA 393 — LAS DOS CASCADAS DEL CIERRE DE BODEGA
+//
+// Entran al censo por lo que son: cuatro identidades de dinero que el usuario ve
+// RESTADAS en pantalla. Y se comprueban aquí, sobre las CADENAS pintadas, y no
+// sobre los `Decimal` de origen, porque comprobarlo contra la función que las
+// genera sería una aserción contra su propia fuente: siempre verde, y el arreglo
+// se quedaría en cosmético.
+//
+// Los importes llevan CÉNTIMOS. Con cifras redondas las cuatro cerrarían igual
+// aunque la pantalla cuadrara al colón, que es exactamente el defecto que este
+// archivo mata.
+//
+//   R6  recaudado − flete − comisión            = para la tienda
+//   R7  cobrado + flete por rechazo             = lo que Ordenex facturó
+//   R8  facturado − mensajeros − gana la bodega = neto de Ordenex
+//   R9  recaudado − mensajeros − gana la bodega = para la central
+// ---------------------------------------------------------------------------
+
+const BODEGA_TOTALES = {
+  efectivo: "100000.17",
+  simpe: "26089.00",
+  transferencia: "0.00",
+  general: "126089.17",
+};
+
+const BODEGA_CABECERA: CierreBodegaResumen = {
+  cierreBodegaId: "b1b1b1b1-1111-4111-8111-b1b1b1b1b1b1",
+  zonaId: "33333333-3333-4333-8333-333333333333",
+  zonaNombre: "Limón",
+  solicitadoPorId: "u1",
+  solicitadoPorNombre: "Sara Satélite",
+  estado: "solicitado",
+  totales: BODEGA_TOTALES,
+  totalPagoMensajero: "14000.55",
+  totalIngresoBodegaRechazos: "250.25",
+  cantidadCierres: 1,
+  solicitadoAt: "2026-09-01T10:00:00.000Z",
+  resueltoAt: null,
+  motivoRechazo: null,
+  // 126089.17 − 14000.55 − 250.25, derivado por el servidor.
+  paraLaCentral: "111838.37",
+  efectivoCubreDescuentos: true,
+};
+
+/** El importe pintado que sigue a un rótulo dentro de una región. */
+function importeTrasEn(region: HTMLElement, rotulo: string): string {
+  const texto = region.textContent ?? "";
+  const desde = texto.indexOf(rotulo);
+  expect(desde, `«${rotulo}» no está en la región`).toBeGreaterThanOrEqual(0);
+  const hallado = texto.slice(desde + rotulo.length).match(PATRON_CASCADA);
+  expect(hallado, `no hay importe junto a «${rotulo}»`).not.toBeNull();
+  return hallado![0];
+}
+
+/**
+ * El patrón de la parte B no vale tal cual para una cascada: sus líneas llevan el
+ * OPERADOR pegado al importe (`-₡14.000,55`, `+₡0`), y `PATRON_IMPORTE` sólo
+ * admite el menos. Sin el `+`, un `+₡0` se leería «₡0» y una aserción sobre el
+ * operador pasaría por casualidad.
+ */
+const PATRON_CASCADA = new RegExp(
+  `[+-]?${monedaConfig.simbolo}\\d[\\d${monedaConfig.separadorMiles}]*(?:${monedaConfig.separadorDecimal}\\d\\d)?`,
+);
+
+describe("ficha 393 · B4 — la TARJETA del cierre de bodega: la cascada a la central", () => {
+  it("recaudado − mensajeros − gana la bodega = para la central, leído del DOM (R9/R18)", async () => {
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <CierreBodegaFacturaResumen cierre={BODEGA_CABECERA} />
+      </SWRConfig>,
+    );
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Ver detalles del cierre de bodega de Limón",
+      }),
+    );
+    const cascada = screen.getByRole("region", { name: CASCADA_CENTRAL_TITULO });
+
+    laCuentaCierra(
+      [
+        importeTrasEn(cascada, "Total"),
+        importeTrasEn(cascada, PAGO_MENSAJERO_LABEL),
+        importeTrasEn(cascada, GANA_BODEGA_SATELITE_LABEL),
+      ],
+      importeTrasEn(cascada, PARA_LA_CENTRAL_LABEL),
+      "tarjeta de bodega: para la central",
+    );
+
+    // Y la cifra que se lee es la del servidor, no una redondeada al colón: el
+    // síntoma que la ficha 230 dejó suelto por trece pantallas.
+    const resultado = importeTrasEn(cascada, PARA_LA_CENTRAL_LABEL);
+    expect(centimosPintados(resultado)).toBe(centimosDelServidor("111838.37"));
+    expect(resultado).not.toBe(money("111838"));
+  });
+});
+
+describe("ficha 393 · B5 — el DETALLE del cierre de bodega: las cuatro identidades", () => {
+  const TOTALES_INGRESO = {
+    montoCobrar: "0.00",
+    fleteConIva: "23000.33",
+    comisionConIva: "4134.50",
+    fleteDevolucionConIva: "500.75",
+    total: "27635.58",
+    flete: "23000.33",
+    ivaFlete: "0.00",
+    fleteDevolucion: "500.75",
+    ivaFleteDevolucion: "0.00",
+    comisionCod: "4134.50",
+    ivaComisionCod: "0.00",
+  };
+
+  async function abrir() {
+    vi.mocked(listarPendientesCierresBodegaPaginado).mockResolvedValue({
+      status: "ok",
+      page: 1,
+      ...paginaInicial([BODEGA_CABECERA]),
+    });
+    vi.mocked(listarHistoricoCierresBodegaPaginado).mockResolvedValue({
+      status: "ok",
+      page: 1,
+      ...paginaInicial([]),
+    });
+    vi.mocked(verCierreBodegaDetalle).mockResolvedValue({
+      status: "ok",
+      cierre: BODEGA_CABECERA,
+      cierres: [],
+      totalesIngreso: TOTALES_INGRESO,
+      ganancia: "13635.03",
+      // 126089.17 − 23000.33 − 4134.50 (el flete por rechazo NO se resta: no salió
+      // de lo recaudado, y por eso existe la línea puente).
+      pagoTienda: "98954.34",
+      cobradoSobreRecaudado: "27134.83",
+      netoOrdenex: "13384.78",
+      paraLaCentral: "111838.37",
+      efectivoCubreDescuentos: true,
+    });
+
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <CierresBodegaAdminModule
+          pendientes={paginaInicial([BODEGA_CABECERA])}
+          historico={paginaInicial([])}
+        />
+      </SWRConfig>,
+    );
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Ver / decidir el cierre de bodega de Limón",
+      }),
+    );
+    return {
+      central: await screen.findByRole("region", {
+        name: `${CASCADA_CENTRAL_TITULO} · cierre de bodega`,
+      }),
+      dueno: screen.getByRole("region", {
+        name: `${CASCADA_DUENO_TITULO} · cierre de bodega`,
+      }),
+    };
+  }
+
+  it("R6 — recaudado − flete − comisión = para la tienda", async () => {
+    const { dueno } = await abrir();
+    laCuentaCierra(
+      [
+        importeTrasEn(dueno, TOTAL_GENERAL_LABEL),
+        importeTrasEn(dueno, FLETE_CON_IVA_LABEL),
+        importeTrasEn(dueno, COMISION_CON_IVA_LABEL),
+      ],
+      importeTrasEn(dueno, PARA_LA_TIENDA_LABEL),
+      "detalle de bodega: para la tienda",
+    );
+  });
+
+  it("R7 — cobrado sobre lo recaudado + flete por rechazo = lo que Ordenex facturó", async () => {
+    const { dueno } = await abrir();
+    laCuentaCierra(
+      [
+        importeTrasEn(dueno, COBRADO_SOBRE_RECAUDADO_LABEL),
+        importeTrasEn(dueno, FLETE_DEV_CON_IVA_LABEL),
+      ],
+      importeTrasEn(dueno, FACTURADO_ORDENEX_LABEL),
+      "detalle de bodega: línea puente",
+    );
+
+    // LA RAZÓN DE SER DE LA LÍNEA PUENTE, medida: sin ella, la resta que quedaría a
+    // la vista NO da. El hueco es exactamente el flete por rechazo.
+    const recaudado = centimosPintados(importeTrasEn(dueno, TOTAL_GENERAL_LABEL));
+    const facturado = centimosPintados(importeTrasEn(dueno, FACTURADO_ORDENEX_LABEL));
+    const tienda = centimosPintados(importeTrasEn(dueno, PARA_LA_TIENDA_LABEL));
+    expect(recaudado - facturado).not.toBe(tienda);
+    expect(tienda - (recaudado - facturado)).toBe(centimosDelServidor("500.75"));
+  });
+
+  it("R8 — facturado − mensajeros − gana la bodega = neto de Ordenex", async () => {
+    const { dueno } = await abrir();
+    laCuentaCierra(
+      [
+        importeTrasEn(dueno, FACTURADO_ORDENEX_LABEL),
+        importeTrasEn(dueno, PAGO_MENSAJERO_LABEL),
+        importeTrasEn(dueno, GANA_BODEGA_SATELITE_LABEL),
+      ],
+      importeTrasEn(dueno, NETO_ORDENEX_LABEL),
+      "detalle de bodega: neto de Ordenex",
+    );
+  });
+
+  it("R9 — recaudado − mensajeros − gana la bodega = para la central, y es la MISMA cifra que la tarjeta", async () => {
+    const { central } = await abrir();
+    laCuentaCierra(
+      [
+        importeTrasEn(central, TOTAL_GENERAL_LABEL),
+        importeTrasEn(central, PAGO_MENSAJERO_LABEL),
+        importeTrasEn(central, GANA_BODEGA_SATELITE_LABEL),
+      ],
+      importeTrasEn(central, PARA_LA_CENTRAL_LABEL),
+      "detalle de bodega: para la central",
+    );
+    expect(centimosPintados(importeTrasEn(central, PARA_LA_CENTRAL_LABEL))).toBe(
+      centimosDelServidor(BODEGA_CABECERA.paraLaCentral),
     );
   });
 });
@@ -704,8 +989,8 @@ describe("ficha 359 · C — el resto del censo, por su propia etiqueta", () => 
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Las TRECE pantallas del censo de la ficha 359, cada una con la identidad que
- * enseña. Si un archivo se mueve o se borra, este test cae en vez de dejar de
+ * Las pantallas del censo: TRECE de la ficha 359 y dos más de la 393, cada una con
+ * la identidad que enseña. Si un archivo se mueve o se borra, este test cae en vez de dejar de
  * mirar en silencio; y si alguna dejara de pasar por el formateador compartido,
  * las partes B y C estarían probando una función que ya nadie llama.
  */
@@ -759,6 +1044,17 @@ const CENSO: readonly { ruta: string; identidad: string }[] = [
     ruta: "app/(app)/ordenes/_components/OrdenesConMontoAjustadoTabla.tsx",
     identidad: "el monto original y el aplicado, con su diferencia visible",
   },
+  // FICHA 393 — las dos superficies de las cascadas del cierre de bodega. La tarjeta
+  // no estrena archivo (vive en `cierre-factura.tsx`, ya censado por la identidad de
+  // los métodos de pago); lo que estrena son ESTAS dos.
+  {
+    ruta: "app/(app)/cierres-admin/_components/CascadaDinero.tsx",
+    identidad: "los sumandos de una cascada, con su operador, dan su resultado destacado",
+  },
+  {
+    ruta: "app/(app)/cierres-admin/_components/CierresBodegaAdminModule.tsx",
+    identidad: "las dos cascadas: para la tienda, neto de Ordenex y para la central",
+  },
 ];
 
 /** Un uso del formateador compartido, por cualquiera de sus nombres. */
@@ -792,17 +1088,20 @@ function importadosPor(rutaRelativa: string): string[] {
   return destinos;
 }
 
-describe("ficha 359 · D — el censo de las trece pantallas", () => {
-  it("las trece existen, no se repiten y cada una declara su identidad", () => {
-    expect(CENSO.length).toBe(13);
-    expect(new Set(CENSO.map((c) => c.ruta)).size).toBe(13);
+describe("ficha 359 · D — el censo de las pantallas de dinero", () => {
+  it("las quince existen, no se repiten y cada una declara su identidad", () => {
+    // Trece hasta la ficha 393, que añade las dos superficies de las cascadas del
+    // cierre de bodega. El número es una FOTO a propósito: una pantalla de dinero
+    // nueva tiene que pasar por aquí, no colarse en silencio.
+    expect(CENSO.length).toBe(15);
+    expect(new Set(CENSO.map((c) => c.ruta)).size).toBe(15);
     for (const { ruta, identidad } of CENSO) {
       expect(existsSync(path.join(RAIZ, ruta)), `${ruta} no existe`).toBe(true);
       expect(identidad.length, `${ruta} está censada sin identidad`).toBeGreaterThan(15);
     }
   });
 
-  it("las trece pintan su dinero con el formateador compartido, no con uno propio", () => {
+  it("las quince pintan su dinero con el formateador compartido, no con uno propio", () => {
     const sinFormateador: string[] = [];
     for (const { ruta } of CENSO) {
       const propio = USA_EL_FORMATEADOR.test(readFileSync(path.join(RAIZ, ruta), "utf8"));

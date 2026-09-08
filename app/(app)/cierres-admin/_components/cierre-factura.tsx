@@ -70,6 +70,16 @@ import {
   INGRESO_TOTAL_LABEL,
   INGRESO_PANEL_LABEL,
   MensajeroBloqueadoBadge,
+  // Feature 393 (F3) — los rotulos y las notas de la cascada «lo que va a la central». Se piden
+  // por la misma puerta que el resto (`cierre-detalle-shared` re-exporta lo que vive en el
+  // modulo puro `cierre-labels`), asi que la tarjeta y el archivo de la descarga leen el MISMO
+  // texto y no pueden decir cosas distintas (R22/R23).
+  CASCADA_CENTRAL_TITULO,
+  PARA_LA_CENTRAL_LABEL,
+  GANA_BODEGA_SATELITE_LABEL,
+  PARA_LA_CENTRAL_NOTA,
+  PARA_LA_CENTRAL_NEGATIVO_NOTA,
+  EFECTIVO_NO_CUBRE_NOTA,
 } from "./cierre-detalle-shared";
 // Feature 213 (T6/T7): el desglose de pago se formatea en UN solo sitio (R25).
 import { desglosePantalla } from "./desglose-pago";
@@ -419,32 +429,76 @@ function esMontoCero(monto: string): boolean {
   return /^-?0(\.0+)?$/.test(monto.trim());
 }
 
-/** Renglón `concepto ..... monto` del desplegable compacto. El monto en cero va apagado. */
+/**
+ * Feature 393 (F3/R5) — el importe de una linea de cascada, con su OPERADOR delante.
+ *
+ * Mismo criterio que `CascadaDinero` del detalle, y por el mismo motivo: el operador va PEGADO
+ * al importe para que la cadena tenga la forma de un importe con signo y la guardia de
+ * identidades de la 359 pueda leer las cuatro lineas del DOM y comprobar que la resta DA (R9).
+ * Restar un importe que ya viene negativo invierte el operador y quita su signo —restar un
+ * negativo suma— en vez de encadenar dos signos: es una regla sobre el TEXTO, no aritmetica.
+ */
+function conOperador(monto: string, resta: boolean): string {
+  const pintado = money(monto);
+  const negativo = esMontoNegativo(monto);
+  const sinSigno = pintado.startsWith("-") ? pintado.slice(1) : pintado;
+  const operador = resta === negativo ? "+" : "-";
+  return `${operador}${sinSigno}`;
+}
+
+/**
+ * Renglón `concepto ..... monto` del desplegable compacto. El monto en cero va apagado.
+ *
+ * Feature 393 (F3): `resta` y `destacado` son OPCIONALES y por defecto no hacen nada, así que
+ * las tres superficies que ya montaban esta línea —el cierre de mensajero del admin, el propio
+ * del mensajero y el `cierre_dia` consolidable— se pintan EXACTAMENTE igual que antes (R21).
+ * Un resultado negativo va en tono de atención: nunca se recorta a cero (R36).
+ */
 function LineaMonto({
   label,
   monto,
   ultima = false,
-}: Readonly<{ label: string; monto: string; ultima?: boolean }>) {
+  resta = false,
+  destacado = false,
+}: Readonly<{
+  label: string;
+  monto: string;
+  ultima?: boolean;
+  /** La línea se RESTA de la cascada: se pinta con su operador delante (R5). */
+  resta?: boolean;
+  /** El resultado de la cascada, destacado frente a las líneas que lo componen (R4). */
+  destacado?: boolean;
+}>) {
   return (
     <div
       className={cn(
         "flex justify-between gap-3 py-1 text-[13px]",
         !ultima && "border-b border-dashed border-border",
+        destacado && "border-t pt-2",
       )}
     >
-      <span className="text-muted-foreground">{label}</span>
+      <span className={cn("text-muted-foreground", destacado && "font-medium text-foreground")}>
+        {label}
+      </span>
       <span
         className={cn(
           "tabular-nums",
-          esMontoCero(monto)
+          esMontoCero(monto) && !destacado
             ? "text-muted-foreground"
             : "font-medium text-foreground",
+          destacado && "font-semibold",
+          destacado && esMontoNegativo(monto) && "text-danger-strong",
         )}
       >
-        {money(monto)}
+        {resta ? conOperador(monto, true) : money(monto)}
       </span>
     </div>
   );
+}
+
+/** Nota al pie de una columna del desplegable compacto (de qué resta sale, o qué significa). */
+function NotaColumna({ children }: Readonly<{ children: ReactNode }>) {
+  return <p className="pt-2 text-xs text-muted-foreground">{children}</p>;
 }
 
 /** Rótulo de una columna del desplegable compacto. */
@@ -585,6 +639,20 @@ interface HojaResumenProps {
    * —se ve al segundo—, que es exactamente la forma en que estas fugas pasan desapercibidas.
    */
   audiencia?: CierreFacturaAudiencia;
+  /**
+   * Feature 393 (H1/R18/R38) — LA CASCADA «lo que va a la central», ya derivada por el servidor.
+   *
+   * Presente SOLO en el comprobante de un cierre de BODEGA: sustituye a la columna «Ajustes» de
+   * ESA superficie (R19) y deja las otras tres —el cierre de mensajero del admin, el propio del
+   * mensajero y el `cierre_dia` consolidable— exactamente como estaban (R21). Ausente ⇒ se pinta
+   * «Ajustes» como hoy.
+   *
+   * Es el numero que la bodega satelite necesita para OPERAR: lo que le entrega a la central. Y
+   * vive aqui, en la tarjeta, porque la satelite SOLO VE LA TARJETA —`ConsolidacionBodegaModule`
+   * monta su listado sin accion de abrir detalle—. La otra cascada, la del margen de Ordenex,
+   * NO se pasa nunca por aqui (R39).
+   */
+  cascadaCentral?: { paraLaCentral: string; efectivoCubreDescuentos: boolean };
 }
 
 /**
@@ -610,6 +678,7 @@ function HojaResumen({
   motivoRechazo,
   extra,
   audiencia = "admin",
+  cascadaCentral,
 }: Readonly<HojaResumenProps>) {
   const [open, setOpen] = useState(false);
   // Design §7.2: en la hoja del mensajero no entra la plata de la empresa.
@@ -733,23 +802,62 @@ function HojaResumen({
               />
             </section>
 
-            <section aria-label={RESUMEN_AJUSTES_TITULO}>
-              <TituloColumna>{RESUMEN_AJUSTES_TITULO}</TituloColumna>
-              <LineaMonto
-                label={etiquetaPago(esMensajero)}
-                monto={totalPagoMensajero}
-                ultima={esMensajero}
-              />
-              {/* El ingreso de bodega por rechazos es de la EMPRESA: fuera de la hoja del
-                  mensajero, igual que en su detalle (design §7.2). */}
-              {esMensajero ? null : (
+            {/* Feature 393 (R18/R19/R38): en un cierre de BODEGA esta columna deja de
+                llamarse «Ajustes» —el pago al mensajero y lo que gana la bodega NO son ajustes—
+                y pasa a contar la cascada entera: de lo recaudado, cuánto le queda a la satélite
+                para entregarle a la central. Sin `cascadaCentral` se pinta lo de siempre, que es
+                lo que hace que las otras tres superficies no cambien (R21). */}
+            {cascadaCentral === undefined ? (
+              <section aria-label={RESUMEN_AJUSTES_TITULO}>
+                <TituloColumna>{RESUMEN_AJUSTES_TITULO}</TituloColumna>
                 <LineaMonto
-                  label={INGRESO_BODEGA_RECHAZOS_LABEL}
+                  label={etiquetaPago(esMensajero)}
+                  monto={totalPagoMensajero}
+                  ultima={esMensajero}
+                />
+                {/* El ingreso de bodega por rechazos es de la EMPRESA: fuera de la hoja del
+                    mensajero, igual que en su detalle (design §7.2). */}
+                {esMensajero ? null : (
+                  <LineaMonto
+                    label={INGRESO_BODEGA_RECHAZOS_LABEL}
+                    monto={totalIngresoBodegaRechazos}
+                    ultima
+                  />
+                )}
+              </section>
+            ) : (
+              <section aria-label={CASCADA_CENTRAL_TITULO}>
+                <TituloColumna>{CASCADA_CENTRAL_TITULO}</TituloColumna>
+                {/* La primera línea REUSA el rótulo del total que ya está en esta tarjeta (D5):
+                    dos nombres para la misma cifra en la misma pantalla es justo el defecto que
+                    esta ficha viene a arreglar (R24). */}
+                <LineaMonto label={RESUMEN_TOTAL_LABEL} monto={totales.general} />
+                <LineaMonto label={PAGO_MENSAJERO_LABEL} monto={totalPagoMensajero} resta />
+                <LineaMonto
+                  label={GANA_BODEGA_SATELITE_LABEL}
                   monto={totalIngresoBodegaRechazos}
+                  resta
+                />
+                <LineaMonto
+                  label={PARA_LA_CENTRAL_LABEL}
+                  monto={cascadaCentral.paraLaCentral}
+                  destacado
                   ultima
                 />
-              )}
-            </section>
+                <NotaColumna>{PARA_LA_CENTRAL_NOTA}</NotaColumna>
+                {/* R36 — el negativo NO es un error: el pago al mensajero es fijo por entrega e
+                    independiente de lo recaudado, así que una jornada prepagada lo produce. Sin
+                    esta nota, un «−₡1.000» en una pantalla de dinero es peor que no tenerlo. */}
+                {esMontoNegativo(cascadaCentral.paraLaCentral) ? (
+                  <NotaColumna>{PARA_LA_CENTRAL_NEGATIVO_NOTA}</NotaColumna>
+                ) : null}
+                {/* R37 — el caso más frecuente, y distinto: «Para la central» sale positivo pero
+                    el EFECTIVO no cubre los descuentos porque parte entró por SINPE. */}
+                {cascadaCentral.efectivoCubreDescuentos ? null : (
+                  <NotaColumna>{EFECTIVO_NO_CUBRE_NOTA}</NotaColumna>
+                )}
+              </section>
+            )}
 
             {/* Sin `solicitadoAt` no hay columna que pintar: el DTO de los consolidables no
                 lleva fechas, y rellenarla con guiones diría «no tiene fecha» cuando lo cierto
@@ -820,6 +928,13 @@ export function CierreBodegaFacturaResumen({
       solicitadoAt={cierre.solicitadoAt}
       resueltoAt={cierre.resueltoAt}
       motivoRechazo={cierre.motivoRechazo}
+      /* Feature 393 (R20/R38): los dos datos llegan YA DERIVADOS del servidor —del mapper que
+         comparten las ocho lecturas de esta cabecera—, así que la tarjeta del maestro y la de la
+         satélite no pueden discrepar: salen del mismo sitio. Aquí no se calcula nada. */
+      cascadaCentral={{
+        paraLaCentral: cierre.paraLaCentral,
+        efectivoCubreDescuentos: cierre.efectivoCubreDescuentos,
+      }}
       extra={
         <p className="mt-3 border-t border-border pt-2 text-[13px] text-muted-foreground">
           {BODEGA_CIERRES_LABEL}:{" "}
