@@ -77,7 +77,14 @@ import {
 import { ListaComprobantes } from "./ListaComprobantes";
 import { FiltrosCierresBarra } from "./FiltrosCierresBarra";
 import { PanelConmutado } from "./PanelConmutado";
-import { destinoCierre } from "./cierre-labels";
+// FICHA 386: los nombres de las dos pestañas salieron a `cierre-labels` (módulo puro) porque
+// `FiltrosCierresBarra` también los necesita —agrupa los estados del filtro por la lista en la que
+// aparecen— y las dos superficies tienen que decir LA MISMA palabra.
+import {
+  destinoCierre,
+  TAB_PENDIENTES_LABEL,
+  TAB_RESUELTOS_LABEL,
+} from "./cierre-labels";
 // Feature 205 (T6.1): el nombre del parámetro que hace direccionable un cierre. Sale del
 // módulo compartido y no de un literal acá, porque quien construye el enlace vive en OTRA
 // pantalla (`/wallet/mensajeros`) y renombrarlo en un solo lado dejaría el enlace mudo.
@@ -192,8 +199,7 @@ interface OfertaPago {
 const TAB_PENDIENTES = "pendientes";
 const TAB_RESUELTOS = "resueltos";
 type TabCierresAdmin = typeof TAB_PENDIENTES | typeof TAB_RESUELTOS;
-const TAB_PENDIENTES_LABEL = "Pendientes";
-const TAB_RESUELTOS_LABEL = "Resueltos";
+// `TAB_PENDIENTES_LABEL` y `TAB_RESUELTOS_LABEL` se importan de `./cierre-labels` (ficha 386).
 /** Nombre accesible del conmutador. Propio: la pantalla anida varios segmentados. */
 const TABS_CIERRES_LABEL = "Cierres del día por estado";
 
@@ -976,6 +982,10 @@ export function CierresAdminModule({
         catalogo={catalogoFiltros}
         onChange={aplicarFiltros}
         disabled={pendientesCargando || historicoCargando}
+        // FICHA 386 — ÉSTA es la única pantalla que puede ofrecerlo: `estados` vive en
+        // `filtrosCierresSchema` (los cierres del DÍA). Las dos de bodega usan
+        // `filtrosCierresBodegaSchema`, que no lo declara y es `.strict()`.
+        conEstado
       />
 
       {/* ---------- Pestañas: pendientes / resueltos (pedido humano del 2026-08-16) ----------
