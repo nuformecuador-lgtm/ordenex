@@ -388,9 +388,13 @@ cierra la pestaña, ese «`𝕠rfirio` → `orfirio`» ya no existe en ningún s
 humano la pide, es una fila en `historial_accion` (ficha 362) — que **tampoco** pediría migración.
 Ver **Q4**.
 
-**El gate rápido no se debería negar** con este diff (no toca migraciones, `db/schema.prisma`,
-`lib/types/` de dominio ni configuración de build). Se corre el completo igualmente por ser pre-PR y
-por tocar `lib/`.
+**El gate rápido SE NIEGA con este diff, y es obligatorio el completo.** *(Corregido el 2026-09-07
+tras la revisión, menor 2. La frase anterior decía lo contrario —«no se debería negar … no toca
+`lib/types/` de dominio»— y era **falsa**: el diseño escribe `TextoNormalizado` y
+`RowResult.textoNormalizado` en `lib/types/carga-masiva.ts`, y `docs/verification.md` pone
+`lib/types/**` entre las rutas ante las que `--rapido` **falla**, sin matiz de «de dominio». No
+tuvo consecuencia —se corrió el completo tres veces, dos el implementador y una el reviewer— pero
+es exactamente la clase de frase que el siguiente lee como permiso.)*
 
 ---
 

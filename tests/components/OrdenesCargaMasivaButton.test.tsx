@@ -7,7 +7,10 @@ import { OrdenesCargaMasivaButton } from "@/app/(app)/ordenes/_components/Ordene
 import type { OrdenesCargaUploadProps } from "@/app/(app)/ordenes/_components/OrdenesCargaUpload";
 import type { OrdenesCargaPreviewProps } from "@/app/(app)/ordenes/_components/OrdenesCargaPreview";
 import type { FilaParseada } from "@/app/(app)/ordenes/_components/carga-masiva-parser";
-import type { OrdenMontoAjustado } from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
+import type {
+  OrdenMontoAjustado,
+  OrdenTextoNormalizado,
+} from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
 import type { RowResult } from "@/lib/types/carga-masiva";
 
 // ---------------------------------------------------------------------------
@@ -124,6 +127,7 @@ function validar(payload: {
   existentes?: { numRemision: string; estatus: string | null }[];
   errores?: RowResult[];
   ajustadas?: OrdenMontoAjustado[];
+  normalizadas?: OrdenTextoNormalizado[];
   filasUnicas?: FilaParseada[];
 }) {
   act(() => {
@@ -139,6 +143,8 @@ function validar(payload: {
           }[]) ?? [],
         // Feature 304: las creadas con el monto redondeado. Vacías salvo que el caso las pida.
         ajustadas: payload.ajustadas ?? [],
+        // Ficha 383: las creadas con el texto reparado. Mismo criterio.
+        normalizadas: payload.normalizadas ?? [],
       },
       filasUnicas: payload.filasUnicas ?? [fila("REM-A", 1)],
     });

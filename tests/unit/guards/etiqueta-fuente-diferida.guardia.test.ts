@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { COBERTURA } from "@/lib/pdf/etiquetas-fuente-cobertura";
 import {
   fuenteEtiqueta,
   PESO_DECLARADO_BASE64,
@@ -133,6 +134,70 @@ describe("R13 — la fuente no entra en la carga inicial del navegador", () => {
     // Lo que si tiene es el parametro obligatorio, que es lo que hace que el
     // compilador cace a quien olvide inyectarla.
     expect(codigo).toContain("fuente: FuenteEmbebida");
+  });
+});
+
+/**
+ * ⭑ FICHA 383 (T1.3, R3) — LA PUERTA DE ENTRADA REUSA LA COBERTURA SIN ARRASTRAR EL ARTEFACTO.
+ *
+ * El agujero, medido antes de escribir una linea: la guardia de R13 de arriba solo mira dentro de
+ * `app/` y `components/`, asi que NO VE UNA LLEGADA TRANSITIVA. Y hay una a un paso:
+ * `app/(app)/ordenes/_components/OrdenesCargaUpload.tsx` importa **estaticamente y por valor**
+ * `findMissingHeaders` de `@/lib/types/carga-masiva`. Colgar de ahi la validacion de la 383
+ * habria metido los 22.592 caracteres del artefacto en el bundle inicial de `/ordenes`
+ * **sin poner nada rojo**: fallo mudo de manual, y de la familia que este repo ya tiene
+ * catalogada.
+ *
+ * Por eso el artefacto se partio en dos (`etiquetas-fuente-cobertura.ts` = solo los rangos) y por
+ * eso esta lista existe: es el camino entero de la validacion de entrada, de la puerta HTTP al
+ * predicado.
+ */
+describe("383/R3 — la validacion de entrada no puede arrastrar el programa de fuente", () => {
+  const MODULO_COBERTURA = "lib/pdf/etiquetas-fuente-cobertura.ts";
+  const CAMINO_DE_ENTRADA = [
+    "lib/utils/texto-imprimible-etiqueta.ts",
+    "lib/utils/mensaje-caracter-no-imprimible.ts",
+    "lib/types/carga-masiva.ts",
+    "lib/services/BulkOrdenService.ts",
+    "lib/services/CorregirDatosClienteService.ts",
+    MODULO_COBERTURA,
+  ];
+
+  it("ninguno de los modulos de ese camino nombra el ARTEFACTO", () => {
+    const nombran = CAMINO_DE_ENTRADA.filter((archivo) =>
+      codigoSinComentarios(archivo).includes(ARTEFACTO),
+    );
+    expect(
+      nombran,
+      "importar el artefacto desde aqui mete 22 KB de base64 en el bundle inicial de /ordenes",
+    ).toEqual([]);
+  });
+
+  it("y `lib/types/carga-masiva.ts` no importa NADA de `lib/pdf/`", () => {
+    // El que viaja al navegador. Ni siquiera el registro (que hoy no pesa): la decision de que es
+    // imprimible se toma en el servicio, no en el schema.
+    expect(codigoSinComentarios("lib/types/carga-masiva.ts")).not.toContain("@/lib/pdf/");
+  });
+
+  it("el modulo de cobertura son SOLO los rangos: no lleva el programa de fuente", () => {
+    // Sobre el fuente CRUDO, con comentarios: si algun dia alguien pega ahi el artefacto, esto
+    // lo dice aunque lo esconda en un comentario.
+    const crudo = readFileSync(path.join(RAIZ, MODULO_COBERTURA), "utf8");
+    // Se busca la FORMA del artefacto —una tirada larga de caracteres base64— y no la palabra
+    // «base64», que aparece legitimamente en la ruta del script que genera el archivo.
+    expect(crudo, "hay una tirada de base64 en el modulo de cobertura").not.toMatch(
+      /[A-Za-z0-9+/]{200,}/,
+    );
+    expect(
+      crudo.length,
+      `${MODULO_COBERTURA} ocupa ${crudo.length} chars: son 19 rangos, no un artefacto`,
+    ).toBeLessThan(4096);
+  });
+
+  it("R1 — y es LA MISMA cobertura que usa el generador del PDF, el mismo objeto", () => {
+    // Identidad referencial, no `toEqual`: dos arrays iguales hoy son dos listas que mañana
+    // divergen. Esto es lo que hace imposible mantener una segunda definicion de «imprimible».
+    expect(COBERTURA).toBe(fuenteEtiqueta.cobertura);
   });
 });
 

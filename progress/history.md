@@ -4563,3 +4563,43 @@ detectó el gate: `jq` no está instalado y su ausencia es un `warn`, así que l
   en `progress/impl_382.md`.
 - **DEUDA:** nadie ha visto el aviso en la app real, y la orden 11081885 sigue rota en produccion
   hasta que se corrija su dato (pantalla de correccion de datos del cliente, fichas 312/327).
+
+## 2026-09-07 — 383: los caracteres que la etiqueta no imprime se paran al entrar
+- Lo que la 382 dejo abierto: aquella arreglo el **mensaje** que sale cuatro dias despues; esta
+  cierra la puerta al cargar, que es el unico momento en que alguien tiene la orden delante.
+  **Repara lo reparable y rechaza lo demas**, con UNA sola definicion de «imprimible» —la misma
+  cobertura de code points que usa el generador del PDF, por identidad referencial, no por copia—.
+- Requisitos cubiertos: **R1–R21**, mapeados a test en `progress/impl_383.md` (dos tablas:
+  backend y T7). Superficies: las **dos** vias de carga masiva (sesion y API key) y la correccion
+  de datos del cliente (312/327), que es la unica donde hoy un humano teclea estos campos a mano
+  —el alta manual de ordenes no existe, y esta medido contra los archivos, no supuesto—.
+- **El hallazgo que corrige al encargo:** la ficha pedia `NFKC` a secas. Medido code point a code
+  point, `NFKC` a ciegas **saca de la fuente NUEVE de los 219 que hoy imprimen bien** —`¨ ¯ ´ µ ¸
+  ¼ ½ ¾ ˜`—, incluido uno que el diseño no preveia: `µ` (U+00B5) se convierte en la `μ` griega, o
+  sea que «5 µg» dejaria de imprimirse. La regla implementada es `NFKC` **acotado al caracter que
+  hoy no se puede imprimir**, y esta demostrablemente limitada a eso.
+- Del bloque matematico U+1D400 (el caso real, guia 11081885): **702 reparan y 322 no** — las
+  griegas normalizan a griego, que tampoco esta en la fuente. Los cuatro conteos son asercion,
+  no una foto.
+- El artefacto de fuente se partio en dos para que la validacion de entrada reuse la cobertura
+  **sin arrastrar los 22 592 caracteres de base64** al bundle inicial de `/ordenes`. La llegada
+  era transitiva por `lib/types/carga-masiva.ts` y no la veia ninguna guardia: fallo mudo de
+  manual, cazado antes de escribir la primera linea.
+- **Se ve, que era la mitad que faltaba (T7):** el preview del dry-run dice cuantas ordenes se
+  cargaran corregidas y enseña un ejemplo «lo que venia» → «lo que se guardara», con los dos
+  textos aislados en `<bdi>`. Sin reparaciones no se pinta nada: una carga normal sigue byte a
+  byte como estaba.
+- Ninguna migracion, ninguna tabla, ninguna politica de RLS. El aviso vive en la respuesta, como
+  el de `montoAjustado` (299/304), y se **cae con la fila** si la fila resulta duplicada.
+- Verificacion: `./init.sh` completo con `INIT_EXIT=0` leido **de dentro** del log, 1776 archivos,
+  26 `skipped` ajenos (17 + 9 de Analitica). **26 mutaciones, 26 muertas** entre implementador
+  (7 backend + 10 de T7 + 3 de la revision) y reviewer (9, dos suyas propias: una prueba que la
+  identidad referencial de la cobertura es real, y la otra que el veredicto de entrada cambia si
+  la cobertura cambia).
+- **Deuda declarada, con su motivo:** (1) los chips de error agrupan por mensaje canonizando lo
+  que va entre comillas simples, asi que dos caracteres distintos dan dos chips — medido que
+  canonizar `«…»` **no** lo arregla porque el `U+XXXX` los sigue separando, y agruparlos de verdad
+  es rediseño del agrupador; (2) un rechazo de texto tapa el error de geografia de la misma fila;
+  (3) el nombre de tienda y los de geografia llegan a la etiqueta y esta ficha **no** los toca
+  (ficha 392); (4) **T9 sin hacer**: nadie ha mirado la app, y en este repo esta medido que mirarla
+  encuentra lo que la suite no.

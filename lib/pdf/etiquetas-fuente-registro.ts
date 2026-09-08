@@ -23,8 +23,11 @@ export interface FuenteEmbebida {
    * ordenados. Se genera desde el propio archivo (R29): una cobertura escrita a
    * mano puede mentir, y aqui una mentira no da un aviso —da una etiqueta con el
    * importe roto, que es el bug que esta ficha cierra.
+   *
+   * Feature 383: el tipo es `Cobertura` (definido mas abajo) para que la validacion de entrada y
+   * el dibujo del PDF hablen de la misma forma de dato, no de dos estructuras parecidas.
    */
-  cobertura: readonly (readonly [number, number])[];
+  cobertura: Cobertura;
 }
 
 /**
@@ -83,13 +86,52 @@ export function seguroEnFuenteEstandar(texto: string): boolean {
   return caracterNoEscribibleEstandar(texto) === null;
 }
 
-/** ¿Cubre el subconjunto este code point? */
-export function cubreCodePoint(fuente: FuenteEmbebida, cp: number): boolean {
-  for (const [desde, hasta] of fuente.cobertura) {
+/**
+ * Feature 383 (R1) — Los rangos de cobertura, SIN el programa de fuente al lado.
+ *
+ * Es el tipo de `FuenteEmbebida["cobertura"]` extraido, y existe para que el predicado se pueda
+ * abrir por su parametro: la validacion de lo que ENTRA (`lib/utils/texto-imprimible-etiqueta.ts`)
+ * necesita la misma decision que el PDF, pero no puede arrastrar los 22 KB de datos incrustados
+ * hasta el navegador (282/R13). Ver `lib/pdf/etiquetas-fuente-cobertura.ts`.
+ */
+export type Cobertura = readonly (readonly [number, number])[];
+
+/**
+ * ¿Cubre ESTA cobertura el code point? La implementacion, UNA sola.
+ *
+ * Asume rangos ordenados y sin solapes, que es lo que el script genera y lo que el test de R29
+ * comprueba contra el `.ttf`.
+ */
+export function cubreCodePointEn(cobertura: Cobertura, cp: number): boolean {
+  for (const [desde, hasta] of cobertura) {
     if (cp < desde) return false;
     if (cp <= hasta) return true;
   }
   return false;
+}
+
+/**
+ * Primer caracter del texto que ESTA cobertura NO cubre, o `null` si los cubre todos. Recorre por
+ * code point (no por unidad UTF-16) para no partir un par suplente en dos mitades que nadie
+ * sabria interpretar.
+ */
+export function caracterNoCubiertoEn(cobertura: Cobertura, texto: string): string | null {
+  for (const caracter of texto) {
+    const cp = caracter.codePointAt(0);
+    if (cp === undefined) continue;
+    if (!cubreCodePointEn(cobertura, cp)) return caracter;
+  }
+  return null;
+}
+
+/** ¿Cabe el texto entero en ESTA cobertura? */
+export function cubreTextoEn(cobertura: Cobertura, texto: string): boolean {
+  return caracterNoCubiertoEn(cobertura, texto) === null;
+}
+
+/** ¿Cubre el subconjunto este code point? */
+export function cubreCodePoint(fuente: FuenteEmbebida, cp: number): boolean {
+  return cubreCodePointEn(fuente.cobertura, cp);
 }
 
 /**
@@ -98,12 +140,7 @@ export function cubreCodePoint(fuente: FuenteEmbebida, cp: number): boolean {
  * suplente en dos mitades que nadie sabria interpretar.
  */
 export function caracterNoCubierto(fuente: FuenteEmbebida, texto: string): string | null {
-  for (const caracter of texto) {
-    const cp = caracter.codePointAt(0);
-    if (cp === undefined) continue;
-    if (!cubreCodePoint(fuente, cp)) return caracter;
-  }
-  return null;
+  return caracterNoCubiertoEn(fuente.cobertura, texto);
 }
 
 /** ¿Puede dibujarse este texto entero con la fuente embebida? */

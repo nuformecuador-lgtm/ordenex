@@ -48,6 +48,7 @@ describe("clasificarBulkSummary — separa el resumen en tres grupos (R1, R2, R3
       expect(clasif.existentes).toEqual([]);
       expect(clasif.errores).toEqual([]);
       expect(clasif.ajustadas).toEqual([]);
+      expect(clasif.normalizadas).toEqual([]);
     }
   });
 
@@ -205,5 +206,223 @@ describe("clasificarBulkSummary — montos redondeados (feature 304)", () => {
     expect(clasif.ajustadas).toEqual([
       { fila: null, numRemision: "REM-0001", original: 11898.81, aplicado: 11899 },
     ]);
+  });
+});
+
+/**
+ * ⭑ FICHA 383 (T7.1) — LA REPARACIÓN DEL TEXTO SOBREVIVE AL VIAJE.
+ *
+ * El backend ya repara `𝕠rfirio` → `orfirio` y emite el aviso en la fila creada
+ * (`textoNormalizado`), pero hasta aquí ese aviso moría igual que murió el del monto en la 304:
+ * de una fila `creada` solo se conservaba el `numRemision`. Sin este transporte la pantalla no
+ * tiene con qué decirlo y la reparación ocurre EN SILENCIO — que es exactamente el fallo que la
+ * ficha vino a evitar («si se normaliza, tiene que verse»).
+ *
+ * Los textos van como LITERALES ESCAPADOS (`\u{1D560}` es la `𝕠` double-struck medida en
+ * producción, guía 11081885), nunca como el resultado de llamar al normalizador: una aserción
+ * contra su propia fuente estaría verde pasara lo que pasara.
+ */
+describe("clasificarBulkSummary — texto reparado (ficha 383)", () => {
+  /** El caso REAL de la guía 11081885: U+1D560 MATHEMATICAL DOUBLE-STRUCK SMALL O. */
+  const AVISO = {
+    campo: "destinatario",
+    original: "\u{1D560}rfirio",
+    aplicado: "orfirio",
+  };
+
+  it("una fila creada con `textoNormalizado` llega con campo, original y aplicado", () => {
+    const clasif = clasificarBulkSummary({
+      filas: [
+        {
+          fila: 7,
+          numRemision: "REM-0007",
+          resultado: "creada",
+          textoNormalizado: [AVISO],
+        },
+        { fila: 8, numRemision: "REM-0008", resultado: "creada" },
+      ],
+    });
+
+    expect(clasif.normalizadas).toEqual([
+      {
+        fila: 7,
+        numRemision: "REM-0007",
+        campo: "destinatario",
+        original: "\u{1D560}rfirio",
+        aplicado: "orfirio",
+      },
+    ]);
+    // Y NO deja de ser una creada: la reparación es una vista, no un cuarto grupo.
+    expect(clasif.numRemisionesNuevas).toEqual(["REM-0007", "REM-0008"]);
+    expect(clasif.errores).toEqual([]);
+    expect(clasif.existentes).toEqual([]);
+  });
+
+  it("una fila con DOS campos reparados aporta DOS avisos con la MISMA remisión", () => {
+    // Importa quién los cuenta: el preview tiene que decir «1 orden», no «2». Y si esto se
+    // aplanara a un aviso por fila, el segundo campo reparado desaparecería de la pantalla.
+    const clasif = clasificarBulkSummary({
+      filas: [
+        {
+          fila: 3,
+          numRemision: "REM-0003",
+          resultado: "creada",
+          textoNormalizado: [
+            AVISO,
+            { campo: "direccion", original: "ﬁnca 3", aplicado: "finca 3" },
+          ],
+        },
+      ],
+    });
+
+    expect(clasif.normalizadas).toHaveLength(2);
+    expect(clasif.normalizadas.map((n) => n.campo)).toEqual([
+      "destinatario",
+      "direccion",
+    ]);
+    expect(new Set(clasif.normalizadas.map((n) => n.numRemision)).size).toBe(1);
+    expect(clasif.numRemisionesNuevas).toEqual(["REM-0003"]);
+  });
+
+  it("solo cuenta la reparación de las CREADAS: una duplicada o una con error no cargó nada", () => {
+    // El backend ya borra el aviso al reclasificar una omitida a `duplicada` (T5.4); esto es la
+    // segunda vuelta de llave en el cliente. Decir «se reparó el nombre» de una orden que no se
+    // creó es la mentira exacta que mató la 294.
+    const clasif = clasificarBulkSummary({
+      filas: [
+        {
+          fila: 1,
+          numRemision: "REM-0001",
+          resultado: "duplicada",
+          estatus: "en_preparacion",
+          textoNormalizado: [AVISO],
+        },
+        {
+          fila: 2,
+          numRemision: "REM-0002",
+          resultado: "error",
+          errores: { destinatario: ["x"] },
+          textoNormalizado: [AVISO],
+        },
+      ],
+    });
+
+    expect(clasif.normalizadas).toEqual([]);
+    expect(clasif.existentes).toHaveLength(1);
+    expect(clasif.errores).toHaveLength(1);
+  });
+
+  it("un `textoNormalizado` que no es una lista de avisos completos se ignora sin lanzar", () => {
+    const basura: unknown[] = [
+      null,
+      42,
+      "orfirio",
+      {},
+      AVISO, // el aviso suelto, sin envolver en lista
+      [null],
+      [42],
+      ["orfirio"],
+      [{}],
+      [{ campo: "destinatario", original: "\u{1D560}rfirio" }],
+      [{ campo: "destinatario", aplicado: "orfirio" }],
+      [{ original: "\u{1D560}rfirio", aplicado: "orfirio" }],
+      [{ campo: "", original: "\u{1D560}rfirio", aplicado: "orfirio" }],
+      [{ campo: 7, original: "\u{1D560}rfirio", aplicado: "orfirio" }],
+      [{ campo: "destinatario", original: 7, aplicado: "orfirio" }],
+      [{ campo: "destinatario", original: "\u{1D560}rfirio", aplicado: null }],
+    ];
+
+    for (const textoNormalizado of basura) {
+      const clasif = clasificarBulkSummary({
+        filas: [
+          { fila: 1, numRemision: "REM-0001", resultado: "creada", textoNormalizado },
+        ],
+      });
+      expect(clasif.normalizadas, JSON.stringify(textoNormalizado ?? null)).toEqual([]);
+      // La fila sigue siendo una creada normal pase lo que pase con el aviso.
+      expect(clasif.numRemisionesNuevas).toEqual(["REM-0001"]);
+    }
+  });
+
+  it("una lista MIXTA conserva los avisos buenos y descarta solo los rotos", () => {
+    // Control positivo del test anterior: si el guarda tirara la lista entera en cuanto ve una
+    // entrada rota, aquel seguiría verde por vacío y esto es lo que lo caza.
+    const clasif = clasificarBulkSummary({
+      filas: [
+        {
+          fila: 1,
+          numRemision: "REM-0001",
+          resultado: "creada",
+          textoNormalizado: [null, AVISO, { campo: "telefono" }],
+        },
+      ],
+    });
+
+    expect(clasif.normalizadas).toEqual([
+      {
+        fila: 1,
+        numRemision: "REM-0001",
+        campo: "destinatario",
+        original: "\u{1D560}rfirio",
+        aplicado: "orfirio",
+      },
+    ]);
+  });
+
+  it("una reparación que no cambia el texto NO se anuncia", () => {
+    // Pintar «se cargará corregida («Ana» → «Ana»)» es un aviso que no informa de ningún
+    // cambio, o sea la pantalla que se contradice sola de las fichas 299/300 — y, sobre todo,
+    // una carga NORMAL ganando una línea que antes no tenía (R21).
+    const clasif = clasificarBulkSummary({
+      filas: [
+        {
+          fila: 1,
+          numRemision: "REM-0001",
+          resultado: "creada",
+          textoNormalizado: [{ campo: "destinatario", original: "Ana", aplicado: "Ana" }],
+        },
+      ],
+    });
+
+    expect(clasif.normalizadas).toEqual([]);
+    expect(clasif.numRemisionesNuevas).toEqual(["REM-0001"]);
+  });
+
+  it("una carga NORMAL no gana ninguna reparación (R21)", () => {
+    const clasif = clasificarBulkSummary({
+      filas: [
+        { fila: 1, numRemision: "REM-0001", resultado: "creada" },
+        { fila: 2, numRemision: "REM-0002", resultado: "duplicada" },
+      ],
+    });
+
+    expect(clasif.normalizadas).toEqual([]);
+  });
+
+  it("sin `fila` numérica el aviso sigue llegando, con `fila: null`", () => {
+    const clasif = clasificarBulkSummary({
+      filas: [
+        { numRemision: "REM-0001", resultado: "creada", textoNormalizado: [AVISO] },
+      ],
+    });
+
+    expect(clasif.normalizadas).toEqual([
+      {
+        fila: null,
+        numRemision: "REM-0001",
+        campo: "destinatario",
+        original: "\u{1D560}rfirio",
+        aplicado: "orfirio",
+      },
+    ]);
+  });
+
+  it("una creada SIN remisión no aporta un aviso que nadie podría nombrar", () => {
+    const clasif = clasificarBulkSummary({
+      filas: [{ fila: 1, resultado: "creada", textoNormalizado: [AVISO] }],
+    });
+
+    expect(clasif.normalizadas).toEqual([]);
+    expect(clasif.numRemisionesNuevas).toEqual([]);
   });
 });

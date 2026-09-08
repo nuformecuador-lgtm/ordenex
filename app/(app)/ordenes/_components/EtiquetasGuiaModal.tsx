@@ -20,10 +20,8 @@ import type {
 } from "@/lib/types/etiqueta-guia";
 
 import { ErrorEtiquetaNoCabe } from "@/lib/pdf/etiquetas-ajuste";
-import {
-  ErrorCaracterNoImprimible,
-  notacionCodePoint,
-} from "@/lib/pdf/etiquetas-fuente-registro";
+import { ErrorCaracterNoImprimible } from "@/lib/pdf/etiquetas-fuente-registro";
+import { fraseCaracterNoImprimible } from "@/lib/utils/mensaje-caracter-no-imprimible";
 
 import { EtiquetaGuia } from "./EtiquetaGuia";
 import {
@@ -100,14 +98,15 @@ export function mensajeEtiquetaNoCabe(numGuia: number | string): string {
  * Lo que NO cierra, y por eso la notación `U+XXXX` va siempre al lado: un
  * carácter de ancho cero (`U+200B`) se sigue viendo como unas comillas vacías.
  * Ahí la notación es la única lectura posible, y por eso no es opcional.
- */
-function aislado(caracter: string): string {
-  // Escapados a proposito: son invisibles, y un literal invisible en el codigo
-  // es un literal que alguien borra sin darse cuenta.
-  return `\u2068${caracter}\u2069`;
-}
-
-/**
+ *
+ * ⭑ FICHA 383 (T3.2) — ESA COMPOSICIÓN YA NO VIVE AQUÍ: es
+ * `fraseCaracterNoImprimible`, en `lib/utils/mensaje-caracter-no-imprimible.ts`,
+ * con este motivo entero escrito al lado. Se movió porque la 383 rechaza el mismo
+ * carácter EN EL SERVIDOR —al cargar un lote y al corregir una orden—, donde este
+ * componente no se puede importar: dejarlo aquí habría hecho nacer una segunda
+ * redacción del mismo aviso sin las dos precauciones que costó aprender. El
+ * literal del mensaje de abajo NO cambia ni un byte.
+ *
  * Feature 382 (R2) — Mensaje cuando un dato de UNA orden trae un carácter que la
  * tipografía de la etiqueta no puede imprimir.
  *
@@ -131,7 +130,7 @@ export function mensajeCaracterNoImprimible(
   caracter: string,
   codePoint: number,
 ): string {
-  return `La etiqueta de la guía ${numGuia} lleva un carácter que la tipografía de la etiqueta no puede imprimir: «${aislado(caracter)}» (${notacionCodePoint(codePoint)}). Reintentar no lo cambia, y ninguna etiqueta del lote se descarga mientras siga ahí: corrige ese dato en la orden ${numGuia} y escríbelo con letras y números normales.`;
+  return `La etiqueta de la guía ${numGuia} lleva un carácter que la tipografía de la etiqueta no puede imprimir: ${fraseCaracterNoImprimible(caracter, codePoint)}. Reintentar no lo cambia, y ninguna etiqueta del lote se descarga mientras siga ahí: corrige ese dato en la orden ${numGuia} y escríbelo con letras y números normales.`;
 }
 
 /** Traduce un resultado no-"ok" de la action a un mensaje para el usuario. */

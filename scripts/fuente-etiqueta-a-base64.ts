@@ -24,6 +24,18 @@ import { codePointsCubiertos } from "../tests/unit/pdf/ttf-lector";
 const RAIZ = path.resolve(__dirname, "..");
 const TTF = path.join(RAIZ, "assets", "fuentes", "LiberationSans-etiqueta-subset.ttf");
 const DESTINO = path.join(RAIZ, "lib", "pdf", "etiquetas-fuente.ts");
+// Feature 383 (T1.1) — LA COBERTURA VIVE EN SU PROPIO MODULO, y el script emite los DOS.
+//
+// Motivo, medido: la validacion de entrada de la 383 tiene que decidir «¿es imprimible?» con LA
+// MISMA cobertura que el PDF (R1), pero quien la consulta desde el servidor no puede arrastrar
+// los 22.592 caracteres del programa de fuente. Y la guardia de carga diferida (282/R13) NO lo
+// veria: solo busca el especificador literal del artefacto dentro de `app/` y `components/`, asi
+// que una llegada TRANSITIVA por `lib/types/carga-masiva.ts` —que si viaja al navegador— metia el
+// peso en el bundle inicial de `/ordenes` sin poner nada rojo.
+//
+// Sigue habiendo UNA sola cobertura y sigue DERIVADA del `.ttf` (282/R29 intacto): este script es
+// el unico que escribe las dos mitades, en la misma pasada y desde el mismo `codePointsCubiertos`.
+const DESTINO_COBERTURA = path.join(RAIZ, "lib", "pdf", "etiquetas-fuente-cobertura.ts");
 
 /** Familia con la que se registra en jsPDF y en `document.fonts`. */
 const NOMBRE = "LiberationSansEtiqueta";
@@ -71,7 +83,35 @@ function main(): void {
     .map(([a, b]) => `  [${hex(a)}, ${hex(b)}],`)
     .join("\n");
 
+  const contenidoCobertura = `// ARCHIVO GENERADO — NO EDITAR A MANO.
+//
+//   pnpm exec tsx scripts/fuente-etiqueta-a-base64.ts
+//
+// Feature 282 (R29) / 383 (R1, R3) — Los code points que el subconjunto commiteado cubre, SOLOS.
+//
+// Estan aqui y no junto al programa de fuente porque son las dos unicas cosas del artefacto que
+// tienen publicos distintos: el programa lo necesita quien DIBUJA el PDF; la cobertura la
+// necesita ademas quien VALIDA lo que entra (\`lib/utils/texto-imprimible-etiqueta.ts\`), y ese
+// camino no puede arrastrar ${base64.length} caracteres de datos incrustados hasta el navegador.
+//
+// SIGUE SIENDO UNA SOLA COBERTURA: la escribe el mismo script, en la misma pasada y desde el
+// mismo lector de TTF que comprueba el test de R29. \`fuenteEtiqueta.cobertura\` apunta a ESTA
+// constante, asi que el generador de PDF y la validacion de entrada no pueden divergir.
+
+/**
+ * Code points cubiertos por el subconjunto, en rangos INCLUSIVOS y ordenados.
+ * DERIVADO del propio archivo por el script (R29), nunca escrito a mano.
+ */
+export const COBERTURA: readonly (readonly [number, number])[] = [
+${lineasRangos}
+];
+
+/** Total de code points cubiertos: ${totalCodePoints}. */
+export default COBERTURA;
+`;
+
   const contenido = `import type { FuenteEmbebida } from "./etiquetas-fuente-registro";
+import { COBERTURA } from "./etiquetas-fuente-cobertura";
 
 // ARCHIVO GENERADO — NO EDITAR A MANO.
 //
@@ -102,14 +142,6 @@ export const PESO_DECLARADO_BYTES = ${ttf.byteLength};
 /** Longitud del base64 que viaja en el modulo. Tope de R14: 81920. */
 export const PESO_DECLARADO_BASE64 = ${base64.length};
 
-/**
- * Code points cubiertos por el subconjunto, en rangos INCLUSIVOS y ordenados.
- * DERIVADO del propio archivo por el script (R29), nunca escrito a mano.
- */
-const COBERTURA: readonly (readonly [number, number])[] = [
-${lineasRangos}
-];
-
 export const fuenteEtiqueta: FuenteEmbebida = {
   nombre: ${JSON.stringify(NOMBRE)},
   archivoVfs: ${JSON.stringify(ARCHIVO_VFS)},
@@ -122,6 +154,7 @@ export const fuenteEtiqueta: FuenteEmbebida = {
 export default fuenteEtiqueta;
 `;
 
+  writeFileSync(DESTINO_COBERTURA, contenidoCobertura, "utf8");
   writeFileSync(DESTINO, contenido, "utf8");
   process.stdout.write(
     [
@@ -130,6 +163,7 @@ export default fuenteEtiqueta;
       `base64     : ${base64.length} chars`,
       `sha256     : ${sha256}`,
       `cobertura  : ${totalCodePoints} code points en ${rangos.length} rangos`,
+      `escrito    : ${path.relative(RAIZ, DESTINO_COBERTURA)}`,
       `escrito    : ${path.relative(RAIZ, DESTINO)}`,
       "",
     ].join("\n"),

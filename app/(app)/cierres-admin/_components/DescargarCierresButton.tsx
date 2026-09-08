@@ -44,6 +44,20 @@ import {
  * pregunta que el maestro contesta cada vez, y arrancar siempre en «Resumen» conserva lo que el
  * botón simple hacía hasta hoy —un clic y el archivo—.
  *
+ * ── LOS DOS NIVELES SE REORDENAN (ficha 387, pedido humano del 2026-09-07) ───────────────
+ * Del 2026-09-05 al 2026-09-07 el detalle se montó con `permitirReordenar={false}` y una nota al
+ * pie que decía al usuario «el orden de esta hoja es fijo». El motivo era real —esa hoja emite
+ * SIEMPRE sus columnas y solo el resultado de cada fila decide cuáles se pueblan, así que el
+ * agrupado «las que siempre traen dato primero, las condicionales después» es lo que hace que una
+ * celda vacía signifique «este resultado no tiene ese dato»— pero el humano lo revirtió sabiéndolo:
+ * el selector es el mismo control en las diecisiete superficies y el detalle no puede ser la única
+ * que se comporte distinto.
+ *
+ * Lo que SOBREVIVE de aquella decisión es el ORDEN POR DEFECTO: el catálogo de la hoja fundida
+ * sigue declarado agrupado (14 + 17, `cierres-gestiones-fundida-descarga-columnas.ts`), quien no
+ * toca nada lo recibe así, y «Restablecer» devuelve a él. Lo que desaparece es la imposición —y con
+ * ella la nota, que a partir de este cambio habría sido falsa en pantalla—.
+ *
  * ── LOS FILTROS DE MENSAJERO Y RANGO: SE CONSERVAN, Y SOLO EN «DETALLE» ──────────────────
  * Se ofrecen donde ya vivían —la ventana de `DescargarGestionesDialog`— y esa ventana es lo que
  * el botón abre cuando el nivel es «Detalle». En «Resumen» el botón descarga directo, como
@@ -85,9 +99,6 @@ const COLUMNAS_LEGEND = "Columnas del archivo";
  */
 export const NIVEL_RESUMEN_LABEL = "Resumen · una fila por cierre";
 export const NIVEL_DETALLE_LABEL = "Detalle · una fila por gestión";
-/** Por qué el detalle no deja mover columnas. Se muestra bajo su lista. */
-const NOTA_ORDEN_FIJO =
-  "El orden de esta hoja es fijo: primero las columnas que siempre traen dato y después las que dependen del resultado de cada gestión. Podés ocultar las que no uses.";
 
 // --- Niveles ---------------------------------------------------------------
 
@@ -227,10 +238,6 @@ export function DescargarCierresButton({
         titulo={SELECTOR_TITULO}
         etiquetaDisparador={SELECTOR_DISPARADOR}
         encabezado={encabezadoSelector}
-        // El detalle OCULTA pero no REORDENA: el orden de esa hoja es lo que la hace legible.
-        // El resumen sí se reordena, como hasta hoy.
-        permitirReordenar={!esDetalle}
-        notaOrden={NOTA_ORDEN_FIJO}
       />
     </div>
   );
