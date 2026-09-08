@@ -3,10 +3,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import {
+  ESTADOS_FILTRO_CIERRES,
   filtrosCierresSchema,
   MAX_IDS_POR_FILTRO,
   sinFiltros,
 } from "@/lib/types/filtros-cierres";
+import { CIERRE_ESTADO_SEED } from "@/lib/types/cierre";
 import {
   listarHistoricoCierresAdminSchema,
   listarPendientesCierresAdminSchema,
@@ -21,8 +23,9 @@ const RAIZ = process.cwd();
  * listados de cierres.
  *
  * LO QUE VIGILA, en una frase: **un filtro puede quitar filas, nunca añadirlas.** El alcance —qué
- * cierres puede ver este actor— lo resuelve el servicio desde la sesión; estas cuatro claves solo
- * recortan dentro de lo que el alcance ya dejó pasar.
+ * cierres puede ver este actor— lo resuelve el servicio desde la sesión; estas claves (cuatro
+ * desde el 2026-08-16, CINCO desde la ficha 386) solo recortan dentro de lo que el alcance ya dejó
+ * pasar.
  *
  * POR QUÉ EXISTE, y por qué es una guardia y no un test de servicio: hasta esta feature el schema
  * de estos listados era `paginaInputSchema(...)` a secas, y su `.strict()` llevaba escrito un
@@ -54,12 +57,52 @@ describe("guardia: un filtro de cierres recorta dentro del alcance, nunca lo rea
       hasta: "2026-08-16",
       destinoZonaIds: [UUID],
       mensajeroIds: [UUID, OTRO_UUID],
+      // FICHA 386 (2026-09-07): la quinta clave. Está en ESTE literal a propósito — es el
+      // contrato de la lista blanca, no una copia de la fuente: si alguien quitara `estados` del
+      // schema, este `toEqual` se pondría rojo por la clave que sobra en el esperado.
+      estados: ["solicitado", "aprobado"],
     };
     expect(filtrosCierresSchema.parse(completo)).toEqual(completo);
     expect(sinFiltros(filtrosCierresSchema.parse(completo))).toBe(false);
 
+    // …y con SOLO el estado puesto tampoco es «sin filtros»: si `sinFiltros` no lo mirara, la
+    // pantalla escondería el «limpiar» de un recorte que sí está aplicado.
+    expect(sinFiltros(filtrosCierresSchema.parse({ estados: ["vencido"] }))).toBe(false);
+
     // `.strict()`: cualquier clave que no esté en la lista muere aquí.
     expect(filtrosCierresSchema.safeParse({ ...completo, loQueSea: 1 }).success).toBe(false);
+  });
+
+  it("(a2) FICHA 386 — el filtro de estado acepta los CUATRO estados del cierre y nada más", () => {
+    // `ESTADOS_FILTRO_CIERRES` se escribe en `lib/types/filtros-cierres.ts` en vez de importar
+    // `CIERRE_ESTADO_SEED` como valor: ese módulo es del BORDE y lo carga un componente
+    // `"use client"`, y el seed arrastra `cierreConfig` (lee `process.env` con clave dinámica) al
+    // bundle del navegador. El precio de esa decisión es que hay DOS listas, y esta afirmación es
+    // lo que impide que se separen: como CONJUNTO son la misma, así que un estado nuevo en el
+    // enum pone esto rojo y alguien decide si el filtro debe ofrecerlo.
+    expect([...ESTADOS_FILTRO_CIERRES].sort()).toEqual([...CIERRE_ESTADO_SEED].sort());
+
+    // Cada uno de los cuatro entra por separado — incluido `vencido`, que es el que da sentido a
+    // la ficha (separa «espera aprobación» de «lo creó el corte nocturno y hay que reenviarlo»).
+    for (const estado of CIERRE_ESTADO_SEED) {
+      const r = filtrosCierresSchema.safeParse({ estados: [estado] });
+      expect(r.success, `el estado \`${estado}\` no entró en el filtro`).toBe(true);
+    }
+    // Los cuatro a la vez también: es «todos», escrito explícito.
+    expect(filtrosCierresSchema.safeParse({ estados: [...CIERRE_ESTADO_SEED] }).success).toBe(true);
+
+    // Un valor que no es un estado muere en el BORDE, no en la consulta: sin este `z.enum`
+    // viajaría a Postgres y reventaría el enum nativo con un 500 en vez de un `validation_error`.
+    expect(filtrosCierresSchema.safeParse({ estados: ["consolidado"] }).success).toBe(false);
+    expect(filtrosCierresSchema.safeParse({ estados: [""] }).success).toBe(false);
+
+    // `[]` no es «sin filtro»: sería «los cierres de cero estados», que es siempre nada. La
+    // pantalla emite `undefined` para decir «todos», y el borde lo exige por si algún día no lo
+    // hace. Misma regla que las listas de ids.
+    expect(filtrosCierresSchema.safeParse({ estados: [] }).success).toBe(false);
+
+    // Y el SINGULAR no existe: `estado` no es una clave de este bloque.
+    expect(filtrosCierresSchema.safeParse({ estado: "aprobado" }).success).toBe(false);
   });
 
   it("(b) las claves de ALCANCE en singular no entran, ni en el bloque ni en el listado", () => {
@@ -86,7 +129,10 @@ describe("guardia: un filtro de cierres recorta dentro del alcance, nunca lo rea
     // Que el archivo acepte los mismos filtros que la página es lo que hace que «descargar»
     // signifique «esto que estoy viendo, entero». Si divergieran, el usuario con un filtro
     // puesto se llevaría un archivo que no reconoce, y nada fallaría.
-    const filtros = { desde: "2026-08-01", mensajeroIds: [UUID] };
+    // FICHA 386: `estados` viaja en el MISMO bloque, así que los cuatro puntos de entrada lo
+    // aceptan por construcción. Si alguien lo declarara suelto en el schema de una página, el
+    // archivo de esa lista dejaría de poder reproducirla y nada fallaría.
+    const filtros = { desde: "2026-08-01", mensajeroIds: [UUID], estados: ["vencido"] };
     for (const [nombre, schema] of [
       ["histórico (página)", listarHistoricoCierresAdminSchema],
       ["cola (página)", listarPendientesCierresAdminSchema],
@@ -128,6 +174,19 @@ describe("guardia: un filtro de cierres recorta dentro del alcance, nunca lo rea
       expect(cuerpo, `\`${criterio}\` dejó de leer \`filtrosWhere\``).toContain("filtrosWhere");
       expect(cuerpo, `\`${criterio}\` dejó de componer los filtros con AND`).toContain("AND:");
       expect(cuerpo, `\`${criterio}\` dejó de aplicar el alcance`).toContain("alcanceWhere");
+
+      // FICHA 386 — el mismo argumento, con la clave que MÁS duele. Estos dos criterios ya
+      // escriben `estado` como clave hermana: es el corte que decide en qué lista cae cada
+      // cierre. El recorte por estado del filtro NO puede escribirse aquí al lado —la última
+      // clave `estado` del objeto gana, y el recorte pasaría a SUSTITUIR al corte: pedir
+      // `aprobado` en pendientes devolvería aprobados—. Así que aquí debe haber EXACTAMENTE UNA
+      // mención de `estado:`, la de la lista; la del filtro vive dentro de `filtrosWhere`.
+      const menciones = cuerpo.match(/\bestado:/g) ?? [];
+      expect(
+        menciones.length,
+        `\`${criterio}\` escribe ${menciones.length} claves \`estado\`: el recorte por estado ` +
+          "se coló como clave hermana y sustituye al corte cola/histórico en vez de sumarse",
+      ).toBe(1);
     }
 
     // Y el filtro de zona se escribe DENTRO del `AND` (en `filtrosWhere`), nunca fuera.
@@ -137,6 +196,8 @@ describe("guardia: un filtro de cierres recorta dentro del alcance, nunca lo rea
     );
     expect(bloque).toMatch(/destinoZonaId:\s*\{\s*in:/);
     expect(bloque).toMatch(/mensajeroId:\s*\{\s*in:/);
+    // FICHA 386: el recorte por estado, en ese mismo bloque y por el mismo motivo.
+    expect(bloque).toMatch(/estado:\s*\{\s*in:/);
   });
 
   it("un rango de fechas invertido se rechaza en el borde, no devuelve cero filas en silencio", () => {

@@ -524,8 +524,8 @@ function alcanceWhere(alcance: Alcance): { destinoTipo: Alcance["destinoTipo"]; 
 
 /**
  * Pedido humano del 2026-08-16 — el WHERE de los FILTROS del listado (fecha, bodega destino,
- * mensajero), declarado UNA vez para los cuatro caminos que leen estos listados: las dos
- * paginas y los dos conjuntos de los que salen los archivos.
+ * mensajero) MAS el estado (ficha 386, 2026-09-07), declarado UNA vez para los cuatro caminos que
+ * leen estos listados: las dos paginas y los dos conjuntos de los que salen los archivos.
  *
  * TRES cosas que este bloque hace y que no son adorno:
  *
@@ -563,6 +563,21 @@ export function filtrosWhere(filtros: FiltrosCierres | undefined): Prisma.Cierre
   }
   if (filtros.mensajeroIds !== undefined) {
     condiciones.push({ mensajeroId: { in: [...filtros.mensajeroIds] } });
+  }
+  // FICHA 386 (2026-09-07) — el recorte por ESTADO, y va AQUI dentro por la MISMA razon del
+  // punto 1 de arriba, con la clave que mas duele: `historicoWhere` y `colaWhere` ya escriben
+  // `estado` como clave hermana (`notIn` / `in` de `ESTADOS_COLA_CIERRE_DIA`), que es lo que
+  // decide EN QUE LISTA cae cada cierre. Escrito ahi al lado, este recorte no lo acompañaria: lo
+  // SUSTITUIRIA —la ultima clave `estado` del objeto gana—, y pedir `aprobado` en la cola de
+  // pendientes devolveria los aprobados, que es exactamente lo que la ficha prohibe. Dentro del
+  // `AND` los dos criterios se exigen A LA VEZ, asi que el filtro INTERSECA con el conjunto de
+  // su lista: pedir un estado del historico dentro de pendientes da VACIO.
+  //
+  // Va el ULTIMO de las cuatro condiciones a proposito: los `*-where.test.ts` fijan el `AND`
+  // como valor absoluto y en orden, asi que añadir por delante habria puesto rojos casos que no
+  // tienen nada que ver con esta ficha.
+  if (filtros.estados !== undefined) {
+    condiciones.push({ estado: { in: [...filtros.estados] } });
   }
   return condiciones;
 }
