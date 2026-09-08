@@ -4714,6 +4714,17 @@
       "complexity": "baja",
       "branch": "feat/397-satelite-ve-el-neto-en-bodega",
       "status_note": "NACE de una decision del humano del 2026-09-08 que DEROGA la R39 de la 393. Sus palabras: «la idea es que la satelite tambien sepa como debe pagar, no le podemos ocultar detalles pues el lio esta pasando tambien desde alla». || La 393 decidio que la satelite ve lo suyo y NO el margen de Ordenex, y asi quedo el cierre de BODEGA. La 395 lo deja visible en el cierre del MENSAJERO por decision del humano. Resultado: las dos pantallas dicen cosas distintas al mismo rol. || TRABAJO: quitar el recorte por rol en el cierre de bodega, y revisar si la 393 dejo alguna guardia o test que AFIRME que la satelite no lo ve -- si existe, es un contrato y se actualiza con el motivo escrito, nunca se relaja en silencio. || CHOCA EN ARCHIVO con la 396, que tambien toca el cierre de bodega: hay que secuenciarlas."
+    },
+    {
+      "id": 398,
+      "title": "una gestion mal declarada no se puede corregir una vez solicitado el cierre",
+      "description": "Si el mensajero marca entregada una orden que fue rechazada y ya solicito el cierre, no hay vuelta atras por ninguna via.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "branch": "fix/398-corregir-gestion-con-cierre-abierto",
+      "status_note": "URGENTE, pedida por el humano el 2026-09-08: TIENE UN CIERRE QUE NO PUEDE APROBAR por esto. || MEDIDO EN EL CODIGO, no supuesto: (1) anular una gestion exige `cierreId: null` (CierreDiaRepository:1185), asi que en cuanto la gestion queda enganchada a un cierre solicitado ya no hay vuelta atras -- y ese es el UNICO sitio del repo que escribe anuladaAt; (2) la correccion de admin sobre un cierre abierto solo toca el REPARTO POR METODO DE PAGO de las entregadas, no el resultado; (3) reabrir un cierre rechazado o vencido cambia SOLO el estado, marcado money-safe, y las gestiones conservan su cierreId. || POR QUE ES DINERO: una orden marcada entregada que fue rechazada mete en el cierre plata que nadie recaudo. A la tienda se le cobran flete y comision sobre un cobro inexistente, el total_general incluye efectivo que el mensajero no tiene, y al consolidar el efectivo no cubre los pagos -- el descuadre ya medido en 2 de 14 cierres. || DECISION DEL LEADER, no del humano, y pendiente de que la corrija: SOLO admin o maestro corrigen, no el mensajero. Mueve dinero y quien se equivoco fue el. || FORMA PROBABLE: permitir deshacer con el cierre ABIERTO (solicitado o vencido) recalculando el snapshot, en vez de exigir cierreId null. El snapshot congelado al solicitar es la parte delicada."
     }
   ]
 }
