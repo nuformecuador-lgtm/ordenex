@@ -322,8 +322,9 @@ describe("descarga detallada en cierres del día (T5.1)", () => {
     const [columnas, filas, hoja] = buildXlsxRowsMock.mock.calls[0];
     expect(hoja).toBe("Gestiones de cierres");
     // 31 desde la ficha 385 (2026-09-07): las 29 anteriores más «Fecha de creación de la orden»
-    // e «Intentos de contacto de la tienda». Aquéllas eran las 27 de la 230 más «Fecha de
-    // gestión» y «Día de reparto» (2026-09-05).
+    // y una de intentos. Aquéllas eran las 27 de la 230 más «Fecha de gestión» y «Día de
+    // reparto» (2026-09-05). La ficha 394 (2026-09-08) SUSTITUYÓ la de intentos por «Intentos de
+    // entrega», así que el número sigue siendo 31.
     expect(columnas).toHaveLength(31);
     // Cinco resultados distintos, CINCO filas, en la misma hoja y con la columna que los nombra.
     expect(filas).toHaveLength(5);

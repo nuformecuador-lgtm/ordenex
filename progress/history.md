@@ -4651,3 +4651,25 @@ Sin migracion.
   no conviven -- viven en pestanas mutuamente excluyentes, y no son el mismo numero.
 - **Falta medida:** no se pudo ver el caso de linea puente distinta de cero, porque la base local
   no tiene gestiones entregadas. Dicho como falta, no como aprobado.
+
+
+## 394 — el Excel de cierres contaba los intentos que no eran (2026-09-08)
+
+Cerrada. Dos PR: #741 (servidor) y #743 (columna). Sin migracion.
+
+- **El fallo:** la columna salia de `orden.intentos_contacto`, el contador que la TIENDA registra
+  desde /novedades, cuando lo pedido eran los intentos de ENTREGA de la orden. Lo detecto el
+  humano usando la hoja, no un test.
+- **De donde viene:** al implementar la 385 quedo abierta la pregunta «de la tienda o del
+  mensajero» y se implemento sin respuesta. La ficha existe por eso.
+- **Sin COUNT propio:** se reusa `contarIntentosVigentesEnLote`. Su repositorio no comparte el
+  `Pick` del cliente Prisma con los dos de la descarga, asi que se extrajo el cuerpo a una
+  funcion que ambos llaman: la analitica y la hoja ejecutan literalmente el mismo `groupBy`.
+- **Vigentes y no totales**, firmado por el humano: es el numero con el que el sistema decide el
+  tope y con el que cobra.
+- **Una asercion actualizada, no relajada:** un test afirmaba que el campo NO existia -- era el
+  contrato de la 385, y es justo lo que se revirtio. La otra mitad de aquel razonamiento sigue
+  viva: un «intentos» a secas sigue prohibido por ambiguo.
+- **Un rojo que parecia contencion y no lo era:** un worktree sin `node_modules` propio se
+  resolvia por ancestros -- suficiente para tsc, eslint y vitest, pero no para una guardia que
+  busca una ruta literal bajo el cwd. Medido antes de concluir.
