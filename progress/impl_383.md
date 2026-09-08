@@ -8,24 +8,53 @@
 
 ## Las decisiones, y de quién son
 
-**Ninguna de estas está firmada por el humano.** Son del leader, escritas el 2026-09-07 y
-reversibles con lo que el spec dice en su tabla de asunciones.
+> ⚠️ **Actualizado el 2026-09-08.** Cuando esto se escribió, la frase de aquí abajo decía
+> «**ninguna** de estas está firmada por el humano», y era cierta. Ya no lo es para **Q1 y Q2**:
+> llegó la firma. Se corrige en vez de dejarla, porque una tabla que dice «leader» de algo que hoy
+> es del humano es exactamente la clase de dato rancio que este repo persigue — y porque T8.3
+> señala a ESTE archivo. Lo que **no** se toca es el relato: la puerta se cruzó **antes** de la
+> firma, y eso sigue escrito abajo y en `tasks.md > T4.1`.
+
+**Q1 y Q2 están FIRMADAS por el humano (2026-09-08). El resto sigue siendo del leader**, escritas
+el 2026-09-07 y reversibles con lo que el spec dice en su tabla de asunciones.
+
+La firma, literal:
+
+> «si dale, que reescriba el nombre y avise en pantalla»
+
+**No cambió una sola línea de código**: confirma lo que ya estaba implementado. Lo que cambia es de
+quién es la decisión. Y la condición —«y avise en pantalla»— es **parte de la firma**, no un extra:
+es lo que hace la línea del preview de T7.2, así que si alguien la quitara estaría deshaciendo lo
+que el humano aprobó, no un detalle de UI.
 
 | # | Decisión | Quién | Qué se implementó |
 | --- | --- | --- | --- |
-| **Q1** | **Reparar y avisar** en la carga masiva, no rechazar — pero **la reparación tiene que verse** | leader | R9/R10: la fila creada trae `textoNormalizado[]` con campo, original y aplicado |
-| **Q2** | **Sí** a un `NFC` previo | leader | `evaluarTextoDeEtiqueta` compone antes de recorrer, **solo** con `reparar: true` |
+| **Q1** | **Reparar y avisar** en la carga masiva, no rechazar — pero **la reparación tiene que verse** | **humano (2026-09-08)** | R9/R10: la fila creada trae `textoNormalizado[]` con campo, original y aplicado; y T7.2 lo pinta |
+| **Q2** | **Sí** a un `NFC` previo | **humano (2026-09-08)**, en la misma frase | `evaluarTextoDeEtiqueta` compone antes de recorrer, **solo** con `reparar: true` |
 | **Q3** | El nombre de tienda y los de geografía **salen fuera** (ficha 392) | leader | No se tocó `UsuarioService` ni `ZonaService` |
 | **Q4** | **No** hace falta rastro persistente | leader | Sin migración, sin `historial_accion`: el aviso vive en la respuesta, como `montoAjustado` |
 | **Q5** | **Sí**, los mensajes comparten la frase de diagnóstico y difieren en el cierre | leader | `fraseCaracterNoImprimible` en `lib/`, tres cierres distintos |
 | **A2** | La corrección **rechaza**, no repara | leader (spec, sin revocar) | R18: `validation_error` con el texto reparado como sugerencia |
 | **A3** | `num_remision` **no se repara nunca** | leader (spec, sin revocar) | R12: `evaluarTextoDeEtiqueta(…, { reparar: false })` |
 
-**T4.1 (la puerta):** se cruzó con Q1 respondida y con A2/A3 **no revocadas** — están escritas
-como normativas en el spec (R18 y R12), y el leader no las cambió al delegar. No se decidió nada
-nuevo aquí. La respuesta del leader llegó por el encargo, **no** está escrita en
+**T4.1 (la puerta):** se cruzó con Q1 respondida **por el leader** y con A2/A3 **no revocadas** —
+están escritas como normativas en el spec (R18 y R12), y el leader no las cambió al delegar. No se
+decidió nada nuevo aquí. La respuesta del leader llegó por el encargo, **no** está escrita en
 `progress/current.md`: ese archivo es del leader y no se toca desde una rama de agente (hay tres
 agentes más trabajando en paralelo).
+
+**Y ese orden fue el equivocado, que es lo que el reviewer levantó como bloqueante el 2026-09-07:
+el código de T5 y T6 se escribió antes de que ninguna persona hubiera visto esas respuestas.** La
+firma llegó el 2026-09-08 y confirmó Q1/Q2 sin cambiar nada, pero pudo no haberlo hecho. El relato
+completo, con las dos fechas, está en `specs/383-.../tasks.md > T4.1`.
+
+**A2 sigue SIN FIRMAR y no se ha tocado.** El reviewer **recomienda revocarla** para el caso
+canónico —que la corrección acepte la composición sin preguntar, ya que `NFC` no cambia la
+identidad de ningún carácter y por tanto seguiría siendo «el nombre que el humano tecleó»—. Es
+razonable y probablemente lo correcto, pero **es una decisión de comportamiento y espera al
+humano**: la firma de Q1 habla de la carga masiva, donde no hay nadie delante de 500 filas, no de
+la corrección, donde sí hay una persona mirando esa orden. Hoy la corrección **rechaza** y no
+escribe nada.
 
 ---
 

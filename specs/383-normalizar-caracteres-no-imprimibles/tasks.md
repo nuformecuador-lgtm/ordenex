@@ -97,17 +97,36 @@
 
 ## T4 — Punto de decisión: parar y preguntar
 
-- [ ] **T4.1 — Puerta de aprobación.** Antes de tocar `BulkOrdenService` y
+- [x] **T4.1 — Puerta de aprobación.** Antes de tocar `BulkOrdenService` y
   `CorregirDatosClienteService`, el humano tiene que responder **Q1** (¿reparar o rechazar en la
   carga?) y confirmar o revocar **A2** (la corrección rechaza) y **A3** (`num_remision` no se
   repara). T5 y T6 dependen de esa respuesta.
   **Hecho cuando:** la respuesta está escrita en `progress/current.md`. · **depende de T2, T3**
-  > ⛔ **SIN MARCAR — no está hecho, y es el bloqueante 1 de la revisión del 2026-09-07.** La
-  > puerta se cruzó **sin firma del humano**: Q1 (y de paso Q2, A2, A3) las respondió el *leader*,
-  > y la respuesta acabó en el `status_note` de `feature_list.json`, no en `progress/current.md`.
-  > El código está escrito bajo esas respuestas y la vuelta atrás de cada una es barata (tabla de
-  > asunciones de `requirements.md`: Q1 cambia R9/R10, A2 un retorno, A3 una constante). **Lo
-  > está resolviendo el leader con el humano; no se marca hasta que haya firma.**
+  > ✅ **MARCADA EL 2026-09-08 — y el orden en que pasó no fue el correcto. Se deja escrito.**
+  >
+  > **1. La puerta se cruzó primero sin firma.** El 2026-09-07, Q1 —y de paso Q2, A2 y A3— las
+  > respondió el **leader**, y su respuesta acabó en el `status_note` de `feature_list.json`, no
+  > en `progress/current.md` como pedía esta tarea. **El código de T5 y T6 se escribió bajo esas
+  > respuestas, antes de que ninguna persona las hubiera visto.** El reviewer lo levantó como
+  > bloqueante 1 el mismo día, con razón.
+  >
+  > **2. La firma humana llegó DESPUÉS, el 2026-09-08**, literal:
+  >
+  > > «si dale, que reescriba el nombre y avise en pantalla»
+  >
+  > Con eso quedan firmados **Q1** —Ordenex **puede** reescribir el nombre de un destinatario para
+  > que la etiqueta salga, **a condición de avisarlo en pantalla**— y con él la mitad de la misma
+  > pregunta, el **`NFC` previo (Q2)**. **No cambia una sola línea de código:** confirma lo que ya
+  > estaba implementado (R9/R10, y la línea del preview de T7.2 es justo el «avise en pantalla»).
+  > Lo que cambia es **de quién es la decisión**.
+  >
+  > **3. Lo que la firma NO cubre**, y sigue siendo del leader: **A2** (la corrección rechaza en
+  > vez de reparar), **A3**, **A1**, **A4**, **A5**, **A6** y **Q3/Q4/Q5**. Ver T8.3 y la tabla de
+  > asunciones de `requirements.md`, donde cada una lleva su vuelta atrás.
+  >
+  > **Por qué se marca igual:** lo que esta tarea exige —que la decisión sea del humano y esté
+  > escrita— ya se cumple para Q1/Q2. La casilla no borra el orden en que ocurrió, y por eso el
+  > orden queda aquí: **el rastro honesto vale más que la casilla**.
 
 ---
 
@@ -221,14 +240,37 @@
   `integration/db` **no** salta (si salta, falta `.env` y la corrida no vale).
   **Hecho cuando:** `INIT_EXIT=0` con los números pegados en `progress/impl_383.md`.
 
-- [ ] **T8.3 — Informe y trazabilidad.** `progress/impl_383.md` con la tabla `R → test` de abajo ya
+- [x] **T8.3 — Informe y trazabilidad.** `progress/impl_383.md` con la tabla `R → test` de abajo ya
   rellenada con los nombres reales, las mediciones de T0 y las asunciones que el humano firmó o
   revocó en T4.1. **Commitearlo** (un informe sin commitear se lo lleva el primer `git checkout`).
-  > ⛔ **SIN MARCAR, y con una sola cosa pendiente.** La tabla `R → test` con los nombres reales
-  > (dos: backend y T7), las cuatro mediciones de T0 y las mutaciones **están escritas y
-  > commiteadas** en `progress/impl_383.md`. Lo que falta es lo único que no puede existir
-  > todavía: **las asunciones que el humano firmó o revocó**, porque T4.1 sigue sin firma. Se
-  > marca cuando se marque T4.1, escribiendo ahí lo que el humano decida.
+  > ✅ **MARCADA EL 2026-09-08, al llegar lo único que faltaba.** Las dos tablas `R → test` con
+  > los nombres reales (backend y T7), las cuatro mediciones de T0 y las 26 mutaciones ya estaban
+  > escritas y commiteadas en `progress/impl_383.md`; lo que no podía existir eran **las
+  > asunciones firmadas**. Ya existen, y este es el reparto:
+  >
+  > **FIRMADAS por el humano (2026-09-08, «si dale, que reescriba el nombre y avise en pantalla»):**
+  >
+  > | # | Qué queda firmado | Dónde vive en el código |
+  > | --- | --- | --- |
+  > | **Q1** | La carga masiva **repara y avisa**, no rechaza — y la condición «avise en pantalla» es parte de la firma, no un extra | R9/R10 en `BulkOrdenService`, y la línea del preview (T7.2) |
+  > | **Q2** | El **`NFC` previo** antes de recorrer | `evaluarTextoDeEtiqueta`, solo con `reparar: true` |
+  >
+  > **SIN FIRMAR — siguen siendo del leader, cada una con su vuelta atrás** (tabla de asunciones
+  > de `requirements.md`, que es donde vive el detalle):
+  >
+  > | # | Asunción | Vuelta atrás |
+  > | --- | --- | --- |
+  > | **A2** | La corrección de datos **rechaza** en vez de reparar | Cambiar el retorno a la reparación aplicada. **El reviewer recomienda revocarla** para el caso canónico —aceptar la composición sin preguntar, porque `NFC` no cambia la identidad de ningún carácter—; **espera decisión y NO se ha tocado** |
+  > | **A1** | `NFKC` **acotado** al carácter que hoy no se imprime, no a la cadena | Quitar la guarda de R4. Es una línea; los tests de R4/R8 pasan a rojo |
+  > | **A3** | `num_remision` **no se repara nunca** | Moverlo a la lista de reparables: una constante |
+  > | **A4** | `notas` fuera de la evaluación | Añadirlo a la lista: una constante |
+  > | **A5** | **Sin rastro persistente** de la reparación | Una fila en `historial_accion` (ficha 362). No pediría migración |
+  > | **A6** | Nombre de tienda y geografía **fuera** del alcance | Ampliar a `UsuarioService.crear`/`ZonaService.crear`, o ficha aparte (**392**) |
+  > | **Q3/Q4/Q5** | Geografía fuera, sin rastro persistente, y los mensajes comparten la frase de diagnóstico | Respondidas por el leader el 2026-09-07; ninguna tiene firma |
+  >
+  > Ojo con la lectura fácil: **la firma de Q1 no arrastra a A2.** Son la misma pregunta en dos
+  > superficies distintas y el humano solo habló de la que repara — en la carga no hay nadie
+  > delante de 500 filas; en la corrección sí.
 
 - [ ] **T9 — Comprobación humana (no la hace el agente).** Subir un XLSX con tres filas: una normal,
   una con el destinatario en double-struck y una con un emoji en la dirección. Leer el preview,

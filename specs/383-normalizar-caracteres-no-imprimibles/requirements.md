@@ -217,7 +217,18 @@ Marcadas como **asunción del leader, NO firmadas por el humano**. Cada una con 
 
 ## Preguntas abiertas
 
-**Q1 — ¿Es correcto que la reparación cambie el dato del cliente en la carga masiva?**
+**Q1 — FIRMADA POR EL HUMANO el 2026-09-08. Ya no está abierta.**
+> «si dale, que reescriba el nombre y avise en pantalla»
+
+Queda firmado que la carga masiva **repara y avisa** en vez de rechazar, **con la condición de que
+se vea en pantalla** — la condición es parte de la firma, no un extra, y es lo que hace la línea
+del preview (T7.2). No cambió una sola línea de código: confirma lo que ya estaba implementado
+(R9/R10). Lo que cambia es de quién es la decisión. **Cuidado con la lectura fácil: esto NO firma
+A2**, que es la misma pregunta en la OTRA superficie (la corrección de datos, donde sí hay una
+persona delante de esa orden) y sigue siendo del leader. El texto original de la pregunta se
+conserva abajo, tal como se escribió, porque es el que el humano respondió.
+
+**Q1 (texto original) — ¿Es correcto que la reparación cambie el dato del cliente en la carga masiva?**
 La ficha lo pide («normalizar lo normalizable») y el diseño lo hace **visible** en el preview antes
 de escribir nada. Pero el resultado sigue siendo que Ordenex guarda un nombre que la tienda no
 escribió. La alternativa honesta es **rechazar también en la carga** y que la tienda corrija su
@@ -225,7 +236,13 @@ archivo (el round-trip del XLSX con `motivo_error` ya existe, ficha 143). *Recom
 leader:* reparar y avisar, porque el preview es una puerta de confirmación humana real; pero es
 decisión del humano y cambia R9/R10.
 
-**Q2 — ¿Se añade un `NFC` previo?**
+**Q2 — FIRMADA POR EL HUMANO el 2026-09-08, con la misma frase que Q1. Ya no está abierta.**
+Es la mitad de la misma pregunta: reescribir el nombre para que la etiqueta salga incluye componer
+la `ñ` que venía partida. Implementado en `evaluarTextoDeEtiqueta`, y **solo** con `reparar: true`.
+Medido además (T0.1c): sobre los 219 code points cubiertos el `NFC` es la **identidad**, o sea que
+no puede tocar un texto que hoy imprime bien. Texto original abajo.
+
+**Q2 (texto original) — ¿Se añade un `NFC` previo?**
 Un texto en forma **descompuesta** (`"n" + U+0303`, lo que produce macOS al copiar) se lee «ñ» en
 pantalla y con las reglas de arriba se **rechaza** nombrando `U+0303` — un mensaje que va a
 desconcertar a quien lo lea, porque el texto «se ve bien». `String.prototype.normalize("NFC")` es
