@@ -135,9 +135,16 @@ export function sinFiltros(filtros: FiltrosCierres | undefined): boolean {
  *    En los listados el mensajero es un recorte opcional; aqui es el conjunto mismo. Confirmar
  *    el dialogo sin nadie elegido no debe llamar al servidor, y si algun cliente lo intenta
  *    muere en el borde y no en una consulta que habria devuelto el alcance entero.
- *  - **`desde`/`hasta` no son un adorno** (R31): sin ellos el conjunto por defecto es TODO el
- *    historico del mensajero, que a grano de gestion choca contra el tope de 5000 casi de
- *    inmediato. Son la mitigacion de producto de ese riesgo, no una comodidad.
+ *  - **`desde`/`hasta` no son un adorno** (R31): son la UNICA forma de acotar este conjunto, y
+ *    sin ellos seria siempre todo el historico del mensajero. Que EXISTAN es R31; que el dialogo
+ *    los trajera RELLENOS era otra cosa, y desde la **ficha 384** (2026-09-07) ya no los trae:
+ *    aquel defecto de hoy-hoy era un filtro que el usuario no ponia y que se comia su descarga en
+ *    silencio. Asi que el conjunto por defecto SI es hoy todo el historico, a proposito.
+ *    El «choca contra el tope de 5000 casi de inmediato» que decia este parrafo se escribio en
+ *    agosto de 2026 y NO se ha vuelto a medir; lo que si esta medido es que el 2026-09-07
+ *    produccion tenia 52 cierres EN TOTAL, asi que el tope queda lejos. Y cuando deje de quedar
+ *    lejos, quien avisa es el SERVIDOR: `limite_excedido` dice el total, dice el tope y dice que
+ *    acotes el rango. Ruidoso y accionable, que es justo lo que el pre-filtro callado no era.
  *
  * El ALCANCE, como en todo este modulo, NO viaja aqui: lo resuelve el servicio desde la sesion y
  * lo compone con esto por conjuncion. Un `mensajeroIds` de otra zona no ensancha nada — da CERO

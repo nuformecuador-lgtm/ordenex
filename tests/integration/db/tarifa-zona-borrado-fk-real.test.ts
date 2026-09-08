@@ -202,7 +202,10 @@ describeSiHayBase("borrar tarifa/zona EN USO: la FK real, no la fabricada", () =
       };
     });
 
-    expect(r.salida).toEqual({ status: "conflict" });
+    // ⭑ FICHA 376 (R11): el `conflict` ahora lleva MOTIVO, y por esta via es `en_uso`. Es la
+    // contraparte del caso de la zona central (`zona-central-guarda-y-rastro.test.ts`): los dos
+    // rechazos existen, y NO son la misma palabra.
+    expect(r.salida).toEqual({ status: "conflict", motivo: "en_uso" });
     expect(r.zonaSigue).toBe(1);
   }, 60_000);
 

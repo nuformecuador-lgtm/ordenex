@@ -1,8 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { GestionResultado, PrismaClient } from "@prisma/client";
 
+import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
-import type { UpdateZonaData } from "@/lib/interfaces/repositories/IZonaRepository";
+import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
+import type { OrderStatusValue } from "@/lib/types/order-status";
+import type {
+  UpdateZonaData,
+  UpdateZonaResult,
+} from "@/lib/interfaces/repositories/IZonaRepository";
 
 import {
   HAY_BASE_DE_DATOS,
@@ -36,6 +42,41 @@ import {
  * que hacer. Un test que no encuentra datos y se va por un `return` reporta `passed` sin haber
  * comprobado nada, y este repo ya se comio ese verde. Sin base alcanzable, `describe.skip` VISIBLE.
  * Todo ocurre dentro de una transaccion que SIEMPRE se revierte: la base local es compartida.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════
+ * ⭑ FICHA 377 / T2 + T5 — EL EJE QUE ESTE ARCHIVO NO VARIABA: EL ESTADO DE LA ORDEN
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠️ `FKS.estatusId` SALE DE UN `findFirst` SIN `orderBy` sobre `orden` (`_postgres-real.ts`,
+ * `fksDeOrden`): es un estado ARBITRARIO Y NO DETERMINISTA, el mismo para todas las ordenes
+ * semilla. Sirve de RELLENO para los casos que no miran el estado y NO VALE para ninguno que si
+ * lo mire. Que las 17 ordenes de la 366 compartieran ese estado unico es EXACTAMENTE el hueco por
+ * el que el defecto de la 377 —una orden ya en el estante de una satelite cambiando de zona— entro
+ * en `dev` con la suite en verde.
+ *
+ * Por eso `crearOrden` acepta ahora `estatusValue`, que se resuelve contra el catalogo REAL con
+ * `findUniqueOrThrow`: si el catalogo no esta sembrado, REVIENTA con nombre y apellido en vez de
+ * reportar `passed`. Sin `estatusValue` el comportamiento es el de siempre, asi que los 17 casos
+ * de la 366 no se editan.
+ *
+ * MUTACIONES EJECUTADAS A MANO DURANTE EL DESARROLLO (2026-09-07), cada una contra este archivo
+ * MAS `tests/unit/repositories/zona-repository.test.ts`. Los conteos son los medidos, no los
+ * esperados:
+ *   · quitar `estatus: { value: { notIn: ESTANTE } }` del `findMany` -> 6 rojos, entre ellos «en
+ *     el estante NO se mueve» y «la bodega que TIENE el paquete lo sigue viendo».
+ *   · `notIn` -> `in` en ese mismo `findMany` -> 24 rojos: los 11 de la 366 (que es exactamente
+ *     lo que impide que este corte se invierta a costa de la 366) y los 8 de la 377.
+ *   · quitar `estatus: { value: { in: ESTANTE } }` del `count` -> 8 rojos, entre ellos «sin nada
+ *     en el estante, las retenidas son 0» y «los dos conteos son DISJUNTOS».
+ *     ⚠️ «el conteo cuenta lo que dice contar» NO se cae con esta mutacion, y es correcto: sus
+ *     cuatro ordenes estan TODAS en el estante, asi que el `where` base ya deja 1 sola con o sin
+ *     la clausula. Ese caso mide el `where` BASE del conteo, no su clausula de estado.
+ *   · usar `ESTADOS_CUSTODIA_SATELITE` en vez de `ESTADOS_PAQUETE_EN_ESTANTE` -> 3 rojos, entre
+ *     ellos «en transito SI se reconcilia»: es la confusion que el docstring de la constante
+ *     avisa, y aqui se cae.
+ *   · quitar `cierreDetalles: { none: {} }` de `whereBaseElegible` (el refactor de la 377) -> 3
+ *     rojos, entre ellos el «YA FACTURADA» de la 366: extraer el `where` a una funcion no dejo
+ *     ningun corte sin vigilar.
  */
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
@@ -53,6 +94,21 @@ function datosDeZona(nombre: string, distritoIds: string[]): UpdateZonaData {
   return { nombre, cobroVehiculo: false, esCentral: false, distritoIds, tarifas: [] };
 }
 
+/**
+ * FICHA 376: el desenlace de `update` viaja NOMBRADO. Falla RUIDOSAMENTE si no es `ok` — devolver
+ * `undefined` dejaria pasar por vacuidad un `sin_zona_central` que nadie esperaba aqui.
+ */
+function reconciliadasDe(res: UpdateZonaResult): number {
+  if (res.estado !== "ok") throw new Error(`se esperaba \`ok\` y llego \`${res.estado}\``);
+  return res.ordenesReconciliadas;
+}
+
+/** FICHA 377 (R8): el otro conteo, con la misma exigencia de desenlace `ok`. */
+function retenidasDe(res: UpdateZonaResult): number {
+  if (res.estado !== "ok") throw new Error(`se esperaba \`ok\` y llego \`${res.estado}\``);
+  return res.ordenesRetenidasEnBodegaSatelite;
+}
+
 interface Escenario {
   tx: TxDeTest;
   repo: ZonaRepository;
@@ -63,7 +119,19 @@ interface Escenario {
     distritoId: string | null;
     zonaId: string;
     borrada?: boolean;
+    /**
+     * FICHA 377 (T2): el estado de la orden, resuelto contra el catalogo REAL. Ausente = el
+     * `FKS.estatusId` de siempre, que es arbitrario y NO sirve para mirar el estado.
+     */
+    estatusValue?: OrderStatusValue;
   }) => Promise<string>;
+  /**
+   * FICHA 377 (R4): una entrada de `orden_historial_estado` con el DESTINO que se le diga. Es la
+   * EVIDENCIA de haber pasado por una bodega, que es cosa distinta del estado ACTUAL.
+   */
+  crearHistorialEstado: (ordenId: string, destino: OrderStatusValue) => Promise<void>;
+  /** El estado ACTUAL de una orden, por su `value` de catalogo. */
+  estadoDe: (ordenId: string) => Promise<string>;
   crearGestion: (
     ordenId: string,
     resultado: GestionResultado,
@@ -140,14 +208,27 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
           return d.id;
         },
 
-        crearOrden: async ({ distritoId, zonaId, borrada = false }) => {
+        crearOrden: async ({ distritoId, zonaId, borrada = false, estatusValue }) => {
+          // FICHA 377 (T2): el estado, resuelto contra el catalogo REAL. `findUniqueOrThrow` a
+          // proposito: si el `value` no existe en `order_status`, el caso REVIENTA diciendo cual
+          // falta. Un `findUnique` con `?? FKS.estatusId` habria dejado el caso en verde sembrando
+          // el estado equivocado, que es la peor de las dos salidas.
+          const estatusId =
+            estatusValue === undefined
+              ? FKS.estatusId
+              : (
+                  await tx.orderStatus.findUniqueOrThrow({
+                    where: { value: estatusValue },
+                    select: { id: true },
+                  })
+                ).id;
           const o = await tx.orden.create({
             data: {
               numRemision: `R-${unico()}`,
               destinatario: "Destinataria 366",
               telefonoDest: "8888-0000",
               producto: "caja de zapatos",
-              estatusId: FKS.estatusId,
+              estatusId,
               tiendaId: FKS.tiendaId,
               zonaId,
               provinciaId: FKS.provinciaId,
@@ -208,6 +289,33 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
           return detalle.id;
         },
 
+        // FICHA 377 (R4): la EVIDENCIA historica, que no es el estado actual. `origenTipo` es la
+        // familia real de la recepcion en satelite; el actor es un usuario cualquiera porque lo
+        // que se mide es el DESTINO de la transicion, no quien la ejecuto.
+        crearHistorialEstado: async (ordenId, destino) => {
+          const estatus = await tx.orderStatus.findUniqueOrThrow({
+            where: { value: destino },
+            select: { id: true },
+          });
+          await tx.ordenHistorialEstado.create({
+            data: {
+              ordenId,
+              estatusDestinoId: estatus.id,
+              actorUsuarioId: USUARIO,
+              origenTipo: "recepcion_satelite",
+            },
+            select: { id: true },
+          });
+        },
+
+        estadoDe: async (ordenId) =>
+          (
+            await tx.orden.findUniqueOrThrow({
+              where: { id: ordenId },
+              select: { estatus: { select: { value: true } } },
+            })
+          ).estatus.value,
+
         historialDe: async (ordenIds) =>
           tx.historialAccion.findMany({
             where: { accion: "orden_zona_reconciliada", entidadId: { in: ordenIds } },
@@ -240,7 +348,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
       );
 
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaFinal: await e.zonaDe(orden),
         zonaA: e.zonas.A.id,
         historial: await e.historialDe([orden]),
@@ -271,7 +379,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
         USUARIO,
       );
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaFinal: await e.zonaDe(orden),
         zonaC: e.zonas.C.id,
         historial: await e.historialDe([orden]),
@@ -295,7 +403,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
         USUARIO,
       );
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaFinal: await e.zonaDe(orden),
         zonaC: e.zonas.C.id,
         historial: await e.historialDe([orden]),
@@ -326,7 +434,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
       );
 
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaFacturada: await e.zonaDe(facturada),
         zonaLibre: await e.zonaDe(libre),
         zonaA: e.zonas.A.id,
@@ -364,7 +472,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
           USUARIO,
         );
         return {
-          reconciliadas: res?.ordenesReconciliadas,
+          reconciliadas: reconciliadasDe(res),
           zonaConGestion: await e.zonaDe(conGestion),
           zonaLibre: await e.zonaDe(libre),
           zonaA: e.zonas.A.id,
@@ -398,7 +506,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
           USUARIO,
         );
         return {
-          reconciliadas: res?.ordenesReconciliadas,
+          reconciliadas: reconciliadasDe(res),
           zonaFinal: await e.zonaDe(orden),
           zonaA: e.zonas.A.id,
           historial: await e.historialDe([orden]),
@@ -424,7 +532,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
         USUARIO,
       );
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaFinal: await e.zonaDe(orden),
         zonaA: e.zonas.A.id,
       };
@@ -450,7 +558,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
         USUARIO,
       );
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaBorrada: await e.zonaDe(borrada),
         zonaViva: await e.zonaDe(viva),
         zonaA: e.zonas.A.id,
@@ -480,7 +588,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
         USUARIO,
       );
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaFinal: await e.zonaDe(derivada),
         zonaA: e.zonas.A.id,
       };
@@ -506,7 +614,7 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
         USUARIO,
       );
       return {
-        reconciliadas: res?.ordenesReconciliadas,
+        reconciliadas: reconciliadasDe(res),
         zonaDelQuitado: await e.zonaDe(ordenQuitado),
         zonaDelQueSigue: await e.zonaDe(ordenQueSigue),
         zonaA: e.zonas.A.id,
@@ -584,13 +692,16 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
       const distrito = await e.crearDistrito([]); // sin ninguna zona todavia
       const conDeriva = await e.crearOrden({ distritoId: distrito, zonaId: e.zonas.A.id });
 
-      await e.repo.create({
-        nombre: `366 NUEVA ${unico()}`,
-        cobroVehiculo: false,
-        esCentral: false,
-        distritoIds: [distrito], // la zona NUEVA es la UNICA que toma este distrito
-        tarifas: [],
-      });
+      await e.repo.create(
+        {
+          nombre: `366 NUEVA ${unico()}`,
+          cobroVehiculo: false,
+          esCentral: false,
+          distritoIds: [distrito], // la zona NUEVA es la UNICA que toma este distrito
+          tarifas: [],
+        },
+        USUARIO,
+      );
 
       // Sin ambiguedad: el distrito tiene que resolver a UNA sola zona (la nueva).
       const filasZonaDistrito = await e.tx.zonaDistrito.findMany({ where: { distritoId: distrito } });
@@ -619,8 +730,8 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
       const segunda = await e.repo.update(e.zonas.A.id, datos, USUARIO);
 
       return {
-        primera: primera?.ordenesReconciliadas,
-        segunda: segunda?.ordenesReconciliadas,
+        primera: reconciliadasDe(primera),
+        segunda: reconciliadasDe(segunda),
         historialTrasPrimera: historialTrasPrimera.length,
         historialTrasSegunda: (await e.historialDe([orden])).length,
       };
@@ -630,5 +741,449 @@ describeSiHayBase("⭑ 366/T5 — la reconciliacion de la zona de las ordenes, c
     expect(medido.segunda).toBe(0);
     expect(medido.historialTrasPrimera).toBe(1);
     expect(medido.historialTrasSegunda).toBe(1);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
+  // ⭑ FICHA 377 / T5 — EL EJE DEL ESTADO: EN TRANSITO SI, EN EL ESTANTE NO
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
+  //
+  // Los dos primeros casos son un PAR y solo valen juntos: uno impide que el corte se QUITE, el
+  // otro impide que se INVIERTA. Con uno solo, una mutacion del `where` sobrevive.
+
+  it("⭑ 377/T2: `crearOrden` siembra el estado que se le pide, y sin pedirselo cae al de FKS", async () => {
+    // El humo de T2: sin esto, ningun caso de esta ficha significa nada, porque todos dependen de
+    // que la orden tenga DE VERDAD el estado que dicen que tiene. Se siembran DOS estados
+    // distintos —no uno— para que un fixture que ignorase el parametro y devolviera siempre lo
+    // mismo se caiga aqui, sea cual sea el estado arbitrario que traiga `FKS`.
+    const medido = await conEscenario(async (e) => {
+      const enEstante = await e.crearOrden({
+        distritoId: null,
+        zonaId: e.zonas.A.id,
+        estatusValue: "en_bodega_satelite",
+      });
+      const enTransito = await e.crearOrden({
+        distritoId: null,
+        zonaId: e.zonas.A.id,
+        estatusValue: "en_ruta_bodega_satelite",
+      });
+      const porDefecto = await e.crearOrden({ distritoId: null, zonaId: e.zonas.A.id });
+      const estatusDeFks = await e.tx.orderStatus.findUniqueOrThrow({
+        where: { id: FKS.estatusId },
+        select: { value: true },
+      });
+
+      return {
+        enEstante: await e.estadoDe(enEstante),
+        enTransito: await e.estadoDe(enTransito),
+        porDefecto: await e.estadoDe(porDefecto),
+        valorDeFks: estatusDeFks.value,
+      };
+    });
+
+    expect(medido.enEstante).toBe("en_bodega_satelite");
+    expect(medido.enTransito).toBe("en_ruta_bodega_satelite");
+    // Sin `estatusValue` el comportamiento es EL DE SIEMPRE: los 17 casos de la 366 no cambian.
+    expect(medido.porDefecto).toBe(medido.valorDeFks);
+  });
+
+  it("⭑ 377/R2/R6: una orden EN EL ESTANTE de una satelite NO cambia de zona ni deja rastro", async () => {
+    // El escenario REAL del defecto: el paquete esta en la bodega A, y el distrito pasa a ser de
+    // B porque este guardado lo saca de A. Sin el corte, la orden se iba a B y quedaba sin bodega
+    // que pudiera asignarla y sin transicion de salida.
+    const medido = await conEscenario(async (e) => {
+      const distrito = await e.crearDistrito([e.zonas.A.id, e.zonas.B.id]);
+      const enEstante = await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.A.id,
+        estatusValue: "en_bodega_satelite",
+      });
+      // ANTI-VACUIDAD: la hermana del MISMO distrito, en un estado que no es de estante, SI se
+      // mueve. Sin ella, un `where` que no encontrara nada dejaria el caso verde por la razon
+      // equivocada.
+      const enBodegaCentral = await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.A.id,
+        estatusValue: "en_bodega_central",
+      });
+
+      const res = await e.repo.update(e.zonas.A.id, datosDeZona(e.zonas.A.nombre, []), USUARIO);
+
+      return {
+        reconciliadas: reconciliadasDe(res),
+        retenidas: retenidasDe(res),
+        zonaEnEstante: await e.zonaDe(enEstante),
+        zonaCentral: await e.zonaDe(enBodegaCentral),
+        estadoEnEstante: await e.estadoDe(enEstante),
+        zonaA: e.zonas.A.id,
+        zonaB: e.zonas.B.id,
+        historialEnEstante: await e.historialDe([enEstante]),
+        historialCentral: await e.historialDe([enBodegaCentral]),
+      };
+    });
+
+    expect(medido.zonaEnEstante).toBe(medido.zonaA); // R2: se queda con la bodega que la tiene
+    expect(medido.zonaCentral).toBe(medido.zonaB); // anti-vacuidad
+    expect(medido.reconciliadas).toBe(1);
+    expect(medido.retenidas).toBe(1);
+    // R6: ni un campo tocado, ni una fila de historial por la retenida.
+    expect(medido.estadoEnEstante).toBe("en_bodega_satelite");
+    expect(medido.historialEnEstante).toEqual([]);
+    expect(medido.historialCentral).toHaveLength(1);
+  });
+
+  it("⭑ 377/R3: una orden EN TRANSITO a una satelite SI se reconcilia (la 366, intacta)", async () => {
+    // El caso que DEFIENDE a la 366: el paquete lo tiene la central, que aun decide adonde lo
+    // manda, y `recibirEnSatelite` acota su guarda por `zonaId` — sin reconciliar, la bodega
+    // correcta no puede recibirlo (41 de 42 ordenes represadas el 2026-09-03).
+    const medido = await conEscenario(async (e) => {
+      const distrito = await e.crearDistrito([e.zonas.A.id, e.zonas.B.id]);
+      const enTransito = await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.A.id,
+        estatusValue: "en_ruta_bodega_satelite",
+      });
+
+      const res = await e.repo.update(e.zonas.A.id, datosDeZona(e.zonas.A.nombre, []), USUARIO);
+
+      return {
+        reconciliadas: reconciliadasDe(res),
+        retenidas: retenidasDe(res),
+        zonaFinal: await e.zonaDe(enTransito),
+        zonaB: e.zonas.B.id,
+        historial: await e.historialDe([enTransito]),
+      };
+    });
+
+    expect(medido.zonaFinal).toBe(medido.zonaB);
+    expect(medido.reconciliadas).toBe(1);
+    expect(medido.retenidas).toBe(0); // en transito NO es «en el estante»
+    expect(medido.historial).toHaveLength(1);
+  });
+
+  it("⭑ 377/R5: el corte viejo sigue vivo bajo el nuevo (gestion vigente `entregada`)", async () => {
+    // La condicion de estado se SUMO a las cuatro de la 366; no sustituyo a ninguna. Una orden
+    // FUERA del estante pero ya gestionada sigue sin moverse, y sin contar como retenida: no la
+    // retiene la bodega, la retiene el dinero.
+    const medido = await conEscenario(async (e) => {
+      const distrito = await e.crearDistrito([e.zonas.A.id]);
+      const gestionada = await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.B.id,
+        estatusValue: "en_bodega_central",
+      });
+      await e.crearGestion(gestionada, "entregada");
+      const libre = await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.B.id,
+        estatusValue: "en_bodega_central",
+      });
+
+      const res = await e.repo.update(
+        e.zonas.A.id,
+        datosDeZona(e.zonas.A.nombre, [distrito]),
+        USUARIO,
+      );
+
+      return {
+        reconciliadas: reconciliadasDe(res),
+        retenidas: retenidasDe(res),
+        zonaGestionada: await e.zonaDe(gestionada),
+        zonaLibre: await e.zonaDe(libre),
+        zonaA: e.zonas.A.id,
+        zonaB: e.zonas.B.id,
+      };
+    });
+
+    expect(medido.zonaGestionada).toBe(medido.zonaB);
+    expect(medido.zonaLibre).toBe(medido.zonaA); // anti-vacuidad
+    expect(medido.reconciliadas).toBe(1);
+    expect(medido.retenidas).toBe(0);
+  });
+
+  it("⭑ 377/R4: cuenta el estado ACTUAL, no el historico (paso por la bodega y ya salio)", async () => {
+    // El caso que distingue `ESTADOS_PAQUETE_EN_ESTANTE` (custodia ACTUAL, se lee del estado) de
+    // `ESTADOS_CUSTODIA_SATELITE` (EVIDENCIA historica, se lee del historial y es para siempre).
+    // Si alguien "arreglara" esto mirando el historial, esta orden —que ya salio a reparto— se
+    // quedaria congelada en la zona vieja para siempre.
+    const medido = await conEscenario(async (e) => {
+      const distrito = await e.crearDistrito([e.zonas.A.id]);
+      const yaSalio = await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.B.id,
+        estatusValue: "en_reparto",
+      });
+      await e.crearHistorialEstado(yaSalio, "en_bodega_satelite");
+
+      const res = await e.repo.update(
+        e.zonas.A.id,
+        datosDeZona(e.zonas.A.nombre, [distrito]),
+        USUARIO,
+      );
+
+      return {
+        reconciliadas: reconciliadasDe(res),
+        retenidas: retenidasDe(res),
+        zonaFinal: await e.zonaDe(yaSalio),
+        zonaA: e.zonas.A.id,
+      };
+    });
+
+    expect(medido.zonaFinal).toBe(medido.zonaA);
+    expect(medido.reconciliadas).toBe(1);
+    expect(medido.retenidas).toBe(0);
+  });
+
+  it("⭑ 377/R9: el conteo de retenidas cuenta EXACTAMENTE lo que dice contar", async () => {
+    // Cuatro ordenes EN EL ESTANTE en el mismo guardado y solo UNA cuenta. Las otras tres se caen
+    // por cada uno de los otros cortes: ya esta en la zona correcta, ya se facturo, y su distrito
+    // no resuelve ninguna zona. Un `count` que se olvidara del `where` base contaria 3 o 4.
+    const medido = await conEscenario(async (e) => {
+      const distrito = await e.crearDistrito([e.zonas.A.id]);
+      const huerfano = await e.crearDistrito([]); // cero zonas: no resuelve ninguna
+
+      const cuenta = await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.B.id,
+        estatusValue: "en_bodega_satelite",
+      });
+      const yaEnLaZonaCorrecta = await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.A.id,
+        estatusValue: "en_bodega_satelite",
+      });
+      const yaFacturada = await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.B.id,
+        estatusValue: "en_bodega_satelite",
+      });
+      await e.crearDetalleDeCierre(yaFacturada, e.zonas.B.id);
+      const sinZonaResuelta = await e.crearOrden({
+        distritoId: huerfano,
+        zonaId: e.zonas.B.id,
+        estatusValue: "en_bodega_satelite",
+      });
+
+      const res = await e.repo.update(
+        e.zonas.A.id,
+        datosDeZona(e.zonas.A.nombre, [distrito]),
+        USUARIO,
+      );
+
+      return {
+        retenidas: retenidasDe(res),
+        reconciliadas: reconciliadasDe(res),
+        zonas: {
+          cuenta: await e.zonaDe(cuenta),
+          yaEnLaZonaCorrecta: await e.zonaDe(yaEnLaZonaCorrecta),
+          yaFacturada: await e.zonaDe(yaFacturada),
+          sinZonaResuelta: await e.zonaDe(sinZonaResuelta),
+        },
+        zonaA: e.zonas.A.id,
+        zonaB: e.zonas.B.id,
+      };
+    });
+
+    expect(medido.retenidas).toBe(1);
+    expect(medido.reconciliadas).toBe(0);
+    // Y ninguna de las cuatro se movio: lo retenido se queda donde estaba.
+    expect(medido.zonas.cuenta).toBe(medido.zonaB);
+    expect(medido.zonas.yaEnLaZonaCorrecta).toBe(medido.zonaA);
+    expect(medido.zonas.yaFacturada).toBe(medido.zonaB);
+    expect(medido.zonas.sinZonaResuelta).toBe(medido.zonaB);
+  });
+
+  it("⭑ 377/R7: los dos conteos son DISJUNTOS (2 movidas y 3 retenidas en el mismo guardado)", async () => {
+    const medido = await conEscenario(async (e) => {
+      const distrito = await e.crearDistrito([e.zonas.A.id]);
+      const movibles = [
+        await e.crearOrden({
+          distritoId: distrito,
+          zonaId: e.zonas.B.id,
+          estatusValue: "en_bodega_central",
+        }),
+        await e.crearOrden({
+          distritoId: distrito,
+          zonaId: e.zonas.B.id,
+          estatusValue: "en_ruta_bodega_satelite",
+        }),
+      ];
+      const enEstante = [];
+      for (let i = 0; i < 3; i += 1) {
+        enEstante.push(
+          await e.crearOrden({
+            distritoId: distrito,
+            zonaId: e.zonas.B.id,
+            estatusValue: "en_bodega_satelite",
+          }),
+        );
+      }
+
+      const res = await e.repo.update(
+        e.zonas.A.id,
+        datosDeZona(e.zonas.A.nombre, [distrito]),
+        USUARIO,
+      );
+
+      return {
+        reconciliadas: reconciliadasDe(res),
+        retenidas: retenidasDe(res),
+        zonasMovibles: await Promise.all(movibles.map((o) => e.zonaDe(o))),
+        zonasEnEstante: await Promise.all(enEstante.map((o) => e.zonaDe(o))),
+        historialEnEstante: await e.historialDe(enEstante),
+        zonaA: e.zonas.A.id,
+        zonaB: e.zonas.B.id,
+      };
+    });
+
+    expect(medido.reconciliadas).toBe(2);
+    expect(medido.retenidas).toBe(3);
+    expect(medido.zonasMovibles).toEqual([medido.zonaA, medido.zonaA]);
+    expect(medido.zonasEnEstante).toEqual([medido.zonaB, medido.zonaB, medido.zonaB]);
+    expect(medido.historialEnEstante).toEqual([]);
+  });
+
+  it("⭑ 377/R10: sin ninguna orden en el estante, las retenidas son 0", async () => {
+    // El caso base de la 366, tal cual: el numero nuevo tiene que existir y valer 0, para que la
+    // pantalla pueda callarse mirando el cero en vez de mirar un `undefined`.
+    const medido = await conEscenario(async (e) => {
+      const distrito = await e.crearDistrito([e.zonas.A.id]);
+      await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.B.id,
+        estatusValue: "en_bodega_central",
+      });
+
+      const res = await e.repo.update(
+        e.zonas.A.id,
+        datosDeZona(e.zonas.A.nombre, [distrito]),
+        USUARIO,
+      );
+      return { reconciliadas: reconciliadasDe(res), retenidas: retenidasDe(res) };
+    });
+
+    expect(medido.reconciliadas).toBe(1);
+    expect(medido.retenidas).toBe(0);
+  });
+
+  it("⭑ 377/R12: repetir el guardado informa las MISMAS retenidas y 0 reconciliadas", async () => {
+    // La retenida no se «gasta»: sigue ahi, y el segundo guardado tiene que volver a decirlo. Un
+    // conteo que se apagara la segunda vez convertiria esto en un aviso de una sola vez.
+    const medido = await conEscenario(async (e) => {
+      const distrito = await e.crearDistrito([e.zonas.A.id]);
+      const enEstante = await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.B.id,
+        estatusValue: "en_bodega_satelite",
+      });
+      const movible = await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.B.id,
+        estatusValue: "en_bodega_central",
+      });
+      const datos = datosDeZona(e.zonas.A.nombre, [distrito]);
+
+      const primera = await e.repo.update(e.zonas.A.id, datos, USUARIO);
+      const historialTrasPrimera = (await e.historialDe([enEstante, movible])).length;
+      const segunda = await e.repo.update(e.zonas.A.id, datos, USUARIO);
+
+      return {
+        primera: { reconciliadas: reconciliadasDe(primera), retenidas: retenidasDe(primera) },
+        segunda: { reconciliadas: reconciliadasDe(segunda), retenidas: retenidasDe(segunda) },
+        historialTrasPrimera,
+        historialTrasSegunda: (await e.historialDe([enEstante, movible])).length,
+        zonaEnEstante: await e.zonaDe(enEstante),
+        zonaB: e.zonas.B.id,
+      };
+    });
+
+    expect(medido.primera).toEqual({ reconciliadas: 1, retenidas: 1 });
+    expect(medido.segunda).toEqual({ reconciliadas: 0, retenidas: 1 });
+    expect(medido.historialTrasPrimera).toBe(1);
+    expect(medido.historialTrasSegunda).toBe(1);
+    expect(medido.zonaEnEstante).toBe(medido.zonaB);
+  });
+
+  it("⭑ 377/R13: `create()` ni reconcilia ni retiene, y su resultado no lleva el conteo", async () => {
+    const medido = await conEscenario(async (e) => {
+      const distrito = await e.crearDistrito([]); // sin ninguna zona todavia
+      const enEstante = await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.A.id,
+        estatusValue: "en_bodega_satelite",
+      });
+
+      const creada = await e.repo.create(
+        {
+          nombre: `377 NUEVA ${unico()}`,
+          cobroVehiculo: false,
+          esCentral: false,
+          distritoIds: [distrito], // la zona NUEVA es la UNICA que toma este distrito
+          tarifas: [],
+        },
+        USUARIO,
+      );
+
+      return {
+        creada,
+        zonaFinal: await e.zonaDe(enEstante),
+        zonaA: e.zonas.A.id,
+        historial: await e.historialDe([enEstante]),
+      };
+    });
+
+    expect(medido.zonaFinal).toBe(medido.zonaA);
+    expect(medido.historial).toEqual([]);
+    expect(medido.creada).not.toHaveProperty("ordenesRetenidasEnBodegaSatelite");
+    expect(medido.creada).not.toHaveProperty("ordenesReconciliadas");
+  });
+
+  it("⭑ 377/R1: la bodega que TIENE el paquete lo sigue viendo en su listado, y la otra no", async () => {
+    // EL REQUISITO DE RESULTADO. No basta con que el `where` excluya: hay que ver que la bodega
+    // sigue teniendo la orden. Por eso aqui se ejercita el LISTADO REAL de la bodega satelite
+    // (`OrdenRepository.findRecepcionSatelitePaginada`, el SQL crudo de `condicionesSatelite`),
+    // no una reconstruccion de su criterio.
+    //
+    // LA MITAD QUE ESTE CASO NO EJECUTA, dicha en voz alta: la asignacion. `AsignacionSateliteService`
+    // rechaza con `zona_ajena` cuando `orden.zonaId !== zonaDelActor`, asi que lo que decide ese
+    // rechazo es EXACTAMENTE el `zonaId` que aqui se afirma. Montar el servicio entero (mensajero
+    // de la zona, lote, carrera) mediria su orquestacion, no este corte.
+    const medido = await conEscenario(async (e) => {
+      const distrito = await e.crearDistrito([e.zonas.A.id, e.zonas.B.id]);
+      const enEstante = await e.crearOrden({
+        distritoId: distrito,
+        zonaId: e.zonas.A.id,
+        estatusValue: "en_bodega_satelite",
+      });
+
+      // El distrito sale de A: pasa a resolver B. Sin el corte de la 377, la orden se iria a B.
+      await e.repo.update(e.zonas.A.id, datosDeZona(e.zonas.A.nombre, []), USUARIO);
+
+      const ordenRepo = new OrdenRepository(clienteConTransaccionAnidada(e.tx));
+      const filtro = { estatusValues: [...ESTADOS_BODEGA_SATELITE] };
+      const enA = await ordenRepo.findRecepcionSatelitePaginada(
+        { ...filtro, zonaId: e.zonas.A.id },
+        { skip: 0, take: 50 },
+      );
+      const enB = await ordenRepo.findRecepcionSatelitePaginada(
+        { ...filtro, zonaId: e.zonas.B.id },
+        { skip: 0, take: 50 },
+      );
+
+      return {
+        enEstante,
+        zonaDeLaOrden: await e.zonaDe(enEstante),
+        zonaA: e.zonas.A.id,
+        idsEnA: enA.items.map((o) => o.id),
+        idsEnB: enB.items.map((o) => o.id),
+      };
+    });
+
+    // La bodega que la recibio la sigue viendo...
+    expect(medido.idsEnA).toContain(medido.enEstante);
+    // ...y la que NO tiene el paquete no la ve aparecer (el otro lado del defecto).
+    expect(medido.idsEnB).not.toContain(medido.enEstante);
+    // Y `orden.zonaId` sigue siendo el de la bodega que la tiene, que es lo que compara
+    // `AsignacionSateliteService` antes de decir `zona_ajena`.
+    expect(medido.zonaDeLaOrden).toBe(medido.zonaA);
   });
 });

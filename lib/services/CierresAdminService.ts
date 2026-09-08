@@ -555,8 +555,16 @@ export class CierresAdminService implements ICierresAdminService {
    * **Misma excepcion declarada a R29 de la 170** que sus dos hermanos: el tope se cumple en el
    * TRANSPORTE (por encima de el no sale ni una fila) y no en el MATERIALIZAR, porque la lectura
    * del repositorio es un `findMany` sin `take`. Aqui pesa mas que alli —el grano es la gestion,
-   * no el cierre—, y por eso el rango de fechas del dialogo (R31) es la mitigacion de producto,
-   * no un adorno: sin el, el conjunto por defecto es todo el historico del mensajero.
+   * no el cierre—, y por eso el rango de fechas del dialogo (R31) existe: sin el no habria forma
+   * de acotar y el conjunto seria siempre todo el historico del mensajero.
+   *
+   * **OJO, ficha 384 (2026-09-07): ese rango ya NO viene relleno.** El dialogo abria con hoy-hoy
+   * en los dos extremos y era un filtro que el usuario no ponia —volvia vacio y culpaba a unos
+   * filtros inexistentes—, asi que ahora arranca vacio y el conjunto por defecto SI es todo el
+   * historico. El que lo corta es ESTE tope, y es un intercambio deliberado: `limite_excedido`
+   * dice el total, dice el tope y dice que acotes, mientras que el pre-filtro callado no decia
+   * nada. Si el historico crece hasta rozarlo a diario, la palanca es el atajo del dialogo (o uno
+   * nuevo tipo «ultimo mes»), no volver a poner un defecto que nadie ve.
    */
   async listarGestionesCierresAdminCompleto(
     actor: Actor,

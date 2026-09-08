@@ -8,6 +8,7 @@ import {
   type ActualizarZonaResult,
   type BorrarZonaResult,
   type CrearZonaResult,
+  type ImpactoZonaCentralResult,
   type ListarZonasResult,
   type ObtenerZonaResult,
   type ZonaActionError,
@@ -27,6 +28,12 @@ import {
 } from "@/lib/errors";
 
 const idSchema = z.string().min(1);
+/**
+ * FICHA 376 (Q4): el borde de `impactoZonaCentral`. Tope de 20 ids —la pantalla pregunta por dos:
+ * la que pierde la marca y la que la gana— para que un payload inventado no se convierta en una
+ * consulta sobre el catalogo entero.
+ */
+const idsSchema = z.array(idSchema).max(20);
 
 // Traduce el AppErrorShape del manejador global al ZonaActionError tipado. A
 // diferencia de tarifas, el dominio de zonas SI produce `conflict` (borrar una
@@ -147,6 +154,46 @@ export async function borrarZona(
     }
     const service = deps.zonaService ?? buildZonaService();
     return service.borrar(parsedId.data, actor);
+  });
+  if (!isAppErrorShape(r)) return r;
+  const error = toZonaActionError(r);
+  // ⭑ FICHA 376 (R11) — POR QUE `en_uso` ES EL DEFAULT CORRECTO POR ESTA VIA, Y NO UNA SUPOSICION.
+  // `toZonaActionError` traduce el `AppErrorShape` del manejador GLOBAL, y por ahi solo puede
+  // llegar un `ConflictError` LANZADO —hoy, el `translateEsCentralConflict` de `ZonaRepository`
+  // («Ya existe una zona central»), que es una carrera perdida contra el indice unico, no un
+  // rechazo de R10—. El rechazo de R10 NO se lanza: viaja tipado como `"es_central"` por el
+  // `return` del service y no pasa por aqui.
+  return error.status === "conflict" ? { status: "conflict", motivo: "en_uso" } : error;
+}
+
+/**
+ * ⭑ FICHA 376 (Q4) — cuantas ordenes VIVAS re-tarifaria mover la marca de zona central.
+ *
+ * Solo lectura y `maestro`-only, como el resto del CRUD de zonas. Existe para que la confirmacion
+ * del formulario pueda decir el IMPACTO antes de enviar nada: mover la marca cambia la columna de
+ * flete (`resolverFlete`) de todo lo que aun no esta congelado en un cierre, y ese numero no es
+ * pequeño. Devuelve una entrada POR ZONA PEDIDA —con cero si no tiene ninguna—: quien lo consuma
+ * compone el texto, este borde no lo redacta.
+ *
+ * Su superficie es la confirmacion de `CrearZonaForm` (T12). La excepcion de accion sin pantalla
+ * que vivia en este bloque se borro al llegar esa pantalla: `superficie-de-uso.guardia` exige que
+ * ninguna excepcion sobreviva a su motivo.
+ */
+export async function impactoZonaCentral(
+  zonaIds: unknown,
+  deps: ZonaActionDeps = {},
+): Promise<ImpactoZonaCentralResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const parsed = idsSchema.safeParse(zonaIds);
+    if (!parsed.success) {
+      throw new ValidationError(MSG.VALIDATION_ERROR, {
+        fieldErrors: { zonaIds: ["zonaIds invalido"] },
+      });
+    }
+    const service = deps.zonaService ?? buildZonaService();
+    return service.impactoZonaCentral(parsed.data, actor);
   });
   return isAppErrorShape(r) ? toZonaActionError(r) : r;
 }

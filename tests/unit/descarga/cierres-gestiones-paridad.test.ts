@@ -67,6 +67,8 @@ function gestion(over: Partial<CierreGestionDescargaDTO> = {}): CierreGestionDes
     // siendo cierta y no se vería; con tres días distintos, cualquier cruce se lee en el diff.
     fechaGestion: "2026-07-12",
     diaReparto: "2026-07-10",
+    // Ficha 385: la cuarta fecha, con el mismo criterio — un día distinto de los otros tres.
+    fechaCreacionOrden: "2026-07-08",
     numGuia: 1001,
     numRemision: "REM-1",
     destinatario: "Ana Pérez",
@@ -77,6 +79,9 @@ function gestion(over: Partial<CierreGestionDescargaDTO> = {}): CierreGestionDes
     distritoNombre: null,
     producto: "Caja",
     tiendaNombre: "Tienda X",
+    // Ficha 385: los intentos de LA TIENDA. Viajan por el DTO común, así que la paridad de los
+    // dos caminos los cubre igual que a las demás celdas.
+    intentosContactoTienda: 3,
     resultado: "entregada",
     montoRecibido: "1000.10",
     pagos: [{ metodo: "SINPE", monto: "1000.10" }],
@@ -147,7 +152,7 @@ describe("paridad de los dos caminos de la descarga detallada (R26)", () => {
       gestion({ ingresoOrdenex: ingreso({ esCentral: false }) }),
     );
     expect(central).toEqual(satelite);
-    // Y `esCentral` no es ninguna de las 26 columnas: es un dato de tarifa, no de la gestión.
+    // Y `esCentral` no es ninguna de las 31 columnas: es un dato de tarifa, no de la gestión.
     expect(Object.keys(central)).not.toContain("esCentral");
     expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.encabezado)).not.toContain("Central");
   });

@@ -15,7 +15,11 @@ import {
   type ZonaActionError,
   type ZonaDTO,
 } from "@/lib/types/zona";
-import { crearZona, actualizarZona } from "@/lib/actions/zonas";
+import {
+  crearZona,
+  actualizarZona,
+  impactoZonaCentral,
+} from "@/lib/actions/zonas";
 import { crearTarifa, actualizarTarifa } from "@/lib/actions/tarifas";
 import {
   actualizarDistritosEspeciales,
@@ -41,6 +45,33 @@ import {
 } from "./TarifaCampos";
 
 type FieldErrors = Record<string, string[]>;
+
+/**
+ * ⭑ FICHA 376 (R20/R21) — LA CONFIRMACIÓN PENDIENTE DE MOVER LA MARCA DE ZONA CENTRAL.
+ *
+ * Dos direcciones, un solo modal. `marcar` es la que ya existía: esta zona GANA la marca y otra
+ * la pierde sin aparecer en ningún payload (R21). `desmarcar` es la que faltaba: la zona que HOY
+ * es la central se queda sin ella y el sistema se quedaría sin ninguna (R20).
+ *
+ * ⚠️ El formulario NO decide: AVISA. Confirmar en `desmarcar` ENVÍA el guardado y el servidor lo
+ * rechaza (R5), y ese rechazo se pinta junto a la casilla (R23). La regla vive en UN solo sitio
+ * —el servidor—; duplicarla aquí como un `if` que impida enviar sería una segunda copia que un
+ * día divergiría (design.md §8 y Q2).
+ */
+type ConfirmacionCentral =
+  | { tipo: "marcar"; pierde: ZonaDTO }
+  | { tipo: "desmarcar"; nombreZona: string };
+
+/**
+ * ⭑ FICHA 376 (Q4) — el impacto en órdenes de mover la marca, tal como lo ve el modal.
+ *
+ * `cargando` y `sin_dato` NO son lo mismo que cero: «no afecta a ninguna» y «no lo pude contar»
+ * tienen que verse distintos en una confirmación que decide una tarifa.
+ */
+type ImpactoCentral =
+  | { fase: "cargando" }
+  | { fase: "listo"; ordenes: number }
+  | { fase: "sin_dato" };
 
 /** Valores pre-cargados para editar (o vacíos al crear). */
 export interface ZonaFormInitial {
@@ -134,9 +165,13 @@ export function CrearZonaForm({
   const [tarifaZonaId, setTarifaZonaId] = useState<string | undefined>(
     initial?.tarifaZonaId,
   );
-  // Zona central en conflicto (ya marcada); si !== null, se muestra el modal de
-  // confirmación antes de reestablecer la marca a esta zona.
-  const [centralConflicto, setCentralConflicto] = useState<ZonaDTO | null>(null);
+  // FICHA 376 (R20/R21): confirmación pendiente de mover la marca de zona central. Si !== null,
+  // el modal está abierto y NADA se ha enviado todavía (R22: cancelar cierra y no envía).
+  const [confirmacion, setConfirmacion] = useState<ConfirmacionCentral | null>(
+    null,
+  );
+  // FICHA 376 (Q4): cuántas órdenes re-tarifaría ese movimiento. Se pide al abrir el modal.
+  const [impacto, setImpacto] = useState<ImpactoCentral>({ fase: "cargando" });
 
   function setCampoTarifa(key: TarifaCampoKey, value: string) {
     setTarifaValores((prev) => ({ ...prev, [key]: value }));
@@ -249,10 +284,18 @@ export function CrearZonaForm({
       // no en el de la rama que de verdad corrió. Sin anotar el tipo, `tsc`
       // sigue el tipo "evolutivo" de cada asignación y sí distingue las ramas.
       let ordenesReconciliadas = 0;
+      // FICHA 377 (R8): el segundo conteo. Las que NO se movieron porque su
+      // paquete ya está recibido en una bodega; el servidor las deja con su zona
+      // anterior a propósito (R2) y la pantalla tiene que decirlo — informar y no
+      // pintarlo sería el mismo fallo mudo que el conteo de arriba vino a cerrar.
+      let ordenesRetenidas = 0;
       let res;
       if (zonaIdGuardada) {
         res = await actualizarZona(zonaIdGuardada, parsed.data);
-        if (res.status === "ok") ordenesReconciliadas = res.ordenesReconciliadas;
+        if (res.status === "ok") {
+          ordenesReconciliadas = res.ordenesReconciliadas;
+          ordenesRetenidas = res.ordenesRetenidasEnBodegaSatelite;
+        }
       } else {
         res = await crearZona(parsed.data);
       }
@@ -263,7 +306,9 @@ export function CrearZonaForm({
         // La marca de especial se guarda con la zona ya persistida: si falla,
         // la zona sigue guardada y sólo se avisa de lo que no entró.
         await guardarEspeciales();
-        toast.success(mensajeGuardado(esEditar, ordenesReconciliadas));
+        toast.success(
+          mensajeGuardado(esEditar, ordenesReconciliadas, ordenesRetenidas),
+        );
         onSaved();
         return;
       }
@@ -277,6 +322,47 @@ export function CrearZonaForm({
       toast.error("Ocurrió un error inesperado.");
     } finally {
       setGuardando(false);
+    }
+  }
+
+  /**
+   * ⭑ FICHA 376 (Q4) — abre la confirmación y va a buscar el impacto EN ÓRDENES.
+   *
+   * El modal se abre YA (no se espera a la consulta) y el número aparece cuando llega: la
+   * confirmación es el sitio donde se dice qué cuesta el movimiento, no una pantalla de carga.
+   * Mientras tanto el botón de confirmar está bloqueado, para que nadie confirme un impacto que
+   * todavía no ha visto. Si la consulta falla, se desbloquea diciendo que no se pudo contar: un
+   * fallo de lectura no puede dejar el guardado atrapado.
+   *
+   * Se pregunta por LAS DOS zonas del traslado —la que pierde la marca y la que la gana—: las dos
+   * cambian de columna de flete (`resolverFlete`), y el borde devuelve una entrada por zona
+   * pedida, con cero si no tiene ninguna.
+   */
+  async function pedirConfirmacion(pendiente: ConfirmacionCentral) {
+    setConfirmacion(pendiente);
+    setImpacto({ fase: "cargando" });
+
+    const ids = [
+      ...(pendiente.tipo === "marcar" ? [pendiente.pierde.id] : []),
+      ...(zonaIdGuardada ? [zonaIdGuardada] : []),
+    ];
+    if (ids.length === 0) {
+      // Zona todavía sin id (creación): no tiene ni una orden que re-tarifar.
+      setImpacto({ fase: "listo", ordenes: 0 });
+      return;
+    }
+    try {
+      const res = await impactoZonaCentral(ids);
+      if (res.status !== "ok") {
+        setImpacto({ fase: "sin_dato" });
+        return;
+      }
+      setImpacto({
+        fase: "listo",
+        ordenes: res.impacto.reduce((total, i) => total + i.ordenesVivas, 0),
+      });
+    } catch {
+      setImpacto({ fase: "sin_dato" });
     }
   }
 
@@ -295,9 +381,17 @@ export function CrearZonaForm({
         (z) => z.esCentral && z.id !== zonaIdGuardada,
       );
       if (conflicto) {
-        setCentralConflicto(conflicto);
+        await pedirConfirmacion({ tipo: "marcar", pierde: conflicto });
         return;
       }
+    } else if (initial?.esCentral === true) {
+      // FICHA 376 (R20): la rama SIMÉTRICA que faltaba. La zona que se edita es hoy la central y
+      // la casilla queda apagada: se pregunta antes de enviar nada, nombrando la zona.
+      await pedirConfirmacion({
+        tipo: "desmarcar",
+        nombreZona: initial.nombre,
+      });
+      return;
     }
 
     await enviar();
@@ -317,15 +411,26 @@ export function CrearZonaForm({
         />
       </FormField>
 
-      <div className="flex items-center gap-2">
-        <Checkbox
-          id="es-central-zona"
-          checked={esCentral}
-          onCheckedChange={(checked) => setEsCentral(checked === true)}
-        />
-        <Label htmlFor="es-central-zona" className="cursor-pointer">
-          Zona Central
-        </Label>
+      {/* FICHA 376 (R23): el rechazo del servidor por «tiene que haber una zona central» llega
+          como `fieldErrors.esCentral` y hasta hoy no se pintaba en ningún sitio. Va JUNTO a la
+          casilla, y enlazado por `aria-describedby` para que un lector de pantalla lo anuncie
+          como el error de ESTE control y no como un texto suelto. */}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="es-central-zona"
+            checked={esCentral}
+            aria-invalid={errors.esCentral ? true : undefined}
+            aria-describedby={
+              errors.esCentral ? "es-central-zona-error" : undefined
+            }
+            onCheckedChange={(checked) => setEsCentral(checked === true)}
+          />
+          <Label htmlFor="es-central-zona" className="cursor-pointer">
+            Zona Central
+          </Label>
+        </div>
+        <FieldError id="es-central-zona-error" messages={errors.esCentral} />
       </div>
 
       <GeografiaSelector
@@ -410,46 +515,137 @@ export function CrearZonaForm({
       </div>
 
       <Modal
-        open={centralConflicto !== null}
+        open={confirmacion !== null}
         onOpenChange={(o) => {
-          if (!o) setCentralConflicto(null); // Cancelar cierra y no envía.
+          // R22: cancelar (o cerrar) NO envía nada y ninguna zona cambia.
+          if (!o) setConfirmacion(null);
         }}
-        title="Zona central ya asignada"
-        description={
-          centralConflicto
-            ? `La zona ${centralConflicto.nombre} ya está marcada como Central. Esta acción reestablecerá la zona Central. ¿Desea continuar?`
-            : ""
+        title={
+          confirmacion?.tipo === "desmarcar"
+            ? "Quitar la marca de zona central"
+            : "Zona central ya asignada"
         }
+        description={confirmacion ? descripcionConfirmacion(confirmacion) : ""}
         confirmLabel="Continuar"
         cancelLabel="Cancelar"
+        // Q4: no se confirma un impacto que todavía no se ha visto.
+        confirmDisabled={impacto.fase === "cargando"}
         onConfirm={async () => {
-          setCentralConflicto(null);
+          setConfirmacion(null);
           await enviar();
         }}
-      />
+      >
+        {/* Q4: el número vive en el modal, no en el borde. `aria-live` lo anuncia cuando llega,
+            porque el modal se abre antes de que la consulta termine. */}
+        <p
+          aria-live="polite"
+          data-testid="impacto-zona-central"
+          className="text-sm text-muted-foreground"
+        >
+          {textoImpacto(impacto)}
+        </p>
+      </Modal>
     </div>
   );
 }
 
 /**
- * Mensaje de éxito del guardado. Al crear, siempre "Zona creada": crear nunca
- * reconcilia órdenes (R13). Al editar, si el guardado reubicó órdenes de otra
- * bodega (su distrito ya resolvía otra zona), lo dice con el conteo exacto;
- * con 0 el mensaje queda igual que antes de esta ficha.
+ * ⭑ FICHA 376 (R20/R21) — el texto de la confirmación, en las dos direcciones.
+ *
+ * `marcar` conserva LITERALMENTE el texto que ya existía (nombra la zona que pierde la marca).
+ * `desmarcar` es el nuevo: nombra la zona y advierte que tiene que existir una zona central —sin
+ * prometer que el guardado va a pasar, porque no va a pasar: lo rechaza el servidor (R5)—.
  */
-function mensajeGuardado(esEditar: boolean, ordenesReconciliadas: number): string {
+function descripcionConfirmacion(confirmacion: ConfirmacionCentral): string {
+  if (confirmacion.tipo === "marcar") {
+    return `La zona ${confirmacion.pierde.nombre} ya está marcada como Central. Esta acción reestablecerá la zona Central. ¿Desea continuar?`;
+  }
+  return `La zona ${confirmacion.nombreZona} es hoy la zona Central. Siempre tiene que haber una zona Central: si le quitas la marca sin marcar otra zona, el guardado se rechaza. ¿Desea continuar?`;
+}
+
+/**
+ * ⭑ FICHA 376 (Q4) — el impacto, en palabras.
+ *
+ * `impactoZonaCentral` devuelve NÚMEROS y no redacta nada: el texto se compone aquí. Se cuentan
+ * las órdenes que todavía no están congeladas en un cierre, que son exactamente las que cambiarían
+ * de columna de flete al mover la marca.
+ */
+function textoImpacto(impacto: ImpactoCentral): string {
+  if (impacto.fase === "cargando") {
+    return "Calculando cuántas órdenes cambiarían de tarifa…";
+  }
+  if (impacto.fase === "sin_dato") {
+    return "No se pudo calcular cuántas órdenes cambiarían de tarifa.";
+  }
+  if (impacto.ordenes <= 0) {
+    return "Ninguna orden sin cerrar cambia de tarifa de flete.";
+  }
+  if (impacto.ordenes === 1) {
+    return "1 orden sin cerrar pasaría a cobrarse con otra tarifa de flete.";
+  }
+  return `${impacto.ordenes} órdenes sin cerrar pasarían a cobrarse con otra tarifa de flete.`;
+}
+
+/**
+ * Mensaje de éxito del guardado. Al crear, siempre "Zona creada": crear nunca
+ * reconcilia órdenes ni retiene ninguna (R13). Al editar, si el guardado
+ * reubicó órdenes de otra bodega (su distrito ya resolvía otra zona), lo dice
+ * con el conteo exacto; con 0 el mensaje queda igual que antes de la 366.
+ *
+ * ⭑ FICHA 377 (R8/R10) — LA SEGUNDA FRASE, Y POR QUE SOLO APARECE A VECES.
+ *
+ * `ordenesRetenidas` son las que el servidor dejó a propósito con su zona
+ * anterior porque su paquete ya está recibido en una bodega (R2): moverlas de
+ * zona las sacaría del listado de quien las tiene y las dejaría sin transición
+ * de salida. Decir «se reubicaron 12» y callar que otras 39 no se movieron es
+ * el fallo mudo que R8 cierra, así que la frase se añade a la de arriba en vez
+ * de sustituirla: los dos conjuntos son DISJUNTOS y los dos números importan.
+ *
+ * Con `0` retenidas NO se dice nada (R10): un «0 órdenes» en el caso normal
+ * —que es la enorme mayoría de los guardados— sería ruido que enseña a ignorar
+ * el mensaje justo cuando el número deja de ser 0. Por eso la guarda es
+ * `> 0` y no `<= 0`: el texto de antes de esta ficha se conserva LITERAL.
+ *
+ * Y la causa se nombra en términos de lo que pasa en la bodega, no del modelo:
+ * ni «retenidas», ni «custodia», ni «sin dueño» —eso último describe un defecto
+ * que este cambio precisamente impide—.
+ */
+function mensajeGuardado(
+  esEditar: boolean,
+  ordenesReconciliadas: number,
+  ordenesRetenidas: number,
+): string {
   if (!esEditar) return "Zona creada";
-  if (ordenesReconciliadas <= 0) return "Zona actualizada";
-  const sustantivo =
-    ordenesReconciliadas === 1 ? "orden reubicada" : "órdenes reubicadas";
-  return `Zona actualizada (${ordenesReconciliadas} ${sustantivo})`;
+
+  const base =
+    ordenesReconciliadas > 0
+      ? `Zona actualizada (${ordenesReconciliadas} ${
+          ordenesReconciliadas === 1 ? "orden reubicada" : "órdenes reubicadas"
+        })`
+      : "Zona actualizada";
+
+  if (!(ordenesRetenidas > 0)) return base;
+
+  const retenidas =
+    ordenesRetenidas === 1
+      ? "1 orden no cambió de zona porque su paquete ya está en una bodega."
+      : `${ordenesRetenidas} órdenes no cambiaron de zona porque su paquete ya está en una bodega.`;
+
+  return `${base}. ${retenidas}`;
 }
 
 /** Mensaje legible para los estados de error de crear/actualizar zona. */
 function mensajeDeError(err: ZonaActionError): string {
   switch (err.status) {
     case "validation_error":
-      return "Revisa los campos: el formulario está incompleto.";
+      // FICHA 376 (R23): el rechazo de la marca de zona central NO es «el formulario está
+      // incompleto» —el formulario estaba completo, la regla lo rechazó—. El motivo lo redacta el
+      // servidor y se reenvía TAL CUAL: la casilla lo pinta (FieldError) y el toast lo repite,
+      // porque la casilla puede haber quedado fuera de la pantalla al hacer scroll.
+      return (
+        err.fieldErrors.esCentral?.[0] ??
+        "Revisa los campos: el formulario está incompleto."
+      );
     case "conflict":
       return "Ya existe una zona con ese nombre o un distrito ya está asignado.";
     case "unauthenticated":

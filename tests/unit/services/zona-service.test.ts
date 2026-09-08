@@ -6,7 +6,7 @@ import type {
   UpdateZonaResult,
 } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IZonaService";
-import type { CrearZonaInput, ZonaDTO } from "@/lib/types/zona";
+import type { ActualizarZonaInput, CrearZonaInput, ZonaDTO } from "@/lib/types/zona";
 
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
 const ADMIN: Actor = { usuarioId: "a1", rol: "admin" };
@@ -19,9 +19,17 @@ function dto(overrides: Partial<ZonaDTO> = {}): ZonaDTO {
   return { id: "z1", nombre: "GAM", cobroVehiculo: false, distritosCount: 1, esCentral: false, ...overrides };
 }
 
-/** FICHA 366: `update` ya no devuelve el DTO pelado, sino el DTO MAS el conteo de R12. */
-function resultadoUpdate(zona: ZonaDTO = dto(), ordenesReconciliadas = 0): UpdateZonaResult {
-  return { zona, ordenesReconciliadas };
+/**
+ * FICHA 366: `update` ya no devuelve el DTO pelado, sino el DTO MAS el conteo de R12.
+ * FICHA 376: y el desenlace viaja NOMBRADO en `estado`, porque ahora hay DOS formas de no guardar.
+ */
+function resultadoUpdate(
+  zona: ZonaDTO = dto(),
+  ordenesReconciliadas = 0,
+  ordenesRetenidasEnBodegaSatelite = 0,
+): UpdateZonaResult {
+  // FICHA 377: y el conteo de las RETENIDAS, que es un numero distinto y disjunto del anterior.
+  return { estado: "ok", zona, ordenesReconciliadas, ordenesRetenidasEnBodegaSatelite };
 }
 
 function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
@@ -36,6 +44,10 @@ function buildRepo(overrides: Partial<IZonaRepository> = {}): IZonaRepository {
     countExistingDistritos: vi.fn(async (ids: string[]) => ids.length),
     countExistingVehiculos: vi.fn(async (ids: string[]) => ids.length),
     findCentralZonaId: vi.fn().mockResolvedValue(null), // feature 54
+    // FICHA 376 (Q4): por defecto, cero ordenes vivas en cada zona pedida.
+    contarOrdenesVivasPorZona: vi.fn(async (ids: string[]) =>
+      ids.map((zonaId) => ({ zonaId, ordenesVivas: 0 })),
+    ),
     ...overrides,
   };
 }
@@ -126,10 +138,119 @@ describe("borrar", () => {
     service = new ZonaService(repo);
     expect((await service.borrar("zX", MAESTRO)).status).toBe("not_found");
   });
-  it("hardDelete referenced -> conflict", async () => {
+  it("hardDelete referenced -> conflict con motivo `en_uso`", async () => {
     repo = buildRepo({ hardDelete: vi.fn().mockResolvedValue("referenced") });
     service = new ZonaService(repo);
-    expect((await service.borrar("z1", MAESTRO)).status).toBe("conflict");
+    const r = await service.borrar("z1", MAESTRO);
+    expect(r.status).toBe("conflict");
+    if (r.status === "conflict") expect(r.motivo).toBe("en_uso");
+  });
+
+  // ⭑ FICHA 376 / R11 — los DOS conflictos tienen que ser distinguibles SIN inferirlo.
+  it("⭑ R11: hardDelete `es_central` -> conflict con motivo `es_central`, distinto de `en_uso`", async () => {
+    // Antes de esta ficha los dos rechazos habrian llegado como el MISMO `{ status: "conflict" }` y
+    // la pantalla habria dicho «la zona esta en uso» para un caso en el que no hay nada en uso: la
+    // salida no es vaciar la zona, es marcar OTRA zona como central.
+    repo = buildRepo({ hardDelete: vi.fn().mockResolvedValue("es_central") });
+    service = new ZonaService(repo);
+    const r = await service.borrar("z1", MAESTRO);
+    expect(r.status).toBe("conflict");
+    if (r.status === "conflict") {
+      expect(r.motivo).toBe("es_central");
+      expect(r.motivo).not.toBe("en_uso");
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 376 — la guarda «siempre tiene que haber una central», traducida hacia fuera
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe("376 — el desenlace `sin_zona_central` del repositorio", () => {
+  /**
+   * ⚠️ LO QUE ESTE BLOQUE **NO** MIDE, y esta dicho a proposito: que la guarda FUNCIONE. Eso vive
+   * en un `WHERE`/un `if` DENTRO de la transaccion del repositorio, y con un doble el service ve
+   * lo que el doble quiera devolver. La guarda se mide contra Postgres real en
+   * `tests/integration/db/zona-central-guarda-y-rastro.test.ts`. Aqui se mide SOLO la traduccion:
+   * que el desenlace no se pierda ni se confunda con `not_found`.
+   */
+  it("⭑ R6: `sin_zona_central` -> validation_error con el motivo colgado de `esCentral`", async () => {
+    repo = buildRepo({ update: vi.fn().mockResolvedValue({ estado: "sin_zona_central" }) });
+    service = new ZonaService(repo);
+
+    const r = await service.actualizar("z1", crearInput({ esCentral: false }), MAESTRO);
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") {
+      // R6: señala EL CAMPO de la marca, para que la pantalla lo pinte junto a la casilla (R23).
+      expect(Object.keys(r.fieldErrors)).toEqual(["esCentral"]);
+      // LITERAL a proposito, y no la constante que lo genera: ESE texto es el contrato con la
+      // persona que esta guardando. Comparar contra su propia fuente dejaria pasar cualquier
+      // reescritura del mensaje, incluida una que no diga que hacer.
+      expect(r.fieldErrors.esCentral).toEqual([
+        "Tiene que haber una zona central. Para quitarle la marca a ésta, márcala en otra zona.",
+      ]);
+      // Y es DISTINGUIBLE de los otros errores de validacion de la zona (R6): ninguno de los dos
+      // que ya existian cuelga de este campo.
+      expect(r.fieldErrors).not.toHaveProperty("distritoIds");
+      expect(r.fieldErrors).not.toHaveProperty("tarifas");
+    }
+  });
+
+  it("R6: `sin_zona_central` NO se confunde con `not_found`", async () => {
+    repo = buildRepo({ update: vi.fn().mockResolvedValue({ estado: "sin_zona_central" }) });
+    service = new ZonaService(repo);
+    expect((await service.actualizar("z1", crearInput(), MAESTRO)).status).not.toBe("not_found");
+  });
+
+  it("⭑ R1: `esCentral` AUSENTE llega al repositorio como `undefined`, no como `false`", async () => {
+    // El defecto que abre la ficha, en el unico punto donde el service podia reintroducirlo: un
+    // `?? false` aqui volveria a apagar la marca por omision, y ningun test de arriba lo veria.
+    const { esCentral: _omitida, ...sinMarca } = crearInput();
+    void _omitida;
+    await service.actualizar("z1", sinMarca as ActualizarZonaInput, MAESTRO);
+
+    const datos = (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(datos).toHaveProperty("esCentral");
+    expect(datos.esCentral).toBeUndefined();
+    // Y el resto del guardado SI viaja (R4): esto no es un payload vacio.
+    expect(datos.nombre).toBe("GAM");
+    expect(datos.distritoIds).toEqual(["d1"]);
+  });
+
+  it("R3: un `false` EXPLICITO llega al repositorio como `false`, no como `undefined`", async () => {
+    // La otra mitad de R1/R3: «no lo mandé» y «lo mandé apagado» tienen que seguir siendo cosas
+    // distintas cuando llegan al repositorio, porque una se ignora y la otra se rechaza CON MOTIVO.
+    await service.actualizar("z1", crearInput({ esCentral: false }), MAESTRO);
+    const datos = (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(datos.esCentral).toBe(false);
+  });
+});
+
+describe("376/Q4 — el impacto de mover la marca", () => {
+  it("reenvia el conteo del repositorio TAL CUAL", async () => {
+    repo = buildRepo({
+      contarOrdenesVivasPorZona: vi.fn().mockResolvedValue([
+        { zonaId: "z-gam", ordenesVivas: 850 },
+        { zonaId: "z-nueva", ordenesVivas: 0 },
+      ]),
+    });
+    service = new ZonaService(repo);
+
+    const r = await service.impactoZonaCentral(["z-gam", "z-nueva"], MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.impacto).toEqual([
+        { zonaId: "z-gam", ordenesVivas: 850 },
+        { zonaId: "z-nueva", ordenesVivas: 0 },
+      ]);
+    }
+    expect(repo.contarOrdenesVivasPorZona).toHaveBeenCalledWith(["z-gam", "z-nueva"]);
+  });
+
+  it("no-maestro -> forbidden y no consulta nada", async () => {
+    const r = await service.impactoZonaCentral(["z1"], ADMIN);
+    expect(r.status).toBe("forbidden");
+    expect(repo.contarOrdenesVivasPorZona).not.toHaveBeenCalled();
   });
 });
 
@@ -147,8 +268,9 @@ describe("listar — include", () => {
 });
 
 describe("actualizar", () => {
-  it("update devuelve null -> not_found", async () => {
-    repo = buildRepo({ update: vi.fn().mockResolvedValue(null) });
+  it("update devuelve `not_found` -> not_found", async () => {
+    // FICHA 376: el desenlace viaja nombrado, no como `null`. Sigue siendo el mismo caso.
+    repo = buildRepo({ update: vi.fn().mockResolvedValue({ estado: "not_found" }) });
     service = new ZonaService(repo);
     expect((await service.actualizar("zX", crearInput(), MAESTRO)).status).toBe("not_found");
   });
@@ -170,6 +292,40 @@ describe("actualizar", () => {
     const r = await service.actualizar("z1", crearInput(), MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status === "ok") expect(r.ordenesReconciliadas).toBe(0);
+  });
+
+  // ⭑ FICHA 377 (T6, R7/R8) — LOS DOS NUMEROS, SIN MEZCLARSE.
+  it("⭑ 377/R7/R8: reenvia los DOS conteos del repo TAL CUAL y por separado", async () => {
+    // Numeros DISTINTOS entre si a proposito: si el service devolviera dos veces el mismo campo
+    // —o la suma— este caso lo caza. Con `{5, 5}` no lo cazaria.
+    repo = buildRepo({ update: vi.fn().mockResolvedValue(resultadoUpdate(dto(), 5, 3)) });
+    service = new ZonaService(repo);
+
+    const r = await service.actualizar("z1", crearInput(), MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.ordenesReconciliadas).toBe(5);
+      expect(r.ordenesRetenidasEnBodegaSatelite).toBe(3);
+    }
+  });
+
+  it("⭑ 377/R10: sin nada retenido, el service reenvia CERO (no lo omite)", async () => {
+    // R10 pide que el numero exista y valga 0, no que desaparezca: la pantalla decide callarse
+    // mirando el cero, y no puede decidirlo sobre un `undefined`.
+    repo = buildRepo({ update: vi.fn().mockResolvedValue(resultadoUpdate(dto(), 2, 0)) });
+    service = new ZonaService(repo);
+
+    const r = await service.actualizar("z1", crearInput(), MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      expect(r.ordenesRetenidasEnBodegaSatelite).toBe(0);
+      expect(Object.keys(r).sort()).toEqual([
+        "ordenesReconciliadas",
+        "ordenesRetenidasEnBodegaSatelite",
+        "status",
+        "zona",
+      ]);
+    }
   });
 
   it("⭑ R10: `actor.usuarioId` llega al repo como TERCER argumento de `update`", async () => {
@@ -209,6 +365,13 @@ describe("esCentral — invariante 'una central' (feature 55/R3/R4/R6)", () => {
     const r = await service.actualizar("z1", crearInput({ esCentral: true }), MAESTRO);
     expect(r.status).toBe("ok");
     if (r.status === "ok") expect(r.zona.esCentral).toBe(true); // R3
+  });
+
+  it("⭑ 376/R12: `actor.usuarioId` llega al repo como SEGUNDO argumento de `create`", async () => {
+    // Sin esto, las dos filas que produce crear una zona central quedarian firmadas por EL SISTEMA
+    // (`resolverActorCongelado(tx, null)`) y el rastro no diria quien movio la marca.
+    await service.crear(crearInput({ esCentral: true }), MAESTRO);
+    expect((repo.create as ReturnType<typeof vi.fn>).mock.calls[0][1]).toBe(MAESTRO.usuarioId);
   });
 
   it("crear con esCentral=false persiste false (R4)", async () => {

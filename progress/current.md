@@ -8,6 +8,114 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🗺️ 2026-09-07 — barrido del área zona / bodega / orden (376–381)
+
+**Sesión abierta.** Nace de una pregunta del humano —«¿qué pasa con las órdenes que están en una
+bodega cuando cambia de zona?»— que destapó ocho huecos. Se auditó el área entera contra el código
+y **contra producción en solo lectura**. Producción salió sorprendentemente limpia: **0** órdenes
+con la zona desalineada de su distrito, **0** con mensajero de otra zona, **0** pares (tienda, zona)
+sin tarifa, **0** cierres aprobados sin consolidar. El problema no es el estado de hoy: es cuántas
+formas hay de romperlo sin que nada se ponga rojo.
+
+**La premisa que lo explica todo, y que conviene no volver a redescubrir:** en este modelo NO existe
+una entidad «bodega». La bodega satélite **ES la zona** (`lib/utils/estados-bodega-satelite.ts`).
+Cambiar la zona de una orden ES cambiarla de bodega, en los datos, mientras el paquete no se mueve.
+
+### Lo que salió, y dónde vive cada cosa
+
+- **376** (in_progress) — la marca de zona central se apaga **por ausencia del campo**:
+  `esCentral: z.boolean().default(false)` vive en el `zonaFields` que comparten crear y
+  actualizar. Sin confirmación, sin guarda de servidor y sin rastro, y es la marca que elige la
+  columna de flete. Backend (T1–T11) entregado en verde; queda T12, la pantalla.
+- **377** (spec listo) — reconciliar la zona de una orden **ya en el estante** de una satélite la
+  deja invisible para quien la tiene y **sin transición de salida**. No confundir con
+  `en_ruta_bodega_satelite`, cuya reconciliación es correcta y buscada (era el atasco de la 366).
+- **378** (cancelada) — 149 distritos activos sin zona. **Decisión del humano: no hay cobertura ahí
+  y se queda así.** Ver la ficha.
+- **379** (pending) — cambiar la zona de un adminSatelite no tiene ninguna guarda, y solo un
+  adminSatelite de esa zona viva puede consolidar sus cierres: ni maestro ni admin pueden.
+- **380** (pending) — `tarifa_zona_mensajero` (el pago al mensajero) se reescribe entera en cada
+  guardado de zona sin una sola fila de historial. Salió de la Q1 del spec de la 376.
+- **381** (pending) — encargo NUEVO del humano, no es del barrido: cargar un costo a una tienda
+  desde «Registrar movimiento».
+
+### Dos tensiones de diseño que NO son fichas todavía, y por qué
+
+No se registran para no inflar el backlog con rediseños que nadie ha decidido. Están medidas y
+escritas aquí para que no se pierdan:
+
+1. **Hay dos definiciones de «de quién es esta orden».** Las órdenes pertenecen a la bodega por
+   `orden.zona_id` (mutable, se re-estampa); el dinero, por `usuario.zona_id` del mensajero
+   congelado en `cierre_dia.destino_zona_id` (snapshot). `findGestionesPendientes(mensajeroId)`
+   no mira la zona en absoluto. Reconciliar una orden mueve la primera y no la segunda, y eso
+   **reabre por otra puerta el defecto que la ficha 357 cerró** («una bodega podía tener un cierre
+   pendiente por una orden que no podía consultar»). Medido en prod: 0 casos hoy.
+2. **Hay dos respuestas a «¿a qué bodega vuelve el paquete?».** `DeshacerAsignacionService` lo
+   deriva **del historial** («jamás desde la zona», la ficha 363 retiró esa guarda a propósito);
+   `LiberacionReprogramada`, `DevolucionSla` y `RecuperacionBodega` lo derivan de
+   `orden.zona_id` **vivo**. Tras un cambio de zona dan resultados opuestos.
+
+### Trampas medidas esta sesión, para la próxima
+
+- **El gate rápido se niega en toda esta área**: `init.sh:134-135` manda al completo si el diff
+  toca `lib/types/`, una migración, o una ruta que case `(cierre|tarifa|pago|wallet|...)`. El UI
+  de zonas vive bajo `app/(app)/configuracion/tarifas/`, así que casa siempre.
+- **`findCentralZonaId()` tiene OCHO llamadas en ocho servicios**, no cinco: la lista corta que
+  circulaba olvidaba `ManifiestoService` y `CierresAdminService`.
+- **Drift preexistente en la base local**: `20260827160000_orden_num_remision_unico_parcial` fue
+  editada después de aplicarse, así que `prisma migrate dev` pide un `migrate reset` de la base
+  COMPARTIDA. Se esquiva escribiendo la carpeta de la migración a mano y aplicándola con
+  `prisma migrate deploy`. No es de esta sesión y sigue ahí.
+
+### Cierre de la jornada del 2026-09-07
+
+- **376 CERRADA y en `dev`** (PR #724, merge `2a34c577`). El humano probó la pantalla en la app
+  real —el único riesgo residual que declaraba `impl_376.md`— y funciona. Gate post-merge sobre
+  `dev` en verde: `INIT_EXIT=0`, 1769/1769 archivos, 25 263 tests, 132 de `integration/db`
+  ejecutados.
+- **378 CERRADA SIN CÓDIGO** por decisión del humano: los 149 distritos sin zona no tienen
+  cobertura, y los que están habilitados no se tocan.
+- **377** en implementación (worktree aislado), desbloqueada por el merge de la 376.
+- **381** con el spec revisado a las decisiones del humano (43 requisitos). Espera turno: pide DOS
+  migraciones y la base local es compartida.
+
+### ⚠️ Dos trampas de la base local que costaron una tarde, y las dos son de la MISMA familia
+
+Un gate post-merge salió rojo con **7 tests en 6 archivos**, todos del tipo «el enum de la base ES el
+catálogo» y todos ajenos a lo que se estaba tocando. `dev` estaba sano; la base local no.
+
+1. **Una migración huérfana de un agente detenido.** Al parar a media escritura al implementador de
+   la 381, su migración **ya estaba aplicada** a la base local compartida. La carpeta se fue con su
+   rama; los valores del enum se quedaron. Ver [base local compartida rompe gates ajenos].
+2. **El `down.sql` se llevó por delante un valor AJENO.** Al revertir esa migración, su `down.sql`
+   —que *recrea el tipo con la lista completa*, porque Postgres no sabe borrar un valor suelto—
+   restauró la lista **de su punto de ramificación**, anterior al merge de la 376. Resultado:
+   `zona_central_cambiada` desapareció de la base **sin un solo error**. Los tests siguieron rojos,
+   pero ya por otro motivo.
+
+**La receta, para la próxima:**
+- antes de revertir, compara la lista del `down.sql` con el catálogo de `dev` **de hoy**, no con el
+  de la rama;
+- después de revertir, reaplica los `migration.sql` de las fichas mergeadas **después** de esa rama
+  (`ADD VALUE IF NOT EXISTS` es idempotente):
+  `pnpm exec prisma db execute --file ./db/migrations/<carpeta>/migration.sql`;
+- la verificación que no miente es correr los propios archivos de `tests/integration/db` que afirman
+  «el enum de la base es el catálogo»: si pasan, la base está bien por construcción;
+- y `pnpm run db:rollback` revierte **la última carpeta por nombre**, así que en `dev` apunta a la
+  ficha recién mergeada, no a la que quieres deshacer. Hay que estar en la rama correcta.
+
+### Reportado por el humano y sin ficha todavía
+
+**El modal «Imprimir etiquetas» avisa «No se pudo preparar la tipografía de la etiqueta».** Visto en
+PRODUCCIÓN (guías 77234159 y 70159914, confirmadas en la base). Lo lanza `cargarFuenteEtiqueta()`
+cuando falla el `import()` diferido del artefacto. Descartado que el artefacto no se despliegue
+(está versionado y no ignorado) y no hay rastro en los logs de Vercel —correcto: un
+`ChunkLoadError` es del navegador y nunca llega al servidor—. La vista previa se degrada a
+propósito (R33) y **la descarga sí falla** (R16). Pendiente de que el humano recargue con
+Ctrl+Shift+R para distinguir chunk caducado de fallo vivo. **Defecto independiente de la causa: el
+aviso dice «Inténtalo de nuevo», que es justo lo único que no puede funcionar si el chunk ya no
+existe.**
+
 ## 🗺️ 2026-09-03 — la zona que no seguía a su configuración (366) + dos huecos de visibilidad (367)
 
 **Sesión abierta.** Nace de cuatro cosas que el humano reportó de golpe. Dos eran fallos (fichas

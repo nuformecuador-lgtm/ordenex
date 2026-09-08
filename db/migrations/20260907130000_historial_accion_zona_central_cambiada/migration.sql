@@ -1,0 +1,38 @@
+-- FICHA 376 — el rastro de MOVER LA MARCA DE ZONA CENTRAL.
+--
+-- QUE REGISTRA: que la marca `zona.es_central` cambio de valor en una zona. Una fila POR CADA ZONA
+-- CUYA MARCA CAMBIO, no una por acto: un traslado escribe DOS con el mismo `lote_id` —la que la
+-- pierde y la que la gana—. La primera es la que hoy no existe: `ZonaRepository` apaga la central
+-- anterior con un `updateMany` que no la nombra en ninguna respuesta, y esa zona no aparece en
+-- ningun payload. «¿Que le paso a la zona GAM?» tiene que devolver el dia en que dejo de ser la
+-- central, que es lo unico que explica por que sus fletes cambiaron.
+--
+-- UN TIPO NUEVO Y NINGUNA ENTIDAD NUEVA: `zona` ya esta en `historial_accion_entidad` desde
+-- `20260902120000_historial_accion` (la usa `zona_borrada`). Aqui solo se amplia
+-- `historial_accion_tipo`.
+--
+-- POR QUE ENTRA EN «mueve dinero» Y NO EN OTRA CATEGORIA. R17 de la 362 exige EXACTAMENTE una
+-- categoria por tipo. `es_central` elige la columna de flete en `resolverFlete`
+-- (`lib/utils/ingreso-ordenex.ts`): `valor_flete_gam`/`valor_flete_devuelto_gam` frente a
+-- `valor_flete`/`valor_flete_devuelto`. Esa columna se factura, y se lee VIVA hasta que
+-- `cierre_detail.es_central` la fotografia, asi que mover la marca re-tarifa todo lo que aun no
+-- esta congelado en un cierre. Es el mismo motivo textual con el que la 366 clasifico
+-- `orden_zona_reconciliada` y la 362 `orden_ubicacion_corregida`. No es «hace desaparecer algo»
+-- (no desaparece nada: la zona sigue ahi) ni «cambia quien puede hacer que» (no cambia ningun
+-- permiso).
+--
+-- `valor_anterior`/`valor_nuevo` LLEVAN `'true'`/`'false'`, calcado de
+-- `usuario_fulfillment_cambiado` (`lib/repositories/UserRepository.ts`): son valores de un
+-- booleano, vocabulario cerrado, ni texto libre ni un dato de destinatario. Sin ellos la fila
+-- diria «alguien toco la marca» sin decir en que direccion, que es justo el defecto que esta ficha
+-- viene a arreglar. `monto` va NULL: lo que se mueve no es un importe, son dos tarifas por cada
+-- tienda de dos zonas enteras.
+--
+-- VA SOLA: Postgres prohibe USAR un valor de enum en la misma transaccion que lo añade (55P04) y
+-- Prisma Migrate corre cada `migration.sql` en su propia transaccion. Mismo patron que
+-- `20260903120000_historial_accion_orden_zona_reconciliada` y que las cuatro ampliaciones
+-- posteriores.
+--
+-- ADITIVA: no crea ni altera tablas, columnas ni indices. La RLS de `historial_accion` —habilitada
+-- y sin policies desde la 362, solo service role— no se toca: un valor nuevo de enum no la afecta.
+ALTER TYPE "historial_accion_tipo" ADD VALUE IF NOT EXISTS 'zona_central_cambiada';

@@ -22,6 +22,7 @@ import {
   rolAdmiteCorreccion,
   type CampoCorregible,
 } from "@/lib/types/correccion-datos-cliente";
+import { paqueteEnEstanteSatelite } from "@/lib/utils/estados-bodega-satelite";
 import { costosListadoOrden } from "@/lib/utils/ingreso-ordenex";
 import { normalizarTelefonoWa } from "@/lib/utils/whatsapp-telefono";
 
@@ -67,6 +68,11 @@ import { normalizarTelefonoWa } from "@/lib/utils/whatsapp-telefono";
 // primera: devuelve `confirmacion_requerida` con los importes de las dos ubicaciones y espera una
 // segunda peticion confirmada (R11). El gate vive AQUI, en el servidor, y no en la pantalla,
 // precisamente para que no dependa de que la pantalla lo pinte.
+//
+// ⭑ FICHA 377 (R15/R16) — Y UN SEGUNDO RECHAZO, QUE NO ES DE DINERO SINO DE CUSTODIA: si el
+// paquete ya esta en el estante de una bodega satelite, esta correccion NO puede llevarse la orden
+// a otra zona. El motivo largo esta junto al codigo, en el paso 6. Decision del leader del
+// 2026-09-07, NO firmada por el humano (Q3 de `specs/377-bodega-satelite-sin-dueno`).
 
 /**
  * Lo que el servicio consume del repositorio de ordenes, por `Pick` de la interfaz (patron
@@ -291,6 +297,46 @@ export class CorregirDatosClienteService implements ICorregirDatosClienteService
           "Ese distrito no tiene una zona unica asignada: hay que configurarla antes de mover la orden ahi",
         );
       }
+      // ══════════════════════════════════════════════════════════════════════════════════════
+      // ⭑ FICHA 377 (R15/R16) — LA SEGUNDA PUERTA AL MISMO AGUJERO, Y SE CIERRA AQUI
+      // ══════════════════════════════════════════════════════════════════════════════════════
+      //
+      // La 377 excluye de la reconciliacion automatica (`ZonaRepository.update`) a la orden cuyo
+      // paquete ya esta en el estante de una bodega satelite. ESTE servicio es el OTRO camino que
+      // llega al mismo `orden.zona_id`: `en_bodega_satelite` no esta en `ESTADOS_SIN_CORRECCION`,
+      // asi que sin esto un maestro cambia el distrito de una orden en estante y la zona se
+      // re-deriva igual, con el MISMO desenlace — desaparece del listado de la bodega que TIENE
+      // el paquete (`OrdenRepository.condicionesSatelite` acota por `zona_id`), esa bodega ya no
+      // puede asignarla (`AsignacionSateliteService`, motivo `zona_ajena`), la otra la ve sin
+      // tener el paquete, y desde `en_bodega_satelite` NO existe transicion de salida hacia otra
+      // bodega. Un arreglo que cierra una de las dos puertas no es un arreglo.
+      //
+      // POR QUE PROHIBIR Y NO SOLO AVISAR. El aviso de R11 (el gate del dinero) ya existe, pero
+      // avisar aqui no evita nada: si quien corrige confirma, la orden se queda igual de
+      // inalcanzable y ahora con una firma encima —«un fallo mudo convertido en fallo
+      // consentido», que es la mitad de la salida (c) que el design §2 de esta ficha descarta—.
+      // La reconciliacion automatica no pide permiso a nadie y se limita; este camino tampoco
+      // puede comprarse el desenlace con un clic.
+      //
+      // POR QUE NO SE METE `en_bodega_satelite` EN `ESTADOS_SIN_CORRECCION`. Eso prohibiria
+      // TAMBIEN corregir el nombre, el telefono, el producto, las notas, el peso o la direccion
+      // de una orden en estante — datos que no mueven la orden de bodega y que son justo lo que
+      // esta ficha existe para poder seguir despachando. El corte es exactamente el daño: LA ZONA
+      // QUE CAMBIA. Corregir el distrito DENTRO de la misma zona sigue permitido (R16), porque no
+      // le quita la orden a nadie; el gate del dinero de abajo lo sigue cubriendo.
+      //
+      // ⚠️ Se compara la zona DERIVADA contra la ESTAMPADA, no `cambios.includes("distritoId")`:
+      // el distrito puede ser el mismo y resolver hoy otra zona (es literalmente el escenario de
+      // la 366), y ese caso escribe `zona_id` igual.
+      if (paqueteEnEstanteSatelite(orden.estatusValue) && distrito.zonaId !== orden.zonaId) {
+        return this.rechazoDeUbicacion(
+          `El paquete de esta orden ya está en la bodega de ${orden.zonaNombre}, y ese ` +
+            "distrito pertenece a otra zona: moverla ahí la sacaría del listado de la bodega " +
+            "que la tiene y nadie podría asignarla. Despáchala desde esa bodega o corrige el " +
+            "distrito dentro de su misma zona.",
+        );
+      }
+
       // R5 — LA ZONA LA ESCRIBE EL SERVIDOR. Nunca sale del input: el schema del borde ni siquiera
       // la admite.
       data.zonaId = distrito.zonaId;

@@ -4478,3 +4478,88 @@ detectó el gate: `jq` no está instalado y su ausencia es un `warn`, así que l
   su orden ES el agrupado que la hace legible. `ColumnasPopover` gana esa capacidad en vez de
   duplicarse.
 - **DEUDA:** ninguna de las dos partes se ha visto en la pantalla real con sesion `maestro`.
+
+## 2026-09-07 — 377: una orden en bodega satélite deja de quedarse sin dueño al cambiar de zona
+
+- La reconciliación de zona de la 366 (`ZonaRepository.update`) no miraba el estado: una orden cuyo
+  paquete **ya estaba en el estante** de una bodega satélite podía cambiar de zona y desaparecer del
+  listado de la bodega que lo tiene —`condicionesSatelite` acota por `orden.zona_id`—, esa bodega ya
+  no podía asignarla (`zona_ajena`), la otra la veía sin tener el paquete, y desde
+  `en_bodega_satelite` **no hay transición de salida** hacia otra bodega. Ahora esas órdenes se
+  **excluyen** del corte de elegibilidad y se **cuentan aparte**. En tránsito
+  (`en_ruta_bodega_satelite`) se sigue reconciliando **intacto**: es lo que desatascó 41 de 42
+  órdenes represadas el 2026-09-03, y esa distinción —quién tiene HOY el paquete— es la ficha entera.
+- Requisitos cubiertos: **R1–R16**, mapa `R<n> → test` en
+  `progress/impl_377-bodega-satelite-sin-dueno.md` y en `specs/377-bodega-satelite-sin-dueno/tasks.md`.
+- El toast de guardar zona dice ahora **las dos cifras**, sin jerga y sin decir «sin dueño» (describe
+  un defecto que este cambio ya impide). El cero se **calla** (`> 0`, no `>= 0`): con 0 retenidas el
+  texto queda **literal** como antes de la ficha, para que el mensaje no se aprenda a ignorar.
+- **El hueco de verificación por el que entró el defecto, cerrado:** el fixture de
+  `tests/integration/db/zona-reconciliacion-ordenes.test.ts` creaba todas sus órdenes con un
+  `estatusId` sacado de un `findFirst` **sin `orderBy`** —arbitrario y no determinista—, así que el
+  eje del estado no se varía nunca y la suite estaba verde. Ahora `crearOrden` acepta `estatusValue`
+  y lo resuelve con `findUniqueOrThrow` (fallo RUIDOSO, nunca un `if (!x) return;`). El archivo pasa
+  de **17 a 28** tests **sin tocar un solo `expect`** de los previos.
+- **El corte vive en el `WHERE`, no en un `filter` de JS, y se puede matar:** quitarlo → **6** rojos;
+  invertirlo (`notIn` → `in`) → **24** (14 de la 366 + 9 de la 377 + 1 unit). Los dos casos R2/R3
+  juntos son los que impiden que el corte se quite **o** se invierta en silencio.
+- **Decisión del LEADER, NO firmada por el humano (Q3):** se cerró también **la segunda puerta** al
+  mismo `orden.zona_id`. `CorregirDatosClienteService` rechaza la corrección manual que **movería de
+  zona** una orden en el estante —compara la zona DERIVADA contra la ESTAMPADA, no
+  `cambios.includes("distritoId")`—. Prohibir y no solo avisar: el aviso que ya existía habla de
+  importes, y consentir el desenlace con un clic convierte un fallo mudo en uno consentido. **NO** se
+  tocó `ESTADOS_SIN_CORRECCION`: nombre, teléfono, producto, notas, peso y **dirección** se siguen
+  corrigiendo con el paquete en el estante. Esto **deroga a propósito** el «ni una línea en
+  `CorregirDatosClienteService`» del `design.md` §7/§10, y la derogación queda anotada **ahí mismo**.
+  Vuelta atrás: quitar un `if`.
+- **Q2 = sí se informa** el conteo de retenidas, lo que **diverge del precedente de la 366** (que dijo
+  que no a un segundo conteo): dejar órdenes con la zona vieja a propósito y callarlo es la familia de
+  fallo mudo que ya costó cinco fichas aquí.
+- **Medición previa al despliegue (T9), 2026-09-07, producción en solo lectura: LUZ VERDE.**
+  **37** en estante · **215** en tránsito · **0** desalineadas · **0** desalineadas en el estante. Con
+  deriva 0 no hay nada que parar ni que reparar: este cambio **congela, no repara**. La cifra vieja de
+  **47** en estante queda caducada.
+- **Revisión independiente: OK, 0 bloqueantes y 9 menores** (`progress/review_377.md`), con el gate y
+  las mutaciones reproducidos por el revisor. Los 9 se cerraron el mismo día: tasks marcadas, T9
+  actualizada, dos cifras corregidas, la derogación anotada en el `design.md`, el texto del rechazo de
+  Q3 reescrito **en español con tildes** (lo lee un maestro en el modal) y un caso nuevo —corregir
+  **solo la dirección** de una orden en el estante— que le pone red a lo que antes solo era correcto
+  «por construcción».
+- **Sin migración, sin columnas, sin índices, sin RLS y sin una arista nueva en `TRANSICIONES`.**
+- **DEUDA declarada, no resuelta:** (a) **Q4** — `por_recoger` sigue expuesto: una orden asignada desde
+  una satélite y aún no recogida se reconcilia igual y esa bodega pierde el deshacer; cubrirlo exige
+  leer la custodia del historial, más superficie que este arreglo mínimo; (b) la orden retenida
+  **conserva la tarifa de la zona vieja** hasta que se gestiona — consecuencia buscada y explicada;
+  (c) **Q1 sigue abierta y es del humano**, y **la decisión Q3 sigue sin su firma**.
+## 2026-09-07 — 382: el caracter que la fuente no imprime dice de que orden es
+
+- Una sola orden de produccion (guia **11081885**) con el destinatario y la direccion en caracteres
+  **double-struck** (bloque U+1D400; el medido, **U+1D560**) tumbaba la descarga del **lote entero**,
+  y el modal respondia «No se pudo preparar la tipografia de la etiqueta. **Intentalo de nuevo.**»
+  — una instruccion imposible de cumplir y sin decir que orden mirar. `exigirCobertura` hacia lo
+  correcto al negarse a imprimir; **el defecto era el mensaje**.
+- El `catch` de `EtiquetasGuiaModal` unia dos modos de fallo con un razonamiento escrito («los dos
+  significan lo mismo para quien esta delante»). **Ese razonamiento se revierte con su motivo al
+  lado:** si la fuente no carga, reintentar puede servir; si el caracter no esta cubierto, lo unico
+  que cambia el resultado es corregir el dato de esa orden.
+- Nuevo error tipado `ErrorCaracterNoImprimible` (guia, caracter, code point, campo, fuente), al
+  estilo de `ErrorEtiquetaNoCabe`. `exigirCobertura` recibe `numGuia` como parametro **obligatorio**,
+  para que el compilador cace a quien no lo pase.
+- Requisitos cubiertos: **R1** (el error lleva la guia y el caracter, en las **dos** llamadas del
+  dibujo, importe incluido) y **R2** (el aviso nombra la orden, muestra el caracter con su `U+XXXX`,
+  pide corregir el dato y **no** manda reintentar). Definidos y mapeados a test en
+  `progress/impl_382.md` — la ficha es `sdd: false` y no hay `specs/382/`.
+- Lo que **no** cambia: `exigirCobertura` sigue negandose a imprimir el caracter; `ERROR_FUENTE_ETIQUETA`
+  y el mensaje de «no cabe» quedan intactos y los tres son distinguibles; la vista previa se sigue
+  degradando a proposito (R33).
+- El caracter culpable va envuelto en aislante bidi (`U+2068`/`U+2069`): sin eso, un `U+202E` —
+  alcanzable desde el dato — invertiria el orden del propio aviso, guia incluida.
+- Verificacion: `./init.sh` completo, `INIT_EXIT=0` leido **de dentro** del log, 1770 archivos,
+  25 279 tests, 26 `skipped` (17 + 9 de Analitica, preexistentes). **16 mutaciones, 16 muertas**,
+  incluida la que el reviewer encontro viva: colar un `0` como guia en la llamada del **importe**
+  dejaba 268 tests verdes y ahora mata 2.
+- **ABIERTA, sin firma del humano:** si hay que **normalizar** estos caracteres al entrar
+  (double-struck → ASCII) en la carga masiva y en el alta. No se implemento nada. Opinion razonada
+  en `progress/impl_382.md`.
+- **DEUDA:** nadie ha visto el aviso en la app real, y la orden 11081885 sigue rota en produccion
+  hasta que se corrija su dato (pantalla de correccion de datos del cliente, fichas 312/327).

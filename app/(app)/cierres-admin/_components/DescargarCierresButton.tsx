@@ -39,7 +39,7 @@ import {
  * no es la que va a bajar.
  *
  * La preferencia de columnas es POR NIVEL, con un ámbito propio cada uno: son juegos distintos
- * (7 columnas frente a 29) y compartir clave haría que ocultar «Motivo» en el resumen moviera
+ * (7 columnas frente a 31) y compartir clave haría que ocultar «Motivo» en el resumen moviera
  * en silencio lo guardado del detalle. El nivel elegido, en cambio, NO se persiste: es la
  * pregunta que el maestro contesta cada vez, y arrancar siempre en «Resumen» conserva lo que el
  * botón simple hacía hasta hoy —un clic y el archivo—.
@@ -51,7 +51,7 @@ import {
  *
  * Las tres alternativas descartadas, y por qué:
  *  · Meter mensajeros y fechas DENTRO del popover. Es una lista con scroll de toda la flota más
- *    dos fechas más 29 casillas de columnas en un panel de 20rem: la elección de columnas
+ *    dos fechas más 31 casillas de columnas en un panel de 20rem: la elección de columnas
  *    quedaría fuera de la vista justo cuando hay más que elegir.
  *  · Ofrecerlos SIEMPRE, también en «Resumen». Serían controles que no recortan nada de ese
  *    archivo (el resumen sale de los filtros de la pantalla, no de los del diálogo): un filtro
