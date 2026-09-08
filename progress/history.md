@@ -4747,3 +4747,28 @@ Cerrada. Dos PR: #750 (servidor) y #751 (pantalla). **Lleva dos migraciones.**
 - **Confirma el hallazgo de la 380:** borrar la escritura del historial deja la guardia del censo
   verde. Mide por metodo, no por escritura.
 - **Queda sin firmar la Q1:** los tres textos que ve el usuario.
+
+
+## 395 — el cierre del mensajero no decia que plata es para quien (2026-09-08)
+
+Cerrada y en produccion el mismo dia. Dos PR: #753 (servidor) y #754 (pantalla).
+Sin migracion.
+
+- **Fallo de alcance del leader en la 393:** las cascadas se montaron solo en los cierres de
+  BODEGA. El detalle del MENSAJERO -- el que se mira todos los dias -- seguia con tarjetas
+  sueltas e invitaba a restar dos numeros que NO salen de la misma bolsa.
+- **Lo descubrio el humano usandolo**, no un test: se confundio leyendo su propia pantalla y
+  dedujo a mano la cuenta que la pantalla deberia haberle dado.
+- **El arreglo es el ORDEN:** primero la particion (recaudado - facturado = gana la tienda) y
+  DESPUES el desglose que explica el pago de hoy. La mutacion que pinta la particion despues
+  del desglose se pone roja: el orden ES el arreglo.
+- **El tiempo verbal esta medido:** el cargo del flete por rechazo se escribe en el saldo de la
+  tienda AL APROBAR. De 37 cierres aprobados con rechazos, los 37 lo tienen; los solicitado y el
+  vencido, ninguno. La pantalla dice «ya se le cargo» o «todavia no» segun el estado.
+- **Una linea que el leader pidio y NO entro, con razon:** «lo que el mensajero entrega». El pago
+  no se descuenta en el cierre del mensajero -- sale del efectivo en la consolidacion de la
+  bodega -- y ademas ese numero YA EXISTE y ya se ve. Habria sido un segundo nombre para lo
+  mismo, que es justo lo que la 393 se prohibio.
+- **DEROGA la R39 de la 393 por decision del humano:** el adminSatelite SI ve el neto de
+  Ordenex. «La idea es que la satelite tambien sepa como debe pagar, no le podemos ocultar
+  detalles pues el lio esta pasando tambien desde alla». Consecuencia registrada como 397.
