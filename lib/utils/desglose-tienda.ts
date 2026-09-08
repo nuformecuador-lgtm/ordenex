@@ -43,6 +43,11 @@ export const CUBETA_POR_CATEGORIA: Record<WalletTiendaMovimientoCategoria, Cubet
   iva_flete_devolucion: "cargos",
   iva_comision_cod: "cargos",
   ajuste_debito: "cargos",
+  // FICHA 381 (R36) — el cobro manual cae en CARGOS, no en `aFavor` ni en `pagado`. De aqui, y de
+  // ningun sitio mas, sale R26: `saldo = aFavor - cargos - pagado`, asi que un cobro baja el saldo
+  // POR CONSTRUCCION y puede dejarlo negativo. Meterlo en `pagado` diria que la tienda ya recibio
+  // ese dinero, que es exactamente lo contrario de lo que ocurrio.
+  cobro_manual: "cargos",
   // Pagado a la tienda: lo ya entregado. Hoy nadie lo emite (lo hara la 172), pero se lee de
   // la categoria REAL del ledger, no se devuelve un cero fijo (R43).
   pago_tienda: "pagado",

@@ -1,0 +1,42 @@
+-- FICHA 381 (1 de 2) — el CONCEPTO del cobro manual a una tienda en el libro de esa tienda.
+--
+-- QUE REGISTRA: `cobro_manual` es un DEBITO que una persona decide desde «Registrar movimiento»
+-- y que BAJA el disponible de la tienda. El humano lo acoto el 2026-09-07 con estas palabras:
+-- «mas que marcar como ingreso es quitar del dinero disponible de esa tienda»; «si se hace un
+-- cobro a una tienda, este se debita de la plata pendiente por pagar a esa tienda, y si no hay,
+-- entonces el disponible debe verse en negativo y cobrarse solo cuando mediante la gestion se le
+-- deba dinero a esa tienda».
+--
+-- ⚠️ NO TOCA LA CAJA DE ORDENEX (D1). No hay ingreso espejo en `wallet_movimiento`, no se amplia
+-- `wallet_origen_tipo` y no hay puerto de caja. Los dos libros divergen A PROPOSITO: la tienda
+-- debe mas y la caja no reconoce ese ingreso hasta que el dinero entre de verdad.
+--
+-- POR QUE UNA CATEGORIA PROPIA Y NO `ajuste_debito` (D2, firmada por el humano el 2026-09-07):
+-- «si es importante distinguir cuando es un cobro a una tienda». Con `ajuste_debito` un cobro y
+-- una correccion compensatoria quedarian indistinguibles en la fila, y lo unico que los separaria
+-- seria la `descripcion` — texto libre tecleado por una persona, sobre lo que este repo se niega a
+-- apoyar logica de dinero. Consecuencias concretas de conflacionarlos: no se podria filtrar «los
+-- cobros» en `/mi-wallet` ni en `/wallet/tiendas`, la descarga diria lo mismo para dos cosas
+-- distintas, y la metrica `cuenta_por_pagar_tienda` sumaria ambas bajo un nombre que ya no
+-- describe su contenido. Y conflacionar filas es IRREVERSIBLE en los datos; añadir el valor cuesta
+-- una migracion hoy y nada despues. `ajuste_debito` se queda INTACTO y sin productores.
+--
+-- POR QUE `cobro_manual` Y NO `cobro_tienda`: TODA esta tabla es de tiendas. Lo que distingue a
+-- esta categoria de `flete`/`comision_cod`/los tres IVA es que la decide UNA PERSONA, no una tarifa.
+--
+-- VA SOLA, y la migracion 2 (`20260908140100_wallet_tienda_check_cobro_manual`) recrea el CHECK
+-- que lo admite: Postgres prohibe USAR un valor de enum en la misma transaccion que lo añade
+-- (55P04) y Prisma Migrate corre cada `migration.sql` en su propia transaccion. El CHECK
+-- `wallet_tienda_movimiento_tipo_categoria_check` NOMBRA los valores admitidos por rama, asi que
+-- recrearlo con `cobro_manual` dentro es *usar* el valor. Precedente:
+-- `20260906120100_historial_accion_nodo_geografico` y las cinco ampliaciones de enum posteriores.
+--
+-- ⚠️ HASTA QUE CORRA LA MIGRACION 2, UN `INSERT` CON `cobro_manual` LO RECHAZA LA BASE. Eso es lo
+-- correcto: el CHECK falla CERRADO a proposito (R60 de la 172), y en esa ventana no hay ningun
+-- escritor —la Server Action y su servicio llegan con este mismo despliegue—.
+--
+-- ADITIVA: no crea ni altera tablas, columnas ni indices, no escribe ni borra datos. La RLS de
+-- `wallet_tienda_movimiento` —habilitada y sin policies desde la 43, solo service role— no se
+-- toca: un valor nuevo de enum no la afecta. NO HAY BACKFILL y no puede haberlo: ningun cobro
+-- manual existe todavia, esta ficha es la que los crea.
+ALTER TYPE "wallet_tienda_movimiento_categoria" ADD VALUE IF NOT EXISTS 'cobro_manual';

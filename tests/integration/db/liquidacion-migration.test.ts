@@ -211,9 +211,25 @@ describe("UP — CHECK tipo <-> categoria de los dos libros (condicion heredada 
       "pago_tienda",
       "ajuste_debito",
     ]);
-    // Exhaustivo sobre el enum REAL y ni un valor de mas (medido en produccion, T A.0: 10/10).
+    // Exhaustivo sobre el enum TAL COMO ERA cuando esta migracion se escribio (T A.0 lo midio en
+    // produccion: 10/10). El `.sql` de una carpeta es una FOTO punto-en-el-tiempo y no se reescribe;
+    // lo que se resta aqui son los valores que features POSTERIORES anadieron, cada una con su
+    // propio `DROP`+`ADD` de este MISMO CHECK — exactamente el mecanismo que el libro del mensajero
+    // ya usaba aqui abajo desde la 293:
+    //   - `cobro_manual` (381): lo anade `20260908140100_wallet_tienda_check_cobro_manual`.
+    //
+    // ⚠️ LA LISTA NO AFLOJA NADA, y por eso se resta en vez de comparar por inclusion: sigue siendo
+    // una igualdad exacta, asi que un valor de enum que nadie clasifique NI en este CHECK NI en esta
+    // lista pone el caso rojo. Que la restriccion de HOY siga cubriendo el enum de HOY se afirma en
+    // `tests/integration/db/wallet-tienda-cobro-migration.test.ts`, que es donde ese CHECK vive
+    // ahora.
+    const AGREGADAS_DESPUES_TIENDA = ["cobro_manual"];
     const clasificadas = [...ramasTienda.values()].flat();
-    expect([...clasificadas].sort()).toEqual(valoresDelEnum("WalletTiendaMovimientoCategoria").sort());
+    expect([...clasificadas].sort()).toEqual(
+      valoresDelEnum("WalletTiendaMovimientoCategoria")
+        .filter((v) => !AGREGADAS_DESPUES_TIENDA.includes(v))
+        .sort(),
+    );
     // "unico tipo valido": ninguna categoria aparece en las dos ramas.
     expect(new Set(clasificadas).size).toBe(clasificadas.length);
     // Los dos tipos del enum quedan cubiertos.

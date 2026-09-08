@@ -2,8 +2,10 @@
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { CierreAporteRepository } from "@/lib/repositories/CierreAporteRepository";
+import { UserRepository } from "@/lib/repositories/UserRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
+import { CobroTiendaService } from "@/lib/services/CobroTiendaService";
 import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
 import { WalletTiendaService } from "@/lib/services/WalletTiendaService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -24,10 +26,15 @@ import {
   listarMovimientosTiendaSchema,
   listarSaldosTiendasCompletoSchema,
   listarSaldosTiendasPaginadoSchema,
+  registrarCobroTiendaSchema,
   type ListarMovimientosDeTiendaCompletoResult,
   type ListarMovimientosTiendaCompletoResult,
   type ListarSaldosTiendasCompletoResult,
 } from "@/lib/types/wallet-tienda";
+import type {
+  ICobroTiendaService,
+  RegistrarCobroTiendaServiceResult,
+} from "@/lib/interfaces/services/ICobroTiendaService";
 import type {
   IDetalleMovimientoService,
   VerDetalleMovimientoCompletoServiceResult,
@@ -124,10 +131,50 @@ function buildDetalleService(): IDetalleMovimientoService {
   );
 }
 
+/**
+ * FICHA 381 (T F.2) — COMPOSITION ROOT del cobro manual a una tienda.
+ *
+ * Cablea el servicio con SUS TRES dependencias y con ninguna mas:
+ *
+ *  - el repositorio del ledger de la tienda, que escribe el asiento Y su fila de historial;
+ *  - el repositorio de usuarios, del que solo se usa `obtenerCuentaTienda` (R17);
+ *  - el ejecutor de transacciones interactivo, que es lo que hace ATOMICOS el asiento y su rastro
+ *    (R25/R42).
+ *
+ * ⚠️ Y LO QUE NO SE INYECTA ES PARTE DEL CONTRATO (R24, D1): aqui NO se construye ningun
+ * `WalletMovimientoRepository` ni ningun puerto de caja. Un cobro no puede escribir en la caja de
+ * Ordenex porque el servicio no tiene con que.
+ */
+function buildCobroTiendaService(): ICobroTiendaService {
+  const prisma = getPrismaClient();
+  return new CobroTiendaService(
+    new WalletTiendaMovimientoRepository(prisma),
+    new UserRepository(prisma),
+    (fn) => prisma.$transaction((tx) => fn(tx)),
+  );
+}
+
 export interface WalletTiendaDeps {
   service?: IWalletTiendaService;
   getActor?: () => Promise<Actor | null>;
 }
+
+/** Las dependencias del cobro, inyectables en test igual que las del ledger. */
+export interface CobroTiendaDeps {
+  service?: ICobroTiendaService;
+  getActor?: () => Promise<Actor | null>;
+}
+
+/**
+ * FICHA 381 (R10/R13) — el contrato COMPLETO que ve la pantalla.
+ *
+ * `unauthenticated` y `validation_error` los decide ESTE borde (sesion y forma); `forbidden`,
+ * `validation_error` de la tienda y `ok` los decide el DOMINIO. Las dos ramas de error viajan SIN
+ * ninguna fila de dinero.
+ */
+export type RegistrarCobroTiendaActionResult =
+  | RegistrarCobroTiendaServiceResult
+  | { status: "unauthenticated" };
 
 /** Las dependencias del detalle, inyectables en test igual que las del ledger. */
 export interface DetalleMiMovimientoDeps {
@@ -399,6 +446,42 @@ export async function verDetalleDeMiMovimientoCompletoAction(
     const data = verDetalleDeMovimientoCompletoSchema.parse(input); // R29
     const service = deps.service ?? buildDetalleService();
     return service.verDetalleDeMiMovimientoCompleto(data, actor);
+  });
+  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
+}
+
+/**
+ * FICHA 381 (T F.1, R12/R13/R14/R15/R16/R17) — COBRARLE UN COSTO A UNA TIENDA.
+ *
+ * Es la UNICA escritura de este modulo, y por eso su borde importa mas que el de las lecturas. El
+ * ORDEN es el mismo que el de sus hermanas y por los mismos motivos:
+ *
+ *  1. sin sesion se corta ANTES de validar y ANTES de construir el servicio (R13): no se abre
+ *     conexion ni se instancia repositorio;
+ *  2. `schema.parse` mata en el BORDE el monto no numerico, la descripcion vacia, la fecha
+ *     imposible y —por el `.strict()`— cualquier clave colada que intentara dictar la categoria o
+ *     el tipo del asiento;
+ *  3. el ROL lo decide el SERVICIO (R12), como en el resto del repo: es dominio, no transporte.
+ *
+ * Server Action y no route handler: es una mutacion interna del mismo proyecto
+ * (`docs/architecture.md`). No hay ruta nueva.
+ *
+ * @sin-superficie ficha 381, mitad de servidor: la pantalla que la dispara —el quinto concepto
+ * «Cobrar un costo a una tienda» del dialogo «Registrar movimiento» de `/wallet`— llega en la mitad
+ * de FRONTEND de esta misma ficha (tandas H e I de `specs/381-cargo-manual-a-tienda/tasks.md`).
+ * ⚠️ QUIEN CABLEE ESE CONCEPTO DEBE BORRAR ESTA ANOTACION EN EL MISMO COMMIT: la guardia de
+ * superficie tambien falla cuando una excepcion sobrevive a su motivo.
+ */
+export async function registrarCobroTiendaAction(
+  input: unknown,
+  deps: CobroTiendaDeps = {},
+): Promise<RegistrarCobroTiendaActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R13: antes del schema y del service
+    const data = registrarCobroTiendaSchema.parse(input); // R14/R15/R16: ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildCobroTiendaService();
+    return service.registrarCobro(data, actor);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }

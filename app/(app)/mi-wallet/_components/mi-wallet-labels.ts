@@ -84,6 +84,11 @@ export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, str
   pago_tienda: "Pago a la tienda",
   ajuste_credito: "Ajuste (crédito)",
   ajuste_debito: "Ajuste (débito)",
+  // FICHA 381 (R33/R34) — el cobro manual, con un nombre que DICE que es un cobro y que es
+  // DISTINTO del de `ajuste_debito`. Lo lee la tienda en `/mi-wallet` y el administrador en
+  // `/wallet/tiendas` (que reexporta este mismo diccionario), y las dos descargas salen de aqui:
+  // un solo texto para las cuatro superficies.
+  cobro_manual: "Cobro de Ordenex",
 };
 
 /** Etiqueta legible del origen de un movimiento (WalletOrigenTipo, subconjunto de la 43). */

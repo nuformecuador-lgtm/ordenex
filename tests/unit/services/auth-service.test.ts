@@ -39,6 +39,7 @@ function buildMocks() {
     listMensajerosParaFiltro: vi.fn().mockResolvedValue([]),
     listByRol: vi.fn().mockResolvedValue([]), // exigido por IUserRepository; no ejercitado aqui
     listCuentasTienda: vi.fn().mockResolvedValue([]), // exigido por IUserRepository (feature 144); no ejercitado aqui
+    obtenerCuentaTienda: vi.fn().mockResolvedValue(null), // exigido por IUserRepository (ficha 381); no ejercitado aqui
     updatePasswordHash: vi.fn(),
     restablecerContrasena: vi.fn(), // ficha 362: el reset POR UN ADMIN, con su fila de registro
     list: vi.fn(),

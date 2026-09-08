@@ -115,6 +115,61 @@ describe("derivarDesgloseTienda — aritmetica de la cabecera (R10/R23)", () => 
     expect(d.signo).toBe("negativo");
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
+  // ⭑ FICHA 381 (R26/R27/R36) — el cobro manual baja el saldo, y puede dejarlo NEGATIVO.
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
+
+  it("381/R36: un cobro manual cae en CARGOS, no en `aFavor` ni en `pagado`", () => {
+    expect(CUBETA_POR_CATEGORIA.cobro_manual).toBe("cargos");
+    const d = derivarDesgloseTienda([
+      fila("cod_recaudado", "10000.00", "credito"),
+      fila("cobro_manual", "1500.00", "debito"),
+    ]);
+    expect(d.aFavor).toBe("10000.00");
+    expect(d.cargos).toBe("1500.00");
+    // ⚠️ Si cayera en `pagado`, la pantalla diria que la tienda YA RECIBIO ese dinero, que es lo
+    // contrario de lo que paso.
+    expect(d.pagado).toBe("0.00");
+  });
+
+  it("381/R26: el saldo baja EXACTAMENTE el importe del cobro", () => {
+    const antes = derivarDesgloseTienda([fila("cod_recaudado", "10000.00", "credito")]);
+    const despues = derivarDesgloseTienda([
+      fila("cod_recaudado", "10000.00", "credito"),
+      fila("cobro_manual", "1500.00", "debito"),
+    ]);
+    expect(antes.saldo).toBe("10000.00");
+    expect(despues.saldo).toBe("8500.00");
+    // La resta, dicha como resta: ni un centimo de mas ni de menos.
+    expect(new Prisma.Decimal(antes.saldo).sub(despues.saldo).toFixed(2)).toBe("1500.00");
+  });
+
+  it("381/R27: un cobro mayor que lo disponible deja el saldo NEGATIVO, entero y con su signo", () => {
+    const d = derivarDesgloseTienda([
+      fila("cod_recaudado", "5000.00", "credito"),
+      fila("cobro_manual", "20000.00", "debito"),
+    ]);
+    // ⚠️ LITERAL, y ES lo que el humano firmo el 2026-09-07: «si no hay, entonces el disponible
+    // debe verse en negativo». Recortarlo a cero o devolver su valor absoluto rompe este caso.
+    expect(d.saldo).toBe("-15000.00");
+    expect(d.signo).toBe("negativo");
+    expect(d.cargos).toBe("20000.00");
+  });
+
+  it("381: varios cobros manuales se acumulan en `cargos`, sin tocar las otras dos cubetas", () => {
+    const d = derivarDesgloseTienda([
+      fila("cod_recaudado", "1000.00", "credito"),
+      fila("cobro_manual", "0.10", "debito"),
+      fila("flete", "0.20", "debito"),
+      fila("pago_tienda", "500.00", "debito"),
+    ]);
+    // Money-safe: 0.10 + 0.20 = 0.30 exacto, no 0.30000000000000004.
+    expect(d.cargos).toBe("0.30");
+    expect(d.aFavor).toBe("1000.00");
+    expect(d.pagado).toBe("500.00");
+    expect(d.saldo).toBe("499.70");
+  });
+
   it("R10: saldo en CERO cuando lo cobrado y lo pagado agotan lo recaudado", () => {
     const d = derivarDesgloseTienda([
       fila("cod_recaudado", "1000.00", "credito"),

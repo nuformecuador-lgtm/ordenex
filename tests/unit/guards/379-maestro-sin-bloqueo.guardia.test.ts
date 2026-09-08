@@ -192,6 +192,7 @@ function elPeorEscenario() {
     listMensajerosParaFiltro: vi.fn(),
     listByRol: vi.fn().mockResolvedValue([]),
     listCuentasTienda: vi.fn().mockResolvedValue([]),
+    obtenerCuentaTienda: vi.fn().mockResolvedValue(null), // exigido por IUserRepository (ficha 381); no ejercitado aqui
     list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     count: vi.fn().mockResolvedValue(0),
     update: vi.fn().mockResolvedValue(usuario({ rolId: "rol-admin", zonaId: null })),

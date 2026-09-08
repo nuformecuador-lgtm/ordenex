@@ -5,6 +5,9 @@ import type {
 } from "@prisma/client";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { walletTiendaConfig } from "@/lib/config/wallet-tienda";
+// FICHA 381: las dos piezas del borde del dinero manual, reutilizadas TAL CUAL desde el libro de la
+// caja. Ver `registrarCobroTiendaSchema` al final del archivo.
+import { fechaMovimientoSchema, montoPositivoSchema } from "@/lib/types/wallet";
 
 // Feature 43 (design §1.1/§3) — fuente unica de verdad de tipos/categorias del ledger POR
 // TIENDA, respaldada por los enums Postgres nativos (patron lib/types/wallet.ts). El
@@ -43,6 +46,12 @@ export const WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED = [
   // ajustes manuales (inmutables, R3/R29)
   "ajuste_credito",
   "ajuste_debito",
+  // FICHA 381 (D2, firmada por el humano el 2026-09-07) — el COBRO MANUAL a una tienda. Es un
+  // DEBITO que decide una persona y que baja el disponible de esa tienda; el saldo puede quedar
+  // negativo y eso es correcto (R27). Categoria PROPIA y no `ajuste_debito`: el humano pidio poder
+  // DISTINGUIR un cobro de una correccion compensatoria, y esa distincion no puede apoyarse en la
+  // `descripcion`, que es texto libre tecleado por una persona.
+  "cobro_manual",
 ] as const satisfies readonly PrismaWalletTiendaMovimientoCategoria[];
 
 export type WalletTiendaMovimientoCategoria =
@@ -294,3 +303,35 @@ export type CierreTiendaOpcionDTO = {
   /** Cuantos movimientos de ESTA tienda trajo ese cierre. Cardinal, NO es un monto. */
   movimientos: number;
 };
+
+// ── FICHA 381 — COBRARLE UN COSTO A UNA TIENDA desde «Registrar movimiento» ──
+
+/**
+ * FICHA 381 (R14/R15/R16/R17/R18) — el BORDE del cobro manual a una tienda.
+ *
+ * REUTILIZA, no reescribe, las dos piezas que ya existen en `lib/types/wallet.ts`:
+ *
+ *  - `montoPositivoSchema` valida el monto COMO STRING (regex de hasta dos decimales) y lo compara
+ *    con `Prisma.Decimal`, NUNCA con `Number`/`parseFloat`. Es la misma pieza que usan los cuatro
+ *    conceptos de caja: reescribirla aqui seria tener dos definiciones de «cuanto dinero es
+ *    valido», que un dia divergen (R18).
+ *  - `fechaMovimientoSchema` delega en `problemaDeFechaMovimiento`, y por eso este concepto emite
+ *    EXACTAMENTE el mismo texto de rechazo que los otros cuatro ante una fecha inexistente, futura
+ *    o fuera de la ventana admisible (R16). Un quinto mensaje distinto para el mismo problema seria
+ *    una diferencia sin causa.
+ *
+ * `.strict()`: una clave colada —`tipo`, `categoria`, un `registradoPor` de regalo— muere AQUI, en
+ * el borde, y no llega al servicio. La categoria y el tipo del asiento NO viajan en la peticion: los
+ * fija el servidor (R19), que es lo unico que impide que el cliente elija en que cubeta cae su
+ * propio cobro.
+ */
+export const registrarCobroTiendaSchema = z
+  .object({
+    tiendaId: z.string().uuid(),
+    monto: montoPositivoSchema, // STRING, > 0, <= 2 decimales (R14/R18)
+    descripcion: z.string().trim().min(1, "La descripcion es obligatoria."), // R15
+    fecha: fechaMovimientoSchema.optional(), // R16/R21
+  })
+  .strict();
+
+export type RegistrarCobroTiendaInput = z.infer<typeof registrarCobroTiendaSchema>;

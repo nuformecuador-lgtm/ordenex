@@ -1633,6 +1633,18 @@ enum WalletTiendaMovimientoCategoria {
   // ajustes manuales (inmutables, correccion compensatoria R3/R29)
   ajuste_credito
   ajuste_debito
+  /// FICHA 381 (D2, firmada por el humano el 2026-09-07): UN COBRO MANUAL A UNA TIENDA. Lo
+  /// registra una persona desde «Registrar movimiento» y BAJA el disponible de esa tienda; el
+  /// saldo puede quedar NEGATIVO y eso es correcto (se compensa solo cuando la gestion vuelva a
+  /// generar dinero a favor de la tienda). NO escribe nada en la caja de Ordenex (D1): los dos
+  /// libros divergen a proposito hasta que el dinero entre de verdad.
+  ///
+  /// ⚠️ CATEGORIA PROPIA Y NO `ajuste_debito`: el humano pidio poder DISTINGUIR un cobro de una
+  /// correccion, y la distincion no puede vivir en la `descripcion` —texto libre tecleado por una
+  /// persona— porque entonces no se podria filtrar, ni descargar, ni etiquetar sin adivinar.
+  /// `ajuste_debito` se queda INTACTO y sin productores, reservado a su proposito original.
+  /// Conflacionar filas bajo un mismo valor es irreversible; añadir el valor cuesta una migracion.
+  cobro_manual
 
   @@map("wallet_tienda_movimiento_categoria")
 }
@@ -3108,6 +3120,19 @@ enum HistorialAccionTipo {
   /// CREAR una zona con pagos no deja fila de este tipo, y borrarla tampoco —`zona_borrada` ya
   /// documenta la desaparicion de la zona y de sus pagos—.
   zona_pago_mensajero_cambiado
+  /// FICHA 381: alguien le COBRO UN COSTO A UNA TIENDA a mano desde «Registrar movimiento». Mueve
+  /// dinero en el sentido mas directo de la categoria: baja el disponible de esa tienda por una
+  /// decision humana, y puede dejarlo NEGATIVO.
+  ///
+  /// ⚠️ TIPO PROPIO Y NO `wallet_movimiento_manual_registrado`: aquel dice «Registró un movimiento
+  /// manual de CAJA» y su productor censado es `WalletMovimientoRepository.crearMovimientoRegistrado`.
+  /// Reusarlo pondria una frase falsa en el historial (un cobro NO toca la caja, D1) y romperia la
+  /// guardia del censo, que exige que el tipo lo escriba el metodo declarado.
+  ///
+  /// La fila lleva `monto` (el importe cobrado, `Decimal` construido del STRING) y se etiqueta por
+  /// el NOMBRE DE LA TIENDA. NUNCA la `descripcion` del cobro: texto libre tecleado por una
+  /// persona, que R5 de la 362 deja fuera de esta tabla.
+  cobro_tienda_registrado
 
   // --- hace desaparecer algo (10) ---
   /// FICHA 371: corregir la fecha de una reprogramacion ya registrada. ENTRA POR «hace desaparecer
@@ -3207,6 +3232,11 @@ enum HistorialAccionEntidad {
   provincia
   canton
   distrito
+  /// FICHA 381: el ASIENTO del cobro manual en el libro de la tienda. Entidad propia y no el
+  /// `usuario` de la tienda: los valores de este enum mapean 1:1 con tablas, y apuntar el rastro a
+  /// la cuenta dejaria la fila sin poder señalar QUE asiento se escribio — que es justo para lo que
+  /// sirve el indice `[entidad_tipo, entidad_id]`.
+  wallet_tienda_movimiento
 
   @@map("historial_accion_entidad")
 }
