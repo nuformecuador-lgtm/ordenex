@@ -255,6 +255,14 @@ export interface IUserRepository {
   /** Feature 25/R13: total de usuarios (soporte del `total` del listado). */
   count(): Promise<number>;
   /**
+   * FICHA 379/R17 — cuantos usuarios `adminSatelite` con `estado='activo'` hay en `zonaId`,
+   * EXCLUYENDO a `excluirUsuarioId` (el usuario cuyo cambio se esta evaluando: contarlo seria
+   * contar a quien esta a punto de irse).
+   *
+   * Devuelve un numero; nunca filas, nunca PII (R22). Los cuatro cortes van en el `WHERE`.
+   */
+  contarAdminSatelitesActivos(zonaId: string, excluirUsuarioId: string): Promise<number>;
+  /**
    * Feature 25/R16/R18/R19: aplica solo los campos editables; valida las FK de
    * catalogo (CatalogoInvalidoError). `null` si el usuario no existe (R17).
    */

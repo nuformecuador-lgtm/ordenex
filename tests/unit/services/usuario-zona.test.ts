@@ -60,6 +60,7 @@ function buildRepo(over: Partial<IUserRepository> = {}): IUserRepository {
     setEstado: vi.fn(),
     listTiposIdentificacion: vi.fn(),
     listRoles: vi.fn().mockResolvedValue(ROLES),
+    contarAdminSatelitesActivos: vi.fn().mockResolvedValue(0), // ficha 379: exigido por IUserRepository
     restablecerContrasena: vi.fn(), // ficha 362
     ...over,
   };
@@ -166,5 +167,106 @@ describe("actualizar — zona por rol (R27/R28)", () => {
     const svc = new UsuarioService(repo, buildZonaRepo(true));
     await svc.actualizar("usr-1", { nombre: "Otro" }, MAESTRO);
     expect((repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1]).not.toHaveProperty("zonaId");
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
+  // FICHA 379 — BLOQUE A: LA ZONA SIGUE AL ROL (R1-R4/R7)
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
+  //
+  // El defecto que cierran estos cuatro casos: `actualizar` solo recalculaba la zona cuando la
+  // peticion TRAIA el campo, y el formulario lo OMITE cuando el rol nuevo no lleva zona. Un
+  // adminSatelite degradado a admin conservaba su `zona_id`, y con el dinero de esa bodega
+  // atrapado: solo un adminSatelite CUYA ZONA VIVA sea Z puede consolidar sus cierres.
+  //
+  // El campo hermano —el vehiculo— ya hacia esto bien doce lineas mas abajo del mismo metodo.
+
+  it("R1 · cambiar el rol de adminSatelite a admin deja la zona en null aunque no se envie zonaId", async () => {
+    repo = buildRepo({
+      findById: vi.fn().mockResolvedValue(usuario({ rolId: "rol-sat", zonaId: "z1" })),
+    });
+    const svc = new UsuarioService(repo, buildZonaRepo(true));
+
+    // La peticion NO lleva `zonaId`: es exactamente lo que manda el formulario al pasar a un
+    // rol sin zona (spread condicional `...(esRolConZona ? { zonaId } : {})`).
+    const r = await svc.actualizar("usr-1", { rolId: "rol-admin" }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    const data = (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    // `toHaveProperty` con valor, no `.zonaId === null`: hace falta que la clave VIAJE, porque
+    // es su presencia la que hace que el repositorio escriba `usuario_zona_cambiada` (R5).
+    expect(data).toHaveProperty("zonaId", null);
+  });
+
+  it("R2 · cambiar el rol de mensajero a adminSatelite sin enviar zonaId conserva la zona actual", async () => {
+    repo = buildRepo({
+      findById: vi.fn().mockResolvedValue(usuario({ rolId: "rol-msg", zonaId: "z1" })),
+    });
+    const svc = new UsuarioService(repo, buildZonaRepo(true));
+
+    const r = await svc.actualizar("usr-1", { rolId: "rol-sat" }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    // El rol nuevo SI lleva zona: la que ya tenia se conserva (y se revalida contra el catalogo),
+    // no se borra por el hecho de no venir en la peticion.
+    expect((repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1].zonaId).toBe("z1");
+  });
+
+  it("R3 · cambiar a un rol con zona sin tener ninguna -> validation_error en zonaId y no escribe", async () => {
+    repo = buildRepo({
+      findById: vi.fn().mockResolvedValue(usuario({ rolId: "rol-admin", zonaId: null })),
+    });
+    const svc = new UsuarioService(repo, buildZonaRepo(true));
+
+    const r = await svc.actualizar("usr-1", { rolId: "rol-sat" }, MAESTRO);
+
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") expect(r.fieldErrors).toHaveProperty("zonaId");
+    // Y NADA se escribe: la alternativa seria un adminSatelite sin zona, que es otra forma del
+    // mismo dato sucio que esta ficha quita.
+    expect(repo.update).not.toHaveBeenCalled();
+  });
+
+  it("R4 · alta y edicion resuelven la MISMA zona efectiva para el mismo par (rol, zona)", async () => {
+    // ⚠️ NO son tres casos escritos a mano: se RECORRE el catalogo de roles del fixture y se
+    // comparan las dos SALIDAS. Es la asercion que caza una segunda copia de la regla —que es
+    // literalmente el defecto que esta ficha arregla: la zona y el vehiculo llevaban dos—.
+    //
+    // `undefined` = «la peticion no trae el campo»; en los dos caminos se parte de un usuario
+    // SIN zona, para que «no se pidio zona» signifique lo mismo en el alta y en la edicion.
+    async function zonaEfectivaDeAlta(rolId: string, zonaId: string | null | undefined) {
+      const local = buildRepo();
+      const svc = new UsuarioService(local, buildZonaRepo(true));
+      const r = await svc.crear({ ...baseCrear, rolId, zonaId, vehiculoId: "v1" }, MAESTRO);
+      if (r.status !== "ok") return { estado: r.status };
+      return {
+        estado: "ok",
+        zonaId: (local.create as ReturnType<typeof vi.fn>).mock.calls[0][0].zonaId,
+      };
+    }
+
+    async function zonaEfectivaDeEdicion(rolId: string, zonaId: string | null | undefined) {
+      const local = buildRepo({
+        findById: vi.fn().mockResolvedValue(usuario({ rolId: "rol-admin", zonaId: null })),
+      });
+      const svc = new UsuarioService(local, buildZonaRepo(true));
+      const r = await svc.actualizar("usr-1", { rolId, zonaId, vehiculoId: "v1" }, MAESTRO);
+      if (r.status !== "ok") return { estado: r.status };
+      return {
+        estado: "ok",
+        zonaId: (local.update as ReturnType<typeof vi.fn>).mock.calls[0][1].zonaId,
+      };
+    }
+
+    for (const rol of ROLES) {
+      for (const pedida of ["z1", undefined] as const) {
+        const alta = await zonaEfectivaDeAlta(rol.id, pedida);
+        const edicion = await zonaEfectivaDeEdicion(rol.id, pedida);
+        expect(
+          edicion,
+          `rol ${rol.value} con zona pedida ${String(pedida)}: el alta resolvio ` +
+            `${JSON.stringify(alta)} y la edicion ${JSON.stringify(edicion)}`,
+        ).toEqual(alta);
+      }
+    }
   });
 });

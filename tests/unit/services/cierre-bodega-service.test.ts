@@ -39,6 +39,10 @@ type Repo = ICierreBodegaRepository;
 function fakeRepo(overrides: Partial<Repo> = {}): Repo {
   return {
     findCierresDiaConsolidables: vi.fn(async () => [consolidableRow()]),
+    // FICHA 379: el resumen del dinero atrapado lo consume `UsuarioService`, no este servicio.
+    // El stub existe para que el doble siga siendo un `ICierreBodegaRepository` valido; su
+    // comportamiento se mide contra Postgres real en `tests/integration/db`.
+    resumirConsolidablesPendientes: vi.fn(async () => ({ cantidad: 0, totalGeneral: "0.00" })),
     contarCierresDiaSolicitados: vi.fn(async () => 0),
     existeCierreBodegaSolicitado: vi.fn(async () => false),
     crearCierreBodega: vi.fn(async () => "cb1"),

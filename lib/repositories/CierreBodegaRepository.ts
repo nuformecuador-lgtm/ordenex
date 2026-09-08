@@ -4,6 +4,7 @@ import type {
   CierreDiaConsolidableRow,
   CrearCierreBodegaInput,
   ICierreBodegaRepository,
+  ResumenConsolidablesPendientes,
 } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { FiltrosCierresBodega } from "@/lib/types/filtros-cierres";
@@ -274,6 +275,37 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
       this.prisma.cierreDia.count({ where }), // R41: el total del CONJUNTO
     ]);
     return { items: rows.map(toConsolidableRow), total };
+  }
+
+  /**
+   * FICHA 379/R18/R19 — cuantos cierre_dia consolidables tiene la zona y por cuanto dinero.
+   *
+   * ⚠️ REUSA `consolidablesWhere`, NO una copia parecida. Es el mismo argumento con el que este
+   * archivo extrajo esa funcion (ver su cabecera) y `ORDEN_CONSOLIDABLES`: el numero que el
+   * aviso dice tiene que ser EL MISMO que la pantalla de consolidacion ensena. Con dos `where`
+   * gemelos, el dia que alguien anada un predicado a uno, el aviso empieza a contar otra cosa y
+   * nada se pone rojo. Su test cruzado compara las dos lecturas sobre el mismo dataset.
+   *
+   * Se llama SIN `filtros`: el aviso mira toda la cola de la bodega.
+   *
+   * `aggregate` no materializa filas (`COUNT` + `SUM` en Postgres) y los dos indices que
+   * necesita ya existen: `@@index([destinoTipo, destinoZonaId])` y `@@index([cierreBodegaId])`.
+   *
+   * Money-safe: `Prisma.Decimal.toFixed(2)`, nunca `Number`/`parseFloat`. Cero filas -> `_sum`
+   * nulo -> `"0.00"`.
+   */
+  async resumirConsolidablesPendientes(
+    zonaId: string,
+  ): Promise<ResumenConsolidablesPendientes> {
+    const r = await this.prisma.cierreDia.aggregate({
+      where: consolidablesWhere(zonaId),
+      _count: { _all: true },
+      _sum: { totalGeneral: true },
+    });
+    return {
+      cantidad: r._count._all,
+      totalGeneral: (r._sum.totalGeneral ?? new Prisma.Decimal(0)).toFixed(2),
+    };
   }
 
   /** R6: cierre_dia de la zona aun `solicitado` (sin resolver por el adminSatelite). */
