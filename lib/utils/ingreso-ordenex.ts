@@ -7,6 +7,11 @@ import type {
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { WalletIngresoConcepto } from "@/lib/types/wallet";
 import type { OrigenFlete } from "@/lib/types/tarifa";
+// Ficha 396 — `partesPorTienda` particiona el recaudo con LA MISMA funcion que produce el total
+// general del cierre, no con una suma escrita aqui (R13/R15). Import de VALOR, y verificado que
+// no crea ciclo: `cierre-totales.ts` importa `pago-mensajero`, `ingreso-bodega` y tipos, y
+// ninguno de los tres importa este archivo.
+import { computeTotales, type GestionConPagos } from "@/lib/utils/cierre-totales";
 
 /**
  * Feature 42 (design §4, R8/R9/R26) — derivacion del INGRESO de Ordenex por gestion.
@@ -389,6 +394,211 @@ export function pagoTiendaOrdenex(
  */
 export function ganaLaTienda(totalGeneral: string, ingresoTotal: string): string {
   return new Prisma.Decimal(totalGeneral).minus(ingresoTotal).toFixed(2);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Ficha 396 — DE QUIEN ES CADA PARTE DEL «PAGO A TIENDA»                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 💰 Ficha 396 — UNA TIENDA de un cierre, con SUS TRES cifras. Todas STRING escala 2.
+ *
+ * CINCO CLAVES Y NI UNA MAS (R5). `fleteConIva` y `comisionConIva` por tienda se calculan
+ * DENTRO de `partesPorTienda` —hacen falta para derivar `pagoTienda`— y NO se emiten: un
+ * contrato que ofrece lo que la pantalla no debe ensenar acaba ensenandose, porque bastaria con
+ * que alguien las pintara «ya que estan».
+ */
+export interface ParteDeTienda {
+  /** La CLAVE del grupo: `cierre_detail.tienda_id`, congelado (R7). Nunca el nombre. */
+  tiendaId: string;
+  /** El nombre congelado, SOLO para mostrarlo. No agrupa nada (R7). */
+  tiendaNombre: string;
+  /**
+   * Lo RECAUDADO atribuido a esta tienda. Sale de `computeTotales` sobre SUS gestiones, o sea
+   * con EXACTAMENTE el mismo criterio que el `total general` del cierre entero (R13): solo las
+   * `entregada`, y solo por sus lineas de pago. Puede ser "0.00" (una tienda que solo trajo
+   * rechazos recauda cero y aun asi aparece, R9).
+   */
+  recaudado: string;
+  /**
+   * Lo que se le paga A ESTA TIENDA de este dinero. `pagoTiendaOrdenex` sobre SU subconjunto.
+   * NO descuenta el flete por rechazo —ese se le cobra aparte, contra su wallet—. Puede ser
+   * NEGATIVO y viaja con su signo.
+   */
+  pagoTienda: string;
+  /**
+   * Lo que ESTA TIENDA gana en total: lo recaudado menos TODO lo que Ordenex le factura,
+   * incluido el flete por rechazo + IVA. `ganaLaTienda` sobre SU subconjunto.
+   *
+   * **NO ES `pagoTienda`**, y confundirlas es el fallo que la ficha 395 arreglo un nivel mas
+   * arriba. La diferencia entre las dos es exactamente el flete por rechazo + IVA de esta
+   * tienda —ver la CUARTA identidad en `partesPorTienda`—. Puede ser NEGATIVO (es lo normal en
+   * la tienda que solo trajo rechazos) y viaja con su signo, nunca recortado a "0.00".
+   */
+  ganaLaTienda: string;
+}
+
+/**
+ * Lo UNICO que `partesPorTienda` lee de una gestion. `GestionConPagos` se REUSA de
+ * `cierre-totales.ts` en vez de re-declarar `{ resultado, pagos }` aqui: una segunda forma del
+ * mismo criterio es justo lo que hace que dos sitios diverjan sin que nadie lo note.
+ *
+ * `CierreGestionPendienteRow` lo satisface estructuralmente, asi que los tres servicios pasan
+ * sus gestiones tal cual, sin adaptador.
+ */
+export type GestionDeTienda = GestionConPagos & {
+  tiendaId: string;
+  tiendaNombre: string;
+  ingresoOrdenex?: IngresoOrdenexDTO | null;
+};
+
+/**
+ * 💰 FICHA 396 — DE QUIEN ES CADA PARTE. Parte las cifras de un cierre POR TIENDA.
+ *
+ * ─── EL PROBLEMA QUE RESUELVE ─────────────────────────────────────────────────────────────
+ *
+ * **El cierre es del MENSAJERO, no de la tienda.** Un mensajero reparte para quien le toque ese
+ * dia, asi que un cierre puede llevar ordenes de varias tiendas — medido en produccion el
+ * 2026-09-08: de 56 cierres, 39 tienen UNA y 17 tienen DOS. La pantalla ensenaba «Pago a
+ * tienda» —singular— como un solo numero que era la suma de todas, sin decirlo en ninguna
+ * parte, y quien lo miraba creia estar viendo lo de UNA tienda.
+ *
+ * **EL DINERO YA ESTABA BIEN.** `wallet_tienda_movimiento` lleva los movimientos SEPARADOS por
+ * tienda desde siempre, cada uno con sus cifras. Esto es presentacion: aqui no se emite,
+ * corrige ni mueve ni una fila del ledger.
+ *
+ * ─── NI UNA FORMULA DE DINERO NUEVA (R15) ─────────────────────────────────────────────────
+ *
+ * Aqui NO se calcula dinero: se PARTICIONA por `tiendaId` y se llaman, sobre CADA subconjunto,
+ * las cuatro funciones que ya producen esas mismas cifras para el conjunto entero:
+ *
+ *   `recaudado`     -> `computeTotales(subconjunto).general`      (`lib/utils/cierre-totales.ts`)
+ *   (interno)       -> `totalesIngresoOrdenex(subconjunto)`       (arriba, en este archivo)
+ *   `pagoTienda`    -> `pagoTiendaOrdenex(recaudado, fleteConIva, comisionConIva)`
+ *   `ganaLaTienda`  -> `ganaLaTienda(recaudado, total)`
+ *
+ * Es EXACTAMENTE lo que `lib/utils/dinero-por-producto.ts:200-273` (`repartoDeOrden`, ficha 347)
+ * ya hace para partir el MISMO importe por OTRA dimension —el producto—, reusando
+ * `pagoTiendaOrdenex` sobre subconjuntos. No es un patron nuevo: es el que el repo ya eligio
+ * una vez, con su invariante escrita en la cabecera.
+ *
+ * ─── POR QUE VIVE AQUI ────────────────────────────────────────────────────────────────────
+ *
+ * Porque aqui viven las identidades que esta funcion particiona (`pagoTiendaOrdenex`,
+ * `ganaLaTienda`), y una identidad tiene UN sitio. Verificado que el import de
+ * `cierre-totales.ts` NO crea ciclo: ese modulo importa `pago-mensajero`, `ingreso-bodega` y
+ * tipos, y ninguno importa este archivo.
+ *
+ * ─── UNA SOLA FUNCION PARA LAS TRES SUPERFICIES (R22) ─────────────────────────────────────
+ *
+ * La llaman el detalle del cierre del MENSAJERO (`CierresAdminService.verCierreDetalle`) y,
+ * cuando entre su tanda, los DOS niveles del detalle del cierre de BODEGA —el de cada mensajero
+ * y el agregado de toda la bodega—. Que sea la misma funcion es lo que hace cierto que la misma
+ * plata no se lea distinta segun por que pantalla se entre, sin depender de que nadie se acuerde.
+ *
+ * ─── LAS CUATRO IDENTIDADES ───────────────────────────────────────────────────────────────
+ *
+ * Las tres primeras atan las partes con su agregado, para el MISMO conjunto de gestiones:
+ *
+ *   R10 ·  Σ parte.pagoTienda    ===  pagoTiendaOrdenex(general, fleteConIva, comisionConIva)
+ *   R11 ·  Σ parte.ganaLaTienda  ===  ganaLaTienda(general, totalesIngresoOrdenex(todas).total)
+ *   R12 ·  Σ parte.recaudado     ===  computeTotales(todas).general
+ *
+ * Son ciertas por construccion porque la particion por `tiendaId` es exhaustiva y disjunta (cada
+ * gestion cae en una y solo una tienda), porque `computeTotales` y `totalesIngresoOrdenex` son
+ * sumas puras sobre gestiones, y porque las tres derivaciones son restas lineales:
+ * `Σ(gᵢ − fᵢ − cᵢ) = Σgᵢ − Σfᵢ − Σcᵢ`. Sin deriva de redondeo: todos los sumandos ya vienen a
+ * escala 2 y sumar decimales de escala 2 da escala 2.
+ *
+ * Y hay una CUARTA, esta POR TIENDA, que ata entre si las dos cifras de pago:
+ *
+ *   parte.pagoTienda − parte.ganaLaTienda  ===  flete por rechazo + IVA DE ESA TIENDA
+ *
+ * Sale de restar las dos definiciones: `(g − f − c) − (g − total) = total − f − c`, que es
+ * precisamente `fleteDevolucionConIva`. **Es la que hace imposible derivar una de las dos con el
+ * subconjunto equivocado sin que se note:** si la particion de una no coincidiera con la de la
+ * otra, esta resta dejaria de dar.
+ *
+ * ⚠️ «Por construccion» es un RAZONAMIENTO, y en este repo ya se midio que un razonamiento sobre
+ * el codigo puede ser desmentido por Postgres. Las cuatro llevan test propio.
+ *
+ * ⚠️ EL PUNTO FRAGIL es que `computeTotales` siga siendo una suma pura sobre gestiones. El dia
+ * que le entrara un tope o un `min()` a nivel de cierre, R12 dejaria de ser cierta EN SILENCIO.
+ * El test de identidad es lo que lo caza.
+ *
+ * ─── LA TERCERA CIFRA ENTRO POR FIRMA, NO DE PASO ─────────────────────────────────────────
+ *
+ * La revision 2 del spec PROHIBIA una tercera cifra por tienda. `ganaLaTienda` entro el
+ * **2026-09-08 por firma explicita del humano** (Q7 de `specs/396-.../requirements.md`), con su
+ * motivo escrito: desglosar una cifra y dejar la otra agregada es exactamente el fallo que se
+ * esta arreglando, un nivel mas abajo. La guardia no se relajo, se movio: hoy prohibe la CUARTA
+ * con la misma fuerza. **Una cuarta cifra necesita otra firma, no un `git push`.**
+ *
+ * ─── EL ORDEN (R8, Q6) ────────────────────────────────────────────────────────────────────
+ *
+ * Por `pagoTienda` DESCENDENTE —de las tres, la del rotulo que da nombre a la ficha—, con el
+ * desempate declarado abajo. Lo fija el SERVIDOR: la pantalla pinta en el orden que recibe.
+ *
+ * ─── MONEY-SAFE ───────────────────────────────────────────────────────────────────────────
+ *
+ * Funcion PURA: sin Prisma Client, sin repositorios, sin reloj, sin efectos al importarse.
+ * Toda la aritmetica y toda la COMPARACION con `Prisma.Decimal`; ni un `Number(`, `parseFloat(`
+ * ni `.toFixed(` sobre algo que no sea un `Decimal`. Ordenar por el valor numerico de un STRING
+ * monetario tampoco se hace con `Number()`: se hace con `comparedTo`.
+ */
+export function partesPorTienda(gestiones: ReadonlyArray<GestionDeTienda>): ParteDeTienda[] {
+  // La particion. `Map` conserva el orden de primera aparicion, que es el que se usa para el
+  // NOMBRE: dentro de un cierre el nombre esta congelado en el mismo instante para todas sus
+  // filas, asi que todas dicen lo mismo. En el agregado de bodega —varios cierres de varios
+  // dias— dos snapshots de la misma tienda podrian traer nombres distintos si hubo un cambio de
+  // nombre entre medias; se muestra el primero que llega, que es determinista porque el orden
+  // de las gestiones lo fija el `orderBy` del repositorio. Lo que NUNCA depende del nombre es el
+  // AGRUPAMIENTO: ese va por `tiendaId` (R7).
+  const porTienda = new Map<string, { nombre: string; gestiones: GestionDeTienda[] }>();
+  for (const g of gestiones) {
+    const grupo = porTienda.get(g.tiendaId);
+    if (grupo === undefined) {
+      porTienda.set(g.tiendaId, { nombre: g.tiendaNombre, gestiones: [g] });
+    } else {
+      grupo.gestiones.push(g);
+    }
+  }
+
+  const partes: ParteDeTienda[] = [];
+  for (const [tiendaId, grupo] of porTienda) {
+    // LAS MISMAS FUNCIONES QUE EL AGREGADO, sobre el subconjunto de ESTA tienda (R15). Ni una
+    // resta escrita a mano: si un dia cambia la definicion de «lo que se le paga», cambia arriba
+    // y esto la sigue sola.
+    const recaudado = computeTotales(grupo.gestiones).general;
+    const ingreso = totalesIngresoOrdenex(grupo.gestiones);
+    partes.push({
+      tiendaId,
+      tiendaNombre: grupo.nombre,
+      recaudado,
+      pagoTienda: pagoTiendaOrdenex(recaudado, ingreso.fleteConIva, ingreso.comisionConIva),
+      // La CUARTA identidad se sostiene porque este `ingreso.total` es el DE ESTA TIENDA. Con el
+      // total agregado aqui, `pagoTienda − ganaLaTienda` dejaria de dar su flete por rechazo.
+      ganaLaTienda: ganaLaTienda(recaudado, ingreso.total),
+    });
+  }
+
+  // R8/Q6 — por `pagoTienda` DESCENDENTE. La comparacion es `Prisma.Decimal.comparedTo` y no
+  // `Number(a) - Number(b)`: es dinero, y pasarlo por coma flotante para ordenarlo es el mismo
+  // defecto que la ficha 204 ya midio (14 de 66 ordenes con un centimo de diferencia).
+  //
+  // EL DESEMPATE, DECLARADO Y EN UN SOLO SITIO, para que la secuencia sea reproducible: a igual
+  // importe manda `tiendaNombre` ASCENDENTE, y a igual nombre —dos tiendas homonimas, que es
+  // justo el caso por el que se agrupa por id— manda `tiendaId` ascendente, que es unico y cierra
+  // el orden total. Las dos comparaciones de texto van por UNIDADES DE CODIGO (`<`/`>`, como
+  // `sort()` por defecto) y NO por `localeCompare`: determinismo antes que correccion
+  // tipografica, la misma regla que `dinero-por-producto.ts` ya usa.
+  return partes.sort((a, b) => {
+    const porImporte = new Prisma.Decimal(b.pagoTienda).comparedTo(new Prisma.Decimal(a.pagoTienda));
+    if (porImporte !== 0) return porImporte;
+    if (a.tiendaNombre !== b.tiendaNombre) return a.tiendaNombre < b.tiendaNombre ? -1 : 1;
+    if (a.tiendaId !== b.tiendaId) return a.tiendaId < b.tiendaId ? -1 : 1;
+    return 0;
+  });
 }
 
 /**

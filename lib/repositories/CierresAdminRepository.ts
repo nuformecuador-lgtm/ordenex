@@ -186,6 +186,14 @@ export const DETALLE_ADMIN_SELECT = {
   destinatario: true,
   direccion: true,
   producto: true,
+  // Ficha 396 (A1) — el IDENTIFICADOR de la tienda, congelado por la feature 69 en esta misma
+  // fila (`cierre_detail.tienda_id`, `schema.prisma`). La columna existia desde entonces y esta
+  // proyeccion no la leia: solo subia el NOMBRE. Sin el id, agrupar el cierre por tienda tendria
+  // que hacerse por `tiendaNombre`, y dos tiendas distintas pueden llamarse igual — el dinero de
+  // una quedaria atribuido a la otra en pantalla. Es la misma leccion que ya pagaron
+  // `rechazo_tienda_cobro` y `analytics_daily`: el id es la clave estable, el nombre es
+  // descriptivo. Sin migracion: la columna ya esta y ya esta poblada.
+  tiendaId: true,
   tiendaNombre: true,
   zonaNombre: true,
   provinciaNombre: true,
@@ -408,6 +416,10 @@ export function toPendienteRowDesdeSnapshot(
     cantonNombre: d.cantonNombre,
     distritoNombre: d.distritoNombre,
     producto: d.producto,
+    // Ficha 396: el id CONGELADO (`d`, o sea `cierre_detail`), nunca el vivo de la orden. El
+    // cierre ya existe: su verdad es la del snapshot (R6). Si la orden se re-apuntara manana a
+    // otra tienda, este cierre —y su desglose— siguen diciendo lo de aquel dia.
+    tiendaId: d.tiendaId,
     tiendaNombre: d.tiendaNombre,
     resultado: g.resultado,
     montoRecibido: decimalToString(g.montoRecibido),

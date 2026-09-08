@@ -225,6 +225,11 @@ export const WITH_DETALLE = {
         destinatario: true,
         direccion: true,
         producto: true,
+        // Ficha 396: el id VIVO de la tienda, al lado del nombre vivo que ya se leia. Esta es la
+        // vista EN VIVO del mensajero —el cierre todavia no existe—, asi que aqui no hay
+        // snapshot que leer y lo vivo es lo unico que hay. El detalle de ADMIN, que si tiene
+        // cierre, lo toma congelado de `cierre_detail` (`CierresAdminRepository`).
+        tiendaId: true,
         tienda: { select: { nombre: true } },
         zona: { select: { nombre: true } },
         provincia: { select: { nombre: true } },
@@ -264,6 +269,8 @@ export function toPendienteRow(
     cantonNombre: row.orden.canton.nombre,
     distritoNombre: row.orden.distrito?.nombre ?? null,
     producto: row.orden.producto,
+    // Ficha 396: el id VIVO, mismo criterio con el que la linea de abajo ya toma el NOMBRE vivo.
+    tiendaId: row.orden.tiendaId,
     tiendaNombre: row.orden.tienda.nombre,
     resultado: row.resultado,
     montoRecibido: decimalToString(row.montoRecibido),

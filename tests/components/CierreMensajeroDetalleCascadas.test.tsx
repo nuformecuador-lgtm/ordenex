@@ -256,6 +256,10 @@ const CON_RECHAZO: DetalleOk = {
   netoOrdenex: "24745.87",
   ganaLaTienda: "214328.33",
   fleteRechazoYaCobradoATienda: false,
+  // Ficha 396: el desglose por tienda viaja SIEMPRE en el DTO, tambien con una sola
+  // tienda. Estas pruebas no lo miran, asi que aqui va vacio; las suyas estan en
+  // `tests/unit/utils/partes-por-tienda.test.ts` y en las de la pantalla del desglose.
+  partesPorTienda: [],
   ordenesSinGestion: [],
   sinGestionRegistrado: true,
 };
@@ -291,6 +295,7 @@ const SIN_RECHAZO: DetalleOk = {
   netoOrdenex: "15000.30",
   ganaLaTienda: "136000.00",
   fleteRechazoYaCobradoATienda: false,
+  partesPorTienda: [],
   ordenesSinGestion: [],
   sinGestionRegistrado: true,
 };
@@ -324,6 +329,7 @@ const NEGATIVOS: DetalleOk = {
   netoOrdenex: "-2499.75",
   ganaLaTienda: "-3400.75",
   fleteRechazoYaCobradoATienda: true,
+  partesPorTienda: [],
   ordenesSinGestion: [],
   sinGestionRegistrado: true,
 };
@@ -615,6 +621,7 @@ describe("395 — el tiempo verbal del cargo del flete por rechazo (la trampa)",
       ...CON_RECHAZO,
       cierre: resumen({ estado: "rechazado", motivoRechazo: "Faltan evidencias" }),
       fleteRechazoYaCobradoATienda: false,
+      partesPorTienda: [],
     });
     const region = factura();
 
@@ -628,6 +635,7 @@ describe("395 — el tiempo verbal del cargo del flete por rechazo (la trampa)",
       ...CON_RECHAZO,
       cierre: resumen({ estado: "solicitado" }),
       fleteRechazoYaCobradoATienda: false,
+      partesPorTienda: [],
     });
 
     expect(within(factura()).getByText(FLETE_RECHAZO_AUN_NO_COBRADO_NOTA)).toBeInTheDocument();
@@ -658,6 +666,7 @@ describe("395 — el tiempo verbal del cargo del flete por rechazo (la trampa)",
         pendientePagoMensajero: "0.00",
       }),
       fleteRechazoYaCobradoATienda: false,
+      partesPorTienda: [],
     });
 
     expect(within(factura()).queryByText(FLETE_RECHAZO_YA_COBRADO_NOTA)).toBeNull();

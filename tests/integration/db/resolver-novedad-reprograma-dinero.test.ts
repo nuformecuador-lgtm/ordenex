@@ -54,6 +54,8 @@ function gestion(overrides: Partial<CierreGestionPendienteRow>): CierreGestionPe
     cantonNombre: "C",
     distritoNombre: "D",
     producto: "caja",
+    // Ficha 396: la clave por la que el cierre se parte por tienda (el nombre es solo para mostrar).
+    tiendaId: "tienda-1",
     tiendaNombre: "T",
     resultado: "entregada",
     montoRecibido: null,

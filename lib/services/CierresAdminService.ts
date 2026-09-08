@@ -60,6 +60,7 @@ import {
   gananciaOrdenex,
   netoOrdenex,
   pagoTiendaOrdenex,
+  partesPorTienda,
   totalesIngresoOrdenex,
 } from "@/lib/utils/ingreso-ordenex";
 import { desglosarIngresoBodegaPorOrigen } from "@/lib/utils/desglose-rechazos-sla";
@@ -740,6 +741,25 @@ export class CierresAdminService implements ICierresAdminService {
       resumen.estado === "aprobado" &&
       new Prisma.Decimal(totalesIngreso.fleteDevolucionConIva).gt(0);
 
+    // 💰 FICHA 396 — DE QUIEN ES CADA PARTE. El cierre es del MENSAJERO, no de la tienda: puede
+    // llevar ordenes de varias (medido el 2026-09-08: de 56 cierres, 17 tienen DOS), y hasta hoy
+    // `pagoTienda` era la SUMA de todas ellas sin que la pantalla lo dijera en ninguna parte.
+    //
+    // NADA DE LO DE ARRIBA CAMBIA (R18): `pagoTienda`, `ganancia`, `totalesIngreso`, el neto, la
+    // linea puente y `ganaLaTienda` siguen saliendo de donde salian y valiendo lo mismo. Esto se
+    // AÑADE al lado, y es la PARTICION de dos de esos numeros.
+    //
+    // Mismo argumento que sus hermanas —`found.gestiones`, el desglose ya congelado que el admin
+    // ve en las tablas—, asi que las tres identidades cuadran por construccion: `partesPorTienda`
+    // llama, sobre cada subconjunto, a las MISMAS funciones que produjeron los agregados.
+    //
+    // SE EMITE SIEMPRE, tambien con UNA sola tienda (un elemento, cuyas tres cifras son iguales a
+    // las agregadas). El umbral de «solo con dos o mas» es de PRESENTACION y vive en la pantalla:
+    // un contrato que a veces trae la lista y a veces no obliga a cada consumidor a distinguir dos
+    // formas del mismo dato, que es el error que la 264 ya documento con
+    // `ordenesSinGestion`/`sinGestionRegistrado`.
+    const partesDeLasTiendas = partesPorTienda(found.gestiones);
+
     // Feature 102/R4-R8/R10: desglose SLA/manual del ingreso de bodega por rechazos, particionando
     // los montos por gestion YA snapshoteados por su clasificacion (esRechazoSla). SOLO LECTURA
     // (R6/R16): el `total` se LEE del snapshot del cierre (no se recomputa); la particion asegura
@@ -765,6 +785,10 @@ export class CierresAdminService implements ICierresAdminService {
       netoOrdenex: neto,
       ganaLaTienda: ganaTienda,
       fleteRechazoYaCobradoATienda,
+      // Ficha 396: la particion de `pagoTienda` y `ganaLaTienda` por tienda, ya ORDENADA por el
+      // servidor (por lo que se le paga, de mayor a menor). La pantalla pinta en el orden que
+      // recibe y no hace ni una operacion aritmetica.
+      partesPorTienda: partesDeLasTiendas,
       // FEATURE 264 (B5, R7/R9/R27) — MAPEO DIRECTO, y deliberadamente aburrido.
       //
       // Passthrough puro de lo que el repositorio congelo: sin firmar URLs (no hay evidencia que
