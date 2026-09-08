@@ -1,4 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import type {
   CierreDeTiendaAgregadoRow,
   CrearMovimientoTiendaInput,
@@ -6,9 +8,11 @@ import type {
   IWalletTiendaMovimientoRepository,
   ListarPorTiendaFiltros,
   ListarPorTiendaPage,
+  RegistrarCobroEnHistorialInput,
   SaldoTiendaAgregado,
   SaldoTiendaAgregadoRow,
   SaldoTiendaFiltros,
+  WalletTiendaHistorialTxClient,
   WalletTiendaTxClient,
 } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
@@ -68,6 +72,11 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
   ): Promise<number> {
     if (movs.length === 0) return 0;
     const data = movs.map((m) => ({
+      // FICHA 381 (design §1.1): la clave SOLO viaja si el llamador la trae. Se OMITE —en vez de
+      // mandar `undefined`— para que los escritores que no la pasan sigan cayendo en el
+      // `@default(uuid())` de la columna, byte a byte como hasta hoy. Precedente literal:
+      // `WalletMovimientoRepository.crearMovimientos`, ficha 334.
+      ...(m.id !== undefined ? { id: m.id } : {}),
       tiendaId: m.tiendaId,
       tipo: m.tipo,
       categoria: m.categoria,
@@ -315,5 +324,47 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
       where: { id, tiendaId }, // `tiendaId` AL FINAL: nada lo puede pisar
     });
     return fila === null ? null : toDTO(fila);
+  }
+
+  /**
+   * FICHA 381 (R40/R41/R42/R43) — la fila de `cobro_tienda_registrado` en `historial_accion`.
+   *
+   * FORMA `recibe_tx`, la fuerte: el primer parametro ES la transaccion en curso y su tipo NO
+   * expone `$transaction`. Este metodo no puede abrir la suya ni escribir fuera, asi que «si el
+   * asiento no se escribe no queda rastro» y «si el rastro falla no queda el asiento» son
+   * propiedades del TIPO. Misma forma y mismo motivo que
+   * `RankingSnapshotRepository.registrarAccionSobreFila`.
+   *
+   * ⚠️ ESTE METODO NO MUTA `wallet_tienda_movimiento`, Y NO DEBE: el ledger es append-only y el
+   * asiento ya lo escribio `crearMovimientos` en ESTA MISMA transaccion, un instante antes. La
+   * lectura de `tx.usuario.findUnique` es lo que CONGELA la etiqueta —el nombre de la tienda— dentro
+   * de la transaccion: resolverlo al leer re-etiquetaria la historia el dia que la tienda se
+   * renombre.
+   *
+   * LA `descripcion` DEL COBRO NO ENTRA (R43): es texto libre tecleado por una persona, y R5 de la
+   * 362 la deja fuera de esta tabla. Vive en el ledger, que es donde se consulta.
+   */
+  async registrarCobroEnHistorial(
+    tx: WalletTiendaHistorialTxClient,
+    input: RegistrarCobroEnHistorialInput,
+  ): Promise<void> {
+    const tienda = await tx.usuario.findUnique({
+      where: { id: input.tiendaId },
+      select: { nombre: true },
+    });
+    const actor = await resolverActorCongelado(tx, input.actorUsuarioId);
+    await appendAccion(tx, [
+      {
+        accion: "cobro_tienda_registrado",
+        entidadTipo: "wallet_tienda_movimiento",
+        entidadId: input.cobroId,
+        entidadEtiqueta: etiquetaDeEntidad("wallet_tienda_movimiento", {
+          tiendaNombre: tienda?.nombre ?? null,
+        }),
+        // STRING money-safe -> `Decimal`, sin pasar por `number` (R18).
+        monto: new Prisma.Decimal(input.monto),
+        ...actor,
+      },
+    ]);
   }
 }

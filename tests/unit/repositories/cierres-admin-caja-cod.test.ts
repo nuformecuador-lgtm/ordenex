@@ -198,6 +198,7 @@ function tiendaRepoQueEscribe(d: Doble) {
     listarCierresDeTienda: vi.fn(async () => []),
     // Ficha 344: la lectura por id acotada a la tienda. Este doble no la ejercita.
     obtenerPorIdDeTienda: vi.fn(async () => null),
+    registrarCobroEnHistorial: vi.fn(async () => undefined), // exigido por IWalletTiendaMovimientoRepository (ficha 381); no ejercitado aqui
   };
 }
 

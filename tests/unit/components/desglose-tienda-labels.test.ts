@@ -63,6 +63,28 @@ describe("etiquetas del desglose por tienda — R20: las MISMAS de /mi-wallet", 
     // R44: el concepto que hoy nadie emite ya es filtrable, porque la lista NO está escrita
     // a mano — sale del catálogo.
     expect(valores).toContain("pago_tienda");
+    // ⭑ FICHA 381 (R35): el cobro manual también, y por el MISMO mecanismo — la opción sale sola
+    // del SEED, en las dos pantallas, sin escribir una línea de filtro.
+    expect(valores).toContain("cobro_manual");
+  });
+
+  it("⭑ FICHA 381 (R33/R34) — el cobro se llama «Cobro de Ordenex», y NO como un ajuste", () => {
+    // Literal, y ES el contrato: es el texto que ve la TIENDA en su propia wallet y el que ve el
+    // administrador en `/wallet/tiendas` — el mismo objeto, así que un solo texto para las dos
+    // pantallas y para las dos descargas.
+    expect(CATEGORIA_TIENDA_LABEL.cobro_manual).toBe("Cobro de Ordenex");
+    // ⚠️ R33: DISTINTO del de una corrección compensatoria. Ésa es la decisión D2 del humano
+    // —«sí es importante distinguir cuándo es un cobro a una tienda»— convertida en algo que se
+    // rompe si alguien las conflaciona.
+    expect(CATEGORIA_TIENDA_LABEL.cobro_manual).not.toBe(CATEGORIA_TIENDA_LABEL.ajuste_debito);
+    // Y `ajuste_debito` NO cambió: se queda intacto y reservado a su propósito original.
+    expect(CATEGORIA_TIENDA_LABEL.ajuste_debito).toBe("Ajuste (débito)");
+    // Tampoco se confunde con el pago que la tienda RECIBE, que es el movimiento contrario.
+    expect(CATEGORIA_TIENDA_LABEL.cobro_manual).not.toBe(CATEGORIA_TIENDA_LABEL.pago_tienda);
+    // Ni una etiqueta repetida en todo el diccionario: dos conceptos con el mismo nombre serían
+    // indistinguibles en la tabla y en el archivo descargado (R39).
+    const etiquetas = Object.values(CATEGORIA_TIENDA_LABEL);
+    expect(new Set(etiquetas).size).toBe(etiquetas.length);
   });
 });
 

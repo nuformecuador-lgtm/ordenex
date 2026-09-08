@@ -4,7 +4,10 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 
-import { HISTORIAL_ACCION_TIPOS } from "@/lib/types/historial-accion";
+import {
+  HISTORIAL_ACCION_ENTIDADES,
+  HISTORIAL_ACCION_TIPOS,
+} from "@/lib/types/historial-accion";
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
@@ -311,13 +314,22 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("380/T3 (a) — el enum de la base ES el cat
     expect(enLaBase.indexOf(VALOR_NUEVO)).toBeGreaterThan(
       enLaBase.indexOf("zona_central_cambiada"),
     );
-    expect(enLaBase.at(-1)).toBe(VALOR_NUEVO);
+    // ⚠️ YA NO ES EL ULTIMO, y esa es la señal que este caso existe para dar: la ficha 381 añadio
+    // `cobro_tienda_registrado` DESPUES (2026-09-08), y al hacerlo tuvo que pasar por aqui. Se
+    // afirma la POSICION RELATIVA —que es el invariante real, «`ADD VALUE` APENDE»— en vez de «es
+    // el ultimo», que caduca con cada ficha nueva. La afirmacion es MAS estrecha, no menos:
+    // inmediatamente antes del siguiente.
+    expect(enLaBase.indexOf("cobro_tienda_registrado")).toBe(enLaBase.indexOf(VALOR_NUEVO) + 1);
   });
 
   it("la 380 NO amplio el enum de entidades: `zona` ya estaba", async () => {
     const entidades = await valoresDeEnum(admin, "public", "historial_accion_entidad");
     expect(entidades).toContain("zona");
-    expect(entidades).toHaveLength(20);
+    // El conteo se compara contra el CATALOGO, no contra un numero congelado —el mismo criterio que
+    // el caso de los tipos aqui arriba—. La ficha 381 amplio este enum con
+    // `wallet_tienda_movimiento` (de 20 a 21) y la 380 sigue sin haberlo tocado.
+    expect(entidades).toHaveLength(HISTORIAL_ACCION_ENTIDADES.length);
+    expect(entidades).toEqual(expect.arrayContaining([...HISTORIAL_ACCION_ENTIDADES]));
   });
 });
 
@@ -360,11 +372,19 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("380/T3 (b) — el down recrea la lista PREV
     expect(entidadesAntes).toContain("zona");
   });
 
-  it("⭑ el estado previo reconstruido ES el catalogo de HOY menos el valor nuevo", () => {
+  it("⭑ el estado previo reconstruido ES el catalogo de HOY menos este valor y los posteriores", () => {
     // El cierre del circulo: si el catalogo de TypeScript y las migraciones discreparan, no hay
     // forma de que esto y el caso de arriba cuadren a la vez por casualidad.
-    const catalogoSinElNuevo = HISTORIAL_ACCION_TIPOS.filter((t) => t !== VALOR_NUEVO);
-    expect([...tiposAntes].sort()).toEqual([...catalogoSinElNuevo].sort());
+    //
+    // ⚠️ CADA FICHA QUE AMPLIE EL ENUM DESPUES DE ESTA ENTRA AQUI, en orden de migracion. Es lo que
+    // convierte la comparacion en una cadena verificable —«el catalogo de hoy menos la 380 menos la
+    // 381»— en vez de en algo que caduca en silencio. Cada una tiene ademas su propio archivo:
+    //   · 381 — `cobro_tienda_registrado`, en `historial-accion-cobro-tienda-migration.test.ts`.
+    const POSTERIORES = ["cobro_tienda_registrado"];
+    const catalogoPrevio = HISTORIAL_ACCION_TIPOS.filter(
+      (t) => t !== VALOR_NUEVO && !POSTERIORES.includes(t),
+    );
+    expect([...tiposAntes].sort()).toEqual([...catalogoPrevio].sort());
   });
 
   it("el up deja 50 tipos, con el nuevo AL FINAL (`ADD VALUE` apende)", () => {

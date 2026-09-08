@@ -94,6 +94,9 @@ describe("366/T1 — el `migration.sql` y el `down.sql`, como texto", () => {
     // La ficha 380 añade `zona_pago_mensajero_cambiado` (la reescritura del pago al mensajero de
     // una zona, que el guardado hacia sin dejar rastro), con su propio archivo en
     // `tests/integration/db/historial-accion-zona-pago-mensajero-migration.test.ts`.
+    // La ficha 381 añade `cobro_tienda_registrado` (cobrarle un costo a una tienda a mano, que baja
+    // su disponible y puede dejarlo en negativo), con su propio archivo en
+    // `tests/integration/db/historial-accion-cobro-tienda-migration.test.ts`.
     const POSTERIORES = [
       "gestion_fecha_reprogramacion_corregida",
       "api_key_eliminada",
@@ -102,6 +105,7 @@ describe("366/T1 — el `migration.sql` y el `down.sql`, como texto", () => {
       "nodo_geografico_renombrado",
       "zona_central_cambiada",
       "zona_pago_mensajero_cambiado",
+      "cobro_tienda_registrado",
     ];
     expect([...HISTORIAL_ACCION_TIPOS].sort()).toEqual(
       [...previos, VALOR_NUEVO, ...POSTERIORES].sort(),

@@ -245,6 +245,23 @@ const CENSO: EntradaCenso[] = [
     mutacion: /tx\.tarifaZonaMensajero\.deleteMany\(/,
   },
   {
+    // ⭑ FICHA 381 — EL COBRO MANUAL A UNA TIENDA. Forma `recibe_tx`, la FUERTE: el metodo recibe la
+    // transaccion como primer parametro y su tipo (`WalletTiendaHistorialTxClient`) no expone
+    // `$transaction`, asi que la atomicidad es del TIPO y no de la disciplina.
+    //
+    // ⚠️ TERCER CASO DECLARADO SIN MUTACION PROPIA, junto a `reparto_anulado` y los dos del premio
+    // del ranking, y por el MISMO motivo: `wallet_tienda_movimiento` es un ledger APPEND-ONLY y este
+    // metodo no puede reescribirlo. La mutacion que este registro documenta es el ASIENTO del cobro,
+    // que `CobroTiendaService` acaba de escribir con `crearMovimientos` en la MISMA transaccion que
+    // aqui se recibe. La «mutacion» que se exige es la LECTURA que congela la etiqueta —el nombre de
+    // la tienda—, que es lo unico propio de este cuerpo.
+    tipos: ["cobro_tienda_registrado"],
+    archivo: "lib/repositories/WalletTiendaMovimientoRepository.ts",
+    metodo: "registrarCobroEnHistorial",
+    forma: "recibe_tx",
+    mutacion: /tx\.usuario\.findUnique\(/,
+  },
+  {
     // ⭑ Q2 (`usuario_fulfillment_cambiado`) comparte punto de escritura con el rol y la zona: es
     // el MISMO formulario, y las N filas salen con el MISMO `lote_id`.
     tipos: ["usuario_rol_cambiado", "usuario_zona_cambiada", "usuario_fulfillment_cambiado"],
@@ -779,13 +796,14 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     expect(inventados, "el censo nombra un tipo que el catalogo no declara").toEqual([]);
   });
 
-  it("los 50 tipos del Anexo A (+ Q1, Q2, la 366, la 371, la 373, la 374, la 375, la 376 y la 380) siguen siendo 50", () => {
+  it("los 51 tipos del Anexo A (+ Q1, Q2, la 366, la 371, la 373, la 374, la 375, la 376, la 380 y la 381) siguen siendo 51", () => {
     // Numero DURO a proposito: añadir un tipo al enum obliga a pasar por aqui, y por tanto a
     // añadirlo al censo y a escribir su productor. Es el mecanismo de R14.
-    // 50 desde la ficha 380 (`zona_pago_mensajero_cambiado`); 49 lo fue desde la 376
-    // (`zona_central_cambiada`); 48 desde la 375 (`nodo_geografico_renombrado`); 47 desde la 374
-    // (los dos `nodo_geografico_*` de activacion); 45 desde la 373.
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(50);
+    // 51 desde la ficha 381 (`cobro_tienda_registrado`); 50 lo fue desde la 380
+    // (`zona_pago_mensajero_cambiado`); 49 desde la 376 (`zona_central_cambiada`); 48 desde la 375
+    // (`nodo_geografico_renombrado`); 47 desde la 374 (los dos `nodo_geografico_*` de activacion);
+    // 45 desde la 373.
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(51);
   });
 });
 

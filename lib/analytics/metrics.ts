@@ -754,6 +754,11 @@ const CATALOGO = [
         "pago_tienda",
         "ajuste_credito",
         "ajuste_debito",
+        // FICHA 381: el cobro manual a una tienda. VA A MANO porque este campo esta tipado
+        // `readonly string[]` y el compilador NO lo obliga —a diferencia de los otros cuatro
+        // `Record` totales sobre la categoria—. Sin esta linea el catalogo describiria una metrica
+        // que suma una categoria que no nombra.
+        "cobro_manual",
       ],
     },
   },

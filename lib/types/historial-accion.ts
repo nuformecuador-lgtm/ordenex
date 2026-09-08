@@ -37,15 +37,16 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // desaparecer algo»; la ficha 375 añade el octavo (`nodo_geografico_renombrado`), que entra en la
 // MISMA categoria que sus dos hermanos; la ficha 376 añade el noveno (`zona_central_cambiada`),
 // que vuelve a «mueve dinero»; la ficha 380 añade el decimo
-// (`zona_pago_mensajero_cambiado`), que tambien es dinero. El motivo de cada uno esta escrito a su
-// lado.
+// (`zona_pago_mensajero_cambiado`), que tambien es dinero; la ficha 381 añade el UNDECIMO
+// (`cobro_tienda_registrado`), que es dinero en el sentido mas directo: baja el disponible de una
+// tienda por una decision humana. El motivo de cada uno esta escrito a su lado.
 
 /**
- * Los 50 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
+ * Los 51 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
  * permisos) y es el que consume el selector de filtros: no se reordena por gusto.
  */
 export const HISTORIAL_ACCION_TIPOS = [
-  // --- A.1 · mueve dinero (28) ---
+  // --- A.1 · mueve dinero (29) ---
   "cierre_dia_aprobado", // cierres-admin.aprobarCierre
   "cierre_dia_rechazado", // cierres-admin.rechazarCierre
   "cierre_dia_pagos_editados", // cierres-admin.actualizarPagosGestion
@@ -121,6 +122,25 @@ export const HISTORIAL_ACCION_TIPOS = [
   //     `zona_creada`, igual que `vehiculo_borrado` sin `vehiculo_creado`— por el motivo escrito
   //     mas abajo: lo que decide no es el nombre de la operacion sino su PAPEL.
   "zona_pago_mensajero_cambiado", // zonas.actualizarZona -> ZonaRepository.update (SOLO update)
+  // ⭑ FICHA 381 — ALGUIEN LE COBRO UN COSTO A UNA TIENDA a mano, desde «Registrar movimiento».
+  // Entra en DINERO y no admite discusion: la fila documenta que el disponible de esa tienda BAJO
+  // por una decision humana, y que puede haber quedado NEGATIVO (el humano lo firmo asi el
+  // 2026-09-07: «si no hay, entonces el disponible debe verse en negativo»).
+  //
+  // ⚠️ TIPO PROPIO Y NO `wallet_movimiento_manual_registrado`: la etiqueta de aquel dice
+  // «Registró un movimiento manual de CAJA» y su productor censado es
+  // `WalletMovimientoRepository.crearMovimientoRegistrado`. Reusarlo pondria en el historial una
+  // frase FALSA —un cobro NO toca la caja de Ordenex (D1)— y romperia la guardia del censo, que
+  // exige que el tipo lo escriba el metodo declarado.
+  //
+  // ⚠️ POR QUE DEJA RASTRO SI EL LEDGER YA TIENE `registrado_por`: el criterio lo fijo la 362 y esta
+  // ficha no lo inventa —«se registra la DECISION, no sus asientos»—. `registrado_por` vive en un
+  // libro que la pantalla del historial no lee, no se puede filtrar por «lo que movio dinero» y no
+  // aparece junto a las otras acciones auditadas.
+  //
+  // La fila lleva `monto` (el importe cobrado) y se etiqueta por el NOMBRE DE LA TIENDA. La
+  // `descripcion` del cobro NO entra (R43): es texto libre tecleado por una persona.
+  "cobro_tienda_registrado", // wallet-tienda.registrarCobroTiendaAction -> WalletTiendaMovimientoRepository.registrarCobroEnHistorial
 
   // --- A.2 · hace desaparecer algo (10) ---
   // ⭑ FICHA 371 — la fecha de una reprogramacion ya registrada, corregida por un coordinador.
@@ -210,13 +230,17 @@ export const HISTORIAL_ACCION_TIPOS = [
 export type HistorialAccionTipo = (typeof HISTORIAL_ACCION_TIPOS)[number];
 
 /**
- * Los 20 tipos de entidad que una accion del catalogo puede afectar.
+ * Los 21 tipos de entidad que una accion del catalogo puede afectar.
  *
  * ⭑ FICHA 374 — `provincia`, `canton` y `distrito` son la PRIMERA ampliacion de este enum: nacio
  * con 17 valores en `20260902120000_historial_accion` y ninguna migracion posterior lo habia
  * tocado. Entran TRES y no una entidad sintetica `nodo_geografico`: los 17 valores previos mapean
  * 1:1 con tablas y este seria el primero que no; ademas, con tres, «que le paso a este distrito»
  * se resuelve por el `@@index([entidadTipo, entidadId])` que ya existe.
+ *
+ * ⭑ FICHA 381 — `wallet_tienda_movimiento` es la SEGUNDA ampliacion, y respeta la misma regla: es
+ * una TABLA. Apuntar el rastro del cobro al `usuario` de la tienda dejaria la fila sin poder señalar
+ * QUE asiento se escribio, que es justo para lo que sirve ese indice.
  */
 export const HISTORIAL_ACCION_ENTIDADES = [
   "orden",
@@ -239,6 +263,7 @@ export const HISTORIAL_ACCION_ENTIDADES = [
   "provincia",
   "canton",
   "distrito",
+  "wallet_tienda_movimiento",
 ] as const satisfies readonly PrismaHistorialAccionEntidad[];
 
 export type HistorialAccionEntidad = (typeof HISTORIAL_ACCION_ENTIDADES)[number];
@@ -291,6 +316,9 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   // FICHA 380: `tarifa_zona_mensajero` ES lo que cobra un mensajero por entregar y por recibir un
   // rechazo. No hay lectura mas literal de «mueve dinero».
   zona_pago_mensajero_cambiado: "mueve_dinero",
+  // FICHA 381 (R41): un cobro manual BAJA el disponible de una tienda. No hay lectura mas directa
+  // de «mueve dinero», y R17 exige exactamente una categoria por tipo.
+  cobro_tienda_registrado: "mueve_dinero",
   gestion_fecha_reprogramacion_corregida: "hace_desaparecer",
   orden_eliminada: "hace_desaparecer",
   orden_recuperada: "hace_desaparecer",
@@ -347,6 +375,7 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   orden_zona_reconciliada: "Actualizó la zona de una orden",
   zona_central_cambiada: "Cambió la marca de zona central",
   zona_pago_mensajero_cambiado: "Cambió el pago al mensajero de una zona",
+  cobro_tienda_registrado: "Cobró un costo a una tienda",
   gestion_fecha_reprogramacion_corregida: "Corrigió la fecha de una reprogramación",
   orden_eliminada: "Eliminó una orden",
   orden_recuperada: "Recuperó una orden",
@@ -400,6 +429,7 @@ export const ENTIDAD_LABELS: Record<HistorialAccionEntidad, string> = {
   provincia: "Provincia",
   canton: "Cantón",
   distrito: "Distrito",
+  wallet_tienda_movimiento: "Movimiento de tienda",
 };
 
 /** Los tipos de UNA categoria. Es la traduccion `categoria -> accion IN (…)` del borde (R17). */

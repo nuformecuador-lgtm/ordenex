@@ -102,6 +102,9 @@ export const FUENTE_TIENDA: Record<WalletTiendaMovimientoCategoria, FuenteDeApor
   pago_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
   ajuste_credito: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
   ajuste_debito: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  // FICHA 381: un cobro manual lo decide una PERSONA, no lo reparte ningun cierre. Abrir su detalle
+  // responde «no nace de un cierre» en vez de irse a buscar un cierre que no existe.
+  cobro_manual: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
 };
 
 /**

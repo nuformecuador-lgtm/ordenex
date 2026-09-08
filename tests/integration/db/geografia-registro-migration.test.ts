@@ -191,7 +191,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("374/R57 (a) — el enum de la base ES el ca
     expect([...enLaBase].sort()).toEqual([...HISTORIAL_ACCION_TIPOS].sort());
   });
 
-  it("`historial_accion_entidad` de `public` tiene exactamente las 20 del catalogo", async () => {
+  // El nombre NO lleva el numero: la comparacion es contra el CATALOGO, y ese numero se movio (20
+  // con la 374, 21 con la 381). Un titulo con la cifra dentro es un registro que caduca.
+  it("`historial_accion_entidad` de `public` tiene exactamente las del catalogo", async () => {
     const enLaBase = await valoresDeEnum(admin, "public", "historial_accion_entidad");
     expect(enLaBase.length).toBeGreaterThan(0);
     expect([...enLaBase].sort()).toEqual([...HISTORIAL_ACCION_ENTIDADES].sort());
