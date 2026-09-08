@@ -4676,11 +4676,11 @@
       "title": "el Excel de cierres cuenta los intentos que no son",
       "description": "El nivel Detalle trae los intentos de contacto de la tienda; deben ser los intentos de entrega vigentes de la orden.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "baja",
       "branch": "fix/394-intentos-entrega-en-detalle-cierres",
-      "status_note": "FIRMADA por el humano el 2026-09-08: se SUSTITUYE la columna, no se anaden las dos, y se cuentan los intentos VIGENTES. || La columna sale hoy de orden.intentos_contacto, que es la gestion de la tienda desde /novedades. El numero correcto ya existe y esta probado: contarIntentosVigentesEnLote (features 160/215), el mismo derivador que usan la analitica y la pantalla de reprogramadas, donde se llama intentosEntrega. Se pide EN LOTE para las ordenes de la descarga. Sin migracion. || Vigentes y no totales porque es el numero con el que el sistema decide el tope y con el que cobra: asi la hoja y la analitica dicen lo mismo. || Corrige a la 385, ya desplegada, y una lectura del leader: la pregunta «de la tienda o del mensajero» quedo abierta y se implemento sin respuesta."
+      "status_note": "EN CURSO desde el 2026-09-08, en worktree aislado. Sin migracion. || FIRMADA por el humano el 2026-09-08: se SUSTITUYE la columna, no se anaden las dos, y se cuentan los intentos VIGENTES. || La columna sale hoy de orden.intentos_contacto, que es la gestion de la tienda desde /novedades. El numero correcto ya existe y esta probado: contarIntentosVigentesEnLote (features 160/215), el mismo derivador que usan la analitica y la pantalla de reprogramadas, donde se llama intentosEntrega. Se pide EN LOTE para las ordenes de la descarga. Sin migracion. || Vigentes y no totales porque es el numero con el que el sistema decide el tope y con el que cobra: asi la hoja y la analitica dicen lo mismo. || Corrige a la 385, ya desplegada, y una lectura del leader: la pregunta «de la tienda o del mensajero» quedo abierta y se implemento sin respuesta."
     }
   ]
 }
