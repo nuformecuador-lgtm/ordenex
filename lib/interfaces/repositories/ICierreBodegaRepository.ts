@@ -67,6 +67,19 @@ export interface CrearCierreBodegaInput {
   totalIngresoBodegaRechazos: string; // feature 56/R18: snapshot agregado del ingreso de bodega por rechazos (STRING)
 }
 
+/**
+ * FICHA 379/R18/R19 — el resumen de «lo que esta bodega tiene sin consolidar», y NADA mas.
+ *
+ * Money-safe: `totalGeneral` viaja como STRING de escala 2, nunca como `number`. Sin filas el
+ * `_sum` de Prisma devuelve `null`, y aqui se traduce a `"0.00"` — que es un importe, no un
+ * hueco: el aviso lo dice igual (AS1), porque el valor esta en saber que la zona se queda sin
+ * nadie que pueda cerrarla, y el dinero es solo el numero de hoy.
+ */
+export interface ResumenConsolidablesPendientes {
+  cantidad: number; // # de cierre_dia consolidables
+  totalGeneral: string; // Decimal(12,2) serializado; "0.00" cuando no hay ninguno
+}
+
 export interface ICierreBodegaRepository {
   /**
    * R5: cierre_dia de la zona en `estado='aprobado'`, `destino_tipo='bodega_satelite'`,
@@ -96,6 +109,20 @@ export interface ICierreBodegaRepository {
     rango: RangoPagina,
     filtros?: FiltrosCierresBodega,
   ): Promise<PaginaRepositorio<CierreDiaConsolidableRow>>;
+  /**
+   * FICHA 379/R18 — el MISMO conjunto que `findCierresDiaConsolidables`, agregado.
+   *
+   * Cuenta e importe salen de `consolidablesWhere(zonaId)`: la funcion que ya decide que puede
+   * consolidar esa bodega. Si alguien cambia ese criterio, el aviso cambia con el — que es
+   * exactamente lo que no puede fallar aqui. Un aviso que dice un numero distinto del que la
+   * pantalla de consolidacion ensena es peor que no avisar.
+   *
+   * SIN `filtros` a proposito: el aviso mira TODA la cola de la bodega, no el rango que alguien
+   * tenga puesto en una pantalla. Money-safe: STRING escala 2, nunca `number` (R19).
+   *
+   * No devuelve ni una fila ni un nombre de persona: solo dos numeros (R22).
+   */
+  resumirConsolidablesPendientes(zonaId: string): Promise<ResumenConsolidablesPendientes>;
   /**
    * R6: cuenta los cierre_dia de la zona (`destino_tipo='bodega_satelite'`,
    * `destino_zona_id=zonaId`) aun en estado `solicitado` (pendientes de que el

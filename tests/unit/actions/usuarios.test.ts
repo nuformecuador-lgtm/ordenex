@@ -8,6 +8,7 @@ import {
   listarTiposIdentificacion,
   listarRoles,
   restablecerContrasenaUsuario,
+  consultarImpactoCambioUsuario,
 } from "@/lib/actions/usuarios";
 import type { Actor, IUsuarioService } from "@/lib/interfaces/services/IUsuarioService";
 import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
@@ -64,6 +65,9 @@ function fakeService(overrides: Partial<IUsuarioService> = {}): IUsuarioService 
       generatedPassword: "Gen3rada!X",
       sesionesRevocadas: 2,
     }),
+    // FICHA 379 (T8): por defecto NO hay nada que avisar, que es el caso normal. Los casos con
+    // impacto lo sobreescriben.
+    consultarImpactoCambio: vi.fn().mockResolvedValue({ status: "ok", impacto: null }),
     ...overrides,
   };
 }
@@ -356,5 +360,85 @@ describe("285/R8/R15 — filtro fuera de contrato: validation_error sin llamar a
     const [entrada] = (service.listar as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(entrada.q).toBe("ro"); // R6: el borde recorta antes de dejarlo pasar
     expect(entrada.rol).toEqual(["mensajero", "admin"]);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+// FICHA 379 / T8 — EL BORDE DE LA CONSULTA PREVIA (R9/R20/R21/R22).
+//
+// Es una accion de SOLO LECTURA: no escribe nada y no bloquea nada (R14). Aqui se afirma lo del
+// borde y nada mas —sesion, forma de la entrada, delegacion—; el predicado del aviso vive en
+// `tests/unit/services/usuario-impacto-zona.test.ts`.
+// ───────────────────────────────────────────────────────────────────────────────────────────
+describe("379/T8 — consultarImpactoCambioUsuario: el borde", () => {
+  it("R22: sin sesion -> unauthenticated ANTES de tocar el service", async () => {
+    const service = fakeService();
+    const r = await consultarImpactoCambioUsuario(
+      "usr-1",
+      { estado: "inactivo" },
+      { usuarioService: service, getActor: noActor },
+    );
+    expect(r.status).toBe("unauthenticated");
+    expect(service.consultarImpactoCambio).not.toHaveBeenCalled();
+  });
+
+  it("id invalido -> validation_error con clave `id`, sin llamar al service", async () => {
+    const service = fakeService();
+    const r = await consultarImpactoCambioUsuario(
+      "",
+      { estado: "inactivo" },
+      { usuarioService: service, getActor: getActor(MAESTRO) },
+    );
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") expect(Object.keys(r.fieldErrors)).toContain("id");
+    expect(service.consultarImpactoCambio).not.toHaveBeenCalled();
+  });
+
+  it("⭑ clave desconocida en el cambio -> validation_error (prueba del `.strict()`)", async () => {
+    // El schema se DERIVA de `actualizarUsuarioSchema`; si alguien lo aflojara, esta consulta
+    // empezaria a aceptar campos que la edicion rechaza y evaluaria un cambio distinto del que
+    // se va a aplicar.
+    const service = fakeService();
+    const r = await consultarImpactoCambioUsuario(
+      "usr-1",
+      { estado: "inactivo", fulfillment: true },
+      { usuarioService: service, getActor: getActor(MAESTRO) },
+    );
+    expect(r.status).toBe("validation_error");
+    expect(service.consultarImpactoCambio).not.toHaveBeenCalled();
+  });
+
+  it("delega con el id y el cambio ya validados, y propaga el impacto tal cual", async () => {
+    const impacto = {
+      zonaNombre: "Puntarenas",
+      cierresSinConsolidar: 2,
+      totalSinConsolidar: "150000.00",
+      adminSatelitesActivosRestantes: 0,
+    };
+    const service = fakeService({
+      consultarImpactoCambio: vi.fn().mockResolvedValue({ status: "ok", impacto }),
+    });
+    const r = await consultarImpactoCambioUsuario(
+      "usr-1",
+      { rolId: "rol-2" },
+      { usuarioService: service, getActor: getActor(MAESTRO) },
+    );
+
+    expect(r).toEqual({ status: "ok", impacto });
+    expect(service.consultarImpactoCambio).toHaveBeenCalledWith(
+      "usr-1",
+      { rolId: "rol-2" },
+      MAESTRO,
+    );
+  });
+
+  it("un cambio vacio es valido: es el SERVIDOR quien decide si hay algo que avisar (AS5)", async () => {
+    const service = fakeService();
+    const r = await consultarImpactoCambioUsuario("usr-1", undefined, {
+      usuarioService: service,
+      getActor: getActor(MAESTRO),
+    });
+    expect(r).toEqual({ status: "ok", impacto: null });
+    expect(service.consultarImpactoCambio).toHaveBeenCalledWith("usr-1", {}, MAESTRO);
   });
 });

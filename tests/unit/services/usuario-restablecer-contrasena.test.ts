@@ -76,6 +76,7 @@ function repoUsuarios(overrides: Partial<IUserRepository> = {}): IUserRepository
     setEstado: vi.fn(),
     listTiposIdentificacion: vi.fn(),
     listRoles: vi.fn(),
+    contarAdminSatelitesActivos: vi.fn().mockResolvedValue(0), // ficha 379: exigido por IUserRepository
     ...overrides,
   };
 }
@@ -365,9 +366,22 @@ describe("287/R37/R38 — ni correo, ni aviso, ni nada que dependa de un proveed
 
   it("R37: el constructor de `UsuarioService` no admite ningun emisor de notificaciones", () => {
     // ⭑ Mata la mutacion «anadir un envio de aviso»: para enviar algo habria que inyectarlo, y
-    //   el constructor tiene CUATRO parametros contados. Si manana alguien anade un quinto para
-    //   un notificador, este caso se pone rojo y obliga a reabrir R37 en la puerta —donde el
+    //   el constructor tiene sus parametros CONTADOS. Si manana alguien anade uno para un
+    //   notificador, este caso se pone rojo y obliga a reabrir R37 en la puerta —donde el
     //   humano decidio el 2026-08-26 que al usuario NO se le avisa— en vez de colarlo.
-    expect(UsuarioService.length).toBe(4);
+    //
+    // FICHA 379 (2026-09-08): el numero pasa de CUATRO a CINCO, y el trampa-hilos hizo
+    // exactamente su trabajo — se puso rojo y obligo a mirar el parametro nuevo antes de
+    // subirlo. El quinto es `ICierreBodegaRepository`, y NO es un emisor de nada:
+    //   - solo expone `resumirConsolidablesPendientes`, una LECTURA agregada (`COUNT`+`SUM`);
+    //   - no lo usa `restablecerContrasena` —el caso de arriba construye el servicio con
+    //     cuatro argumentos y completa igual—, sino `consultarImpactoCambio`, que es una
+    //     consulta previa de pantalla;
+    //   - y ningun camino de escritura lo toca: eso lo vigila aparte
+    //     `tests/unit/guards/379-maestro-sin-bloqueo.guardia.test.ts`.
+    // El numero sigue siendo un literal exacto: relajarlo a `toBeGreaterThan` desarmaria la
+    // trampa y dejaria pasar en silencio el sexto parametro, que es lo unico que este caso
+    // existe para no dejar pasar.
+    expect(UsuarioService.length).toBe(5);
   });
 });
