@@ -466,11 +466,10 @@ export async function verDetalleDeMiMovimientoCompletoAction(
  * Server Action y no route handler: es una mutacion interna del mismo proyecto
  * (`docs/architecture.md`). No hay ruta nueva.
  *
- * @sin-superficie ficha 381, mitad de servidor: la pantalla que la dispara —el quinto concepto
- * «Cobrar un costo a una tienda» del dialogo «Registrar movimiento» de `/wallet`— llega en la mitad
- * de FRONTEND de esta misma ficha (tandas H e I de `specs/381-cargo-manual-a-tienda/tasks.md`).
- * ⚠️ QUIEN CABLEE ESE CONCEPTO DEBE BORRAR ESTA ANOTACION EN EL MISMO COMMIT: la guardia de
- * superficie tambien falla cuando una excepcion sobrevive a su motivo.
+ * SUPERFICIE (tanda H de la ficha): la dispara el quinto concepto «Cobrar un costo a una tienda»
+ * del dialogo `RegistrarMovimientoCajaDialog` de `/wallet`. La anotacion `@sin-superficie` con la
+ * que nacio esta accion se BORRO al cablear ese concepto, en el mismo commit: una excepcion que
+ * sobrevive a su motivo pone roja la guardia de superficie igual que su ausencia.
  */
 export async function registrarCobroTiendaAction(
   input: unknown,

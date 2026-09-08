@@ -42,7 +42,12 @@ export const DESGLOSE_MI_WALLET_LABEL = {
   aFavor: "A tu favor",
   aFavorHint: "COD recaudado y ajustes",
   cargos: "Cargos de Ordenex",
-  cargosHint: "Fletes, comisión e IVA",
+  // FICHA 381 (R37) — la enumeración deja de ser solo de conceptos AUTOMÁTICOS. Desde esta
+  // ficha, dentro de este importe puede haber un cobro decidido por una persona, y la tienda
+  // tiene que poder relacionarlo con la fila que va a leer en su libro: allí ese concepto se
+  // rotula «Cobro de Ordenex», y por eso aquí se nombra con esa misma palabra en plural. Sin
+  // esto, la aclaración diría que el importe son fletes, comisión e IVA cuando ya no lo es.
+  cargosHint: "Fletes, comisión, IVA y cobros de Ordenex",
   pagado: "Ya pagado",
   pagadoHint: "Lo que Ordenex ya te entregó",
   saldo: "Saldo a favor",
