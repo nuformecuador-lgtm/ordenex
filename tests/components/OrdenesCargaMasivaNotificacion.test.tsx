@@ -115,6 +115,7 @@ function validar(filasUnicas: FilaParseada[], nuevas: string[]) {
         existentes: [],
         errores: [],
         ajustadas: [],
+        normalizadas: [],
       },
       filasUnicas,
     });

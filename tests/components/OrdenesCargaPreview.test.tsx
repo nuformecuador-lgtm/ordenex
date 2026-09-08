@@ -81,6 +81,8 @@ function clasif(overrides: Partial<ClasificacionCarga> = {}): ClasificacionCarga
     errores: [],
     // Feature 304: sin ajustes por defecto — el caso de casi todas las cargas.
     ajustadas: [],
+    // Ficha 383: y sin reparaciones de texto, por el mismo motivo.
+    normalizadas: [],
     ...overrides,
   };
 }
@@ -447,5 +449,122 @@ describe("OrdenesCargaPreview — monto redondeado (feature 304)", () => {
     const tabla = screen.getByRole("table", { name: TABLA_AJUSTES });
     expect(within(tabla).getAllByRole("row")).toHaveLength(3); // cabecera + 2 filas
     expect(within(tabla).getByText(`${formatMonto(0)}${COMA}50`)).toBeInTheDocument();
+  });
+});
+
+/**
+ * ⭑ FICHA 383 (T7.2) — LA REPARACIÓN DEL TEXTO SE VE ANTES DE CONFIRMAR.
+ *
+ * El backend repara `𝕠rfirio` → `orfirio` para que la etiqueta pueda imprimirlo, y con eso
+ * Ordenex guarda un nombre que la tienda NO escribió. La regla de la ficha es «si se normaliza,
+ * tiene que verse», y este paso —el dry-run, donde todavía no se ha escrito una sola fila— es el
+ * único momento en el que alguien tiene la orden delante.
+ *
+ * Los literales van ESCAPADOS y COMPLETOS: son el contrato de lo que el usuario lee, no el
+ * resultado de llamar a nada del componente.
+ */
+const ORIGINAL_383 = "\u{1D560}rfirio"; // U+1D560, el caso real de la guía 11081885
+const APLICADO_383 = "orfirio";
+const LINEA_UNA =
+  "1 trae caracteres que la etiqueta no puede imprimir y se cargará corregida («\u{1D560}rfirio» → «orfirio»).";
+const LINEA_DOS =
+  "2 traen caracteres que la etiqueta no puede imprimir y se cargarán corregidas («\u{1D560}rfirio» → «orfirio»).";
+
+describe("OrdenesCargaPreview — texto reparado (ficha 383)", () => {
+  const aviso = (numRemision: string, fila: number, campo = "destinatario") => ({
+    fila,
+    numRemision,
+    campo,
+    original: ORIGINAL_383,
+    aplicado: APLICADO_383,
+  });
+
+  function render383(clasificacion: ClasificacionCarga) {
+    render(
+      <OrdenesCargaPreview
+        clasificacion={clasificacion}
+        confirmando={false}
+        onConfirmar={vi.fn()}
+      />,
+    );
+    return screen.getByRole("alert");
+  }
+
+  it("una fila reparada: lo dice y enseña «lo que venía» → «lo que se guardará»", () => {
+    const alerta = render383(
+      clasif({
+        numRemisionesNuevas: ["REM-7", "REM-8"],
+        normalizadas: [aviso("REM-7", 7)],
+      }),
+    );
+
+    expect(alerta.textContent).toContain(LINEA_UNA);
+  });
+
+  it("cuenta ÓRDENES, no avisos: dos campos reparados de la MISMA fila siguen siendo 1", () => {
+    // `normalizadas` trae una entrada por CAMPO. Contar la longitud diría «2 traen…» de una sola
+    // orden: un número que no cuadra con lo que la tienda tiene delante.
+    const alerta = render383(
+      clasif({
+        numRemisionesNuevas: ["REM-7"],
+        normalizadas: [aviso("REM-7", 7), aviso("REM-7", 7, "direccion")],
+      }),
+    );
+
+    expect(alerta.textContent).toContain(LINEA_UNA);
+    expect(alerta.textContent).not.toContain("2 traen");
+  });
+
+  it("dos órdenes reparadas lo dicen en plural", () => {
+    const alerta = render383(
+      clasif({
+        numRemisionesNuevas: ["REM-7", "REM-8"],
+        normalizadas: [aviso("REM-7", 7), aviso("REM-8", 8)],
+      }),
+    );
+
+    expect(alerta.textContent).toContain(LINEA_DOS);
+  });
+
+  it("sin reparaciones el paso se ve EXACTAMENTE como antes: ni una palabra de más", () => {
+    const alerta = render383(clasif({ numRemisionesNuevas: ["REM-7"] }));
+
+    expect(alerta.textContent).not.toContain("no puede imprimir");
+    expect(alerta.textContent).not.toContain("corregid");
+    expect(screen.queryByText(/no puede imprimir/i)).toBeNull();
+  });
+
+  it("los dos textos van AISLADOS en `<bdi>`: el dato del archivo no reordena el aviso", () => {
+    // El dato viene del archivo de la tienda y es, por definición, texto que la fuente no cubre.
+    // Sin aislarlo, un carácter de control podría dar la vuelta a la frase que lo denuncia —la
+    // lección de la 382, aquí con el elemento que el estándar HTML tiene para esto—.
+    const alerta = render383(
+      clasif({
+        numRemisionesNuevas: ["REM-7"],
+        normalizadas: [aviso("REM-7", 7)],
+      }),
+    );
+
+    const aislados = Array.from(alerta.querySelectorAll("bdi")).map(
+      (nodo) => nodo.textContent,
+    );
+    expect(aislados).toEqual([ORIGINAL_383, APLICADO_383]);
+  });
+
+  it("NO es un error ni una duplicada: no toca esos grupos ni sus tablas", () => {
+    render383(
+      clasif({
+        numRemisionesNuevas: ["REM-7", "REM-8"],
+        normalizadas: [aviso("REM-7", 7)],
+      }),
+    );
+
+    // La fila reparada sigue contada entre las nuevas (2, no 1) y se puede confirmar.
+    expect(
+      screen.getByRole("button", { name: /confirmar y cargar 2 nuevas/i }),
+    ).toBeEnabled();
+    expect(screen.queryByRole("table", { name: /órdenes con error/i })).toBeNull();
+    expect(screen.queryByRole("table", { name: /órdenes ya existentes/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: BOTON_DESCARGA })).toBeNull();
   });
 });
