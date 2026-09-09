@@ -8,19 +8,10 @@ import type { CierreEstado } from "@/lib/types/cierre";
 import type { ParteDeTienda } from "@/lib/utils/ingreso-ordenex";
 
 import { CascadaDinero, type LineaCascada } from "./CascadaDinero";
-// FICHA 396 — los seis textos nuevos se piden al módulo PURO directamente, y NO por el
-// re-export de `cierre-detalle-shared`: ese camino existe para las etiquetas que también
-// necesita el archivo de la descarga, y las descargas de cierres no se tocan en esta ficha
-// (R27). Menos superficie tocada, mismo texto y un solo sitio donde vive.
-import {
-  DESGLOSE_NO_REPARTIDO_NOTA,
-  DESGLOSE_POR_TIENDA_NOTA,
-  DESGLOSE_POR_TIENDA_TITULO,
-  TIENDA_GANA_TOTAL_LABEL,
-  TIENDA_PAGO_HOY_LABEL,
-  TIENDA_RECAUDADO_LABEL,
-  totalDeVariasTiendasNota,
-} from "./cierre-labels";
+// FICHA 396 (D2) — el desglose y su umbral viven en un archivo PROPIO desde la tanda de bodega:
+// lo montan TRES superficies en DOS módulos (R22), y un componente compartido escondido dentro de
+// una de ellas lo cumple de casualidad. Aquí sólo se consume; el porqué está escrito allí.
+import { DesglosePorTienda, marcaDeVariasTiendas } from "./DesglosePorTienda";
 import {
   CASCADA_DUENO_TITULO,
   CASCADA_FACTURA_TIENDA_TITULO,
@@ -113,11 +104,16 @@ import {
  *    termina en «Pago a tienda» y la de lo que le queda a Ordenex. Ahí, y no antes: primero se
  *    lee de quién es el dinero y cuánto se le paga, y sólo después de qué tienda es cada parte.
  *
- * ── EL UMBRAL ES DE PRESENTACIÓN, Y VIVE AQUÍ (R2, Q5)
+ * ── EL UMBRAL ES DE PRESENTACIÓN (R2, Q5)
  * Con UNA sola tienda no se pinta NADA nuevo: la pantalla queda exactamente como la dejó la 395.
  * El servidor emite `partesPorTienda` SIEMPRE —también con una— para que ningún consumidor tenga
- * que distinguir dos formas del mismo dato; quien decide enseñarlo es esta pantalla, contando
+ * que distinguir dos formas del mismo dato; quien decide enseñarlo es la pantalla, contando
  * cuántos elementos trae la lista.
+ *
+ * ⚠️ **La cuenta la hace `marcaDeVariasTiendas`, y desde la tanda de BODEGA vive en
+ * `DesglosePorTienda.tsx`**, que es donde vive el componente que se comparte con las otras dos
+ * superficies (R22). Aquí sólo se llama y se usa su resultado para las DOS cosas que tienen que
+ * ir juntas: la marca de las cascadas de arriba y el desglose de abajo.
  *
  * ── NI UNA OPERACIÓN ARITMÉTICA, TAMPOCO AQUÍ (R14)
  * Las tres cifras de cada tienda llegan YA DERIVADAS del servidor, como STRING con su signo, y
@@ -127,10 +123,11 @@ import {
  * cardinal y no un importe.
  *
  * ── POR QUÉ LA CASCADA DE UNA TIENDA NO ES UNA RESTA
- * Las otras tres cascadas cierran una cuenta; ésta enseña TRES lecturas de la misma tienda sin
+ * Las otras tres cascadas cierran una cuenta; la de cada tienda enseña TRES lecturas sin
  * operadores. Para pintarla como resta haría falta una cuarta cifra —lo que Ordenex le factura a
  * ESA tienda— y R5 la prohíbe: tres cifras por tienda y ni una más. Inventar una resta que no se
- * puede completar sería justo el defecto que la 395 arregló.
+ * puede completar sería justo el defecto que la 395 arregló. El componente y ese razonamiento
+ * viven hoy en `DesglosePorTienda.tsx`.
  */
 
 export interface CascadasCierreMensajeroProps {
@@ -294,74 +291,6 @@ function lineasFacturaTienda(
 }
 
 /**
- * 💰 FICHA 396 — LAS TRES CIFRAS DE UNA TIENDA, y ni una más (R5).
- *
- * Sin operadores: no es una resta, son tres lecturas de la misma tienda (ver la cabecera). Las
- * dos de pago van DESTACADAS y en este orden —primero lo que se le paga hoy, luego lo que gana
- * en total— porque es el orden en que las lee la cascada de arriba, y porque el rótulo de cada
- * una dice con todas las letras cuál es cuál: «hoy» frente a «en total».
- *
- * `ganaLaTienda` de una tienda que sólo trajo rechazos es NEGATIVO, y sale con su signo y en
- * tono de atención —`CascadaDinero` lo tiñe por ser un resultado destacado—: nunca recortado a
- * cero, que diría algo falso justo donde el desglose informa de lo que el agregado tapaba (R9).
- *
- * Ni un importe se toca aquí: los tres se pintan tal como llegan.
- */
-function lineasDeTienda(parte: ParteDeTienda): LineaCascada[] {
-  return [
-    { label: TIENDA_RECAUDADO_LABEL, monto: parte.recaudado, signo: "neutro" },
-    { label: TIENDA_PAGO_HOY_LABEL, monto: parte.pagoTienda, signo: "neutro", destacado: true },
-    {
-      label: TIENDA_GANA_TOTAL_LABEL,
-      monto: parte.ganaLaTienda,
-      signo: "neutro",
-      destacado: true,
-    },
-  ];
-}
-
-/**
- * 💰 FICHA 396 — EL DESGLOSE: una cascada por tienda, en el orden que emite el servidor.
- *
- * Es una región propia con nombre accesible, y dentro va una región por tienda: la pantalla ya
- * monta tres cascadas y sin nombres distintos un lector de pantalla las anunciaría todas igual.
- * El nombre de cada una es el de SU tienda más el mensajero.
- *
- * ⚠️ DOS TIENDAS HOMÓNIMAS se leen igual, y es lo correcto: también se VEN igual, y quien mira
- * la pantalla está en la misma situación. Lo que no pasa es que su dinero se funda —el servidor
- * agrupa por el identificador congelado, no por el nombre (R7)—, y por eso la `key` de React es
- * `tiendaId` y no el nombre.
- *
- * Las dos notas de cabecera van UNA vez para todo el desglose: la que separa las dos cifras de
- * pago, y la que dice qué NO está repartido (R17).
- */
-function DesglosePorTienda({
-  partes,
-  de,
-}: Readonly<{ partes: readonly ParteDeTienda[]; de: string }>) {
-  return (
-    <section
-      aria-label={`${DESGLOSE_POR_TIENDA_TITULO} · ${de}`}
-      className="flex flex-col gap-3"
-    >
-      <div className="flex flex-col gap-1">
-        <h3 className="text-base font-semibold">{DESGLOSE_POR_TIENDA_TITULO}</h3>
-        <p className="text-xs text-muted-foreground">{DESGLOSE_POR_TIENDA_NOTA}</p>
-        <p className="text-xs text-muted-foreground">{DESGLOSE_NO_REPARTIDO_NOTA}</p>
-      </div>
-      {partes.map((parte) => (
-        <CascadaDinero
-          key={parte.tiendaId}
-          titulo={parte.tiendaNombre}
-          ariaLabel={`${parte.tiendaNombre} · ${de}`}
-          lineas={lineasDeTienda(parte)}
-        />
-      ))}
-    </section>
-  );
-}
-
-/**
  * LO QUE LE QUEDA A ORDENEX. `netoOrdenex` NO es la `ganancia` que este mismo detalle ya pinta
  * cuando es negativa: aquella resta SÓLO el pago al mensajero, y ésta resta ADEMÁS el ingreso de
  * bodega por rechazos. Las dos coinciden exactamente cuando ese ingreso es cero.
@@ -396,10 +325,9 @@ export function CascadasCierreMensajero(props: Readonly<CascadasCierreMensajeroP
 
   // FICHA 396 — EL UMBRAL (R2, Q5). Con una sola tienda el desglose no aporta nada que el
   // agregado no diga ya, y la pantalla se queda EXACTAMENTE como estaba: ni marca ni cascadas.
-  // Se cuenta la longitud de la lista —un cardinal, no un importe— y no se filtra ni se ordena
-  // nada: eso ya lo hizo el servidor.
-  const variasTiendas = props.partesPorTienda.length >= 2;
-  const marca = variasTiendas ? totalDeVariasTiendasNota(props.partesPorTienda.length) : null;
+  // La cuenta la hace `marcaDeVariasTiendas`, que es la MISMA para las tres superficies: así la
+  // marca y el desglose no pueden aparecer el uno sin el otro. `null` = una sola tienda.
+  const marca = marcaDeVariasTiendas(props.partesPorTienda);
 
   return (
     <div className="flex flex-col gap-5">
@@ -421,9 +349,7 @@ export function CascadasCierreMensajero(props: Readonly<CascadasCierreMensajeroP
       />
       {/* FICHA 396 — el desglose va AQUÍ: después de la cascada que termina en «Pago a tienda»,
           que es la cifra que parte, y antes de la de Ordenex, que ya no habla de tiendas. */}
-      {variasTiendas ? (
-        <DesglosePorTienda partes={props.partesPorTienda} de={de} />
-      ) : null}
+      {marca !== null ? <DesglosePorTienda partes={props.partesPorTienda} de={de} /> : null}
       <CascadaDinero
         titulo={CASCADA_NETO_ORDENEX_TITULO}
         ariaLabel={`${CASCADA_NETO_ORDENEX_TITULO} · ${de}`}

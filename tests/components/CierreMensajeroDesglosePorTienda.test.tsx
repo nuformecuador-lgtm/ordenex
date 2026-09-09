@@ -337,7 +337,18 @@ const factura = () =>
 const neto = () => screen.getByRole("region", { name: `${CASCADA_NETO_ORDENEX_TITULO} · ${DE}` });
 const desglose = () =>
   screen.getByRole("region", { name: `${DESGLOSE_POR_TIENDA_TITULO} · ${DE}` });
-const tienda = (nombre: string) => screen.getByRole("region", { name: `${nombre} · ${DE}` });
+/**
+ * FICHA 396 (D2) — el nombre accesible de la cascada de una tienda lleva, ADEMÁS del nombre y del
+ * contexto, su POSICIÓN en el nivel: dos tiendas pueden llamarse igual —el servidor agrupa por el
+ * id congelado y no las funde (R7)— y dos regiones que se anuncian igual no se pueden distinguir.
+ *
+ * Por eso se busca por los DOS extremos en vez de por el literal entero. No se afloja nada: sigue
+ * exigiendo que empiece por el nombre de ESA tienda —con el paréntesis de la posición pegado, así
+ * que «Tienda Norte» no casa con «Tienda Norte 2»— y que termine en el contexto de ESTE cierre.
+ */
+const nombraA = (nombre: string) => (accesible: string) =>
+  accesible.startsWith(`${nombre} (`) && accesible.endsWith(` · ${DE}`);
+const tienda = (nombre: string) => screen.getByRole("region", { name: nombraA(nombre) });
 
 /** Monta la pantalla y abre el detalle del cierre. */
 async function abrirDetalle(detalle: DetalleOk = DOS_TIENDAS) {
@@ -680,10 +691,33 @@ describe("396 — dos tiendas HOMÓNIMAS no se funden en una", () => {
       ],
     });
 
-    const regiones = screen.getAllByRole("region", { name: `Mi Tienda · ${DE}` });
+    const regiones = screen.getAllByRole("region", { name: nombraA("Mi Tienda") });
     expect(regiones, "dos tiendas con el mismo nombre se fundieron en una").toHaveLength(2);
     expect(importeTras(regiones[0], TIENDA_PAGO_HOY_LABEL)).toBe("₡144.000");
     expect(importeTras(regiones[1], TIENDA_PAGO_HOY_LABEL)).toBe("₡81.176,33");
+  });
+
+  it("y NO comparten nombre accesible: se pueden nombrar por separado", async () => {
+    // FICHA 396 (D2) — corrige la decisión de la tanda C, que las dejaba con el mismo nombre
+    // «porque también se ven igual». Quien navega por landmarks NO las ve: oye dos veces «Mi
+    // Tienda» y no tiene forma de saber cuál trae ₡144.000. Escrito a mano, nunca derivado de la
+    // función que lo genera.
+    await abrirDetalle({
+      ...DOS_TIENDAS,
+      partesPorTienda: [
+        { ...NORTE, tiendaId: "t-uno", tiendaNombre: "Mi Tienda" },
+        { ...SUR, tiendaId: "t-dos", tiendaNombre: "Mi Tienda" },
+      ],
+    });
+
+    const nombres = screen
+      .getAllByRole("region", { name: nombraA("Mi Tienda") })
+      .map((region) => region.getAttribute("aria-label"));
+    expect(nombres).toEqual([
+      "Mi Tienda (1 de 2) · cierre de Ana Mensajera",
+      "Mi Tienda (2 de 2) · cierre de Ana Mensajera",
+    ]);
+    expect(new Set(nombres).size, `las dos se anuncian igual: ${nombres.join(" · ")}`).toBe(2);
   });
 });
 
@@ -717,6 +751,9 @@ describe("396 · R26 — la vista del MENSAJERO no cambia", () => {
     // empresa: el desglose por tienda vive en `CascadasCierreMensajero`, que ese módulo no monta.
     for (const prohibido of [
       "CascadasCierreMensajero",
+      // FICHA 396 (D2) — desde la tanda de bodega el desglose es un archivo propio: si un día
+      // alguien lo montara aquí directamente, el nombre del componente lo delata igual.
+      "DesglosePorTienda",
       "partesPorTienda",
       "DESGLOSE_POR_TIENDA",
       "DESGLOSE_NO_REPARTIDO",
@@ -734,6 +771,10 @@ describe("396 · R26 — la vista del MENSAJERO no cambia", () => {
 describe("396 — money-safe: la pantalla no hace aritmética de dinero", () => {
   const FUENTES = [
     "app/(app)/cierres-admin/_components/CascadasCierreMensajero.tsx",
+    // FICHA 396 (D2) — el desglose salió a su propio archivo al compartirse con las dos
+    // superficies de bodega. La guardia lo sigue: si no, el código que pinta las tres cifras de
+    // cada tienda se habría quedado sin vigilar justo al mudarse de casa.
+    "app/(app)/cierres-admin/_components/DesglosePorTienda.tsx",
     "app/(app)/cierres-admin/_components/cierre-labels.ts",
   ] as const;
 
@@ -760,11 +801,13 @@ describe("396 — money-safe: la pantalla no hace aritmética de dinero", () => 
     const { quitarComentarios } = await import("@/tests/fixtures/sin-comentarios");
 
     const codigo = quitarComentarios(
+      // FICHA 396 (D2) — el archivo que hoy pinta el desglose. Antes era
+      // `CascadasCierreMensajero.tsx`; al mudarse, la guardia se muda con él o deja de mirar.
       readFileSync(
         path.resolve(
           __dirname,
           "../..",
-          "app/(app)/cierres-admin/_components/CascadasCierreMensajero.tsx",
+          "app/(app)/cierres-admin/_components/DesglosePorTienda.tsx",
         ),
         "utf8",
       ),
