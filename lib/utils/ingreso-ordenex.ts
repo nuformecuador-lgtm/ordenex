@@ -491,10 +491,19 @@ export type GestionDeTienda = GestionConPagos & {
  *
  * ─── UNA SOLA FUNCION PARA LAS TRES SUPERFICIES (R22) ─────────────────────────────────────
  *
- * La llaman el detalle del cierre del MENSAJERO (`CierresAdminService.verCierreDetalle`) y,
- * cuando entre su tanda, los DOS niveles del detalle del cierre de BODEGA —el de cada mensajero
- * y el agregado de toda la bodega—. Que sea la misma funcion es lo que hace cierto que la misma
- * plata no se lea distinta segun por que pantalla se entre, sin depender de que nadie se acuerde.
+ * La llaman los TRES, y desde la tanda D los tres de verdad: el detalle del cierre del MENSAJERO
+ * (`CierresAdminService.verCierreDetalle`) y los DOS niveles del detalle del cierre de BODEGA
+ * (`CierresBodegaAdminService.verCierreBodegaDetalle`) —el de cada mensajero, con `cd.gestiones`,
+ * y el agregado de toda la bodega, con el `flatMap` de todas—. Que sea la misma funcion es lo que
+ * hace cierto que la misma plata no se lea distinta segun por que pantalla se entre, sin depender
+ * de que nadie se acuerde.
+ *
+ * ⚠️ **Cada superficie tiene que pasarle SU conjunto**, y en eso no ayuda el compilador: el nivel
+ * del mensajero recibe las gestiones DE ESE MENSAJERO, no las de la bodega. De ahi sale, sin un
+ * `if` que lo diga, que el umbral de presentacion de ese nivel se evalue sobre SUS tiendas. Que
+ * los tres la llamen —y con el argumento correcto— lo fija
+ * `tests/unit/services/cierre-desglose-tres-superficies.test.ts`: un `import` que nadie invoca no
+ * rompe ni el typecheck ni ninguna guardia, solo deja la lista vacia.
  *
  * ─── LAS CUATRO IDENTIDADES ───────────────────────────────────────────────────────────────
  *

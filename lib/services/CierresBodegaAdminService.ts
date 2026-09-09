@@ -31,10 +31,12 @@ import { toDetalleDTO } from "@/lib/services/CierreDiaService";
 import {
   cobradoSobreRecaudado,
   efectivoCubreDescuentos,
+  ganaLaTienda,
   gananciaOrdenex,
   netoOrdenex,
   pagoTiendaOrdenex,
   paraLaCentral,
+  partesPorTienda,
   totalesIngresoOrdenex,
 } from "@/lib/utils/ingreso-ordenex";
 
@@ -327,6 +329,28 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
           cd.resumen.totalPagoMensajero,
           cd.resumen.totalIngresoBodegaRechazos,
         ),
+        // 💰 FICHA 396 (D1) — LO QUE LA TIENDA GANA EN TOTAL con el dia de ESTE mensajero. Es la
+        // ASIMETRIA que la 395 dejo abierta: puso `ganaLaTienda` solo en el detalle del cierre del
+        // mensajero, asi que aqui el desglose de abajo sumaria hacia un total que no estaba en
+        // ninguna pantalla. MISMA funcion que alli, sobre los datos de ESTE cierre_dia.
+        //
+        // NO es `pagoTienda` —dos lineas mas arriba—: aquel no resta el flete por rechazo, porque
+        // ese flete nunca entro en lo recaudado y se le cobra aparte contra la wallet de la
+        // tienda. La diferencia entre los dos es exactamente `fleteDevolucionConIva` de este dia.
+        ganaLaTienda: ganaLaTienda(cd.resumen.totales.general, totalesIngreso.total),
+        // 💰 FICHA 396 (R19) — DE QUIEN ES CADA PARTE, en el nivel del MENSAJERO.
+        //
+        // MISMO argumento y MISMO sitio que `totalesIngresoOrdenex(cd.gestiones)` de arriba: las
+        // gestiones de ESTE cierre_dia y ninguna otra (R21). De ahi sale, sin `if` que lo diga,
+        // que el umbral de presentacion de este nivel se evalue sobre las tiendas DE ESTE
+        // MENSAJERO: la lista que llega aqui solo contiene las suyas. Derivarlo del agregado de la
+        // bodega —o repartir el agregado entre los dias— ensenaria desglose en un mensajero que
+        // solo llevo UNA tienda.
+        //
+        // Ni una formula de dinero nueva: `partesPorTienda` particiona por `tiendaId` congelado y
+        // llama, sobre cada subconjunto, a las MISMAS funciones que produjeron los agregados de
+        // esta misma vuelta del bucle.
+        partesPorTienda: partesPorTienda(cd.gestiones),
         paraLaCentral: paraLaCentral(
           cd.resumen.totales.general,
           cd.resumen.totalPagoMensajero,
@@ -343,9 +367,11 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
     // Agregado de toda la bodega: se suma desde las MISMAS gestiones que alimentan el
     // desglose por cierre_dia, no por una consulta aparte que podria no cuadrar con ellas.
     const resumen = toResumen(found.cierre);
-    const totalesIngreso = totalesIngresoOrdenex(
-      found.cierresDia.flatMap((cd) => cd.gestiones),
-    );
+    // Ficha 396: el `flatMap` se nombra UNA vez y lo comparten lo facturado agregado y el
+    // desglose por tienda. Dos expresiones iguales escritas dos veces son dos sitios donde
+    // divergir; asi es literal que las dos cifras salen del MISMO conjunto de gestiones.
+    const gestionesDeTodaLaBodega = found.cierresDia.flatMap((cd) => cd.gestiones);
+    const totalesIngreso = totalesIngresoOrdenex(gestionesDeTodaLaBodega);
     // El pago agregado sale del snapshot del cierre de bodega (R13), no de sumar los cierre_dia.
     const ganancia = gananciaOrdenex(totalesIngreso.total, resumen.totalPagoMensajero);
     // Pago a tiendas agregado: parte del total general recibido, no del bruto facturado.
@@ -371,6 +397,34 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
       resumen.totalIngresoBodegaRechazos,
     );
 
+    // 💰 FICHA 396 (D1) — LO QUE LAS TIENDAS GANAN EN TOTAL con toda la bodega. Este contrato NO
+    // lo tenia: la 395 lo puso solo en el detalle del cierre del mensajero, y sin el el desglose
+    // de abajo sumaria hacia un total que no esta en ninguna pantalla (`design.md §5.2`).
+    //
+    // MISMO minuendo que `pagoTienda` —el snapshot AGREGADO `resumen.totales.general`, no la suma
+    // de los `cierre_dia`—, por la misma decision de la 393 que se explica justo arriba: cada
+    // nivel se lee de su propio snapshot. Y misma funcion que en el nivel del mensajero.
+    const ganaLaTiendaAgregado = ganaLaTienda(resumen.totales.general, totalesIngreso.total);
+
+    // 💰 FICHA 396 (R20/Q8) — DE QUIEN ES CADA PARTE, en el nivel AGREGADO. Una fila POR TIENDA a
+    // traves de todos los mensajeros: agrupar por `tiendaId` sobre el `flatMap` ES una fila por
+    // tienda, asi que Q8 —«no hay matriz tienda × mensajero»— se cumple por construccion y sin un
+    // `if` que lo diga. El cruce ya existe un nivel mas abajo, en `cierres[].partesPorTienda`.
+    //
+    // MISMO argumento que `totalesIngresoOrdenex` de arriba (R21): sale de las gestiones, nunca
+    // de SUMAR el desglose de los mensajeros ni de repartir nada.
+    //
+    // ⚠️ Y AQUI ESTA LA ASIMETRIA HONESTA, que se deja escrita en vez de taparla: los agregados
+    // (`pagoTienda`, `ganaLaTiendaAgregado`) parten del snapshot AGREGADO, y el desglose solo
+    // puede partir de las gestiones. Las dos vias coinciden mientras el snapshot agregado sea la
+    // suma de sus dias — medido contra produccion el 2026-09-08, 14 de 14, igual que midio la
+    // 393—, pero eso es una MEDICION, NO UNA REGLA. Si un dia dejaran de coincidir, la suma de las
+    // partes no dara el agregado y **eso es un descuadre real que la pantalla debe ensenar (R21)**:
+    // no se corrige el agregado para que cuadre con las gestiones —violaria R18 y contradiria la
+    // decision explicita de la 393, escrita seis lineas mas arriba— ni el desglose para que cuadre
+    // con el agregado.
+    const partesDeLasTiendas = partesPorTienda(gestionesDeTodaLaBodega);
+
     // R11/R13: cabecera con totales agregados snapshot.
     return {
       status: "ok",
@@ -381,6 +435,10 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
       pagoTienda,
       cobradoSobreRecaudado: cobradoSobreRecaudadoAgregado,
       netoOrdenex: netoOrdenexAgregado,
+      // Ficha 396: el agregado que le faltaba a este contrato y la particion de las dos cifras de
+      // pago por tienda, ya ORDENADA por el servidor (por lo que se le paga, de mayor a menor).
+      ganaLaTienda: ganaLaTiendaAgregado,
+      partesPorTienda: partesDeLasTiendas,
       paraLaCentral: resumen.paraLaCentral,
       efectivoCubreDescuentos: resumen.efectivoCubreDescuentos,
     };
