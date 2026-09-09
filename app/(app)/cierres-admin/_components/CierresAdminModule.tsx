@@ -24,6 +24,9 @@ import {
   listarPendientesCierresAdminPaginado,
 } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
+// FICHA 396: el desglose por tienda viaja YA DERIVADO y YA ORDENADO en el detalle. El tipo se
+// pide donde vive la identidad que particiona, igual que hace `ICierresAdminService`.
+import type { ParteDeTienda } from "@/lib/utils/ingreso-ordenex";
 import type {
   CatalogoFiltrosCierresDTO,
   FiltrosCierres,
@@ -353,6 +356,14 @@ interface DetalleAbierto {
   ganaLaTienda: string;
   fleteRechazoYaCobradoATienda: boolean;
   /**
+   * FICHA 396 — de qué tienda es cada parte de `pagoTienda` y de `ganaLaTienda`: una entrada por
+   * tienda del cierre, con sus tres cifras ya derivadas y **ya ordenadas por el servidor**.
+   *
+   * Llega SIEMPRE, también con una sola tienda; el umbral de enseñarlo —dos o más— lo evalúa
+   * `CascadasCierreMensajero`. Aquí no se ordena, no se filtra y no se suma nada.
+   */
+  partesPorTienda: ParteDeTienda[];
+  /**
    * Feature 264 (R7/R13) — las órdenes que el corte del día barrió a `sin_gestionar` al crear
    * ESTE cierre. Sin un solo campo de dinero: no tienen gestión, así que no hay nada que sumar.
    */
@@ -643,6 +654,9 @@ export function CierresAdminModule({
         netoOrdenex: result.netoOrdenex,
         ganaLaTienda: result.ganaLaTienda,
         fleteRechazoYaCobradoATienda: result.fleteRechazoYaCobradoATienda,
+        // FICHA 396: el desglose por tienda, tal cual llega. Ya viene ordenado por el servidor
+        // (R8) y con las tres cifras derivadas: aquí no se reordena ni se recalcula nada.
+        partesPorTienda: result.partesPorTienda,
         // Feature 264 (R30): los dos campos viajan JUNTOS desde el servicio hasta la hoja. No
         // se derivan ni se rellenan aquí: `[]` y `false` significan cosas distintas y sólo el
         // servidor sabe cuál es cuál.
@@ -1219,6 +1233,9 @@ export function CierresAdminModule({
               netoOrdenex={detalle.netoOrdenex}
               ganaLaTienda={detalle.ganaLaTienda}
               fleteRechazoYaCobradoATienda={detalle.fleteRechazoYaCobradoATienda}
+              // FICHA 396: «Pago a tienda» y «Gana la tienda» son la SUMA de las tiendas del
+              // cierre. Con dos o más, la cascada lo dice y las desglosa; con una, nada cambia.
+              partesPorTienda={detalle.partesPorTienda}
             />
 
             {/* El detalle es UNA sola lectura: el comprobante. Reemplazó a los paneles
