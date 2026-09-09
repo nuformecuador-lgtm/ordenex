@@ -1087,3 +1087,488 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle — las dos cascadas 
     expect(r.cierres[1].pagoTienda).toBe("38037.20");
   });
 });
+
+/**
+ * 💰 FICHA 396 (D1) — EL DETALLE DEL CIERRE DE BODEGA DICE DE QUÉ TIENDA ES CADA PARTE,
+ * EN SUS **DOS** NIVELES.
+ *
+ * ⚠️ **NO ES UN DEFECTO DE DINERO.** `wallet_tienda_movimiento` lleva los movimientos separados
+ * por tienda desde siempre, con sus propias cifras: a nadie se le paga mal, y esta ficha no
+ * emite, borra ni corrige ni una fila del ledger. Lo que faltaba era DECIRLO en la pantalla.
+ *
+ * Aquí el defecto es el peor de los tres: el cierre de bodega agrega **N mensajeros × M
+ * tiendas** bajo un único rótulo «Pago a tienda».
+ *
+ * **Todos los importes de aquí abajo están escritos a mano.** Ninguno sale de llamar a
+ * `partesPorTienda` ni a `ganaLaTienda`, que son las funciones bajo prueba: comparar un total
+ * contra la función que lo genera deja el test siempre verde.
+ *
+ * ⚠️ **EL CORPUS TIENE CARDINALES DISTINTOS POR NIVEL, A PROPÓSITO.** Ana llevó órdenes de UNA
+ * sola tienda; Beto, de DOS; la bodega entera, DOS. Es lo que separa R19 de R20: el umbral del
+ * nivel-mensajero se evalúa sobre las tiendas **DE ESE MENSAJERO**. Y la tienda Norte aparece en
+ * los DOS mensajeros, así que el agregado la trae UNA sola vez (R20/Q8).
+ */
+describe("396/D1 — `verCierreBodegaDetalle` emite el desglose por tienda en los DOS niveles", () => {
+  /** Desglose por orden como lo emite el repositorio (ya derivado del snapshot congelado). */
+  function ingreso(over: Partial<IngresoOrdenexDTO>): IngresoOrdenexDTO {
+    return {
+      montoCobrar: null,
+      cobraComision: false,
+      esCentral: false,
+      esZonaEspecial: false,
+      fleteOrigen: "normal",
+      fleteDevolucionOrigen: "normal",
+      flete: null,
+      ivaFlete: null,
+      fleteDevolucion: null,
+      ivaFleteDevolucion: null,
+      comisionCod: null,
+      ivaComisionCod: null,
+      fleteConIva: null,
+      fleteDevolucionConIva: null,
+      comisionConIva: null,
+      total: "0.00",
+      tarifa: null,
+      ...over,
+    };
+  }
+
+  // --- ANA (cd1): UNA sola tienda (Norte), y CON un rechazo ------------------------------
+  const GESTIONES_ANA = () => [
+    gestionRow({
+      gestionId: "g-ana-entrega",
+      ordenId: "o-ana-1",
+      tiendaId: "t-norte",
+      tiendaNombre: "Tienda Norte",
+      resultado: "entregada",
+      montoRecibido: "100000.00",
+      metodoPago: "efectivo",
+      ingresoOrdenex: ingreso({
+        flete: "2500.00",
+        ivaFlete: "325.00",
+        fleteConIva: "2825.00",
+        comisionCod: "3000.00",
+        ivaComisionCod: "390.00",
+        comisionConIva: "3390.00",
+        total: "6215.00",
+      }),
+    }),
+    gestionRow({
+      gestionId: "g-ana-rechazo",
+      ordenId: "o-ana-2",
+      tiendaId: "t-norte",
+      tiendaNombre: "Tienda Norte",
+      resultado: "rechazada",
+      montoRecibido: null,
+      metodoPago: null,
+      ingresoOrdenex: ingreso({
+        fleteDevolucion: "1500.00",
+        ivaFleteDevolucion: "195.00",
+        fleteDevolucionConIva: "1695.00",
+        total: "1695.00",
+      }),
+    }),
+  ];
+
+  // --- BETO (cd2): DOS tiendas (Sur y Norte), SIN rechazos -------------------------------
+  const GESTIONES_BETO = () => [
+    gestionRow({
+      gestionId: "g-beto-sur",
+      ordenId: "o-beto-1",
+      tiendaId: "t-sur",
+      tiendaNombre: "Tienda Sur",
+      resultado: "entregada",
+      montoRecibido: "40000.00",
+      metodoPago: "SINPE",
+      ingresoOrdenex: ingreso({
+        flete: "2000.00",
+        ivaFlete: "260.00",
+        fleteConIva: "2260.00",
+        comisionCod: "1200.00",
+        ivaComisionCod: "156.00",
+        comisionConIva: "1356.00",
+        total: "3616.00",
+      }),
+    }),
+    gestionRow({
+      gestionId: "g-beto-norte",
+      ordenId: "o-beto-2",
+      tiendaId: "t-norte",
+      tiendaNombre: "Tienda Norte",
+      resultado: "entregada",
+      montoRecibido: "25000.00",
+      metodoPago: "efectivo",
+      ingresoOrdenex: ingreso({
+        flete: "2000.00",
+        ivaFlete: "260.00",
+        fleteConIva: "2260.00",
+        comisionCod: "750.00",
+        ivaComisionCod: "97.50",
+        comisionConIva: "847.50",
+        total: "3107.50",
+      }),
+    }),
+  ];
+
+  const SNAPSHOT_ANA = {
+    totales: { efectivo: "100000.00", simpe: "0.00", transferencia: "0.00", general: "100000.00" },
+    totalPagoMensajero: "5000.00",
+    totalIngresoBodegaRechazos: "500.00",
+  };
+  const SNAPSHOT_BETO = {
+    totales: {
+      efectivo: "25000.00",
+      simpe: "40000.00",
+      transferencia: "0.00",
+      general: "65000.00",
+    },
+    totalPagoMensajero: "4000.00",
+    totalIngresoBodegaRechazos: "0.00",
+  };
+  /** El snapshot AGREGADO es la suma exacta de los dos días — la condición MEDIDA de T0.5. */
+  const SNAPSHOT_AGREGADO = {
+    totales: {
+      efectivo: "125000.00",
+      simpe: "40000.00",
+      transferencia: "0.00",
+      general: "165000.00",
+    },
+    totalPagoMensajero: "9000.00",
+    totalIngresoBodegaRechazos: "500.00",
+  };
+
+  function repoDeDosMensajeros(cierre: Partial<CierreBodegaResumenRow> = {}) {
+    return fakeRepo({
+      findCierreBodegaConDetalle: vi.fn(async () => ({
+        cierre: bodegaResumenRow({ ...SNAPSHOT_AGREGADO, ...cierre }),
+        cierresDia: [
+          {
+            resumen: detalleCierreRow({
+              cierreDiaId: "cd-ana",
+              mensajeroId: "m-ana",
+              mensajeroNombre: "Ana Mensajera",
+              ...SNAPSHOT_ANA,
+            }),
+            gestiones: GESTIONES_ANA(),
+          },
+          {
+            resumen: detalleCierreRow({
+              cierreDiaId: "cd-beto",
+              mensajeroId: "m-beto",
+              mensajeroNombre: "Beto Mensajero",
+              ...SNAPSHOT_BETO,
+            }),
+            gestiones: GESTIONES_BETO(),
+          },
+        ],
+      })),
+    });
+  }
+
+  const sumar = (montos: string[]) =>
+    montos.reduce((a, m) => a.plus(new Prisma.Decimal(m)), new Prisma.Decimal(0)).toFixed(2);
+
+  it("D1: los DOS niveles emiten el `ganaLaTienda` AGREGADO que a este contrato le faltaba", async () => {
+    // La asimetría que la 395 dejó abierta: puso `ganaLaTienda` sólo en el detalle del cierre
+    // del mensajero. Sin él, el desglose de abajo sumaría hacia un total que no está en ninguna
+    // pantalla. Literales a mano; misma función que en el otro detalle, sobre los datos de cada
+    // nivel.
+    const { service } = newService({ repo: repoDeDosMensajeros() });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // Ana: 100.000,00 − 7.910,00 (6.215,00 de la entrega + 1.695,00 del rechazo).
+    expect(r.cierres[0].ganaLaTienda).toBe("92090.00");
+    // Beto: 65.000,00 − 6.723,50 (3.616,00 + 3.107,50). SIN rechazos, coincide con su pago.
+    expect(r.cierres[1].ganaLaTienda).toBe("58276.50");
+    expect(r.cierres[1].pagoTienda).toBe("58276.50");
+    // Agregado: 165.000,00 − 14.633,50.
+    expect(r.ganaLaTienda).toBe("150366.50");
+
+    // Y NO es `pagoTienda`: la diferencia es, al céntimo, el flete por rechazo de ese nivel.
+    expect(
+      new Prisma.Decimal(r.cierres[0].pagoTienda).minus(r.cierres[0].ganaLaTienda).toFixed(2),
+    ).toBe("1695.00");
+    expect(new Prisma.Decimal(r.pagoTienda).minus(r.ganaLaTienda).toFixed(2)).toBe("1695.00");
+  });
+
+  it("⚠️ R19: el nivel de CADA MENSAJERO se desglosa con SUS gestiones — Ana tiene UNA tienda y la bodega DOS", async () => {
+    // ESTE es el caso que separa los dos umbrales. Si el nivel-mensajero se derivara del
+    // conjunto de toda la bodega, a Ana le saldrían DOS tiendas y la pantalla enseñaría un
+    // desglose en un mensajero que sólo llevó una.
+    const { service } = newService({ repo: repoDeDosMensajeros() });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    expect(r.cierres[0].partesPorTienda).toEqual([
+      {
+        tiendaId: "t-norte",
+        tiendaNombre: "Tienda Norte",
+        recaudado: "100000.00",
+        pagoTienda: "93785.00", // 100.000,00 − 2.825,00 − 3.390,00
+        ganaLaTienda: "92090.00", // 100.000,00 − (6.215,00 + 1.695,00)
+      },
+    ]);
+
+    // Beto: DOS, ordenadas por lo que se les paga, de mayor a menor (R8).
+    expect(r.cierres[1].partesPorTienda).toEqual([
+      {
+        tiendaId: "t-sur",
+        tiendaNombre: "Tienda Sur",
+        recaudado: "40000.00",
+        pagoTienda: "36384.00", // 40.000,00 − 2.260,00 − 1.356,00
+        ganaLaTienda: "36384.00", // sin rechazos, coincide
+      },
+      {
+        tiendaId: "t-norte",
+        tiendaNombre: "Tienda Norte",
+        recaudado: "25000.00",
+        pagoTienda: "21892.50", // 25.000,00 − 2.260,00 − 847,50
+        ganaLaTienda: "21892.50",
+      },
+    ]);
+
+    // Los cardinales, dichos aparte: es el número del que la pantalla saca su umbral.
+    expect(r.cierres[0].partesPorTienda).toHaveLength(1);
+    expect(r.cierres[1].partesPorTienda).toHaveLength(2);
+    expect(r.partesPorTienda).toHaveLength(2);
+  });
+
+  it("R20/Q8: el agregado trae UNA fila por tienda — Norte está en los DOS mensajeros y sale una vez", async () => {
+    const { service } = newService({ repo: repoDeDosMensajeros() });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // Ni matriz tienda × mensajero, ni la misma tienda repetida: DOS filas para DOS tiendas,
+    // con las cifras de Norte sumadas a través de los dos mensajeros.
+    expect(r.partesPorTienda).toEqual([
+      {
+        tiendaId: "t-norte",
+        tiendaNombre: "Tienda Norte",
+        recaudado: "125000.00", // 100.000,00 + 25.000,00
+        pagoTienda: "115677.50", // 125.000,00 − 5.085,00 − 4.237,50
+        ganaLaTienda: "113982.50", // 125.000,00 − 11.017,50
+      },
+      {
+        tiendaId: "t-sur",
+        tiendaNombre: "Tienda Sur",
+        recaudado: "40000.00",
+        pagoTienda: "36384.00",
+        ganaLaTienda: "36384.00",
+      },
+    ]);
+  });
+
+  it("R10/R11/R12: en los TRES niveles la suma de las partes ES el agregado de ESE nivel, al céntimo", async () => {
+    const { service } = newService({ repo: repoDeDosMensajeros() });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // Los DOS lados anclados a literales escritos a mano: la suma de las partes y el agregado
+    // que el propio DTO emite. Si cualquiera de los dos se moviera, esto se entera.
+    const ana = r.cierres[0];
+    expect(sumar(ana.partesPorTienda.map((p) => p.pagoTienda))).toBe("93785.00");
+    expect(ana.pagoTienda).toBe("93785.00"); // R10
+    expect(sumar(ana.partesPorTienda.map((p) => p.ganaLaTienda))).toBe("92090.00");
+    expect(ana.ganaLaTienda).toBe("92090.00"); // R11
+    expect(sumar(ana.partesPorTienda.map((p) => p.recaudado))).toBe("100000.00");
+    expect(ana.totales.general).toBe("100000.00"); // R12
+
+    const beto = r.cierres[1];
+    expect(sumar(beto.partesPorTienda.map((p) => p.pagoTienda))).toBe("58276.50");
+    expect(beto.pagoTienda).toBe("58276.50");
+    expect(sumar(beto.partesPorTienda.map((p) => p.ganaLaTienda))).toBe("58276.50");
+    expect(beto.ganaLaTienda).toBe("58276.50");
+    expect(sumar(beto.partesPorTienda.map((p) => p.recaudado))).toBe("65000.00");
+    expect(beto.totales.general).toBe("65000.00");
+
+    expect(sumar(r.partesPorTienda.map((p) => p.pagoTienda))).toBe("152061.50");
+    expect(r.pagoTienda).toBe("152061.50");
+    expect(sumar(r.partesPorTienda.map((p) => p.ganaLaTienda))).toBe("150366.50");
+    expect(r.ganaLaTienda).toBe("150366.50");
+    expect(sumar(r.partesPorTienda.map((p) => p.recaudado))).toBe("165000.00");
+    expect(r.cierre.totales.general).toBe("165000.00");
+  });
+
+  it("la CUARTA identidad, por tienda: lo que se le paga − lo que gana = SU flete por rechazo", async () => {
+    // Es la que hace imposible derivar una de las dos con el subconjunto equivocado sin que se
+    // note. Norte tuvo un rechazo (1.695,00) y Sur no (0,00): si las dos dieran cero, este test
+    // pasaría sin comprobar nada.
+    const { service } = newService({ repo: repoDeDosMensajeros() });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    const dif = (p: { pagoTienda: string; ganaLaTienda: string }) =>
+      new Prisma.Decimal(p.pagoTienda).minus(p.ganaLaTienda).toFixed(2);
+
+    const norte = r.partesPorTienda.find((p) => p.tiendaId === "t-norte");
+    const sur = r.partesPorTienda.find((p) => p.tiendaId === "t-sur");
+    if (norte === undefined || sur === undefined) throw new Error("falta una tienda del agregado");
+    expect(dif(norte)).toBe("1695.00");
+    expect(dif(sur)).toBe("0.00");
+
+    // Y en el nivel de Beto, donde Norte NO trajo rechazos, su diferencia es cero: la resta
+    // depende del SUBCONJUNTO, no de la tienda.
+    const norteDeBeto = r.cierres[1].partesPorTienda.find((p) => p.tiendaId === "t-norte");
+    if (norteDeBeto === undefined) throw new Error("falta Norte en el nivel de Beto");
+    expect(dif(norteDeBeto)).toBe("0.00");
+  });
+
+  it("⚠️ R21: si el snapshot AGREGADO no es la suma de sus días, el descuadre SE VE — no se maquilla", async () => {
+    // Los agregados salen del snapshot AGREGADO y el desglose sólo puede salir de las gestiones.
+    // Que las dos vías coincidan se MIDIÓ contra producción (14 de 14 el 2026-09-08), pero es una
+    // medición, NO una regla. Aquí se fuerza el descuadre: el agregado sigue saliendo del
+    // snapshot y el desglose de las gestiones, y la diferencia queda a la vista (R21). Corregir
+    // cualquiera de los dos para que cuadren violaría R18 y contradiría la decisión de la 393.
+    const { service } = newService({
+      repo: repoDeDosMensajeros({
+        totales: {
+          efectivo: "160000.00",
+          simpe: "40000.00",
+          transferencia: "0.00",
+          general: "200000.00", // 35.000,00 MÁS que lo que suman los dos días
+        },
+      }),
+    });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // El agregado, desde el SNAPSHOT: 200.000,00 − 7.345,00 − 5.593,50 y 200.000,00 − 14.633,50.
+    expect(r.pagoTienda).toBe("187061.50");
+    expect(r.ganaLaTienda).toBe("185366.50");
+
+    // El desglose, desde las GESTIONES: exactamente el mismo de antes, sin enterarse.
+    expect(sumar(r.partesPorTienda.map((p) => p.pagoTienda))).toBe("152061.50");
+    expect(sumar(r.partesPorTienda.map((p) => p.ganaLaTienda))).toBe("150366.50");
+    expect(sumar(r.partesPorTienda.map((p) => p.recaudado))).toBe("165000.00");
+
+    // Y el descuadre es visible y vale exactamente los 35.000,00 que se le añadieron al
+    // snapshot. NO es un fallo del desglose: es lo que la pantalla debe enseñar.
+    expect(
+      new Prisma.Decimal(r.pagoTienda)
+        .minus(sumar(r.partesPorTienda.map((p) => p.pagoTienda)))
+        .toFixed(2),
+    ).toBe("35000.00");
+    expect(
+      new Prisma.Decimal(r.cierre.totales.general)
+        .minus(sumar(r.partesPorTienda.map((p) => p.recaudado)))
+        .toFixed(2),
+    ).toBe("35000.00");
+
+    // Los niveles por mensajero NO se contagian: cada uno sigue cuadrando con SU propio día.
+    expect(sumar(r.cierres[0].partesPorTienda.map((p) => p.pagoTienda))).toBe(
+      r.cierres[0].pagoTienda,
+    );
+    expect(sumar(r.cierres[1].partesPorTienda.map((p) => p.pagoTienda))).toBe(
+      r.cierres[1].pagoTienda,
+    );
+  });
+
+  it("R5/R16: cinco claves por parte, y ni el pago al mensajero ni el ingreso de bodega se reparten", async () => {
+    const { service } = newService({ repo: repoDeDosMensajeros() });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    for (const parte of [...r.partesPorTienda, ...r.cierres.flatMap((c) => c.partesPorTienda)]) {
+      expect(Object.keys(parte).sort()).toEqual([
+        "ganaLaTienda",
+        "pagoTienda",
+        "recaudado",
+        "tiendaId",
+        "tiendaNombre",
+      ]);
+    }
+    // Siguen siendo del cierre entero, agregados y sin repartir (R16).
+    expect(r.cierre.totalPagoMensajero).toBe("9000.00");
+    expect(r.cierre.totalIngresoBodegaRechazos).toBe("500.00");
+    expect(r.cierres[0].totalPagoMensajero).toBe("5000.00");
+    expect(r.cierres[1].totalIngresoBodegaRechazos).toBe("0.00");
+  });
+
+  it("R18: ni un importe ya visible cambia de valor por añadir el desglose", async () => {
+    const { service } = newService({ repo: repoDeDosMensajeros() });
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    // AGREGADO: lo facturado por concepto y los cinco derivados que ya existían.
+    expect(r.totalesIngreso.fleteConIva).toBe("7345.00"); // 2.825,00 + 2.260,00 + 2.260,00
+    expect(r.totalesIngreso.comisionConIva).toBe("5593.50"); // 3.390,00 + 1.356,00 + 847,50
+    expect(r.totalesIngreso.fleteDevolucionConIva).toBe("1695.00");
+    expect(r.totalesIngreso.total).toBe("14633.50");
+    expect(r.ganancia).toBe("5633.50"); // 14.633,50 − 9.000,00
+    expect(r.pagoTienda).toBe("152061.50");
+    expect(r.cobradoSobreRecaudado).toBe("12938.50"); // 7.345,00 + 5.593,50
+    expect(r.netoOrdenex).toBe("5133.50"); // 14.633,50 − 9.000,00 − 500,00
+    expect(r.paraLaCentral).toBe("155500.00"); // 165.000,00 − 9.000,00 − 500,00
+    expect(r.efectivoCubreDescuentos).toBe(true);
+
+    // POR MENSAJERO: los mismos cinco, de sus propios snapshots.
+    expect(r.cierres[0].totalesIngreso.total).toBe("7910.00");
+    expect(r.cierres[0].ganancia).toBe("2910.00"); // 7.910,00 − 5.000,00
+    expect(r.cierres[0].pagoTienda).toBe("93785.00");
+    expect(r.cierres[0].cobradoSobreRecaudado).toBe("6215.00"); // 2.825,00 + 3.390,00
+    expect(r.cierres[0].netoOrdenex).toBe("2410.00"); // 7.910,00 − 5.000,00 − 500,00
+    expect(r.cierres[0].paraLaCentral).toBe("94500.00"); // 100.000,00 − 5.000,00 − 500,00
+    expect(r.cierres[1].totalesIngreso.total).toBe("6723.50");
+    expect(r.cierres[1].ganancia).toBe("2723.50");
+    expect(r.cierres[1].pagoTienda).toBe("58276.50");
+    expect(r.cierres[1].cobradoSobreRecaudado).toBe("6723.50");
+    expect(r.cierres[1].netoOrdenex).toBe("2723.50");
+    expect(r.cierres[1].paraLaCentral).toBe("61000.00"); // 65.000,00 − 4.000,00 − 0,00
+  });
+
+  it("R24: el desglose no se cuela por la puerta de alcance — un rol sin acceso total no lo ve", async () => {
+    const repo = repoDeDosMensajeros();
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreBodegaDetalle("cb1", ADMIN_SATELITE);
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(Object.keys(r)).toEqual(["status"]); // ni `partesPorTienda`, ni `ganaLaTienda`
+    expect(repo.findCierreBodegaConDetalle).not.toHaveBeenCalled();
+  });
+
+  it("con UNA sola tienda en toda la bodega el campo se emite igual, con un elemento", async () => {
+    // El umbral de Q5 es de PRESENTACIÓN y vive en la pantalla. Un contrato que a veces trae la
+    // lista y a veces no obliga a cada consumidor a distinguir dos formas del mismo dato: el
+    // error que la 264 ya documentó.
+    const repo = fakeRepo({
+      findCierreBodegaConDetalle: vi.fn(async () => ({
+        cierre: bodegaResumenRow({
+          totales: {
+            efectivo: "100000.00",
+            simpe: "0.00",
+            transferencia: "0.00",
+            general: "100000.00",
+          },
+          totalPagoMensajero: "5000.00",
+          totalIngresoBodegaRechazos: "500.00",
+        }),
+        cierresDia: [
+          {
+            resumen: detalleCierreRow({ cierreDiaId: "cd-ana", ...SNAPSHOT_ANA }),
+            gestiones: GESTIONES_ANA(),
+          },
+        ],
+      })),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreBodegaDetalle("cb1", MAESTRO);
+    if (r.status !== "ok") throw new Error("esperaba ok");
+
+    expect(r.partesPorTienda).toEqual([
+      {
+        tiendaId: "t-norte",
+        tiendaNombre: "Tienda Norte",
+        recaudado: "100000.00",
+        pagoTienda: "93785.00",
+        ganaLaTienda: "92090.00",
+      },
+    ]);
+    // Y sus tres cifras son EXACTAMENTE las agregadas del mismo nivel.
+    expect(r.partesPorTienda[0].pagoTienda).toBe(r.pagoTienda);
+    expect(r.partesPorTienda[0].ganaLaTienda).toBe(r.ganaLaTienda);
+    expect(r.partesPorTienda[0].recaudado).toBe(r.cierre.totales.general);
+  });
+});
