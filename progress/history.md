@@ -4801,3 +4801,23 @@ imposible de seguir.
 - Ahora distingue CUATRO contextos, uno de ellos que nadie habia considerado: el sitio ya tiene
   permiso y quien lo niega es el telefono.
 - Lo que NO se puede detectar se declara: el navegador embebido de WhatsApp.
+
+
+## 396 — el cierre sumaba varias tiendas en un solo numero (2026-09-08)
+
+Cerrada y en produccion. Cuatro PR (#760, #761, #762, #763), release #764. Sin migracion.
+
+- **El dinero SIEMPRE estuvo bien.** La wallet reparte por tienda con sus propias cifras: a
+  nadie se le pago mal. Era presentacion, y las cuatro bitacoras abren diciendolo.
+- **El cierre es del MENSAJERO, no de la tienda.** Medido: de 56 cierres, 17 llevan DOS tiendas,
+  y «Pago a tienda» era la suma sin decirlo.
+- **Tres superficies, tres umbrales distintos.** El del nivel-mensajero se evalua sobre las
+  tiendas DE ESE MENSAJERO -- es la trampa que mas facil se cuela, y tiene mutacion propia.
+- **35 mutaciones muertas y CUATRO controles negativos.** Mutar un comentario sobrevive: eso es
+  lo que separa un arnes que mide de uno que recita.
+- **Limite real declarado:** en bodega solo se marca una de las dos cifras. Marcar la otra exige
+  redisenar una cascada ya entregada, y no se hizo de tapadillo.
+- **Una tanda corrigio a la anterior en accesibilidad:** dos tiendas homonimas no «se leen igual
+  porque se ven igual» -- quien navega con lector de pantalla no las ve.
+- **El spec fallo en tres puntos** y los implementadores los detectaron al mirar el codigo: un
+  archivo refactorizado por la 395, un DTO fuera del censo del leader, y el arrastre de tests.
