@@ -70,6 +70,31 @@ export interface CierreGestionPendienteRow {
   cantonNombre: string;
   distritoNombre: string | null;
   producto: string;
+  /**
+   * 💰 Ficha 396 — EL IDENTIFICADOR de la tienda de esta gestion. Es la CLAVE con la que el
+   * cierre se parte por tienda; `tiendaNombre` (justo debajo) es solo para mostrarlo.
+   *
+   * POR QUE EL ID Y NO EL NOMBRE, que es lo que ya viajaba: un cierre es del MENSAJERO, no de
+   * la tienda, asi que puede llevar ordenes de varias (medido en produccion el 2026-09-08: de
+   * 56 cierres, 17 tienen DOS). Agrupar por nombre fundiria dos tiendas homonimas y atribuiria
+   * el dinero de una a la otra en pantalla.
+   *
+   * DE DONDE SALE, y no es el mismo sitio en los dos mappers, a proposito:
+   *
+   *   · `CierresAdminRepository.toPendienteRowDesdeSnapshot` -> `cierre_detail.tienda_id`, o sea
+   *     lo CONGELADO al solicitar el cierre. El cierre ya existe y su verdad es la del snapshot:
+   *     si la orden se re-apuntara despues a otra tienda, el cierre no se entera (R6). Este es
+   *     el camino del detalle de admin del cierre del mensajero Y el del cierre de bodega, que
+   *     comparten proyeccion y mapper.
+   *   · `CierreDiaRepository.toPendienteRow` -> `orden.tienda_id`, o sea lo VIVO. Es la vista
+   *     EN VIVO del mensajero: el cierre TODAVIA NO EXISTE, asi que no hay snapshot que leer.
+   *     Es el mismo criterio con el que esa funcion ya toma `row.orden.tienda.nombre`.
+   *
+   * REQUERIDO y no opcional: un `tiendaId?: string` deja pasar en silencio la proyeccion que se
+   * olvide de traerlo, y el desglose saldria agrupado bajo `undefined`. Requerido, el
+   * compilador lo caza en strict.
+   */
+  tiendaId: string;
   tiendaNombre: string;
   resultado: GestionResultado;
   montoRecibido: string | null;

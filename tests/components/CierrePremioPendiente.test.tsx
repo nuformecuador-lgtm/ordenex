@@ -156,6 +156,10 @@ function conDetalleDe(cierre: CierreAdminResumen) {
     netoOrdenex: "0.00",
     ganaLaTienda: "0.00",
     fleteRechazoYaCobradoATienda: false,
+    // Ficha 396: el desglose por tienda viaja SIEMPRE en el DTO, tambien con una sola
+    // tienda. Estas pruebas no lo miran, asi que aqui va vacio; las suyas estan en
+    // `tests/unit/utils/partes-por-tienda.test.ts` y en las de la pantalla del desglose.
+    partesPorTienda: [],
   });
 }
 

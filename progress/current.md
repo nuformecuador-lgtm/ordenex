@@ -1,61 +1,66 @@
-# Estado — madrugada del 2026-09-08
+# Estado — cierre de sesión del 2026-09-08
 
-**La cola está vacía.** Las siete fichas que traíamos están cerradas y **en producción**.
+## 20 fichas cerradas, en seis releases
 
-## Dos releases, las dos verificadas
+`376 · 377 · 379 · 380 · 381 · 382 · 383 · 384 · 385 · 386 · 387 · 388 · 390 · 391 · 392 · 393 · 394 · 395 · 398 · 399`
 
-| | commit | qué llevó |
+Canceladas por decisión del humano: **378** y **389**.
+
+| Release | Commit | Migraciones |
 |---|---|---|
-| **#748** | `8a68b5db` | 379, 386, 392, 393, 394 — sin migraciones |
-| **#752** | `7381b54c` | 380, 381 — **con tres migraciones** |
+| #733 | `7f6455c7` | — |
+| #735 | `1d2e6c4e` | — |
+| #748 | `8a68b5db` | — |
+| #752 | `7381b54c` | **3** — verificadas: 49→51, 20→21, 10→11 |
+| #755 | `73f9a420` | — |
+| #758 | `0c0d3312` | **1** — ⚠️ **SIN VERIFICAR** |
 
-Las dos con despliegue en verde y **cero errores de runtime**.
+## ⚠️ LO PRIMERO QUE HAY QUE MIRAR
 
-## Las migraciones, comprobadas contra la base de producción
+**RESUELTO.** La release #758 se habia mergeado SIN crear despliegue: se redisparo con un commit vacio en `prod` (`c359b08e`) y quedo verificada -- migracion aplicada, catalogos en 52 y 34, cero errores de runtime. Lo que sigue es el historico de como se detecto. `prod` apunta a
+`0c0d3312`, pero el catálogo de producción seguía en **51 / 33** y debe quedar en
+**52 / 34**. Comprobar también que no hay errores de runtime.
 
-Medido **antes** y **después**, no supuesto:
+```sql
+select t.typname, count(*) from pg_type t join pg_enum e on e.enumtypid = t.oid
+where t.typname in ('historial_accion_tipo','orden_historial_origen_tipo')
+group by t.typname;
+```
 
-| | antes | después | esperado |
-|---|---|---|---|
-| tipos de historial | 49 | **51** | 51 |
-| entidades de historial | 20 | **21** | 21 |
-| categorías de wallet de tienda | 10 | **11** | 11 |
+Lleva la **398** (corregir una gestión mal declarada) y la **399** (el aviso de ubicación).
 
-Los cuatro valores nuevos son los correctos, las tres migraciones figuran aplicadas
-y ninguna revertida, y el CHECK admite `cobro_manual` **solo en la rama de débito**.
+## Una corrección aplicada A MANO en producción
 
-## Lo que queda abierto, y es de verdad
+Orden **50337523** del cierre **1E2D7CF8**: `entregada` → `rechazada`, con autorización
+del maestro, porque la funcionalidad no existía todavía. Totales verificados **después**:
+general `267.575` = suma de líneas de pago · efectivo `120.945` + SINPE `146.630` = el
+total · pago al mensajero `34.000` = suma por gestión. Rastro en `orden_historial_estado`.
 
-- **La Q1 de la 381 sigue SIN FIRMAR**: los tres textos que ve el usuario en el
-  diálogo de cobro. Se implementó la propuesta del diseño para no bloquear.
-  Cambiarlos cuesta una línea cada uno; el valor interno del enum costaría otra
-  migración.
-- **La A2 de la 383 sigue sin firmar**: la corrección manual de datos *rechaza* el
-  carácter en vez de repararlo, al revés que la carga masiva. La 392 eligió
-  rechazar por coherencia con el formulario más cercano, **no por firma**.
-- **De la 393 no se pudo ver el caso de línea puente distinta de cero**: la base
-  local no tiene gestiones entregadas ni tarifa congelada. Dicho como falta, no
-  como aprobado.
-- **Cinco fichas (394, 386, 392, 380, 381) no pasaron por reviewer.** Pasaron su
-  gate completo y sus mutaciones. Queda dicho.
+## En curso al cerrar
 
-## Dos hallazgos que valen más que sus fichas
+- **396**, solo la **tanda del cierre de mensajero**. La de **bodega va después**: chocaría
+  con la 397.
+- **397**, el recorte por rol en el cierre de bodega.
 
-1. **La guardia del historial NO caza que una escritura desaparezca.** Mide por
-   *método*: si el método conserva sus otras llamadas a `appendAccion`, borrar una
-   entera deja el censo **verde**. Medido dos veces, en la 380 y en la 381. Quien
-   protege esos requisitos es Postgres, no el censo.
-2. **El deadlock `40P01` que ensució gates toda la noche es contención entre tests
-   de migración** que aplican DDL sin tomar un bloqueo de aviso compartido. Se
-   reproduce corriendo `tests/integration/db/` **sin el archivo de nadie**. Es
-   arreglable y no está arreglado.
+Van en paralelo **a propósito y sin pisarse**: tocan archivos distintos.
 
-## Deuda menor, con dueño
+## Dos decisiones del humano, pendientes
 
-- El error **bajo el campo** de la validación de cliente sigue en inglés en el
-  formulario de usuarios (anterior a la 392).
-- El select de Rol pinta los valores crudos del enum (`adminSatelite`…).
-- `MontoDerivadoCard` y `GANANCIA_NOTA_BODEGA` quedan **muertos y declarados**, no
-  borrados: borrarlos se llevaría cobertura ajena.
-- El campo `intentosContactoTienda` del DTO de cierres queda **sin consumidor** y
-  no se borra, por lo mismo.
+1. **Al mensajero no se le avisa** de que su pago pasó a cero tras una corrección.
+2. **A la tienda no le llega el aviso** de «orden rechazada» cuando se corrige.
+
+Las dos pedirían otro tipo de notificación y otra migración. **No son bugs.**
+
+## Deuda técnica medida, con dueño
+
+- **El deadlock `40P01`** que ensució gates toda la sesión es contención entre tests de
+  migración que aplican DDL sin bloqueo de aviso compartido. **Se reproduce sin el archivo
+  de nadie.** Arreglable, no arreglado.
+- **`recuperar-contrasena-form.test.tsx` es frágil bajo carga**: cae un test distinto cada
+  vez, siempre esperando el paso a la fase de contraseña, y va de 8 s a 16 s según máquina.
+- **La guardia del historial mide por MÉTODO, no por escritura.** Borrar una de varias
+  escrituras del mismo método la deja verde. Medido dos veces.
+- El error **bajo el campo** de la validación de cliente sigue en inglés en el formulario
+  de usuarios. El select de Rol pinta los valores crudos del enum.
+- **En iPhone**, la ruta de Ajustes del aviso de ubicación es la de Android.
+- El **navegador embebido de WhatsApp no se detecta**, y no hay forma fiable de hacerlo.

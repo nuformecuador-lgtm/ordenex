@@ -4772,3 +4772,32 @@ Sin migracion.
 - **DEROGA la R39 de la 393 por decision del humano:** el adminSatelite SI ve el neto de
   Ordenex. «La idea es que la satelite tambien sepa como debe pagar, no le podemos ocultar
   detalles pues el lio esta pasando tambien desde alla». Consecuencia registrada como 397.
+
+
+## 398 y 399 — corregir una gestion mal declarada, y el aviso de ubicacion (2026-09-08)
+
+Cerradas el mismo dia en que aparecieron, las dos desde un problema real de campo.
+
+**398.** Un mensajero marco entregada una orden que fue rechazada y ya habia solicitado el
+cierre. NO existia ninguna via de corregirlo: anular exige que la gestion no tenga cierre, la
+correccion de admin solo reparte por metodo de pago, y reabrir el cierre no vuelve a fotografiar
+los totales. Hubo que corregirlo A MANO en la base de produccion.
+
+- Se corrige EN SITIO, no se anula: anular dejaria una fila huerfana en una tabla inmutable.
+- **El paquete se resuelve solo:** la orden queda en rechazada y la aprobacion ya la manda a por
+  devolver. Corrige lo que el leader habia supuesto.
+- **Sin una arista nueva en el catalogo de transiciones la ficha NO ARRANCABA:** `entregada`
+  tenia una sola salida y la correccion habria reventado la transaccion entera.
+- **Dos mutaciones sobrevivieron en la primera pasada** y cambiaron el diseno: la lectura previa
+  filtraba, asi que la guardia del UPDATE era decorativa. Parecia protegido y no lo estaba.
+
+**399.** Una mensajera con la ubicacion del telefono ENCENDIDA no podia registrar una entrega.
+El aviso le pedia tocar el candado de la barra de direcciones, y ella entra desde el icono:
+el manifest declara display standalone, asi que NO HAY barra ni candado. La instruccion era
+imposible de seguir.
+
+- El diagnostico se midio en el codigo antes de tocar nada: ese texto sale SOLO con
+  PERMISSION_DENIED, asi que el permiso denegado era real y no era el del telefono.
+- Ahora distingue CUATRO contextos, uno de ellos que nadie habia considerado: el sitio ya tiene
+  permiso y quien lo niega es el telefono.
+- Lo que NO se puede detectar se declara: el navegador embebido de WhatsApp.

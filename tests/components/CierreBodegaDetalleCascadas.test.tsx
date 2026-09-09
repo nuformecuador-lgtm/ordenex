@@ -220,6 +220,12 @@ const DIA_ANA: CierreBodegaDetalleCierre = {
   pagoTienda: "62499.75",
   cobradoSobreRecaudado: "17500.35",
   netoOrdenex: "8750.55",
+  // Ficha 396 (D1) — el agregado que le faltaba a este nivel: 80.000,10 - 18.001,10. Difiere
+  // de `pagoTienda` en exactamente su flete por rechazo (500,75), que es el dia CON rechazo.
+  ganaLaTienda: "61999.00",
+  // Ficha 396 — este bloque es de la 393 y no pinta el desglose; el campo va porque el DTO lo
+  // declara REQUERIDO. Los casos del desglose viven en su propio archivo.
+  partesPorTienda: [],
   paraLaCentral: "70749.55",
   efectivoCubreDescuentos: true,
 };
@@ -248,6 +254,9 @@ const DIA_BETO: CierreBodegaDetalleCierre = {
   pagoTienda: "36454.59",
   cobradoSobreRecaudado: "9634.48",
   netoOrdenex: "4634.23",
+  // Ficha 396 (D1): 46.089,07 - 9.634,48. Sin rechazos, COINCIDE con `pagoTienda`.
+  ganaLaTienda: "36454.59",
+  partesPorTienda: [],
   paraLaCentral: "41088.82",
   efectivoCubreDescuentos: true,
 };
@@ -266,6 +275,9 @@ const DETALLE_OK = {
   pagoTienda: "98954.34",
   cobradoSobreRecaudado: "27134.83",
   netoOrdenex: "13384.78",
+  // Ficha 396 (D1) — el agregado que le faltaba a este contrato: 126.089,17 - 27.635,58.
+  ganaLaTienda: "98453.59",
+  partesPorTienda: [],
   paraLaCentral: "111838.37",
   efectivoCubreDescuentos: true,
 };

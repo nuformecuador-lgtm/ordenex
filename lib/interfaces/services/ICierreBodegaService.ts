@@ -8,6 +8,11 @@ import type {
   CierreTotales,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
+// Ficha 396 — la parte de UNA tienda se DECLARA junto a la funcion que la produce
+// (`partesPorTienda`), donde viven las identidades que particiona, y se importa aqui como TIPO.
+// Mismo camino por el que ya viaja hasta `ICierresAdminService`: un `import type` se borra al
+// compilar, asi que esto no arrastra ni un byte de `lib/utils/` al bundle.
+import type { ParteDeTienda } from "@/lib/utils/ingreso-ordenex";
 
 // Feature 40 — contrato del servicio del "Cierre de bodega" (lado adminSatelite:
 // consolidar + solicitar). Espejo de ICierreDiaService (feature 37), un nivel arriba.
@@ -98,6 +103,56 @@ export interface CierreBodegaDetalleCierre {
    * bodega, y por eso los dos numeros solo coinciden cuando la bodega es 0. Puede ser NEGATIVO.
    */
   netoOrdenex: string;
+  /**
+   * Ficha 396 (D1) — DERIVADO: `totales.general` − `totalesIngreso.total` de ESTE cierre_dia.
+   * LO QUE LA TIENDA GANA EN TOTAL con el dia de ESE mensajero.
+   *
+   * **NO es `pagoTienda`**, que viaja aqui arriba y sigue significando lo mismo: aquel es lo que
+   * se le paga DE ESTE DINERO —no resta el flete por rechazo, que nunca entro en lo recaudado—;
+   * este es lo que le queda DESPUES de que tambien le cobren aquel flete. La diferencia entre los
+   * dos es exactamente `totalesIngreso.fleteDevolucionConIva` de este cierre_dia.
+   *
+   * FALTABA, y por eso lo trae esta ficha: la 395 puso `ganaLaTienda` SOLO en el detalle del
+   * cierre del mensajero, asi que el desglose por tienda de bodega sumaria hacia un total que no
+   * estaba en ninguna parte (`design.md §5.2`). Se deriva con la MISMA funcion
+   * (`ganaLaTienda`, `lib/utils/ingreso-ordenex.ts`), no con una resta escrita aqui.
+   *
+   * Sale de SUS PROPIOS snapshot y desglose, nunca de los del agregado (R21). Puede ser NEGATIVO
+   * y se emite CON SU SIGNO, nunca recortado a "0.00".
+   */
+  ganaLaTienda: string;
+  /**
+   * 💰 Ficha 396 (R19) — DE QUIEN ES CADA PARTE de `pagoTienda` y `ganaLaTienda` DE ESTE
+   * `cierre_dia`, o sea del dia de ESE mensajero.
+   *
+   * ⚠️ **NO ES UNA CORRECCION DE DINERO.** `wallet_tienda_movimiento` lleva los movimientos
+   * separados por tienda desde siempre: a nadie se le paga mal, y esta ficha no toca ni una fila
+   * del ledger. `pagoTienda` y `ganaLaTienda` siguen valiendo lo mismo (R18); esto se AÑADE.
+   *
+   * ⚠️ **SALE DE `cd.gestiones`, LAS DE ESTE MENSAJERO, y de ninguna otra.** No se deriva del
+   * agregado de la bodega ni se corrige para cuadrar con el (R21). De ahi se sigue que el UMBRAL
+   * de presentacion de este nivel se evalua sobre `partesPorTienda.length` DE ESTE elemento —las
+   * tiendas de ESE mensajero—, nunca sobre las de toda la bodega: un cierre de bodega con dos
+   * mensajeros que llevaron UNA tienda cada uno no ensena desglose en ningun nivel de mensajero
+   * y SI en el agregado.
+   *
+   * SE EMITE SIEMPRE, tambien con UNA sola tienda (un elemento). El umbral es de PRESENTACION y
+   * vive en la pantalla, por el mismo motivo que en el detalle del mensajero.
+   *
+   * ORDENADO POR EL SERVIDOR (R8): por `pagoTienda` descendente, desempate en `partesPorTienda`.
+   *
+   * INVARIANTES de ESTE nivel (R10/R11/R12):
+   *   Σ `.pagoTienda`   === `pagoTienda`
+   *   Σ `.ganaLaTienda` === `ganaLaTienda`
+   *   Σ `.recaudado`    === `totales.general`
+   * Las tres se sostienen mientras el snapshot de este `cierre_dia` sea lo que suman sus
+   * gestiones. Si un dia dejara de serlo, la pantalla ensena el descuadre (R21); NO se toca el
+   * agregado para forzar que cuadre.
+   *
+   * LO QUE NO SE REPARTE (R16): `totalPagoMensajero` y `totalIngresoBodegaRechazos` son del
+   * cierre_dia ENTERO y se quedan agregados.
+   */
+  partesPorTienda: ParteDeTienda[];
   /**
    * Feature 393 (R9/R15) — DERIVADO: `totales.general` − `totalPagoMensajero` −
    * `totalIngresoBodegaRechazos` de ESTE cierre_dia, desde SUS PROPIOS snapshots (nunca desde
