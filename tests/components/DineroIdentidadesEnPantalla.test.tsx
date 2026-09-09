@@ -1069,6 +1069,19 @@ const CENSO: readonly { ruta: string; identidad: string }[] = [
     identidad:
       "recaudado − facturado = gana la tienda; puente + flete por rechazo = facturado; recaudado − puente = pago a tienda",
   },
+  // FICHA 396 — el desglose por tienda. Entra en el censo porque es una superficie de dinero MÁS,
+  // no un refactor: la monta el detalle del cierre de mensajero Y los DOS niveles del de bodega
+  // (R22), y su identidad es la que el humano no podía hacer a ojo. Nació como función local de
+  // `CascadasCierreMensajero.tsx` y salió a archivo propio al ganar su segundo y tercer
+  // consumidor; declararla aquí es el precio de tener el mismo componente en las tres pantallas,
+  // y es el precio correcto: esconderla dentro de un archivo ya censado para no tocar este número
+  // sería usar la guardia al revés. Las lee del DOM `CierreMensajeroDesglosePorTienda.test.tsx` y
+  // `CierreBodegaDesglosePorTienda.test.tsx`.
+  {
+    ruta: "app/(app)/cierres-admin/_components/DesglosePorTienda.tsx",
+    identidad:
+      "Σ lo que se le paga a cada tienda = pago a tienda; Σ lo que gana cada tienda = gana la tienda; Σ lo recaudado por cada tienda = total general",
+  },
 ];
 
 /** Un uso del formateador compartido, por cualquiera de sus nombres. */
@@ -1103,20 +1116,21 @@ function importadosPor(rutaRelativa: string): string[] {
 }
 
 describe("ficha 359 · D — el censo de las pantallas de dinero", () => {
-  it("las dieciséis existen, no se repiten y cada una declara su identidad", () => {
+  it("las diecisiete existen, no se repiten y cada una declara su identidad", () => {
     // Trece hasta la ficha 393, que añade las dos superficies de las cascadas del
-    // cierre de bodega; dieciséis desde la 395, que añade la del cierre de MENSAJERO.
-    // El número es una FOTO a propósito: una pantalla de dinero nueva tiene que pasar
-    // por aquí, no colarse en silencio.
-    expect(CENSO.length).toBe(16);
-    expect(new Set(CENSO.map((c) => c.ruta)).size).toBe(16);
+    // cierre de bodega; dieciséis desde la 395, que añade la del cierre de MENSAJERO;
+    // DIECISIETE desde la 396, que añade el desglose por tienda —el mismo componente
+    // en las tres superficies—. El número es una FOTO a propósito: una pantalla de
+    // dinero nueva tiene que pasar por aquí, no colarse en silencio.
+    expect(CENSO.length).toBe(17);
+    expect(new Set(CENSO.map((c) => c.ruta)).size).toBe(17);
     for (const { ruta, identidad } of CENSO) {
       expect(existsSync(path.join(RAIZ, ruta)), `${ruta} no existe`).toBe(true);
       expect(identidad.length, `${ruta} está censada sin identidad`).toBeGreaterThan(15);
     }
   });
 
-  it("las dieciséis pintan su dinero con el formateador compartido, no con uno propio", () => {
+  it("las diecisiete pintan su dinero con el formateador compartido, no con uno propio", () => {
     const sinFormateador: string[] = [];
     for (const { ruta } of CENSO) {
       const propio = USA_EL_FORMATEADOR.test(readFileSync(path.join(RAIZ, ruta), "utf8"));

@@ -29,6 +29,10 @@ import type {
   CierreBodegaResumen,
 } from "@/lib/interfaces/services/ICierreBodegaService";
 import type { TotalesIngresoOrdenex } from "@/lib/interfaces/services/ICierreDiaService";
+// Ficha 396 (D2) — el tipo del desglose se pide DONDE VIVE la identidad que particiona
+// (`lib/utils/ingreso-ordenex.ts`), igual que hace el contrato del servicio. Es un `import type`:
+// se borra al compilar y no arrastra ni `Prisma` ni una linea de servidor al navegador.
+import type { ParteDeTienda } from "@/lib/utils/ingreso-ordenex";
 import {
   DetalleSecciones,
   TotalesIngresoPanel,
@@ -58,6 +62,10 @@ import {
   esMontoNegativo,
 } from "./cierre-detalle-shared";
 import { CascadaDinero, type LineaCascada } from "./CascadaDinero";
+// Ficha 396 (D2) — EL MISMO componente y EL MISMO umbral que el detalle del cierre de MENSAJERO
+// (R22). No es una copia ni un gemelo: es el archivo que la tanda de bodega sacó de aquella
+// pantalla justo para que las tres superficies no puedan decir cosas distintas de la misma plata.
+import { DesglosePorTienda, marcaDeVariasTiendas } from "./DesglosePorTienda";
 import { CierreBodegaFacturaResumen } from "./cierre-factura";
 import {
   DescargarCierresButton,
@@ -176,6 +184,16 @@ interface DetalleAbierto {
   netoOrdenex: string;
   paraLaCentral: string;
   efectivoCubreDescuentos: boolean;
+  /**
+   * 💰 Ficha 396 (R20) — DE QUE TIENDA ES CADA PARTE del «Para la tienda» AGREGADO de toda la
+   * bodega: UNA fila por tienda a traves de todos los mensajeros incluidos (Q8), ya derivada y
+   * **ya ordenada por el servidor** (R8). El desglose de CADA mensajero no viaja aqui: viaja en
+   * su propio `cierres[i].partesPorTienda`, y son listas DISTINTAS a proposito (R19 vs R20).
+   *
+   * Llega SIEMPRE, tambien con una sola tienda: el UMBRAL de ensenarlo es de presentacion y lo
+   * evalua esta pantalla, nivel por nivel.
+   */
+  partesPorTienda: ParteDeTienda[];
 }
 
 /**
@@ -235,16 +253,33 @@ function lineasCascadaCentral(nivel: {
  * flete por rechazo en cero (R10): ese cobro se le factura a la tienda pero NO sale de lo
  * recaudado —un rechazo no cobra contra entrega—, así que sin ella la pantalla enseñaría
  * «recaudado − facturado = para la tienda», que no da en cuanto hay un rechazo.
+ *
+ * 💰 Ficha 396 (R1) — «PARA LA TIENDA» AQUÍ TAMBIÉN ERA LA SUMA DE VARIAS, y en el cierre de
+ * bodega es el peor de los tres casos: agrega N mensajeros × M tiendas en un solo número. Ni un
+ * importe cambia de valor (R18); lo que se añade es la NOTA que dice que es un total y de
+ * cuántas tiendas, y el desglose que va debajo de la cascada. **No es un arreglo de dinero:** la
+ * wallet reparte por tienda desde siempre y a nadie se le paga mal.
  */
-function lineasCascadaDueno(nivel: {
-  general: string;
-  totalesIngreso: TotalesIngresoOrdenex;
-  totalPagoMensajero: string;
-  totalIngresoBodegaRechazos: string;
-  pagoTienda: string;
-  cobradoSobreRecaudado: string;
-  netoOrdenex: string;
-}): LineaCascada[] {
+function lineasCascadaDueno(
+  nivel: {
+    general: string;
+    totalesIngreso: TotalesIngresoOrdenex;
+    totalPagoMensajero: string;
+    totalIngresoBodegaRechazos: string;
+    pagoTienda: string;
+    cobradoSobreRecaudado: string;
+    netoOrdenex: string;
+  },
+  // Ficha 396 (R1) — LA MARCA de este nivel, o `null` si sus gestiones son de una sola tienda.
+  // Sale de `marcaDeVariasTiendas`, la MISMA funcion que decide si se pinta el desglose: las dos
+  // cosas aparecen y desaparecen juntas, y ninguna de las dos se decide aqui.
+  marcaDeVariasTiendasDelNivel: string | null,
+): LineaCascada[] {
+  // ⚠️ LA MARCA VA EN «Para la tienda» Y NO EN OTRA LINEA, y es la unica de esta cascada que la
+  // lleva: es la que nombra a «la tienda» EN SINGULAR y por tanto la unica que, sola, se lee como
+  // si fuera de una. «Total general» tambien se parte por tienda, pero su rotulo no promete una.
+  const notasDelPago = marcaDeVariasTiendasDelNivel === null ? [] : [marcaDeVariasTiendasDelNivel];
+
   return [
     { label: TOTAL_GENERAL_LABEL, monto: nivel.general, signo: "neutro" },
     { label: FLETE_CON_IVA_LABEL, monto: nivel.totalesIngreso.fleteConIva, signo: "resta" },
@@ -253,7 +288,13 @@ function lineasCascadaDueno(nivel: {
       monto: nivel.totalesIngreso.comisionConIva,
       signo: "resta",
     },
-    { label: PARA_LA_TIENDA_LABEL, monto: nivel.pagoTienda, signo: "neutro", destacado: true },
+    {
+      label: PARA_LA_TIENDA_LABEL,
+      monto: nivel.pagoTienda,
+      signo: "neutro",
+      destacado: true,
+      notas: notasDelPago,
+    },
     // La línea puente: lo mismo que se acaba de restar, ahora leído como lo que Ordenex cobró.
     {
       label: COBRADO_SOBRE_RECAUDADO_LABEL,
@@ -391,6 +432,9 @@ export function CierresBodegaAdminModule({
         netoOrdenex: result.netoOrdenex,
         paraLaCentral: result.paraLaCentral,
         efectivoCubreDescuentos: result.efectivoCubreDescuentos,
+        // Ficha 396 (R20/R8): se guarda TAL CUAL llega. La pantalla no lo filtra, no lo suma y
+        // no lo reordena — el orden es el que emitio el servidor.
+        partesPorTienda: result.partesPorTienda,
       });
       return;
     }
@@ -499,6 +543,16 @@ export function CierresBodegaAdminModule({
 
   const cierreAbierto = detalle?.cierre ?? null;
   const esPendiente = cierreAbierto?.estado === "solicitado";
+  /**
+   * 💰 Ficha 396 (R1/R2/R20) — la marca del NIVEL AGREGADO, y el interruptor de su desglose.
+   *
+   * ⚠️ Se evalua sobre las tiendas de TODA LA BODEGA, y **no es la de ningun mensajero**: la de
+   * cada `cierre_dia` se calcula abajo, con SU propia lista (R19). Una bodega con dos mensajeros
+   * que llevaron una tienda cada uno tiene marca AQUI y en ninguno de los dos niveles de
+   * mensajero — es el caso que separa los tres umbrales, y hay test de el.
+   */
+  const marcaAgregada =
+    detalle === null ? null : marcaDeVariasTiendas(detalle.partesPorTienda);
 
   return (
     // `gap-4`: la barra de filtros y las pestañas son una cabecera, no dos secciones.
@@ -678,16 +732,28 @@ export function CierresBodegaAdminModule({
             <CascadaDinero
               titulo={CASCADA_DUENO_TITULO}
               ariaLabel={`${CASCADA_DUENO_TITULO} · cierre de bodega`}
-              lineas={lineasCascadaDueno({
-                general: detalle.cierre.totales.general,
-                totalesIngreso: detalle.totalesIngreso,
-                totalPagoMensajero: detalle.cierre.totalPagoMensajero,
-                totalIngresoBodegaRechazos: detalle.cierre.totalIngresoBodegaRechazos,
-                pagoTienda: detalle.pagoTienda,
-                cobradoSobreRecaudado: detalle.cobradoSobreRecaudado,
-                netoOrdenex: detalle.netoOrdenex,
-              })}
+              lineas={lineasCascadaDueno(
+                {
+                  general: detalle.cierre.totales.general,
+                  totalesIngreso: detalle.totalesIngreso,
+                  totalPagoMensajero: detalle.cierre.totalPagoMensajero,
+                  totalIngresoBodegaRechazos: detalle.cierre.totalIngresoBodegaRechazos,
+                  pagoTienda: detalle.pagoTienda,
+                  cobradoSobreRecaudado: detalle.cobradoSobreRecaudado,
+                  netoOrdenex: detalle.netoOrdenex,
+                },
+                marcaAgregada,
+              )}
             />
+
+            {/* 💰 Ficha 396 (R20) — EL DESGLOSE DE TODA LA BODEGA, una fila por tienda a través de
+                todos los mensajeros (Q8). Va DESPUÉS de la cascada que termina en «Para la
+                tienda» —la cifra que parte— y ANTES del desglose por concepto, que ya no habla de
+                tiendas: primero la cuenta que cierra, y sólo después de quién es cada parte. Es
+                el mismo sitio relativo que ocupa en el detalle del cierre de mensajero. */}
+            {marcaAgregada !== null ? (
+              <DesglosePorTienda partes={detalle.partesPorTienda} de="cierre de bodega" />
+            ) : null}
 
             {/* El desglose por concepto de la línea «Lo que Ordenex facturó»: sin cambios. */}
             <TotalesIngresoPanel
@@ -707,7 +773,16 @@ export function CierresBodegaAdminModule({
 
             {/* Sub-detalle por cada cierre_dia incluido (R11): mensajero + totales +
                 4 secciones por resultado con evidencia firmada (R12). */}
-            {detalle.cierres.map((cierreDia) => (
+            {detalle.cierres.map((cierreDia) => {
+              /**
+               * 💰 Ficha 396 (R19) — la marca de ESTE mensajero, con SUS tiendas y de ninguna
+               * otra lista. ⚠️ NO es `marcaAgregada`: usar aquella evaluaría el umbral de este
+               * nivel sobre las tiendas de toda la bodega y enseñaría un desglose de una sola
+               * tienda —o diría «el total de 2 tiendas» encima del dinero de una—.
+               */
+              const marcaDelMensajero = marcaDeVariasTiendas(cierreDia.partesPorTienda);
+
+              return (
               <section
                 key={cierreDia.cierreDiaId}
                 aria-label={`Cierre del día · ${cierreDia.mensajeroNombre}`}
@@ -739,16 +814,30 @@ export function CierresBodegaAdminModule({
                 <CascadaDinero
                   titulo={CASCADA_DUENO_TITULO}
                   ariaLabel={`${CASCADA_DUENO_TITULO} · ${cierreDia.mensajeroNombre}`}
-                  lineas={lineasCascadaDueno({
-                    general: cierreDia.totales.general,
-                    totalesIngreso: cierreDia.totalesIngreso,
-                    totalPagoMensajero: cierreDia.totalPagoMensajero,
-                    totalIngresoBodegaRechazos: cierreDia.totalIngresoBodegaRechazos,
-                    pagoTienda: cierreDia.pagoTienda,
-                    cobradoSobreRecaudado: cierreDia.cobradoSobreRecaudado,
-                    netoOrdenex: cierreDia.netoOrdenex,
-                  })}
+                  lineas={lineasCascadaDueno(
+                    {
+                      general: cierreDia.totales.general,
+                      totalesIngreso: cierreDia.totalesIngreso,
+                      totalPagoMensajero: cierreDia.totalPagoMensajero,
+                      totalIngresoBodegaRechazos: cierreDia.totalIngresoBodegaRechazos,
+                      pagoTienda: cierreDia.pagoTienda,
+                      cobradoSobreRecaudado: cierreDia.cobradoSobreRecaudado,
+                      netoOrdenex: cierreDia.netoOrdenex,
+                    },
+                    marcaDelMensajero,
+                  )}
                 />
+                {/* 💰 Ficha 396 (R19) — EL DESGLOSE DE ESTE MENSAJERO, con SUS gestiones. Mismo
+                    componente y mismos rótulos que el agregado de arriba y que el detalle del
+                    cierre de mensajero (R22), y en el mismo sitio relativo: pegado a la cascada
+                    que termina en «Para la tienda». El nombre accesible lleva el del mensajero,
+                    que es lo que lo distingue del desglose agregado y del de los demás. */}
+                {marcaDelMensajero !== null ? (
+                  <DesglosePorTienda
+                    partes={cierreDia.partesPorTienda}
+                    de={cierreDia.mensajeroNombre}
+                  />
+                ) : null}
                 {/* El desglose por concepto de ESTE cierre_dia: sin cambios. */}
                 <TotalesIngresoPanel
                   totales={cierreDia.totalesIngreso}
@@ -763,7 +852,8 @@ export function CierresBodegaAdminModule({
                   contexto={cierreDia.mensajeroNombre}
                 />
               </section>
-            ))}
+              );
+            })}
 
             {/* Acciones: solo en un cierre de bodega PENDIENTE (`solicitado`). */}
             {esPendiente ? (

@@ -412,3 +412,37 @@ export const DESGLOSE_POR_TIENDA_NOTA =
  */
 export const DESGLOSE_NO_REPARTIDO_NOTA =
   "El pago al mensajero y el ingreso de bodega por rechazos son del cierre completo: no están repartidos entre las tiendas.";
+
+/**
+ * FICHA 396 (D2) — EL NOMBRE ACCESIBLE de la cascada de UNA tienda, y tiene que ser ÚNICO.
+ *
+ * ⚠️ EL NOMBRE DE LA TIENDA NO BASTA, y no es un caso teórico: el servidor agrupa por el
+ * `tiendaId` congelado precisamente para que **dos tiendas homónimas no se fundan** (R7, atado
+ * con un test contra Postgres real), así que dos cascadas pueden llegar con el MISMO nombre
+ * visible y con dinero distinto. Dos regiones con el mismo nombre accesible dejan a quien navega
+ * por landmarks sin manera de decir cuál es cuál — y el modal del cierre de BODEGA lo multiplica:
+ * el desglose se monta una vez por mensajero incluido MÁS una para el agregado, así que la misma
+ * tienda aparece varias veces a propósito.
+ *
+ * Por eso el nombre lleva DOS discriminantes:
+ *  - la POSICIÓN dentro de su nivel («1 de 3»), que separa a dos homónimas del MISMO nivel y de
+ *    paso dice cuántas hay. El orden es el que emitió el servidor (R8), no uno del navegador;
+ *  - el CONTEXTO —«cierre de bodega», o el nombre del mensajero—, que separa el mismo nombre
+ *    repetido en dos niveles del mismo modal.
+ *
+ * El `indice + 1` se hace AQUÍ, en el módulo de textos, y no en el componente: es el ordinal de
+ * una frase, no un importe, y el componente del desglose no hace ni una operación (R14).
+ *
+ * El nombre VISIBLE de la cascada sigue siendo sólo el de la tienda: esto nombra la región para
+ * quien no la ve, no añade texto a la pantalla.
+ *
+ * Elección de redacción del `frontend_dev`.
+ */
+export function nombreAccesibleDeTienda(
+  tiendaNombre: string,
+  indice: number,
+  cuantasTiendas: number,
+  contexto: string,
+): string {
+  return `${tiendaNombre} (${indice + 1} de ${cuantasTiendas}) · ${contexto}`;
+}
