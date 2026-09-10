@@ -3,6 +3,7 @@
 // enorme): el handler solo necesita resolver el destino y el cuerpo de entrega.
 import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
+import type { ApiMensajeroDTO } from "@/lib/types/api-orden";
 
 /** Datos para construir el cuerpo de entrega (D3). `estado` es el `value` del destino. */
 export interface DatosEntregaOrden {
@@ -63,6 +64,22 @@ export interface DatosEntregaOrden {
    * nombre propio.
    */
   causaIncidente: CausaIncidente | null;
+  /**
+   * ⏳ 2026-09-09 (feature 404, R8/R11/R12) — el mensajero ASIGNADO a la orden EN EL INSTANTE DE
+   * ESTA LECTURA (`orden.mensajero_asignado_id` -> `usuario`), o `null` si nadie la lleva.
+   *
+   * VIGENTE, NO FOTO (R11): la lectura ocurre en cada entrega, asi que un reintento del MISMO
+   * `eventoId` publica el mensajero de ESE momento, que puede no ser el del cambio de estado. Es
+   * exactamente la regla que ya rige a `motivo` y esta publicada como tal.
+   *
+   * ASIGNADO, NO GESTOR (R7): no es `gestion_orden.mensajero_id`. Una orden barrida por el corte
+   * diario o recuperada a bodega queda en `null` aunque alguien la haya llevado (R23).
+   *
+   * Campo REQUERIDO, no opcional, por la misma razon escrita en `causaDevolucion`: un `?` dejaria
+   * pasar en silencio a quien se olvide de proyectarlo. Se resuelve DENTRO del `findUnique` que ya
+   * se hace, como relacion anidada: sin consulta nueva (R12).
+   */
+  mensajero: ApiMensajeroDTO | null;
 }
 
 export interface IWebhookOrdenReader {

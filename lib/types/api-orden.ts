@@ -4,6 +4,48 @@
 //   - sin `evidencia_storage_path` crudo ni el nombre del bucket (solo URL firmada, R16),
 //   - sin datos del mensajero que gestiono la orden (R16).
 // El identificador publico es `numGuia` (decision (d) del gate F1.4).
+//
+// ⏳ 2026-09-09 (feature 404) — AQUI DECIA «sin datos del mensajero que gestiono la orden (R16)»
+// como si el canal no dijera nada de ningun mensajero, y ESO YA NO ES CIERTO SIN MATIZ. Hay que
+// leerlo distinguiendo DOS mensajeros distintos, porque la frase original mezclaba los dos:
+//   - el que GESTIONO la orden (`gestion_orden.mensajero_id`): sigue SIN publicarse, ni su nombre
+//     ni su id ni su texto libre. Es material de la feature 405, no de esta.
+//   - el ASIGNADO a la orden ahora mismo (`orden.mensajero_asignado_id`): esta feature publica su
+//     `id` y su `nombre` —y NADA mas— al DUENO de la orden. Excepcion ACOTADA a 106/R16, firmada
+//     por el humano el 2026-09-09 con este argumento medido: la cuenta `adminTienda` ya ve ese
+//     mismo nombre completo en la columna «Mensajero» de `/ordenes` y se lo lleva en el XLSX, asi
+//     que la API no le entrega ni un caracter que no tuviera ya.
+// El resto de la frase sigue vigente palabra por palabra: sin `storage_path`, sin bucket, sin
+// `tiendaId`, sin ids internos de orden y sin el resto de la PII del mensajero (telefono, email,
+// cedula, foto, zona, vehiculo).
+
+/**
+ * ⏳ 2026-09-09 (feature 404) — el mensajero ASIGNADO de una orden, en el canal publico.
+ *
+ * QUE ES. `id` es el `usuario.id` (UUID en texto, `db/schema.prisma`): estable en el tiempo, no se
+ * regenera y no se recicla —la FK de la orden es `onDelete: SetNull`, asi que borrar la cuenta deja
+ * la orden SIN mensajero, nunca apuntando a otra persona— (R4). `nombre` es el nombre COMPLETO
+ * compuesto por `nombreCompletoUsuario` (`lib/utils/nombre-usuario.ts`), la unica fuente de
+ * composicion del repo (R3): no se compone a mano en ningun segundo sitio.
+ *
+ * QUE SIGNIFICA (R7). Es «quien LLEVA la orden AHORA», leido de `orden.mensajero_asignado_id`, y
+ * NUNCA «quien la gestiono». Varios flujos limpian esa asignacion a `null` —generacion de guia,
+ * quitar mensajero, devolucion a bodega, liberacion de reprogramada, recuperacion a bodega y el
+ * barrido del corte diario—, de modo que una orden historica puede quedar sin mensajero aunque
+ * alguien la haya llevado. La identidad de quien la gestiono vive en `gestion_orden.mensajero_id`
+ * y es material de la feature 405.
+ *
+ * DOS CLAVES Y NINGUNA MAS (R1/R6): ni telefono, ni email, ni cedula, ni foto, ni zona, ni
+ * vehiculo, ni ningun campo de estado interno.
+ *
+ * LA 405 REUTILIZA ESTE TIPO (design §11): su mensajero es OTRO dato con la MISMA forma (el de
+ * cada gestion). No debe declarar un segundo tipo de mensajero ni «mejorar» este con campos
+ * nuevos; cambiarlo seria un cambio del contrato publico con su propia entrada de CHANGELOG.
+ */
+export interface ApiMensajeroDTO {
+  id: string; // usuario.id (UUID). Estable; nunca se reasigna.
+  nombre: string; // nombreCompletoUsuario(): nombre + apellidos, sin dobles espacios.
+}
 
 /** Un item del LISTADO paginado (GET coleccion). Campos publicos de la orden (R6). */
 export interface ApiOrdenListItemDTO {
@@ -16,6 +58,12 @@ export interface ApiOrdenListItemDTO {
   direccion: string | null;
   montoCobrar: number | null; // Decimal -> number
   createdAt: Date;
+  /**
+   * ⏳ 2026-09-09 (feature 404, R14/R18) — el mensajero ASIGNADO, o `null` si nadie lleva la orden.
+   * La clave viaja SIEMPRE (R2): `null` es un hecho del negocio que el integrador cuenta en su
+   * denominador, no un «no aplica» que se pueda omitir. `ApiOrdenDetalleDTO` lo hereda.
+   */
+  mensajero: ApiMensajeroDTO | null;
 }
 
 /** Info de paginacion offset/limit del listado (R10), con `total` para recorrer paginas. */

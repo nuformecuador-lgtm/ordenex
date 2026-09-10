@@ -31,6 +31,14 @@ const SECRET_ENC = cifrarSecreto(CLAVE, SECRETO);
 const NUM_REMISION = "REM-DEL-OWNER-A";
 const DESTINATARIO = "Juan Perez"; // PII que NUNCA debe ir al payload/log
 
+/**
+ * ⏳ 2026-09-09 (feature 404) — el mensajero asignado del caso «hay alguien llevandola». Es PII de
+ * un TERCERO y por eso vive aqui arriba junto a `DESTINATARIO`: los asertos de R13 lo buscan por
+ * este mismo literal en todo lo que sale por el logger.
+ */
+const MENSAJERO_ID = "018f2c31-0000-4000-8000-0000000000aa";
+const MENSAJERO_NOMBRE = "Carlos Jimenez Mora";
+
 /** ⏳ 2026-08-22 (268/R24): origin con el que se construye `data.evidenciasUrl`. */
 const ORIGIN = "https://app.ordenex.co";
 const ORDEN_ID = "orden-1";
@@ -65,6 +73,10 @@ const DATOS_BASE: DatosEntregaOrden = {
   causaDevolucion: null,
   // ⏳ 2026-08-22 (268): el hermano, tambien con su nombre propio en el DTO interno.
   causaIncidente: null,
+  // ⏳ 2026-09-09 (404): el caso BASE de este archivo es una orden SIN mensajero asignado, para
+  // que los congeladores de claves de la 256/268 midan la convencion de ausencia (`null`
+  // presente). El caso CON mensajero vive en `webhook-estado-service.mensajero.test.ts`.
+  mensajero: null,
 };
 
 /** Feature 256 — datos de una orden que transiciona a `devuelta` con su causa vigente. */
@@ -211,12 +223,25 @@ describe("R17/R19 — entrega y complete", () => {
     // se ACTUALIZA (no se borra) al ganar `data` una cuarta. Se afirman las claves EXACTAS y su
     // ORDEN, porque la firma se calcula sobre el string serializado en orden de insercion, y
     // los valores uno a uno: ninguno de los tres viejos cambia de nombre, tipo ni valor.
-    expect(Object.keys(body.data)).toEqual(["numGuia", "numRemision", "estado", "motivo"]);
+    //
+    // ⏳ 2026-09-09 (feature 404, R9/R10) — se ACTUALIZA otra vez, por quinta clave: `mensajero`
+    // entra TRAS `motivo`, que es el final del bloque de claves siempre presentes. Se enmienda y
+    // NO se relaja a `toContain` ni a un aserto de longitud: el literal ES el contrato, y lo que
+    // protege es que las cuatro claves de la 256 sigan estando, con su nombre, su tipo y su
+    // posicion. La posicion es load-bearing porque la firma se calcula sobre el string.
+    expect(Object.keys(body.data)).toEqual([
+      "numGuia",
+      "numRemision",
+      "estado",
+      "motivo",
+      "mensajero",
+    ]);
     expect(body.data).toEqual({
       numGuia: 12345,
       numRemision: NUM_REMISION,
       estado: "en_reparto",
       motivo: null,
+      mensajero: null, // 404/R2: la orden base no tiene asignado; la clave viaja igual
     });
     // R2: blindaje del breaking change — la clave vieja `orden` ya no existe en el cuerpo.
     expect(body.orden).toBeUndefined();
@@ -415,11 +440,19 @@ describe("256/R6-R7 — la forma: UNA sola, el campo siempre presente", () => {
     expect(cuerpoDe(entregar)).not.toContain("not_found");
   });
 
-  it("256/R7: `data` tiene EXACTAMENTE las cuatro claves, en orden, tambien en un evento de devolucion", async () => {
+  // ⏳ 2026-09-09 (404/R9/R10): el titulo decia «las cuatro claves» y pasa a CINCO. Se enmienda
+  // el literal con el orden nuevo; sigue siendo una igualdad exacta, no un `toContain`.
+  it("256/R7 (+404): `data` tiene EXACTAMENTE las cinco claves, en orden, tambien en un evento de devolucion", async () => {
     const { service, entregar } = buildService({ datos: datosDevuelta("wrong_number") });
     await service.ejecutar(jobDevuelta());
     const body = JSON.parse(cuerpoDe(entregar));
-    expect(Object.keys(body.data)).toEqual(["numGuia", "numRemision", "estado", "motivo"]);
+    expect(Object.keys(body.data)).toEqual([
+      "numGuia",
+      "numRemision",
+      "estado",
+      "motivo",
+      "mensajero",
+    ]);
     // Plano dentro de `data`, no anidado bajo `devolucion` (A4, descartada).
     expect(body.data.devolucion).toBeUndefined();
   });
@@ -666,11 +699,14 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
     const bodyIncidente = JSON.parse(cuerpoDe(a.entregar));
     expect(bodyIncidente.data.evidenciasUrl).toBe(ENLACE);
     // Orden de claves congelado: la firma se calcula sobre el string serializado.
+    // ⏳ 2026-09-09 (404/R9/R10): pasa de 5 a 6 claves. `mensajero` entra ANTES de `evidenciasUrl`,
+    // que sigue cerrando el objeto y sigue siendo la UNICA clave opcional.
     expect(Object.keys(bodyIncidente.data)).toEqual([
       "numGuia",
       "numRemision",
       "estado",
       "motivo",
+      "mensajero",
       "evidenciasUrl",
     ]);
 
@@ -688,7 +724,14 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
     await service.ejecutar(job());
     const body = JSON.parse(cuerpoDe(entregar));
     expect(Object.keys(body)).toEqual(["evento", "eventoId", "ocurridoAt", "data"]);
-    expect(Object.keys(body.data)).toEqual(["numGuia", "numRemision", "estado", "motivo"]);
+    // ⏳ 2026-09-09 (404/R9/R10): cuatro -> cinco, con `mensajero` al final del bloque presente.
+    expect(Object.keys(body.data)).toEqual([
+      "numGuia",
+      "numRemision",
+      "estado",
+      "motivo",
+      "mensajero",
+    ]);
     expect(body.evento).toBe("orden.estado_actualizado");
   });
 
@@ -845,6 +888,27 @@ describe("R29 — logs sin secreto/URL/PII", () => {
     // mensajes siguen siendo agregados (99/R29).
     for (const causa of CAUSA_DEVOLUCION_SEED) expect(todo).not.toContain(causa);
     expect(todo).not.toContain("motivo");
+  });
+
+  // ⏳ 2026-09-09 (feature 404, R13) — se AMPLIA este bloque en vez de abrir uno paralelo: el
+  // mensajero es PII de un tercero y cae bajo la misma regla que el destinatario y la causa.
+  it("404/R13: con un mensajero asignado, ni su nombre ni su id llegan al logger", async () => {
+    const { service, logs } = buildService({
+      datos: {
+        ...datosDevuelta("not_found"),
+        mensajero: { id: MENSAJERO_ID, nombre: MENSAJERO_NOMBRE },
+      },
+      subPorOwner: { "owner-A": { url: "https://secreta.example.com/hook", secret: SECRET_ENC } },
+      outcome: { status: "transitorio", detalle: "entregar webhook: HTTP 503" },
+    });
+    await service.ejecutar(jobDevuelta()).catch(() => {});
+    const todo = logs.join("\n");
+    expect(logs.length).toBeGreaterThan(0); // el camino que loguea SI se recorrio
+    expect(todo).not.toContain(MENSAJERO_NOMBRE);
+    expect(todo).not.toContain(MENSAJERO_ID);
+    // Tampoco el apellido suelto ni el nombre de la clave: el mensaje sigue siendo agregado.
+    expect(todo).not.toContain("Jimenez");
+    expect(todo).not.toContain("mensajero");
   });
 });
 

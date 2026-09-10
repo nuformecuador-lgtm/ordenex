@@ -204,6 +204,10 @@ const ESTADOS_CANCELABLES_API: readonly string[] = ["en_bodega_central", "en_rut
 // Feature 106 — `select` de los campos PUBLICOS de una orden para el canal integrador, y su
 // mapeo a `ApiOrdenRow` (Decimal -> number, estatus.value plano). Un solo lugar para que el
 // listado y el detalle no diverjan en las columnas que exponen.
+//
+// ⏳ 2026-09-09 (feature 404, R14/R15/R18) — `mensajeroAsignado` entra AQUI y no en cada consumidor:
+// asi el listado y el detalle lo ganan a la vez (`API_ORDEN_DETALLE_SELECT` hace el spread de esta
+// constante) y siguen sin poder divergir, que es la razon por la que esta constante existe.
 const API_ORDEN_SELECT = {
   numGuia: true,
   numRemision: true,
@@ -214,6 +218,11 @@ const API_ORDEN_SELECT = {
   montoCobrar: true,
   createdAt: true,
   estatus: { select: { value: true } },
+  // ⏳ 2026-09-09 (feature 404, R6/R15): una RELACION ANIDADA de la misma `findMany`/`findUnique`
+  // —un LEFT JOIN por la PK de `usuario`—, no una consulta por item: la pagina entera se resuelve
+  // con la consulta que ya se hacia. Se proyectan `id` + las tres columnas de identidad y NADA MAS
+  // (ni telefono, ni email, ni cedula, ni zona, ni vehiculo, ni estado interno).
+  mensajeroAsignado: { select: { id: true, ...NOMBRE_USUARIO_SELECT } },
 } as const;
 
 // Feature 106 + 177 — `select` del DETALLE (campos publicos + evidencias de entrega/rechazo con
@@ -297,6 +306,13 @@ type ApiOrdenSelectRow = {
   montoCobrar: Prisma.Decimal | null;
   createdAt: Date;
   estatus: { value: string };
+  // ⏳ 2026-09-09 (feature 404): `null` cuando `orden.mensajero_asignado_id` es NULL (R2/R23).
+  mensajeroAsignado: {
+    id: string;
+    nombre: string;
+    primerApellido: string | null;
+    segundoApellido: string | null;
+  } | null;
 };
 
 type ApiOrdenDetalleSelectRow = ApiOrdenSelectRow & {
@@ -324,6 +340,13 @@ function toApiOrdenRow(r: ApiOrdenSelectRow): ApiOrdenRow {
     direccion: r.direccion,
     montoCobrar: r.montoCobrar !== null ? r.montoCobrar.toNumber() : null,
     createdAt: r.createdAt,
+    // ⏳ 2026-09-09 (feature 404, R3/R4): el `usuario.id` tal cual y el nombre completo por la
+    // fuente unica —la MISMA `nombreCompletoUsuario` que ya puebla la columna «Mensajero» de la
+    // pantalla de `/ordenes`—, para que la API no publique una composicion distinta de la que el
+    // dueno de la orden ya ve.
+    mensajero: r.mensajeroAsignado
+      ? { id: r.mensajeroAsignado.id, nombre: nombreCompletoUsuario(r.mensajeroAsignado) }
+      : null,
   };
 }
 

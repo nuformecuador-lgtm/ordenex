@@ -4,6 +4,9 @@ import type {
   IWebhookOrdenReader,
 } from "@/lib/interfaces/repositories/IWebhookOrdenReader";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
+// ⏳ 2026-09-09 (feature 404) — la MISMA composicion de nombre que usa la pantalla de `/ordenes`:
+// una sola fuente, aqui no se compone nada a mano (R3).
+import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 
 // Feature 99 (design §7) — lectura minima de la orden + catalogo de estado para la entrega.
 // Solo queries. Separado de `OrdenRepository` para no arrastrar su superficie al handler.
@@ -114,6 +117,12 @@ export class WebhookOrdenReader implements IWebhookOrdenReader {
           take: 1,
           select: { causa: true, createdAt: true },
         },
+        // ⏳ 2026-09-09 (feature 404, R6/R12) — el mensajero ASIGNADO, como UNA RELACION ANIDADA
+        // MAS de esta misma lectura: un LEFT JOIN por la PK de `usuario`, no una consulta aparte.
+        // El reader SIGUE haciendo exactamente 2 llamadas a Prisma (esta y el catalogo de estado).
+        // Se proyectan `id` + las tres columnas de identidad y NADA MAS: ni telefono, ni email, ni
+        // cedula, ni zona, ni vehiculo, ni estado interno (R6).
+        mensajeroAsignado: { select: { id: true, ...NOMBRE_USUARIO_SELECT } },
       },
     });
     // R22: orden inexistente -> `null` -> el handler completa sin entregar.
@@ -144,6 +153,15 @@ export class WebhookOrdenReader implements IWebhookOrdenReader {
       // responde SIEMPRE «cual es la causa vigente»; que se publique o no es POLITICA de
       // contrato y vive en `WebhookEstadoService` (criterio heredado de la 256).
       causaIncidente: causaIncidenteVigente(gestionIncidente, orden.incidentesAdmin[0]),
+      // ⏳ 2026-09-09 (feature 404, R2/R3/R4/R23): `null` cuando la orden no tiene asignado —el
+      // hecho que el integrador necesita contar—, y el `usuario.id` tal cual (sin derivar ni
+      // formatear) mas el nombre completo de la fuente unica cuando lo tiene.
+      mensajero: orden.mensajeroAsignado
+        ? {
+            id: orden.mensajeroAsignado.id,
+            nombre: nombreCompletoUsuario(orden.mensajeroAsignado),
+          }
+        : null,
     };
   }
 }

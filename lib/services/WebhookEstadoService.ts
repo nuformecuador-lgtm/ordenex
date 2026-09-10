@@ -13,6 +13,10 @@ import type {
 } from "@/lib/interfaces/repositories/IWebhookOrdenReader";
 import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
+// ⏳ 2026-09-09 (feature 404, design §D5) — la forma del mensajero se declara UNA sola vez, en el
+// archivo de DTOs publicos del canal, y las tres superficies la importan. Import de TIPO puro: no
+// acopla el service a nada, y `services -> types` es la direccion de siempre.
+import type { ApiMensajeroDTO } from "@/lib/types/api-orden";
 import type { IWebhookSender } from "@/lib/interfaces/external/IWebhookSender";
 import type { WebhookConfig } from "@/lib/config/webhook";
 import { descifrarSecreto } from "@/lib/crypto/webhook-secret-cipher";
@@ -56,14 +60,16 @@ const ESTADO_INCIDENTE = "incidente";
 const PATH_ORDEN_API_KEY = "/api/ordenes/api-key/orden";
 
 /**
- * Forma del `data` del cuerpo. `motivo` SIEMPRE presente (convencion de la 256);
- * `evidenciasUrl` opcional (convencion de la 268). Ver el comentario de `armarData`.
+ * Forma del `data` del cuerpo. `motivo` SIEMPRE presente (convencion de la 256); `mensajero`
+ * SIEMPRE presente (convencion de la 404); `evidenciasUrl` opcional (convencion de la 268, y la
+ * UNICA clave opcional que queda). Ver el comentario de `armarData`.
  */
 interface DataEvento {
   numGuia: number | null;
   numRemision: string;
   estado: string | null;
   motivo: CausaDevolucion | CausaIncidente | null;
+  mensajero: ApiMensajeroDTO | null;
   evidenciasUrl?: string;
 }
 
@@ -231,6 +237,21 @@ export class WebhookEstadoService {
    *  - `evidenciasUrl` se OMITE cuando no aplica. Es ADITIVO y OPCIONAL desde el dia uno
    *    (268/R19/R24): nunca se publico con forma unica, y R24 exige literalmente que «no viaje»
    *    cuando el estado no es `incidente`.
+   *
+   * ⏳ 2026-09-09 (feature 404, R2/R8/R10, design §D3) — `mensajero` cae en el PRIMER grupo:
+   * SIEMPRE presente, `null` cuando nadie lleva la orden. Y cae ahi por lo que distingue a los dos
+   * grupos, no por parecido: en `evidenciasUrl` la ausencia significa «NO APLICA» (no hay
+   * incidente, no hay nada que enlazar) y omitirla ES informacion; en `mensajero` significaria
+   * «NADIE LA LLEVA», que es un hecho del negocio que el integrador necesita leer para su
+   * denominador —`null` lo dice; omitir la clave lo esconde detras de una ramificacion por
+   * presencia—. Ademas es lo que se pidio literalmente. Con esto `data` tiene CINCO claves siempre
+   * presentes y `evidenciasUrl` sigue siendo la UNICA opcional.
+   *
+   * ⚠️ SU POSICION ES LOAD-BEARING, como la de todas: va tras `motivo` (final del bloque siempre
+   * presente) y ANTES del bloque de `evidenciasUrl`, que sigue cerrando el objeto. La firma se
+   * calcula sobre el string ya serializado, asi que mover esta linea cambia el cuerpo y cambia la
+   * firma; ademas, insertar aqui deja el diff respecto del cuerpo de ayer como una INSERCION y no
+   * como un reordenamiento (R10).
    */
   private armarData(datos: DatosEntregaOrden, ordenId: string): DataEvento {
     const data: DataEvento = {
@@ -254,6 +275,12 @@ export class WebhookEstadoService {
       // La POLITICA de contrato vive AQUI, no en el repositorio, que siempre responde «cual es la
       // causa vigente de la orden» sea cual sea el estado destino del evento.
       motivo: this.motivoPublicado(datos),
+      // ⏳ 2026-09-09 (feature 404, R7/R8/R11): el mensajero ASIGNADO que el reader acaba de leer
+      // —«quien la LLEVA», no «quien la gestiono»—, vigente en el instante de ESTA entrega. No hay
+      // ningun `mensajeroPublicado()` paralelo a `motivoPublicado()` a proposito: aqui la politica
+      // de contrato es «se publica siempre», y una indireccion sin decision dentro solo esconde
+      // que no hay decision.
+      mensajero: datos.mensajero,
     };
 
     const evidenciasUrl = this.evidenciasUrlDe(datos.estado, ordenId);

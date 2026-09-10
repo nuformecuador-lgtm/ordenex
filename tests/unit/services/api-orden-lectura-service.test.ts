@@ -23,9 +23,14 @@ function row(overrides: Partial<ApiOrdenRow> = {}): ApiOrdenRow {
     direccion: "Calle 1",
     montoCobrar: 1500,
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
+    // ⏳ 2026-09-09 (feature 404): campo REQUERIDO de `ApiOrdenRow`. Por defecto, sin asignado.
+    mensajero: null,
     ...overrides,
   };
 }
+
+/** ⏳ 2026-09-09 (404) — el mensajero que devolveria el repo, ya compuesto por el repositorio. */
+const MENSAJERO = { id: "018f2c31-0000-4000-8000-0000000000aa", nombre: "Carlos Jimenez Mora" };
 
 function fakeRepo(overrides: Record<string, unknown> = {}) {
   return {
@@ -84,6 +89,86 @@ describe("ApiOrdenLecturaService.listar (feature 106, T8)", () => {
     expect(res.pagination).toEqual({ limit: 50, offset: 0, total: 1 });
     expect(res.items[0]).toMatchObject({ numGuia: 10234, estado: "en_bodega_central" });
     expect(res.items[0]).not.toHaveProperty("estatusValue");
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// ⏳ 2026-09-09 — Feature 404 (T5): el DTO del item lleva `mensajero`, tal cual lo dio el repo.
+// -----------------------------------------------------------------------------------------------
+
+describe("ApiOrdenLecturaService.listar — `mensajero` en el DTO (feature 404)", () => {
+  it("404/R14: el DTO del item lleva `mensajero` TAL CUAL lo dio el repo (no lo recompone)", async () => {
+    const repo = fakeRepo({
+      listByOwner: vi.fn().mockResolvedValue({ items: [row({ mensajero: MENSAJERO })], total: 1 }),
+    });
+    const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls());
+
+    const res = await svc.listar(ACTOR, { limit: 50, offset: 0 });
+
+    expect(res.items[0].mensajero).toEqual({
+      id: "018f2c31-0000-4000-8000-0000000000aa",
+      nombre: "Carlos Jimenez Mora",
+    });
+  });
+
+  it("404/R1+R6: el objeto `mensajero` del DTO tiene EXACTAMENTE dos claves", async () => {
+    // El repo devuelve una fila con un campo de mas (lo que pasaria si alguien ampliara la
+    // proyeccion sin actualizar el tipo): el DTO no debe dejarlo pasar por copia ciega.
+    const repo = fakeRepo({
+      listByOwner: vi.fn().mockResolvedValue({
+        items: [row({ mensajero: MENSAJERO })],
+        total: 1,
+      }),
+    });
+    const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls());
+
+    const res = await svc.listar(ACTOR, { limit: 50, offset: 0 });
+
+    expect(Object.keys(res.items[0].mensajero!).sort()).toEqual(["id", "nombre"]);
+    // Y el item entero sigue teniendo los nueve publicados + `mensajero`, ni uno mas (R16).
+    expect(Object.keys(res.items[0]).sort()).toEqual([
+      "createdAt",
+      "destinatario",
+      "direccion",
+      "estado",
+      "mensajero",
+      "montoCobrar",
+      "numGuia",
+      "numRemision",
+      "producto",
+      "telefonoDest",
+    ]);
+  });
+
+  it("404/R2+R23: sin asignado el DTO lleva la clave con `null`, no la omite", async () => {
+    const repo = fakeRepo();
+    const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls());
+
+    const res = await svc.listar(ACTOR, { limit: 50, offset: 0 });
+
+    expect("mensajero" in res.items[0]).toBe(true);
+    expect(res.items[0].mensajero).toBeNull();
+    expect(JSON.stringify(res.items[0])).toContain('"mensajero":null');
+  });
+
+  it("404/R17: `mensajero` no llega al repo como criterio: los params del listado no cambian", async () => {
+    // El service traduce `estado`/`desde`/`hasta`/`numGuia`/`numRemision` y NADA MAS. Si alguien
+    // anadiera un filtro por mensajero, esta igualdad exacta de argumentos se pondria roja.
+    const repo = fakeRepo();
+    const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls());
+
+    await svc.listar(ACTOR, { limit: 50, offset: 0 });
+
+    expect(repo.listByOwner).toHaveBeenCalledWith({
+      ownerId: "store-1",
+      estatusId: undefined,
+      skip: 0,
+      take: 50,
+    });
+    const args = repo.listByOwner.mock.calls[0][0] as Record<string, unknown>;
+    expect(args).not.toHaveProperty("mensajero");
+    expect(args).not.toHaveProperty("mensajeroAsignadoId");
+    expect(args).not.toHaveProperty("orderBy");
   });
 });
 

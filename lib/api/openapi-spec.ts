@@ -931,9 +931,13 @@ export const openApiSpec = {
             // ya no describe el objeto entero: hay una QUINTA clave, `evidenciasUrl`, que
             // es OPCIONAL y se OMITE salvo en `incidente`. Se dice cual es cual para que el
             // consumidor no tenga que deducirlo.
+            // ⏳ 2026-09-09 (feature 404/R24) — la frase decía «las CUATRO claves… están SIEMPRE
+            // presentes». Pasan a ser CINCO: `mensajero` se suma al bloque presente-con-`null`,
+            // por la misma razón que `motivo` y no por la de `evidenciasUrl` (ver su description).
+            // `evidenciasUrl` sigue siendo la ÚNICA opcional.
             description:
-              "Las cuatro claves `numGuia`, `numRemision`, `estado` y `motivo` están SIEMPRE presentes, sea cual sea el estado: el consumidor no ramifica por estado para saber si existen (`motivo` viaja como `null` cuando no aplica, nunca omitido). A ellas se suma UNA clave OPCIONAL, `evidenciasUrl`, que SÍ se omite salvo en los eventos con `estado: \"incidente\"`.",
-            required: ["numGuia", "numRemision", "estado", "motivo"],
+              "Las cinco claves `numGuia`, `numRemision`, `estado`, `motivo` y `mensajero` están SIEMPRE presentes, sea cual sea el estado: el consumidor no ramifica por estado para saber si existen (`motivo` y `mensajero` viajan como `null` cuando no aplica, nunca omitidos). A ellas se suma UNA clave OPCIONAL, `evidenciasUrl`, que SÍ se omite salvo en los eventos con `estado: \"incidente\"`.",
+            required: ["numGuia", "numRemision", "estado", "motivo", "mensajero"],
             properties: {
               numGuia: {
                 type: ["integer", "null"],
@@ -995,7 +999,47 @@ export const openApiSpec = {
                   "se emite NUNCA en este webhook—, ni ningún otro dato del destinatario.",
                 ].join("\n"),
               },
-              // feature 268/R24/R30 — la QUINTA clave, y la unica OPCIONAL del objeto:
+              // ⏳ 2026-09-09 (feature 404/R24) — la QUINTA clave SIEMPRE PRESENTE. Va aqui, tras
+              // `motivo` y antes de `evidenciasUrl`, porque el orden de las propiedades del
+              // contrato refleja el orden REAL de las claves del cuerpo (la firma se calcula sobre
+              // el string serializado).
+              mensajero: {
+                type: ["object", "null"],
+                required: ["id", "nombre"],
+                additionalProperties: false,
+                properties: {
+                  id: {
+                    type: "string",
+                    description:
+                      "Identificador ESTABLE del mensajero: un UUID en TEXTO, no un entero. El mismo mensajero produce el mismo `id` en el webhook, en el listado y en el detalle, y ese `id` no se reasigna nunca a otra persona: es tu clave de agrupación para métricas por mensajero.",
+                  },
+                  nombre: {
+                    type: "string",
+                    description:
+                      "Nombre completo de la persona (nombre + apellidos). Es un texto para mostrar y PUEDE CAMBIAR (una corrección de datos lo reescribe): no agrupes por él, agrupá por `id`.",
+                  },
+                },
+                description: [
+                  "Mensajero ASIGNADO a la orden, o `null` si en ese momento no la lleva nadie.",
+                  "",
+                  "**La clave viaja SIEMPRE**, igual que `motivo`: `null` es un valor con significado",
+                  "—«todavía nadie la lleva»—, no una omisión. No ramifiques por «la clave existe».",
+                  "",
+                  "⚠️ **Es QUIÉN LA LLEVA, no quién la gestionó.** Sale de la asignación vigente de la",
+                  "orden, así que es el mensajero VIGENTE EN EL MOMENTO DE LA ENTREGA del evento —la",
+                  "misma regla que rige a `motivo`—: si la orden se reasigna entre dos entregas del",
+                  "mismo `eventoId`, la segunda lleva el mensajero de entonces. Y varios flujos",
+                  "LIMPIAN la asignación (generación de guía, quitar mensajero, devolución o",
+                  "recuperación a bodega, liberación de una reprogramada, el barrido del cierre",
+                  "diario), de modo que una orden que alguien llevó puede quedar con `mensajero:",
+                  "null` más tarde. Para «quién gestionó cada intento» hace falta el historial de",
+                  "gestiones, que este evento NO transporta.",
+                  "",
+                  "Lleva EXCLUSIVAMENTE `id` y `nombre`. Ningún otro dato personal del mensajero",
+                  "(teléfono, email, cédula, foto, zona, vehículo) se publica por este canal.",
+                ].join("\n"),
+              },
+              // feature 268/R24/R30 — la clave OPCIONAL del objeto, y la unica:
               // deliberadamente FUERA de `required`.
               evidenciasUrl: {
                 type: "string",
@@ -1033,6 +1077,8 @@ export const openApiSpec = {
               numRemision: "REM-0001",
               estado: "devuelta",
               motivo: "not_found",
+              // ⏳ 2026-09-09 (feature 404/R2): el ejemplo del caso SIN mensajero asignado.
+              mensajero: null,
             },
           },
           {
@@ -1045,6 +1091,12 @@ export const openApiSpec = {
               numRemision: "REM-0002",
               estado: "incidente",
               motivo: "robado",
+              // ⏳ 2026-09-09 (feature 404/R2/R24): el ejemplo del caso CON mensajero asignado, y
+              // en su posicion real dentro del cuerpo (tras `motivo`, antes de `evidenciasUrl`).
+              mensajero: {
+                id: "018f2c31-0000-4000-8000-0000000000aa",
+                nombre: "Carlos Jiménez Mora",
+              },
               evidenciasUrl:
                 "https://app.ordenex.co/api/ordenes/api-key/orden/018f2c31-0000-4000-8000-000000000002",
             },
@@ -1072,7 +1124,11 @@ export const openApiSpec = {
       },
       OrdenListItem: {
         type: "object",
-        description: "Item público de una orden propia (sin ids internos ni PII de terceros).",
+        // ⏳ 2026-09-09 (feature 404/R25) — la description decía «sin ids internos ni PII de
+        // terceros» a secas, y eso ya no describe el item: publica el NOMBRE del mensajero
+        // asignado. La exclusión queda ACOTADA, no derogada, y se dice con su alcance.
+        description:
+          "Item público de una orden propia: sin ids internos de la orden ni de la tienda. La única excepción a «sin datos personales de terceros» es el campo `mensajero`, que lleva el `id` y el NOMBRE del mensajero ASIGNADO —y nada más— hacia el dueño de la orden, que ya ve ese mismo nombre en la aplicación. El resto de los datos personales del mensajero (teléfono, email, cédula, foto, zona, vehículo) sigue excluido, y también el mensajero que GESTIONÓ la orden y el texto libre que escribe al gestionarla.",
         required: [
           "numGuia",
           "numRemision",
@@ -1083,6 +1139,8 @@ export const openApiSpec = {
           "direccion",
           "montoCobrar",
           "createdAt",
+          // ⏳ 2026-09-09 (feature 404/R2/R24): SIEMPRE presente; `null` cuando no hay asignado.
+          "mensajero",
         ],
         properties: {
           numGuia: { type: ["integer", "null"], description: "Número de guía (null si aún no asignado)." },
@@ -1094,6 +1152,39 @@ export const openApiSpec = {
           direccion: { type: ["string", "null"] },
           montoCobrar: { type: ["number", "null"], description: "Monto a cobrar (COD)." },
           createdAt: { type: "string", format: "date-time" },
+          mensajero: {
+            type: ["object", "null"],
+            required: ["id", "nombre"],
+            additionalProperties: false,
+            properties: {
+              id: {
+                type: "string",
+                description:
+                  "Identificador ESTABLE del mensajero: un UUID en TEXTO, no un entero. El mismo mensajero produce el mismo `id` aquí, en el detalle y en el webhook, y nunca se reasigna a otra persona: agrupá por este valor.",
+              },
+              nombre: {
+                type: "string",
+                description:
+                  "Nombre completo de la persona (nombre + apellidos). Texto para mostrar; PUEDE cambiar si se corrigen sus datos, así que no lo uses como clave.",
+              },
+            },
+            description: [
+              "Mensajero ASIGNADO a la orden, o `null` si no la lleva nadie.",
+              "",
+              "**La clave está SIEMPRE presente**: `null` significa «todavía nadie la lleva», no «no",
+              "se sabe» y no una omisión.",
+              "",
+              "⚠️ **Es QUIÉN LA LLEVA en el momento de la lectura, no quién la gestionó.** Varios",
+              "flujos limpian la asignación (generación de guía, quitar mensajero, devolución o",
+              "recuperación a bodega, liberación de una reprogramada, el barrido del cierre diario),",
+              "así que una orden que alguien llevó puede devolver `null` más tarde. Para «quién",
+              "gestionó cada intento» hace falta el historial de gestiones, que este recurso NO",
+              "expone.",
+              "",
+              "No se puede filtrar ni ordenar el listado por este campo: un parámetro de query que lo",
+              "intente se ignora, como cualquier otra clave desconocida.",
+            ].join("\n"),
+          },
         },
       },
       Pagination: {
