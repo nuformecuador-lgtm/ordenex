@@ -4838,7 +4838,7 @@
       "title": "el operador puede autorizar la asignacion de una orden que no se pudo ubicar",
       "description": "Una direccion descriptiva que el geocodificador no sabe ubicar bloquea la asignacion, aunque el mensajero pueda llegar con la referencia.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
       "complexity": "media",
       "spec_path": "specs/407-autorizar-asignacion-sin-ubicacion/",
