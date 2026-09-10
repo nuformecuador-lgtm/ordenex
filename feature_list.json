@@ -4814,10 +4814,9 @@
       "description": "El integrador solo ve el resultado final, no los intentos, asi que no puede medir reintentos ni tiempos por mensajero.",
       "zone": "backend",
       "status": "in_progress",
-      "branch": "feat/405-gestiones-en-detalle-api",
       "sdd": true,
       "complexity": "media",
-      "branch": null,
+      "branch": "feat/405-gestiones-en-detalle-api",
       "depends_on": 404,
       "status_note": "FASE 2 pedida por el integrador (Daniel Marin) el 2026-09-07, explicitamente SIN AFAN: arreglo `gestiones[]` en el detalle con { fecha, tipo, estado_resultante, motivo, mensajero } para medir reintentos y tiempos. || OJO CON `motivo`, son DOS cosas distintas que comparten nombre: la causa TIPIFICADA (enum cerrado, esa si se publica hoy en el webhook) y el TEXTO LIBRE que escribe el mensajero (gestion_orden.motivo), que NO SE EMITE JAMAS por decision expresa (256/R22). El spec debe confirmar con el humano cual de las dos pidio el integrador antes de disenar; lo probable es la tipificada. || Depende de la 404 porque reusa la forma del campo mensajero. || Sin storage_path, sin bucket y sin ids internos, como exige el DTO publico de la 106."
     },
