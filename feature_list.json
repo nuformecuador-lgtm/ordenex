@@ -4867,10 +4867,11 @@
       "title": "el panel de notificaciones se rediseña, avisa lo que hay que hacer y lleva a resolverlo",
       "description": "La campana cuenta mensajes sin leer en vez de cosas por hacer, no dice cuando paso nada y no lleva a ninguna parte: 26 de 39 personas no la han abierto nunca.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "alta",
-      "branch": null,
+      "spec_path": "specs/409-panel-notificaciones-accionable/",
+      "branch": "feat/409-panel-notificaciones-accionable",
       "depends_on": null,
       "status_note": "MEDIDO EN PRODUCCION el 2026-09-10: 1.214 avisos emitidos y 26 de 39 personas NO han abierto ninguno. Por rol: 1 de 5 tiendas, 1 de 4 admins, 4 de 10 adminSatelite, 8 de 18 mensajeros. Los dos roles a los que mas urge avisar son los que menos la usan. || DISEÑO APROBADO por el humano el 2026-09-10 (lienzo en `design-notificaciones/`). CUATRO PARTES: (1) el panel separa REQUIEREN TU ACCION de PARA TU INFORMACION, con titulo, contexto, tiempo relativo y boton; (2) cada aviso accionable lleva ATAJO a donde se resuelve; (3) la campana cuenta SOLO lo accionable y lo dice con palabras (2 por hacer), y se apaga sola al llegar a cero -hoy cuenta no-leidas, que no es lo mismo-; (4) DOS AVISOS NUEVOS: a la tienda sus novedades sin gestionar y al admin las ordenes por devolver represadas, los dos AGREGADOS (un aviso con el numero dentro, jamas uno por orden), UNO AL DIA por tipo y con el plazo dicho -patron ya probado en `gasto_fijo_cobro_pendiente`-. || EL ATAJO SE EVALUA POR AVISO, y el criterio es: solo si existe una pantalla donde ESA persona pueda resolverlo. `geocodificacion_caida` es el contraejemplo y NO lleva atajo: se arregla en la consola de Google, no en la app. || El plazo de los 5 dias se cuenta desde que el paquete entra a bodega (decision del humano del 2026-09-10, ya vigente): el texto del aviso debe decir eso y no otra cosa. || Hoy el DTO no tiene destino ni instante relativo: el campo del atajo es aditivo. Componente: `components/shared/NotificationsBell.tsx`."
     },
