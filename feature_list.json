@@ -4798,10 +4798,11 @@
       "title": "el mensajero de la orden viaja en el webhook y en la API de lectura",
       "description": "Ni el evento de cambio de estado ni el listado ni el detalle dicen que mensajero lleva la orden, asi que el integrador no puede medir la operacion por mensajero.",
       "zone": "backend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
-      "branch": null,
+      "spec_path": "specs/404-mensajero-en-webhook-y-api/",
+      "branch": "feat/404-mensajero-en-webhook-y-api",
       "depends_on": null,
       "status_note": "PEDIDA POR UN INTEGRADOR REAL (Daniel Marin) el 2026-09-07: quiere medir tasa de entrega, novedades y devoluciones por mensajero y por zona desde su dashboard. Campo ADITIVO `mensajero` {id, nombre}, null si no hay asignado, en el evento orden.estado_actualizado y en GET /api/ordenes/api-key (listado y detalle). || LA PUERTA DE PRIVACIDAD YA ESTA FIRMADA por el humano el 2026-09-09: el contrato publico de la 106 excluye «datos personales de terceros (p. ej. el mensajero)», y el humano autoriza la excepcion PARA EL NOMBRE con este argumento: la tienda ya ve el nombre del mensajero en la UI, asi que la API no expone a esa tienda nada que no tuviera. El spec DEBE verificar esa premisa en el codigo y dejarla escrita; si resulta falsa, para y pregunta. || BARATA: OrdenRepository ya construye {id, nombre} con nombreCompletoUsuario. El payload del webhook (DataEvento) hoy lleva numGuia, numRemision, estado, motivo y evidenciasUrl opcional, y ya tiene precedente de campo aditivo opcional. || 256/R22 sigue en pie: el TEXTO LIBRE gestion_orden.motivo no se emite jamas."
     },
