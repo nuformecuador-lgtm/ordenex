@@ -4854,13 +4854,14 @@
       "title": "el motivo de un rechazo automatico se lee en lenguaje humano",
       "description": "El motivo de un rechazo automatico se pinta con el texto crudo del sistema, y el tooltip de al lado lo explica mejor que el propio dato.",
       "zone": "frontend",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "baja",
       "spec_path": "specs/408-motivo-rechazo-automatico-legible/",
       "branch": "feat/408-motivo-rechazo-automatico-legible",
       "depends_on": null,
-      "status_note": "REPORTADA POR EL HUMANO el 2026-09-10 y VERIFICADA: en el detalle de un cierre, la columna Motivo de una gestion `rechazada` pinta `g.motivo` crudo, que para las sinteticas del cron 99 es la plantilla `escalado SLA <causa>` -jerga de programador, y con la sigla SLA que este repo decidio NO mostrar en pantalla-. Al lado, el badge de origen lleva un tooltip que SI esta en cristiano: «Rechazo automatico por vencerse el plazo de la devolucion (no lo hizo el mensajero)». El tooltip explica mejor que el dato. || SE TRADUCE AL PINTAR, no se reescribe el historico: la causa a lenguaje humano (`wrong_address` -> direccion incorrecta, `wrong_number` -> telefono incorrecto, `not_found` -> no se encontro al destinatario) mas la explicacion del automatismo. || Sitio medido: `renderRechazoOrigen` y la columna `motivo` en `app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx`; los literales viven en `cierre-labels.ts`. Frontend puro, sin tocar la base."
+      "status_note": "REPORTADA POR EL HUMANO el 2026-09-10 y VERIFICADA: en el detalle de un cierre, la columna Motivo de una gestion `rechazada` pinta `g.motivo` crudo, que para las sinteticas del cron 99 es la plantilla `escalado SLA <causa>` -jerga de programador, y con la sigla SLA que este repo decidio NO mostrar en pantalla-. Al lado, el badge de origen lleva un tooltip que SI esta en cristiano: «Rechazo automatico por vencerse el plazo de la devolucion (no lo hizo el mensajero)». El tooltip explica mejor que el dato. || SE TRADUCE AL PINTAR, no se reescribe el historico: la causa a lenguaje humano (`wrong_address` -> direccion incorrecta, `wrong_number` -> telefono incorrecto, `not_found` -> no se encontro al destinatario) mas la explicacion del automatismo. || Sitio medido: `renderRechazoOrigen` y la columna `motivo` en `app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx`; los literales viven en `cierre-labels.ts`. Frontend puro, sin tocar la base. || CERRADA 2026-09-10, PR #775 mergeado a dev (merge commit 84deb833). Reviewer APROBADO, 0 bloqueantes, 12/12 requisitos verificados por el y las 7 mutaciones REAPLICADAS por su cuenta, ninguna superviviente. MANDA EL VOCABULARIO YA APROBADO en la 73 (`CAUSA_DEVOLUCION_LABEL`), no uno nuevo: un concepto, un nombre. || DOS VARIANTES, UN SOLO BOOLEANO: `motivoGestionLegible(motivo, hayMarcadorDeOrigen)` y los 18 puntos de llamada pasan siempre `gestion.esRechazoSla`, el mismo que decide si el marcador se pinta, asi que no pueden desincronizarse. En `/cierre-dia` ese booleano va SIEMPRE false por decision de la 102 (`CierreDiaRepository.ts:295`), no hay marcador y el texto es el unico portador: por eso alli se lee entero y se sostiene solo. || FALLO MUDO CAZADO: pasar `true` fijo en los 8 llamadores de `/cierre-dia` no rompe nada visible, solo acorta el texto y deja al mensajero sin saber que el rechazo no fue suyo. Muere con 6 rojos en 2 archivos. || HUECO DECLARADO Y CERRADO POR EL REVIEWER: un `false` fijo es hoy INDISTINGUIBLE del codigo correcto -el servidor solo produce false ahi- y no se puede proteger sin un test de «true -> texto corto» que ATORNILLARIA el bug. El implementador lo declaro en vez de fabricar una proteccion falsa; el reviewer lo reprodujo y lo dio por cerrado. || Gate COMPLETO con .env: 27.177 tests, 154 archivos de integration/db ejecutados. Los rojos de `notificacion-evento-*-migration` son AJENOS: la base local compartida tiene los valores de enum de la 409, aun en rama; probado corriendo tambien dev limpio, con los mismos rojos. NO se metio nada en baseline-rojos.json. || El comentario que decia «trece puntos de llamada» se corrigio a 18 antes de mergear, con el desglose al lado: la familia «comentario que queda mintiendo» no se deja pasar.",
+      "merged_pr": 775
     },
     {
       "id": 409,
@@ -4923,6 +4924,18 @@
       "branch": null,
       "depends_on": null,
       "status_note": "DESTAPADA AL ESPECIFICAR LA 410 el 2026-09-10: el lienzo aprobado promete al mensajero «tenes N ordenes para mañana» y NO EXISTE NADA — ni valor en el enum, ni emisor, ni cron, ni productor. Medido, no supuesto. || ES LA MAS CARA DE LAS DOS y por eso va aparte: necesita un cron con hora propia, decidir a que hora del dia anterior se congela «lo de mañana» (una asignacion posterior cambiaria el numero ya avisado), y que hacer cuando el numero cambia despues de avisar. Ninguna de esas tres preguntas la responde el canal. || OJO CON LA HORA: `fecha_reparto` es una fecha calendario CR y las cotas correctas contra columnas `timestamp` son `inicioDelDiaCREnUtc`/`inicioDelDiaSiguienteCREnUtc`, nunca `startOfDayCR` -trampa ya documentada en `lib/analytics/ranges.ts`-. || Aviso AGREGADO por definicion (un numero, no una notificacion por orden) y con atajo a `/mis-asignaciones`. || NO ES URGENTE: nace de una promesa del diseño, no de un incidente."
+    },
+    {
+      "id": 414,
+      "title": "el comprobante del mensajero le atribuye un rechazo que hizo el sistema",
+      "description": "En el comprobante, el texto del motivo dice que el rechazo fue automatico mientras el distintivo de al lado dice Manual: la fila se contradice.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "baja",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "DESTAPADA POR EL REVIEWER DE LA 408 el 2026-09-10, y MEDIDA CON UNA SONDA, no supuesta: en el comprobante del mensajero conviven el texto largo del motivo -que dice que lo rechazo el sistema al vencerse el plazo- y el distintivo «Manual», cuyo tooltip afirma «Rechazo registrado manualmente por el mensajero». La fila se contradice sola y le atribuye al mensajero un rechazo que no hizo. || ES PREEXISTENTE de la 102 y quedo FUERA del alcance de la 408 a proposito: sus dos arreglos posibles -rediseñar el marcador, o la alternativa G del spec- estan declarados fuera alli. La 408 no lo introdujo; lo hizo visible al poner un texto que si dice la verdad. || RAIZ MEDIDA: `CierreDiaRepository.ts:295` fija `esRechazoSla: false` para la vista del mensajero por decision expresa de la 102, asi que el marcador cae siempre en la rama «Manual» aunque el rechazo sea del cron. El arreglo honesto pasa por decidir que hace ese distintivo cuando el origen no se deriva, no por tocar el texto -que ya es correcto-. || Frontend puro."
     }
   ]
 }
