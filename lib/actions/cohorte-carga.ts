@@ -75,11 +75,19 @@ function construirServicio(now: () => Date): CohorteCargaService {
  * la vertical, incluidas las seis facetas y el rango. Ningun parametro propio de esta ficha: que
  * la barra mueva las ocho lecturas a la vez es la razon de que compartan filtro.
  *
- * SU SUPERFICIE (retirado el `@sin-superficie` el 2026-09-10, B7): la consume
+ * SU SUPERFICIE (B7, 2026-09-10): la consume
  * `app/(app)/analitica/_components/entregas/CohorteCargaTabla.tsx`, que monta
- * `app/(app)/analitica/page.tsx` dentro de `FiltroEntregasProvider`. La anotacion vivio
- * exactamente lo que tardo en existir la tabla — una excepcion que sobrevive a su motivo deja de
- * significar nada, y `superficie-de-uso.guardia` la exige retirada en cuanto esto es alcanzable.
+ * `app/(app)/analitica/page.tsx` dentro de `FiltroEntregasProvider`.
+ *
+ * Hasta ese commit esto llevaba la anotacion de excepcion de `superficie-de-uso.guardia` —el
+ * backend iba por delante y ningun modulo alcanzable lo importaba—, y se retiro en el MISMO
+ * commit que monto la tabla: una excepcion que sobrevive a su motivo deja de significar nada, y
+ * ese guardia la exige quitada en cuanto lo anotado vuelve a ser alcanzable.
+ *
+ * ⚠ Y por eso esta nota NO escribe el nombre de la anotacion, ni entre comillas ni en prosa: ese
+ * censo lee el TEXTO CRUDO del archivo, comentarios incluidos. Contar aqui que se retiro
+ * escribiendola de nuevo es la clase de detalle que hoy pasa y que la proxima vez que alguien
+ * afine ese regex deja este archivo rojo por un motivo que nadie adivinaria.
  */
 export async function consultarCohorteCarga(
   raw: unknown,
