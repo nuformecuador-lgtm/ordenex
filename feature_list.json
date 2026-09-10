@@ -4736,6 +4736,82 @@
       "complexity": "baja",
       "branch": "fix/399-aviso-ubicacion-segun-contexto",
       "status_note": "VERIFICADA EN PRODUCCION el 2026-09-08: el despliegue de la release #758 NO SE HABIA CREADO -- el PR estaba MERGED y prod apuntaba al commit correcto, pero Vercel no construyo nada y produccion seguia sirviendo la build anterior. Se redisparo con un commit vacio en prod (c359b08e) y esta vez si: despliegue en verde, migracion 20260908160000 aplicada y sin revertir, catalogos en 52 y 34 (los previstos, ni uno mas) y CERO errores de runtime. || CERRADA el 2026-09-08. PR #757, release PR #758 (commit 0c0d3312). Sin migracion propia. || Distingue CUATRO contextos, no dos: app instalada, navegador con el sitio bloqueado, navegador con el sitio YA concedido -donde quien niega es el telefono- y aviso sin contestar. El navegador embebido de WhatsApp NO se detecta y se declara: no hay API que lo diga y el user agent es reescribible. En iPhone la ruta de Ajustes que se da es la de Android. || EN CURSO desde el 2026-09-08, en worktree aislado. Sin migracion. Zona frontend, no choca con la 398 (cierres-admin). || REPORTADO EN CAMPO el 2026-09-08: una mensajera con la ubicacion del telefono ENCENDIDA no podia registrar una entrega. Samsung Galaxy S25 Ultra. || DIAGNOSTICO MEDIDO EN EL CODIGO, no supuesto: el mensaje solo sale en el desenlace `denegado`, que capturarUbicacion devuelve UNICAMENTE con el codigo 1 (PERMISSION_DENIED). Los fallos tecnicos -timeout, no disponible, contexto inseguro- tienen otro camino y NO muestran ese texto. Asi que el permiso del sitio o del navegador esta denegado de verdad; la ubicacion del telefono no es el problema. || LA CAUSA DEL MENSAJE IMPOSIBLE: public/manifest.json declara display standalone, asi que abierta desde el icono NO HAY barra de direcciones NI candado. El texto pide «activa el permiso desde el candado de la barra de direcciones», que en esa pantalla no existe. En Android una PWA instalada se gestiona en Ajustes > Aplicaciones > Ordenex > Permisos > Ubicacion. || TRABAJO: detectar el contexto (display-mode standalone, o navegador embebido tipo WhatsApp) y dar la instruccion correcta en cada uno. Mirar tambien si conviene usar navigator.permissions.query para distinguir denegado-de-sitio de denegado-de-navegador. || AFECTA A TODOS LOS MENSAJEROS: son precisamente ellos a quienes se les pide instalarla."
+    },
+    {
+      "id": 400,
+      "title": "un fallo de configuracion del geocodificador no debe bloquear la asignacion",
+      "description": "El gate de asignabilidad trata igual una direccion irresoluble y un proveedor que rechaza las peticiones; cuando la causa es propia debe dejar asignar la orden marcada sin ubicacion, y el mensaje dejar de decir 'Direccion no encontrada'.",
+      "zone": "fullstack",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "media",
+      "branch": "feat/400-fallo-config-no-bloquea-asignacion",
+      "depends_on": null,
+      "status_note": "MEDIDO EN PRODUCCION el 2026-09-09: la Geocoding API rechaza todo desde el 8-sep 19:40 (REQUEST_DENIED, que el cliente traduce a config_invalida) y el gate lo presenta como 'Direccion no encontrada'. De las 43 ordenes represadas, 42 lo estaban por la credencial y solo 1 por una direccion real irresoluble. || EL MODO DEGRADADO YA EXISTE Y ESTA PROBADO: R37 excluye de la optimizacion las ordenes sin coordenadas sin abortarla, R28 las muestra al final de la lista del mensajero y R30 avisa mientras las haya. El unico que lo impide es el gate. || BARATA: JobDTO.lastError ya llega al gate, sin migracion ni cambio de repositorio. El desenlace de configuracion debe viajar con un marcador estable, NO comparando substrings del texto del error. || PUERTA YA DECIDIDA por el humano: deja pasar SOLO cuando el fallo es nuestro; ZERO_RESULTS sigue bloqueada. || NO CONFUNDIR con la 270, que va de la CALIDAD de la coordenada (centroides que se hacen pasar por la casa del cliente), no de su ausencia.",
+      "spec_path": "specs/400-fallo-configuracion-geocodificador-no-bloquea/"
+    },
+    {
+      "id": 401,
+      "title": "la caida del geocodificador no se avisa a nadie ni se recupera sola",
+      "description": "Los jobs de geocodificacion muertos por un fallo de configuracion no notifican a nadie y no se reintentan cuando el proveedor vuelve.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "branch": null,
+      "depends_on": 400,
+      "status_note": "MEDIDO el 2026-09-09: el sistema estuvo 19 horas sin geocodificar una sola direccion y ninguna alerta se disparo; lo detecto el humano por las ordenes que no podia asignar. || 25 jobs quedaron en failed y NO se reintentan solos: aunque la credencial se arregle, el gate los seguira leyendo como bloqueo permanente hasta que alguien los reencole a mano. || SIN ESTA FICHA la 400 queda coja: deja ordenes asignadas que ya nunca reciben coordenadas. || Se apoya en la tabla notificacion y el cron de jobs, ambos ya existentes.",
+      "spec_path": "specs/401-geocodificador-caido-avisa-y-se-recupera/"
+    },
+    {
+      "id": 402,
+      "title": "la cola no reparte el trabajo entre tipos y uno saturado deja a los demas sin turno",
+      "description": "El drenador reclama 10 jobs por corrida ordenando solo por antiguedad, asi que un tipo que falla en masa se pone siempre delante y los demas no llegan a ejecutarse.",
+      "zone": "backend",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "media",
+      "branch": "feat/402-cola-reparte-entre-tipos",
+      "depends_on": null,
+      "status_note": "MEDIDO EN PRODUCCION el 2026-09-09: JobRepository.claimBatch reclama JOBS_BATCH_SIZE (default 10) con ORDER BY run_after ASC y ninguna nocion de equidad entre tipos. || 82 webhook_estado vencidos por delante dejaron los 6 jobs de geocodificacion SIN EJECUTARSE durante media hora, con la credencial de Google YA ARREGLADA: hubo que adelantarlos a mano para que corrieran. || COMO SE DETECTA: max(updated_at) de un tipo no se mueve mientras otros tipos avanzan en el mismo minuto; parece el handler o el proveedor y es la cola. || Sin esto, cualquier tipo que falle en masa vuelve a parar el resto (la 401 y la 403 lo hacen menos probable, no imposible).",
+      "spec_path": "specs/402-cola-reparte-trabajo-entre-tipos/"
+    },
+    {
+      "id": 403,
+      "title": "una suscripcion de webhook que falla siempre ni se desactiva sola ni avisa a nadie",
+      "description": "Un destino que rechaza sistematicamente acumula miles de entregas muertas sin que nadie se entere, y el 429 se trata como un fallo generico mas.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "MEDIDO EN PRODUCCION el 2026-09-09: 2.042 fallos con HTTP 429 y 1.958 jobs muertos contra UN SOLO destino entre el 4 y el 9 de septiembre, frente a 60 entregas correctas. Nadie se entero. || El destino era webhook.site (URL de PRUEBAS) que quedo registrada como suscripcion activa en produccion desde el 2026-08-28; el leader la desactivo a mano el 2026-09-09 para cortar la tormenta. || NO HAY TRATAMIENTO DEL 429: solo el backoff exponencial generico de la cola, sin leer Retry-After y sin cortar ante un destino que rechaza siempre. || Efecto colateral ya medido: esos reintentos son los que dejaron sin turno a la geocodificacion (ver ficha 402).",
+      "spec_path": "specs/403-webhook-destino-que-falla-siempre/"
+    },
+    {
+      "id": 404,
+      "title": "el mensajero de la orden viaja en el webhook y en la API de lectura",
+      "description": "Ni el evento de cambio de estado ni el listado ni el detalle dicen que mensajero lleva la orden, asi que el integrador no puede medir la operacion por mensajero.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "PEDIDA POR UN INTEGRADOR REAL (Daniel Marin) el 2026-09-07: quiere medir tasa de entrega, novedades y devoluciones por mensajero y por zona desde su dashboard. Campo ADITIVO `mensajero` {id, nombre}, null si no hay asignado, en el evento orden.estado_actualizado y en GET /api/ordenes/api-key (listado y detalle). || LA PUERTA DE PRIVACIDAD YA ESTA FIRMADA por el humano el 2026-09-09: el contrato publico de la 106 excluye «datos personales de terceros (p. ej. el mensajero)», y el humano autoriza la excepcion PARA EL NOMBRE con este argumento: la tienda ya ve el nombre del mensajero en la UI, asi que la API no expone a esa tienda nada que no tuviera. El spec DEBE verificar esa premisa en el codigo y dejarla escrita; si resulta falsa, para y pregunta. || BARATA: OrdenRepository ya construye {id, nombre} con nombreCompletoUsuario. El payload del webhook (DataEvento) hoy lleva numGuia, numRemision, estado, motivo y evidenciasUrl opcional, y ya tiene precedente de campo aditivo opcional. || 256/R22 sigue en pie: el TEXTO LIBRE gestion_orden.motivo no se emite jamas."
+    },
+    {
+      "id": 405,
+      "title": "el detalle por API no expone el historial de gestiones de la orden",
+      "description": "El integrador solo ve el resultado final, no los intentos, asi que no puede medir reintentos ni tiempos por mensajero.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "branch": null,
+      "depends_on": 404,
+      "status_note": "FASE 2 pedida por el integrador (Daniel Marin) el 2026-09-07, explicitamente SIN AFAN: arreglo `gestiones[]` en el detalle con { fecha, tipo, estado_resultante, motivo, mensajero } para medir reintentos y tiempos. || OJO CON `motivo`, son DOS cosas distintas que comparten nombre: la causa TIPIFICADA (enum cerrado, esa si se publica hoy en el webhook) y el TEXTO LIBRE que escribe el mensajero (gestion_orden.motivo), que NO SE EMITE JAMAS por decision expresa (256/R22). El spec debe confirmar con el humano cual de las dos pidio el integrador antes de disenar; lo probable es la tipificada. || Depende de la 404 porque reusa la forma del campo mensajero. || Sin storage_path, sin bucket y sin ids internos, como exige el DTO publico de la 106."
     }
   ]
 }
