@@ -4838,11 +4838,11 @@
       "title": "el operador puede autorizar la asignacion de una orden que no se pudo ubicar",
       "description": "Una direccion descriptiva que el geocodificador no sabe ubicar bloquea la asignacion, aunque el mensajero pueda llegar con la referencia.",
       "zone": "fullstack",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
       "spec_path": "specs/407-autorizar-asignacion-sin-ubicacion/",
-      "branch": null,
+      "branch": "feat/407-autorizar-asignacion-sin-ubicacion",
       "depends_on": null,
       "status_note": "PEDIDA POR EL HUMANO el 2026-09-10 con su caso: la guia 76068276 (Quesada, San Carlos) lleva CINCO DIAS parada con `geocode_status = ZERO_RESULTS` y sin coordenadas. La direccion es de referencias -«DE LA CLINICA VETERINARIA MASCOTICAS, 75 METROS HACIA EL SUR...»- y el mensajero llega igual. Son las 2 UNICAS ordenes sin coordenadas de toda la base (la otra es de Palmira, Carrillo): el fenomeno es raro, pero deja la orden muerta. || EL HUMANO ELIGIO LA VIA DE AUTORIZAR LA ASIGNACION. Fijar el punto a mano en un mapa queda FUERA y el spec lo declara como alternativa DESCARTADA, no como propuesta. || BARATA PORQUE EL CARRIL YA EXISTE: la 400 construyo `asignable_sin_ubicacion` y su aviso, y esto anade una SEGUNDA puerta de entrada al mismo carril -la que abre una persona a sabiendas, frente a la que abre el sistema por un fallo propio-. Y aguas abajo YA ESTA RESUELTO, verificado en el codigo: `OptimizacionRutaService` (R37/R28) excluye las ordenes sin coordenadas SIN abortar y la lectura las pinta al final. El unico punto de toda la cadena que se planta es el gate de `AsignabilidadCoordenadasService`, donde `ZERO_RESULTS` cae en `STATUS_DETERMINISTAS` y sale `direccion_no_geocodificable`. || ⚠️ EL TEXTO DE LA 400 NO SE PUEDE REUSAR: dice «por un problema del sistema, NO de la direccion», y aqui SI es la direccion. Reusarlo seria mentirle al operador; hace falta literal propio, fijado a mano como contrato de test. || OJO al distinguir motivos en el mismo lote: `geocodificacion_en_curso` NO es definitivo y no debe poder autorizarse, porque esa orden aun puede resolverse sola."
     }

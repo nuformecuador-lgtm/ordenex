@@ -13,136 +13,115 @@ El 2026-09-10, en producción:
   ENTRADA PRINCIPAL DEL RESIDENCIAL VISTAS DEL SOL, DE ESA ENTRADA 870 METROS HACIA EL ESTÉ, EN
   LÍNEA RECTA HASTA PEGAR CON PORTON GRANDE». Correcta para un humano, ilegible para Google.
 - Hay **otra** igual (Palmira / Carrillo, «Del doit center 8 kilómetros al norte camino a
-  papagayo…»), todavía sin guía. **Son las 2 únicas órdenes sin coordenadas de toda la base**:
-  el fenómeno es raro, pero deja la orden muerta.
+  papagayo…»), todavía sin guía. **Son las 2 únicas órdenes sin coordenadas de toda la base.**
 
-**Premisa firmada por el humano el 2026-09-10:** la dirección es descriptiva pero el mensajero
-llega sin problema, así que **no debe bloquear**. La vía elegida es **autorizar la asignación**,
-no capturar coordenadas a mano (ver `design.md` §9, alternativa A1 descartada).
+**Decisiones del humano, 2026-09-10 (premisas de la ficha, no reabribles):**
+
+1. La dirección es descriptiva pero el mensajero llega sin problema, así que **no debe bloquear**.
+2. La vía es **autorizar la asignación**, no capturar coordenadas a mano.
+3. **No hace falta rastro.** La autorización **no se persiste**: es un **parámetro de la propia
+   acción de asignar**. El operador la marca en el modal y esa misma llamada asigna. Sin tabla,
+   sin columna, sin migración. Consecuencia aceptada a sabiendas: **no se podrá responder «quién
+   autorizó esto» más adelante**, y si una orden se libera y se vuelve a asignar, **hay que volver
+   a autorizarla**.
+4. Autoriza **quien ya puede asignar** esa orden. Sin rol nuevo y sin restringir a `maestro`: la
+   guía del caso real está en **bodega satélite**, así que exigir maestro dejaría a quien la tiene
+   delante sin poder desatascarla.
+5. `geocodificacion_agotada` **no** es autorizable: la feature 400 ya resuelve ese caso cuando el
+   fallo es nuestro.
 
 **Vocabulario de esta ficha.** «Dirección irresoluble» = el estado `direccion_no_geocodificable`
-del gate de asignabilidad por coordenadas (feature 92). Es el ÚNICO veredicto DEFINITIVO del
-gate: los tres `geocode_status` que lo producen (`ZERO_RESULTS`, `INVALID_REQUEST`,
-`SIN_DIRECCION`) son deterministas y reintentarlos no los mejora. «Autorización» = el acto por el
-que una persona decide, a sabiendas, que esa orden puede asignarse sin ubicación en el mapa.
+del gate (feature 92): el ÚNICO veredicto DEFINITIVO, producido por los tres `geocode_status`
+deterministas `ZERO_RESULTS`, `INVALID_REQUEST` y `SIN_DIRECCION`. «La marca» = el parámetro con
+el que una petición de asignación declara que una persona autoriza, a sabiendas, asignar esa orden
+sin ubicación en el mapa.
 
 ---
 
 ## Requisitos
 
-### Quién autoriza y sobre qué
+### Alcance de la marca
 
-**R1.** MIENTRAS el gate de asignabilidad por coordenadas clasifique una orden como bloqueada por
-dirección irresoluble, el sistema DEBE permitir que una persona autorizada registre una
-autorización de asignación sin ubicación sobre esa orden.
+**R1.** CUANDO una petición de asignación traiga la marca para una orden de su propio lote, y el
+gate de asignabilidad clasifique esa orden como bloqueada por dirección irresoluble, el sistema
+DEBE dejarla pasar y asignarla en esa **misma** petición.
 
-**R2.** CUANDO se solicite autorizar una orden cuyo estado de asignabilidad NO sea «dirección
-irresoluble», el sistema DEBE rechazar esa orden, NO registrar ninguna autorización para ella y
-devolver el motivo por el que no se puede autorizar.
+**R2.** El sistema NUNCA DEBE tener en cuenta la marca sobre una orden cuyo bloqueo no sea
+«dirección irresoluble». En particular, `geocodificacion_en_curso`, `geocodificacion_encolada`,
+`geocodificacion_no_encolable` y `geocodificacion_agotada` DEBEN seguir bloqueando la asignación
+aunque la marca venga: ninguno es un veredicto definitivo sobre la dirección y la orden todavía
+puede resolverse sola.
 
-**R3.** SI el rol del actor es `maestro` o `admin`, ENTONCES el sistema DEBE aceptar la solicitud
-de autorización sobre órdenes de cualquier zona.
+**R3.** El sistema NUNCA DEBE aplicar la marca a una orden que no esté en el lote de esa misma
+petición.
 
-**R4.** SI el rol del actor es `adminSatelite`, ENTONCES el sistema DEBE aceptar la autorización
-únicamente sobre órdenes cuya zona coincida con la zona del propio actor, y DEBE rechazar cada
-orden de otra zona con su motivo propio y sin registrar autorización para ella.
+**R4.** SI la orden marcada tiene latitud y longitud, ENTONCES el sistema DEBE clasificarla como
+asignable con normalidad y la marca NO DEBE tener ningún efecto observable.
 
-**R5.** SI el rol del actor no es `maestro`, `admin` ni `adminSatelite`, ENTONCES el sistema DEBE
-rechazar la solicitud completa sin registrar ninguna autorización y sin revelar dato alguno de
-las órdenes pedidas.
+**R5.** MIENTRAS una petición de asignación no traiga ninguna marca, el sistema DEBE comportarse
+exactamente como antes de esta ficha: misma clasificación del gate, mismos resultados, mismos
+textos.
 
-**R6.** CUANDO la solicitud de autorización llegue sin sesión válida, el sistema DEBE rechazarla
-antes de leer ninguna orden y sin registrar ninguna autorización.
+### Permisos
 
-### Por lote, y qué pasa con los motivos mezclados
+**R6.** El sistema NO DEBE exigir ningún permiso adicional por traer la marca: DEBE aplicar las
+mismas comprobaciones de rol, zona, estado de origen, mensajero y tope de intentos que ya
+gobiernan la asignación correspondiente, y DEBE evaluarlas **antes** de mirar la marca.
 
-**R7.** CUANDO una solicitud de autorización incluya a la vez órdenes autorizables y órdenes no
-autorizables, el sistema DEBE registrar la autorización de las autorizables y rechazar
-individualmente las demás, sin abortar la solicitud completa.
+**R7.** SI el actor no supera esas comprobaciones, ENTONCES la marca NO DEBE producir ningún
+efecto y ninguna orden DEBE cambiar de estado.
 
-**R8.** El sistema DEBE devolver un desenlace por CADA orden recibida en la solicitud, sin omitir
-ninguna.
+### Lote
 
-**R9.** El sistema NUNCA DEBE registrar una autorización sobre una orden cuyo bloqueo sea
-`geocodificacion_en_curso`, `geocodificacion_encolada`, `geocodificacion_no_encolable` o
-`geocodificacion_agotada`: ninguno de esos cuatro es un veredicto definitivo sobre la dirección y
-la orden todavía puede resolverse sola.
+**R8.** CUANDO un lote contenga a la vez órdenes marcadas y órdenes bloqueadas por un motivo no
+autorizable, el sistema DEBE asignar las marcadas y reportar las demás como bloqueadas, sin
+abortar el lote.
 
-### El rastro
+### Nada se guarda (consecuencia declarada de la decisión 3)
 
-**R10.** CUANDO el sistema registre una autorización, DEBE dejar constancia permanente de: la
-orden autorizada, el usuario que autorizó, el instante en que autorizó y la huella de la
-dirección vigente de la orden en ese instante.
+**R9.** El sistema NUNCA DEBE persistir la marca ni ningún estado derivado de ella. SI una orden
+asignada con la marca vuelve a quedar disponible para asignación, ENTONCES el sistema DEBE volver
+a exigir la marca para poder asignarla de nuevo.
 
-**R11.** El sistema NUNCA DEBE modificar ni borrar un registro de autorización ya escrito; una
-autorización posterior sobre la misma orden DEBE añadir un registro nuevo.
+### Las cifras y los textos
 
-**R12.** SI la orden ya tiene una autorización vigente para su dirección actual, ENTONCES el
-sistema NO DEBE escribir un registro nuevo y DEBE devolver esa orden como ya autorizada.
+**R10.** CUANDO una asignación deje pasar órdenes por la marca, el resultado DEBE informar cuántas
+fueron, como cifra agregada y separada de la cifra de la feature 400.
 
-**R13.** Todo registro de autorización DEBE quedar inaccesible salvo para el servidor de la
-aplicación (seguridad a nivel de fila habilitada en la tabla que lo guarda).
+**R11.** Ninguna orden DEBE contarse a la vez en la cifra de la feature 400 y en la de esta ficha.
 
-### El gate deja pasar
+**R12.** El sistema NUNCA DEBE describir una orden asignada por la marca con el texto de la
+feature 400 («por un problema del sistema, no de la dirección»): en este caso el problema **sí** es
+la dirección, y ese texto sería falso.
 
-**R14.** MIENTRAS una orden no tenga coordenadas y exista al menos una autorización cuya huella
-coincida con la dirección vigente de la orden, el gate de asignabilidad DEBE clasificarla como
-asignable sin ubicación por autorización, y los dos caminos de asignación (bodega central y
-bodega satélite) DEBEN dejarla pasar.
+**R13.** CUANDO el sistema informe de órdenes asignadas por la marca, DEBE usar el literal fijado
+en `design.md` §5.2, en lenguaje llano, sin siglas ni jerga interna.
 
-**R15.** SI la orden tiene latitud y longitud, ENTONCES el gate DEBE clasificarla como asignable
-con normalidad, con independencia de que exista o no una autorización.
+**R14.** ANTES de que la persona confirme la autorización, el sistema DEBE mostrarle el literal de
+consecuencia fijado en `design.md` §5.1: que la orden se asignará sin ubicación en el mapa, que
+aparecerá al final de la lista de entregas del mensajero y que no se tendrá en cuenta al calcular
+el orden del recorrido.
 
-**R16.** SI la dirección vigente de la orden difiere de la que se autorizó, ENTONCES el gate NO
-DEBE honrar esa autorización y DEBE volver a clasificar la orden por su situación real.
+**R15.** El sistema NUNCA DEBE incluir en los textos de R13 y R14 la dirección, el destinatario,
+el teléfono, el número de guía ni el identificador interno de ninguna orden.
 
-**R17.** El estado de asignabilidad que produce esta ficha DEBE ser distinto del que produce el
-fallo de configuración del geocodificador (feature 400), y ninguna orden DEBE clasificarse en los
-dos a la vez.
+### Lo que hace el modal
 
-### Lo que ve el operador, y que no mienta
+**R16.** CUANDO un intento de asignación devuelva al menos una orden bloqueada por dirección
+irresoluble, el modal DEBE ofrecer autorizar y asignar esas órdenes, tanto si el intento no asignó
+ninguna orden como si asignó solo una parte del lote.
 
-**R18.** CUANDO una asignación deje pasar órdenes por autorización, el resultado de la asignación
-DEBE informar cuántas fueron, como cifra agregada y separada de la cifra de la feature 400.
-
-**R19.** El sistema NUNCA DEBE describir una orden asignada por autorización con el texto de la
-feature 400 («por un problema del sistema, no de la dirección»): en este caso el problema **sí**
-es la dirección, y ese texto sería falso.
-
-**R20.** CUANDO el sistema informe de órdenes asignadas por autorización, DEBE usar el literal
-fijado en `design.md` §6.2, que dice que se autorizó y qué consecuencia tiene, en lenguaje llano,
-sin siglas ni jerga interna.
-
-**R21.** ANTES de que la persona confirme una autorización, el sistema DEBE mostrarle el literal
-de consecuencia fijado en `design.md` §6.1: que la orden se asignará sin ubicación en el mapa,
-que aparecerá al final de la lista de entregas del mensajero y que no se tendrá en cuenta al
-calcular el orden del recorrido.
-
-**R22.** El sistema NUNCA DEBE incluir en los textos de los requisitos R20 y R21 la dirección, el
-destinatario, el teléfono, el número de guía ni el identificador interno de ninguna orden.
-
-**R23.** CUANDO un intento de asignación devuelva al menos una orden bloqueada por dirección
-irresoluble, el modal correspondiente DEBE ofrecer la autorización sobre esas órdenes, tanto si
-el intento no asignó ninguna orden como si asignó solo una parte del lote.
-
-**R24.** Los modales de asignación NUNCA DEBEN decidir con literales propios qué motivo del gate
+**R17.** Los modales de asignación NUNCA DEBEN decidir con literales propios qué motivo del gate
 es autorizable: DEBEN obtener ese criterio del único módulo compartido de vocabulario.
 
-**R25.** CUANDO una solicitud de autorización termine, el modal DEBE indicar qué órdenes quedaron
-autorizadas y cuáles no, identificándolas por su número de remisión y nunca por su identificador
-interno ni por su dirección.
+**R18.** CUANDO la persona confirme la autorización, el modal DEBE lanzar **una sola** petición de
+asignación que lleve la marca y esté acotada a las órdenes autorizables.
 
-**R26.** El sistema NO DEBE asignar la orden como efecto de autorizarla: asignar sigue siendo un
-acto aparte que la persona vuelve a pedir explícitamente.
+**R19.** El modal DEBE identificar las órdenes de ese bloque por su número de remisión, nunca por
+su identificador interno ni por su dirección.
 
-### No regresión
-
-**R27.** MIENTRAS no exista ninguna autorización registrada, el sistema DEBE comportarse
-exactamente como antes de esta ficha: misma clasificación del gate, mismos textos, mismos
-resultados de las dos asignaciones.
-
-**R28.** La migración que introduzca la tabla de autorizaciones DEBE ser reversible mediante su
-`down.sql`.
+**R20.** El manifiesto del modal DEBE incluir todas las órdenes efectivamente asignadas durante
+esa apertura, también las asignadas en la segunda petición.
 
 ---
 
@@ -153,72 +132,40 @@ cada uno está en `tasks.md`.
 
 | R | Test que lo cubre |
 | --- | --- |
-| R1 | `tests/unit/services/autorizar-asignacion-sin-ubicacion.test.ts` (nuevo) — orden con `geocode_status = ZERO_RESULTS` y sin coordenadas → se registra la autorización |
-| R2 | idem — orden `geocodificacion_en_curso` → desenlace `no_autorizable` y CERO llamadas al escritor (`expect(repo.registrar).not.toHaveBeenCalled()`) |
-| R3 | idem — actor `maestro` y actor `admin` sobre orden de zona ajena → autorizada |
-| R4 | idem — actor `adminSatelite`: orden de su zona autorizada, orden de otra zona → `zona_ajena` y sin escritura |
-| R5 | idem — actor `mensajero` / `adminTienda` → `forbidden`, sin lecturas de orden ni escrituras |
-| R6 | `tests/unit/actions/autorizar-asignacion-sin-ubicacion.action.test.ts` (nuevo) — sin actor → `unauthenticated`, y el service nunca se construye |
-| R7 | `autorizar-asignacion-sin-ubicacion.test.ts` — lote de 3 (una irresoluble, una en curso, una ya asignable) → 1 autorizada + 2 rechazadas, una sola escritura |
-| R8 | idem — el resultado tiene exactamente tantos items como ids pedidos, en el mismo orden |
-| R9 | idem — caso por cada uno de los cuatro estados, tabla parametrizada; ninguno escribe |
-| R10 | `tests/integration/db/orden-asignacion-sin-ubicacion-migration.test.ts` (nuevo) — inserta y lee la fila real: `orden_id`, `actor_usuario_id`, `created_at`, `direccion_hash` presentes y no nulos |
-| R11 | idem — la tabla no tiene columnas `updated_at` ni `deleted_at` (`information_schema.columns`), y dos autorizaciones sobre la misma orden con huellas distintas dejan DOS filas |
-| R12 | `autorizar-asignacion-sin-ubicacion.test.ts` — orden ya autorizada para su dirección vigente → desenlace `ya_autorizada` y `registrar` no se llama |
-| R13 | `orden-asignacion-sin-ubicacion-migration.test.ts` — `pg_class.relrowsecurity` es `true` y `pg_policies` está vacío para la tabla |
-| R14 | `tests/unit/services/asignabilidad-coordenadas-autorizada.test.ts` (nuevo) — fila con `geocodeStatus: "ZERO_RESULTS"` + autorización con la huella de su dirección → estado `asignable_sin_ubicacion_autorizada`; y `esAsignable(estado) === true` |
-| R14 (writers) | `tests/unit/services/guia-asignacion-gate-coordenadas.test.ts` y `tests/unit/services/asignacion-satelite-gate-coordenadas.test.ts` — la orden autorizada NO aparece en `bloqueadas` y SÍ en `resultados` |
-| R15 | `asignabilidad-coordenadas-autorizada.test.ts` — con lat/lng presentes y autorización presente → `asignable` (no el estado nuevo) |
-| R16 | `asignabilidad-coordenadas-autorizada.test.ts` — autorización con huella de OTRA dirección → vuelve a `direccion_no_geocodificable`; y `tests/integration/db/orden-asignacion-sin-ubicacion-migration.test.ts` para el `select` real de `findParaAsignabilidad` |
-| R17 | `guia-asignacion-gate-coordenadas.test.ts` / `asignacion-satelite-gate-coordenadas.test.ts` — lote con una orden de cada clase → `{ sinUbicacion: 1, sinUbicacionAutorizada: 1 }`, sumas disjuntas |
-| R18 | idem — `ok` y `partial` llevan `sinUbicacionAutorizada` solo cuando es mayor que cero |
-| R19 | `tests/unit/guards/autorizacion-texto-no-miente.guardia.test.ts` (nuevo) — el literal de R20, leído del árbol real, NO contiene «no de la dirección»; y el mensaje renderizado por los modales para un resultado con solo `sinUbicacionAutorizada` no contiene el literal de la 400 |
-| R20 | `tests/unit/components/geocodificacion-motivo-messages.test.ts` — comparación contra el texto **escrito a mano en el test**, copiado de `design.md` §6.2 (singular y plural) |
-| R21 | `tests/components/AsignarBodegaModal.autorizacion.test.tsx` y `...Satelite...` (nuevos) — el literal de `design.md` §6.1 está en pantalla ANTES de pulsar confirmar |
-| R22 | `geocodificacion-motivo-messages.test.ts` — las funciones de R20 reciben un `number`, así que no pueden emitir PII; test de firma + barrido del literal contra una dirección/guía de ejemplo |
-| R23 | `AsignarBodegaModal.autorizacion.test.tsx` / `AsignarSateliteModal.autorizacion.test.tsx` — dos casos: respuesta `conflict` (nada asignado) y respuesta `partial` |
-| R24 | `tests/unit/guards/geocodificacion-motivo-por-orden-mismo-modulo.guardia.test.ts` (ampliado) — el barrido de literales del gate sobre el código real de los dos modales, con el estado nuevo añadido a su lista |
-| R25 | `AsignarBodegaModal.autorizacion.test.tsx` / `...Satelite...` — la lista de desenlaces muestra `numRemision` y NO el uuid |
-| R26 | idem — tras autorizar, `asignarDesdeBodega` / `asignarDesdeSatelite` NO se volvió a llamar |
-| R27 | `tests/unit/services/asignabilidad-coordenadas.test.ts` (existente, sin cambios de expectativa) + `guia-asignacion-gate-coordenadas.test.ts` / `asignacion-satelite-gate-coordenadas.test.ts` siguen verdes sin tocar sus `toEqual` |
-| R28 | `orden-asignacion-sin-ubicacion-migration.test.ts` — ejecuta el `down.sql` REAL en un esquema temporal dentro de una transacción revertida, y la tabla deja de existir |
+| R1 | `tests/unit/services/asignabilidad-coordenadas-autorizada.test.ts` (nuevo) — fila `ZERO_RESULTS` sin coordenadas + su id en el conjunto marcado → `asignable_sin_ubicacion_autorizada`; y `tests/unit/services/guia-asignacion-gate-coordenadas.test.ts` / `asignacion-satelite-gate-coordenadas.test.ts` (ampliados) — esa orden sale en `resultados` y **no** en `bloqueadas` |
+| R2 | `asignabilidad-coordenadas-autorizada.test.ts` — tabla parametrizada con los cuatro estados de cola, **todos con la marca puesta** → los cuatro siguen bloqueando |
+| R3 | `asignabilidad-coordenadas-autorizada.test.ts` — conjunto marcado con un id que no está en el lote → ninguna orden del lote cambia de estado |
+| R4 | `asignabilidad-coordenadas-autorizada.test.ts` — lat/lng presentes + marca → `asignable` (no el estado nuevo) |
+| R5 | `tests/unit/services/asignabilidad-coordenadas.test.ts` (existente, **sin tocar expectativas**) + los dos gate-tests de los writers siguen verdes con sus `toEqual` intactos |
+| R6 | `guia-asignacion-gate-coordenadas.test.ts` / `asignacion-satelite-gate-coordenadas.test.ts` — con la marca puesta, un actor sin rol devuelve `forbidden`; un mensajero bloqueado por cierres, una orden en origen inválido y una orden en el tope de intentos siguen abortando el lote **antes** del gate |
+| R7 | idem — en cada uno de esos casos, `asignarBodegaLote` / `asignarSateliteLote` **no se llamó** |
+| R8 | `guia-asignacion-gate-coordenadas.test.ts` / `asignacion-satelite-gate-coordenadas.test.ts` — lote de 3 (una marcada e irresoluble, una `geocodificacion_en_curso`, una asignable) → `partial` con 2 en `resultados` y 1 en `bloqueadas` |
+| R9 | `asignabilidad-coordenadas-autorizada.test.ts` — dos llamadas consecutivas a `evaluar` sobre la MISMA fila, la primera con marca y la segunda sin ella → la segunda devuelve `direccion_no_geocodificable`. Mutación que lo pone rojo: guardar el conjunto en un campo de la instancia |
+| R10 | `guia-asignacion-gate-coordenadas.test.ts` / `asignacion-satelite-gate-coordenadas.test.ts` — `ok`/`partial` llevan `sinUbicacionAutorizada` solo cuando es mayor que cero (`not.toHaveProperty` cuando es cero) |
+| R11 | idem — lote con una orden de la 400 y una de la 407 → `{ sinUbicacion: 1, sinUbicacionAutorizada: 1 }`, sumas disjuntas |
+| R12 | `tests/unit/guards/autorizacion-texto-no-miente.guardia.test.ts` (nuevo) — lee el árbol real y afirma que el literal de R13 no contiene «no de la dirección» ni «problema del sistema», y que los dos mensajes agregados son distintos entre sí |
+| R13 | `tests/unit/components/geocodificacion-motivo-messages.test.ts` (ampliado) — singular, plural y `n <= 0`, comparados contra el texto **escrito a mano en el test**, copiado de `design.md` §5.2 |
+| R14 | `tests/components/AsignarBodegaModal.autorizacion.test.tsx` y `tests/components/AsignarSateliteModal.autorizacion.test.tsx` (nuevos) — el literal de §5.1 está en el documento **antes** de pulsar el control |
+| R15 | `geocodificacion-motivo-messages.test.ts` — la función recibe un `number` (test de firma) y el literal no contiene ninguna cadena de una fixture de PII (la dirección del caso medido, `"76068276"`, un uuid) |
+| R16 | `AsignarBodegaModal.autorizacion.test.tsx` / `AsignarSateliteModal.autorizacion.test.tsx` — dos casos: respuesta `conflict` (nada asignado) y respuesta `partial`; y un tercero de contraste: `conflict` con `geocodificacion_en_curso` → **no** hay panel |
+| R17 | `tests/unit/guards/geocodificacion-motivo-por-orden-mismo-modulo.guardia.test.ts` (ampliado) — el barrido de literales sobre el código real de los dos modales, con el octavo estado en su lista, más un `it` que exige que los dos importen el predicado del mismo módulo |
+| R18 | `AsignarBodegaModal.autorizacion.test.tsx` / `...Satelite...` — tras confirmar, la acción se llamó **una** vez más, con `ordenIds` y marca **iguales al conjunto autorizable** |
+| R19 | idem — el bloque muestra el `numRemision` y el uuid de la orden **no** aparece en el DOM |
+| R20 | idem — tras la segunda petición, `ManifiestoResultado` recibe la unión de las órdenes asignadas en las dos |
 
 ---
 
 ## Preguntas abiertas
 
-**Q1 — ¿El rastro debe además producir una fila en `historial_accion` (ficha 362)?**
-No encaja limpiamente en ninguna de sus tres categorías. Autorizar **no mueve dinero**, **no hace
-desaparecer nada** y **no cambia quién puede hacer qué**. Forzarlo obligaría a ampliar el criterio
-de la 362, y R17 de aquella ficha exige exactamente una categoría por tipo. Por eso el diseño
-propone una tabla propia (§4.1), que es el mismo camino que ya tomaron `orden_dia_reparto_cambio`
-(262) y `gestion_fecha_reprogramacion_cambio` (371). **Pregunta:** ¿se quiere ADEMÁS una fila
-transversal en `historial_accion` para que la autorización aparezca en el listado «quién hizo
-qué»? Si la respuesta es sí, hace falta decidir su categoría, y eso es una decisión del humano,
-no del spec.
+Ninguna. Las seis que abría la versión anterior de este documento quedaron **resueltas por el
+humano el 2026-09-10** y están recogidas como premisas arriba:
 
-**Q2 — ¿La autorización debe VERSE en algún sitio después?**
-Esta ficha la escribe y la lee el gate, pero no propone ninguna pantalla que muestre «esta orden
-está autorizada, por Fulano, el día tal». ¿Debe aparecer en el detalle de la orden? ¿En la línea
-de tiempo? Sin respuesta, queda fuera de alcance.
-
-**Q3 — ¿`geocodificacion_agotada` debe poder autorizarse también?**
-Hoy R9 dice que no: significa que el servicio de mapas agotó los intentos, no que la dirección sea
-mala, y el operador ya tiene el mensaje que se lo dice. Pero si en la práctica hay órdenes que se
-quedan ahí clavadas, sería el siguiente candidato. **No hay dato medido** que lo respalde: en la
-base solo hay 2 órdenes sin coordenadas y las dos son `ZERO_RESULTS`.
-
-**Q4 — ¿Hace falta REVOCAR una autorización?**
-El diseño la deja inerte sola en dos casos (la orden gana coordenadas, o alguien corrige la
-dirección). No contempla un «me equivoqué, quítala». ¿Se necesita?
-
-**Q5 — ¿Puede autorizar alguien más?**
-R3/R4 dan la capacidad a quien ya puede asignar esa orden (`maestro`/`admin` en la central,
-`adminSatelite` en su zona), y el motivo está en `design.md` §3. ¿Debe restringirse solo a
-`maestro`, aun sabiendo que el caso medido lo destapó una bodega satélite y que escalar sería
-volver a los cinco días de espera?
-
-**Q6 — Los dos literales de §6.1 y §6.2 necesitan el visto bueno del humano.**
-Están fijados a mano como contrato de test; cambiarlos después obliga a tocar el spec y los tests.
+| Antes | Resolución |
+| --- | --- |
+| Q1 — fila en `historial_accion` | **No.** Cae con el rastro. |
+| Q2 — ¿se ve la autorización en pantalla? | **No.** Cae con el rastro. |
+| Q3 — ¿`geocodificacion_agotada` autorizable? | **No.** La 400 ya cubre el fallo propio. |
+| Q4 — ¿revocar una autorización? | **Sin objeto.** Si nada persiste, no hay nada que revocar. |
+| Q5 — ¿quién autoriza? | **Quien ya puede asignar.** Sin rol nuevo (R6). |
+| Q6 — los dos literales | **Aprobados tal cual.** No se tocan. |
 </content>
-</invoke>
