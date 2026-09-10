@@ -12,8 +12,15 @@ import type { JobTipo } from "@prisma/client";
 // registra PII ni secretos (R18/R19): solo mensajes agregados sin datos de dominio.
 export interface JobsLogger {
   warn(message: string): void;
+  /**
+   * Feature 402 (R8) — canal informativo del desglose por tipo de cada corrida. OPCIONAL a
+   * proposito: al menos diez archivos de test instancian este servicio con un doble que solo
+   * implementa `warn`, y exigir `info` romperia el typecheck de todos ellos sin que ninguno
+   * tenga que ver con esta ficha. Se invoca con `this.logger.info?.(...)`.
+   */
+  info?(message: string): void;
 }
-const defaultLogger: JobsLogger = { warn: (m) => console.warn(m) };
+const defaultLogger: JobsLogger = { warn: (m) => console.warn(m), info: (m) => console.info(m) };
 
 // `last_error` acotado (R15): sin volcar stacks enormes. El mensaje del handler no
 // contiene el secreto (el secreto vive en el controller, no llega al service).
@@ -47,6 +54,19 @@ export class JobQueueService implements IJobQueueService {
     const visibilityCutoff = new Date(now.getTime() - this.config.JOBS_VISIBILITY_TIMEOUT_MS);
     // R10: reclamo atomico del lote (SKIP LOCKED). `intentos` ya viene incrementado.
     const jobs = await this.repo.claimBatch(limit, { now, visibilityCutoff });
+
+    // Feature 402 (R8): que tipos avanzaron en ESTA corrida. Se calcula agrupando el array
+    // que el claim ya devolvio —ni una consulta mas (R7)— y solo lleva `tipo` (un valor de
+    // enum) y un conteo: nada de `payload`, ids ni datos de dominio (R18/R19 de la 90). Sin
+    // esto, ver que un tipo lleva media hora sin correr exige consultar `jobs` a mano, que es
+    // lo que hubo que hacer en el incidente del 2026-09-09.
+    if (jobs.length > 0) {
+      const porTipo = jobs.reduce<Record<string, number>>((acc, j) => {
+        acc[j.tipo] = (acc[j.tipo] ?? 0) + 1;
+        return acc;
+      }, {});
+      this.logger.info?.(`[procesar-jobs] reclamados por tipo: ${JSON.stringify(porTipo)}`);
+    }
 
     const result: DrenarResult = {
       procesados: jobs.length,

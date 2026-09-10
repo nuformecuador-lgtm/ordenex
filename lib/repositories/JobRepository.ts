@@ -94,31 +94,73 @@ export class JobRepository implements IJobRepository {
 
   async claimBatch(limit: number, opts: ClaimOpts): Promise<JobDTO[]> {
     const { now, visibilityCutoff } = opts;
-    // R10-R13: una sola sentencia atomica. La CTE `candidatos` selecciona pendientes
-    // vencidos (`run_after <= now`, R7/R12) O `processing` colgados (`locked_at <` cutoff,
-    // R13), los BLOQUEA con `FOR UPDATE SKIP LOCKED` (R10/R11: dos workers nunca toman la
-    // misma fila, sin espera) y el UPDATE los marca `processing`, sella `locked_at` e
-    // incrementa `intentos`. `now`/`visibilityCutoff` INYECTADOS (no `NOW()` de Postgres)
-    // para tests deterministas (design alternativa F descartada).
+    // R10-R13 (feature 90, design §3.1) + REPARTO POR TURNOS (feature 402, design §1).
+    //
+    // UNA sola sentencia atomica, como siempre (402/R7: ni una consulta ni una transaccion
+    // mas por corrida). Lo que cambia respecto de la 90 es SOLO la regla de seleccion:
+    //
+    //  · `candidatos` — mismo `WHERE` de siempre (pendientes vencidos `run_after <= now`,
+    //    R7/R12, O `processing` colgados `locked_at <` cutoff, R13) y ademas numera cada
+    //    candidato POR SU TIPO: `ROW_NUMBER() OVER (PARTITION BY tipo ORDER BY run_after)`.
+    //    El mas antiguo de cada tipo es su turno 1. Generico sobre la columna (402/R9): un
+    //    tipo nuevo del enum entra solo, sin tocar este archivo.
+    //  · `priorizados` — `ORDER BY turno, run_after LIMIT $limit`: el turno 1 de TODOS los
+    //    tipos presentes antes que el turno 2 de ninguno. Con un solo tipo activo el lote
+    //    entero sigue siendo suyo (402/R2), y los turnos que un tipo con pocos candidatos
+    //    no puede llenar los ocupa el mayoritario (402/R3).
+    //  · `bloqueados` — aqui, y solo aqui, se BLOQUEA: `FOR UPDATE OF j SKIP LOCKED`
+    //    (R10/R11: dos workers nunca toman la misma fila, sin espera). `OF j` porque hay
+    //    JOIN con una CTE y hay que decir cual es la fila a bloquear.
+    //
+    // POR QUE TRES CTEs Y NO UNA: Postgres prohibe `FOR UPDATE` junto a funciones de ventana
+    // en la MISMA `SELECT` ("FOR UPDATE is not allowed with window functions"). El turno se
+    // calcula sin bloqueo, se recorta a `$limit`, y el bloqueo se aplica al final sobre ese
+    // conjunto ya fijado. Colapsarlas revienta en tiempo de ejecucion.
+    //
+    // POR QUE EL `WHERE` SE REPITE EN `bloqueados`, que no esta en design.md §1: sostiene la
+    // exclusion mutua cuando otro worker COMMITEA entre el snapshot de esta sentencia y el
+    // bloqueo. En ese caso Postgres reevalua (EvalPlanQual) las condiciones sobre la version
+    // NUEVA de la fila; si la unica condicion fuera el JOIN por id, la fila que el otro
+    // worker acaba de reclamar volveria a pasar y se entregaria DOS VECES. Con el predicado
+    // repetido, la fila ya `processing` con `locked_at` reciente no lo cumple y se descarta,
+    // que es exactamente lo que hacia el `FOR UPDATE` de la 90 al vivir dentro del `WHERE`.
+    //
+    // `now`/`visibilityCutoff` siguen INYECTADOS (nunca `NOW()` de Postgres) para tests
+    // deterministas (design alternativa F de la 90, descartada).
     const rows = await this.prisma.$queryRaw<JobRow[]>`
       WITH candidatos AS (
-        SELECT "id" FROM "jobs"
+        SELECT "id", "run_after",
+               ROW_NUMBER() OVER (PARTITION BY "tipo" ORDER BY "run_after" ASC) AS "turno"
+        FROM "jobs"
         WHERE (
           ("estado" = 'pending'    AND "run_after" <= ${now})
           OR
           ("estado" = 'processing' AND "locked_at" < ${visibilityCutoff})
         )
-        ORDER BY "run_after" ASC
-        FOR UPDATE SKIP LOCKED
+      ),
+      priorizados AS (
+        SELECT "id" FROM candidatos
+        ORDER BY "turno" ASC, "run_after" ASC
         LIMIT ${limit}
+      ),
+      bloqueados AS (
+        SELECT j."id" FROM "jobs" j
+        JOIN priorizados p ON p."id" = j."id"
+        WHERE (
+          (j."estado" = 'pending'    AND j."run_after" <= ${now})
+          OR
+          (j."estado" = 'processing' AND j."locked_at" < ${visibilityCutoff})
+        )
+        ORDER BY j."run_after" ASC
+        FOR UPDATE OF j SKIP LOCKED
       )
       UPDATE "jobs" AS j
       SET "estado" = 'processing',
           "locked_at" = ${now},
           "intentos" = j."intentos" + 1,
           "updated_at" = ${now}
-      FROM candidatos c
-      WHERE j."id" = c."id"
+      FROM bloqueados b
+      WHERE j."id" = b."id"
       RETURNING j.*`;
     return rows.map(toDTO);
   }

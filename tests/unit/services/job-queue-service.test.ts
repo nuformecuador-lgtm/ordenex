@@ -216,3 +216,95 @@ describe("JobQueueService.drenar — handler no registrado", () => {
     expect(calls.complete).toHaveLength(0);
   });
 });
+
+/**
+ * FEATURE 402 (R8) — el desglose por tipo de cada corrida, en el log.
+ *
+ * PARA QUE SIRVE: con el reparto por turnos, la pregunta operativa deja de ser «cuantos jobs
+ * corrieron» y pasa a ser «que tipos avanzaron». Sin este log, la unica forma de ver que un
+ * tipo lleva media hora sin ejecutarse es consultar a mano la tabla `jobs` — que es justo lo
+ * que hubo que hacer en el incidente del 2026-09-09.
+ *
+ * LO QUE ESTE TEST *NO* PRUEBA, y conviene decirlo: nada del reparto en si. El reparto vive en
+ * el SQL y se mide en `tests/integration/db/job-repository-reparto-por-tipo.int.test.ts`; aqui
+ * el `claimBatch` es un doble que devuelve lo que se le diga.
+ */
+describe("JobQueueService.drenar — desglose por tipo en el log (402/R8)", () => {
+  /** Servicio con un logger que ADEMAS implementa `info` (espia de mensajes). */
+  function servicioConInfo(claimed: JobDTO[]) {
+    const { repo, calls } = fakeRepo(claimed);
+    const mensajes: string[] = [];
+    const handlers = new Map<JobTipo, JobHandler>([
+      [TIPO, okHandler],
+      ["webhook_estado", okHandler],
+      ["geocodificacion", okHandler],
+    ]);
+    const svc = new JobQueueService(repo, handlers, new Map(), CONFIG, () => NOW, {
+      warn: () => {},
+      info: (m) => mensajes.push(m),
+    });
+    return { svc, mensajes, calls };
+  }
+
+  /** El desglose viaja DENTRO del mensaje; se parsea, no se compara el texto que lo rodea. */
+  function desgloseDe(mensaje: string): unknown {
+    const json = mensaje.match(/\{[\s\S]*\}/)?.[0];
+    expect(json, `el mensaje no lleva un desglose JSON: ${mensaje}`).toBeDefined();
+    return JSON.parse(json as string);
+  }
+
+  it("R8: con jobs de DOS tipos, registra `{tipo: cantidad}` una sola vez", async () => {
+    const { svc, mensajes } = servicioConInfo([
+      makeJob({ id: "w-1", tipo: "webhook_estado" }),
+      makeJob({ id: "w-2", tipo: "webhook_estado" }),
+      makeJob({ id: "g-1", tipo: "geocodificacion" }),
+    ]);
+
+    await svc.drenar(10);
+
+    expect(mensajes).toHaveLength(1);
+    expect(desgloseDe(mensajes[0])).toEqual({ webhook_estado: 2, geocodificacion: 1 });
+  });
+
+  it("R8: lote VACIO -> no registra nada (no hay corrida que diagnosticar)", async () => {
+    const { svc, mensajes } = servicioConInfo([]);
+    await svc.drenar(10);
+    expect(mensajes).toEqual([]);
+  });
+
+  it("R8: el mensaje NO lleva payload, ni ids, ni ningun dato de dominio", async () => {
+    const { svc, mensajes } = servicioConInfo([
+      makeJob({
+        id: "orden-secreta-1",
+        tipo: "geocodificacion",
+        payload: { telefono: "88887777" },
+      }),
+    ]);
+
+    await svc.drenar(10);
+
+    expect(mensajes).toHaveLength(1);
+    expect(mensajes[0]).not.toContain("orden-secreta-1");
+    expect(mensajes[0]).not.toContain("88887777");
+    expect(mensajes[0]).not.toContain("telefono");
+    expect(desgloseDe(mensajes[0])).toEqual({ geocodificacion: 1 });
+  });
+
+  it("un logger SIN `info` (los diez dobles que ya existen) no rompe el drenado", async () => {
+    // `info` es OPCIONAL en la interfaz y se invoca con `?.`: un doble antiguo sigue valiendo.
+    const { repo, calls } = fakeRepo([makeJob({ tipo: "webhook_estado" })]);
+    const svc = new JobQueueService(
+      repo,
+      new Map<JobTipo, JobHandler>([["webhook_estado", okHandler]]),
+      new Map(),
+      CONFIG,
+      () => NOW,
+      { warn: () => {} },
+    );
+
+    const res = await svc.drenar(10);
+
+    expect(res.ok).toBe(1);
+    expect(calls.complete).toHaveLength(1);
+  });
+});
