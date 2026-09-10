@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { AsignacionSateliteService } from "@/lib/services/AsignacionSateliteService";
+// FICHA 407 (T6): el gate REAL, para medir el cable entero — input -> writer -> gate.
+import { AsignabilidadCoordenadasService } from "@/lib/services/AsignabilidadCoordenadasService";
+import { MSG_TOPE_INTENTOS_ASIGNACION } from "@/lib/services/mensajes-bloqueo";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
+import type { IJobRepository } from "@/lib/interfaces/repositories/IJobRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type {
   EstadoAsignabilidad,
@@ -421,6 +425,377 @@ describe("400/R6-R7, R31-R33, R35 — AsignacionSateliteService con ordenes `asi
 
     expect(r.status).toBe("conflict");
     expect(Object.keys(r)).not.toContain("sinUbicacion");
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 407 (T6, 2026-09-10) — ESPEJO EXACTO del archivo de la bodega central.
+//
+// Y aqui importa MAS que alli: la guia 76068276 que origina la ficha esta en bodega
+// SATELITE. Si la marca solo funcionara en la central, el caso medido seguiria parado y
+// quien tiene el paquete delante tendria que escalar — que es lo que produjo los cinco dias.
+//
+// Que se olvide en UNO de los dos lados lo caza este par de archivos: un olvido deja ESTE
+// rojo y el otro verde, no ambos.
+// ════════════════════════════════════════════════════════════════════════════════════════
+
+/** Doble del gate que HONRA el segundo parametro, con la misma regla que el servicio real. */
+function gateConMarca(
+  porOrden: Record<string, EstadoAsignabilidad> = {},
+): IAsignabilidadCoordenadasService {
+  return {
+    evaluar: vi.fn(
+      async (ordenes: OrdenAsignabilidadRow[], autorizadas?: ReadonlySet<string>) =>
+        new Map<string, EstadoAsignabilidad>(
+          ordenes.map((o) => {
+            const base = porOrden[o.id] ?? "asignable";
+            const autorizada =
+              base === "direccion_no_geocodificable" && autorizadas?.has(o.id) === true;
+            return [o.id, autorizada ? "asignable_sin_ubicacion_autorizada" : base];
+          }),
+        ),
+    ),
+  };
+}
+
+/** Cola en memoria minima para poder montar el gate REAL sobre este writer. */
+function colaVacia(): IJobRepository {
+  return {
+    enqueue: vi.fn(async () => null),
+    findByDedupeKeys: vi.fn(async () => []),
+    claimBatch: vi.fn(async () => []),
+    complete: vi.fn(async () => {}),
+    fail: vi.fn(async () => {}),
+  } as unknown as IJobRepository;
+}
+
+describe("407/R1, R6-R8, R10-R11 — AsignacionSateliteService.asignar con la marca", () => {
+  function repo3(over: Record<string, unknown> = {}) {
+    return fakeRepo({
+      findByIdsForTransicion: vi.fn(async (ids: string[]) => ids.map((id) => ordenRow({ id }))),
+      asignarSateliteLote: vi.fn(async (ids: string[]) => ids.length),
+      ...over,
+    });
+  }
+
+  it("407/R1: la irresoluble MARCADA sale en `resultados` y NO en `bloqueadas`", async () => {
+    const repo = repo3();
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gateConMarca({ o1: "direccion_no_geocodificable" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1", autorizarSinUbicacionIds: ["o1"] },
+      ADMIN_SATELITE,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.resultados.map((x) => x.ordenId)).toEqual(["o1", "o2", "o3"]);
+    expect(r.sinUbicacionAutorizada).toBe(1);
+    expect(JSON.stringify(r)).not.toContain("asignable_sin_ubicacion_autorizada");
+  });
+
+  it("407/R1: con el gate REAL enganchado, la marca viaja del input al gate y la orden se asigna", async () => {
+    const filasDeProduccion = () =>
+      vi.fn(async (ids: string[]) =>
+        ids.map((id) => ({
+          id,
+          direccion: "Del doit center 8 kilometros al norte camino a papagayo",
+          latitud: id === "o1" ? null : 10.63,
+          longitud: id === "o1" ? null : -85.44,
+          geocodeStatus: id === "o1" ? "ZERO_RESULTS" : "OK",
+        })),
+      );
+    const repo = repo3({ findParaAsignabilidad: filasDeProduccion() });
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      new AsignabilidadCoordenadasService(colaVacia()),
+      fakeIntentosEnLote(),
+    );
+
+    const conMarca = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1", autorizarSinUbicacionIds: ["o1"] },
+      ADMIN_SATELITE,
+    );
+
+    expect(conMarca.status).toBe("ok");
+    if (conMarca.status !== "ok") throw new Error("unreachable");
+    expect(conMarca.resultados.map((x) => x.ordenId)).toEqual(["o1", "o2", "o3"]);
+    expect(conMarca.sinUbicacionAutorizada).toBe(1);
+
+    // CONTRASTE con el MISMO gate real: sin la marca, `o1` sigue bloqueada.
+    const sinMarca = await new AsignacionSateliteService(
+      repo3({ findParaAsignabilidad: filasDeProduccion() }) as unknown as IOrdenRepository,
+      new AsignabilidadCoordenadasService(colaVacia()),
+      fakeIntentosEnLote(),
+    ).asignar({ ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" }, ADMIN_SATELITE);
+
+    expect(sinMarca.status).toBe("partial");
+    if (sinMarca.status !== "partial") throw new Error("unreachable");
+    expect(sinMarca.bloqueadas).toEqual([
+      { ordenId: "o1", motivo: "direccion_no_geocodificable" },
+    ]);
+  });
+
+  it("407/R8: lote mixto -> `partial`, la marcada se asigna y la que esta en curso se reporta", async () => {
+    const repo = repo3();
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gateConMarca({ o1: "direccion_no_geocodificable", o2: "geocodificacion_en_curso" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1", autorizarSinUbicacionIds: ["o1"] },
+      ADMIN_SATELITE,
+    );
+
+    expect(r.status).toBe("partial");
+    if (r.status !== "partial") throw new Error("unreachable");
+    expect(r.resultados.map((x) => x.ordenId)).toEqual(["o1", "o3"]);
+    expect(r.bloqueadas).toEqual([{ ordenId: "o2", motivo: "geocodificacion_en_curso" }]);
+    expect(r.sinUbicacionAutorizada).toBe(1);
+    expect(repo.asignarSateliteLote).toHaveBeenCalledWith(
+      ["o1", "o3"],
+      "m1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("407/R2: marcar una orden que NO es autorizable no la desbloquea", async () => {
+    const repo = repo3();
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gateConMarca({ o2: "geocodificacion_en_curso" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1", autorizarSinUbicacionIds: ["o2"] },
+      ADMIN_SATELITE,
+    );
+
+    expect(r.status).toBe("partial");
+    if (r.status !== "partial") throw new Error("unreachable");
+    expect(r.bloqueadas).toEqual([{ ordenId: "o2", motivo: "geocodificacion_en_curso" }]);
+    expect(r).not.toHaveProperty("sinUbicacionAutorizada");
+  });
+
+  it("407/R3: marcar un id que NO esta en el lote no cambia nada", async () => {
+    const repo = repo3();
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gateConMarca({ o1: "direccion_no_geocodificable" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      {
+        ordenIds: ["o1", "o2", "o3"],
+        mensajeroId: "m1",
+        autorizarSinUbicacionIds: ["o-de-otro-lote"],
+      },
+      ADMIN_SATELITE,
+    );
+
+    expect(r.status).toBe("partial");
+    if (r.status !== "partial") throw new Error("unreachable");
+    expect(r.bloqueadas).toEqual([{ ordenId: "o1", motivo: "direccion_no_geocodificable" }]);
+    expect(r).not.toHaveProperty("sinUbicacionAutorizada");
+    expect(repo.asignarSateliteLote).toHaveBeenCalledWith(
+      ["o2", "o3"],
+      "m1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("407/R11: las dos cifras son DISJUNTAS — una orden de la 400 y otra de la 407", async () => {
+    const repo = repo3();
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gateConMarca({ o1: "asignable_sin_ubicacion", o2: "direccion_no_geocodificable" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1", autorizarSinUbicacionIds: ["o2"] },
+      ADMIN_SATELITE,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.sinUbicacion).toBe(1);
+    expect(r.sinUbicacionAutorizada).toBe(1);
+    expect((r.sinUbicacion ?? 0) + (r.sinUbicacionAutorizada ?? 0)).toBe(2);
+    expect(r.resultados).toHaveLength(3);
+  });
+
+  it("407/R10: con cero autorizadas, la clave NO EXISTE en el resultado", async () => {
+    const repo = repo3();
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gateConMarca(),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      ADMIN_SATELITE,
+    );
+
+    expect(r).not.toHaveProperty("sinUbicacionAutorizada");
+    expect(r).toEqual({
+      status: "ok",
+      resultados: [
+        { ordenId: "o1", estado: "por_recoger" },
+        { ordenId: "o2", estado: "por_recoger" },
+        { ordenId: "o3", estado: "por_recoger" },
+      ],
+    });
+  });
+
+  it("407/R10: el lote entero marcado y bloqueado -> `conflict` sin ninguna cifra", async () => {
+    const repo = repo3();
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gateConMarca({
+        o1: "geocodificacion_en_curso",
+        o2: "geocodificacion_agotada",
+        o3: "geocodificacion_encolada",
+      }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      {
+        ordenIds: ["o1", "o2", "o3"],
+        mensajeroId: "m1",
+        autorizarSinUbicacionIds: ["o1", "o2", "o3"],
+      },
+      ADMIN_SATELITE,
+    );
+
+    expect(r.status).toBe("conflict");
+    expect(r).not.toHaveProperty("sinUbicacionAutorizada");
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+});
+
+describe("407/R6-R7 — en el satelite, la marca tampoco desactiva ninguna otra guarda", () => {
+  const CON_MARCA = {
+    ordenIds: ["o1", "o2"],
+    mensajeroId: "m1",
+    autorizarSinUbicacionIds: ["o1", "o2"],
+  };
+
+  it("rol no adminSatelite -> forbidden, y el gate ni se invoca", async () => {
+    const repo = fakeRepo();
+    const g = gateConMarca({ o1: "direccion_no_geocodificable" });
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      g,
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(CON_MARCA, { usuarioId: "u", rol: "maestro" });
+
+    expect(r.status).toBe("forbidden");
+    expect(g.evaluar).not.toHaveBeenCalled();
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("adminSatelite SIN zona -> sin_zona, y el gate ni se invoca", async () => {
+    const repo = fakeRepo({ findUsuarioZonaId: vi.fn(async () => null) });
+    const g = gateConMarca({ o1: "direccion_no_geocodificable" });
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      g,
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(CON_MARCA, ADMIN_SATELITE);
+
+    expect(r.status).toBe("sin_zona");
+    expect(g.evaluar).not.toHaveBeenCalled();
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("bodega bloqueada -> bodega_bloqueada, y el gate ni se invoca", async () => {
+    const repo = fakeRepo({
+      existeBodegaSateliteBloqueada: vi.fn(async () => ({
+        bloqueada: true,
+        porMensajeros: true,
+        porCierreBodega: false,
+      })),
+    });
+    const g = gateConMarca({ o1: "direccion_no_geocodificable" });
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      g,
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(CON_MARCA, ADMIN_SATELITE);
+
+    expect(r.status).toBe("bodega_bloqueada");
+    expect(g.evaluar).not.toHaveBeenCalled();
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("una orden de zona ajena -> conflict, y el gate ni se invoca", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", zonaId: "z-otra" }),
+        ordenRow({ id: "o2" }),
+      ]),
+    });
+    const g = gateConMarca({ o1: "direccion_no_geocodificable" });
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      g,
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(CON_MARCA, ADMIN_SATELITE);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle).toEqual([{ ordenId: "o1", motivo: "zona_ajena" }]);
+    expect(g.evaluar).not.toHaveBeenCalled();
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  it("una orden en el tope de intentos -> conflict, y el gate ni se invoca", async () => {
+    const repo = fakeRepo();
+    const g = gateConMarca({ o1: "direccion_no_geocodificable" });
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      g,
+      // 276: el umbral por defecto es 3 intentos vigentes.
+      fakeIntentosEnLote({ o1: 3 }),
+    );
+
+    const r = await service.asignar(CON_MARCA, ADMIN_SATELITE);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle.map((d) => d.motivo)).toEqual([
+      MSG_TOPE_INTENTOS_ASIGNACION,
+      MSG_TOPE_INTENTOS_ASIGNACION,
+    ]);
+    expect(g.evaluar).not.toHaveBeenCalled();
     expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
   });
 });

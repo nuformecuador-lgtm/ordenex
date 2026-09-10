@@ -80,8 +80,11 @@ describe("asignarDesdeSatelite — borde (R1/R15/R19)", () => {
     // Feature 246 (T3.1, R2/R4): el borde pasa el `dia` TAL CUAL al servicio, sin coercion. La
     // peticion no lo traia, asi que zod le puso el default `"hoy"` — el comportamiento anterior a
     // esta ficha (R4). Si el borde lo transformara, o si el default se perdiera, este caso lo dice.
+    // FICHA 407 (2026-09-10, R5): la foto gana `autorizarSinUbicacionIds: []`, igual que gano
+    // `dia: "hoy"` en la 246 — es lo que zod produce con `.default([])` cuando la peticion no
+    // trae el campo. Lista vacia = «ninguna autorizada» = el comportamiento previo a la ficha.
     expect(service.asignar).toHaveBeenCalledWith(
-      { ordenIds: [ORDEN], mensajeroId: MENSAJERO, dia: "hoy" },
+      { ordenIds: [ORDEN], mensajeroId: MENSAJERO, dia: "hoy", autorizarSinUbicacionIds: [] },
       ADMIN,
     );
   });
@@ -178,5 +181,54 @@ describe("listarMensajerosSatelite — scoped a la zona del actor (R2/R5/R6)", (
     const r = await listarMensajerosSatelite({ ordenRepo, getActor: actorAdmin });
     expect(r).toEqual({ status: "ok", mensajeros: [] });
     expect(ordenRepo.findMensajerosByZona).not.toHaveBeenCalled();
+  });
+});
+
+
+// ════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 407 (T6, nota del spec) — ESPEJO: `lib/actions/recepcion-satelite.ts` NO SE TOCA
+// ════════════════════════════════════════════════════════════════════════════════════════
+describe("407/R1 — la marca cruza el borde de `asignarDesdeSatelite` sin tocar la action", () => {
+  it("los ids autorizados llegan al service TAL CUAL", async () => {
+    const service = buildService();
+
+    await asignarDesdeSatelite(
+      { ordenIds: [ORDEN], mensajeroId: MENSAJERO, autorizarSinUbicacionIds: [ORDEN] },
+      { service, getActor: actorAdmin },
+    );
+
+    expect(service.asignar).toHaveBeenCalledWith(
+      {
+        ordenIds: [ORDEN],
+        mensajeroId: MENSAJERO,
+        dia: "hoy",
+        autorizarSinUbicacionIds: [ORDEN],
+      },
+      ADMIN,
+    );
+  });
+
+  it("R5: sin el campo, el service recibe la lista VACIA — nunca `undefined` ni «todas»", async () => {
+    const service = buildService();
+
+    await asignarDesdeSatelite(
+      { ordenIds: [ORDEN], mensajeroId: MENSAJERO },
+      { service, getActor: actorAdmin },
+    );
+
+    const [entrada] = vi.mocked(service.asignar).mock.calls[0]!;
+    expect(entrada.autorizarSinUbicacionIds).toEqual([]);
+  });
+
+  it("un id que no es uuid en la marca -> validation_error, sin tocar el service", async () => {
+    const service = buildService();
+
+    const r = await asignarDesdeSatelite(
+      { ordenIds: [ORDEN], mensajeroId: MENSAJERO, autorizarSinUbicacionIds: ["no-soy-uuid"] },
+      { service, getActor: actorAdmin },
+    );
+
+    expect(r.status).toBe("validation_error");
+    expect(service.asignar).not.toHaveBeenCalled();
   });
 });

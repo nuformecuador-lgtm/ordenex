@@ -101,8 +101,14 @@ describe("feature 94: admin en escritura -> permitido (delegado al service con e
     expect(r).toEqual({ status: "ok", resultados: [] });
     // Feature 246 (T3.1, R4): idem bodega central — la peticion no trae `dia`, zod le pone
     // `"hoy"` y el borde lo entrega sin transformar.
+    //
+    // FICHA 407 (2026-09-10, R5): la foto gana `autorizarSinUbicacionIds: []`, por el MISMO
+    // motivo por el que gano `dia: "hoy"` en la 246 — es lo que zod produce con `.default([])`
+    // para una peticion que no trae el campo. El literal se actualiza porque ES el contrato del
+    // borde, no un polizon: la lista VACIA es «ninguna orden autorizada», que es exactamente el
+    // comportamiento previo a la ficha.
     expect(service.asignarDesdeBodega).toHaveBeenCalledWith(
-      { ordenIds: ["o1"], mensajeroId: "m1", dia: "hoy" },
+      { ordenIds: ["o1"], mensajeroId: "m1", dia: "hoy", autorizarSinUbicacionIds: [] },
       ADMIN,
     );
   });
@@ -564,5 +570,68 @@ describe("asignarRecoleccion (feature 157)", () => {
       { ordenIds: [ORDEN_ID], mensajeroId: MENSAJERO_ID },
       ADMIN,
     );
+  });
+});
+
+
+// ════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 407 (T5, nota del spec) — `lib/actions/ordenes-guia.ts` NO SE TOCA, Y ESTO LO MIDE
+//
+// El spec afirma que la action hace `schema.parse(input)` y entrega el resultado al service
+// tal cual, asi que el campo nuevo «viaja solo». Eso no es una afirmacion sobre un comentario:
+// se comprueba mandando la marca por el borde y leyendo lo que recibio el service inyectado,
+// SIN haber editado el archivo de la action. Si hubiera que editarlo, el passthrough no era
+// tal y habria que decirlo.
+// ════════════════════════════════════════════════════════════════════════════════════════
+describe("407/R1 — la marca cruza el borde de `asignarDesdeBodega` sin tocar la action", () => {
+  const ORDEN_UUID = "33333333-3333-4333-8333-333333333333";
+
+  it("los ids autorizados llegan al service TAL CUAL", async () => {
+    const service = fakeGuiaService();
+
+    await asignarDesdeBodega(
+      {
+        ordenIds: [ORDEN_UUID, "o2"],
+        mensajeroId: "m1",
+        autorizarSinUbicacionIds: [ORDEN_UUID],
+      },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
+
+    expect(service.asignarDesdeBodega).toHaveBeenCalledWith(
+      {
+        ordenIds: [ORDEN_UUID, "o2"],
+        mensajeroId: "m1",
+        dia: "hoy",
+        autorizarSinUbicacionIds: [ORDEN_UUID],
+      },
+      MAESTRO,
+    );
+  });
+
+  it("R5: sin el campo, el service recibe la lista VACIA — nunca `undefined` ni «todas»", async () => {
+    const service = fakeGuiaService();
+
+    await asignarDesdeBodega(
+      { ordenIds: [ORDEN_UUID], mensajeroId: "m1" },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
+
+    const [entrada] = vi.mocked(service.asignarDesdeBodega).mock.calls[0]!;
+    expect(entrada.autorizarSinUbicacionIds).toEqual([]);
+  });
+
+  it("un id que no es uuid en la marca -> validation_error, sin tocar el service", async () => {
+    // El borde tipa la marca: `z.array(z.string().uuid())`. Un cliente fabricado que mande
+    // basura ahi se para ANTES del service, sin efectos.
+    const service = fakeGuiaService();
+
+    const r = await asignarDesdeBodega(
+      { ordenIds: [ORDEN_UUID], mensajeroId: "m1", autorizarSinUbicacionIds: ["no-soy-uuid"] },
+      { guiaService: service, getActor: getActor(MAESTRO) },
+    );
+
+    expect(r.status).toBe("validation_error");
+    expect(service.asignarDesdeBodega).not.toHaveBeenCalled();
   });
 });
