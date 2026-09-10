@@ -41,9 +41,9 @@ guion de pantalla no acabe dentro de una celda de Excel.
 
 **Los 18 puntos de llamada pasan `gestion.esRechazoSla`**, sin excepción — el mismo booleano que
 decide si el marcador se pinta. Comprobado con `grep -c` archivo por archivo: 4+4+1+1+4+4 = 18.
-(⚠️ El `design.md` §3 dice «13 puntos de llamada» en prosa, pero su propia tabla de §4 enumera
-esos 18; se implementaron **todos los que §4 enumera**. Es una discrepancia de conteo en el spec,
-no una decisión reabierta.)
+(⚠️ El `design.md` §3 decía «13 puntos de llamada» en prosa, contra los 18 que enumera su propia
+tabla de §4. Se implementaron **todos los que §4 enumera**; el 13 se coló además en el comentario
+de `motivoGestionLegible`. **Las dos líneas se corrigieron tras la revisión** — ver §6.)
 
 ### Archivos de test (4 nuevos, 3 ampliados)
 
@@ -180,10 +180,8 @@ que otro worktree pueda pisar.
 
 ## 5. Lo que queda abierto
 
-1. **El conteo del spec: «13 puntos de llamada» (design §3) vs los 18 que enumera §4.** Se
-   implementaron los 18 —todos los que la tabla de §4 lista, y todos pasando
-   `gestion.esRechazoSla`—, así que no queda ninguno crudo. Es la prosa del design la que va
-   corta, no el código. **No se editó el spec**: eso lo decide quien lo aprobó.
+1. **CERRADO (ver §6): el conteo «13» vs 18.** Estaba en el `design.md` §3 y —eso es lo que
+   duele— acabó copiado al comentario de `motivoGestionLegible`. Los dos dicen ya 18.
 2. **Un `false` fijo en los llamadores de `/cierre-dia` NO lo caza ningún test, y es honesto
    decirlo.** Hoy es indistinguible del código correcto, porque `CierreDiaRepository` manda
    siempre `false` para esa vista: el resultado pintado sería idéntico. Sólo empezaría a
@@ -201,3 +199,38 @@ que otro worktree pueda pisar.
    merge, hay que volver a medir.
 5. **`feature_list.json` y `progress/current.md` NO se tocaron**, como pedía el encargo: los
    gestiona el leader.
+
+---
+
+## 6. Post-revisión (2026-09-10) — el comentario que se quedó mintiendo
+
+La revisión salió **aprobada, cero bloqueantes**, con una corrección pedida antes de mergear.
+
+**El defecto:** `cierre-labels.ts` decía «Los trece puntos de llamada» en el comentario de
+`motivoGestionLegible`. El número equivocado venía del `design.md` §3 y **acabó copiado al
+código**. El mensaje de commit sí decía 18 —la cuenta se hizo bien—, así que lo que se quedó
+atrás fue el comentario, que es justo lo peor: **un comentario falso no lo pone rojo nadie**, y
+la ficha 405 corrigió tres del mismo tipo el mismo día, una de ellas ya en producción.
+
+**Las dos correcciones:**
+
+| Dónde | Antes | Ahora |
+| --- | --- | --- |
+| `app/(app)/cierres-admin/_components/cierre-labels.ts` (comentario de `motivoGestionLegible`) | «Los trece puntos de llamada» | «Los DIECIOCHO puntos de llamada», con el desglose por archivo (4 + 4 + 1 + 1 + 4 + 4) escrito al lado, para que la cuenta se pueda comprobar sin salir del archivo |
+| `specs/408-motivo-rechazo-automatico-legible/design.md` §3 | «los 13 puntos de llamada» | «los 18 puntos de llamada», con nota de la corrección y de su fecha |
+
+**Por qué el `design.md` se edita AHORA y no antes:** mientras se implementa, el spec es la
+referencia independiente contra la que el reviewer mide; corregirlo sobre la marcha la destruye.
+Con la revisión ya cerrada, dejarlo mal sería sembrar el mismo error para el siguiente que lo
+lea — que es exactamente cómo llegó al código esta vez.
+
+**Dos cosas que el reviewer cerró por escrito y que estaban aquí como abiertas:**
+
+- **El hueco del `false` fijo (§5.2) queda confirmado, no refutado.** Lo reprodujo: con `false`
+  fijo en los llamadores de `/cierre-dia`, los 124 tests siguen verdes. Y confirmó que no hay
+  forma de protegerlo sin contradecir la ficha — el único discriminador sería un test de
+  «`true` → texto corto en `/cierre-dia`», que atornillaría el bug en lugar de impedirlo.
+  Declararlo era lo correcto; fabricar una protección falsa, no.
+- **Los rojos ajenos de la base local no son de esta rama.** El reviewer corrió `dev` limpio
+  contra la misma base local y salieron los mismos: es la migración de otra ficha aplicada a la
+  base compartida.

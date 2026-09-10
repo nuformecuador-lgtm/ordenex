@@ -494,7 +494,10 @@ const ETIQUETA_POR_MOTIVO_AUTOMATICO: ReadonlyMap<string, string> = new Map(
 /**
  * El motivo de una gestión, listo para pintarse. Función PURA: no toca la gestión ni nada más.
  *
- * `hayMarcadorDeOrigen`: ¿esta fila enseña el marcador «Automático»? Los trece puntos de llamada
+ * `hayMarcadorDeOrigen`: ¿esta fila enseña el marcador «Automático»? Los DIECIOCHO puntos de
+ * llamada —4 en `cierre-detalle-shared` + 4 en `cierre-gestiones-descarga-columnas` + 1 en
+ * `cierre-factura` + 1 en `cierres-gestiones-fundida-descarga-columnas` + 4 en `CierreDiaModule`
+ * + 4 en `cierre-dia-descarga-columnas`—
  * pasan SIEMPRE `gestion.esRechazoSla` —el mismo booleano que decide si el marcador se pinta—,
  * así que el llamador no decide nada y las dos cosas no pueden desincronizarse. En `/cierre-dia`
  * es siempre `false` (`CierreDiaRepository.ts`, decisión expresa de la 102): ahí no hay marcador
