@@ -1,66 +1,70 @@
-# Estado — cierre de sesión del 2026-09-08
+# Estado — cierre de sesión del 2026-09-10 (madrugada)
 
-## 20 fichas cerradas, en seis releases
+## Release desplegada y verificada en producción
 
-`376 · 377 · 379 · 380 · 381 · 382 · 383 · 384 · 385 · 386 · 387 · 388 · 390 · 391 · 392 · 393 · 394 · 395 · 398 · 399`
+**PR #769**, `prod` en **`a9d48f13`**, despliegue Vercel **READY comprobado** (no solo el PR
+mergeado: se verificó que el build existe, cosa que ya falló una vez). Cuatro fichas:
 
-Canceladas por decisión del humano: **378** y **389**.
-
-| Release | Commit | Migraciones |
+| Ficha | PR | Qué cierra |
 |---|---|---|
-| #733 | `7f6455c7` | — |
-| #735 | `1d2e6c4e` | — |
-| #748 | `8a68b5db` | — |
-| #752 | `7381b54c` | **3** — verificadas: 49→51, 20→21, 10→11 |
-| #755 | `73f9a420` | — |
-| #758 | `0c0d3312` | **1** — ⚠️ **SIN VERIFICAR** |
+| **400** | #766 | un fallo de configuración del geocodificador ya no bloquea la asignación |
+| **401** | #768 | la caída avisa (~75 min en vez de 19 h) y se recupera sola |
+| **402** | #765 | la cola reparte el lote entre tipos: un tipo saturado ya no deja a los demás sin turno |
+| **403** | #767 | un webhook que falla en racha se pausa, avisa y se recupera solo |
+
+**Gate completo sobre `dev` con las cuatro dentro: `INIT_EXIT=0`, 1846 archivos, 26.782 tests,
+26 saltados (ajenos y preexistentes), cero rojos nuevos.**
+
+Verificado en producción tras el despliegue: las **4 migraciones aplicadas** (06:49 UTC), los enums
+en 11 y 9 valores con los nuevos dentro, **T20 = CERO candidatas** (como estaba previsto),
+`fallos_consecutivos = 0`, cola sin nada vencido y **cero errores de runtime nuevos** (el único
+grupo que aparece es un aviso de deprecación preexistente desde el 27 de julio).
 
 ## ⚠️ LO PRIMERO QUE HAY QUE MIRAR
 
-**RESUELTO.** La release #758 se habia mergeado SIN crear despliegue: se redisparo con un commit vacio en `prod` (`c359b08e`) y quedo verificada -- migracion aplicada, catalogos en 52 y 34, cero errores de runtime. Lo que sigue es el historico de como se detecto. `prod` apunta a
-`0c0d3312`, pero el catálogo de producción seguía en **51 / 33** y debe quedar en
-**52 / 34**. Comprobar también que no hay errores de runtime.
+**Nadie ha visto la app funcionando con los mensajes nuevos.** Ningún agente pudo levantarla; se
+renderizaron los modales y se volcó el DOM literal, pero el toast real —más de 180 caracteres— no
+lo ha visto una persona. **Se cierra mirando producción**, y es la deuda declarada de la 400.
 
-```sql
-select t.typname, count(*) from pg_type t join pg_enum e on e.enumtypid = t.oid
-where t.typname in ('historial_accion_tipo','orden_historial_origen_tipo')
-group by t.typname;
-```
+## El incidente que originó todo
 
-Lleva la **398** (corregir una gestión mal declarada) y la **399** (el aviso de ubicación).
+El **2026-09-08 a las 19:40 UTC** la Geocoding API empezó a rechazar todo con `REQUEST_DENIED`.
+**19 horas sin geocodificar una sola dirección, en silencio.** Lo detectó el humano porque no podía
+asignar órdenes, leyendo «Dirección no encontrada» sobre direcciones que estaban bien: de 43 órdenes
+represadas, **42 lo estaban por la credencial y solo 1 por una dirección irresoluble**.
 
-## Una corrección aplicada A MANO en producción
+Se rescató a mano (47 jobs resucitados contra la base de producción) y salieron tres fallos
+encadenados más, todos cerrados en esta release. **El más caro de encontrar:** los reintentos de un
+webhook contra `webhook.site` —una URL de PRUEBAS activa en producción desde el 28 de agosto—
+dejaron media hora sin turno a la geocodificación **con la credencial ya arreglada**, mientras un
+integrador real llevaba cinco días sin recibir un solo evento.
 
-Orden **50337523** del cierre **1E2D7CF8**: `entregada` → `rechazada`, con autorización
-del maestro, porque la funcionalidad no existía todavía. Totales verificados **después**:
-general `267.575` = suma de líneas de pago · efectivo `120.945` + SINPE `146.630` = el
-total · pago al mensajero `34.000` = suma por gestión. Rastro en `orden_historial_estado`.
+## Esperando al humano
 
-## En curso al cerrar
+1. **Preguntar a Daniel si el secreto de firma le cuadra.** Sus eventos le llegan (177 entregados,
+   cero fallidos), pero si valida la firma con otro secreto los rechaza de su lado. Es lo único que
+   no se puede comprobar desde aquí.
+2. **Validar los textos** que ve el operador (en el PR #766) y el del dueño del webhook (#767).
+3. **El mensaje para Daniel** con las cuatro aclaraciones: el `id` es uuid y no entero; `mensajero`
+   es «quién la lleva AHORA» y se vacía en devoluciones —justo lo que él quiere medir—; qué
+   `motivo` necesita (**puerta BLOQUEANTE de la 405**); y que `fecha`/`tipo` cambian de nombre.
+4. **Dos órdenes con direcciones irresolubles** (`ZERO_RESULTS`) que necesitan una referencia mejor.
 
-- **396**, solo la **tanda del cierre de mensajero**. La de **bodega va después**: chocaría
-  con la 397.
-- **397**, el recorte por rol en el cierre de bodega.
+## Backlog abierto
 
-Van en paralelo **a propósito y sin pisarse**: tocan archivos distintos.
+- **404** — el mensajero en el webhook y en la API. Spec listo (25 requisitos), premisa de
+  privacidad **verificada en el código**, no supuesta.
+- **405** — el historial de gestiones. Spec listo (22 requisitos). **Q1 bloqueante**: confirmar el
+  `motivo` con el integrador antes de escribir una línea.
+- **406** — el enlace de evidencias del webhook da 404 (uuid contra un endpoint que resuelve por
+  guía/remisión). Hoy inofensivo: cero incidentes en producción. Se estrena roto ante el primero.
+- **270** — sigue `pending` y ahora importa más: `geocode_precision` no lo lee nadie, y 4 de las 6
+  órdenes desbloqueadas salieron con precisión `GEOMETRIC_CENTER`, no `ROOFTOP`.
 
-## Dos decisiones del humano, pendientes
+## Lecciones de la madrugada, por si se repiten
 
-1. **Al mensajero no se le avisa** de que su pago pasó a cero tras una corrección.
-2. **A la tienda no le llega el aviso** de «orden rechazada» cuando se corrige.
-
-Las dos pedirían otro tipo de notificación y otra migración. **No son bugs.**
-
-## Deuda técnica medida, con dueño
-
-- **El deadlock `40P01`** que ensució gates toda la sesión es contención entre tests de
-  migración que aplican DDL sin bloqueo de aviso compartido. **Se reproduce sin el archivo
-  de nadie.** Arreglable, no arreglado.
-- **`recuperar-contrasena-form.test.tsx` es frágil bajo carga**: cae un test distinto cada
-  vez, siempre esperando el paso a la fase de contraseña, y va de 8 s a 16 s según máquina.
-- **La guardia del historial mide por MÉTODO, no por escritura.** Borrar una de varias
-  escrituras del mismo método la deja verde. Medido dos veces.
-- El error **bajo el campo** de la validación de cliente sigue en inglés en el formulario
-  de usuarios. El select de Rol pinta los valores crudos del enum.
-- **En iPhone**, la ruta de Ajustes del aviso de ubicación es la de Android.
-- El **navegador embebido de WhatsApp no se detecta**, y no hay forma fiable de hacerlo.
+- **Un gate rojo tras un merge con migraciones puede ser el cliente Prisma rancio**: 14 errores de
+  typecheck sobre campos que sí estaban en el esquema. `prisma generate` y a correr otra vez.
+- **La base local es compartida entre worktrees**: dos fichas con migraciones se rompieron el gate
+  mutuamente. Se resuelve con orden de merge, no desde dentro de las ramas.
+- **Un `down.sql` recrea-con-lista caduca en cuanto otra ficha entra antes que tú.**
