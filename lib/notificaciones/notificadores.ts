@@ -27,6 +27,7 @@ import {
   emitirCierreDiaVencido,
   emitirDiaRepartoCorregido,
   emitirGastoFijoCobroPendiente,
+  emitirGeocodificacionCaida,
   emitirMensajeroBloqueado,
   emitirPostulacionPendiente,
   emitirPostulacionRecursoPendiente,
@@ -36,6 +37,7 @@ import {
   type CierreVencidoContexto,
   type DiaRepartoCorregidoContexto,
   type GastoFijoCobroPendienteContexto,
+  type GeocodificacionCaidaContexto,
   type MensajeroBloqueadoContexto,
   type PostulacionContexto,
   type PostulacionRecursoContexto,
@@ -87,6 +89,14 @@ export type GastoFijoCobroPendienteNotificador = (
 export type WebhookSuscripcionPausadaNotificador = (
   ctx: WebhookSuscripcionPausadaContexto,
 ) => Promise<void>;
+/**
+ * FICHA 401 (R7/R8/R12). Firma del notificador de «el servicio de mapas esta rechazando nuestras
+ * peticiones». Lo usa `GeocodeSaludService`, desde la rama de configuracion del job de
+ * geocodificacion — es decir, dentro de la corrida del CRON de la cola.
+ */
+export type GeocodificacionCaidaNotificador = (
+  ctx: GeocodificacionCaidaContexto,
+) => Promise<void>;
 
 /**
  * DEFAULT de los tres services: no hace nada. Un service construido sin cablear su notificador
@@ -101,7 +111,8 @@ export const notificadorNoOp: PostulacionNotificador &
   CierreVencidoNotificador &
   MensajeroBloqueadoNotificador &
   GastoFijoCobroPendienteNotificador &
-  WebhookSuscripcionPausadaNotificador = async () => {};
+  WebhookSuscripcionPausadaNotificador &
+  GeocodificacionCaidaNotificador = async () => {};
 
 /**
  * Construye el repositorio real. Aislado en una funcion para que los tests del camino REAL
@@ -291,6 +302,31 @@ export function notificarWebhookSuscripcionPausadaCon(
   };
 }
 
+/**
+ * FICHA 401 (R7/R8/R11) — emite «el servicio de mapas esta rechazando nuestras peticiones» contra
+ * `repo`, absorbiendo su fallo.
+ *
+ * BEST-EFFORT Y FUERA DE TODA TRANSACCION, y aqui el motivo no es comodidad: lo llama el DRENADOR
+ * de la cola, que sirve a nueve tipos de job y corre cada minuto sin nadie mirando. El aviso sale
+ * en la rama en la que el job de geocodificacion ya se dio por fallido; un aviso caido no puede
+ * cambiar ese desenlace ni tumbar el resto del lote. LA COLA MANDA, EL AVISO ES CORTESIA (R11).
+ *
+ * Y no es un `catch` vacio (`docs/conventions.md`): `emitirBestEffort` deja el fallo REGISTRADO
+ * con el nombre de la operacion y su causa.
+ */
+export function notificarGeocodificacionCaidaCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): GeocodificacionCaidaNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "geocodificacion_caida",
+      () => emitirGeocodificacionCaida(repo, ctx),
+      logger,
+    );
+  };
+}
+
 // Bindings de PRODUCCION. Solo el composition root los importa. Resuelven el repositorio en el
 // momento de la emision (no al importar el modulo), para no abrir una conexion por el hecho de
 // que alguien importe este archivo.
@@ -322,3 +358,6 @@ export const notificarGastoFijoCobroPendienteReal: GastoFijoCobroPendienteNotifi
 export const notificarWebhookSuscripcionPausadaReal: WebhookSuscripcionPausadaNotificador = async (
   ctx,
 ) => notificarWebhookSuscripcionPausadaCon(repoReal())(ctx);
+
+export const notificarGeocodificacionCaidaReal: GeocodificacionCaidaNotificador = async (ctx) =>
+  notificarGeocodificacionCaidaCon(repoReal())(ctx);

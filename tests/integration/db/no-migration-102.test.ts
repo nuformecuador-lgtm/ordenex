@@ -77,6 +77,13 @@ const MIGRACIONES_NOTIFICACIONES_POSTERIORES = [
   // espaciaron». Los DOS enums de la campana ganan un valor; las columnas del circuito van en su
   // propia migracion (`20260909120000_webhook_suscripcion_circuito`), que no cae en este filtro.
   "_notificacion_evento_webhook_suscripcion",
+  // Ficha 401 / design 3.3 (2026-09-09): el aviso «el servicio de mapas esta rechazando nuestras
+  // peticiones por un problema de configuracion de la cuenta». Los DOS enums de la campana ganan
+  // un valor —`geocodificacion_caida` y `geocodificacion_caida_dia`—; el indice PARCIAL sobre
+  // `jobs` va en su propia migracion (`20260910110000_jobs_geocodificacion_salud_idx`), que no
+  // lleva la palabra «notificacion» y no cae en este filtro. Nada de esto es infra de la 102: la
+  // campana no gana tabla ni columna, y la clasificacion SLA sigue siendo derivada.
+  "_notificacion_evento_geocodificacion_caida",
 ] as const;
 
 describe("Feature 102 · SIN migracion nueva (R3)", () => {

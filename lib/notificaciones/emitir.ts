@@ -831,3 +831,99 @@ export async function emitirWebhookSuscripcionPausada(
     tx,
   );
 }
+
+// FICHA 401 §7 — El servicio de mapas está rechazando nuestras peticiones. BEST-EFFORT, desde la
+// rama de configuración del job de geocodificación.
+//
+// EL HECHO QUE LO ORIGINA, MEDIDO: el 2026-09-08 el proveedor rechazó TODAS las peticiones durante
+// 19 h 55 min por un problema de configuración de nuestra cuenta, **ninguna alerta se disparó**, y
+// lo detectó un humano porque no podía asignar órdenes. El contrato de la feature 91 ya decía que
+// ese caso «debe ser RUIDOSO, nunca silencioso». No lo fue.
+//
+// ⚠️ LA ENTIDAD DE ESTE AVISO ES **LA JORNADA CR**, NO EL JOB NI LA ORDEN, y es la misma decisión
+// (y el mismo motivo) que la de la 333. `notificacion_dedupe_key` es UNIQUE sobre `(evento,
+// entidad_id, destinatario_rol, destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE
+// entidad_id IS NOT NULL`, y `crear` ABSORBE el `P2002` devolviendo `false`. Con una entidad que
+// no cambiara entre jornadas, el aviso del día 2 no saldría NUNCA, en silencio. Con la jornada:
+// días distintos ⇒ el aviso sale siempre (R10); misma jornada ⇒ un solo aviso por rol (R9). Y esto
+// último no es cosmético: el drenador corre CADA MINUTO, así que sin la entidad por jornada el
+// corte medido habría producido ~2.280 filas.
+//
+// Y tampoco es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el
+// índice único es PARCIAL, de modo que saldría un aviso por evaluación.
+// ---------------------------------------------------------------------------
+
+/** Lo MÍNIMO que el aviso necesita: un número y un día. Ni dirección, ni orden, ni guía (R26). */
+export interface GeocodificacionCaidaContexto {
+  /** Cuántos jobs distintos llevan el marcador dentro de la ventana. UN NÚMERO, nada más (R26). */
+  afectados: number;
+  /** `YYYY-MM-DD`: la jornada CR en que se detectó la caída. **ES LA ENTIDAD** del aviso. */
+  diaCR: string;
+}
+
+/**
+ * R26/R27 — el texto del aviso. LITERAL FIJO, y es contrato de test afirmado a mano.
+ *
+ * ⚠️ SIN JERGA Y SIN SIGLAS (R27). Quedan prohibidas «geocodificación», «geocodificador»,
+ * «config_invalida», «REQUEST_DENIED» y «API»: quien lee esto es una persona, y el término que ya
+ * usa el resto de la app de cara al operador es «servicio de mapas» (la 400 lo fijó en
+ * `MSG_UBICACION_NO_VERIFICADA`). Un solo vocabulario, no dos.
+ *
+ * ⚠️ DICE QUE LA CAUSA ES NUESTRA, no la dirección, y es la mitad del valor del aviso: el
+ * 2026-09-09 se mandó al operador a corregir seis direcciones que estaban perfectamente bien.
+ *
+ * SIN PII NI SECRETOS (R26): un número agregado y una instrucción. Nunca la dirección, el id de la
+ * orden, su guía, la URL del proveedor ni la credencial — ni siquiera enmascarada.
+ *
+ * Singular y plural explícitos, como `textoCargaMasivaTerminada`: «1 direcciones» sería el tipo de
+ * texto roto que ninguna suite ve y que un humano lee el día peor.
+ */
+export function textoGeocodificacionCaida(n: number): string {
+  return n === 1
+    ? "El servicio de mapas está rechazando nuestras peticiones por un problema de configuración de la cuenta. 1 dirección quedó sin ubicar. Revisa la credencial y la facturación de la cuenta del proveedor de mapas."
+    : `El servicio de mapas está rechazando nuestras peticiones por un problema de configuración de la cuenta. ${n} direcciones quedaron sin ubicar. Revisa la credencial y la facturación de la cuenta del proveedor de mapas.`;
+}
+
+/**
+ * R7/R8/R9/R10 — DOS filas `alert`, una por cada rol de administración, con el MISMO texto.
+ *
+ * LOS DOS ROLES son decisión del humano del 2026-09-09 (pregunta abierta Q1). La propuesta del
+ * spec era «sólo `maestro`», con el criterio de la 333: la acción que el aviso pide —revisar la
+ * credencial y la facturación de la cuenta del proveedor— es del dueño. Lo que ese argumento no
+ * veía y el incidente sí: el corte duró 19 horas, la mayoría fuera de horario, y quien acabó
+ * notándolo fue **quien estaba operando**, no quien podía arreglarlo. El `admin` no toca la
+ * facturación, pero ESCALA — y para escalar necesita enterarse.
+ *
+ * `ROLES_ADMINISTRACION` se REUTILIZA tal cual (constante privada de este mismo archivo, la misma
+ * que usan ya `emitirPostulacionPendiente`, `emitirPostulacionRecursoPendiente`,
+ * `emitirCierreDiaPorAprobar` y `emitirCierreDiaVencido`). No se exporta ni se toca.
+ *
+ * `alert` y NO `warning`: `warning` es «algo pendiente de aprobación» —una cola de trabajo
+ * normal—. Esto es un servicio caído por configuración nuestra que exige una acción FUERA de la
+ * app.
+ *
+ * EL MISMO TEXTO PARA LOS DOS: es lo que hacen los cuatro emisores multi-rol vigentes. Un texto
+ * distinto por rol duplicaría el literal —y con él el riesgo de que uno de los dos se quede sin
+ * revisar contra R26/R27— para decir lo mismo.
+ *
+ * SIN ANEXO: no hay ningún dato adicional que enseñar sin arriesgar R26.
+ */
+export async function emitirGeocodificacionCaida(
+  repo: INotificacionRepository,
+  ctx: GeocodificacionCaidaContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  return emitirFilas(
+    repo,
+    ROLES_ADMINISTRACION.map((destinatario) => ({
+      tipo: "alert" as const,
+      evento: "geocodificacion_caida" as const,
+      descripcion: textoGeocodificacionCaida(ctx.afectados),
+      anexo: null,
+      entidadTipo: "geocodificacion_caida_dia" as const,
+      entidadId: ctx.diaCR,
+      destinatario,
+    })),
+    tx,
+  );
+}

@@ -247,13 +247,32 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
     return (filas[0]?.valores ?? "").split(",").filter((v) => v.length > 0);
   }
 
-  it("la base tiene los DIEZ eventos y los OCHO entidad_tipo, con el nuevo AL FINAL", async () => {
+  it("la base tiene los ONCE eventos y los NUEVE entidad_tipo, con el de esta ficha y el posterior AL FINAL", async () => {
     // El orden (`enumsortorder`) es lo que demuestra que el valor se ANADIO y no que el tipo se
     // recreo por detras.
-    expect(await valoresDe("notificacion_evento")).toEqual([...EVENTOS_PREVIOS, EVENTO_NUEVO]);
+    //
+    // ⚠️ AMPLIADA EL 2026-09-10 POR LA FICHA 401, y esa ampliacion ES el contrato en marcha: esta
+    // lista lee la BASE APLICADA —el estado de HOY—, no una foto historica como las de los `down`
+    // de arriba. La 401 entro DESPUES de esta ficha con
+    // `20260910120000_notificacion_evento_geocodificacion_caida`, asi que la base tiene ahora un
+    // evento y un `entidad_tipo` mas. Que este test se pusiera rojo es lo que obligo a mirarlo, que
+    // es exactamente para lo que existe un inventario CERRADO: se AMPLIA a mano, no se relaja ni se
+    // deriva del enum (una lista que se lee a si misma esta siempre verde y no dice nada).
+    expect(await valoresDe("notificacion_evento")).toEqual([
+      ...EVENTOS_PREVIOS,
+      EVENTO_NUEVO,
+      // FICHA 401 (design 3.3, 2026-09-10) - «el servicio de mapas esta rechazando nuestras
+      // peticiones por un problema de configuracion de la cuenta». Lo emite `GeocodeSaludService`
+      // desde la rama de configuracion del job de geocodificacion; va al `maestro` Y al `admin`.
+      "geocodificacion_caida",
+    ]);
     expect(await valoresDe("notificacion_entidad_tipo")).toEqual([
       ...ENTIDADES_PREVIAS,
       ENTIDAD_NUEVA,
+      // FICHA 401 (design 3.3) - TERCER `entidad_tipo` que no apunta a una fila de tabla: la
+      // entidad del aviso es LA JORNADA CR. Mismo argumento por el que esta ficha 403 eligio LA
+      // RACHA y no la suscripcion.
+      "geocodificacion_caida_dia",
     ]);
   });
 
