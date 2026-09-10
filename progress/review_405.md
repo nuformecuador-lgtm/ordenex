@@ -337,3 +337,187 @@ borraron (también la copia que llevé al checkout principal para medir el basel
    quedarse como están.
 3. Al cerrar: entrada en `progress/history.md`, y **mandar** el CHANGELOG al integrador (T19) antes
    de `prod`.
+
+---
+---
+
+# RONDA 2 — verificación de los dos bloqueantes (2026-09-10)
+
+**Revisado:** `ae229c7f` (cabeza), sobre `8f807ec9` (los arreglos) y `ae229c7f` (bitácora).
+**Método:** volví a aplicar **mi propia mutación** y volví a **medir**; no leí su informe como prueba.
+
+## Veredicto de la ronda 2
+
+# APROBADO
+
+Los dos bloqueantes están cerrados, y cerrados **como se pedía**: el primero arreglando el
+**escenario** (no el aserto), el segundo diciendo la verdad medida y **congelándola**. Quedan tres
+`menor`, ninguno bloquea.
+
+---
+
+## BLOQUEANTE 1 — cerrado. Mi mutación ahora muere
+
+Reapliqué **exactamente** la mutación de la ronda 1 (M14: añadir `"devuelta"` y `"reprogramada"` a
+la lista del `.filter()` en memoria de `toApiOrdenDetalleRow`, `OrdenRepository.ts:522`):
+
+```
+Tests  2 failed | 10 passed (12)
+ x R11 + no-regresion 268: la ANULADA CON FOTO no entra en `gestiones[]` pero SI en `evidencias[]`
+ x R15: `evidencias[]` NO gana las gestiones con foto cuyo resultado no le corresponde
+AssertionError: expected [ ...(3) ] to deeply equal [ "entregada:anulada-con-foto.jpg" ]
+```
+
+**2 rojos**, donde en la ronda 1 sobrevivía a **9.446 tests en verde**. Coincide con lo que declara
+la bitácora.
+
+**¿Puede el caso nuevo pasar en falso por falta de datos?** No, y lo comprobé: la lista `conFoto` se
+construye leyendo las **filas reales de la base** (`m.fotoAntes.gestiones`, la foto del `SELECT`, no
+el DTO) y se afirma contra un **literal de tres nombres de archivo escrito a mano**, más un
+`toHaveLength(3)`. Si la siembra no ocurriera, ese primer `toEqual` cae antes de llegar al aserto
+que importa. Es la contraprueba que faltaba en la ronda 1, puesta donde tenía que estar.
+
+El escenario además dejó de describir un imposible: la `devuelta` y la `reprogramada` vigentes
+llevan foto (obligatoria en `devuelta` desde la feature 75), y la única `devuelta` sin foto que
+queda está **declarada como anterior a esa feature** y encima anulada. Coherente consigo misma.
+
+---
+
+## BLOQUEANTE 2 — cerrado. Repetí la medición y salen los mismos números
+
+Volví a medir con mi propia sonda (`$on("query")` sobre `findDetalleByOrdenIdForOwner`, misma base
+local, misma orden), una vez en cada rama:
+
+| rama | consultas | tablas |
+|---|---|---|
+| `dev` (`48918e60`) | **6** | `orden`, `order_status`, `gestion_orden`, `orden_incidente`, `orden_incidente_evidencia`, `usuario` |
+| `feat/405…` (`ae229c7f`) | **9** | las 6 + `orden_historial_estado` + un 2.º `order_status` + un 2.º `usuario` |
+
+**6 y 9 confirmados por mí.** El aumento lo aceptó el leader sobre el número medido y **no lo
+reporto como hallazgo**.
+
+**El test nuevo protege de verdad.** Apliqué **M16** por mi cuenta —añadí una relación anidada más
+al `select` del detalle (`zona: { select: { id: true } }`)— y:
+
+```
+ x R19/R19-b: el detalle emite EXACTAMENTE 9 consultas, y son estas nueve
+ x R19: ese numero NO depende del numero de gestiones (no hay N+1)
+AssertionError: expected [ "orden", "order_status", ...(8) ] to deeply equal [ ...(7) ]
+- Expected
++ Received
++   "zona"
+```
+
+**Y el rojo dice CUÁL sobra**: `+ "zona"`, por su nombre de tabla. Eso era justo lo que pedía R19-b.
+El tercer rojo que declara la bitácora también está: `orden-repository.no-regresion-106.test.ts` (el
+literal congelado del `select`) → **3 rojos en total**, confirmado.
+
+**No hay N+1**, y está afirmado por las dos puntas: `tablasConGestiones` y `tablasSinGestiones`
+valen los dos `CONSULTAS_DEL_DETALLE`, así que una orden con 3 gestiones y otra con 0 cuestan las
+mismas 9.
+
+### Las tres frases falsas: verificadas en el blob de `origin`, no en su disco
+
+El implementador declara que un `git checkout --` se le llevó dos correcciones sin commitear y las
+reaplicó. **Comprobado sobre `git show origin/…:archivo`**, que es lo único que cuenta:
+
+| # | Dónde | Estado en `origin` |
+|---|---|---|
+| 1 | `OrdenRepository.ts`, cabecera de `API_ORDEN_DETALLE_SELECT` | corregida (l. 294-307): cita la frase vieja, da el 6 → 9 medido y apunta a `CONSULTAS_DEL_DETALLE` |
+| 2 | `OrdenRepository.ts`, docblock de `findDetalleByOrdenIdForOwner` | corregida (l. 3123, 3127): «join» retirado, «sin N+1» conservado con su porqué |
+| 3 | `design.md` §3.1 | corregida (l. 134): cita «ninguna consulta nueva» como falsa y separa el superconjunto (gratis) de las relaciones nuevas (no) |
+
+**Barrido de residuo** en el archivo de producción entero con
+`grep -niE "una sola consulta|ninguna consulta nueva|un solo round-?trip|hace un join"`: las cinco
+coincidencias restantes son de **otros métodos** (`groupBy` de lote, consulta de pertenencia,
+agregada de página) y describen bien lo suyo. **Ninguna frase falsa más sobre el coste del detalle.**
+
+---
+
+## El gate: el «0 saltados» está respaldado por el log
+
+Verifiqué `scratchpad/gate-405-v2.log` (1,06 MB) yo mismo, no la cita:
+
+| Comprobación | Medida |
+|---|---|
+| `Test Files` | `1854 passed (1854)` — ni un archivo saltado |
+| Líneas con la flecha de salto en TODO el log | **0** |
+| Archivos `tests/integration/db/*.test.ts` distintos que aparecen | **231** |
+| El de esta ficha | `tests/integration/db/gestiones-detalle-api-405.test.ts (12 tests) 1372ms`, en verde |
+| `40P01` / `deadlock` en el log | **0 coincidencias** |
+| Cierre | `.env presente`, `== init OK ==`, **`INIT_EXIT=0`** |
+
+Los 26 `skipped` son **casos sueltos de otros archivos**, no archivos enteros, y los cuatro de esta
+ficha reportan sus 12 / 19 / 10 / 26 tests ejecutados.
+
+---
+
+## Lo que corrí yo en esta ronda
+
+| Qué | Resultado |
+|---|---|
+| El archivo de integración, **5 veces seguidas** | **12/12 passed** las cinco. Sin `40P01`, sin flake |
+| Los 13 archivos de la ficha | **201 passed / 201** (eran 199; +2 casos nuevos) |
+| `tsc --noEmit` | **TSC_EXIT=0** |
+| Mi mutación M14 reaplicada | **2 rojos** |
+| Mi mutación M16 (una relación más) | **3 rojos**, y el rojo nombra `zona` |
+| Sonda de consultas en las dos ramas | **6** y **9** |
+
+---
+
+## Hallazgos de la ronda 2 — ninguno bloqueante
+
+### `menor` 7 — el congelado de las 9 consultas es SENSIBLE AL ORDEN, y el orden depende del camino
+
+`CONSULTAS_DEL_DETALLE` se compara con `toEqual` sobre una lista **ordenada**. Ese orden no es el
+mismo por todos los caminos: mi sonda, que llama al repositorio **fuera** de una transacción, obtiene
+las mismas nueve tablas en **otro orden** (`gestion_orden, orden_historial_estado, orden_incidente,
+usuario, order_status, orden_incidente_evidencia, usuario` tras las dos primeras) que el que congela
+el test, que corre **dentro** de `enTransaccionRevertida`. El multiconjunto es idéntico; la
+secuencia no.
+
+Dentro del camino que el test usa es **estable: 5 corridas de 5**, así que no es un flake observado y
+no bloquea. Pero el congelado descansa en un detalle de planificación de Prisma que ya se demostró
+distinto en otro camino. **Sugerencia, no exigencia:** comparar los dos lados ordenados —o como
+multiconjunto—; se conserva íntegro lo que de verdad protege (cuántas y cuáles, con el nombre de la
+que sobra en el rojo) y deja de depender de en qué orden las despacha el motor.
+
+### `menor` 8 — queda una cuarta frase con la afirmación vieja, en la bitácora
+
+`progress/impl_405.md:61`, en la sección «el SUPERCONJUNTO», sigue diciendo: «… y
+`toApiOrdenDetalleRow` vuelve a aplicar cada predicado en memoria … **Sigue siendo una sola consulta
+(R19)**». Es exactamente la frase que se corrigió en el código y en el design. En su contexto se
+refiere al superconjunto —que sí es gratis— pero la cita a R19 la vuelve engañosa, y la propia ficha
+ya separó los dos matices en los otros dos sitios. **No bloquea**: es la bitácora, no el contrato ni
+el código. Conviene alinearla al cerrar.
+
+### `menor` 9 — la fila de R19-b en la tabla de trazabilidad está a medio escribir
+
+`requirements.md`, tabla §6: «`openapi-405-gestiones.test.ts` no aplica; las frases del design y del
+comentario se verifican a ojo en la revisión». Es **honesto y cierto** —esa mitad de R19-b es
+verificación humana y la hice—, pero la celda mezcla el test que sí existe con una nota de proceso.
+Cosmético.
+
+### Siguen abiertos de la ronda 1, sin cambio
+
+`menor` 3 (`tasks.md` sin casillas, convención del repo), `menor` 4 (`progress/history.md` al
+cerrar) y `menor` 6 (**T19: mandar el CHANGELOG al integrador bloquea la RELEASE**, no el merge).
+
+---
+
+## Trazabilidad, actualizada
+
+**22 de 22 requisitos (23 con R19-b) tienen test real, letal y verificado por mí.**
+
+- **R15** pasa de PARCIAL a **ok**: caso nuevo, y mi mutación muere con 2 rojos.
+- **R19** pasa de INCUMPLIDO a **ok**: reescrito sobre el número medido, que confirmé.
+- **R19-b** entra **ok**: las 9 congeladas por nombre de tabla; mi mutación muere con 3 rojos y el
+  rojo nombra la que sobra.
+
+## Estado del árbol al cerrar la ronda 2
+
+Las dos mutaciones (M14 y M16) revertidas con `git checkout --` y la sonda temporal borrada, aquí y
+en el checkout principal. `git status --porcelain` en el worktree: solo `?? scratchpad/`, ignorado.
+**No edité código de producción, ni tests, ni `feature_list.json`.**
+
+**Veredicto final de la ficha 405: APROBADO.** Antes de `prod`, T19.
