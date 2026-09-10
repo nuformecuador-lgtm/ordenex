@@ -362,9 +362,9 @@ WHERE "tipo"   = 'geocodificacion'
 ```
 
 ```sql
--- revivirFallosConfig
-WITH candidatos AS (
-  SELECT "id", row_number() OVER (ORDER BY "updated_at" ASC) AS pos
+-- revivirFallosConfig — DOS CTEs Y EL `UPDATE`. NO se colapsan. Ver el aviso de abajo.
+WITH elegibles AS (
+  SELECT "id", "updated_at"
   FROM "jobs"
   WHERE "tipo"   = 'geocodificacion'
     AND "estado" = 'failed'
@@ -372,7 +372,11 @@ WITH candidatos AS (
     AND left("last_error", $len) = $marcador
   ORDER BY "updated_at" ASC
   LIMIT $limite
-  FOR UPDATE SKIP LOCKED
+  FOR UPDATE SKIP LOCKED          -- el BLOQUEO va aqui, y aqui NO hay funcion de ventana
+),
+candidatos AS (
+  SELECT "id", row_number() OVER (ORDER BY "updated_at" ASC) AS pos
+  FROM elegibles                  -- la VENTANA va aqui, sobre el conjunto ya bloqueado y acotado
 )
 UPDATE "jobs" AS j
 SET "estado"     = 'pending',
@@ -386,6 +390,37 @@ WHERE j."id" = c."id"
 RETURNING j."id";
 ```
 
+> ### ⚠️ POR QUÉ SON DOS CTEs Y NO UNA: **`FOR UPDATE` y `row_number()` NO PUEDEN CONVIVIR EN LA
+> MISMA `SELECT`.** Colapsarlas **no compila en tiempo de ejecución.**
+>
+> **La primera versión de este documento publicaba la forma colapsada** —`row_number()` y
+> `FOR UPDATE SKIP LOCKED` en la misma `SELECT`— y **no corre**. Medido el 2026-09-09 contra
+> Postgres, ejecutando esa CTE tal cual estaba escrita aquí:
+>
+> ```
+> Raw query failed. Code: `0A000`.
+> Message: `FOR UPDATE no está permitido con funciones de ventana deslizante`
+> ```
+>
+> **Es la misma restricción que ya obligó a partir en tres el `claimBatch` de `JobRepository`** (la
+> 402 lo dejó documentado en su propio comentario: *«Postgres prohibe `FOR UPDATE` junto a funciones
+> de ventana en la MISMA `SELECT` … Colapsarlas revienta en tiempo de ejecución»*). El turno se
+> calcula sin bloqueo, el conjunto se recorta con `LIMIT`, y el bloqueo se aplica sobre ese conjunto
+> ya fijado — o, como aquí, al revés: se bloquea y acota primero y se numera después. Las dos formas
+> valen; **la colapsada no**.
+>
+> **PROHIBIDO FUNDIRLAS «para que quede más corto».** Y el motivo por el que esto se escribe con
+> mayúsculas es que el fallo sería **MUDO**: `revivirFallosConfig` lanzaría, la llamada está envuelta
+> a propósito para que no cambie el desenlace del job (§5.3, R20), y el logger que el composition
+> root inyecta hoy es el no-op. Resultado: la recuperación deja de funcionar, ninguna prueba del
+> camino de producción se pone roja y no queda ni una línea de log — exactamente la familia de
+> fallos que esta ficha existe para cerrar.
+>
+> Lo que **no** cambia respecto de la versión colapsada: el `WHERE` es el mismo, el `ORDER BY
+> "updated_at" ASC` (R19) es el mismo, el `LIMIT` (R21) es el mismo, el `FOR UPDATE SKIP LOCKED`
+> sigue estando y el escalonado por `row_number()` (R22) sigue siendo el mismo. **Sólo cambia en qué
+> CTE vive cada cosa.**
+
 Cuatro decisiones dentro de esas sentencias, cada una con su porqué:
 
 - **`left("last_error", $len) = $marcador` y no `LIKE '…%'`.** Es la traducción SQL **exacta** del
@@ -394,7 +429,8 @@ Cuatro decisiones dentro de esas sentencias, cada una con su porqué:
   módulo de la 400**: ni un literal copiado (R13 de la 400 lo prohíbe, y hay un guard suyo que lo
   vigila).
 - **`FOR UPDATE SKIP LOCKED`**, igual que `claimBatch`: dos corridas del drenador solapadas **no**
-  reviven el mismo job dos veces, ni se esperan la una a la otra.
+  reviven el mismo job dos veces, ni se esperan la una a la otra. Va en la CTE `elegibles`, **no** en
+  la que numera: ver el aviso de arriba.
 - **`locked_at = NULL`.** Una fila `failed` puede arrastrar un `locked_at` viejo; el rescate manual del
   09-09 dejó las filas limpias y esto lo replica. No afecta al rescate por visibility timeout (que sólo
   mira `estado = 'processing'`), pero deja la fila indistinguible de una recién encolada.

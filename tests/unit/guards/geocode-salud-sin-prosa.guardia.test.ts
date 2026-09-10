@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { geocodeLoggerReal } from "@/lib/services/jobs/geocodificacion-handler";
 
 /**
  * FICHA 401 (T14, R1/R33/R35) — GUARDIA DE ALCANCE SOBRE EL ÁRBOL REAL.
@@ -183,6 +184,51 @@ describe("401/T14 — R35: el contrato GENÉRICO de la cola no gana miembros por
   it("⭑ CONTRAPRUEBA: el extractor de miembros SÍ ve un método añadido", () => {
     const conExtra = `export interface IJobRepository {\n  enqueue(): void;\n  revivir(): void;\n}\n`;
     expect(miembrosDe(conExtra, "IJobRepository")).toEqual(["enqueue", "revivir"]);
+  });
+});
+
+describe("401 — R20/m-6: el composition root inyecta un logger REAL, no el no-op", () => {
+  // ⚠️ NACE DE UN HALLAZGO DE LA REVISIÓN, no de la simetría. R20 promete que un fallo de la
+  // recuperación «queda registrado con contexto», y hasta el arreglo NO ERA CIERTO EN PRODUCCIÓN:
+  // los dos services declaran su logger con default `{ warn: () => {} }` y el composition root les
+  // pasaba `undefined`. Los tests seguían verdes porque ELLOS sí inyectan un logger — el clásico
+  // fallo mudo de este repo, en su versión de logging.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("⭑ el logger real ESCRIBE de verdad (no es otro no-op con nombre bonito)", () => {
+    // Lo que ninguna aserción de texto puede demostrar: que llamarlo produce una línea. Si mañana
+    // alguien lo cambia por `{ warn: () => {} }`, esto se pone rojo.
+    const espia = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    geocodeLoggerReal.warn("[geocodificacion] recuperados 3 job(s) muertos por configuracion");
+
+    expect(espia).toHaveBeenCalledTimes(1);
+    expect(espia).toHaveBeenCalledWith(
+      "[geocodificacion] recuperados 3 job(s) muertos por configuracion",
+    );
+  });
+
+  it("⭑ y se PASA a los DOS services, no sólo se declara", () => {
+    // Uso efectivo, sin imports ni comentarios: declararlo y no pasarlo es exactamente el estado
+    // que produjo el hallazgo.
+    const uso = ejecutableDe(leer("lib/services/jobs/geocodificacion-handler.ts"));
+    expect(uso).toMatch(/new GeocodeSaludService\([\s\S]*geocodeLoggerReal,?[\s\S]*\)/);
+    expect(uso).toMatch(/new GeocodificacionService\([\s\S]*geocodeLoggerReal,?[\s\S]*\)/);
+  });
+
+  it("⭑ ninguna de las dos construcciones deja el hueco del logger en `undefined`", () => {
+    // La forma exacta del fallo: `undefined` en la posición del logger vuelve al default no-op.
+    const uso = ejecutableDe(leer("lib/services/jobs/geocodificacion-handler.ts"));
+    expect(uso).not.toMatch(/undefined/);
+  });
+
+  it("el canal vive en el composition root, y `GeocodificacionService` sigue sin usar `console.*`", () => {
+    // La guardia de privacidad de la feature 91 (R31) se conserva intacta: el service recibe una
+    // interfaz, y quién es el canal se decide aquí.
+    expect(ejecutableDe(leer("lib/services/GeocodificacionService.ts"))).not.toMatch(/console\./);
+    expect(ejecutableDe(leer("lib/services/GeocodeSaludService.ts"))).not.toMatch(/console\./);
   });
 });
 

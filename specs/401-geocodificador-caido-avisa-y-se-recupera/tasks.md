@@ -108,15 +108,30 @@ de esos valores.
 ### T6 — `lib/repositories/GeocodeSaludRepository.ts`
 **Depende de:** T2, T4.
 
-Las dos sentencias de `design.md` §5.1, en SQL crudo parametrizado, estilo `JobRepository`. Cuatro
+Las dos sentencias de `design.md` §5.1, en SQL crudo parametrizado, estilo `JobRepository`. Cinco
 detalles que son requisitos, no gusto:
 - `left("last_error", $len) = $marcador`, **con el marcador y su longitud importados del módulo de la
   400** — ni un literal copiado (lo prohíbe R13 de la 400, y su guard lo vigila);
-- `FOR UPDATE SKIP LOCKED` en la CTE de candidatos;
-- `run_after` escalonado con `row_number()` y `$espaciadoMs` (**R22**);
-- `intentos = 0`, `last_error = NULL`, `locked_at = NULL` (**R15**).
+- **la recuperación va en DOS CTEs, y no se colapsan**: `elegibles` lleva el `WHERE`, el
+  `ORDER BY "updated_at" ASC` (**R19**), el `LIMIT` (**R21**) y el **`FOR UPDATE SKIP LOCKED`**, y
+  **no** lleva función de ventana; `candidatos` numera con `row_number()` sobre `elegibles`, y **no**
+  lleva bloqueo;
+- `run_after` escalonado con esa `row_number()` y `$espaciadoMs` (**R22**);
+- `intentos = 0`, `last_error = NULL`, `locked_at = NULL` (**R15**);
+- y el `UPDATE` **sólo** toca esas columnas más `estado`, `run_after` y `updated_at`: nunca `tipo`,
+  `payload` ni `dedupe_key`.
 
-**Hecho cuando:** compila y **no** contiene ningún literal de prosa del proveedor.
+> ⚠️ **NO PONGAS `FOR UPDATE SKIP LOCKED` Y `row_number()` EN LA MISMA `SELECT`.** Postgres lo
+> rechaza en ejecución —medido el 2026-09-09 contra la base: `0A000`, *«FOR UPDATE no está permitido
+> con funciones de ventana deslizante»*— y es la **misma** restricción que ya obligó a partir en tres
+> el `claimBatch` de `JobRepository` (402). Si alguien las funde «para que quede más corto», el fallo
+> es **MUDO**: `revivirFallosConfig` lanza, la llamada está envuelta a propósito para no cambiar el
+> desenlace del job (R20) y el logger del composition root es el no-op — la recuperación se apaga sin
+> un test rojo del camino de producción y sin una línea de log. `design.md` §5.1 lo explica entero.
+
+**Hecho cuando:** compila, **no** contiene ningún literal de prosa del proveedor, y la sentencia de
+recuperación **se ejecuta de verdad** contra Postgres en T7 (si estuviera colapsada, T7 entero
+reventaría con `0A000`, que es la red que impide reintroducirla).
 
 ### T7 — Test de integración de la recuperación (el que prueba el `WHERE`)
 **Depende de:** T6.

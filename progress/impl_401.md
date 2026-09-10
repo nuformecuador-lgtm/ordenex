@@ -53,7 +53,7 @@ segundo mecanismo, y hay una guardia que lo vigila (T14).
 | `lib/notificaciones/emitir.ts` | `+GeocodificacionCaidaContexto`, `+textoGeocodificacionCaida`, `+emitirGeocodificacionCaida` |
 | `lib/notificaciones/notificadores.ts` | `+GeocodificacionCaidaNotificador`, `+…Con`/`…Real`, `+` a la intersección del no-op |
 | `lib/services/GeocodificacionService.ts` | 1 colaborador opcional (default no-op) y 3 llamadas envueltas |
-| `lib/services/jobs/geocodificacion-handler.ts` | **el composition root** |
+| `lib/services/jobs/geocodificacion-handler.ts` | **el composition root** + `geocodeLoggerReal` (m-6) |
 | `tests/unit/services/geocodificacion-service.test.ts` *(ext.)* | R6, R13, R14, R17, R20, R25 |
 | `tests/unit/services/notificacion-notificadores-reales.test.ts` *(ext.)* | R7, R8, R11, **R12** (censo + guardia por sitio) |
 | `tests/unit/services/notificacion-productores-wiring.test.ts` *(ext.)* | inventario CERRADO de eventos y entidades |
@@ -118,7 +118,7 @@ ya deja asignables sin ubicación.
 | R17 | `geocodificacion-service` › «⭑ R17: los tres desenlaces DETERMINISTAS de dirección COMPLETAN el job, no lo matan» + R16 (un job sin marcador no es elegible) |
 | R18 | `geocode-recuperacion` › «⭑ 25 jobs muertos con marcador + una respuesta satisfactoria → vuelven a la cola sin tocar la base a mano» |
 | R19 | idem: `recuperados` es exactamente `losCincoMasViejos`, comparado por id |
-| R20 | `geocodificacion-service` › «401/R20 — una recuperación caída NO revierte una geocodificación buena» (el job se completa igual + el fallo queda logueado sin PII) |
+| R20 | `geocodificacion-service` › «401/R20 — una recuperación caída NO revierte una geocodificación buena» (el job se completa igual + el fallo queda logueado sin PII) + **guardia** › «401 — R20/m-6: el composition root inyecta un logger REAL, no el no-op» (4 casos, uno de comportamiento sobre `console.warn`), que es lo que hace cierta la promesa «queda registrado» **en producción** |
 | R21 | `geocode-recuperacion` › «⭑ R21: con 25 candidatos y máximo 5, se recuperan EXACTAMENTE 5» (y 20 siguen muertos) |
 | R22 | `geocode-recuperacion` › «⭑ R22: los `run_after` de la tanda están separados ≥60 s y TODOS son posteriores a la recuperación» (y son 1, 2, 3, 4 y 5 minutos) + «⭑ un espaciado configurado distinto viaja al SQL de verdad» + `geocode-salud-service` › «⭑ lote, espaciado y enfriamiento, los tres, afirmados A MANO» |
 | R23 | `geocode-recuperacion` › «⭑ filas testigo comparadas ANTES y DESPUÉS: ninguna cambia» (otro tipo de job, `done`, `pending` y `processing`, todas con marcador) |
@@ -303,11 +303,101 @@ aquí y ahora es lo de arriba: el único valor inesperado es el suyo.
 
 ---
 
+## Respuesta a la revisión (`progress/review_401.md`, commit `5e167945`)
+
+### B-1 (bloqueante) — CORREGIDO: el spec ya no publica el SQL que no corre
+
+Se corrigieron **los dos archivos**, sin tocar una línea de código:
+
+- **`design.md` §5.1** — el bloque de `revivirFallosConfig` muestra ahora la forma **de dos CTEs +
+  el `UPDATE`** que está implementada (`elegibles` lleva el `WHERE`, el `ORDER BY`, el `LIMIT` y el
+  `FOR UPDATE SKIP LOCKED`, sin función de ventana; `candidatos` numera con `row_number()` sobre
+  `elegibles`, sin bloqueo), con un aviso encima que dice **por qué no se pueden colapsar**: el
+  `0A000` medido *(«FOR UPDATE no está permitido con funciones de ventana deslizante»)*, la cita de
+  que es **la misma restricción que ya obligó a partir en tres el `claimBatch` de `JobRepository`**
+  (402, documentado en su propio comentario), y la prohibición expresa de fundirlas «para que quede
+  más corto». Se explica además **por qué el fallo sería MUDO** si alguien lo reintrodujera:
+  `revivirFallosConfig` lanzaría, la llamada está envuelta a propósito (R20) y el logger era el
+  no-op. La viñeta de `FOR UPDATE SKIP LOCKED` de la lista de «cuatro decisiones» dice ahora en qué
+  CTE vive.
+- **`tasks.md` T6** — la viñeta que pedía «`FOR UPDATE SKIP LOCKED` en la CTE de candidatos» se
+  sustituyó por la que describe **las dos CTEs y qué va en cada una**, con el mismo aviso ⚠️ y su
+  `0A000`. El «hecho cuando» añade la red que impide reintroducirlo: si la sentencia estuviera
+  colapsada, **T7 entero revienta** con ese código de error.
+
+Lo que **no** cambia respecto de la versión colapsada, y se dice en el propio spec: el `WHERE`, el
+`ORDER BY "updated_at" ASC` (R19), el `LIMIT` (R21), el `FOR UPDATE SKIP LOCKED` y el escalonado por
+`row_number()` (R22). Sólo cambia en qué CTE vive cada cosa.
+
+### m-6 — CORREGIDO: R20 ya no promete un log que no existía
+
+`buildGeocodificacionService` pasaba `undefined` en la posición del logger a **los dos** services, y
+su default es `{ warn: () => {} }`: en producción, un fallo de `contarFallosConfigDesde` o de
+`revivirFallosConfig` **no dejaba ni una línea**, con los tests en verde porque ellos sí inyectan un
+logger. Ahora el composition root exporta e inyecta `geocodeLoggerReal`
+(`{ warn: (m) => console.warn(m) }`), el **mismo canal** que ya usan los defaults reales de
+`JobQueueService`, `CorteDiarioService`, `AnaliticaRollupService` y `DevolucionSlaService`.
+
+Vive en el composition root y **no** dentro de los services a propósito: `GeocodificacionService`
+conserva intacta su guardia de la feature 91 que le prohíbe `console.*` (R31). El canal se elige
+arriba; el service sólo recibe una interfaz.
+
+Cuatro casos nuevos en `tests/unit/guards/geocode-salud-sin-prosa.guardia.test.ts`, y uno de ellos es
+**de comportamiento, no de texto**: espía `console.warn` y comprueba que llamar al logger **produce
+una línea** —si mañana alguien lo cambia por otro no-op con nombre bonito, se pone rojo—. **Mutación
+aplicada y medida** (volver a poner `undefined` en las dos construcciones):
+
+```
+     × ⭑ y se PASA a los DOS services, no sólo se declara 4ms
+     × ⭑ ninguna de las dos construcciones deja el hueco del logger en `undefined` 1ms
+ Test Files  1 failed (1)
+      Tests  2 failed | 23 passed (25)
+```
+
+Restaurado: `25 passed (25)`.
+
+### M-2 — declarado: `tasks.md` no tiene casillas
+
+Medido: `grep -c "- \[ \]\|- \[x\]"` da **0** tanto en
+`specs/401-geocodificador-caido-avisa-y-se-recupera/tasks.md` como en el `tasks.md` de la **400**. No
+hay casillas que marcar; el formato es el mismo que el de aquella ficha. Queda declarado, no
+inventado.
+
+### Pendiente, y NO hecho todavía: los dos ajustes del orden de merge
+
+El orden decidido es **la 403 primero, ésta después**. Cuando la 403 esté en `dev` y se rebase:
+
+1. **Las listas literales de enum** de esta rama —los inventarios de
+   `notificacion-evento-{postulacion-recurso,dia-reparto-corregido,bloqueo-cierre,gasto-fijo}-migration.test.ts`
+   y `notificacion-productores-wiring.test.ts`— tienen que sumar `webhook_suscripcion_pausada` y
+   `webhook_suscripcion_pausa`. Sin eso, esta ficha **deja `dev` en rojo al entrar** (es el H-1 de la
+   revisión de la 403).
+2. **El `down.sql` de la migración de enums hay que REESCRIBIRLO** (M-4). Hoy su lista es la foto de
+   `origin/dev` @ `7a23c0f3`, correcta entonces porque la 403 no estaba en `dev`. **En cuanto entre,
+   deja de serlo**: este down recrea-con-lista, y una lista sin los valores de la 403 **los borraría
+   en silencio** al revertir — el modo de fallo que este repo ya tiene documentado. La regla ya está
+   escrita dentro del propio `down.sql`; falta ejecutarla con el árbol delante y volver a comprobar
+   que la precondición sigue siendo ruidosa.
+
+**No se rebasó ni se corrió el gate completo** (M-3: mientras la base local arrastre las migraciones
+de la 403, el gate completo desde esta rama no diría nada). Sólo tests focalizados.
+
+### Apunte de método, del reviewer
+
+`prisma migrate status` le dijo **«up to date»** y **no** delató las migraciones ajenas —al contrario
+de lo que vio esta implementación—. La evidencia que sí vale es **contar `_prisma_migrations`**: 189
+filas contra 187 carpetas en el árbol. Para la próxima: la tabla, no ese comando.
+
+---
+
 ## Dos cosas del spec que no cuadraron al bajar al código
 
-**1. El SQL de `design.md` §5.1 no corre en Postgres.** La CTE `candidatos` lleva
+> **Las dos están ya CORREGIDAS EN EL SPEC** (B-1 de la revisión, arriba). Se conserva el diagnóstico
+> porque explica por qué el código es como es.
+
+**1. El SQL de `design.md` §5.1 no corría en Postgres.** La CTE `candidatos` llevaba
 `row_number() OVER (…)` y `FOR UPDATE SKIP LOCKED` en la **misma** `SELECT`, y Postgres lo rechaza
-en ejecución. Medido contra la base local el 2026-09-09, con la sentencia tal cual la escribe el
+en ejecución. Medido contra la base local el 2026-09-09, con la sentencia tal cual la escribía el
 spec:
 
 ```
@@ -322,7 +412,8 @@ fijado—, que **conserva íntegras las cuatro decisiones que el spec exige** (`
 `intentos`/`last_error`/`locked_at` limpios). El porqué queda escrito en el propio archivo.
 
 **2. El caso «con la del `maestro` ya leída, una tercera emisión no crea ninguna» no es medible de
-una pieza dentro de una transacción.** En producción funciona por dos barreras distintas —la
+una pieza dentro de una transacción.** *(Aceptado por la revisión: las dos barreras cubren el
+requisito **sin aflojar ninguna aserción**.)* En producción funciona por dos barreras distintas —la
 guardia previa para el `admin` (sin leer) y el índice único para el `maestro` (ya leída), cuyo
 `P2002` el repositorio absorbe—, y ahí cada sentencia va en su propia transacción. Dentro de una
 transacción revertida, la violación del índice **aborta la transacción entera** y la guardia del
@@ -372,3 +463,8 @@ que hay que saber, ninguna de ellas «arreglada» por mí:
 vieron ROJAS con el import intacto; el gate completo deja `INIT_EXIT=1` con 6 rojos que no son de
 esta ficha —son los dos valores de enum que la 403 aplicó a la base local compartida— y todo lo
 demás en verde (26.629 pasados, 26 saltados ajenos, `integration/db` ejecutada entera).**
+
+**Tras la revisión:** el bloqueante B-1 está cerrado —`design.md` §5.1 y `tasks.md` T6 publican ya
+la forma de dos CTEs, con el `0A000` medido y la prohibición expresa de colapsarlas— y m-6 también
+—el composition root inyecta un logger real, con su mutación vista en rojo—; quedan pendientes, y
+sólo para después del merge de la 403, las dos listas de enum y la reescritura del `down.sql`.
