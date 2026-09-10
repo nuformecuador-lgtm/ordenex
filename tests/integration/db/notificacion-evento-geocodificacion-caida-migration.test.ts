@@ -26,9 +26,12 @@ import {
 //     NO SE SUPONE: se mide abajo, y DESPUÉS de correr el down, no sólo sobre la base tal cual.
 //  2. Hay que mirar si el `down.sql` de la migración que CREÓ los enums recrea-con-lista o sólo
 //     dropea. Aquí sólo dropea (la 146 se lleva también las tablas), así que ese archivo NO se
-//     toca. Y los de la 253, la 262, la 271 y la 333 SÍ recrean, cada uno con SU lista —«el enum
-//     antes de MI migración»—, que sigue siendo cierta: tampoco se tocan. Las CINCO cosas se
-//     AFIRMAN abajo.
+//     toca. Y los de la 253, la 262, la 271, la 333 y la 403 SÍ recrean, cada uno con SU lista
+//     —«el enum antes de MI migración»—, que sigue siendo cierta: tampoco se tocan. Las SEIS cosas
+//     se AFIRMAN abajo.
+//     ⚠️ Y la contrapartida, que es la que estuvo mal hasta el 2026-09-10: el down de ESTA ficha
+//     —el único que conoce «la lista de HOY»— SÍ tuvo que reescribirse cuando la 403 entró en
+//     `dev` antes que ella. Ver la nota de `EVENTOS_PREVIOS`.
 //  3. `notificacion_entidad_tipo` TAMBIÉN se toca, y esa es la mitad que se olvida: la entidad de
 //     este aviso es LA JORNADA CR, y ningún valor existente la describe.
 
@@ -52,6 +55,7 @@ const dir333 = carpetaQueTerminaEn("_notificacion_evento_gasto_fijo_cobro");
 const dir271 = carpetaQueTerminaEn("_notificacion_evento_bloqueo_cierre");
 const dir262 = carpetaQueTerminaEn("_notificacion_evento_dia_reparto_corregido");
 const dir253 = carpetaQueTerminaEn("_notificacion_evento_postulacion_recurso");
+const dir403 = carpetaQueTerminaEn("_notificacion_evento_webhook_suscripcion");
 const dir146 = carpetaQueTerminaEn("_notificacion");
 
 const upSql = fs.readFileSync(path.join(dirNueva, "migration.sql"), "utf8");
@@ -62,6 +66,7 @@ const down333 = fs.readFileSync(path.join(dir333, "down.sql"), "utf8");
 const down271 = fs.readFileSync(path.join(dir271, "down.sql"), "utf8");
 const down262 = fs.readFileSync(path.join(dir262, "down.sql"), "utf8");
 const down253 = fs.readFileSync(path.join(dir253, "down.sql"), "utf8");
+const down403 = fs.readFileSync(path.join(dir403, "down.sql"), "utf8");
 const down146 = fs.readFileSync(path.join(dir146, "down.sql"), "utf8");
 
 function sinComentarios(sql: string): string {
@@ -78,7 +83,15 @@ const upIndiceDdl = sinComentarios(upIndice);
 const downIndiceDdl = sinComentarios(downIndice);
 const down271Ddl = sinComentarios(down271);
 
-/** `notificacion_evento` ANTES de esta migración: 4 (146) + 253 + 262 + 2 (271) + 333. */
+// ⚠️ ESTAS DOS LISTAS SE REESCRIBIERON EL 2026-09-10, Y ESE ES EL PUNTO. Son «los enums ANTES de
+// esta migración», y ANTES cambió: la **ficha 403** se mergeó en `dev` primero (PR #767, merge
+// `9aba74cc`) y añadió sus dos valores a estos MISMOS dos enums. Con las listas de la versión
+// anterior —nueve eventos y siete entidades, la foto de `origin/dev` @ `7a23c0f3`— el `down.sql`
+// de esta ficha habría BORRADO EN SILENCIO `webhook_suscripcion_pausada` y
+// `webhook_suscripcion_pausa` al revertir. Es el modo de fallo que este repo ya tiene documentado,
+// y por eso el down se revisa AL MERGEAR y no al escribirlo.
+
+/** `notificacion_evento` ANTES de esta migración: 4 (146) + 253 + 262 + 2 (271) + 333 + 403. */
 const EVENTOS_PREVIOS = [
   "orden_rechazada",
   "carga_masiva_terminada",
@@ -89,9 +102,10 @@ const EVENTOS_PREVIOS = [
   "cierre_dia_vencido",
   "mensajero_bloqueado_por_cierres",
   "gasto_fijo_cobro_pendiente",
+  "webhook_suscripcion_pausada", // ficha 403 — entró en `dev` ANTES que esta ficha
 ];
 
-/** `notificacion_entidad_tipo` ANTES de esta migración: 4 (146) + 253 + 262 + 333. */
+/** `notificacion_entidad_tipo` ANTES de esta migración: 4 (146) + 253 + 262 + 333 + 403. */
 const ENTIDADES_PREVIAS = [
   "orden",
   "usuario",
@@ -100,6 +114,7 @@ const ENTIDADES_PREVIAS = [
   "postulacion_recurso",
   "orden_dia_reparto_cambio",
   "gasto_fijo_cobro_dia",
+  "webhook_suscripcion_pausa", // ficha 403 — entró en `dev` ANTES que esta ficha
 ];
 
 const EVENTO_NUEVO = "geocodificacion_caida";
@@ -153,12 +168,12 @@ describe("401/T5 — el UP de los enums es aditivo y no toca nada más", () => {
 });
 
 describe("401/T5 — el DOWN recrea con la lista de HOY y no borra nada", () => {
-  it("⭑ recrea `notificacion_evento` con los NUEVE previos, en orden, y sin el nuevo", () => {
+  it("⭑ recrea `notificacion_evento` con los DIEZ previos, en orden, y sin el nuevo", () => {
     expect(valoresDelCreateType(downDdl, "notificacion_evento")).toEqual(EVENTOS_PREVIOS);
     expect(downDdl).not.toContain(EVENTO_NUEVO);
   });
 
-  it("⭑ recrea `notificacion_entidad_tipo` con los SIETE previos, en orden, y sin el nuevo", () => {
+  it("⭑ recrea `notificacion_entidad_tipo` con los OCHO previos, en orden, y sin el nuevo", () => {
     expect(valoresDelCreateType(downDdl, "notificacion_entidad_tipo")).toEqual(ENTIDADES_PREVIAS);
     expect(downDdl).not.toContain(ENTIDAD_NUEVA);
   });
@@ -190,7 +205,7 @@ describe("401/T5 — el DOWN recrea con la lista de HOY y no borra nada", () => 
   });
 });
 
-describe("401/T5 — los CINCO `down.sql` anteriores NO se tocan, y esta es la comprobación", () => {
+describe("401/T5 — los SEIS `down.sql` anteriores NO se tocan, y esta es la comprobación", () => {
   it("⭑ el de la 146 SÓLO dropea los dos tipos; no los recrea con lista", () => {
     expect(down146).toMatch(/DROP TYPE IF EXISTS "notificacion_evento"/);
     expect(down146).toMatch(/DROP TYPE IF EXISTS "notificacion_entidad_tipo"/);
@@ -227,6 +242,32 @@ describe("401/T5 — los CINCO `down.sql` anteriores NO se tocan, y esta es la c
     );
     expect(down333).not.toContain(EVENTO_NUEVO);
     expect(down333).not.toContain(ENTIDAD_NUEVA);
+  });
+
+  it("⭑ el de la 403 recrea los DOS con SUS NUEVE y SUS SIETE, y sigue siendo cierto", () => {
+    // La 403 entró en `dev` el 2026-09-10, JUSTO ANTES que esta ficha. Su down es la foto de «los
+    // enums antes de la 403» —nueve eventos y siete entidades—, que sigue siendo cierta: esta
+    // ficha añade DESPUÉS, así que no la invalida. Es el archivo que NO se toca; el que sí tuvo
+    // que reescribirse es el de aquí (ver la nota de `EVENTOS_PREVIOS`).
+    expect(valoresDelCreateType(down403, "notificacion_evento")).toEqual(EVENTOS_PREVIOS.slice(0, 9));
+    expect(valoresDelCreateType(down403, "notificacion_entidad_tipo")).toEqual(
+      ENTIDADES_PREVIAS.slice(0, 7),
+    );
+    expect(down403).not.toContain(EVENTO_NUEVO);
+    expect(down403).not.toContain(ENTIDAD_NUEVA);
+  });
+
+  it("⭑ y el de ESTA ficha SÍ los lista: revertir no puede llevarse los de la 403 por delante", () => {
+    // LA MITAD QUE IMPORTA, y la que estuvo mal hasta el 2026-09-10. El down recrea-con-lista; si
+    // la lista no incluyera los valores de la 403 —que ya estaban en `dev` cuando esta migración
+    // se aplica—, revertirla los BORRARÍA EN SILENCIO. Se afirma por nombre, no por conteo.
+    const eventos = valoresDelCreateType(downDdl, "notificacion_evento")!;
+    const entidades = valoresDelCreateType(downDdl, "notificacion_entidad_tipo")!;
+    expect(eventos).toContain("webhook_suscripcion_pausada");
+    expect(entidades).toContain("webhook_suscripcion_pausa");
+    // Y van ANTES del hueco que deja el valor de esta ficha: el orden del enum se conserva.
+    expect(eventos[eventos.length - 1]).toBe("webhook_suscripcion_pausada");
+    expect(entidades[entidades.length - 1]).toBe("webhook_suscripcion_pausa");
   });
 });
 

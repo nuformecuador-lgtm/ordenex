@@ -363,24 +363,85 @@ Medido: `grep -c "- \[ \]\|- \[x\]"` da **0** tanto en
 hay casillas que marcar; el formato es el mismo que el de aquella ficha. Queda declarado, no
 inventado.
 
-### Pendiente, y NO hecho todavía: los dos ajustes del orden de merge
+### Los dos ajustes del orden de merge — HECHOS el 2026-09-10, con la 403 ya en `dev`
 
-El orden decidido es **la 403 primero, ésta después**. Cuando la 403 esté en `dev` y se rebase:
+La 403 entró primero (PR #767, merge `9aba74cc`). Esta rama se **rebasó** sobre `origin/dev`
+—que para cuando terminé el rebase ya estaba en `d1ad368b`, así que se rebasó otra vez sobre ése— y
+se hicieron los dos ajustes que dependían de tenerla delante.
 
-1. **Las listas literales de enum** de esta rama —los inventarios de
-   `notificacion-evento-{postulacion-recurso,dia-reparto-corregido,bloqueo-cierre,gasto-fijo}-migration.test.ts`
-   y `notificacion-productores-wiring.test.ts`— tienen que sumar `webhook_suscripcion_pausada` y
-   `webhook_suscripcion_pausa`. Sin eso, esta ficha **deja `dev` en rojo al entrar** (es el H-1 de la
-   revisión de la 403).
-2. **El `down.sql` de la migración de enums hay que REESCRIBIRLO** (M-4). Hoy su lista es la foto de
-   `origin/dev` @ `7a23c0f3`, correcta entonces porque la 403 no estaba en `dev`. **En cuanto entre,
-   deja de serlo**: este down recrea-con-lista, y una lista sin los valores de la 403 **los borraría
-   en silencio** al revertir — el modo de fallo que este repo ya tiene documentado. La regla ya está
-   escrita dentro del propio `down.sql`; falta ejecutarla con el árbol delante y volver a comprobar
-   que la precondición sigue siendo ruidosa.
+**1. Las listas literales de enum suman los dos valores ajenos.** `webhook_suscripcion_pausada` y
+`webhook_suscripcion_pausa`, escritos **a mano** —nunca derivados del enum ni de la base: un
+inventario que se lee a sí mismo siempre está verde— en las mismas listas que ya se ampliaron para
+los propios:
 
-**No se rebasó ni se corrió el gate completo** (M-3: mientras la base local arrastre las migraciones
-de la 403, el gate completo desde esta rama no diría nada). Sólo tests focalizados.
+| Archivo | Qué se añadió |
+| --- | --- |
+| `tests/unit/services/notificacion-productores-wiring.test.ts` | los dos valores, en las dos listas del inventario CERRADO |
+| `tests/integration/db/notificacion-evento-postulacion-recurso-migration.test.ts` (253) | los dos, en las 4 listas (2 de schema, 2 de base) |
+| `tests/integration/db/notificacion-evento-dia-reparto-corregido-migration.test.ts` (262) | los dos, en las 4 listas |
+| `tests/integration/db/notificacion-evento-bloqueo-cierre-migration.test.ts` (271) | el evento, en su lista de base |
+| `tests/integration/db/notificacion-evento-gasto-fijo-migration.test.ts` (333) | los dos, en su lista de base |
+| `tests/integration/db/no-migration-102.test.ts` | la carpeta `_notificacion_evento_webhook_suscripcion` ya estaba declarada por la 403; se conserva y se suma la de esta ficha |
+
+El orden dentro de cada lista es el del enum: primero los de la 403, después los de esta ficha —que
+es como están en la base, porque su migración es posterior—.
+
+**2. El `down.sql` de la migración de enums, REESCRITO (M-4).** Su lista es «los enums ANTES de esta
+migración», y ese ANTES cambió al entrar la 403. Ahora lista **DIEZ eventos y OCHO
+`entidad_tipo`**, los dos de la 403 incluidos:
+
+```sql
+CREATE TYPE "notificacion_evento" AS ENUM (
+  'orden_rechazada', 'carga_masiva_terminada', 'postulacion_mensajero_pendiente',
+  'cierre_dia_por_aprobar', 'postulacion_recurso_pendiente', 'dia_reparto_corregido',
+  'cierre_dia_vencido', 'mensajero_bloqueado_por_cierres', 'gasto_fijo_cobro_pendiente',
+  'webhook_suscripcion_pausada'
+);
+CREATE TYPE "notificacion_entidad_tipo" AS ENUM (
+  'orden', 'usuario', 'cierre_dia', 'carga', 'postulacion_recurso',
+  'orden_dia_reparto_cambio', 'gasto_fijo_cobro_dia', 'webhook_suscripcion_pausa'
+);
+```
+
+Con la lista anterior, revertir esta migración habría **borrado en silencio** los dos valores de la
+403. El propio archivo lleva ahora escrita la historia de las dos versiones y la regla para quien
+venga detrás: *si otra ficha añade un valor y entra antes, hay que volver a reescribir estas dos
+listas; se decide leyendo el árbol al mergear, nunca de memoria*.
+
+**Y ahora lo vigila un test, no la disciplina.** Dos casos nuevos en
+`notificacion-evento-geocodificacion-caida-migration.test.ts`: «⭑ el de la 403 recrea los DOS con
+SUS NUEVE y SUS SIETE, y sigue siendo cierto» (su `down` **no se toca**) y «⭑ y el de ESTA ficha SÍ
+los lista: revertir no puede llevarse los de la 403 por delante», que afirma por **nombre** —no por
+conteo— que los dos valores ajenos están en la lista y son los últimos. **Mutación medida** (quitar
+`webhook_suscripcion_pausada` del `down.sql`):
+
+```
+     × ⭑ recrea `notificacion_evento` con los DIEZ previos, en orden, y sin el nuevo 6ms
+     × ⭑ y el de ESTA ficha SÍ los lista: revertir no puede llevarse los de la 403 por delante 1ms
+ Test Files  1 failed (1)
+      Tests  2 failed | 25 passed (27)
+```
+
+Restaurado: `27 passed (27)`.
+
+**La precondición ruidosa sigue siéndolo**, y se sigue ejercitando de verdad: los dos casos contra
+Postgres —«el DOWN con una fila del evento nuevo ABORTA RUIDOSAMENTE» y su control positivo, donde
+el `down` corre entero y `notificacion_dedupe_key` **sobrevive** con su `NULLS NOT DISTINCT` y su
+`WHERE` parcial— siguen verdes.
+
+**La base local y esta rama comparten por fin el mismo conjunto de migraciones.** Medido con el
+método bueno —contar `_prisma_migrations`, no `prisma migrate status`, que al reviewer le dijo «up
+to date» teniendo dos migraciones ajenas dentro—:
+
+```
+aplicadas en _prisma_migrations: 189 | carpetas en el arbol: 189
+en la base y NO en el arbol: []
+en el arbol y NO en la base: []
+notificacion_evento: …, gasto_fijo_cobro_pendiente, webhook_suscripcion_pausada, geocodificacion_caida
+notificacion_entidad_tipo: …, gasto_fijo_cobro_dia, webhook_suscripcion_pausa, geocodificacion_caida_dia
+```
+
+Por eso el gate completo de abajo **sí dice la verdad**, al contrario que el de la primera corrida.
 
 ### Apunte de método, del reviewer
 
