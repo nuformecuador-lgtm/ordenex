@@ -200,10 +200,17 @@ destino con `?`, el fuente de la página de destino lee ese parámetro» — hoy
   todas siguen siendo ciertas; el test de migración lo afirma uno a uno y además comprueba que
   ninguno menciona los valores de esta ficha.
 
-⚠️ **T2.5, pendiente para el momento del PR.** Estas dos listas hay que **volver a leerlas contra
-`origin/dev`** justo antes de abrir el PR. Si otra ficha añade un valor a estos enums y entra en
-`dev` antes que ésta, revertir con la lista vieja lo **borraría en silencio** — le pasó a la 401
-con la 403. Comprobado hoy contra `aff769d8`; el frontend o el leader tienen que repetirlo.
+⚠️ **T2.5, comprobada DOS veces hoy — porque el pre-vuelo caduca.** Estas dos listas hay que
+**volver a leerlas contra `origin/dev`** justo antes de abrir el PR: si otra ficha añade un valor a
+estos enums y entra en `dev` antes que ésta, revertir con la lista vieja lo **borraría en
+silencio** (le pasó a la 401 con la 403).
+
+- 1.ª lectura: `origin/dev` @ `aff769d8` → 11 eventos, 9 entidades.
+- 2.ª lectura, el mismo día: **`dev` se había movido a `2d790a13`** (otra sesión empujó en
+  paralelo). Se releyó: **los dos enums siguen idénticos** —mismos nombres, mismo orden—, así que
+  las listas siguen siendo correctas y **no se tocan**. La nota queda escrita en el propio
+  `down.sql`.
+- **Falta la tercera**, justo antes del PR. Es del frontend o del leader.
 
 **Ejercitada de verdad contra la base local** (`localhost:5432/ordenex`, confirmado con
 `prisma migrate status` sin exponer credencial):
@@ -319,6 +326,12 @@ corrida final salió verde.
 | M9 | añadir `devolviendo_a_tienda` al predicado de represadas | **1** | `aviso-agregado-repository` › «(f) una orden en `devolviendo_a_tienda` con NUEVE dias NO entra» → **R46** |
 
 **Supervivientes: NINGUNO.** Las nueve se mataron.
+
+⚠️ **M9 se volvió a medir DESPUÉS**, y por una razón concreta: el arreglo del gate rojo tocó
+`AvisoAgregadoRepository.ts` —la proyección del ancla pasó a importarse— **después** de la corrida
+de mutaciones, así que aquella medición ya no describía el archivo que hay hoy. Re-aplicada sobre
+el árbol actual: **1 rojo, el mismo** (`(f) R46: una orden en 'devolviendo_a_tienda' con NUEVE dias
+NO entra`), y revertida limpia. Las otras ocho no tocan archivos que hayan cambiado desde entonces.
 
 Dos honestidades sobre el conteo, porque un número grande no siempre es mejor:
 

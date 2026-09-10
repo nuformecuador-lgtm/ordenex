@@ -31,6 +31,12 @@
 --   entidades, con los dos de la 403 y los dos de la 401 ya dentro. Es lo que hay en `dev` justo
 --   ANTES de esta migracion, y es exactamente lo que se recrea.
 --
+--   RE-COMPROBADO el 2026-09-10, mas tarde el mismo dia: `dev` SE HABIA MOVIDO a
+--   `2d790a13e691409e4ba2eaaaea65d4f333de8b7e`, y por eso se volvio a leer -el pre-vuelo caduca-.
+--   Los DOS enums siguen EXACTAMENTE igual alli (once eventos, nueve entidades, mismos nombres y
+--   mismo orden), asi que estas dos listas siguen siendo correctas y NO se tocan. La comprobacion
+--   se repite igual justo antes de abrir el PR.
+--
 -- REGLA, para quien venga detras: si otra ficha anade un valor a estos enums y entra en `dev`
 -- ANTES que esta, hay que VOLVER A REESCRIBIR estas dos listas contra el arbol al mergear.
 -- Revertir con una lista vieja BORRARIA EN SILENCIO el valor de la otra ficha -- le paso a la 401
