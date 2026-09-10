@@ -28,6 +28,9 @@ import {
   CAUSA_INCIDENTE_COL,
   DESTINO_TIPO_LABEL,
   ESTADO_LABEL,
+  // FICHA 408 — se AÑADE al import que ya existía. En el archivo del mensajero no hay ni
+  // columna «Origen» ni tooltip: el texto del motivo es lo único que hay.
+  motivoGestionLegible,
 } from "@/app/(app)/cierres-admin/_components/cierre-labels";
 import { desgloseDescarga } from "@/app/(app)/cierres-admin/_components/desglose-pago";
 
@@ -161,7 +164,7 @@ export function filaDescargaDiaReprogramada(gestion: CierreDetalleGestion): Desc
   return {
     ...celdasComunes(gestion),
     nuevaFecha: gestion.fechaReprogramacion,
-    motivo: gestion.motivo,
+    motivo: motivoGestionLegible(gestion.motivo, gestion.esRechazoSla),
     ganancia: gestion.pagoMensajero,
   };
 }
@@ -175,7 +178,7 @@ export const COLUMNAS_DESCARGA_DIA_DEVUELTAS: DescargaColumna[] = [
 export function filaDescargaDiaDevuelta(gestion: CierreDetalleGestion): DescargaFila {
   return {
     ...celdasComunes(gestion),
-    motivo: gestion.motivo,
+    motivo: motivoGestionLegible(gestion.motivo, gestion.esRechazoSla),
     ganancia: gestion.pagoMensajero,
   };
 }
@@ -190,7 +193,7 @@ export const COLUMNAS_DESCARGA_DIA_RECHAZADAS: DescargaColumna[] = [
 export function filaDescargaDiaRechazada(gestion: CierreDetalleGestion): DescargaFila {
   return {
     ...celdasComunes(gestion),
-    motivo: gestion.motivo,
+    motivo: motivoGestionLegible(gestion.motivo, gestion.esRechazoSla),
     tieneEvidencia: tieneEvidencia(gestion),
     ganancia: gestion.pagoMensajero,
   };
@@ -213,7 +216,7 @@ export function filaDescargaDiaIncidente(gestion: CierreDetalleGestion): Descarg
     causa: gestion.causaIncidente
       ? CAUSA_INCIDENTE_LABEL[gestion.causaIncidente] ?? gestion.causaIncidente
       : null,
-    motivo: gestion.motivo,
+    motivo: motivoGestionLegible(gestion.motivo, gestion.esRechazoSla),
     tieneEvidencia: tieneEvidencia(gestion),
   };
 }

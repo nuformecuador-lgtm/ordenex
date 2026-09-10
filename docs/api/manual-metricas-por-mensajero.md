@@ -56,8 +56,13 @@ ese momento, así que no necesitás consultar nada después.
 }
 ```
 
-Acumulá por `data.mensajero.id` y por `data.estado`. Para la zona, cruzá con el `zona` que ya
-recibís en el listado.
+Acumulá por `data.mensajero.id` y por `data.estado`.
+
+> **Corrección del 2026-09-10.** Una versión anterior de este documento decía que la zona se podía
+> cruzar con el listado. **Es falso: hoy no publicamos la zona por ningún endpoint.** El ítem del
+> listado lleva exactamente `numGuia`, `numRemision`, `estado`, `destinatario`, `telefonoDest`,
+> `producto`, `direccion`, `montoCobrar`, `createdAt` y `mensajero`, y nada más. La medición por
+> mensajero funciona; **la medición por zona no se puede hacer con lo que publicamos hoy**.
 
 **Tres reglas que evitan una serie histórica rota:**
 

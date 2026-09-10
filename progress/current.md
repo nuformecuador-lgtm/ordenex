@@ -1,70 +1,84 @@
 # Estado — sesión del 2026-09-10
 
-## Cuatro fichas cerradas y en `dev`, SIN desplegar
+## Lo desplegado hoy
 
-`dev` en `8a449e37`. Ninguna ficha `in_progress`.
+**Release PR #774**, `prod` en `46662bea`, despliegue **READY verificado** (no solo el PR mergeado).
+Cero errores de runtime tras el despliegue y los dos jobs recurrentes con su fila del día siguiente.
+**Sin migraciones.**
 
 | Ficha | PR | Qué cierra |
 |---|---|---|
-| **404** | #770 | el mensajero de la orden viaja en el webhook, el listado y el detalle |
-| **405** | #771 | el detalle expone el historial de gestiones (`gestiones[]`) |
-| **406** | #772 | el enlace de evidencias del webhook deja de dar 404 garantizado |
-| **407** | #773 | el operador puede autorizar la asignación de una orden que no se pudo ubicar |
+| **404** | #770 | el mensajero viaja en el webhook, el listado y el detalle |
+| **405** | #771 | el detalle expone el historial de gestiones |
+| **406** | #772 | el enlace de evidencias deja de dar 404 garantizado |
+| **407** | #773 | el operador puede autorizar la asignación de una orden sin ubicar |
 
-Las cuatro con reviewer APROBADO y gate completo en verde **en su rama**. La 405 fue RECHAZADA
-en ronda 1 y aprobada en ronda 2.
+Con eso, **lo que pidió el integrador el 2026-09-07 está completo**, fase 2 incluida. Su webhook
+lleva entregando desde anoche: 340 eventos, cero fallidos.
 
-## ⚠️ LO PRIMERO QUE HAY QUE MIRAR
+Manual para él en `docs/api/manual-metricas-por-mensajero.md`. **La única puerta que sigue abierta
+de esa release es mandárselo**: el CHANGELOG *es* el aviso.
 
-**Tres puertas de release, ninguna de código:**
+## En curso ahora mismo
 
-1. **Mandar el aviso a los integradores.** El CHANGELOG **es** el aviso, y las tres fichas de API
-   (404, 405, 406) lo tocan. Sin enviarlo, un integrador que valide esquema en estricto se entera
-   por su lado. Hay un mensaje redactado para Daniel Marin en el chat de esta sesión.
-2. **Nadie ha visto la pantalla de la 407 en un navegador.** Todo medido en jsdom. Sin cubrir: el
-   panel con un lote grande y el contraste en los dos temas. Es la misma deuda que arrastra la 400
-   desde anoche con su toast de 176 caracteres.
-3. **La excepción de privacidad de la 404** quedó con la decisión por defecto (aplica a los dos
-   modelos de propiedad). Antes de gastar decisión en acotarla, **medir cuántas keys con cuenta
-   dedicada existen**: si son cero, la discusión sobra.
+`dev` en `2d790a13`. Diseño de notificaciones aprobado por el humano, commiteado en
+`design-notificaciones/` y publicado como lienzo.
 
-## El caso que originó la 407
+| Ficha | Estado |
+|---|---|
+| **408** — el motivo de un rechazo automático se lee en lenguaje humano | **en `dev`** (PR #775) |
+| **409** — el panel accionable, los atajos, la campana y dos avisos nuevos | backend en su rama; frontend implementándose |
+| **411** — cohorte de carga en analítica | backend en su rama; frontend implementándose |
+| **410** — notificaciones push | spec listo (52 req.); **entra cuando la 409 esté en `dev`** |
+| **412 · 413 · 414** | registradas, sin empezar |
 
-**Guía 76068276** (ÓSCAR ELIZONDO SOLIS, Quesada / San Carlos): dirección de referencias, cinco días
-parada con `geocode_status = ZERO_RESULTS`. Son **2 las órdenes así en toda la base** (la otra en
-Palmira, Carrillo). **Se desatasca hoy sin esperar al despliegue** editando la dirección para que
-empiece por un nombre propio que el mapa reconozca: al guardar se re-geocodifica sola en menos de
-un minuto.
+**169 requisitos especificados**, todos con test asignado y cero preguntas abiertas.
 
-Hallazgo que abarató la ficha, verificado en el código: `OptimizacionRutaService` (R37/R28) **ya
-excluye** las órdenes sin coordenadas del cálculo sin abortar y las pinta al final. El único punto
-de toda la cadena que se plantaba era el gate de asignación.
+## ⚠️ Lo que hay que mirar antes de desplegar esto
+
+1. **Mandarle el manual al integrador** (deuda de la release ya desplegada).
+2. **Nadie ha visto en un navegador** el panel de la 407 ni el aviso de la 400. Todo medido en jsdom.
+3. **3 de 18 mensajeros usan SOLO iPhone** (medido sobre ingresos reales): sin instalar la app en su
+   pantalla de inicio, **no recibirán push**. No lo arregla el código.
+4. **T7.5 de la 409, ya medida**: `por_devolver` tiene 27 órdenes y 7 pasan de 3 días — el umbral
+   aguanta. Pero `por_devolver_a_tienda` está **vacío** y las 27 son de **una sola tienda**: tras
+   desplegar, no ver nada de ese ámbito **puede ser lo correcto**.
+
+## Decisiones del humano de hoy, para no reabrirlas
+
+- **El plazo de los 5 días se cuenta desde que el paquete entra a bodega**, no desde el reporte del
+  mensajero. Verificado que NO acumula entre intentos: el reloj se reinicia con cada devolución.
+- **La autorización de asignar sin ubicación NO deja rastro** (407): decidido a sabiendas.
+- **El vocabulario de las causas es el aprobado en la 73**, no uno nuevo.
+- **Umbral de represamiento: 3 días, sobre `por_devolver`.** `devolviendo_a_tienda` NO se vigila:
+  247 órdenes y ninguna pasa de día y medio — vigilarlo sería ruido sobre el cubo más grande.
+- **Criterio del atajo**: «¿le acerca esta pantalla a resolverlo?», no «¿puede ejecutar la
+  transición?». `geocodificacion_caida` es el único accionable sin atajo, y es deliberado.
 
 ## Deuda y hallazgos abiertos
 
-- ⚠️ **Otro localizador por fecha, latente**: `tests/unit/api/openapi-374-nodo-retirado.test.ts:118-127`
-  ata su aserción a `2026-09-06`. El día que alguien añada una entrada con esa fecha, rojo ajeno sin
-  relación con su cambio. El gemelo de este ya explotó hoy en `openapi-405-gestiones.test.ts` y se
-  arregló anclándolo al título.
-- **Q4 de la 406 sin medir**: no se consultó el `max(length(num_remision))` real de producción.
-- **Q5 de la 406** se midió contra `next dev`, no contra un build de producción.
-- **La colisión heredada de la 177** (orden sin guía + remisión numérica que coincide con la guía de
-  otra) queda reducida a un subconjunto estricto, no cerrada.
-- **~40 worktrees huérfanos** en `.claude/worktrees/`, de sesiones anteriores. Ocupan disco.
-- **270** sigue `pending` y sigue importando: `geocode_precision` no lo lee nadie.
+- **Los rojos de `notificacion-evento-*-migration`** en gates ajenos son de la **base local
+  compartida**, que tiene la migración de la 409 aún sin mergear. Medido dos veces, incluso contra
+  `dev` limpio. **No se metió nada en `tests/baseline-rojos.json`**: se resuelve solo al mergear.
+- **Otro localizador por fecha, latente**: `tests/unit/api/openapi-374-nodo-retirado.test.ts:118-127`
+  ata su aserción a `2026-09-06`. Su gemelo ya explotó hoy.
+- **~45 worktrees huérfanos** en `.claude/worktrees/`.
+- **270** sigue `pending`: `geocode_precision` no lo lee nadie.
 
 ## Lecciones de esta sesión, medidas
 
-- **El `INIT_EXIT` dentro del log no es paranoia.** Un gate ROJO llegó como «exit code 0» porque el
-  `echo` posterior tapa el código real. Se repitió hoy tal cual.
-- **Dos agentes contra la misma base local se pisan.** Un gate post-merge salió rojo por un
-  `40P01` (deadlock) en un archivo ajeno, con **0 tests fallidos** — esa es la firma. Se distingue
-  re-corriendo el archivo aislado; ninguno de los agentes lo apuntó como deuda, que es lo correcto.
-- **Un escenario imposible no prueba nada.** En la 405, una `devuelta` SIN foto describía un estado
-  que no puede existir desde la feature 75, y por eso una mutación del filtro sobrevivía a **9.446
-  tests en verde**. Se arregló el escenario, no el aserto.
-- **Un requisito puede ser inalcanzable por construcción.** R19 de la 405 pedía «el mismo número de
-  consultas» y no se puede devolver `gestiones[]` sin leerlas: lo falso era la premisa del design,
-  no la implementación. Se aceptó 6 -> 9 y se congeló el número con un test que dice CUÁL sobra.
-- **Ver el rojo antes del arreglo.** El cierre de lazo de la 406 daba 404 en sus 4 casos antes del
-  fix, y el reviewer lo reprodujo revirtiéndolo: 22 rojos en 4 archivos.
+- **El `INIT_EXIT` dentro del log salvó dos gates.** Dos corridas ROJAS llegaron anunciadas como
+  «exit code 0». No es paranoia: es el comportamiento por defecto.
+- **`git checkout` sobre archivos sin commitear mordió a dos agentes distintos.** Uno perdió dos
+  correcciones y las detectó por un `grep` de comprobación; otro descartó una tanda entera de
+  mediciones por contaminación. **Commitea antes de mutar.**
+- **Una guardia impidió un texto que mentía**: al derivar por segunda vez el ancla de la devolución,
+  el aviso habría dicho «3 días» sobre una orden a la que el cron le cuenta 5.
+- **Un escenario imposible no prueba nada**: en la 405, una `devuelta` SIN foto describía un estado
+  que no puede existir, y por eso una mutación sobrevivía a **9.446 tests en verde**.
+- **Un requisito puede ser inalcanzable por construcción** (R19 de la 405): lo falso era la premisa
+  del design, no la implementación.
+- **Ver el rojo antes del arreglo**: el cierre de lazo de la 406 daba 404 en sus 4 casos, y el
+  reviewer lo reprodujo revirtiendo el fix — 22 rojos en 4 archivos.
+- **El diseño prometía lo que no existía.** Dos avisos del lienzo no tenían productor; se
+  descubrieron al comprobar cada uno contra el código, no leyendo el mockup.
