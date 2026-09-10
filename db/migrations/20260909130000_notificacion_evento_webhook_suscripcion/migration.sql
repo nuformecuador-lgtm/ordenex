@@ -1,0 +1,55 @@
+-- Ficha 403 (T2, design §1.2) -- el aviso de la campana cuando una suscripcion de webhook lleva
+-- fallando en racha y sus reintentos se espaciaron solos.
+--
+-- QUE ANADE, y son DOS valores en DOS enums distintos:
+--
+--   `notificacion_evento`       += 'webhook_suscripcion_pausada'
+--   `notificacion_entidad_tipo` += 'webhook_suscripcion_pausa'
+--
+-- POR QUE VA SOLA Y CON TIMESTAMP PROPIO, separada de la migracion de las columnas. Postgres NO
+-- permite USAR un valor de enum recien anadido en la misma transaccion que lo anadio (`55P04`) y
+-- Prisma Migrate corre cada `migration.sql` dentro de una. Aqui SOLO se anaden los valores; su
+-- primer uso ocurre en runtime (`emitirWebhookSuscripcionPausada`), en transacciones posteriores.
+-- Mismo precedente que la 333, la 271, la 262 y la 253.
+--
+-- ⚠️ POR QUE TAMBIEN EL SEGUNDO ENUM, QUE ES LA MITAD QUE SE OLVIDA -- y aqui ademas es LA
+-- DECISION QUE HACE QUE R12 SEA ESTRUCTURAL Y NO DISCIPLINA.
+--
+-- `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+-- destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`
+-- (`20260727120000_notificacion/migration.sql`), y `NotificacionRepository.crear` ABSORBE el
+-- `P2002` devolviendo `false`.
+--
+-- LA ENTIDAD DE ESTE AVISO ES **LA RACHA DE FALLOS**, no la suscripcion y no un instante puntual:
+--
+--     entidad_id = '<owner_usuario_id>:<sin_exito_desde ISO>'
+--
+-- `webhook_suscripcion_pausa` es, como `gasto_fijo_cobro_dia` de la 333, un `entidad_tipo` SIN
+-- fila real detras: `entidad_id` no apunta a ninguna tabla. Se le da valor propio en vez de reusar
+-- `usuario` -- que es la eleccion "natural", porque el owner ES un usuario -- por dos razones,
+-- cada una suficiente:
+--
+--   1. Con `usuario` + `<ownerUsuarioId>` la clave admitiria UNA sola fila por (evento, owner,
+--      maestro) PARA SIEMPRE: la SEGUNDA racha de ese integrador, meses despues, no avisaria
+--      NUNCA -- sin error, sin log y sin nada. Es literalmente el fallo que documento la 262 con
+--      `orden` como entidad y que la 333 evito con el dia.
+--   2. Reusar un valor que promete una fila de tabla seria escribir un dato falso con formato de
+--      dato (el motivo por el que la 253 no reuso `usuario`).
+--
+-- CONSECUENCIAS, y son ESTRUCTURALES:
+--   - mientras la racha sigue viva `sin_exito_desde` no cambia => misma entidad => TODOS los
+--     intentos fallidos posteriores de esa racha chocan con el indice y se descartan en silencio:
+--     UN solo aviso por racha (R12, primera frase);
+--   - cuando la racha termina (un 2xx, R2) y otra empieza mas adelante, `sin_exito_desde` es OTRO
+--     => otra entidad => aviso independiente (R12, segunda frase).
+-- Ninguna de las dos depende de que el codigo "recuerde" si ya notifico, ni de detectar la
+-- transicion "no pausada -> pausada" (design §4).
+--
+-- Y tampoco es `entidad_id = NULL`: con `null`, `emitirFilas` se salta la guardia de no-leidas y
+-- el indice unico es PARCIAL, de modo que cada intento fallido dejaria un aviso identico.
+--
+-- ADITIVA: no altera ninguna tabla, no crea columnas, no toca RLS (`notificacion` conserva la de
+-- la 146). SIN BACKFILL: ninguna notificacion existente cambia de evento ni de entidad, y no hay
+-- nada que avisar hacia atras.
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'webhook_suscripcion_pausada';
+ALTER TYPE "notificacion_entidad_tipo" ADD VALUE IF NOT EXISTS 'webhook_suscripcion_pausa';

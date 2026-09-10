@@ -2445,6 +2445,21 @@ model WebhookSuscripcion {
   // Default declarado para que coincida con `20260721130000_webhook_suscripcion`.
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
 
+  // FICHA 403 (design §1.1, R1) — EL ESTADO DEL CIRCUITO. Dos columnas, y ninguna es un flag
+  // `pausada`: "pausada" es un estado DERIVADO de estas dos mas el reloj, evaluado por la funcion
+  // pura `estaPausada` (`lib/utils/webhook-suscripcion-pausa.ts`) tanto para espaciar un reintento
+  // como para lo que ve la pantalla. Un booleano persistido EN PARALELO a los datos que lo
+  // determinan puede divergir de ellos —basta con que un camino de recuperacion futuro se olvide
+  // de limpiarlo— y entonces el flag miente sobre el historial; con el valor derivado eso es
+  // estructuralmente imposible (design §1.1, alternativa descartada 3).
+  //
+  // ⚠️ NINGUNA DE LAS DOS TOCA `activa` (R5). `activa` es el interruptor MANUAL del dueño (99/105/
+  // 108); la pausa solo ESPACIA los reintentos y se levanta sola al primer 2xx.
+  fallosConsecutivos Int      @default(0) @map("fallos_consecutivos") // R3: fallos SEGUIDOS sin un 2xx de por medio
+  // R1/R2/R7: instante de la ultima entrega aceptada, o del alta/edicion de la URL si aun no hubo
+  // ninguna. NUNCA es NULL — una suscripcion recien creada ya tiene ancla: su propia creacion.
+  sinExitoDesde      DateTime @default(now()) @map("sin_exito_desde")
+
   owner Usuario @relation("WebhookSuscripcionOwner", fields: [ownerUsuarioId], references: [id], onDelete: Restrict)
 
   @@map("webhook_suscripcion")
@@ -2628,6 +2643,13 @@ enum NotificacionEvento {
   cierre_dia_vencido // feature 271 (§9.2, R38/R39): el corte creo un cierre `vencido`; se avisa al MENSAJERO dueño y a su bodega responsable
   mensajero_bloqueado_por_cierres // feature 271 (§9.2, R40/R41/R42): el mensajero quedo BLOQUEADO por acumular cierres, o por un rechazo; mismo evento para las tres causas porque la accion que pide es la misma
   gasto_fijo_cobro_pendiente // ficha 333 (R29/R30/R36): quedan cobros de gasto fijo esperando decision. Se emite AL FINAL de la corrida del cron y se REPITE cada dia CR mientras siga habiendo alguno; el texto lleva SOLO el numero (R35)
+  // Ficha 403 (R9/R12): una suscripcion de webhook lleva fallando en RACHA y sus reintentos se
+  // espaciaron solos. Lo emite el drenador de la cola (`WebhookEstadoService`) en cada fallo
+  // mientras la suscripcion este pausada; que salga UN solo aviso por racha lo da la entidad
+  // (`webhook_suscripcion_pausa`, anclada a `sin_exito_desde`), no una rama de codigo.
+  // ⚠️ EL TEXTO NUNCA DICE "DESACTIVADA": la suscripcion sigue activa, sigue reintentando y se
+  // recupera sola al primer 2xx. Destinatario: el rol `maestro`, el mismo que opera esa pantalla.
+  webhook_suscripcion_pausada
 
   @@map("notificacion_evento")
 }
@@ -2651,6 +2673,15 @@ enum NotificacionEntidadTipo {
   // propio en vez de reusar uno existente porque reusar un valor que promete una fila (`carga`,
   // `usuario`...) seria escribir un dato falso con formato de dato.
   gasto_fijo_cobro_dia
+  // Ficha 403 (design §1.2) - SEGUNDO `entidad_tipo` que NO apunta a una fila de tabla: la entidad
+  // es LA RACHA DE FALLOS (`entidad_id = '<owner_usuario_id>:<sin_exito_desde ISO>'`), no la
+  // suscripcion. Con la SUSCRIPCION (o su owner) como entidad, `notificacion_dedupe_key` admitiria
+  // UNA sola fila por (evento, owner, maestro) PARA SIEMPRE y la SEGUNDA racha de ese integrador
+  // no avisaria NUNCA, en silencio - el fallo que documento la 262 con `orden`. Con la racha:
+  // misma racha => misma entidad => un solo aviso (R12, 1a frase); racha nueva tras una
+  // recuperacion => `sin_exito_desde` distinto => entidad distinta => aviso nuevo (R12, 2a frase).
+  // Las dos propiedades son ESTRUCTURALES: no hay codigo que detecte la transicion.
+  webhook_suscripcion_pausa
 
   @@map("notificacion_entidad_tipo")
 }

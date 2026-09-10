@@ -16,6 +16,9 @@ import { WebhookSecretKeyError } from "@/lib/crypto/webhook-secret-cipher";
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 const ADMIN: Actor = { usuarioId: "u-admin", rol: "adminTienda" };
 
+/** FICHA 403 (R18): el ancla de la racha que el DTO expone en ISO-8601. */
+const ANCLA = "2026-09-04T18:00:00.000Z";
+
 function buildService(secret = "ordx_whsec_x"): IWebhookSuscripcionService {
   return {
     registrar: vi.fn(async () => ({ status: "creada", secret }) as const),
@@ -205,15 +208,64 @@ describe("obtenerWebhook (gate D2) — autorizacion y contrato", () => {
   it("R35: devuelve la vista {url, activa} y NUNCA el secreto", async () => {
     const service: IWebhookSuscripcionService = {
       ...buildService(),
-      obtener: vi.fn(async () => ({ url: "https://a.example.com", activa: true })),
+      obtener: vi.fn(async () => ({
+        url: "https://a.example.com",
+        activa: true,
+        pausada: false,
+        sinExitoDesde: ANCLA,
+      })),
     };
     const r = await obtenerWebhook(
       { ownerUsuarioId: "o1" },
       { getActor: async () => MAESTRO, service, resolverOwnerWebhook: async (id: string) => id },
     );
-    expect(r).toEqual({ status: "ok", webhook: { url: "https://a.example.com", activa: true } });
+    expect(r).toEqual({
+      status: "ok",
+      webhook: {
+        url: "https://a.example.com",
+        activa: true,
+        pausada: false,
+        sinExitoDesde: ANCLA,
+      },
+    });
     expect(JSON.stringify(r)).not.toContain("secret");
     expect(service.obtener).toHaveBeenCalledWith("o1");
+  });
+
+  // FICHA 403 (R18) — LOS DOS CAMPOS NUEVOS LLEGAN INTACTOS HASTA LA SERVER ACTION.
+  //
+  // Es passthrough puro y por eso se afirma sobre el RESULTADO de la accion y no sobre el doble:
+  // el riesgo real no es que el service devuelva mal, es que una capa intermedia proyecte campo a
+  // campo (`{ url, activa }`) y deje caer los nuevos en silencio — sin error y sin test rojo. Esa
+  // era la unica forma de que la pantalla no pudiera enterarse nunca de la pausa.
+  it("⭑ 403/R18: `pausada` y `sinExitoDesde` viajan hasta el resultado, y sin el secreto", async () => {
+    const service: IWebhookSuscripcionService = {
+      ...buildService(),
+      obtener: vi.fn(async () => ({
+        url: "https://a.example.com",
+        activa: true,
+        pausada: true,
+        sinExitoDesde: ANCLA,
+      })),
+    };
+    const r = await obtenerWebhook(
+      { ownerUsuarioId: "o1" },
+      { getActor: async () => MAESTRO, service, resolverOwnerWebhook: async (id: string) => id },
+    );
+    expect(r).toEqual({
+      status: "ok",
+      webhook: {
+        url: "https://a.example.com",
+        // R5: pausada y activa CONVIVEN. Una pausa no da de baja nada.
+        activa: true,
+        pausada: true,
+        sinExitoDesde: ANCLA,
+      },
+    });
+    // R13/R35: ni el secreto ni ningun rastro suyo cruzan esta frontera.
+    const serializado = JSON.stringify(r);
+    expect(serializado).not.toContain("secret");
+    expect(serializado).not.toContain("ordx_whsec_");
   });
 
   it("sin suscripción devuelve webhook null (status ok)", async () => {

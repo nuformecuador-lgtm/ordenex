@@ -8,6 +8,7 @@
 //
 // `WEBHOOK_MAX_ATTEMPTS` NO es config: `maxIntentos` quedo FIJADO en 5 (D5), constante del
 // helper de encolado (`webhook-estado-encolado.ts`), no un env.
+import type { WebhookPausaConfig } from "@/lib/utils/webhook-suscripcion-pausa";
 
 /** Lee un entero POSITIVO de `process.env`; ausente/vacio/invalido -> `fallback`. */
 function readPositiveInt(name: string, fallback: number): number {
@@ -47,6 +48,37 @@ export interface WebhookConfig {
    * despliegue, no una variacion entre reintentos.
    */
   WEBHOOK_APP_ORIGIN: string | null;
+  /**
+   * FICHA 403 (R8, design §2.3) — PISO DE EVIDENCIA del circuito: fallos consecutivos minimos
+   * antes de que el reloj pueda pausar. Default 3.
+   *
+   * Sin este piso, una suscripcion con trafico muy esporadico —un pedido, un fallo aislado y
+   * luego silencio REAL durante mas de la ventana porque no llega ningun otro pedido— entraria en
+   * pausa la proxima vez que llegara un intento, por el solo transcurso del reloj sobre UN dato.
+   */
+  WEBHOOK_PAUSA_FALLOS_MINIMOS: number;
+  /**
+   * FICHA 403 (R8) — VENTANA sin ninguna entrega aceptada, en MS. Default 30 min. Se configura en
+   * MINUTOS (`WEBHOOK_PAUSA_VENTANA_MINUTOS`) porque es la unidad en la que se razono y la que
+   * aparece en el spec; aqui sale ya en ms para que el predicado no tenga que convertir nada.
+   *
+   * 30 minutos NO es una intuicion: es el tiempo MEDIDO que estos mismos reintentos dejaron sin
+   * turno a la geocodificacion (42 ordenes esperando, ficha 402). El espaciado entra en juego como
+   * muy tarde en el mismo margen en el que ya se midio el daño colateral, no despues de repetirlo.
+   */
+  WEBHOOK_PAUSA_VENTANA_MS: number;
+  /**
+   * FICHA 403 (R4/R8/R17) — INTERVALO al que se espacian los reintentos de una suscripcion
+   * pausada, en ms. Default 3_600_000 (1 h).
+   *
+   * No es un numero nuevo: es el MISMO tope que ya gobierna cualquier backoff de la cola
+   * (`JOBS_BACKOFF_CAP_MS`, default tambien 1 h), o sea el peor caso de espera que este sistema ya
+   * considera aceptable para CUALQUIER tipo de job. Reutilizarlo evita que un destino pausado
+   * espere mas de lo ya tolerado en cualquier otro sitio — y de hecho `JobQueueService` lo ACOTA
+   * a `JOBS_BACKOFF_CAP_MS` pase lo que pase (R17), asi que subir este env por encima del cap no
+   * alarga la espera: la cola manda.
+   */
+  WEBHOOK_PAUSA_INTERVALO_MS: number;
 }
 
 /** Lee un origin de `process.env`; ausente/vacio -> `null`. Sin barra final. */
@@ -64,5 +96,23 @@ export function loadWebhookConfig(): WebhookConfig {
     WEBHOOK_REPLAY_WINDOW_S: readPositiveInt("WEBHOOK_REPLAY_WINDOW_S", 300),
     WEBHOOK_SECRET_ENC_KEY: rawKey !== undefined && rawKey !== "" ? rawKey : null,
     WEBHOOK_APP_ORIGIN: readOrigin("NEXT_PUBLIC_APP_URL"),
+    // FICHA 403 (R8): los tres, mismo patron que el resto del archivo — ausente, vacio o invalido
+    // cae al default y esta funcion NUNCA lanza (R28: una excepcion al CARGAR la config tumbaria
+    // la corrida entera de la cola, que este tipo de job comparte con otros cinco).
+    WEBHOOK_PAUSA_FALLOS_MINIMOS: readPositiveInt("WEBHOOK_PAUSA_FALLOS_MINIMOS", 3),
+    WEBHOOK_PAUSA_VENTANA_MS: readPositiveInt("WEBHOOK_PAUSA_VENTANA_MINUTOS", 30) * 60_000,
+    WEBHOOK_PAUSA_INTERVALO_MS: readPositiveInt("WEBHOOK_PAUSA_INTERVALO_MS", 3_600_000),
+  };
+}
+
+/**
+ * FICHA 403 — la vista que `estaPausada` necesita, extraida de la config completa. Existe para
+ * que ni el repositorio ni el service tengan que saber COMO se llaman los dos envs: reciben el
+ * umbral ya en la forma del predicado (`docs/architecture.md`, principio 4).
+ */
+export function pausaConfigDe(config: WebhookConfig): WebhookPausaConfig {
+  return {
+    fallosMinimos: config.WEBHOOK_PAUSA_FALLOS_MINIMOS,
+    ventanaMs: config.WEBHOOK_PAUSA_VENTANA_MS,
   };
 }

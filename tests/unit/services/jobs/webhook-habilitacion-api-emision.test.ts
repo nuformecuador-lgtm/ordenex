@@ -125,3 +125,82 @@ describe("266/R17 — la habilitacion por API que devuelve la orden a `en_repart
     expect(enqueue).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// FICHA 403 (R5) — UNA SUSCRIPCION PAUSADA SIGUE RECIBIENDO JOBS.
+//
+// Es la mitad de la ficha que se cae en silencio si alguien "optimiza": si el encolado dejara de
+// producir jobs para un destino pausado, la suscripcion no volveria a intentarlo NUNCA y solo un
+// humano podria sacarla de ahi — que es exactamente el mecanismo que el humano descarto (la cura
+// no puede parecerse a la enfermedad). La pausa solo ESPACIA reintentos; no corta el grifo.
+//
+// COMO SE MIDE, y es deliberado: el doble del `tx` INSPECCIONA el SQL. Si la consulta de
+// elegibilidad mencionara alguna de las dos columnas del circuito, el doble asume que la fila
+// —que esta en plena racha de fallos— quedaria fuera y devuelve cero elegibles. Asi una mutacion
+// del `WHERE` se ve desde aqui, en vez de pasar inadvertida por un doble que ignora el SQL.
+// ---------------------------------------------------------------------------
+
+/** Columnas del circuito (403/T1). Ninguna debe aparecer en el filtro de elegibilidad. */
+const COLUMNAS_CIRCUITO = ["fallos_consecutivos", "sin_exito_desde"];
+
+/**
+ * `tx` cuya fila de `webhook_suscripcion` esta ACTIVA pero en plena racha de fallos (muy pausada).
+ * Devuelve la orden como elegible SOLO si la consulta no discrimina por el circuito.
+ */
+function buildTxPausada() {
+  const sqlVisto: string[] = [];
+  const createMany = vi.fn(async () => ({ count: 1 }));
+  const $queryRaw = vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    const sql = strings.join(" ");
+    sqlVisto.push(sql);
+    const args = values.flatMap((v) => {
+      const inner = (v as { values?: unknown[] })?.values;
+      return Array.isArray(inner) ? inner : [v];
+    });
+    if (sql.includes("webhook_suscripcion")) {
+      // La fila esta `activa = true`; si el filtro mirara el circuito, la dejaria fuera.
+      if (COLUMNAS_CIRCUITO.some((c) => sql.includes(c))) return [];
+      return args.filter((id) => id === ORDEN_ID).map((id) => ({ orden_id: id }));
+    }
+    if (sql.includes("order_status")) return [{ id: ID_EN_REPARTO, value: "en_reparto" }];
+    return [];
+  });
+  return {
+    tx: { ordenHistorialEstado: { createMany }, $queryRaw, $executeRaw: vi.fn() },
+    sqlVisto,
+  };
+}
+
+describe("403/R5 — pausar NO es desactivar: la suscripcion pausada sigue encolando", () => {
+  it("⭑ una suscripcion en plena racha de fallos SIGUE recibiendo su job", async () => {
+    const { tx } = buildTxPausada();
+    const { repo, enqueue } = buildJobRepo();
+    const emitir = (txArg: never, entradas: CambioEstadoEntrada[]) =>
+      emitirWebhooksEstado(txArg, entradas, repo, () => new Date("2026-09-09T10:00:00.000Z"));
+
+    await appendCambioEstado(tx as never, [entradaRamaA()], emitir as never, undefined, async () => {});
+
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect((enqueue.mock.calls[0] as unknown as [string])[0]).toBe("webhook_estado");
+  });
+
+  it("⭑ y el filtro de elegibilidad mira SOLO `activa`, no el estado del circuito", async () => {
+    // La otra cara del mismo requisito, afirmada sobre el SQL que de verdad se emitio. `activa` es
+    // el interruptor MANUAL del dueño y sigue mandando; la pausa no entra en esta consulta.
+    const { tx, sqlVisto } = buildTxPausada();
+    const { repo } = buildJobRepo();
+    const emitir = (txArg: never, entradas: CambioEstadoEntrada[]) =>
+      emitirWebhooksEstado(txArg, entradas, repo, () => new Date("2026-09-09T10:00:00.000Z"));
+
+    await appendCambioEstado(tx as never, [entradaRamaA()], emitir as never, undefined, async () => {});
+
+    const consulta = sqlVisto.find((s) => s.includes("webhook_suscripcion"));
+    expect(consulta, "el emisor no consulto `webhook_suscripcion`").toBeDefined();
+    expect(consulta).toMatch(/w\."activa"/);
+    for (const columna of COLUMNAS_CIRCUITO) {
+      expect(consulta, `el filtro de elegibilidad discrimina por \`${columna}\``).not.toContain(
+        columna,
+      );
+    }
+  });
+});

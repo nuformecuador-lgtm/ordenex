@@ -34,6 +34,17 @@ export type RotarSecretoResult =
 export interface WebhookSuscripcionVistaDTO {
   url: string;
   activa: boolean;
+  /**
+   * FICHA 403 (R18) — si AHORA MISMO sus reintentos estan espaciados por fallos de entrega
+   * sostenidos. DERIVADO en el momento de la consulta (`estaPausada()`), no una columna.
+   *
+   * ⚠️ INDEPENDIENTE DE `activa`: una suscripcion pausada sigue activa, sigue recibiendo jobs y se
+   * recupera sola al primer 2xx. La pantalla debe pintarlo como una linea ADICIONAL, no como otra
+   * rama de "activa / no hay webhook".
+   */
+  pausada: boolean;
+  /** FICHA 403 (R18) — ISO-8601 del instante desde el que no hay ninguna entrega aceptada. */
+  sinExitoDesde: string | null;
 }
 
 export interface IWebhookSuscripcionService {

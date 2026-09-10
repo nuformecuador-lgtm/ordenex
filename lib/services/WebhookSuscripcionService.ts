@@ -89,7 +89,15 @@ export class WebhookSuscripcionService implements IWebhookSuscripcionService {
     await this.repo.desactivarByOwner(ownerUsuarioId);
   }
 
-  /** R7: consulta de display SIN secreto. */
+  /**
+   * R7: consulta de display SIN secreto.
+   *
+   * FICHA 403 (R18): PASSTHROUGH puro de `pausada`/`sinExitoDesde`. No hay logica nueva aqui a
+   * proposito — `pausada` lo calcula el repositorio con la MISMA funcion pura y el MISMO umbral
+   * que usa el drenador para decidir el espaciado. Recalcularlo en esta capa abriria justo la
+   * grieta por la que "lo que hace la cola" y "lo que ve el dueño" empiezan a decir cosas
+   * distintas.
+   */
   async obtener(ownerUsuarioId: string): Promise<WebhookSuscripcionVistaDTO | null> {
     return this.repo.findByOwner(ownerUsuarioId);
   }

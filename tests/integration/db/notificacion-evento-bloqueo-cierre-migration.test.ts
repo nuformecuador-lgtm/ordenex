@@ -189,11 +189,12 @@ describeSiHayBase("271 / §3.2 — la base aplicada, y el DOWN ejercitado de ver
     return (filas[0]?.valores ?? "").split(",").filter((v) => v.length > 0);
   }
 
-  // ⚠️ ACTUALIZADO EL 2026-08-29 POR LA FICHA 333, Y SOLO ESTE CASO. Lee la BASE APLICADA —el
-  // estado de HOY—, no una foto historica, asi que crece con cada valor que se anada detras. Todo
-  // lo demas de este archivo (el UP de la 271, su DOWN con los SEIS previos y las afirmaciones
-  // sobre los `down.sql` de la 146, la 253 y la 262) son FOTOS HISTORICAS y NO se tocan.
-  it("la base tiene los NUEVE eventos, con los dos de la 271 y el de la 333 AL FINAL y en orden de adicion", async () => {
+  // ⚠️ ACTUALIZADO EL 2026-08-29 POR LA FICHA 333 Y EL 2026-09-09 POR LA 403, Y SOLO ESTE CASO. Lee
+  // la BASE APLICADA —el estado de HOY—, no una foto historica, asi que crece con cada valor que se
+  // anada detras. Todo lo demas de este archivo (el UP de la 271, su DOWN con los SEIS previos y
+  // las afirmaciones sobre los `down.sql` de la 146, la 253 y la 262) son FOTOS HISTORICAS y NO se
+  // tocan. El titulo ya no lleva la cuenta: decia «los NUEVE» cuando ya eran diez.
+  it("la base tiene los eventos de la 271 y los posteriores AL FINAL y en orden de adicion", async () => {
     // El orden (`enumsortorder`) es lo que demuestra que los valores se ANADIERON y no que el tipo
     // se recreo por detras.
     expect(await valoresDe("notificacion_evento")).toEqual([
@@ -203,6 +204,11 @@ describeSiHayBase("271 / §3.2 — la base aplicada, y el DOWN ejercitado de ver
       // fijo esperando decision», que la corrida del cron emite AL FINAL y repite cada dia
       // mientras siga habiendo alguno. Migracion `20260829130000_notificacion_evento_gasto_fijo_cobro`.
       "gasto_fijo_cobro_pendiente",
+      // FICHA 403 (design §1.2/§5, R9, 2026-09-09) - el aviso «un webhook lleva fallando y sus
+      // reintentos se espaciaron». Lo emite el DRENADOR de la cola mientras la suscripcion este
+      // pausada; un solo aviso por RACHA. Migracion
+      // `20260909130000_notificacion_evento_webhook_suscripcion`.
+      "webhook_suscripcion_pausada",
     ]);
   });
 
