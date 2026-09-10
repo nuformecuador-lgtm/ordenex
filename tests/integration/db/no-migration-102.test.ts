@@ -73,6 +73,10 @@ const MIGRACIONES_NOTIFICACIONES_POSTERIORES = [
   // Los DOS enums de la campana ganan un valor; la tabla `gasto_fijo_cobro` va en su propia
   // migracion, que no cae en este filtro.
   "_notificacion_evento_gasto_fijo_cobro",
+  // Ficha 403 / design §1.2 (2026-09-09): el aviso «un webhook lleva fallando y sus reintentos se
+  // espaciaron». Los DOS enums de la campana ganan un valor; las columnas del circuito van en su
+  // propia migracion (`20260909120000_webhook_suscripcion_circuito`), que no cae en este filtro.
+  "_notificacion_evento_webhook_suscripcion",
 ] as const;
 
 describe("Feature 102 · SIN migracion nueva (R3)", () => {

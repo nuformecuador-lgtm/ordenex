@@ -10,23 +10,41 @@ import type {
 // Feature 99 (R5/R6/R7/R8/R9/R32) — el servicio de registro es puro. `cifrar` y
 // `generarSecreto` se inyectan para verificar el contrato sin claves reales.
 
+/** FICHA 403: la fila del doble gana el estado del circuito (dos datos, ningun flag `pausada`). */
+interface FilaDoble {
+  url: string;
+  secret: string;
+  activa: boolean;
+  pausada: boolean;
+  sinExitoDesde: string;
+}
+
+const ANCLA = "2026-09-09T12:00:00.000Z";
+
 function buildRepo(): {
   repo: IWebhookSuscripcionRepository;
-  filas: Map<string, { url: string; secret: string; activa: boolean }>;
+  filas: Map<string, FilaDoble>;
   upsert: ReturnType<typeof vi.fn>;
   actualizarUrl: ReturnType<typeof vi.fn>;
   actualizarSecreto: ReturnType<typeof vi.fn>;
   desactivar: ReturnType<typeof vi.fn>;
 } {
-  const filas = new Map<string, { url: string; secret: string; activa: boolean }>();
+  const filas = new Map<string, FilaDoble>();
   const upsert = vi.fn(async (data: WebhookSuscripcionUpsertData) => {
-    filas.set(data.ownerUsuarioId, { url: data.url, secret: data.secret, activa: true });
+    filas.set(data.ownerUsuarioId, {
+      url: data.url,
+      secret: data.secret,
+      activa: true,
+      pausada: false,
+      sinExitoDesde: ANCLA,
+    });
   });
   const actualizarUrl = vi.fn(async (owner: string, url: string) => {
     const f = filas.get(owner);
     if (f) {
       f.url = url;
       f.activa = true; // reactiva, conserva el secreto
+      f.pausada = false; // FICHA 403 (R7): guardar la URL saca de la pausa
     }
   });
   const actualizarSecreto = vi.fn(async (owner: string, secret: string) => {
@@ -48,11 +66,18 @@ function buildRepo(): {
     },
     async findByOwner(owner): Promise<WebhookSuscripcionVista | null> {
       const f = filas.get(owner);
-      return f ? { url: f.url, activa: f.activa } : null;
+      return f
+        ? { url: f.url, activa: f.activa, pausada: f.pausada, sinExitoDesde: f.sinExitoDesde }
+        : null;
     },
     async resolverOwnerWebhook(owner: string) {
       return owner;
     },
+    // FICHA 403: los dos metodos del circuito. Aqui son minimos (su logica real la miden
+    // `webhook-suscripcion-repository.test.ts` y `webhook-estado-service.test.ts`); lo que importa
+    // en este archivo es que el service de REGISTRO no los llama nunca.
+    registrarEntregaOk: vi.fn(async () => {}),
+    incrementarFalloYLeer: vi.fn(async () => null),
   };
   return { repo, filas, upsert, actualizarUrl, actualizarSecreto, desactivar };
 }
@@ -88,7 +113,13 @@ describe("R33/R7/R32 — ALTA persiste cifrado y retorna el secreto una vez (cre
 
     // R7: la consulta de display NO trae el secreto.
     const vista = await service.obtener("o1");
-    expect(vista).toEqual({ url: "https://a.example.com", activa: true });
+    expect(vista).toEqual({
+      url: "https://a.example.com",
+      activa: true,
+      // FICHA 403 (R18): los dos campos nuevos llegan intactos hasta el DTO del service.
+      pausada: false,
+      sinExitoDesde: ANCLA,
+    });
     expect(JSON.stringify(vista)).not.toContain("ENC(");
   });
 
@@ -190,7 +221,14 @@ describe("R8 — baja", () => {
     await service.registrar({ ownerUsuarioId: "o1", url: "https://a.example.com" });
     await service.desactivar("o1");
     expect(filas.get("o1")!.activa).toBe(false);
-    expect(await service.obtener("o1")).toEqual({ url: "https://a.example.com", activa: false });
+    expect(await service.obtener("o1")).toEqual({
+      url: "https://a.example.com",
+      activa: false,
+      // FICHA 403 (R5): dar de baja y estar pausada son cosas DISTINTAS. Una baja manual no
+      // pausa nada, y una pausa no da de baja: los dos campos viajan independientes.
+      pausada: false,
+      sinExitoDesde: ANCLA,
+    });
   });
 });
 

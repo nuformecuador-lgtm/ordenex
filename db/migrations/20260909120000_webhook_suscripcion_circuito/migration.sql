@@ -1,0 +1,42 @@
+-- Ficha 403 (T1, design §1.1) -- el estado del circuito de una suscripcion de webhook.
+--
+-- QUE ANADE, y son DOS columnas, no cuatro:
+--
+--   `webhook_suscripcion.fallos_consecutivos` INT     NOT NULL DEFAULT 0
+--   `webhook_suscripcion.sin_exito_desde`     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+--
+-- `fallos_consecutivos`: entregas fallidas SEGUIDAS sin ningun 2xx de por medio (R3). Se
+-- reinicia a cero en cada entrega aceptada (R2) y en cada alta/edicion de la URL (R7).
+-- `sin_exito_desde`: instante de la ULTIMA entrega aceptada, o del alta/edicion mas reciente si
+-- todavia no hubo ninguna. NUNCA es NULL: una suscripcion recien creada ya tiene un ancla valida
+-- -- su propia creacion --, y por eso la columna nace NOT NULL con default y sin backfill aparte.
+--
+-- ⚠️ NO HAY UNA TERCERA COLUMNA `pausada` (ni `pausada_desde`), Y ES UNA DECISION, NO UN OLVIDO
+-- (design §1.1 / alternativa descartada 3). "Pausada" es un estado 100 % DERIVADO de estas dos
+-- columnas mas el reloj, evaluado por una funcion pura (`lib/utils/webhook-suscripcion-pausa.ts`)
+-- tanto para decidir el espaciado de un reintento como para lo que ve la pantalla. Un booleano
+-- persistido EN PARALELO a los datos que lo determinan puede divergir de ellos -- basta con que un
+-- camino de recuperacion futuro se olvide de limpiarlo -- y entonces el flag miente sobre el
+-- historial de fallos. Con el valor derivado eso es estructuralmente imposible: hay una sola
+-- fuente de verdad.
+--
+-- LA PAUSA NO TOCA `activa` (R5). La bandera `activa` es el interruptor MANUAL del dueño
+-- (fichas 99/105/108) y esta migracion no la altera ni la lee. Pausar solo ESPACIA los
+-- reintentos; la suscripcion sigue viva, sigue recibiendo jobs y se recupera sola al primer 2xx.
+--
+-- ADITIVA Y SIN BACKFILL: las dos columnas nacen con default, asi que las filas existentes
+-- quedan con `fallos_consecutivos = 0` y `sin_exito_desde = ahora` -- es decir, tratadas como
+-- "sanas ahora mismo", que es exactamente el arranque correcto: nadie entra en pausa por su
+-- historial previo, sino por lo que le pase a partir de aqui. No se reescribe ninguna fila.
+--
+-- RLS: NO SE TOCA. `webhook_suscripcion` ya tiene RLS habilitada SIN policies desde
+-- `20260721130000_webhook_suscripcion` (solo service role), y estas dos columnas se leen y se
+-- escriben por el mismo camino que las existentes. No guardan URL, ni secreto, ni PII: un
+-- contador y un timestamp (design §9).
+--
+-- TIPO DE LA COLUMNA DE TIEMPO: `TIMESTAMP(3)`, igual que `created_at`/`updated_at` de esta misma
+-- tabla y que el resto del arbol. Es a lo que Prisma mapea un `DateTime` sin `@db.`, asi que
+-- cualquier otro tipo dejaria drift permanente entre `db/schema.prisma` y la base.
+ALTER TABLE "webhook_suscripcion"
+  ADD COLUMN "fallos_consecutivos" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN "sin_exito_desde" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;

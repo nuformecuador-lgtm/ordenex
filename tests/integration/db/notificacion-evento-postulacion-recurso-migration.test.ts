@@ -196,6 +196,10 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // esperando decision»: lo emite la corrida del cron al terminar y se repite cada dia CR
       // mientras quede alguno. Migracion `20260829130000_notificacion_evento_gasto_fijo_cobro`.
       "gasto_fijo_cobro_pendiente",
+      // FICHA 403 (design §1.2/§5, R9, 2026-09-09) - «un webhook lleva fallando y sus reintentos se
+      // espaciaron». Lo emite el DRENADOR de la cola; un solo aviso por RACHA. Migracion
+      // `20260909130000_notificacion_evento_webhook_suscripcion`.
+      "webhook_suscripcion_pausada",
     ]);
   });
 
@@ -214,6 +218,11 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // propio en vez de reusar uno existente por la MISMA razon por la que esta ficha 253 no
       // reuso `usuario`: prometer una fila que no existe seria un dato falso con formato de dato.
       "gasto_fijo_cobro_dia",
+      // FICHA 403 (design §1.2, 2026-09-09) - LA RACHA DE FALLOS
+      // (`'<owner>:<sinExitoDesde ISO>'`), no la suscripcion. Valor propio por la MISMA razon por
+      // la que esta ficha 253 no reuso `usuario`: prometer una fila que no existe seria un dato
+      // falso con formato de dato.
+      "webhook_suscripcion_pausa",
     ]);
   });
 
@@ -250,13 +259,14 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
     return (filas[0]?.valores ?? "").split(",").filter((v) => v.length > 0);
   }
 
-  // ⚠️ ACTUALIZADAS EL 2026-08-22 POR LA 262, EL 2026-08-23 POR LA 271 Y EL 2026-08-29 POR LA FICHA
-  // 333, y por la misma razon que las dos del schema: estas dos leen la BASE APLICADA, o sea el
-  // estado de HOY, no una foto historica. Hoy la base tiene NUEVE eventos (4 de la 146 + 1 de la
-  // 253 + 1 de la 262 + 2 de la 271 + 1 de la 333) y SIETE tipos de entidad (4 de la 146 + 1 de la
-  // 253 + 1 de la 262 + 1 de la 333). Lo que se conserva intacto es el orden —`enumsortorder`—,
-  // que es lo que demuestra que el valor se ANADIO al final y no se recreo el tipo.
-  it("la base tiene los NUEVE eventos, con los nuevos al final y en orden de adicion", async () => {
+  // ⚠️ ACTUALIZADAS EL 2026-08-22 POR LA 262, EL 2026-08-23 POR LA 271, EL 2026-08-29 POR LA 333 Y
+  // EL 2026-09-09 POR LA 403, y por la misma razon que las dos del schema: estas dos leen la BASE
+  // APLICADA, o sea el estado de HOY, no una foto historica. Hoy la base tiene DIEZ eventos (4 de
+  // la 146 + 1 de la 253 + 1 de la 262 + 2 de la 271 + 1 de la 333 + 1 de la 403) y OCHO tipos de
+  // entidad (4 de la 146 + 1 de la 253 + 1 de la 262 + 1 de la 333 + 1 de la 403). Lo que se
+  // conserva intacto es el orden —`enumsortorder`—, que es lo que demuestra que el valor se ANADIO
+  // al final y no se recreo el tipo. Los titulos ya no llevan la cuenta: caducaba en cada ficha.
+  it("la base tiene los eventos posteriores al final y en orden de adicion", async () => {
     expect(await valoresDe("notificacion_evento")).toEqual([
       ...EVENTOS_146,
       "postulacion_recurso_pendiente", // feature 253 / D6
@@ -267,10 +277,14 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       // FICHA 333 (design 4.1/4.2, R29/R30/R36, 2026-08-29) - «quedan cobros de gasto fijo
       // esperando decision». Migracion `20260829130000_notificacion_evento_gasto_fijo_cobro`.
       "gasto_fijo_cobro_pendiente",
+      // FICHA 403 (design §1.2/§5, R9, 2026-09-09) - «un webhook lleva fallando y sus reintentos se
+      // espaciaron». Lo emite el DRENADOR de la cola; un solo aviso por RACHA. Migracion
+      // `20260909130000_notificacion_evento_webhook_suscripcion`.
+      "webhook_suscripcion_pausada",
     ]);
   });
 
-  it("y los SIETE tipos de entidad", async () => {
+  it("y los tipos de entidad, con los posteriores al final", async () => {
     expect(await valoresDe("notificacion_entidad_tipo")).toEqual([
       ...ENTIDADES_146,
       "postulacion_recurso", // feature 253 / D6
@@ -278,6 +292,11 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       // FICHA 333 (design 4.2, 2026-08-29) - la entidad del aviso es EL DIA CR de la corrida, no
       // el cobro; sin valor propio la dedupe de la 146 apagaria el recordatorio diario (R30).
       "gasto_fijo_cobro_dia",
+      // FICHA 403 (design §1.2, 2026-09-09) - LA RACHA DE FALLOS
+      // (`'<owner>:<sinExitoDesde ISO>'`), no la suscripcion. Valor propio por la MISMA razon por
+      // la que esta ficha 253 no reuso `usuario`: prometer una fila que no existe seria un dato
+      // falso con formato de dato.
+      "webhook_suscripcion_pausa",
     ]);
   });
 

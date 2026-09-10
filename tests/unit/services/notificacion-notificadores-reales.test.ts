@@ -376,6 +376,12 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     // sin nadie mirando, asi que su default no-op no es comodidad: es lo que impide que una suite
     // escriba avisos contra la base local, que en este repo es COMPARTIDA.
     "GeneracionGastosFijosService.ts", // ficha 333 / §4.4
+    // FICHA 403 (T12, R9/R10): el DRENADOR DE LA COLA pasa a tener notificador —«un webhook lleva
+    // fallando y sus reintentos se espaciaron»—. Es el TERCER aviso del arbol que se dispara SOLO
+    // y sin nadie mirando, y el unico que se emite desde dentro de un lote de 10 jobs: su default
+    // no-op no es comodidad, es lo que impide que las suites que instancian este service escriban
+    // avisos contra la base local, que en este repo es COMPARTIDA.
+    "WebhookEstadoService.ts", // ficha 403 / §5
   ] as const;
 
   it("lib/actions/postulacion-recurso.ts inyecta el notificador real", () => {
@@ -425,6 +431,31 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     // que se exige, no el import.
     expect(fuente).toContain(
       'import { notificarGastoFijoCobroPendienteReal } from "@/lib/notificaciones/notificadores"',
+    );
+  });
+
+  it("lib/services/jobs/webhook-estado-handler.ts inyecta el notificador real", () => {
+    // FICHA 403 (T12) — MISMO MOLDE QUE LOS DOS DE ARRIBA, Y POR EL MISMO MOTIVO MEDIDO. El
+    // notificador es el SEPTIMO argumento de `WebhookEstadoService`, detras del logger; si esta
+    // fabrica dejara de pasarlo, el service se quedaria con su default NO-OP y el aviso no se
+    // emitiria JAMAS en produccion con la suite entera en verde — que es exactamente lo que le
+    // paso a `corte-diario/route.ts` (feature 271), que pasaba CINCO argumentos.
+    //
+    // El composition root de este aviso NO vive bajo `app/` como los otros dos: el productor es el
+    // drenador de la cola, y su fabrica de dependencias reales es este archivo. Por eso la guardia
+    // apunta aqui y no a la ruta del cron.
+    //
+    // Se afirma sobre el USO EFECTIVO (fuente sin imports ni comentarios) y no con un `toContain`
+    // a secas: medido en este mismo archivo, un `toContain` se satisface con el `import` de
+    // arriba, asi que borrar solo el argumento del cableado lo dejaria EN VERDE.
+    const fuente = leer("lib", "services", "jobs", "webhook-estado-handler.ts");
+    const uso = fuenteSinImportsNiComentarios(fuente);
+    expect(uso).toContain("notificarWebhookSuscripcionPausadaReal");
+    expect(uso).toMatch(
+      /new WebhookEstadoService\([\s\S]*notificarWebhookSuscripcionPausadaReal,?[\s\S]*\)/,
+    );
+    expect(fuente).toContain(
+      'import { notificarWebhookSuscripcionPausadaReal } from "@/lib/notificaciones/notificadores"',
     );
   });
 

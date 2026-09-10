@@ -17,6 +17,10 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 // literal: las cadenas de notificacion siguen viviendo solo en este archivo (146 §4.6). Y
 // `fechaLegible` es pura — no importa `Date` ni `Intl`.
 import { fechaLegible } from "@/lib/utils/dia-reparto-textos";
+// FICHA 403: el dia calendario de COSTA RICA. `fechaLegible` solo pone en palabras un
+// `YYYY-MM-DD`; quien decide QUE dia es ese a partir de un instante es esta funcion, y por eso no
+// vale `toISOString().slice(0, 10)` (en UTC, un fallo de las 19:00 CR ya cae en el dia siguiente).
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 // Feature 271 (§9.2/§10.1): el aviso de bloqueo al mensajero se COMPONE con el mismo formateador
 // que la pantalla. No es una cadena importada de fuera: es la regla que CUENTA (N, V y cual toca
 // primero) escrita una sola vez, para que campana y pantalla no puedan divergir (R43/R52).
@@ -710,6 +714,117 @@ export async function emitirGastoFijoCobroPendiente(
         anexo: null,
         entidadTipo: "gasto_fijo_cobro_dia",
         entidadId: ctx.diaCR,
+        destinatario: { tipo: "rol", rol: "maestro" },
+      },
+    ],
+    tx,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FICHA 403 §5 — Una suscripción de webhook lleva fallando en racha y sus reintentos se
+// espaciaron solos. BEST-EFFORT, desde el DRENADOR DE LA COLA.
+//
+// ⚠️ LA ENTIDAD DE ESTE AVISO ES **LA RACHA DE FALLOS**, NO LA SUSCRIPCIÓN, y es lo que hace que
+// R12 sea estructural en vez de disciplina:
+//
+//     entidadId = `${ownerUsuarioId}:${sinExitoDesde.toISOString()}`
+//
+// `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+// destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`, y
+// `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `false`. Con la SUSCRIPCIÓN (o su
+// owner) como entidad, esa clave admitiría UNA sola fila por (evento, owner, maestro) PARA
+// SIEMPRE: la SEGUNDA racha de ese integrador —meses después, tras haberse recuperado— no
+// avisaría NUNCA, sin error, sin log y sin nada. Es el fallo que la 262 documentó con `orden` y
+// que la 333 evitó eligiendo el día.
+//
+// Con la racha:
+//   · mientras dura, `sinExitoDesde` no se mueve ⇒ misma entidad ⇒ TODOS los intentos fallidos
+//     posteriores chocan con el índice y se descartan en silencio: UN aviso por racha (R12, 1ª);
+//   · tras un 2xx (R2) o un guardado manual de la URL (R7), `sinExitoDesde` cambia ⇒ otra entidad
+//     ⇒ la siguiente racha avisa de nuevo (R12, 2ª).
+//
+// POR ESO NO HACE FALTA CÓDIGO QUE DETECTE LA TRANSICIÓN «no pausada → pausada» (design §4): el
+// service intenta notificar en CADA fallo mientras `estaPausada()` sea cierto, y la deduplicación
+// la hace la clave. Se probó la alternativa —reconstruir el estado previo restando uno al
+// contador— y NO funciona: no distingue el caso en que el conteo ya superaba el umbral desde hacía
+// rato y es el TIEMPO el que acaba de cumplirse (ambos lados se evalúan con el mismo «ahora»).
+// ---------------------------------------------------------------------------
+
+/**
+ * Lo MÍNIMO que el aviso necesita, y ni un dato más (R13): quién es el owner —solo para formar la
+ * clave, nunca para el texto— y desde cuándo dura la racha.
+ *
+ * ⚠️ NO LLEVA NI LA URL NI EL SECRETO, ni cifrado, y no es un descuido: son el dato del integrador
+ * y la credencial de firma. Un aviso viaja a una campana que se lee en pantalla y puede acabar en
+ * una captura o en un log.
+ */
+export interface WebhookSuscripcionPausadaContexto {
+  /** Owner de la suscripción. Solo entra en el `entidadId`, jamás en la descripción. */
+  ownerUsuarioId: string;
+  /** Ancla de la racha: instante desde el que no hay ninguna entrega aceptada. */
+  sinExitoDesde: Date;
+}
+
+/**
+ * FICHA 403 (R9/R13) — el texto del aviso.
+ *
+ * ⚠️ NUNCA DICE «DESACTIVADA», «DADA DE BAJA» NI «CANCELADA» (R9, última frase), Y ESO ES EL
+ * REQUISITO, no una preferencia de estilo. La suscripción SIGUE ACTIVA, sigue encolando y sigue
+ * reintentando: lo único que cambió es el espaciado, y se deshace solo al primer 2xx. Un texto que
+ * dijera «se desactivó» mandaría al maestro a reactivar a mano algo que no está apagado —y la
+ * decisión del humano en esta ficha fue exactamente NO reproducir ese mecanismo—.
+ *
+ * SIN LA URL Y SIN EL SECRETO (R13). Y sin nombrar cuál suscripción: hoy hay una sola en
+ * producción, y nombrarla el día que haya varias es una extensión de una línea, no otro mecanismo.
+ *
+ * La fecha va en palabras con `fechaLegible`, el MISMO formateador que usan la asignación y el
+ * portal del mensajero: lo que se importa es la conversión de fecha, no otro literal (146 §4.6).
+ *
+ * Y el día calendario sale de `fechaCalendarioCR`, NO de `toISOString().slice(0, 10)`: quien lee
+ * este aviso está en Costa Rica, y en UTC un fallo de las 19:00 CR ya cae en el día siguiente. Un
+ * aviso que dice «desde el 10» cuando en pantalla todavía es el 9 se lee como un error del sistema.
+ */
+export function textoWebhookSuscripcionPausada(sinExitoDesde: Date): string {
+  return (
+    `Un webhook lleva fallando desde el ${fechaLegible(fechaCalendarioCR(sinExitoDesde))} ` +
+    "y sus reintentos se espaciaron automáticamente para no saturar la cola de trabajo. " +
+    "Se reanudarán solos en cuanto vuelva a responder. Revisa Configuración > API."
+  );
+}
+
+/**
+ * R9/R10/R12/R13 — UNA fila `warning` dirigida al rol `maestro`, y a nadie más.
+ *
+ * `warning` y NO `alert`: la suscripción sigue viva y se está recuperando sola. Un `alert` teñiría
+ * de rojo (`NotificationsBell.tsx`) algo que no exige intervenir — no es la misma severidad que
+ * «algo se rompió y hay que arreglarlo a mano».
+ *
+ * SÓLO AL `maestro`: es el único rol que opera Configuración > API (`lib/actions/webhooks.ts`
+ * autoriza a `maestro` y a nadie más). El `admin` la vería sin poder actuar, que es el mismo
+ * argumento por el que la 333 lo excluyó.
+ *
+ * SIN ANEXO: no hay ningún dato más que enseñar sin arriesgar R13.
+ *
+ * R10: reutiliza `emitirFilas` → `INotificacionRepository.crear`, el mecanismo de la 146. No se
+ * construye ningún canal de aviso nuevo.
+ */
+export async function emitirWebhookSuscripcionPausada(
+  repo: INotificacionRepository,
+  ctx: WebhookSuscripcionPausadaContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  return emitirFilas(
+    repo,
+    [
+      {
+        tipo: "warning",
+        evento: "webhook_suscripcion_pausada",
+        descripcion: textoWebhookSuscripcionPausada(ctx.sinExitoDesde),
+        anexo: null,
+        entidadTipo: "webhook_suscripcion_pausa",
+        // ⚠️ LA RACHA, no la suscripción. Ver el bloque de arriba.
+        entidadId: `${ctx.ownerUsuarioId}:${ctx.sinExitoDesde.toISOString()}`,
         destinatario: { tipo: "rol", rol: "maestro" },
       },
     ],
