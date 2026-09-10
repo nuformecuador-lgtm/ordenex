@@ -84,6 +84,10 @@ import {
   // Lo necesita tambien el detalle del cierre de mensajero, y dos copias del mismo criterio se
   // separan a la primera correccion.
   esMontoCero,
+  // FICHA 408: el comprobante lo miran EL ADMIN Y EL MENSAJERO, y aquí no hay columna «Origen»
+  // que acompañe al motivo — sólo el badge de más abajo, y sólo en `rechazada`. Se pide por la
+  // misma puerta que el resto de los textos de cierre.
+  motivoGestionLegible,
 } from "./cierre-detalle-shared";
 // Feature 213 (T6/T7): el desglose de pago se formatea en UN solo sitio (R25).
 import { desglosePantalla } from "./desglose-pago";
@@ -1527,7 +1531,10 @@ function FilaGestion({
               label={FILA_NUEVA_FECHA_LABEL}
               value={g.fechaReprogramacion}
             />
-            <DatoFila label={FILA_MOTIVO_LABEL} value={g.motivo} />
+            <DatoFila
+              label={FILA_MOTIVO_LABEL}
+              value={motivoGestionLegible(g.motivo, g.esRechazoSla)}
+            />
             {g.resultado === "rechazada" ? (
               <>
                 <DatoFila

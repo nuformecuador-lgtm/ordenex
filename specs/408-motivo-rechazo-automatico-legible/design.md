@@ -88,7 +88,9 @@ export function motivoGestionLegible(
 | `"escalado SLA wrong_address"` | `"Dirección errada"` | `"Dirección errada · …"` |
 | cualquier otra cosa (texto libre, cadena vacía, causa desconocida, otra caja) | **la entrada, idéntica** | **la entrada, idéntica** |
 
-**Un solo booleano para los 13 puntos de llamada, y siempre el mismo valor: `gestion.esRechazoSla`.**
+**Un solo booleano para los 18 puntos de llamada, y siempre el mismo valor: `gestion.esRechazoSla`.**
+*(Corregido el 2026-09-10, al implementar: esta línea decía «13». El número bueno es el que
+enumera la tabla de §4 —4 + 4 + 1 + 1 + 4 + 4 = 18—, y es el que hay en el código.)*
 Funciona sin excepciones y no es casualidad: `esRechazoSla` es `true` exactamente en las filas donde
 el marcador se pinta (`renderRechazoOrigen`, la celda `origenRechazo` de las dos descargas, el badge
 de `cierre-factura.tsx:1542`) y `false` en todas las demás —incluidas **todas** las de `/cierre-dia`,
