@@ -22,6 +22,18 @@ export interface AsignarSateliteInput {
    * manda una fecha (R6).
    */
   dia?: DiaReparto;
+  /**
+   * FICHA 407 (2026-09-10, R1/R9) — ESPEJO EXACTO de `AsignarBodegaInput.autorizarSinUbicacionIds`:
+   * ids DE ESTE MISMO LOTE que la persona autoriza a asignar SIN ubicacion en el mapa. Y aqui
+   * importa mas que en la bodega central: la guia que origino la ficha (76068276, Quesada /
+   * San Carlos) esta en bodega SATELITE, asi que dejar este lado fuera dejaria sin salida a
+   * quien tiene el paquete delante (design §8-A9).
+   *
+   * Opcional (patron aditivo de `dia?`): ausente significa «ninguna», nunca «todas». Efimero:
+   * no se guarda en ningun sitio (R9). No abre ninguna otra puerta — rol, zona, bodega
+   * bloqueada, mensajero y tope de intentos se evaluan ANTES del gate (R6/R7).
+   */
+  autorizarSinUbicacionIds?: string[];
 }
 
 // R7/R3/R9/R10/R13: maquina de resultados de la asignacion. Todos los rechazos son
@@ -51,8 +63,19 @@ export interface BodegaBloqueadaCausa {
 // esta duplicado aqui. Que se olvide en UNO de los dos lados lo caza el par de gate-tests
 // (`guia-asignacion-gate-coordenadas` / `asignacion-satelite-gate-coordenadas`), que llevan
 // el mismo caso espejado.
+//
+// FICHA 407 (2026-09-10, R10/R11): `sinUbicacionAutorizada` es el espejo de la segunda cifra
+// de `AsignarBodegaServiceResult` — cuantas se asignaron sin ubicacion porque una PERSONA lo
+// autorizo. Disjunta de `sinUbicacion` por construccion (dos estados excluyentes del gate),
+// ausente cuando vale cero, y nunca en `conflict`. Espejada a mano por el mismo motivo que la
+// anterior, y con el mismo par de gate-tests cazando el olvido de un solo lado.
 export type AsignarSateliteServiceResult =
-  | { status: "ok"; resultados: { ordenId: string; estado: "por_recoger" }[]; sinUbicacion?: number } // R7
+  | {
+      status: "ok";
+      resultados: { ordenId: string; estado: "por_recoger" }[];
+      sinUbicacion?: number;
+      sinUbicacionAutorizada?: number;
+    } // R7
   // Feature 368 (R2/R15) — espejo exacto del `"partial"` de la bodega central: solo el motivo
   // de coordenadas del gate produce esta rama. Asigna las asignables y reporta las bloqueadas,
   // sin tocar el significado de `conflict` (R16).
@@ -61,6 +84,7 @@ export type AsignarSateliteServiceResult =
       resultados: { ordenId: string; estado: "por_recoger" }[];
       bloqueadas: { ordenId: string; motivo: string }[];
       sinUbicacion?: number;
+      sinUbicacionAutorizada?: number;
     }
   | { status: "forbidden" } // R13
   | { status: "sin_zona" } // R3

@@ -30,6 +30,23 @@ export interface AsignarBodegaInput {
    * schema — «hoy», el comportamiento anterior a esta feature (R4).
    */
   dia?: DiaReparto;
+  /**
+   * FICHA 407 (2026-09-10, R1/R9) — ids DE ESTE MISMO LOTE que la persona autoriza a asignar
+   * SIN ubicacion en el mapa, sabiendo que su direccion es irresoluble. Es la marca: no un
+   * acto aparte, sino un parametro de la propia asignacion.
+   *
+   * Opcional por el MISMO patron aditivo de `dia?`: ausente significa «ninguna», nunca
+   * «todas», y una peticion sin el campo se comporta exactamente como antes de la ficha (R5).
+   *
+   * EFIMERO: no se guarda en ningun sitio (R9). Decision del humano del 2026-09-10 — si la
+   * orden se libera y se reasigna, hay que volver a autorizarla, y no habra forma de saber
+   * quien autorizo (design §8-A1).
+   *
+   * NO abre ninguna otra puerta (R6/R7): rol, zona, estado de origen, mensajero, cierres y
+   * tope de intentos se evaluan ANTES del gate y siguen abortando el lote igual. Un id que no
+   * este en `ordenIds` no tiene donde aplicarse (R3).
+   */
+  autorizarSinUbicacionIds?: string[];
 }
 
 export interface GenerarGuiaResultadoItem {
@@ -83,8 +100,20 @@ export type GenerarGuiaServiceResult =
 // CAMPO HERMANO de `bloqueadas`, jamas anidado en el (R35): una orden asignada sin
 // ubicacion SI recibio el efecto pedido, asi que reportarla dentro de `bloqueadas` seria
 // mentir sobre el resultado (design §8-A10).
+//
+// FICHA 407 (2026-09-10, R10/R11) — `sinUbicacionAutorizada` es la SEGUNDA cifra, hermana de
+// la anterior y DISJUNTA de ella: cuantas ordenes del lote se asignaron sin ubicacion porque
+// una PERSONA lo autorizo (no por una averia nuestra). Son dos estados distintos de una union
+// cerrada y cada orden tiene exactamente uno, asi que ninguna se cuenta en las dos (R11).
+// Mismo patron aditivo: campo hermano de `bloqueadas`, ausente cuando vale cero, y jamas en
+// `conflict` (ahi no se asigno nada). Dos causas, dos cifras, dos textos (R12).
 export type AsignarBodegaServiceResult =
-  | { status: "ok"; resultados: AsignarBodegaResultadoItem[]; sinUbicacion?: number }
+  | {
+      status: "ok";
+      resultados: AsignarBodegaResultadoItem[];
+      sinUbicacion?: number;
+      sinUbicacionAutorizada?: number;
+    }
   // Feature 368 (R1/R15) — exito parcial: el motivo de coordenadas ya no aborta el lote
   // completo. Las asignables se asignan (`resultados`) y las bloqueadas por coordenadas se
   // reportan (`bloqueadas`), con el mismo `DetalleConflicto` que usaba `conflict`. `conflict`
@@ -94,6 +123,7 @@ export type AsignarBodegaServiceResult =
       resultados: AsignarBodegaResultadoItem[];
       bloqueadas: DetalleConflicto[];
       sinUbicacion?: number;
+      sinUbicacionAutorizada?: number;
     }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }

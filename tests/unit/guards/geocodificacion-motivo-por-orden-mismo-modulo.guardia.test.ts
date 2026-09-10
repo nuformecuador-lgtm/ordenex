@@ -35,10 +35,20 @@ const MODULO_COMPARTIDO = "@/app/(app)/_components/geocodificacion-motivo-messag
  * exactamente la que este guardia existe para cazar: la clasificación vive en el gate y el
  * vocabulario en `geocodificacion-motivo-messages.ts`, nunca en el modal. Lo que el modal
  * SÍ recibe de la 400 es una CIFRA (`sinUbicacion`), que no es un literal de estado.
+ *
+ * FICHA 407 (T8, R17): y ahora son OCHO. `asignable_sin_ubicacion_autorizada` es el estado que
+ * el gate devuelve cuando la petición trae la autorización explícita de una persona, y es el que
+ * MÁS tienta a tratar a mano en el modal, porque el modal es justo quien decide a quién ofrecerle
+ * el control de autorizar. Esa decisión NO se toma con un literal escrito aquí: se toma con
+ * `esMotivoAutorizableSinUbicacion`, que los dos modales importan del mismo módulo compartido (el
+ * `it` de más abajo lo exige). Si alguno filtrara por el literal del motivo irresoluble, el día
+ * que la lista de autorizables cambie el modal seguiría ofreciendo lo que el servidor ya niega —
+ * la lección de la 271, otra vez.
  */
 const MOTIVOS_DEL_GATE = [
   "asignable",
   "asignable_sin_ubicacion",
+  "asignable_sin_ubicacion_autorizada",
   "direccion_no_geocodificable",
   "geocodificacion_agotada",
   "geocodificacion_en_curso",
@@ -144,6 +154,74 @@ describe("368/T8 — AsignarBodegaModal y AsignarSateliteModal importan mensajeD
         literalPropioCopiado.includes(`'${motivo}'`),
     );
     expect(cazados).toEqual(["direccion_no_geocodificable", "geocodificacion_agotada"]);
+  });
+});
+
+/**
+ * FICHA 407 (T8, R17) — GUARDIA: QUÉ MOTIVO SE PUEDE AUTORIZAR LO DECIDE EL MÓDULO COMPARTIDO,
+ * NUNCA UN LITERAL ESCRITO EN EL MODAL.
+ *
+ * El bloque de arriba ya prohíbe que un modal CITE un literal del gate. Este cierra la otra
+ * mitad, que es la positiva y la que se puede olvidar en silencio: que los dos modales
+ * IMPORTEN el predicado, y del mismo sitio. Un modal que no lo importara pasaría el barrido de
+ * literales sin problema —basta con comparar contra una constante local— y quedaría decidiendo
+ * por su cuenta a quién ofrecer el control de autorizar.
+ *
+ * Por qué importa: la lista de autorizables (`MOTIVOS_AUTORIZABLES_SIN_UBICACION`) está escrita
+ * a mano en el contrato del gate y va a cambiar antes o después. Cuando cambie, el modal que
+ * consulta el predicado se entera solo; el que copió el criterio, no — y ofrecería autorizar
+ * algo que el servidor ya niega, que es exactamente el defecto de pantalla que la 271 documentó.
+ */
+describe("407/T8 — los dos modales obtienen el criterio de autorizable del MISMO módulo compartido", () => {
+  const PREDICADO = "esMotivoAutorizableSinUbicacion";
+
+  it("AsignarBodegaModal.tsx importa el predicado de geocodificacion-motivo-messages", () => {
+    expect(moduloDeImport(leer(RUTA_BODEGA), PREDICADO)).toBe(MODULO_COMPARTIDO);
+  });
+
+  it("AsignarSateliteModal.tsx importa el predicado del MISMO módulo", () => {
+    expect(moduloDeImport(leer(RUTA_SATELITE), PREDICADO)).toBe(MODULO_COMPARTIDO);
+  });
+
+  it("los dos lo traen del mismo sitio — y ninguno se queda sin importarlo", () => {
+    const deBodega = moduloDeImport(leer(RUTA_BODEGA), PREDICADO);
+    const deSatelite = moduloDeImport(leer(RUTA_SATELITE), PREDICADO);
+
+    // No-vacuidad: sin esto, dos `null` compararían iguales y el guardia estaría verde por vacío.
+    expect(deBodega).not.toBeNull();
+    expect(deSatelite).not.toBeNull();
+    expect(deBodega).toBe(deSatelite);
+  });
+
+  it("CONTRAPRUEBA: el barrido caza un modal que filtrara el motivo irresoluble A MANO", () => {
+    // La forma concreta que R17 prohíbe: el modal decide a quién ofrecer autorizar comparando
+    // contra el literal del gate en vez de preguntarle al predicado compartido. Pasaría los
+    // tests de componente sin despeinarse y divergiría el día que la lista cambie.
+    const modalQueDecideAMano = [
+      `const autorizables = bloqueadas.filter(`,
+      `  (b) => b.motivo === "direccion_no_geocodificable",`,
+      `);`,
+    ].join("\n");
+
+    const cazados = MOTIVOS_DEL_GATE.filter(
+      (motivo) =>
+        modalQueDecideAMano.includes(`"${motivo}"`) ||
+        modalQueDecideAMano.includes(`'${motivo}'`),
+    );
+    expect(cazados).toEqual(["direccion_no_geocodificable"]);
+
+    // Y ese modal de mentira tampoco importa el predicado: las DOS mitades lo denuncian.
+    expect(moduloDeImport(modalQueDecideAMano, PREDICADO)).toBeNull();
+  });
+
+  it("CONTRAPRUEBA: el estado nuevo de la 407 está en la lista vigilada, con su literal exacto", () => {
+    // La lista es a mano por diseño, así que su olvido sería mudo: este caso lo hace ruidoso.
+    expect(MOTIVOS_DEL_GATE).toContain("asignable_sin_ubicacion_autorizada");
+    // Y el detector distingue los dos estados hermanos: el literal del de la 400 NO aparece
+    // dentro del de la 407 cuando se busca entrecomillado, que es como barre el guardia.
+    expect(`"asignable_sin_ubicacion_autorizada"`).not.toContain(
+      `"asignable_sin_ubicacion"`,
+    );
   });
 });
 

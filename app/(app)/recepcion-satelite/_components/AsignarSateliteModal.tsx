@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Modal } from "@/components/shared/Modal";
 import { ManifiestoResultado } from "@/components/shared/ManifiestoResultado";
 import { SelectorDiaReparto } from "@/components/shared/SelectorDiaReparto";
+import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
 import { asignarDesdeSatelite } from "@/lib/actions/recepcion-satelite";
@@ -23,9 +24,27 @@ import {
 import { MOTIVO_USUARIO_NO_ASIGNABLE } from "@/lib/constants/estado-usuario-asignable";
 import { asignacionSateliteErrorMessage } from "./asignacion-satelite-error-messages";
 import {
+  esMotivoAutorizableSinUbicacion,
+  LABEL_AUTORIZAR_SIN_UBICACION,
   mensajeAsignadasSinUbicacion,
+  mensajeAsignadasSinUbicacionAutorizada,
   mensajeDireccionPorMotivo,
+  MSG_CONSECUENCIA_AUTORIZAR_SIN_UBICACION,
 } from "@/app/(app)/_components/geocodificacion-motivo-messages";
+
+/**
+ * FICHA 407 — los dos desenlaces de `asignarDesdeSatelite` que SÍ tuvieron efecto. Espejo exacto
+ * del de la bodega central: las dos peticiones (la normal y la autorizada) comparten el mismo
+ * procesamiento, para que el manifiesto de la segunda no se coma lo asignado en la primera.
+ */
+type AsignacionConEfecto = Extract<AsignarSateliteResult, { status: "ok" | "partial" }>;
+
+/** Una orden del lote que el gate bloqueó y una persona PUEDE autorizar (R16/R19). */
+interface OrdenAutorizable {
+  ordenId: string;
+  /** R19: el identificador que se muestra. El id interno nunca se pinta. */
+  numRemision: string;
+}
 
 export interface AsignarSateliteModalProps {
   open: boolean;
@@ -94,8 +113,27 @@ export function AsignarSateliteModal({
      * gate de coordenadas bloqueó, con su `numRemision` (nunca id interno ni dirección) y el
      * mensaje de SU propio motivo. Vacío en éxito total.
      */
-    bloqueadas: { numRemision: string; mensaje: string }[];
+    bloqueadas: { ordenId: string; numRemision: string; mensaje: string }[];
+    /**
+     * FICHA 407 (R20): las cifras de los avisos agregados, ACUMULADAS entre las dos peticiones
+     * de una misma apertura. Espejo exacto de la bodega central.
+     */
+    sinUbicacion: number;
+    sinUbicacionAutorizada: number;
   } | null>(null);
+  /**
+   * FICHA 407 (R16): las órdenes del último intento que el gate bloqueó por una dirección que
+   * el mapa no reconoce y que, por tanto, una persona puede autorizar. Sale del `motivo` que
+   * devuelve el servidor, filtrado con el predicado del módulo compartido — nunca con un
+   * literal escrito aquí (R17).
+   *
+   * Se llena en las DOS rutas de un intento sin éxito total: `partial` y `conflict`. Y esta
+   * pantalla importa más que la otra: la guía del caso real (76068276, Quesada / San Carlos)
+   * está en bodega SATÉLITE, así que es aquí donde alguien lleva cinco días sin poder asignarla.
+   */
+  const [autorizables, setAutorizables] = useState<OrdenAutorizable[]>([]);
+  /** Bloqueo anti-doble-envío de la segunda petición: vive fuera del `Modal`, que no la ve. */
+  const [autorizando, setAutorizando] = useState(false);
   // Reinicia la selección solo al transicionar a `open` (ajuste de estado durante
   // el render, no en un `useEffect`, para evitar el render en cascada).
   const [prevOpen, setPrevOpen] = useState(open);
@@ -107,6 +145,11 @@ export function AsignarSateliteModal({
       // sin esto un «mañana» elegido para un lote se quedaría pegado al siguiente.
       setDia("hoy");
       setResultado(null);
+      // FICHA 407 (R9): la autorización NO sobrevive a la apertura. El servidor tampoco la
+      // guarda, así que dejarla pegada aquí ofrecería asignar sin ubicación un lote que nadie
+      // ha intentado todavía.
+      setAutorizables([]);
+      setAutorizando(false);
     }
   }
 
@@ -127,6 +170,152 @@ export function AsignarSateliteModal({
     ]),
   );
 
+  // R10 (368): el identificador visible sale del MISMO snapshot `ordenes` que generó los
+  // `ordenIds` enviados al servidor — nunca de un campo nuevo en la respuesta del backend.
+  // Vive en el cuerpo del componente porque ahora lo usan los dos caminos: la lista de
+  // bloqueadas y el panel de autorización de la 407.
+  const numRemisionPorId = new Map(ordenes.map((orden) => [orden.id, orden.numRemision]));
+
+  /**
+   * FICHA 407 (R16/R17) — recalcula qué órdenes del último intento se pueden autorizar.
+   *
+   * Mira las bloqueadas del gate en las dos formas en que llegan (`partial.bloqueadas` y
+   * `conflict.detalle`) y se queda con las que el módulo compartido declara autorizables. Un
+   * desenlace `ok` deja la lista vacía, que es lo que hace desaparecer el panel cuando la
+   * segunda petición asigna todo.
+   */
+  function recogerAutorizables(result: AsignarSateliteResult) {
+    const bloqueadasDelGate =
+      result.status === "partial"
+        ? result.bloqueadas
+        : result.status === "conflict"
+          ? result.detalle
+          : [];
+    setAutorizables(
+      bloqueadasDelGate
+        .filter((b) => esMotivoAutorizableSinUbicacion(b.motivo))
+        .map((b) => ({
+          ordenId: b.ordenId,
+          numRemision: numRemisionPorId.get(b.ordenId) ?? b.ordenId, // fallback defensivo
+        })),
+    );
+  }
+
+  /**
+   * Pasa a la fase «resultado» ACUMULANDO sobre lo que ya había (FICHA 407, R20).
+   *
+   * Por qué acumula y no reemplaza: la segunda petición —la autorizada— solo lleva las órdenes
+   * autorizables, así que su respuesta solo trae ESAS. Si el manifiesto se quedara con la
+   * última respuesta, el operador se descargaría un manifiesto al que le faltan las órdenes que
+   * la primera petición SÍ asignó, y nada se lo diría. En la primera petición no hay nada
+   * previo que acumular, así que el resultado es idéntico al de antes de esta ficha (R5).
+   */
+  function registrarAsignacion(result: AsignacionConEfecto) {
+    const asignadasAhora = result.resultados.map((r) => r.ordenId);
+    const previo = resultado;
+    const yaAsignadas = previo?.ordenIds ?? [];
+    const ordenIds = [
+      ...yaAsignadas,
+      ...asignadasAhora.filter((id) => !yaAsignadas.includes(id)),
+    ];
+
+    // Una orden que ACABA de asignarse deja de estar bloqueada: se cae de la lista previa.
+    const bloqueadas = [
+      ...(previo?.bloqueadas ?? []).filter((b) => !asignadasAhora.includes(b.ordenId)),
+      ...(result.status === "partial"
+        ? result.bloqueadas.map((b) => ({
+            ordenId: b.ordenId,
+            numRemision: numRemisionPorId.get(b.ordenId) ?? b.ordenId, // fallback defensivo
+            // R11 (368): mensaje de SU PROPIO motivo, no el agregado del lote.
+            mensaje: mensajeDireccionPorMotivo(b.motivo) ?? "No se pudo asignar.",
+          }))
+        : []),
+    ];
+
+    const sinUbicacion = (previo?.sinUbicacion ?? 0) + (result.sinUbicacion ?? 0);
+    const sinUbicacionAutorizada =
+      (previo?.sinUbicacionAutorizada ?? 0) + (result.sinUbicacionAutorizada ?? 0);
+
+    // R12/R5 (368): mismo criterio y mismo texto que en la bodega central (Q1 aprobado,
+    // design.md §6.3 de la 368), escrito a mano.
+    //
+    // La rama se elige por si QUEDA alguna bloqueada, no por el `status` de esta respuesta: tras
+    // la segunda petición el desenlace puede ser `ok` y seguir habiendo una orden bloqueada por
+    // un motivo que nadie puede autorizar. En la primera petición las dos condiciones coinciden,
+    // así que el texto no cambia respecto de antes de esta ficha (R5).
+    //
+    // FEATURE 400 (R31/R34/R35) y FICHA 407 (R10/R12): espejo EXACTO de la bodega central — los
+    // dos avisos agregados se concatenan a la misma frase que ya va al toast y al
+    // `<ManifiestoResultado>`, jamás a la lista de bloqueadas (esas no recibieron mensajero;
+    // estas sí). Son DOS avisos DISJUNTOS: el de la 400 dice que el problema es del sistema y no
+    // de la dirección, y aquí la dirección SÍ es el problema (R12). Cifras agregadas y nada más:
+    // las dos funciones reciben un número, así que por aquí no puede viajar ninguna guía ni
+    // ningún id (R15).
+    const mensaje =
+      (bloqueadas.length > 0
+        ? `Mensajero asignado a ${ordenIds.length} de ${
+            ordenIds.length + bloqueadas.length
+          } orden(es). ${bloqueadas.length} bloqueada(s).`
+        : `Mensajero asignado a ${ordenIds.length} orden(es).`) +
+      (sinUbicacion ? ` ${mensajeAsignadasSinUbicacion(sinUbicacion)}` : "") +
+      (sinUbicacionAutorizada
+        ? ` ${mensajeAsignadasSinUbicacionAutorizada(sinUbicacionAutorizada)}`
+        : "");
+    toast.success(mensaje);
+    // Feature 148 (§9.7): asignación ya cometida → fase "resultado"; `onSuccess()`
+    // se difiere al cierre. Nada del contrato de negocio cambia (R27).
+    setResultado({
+      // R13 (368): el manifiesto sigue recibiendo SOLO las órdenes efectivamente asignadas —
+      // ahora, las de las DOS peticiones de esta apertura (R20).
+      ordenIds,
+      mensaje,
+      // R28: se congela con el lote cometido, no se deriva del estado vivo del selector.
+      confirmacionDia: confirmacionDiaReparto(dia, fechasDiaReparto),
+      bloqueadas,
+      sinUbicacion,
+      sinUbicacionAutorizada,
+    });
+  }
+
+  /**
+   * FICHA 407 (R18) — la SEGUNDA petición: una sola, con la marca, y ACOTADA a las autorizables.
+   *
+   * Acotada y no al lote entero, y esto no es una optimización: en la ruta `partial` una parte
+   * del lote YA se asignó, así que reenviarla la encontraría en su estado nuevo y el writer
+   * abortaría el lote completo con «estado de origen no permitido». Acotar es lo único correcto
+   * en las dos rutas, así que se hace igual en ambas y no hay dos caminos que mantener.
+   *
+   * Van los `ordenId` reales (uuids), no el número de remisión: el borde valida
+   * `z.array(z.string().uuid())` y cualquier otra cosa vuelve como error de validación sin
+   * llegar al servicio.
+   */
+  async function handleAutorizar() {
+    const ids = autorizables.map((a) => a.ordenId);
+    if (ids.length === 0 || autorizando) return;
+    setAutorizando(true);
+    try {
+      const result = await asignarDesdeSatelite({
+        ordenIds: ids,
+        mensajeroId,
+        dia,
+        autorizarSinUbicacionIds: ids,
+      });
+      if (result.status !== "ok" && result.status !== "partial") {
+        // Un rechazo aquí NO vacía el panel: el modal puede estar en la fase «resultado», donde
+        // el botón de confirmar está oculto, y dejarlo sin panel dejaría al operador sin ninguna
+        // vía para reintentar.
+        handleError(result);
+        return;
+      }
+      recogerAutorizables(result);
+      registrarAsignacion(result);
+    } catch (error) {
+      handleError(error);
+    } finally {
+      setAutorizando(false);
+    }
+  }
+
   async function handleConfirm() {
     if (!mensajeroId) {
       // Validación en el borde de UI: sin mensajero no hay nada que asignar.
@@ -145,53 +334,20 @@ export function AsignarSateliteModal({
       // tenga `.default("hoy")`: sin este campo el olvido sería silencioso.
       dia,
     });
+    // FICHA 407 (R16): antes de decidir si esto es un error, se anota qué órdenes del intento
+    // se pueden autorizar. El `setState` va ANTES del `throw` a propósito: en la ruta
+    // `conflict` —que es la del caso que originó la ficha, una sola orden bloqueada— el toast
+    // de error sigue saliendo exactamente igual y el modal, que no se cierra al confirmar,
+    // queda abierto con el panel pintado debajo.
+    recogerAutorizables(result);
     // Feature 368 (R2/R15, espejo de AsignarBodegaModal): "partial" se suma a "ok" — es un
     // resultado que SÍ tuvo efecto, así que no va al canal de error del `Modal`. El resto de
-    // resultados no-"ok" siguen lanzándose ahí, sin cambio de comportamiento (R16).
+    // resultados no-"ok" siguen lanzándose ahí, sin cambio de comportamiento (R16 de la 368).
     if (result.status !== "ok" && result.status !== "partial") {
       throw result;
     }
 
-    // R10: identificador visible desde el MISMO snapshot `ordenes` que generó los `ordenIds`
-    // enviados al servidor — nunca de un campo nuevo en la respuesta del backend.
-    const numRemisionPorId = new Map(ordenes.map((orden) => [orden.id, orden.numRemision]));
-    const bloqueadas =
-      result.status === "partial"
-        ? result.bloqueadas.map((b) => ({
-            numRemision: numRemisionPorId.get(b.ordenId) ?? b.ordenId, // fallback defensivo
-            // R11: mensaje de SU PROPIO motivo, no el agregado del lote.
-            mensaje: mensajeDireccionPorMotivo(b.motivo) ?? "No se pudo asignar.",
-          }))
-        : [];
-
-    // R12/R5: mismo criterio y mismo texto que en la bodega central (Q1 aprobado, design.md
-    // §6.3), escrito a mano.
-    //
-    // FEATURE 400 (R31/R34/R35, design §6.5-c): espejo EXACTO de la bodega central — el
-    // aviso de cuántas quedaron sin ubicación se concatena a la misma frase que ya va al
-    // toast y al `<ManifiestoResultado>`, jamás a la lista de `bloqueadas` (esas no
-    // recibieron mensajero; estas sí). Cifra agregada y nada más: la función recibe un
-    // número, así que por aquí no puede viajar ninguna guía ni ningún id (R32).
-    const mensaje =
-      (result.status === "partial"
-        ? `Mensajero asignado a ${result.resultados.length} de ${
-            result.resultados.length + bloqueadas.length
-          } orden(es). ${bloqueadas.length} bloqueada(s).`
-        : `Mensajero asignado a ${result.resultados.length} orden(es).`) +
-      (result.sinUbicacion
-        ? ` ${mensajeAsignadasSinUbicacion(result.sinUbicacion)}`
-        : "");
-    toast.success(mensaje);
-    // Feature 148 (§9.7): asignación ya cometida → fase "resultado"; `onSuccess()`
-    // se difiere al cierre. Nada del contrato de negocio cambia (R27).
-    setResultado({
-      // R13: el manifiesto sigue recibiendo SOLO las órdenes efectivamente asignadas.
-      ordenIds: result.resultados.map((r) => r.ordenId),
-      mensaje,
-      // R28: se congela con el lote cometido, no se deriva del estado vivo del selector.
-      confirmacionDia: confirmacionDiaReparto(dia, fechasDiaReparto),
-      bloqueadas,
-    });
+    registrarAsignacion(result);
   }
 
   function handleError(error: unknown) {
@@ -202,12 +358,56 @@ export function AsignarSateliteModal({
   function handleOpenChange(next: boolean) {
     if (!next && resultado) {
       setResultado(null);
+      // FICHA 407 (R9): la autorización se va con el modal. No queda nada guardado en ningún
+      // sitio, ni aquí ni en el servidor.
+      setAutorizables([]);
       onOpenChange(false);
       onSuccess();
       return;
     }
     onOpenChange(next);
   }
+
+  /**
+   * FICHA 407 (R14/R16/R18/R19) — EL PANEL DE AUTORIZACIÓN. Espejo exacto del de la bodega
+   * central: mismo literal, misma etiqueta, misma forma.
+   *
+   * Se pinta igual en las dos fases del modal —tras un `conflict`, junto al formulario; tras un
+   * `partial`, junto al manifiesto y a la lista de bloqueadas— porque R16 exige las dos rutas y
+   * el caso real (una sola orden bloqueada, nada asignado) es precisamente el `conflict`.
+   *
+   * Qué NO lleva: ni la dirección, ni el destinatario, ni el teléfono, ni la guía, ni el id
+   * interno (R15/R19). Solo el número de remisión de cada orden y un literal fijo.
+   *
+   * `role="status"` en la consecuencia y no `role="alert"`: esto no es un error, es una decisión
+   * que se ofrece, y el canal asertivo del modal ya lo ocupa la lista de órdenes bloqueadas —que
+   * sí es el fallo. Un segundo `alert` competiría con ella por la misma atención.
+   */
+  const panelAutorizacion =
+    autorizables.length > 0 ? (
+      <section
+        aria-label="Autorizar asignación sin ubicación en el mapa"
+        className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm"
+      >
+        <ul className="flex list-disc flex-col gap-1 overflow-auto pl-5">
+          {autorizables.map((a) => (
+            <li key={a.ordenId}>{a.numRemision}</li>
+          ))}
+        </ul>
+        {/* R14: la consecuencia, ANTES de que nadie pulse nada. */}
+        <p role="status">{MSG_CONSECUENCIA_AUTORIZAR_SIN_UBICACION}</p>
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleAutorizar}
+            disabled={autorizando}
+          >
+            {LABEL_AUTORIZAR_SIN_UBICACION}
+          </Button>
+        </div>
+      </section>
+    ) : null;
 
   return (
     <Modal
@@ -250,12 +450,15 @@ export function AsignarSateliteModal({
               className="flex list-disc flex-col gap-1 overflow-auto rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 pl-8 text-sm text-destructive"
             >
               {resultado.bloqueadas.map((b) => (
-                <li key={b.numRemision}>
+                <li key={b.ordenId}>
                   {b.numRemision} — {b.mensaje}
                 </li>
               ))}
             </ul>
           ) : null}
+          {/* FICHA 407 (R16-b): tras un `partial`, el panel va DESPUÉS de la lista de
+              bloqueadas — primero qué pasó, después qué se puede hacer al respecto. */}
+          {panelAutorizacion}
         </div>
       ) : (
       <div className="flex flex-col gap-2">
@@ -291,6 +494,10 @@ export function AsignarSateliteModal({
             />
           </>
         )}
+        {/* FICHA 407 (R16-a): tras un `conflict` no se asignó nada y el modal sigue en esta
+            fase, así que el panel aparece aquí. Es la ruta del caso que originó la ficha: una
+            sola orden, bloqueada, cinco días parada. */}
+        {panelAutorizacion}
       </div>
       )}
     </Modal>

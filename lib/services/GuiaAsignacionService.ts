@@ -84,6 +84,12 @@ interface GateCoordenadasResultado {
   bloqueadas: DetalleConflicto[];
   /** Cifra AGREGADA (R32): cuantas, jamas cuales. */
   sinUbicacion: number;
+  /**
+   * FICHA 407 (2026-09-10, R10/R11) — cuantas pasaron porque una PERSONA lo autorizo, no por
+   * una averia nuestra. Cifra hermana de la anterior y DISJUNTA de ella: son dos estados
+   * distintos del gate y cada orden tiene exactamente uno.
+   */
+  sinUbicacionAutorizada: number;
 }
 
 // Feature 46/R2: estatus bloqueado por reprogramacion (guardia explicito y tipado).
@@ -194,19 +200,31 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
    * exigen coordenadas todavia: se le exigiran cuando la bodega la asigne (aqui o via
    * `AsignacionSateliteService`).
    */
-  private async gateCoordenadas(ordenIds: string[]): Promise<GateCoordenadasResultado> {
-    if (ordenIds.length === 0) return { bloqueadas: [], sinUbicacion: 0 };
+  private async gateCoordenadas(
+    ordenIds: string[],
+    // FICHA 407 (R1): los ids que la peticion autoriza a asignar sin ubicacion. Se reenvia
+    // TAL CUAL al gate — este metodo no decide nada sobre la marca, solo la transporta.
+    autorizadasSinUbicacion: ReadonlySet<string> = new Set<string>(),
+  ): Promise<GateCoordenadasResultado> {
+    if (ordenIds.length === 0) {
+      return { bloqueadas: [], sinUbicacion: 0, sinUbicacionAutorizada: 0 };
+    }
     const filas = await this.repo.findParaAsignabilidad(ordenIds);
-    const estados = await this.asignabilidad.evaluar(filas);
+    const estados = await this.asignabilidad.evaluar(filas, autorizadasSinUbicacion);
     const detalle: DetalleConflicto[] = [];
     // FEATURE 400 (2026-09-09, R31): segunda cuenta sobre el MISMO `Map` que ya se recorre.
     // Cero consultas nuevas: es una segunda lectura de un dato ya cargado.
     let sinUbicacion = 0;
+    // FICHA 407 (R10/R11): segunda cifra, sobre el MISMO `Map`. Cero consultas nuevas.
+    let sinUbicacionAutorizada = 0;
     for (const ordenId of ordenIds) {
       const estado = estados.get(ordenId);
       // 400/R31: se cuenta ANTES del `continue`, porque `asignable_sin_ubicacion` SI pasa
       // el gate — no entra en `detalle` (R10), solo en la cifra.
       if (estado === "asignable_sin_ubicacion") sinUbicacion += 1;
+      // 407/R10/R11: idem, y en un `if` SEPARADO — son estados excluyentes, asi que ninguna
+      // orden puede sumar en las dos cifras.
+      if (estado === "asignable_sin_ubicacion_autorizada") sinUbicacionAutorizada += 1;
       if (esAsignable(estado)) continue;
       // `estado` indefinido = la orden no existe (el gate devuelve una entrada por cada
       // fila recibida). No deberia pasar aqui —las guardas de existencia corren antes—,
@@ -216,7 +234,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
         motivo: estado === undefined ? "orden no existe" : motivoAsignabilidad(estado),
       });
     }
-    return { bloqueadas: detalle, sinUbicacion };
+    return { bloqueadas: detalle, sinUbicacion, sinUbicacionAutorizada };
   }
 
   /**
@@ -515,7 +533,18 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     // de las que pasan lo hacen sin coordenadas, por un fallo de configuracion NUESTRO. Se
     // expone en `ok`/`partial` SOLO si es mayor que cero (campo opcional, patron aditivo).
     // `conflict` no lo lleva: ahi no se asigno nada, asi que no hay nada que avisar.
-    const { bloqueadas: detalleCoords, sinUbicacion } = await this.gateCoordenadas(ordenIds);
+    //
+    // FICHA 407 (2026-09-10, R1/R6/R7): la peticion puede traer la marca — los ids que una
+    // persona autoriza a asignar SIN ubicacion. Llega AQUI y no antes a proposito: TODAS las
+    // guardas de arriba (rol, zona, estado de origen, mensajero, cierres, recoleccion y tope
+    // de intentos) ya se evaluaron y siguen abortando el lote igual. La marca solo puede
+    // afectar a ordenes que este actor YA podia asignar, y solo dentro de la rama R3 del gate.
+    const autorizadas = new Set(input.autorizarSinUbicacionIds ?? []);
+    const {
+      bloqueadas: detalleCoords,
+      sinUbicacion,
+      sinUbicacionAutorizada,
+    } = await this.gateCoordenadas(ordenIds, autorizadas);
     const bloqueadasIds = new Set(detalleCoords.map((d) => d.ordenId));
     const asignables = ordenIds.filter((id) => !bloqueadasIds.has(id));
     if (asignables.length === 0) return { status: "conflict", detalle: detalleCoords }; // R3
@@ -557,9 +586,11 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     // la clave ni siquiera existe en el objeto (`toEqual({ status: "ok", resultados })` de
     // los tests vigentes sigue verde).
     const aviso400 = sinUbicacion > 0 ? { sinUbicacion } : {};
+    // Ficha 407 (R10): misma regla, cifra propia. Con cero, la clave NO existe en el objeto.
+    const aviso407 = sinUbicacionAutorizada > 0 ? { sinUbicacionAutorizada } : {};
     return detalleCoords.length > 0
-      ? { status: "partial", resultados, bloqueadas: detalleCoords, ...aviso400 }
-      : { status: "ok", resultados, ...aviso400 };
+      ? { status: "partial", resultados, bloqueadas: detalleCoords, ...aviso400, ...aviso407 }
+      : { status: "ok", resultados, ...aviso400, ...aviso407 };
   }
 
   /**
