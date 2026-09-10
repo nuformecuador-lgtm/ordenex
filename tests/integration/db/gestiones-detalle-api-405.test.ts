@@ -49,6 +49,7 @@ const T = {
   reprogramada: new Date("2026-09-02T15:41:07.000Z"),
   devuelta: new Date("2026-09-04T18:02:55.000Z"),
   anulada: new Date("2026-09-05T09:00:00.000Z"),
+  anuladaConFoto: new Date("2026-09-05T13:00:00.000Z"),
   legada: new Date("2026-09-06T11:30:00.000Z"),
 } as const;
 
@@ -148,6 +149,7 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
         anuladaAt?: Date | null;
         causaDevolucion?: "not_found" | "wrong_number" | "wrong_address" | null;
         motivo?: string | null;
+        evidenciaStoragePath?: string | null;
       }) =>
         (
           await tx.gestionOrden.create({
@@ -158,6 +160,8 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
               createdAt: data.createdAt,
               anuladaAt: data.anuladaAt ?? null,
               causaDevolucion: data.causaDevolucion ?? null,
+              evidenciaStoragePath: data.evidenciaStoragePath ?? null,
+              evidenciaContentType: data.evidenciaStoragePath ? "image/jpeg" : null,
               // ⭑ EL TEXTO LIBRE, SEMBRADO A PROPOSITO (256/R22): si el `select` lo proyectara,
               // esta cadena aparecería en la respuesta y el aserto de abajo la caza.
               motivo: data.motivo ?? null,
@@ -215,8 +219,8 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
         new Date(T.devuelta.getTime() + 60_000), // `estadoResultante` saldria `entregada`.
       );
 
-      // (3) ANULADA: no debe salir (R11), y ademas lleva causa y texto libre para que su fuga
-      //     sea inconfundible.
+      // (3) ANULADA SIN FOTO: la excluye el `where` de la consulta —no casa con ninguna de las
+      //     dos ramas del `OR`—. Lleva causa y texto libre para que su fuga sea inconfundible.
       const gAnulada = await crearGestion({
         ordenId: propia,
         mensajeroId: mensajeroA.id,
@@ -227,6 +231,22 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
         motivo: "TEXTO-LIBRE-de-la-gestion-ANULADA",
       });
       await crearTransicion(propia, gAnulada, "devolucion_por_confirmar", T.anulada);
+
+      // (3b) ANULADA **CON FOTO**: esta SI la devuelve la consulta, porque casa con la PRIMERA
+      //      rama del `OR` (la de `evidencias[]`, que desde la 268 no filtra anuladas a
+      //      proposito). Es el caso que separa las DOS redes de R11: el `where` no la para, la
+      //      para el filtro en memoria del mapeo. Sin ella, quitar ese filtro sobreviviria en
+      //      verde — medido el 2026-09-10.
+      const gAnuladaConFoto = await crearGestion({
+        ordenId: propia,
+        mensajeroId: mensajeroB.id,
+        resultado: "entregada",
+        createdAt: T.anuladaConFoto,
+        anuladaAt: new Date("2026-09-05T14:00:00.000Z"),
+        evidenciaStoragePath: `ordenes/${SUFIJO}/anulada-con-foto.jpg`,
+        motivo: "TEXTO-LIBRE-de-la-ANULADA-con-foto",
+      });
+      await crearTransicion(propia, gAnuladaConFoto, "entregada", T.anuladaConFoto);
 
       // (4) LEGADA: vigente y SIN fila de historial que la respalde -> `estadoResultante: null`.
       await crearGestion({
@@ -319,20 +339,36 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
     return { gestiones, historial };
   }
 
-  it("R11: una gestion ANULADA no aparece, y las VIGENTES si (las cuatro, menos la anulada)", async () => {
+  it("R11: las DOS gestiones ANULADAS quedan fuera, y las TRES vigentes salen", async () => {
     const m = await escenario();
 
     expect(m.detalle).not.toBeNull();
-    // TRES vigentes: reprogramada, devuelta y legada. La cuarta esta anulada.
+    // TRES vigentes: reprogramada, devuelta y legada. Las otras dos estan anuladas.
     expect(m.detalle!.gestiones).toHaveLength(3);
     // El escenario se sembro de verdad: si `crearGestion` no hubiera escrito nada, el aserto de
     // arriba habria dado 0 y este lo confirma desde la otra punta.
-    expect(m.fotoAntes.gestiones).toHaveLength(4);
-    // Y la anulada no se cuela por ninguna via: ni su causa ni su texto libre estan en el cuerpo.
+    expect(m.fotoAntes.gestiones).toHaveLength(5);
+    // Y ninguna de las dos se cuela: ni su causa, ni su texto libre.
     const texto = JSON.stringify(m.detalle);
     expect(texto).not.toContain("TEXTO-LIBRE-de-la-gestion-ANULADA");
-    // `not_found` es la causa que SOLO tiene la anulada en este escenario.
+    expect(texto).not.toContain("TEXTO-LIBRE-de-la-ANULADA-con-foto");
+    // `not_found` es la causa que SOLO tiene la anulada sin foto en este escenario.
     expect(texto).not.toContain("not_found");
+  });
+
+  it("R11 + no-regresion 268: la ANULADA CON FOTO no entra en `gestiones[]` pero SI en `evidencias[]`", async () => {
+    const m = await escenario();
+
+    // ⭑ EL CASO DE LAS DOS REDES. Esta gestion SI la devuelve la consulta (casa con la rama del
+    // `OR` que alimenta `evidencias[]`), asi que lo unico que impide que salga en `gestiones[]`
+    // es el filtro en memoria del mapeo.
+    expect(m.detalle!.gestiones.map((g) => g.createdAt.toISOString())).not.toContain(
+      "2026-09-05T13:00:00.000Z",
+    );
+    // Y su evidencia sigue publicandose, como desde la 268: esta ficha declara que NO lo toca.
+    expect(m.detalle!.evidencias).toHaveLength(1);
+    expect(m.detalle!.evidencias[0].resultado).toBe("entregada");
+    expect(m.detalle!.evidencias[0].storagePath).toContain("anulada-con-foto.jpg");
   });
 
   it("R10: salen de la mas antigua a la mas reciente, y dos lecturas dan el MISMO orden", async () => {
