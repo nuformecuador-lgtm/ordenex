@@ -418,3 +418,119 @@ describe("GET /api/ordenes/api-key/orden/{id} — `mensajero` de punta a punta (
     expect(cuerpo).not.toMatch(/mensajeroId|mensajeroGestion|gestionadaPor/);
   });
 });
+
+// -----------------------------------------------------------------------------------------------
+// ⏳ 2026-09-10 — Feature 405 (T10): `gestiones[]` en el BORDE HTTP del detalle. Cubre R1 y R17.
+//
+// Sobre la CADENA REAL (`handler -> ApiOrdenLecturaService -> OrdenRepository -> Prisma`), no
+// sobre el `detalleDe` falso de arriba: con el doble, estos casos pasarian aunque el repositorio
+// no proyectara nada. Lo que NO se mide aqui es el `where` ni el `orderBy` —eso es SQL y vive en
+// `tests/integration/db/gestiones-detalle-api-405.test.ts`—.
+// -----------------------------------------------------------------------------------------------
+
+/** Una fila CRUDA de `gestion_orden` con las claves que pide el `select` del detalle. */
+function gestionCruda(over: Record<string, unknown> = {}) {
+  return {
+    id: "g-1",
+    resultado: "devuelta",
+    evidenciaStoragePath: null,
+    evidenciaContentType: null,
+    createdAt: new Date("2026-09-04T18:02:55.000Z"),
+    anuladaAt: null,
+    causaDevolucion: "wrong_address",
+    causaIncidente: null,
+    mensajero: {
+      id: "018f2c31-0000-4000-8000-0000000000bb",
+      nombre: "Ana",
+      primerApellido: "Solis",
+      segundoApellido: "Vargas",
+    },
+    ...over,
+  };
+}
+
+describe("GET /api/ordenes/api-key/orden/{id} — `gestiones` de punta a punta (feature 405)", () => {
+  it("405/R1: el detalle incluye la clave `gestiones` con sus cinco campos publicos", async () => {
+    const { deps: d } = depsRealesDetalle(
+      filaDetalle({
+        gestiones: [gestionCruda()],
+        historialEstados: [
+          {
+            id: "h-1",
+            gestionOrdenId: "g-1",
+            createdAt: new Date("2026-09-04T18:02:55.000Z"),
+            estatusDestino: { value: "devolucion_por_confirmar" },
+          },
+        ],
+      }),
+    );
+
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    // Literales a mano: el nombre completo compuesto de las tres columnas, la causa tipificada y
+    // el estado destino de la transicion sembrada.
+    expect(json.gestiones).toEqual([
+      {
+        createdAt: "2026-09-04T18:02:55.000Z",
+        resultado: "devuelta",
+        estadoResultante: "devolucion_por_confirmar",
+        motivo: "wrong_address",
+        mensajero: {
+          id: "018f2c31-0000-4000-8000-0000000000bb",
+          nombre: "Ana Solis Vargas",
+        },
+      },
+    ]);
+  });
+
+  it("405/R2: una orden sin gestiones responde `gestiones: []`, con la clave presente", async () => {
+    const { deps: d } = depsRealesDetalle(filaDetalle());
+
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    const cuerpo = await res.text();
+    expect(cuerpo).toContain('"gestiones":[]');
+    expect(JSON.parse(cuerpo).gestiones).toEqual([]);
+  });
+
+  it("405/R12: el texto libre de la gestion no cruza el borde ni aunque la fila lo trajera", async () => {
+    const { deps: d } = depsRealesDetalle(
+      filaDetalle({
+        gestiones: [
+          {
+            ...gestionCruda(),
+            // La columna existe en la tabla; si el `select` la pidiera, Prisma la devolveria y
+            // este es el aspecto que tendria la fila. El repositorio NO debe emitirla.
+            motivo: "FUGA-TEXTO-LIBRE-el-cliente-no-contesto",
+          },
+        ],
+      }),
+    );
+
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    const cuerpo = await res.text();
+    expect(cuerpo).not.toContain("FUGA-TEXTO-LIBRE");
+    expect(cuerpo).not.toContain("g-1"); // ni el id interno de la gestion
+  });
+
+  it("405/R17: los codigos de estado del endpoint no cambian con la clave nueva", async () => {
+    // R17 en el mismo sitio donde vive el borde: la ficha 405 no toca el handler, y esto lo
+    // demuestra ejercitando los cuatro caminos de error con la cadena de siempre.
+    const casos: Array<[ApiKeyAuthResult, Fila[], string, number]> = [
+      [{ status: "unauthenticated" }, [ORDEN_A], "100234", 401],
+      [{ status: "forbidden" }, [ORDEN_A], "100234", 403],
+      [OK_AUTH, [ORDEN_A], "", 422],
+      [OK_AUTH, [], "100234", 404],
+    ];
+    for (const [auth, filas, id, esperado] of casos) {
+      const res = await handleConsultaOrdenApi(req(SECRETO), id, deps(auth, filas).deps);
+      expect(res.status, `caso ${esperado}`).toBe(esperado);
+      const cuerpo = await res.text();
+      // Y ninguna respuesta de error menciona la clave nueva.
+      expect(cuerpo).not.toContain("gestiones");
+    }
+  });
+});
