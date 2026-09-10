@@ -270,14 +270,25 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
     // ordenes pasaron el gate por `asignable_sin_ubicacion`. Cero consultas nuevas. La
     // cifra se expone en `ok`/`partial` solo si es mayor que cero (R33), y JAMAS dentro de
     // `bloqueadas` (R35): esa orden SI recibio mensajero.
+    //
+    // FICHA 407 (2026-09-10, R1/R6/R7) — ESPEJO EXACTO de la bodega central: la peticion puede
+    // traer la marca (los ids que una persona autoriza a asignar SIN ubicacion) y se reenvia
+    // al gate, que solo la honra DENTRO de su rama R3. Llega aqui y no antes a proposito:
+    // rol, zona, bodega bloqueada, mensajero y tope de intentos ya se evaluaron arriba y
+    // siguen abortando el lote igual. Efimera: no se persiste (R9).
+    const autorizadas = new Set(input.autorizarSinUbicacionIds ?? []);
     const filas = await this.repo.findParaAsignabilidad(ordenIds);
-    const estados = await this.asignabilidad.evaluar(filas);
+    const estados = await this.asignabilidad.evaluar(filas, autorizadas);
     const detalleCoords: { ordenId: string; motivo: string }[] = [];
     let sinUbicacion = 0;
+    // FICHA 407 (R10/R11): segunda cifra, sobre el MISMO `Map`. Cero consultas nuevas.
+    let sinUbicacionAutorizada = 0;
     for (const id of ordenIds) {
       const estado = estados.get(id);
       // 400/R31: se cuenta ANTES del `continue` — `asignable_sin_ubicacion` SI pasa el gate.
       if (estado === "asignable_sin_ubicacion") sinUbicacion += 1;
+      // 407/R10/R11: idem, en un `if` SEPARADO — estados excluyentes, cifras disjuntas.
+      if (estado === "asignable_sin_ubicacion_autorizada") sinUbicacionAutorizada += 1;
       if (esAsignable(estado)) continue;
       detalleCoords.push({
         ordenId: id,
@@ -368,8 +379,10 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
       estado: ESTADO_ASIGNADA as "por_recoger",
     }));
     const aviso400 = sinUbicacion > 0 ? { sinUbicacion } : {};
+    // Ficha 407 (R10): misma regla, cifra propia. Con cero, la clave NO existe en el objeto.
+    const aviso407 = sinUbicacionAutorizada > 0 ? { sinUbicacionAutorizada } : {};
     return detalleCoords.length > 0
-      ? { status: "partial", resultados, bloqueadas: detalleCoords, ...aviso400 }
-      : { status: "ok", resultados, ...aviso400 };
+      ? { status: "partial", resultados, bloqueadas: detalleCoords, ...aviso400, ...aviso407 }
+      : { status: "ok", resultados, ...aviso400, ...aviso407 };
   }
 }

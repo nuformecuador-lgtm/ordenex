@@ -299,8 +299,16 @@ describe("AsignarBodegaModal — asignación parcial (368/R1/R10-R14)", () => {
 
     // El DOM de la fase "resultado" identifica la orden bloqueada por su `numRemision` (tomado
     // del `ordenes` prop del test) y el mensaje de SU motivo.
-    expect(await screen.findByText(/NA-138/)).toBeInTheDocument();
-    expect(screen.getByText(/Dirección no encontrada/)).toBeInTheDocument();
+    //
+    // FICHA 407: se acota a la lista de bloqueadas (`role="alert"`), que es DONDE R10/R11 de la
+    // 368 exigen ese identificador. Antes se buscaba en todo el documento, y eso era un polizón,
+    // no el contrato: desde la 407 esta misma orden —bloqueada por una dirección irresoluble—
+    // aparece TAMBIÉN en el panel que ofrece autorizar su asignación, así que un `findByText`
+    // sin ámbito encuentra dos. Lo que la 368 fijó es que la bloqueada se identifica por
+    // remisión y con el mensaje de su motivo, y eso es exactamente lo que se sigue afirmando.
+    const bloqueadas = await screen.findByRole("alert");
+    expect(within(bloqueadas).getByText(/NA-138/)).toBeInTheDocument();
+    expect(within(bloqueadas).getByText(/Dirección no encontrada/)).toBeInTheDocument();
   });
 
   it("T5.2: partial NO llama al canal de error del Modal — tuvo efecto, no es un error", async () => {

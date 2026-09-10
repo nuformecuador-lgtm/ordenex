@@ -1,7 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
-import { MSG_MENSAJERO_SIN_VEHICULO } from "@/lib/services/mensajes-bloqueo";
+import {
+  MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
+  MSG_MENSAJERO_SIN_VEHICULO,
+  MSG_TOPE_INTENTOS_ASIGNACION,
+} from "@/lib/services/mensajes-bloqueo";
 import { GuiaAsignacionService } from "@/lib/services/GuiaAsignacionService";
+// FICHA 407 (T5): el gate REAL, para medir el cable entero — input -> writer -> gate.
+import { AsignabilidadCoordenadasService } from "@/lib/services/AsignabilidadCoordenadasService";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
+import type { IJobRepository } from "@/lib/interfaces/repositories/IJobRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type {
@@ -539,6 +546,410 @@ describe("400/R6-R7, R31-R33, R35 — asignarDesdeBodega con ordenes `asignable_
 
     expect(r.status).toBe("conflict");
     expect(Object.keys(r)).not.toContain("sinUbicacion");
+    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 407 (T5, 2026-09-10) — LA MARCA LLEGA AL GATE, Y NO ABRE NINGUNA OTRA PUERTA
+//
+// Guia 76068276 (Quesada / San Carlos), `ZERO_RESULTS`, cinco dias parada: la direccion de
+// referencias es seguible para el mensajero pero ilegible para el mapa. Desde esta ficha el
+// operador puede AUTORIZAR esa asignacion a sabiendas, en la misma peticion que asigna.
+//
+// Lo que este bloque protege, ademas del camino feliz:
+//   - que el writer REENVIE de verdad el conjunto al gate (el «composition root que no
+//     inyecta»: importar el parametro y no pasarlo deja la suite verde y la feature muerta);
+//   - que la marca NO desactive ninguna otra guarda (R6/R7): rol, cierres, origen y tope se
+//     evaluan ANTES y siguen abortando el lote sin escribir nada;
+//   - que las dos cifras (400 y 407) sean DISJUNTAS (R11) y la nueva desaparezca en cero (R10).
+// ════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Doble del gate que HONRA el segundo parametro con la misma regla que el servicio real:
+ * la marca solo convierte `direccion_no_geocodificable`, y solo si el id viene en el conjunto.
+ *
+ * Si el writer no reenviara el conjunto, `autorizadas` llega `undefined` y todos estos casos
+ * se ponen rojos — que es exactamente para lo que existe este doble.
+ */
+function gateConMarca(
+  porOrden: Record<string, EstadoAsignabilidad> = {},
+): IAsignabilidadCoordenadasService {
+  return {
+    evaluar: vi.fn(
+      async (ordenes: OrdenAsignabilidadRow[], autorizadas?: ReadonlySet<string>) =>
+        new Map<string, EstadoAsignabilidad>(
+          ordenes.map((o) => {
+            const base = porOrden[o.id] ?? "asignable";
+            const autorizada =
+              base === "direccion_no_geocodificable" && autorizadas?.has(o.id) === true;
+            return [o.id, autorizada ? "asignable_sin_ubicacion_autorizada" : base];
+          }),
+        ),
+    ),
+  };
+}
+
+/** Cola en memoria minima para poder montar el gate REAL sobre este writer. */
+function colaVacia(): IJobRepository {
+  return {
+    enqueue: vi.fn(async () => null),
+    findByDedupeKeys: vi.fn(async () => []),
+    claimBatch: vi.fn(async () => []),
+    complete: vi.fn(async () => {}),
+    fail: vi.fn(async () => {}),
+  } as unknown as IJobRepository;
+}
+
+describe("407/R1, R6-R8, R10-R11 — asignarDesdeBodega con la marca", () => {
+  function repoBodega3(over: Record<string, unknown> = {}) {
+    return fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central" }),
+        ordenRow({ id: "o2", estatusValue: "en_bodega_central" }),
+        ordenRow({ id: "o3", estatusValue: "en_bodega_central" }),
+      ]),
+      ...over,
+    });
+  }
+
+  it("407/R1: la irresoluble MARCADA sale en `resultados` y NO en `bloqueadas`", async () => {
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gateConMarca({ o1: "direccion_no_geocodificable" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1", autorizarSinUbicacionIds: ["o1"] },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.resultados.map((x) => x.ordenId)).toEqual(["o1", "o2", "o3"]);
+    expect(r.sinUbicacionAutorizada).toBe(1);
+    expect(repo.asignarBodegaLote).toHaveBeenCalledWith(
+      ["o1", "o2", "o3"],
+      "m1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    // El estado nuevo no se filtra como `motivo` a ningun sitio del resultado.
+    expect(JSON.stringify(r)).not.toContain("asignable_sin_ubicacion_autorizada");
+  });
+
+  // EL CABLE, MEDIDO CON EL GATE REAL. Un doble puede honrar el parametro y aun asi mentir si
+  // el writer se lo pasa mal; aqui el gate es `AsignabilidadCoordenadasService` de verdad y la
+  // fila viene de `findParaAsignabilidad` con el `ZERO_RESULTS` del caso de produccion.
+  it("407/R1: con el gate REAL enganchado, la marca viaja del input al gate y la orden se asigna", async () => {
+    // `o1` es el caso de produccion: `ZERO_RESULTS` y sin coordenadas. Las otras dos tienen
+    // coordenadas, asi que salen por R2 y no tocan la cola.
+    const filasDeProduccion = () =>
+      vi.fn(async (ids: string[]) =>
+        ids.map((id) => ({
+          id,
+          direccion: "DE LA CLINICA VETERINARIA MASCOTICAS, 75 METROS HACIA EL SUR",
+          latitud: id === "o1" ? null : 9.93,
+          longitud: id === "o1" ? null : -84.08,
+          geocodeStatus: id === "o1" ? "ZERO_RESULTS" : "OK",
+        })),
+      );
+    const repo = repoBodega3({ findParaAsignabilidad: filasDeProduccion() });
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      new AsignabilidadCoordenadasService(colaVacia()),
+      fakeIntentosEnLote(),
+    );
+
+    const conMarca = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1", autorizarSinUbicacionIds: ["o1"] },
+      MAESTRO,
+    );
+
+    expect(conMarca.status).toBe("ok");
+    if (conMarca.status !== "ok") throw new Error("unreachable");
+    expect(conMarca.resultados.map((x) => x.ordenId)).toEqual(["o1", "o2", "o3"]);
+    expect(conMarca.sinUbicacionAutorizada).toBe(1);
+
+    // CONTRASTE, con el MISMO gate real y el mismo lote: sin la marca, `o1` sigue bloqueada.
+    // Sin este contraste, un gate que dejara pasar `ZERO_RESULTS` por su cuenta pasaria igual.
+    const sinMarca = await new GuiaAsignacionService(
+      repoBodega3({ findParaAsignabilidad: filasDeProduccion() }),
+      fakeZonaRepo(),
+      new AsignabilidadCoordenadasService(colaVacia()),
+      fakeIntentosEnLote(),
+    ).asignarDesdeBodega({ ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" }, MAESTRO);
+
+    expect(sinMarca.status).toBe("partial");
+    if (sinMarca.status !== "partial") throw new Error("unreachable");
+    expect(sinMarca.bloqueadas).toEqual([
+      { ordenId: "o1", motivo: "direccion_no_geocodificable" },
+    ]);
+  });
+
+  it("407/R8: lote mixto -> `partial`, la marcada se asigna y la que esta en curso se reporta", async () => {
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gateConMarca({ o1: "direccion_no_geocodificable", o2: "geocodificacion_en_curso" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1", autorizarSinUbicacionIds: ["o1"] },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("partial");
+    if (r.status !== "partial") throw new Error("unreachable");
+    expect(r.resultados.map((x) => x.ordenId)).toEqual(["o1", "o3"]);
+    expect(r.bloqueadas).toEqual([{ ordenId: "o2", motivo: "geocodificacion_en_curso" }]);
+    expect(r.sinUbicacionAutorizada).toBe(1);
+    expect(repo.asignarBodegaLote).toHaveBeenCalledWith(
+      ["o1", "o3"],
+      "m1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("407/R2: marcar una orden que NO es autorizable no la desbloquea", async () => {
+    // Hostil a proposito: el cliente manda la marca sobre una orden `geocodificacion_en_curso`.
+    // El gate no la honra ahi, asi que la orden sigue bloqueada y no recibe mensajero.
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gateConMarca({ o2: "geocodificacion_en_curso" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1", autorizarSinUbicacionIds: ["o2"] },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("partial");
+    if (r.status !== "partial") throw new Error("unreachable");
+    expect(r.bloqueadas).toEqual([{ ordenId: "o2", motivo: "geocodificacion_en_curso" }]);
+    expect(r).not.toHaveProperty("sinUbicacionAutorizada");
+    expect(repo.asignarBodegaLote).toHaveBeenCalledWith(
+      ["o1", "o3"],
+      "m1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("407/R3: marcar un id que NO esta en el lote no cambia nada", async () => {
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gateConMarca({ o1: "direccion_no_geocodificable" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      {
+        ordenIds: ["o1", "o2", "o3"],
+        mensajeroId: "m1",
+        autorizarSinUbicacionIds: ["o-de-otro-lote"],
+      },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("partial");
+    if (r.status !== "partial") throw new Error("unreachable");
+    expect(r.bloqueadas).toEqual([{ ordenId: "o1", motivo: "direccion_no_geocodificable" }]);
+    expect(r).not.toHaveProperty("sinUbicacionAutorizada");
+    expect(repo.asignarBodegaLote).toHaveBeenCalledWith(
+      ["o2", "o3"],
+      "m1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("407/R11: las dos cifras son DISJUNTAS — una orden de la 400 y otra de la 407", async () => {
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gateConMarca({ o1: "asignable_sin_ubicacion", o2: "direccion_no_geocodificable" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1", autorizarSinUbicacionIds: ["o2"] },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.sinUbicacion).toBe(1);
+    expect(r.sinUbicacionAutorizada).toBe(1);
+    // Ninguna orden se cuenta dos veces: 1 + 1 = 2 de las 3 asignadas.
+    expect((r.sinUbicacion ?? 0) + (r.sinUbicacionAutorizada ?? 0)).toBe(2);
+    expect(r.resultados).toHaveLength(3);
+  });
+
+  it("407/R10: con cero autorizadas, la clave NO EXISTE en el resultado", async () => {
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gateConMarca(),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    // `not.toHaveProperty`, NO `toBeUndefined()`: este pasaria igual si la clave existiera con
+    // valor `undefined`, y entonces los `toEqual` vigentes de arriba se romperian.
+    expect(r).not.toHaveProperty("sinUbicacionAutorizada");
+    expect(r).toEqual({
+      status: "ok",
+      resultados: [
+        { ordenId: "o1", estado: "por_recoger" },
+        { ordenId: "o2", estado: "por_recoger" },
+        { ordenId: "o3", estado: "por_recoger" },
+      ],
+    });
+  });
+
+  it("407/R10: el lote entero marcado y bloqueado -> `conflict` sin ninguna cifra", async () => {
+    // `conflict` significa cero efectos, asi que no hay nada de que avisar. La marca sobre
+    // motivos no autorizables no cambia eso.
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gateConMarca({
+        o1: "geocodificacion_en_curso",
+        o2: "geocodificacion_agotada",
+        o3: "geocodificacion_encolada",
+      }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      {
+        ordenIds: ["o1", "o2", "o3"],
+        mensajeroId: "m1",
+        autorizarSinUbicacionIds: ["o1", "o2", "o3"],
+      },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("conflict");
+    expect(r).not.toHaveProperty("sinUbicacionAutorizada");
+    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+  });
+});
+
+describe("407/R6-R7 — la marca NO desactiva ninguna otra guarda", () => {
+  function repoBodega2(over: Record<string, unknown> = {}) {
+    return fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central" }),
+        ordenRow({ id: "o2", estatusValue: "en_bodega_central" }),
+      ]),
+      ...over,
+    });
+  }
+
+  const CON_MARCA = {
+    ordenIds: ["o1", "o2"],
+    mensajeroId: "m1",
+    autorizarSinUbicacionIds: ["o1", "o2"],
+  };
+
+  it("un actor sin acceso total -> forbidden, y el gate ni se invoca", async () => {
+    const repo = repoBodega2();
+    const g = gateConMarca({ o1: "direccion_no_geocodificable" });
+    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), g, fakeIntentosEnLote());
+
+    const r = await service.asignarDesdeBodega(CON_MARCA, {
+      usuarioId: "u-sat",
+      rol: "adminSatelite",
+    });
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(g.evaluar).not.toHaveBeenCalled();
+    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+  });
+
+  it("mensajero bloqueado por cierres -> conflict, sin escribir y sin llegar al gate", async () => {
+    const repo = repoBodega2({
+      findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>(["m1"])),
+    });
+    const g = gateConMarca({ o1: "direccion_no_geocodificable" });
+    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), g, fakeIntentosEnLote());
+
+    const r = await service.asignarDesdeBodega(CON_MARCA, MAESTRO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle.map((d) => d.motivo)).toEqual([
+      MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
+      MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
+    ]);
+    expect(g.evaluar).not.toHaveBeenCalled();
+    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+  });
+
+  it("una orden en un origen NO permitido -> conflict, sin escribir y sin llegar al gate", async () => {
+    const repo = repoBodega2({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "por_recoger" }),
+        ordenRow({ id: "o2", estatusValue: "en_bodega_central" }),
+      ]),
+    });
+    const g = gateConMarca({ o1: "direccion_no_geocodificable" });
+    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), g, fakeIntentosEnLote());
+
+    const r = await service.asignarDesdeBodega(CON_MARCA, MAESTRO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle.map((d) => d.ordenId)).toEqual(["o1"]);
+    expect(g.evaluar).not.toHaveBeenCalled();
+    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+  });
+
+  it("una orden en el tope de intentos -> conflict, sin escribir y sin llegar al gate", async () => {
+    const repo = repoBodega2();
+    const g = gateConMarca({ o1: "direccion_no_geocodificable" });
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      g,
+      // 276: el umbral por defecto es 3 intentos vigentes.
+      fakeIntentosEnLote({ o1: 3 }),
+    );
+
+    const r = await service.asignarDesdeBodega(CON_MARCA, MAESTRO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("unreachable");
+    expect(r.detalle.map((d) => d.motivo)).toEqual([
+      MSG_TOPE_INTENTOS_ASIGNACION,
+      MSG_TOPE_INTENTOS_ASIGNACION,
+    ]);
+    expect(g.evaluar).not.toHaveBeenCalled();
     expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
   });
 });

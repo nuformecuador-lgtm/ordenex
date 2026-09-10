@@ -124,8 +124,15 @@ export async function handleConsultaOrdenApi(
     const resuelta = await resolucion.resolver(auth.actor, parsed.data);
     if (resuelta.status === "not_found") throw new NotFoundError(); // R11/R12 -> 404 uniforme
 
-    // 4. R16/R18: detalle publico (mismo DTO de la 106), sin storage_path, sin bucket, sin ids
-    //    internos y sin PII del mensajero.
+    // 4. R16/R18: detalle publico (mismo DTO de la 106), sin storage_path, sin bucket y sin ids
+    //    internos.
+    //    ⏳ 2026-09-09 (feature 404) — AQUI DECIA ademas «y sin PII del mensajero», y ya no es
+    //    cierto tal cual: el detalle lleva `mensajero: { id, nombre } | null`, que es el mensajero
+    //    ASIGNADO a la orden (`orden.mensajero_asignado_id`, «quien la lleva»). Lo que sigue sin
+    //    salir por aqui es el mensajero que la GESTIONO —`gestion_orden.mensajero_id` y su texto
+    //    libre `motivo` (256/R22), material de la feature 405— y el resto de la PII del asignado
+    //    (telefono, email, cedula, foto, zona, vehiculo). El nombre va SOLO al dueno de la orden:
+    //    el owner sigue forzado por la autenticacion del canal y no se toca en esta feature.
     const detalle = await (deps.detallePorOrdenId ?? buildDetallePorOrdenId())(
       auth.actor,
       resuelta.orden.id,

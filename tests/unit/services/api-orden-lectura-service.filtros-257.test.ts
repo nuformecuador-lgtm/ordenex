@@ -39,6 +39,8 @@ function row(overrides: Partial<ApiOrdenRow> = {}): ApiOrdenRow {
     direccion: "Calle 1",
     montoCobrar: 1500,
     createdAt: new Date("2026-08-10T15:04:00.000Z"),
+    // ⏳ 2026-09-09 (feature 404): campo REQUERIDO de `ApiOrdenRow`; aqui, sin asignado.
+    mensajero: null,
     ...overrides,
   };
 }

@@ -37,12 +37,28 @@ function ordenSelectRow(overrides: Record<string, unknown> = {}) {
     montoCobrar: new Prisma.Decimal(1500),
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
     estatus: { value: "en_bodega_central" },
+    // ⏳ 2026-09-09 (feature 404): por DEFECTO la orden no tiene mensajero asignado
+    // (`mensajero_asignado_id` NULL). Los casos que si lo tienen pasan `MENSAJERO_ROW`.
+    mensajeroAsignado: null,
     ...overrides,
   };
 }
 
 const OWNER = "store-1";
 const ORDEN_ID = "orden-1";
+
+/**
+ * ⏳ 2026-09-09 (feature 404) — la fila de `usuario` que Prisma devuelve para la relacion
+ * `mensajeroAsignado`, ya proyectada por el `select` del repositorio (id + las tres columnas de
+ * identidad de la feature 21).
+ */
+const MENSAJERO_ID = "018f2c31-0000-4000-8000-0000000000aa";
+const MENSAJERO_ROW = {
+  id: MENSAJERO_ID,
+  nombre: "Carlos",
+  primerApellido: "Jimenez",
+  segundoApellido: "Mora",
+};
 
 describe("OrdenRepository.listByOwner (feature 106, T5)", () => {
   it("R7: el where fuerza tienda_id = ownerId y deleted_at IS NULL (find y count)", async () => {
@@ -78,6 +94,9 @@ describe("OrdenRepository.listByOwner (feature 106, T5)", () => {
     const res = await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
 
     expect(res.total).toBe(1);
+    // ⏳ 2026-09-09 (feature 404, R16): sigue siendo una igualdad ESTRUCTURAL —no `toMatchObject`—
+    // para que un decimo campo que se colara ponga el test rojo. Gana `mensajero` y ni una clave
+    // mas; los nueve publicados conservan nombre, tipo y valor.
     expect(res.items[0]).toEqual({
       numGuia: 10234,
       numRemision: "REM-1",
@@ -88,6 +107,7 @@ describe("OrdenRepository.listByOwner (feature 106, T5)", () => {
       direccion: "Calle 1",
       montoCobrar: 1500,
       createdAt: new Date("2026-07-20T15:04:00.000Z"),
+      mensajero: null,
     });
   });
 
@@ -99,6 +119,170 @@ describe("OrdenRepository.listByOwner (feature 106, T5)", () => {
     expect(call.where).toMatchObject({ tiendaId: OWNER, deletedAt: null, estatusId: "os-bodega" });
     expect(call.skip).toBe(100);
     expect(call.take).toBe(25);
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// ⏳ 2026-09-09 — Feature 404 (T4): `mensajero` en la fila publica del listado y del detalle.
+// -----------------------------------------------------------------------------------------------
+
+describe("OrdenRepository — el mensajero asignado del canal (feature 404)", () => {
+  it("404/R3+R4: la fila publica lleva `{id, nombre}` con el nombre COMPLETO", async () => {
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi.fn().mockResolvedValue([ordenSelectRow({ mensajeroAsignado: MENSAJERO_ROW })]),
+        count: vi.fn().mockResolvedValue(1),
+        findFirst: vi.fn(),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+
+    // Literal a mano: compararlo contra `nombreCompletoUsuario(MENSAJERO_ROW)` seria compararlo
+    // contra su propia fuente y no podria ponerse rojo nunca.
+    expect(res.items[0].mensajero).toEqual({ id: MENSAJERO_ID, nombre: "Carlos Jimenez Mora" });
+    // R1/R6: dos claves y ninguna mas.
+    expect(Object.keys(res.items[0].mensajero!).sort()).toEqual(["id", "nombre"]);
+  });
+
+  it("404/R2+R23: `mensajero` es null cuando `mensajero_asignado_id` es NULL, y la clave existe", async () => {
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi.fn().mockResolvedValue([ordenSelectRow({ mensajeroAsignado: null })]),
+        count: vi.fn().mockResolvedValue(1),
+        findFirst: vi.fn(),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+
+    expect("mensajero" in res.items[0]).toBe(true);
+    expect(res.items[0].mensajero).toBeNull();
+  });
+
+  it("404/R6: el `select` del listado pide EXACTAMENTE id + las tres columnas de identidad", async () => {
+    const prisma = buildPrisma();
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+
+    const { select } = (prisma.orden.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(select.mensajeroAsignado).toEqual({
+      select: { id: true, nombre: true, primerApellido: true, segundoApellido: true },
+    });
+  });
+
+  it("404/R15: una pagina de N ordenes se resuelve con UNA findMany y UN count, sin consulta por item", async () => {
+    const filas = Array.from({ length: 25 }, (_, i) =>
+      ordenSelectRow({
+        numRemision: `REM-${i}`,
+        // Mitad con mensajero y mitad sin: si alguien resolviera el nombre con una lectura por
+        // item, el contador de llamadas dejaria de ser 1.
+        mensajeroAsignado: i % 2 === 0 ? MENSAJERO_ROW : null,
+      }),
+    );
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi.fn().mockResolvedValue(filas),
+        count: vi.fn().mockResolvedValue(25),
+        findFirst: vi.fn(),
+      },
+      // El delegate existe SOLO para poder afirmar que NADIE lo usa: resolver el nombre con una
+      // lectura por item es la forma facil de romper R15 sin que ningun otro aserto se entere.
+      usuario: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 25 });
+
+    expect(res.items).toHaveLength(25);
+    expect(prisma.orden.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.orden.count).toHaveBeenCalledTimes(1);
+    const usuario = (prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>>)
+      .usuario;
+    expect(usuario.findMany).not.toHaveBeenCalled();
+    expect(usuario.findFirst).not.toHaveBeenCalled();
+    expect(usuario.findUnique).not.toHaveBeenCalled();
+    // Y el mapeo se hizo de verdad, no devolvio 25 `null`.
+    expect(res.items.filter((i) => i.mensajero !== null)).toHaveLength(13);
+    expect(res.items[0].mensajero?.nombre).toBe("Carlos Jimenez Mora");
+  });
+
+  it("404/R18: el DETALLE hereda `mensajero` sin que su `select` declare nada propio", async () => {
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi.fn(),
+        count: vi.fn(),
+        findFirst: vi.fn().mockResolvedValue({
+          ...ordenSelectRow({ mensajeroAsignado: MENSAJERO_ROW }),
+          gestiones: [],
+          historialEstados: [], // 405: relacion nueva del select del detalle
+          incidentesAdmin: [],
+        }),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.findDetalleByOrdenIdForOwner(ORDEN_ID, OWNER);
+
+    expect(res!.mensajero).toEqual({ id: MENSAJERO_ID, nombre: "Carlos Jimenez Mora" });
+    expect(res!.evidencias).toEqual([]); // R19: el array sigue ahi, vacio
+    // La herencia es por el spread de `API_ORDEN_SELECT`: el `select` del detalle pide la MISMA
+    // relacion, con la MISMA proyeccion que el listado. Si alguien la declarara aparte, los dos
+    // podrian divergir — que es justo lo que la constante compartida existe para impedir.
+    const detalleSelect = (prisma.orden.findFirst as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      .select;
+    const listaPrisma = buildPrisma();
+    await new OrdenRepository(listaPrisma as unknown as PrismaClient).listByOwner({
+      ownerId: OWNER,
+      skip: 0,
+      take: 1,
+    });
+    const listadoSelect = (listaPrisma.orden.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      .select;
+    expect(detalleSelect.mensajeroAsignado).toEqual(listadoSelect.mensajeroAsignado);
+  });
+
+  it("404/R21+R22: el detalle no proyecta el mensajero de la gestion ni su texto libre", async () => {
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi.fn(),
+        count: vi.fn(),
+        findFirst: vi.fn().mockResolvedValue({
+          ...ordenSelectRow({ mensajeroAsignado: MENSAJERO_ROW }),
+          gestiones: [],
+          historialEstados: [], // 405: relacion nueva del select del detalle
+          incidentesAdmin: [],
+        }),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.findDetalleByOrdenIdForOwner(ORDEN_ID, OWNER);
+
+    const { select } = (prisma.orden.findFirst as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // ⏳ 2026-09-10 (feature 405) — AQUI DECIA «el gestor es `gestion_orden.mensajero_id` y es la
+    // 405: aqui no se pide», y esa mitad ya NO es cierta: la 405 publica el mensajero de cada
+    // gestion. Lo que sigue vigente, y es lo que estos dos asertos protegen de verdad:
+    //   · la FK cruda `mensajeroId` NO se proyecta —lo que se pide es la RELACION `mensajero`,
+    //     acotada a `id` + las tres columnas de identidad, igual que el asignado—;
+    //   · el TEXTO LIBRE `gestion_orden.motivo` sigue sin proyectarse (256/R22), y esa parte no
+    //     tiene fecha de caducidad.
+    expect(select.gestiones.select).not.toHaveProperty("mensajeroId");
+    expect(select.gestiones.select).not.toHaveProperty("motivo"); // 256/R22, texto libre
+    // 405/R12: y del gestor tampoco se pide nada mas alla de su identidad.
+    expect(select.gestiones.select.mensajero.select).not.toHaveProperty("telefono");
+    expect(select.gestiones.select.mensajero.select).not.toHaveProperty("email");
+    expect(select.gestiones.select.mensajero.select).not.toHaveProperty("cedula");
+    // Y del asignado no se pide nada mas alla de la identidad.
+    expect(select.mensajeroAsignado.select).not.toHaveProperty("telefono");
+    expect(select.mensajeroAsignado.select).not.toHaveProperty("email");
+    expect(select.mensajeroAsignado.select).not.toHaveProperty("cedula");
+    // R22: y el `select` publico sigue sin pedir ids internos de la orden ni la tienda.
+    expect(select).not.toHaveProperty("id");
+    expect(select).not.toHaveProperty("tiendaId");
   });
 });
 
@@ -126,6 +310,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
           createdAt: new Date("2026-08-22T10:00:00.000Z"),
         },
       ],
+      historialEstados: [], // 405: relacion nueva del select del detalle
       incidentesAdmin: [],
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -145,6 +330,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     const prisma = prismaConDetalle({
       ...ordenSelectRow({ estatus: { value: "incidente" } }),
       gestiones: [], // el camino del admin no crea gestion ninguna: esto es lo que rompe la opcion (a)
+      historialEstados: [], // 405: relacion nueva del select del detalle
       incidentesAdmin: [
         { evidencias: [{ storagePath: "incidentes/i1/portada.jpg", contentType: "image/png" }] },
       ],
@@ -173,6 +359,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
           createdAt: new Date("2026-08-22T10:00:00.000Z"),
         },
       ],
+      historialEstados: [], // 405: relacion nueva del select del detalle
       incidentesAdmin: [
         { evidencias: [{ storagePath: "incidentes/i1/portada.jpg", contentType: "image/png" }] },
       ],
@@ -192,6 +379,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     const prisma = prismaConDetalle({
       ...ordenSelectRow({ estatus: { value: "incidente" } }),
       gestiones: [],
+      historialEstados: [], // 405: relacion nueva del select del detalle
       incidentesAdmin: [{ evidencias: [] }],
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -205,6 +393,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     const prisma = prismaConDetalle({
       ...ordenSelectRow(),
       gestiones: [],
+      historialEstados: [], // 405: relacion nueva del select del detalle
       incidentesAdmin: [],
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -229,6 +418,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     const prisma = prismaConDetalle({
       ...ordenSelectRow(),
       gestiones: [],
+      historialEstados: [], // 405: relacion nueva del select del detalle
       incidentesAdmin: [],
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);

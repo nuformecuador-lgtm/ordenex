@@ -38,6 +38,11 @@ function toListItemDTO(row: ApiOrdenRow): ApiOrdenListItemDTO {
     direccion: row.direccion,
     montoCobrar: row.montoCobrar,
     createdAt: row.createdAt,
+    // ⏳ 2026-09-09 (feature 404, R14/R18): se COPIA tal cual lo dio el repo —el repo ya lo resolvio
+    // en su propia consulta y ya compuso el nombre con la fuente unica—. Aqui no se recompone, no
+    // se filtra por estado y no se decide nada: `toDetalleDTO` hace `...toListItemDTO(row)`, asi
+    // que el detalle lo hereda por esta misma linea.
+    mensajero: row.mensajero,
   };
 }
 
@@ -45,6 +50,18 @@ function toListItemDTO(row: ApiOrdenRow): ApiOrdenListItemDTO {
  * Feature 106 (design §2/§3) — LECTURA del canal integrador. Fuerza el owner = `actor.usuarioId`
  * (R4), resuelve evidencias como URLs firmadas de 5 min (R15/R17) y mapea a DTO publico SIN
  * `storage_path` crudo, sin bucket, sin PII del mensajero (R16).
+ *
+ * ⏳ 2026-09-09 (feature 404, R20/R25) — AQUI DECIA «sin PII del mensajero (R16)» a secas, y esa
+ * frase ya no describe lo que hace esta clase. Queda ACOTADA, no derogada:
+ *   - el mensajero ASIGNADO (`orden.mensajero_asignado_id`) viaja con `id` y `nombre` —y nada mas—
+ *     en el item y en el detalle, hacia el DUENO de la orden y solo sobre sus ordenes: el
+ *     `ownerId` forzado de R4 no se toca y esta feature no abre ninguna via nueva a una orden
+ *     ajena;
+ *   - el mensajero que GESTIONO la orden y su texto libre `gestion_orden.motivo` siguen SIN
+ *     salir por aqui (256/R22), igual que el `storage_path` crudo, el bucket, el `tiendaId` y el
+ *     resto de la PII del mensajero (telefono, email, cedula, foto, zona, vehiculo).
+ * La excepcion la firma el humano el 2026-09-09: la cuenta duena ya ve ese mismo nombre completo en
+ * la columna «Mensajero» de `/ordenes` y se lo descarga en el XLSX.
  */
 export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
   constructor(
@@ -114,6 +131,22 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
       expiraEnSegundos: ttl,
     }));
 
-    return { ...toListItemDTO(row), evidencias };
+    // ⏳ 2026-09-10 (feature 405, R1/R3/R12) — CAMPO A CAMPO, y no `{ ...g }`. Un spread copiaria
+    // cualquier cosa que el repositorio anadiera manana a su fila —el texto libre, el id de la
+    // gestion, un monto— sin que nadie lo decidiera, y ESA es la fuga que la guardia de lista
+    // blanca busca. Aqui no hay Storage que tocar: las gestiones no llevan URL, asi que el orden
+    // de la orden sin evidencias sigue sin firmar nada (R18 de la 106).
+    const gestiones = row.gestiones.map((g) => ({
+      createdAt: g.createdAt,
+      resultado: g.resultado,
+      estadoResultante: g.estadoResultante,
+      motivo: g.motivo,
+      // Las DOS claves del mensajero, tambien copiadas y no reenviadas por referencia: si la fila
+      // del repositorio trajera una tercera, no cruzaria. Y si `ApiMensajeroDTO` ganara un campo
+      // de verdad, esto deja de compilar (falta una propiedad), que es como se quiere enterar uno.
+      mensajero: { id: g.mensajero.id, nombre: g.mensajero.nombre },
+    }));
+
+    return { ...toListItemDTO(row), evidencias, gestiones };
   }
 }

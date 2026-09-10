@@ -271,16 +271,24 @@ describe("256/R24 — el webhook orden.estado_actualizado esta publicado en el c
     // ADITIVA y se OMITE salvo en los eventos de `incidente`, asi que ningun consumidor escrito
     // contra el contrato de la 256 se rompe. Por eso el aserto no se relaja a un tamaño: se parte
     // en dos igualdades de contenido, una por cada mitad de la afirmacion.
-    const CINCO = ["numGuia", "numRemision", "estado", "motivo", "evidenciasUrl"];
-    const CUATRO_REQUIRED = ["numGuia", "numRemision", "estado", "motivo"];
+    //
+    // ⏳ 2026-09-09 (feature 404/R9/R10/R24) — se ACTUALIZA otra vez, por la MISMA mecanica y con
+    // el mismo cuidado: la 404 añade una SEXTA propiedad, `mensajero`, y la mete DENTRO de
+    // `required`. Su posicion no es cosmetica —va tras `motivo` y antes de `evidenciasUrl`— porque
+    // el orden de las propiedades del contrato refleja el orden REAL de las claves del cuerpo, y
+    // la firma se calcula sobre el string serializado. Lo que la 256 fijaba sigue intacto: sus
+    // cuatro claves conservan nombre, posicion y presencia, y `evidenciasUrl` sigue siendo la
+    // UNICA opcional. El aserto no se relaja: siguen siendo dos igualdades de contenido.
+    const SEIS = ["numGuia", "numRemision", "estado", "motivo", "mensajero", "evidenciasUrl"];
+    const CINCO_REQUIRED = ["numGuia", "numRemision", "estado", "motivo", "mensajero"];
 
-    // (1) Las CINCO propiedades, en el orden real del objeto. Un intercambio se ve.
-    expect(Object.keys(dataTs.properties)).toEqual(CINCO);
-    expect(Object.keys(porCamino(dataYaml, "properties"))).toEqual(CINCO);
+    // (1) Las SEIS propiedades, en el orden real del objeto. Un intercambio se ve.
+    expect(Object.keys(dataTs.properties)).toEqual(SEIS);
+    expect(Object.keys(porCamino(dataYaml, "properties"))).toEqual(SEIS);
 
-    // (2) `required` sigue siendo el CUATRO de la 256: `evidenciasUrl` esta FUERA, las otras DENTRO.
-    expect(dataTs.required).toEqual(CUATRO_REQUIRED);
-    expect(dataYaml.required as string[]).toEqual(CUATRO_REQUIRED);
+    // (2) `required` son las CINCO siempre presentes: `evidenciasUrl` esta FUERA, las otras DENTRO.
+    expect(dataTs.required).toEqual(CINCO_REQUIRED);
+    expect(dataYaml.required as string[]).toEqual(CINCO_REQUIRED);
     for (const required of [dataTs.required as readonly string[], dataYaml.required as string[]]) {
       expect(required).not.toContain("evidenciasUrl");
     }
@@ -407,8 +415,12 @@ describe("256/R24 — el webhook orden.estado_actualizado esta publicado en el c
     // ⏳ 2026-08-22 — AQUI DECIA `toContain("las cuatro claves están SIEMPRE presentes")`, y la
     // frase suelta ya no describe el objeto entero: hay una quinta clave. La 268 la conserva
     // NOMBRANDO las cuatro y diciendo cual es la opcional, y el aserto afirma las dos mitades.
+    //
+    // ⏳ 2026-09-09 (feature 404/R24) — y AQUI DECIA «las CUATRO claves», que pasan a ser CINCO
+    // con `mensajero`. Se enmienda el literal, no se afloja: la segunda mitad —que `evidenciasUrl`
+    // sigue siendo la UNICA opcional— es exactamente lo que hay que seguir protegiendo.
     expect(dataTs.description).toContain(
-      "Las cuatro claves `numGuia`, `numRemision`, `estado` y `motivo` están SIEMPRE presentes",
+      "Las cinco claves `numGuia`, `numRemision`, `estado`, `motivo` y `mensajero` están SIEMPRE presentes",
     );
     expect(dataTs.description).toContain("UNA clave OPCIONAL, `evidenciasUrl`");
   });

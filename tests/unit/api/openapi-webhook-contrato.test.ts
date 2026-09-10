@@ -197,11 +197,22 @@ describe("268/R28 — `evidenciasUrl` es OPCIONAL y las otras cuatro siguen REQU
   // ya vivo —el consumidor que no ramifica porque confia en que la clave existe—, asi que
   // prevalece no romperlo: `motivo` sigue requerido y nullable, y la unica clave opcional que la
   // 268 introduce es `evidenciasUrl`. Nota fechada el 2026-08-22.
-  it("`data.required` son EXACTAMENTE numGuia, numRemision, estado y motivo", () => {
+  //
+  // ⏳ 2026-09-09 (feature 404/R9/R24) — AQUI DECIA que las requeridas eran CUATRO, y ya no es
+  // cierto: son CINCO. `mensajero` entra en `required` por el mismo argumento que sostiene a
+  // `motivo` —la clave viaja siempre y vale `null` cuando no aplica—, y no por el de
+  // `evidenciasUrl`. Lo que este caso protege sigue intacto y es lo importante: que
+  // `evidenciasUrl` siga siendo la UNICA fuera de `required`.
+  it("`data.required` son EXACTAMENTE numGuia, numRemision, estado, motivo y mensajero", () => {
     expect([...dataTs.required].sort()).toEqual(
-      ["estado", "motivo", "numGuia", "numRemision"].sort(),
+      ["estado", "mensajero", "motivo", "numGuia", "numRemision"].sort(),
     );
     expect(dataTs.required).not.toContain("evidenciasUrl");
+    // Y dicho de la otra forma, que es la que se rompe si alguien añade una segunda opcional:
+    // toda propiedad declarada salvo `evidenciasUrl` esta en `required`.
+    const requeridas = dataTs.required as readonly string[];
+    const noRequeridas = Object.keys(dataTs.properties).filter((k) => !requeridas.includes(k));
+    expect(noRequeridas).toEqual(["evidenciasUrl"]);
   });
 
   it("`evidenciasUrl` esta declarada como propiedad, con tipo string/uri", () => {
@@ -280,7 +291,9 @@ describe("268/R30 — el .yaml publica el MISMO bloque que el objeto TS", () => 
     // `webhooks` y es ahora un schema de `components.schemas`.
     expect(PROPIEDADES_YAML.some((l) => l === `${" ".repeat(12)}evidenciasUrl:`)).toBe(true);
     const requeridas = requiredDelBloque(DATA_YAML);
-    expect(requeridas).toEqual(["numGuia", "numRemision", "estado", "motivo"]);
+    // ⏳ 2026-09-09 (feature 404/R24): el espejo textual gana `mensajero` en `required`, en el
+    // mismo orden que el objeto TS. `evidenciasUrl` sigue fuera.
+    expect(requeridas).toEqual(["numGuia", "numRemision", "estado", "motivo", "mensajero"]);
     expect(requeridas).not.toContain("evidenciasUrl");
   });
 });

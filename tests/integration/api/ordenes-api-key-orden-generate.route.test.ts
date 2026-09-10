@@ -37,6 +37,11 @@ function detalleRow(fila: Fila): ApiOrdenDetalleRow {
     montoCobrar: 1500,
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
     evidencias: [],
+    // ⏳ 2026-09-10 (feature 405): campo REQUERIDO de `ApiOrdenDetalleRow`. Este archivo mide el
+    // PDF de etiqueta, no el historial: la orden de prueba no tiene gestiones.
+    gestiones: [],
+    // ⏳ 2026-09-09 (feature 404): campo REQUERIDO de `ApiOrdenDetalleRow`.
+    mensajero: null,
   };
 }
 

@@ -5,6 +5,12 @@ import { TOPE_FILAS_HABILITAR } from "@/lib/config/habilitacion-api";
 // El literal de `penumbra` NO se reescribe aqui: se importa del contrato interno, que es donde
 // vive (126/R20). Una segunda copia es la clasica cifra duplicada que un dia diverge.
 import { PENUMBRA } from "@/lib/types/analitica-operativa";
+// ⏳ 2026-09-10 (feature 405) — las TRES fuentes de las que se derivan los enums de `OrdenGestion`.
+// Ninguna se reescribe como lista literal aqui: el mapa de destinos es exhaustivo contra el enum
+// de Prisma y los dos seeds llevan su propio doble candado.
+import { ESTATUS_POR_RESULTADO } from "@/lib/types/gestion-destino";
+import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
+import { CAUSA_INCIDENTE_SEED } from "@/lib/types/causa-incidente";
 
 // Feature 106 — Fuente de verdad del contrato OpenAPI 3.1 del canal integrador por API key.
 // Este objeto es lo que sirve `GET /api/docs/openapi` (como JSON) y lo que renderiza Swagger UI
@@ -62,6 +68,35 @@ const ORDER_STATUS_ENUM = [
 // NUNCA se copia como lista literal: si la politica cambia, este enum cambia solo y
 // `tests/unit/api/openapi-webhook-contrato.test.ts` se pone rojo si alguien lo desengancha.
 const WEBHOOK_ESTADO_ENUM = [...EVENTOS_PUBLICOS].sort();
+
+// ⏳ 2026-09-10 (feature 405/R5) — enum de RESULTADOS de gestion del schema `OrdenGestion`. Se
+// DERIVA de `ESTATUS_POR_RESULTADO` (`lib/types/gestion-destino.ts`), que es un
+// `Record<GestionResultado, ...>` exhaustivo contra el enum nativo de Prisma: si el enum gana un
+// sexto value, aquel mapa no compila hasta que alguien decida su destino, y este enum lo hereda
+// solo. NUNCA se copia como lista literal, por la misma regla que `WEBHOOK_ESTADO_ENUM`.
+//
+// Orden alfabetico para que el espejo `.yaml` sea comparable posicionalmente y para que reordenar
+// el mapa de origen no mueva el contrato publicado.
+//
+// NO cuenta como «enum de estado» para `openapi-contrato-en-reparto.test.ts`: contiene
+// `entregada` pero NO `por_recoger`, asi que los bloques de catalogo siguen siendo CUATRO.
+const GESTION_RESULTADO_ENUM = Object.keys(ESTATUS_POR_RESULTADO).sort();
+
+// ⏳ 2026-09-10 (feature 405/R21) — enum de `OrdenGestion.motivo`: las DOS causas tipificadas y
+// `null`. Derivado de los MISMOS seeds de los que sale la lista del webhook
+// (`CAUSA_DEVOLUCION_SEED` + `CAUSA_INCIDENTE_SEED`), en el MISMO orden: primero las tres de
+// devolucion (en INGLES, 73/F1.4-g), luego las tres de incidente (en ESPAÑOL, 158/Q-B), y `null`
+// al final.
+//
+// La lista del webhook sigue siendo un literal escrito a mano —es contrato vigente y NO se toca en
+// esta ficha—, y `tests/unit/api/openapi-405-gestiones.test.ts` las compara VALOR A VALOR. Son dos
+// fuentes independientes contrastadas entre si: si alguien anadiera una causa a un seed sin
+// tocar el webhook, o al reves, ese test se pone rojo.
+const MOTIVO_CAUSA_ENUM: (string | null)[] = [
+  ...CAUSA_DEVOLUCION_SEED,
+  ...CAUSA_INCIDENTE_SEED,
+  null,
+];
 
 // Tope duro de filas por lote de carga (cargaMasivaConfig.MAX_CHUNK_ROWS, default 5000).
 const MAX_CARGA_ROWS = 5000;
@@ -931,9 +966,13 @@ export const openApiSpec = {
             // ya no describe el objeto entero: hay una QUINTA clave, `evidenciasUrl`, que
             // es OPCIONAL y se OMITE salvo en `incidente`. Se dice cual es cual para que el
             // consumidor no tenga que deducirlo.
+            // ⏳ 2026-09-09 (feature 404/R24) — la frase decía «las CUATRO claves… están SIEMPRE
+            // presentes». Pasan a ser CINCO: `mensajero` se suma al bloque presente-con-`null`,
+            // por la misma razón que `motivo` y no por la de `evidenciasUrl` (ver su description).
+            // `evidenciasUrl` sigue siendo la ÚNICA opcional.
             description:
-              "Las cuatro claves `numGuia`, `numRemision`, `estado` y `motivo` están SIEMPRE presentes, sea cual sea el estado: el consumidor no ramifica por estado para saber si existen (`motivo` viaja como `null` cuando no aplica, nunca omitido). A ellas se suma UNA clave OPCIONAL, `evidenciasUrl`, que SÍ se omite salvo en los eventos con `estado: \"incidente\"`.",
-            required: ["numGuia", "numRemision", "estado", "motivo"],
+              "Las cinco claves `numGuia`, `numRemision`, `estado`, `motivo` y `mensajero` están SIEMPRE presentes, sea cual sea el estado: el consumidor no ramifica por estado para saber si existen (`motivo` y `mensajero` viajan como `null` cuando no aplica, nunca omitidos). A ellas se suma UNA clave OPCIONAL, `evidenciasUrl`, que SÍ se omite salvo en los eventos con `estado: \"incidente\"`.",
+            required: ["numGuia", "numRemision", "estado", "motivo", "mensajero"],
             properties: {
               numGuia: {
                 type: ["integer", "null"],
@@ -995,7 +1034,47 @@ export const openApiSpec = {
                   "se emite NUNCA en este webhook—, ni ningún otro dato del destinatario.",
                 ].join("\n"),
               },
-              // feature 268/R24/R30 — la QUINTA clave, y la unica OPCIONAL del objeto:
+              // ⏳ 2026-09-09 (feature 404/R24) — la QUINTA clave SIEMPRE PRESENTE. Va aqui, tras
+              // `motivo` y antes de `evidenciasUrl`, porque el orden de las propiedades del
+              // contrato refleja el orden REAL de las claves del cuerpo (la firma se calcula sobre
+              // el string serializado).
+              mensajero: {
+                type: ["object", "null"],
+                required: ["id", "nombre"],
+                additionalProperties: false,
+                properties: {
+                  id: {
+                    type: "string",
+                    description:
+                      "Identificador ESTABLE del mensajero: un UUID en TEXTO, no un entero. El mismo mensajero produce el mismo `id` en el webhook, en el listado y en el detalle, y ese `id` no se reasigna nunca a otra persona: es tu clave de agrupación para métricas por mensajero.",
+                  },
+                  nombre: {
+                    type: "string",
+                    description:
+                      "Nombre completo de la persona (nombre + apellidos). Es un texto para mostrar y PUEDE CAMBIAR (una corrección de datos lo reescribe): no agrupes por él, agrupá por `id`.",
+                  },
+                },
+                description: [
+                  "Mensajero ASIGNADO a la orden, o `null` si en ese momento no la lleva nadie.",
+                  "",
+                  "**La clave viaja SIEMPRE**, igual que `motivo`: `null` es un valor con significado",
+                  "—«todavía nadie la lleva»—, no una omisión. No ramifiques por «la clave existe».",
+                  "",
+                  "⚠️ **Es QUIÉN LA LLEVA, no quién la gestionó.** Sale de la asignación vigente de la",
+                  "orden, así que es el mensajero VIGENTE EN EL MOMENTO DE LA ENTREGA del evento —la",
+                  "misma regla que rige a `motivo`—: si la orden se reasigna entre dos entregas del",
+                  "mismo `eventoId`, la segunda lleva el mensajero de entonces. Y varios flujos",
+                  "LIMPIAN la asignación (generación de guía, quitar mensajero, devolución o",
+                  "recuperación a bodega, liberación de una reprogramada, el barrido del cierre",
+                  "diario), de modo que una orden que alguien llevó puede quedar con `mensajero:",
+                  "null` más tarde. Para «quién gestionó cada intento» hace falta el historial de",
+                  "gestiones, que este evento NO transporta.",
+                  "",
+                  "Lleva EXCLUSIVAMENTE `id` y `nombre`. Ningún otro dato personal del mensajero",
+                  "(teléfono, email, cédula, foto, zona, vehículo) se publica por este canal.",
+                ].join("\n"),
+              },
+              // feature 268/R24/R30 — la clave OPCIONAL del objeto, y la unica:
               // deliberadamente FUERA de `required`.
               evidenciasUrl: {
                 type: "string",
@@ -1005,14 +1084,24 @@ export const openApiSpec = {
                   "(`GET /api/ordenes/api-key/orden/{id}`), cuyo array `evidencias[]` incluye las",
                   "evidencias del incidente con `resultado: \"incidente\"`.",
                   "",
+                  "**El último segmento es un identificador que ya venís leyendo en este mismo",
+                  "`data`:** el `numGuia` cuando la orden tiene guía, y el `numRemision` cuando",
+                  "todavía no la tiene. Es el mismo `{id}` que acepta el endpoint, así que el enlace",
+                  "se puede invocar tal cual. Ningún id interno viaja en la URL. El segmento va",
+                  "codificado como componente de ruta: una remisión con `/`, `?`, `#`, `%` o espacios",
+                  "viaja entera, y decodificándola recuperás el `numRemision` carácter a carácter.",
+                  "",
                   "**Es el único campo OPCIONAL de `data`.** Viaja SOLO en los eventos con",
                   "`estado: \"incidente\"`, y se OMITE —no viaja como `null`— tanto en cualquier otro",
                   "estado como en un `incidente` para el que no se pueda resolver el enlace. Ramificá",
                   "por «la clave existe», no por su valor.",
                   "",
                   "⚠️ **NO es una URL firmada y NO lleva credencial.** Es un enlace ESTABLE y",
-                  "determinista: sin token, sin expiración, no caduca, y las dos entregas de un mismo",
-                  "`eventoId` (por ejemplo tras un reintento) llevan exactamente el mismo valor. Por eso",
+                  "determinista: sin token, sin query string y sin expiración; no caduca. Lo único",
+                  "que puede cambiar entre dos entregas del mismo `eventoId` es ese identificador, y",
+                  "solo si la orden GENERA su guía entre un intento y otro: las dos URLs apuntan a la",
+                  "MISMA orden, y el `eventoId` —por donde deduplicás— no cambia nunca. Es la misma",
+                  "ventana que ya tiene `data.numGuia`, que se lee en cada entrega. Por eso",
                   "**no podés abrirlo sin autenticarte**: invocalo con tu propio",
                   "`Authorization: Bearer ordx_...`, igual que cualquier otra llamada al canal, y el",
                   "detalle te devolverá las URLs firmadas frescas de las fotos, con su TTL corto. La",
@@ -1033,6 +1122,8 @@ export const openApiSpec = {
               numRemision: "REM-0001",
               estado: "devuelta",
               motivo: "not_found",
+              // ⏳ 2026-09-09 (feature 404/R2): el ejemplo del caso SIN mensajero asignado.
+              mensajero: null,
             },
           },
           {
@@ -1045,8 +1136,16 @@ export const openApiSpec = {
               numRemision: "REM-0002",
               estado: "incidente",
               motivo: "robado",
-              evidenciasUrl:
-                "https://app.ordenex.co/api/ordenes/api-key/orden/018f2c31-0000-4000-8000-000000000002",
+              // ⏳ 2026-09-09 (feature 404/R2/R24): el ejemplo del caso CON mensajero asignado, y
+              // en su posicion real dentro del cuerpo (tras `motivo`, antes de `evidenciasUrl`).
+              mensajero: {
+                id: "018f2c31-0000-4000-8000-0000000000aa",
+                nombre: "Carlos Jiménez Mora",
+              },
+              // ⏳ 2026-09-10 (feature 406/R14): AQUI IBA el `orden.id` (un uuid), y ese enlace
+              // respondia 404 SIEMPRE — el `{id}` de esa ruta nunca significo `orden.id`. El
+              // ultimo segmento es ahora el `numGuia` que ESTE MISMO ejemplo declara arriba.
+              evidenciasUrl: "https://app.ordenex.co/api/ordenes/api-key/orden/100235",
             },
           },
         ],
@@ -1072,7 +1171,11 @@ export const openApiSpec = {
       },
       OrdenListItem: {
         type: "object",
-        description: "Item público de una orden propia (sin ids internos ni PII de terceros).",
+        // ⏳ 2026-09-09 (feature 404/R25) — la description decía «sin ids internos ni PII de
+        // terceros» a secas, y eso ya no describe el item: publica el NOMBRE del mensajero
+        // asignado. La exclusión queda ACOTADA, no derogada, y se dice con su alcance.
+        description:
+          "Item público de una orden propia: sin ids internos de la orden ni de la tienda. La única excepción a «sin datos personales de terceros» es el campo `mensajero`, que lleva el `id` y el NOMBRE del mensajero ASIGNADO —y nada más— hacia el dueño de la orden, que ya ve ese mismo nombre en la aplicación. El resto de los datos personales del mensajero (teléfono, email, cédula, foto, zona, vehículo) sigue excluido, y también el mensajero que GESTIONÓ la orden y el texto libre que escribe al gestionarla.",
         required: [
           "numGuia",
           "numRemision",
@@ -1083,6 +1186,8 @@ export const openApiSpec = {
           "direccion",
           "montoCobrar",
           "createdAt",
+          // ⏳ 2026-09-09 (feature 404/R2/R24): SIEMPRE presente; `null` cuando no hay asignado.
+          "mensajero",
         ],
         properties: {
           numGuia: { type: ["integer", "null"], description: "Número de guía (null si aún no asignado)." },
@@ -1094,6 +1199,39 @@ export const openApiSpec = {
           direccion: { type: ["string", "null"] },
           montoCobrar: { type: ["number", "null"], description: "Monto a cobrar (COD)." },
           createdAt: { type: "string", format: "date-time" },
+          mensajero: {
+            type: ["object", "null"],
+            required: ["id", "nombre"],
+            additionalProperties: false,
+            properties: {
+              id: {
+                type: "string",
+                description:
+                  "Identificador ESTABLE del mensajero: un UUID en TEXTO, no un entero. El mismo mensajero produce el mismo `id` aquí, en el detalle y en el webhook, y nunca se reasigna a otra persona: agrupá por este valor.",
+              },
+              nombre: {
+                type: "string",
+                description:
+                  "Nombre completo de la persona (nombre + apellidos). Texto para mostrar; PUEDE cambiar si se corrigen sus datos, así que no lo uses como clave.",
+              },
+            },
+            description: [
+              "Mensajero ASIGNADO a la orden, o `null` si no la lleva nadie.",
+              "",
+              "**La clave está SIEMPRE presente**: `null` significa «todavía nadie la lleva», no «no",
+              "se sabe» y no una omisión.",
+              "",
+              "⚠️ **Es QUIÉN LA LLEVA en el momento de la lectura, no quién la gestionó.** Varios",
+              "flujos limpian la asignación (generación de guía, quitar mensajero, devolución o",
+              "recuperación a bodega, liberación de una reprogramada, el barrido del cierre diario),",
+              "así que una orden que alguien llevó puede devolver `null` más tarde. Para «quién",
+              "gestionó cada intento» hace falta el historial de gestiones, que este recurso NO",
+              "expone.",
+              "",
+              "No se puede filtrar ni ordenar el listado por este campo: un parámetro de query que lo",
+              "intente se ignora, como cualquier otra clave desconocida.",
+            ].join("\n"),
+          },
         },
       },
       Pagination: {
@@ -1128,19 +1266,207 @@ export const openApiSpec = {
           expiraEnSegundos: { type: "integer", description: "TTL de la URL firmada en segundos (300)." },
         },
       },
+      // ⏳ 2026-09-10 (feature 405/R9) — EL MENSAJERO, COMO SCHEMA CON NOMBRE.
+      //
+      // La 404 publico la forma `{id, nombre}` INLINE en sus dos sitios (`data.mensajero` del
+      // webhook y `OrdenListItem.mensajero`), cada uno con su prosa —uno habla del momento de la
+      // entrega, el otro del momento de la lectura, y el listado ademas avisa de que no se puede
+      // filtrar por el—. Esas dos NO se tocan aqui: reescribirlas seria cambiar texto publicado
+      // por una ficha ajena, y su nullabilidad tampoco es la de aqui.
+      //
+      // Lo que si se hace es DARLE NOMBRE al concepto para que `OrdenGestion` lo referencie en vez
+      // de declarar una TERCERA copia. La igualdad de forma entre este schema y el de la 404 no se
+      // deja a la buena voluntad: `openapi-405-gestiones.test.ts` compara los dos nodos clave a
+      // clave y tipo a tipo, que es lo que R9 exige.
+      //
+      // ⚠️ AQUI NO ES NULLABLE, y no es un descuido: `gestion_orden.mensajero_id` es NOT NULL en
+      // el esquema. Una orden puede no tener mensajero asignado; una GESTION siempre tiene quien
+      // la registro o a quien se le atribuye.
+      Mensajero: {
+        type: "object",
+        required: ["id", "nombre"],
+        additionalProperties: false,
+        description:
+          "Una persona mensajera, con lo minimo para identificarla y mostrarla. Es la MISMA forma que publica el campo `mensajero` de `OrdenListItem` y del evento `orden.estado_actualizado`.",
+        properties: {
+          id: {
+            type: "string",
+            description:
+              "Identificador ESTABLE del mensajero: un UUID en TEXTO, no un entero. El mismo mensajero produce el mismo `id` aquí, en el listado, en el detalle y en el webhook, y nunca se reasigna a otra persona: agrupá por este valor.",
+          },
+          nombre: {
+            type: "string",
+            description:
+              "Nombre completo de la persona (nombre + apellidos). Texto para mostrar; PUEDE cambiar si se corrigen sus datos, así que no lo uses como clave.",
+          },
+        },
+      },
+      // ⏳ 2026-09-10 (feature 405) — UNA gestion del historial de la orden.
+      //
+      // Va DESPUES de `Evidencia` y ANTES de `OrdenDetalle`, y el orden importa para el espejo
+      // `.yaml`: `openapi-contrato-en-reparto.test.ts` localiza el enum de `Evidencia.resultado`
+      // con una regex posicional que toma la PRIMERA coincidencia de `resultado: / type: string /
+      // enum:` con esa sangria. Si este schema se moviera por delante, aquel test empezaria a
+      // medir el enum equivocado. `openapi-405-gestiones.test.ts` lo afirma explicitamente.
+      OrdenGestion: {
+        type: "object",
+        description:
+          "Un desenlace registrado sobre la orden: quién lo registró, cuándo y en qué dejó la orden. El array completo permite medir cuántas veces se visitó la orden y cuánto pasó entre una vez y la siguiente.",
+        required: ["createdAt", "resultado", "estadoResultante", "motivo", "mensajero"],
+        additionalProperties: false,
+        properties: {
+          createdAt: {
+            type: "string",
+            format: "date-time",
+            description:
+              "Instante en que la gestión quedó REGISTRADA (ISO 8601, UTC). Mismo tipo y misma serialización que el `createdAt` de la orden. NO es la fecha de reprogramación ni la de aprobación de un cierre.",
+          },
+          resultado: {
+            type: "string",
+            enum: GESTION_RESULTADO_ENUM,
+            description:
+              "Desenlace de la gestión, con el value CRUDO del catálogo interno y sin traducir. La lista de arriba es EXACTA y COMPLETA. Ojo: `resultado` NO es el estado en que quedó la orden — para eso está `estadoResultante`, y los dos NO siempre coinciden.",
+          },
+          estadoResultante: {
+            type: ["string", "null"],
+            description: [
+              "El `value` del estado al que ESTA gestión llevó la orden: el destino de la primera",
+              "transición que originó. Es un value del mismo catálogo que publica",
+              "`OrdenListItem.estado`; **se publica sin lista cerrada a propósito**, porque el",
+              "catálogo documentado en `estado` está incompleto y aquí pueden aparecer values que",
+              "aquella lista todavía no enumera. Tratá un value desconocido como texto, no como",
+              "error.",
+              "",
+              "⚠️ **No lo deduzcas del `resultado`**: una gestión `devuelta` deja la orden en",
+              "`devolucion_por_confirmar`, no en `devuelta`; solo la aprobación posterior del cierre",
+              "la mueve ahí.",
+              "",
+              "Es `null` en gestiones ANTIGUAS, anteriores a que existiera la línea de tiempo de",
+              "estados: no hay ninguna transición registrada que las respalde. No es un fallo del",
+              "canal, y la clave NUNCA se omite.",
+            ].join("\n"),
+          },
+          motivo: {
+            type: ["string", "null"],
+            enum: MOTIVO_CAUSA_ENUM,
+            description: [
+              "Causa TIPIFICADA del desenlace, con el value crudo del enum y sin traducir. Son los",
+              "MISMOS valores que ya recibís en `data.motivo` del webhook `orden.estado_actualizado`.",
+              "El campo transporta DOS enums distintos y cuál aplica lo decide `resultado`:",
+              "",
+              "- **`resultado: \"devuelta\"`** → causa de la devolución: `not_found` (destinatario no",
+              "  encontrado), `wrong_number` (teléfono equivocado), `wrong_address` (dirección",
+              "  equivocada).",
+              "- **`resultado: \"incidente\"`** → causa del incidente: `danado`, `perdido`, `robado`.",
+              "- **cualquier otro `resultado`** → siempre `null`.",
+              "",
+              "⚠️ **La asimetría de idioma es DELIBERADA, no un error que corregir.** Las causas de",
+              "devolución van en INGLÉS y las de incidente en ESPAÑOL (`danado` sin eñe, `perdido`,",
+              "`robado`) porque cada enum se publicó con el value crudo de su catálogo interno y",
+              "renombrar cualquiera de los dos rompería a los integradores que ya lo consumen.",
+              "Decisión consciente y firmada (73/F1.4-g y 158/Q-B): no se «armoniza» en el futuro.",
+              "",
+              "Es `null` **también** en una `devuelta` (o un `incidente`) sin causa registrada —",
+              "gestiones anteriores a que la causa se pidiera; ese histórico no se rellenó—. El",
+              "contrato no distingue «no hubo causa» de «no se registró»: en los dos casos viaja",
+              "`null` y el campo NUNCA se omite.",
+              "",
+              "⚠️ Transporta EXCLUSIVAMENTE la causa tipificada. **NO es el comentario en texto libre",
+              "que el mensajero escribe al gestionar la orden** —que comparte el nombre `motivo` en",
+              "nuestra base de datos y NO sale del sistema por decisión de privacidad—, ni ningún",
+              "otro dato del destinatario.",
+            ].join("\n"),
+          },
+          mensajero: {
+            $ref: "#/components/schemas/Mensajero",
+            description: [
+              "Mensajero ATRIBUIDO a esta gestión. **Nunca es `null`**: a diferencia del",
+              "`mensajero` de la orden —que es quien la lleva AHORA y puede no ser nadie—, una",
+              "gestión siempre tiene una persona detrás.",
+              "",
+              "⚠️ **Atribuido no siempre significa «quien la registró».** Algunas gestiones las crea",
+              "el sistema o la propia tienda (una reprogramación desde el escritorio, el escalado",
+              "automático por vencimiento de plazo, un rechazo manual de la tienda, el desenlace de",
+              "una solicitud de ayuda, o el corte por llegar al tope de reintento) y quedan",
+              "atribuidas al mensajero de la última devolución. En este array se ven idénticas a una",
+              "visita de calle.",
+            ].join("\n"),
+          },
+        },
+      },
       OrdenDetalle: {
         allOf: [
           { $ref: "#/components/schemas/OrdenListItem" },
           {
             type: "object",
-            required: ["evidencias"],
+            // ⏳ 2026-09-10 (feature 405/R1): `gestiones` es REQUERIDA, como `evidencias`. Un array
+            // vacio es un hecho («esta orden no se ha gestionado»), no una ausencia.
+            required: ["evidencias", "gestiones"],
             properties: {
               evidencias: {
                 type: "array",
                 description: "Evidencias de la orden ([] si no hay).",
                 items: { $ref: "#/components/schemas/Evidencia" },
               },
+              gestiones: {
+                type: "array",
+                items: { $ref: "#/components/schemas/OrdenGestion" },
+                description: [
+                  "Historial de gestiones VIGENTES de la orden, de la más antigua a la más",
+                  "reciente. `[]` cuando la orden todavía no se ha gestionado: la clave viaja",
+                  "SIEMPRE y nunca es `null`.",
+                  "",
+                  "Llega **completo y sin paginar**. No incluye las gestiones anuladas (una",
+                  "anulación deshace el registro, y contarla inflaría tus métricas) ni los",
+                  "incidentes que reporta nuestro personal de bodega, que no son gestiones y no",
+                  "tienen mensajero atribuido —sus fotos sí siguen en `evidencias[]`—.",
+                  "",
+                  "⚠️ **`gestiones.length` no es nuestro contador interno de reintento.** Ese cuenta",
+                  "cierres aprobados distintos con visita real, así que varias gestiones del mismo",
+                  "cierre valen 1. Este array es la lista cruda, sin agrupar.",
+                ].join("\n"),
+              },
             },
+          },
+        ],
+        // ⏳ 2026-09-10 (feature 405/R20): ejemplo con DOS gestiones —una `reprogramada` con
+        // `motivo: null` y una `devuelta` con causa—, para que el consumidor vea la convencion de
+        // ausencia y la forma del mensajero sin tener que deducirlas.
+        examples: [
+          {
+            numGuia: 100234,
+            numRemision: "REM-0001",
+            estado: "devolviendo_a_tienda",
+            destinatario: "Jimena Porras",
+            telefonoDest: "88887777",
+            producto: "Audífonos inalámbricos",
+            direccion: "Cartago, de la iglesia 200m sur",
+            montoCobrar: 48750,
+            createdAt: "2026-09-01T14:20:00.000Z",
+            mensajero: null,
+            evidencias: [],
+            gestiones: [
+              {
+                createdAt: "2026-09-02T15:41:07.000Z",
+                resultado: "reprogramada",
+                estadoResultante: "reprogramada",
+                motivo: null,
+                mensajero: {
+                  id: "018f2c31-0000-4000-8000-0000000000aa",
+                  nombre: "Carlos Jiménez Mora",
+                },
+              },
+              {
+                createdAt: "2026-09-04T18:02:55.000Z",
+                resultado: "devuelta",
+                estadoResultante: "devolucion_por_confirmar",
+                motivo: "wrong_address",
+                mensajero: {
+                  id: "018f2c31-0000-4000-8000-0000000000bb",
+                  nombre: "Ana Solís Vargas",
+                },
+              },
+            ],
           },
         ],
       },

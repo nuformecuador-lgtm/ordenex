@@ -30,8 +30,23 @@ function row(overrides: Partial<ApiOrdenRow> = {}): ApiOrdenRow {
     direccion: "Calle 1",
     montoCobrar: 1500,
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
+    // ⏳ 2026-09-09 (feature 404): campo REQUERIDO de `ApiOrdenRow`. Por defecto, sin asignado.
+    mensajero: null,
     ...overrides,
   };
+}
+
+/** ⏳ 2026-09-09 (404) — el mensajero ya compuesto por el repositorio. */
+const MENSAJERO = { id: "018f2c31-0000-4000-8000-0000000000aa", nombre: "Carlos Jimenez Mora" };
+
+/**
+ * ⏳ 2026-09-10 (feature 405) — la fila del DETALLE: la del listado + los dos arrays.
+ *
+ * Existia como `{ ...row(), evidencias: [...] }` repetido en cada caso; con `gestiones` serian dos
+ * claves que anadir a mano en cada sitio. Se nombra una vez y los casos de la 405 la usan.
+ */
+function detalleRow(overrides: Partial<ApiOrdenDetalleRow> = {}): ApiOrdenDetalleRow {
+  return { ...row(), evidencias: [], gestiones: [], ...overrides };
 }
 
 function fakeRepo(detalle: ApiOrdenDetalleRow | null) {
@@ -51,13 +66,12 @@ function fakeSignedUrls(map: Record<string, string> = {}): ISignedUrlProvider {
 
 describe("ApiOrdenLecturaService.detallePorOrdenId (feature 177)", () => {
   it("R16: orden propia con evidencias -> DTO con URLs firmadas al TTL de la 106, sin storagePath", async () => {
-    const detalleRow: ApiOrdenDetalleRow = {
-      ...row(),
+    const filaConEvidencia: ApiOrdenDetalleRow = detalleRow({
       evidencias: [
         { resultado: "entregada", storagePath: "ordenes/o1/e.jpg", contentType: "image/jpeg" },
       ],
-    };
-    const repo = fakeRepo(detalleRow);
+    });
+    const repo = fakeRepo(filaConEvidencia);
     const provider = fakeSignedUrls({ "ordenes/o1/e.jpg": "https://signed/e.jpg" });
     const svc = new ApiOrdenLecturaService(repo as never, provider);
 
@@ -78,11 +92,23 @@ describe("ApiOrdenLecturaService.detallePorOrdenId (feature 177)", () => {
     ]);
     const serialized = JSON.stringify(res);
     expect(serialized).not.toContain("ordenes/o1/e.jpg");
-    expect(serialized).not.toMatch(/storagePath|mensajero|bucket/i);
+    // ⏳ 2026-09-09 (feature 404) — AQUI DECIA `/storagePath|mensajero|bucket/i`, prohibiendo la
+    // palabra «mensajero» en la respuesta entera. Ya no vale tal cual: el detalle publica
+    // `mensajero: { id, nombre } | null`, el ASIGNADO, por la excepcion acotada a 106/R16 que el
+    // humano firmo el 2026-09-09. Lo que la regla protegia —que no salga el `storage_path` crudo
+    // ni el bucket— se conserva INTACTO; lo que se acota es solo la tercera alternativa, y se
+    // sustituye por los asertos concretos de lo que sigue prohibido: los DATOS del mensajero que
+    // no son su id ni su nombre, y el mensajero que GESTIONO la orden (la feature 405).
+    expect(serialized).not.toMatch(/storagePath|storage_path|bucket/i);
+    expect(serialized).not.toMatch(/telefonoMensajero|emailMensajero|cedula|placa|vehiculo/i);
+    expect(serialized).not.toMatch(/mensajeroGestion|gestionadaPor|mensajeroId/i);
+    // El caso base no tiene asignado: la clave viaja con `null` y nada mas (404/R2).
+    expect(res!.mensajero).toBeNull();
+    expect(serialized).toContain('"mensajero":null');
   });
 
   it("R16: orden propia sin evidencias -> [] y NO se invoca el provider", async () => {
-    const repo = fakeRepo({ ...row(), evidencias: [] });
+    const repo = fakeRepo(detalleRow());
     const provider = fakeSignedUrls();
     const svc = new ApiOrdenLecturaService(repo as never, provider);
 
@@ -104,12 +130,91 @@ describe("ApiOrdenLecturaService.detallePorOrdenId (feature 177)", () => {
   });
 
   it("R4/R7: el ownerId que llega al repo es actor.usuarioId (y el ordenId va como ordenId)", async () => {
-    const repo = fakeRepo({ ...row(), evidencias: [] });
+    const repo = fakeRepo(detalleRow());
     const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls());
 
     await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
 
     expect(repo.findDetalleByOrdenIdForOwner).toHaveBeenCalledWith(ORDEN_ID, "store-1");
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// ⏳ 2026-09-09 — Feature 404 (T5): el DTO del DETALLE lleva `mensajero` y conserva `evidencias`.
+// -----------------------------------------------------------------------------------------------
+
+describe("ApiOrdenLecturaService.detallePorOrdenId — `mensajero` (feature 404)", () => {
+  it("404/R18+R19: el detalle lleva `mensajero` y conserva `evidencias`, incluido el `[]`", async () => {
+    const repo = fakeRepo(detalleRow({ mensajero: MENSAJERO }));
+    const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls());
+
+    const res = await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
+
+    expect(res!.mensajero).toEqual({
+      id: "018f2c31-0000-4000-8000-0000000000aa",
+      nombre: "Carlos Jimenez Mora",
+    });
+    expect(res!.evidencias).toEqual([]); // el array sigue ahi, vacio, no desaparece
+    // R19/R16: el detalle es el item + `evidencias`, ni una clave mas.
+    //
+    // ⏳ 2026-09-10 (feature 405/R1) — AQUI HABIA ONCE CLAVES y ahora son DOCE: `gestiones` es el
+    // array nuevo del detalle. El literal se ENMIENDA (sigue siendo una igualdad exacta y sigue
+    // cazando una clave de mas), no se relaja a `toContain`: ES el contrato publicado.
+    expect(Object.keys(res!).sort()).toEqual([
+      "createdAt",
+      "destinatario",
+      "direccion",
+      "estado",
+      "evidencias",
+      "gestiones",
+      "mensajero",
+      "montoCobrar",
+      "numGuia",
+      "numRemision",
+      "producto",
+      "telefonoDest",
+    ]);
+  });
+
+  it("404/R1+R6: el `mensajero` del detalle tiene exactamente dos claves", async () => {
+    const repo = fakeRepo(detalleRow({ mensajero: MENSAJERO }));
+    const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls());
+
+    const res = await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
+
+    expect(Object.keys(res!.mensajero!).sort()).toEqual(["id", "nombre"]);
+  });
+
+  it("404/R18: sobre el repositorio REAL, el detalle compone el nombre desde las tres columnas", async () => {
+    // Con un repo falso este caso pasaria aunque el mapeo del repositorio no existiera; sobre el
+    // `OrdenRepository` real con Prisma mockeado, mide de verdad la cadena entera.
+    const { svc } = servicioSobrePrisma(
+      prismaDetalleRow({
+        mensajeroAsignado: {
+          id: "018f2c31-0000-4000-8000-0000000000aa",
+          nombre: "Carlos",
+          primerApellido: "Jimenez",
+          segundoApellido: "Mora",
+        },
+      }),
+      {},
+    );
+
+    const res = await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
+
+    expect(res!.mensajero).toEqual({
+      id: "018f2c31-0000-4000-8000-0000000000aa",
+      nombre: "Carlos Jimenez Mora",
+    });
+  });
+
+  it("404/R2+R23: sobre el repositorio REAL, sin asignado el detalle da `null`", async () => {
+    const { svc } = servicioSobrePrisma(prismaDetalleRow({ mensajeroAsignado: null }), {});
+
+    const res = await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
+
+    expect("mensajero" in res!).toBe(true);
+    expect(res!.mensajero).toBeNull();
   });
 });
 
@@ -141,7 +246,13 @@ function prismaDetalleRow(overrides: Record<string, unknown> = {}) {
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
     estatus: { value: "incidente" },
     gestiones: [],
+    // ⏳ 2026-09-10 (feature 405): la relacion que el `select` del detalle pide ahora para resolver
+    // `estadoResultante`. Sin gestiones que emparejar, esta vacia.
+    historialEstados: [],
     incidentesAdmin: [],
+    // ⏳ 2026-09-09 (feature 404): la relacion que Prisma devuelve para `mensajeroAsignado`;
+    // `null` = la orden no tiene a nadie llevandola.
+    mensajeroAsignado: null,
     ...overrides,
   };
 }

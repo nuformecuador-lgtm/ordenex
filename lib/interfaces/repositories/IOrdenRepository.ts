@@ -1,4 +1,4 @@
-import type { GestionCausaDevolucion } from "@prisma/client";
+import type { GestionCausaDevolucion, GestionResultado } from "@prisma/client";
 import type {
   FilaBodegaSatelite,
   OrdenDTO,
@@ -23,6 +23,15 @@ import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { FiltroAlcanceTablero } from "@/lib/types/alcance-tablero";
 // Feature 236 (T2.2, R5): el grupo de novedad viaja en la firma de los dos metodos del listado.
 import type { GrupoNovedad } from "@/lib/types/novedad-grupo";
+// ⏳ 2026-09-09 (feature 404, design §D5): la forma del mensajero publico se declara UNA vez, en el
+// archivo de DTOs del canal, y las tres superficies la importan de ahi.
+import type { ApiMensajeroDTO } from "@/lib/types/api-orden";
+// ⏳ 2026-09-10 (feature 405, R8/R21): las DOS causas TIPIFICADAS, importadas de sus fuentes
+// unicas. NO se reescriben aqui como union de strings: `causa-devolucion.ts` y
+// `causa-incidente.ts` tienen su doble candado contra el enum de Prisma, y una copia literal se
+// quedaria atras el dia que el enum crezca.
+import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
+import type { CausaIncidente } from "@/lib/types/causa-incidente";
 // FICHA 374: el nivel del catalogo geografico, como vocabulario cerrado compartido.
 import type { NivelGeografico } from "@/lib/types/geografia-nodo";
 // Feature 271 — el conteo N/V y el detalle del bloqueo viven en un modulo PURO
@@ -1044,6 +1053,15 @@ export interface ApiOrdenRow {
   direccion: string | null;
   montoCobrar: number | null;
   createdAt: Date;
+  /**
+   * ⏳ 2026-09-09 (feature 404, R7/R14/R23) — el mensajero ASIGNADO a la orden
+   * (`orden.mensajero_asignado_id`), o `null` si nadie la lleva. Es «quien la LLEVA AHORA», NUNCA
+   * «quien la gestiono»: esa identidad vive en `gestion_orden.mensajero_id` y es de la feature 405.
+   * Una orden que perdio la asignacion —reasignacion, devolucion o recuperacion a bodega,
+   * liberacion de reprogramada, barrido del corte— sale con `null`, sin error y sin inventar un
+   * mensajero anterior. `ApiOrdenDetalleRow` lo hereda por el `extends`.
+   */
+  mensajero: ApiMensajeroDTO | null;
 }
 
 export interface ApiOrdenListResult {
@@ -1065,8 +1083,60 @@ export interface ApiOrdenEvidenciaRow {
   contentType: string | null;
 }
 
+/**
+ * ⏳ 2026-09-10 (feature 405, R3/R12) — UNA gestion de la orden en el detalle publico.
+ *
+ * CINCO CAMPOS Y NINGUNO MAS, y la lista es la frontera de privacidad, no una preferencia: el
+ * texto libre `gestion_orden.motivo` (256/R22), el `evidencia_storage_path`, el `id` de la
+ * gestion, el `cierre_id`, el `monto_recibido`, el `metodo_pago`, el `pago_mensajero`, la
+ * `indemnizacion` y las coordenadas de la gestion (solo escritura por la 193/R7) NO estan aqui y
+ * no pueden estarlo: lo que no cruza esta interfaz no puede filtrarse por un spread mas abajo
+ * (R12). Espejo EXACTO de
+ * `ApiOrdenGestionDTO` (`lib/types/api-orden.ts`): si uno crece y el otro no,
+ * `ApiOrdenLecturaService.toDetalleDTO` deja de compilar, que es la idea (mismo mecanismo que
+ * `ApiOrdenEvidenciaRow`).
+ */
+export interface ApiOrdenGestionRow {
+  /** R4: instante en que la gestion quedo REGISTRADA (`gestion_orden.created_at`). */
+  createdAt: Date;
+  /** R5: el value CRUDO del enum `gestion_resultado`, sin traducir y sin etiqueta. */
+  resultado: GestionResultado;
+  /**
+   * R6/R7: `value` del estado destino de la PRIMERA transicion que ESTA gestion origino.
+   * `null` cuando no hay ninguna fila de `orden_historial_estado` que la respalde — el caso de
+   * las gestiones LEGADAS anteriores al historial de la feature 49, el mismo limite que declara
+   * `whereIntentosVigentes`. No se tipa contra el catalogo a proposito: el enum `estado` que el
+   * contrato publica esta incompleto por deuda declarada desde la 109 (405/Q8).
+   */
+  estadoResultante: string | null;
+  /**
+   * R8 — la causa TIPIFICADA, y JAMAS el texto libre. `causa_devolucion` cuando el resultado es
+   * `devuelta`, `causa_incidente` cuando es `incidente`, `null` en el resto y tambien cuando la
+   * causa no esta registrada (historico anterior a la 73 / la 158).
+   *
+   * ⚠️ En este sistema `motivo` nombra DOS cosas (`WebhookEstadoService.armarData`): esta, que se
+   * publica, y `gestion_orden.motivo` —lo que el mensajero teclea a mano sobre un cliente—, que
+   * NO sale del sistema por decision expresa (256/R22) y que ni siquiera se proyecta.
+   */
+  motivo: CausaDevolucion | CausaIncidente | null;
+  /**
+   * R9 — el mensajero ATRIBUIDO a la gestion (`gestion_orden.mensajero_id`, NOT NULL en el
+   * esquema: aqui NUNCA es `null`, a diferencia del asignado de `ApiOrdenRow.mensajero`).
+   * Es el MISMO tipo que publica la feature 404, importado y no redeclarado: un concepto, una
+   * forma.
+   */
+  mensajero: ApiMensajeroDTO;
+}
+
 export interface ApiOrdenDetalleRow extends ApiOrdenRow {
   evidencias: ApiOrdenEvidenciaRow[];
+  /**
+   * ⏳ 2026-09-10 (feature 405, R1/R2/R10/R11) — el historial de gestiones VIGENTES de la orden,
+   * de la mas antigua a la mas reciente y con el empate resuelto por `id`. `[]` cuando no hay
+   * ninguna: nunca `null`, nunca ausente. Las ANULADAS (`anulada_at IS NOT NULL`) quedan FUERA,
+   * el mismo criterio de «gestion que cuenta» que ya usa `whereIntentosVigentes`.
+   */
+  gestiones: ApiOrdenGestionRow[];
 }
 
 // Feature 106 — resultado discriminado de `cancelarViaApi` (sin acoplarse a HTTP):

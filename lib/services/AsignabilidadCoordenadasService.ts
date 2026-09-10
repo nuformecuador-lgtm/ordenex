@@ -6,6 +6,7 @@
 //
 //   R2  coordenadas presentes                  -> asignable                  (sin tocar `jobs`)
 //   R3  geocode_status DETERMINISTA            -> direccion_no_geocodificable(sin tocar `jobs`)
+//   407   ...Y ADEMAS autorizada por una persona -> asignable_sin_ubicacion_autorizada
 //   R4  clave EXACTA reconstruida -> una consulta por lote
 //   400 job.lastError MARCADO de configuracion -> asignable_sin_ubicacion
 //       Y job.estado en {failed,pending,processing}
@@ -39,6 +40,22 @@
 // orden gana coordenadas y R2 gana antes de llegar a la cola; si vuelve a fallar por otra
 // causa, `fail()` SOBRESCRIBE `last_error` sin marcador; y si la direccion se corrige,
 // cambia el hash, cambia la `dedupe_key` y el job viejo deja de responder por esa orden.
+//
+// ── FICHA 407 (2026-09-10) — POR QUE LA AUTORIZACION VIVE DENTRO DE R3 (design §3.2)
+// El paso nuevo NO es un paso propio del arbol: es un `if` DENTRO de la rama de
+// `STATUS_DETERMINISTAS`, y en ningun otro sitio. Es la decision estructural de la ficha.
+//   - NO puede ganarle a R2: si la orden tiene coordenadas, R2 ya salio con `asignable` antes
+//     de llegar aqui, asi que la marca no tiene NINGUN efecto observable (407/R4).
+//   - NO puede comerse un estado de cola: `geocodificacion_en_curso`, `_encolada`,
+//     `_no_encolable` y `_agotada` se calculan en otra rama a la que este codigo NO LLEGA.
+//     Ninguno es un veredicto definitivo sobre la direccion y todavia pueden resolverse solos
+//     (407/R2). Un paso propio antes de la cola dejaria esa puerta abierta; dentro de R3 es
+//     estructuralmente IMPOSIBLE.
+//   - NO puede tocar ordenes ajenas: el bucle solo recorre `ordenes`, asi que un id marcado
+//     que no este en el lote no tiene donde aplicarse (407/R3).
+//   - NO se queda pegada: el conjunto llega por parametro y muere con la llamada. La
+//     siguiente peticion sin marca vuelve a bloquear (407/R9). Nada se persiste.
+//   - COSTE: CERO consultas nuevas. Es una lectura de un `Set` en memoria.
 //
 // ── POR QUE R3 VA ANTES QUE LA COLA (design §0.1, verificado en `GeocodificacionService`)
 // `GeocodificacionService` COMPLETA el job (lo deja en `done`, NO en `failed`) en los tres
@@ -91,6 +108,11 @@ export class AsignabilidadCoordenadasService implements IAsignabilidadCoordenada
 
   async evaluar(
     ordenes: OrdenAsignabilidadRow[],
+    // FICHA 407 (R1/R5/R9): los ids que ESTA peticion autoriza a asignar sin ubicacion. El
+    // `= new Set()` por defecto es lo que garantiza R5: un llamador que no lo pase obtiene
+    // EXACTAMENTE el comportamiento previo a la ficha. Efimero: no se guarda en la instancia
+    // (ver el caso R9 del test) ni en ningun otro sitio.
+    autorizadasSinUbicacion: ReadonlySet<string> = new Set<string>(),
   ): Promise<Map<string, EstadoAsignabilidad>> {
     const resultado = new Map<string, EstadoAsignabilidad>();
     if (ordenes.length === 0) return resultado;
@@ -103,7 +125,14 @@ export class AsignabilidadCoordenadasService implements IAsignabilidadCoordenada
         continue;
       }
       if (orden.geocodeStatus !== null && STATUS_DETERMINISTAS.has(orden.geocodeStatus)) {
-        resultado.set(orden.id, "direccion_no_geocodificable"); // R3
+        // FICHA 407 (R1): la direccion es irresoluble, PERO una persona autorizo asignarla
+        // igual en esta misma peticion. Es la unica puerta de la marca (ver cabecera).
+        resultado.set(
+          orden.id,
+          autorizadasSinUbicacion.has(orden.id)
+            ? "asignable_sin_ubicacion_autorizada"
+            : "direccion_no_geocodificable", // R3
+        );
         continue;
       }
       pendientesDeCola.push(orden);
@@ -209,12 +238,25 @@ export function motivoAsignabilidad(estado: EstadoAsignabilidad): string {
 /**
  * R8 — los estados que DEJAN PASAR la asignacion.
  *
+ * ⚠️ SI AMPLIAS ESTE DOCSTRING, ESCRIBE POR ENCIMA DE ESTA LINEA.
+ * `marcador-fallo-config-declaracion-unica.guardia` lee una VENTANA FIJA de 1400 caracteres
+ * inmediatamente anterior a la firma y exige encontrar «FEATURE 400» dentro. Todo lo que se
+ * anada DEBAJO empuja ese texto fuera de la ventana y pone el guardia rojo — le paso a la
+ * ficha 407 el 2026-09-10, con 235 caracteres de mas. Lo escrito ARRIBA no consume margen.
+ *
  * FEATURE 400 (2026-09-09, R6) — REGLA VIGENTE: son DOS, no uno. Hasta esta ficha este
  * docstring decia «`asignable` es el UNICO estado que deja pasar la asignacion», y era
  * cierto; desde la 400 tambien pasa `asignable_sin_ubicacion` — la orden no tiene
  * coordenadas, pero la culpa es de NUESTRA configuracion (el proveedor rechazo la peticion,
  * o falta la credencial) y la direccion nunca llego a consultarse. Rio abajo esa orden esta
  * cubierta por el modo degradado que ya existia (feature 92 R37/R28/R30).
+ *
+ * FICHA 407 (2026-09-10, R1) — REGLA VIGENTE: son TRES. El tercero,
+ * `asignable_sin_ubicacion_autorizada`, es la direccion irresoluble que una PERSONA autoriza
+ * a sabiendas en esa misma peticion (efimero, no se persiste: R9).
+ *
+ * ⚠️ El tipo NO protege esta lista: un array mas CORTO compila igual, y olvidar un valor
+ * seria un fallo MUDO. Por eso hay un caso por valor en el test de la 407.
  *
  * `undefined` (la orden no existe) NUNCA pasa: no se deja pasar nada por omision.
  *
@@ -224,6 +266,10 @@ export function motivoAsignabilidad(estado: EstadoAsignabilidad): string {
  */
 export function esAsignable(estado: EstadoAsignabilidad | undefined): boolean {
   if (estado === undefined) return false;
-  const asignables: readonly EstadoAsignable[] = ["asignable", "asignable_sin_ubicacion"];
+  const asignables: readonly EstadoAsignable[] = [
+    "asignable",
+    "asignable_sin_ubicacion",
+    "asignable_sin_ubicacion_autorizada",
+  ];
   return (asignables as readonly string[]).includes(estado);
 }

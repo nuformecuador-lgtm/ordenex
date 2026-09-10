@@ -11,6 +11,13 @@ import { ApiOrdenResolucionService } from "@/lib/services/ApiOrdenResolucionServ
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ApiKeyAuthResult } from "@/lib/interfaces/services/IApiKeyAuthService";
 import type { ApiOrdenDetalleDTO } from "@/lib/types/api-orden";
+// ⏳ 2026-09-09 (feature 404, T6): los casos del campo nuevo cablean la CADENA REAL por debajo del
+// handler (ApiOrdenLecturaService -> OrdenRepository -> Prisma mockeado). Con el `detalleDe` falso
+// de arriba pasarian aunque el repositorio no proyectara nada.
+import { Prisma, type PrismaClient } from "@prisma/client";
+import { ApiOrdenLecturaService } from "@/lib/services/ApiOrdenLecturaService";
+import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 
 const ACTOR: Actor = { usuarioId: "store-1", rol: "apiKey" };
 const OK_AUTH: ApiKeyAuthResult = { status: "ok", actor: ACTOR, apiKeyId: "k1" };
@@ -33,6 +40,12 @@ function detalleDe(fila: Fila, overrides: Partial<ApiOrdenDetalleDTO> = {}): Api
     direccion: "Calle 1",
     montoCobrar: 1500,
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
+    // ⏳ 2026-09-09 (feature 404): campo REQUERIDO del DTO publico; por defecto, sin asignado.
+    mensajero: null,
+    // ⏳ 2026-09-10 (feature 405): campo REQUERIDO del DTO publico; por defecto, sin gestiones.
+    // Los casos de la 405 que SI las miden cablean la cadena real (`depsRealesDetalle`), no este
+    // doble: con el doble pasarian aunque el repositorio no proyectara nada.
+    gestiones: [],
     evidencias: [
       {
         resultado: "entregada",
@@ -204,7 +217,13 @@ describe("GET /api/ordenes/api-key/orden/{id} — validacion y contrato (R13/R18
     expect(detallePorOrdenId).toHaveBeenCalledTimes(0);
   });
 
-  it("R18: la respuesta 200 no expone storagePath, bucket, ids internos ni PII de mensajero", async () => {
+  // ⏳ 2026-09-09 (feature 404, R21/R22) — se AMPLIA esta lista en vez de escribir un aserto
+  // paralelo. Sale de ella la palabra suelta «mensajero»: el detalle publica `mensajero: {id,
+  // nombre} | null` —el ASIGNADO— por la excepcion acotada a 106/R16 que el humano firmo el
+  // 2026-09-09 (design §2). Entran, por su nombre, las cosas que la palabra generica tapaba y que
+  // SIGUEN prohibidas: el resto de la PII del asignado y todo lo del mensajero que GESTIONO la
+  // orden, que es la feature 405. Lo demas de la lista no se toca.
+  it("R18 (+404): la respuesta 200 no expone storagePath, bucket, ids internos ni PII fuera del nombre del asignado", async () => {
     const { deps: d } = deps(OK_AUTH, [ORDEN_A]);
     const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
     const texto = JSON.stringify(await res.json());
@@ -217,10 +236,22 @@ describe("GET /api/ordenes/api-key/orden/{id} — validacion y contrato (R13/R18
       "tiendaId",
       "usuarioId",
       "store-1",
-      "mensajero",
+      // 404/R6: del mensajero asignado SOLO su id y su nombre; nada mas de su ficha.
+      "telefonoMensajero",
+      "mensajeroTelefono",
+      "cedula",
+      "vehiculo",
+      "placa",
+      "zonaMensajero",
+      // 404/R7 + 256/R22: el GESTOR y su texto libre no salen por aqui (es la 405).
+      "mensajeroId",
+      "mensajeroGestion",
+      "gestionadaPor",
     ]) {
       expect(texto).not.toContain(prohibida);
     }
+    // Y lo que SI sale es exactamente la clave nueva, con la convencion de ausencia de R2.
+    expect(JSON.parse(texto).mensajero).toBeNull();
   });
 
   it("R15/R42: ningun caso responde 409 y todo error usa status/code/message con codigos existentes", async () => {
@@ -242,6 +273,264 @@ describe("GET /api/ordenes/api-key/orden/{id} — validacion y contrato (R13/R18
         expect(typeof json.message).toBe("string");
         expect(codigosPermitidos).toContain(json.code);
       }
+    }
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// ⏳ 2026-09-09 — Feature 404 (T6): `mensajero` en el borde HTTP del DETALLE, de punta a punta.
+// -----------------------------------------------------------------------------------------------
+
+const MENSAJERO_ID = "018f2c31-0000-4000-8000-0000000000aa";
+const MENSAJERO_ROW = {
+  id: MENSAJERO_ID,
+  nombre: "Carlos",
+  primerApellido: "Jimenez",
+  segundoApellido: "Mora",
+};
+
+const signedUrlsNoOp: ISignedUrlProvider = {
+  createSignedUrl: vi.fn(async () => "https://signed/one"),
+  createSignedUrls: vi.fn(async () => ({})),
+};
+
+/** Fila de `orden` como la devuelve Prisma para `API_ORDEN_DETALLE_SELECT`, con su owner. */
+function filaDetalle(over: Record<string, unknown> = {}) {
+  return {
+    tiendaId: ACTOR.usuarioId,
+    numGuia: 100234,
+    numRemision: "REM-A",
+    destinatario: "Ana",
+    telefonoDest: "0999999999",
+    producto: "Caja",
+    direccion: "Calle 1",
+    montoCobrar: new Prisma.Decimal(1500),
+    createdAt: new Date("2026-07-20T15:04:00.000Z"),
+    estatus: { value: "en_reparto" },
+    gestiones: [],
+    // ⏳ 2026-09-10 (feature 405): la relacion del historial que el `select` del detalle pide para
+    // resolver `estadoResultante`.
+    historialEstados: [],
+    incidentesAdmin: [],
+    mensajeroAsignado: MENSAJERO_ROW,
+    ...over,
+  };
+}
+
+/**
+ * Deps con el handler real por encima de la cadena real. El Prisma falso APLICA el `where` del
+ * repositorio, asi que el aislamiento por owner se mide de verdad y no se supone.
+ */
+function depsRealesDetalle(fila: Record<string, unknown> | null) {
+  const prisma = {
+    orden: {
+      findFirst: vi.fn(async (arg: { where: Record<string, unknown> }) =>
+        fila !== null && fila.tiendaId === arg.where.tiendaId ? fila : null,
+      ),
+      findMany: vi.fn(async () => []),
+      count: vi.fn(async () => 0),
+    },
+    usuario: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
+  };
+  const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+  const svc = new ApiOrdenLecturaService(repo, signedUrlsNoOp);
+  const d: ConsultaOrdenApiDeps = {
+    autenticar: vi.fn(async () => OK_AUTH),
+    resolucionService: new ApiOrdenResolucionService(repoCon([ORDEN_A])),
+    detallePorOrdenId: (actor: Actor, ordenId: string) => svc.detallePorOrdenId(actor, ordenId),
+  };
+  return { deps: d, prisma };
+}
+
+describe("GET /api/ordenes/api-key/orden/{id} — `mensajero` de punta a punta (feature 404)", () => {
+  it("404/R18: el detalle trae `mensajero` con `{id, nombre}` y conserva `evidencias`", async () => {
+    const { deps: d } = depsRealesDetalle(filaDetalle());
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    // Literal a mano: el nombre completo compuesto de las tres columnas.
+    expect(json.mensajero).toEqual({ id: MENSAJERO_ID, nombre: "Carlos Jimenez Mora" });
+    expect(json.evidencias).toEqual([]); // R19: el array sigue ahi, vacio
+  });
+
+  it("404/R2+R23: sin asignado el detalle responde `mensajero: null`, con la clave presente", async () => {
+    const { deps: d } = depsRealesDetalle(filaDetalle({ mensajeroAsignado: null }));
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    const cuerpo = await res.text();
+    expect(cuerpo).toContain('"mensajero":null');
+    expect(JSON.parse(cuerpo).mensajero).toBeNull();
+  });
+
+  it("404/R16+R19 (+405/R1): el detalle son los nueve publicados + `mensajero` + los DOS arrays, y nada mas", async () => {
+    const { deps: d } = depsRealesDetalle(filaDetalle());
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    const json = await res.json();
+    // ⏳ 2026-09-10 (feature 405/R1) — ONCE claves pasan a ser DOCE: `gestiones` es el array nuevo
+    // del detalle. Igualdad exacta, como estaba: una clave de mas sigue siendo un fallo.
+    expect(Object.keys(json).sort()).toEqual([
+      "createdAt",
+      "destinatario",
+      "direccion",
+      "estado",
+      "evidencias",
+      "gestiones",
+      "mensajero",
+      "montoCobrar",
+      "numGuia",
+      "numRemision",
+      "producto",
+      "telefonoDest",
+    ]);
+  });
+
+  it("404/R20: una orden de OTRO owner sigue dando 404, y su mensajero no se filtra", async () => {
+    const { deps: d } = depsRealesDetalle(
+      filaDetalle({
+        tiendaId: "store-AJENA",
+        mensajeroAsignado: {
+          id: "018f2c31-0000-4000-8000-0000000000cc",
+          nombre: "Pedro",
+          primerApellido: "Ajeno",
+          segundoApellido: null,
+        },
+      }),
+    );
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    expect(res.status).toBe(404);
+    const cuerpo = await res.text();
+    expect(cuerpo).not.toContain("Pedro");
+    expect(cuerpo).not.toContain("018f2c31-0000-4000-8000-0000000000cc");
+    expect(cuerpo).not.toContain("mensajero");
+  });
+
+  it("404/R21+R22: la respuesta no lleva storagePath, bucket, tiendaId ni el texto libre de la gestion", async () => {
+    const { deps: d } = depsRealesDetalle(filaDetalle());
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    const cuerpo = await res.text();
+    expect(cuerpo).not.toMatch(/storagePath|storage_path|bucket/i);
+    expect(cuerpo).not.toContain("tiendaId");
+    expect(cuerpo).not.toContain("store-1");
+    expect(cuerpo).not.toMatch(/mensajeroId|mensajeroGestion|gestionadaPor/);
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// ⏳ 2026-09-10 — Feature 405 (T10): `gestiones[]` en el BORDE HTTP del detalle. Cubre R1 y R17.
+//
+// Sobre la CADENA REAL (`handler -> ApiOrdenLecturaService -> OrdenRepository -> Prisma`), no
+// sobre el `detalleDe` falso de arriba: con el doble, estos casos pasarian aunque el repositorio
+// no proyectara nada. Lo que NO se mide aqui es el `where` ni el `orderBy` —eso es SQL y vive en
+// `tests/integration/db/gestiones-detalle-api-405.test.ts`—.
+// -----------------------------------------------------------------------------------------------
+
+/** Una fila CRUDA de `gestion_orden` con las claves que pide el `select` del detalle. */
+function gestionCruda(over: Record<string, unknown> = {}) {
+  return {
+    id: "g-1",
+    resultado: "devuelta",
+    evidenciaStoragePath: null,
+    evidenciaContentType: null,
+    createdAt: new Date("2026-09-04T18:02:55.000Z"),
+    anuladaAt: null,
+    causaDevolucion: "wrong_address",
+    causaIncidente: null,
+    mensajero: {
+      id: "018f2c31-0000-4000-8000-0000000000bb",
+      nombre: "Ana",
+      primerApellido: "Solis",
+      segundoApellido: "Vargas",
+    },
+    ...over,
+  };
+}
+
+describe("GET /api/ordenes/api-key/orden/{id} — `gestiones` de punta a punta (feature 405)", () => {
+  it("405/R1: el detalle incluye la clave `gestiones` con sus cinco campos publicos", async () => {
+    const { deps: d } = depsRealesDetalle(
+      filaDetalle({
+        gestiones: [gestionCruda()],
+        historialEstados: [
+          {
+            id: "h-1",
+            gestionOrdenId: "g-1",
+            createdAt: new Date("2026-09-04T18:02:55.000Z"),
+            estatusDestino: { value: "devolucion_por_confirmar" },
+          },
+        ],
+      }),
+    );
+
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    // Literales a mano: el nombre completo compuesto de las tres columnas, la causa tipificada y
+    // el estado destino de la transicion sembrada.
+    expect(json.gestiones).toEqual([
+      {
+        createdAt: "2026-09-04T18:02:55.000Z",
+        resultado: "devuelta",
+        estadoResultante: "devolucion_por_confirmar",
+        motivo: "wrong_address",
+        mensajero: {
+          id: "018f2c31-0000-4000-8000-0000000000bb",
+          nombre: "Ana Solis Vargas",
+        },
+      },
+    ]);
+  });
+
+  it("405/R2: una orden sin gestiones responde `gestiones: []`, con la clave presente", async () => {
+    const { deps: d } = depsRealesDetalle(filaDetalle());
+
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    const cuerpo = await res.text();
+    expect(cuerpo).toContain('"gestiones":[]');
+    expect(JSON.parse(cuerpo).gestiones).toEqual([]);
+  });
+
+  it("405/R12: el texto libre de la gestion no cruza el borde ni aunque la fila lo trajera", async () => {
+    const { deps: d } = depsRealesDetalle(
+      filaDetalle({
+        gestiones: [
+          {
+            ...gestionCruda(),
+            // La columna existe en la tabla; si el `select` la pidiera, Prisma la devolveria y
+            // este es el aspecto que tendria la fila. El repositorio NO debe emitirla.
+            motivo: "FUGA-TEXTO-LIBRE-el-cliente-no-contesto",
+          },
+        ],
+      }),
+    );
+
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    const cuerpo = await res.text();
+    expect(cuerpo).not.toContain("FUGA-TEXTO-LIBRE");
+    expect(cuerpo).not.toContain("g-1"); // ni el id interno de la gestion
+  });
+
+  it("405/R17: los codigos de estado del endpoint no cambian con la clave nueva", async () => {
+    // R17 en el mismo sitio donde vive el borde: la ficha 405 no toca el handler, y esto lo
+    // demuestra ejercitando los cuatro caminos de error con la cadena de siempre.
+    const casos: Array<[ApiKeyAuthResult, Fila[], string, number]> = [
+      [{ status: "unauthenticated" }, [ORDEN_A], "100234", 401],
+      [{ status: "forbidden" }, [ORDEN_A], "100234", 403],
+      [OK_AUTH, [ORDEN_A], "", 422],
+      [OK_AUTH, [], "100234", 404],
+    ];
+    for (const [auth, filas, id, esperado] of casos) {
+      const res = await handleConsultaOrdenApi(req(SECRETO), id, deps(auth, filas).deps);
+      expect(res.status, `caso ${esperado}`).toBe(esperado);
+      const cuerpo = await res.text();
+      // Y ninguna respuesta de error menciona la clave nueva.
+      expect(cuerpo).not.toContain("gestiones");
     }
   });
 });

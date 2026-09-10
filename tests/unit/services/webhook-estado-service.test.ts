@@ -31,6 +31,14 @@ const SECRET_ENC = cifrarSecreto(CLAVE, SECRETO);
 const NUM_REMISION = "REM-DEL-OWNER-A";
 const DESTINATARIO = "Juan Perez"; // PII que NUNCA debe ir al payload/log
 
+/**
+ * ⏳ 2026-09-09 (feature 404) — el mensajero asignado del caso «hay alguien llevandola». Es PII de
+ * un TERCERO y por eso vive aqui arriba junto a `DESTINATARIO`: los asertos de R13 lo buscan por
+ * este mismo literal en todo lo que sale por el logger.
+ */
+const MENSAJERO_ID = "018f2c31-0000-4000-8000-0000000000aa";
+const MENSAJERO_NOMBRE = "Carlos Jimenez Mora";
+
 /** ⏳ 2026-08-22 (268/R24): origin con el que se construye `data.evidenciasUrl`. */
 const ORIGIN = "https://app.ordenex.co";
 const ORDEN_ID = "orden-1";
@@ -65,6 +73,10 @@ const DATOS_BASE: DatosEntregaOrden = {
   causaDevolucion: null,
   // ⏳ 2026-08-22 (268): el hermano, tambien con su nombre propio en el DTO interno.
   causaIncidente: null,
+  // ⏳ 2026-09-09 (404): el caso BASE de este archivo es una orden SIN mensajero asignado, para
+  // que los congeladores de claves de la 256/268 midan la convencion de ausencia (`null`
+  // presente). El caso CON mensajero vive en `webhook-estado-service.mensajero.test.ts`.
+  mensajero: null,
 };
 
 /** Feature 256 — datos de una orden que transiciona a `devuelta` con su causa vigente. */
@@ -211,12 +223,25 @@ describe("R17/R19 — entrega y complete", () => {
     // se ACTUALIZA (no se borra) al ganar `data` una cuarta. Se afirman las claves EXACTAS y su
     // ORDEN, porque la firma se calcula sobre el string serializado en orden de insercion, y
     // los valores uno a uno: ninguno de los tres viejos cambia de nombre, tipo ni valor.
-    expect(Object.keys(body.data)).toEqual(["numGuia", "numRemision", "estado", "motivo"]);
+    //
+    // ⏳ 2026-09-09 (feature 404, R9/R10) — se ACTUALIZA otra vez, por quinta clave: `mensajero`
+    // entra TRAS `motivo`, que es el final del bloque de claves siempre presentes. Se enmienda y
+    // NO se relaja a `toContain` ni a un aserto de longitud: el literal ES el contrato, y lo que
+    // protege es que las cuatro claves de la 256 sigan estando, con su nombre, su tipo y su
+    // posicion. La posicion es load-bearing porque la firma se calcula sobre el string.
+    expect(Object.keys(body.data)).toEqual([
+      "numGuia",
+      "numRemision",
+      "estado",
+      "motivo",
+      "mensajero",
+    ]);
     expect(body.data).toEqual({
       numGuia: 12345,
       numRemision: NUM_REMISION,
       estado: "en_reparto",
       motivo: null,
+      mensajero: null, // 404/R2: la orden base no tiene asignado; la clave viaja igual
     });
     // R2: blindaje del breaking change — la clave vieja `orden` ya no existe en el cuerpo.
     expect(body.orden).toBeUndefined();
@@ -415,11 +440,19 @@ describe("256/R6-R7 — la forma: UNA sola, el campo siempre presente", () => {
     expect(cuerpoDe(entregar)).not.toContain("not_found");
   });
 
-  it("256/R7: `data` tiene EXACTAMENTE las cuatro claves, en orden, tambien en un evento de devolucion", async () => {
+  // ⏳ 2026-09-09 (404/R9/R10): el titulo decia «las cuatro claves» y pasa a CINCO. Se enmienda
+  // el literal con el orden nuevo; sigue siendo una igualdad exacta, no un `toContain`.
+  it("256/R7 (+404): `data` tiene EXACTAMENTE las cinco claves, en orden, tambien en un evento de devolucion", async () => {
     const { service, entregar } = buildService({ datos: datosDevuelta("wrong_number") });
     await service.ejecutar(jobDevuelta());
     const body = JSON.parse(cuerpoDe(entregar));
-    expect(Object.keys(body.data)).toEqual(["numGuia", "numRemision", "estado", "motivo"]);
+    expect(Object.keys(body.data)).toEqual([
+      "numGuia",
+      "numRemision",
+      "estado",
+      "motivo",
+      "mensajero",
+    ]);
     // Plano dentro de `data`, no anidado bajo `devolucion` (A4, descartada).
     expect(body.data.devolucion).toBeUndefined();
   });
@@ -658,7 +691,12 @@ describe("268/R20-R21 — `data.motivo` transporta tambien la causa del incident
 });
 
 describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin credencial", () => {
-  const ENLACE = `${ORIGIN}/api/ordenes/api-key/orden/${ORDEN_ID}`;
+  // ⏳ 2026-09-10 (feature 406) — AQUI DECIA `${ORIGIN}/api/ordenes/api-key/orden/${ORDEN_ID}`, y
+  // ese enlace daba 404 SIEMPRE: el `{id}` del canal nunca significo `orden.id`. Ahora lleva el
+  // identificador PUBLICO de la orden —la guia de `DATOS_BASE`, `12345`—, y el literal se escribe
+  // ENTERO A MANO: derivarlo de `PATH_ORDEN_API_KEY` o de una funcion del service lo dejaria
+  // verde contra su propia fuente.
+  const ENLACE = "https://app.ordenex.co/api/ordenes/api-key/orden/12345";
 
   it("268/R24 (1): en `incidente` viaja el enlace EXACTO; en `entregada` la clave NO existe", async () => {
     const a = buildService({ datos: datosIncidente("danado") });
@@ -666,11 +704,14 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
     const bodyIncidente = JSON.parse(cuerpoDe(a.entregar));
     expect(bodyIncidente.data.evidenciasUrl).toBe(ENLACE);
     // Orden de claves congelado: la firma se calcula sobre el string serializado.
+    // ⏳ 2026-09-09 (404/R9/R10): pasa de 5 a 6 claves. `mensajero` entra ANTES de `evidenciasUrl`,
+    // que sigue cerrando el objeto y sigue siendo la UNICA clave opcional.
     expect(Object.keys(bodyIncidente.data)).toEqual([
       "numGuia",
       "numRemision",
       "estado",
       "motivo",
+      "mensajero",
       "evidenciasUrl",
     ]);
 
@@ -688,7 +729,14 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
     await service.ejecutar(job());
     const body = JSON.parse(cuerpoDe(entregar));
     expect(Object.keys(body)).toEqual(["evento", "eventoId", "ocurridoAt", "data"]);
-    expect(Object.keys(body.data)).toEqual(["numGuia", "numRemision", "estado", "motivo"]);
+    // ⏳ 2026-09-09 (404/R9/R10): cuatro -> cinco, con `mensajero` al final del bloque presente.
+    expect(Object.keys(body.data)).toEqual([
+      "numGuia",
+      "numRemision",
+      "estado",
+      "motivo",
+      "mensajero",
+    ]);
     expect(body.evento).toBe("orden.estado_actualizado");
   });
 
@@ -770,12 +818,17 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
     // Y lo que SI lleva: un enlace sin query string ninguna.
     const url = new URL(JSON.parse(cuerpo).data.evidenciasUrl);
     expect(url.search).toBe("");
-    expect(url.pathname).toBe(`/api/ordenes/api-key/orden/${ORDEN_ID}`);
+    // ⏳ 2026-09-10 (406/R6): el segmento es la GUIA, no el uuid. Literal a mano.
+    expect(url.pathname).toBe("/api/ordenes/api-key/orden/12345");
   });
 
-  it("268/R25: el enlace no depende de la base, solo del origin y del ordenId del payload", async () => {
-    // Misma orden, mismo enlace, AUNQUE la causa leida cambie entre intentos (la ventana
-    // declarada de la 256/R15): el enlace no consulta Storage ni depende del estado de la base.
+  it("268/R25 + 406/R4: el enlace lo fija la ORDEN, no el `ordenId` del payload", async () => {
+    // ⏳ 2026-09-10 — AQUI DECIA «el enlace no depende de la base, solo del origin y del ordenId
+    // del payload», y la segunda mitad ya no es cierta: la 406 lo construye con el identificador
+    // PUBLICO (guia, o remision si no hay guia), que sale de la lectura. La primera mitad se
+    // CONSERVA intacta porque es la que sigue protegiendo lo que la 268 queria —el enlace no
+    // consulta Storage ni cambia con la causa leida dentro de la ventana de la 256/R15— y se le
+    // suma la afirmacion inversa, que es la que fija el cambio de esta ficha.
     const { service, entregar } = buildService({ datos: datosIncidente("danado") });
     await service.ejecutar(jobIncidente());
     const { service: s2, entregar: e2 } = buildService({ datos: datosIncidente(null) });
@@ -785,13 +838,20 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
     );
     expect(JSON.parse(cuerpoDe(e2)).data.motivo).toBeNull();
 
-    // Otra orden -> otro enlace: el `ordenId` sale del payload del job, no de la lectura.
+    // MISMA orden con OTRO `ordenId` de payload -> MISMO enlace (antes daba otro).
     const { service: s3, entregar: e3 } = buildService({ datos: datosIncidente("danado") });
     await s3.ejecutar(
       job({ ordenId: "orden-2", estatusDestinoId: "s-incidente", ocurridoAt: "2026-08-22T10:00:00.000Z" }),
     );
-    expect(JSON.parse(cuerpoDe(e3)).data.evidenciasUrl).toBe(
-      `${ORIGIN}/api/ordenes/api-key/orden/orden-2`,
+    expect(JSON.parse(cuerpoDe(e3)).data.evidenciasUrl).toBe(ENLACE);
+
+    // OTRA orden (otra guia) -> OTRO enlace. Literal a mano, no derivado del service.
+    const { service: s4, entregar: e4 } = buildService({
+      datos: { ...datosIncidente("danado"), numGuia: 777001 },
+    });
+    await s4.ejecutar(jobIncidente());
+    expect(JSON.parse(cuerpoDe(e4)).data.evidenciasUrl).toBe(
+      "https://app.ordenex.co/api/ordenes/api-key/orden/777001",
     );
   });
 
@@ -806,6 +866,140 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
     expect(cuerpo).toContain(`"evidenciasUrl":"${ENLACE}"`);
     const ts = Number(headers["X-Ordenex-Timestamp"]);
     expect(headers["X-Ordenex-Signature"]).toBe(`sha256=${firmarWebhook(SECRETO, ts, cuerpo)}`);
+  });
+});
+
+// ⏳ 2026-09-10 — FEATURE 406: el identificador con el que se construye `data.evidenciasUrl`.
+//
+// El defecto que cierra: el enlace llevaba el `orden.id` del payload (un uuid) y el `{id}` del
+// canal solo resuelve por `num_guia` o `num_remision` (177/R8-R15) -> 404 GARANTIZADO. Aqui se
+// fija QUE identificador viaja; que ese identificador RESUELVE de verdad se cierra en
+// `tests/integration/api/webhook-evidencias-url-resuelve.route.test.ts` (el lazo entero) y contra
+// el SQL real en `tests/integration/db/webhook-evidencias-url-resuelve-sql-real.test.ts`.
+//
+// LOS LITERALES DE ESTE BLOQUE ESTAN ESCRITOS A MANO A PROPOSITO: no se importa
+// `PATH_ORDEN_API_KEY` ni ninguna funcion del service para construir el esperado. Compararlo
+// contra su propia fuente estaria siempre verde.
+describe("406/R4-R6 — `data.evidenciasUrl` lleva el identificador PUBLICO, nunca el uuid interno", () => {
+  it("406/R4: con guia, el ultimo segmento es la guia en decimal", async () => {
+    const { service, entregar } = buildService({
+      datos: { ...datosIncidente("robado"), numGuia: 100235, numRemision: "REM-0002" },
+    });
+    await service.ejecutar(jobIncidente());
+    const { data } = JSON.parse(cuerpoDe(entregar));
+
+    expect(data.evidenciasUrl).toBe("https://app.ordenex.co/api/ordenes/api-key/orden/100235");
+    expect(new URL(data.evidenciasUrl).pathname).toBe("/api/ordenes/api-key/orden/100235");
+    // La guia gana a la remision: las DOS estan en el mismo `data` y solo una va en el enlace.
+    expect(data.numGuia).toBe(100235);
+    expect(data.numRemision).toBe("REM-0002");
+    expect(data.evidenciasUrl).not.toContain("REM-0002");
+  });
+
+  it("406/R5: sin guia, el ultimo segmento es la remision tal cual", async () => {
+    const { service, entregar } = buildService({
+      datos: { ...datosIncidente("robado"), numGuia: null, numRemision: "REM-0002" },
+    });
+    await service.ejecutar(jobIncidente());
+    const { data } = JSON.parse(cuerpoDe(entregar));
+
+    expect(data.evidenciasUrl).toBe("https://app.ordenex.co/api/ordenes/api-key/orden/REM-0002");
+    expect(data.numGuia).toBeNull();
+  });
+
+  it("406/R5: una remision con `/` y espacio viaja CODIFICADA y vuelve intacta", async () => {
+    const { service, entregar } = buildService({
+      datos: { ...datosIncidente("robado"), numGuia: null, numRemision: "A/B C" },
+    });
+    await service.ejecutar(jobIncidente());
+    const { data } = JSON.parse(cuerpoDe(entregar));
+
+    expect(data.evidenciasUrl).toBe("https://app.ordenex.co/api/ordenes/api-key/orden/A%2FB%20C");
+    // UN solo segmento tras `/orden/`: el `/` de la remision NO inventa uno nuevo.
+    const segmentos = new URL(data.evidenciasUrl).pathname.split("/");
+    expect(segmentos).toHaveLength(6);
+    expect(decodeURIComponent(segmentos[5])).toBe("A/B C");
+  });
+
+  it("406/R6: el `ordenId` del payload NO aparece en el enlace (aunque siga en el `eventoId`)", async () => {
+    const { service, entregar } = buildService({
+      datos: { ...datosIncidente("robado"), numGuia: 100235 },
+    });
+    await service.ejecutar(jobIncidente());
+    const body = JSON.parse(cuerpoDe(entregar)); // el STRING REAL que recibe el sender
+
+    // Aserto por AUSENCIA sobre el enlace, no sobre el cuerpo entero: el uuid SIGUE viajando en
+    // el `eventoId`, que es la clave de deduplicacion y NO cambia (design §9).
+    expect(body.data.evidenciasUrl).not.toContain(ORDEN_ID);
+    expect(body.eventoId).toContain(ORDEN_ID);
+    // Y no se cuela NINGUN uuid por la puerta de atras.
+    expect(body.data.evidenciasUrl).not.toMatch(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+    );
+  });
+});
+
+// ⏳ 2026-09-10 — FEATURE 406 (R7/R8): cuando NO hay identificador publicable, se OMITE la clave
+// en vez de emitir un enlace que el endpoint rechazaria o de tumbar la entrega entera.
+describe("406/R7-R8 — sin identificador resoluble, la clave se OMITE y el job completa", () => {
+  /** Las CINCO claves siempre presentes: lo que tiene que seguir viajando cuando falta el enlace. */
+  const CINCO = ["numGuia", "numRemision", "estado", "motivo", "mensajero"];
+
+  it("406/R7a: remision de 129 caracteres -> clave AUSENTE, cuerpo normal y job completado", async () => {
+    const larga = "R".repeat(129);
+    const { service, entregar } = buildService({
+      datos: { ...datosIncidente("robado"), numGuia: null, numRemision: larga },
+    });
+    await expect(service.ejecutar(jobIncidente())).resolves.toBeUndefined();
+
+    const cuerpo = cuerpoDe(entregar);
+    const { data } = JSON.parse(cuerpo);
+    expect("evidenciasUrl" in data).toBe(false);
+    expect(Object.keys(data)).toEqual(CINCO);
+    expect(cuerpo).not.toContain("evidenciasUrl");
+    // El resto del cuerpo va como siempre: la remision larga SI viaja en su propio campo.
+    expect(data.numRemision).toBe(larga);
+    expect(data.motivo).toBe("robado");
+  });
+
+  it("406/R7b: remision con espacios de borde -> clave AUSENTE (el borde la recortaria)", async () => {
+    // El complemento de este caso —que ` REM-1 ` da 404 en el endpoint real, o sea que la omision
+    // esta JUSTIFICADA— vive en `tests/integration/api/webhook-evidencias-url-resuelve.route.test.ts`.
+    const { service, entregar } = buildService({
+      datos: { ...datosIncidente("robado"), numGuia: null, numRemision: " REM-1 " },
+    });
+    await expect(service.ejecutar(jobIncidente())).resolves.toBeUndefined();
+
+    const { data } = JSON.parse(cuerpoDe(entregar));
+    expect("evidenciasUrl" in data).toBe(false);
+    expect(data.numRemision).toBe(" REM-1 ");
+  });
+
+  it("406/R7c: remision de 128 caracteres EXACTOS -> la clave SI viaja (la cota no se pasa de frenada)", async () => {
+    const justa = "R".repeat(128);
+    const { service, entregar } = buildService({
+      datos: { ...datosIncidente("robado"), numGuia: null, numRemision: justa },
+    });
+    await service.ejecutar(jobIncidente());
+
+    const { data } = JSON.parse(cuerpoDe(entregar));
+    expect("evidenciasUrl" in data).toBe(true);
+    expect(data.evidenciasUrl).toBe(`https://app.ordenex.co/api/ordenes/api-key/orden/${justa}`);
+  });
+
+  it("406/R8: remision con un sustituto UTF-16 desemparejado -> clave AUSENTE y el job NO falla", async () => {
+    // `encodeURIComponent("\uD800")` LANZA `URIError`. Si escapara, saldria por el `throw` de
+    // `ejecutar`: cinco reintentos y dead-letter de una entrega por lo demas perfecta.
+    const rota = "REM-\uD800";
+    const { service, entregar } = buildService({
+      datos: { ...datosIncidente("robado"), numGuia: null, numRemision: rota },
+    });
+    await expect(service.ejecutar(jobIncidente())).resolves.toBeUndefined();
+
+    expect(entregar).toHaveBeenCalledTimes(1); // la entrega SE HIZO, no se aborto
+    const { data } = JSON.parse(cuerpoDe(entregar));
+    expect("evidenciasUrl" in data).toBe(false);
+    expect(Object.keys(data)).toEqual(CINCO);
   });
 });
 
@@ -845,6 +1039,27 @@ describe("R29 — logs sin secreto/URL/PII", () => {
     // mensajes siguen siendo agregados (99/R29).
     for (const causa of CAUSA_DEVOLUCION_SEED) expect(todo).not.toContain(causa);
     expect(todo).not.toContain("motivo");
+  });
+
+  // ⏳ 2026-09-09 (feature 404, R13) — se AMPLIA este bloque en vez de abrir uno paralelo: el
+  // mensajero es PII de un tercero y cae bajo la misma regla que el destinatario y la causa.
+  it("404/R13: con un mensajero asignado, ni su nombre ni su id llegan al logger", async () => {
+    const { service, logs } = buildService({
+      datos: {
+        ...datosDevuelta("not_found"),
+        mensajero: { id: MENSAJERO_ID, nombre: MENSAJERO_NOMBRE },
+      },
+      subPorOwner: { "owner-A": { url: "https://secreta.example.com/hook", secret: SECRET_ENC } },
+      outcome: { status: "transitorio", detalle: "entregar webhook: HTTP 503" },
+    });
+    await service.ejecutar(jobDevuelta()).catch(() => {});
+    const todo = logs.join("\n");
+    expect(logs.length).toBeGreaterThan(0); // el camino que loguea SI se recorrio
+    expect(todo).not.toContain(MENSAJERO_NOMBRE);
+    expect(todo).not.toContain(MENSAJERO_ID);
+    // Tampoco el apellido suelto ni el nombre de la clave: el mensaje sigue siendo agregado.
+    expect(todo).not.toContain("Jimenez");
+    expect(todo).not.toContain("mensajero");
   });
 });
 

@@ -21,6 +21,240 @@
 
 ---
 
+## 2026-09-10 — ARREGLO: el `evidenciasUrl` del webhook de `incidente` ahora sí se puede abrir
+
+**Esto es un arreglo, no un cambio de contrato.** Ninguna clave cambia de nombre, de tipo ni de
+posición; el campo sigue siendo opcional y sigue viajando **sólo** en los eventos con
+`estado: "incidente"`. Lo único que cambia es **el último segmento de la URL**.
+
+**Qué estaba mal.** El enlace se construía con un identificador **interno** de la orden, y
+`GET /api/ordenes/api-key/orden/{id}` no lo resuelve: ese `{id}` significa **número de guía o
+número de remisión**, nunca un id interno. Es decir, el enlace que publicamos en la entrada del
+2026-08-22 **respondía 404 siempre**, para cualquier orden. No lo dejamos escrito como si hubiera
+funcionado: no funcionó nunca.
+
+**Qué cambia.** El último segmento pasa a ser un identificador que **ya venís leyendo en ese mismo
+`data`**: el `numGuia` cuando la orden tiene guía, y el `numRemision` cuando todavía no la tiene.
+Es el mismo `{id}` que acepta el endpoint, así que el enlace se invoca tal cual, con tu propio
+`Authorization: Bearer ordx_...`.
+
+```json
+"data": {
+  "numGuia": 100235,
+  "numRemision": "REM-0002",
+  "estado": "incidente",
+  "motivo": "robado",
+  "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" },
+  "evidenciasUrl": "https://app.ordenex.co/api/ordenes/api-key/orden/100235"
+}
+```
+
+Y una orden que todavía no tiene guía:
+
+```json
+"data": { "numGuia": null, "numRemision": "REM-0002", "estado": "incidente", "motivo": "robado",
+          "mensajero": null, "evidenciasUrl": "https://app.ordenex.co/api/ordenes/api-key/orden/REM-0002" }
+```
+
+**Tres detalles que conviene saber:**
+
+1. **El segmento va codificado como componente de ruta.** Si tu remisión lleva `/`, `?`, `#`, `%` o
+   espacios, viaja entera y codificada (`A/B C` → `A%2FB%20C`). Decodificándola recuperás el
+   `numRemision` carácter a carácter.
+2. **Ya no prometemos que las dos entregas de un mismo `eventoId` lleven URLs idénticas.** Si la
+   orden **genera su guía** entre un intento y otro, la segunda entrega lleva la guía. Las dos URLs
+   apuntan a la **misma orden** y el `eventoId` —por donde deduplicás— no cambia nunca. Es la misma
+   ventana que ya tenía `data.numGuia`, que se lee en cada entrega.
+3. **En un puñado de casos el campo se omite**, como hasta ahora: si el identificador no sobrevive
+   a la validación del endpoint (remisión de más de 128 caracteres, o con espacios al principio o
+   al final). Preferimos no mandarte un enlace que sabemos que va a fallar. Ramificá por «la clave
+   existe», no por su valor.
+
+**Qué NO cambia:** el `eventoId` (sigue llevando el identificador interno: es una clave de
+deduplicación opaca, no una URL), el orden de las claves de `data`, la firma
+`X-Ordenex-Signature`, los estados que emiten evento, y el detalle que devuelve el endpoint
+enlazado.
+
+---
+
+## 2026-09-10 — Un campo NUEVO: `gestiones[]`, en el detalle de una orden
+
+**Es ADITIVO: nada de lo que hoy funciona deja de funcionar.** No se retira ni se renombra ningún
+campo, ningún path cambia, ningún código de estado cambia y ninguna respuesta pierde nada.
+`GET /api/ordenes/api-key` (el listado) y el webhook `orden.estado_actualizado` **no cambian en
+absoluto**. Si tu integración ignora las claves que no conoce —lo recomendado—, **no tenés que
+hacer nada**.
+
+**Qué es.** `GET /api/ordenes/api-key/orden/{id}` pasa a incluir `gestiones`: la lista de los
+desenlaces que se registraron sobre esa orden, del más antiguo al más reciente. Antes solo veías el
+resultado final; ahora podés ver cuántas veces se intentó, cuándo y quién.
+
+```json
+"gestiones": [
+  {
+    "createdAt": "2026-09-02T15:41:07.000Z",
+    "resultado": "reprogramada",
+    "estadoResultante": "reprogramada",
+    "motivo": null,
+    "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" }
+  },
+  {
+    "createdAt": "2026-09-04T18:02:55.000Z",
+    "resultado": "devuelta",
+    "estadoResultante": "devolucion_por_confirmar",
+    "motivo": "wrong_address",
+    "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000bb", "nombre": "Ana Solís Vargas" }
+  }
+]
+```
+
+Cuando la orden todavía no se gestionó, llega `"gestiones": []`. **La clave viaja SIEMPRE**: nunca
+es `null` y nunca se omite. Las **cinco** claves de cada elemento también están siempre presentes,
+con `null` donde no aplica. Es la misma convención que ya tiene `motivo` en el webhook.
+
+**Los nombres: pediste `fecha` y `tipo`; se llaman `createdAt` y `resultado`.** No es un capricho:
+
+- `createdAt` es como se llama el instante de creación de un registro en el resto de este canal
+  (lo lleva cada orden del listado), y `fecha` habría sido ambiguo — en una gestión reprogramada
+  hay **otra** fecha, la de reprogramación, que es un dato distinto;
+- `resultado` es como se llama ese mismo valor en `evidencias[]`, que ya publicamos con tres de
+  sus cinco values.
+
+Un concepto, un nombre. El mapeo es directo: `fecha` → `createdAt`, `tipo` → `resultado`.
+
+**`motivo` es la causa TIPIFICADA, y NO es el comentario del mensajero.** Esto es lo más importante
+de esta entrada, porque en nuestra base de datos hay dos cosas que se llaman `motivo` y solo una
+sale:
+
+- lo que recibís es la **causa tipificada** del desenlace, con seis valores posibles:
+  `not_found` / `wrong_number` / `wrong_address` en una devolución, y `danado` / `perdido` /
+  `robado` en un incidente. Es el mismo campo y los mismos valores que ya recibís en `data.motivo`
+  del webhook;
+- **NO es** el comentario en texto libre que el mensajero escribe al gestionar la orden. Ese texto
+  **no sale del sistema** por decisión de privacidad, y no va a salir.
+
+En cualquier otro `resultado` —`entregada`, `reprogramada`, `rechazada`— `motivo` es `null`. Y
+también es `null` en devoluciones e incidentes **antiguos**, anteriores a que empezáramos a pedir
+la causa: ese histórico no se rellenó. El contrato no distingue «no hubo causa» de «no se
+registró».
+
+**La asimetría de idioma es DELIBERADA.** Las causas de devolución van en **inglés**
+(`not_found`, `wrong_number`, `wrong_address`) y las de incidente en **español** (`danado` —sin
+eñe—, `perdido`, `robado`). Cada una se publicó con el value crudo de su catálogo interno, y
+renombrar cualquiera de las dos rompería a quien ya las consume. No las vamos a «armonizar»: no
+escribas código que asuma que van a cambiar, ni que las traduzca por su idioma.
+
+**`estadoResultante` no se deduce del `resultado`.** Es el estado en que ESA gestión dejó la orden,
+leído de nuestra línea de tiempo. Ojo con el caso que más confunde: una gestión `devuelta` deja la
+orden en `devolucion_por_confirmar`, **no** en `devuelta`; es la aprobación posterior del cierre la
+que la mueve. Puede llegar `null` en gestiones **antiguas**, anteriores a que existiera esa línea
+de tiempo: no hay transición registrada que las respalde, y no es un fallo. Se publica **sin lista
+cerrada de valores** a propósito, porque puede tomar values que la lista documentada de `estado`
+todavía no enumera: tratá un value desconocido como texto, no como error.
+
+**`mensajero` es el ATRIBUIDO a la gestión, y no siempre es quien la registró.** Tiene la misma
+forma `{ id, nombre }` que el `mensajero` de la orden, y aquí **nunca es `null`**. Pero algunas
+gestiones las crea el sistema o tu propia tienda —una reprogramación desde el escritorio, el
+escalado automático por vencimiento de plazo, un rechazo manual, el desenlace de una solicitud de
+ayuda, o el corte al llegar al tope de reintento— y quedan atribuidas al mensajero de la última
+devolución. En el array se ven **idénticas** a una visita de calle. Si tu métrica es «tiempo por
+mensajero», tenelo en cuenta: no todas las entradas son una visita física de esa persona.
+
+**`gestiones.length` NO es nuestro contador de intentos de entrega.** El nuestro cuenta cierres
+aprobados distintos con visita real, así que **varias gestiones del mismo cierre valen 1**. Este
+array es la lista cruda, sin agrupar: si contás sus elementos, vas a obtener un número mayor que el
+que usamos nosotros. No es el mismo dato y no deberían cuadrar.
+
+**Qué NO está en el array:**
+
+- las gestiones **anuladas**. Una anulación deshace el registro, y contarla inflaría justo la
+  métrica de reintentos que este campo existe para medir;
+- los **incidentes que reporta nuestro personal de bodega**. No son gestiones, no tienen mensajero
+  atribuido y no cambian de dueño el paquete. Sus fotos sí siguen apareciendo en `evidencias[]`,
+  como hasta ahora.
+
+**Llega completo y sin paginar.** No hay tope ni `limit`: el array trae todas las gestiones
+vigentes de la orden. Medido sobre nuestros datos reales, el máximo en una sola orden son 5 y el
+promedio es 1,4, así que el cuerpo crece unos pocos cientos de bytes en el peor caso. Si algún día
+eso cambiara, lo avisaríamos aquí antes de tocar nada — **nunca** vamos a recortar el array en
+silencio.
+
+**Si validás el esquema de forma estricta** (`additionalProperties: false` sobre nuestra respuesta),
+esta clave nueva te va a hacer fallar. El contrato actualizado está en
+`docs/api/api-key-openapi.yaml` y en `/api-docs`.
+
+---
+
+## 2026-09-09 — Un campo NUEVO: `mensajero`, en el webhook, en el listado y en el detalle
+
+**Es ADITIVO: nada de lo que hoy funciona deja de funcionar.** No se retira ni se renombra ningún
+campo, ningún path cambia, ningún código de estado cambia y ninguna respuesta pierde nada. Si tu
+integración ignora las claves que no conoce —lo recomendado—, **no tenés que hacer nada**.
+
+**Qué es.** Cada orden pasa a decir qué mensajero la lleva. El campo se llama `mensajero`, tiene
+siempre la misma forma en las tres superficies del canal y lleva exactamente dos claves:
+
+```json
+"mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" }
+```
+
+o, cuando todavía no la lleva nadie:
+
+```json
+"mensajero": null
+```
+
+**Dónde aparece:**
+
+1. dentro de `data`, en el evento `orden.estado_actualizado` del webhook;
+2. en **cada ítem** de `GET /api/ordenes/api-key`;
+3. en `GET /api/ordenes/api-key/orden/{id}`.
+
+**La clave viaja SIEMPRE.** `null` no es «no se sabe» ni una omisión: significa **«todavía nadie la
+lleva»**, y es un dato que podés contar. No ramifiques por «la clave existe», ramificá por su valor.
+Es la misma convención que ya tiene `motivo`, no la de `evidenciasUrl`.
+
+**El `id` es un UUID en TEXTO, no un entero.** Si esperabas algo como `"id": 123`, no existe: en
+nuestro modelo la identidad de una persona es un UUID y se publica tal cual, como string. Es
+**estable**: el mismo mensajero produce el mismo `id` en las tres superficies y en todas las
+lecturas, y ese `id` no se reasigna nunca a otra persona. Agrupá por `id`, **no por `nombre`**: el
+nombre es un texto para mostrar y puede corregirse, lo que te partiría la serie histórica en dos.
+
+**Es quién la LLEVA, no quién la entregó.** El campo dice quién tiene la orden asignada **en el
+momento de la lectura** —o, en el webhook, en el momento de **esa entrega**, igual que `motivo`: si
+la orden se reasigna entre dos entregas del mismo `eventoId`, la segunda lleva el mensajero de
+entonces—. Y hay flujos que **limpian** la asignación: generación de guía, quitar mensajero,
+devolución o recuperación a bodega, liberación de una reprogramada y el barrido del cierre diario.
+Consecuencia práctica, que preferimos decir antes de que la descubras: una orden **entregada o
+devuelta conserva** su mensajero, así que la métrica de entregas por mensajero funciona; pero una
+orden vieja **barrida por el cierre** puede aparecer con `mensajero: null` aunque alguien la
+llevara. Para «quién gestionó cada intento» hace falta el historial de gestiones, que este cambio
+**no** incluye.
+
+**El bloque `data` del webhook pasa a tener CINCO claves siempre presentes** —`numGuia`,
+`numRemision`, `estado`, `motivo` y `mensajero`— y `evidenciasUrl` sigue siendo la **única**
+opcional, que se omite salvo en los eventos con `estado: "incidente"`. `mensajero` se inserta
+**después de `motivo` y antes de `evidenciasUrl`**; el resto del cuerpo no se mueve.
+
+**⚠️ Si tu cliente valida el esquema en estricto** (`additionalProperties: false`, un DTO generado
+que rechaza claves desconocidas, un parser que falla ante un campo de más), **una clave nueva puede
+romperte**. Es el mismo aviso que dimos al añadir `evidenciasUrl`: regenerá tu modelo contra el
+contrato actualizado o relajá la validación antes de la fecha de despliegue.
+
+**Qué NO cambia.** No hay parámetro de query nuevo: **no se puede filtrar ni ordenar el listado por
+mensajero**, y un `?mensajero=...` se ignora como cualquier otra clave desconocida. Los nueve campos
+publicados del ítem, el bloque `pagination`, el `evidencias[]` del detalle y el orden de las filas
+entre páginas quedan **exactamente** como estaban. Del mensajero se publica **solo** su `id` y su
+`nombre`: ningún otro dato personal suyo (teléfono, email, cédula, foto, zona, vehículo) sale por
+este canal.
+
+Los dos artefactos del contrato quedan actualizados (`lib/api/openapi-spec.ts` y su espejo
+`docs/api/api-key-openapi.yaml`): `WebhookOrdenEstadoActualizado.data` y `OrdenListItem` declaran
+`mensajero` dentro de `required` —`OrdenDetalle` lo hereda—, y los dos ejemplos del webhook lo
+muestran, uno con objeto y otro con `null`.
+
+---
+
 ## 2026-09-06 — Un motivo de error de fila NUEVO: provincia, cantón o distrito RETIRADOS del catálogo
 
 **Qué cambia.** Ordenex pasa a poder **retirar** una provincia, un cantón o un distrito de su
