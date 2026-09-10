@@ -1,4 +1,12 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import {
+  Prisma,
+  type PrismaClient,
+  // ⏳ 2026-09-10 (feature 405): los enums nativos de las dos causas y el de resultado, para tipar
+  // la fila cruda y el helper `causaTipificadaDeGestion` sin repetir sus values a mano.
+  type GestionCausaDevolucion,
+  type GestionCausaIncidente,
+  type GestionResultado,
+} from "@prisma/client";
 import type { CierreEstado } from "@/lib/types/cierre";
 // Feature 271 — LA REGLA del bloqueo por cierres vive en un modulo PURO, no aqui: un solo
 // predicado leido por el servidor y por la pantalla (R10).
@@ -96,6 +104,8 @@ import {
   type UpdateOrdenData,
   type ApiOrdenListResult,
   type ApiOrdenDetalleRow,
+  // ⏳ 2026-09-10 (feature 405): la fila publica de UNA gestion del detalle.
+  type ApiOrdenGestionRow,
   type ApiOrdenRow,
   type CancelarViaApiResult,
   type LoteContexto,
@@ -266,21 +276,79 @@ const API_ORDEN_SELECT = {
 // el scope sigue siendo el mismo `where` de la orden (`tienda_id = ownerId AND deleted_at IS
 // NULL`) de los dos `findDetalleBy*ForOwner`. No hay regla de alcance nueva que escribir, y por
 // eso la valvula declarada en design §7.3 no se dispara.
+// ⏳ 2026-09-10 (feature 405, T4 / design §3.1) — LA RELACION `gestiones` SE PIDE UNA SOLA VEZ, COMO
+// SUPERCONJUNTO, Y DE AHI SE DERIVAN LAS DOS LISTAS.
+//
+// Por que no son dos entradas: Prisma no admite pedir la MISMA relacion dos veces con dos alias en
+// un `select`. Y por que no se funden los dos `where` a secas: el de arriba alimenta `evidencias[]`
+// (106/268) y NO filtra `anuladaAt` por una decision explicita de la 268 (§b, «arreglar lo de
+// `anuladaAt` aqui seria un cambio de comportamiento fuera de alcance»). Cambiarlo moveria lo que
+// ven las evidencias, que es contrato vigente y funciona.
+//
+// La salida: el `where` pasa a ser el `OR` de los DOS predicados —el original, palabra por palabra,
+// y el de la 405— y `toApiOrdenDetalleRow` vuelve a aplicar cada uno en memoria sobre el
+// superconjunto. `evidencias[]` sale byte a byte igual que antes (lo afirma
+// `orden-repository.api-lectura.test.ts` y el `toEqual` del DTO entero de
+// `api-orden-lectura-service.por-orden-id.test.ts`), y `gestiones[]` ve exactamente las VIGENTES.
+//
+// Sigue siendo UNA sola consulta (R19): un superconjunto de la misma relacion no anade round-trips.
 const API_ORDEN_DETALLE_SELECT = {
   ...API_ORDEN_SELECT,
   gestiones: {
     where: {
-      // R15 + 268/R27: entrega/rechazo y ademas el incidente del MENSAJERO.
-      resultado: { in: ["entregada", "rechazada", "incidente"] },
-      evidenciaStoragePath: { not: null }, // R15: con evidencia adjunta
+      OR: [
+        {
+          // R15 + 268/R27: entrega/rechazo y ademas el incidente del MENSAJERO. INTACTO.
+          resultado: { in: ["entregada", "rechazada", "incidente"] },
+          evidenciaStoragePath: { not: null }, // R15: con evidencia adjunta
+        },
+        // 405/R11: las gestiones VIGENTES, sea cual sea su resultado y lleven foto o no. Es el
+        // MISMO criterio de «gestion que cuenta» que ya usa `whereIntentosVigentes`.
+        { anuladaAt: null },
+      ],
     },
     select: {
       resultado: true,
       evidenciaStoragePath: true,
       evidenciaContentType: true,
       createdAt: true,
+      // ⏳ 2026-09-10 (feature 405) — lo que la 405 anade, y NADA mas. `id` y `anuladaAt` NO se
+      // publican: son de uso interno del mapeo (emparejar con el historial y re-aplicar el
+      // predicado del superconjunto). Y lo que sigue SIN pedirse, a proposito: `motivo` (el texto
+      // libre, 256/R22), `cierreId`, `montoRecibido`, `metodoPago`, `pagoMensajero`,
+      // `indemnizacion` ni las coordenadas de la gestion —que son de SOLO ESCRITURA por la 193/R7
+      // y tienen su propia guardia—. Lo que no se lee no se puede filtrar.
+      id: true,
+      anuladaAt: true,
+      causaDevolucion: true, // 405/R8: la causa TIPIFICADA de la devolucion (73)
+      causaIncidente: true, // 405/R8: la causa TIPIFICADA del incidente (158)
+      mensajero: { select: { id: true, ...NOMBRE_USUARIO_SELECT } }, // 405/R9
     },
-    orderBy: { createdAt: "asc" },
+    // ⏳ 2026-09-10 (feature 405, R10): el `createdAt asc` de siempre, MAS `id asc` para que dos
+    // gestiones del mismo instante no puedan salir en distinto orden entre dos lecturas. El orden
+    // primario no cambia, asi que `evidencias[]` conserva el suyo.
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  },
+  // ⏳ 2026-09-10 (feature 405, R6 / design §3.2) — EL HISTORIAL SE PIDE COMO RELACION DE LA ORDEN,
+  // NO NAVEGANDO DESDE CADA GESTION, y esto es lo importante del diseno: `orden_historial_estado`
+  // NO tiene indice por `gestion_orden_id` —en Postgres una FK no crea indice— y sus tres indices
+  // empiezan por `ordenId` o por `actorUsuarioId`. `OrdenHistorialRepository` ya tiene medido ese
+  // seq scan y por eso `whereIntentosVigentes` repite el `ordenId` dentro del `EXISTS`. Pedirlo
+  // por aqui entra por `@@index([ordenId, createdAt])` y deja `gestion_orden_id` como filtro
+  // residual sobre el punado de filas de esta orden.
+  //
+  // Ni `actorUsuarioId`, ni `origenTipo`, ni `motivo` (el de la gestion, 49/R22): el detalle
+  // publico no crece con datos internos. Solo lo que hace falta para emparejar y para emitir el
+  // `value` del estado destino.
+  historialEstados: {
+    where: { gestionOrdenId: { not: null } },
+    select: {
+      id: true,
+      gestionOrdenId: true,
+      createdAt: true,
+      estatusDestino: { select: { value: true } },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   },
   // 268/R27: el incidente del ADMIN. Solo la PORTADA de cada registro (`indice: 0`, a lo sumo una
   // fila por `@@unique([incidenteId, indice])`), y ni un campo mas: ni `causa`, ni `motivo`, ni
@@ -321,6 +389,26 @@ type ApiOrdenDetalleSelectRow = ApiOrdenSelectRow & {
     evidenciaStoragePath: string | null;
     evidenciaContentType: string | null;
     createdAt: Date;
+    // ⏳ 2026-09-10 (feature 405): lo que la relacion trae AHORA, tras pasar a superconjunto.
+    id: string;
+    anuladaAt: Date | null;
+    causaDevolucion: GestionCausaDevolucion | null;
+    causaIncidente: GestionCausaIncidente | null;
+    mensajero: {
+      id: string;
+      nombre: string;
+      primerApellido: string | null;
+      segundoApellido: string | null;
+    };
+  }[];
+  // ⏳ 2026-09-10 (feature 405, R6): las transiciones de ESTA orden causadas por una gestion, ya
+  // ordenadas ascendentemente. `gestionOrdenId` es `string | null` en el modelo aunque el `where`
+  // lo acote a no-nulo: el tipo describe la columna, no el filtro.
+  historialEstados: {
+    id: string;
+    gestionOrdenId: string | null;
+    createdAt: Date;
+    estatusDestino: { value: string };
   }[];
   // 268/R27: el camino del ADMIN. `evidencias` viene acotado a la portada por el `where` del
   // select, asi que es `[]` o un unico elemento.
@@ -351,21 +439,81 @@ function toApiOrdenRow(r: ApiOrdenSelectRow): ApiOrdenRow {
 }
 
 /**
+ * ⏳ 2026-09-10 (feature 405, T3 / R8) — la CAUSA TIPIFICADA que se publica para una gestion.
+ *
+ * `devuelta` -> `causa_devolucion` (73), `incidente` -> `causa_incidente` (158), y `null` en los
+ * otros tres resultados. Tambien `null` cuando la causa NO esta registrada: el historico anterior
+ * a esas dos features no se backfilleo (73/R16) y el contrato no distingue «no hubo causa» de «no
+ * se registro», exactamente como ya hace el webhook.
+ *
+ * NO se importa ni se copia `WebhookEstadoService.motivoPublicado`, y no es un descuido (design
+ * §2.3): aquel decide por el `estado` DESTINO DEL EVENTO —un dato que aqui no existe, porque una
+ * gestion no es un evento— y su firma es la del webhook. La decision se toma UNA vez, aqui, y lo
+ * que si queda atado entre las dos superficies es la LISTA PUBLICADA de values, que
+ * `tests/unit/api/openapi-405-gestiones.test.ts` compara valor a valor.
+ *
+ * ⛔ Lo que esta funcion NO puede devolver jamas: `gestion_orden.motivo`, el texto libre que el
+ * mensajero teclea (256/R22). Ni siquiera llega hasta aqui — no esta en el `select`.
+ */
+export function causaTipificadaDeGestion(gestion: {
+  resultado: GestionResultado;
+  causaDevolucion: GestionCausaDevolucion | null;
+  causaIncidente: GestionCausaIncidente | null;
+}): GestionCausaDevolucion | GestionCausaIncidente | null {
+  if (gestion.resultado === "devuelta") return gestion.causaDevolucion;
+  if (gestion.resultado === "incidente") return gestion.causaIncidente;
+  return null;
+}
+
+/**
+ * ⏳ 2026-09-10 (feature 405, T5 / R6) — `id de gestion -> value del estado destino` de la PRIMERA
+ * transicion que esa gestion origino.
+ *
+ * Una pasada sobre el historial YA ORDENADO ascendentemente: la primera entrada de cada gestion
+ * gana y las posteriores no la pisan. Un `Map` y no un `find` dentro del bucle de gestiones: son
+ * pocas filas, pero el `find` en bucle es el O(n^2) escondido que este repo persigue y no hay
+ * ninguna razon para escribirlo.
+ */
+function primerEstadoPorGestion(
+  historial: ApiOrdenDetalleSelectRow["historialEstados"],
+): Map<string, string> {
+  const porGestion = new Map<string, string>();
+  for (const fila of historial) {
+    if (fila.gestionOrdenId === null) continue; // el `where` ya lo excluye; el tipo no lo sabe
+    if (porGestion.has(fila.gestionOrdenId)) continue; // R6: gana la PRIMERA
+    porGestion.set(fila.gestionOrdenId, fila.estatusDestino.value);
+  }
+  return porGestion;
+}
+
+/**
  * Feature 106/R15/R18 + 177/R16: fila -> DTO de detalle. Compartido por ambas variantes.
  *
  * FEATURE 268/R27 (2026-08-22): las DOS procedencias del incidente caen en el MISMO array
  * `evidencias[]`, con la misma forma que las de entrega/rechazo. El consumidor no distingue —ni
  * debe— si la foto la subio el mensajero o el admin: para el es "la evidencia del incidente".
  * Primero las gestiones (por `createdAt`), luego los incidentes del admin (por `createdAt`).
+ *
+ * ⏳ 2026-09-10 (feature 405) — la relacion `gestiones` llega ahora como SUPERCONJUNTO de los dos
+ * predicados (ver la cabecera de `API_ORDEN_DETALLE_SELECT`), asi que cada lista vuelve a aplicar
+ * el suyo aqui: `evidencias[]` el de la 106/268 —resultado con foto, SIN mirar `anuladaAt`, tal y
+ * como estaba— y `gestiones[]` el de la 405 —`anulada_at IS NULL`, sea cual sea el resultado—.
  */
 function toApiOrdenDetalleRow(row: ApiOrdenDetalleSelectRow): ApiOrdenDetalleRow {
-  const deGestiones = row.gestiones.map((g) => ({
-    // `resultado` esta acotado por el WHERE a estos tres valores.
-    resultado: g.resultado as "entregada" | "rechazada" | "incidente",
-    // El WHERE exige `evidencia_storage_path` no nulo; el `!` es seguro.
-    storagePath: g.evidenciaStoragePath!,
-    contentType: g.evidenciaContentType,
-  }));
+  const deGestiones = row.gestiones
+    // 405: el predicado ORIGINAL de la 106/268, palabra por palabra, sobre el superconjunto.
+    .filter(
+      (g) =>
+        ["entregada", "rechazada", "incidente"].includes(g.resultado) &&
+        g.evidenciaStoragePath !== null,
+    )
+    .map((g) => ({
+      // `resultado` esta acotado por el filtro de arriba a estos tres valores.
+      resultado: g.resultado as "entregada" | "rechazada" | "incidente",
+      // El filtro exige `evidencia_storage_path` no nulo; el `!` es seguro.
+      storagePath: g.evidenciaStoragePath!,
+      contentType: g.evidenciaContentType,
+    }));
 
   // 268/R27: un incidente del admin SIN evidencias se OMITE. Emitir una entrada con
   // `storagePath` vacio o `undefined` mandaria al service a firmar un path que no existe y el
@@ -383,9 +531,31 @@ function toApiOrdenDetalleRow(row: ApiOrdenDetalleSelectRow): ApiOrdenDetalleRow
     ];
   });
 
+  // ⏳ 2026-09-10 (feature 405, R1/R3/R11) — `gestiones[]`: las VIGENTES del superconjunto, ya en
+  // el orden que impuso el `orderBy` de la relacion (R10). Campo a campo, NUNCA un spread de la
+  // fila cruda: el spread es exactamente la fuga que la guardia de lista blanca busca (R12).
+  const estadoPorGestion = primerEstadoPorGestion(row.historialEstados);
+  const gestiones: ApiOrdenGestionRow[] = row.gestiones
+    .filter((g) => g.anuladaAt === null) // R11: las ANULADAS no cuentan y no salen
+    .map((g) => ({
+      createdAt: g.createdAt,
+      resultado: g.resultado as GestionResultado,
+      // R6/R7: el destino de la PRIMERA transicion que origino, o `null` si no hay ninguna
+      // (gestion legada anterior al historial de la 49).
+      estadoResultante: estadoPorGestion.get(g.id) ?? null,
+      motivo: causaTipificadaDeGestion({
+        resultado: g.resultado as GestionResultado,
+        causaDevolucion: g.causaDevolucion,
+        causaIncidente: g.causaIncidente,
+      }),
+      // R9: la MISMA composicion del nombre que el mensajero asignado y que la pantalla.
+      mensajero: { id: g.mensajero.id, nombre: nombreCompletoUsuario(g.mensajero) },
+    }));
+
   return {
     ...toApiOrdenRow(row),
     evidencias: [...deGestiones, ...deIncidentesAdmin],
+    gestiones,
   };
 }
 

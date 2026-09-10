@@ -42,6 +42,10 @@ function detalleDe(fila: Fila, overrides: Partial<ApiOrdenDetalleDTO> = {}): Api
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
     // ⏳ 2026-09-09 (feature 404): campo REQUERIDO del DTO publico; por defecto, sin asignado.
     mensajero: null,
+    // ⏳ 2026-09-10 (feature 405): campo REQUERIDO del DTO publico; por defecto, sin gestiones.
+    // Los casos de la 405 que SI las miden cablean la cadena real (`depsRealesDetalle`), no este
+    // doble: con el doble pasarian aunque el repositorio no proyectara nada.
+    gestiones: [],
     evidencias: [
       {
         resultado: "entregada",
@@ -304,6 +308,9 @@ function filaDetalle(over: Record<string, unknown> = {}) {
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
     estatus: { value: "en_reparto" },
     gestiones: [],
+    // ⏳ 2026-09-10 (feature 405): la relacion del historial que el `select` del detalle pide para
+    // resolver `estadoResultante`.
+    historialEstados: [],
     incidentesAdmin: [],
     mensajeroAsignado: MENSAJERO_ROW,
     ...over,
@@ -356,17 +363,20 @@ describe("GET /api/ordenes/api-key/orden/{id} — `mensajero` de punta a punta (
     expect(JSON.parse(cuerpo).mensajero).toBeNull();
   });
 
-  it("404/R16+R19: el detalle son los nueve publicados + `mensajero` + `evidencias`, y nada mas", async () => {
+  it("404/R16+R19 (+405/R1): el detalle son los nueve publicados + `mensajero` + los DOS arrays, y nada mas", async () => {
     const { deps: d } = depsRealesDetalle(filaDetalle());
     const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
 
     const json = await res.json();
+    // ⏳ 2026-09-10 (feature 405/R1) — ONCE claves pasan a ser DOCE: `gestiones` es el array nuevo
+    // del detalle. Igualdad exacta, como estaba: una clave de mas sigue siendo un fallo.
     expect(Object.keys(json).sort()).toEqual([
       "createdAt",
       "destinatario",
       "direccion",
       "estado",
       "evidencias",
+      "gestiones",
       "mensajero",
       "montoCobrar",
       "numGuia",

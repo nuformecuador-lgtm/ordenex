@@ -131,6 +131,22 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
       expiraEnSegundos: ttl,
     }));
 
-    return { ...toListItemDTO(row), evidencias };
+    // ⏳ 2026-09-10 (feature 405, R1/R3/R12) — CAMPO A CAMPO, y no `{ ...g }`. Un spread copiaria
+    // cualquier cosa que el repositorio anadiera manana a su fila —el texto libre, el id de la
+    // gestion, un monto— sin que nadie lo decidiera, y ESA es la fuga que la guardia de lista
+    // blanca busca. Aqui no hay Storage que tocar: las gestiones no llevan URL, asi que el orden
+    // de la orden sin evidencias sigue sin firmar nada (R18 de la 106).
+    const gestiones = row.gestiones.map((g) => ({
+      createdAt: g.createdAt,
+      resultado: g.resultado,
+      estadoResultante: g.estadoResultante,
+      motivo: g.motivo,
+      // Las DOS claves del mensajero, tambien copiadas y no reenviadas por referencia: si la fila
+      // del repositorio trajera una tercera, no cruzaria. Y si `ApiMensajeroDTO` ganara un campo
+      // de verdad, esto deja de compilar (falta una propiedad), que es como se quiere enterar uno.
+      mensajero: { id: g.mensajero.id, nombre: g.mensajero.nombre },
+    }));
+
+    return { ...toListItemDTO(row), evidencias, gestiones };
   }
 }

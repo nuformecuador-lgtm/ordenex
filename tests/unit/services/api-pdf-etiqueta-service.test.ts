@@ -52,6 +52,9 @@ function filaOrden(downloadUrl: string | null): FilaOrdenFake {
     montoCobrar: 10,
     createdAt: new Date("2026-07-22T14:03:11.000Z"),
     evidencias: [],
+    // ⏳ 2026-09-10 (feature 405): idem — el PDF de etiqueta tampoco pinta el historial de
+    // gestiones. Esta aqui solo para que el doble tenga la forma del contrato.
+    gestiones: [],
     // ⏳ 2026-09-09 (feature 404): campo REQUERIDO de `ApiOrdenDetalleRow`. El PDF de etiqueta no
     // lo pinta ni lo necesita; aqui esta solo para que el doble tenga la forma del contrato.
     mensajero: null,

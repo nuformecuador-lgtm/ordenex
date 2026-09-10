@@ -44,7 +44,34 @@ function ordenDetalleRow(overrides: Record<string, unknown> = {}) {
     createdAt: new Date("2026-07-22T14:03:11.000Z"),
     estatus: { value: "entregada" },
     gestiones: [],
+    historialEstados: [], // 405: relacion nueva del select del detalle
     incidentesAdmin: [], // 268/R27: segunda procedencia de las evidencias (incidente del ADMIN)
+    ...overrides,
+  };
+}
+
+/**
+ * ⏳ 2026-09-10 (feature 405) — una fila de `gestion_orden` tal y como la devuelve Prisma para el
+ * `select` del detalle, con TODAS las claves que ese `select` pide. Los defaults describen la
+ * gestion mas inocua posible (vigente, sin causa, sin foto) para que cada caso solo tenga que
+ * declarar lo que esta midiendo.
+ */
+function gestionRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "g-1",
+    resultado: "entregada",
+    evidenciaStoragePath: null,
+    evidenciaContentType: null,
+    createdAt: new Date("2026-09-01T10:00:00.000Z"),
+    anuladaAt: null,
+    causaDevolucion: null,
+    causaIncidente: null,
+    mensajero: {
+      id: "u-mensajero-1",
+      nombre: "Ana",
+      primerApellido: "Solis",
+      segundoApellido: null,
+    },
     ...overrides,
   };
 }
@@ -240,9 +267,82 @@ describe("OrdenRepository.findDetalleByOrdenIdForOwner (feature 177, T7)", () =>
     // FEATURE 268 (T6c, 2026-08-22): el `in` gana `incidente` (camino del MENSAJERO). El camino
     // del ADMIN no crea gestion, asi que viaja aparte por `incidentesAdmin`; ambos se mapean al
     // mismo array `evidencias[]`. Ver design §7.3 (opcion a+).
+    //
+    // ⏳ 2026-09-10 (feature 405) — AQUI EL `where` ERA ESE PREDICADO A SECAS y ahora es un `OR`:
+    // la 405 necesita TODAS las gestiones vigentes (tambien las que no llevan foto) y Prisma no
+    // deja pedir la misma relacion dos veces. Lo que este caso protege NO cambia y por eso se
+    // afirma sobre la PRIMERA rama con una igualdad EXACTA: el predicado de las evidencias sigue
+    // siendo el de la 268, palabra por palabra. Si alguien lo relajara —quitar el
+    // `evidenciaStoragePath`, ampliar el `in`— esto se pone rojo igual que antes.
     const gestiones = (prisma.orden.findFirst as Mock).mock.calls[0][0].select.gestiones;
-    expect(gestiones.where.resultado.in).toEqual(["entregada", "rechazada", "incidente"]);
-    expect(gestiones.where.evidenciaStoragePath).toEqual({ not: null });
+    expect(gestiones.where.OR[0]).toEqual({
+      resultado: { in: ["entregada", "rechazada", "incidente"] },
+      evidenciaStoragePath: { not: null },
+    });
+    expect(gestiones.where.OR[1]).toEqual({ anuladaAt: null }); // 405/R11
+    expect(gestiones.where.OR).toHaveLength(2);
+    // Y el `where` no tiene NADA fuera del `OR`: una condicion suelta al lado se aplicaria a las
+    // dos ramas y estrecharia en silencio una de las dos listas.
+    expect(Object.keys(gestiones.where)).toEqual(["OR"]);
+  });
+
+  // ⏳ 2026-09-10 — Feature 405: NO-REGRESION DE `evidencias[]` BAJO EL SUPERCONJUNTO.
+  //
+  // El riesgo real del cambio de la 405 no es que `gestiones[]` salga mal: es que `evidencias[]`
+  // salga distinto sin que nadie lo note, porque ahora Prisma devuelve MAS filas de las que aquel
+  // array quiere y el recorte pasa a hacerse en memoria. Estos dos casos son justo los que
+  // distinguen «el filtro se re-aplica» de «se cuela el superconjunto entero».
+  it("405: una gestion ANULADA con foto SIGUE saliendo en `evidencias[]` (la 268 no filtraba anuladas)", async () => {
+    const prisma = buildPrisma();
+    (prisma.orden.findFirst as Mock).mockResolvedValue(
+      ordenDetalleRow({
+        gestiones: [
+          gestionRow({
+            resultado: "entregada",
+            evidenciaStoragePath: "ordenes/o1/anulada.jpg",
+            evidenciaContentType: "image/jpeg",
+            anuladaAt: new Date("2026-09-01T12:00:00.000Z"),
+          }),
+        ],
+      }),
+    );
+
+    const res = await repoCon(prisma).findDetalleByOrdenIdForOwner("o-1", OWNER);
+
+    // La evidencia sigue publicandose: es el comportamiento vigente desde la 268 (§b) y esta
+    // ficha declara que NO lo toca.
+    expect(res!.evidencias).toEqual([
+      {
+        resultado: "entregada",
+        storagePath: "ordenes/o1/anulada.jpg",
+        contentType: "image/jpeg",
+      },
+    ]);
+    // Pero esa misma gestion NO entra en el historial publico (405/R11).
+    expect(res!.gestiones).toEqual([]);
+  });
+
+  it("405: una gestion VIGENTE sin foto NO entra en `evidencias[]` aunque si en `gestiones[]`", async () => {
+    const prisma = buildPrisma();
+    (prisma.orden.findFirst as Mock).mockResolvedValue(
+      ordenDetalleRow({
+        gestiones: [
+          gestionRow({
+            resultado: "reprogramada",
+            evidenciaStoragePath: null,
+            evidenciaContentType: null,
+          }),
+        ],
+      }),
+    );
+
+    const res = await repoCon(prisma).findDetalleByOrdenIdForOwner("o-1", OWNER);
+
+    // Si el recorte de `evidencias[]` desapareciera, aqui saldria una entrada con
+    // `storagePath: null` y el service intentaria firmarla.
+    expect(res!.evidencias).toEqual([]);
+    expect(res!.gestiones).toHaveLength(1);
+    expect(res!.gestiones[0].resultado).toBe("reprogramada");
   });
 
   it("268/R27: la variante por id trae tambien la evidencia del incidente del ADMIN", async () => {

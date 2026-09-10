@@ -218,6 +218,7 @@ describe("OrdenRepository — el mensajero asignado del canal (feature 404)", ()
         findFirst: vi.fn().mockResolvedValue({
           ...ordenSelectRow({ mensajeroAsignado: MENSAJERO_ROW }),
           gestiones: [],
+          historialEstados: [], // 405: relacion nueva del select del detalle
           incidentesAdmin: [],
         }),
       },
@@ -252,6 +253,7 @@ describe("OrdenRepository — el mensajero asignado del canal (feature 404)", ()
         findFirst: vi.fn().mockResolvedValue({
           ...ordenSelectRow({ mensajeroAsignado: MENSAJERO_ROW }),
           gestiones: [],
+          historialEstados: [], // 405: relacion nueva del select del detalle
           incidentesAdmin: [],
         }),
       },
@@ -261,9 +263,19 @@ describe("OrdenRepository — el mensajero asignado del canal (feature 404)", ()
     await repo.findDetalleByOrdenIdForOwner(ORDEN_ID, OWNER);
 
     const { select } = (prisma.orden.findFirst as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    // El gestor es `gestion_orden.mensajero_id` y es la 405: aqui no se pide.
+    // ⏳ 2026-09-10 (feature 405) — AQUI DECIA «el gestor es `gestion_orden.mensajero_id` y es la
+    // 405: aqui no se pide», y esa mitad ya NO es cierta: la 405 publica el mensajero de cada
+    // gestion. Lo que sigue vigente, y es lo que estos dos asertos protegen de verdad:
+    //   · la FK cruda `mensajeroId` NO se proyecta —lo que se pide es la RELACION `mensajero`,
+    //     acotada a `id` + las tres columnas de identidad, igual que el asignado—;
+    //   · el TEXTO LIBRE `gestion_orden.motivo` sigue sin proyectarse (256/R22), y esa parte no
+    //     tiene fecha de caducidad.
     expect(select.gestiones.select).not.toHaveProperty("mensajeroId");
     expect(select.gestiones.select).not.toHaveProperty("motivo"); // 256/R22, texto libre
+    // 405/R12: y del gestor tampoco se pide nada mas alla de su identidad.
+    expect(select.gestiones.select.mensajero.select).not.toHaveProperty("telefono");
+    expect(select.gestiones.select.mensajero.select).not.toHaveProperty("email");
+    expect(select.gestiones.select.mensajero.select).not.toHaveProperty("cedula");
     // Y del asignado no se pide nada mas alla de la identidad.
     expect(select.mensajeroAsignado.select).not.toHaveProperty("telefono");
     expect(select.mensajeroAsignado.select).not.toHaveProperty("email");
@@ -298,6 +310,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
           createdAt: new Date("2026-08-22T10:00:00.000Z"),
         },
       ],
+      historialEstados: [], // 405: relacion nueva del select del detalle
       incidentesAdmin: [],
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -317,6 +330,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     const prisma = prismaConDetalle({
       ...ordenSelectRow({ estatus: { value: "incidente" } }),
       gestiones: [], // el camino del admin no crea gestion ninguna: esto es lo que rompe la opcion (a)
+      historialEstados: [], // 405: relacion nueva del select del detalle
       incidentesAdmin: [
         { evidencias: [{ storagePath: "incidentes/i1/portada.jpg", contentType: "image/png" }] },
       ],
@@ -345,6 +359,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
           createdAt: new Date("2026-08-22T10:00:00.000Z"),
         },
       ],
+      historialEstados: [], // 405: relacion nueva del select del detalle
       incidentesAdmin: [
         { evidencias: [{ storagePath: "incidentes/i1/portada.jpg", contentType: "image/png" }] },
       ],
@@ -364,6 +379,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     const prisma = prismaConDetalle({
       ...ordenSelectRow({ estatus: { value: "incidente" } }),
       gestiones: [],
+      historialEstados: [], // 405: relacion nueva del select del detalle
       incidentesAdmin: [{ evidencias: [] }],
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -377,6 +393,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     const prisma = prismaConDetalle({
       ...ordenSelectRow(),
       gestiones: [],
+      historialEstados: [], // 405: relacion nueva del select del detalle
       incidentesAdmin: [],
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
@@ -401,6 +418,7 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     const prisma = prismaConDetalle({
       ...ordenSelectRow(),
       gestiones: [],
+      historialEstados: [], // 405: relacion nueva del select del detalle
       incidentesAdmin: [],
     });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);

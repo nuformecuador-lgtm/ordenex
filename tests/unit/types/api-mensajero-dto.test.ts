@@ -93,6 +93,9 @@ describe("404/R2+R5 — la convencion de ausencia y la herencia del detalle", ()
       createdAt: new Date("2026-09-09T10:00:00.000Z"),
       mensajero: MENSAJERO,
       evidencias: [],
+      // ⏳ 2026-09-10 (feature 405): campo REQUERIDO del detalle. Este caso mide la HERENCIA del
+      // `mensajero` del item, no el historial.
+      gestiones: [],
     };
     // La asignacion cruzada solo compila si los dos campos son el MISMO tipo.
     const comoDelItem: ApiOrdenListItemDTO["mensajero"] = detalle.mensajero;
