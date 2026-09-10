@@ -40,8 +40,19 @@ export interface BodegaBloqueadaCausa {
   porCierreBodega: boolean;
 }
 
+// Feature 400 (2026-09-09, R31-R33/R35) — `sinUbicacion` es el ESPEJO EXACTO del campo de
+// `AsignarBodegaServiceResult`: cuantas ordenes del lote quedaron asignadas SIN ubicacion
+// porque su geocodificacion murio por un fallo de configuracion NUESTRO. Una cifra
+// agregada, nunca una lista (R32); ausente cuando vale cero (R33); campo HERMANO de
+// `bloqueadas`, nunca anidado en el (R35). El razonamiento completo esta escrito una sola
+// vez, en `IGuiaAsignacionService.ts`.
+//
+// Espejado a mano y no importado a proposito: es el mismo motivo por el que `bloqueadas` ya
+// esta duplicado aqui. Que se olvide en UNO de los dos lados lo caza el par de gate-tests
+// (`guia-asignacion-gate-coordenadas` / `asignacion-satelite-gate-coordenadas`), que llevan
+// el mismo caso espejado.
 export type AsignarSateliteServiceResult =
-  | { status: "ok"; resultados: { ordenId: string; estado: "por_recoger" }[] } // R7
+  | { status: "ok"; resultados: { ordenId: string; estado: "por_recoger" }[]; sinUbicacion?: number } // R7
   // Feature 368 (R2/R15) — espejo exacto del `"partial"` de la bodega central: solo el motivo
   // de coordenadas del gate produce esta rama. Asigna las asignables y reporta las bloqueadas,
   // sin tocar el significado de `conflict` (R16).
@@ -49,6 +60,7 @@ export type AsignarSateliteServiceResult =
       status: "partial";
       resultados: { ordenId: string; estado: "por_recoger" }[];
       bloqueadas: { ordenId: string; motivo: string }[];
+      sinUbicacion?: number;
     }
   | { status: "forbidden" } // R13
   | { status: "sin_zona" } // R3
