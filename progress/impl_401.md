@@ -221,7 +221,41 @@ conexión en vez de saltar los tests).
 esta sesión —`/tmp` es compartido entre worktrees y dos agentes ya se pisaron el veredicto una
 vez— y `INIT_EXIT=$?` escrito **dentro** del log, sin canalizar por `tail`.
 
-### Salida real (segunda corrida, tras arreglar los inventarios de enums)
+### ⭑ Salida real DEFINITIVA (2026-09-10, rebasada sobre `dev` con la 403 dentro) — **VERDE**
+
+Ésta es la que cuenta: la base local y la rama comparten por fin el mismo conjunto de migraciones
+(189 = 189), así que este gate **sí dice la verdad**.
+
+```
+✓ node v24.13.0
+✓ dependencias presentes
+✓ feature_list.json: sin ids duplicados, cupo por zona respetado y specs en su sitio
+-> pnpm run typecheck            → sin salida (0 errores)
+-> pnpm run lint                 → ✖ 177 problems (0 errors, 177 warnings)   ✓ lint paso
+✓ DATABASE_URL resuelta: los 152 archivos de tests contra Postgres SI se ejecutan
+-> pnpm run test:json
+
+ Test Files  1846 passed (1846)
+      Tests  26782 passed | 26 skipped (26808)
+
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1846 ejecutado(s), todos en el baseline conocido)
+== init OK ==
+INIT_EXIT=0
+```
+
+**Saltados: 26, y son los legítimos de siempre** — `tests/components/AnaliticaPage.test.tsx`
+(58 tests, **17 skipped**) y `tests/components/AnaliticaShell.test.tsx` (15 tests, **9 skipped**).
+Ajenos a esta ficha, y ni uno más. **`integration/db` NO se saltó**: 152 archivos contra Postgres
+ejecutados, incluidos los que prueban el `WHERE` (T7) y la dedupe (T5).
+
+**Hubo una corrida previa el mismo día con `INIT_EXIT=1` y UN solo rojo**, y era mío:
+`tests/integration/db/notificacion-evento-webhook-suscripcion-migration.test.ts`, el inventario de
+la **403**, que afirma sobre la **base aplicada** («DIEZ eventos y OCHO `entidad_tipo`») y no podía
+conocer los míos, porque entró antes. Se amplió a mano —igual que se ampliaron los otros cinco— y
+quedó en `22 passed`. Que ese test se pusiera rojo es exactamente para lo que existe un inventario
+cerrado.
+
+### Salida de la primera corrida (histórica, ANTES del rebase)
 
 ```
 ✓ node v24.13.0
@@ -520,12 +554,14 @@ que hay que saber, ninguna de ellas «arreglada» por mí:
 
 ## Veredicto
 
-**Los 35 requisitos tienen test, las cinco mutaciones murieron y las dos guardias del cableado se
-vieron ROJAS con el import intacto; el gate completo deja `INIT_EXIT=1` con 6 rojos que no son de
-esta ficha —son los dos valores de enum que la 403 aplicó a la base local compartida— y todo lo
-demás en verde (26.629 pasados, 26 saltados ajenos, `integration/db` ejecutada entera).**
+**Los 35 requisitos tienen test, las siete mutaciones murieron, las dos guardias del cableado se
+vieron ROJAS con el import intacto, y el gate completo —ya rebasada sobre `dev` con la 403 dentro,
+189 migraciones = 189 carpetas— termina en `INIT_EXIT=0`: 1846/1846 archivos, 26.782 tests pasados,
+26 saltados ajenos y `integration/db` ejecutada entera. La ficha está lista para entrar.**
 
-**Tras la revisión:** el bloqueante B-1 está cerrado —`design.md` §5.1 y `tasks.md` T6 publican ya
-la forma de dos CTEs, con el `0A000` medido y la prohibición expresa de colapsarlas— y m-6 también
-—el composition root inyecta un logger real, con su mutación vista en rojo—; quedan pendientes, y
-sólo para después del merge de la 403, las dos listas de enum y la reescritura del `down.sql`.
+Recorrido: el bloqueante **B-1** cerrado —`design.md` §5.1 y `tasks.md` T6 publican la forma de dos
+CTEs, con el `0A000` medido y la prohibición expresa de colapsarlas—; **m-6** cerrado —el
+composition root inyecta un logger real, con su mutación en rojo—; y los dos ajustes del orden de
+merge hechos con la 403 delante: las **seis** listas literales de enum suman sus dos valores y el
+**`down.sql` reescrito** ya no puede borrárselos en silencio, con un test que lo afirma por nombre
+y su mutación medida.
