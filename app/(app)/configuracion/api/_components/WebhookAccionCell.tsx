@@ -10,12 +10,14 @@ import {
   desactivarWebhook,
   rotarSecretoWebhook,
 } from "@/lib/actions/webhooks";
+import type { WebhookVistaPublica } from "@/lib/types/webhook";
 
 import {
   RegistrarWebhookForm,
   type RegistrarWebhookFormHandle,
 } from "./RegistrarWebhookForm";
 import { RevelarWebhookSecretoModal } from "./RevelarWebhookSecretoModal";
+import { formatFechaHoraLegible } from "./fecha-legible";
 
 export interface WebhookAccionCellProps {
   /** Owner (usuario de rol `apiKey`) de la fila. */
@@ -24,8 +26,12 @@ export interface WebhookAccionCellProps {
   identificador: string;
 }
 
-/** Estado de la suscripción leído con `obtenerWebhook` (NUNCA el secreto, R5). */
-type WebhookEstado = { url: string; activa: boolean } | null;
+/**
+ * Estado de la suscripción leído con `obtenerWebhook` (NUNCA el secreto, R5). Es el tipo del
+ * contrato (`WebhookVistaPublica`), no una copia: la ficha 403 le añadió `pausada` y
+ * `sinExitoDesde` y una copia local se habría quedado atrás en silencio.
+ */
+type WebhookEstado = WebhookVistaPublica | null;
 
 /** `undefined` = aún no leído / cargando; `null` = sin suscripción. */
 type EstadoCarga = WebhookEstado | undefined;
@@ -74,6 +80,21 @@ export function WebhookAccionCell({
   }
 
   const activa = estado?.activa === true;
+
+  /**
+   * FICHA 403 (R18/R19). «Espaciada» NO es un error, ni una baja, ni algo que el dueño tenga
+   * que arreglar desde aquí: la suscripción sigue viva y sigue reintentando, solo que más
+   * separado en el tiempo, porque el destino lleva un rato sin aceptar ningún envío. Por eso
+   * la línea es independiente de la rama `activa`/`no hay webhook` y no toca ningún botón.
+   *
+   * El valor es DERIVADO en el servidor y se recalcula en cada `obtenerWebhook`, así que el
+   * `refrescar()` que ya corre tras guardar la URL lo apaga sin recargar la página (R19). No
+   * se replica aquí ninguna de esas reglas.
+   */
+  const pausada = estado?.pausada === true;
+  const sinExitoDesde = estado?.sinExitoDesde
+    ? formatFechaHoraLegible(estado.sinExitoDesde)
+    : null;
 
   async function onConfirmRegistrar() {
     // R16: el `Modal` bloquea el segundo submit mientras esta promesa corre.
@@ -157,6 +178,19 @@ export function WebhookAccionCell({
                 No hay webhook registrado para este owner.
               </span>
             )}
+
+            {/* 403/R18: línea ADICIONAL, independiente de la rama de arriba. */}
+            {pausada ? (
+              <p className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-foreground">
+                Los envíos a este webhook se están espaciando:{" "}
+                {sinExitoDesde
+                  ? `el destino lleva sin aceptar ninguno desde el ${sinExitoDesde}.`
+                  : "el destino lleva un rato sin aceptar ninguno."}{" "}
+                No hay que hacer nada: vuelven a su ritmo normal en cuanto el
+                destino acepte un envío. Si ya está resuelto, guarda la URL de
+                nuevo para reintentarlo ahora.
+              </p>
+            ) : null}
           </div>
 
           {!cargando ? (

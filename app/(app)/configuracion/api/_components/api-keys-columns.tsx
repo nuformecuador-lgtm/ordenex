@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { ApiKeyAccionCell } from "./ApiKeyAccionCell";
 import { WebhookAccionCell } from "./WebhookAccionCell";
 import { ESTADO_API_KEY_LABEL } from "./api-key-estado-label";
+import { formatFechaHoraLegible } from "./fecha-legible";
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
@@ -134,20 +135,15 @@ export function EstadoApiKeyBadge({ value }: { value: EstadoApiKey }) {
   );
 }
 
-// Coacciona a Date defensivamente: el DTO tipa `createdAt: Date`, pero según el
-// borde de serialización (Server Action → cliente) puede llegar como string ISO.
-function toDate(value: Date | string): Date {
-  return value instanceof Date ? value : new Date(value);
-}
-
-/** Fecha de creación legible (es-EC): fecha corta + hora. */
+/**
+ * Fecha de creación legible (es-EC): fecha corta + hora. El formato —y la coacción
+ * defensiva a `Date`, porque el DTO tipa `createdAt: Date` pero según el borde de
+ * serialización puede llegar como string ISO— vive en `./fecha-legible`, compartido con el
+ * aviso de envíos espaciados de `WebhookAccionCell` (403/T14). Aquí solo se decide qué
+ * pintar cuando no hay fecha interpretable: el `—` de la tabla.
+ */
 function formatFechaCreacion(value: Date | string): string {
-  const d = toDate(value);
-  if (Number.isNaN(d.getTime())) return SIN_DATO;
-  return new Intl.DateTimeFormat("es-EC", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(d);
+  return formatFechaHoraLegible(value) ?? SIN_DATO;
 }
 
 export interface ApiKeysColumnsOptions {
