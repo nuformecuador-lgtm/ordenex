@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { RolValue } from "@prisma/client";
 import { CATALOGO_AVISOS, accionDeAviso } from "@/lib/notificaciones/catalogo-avisos";
 import { SIDEBAR_ITEMS, itemsVisibles } from "@/lib/auth/menu-visibility";
@@ -16,13 +18,11 @@ import type { NotificacionEvento } from "@/lib/types/notificacion";
 // catalogo y el menu—, asi que ningun grafo de imports la seleccionaria en el modo rapido. Las
 // guardias corren SIEMPRE.
 //
-// ⚠️ LO QUE ESTA GUARDIA **NO** CUBRE TODAVIA, DECLARADO CON NOMBRE: la segunda mitad de R6 —«si
-// el destino lleva un parametro de consulta, la PAGINA DE DESTINO LO LEE»—. Hoy el unico destino
-// con parametro es `/novedades?superficie=devolucion`, y quien tiene que leerlo es
-// `app/(app)/novedades/page.tsx`, que es FRONTEND (tarea T6.5 del spec, fase 6). El agente de
-// frontend añade aqui ese bloque cuando la pagina lo lea; hasta entonces el aserto seria rojo por
-// una razon que no es la suya. Lo que SI se comprueba abajo es la mitad que depende del catalogo:
-// que ningun destino invente un parametro fuera de la lista blanca declarada.
+// ⚠️ LA SEGUNDA MITAD DE R6 —«si el destino lleva un parametro de consulta, la PAGINA DE DESTINO
+// LO LEE»— YA ESTA CUBIERTA (T6.5, cerrada por el frontend el 2026-09-10): el ultimo `describe` de
+// este archivo abre el FUENTE de la pagina de destino y comprueba que lee ese parametro. Un
+// parametro que el destino ignora no rompe nada visible: deja al usuario en la pestaña equivocada
+// con un 200, que es la clase de fallo mudo mas cara de este repo.
 
 /** Actor minimo para preguntarle al menu «¿este rol ve esto?». */
 function actorDe(rol: RolValue) {
@@ -114,5 +114,60 @@ describe("R6 (mitad del catalogo) — ningun destino inventa un parametro de con
   it("el unico destino con parametro es el de novedades, y su valor es un grupo real", () => {
     const conParametro = destinosDeclarados().filter((d) => d.href.includes("?"));
     expect(conParametro.map((d) => d.href)).toEqual(["/novedades?superficie=devolucion"]);
+  });
+});
+
+describe("R6 (mitad de la pagina) — el destino que lleva parametro, LO LEE", () => {
+  /**
+   * De ruta a su archivo de pagina. Se escribe a mano y en un solo sitio: derivarlo del `href` con
+   * un `glob` haria que un destino sin pagina pasara por «no encontre archivo» en vez de por rojo.
+   */
+  const PAGINA_DE_RUTA: Record<string, string> = {
+    "/novedades": "app/(app)/novedades/page.tsx",
+  };
+
+  function fuenteDeLaPagina(ruta: string): string {
+    const relativo = PAGINA_DE_RUTA[ruta];
+    if (!relativo) throw new Error(`sin archivo declarado para la ruta ${ruta}`);
+    return readFileSync(path.join(process.cwd(), relativo), "utf8");
+  }
+
+  it("cada destino con `?` apunta a una pagina que lee ESE parametro", () => {
+    const conParametro = destinosDeclarados().filter((d) => d.href.includes("?"));
+    // Autocomprobacion antes de afirmar nada: si la extraccion fallara, el bucle de abajo pasaria
+    // en verde sin haber leido un solo fuente.
+    expect(conParametro.length).toBeGreaterThan(0);
+
+    const sordos: string[] = [];
+    for (const { evento, href } of conParametro) {
+      const [ruta, query] = href.split("?");
+      const fuente = fuenteDeLaPagina(ruta);
+      // `searchParams` es la UNICA via por la que un Server Component recibe la query: sin ella,
+      // el nombre del parametro podria estar escrito en un comentario y no leerse nunca.
+      if (!fuente.includes("searchParams")) sordos.push(`${evento} -> ${ruta} no lee searchParams`);
+      for (const par of (query ?? "").split("&")) {
+        const nombre = par.split("=")[0];
+        if (!fuente.includes(nombre)) sordos.push(`${evento} -> ${ruta} ignora ?${nombre}`);
+      }
+    }
+    expect(sordos).toEqual([]);
+  });
+
+  it("la guardia SI se pone roja ante un parametro que la pagina ignora (mutacion)", () => {
+    // Se ejercita EL MISMO predicado del bucle de arriba con un parametro inventado, para
+    // demostrar que ese bucle no es decorativo. La mutacion del design es «inventar `?estado=x`
+    // en un destino»: la pagina de novedades no contiene `estadoInventado` por ningun lado.
+    const fuente = fuenteDeLaPagina("/novedades");
+    expect(fuente.includes("superficie")).toBe(true);
+    expect(fuente.includes("estadoInventado")).toBe(false);
+  });
+
+  it("la pagina de novedades valida contra la lista blanca, y no con un `as`", () => {
+    // Un valor arbitrario que llegara hasta `TabsGroup` activaria una pestaña que no existe y
+    // base-ui desmontaria su panel: pantalla en blanco con un 200 (R66). La validacion es de
+    // borde y se escribe con zod contra `GRUPOS_NOVEDAD`, como pide `docs/conventions.md`.
+    const fuente = fuenteDeLaPagina("/novedades");
+    expect(fuente).toContain("GRUPOS_NOVEDAD");
+    expect(fuente).not.toMatch(/as GrupoNovedad/);
   });
 });
