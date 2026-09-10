@@ -39,6 +39,19 @@ export const asignarBodegaSchema = z.object({
   //
   // NO se acepta una fecha (R6): el cliente manda un token, la fecha la pone el servidor.
   dia: diaRepartoSchema.default("hoy"),
+  /**
+   * FICHA 407 (2026-09-10, R1/R5/R9) — LA MARCA. Ids del MISMO lote que la persona autoriza a
+   * asignar SIN ubicacion en el mapa, sabiendo que su direccion es irresoluble. No es un acto
+   * aparte: es un parametro de la propia asignacion, y esa misma llamada asigna.
+   *
+   * `.default([])` y NO obligatorio, por el MISMO motivo que `dia` lo tiene (R5): una peticion
+   * sin el campo se comporta EXACTAMENTE como antes de esta ficha. Ausente = «ninguna», jamas
+   * «todas».
+   *
+   * NO SE PERSISTE en ningun sitio (R9): decision del humano del 2026-09-10. Si la orden se
+   * libera y se reasigna, hay que volver a autorizarla.
+   */
+  autorizarSinUbicacionIds: z.array(z.string().uuid()).default([]),
 });
 export type AsignarBodegaActionInput = z.infer<typeof asignarBodegaSchema>;
 
@@ -85,7 +98,16 @@ export type AsignarBodegaResult =
   // asignadas SIN ubicacion por un fallo de configuracion del geocodificador. Cifra
   // agregada (nunca una lista de ordenes, R32) y ausente cuando vale cero (R33). Espejo del
   // contrato del service; el razonamiento vive en `IGuiaAsignacionService.ts`.
-  | { status: "ok"; resultados: AsignarBodegaResultadoItem[]; sinUbicacion?: number }
+  // FICHA 407 (2026-09-10, R10/R11/R12): `sinUbicacionAutorizada` = cuantas se asignaron sin
+  // ubicacion porque una PERSONA lo autorizo. Cifra hermana de `sinUbicacion` y DISJUNTA de
+  // ella —dos estados excluyentes del gate—, y con texto propio: el de la 400 dice «un
+  // problema del sistema, no de la direccion» y aqui la direccion SI es el problema (R12).
+  | {
+      status: "ok";
+      resultados: AsignarBodegaResultadoItem[];
+      sinUbicacion?: number;
+      sinUbicacionAutorizada?: number;
+    }
   // Feature 368 (R15) — espejo EXACTO de `AsignarBodegaServiceResult` (el server action hace
   // passthrough directo del resultado del service, sin traducirlo: ver `lib/actions/ordenes-guia.ts`).
   | {
@@ -93,6 +115,7 @@ export type AsignarBodegaResult =
       resultados: AsignarBodegaResultadoItem[];
       bloqueadas: DetalleConflicto[];
       sinUbicacion?: number;
+      sinUbicacionAutorizada?: number;
     }
   | { status: "unauthenticated" }
   | { status: "forbidden" }
