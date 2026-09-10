@@ -41,6 +41,43 @@ import {
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
 
+/**
+ * ⏳ 2026-09-10 (R19-b) — las TABLAS de las consultas emitidas, en orden.
+ *
+ * Se guarda el NOMBRE de la tabla y no solo el conteo porque un rojo de «esperaba 9, hubo 10» no
+ * dice nada; uno que enseña la lista entera dice CUÁL sobra. Si el `FROM` no se puede extraer, se
+ * conserva un recorte del SQL: es preferible una entrada fea a perder la consulta del recuento.
+ */
+function tablasDe(eventos: { query: string }[]): string[] {
+  return eventos.map(
+    (e) => /FROM\s+"?public"?\.?"?(\w+)"?/i.exec(e.query)?.[1] ?? `??:${e.query.slice(0, 40)}`,
+  );
+}
+
+/**
+ * ⏳ 2026-09-10 (R19/R19-b) — EL COSTE DEL DETALLE, CONGELADO.
+ *
+ * Nueve consultas, en este orden, y cada una con su porqué. Las SEIS primeras son las que ya
+ * emitía `dev` —medido el 2026-09-10 con este mismo espía sobre la misma orden: 6—; las TRES
+ * marcadas con ⭑ las añade esta ficha, porque Prisma resuelve cada relación anidada con su propia
+ * consulta y `gestiones[]` no se puede devolver sin leerlas.
+ *
+ * Este literal es EL CONTRATO DE COSTE. Si alguien añade una relación al `select` del detalle,
+ * este `toEqual` se pone rojo y le enseña la consulta nueva por su nombre. Es justo lo que faltaba
+ * cuando la revisión midió 6 → 9 con la suite entera en verde.
+ */
+const CONSULTAS_DEL_DETALLE = [
+  "orden", //   1. el `findFirst` con el `where` del owner
+  "order_status", //   2. `estatus` de la orden
+  "usuario", //   3. `mensajeroAsignado` (feature 404)
+  "gestion_orden", //   4. la relacion `gestiones` (superconjunto)
+  "orden_historial_estado", // ⭑ 5. 405: el historial de la ORDEN (R6)
+  "orden_incidente", //   6. `incidentesAdmin` (feature 268)
+  "usuario", // ⭑ 7. 405: `gestiones.mensajero` (R9)
+  "order_status", // ⭑ 8. 405: `historialEstados.estatusDestino` (R6)
+  "orden_incidente_evidencia", //   9. la portada del incidente del admin (268)
+];
+
 /** Sufijo unico por corrida: `num_remision` es UNICO entre las ordenes vivas de una tienda. */
 const SUFIJO = `405-${Date.now().toString(36)}`;
 
@@ -197,6 +234,12 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
         resultado: "reprogramada",
         createdAt: T.reprogramada,
         motivo: "TEXTO-LIBRE-el-cliente-no-contesto",
+        // ⭑ CON FOTO. `reprogramada` es el unico resultado que NO la exige, pero la tiene en la
+        //   mayoria de los casos reales (8 de 12 vigentes en la base local, medido el
+        //   2026-09-10). Y es una de las DOS filas que hacen letal la mutacion del filtro de
+        //   `evidencias[]`: la consulta la devuelve, y lo unico que la mantiene fuera del
+        //   contrato publico es la lista `["entregada","rechazada","incidente"]` del mapeo.
+        evidenciaStoragePath: `ordenes/${SUFIJO}/reprogramada-con-foto.jpg`,
       });
       await crearTransicion(propia, gReprogramada, "reprogramada", T.reprogramada);
 
@@ -210,6 +253,12 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
         createdAt: T.devuelta,
         causaDevolucion: "wrong_address",
         motivo: "TEXTO-LIBRE-direccion-mal-escrita",
+        // ⭑ CON FOTO, Y NO ES UN ADORNO: en una `devuelta` la evidencia es **OBLIGATORIA** desde
+        //   la feature 75 (`lib/types/gestion-orden.ts`, rama `devuelta` del
+        //   `discriminatedUnion`: `evidencias: evidenciasSchema`). Una `devuelta` vigente SIN
+        //   foto describe un estado que ninguna gestion creada desde entonces puede tener, y un
+        //   escenario imposible no prueba nada. La segunda fila que hace letal la mutacion.
+        evidenciaStoragePath: `ordenes/${SUFIJO}/devuelta-con-foto.jpg`,
       });
       await crearTransicion(propia, gDevuelta, "devolucion_por_confirmar", T.devuelta);
       await crearTransicion(
@@ -219,8 +268,11 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
         new Date(T.devuelta.getTime() + 60_000), // `estadoResultante` saldria `entregada`.
       );
 
-      // (3) ANULADA SIN FOTO: la excluye el `where` de la consulta —no casa con ninguna de las
-      //     dos ramas del `OR`—. Lleva causa y texto libre para que su fuga sea inconfundible.
+      // (3) ANULADA y LEGADA (sin foto): la excluye el `where` de la consulta —no casa con
+      //     ninguna de las dos ramas del `OR`—. Es una `devuelta` ANTERIOR a la feature 75, que
+      //     es cuando la foto paso a ser obligatoria: por eso puede no tenerla, y por eso es el
+      //     unico sitio del escenario donde una `devuelta` sin evidencia es realista.
+      //     Lleva causa y texto libre para que su fuga sea inconfundible.
       const gAnulada = await crearGestion({
         ordenId: propia,
         mensajeroId: mensajeroA.id,
@@ -249,6 +301,11 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
       await crearTransicion(propia, gAnuladaConFoto, "entregada", T.anuladaConFoto);
 
       // (4) LEGADA: vigente y SIN fila de historial que la respalde -> `estadoResultante: null`.
+      //     Tampoco tiene foto, y las dos cosas van juntas: es una gestion anterior al historial
+      //     de la feature 49 y a la evidencia obligatoria, asi que es coherente consigo misma.
+      //     Es ademas la fila que hace letal la OTRA mitad del filtro de `evidencias[]` (la de
+      //     `evidenciaStoragePath !== null`): si esa mitad desapareciera, entraria con un
+      //     `storagePath` nulo y el service intentaria firmarlo.
       await crearGestion({
         ordenId: propia,
         mensajeroId: mensajeroA.id,
@@ -281,15 +338,16 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
 
       const repo = new OrdenRepository(tx as unknown as PrismaClient);
 
-      // R19: se cuentan las consultas que emite CADA lectura. El espia recoge todo lo que pasa
-      // por la conexion, asi que se mide por delta alrededor de la llamada.
+      // R19/R19-b: se cuentan las consultas que emite CADA lectura, y se guarda ADEMAS la TABLA
+      // de cada una para que un rojo diga QUE consulta sobra en vez de solo cuántas hay. El espia
+      // recoge todo lo que pasa por la conexion, asi que se mide por delta alrededor de la llamada.
       const antesConGestiones = eventos.length;
       const detalle = await repo.findDetalleByOrdenIdForOwner(propia, tiendaPropia.id);
-      const consultasConGestiones = eventos.length - antesConGestiones;
+      const tablasConGestiones = tablasDe(eventos.slice(antesConGestiones));
 
       const antesSinGestiones = eventos.length;
       const detalleVacio = await repo.findDetalleByOrdenIdForOwner(sinGestiones, tiendaPropia.id);
-      const consultasSinGestiones = eventos.length - antesSinGestiones;
+      const tablasSinGestiones = tablasDe(eventos.slice(antesSinGestiones));
 
       // R13: la MISMA orden ajena, pedida con el owner de la key propia.
       const detalleAjeno = await repo.findDetalleByOrdenIdForOwner(ajena, tiendaPropia.id);
@@ -311,8 +369,8 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
         detalleVacio,
         detalleAjeno,
         detalleAjenoConSuOwner,
-        consultasConGestiones,
-        consultasSinGestiones,
+        tablasConGestiones,
+        tablasSinGestiones,
         fotoAntes,
         fotoDespues,
         nombres: {
@@ -369,6 +427,52 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
     expect(m.detalle!.evidencias).toHaveLength(1);
     expect(m.detalle!.evidencias[0].resultado).toBe("entregada");
     expect(m.detalle!.evidencias[0].storagePath).toContain("anulada-con-foto.jpg");
+  });
+
+  // ⏳ 2026-09-10 — R15, LA MITAD DEL FILTRO QUE NADIE VIGILABA (bloqueante 1 de la revision).
+  //
+  // QUE PASO. Hasta esta ficha, lo que entraba en `evidencias[]` lo decidia POSTGRES:
+  // `resultado IN ('entregada','rechazada','incidente') AND evidencia_storage_path IS NOT NULL`.
+  // Al pasar el `where` a superconjunto, la consulta devuelve TAMBIEN `devuelta` y `reprogramada`
+  // con foto, y lo unico que las mantiene fuera del contrato publico es una linea de JavaScript.
+  // El reviewer anadio `"devuelta"` y `"reprogramada"` a esa lista y la mutacion **sobrevivio a
+  // 9.446 tests en verde** el 2026-09-10. No era teorico: en la base local hay 14 filas vigentes
+  // con foto en esos dos resultados.
+  //
+  // POR QUE NO SE CAZABA. El escenario sembraba la `devuelta` SIN foto, y una `devuelta` sin foto
+  // **no puede existir** desde la feature 75 (la evidencia es obligatoria en esa rama del
+  // `discriminatedUnion`). Un escenario imposible no prueba nada: la fila nunca entraba por la
+  // puerta que el filtro tenia que cerrar.
+  //
+  // EL ARREGLO ES EL ESCENARIO, NO EL ASERTO: la `devuelta` y la `reprogramada` vigentes ahora
+  // llevan foto, como en la realidad, y este caso afirma el CONJUNTO EXACTO de `evidencias[]`.
+  it("R15: `evidencias[]` NO gana las gestiones con foto cuyo resultado no le corresponde", async () => {
+    const m = await escenario();
+
+    // Las TRES filas con foto que la consulta devuelve, por su nombre. El aserto no es un conteo:
+    // es la lista entera, para que una de mas se vea con nombre y apellidos.
+    const conFoto = m.fotoAntes.gestiones
+      .filter((g) => g.evidenciaStoragePath !== null)
+      .map((g) => `${g.resultado}:${g.evidenciaStoragePath!.split("/").pop()}`)
+      .sort();
+    expect(conFoto).toEqual([
+      "devuelta:devuelta-con-foto.jpg",
+      "entregada:anulada-con-foto.jpg",
+      "reprogramada:reprogramada-con-foto.jpg",
+    ]);
+
+    // ⭑ Y SOLO UNA CRUZA. Si alguien anade `devuelta` o `reprogramada` a la lista del filtro en
+    // memoria de `toApiOrdenDetalleRow`, este `toEqual` pasa a tener DOS elementos mas y se pone
+    // rojo con el nombre del archivo filtrado dentro.
+    expect(
+      m.detalle!.evidencias.map((e) => `${e.resultado}:${e.storagePath.split("/").pop()}`),
+    ).toEqual(["entregada:anulada-con-foto.jpg"]);
+
+    // Las dos que NO deben cruzar existen y llevan foto: sin esto, el aserto de arriba pasaria
+    // igual sobre un escenario que no tuviera ninguna (el falso verde por falta de datos).
+    expect(conFoto).toHaveLength(3);
+    expect(JSON.stringify(m.detalle!.evidencias)).not.toContain("devuelta-con-foto.jpg");
+    expect(JSON.stringify(m.detalle!.evidencias)).not.toContain("reprogramada-con-foto.jpg");
   });
 
   it("R10: salen de la mas antigua a la mas reciente, y dos lecturas dan el MISMO orden", async () => {
@@ -453,16 +557,38 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
     expect(m.fotoAntes.historial.length).toBeGreaterThan(0);
   });
 
-  it("R19: el detalle con gestiones emite el MISMO numero de consultas que sin ellas", async () => {
+  // ⏳ 2026-09-10 — R19 REESCRITO tras la revision (bloqueante 2).
+  //
+  // AQUI SOLO SE COMPARABA «con 3 gestiones» contra «con 0 gestiones». Esa es una propiedad MAS
+  // DEBIL que el requisito —dice que no hay N+1, no cuántas consultas hay—, y por eso no cazó que
+  // el detalle hubiera pasado de 6 a 9. R19 decía «el MISMO número que hoy» y era **inalcanzable**:
+  // `gestiones[]` no se puede devolver sin leerlas. La premisa era falsa, no la implementación.
+  //
+  // El requisito se reescribió con el número MEDIDO y aquí se CONGELA. Las dos mitades se afirman
+  // por separado, porque protegen cosas distintas.
+  it("R19/R19-b: el detalle emite EXACTAMENTE 9 consultas, y son estas nueve", async () => {
+    const m = await escenario();
+
+    // ⭑ EL NUMERO, CON NOMBRE Y APELLIDOS. Un `toEqual` de la lista entera: si mañana alguien
+    // añade una relación al `select`, este aserto dice CUÁL es la consulta nueva.
+    expect(m.tablasConGestiones).toEqual(CONSULTAS_DEL_DETALLE);
+    expect(m.tablasConGestiones).toHaveLength(9);
+    // Y el espía está midiendo de verdad: una lista vacía significaría que el `log: query` no
+    // llegó y que este caso lleva pasando en falso.
+    expect(m.tablasConGestiones.length).toBeGreaterThan(0);
+  });
+
+  it("R19: ese número NO depende del número de gestiones (no hay N+1)", async () => {
     const m = await escenario();
 
     expect(m.detalleVacio!.gestiones).toEqual([]);
     expect(m.detalle!.gestiones).toHaveLength(3);
-    // La propiedad: el coste no depende del numero de gestiones. Si alguien resolviera
-    // `estadoResultante` con una consulta por gestion, aqui habria tres de mas.
-    expect(m.consultasConGestiones).toBe(m.consultasSinGestiones);
-    // Y el espia esta midiendo algo: cero consultas significaria que el `log: query` no llego.
-    expect(m.consultasConGestiones).toBeGreaterThan(0);
+    // La segunda mitad del requisito, y la que de verdad importa para el coste: si alguien
+    // resolviera `estadoResultante` con una consulta por gestión, aquí habría tres de más.
+    expect(m.tablasConGestiones).toHaveLength(m.tablasSinGestiones.length);
+    // Ojo con el matiz: una orden SIN gestiones emite las mismas 9. Prisma pide la relación
+    // igualmente, y por eso el conteo no se mueve.
+    expect(m.tablasSinGestiones).toEqual(CONSULTAS_DEL_DETALLE);
   });
 
   it("R9: cada gestion lleva su mensajero ATRIBUIDO, con `{id, nombre}` y nada mas", async () => {

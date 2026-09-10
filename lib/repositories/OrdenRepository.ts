@@ -291,7 +291,22 @@ const API_ORDEN_SELECT = {
 // `orden-repository.api-lectura.test.ts` y el `toEqual` del DTO entero de
 // `api-orden-lectura-service.por-orden-id.test.ts`), y `gestiones[]` ve exactamente las VIGENTES.
 //
-// Sigue siendo UNA sola consulta (R19): un superconjunto de la misma relacion no anade round-trips.
+// ⏳ 2026-09-10 — AQUI DECIA «Sigue siendo UNA sola consulta (R19)» Y ERA FALSO. Lo corrige la
+// revision de la 405, y se deja escrito el numero MEDIDO porque un comentario que afirma una cifra
+// que nadie comprobo es peor que no tener comentario:
+//
+//   · el SUPERCONJUNTO, en efecto, NO anade ninguna consulta: es la misma relacion con un `where`
+//     mas ancho. Esa mitad de la frase era cierta y es la que se conserva;
+//   · pero Prisma resuelve CADA relacion anidada con su propia consulta, y este `select` gana DOS
+//     relaciones nuevas (`historialEstados` y `gestiones.mensajero`) mas UNA anidada dentro de la
+//     primera (`estatusDestino`). El detalle pasa de **6 consultas a 9**, medido con el espia
+//     `$on("query")` sobre la misma orden y la misma base (405/R19).
+//
+// Las 9 estan CONGELADAS por su nombre de tabla en
+// `tests/integration/db/gestiones-detalle-api-405.test.ts` (`CONSULTAS_DEL_DETALLE`): anadir una
+// relacion mas aqui pone ese test rojo y dice cual es la consulta nueva. Lo que NO cambia, y es lo
+// que de verdad importa: el numero es FIJO, no depende de cuantas gestiones tenga la orden. Cero,
+// tres o seis gestiones cuestan las mismas 9.
 const API_ORDEN_DETALLE_SELECT = {
   ...API_ORDEN_SELECT,
   gestiones: {
@@ -3105,8 +3120,14 @@ export class OrdenRepository implements IOrdenRepository {
    * Feature 177/R16/R17: detalle publico de una orden del owner por `orden.id` (la resolucion de
    * la 177 devuelve el id porque `num_guia` puede ser NULL). El scope va en el WHERE
    * (`tienda_id = ownerId` + `deleted_at IS NULL`): ajena, borrada o inexistente -> `null` (el
-   * service -> 404 uniforme, no filtra existencia). Incluye (join, sin N+1) las evidencias de
-   * entrega/rechazo/incidente por sus dos procedencias; `[]` si no hay. Solo LEE.
+   * service -> 404 uniforme, no filtra existencia). Incluye (sin N+1) las evidencias de
+   * entrega/rechazo/incidente por sus dos procedencias y, desde la 405, las gestiones VIGENTES;
+   * `[]` si no hay. Solo LEE.
+   *
+   * ⏳ 2026-09-10 — «join» se retira de esa frase porque describia mal lo que Prisma hace: NO es un
+   * join, es una llamada de cliente que el motor resuelve con **9 consultas** (6 antes de la 405),
+   * congeladas por su nombre en `tests/integration/db/gestiones-detalle-api-405.test.ts`. «Sin
+   * N+1» SI es cierto y se conserva: el numero no depende de cuantas gestiones tenga la orden.
    */
   async findDetalleByOrdenIdForOwner(
     ordenId: string,
