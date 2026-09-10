@@ -74,10 +74,12 @@
             <p style="margin: 0; font-size: 12.5px; line-height: 1.45; color: #4a5368;">{{item.detalle}}</p>
 
             <div style="display: flex; align-items: center; gap: 10px; margin-top: 2px;">
-              <button type="button" class="accion-btn" style="border: 0; border-radius: 8px; background: #f26419; color: #ffffff; font-family: inherit; font-size: 12px; font-weight: 600; padding: 7px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
-                {{item.accion}}
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>
-              </button>
+              <sc-if value="{{item.tieneAtajo}}" hint-placeholder-val="{{true}}">
+                <button type="button" class="accion-btn" style="border: 0; border-radius: 8px; background: #f26419; color: #ffffff; font-family: inherit; font-size: 12px; font-weight: 600; padding: 7px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                  {{item.accion}}
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>
+                </button>
+              </sc-if>
               <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: #4a5368;">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 {{item.cuando}}
@@ -108,8 +110,6 @@
       </sc-for>
     </div>
 
-    <!-- Pie -->
-    <button type="button" class="link-btn" style="border: 0; background: #ffffff; padding: 11px 16px; font-family: inherit; font-size: 12.5px; font-weight: 500; color: #4a5368; cursor: pointer; text-align: center;">Ver todas las notificaciones</button>
   </div>
 
 </div>
@@ -155,23 +155,22 @@ class Component extends DCLogic {
       },
       "Mensajero": {
         accionables: [
-          { ...ALERTA, titulo: "Tu cierre del lunes fue rechazado",
-            detalle: "El monto en efectivo no cuadra con las gestiones. Revisá y volvé a enviarlo.",
+          { ...ALERTA, titulo: "Tu cierre del lunes quedó vencido",
+            detalle: "Se cerró sin que lo enviaras. Resolvelo hoy o vas a quedar bloqueado.",
             accion: "Ver mi cierre", cuando: "hace 40 min" },
-          { ...CAJA, titulo: "Tenés 14 órdenes para mañana",
-            detalle: "Zona GAM San Ramón. Recogé en bodega central antes de las 8:00.",
+          { ...CAJA, titulo: "Le cambiaron el día de reparto a 2 órdenes tuyas",
+            detalle: "Pasaron a mañana. Revisá tu lista antes de salir para no llevar lo que ya no toca.",
             accion: "Ver mi reparto", cuando: "hace 3 h" },
         ],
         informativas: [
           { titulo: "Se retiró la guía 41270372 de tu ruta", cuando: "hace 5 h" },
-          { titulo: "Le cambiaron el día de reparto a 2 órdenes tuyas", cuando: "ayer" },
         ],
       },
       "Maestro": {
         accionables: [
           { ...ALERTA, titulo: "El servicio de mapas lleva 2 h rechazando peticiones",
-            detalle: "43 direcciones sin ubicar. Es un problema de nuestra credencial, no de las direcciones.",
-            accion: "Ver el diagnóstico", cuando: "hace 15 min" },
+            detalle: "43 direcciones sin ubicar. Es nuestra credencial, no las direcciones: se arregla fuera de la app.",
+            accion: "", tieneAtajo: false, cuando: "hace 15 min" },
           { ...AVISO, titulo: "Un webhook lleva fallando en racha",
             detalle: "Sus reintentos se espaciaron solos. Sigue activo y se recupera al primer envío correcto.",
             accion: "Ver suscripción", cuando: "hace 4 h" },
@@ -184,11 +183,15 @@ class Component extends DCLogic {
     };
 
     const set = porRol[rol] ?? porRol["Tienda"];
+    // Un aviso puede requerir accion y NO tener a donde llevarte: el servicio de mapas
+    // caido se arregla fuera de la app, asi que ahi no se pinta boton. Un atajo que no
+    // resuelve nada enseña a ignorar los que si.
+    const accionables = set.accionables.map((a) => ({ ...a, tieneAtajo: a.tieneAtajo !== false }));
     return {
-      accionables: set.accionables,
+      accionables,
       informativas: set.informativas,
-      conteoAccion: set.accionables.length,
-      conteoTotal: set.accionables.length + set.informativas.length,
+      conteoAccion: accionables.length,
+      conteoTotal: accionables.length + set.informativas.length,
     };
   }
 }

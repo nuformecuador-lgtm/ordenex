@@ -19,6 +19,13 @@
       "y": -130,
       "w": 440,
       "text": "El panel cambia de contenido según el rol: probá el selector de arriba del artboard."
+    },
+    {
+      "id": "nota-no-existen",
+      "x": 1560,
+      "y": 1020,
+      "w": 320,
+      "text": "Corregido el 2026-09-10, contra el código:\n\nDos avisos que este lienzo prometía al mensajero NO EXISTEN todavía — «tu cierre fue rechazado» (si no llega a bloquearlo, hoy no avisa nada) y «tu reparto de mañana» (no hay ni evento). Quedan como fichas 412 y 413.\n\nEl aviso de mapas caídos perdió su botón: esa credencial se arregla fuera de la app, y un atajo que no resuelve nada enseña a ignorar los que sí."
     }
   ],
   "launch": { "view": "canvas" }
