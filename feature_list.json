@@ -4808,10 +4808,11 @@
     },
     {
       "id": 405,
+      "spec_path": "specs/405-gestiones-en-detalle-api/",
       "title": "el detalle por API no expone el historial de gestiones de la orden",
       "description": "El integrador solo ve el resultado final, no los intentos, asi que no puede medir reintentos ni tiempos por mensajero.",
       "zone": "backend",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
       "complexity": "media",
       "branch": null,
