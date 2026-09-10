@@ -7,7 +7,7 @@ desactivar — `activa` no se toca en ningún task de esta lista.
 
 ## Fase 0 — Migraciones (bloquean todo lo demás)
 
-- [ ] **T1.** Migración `db/migrations/20260909120000_webhook_suscripcion_circuito/`: añade
+- [x] **T1.** Migración `db/migrations/20260909120000_webhook_suscripcion_circuito/`: añade
   `fallos_consecutivos` (int, default 0) y `sin_exito_desde` (timestamptz, default `now()`) a
   `webhook_suscripcion` (design §1.1) — **dos columnas, no cuatro**: no hay columna de "pausada"
   (es derivada, §2). Incluye `down.sql` (`DROP COLUMN` de las 2, en orden inverso). Actualiza
@@ -18,7 +18,7 @@ desactivar — `activa` no se toca en ningún task de esta lista.
   verifica que `db:rollback` las retira sin tocar las columnas existentes. Cubre R1 (parcial,
   solo el modelo de datos).
 
-- [ ] **T2. [P]** Migración `db/migrations/20260909130000_notificacion_evento_webhook_suscripcion/`:
+- [x] **T2. [P]** Migración `db/migrations/20260909130000_notificacion_evento_webhook_suscripcion/`:
   `ALTER TYPE ... ADD VALUE IF NOT EXISTS` para `webhook_suscripcion_pausada` (en
   `notificacion_evento`) y `webhook_suscripcion_pausa` (en `notificacion_entidad_tipo`), con su
   `down.sql` recreando-con-lista los enums de HOY (design §1.2 — copiar exactamente la lista
@@ -33,14 +33,14 @@ desactivar — `activa` no se toca en ningún task de esta lista.
 
 ## Fase 1 — El predicado puro y la configuración
 
-- [ ] **T3.** `lib/utils/webhook-suscripcion-pausa.ts` (nuevo): `WebhookPausaConfig` +
+- [x] **T3.** `lib/utils/webhook-suscripcion-pausa.ts` (nuevo): `WebhookPausaConfig` +
   `estaPausada(fallosConsecutivos, sinExitoDesde, ahora, config)` (design §2), función pura sin
   dependencias.
   Depende de: nada. **Hecho cuando:** `tests/unit/utils/webhook-suscripcion-pausa.test.ts`
   (nuevo) cubre: por debajo del piso de fallos → `false`; piso cumplido pero ventana no →
   `false` (R6); ambos cumplidos → `true` (R4); caso límite exacto (`>=` en ambas condiciones).
 
-- [ ] **T4. [P]** `lib/config/webhook.ts`: añade `WEBHOOK_PAUSA_FALLOS_MINIMOS` (default 3),
+- [x] **T4. [P]** `lib/config/webhook.ts`: añade `WEBHOOK_PAUSA_FALLOS_MINIMOS` (default 3),
   `WEBHOOK_PAUSA_VENTANA_MS` (env en minutos, default 30, convertido a ms) y
   `WEBHOOK_PAUSA_INTERVALO_MS` (default 3_600_000) a `WebhookConfig`/`loadWebhookConfig` (design
   §2.3).
@@ -49,14 +49,14 @@ desactivar — `activa` no se toca en ningún task de esta lista.
 
 ## Fase 2 — Repositorio
 
-- [ ] **T5.** `lib/interfaces/repositories/IWebhookSuscripcionRepository.ts`: añade
+- [x] **T5.** `lib/interfaces/repositories/IWebhookSuscripcionRepository.ts`: añade
   `registrarEntregaOk`, `incrementarFalloYLeer` (design §2.2) — **no** hay un tercer método de
   "pausar" ni "desactivar"; extiende `WebhookSuscripcionVista` con `pausada`/`sinExitoDesde`
   (design §7). Actualiza cualquier doble/fake de test que implemente esta interfaz.
   Depende de: T1. **Hecho cuando:** el proyecto tipa en verde (`tsc`) y el doble de test queda
   con los 2 métodos nuevos implementados de forma mínima (la lógica real la prueba T6).
 
-- [ ] **T6.** `lib/repositories/WebhookSuscripcionRepository.ts`: implementa los 2 métodos
+- [x] **T6.** `lib/repositories/WebhookSuscripcionRepository.ts`: implementa los 2 métodos
   nuevos (atómicos vía `update`/`increment` de Prisma); extiende `upsertByOwner`/
   `actualizarUrlByOwner` para resetear las 2 columnas en cada llamada (design §2.2); `findByOwner`
   calcula `pausada` con `estaPausada()` (T3) usando la config vigente (T4) y selecciona
@@ -69,14 +69,14 @@ desactivar — `activa` no se toca en ningún task de esta lista.
 
 ## Fase 3 — El circuito en el service y en la cola
 
-- [ ] **T7. [P]** `lib/interfaces/external/IWebhookSender.ts` + `lib/clients/webhook-sender.ts`:
+- [x] **T7. [P]** `lib/interfaces/external/IWebhookSender.ts` + `lib/clients/webhook-sender.ts`:
   `WebhookOutcome.transitorio` gana `retryAfterMs?: number`; `entregar` parsea `Retry-After` en
   429 (segundos y fecha HTTP), con `now` inyectable en `WebhookSenderOpts` (design §6).
   Depende de: nada. **Hecho cuando:** `tests/unit/clients/webhook-sender.test.ts` (extendido)
   cubre: 429 + `Retry-After: <segundos>`, 429 + `Retry-After: <fecha HTTP>`, 429 sin cabecera,
   429 con cabecera ilegible (cae a `undefined`, no revienta). Cubre R14, R15.
 
-- [ ] **T8.** `lib/services/WebhookEstadoService.ts`: `WebhookEntregaFallidaError` gana
+- [x] **T8.** `lib/services/WebhookEstadoService.ts`: `WebhookEntregaFallidaError` gana
   `retryAfterMs?: number`; `ejecutar` llama a `registrarEntregaOk` en éxito y a
   `incrementarFalloYLeer` + `estaPausada` en fallo (design §2.1), calcula el `retryAfterMs`
   final (intervalo de pausa si `estaPausada()`, si no el del 429 si lo hubiera), excluye
@@ -91,7 +91,7 @@ desactivar — `activa` no se toca en ningún task de esta lista.
   ventana no cumplida → `retryAfterMs` sin el intervalo de pausa), R5 (nada en el test toca
   `activa`), y que ni el log ni la notificación contienen URL/secreto (R13).
 
-- [ ] **T9.** `lib/services/JobQueueService.ts`: hook genérico `retryAfterMs` (design §6) —
+- [x] **T9.** `lib/services/JobQueueService.ts`: hook genérico `retryAfterMs` (design §6) —
   `drenar` extrae el hint del `err` capturado y lo pasa a `manejarFallo`, que calcula
   `max(backoffGenerico, min(hint, JOBS_BACKOFF_CAP_MS))`.
   Depende de: nada (independiente de T8 en código, pero su test usa `WebhookEntregaFallidaError`
@@ -103,7 +103,7 @@ desactivar — `activa` no se toca en ningún task de esta lista.
 
 ## Fase 4 — Aviso
 
-- [ ] **T10.** `lib/notificaciones/emitir.ts`: `WebhookSuscripcionPausadaContexto` +
+- [x] **T10.** `lib/notificaciones/emitir.ts`: `WebhookSuscripcionPausadaContexto` +
   `emitirWebhookSuscripcionPausada` (design §5), entidad sintética
   `"${ownerUsuarioId}:${sinExitoDesde.toISOString()}"`, destinatario `{tipo:"rol",
   rol:"maestro"}`, `tipo: "warning"`, texto sin URL/secreto y sin la palabra "desactiv" (R9,
@@ -114,7 +114,7 @@ desactivar — `activa` no se toca en ningún task de esta lista.
   distintos producen `entidadId` distintos mientras que el mismo `sinExitoDesde` producen el
   mismo (R12).
 
-- [ ] **T11.** `lib/notificaciones/notificadores.ts`:
+- [x] **T11.** `lib/notificaciones/notificadores.ts`:
   `notificarWebhookSuscripcionPausadaCon`/`...Real`, mismo patrón `emitirBestEffort` que los 8
   notificadores existentes (design §5).
   Depende de: T10. **Hecho cuando:** `tests/unit/services/notificacion-notificadores-reales.test.ts`
@@ -123,7 +123,7 @@ desactivar — `activa` no se toca en ningún task de esta lista.
   absorbe el `P2002` sin lanzar — R12, primera frase), y que un repo que lanza NO propaga el
   error (R11).
 
-- [ ] **T12.** `lib/services/jobs/webhook-estado-handler.ts`: `buildWebhookEstadoService` inyecta
+- [x] **T12.** `lib/services/jobs/webhook-estado-handler.ts`: `buildWebhookEstadoService` inyecta
   `notificarWebhookSuscripcionPausadaReal` como composition root (design §5).
   Depende de: T8, T11. **Hecho cuando:** el handler de producción queda cableado; test de
   wiring (o extensión del existente de `procesar-jobs/route.ts`) confirma que la construcción
@@ -131,7 +131,7 @@ desactivar — `activa` no se toca en ningún task de esta lista.
 
 ## Fase 5 — Visibilidad en la UI existente
 
-- [ ] **T13.** `lib/interfaces/services/IWebhookSuscripcionService.ts`
+- [x] **T13.** `lib/interfaces/services/IWebhookSuscripcionService.ts`
   (`WebhookSuscripcionVistaDTO`), `lib/services/WebhookSuscripcionService.ts` (`obtener`),
   `lib/types/webhook.ts` (`ObtenerWebhookActionResult`), `lib/actions/webhooks.ts`
   (`obtenerWebhook`): passthrough de `pausada`/`sinExitoDesde` (design §7).
@@ -140,7 +140,7 @@ desactivar — `activa` no se toca en ningún task de esta lista.
   llegan intactos hasta el resultado de la Server Action, y que `obtenerWebhook` sigue sin
   exponer el secreto. Cubre R18.
 
-- [ ] **T14.** `app/(app)/configuracion/api/_components/WebhookAccionCell.tsx`: tipo
+- [x] **T14.** `app/(app)/configuracion/api/_components/WebhookAccionCell.tsx`: tipo
   `WebhookEstado` gana `pausada`/`sinExitoDesde`; línea adicional (independiente de la rama
   `activa`/`no hay webhook`) cuando `pausada === true` (design §7). Sin botones nuevos: "Guardar
   URL"/"Registrar" ya existente es la vía manual de salida.
@@ -151,7 +151,7 @@ desactivar — `activa` no se toca en ningún task de esta lista.
 
 ## Fase 6 — Cierre
 
-- [ ] **T15.** Actualizar `progress/impl_403-webhook-destino-que-falla-siempre.md` con el mapa
+- [x] **T15.** Actualizar `progress/impl_403-webhook-destino-que-falla-siempre.md` con el mapa
   R→test final (el implementer lo escribe al terminar, per `docs/specs.md`).
   Depende de: T1–T14. **Hecho cuando:** cada `R1`–`R19` de `requirements.md` aparece con al
   menos un test real y en verde; ningún requisito queda sin test (gate del reviewer); ninguna

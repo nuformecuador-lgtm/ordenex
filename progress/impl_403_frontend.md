@@ -8,12 +8,18 @@
 ## Qué se añadió, y por qué está escrito así
 
 Una línea más dentro del bloque `role="status"` del modal de gestión del webhook, que aparece
-solo cuando la Server Action devuelve `pausada: true`. **El texto exacto** (la fecha del
-ejemplo es la del test, `2026-09-09T13:05:00.000Z` ya formateada):
+solo cuando la Server Action devuelve `pausada: true` **y la suscripción está activa** (H-2).
+**El texto exacto**, copiado del render real y no de la intención (la fecha del ejemplo es la
+del test, `2026-09-09T13:05:00.000Z`, formateada por el `Intl` de la máquina):
 
 > Los envíos a este webhook se están espaciando: el destino lleva sin aceptar ninguno desde el
-> 9/9/2026, 8:05. No hay que hacer nada: vuelven a su ritmo normal en cuanto el destino acepte
+> 9/9/26, 8:05 a. m.. No hay que hacer nada: vuelven a su ritmo normal en cuanto el destino acepte
 > un envío. Si ya está resuelto, guarda la URL de nuevo para reintentarlo ahora.
+
+**Ojo al punto doble de «a. m..»**: es real y está medido (ver el punto 4 de «lo que no
+cuadra»); la primera versión de esta bitácora decía «9/9/2026, 8:05» y era una suposición mía,
+no el render. El `dateStyle: "short"` de es-EC da año de dos dígitos y hora con `a. m.`/`p. m.`,
+y ese punto de la abreviatura choca con el que cierra la frase.
 
 Y **sin fecha** (si `sinExitoDesde` llegara `null`, que el contrato permite):
 
@@ -42,15 +48,18 @@ recalcula la pausa ni la deduce de nada: `pausada` llega ya resuelta y se recalc
 
 ## Archivos
 
-**Creado:** `app/(app)/configuracion/api/_components/fecha-legible.ts`
+**Creados:** `app/(app)/configuracion/api/_components/fecha-legible.ts` ·
+`tests/unit/components/fecha-legible.test.ts` (2ª vuelta, H-3)
 
 **Modificados:**
 - `app/(app)/configuracion/api/_components/WebhookAccionCell.tsx` — `WebhookEstado` pasa a ser
   el tipo del contrato (`WebhookVistaPublica`) en vez de una copia local que ya se había
-  quedado corta; `pausada`/`sinExitoDesde` derivados junto a `activa`; la línea nueva.
+  quedado corta; `pausada`/`sinExitoDesde` derivados junto a `activa`; la línea nueva,
+  condicionada a `activa && pausada` (H-2).
 - `app/(app)/configuracion/api/_components/api-keys-columns.tsx` — su `formatFechaCreacion`
   ahora delega en `fecha-legible` (mismo resultado; solo decide su propio `—`).
-- `tests/components/WebhookAccionCell.test.tsx` — 7 tests nuevos (16 → 23).
+- `tests/components/WebhookAccionCell.test.tsx` — 8 tests nuevos (16 → 24).
+- `specs/403-webhook-destino-que-falla-siempre/tasks.md` — las 15 casillas marcadas (H-5).
 
 ## Mapa `R<n> → test` (la parte de UI; el resto está en la bitácora del backend)
 
@@ -63,6 +72,8 @@ recalcula la pausa ni la deduce de nada: `pausada` llega ya resuelta y se recalc
 | **R19** | tras «Guardar URL», el aviso se apaga sin recargar | ídem → «tras 'Guardar URL' el aviso desaparece sin recargar la página» (2ª lectura de `obtenerWebhook`, el modal sigue en pie) |
 | **R9** (su regla de vocabulario, aplicada a la UI) | nunca «se desactivó»/«se dio de baja»/«se canceló», y sin jerga | ídem → «el aviso NO dice que se desactivó, ni que se dio de baja, ni suena a jerga técnica» |
 | **R13** | ni la URL ni el secreto en el texto | ídem → «el aviso no filtra la URL del webhook ni el secreto» |
+| **H-2** (revisión) | una suscripción dada de baja NO puede decir a la vez que no existe y que sus envíos se espacian | ídem → «con la suscripción dada de baja no se muestra el aviso de espaciado, aunque venga `pausada: true`» (afirma además que el bloque `role="status"` dice UNA sola cosa) |
+| **H-3** (revisión, parcial) | el caso vacío del formateador de fecha | `tests/unit/components/fecha-legible.test.ts` → «EL CASO VACÍO: una fecha no interpretable devuelve `null`, nunca «Invalid Date»» |
 
 ## Mutaciones: dos, las dos muertas
 
@@ -76,6 +87,41 @@ Arnés autocomprobado (`sha1` antes/después, aborta con código 2 si el archivo
 
 M2 es la que importa de verdad: un aviso que sale siempre es tan inútil como no tenerlo, y es
 justo lo que un `pausada` mal leído produciría.
+
+**Segunda vuelta (H-2): M3, también muerta.**
+
+| # | Qué se rompió | Rojo |
+| --- | --- | --- |
+| **M3** | se quita la condición nueva: `{activa && pausada ? (` vuelve a `{pausada ? (` | **1 test rojo** de 24, y es exactamente el del caso: «con la suscripción dada de baja no se muestra el aviso de espaciado, aunque venga `pausada: true`» → `expected <p …(1)></p> to be null`. Los otros 23 siguen verdes, o sea que la condición nueva no rompió ningún caso previo |
+
+---
+
+## Segunda vuelta: los dos hallazgos de la revisión que tocaba cerrar
+
+**H-2 — dos frases que se contradicen.** Reproducido por el reviewer: `activa=false` +
+`pausada=true` a la vez (dar de baja no reinicia el circuito y `findByOwner` no filtra por
+`activa`), y la pantalla pintaba «No hay webhook registrado» **y** «sus envíos se están
+espaciando». Arreglado donde lo cifró la revisión, en la condición del bloque
+(`WebhookAccionCell.tsx`): `{activa && pausada ? (`. Se eligió esa vía y no reiniciar el
+circuito en `desactivarByOwner` porque esto es frontend y esa otra es una escritura de
+repositorio, fuera de este alcance — y porque la frase es falsa aunque el dato sea fiel: una
+suscripción de baja no recibe entregas, así que no hay nada que espaciar. El porqué queda
+escrito en el docblock, junto a la condición, para que el próximo que lo toque no lo deshaga
+sin enterarse; y el test del caso lo sostiene (M3).
+
+**H-5 — `tasks.md` con 0 de 15.** Marcadas las 15: T1–T13 y T15 las hizo el backend, T14 esta
+bitácora. `CHECKPOINTS.md` línea 9 lo pide por su letra («todas las tasks están marcadas
+`[x]`»). Comprobado que no queda ninguna `- [ ]` en el archivo.
+
+**H-3 — cubierto a nivel de módulo, no de columna.** Salía casi gratis, así que
+`tests/unit/components/fecha-legible.test.ts` afirma el contrato del formateador nuevo, incluido
+**el caso vacío** (fecha no interpretable → `null`, nunca «Invalid Date»). Lo que sigue **sin**
+test es el `?? SIN_DATO` de la columna «Fecha de creación» —que una fecha ilegible se pinte como
+`—` en la tabla—: es deuda preexistente que este refactor preserva tal cual, y cubrirla exige
+renderizar las columnas, que es otro archivo y otra ficha.
+
+H-1 (orden de merge con la 401), H-4 (un destino que aletea) y H-6 quedan como los dejó la
+revisión: no son de este alcance.
 
 ## El gate: `INIT_EXIT=1`, y el rojo NO es de este diff
 
@@ -131,5 +177,15 @@ documentada es mergear primero la ficha cuya migración causa el rojo; no es alg
    habría creado un ciclo—. Se extrajo a `_components/fecha-legible.ts`, consumido por los dos.
    Es presentación pura, sin cambio de comportamiento (la columna «Fecha de creación» pinta
    exactamente lo mismo, incluido su `—`), y evita la segunda copia del formato.
-3. **`tasks.md` no se marca.** Ninguna casilla de esa lista está marcada (T1–T13 tampoco, y
-   están hechas); se respeta la convención de la ficha en vez de estrenar una.
+3. ~~**`tasks.md` no se marca.**~~ **Resuelto en la 2ª vuelta (H-5):** las 15 casillas están
+   marcadas. Mi razón original («no estrenar convención») era mala: `CHECKPOINTS.md` lo pide
+   por su letra y la 393 lo lleva así (35 marcadas, 0 sin marcar).
+4. **El texto que se ve tiene un punto doble: «…desde el 9/9/26, 8:05 a. m..».** Medido, no
+   supuesto: `dateStyle: "short"` de es-EC devuelve `9/9/26, 8:05 a. m.` —año de dos dígitos y
+   la abreviatura con punto—, y ese punto choca con el que cierra mi frase. **No se ha tocado**
+   porque el copy ya está revisado y aprobado, y cambiarlo por mi cuenta después de la revisión
+   sería justo lo contrario de lo que se me pidió. El arreglo, si se quiere, es de una línea y
+   sin tocar ni una palabra del mensaje: poner la fecha donde no cierre la frase —
+   `desde el ${sinExitoDesde} el destino no acepta ninguno.`— lo que además queda inmune a que
+   otro ICU dé la hora en formato 24 h (ahí no hay abreviatura y hoy no sobraría nada). Queda
+   declarado para que lo decida quien lleva el copy.

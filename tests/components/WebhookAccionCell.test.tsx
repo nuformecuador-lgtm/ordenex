@@ -516,6 +516,35 @@ describe("WebhookAccionCell — envíos espaciados (ficha 403: R18, R19)", () =>
     expect(screen.queryByText(/se están espaciando/i)).toBeNull();
   });
 
+  it("H-2: con la suscripción dada de baja no se muestra el aviso de espaciado, aunque venga `pausada: true`", async () => {
+    // Camino REAL, reproducido en la revisión: el dueño da de baja una suscripción que estaba
+    // en racha de fallos. `desactivarByOwner` pone `activa=false` y NO reinicia el circuito, y
+    // `findByOwner` no filtra por `activa`, así que el servidor sigue diciendo `pausada: true`.
+    // La pantalla NO puede pintar las dos frases a la vez: «No hay webhook registrado» y «sus
+    // envíos se están espaciando» se contradicen, y la segunda es falsa —una suscripción de
+    // baja no recibe entregas, así que no hay nada que espaciar—.
+    obtenerWebhookMock.mockResolvedValue({
+      status: "ok" as const,
+      webhook: {
+        url: URL_ACTIVA,
+        activa: false,
+        pausada: true,
+        sinExitoDesde: SIN_EXITO_ISO,
+      },
+    });
+    const user = userEvent.setup();
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    await abrir(user);
+    await screen.findByText(/No hay webhook registrado/i);
+
+    expect(screen.queryByText(/se están espaciando/i)).toBeNull();
+    // Y la frase que SÍ vale se sigue leyendo sola, sin nada que la contradiga.
+    expect(
+      normalizar(screen.getByRole("status").textContent ?? ""),
+    ).toBe("No hay webhook registrado para este owner.");
+  });
+
   it("R19: tras 'Guardar URL' el aviso desaparece sin recargar la página", async () => {
     // El reinicio lo hace el SERVIDOR al guardar la URL; la pantalla solo vuelve a leer con
     // el `refrescar()` que ya existía, y la segunda lectura ya viene sin pausa.

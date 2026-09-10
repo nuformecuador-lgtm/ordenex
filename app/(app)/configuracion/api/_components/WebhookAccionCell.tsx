@@ -84,8 +84,15 @@ export function WebhookAccionCell({
   /**
    * FICHA 403 (R18/R19). «Espaciada» NO es un error, ni una baja, ni algo que el dueño tenga
    * que arreglar desde aquí: la suscripción sigue viva y sigue reintentando, solo que más
-   * separado en el tiempo, porque el destino lleva un rato sin aceptar ningún envío. Por eso
-   * la línea es independiente de la rama `activa`/`no hay webhook` y no toca ningún botón.
+   * separado en el tiempo, porque el destino lleva un rato sin aceptar ningún envío. La línea
+   * es ADICIONAL a la de arriba y no toca ningún botón.
+   *
+   * PERO SOLO SE PINTA SI LA SUSCRIPCIÓN ESTÁ ACTIVA (H-2 de la revisión, reproducido): dar de
+   * baja pone `activa=false` sin reiniciar el circuito, así que `pausada` sigue llegando en
+   * `true` y la pantalla mostraba a la vez «No hay webhook registrado» y «sus envíos se están
+   * espaciando». Son incompatibles, y la segunda es falsa: una suscripción de baja no recibe
+   * entregas, así que no hay nada que espaciar. Dos frases que se contradicen no informan: le
+   * enseñan al dueño a no creerse ninguna.
    *
    * El valor es DERIVADO en el servidor y se recalcula en cada `obtenerWebhook`, así que el
    * `refrescar()` que ya corre tras guardar la URL lo apaga sin recargar la página (R19). No
@@ -179,8 +186,8 @@ export function WebhookAccionCell({
               </span>
             )}
 
-            {/* 403/R18: línea ADICIONAL, independiente de la rama de arriba. */}
-            {pausada ? (
+            {/* 403/R18: línea ADICIONAL a la de arriba, pero NUNCA contra ella (H-2). */}
+            {activa && pausada ? (
               <p className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-foreground">
                 Los envíos a este webhook se están espaciando:{" "}
                 {sinExitoDesde
