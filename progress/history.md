@@ -4895,3 +4895,40 @@ Cerrada y en produccion. Cuatro PR (#760, #761, #762, #763), release #764. Sin m
   render, y ahora hay un test que vigila la puntuacion y el orden de la frase.
 - Se corrigio ademas una contradiccion en pantalla: una suscripcion dada de baja mostraba a la vez
   «No hay webhook registrado» y «Los envios se estan espaciando».
+
+## 2026-09-10 — 401 · la caida del geocodificador avisa y se recupera sola
+- Aviso al `maestro` y a los `admin` cuando 3 jobs DISTINTOS acumulan el marcador de fallo de
+  configuracion en una ventana de 60 min, y recuperacion automatica de los jobs muertos por esa
+  causa en cuanto el proveedor responde de verdad. Nunca resucita un job cuya causa sea la
+  direccion: esas terminan `done`, no `failed`.
+- Requisitos cubiertos: R1-R35, mapeados en `progress/impl_401.md`. Gate completo `INIT_EXIT=0`,
+  26.782 tests, `integration/db` entera (152 archivos), sincronia base<->rama medida contando
+  `_prisma_migrations`: 189 = 189, sin sobrantes por ningun lado.
+- **ORIGEN, medido:** el corte del 2026-09-08 duro **19 HORAS sin que ninguna alerta se disparara**
+  —lo detecto el humano porque no podia asignar ordenes— y los 25 jobs muertos **no se recuperaron
+  solos**: hubo que entrar a la base de produccion a resucitarlos a mano. El criterio de exito de
+  esta ficha es que, si se repite, nadie tenga que abrir la base de datos.
+- **El umbral esta calculado, no intuido:** a la tasa medida del corte (2,4 jobs/h) el aviso sale
+  a **~75 minutos en vez de 19 horas**. Se cuentan jobs y no intentos, porque un solo job reintenta
+  8 veces con backoff y cruzaria un umbral de 3 en tres minutos: el "fallo aislado" prohibido.
+- **Descarto el segundo eje de la 403 con una razon que nadie habia visto:** un job de
+  geocodificacion puede completarse **sin tocar al proveedor** (acierto de cache, `SIN_DIRECCION`,
+  orden borrada). Un aviso que exigiera «cero exitos en la ventana» se apagaria con el primer
+  acierto de cache y **no saldria nunca**. Copiar el umbral de la ficha hermana habria producido
+  una alerta muerta.
+- **La revision RECHAZO la primera vuelta, y no por el codigo:** el `design.md` publicaba un SQL
+  que Postgres rechaza (`0A000`, `FOR UPDATE` junto a funciones de ventana) y `tasks.md` llegaba a
+  pedirlo por escrito. El codigo usaba la forma correcta de tres CTEs —la misma que ya obligo a
+  partir el `claimBatch` de la 402— pero el spec habria hecho que alguien lo reintrodujera, **y el
+  fallo seria MUDO**: lanzaria, el avisador se lo tragaria, y el logger inyectado era un no-op.
+- **Otro fallo mudo cerrado de paso:** R20 afirmaba «queda registrado con contexto» y en produccion
+  no registraba nada (el composition root pasaba `undefined` y el default era `{ warn: () => {} }`).
+  Ahora un test espia la salida real y falla si nadie escribe.
+- **El `down.sql` hubo que reescribirlo por el ORDEN DE MERGE:** su lista era la foto de `dev`
+  antes de que entrara la 403, y revertir esta migracion **habria borrado en silencio sus dos
+  valores**. Reescrito con los diez eventos y ocho `entidad_tipo` actuales, y protegido con dos
+  tests que lo afirman **por nombre**: ya no depende de que alguien se acuerde.
+- Cinco parametros quedan configurables por entorno con default (jobs minimos, ventana,
+  lote, espaciado, enfriamiento). Ausente, vacio, no numerico, cero o negativo cae al default sin
+  lanzar. **No se declaran en `.env.example`**: `lib/config/jobs.ts` sigue el mismo patron con cinco
+  variables y ninguna esta ahi.
