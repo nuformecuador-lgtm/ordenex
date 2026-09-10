@@ -17,8 +17,11 @@ import { render, screen, cleanup, waitFor, within } from "@testing-library/react
 import { useEffect } from "react";
 import { SWRConfig } from "swr";
 
-import { CohorteCargaTabla } from "@/app/(app)/analitica/_components/entregas/CohorteCargaTabla";
-import { COHORTE_TEXTOS } from "@/app/(app)/analitica/_components/entregas/CohorteCargaTabla";
+import {
+  CohorteCargaTabla,
+  COHORTE_TEXTOS,
+  mensajeDe,
+} from "@/app/(app)/analitica/_components/entregas/CohorteCargaTabla";
 import {
   TEXTO_ERROR_PANEL,
   TEXTO_PROHIBIDO,
@@ -208,6 +211,22 @@ describe("Cohorte de carga (R39) — sin rango es una invitacion, no un error ni
     const cuerpo = document.body.textContent ?? "";
     expect(cuerpo).not.toContain(TITULO_FILTRO_INVALIDO);
     expect(cuerpo).not.toContain(TEXTO_PROHIBIDO);
+  });
+
+  // ⚠ ESTE CASO NACIO DE UN MUTANTE QUE SOBREVIVIO. Mapear `sin_rango` a «el filtro no es
+  // valido» dentro de `mensajeDe` dejaba los 27 casos de este archivo EN VERDE, porque hoy
+  // `esInvitacion` gana y la tabla —con su mensaje de error— ni siquiera se monta. O sea que el
+  // texto equivocado estaria escrito y latente: el dia que alguien reordene el render para que
+  // el error preceda a la invitacion, la pantalla acusaria al usuario de una equivocacion que no
+  // cometio. Se ancla en la FUNCION, que es donde vive la decision, y no en el DOM, que hoy no
+  // puede distinguirlas.
+  it("`sin_rango` NO tiene mensaje de error: no es un fallo del filtro", () => {
+    expect(mensajeDe({ status: "sin_rango" }, false)).toBeNull();
+    // Y el contraste, para que el caso no pase por «esta funcion devuelve null a todo»:
+    expect(mensajeDe({ status: "forbidden" }, false)).toBe(TEXTO_PROHIBIDO);
+    expect(
+      mensajeDe({ status: "validation_error", fieldErrors: {} }, false),
+    ).toBe(TITULO_FILTRO_INVALIDO);
   });
 });
 
