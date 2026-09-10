@@ -129,7 +129,26 @@ nunca dos.
 
 `findDetalleByOrdenIdForOwner` ya hace **un** `prisma.orden.findFirst` con
 `where: { id, tiendaId: ownerId, deletedAt: null }` y `select: API_ORDEN_DETALLE_SELECT`. Ese select
-gana dos entradas, y **ninguna consulta nueva** (R19):
+gana dos entradas:
+
+> ⏳ **2026-09-10 — AQUÍ DECÍA «y ninguna consulta nueva (R19)», Y ERA FALSO.** Lo corrige la
+> revisión de la ficha, con el número medido y no con una estimación:
+>
+> - **una sola llamada de Prisma, sí** — se conserva `findFirst`, no hay N+1 y el número no depende
+>   de cuántas gestiones tenga la orden;
+> - **un solo round-trip, NO.** Prisma resuelve **cada relación anidada con su propia consulta**.
+>   Estas dos entradas, más la anidada `estatusDestino` dentro del historial y la anidada
+>   `mensajero` dentro de las gestiones, son **+3 consultas**: el detalle pasa de **6 a 9**, medido
+>   con el espía `$on("query")` sobre la misma base y la misma orden.
+>
+> El **superconjunto** (§3.1, más abajo) sí es gratis: es la misma relación con un `where` más
+> ancho, y no añade round-trips. Lo que cuesta son las relaciones NUEVAS.
+>
+> El aumento se aceptó sobre el número medido, R19 se reescribió para decir la verdad y las 9
+> consultas quedan **congeladas por su nombre de tabla** en
+> `tests/integration/db/gestiones-detalle-api-405.test.ts` (`CONSULTAS_DEL_DETALLE`). La
+> alternativa de rebajarlo —resolver `estadoResultante` sin la relación anidada `estatusDestino`—
+> queda descartada aquí: son 3 round-trips fijos en un detalle unitario, no en un listado.
 
 ```ts
 gestiones: {

@@ -57,11 +57,16 @@ describe("404/R24 — los schemas publicados declaran `mensajero` con la forma `
     const partes = detalle.allOf as Nodo[];
     // La primera parte es la referencia al item: de ahi sale el campo.
     expect(partes[0]).toEqual({ $ref: "#/components/schemas/OrdenListItem" });
-    // Y la segunda —la que añade `evidencias`— no vuelve a declararlo: una segunda declaracion
-    // podria divergir, que es justo lo que R5 prohibe.
+    // ⏳ 2026-09-10 (feature 405) — AQUI LA SEGUNDA PARTE TENIA UNA SOLA PROPIEDAD, `evidencias`,
+    // y ahora tiene DOS: la 405 le suma `gestiones`. El literal se ENMIENDA y sigue siendo una
+    // igualdad exacta, en el mismo orden, porque lo que este caso protege NO ha cambiado: que el
+    // detalle no vuelva a declarar un `mensajero` propio —una segunda declaracion podria
+    // divergir, que es justo lo que 404/R5 prohibe—.
     const propias = partes[1].properties as Nodo;
-    expect(Object.keys(propias)).toEqual(["evidencias"]);
-    expect(partes[1].required).toEqual(["evidencias"]);
+    expect(Object.keys(propias)).toEqual(["evidencias", "gestiones"]);
+    expect(partes[1].required).toEqual(["evidencias", "gestiones"]);
+    // La afirmacion de fondo, dicha por su nombre y no por conteo: `mensajero` no esta aqui.
+    expect(Object.keys(propias)).not.toContain("mensajero");
   });
 });
 
@@ -242,17 +247,26 @@ describe("404/R24 — el espejo `docs/api/api-key-openapi.yaml` refleja el cambi
     // Tres apariciones como clave con hijos: la propiedad del `data` del webhook (sangria 12), la
     // propiedad de `OrdenListItem` (sangria 8) y el objeto del EJEMPLO de `incidente` (sangria
     // 12). Se cuentan una a una para que quitar cualquiera de las tres se vea.
+    //
+    // ⏳ 2026-09-10 (feature 405) — ERAN TRES Y AHORA SON SEIS. Las tres de la 404 siguen exactas
+    // (12, 12 y 8) y NO se han tocado; las tres nuevas son de la 405: la propiedad de
+    // `OrdenGestion` (sangria 8) y los DOS mensajeros del ejemplo de `OrdenDetalle` (sangria 14).
+    // El conteo se ENMIENDA y sigue siendo exacto —quitar cualquiera de las seis se ve—, con un
+    // orden numerico explicito porque el `sort()` por defecto de JavaScript ordena por texto.
     const comoClave = yamlTexto
       .split("\n")
       .filter((l) => /^\s+mensajero:\s*$/.test(l))
       .map((l) => l.length - l.trimStart().length)
-      .sort();
-    expect(comoClave).toEqual([12, 12, 8].sort());
+      .sort((a, b) => a - b);
+    expect(comoClave).toEqual([8, 8, 12, 12, 14, 14]);
   });
 
   it("mete `mensajero` en los DOS bloques `required` y no toca `evidenciasUrl`", () => {
+    // ⏳ 2026-09-10 (feature 405): eran DOS bloques `required` con `- mensajero` (el `data` del
+    // webhook y `OrdenListItem`) y ahora son TRES: `OrdenGestion` tambien lo exige. Lo que este
+    // caso protege de verdad —que `evidenciasUrl` siga SIN ser requerida— no cambia.
     const enRequired = yamlTexto.split("\n").filter((l) => /^\s+- mensajero\s*$/.test(l));
-    expect(enRequired).toHaveLength(2);
+    expect(enRequired).toHaveLength(3);
     expect(yamlTexto).not.toContain("- evidenciasUrl");
   });
 

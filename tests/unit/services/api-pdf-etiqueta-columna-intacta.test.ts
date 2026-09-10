@@ -177,6 +177,7 @@ function ordenHeredada(overrides: Fila = {}): Fila {
     // segunda procedencia de las evidencias del incidente). Esta fila la lee
     // `findDetalleByOrdenIdForOwner`, asi que el mock tiene que devolver la relacion; el PDF de
     // etiquetas no la usa para nada.
+    historialEstados: [], // 405: relacion nueva del select del detalle
     incidentesAdmin: [],
     tienda: { nombre: "Tienda Uno" },
     zona: { nombre: "GAM" },

@@ -43,6 +43,22 @@ const ORDEN_ID = "orden-1";
  *   - entra en `API_ORDEN_SELECT` (no aqui abajo, no en el detalle): el detalle la hereda por el
  *     spread, que es la razon por la que la constante compartida existe.
  *
+ * ⚠️ FEATURE 405 (T4, 2026-09-10) — AQUI EL `where` DE `gestiones` ERA UN SOLO PREDICADO Y NO
+ * EXISTIA `historialEstados`, y ya no es cierto. Los cambios son DELIBERADOS y estan firmados en
+ * `specs/405-gestiones-en-detalle-api/design.md` §3.1 y §3.2:
+ *
+ *   - el `where` de `gestiones` pasa a ser el `OR` del predicado ORIGINAL —intacto, palabra por
+ *     palabra— y del de la 405 (`anuladaAt: null`). Prisma no deja pedir la misma relacion dos
+ *     veces con dos alias, asi que se pide el SUPERCONJUNTO una vez y `toApiOrdenDetalleRow`
+ *     vuelve a aplicar cada predicado en memoria. `evidencias[]` sale igual que antes, y eso lo
+ *     afirma `orden-repository.api-lectura.test.ts` por comportamiento, no por proyeccion;
+ *   - el `select` gana `id`, `anuladaAt`, las DOS causas tipificadas y la relacion `mensajero`
+ *     (id + las tres columnas de identidad). NO gana `motivo` —el texto libre, 256/R22— ni
+ *     `cierreId`, ni montos, ni ubicacion: lo que no se lee no se puede filtrar;
+ *   - el `orderBy` gana `id` como desempate (405/R10); el orden primario no cambia;
+ *   - `historialEstados` es la relacion NUEVA de la orden, la unica forma de saber a que estado
+ *     llevo cada gestion sin entrar por una columna sin indice.
+ *
  * El literal se ENMIENDA, no se sustituye por una comparacion contra la constante de produccion:
  * eso seria tautologico y dejaria de vigilar nada. Lo que sigue congelando: que no aparezca ninguna
  * OTRA columna de `usuario` (telefono, email, cedula, rol...), los nueve campos publicos de la
@@ -71,16 +87,42 @@ const SELECT_DETALLE_106 = {
   },
   gestiones: {
     where: {
-      resultado: { in: ["entregada", "rechazada", "incidente"] }, // 268/R27
-      evidenciaStoragePath: { not: null },
+      OR: [
+        {
+          resultado: { in: ["entregada", "rechazada", "incidente"] }, // 268/R27
+          evidenciaStoragePath: { not: null },
+        },
+        { anuladaAt: null }, // 405/R11
+      ],
     },
     select: {
       resultado: true,
       evidenciaStoragePath: true,
       evidenciaContentType: true,
       createdAt: true,
+      // 405: id + anuladaAt son de uso INTERNO del mapeo (emparejar y re-filtrar); no se publican.
+      id: true,
+      anuladaAt: true,
+      causaDevolucion: true, // 405/R8
+      causaIncidente: true, // 405/R8
+      mensajero: {
+        select: { id: true, nombre: true, primerApellido: true, segundoApellido: true },
+      },
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }], // 405/R10: empate determinista
+  },
+  // 405/R6: el historial de la ORDEN, filtrado a las transiciones que nacieron de una gestion.
+  // Se pide por aqui —y no navegando `gestion.historialEstados`— porque `orden_historial_estado`
+  // no tiene indice por `gestion_orden_id` (design 405 §3.2).
+  historialEstados: {
+    where: { gestionOrdenId: { not: null } },
+    select: {
+      id: true,
+      gestionOrdenId: true,
+      createdAt: true,
+      estatusDestino: { select: { value: true } },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   },
   // 268/R27: la portada (indice 0) del incidente del ADMIN, y nada mas del tramite.
   incidentesAdmin: {

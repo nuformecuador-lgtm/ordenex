@@ -1,3 +1,11 @@
+// ⏳ 2026-09-10 (feature 405) — los tres tipos que acotan `gestiones[]`, importados de sus fuentes
+// UNICAS y no reescritos aqui: el enum de resultados es el de Prisma, y las dos causas tipificadas
+// llevan su doble candado contra el enum nativo. Son `import type`: se borran en compilacion y este
+// modulo sigue sin arrastrar runtime.
+import type { GestionResultado } from "@prisma/client";
+import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
+import type { CausaIncidente } from "@/lib/types/causa-incidente";
+
 // Feature 106 — DTOs PUBLICOS del canal integrador (API por key). Son la superficie que el
 // integrador ve; NUNCA incluyen internals ni PII de terceros:
 //   - sin `id` UUID interno ni `tiendaId` (el owner ya es quien pregunta),
@@ -93,9 +101,54 @@ export interface ApiOrdenEvidenciaDTO {
   expiraEnSegundos: number;
 }
 
+/**
+ * ⏳ 2026-09-10 (feature 405) — UNA gestion de la orden en el DETALLE publico del canal.
+ *
+ * QUE ES. La lista cruda de los desenlaces que se registraron sobre la orden, para que el
+ * integrador pueda medir reintentos y tiempos por mensajero en vez de ver solo el resultado
+ * final. Es de SOLO LECTURA y ADITIVA: no cambia ni una clave de lo que ya se publicaba.
+ *
+ * LAS CINCO CLAVES ESTAN SIEMPRE PRESENTES (R3), con `null` donde no aplica. Es la convencion que
+ * el canal ya firmo para `data.motivo` del webhook (256): el consumidor no ramifica por «la clave
+ * existe». Ni una clave mas: el conjunto EXACTO lo vigila
+ * `tests/unit/guards/gestiones-detalle-lista-blanca.guardia.test.ts`.
+ *
+ * ⚠️ `motivo` ES LA CAUSA TIPIFICADA — `gestion_orden.causa_devolucion` (73) o
+ * `gestion_orden.causa_incidente` (158), los mismos values que ya viajan en el webhook— y NO es
+ * `gestion_orden.motivo` (`db/schema.prisma:1045`), el texto libre que el mensajero teclea sobre
+ * un cliente. Ese texto NO sale del sistema por decision expresa (**256/R22**) y esta feature ni
+ * siquiera lo proyecta en el `select` de Prisma: la forma mas barata de no filtrar un dato es no
+ * leerlo.
+ *
+ * ⚠️ `mensajero` ES EL ATRIBUIDO A LA GESTION, no siempre quien la registro: las gestiones
+ * sinteticas que crea el sistema o la tienda (reprogramacion de escritorio, escalado por plazo,
+ * rechazo manual, desenlace de la ayuda, tope de reintento) quedan atribuidas al mensajero de la
+ * ultima devolucion vigente. Se emiten igual, y el CHANGELOG del canal lo avisa (R22-b).
+ */
+export interface ApiOrdenGestionDTO {
+  createdAt: Date; // R4: instante del registro, misma serializacion que el `createdAt` de la orden
+  resultado: GestionResultado; // R5: value CRUDO de `gestion_resultado`, sin traducir
+  estadoResultante: string | null; // R6/R7: destino de la PRIMERA transicion; `null` si no hubo
+  motivo: CausaDevolucion | CausaIncidente | null; // R8: causa TIPIFICADA; NUNCA el texto libre
+  /**
+   * R9 — el MISMO tipo que declara la feature 404 para el mensajero asignado, importado y no
+   * redeclarado. La restriccion es que aqui NO es `| null`: `gestion_orden.mensajero_id` es NOT
+   * NULL en el esquema, asi que una gestion siempre tiene mensajero. Si la 404 cambiara la forma,
+   * esto la sigue sin edicion o deja de compilar.
+   */
+  mensajero: ApiMensajeroDTO;
+}
+
 /** Detalle de UNA orden propia con sus evidencias firmadas (R12/R15/R18). */
 export interface ApiOrdenDetalleDTO extends ApiOrdenListItemDTO {
   evidencias: ApiOrdenEvidenciaDTO[]; // [] cuando no hay (R18)
+  /**
+   * ⏳ 2026-09-10 (feature 405, R1/R2/R11) — las gestiones VIGENTES de la orden, de la mas
+   * antigua a la mas reciente (R10). `[]` cuando no hay ninguna: nunca `null` y nunca la clave
+   * omitida. Las ANULADAS no entran (R11): incluirlas inflaria justo la metrica de reintento que
+   * el integrador pidio medir.
+   */
+  gestiones: ApiOrdenGestionDTO[];
 }
 
 /** Resultado de la CANCELACION (PUT), con el estado anterior y el destino (R19). */

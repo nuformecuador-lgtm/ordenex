@@ -5,6 +5,12 @@ import { TOPE_FILAS_HABILITAR } from "@/lib/config/habilitacion-api";
 // El literal de `penumbra` NO se reescribe aqui: se importa del contrato interno, que es donde
 // vive (126/R20). Una segunda copia es la clasica cifra duplicada que un dia diverge.
 import { PENUMBRA } from "@/lib/types/analitica-operativa";
+// ⏳ 2026-09-10 (feature 405) — las TRES fuentes de las que se derivan los enums de `OrdenGestion`.
+// Ninguna se reescribe como lista literal aqui: el mapa de destinos es exhaustivo contra el enum
+// de Prisma y los dos seeds llevan su propio doble candado.
+import { ESTATUS_POR_RESULTADO } from "@/lib/types/gestion-destino";
+import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
+import { CAUSA_INCIDENTE_SEED } from "@/lib/types/causa-incidente";
 
 // Feature 106 — Fuente de verdad del contrato OpenAPI 3.1 del canal integrador por API key.
 // Este objeto es lo que sirve `GET /api/docs/openapi` (como JSON) y lo que renderiza Swagger UI
@@ -62,6 +68,35 @@ const ORDER_STATUS_ENUM = [
 // NUNCA se copia como lista literal: si la politica cambia, este enum cambia solo y
 // `tests/unit/api/openapi-webhook-contrato.test.ts` se pone rojo si alguien lo desengancha.
 const WEBHOOK_ESTADO_ENUM = [...EVENTOS_PUBLICOS].sort();
+
+// ⏳ 2026-09-10 (feature 405/R5) — enum de RESULTADOS de gestion del schema `OrdenGestion`. Se
+// DERIVA de `ESTATUS_POR_RESULTADO` (`lib/types/gestion-destino.ts`), que es un
+// `Record<GestionResultado, ...>` exhaustivo contra el enum nativo de Prisma: si el enum gana un
+// sexto value, aquel mapa no compila hasta que alguien decida su destino, y este enum lo hereda
+// solo. NUNCA se copia como lista literal, por la misma regla que `WEBHOOK_ESTADO_ENUM`.
+//
+// Orden alfabetico para que el espejo `.yaml` sea comparable posicionalmente y para que reordenar
+// el mapa de origen no mueva el contrato publicado.
+//
+// NO cuenta como «enum de estado» para `openapi-contrato-en-reparto.test.ts`: contiene
+// `entregada` pero NO `por_recoger`, asi que los bloques de catalogo siguen siendo CUATRO.
+const GESTION_RESULTADO_ENUM = Object.keys(ESTATUS_POR_RESULTADO).sort();
+
+// ⏳ 2026-09-10 (feature 405/R21) — enum de `OrdenGestion.motivo`: las DOS causas tipificadas y
+// `null`. Derivado de los MISMOS seeds de los que sale la lista del webhook
+// (`CAUSA_DEVOLUCION_SEED` + `CAUSA_INCIDENTE_SEED`), en el MISMO orden: primero las tres de
+// devolucion (en INGLES, 73/F1.4-g), luego las tres de incidente (en ESPAÑOL, 158/Q-B), y `null`
+// al final.
+//
+// La lista del webhook sigue siendo un literal escrito a mano —es contrato vigente y NO se toca en
+// esta ficha—, y `tests/unit/api/openapi-405-gestiones.test.ts` las compara VALOR A VALOR. Son dos
+// fuentes independientes contrastadas entre si: si alguien anadiera una causa a un seed sin
+// tocar el webhook, o al reves, ese test se pone rojo.
+const MOTIVO_CAUSA_ENUM: (string | null)[] = [
+  ...CAUSA_DEVOLUCION_SEED,
+  ...CAUSA_INCIDENTE_SEED,
+  null,
+];
 
 // Tope duro de filas por lote de carga (cargaMasivaConfig.MAX_CHUNK_ROWS, default 5000).
 const MAX_CARGA_ROWS = 5000;
@@ -1219,19 +1254,207 @@ export const openApiSpec = {
           expiraEnSegundos: { type: "integer", description: "TTL de la URL firmada en segundos (300)." },
         },
       },
+      // ⏳ 2026-09-10 (feature 405/R9) — EL MENSAJERO, COMO SCHEMA CON NOMBRE.
+      //
+      // La 404 publico la forma `{id, nombre}` INLINE en sus dos sitios (`data.mensajero` del
+      // webhook y `OrdenListItem.mensajero`), cada uno con su prosa —uno habla del momento de la
+      // entrega, el otro del momento de la lectura, y el listado ademas avisa de que no se puede
+      // filtrar por el—. Esas dos NO se tocan aqui: reescribirlas seria cambiar texto publicado
+      // por una ficha ajena, y su nullabilidad tampoco es la de aqui.
+      //
+      // Lo que si se hace es DARLE NOMBRE al concepto para que `OrdenGestion` lo referencie en vez
+      // de declarar una TERCERA copia. La igualdad de forma entre este schema y el de la 404 no se
+      // deja a la buena voluntad: `openapi-405-gestiones.test.ts` compara los dos nodos clave a
+      // clave y tipo a tipo, que es lo que R9 exige.
+      //
+      // ⚠️ AQUI NO ES NULLABLE, y no es un descuido: `gestion_orden.mensajero_id` es NOT NULL en
+      // el esquema. Una orden puede no tener mensajero asignado; una GESTION siempre tiene quien
+      // la registro o a quien se le atribuye.
+      Mensajero: {
+        type: "object",
+        required: ["id", "nombre"],
+        additionalProperties: false,
+        description:
+          "Una persona mensajera, con lo minimo para identificarla y mostrarla. Es la MISMA forma que publica el campo `mensajero` de `OrdenListItem` y del evento `orden.estado_actualizado`.",
+        properties: {
+          id: {
+            type: "string",
+            description:
+              "Identificador ESTABLE del mensajero: un UUID en TEXTO, no un entero. El mismo mensajero produce el mismo `id` aquí, en el listado, en el detalle y en el webhook, y nunca se reasigna a otra persona: agrupá por este valor.",
+          },
+          nombre: {
+            type: "string",
+            description:
+              "Nombre completo de la persona (nombre + apellidos). Texto para mostrar; PUEDE cambiar si se corrigen sus datos, así que no lo uses como clave.",
+          },
+        },
+      },
+      // ⏳ 2026-09-10 (feature 405) — UNA gestion del historial de la orden.
+      //
+      // Va DESPUES de `Evidencia` y ANTES de `OrdenDetalle`, y el orden importa para el espejo
+      // `.yaml`: `openapi-contrato-en-reparto.test.ts` localiza el enum de `Evidencia.resultado`
+      // con una regex posicional que toma la PRIMERA coincidencia de `resultado: / type: string /
+      // enum:` con esa sangria. Si este schema se moviera por delante, aquel test empezaria a
+      // medir el enum equivocado. `openapi-405-gestiones.test.ts` lo afirma explicitamente.
+      OrdenGestion: {
+        type: "object",
+        description:
+          "Un desenlace registrado sobre la orden: quién lo registró, cuándo y en qué dejó la orden. El array completo permite medir cuántas veces se visitó la orden y cuánto pasó entre una vez y la siguiente.",
+        required: ["createdAt", "resultado", "estadoResultante", "motivo", "mensajero"],
+        additionalProperties: false,
+        properties: {
+          createdAt: {
+            type: "string",
+            format: "date-time",
+            description:
+              "Instante en que la gestión quedó REGISTRADA (ISO 8601, UTC). Mismo tipo y misma serialización que el `createdAt` de la orden. NO es la fecha de reprogramación ni la de aprobación de un cierre.",
+          },
+          resultado: {
+            type: "string",
+            enum: GESTION_RESULTADO_ENUM,
+            description:
+              "Desenlace de la gestión, con el value CRUDO del catálogo interno y sin traducir. La lista de arriba es EXACTA y COMPLETA. Ojo: `resultado` NO es el estado en que quedó la orden — para eso está `estadoResultante`, y los dos NO siempre coinciden.",
+          },
+          estadoResultante: {
+            type: ["string", "null"],
+            description: [
+              "El `value` del estado al que ESTA gestión llevó la orden: el destino de la primera",
+              "transición que originó. Es un value del mismo catálogo que publica",
+              "`OrdenListItem.estado`; **se publica sin lista cerrada a propósito**, porque el",
+              "catálogo documentado en `estado` está incompleto y aquí pueden aparecer values que",
+              "aquella lista todavía no enumera. Tratá un value desconocido como texto, no como",
+              "error.",
+              "",
+              "⚠️ **No lo deduzcas del `resultado`**: una gestión `devuelta` deja la orden en",
+              "`devolucion_por_confirmar`, no en `devuelta`; solo la aprobación posterior del cierre",
+              "la mueve ahí.",
+              "",
+              "Es `null` en gestiones ANTIGUAS, anteriores a que existiera la línea de tiempo de",
+              "estados: no hay ninguna transición registrada que las respalde. No es un fallo del",
+              "canal, y la clave NUNCA se omite.",
+            ].join("\n"),
+          },
+          motivo: {
+            type: ["string", "null"],
+            enum: MOTIVO_CAUSA_ENUM,
+            description: [
+              "Causa TIPIFICADA del desenlace, con el value crudo del enum y sin traducir. Son los",
+              "MISMOS valores que ya recibís en `data.motivo` del webhook `orden.estado_actualizado`.",
+              "El campo transporta DOS enums distintos y cuál aplica lo decide `resultado`:",
+              "",
+              "- **`resultado: \"devuelta\"`** → causa de la devolución: `not_found` (destinatario no",
+              "  encontrado), `wrong_number` (teléfono equivocado), `wrong_address` (dirección",
+              "  equivocada).",
+              "- **`resultado: \"incidente\"`** → causa del incidente: `danado`, `perdido`, `robado`.",
+              "- **cualquier otro `resultado`** → siempre `null`.",
+              "",
+              "⚠️ **La asimetría de idioma es DELIBERADA, no un error que corregir.** Las causas de",
+              "devolución van en INGLÉS y las de incidente en ESPAÑOL (`danado` sin eñe, `perdido`,",
+              "`robado`) porque cada enum se publicó con el value crudo de su catálogo interno y",
+              "renombrar cualquiera de los dos rompería a los integradores que ya lo consumen.",
+              "Decisión consciente y firmada (73/F1.4-g y 158/Q-B): no se «armoniza» en el futuro.",
+              "",
+              "Es `null` **también** en una `devuelta` (o un `incidente`) sin causa registrada —",
+              "gestiones anteriores a que la causa se pidiera; ese histórico no se rellenó—. El",
+              "contrato no distingue «no hubo causa» de «no se registró»: en los dos casos viaja",
+              "`null` y el campo NUNCA se omite.",
+              "",
+              "⚠️ Transporta EXCLUSIVAMENTE la causa tipificada. **NO es el comentario en texto libre",
+              "que el mensajero escribe al gestionar la orden** —que comparte el nombre `motivo` en",
+              "nuestra base de datos y NO sale del sistema por decisión de privacidad—, ni ningún",
+              "otro dato del destinatario.",
+            ].join("\n"),
+          },
+          mensajero: {
+            $ref: "#/components/schemas/Mensajero",
+            description: [
+              "Mensajero ATRIBUIDO a esta gestión. **Nunca es `null`**: a diferencia del",
+              "`mensajero` de la orden —que es quien la lleva AHORA y puede no ser nadie—, una",
+              "gestión siempre tiene una persona detrás.",
+              "",
+              "⚠️ **Atribuido no siempre significa «quien la registró».** Algunas gestiones las crea",
+              "el sistema o la propia tienda (una reprogramación desde el escritorio, el escalado",
+              "automático por vencimiento de plazo, un rechazo manual de la tienda, el desenlace de",
+              "una solicitud de ayuda, o el corte por llegar al tope de reintento) y quedan",
+              "atribuidas al mensajero de la última devolución. En este array se ven idénticas a una",
+              "visita de calle.",
+            ].join("\n"),
+          },
+        },
+      },
       OrdenDetalle: {
         allOf: [
           { $ref: "#/components/schemas/OrdenListItem" },
           {
             type: "object",
-            required: ["evidencias"],
+            // ⏳ 2026-09-10 (feature 405/R1): `gestiones` es REQUERIDA, como `evidencias`. Un array
+            // vacio es un hecho («esta orden no se ha gestionado»), no una ausencia.
+            required: ["evidencias", "gestiones"],
             properties: {
               evidencias: {
                 type: "array",
                 description: "Evidencias de la orden ([] si no hay).",
                 items: { $ref: "#/components/schemas/Evidencia" },
               },
+              gestiones: {
+                type: "array",
+                items: { $ref: "#/components/schemas/OrdenGestion" },
+                description: [
+                  "Historial de gestiones VIGENTES de la orden, de la más antigua a la más",
+                  "reciente. `[]` cuando la orden todavía no se ha gestionado: la clave viaja",
+                  "SIEMPRE y nunca es `null`.",
+                  "",
+                  "Llega **completo y sin paginar**. No incluye las gestiones anuladas (una",
+                  "anulación deshace el registro, y contarla inflaría tus métricas) ni los",
+                  "incidentes que reporta nuestro personal de bodega, que no son gestiones y no",
+                  "tienen mensajero atribuido —sus fotos sí siguen en `evidencias[]`—.",
+                  "",
+                  "⚠️ **`gestiones.length` no es nuestro contador interno de reintento.** Ese cuenta",
+                  "cierres aprobados distintos con visita real, así que varias gestiones del mismo",
+                  "cierre valen 1. Este array es la lista cruda, sin agrupar.",
+                ].join("\n"),
+              },
             },
+          },
+        ],
+        // ⏳ 2026-09-10 (feature 405/R20): ejemplo con DOS gestiones —una `reprogramada` con
+        // `motivo: null` y una `devuelta` con causa—, para que el consumidor vea la convencion de
+        // ausencia y la forma del mensajero sin tener que deducirlas.
+        examples: [
+          {
+            numGuia: 100234,
+            numRemision: "REM-0001",
+            estado: "devolviendo_a_tienda",
+            destinatario: "Jimena Porras",
+            telefonoDest: "88887777",
+            producto: "Audífonos inalámbricos",
+            direccion: "Cartago, de la iglesia 200m sur",
+            montoCobrar: 48750,
+            createdAt: "2026-09-01T14:20:00.000Z",
+            mensajero: null,
+            evidencias: [],
+            gestiones: [
+              {
+                createdAt: "2026-09-02T15:41:07.000Z",
+                resultado: "reprogramada",
+                estadoResultante: "reprogramada",
+                motivo: null,
+                mensajero: {
+                  id: "018f2c31-0000-4000-8000-0000000000aa",
+                  nombre: "Carlos Jiménez Mora",
+                },
+              },
+              {
+                createdAt: "2026-09-04T18:02:55.000Z",
+                resultado: "devuelta",
+                estadoResultante: "devolucion_por_confirmar",
+                motivo: "wrong_address",
+                mensajero: {
+                  id: "018f2c31-0000-4000-8000-0000000000bb",
+                  nombre: "Ana Solís Vargas",
+                },
+              },
+            ],
           },
         ],
       },

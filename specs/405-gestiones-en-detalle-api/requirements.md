@@ -136,9 +136,39 @@ al servir el detalle: esta feature es de SOLO LECTURA.
 
 ## 4. Coste de la lectura
 
-**R19.** El sistema DEBE resolver el detalle completo —incluido `gestiones[]`— con el MISMO número de
-consultas a la base de datos que hoy, sea cual sea el número de gestiones de la orden: no DEBE emitir
-una consulta por gestión.
+> ⏳ **2026-09-10 — R19 REESCRITO, y no para acomodar la implementación: la premisa era falsa.**
+>
+> Decía «con el **MISMO** número de consultas a la base de datos que hoy». Ese requisito era
+> **inalcanzable por construcción**: `gestiones[]` no se puede devolver sin leer `gestion_orden`
+> con su mensajero, ni `estadoResultante` sin leer `orden_historial_estado` con su estado destino,
+> y Prisma resuelve **cada relación anidada con su propia consulta**. El design lo daba por gratis
+> (§3.1, «ninguna consulta nueva») y el código repetía la afirmación en un comentario; **las dos
+> frases eran falsas y están corregidas**.
+>
+> Lo midió el reviewer y lo **volvió a medir el implementador** con el mismo método —el espía
+> `$on("query")` de `crearPrismaDeTestConEspia`, misma base local, misma orden—:
+>
+> | | consultas |
+> |---|---|
+> | `dev` | **6** — `orden`, `order_status`, `usuario`, `gestion_orden`, `orden_incidente`, `orden_incidente_evidencia` |
+> | esta ficha | **9** — las 6 anteriores **+ `orden_historial_estado`**, **+ un segundo `usuario`** (el mensajero de la gestión) **+ un segundo `order_status`** (`estatusDestino`) |
+>
+> **El aumento se ACEPTA**, decidido por el humano el 2026-09-10 sobre el número medido: son 3
+> round-trips fijos en un endpoint de detalle unitario, no en un listado. Lo que **no** se acepta
+> —y es lo que este requisito pasa a proteger— es que el número crezca sin que nadie se entere, ni
+> que dependa del número de gestiones.
+>
+> El texto original queda arriba, tachado en su intención: **ya no se exige «el mismo número»**.
+
+**R19.** El sistema DEBE resolver el detalle completo —incluido `gestiones[]`— con un número FIJO de
+consultas a la base de datos: **exactamente 9**, frente a las **6** de antes de esta feature. Ese
+número NO DEBE depender del número de gestiones de la orden —cero, tres o seis gestiones DEBEN
+costar las mismas 9 consultas—, y en particular el sistema NO DEBE emitir una consulta por gestión.
+
+**R19-b.** El sistema DEBE tener el número 9 **congelado en un test que se ejecute contra Postgres
+real**, de modo que añadir una consulta más al detalle ponga un test en rojo en vez de descubrirse
+en una revisión. Y las afirmaciones sobre el coste que viajan en `design.md` y en los comentarios
+del repositorio DEBEN decir ese mismo número.
 
 ---
 
@@ -183,7 +213,8 @@ Los archivos con `(nuevo)` los crea esta feature; el resto se amplía.
 | R16 | `el cuerpo del listado y el del webhook no ganan ninguna clave` | `tests/unit/api/openapi-405-gestiones.test.ts` (nuevo) |
 | R17 | `401, 403, 422 y 404 siguen siendo los de hoy` | `tests/integration/api/ordenes-api-key-orden-consulta.route.test.ts` |
 | R18 | `servir el detalle no escribe en gestion_orden ni en orden_historial_estado` | `tests/integration/db/gestiones-detalle-api-405.test.ts` |
-| R19 | `el detalle con N gestiones emite el mismo numero de consultas que sin ellas` | `tests/integration/db/gestiones-detalle-api-405.test.ts` |
+| R19 | `el detalle emite EXACTAMENTE 9 consultas, y ese numero no depende de las gestiones` | `tests/integration/db/gestiones-detalle-api-405.test.ts` |
+| R19-b | `el detalle emite EXACTAMENTE 9 consultas...` (el `toBe(9)`) + `openapi-405-gestiones.test.ts` no aplica; las frases del design y del comentario se verifican a ojo en la revisión | `tests/integration/db/gestiones-detalle-api-405.test.ts` |
 | R20 | `OrdenDetalle declara gestiones y el yaml es espejo exacto` | `tests/unit/api/openapi-405-gestiones.test.ts` |
 | R21 | `el enum de motivo del detalle coincide valor a valor con el del webhook` | `tests/unit/api/openapi-405-gestiones.test.ts` |
 | R22 | `el CHANGELOG del canal tiene la entrada de la 405 con los tres avisos` | `tests/unit/api/openapi-405-gestiones.test.ts` |

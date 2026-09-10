@@ -90,6 +90,7 @@ async function cuerpoDelWebhook(
         numRemision: "REM-1",
         deletedAt: null,
         gestiones: [],
+        historialEstados: [], // 405: relacion nueva del select del detalle
         incidentesAdmin: [],
         mensajeroAsignado,
       })),
@@ -145,6 +146,7 @@ function filaOrden(mensajeroAsignado: typeof USUARIO | null) {
     createdAt: new Date("2026-09-09T10:00:00.000Z"),
     estatus: { value: "en_reparto" },
     gestiones: [],
+    historialEstados: [], // 405: relacion nueva del select del detalle
     incidentesAdmin: [],
     mensajeroAsignado,
   };
