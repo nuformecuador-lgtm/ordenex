@@ -71,6 +71,13 @@ MCP de Supabase en su conjunto de herramientas y la `DATABASE_URL` de producció
 y no la puede hacer este agente.** Contexto que la relativiza: producción se vació a propósito el
 2026-08-25 (arranque comercial), así que hoy allí también son cientos de filas.
 
+> **CERRADO DESPUÉS, y esta sección NO se reescribe** (era cierta cuando se escribió). El leader
+> corrió la medición **contra producción** en solo lectura el 2026-09-10: 31 filas y
+> `Execution Time` **19,766 ms** (30 días) / **25,509 ms** (366 días), con `Seq Scan` en las dos
+> tablas. Cambia el MOTIVO de «no hace falta índice» —es barata por tamaño, no por índice— y deja
+> un hueco nuevo: los dos rangos abarcan lo mismo, así que un rango largo de verdad sigue sin
+> medirse. Detalle en `progress/impl_411_frontend.md` y en la nota de T6.2 de `tasks.md`.
+
 Tamaño de la base local: `orden` = **70** filas · `orden_historial_estado` = **207** filas.
 
 | rango | ventana | filas devueltas | ms de reloj | `Planning Time` | `Execution Time` |

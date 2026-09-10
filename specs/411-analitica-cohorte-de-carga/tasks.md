@@ -32,19 +32,33 @@
   **Hecho:** los doce leídos EN DISCO (no en el grafo del MCP, que devuelve de más) y sus líneas
   anotadas en `progress/impl_411.md`. Si alguno no está donde el diseño supone, **se para y se dice**.
 
-- [ ] **T0.2 — Medir el coste de la consulta contra producción, en SOLO LECTURA.**
+- [x] **T0.2 — Medir el coste de la consulta contra producción, en SOLO LECTURA.**
   Correr el SQL de `design.md §2` con un rango de 30 días y con uno de 366, y anotar: filas
   devueltas, milisegundos y `EXPLAIN ANALYZE` de los dos.
   **Hecho:** los seis números en `progress/impl_411.md`. Sin ellos, «la consulta viva es barata» es
   una opinión.
-  > **SIN MARCAR, y a medias a propósito.** Los seis números **están** medidos y escritos
-  > (`progress/impl_411_backend.md §3`: 1 y 8 filas, 10 y 1 ms, `Execution Time` 0,145 y 0,303 ms),
-  > pero **contra `localhost`, no contra producción**, que es lo que pide el título. Lo declara el
-  > propio backend: no tenía el MCP de Supabase y la `DATABASE_URL` de producción es *sensitive*.
-  > Se deja vacía en vez de marcarla porque su autor escribió «la medición contra producción queda
-  > pendiente», y una casilla marcada contra esa frase valdría menos que ninguna. Lo que relativiza
-  > el hueco: producción se vació a propósito el 2026-08-25 (arranque comercial), así que hoy allí
-  > también son cientos de filas — pero eso es un argumento, no una medida.
+  > **CERRADA CONTRA PRODUCCIÓN el 2026-09-10, en solo lectura.** Estuvo vacía mientras los únicos
+  > seis números eran de `localhost` (`progress/impl_411_backend.md §3`) y su propio autor escribía
+  > «la medición contra producción queda pendiente»: el título pide producción, y una casilla
+  > marcada contra esa frase valdría menos que una vacía. Los números de producción:
+  >
+  > | rango | filas | `Planning Time` | `Execution Time` |
+  > | --- | --- | --- | --- |
+  > | 30 días | 31 | 3,169 ms | **19,766 ms** |
+  > | 366 días | 31 | 4,356 ms | **25,509 ms** |
+  >
+  > **Y dos cosas que hay que leer con los números, porque contradicen en parte lo que supuso el
+  > diseño:**
+  >
+  > 1. **No son dos medidas: son una.** Los dos rangos dan el MISMO plan y casi el mismo tiempo
+  >    porque producción sólo tiene datos desde el arranque comercial (2026-08-25), así que los 366
+  >    días y los 30 abarcan lo mismo. **Medir un rango largo aquí todavía no prueba nada sobre un
+  >    rango largo de verdad.**
+  > 2. **El planificador elige `Seq Scan`, no índice** — ni en `orden` (1.652 filas de 1.800 tras el
+  >    filtro) ni en `orden_historial_estado` (12.511 filas). Y hace bien: una cohorte de 30 días es
+  >    casi toda la tabla, y ahí barrerla sale más barato que entrar por índice. O sea: **la
+  >    consulta es barata, pero no por el índice — es barata porque las tablas son pequeñas.**
+  >    La consecuencia para T6.2 y R36 está escrita en la nota de T6.2.
 
 - [x] **T0.3 — Fotografiar en verde los censos que esta ficha mueve.** [P]
   `tests/unit/analytics/alcance-obligatorio.guardia.test.ts`,
@@ -245,6 +259,26 @@
   su test de migración+down y su caso de `pg_indexes`.
   **Hecho:** o bien escrito «no hace falta índice» **con los números delante**, o bien la migración
   con sus tres aserciones (crea / `down.sql` revierte exactamente / está en el datamodel). R37.
+  > **MARCADA: «no hace falta índice» se sostiene — pero por un motivo DISTINTO del que suponía el
+  > diseño, y eso hay que decirlo.** Con la medición contra producción de T0.2 delante
+  > (2026-09-10), el planificador **elige `Seq Scan`** en las dos tablas y hace bien: una cohorte de
+  > 30 días es casi toda la tabla `orden` (1.652 de 1.800), y ahí barrerla es más barato que entrar
+  > por índice. La consulta cuesta **19,8 ms / 25,5 ms**: es barata, **pero no gracias al índice —
+  > es barata porque las tablas son pequeñas**. Ningún índice nuevo, ninguna migración, ningún
+  > `down.sql`; R37 no se dispara.
+  >
+  > ⚠ **Consecuencia para R36, y NO se corrige el test.** `cohorte-carga-indices.int.test.ts` exige
+  > que el plan entre por el índice de `orden_historial_estado` y no haga `Seq Scan` sobre ella,
+  > midiendo con `SET LOCAL enable_seqscan = off` y con su caso discriminante. Eso **no describe lo
+  > que hace producción hoy**: protege el caso SELECTIVO, que es el que llegará cuando la tabla
+  > crezca y una cohorte deje de ser casi toda la tabla. Es la protección correcta para el futuro y
+  > se queda tal cual. Lo que no se puede hacer es leer ese verde como «así se comporta producción»,
+  > porque hoy no es cierto.
+  >
+  > Y el hueco que queda abierto, dicho: en producción los rangos de 30 y 366 días **abarcan lo
+  > mismo** (sólo hay datos desde el arranque comercial), así que **el coste de un rango largo de
+  > verdad sigue sin medirse**. Cuando la base acumule más de un año, esta tarea merece una segunda
+  > pasada.
 
 ---
 

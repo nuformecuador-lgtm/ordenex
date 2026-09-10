@@ -349,6 +349,43 @@ por test, y por eso el riesgo es menor de lo que suele:
 
 Lo que NADIE ha visto todavía: la tabla con datos reales en un navegador real.
 
+### T0.2 se cerró contra PRODUCCIÓN (2026-09-10), y desmiente en parte al diseño
+
+La midió el leader en solo lectura, que es lo que a la sesión del backend le faltaba (no tenía el
+MCP de Supabase y la `DATABASE_URL` de producción es *sensitive*).
+
+| rango | filas | `Planning Time` | `Execution Time` |
+| --- | --- | --- | --- |
+| 30 días | 31 | 3,169 ms | **19,766 ms** |
+| 366 días | 31 | 4,356 ms | **25,509 ms** |
+
+**Lo que estos números NO dicen, y es la mitad del dato:**
+
+1. **No son dos medidas, son una.** Los dos rangos dan el MISMO plan y casi el mismo tiempo porque
+   producción sólo tiene datos desde el arranque comercial (2026-08-25): los 366 días y los 30
+   abarcan lo mismo. **El coste de un rango largo de verdad sigue sin medirse**, y merece una
+   segunda pasada cuando la base acumule más de un año.
+2. **El planificador elige `Seq Scan`, no índice**, ni en `orden` (1.652 filas de 1.800 tras el
+   filtro) ni en `orden_historial_estado` (12.511). Y hace bien: una cohorte de 30 días es casi
+   toda la tabla, y ahí barrerla sale más barato. O sea que **la consulta es barata, pero no por el
+   índice — es barata porque las tablas son pequeñas.**
+
+**Consecuencia para R36, y el test NO se toca.** `cohorte-carga-indices.int.test.ts` exige que el
+plan entre por índice y no haga `Seq Scan`, midiendo con `enable_seqscan = off`. Eso **no describe
+lo que hace producción hoy**: protege el caso SELECTIVO, el que llegará cuando la cohorte deje de
+ser casi toda la tabla. Es la protección correcta para el futuro y se queda. Lo que no vale es leer
+ese verde como «así se comporta producción». La decisión de T6.2 —«no hace falta índice»— **se
+sostiene con los números delante, pero por un motivo distinto del que suponía `design.md §1.2`**.
+
+### Varios agentes sobre la MISMA rama: pasó, y conviene saberlo
+
+Mientras marcaba las casillas, el reviewer **commiteó y empujó su informe
+(`progress/review_411.md` + `progress/gate_review_411.log`) a esta misma rama**. Mi `git push`
+salió rechazado por no-fast-forward y se resolvió con un merge limpio —su informe está dentro y no
+se perdió nada—, pero el modo de fallo está a un paso: quien reaccione a ese rechazo con un
+`push --force` se lleva por delante el trabajo del otro sin dejar rastro. En una rama con más de un
+agente, ante un rechazo de push se mira **qué** trae el remoto antes de tocar nada.
+
 ### Dos cosas menores, dichas para que no se descubran a mano
 
 1. **El `.env` se copió al worktree** (está en `.gitignore`, no viaja en ningún commit).
