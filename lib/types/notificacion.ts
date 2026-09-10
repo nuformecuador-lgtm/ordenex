@@ -48,7 +48,15 @@ export type NotificacionEvento =
   // ⚠️ EL TEXTO NUNCA DICE «desactivada», «dada de baja» ni «cancelada» (R9, última frase): la
   // suscripción SIGUE ACTIVA, sigue reintentando y se recupera sola al primer 2xx. `activa` no se
   // toca en ningún punto de esta ficha.
-  | "webhook_suscripcion_pausada";
+  | "webhook_suscripcion_pausada"
+  // FICHA 401 (R7/R9/R10) — el servicio de mapas está rechazando nuestras peticiones por un
+  // problema de configuración de NUESTRA cuenta, y nadie se entera. El 2026-09-08 eso duró 19 h
+  // 55 min sin una sola alerta, y lo detectó un humano porque no podía asignar órdenes.
+  // Destinatarios: `maestro` Y `admin` (decisión del humano del 2026-09-09) — el maestro puede
+  // arreglarlo pero puede no estar delante; el admin no arregla la facturación, pero ESCALA, y
+  // para escalar necesita enterarse. Se emite desde la rama de configuración del job, no desde el
+  // drenador, y como mucho una vez por jornada CR y por rol.
+  | "geocodificacion_caida";
 
 /** Entidad de origen referenciada (referencia polimorfica, sin FK — design §1.2). */
 export type NotificacionEntidadTipo =
@@ -102,7 +110,17 @@ export type NotificacionEntidadTipo =
   //   · racha nueva tras una recuperación ⇒ `sinExitoDesde` distinto ⇒ entidad distinta ⇒ aviso
   //     independiente (R12, 2ª frase).
   // No hay ningún código que detecte la transición «no pausada → pausada» (design §4).
-  | "webhook_suscripcion_pausa";
+  | "webhook_suscripcion_pausa"
+  // ⚠️ FICHA 401 (design §3.3) — LA ENTIDAD DE ESTE AVISO ES **LA JORNADA CR**: `entidad_id` es la
+  // fecha `"YYYY-MM-DD"` del día en que se detectó la caída. TERCER valor del inventario que no
+  // apunta a una fila de tabla, y por el mismo motivo que los de la 333 y la 403: no hay ninguna
+  // fila que represente «el corte» —esta ficha no crea tabla ni columna (R31)— y reusar un valor
+  // que promete una (`orden`, `usuario`) sería escribir un dato falso con formato de dato.
+  //
+  // Y no es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el índice
+  // único es PARCIAL, así que saldría un aviso POR EVALUACIÓN. El drenador corre cada minuto: el
+  // corte medido de 19 h habría dejado ~2.280 filas en vez de 4.
+  | "geocodificacion_caida_dia";
 
 /**
  * DTO que viaja al cliente (design §3.1). `read` NO es una columna de `notificacion`:

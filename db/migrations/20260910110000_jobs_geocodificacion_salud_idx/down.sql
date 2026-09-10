@@ -1,0 +1,12 @@
+-- DOWN (ficha 401, T4) -- revierte EXACTAMENTE lo que hace su `migration.sql`: un indice, y nada
+-- mas.
+--
+-- Es seguro y reversible sin condiciones: un indice no guarda datos. Soltarlo devuelve las dos
+-- consultas de la salud del geocodificador al escaneo secuencial (mas lentas, igual de correctas),
+-- que es el estado previo a esta migracion.
+--
+-- `IF EXISTS` porque el up es idempotente (`CREATE INDEX IF NOT EXISTS`) y el down tiene que serlo
+-- igual: aplicar dos veces el rollback no puede reventar.
+--
+-- AQUI NO HAY NI UN `DELETE` NI UN `UPDATE`: esta migracion nunca escribio una fila.
+DROP INDEX IF EXISTS "jobs_geocodificacion_estado_updated_idx";

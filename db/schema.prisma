@@ -2650,6 +2650,7 @@ enum NotificacionEvento {
   // ⚠️ EL TEXTO NUNCA DICE "DESACTIVADA": la suscripcion sigue activa, sigue reintentando y se
   // recupera sola al primer 2xx. Destinatario: el rol `maestro`, el mismo que opera esa pantalla.
   webhook_suscripcion_pausada
+  geocodificacion_caida // ficha 401 (R7/R9/R10): el servicio de mapas rechaza nuestras peticiones por configuracion de NUESTRA cuenta. Se emite desde la rama de configuracion del job, una vez por jornada CR y POR ROL (`maestro` y `admin`), mientras el corte siga vivo; el texto lleva SOLO el numero de direcciones sin ubicar (R26/R27)
 
   @@map("notificacion_evento")
 }
@@ -2682,6 +2683,14 @@ enum NotificacionEntidadTipo {
   // recuperacion => `sin_exito_desde` distinto => entidad distinta => aviso nuevo (R12, 2a frase).
   // Las dos propiedades son ESTRUCTURALES: no hay codigo que detecte la transicion.
   webhook_suscripcion_pausa
+  // Ficha 401 (design 3.3) - TERCER `entidad_tipo` que NO apunta a una fila de tabla, por el mismo
+  // motivo que los de la 333 y la 403: la entidad del aviso es LA JORNADA CR (`entidad_id` =
+  // "YYYY-MM-DD"), no ningun job ni ninguna orden. Con una entidad que no cambiara entre jornadas,
+  // `notificacion_dedupe_key` admitiria UNA sola fila por (evento, entidad, rol) PARA SIEMPRE y el
+  // aviso del dia 2 no saldria nunca, en silencio. Con la jornada: dias distintos => el aviso sale
+  // siempre (R10); misma jornada => un solo aviso por rol (R9), y eso importa porque el drenador
+  // corre CADA MINUTO (sin esto, el corte de 19 h del 2026-09-08 habria dejado ~2.280 filas).
+  geocodificacion_caida_dia
 
   @@map("notificacion_entidad_tipo")
 }
