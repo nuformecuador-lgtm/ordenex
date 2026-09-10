@@ -1,5 +1,17 @@
 # review_402 — La cola reparte el trabajo entre tipos
 
+> **ESTE INFORME TIENE DOS VUELTAS.** Abajo, intacto, el registro de la PRIMERA (commit
+> `8f55dd77`, veredicto **RECHAZADO**, tres bloqueantes). La SEGUNDA vuelta —commit
+> `c19f4011`, que cierra los tres— esta al final, en
+> **"Segunda vuelta: verificacion del commit `c19f4011`"**.
+>
+> **VEREDICTO VIGENTE: APROBADA.** Lo de aqui abajo se conserva porque explica POR QUE el
+> arreglo esta como esta; no describe el estado actual de la rama.
+
+---
+
+## PRIMERA VUELTA (commit `8f55dd77`) - RECHAZADO
+
 Revisión del commit `8f55dd77b3633a2d06a32f3856cd9dac38ef27ae` (rama
 `feat/402-cola-reparte-entre-tipos`, 9 archivos sobre `079c4ec7`) contra
 `specs/402-cola-reparte-trabajo-entre-tipos/`, `docs/architecture.md`,
@@ -367,3 +379,176 @@ Vuelve al implementer con tres cosas, ninguna de ellas en `JobRepository.ts`:
 
 Hecho eso, la ficha está lista: el reparto por turnos es correcto, discriminante y está bien
 medido.
+
+---
+---
+
+# Segunda vuelta: verificacion del commit `c19f4011`
+
+`c19f4011f884b2c9785f5f4f8bd2d7906861c2d6`, encima del commit de esta revisión. **6 archivos,
+583 inserciones.**
+
+**VEREDICTO: APROBADA.** Los tres bloqueantes están cerrados y lo comprobé ejecutando, no
+leyendo. Los cinco menores, atendidos.
+
+## Lo primero: el SQL no se tocó
+
+```
+git diff 8f55dd77 c19f4011 -- lib/    ->  vacio
+```
+
+Confirmado por mi cuenta. La corrección es toda de evidencia y de spec, que es exactamente lo que
+pedía el informe.
+
+## BLOQUEANTE 1 — CERRADO. Las mutaciones mueren, y cada una en su propio caso
+
+Apliqué yo las mutaciones al SQL real y corrí los tres archivos de la ficha. Éste era mi criterio
+objetivo, literal, de la primera vuelta:
+
+| Mutación aplicada por mí | Antes (1.ª vuelta) | Ahora | Rojo exacto |
+| --- | --- | --- | --- |
+| **(e)** `j."locked_at" < $visibilityCutoff` a `IS NOT NULL` | **SOBREVIVÍA** | **MUERE** | `R5: una fila que otro worker ya reclamo Y COMMITEO no se entrega por segunda vez` — mensaje: `DOBLE ENTREGA: A reclamo filas que el competidor ya se habia llevado y commiteado. A: (123 ms), commit del competidor: +40 ms` |
+| **(g)** `j."run_after" <= $now` a `IS NOT NULL` | **SOBREVIVÍA** | **MUERE** | `una fila re-agendada con backoff por otro worker no se reclama antes de tiempo` — mensaje: `BACKOFF IGNORADO: A reclamo filas que otro worker acababa de re-agendar para dentro de cinco minutos` |
+| **(d)** quitar el `WHERE` de `bloqueados` entero | moría **sólo** por el regex de forma | **MUERE POR COMPORTAMIENTO**: los DOS casos del modo 2 (`DOBLE ENTREGA` y `BACKOFF IGNORADO`), y además el regex | |
+| **(a)** `ORDER BY "run_after" ASC` global | moría | **MUERE** (7 rojos) | |
+| **(b)** quitar `SKIP LOCKED` | moría | **MUERE** (3 casos del modo 1 a los ~3.020 ms: `statement_timeout` 57014) | |
+
+Cada mutación cae en el caso que le corresponde y con un mensaje que dice **qué se rompió**, no
+un `toEqual` mudo. Eso es lo que separa una medida de un cable trampa.
+
+### El mecanismo antifalso-verde: lo saboteé y funciona
+
+Era la parte que más me importaba, porque es el modo de fallo que buscaba en la primera vuelta.
+Muté el test, no el código: `CANDIDATOS_GRANDES` de **150.000 a 50**, para que la sentencia de A
+termine antes de que el competidor commitee.
+
+**Los dos casos del modo 2 se ponen ROJOS, no pasan por vacío:**
+
+```
+x  R5: una fila que otro worker ya reclamo Y COMMITEO no se entrega por segunda vez
+x  una fila re-agendada con backoff por otro worker no se reclama antes de tiempo
+   LA VENTANA NO SE ABRIO — A: (3 ms), commit del competidor: +33 ms.
+   El competidor commiteo DESPUES de que A terminase, asi que la carrera no se ejercio.
+   Sube CANDIDATOS_GRANDES (hoy 50).
+```
+
+Con el corpus real: A dura 123–151 ms y el competidor commitea a los ~40 ms, o sea ~100 ms de
+holgura, y la comprobación `tCommitB < tFinA` lo certifica **en cada corrida**. No es una promesa
+del comentario: es una aserción.
+
+**Detalle que vale la pena conocer** (no es un defecto, es cómo se comporta el mecanismo): con la
+mutación (a) —que devuelve el `ORDER BY` global y con él la capacidad de cortar el escaneo en
+`limit` filas— la sentencia baja de ~130 ms a ~28 ms, la ventana se cierra y los casos del modo 2
+caen con `LA VENTANA NO SE ABRIO` en vez de con `DOBLE ENTREGA`. **Siguen rojos**, que es lo que
+importa; sólo cambia el mensaje. El sistema es coherente: si la sentencia se acelera, el test avisa
+de que ya no está midiendo la carrera, en vez de mentir.
+
+### Estabilidad: 13 corridas verdes, cero flakes
+
+| Qué | Resultado |
+| --- | --- |
+| Archivo de concurrencia, 8 corridas seguidas | **8 verdes / 0 rojas**, `Tests 5 passed (5)`, 4,9–5,6 s cada una |
+| Los tres archivos de la ficha, 3 corridas mas 1 verbose | verdes, `Tests 27 passed (27)`, 3,6 s |
+| Dentro del gate | `job-repository-claim-concurrente.int.test.ts (5 tests) 3718ms` |
+
+El retardo del competidor se calibra con lo que tardó el ensayo (`msDelClaim * 0.3`), no con un
+número fijo, así que en una máquina más lenta la ventana se ensancha y el retardo la sigue.
+**Riesgo residual, y va en la dirección correcta:** si la máquina se carga entre el ensayo y la
+carrera, el caso puede salir rojo con `LA VENTANA NO SE ABRIO`. Es un falso ROJO con instrucciones,
+no un falso verde. Es el intercambio que hay que querer.
+
+### Lo que además comprobé del test nuevo
+
+- **Los objetivos no se calculan con un SQL escrito a mano.** El `beforeAll` hace un ensayo con
+  `JobRepository.claimBatch` REAL y lo revierte: se mide contra las filas que elige la sentencia de
+  producción, no contra un orden inventado. Es el patrón «aserción contra su propia fuente»
+  evitado bien.
+- **El competidor del caso del backoff usa `repo.fail` REAL**, no un `UPDATE` a mano: si el backoff
+  cambiara de forma, el test lo seguiría.
+- **`restaurarObjetivos()` devuelve el corpus a su estado inicial antes de cada carrera**, así que
+  el segundo caso no mide los restos del primero — el competidor commitea de verdad y eso deja
+  huella.
+- **`expect(idsA).toEqual(objetivos.slice(ROBADAS))`**: no se conforma con «no hay repetidas»
+  (cierto por vacío si A devolviera cero); exige exactamente las que el competidor no tocó.
+- **El modo 1 ya no depende del orden entre casos**: cada caso corre su propio solape. Cierra el
+  menor 3.
+
+## BLOQUEANTE 2 — CERRADO. El design ya no puede reintroducir el fallo
+
+Comparé el bloque SQL del `design.md` §1 contra el `$queryRaw` real, línea a línea: **coinciden**,
+predicado incluido, marcado `OBLIGATORIO, no es redundante`. Y alrededor hay ahora:
+
+- la sección **«Por qué el predicado de candidato se REPITE en `bloqueados`»**, con el mecanismo de
+  EvalPlanQual explicado, **mis números medidos** pegados (SIN el predicado: reclamó 5, la misma
+  fila dos veces; CON el predicado: reclamó 4) y la escala de la ventana (20k a 30 ms; 60k a 97 ms;
+  150k a 252 ms; 300k a 436 ms);
+- el agravante que faltaba: **la exposición crece con la saturación**, o sea que la carrera es más
+  probable justo en el escenario que la ficha atiende;
+- el punto 2 de «Garantías conservadas» corregido: `SKIP LOCKED` **sólo cubre uno de los dos modos**
+  de competencia, y el otro lo sostiene el predicado;
+- una frase dirigida a quien lo lea mañana: las tres CTEs no se colapsan y **el predicado no se
+  borra por «duplicado»**, con la ruta del test que lo prueba;
+- **el efecto del solape sube al design**, con el razonamiento de autocommit completo (los cuatro
+  puntos) y la advertencia de que la propiedad «cada worker se lleva N libres» dejó de ser cierta.
+
+Respuesta a la pregunta que se me hizo: **no, quien lea ese design mañana no puede reintroducir el
+fallo creyendo que alinea el código con la especificación.** El SQL del design ES el del código, el
+predicado lleva el aviso pegado, y si aun así alguien lo borrara, los dos casos del modo 2 se lo
+dicen con nombre y apellidos.
+
+*Nit sin consecuencia, no pido cambio:* el `candidatos` del design lista
+`SELECT "id", "tipo", "run_after"` y el código sólo `"id", "run_after"`. Da igual —`PARTITION BY
+"tipo"` no necesita proyectar la columna— y copiar el design tampoco rompería nada.
+
+## BLOQUEANTE 3 — CERRADO
+
+`tasks.md`: **15 casillas, las 15 en `[x]`, ninguna sin marcar.** T1–T12 de la primera vuelta más
+un grupo nuevo: T13 (test del competidor commiteado), T14 (design §1) y T15 (menores). Ahora el
+checkpoint es verificable.
+
+## Los menores
+
+| # | Qué pedí | Qué hizo | Mi lectura |
+| --- | --- | --- | --- |
+| **1** | separar el `toEqual` de `jobsB` de la aserción de R5 | Lo movió a su propio caso, `bajo solape, el segundo lote viene INCOMPLETO — el precio de fijar los ids antes de bloquear`, con el porqué y con el «en producción no muerde» | **De acuerdo con él, y tiene razón en no borrarlo.** Ese literal **es contrato**, no polizón: fija un efecto que ahora está declarado en `design.md` §1. Borrarlo dejaría el cambio de comportamiento sin nadie que lo vigile; cambiarlo por su propia fuente lo dejaría siempre verde. En su propio caso y con ese nombre ya no se lee como si fuera R5. **Cerrado.** |
+| **2** | esquemas huérfanos | `barrerHuerfanos()` al arrancar, **por EDAD** (sello de tiempo en el nombre, más de 1 h), no por prefijo | **Mejor que lo que pedí.** Un barrido por prefijo se llevaría el esquema de otro archivo corriendo en paralelo, que es el modo de fallo caro. Los nombres del formato viejo se quedan (el `parseInt` da NaN y se saltan): deuda inocua, y está dicho. **Cerrado.** |
+| **3** | orden implícito entre los dos casos | Cada caso del modo 1 corre su propio solape | **Cerrado.** |
+| **4** | `.env` copiado | Gate corrido exportando `DATABASE_URL` | **Cerrado, y con la prueba en el log**: `DATABASE_URL resuelta: los 147 archivos ... SI se ejecutan` conviviendo con `no hay .env`. Reproducido por mí, idéntico. |
+| **5** | cifra rancia (77) | `docs/verification.md` a **147**, con la fecha, el valor anterior y la advertencia de que **esta cifra caduca** y la buena es la que imprime el gate | **Cerrado, y bien resuelto**: no se limita a cambiar el número, avisa de que el número no es la fuente. |
+
+## Gate, reproducido por mí sobre `c19f4011`
+
+| Qué | Resultado |
+| --- | --- |
+| `./init.sh --rapido` (con `DATABASE_URL` exportada, sin `.env`) | **`INIT_EXIT=0`**, `== init OK ==` |
+| Relacionados | `Test Files 438 passed (438)` · `Tests 6210 passed | 17 skipped (6227)` |
+| Guardias | `Test Files 198 passed (198)` · `Tests 2952 passed (2952)` |
+| Veredicto de baseline | `sin rojos nuevos (0 archivo(s) rojo(s) sobre 629 ejecutado(s))` |
+| Saltados | **17 casos, los 17 en `AnaliticaPage.test.tsx`** (ajenos). **Cero archivos saltados.** |
+| Los 3 de la ficha | ejecutados: `claim-concurrente (5 tests) 3718ms`, `reparto-por-tipo (9 tests) 764ms`, `job-queue-service (13 tests) 10ms` |
+| Residuos en la base local | **ninguno**: cero esquemas `t402_*`, `public."jobs"` sigue con 74 filas |
+
+## CHECKPOINTS, lo que cambia respecto a la primera vuelta
+
+- [x] `tasks.md` con todas las tasks marcadas `[x]` — **ahora sí** (15/15).
+- [x] Cada `R<n>` mapea a un test que lo verifica — **R5 ya cubre sus dos modos de competencia**.
+- [x] `design.md` describe lo que se construyó, sin trampa para el siguiente.
+- [x] `progress/review_402.md` existe y su veredicto es **OK**.
+- [ ] Entrada en `progress/history.md`: sigue pendiente, **corresponde al cierre de la ficha**, no
+      al implementer de esta vuelta.
+
+Todo lo demás del checklist de la primera vuelta sigue igual y sigue verde: sin migración, sin
+tabla nueva, sin secretos, capas intactas y sin hardcode de contexto (el `lib/` no se tocó).
+
+## Veredicto final
+
+**APROBADA.** No queda ningún bloqueante ni ninguna reserva.
+
+El reparto por turnos era correcto desde la primera vuelta; lo que faltaba era que alguien pudiera
+romperlo sin que nadie se enterara, y eso se acabó: **las dos mutaciones de una línea que devolvían
+la doble entrega hoy mueren, cada una en su propio caso y con su propio mensaje**, el mecanismo que
+impide el falso verde está saboteado y comprobado, el test es estable en 13 corridas, y el
+`design.md` ya no le tiende una trampa al siguiente que lo lea.
+
+Queda para el cierre de la ficha, como siempre: la entrada en `progress/history.md` y el paso a
+`done` en `feature_list.json`.
