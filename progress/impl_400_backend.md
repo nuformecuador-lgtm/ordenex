@@ -193,3 +193,39 @@ Ninguna sobrevivió.
    Medido: irrelevante para el diagnóstico (los mensajes reales rondan los 80 caracteres).
 4. **Dos textos legados, no uno** (ver T0). El backfill reconoce los dos; `design.md` §7 solo
    nombraba el de `REQUEST_DENIED`.
+
+---
+
+## T1 — Fotografía de producción (ejecutada por el leader, en SOLO LECTURA)
+
+**Medida el 2026-09-10 a las 00:22:16 UTC** vía el MCP de Supabase (`DATABASE_URL` de prod es
+`sensitive`). El implementador no pudo ejecutarla: ese MCP no está en su conjunto de herramientas.
+
+| Qué | Valor |
+| --- | --- |
+| Jobs `geocodificacion` en `pending` / `failed` / `processing` | **0 / 0 / 0** |
+| De ellos, con el `last_error` legado del fallo de configuración | **0** |
+| Órdenes vivas sin `latitud`/`longitud`, **sin** `geocode_status` | **0** |
+| Órdenes vivas sin `latitud`/`longitud`, **con** `geocode_status` determinista | **2** (ambas `ZERO_RESULTS`) |
+| Último geocode con éxito | **2026-09-09 23:01:04 UTC** |
+
+**Lectura:** la credencial sigue funcionando (último éxito ~1 h 20 min antes de la medición) y el
+corte del 8-sep NO se ha repetido: cero jobs vivos con el marcador de fallo de configuración. Las 2
+órdenes sin coordenadas son el caso LEGÍTIMO que esta ficha deja bloqueado a propósito —dirección
+irresoluble, no fallo nuestro—; eran 1 a las 15:41 UTC y apareció una segunda durante la tarde.
+
+**Confirma lo que ya decía la corrección del spec:** hoy no hay nada que desbloquear, así que T20
+(dry-run del backfill tras el despliegue) debe encontrar **0 candidatas**. Si encontrara más, es que
+el corte se repitió y hay que avisar antes de seguir.
+
+Consultas usadas (solo lectura, sin escribir nada):
+
+```sql
+select count(*) from jobs where tipo='geocodificacion' and estado='pending';   -- y failed / processing
+select count(*) from jobs where tipo='geocodificacion' and estado<>'done'
+  and (last_error like '%REQUEST_DENIED%' or last_error like '%no esta configurada%');
+select case when geocode_status is null then 'sin geocode_status'
+            else 'determinista: ' || geocode_status end, count(*)
+  from orden where deleted_at is null and latitud is null group by 1;
+select max(created_at) from geocode_cache;
+```
