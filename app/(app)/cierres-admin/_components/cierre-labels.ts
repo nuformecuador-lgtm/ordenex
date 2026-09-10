@@ -14,6 +14,12 @@ import type { MetodoPagoValue } from "@prisma/client";
 
 import type { CierreResultado } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
+// FICHA 408 — los dos módulos del vocabulario de la causa de devolución. Los DOS son PUROS
+// (sin React, sin DOM), así que este archivo lo sigue siendo. El precedente de importar
+// etiquetas desde `mis-asignaciones/_components` está escrito en `cierre-detalle-shared.tsx`
+// (`CAUSA_INCIDENTE_LABEL`), y el vocabulario es el aprobado el 2026-07-15 (feature 73).
+import { CAUSA_DEVOLUCION_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-devolucion-options";
+import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 
 // --- Etiquetas i18n-ready (texto separado de la lógica) ---
 export const RESULTADO_LABEL: Record<CierreResultado, string> = {
@@ -445,4 +451,74 @@ export function nombreAccesibleDeTienda(
   contexto: string,
 ): string {
   return `${tiendaNombre} (${indice + 1} de ${cuantasTiendas}) · ${contexto}`;
+}
+
+// ---------------------------------------------------------------------------
+// FICHA 408 (2026-09-10) — EL MOTIVO DE UN RECHAZO AUTOMÁTICO, EN CASTELLANO.
+//
+// El cron de plazos vencidos (feature 99) guarda el motivo como `escalado SLA <causa>`
+// (`lib/services/DevolucionSlaService.ts`). Esa cadena es jerga de programador, lleva una sigla
+// que este repo decidió no enseñar nunca y termina en el value inglés del enum. Se traduce AL
+// PINTAR: el histórico de `gestion_orden.motivo` NO se toca —esas filas son evidencia— y el
+// productor del texto tampoco.
+//
+// Vive aquí, en el módulo PURO, porque lo necesitan por igual la pantalla del admin, la del
+// mensajero, el comprobante y las TRES descargas: que el archivo y la pantalla digan lo mismo es
+// cierto porque leen del MISMO sitio, no porque hoy coincidan dos literales.
+// ---------------------------------------------------------------------------
+
+/**
+ * Lo que se le añade a la causa cuando la fila NO enseña el marcador de origen (R11).
+ *
+ * NO copia la frase de `RECHAZO_SLA_BADGE_NOTA`: si algún día los dos apareciesen juntos, no
+ * sería un eco literal. Y no depende de ningún `title` para entenderse, que en táctil no existe.
+ */
+export const MOTIVO_RECHAZO_AUTOMATICO_COLA =
+  "lo rechazó el sistema al vencerse el plazo de la devolución";
+
+/**
+ * Las TRES cadenas que el cron puede haber guardado, con su etiqueta en castellano.
+ *
+ * Se compone desde `CAUSA_DEVOLUCION_SEED` y no de una lista literal paralela: si el enum gana un
+ * cuarto valor, esta tabla lo gana sola —y el `Record` exhaustivo de `CAUSA_DEVOLUCION_LABEL`
+ * rompe el build si nadie le puso nombre—. Es un `Map` y no un objeto: la entrada es texto que
+ * escribe una persona, y un objeto respondería a `"constructor"` o a `"__proto__"`.
+ */
+const ETIQUETA_POR_MOTIVO_AUTOMATICO: ReadonlyMap<string, string> = new Map(
+  CAUSA_DEVOLUCION_SEED.map((causa) => [
+    `escalado SLA ${causa}`,
+    CAUSA_DEVOLUCION_LABEL[causa],
+  ]),
+);
+
+/**
+ * El motivo de una gestión, listo para pintarse. Función PURA: no toca la gestión ni nada más.
+ *
+ * `hayMarcadorDeOrigen`: ¿esta fila enseña el marcador «Automático»? Los trece puntos de llamada
+ * pasan SIEMPRE `gestion.esRechazoSla` —el mismo booleano que decide si el marcador se pinta—,
+ * así que el llamador no decide nada y las dos cosas no pueden desincronizarse. En `/cierre-dia`
+ * es siempre `false` (`CierreDiaRepository.ts`, decisión expresa de la 102): ahí no hay marcador
+ * ni puede haberlo, y el texto del motivo es el ÚNICO portador de que el rechazo no fue suyo.
+ *
+ * Tres decisiones que parecen detalles y no lo son:
+ *
+ * 1. **La igualdad es EXACTA contra la cadena completa**, no `startsWith`/`includes`/`toLowerCase`
+ *    ni una expresión regular: el texto libre que escribe el mensajero es sagrado (R2) y
+ *    cualquier emparejamiento laxo puede comérselo o deformarlo. Coste aceptado: una fila con un
+ *    espacio de más saldría cruda — ninguna existe, todas las produce el mismo template literal.
+ * 2. **`null` sigue siendo `null`, jamás `"—"`**: el guion es un marcador de PANTALLA y la
+ *    descarga declara que una celda sin dato va VACÍA (R10 de la 170). Colapsarlo aquí metería un
+ *    `"—"` dentro del Excel. El `?? "—"` se queda en el render, fuera de esta función.
+ * 3. **Dos variantes y UN solo vocabulario**: donde el marcador acompaña al motivo, cada columna
+ *    responde una pregunta distinta y la celda no repite lo que el marcador ya dice; donde no hay
+ *    marcador, el texto tiene que sostenerse solo.
+ */
+export function motivoGestionLegible(
+  motivo: string | null,
+  hayMarcadorDeOrigen: boolean,
+): string | null {
+  if (motivo === null) return null;
+  const etiqueta = ETIQUETA_POR_MOTIVO_AUTOMATICO.get(motivo);
+  if (etiqueta === undefined) return motivo;
+  return hayMarcadorDeOrigen ? etiqueta : `${etiqueta} · ${MOTIVO_RECHAZO_AUTOMATICO_COLA}`;
 }

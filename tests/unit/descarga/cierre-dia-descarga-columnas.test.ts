@@ -8,6 +8,9 @@ import {
   COLUMNAS_DESCARGA_DIA_RECHAZADAS,
   COLUMNAS_DESCARGA_DIA_INCIDENTES,
   filaDescargaDiaEntregada,
+  // FICHA 408 — las dos proyecciones que pueden traer el motivo del cron de plazos vencidos.
+  filaDescargaDiaRechazada,
+  filaDescargaDiaDevuelta,
 } from "@/app/(app)/cierre-dia/_components/cierre-dia-descarga-columnas";
 import type { CierreDetalleGestion } from "@/lib/interfaces/services/ICierreDiaService";
 
@@ -375,5 +378,84 @@ describe("celda «Método» de la sección ENTREGADAS del cierre del día (mensa
     expect(fila.metodo).toBe("Efectivo 1234567.89 + SINPE 0.10");
     expect(fila.metodo).not.toMatch(/[₡$]/);
     expect(fila.metodo).not.toMatch(/1[.,]234[.,]567/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FICHA 408 — el motivo del cron en el archivo DEL MENSAJERO (R6 con la variante LARGA)
+// ---------------------------------------------------------------------------
+//
+// Ésta es la hoja donde menos contexto hay: no lleva columna «Origen» —la pantalla de la que
+// sale tampoco la tiene, porque `CierreDiaRepository` fija `esRechazoSla: false` para esta
+// vista— y en un archivo no existe ningún tooltip. Así que la celda tiene que llevar el texto
+// AUTOSUFICIENTE, entero.
+//
+// ⚠️ Si alguien pasara `true` fijo en los llamadores de este módulo, la celda diría «Dirección
+// errada» a secas y nada más se rompería. Esa es la única aserción que lo caza aquí, y el
+// literal va tecleado a mano.
+
+/** El texto autosuficiente completo, escrito a mano (R11). */
+const MOTIVO_LARGO_DIRECCION =
+  "Dirección errada · lo rechazó el sistema al vencerse el plazo de la devolución";
+
+/** Gestión mínima del cierre del día con el resultado y el motivo que cada caso necesita. */
+function gestionDiaConMotivo(
+  resultado: CierreDetalleGestion["resultado"],
+  motivo: string | null,
+): CierreDetalleGestion {
+  return {
+    ...gestionEntregada([]),
+    gestionId: "g-motivo",
+    resultado,
+    motivo,
+    montoRecibido: null,
+    // Lo que ESTA vista recibe SIEMPRE del servidor (feature 102).
+    esRechazoSla: false,
+  };
+}
+
+describe("FICHA 408 — el motivo del cron en el archivo del cierre del día", () => {
+  it("un rechazo automático emite el texto LARGO, no la etiqueta a secas (R6/R11)", () => {
+    const fila = filaDescargaDiaRechazada(
+      gestionDiaConMotivo("rechazada", "escalado SLA wrong_address"),
+    );
+
+    expect(fila.motivo).toBe(MOTIVO_LARGO_DIRECCION);
+    expect(fila.motivo).not.toBe("Dirección errada");
+  });
+
+  it("y en esa celda no queda ni la sigla ni el value del enum (R4)", () => {
+    const fila = filaDescargaDiaRechazada(
+      gestionDiaConMotivo("rechazada", "escalado SLA not_found"),
+    );
+
+    expect(fila.motivo).toBe(
+      "Cliente no localizado · lo rechazó el sistema al vencerse el plazo de la devolución",
+    );
+    expect(String(fila.motivo)).not.toContain("SLA");
+    expect(String(fila.motivo)).not.toContain("not_found");
+  });
+
+  it("una DEVUELTA con la plantilla también se traduce, y con el mismo texto largo (R6)", () => {
+    const fila = filaDescargaDiaDevuelta(
+      gestionDiaConMotivo("devuelta", "escalado SLA wrong_address"),
+    );
+
+    expect(fila.motivo).toBe(MOTIVO_LARGO_DIRECCION);
+  });
+
+  it("el motivo que él escribió sale intacto (R2)", () => {
+    const fila = filaDescargaDiaRechazada(
+      gestionDiaConMotivo("rechazada", "El cliente no contesta el timbre"),
+    );
+
+    expect(fila.motivo).toBe("El cliente no contesta el timbre");
+  });
+
+  it("un motivo AUSENTE deja la celda VACÍA, nunca el guion de pantalla (R3)", () => {
+    const fila = filaDescargaDiaRechazada(gestionDiaConMotivo("rechazada", null));
+
+    expect(fila.motivo).toBeNull();
+    expect(fila.motivo).not.toBe("—");
   });
 });

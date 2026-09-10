@@ -843,3 +843,58 @@ describe("la hoja fundida no tiene NADA de evidencia (T3.4, R40/R41)", () => {
     ).toContain(TIENE_EVIDENCIA_COL);
   });
 });
+
+// ---------------------------------------------------------------------------
+// FICHA 408 — la celda «Motivo» de la hoja FUNDIDA dice lo mismo que la pantalla (R6)
+// ---------------------------------------------------------------------------
+//
+// Es el mismo criterio que R45 —«SIEMPRE la etiqueta legible, JAMÁS el value del enum»— aplicado
+// al motivo que compone el cron de plazos vencidos. Los literales van tecleados a mano.
+
+describe("FICHA 408 — el motivo del cron en la hoja fundida", () => {
+  it("un rechazo automático emite «Dirección errada», no la plantilla cruda (R6)", () => {
+    const fila = filaDescargaGestionFundida(
+      gestion({
+        resultado: "rechazada",
+        esRechazoSla: true,
+        motivo: "escalado SLA wrong_address",
+      }),
+    );
+
+    expect(fila.motivo).toBe("Dirección errada");
+    // La celda «Origen» de al lado es la que decide la variante, con el MISMO booleano.
+    expect(fila.origenRechazo).toBe("Automático");
+    expect(String(fila.motivo)).not.toContain("SLA");
+    expect(String(fila.motivo)).not.toContain("wrong_address");
+  });
+
+  it("las otras dos causas también salen en castellano (R1)", () => {
+    expect(
+      filaDescargaGestionFundida(
+        gestion({ resultado: "rechazada", esRechazoSla: true, motivo: "escalado SLA not_found" }),
+      ).motivo,
+    ).toBe("Cliente no localizado");
+    expect(
+      filaDescargaGestionFundida(
+        gestion({
+          resultado: "rechazada",
+          esRechazoSla: true,
+          motivo: "escalado SLA wrong_number",
+        }),
+      ).motivo,
+    ).toBe("Número de celular errado");
+  });
+
+  it("el motivo que escribió el mensajero sale intacto (R2)", () => {
+    const fila = filaDescargaGestionFundida(
+      gestion({
+        resultado: "rechazada",
+        esRechazoSla: false,
+        motivo: "El cliente no contesta el timbre",
+      }),
+    );
+
+    expect(fila.motivo).toBe("El cliente no contesta el timbre");
+    expect(fila.origenRechazo).toBe("Manual");
+  });
+});

@@ -136,6 +136,9 @@ import {
   RECHAZO_ORIGEN_COL,
   RECHAZO_SLA_BADGE_LABEL,
   RESULTADO_FILA_LABEL,
+  // FICHA 408: mismo criterio que R45 —«SIEMPRE la etiqueta legible, JAMÁS el value del
+  // enum»—, aplicado al motivo que compone el cron de plazos vencidos.
+  motivoGestionLegible,
 } from "./cierre-labels";
 import { CLAVE_MEDIO_PAGO, montoPorMetodo } from "./desglose-pago";
 import { COLUMNAS_MEDIOS_PAGO } from "./medios-pago-descarga-columnas";
@@ -442,7 +445,9 @@ function celdasEspecificas(
     causa: gestion.causaIncidente
       ? CAUSA_INCIDENTE_LABEL[gestion.causaIncidente] ?? gestion.causaIncidente
       : null,
-    motivo: gestion.motivo,
+    // FICHA 408: el motivo del cron de plazos vencidos, en castellano. La celda «Origen» de
+    // aquí al lado es la que decide la variante, con el MISMO booleano.
+    motivo: motivoGestionLegible(gestion.motivo, gestion.esRechazoSla),
     fleteConIva: ingreso ? ingreso.fleteConIva : null,
     comisionConIva: ingreso ? ingreso.comisionConIva : null,
     fleteDevolucionConIva: ingreso ? ingreso.fleteDevolucionConIva : null,
