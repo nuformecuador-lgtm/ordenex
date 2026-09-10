@@ -4781,10 +4781,10 @@
       "title": "una suscripcion de webhook que falla siempre ni se desactiva sola ni avisa a nadie",
       "description": "Un destino que rechaza sistematicamente acumula miles de entregas muertas sin que nadie se entere, y el 429 se trata como un fallo generico mas.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
-      "branch": null,
+      "branch": "feat/403-webhook-destino-que-falla-pausa-y-avisa",
       "depends_on": null,
       "status_note": "MEDIDO EN PRODUCCION el 2026-09-09: 2.042 fallos con HTTP 429 y 1.958 jobs muertos contra UN SOLO destino entre el 4 y el 9 de septiembre, frente a 60 entregas correctas. Nadie se entero. || El destino era webhook.site (URL de PRUEBAS) que quedo registrada como suscripcion activa en produccion desde el 2026-08-28; el leader la desactivo a mano el 2026-09-09 para cortar la tormenta. || NO HAY TRATAMIENTO DEL 429: solo el backoff exponencial generico de la cola, sin leer Retry-After y sin cortar ante un destino que rechaza siempre. || Efecto colateral ya medido: esos reintentos son los que dejaron sin turno a la geocodificacion (ver ficha 402).",
       "spec_path": "specs/403-webhook-destino-que-falla-siempre/"
