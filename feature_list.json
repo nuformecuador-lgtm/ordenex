@@ -4826,13 +4826,14 @@
       "title": "el enlace de evidencias del webhook apunta a un identificador que el endpoint no sabe resolver",
       "description": "El evento de incidente manda una URL construida con el uuid de la orden, y ese endpoint solo resuelve por numero de guia o de remision: 404 garantizado.",
       "zone": "backend",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "baja",
       "spec_path": "specs/406-enlace-evidencias-webhook-identificador/",
       "branch": "feat/406-enlace-evidencias-webhook-identificador",
+      "merged_pr": 772,
       "depends_on": 404,
-      "status_note": "MEDIDO EN EL CODIGO el 2026-09-09: WebhookEstadoService.evidenciasUrlDe construye `${origin}${PATH_ORDEN_API_KEY}/${ordenId}` con el UUID, y ApiOrdenResolucionService.resolver solo casa por num_guia (entero) o num_remision (texto exacto). Un uuid no es ninguno de los dos, asi que cae en el 404 uniforme del borde. || HOY ES INOFENSIVO Y POR ESO NO CORRE PRISA: el enlace solo viaja en eventos de estado `incidente`, y produccion tiene CERO incidentes registrados y CERO eventos de ese tipo emitidos (medido). Pero se estrena roto ante el primer incidente real, y va hacia un integrador externo. || Hallazgo colateral del spec de la 404, declarado fuera de su alcance."
+      "status_note": "MEDIDO EN EL CODIGO el 2026-09-09: WebhookEstadoService.evidenciasUrlDe construye `${origin}${PATH_ORDEN_API_KEY}/${ordenId}` con el UUID, y ApiOrdenResolucionService.resolver solo casa por num_guia (entero) o num_remision (texto exacto). Un uuid no es ninguno de los dos, asi que cae en el 404 uniforme del borde. || HOY ES INOFENSIVO Y POR ESO NO CORRE PRISA: el enlace solo viaja en eventos de estado `incidente`, y produccion tiene CERO incidentes registrados y CERO eventos de ese tipo emitidos (medido). Pero se estrena roto ante el primer incidente real, y va hacia un integrador externo. || Hallazgo colateral del spec de la 404, declarado fuera de su alcance. || CERRADA 2026-09-10, PR #772 mergeado a dev (merge commit 203fea37). Reviewer APROBADO, 0 bloqueantes, 16/16 requisitos verificados por el leyendo cada test y ejecutandolo. SE ARREGLO EL EMISOR, no el resolutor: el enlace lleva numGuia si existe y numRemision si no, ambos ya presentes en el mismo `data`. EL ROJO SE VIO ANTES DEL ARREGLO y el reviewer lo REPRODUJO revirtiendo el fix: los 4 casos del cierre de lazo caen con 404 y arrastran 22 rojos en 4 archivos, 4 de ellos contra Postgres real. Q5 MEDIDA, no asumida (sonda contra next dev, borrada despues): Next decodifica el segmento dinamico EXACTAMENTE UNA VEZ y el / codificado no parte el segmento, asi que encodeURIComponent basta. 8+4 mutaciones, todas muertas; la de invertir la precedencia deja el archivo del lazo ENTERO en verde y solo la mata el literal a mano de R4. DEUDA AJENA DESTAPADA Y ARREGLADA: un localizador del CHANGELOG en openapi-405-gestiones.test.ts ataba su asercion a la FECHA y la entrada del mismo dia lo rompia (5 rojos ajenos); se anclo al titulo sin relajar nada, verificado por el reviewer. ⚠️ QUEDA OTRO IGUAL, LATENTE: openapi-374-nodo-retirado.test.ts:118-127 usa el mismo patron por fecha (2026-09-06). LIMITES DECLARADOS: Q5 se midio en next dev y no contra un build de produccion, y Q4 (max(length(num_remision)) real) sigue sin medir."
     },
     {
       "id": 407,
