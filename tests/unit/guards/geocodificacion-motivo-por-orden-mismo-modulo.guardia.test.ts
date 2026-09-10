@@ -24,8 +24,20 @@ const RUTA_BODEGA = "app/(app)/ordenes/_components/AsignarBodegaModal.tsx";
 const RUTA_SATELITE = "app/(app)/recepcion-satelite/_components/AsignarSateliteModal.tsx";
 const MODULO_COMPARTIDO = "@/app/(app)/_components/geocodificacion-motivo-messages";
 
-/** Los cinco motivos literales que emite el gate de coordenadas (feature 92, R6 de la 368). */
+/**
+ * La UNIÓN COMPLETA de `EstadoAsignabilidad`, escrita a mano (feature 92, R6 de la 368).
+ *
+ * FEATURE 400 (T16, R23): eran los CINCO motivos bloqueantes; ahora son los SIETE estados,
+ * porque los dos que DEJAN PASAR la asignación también tienen que estar prohibidos en los
+ * modales. El estado nuevo, `asignable_sin_ubicacion`, es el que más tienta a tratar a mano
+ * ("si esta orden no tiene ubicación, pinto algo distinto") y esa divergencia es
+ * exactamente la que este guardia existe para cazar: la clasificación vive en el gate y el
+ * vocabulario en `geocodificacion-motivo-messages.ts`, nunca en el modal. Lo que el modal
+ * SÍ recibe de la 400 es una CIFRA (`sinUbicacion`), que no es un literal de estado.
+ */
 const MOTIVOS_DEL_GATE = [
+  "asignable",
+  "asignable_sin_ubicacion",
   "direccion_no_geocodificable",
   "geocodificacion_agotada",
   "geocodificacion_en_curso",
@@ -73,7 +85,7 @@ describe("368/T8 — AsignarBodegaModal y AsignarSateliteModal importan mensajeD
     expect(deBodega).toBe(deSatelite);
   });
 
-  it("ninguno de los dos declara su PROPIO mapa motivo->mensaje: los cinco literales del gate no aparecen como string en el modal", () => {
+  it("ninguno de los dos declara su PROPIO mapa motivo->mensaje: NINGÚN literal de la unión del gate aparece como string en el modal", () => {
     for (const ruta of [RUTA_BODEGA, RUTA_SATELITE]) {
       const codigo = leer(ruta);
       for (const motivo of MOTIVOS_DEL_GATE) {
@@ -100,6 +112,23 @@ describe("368/T8 — AsignarBodegaModal y AsignarSateliteModal importan mensajeD
     expect(moduloDeImport(sinImport, "mensajeDireccionPorMotivo")).toBeNull();
   });
 
+  it("CONTRAPRUEBA (400/R23): el barrido caza un modal que tratara `asignable_sin_ubicacion` a mano", () => {
+    // Es la divergencia concreta que la 400 hace posible: el estado nuevo no bloquea, así que
+    // un modal podría sentirse tentado de reconocerlo por su literal y pintar su propio aviso.
+    const modalQueLoTrataAMano = [
+      `const sinUbicacion = bloqueadas.filter(`,
+      `  (b) => b.motivo === "asignable_sin_ubicacion",`,
+      `).length;`,
+    ].join("\n");
+
+    const cazados = MOTIVOS_DEL_GATE.filter(
+      (motivo) =>
+        modalQueLoTrataAMano.includes(`"${motivo}"`) ||
+        modalQueLoTrataAMano.includes(`'${motivo}'`),
+    );
+    expect(cazados).toEqual(["asignable_sin_ubicacion"]);
+  });
+
   it("CONTRAPRUEBA: el barrido de literales SÍ caza un mapa propio copiado con los motivos del gate", () => {
     const literalPropioCopiado = [
       `const MOTIVO_A_MENSAJE_LOCAL = new Map([`,
@@ -114,5 +143,69 @@ describe("368/T8 — AsignarBodegaModal y AsignarSateliteModal importan mensajeD
         literalPropioCopiado.includes(`'${motivo}'`),
     );
     expect(cazados).toEqual(["direccion_no_geocodificable", "geocodificacion_agotada"]);
+  });
+});
+
+/**
+ * FICHA 400 (T13/T16, R25) — GUARDIA: EL MAPA `motivo -> mensaje` ESTÁ TIPADO POR LA LISTA
+ * DE ESTADOS BLOQUEANTES, NO POR `string`.
+ *
+ * Por qué hace falta un guardia y no basta un test de comportamiento: la exhaustividad de
+ * R25 la sostiene UNA anotación de tipo (`Record<EstadoBloqueante, string>`) y las
+ * anotaciones no se pueden observar en runtime. Medido el 2026-09-09 con una mutación:
+ * cambiar esa anotación a `Record<string, string>` y añadir un estado nuevo a
+ * `EstadoAsignabilidad` deja el `typecheck` VERDE y los 42 tests del módulo VERDES — el
+ * estado nuevo cae al `null` defensivo y el operador ve el mensaje genérico. Es el fallo
+ * MUDO exacto que esta ficha vino a cerrar, así que se cierra leyendo el árbol real.
+ *
+ * (Con la anotación puesta, esa misma mutación es `error TS2741: Property … is missing in
+ * type … but required in type 'Record<EstadoBloqueante, string>'`.)
+ */
+describe("400/T13 — el mapa de mensajes se tipa por `EstadoBloqueante`, y el tipo viene de su único módulo", () => {
+  const RUTA_MENSAJES = "app/(app)/_components/geocodificacion-motivo-messages.ts";
+  const MODULO_DEL_TIPO = "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
+
+  /** El tipo con el que se declara `MOTIVO_A_MENSAJE`, o `null` si no se declara así. */
+  function tipoDelMapa(codigo: string): string | null {
+    const match = codigo.match(/const\s+MOTIVO_A_MENSAJE\s*:\s*([^=]+?)\s*=/);
+    return match ? match[1]!.trim() : null;
+  }
+
+  it("`MOTIVO_A_MENSAJE` se declara como `Record<EstadoBloqueante, string>`", () => {
+    expect(tipoDelMapa(leer(RUTA_MENSAJES))).toBe("Record<EstadoBloqueante, string>");
+  });
+
+  it("no queda ningún `Map<string, string>` ni `Record<string, string>`: eso era el silencio de antes de la 400", () => {
+    const codigo = leer(RUTA_MENSAJES);
+    expect(codigo).not.toContain("Record<string, string>");
+    expect(codigo).not.toContain("Map<string, string>");
+  });
+
+  it("`EstadoBloqueante` se importa del contrato del gate, no se redeclara aquí", () => {
+    const codigo = leer(RUTA_MENSAJES);
+    // `import type` para que el tipo no cree acoplamiento en runtime (design §6.1).
+    expect(codigo).toMatch(
+      new RegExp(
+        `import\\s+type\\s*\\{[^}]*\\bEstadoBloqueante\\b[^}]*\\}\\s*from\\s*["']${MODULO_DEL_TIPO.replace(
+          /[/]/g,
+          "\\/",
+        )}["']`,
+      ),
+    );
+    expect(codigo).not.toMatch(/type\s+EstadoBloqueante\s*=/);
+  });
+
+  it("CONTRAPRUEBA: el detector caza la forma vieja (`Record<string, string>`) y la anterior (`new Map`)", () => {
+    expect(
+      tipoDelMapa(`const MOTIVO_A_MENSAJE: Record<string, string> = {};`),
+    ).toBe("Record<string, string>");
+    // La forma que tenía el módulo hasta la 400 no lleva anotación ninguna: `null`.
+    expect(
+      tipoDelMapa(`const MOTIVO_A_MENSAJE = new Map<string, string>([]);`),
+    ).toBeNull();
+    // Y la buena se reconoce como tal.
+    expect(
+      tipoDelMapa(`const MOTIVO_A_MENSAJE: Record<EstadoBloqueante, string> = {};`),
+    ).toBe("Record<EstadoBloqueante, string>");
   });
 });

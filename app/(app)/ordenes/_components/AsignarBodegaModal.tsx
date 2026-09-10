@@ -21,7 +21,10 @@ import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 import { MOTIVO_BLOQUEADO_POR_CIERRE, toMensajeroOptions } from "./mensajero-options";
 import { MOTIVO_USUARIO_NO_ASIGNABLE } from "@/lib/constants/estado-usuario-asignable";
 import { guiaDecisionErrorMessage } from "./guia-decision-error-messages";
-import { mensajeDireccionPorMotivo } from "@/app/(app)/_components/geocodificacion-motivo-messages";
+import {
+  mensajeAsignadasSinUbicacion,
+  mensajeDireccionPorMotivo,
+} from "@/app/(app)/_components/geocodificacion-motivo-messages";
 
 export interface AsignarBodegaModalProps {
   open: boolean;
@@ -190,12 +193,23 @@ export function AsignarBodegaModal({
     // R12: informa cuántas se asignaron y cuántas quedaron bloqueadas, en el mismo lugar
     // donde hoy se confirma un lote de éxito total. Literales de design.md §6.3 (Q1
     // aprobado por el humano el 2026-09-03), a mano — no se derivan de otra fuente.
+    //
+    // FEATURE 400 (R31/R34/R35, design §6.5-c): y, PEGADO A ESA MISMA FRASE, cuántas del
+    // lote quedaron asignadas SIN UBICACIÓN. Va aquí y no en un bloque nuevo a propósito:
+    // R34 pide verlo «donde hoy ve la confirmación», y este `mensaje` es literalmente eso
+    // (el toast y el `<ManifiestoResultado>`). Nunca dentro de la lista de `bloqueadas`
+    // (R35): esas órdenes NO recibieron mensajero y estas SÍ. Es una cifra agregada y solo
+    // eso — `mensajeAsignadasSinUbicacion` recibe un número, así que por este canal no
+    // puede colarse ninguna guía ni ningún id (R32).
     const mensaje =
-      result.status === "partial"
+      (result.status === "partial"
         ? `Mensajero asignado a ${result.resultados.length} de ${
             result.resultados.length + bloqueadas.length
           } orden(es). ${bloqueadas.length} bloqueada(s).`
-        : `Mensajero asignado a ${result.resultados.length} orden(es).`;
+        : `Mensajero asignado a ${result.resultados.length} orden(es).`) +
+      (result.sinUbicacion
+        ? ` ${mensajeAsignadasSinUbicacion(result.sinUbicacion)}`
+        : "");
     toast.success(mensaje);
     // Feature 148 (§9.7): asignación ya cometida → fase "resultado"; `onSuccess()`
     // se difiere al cierre. La llamada de negocio, su input y su toast no cambian (R27).

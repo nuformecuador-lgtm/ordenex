@@ -52,4 +52,30 @@ describe("guiaDecisionErrorMessage", () => {
     expect(msg).toBe("Datos inválidos: revisa la selección y vuelve a intentarlo.");
     expect(msg).not.toMatch(/mensajero/i);
   });
+
+  // FEATURE 400 (T16, R19/R23) — el mensaje del fallo del servicio de mapas llega hasta aquí
+  // por el módulo compartido `geocodificacion-motivo-messages`, que este mapper consulta ANTES
+  // de su switch por `status`. Si alguien declarara un mapa propio en el mapper (o en un modal),
+  // este caso volvería al genérico de `conflict` y se pondría rojo. Literal a mano.
+  it("400/R19: conflict con motivo geocodificacion_agotada -> el fallo del servicio, no «Dirección no encontrada»", () => {
+    const error = {
+      status: "conflict",
+      detalle: [{ ordenId: "o1", motivo: "geocodificacion_agotada" }],
+    };
+    expect(guiaDecisionErrorMessage(error)).toBe(
+      "No se pudo verificar la ubicación por un fallo del servicio de mapas. La dirección no es el problema; vuelve a intentarlo más tarde.",
+    );
+    expect(guiaDecisionErrorMessage(error)).not.toBe("Dirección no encontrada");
+    // Y tampoco cae en el genérico de `conflict`, que es lo que pasaba antes de la 93.
+    expect(guiaDecisionErrorMessage(error)).not.toMatch(/ya no admite esta acción/i);
+  });
+
+  it("400/R20: conflict con motivo direccion_no_geocodificable conserva «Dirección no encontrada»", () => {
+    expect(
+      guiaDecisionErrorMessage({
+        status: "conflict",
+        detalle: [{ ordenId: "o1", motivo: "direccion_no_geocodificable" }],
+      }),
+    ).toBe("Dirección no encontrada");
+  });
 });

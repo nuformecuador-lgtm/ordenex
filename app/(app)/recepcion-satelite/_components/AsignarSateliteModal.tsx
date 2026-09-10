@@ -22,7 +22,10 @@ import {
 } from "@/app/(app)/ordenes/_components/mensajero-options";
 import { MOTIVO_USUARIO_NO_ASIGNABLE } from "@/lib/constants/estado-usuario-asignable";
 import { asignacionSateliteErrorMessage } from "./asignacion-satelite-error-messages";
-import { mensajeDireccionPorMotivo } from "@/app/(app)/_components/geocodificacion-motivo-messages";
+import {
+  mensajeAsignadasSinUbicacion,
+  mensajeDireccionPorMotivo,
+} from "@/app/(app)/_components/geocodificacion-motivo-messages";
 
 export interface AsignarSateliteModalProps {
   open: boolean;
@@ -163,12 +166,21 @@ export function AsignarSateliteModal({
 
     // R12/R5: mismo criterio y mismo texto que en la bodega central (Q1 aprobado, design.md
     // §6.3), escrito a mano.
+    //
+    // FEATURE 400 (R31/R34/R35, design §6.5-c): espejo EXACTO de la bodega central — el
+    // aviso de cuántas quedaron sin ubicación se concatena a la misma frase que ya va al
+    // toast y al `<ManifiestoResultado>`, jamás a la lista de `bloqueadas` (esas no
+    // recibieron mensajero; estas sí). Cifra agregada y nada más: la función recibe un
+    // número, así que por aquí no puede viajar ninguna guía ni ningún id (R32).
     const mensaje =
-      result.status === "partial"
+      (result.status === "partial"
         ? `Mensajero asignado a ${result.resultados.length} de ${
             result.resultados.length + bloqueadas.length
           } orden(es). ${bloqueadas.length} bloqueada(s).`
-        : `Mensajero asignado a ${result.resultados.length} orden(es).`;
+        : `Mensajero asignado a ${result.resultados.length} orden(es).`) +
+      (result.sinUbicacion
+        ? ` ${mensajeAsignadasSinUbicacion(result.sinUbicacion)}`
+        : "");
     toast.success(mensaje);
     // Feature 148 (§9.7): asignación ya cometida → fase "resultado"; `onSuccess()`
     // se difiere al cierre. Nada del contrato de negocio cambia (R27).
