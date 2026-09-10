@@ -83,6 +83,9 @@ const SELECT_LISTADO = {
   descripcion: true,
   anexo: true,
   createdAt: true,
+  // FICHA 409: el `evento` pasa a viajar. Es lo que el catalogo necesita para clasificar la fila
+  // y resolverle un atajo; sin el, la campana tendria que adivinar por el texto.
+  evento: true,
 } as const;
 
 export class NotificacionRepository implements INotificacionRepository {
@@ -174,6 +177,7 @@ export class NotificacionRepository implements INotificacionRepository {
       anexo: f.anexo,
       createdAt: f.createdAt,
       leida: (f.lecturas[0]?.leidaAt ?? null) !== null,
+      evento: f.evento as NotificacionEvento, // ficha 409
     }));
   }
 

@@ -26,6 +26,11 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 // primero) escrita una sola vez, para que campana y pantalla no puedan divergir (R43/R52).
 import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
 import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
+// FICHA 409 (R39): el «5» y el «24» del texto del aviso de novedades salen de la MISMA
+// configuracion de la que `DevolucionSlaService` deriva sus ventanas. Con dos copias del numero,
+// el dia que el humano mueva el plazo el cron escalaria a los 6 dias y el aviso seguiria
+// prometiendo 5 — y la tienda organiza su trabajo con ese numero.
+import { devolucionSlaConfig } from "@/lib/config/devolucion-sla";
 
 /**
  * Cliente transaccional que el emisor del rechazo necesita: las dos tablas de la feature +
@@ -922,6 +927,211 @@ export async function emitirGeocodificacionCaida(
       anexo: null,
       entidadTipo: "geocodificacion_caida_dia" as const,
       entidadId: ctx.diaCR,
+      destinatario,
+    })),
+    tx,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FICHA 409 §4.3 — LOS DOS AVISOS AGREGADOS. BEST-EFFORT, desde el CRON `avisos-diarios`.
+//
+// ⚠️ SON AGREGADOS: UN aviso con el NUMERO dentro, JAMAS uno por orden (R36). El patron exacto ya
+// existe en `gasto_fijo_cobro_pendiente` (ficha 333) y se REUSA, no se reinventa: fila + entidad
+// por dia, con la cifra viva resuelta AL LEER para que el aviso se apague solo (design §5).
+//
+// ⚠️ Y EL ALCANCE VA DENTRO DEL `entidad_id`. `notificacion_dedupe_key` es UNIQUE sobre
+// `(evento, entidad_id, destinatario_rol, destinatario_usuario_id)` con `NULLS NOT DISTINCT` y
+// `WHERE entidad_id IS NOT NULL`, y **el ALCANCE (`tienda_id`, `zona_id`) NO ENTRA en esa clave**
+// —esta escrito en `NotificacionRepository.columnasDestinatario`—, ademas de que `crear` ABSORBE
+// el `P2002` devolviendo `false`. Con `entidad_id = diaCR` a secas, la clave seria la MISMA para
+// todas las tiendas (y para todas las zonas): la PRIMERA de la corrida se llevaria el aviso y
+// TODAS LAS DEMAS quedarian silenciadas, sin error, sin log y sin nada. Es el fallo que la 262
+// documento con `orden` y que la 403 evito con la racha, y este repo ya lo cometio DOS veces.
+// R42 y R51, con sus mutaciones obligatorias, existen para eso.
+// ---------------------------------------------------------------------------
+
+/**
+ * Que plazo comparte el LOTE de novedades sin gestionar de una tienda. Lo decide
+ * `AvisosDiariosService` mirando las causas y el tope de intentos; el emisor solo lo escribe.
+ *
+ * ⚠️ EL «MEZCLADO» NO ES UN CASO RARO, ES EL REQUISITO (R40, decision Q9 del humano). El plazo del
+ * rechazo automatico DEPENDE DE LA CAUSA —5 dias para `wrong_address`/`wrong_number`, 24 h para
+ * `not_found`— y desde la 276 una novedad `wrong_*` que YA alcanzo el tope de intentos escala en
+ * la corrida SIGUIENTE, sin esperar sus cinco dias. Un texto que dijera «a los 5 dias» sobre un
+ * lote mezclado le prometeria a la tienda MAS TIEMPO DEL QUE TIENE, y la tienda organiza su
+ * trabajo con ese numero. Si el lote mezcla, el texto habla SIN plazo.
+ */
+export type PlazoNovedades = "cinco_dias" | "veinticuatro_horas" | "mezclado";
+
+/**
+ * FICHA 409 (R37/R39/R40) — el DETALLE del aviso de novedades sin gestionar. TRES formas, y elegir
+ * la correcta ES el requisito.
+ *
+ * ⚠️ EL «5» Y EL «24» NO SE ESCRIBEN AQUI: salen de `lib/config/devolucion-sla.ts`, de donde
+ * TAMBIEN derivan sus ventanas `DevolucionSlaService`. Asi, el dia que el humano mueva el plazo, el
+ * aviso no puede quedarse diciendo otro numero que el que aplica el cron. Lo mide
+ * `devolucion-sla-plazo-unica-fuente.test.ts` con un aserto de configuracion Y uno de
+ * COMPORTAMIENTO del cron: mutar la configuracion a 6 pone los dos en rojo.
+ *
+ * SIN PII (R44): un numero, unos dias y una instruccion. Ni guia, ni remision, ni direccion, ni
+ * telefono, ni destinatario, ni monto. Regla de la 146 §4.6.
+ *
+ * Singular y plural EXPLICITOS, y un caso propio para el dia cero: «lleva 0 dias en bodega» seria
+ * el texto roto que ninguna suite ve y que un humano lee el dia peor.
+ */
+export function textoNovedadesSinGestionar(diasMasAntigua: number, plazo: PlazoNovedades): string {
+  return `${fraseAntiguedad(diasMasAntigua)} ${frasePlazo(plazo)}`;
+}
+
+/** «La más antigua …» — la mitad del texto que dice CUANTO lleva esperando (R37). */
+function fraseAntiguedad(dias: number): string {
+  if (dias <= 0) return "La más antigua entró hoy a bodega.";
+  if (dias === 1) return "La más antigua lleva 1 día en bodega.";
+  return `La más antigua lleva ${dias} días en bodega.`;
+}
+
+/** La mitad del texto que dice QUE PASA SI NO SE GESTIONA — o que no lo dice (R40). */
+function frasePlazo(plazo: PlazoNovedades): string {
+  if (plazo === "cinco_dias") {
+    return `A los ${devolucionSlaConfig.DIAS_RECHAZO_AUTOMATICO} días se rechaza automáticamente.`;
+  }
+  if (plazo === "veinticuatro_horas") {
+    return `A las ${devolucionSlaConfig.HORAS_REINTENTO} horas de entrar, el sistema la reintenta o la rechaza sin esperar tu decisión.`;
+  }
+  // R40: causas con ventanas distintas, o alguna ya en el tope de intentos. NI UNA CIFRA DE PLAZO.
+  return "Los plazos vencen en momentos distintos según la causa: revisalas una por una.";
+}
+
+/** Lo MINIMO que el aviso necesita: una tienda, unos dias, un plazo y un dia CR. Sin PII (R44). */
+export interface NovedadesSinGestionarContexto {
+  /** La tienda dueña de las novedades. Va en el ALCANCE **y** en la ENTIDAD (ver arriba). */
+  tiendaId: string;
+  /**
+   * Dias que lleva en bodega la novedad mas antigua, contados desde el MISMO ANCLA que usa el
+   * proceso del rechazo automatico: la ultima transicion `anclaje_devolucion` de la orden, con
+   * caida a su gestion `devuelta` vigente para la poblacion legada (R38, 239/R12 y 239/R14). Asi
+   * el aviso no puede decir «lleva 3 dias» sobre una orden a la que el cron le cuenta 5.
+   * ⚠️ `orden.updated_at` NO sirve de ancla y no se usa: es una fecha mutable que cualquier
+   * escritura mueve. Leccion ya pagada en este repo.
+   */
+  diasMasAntigua: number;
+  /** Homogeneidad del lote, decidida por el servicio (R39/R40). */
+  plazo: PlazoNovedades;
+  /**
+   * `YYYY-MM-DD` del dia calendario CR de la corrida. Sale de `fechaCalendarioCR`, nunca de
+   * `toISOString().slice(0,10)` (en UTC, las 19:00 CR ya caen en el dia siguiente).
+   */
+  diaCR: string;
+}
+
+/**
+ * R35/R36/R41/R42 — UNA sola fila `alert` dirigida al rol `adminTienda` ACOTADO a su tienda.
+ *
+ * `alert` y no `warning`: hay un reloj corriendo y un desenlace automatico al final. No es una cola
+ * de trabajo normal como «un cierre por aprobar».
+ *
+ * ⚠️ EL TITULO (con el numero) NO SE PERSISTE AQUI y no es un olvido: vive en el CATALOGO
+ * (`catalogo-avisos.ts`) porque se compone con la cifra VIVA en el instante de la consulta (R57).
+ * Si se persistiera, el aviso diria «5 novedades» eternamente aunque ya solo quedaran 2 — y ese es
+ * exactamente el modo en que un aviso pierde la confianza de quien lo lee.
+ *
+ * SIN ANEXO: no hay ningun dato adicional que enseñar sin romper R44.
+ */
+export async function emitirNovedadesSinGestionar(
+  repo: INotificacionRepository,
+  ctx: NovedadesSinGestionarContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  return emitirFilas(
+    repo,
+    [
+      {
+        tipo: "alert",
+        evento: "novedades_sin_gestionar",
+        descripcion: textoNovedadesSinGestionar(ctx.diasMasAntigua, ctx.plazo),
+        anexo: null,
+        entidadTipo: "novedades_sin_gestionar_dia",
+        // ⚠️ LA TIENDA VA DENTRO. Sin ella, solo la primera tienda de la corrida recibiria su
+        // aviso y todas las demas quedarian mudas (ver la cabecera de esta seccion, R42).
+        entidadId: `${ctx.tiendaId}:${ctx.diaCR}`,
+        destinatario: { tipo: "rol", rol: "adminTienda", tiendaId: ctx.tiendaId },
+      },
+    ],
+    tx,
+  );
+}
+
+/**
+ * El AMBITO de un aviso de represadas: o el total del sistema (administracion central) o una zona
+ * concreta (su bodega satelite). Union discriminada para que «zona sin id» no sea representable.
+ */
+export type AmbitoRepresadas =
+  | { readonly tipo: "global" }
+  | { readonly tipo: "zona"; readonly zonaId: string };
+
+/**
+ * FICHA 409 (R50/R54) — el DETALLE del aviso de devoluciones represadas.
+ *
+ * SIN PII (R54): ni guia, ni remision, ni direccion, ni telefono, ni destinatario, ni NOMBRE DE
+ * TIENDA, ni nombre de zona, ni monto. Un numero, unos dias y una instruccion.
+ *
+ * Singular y plural explicitos, con su caso propio para el dia cero.
+ */
+export function textoDevolucionesRepresadas(diasMasAntigua: number): string {
+  return `${fraseAntiguedad(diasMasAntigua)} Coordiná la devolución.`;
+}
+
+/** Lo MINIMO que el aviso necesita: un ambito, unos dias y un dia CR. Sin PII (R54). */
+export interface DevolucionesRepresadasContexto {
+  /** Global (maestro + admin) o una zona (su `adminSatelite`). VA DENTRO DE LA ENTIDAD. */
+  ambito: AmbitoRepresadas;
+  /**
+   * Dias que lleva en bodega la mas antigua DEL AMBITO QUE CUBRE (R50), contados desde la ultima
+   * transicion cuyo destino es `por_devolver`. `orden.updated_at` NO sirve de ancla.
+   */
+  diasMasAntigua: number;
+  /** `YYYY-MM-DD` del dia calendario CR de la corrida (`fechaCalendarioCR`). */
+  diaCR: string;
+}
+
+/**
+ * R47/R48/R49/R51 — UNA fila `warning` por rol destinatario del ambito:
+ *   · ambito GLOBAL -> `maestro` y `admin`, sin acotar por zona (R49);
+ *   · ambito ZONA   -> `adminSatelite` ACOTADO a esa zona, con SU numero y no el total (R48).
+ *
+ * `warning` y no `alert`: es una cola de trabajo que se ha atascado, no un servicio caido.
+ *
+ * ⚠️ EL AMBITO VA DENTRO DEL `entidad_id` (`${ambito}:${diaCR}`), y sin el LAS ZONAS SE PISAN
+ * ENTRE SI: la clave de dedupe no incluye `zona_id`, asi que la primera zona del recorrido se
+ * llevaria el aviso y las demas quedarian mudas (R51, mutacion obligatoria). El literal `"global"`
+ * nunca puede colisionar con un uuid de zona, y la forma uniforme evita que alguien confunda las
+ * dos al leer una fila.
+ *
+ * Que `destinatario_rol` este DENTRO de la clave de dedupe es lo que hace que `maestro` y `admin`
+ * se deduplican de forma INDEPENDIENTE: que uno lea el suyo no suprime el del otro.
+ *
+ * SIN ANEXO: no hay dato adicional que enseñar sin romper R54.
+ */
+export async function emitirDevolucionesRepresadas(
+  repo: INotificacionRepository,
+  ctx: DevolucionesRepresadasContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  const destinatarios: NotificacionDestinatario[] =
+    ctx.ambito.tipo === "global"
+      ? [...ROLES_ADMINISTRACION]
+      : [{ tipo: "rol", rol: "adminSatelite", zonaId: ctx.ambito.zonaId }];
+  const ambito = ctx.ambito.tipo === "global" ? "global" : ctx.ambito.zonaId;
+  return emitirFilas(
+    repo,
+    destinatarios.map((destinatario) => ({
+      tipo: "warning" as const,
+      evento: "devoluciones_represadas" as const,
+      descripcion: textoDevolucionesRepresadas(ctx.diasMasAntigua),
+      anexo: null,
+      entidadTipo: "devoluciones_represadas_dia" as const,
+      entidadId: `${ambito}:${ctx.diaCR}`,
       destinatario,
     })),
     tx,

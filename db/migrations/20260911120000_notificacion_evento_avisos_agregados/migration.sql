@@ -1,0 +1,58 @@
+-- FICHA 409 (T2.2, design §6.1) -- los DOS avisos AGREGADOS del panel accionable: «tienes N
+-- novedades sin gestionar» (a la tienda) y «N ordenes esperan volver a su tienda» (a la bodega y a
+-- la administracion central).
+--
+-- QUE ANADE, y son CUATRO valores en DOS enums distintos:
+--
+--   `notificacion_evento`       += 'novedades_sin_gestionar'
+--   `notificacion_evento`       += 'devoluciones_represadas'
+--   `notificacion_entidad_tipo` += 'novedades_sin_gestionar_dia'
+--   `notificacion_entidad_tipo` += 'devoluciones_represadas_dia'
+--
+-- POR QUE VA SOLA Y CON TIMESTAMP PROPIO. Postgres NO permite USAR un valor de enum recien
+-- anadido en la misma transaccion que lo anadio (`55P04`) y Prisma Migrate corre cada
+-- `migration.sql` dentro de una. Aqui SOLO se anaden los valores; su primer uso ocurre en runtime
+-- (`emitirNovedadesSinGestionar` / `emitirDevolucionesRepresadas`), en transacciones posteriores.
+-- Mismo precedente que la 401, la 403, la 333, la 271, la 262, la 253, la 240, la 239 y la 237.
+--
+-- ⚠️ POR QUE TAMBIEN EL SEGUNDO ENUM, Y POR QUE EL ALCANCE VIVE DENTRO DEL `entidad_id`. ES LA
+-- DECISION QUE EVITA UN SILENCIO TOTAL, y este repo ya la pago dos veces (262 y 403).
+--
+-- `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+-- destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`
+-- (`20260727120000_notificacion/migration.sql:89-92`), el ALCANCE (`tienda_id`, `zona_id`) **NO
+-- ENTRA** en esa clave -esta escrito en `NotificacionRepository.columnasDestinatario`- y
+-- `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `false`.
+--
+-- Con `entidad_id = 'YYYY-MM-DD'` a secas y destinatario `{rol: adminTienda, tienda_id: T}`, la
+-- clave seria ('novedades_sin_gestionar', '2026-09-11', 'adminTienda', NULL) **PARA TODAS LAS
+-- TIENDAS**: la PRIMERA tienda de la corrida se llevaria el aviso y TODAS LAS DEMAS quedarian
+-- silenciadas -- sin error, sin log y sin nada. Lo mismo, exactamente, con las zonas del
+-- `adminSatelite`. Por eso:
+--
+--   `novedades_sin_gestionar_dia`   -> entidad_id = '<tienda_id>:<YYYY-MM-DD>'
+--   `devoluciones_represadas_dia`   -> entidad_id = '<zona_id|global>:<YYYY-MM-DD>'
+--
+-- La FORMA es uniforme a proposito (`${ambito}:${dia}`, con el literal 'global' para el ambito
+-- central): dos formas distintas para el mismo evento invitarian a confundirlas al leer una fila,
+-- y 'global' nunca puede colisionar con un uuid de zona.
+--
+-- Y NO es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el indice
+-- unico es PARCIAL, asi que saldria un aviso por cada ejecucion del cron.
+--
+-- CONSECUENCIAS, y son ESTRUCTURALES, no de disciplina:
+--   - dias distintos => entidades distintas => el recordatorio diario sale siempre (R41, R51);
+--   - misma corrida repetida el mismo dia => misma entidad => UN solo aviso (R41, R51);
+--   - tiendas/zonas distintas el mismo dia => entidades distintas => CADA UNA recibe el suyo (R42).
+--
+-- Y `destinatario_rol` esta DENTRO de la clave, asi que los dos destinatarios del ambito global
+-- -`maestro` y `admin`- se deduplican de forma INDEPENDIENTE: que uno lea el suyo no suprime el
+-- del otro.
+--
+-- ADITIVA: no altera ninguna tabla, no crea columnas, no crea indices y no toca RLS
+-- (`notificacion` conserva la de la 146). SIN BACKFILL: ninguna notificacion existente cambia de
+-- evento ni de entidad.
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'novedades_sin_gestionar';
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'devoluciones_represadas';
+ALTER TYPE "notificacion_entidad_tipo" ADD VALUE IF NOT EXISTS 'novedades_sin_gestionar_dia';
+ALTER TYPE "notificacion_entidad_tipo" ADD VALUE IF NOT EXISTS 'devoluciones_represadas_dia';
