@@ -233,6 +233,40 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     ],
   },
   {
+    // FICHA 411 (B7/T7.2) — LA COHORTE DE CARGA: de las ordenes que entraron cada dia, cuantas
+    // se entregaron, cuantas se devolvieron y cuantas siguen vivas. Tercera `<DataTable>` de
+    // `/analitica`, hermana de la de productos y dentro del mismo proveedor de filtro.
+    //
+    // ⚠ NACE `fuera`, Y ES UNA DECISION CON MOTIVO ESCRITO, no un olvido — esta guardia se vio
+    // ROJA («hay tablas sin registrar: …CohorteCargaTabla.tsx #1») antes de escribir esta
+    // entrada, que es la convencion de la casa y lo que obliga a decidir.
+    //
+    // El motivo no es ninguno de los dos que ya hay en este archivo: ni es un recorte de algo
+    // que ya se descarga entero (como el panel de la 343) ni le falta la puerta para servirlo
+    // completo (como al detalle de la 347 — aqui el borde devuelve el DTO entero de una sola
+    // consulta, asi que cablearla seria barato). Es que la descarga se PREGUNTO y se decidio que
+    // NO: ⟨P5⟩ de `specs/411-analitica-cohorte-de-carga/requirements.md`, «alcance minimo; si al
+    // verla hace falta, se pide entonces». Una tabla de dias con siete columnas se lee entera en
+    // pantalla; el dia que alguien la quiera en un archivo, esta entrada pasa a `con_descarga`
+    // —con su censo de columnas sensibles— y la guardia obliga a volver aqui.
+    //
+    // Lo que NO lleva su archivo, dicho aqui porque es decision y no olvido: ni un uuid, ni una
+    // cifra de dinero. Sus columnas son una fecha, cinco conteos y un promedio de dias.
+    ruta: "app/(app)/analitica/_components/entregas/CohorteCargaTabla.tsx",
+    tablas: [
+      {
+        nombre: "Cohorte de carga por día (analítica)",
+        estado: "fuera",
+        nota:
+          "la descarga se PREGUNTO y se decidio que no entra en la ficha: ⟨P5⟩ de " +
+          "`specs/411-analitica-cohorte-de-carga/requirements.md`, alcance minimo. No es que " +
+          "falte la puerta --el borde devuelve el DTO entero en una consulta-- ni que sea un " +
+          "recorte de otra descarga: es una tabla de dias que se lee entera en pantalla. Si al " +
+          "verla hace falta el archivo, se pide entonces y esta entrada pasa a `con_descarga`",
+      },
+    ],
+  },
+  {
     // Pedido humano del 2026-08-16: «Cierres solicitados (mensajero)» DEJÓ DE SER UNA TABLA.
     // Ver la nota de SEIS BAJAS en la cabecera de este archivo. La que queda es la del día.
     ruta: "app/(app)/cierre-dia/_components/CierreDiaModule.tsx",
