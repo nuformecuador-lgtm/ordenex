@@ -7,9 +7,38 @@
 //   R2  coordenadas presentes                  -> asignable                  (sin tocar `jobs`)
 //   R3  geocode_status DETERMINISTA            -> direccion_no_geocodificable(sin tocar `jobs`)
 //   R4  clave EXACTA reconstruida -> una consulta por lote
+//   400 job.lastError MARCADO de configuracion -> asignable_sin_ubicacion
+//       Y job.estado en {failed,pending,processing}
 //   R5    job.estado === 'failed'              -> geocodificacion_agotada
 //   R6    job.estado pending|processing        -> geocodificacion_en_curso
 //   R7  sin job (o `done` sin resultado)       -> encolar puntual
+//
+// ── FEATURE 400 (2026-09-09) — POR QUE EL PASO NUEVO VA EXACTAMENTE AHI (design §4.2)
+// EL DEFECTO QUE CORRIGE: hasta esta ficha, R5 clasificaba CUALQUIER job `failed` como
+// `geocodificacion_agotada` sin mirar POR QUE murio. Un corte de credencial y una direccion
+// que el proveedor no resuelve caian en el mismo cubo. Medido: el 2026-09-08 la Google
+// Geocoding API empezo a rechazar todas las peticiones (`REQUEST_DENIED`) y 42 ordenes
+// quedaron 19 horas sin poder asignarse a NINGUN mensajero, con el operador leyendo
+// «Direccion no encontrada» sobre direcciones perfectamente validas.
+//
+//   - DESPUES de R2 y R3, sin excepcion. La ORDEN sigue siendo la fuente de verdad de «la
+//     direccion no existe»: una orden con `geocode_status = ZERO_RESULTS` SIGUE bloqueando
+//     aunque un job posterior haya muerto por configuracion (R4 de la 400). Sin esta
+//     precedencia, un corte de credencial ENMASCARARIA una direccion genuinamente mala y la
+//     meteria en la ruta de un mensajero.
+//   - ANTES de R5 y R6, y no DENTRO de R5. El criterio nuevo es la CAUSA, no el estado del
+//     job. Meterlo dentro de R5 lo ataria a `failed` y dejaria fuera la mitad del incidente
+//     medido: 23 de los 48 jobs estaban en `pending` (design §8-A4).
+//   - SE EXIGE ADEMAS EL ESTADO no-`done`. Un job `done` termino su ultimo intento SIN
+//     morir por configuracion; su `last_error` (si lo tiene) es la fotografia de un intento
+//     anterior ya superado. Leerlo abriria la puerta con un dato obsoleto.
+//   - COSTE: CERO consultas nuevas. `lastError` viene en el mismo `JobDTO` que
+//     `findByDedupeKeys` ya devolvia.
+//
+// Y el marcador NO se queda pegado para siempre (design §4.3): si el job acaba con exito la
+// orden gana coordenadas y R2 gana antes de llegar a la cola; si vuelve a fallar por otra
+// causa, `fail()` SOBRESCRIBE `last_error` sin marcador; y si la direccion se corrige,
+// cambia el hash, cambia la `dedupe_key` y el job viejo deja de responder por esa orden.
 //
 // ── POR QUE R3 VA ANTES QUE LA COLA (design §0.1, verificado en `GeocodificacionService`)
 // `GeocodificacionService` COMPLETA el job (lo deja en `done`, NO en `failed`) en los tres
@@ -28,13 +57,23 @@
 // `intentos === maxIntentos` esta corriendo su ULTIMO intento y todavia puede terminar en
 // `done` con coordenadas. Usar ese predicado bloquearia ordenes que estan a punto de
 // resolverse. El unico predicado correcto y estable es `estado = 'failed'`.
+//
+// ⚠️ FEATURE 400 (2026-09-09) — MATIZ VIGENTE, LEE ESTO ANTES DE CITAR EL PARRAFO DE
+// ARRIBA. `estado === 'failed'` sigue siendo el unico predicado de «intentos agotados»,
+// pero YA NO es suficiente para clasificar `geocodificacion_agotada`: desde esta ficha, un
+// job `failed` cuyo `last_error` lleva el marcador de fallo de configuracion NUESTRA sale
+// como `asignable_sin_ubicacion` y no bloquea. «Agotado» describe el ESTADO del job;
+// «bloquea o no» depende ademas de la CAUSA. Son dos preguntas distintas y esta ficha las
+// separo.
 import type { IJobRepository } from "@/lib/interfaces/repositories/IJobRepository";
 import type {
   EstadoAsignabilidad,
+  EstadoAsignable,
   IAsignabilidadCoordenadasService,
   OrdenAsignabilidadRow,
 } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import { hashDireccion } from "@/lib/geo/direccion-query";
+import { esFalloConfigGeocode } from "@/lib/geo/fallo-config-geocode";
 import {
   dedupeKeyGeocodificacion,
   encolarGeocodificacion,
@@ -93,6 +132,21 @@ export class AsignabilidadCoordenadasService implements IAsignabilidadCoordenada
       const key = keyPorOrden.get(orden.id) as string;
       const job = jobPorKey.get(key);
 
+      // FEATURE 400 (2026-09-09, R1) — LA CAUSA MANDA SOBRE EL ESTADO. Va ANTES de R5/R6 a
+      // proposito (ver cabecera): si el ultimo intento murio por configuracion NUESTRA, la
+      // direccion nunca llego a consultarse y bloquear la asignacion no protege nada — la
+      // orden asignada sin ubicacion NO se pierde (feature 92 R37/R28/R30) y puede recibir
+      // coordenadas despues, ya asignada. Se exige ADEMAS que el job no este `done`: un
+      // `done` no murio, y su `last_error` seria una foto vieja.
+      if (
+        job !== undefined &&
+        (job.estado === "failed" || job.estado === "pending" || job.estado === "processing") &&
+        esFalloConfigGeocode(job.lastError)
+      ) {
+        resultado.set(orden.id, "asignable_sin_ubicacion");
+        continue;
+      }
+
       // R5: el UNICO predicado de "intentos agotados" (ver cabecera).
       if (job !== undefined && job.estado === "failed") {
         resultado.set(orden.id, "geocodificacion_agotada");
@@ -132,8 +186,18 @@ export class AsignabilidadCoordenadasService implements IAsignabilidadCoordenada
 
 /**
  * R8 — traduccion del estado a un `motivo` estable para el `DetalleConflicto` de los tres
- * writers. Es el vocabulario que la UI de asignacion (feature 93, R9) mapea a texto: dos
- * mensajes distintos segun si la direccion es irresoluble o si aun se esta validando.
+ * writers. Es el vocabulario que la UI de asignacion (feature 93, R9) mapea a texto.
+ *
+ * FEATURE 400 (2026-09-09, R19/R22) — REGLA VIGENTE: los mensajes son TRES clases, no dos.
+ * Hasta esta ficha este docstring decia «dos mensajes distintos segun si la direccion es
+ * irresoluble o si aun se esta validando», y `geocodificacion_agotada` compartia texto con
+ * `direccion_no_geocodificable` — es decir, un fallo del servicio de mapas se le mostraba
+ * al operador como «Direccion no encontrada». Ahora son: direccion irresoluble > fallo del
+ * servicio de geocodificacion > en validacion.
+ *
+ * Solo recibe estados BLOQUEANTES: los dos llamadores hacen `if (esAsignable(estado))
+ * continue;` antes, asi que `asignable_sin_ubicacion` nunca llega aqui ni entra en ningun
+ * `detalle` (R10).
  *
  * Se exporta como funcion (y no como literal inline en cada writer) para que los tres
  * services no puedan divergir en el texto.
@@ -142,7 +206,24 @@ export function motivoAsignabilidad(estado: EstadoAsignabilidad): string {
   return estado;
 }
 
-/** R8: `asignable` es el UNICO estado que deja pasar la asignacion. */
+/**
+ * R8 — los estados que DEJAN PASAR la asignacion.
+ *
+ * FEATURE 400 (2026-09-09, R6) — REGLA VIGENTE: son DOS, no uno. Hasta esta ficha este
+ * docstring decia «`asignable` es el UNICO estado que deja pasar la asignacion», y era
+ * cierto; desde la 400 tambien pasa `asignable_sin_ubicacion` — la orden no tiene
+ * coordenadas, pero la culpa es de NUESTRA configuracion (el proveedor rechazo la peticion,
+ * o falta la credencial) y la direccion nunca llego a consultarse. Rio abajo esa orden esta
+ * cubierta por el modo degradado que ya existia (feature 92 R37/R28/R30).
+ *
+ * `undefined` (la orden no existe) NUNCA pasa: no se deja pasar nada por omision.
+ *
+ * Se implementa contra `EstadoAsignable`, no con literales sueltos: la lista vive en el
+ * contrato (`IAsignabilidadCoordenadasService`) y `EstadoBloqueante` se deriva de ella, asi
+ * que anadir un estado sin clasificarlo rompe la compilacion del mapa de mensajes (R25).
+ */
 export function esAsignable(estado: EstadoAsignabilidad | undefined): boolean {
-  return estado === "asignable";
+  if (estado === undefined) return false;
+  const asignables: readonly EstadoAsignable[] = ["asignable", "asignable_sin_ubicacion"];
+  return (asignables as readonly string[]).includes(estado);
 }

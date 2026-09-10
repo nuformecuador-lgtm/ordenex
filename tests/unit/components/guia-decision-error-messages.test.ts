@@ -3,10 +3,10 @@ import { describe, it, expect } from "vitest";
 import { guiaDecisionErrorMessage } from "@/app/(app)/ordenes/_components/guia-decision-error-messages";
 import { asignacionSateliteErrorMessage } from "@/app/(app)/recepcion-satelite/_components/asignacion-satelite-error-messages";
 import {
+  MOTIVOS_BLOQUEANTES,
   MSG_DIRECCION_EN_VALIDACION,
   MSG_DIRECCION_NO_ENCONTRADA,
-  MOTIVOS_DIRECCION_EN_VALIDACION,
-  MOTIVOS_DIRECCION_NO_ENCONTRADA,
+  MSG_UBICACION_NO_VERIFICADA,
 } from "@/app/(app)/_components/geocodificacion-motivo-messages";
 
 // Feature 93 (R9) — el mapeo de los 5 `motivo` del gate de coordenadas (92) a
@@ -23,34 +23,58 @@ function conflict(...motivos: string[]) {
 }
 
 describe("R9 · mapeo de motivos del gate de coordenadas", () => {
-  it("R9: los 5 motivos declarados se reparten en exactamente 2 mensajes", () => {
-    const todos = [
-      ...MOTIVOS_DIRECCION_NO_ENCONTRADA,
-      ...MOTIVOS_DIRECCION_EN_VALIDACION,
-    ];
-    expect(todos).toHaveLength(5);
-    const mensajes = new Set(todos.map((m) => guiaDecisionErrorMessage(conflict(m))));
-    expect(mensajes.size).toBe(2);
+  // FEATURE 400 (T16): eran DOS mensajes para cinco motivos; ahora son TRES.
+  // `geocodificacion_agotada` se separó de `direccion_no_geocodificable` (R19).
+  it("R9 + 400/R19: los 5 motivos bloqueantes se reparten ahora en exactamente 3 mensajes", () => {
+    expect(MOTIVOS_BLOQUEANTES).toHaveLength(5);
+    const mensajes = new Set(
+      MOTIVOS_BLOQUEANTES.map((m) => guiaDecisionErrorMessage(conflict(m))),
+    );
+    expect(mensajes.size).toBe(3);
   });
 
-  it.each(MOTIVOS_DIRECCION_NO_ENCONTRADA)(
-    'R9: "%s" → "Dirección no encontrada" (desenlace definitivo)',
-    (motivo) => {
-      expect(guiaDecisionErrorMessage(conflict(motivo))).toBe(
-        "Dirección no encontrada",
-      );
-      expect(asignacionSateliteErrorMessage(conflict(motivo))).toBe(
-        "Dirección no encontrada",
-      );
-    },
-  );
+  it('400/R20: "direccion_no_geocodificable" → "Dirección no encontrada", por los DOS mappers', () => {
+    expect(
+      guiaDecisionErrorMessage(conflict("direccion_no_geocodificable")),
+    ).toBe("Dirección no encontrada");
+    expect(
+      asignacionSateliteErrorMessage(conflict("direccion_no_geocodificable")),
+    ).toBe("Dirección no encontrada");
+  });
 
-  it.each(MOTIVOS_DIRECCION_EN_VALIDACION)(
+  // El mensaje NUEVO tiene que llegar POR LOS DOS MAPPERS o la mitad de las pantallas
+  // seguiría mintiendo. Literal escrito a mano (design.md §6.2), no comparado con su constante.
+  it('400/R19/R23: "geocodificacion_agotada" → el mensaje del fallo del servicio, por los DOS mappers', () => {
+    const esperado =
+      "No se pudo verificar la ubicación por un fallo del servicio de mapas. La dirección no es el problema; vuelve a intentarlo más tarde.";
+
+    expect(guiaDecisionErrorMessage(conflict("geocodificacion_agotada"))).toBe(
+      esperado,
+    );
+    expect(
+      asignacionSateliteErrorMessage(conflict("geocodificacion_agotada")),
+    ).toBe(esperado);
+    // La mitad negativa de R19, en los dos mappers: ya no culpa a la dirección.
+    expect(
+      guiaDecisionErrorMessage(conflict("geocodificacion_agotada")),
+    ).not.toBe("Dirección no encontrada");
+    expect(
+      asignacionSateliteErrorMessage(conflict("geocodificacion_agotada")),
+    ).not.toBe("Dirección no encontrada");
+    expect(MSG_UBICACION_NO_VERIFICADA).toBe(esperado);
+  });
+
+  it.each([
+    "geocodificacion_en_curso",
+    "geocodificacion_encolada",
+    "geocodificacion_no_encolable",
+  ])(
     'R9: "%s" → mensaje DISTINTO de validación en curso (no es fallo definitivo)',
     (motivo) => {
       const msg = guiaDecisionErrorMessage(conflict(motivo));
       expect(msg).toBe(MSG_DIRECCION_EN_VALIDACION);
       expect(msg).not.toBe(MSG_DIRECCION_NO_ENCONTRADA);
+      expect(msg).not.toBe(MSG_UBICACION_NO_VERIFICADA);
       expect(msg).toMatch(/valid/i);
       expect(asignacionSateliteErrorMessage(conflict(motivo))).toBe(msg);
     },

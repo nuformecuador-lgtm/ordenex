@@ -251,9 +251,18 @@ describe("AsignarSateliteModal", () => {
     await user.click(screen.getByRole("button", { name: "Asignar" }));
   }
 
-  it.each(["direccion_no_geocodificable", "geocodificacion_agotada"])(
-    "92/R9: conflict con motivo %s → toast 'Dirección no encontrada'",
-    async (motivo) => {
+  // FEATURE 400 (T16, R19/R23): eran el MISMO texto y ya no lo son. `geocodificacion_agotada`
+  // pasa por el mismo mapper compartido, así que este modal hereda el mensaje nuevo sin tocar
+  // ni una línea de su código — que es justo lo que R23 exige. Literales a mano.
+  it.each([
+    ["direccion_no_geocodificable", "Dirección no encontrada"],
+    [
+      "geocodificacion_agotada",
+      "No se pudo verificar la ubicación por un fallo del servicio de mapas. La dirección no es el problema; vuelve a intentarlo más tarde.",
+    ],
+  ])(
+    "92/R9 + 400/R19: conflict con motivo %s → toast con SU propio mensaje",
+    async (motivo, esperado) => {
       const user = userEvent.setup();
       asignarDesdeSateliteMock.mockResolvedValue({
         status: "conflict",
@@ -264,7 +273,7 @@ describe("AsignarSateliteModal", () => {
       await asignarConMensajero(user);
 
       await vi.waitFor(() =>
-        expect(errorMock).toHaveBeenCalledWith("Dirección no encontrada"),
+        expect(errorMock).toHaveBeenCalledWith(esperado),
       );
     },
   );
@@ -650,5 +659,199 @@ describe("AsignarSateliteModal — bloqueados por cierres (271/T9.5)", () => {
       within(listbox).getByRole("option", { name: "Beto Mensajero" }),
     ).not.toHaveAttribute("aria-disabled", "true");
     expect(within(listbox).queryByText(/cierres sin resolver/i)).toBeNull();
+  });
+});
+
+// Feature 400 (T16b, R31-R36) — EL MISMO AVISO, ESPEJO EXACTO DE LA BODEGA CENTRAL.
+//
+// Una orden cuyo último intento de ubicación murió por un fallo de configuración NUESTRO ya
+// no bloquea la asignación (400/R1): recibe mensajero y queda SIN ubicación. Eso no es un
+// conflicto —la orden SÍ recibió el efecto pedido— así que el aviso viaja por un canal
+// propio: una CIFRA agregada (`sinUbicacion`) concatenada al mismo `mensaje` que el modal ya
+// muestra en el toast y en el bloque de resultado. Nunca una lista de órdenes (R32), nunca
+// dentro del `role="alert"` de las bloqueadas (R35), nunca una pantalla nueva (R34).
+//
+// Los dos literales van ESCRITOS A MANO (design.md §6.5-b).
+describe("AsignarSateliteModal — órdenes asignadas sin ubicación (400/R31-R36)", () => {
+  const AVISO_UNA =
+    "1 orden se asignó sin ubicación en el mapa por un problema del sistema, no de la dirección. Se ubicará más tarde.";
+  const AVISO_DOS =
+    "2 órdenes se asignaron sin ubicación en el mapa por un problema del sistema, no de la dirección. Se ubicarán más tarde.";
+
+  /** El bloque de confirmación del resultado: el que ya dice «Mensajero asignado a …». */
+  function bloqueDeConfirmacion(): HTMLElement {
+    const bloque = screen
+      .getAllByRole("status")
+      .find((el) => el.textContent?.includes("Mensajero asignado a"));
+    // No-vacuidad: sin este bloque, todo lo que se afirme sobre su contenido pasaría por
+    // comparar contra `undefined`.
+    expect(bloque, "no se encontró el bloque de confirmación del resultado").toBeDefined();
+    return bloque!;
+  }
+
+  it("R31/R34: con 2 órdenes sin ubicación, la CIFRA aparece en el MISMO bloque que confirma la asignación", async () => {
+    const user = userEvent.setup();
+    asignarDesdeSateliteMock.mockResolvedValue({
+      status: "ok",
+      resultados: [
+        { ordenId: "orden-uno", estado: "por_recoger" },
+        { ordenId: "orden-dos", estado: "por_recoger" },
+      ],
+      sinUbicacion: 2,
+    });
+    renderModal([
+      makeOrden({ id: "orden-uno", numRemision: "NA-901" }),
+      makeOrden({ id: "orden-dos", numRemision: "NA-902" }),
+    ]);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    // R34: dentro del bloque de resultado que YA existía, no en uno nuevo.
+    await screen.findByRole("button", { name: "Cerrar" });
+    const confirmacion = bloqueDeConfirmacion();
+    expect(confirmacion.textContent).toContain("Mensajero asignado a 2 orden(es).");
+    expect(confirmacion.textContent).toContain(AVISO_DOS);
+
+    // R31: y el operador lo ve también en el toast, que es el otro sitio donde ya mira.
+    await vi.waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+    expect(successMock.mock.calls[0]![0] as string).toContain(AVISO_DOS);
+  });
+
+  it("R31: con UNA sola orden sin ubicación, el aviso va en singular", async () => {
+    const user = userEvent.setup();
+    asignarDesdeSateliteMock.mockResolvedValue({
+      status: "ok",
+      resultados: [
+        { ordenId: "orden-uno", estado: "por_recoger" },
+        { ordenId: "orden-dos", estado: "por_recoger" },
+      ],
+      sinUbicacion: 1,
+    });
+    renderModal([
+      makeOrden({ id: "orden-uno", numRemision: "NA-901" }),
+      makeOrden({ id: "orden-dos", numRemision: "NA-902" }),
+    ]);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await screen.findByRole("button", { name: "Cerrar" });
+    expect(bloqueDeConfirmacion().textContent).toContain(AVISO_UNA);
+  });
+
+  it("R32: el aviso NO identifica cuál orden quedó sin ubicación — ni por guía ni por id", async () => {
+    const user = userEvent.setup();
+    asignarDesdeSateliteMock.mockResolvedValue({
+      status: "ok",
+      resultados: [
+        { ordenId: "orden-sin-ubicacion-1", estado: "por_recoger" },
+        { ordenId: "orden-sin-ubicacion-2", estado: "por_recoger" },
+      ],
+      sinUbicacion: 2,
+    });
+    renderModal([
+      makeOrden({ id: "orden-sin-ubicacion-1", numRemision: "NA-901" }),
+      makeOrden({ id: "orden-sin-ubicacion-2", numRemision: "NA-902" }),
+    ]);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await screen.findByRole("button", { name: "Cerrar" });
+    const texto = bloqueDeConfirmacion().textContent ?? "";
+    // El aviso SÍ está —si no, esto pasaría por vacío— y aun así no nombra ninguna orden.
+    expect(texto).toContain(AVISO_DOS);
+    for (const identificador of [
+      "NA-901",
+      "NA-902",
+      "orden-sin-ubicacion-1",
+      "orden-sin-ubicacion-2",
+    ]) {
+      expect(texto, `el aviso no debe nombrar ${identificador}`).not.toContain(
+        identificador,
+      );
+    }
+  });
+
+  it.each([
+    ["sin el campo (respuesta de antes de la 400)", undefined],
+    ["con el campo en cero", 0],
+  ])("R33: %s no se renderiza ningún aviso", async (_caso, sinUbicacion) => {
+    const user = userEvent.setup();
+    asignarDesdeSateliteMock.mockResolvedValue({
+      status: "ok",
+      resultados: [{ ordenId: "orden-uno", estado: "por_recoger" }],
+      ...(sinUbicacion === undefined ? {} : { sinUbicacion }),
+    });
+    renderModal([makeOrden({ id: "orden-uno", numRemision: "NA-901" })]);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await screen.findByRole("button", { name: "Cerrar" });
+    const texto = bloqueDeConfirmacion().textContent ?? "";
+    expect(texto).toContain("Mensajero asignado a 1 orden(es).");
+    expect(texto).not.toMatch(/sin ubicación/i);
+    expect(screen.queryByText(/sin ubicación/i)).toBeNull();
+    // Y el toast tampoco lo lleva: es el mismo `mensaje`.
+    await vi.waitFor(() => expect(successMock).toHaveBeenCalledTimes(1));
+    expect(successMock.mock.calls[0]![0] as string).not.toMatch(/sin ubicación/i);
+  });
+
+  it("R35: con bloqueadas Y sin ubicación a la vez, los dos avisos no comparten contenedor ni mezclan sus números", async () => {
+    const user = userEvent.setup();
+    asignarDesdeSateliteMock.mockResolvedValue({
+      status: "partial",
+      resultados: [
+        { ordenId: "orden-uno", estado: "por_recoger" },
+        { ordenId: "orden-dos", estado: "por_recoger" },
+      ],
+      bloqueadas: [{ ordenId: "orden-tres", motivo: "direccion_no_geocodificable" }],
+      sinUbicacion: 2,
+    });
+    renderModal([
+      makeOrden({ id: "orden-uno", numRemision: "NA-901" }),
+      makeOrden({ id: "orden-dos", numRemision: "NA-902" }),
+      makeOrden({ id: "orden-tres", numRemision: "NA-903" }),
+    ]);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    // La lista de bloqueadas sigue siendo su propio `role="alert"`, y ahí SOLO hay bloqueadas.
+    const bloqueadas = await screen.findByRole("alert");
+    expect(bloqueadas.textContent).toContain("NA-903");
+    expect(bloqueadas.textContent).toContain("Dirección no encontrada");
+    expect(bloqueadas.textContent).not.toMatch(/sin ubicación/i);
+    expect(within(bloqueadas).queryByText(AVISO_DOS)).toBeNull();
+
+    // Y el aviso de la 400 vive en el bloque de confirmación, que NO es ese contenedor.
+    const confirmacion = bloqueDeConfirmacion();
+    expect(confirmacion).not.toBe(bloqueadas);
+    expect(confirmacion.contains(bloqueadas)).toBe(false);
+    expect(bloqueadas.contains(confirmacion)).toBe(false);
+    expect(confirmacion.textContent).toContain(AVISO_DOS);
+    // Los números no se mezclan: 2 asignadas de 3, 1 bloqueada, 2 sin ubicación.
+    expect(confirmacion.textContent).toContain(
+      "Mensajero asignado a 2 de 3 orden(es). 1 bloqueada(s).",
+    );
+  });
+
+  it("R34: el aviso no abre ni una pantalla ni un diálogo nuevo — sigue habiendo un solo modal", async () => {
+    const user = userEvent.setup();
+    asignarDesdeSateliteMock.mockResolvedValue({
+      status: "ok",
+      resultados: [{ ordenId: "orden-uno", estado: "por_recoger" }],
+      sinUbicacion: 1,
+    });
+    renderModal([makeOrden({ id: "orden-uno", numRemision: "NA-901" })]);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await screen.findByRole("button", { name: "Cerrar" });
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(bloqueDeConfirmacion().textContent).toContain(AVISO_UNA);
   });
 });

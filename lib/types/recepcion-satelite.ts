@@ -239,7 +239,11 @@ export type AsignarSateliteActionInput = z.infer<typeof asignarSateliteSchema>;
 // del borde; el resto son resultados de dominio del service). Espejo de
 // `AsignarSateliteServiceResult`.
 export type AsignarSateliteResult =
-  | { status: "ok"; resultados: { ordenId: string; estado: "por_recoger" }[] }
+  // Feature 400 (2026-09-09, R31-R33): `sinUbicacion` = cuantas ordenes del lote quedaron
+  // asignadas SIN ubicacion por un fallo de configuracion del geocodificador. Cifra
+  // agregada (nunca una lista, R32) y ausente cuando vale cero (R33). Espejo del contrato
+  // del service; el razonamiento vive en `IGuiaAsignacionService.ts`.
+  | { status: "ok"; resultados: { ordenId: string; estado: "por_recoger" }[]; sinUbicacion?: number }
   // Feature 368 (R15) — espejo EXACTO de `AsignarSateliteServiceResult` (el server action hace
   // passthrough directo del resultado del service, sin traducirlo: ver
   // `lib/actions/recepcion-satelite.ts`).
@@ -247,6 +251,7 @@ export type AsignarSateliteResult =
       status: "partial";
       resultados: { ordenId: string; estado: "por_recoger" }[];
       bloqueadas: { ordenId: string; motivo: string }[];
+      sinUbicacion?: number;
     }
   | { status: "forbidden" }
   | { status: "sin_zona" }

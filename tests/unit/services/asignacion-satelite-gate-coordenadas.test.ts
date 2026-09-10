@@ -218,3 +218,209 @@ describe("R8 — AsignacionSateliteService.asignar", () => {
     expect(g.evaluar).not.toHaveBeenCalled();
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════════════════════
+// FEATURE 400 (T10/T10b, 2026-09-09) — ESPEJO EXACTO del archivo de la bodega central.
+//
+// Los dos writers tienen que comportarse igual: que el campo se olvide en UNO de los dos
+// lados es el riesgo que este par de archivos existe para cazar (design §9). Un olvido en
+// un solo lado deja ESTE test rojo y el otro verde, no ambos.
+// ════════════════════════════════════════════════════════════════════════════════════════
+describe("400/R6-R7, R31-R33, R35 — AsignacionSateliteService con ordenes `asignable_sin_ubicacion`", () => {
+  function repo3(over: Record<string, unknown> = {}) {
+    return fakeRepo({
+      findByIdsForTransicion: vi.fn(async (ids: string[]) =>
+        ids.map((id) => ordenRow({ id })),
+      ),
+      asignarSateliteLote: vi.fn(async (ids: string[]) => ids.length),
+      ...over,
+    });
+  }
+
+  it("400/R6: recibe mensajero y NO entra en `bloqueadas` — el lote sale `ok`", async () => {
+    const repo = repo3();
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gate({ o1: "asignable_sin_ubicacion" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      ADMIN_SATELITE,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.resultados.map((x) => x.ordenId)).toEqual(["o1", "o2", "o3"]);
+    expect(repo.asignarSateliteLote).toHaveBeenCalledWith(
+      ["o1", "o2", "o3"],
+      "m1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(JSON.stringify(r)).not.toContain("asignable_sin_ubicacion");
+  });
+
+  it("400/R7: la escritura NO lleva latitud, longitud, geocodeStatus ni geocodedAt", async () => {
+    const PROHIBIDOS = ["latitud", "longitud", "geocodeStatus", "geocodedAt"];
+    const asignarSateliteLote = vi.fn(async (...args: unknown[]) => {
+      for (const arg of args) {
+        if (arg === null || typeof arg !== "object") continue;
+        for (const clave of Object.keys(arg as Record<string, unknown>)) {
+          if (PROHIBIDOS.includes(clave)) {
+            throw new Error(`el writer paso ${clave} al repositorio (400/R7)`);
+          }
+        }
+      }
+      return (args[0] as string[]).length;
+    });
+    const repo = repo3({ asignarSateliteLote });
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gate({ o1: "asignable_sin_ubicacion", o2: "asignable_sin_ubicacion" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      ADMIN_SATELITE,
+    );
+
+    expect(r.status).toBe("ok");
+    expect(asignarSateliteLote).toHaveBeenCalledTimes(1);
+    const args = asignarSateliteLote.mock.calls[0] as unknown[];
+    expect(args[0]).toEqual(["o1", "o2", "o3"]);
+    expect(args.some((a) => a !== null && typeof a === "object" && !Array.isArray(a))).toBe(true);
+  });
+
+  it("400/R31: N ordenes sin ubicacion -> `sinUbicacion` vale N en el resultado `ok`", async () => {
+    const repo = repo3();
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gate({ o1: "asignable_sin_ubicacion", o3: "asignable_sin_ubicacion" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      ADMIN_SATELITE,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.sinUbicacion).toBe(2);
+  });
+
+  it("400/R31: tambien viaja en `partial`, junto a las bloqueadas", async () => {
+    const repo = repo3({ asignarSateliteLote: vi.fn(async (ids: string[]) => ids.length) });
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gate({ o1: "asignable_sin_ubicacion", o2: "direccion_no_geocodificable" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      ADMIN_SATELITE,
+    );
+
+    expect(r.status).toBe("partial");
+    if (r.status !== "partial") throw new Error("unreachable");
+    expect(r.sinUbicacion).toBe(1);
+    expect(r.bloqueadas).toEqual([{ ordenId: "o2", motivo: "direccion_no_geocodificable" }]);
+    expect(r.resultados.map((x) => x.ordenId)).toEqual(["o1", "o3"]);
+  });
+
+  it("400/R32: es un NUMERO, no una lista de ordenes", async () => {
+    const repo = repo3();
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gate({ o1: "asignable_sin_ubicacion", o3: "asignable_sin_ubicacion" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      ADMIN_SATELITE,
+    );
+
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(typeof r.sinUbicacion).toBe("number");
+    expect(Array.isArray(r.sinUbicacion)).toBe(false);
+    expect(JSON.stringify(r.sinUbicacion)).toBe("2");
+  });
+
+  it("400/R33: sin ninguna orden sin ubicacion, la clave NO EXISTE en el resultado", async () => {
+    const repo = repo3();
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gate(),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      ADMIN_SATELITE,
+    );
+
+    expect(r).toEqual({
+      status: "ok",
+      resultados: [
+        { ordenId: "o1", estado: "por_recoger" },
+        { ordenId: "o2", estado: "por_recoger" },
+        { ordenId: "o3", estado: "por_recoger" },
+      ],
+    });
+    expect(Object.keys(r)).not.toContain("sinUbicacion");
+  });
+
+  it("400/R35: `bloqueadas` y `sinUbicacion` son campos HERMANOS, ninguno dentro del otro", async () => {
+    const repo = repo3({ asignarSateliteLote: vi.fn(async (ids: string[]) => ids.length) });
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gate({ o1: "asignable_sin_ubicacion", o2: "geocodificacion_agotada" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      ADMIN_SATELITE,
+    );
+
+    if (r.status !== "partial") throw new Error("unreachable");
+    expect(Object.keys(r).sort()).toEqual(
+      ["bloqueadas", "resultados", "sinUbicacion", "status"].sort(),
+    );
+    expect(JSON.stringify(r.bloqueadas)).not.toContain("sinUbicacion");
+    for (const b of r.bloqueadas) {
+      expect(Object.keys(b).sort()).toEqual(["motivo", "ordenId"]);
+      expect(b.ordenId).not.toBe("o1");
+    }
+  });
+
+  it("400/R33: `conflict` (ninguna paso el gate) no lleva el aviso: no se asigno nada", async () => {
+    const repo = repo3();
+    const service = new AsignacionSateliteService(
+      repo as unknown as IOrdenRepository,
+      gate({
+        o1: "geocodificacion_agotada",
+        o2: "direccion_no_geocodificable",
+        o3: "geocodificacion_en_curso",
+      }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignar(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      ADMIN_SATELITE,
+    );
+
+    expect(r.status).toBe("conflict");
+    expect(Object.keys(r)).not.toContain("sinUbicacion");
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+});

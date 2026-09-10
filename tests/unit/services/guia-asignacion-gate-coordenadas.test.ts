@@ -319,3 +319,226 @@ describe("R8 — asignarDesdeBodega (todo el lote recibe mensajero)", () => {
     expect(orden.filter((o) => o.startsWith("estatus:en_espera"))).toHaveLength(0);
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════════════════════
+// FEATURE 400 (T10/T10b, 2026-09-09) — LA ORDEN SIN UBICACION SI SE ASIGNA, Y SE CUENTA
+//
+// El 2026-09-08 la credencial de Google empezo a rechazar todas las peticiones y 42 ordenes
+// quedaron 19 horas sin poder asignarse a NINGUN mensajero. La causa era nuestra y la
+// direccion estaba bien. Desde esta ficha esas ordenes pasan el gate como
+// `asignable_sin_ubicacion`: reciben mensajero, NO entran en `bloqueadas`, y el writer
+// informa CUANTAS quedaron asi — cuantas, nunca cuales (R32).
+// ════════════════════════════════════════════════════════════════════════════════════════
+describe("400/R6-R7, R31-R33, R35 — asignarDesdeBodega con ordenes `asignable_sin_ubicacion`", () => {
+  function repoBodega3(over: Record<string, unknown> = {}) {
+    return fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central" }),
+        ordenRow({ id: "o2", estatusValue: "en_bodega_central" }),
+        ordenRow({ id: "o3", estatusValue: "en_bodega_central" }),
+      ]),
+      ...over,
+    });
+  }
+
+  it("400/R6: recibe mensajero y NO entra en el detalle — el lote sale `ok`, no `partial`", async () => {
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gate({ o1: "asignable_sin_ubicacion" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    // La orden sin ubicacion esta ENTRE las asignadas, no fuera.
+    expect(r.resultados.map((x) => x.ordenId)).toEqual(["o1", "o2", "o3"]);
+    expect(repo.asignarBodegaLote).toHaveBeenCalledWith(
+      ["o1", "o2", "o3"],
+      "m1",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    // R10: el estado nuevo NO aparece como motivo en ningun sitio del resultado.
+    expect(JSON.stringify(r)).not.toContain("asignable_sin_ubicacion");
+  });
+
+  it("400/R7: la escritura NO lleva latitud, longitud, geocodeStatus ni geocodedAt", async () => {
+    // Doble que REVIENTA si el writer intentara escribir ubicacion: la orden queda asignada
+    // Y SIN ubicacion. Escribir un `geocode_status` aqui seria inventarse un desenlace de
+    // geocodificacion que nunca ocurrio.
+    const PROHIBIDOS = ["latitud", "longitud", "geocodeStatus", "geocodedAt"];
+    const asignarBodegaLote = vi.fn(async (...args: unknown[]) => {
+      for (const arg of args) {
+        if (arg === null || typeof arg !== "object") continue;
+        for (const clave of Object.keys(arg as Record<string, unknown>)) {
+          if (PROHIBIDOS.includes(clave)) {
+            throw new Error(`el writer paso ${clave} al repositorio (400/R7)`);
+          }
+        }
+      }
+      return 3;
+    });
+    const repo = repoBodega3({ asignarBodegaLote });
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gate({ o1: "asignable_sin_ubicacion", o2: "asignable_sin_ubicacion" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+    expect(asignarBodegaLote).toHaveBeenCalledTimes(1);
+    // No-vacuidad: el doble corrio de verdad y reviso argumentos reales.
+    const args = asignarBodegaLote.mock.calls[0] as unknown[];
+    expect(args[0]).toEqual(["o1", "o2", "o3"]);
+    expect(args.some((a) => a !== null && typeof a === "object")).toBe(true);
+  });
+
+  it("400/R31: N ordenes sin ubicacion -> `sinUbicacion` vale N en el resultado `ok`", async () => {
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gate({ o1: "asignable_sin_ubicacion", o3: "asignable_sin_ubicacion" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(r.sinUbicacion).toBe(2);
+  });
+
+  it("400/R31: tambien viaja en `partial`, junto a las bloqueadas", async () => {
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gate({ o1: "asignable_sin_ubicacion", o2: "direccion_no_geocodificable" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("partial");
+    if (r.status !== "partial") throw new Error("unreachable");
+    expect(r.sinUbicacion).toBe(1);
+    expect(r.bloqueadas).toEqual([{ ordenId: "o2", motivo: "direccion_no_geocodificable" }]);
+    expect(r.resultados.map((x) => x.ordenId)).toEqual(["o1", "o3"]);
+  });
+
+  it("400/R32: es un NUMERO, no una lista — ningun id ni guia se cuela por ese campo", async () => {
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gate({ o1: "asignable_sin_ubicacion", o3: "asignable_sin_ubicacion" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    if (r.status !== "ok") throw new Error("unreachable");
+    expect(typeof r.sinUbicacion).toBe("number");
+    expect(Array.isArray(r.sinUbicacion)).toBe(false);
+    // Un `number` no se puede des-agregar: no hay forma de saber CUALES eran.
+    expect(JSON.stringify(r.sinUbicacion)).toBe("2");
+  });
+
+  it("400/R33: sin ninguna orden sin ubicacion, la clave NO EXISTE en el resultado", async () => {
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), gate(), fakeIntentosEnLote());
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    // AUSENTE, no `sinUbicacion: 0`: es lo que mantiene verdes los `toEqual` vigentes y lo
+    // que le dice al modal «no hay nada que avisar» sin ninguna rama extra.
+    expect(r).toEqual({
+      status: "ok",
+      resultados: [
+        { ordenId: "o1", estado: "por_recoger" },
+        { ordenId: "o2", estado: "por_recoger" },
+        { ordenId: "o3", estado: "por_recoger" },
+      ],
+    });
+    expect(Object.keys(r)).not.toContain("sinUbicacion");
+  });
+
+  it("400/R35: `bloqueadas` y `sinUbicacion` son campos HERMANOS, ninguno dentro del otro", async () => {
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gate({ o1: "asignable_sin_ubicacion", o2: "geocodificacion_agotada" }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    if (r.status !== "partial") throw new Error("unreachable");
+    // Hermanos del MISMO objeto...
+    expect(Object.keys(r).sort()).toEqual(
+      ["bloqueadas", "resultados", "sinUbicacion", "status"].sort(),
+    );
+    // ...y la cifra no aparece dentro de la lista de bloqueadas ni la contamina.
+    expect(JSON.stringify(r.bloqueadas)).not.toContain("sinUbicacion");
+    for (const b of r.bloqueadas) {
+      expect(Object.keys(b).sort()).toEqual(["motivo", "ordenId"]);
+      expect(b.ordenId).not.toBe("o1"); // la sin-ubicacion NO esta ahi dentro
+    }
+  });
+
+  it("400/R33: cuando NINGUNA orden pasa el gate el desenlace sigue siendo `conflict`, sin aviso", async () => {
+    // `conflict` significa cero efectos: no se asigno nada, asi que no hay nada de que
+    // avisar. Es la unica rama que no puede llevar el campo.
+    const repo = repoBodega3();
+    const service = new GuiaAsignacionService(
+      repo,
+      fakeZonaRepo(),
+      gate({
+        o1: "geocodificacion_agotada",
+        o2: "direccion_no_geocodificable",
+        o3: "geocodificacion_en_curso",
+      }),
+      fakeIntentosEnLote(),
+    );
+
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("conflict");
+    expect(Object.keys(r)).not.toContain("sinUbicacion");
+    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+  });
+});

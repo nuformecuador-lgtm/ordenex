@@ -3,9 +3,13 @@ import {
   GeocodificacionService,
   GeocodeNoConfiguradoError,
   GeocodeIntentoFallidoError,
+  GeocodeConfigInvalidaError,
 } from "@/lib/services/GeocodificacionService";
 import { JobQueueService } from "@/lib/services/JobQueueService";
-import { GoogleGeocodeClient } from "@/lib/clients/google-geocode";
+import { GoogleGeocodeClient, GeocodeRespuestaInvalidaError } from "@/lib/clients/google-geocode";
+import { esFalloConfigGeocode } from "@/lib/geo/fallo-config-geocode";
+import { OrdenGeocodeRepository } from "@/lib/repositories/OrdenGeocodeRepository";
+import type { PrismaClient } from "@prisma/client";
 import type { JobDTO } from "@/lib/interfaces/repositories/IJobRepository";
 import type { IJobRepository } from "@/lib/interfaces/repositories/IJobRepository";
 import type { JobHandler, RecurrenciaSpec } from "@/lib/interfaces/services/IJobQueueService";
@@ -177,14 +181,59 @@ describe("R23 — fallos transitorios", () => {
       expect(d.ordenes.guardarResultado).not.toHaveBeenCalled();
     }
   });
+
+  // FEATURE 400 (T3, R16) — la mitad que impide que el marcador se reparta a todo el mundo.
+  it("400/R16: NINGUN transitorio lleva el marcador de fallo de configuracion", async () => {
+    for (const detalle of ["OVER_QUERY_LIMIT", "UNKNOWN_ERROR", "HTTP 503", "fallo de red"]) {
+      const d = build({ outcome: { status: "transitorio", detalle } });
+      const error = (await d.service.ejecutar(job()).catch((e: unknown) => e)) as Error;
+      expect(esFalloConfigGeocode(error.message)).toBe(false);
+    }
+  });
+
+  // FEATURE 400 (T3, R16): los otros dos fallos AJENOS que puede producir este service.
+  it("400/R16: el payload invalido tampoco lleva el marcador", async () => {
+    const d = build();
+    const error = (await d.service
+      .ejecutar(job({ noEsElPayloadEsperado: true }))
+      .catch((e: unknown) => e)) as Error;
+    expect(error.message).toContain("payload invalido");
+    expect(esFalloConfigGeocode(error.message)).toBe(false);
+  });
+
+  it("400/R16: una respuesta del proveedor con forma inesperada tampoco lo lleva", async () => {
+    // El error REAL del cliente, no uno inventado: si algun dia se le anadiera un prefijo,
+    // este test lo veria.
+    const error = new GeocodeRespuestaInvalidaError("campos invalidos: results.0.geometry");
+    expect(esFalloConfigGeocode(error.message)).toBe(false);
+  });
 });
 
 describe("R24 — REQUEST_DENIED", () => {
-  it("REQUEST_DENIED lanza y no escribe coordenadas", async () => {
+  // FEATURE 400 (T4, 2026-09-09) — ESTA ASERCION CAMBIO A PROPOSITO. Hasta la 400 decia
+  // `toBeInstanceOf(GeocodeIntentoFallidoError)`, y ESE literal ERA el contrato: afirmaba
+  // que REQUEST_DENIED y un fallo de red eran el mismo desenlace. Justo eso es el bug que
+  // esta ficha corrige, asi que la asercion se actualiza a la clase nueva y se le anade la
+  // mitad negativa (ya NO son el mismo cubo).
+  it("REQUEST_DENIED lanza `GeocodeConfigInvalidaError` y no escribe coordenadas", async () => {
     const d = build({ outcome: { status: "config_invalida", detalle: "REQUEST_DENIED" } });
-    await expect(d.service.ejecutar(job())).rejects.toBeInstanceOf(GeocodeIntentoFallidoError);
+    await expect(d.service.ejecutar(job())).rejects.toBeInstanceOf(GeocodeConfigInvalidaError);
     expect(d.ordenes.guardarResultado).not.toHaveBeenCalled();
     expect(d.cache.upsert).not.toHaveBeenCalled();
+  });
+
+  it("400/R11: su mensaje lleva el marcador de fallo de configuracion", async () => {
+    const d = build({ outcome: { status: "config_invalida", detalle: "REQUEST_DENIED" } });
+    const error = (await d.service.ejecutar(job()).catch((e: unknown) => e)) as Error;
+    expect(esFalloConfigGeocode(error.message)).toBe(true);
+    // Y el diagnostico original sigue ahi: el marcador anade, no sustituye.
+    expect(error.message).toContain("REQUEST_DENIED");
+  });
+
+  it("400/R16: y NO es un `GeocodeIntentoFallidoError` — dejaron de ser el mismo cubo", async () => {
+    const d = build({ outcome: { status: "config_invalida", detalle: "REQUEST_DENIED" } });
+    const error = (await d.service.ejecutar(job()).catch((e: unknown) => e)) as Error;
+    expect(error).not.toBeInstanceOf(GeocodeIntentoFallidoError);
   });
 });
 
@@ -241,7 +290,91 @@ describe("R25 — sin credencial configurada", () => {
     const d = build({ apiKey: null });
     const error = (await d.service.ejecutar(job()).catch((e: unknown) => e)) as Error;
     expect(error.message).not.toContain(ORDEN.direccion as string);
+    // FEATURE 400 (T4): este literal SE CONSERVA porque ES el contrato — dice CUAL es la
+    // configuracion que falta, que es lo unico accionable del mensaje. La ficha 400 solo le
+    // antepone el marcador, asi que sigue estando contenido.
     expect(error.message).toContain("GOOGLE_MAPS_API_KEY");
+  });
+
+  // FEATURE 400 (T3, R11): la credencial ausente es el SEGUNDO fallo nuestro, y tambien
+  // tiene que llegar marcado al gate. Sin este caso, un despliegue sin credencial dejaria
+  // las ordenes bloqueadas igual que el 2026-09-08.
+  it("400/R11: sin credencial, el mensaje lleva el marcador de fallo de configuracion", async () => {
+    const d = build({ apiKey: null });
+    const error = (await d.service.ejecutar(job()).catch((e: unknown) => e)) as Error;
+    expect(esFalloConfigGeocode(error.message)).toBe(true);
+    expect(error).toBeInstanceOf(GeocodeNoConfiguradoError);
+  });
+});
+
+// FEATURE 400 (T12, R8) — LA COORDENADA PUEDE LLEGAR DESPUES DE ASIGNAR.
+//
+// Es el argumento que sostiene toda la ficha (design §8-A4): dejar pasar la asignacion de
+// una orden sin ubicacion es barato PORQUE el ciclo de geocodificacion sigue corriendo
+// despues, y la siguiente optimizacion ya la coloca en su sitio. Si esto dejara de ser
+// cierto, la puerta de la 400 habria que reconsiderarla.
+//
+// ⚠️ POR QUE NO BASTA UN DOBLE DEL REPOSITORIO. Lo que hay que probar es el WHERE, y un
+// doble del repo no lo ve (memoria «probar el WHERE donde vive»). Aqui se usa el
+// repositorio REAL con un `prisma.orden.updateMany` doblado que CAPTURA el `where`
+// literalmente: si alguien anadiera `mensajeroAsignadoId: null` o un filtro por estatus,
+// este test se pone rojo.
+describe("400/R8 — guardarResultado escribe aunque la orden YA tenga mensajero", () => {
+  const ORDEN_YA_ASIGNADA = "orden-con-mensajero";
+
+  type ArgsUpdateMany = { where: Record<string, unknown>; data: Record<string, unknown> };
+
+  function repoRealConPrismaDoblado() {
+    const updateMany = vi.fn(async (_args: ArgsUpdateMany) => ({ count: 1 }));
+    const prisma = { orden: { updateMany } } as unknown as PrismaClient;
+    return { repo: new OrdenGeocodeRepository(prisma), updateMany };
+  }
+
+  it("el `where` del update filtra SOLO por id y por no-borrada: ni estatus ni mensajero", async () => {
+    const { repo, updateMany } = repoRealConPrismaDoblado();
+
+    await repo.guardarResultado(ORDEN_YA_ASIGNADA, {
+      latitud: 9.9333,
+      longitud: -84.0833,
+      precision: "ROOFTOP",
+      status: "OK",
+      geocodedAt: AHORA,
+    });
+
+    const args = updateMany.mock.calls[0]![0];
+    // Literal EXACTO, no `objectContaining`: un filtro extra tiene que romper esto.
+    expect(args.where).toEqual({ id: ORDEN_YA_ASIGNADA, deletedAt: null });
+    for (const prohibido of ["mensajeroAsignadoId", "estatusId", "estatus", "asignadoAt"]) {
+      expect(Object.keys(args.where)).not.toContain(prohibido);
+    }
+  });
+
+  it("y escribe de verdad las coordenadas (no es un update vacio)", async () => {
+    const { repo, updateMany } = repoRealConPrismaDoblado();
+
+    await repo.guardarResultado(ORDEN_YA_ASIGNADA, {
+      latitud: 9.9333,
+      longitud: -84.0833,
+      precision: "ROOFTOP",
+      status: "OK",
+      geocodedAt: AHORA,
+    });
+
+    const args = updateMany.mock.calls[0]![0];
+    expect(args.data.geocodeStatus).toBe("OK");
+    expect(args.data.geocodedAt).toBe(AHORA);
+    expect(String(args.data.latitud)).toBe("9.9333");
+    expect(String(args.data.longitud)).toBe("-84.0833");
+  });
+
+  it("el service llama a `guardarResultado` sin consultar NUNCA si la orden tiene mensajero", async () => {
+    // La otra mitad: el ciclo de geocodificacion no depende del estado de asignacion. El
+    // service solo conoce `findParaGeocodificar` y `guardarResultado` — no hay ninguna via
+    // por la que pudiera mirar el mensajero.
+    const d = build({ outcome: OUTCOME_OK });
+    await d.service.ejecutar(job());
+    expect(d.ordenes.guardarResultado).toHaveBeenCalledTimes(1);
+    expect(Object.keys(d.ordenes)).toEqual(["findParaGeocodificar", "guardarResultado"]);
   });
 });
 

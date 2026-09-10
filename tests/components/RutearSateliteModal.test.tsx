@@ -123,9 +123,18 @@ describe("RutearSateliteModal", () => {
   // El gate de coordenadas (92, R1-R8) devuelve `conflict` con un `motivo` por
   // orden. El mapper debe inspeccionar `detalle[].motivo` ANTES del switch por
   // `status`; si no, el motivo se descarta y el toast cae en el genérico.
-  it.each(["direccion_no_geocodificable", "geocodificacion_agotada"])(
-    "92/R9: conflict con motivo %s → toast 'Dirección no encontrada'",
-    async (motivo) => {
+  // FEATURE 400 (T16, R19/R23): eran el MISMO texto y ya no lo son. `geocodificacion_agotada`
+  // pasa por el mismo mapper compartido, así que este modal hereda el mensaje nuevo sin tocar
+  // ni una línea de su código — que es justo lo que R23 exige. Literales a mano.
+  it.each([
+    ["direccion_no_geocodificable", "Dirección no encontrada"],
+    [
+      "geocodificacion_agotada",
+      "No se pudo verificar la ubicación por un fallo del servicio de mapas. La dirección no es el problema; vuelve a intentarlo más tarde.",
+    ],
+  ])(
+    "92/R9 + 400/R19: conflict con motivo %s → toast con SU propio mensaje",
+    async (motivo, esperado) => {
       const user = userEvent.setup();
       rutearMock.mockResolvedValue({
         status: "conflict",
@@ -136,7 +145,7 @@ describe("RutearSateliteModal", () => {
       await confirmar(user);
 
       await vi.waitFor(() =>
-        expect(errorMock).toHaveBeenCalledWith("Dirección no encontrada"),
+        expect(errorMock).toHaveBeenCalledWith(esperado),
       );
     },
   );

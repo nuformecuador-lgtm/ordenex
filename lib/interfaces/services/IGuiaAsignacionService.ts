@@ -66,13 +66,35 @@ export type GenerarGuiaServiceResult =
   | { status: "validation_error"; fieldErrors: Record<string, string[]> } // R28, catalogo incompleto
   | { status: "conflict"; detalle: DetalleConflicto[] }; // R27/R29
 
+// Feature 400 (2026-09-09, R31-R33/R35) — CUANTAS ORDENES DEL LOTE QUEDARON ASIGNADAS SIN
+// UBICACION, y por que es una CIFRA y no una lista.
+//
+// El operador que asigna merece saber que algunas ordenes se fueron sin punto en el mapa
+// por un problema NUESTRO. Pero R32 prohibe identificar CUALES: ni el id, ni el numero de
+// guia, ni la direccion. Un `number` agregado no se puede des-agregar; un booleano por item
+// si — el modal ya resuelve `ordenId -> numRemision` con su propio snapshot, asi que un
+// array le regalaria la lista exacta (design §8-A9).
+//
+// OPCIONAL Y AUSENTE CUANDO VALE CERO (R33), con el mismo patron aditivo de
+// `AsignarBodegaInput.dia?`: ningun test vigente que compare `toEqual({ status: "ok",
+// resultados })` se rompe por una ficha que no le concierne. Ausente significa "cero",
+// nunca "desconocido".
+//
+// CAMPO HERMANO de `bloqueadas`, jamas anidado en el (R35): una orden asignada sin
+// ubicacion SI recibio el efecto pedido, asi que reportarla dentro de `bloqueadas` seria
+// mentir sobre el resultado (design §8-A10).
 export type AsignarBodegaServiceResult =
-  | { status: "ok"; resultados: AsignarBodegaResultadoItem[] }
+  | { status: "ok"; resultados: AsignarBodegaResultadoItem[]; sinUbicacion?: number }
   // Feature 368 (R1/R15) — exito parcial: el motivo de coordenadas ya no aborta el lote
   // completo. Las asignables se asignan (`resultados`) y las bloqueadas por coordenadas se
   // reportan (`bloqueadas`), con el mismo `DetalleConflicto` que usaba `conflict`. `conflict`
   // no cambia de forma (R16): sigue significando "cero efectos sobre datos".
-  | { status: "partial"; resultados: AsignarBodegaResultadoItem[]; bloqueadas: DetalleConflicto[] }
+  | {
+      status: "partial";
+      resultados: AsignarBodegaResultadoItem[];
+      bloqueadas: DetalleConflicto[];
+      sinUbicacion?: number;
+    }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "conflict"; detalle: DetalleConflicto[] };
