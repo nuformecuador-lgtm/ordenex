@@ -424,6 +424,16 @@ cuando se escribieron—. Un job `failed` **no vuelve a ejecutarse nunca** (el r
 Sin hacer nada, esta ficha se desplegaría y **esas órdenes seguirían bloqueadas**: el arreglo no
 llegaría a las órdenes que lo motivan.
 
+> **Corrección 2026-09-09 (implementación, `menor-8` de la revisión): los textos legados son DOS,
+> no uno.** Esta sección nombraba solo la frase de `REQUEST_DENIED`, pero `requirements.md`
+> (precisión 3) ya decía que el desenlace de configuración está aislado en **dos** sitios del
+> dominio, y el segundo escribe su propio texto: `GeocodeNoConfiguradoError` persiste
+> «`geocodificacion: GOOGLE_MAPS_API_KEY no esta configurada`» cuando falta la credencial. Un
+> `WHERE` que solo mirara `REQUEST_DENIED` dejaría fuera todos los jobs muertos por credencial
+> ausente —el caso de un despliegue mal configurado, que es igual de nuestro—. El script
+> implementado reconoce los dos fragmentos, y el test de integración siembra una fila candidata de
+> **cada** texto, no una sola.
+
 **Los `pending`/`processing` se curan solos** y no necesitan intervención: su próximo intento corre
 con el código nuevo, falla otra vez por la misma causa y `fail()` reescribe `last_error` **con**
 marcador. Con `JOBS_BACKOFF_BASE_MS = 60_000` y `JOBS_BACKOFF_CAP_MS = 3_600_000`, eso ocurre a lo
@@ -439,7 +449,9 @@ scripts/backfill-marcador-config-geocode.ts
   desglose por `estado`. Escribe únicamente con `--apply`. Memoria del repo: *medir el backfill antes
   de desplegar y decir el número antes*.
 - **Alcance del `WHERE`:** `tipo = 'geocodificacion'` **y** `estado = 'failed'` **y** `last_error`
-  coincide con el texto legado del fallo de configuración **y** `last_error` **no** empieza ya por el
+  coincide con **alguno de los dos** textos legados del fallo de configuración —el del proveedor
+  (`…el proveedor rechazo la peticion (REQUEST_DENIED)`) **o** el de la credencial ausente
+  (`…GOOGLE_MAPS_API_KEY no esta configurada`)— **y** `last_error` **no** empieza ya por el
   marcador (idempotencia, R17).
 - **Efecto:** prefija el marcador. **No toca** `estado`, `intentos`, `run_after`, `dedupe_key` ni
   `payload` (R18).

@@ -181,6 +181,181 @@ Ninguna sobrevivió.
 
 ---
 
+---
+
+# Segunda tanda — cierre de reservas de la revisión (2026-09-09)
+
+`progress/review_400.md` aprobó con reservas: cero bloqueantes, diez menores. El leader me asignó
+tres. Lo demás de la revisión —el gate exacto, las dos desviaciones y el backfill probado e
+idempotente de verdad— no se tocó.
+
+## `menor-1` — el eslabón de ARRIBA del tipado, cerrado (PRIORITARIO)
+
+**El hallazgo era correcto y era mío.** El guardia `400/T13` anclaba en la anotación del mapa
+(`Record<EstadoBloqueante, string>`), que es el eslabón de abajo. Pero la exhaustividad de R25
+cuelga de dos, y el de arriba —que `EstadoBloqueante` siga **derivándose** con
+`Exclude<EstadoAsignabilidad, EstadoAsignable>`— no lo protegía nadie. `MUT-2` del reviewer lo
+midió: reescribirlo a mano con los cinco literales y añadir un sexto estado bloqueante dejaba
+**typecheck limpio y 1999 tests verdes**.
+
+Arreglo: **dos aserciones y una contraprueba** en el guardia que ya existe
+(`tests/unit/guards/geocodificacion-motivo-por-orden-mismo-modulo.guardia.test.ts`, bloque
+`400/T13`), leyendo `lib/interfaces/services/IAsignabilidadCoordenadasService.ts`:
+
+1. la parte derecha de `export type EstadoBloqueante = …;` es **exactamente**
+   `Exclude<EstadoAsignabilidad, EstadoAsignable>`;
+2. esa declaración **no contiene ni una comilla ni ninguno de los siete estados** — o sea, no es
+   una lista escrita a mano. Con no-vacuidad explícita (`expect(declaracion).not.toBeNull()`),
+   porque si el detector devolviera `null` las dos aserciones pasarían por vacío.
+
+### MUT-2 reproducida, y muerta
+
+Aplicada tal cual la describe el informe (derivación → cinco literales a mano, + un sexto estado
+`geocodificacion_cuota_agotada` en `EstadoAsignabilidad` sin mensaje en el mapa):
+
+- **`pnpm run typecheck` → LIMPIO.** Confirmado: el compilador no puede ver esto, tal como decía
+  el reviewer. Ahí es donde vivía el silencio.
+- **El guardia → 2 rojos**, en el mismo archivo:
+
+```
+× menor-1: `EstadoBloqueante` se DERIVA con `Exclude`, nunca se escribe a mano
+  AssertionError
+  Expected: "Exclude<EstadoAsignabilidad, EstadoAsignable>"
+  Received: "| "direccion_no_geocodificable" | "geocodificacion_agotada" | "geocodificacion_en_curso" | "geocodificacion_encolada" | "geocodificacion_no_encolable""
+
+× menor-1: y su declaración no contiene NI UN literal de estado (eso sería la lista a mano)
+  AssertionError: expected '| "direccion_no_geocodificable" | "ge…' not to contain '"'
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 13 passed (15)
+```
+
+Restaurado desde copia de seguridad (no con `git checkout`, para no arrastrar nada de otra sesión).
+
+## `menor-2` — salió gratis al tocar el guardia, así que está cerrado
+
+El coordinador lo dejó opcional («si te sale gratis»). Salió: `tipoDelMapa` y el detector nuevo
+pasan ahora el código por `quitarComentarios` de `tests/fixtures/sin-comentarios.ts` —el quitador
+único del repo, el que usan 171 suites—, así que `String.match` ya no puede leer un comentario
+señuelo en vez de la declaración real.
+
+**MUT-1c reproducida y muerta**: comentario señuelo con la anotación buena encima, y la real como
+`Record<EstadoBloqueante | string, string>`.
+
+```
+× `MOTIVO_A_MENSAJE` se declara como `Record<EstadoBloqueante, string>`
+  Expected: "Record<EstadoBloqueante, string>"
+  Received: "Record<EstadoBloqueante | string, string>"
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 passed (15)
+```
+
+De paso, el barrido de `Record<string, string>` / `Map<string, string>` también corre ahora sobre
+el código sin comentarios: la cabecera del módulo **nombra** las formas prohibidas para explicar
+por qué lo están, y denunciar esa explicación obligaría a borrarla.
+
+## `menor-3` — `ejecutarCli` del backfill, probado antes de que toque producción
+
+Nuevo: `tests/unit/scripts/backfill-marcador-config-geocode-cli.test.ts` (14 tests), patrón de
+`backfill-caja-tesoreria-cli.test.ts`. Toda la I/O va inyectada, así que no hace falta ni DB ni
+proceso hijo. Cubre:
+
+- **sin `--apply` no se llama a `$executeRaw` ni una vez** —la única escritura del script—, con
+  no-vacuidad (`$queryRaw` sí se llamó dos veces, así que el cero no es «no corrió nada»);
+- **una errata en el flag se RECHAZA con código 2**, parametrizado sobre `--aply`, `--applY`,
+  `-apply`, `--apply-todo` y `aplicar`, y también `--apply --forzar`. Ese era el modo de fallo
+  peligroso: quien escribe mal el flag creería haber aplicado el backfill mientras el script corre
+  como simulación, imprime un número y sale con 0;
+- **la conexión es perezosa**: con argumentos inválidos, `crearCliente` no se llama;
+- **la salida dice el número** (lo que hay que poder decirle al humano antes de tocar producción) y
+  el desglose por estado, `pending` incluidos;
+- **nada de lo impreso contiene la URL de la base ni su contraseña**;
+- importar el módulo no imprime, no cambia `process.exitCode` y no toca la base.
+
+**Dos mutaciones, las dos muertas:**
+
+| Mutación | Resultado |
+| --- | --- |
+| `const aplicar = entorno.argv.includes("--apply")` → `= true` | **2 rojos**: los dos casos de «sin `--apply` no escribe» |
+| El rechazo de argumentos desconocidos se anula (`if (false && …)`) | **6 rojos**: los cinco flags con errata + el caso combinado |
+
+## `menor-8` — el spec, al día con las correcciones
+
+- **`design.md` §7**: nota de corrección — los textos legados son **dos**, no uno. El de
+  `REQUEST_DENIED` y el de `GOOGLE_MAPS_API_KEY no esta configurada`. Un `WHERE` que solo mirara el
+  primero dejaría fuera los jobs muertos por credencial ausente, que son igual de nuestros. Y el
+  bullet del alcance del `WHERE` ahora nombra los dos fragmentos.
+- **`requirements.md`, fila R8**: el test vive contra `OrdenGeocodeRepository` (el repositorio
+  **real**, con `updateMany` doblado que captura el `where` literal), no contra el service — porque
+  lo que R8 afirma **es** el `WHERE`, y un doble del repositorio no lo ve.
+- **`requirements.md`, fila R15**: `google-geocode.test.ts` **no se extendió** y no hacía falta: su
+  caso vigente ya barre `REQUEST_DENIED` pese a llamarse «transitorio».
+
+## `menor-4` — cerrado: fuera el `.env`, dentro el `export`
+
+`.env` **borrado del worktree**. El gate de esta tanda corrió con `DATABASE_URL` **exportada**
+desde el árbol principal, sin copiar el archivo (`docs/verification.md` lo prohíbe expresamente).
+El valor no se imprime en ningún sitio: el guion solo ecoa su longitud y su prefijo.
+
+## Lo que sigue sin hacerse, y por qué
+
+- **`menor-5` / T17** — deuda declarada, se cierra en el despliegue. Falta ver los casos 1 y 2 con
+  datos reales y **mirar el toast real**: la frase concatenada pasa de 180 caracteres y en los
+  tests el toast es un doble.
+- **`menor-7`** (ficha en `feature_list.json` + entrada en `progress/history.md`) — del leader.
+- **`menor-6`, `menor-9`, `menor-10`** — declarados en la revisión, sin acción por mi parte.
+- **T20** (dry-run del backfill contra producción) — depende del despliegue. Ahora, además, con su
+  punto de entrada probado.
+
+## Gate de la segunda tanda
+
+`./init.sh` **completo** (el rápido se niega solo: la rama toca `lib/types/`), con `DATABASE_URL`
+**exportada** y **sin `.env` en el worktree**. Log en `/tmp/init-400-final.log`.
+
+```
+ Test Files  1833 passed (1833)
+      Tests  26477 passed | 26 skipped (26503)
+   Duration  669.86s
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1833 ejecutado(s), todos en el baseline conocido)
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at
+! no hay .env. Crea uno a partir de .env.example
+== init OK ==
+INIT_EXIT=0
+```
+
+- `pnpm run typecheck` → limpio.
+- El aviso de `down.sql` es preexistente (tres migraciones de la 265, agosto).
+- **El aviso `! no hay .env` es exactamente lo que se buscaba**: el gate lo dice, y aun así
+  `integration/db` corrió **entera — 224 archivos, 0 rojos** — porque `DATABASE_URL` iba
+  exportada. Es la prueba de que `menor-4` se cierra sin perder cobertura.
+- **26 saltados, los mismos de siempre y ajenos**: `AnaliticaPage.test.tsx` (17) y
+  `AnaliticaShell.test.tsx` (9).
+- Los cuatro archivos de esta tanda, verdes en el log:
+  `backfill-marcador-config-geocode.test.ts` (6), `backfill-marcador-config-geocode-cli.test.ts`
+  (14), `geocodificacion-motivo-por-orden-mismo-modulo.guardia.test.ts` (15, eran 12),
+  `marcador-fallo-config-declaracion-unica.guardia.test.ts` (14).
+
+### Dos corridas descartadas antes de esta, y por qué se descartaron
+
+No las escondo porque las dos enseñan algo que va a volver a pasar:
+
+1. **La primera exportó una `DATABASE_URL` inválida.** El `.env` de este repo entrecomilla el
+   valor con **comillas simples** y mi extracción solo quitaba las dobles, así que exporté una URL
+   que empezaba por `'`. Efecto: las suites de `integration/db` **fallaron al conectar** —no se
+   saltaron, fallaron—, con 62 archivos rojos. El guion ahora quita las dos formas y **aborta si
+   el prefijo no es `postgres`**, antes de gastar los 17 minutos.
+2. **La segunda la invalidé yo al editar el guion mientras corría.** `bash` relee el archivo por
+   offset entre comandos, así que la edición se ejecutó desde una posición vieja: el log quedó
+   truncado y con dos corridas encima. El veredicto era irreproducible, así que se tira entero —
+   un gate cuya procedencia no puedo explicar no vale como evidencia. **No se edita un guion que
+   está corriendo.**
+
+El gate que se reporta arriba es una corrida limpia, de principio a fin, sobre un guion que no se
+tocó (`gate-400-final.sh`).
+
+---
+
 ## Notas y deuda
 
 1. **El spec no está commiteado.** `specs/400-fallo-configuracion-geocodificador-no-bloquea/`
