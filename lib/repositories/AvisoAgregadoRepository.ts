@@ -6,6 +6,7 @@ import type {
   ResumenRepresadasZona,
 } from "@/lib/interfaces/repositories/IAvisoAgregadoRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import { PROYECCION_ANCLAJE_DEVOLUCION } from "@/lib/repositories/DevolucionSlaRepository";
 import { ESTATUS_POR_GRUPO } from "@/lib/types/novedad-grupo";
 import type { OrderStatusValue } from "@/lib/types/order-status";
 
@@ -18,9 +19,10 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 //    `OrdenRepository.novedadWhere` para pintar `/novedades`. No se copia el `where`: se comparte
 //    su unica fuente. Si el aviso dijera «5» y la pantalla enseñara 4, el aviso quedaria
 //    desacreditado el primer dia.
-//  · la familia de historial que ANCLA una devolucion -> `anclaje_devolucion`, el mismo literal
-//    que usa `DevolucionSlaRepository` (239/R12). Es el instante en que se APRUEBA el cierre que
-//    trae el paquete de vuelta, y es el reloj que el cron del rechazo automatico aplica.
+//  · la familia de historial que ANCLA una devolucion -> NO se escribe aqui: se IMPORTA
+//    `PROYECCION_ANCLAJE_DEVOLUCION` de `DevolucionSlaRepository` (239/R12/R16). Es el instante en
+//    que se APRUEBA el cierre que trae el paquete de vuelta, o sea el reloj que el cron del
+//    rechazo automatico aplica: compartirlo es lo que impide que el aviso cuente desde otra fecha.
 //  · el estado REPRESADO -> `por_devolver`, y NO `devolviendo_a_tienda` (R46).
 //
 // ⚠️ `orden.updated_at` NO SE USA NUNCA COMO ANCLA en este archivo, y es deliberado: es una fecha
@@ -30,8 +32,6 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 const ESTATUS_NOVEDAD_DEVOLUCION = ESTATUS_POR_GRUPO.devolucion;
 /** `resultado` de la gestion que ancla la ventana (mismo valor que `DevolucionSlaRepository`). */
 const RESULTADO_DEVUELTA = "devuelta";
-/** Familia de historial que marca la entrada en `devuelta` (239/R12). */
-const ORIGEN_ANCLAJE = "anclaje_devolucion";
 /**
  * ⚠️ EL ESTADO VIGILADO, Y ESTA MEDIDO (produccion 2026-09-10): `por_devolver` = 27 ordenes, media
  * 2,4 d, maximo 8,2 d, SIETE por encima de 3 d. `devolviendo_a_tienda` = 247 ordenes y NINGUNA por
@@ -89,12 +89,12 @@ export class AvisoAgregadoRepository implements IAvisoAgregadoRepository {
           take: 1,
           select: { causaDevolucion: true, createdAt: true },
         },
-        historialEstados: {
-          where: { origenTipo: ORIGEN_ANCLAJE },
-          orderBy: { createdAt: "desc" },
-          take: 1,
-          select: { createdAt: true },
-        },
+        // ⚠️ LA PROYECCION DEL ANCLA SE IMPORTA, NO SE COPIA (239/R16). Es la MISMA lectura que
+        // aplica el cron del rechazo automatico, y compartirla es lo que impide que el aviso diga
+        // «lleva 3 dias» sobre una orden a la que el cron le cuenta 5. Copiar el `where` aqui
+        // ademas pondria roja la guardia `anclaje-vs-intentos.guardia.test.ts`, que exige que la
+        // LECTURA del ancla viva en UN solo modulo.
+        historialEstados: PROYECCION_ANCLAJE_DEVOLUCION,
       },
     });
 

@@ -84,6 +84,12 @@ const MIGRACIONES_NOTIFICACIONES_POSTERIORES = [
   // lleva la palabra «notificacion» y no cae en este filtro. Nada de esto es infra de la 102: la
   // campana no gana tabla ni columna, y la clasificacion SLA sigue siendo derivada.
   "_notificacion_evento_geocodificacion_caida",
+  // Ficha 409 / design §6.1 (2026-09-10): los DOS avisos AGREGADOS del panel accionable —«tienes N
+  // novedades sin gestionar» y «N ordenes esperan volver a su tienda»—. Los DOS enums de la campana
+  // ganan DOS valores cada uno; NO hay tabla nueva, ni columna, ni indice: la ficha entera cabe en
+  // el mecanismo de la 146. Nada de esto es infra de la 102 — la clasificacion SLA sigue siendo
+  // derivada y esta ficha no la toca.
+  "_notificacion_evento_avisos_agregados",
 ] as const;
 
 describe("Feature 102 · SIN migracion nueva (R3)", () => {

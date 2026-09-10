@@ -453,6 +453,19 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       // direcciones de TODA la operacion y el maestro puede no estar delante durante las horas que
       // dura, que es literalmente lo que paso las 19 h del 2026-09-08.
       "geocodificacion_caida", // ficha 401 / §7.1
+      // FICHA 409 (T2.1) — DUODECIMO y DECIMOTERCERO valores, y que esta lista se pusiera roja ES
+      // otra vez LA PRUEBA de que el inventario sigue CERRADO. La ficha pago el precio completo:
+      // `ALTER TYPE` en migracion APARTE (por el 55P04), su `down.sql` recreando los DOS tipos con
+      // los ONCE eventos y las NUEVE entidades previos —leidos de `origin/dev` @ `aff769d8`—, y
+      // estas dos lineas escritas a mano.
+      //
+      // Los dos son AGREGADOS: UNA notificacion con el NUMERO dentro, jamas una por orden. Su
+      // productor es el CRON `avisos-diarios` (`AvisosDiariosService`), a las 07:00 CR.
+      //   · `novedades_sin_gestionar`  -> al rol `adminTienda`, ACOTADO a su tienda.
+      //   · `devoluciones_represadas`  -> a `maestro` y `admin` (ambito global) y al
+      //     `adminSatelite` de cada zona (ambito = su zona), cada uno con SU numero.
+      "novedades_sin_gestionar", // ficha 409 / §4.3
+      "devoluciones_represadas", // ficha 409 / §4.3
     ]);
   });
 
@@ -492,6 +505,19 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       // «el corte» —esta ficha no crea tabla ni columna (R31)— y con una entidad que no cambiara
       // entre jornadas el aviso del dia 2 no saldria NUNCA, en silencio.
       "geocodificacion_caida_dia", // ficha 401 / §3.3 — LA JORNADA CR
+      // ⚠️ FICHA 409 (design §4.2) — CUARTO y QUINTO valores que NO apuntan a una fila de tabla, y
+      // los primeros que llevan EL ALCANCE DENTRO del `entidad_id`:
+      //
+      //     novedades_sin_gestionar_dia   -> `${tiendaId}:${diaCR}`
+      //     devoluciones_represadas_dia   -> `${ambito}:${diaCR}`   (ambito = "global" | zonaId)
+      //
+      // Y esa mitad —la tienda, la zona— NO es decoracion: `notificacion_dedupe_key` es UNIQUE
+      // sobre `(evento, entidad_id, destinatario_rol, destinatario_usuario_id)` y el ALCANCE
+      // (`tienda_id`, `zona_id`) **NO ENTRA** en la clave. Con `entidad_id = diaCR` a secas, la
+      // primera tienda de la corrida se llevaria el aviso y TODAS LAS DEMAS quedarian silenciadas,
+      // sin error y sin log — el fallo que la 262 documento con `orden` y la 403 con la racha.
+      "novedades_sin_gestionar_dia", // ficha 409 / §4.2 — LA TIENDA Y EL DIA CR
+      "devoluciones_represadas_dia", // ficha 409 / §4.2 — EL AMBITO Y EL DIA CR
     ]);
   });
 });
