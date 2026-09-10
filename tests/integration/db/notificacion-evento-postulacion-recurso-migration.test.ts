@@ -200,6 +200,11 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // espaciaron». Lo emite el DRENADOR de la cola; un solo aviso por RACHA. Migracion
       // `20260909130000_notificacion_evento_webhook_suscripcion`.
       "webhook_suscripcion_pausada",
+      // FICHA 401 (design 3.3, 2026-09-09) - «el servicio de mapas esta rechazando nuestras
+      // peticiones por un problema de configuracion de la cuenta». Lo emite `GeocodeSaludService`
+      // desde la rama de configuracion del job de geocodificacion, y va al `maestro` Y al `admin`.
+      // Migracion `20260910120000_notificacion_evento_geocodificacion_caida`.
+      "geocodificacion_caida",
     ]);
   });
 
@@ -223,6 +228,10 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // la que esta ficha 253 no reuso `usuario`: prometer una fila que no existe seria un dato
       // falso con formato de dato.
       "webhook_suscripcion_pausa",
+      // FICHA 401 (design 3.3, 2026-09-09) - SEGUNDO `entidad_tipo` que no apunta a una fila, por
+      // el mismo motivo: la entidad del aviso es LA JORNADA CR. Sin valor propio, la dedupe de la
+      // 146 apagaria el aviso del dia siguiente, en silencio.
+      "geocodificacion_caida_dia",
     ]);
   });
 
@@ -281,6 +290,9 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       // espaciaron». Lo emite el DRENADOR de la cola; un solo aviso por RACHA. Migracion
       // `20260909130000_notificacion_evento_webhook_suscripcion`.
       "webhook_suscripcion_pausada",
+      // FICHA 401 (design 3.3, 2026-09-09) - «el servicio de mapas esta rechazando nuestras
+      // peticiones». Migracion `20260910120000_notificacion_evento_geocodificacion_caida`.
+      "geocodificacion_caida",
     ]);
   });
 
@@ -297,6 +309,8 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       // la que esta ficha 253 no reuso `usuario`: prometer una fila que no existe seria un dato
       // falso con formato de dato.
       "webhook_suscripcion_pausa",
+      // FICHA 401 (design 3.3, 2026-09-09) - la entidad del aviso es LA JORNADA CR.
+      "geocodificacion_caida_dia",
     ]);
   });
 

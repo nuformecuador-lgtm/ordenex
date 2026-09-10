@@ -209,6 +209,10 @@ describeSiHayBase("271 / §3.2 — la base aplicada, y el DOWN ejercitado de ver
       // pausada; un solo aviso por RACHA. Migracion
       // `20260909130000_notificacion_evento_webhook_suscripcion`.
       "webhook_suscripcion_pausada",
+      // FICHA 401 (design 3.3, 2026-09-10) - «el servicio de mapas esta rechazando nuestras
+      // peticiones por un problema de configuracion de la cuenta». Migracion
+      // `20260910120000_notificacion_evento_geocodificacion_caida`, POSTERIOR a la de la 403.
+      "geocodificacion_caida",
     ]);
   });
 
