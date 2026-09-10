@@ -138,7 +138,12 @@ describe("404/R8+R2 — `data.mensajero`: el objeto cuando lo hay, `null` cuando
     const body = JSON.parse(cuerpoDe(entregar));
     expect("mensajero" in body.data).toBe(true);
     expect(body.data.mensajero).toBeNull();
-    expect(body.data.evidenciasUrl).toBe(`${ORIGIN}/api/ordenes/api-key/orden/${ORDEN_ID}`);
+    // ⏳ 2026-09-10 (feature 406/R4) — AQUI DECIA `${ORIGIN}/api/ordenes/api-key/orden/${ORDEN_ID}`,
+    // o sea el uuid del payload, y ese enlace respondia 404 SIEMPRE. Lo que este caso protege —que
+    // en un `incidente` viajan LAS DOS cosas: `mensajero: null` y el enlace— no cambia; cambia el
+    // valor del enlace, que ahora lleva la GUIA de la orden (`DATOS_BASE.numGuia`, 12345). Literal
+    // escrito a mano, no derivado del service.
+    expect(body.data.evidenciasUrl).toBe("https://app.ordenex.co/api/ordenes/api-key/orden/12345");
   });
 });
 
