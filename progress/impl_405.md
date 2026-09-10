@@ -3,6 +3,8 @@
 **Rama:** `feat/405-gestiones-en-detalle-api`
 **SHA base:** `f734e114` (`fix(405): la rama de la ficha, sin clave duplicada`, ya con la 404 dentro)
 **Fecha:** 2026-09-10 · **Agente:** backend_dev · **Worktree:** aislado
+**Estado:** 2.ª vuelta — los dos bloqueantes de `progress/review_405.md` (commit `351cd8d6`)
+cerrados. Ver **§ Segunda vuelta** más abajo.
 
 > Nota de nombre: `tasks.md` llama a este archivo `progress/impl_405_backend.md`. Se escribe como
 > `progress/impl_405.md`, que es la convención viva del repo (`impl_404.md`, `impl_401.md`…) y lo
@@ -155,6 +157,92 @@ cubre con un `grep` sobre un comentario.
 
 🔴 = vive en `tests/integration/db/`, contra Postgres real.
 
+> ⏳ **2026-09-10, SEGUNDA VUELTA — las dos filas que cambian tras la revisión.**
+>
+> | R | Antes | Ahora |
+> |---|---|---|
+> | **R15** | PARCIAL (la mitad `resultado` del filtro nuevo, sin vigilar) | **ok** — `gestiones-detalle-api-405.test.ts` → «`evidencias[]` NO gana las gestiones con foto cuyo resultado no le corresponde» |
+> | **R19** | NO CUMPLIDO (el test medía una propiedad más débil) | **ok** — R19 reescrito con el número medido; `gestiones-detalle-api-405.test.ts` → «el detalle emite EXACTAMENTE 9 consultas, y son estas nueve» + «ese número NO depende del número de gestiones» |
+>
+> Y una fila nueva: **R19-b** → el mismo caso del `toEqual` de `CONSULTAS_DEL_DETALLE`, que es el
+> que congela el número por su **nombre de tabla**.
+
+---
+
+## Segunda vuelta (2026-09-10) — los dos bloqueantes de `progress/review_405.md`
+
+### BLOQUEANTE 1 — `evidencias[]` se decidía en memoria y nadie lo medía
+
+**El diagnóstico del reviewer es correcto y la causa raíz era mía.** Al pasar el `where` a
+superconjunto, lo que entra en `evidencias[]` dejó de decidirlo Postgres y pasó a decidirlo el
+`.filter()` de `toApiOrdenDetalleRow`. Él añadió `"devuelta"` y `"reprogramada"` a esa lista y la
+mutación **sobrevivió a 9.446 tests en verde**.
+
+**Por qué no se cazaba, y esto es lo importante:** mi escenario sembraba la `devuelta` vigente
+**SIN foto**, y eso describe un estado que **no puede existir**. La evidencia es **OBLIGATORIA** en
+`devuelta` desde la feature 75 — comprobado en el archivo real,
+`lib/types/gestion-orden.ts`, rama `devuelta` del `discriminatedUnion`: `evidencias: evidenciasSchema`
+(lo mismo en `entregada`, `rechazada` e `incidente`; `reprogramada` es la única que no la exige).
+Con esa fila sin foto, la gestión nunca entraba por la puerta que el filtro tenía que cerrar: el
+filtro no llegaba a decidir nada, así que mutarlo no cambiaba ninguna aserción.
+
+**Arreglo — el escenario, no el aserto** (el mismo criterio que ya se aplicó con M1a):
+
+- la `devuelta` vigente y la `reprogramada` vigente pasan a llevar **foto**, como en la realidad
+  (en la base local hay **14 filas vigentes con foto** en esos dos resultados, el dato que aportó el
+  reviewer);
+- la `devuelta` **anulada** conserva su ausencia de foto, y ahora se declara por lo que es: una
+  gestión **anterior a la 75**, que es el único caso en que eso es realista;
+- caso nuevo, **R15**: afirma el **conjunto exacto** de `evidencias[]` por nombre de archivo
+  (`["entregada:anulada-con-foto.jpg"]`) y, al lado, la lista de las **tres** filas con foto que la
+  consulta devuelve. Un rojo aquí dice el nombre del archivo que se filtró, no solo un número.
+
+**Medido después del arreglo:** la mutación del reviewer (M14) pone **2 rojos**. La otra mitad del
+filtro (M15) sigue matando, con los mismos 2.
+
+### BLOQUEANTE 2 — R19 era inalcanzable y había dos frases falsas
+
+**Medí los dos números yo mismo**, con el método del reviewer (el espía `$on("query")` de
+`crearPrismaDeTestConEspia`, misma base local, misma orden sembrada, sonda temporal borrada
+después). No copié los suyos:
+
+| | consultas | tablas |
+|---|---|---|
+| **`dev`** (`git checkout origin/dev -- lib/repositories/OrdenRepository.ts`, restaurado después) | **6** | `orden`, `order_status`, `usuario`, `gestion_orden`, `orden_incidente`, `orden_incidente_evidencia` |
+| **esta rama** | **9** | las 6 anteriores **+ `orden_historial_estado`** ⭑ **+ un segundo `usuario`** (el mensajero de la gestión) ⭑ **+ un segundo `order_status`** (`estatusDestino`) ⭑ |
+
+**No hay N+1, y lo medí explícitamente:** con **3** gestiones son 9 consultas y con **6** gestiones
+son **las mismas 9**. En `dev` son 6 en los dos casos. El superconjunto, en efecto, no añade
+ninguna: lo que cuesta son las **relaciones nuevas**, porque Prisma resuelve cada relación anidada
+con su propia consulta. Así que **no hay que parar**: el escenario que el leader marcaba como
+«otro bloqueante» (N+1) no se da.
+
+**Lo aplicado, en el orden pedido:**
+
+1. **R19 reescrito** en `requirements.md` §4 con los dos números concretos y un bloque fechado que
+   dice por qué el requisito original era **inalcanzable por construcción**: `gestiones[]` no se
+   puede devolver sin leerlas. La premisa del design era falsa, no la implementación. Se añade
+   **R19-b**: el número, congelado en un test contra Postgres.
+2. **Test débil sustituido.** El caso «0-vs-N gestiones» medía una propiedad **más floja** que el
+   requisito y por eso no cazó el 6 → 9. Ahora son **dos** casos: uno congela
+   `CONSULTAS_DEL_DETALLE` —las nueve, **por nombre de tabla y en orden**, para que un rojo diga
+   *cuál* sobra— y el otro conserva la no-N+1.
+3. **Las dos frases falsas, corregidas**, y una tercera que encontré de paso:
+   - `specs/405-…/design.md` §3.1 — «ninguna consulta nueva» → bloque fechado con el 6 → 9 y la
+     distinción entre «una llamada de Prisma» (cierto) y «un round-trip» (falso);
+   - `lib/repositories/OrdenRepository.ts`, cabecera de `API_ORDEN_DETALLE_SELECT` — «Sigue siendo
+     UNA sola consulta (R19)» → reescrita con el número medido. Era la peor de las tres: **estaba
+     en código de producción**, en el archivo donde vive la decisión;
+   - `lib/repositories/OrdenRepository.ts`, docblock de `findDetalleByOrdenIdForOwner` — decía
+     «(join, sin N+1)». Prisma **no hace un join**: se retira la palabra y se conserva «sin N+1»,
+     que sí es cierto.
+
+⚠️ **Un tropiezo propio que conviene dejar escrito.** Al restaurar la mutación M16 con
+`git checkout -- lib/repositories/OrdenRepository.ts`, me llevé por delante las **dos correcciones
+de comentario que todavía no estaban commiteadas**. Lo detecté con un `grep` de comprobación y las
+reapliqué. La lección, que es la de «verificar el blob commiteado»: **commitea antes de mutar**, o
+el `checkout --` de la restauración se lleva lo que no está guardado.
+
 ---
 
 ## Gate
@@ -162,23 +250,56 @@ cubre con un `grep` sobre un comentario.
 `./init.sh` **COMPLETO** (no `--rapido`): el diff toca `lib/types/api-orden.ts`, así que el modo
 rápido se niega solo y manda al completo (`docs/verification.md`).
 
-Log: `scratchpad/gate-405.log` (no canalizado por `tail`; el `INIT_EXIT` se escribe DENTRO del log).
+### ⭑ La corrida que vale: segunda vuelta, CON `.env` y con los `integration/db` EJECUTADOS
+
+Log: `scratchpad/gate-405-v2.log` (no canalizado por `tail`; el `INIT_EXIT` se escribe DENTRO del
+log).
+
+```
+ Test Files  1854 passed (1854)
+      Tests  26931 passed | 26 skipped (26957)
+   Duration  1020.18s
+
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1854 ejecutado(s), todos en el baseline conocido)
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+**Cero archivos saltados: `1854 passed (1854)`, sin una sola línea `↓` en todo el log.** De ellos,
+**231 archivos de `tests/integration/db/` se EJECUTARON** (contados con
+`grep -o "^ ✓ tests/integration/db/…" | sort -u | wc -l`), **0 saltados**, frente a los 153 que la
+primera corrida declaró saltados por falta de `DATABASE_URL`. El de esta ficha, entre ellos:
+
+```
+✓ tests/integration/db/gestiones-detalle-api-405.test.ts (12 tests) 1372ms
+```
+
+Los **26 tests** que salen como `skipped` son casos individuales de otros archivos —no hay ni un
+archivo entero saltado— y ninguno pertenece a esta ficha: sus cuatro archivos reportan 12, 19, 10 y
+26 tests, todos ejecutados.
+
+**Sin `40P01` en ninguna corrida.** La contención con el otro agente contra la misma base local no
+se materializó: no aparece «deadlock» en el log y el recuento de tests es explícito, así que no hay
+que distinguirlo de una regresión propia.
+
+`pnpm run typecheck` → 0 errores. `pnpm run lint` → **0 errores**, 183 warnings, todos
+`no-unused-vars`/`no-img-element` preexistentes en archivos ajenos a esta ficha.
+
+### La corrida de la PRIMERA vuelta, que queda como referencia
 
 ```
  Test Files  1744 passed | 110 skipped (1854)
       Tests  25603 passed | 1352 skipped (26955)
-   Duration  637.92s
-
-✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1854 ejecutado(s), todos en el baseline conocido)
-! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at
+✓ tests: sin rojos nuevos
 ! no hay .env. Crea uno a partir de .env.example
 ! recuerda: este verde NO incluye los 153 archivos de tests contra Postgres (sin DATABASE_URL se saltaron).
 == init OK ==
 INIT_EXIT=0
 ```
 
-`pnpm run typecheck` → 0 errores. `pnpm run lint` → **0 errores**, 183 warnings, todos
-`no-unused-vars`/`no-img-element` preexistentes en archivos ajenos a esta ficha.
+Log: `scratchpad/gate-405.log`. Ese verde **no** incluía los `integration/db`; el de arriba sí.
 
 Los tres avisos de `down.sql` faltante son deuda preexistente de tres migraciones de agosto: esta
 ficha **no crea ninguna migración**.
@@ -192,33 +313,19 @@ encontraba `node_modules/.bin`. Se creó la **junction** que el arnés espera
 (`node_modules` → el del checkout principal) y el gate corrió entero. Prepender el `.bin` del padre
 al `PATH` **no** sirve: `pnpm run` lanza el script por `cmd.exe` y la ruta estilo POSIX no llega.
 
-### Los `skipped`, mirados uno a uno (no solo el exit code)
+### El hueco de la primera vuelta, ya CERRADO
 
-**153 archivos de `integration/db` se saltaron** por no haber `.env` en el worktree, y **uno de
-ellos es el de esta ficha**:
+En la primera corrida se saltaron **153 archivos de `integration/db`** por no haber `.env`, y uno
+de ellos era el de esta ficha —donde viven siete de los veintidós requisitos—. Se dijo entonces por
+su nombre en vez de darlo por probado, y ese aviso es lo que permitió al reviewer comprobarlo.
 
-```
-↓ tests/integration/db/gestiones-detalle-api-405.test.ts (10 tests | 10 skipped)
-```
+**Ya no aplica:** el reviewer dejó el `.env` en el worktree y la segunda corrida ejecuta los 231
+archivos, incluido el nuestro (12 tests). El agujero está cerrado dentro del gate, no fuera de él.
 
-⚠️ **Eso solo, sería un agujero: siete de los veintidós requisitos (R6, R10, R11, R13, R14, R18,
-R19) viven ahí.** No se da por probado lo que no corrió: ese archivo se ejecutó **aparte y contra
-Postgres real** (la base LOCAL del `.env` del checkout principal — verificada antes de usarla:
-apunta a `localhost:5432/ordenex`, y la URL de Supabase del archivo está comentada), dentro de una
-transacción que siempre se revierte:
+Los otros archivos que tocan o cubren esta ficha, todos con `✓` en la segunda corrida:
 
 ```
-DATABASE_URL=<la de localhost> npx vitest run tests/integration/db/gestiones-detalle-api-405.test.ts
-  Test Files  1 passed (1)
-       Tests  10 passed (10)
-```
-
-Y no solo pasó: **cuatro de las mutaciones de abajo (M1a, M1b, M2, M3, M4) se mataron contra esa
-misma base.** Aun así, conviene que la corrida post-merge sobre `dev` con base lo confirme.
-
-Los **otros nueve archivos** que tocan o cubren esta ficha aparecen todos con `✓` en el log:
-
-```
+✓ tests/integration/db/gestiones-detalle-api-405.test.ts (12 tests)
 ✓ tests/unit/services/api-orden-lectura-service.gestiones-405.test.ts (19 tests)
 ✓ tests/unit/guards/gestiones-detalle-lista-blanca.guardia.test.ts (10 tests)
 ✓ tests/unit/api/openapi-405-gestiones.test.ts (26 tests)
@@ -254,8 +361,29 @@ archivos se restauraron con `git checkout --`; `grep -rn MUTACION lib/ app/ docs
 | **M11** | mapeo: quitar el recorte en memoria de `evidencias[]` | **MUERTA** — 2 rojos (los dos casos nuevos de no-regresión de la 268) |
 | **M12** | `.yaml`: borrar `- gestiones` del `required` del espejo | **MUERTA** — 1 rojo (R20, el espejo) |
 | **M13** | CHANGELOG: borrar el aviso (c), el del contador de intentos | **MUERTA** — 1 rojo (R22-c) |
+| **M14** ⭑ | mapeo: añadir `"devuelta"` y `"reprogramada"` a la lista `resultado` del filtro de `evidencias[]` (**la mutación del reviewer**) | **SOBREVIVÍA a 9.446 tests.** Tras el arreglo del escenario: **MUERTA — 2 rojos** contra Postgres real (`R15` y `R11 + no-regresión 268`), sobre una corrida de 547 archivos / 9.447 tests |
+| **M15** | mapeo: quitar la otra mitad del filtro (`g.evidenciaStoragePath !== null`) | **MUERTA** — 2 rojos contra Postgres real. La fila que la mata es la `entregada` legada sin foto |
+| **M16** ⭑ | `select`: añadir UNA relación anidada de más (`historialEstados.actor`) | **MUERTA** — 3 rojos: los dos casos de R19/R19-b (que dicen **qué tabla** sobra) + el literal congelado `SELECT_DETALLE_106` |
 
-### M1a, la única que sobrevivió, y por qué el arreglo NO fue tocar el test para que pasara
+### Las DOS que sobrevivieron, y el patrón que comparten
+
+M1a y M14 fallaron por **la misma razón**, y merece la pena decirla de una vez: en los dos casos la
+mutación tocaba un filtro **en memoria** cuyo caso de uso **el escenario no producía**. No era que
+el aserto fuera flojo: era que la fila que tenía que entrar por esa puerta no existía en la base
+sembrada. Un filtro que nunca llega a decidir nada es indistinguible de uno que no está.
+
+Las dos se arreglaron **igual**: añadiendo al escenario la fila que faltaba, no relajando el aserto.
+Y la lección operativa es que el superconjunto de esta ficha **movió dos decisiones del SQL a
+JavaScript**, así que el escenario tiene que traer, por cada mitad de cada filtro, una fila que la
+consulta devuelva y el filtro tenga que rechazar. Ahora las trae:
+
+| Mitad del filtro | Fila que la ejercita |
+|---|---|
+| `anuladaAt === null` (gestiones) | la `entregada` anulada **con foto** |
+| `resultado ∈ {entregada, rechazada, incidente}` (evidencias) | la `devuelta` y la `reprogramada` vigentes **con foto** |
+| `evidenciaStoragePath !== null` (evidencias) | la `entregada` legada **sin foto** |
+
+### M1a, la primera que sobrevivió, y por qué el arreglo NO fue tocar el test para que pasara
 
 **Qué pasó.** En la primera versión del escenario de integración la única gestión anulada era una
 `devuelta` **sin foto**. A esa la para ya el `where` de la consulta (no casa con ninguna de las dos
@@ -270,6 +398,23 @@ su foto, que es un caso real y frecuente (se anula una entrega ya registrada).
 con ella M1a pone en rojo 6 casos contra Postgres. De paso queda afirmada en la base la
 no-regresión de la 268: la evidencia de esa anulada **se sigue publicando** en `evidencias[]`.
 Está escrito en el commit `c2b14579` y en la cabecera del propio archivo de test.
+
+### M14, la que encontró el reviewer, y lo que la hacía invisible
+
+**Qué pasó.** El escenario sembraba la `devuelta` vigente **SIN foto**. Ese estado **no puede
+existir**: la evidencia es obligatoria en `devuelta` desde la feature 75 (comprobado en
+`lib/types/gestion-orden.ts`, rama `devuelta` del `discriminatedUnion`). Sin una fila `devuelta` o
+`reprogramada` con foto, la mutación de la lista `resultado` no cambiaba **nada** observable, y por
+eso sobrevivió a 9.446 tests.
+
+**Por qué importa.** Hasta esta ficha, lo que entraba en `evidencias[]` lo decidía **Postgres**. El
+superconjunto lo movió a una línea de JavaScript, y esa línea es contrato público de la 106/268. En
+la base local hay **14 filas vigentes con foto** en `devuelta` y `reprogramada`: la fuga habría sido
+real, no hipotética.
+
+**El arreglo.** Las dos gestiones vigentes pasan a llevar foto —como en la realidad— y el caso nuevo
+de R15 afirma el **conjunto exacto** de `evidencias[]` por nombre de archivo. M14 pasa de
+superviviente a **2 rojos**.
 
 ### Trampas del repo, cubiertas explícitamente
 
@@ -290,9 +435,16 @@ Está escrito en el commit `c2b14579` y en la cabecera del propio archivo de tes
   veinte sitios.
 - *Test verde sin datos*: el archivo de integración usa `describe.skip` sin base (nunca un `return`
   silencioso), y cada caso que compara conjuntos afirma además que el escenario **no está vacío**
-  (`fotoAntes.gestiones` tiene 5 filas, `historial.length > 0`, `consultasConGestiones > 0`). La
-  guardia de no-fuga lleva su propia contraprueba («el detector NO esta ciego») y el troceador del
-  CHANGELOG también.
+  (`fotoAntes.gestiones` tiene 5 filas, `historial.length > 0`, la lista de consultas no vacía, las
+  tres filas con foto contadas por su nombre). La guardia de no-fuga lleva su propia contraprueba
+  («el detector NO esta ciego») y el troceador del CHANGELOG también.
+  **Matiz aprendido en la revisión, y es distinto de esto:** un escenario puede no estar vacío y aun
+  así no producir el caso que un filtro tiene que rechazar. Eso no lo detecta ninguna contraprueba
+  de «hay datos»: lo detecta una **mutación**, y por eso M14 tuvo que venir de fuera.
+- *El escenario que describe un imposible*: la `devuelta` sin foto era un estado que ninguna gestión
+  creada desde la feature 75 puede tener. **Un escenario irreal no prueba nada**, aunque el test
+  pase. Al sembrar filas de integración conviene comprobar el `discriminatedUnion` del borde
+  (`lib/types/gestion-orden.ts`) y no solo lo que la columna admite como `NULL`.
 - *Literal: contrato o polizón*: los seis literales congelados que esta ficha rompía
   (`SELECT_DETALLE_106`, las dos listas de claves del detalle, el `allOf` de `OrdenDetalle` y los
   dos conteos del `.yaml`) **son el contrato**: se enmiendan con su bloque fechado y siguen siendo
@@ -332,11 +484,25 @@ Está escrito en el commit `c2b14579` y en la cabecera del propio archivo de tes
    en `openapi-405-gestiones.test.ts` que lo afirma explícitamente.
 8. **Sin E2E**: el repo no tiene harness de Playwright vivo y esta ficha es backend puro sin
    pantalla. No aplica.
+9. **El coste del detalle subió y está aceptado, pero conviene que se sepa:** 6 → **9** consultas.
+   Es un endpoint de detalle **unitario**, no un listado, y el número es fijo. Si algún día el
+   canal necesitara bajarlo, la palanca está identificada: resolver `estadoResultante` sin la
+   relación anidada `estatusDestino` ahorraría una. **No se hace aquí** y no es deuda pendiente:
+   es una opción escrita por si el techo cambia.
+10. **Los `menores` del reviewer que NO son del implementador**, anotados para que no se caigan:
+    `tasks.md` sin casillas `[x]` (ningún `tasks.md` del repo las usa: el checkpoint lleva tiempo
+    desalineado con la convención viva) y la entrada de `progress/history.md`, que la escribe el
+    leader al cerrar.
 
 ---
 
-**Veredicto:** `gestiones[]` viaja aditivo en el detalle por API key con las cinco claves de R3, los
-22 requisitos tienen test que se pone rojo con una mutación real —13 mutaciones aplicadas, 13
-muertas, y la única que sobrevivió delató un hueco del escenario que se cerró—, los siete requisitos
-que dependen del SQL se midieron contra Postgres real, y `./init.sh` completo termina con
-`INIT_EXIT=0` y sin rojos nuevos sobre el baseline.
+**Veredicto (2.ª vuelta, tras `progress/review_405.md`):** los dos bloqueantes están cerrados con
+medición propia, no con prosa. **R15** vuelve a estar cubierto: la mutación que sobrevivió a 9.446
+tests ahora pone **2 rojos** contra Postgres real, y el arreglo fue el escenario —la `devuelta`
+llevaba un estado imposible desde la feature 75—, no el aserto. **R19** era inalcanzable tal y como
+estaba escrito: se midió (`dev` **6**, esta rama **9**, sin N+1 con 3 ni con 6 gestiones), se
+reescribió con esos números, se congelaron las nueve **por nombre de tabla** en un test contra
+Postgres, y las **tres** frases que decían lo contrario —incluida una en código de producción— están
+corregidas. **16 mutaciones aplicadas, 16 muertas.** `./init.sh` completo, ahora **con `.env`**,
+termina con `INIT_EXIT=0`, **1854 archivos ejecutados y ninguno saltado**, de los cuales **231 son
+`integration/db`** contra Postgres real.
