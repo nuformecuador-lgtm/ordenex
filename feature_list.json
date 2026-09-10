@@ -4848,6 +4848,54 @@
       "merged_pr": 773,
       "depends_on": null,
       "status_note": "PEDIDA POR EL HUMANO el 2026-09-10 con su caso: la guia 76068276 (Quesada, San Carlos) lleva CINCO DIAS parada con `geocode_status = ZERO_RESULTS` y sin coordenadas. La direccion es de referencias -«DE LA CLINICA VETERINARIA MASCOTICAS, 75 METROS HACIA EL SUR...»- y el mensajero llega igual. Son las 2 UNICAS ordenes sin coordenadas de toda la base (la otra es de Palmira, Carrillo): el fenomeno es raro, pero deja la orden muerta. || EL HUMANO ELIGIO LA VIA DE AUTORIZAR LA ASIGNACION. Fijar el punto a mano en un mapa queda FUERA y el spec lo declara como alternativa DESCARTADA, no como propuesta. || BARATA PORQUE EL CARRIL YA EXISTE: la 400 construyo `asignable_sin_ubicacion` y su aviso, y esto anade una SEGUNDA puerta de entrada al mismo carril -la que abre una persona a sabiendas, frente a la que abre el sistema por un fallo propio-. Y aguas abajo YA ESTA RESUELTO, verificado en el codigo: `OptimizacionRutaService` (R37/R28) excluye las ordenes sin coordenadas SIN abortar y la lectura las pinta al final. El unico punto de toda la cadena que se planta es el gate de `AsignabilidadCoordenadasService`, donde `ZERO_RESULTS` cae en `STATUS_DETERMINISTAS` y sale `direccion_no_geocodificable`. || ⚠️ EL TEXTO DE LA 400 NO SE PUEDE REUSAR: dice «por un problema del sistema, NO de la direccion», y aqui SI es la direccion. Reusarlo seria mentirle al operador; hace falta literal propio, fijado a mano como contrato de test. || OJO al distinguir motivos en el mismo lote: `geocodificacion_en_curso` NO es definitivo y no debe poder autorizarse, porque esa orden aun puede resolverse sola. || CERRADA 2026-09-10, PR #773 mergeado a dev (merge commit 8a449e37); el PR lleva backend y frontend juntos, 8 commits. Reviewer APROBADO, 0 bloqueantes, 20/20 requisitos verificados por el (10 matados con mutacion propia). 14 mutaciones aplicadas, 14 muertas. SIN RASTRO POR DECISION DEL HUMANO: la autorizacion viaja por parametro y no se persiste, asi que NO se podra saber quien autorizo; escrito en design.md §3.3 y §8, con la tabla append-only como alternativa DESCARTADA. Contrapartida buena y declarada: al no persistirse, la marca no puede quedarse pegada desactivando el gate para siempre. EL TEXTO NO MIENTE: literales propios aprobados por el humano y un guardia que se pone rojo si vuelve el «no de la direccion» de la 400 (7 rojos al mutarlo) o si alguien aliasa las dos funciones (13 rojos). Dos fallos MUDOS cazados por sus tests: la 2a peticion reenviando el lote entero (R18) y el manifiesto sin acumular las dos respuestas (R20), 1 rojo cada uno por modal. Familia «composition root que no inyecta» cubierta con el servicio REAL enganchado en los dos writers, y verificado que no hay un tercer writer olvidado. DESVIACION DELIBERADA del design §4.2, juzgada correcta: `role='status'` y landmark region en vez de un segundo `role='alert'`, que romperia por ambigüedad ocho consultas en singular ya existentes. ⚠️ LIMITE DECLARADO: NADIE HA VISTO LA PANTALLA EN UN NAVEGADOR. Todo medido en jsdom; sin cubrir el panel con un lote grande y el contraste en los dos temas."
+    },
+    {
+      "id": 408,
+      "title": "el motivo de un rechazo automatico se lee en lenguaje humano",
+      "description": "El motivo de un rechazo automatico se pinta con el texto crudo del sistema, y el tooltip de al lado lo explica mejor que el propio dato.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "baja",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "REPORTADA POR EL HUMANO el 2026-09-10 y VERIFICADA: en el detalle de un cierre, la columna Motivo de una gestion `rechazada` pinta `g.motivo` crudo, que para las sinteticas del cron 99 es la plantilla `escalado SLA <causa>` -jerga de programador, y con la sigla SLA que este repo decidio NO mostrar en pantalla-. Al lado, el badge de origen lleva un tooltip que SI esta en cristiano: «Rechazo automatico por vencerse el plazo de la devolucion (no lo hizo el mensajero)». El tooltip explica mejor que el dato. || SE TRADUCE AL PINTAR, no se reescribe el historico: la causa a lenguaje humano (`wrong_address` -> direccion incorrecta, `wrong_number` -> telefono incorrecto, `not_found` -> no se encontro al destinatario) mas la explicacion del automatismo. || Sitio medido: `renderRechazoOrigen` y la columna `motivo` en `app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx`; los literales viven en `cierre-labels.ts`. Frontend puro, sin tocar la base."
+    },
+    {
+      "id": 409,
+      "title": "el panel de notificaciones se rediseña, avisa lo que hay que hacer y lleva a resolverlo",
+      "description": "La campana cuenta mensajes sin leer en vez de cosas por hacer, no dice cuando paso nada y no lleva a ninguna parte: 26 de 39 personas no la han abierto nunca.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "alta",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "MEDIDO EN PRODUCCION el 2026-09-10: 1.214 avisos emitidos y 26 de 39 personas NO han abierto ninguno. Por rol: 1 de 5 tiendas, 1 de 4 admins, 4 de 10 adminSatelite, 8 de 18 mensajeros. Los dos roles a los que mas urge avisar son los que menos la usan. || DISEÑO APROBADO por el humano el 2026-09-10 (lienzo en `design-notificaciones/`). CUATRO PARTES: (1) el panel separa REQUIEREN TU ACCION de PARA TU INFORMACION, con titulo, contexto, tiempo relativo y boton; (2) cada aviso accionable lleva ATAJO a donde se resuelve; (3) la campana cuenta SOLO lo accionable y lo dice con palabras (2 por hacer), y se apaga sola al llegar a cero -hoy cuenta no-leidas, que no es lo mismo-; (4) DOS AVISOS NUEVOS: a la tienda sus novedades sin gestionar y al admin las ordenes por devolver represadas, los dos AGREGADOS (un aviso con el numero dentro, jamas uno por orden), UNO AL DIA por tipo y con el plazo dicho -patron ya probado en `gasto_fijo_cobro_pendiente`-. || EL ATAJO SE EVALUA POR AVISO, y el criterio es: solo si existe una pantalla donde ESA persona pueda resolverlo. `geocodificacion_caida` es el contraejemplo y NO lleva atajo: se arregla en la consola de Google, no en la app. || El plazo de los 5 dias se cuenta desde que el paquete entra a bodega (decision del humano del 2026-09-10, ya vigente): el texto del aviso debe decir eso y no otra cosa. || Hoy el DTO no tiene destino ni instante relativo: el campo del atajo es aditivo. Componente: `components/shared/NotificationsBell.tsx`."
+    },
+    {
+      "id": 410,
+      "title": "las notificaciones llegan al telefono aunque la app este cerrada",
+      "description": "Hoy no hay push: el service worker no maneja el evento y no hay suscripciones, asi que un aviso urgente solo existe si alguien entra a la app.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "alta",
+      "branch": null,
+      "depends_on": 409,
+      "status_note": "MEDIDO el 2026-09-10: `public/sw.js` NO tiene manejador de `push` ni de `notificationclick`, y no hay `web-push` ni suscripciones en el repo. La PWA existe (manifest mas sw registrado en `app/layout.tsx`) pero el canal no. || DEPENDE DE LA 409: primero que el aviso exista y sea correcto, luego que persiga a la gente. Reusa su catalogo y su atajo. || QUE MERECE PUSH, decidido con el humano: SOLO lo que tiene PLAZO o DINERO, y siempre agregado. Tienda: novedades sin gestionar. Admin y satelite: devoluciones represadas y cierre por aprobar. Mensajero: su cierre rechazado, quedo bloqueado, su reparto de mañana, le cambiaron el dia. Maestro: un servicio caido. NUNCA: un aviso por orden, cada cambio de estado, ni nada que quien lo recibe no pueda resolver. || PIEZAS QUE NO EXISTEN: permiso del navegador, suscripcion por dispositivo, claves VAPID como secreto de entorno, tabla de suscripciones y un emisor. No es una notificacion mas."
+    },
+    {
+      "id": 411,
+      "title": "la analitica sigue un lote de carga hasta su desenlace",
+      "description": "Se puede ver la efectividad de un dia, pero no la de un lote: que paso con las ordenes que se cargaron el lunes no lo responde ninguna pantalla.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-09-10 al preguntar por la efectividad de un dia concreto. LO QUE YA FUNCIONA Y NO HAY QUE TOCAR: el rango personalizado con la MISMA fecha en desde y hasta ya da un dia completo (`resolverRango` produce la ventana de 00:00 CR a 00:00 CR del dia siguiente), asi que la efectividad de un dia YA se puede ver. || LO QUE FALTA ES OTRA PREGUNTA: la base de los KPI es el INVENTARIO VIVO del dia -las no terminadas al cierre mas las que terminaron ese dia, universo B2 de la 124-, asi que incluye ordenes viejas. Una COHORTE es distinta: de las N que se cargaron el lunes, cuantas se entregaron, cuantas se devolvieron y en cuantos dias. Hoy no lo responde nada. || `contarOrdenesCreadas` ya cuenta por `created_at`, que es el ancla natural de la cohorte. OJO con la trampa horaria ya documentada: `created_at` es `timestamp` y las cotas correctas son `inicioDelDiaCREnUtc` / `inicioDelDiaSiguienteCREnUtc`, NUNCA `startOfDayCR`, que contra un timestamp da la ventana 18:00-18:00. || NO es urgente: el humano la pidio como «solo si lo querés»."
     }
   ]
 }

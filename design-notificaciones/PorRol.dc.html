@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+  <style>
+    body {
+      margin: 0;
+      font-family: Poppins, system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #f7f8fc;
+      color: #12233f;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: #d4530d; }
+    a:hover { color: #b8460b; }
+    .celda { padding: 14px 16px; vertical-align: top; border-top: 1px solid #e3e8f2; }
+  </style>
+</helmet>
+
+<div style="padding: 30px; display: flex; flex-direction: column; gap: 20px;">
+
+  <div style="display: flex; flex-direction: column; gap: 5px;">
+    <h2 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em;">Quién recibe qué</h2>
+    <p style="margin: 0; font-size: 13px; color: #4a5368; line-height: 1.5; max-width: 760px;">Un aviso solo existe si <strong style="color:#12233f;font-weight:600;">pide una acción</strong>, <strong style="color:#12233f;font-weight:600;">tiene consecuencia</strong> si no se hace y <strong style="color:#12233f;font-weight:600;">quien lo recibe puede resolverlo</strong>. Si falla una de las tres, es información de pantalla, no una notificación.</p>
+  </div>
+
+  <div style="background: #ffffff; border: 1px solid #e3e8f2; border-radius: 10px; overflow: hidden;">
+    <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+      <thead>
+        <tr style="background: #f1f4fb;">
+          <th style="text-align: left; padding: 11px 16px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #4a5368; width: 150px;">Rol</th>
+          <th style="text-align: left; padding: 11px 16px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #b91c1c;">Push · interrumpe</th>
+          <th style="text-align: left; padding: 11px 16px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #1d4ed8;">Solo campana</th>
+          <th style="text-align: left; padding: 11px 16px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #4a5368;">Nunca</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="celda">
+            <div style="font-weight: 600; font-size: 13px;">Tienda</div>
+            <div style="color: #4a5368; font-size: 11.5px; margin-top: 2px;">5 personas · 1 usa la campana</div>
+          </td>
+          <td class="celda" style="line-height: 1.5;">Novedades sin gestionar, con los días que lleva la más antigua y cuándo se rechazan solas</td>
+          <td class="celda" style="line-height: 1.5; color: #4a5368;">Carga masiva terminada · devolución en camino · dirección que necesita mejor referencia</td>
+          <td class="celda" style="line-height: 1.5; color: #4a5368;">Cada cambio de estado de una orden</td>
+        </tr>
+        <tr>
+          <td class="celda">
+            <div style="font-weight: 600; font-size: 13px;">Admin y bodega satélite</div>
+            <div style="color: #4a5368; font-size: 11.5px; margin-top: 2px;">14 personas · 5 usan la campana</div>
+          </td>
+          <td class="celda" style="line-height: 1.5;">Devoluciones represadas hace más de N días · cierre del día por aprobar (hay dinero parado)</td>
+          <td class="celda" style="line-height: 1.5; color: #4a5368;">Órdenes sin ubicación que bloquean asignación · cierre de bodega pendiente · órdenes sin mensajero al cerrar</td>
+          <td class="celda" style="line-height: 1.5; color: #4a5368;">Una notificación por orden</td>
+        </tr>
+        <tr>
+          <td class="celda">
+            <div style="font-weight: 600; font-size: 13px;">Mensajero</div>
+            <div style="color: #4a5368; font-size: 11.5px; margin-top: 2px;">18 personas · 8 usan la campana</div>
+          </td>
+          <td class="celda" style="line-height: 1.5;">Su cierre fue rechazado · quedó bloqueado · su reparto de mañana · le cambiaron el día de reparto</td>
+          <td class="celda" style="line-height: 1.5; color: #4a5368;">Le retiraron una orden de la ruta</td>
+          <td class="celda" style="line-height: 1.5; color: #4a5368;">Novedades de otros · movimientos de bodega</td>
+        </tr>
+        <tr>
+          <td class="celda">
+            <div style="font-weight: 600; font-size: 13px;">Maestro</div>
+            <div style="color: #4a5368; font-size: 11.5px; margin-top: 2px;">2 personas · 1 usa la campana</div>
+          </td>
+          <td class="celda" style="line-height: 1.5;">Un servicio caído: mapas o webhooks. Hoy solo llega a la campana, que es justo donde nadie lo ve</td>
+          <td class="celda" style="line-height: 1.5; color: #4a5368;">Postulaciones · cola atascada · una tienda concentra devoluciones</td>
+          <td class="celda" style="line-height: 1.5; color: #4a5368;">Todo lo operativo del día a día</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Reglas anti-ruido -->
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;">
+    <div style="background: #ffffff; border: 1px solid #e3e8f2; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 7px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 999px; background: #fff0e8; color: #d4530d; font-size: 11.5px; font-weight: 700;">1</span>
+        <span style="font-size: 13px; font-weight: 600;">Agregado, nunca por unidad</span>
+      </div>
+      <p style="margin: 0; font-size: 12.5px; line-height: 1.5; color: #4a5368;">Cuarenta novedades son un aviso con el número dentro, no cuarenta avisos.</p>
+    </div>
+    <div style="background: #ffffff; border: 1px solid #e3e8f2; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 7px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 999px; background: #fff0e8; color: #d4530d; font-size: 11.5px; font-weight: 700;">2</span>
+        <span style="font-size: 13px; font-weight: 600;">Uno al día por tipo</span>
+      </div>
+      <p style="margin: 0; font-size: 12.5px; line-height: 1.5; color: #4a5368;">Y solo si sigue habiendo algo que hacer. Es el patrón que ya usan los cobros pendientes.</p>
+    </div>
+    <div style="background: #ffffff; border: 1px solid #e3e8f2; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 7px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 999px; background: #fff0e8; color: #d4530d; font-size: 11.5px; font-weight: 700;">3</span>
+        <span style="font-size: 13px; font-weight: 600;">Se apaga solo</span>
+      </div>
+      <p style="margin: 0; font-size: 12.5px; line-height: 1.5; color: #4a5368;">Cuando la cifra llega a cero desaparece. Nadie marca leído para que algo ya resuelto se vaya.</p>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

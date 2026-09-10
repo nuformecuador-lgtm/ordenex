@@ -1,0 +1,25 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "Panel rediseñado", "x": 0, "y": 0, "w": 440, "h": 900 },
+    { "file": "Campana.dc.html", "title": "La campana en la barra", "x": 540, "y": 0, "w": 700, "h": 640 },
+    { "file": "Push.dc.html", "title": "Push: qué sí y qué no", "x": 1340, "y": 0, "w": 420, "h": 900 },
+    { "file": "PorRol.dc.html", "title": "Quién recibe qué", "x": 0, "y": 1020, "w": 1120, "h": 680 }
+  ],
+  "annotations": [
+    {
+      "id": "nota-medida",
+      "x": 1200,
+      "y": 1020,
+      "w": 300,
+      "text": "Medido hoy en producción:\n\n26 de 39 personas nunca han abierto una notificación.\n\n1 de 5 tiendas.\n1 de 4 administradores.\n\nJustamente los dos roles a los que queremos avisar."
+    },
+    {
+      "id": "nota-tweak",
+      "x": 0,
+      "y": -130,
+      "w": 440,
+      "text": "El panel cambia de contenido según el rol: probá el selector de arriba del artboard."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}
