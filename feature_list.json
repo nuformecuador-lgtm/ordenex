@@ -4854,10 +4854,11 @@
       "title": "el motivo de un rechazo automatico se lee en lenguaje humano",
       "description": "El motivo de un rechazo automatico se pinta con el texto crudo del sistema, y el tooltip de al lado lo explica mejor que el propio dato.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "baja",
-      "branch": null,
+      "spec_path": "specs/408-motivo-rechazo-automatico-legible/",
+      "branch": "feat/408-motivo-rechazo-automatico-legible",
       "depends_on": null,
       "status_note": "REPORTADA POR EL HUMANO el 2026-09-10 y VERIFICADA: en el detalle de un cierre, la columna Motivo de una gestion `rechazada` pinta `g.motivo` crudo, que para las sinteticas del cron 99 es la plantilla `escalado SLA <causa>` -jerga de programador, y con la sigla SLA que este repo decidio NO mostrar en pantalla-. Al lado, el badge de origen lleva un tooltip que SI esta en cristiano: «Rechazo automatico por vencerse el plazo de la devolucion (no lo hizo el mensajero)». El tooltip explica mejor que el dato. || SE TRADUCE AL PINTAR, no se reescribe el historico: la causa a lenguaje humano (`wrong_address` -> direccion incorrecta, `wrong_number` -> telefono incorrecto, `not_found` -> no se encontro al destinatario) mas la explicacion del automatismo. || Sitio medido: `renderRechazoOrigen` y la columna `motivo` en `app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx`; los literales viven en `cierre-labels.ts`. Frontend puro, sin tocar la base."
     },
