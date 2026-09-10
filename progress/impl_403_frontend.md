@@ -12,14 +12,18 @@ solo cuando la Server Action devuelve `pausada: true` **y la suscripción está 
 **El texto exacto**, copiado del render real y no de la intención (la fecha del ejemplo es la
 del test, `2026-09-09T13:05:00.000Z`, formateada por el `Intl` de la máquina):
 
-> Los envíos a este webhook se están espaciando: el destino lleva sin aceptar ninguno desde el
-> 9/9/26, 8:05 a. m.. No hay que hacer nada: vuelven a su ritmo normal en cuanto el destino acepte
+> Los envíos a este webhook se están espaciando: desde el 9/9/26, 8:05 a. m. el destino no
+> acepta ninguno. No hay que hacer nada: vuelven a su ritmo normal en cuanto el destino acepte
 > un envío. Si ya está resuelto, guarda la URL de nuevo para reintentarlo ahora.
 
-**Ojo al punto doble de «a. m..»**: es real y está medido (ver el punto 4 de «lo que no
-cuadra»); la primera versión de esta bitácora decía «9/9/2026, 8:05» y era una suposición mía,
-no el render. El `dateStyle: "short"` de es-EC da año de dos dígitos y hora con `a. m.`/`p. m.`,
-y ese punto de la abreviatura choca con el que cierra la frase.
+**La fecha va EN MEDIO de la frase, y eso es el arreglo de la 3ª vuelta.** Antes cerraba la
+frase (`…desde el ${fecha}.`) y el render real salía con **punto doble**: `dateStyle: "short"`
+de es-EC devuelve `9/9/26, 8:05 a. m.` —año de dos dígitos y abreviatura CON punto— y ese punto
+chocaba con el que cerraba la frase: «8:05 a. m..». No lo vio ningún test porque todos
+construían la fecha con `Intl` y comparaban contra el mismo resultado; se vio **mirando el
+render**. Ni una palabra del mensaje cambió, solo el orden, y así queda inmune también a un ICU
+en formato 24 h (donde no hay abreviatura y el síntoma habría desaparecido con el orden aún
+mal).
 
 Y **sin fecha** (si `sinExitoDesde` llegara `null`, que el contrato permite):
 
@@ -58,7 +62,7 @@ recalcula la pausa ni la deduce de nada: `pausada` llega ya resuelta y se recalc
   condicionada a `activa && pausada` (H-2).
 - `app/(app)/configuracion/api/_components/api-keys-columns.tsx` — su `formatFechaCreacion`
   ahora delega en `fecha-legible` (mismo resultado; solo decide su propio `—`).
-- `tests/components/WebhookAccionCell.test.tsx` — 8 tests nuevos (16 → 24).
+- `tests/components/WebhookAccionCell.test.tsx` — 9 tests nuevos (16 → 25).
 - `specs/403-webhook-destino-que-falla-siempre/tasks.md` — las 15 casillas marcadas (H-5).
 
 ## Mapa `R<n> → test` (la parte de UI; el resto está en la bitácora del backend)
@@ -74,8 +78,9 @@ recalcula la pausa ni la deduce de nada: `pausada` llega ya resuelta y se recalc
 | **R13** | ni la URL ni el secreto en el texto | ídem → «el aviso no filtra la URL del webhook ni el secreto» |
 | **H-2** (revisión) | una suscripción dada de baja NO puede decir a la vez que no existe y que sus envíos se espacian | ídem → «con la suscripción dada de baja no se muestra el aviso de espaciado, aunque venga `pausada: true`» (afirma además que el bloque `role="status"` dice UNA sola cosa) |
 | **H-3** (revisión, parcial) | el caso vacío del formateador de fecha | `tests/unit/components/fecha-legible.test.ts` → «EL CASO VACÍO: una fecha no interpretable devuelve `null`, nunca «Invalid Date»» |
+| **Puntuación** (3ª vuelta) | que el aviso no se lea con un punto doble, y que la fecha no vuelva a cerrar la frase | `tests/components/WebhookAccionCell.test.tsx` → «PUNTUACIÓN: la fecha va EN MEDIO de la frase, y el aviso nunca se lee con un punto doble» (síntoma `..` + causa: tras la fecha sigue la frase) · y la variante sin fecha lo comprueba también en «sin `sinExitoDesde` el aviso sigue apareciendo…» |
 
-## Mutaciones: dos, las dos muertas
+## Mutaciones: cuatro, las cuatro muertas
 
 Arnés autocomprobado (`sha1` antes/después, aborta con código 2 si el archivo no cambió) sobre
 `WebhookAccionCell.tsx`, restaurando desde copia y verificando el `sha1` de vuelta.
@@ -93,6 +98,16 @@ justo lo que un `pausada` mal leído produciría.
 | # | Qué se rompió | Rojo |
 | --- | --- | --- |
 | **M3** | se quita la condición nueva: `{activa && pausada ? (` vuelve a `{pausada ? (` | **1 test rojo** de 24, y es exactamente el del caso: «con la suscripción dada de baja no se muestra el aviso de espaciado, aunque venga `pausada: true`» → `expected <p …(1)></p> to be null`. Los otros 23 siguen verdes, o sea que la condición nueva no rompió ningún caso previo |
+
+**Tercera vuelta (puntuación): M4, también muerta.**
+
+| # | Qué se rompió | Rojo |
+| --- | --- | --- |
+| **M4** | se deshace la reordenación y la fecha vuelve a cerrar la frase (`el destino lleva sin aceptar ninguno desde el ${fecha}.`) | **2 tests rojos** de 25: «con `pausada: true` la pantalla avisa… y desde cuándo» (el literal completo) y «PUNTUACIÓN: la fecha va EN MEDIO de la frase, y el aviso nunca se lee con un punto doble» → `expected '…' not to contain '..'` |
+
+El test de puntuación vigila **las dos** cosas: el síntoma (`..`) y la causa (que tras la fecha
+siga la frase y no la cierre un punto). Solo con el síntoma, un ICU en formato 24 h —sin
+`a. m.`— lo dejaría pasar con el orden otra vez mal.
 
 ---
 
@@ -180,12 +195,15 @@ documentada es mergear primero la ficha cuya migración causa el rojo; no es alg
 3. ~~**`tasks.md` no se marca.**~~ **Resuelto en la 2ª vuelta (H-5):** las 15 casillas están
    marcadas. Mi razón original («no estrenar convención») era mala: `CHECKPOINTS.md` lo pide
    por su letra y la 393 lo lleva así (35 marcadas, 0 sin marcar).
-4. **El texto que se ve tiene un punto doble: «…desde el 9/9/26, 8:05 a. m..».** Medido, no
-   supuesto: `dateStyle: "short"` de es-EC devuelve `9/9/26, 8:05 a. m.` —año de dos dígitos y
-   la abreviatura con punto—, y ese punto choca con el que cierra mi frase. **No se ha tocado**
-   porque el copy ya está revisado y aprobado, y cambiarlo por mi cuenta después de la revisión
-   sería justo lo contrario de lo que se me pidió. El arreglo, si se quiere, es de una línea y
-   sin tocar ni una palabra del mensaje: poner la fecha donde no cierre la frase —
-   `desde el ${sinExitoDesde} el destino no acepta ninguno.`— lo que además queda inmune a que
-   otro ICU dé la hora en formato 24 h (ahí no hay abreviatura y hoy no sobraría nada). Queda
-   declarado para que lo decida quien lleva el copy.
+4. ~~**El texto que se ve tiene un punto doble: «…desde el 9/9/26, 8:05 a. m..».**~~ **Resuelto
+   en la 3ª vuelta, con el visto bueno de quien lleva el copy.** Se declaró sin tocarlo (el
+   copy ya estaba aprobado y no me correspondía cambiarlo por mi cuenta), y una vez autorizado
+   se aplicó la reordenación propuesta: `desde el ${sinExitoDesde} el destino no acepta
+   ninguno.`. Ni una palabra del mensaje cambió. Lo vigila el test «PUNTUACIÓN…» (mutación M4).
+
+**Y la lección, porque la parte que falló fue la mía:** la primera versión de esta bitácora
+decía que el aviso mostraba «9/9/2026, 8:05». Nunca lo vi renderizado —lo deduje del
+`dateStyle: "short"`— y estaba mal en las dos mitades: el año va con dos dígitos y la hora trae
+`a. m.`. Los tests no me contradijeron porque construían la fecha con el MISMO `Intl` y la
+comparaban contra sí misma: eran verdes y ciegos a la vez. Salió mirando el render de verdad al
+escribir el test del formateador.

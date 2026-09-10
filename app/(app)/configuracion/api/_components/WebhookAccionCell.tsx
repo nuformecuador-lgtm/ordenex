@@ -190,8 +190,12 @@ export function WebhookAccionCell({
             {activa && pausada ? (
               <p className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-foreground">
                 Los envíos a este webhook se están espaciando:{" "}
+                {/* La fecha NO cierra la frase: `dateStyle: "short"` de es-EC termina en
+                    «a. m.»/«p. m.», y un punto de abreviatura seguido del punto final se lee
+                    «8:05 a. m..». Con la fecha en medio no sobra nada, y da igual el formato
+                    que devuelva el ICU (12 h con abreviatura o 24 h sin ella). */}
                 {sinExitoDesde
-                  ? `el destino lleva sin aceptar ninguno desde el ${sinExitoDesde}.`
+                  ? `desde el ${sinExitoDesde} el destino no acepta ninguno.`
                   : "el destino lleva un rato sin aceptar ninguno."}{" "}
                 No hay que hacer nada: vuelven a su ritmo normal en cuanto el
                 destino acepte un envío. Si ya está resuelto, guarda la URL de

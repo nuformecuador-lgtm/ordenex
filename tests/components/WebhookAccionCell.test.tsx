@@ -396,9 +396,9 @@ describe("WebhookAccionCell — envíos espaciados (ficha 403: R18, R19)", () =>
     const aviso = avisoDeEspaciado();
     const desde = normalizar(FECHA_HORA_ES_EC.format(new Date(SIN_EXITO_ISO)));
     expect(aviso).toBe(
-      `Los envíos a este webhook se están espaciando: el destino lleva sin ` +
-        `aceptar ninguno desde el ${desde}. No hay que hacer nada: vuelven a su ` +
-        `ritmo normal en cuanto el destino acepte un envío. Si ya está resuelto, ` +
+      `Los envíos a este webhook se están espaciando: desde el ${desde} el ` +
+        `destino no acepta ninguno. No hay que hacer nada: vuelven a su ritmo ` +
+        `normal en cuanto el destino acepte un envío. Si ya está resuelto, ` +
         `guarda la URL de nuevo para reintentarlo ahora.`,
     );
   });
@@ -416,6 +416,31 @@ describe("WebhookAccionCell — envíos espaciados (ficha 403: R18, R19)", () =>
     expect(aviso).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/); // ISO-8601 en pantalla
     expect(aviso).toContain(
       normalizar(FECHA_HORA_ES_EC.format(new Date(SIN_EXITO_ISO))),
+    );
+  });
+
+  it("PUNTUACIÓN: la fecha va EN MEDIO de la frase, y el aviso nunca se lee con un punto doble", async () => {
+    // Esto no es quisquillosidad: `dateStyle: "short"` de es-EC devuelve «9/9/26, 8:05 a. m.»
+    // -abreviatura CON punto-, así que dejar la fecha cerrando la frase producía «a. m..» en
+    // producción. Solo se ve mirando el render, y ningún test anterior lo habría cazado.
+    // Se vigilan las DOS causas: el punto doble (el síntoma) y la fecha al final de su frase
+    // (la causa), para que tampoco vuelva por un ICU distinto -en formato 24 h no hay
+    // abreviatura y el síntoma desaparecería aunque el orden volviera a estar mal-.
+    obtenerWebhookMock.mockResolvedValue(OK_PAUSADA);
+    const user = userEvent.setup();
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    await abrir(user);
+    await screen.findByText(URL_ACTIVA);
+
+    const aviso = avisoDeEspaciado();
+    const desde = normalizar(FECHA_HORA_ES_EC.format(new Date(SIN_EXITO_ISO)));
+
+    expect(aviso).not.toContain(".."); // el síntoma
+    // La causa: tras la fecha SIGUE la frase, no la cierra un punto.
+    expect(aviso).toContain(`desde el ${desde} el destino`);
+    expect(aviso).not.toMatch(
+      new RegExp(`${desde.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\.`),
     );
   });
 
@@ -484,12 +509,18 @@ describe("WebhookAccionCell — envíos espaciados (ficha 403: R18, R19)", () =>
     await abrir(user);
     await screen.findByText(URL_ACTIVA);
 
-    expect(avisoDeEspaciado()).toBe(
+    const aviso = avisoDeEspaciado();
+    expect(aviso).toBe(
       "Los envíos a este webhook se están espaciando: el destino lleva un rato " +
         "sin aceptar ninguno. No hay que hacer nada: vuelven a su ritmo normal " +
         "en cuanto el destino acepte un envío. Si ya está resuelto, guarda la " +
         "URL de nuevo para reintentarlo ahora.",
     );
+    // La otra variante del texto también se lee entera y bien puntuada: ni hueco donde iba
+    // la fecha, ni punto doble, ni un «desde el» huérfano.
+    expect(aviso).not.toContain("..");
+    expect(aviso).not.toContain("desde el");
+    expect(aviso).not.toContain("null");
   });
 
   it("R18: con `pausada: false` NO hay aviso — una suscripción sana no alarma a nadie", async () => {
