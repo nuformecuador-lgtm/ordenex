@@ -4755,10 +4755,10 @@
       "title": "la caida del geocodificador no se avisa a nadie ni se recupera sola",
       "description": "Los jobs de geocodificacion muertos por un fallo de configuracion no notifican a nadie y no se reintentan cuando el proveedor vuelve.",
       "zone": "backend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
-      "branch": null,
+      "branch": "feat/401-geocodificador-avisa-y-se-recupera",
       "depends_on": 400,
       "status_note": "MEDIDO el 2026-09-09: el sistema estuvo 19 horas sin geocodificar una sola direccion y ninguna alerta se disparo; lo detecto el humano por las ordenes que no podia asignar. || 25 jobs quedaron en failed y NO se reintentan solos: aunque la credencial se arregle, el gate los seguira leyendo como bloqueo permanente hasta que alguien los reencole a mano. || SIN ESTA FICHA la 400 queda coja: deja ordenes asignadas que ya nunca reciben coordenadas. || Se apoya en la tabla notificacion y el cron de jobs, ambos ya existentes.",
       "spec_path": "specs/401-geocodificador-caido-avisa-y-se-recupera/"
