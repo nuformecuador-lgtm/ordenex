@@ -37,6 +37,8 @@ function detalleRow(fila: Fila): ApiOrdenDetalleRow {
     montoCobrar: 1500,
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
     evidencias: [],
+    // ⏳ 2026-09-09 (feature 404): campo REQUERIDO de `ApiOrdenDetalleRow`.
+    mensajero: null,
   };
 }
 

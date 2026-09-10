@@ -117,6 +117,14 @@ describe("R13/R27 — payload minimo y maxIntentos=5", () => {
       ocurridoAt: "2026-07-21T10:00:00.000Z",
     });
     expect(JSON.stringify(payload)).not.toMatch(/secret/i); // R13: sin secreto
+    // ⏳ 2026-09-09 (feature 404, R13) — el `toEqual` de arriba ya congela las TRES claves, asi
+    // que un `mensajero` en el payload lo pondria rojo; esto lo dice por su nombre para que quien
+    // lo lea sepa que la ausencia es deliberada. El mensajero se resuelve al ARMAR EL CUERPO,
+    // leyendo la orden en cada entrega (R11): meterlo aqui seria una foto del instante del cambio
+    // de estado, y ademas PII de un tercero guardada en la tabla `jobs`.
+    expect(Object.keys(payload)).toHaveLength(3);
+    expect(payload).not.toHaveProperty("mensajero");
+    expect(payload).not.toHaveProperty("mensajeroAsignadoId");
     expect(opts.maxIntentos).toBe(MAX_INTENTOS_WEBHOOK);
     expect(opts.maxIntentos).toBe(5); // R27/D5
     expect(opts.dedupeKey).toBe(

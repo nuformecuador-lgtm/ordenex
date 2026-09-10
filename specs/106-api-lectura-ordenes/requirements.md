@@ -177,3 +177,43 @@ Postgres `orden_historial_origen_tipo` (`ADD VALUE IF NOT EXISTS`) con su `down.
 (docs/architecture.md §Migraciones), documentando la irreversibilidad parcial del `ADD
 VALUE` (patrón feature 104). NO se migra el enum de estatus de orden (se reutiliza
 `devuelta_origen`) ni la tabla `gestion_orden` (no se toca su esquema).
+
+---
+
+## ⏳ 2026-09-09 — R16 ACOTADO por la feature 404
+
+**El texto de R16 de arriba NO se toca**, y es deliberado: es el registro de una decisión con su
+fecha, igual que un `down.sql` es la foto de su rama. Reescribirlo borraría el rastro de que hubo
+una excepción y de quién la firmó. Lo que sigue es un ADDENDUM: dice qué parte de R16 sigue
+vigente y qué parte queda acotada a partir de esta fecha.
+
+R16 dice hoy, textualmente, que el sistema *«NUNCA DEBE exponer la ruta cruda del objeto en el
+bucket, ni el nombre del bucket, ni datos personales de terceros (p. ej. el mensajero) en la
+respuesta»*.
+
+**Sigue vigente, palabra por palabra:**
+
+- la ruta cruda del objeto en el bucket (`evidencia_storage_path`) y el nombre del bucket;
+- los ids internos de la orden y de la tienda;
+- **el resto de los datos personales del mensajero**: teléfono, email, cédula, foto, zona,
+  vehículo, y cualquier campo de estado interno suyo;
+- **el mensajero que GESTIONÓ la orden** (`gestion_orden.mensajero_id`) y el TEXTO LIBRE
+  `gestion_orden.motivo` que escribe al gestionarla (256/R22). Eso es material de la feature 405 y
+  no se publica por ninguna superficie de esta.
+
+**Queda ACOTADO** — y solo esto:
+
+- el **NOMBRE** del mensajero **ASIGNADO** a la orden (`orden.mensajero_asignado_id`) SÍ se publica,
+  junto a su `id`, en las tres superficies del canal: el evento `orden.estado_actualizado`, el
+  listado `GET /api/ordenes/api-key` y el detalle `GET /api/ordenes/api-key/orden/{id}`;
+- el destinatario del dato sigue siendo **el dueño de la orden** y solo sobre órdenes propias: el
+  alcance por owner de R4/R7 no se toca y la 404 no abre ninguna vía nueva a una orden ajena
+  (404/R20).
+
+**Quién lo autoriza y con qué argumento.** La excepción la firma el humano el **2026-09-09**, y el
+argumento es medible, no una opinión: la cuenta dueña de las órdenes ya ve ese mismo nombre
+completo —compuesto por la misma función, `nombreCompletoUsuario`— en la columna «Mensajero» de
+`/ordenes`, y se lo lleva además en el XLSX de descarga. La API no le entrega ni un carácter que no
+tuviera ya. La verificación archivo por archivo está en
+`specs/404-mensajero-en-webhook-y-api/design.md` §2, con el matiz de los dos modelos de propiedad
+de las órdenes (§2.2) y la decisión D0.

@@ -23,6 +23,9 @@ import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { FiltroAlcanceTablero } from "@/lib/types/alcance-tablero";
 // Feature 236 (T2.2, R5): el grupo de novedad viaja en la firma de los dos metodos del listado.
 import type { GrupoNovedad } from "@/lib/types/novedad-grupo";
+// ⏳ 2026-09-09 (feature 404, design §D5): la forma del mensajero publico se declara UNA vez, en el
+// archivo de DTOs del canal, y las tres superficies la importan de ahi.
+import type { ApiMensajeroDTO } from "@/lib/types/api-orden";
 // FICHA 374: el nivel del catalogo geografico, como vocabulario cerrado compartido.
 import type { NivelGeografico } from "@/lib/types/geografia-nodo";
 // Feature 271 — el conteo N/V y el detalle del bloqueo viven en un modulo PURO
@@ -1044,6 +1047,15 @@ export interface ApiOrdenRow {
   direccion: string | null;
   montoCobrar: number | null;
   createdAt: Date;
+  /**
+   * ⏳ 2026-09-09 (feature 404, R7/R14/R23) — el mensajero ASIGNADO a la orden
+   * (`orden.mensajero_asignado_id`), o `null` si nadie la lleva. Es «quien la LLEVA AHORA», NUNCA
+   * «quien la gestiono»: esa identidad vive en `gestion_orden.mensajero_id` y es de la feature 405.
+   * Una orden que perdio la asignacion —reasignacion, devolucion o recuperacion a bodega,
+   * liberacion de reprogramada, barrido del corte— sale con `null`, sin error y sin inventar un
+   * mensajero anterior. `ApiOrdenDetalleRow` lo hereda por el `extends`.
+   */
+  mensajero: ApiMensajeroDTO | null;
 }
 
 export interface ApiOrdenListResult {

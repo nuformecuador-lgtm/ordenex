@@ -79,10 +79,30 @@ function consultarRelacion(
   });
 }
 
+/**
+ * ⏳ 2026-09-09 (feature 404) — fila CRUDA de `usuario` (el mensajero asignado), tal y como esta en
+ * la base: con TODAS sus columnas, incluidas las que el canal no debe ver. El fake proyecta esta
+ * fila con el `select` REAL que le pasa el reader, asi que si alguien pidiera `telefono` aqui
+ * saldria, y el aserto de R6 se pondria rojo.
+ */
+interface FilaUsuario {
+  id: string;
+  nombre: string;
+  primerApellido: string | null;
+  segundoApellido: string | null;
+  telefono?: string | null;
+  email?: string | null;
+  cedula?: string | null;
+  rol?: string;
+}
+
 function buildPrisma(
   filas: readonly FilaGestion[],
   incidentesAdmin: readonly FilaIncidenteAdmin[] = [],
   ordenOverride: Record<string, unknown> = {},
+  // ⏳ 2026-09-09 (404): `null` = la orden no tiene mensajero asignado (`mensajero_asignado_id`
+  // NULL), que es el caso por DEFECTO de este archivo.
+  mensajeroAsignado: FilaUsuario | null = null,
 ) {
   const prisma = {
     orden: {
@@ -99,6 +119,16 @@ function buildPrisma(
           incidentesAdmin as unknown as readonly Record<string, unknown>[],
           arg.select.incidentesAdmin as ArgRelacion,
         ),
+        // ⏳ 2026-09-09 (404): relacion 1-1, asi que se proyecta la fila UNICA (o `null`) con el
+        // `select` real. Se reutiliza `consultarRelacion` —sin `where`/`orderBy`/`take`— para no
+        // escribir un segundo proyector que pudiera divergir del primero.
+        mensajeroAsignado:
+          mensajeroAsignado === null
+            ? null
+            : (consultarRelacion(
+                [mensajeroAsignado as unknown as Record<string, unknown>],
+                arg.select.mensajeroAsignado as ArgRelacion,
+              )[0] ?? null),
         ...ordenOverride,
       })),
     },
@@ -109,6 +139,10 @@ function buildPrisma(
     // que recibe el reader (`Pick<PrismaClient, "orden" | "orderStatus">`) ni los expone.
     gestionOrden: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
     ordenIncidente: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
+    // ⏳ 2026-09-09 (404/R12): mismo truco para el mensajero — el delegate existe SOLO para poder
+    // afirmar que el reader no lo toca. Resolverlo con una segunda consulta seria la forma facil
+    // de romper R12 sin que ningun otro aserto se entere.
+    usuario: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
   };
   return prisma;
 }
@@ -132,6 +166,8 @@ function argOrden(prisma: ReturnType<typeof buildPrisma>) {
         take: number;
         select: Record<string, unknown>;
       };
+      // ⏳ 2026-09-09 (404/R6): el `select` con el que se pide el mensajero asignado.
+      mensajeroAsignado: { select: Record<string, unknown> };
     };
   };
 }
@@ -290,6 +326,9 @@ describe("256/R8-R12 — que gestion manda al resolver la causa de la devolucion
       causaDevolucion: "not_found",
       // ⏳ 2026-08-22 (268): el DTO gana un campo REQUERIDO. `toEqual` lo exige presente.
       causaIncidente: null,
+      // ⏳ 2026-09-09 (404/R2): otro campo REQUERIDO. La orden de este caso no tiene asignado, y
+      // el `toEqual` exige que la clave este presente con `null` — no que se omita.
+      mensajero: null,
     });
   });
 });
@@ -406,5 +445,115 @@ describe("268/R20 — el reader proyecta `causaIncidente` desde las DOS proceden
       ).toBe(causa);
     }
     expect([...CAUSA_INCIDENTE_SEED]).toEqual(["danado", "perdido", "robado"]);
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// ⏳ 2026-09-09 — Feature 404 (T2): el mensajero ASIGNADO viaja en la MISMA lectura.
+// -----------------------------------------------------------------------------------------------
+
+/**
+ * La fila de `usuario` del mensajero, con columnas que el canal NO debe ver (telefono, email,
+ * cedula, rol) para que el proyector del fake las pueda dejar pasar si el `select` las pidiera.
+ */
+const MENSAJERO_ID = "018f2c31-0000-4000-8000-0000000000aa";
+function usuarioMensajero(over: Partial<FilaUsuario> = {}): FilaUsuario {
+  return {
+    id: MENSAJERO_ID,
+    nombre: "Carlos",
+    primerApellido: "Jimenez",
+    segundoApellido: "Mora",
+    telefono: "0991234567",
+    email: "carlos@ordenex.co",
+    cedula: "0102030405",
+    rol: "mensajero",
+    ...over,
+  };
+}
+
+describe("404/R2-R6+R12 — el mensajero asignado, dentro de la lectura que ya se hacia", () => {
+  it("404/R3+R4: devuelve `{id, nombre}` con el nombre COMPLETO compuesto de las tres columnas", async () => {
+    const prisma = buildPrisma([devuelta()], [], {}, usuarioMensajero());
+    const datos = await readerWith(prisma).findDatosEntrega(ORDEN_ID, ESTATUS_DESTINO_ID);
+
+    // El literal se escribe A MANO. Compararlo contra `nombreCompletoUsuario(...)` seria
+    // compararlo contra su propia fuente y estaria verde pasara lo que pasara.
+    expect(datos?.mensajero).toEqual({ id: MENSAJERO_ID, nombre: "Carlos Jimenez Mora" });
+    // R4: el id es el `usuario.id` PROYECTADO, sin derivar, sin hashear y sin formatear.
+    expect(datos?.mensajero?.id).toBe(MENSAJERO_ID);
+  });
+
+  it("404/R3: una cuenta sin apellidos devuelve solo su nombre, sin espacios de cola", async () => {
+    const prisma = buildPrisma(
+      [devuelta()],
+      [],
+      {},
+      usuarioMensajero({ nombre: "Ana", primerApellido: null, segundoApellido: null }),
+    );
+    const datos = await readerWith(prisma).findDatosEntrega(ORDEN_ID, ESTATUS_DESTINO_ID);
+    expect(datos?.mensajero?.nombre).toBe("Ana");
+  });
+
+  it("404/R2+R23: `mensajero` es null —y la clave EXISTE— cuando la orden no tiene asignado", async () => {
+    const prisma = buildPrisma([devuelta()], [], {}, null);
+    const datos = await readerWith(prisma).findDatosEntrega(ORDEN_ID, ESTATUS_DESTINO_ID);
+
+    expect(datos).not.toBeNull();
+    expect("mensajero" in datos!).toBe(true); // presente, no omitido
+    expect(datos?.mensajero).toBeNull();
+  });
+
+  it("404/R6: el `select` de `mensajeroAsignado` pide EXACTAMENTE id + las tres de identidad", async () => {
+    const prisma = buildPrisma([devuelta()], [], {}, usuarioMensajero());
+    const datos = await readerWith(prisma).findDatosEntrega(ORDEN_ID, ESTATUS_DESTINO_ID);
+
+    // Igualdad ESTRUCTURAL del `select`, no `toMatchObject`: una quinta columna lo pone rojo.
+    expect(argOrden(prisma).select.mensajeroAsignado.select).toEqual({
+      id: true,
+      nombre: true,
+      primerApellido: true,
+      segundoApellido: true,
+    });
+    // Y la prueba de que el `select` es lo que MANDA: la fila cruda traia telefono, email, cedula
+    // y rol, y ninguno llega al DTO ni al JSON que se acabara serializando.
+    expect(Object.keys(datos!.mensajero!).sort()).toEqual(["id", "nombre"]);
+    const serializado = JSON.stringify(datos);
+    expect(serializado).not.toContain("0991234567");
+    expect(serializado).not.toContain("carlos@ordenex.co");
+    expect(serializado).not.toContain("0102030405");
+    expect(serializado).not.toContain("telefono");
+  });
+
+  it("404/R12: con mensajero asignado el reader SIGUE haciendo exactamente 2 llamadas a Prisma", async () => {
+    // El aserto de 268/R12 vive arriba; este lo AMPLIA al caso nuevo en vez de duplicar el bloque.
+    const prisma = buildPrisma([devuelta()], [incidenteAdmin()], {}, usuarioMensajero());
+    await readerWith(prisma).findDatosEntrega(ORDEN_ID, ESTATUS_DESTINO_ID);
+
+    expect(prisma.orden.findUnique).toHaveBeenCalledTimes(1);
+    expect(prisma.orderStatus.findUnique).toHaveBeenCalledTimes(1);
+    expect(
+      prisma.orden.findUnique.mock.calls.length + prisma.orderStatus.findUnique.mock.calls.length,
+    ).toBe(2);
+    // R11/R12: y sigue sin haber consulta libre a ningun delegate de usuario.
+    expect(prisma.usuario.findUnique).not.toHaveBeenCalled();
+    expect(prisma.usuario.findMany).not.toHaveBeenCalled();
+  });
+
+  it("404/R7+R21: el mensajero que GESTIONO la orden no se proyecta ni se emite", async () => {
+    // La gestion vigente lleva su propio `mensajero_id` y su texto libre; ninguno de los dos
+    // aparece en el `select` de `gestiones` ni en el DTO. Es la 405, no esta ficha.
+    const prisma = buildPrisma(
+      [devuelta({ motivo: "lo dejo el otro chico, 0988888888" })],
+      [],
+      {},
+      usuarioMensajero(),
+    );
+    const datos = await readerWith(prisma).findDatosEntrega(ORDEN_ID, ESTATUS_DESTINO_ID);
+
+    expect(argOrden(prisma).select.gestiones.select).not.toHaveProperty("mensajeroId");
+    expect(argOrden(prisma).select.gestiones.select).not.toHaveProperty("motivo");
+    expect(JSON.stringify(datos)).not.toContain("otro chico");
+    // Lo que SI viaja es el asignado de la orden.
+    expect(datos?.mensajero?.nombre).toBe("Carlos Jimenez Mora");
   });
 });

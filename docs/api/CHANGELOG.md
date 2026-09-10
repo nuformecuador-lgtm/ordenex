@@ -21,6 +21,76 @@
 
 ---
 
+## 2026-09-09 — Un campo NUEVO: `mensajero`, en el webhook, en el listado y en el detalle
+
+**Es ADITIVO: nada de lo que hoy funciona deja de funcionar.** No se retira ni se renombra ningún
+campo, ningún path cambia, ningún código de estado cambia y ninguna respuesta pierde nada. Si tu
+integración ignora las claves que no conoce —lo recomendado—, **no tenés que hacer nada**.
+
+**Qué es.** Cada orden pasa a decir qué mensajero la lleva. El campo se llama `mensajero`, tiene
+siempre la misma forma en las tres superficies del canal y lleva exactamente dos claves:
+
+```json
+"mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" }
+```
+
+o, cuando todavía no la lleva nadie:
+
+```json
+"mensajero": null
+```
+
+**Dónde aparece:**
+
+1. dentro de `data`, en el evento `orden.estado_actualizado` del webhook;
+2. en **cada ítem** de `GET /api/ordenes/api-key`;
+3. en `GET /api/ordenes/api-key/orden/{id}`.
+
+**La clave viaja SIEMPRE.** `null` no es «no se sabe» ni una omisión: significa **«todavía nadie la
+lleva»**, y es un dato que podés contar. No ramifiques por «la clave existe», ramificá por su valor.
+Es la misma convención que ya tiene `motivo`, no la de `evidenciasUrl`.
+
+**El `id` es un UUID en TEXTO, no un entero.** Si esperabas algo como `"id": 123`, no existe: en
+nuestro modelo la identidad de una persona es un UUID y se publica tal cual, como string. Es
+**estable**: el mismo mensajero produce el mismo `id` en las tres superficies y en todas las
+lecturas, y ese `id` no se reasigna nunca a otra persona. Agrupá por `id`, **no por `nombre`**: el
+nombre es un texto para mostrar y puede corregirse, lo que te partiría la serie histórica en dos.
+
+**Es quién la LLEVA, no quién la entregó.** El campo dice quién tiene la orden asignada **en el
+momento de la lectura** —o, en el webhook, en el momento de **esa entrega**, igual que `motivo`: si
+la orden se reasigna entre dos entregas del mismo `eventoId`, la segunda lleva el mensajero de
+entonces—. Y hay flujos que **limpian** la asignación: generación de guía, quitar mensajero,
+devolución o recuperación a bodega, liberación de una reprogramada y el barrido del cierre diario.
+Consecuencia práctica, que preferimos decir antes de que la descubras: una orden **entregada o
+devuelta conserva** su mensajero, así que la métrica de entregas por mensajero funciona; pero una
+orden vieja **barrida por el cierre** puede aparecer con `mensajero: null` aunque alguien la
+llevara. Para «quién gestionó cada intento» hace falta el historial de gestiones, que este cambio
+**no** incluye.
+
+**El bloque `data` del webhook pasa a tener CINCO claves siempre presentes** —`numGuia`,
+`numRemision`, `estado`, `motivo` y `mensajero`— y `evidenciasUrl` sigue siendo la **única**
+opcional, que se omite salvo en los eventos con `estado: "incidente"`. `mensajero` se inserta
+**después de `motivo` y antes de `evidenciasUrl`**; el resto del cuerpo no se mueve.
+
+**⚠️ Si tu cliente valida el esquema en estricto** (`additionalProperties: false`, un DTO generado
+que rechaza claves desconocidas, un parser que falla ante un campo de más), **una clave nueva puede
+romperte**. Es el mismo aviso que dimos al añadir `evidenciasUrl`: regenerá tu modelo contra el
+contrato actualizado o relajá la validación antes de la fecha de despliegue.
+
+**Qué NO cambia.** No hay parámetro de query nuevo: **no se puede filtrar ni ordenar el listado por
+mensajero**, y un `?mensajero=...` se ignora como cualquier otra clave desconocida. Los nueve campos
+publicados del ítem, el bloque `pagination`, el `evidencias[]` del detalle y el orden de las filas
+entre páginas quedan **exactamente** como estaban. Del mensajero se publica **solo** su `id` y su
+`nombre`: ningún otro dato personal suyo (teléfono, email, cédula, foto, zona, vehículo) sale por
+este canal.
+
+Los dos artefactos del contrato quedan actualizados (`lib/api/openapi-spec.ts` y su espejo
+`docs/api/api-key-openapi.yaml`): `WebhookOrdenEstadoActualizado.data` y `OrdenListItem` declaran
+`mensajero` dentro de `required` —`OrdenDetalle` lo hereda—, y los dos ejemplos del webhook lo
+muestran, uno con objeto y otro con `null`.
+
+---
+
 ## 2026-09-06 — Un motivo de error de fila NUEVO: provincia, cantón o distrito RETIRADOS del catálogo
 
 **Qué cambia.** Ordenex pasa a poder **retirar** una provincia, un cantón o un distrito de su

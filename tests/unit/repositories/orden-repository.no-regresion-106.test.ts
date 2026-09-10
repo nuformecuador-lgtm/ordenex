@@ -32,6 +32,23 @@ const ORDEN_ID = "orden-1";
  *     crea gestion ninguna, asi que ampliar solo el `in` habria dejado 5 de las 6 aristas sin
  *     fotos y EN SILENCIO (esa es la opcion (a) que el design descarta por su nombre).
  *
+ * ⚠️ FEATURE 404 (T4, 2026-09-09) — AQUI NO EXISTIA `mensajeroAsignado`, y ya no es cierto. El
+ * cambio es DELIBERADO y esta firmado en `specs/404-mensajero-en-webhook-y-api/design.md` §5.2, y
+ * la excepcion de privacidad que lo permite la firmo el humano el 2026-09-09 (design §2):
+ *
+ *   - se anade la relacion `mensajeroAsignado` con `id` + las TRES columnas de identidad de la
+ *     feature 21 (`nombre`, `primerApellido`, `segundoApellido`) y NADA MAS -> el listado y el
+ *     detalle publican `mensajero: { id, nombre } | null`, que es «quien LLEVA la orden», no quien
+ *     la gestiono (404/R7);
+ *   - entra en `API_ORDEN_SELECT` (no aqui abajo, no en el detalle): el detalle la hereda por el
+ *     spread, que es la razon por la que la constante compartida existe.
+ *
+ * El literal se ENMIENDA, no se sustituye por una comparacion contra la constante de produccion:
+ * eso seria tautologico y dejaria de vigilar nada. Lo que sigue congelando: que no aparezca ninguna
+ * OTRA columna de `usuario` (telefono, email, cedula, rol...), los nueve campos publicos de la
+ * orden, la forma del bloque `gestiones` (mismas claves, mismo `select`, mismo `orderBy`, mismo
+ * filtro de `evidenciaStoragePath`) y el `where` del metodo.
+ *
  * Lo que este literal SIGUE congelando y no ha cambiado: los nueve campos publicos de la orden, la
  * forma del bloque `gestiones` (mismas claves, mismo `select`, mismo `orderBy`, mismo filtro de
  * `evidenciaStoragePath`) y el `where` del metodo. La no-regresion de la 106 es que su respuesta
@@ -48,6 +65,10 @@ const SELECT_DETALLE_106 = {
   montoCobrar: true,
   createdAt: true,
   estatus: { select: { value: true } },
+  // 404/R6 (2026-09-09): el mensajero ASIGNADO. Id + identidad, ni una columna mas de `usuario`.
+  mensajeroAsignado: {
+    select: { id: true, nombre: true, primerApellido: true, segundoApellido: true },
+  },
   gestiones: {
     where: {
       resultado: { in: ["entregada", "rechazada", "incidente"] }, // 268/R27

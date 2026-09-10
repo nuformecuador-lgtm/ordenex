@@ -36,6 +36,8 @@ function okListado(): ApiOrdenListadoDTO {
         direccion: "Calle 1",
         montoCobrar: 1500,
         createdAt: new Date("2026-07-20T15:04:00.000Z"),
+        // ⏳ 2026-09-09 (feature 404): campo REQUERIDO del DTO publico.
+        mensajero: null,
       },
     ],
     pagination: { limit: 50, offset: 0, total: 173 },

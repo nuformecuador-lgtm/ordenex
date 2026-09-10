@@ -294,6 +294,8 @@ function detalleDe(orden: OrdenRow): ApiOrdenDetalleRow {
     montoCobrar: null,
     createdAt: new Date("2026-06-04T09:00:00.000Z"),
     evidencias: [],
+    // ⏳ 2026-09-09 (feature 404): campo REQUERIDO de `ApiOrdenDetalleRow`.
+    mensajero: null,
   };
 }
 
