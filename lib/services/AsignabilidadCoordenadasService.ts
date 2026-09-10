@@ -238,6 +238,12 @@ export function motivoAsignabilidad(estado: EstadoAsignabilidad): string {
 /**
  * R8 — los estados que DEJAN PASAR la asignacion.
  *
+ * ⚠️ SI AMPLIAS ESTE DOCSTRING, ESCRIBE POR ENCIMA DE ESTA LINEA.
+ * `marcador-fallo-config-declaracion-unica.guardia` lee una VENTANA FIJA de 1400 caracteres
+ * inmediatamente anterior a la firma y exige encontrar «FEATURE 400» dentro. Todo lo que se
+ * anada DEBAJO empuja ese texto fuera de la ventana y pone el guardia rojo — le paso a la
+ * ficha 407 el 2026-09-10, con 235 caracteres de mas. Lo escrito ARRIBA no consume margen.
+ *
  * FEATURE 400 (2026-09-09, R6) — REGLA VIGENTE: son DOS, no uno. Hasta esta ficha este
  * docstring decia «`asignable` es el UNICO estado que deja pasar la asignacion», y era
  * cierto; desde la 400 tambien pasa `asignable_sin_ubicacion` — la orden no tiene
@@ -246,15 +252,11 @@ export function motivoAsignabilidad(estado: EstadoAsignabilidad): string {
  * cubierta por el modo degradado que ya existia (feature 92 R37/R28/R30).
  *
  * FICHA 407 (2026-09-10, R1) — REGLA VIGENTE: son TRES. El tercero,
- * `asignable_sin_ubicacion_autorizada`, tampoco tiene coordenadas, pero ahi la direccion SI
- * es irresoluble y quien deja pasar la asignacion es una PERSONA que lo autoriza a sabiendas
- * en esa misma peticion (no se persiste: R9). Rio abajo esta cubierto por el mismo modo
- * degradado (feature 92 R37/R28/R30).
+ * `asignable_sin_ubicacion_autorizada`, es la direccion irresoluble que una PERSONA autoriza
+ * a sabiendas en esa misma peticion (efimero, no se persiste: R9).
  *
- * ⚠️ ESTA LISTA NO LA PROTEGE EL TRIPWIRE DE TIPOS. Esta anotada `readonly EstadoAsignable[]`
- * y un array mas CORTO que su tipo sigue compilando: olvidar un valor aqui seria un fallo
- * MUDO (el gate devolveria el estado y los writers lo tratarian como bloqueante). Por eso hay
- * un caso explicito por valor en `asignabilidad-coordenadas-autorizada.test.ts`.
+ * ⚠️ El tipo NO protege esta lista: un array mas CORTO compila igual, y olvidar un valor
+ * seria un fallo MUDO. Por eso hay un caso por valor en el test de la 407.
  *
  * `undefined` (la orden no existe) NUNCA pasa: no se deja pasar nada por omision.
  *
