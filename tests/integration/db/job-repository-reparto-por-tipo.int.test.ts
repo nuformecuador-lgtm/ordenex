@@ -383,12 +383,16 @@ describeSiHayBase("402 — `claimBatch` reparte el lote entre tipos (Postgres re
       // Y esa unica sentencia es la del reparto: ventana por tipo + bloqueo sin espera.
       expect(sentencias[0]).toMatch(/ROW_NUMBER\(\)\s+OVER\s*\(\s*PARTITION BY\s+"tipo"/i);
       expect(sentencias[0]).toMatch(/FOR UPDATE OF j SKIP LOCKED/i);
-      // Y la CTE que bloquea REPITE el predicado de candidato. Esto es una asercion de FORMA
-      // a proposito: la propiedad que sostiene —que si otro worker COMMITEA su claim entre el
-      // snapshot y el bloqueo, Postgres reevalua (EvalPlanQual) las condiciones sobre la fila
-      // NUEVA y la descarta— ocurre en una ventana de microsegundos que ningun test puede
-      // provocar a voluntad. Sin el predicado, la unica condicion seria el JOIN por id, que la
-      // fila recien reclamada por el otro worker SIGUE cumpliendo: se entregaria dos veces.
+      // Y la CTE que bloquea REPITE el predicado de candidato, que es lo que impide entregar
+      // dos veces una fila que otro worker ya reclamo y COMMITEO (recheck de EvalPlanQual).
+      //
+      // OJO CON LO QUE ESTA LINEA VALE Y LO QUE NO. Es una asercion de FORMA, y una asercion de
+      // forma NO protege el invariante: mide el texto, no el comportamiento. Aqui esta medido
+      // que una mutacion de una linea DENTRO de ese predicado (`locked_at < cutoff` por
+      // `IS NOT NULL`) la pasa entera y restaura la doble entrega. Quien guarda el invariante
+      // de verdad son los dos casos del "modo 2" de
+      // `tests/integration/db/job-repository-claim-concurrente.int.test.ts`, que provocan la
+      // carrera contra Postgres. Esto se queda solo como aviso temprano y barato.
       expect(sentencias[0]).toMatch(
         /JOIN priorizados[\s\S]*?WHERE[\s\S]*?j\."estado" = 'pending'[\s\S]*?FOR UPDATE OF j SKIP LOCKED/i,
       );

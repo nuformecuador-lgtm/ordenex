@@ -45,6 +45,11 @@ Explícitamente, este diseño **conserva**:
 2. **`FOR UPDATE SKIP LOCKED` y exclusión mutua (R10/R11 de la 90).** Dos workers concurrentes
    siguen sin poder recibir la misma fila; el `SKIP LOCKED` se mantiene idéntico en su
    semántica, solo cambia CUÁLES filas se intentan bloquear primero (R5/R6 de esta ficha).
+   **Pero `SKIP LOCKED` solo cubre uno de los dos modos de competencia** —el del lock todavía
+   abierto—. El otro, el del competidor que ya commiteó (que es el NORMAL, porque el claim
+   corre en autocommit), lo sostiene el predicado repetido en la CTE `bloqueados`: §1,
+   "Por qué el predicado de candidato se REPITE". Sin él, la reescritura ROMPE este punto, y
+   está medido que lo rompe.
 3. **Rescate de `processing` colgados por `visibilityCutoff` (R13 de la 90).** Un candidato
    rescatado compite por su turno igual que un `pending` vencido (R6); no se le da trato
    especial ni se le excluye del reparto.
@@ -109,6 +114,11 @@ priorizados AS (
 bloqueados AS (
   SELECT j."id" FROM "jobs" j
   JOIN priorizados p ON p."id" = j."id"
+  WHERE (                                  -- ⚠ OBLIGATORIO, no es redundante: ver más abajo
+    (j."estado" = 'pending'    AND j."run_after" <= $now)
+    OR
+    (j."estado" = 'processing' AND j."locked_at" < $visibilityCutoff)
+  )
   ORDER BY j."run_after" ASC
   FOR UPDATE OF j SKIP LOCKED              -- R5/R10/R11: misma exclusión mutua de siempre
 )
@@ -129,6 +139,74 @@ intento de bloquear la CTE.
 `WHERE`, las dos ramas del `OR` (R7/R12 y R13 de la 90) y el `UPDATE` final **no cambian una
 sola palabra** respecto al SQL actual; el único añadido es la partición por `tipo` antes del
 `LIMIT`.
+
+### ⚠ Por qué el predicado de candidato se REPITE en `bloqueados`
+
+**Esto no es código de más, y no se puede quitar: sin él la sentencia entrega la misma fila a
+dos workers.** La primera versión de este design lo omitía —`JOIN` por id como única
+condición— y el reviewer de la ficha lo MIDIÓ contra Postgres real, con la sentencia exacta de
+producción (`FOR UPDATE OF j SKIP LOCKED` incluido) y la ventana ensanchada con 300.000
+candidatos:
+
+```
+[SKIP LOCKED real, 300000 candidatos, commit del competidor a los 150 ms]
+  bloqueados SIN el predicado repetido -> A tardó 259 ms, reclamó 5  <-- LA MISMA FILA QUE B, DOS VECES
+  bloqueados CON el predicado repetido -> A tardó 172 ms, reclamó 4  (sin repetidas)
+```
+
+**El mecanismo.** En `READ COMMITTED` toda la sentencia usa el snapshot que tomó al empezar.
+Si otro worker reclama esas filas y **commitea** mientras esta sentencia sigue viva, al llegar
+al bloqueo Postgres encuentra una versión más nueva y aplica *EvalPlanQual*: **re-evalúa las
+condiciones de la consulta sobre la fila NUEVA** y la descarta si ya no las cumple. Con el
+`JOIN` por id como única condición, una fila recién reclamada por otro **la sigue cumpliendo**
+(su id no ha cambiado) y se entrega por segunda vez. Con el predicado repetido, esa fila ya es
+`processing` con `locked_at` reciente —o `pending` con un `run_after` futuro, si el competidor
+la re-agendó con backoff— y se cae, que es exactamente lo que hacía el `FOR UPDATE` de la
+feature 90 al vivir **dentro** del `WHERE`.
+
+**Y el modo COMMITEADO es el normal, no el raro:** `JobQueueService.drenar` llama a
+`claimBatch` en **autocommit**, así que los locks de un worker duran **una sentencia**
+(milisegundos), no lo que dura el procesado del lote. El caso "el competidor todavía tiene el
+lock abierto" —el que cubre `SKIP LOCKED`— es el menos frecuente de los dos.
+
+**La exposición CRECE con la saturación.** La sentencia nueva ya no puede cortar el escaneo en
+`limit` filas (§2): el `ROW_NUMBER()` obliga a ver todos los candidatos, así que la duración
+del statement —y con ella la ventana snapshot→bloqueo— sube con el tamaño del conjunto
+candidato. Medido: 20k candidatos → 30 ms; 60k → 97 ms; 150k → 252 ms; 300k → 436 ms. Es decir,
+la carrera es **más probable justo bajo la saturación que esta ficha existe para atender**.
+
+**Consecuencia para quien lea esto mañana:** las tres CTEs no se pueden colapsar en una
+(Postgres prohíbe `FOR UPDATE` con funciones de ventana) **y el predicado de `bloqueados` no se
+puede borrar por "duplicado"**. Las dos cosas están cubiertas por tests de comportamiento en
+`tests/integration/db/job-repository-claim-concurrente.int.test.ts` ("modo 2"): mutar
+`locked_at < cutoff` o `run_after <= now` a `IS NOT NULL` dentro de ese `WHERE` los pone rojos.
+
+### Efecto declarado: bajo solape de dos claims, el segundo lote puede venir incompleto
+
+`priorizados` fija los `limit` ids **antes** de bloquear, así que si otro worker tiene algunas
+de esas filas bloqueadas, el segundo claim se lleva **solo el resto** (puede ser ninguna),
+aunque queden más candidatos por debajo. Antes el `SKIP LOCKED` vivía dentro del `LIMIT` y el
+segundo worker se llevaba las siguientes N libres.
+
+**No es una regresión operativa, y este es el porqué medido:**
+
+1. `claimBatch` corre en **autocommit** (`JobQueueService.drenar` no abre transacción): los
+   locks duran **un statement**, no el procesado del lote.
+2. Si la corrida N+1 arranca después de que la N commiteara su claim, las filas de la N ya son
+   `processing` con `locked_at` reciente: **ni siquiera entran en `candidatos`**, y el segundo
+   lote se llena entero.
+3. El caso "una corrida tarda más de un minuto y se solapa con la siguiente" **no degrada
+   nada**: lo que se solapa es el *procesado* de la N con el *claim* de la N+1, y el claim de
+   la N commiteó hace rato. Haría falta que dos `claimBatch` se solaparan, o sea que el claim
+   solo tardase más de 60 s.
+4. **Coste máximo si ocurriese:** un lote más corto. Ninguna fila se pierde ni se retrasa más
+   allá de la corrida siguiente (60 s), y no hay livelock posible porque los locks son
+   transitorios.
+
+Queda escrito aquí —y no solo en la bitácora— porque la propiedad "cada worker se lleva N
+libres" **dejó de ser cierta**: el día que se añada un segundo worker, un disparo manual o se
+baje la frecuencia del cron, hay que releer este párrafo. El comportamiento está fijado en un
+test con nombre propio (`bajo solape, el segundo lote viene INCOMPLETO`).
 
 ### Por qué esta regla resuelve los tres escenarios del brief
 
