@@ -880,14 +880,24 @@ components:
                 (`GET /api/ordenes/api-key/orden/{id}`), cuyo array `evidencias[]` incluye las
                 evidencias del incidente con `resultado: "incidente"`.
 
+                **El último segmento es un identificador que ya venís leyendo en este mismo
+                `data`:** el `numGuia` cuando la orden tiene guía, y el `numRemision` cuando
+                todavía no la tiene. Es el mismo `{id}` que acepta el endpoint, así que el enlace
+                se puede invocar tal cual. Ningún id interno viaja en la URL. El segmento va
+                codificado como componente de ruta: una remisión con `/`, `?`, `#`, `%` o espacios
+                viaja entera, y decodificándola recuperás el `numRemision` carácter a carácter.
+
                 **Es el único campo OPCIONAL de `data`.** Viaja SOLO en los eventos con
                 `estado: "incidente"`, y se OMITE —no viaja como `null`— tanto en cualquier otro
                 estado como en un `incidente` para el que no se pueda resolver el enlace. Ramificá
                 por «la clave existe», no por su valor.
 
                 ⚠️ **NO es una URL firmada y NO lleva credencial.** Es un enlace ESTABLE y
-                determinista: sin token, sin expiración, no caduca, y las dos entregas de un mismo
-                `eventoId` (por ejemplo tras un reintento) llevan exactamente el mismo valor. Por eso
+                determinista: sin token, sin query string y sin expiración; no caduca. Lo único
+                que puede cambiar entre dos entregas del mismo `eventoId` es ese identificador, y
+                solo si la orden GENERA su guía entre un intento y otro: las dos URLs apuntan a la
+                MISMA orden, y el `eventoId` —por donde deduplicás— no cambia nunca. Es la misma
+                ventana que ya tiene `data.numGuia`, que se lee en cada entrega. Por eso
                 **no podés abrirlo sin autenticarte**: invocalo con tu propio
                 `Authorization: Bearer ordx_...`, igual que cualquier otra llamada al canal, y el
                 detalle te devolverá las URLs firmadas frescas de las fotos, con su TTL corto. La
@@ -919,7 +929,10 @@ components:
             mensajero:
               id: "018f2c31-0000-4000-8000-0000000000aa"
               nombre: "Carlos Jiménez Mora"
-            evidenciasUrl: "https://app.ordenex.co/api/ordenes/api-key/orden/018f2c31-0000-4000-8000-000000000002"
+            # ⏳ 2026-09-10 (feature 406/R14): AQUI IBA el `orden.id` (un uuid), y ese enlace
+            # respondia 404 SIEMPRE — el `{id}` de esa ruta nunca significo `orden.id`. El ultimo
+            # segmento es ahora el `numGuia` que ESTE MISMO ejemplo declara arriba.
+            evidenciasUrl: "https://app.ordenex.co/api/ordenes/api-key/orden/100235"
     Error:
       type: object
       description: "Shape uniforme de error del manejador global. `status` siempre `\"error\"`."
