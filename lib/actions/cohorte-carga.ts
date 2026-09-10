@@ -75,10 +75,11 @@ function construirServicio(now: () => Date): CohorteCargaService {
  * la vertical, incluidas las seis facetas y el rango. Ningun parametro propio de esta ficha: que
  * la barra mueva las ocho lecturas a la vez es la razon de que compartan filtro.
  *
- * @sin-superficie el backend (B1-B6 de la ficha 411) va por delante del frontend: la tabla
- * `CohorteCargaTabla` es la tarea B7 y todavia no existe, asi que hoy ningun modulo alcanzable
- * importa esta accion. Anotado el 2026-09-10 y **se retira en el commit que monta la tabla en
- * `/analitica`** — una excepcion que sobrevive a su motivo deja de significar nada.
+ * SU SUPERFICIE (retirado el `@sin-superficie` el 2026-09-10, B7): la consume
+ * `app/(app)/analitica/_components/entregas/CohorteCargaTabla.tsx`, que monta
+ * `app/(app)/analitica/page.tsx` dentro de `FiltroEntregasProvider`. La anotacion vivio
+ * exactamente lo que tardo en existir la tabla — una excepcion que sobrevive a su motivo deja de
+ * significar nada, y `superficie-de-uso.guardia` la exige retirada en cuanto esto es alcanzable.
  */
 export async function consultarCohorteCarga(
   raw: unknown,
