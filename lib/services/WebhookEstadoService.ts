@@ -22,6 +22,11 @@ import type { WebhookConfig } from "@/lib/config/webhook";
 import { descifrarSecreto } from "@/lib/crypto/webhook-secret-cipher";
 import { cabecerasFirma } from "@/lib/crypto/webhook-firma";
 import { dedupeKeyWebhookEstado } from "@/lib/services/jobs/webhook-estado-encolado";
+// ⏳ 2026-09-10 (feature 406, R7) — el MISMO schema que valida el `{id}` en el borde del endpoint
+// enlazado. Se importa a proposito: el modulo es zod puro, SIN HTTP (lo dice su propia cabecera),
+// y asi el emisor del enlace y el borde que lo recibe no pueden divergir. Escribir «≤ 128» aqui a
+// mano seria la segunda copia de una regla que ya tiene dueño.
+import { idOrdenApiSchema } from "@/lib/api/api-orden-identificador";
 // FICHA 403 — el circuito: un predicado puro + la config del umbral + el aviso best-effort.
 import { estaPausada } from "@/lib/utils/webhook-suscripcion-pausa";
 import { pausaConfigDe } from "@/lib/config/webhook";
@@ -54,8 +59,16 @@ const ESTADO_INCIDENTE = "incidente";
  * drenar horas despues; (c) es una CREDENCIAL AL PORTADOR que cualquiera que vea el cuerpo —un
  * log, un proxy, un reenvio— usa sin autenticarse. El enlace es estable y determinista: sin token,
  * sin expiracion y calculable sin consultar Storage. La credencial la pone el integrador, que es
- * donde debe estar. Se elige la variante por `orden.id` y no por `numGuia` porque `num_guia` puede
- * ser NULL y el `ordenId` siempre esta en el payload del job.
+ * donde debe estar.
+ *
+ * ⏳ 2026-09-10 (feature 406) — AQUI DECIA: «Se elige la variante por `orden.id` y no por `numGuia`
+ * porque `num_guia` puede ser NULL y el `ordenId` siempre esta en el payload del job». ERA FALSO, y
+ * el enlace nacio roto por creerlo: el `{id}` de esta ruta NUNCA significo `orden.id`. Desde la 177
+ * significa «identificador libre = guia O remision», y `ApiOrdenResolucionService` solo casa por
+ * `num_guia` (entero decimal canonico) o por `num_remision` (igualdad exacta). Un uuid no es
+ * ninguno de los dos, asi que el enlace respondia 404 SIEMPRE. Lo que viaja hoy es el identificador
+ * PUBLICO que el propio cuerpo ya nombra (ver `identificadorPublicoDe`), y la premisa del NULL se
+ * resuelve por el otro lado: `num_remision` es NOT NULL, asi que siempre hay uno.
  */
 const PATH_ORDEN_API_KEY = "/api/ordenes/api-key/orden";
 
@@ -163,7 +176,7 @@ export class WebhookEstadoService {
       evento: EVENTO_ESTADO,
       eventoId,
       ocurridoAt,
-      data: this.armarData(datos, ordenId),
+      data: this.armarData(datos),
     });
 
     // R18: firma sobre `${timestamp}.${cuerpo}`; cabeceras X-Ordenex-Signature/-Timestamp.
@@ -253,7 +266,7 @@ export class WebhookEstadoService {
    * firma; ademas, insertar aqui deja el diff respecto del cuerpo de ayer como una INSERCION y no
    * como un reordenamiento (R10).
    */
-  private armarData(datos: DatosEntregaOrden, ordenId: string): DataEvento {
+  private armarData(datos: DatosEntregaOrden): DataEvento {
     const data: DataEvento = {
       numGuia: datos.numGuia,
       numRemision: datos.numRemision,
@@ -283,7 +296,7 @@ export class WebhookEstadoService {
       mensajero: datos.mensajero,
     };
 
-    const evidenciasUrl = this.evidenciasUrlDe(datos.estado, ordenId);
+    const evidenciasUrl = this.evidenciasUrlDe(datos);
     if (evidenciasUrl !== null) data.evidenciasUrl = evidenciasUrl;
     return data;
   }
@@ -296,14 +309,60 @@ export class WebhookEstadoService {
   }
 
   /**
+   * ⏳ 2026-09-10 (feature 406, R4-R8) — el identificador PUBLICO con el que se enlaza ESTA orden,
+   * o `null` si no hay ninguno que el endpoint pueda resolver SIN CAMBIARLO.
+   *
+   * GUIA PRIMERO, REMISION DE RESPALDO, que es la MISMA precedencia que aplica el resolutor del
+   * `{id}` (177/R14). `num_guia` es `@unique` GLOBAL: cuando existe, la resolucion es exacta y no
+   * puede acabar en OTRA orden. `num_remision` solo es unica por tienda y entre las vivas, pero es
+   * NOT NULL, asi que SIEMPRE hay un identificador — que era la unica propiedad real por la que la
+   * 268 habia elegido el uuid.
+   *
+   * PRECIO ACEPTADO A SABIENDAS (requirements §Riesgos 1): con el uuid el enlace era identico
+   * entre los cinco reintentos del mismo job; ahora cambia si la guia se genera ENTRE dos
+   * reintentos. Se acepta porque `data.numGuia` ya tiene exactamente esa propiedad hoy —se lee de
+   * la base en cada entrega—, y porque el `eventoId`, que es por donde el consumidor deduplica, no
+   * depende del cuerpo en absoluto.
+   *
+   * Se valida contra EL MISMO `idOrdenApiSchema` del borde, y se exige ademas que el valor NO
+   * CAMBIE al pasar por el (`parsed.data === bruto`): el schema RECORTA y el resolutor compara la
+   * remision por igualdad EXACTA contra la columna, asi que una remision guardada como `" REM-1 "`
+   * es inalcanzable por ese endpoint. Omitir la clave es mejor que publicar un 404 (R7).
+   */
+  private identificadorPublicoDe(datos: DatosEntregaOrden): string | null {
+    const bruto = datos.numGuia !== null ? String(datos.numGuia) : datos.numRemision;
+    const parsed = idOrdenApiSchema.safeParse(bruto);
+    if (!parsed.success || parsed.data !== bruto) return null;
+    try {
+      // R8 — SONDA DE CODIFICABILIDAD, no una codificacion de mas: `encodeURIComponent` LANZA
+      // `URIError` ante un sustituto UTF-16 desemparejado (ya paso en este repo, ver
+      // `lib/utils/chat-media-headers.ts`). Si ese error escapara, saldria por el `throw` de
+      // `ejecutar` y la cola trataria como fallo recuperable —cinco reintentos y dead-letter— una
+      // entrega que por lo demas estaba perfecta. Se prueba aqui para que `evidenciasUrlDe` no
+      // pueda lanzar, y se descarta el resultado a proposito: quien construye la URL es el.
+      encodeURIComponent(bruto);
+    } catch {
+      return null;
+    }
+    return bruto;
+  }
+
+  /**
    * 268/R22/R24/R25: el enlace ESTABLE a las evidencias, solo en un evento de `incidente`.
    * `null` (-> campo omitido) si el estado no es `incidente` o si el origin no se resuelve: NUNCA
    * una ruta relativa ni un `https://undefined/...`.
+   *
+   * ⏳ 2026-09-10 (feature 406, R4-R8): TERCERA guarda —sin identificador publico resoluble, la
+   * clave se omite— y el segmento se CODIFICA. Sobre un entero decimal `encodeURIComponent` es la
+   * identidad, asi que el caso comun no cambia de forma; sobre una remision codifica `/`, `?`,
+   * `#`, `%` y el espacio, que son justo los que romperian el segmento de ruta (R5).
    */
-  private evidenciasUrlDe(estado: string | null, ordenId: string): string | null {
-    if (estado !== ESTADO_INCIDENTE) return null;
+  private evidenciasUrlDe(datos: DatosEntregaOrden): string | null {
+    if (datos.estado !== ESTADO_INCIDENTE) return null;
     const origin = this.config.WEBHOOK_APP_ORIGIN;
     if (origin === null) return null;
-    return `${origin}${PATH_ORDEN_API_KEY}/${ordenId}`;
+    const identificador = this.identificadorPublicoDe(datos);
+    if (identificador === null) return null;
+    return `${origin}${PATH_ORDEN_API_KEY}/${encodeURIComponent(identificador)}`;
   }
 }

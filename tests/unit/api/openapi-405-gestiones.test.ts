@@ -349,7 +349,13 @@ describe("405/R16 — el cuerpo del listado y el del webhook no ganan ninguna cl
 
 describe("405/R22 — el CHANGELOG del canal tiene la entrada de la 405 con los tres avisos", () => {
   const entrada = (() => {
-    const inicio = changelog.indexOf("## 2026-09-10 —");
+    // ⏳ 2026-09-10 (feature 406) — AQUI SE BUSCABA `"## 2026-09-10 —"` A SECAS, y bastó con que
+    // OTRA ficha del MISMO DIA añadiera su entrada arriba para que este bloque midiera la entrada
+    // equivocada: cinco casos rojos que no tenian nada que ver con la 405. La fecha no identifica
+    // una entrada; el TITULO si. Se ancla al titulo propio, con la fecha dentro, y asi el orden de
+    // las entradas del dia deja de importar. No se relaja nada: los avisos que se afirman abajo
+    // son exactamente los mismos.
+    const inicio = changelog.indexOf("## 2026-09-10 — Un campo NUEVO: `gestiones[]`");
     if (inicio === -1) return "";
     const resto = changelog.slice(inicio + 3);
     const fin = resto.indexOf("\n## ");

@@ -21,6 +21,62 @@
 
 ---
 
+## 2026-09-10 — ARREGLO: el `evidenciasUrl` del webhook de `incidente` ahora sí se puede abrir
+
+**Esto es un arreglo, no un cambio de contrato.** Ninguna clave cambia de nombre, de tipo ni de
+posición; el campo sigue siendo opcional y sigue viajando **sólo** en los eventos con
+`estado: "incidente"`. Lo único que cambia es **el último segmento de la URL**.
+
+**Qué estaba mal.** El enlace se construía con un identificador **interno** de la orden, y
+`GET /api/ordenes/api-key/orden/{id}` no lo resuelve: ese `{id}` significa **número de guía o
+número de remisión**, nunca un id interno. Es decir, el enlace que publicamos en la entrada del
+2026-08-22 **respondía 404 siempre**, para cualquier orden. No lo dejamos escrito como si hubiera
+funcionado: no funcionó nunca.
+
+**Qué cambia.** El último segmento pasa a ser un identificador que **ya venís leyendo en ese mismo
+`data`**: el `numGuia` cuando la orden tiene guía, y el `numRemision` cuando todavía no la tiene.
+Es el mismo `{id}` que acepta el endpoint, así que el enlace se invoca tal cual, con tu propio
+`Authorization: Bearer ordx_...`.
+
+```json
+"data": {
+  "numGuia": 100235,
+  "numRemision": "REM-0002",
+  "estado": "incidente",
+  "motivo": "robado",
+  "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" },
+  "evidenciasUrl": "https://app.ordenex.co/api/ordenes/api-key/orden/100235"
+}
+```
+
+Y una orden que todavía no tiene guía:
+
+```json
+"data": { "numGuia": null, "numRemision": "REM-0002", "estado": "incidente", "motivo": "robado",
+          "mensajero": null, "evidenciasUrl": "https://app.ordenex.co/api/ordenes/api-key/orden/REM-0002" }
+```
+
+**Tres detalles que conviene saber:**
+
+1. **El segmento va codificado como componente de ruta.** Si tu remisión lleva `/`, `?`, `#`, `%` o
+   espacios, viaja entera y codificada (`A/B C` → `A%2FB%20C`). Decodificándola recuperás el
+   `numRemision` carácter a carácter.
+2. **Ya no prometemos que las dos entregas de un mismo `eventoId` lleven URLs idénticas.** Si la
+   orden **genera su guía** entre un intento y otro, la segunda entrega lleva la guía. Las dos URLs
+   apuntan a la **misma orden** y el `eventoId` —por donde deduplicás— no cambia nunca. Es la misma
+   ventana que ya tenía `data.numGuia`, que se lee en cada entrega.
+3. **En un puñado de casos el campo se omite**, como hasta ahora: si el identificador no sobrevive
+   a la validación del endpoint (remisión de más de 128 caracteres, o con espacios al principio o
+   al final). Preferimos no mandarte un enlace que sabemos que va a fallar. Ramificá por «la clave
+   existe», no por su valor.
+
+**Qué NO cambia:** el `eventoId` (sigue llevando el identificador interno: es una clave de
+deduplicación opaca, no una URL), el orden de las claves de `data`, la firma
+`X-Ordenex-Signature`, los estados que emiten evento, y el detalle que devuelve el endpoint
+enlazado.
+
+---
+
 ## 2026-09-10 — Un campo NUEVO: `gestiones[]`, en el detalle de una orden
 
 **Es ADITIVO: nada de lo que hoy funciona deja de funcionar.** No se retira ni se renombra ningún
