@@ -27,17 +27,21 @@ import {
   emitirCierreDiaVencido,
   emitirDiaRepartoCorregido,
   emitirGastoFijoCobroPendiente,
+  emitirGeocodificacionCaida,
   emitirMensajeroBloqueado,
   emitirPostulacionPendiente,
   emitirPostulacionRecursoPendiente,
+  emitirWebhookSuscripcionPausada,
   type CargaMasivaContexto,
   type CierrePorAprobarContexto,
   type CierreVencidoContexto,
   type DiaRepartoCorregidoContexto,
   type GastoFijoCobroPendienteContexto,
+  type GeocodificacionCaidaContexto,
   type MensajeroBloqueadoContexto,
   type PostulacionContexto,
   type PostulacionRecursoContexto,
+  type WebhookSuscripcionPausadaContexto,
 } from "@/lib/notificaciones/emitir";
 
 /**
@@ -78,6 +82,21 @@ export type MensajeroBloqueadoNotificador = (ctx: MensajeroBloqueadoContexto) =>
 export type GastoFijoCobroPendienteNotificador = (
   ctx: GastoFijoCobroPendienteContexto,
 ) => Promise<void>;
+/**
+ * FICHA 403 (R9/R10/R11). Firma del notificador de «un webhook lleva fallando y sus reintentos se
+ * espaciaron». Lo usa el DRENADOR DE LA COLA, en cada fallo mientras la suscripcion este pausada.
+ */
+export type WebhookSuscripcionPausadaNotificador = (
+  ctx: WebhookSuscripcionPausadaContexto,
+) => Promise<void>;
+/**
+ * FICHA 401 (R7/R8/R12). Firma del notificador de «el servicio de mapas esta rechazando nuestras
+ * peticiones». Lo usa `GeocodeSaludService`, desde la rama de configuracion del job de
+ * geocodificacion — es decir, dentro de la corrida del CRON de la cola.
+ */
+export type GeocodificacionCaidaNotificador = (
+  ctx: GeocodificacionCaidaContexto,
+) => Promise<void>;
 
 /**
  * DEFAULT de los tres services: no hace nada. Un service construido sin cablear su notificador
@@ -91,7 +110,9 @@ export const notificadorNoOp: PostulacionNotificador &
   DiaRepartoCorregidoNotificador &
   CierreVencidoNotificador &
   MensajeroBloqueadoNotificador &
-  GastoFijoCobroPendienteNotificador = async () => {};
+  GastoFijoCobroPendienteNotificador &
+  WebhookSuscripcionPausadaNotificador &
+  GeocodificacionCaidaNotificador = async () => {};
 
 /**
  * Construye el repositorio real. Aislado en una funcion para que los tests del camino REAL
@@ -252,6 +273,60 @@ export function notificarGastoFijoCobroPendienteCon(
   };
 }
 
+/**
+ * FICHA 403 (R9/R10/R11) — emite «un webhook lleva fallando y sus reintentos se espaciaron» contra
+ * `repo`, absorbiendo su fallo.
+ *
+ * BEST-EFFORT Y FUERA DE CUALQUIER TRANSACCION, y el motivo no es comodidad: lo llama el DRENADOR
+ * DE LA COLA, que procesa un lote de 10 jobs por corrida y corre sin nadie mirando. Cuando esto se
+ * ejecuta, la entrega ya fallo y el contador ya esta escrito; un aviso caido no puede tumbar la
+ * corrida ni dejar sin procesar los otros nueve jobs del lote. La direccion segura del error es
+ * esa: LA CORRIDA MANDA, EL AVISO ES CORTESIA (R11).
+ *
+ * Y no es un `catch` vacio (`docs/conventions.md`): `emitirBestEffort` deja el fallo REGISTRADO con
+ * el nombre de la operacion y su causa.
+ *
+ * R13: ni el nombre de la operacion ni el contexto llevan la URL o el secreto — el contexto solo
+ * tiene un id de owner y una fecha.
+ */
+export function notificarWebhookSuscripcionPausadaCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): WebhookSuscripcionPausadaNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "webhook_suscripcion_pausada",
+      () => emitirWebhookSuscripcionPausada(repo, ctx),
+      logger,
+    );
+  };
+}
+
+/**
+ * FICHA 401 (R7/R8/R11) — emite «el servicio de mapas esta rechazando nuestras peticiones» contra
+ * `repo`, absorbiendo su fallo.
+ *
+ * BEST-EFFORT Y FUERA DE TODA TRANSACCION, y aqui el motivo no es comodidad: lo llama el DRENADOR
+ * de la cola, que sirve a nueve tipos de job y corre cada minuto sin nadie mirando. El aviso sale
+ * en la rama en la que el job de geocodificacion ya se dio por fallido; un aviso caido no puede
+ * cambiar ese desenlace ni tumbar el resto del lote. LA COLA MANDA, EL AVISO ES CORTESIA (R11).
+ *
+ * Y no es un `catch` vacio (`docs/conventions.md`): `emitirBestEffort` deja el fallo REGISTRADO
+ * con el nombre de la operacion y su causa.
+ */
+export function notificarGeocodificacionCaidaCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): GeocodificacionCaidaNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "geocodificacion_caida",
+      () => emitirGeocodificacionCaida(repo, ctx),
+      logger,
+    );
+  };
+}
+
 // Bindings de PRODUCCION. Solo el composition root los importa. Resuelven el repositorio en el
 // momento de la emision (no al importar el modulo), para no abrir una conexion por el hecho de
 // que alguien importe este archivo.
@@ -279,3 +354,10 @@ export const notificarMensajeroBloqueadoReal: MensajeroBloqueadoNotificador = as
 export const notificarGastoFijoCobroPendienteReal: GastoFijoCobroPendienteNotificador = async (
   ctx,
 ) => notificarGastoFijoCobroPendienteCon(repoReal())(ctx);
+
+export const notificarWebhookSuscripcionPausadaReal: WebhookSuscripcionPausadaNotificador = async (
+  ctx,
+) => notificarWebhookSuscripcionPausadaCon(repoReal())(ctx);
+
+export const notificarGeocodificacionCaidaReal: GeocodificacionCaidaNotificador = async (ctx) =>
+  notificarGeocodificacionCaidaCon(repoReal())(ctx);

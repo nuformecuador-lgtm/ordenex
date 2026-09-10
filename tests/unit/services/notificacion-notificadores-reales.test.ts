@@ -9,6 +9,7 @@ import {
   notificadorNoOp,
   notificarCargaMasivaTerminadaCon,
   notificarCierreDiaPorAprobarCon,
+  notificarGeocodificacionCaidaCon,
   notificarPostulacionPendienteCon,
 } from "@/lib/notificaciones/notificadores";
 import { PostulacionMensajeroService } from "@/lib/services/PostulacionMensajeroService";
@@ -85,6 +86,47 @@ describe("R23 — camino real del notificador de postulacion", () => {
     expect(logError).toHaveBeenCalledTimes(1);
     const registrado = logError.mock.calls[0][0] as Error;
     expect(registrado.message).toContain("postulacion_mensajero_pendiente");
+    expect((registrado.cause as Error).message).toBe("base caida");
+  });
+});
+
+describe("401/R7-R8-R11 — camino real del notificador de «el servicio de mapas esta caido»", () => {
+  it("⭑ R8: el camino real crea las DOS filas por `INotificacionRepository.crear`, sin canal nuevo", async () => {
+    const repo = new RepoDoble();
+
+    await notificarGeocodificacionCaidaCon(repo)({ afectados: 3, diaCR: "2026-09-08" });
+
+    expect(repo.creadas).toHaveLength(2);
+    // A MANO, nunca derivado de `ROLES_ADMINISTRACION`: si se comparase contra su propia fuente,
+    // quitar un rol de la constante dejaria este test EN VERDE y la mitad de los avisos se
+    // perderia en silencio. El contrato es «maestro Y admin», decidido por el humano el
+    // 2026-09-09.
+    expect(repo.creadas.map((c) => c.destinatario)).toEqual([
+      { tipo: "rol", rol: "maestro" },
+      { tipo: "rol", rol: "admin" },
+    ]);
+    // Mismo texto para los dos (R7): una sola descripcion por evento.
+    expect(repo.creadas[0].descripcion).toBe(repo.creadas[1].descripcion);
+    expect(repo.creadas[0].tipo).toBe("alert");
+    expect(repo.creadas[0].entidadTipo).toBe("geocodificacion_caida_dia");
+    expect(repo.creadas[0].entidadId).toBe("2026-09-08");
+  });
+
+  it("⭑ R11: absorbe el fallo del repositorio y lo REGISTRA con contexto, sin propagarlo", async () => {
+    // La cola manda, el aviso es cortesia: esto lo llama el drenador, que sirve a nueve tipos de
+    // job. Un aviso caido no puede tumbar la corrida ni cambiar el desenlace del job fallido.
+    const logError = vi.fn();
+
+    await expect(
+      notificarGeocodificacionCaidaCon(new RepoQueFalla(), { logError })({
+        afectados: 5,
+        diaCR: "2026-09-08",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(logError).toHaveBeenCalledTimes(1); // NO es un catch vacio
+    const registrado = logError.mock.calls[0][0] as Error;
+    expect(registrado.message).toContain("geocodificacion_caida");
     expect((registrado.cause as Error).message).toBe("base caida");
   });
 });
@@ -376,6 +418,18 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     // sin nadie mirando, asi que su default no-op no es comodidad: es lo que impide que una suite
     // escriba avisos contra la base local, que en este repo es COMPARTIDA.
     "GeneracionGastosFijosService.ts", // ficha 333 / §4.4
+    // FICHA 403 (T12, R9/R10): el DRENADOR DE LA COLA pasa a tener notificador —«un webhook lleva
+    // fallando y sus reintentos se espaciaron»—. Es el TERCER aviso del arbol que se dispara SOLO
+    // y sin nadie mirando, y el unico que se emite desde dentro de un lote de 10 jobs: su default
+    // no-op no es comodidad, es lo que impide que las suites que instancian este service escriban
+    // avisos contra la base local, que en este repo es COMPARTIDA.
+    "WebhookEstadoService.ts", // ficha 403 / §5
+    // FICHA 401 (T11, R12): la SALUD DEL GEOCODIFICADOR pasa a tener notificador — «el servicio de
+    // mapas esta rechazando nuestras peticiones». Es el CUARTO aviso del arbol que se dispara SOLO
+    // y sin nadie mirando: lo emite el drenador de la cola, que corre CADA MINUTO. Su default
+    // no-op no es comodidad — es lo que impide que una suite escriba avisos contra la base local,
+    // que en este repo es COMPARTIDA entre worktrees.
+    "GeocodeSaludService.ts", // ficha 401 / §5.2
   ] as const;
 
   it("lib/actions/postulacion-recurso.ts inyecta el notificador real", () => {
@@ -426,6 +480,59 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     expect(fuente).toContain(
       'import { notificarGastoFijoCobroPendienteReal } from "@/lib/notificaciones/notificadores"',
     );
+  });
+
+  it("lib/services/jobs/webhook-estado-handler.ts inyecta el notificador real", () => {
+    // FICHA 403 (T12) — MISMO MOLDE QUE LOS DOS DE ARRIBA, Y POR EL MISMO MOTIVO MEDIDO. El
+    // notificador es el SEPTIMO argumento de `WebhookEstadoService`, detras del logger; si esta
+    // fabrica dejara de pasarlo, el service se quedaria con su default NO-OP y el aviso no se
+    // emitiria JAMAS en produccion con la suite entera en verde — que es exactamente lo que le
+    // paso a `corte-diario/route.ts` (feature 271), que pasaba CINCO argumentos.
+    //
+    // El composition root de este aviso NO vive bajo `app/` como los otros dos: el productor es el
+    // drenador de la cola, y su fabrica de dependencias reales es este archivo. Por eso la guardia
+    // apunta aqui y no a la ruta del cron.
+    //
+    // Se afirma sobre el USO EFECTIVO (fuente sin imports ni comentarios) y no con un `toContain`
+    // a secas: medido en este mismo archivo, un `toContain` se satisface con el `import` de
+    // arriba, asi que borrar solo el argumento del cableado lo dejaria EN VERDE.
+    const fuente = leer("lib", "services", "jobs", "webhook-estado-handler.ts");
+    const uso = fuenteSinImportsNiComentarios(fuente);
+    expect(uso).toContain("notificarWebhookSuscripcionPausadaReal");
+    expect(uso).toMatch(
+      /new WebhookEstadoService\([\s\S]*notificarWebhookSuscripcionPausadaReal,?[\s\S]*\)/,
+    );
+    expect(fuente).toContain(
+      'import { notificarWebhookSuscripcionPausadaReal } from "@/lib/notificaciones/notificadores"',
+    );
+  });
+
+  it("lib/services/jobs/geocodificacion-handler.ts inyecta el notificador real", () => {
+    // FICHA 401 (T13, R12) — MISMO MOLDE QUE EL DE `generar-gastos-fijos`, Y POR EL MISMO MOTIVO.
+    // `buildGeocodificacionService` es el UNICO punto del arbol donde el service de
+    // geocodificacion se arma para produccion. Si dejara de pasar el notificador,
+    // `GeocodeSaludService` se quedaria con su default NO-OP y el aviso no se emitiria JAMAS — que
+    // es exactamente lo que le paso a `corte-diario` (dos de siete notificadores muertos con la
+    // suite entera en verde).
+    //
+    // Se afirma sobre el USO EFECTIVO (fuente sin imports ni comentarios) y no con un `toContain`
+    // a secas: medido en este mismo archivo, un `toContain` se satisface con el `import` de
+    // arriba, asi que borrar SOLO el argumento del cableado lo dejaria EN VERDE.
+    const fuente = leer("lib", "services", "jobs", "geocodificacion-handler.ts");
+    const uso = fuenteSinImportsNiComentarios(fuente);
+    expect(uso).toContain("notificarGeocodificacionCaidaReal");
+    expect(uso).toMatch(
+      /new GeocodeSaludService\([\s\S]*notificarGeocodificacionCaidaReal,?[\s\S]*\)/,
+    );
+    // Y el `import` tiene que seguir ahi: sin el, lo de arriba no compilaria — pero es el USO lo
+    // que se exige, no el import.
+    expect(fuente).toContain(
+      'import { notificarGeocodificacionCaidaReal } from "@/lib/notificaciones/notificadores"',
+    );
+    // La SEGUNDA mitad del cableado, y es tan mortal como la primera: si el `salud` no se le pasa
+    // a `GeocodificacionService`, este se queda con `geocodeSaludNoOp` y la ficha entera queda
+    // inerte —ni avisa ni recupera— sin un solo test rojo.
+    expect(uso).toMatch(/new GeocodificacionService\([\s\S]*\bsalud,?[\s\S]*\)/);
   });
 
   it("lib/actions/cierres-admin.ts inyecta el notificador real", () => {

@@ -18,6 +18,13 @@ import type { WebhookConfig } from "@/lib/config/webhook";
 import { descifrarSecreto } from "@/lib/crypto/webhook-secret-cipher";
 import { cabecerasFirma } from "@/lib/crypto/webhook-firma";
 import { dedupeKeyWebhookEstado } from "@/lib/services/jobs/webhook-estado-encolado";
+// FICHA 403 — el circuito: un predicado puro + la config del umbral + el aviso best-effort.
+import { estaPausada } from "@/lib/utils/webhook-suscripcion-pausa";
+import { pausaConfigDe } from "@/lib/config/webhook";
+import {
+  notificadorNoOp,
+  type WebhookSuscripcionPausadaNotificador,
+} from "@/lib/notificaciones/notificadores";
 
 /** Nombre del evento del cuerpo de entrega (D3). */
 export const EVENTO_ESTADO = "orden.estado_actualizado";
@@ -79,9 +86,23 @@ const defaultLogger: WebhookEstadoLogger = { warn: () => {} };
  * `detalle` proviene del sender y NUNCA incluye la URL, el cuerpo ni el secreto (R29).
  */
 export class WebhookEntregaFallidaError extends Error {
-  constructor(detalle: string) {
+  /**
+   * FICHA 403 (design §6) — cuanto conviene esperar antes del proximo intento, en ms, o
+   * `undefined` si no hay nada que sugerir (y entonces la cola aplica su backoff de siempre).
+   *
+   * DOS ORIGENES DISTINTOS QUE COMPARTEN CANAL A PROPOSITO: el `Retry-After` de un 429 real (R14)
+   * y el intervalo de pausa del circuito (R4). `JobQueueService` no distingue entre ellos ni
+   * necesita hacerlo — solo lee «este error trae una sugerencia de espera» y la acota (R17).
+   *
+   * PUBLICO Y DE SOLO LECTURA: la cola lo lee por duck-typing, sin importar esta clase (no debe
+   * conocer los tipos de job concretos).
+   */
+  readonly retryAfterMs?: number;
+
+  constructor(detalle: string, retryAfterMs?: number) {
     super(detalle);
     this.name = "WebhookEntregaFallidaError";
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -93,6 +114,13 @@ export class WebhookEstadoService {
     private readonly config: WebhookConfig,
     private readonly now: () => Date = () => new Date(),
     private readonly logger: WebhookEstadoLogger = defaultLogger,
+    /**
+     * FICHA 403 (R9/R10/R11) — aviso al `maestro` cuando esta suscripcion esta pausada. DEFAULT
+     * NO-OP: un service construido sin cablearlo —tipicamente un doble de test— no escribe nada en
+     * la base, que en este repo es COMPARTIDA. El notificador REAL lo inyecta el composition root
+     * (`lib/services/jobs/webhook-estado-handler.ts`), nunca este archivo.
+     */
+    private readonly notificarPausa: WebhookSuscripcionPausadaNotificador = notificadorNoOp,
   ) {}
 
   /**
@@ -137,12 +165,58 @@ export class WebhookEstadoService {
     const headers = cabecerasFirma(secret, timestampUnix, cuerpo);
 
     const outcome = await this.sender.entregar(sub.url, cuerpo, headers);
-    if (outcome.status === "ok") return; // R19: 2xx -> completado
+    if (outcome.status === "ok") {
+      // FICHA 403 (R2): el 2xx CIERRA la racha — contador a cero y ancla al momento del exito. Con
+      // eso la suscripcion SALE DE LA PAUSA de inmediato y sin intervencion manual, porque
+      // `estaPausada()` se evalua sobre esos dos datos. Es la propiedad que un `activa = false` no
+      // tenia: aqui no hay ningun estado del que solo un humano pueda sacarla.
+      await this.suscripciones.registrarEntregaOk(datos.tiendaId, this.now());
+      return; // R19: 2xx -> completado
+    }
 
     // R20/R31: transitorio -> lanza con el `detalle` para que aterrice en `jobs.last_error`.
     // Log agregado, sin secreto/URL/PII (R29).
     this.logger.warn("[webhook_estado] entrega fallida (transitorio)");
-    throw new WebhookEntregaFallidaError(outcome.detalle);
+    // FICHA 403 (R14): por defecto, lo unico que sugiere esperar es un 429 con `Retry-After`.
+    let retryAfterMs = outcome.retryAfterMs;
+
+    // FICHA 403 (R3): SOLO cuenta lo que llego a intentar la peticion HTTP. Un payload invalido o
+    // un `WebhookSecretKeyError` salieron ANTES por `throw`, asi que no pasan por aqui: son
+    // problemas NUESTROS de configuracion y penalizarian con reintentos espaciados a un destino
+    // sano.
+    const ahora = this.now();
+    const estado = await this.suscripciones.incrementarFalloYLeer(datos.tiendaId, ahora);
+    if (estado !== null) {
+      const pausada = estaPausada(
+        estado.fallosConsecutivos,
+        estado.sinExitoDesde,
+        ahora,
+        pausaConfigDe(this.config),
+      );
+      if (pausada) {
+        // R9-R13. SIN codigo de deteccion de transicion (design §4): se intenta notificar en CADA
+        // fallo mientras la suscripcion este pausada, y la deduplicacion por RACHA la hace el
+        // `entidadId` del aviso contra `notificacion_dedupe_key`. Se probo la alternativa
+        // —reconstruir el estado previo restando uno al contador— y NO funciona: no distingue el
+        // caso en que el conteo ya superaba el umbral desde hacia rato y es el TIEMPO el que acaba
+        // de cumplirse.
+        //
+        // BEST-EFFORT (R11): `notificarPausa` absorbe y registra su propio fallo; no puede tumbar
+        // el resto del lote. El contexto lleva un id y una fecha, jamas la URL ni el secreto (R13).
+        await this.notificarPausa({
+          ownerUsuarioId: datos.tiendaId,
+          sinExitoDesde: estado.sinExitoDesde,
+        });
+        // R4: el UNICO efecto observable de cruzar el umbral. `activa` no se toca en ninguna rama
+        // de este metodo (R5): la suscripcion sigue viva, sigue encolando y sigue reintentando —
+        // solo mas espaciada. La cola lo acota a `JOBS_BACKOFF_CAP_MS` (R17).
+        retryAfterMs = this.config.WEBHOOK_PAUSA_INTERVALO_MS;
+      }
+    }
+    // R6: si NO esta pausada (fallos insuficientes o ventana sin cumplir —incluida una caida corta
+    // y aislada—), `retryAfterMs` sigue siendo lo que trajera el 429, o `undefined`, y la cola
+    // aplica su backoff exponencial generico exactamente como antes de esta ficha.
+    throw new WebhookEntregaFallidaError(outcome.detalle, retryAfterMs);
   }
 
   /**

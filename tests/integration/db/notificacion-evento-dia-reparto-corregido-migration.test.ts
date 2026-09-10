@@ -240,6 +240,16 @@ describe("262 / D7 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // esperando decision»: lo emite la corrida del cron al terminar y se repite cada dia CR
       // mientras quede alguno. Migracion `20260829130000_notificacion_evento_gasto_fijo_cobro`.
       "gasto_fijo_cobro_pendiente",
+      // FICHA 403 (design §1.2/§5, R9, 2026-09-09) - «un webhook lleva fallando y sus reintentos se
+      // espaciaron»: lo emite el DRENADOR de la cola en cada entrega fallida mientras la
+      // suscripcion este pausada, y sale UN solo aviso por RACHA. Migracion
+      // `20260909130000_notificacion_evento_webhook_suscripcion`.
+      "webhook_suscripcion_pausada",
+      // FICHA 401 (design 3.3, 2026-09-09) - «el servicio de mapas esta rechazando nuestras
+      // peticiones por un problema de configuracion de la cuenta». Lo emite `GeocodeSaludService`
+      // desde la rama de configuracion del job de geocodificacion, y va al `maestro` Y al `admin`.
+      // Migracion `20260910120000_notificacion_evento_geocodificacion_caida`.
+      "geocodificacion_caida",
     ]);
   });
 
@@ -258,6 +268,16 @@ describe("262 / D7 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // maestro) PARA SIEMPRE y el recordatorio del dia 2 no saldria nunca — exactamente el fallo
       // que esta misma ficha 262 documento con `orden` como entidad (§15.2, A20).
       "gasto_fijo_cobro_dia",
+      // FICHA 403 (design §1.2, 2026-09-09) - el SEGUNDO `entidad_tipo` que no apunta a una fila de
+      // tabla: la entidad es LA RACHA DE FALLOS (`entidad_id = '<owner>:<sinExitoDesde ISO>'`), no
+      // la suscripcion. Con la suscripcion como entidad, la dedupe admitiria UNA sola fila por
+      // (evento, owner, maestro) PARA SIEMPRE y la SEGUNDA racha no avisaria nunca - el MISMO
+      // fallo que esta ficha 262 documento con `orden`.
+      "webhook_suscripcion_pausa",
+      // FICHA 401 (design 3.3, 2026-09-09) - SEGUNDO `entidad_tipo` que no apunta a una fila, por
+      // el mismo motivo: la entidad del aviso es LA JORNADA CR. El corte medido del 2026-09-08
+      // cruzo la medianoche, y sin valor propio el aviso del dia 2 no habria existido nunca.
+      "geocodificacion_caida_dia",
     ]);
   });
 
@@ -294,7 +314,10 @@ describeSiHayBase("262 / D7 — la base aplicada, y el DOWN ejercitado de verdad
     return (filas[0]?.valores ?? "").split(",").filter((v) => v.length > 0);
   }
 
-  it("la base tiene los NUEVE eventos, con el de esta ficha y los posteriores AL FINAL", async () => {
+  // El titulo ya no lleva la cuenta: decia «los NUEVE» cuando ya eran diez. Este caso lee la BASE
+  // APLICADA -el estado de HOY-, asi que crece con cada valor que se anada detras; el resto del
+  // archivo son FOTOS HISTORICAS y no se tocan.
+  it("la base tiene el evento de esta ficha y los posteriores AL FINAL", async () => {
     // El orden (`enumsortorder`) es lo que demuestra que el valor se ANADIO y no que el tipo se
     // recreo por detras.
     expect(await valoresDe("notificacion_evento")).toEqual([
@@ -306,16 +329,32 @@ describeSiHayBase("262 / D7 — la base aplicada, y el DOWN ejercitado de verdad
       // FICHA 333 (design 4.1/4.2, R29/R30/R36, 2026-08-29) - «quedan cobros de gasto fijo
       // esperando decision». Migracion `20260829130000_notificacion_evento_gasto_fijo_cobro`.
       "gasto_fijo_cobro_pendiente",
+      // FICHA 403 (design §1.2/§5, R9, 2026-09-09) - «un webhook lleva fallando y sus reintentos se
+      // espaciaron»: lo emite el DRENADOR de la cola en cada entrega fallida mientras la
+      // suscripcion este pausada, y sale UN solo aviso por RACHA. Migracion
+      // `20260909130000_notificacion_evento_webhook_suscripcion`.
+      "webhook_suscripcion_pausada",
+      // FICHA 401 (design 3.3, 2026-09-09) - «el servicio de mapas esta rechazando nuestras
+      // peticiones». Migracion `20260910120000_notificacion_evento_geocodificacion_caida`.
+      "geocodificacion_caida",
     ]);
   });
 
-  it("y los SIETE tipos de entidad", async () => {
+  it("y los tipos de entidad, con los posteriores al final", async () => {
     expect(await valoresDe("notificacion_entidad_tipo")).toEqual([
       ...ENTIDADES_PREVIAS,
       "orden_dia_reparto_cambio",
       // FICHA 333 (design 4.2, 2026-08-29) - la entidad del aviso es EL DIA CR de la corrida, no
       // el cobro; sin valor propio la dedupe de la 146 apagaria el recordatorio diario (R30).
       "gasto_fijo_cobro_dia",
+      // FICHA 403 (design §1.2, 2026-09-09) - el SEGUNDO `entidad_tipo` que no apunta a una fila de
+      // tabla: la entidad es LA RACHA DE FALLOS (`entidad_id = '<owner>:<sinExitoDesde ISO>'`), no
+      // la suscripcion. Con la suscripcion como entidad, la dedupe admitiria UNA sola fila por
+      // (evento, owner, maestro) PARA SIEMPRE y la SEGUNDA racha no avisaria nunca - el MISMO
+      // fallo que esta ficha 262 documento con `orden`.
+      "webhook_suscripcion_pausa",
+      // FICHA 401 (design 3.3, 2026-09-09) - la entidad del aviso es LA JORNADA CR.
+      "geocodificacion_caida_dia",
     ]);
   });
 

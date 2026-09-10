@@ -431,6 +431,28 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       // final de su corrida mientras quede al menos un cobro `pendiente`. Destinatario: el rol
       // `maestro` y nadie mas — el `admin` VE la cola pero no puede decidirla (R24).
       "gasto_fijo_cobro_pendiente", // ficha 333 / §4.1
+      // FICHA 403 (R9) — DECIMO valor. Que esta lista se pusiera roja ES LA PRUEBA de que el
+      // inventario sigue CERRADO, y esta ficha pago el precio completo: `ALTER TYPE` en migracion
+      // APARTE (por el 55P04), su `down.sql` recreando el tipo con los NUEVE previos, y esta linea
+      // escrita a mano.
+      //
+      // Su productor es el DRENADOR DE LA COLA (`WebhookEstadoService`), que lo emite en cada
+      // entrega fallida mientras la suscripcion este pausada; que salga UN solo aviso por racha lo
+      // da la ENTIDAD, no una rama de codigo. Destinatario: el rol `maestro` y nadie mas — es el
+      // unico que opera Configuracion > API.
+      "webhook_suscripcion_pausada", // ficha 403 / §5
+      // FICHA 401 (T5, R7) — UNDECIMO valor, y que esta lista se pusiera roja ES otra vez LA
+      // PRUEBA de que el inventario sigue CERRADO. Pago el precio completo: `ALTER TYPE` en
+      // migracion APARTE (por el 55P04), su `down.sql` recreando el tipo con los DIEZ previos —los
+      // nueve de siempre MAS el de la 403, que entro antes que esta ficha—, y esta linea escrita a
+      // mano.
+      //
+      // Su productor es `GeocodeSaludService`, desde la rama de configuracion del job de
+      // geocodificacion (es decir, dentro del cron de la cola). Destinatarios: `maestro` Y `admin`
+      // —decision del humano del 2026-09-09—, porque un corte del proveedor deja de ubicar
+      // direcciones de TODA la operacion y el maestro puede no estar delante durante las horas que
+      // dura, que es literalmente lo que paso las 19 h del 2026-09-08.
+      "geocodificacion_caida", // ficha 401 / §7.1
     ]);
   });
 
@@ -459,6 +481,17 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       "postulacion_recurso", // feature 253 / D6
       "orden_dia_reparto_cambio", // feature 262 / D7
       "gasto_fijo_cobro_dia", // ficha 333 / §4.2 — EL DIA CR, no el cobro
+      // FICHA 403 (design §1.2) — SEGUNDO valor que NO apunta a una fila de tabla: la entidad es
+      // LA RACHA DE FALLOS (`entidad_id = "<owner>:<sinExitoDesde ISO>"`), no la suscripcion. Con
+      // la suscripcion como entidad, `notificacion_dedupe_key` admitiria UNA sola fila por
+      // (evento, owner, maestro) PARA SIEMPRE y la SEGUNDA racha de ese integrador no avisaria
+      // nunca, en silencio — el fallo que documento la 262 con `orden`.
+      "webhook_suscripcion_pausa", // ficha 403 / §1.2 — LA RACHA, no la suscripcion
+      // FICHA 401 (§3.3) — TERCER `entidad_tipo` que no apunta a una fila de tabla, por el mismo
+      // motivo exacto: la entidad del aviso es LA JORNADA CR. No hay ninguna fila que represente
+      // «el corte» —esta ficha no crea tabla ni columna (R31)— y con una entidad que no cambiara
+      // entre jornadas el aviso del dia 2 no saldria NUNCA, en silencio.
+      "geocodificacion_caida_dia", // ficha 401 / §3.3 — LA JORNADA CR
     ]);
   });
 });

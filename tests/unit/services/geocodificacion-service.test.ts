@@ -3,9 +3,13 @@ import {
   GeocodificacionService,
   GeocodeNoConfiguradoError,
   GeocodeIntentoFallidoError,
+  GeocodeConfigInvalidaError,
 } from "@/lib/services/GeocodificacionService";
 import { JobQueueService } from "@/lib/services/JobQueueService";
-import { GoogleGeocodeClient } from "@/lib/clients/google-geocode";
+import { GoogleGeocodeClient, GeocodeRespuestaInvalidaError } from "@/lib/clients/google-geocode";
+import { esFalloConfigGeocode } from "@/lib/geo/fallo-config-geocode";
+import { OrdenGeocodeRepository } from "@/lib/repositories/OrdenGeocodeRepository";
+import type { PrismaClient } from "@prisma/client";
 import type { JobDTO } from "@/lib/interfaces/repositories/IJobRepository";
 import type { IJobRepository } from "@/lib/interfaces/repositories/IJobRepository";
 import type { JobHandler, RecurrenciaSpec } from "@/lib/interfaces/services/IJobQueueService";
@@ -20,6 +24,7 @@ import type {
   IGeocodeCacheRepository,
 } from "@/lib/interfaces/repositories/IGeocodeCacheRepository";
 import { hashDireccion, construirQueryDireccion } from "@/lib/geo/direccion-query";
+import type { IGeocodeSaludService } from "@/lib/interfaces/services/IGeocodeSaludService";
 
 // Feature 91 (R18, R20-R31) — el handler y su TABLA DE DECISION normativa (gate F1.4-Q3,
 // requirements.md Bloque E). Retornar = el job se completa; lanzar = backoff y, agotados
@@ -62,6 +67,11 @@ interface Dobles {
   cache: { findByHash: ReturnType<typeof vi.fn>; upsert: ReturnType<typeof vi.fn> };
   geocodificar: ReturnType<typeof vi.fn>;
   logs: string[];
+  /** FICHA 401 (T12): el doble de salud que CUENTA LLAMADAS. */
+  salud: {
+    registrarFalloConfig: ReturnType<typeof vi.fn>;
+    registrarExitoProveedor: ReturnType<typeof vi.fn>;
+  };
 }
 
 function build(opts: {
@@ -69,6 +79,8 @@ function build(opts: {
   enCache?: GeocodeCacheEntry | null;
   outcome?: GeocodeOutcome;
   apiKey?: string | null;
+  /** FICHA 401: la salud revienta — el desenlace del job NO puede cambiar por eso (R11/R20). */
+  saludLanza?: Error;
 } = {}): Dobles {
   const ordenes = {
     findParaGeocodificar: vi.fn(async () =>
@@ -84,6 +96,15 @@ function build(opts: {
     async () => opts.outcome ?? ({ status: "sin_resultados" } as GeocodeOutcome),
   );
   const logs: string[] = [];
+  const salud = {
+    registrarFalloConfig: vi.fn(async () => {
+      if (opts.saludLanza) throw opts.saludLanza;
+    }),
+    registrarExitoProveedor: vi.fn(async () => {
+      if (opts.saludLanza) throw opts.saludLanza;
+      return 0;
+    }),
+  };
   const service = new GeocodificacionService(
     ordenes as unknown as IOrdenGeocodeRepository,
     cache as unknown as IGeocodeCacheRepository,
@@ -94,8 +115,9 @@ function build(opts: {
     },
     () => AHORA,
     { warn: (m) => logs.push(m) },
+    salud as unknown as IGeocodeSaludService,
   );
-  return { service, ordenes, cache, geocodificar, logs };
+  return { service, ordenes, cache, geocodificar, logs, salud };
 }
 
 const OUTCOME_OK: GeocodeOutcome = {
@@ -177,14 +199,59 @@ describe("R23 — fallos transitorios", () => {
       expect(d.ordenes.guardarResultado).not.toHaveBeenCalled();
     }
   });
+
+  // FEATURE 400 (T3, R16) — la mitad que impide que el marcador se reparta a todo el mundo.
+  it("400/R16: NINGUN transitorio lleva el marcador de fallo de configuracion", async () => {
+    for (const detalle of ["OVER_QUERY_LIMIT", "UNKNOWN_ERROR", "HTTP 503", "fallo de red"]) {
+      const d = build({ outcome: { status: "transitorio", detalle } });
+      const error = (await d.service.ejecutar(job()).catch((e: unknown) => e)) as Error;
+      expect(esFalloConfigGeocode(error.message)).toBe(false);
+    }
+  });
+
+  // FEATURE 400 (T3, R16): los otros dos fallos AJENOS que puede producir este service.
+  it("400/R16: el payload invalido tampoco lleva el marcador", async () => {
+    const d = build();
+    const error = (await d.service
+      .ejecutar(job({ noEsElPayloadEsperado: true }))
+      .catch((e: unknown) => e)) as Error;
+    expect(error.message).toContain("payload invalido");
+    expect(esFalloConfigGeocode(error.message)).toBe(false);
+  });
+
+  it("400/R16: una respuesta del proveedor con forma inesperada tampoco lo lleva", async () => {
+    // El error REAL del cliente, no uno inventado: si algun dia se le anadiera un prefijo,
+    // este test lo veria.
+    const error = new GeocodeRespuestaInvalidaError("campos invalidos: results.0.geometry");
+    expect(esFalloConfigGeocode(error.message)).toBe(false);
+  });
 });
 
 describe("R24 — REQUEST_DENIED", () => {
-  it("REQUEST_DENIED lanza y no escribe coordenadas", async () => {
+  // FEATURE 400 (T4, 2026-09-09) — ESTA ASERCION CAMBIO A PROPOSITO. Hasta la 400 decia
+  // `toBeInstanceOf(GeocodeIntentoFallidoError)`, y ESE literal ERA el contrato: afirmaba
+  // que REQUEST_DENIED y un fallo de red eran el mismo desenlace. Justo eso es el bug que
+  // esta ficha corrige, asi que la asercion se actualiza a la clase nueva y se le anade la
+  // mitad negativa (ya NO son el mismo cubo).
+  it("REQUEST_DENIED lanza `GeocodeConfigInvalidaError` y no escribe coordenadas", async () => {
     const d = build({ outcome: { status: "config_invalida", detalle: "REQUEST_DENIED" } });
-    await expect(d.service.ejecutar(job())).rejects.toBeInstanceOf(GeocodeIntentoFallidoError);
+    await expect(d.service.ejecutar(job())).rejects.toBeInstanceOf(GeocodeConfigInvalidaError);
     expect(d.ordenes.guardarResultado).not.toHaveBeenCalled();
     expect(d.cache.upsert).not.toHaveBeenCalled();
+  });
+
+  it("400/R11: su mensaje lleva el marcador de fallo de configuracion", async () => {
+    const d = build({ outcome: { status: "config_invalida", detalle: "REQUEST_DENIED" } });
+    const error = (await d.service.ejecutar(job()).catch((e: unknown) => e)) as Error;
+    expect(esFalloConfigGeocode(error.message)).toBe(true);
+    // Y el diagnostico original sigue ahi: el marcador anade, no sustituye.
+    expect(error.message).toContain("REQUEST_DENIED");
+  });
+
+  it("400/R16: y NO es un `GeocodeIntentoFallidoError` — dejaron de ser el mismo cubo", async () => {
+    const d = build({ outcome: { status: "config_invalida", detalle: "REQUEST_DENIED" } });
+    const error = (await d.service.ejecutar(job()).catch((e: unknown) => e)) as Error;
+    expect(error).not.toBeInstanceOf(GeocodeIntentoFallidoError);
   });
 });
 
@@ -241,7 +308,91 @@ describe("R25 — sin credencial configurada", () => {
     const d = build({ apiKey: null });
     const error = (await d.service.ejecutar(job()).catch((e: unknown) => e)) as Error;
     expect(error.message).not.toContain(ORDEN.direccion as string);
+    // FEATURE 400 (T4): este literal SE CONSERVA porque ES el contrato — dice CUAL es la
+    // configuracion que falta, que es lo unico accionable del mensaje. La ficha 400 solo le
+    // antepone el marcador, asi que sigue estando contenido.
     expect(error.message).toContain("GOOGLE_MAPS_API_KEY");
+  });
+
+  // FEATURE 400 (T3, R11): la credencial ausente es el SEGUNDO fallo nuestro, y tambien
+  // tiene que llegar marcado al gate. Sin este caso, un despliegue sin credencial dejaria
+  // las ordenes bloqueadas igual que el 2026-09-08.
+  it("400/R11: sin credencial, el mensaje lleva el marcador de fallo de configuracion", async () => {
+    const d = build({ apiKey: null });
+    const error = (await d.service.ejecutar(job()).catch((e: unknown) => e)) as Error;
+    expect(esFalloConfigGeocode(error.message)).toBe(true);
+    expect(error).toBeInstanceOf(GeocodeNoConfiguradoError);
+  });
+});
+
+// FEATURE 400 (T12, R8) — LA COORDENADA PUEDE LLEGAR DESPUES DE ASIGNAR.
+//
+// Es el argumento que sostiene toda la ficha (design §8-A4): dejar pasar la asignacion de
+// una orden sin ubicacion es barato PORQUE el ciclo de geocodificacion sigue corriendo
+// despues, y la siguiente optimizacion ya la coloca en su sitio. Si esto dejara de ser
+// cierto, la puerta de la 400 habria que reconsiderarla.
+//
+// ⚠️ POR QUE NO BASTA UN DOBLE DEL REPOSITORIO. Lo que hay que probar es el WHERE, y un
+// doble del repo no lo ve (memoria «probar el WHERE donde vive»). Aqui se usa el
+// repositorio REAL con un `prisma.orden.updateMany` doblado que CAPTURA el `where`
+// literalmente: si alguien anadiera `mensajeroAsignadoId: null` o un filtro por estatus,
+// este test se pone rojo.
+describe("400/R8 — guardarResultado escribe aunque la orden YA tenga mensajero", () => {
+  const ORDEN_YA_ASIGNADA = "orden-con-mensajero";
+
+  type ArgsUpdateMany = { where: Record<string, unknown>; data: Record<string, unknown> };
+
+  function repoRealConPrismaDoblado() {
+    const updateMany = vi.fn(async (_args: ArgsUpdateMany) => ({ count: 1 }));
+    const prisma = { orden: { updateMany } } as unknown as PrismaClient;
+    return { repo: new OrdenGeocodeRepository(prisma), updateMany };
+  }
+
+  it("el `where` del update filtra SOLO por id y por no-borrada: ni estatus ni mensajero", async () => {
+    const { repo, updateMany } = repoRealConPrismaDoblado();
+
+    await repo.guardarResultado(ORDEN_YA_ASIGNADA, {
+      latitud: 9.9333,
+      longitud: -84.0833,
+      precision: "ROOFTOP",
+      status: "OK",
+      geocodedAt: AHORA,
+    });
+
+    const args = updateMany.mock.calls[0]![0];
+    // Literal EXACTO, no `objectContaining`: un filtro extra tiene que romper esto.
+    expect(args.where).toEqual({ id: ORDEN_YA_ASIGNADA, deletedAt: null });
+    for (const prohibido of ["mensajeroAsignadoId", "estatusId", "estatus", "asignadoAt"]) {
+      expect(Object.keys(args.where)).not.toContain(prohibido);
+    }
+  });
+
+  it("y escribe de verdad las coordenadas (no es un update vacio)", async () => {
+    const { repo, updateMany } = repoRealConPrismaDoblado();
+
+    await repo.guardarResultado(ORDEN_YA_ASIGNADA, {
+      latitud: 9.9333,
+      longitud: -84.0833,
+      precision: "ROOFTOP",
+      status: "OK",
+      geocodedAt: AHORA,
+    });
+
+    const args = updateMany.mock.calls[0]![0];
+    expect(args.data.geocodeStatus).toBe("OK");
+    expect(args.data.geocodedAt).toBe(AHORA);
+    expect(String(args.data.latitud)).toBe("9.9333");
+    expect(String(args.data.longitud)).toBe("-84.0833");
+  });
+
+  it("el service llama a `guardarResultado` sin consultar NUNCA si la orden tiene mensajero", async () => {
+    // La otra mitad: el ciclo de geocodificacion no depende del estado de asignacion. El
+    // service solo conoce `findParaGeocodificar` y `guardarResultado` — no hay ninguna via
+    // por la que pudiera mirar el mensajero.
+    const d = build({ outcome: OUTCOME_OK });
+    await d.service.ejecutar(job());
+    expect(d.ordenes.guardarResultado).toHaveBeenCalledTimes(1);
+    expect(Object.keys(d.ordenes)).toEqual(["findParaGeocodificar", "guardarResultado"]);
   });
 });
 
@@ -468,5 +619,202 @@ describe("R31 — privacidad de los logs", () => {
       .filter((l) => !l.trimStart().startsWith("//") && !l.trimStart().startsWith("*"))
       .join("\n");
     expect(ejecutable).not.toMatch(/console\./);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FICHA 401 (T12) — LOS TRES PUNTOS DE LLAMADA A LA SALUD, Y LOS SEIS DONDE NO SE LLAMA.
+//
+// Cubre R6, R13, R14, R17, R20 y R25. El doble de salud CUENTA LLAMADAS: es la única forma de
+// medir «aquí sí, aquí no» sin base de datos, y el «aquí no» es la mitad del requisito — un
+// acierto de caché que disparara la recuperación reviviría jobs con el proveedor todavía caído.
+// ---------------------------------------------------------------------------
+
+describe("401/R2 — la caída se evalúa en los DOS caminos de configuración propia", () => {
+  it("⭑ `config_invalida`: una llamada a `registrarFalloConfig`, con el id del job", async () => {
+    const d = build({ outcome: { status: "config_invalida", detalle: "REQUEST_DENIED" } });
+
+    await expect(d.service.ejecutar(job())).rejects.toBeInstanceOf(GeocodeConfigInvalidaError);
+
+    expect(d.salud.registrarFalloConfig).toHaveBeenCalledTimes(1);
+    expect(d.salud.registrarFalloConfig).toHaveBeenCalledWith("job-1", AHORA);
+    expect(d.salud.registrarExitoProveedor).not.toHaveBeenCalled();
+  });
+
+  it("⭑ credencial AUSENTE: el otro camino que la 400 marca, también evalúa", async () => {
+    const d = build({ apiKey: null });
+
+    await expect(d.service.ejecutar(job())).rejects.toBeInstanceOf(GeocodeNoConfiguradoError);
+
+    expect(d.salud.registrarFalloConfig).toHaveBeenCalledTimes(1);
+    expect(d.salud.registrarFalloConfig).toHaveBeenCalledWith("job-1", AHORA);
+  });
+
+  it("⭑ R11: con la salud LANZANDO, el `throw` del job sigue ocurriendo IGUAL", async () => {
+    // LA COLA MANDA. Si el aviso pudiera cambiar el desenlace, un fallo de la campana convertiría
+    // un job que debe reintentarse en otra cosa.
+    const rota = build({
+      outcome: { status: "config_invalida", detalle: "REQUEST_DENIED" },
+      saludLanza: new Error("salud caida"),
+    });
+    await expect(rota.service.ejecutar(job())).rejects.toBeInstanceOf(GeocodeConfigInvalidaError);
+
+    const sinCredencial = build({ apiKey: null, saludLanza: new Error("salud caida") });
+    await expect(sinCredencial.service.ejecutar(job())).rejects.toBeInstanceOf(
+      GeocodeNoConfiguradoError,
+    );
+    // Y el fallo queda registrado, no en un `catch` vacío.
+    expect(sinCredencial.logs.some((l) => l.includes("salud caida"))).toBe(true);
+  });
+
+  it("el mensaje que se lanza sigue llevando el marcador de la 400: esta ficha no lo toca", async () => {
+    const d = build({ outcome: { status: "config_invalida", detalle: "REQUEST_DENIED" } });
+    const error = await d.service.ejecutar(job()).catch((e: Error) => e);
+    expect(esFalloConfigGeocode((error as Error).message)).toBe(true);
+  });
+});
+
+describe("401/R13-R14 — la recuperación viaja SÓLO en la estela de un éxito REAL", () => {
+  it("⭑ R13: tras un `ok` del proveedor, se invoca la recuperación exactamente UNA vez", async () => {
+    const d = build({ outcome: OUTCOME_OK });
+
+    await d.service.ejecutar(job());
+
+    expect(d.salud.registrarExitoProveedor).toHaveBeenCalledTimes(1);
+    expect(d.salud.registrarExitoProveedor).toHaveBeenCalledWith(AHORA);
+  });
+
+  it("⭑ R13: la recuperación va DESPUÉS de escribir la caché y la orden", async () => {
+    // Lo que ya está escrito manda. Si se invocara antes, un fallo de la recuperación —aunque hoy
+    // esté envuelto— habría dejado el trabajo bueno a medias.
+    const orden: string[] = [];
+    const d = build({ outcome: OUTCOME_OK });
+    d.cache.upsert.mockImplementation(async () => {
+      orden.push("cache");
+    });
+    d.ordenes.guardarResultado.mockImplementation(async () => {
+      orden.push("orden");
+    });
+    d.salud.registrarExitoProveedor.mockImplementation(async () => {
+      orden.push("recuperacion");
+      return 0;
+    });
+
+    await d.service.ejecutar(job());
+
+    expect(orden).toEqual(["cache", "orden", "recuperacion"]);
+  });
+
+  it("⭑ R14: un ACIERTO DE CACHÉ no invoca la recuperación, y el job termina igual", async () => {
+    // ES LA DECISIÓN CENTRAL DE R14: la caché se resuelve sin tocar la red, así que SIGUE
+    // FUNCIONANDO DURANTE UN CORTE. Tomarla por prueba de que el proveedor volvió reviviría jobs
+    // con la credencial todavía rota, y cada uno quemaría sus 8 intentos.
+    const d = build({ enCache: { latitud: 1.5, longitud: -2.5, precision: "ROOFTOP" } });
+
+    await expect(d.service.ejecutar(job())).resolves.toBeUndefined();
+
+    expect(d.geocodificar).not.toHaveBeenCalled();
+    expect(d.salud.registrarExitoProveedor).not.toHaveBeenCalled();
+    expect(d.salud.registrarFalloConfig).not.toHaveBeenCalled();
+    // Y la orden se escribió igual: la no-llamada no cambia nada del desenlace.
+    expect(d.ordenes.guardarResultado).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("401/R6-R17-R25 — los desenlaces donde NO se llama a la salud, ni una vez", () => {
+  const NO_LLAMAN: [string, Parameters<typeof build>[0]][] = [
+    ["acierto de caché", { enCache: { latitud: 1, longitud: 2, precision: "ROOFTOP" } }],
+    ["sin_resultados (dirección irresoluble)", { outcome: { status: "sin_resultados" } }],
+    ["consulta_invalida (dirección irresoluble)", { outcome: { status: "consulta_invalida" } }],
+    ["SIN_DIRECCION", { orden: { ...ORDEN, direccion: "   " } }],
+    ["orden inexistente o borrada", { orden: null }],
+    ["transitorio (red, timeout, 5xx, cuota)", { outcome: { status: "transitorio", detalle: "OVER_QUERY_LIMIT" } }],
+  ];
+
+  it.each(NO_LLAMAN)("⭑ %s → CERO llamadas de los dos tipos", async (_nombre, opciones) => {
+    const d = build(opciones);
+
+    await d.service.ejecutar(job()).catch(() => {});
+
+    expect(d.salud.registrarFalloConfig).not.toHaveBeenCalled();
+    expect(d.salud.registrarExitoProveedor).not.toHaveBeenCalled();
+  });
+
+  it("⭑ R17: los tres desenlaces DETERMINISTAS de dirección COMPLETAN el job, no lo matan", async () => {
+    // Por eso el conjunto recuperable y el de «dirección mala» son disjuntos POR CONSTRUCCIÓN: una
+    // dirección irresoluble nunca produce una fila `failed`, así que no puede ser elegible para
+    // revivir. No hay ninguna lista de exclusiones que alguien deba mantener.
+    for (const [opciones, estado] of [
+      [{ outcome: { status: "sin_resultados" } }, "ZERO_RESULTS"],
+      [{ outcome: { status: "consulta_invalida" } }, "INVALID_REQUEST"],
+      [{ orden: { ...ORDEN, direccion: "   " } }, "SIN_DIRECCION"],
+    ] as [Parameters<typeof build>[0], string][]) {
+      const d = build(opciones);
+      await expect(d.service.ejecutar(job())).resolves.toBeUndefined(); // retorna = `complete`
+      expect(d.ordenes.guardarResultado).toHaveBeenCalledWith(
+        ORDEN_ID,
+        expect.objectContaining({ status: estado }),
+      );
+      expect(d.salud.registrarExitoProveedor).not.toHaveBeenCalled();
+    }
+  });
+
+  it("⭑ R25: durante `config_invalida` la recuperación no se invoca NI UNA VEZ", async () => {
+    // Mientras la geocodificación siga caída no se devuelve nada a la cola. La recuperación se
+    // dispara sólo tras una respuesta satisfactoria del proveedor, que no puede coexistir con un
+    // corte de configuración (es global y determinista).
+    const d = build({ outcome: { status: "config_invalida", detalle: "REQUEST_DENIED" } });
+
+    await d.service.ejecutar(job()).catch(() => {});
+
+    expect(d.salud.registrarExitoProveedor).not.toHaveBeenCalled();
+  });
+});
+
+describe("401/R20 — una recuperación caída NO revierte una geocodificación buena", () => {
+  it("⭑ con `registrarExitoProveedor` lanzando, el job se completa IGUAL", async () => {
+    // La dirección contraria sería mucho peor: una recuperación caída revertiría un trabajo bueno
+    // que ya está escrito, y el job volvería a la cola a pagar otra llamada al proveedor.
+    const d = build({ outcome: OUTCOME_OK, saludLanza: new Error("recuperacion caida") });
+
+    await expect(d.service.ejecutar(job())).resolves.toBeUndefined();
+
+    expect(d.cache.upsert).toHaveBeenCalledTimes(1);
+    expect(d.ordenes.guardarResultado).toHaveBeenCalledWith(
+      ORDEN_ID,
+      expect.objectContaining({ status: "OK" }),
+    );
+  });
+
+  it("⭑ y el fallo queda LOGUEADO con contexto, sin PII", async () => {
+    const d = build({ outcome: OUTCOME_OK, saludLanza: new Error("recuperacion caida") });
+
+    await d.service.ejecutar(job());
+
+    const linea = d.logs.find((l) => l.includes("recuperacion caida"));
+    expect(linea).toBeDefined();
+    expect(linea).toContain("best-effort");
+    expect(linea).not.toContain("Av. Central 100");
+    expect(linea).not.toContain("clave-de-prueba");
+    expect(linea).not.toContain(ORDEN_ID);
+  });
+});
+
+describe("401/R12 — el DEFAULT del colaborador de salud es el no-op", () => {
+  it("⭑ un service construido SIN cablearlo no consulta ni escribe nada", async () => {
+    // Es lo que impide que las decenas de suites que construyen este service toquen la base local,
+    // que en este repo es COMPARTIDA entre worktrees. El real lo inyecta el composition root, y
+    // que lo inyecte lo vigilan las guardias de `notificacion-notificadores-reales.test.ts`.
+    const service = new GeocodificacionService(
+      { findParaGeocodificar: vi.fn(async () => ORDEN), guardarResultado: vi.fn(async () => {}) } as unknown as IOrdenGeocodeRepository,
+      { findByHash: vi.fn(async () => null), upsert: vi.fn(async () => {}) } as unknown as IGeocodeCacheRepository,
+      { geocodificar: vi.fn(async () => OUTCOME_OK) },
+      { GOOGLE_MAPS_API_KEY: "clave-de-prueba", GEOCODE_TIMEOUT_MS: 10_000 },
+      () => AHORA,
+      { warn: () => {} },
+      // ← sin séptimo argumento: `geocodeSaludNoOp`
+    );
+
+    await expect(service.ejecutar(job())).resolves.toBeUndefined();
   });
 });

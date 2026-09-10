@@ -264,11 +264,20 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
     //     coordenadas).
     // El resto de guardas de este metodo (zona/estado por orden, mensajero, tope de intentos,
     // TODAS evaluadas ANTES de este gate) siguen abortando el lote completo sin cambios (R7/R8).
+    //
+    // FEATURE 400 (2026-09-09, R31) — ESPEJO EXACTO de `GuiaAsignacionService`: sobre el
+    // MISMO `Map` que ya se recorre para armar `detalleCoords` se cuenta ademas cuantas
+    // ordenes pasaron el gate por `asignable_sin_ubicacion`. Cero consultas nuevas. La
+    // cifra se expone en `ok`/`partial` solo si es mayor que cero (R33), y JAMAS dentro de
+    // `bloqueadas` (R35): esa orden SI recibio mensajero.
     const filas = await this.repo.findParaAsignabilidad(ordenIds);
     const estados = await this.asignabilidad.evaluar(filas);
     const detalleCoords: { ordenId: string; motivo: string }[] = [];
+    let sinUbicacion = 0;
     for (const id of ordenIds) {
       const estado = estados.get(id);
+      // 400/R31: se cuenta ANTES del `continue` — `asignable_sin_ubicacion` SI pasa el gate.
+      if (estado === "asignable_sin_ubicacion") sinUbicacion += 1;
       if (esAsignable(estado)) continue;
       detalleCoords.push({
         ordenId: id,
@@ -352,12 +361,15 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
     }
 
     // 7. R2/R4: `partial` si quedo alguna bloqueada por coordenadas, `ok` si el lote paso completo.
+    // Feature 400 (R31/R33): `sinUbicacion` se anade SOLO si es mayor que cero; con cero, la
+    // clave no existe en el objeto y los `toEqual` vigentes siguen verdes.
     const resultados = asignables.map((ordenId) => ({
       ordenId,
       estado: ESTADO_ASIGNADA as "por_recoger",
     }));
+    const aviso400 = sinUbicacion > 0 ? { sinUbicacion } : {};
     return detalleCoords.length > 0
-      ? { status: "partial", resultados, bloqueadas: detalleCoords }
-      : { status: "ok", resultados };
+      ? { status: "partial", resultados, bloqueadas: detalleCoords, ...aviso400 }
+      : { status: "ok", resultados, ...aviso400 };
   }
 }

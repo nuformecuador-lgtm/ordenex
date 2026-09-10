@@ -81,10 +81,19 @@ export type GenerarGuiaResult =
   | { status: "conflict"; detalle: DetalleConflicto[] }; // R27/R29
 
 export type AsignarBodegaResult =
-  | { status: "ok"; resultados: AsignarBodegaResultadoItem[] }
+  // Feature 400 (2026-09-09, R31-R33): `sinUbicacion` = cuantas ordenes del lote quedaron
+  // asignadas SIN ubicacion por un fallo de configuracion del geocodificador. Cifra
+  // agregada (nunca una lista de ordenes, R32) y ausente cuando vale cero (R33). Espejo del
+  // contrato del service; el razonamiento vive en `IGuiaAsignacionService.ts`.
+  | { status: "ok"; resultados: AsignarBodegaResultadoItem[]; sinUbicacion?: number }
   // Feature 368 (R15) — espejo EXACTO de `AsignarBodegaServiceResult` (el server action hace
   // passthrough directo del resultado del service, sin traducirlo: ver `lib/actions/ordenes-guia.ts`).
-  | { status: "partial"; resultados: AsignarBodegaResultadoItem[]; bloqueadas: DetalleConflicto[] }
+  | {
+      status: "partial";
+      resultados: AsignarBodegaResultadoItem[];
+      bloqueadas: DetalleConflicto[];
+      sinUbicacion?: number;
+    }
   | { status: "unauthenticated" }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }

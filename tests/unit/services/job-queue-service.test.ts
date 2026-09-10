@@ -9,6 +9,9 @@ import type {
 import type { JobHandler, RecurrenciaSpec } from "@/lib/interfaces/services/IJobQueueService";
 import type { JobsConfig } from "@/lib/config/jobs";
 import type { JobTipo } from "@prisma/client";
+// FICHA 403: el productor REAL de la sugerencia de espera. Se usa el de verdad y no un objeto
+// inventado para que este test se rompa si el campo cambia de nombre en el otro lado.
+import { WebhookEntregaFallidaError } from "@/lib/services/WebhookEstadoService";
 
 // Feature 90 (R14/R15/R16/R23/R24) — logica del drenador con dobles de `IJobRepository` y
 // handlers fake: backoff exponencial acotado, dead-letter al agotar `max_intentos`,
@@ -199,6 +202,113 @@ describe("JobQueueService.drenar — recurrencia (R23/R24)", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// FICHA 403 (T9, design §6) — EL HOOK GENERICO DE `retryAfterMs`.
+//
+// `JobQueueService` lo comparten NUEVE tipos de job y no debe saber que existe un webhook, ni un
+// 429, ni una «suscripcion pausada»: solo lee «este error trae una sugerencia de espera». Por eso
+// los casos de abajo usan `WebhookEntregaFallidaError` —el productor REAL, no un objeto
+// inventado— pero afirman sobre el comportamiento generico.
+//
+// LA SUGERENCIA SE ACOTA POR LOS DOS LADOS, y cada cota tiene su motivo:
+//   · nunca MENOR que el backoff que ya tocaba (R14, "nunca menor"): si no, un `Retry-After: 1`
+//     convertiria un 429 en un martilleo mas agresivo que el de hoy;
+//   · nunca MAYOR que `JOBS_BACKOFF_CAP_MS` (R17): un valor extremo o malformado de un destino
+//     hostil, o una racha de pausa muy larga, no pueden dejar un job parado indefinidamente.
+// ---------------------------------------------------------------------------
+
+/** Handler que falla con la sugerencia de espera del webhook (429 o intervalo de pausa). */
+function handlerConHint(retryAfterMs?: number): JobHandler {
+  return async () => {
+    throw new WebhookEntregaFallidaError("entregar webhook: HTTP 429", retryAfterMs);
+  };
+}
+
+describe("403/R14/R17 — la sugerencia de espera del error mueve el `runAfter`", () => {
+  it("⭑ SIN sugerencia el comportamiento es EXACTAMENTE el de antes de esta ficha", () => {
+    // La no-regresion de los otros ocho tipos de job, dicha con el mismo productor: un
+    // `WebhookEntregaFallidaError` sin `retryAfterMs` no debe cambiar nada.
+    return (async () => {
+      const { svc, calls } = service([makeJob({ intentos: 1, maxIntentos: 99 })], handlerConHint());
+      await svc.drenar(10);
+      expect(calls.fail[0].runAfter).toEqual(new Date(NOW.getTime() + 1000)); // base, sin tocar
+    })();
+  });
+
+  it("⭑ una sugerencia MENOR que el backoff generico se ignora: manda el backoff (R14)", async () => {
+    // intentos=2 -> backoff = base*2 = 2000. El destino pide 500 ms.
+    const { svc, calls } = service(
+      [makeJob({ intentos: 2, maxIntentos: 99 })],
+      handlerConHint(500),
+    );
+    await svc.drenar(10);
+    expect(calls.fail[0].runAfter).toEqual(new Date(NOW.getTime() + 2000));
+  });
+
+  it("⭑ una sugerencia MAYOR gana… hasta el cap, y ni un milisegundo mas (R17)", async () => {
+    // intentos=1 -> backoff = 1000. Cap de este test = 3000.
+    const casos = [
+      { hint: 2500, esperado: 2500 }, // entre el backoff y el cap: se usa la sugerencia
+      { hint: 3000, esperado: 3000 }, // justo el cap
+      { hint: 3_600_000, esperado: 3000 }, // el INTERVALO DE PAUSA de 1 h -> acotado al cap
+      { hint: 999_999_999_000, esperado: 3000 }, // `Retry-After` extremo de un destino hostil
+    ];
+    for (const { hint, esperado } of casos) {
+      const { svc, calls } = service(
+        [makeJob({ intentos: 1, maxIntentos: 99 })],
+        handlerConHint(hint),
+      );
+      await svc.drenar(10);
+      expect(calls.fail[0].runAfter, `hint ${hint}`).toEqual(new Date(NOW.getTime() + esperado));
+    }
+  });
+
+  it("una sugerencia que no es un numero usable no rompe nada", async () => {
+    // El hook es duck-typed: cualquier error puede traer la propiedad. Un valor absurdo debe
+    // degradar al backoff normal, no propagar un `NaN` al `runAfter` (que produciria un
+    // `Invalid Date` en la columna y un job irrecuperable, sin error visible).
+    for (const basura of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1]) {
+      const boom: JobHandler = async () => {
+        throw Object.assign(new Error("algo fallo"), { retryAfterMs: basura });
+      };
+      const { svc, calls } = service([makeJob({ intentos: 1, maxIntentos: 99 })], boom);
+      await svc.drenar(10);
+      expect(calls.fail[0].runAfter, `con ${String(basura)}`).toEqual(
+        new Date(NOW.getTime() + 1000),
+      );
+    }
+  });
+});
+
+describe("403/R16 — la sugerencia NO salva a un job de morir", () => {
+  it("⭑ cinco 429 seguidos con `Retry-After` siguen terminando en `failed`", async () => {
+    // R16 literal: un 429 —o una racha en pausa— sigue contando como intento y el job sigue
+    // muriendo al agotar `MAX_INTENTOS_WEBHOOK`, exactamente igual que hoy. Si la sugerencia
+    // tocara el conteo, un destino saturado dejaria jobs vivos para siempre.
+    const MAX = 5;
+    let ultimo: FailCall | undefined;
+    for (let intento = 1; intento <= MAX; intento++) {
+      const { svc, calls } = service(
+        [makeJob({ intentos: intento, maxIntentos: MAX })],
+        handlerConHint(3_600_000),
+      );
+      const res = await svc.drenar(10);
+      ultimo = calls.fail[0];
+      if (intento < MAX) {
+        expect(res.reintentados, `intento ${intento}`).toBe(1);
+        expect(res.muertos, `intento ${intento}`).toBe(0);
+        expect(ultimo.runAfter, `intento ${intento}`).not.toBeNull();
+      } else {
+        expect(res.muertos).toBe(1);
+        expect(res.reintentados).toBe(0);
+      }
+    }
+    // Dead-letter: `runAfter` null pese a que el error traia una sugerencia de una hora. No hay
+    // proximo intento que retrasar.
+    expect(ultimo!.runAfter).toBeNull();
+  });
+});
+
 describe("JobQueueService.drenar — handler no registrado", () => {
   it("sin handler para el tipo -> fallo controlado (no crash) contado como fallido", async () => {
     const { repo, calls } = fakeRepo([makeJob({ intentos: 1, maxIntentos: 3 })]);
@@ -214,5 +324,97 @@ describe("JobQueueService.drenar — handler no registrado", () => {
     expect(res.fallidos).toBe(1);
     expect(calls.fail).toHaveLength(1);
     expect(calls.complete).toHaveLength(0);
+  });
+});
+
+/**
+ * FEATURE 402 (R8) — el desglose por tipo de cada corrida, en el log.
+ *
+ * PARA QUE SIRVE: con el reparto por turnos, la pregunta operativa deja de ser «cuantos jobs
+ * corrieron» y pasa a ser «que tipos avanzaron». Sin este log, la unica forma de ver que un
+ * tipo lleva media hora sin ejecutarse es consultar a mano la tabla `jobs` — que es justo lo
+ * que hubo que hacer en el incidente del 2026-09-09.
+ *
+ * LO QUE ESTE TEST *NO* PRUEBA, y conviene decirlo: nada del reparto en si. El reparto vive en
+ * el SQL y se mide en `tests/integration/db/job-repository-reparto-por-tipo.int.test.ts`; aqui
+ * el `claimBatch` es un doble que devuelve lo que se le diga.
+ */
+describe("JobQueueService.drenar — desglose por tipo en el log (402/R8)", () => {
+  /** Servicio con un logger que ADEMAS implementa `info` (espia de mensajes). */
+  function servicioConInfo(claimed: JobDTO[]) {
+    const { repo, calls } = fakeRepo(claimed);
+    const mensajes: string[] = [];
+    const handlers = new Map<JobTipo, JobHandler>([
+      [TIPO, okHandler],
+      ["webhook_estado", okHandler],
+      ["geocodificacion", okHandler],
+    ]);
+    const svc = new JobQueueService(repo, handlers, new Map(), CONFIG, () => NOW, {
+      warn: () => {},
+      info: (m) => mensajes.push(m),
+    });
+    return { svc, mensajes, calls };
+  }
+
+  /** El desglose viaja DENTRO del mensaje; se parsea, no se compara el texto que lo rodea. */
+  function desgloseDe(mensaje: string): unknown {
+    const json = mensaje.match(/\{[\s\S]*\}/)?.[0];
+    expect(json, `el mensaje no lleva un desglose JSON: ${mensaje}`).toBeDefined();
+    return JSON.parse(json as string);
+  }
+
+  it("R8: con jobs de DOS tipos, registra `{tipo: cantidad}` una sola vez", async () => {
+    const { svc, mensajes } = servicioConInfo([
+      makeJob({ id: "w-1", tipo: "webhook_estado" }),
+      makeJob({ id: "w-2", tipo: "webhook_estado" }),
+      makeJob({ id: "g-1", tipo: "geocodificacion" }),
+    ]);
+
+    await svc.drenar(10);
+
+    expect(mensajes).toHaveLength(1);
+    expect(desgloseDe(mensajes[0])).toEqual({ webhook_estado: 2, geocodificacion: 1 });
+  });
+
+  it("R8: lote VACIO -> no registra nada (no hay corrida que diagnosticar)", async () => {
+    const { svc, mensajes } = servicioConInfo([]);
+    await svc.drenar(10);
+    expect(mensajes).toEqual([]);
+  });
+
+  it("R8: el mensaje NO lleva payload, ni ids, ni ningun dato de dominio", async () => {
+    const { svc, mensajes } = servicioConInfo([
+      makeJob({
+        id: "orden-secreta-1",
+        tipo: "geocodificacion",
+        payload: { telefono: "88887777" },
+      }),
+    ]);
+
+    await svc.drenar(10);
+
+    expect(mensajes).toHaveLength(1);
+    expect(mensajes[0]).not.toContain("orden-secreta-1");
+    expect(mensajes[0]).not.toContain("88887777");
+    expect(mensajes[0]).not.toContain("telefono");
+    expect(desgloseDe(mensajes[0])).toEqual({ geocodificacion: 1 });
+  });
+
+  it("un logger SIN `info` (los diez dobles que ya existen) no rompe el drenado", async () => {
+    // `info` es OPCIONAL en la interfaz y se invoca con `?.`: un doble antiguo sigue valiendo.
+    const { repo, calls } = fakeRepo([makeJob({ tipo: "webhook_estado" })]);
+    const svc = new JobQueueService(
+      repo,
+      new Map<JobTipo, JobHandler>([["webhook_estado", okHandler]]),
+      new Map(),
+      CONFIG,
+      () => NOW,
+      { warn: () => {} },
+    );
+
+    const res = await svc.drenar(10);
+
+    expect(res.ok).toBe(1);
+    expect(calls.complete).toHaveLength(1);
   });
 });

@@ -1,0 +1,45 @@
+-- FICHA 401 (T5, design §3.3) -- el aviso de la campana cuando el servicio de mapas esta
+-- rechazando nuestras peticiones por un problema de configuracion de la cuenta.
+--
+-- QUE ANADE, y son DOS valores en DOS enums distintos:
+--
+--   `notificacion_evento`       += 'geocodificacion_caida'
+--   `notificacion_entidad_tipo` += 'geocodificacion_caida_dia'
+--
+-- POR QUE VA SOLA Y CON TIMESTAMP PROPIO. Postgres NO permite USAR un valor de enum recien
+-- anadido en la misma transaccion que lo anadio (`55P04`) y Prisma Migrate corre cada
+-- `migration.sql` dentro de una. Aqui SOLO se anaden los valores; su primer uso ocurre en runtime
+-- (`emitirGeocodificacionCaida`), en transacciones posteriores. Mismo precedente que la 333, la
+-- 271, la 262, la 253, la 240, la 239 y la 237.
+--
+-- ⚠️ POR QUE TAMBIEN EL SEGUNDO ENUM, QUE ES LA MITAD QUE SE OLVIDA -- y aqui es LA DECISION QUE
+-- EVITA QUE EL AVISO DEL SEGUNDO DIA NO SALGA NUNCA.
+--
+-- `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+-- destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`
+-- (`20260727120000_notificacion/migration.sql:89-92`), y `NotificacionRepository.crear` ABSORBE
+-- el `P2002` devolviendo `false`. Con una entidad que no cambiara entre jornadas, esa clave
+-- admitiria UNA sola fila por (evento, entidad, rol) PARA SIEMPRE: el aviso del dia 2 no saldria
+-- NUNCA, sin error, sin log y sin nada. Es literalmente lo que le paso a la 262 con `orden` como
+-- entidad, y lo que la 333 evito eligiendo el dia.
+--
+-- Por eso LA ENTIDAD DE ESTE AVISO ES LA JORNADA CR (`entidad_id = 'YYYY-MM-DD'`), y por eso
+-- necesita un `entidad_tipo` propio: `geocodificacion_caida_dia` es el TERCER valor del
+-- inventario que NO apunta a una fila de tabla (el primero fue `gasto_fijo_cobro_dia`, ficha 333;
+-- el segundo `webhook_suscripcion_pausa`, ficha 403), y el nombre lo DECLARA. Reusar un valor que promete una fila (`orden`, `usuario`...) seria
+-- escribir un dato falso con formato de dato. Y emitir con `entidad_id = NULL` apagaria la dedupe
+-- entera (el indice es PARCIAL y `emitirFilas` se salta su guardia previa): el drenador corre CADA
+-- MINUTO, asi que el corte medido del 2026-09-08 habria producido ~2.280 filas.
+--
+-- CONSECUENCIAS, y son ESTRUCTURALES, no de disciplina:
+--   - jornadas distintas => entidades distintas => el aviso del dia siguiente sale siempre (R10);
+--   - misma jornada, muchas evaluaciones => misma entidad => UN solo aviso por rol (R9).
+--
+-- Y `destinatario_rol` esta DENTRO de la clave de dedupe, asi que los dos destinatarios de R7
+-- —`maestro` y `admin`, decision del humano del 2026-09-09— se deduplican de forma INDEPENDIENTE:
+-- que uno lea la suya no suprime la del otro.
+--
+-- ADITIVA: no altera ninguna tabla, no crea columnas, no toca RLS (`notificacion` conserva la de
+-- la 146). SIN BACKFILL: ninguna notificacion existente cambia de evento ni de entidad.
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'geocodificacion_caida';
+ALTER TYPE "notificacion_entidad_tipo" ADD VALUE IF NOT EXISTS 'geocodificacion_caida_dia';

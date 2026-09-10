@@ -4801,3 +4801,134 @@ imposible de seguir.
 - Ahora distingue CUATRO contextos, uno de ellos que nadie habia considerado: el sitio ya tiene
   permiso y quien lo niega es el telefono.
 - Lo que NO se puede detectar se declara: el navegador embebido de WhatsApp.
+
+
+## 396 — el cierre sumaba varias tiendas en un solo numero (2026-09-08)
+
+Cerrada y en produccion. Cuatro PR (#760, #761, #762, #763), release #764. Sin migracion.
+
+- **El dinero SIEMPRE estuvo bien.** La wallet reparte por tienda con sus propias cifras: a
+  nadie se le pago mal. Era presentacion, y las cuatro bitacoras abren diciendolo.
+- **El cierre es del MENSAJERO, no de la tienda.** Medido: de 56 cierres, 17 llevan DOS tiendas,
+  y «Pago a tienda» era la suma sin decirlo.
+- **Tres superficies, tres umbrales distintos.** El del nivel-mensajero se evalua sobre las
+  tiendas DE ESE MENSAJERO -- es la trampa que mas facil se cuela, y tiene mutacion propia.
+- **35 mutaciones muertas y CUATRO controles negativos.** Mutar un comentario sobrevive: eso es
+  lo que separa un arnes que mide de uno que recita.
+- **Limite real declarado:** en bodega solo se marca una de las dos cifras. Marcar la otra exige
+  redisenar una cascada ya entregada, y no se hizo de tapadillo.
+- **Una tanda corrigio a la anterior en accesibilidad:** dos tiendas homonimas no «se leen igual
+  porque se ven igual» -- quien navega con lector de pantalla no las ve.
+- **El spec fallo en tres puntos** y los implementadores los detectaron al mirar el codigo: un
+  archivo refactorizado por la 395, un DTO fuera del censo del leader, y el arrastre de tests.
+
+## 2026-09-10 — 400 · un fallo de configuracion del geocodificador no bloquea la asignacion
+- El gate de asignabilidad trataba igual «la direccion no existe» y «nuestro proveedor rechaza
+  las peticiones». Ahora, cuando la causa es NUESTRA, la orden se asigna marcada como sin
+  ubicacion; una direccion irresoluble (`ZERO_RESULTS`) sigue bloqueada. El operador ve cuantas
+  quedaron sin ubicacion, como cifra agregada y sin identificar cuales.
+- Requisitos cubiertos: R1-R36, mapeados en `progress/impl_400_backend.md` e
+  `impl_400_frontend.md`. Gate completo `INIT_EXIT=0`, 26.477 tests, `integration/db` entera.
+- **ORIGEN, medido en produccion:** el 2026-09-08 a las 19:40 UTC la Geocoding API empezo a
+  rechazar todo con `REQUEST_DENIED`. 19 HORAS de silencio. De 43 ordenes represadas, **42 lo
+  estaban por la credencial y solo 1 por una direccion real irresoluble**: el gate trataba igual
+  a las dos, y el operador corregia direcciones que estaban bien.
+- **El modo degradado YA EXISTIA** desde la 92 (R28/R30/R37: la orden sin coordenadas se excluye
+  de la optimizacion sin abortarla y se muestra al final de la lista del mensajero). El unico que
+  lo impedia era el gate. Por eso la ficha salio barata: `JobDTO.lastError` ya llegaba al gate,
+  sin migracion ni columna nueva.
+- **DOS FALLOS MUDOS cazados por el camino, ambos con la suite en verde:** quitar la anotacion de
+  tipo del mapa de mensajes dejaba typecheck limpio y 42/42 tests verdes; y reescribir el tipo A
+  MANO en vez de derivarlo con `Exclude` dejaba 1999 tests verdes en 129 archivos de guardias.
+  Los dos cerrados con guardias que leen el arbol real.
+- **El CLI del backfill no tenia NI UN TEST** y es lo que se ejecutaria contra produccion: una
+  errata en el flag (`--aply`) corria como simulacion **en silencio**, y quien lo tecleaba mal
+  creia haber aplicado. Ahora se rechaza con codigo 2.
+- Un requisito no se podia probar como pedia la tabla de trazabilidad (un doble no ve el `WHERE`):
+  se movio al repositorio real capturando la consulta literal.
+- DEUDA declarada: **T17 sin cerrar** — nadie ha visto la app con los mensajes nuevos; el toast
+  real pasa de 180 caracteres. Y T20, el simulacro del backfill tras el despliegue, que debe dar
+  **cero candidatas** (medido el 2026-09-10 a las 00:22 UTC: 0 jobs vivos, 0 con marcador).
+
+## 2026-09-10 — 402 · la cola reparte el lote entre tipos
+- `claimBatch` reclamaba 10 jobs por corrida ordenando solo por `run_after ASC`, sin nocion de
+  tipo. Ahora reparte por turnos: el turno 1 de cada tipo presente antes que el turno 2 de
+  ninguno. Sin migracion, sin cambiar la firma, sin tocar el resto de capas.
+- Requisitos cubiertos: R1-R9, 8 de los 9 en `tests/integration/db` contra Postgres real, porque
+  la logica vive en el SQL y un test con dobles no ve la consulta.
+- **ORIGEN, medido:** 82 `webhook_estado` vencidos dejaron 6 jobs de geocodificacion **sin
+  ejecutarse durante media hora, con la credencial de Google YA ARREGLADA**. Hubo que adelantarlos
+  a mano en la base de produccion para desbloquear 42 ordenes.
+- **La revision RECHAZO la primera vuelta**, y ese rechazo es lo mejor de esta ficha. El
+  implementador se habia desviado del design repitiendo un predicado; el reviewer no discutio el
+  razonamiento: **monto la carrera contra Postgres real** con 300.000 candidatos y la provoco de
+  forma determinista — `sin el predicado: A reclamo la MISMA FILA que B`. Tenia razon. Pero su
+  proteccion (una asercion de FORMA sobre el SQL) dejaba pasar dos mutaciones que **sobrevivian
+  los 24 tests, los 438 archivos relacionados y las 198 guardias**, restaurando la doble entrega.
+- Cerrado con dos casos que provocan la carrera de verdad, y con un mecanismo antifalso-verde: si
+  la ventana no llega a abrirse, el test **FALLA** diciendo `LA VENTANA NO SE ABRIO` en vez de
+  pasar por vacio. El reviewer lo saboteo bajando el corpus a 50 para comprobarlo. 13 corridas
+  seguidas, cero flakes.
+- Agravante documentado: **la ventana crece con el conjunto candidato**, asi que la exposicion
+  sube justo bajo saturacion. El `design.md` prohibe expresamente colapsar las CTEs.
+
+## 2026-09-10 — 403 · un webhook que falla en racha se pausa, avisa y se recupera solo
+- Un destino que rechaza sistematicamente ya no castiga la cola: se PAUSA (no se desactiva),
+  se avisa, y el 429 tiene tratamiento propio. La suscripcion sigue viva y **se recupera sola al
+  primer 2xx**. Umbral: 3 fallos consecutivos Y 30 minutos sin exito.
+- Requisitos cubiertos: R1-R19, en `progress/impl_403_backend.md` e `impl_403_frontend.md`.
+- **ORIGEN, medido:** 2.042 fallos con HTTP 429 y **1.958 jobs muertos en cinco dias** contra un
+  unico destino, frente a 60 entregas. **Nadie se entero.** El destino era `webhook.site` —una URL
+  de PRUEBAS— que quedo activa en produccion desde el 2026-08-28, mientras un integrador REAL
+  llevaba cinco dias sin recibir un solo evento. Se corrigio la URL a mano el 2026-09-09 (16:00 y
+  22:27 UTC) y desde entonces las entregas van al 100%.
+- **PAUSAR y no DESACTIVAR es decision del humano**, tomada al saber que hay un integrador real:
+  desactivar lo dejaria desconectado hasta que alguien lo reactive a mano, y ya sabemos que ese
+  silencio puede durar cinco dias. La cura se pareceria demasiado a la enfermedad.
+- El `down.sql` de enums **recrea-con-lista** —el modo que en este repo ya borro valores en
+  silencio— y por eso lleva **precondicion ruidosa**: si queda una fila con el valor nuevo, el
+  rollback ABORTA en vez de tragarse avisos no leidos. Ejercitado contra Postgres con control
+  positivo. Los cinco `down.sql` anteriores se revisaron y NO se tocaron.
+- **Una leccion de test que conviene no olvidar:** el aviso de pantalla se leia con un punto doble
+  (`…8:05 a. m..`) y ningun test lo veia, porque **construian la fecha con el mismo formateador
+  que el componente y la comparaban contra si misma** — verdes y ciegos a la vez. Salio mirando el
+  render, y ahora hay un test que vigila la puntuacion y el orden de la frase.
+- Se corrigio ademas una contradiccion en pantalla: una suscripcion dada de baja mostraba a la vez
+  «No hay webhook registrado» y «Los envios se estan espaciando».
+
+## 2026-09-10 — 401 · la caida del geocodificador avisa y se recupera sola
+- Aviso al `maestro` y a los `admin` cuando 3 jobs DISTINTOS acumulan el marcador de fallo de
+  configuracion en una ventana de 60 min, y recuperacion automatica de los jobs muertos por esa
+  causa en cuanto el proveedor responde de verdad. Nunca resucita un job cuya causa sea la
+  direccion: esas terminan `done`, no `failed`.
+- Requisitos cubiertos: R1-R35, mapeados en `progress/impl_401.md`. Gate completo `INIT_EXIT=0`,
+  26.782 tests, `integration/db` entera (152 archivos), sincronia base<->rama medida contando
+  `_prisma_migrations`: 189 = 189, sin sobrantes por ningun lado.
+- **ORIGEN, medido:** el corte del 2026-09-08 duro **19 HORAS sin que ninguna alerta se disparara**
+  —lo detecto el humano porque no podia asignar ordenes— y los 25 jobs muertos **no se recuperaron
+  solos**: hubo que entrar a la base de produccion a resucitarlos a mano. El criterio de exito de
+  esta ficha es que, si se repite, nadie tenga que abrir la base de datos.
+- **El umbral esta calculado, no intuido:** a la tasa medida del corte (2,4 jobs/h) el aviso sale
+  a **~75 minutos en vez de 19 horas**. Se cuentan jobs y no intentos, porque un solo job reintenta
+  8 veces con backoff y cruzaria un umbral de 3 en tres minutos: el "fallo aislado" prohibido.
+- **Descarto el segundo eje de la 403 con una razon que nadie habia visto:** un job de
+  geocodificacion puede completarse **sin tocar al proveedor** (acierto de cache, `SIN_DIRECCION`,
+  orden borrada). Un aviso que exigiera «cero exitos en la ventana» se apagaria con el primer
+  acierto de cache y **no saldria nunca**. Copiar el umbral de la ficha hermana habria producido
+  una alerta muerta.
+- **La revision RECHAZO la primera vuelta, y no por el codigo:** el `design.md` publicaba un SQL
+  que Postgres rechaza (`0A000`, `FOR UPDATE` junto a funciones de ventana) y `tasks.md` llegaba a
+  pedirlo por escrito. El codigo usaba la forma correcta de tres CTEs —la misma que ya obligo a
+  partir el `claimBatch` de la 402— pero el spec habria hecho que alguien lo reintrodujera, **y el
+  fallo seria MUDO**: lanzaria, el avisador se lo tragaria, y el logger inyectado era un no-op.
+- **Otro fallo mudo cerrado de paso:** R20 afirmaba «queda registrado con contexto» y en produccion
+  no registraba nada (el composition root pasaba `undefined` y el default era `{ warn: () => {} }`).
+  Ahora un test espia la salida real y falla si nadie escribe.
+- **El `down.sql` hubo que reescribirlo por el ORDEN DE MERGE:** su lista era la foto de `dev`
+  antes de que entrara la 403, y revertir esta migracion **habria borrado en silencio sus dos
+  valores**. Reescrito con los diez eventos y ocho `entidad_tipo` actuales, y protegido con dos
+  tests que lo afirman **por nombre**: ya no depende de que alguien se acuerde.
+- Cinco parametros quedan configurables por entorno con default (jobs minimos, ventana,
+  lote, espaciado, enfriamiento). Ausente, vacio, no numerico, cero o negativo cae al default sin
+  lanzar. **No se declaran en `.env.example`**: `lib/config/jobs.ts` sigue el mismo patron con cinco
+  variables y ninguna esta ahi.

@@ -17,6 +17,10 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 // literal: las cadenas de notificacion siguen viviendo solo en este archivo (146 §4.6). Y
 // `fechaLegible` es pura — no importa `Date` ni `Intl`.
 import { fechaLegible } from "@/lib/utils/dia-reparto-textos";
+// FICHA 403: el dia calendario de COSTA RICA. `fechaLegible` solo pone en palabras un
+// `YYYY-MM-DD`; quien decide QUE dia es ese a partir de un instante es esta funcion, y por eso no
+// vale `toISOString().slice(0, 10)` (en UTC, un fallo de las 19:00 CR ya cae en el dia siguiente).
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 // Feature 271 (§9.2/§10.1): el aviso de bloqueo al mensajero se COMPONE con el mismo formateador
 // que la pantalla. No es una cadena importada de fuera: es la regla que CUENTA (N, V y cual toca
 // primero) escrita una sola vez, para que campana y pantalla no puedan divergir (R43/R52).
@@ -713,6 +717,213 @@ export async function emitirGastoFijoCobroPendiente(
         destinatario: { tipo: "rol", rol: "maestro" },
       },
     ],
+    tx,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FICHA 403 §5 — Una suscripción de webhook lleva fallando en racha y sus reintentos se
+// espaciaron solos. BEST-EFFORT, desde el DRENADOR DE LA COLA.
+//
+// ⚠️ LA ENTIDAD DE ESTE AVISO ES **LA RACHA DE FALLOS**, NO LA SUSCRIPCIÓN, y es lo que hace que
+// R12 sea estructural en vez de disciplina:
+//
+//     entidadId = `${ownerUsuarioId}:${sinExitoDesde.toISOString()}`
+//
+// `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+// destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`, y
+// `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `false`. Con la SUSCRIPCIÓN (o su
+// owner) como entidad, esa clave admitiría UNA sola fila por (evento, owner, maestro) PARA
+// SIEMPRE: la SEGUNDA racha de ese integrador —meses después, tras haberse recuperado— no
+// avisaría NUNCA, sin error, sin log y sin nada. Es el fallo que la 262 documentó con `orden` y
+// que la 333 evitó eligiendo el día.
+//
+// Con la racha:
+//   · mientras dura, `sinExitoDesde` no se mueve ⇒ misma entidad ⇒ TODOS los intentos fallidos
+//     posteriores chocan con el índice y se descartan en silencio: UN aviso por racha (R12, 1ª);
+//   · tras un 2xx (R2) o un guardado manual de la URL (R7), `sinExitoDesde` cambia ⇒ otra entidad
+//     ⇒ la siguiente racha avisa de nuevo (R12, 2ª).
+//
+// POR ESO NO HACE FALTA CÓDIGO QUE DETECTE LA TRANSICIÓN «no pausada → pausada» (design §4): el
+// service intenta notificar en CADA fallo mientras `estaPausada()` sea cierto, y la deduplicación
+// la hace la clave. Se probó la alternativa —reconstruir el estado previo restando uno al
+// contador— y NO funciona: no distingue el caso en que el conteo ya superaba el umbral desde hacía
+// rato y es el TIEMPO el que acaba de cumplirse (ambos lados se evalúan con el mismo «ahora»).
+// ---------------------------------------------------------------------------
+
+/**
+ * Lo MÍNIMO que el aviso necesita, y ni un dato más (R13): quién es el owner —solo para formar la
+ * clave, nunca para el texto— y desde cuándo dura la racha.
+ *
+ * ⚠️ NO LLEVA NI LA URL NI EL SECRETO, ni cifrado, y no es un descuido: son el dato del integrador
+ * y la credencial de firma. Un aviso viaja a una campana que se lee en pantalla y puede acabar en
+ * una captura o en un log.
+ */
+export interface WebhookSuscripcionPausadaContexto {
+  /** Owner de la suscripción. Solo entra en el `entidadId`, jamás en la descripción. */
+  ownerUsuarioId: string;
+  /** Ancla de la racha: instante desde el que no hay ninguna entrega aceptada. */
+  sinExitoDesde: Date;
+}
+
+/**
+ * FICHA 403 (R9/R13) — el texto del aviso.
+ *
+ * ⚠️ NUNCA DICE «DESACTIVADA», «DADA DE BAJA» NI «CANCELADA» (R9, última frase), Y ESO ES EL
+ * REQUISITO, no una preferencia de estilo. La suscripción SIGUE ACTIVA, sigue encolando y sigue
+ * reintentando: lo único que cambió es el espaciado, y se deshace solo al primer 2xx. Un texto que
+ * dijera «se desactivó» mandaría al maestro a reactivar a mano algo que no está apagado —y la
+ * decisión del humano en esta ficha fue exactamente NO reproducir ese mecanismo—.
+ *
+ * SIN LA URL Y SIN EL SECRETO (R13). Y sin nombrar cuál suscripción: hoy hay una sola en
+ * producción, y nombrarla el día que haya varias es una extensión de una línea, no otro mecanismo.
+ *
+ * La fecha va en palabras con `fechaLegible`, el MISMO formateador que usan la asignación y el
+ * portal del mensajero: lo que se importa es la conversión de fecha, no otro literal (146 §4.6).
+ *
+ * Y el día calendario sale de `fechaCalendarioCR`, NO de `toISOString().slice(0, 10)`: quien lee
+ * este aviso está en Costa Rica, y en UTC un fallo de las 19:00 CR ya cae en el día siguiente. Un
+ * aviso que dice «desde el 10» cuando en pantalla todavía es el 9 se lee como un error del sistema.
+ */
+export function textoWebhookSuscripcionPausada(sinExitoDesde: Date): string {
+  return (
+    `Un webhook lleva fallando desde el ${fechaLegible(fechaCalendarioCR(sinExitoDesde))} ` +
+    "y sus reintentos se espaciaron automáticamente para no saturar la cola de trabajo. " +
+    "Se reanudarán solos en cuanto vuelva a responder. Revisa Configuración > API."
+  );
+}
+
+/**
+ * R9/R10/R12/R13 — UNA fila `warning` dirigida al rol `maestro`, y a nadie más.
+ *
+ * `warning` y NO `alert`: la suscripción sigue viva y se está recuperando sola. Un `alert` teñiría
+ * de rojo (`NotificationsBell.tsx`) algo que no exige intervenir — no es la misma severidad que
+ * «algo se rompió y hay que arreglarlo a mano».
+ *
+ * SÓLO AL `maestro`: es el único rol que opera Configuración > API (`lib/actions/webhooks.ts`
+ * autoriza a `maestro` y a nadie más). El `admin` la vería sin poder actuar, que es el mismo
+ * argumento por el que la 333 lo excluyó.
+ *
+ * SIN ANEXO: no hay ningún dato más que enseñar sin arriesgar R13.
+ *
+ * R10: reutiliza `emitirFilas` → `INotificacionRepository.crear`, el mecanismo de la 146. No se
+ * construye ningún canal de aviso nuevo.
+ */
+export async function emitirWebhookSuscripcionPausada(
+  repo: INotificacionRepository,
+  ctx: WebhookSuscripcionPausadaContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  return emitirFilas(
+    repo,
+    [
+      {
+        tipo: "warning",
+        evento: "webhook_suscripcion_pausada",
+        descripcion: textoWebhookSuscripcionPausada(ctx.sinExitoDesde),
+        anexo: null,
+        entidadTipo: "webhook_suscripcion_pausa",
+        // ⚠️ LA RACHA, no la suscripción. Ver el bloque de arriba.
+        entidadId: `${ctx.ownerUsuarioId}:${ctx.sinExitoDesde.toISOString()}`,
+        destinatario: { tipo: "rol", rol: "maestro" },
+      },
+    ],
+    tx,
+  );
+}
+
+// FICHA 401 §7 — El servicio de mapas está rechazando nuestras peticiones. BEST-EFFORT, desde la
+// rama de configuración del job de geocodificación.
+//
+// EL HECHO QUE LO ORIGINA, MEDIDO: el 2026-09-08 el proveedor rechazó TODAS las peticiones durante
+// 19 h 55 min por un problema de configuración de nuestra cuenta, **ninguna alerta se disparó**, y
+// lo detectó un humano porque no podía asignar órdenes. El contrato de la feature 91 ya decía que
+// ese caso «debe ser RUIDOSO, nunca silencioso». No lo fue.
+//
+// ⚠️ LA ENTIDAD DE ESTE AVISO ES **LA JORNADA CR**, NO EL JOB NI LA ORDEN, y es la misma decisión
+// (y el mismo motivo) que la de la 333. `notificacion_dedupe_key` es UNIQUE sobre `(evento,
+// entidad_id, destinatario_rol, destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE
+// entidad_id IS NOT NULL`, y `crear` ABSORBE el `P2002` devolviendo `false`. Con una entidad que
+// no cambiara entre jornadas, el aviso del día 2 no saldría NUNCA, en silencio. Con la jornada:
+// días distintos ⇒ el aviso sale siempre (R10); misma jornada ⇒ un solo aviso por rol (R9). Y esto
+// último no es cosmético: el drenador corre CADA MINUTO, así que sin la entidad por jornada el
+// corte medido habría producido ~2.280 filas.
+//
+// Y tampoco es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el
+// índice único es PARCIAL, de modo que saldría un aviso por evaluación.
+// ---------------------------------------------------------------------------
+
+/** Lo MÍNIMO que el aviso necesita: un número y un día. Ni dirección, ni orden, ni guía (R26). */
+export interface GeocodificacionCaidaContexto {
+  /** Cuántos jobs distintos llevan el marcador dentro de la ventana. UN NÚMERO, nada más (R26). */
+  afectados: number;
+  /** `YYYY-MM-DD`: la jornada CR en que se detectó la caída. **ES LA ENTIDAD** del aviso. */
+  diaCR: string;
+}
+
+/**
+ * R26/R27 — el texto del aviso. LITERAL FIJO, y es contrato de test afirmado a mano.
+ *
+ * ⚠️ SIN JERGA Y SIN SIGLAS (R27). Quedan prohibidas «geocodificación», «geocodificador»,
+ * «config_invalida», «REQUEST_DENIED» y «API»: quien lee esto es una persona, y el término que ya
+ * usa el resto de la app de cara al operador es «servicio de mapas» (la 400 lo fijó en
+ * `MSG_UBICACION_NO_VERIFICADA`). Un solo vocabulario, no dos.
+ *
+ * ⚠️ DICE QUE LA CAUSA ES NUESTRA, no la dirección, y es la mitad del valor del aviso: el
+ * 2026-09-09 se mandó al operador a corregir seis direcciones que estaban perfectamente bien.
+ *
+ * SIN PII NI SECRETOS (R26): un número agregado y una instrucción. Nunca la dirección, el id de la
+ * orden, su guía, la URL del proveedor ni la credencial — ni siquiera enmascarada.
+ *
+ * Singular y plural explícitos, como `textoCargaMasivaTerminada`: «1 direcciones» sería el tipo de
+ * texto roto que ninguna suite ve y que un humano lee el día peor.
+ */
+export function textoGeocodificacionCaida(n: number): string {
+  return n === 1
+    ? "El servicio de mapas está rechazando nuestras peticiones por un problema de configuración de la cuenta. 1 dirección quedó sin ubicar. Revisa la credencial y la facturación de la cuenta del proveedor de mapas."
+    : `El servicio de mapas está rechazando nuestras peticiones por un problema de configuración de la cuenta. ${n} direcciones quedaron sin ubicar. Revisa la credencial y la facturación de la cuenta del proveedor de mapas.`;
+}
+
+/**
+ * R7/R8/R9/R10 — DOS filas `alert`, una por cada rol de administración, con el MISMO texto.
+ *
+ * LOS DOS ROLES son decisión del humano del 2026-09-09 (pregunta abierta Q1). La propuesta del
+ * spec era «sólo `maestro`», con el criterio de la 333: la acción que el aviso pide —revisar la
+ * credencial y la facturación de la cuenta del proveedor— es del dueño. Lo que ese argumento no
+ * veía y el incidente sí: el corte duró 19 horas, la mayoría fuera de horario, y quien acabó
+ * notándolo fue **quien estaba operando**, no quien podía arreglarlo. El `admin` no toca la
+ * facturación, pero ESCALA — y para escalar necesita enterarse.
+ *
+ * `ROLES_ADMINISTRACION` se REUTILIZA tal cual (constante privada de este mismo archivo, la misma
+ * que usan ya `emitirPostulacionPendiente`, `emitirPostulacionRecursoPendiente`,
+ * `emitirCierreDiaPorAprobar` y `emitirCierreDiaVencido`). No se exporta ni se toca.
+ *
+ * `alert` y NO `warning`: `warning` es «algo pendiente de aprobación» —una cola de trabajo
+ * normal—. Esto es un servicio caído por configuración nuestra que exige una acción FUERA de la
+ * app.
+ *
+ * EL MISMO TEXTO PARA LOS DOS: es lo que hacen los cuatro emisores multi-rol vigentes. Un texto
+ * distinto por rol duplicaría el literal —y con él el riesgo de que uno de los dos se quede sin
+ * revisar contra R26/R27— para decir lo mismo.
+ *
+ * SIN ANEXO: no hay ningún dato adicional que enseñar sin arriesgar R26.
+ */
+export async function emitirGeocodificacionCaida(
+  repo: INotificacionRepository,
+  ctx: GeocodificacionCaidaContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  return emitirFilas(
+    repo,
+    ROLES_ADMINISTRACION.map((destinatario) => ({
+      tipo: "alert" as const,
+      evento: "geocodificacion_caida" as const,
+      descripcion: textoGeocodificacionCaida(ctx.afectados),
+      anexo: null,
+      entidadTipo: "geocodificacion_caida_dia" as const,
+      entidadId: ctx.diaCR,
+      destinatario,
+    })),
     tx,
   );
 }

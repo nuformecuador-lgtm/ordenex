@@ -39,6 +39,50 @@ const OK_ACTIVA = {
 };
 const OK_VACIO = { status: "ok" as const, webhook: null };
 
+// ---------------------------------------------------------------------------------------
+// FICHA 403 (T14) — la suscripción cuyos envíos están espaciados. `pausada` llega YA
+// calculada del servidor (es un valor derivado que se reevalúa en cada `obtenerWebhook`):
+// la pantalla no la deduce ni la recalcula, solo la cuenta.
+// ---------------------------------------------------------------------------------------
+const SIN_EXITO_ISO = "2026-09-09T13:05:00.000Z";
+const OK_PAUSADA = {
+  status: "ok" as const,
+  webhook: {
+    url: URL_ACTIVA,
+    activa: true,
+    pausada: true,
+    sinExitoDesde: SIN_EXITO_ISO,
+  },
+};
+const OK_NO_PAUSADA = {
+  status: "ok" as const,
+  webhook: {
+    url: URL_ACTIVA,
+    activa: true,
+    pausada: false,
+    sinExitoDesde: SIN_EXITO_ISO,
+  },
+};
+
+// Mismo formato que la pantalla (es-EC, fecha corta + hora corta), construido aparte y NO
+// importado de `fecha-legible`: compararlo contra su propia fuente estaría siempre verde.
+const FECHA_HORA_ES_EC = new Intl.DateTimeFormat("es-EC", {
+  dateStyle: "short",
+  timeStyle: "short",
+});
+
+/** Los formateadores meten espacios finos/duros (U+202F, U+00A0) que el DOM conserva. */
+function normalizar(texto: string): string {
+  return texto.replace(/[\s  ]+/g, " ").trim();
+}
+
+/** El texto del aviso de envíos espaciados, tal como lo LEE una persona. */
+function avisoDeEspaciado(): string {
+  return normalizar(
+    screen.getByText(/se están espaciando/i).textContent ?? "",
+  );
+}
+
 function renderCell(ui: ReactElement) {
   return render(<ToastProvider>{ui}</ToastProvider>);
 }
@@ -323,5 +367,235 @@ describe("WebhookAccionCell — rotar secreto (R19, R20, R21)", () => {
     expect(
       await screen.findByLabelText("Secreto de webhook generado"),
     ).toHaveValue(SECRET);
+  });
+});
+
+// =========================================================================================
+// FICHA 403 (T14) — «SUS ENVÍOS ESTÁN ESPACIADOS», DICHO PARA QUIEN NO SABE DE COLAS
+//
+// El servidor ya decide y sirve el estado (`pausada`, `sinExitoDesde`); esta pantalla solo
+// tiene que CONTARLO bien. Lo que se vigila aquí es exactamente lo que puede salir mal en la
+// capa de presentación:
+//   1. que el aviso APAREZCA cuando el servidor dice `pausada: true`;
+//   2. que NO aparezca cuando dice `false` (un aviso permanente es tan inútil como ninguno);
+//   3. que el texto NO suene a corte ni a baja —el dueño no tiene que hacer nada— y no
+//      arrastre jerga («reintentos», «circuito», «backoff», «429») ni el timestamp crudo;
+//   4. que tras «Guardar URL» se apague solo, sin recargar la página (R19).
+// Los textos se afirman como LITERALES de lo que una persona lee: son el contrato de esta
+// task, no un detalle de implementación.
+// =========================================================================================
+describe("WebhookAccionCell — envíos espaciados (ficha 403: R18, R19)", () => {
+  it("R18: con `pausada: true` la pantalla avisa de que los envíos se están espaciando y desde cuándo", async () => {
+    obtenerWebhookMock.mockResolvedValue(OK_PAUSADA);
+    const user = userEvent.setup();
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    await abrir(user);
+    await screen.findByText(URL_ACTIVA);
+
+    const aviso = avisoDeEspaciado();
+    const desde = normalizar(FECHA_HORA_ES_EC.format(new Date(SIN_EXITO_ISO)));
+    expect(aviso).toBe(
+      `Los envíos a este webhook se están espaciando: desde el ${desde} el ` +
+        `destino no acepta ninguno. No hay que hacer nada: vuelven a su ritmo ` +
+        `normal en cuanto el destino acepte un envío. Si ya está resuelto, ` +
+        `guarda la URL de nuevo para reintentarlo ahora.`,
+    );
+  });
+
+  it("R18: la fecha se lee como fecha, no como el timestamp crudo que llega de la acción", async () => {
+    obtenerWebhookMock.mockResolvedValue(OK_PAUSADA);
+    const user = userEvent.setup();
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    await abrir(user);
+    await screen.findByText(URL_ACTIVA);
+
+    const aviso = avisoDeEspaciado();
+    expect(aviso).not.toContain(SIN_EXITO_ISO);
+    expect(aviso).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/); // ISO-8601 en pantalla
+    expect(aviso).toContain(
+      normalizar(FECHA_HORA_ES_EC.format(new Date(SIN_EXITO_ISO))),
+    );
+  });
+
+  it("PUNTUACIÓN: la fecha va EN MEDIO de la frase, y el aviso nunca se lee con un punto doble", async () => {
+    // Esto no es quisquillosidad: `dateStyle: "short"` de es-EC devuelve «9/9/26, 8:05 a. m.»
+    // -abreviatura CON punto-, así que dejar la fecha cerrando la frase producía «a. m..» en
+    // producción. Solo se ve mirando el render, y ningún test anterior lo habría cazado.
+    // Se vigilan las DOS causas: el punto doble (el síntoma) y la fecha al final de su frase
+    // (la causa), para que tampoco vuelva por un ICU distinto -en formato 24 h no hay
+    // abreviatura y el síntoma desaparecería aunque el orden volviera a estar mal-.
+    obtenerWebhookMock.mockResolvedValue(OK_PAUSADA);
+    const user = userEvent.setup();
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    await abrir(user);
+    await screen.findByText(URL_ACTIVA);
+
+    const aviso = avisoDeEspaciado();
+    const desde = normalizar(FECHA_HORA_ES_EC.format(new Date(SIN_EXITO_ISO)));
+
+    expect(aviso).not.toContain(".."); // el síntoma
+    // La causa: tras la fecha SIGUE la frase, no la cierra un punto.
+    expect(aviso).toContain(`desde el ${desde} el destino`);
+    expect(aviso).not.toMatch(
+      new RegExp(`${desde.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\.`),
+    );
+  });
+
+  it("R18/R9: el aviso NO dice que se desactivó, ni que se dio de baja, ni suena a jerga técnica", async () => {
+    obtenerWebhookMock.mockResolvedValue(OK_PAUSADA);
+    const user = userEvent.setup();
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    await abrir(user);
+    await screen.findByText(URL_ACTIVA);
+
+    const aviso = avisoDeEspaciado().toLowerCase();
+    // La suscripción sigue viva: nada de "te hemos cortado".
+    for (const prohibida of [
+      "desactiv",
+      "dado de baja",
+      "dio de baja",
+      "cancel",
+      "suspend",
+      "bloquead",
+      "error",
+      "fall", // "fallos", "falló": el dueño no tiene que interpretar fallos
+    ]) {
+      expect(aviso).not.toContain(prohibida);
+    }
+    // Jerga que el dueño de la integración no tiene por qué conocer.
+    for (const jerga of [
+      "circuito",
+      "backoff",
+      "429",
+      "cola",
+      "job",
+      "http",
+      "pausad", // el vocabulario interno del servidor no se filtra a la pantalla
+    ]) {
+      expect(aviso).not.toContain(jerga);
+    }
+  });
+
+  it("R13: el aviso no filtra la URL del webhook ni el secreto", async () => {
+    obtenerWebhookMock.mockResolvedValue(OK_PAUSADA);
+    const user = userEvent.setup();
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    await abrir(user);
+    await screen.findByText(URL_ACTIVA);
+
+    const aviso = avisoDeEspaciado();
+    expect(aviso).not.toContain(URL_ACTIVA);
+    expect(aviso).not.toContain(SECRET);
+  });
+
+  it("R18: sin `sinExitoDesde` el aviso sigue apareciendo, sin hueco ni fecha inventada", async () => {
+    obtenerWebhookMock.mockResolvedValue({
+      status: "ok" as const,
+      webhook: {
+        url: URL_ACTIVA,
+        activa: true,
+        pausada: true,
+        sinExitoDesde: null,
+      },
+    });
+    const user = userEvent.setup();
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    await abrir(user);
+    await screen.findByText(URL_ACTIVA);
+
+    const aviso = avisoDeEspaciado();
+    expect(aviso).toBe(
+      "Los envíos a este webhook se están espaciando: el destino lleva un rato " +
+        "sin aceptar ninguno. No hay que hacer nada: vuelven a su ritmo normal " +
+        "en cuanto el destino acepte un envío. Si ya está resuelto, guarda la " +
+        "URL de nuevo para reintentarlo ahora.",
+    );
+    // La otra variante del texto también se lee entera y bien puntuada: ni hueco donde iba
+    // la fecha, ni punto doble, ni un «desde el» huérfano.
+    expect(aviso).not.toContain("..");
+    expect(aviso).not.toContain("desde el");
+    expect(aviso).not.toContain("null");
+  });
+
+  it("R18: con `pausada: false` NO hay aviso — una suscripción sana no alarma a nadie", async () => {
+    obtenerWebhookMock.mockResolvedValue(OK_NO_PAUSADA);
+    const user = userEvent.setup();
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    await abrir(user);
+    await screen.findByText(URL_ACTIVA);
+
+    expect(screen.queryByText(/se están espaciando/i)).toBeNull();
+    // Y el estado normal se sigue leyendo igual que siempre.
+    expect(screen.getByText(/activa/i)).toBeInTheDocument();
+  });
+
+  it("R18: sin suscripción (webhook: null) tampoco hay aviso", async () => {
+    obtenerWebhookMock.mockResolvedValue(OK_VACIO);
+    const user = userEvent.setup();
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    await abrir(user);
+    await screen.findByText(/No hay webhook registrado/i);
+
+    expect(screen.queryByText(/se están espaciando/i)).toBeNull();
+  });
+
+  it("H-2: con la suscripción dada de baja no se muestra el aviso de espaciado, aunque venga `pausada: true`", async () => {
+    // Camino REAL, reproducido en la revisión: el dueño da de baja una suscripción que estaba
+    // en racha de fallos. `desactivarByOwner` pone `activa=false` y NO reinicia el circuito, y
+    // `findByOwner` no filtra por `activa`, así que el servidor sigue diciendo `pausada: true`.
+    // La pantalla NO puede pintar las dos frases a la vez: «No hay webhook registrado» y «sus
+    // envíos se están espaciando» se contradicen, y la segunda es falsa —una suscripción de
+    // baja no recibe entregas, así que no hay nada que espaciar—.
+    obtenerWebhookMock.mockResolvedValue({
+      status: "ok" as const,
+      webhook: {
+        url: URL_ACTIVA,
+        activa: false,
+        pausada: true,
+        sinExitoDesde: SIN_EXITO_ISO,
+      },
+    });
+    const user = userEvent.setup();
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    await abrir(user);
+    await screen.findByText(/No hay webhook registrado/i);
+
+    expect(screen.queryByText(/se están espaciando/i)).toBeNull();
+    // Y la frase que SÍ vale se sigue leyendo sola, sin nada que la contradiga.
+    expect(
+      normalizar(screen.getByRole("status").textContent ?? ""),
+    ).toBe("No hay webhook registrado para este owner.");
+  });
+
+  it("R19: tras 'Guardar URL' el aviso desaparece sin recargar la página", async () => {
+    // El reinicio lo hace el SERVIDOR al guardar la URL; la pantalla solo vuelve a leer con
+    // el `refrescar()` que ya existía, y la segunda lectura ya viene sin pausa.
+    obtenerWebhookMock
+      .mockResolvedValueOnce(OK_PAUSADA)
+      .mockResolvedValue(OK_NO_PAUSADA);
+    registrarWebhookMock.mockResolvedValue({ status: "actualizada" });
+    const user = userEvent.setup();
+    renderCell(<WebhookAccionCell ownerUsuarioId={OWNER} identificador={IDENT} />);
+
+    await abrir(user);
+    await screen.findByText(URL_ACTIVA);
+    expect(avisoDeEspaciado()).toContain("se están espaciando");
+
+    await user.click(screen.getByRole("button", { name: "Guardar URL" }));
+
+    await waitFor(() =>
+      expect(screen.queryByText(/se están espaciando/i)).toBeNull(),
+    );
+    expect(obtenerWebhookMock).toHaveBeenCalledTimes(2); // re-lectura, no recarga
+    expect(screen.getByRole("dialog")).toBeInTheDocument(); // el modal sigue en pie
   });
 });

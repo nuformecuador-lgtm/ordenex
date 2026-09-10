@@ -66,7 +66,7 @@ function respuestaHttp(body: unknown): Response {
 }
 
 /** Servicio REAL con el compuesto REAL; solo la red y la base son dobles. */
-function armarCadena(body: unknown) {
+function armarCadena(body: unknown, paradas: ParadaRutaRow[] = PARADAS) {
   const rutas = {
     findByMensajero: vi.fn(async () => null),
     upsertOrigen: vi.fn<(m: string, u: unknown) => Promise<void>>(async () => {}),
@@ -77,7 +77,8 @@ function armarCadena(body: unknown) {
     marcarTramoVivo: vi.fn<(m: string, a: Date) => Promise<void>>(async () => {}),
     marcarDesactualizada: vi.fn<(m: string, e: string) => Promise<void>>(async () => {}),
   };
-  const paradasRepo: ParadasRepo = { findParadasEnReparto: async () => PARADAS };
+  const findParadasEnReparto = vi.fn(async () => paradas);
+  const paradasRepo: ParadasRepo = { findParadasEnReparto };
   const fetchImpl = vi.fn(async () => respuestaHttp(body));
   const warn = vi.fn();
 
@@ -100,7 +101,7 @@ function armarCadena(body: unknown) {
     () => T0,
     { warn },
   );
-  return { service, rutas, fetchImpl, warn };
+  return { service, rutas, fetchImpl, warn, findParadasEnReparto };
 }
 
 function job(): JobDTO {
@@ -251,5 +252,81 @@ describe("265/R49 — sin codigos de motivo, el aviso y el motivo siguen complet
     for (const prohibido of ["9.9281", "-84.0907", "o1"]) {
       expect(aviso).not.toContain(prohibido);
     }
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════
+// FEATURE 400 (T11, R9) — ANCLA DE NO-REGRESION DEL MODO DEGRADADO DE LA 92 (R37/R28).
+//
+// La ficha 400 deja pasar la asignacion de ordenes SIN coordenadas. Eso solo es seguro
+// porque rio abajo ya existe el modo degradado: la orden sin coordenadas se EXCLUYE del
+// calculo de ruta en vez de ABORTARLO, y queda como parada sin posicion al final de la
+// lista del mensajero. Este bloque no anade comportamiento: pone una red para que un cambio
+// futuro en `OptimizacionRutaService` no convierta la 400 en una perdida de ordenes.
+//
+// Si estas aserciones se caen, la puerta que abre la 400 habria que cerrarla.
+// ════════════════════════════════════════════════════════════════════════════════════════
+describe("400/R9 (92/R37, R28) — una orden SIN coordenadas no aborta la optimizacion", () => {
+  /** Tres paradas del mensajero; `o2` es la orden que se asigno sin ubicacion. */
+  const CON_UNA_SIN_UBICACION: ParadaRutaRow[] = [
+    { ordenId: "o1", latitud: 9.9281, longitud: -84.0907, createdAt: T0 },
+    { ordenId: "o2", latitud: null, longitud: null, createdAt: T0 },
+    { ordenId: "o3", latitud: 9.9412, longitud: -84.1012, createdAt: T0 },
+  ];
+
+  it("la optimizacion TERMINA BIEN y ordena las dos que si tienen coordenadas", async () => {
+    const { service, rutas } = armarCadena(
+      { routes: [{ visits: [{ shipmentIndex: 1 }, { shipmentIndex: 0 }] }] },
+      CON_UNA_SIN_UBICACION,
+    );
+
+    const r = await service.ejecutar(MENSAJERO, { motivo: "debounce", jobCreatedAt: T0 });
+
+    // NO aborta: el desenlace es `ok`, no un error ni una omision.
+    expect(r).toMatchObject({ status: "ok", paradas: 2 });
+    expect(rutas.reemplazarSecuencia).toHaveBeenCalledTimes(1);
+    expect(rutas.reemplazarSecuencia.mock.calls[0][1]).toEqual(["o3", "o1"]);
+  });
+
+  it("la orden sin coordenadas se EXCLUYE de la secuencia calculada, no se cuela con una posicion inventada", async () => {
+    const { service, rutas } = armarCadena(
+      { routes: [{ visits: [{ shipmentIndex: 0 }, { shipmentIndex: 1 }] }] },
+      CON_UNA_SIN_UBICACION,
+    );
+
+    await service.ejecutar(MENSAJERO, { motivo: "debounce", jobCreatedAt: T0 });
+
+    const secuencia = rutas.reemplazarSecuencia.mock.calls[0][1] as string[];
+    expect(secuencia).not.toContain("o2");
+    expect([...secuencia].sort()).toEqual(["o1", "o3"]);
+  });
+
+  it("pero NO se pierde: la lectura de paradas del mensajero sigue devolviendola (R28: parada sin posicion)", async () => {
+    // `findParadasEnReparto` no filtra las coordenadas nulas: la orden sigue siendo del
+    // mensajero y aparece en su lista, al final. Es lo que hace que asignarla sin ubicacion
+    // no sea perderla.
+    const { service, findParadasEnReparto } = armarCadena(
+      { routes: [{ visits: [{ shipmentIndex: 0 }, { shipmentIndex: 1 }] }] },
+      CON_UNA_SIN_UBICACION,
+    );
+
+    await service.ejecutar(MENSAJERO, { motivo: "debounce", jobCreatedAt: T0 });
+
+    const devueltas = await findParadasEnReparto.mock.results[0]!.value as ParadaRutaRow[];
+    expect(devueltas.map((p) => p.ordenId)).toContain("o2");
+    expect(devueltas).toHaveLength(3);
+  });
+
+  it("con TODAS sin coordenadas la optimizacion tampoco revienta: se omite, sin excepcion", async () => {
+    // El extremo: si el corte de credencial hubiera dejado el dia entero sin geocodificar,
+    // el mensajero no se queda sin app — se queda sin ORDENACION, que es otra cosa.
+    const { service } = armarCadena({ routes: [{}] }, [
+      { ordenId: "o1", latitud: null, longitud: null, createdAt: T0 },
+      { ordenId: "o2", latitud: null, longitud: null, createdAt: T0 },
+    ]);
+
+    const r = await service.ejecutar(MENSAJERO, { motivo: "debounce", jobCreatedAt: T0 });
+
+    expect(r.status).toBe("omitida");
   });
 });

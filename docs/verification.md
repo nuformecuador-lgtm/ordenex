@@ -153,10 +153,12 @@ un build y **no corre tests**— y entro un guard rojo en `dev`.
 
 ### Sin `DATABASE_URL` la suite se encoge — y en un worktree eso es lo normal
 
-**77 archivos de test** (medido el 2026-08-28) van envueltos en `HAY_BASE_DE_DATOS`
-(`tests/integration/db/_postgres-real.ts`). Sin una `DATABASE_URL` resoluble, vitest los da por
-**saltados** y la suite termina **verde sin haber tocado la capa de datos**: en la corrida completa
-de ese día, **52 archivos enteros** no ejecutaron ni una aserción.
+**147 archivos de test** (medido por el propio gate el 2026-09-09; eran 77 el 2026-08-28) van
+envueltos en `HAY_BASE_DE_DATOS` (`tests/integration/db/_postgres-real.ts`). Sin una
+`DATABASE_URL` resoluble, vitest los da por **saltados** y la suite termina **verde sin haber
+tocado la capa de datos**: en la corrida completa del 2026-08-28, **52 archivos enteros** no
+ejecutaron ni una aserción. **La cifra de este párrafo caduca** —ha casi doblado en doce días—;
+la buena es la que imprime el gate en cada corrida, no esta.
 
 `git worktree add` **no lleva el `.env`** —está gitignorado y vive solo en el árbol principal—, así
 que ese caso dejó de ser la máquina rara de alguien: pasa cada vez que se abre un árbol aparte, que
@@ -165,7 +167,7 @@ es la vía normal de paralelismo aquí.
 Por eso `init.sh` lo dice **con nombre y cifra, antes de correr**, y lo repite junto al veredicto:
 
 ```
-! sin DATABASE_URL: 77 archivos de tests contra Postgres NO se van a ejecutar.
+! sin DATABASE_URL: 147 archivos de tests contra Postgres NO se van a ejecutar.
     Se SALTAN, no fallan: los envuelve HAY_BASE_DE_DATOS, de
     tests/integration/db/_postgres-real.ts. La lista completa: ...
 ```

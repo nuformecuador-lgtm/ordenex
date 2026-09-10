@@ -10,12 +10,14 @@ import {
   desactivarWebhook,
   rotarSecretoWebhook,
 } from "@/lib/actions/webhooks";
+import type { WebhookVistaPublica } from "@/lib/types/webhook";
 
 import {
   RegistrarWebhookForm,
   type RegistrarWebhookFormHandle,
 } from "./RegistrarWebhookForm";
 import { RevelarWebhookSecretoModal } from "./RevelarWebhookSecretoModal";
+import { formatFechaHoraLegible } from "./fecha-legible";
 
 export interface WebhookAccionCellProps {
   /** Owner (usuario de rol `apiKey`) de la fila. */
@@ -24,8 +26,12 @@ export interface WebhookAccionCellProps {
   identificador: string;
 }
 
-/** Estado de la suscripción leído con `obtenerWebhook` (NUNCA el secreto, R5). */
-type WebhookEstado = { url: string; activa: boolean } | null;
+/**
+ * Estado de la suscripción leído con `obtenerWebhook` (NUNCA el secreto, R5). Es el tipo del
+ * contrato (`WebhookVistaPublica`), no una copia: la ficha 403 le añadió `pausada` y
+ * `sinExitoDesde` y una copia local se habría quedado atrás en silencio.
+ */
+type WebhookEstado = WebhookVistaPublica | null;
 
 /** `undefined` = aún no leído / cargando; `null` = sin suscripción. */
 type EstadoCarga = WebhookEstado | undefined;
@@ -74,6 +80,28 @@ export function WebhookAccionCell({
   }
 
   const activa = estado?.activa === true;
+
+  /**
+   * FICHA 403 (R18/R19). «Espaciada» NO es un error, ni una baja, ni algo que el dueño tenga
+   * que arreglar desde aquí: la suscripción sigue viva y sigue reintentando, solo que más
+   * separado en el tiempo, porque el destino lleva un rato sin aceptar ningún envío. La línea
+   * es ADICIONAL a la de arriba y no toca ningún botón.
+   *
+   * PERO SOLO SE PINTA SI LA SUSCRIPCIÓN ESTÁ ACTIVA (H-2 de la revisión, reproducido): dar de
+   * baja pone `activa=false` sin reiniciar el circuito, así que `pausada` sigue llegando en
+   * `true` y la pantalla mostraba a la vez «No hay webhook registrado» y «sus envíos se están
+   * espaciando». Son incompatibles, y la segunda es falsa: una suscripción de baja no recibe
+   * entregas, así que no hay nada que espaciar. Dos frases que se contradicen no informan: le
+   * enseñan al dueño a no creerse ninguna.
+   *
+   * El valor es DERIVADO en el servidor y se recalcula en cada `obtenerWebhook`, así que el
+   * `refrescar()` que ya corre tras guardar la URL lo apaga sin recargar la página (R19). No
+   * se replica aquí ninguna de esas reglas.
+   */
+  const pausada = estado?.pausada === true;
+  const sinExitoDesde = estado?.sinExitoDesde
+    ? formatFechaHoraLegible(estado.sinExitoDesde)
+    : null;
 
   async function onConfirmRegistrar() {
     // R16: el `Modal` bloquea el segundo submit mientras esta promesa corre.
@@ -157,6 +185,23 @@ export function WebhookAccionCell({
                 No hay webhook registrado para este owner.
               </span>
             )}
+
+            {/* 403/R18: línea ADICIONAL a la de arriba, pero NUNCA contra ella (H-2). */}
+            {activa && pausada ? (
+              <p className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-foreground">
+                Los envíos a este webhook se están espaciando:{" "}
+                {/* La fecha NO cierra la frase: `dateStyle: "short"` de es-EC termina en
+                    «a. m.»/«p. m.», y un punto de abreviatura seguido del punto final se lee
+                    «8:05 a. m..». Con la fecha en medio no sobra nada, y da igual el formato
+                    que devuelva el ICU (12 h con abreviatura o 24 h sin ella). */}
+                {sinExitoDesde
+                  ? `desde el ${sinExitoDesde} el destino no acepta ninguno.`
+                  : "el destino lleva un rato sin aceptar ninguno."}{" "}
+                No hay que hacer nada: vuelven a su ritmo normal en cuanto el
+                destino acepte un envío. Si ya está resuelto, guarda la URL de
+                nuevo para reintentarlo ahora.
+              </p>
+            ) : null}
           </div>
 
           {!cargando ? (

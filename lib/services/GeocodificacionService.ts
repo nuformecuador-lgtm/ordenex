@@ -11,6 +11,14 @@ import type { IOrdenGeocodeRepository } from "@/lib/interfaces/repositories/IOrd
 import type { IGeocodeClient } from "@/lib/interfaces/external/IGeocodeClient";
 import type { GeocodeConfig } from "@/lib/config/geocode";
 import { construirQueryDireccion, hashDireccion } from "@/lib/geo/direccion-query";
+import { marcarFalloConfigGeocode } from "@/lib/geo/fallo-config-geocode";
+// FICHA 401 (design §5.3): el colaborador que reconoce la caida por configuracion NUESTRA y
+// recupera los jobs que murieron por ella. Su DEFAULT es el no-op, asi que ninguna suite que
+// construya este service toca la base por construccion.
+import {
+  geocodeSaludNoOp,
+  type IGeocodeSaludService,
+} from "@/lib/interfaces/services/IGeocodeSaludService";
 
 /** Estados que se persisten en `orden.geocode_status`. */
 export const STATUS_OK = "OK";
@@ -33,16 +41,53 @@ const defaultLogger: GeocodeLogger = { warn: () => {} };
  */
 export class GeocodeNoConfiguradoError extends Error {
   constructor() {
-    super("geocodificacion: GOOGLE_MAPS_API_KEY no esta configurada");
+    // FEATURE 400 (2026-09-09, R11): el mensaje viaja MARCADO. Falta de credencial es un
+    // fallo NUESTRO, no de la direccion, y el gate de asignabilidad tiene que poder
+    // distinguirlo al otro lado de la cola (`jobs.last_error`), donde lo unico que queda
+    // es esta cadena. El texto legible NO cambia: solo gana el prefijo.
+    super(marcarFalloConfigGeocode("geocodificacion: GOOGLE_MAPS_API_KEY no esta configurada"));
     this.name = "GeocodeNoConfiguradoError";
   }
 }
 
-/** El proveedor rechazo la peticion (REQUEST_DENIED) o hubo un fallo transitorio. */
+/**
+ * FALLO TRANSITORIO del intento: red, timeout, HTTP 5xx, cuota (`OVER_QUERY_LIMIT`),
+ * estado desconocido del proveedor. La cola aplica su backoff y lo reintenta.
+ *
+ * FEATURE 400 (2026-09-09, R16) — REGLA VIGENTE: este error es SOLO para el transitorio.
+ * Hasta esta ficha su docstring decia «el proveedor rechazo la peticion (REQUEST_DENIED)
+ * **o** hubo un fallo transitorio», y esa ambiguedad ERA el bug: rio abajo los dos casos
+ * quedaban indistinguibles, y un corte de credencial se leia en pantalla como «Direccion
+ * no encontrada» (42 ordenes bloqueadas 19 horas el 2026-09-08). El caso de configuracion
+ * tiene ahora su propia clase, `GeocodeConfigInvalidaError`, y su propio marcador.
+ *
+ * Consecuencia deliberada: este error NO lleva marcador. Un job muerto por red o por cuota
+ * sigue bloqueando la asignacion, que es lo que el humano decidio (design §8-A5).
+ */
 export class GeocodeIntentoFallidoError extends Error {
   constructor(detalle: string) {
     super(detalle);
     this.name = "GeocodeIntentoFallidoError";
+  }
+}
+
+/**
+ * FEATURE 400 (2026-09-09, R11) — el proveedor RECHAZO la peticion (`REQUEST_DENIED`):
+ * credencial, facturacion o configuracion del proyecto. La direccion NUNCA llego a
+ * consultarse, asi que este fallo no dice absolutamente nada sobre ella.
+ *
+ * Su `message` va MARCADO (`marcarFalloConfigGeocode`) para que la causa sobreviva al
+ * salto por la cola y `AsignabilidadCoordenadasService` pueda clasificar la orden como
+ * `asignable_sin_ubicacion` en vez de bloquearla.
+ *
+ * NO extiende `GeocodeIntentoFallidoError` a proposito: si lo hiciera, un
+ * `toBeInstanceOf(GeocodeIntentoFallidoError)` seguiria verde sobre este caso y los dos
+ * volverian a ser el mismo cubo — que es exactamente el defecto que esta ficha corrige.
+ */
+export class GeocodeConfigInvalidaError extends Error {
+  constructor(detalle: string) {
+    super(marcarFalloConfigGeocode(detalle));
+    this.name = "GeocodeConfigInvalidaError";
   }
 }
 
@@ -57,6 +102,12 @@ export class GeocodificacionService {
     private readonly config: GeocodeConfig,
     private readonly now: () => Date = () => new Date(),
     private readonly logger: GeocodeLogger = defaultLogger,
+    /**
+     * FICHA 401 (R2/R13). Colaborador OPCIONAL con default NO-OP: un service construido sin
+     * cablearlo no consulta ni escribe nada. El real lo inyecta el composition root
+     * (`lib/services/jobs/geocodificacion-handler.ts`).
+     */
+    private readonly salud: IGeocodeSaludService = geocodeSaludNoOp,
   ) {}
 
   /**
@@ -114,6 +165,9 @@ export class GeocodificacionService {
     // R25: sin credencial se lanza ANTES de llamar. Mensaje agregado, sin PII.
     if (this.config.GOOGLE_MAPS_API_KEY === null) {
       this.logger.warn("[geocodificacion] job sin credencial configurada");
+      // FICHA 401 (R2): el OTRO camino de configuracion NUESTRA que la 400 marca. Va ANTES del
+      // `throw` y no puede cambiarlo (R11).
+      await this.avisarSalud(() => this.salud.registrarFalloConfig(job.id, this.now()));
       throw new GeocodeNoConfiguradoError();
     }
 
@@ -136,6 +190,15 @@ export class GeocodificacionService {
           status: STATUS_OK,
           geocodedAt: this.now(),
         });
+        // FICHA 401 (R13/R18) — RESPUESTA SATISFACTORIA DEL PROVEEDOR: es la unica senal fiable de
+        // que la credencial VOLVIO, porque prueba que ESTA credencial, AHORA, obtiene respuesta.
+        // Va DESPUES de persistir cache y orden a proposito: lo que ya esta escrito manda.
+        //
+        // ⚠️ EL ACIERTO DE CACHE NO LLEGA AQUI (R14), y es deliberado: se resuelve arriba, sin
+        // tocar la red, y por tanto SIGUE FUNCIONANDO DURANTE UN CORTE. Tomarlo por prueba de
+        // recuperacion reviviria jobs con el proveedor todavia caido, y cada uno quemaria sus 8
+        // intentos.
+        await this.avisarSalud(() => this.salud.registrarExitoProveedor(this.now()));
         return;
       }
       case "sin_resultados": {
@@ -169,8 +232,37 @@ export class GeocodificacionService {
         // R24: credencial o facturacion rota. Ruidoso a proposito (Q3): preferimos una
         // cola de fallidos VISIBLE a jobs completados en silencio sin coordenadas.
         // R34 (maxIntentos 8) amortigua el caso hasta ~4 h de corte.
+        //
+        // FEATURE 400 (2026-09-09, R11/R16): error PROPIO y MARCADO, no el generico de
+        // transitorio. Es el unico camino de este switch —junto con la credencial ausente,
+        // arriba— en el que la direccion NO llego a consultarse: el fallo es nuestro, y el
+        // gate de asignabilidad debe poder dejar pasar la asignacion por eso.
         this.logger.warn("[geocodificacion] el proveedor rechazo la peticion");
-        throw new GeocodeIntentoFallidoError(outcome.detalle);
+        // FICHA 401 (R2/R6) — la caida se evalua AQUI y solo aqui: en la rama donde la causa se
+        // conoce con certeza y sin leer prosa. NO en el drenador, que corre cada minuto sobre una
+        // tabla que no se purga, ni en `JobQueueService`, que sirve a nueve tipos de job. Coste:
+        // CERO consultas cuando no pasa nada, ~2-3 por hora durante un corte.
+        await this.avisarSalud(() => this.salud.registrarFalloConfig(job.id, this.now()));
+        throw new GeocodeConfigInvalidaError(outcome.detalle);
+    }
+  }
+
+  /**
+   * FICHA 401 (R11/R20) — LA COLA MANDA, EL AVISO Y EL RESCATE SON CORTESIA.
+   *
+   * Envuelve las tres llamadas a la salud para que NINGUNA pueda cambiar el desenlace del job. La
+   * direccion contraria seria mucho peor: una recuperacion caida revertiria una geocodificacion
+   * buena que ya esta escrita, y un aviso caido convertiria un fallo recuperable en otra cosa.
+   *
+   * Y no es un `catch` vacio (`docs/conventions.md`): el fallo queda REGISTRADO con la operacion y
+   * su causa. Mensaje agregado y sin PII, como el resto de este archivo (R26/R31).
+   */
+  private async avisarSalud(fn: () => Promise<unknown>): Promise<void> {
+    try {
+      await fn();
+    } catch (error) {
+      const causa = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`[geocodificacion] la salud de la cola fallo (best-effort): ${causa}`);
     }
   }
 }

@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { randomBytes } from "node:crypto";
+// FICHA 403: el predicado del circuito (para medir que un exito SACA de la pausa) y el quitador de
+// comentarios del repo (la guardia de vocabulario mide el CODIGO, no la prosa que lo explica).
+import { estaPausada } from "@/lib/utils/webhook-suscripcion-pausa";
+import type { WebhookSuscripcionPausadaContexto } from "@/lib/notificaciones/emitir";
+import { codigoSinComentarios } from "@/tests/fixtures/sin-comentarios";
 import { WebhookEstadoService, WebhookEntregaFallidaError } from "@/lib/services/WebhookEstadoService";
 import { WebhookSecretKeyError, cifrarSecreto } from "@/lib/crypto/webhook-secret-cipher";
 import { firmarWebhook } from "@/lib/crypto/webhook-firma";
@@ -30,11 +35,23 @@ const DESTINATARIO = "Juan Perez"; // PII que NUNCA debe ir al payload/log
 const ORIGIN = "https://app.ordenex.co";
 const ORDEN_ID = "orden-1";
 
+/**
+ * FICHA 403: el umbral del circuito, con los valores por defecto de R8 (3 fallos / 30 min / 1 h).
+ * Se escriben aqui —y no se leen de `loadWebhookConfig()`— para que este archivo no dependa del
+ * entorno y para que los casos digan con que numeros se estan midiendo.
+ */
+const PAUSA_FALLOS = 3;
+const PAUSA_VENTANA_MS = 30 * 60_000;
+const PAUSA_INTERVALO_MS = 3_600_000;
+
 const config: WebhookConfig = {
   WEBHOOK_TIMEOUT_MS: 10_000,
   WEBHOOK_REPLAY_WINDOW_S: 300,
   WEBHOOK_SECRET_ENC_KEY: CLAVE,
   WEBHOOK_APP_ORIGIN: ORIGIN,
+  WEBHOOK_PAUSA_FALLOS_MINIMOS: PAUSA_FALLOS,
+  WEBHOOK_PAUSA_VENTANA_MS: PAUSA_VENTANA_MS,
+  WEBHOOK_PAUSA_INTERVALO_MS: PAUSA_INTERVALO_MS,
 };
 
 const DATOS_BASE: DatosEntregaOrden = {
@@ -108,7 +125,13 @@ interface Fakes {
   datos: DatosEntregaOrden | null;
   subPorOwner: Record<string, WebhookSuscripcionActiva | null>;
   outcome: WebhookOutcome;
+  /** FICHA 403: estado del circuito que devuelve `incrementarFalloYLeer` (ya incrementado). */
+  estadoTrasFallo?: { fallosConsecutivos: number; sinExitoDesde: Date } | null;
+  /** FICHA 403: reloj inyectado; por defecto el de siempre de este archivo. */
+  now?: () => Date;
 }
+
+const AHORA = new Date("2026-07-21T10:00:05.000Z");
 
 function buildService(f: Partial<Fakes> = {}) {
   const datos = f.datos === undefined ? DATOS_BASE : f.datos;
@@ -116,18 +139,60 @@ function buildService(f: Partial<Fakes> = {}) {
   const outcome = f.outcome ?? { status: "ok" };
 
   const ordenes: IWebhookOrdenReader = { findDatosEntrega: vi.fn(async () => datos) };
+  // FICHA 403: el doble del repositorio expone los DOS metodos del circuito. `activa` NO aparece
+  // por ningun lado en este doble, y eso es intencionado: R5 dice que la pausa no la toca, asi que
+  // un service que intentara escribirla no tendria por donde.
+  // Los dobles llevan sus parametros TIPADOS (aunque no los usen) para que `mock.calls[0][0]` sea
+  // consultable: sin ellos vitest infiere una tupla vacia y las aserciones sobre los argumentos no
+  // compilan — que es justo lo que hay que afirmar aqui.
+  const registrarEntregaOk = vi.fn(async (_owner: string, _ahora: Date) => {});
+  const incrementarFalloYLeer = vi.fn(async (_owner: string, _ahora: Date) =>
+    f.estadoTrasFallo === undefined
+      ? { fallosConsecutivos: 1, sinExitoDesde: AHORA }
+      : f.estadoTrasFallo,
+  );
   const suscripciones = {
     findActivaByOwner: vi.fn(async (owner: string) => subPorOwner[owner] ?? null),
+    registrarEntregaOk,
+    incrementarFalloYLeer,
   } as unknown as IWebhookSuscripcionRepository;
   const entregar = vi.fn(async () => outcome);
   const sender: IWebhookSender = { entregar };
   const logs: string[] = [];
   const logger = { warn: (m: string) => logs.push(m) };
-  const now = () => new Date("2026-07-21T10:00:05.000Z");
+  const now = f.now ?? (() => AHORA);
+  // FICHA 403: notificador de pausa espia. El DEFAULT del service es el no-op; aqui se inyecta uno
+  // que registra para poder afirmar CUANDO se llama y con QUE contexto (R9/R13).
+  const notificarPausa = vi.fn(async (_ctx: WebhookSuscripcionPausadaContexto) => {});
 
-  const service = new WebhookEstadoService(ordenes, suscripciones, sender, config, now, logger);
-  return { service, entregar, logs, ordenes, suscripciones };
+  const service = new WebhookEstadoService(
+    ordenes,
+    suscripciones,
+    sender,
+    config,
+    now,
+    logger,
+    notificarPausa,
+  );
+  return {
+    service,
+    entregar,
+    logs,
+    ordenes,
+    suscripciones,
+    registrarEntregaOk,
+    incrementarFalloYLeer,
+    notificarPausa,
+  };
 }
+
+/** El estado que devolveria el repositorio tras un fallo, con la racha empezada hace `minutos`. */
+function estadoTras(fallos: number, minutos: number) {
+  return { fallosConsecutivos: fallos, sinExitoDesde: new Date(AHORA.getTime() - minutos * 60_000) };
+}
+
+/** Un desenlace transitorio corriente (sin sugerencia de espera). */
+const FALLO: WebhookOutcome = { status: "transitorio", detalle: "entregar webhook: HTTP 500" };
 
 describe("R17/R19 — entrega y complete", () => {
   it("con suscripcion activa hace POST a la URL del owner con el cuerpo del evento", async () => {
@@ -238,6 +303,10 @@ describe("R23 — idempotencia", () => {
       const ordenes: IWebhookOrdenReader = { findDatosEntrega: vi.fn(async () => datos) };
       const suscripciones = {
         findActivaByOwner: vi.fn(async () => ({ url: "https://a.example.com/hook", secret: SECRET_ENC })),
+        // FICHA 403: el circuito se contabiliza en los dos desenlaces; sin estos dos, un doble
+        // parcial rompe caminos que nada tienen que ver con la pausa.
+        registrarEntregaOk: vi.fn(async () => {}),
+        incrementarFalloYLeer: vi.fn(async () => null),
       } as unknown as IWebhookSuscripcionRepository;
       const entregar = vi.fn(async () => ({ status: "ok" }) as WebhookOutcome);
       const service = new WebhookEstadoService(
@@ -399,6 +468,10 @@ describe("256/R15 — la ventana DECLARADA: el motivo es el VIGENTE AL ENTREGAR"
     };
     const suscripciones = {
       findActivaByOwner: vi.fn(async () => ({ url: "https://a.example.com/hook", secret: SECRET_ENC })),
+      // FICHA 403: el circuito se contabiliza en los dos desenlaces; sin estos dos, un doble
+      // parcial rompe caminos que nada tienen que ver con la pausa.
+      registrarEntregaOk: vi.fn(async () => {}),
+      incrementarFalloYLeer: vi.fn(async () => null),
     } as unknown as IWebhookSuscripcionRepository;
     const entregar = vi.fn(async () => ({ status: "ok" }) as WebhookOutcome);
     const service = new WebhookEstadoService(
@@ -624,6 +697,10 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
     const ordenes: IWebhookOrdenReader = { findDatosEntrega: vi.fn(async () => datosIncidente("danado")) };
     const suscripciones = {
       findActivaByOwner: vi.fn(async () => ({ url: "https://a.example.com/hook", secret: SECRET_ENC })),
+      // FICHA 403: el circuito se contabiliza en los dos desenlaces; sin estos dos, un doble
+      // parcial rompe caminos que nada tienen que ver con la pausa.
+      registrarEntregaOk: vi.fn(async () => {}),
+      incrementarFalloYLeer: vi.fn(async () => null),
     } as unknown as IWebhookSuscripcionRepository;
     const entregar = vi.fn(async () => ({ status: "ok" }) as WebhookOutcome);
     const service = new WebhookEstadoService(
@@ -659,6 +736,10 @@ describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin cred
       };
       const suscripciones = {
         findActivaByOwner: vi.fn(async () => ({ url: "https://a.example.com/hook", secret: SECRET_ENC })),
+        // FICHA 403: el circuito se contabiliza en los dos desenlaces; sin estos dos, un doble
+        // parcial rompe caminos que nada tienen que ver con la pausa.
+        registrarEntregaOk: vi.fn(async () => {}),
+        incrementarFalloYLeer: vi.fn(async () => null),
       } as unknown as IWebhookSuscripcionRepository;
       const entregar = vi.fn(async () => ({ status: "ok" }) as WebhookOutcome);
       const service = new WebhookEstadoService(
@@ -784,6 +865,10 @@ describe("R32 — clave de cifrado ausente", () => {
     const ordenes: IWebhookOrdenReader = { findDatosEntrega: vi.fn(async () => DATOS_BASE) };
     const suscripciones = {
       findActivaByOwner: vi.fn(async () => ({ url: "https://a.example.com/hook", secret: SECRET_ENC })),
+      // FICHA 403: el circuito se contabiliza en los dos desenlaces; sin estos dos, un doble
+      // parcial rompe caminos que nada tienen que ver con la pausa.
+      registrarEntregaOk: vi.fn(async () => {}),
+      incrementarFalloYLeer: vi.fn(async () => null),
     } as unknown as IWebhookSuscripcionRepository;
     const entregar = vi.fn(async () => ({ status: "ok" }) as WebhookOutcome);
     const service = new WebhookEstadoService(
@@ -797,5 +882,380 @@ describe("R32 — clave de cifrado ausente", () => {
     expect(err).toBeInstanceOf(WebhookSecretKeyError);
     expect((err as Error).message).not.toContain(SECRETO);
     expect(entregar).not.toHaveBeenCalled(); // no se entrega sin poder firmar
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FICHA 403 (T8) — EL CIRCUITO DENTRO DEL SERVICE.
+//
+// Cubre R2 (el 2xx cierra la racha y saca de la pausa), R3 (que cuenta y que NO), R4 (cruzar el
+// umbral espacia y avisa), R5 (`activa` no se toca en ninguna rama), R6 (lo que NO debe pausar) y
+// R13 (ni el aviso ni el log llevan URL o secreto).
+//
+// ⚠️ EL RIESGO REAL DE ESTA FICHA ES EL FALSO POSITIVO. Hay un integrador de verdad conectado: si
+// una caida corta acabara en pausa, le espaciariamos las entregas una hora sin motivo. Por eso los
+// casos de R6 son tan importantes como los de R4.
+// ---------------------------------------------------------------------------
+
+describe("403/R2 — un 2xx cierra la racha y saca de la pausa, sin intervencion manual", () => {
+  it("⭑ la entrega aceptada llama a `registrarEntregaOk` con el owner y el `now` del service", async () => {
+    const { service, registrarEntregaOk, incrementarFalloYLeer } = buildService({
+      outcome: { status: "ok" },
+    });
+
+    await service.ejecutar(job());
+
+    expect(registrarEntregaOk).toHaveBeenCalledTimes(1);
+    expect(registrarEntregaOk).toHaveBeenCalledWith("owner-A", AHORA);
+    // Y no cuenta ningun fallo: el exito no es un intento fallido.
+    expect(incrementarFalloYLeer).not.toHaveBeenCalled();
+  });
+
+  it("⭑ SALE DE LA PAUSA: tras el reset, el mismo estado ya no cumple el umbral", async () => {
+    // Es R2 medido donde de verdad ocurre. `registrarEntregaOk` pone el contador a 0 y el ancla a
+    // `ahora`; con esos dos valores, `estaPausada` —la MISMA funcion que usa el drenador— devuelve
+    // `false` sin que nadie toque nada mas. La suscripcion se recupera sola.
+    const pausadaAntes = estaPausada(9, new Date(AHORA.getTime() - 5 * 60 * 60_000), AHORA, {
+      fallosMinimos: PAUSA_FALLOS,
+      ventanaMs: PAUSA_VENTANA_MS,
+    });
+    expect(pausadaAntes).toBe(true);
+
+    const { service, registrarEntregaOk } = buildService({ outcome: { status: "ok" } });
+    await service.ejecutar(job());
+    const [, anclaNueva] = registrarEntregaOk.mock.calls[0] as unknown as [string, Date];
+
+    // El estado que deja el reset: contador 0, ancla = el instante del exito.
+    expect(
+      estaPausada(0, anclaNueva, AHORA, {
+        fallosMinimos: PAUSA_FALLOS,
+        ventanaMs: PAUSA_VENTANA_MS,
+      }),
+    ).toBe(false);
+  });
+
+  it("no notifica nada en un exito", async () => {
+    const { service, notificarPausa } = buildService({ outcome: { status: "ok" } });
+    await service.ejecutar(job());
+    expect(notificarPausa).not.toHaveBeenCalled();
+  });
+});
+
+describe("403/R3 — que cuenta como fallo de entrega, y que NO", () => {
+  it("⭑ un no-2xx cuenta: se incrementa una vez, con el owner de la orden", async () => {
+    const { service, incrementarFalloYLeer } = buildService({ outcome: FALLO });
+    await service.ejecutar(job()).catch(() => {});
+    expect(incrementarFalloYLeer).toHaveBeenCalledTimes(1);
+    expect(incrementarFalloYLeer.mock.calls[0][0]).toBe("owner-A");
+  });
+
+  it("⭑ un timeout o un fallo de red tambien cuentan", async () => {
+    for (const detalle of [
+      "entregar webhook: fallo de red o timeout",
+      "entregar webhook: HTTP 429",
+    ]) {
+      const { service, incrementarFalloYLeer } = buildService({
+        outcome: { status: "transitorio", detalle },
+      });
+      await service.ejecutar(job()).catch(() => {});
+      expect(incrementarFalloYLeer, detalle).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("⭑ un PAYLOAD INVALIDO no cuenta: nunca intento la peticion HTTP", async () => {
+    // R3, ultima frase. Es un problema NUESTRO de integracion; contarlo penalizaria con reintentos
+    // espaciados a un destino perfectamente sano.
+    const { service, incrementarFalloYLeer, entregar } = buildService();
+    await service.ejecutar(job({ foo: "bar" })).catch(() => {});
+    expect(entregar).not.toHaveBeenCalled();
+    expect(incrementarFalloYLeer).not.toHaveBeenCalled();
+  });
+
+  it("⭑ un `WebhookSecretKeyError` (clave de cifrado ausente) TAMPOCO cuenta", async () => {
+    // El otro caso de R3, ultima frase, y el mas peligroso: si un despliegue se queda sin
+    // `WEBHOOK_SECRET_ENC_KEY`, TODAS las suscripciones fallarian a la vez. Contarlo pausaria a
+    // todos los integradores del sistema por un fallo de configuracion propio.
+    const ordenes: IWebhookOrdenReader = { findDatosEntrega: vi.fn(async () => DATOS_BASE) };
+    const incrementarFalloYLeer = vi.fn(async () => null);
+    const registrarEntregaOk = vi.fn(async () => {});
+    const suscripciones = {
+      findActivaByOwner: vi.fn(async () => ({
+        url: "https://a.example.com/hook",
+        secret: SECRET_ENC,
+      })),
+      incrementarFalloYLeer,
+      registrarEntregaOk,
+    } as unknown as IWebhookSuscripcionRepository;
+    const entregar = vi.fn(async () => ({ status: "ok" }) as WebhookOutcome);
+    const service = new WebhookEstadoService(
+      ordenes,
+      suscripciones,
+      { entregar },
+      { ...config, WEBHOOK_SECRET_ENC_KEY: null },
+      () => AHORA,
+    );
+
+    const err = await service.ejecutar(job()).catch((e) => e);
+
+    expect(err).toBeInstanceOf(WebhookSecretKeyError);
+    expect(entregar).not.toHaveBeenCalled();
+    expect(incrementarFalloYLeer).not.toHaveBeenCalled();
+    expect(registrarEntregaOk).not.toHaveBeenCalled();
+  });
+
+  it("una orden sin suscripcion activa no cuenta ningun fallo", async () => {
+    const { service, incrementarFalloYLeer } = buildService({ subPorOwner: { "owner-A": null } });
+    await service.ejecutar(job());
+    expect(incrementarFalloYLeer).not.toHaveBeenCalled();
+  });
+});
+
+describe("403/R4 — cruzar umbral Y ventana espacia el reintento y avisa", () => {
+  it("⭑ 3 fallos y 30 minutos: el error lleva el INTERVALO DE PAUSA como sugerencia", async () => {
+    const { service } = buildService({
+      outcome: FALLO,
+      estadoTrasFallo: estadoTras(PAUSA_FALLOS, 30),
+    });
+
+    const err = await service.ejecutar(job()).catch((e) => e);
+
+    expect(err).toBeInstanceOf(WebhookEntregaFallidaError);
+    expect((err as WebhookEntregaFallidaError).retryAfterMs).toBe(PAUSA_INTERVALO_MS);
+    // El detalle NO cambia: la cola sigue viendo el mismo fallo de siempre (R16).
+    expect((err as Error).message).toBe(FALLO.detalle);
+  });
+
+  it("⭑ y avisa al maestro con el ancla de la RACHA, no con `ahora`", async () => {
+    // El `sinExitoDesde` que viaja al aviso es lo que hace que la deduplicacion sea POR RACHA
+    // (R12). Si aqui se colara `ahora`, el `entidadId` cambiaria en cada intento y saldria un
+    // aviso por fallo — 1.958 avisos en el incidente medido.
+    const estado = estadoTras(PAUSA_FALLOS, 45);
+    const { service, notificarPausa } = buildService({ outcome: FALLO, estadoTrasFallo: estado });
+
+    await service.ejecutar(job()).catch(() => {});
+
+    expect(notificarPausa).toHaveBeenCalledTimes(1);
+    expect(notificarPausa).toHaveBeenCalledWith({
+      ownerUsuarioId: "owner-A",
+      sinExitoDesde: estado.sinExitoDesde,
+    });
+  });
+
+  it("⭑ intenta notificar en CADA fallo de la racha: no hay deteccion de transicion aqui", async () => {
+    // design §4. El service no recuerda si ya notifico —eso lo resuelve el `entidadId` contra el
+    // indice unico—, asi que llama siempre que `estaPausada()` sea cierto. Reconstruir el estado
+    // previo restando uno al contador NO funciona: no distingue el caso en que el conteo ya
+    // superaba el umbral y es el TIEMPO el que acaba de cumplirse.
+    const estado = estadoTras(50, 300);
+    const { service, notificarPausa } = buildService({ outcome: FALLO, estadoTrasFallo: estado });
+
+    await service.ejecutar(job()).catch(() => {});
+    await service.ejecutar(job()).catch(() => {});
+
+    expect(notificarPausa).toHaveBeenCalledTimes(2);
+    // Y las dos veces con el MISMO contexto: misma racha, misma entidad, un solo aviso al final.
+    expect(notificarPausa.mock.calls[0][0]).toEqual(notificarPausa.mock.calls[1][0]);
+  });
+
+  it("⭑ R11: el aviso es lo ULTIMO que puede pasar, y el job falla igual", async () => {
+    // LA CORRIDA MANDA, EL AVISO ES CORTESIA. Quien ABSORBE el fallo del aviso es el notificador
+    // real (`notificarWebhookSuscripcionPausadaCon` → `emitirBestEffort`), y eso se mide en
+    // `notificacion-notificadores-reales.test.ts`. Lo que se fija AQUI es la mitad que corresponde
+    // al service: que el aviso no se interponga entre el fallo y su reintento —el contador ya se
+    // incremento antes de notificar, y el error que sale es el de la ENTREGA—.
+    const { service, incrementarFalloYLeer, notificarPausa } = buildService({
+      outcome: FALLO,
+      estadoTrasFallo: estadoTras(PAUSA_FALLOS, 60),
+    });
+
+    const err = await service.ejecutar(job()).catch((e) => e);
+
+    expect(incrementarFalloYLeer).toHaveBeenCalledTimes(1);
+    expect(notificarPausa).toHaveBeenCalledTimes(1);
+    // El `last_error` que vera la cola es el de la entrega, no el del aviso.
+    expect(err).toBeInstanceOf(WebhookEntregaFallidaError);
+    expect((err as Error).message).toBe(FALLO.detalle);
+  });
+});
+
+describe("403/R6 — lo que NO debe pausar (el falso positivo es el riesgo real)", () => {
+  it("⭑ CAIDA CORTA: 5 fallos en 4 minutos NO pausa ni avisa", async () => {
+    // Un despliegue del integrador, un reinicio, un pico de latencia. Sin la ventana, esto
+    // convertiria una caida de 4 minutos en una interrupcion de una hora.
+    const { service, notificarPausa } = buildService({
+      outcome: FALLO,
+      estadoTrasFallo: estadoTras(5, 4),
+    });
+
+    const err = await service.ejecutar(job()).catch((e) => e);
+
+    expect(notificarPausa).not.toHaveBeenCalled();
+    expect((err as WebhookEntregaFallidaError).retryAfterMs).toBeUndefined();
+  });
+
+  it("⭑ FALLOS INSUFICIENTES: 2 fallos con 3 horas sin exito NO pausa ni avisa", async () => {
+    const { service, notificarPausa } = buildService({
+      outcome: FALLO,
+      estadoTrasFallo: estadoTras(PAUSA_FALLOS - 1, 180),
+    });
+
+    const err = await service.ejecutar(job()).catch((e) => e);
+
+    expect(notificarPausa).not.toHaveBeenCalled();
+    expect((err as WebhookEntregaFallidaError).retryAfterMs).toBeUndefined();
+  });
+
+  it("⭑ sin pausa, un 429 conserva SU `Retry-After`: el circuito no lo pisa (R14)", async () => {
+    const { service } = buildService({
+      outcome: { status: "transitorio", detalle: "entregar webhook: HTTP 429", retryAfterMs: 90_000 },
+      estadoTrasFallo: estadoTras(1, 1),
+    });
+
+    const err = await service.ejecutar(job()).catch((e) => e);
+
+    expect((err as WebhookEntregaFallidaError).retryAfterMs).toBe(90_000);
+  });
+
+  it("⭑ CON pausa, el intervalo de pausa GANA al `Retry-After` del 429", async () => {
+    // Un destino saturado que ademas lleva media hora sin aceptar nada: la pausa es la señal mas
+    // fuerte de las dos, y ademas la cola se queda con el mayor de los dos por su propia regla.
+    const { service } = buildService({
+      outcome: { status: "transitorio", detalle: "entregar webhook: HTTP 429", retryAfterMs: 5_000 },
+      estadoTrasFallo: estadoTras(PAUSA_FALLOS, 31),
+    });
+
+    const err = await service.ejecutar(job()).catch((e) => e);
+
+    expect((err as WebhookEntregaFallidaError).retryAfterMs).toBe(PAUSA_INTERVALO_MS);
+  });
+
+  it("una suscripcion borrada entre el encolado y la entrega no pausa nada", async () => {
+    const { service, notificarPausa } = buildService({ outcome: FALLO, estadoTrasFallo: null });
+    const err = await service.ejecutar(job()).catch((e) => e);
+    expect(err).toBeInstanceOf(WebhookEntregaFallidaError);
+    expect(notificarPausa).not.toHaveBeenCalled();
+  });
+});
+
+describe("403/R5 — PAUSAR NO ES DESACTIVAR: `activa` no se toca en ningun camino", () => {
+  it("⭑ ni en un exito, ni en un fallo, ni al cruzar el umbral se llama a `desactivarByOwner`", async () => {
+    // R5 medido donde puede romperse. El doble expone `desactivarByOwner` como espia: si algun dia
+    // alguien "arregla" esto desactivando la suscripcion, este caso lo nombra.
+    const desactivarByOwner = vi.fn(async () => {});
+    for (const escenario of [
+      { outcome: { status: "ok" } as WebhookOutcome, estado: undefined },
+      { outcome: FALLO, estado: estadoTras(1, 1) },
+      { outcome: FALLO, estado: estadoTras(99, 600) }, // pausada de sobra
+    ]) {
+      const suscripciones = {
+        findActivaByOwner: vi.fn(async () => ({
+          url: "https://a.example.com/hook",
+          secret: SECRET_ENC,
+        })),
+        registrarEntregaOk: vi.fn(async () => {}),
+        incrementarFalloYLeer: vi.fn(async () => escenario.estado ?? null),
+        desactivarByOwner,
+        upsertByOwner: vi.fn(async () => {}),
+        actualizarUrlByOwner: vi.fn(async () => {}),
+        actualizarSecretoByOwner: vi.fn(async () => {}),
+      } as unknown as IWebhookSuscripcionRepository;
+      const service = new WebhookEstadoService(
+        { findDatosEntrega: vi.fn(async () => DATOS_BASE) },
+        suscripciones,
+        { entregar: vi.fn(async () => escenario.outcome) },
+        config,
+        () => AHORA,
+        { warn: () => {} },
+        vi.fn(async () => {}),
+      );
+      await service.ejecutar(job()).catch(() => {});
+    }
+    expect(desactivarByOwner).not.toHaveBeenCalled();
+  });
+
+  it("⭑ y el codigo de este service no menciona `activa` ni `desactiv` en ninguna forma", () => {
+    // Guardia de texto sobre el archivo REAL. El vocabulario de esta ficha es «pausa»: la
+    // suscripcion sigue viva. Un `activa: false` colado aqui reproduciria exactamente la
+    // enfermedad —dejar al integrador desconectado hasta que alguien lo reactive a mano—.
+    // Se mide sobre el CODIGO, con el quitador de comentarios del repo: la prosa de este archivo
+    // nombra a proposito lo que el codigo tiene prohibido, y un barrido sobre el texto crudo
+    // denunciaria la explicacion en vez del error.
+    const codigo = codigoSinComentarios("lib/services/WebhookEstadoService.ts");
+    expect(codigo).not.toMatch(/desactiv/i);
+    expect(codigo).not.toMatch(/\bactiva\s*[:=]/);
+  });
+});
+
+describe("403/R13 — ni el aviso ni el log llevan la URL o el secreto", () => {
+  it("⭑ el contexto del notificador solo tiene un id de owner y una fecha", async () => {
+    const { service, notificarPausa } = buildService({
+      subPorOwner: {
+        "owner-A": { url: "https://secreta.example.com/hook?token=SECRETO-EN-URL", secret: SECRET_ENC },
+      },
+      outcome: FALLO,
+      estadoTrasFallo: estadoTras(PAUSA_FALLOS, 60),
+    });
+
+    await service.ejecutar(job()).catch(() => {});
+
+    expect(notificarPausa).toHaveBeenCalledTimes(1);
+    const ctx = notificarPausa.mock.calls[0][0] as unknown as Record<string, unknown>;
+    // La forma EXACTA: dos claves y ninguna mas. Un campo de mas es por donde se cuela la URL.
+    expect(Object.keys(ctx).sort()).toEqual(["ownerUsuarioId", "sinExitoDesde"]);
+    const serializado = JSON.stringify(ctx);
+    expect(serializado).not.toContain("secreta.example.com");
+    expect(serializado).not.toContain("SECRETO-EN-URL");
+    expect(serializado).not.toContain(SECRETO);
+    expect(serializado).not.toContain(SECRET_ENC);
+    expect(serializado).not.toContain(NUM_REMISION);
+    expect(serializado).not.toContain(DESTINATARIO);
+  });
+
+  it("⭑ el log de una entrega fallida ESTANDO PAUSADA sigue sin filtrar nada", async () => {
+    const { service, logs } = buildService({
+      subPorOwner: {
+        "owner-A": { url: "https://secreta.example.com/hook", secret: SECRET_ENC },
+      },
+      outcome: FALLO,
+      estadoTrasFallo: estadoTras(99, 600),
+    });
+
+    await service.ejecutar(job()).catch(() => {});
+
+    const todo = logs.join("\n");
+    expect(todo).not.toContain("secreta.example.com");
+    expect(todo).not.toContain(SECRETO);
+    expect(todo).not.toContain(SECRET_ENC);
+    expect(todo).not.toContain(NUM_REMISION);
+    expect(todo).not.toContain(DESTINATARIO);
+    expect(todo).not.toMatch(/desactiv/i);
+  });
+});
+
+describe("403 — el DEFAULT del notificador es el no-op, no el real", () => {
+  it("⭑ un service construido SIN notificador no escribe nada y no revienta al pausar", async () => {
+    // Es lo que impide que cualquiera de las suites que instancian este service escriba avisos
+    // contra la base local, que en este repo es COMPARTIDA. Se construye con SEIS argumentos —el
+    // septimo se omite— y se le hace cruzar el umbral.
+    const suscripciones = {
+      findActivaByOwner: vi.fn(async () => ({
+        url: "https://a.example.com/hook",
+        secret: SECRET_ENC,
+      })),
+      registrarEntregaOk: vi.fn(async () => {}),
+      incrementarFalloYLeer: vi.fn(async () => estadoTras(99, 600)),
+    } as unknown as IWebhookSuscripcionRepository;
+    const service = new WebhookEstadoService(
+      { findDatosEntrega: vi.fn(async () => DATOS_BASE) },
+      suscripciones,
+      { entregar: vi.fn(async () => FALLO) },
+      config,
+      () => AHORA,
+    );
+
+    const err = await service.ejecutar(job()).catch((e) => e);
+
+    expect(err).toBeInstanceOf(WebhookEntregaFallidaError);
+    expect((err as WebhookEntregaFallidaError).retryAfterMs).toBe(PAUSA_INTERVALO_MS);
   });
 });

@@ -276,13 +276,34 @@ describeSiHayBase("333/A8 — la base aplicada, y el DOWN ejercitado de verdad",
     return (filas[0]?.valores ?? "").split(",").filter((v) => v.length > 0);
   }
 
-  it("la base tiene los NUEVE eventos y los SIETE entidad_tipo, con el nuevo AL FINAL", async () => {
+  // ⚠️ ACTUALIZADO EL 2026-09-09 POR LA FICHA 403, Y SOLO ESTE CASO. Lee la BASE APLICADA —el
+  // estado de HOY—, no una foto historica, asi que crece con cada valor que se anada detras. Todo
+  // lo demas de este archivo (el UP de la 333, su DOWN con los OCHO/SEIS previos y las
+  // afirmaciones sobre los `down.sql` de la 146, la 253, la 262 y la 271) son FOTOS HISTORICAS y
+  // NO se tocan. El titulo ya no lleva la cuenta: decia «NUEVE/SIETE» cuando ya eran diez y ocho.
+  it("la base tiene el evento y la entidad de esta ficha, con los posteriores AL FINAL", async () => {
     // El orden (`enumsortorder`) es lo que demuestra que el valor se ANADIO y no que el tipo se
     // recreo por detras.
-    expect(await valoresDe("notificacion_evento")).toEqual([...EVENTOS_PREVIOS, EVENTO_NUEVO]);
+    // FICHA 401 (2026-09-10): la base gana tambien los dos valores del aviso «el servicio de mapas
+    // esta rechazando nuestras peticiones»
+    // (`20260910120000_notificacion_evento_geocodificacion_caida`), que entro DESPUES de la 403.
+    // Esta lista lee la BASE APLICADA —el estado de HOY, no una foto historica— y por eso se
+    // amplia, igual que la amplio la 333 sobre las de la 253, la 262 y la 271.
+    expect(await valoresDe("notificacion_evento")).toEqual([
+      ...EVENTOS_PREVIOS,
+      EVENTO_NUEVO,
+      // FICHA 403 (design §1.2/§5, R9, 2026-09-09) - «un webhook lleva fallando y sus reintentos se
+      // espaciaron». Migracion `20260909130000_notificacion_evento_webhook_suscripcion`.
+      "webhook_suscripcion_pausada",
+      "geocodificacion_caida", // ficha 401 / design 3.3
+    ]);
     expect(await valoresDe("notificacion_entidad_tipo")).toEqual([
       ...ENTIDADES_PREVIAS,
       ENTIDAD_NUEVA,
+      // FICHA 403 (design §1.2) - LA RACHA DE FALLOS (`'<owner>:<sinExitoDesde ISO>'`), no la
+      // suscripcion: es el mismo argumento por el que esta ficha 333 eligio EL DIA y no el cobro.
+      "webhook_suscripcion_pausa",
+      "geocodificacion_caida_dia", // ficha 401 / design 3.3 — LA JORNADA CR
     ]);
   });
 

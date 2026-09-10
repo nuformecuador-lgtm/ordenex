@@ -37,7 +37,26 @@ export type NotificacionEvento =
   // un cobro `pendiente` —también los días en que no se generó ninguno nuevo—. Destinatario: el
   // rol `maestro` y nadie más, porque el `admin` VE la cola pero no puede decidirla (R24) y un
   // recordatorio diario que no se puede atender es ruido. El texto lleva SOLO el número (R35).
-  | "gasto_fijo_cobro_pendiente";
+  | "gasto_fijo_cobro_pendiente"
+  // FICHA 403 (R9/R12) — una suscripción de webhook lleva fallando en RACHA y sus reintentos se
+  // espaciaron automáticamente para no saturar la cola. Lo emite el drenador
+  // (`WebhookEstadoService`) en cada fallo mientras la suscripción esté pausada; que salga UN solo
+  // aviso por racha lo da la ENTIDAD (`webhook_suscripcion_pausa`, anclada a `sinExitoDesde`), no
+  // una rama de código. Destinatario: el rol `maestro` y nadie más — es quien opera
+  // Configuración > API (`lib/actions/webhooks.ts`), y el `admin` no puede actuar sobre ella.
+  //
+  // ⚠️ EL TEXTO NUNCA DICE «desactivada», «dada de baja» ni «cancelada» (R9, última frase): la
+  // suscripción SIGUE ACTIVA, sigue reintentando y se recupera sola al primer 2xx. `activa` no se
+  // toca en ningún punto de esta ficha.
+  | "webhook_suscripcion_pausada"
+  // FICHA 401 (R7/R9/R10) — el servicio de mapas está rechazando nuestras peticiones por un
+  // problema de configuración de NUESTRA cuenta, y nadie se entera. El 2026-09-08 eso duró 19 h
+  // 55 min sin una sola alerta, y lo detectó un humano porque no podía asignar órdenes.
+  // Destinatarios: `maestro` Y `admin` (decisión del humano del 2026-09-09) — el maestro puede
+  // arreglarlo pero puede no estar delante; el admin no arregla la facturación, pero ESCALA, y
+  // para escalar necesita enterarse. Se emite desde la rama de configuración del job, no desde el
+  // drenador, y como mucho una vez por jornada CR y por rol.
+  | "geocodificacion_caida";
 
 /** Entidad de origen referenciada (referencia polimorfica, sin FK — design §1.2). */
 export type NotificacionEntidadTipo =
@@ -71,7 +90,37 @@ export type NotificacionEntidadTipo =
   // Con el día: días distintos ⇒ entidades distintas ⇒ el recordatorio diario sale siempre
   // (R30); misma corrida repetida el mismo día ⇒ misma entidad ⇒ un solo aviso (R31). Las dos
   // propiedades son ESTRUCTURALES, no de disciplina.
-  | "gasto_fijo_cobro_dia";
+  | "gasto_fijo_cobro_dia"
+  // ⚠️ FICHA 403 (design §1.2) — SEGUNDO `entidad_tipo` que NO apunta a una fila de tabla, y la
+  // entidad de este aviso es **LA RACHA DE FALLOS**, no la suscripción:
+  //
+  //     entidadId = `${ownerUsuarioId}:${sinExitoDesde.toISOString()}`
+  //
+  // POR QUÉ NO LA SUSCRIPCIÓN (ni su owner), que es la elección natural: `notificacion_dedupe_key`
+  // es UNIQUE sobre `(evento, entidad_id, destinatario_rol, destinatario_usuario_id)` con
+  // `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`, y `NotificacionRepository.crear`
+  // ABSORBE el `P2002` devolviendo `false`. Con la suscripción como entidad, la clave admitiría
+  // UNA sola fila por (evento, owner, maestro) PARA SIEMPRE: la SEGUNDA racha de ese integrador
+  // —meses después, tras haberse recuperado— no avisaría NUNCA, sin error, sin log y sin nada. Es
+  // el mismo fallo que la 262 documentó con `orden` y que la 333 evitó eligiendo el día.
+  //
+  // Con la racha, las dos mitades de R12 son ESTRUCTURALES y no de disciplina:
+  //   · misma racha ⇒ `sinExitoDesde` no cambia ⇒ misma entidad ⇒ UN solo aviso, por muchos
+  //     intentos fallidos que haya (R12, 1ª frase);
+  //   · racha nueva tras una recuperación ⇒ `sinExitoDesde` distinto ⇒ entidad distinta ⇒ aviso
+  //     independiente (R12, 2ª frase).
+  // No hay ningún código que detecte la transición «no pausada → pausada» (design §4).
+  | "webhook_suscripcion_pausa"
+  // ⚠️ FICHA 401 (design §3.3) — LA ENTIDAD DE ESTE AVISO ES **LA JORNADA CR**: `entidad_id` es la
+  // fecha `"YYYY-MM-DD"` del día en que se detectó la caída. TERCER valor del inventario que no
+  // apunta a una fila de tabla, y por el mismo motivo que los de la 333 y la 403: no hay ninguna
+  // fila que represente «el corte» —esta ficha no crea tabla ni columna (R31)— y reusar un valor
+  // que promete una (`orden`, `usuario`) sería escribir un dato falso con formato de dato.
+  //
+  // Y no es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el índice
+  // único es PARCIAL, así que saldría un aviso POR EVALUACIÓN. El drenador corre cada minuto: el
+  // corte medido de 19 h habría dejado ~2.280 filas en vez de 4.
+  | "geocodificacion_caida_dia";
 
 /**
  * DTO que viaja al cliente (design §3.1). `read` NO es una columna de `notificacion`:

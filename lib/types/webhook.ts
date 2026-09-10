@@ -60,9 +60,27 @@ export type RotarSecretoWebhookActionResult =
   /** R32: `WEBHOOK_SECRET_ENC_KEY` no configurada; no se puede cifrar el secreto. */
   | { status: "config_error" };
 
+/**
+ * FICHA 403 (R18/R19) — LA FRONTERA CONTRACTUAL con `WebhookAccionCell.tsx`. Lo que la pantalla
+ * necesita para decir «sus reintentos están espaciados» y desde cuándo, sin consultar nada más.
+ *
+ * `pausada` es DERIVADO y se evalúa en cada consulta, así que tras guardar la URL (que reinicia el
+ * circuito, R7) el `refrescar()` que ya existe lo devuelve en `false` sin recargar la página (R19).
+ *
+ * NUNCA el secreto (R35 de la 99) ni nada más de la suscripción.
+ */
+export interface WebhookVistaPublica {
+  url: string;
+  activa: boolean;
+  /** Si AHORA sus reintentos están espaciados por fallos sostenidos. Independiente de `activa`. */
+  pausada: boolean;
+  /** ISO-8601 del instante desde el que no hay ninguna entrega aceptada. */
+  sinExitoDesde: string | null;
+}
+
 export type ObtenerWebhookActionResult =
   /** R35 (gate D2): vista de la suscripción para la UI; NUNCA el secreto. `null` si no hay. */
-  | { status: "ok"; webhook: { url: string; activa: boolean } | null }
+  | { status: "ok"; webhook: WebhookVistaPublica | null }
   | { status: "unauthenticated" }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: { ownerUsuarioId?: string[] } };

@@ -72,6 +72,20 @@ const ORIGEN_RECOLECCION = "por_recolectar_en_tienda";
 // ninguna otra orden del lote (155/R29).
 const ORIGEN_RUTEO_SATELITE = "en_bodega_central";
 
+/**
+ * FEATURE 400 (2026-09-09, R31) — lo que devuelve `gateCoordenadas`: las ordenes que el
+ * gate BLOQUEA y, aparte, cuantas de las que deja pasar lo hacen SIN ubicacion.
+ *
+ * Dos campos HERMANOS, nunca uno dentro del otro (R35): una orden asignada sin ubicacion SI
+ * recibio mensajero, asi que no pertenece a `bloqueadas` — ese array significa, en el
+ * contrato vigente y en la UI, "esta orden NO recibio el efecto pedido".
+ */
+interface GateCoordenadasResultado {
+  bloqueadas: DetalleConflicto[];
+  /** Cifra AGREGADA (R32): cuantas, jamas cuales. */
+  sinUbicacion: number;
+}
+
 // Feature 46/R2: estatus bloqueado por reprogramacion (guardia explicito y tipado).
 const ESTATUS_REPROGRAMADA = "reprogramada";
 
@@ -160,6 +174,11 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
    * Feature 92 (R8) — guarda del writer de `mensajero_asignado_id` de este service.
    * Devuelve el `detalle` de las ordenes NO asignables (vacio si todas lo son).
    *
+   * FEATURE 400 (2026-09-09, R31) — cambia de FORMA DE RETORNO: ademas de las bloqueadas
+   * devuelve `sinUbicacion`, cuantas de las que SI pasaron lo hicieron por
+   * `asignable_sin_ubicacion`. Es un helper PRIVADO, asi que esto no toca ningun contrato
+   * compartido (R27 prohibe cambiar `IJobRepository`, no esto).
+   *
    * FEATURE 368 (2026-09-03, R18/R19) — YA NO ES TODO-O-NADA. Hasta esta ficha, una sola
    * orden con motivo de coordenadas abortaba el lote entero (contrato documentado aqui
    * mismo, ahora superado). Desde la 368, el llamador (`asignarDesdeBodega`) FILTRA el
@@ -175,13 +194,19 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
    * exigen coordenadas todavia: se le exigiran cuando la bodega la asigne (aqui o via
    * `AsignacionSateliteService`).
    */
-  private async gateCoordenadas(ordenIds: string[]): Promise<DetalleConflicto[]> {
-    if (ordenIds.length === 0) return [];
+  private async gateCoordenadas(ordenIds: string[]): Promise<GateCoordenadasResultado> {
+    if (ordenIds.length === 0) return { bloqueadas: [], sinUbicacion: 0 };
     const filas = await this.repo.findParaAsignabilidad(ordenIds);
     const estados = await this.asignabilidad.evaluar(filas);
     const detalle: DetalleConflicto[] = [];
+    // FEATURE 400 (2026-09-09, R31): segunda cuenta sobre el MISMO `Map` que ya se recorre.
+    // Cero consultas nuevas: es una segunda lectura de un dato ya cargado.
+    let sinUbicacion = 0;
     for (const ordenId of ordenIds) {
       const estado = estados.get(ordenId);
+      // 400/R31: se cuenta ANTES del `continue`, porque `asignable_sin_ubicacion` SI pasa
+      // el gate — no entra en `detalle` (R10), solo en la cifra.
+      if (estado === "asignable_sin_ubicacion") sinUbicacion += 1;
       if (esAsignable(estado)) continue;
       // `estado` indefinido = la orden no existe (el gate devuelve una entrada por cada
       // fila recibida). No deberia pasar aqui —las guardas de existencia corren antes—,
@@ -191,7 +216,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
         motivo: estado === undefined ? "orden no existe" : motivoAsignabilidad(estado),
       });
     }
-    return detalle;
+    return { bloqueadas: detalle, sinUbicacion };
   }
 
   /**
@@ -485,7 +510,12 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     //     `detalle` de coordenadas), ambos en el orden original de `ordenIds`.
     // El resto de motivos de este metodo (estado/pertenencia, mensajero, tope de intentos, todos
     // evaluados ANTES de este gate) siguen abortando el lote completo sin ningun cambio (R7/R8).
-    const detalleCoords = await this.gateCoordenadas(ordenIds);
+    //
+    // FEATURE 400 (2026-09-09, R31/R33): el gate devuelve ademas `sinUbicacion` — cuantas
+    // de las que pasan lo hacen sin coordenadas, por un fallo de configuracion NUESTRO. Se
+    // expone en `ok`/`partial` SOLO si es mayor que cero (campo opcional, patron aditivo).
+    // `conflict` no lo lleva: ahi no se asigno nada, asi que no hay nada que avisar.
+    const { bloqueadas: detalleCoords, sinUbicacion } = await this.gateCoordenadas(ordenIds);
     const bloqueadasIds = new Set(detalleCoords.map((d) => d.ordenId));
     const asignables = ordenIds.filter((id) => !bloqueadasIds.has(id));
     if (asignables.length === 0) return { status: "conflict", detalle: detalleCoords }; // R3
@@ -523,9 +553,13 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       estado: ESTATUS_EN_ESPERA_ACEPTACION,
     }));
     // R1/R4: `partial` si quedo alguna bloqueada por coordenadas, `ok` si el lote paso completo.
+    // Feature 400 (R31/R33): `sinUbicacion` se anade SOLO si es mayor que cero — con cero,
+    // la clave ni siquiera existe en el objeto (`toEqual({ status: "ok", resultados })` de
+    // los tests vigentes sigue verde).
+    const aviso400 = sinUbicacion > 0 ? { sinUbicacion } : {};
     return detalleCoords.length > 0
-      ? { status: "partial", resultados, bloqueadas: detalleCoords }
-      : { status: "ok", resultados };
+      ? { status: "partial", resultados, bloqueadas: detalleCoords, ...aviso400 }
+      : { status: "ok", resultados, ...aviso400 };
   }
 
   /**
