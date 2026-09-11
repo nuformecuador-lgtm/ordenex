@@ -18,7 +18,7 @@ por diseño (`docs/verification.md`). ~4 minutos, y hay que mirar los `skipped`.
 
 ---
 
-- [ ] **T1 — Mudar los dos textos de «La tienda» al módulo puro.**
+- [x] **T1 — Mudar los dos textos de «La tienda» al módulo puro.**
   Declarar `GESTION_TIENDA_BADGE_LABEL` y `GESTION_TIENDA_BADGE_NOTA` en `cierre-labels.ts` con el
   **mismo texto, carácter por carácter**; añadir los dos nombres al bloque de re-exportación de
   `cierre-detalle-shared.tsx:125-174`; borrar las declaraciones de `CierreDiaModule.tsx:1079-1087` y
@@ -29,7 +29,7 @@ por diseño (`docs/verification.md`). ~4 minutos, y hay que mirar los `skipped`.
   `tests/components/CierreDiaModule.test.tsx` (que afirma esos textos en la tabla en vivo) **verde sin
   tocarlo**.
 
-- [ ] **T2 — Declinar el distintivo de origen para la audiencia del mensajero.**
+- [x] **T2 — Declinar el distintivo de origen para la audiencia del mensajero.**
   En `FilaGestion`, envolver **sólo** el `<span>` del badge (`:1548-1566`) en `esMensajero ? null : (…)`.
   El `DatoFila` de «Ingreso de bodega por rechazos» (`:1540-1547`) **no se toca**. Rótulos y notas del
   origen, sin cambiar ni un carácter. Comentario corto con el porqué (`CierreDiaRepository.ts:295`) y
@@ -37,14 +37,14 @@ por diseño (`docs/verification.md`). ~4 minutos, y hay que mirar los `skipped`.
   *Depende de:* nada. *Paralelo con:* T1.
   **Hecho:** typecheck verde; `git diff --stat` sin un solo archivo de `lib/` ni de `db/`.
 
-- [ ] **T3 — El argumento del motivo dice la verdad por construcción.**
+- [x] **T3 — El argumento del motivo dice la verdad por construcción.**
   En `:1536`, `motivoGestionLegible(g.motivo, !esMensajero && g.esRechazoSla)`. No se toca
   `cierre-labels.ts` ni la firma de la función.
   *Depende de:* T2 (mismo archivo, misma lectura).
   **Hecho:** typecheck verde; para el admin la salida es idéntica a la de antes, lo comprueba T7 con
   los tests existentes sin modificarlos.
 
-- [ ] **T4 — Pintar la marca «La tienda» en el comprobante del mensajero.**
+- [x] **T4 — Pintar la marca «La tienda» en el comprobante del mensajero.**
   En el bloque desplegado de `FilaGestion` (`{open ? … : null}`, `:1474`) y **FUERA del fragmento
   `g.resultado === "rechazada"`**, condicionada a `esMensajero && g.desdeAyudaTienda`, con el mismo
   `Badge variant="secondary"` + `title` + `aria-label` que la tabla en vivo. Los textos se **importan**
@@ -56,7 +56,7 @@ por diseño (`docs/verification.md`). ~4 minutos, y hay que mirar los `skipped`.
   *Depende de:* T1, T2.
   **Hecho:** typecheck verde; T5 en verde con sus dos resultados.
 
-- [ ] **T5 [P] — Test del comprobante: las dos audiencias, las dos marcas.**
+- [x] **T5 [P] — Test del comprobante: las dos audiencias, las dos marcas.**
   `tests/components/ComprobanteMensajeroOrigenRechazo.test.tsx` (nuevo). Render directo de
   `CierreFacturaDetalle` con gestiones construidas a mano. Cubre R1 (mensajero, sin distintivo), R2
   (admin, los dos rótulos con sus dos notas), R3 (el renglón del ingreso y el motivo largo siguen), R4
@@ -70,7 +70,7 @@ por diseño (`docs/verification.md`). ~4 minutos, y hay que mirar los `skipped`.
   **Hecho:** verde, y las mutaciones 1, 2, 3, 4, 5 y 6 de `design.md` §9 lo ponen rojo — cada una con
   su número anotado.
 
-- [ ] **T6 [P] — Test de la pantalla real del mensajero (composition root + un solo texto).**
+- [x] **T6 [P] — Test de la pantalla real del mensajero (composition root + un solo texto).**
   `tests/components/CierreDiaComprobanteMarcasDeOrigen.test.tsx` (nuevo). Monta `CierreDiaModule`,
   copiando la receta de mocks de `tests/components/CierreDiaMotivoRechazoAutomatico.test.tsx:27-53` y
   añadiendo `verCierrePasado` al mock de `@/lib/actions/cierre-dia`; un cierre pasado en el listado,
@@ -83,7 +83,7 @@ por diseño (`docs/verification.md`). ~4 minutos, y hay que mirar los `skipped`.
   leader. Un aserto sobre el texto del archivo mide escritura, no comportamiento, y lo que se quiere
   comprobar es que la pantalla **pasa** `audiencia="mensajero"`.
 
-- [ ] **T7 — No-regresión, sin tocar los tests ajenos.**
+- [x] **T7 — No-regresión, sin tocar los tests ajenos.**
   Correr `CierreMotivoRechazoAutomatico.test.tsx`, `CierresAdminModule.test.tsx`,
   `CierreDiaModule.test.tsx`, `CierreDiaMotivoRechazoAutomatico.test.tsx`, `CierreFacturaPapel.test.tsx`,
   `CierreDetallePagos.test.tsx`, `CierreFacturaSinGestionar.test.tsx`, los tres de
@@ -93,7 +93,7 @@ por diseño (`docs/verification.md`). ~4 minutos, y hay que mirar los `skipped`.
   archivos. Si alguno exige un cambio, es señal de que T1/T2/T4 se pasaron de largo: se arregla el
   código, no el test (lección «literal: contrato o polizón»).
 
-- [ ] **T8 — Las ocho mutaciones de `design.md` §9.**
+- [x] **T8 — Las ocho mutaciones de `design.md` §9.**
   Una a una sobre el árbol: aplicar, correr los tests de la ficha, anotar **cuántos rojos y en qué
   archivos**, revertir con `git checkout -- app/ tests/`. La 8 es la autocomprobación del test: debe
   salir **verde** y demuestra que el control de no-vacuidad es lo único que impide el falso verde.
@@ -108,3 +108,16 @@ por diseño (`docs/verification.md`). ~4 minutos, y hay que mirar los `skipped`.
   *Depende de:* T8.
   **Hecho:** gate verde contra el baseline, los nueve requisitos mapeados a un test que existe y pasa, y
   **todo commiteado y verificado en el blob de la rama**, no sólo en el árbol de trabajo.
+
+  ⬜ **SIN MARCAR, y por una sola de sus tres partes (2026-09-10).** Lo que SÍ está hecho: el gate
+  completo se corrió (`INIT_EXIT=$?` **dentro** del log, ruta propia del agente, sin `tail`), los
+  `skipped` se miraron (26, todos de `AnaliticaPage`/`AnaliticaShell`, ajenos), los **160** archivos
+  contra Postgres SÍ se ejecutaron —`.env` copiado tras comprobar que apunta a `localhost`—, los nueve
+  requisitos están mapeados a un test que existe y pasa, y todo está commiteado y verificado en el blob.
+  Lo que NO se puede sostener es **«gate verde contra el baseline»**: el veredicto fue `INIT_EXIT=1`
+  por **5 archivos ajenos** (`tests/integration/db/notificacion-evento-*-migration.test.ts`, error
+  `2BP01`) que la base local **compartida** rompe por tener aplicada la migración de la ficha **410**,
+  que sigue en su rama. Medido tres veces —en la corrida completa, aislados (cero `40P01`: no es
+  contención) y **contra `origin/dev` limpio sin una línea mía**— y **no** se metieron en
+  `tests/baseline-rojos.json`, por instrucción expresa. Detalle en `progress/impl_414.md` §4. La
+  casilla se marca cuando la 410 se mergee o la base local se rehaga y el gate cierre en verde.
