@@ -175,13 +175,13 @@
 
 ## Tanda 5 · Frontend (depende de 3 y 4)
 
-- [ ] *(FRONTEND — tanda 5, otro agente sobre esta misma rama)* **T5.1 — `hooks/usePushSuscripcion.ts`**: soporte del navegador, estado del permiso, suscripción
+- [x] **T5.1 — `hooks/usePushSuscripcion.ts`**: soporte del navegador, estado del permiso, suscripción
       de **este** dispositivo, activar y desactivar.
       *Hecho:* unit en jsdom con `navigator.serviceWorker` / `Notification` / `PushManager` dobles:
       **al montar NO se llama a `requestPermission`** (R10, aserción sobre el no-llamado);
       `denied` no vuelve a pedirlo (R12); desactivar llama a `unsubscribe()` **y** a la acción de
       borrado (R15).
-- [ ] *(FRONTEND — tanda 5)* **T5.2 — `components/shared/PushOptIn.tsx`**: los tres estados de R14, la explicación previa,
+- [x] **T5.2 — `components/shared/PushOptIn.tsx`**: los tres estados de R14, la explicación previa,
       el texto de recuperación para `denied` y la instrucción de **instalar en la pantalla de inicio**
       cuando el navegador no ofrece `PushManager` (R45).
       *Hecho:* unit que renderiza los cuatro casos (no soportado / sin activar / activado / bloqueado)
@@ -191,15 +191,21 @@
       una ayuda ni en un pie. Son **3 de 18 mensajeros** los que solo entran desde iOS y a los que ese
       hueco vacío les parecería una avería. Un test afirma que en el caso «no soportado» **hay** texto
       accionable en el sitio del control, no ausencia.
-- [ ] *(FRONTEND — tanda 5)* **T5.3 — Montarlo en el panel de la campana** (`NotificationsBell.tsx`, 1 import + 1 línea) y en
+- [x] **T5.3 — Montarlo en el panel de la campana** (`NotificationsBell.tsx`, 1 import + 1 línea) y en
       el perfil. **Es el archivo que toca la 409: hacerlo con la 409 ya mergeada.**
       *Hecho:* unit del panel que lo encuentra renderizado; la suite existente de la campana sigue
       verde.
-- [ ] *(FRONTEND — tanda 5)* **T5.4 — Un solo sonido (R43)**: la app escucha el mensaje del service worker, revalida la
+      ⚠️ **La mitad del «perfil» NO se entrega porque esa pantalla NO EXISTE**: medido el 2026-09-10
+      con `find app -name page.tsx` — hay 33 rutas y ninguna es un perfil de la persona
+      (`configuracion/**` es de administración y el mensajero no entra). El panel de la campana vive
+      en `PageHeader`, o sea en **todas** las pantallas autenticadas y para los cinco roles, así que
+      el control ya es alcanzable para las 39 personas. No se inventa una pantalla nueva para
+      cumplir una casilla.
+- [x] **T5.4 — Un solo sonido (R43)**: la app escucha el mensaje del service worker, revalida la
       campana y **suprime su tono** para ese incremento.
       *Hecho:* unit de hook: llega el mensaje → hay revalidación y **cero** llamadas al tono; llega un
       incremento normal sin mensaje → el tono suena. Mutar la supresión lo pone rojo.
-- [ ] *(FRONTEND — tanda 5)* **T5.5 — Baja al cerrar sesión**: el `LogoutButton` da de baja la suscripción de este
+- [x] **T5.5 — Baja al cerrar sesión**: el `LogoutButton` da de baja la suscripción de este
       dispositivo **antes** de `logout()`, y el fallo **no** impide salir.
       *Hecho:* unit donde la baja rechaza y aun así se llama a `logout()` y se navega. Cubre R19, R20.
 
@@ -210,7 +216,10 @@
       *Hecho:* la tabla escrita en `progress/impl_410.md`. Una mutación superviviente es un hallazgo,
       no una nota al pie. **Y el informe de mutaciones se autocomprueba**: si el arnés dice 11/11
       muertas sin haber ejecutado un test, no vale.
-- [ ] *(INCOMPLETA A PROPOSITO: 41 de los 52 estan mapeados en `progress/impl_410_backend.md` §3; los 11 del frontend quedan DECLARADOS con su tarea, no olvidados)* **T6.2 — Mapa `R<n> → test`** para los **52** requisitos (R1-R52), en `progress/impl_410.md`.
+- [x] **T6.2 — Mapa `R<n> → test`** para los **52** requisitos (R1-R52), en `progress/impl_410.md`.
+      *Completo:* 41 en `progress/impl_410_backend.md` §3 y los **11 del frontend** (R10, R11, R12,
+      R14, R45 enteros, y las mitades de cliente de R13, R15, R19, R20, R43, R46) en
+      `progress/impl_410_frontend.md` §3.
       *Hecho:* ni un requisito sin test concreto; el reviewer rechaza si falta alguno.
 - [x] **T6.2b — Los dos avisos SIN CUBRIR quedan escritos donde se lean.** «Su cierre fue rechazado»
       (sin bloqueo) y «tu reparto de mañana» **no se entregan** en esta ficha porque no existen como
@@ -229,5 +238,5 @@
       *Hecho:* descrito paso a paso con el resultado. **Es la única prueba de que el canal existe**:
       todo lo anterior es jsdom, Postgres y un arnés. Si no se puede hacer, se declara como límite
       abierto en la ficha, no se da por bueno.
-- [ ] *(a MEDIAS: `progress/impl_410_backend.md` escrita y commiteada; falta la bitacora del frontend y la entrada en `progress/history.md`, que es del leader)* **T6.6 — Bitácora**: `progress/impl_410.md` y entrada en `progress/history.md`, **commiteadas**
+- [ ] *(a MEDIAS: `progress/impl_410_backend.md` e `impl_410_frontend.md` escritas y commiteadas; falta SOLO la entrada en `progress/history.md`, que es del leader)* **T6.6 — Bitácora**: `progress/impl_410.md` y entrada en `progress/history.md`, **commiteadas**
       (el informe describe el disco, no un commit: verificar el blob en la rama).
