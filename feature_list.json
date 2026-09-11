@@ -4972,10 +4972,11 @@
       "title": "un admin de bodega satelite sin zona veria la cifra global de un aviso",
       "description": "El conteo de un aviso no acota por zona cuando el actor no tiene ninguna: hoy no pasa, pero lo impide una regla de otra ficha y nada avisaria si se toca.",
       "zone": "backend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "baja",
-      "branch": null,
+      "spec_path": "specs/417-alcance-aviso-satelite-sin-zona/",
+      "branch": "feat/417-alcance-aviso-satelite-sin-zona",
       "depends_on": null,
       "status_note": "DESTAPADA POR EL REVIEWER DE LA 409 el 2026-09-10 y declarada FUERA de su alcance a proposito, no olvidada. || QUE ES: un `adminSatelite` **sin zona asignada** pediria la cifra GLOBAL del aviso agregado en vez de la de su ambito. || POR QUE NO ES URGENTE, medido: hoy NO ES ALCANZABLE -el resolutor ni se llama para ese actor- y el peor caso seria un CONTEO fuera de ambito, NO una fuga de datos: R54 de la 409 deja el texto sin tienda ni zona. || POR QUE SI MERECE FICHA, que es el punto: hoy lo impide un predicado de OTRA ficha (la 146), o sea una proteccion que funciona POR HERENCIA y no por diseño propio de este seam. NINGUN test de la 409 se pondria rojo si alguien toca aquel predicado: se abriria en silencio. || QUE TIENE QUE PROBAR, dicho por el reviewer: un test en ESTE seam con `{ rol: 'adminSatelite', zonaId: null }` que exija que NO caiga al ambito global. || ⚠️ AVISO PARA QUE NO NAZCA CON EL NOMBRE EQUIVOCADO: el caso vigente se llama «no ve el total» pero AFIRMA QUE SE PIDE `null`, que es justamente el total. Leer ese nombre sin abrir el cuerpo lleva a creer que ya esta cubierto."
     }
