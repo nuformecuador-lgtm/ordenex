@@ -1,6 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
+// FICHA 418 (T2.5) — `RolValue` entra como VALOR, no solo como tipo: es el catalogo REAL de roles
+// del dominio y es lo que hace posible el caso exhaustivo de R5. Mismo patron que
+// `tests/unit/services/alcance-borrado-orden.test.ts` y `lib/auth/acceso-total.ts`.
+import { RolValue } from "@prisma/client";
 import { VigenciaAvisoAgregadoService } from "@/lib/services/VigenciaAvisoAgregadoService";
 import { vigenciaNoResuelta } from "@/lib/services/NotificacionService";
+// FICHA 418 (T5.1, R7) — el CATALOGO se importa para compararlo con la lista blanca escrita a mano
+// aqui. La lista blanca de PRODUCCION no lo importa, y por eso este aserto no es vacuo.
+import { CATALOGO_AVISOS } from "@/lib/notificaciones/catalogo-avisos";
 import type { IAvisoAgregadoRepository } from "@/lib/interfaces/repositories/IAvisoAgregadoRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
@@ -174,6 +181,126 @@ describe("417/R3-R4 — `novedades_sin_gestionar` solo lo cuenta un adminTienda"
       /no es una tienda/i,
     );
     expect(repo.contarNovedadesDeTienda).not.toHaveBeenCalled();
+  });
+});
+
+// ⚠️ FICHA 418 (T2, R3-R7) — LA LISTA BLANCA DE `devoluciones_represadas`, Y POR QUE HACE FALTA.
+//
+// Hasta la 418 esta rama decidia por EXCLUSION: `rol !== "adminSatelite"` => ambito global, o sea
+// `contarRepresadas(cota, null)`, que en `AvisoAgregadoRepository` es EL TOTAL DEL SISTEMA. El enum
+// tiene SEIS roles y la condicion nombraba UNO, asi que `mensajero`, `adminTienda` y `apiKey` caian
+// en el total por omision —y el septimo valor que alguien añadiera al enum entraria con ellos—.
+//
+// NOTA DE HONESTIDAD: hoy ese estado NO ES ALCANZABLE, y lo impiden dos capas AJENAS a este seam
+// (quien recibe el aviso en `lib/notificaciones/emitir.ts`, y el predicado de visibilidad de la 146
+// en `lib/repositories/NotificacionRepository.ts`). Estos casos se las saltan A PROPOSITO: lo que
+// se prueba es una defensa en profundidad, no un camino vivo. El punto entero de la ficha es que
+// ANTES DE ELLA nada de aqui se ponia rojo si alguien metia a esos tres roles en el ambito global,
+// porque ningun aserto lo afirmaba.
+describe("418/R3-R7 — el ambito de `devoluciones_represadas` se decide por INCLUSION", () => {
+  // La lista blanca, ESCRITA A MANO aqui. No se importa de produccion a proposito: comparar la
+  // lista contra la constante que la genera estaria siempre verde diga lo que diga.
+  const LISTA_BLANCA_A_MANO: readonly RolValue[] = ["maestro", "admin", "adminSatelite"];
+
+  // Los tres roles de HOY que quedan fuera. Con zona util a proposito: asi el fallo no puede venir
+  // de la guarda de zona de la 417, solo de no tener ambito en este aviso.
+  const SIN_AMBITO: Array<[string, Actor]> = [
+    ["mensajero", { usuarioId: "men-9", rol: "mensajero", zonaId: ZONA }],
+    ["adminTienda", { usuarioId: "tienda-9", rol: "adminTienda", zonaId: ZONA }],
+    ["apiKey", { usuarioId: "key-9", rol: "apiKey", zonaId: ZONA }],
+  ];
+
+  // R3 y R4 van SEPARADOS a proposito, igual que en la 417: sustituir el lanzamiento por un
+  // `return 0` deja el de R3 VERDE (el repositorio sigue sin llamarse) y pone rojo solo el de R4,
+  // y asi el rojo dice QUE se perdio. Juntos, dos rojos taparian cual de las dos mitades se rompio.
+  it.each(SIN_AMBITO)("R3 — con un %s no se consulta NINGUN ambito", async (_rol, actor) => {
+    const repo = repoEspia();
+
+    await servicio(repo)
+      .cifra("devoluciones_represadas", actor)
+      .catch(() => undefined);
+
+    expect(repo.contarRepresadas).not.toHaveBeenCalled();
+    expect(repo.contarNovedadesDeTienda).not.toHaveBeenCalled();
+  });
+
+  it.each(SIN_AMBITO)("R4 — con un %s falla NOMBRANDO la causa", async (_rol, actor) => {
+    // Literal ESCRITO A MANO, nunca importado de produccion.
+    await expect(servicio(repoEspia()).cifra("devoluciones_represadas", actor)).rejects.toThrow(
+      /no define ambito para el rol/i,
+    );
+  });
+
+  it("R4 — ni siquiera devuelve el `7` que el repositorio daria: ese 7 ES el total del sistema", async () => {
+    // El espia devuelve 7 para `contarRepresadas`, y con ambito `null` ese 7 es EL TOTAL DEL
+    // SISTEMA (`AvisoAgregadoRepository`: `zonaId === null ? filas.length : filas.filter(...)`).
+    // Este caso fija que ese numero no es un resultado aceptable para quien no tiene ambito: ni el
+    // total, ni un `0` de cortesia que apagaria la fila en silencio (409/R55).
+    const repo = repoEspia();
+
+    await expect(
+      servicio(repo).cifra("devoluciones_represadas", SIN_AMBITO[0][1]),
+    ).rejects.toThrow(/no define ambito para el rol/i);
+
+    expect(repo.contarRepresadas).not.toHaveBeenCalled();
+  });
+
+  it("R6 — el error NO es el de las otras dos guardas del mismo metodo, y no lleva el usuarioId", async () => {
+    // Sin esto, el `rejects.toThrow` de R4 podria estar pasando POR EL ERROR EQUIVOCADO: los tres
+    // fallos de ambito de este metodo aterrizan en el mismo `catch` de `cifrasVivas`.
+    const actor = SIN_AMBITO[0][1];
+    const error = await servicio(repoEspia())
+      .cifra("devoluciones_represadas", actor)
+      .then(() => null)
+      .catch((e: unknown) => e as Error);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error!.message).toMatch(/no define ambito para el rol/i);
+    // Los dos literales hermanos, escritos a mano: el del adminSatelite sin zona y el del rol que
+    // no es tienda. El mensaje nuevo no puede ser ninguno de los dos.
+    expect(error!.message).not.toMatch(/no tiene zona asignada/i);
+    expect(error!.message).not.toMatch(/no es una tienda/i);
+    // Y NO lleva PII: el id del usuario no viaja en el mensaje (design §4). El rol si, y a
+    // proposito: no es dato personal y es lo que hace el error accionable.
+    expect(error!.message).not.toContain("men-9");
+    expect(error!.message).toContain("mensajero");
+  });
+
+  it("R5 — el catalogo ENTERO de roles queda clasificado: lo que no esta enumerado NO obtiene cifra", async () => {
+    // Autocomprobacion sobre el enum REAL de Prisma, no sobre una lista de excepciones sueltas. Si
+    // mañana nace un `RolValue`, cae aqui y por defecto FALLA CERRADO —nunca en el ambito global,
+    // que es exactamente lo que la lista negra hacia—.
+    const roles = Object.values(RolValue);
+    expect(roles.length).toBeGreaterThanOrEqual(6);
+
+    const fuera = roles.filter((rol) => !LISTA_BLANCA_A_MANO.includes(rol));
+    // El escenario no puede estar vacio: un `for` sobre cero roles reportaria `passed` sin haber
+    // comprobado nada.
+    expect(fuera.length).toBe(roles.length - LISTA_BLANCA_A_MANO.length);
+    expect(fuera.length).toBeGreaterThan(0);
+
+    for (const rol of fuera) {
+      const repo = repoEspia();
+      const actor: Actor = { usuarioId: `u-${rol}`, rol, zonaId: ZONA };
+
+      await expect(servicio(repo).cifra("devoluciones_represadas", actor)).rejects.toThrow(
+        /no define ambito para el rol/i,
+      );
+      expect(repo.contarRepresadas).not.toHaveBeenCalled();
+      expect(repo.contarNovedadesDeTienda).not.toHaveBeenCalled();
+    }
+  });
+
+  it("R7 — la lista blanca no diverge de los destinatarios declarados del aviso en el catalogo", () => {
+    // Lo que convierte la lista blanca de «escrita a mano» en «derivada de una fuente». Sin este
+    // aserto, el dia que alguien añada un rol a `destinatarios` la lista blanca se queda corta y
+    // NADA se pone rojo — el mismo fallo mudo que esta ficha existe para no repetir.
+    //
+    // El servicio NO lee el catalogo en tiempo de ejecucion (design §7-B): si lo leyera, esto seria
+    // una asercion contra su propia fuente y estaria siempre verde.
+    const delCatalogo = [...CATALOGO_AVISOS.devoluciones_represadas.destinatarios];
+
+    expect([...LISTA_BLANCA_A_MANO].sort()).toEqual(delCatalogo.sort());
   });
 });
 

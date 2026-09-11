@@ -11,22 +11,22 @@ anotada» — fue el único bloqueante de la 409.
 
 ## T0 — Pre-vuelo (10 min, sin escribir código) — bloquea todo lo demás
 
-- [ ] **T0.1** Releer en el **archivo real** (no en el grafo: devuelve símbolos ya borrados):
+- [x] **T0.1** Releer en el **archivo real** (no en el grafo: devuelve símbolos ya borrados):
   `lib/services/VigenciaAvisoAgregadoService.ts`, `lib/notificaciones/catalogo-avisos.ts`,
   `lib/notificaciones/emitir.ts` (`emitirDevolucionesRepresadas` y `ROLES_ADMINISTRACION`),
   `lib/repositories/NotificacionRepository.ts` (`predicadoVisibilidad` y `columnasDestinatario`) y
   `lib/services/NotificacionService.ts` (`listar` y `cifrasVivas`).
   **Hecho cuando:** confirmas las anclas de `requirements.md` §Verificado y, si alguna se movió, lo
   anotas en `progress/impl_418.md` **antes** de tocar nada.
-- [ ] **T0.2** Confirmar la **lista blanca** en sus dos fuentes: `catalogo-avisos.ts:260`
+- [x] **T0.2** Confirmar la **lista blanca** en sus dos fuentes: `catalogo-avisos.ts:260`
   (`destinatarios: ["maestro", "admin", "adminSatelite"]`) y `emitir.ts:1121-1124` + `112-115`.
   **Hecho cuando:** las dos están citadas literales en la bitácora y **coinciden**. **Si no
   coincidieran, para y dilo**: la ficha cambia de forma, porque el spec se apoya en que coinciden.
-- [ ] **T0.3** Confirmar que `devoluciones_represadas` tiene **un solo productor**
+- [x] **T0.3** Confirmar que `devoluciones_represadas` tiene **un solo productor**
   (`emitirDevolucionesRepresadas` invocado sólo en `notificadores.ts:392`; el resto, tests).
   **Hecho cuando:** verificado en el archivo real. **Si aparece un segundo productor o un
   destinatario de otro rol, para y dilo**: la lista blanca cambiaría.
-- [ ] **T0.4** Abrir **los cuerpos** de los casos vigentes de
+- [x] **T0.4** Abrir **los cuerpos** de los casos vigentes de
   `tests/unit/services/vigencia-aviso-agregado.test.ts` que esta ficha toca de refilón (líneas 45-53,
   55-64, 66-73, 75-81, 180-190) y confirmar que **ninguno** usa un rol fuera de la lista blanca con
   `devoluciones_represadas`.
@@ -37,18 +37,18 @@ anotada» — fue el único bloqueante de la 409.
 
 ## T1 — La lista blanca en el seam (R3, R4, R5, R6) · depende de T0
 
-- [ ] **T1.1** En `VigenciaAvisoAgregadoService.cifra`, rama `devoluciones_represadas`: sustituir la
+- [x] **T1.1** En `VigenciaAvisoAgregadoService.cifra`, rama `devoluciones_represadas`: sustituir la
   decisión por **exclusión** (`rol !== "adminSatelite" ⇒ global`) por una decisión por **inclusión**:
   `maestro`/`admin` → ámbito global; `adminSatelite` → la guarda de zona de la 417 y su zona;
   **cualquier otro rol** → **no llamar al repositorio** y lanzar un error que nombre la causa e
   incluya el rol. Comentario al lado con **el porqué**, no con el qué.
   **Hecho cuando:** `pnpm run typecheck` y `pnpm run lint` pasan; las dos guardas de la 417 quedan
   **sin tocar**; la rama de `maestro`/`admin` sigue pidiendo `null`.
-- [ ] **T1.2** Comprobar que el mensaje nuevo **no coincide** con los otros dos fallos de ámbito del
+- [x] **T1.2** Comprobar que el mensaje nuevo **no coincide** con los otros dos fallos de ámbito del
   método (`/no tiene zona asignada/i`, `/no es una tienda/i`) y **no lleva `usuarioId`** (R6).
   **Hecho cuando:** los tres mensajes están pegados juntos en la bitácora y se ven distintos a
   simple vista.
-- [ ] **T1.3 `[P]`** Ampliar la documentación de `lib/interfaces/services/IVigenciaAvisoAgregado.ts`
+- [x] **T1.3 `[P]`** Ampliar la documentación de `lib/interfaces/services/IVigenciaAvisoAgregado.ts`
   (líneas 26-36) con el **tercer** caso de lanzamiento, junto a los dos de la 417.
   **Hecho cuando:** el contrato no dice menos de lo que la implementación hace. **Sin cambio de
   firma.**
@@ -59,23 +59,23 @@ anotada» — fue el único bloqueante de la 409.
 
 Todos en `tests/unit/services/vigencia-aviso-agregado.test.ts`, **sin editar ningún caso existente**.
 
-- [ ] **T2.1** Casos de R3: para un actor de rol `mensajero`, `adminTienda` y `apiKey` pidiendo
+- [x] **T2.1** Casos de R3: para un actor de rol `mensajero`, `adminTienda` y `apiKey` pidiendo
   `devoluciones_represadas`, **el repositorio no se llama** (`contarRepresadas` **ni**
   `contarNovedadesDeTienda`).
   **Hecho cuando:** pasan, y el caso está nombrado por lo que afirma («no se consulta ningún
   ámbito»), no por lo que promete.
-- [ ] **T2.2** Casos de R4, **separados de los de R3 a propósito** (igual que en la 417: así una
+- [x] **T2.2** Casos de R4, **separados de los de R3 a propósito** (igual que en la 417: así una
   mutación a `return 0` deja R3 verde y sólo enrojece R4, y el rojo dice **qué** se perdió): los
   mismos tres roles **lanzan** con el literal **escrito a mano**, nunca importado de producción.
   **Hecho cuando:** pasan y **ninguno afirma `0`** ni ningún número.
-- [ ] **T2.3** Caso de R4 «ni siquiera el número que el repositorio daría»: con el espía cargado
+- [x] **T2.3** Caso de R4 «ni siquiera el número que el repositorio daría»: con el espía cargado
   (devuelve `7`), un rol fuera de la lista blanca **lanza** y `contarRepresadas` **no se llama**.
   **Hecho cuando:** pasa. Es el que retrata el defecto: ese `7` es el total del sistema.
-- [ ] **T2.4** Caso de R6: el error de R4 **no** casa con `/no tiene zona asignada/i` ni con
+- [x] **T2.4** Caso de R6: el error de R4 **no** casa con `/no tiene zona asignada/i` ni con
   `/no es una tienda/i`, y **no contiene** el `usuarioId` del actor.
   **Hecho cuando:** pasa. Sin esto, el aserto de T2.2 podría estar pasando por el error equivocado
   (lo demuestra **M5**).
-- [ ] **T2.5** Caso de R5, **exhaustivo sobre el enum**: iterar `Object.values(RolValue)` —importado
+- [x] **T2.5** Caso de R5, **exhaustivo sobre el enum**: iterar `Object.values(RolValue)` —importado
   como **valor** desde `@prisma/client`, patrón que ya usan `tests/unit/services/alcance-borrado-orden.test.ts:57`
   y `lib/auth/acceso-total.ts:5`— y afirmar que **todo** rol que no esté en la lista blanca escrita
   a mano en el test cae en R3+R4.
@@ -86,14 +86,14 @@ Todos en `tests/unit/services/vigencia-aviso-agregado.test.ts`, **sin editar nin
 
 ## T3 — No regresión (R1, R2, R8) · depende de T1 · `[P]` con T4 y T5
 
-- [ ] **T3.1** Ejecutar **sin editarlos** los casos vigentes: «maestro y admin lo piden GLOBAL
+- [x] **T3.1** Ejecutar **sin editarlos** los casos vigentes: «maestro y admin lo piden GLOBAL
   (`null`)» (R1, líneas 75-81), «`devoluciones_represadas` se pide con la ZONA del adminSatelite»
   (R2, 55-64), la mutación hermana de la 409 (66-73), «`novedades_sin_gestionar` se pide con el
   usuarioId de la tienda» (R8, 45-53), los de 417/R1-R4 (101-178), el umbral (180-190), el evento no
   agregado (192-202) y el default (204-213).
   **Hecho cuando:** todos pasan y **el diff de esos bloques está vacío**. Son el control positivo de
   la ficha: si la lista blanca dispara de más, se ponen rojos (**M3**, **M4**).
-- [ ] **T3.2** Comprobar por **diff**, no por palabra, que salen vacíos:
+- [x] **T3.2** Comprobar por **diff**, no por palabra, que salen vacíos:
   `lib/repositories/NotificacionRepository.ts`, `lib/notificaciones/emitir.ts`,
   `lib/notificaciones/catalogo-avisos.ts` y `lib/services/AvisosDiariosService.ts` (R9).
   **Hecho cuando:** `git diff --stat dev...HEAD -- <esos cuatro>` sale **vacío**, pegado en la
@@ -103,7 +103,7 @@ Todos en `tests/unit/services/vigencia-aviso-agregado.test.ts`, **sin editar nin
 
 ## T4 — Dónde aterriza el fallo (R10) · depende de T1
 
-- [ ] **T4.1** Caso nuevo en `tests/unit/services/notificacion-service.test.ts`, **con el molde del
+- [x] **T4.1** Caso nuevo en `tests/unit/services/notificacion-service.test.ts`, **con el molde del
   de la 417** (líneas 589-641, que usa el resolutor **real** + repositorio espía + logger espía):
   un actor de rol fuera de la lista blanca —p. ej. `{ rol: "mensajero" }`— y una fila de
   `devoluciones_represadas` visible para él.
@@ -128,7 +128,7 @@ Todos en `tests/unit/services/vigencia-aviso-agregado.test.ts`, **sin editar nin
 > `destinatarios` en el catálogo, la lista blanca se queda corta **y nada se pone rojo** — el mismo
 > defecto que esta ficha existe para no repetir. No es opcional.
 
-- [ ] **T5.1** Caso nuevo en `tests/unit/services/vigencia-aviso-agregado.test.ts`: la lista blanca
+- [x] **T5.1** Caso nuevo en `tests/unit/services/vigencia-aviso-agregado.test.ts`: la lista blanca
   **escrita a mano** en el test coincide (como conjunto, sin depender del orden) con
   `CATALOGO_AVISOS.devoluciones_represadas.destinatarios`.
   **Hecho cuando:** pasa, y el test **importa el catálogo** pero **la lista blanca de producción NO
@@ -142,36 +142,36 @@ Todos en `tests/unit/services/vigencia-aviso-agregado.test.ts`, **sin editar nin
 Árbol limpio **antes y después de cada una** (`git status --short`), y la salida **pegada** en
 `progress/impl_418.md` con el conteo exacto de rojos **y el nombre de cada caso rojo**.
 
-- [ ] **T6.1 — M1 (la que da sentido a la ficha).** Volver a la lista negra:
+- [x] **T6.1 — M1 (la que da sentido a la ficha).** Volver a la lista negra:
   `if (actor.rol !== "adminSatelite") return this.repo.contarRepresadas(this.ancladaAntesDe(), null);`
   **Hecho cuando:** se ponen **rojos R3, R4, R5 y R10**, y lo hacen con
   `lib/repositories/NotificacionRepository.ts` **intacto** (`git diff --stat` de ese archivo, vacío,
   **en la misma corrida**) y **sin tocar las guardas de la 417**. Si sale verde, la ficha **no ha
   hecho nada** y hay que volver a T2.
-- [ ] **T6.2 — M1b, LA OTRA MITAD (la que midió el reviewer de la 417).** Restaurar los archivos al
+- [x] **T6.2 — M1b, LA OTRA MITAD (la que midió el reviewer de la 417).** Restaurar los archivos al
   estado **anterior a esta ficha** (el `dev` de partida) y correr el mismo par de archivos de test.
   **Hecho cuando:** la suite sale **verde entera con el defecto delante**, y el número de casos
   verdes está pegado en la bitácora. Es lo que convierte «antes esto no lo veía nadie» en una
   **medida** y no en un argumento.
-- [ ] **T6.3 — M2.** Sustituir el lanzamiento nuevo por `return 0`.
+- [x] **T6.3 — M2.** Sustituir el lanzamiento nuevo por `return 0`.
   **Hecho cuando:** se pone **rojo R4** y **R3 queda VERDE** (el repositorio sigue sin llamarse).
   Demuestra que la ficha exige **ruido**, no silencio, y que los dos asertos están separados a
   propósito.
-- [ ] **T6.4 — M3 (control positivo).** Quitar `admin` de la lista blanca.
+- [x] **T6.4 — M3 (control positivo).** Quitar `admin` de la lista blanca.
   **Hecho cuando:** se pone **rojo R1**, y por el caso de `admin`. Demuestra que los dos roles
   globales están cubiertos **uno a uno**.
-- [ ] **T6.5 — M4 (control positivo).** Quitar `adminSatelite` de la lista blanca.
+- [x] **T6.5 — M4 (control positivo).** Quitar `adminSatelite` de la lista blanca.
   **Hecho cuando:** se pone **rojo R2** (y la mutación hermana de la 409, líneas 66-73). Demuestra
   que la protección nueva no cierra un ámbito legítimo.
-- [ ] **T6.6 — M5 (control contra el error equivocado).** Hacer que el error nuevo lleve el mensaje
+- [x] **T6.6 — M5 (control contra el error equivocado).** Hacer que el error nuevo lleve el mensaje
   de otro de los dos fallos de ámbito del método.
   **Hecho cuando:** se ponen **rojos R4 y R6**. Si R4 sobrevive, su `rejects.toThrow` está casando
   con cualquier error y **no prueba nada**.
-- [ ] **T6.7 — M6.** Añadir `mensajero` a `destinatarios` de `devoluciones_represadas` en
+- [x] **T6.7 — M6.** Añadir `mensajero` a `destinatarios` de `devoluciones_represadas` en
   `catalogo-avisos.ts`.
   **Hecho cuando:** el caso de **R7 está entre los rojos, por nombre**. Pueden enrojecer también
   guardias ajenas (p. ej. la del atajo visible por rol): anótalo, no invalida la mutación.
-- [ ] **T6.8** Revertir **todas** y confirmar árbol limpio.
+- [x] **T6.8** Revertir **todas** y confirmar árbol limpio.
   **Hecho cuando:** `git status --short` y `git diff --numstat` salen vacíos respecto del estado
   previo a T6, y el par de archivos de test vuelve a pasar entero.
 
@@ -179,19 +179,19 @@ Todos en `tests/unit/services/vigencia-aviso-agregado.test.ts`, **sin editar nin
 
 ## T7 — Gate y cierre · depende de T6
 
-- [ ] **T7.1** `./init.sh --rapido`, con `INIT_EXIT=$?` escrito **dentro** del log y **sin canalizar
+- [x] **T7.1** `./init.sh --rapido`, con `INIT_EXIT=$?` escrito **dentro** del log y **sin canalizar
   por `tail`** (un `tail` en segundo plano trunca el fichero en origen y el rojo se queda sin
   nombre).
   **Hecho cuando:** el log dice `INIT_EXIT=0`, y los `skipped` se miran **uno a uno** (no sólo el
   exit code): sin `.env` en un worktree, la capa de datos se salta en silencio. Este diff **no** toca
   cimientos, así que el rápido **no debe negarse**; **si se niega, algo se tocó de más** — léelo
   antes de correr el completo.
-- [ ] **T7.2** Escribir `progress/impl_418.md` con: el mapa `R<n> → test`, la salida de **las siete**
+- [x] **T7.2** Escribir `progress/impl_418.md` con: el mapa `R<n> → test`, la salida de **las siete**
   mutaciones (incluida M1b, la mitad verde), los diffs vacíos de T3.2 y las desviaciones.
   **Hecho cuando:** existe **y está commiteado** —tres veces en un día se quedó sin commitear en este
   repo— y el **blob commiteado** se ha verificado en la rama (el árbol no distingue «lo commiteé» de
   «alguien lo revirtió»).
-- [ ] **T7.3** Marcar en este archivo **todas** las casillas ejecutadas y dejar sin marcar las que no,
+- [x] **T7.3** Marcar en este archivo **todas** las casillas ejecutadas y dejar sin marcar las que no,
   **con el motivo en la propia línea**.
   **Hecho cuando:** no queda ninguna casilla ambigua.
 
@@ -208,7 +208,10 @@ Todos en `tests/unit/services/vigencia-aviso-agregado.test.ts`, **sin editar nin
 > **El dato de hoy se reporta como lo que es —«el enum no tiene ese valor»— y NO como «salieron cero
 > filas»**: son cosas distintas y la diferencia decide si estás midiendo algo o midiendo la nada.
 
-- [ ] **T8.1** — **NO EJECUTAR AHORA.** Queda anotada aquí para el día en que la 409 esté desplegada
+- [ ] **T8.1** — **SIN MARCAR A PROPÓSITO, y el motivo: NO SE EJECUTA EN ESTA FICHA.** Es
+  post-despliegue. El `SELECT` mide producción y allí el valor `devoluciones_represadas` **no existe
+  en el enum** (la migración de la 409 está en `dev`, sin desplegar), así que hoy **no mediría cero:
+  mediría la nada**. Queda anotada aquí para el día en que la 409 esté desplegada
   a producción. Correr entonces, en **solo lectura**:
 
   ```sql

@@ -1,3 +1,5 @@
+import type { RolValue } from "@prisma/client";
+
 import type { IAvisoAgregadoRepository } from "@/lib/interfaces/repositories/IAvisoAgregadoRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IVigenciaAvisoAgregado } from "@/lib/interfaces/services/IVigenciaAvisoAgregado";
@@ -29,6 +31,28 @@ import type { NotificacionEvento } from "@/lib/types/notificacion";
 // cuenta y lo dice. Es defensa en profundidad, no un sustituto.
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
+/**
+ * FICHA 418 (design §3) — LOS ROLES CON AMBITO PROPIO EN `devoluciones_represadas`, Y CUAL ES.
+ *
+ * Lista BLANCA: lo que no esta aqui NO tiene ambito y falla (R3-R5). No sale de mi criterio, sale
+ * de dos fuentes independientes que coinciden: el catalogo dice QUIEN recibe el aviso
+ * (`catalogo-avisos.ts`: `destinatarios: ["maestro", "admin", "adminSatelite"]`) y el emisor dice
+ * CON QUE ACOTACION (`emitir.ts`: ambito global -> `ROLES_ADMINISTRACION`, o sea maestro y admin;
+ * ambito zona -> `{ tipo: "rol", rol: "adminSatelite", zonaId }`). `destinatarios` por si solo NO
+ * basta: no codifica el ambito, que es justo lo que este resolutor necesita saber.
+ *
+ * ESCRITA A MANO Y LOCAL A ESTE SERVICIO a proposito, como ya hacen los dos artefactos hermanos
+ * (`emitir.ts` con `ROLES_ADMINISTRACION` y `catalogo-avisos.ts` con `ADMINISTRACION_CENTRAL`, cada
+ * uno con la suya). NO se deriva de `esAccesoTotal` —eso significa «acceso total de GESTION», y un
+ * rol nuevo alli heredaria en silencio el ambito global de este aviso— ni se lee del catalogo en
+ * tiempo de ejecucion: si se leyera, el aserto que compara las dos (R7) estaria SIEMPRE VERDE.
+ */
+const AMBITO_REPRESADAS_POR_ROL: Partial<Record<RolValue, "global" | "zona">> = {
+  maestro: "global",
+  admin: "global",
+  adminSatelite: "zona",
+};
 
 /**
  * Un id util es una cadena no vacia. `null`, `undefined`, `""` y cualquier otra cosa NO lo son.
@@ -69,7 +93,27 @@ export class VigenciaAvisoAgregadoService implements IVigenciaAvisoAgregado {
       // ⚠️ LA ZONA SALE DEL ACTOR, y solo para el `adminSatelite`. Ignorarla le enseñaria al
       // satelite el total del sistema —el numero de OTRA bodega— y es una de las mutaciones que
       // el test de este servicio mata. Para maestro y admin el ambito es global (`null`).
-      if (actor.rol !== "adminSatelite") {
+      //
+      // FICHA 418 (R3-R5) — POR QUE UN MAPA Y NO UN `!==`: hasta aqui esta rama decidia por
+      // EXCLUSION (`rol !== "adminSatelite"` => global), y UNA LISTA NEGRA DA POR BUENO TODO LO QUE
+      // NO ENUMERA. El enum tiene SEIS roles y la condicion nombraba UNO, asi que `mensajero`,
+      // `adminTienda` y `apiKey` obtenian el total del sistema por omision —y el septimo valor que
+      // alguien añadiera al enum entraria con ellos SIN QUE NADA SE PUSIERA ROJO, en un cambio que
+      // nadie relacionaria con este archivo. La rama hermana de arriba ya decidia por inclusion
+      // desde la 417, a diez lineas y en la misma funcion: esto iguala las dos.
+      const ambito = AMBITO_REPRESADAS_POR_ROL[actor.rol];
+      if (ambito === undefined) {
+        // Misma regla que la 417 y por las mismas razones: *si el ambito del actor no existe, se
+        // falla; no se inventa uno*. NO se consulta al repositorio —ni el global ni el de ninguna
+        // zona— y el error NOMBRA la causa y el rol (el rol no es PII; el `usuarioId` no viaja). Un
+        // `0` de cortesia apagaria la fila en silencio (409/R55) y el global ES el defecto.
+        // `cifrasVivas` captura esto, lo registra con su causa y muestra el aviso SIN numero
+        // (409/R58): lanzar aqui no rompe ninguna pantalla.
+        throw new Error(
+          `vigencia: el evento "${evento}" no define ambito para el rol "${actor.rol}"`,
+        );
+      }
+      if (ambito === "global") {
         return this.repo.contarRepresadas(this.ancladaAntesDe(), null);
       }
       // FICHA 417 (R1/R2) — el comentario de arriba cubria IGNORAR la zona; esto cubre que FALTE,
