@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { z } from "zod";
 
 import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -8,8 +9,36 @@ import {
 } from "@/lib/actions/novedades";
 import { listarRechazosSlaTiendaAction } from "@/lib/actions/rechazos-sla-tienda";
 
+import { GRUPOS_NOVEDAD, type GrupoNovedad } from "@/lib/types/novedad-grupo";
+
 import { NovedadesTabs } from "./_components/NovedadesTabs";
 import { SUBTITULO_NOVEDADES } from "./_components/novedad-grupo-textos";
+
+// ⚠️ FICHA 409 (T6.5 — R6/R7/R66) — LA PANTALLA LEE LA SUPERFICIE QUE LE PIDE LA URL.
+//
+// El aviso «N novedades esperan tu decisión» declara su atajo a `/novedades?superficie=devolucion`
+// (`lib/notificaciones/catalogo-avisos.ts`), y R6 prohibe emitir un parametro que el destino
+// IGNORE: sin esta lectura, el boton dejaria a la tienda en «Ayuda solicitada» hablandole de la
+// pestaña de al lado, y el aviso quedaria desacreditado el primer dia.
+//
+// LISTA BLANCA CONTRA `GRUPOS_NOVEDAD`, NUNCA UN `as`: un valor arbitrario de la URL que llegara
+// hasta `TabsGroup` activaria una pestaña que no existe, base-ui desmontaria su panel y la
+// pantalla quedaria EN BLANCO con un 200. Con el `enum` de zod, lo desconocido cae al defecto y la
+// pagina responde 200 con su pestaña de siempre (R66).
+//
+// NO es un filtro por URL: es FIJAR LA PESTAÑA, el minimo que R7 exige. El filtro completo de
+// `/ordenes` y `/novedades` esta declarado FUERA de alcance en el spec (§12).
+const PARAM_SUPERFICIE = "superficie";
+const superficieSchema = z.enum(GRUPOS_NOVEDAD);
+
+/** El grupo que pide la URL, o `undefined` si no lo pide o pide uno que no existe (R66). */
+function superficieSolicitada(
+  valor: string | string[] | undefined,
+): GrupoNovedad | undefined {
+  const crudo = Array.isArray(valor) ? valor[0] : valor;
+  const parsed = superficieSchema.safeParse(crudo);
+  return parsed.success ? parsed.data : undefined;
+}
 
 // Feature 87 (T13, design §3.1) + Feature 102 (T12, design §6.2) + Feature 236 (T4.1, design §5) —
 // pagina `/novedades` de la tienda. Server Component role-aware (molde `mi-wallet/page.tsx`): el
@@ -27,11 +56,16 @@ import { SUBTITULO_NOVEDADES } from "./_components/novedad-grupo-textos";
 //    vacio. Son superficies secundarias, y tumbar la pantalla entera por una de ellas seria peor
 //    que enseñarla vacia. Se escribe aqui para que el fallback no se lea como un olvido — y porque
 //    ese estado vacio ya tiene que estar bien escrito por R16.
-export default async function NovedadesPage() {
+export default async function NovedadesPage(props: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+} = {}) {
   const actor = await resolveActorFromSession();
   if (!actor || actor.rol !== "adminTienda") {
     notFound(); // R18: rol no autorizado / sin sesion -> sin exponer datos
   }
+
+  const query = (await props.searchParams) ?? {};
+  const superficieInicial = superficieSolicitada(query[PARAM_SUPERFICIE]);
 
   const [ayudaResult, novedadesResult, rechazosSlaResult] = await Promise.all([
     listarAyudaTiendaAction({ page: 1 }),
@@ -80,6 +114,7 @@ export default async function NovedadesPage() {
           },
         }}
         rechazosSla={rechazosSla}
+        superficieInicial={superficieInicial}
       />
     </AppPage>
   );

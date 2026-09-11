@@ -46,6 +46,10 @@ describe("R26 — el drenador resuelve el handler de webhook_estado y no lo re-a
       "geocodificacion",
       "liberar_reprogramadas",
       "optimizacion_ruta",
+      // FICHA 410: entrega de un aviso ya creado a las suscripciones push de sus
+      // destinatarios. PUNTUAL -lo encola el decorador del repositorio de notificaciones-,
+      // asi que tampoco va en `buildRecurrencias`.
+      "push_web",
       "webhook_estado",
       "whatsapp_bienvenida", // mensaje de bienvenida al recoger
       "whatsapp_chat_envio", // feature 109

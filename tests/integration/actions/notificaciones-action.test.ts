@@ -167,9 +167,11 @@ describe("R39 — la carga terminada notifica SOLO al ejecutor y una sola vez po
   class RepoDedupe implements INotificacionRepository {
     creadas: CrearNotificacionInput[] = [];
 
-    async crear(input: CrearNotificacionInput): Promise<boolean> {
+    // FICHA 410 (design 6.1): `crear` devuelve el ID de la fila creada y `null` cuando la
+    // dedupe la absorbio. `null` significa EXACTAMENTE lo que significaba `false`.
+    async crear(input: CrearNotificacionInput): Promise<string | null> {
       this.creadas.push(input);
-      return true;
+      return `n-${this.creadas.length}`;
     }
     async existeNoLeidaPara(evento: string, entidadId: string): Promise<boolean> {
       return this.creadas.some((c) => c.evento === evento && c.entidadId === entidadId);

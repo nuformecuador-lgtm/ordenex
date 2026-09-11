@@ -80,6 +80,15 @@ import {
   FLETE_RECHAZO_NO_SE_COBRARA_NOTA,
   CASCADA_FACTURA_TIENDA_TITULO,
   CASCADA_NETO_ORDENEX_TITULO,
+  // FICHA 408 — el traductor del motivo de un rechazo automatico. Vive en el modulo PURO
+  // porque lo leen tambien las tres descargas, que no pueden arrastrar `Card`/`Badge`.
+  MOTIVO_RECHAZO_AUTOMATICO_COLA,
+  motivoGestionLegible,
+  // FICHA 414 — los dos textos de la marca «La tienda» (237/R41). Se importan aqui SOLO para
+  // re-exportarlos: los declaraba `CierreDiaModule`, y `cierre-factura` no puede pedirselos a el
+  // —ese modulo ya importa `CierreFacturaDetalle` y la vuelta seria un ciclo—.
+  GESTION_TIENDA_BADGE_LABEL,
+  GESTION_TIENDA_BADGE_NOTA,
 } from "./cierre-labels";
 // Feature 213 (T6/T7): el desglose de pago vive en UN solo sitio (R25). De ahí salen también
 // el orden de los medios y el monto de cada uno, que es lo que estas tablas pintan por columna.
@@ -162,6 +171,16 @@ export {
   FLETE_RECHAZO_NO_SE_COBRARA_NOTA,
   CASCADA_FACTURA_TIENDA_TITULO,
   CASCADA_NETO_ORDENEX_TITULO,
+  // FICHA 408 — por el mismo camino y por el mismo motivo: el traductor del motivo vive en el
+  // modulo PURO (lo necesitan las tres descargas) y las pantallas lo piden por esta puerta,
+  // que es donde ya piden el resto. `cierre-factura` es quien lo lee de aqui.
+  MOTIVO_RECHAZO_AUTOMATICO_COLA,
+  motivoGestionLegible,
+  // FICHA 414 — la marca «La tienda» (237/R41), por el mismo camino y por el mismo motivo: el
+  // texto vive en el modulo PURO y las superficies lo piden por esta puerta. `cierre-factura` es
+  // quien lo lee de aqui; la tabla en vivo de `/cierre-dia` lo lee del modulo puro directamente.
+  GESTION_TIENDA_BADGE_LABEL,
+  GESTION_TIENDA_BADGE_NOTA,
 };
 
 export const RESULTADO_VACIO: Record<CierreResultado, string> = {
@@ -1382,7 +1401,14 @@ export function columnasPara(
       COLUMNA_MONTO_COBRAR,
       COLUMNA_FULFILLMENT,
       COLUMNA_CAUSA_INCIDENTE,
-      { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      {
+        id: "motivo",
+        value: "Motivo",
+        // FICHA 408: el motivo del cron de plazos vencidos se pinta en castellano. `esRechazoSla`
+        // es el MISMO booleano que decide el marcador «Automático» de la columna «Origen»: aquí
+        // esa columna existe, así que la celda no repite lo que el marcador ya dice.
+        render: (g) => motivoGestionLegible(g.motivo, g.esRechazoSla) ?? "—",
+      },
       COLUMNA_EVIDENCIA(verEvidencia),
       COLUMNA_INDEMNIZACION,
     ];
@@ -1421,7 +1447,14 @@ export function columnasPara(
         value: "Nueva fecha",
         render: (g) => g.fechaReprogramacion ?? "—",
       },
-      { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      {
+        id: "motivo",
+        value: "Motivo",
+        // FICHA 408: el motivo del cron de plazos vencidos se pinta en castellano. `esRechazoSla`
+        // es el MISMO booleano que decide el marcador «Automático» de la columna «Origen»: aquí
+        // esa columna existe, así que la celda no repite lo que el marcador ya dice.
+        render: (g) => motivoGestionLegible(g.motivo, g.esRechazoSla) ?? "—",
+      },
       COLUMNA_PAGO_MENSAJERO,
     ];
   }
@@ -1430,7 +1463,14 @@ export function columnasPara(
       ...COLUMNAS_COMUNES,
       COLUMNA_MONTO_COBRAR,
       COLUMNA_FULFILLMENT,
-      { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      {
+        id: "motivo",
+        value: "Motivo",
+        // FICHA 408: el motivo del cron de plazos vencidos se pinta en castellano. `esRechazoSla`
+        // es el MISMO booleano que decide el marcador «Automático» de la columna «Origen»: aquí
+        // esa columna existe, así que la celda no repite lo que el marcador ya dice.
+        render: (g) => motivoGestionLegible(g.motivo, g.esRechazoSla) ?? "—",
+      },
       // 2026-08-19: el flete de devolución se pinta AGRUPADO con su IVA, igual que en la
       // sección de rechazadas. El par partido (flete / IVA por separado) se retiró: son dos
       // columnas para un importe que siempre se lee sumado, y el split sigue disponible en la
@@ -1452,7 +1492,14 @@ export function columnasPara(
     COLUMNA_RECHAZO_ORIGEN,
     COLUMNA_MONTO_COBRAR,
     COLUMNA_FULFILLMENT,
-    { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+    {
+      id: "motivo",
+      value: "Motivo",
+      // FICHA 408: la sección donde MÁS importa. Es la única que lleva `COLUMNA_RECHAZO_ORIGEN`
+      // al lado, así que aquí `esRechazoSla` resuelve a la variante corta justo en las filas en
+      // las que el marcador «Automático» ya cuenta el resto de la historia.
+      render: (g) => motivoGestionLegible(g.motivo, g.esRechazoSla) ?? "—",
+    },
     COLUMNA_EVIDENCIA(verEvidencia),
     columnaFlete(
       "fleteDevolucionConIva",

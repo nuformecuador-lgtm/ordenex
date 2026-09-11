@@ -22,6 +22,7 @@ import userEvent from "@testing-library/user-event";
 import { NovedadesTabs } from "@/app/(app)/novedades/_components/NovedadesTabs";
 import { listarNovedadesAction } from "@/lib/actions/novedades";
 import type { NovedadDTO } from "@/lib/types/novedad";
+import type { GrupoNovedad } from "@/lib/types/novedad-grupo";
 
 vi.mock("@/lib/actions/novedades", () => ({
   listarNovedadesAction: vi.fn(),
@@ -93,6 +94,8 @@ function renderTabs(
   over: {
     ayuda?: { items: NovedadDTO[]; total: number; page: number; pageSize: number };
     devolucion?: { items: NovedadDTO[]; total: number; page: number; pageSize: number };
+    /** FICHA 409 (T6.5, R7): la superficie que pide la URL. Opcional, como en la pantalla. */
+    superficieInicial?: GrupoNovedad;
   } = {},
 ) {
   return render(
@@ -102,6 +105,7 @@ function renderTabs(
         devolucion: over.devolucion ?? VACIO,
       }}
       rechazosSla={VACIO}
+      superficieInicial={over.superficieInicial}
     />,
   );
 }
@@ -386,5 +390,50 @@ describe("NovedadesTabs — R2/R8: la partición es del SERVIDOR, no de la panta
     const modal100 = await screen.findByRole("dialog");
     expect(modal100).not.toHaveTextContent("Resolver la orden por tu cuenta");
     expect(modal100).not.toHaveTextContent("entra en su cierre del día");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ⚠️ FICHA 409 (T6.5 — R7): LA SUPERFICIE QUE PIDE LA URL
+// ---------------------------------------------------------------------------
+describe("NovedadesTabs — la superficie inicial (409/R7)", () => {
+  it("R7: con `superficieInicial=\"devolucion\"` la pestaña activa es «En devolución»", () => {
+    // El atajo del aviso «N novedades esperan tu decisión» apunta a la SEGUNDA pestaña. Que la
+    // prop llegue no basta: lo que se afirma es que la pestaña QUEDA seleccionada, porque
+    // `TabsGroup` podría ignorarla y la prop seguiría estando ahí.
+    renderTabs({ superficieInicial: "devolucion" });
+
+    const tabs = within(
+      screen.getByRole("tablist", { name: "Vistas de novedades" }),
+    ).getAllByRole("tab");
+    const activa = tabs.find((t) => t.getAttribute("aria-selected") === "true");
+    expect(activa).toHaveTextContent("En devolución");
+    // Y la de entrada DEJA de estarlo: sin esta mitad, dos pestañas seleccionadas pasarían.
+    expect(tabs[0]).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("R7/R66: sin la prop, la pestaña de entrada sigue siendo «Ayuda solicitada»", () => {
+    // El comportamiento por defecto de la pantalla NO cambia (D6 de la 236 sigue mandando): es la
+    // mitad de R66 que se puede medir sin la URL.
+    renderTabs();
+
+    const tabs = within(
+      screen.getByRole("tablist", { name: "Vistas de novedades" }),
+    ).getAllByRole("tab");
+    expect(tabs[0]).toHaveTextContent("Ayuda solicitada");
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("R7: el panel que se monta es el de SU superficie, no sólo el rótulo", async () => {
+    // Un `aria-selected` correcto con el panel del vecino montado sería el peor de los dos
+    // mundos: la tienda vería la pestaña bien marcada y la lista equivocada debajo.
+    renderTabs({
+      superficieInicial: "devolucion",
+      devolucion: { items: [novedad({ id: "o1" })], total: 1, page: 1, pageSize: 10 },
+    });
+
+    expect(
+      await screen.findByRole("list", { name: "Órdenes en devolución" }),
+    ).toBeInTheDocument();
   });
 });

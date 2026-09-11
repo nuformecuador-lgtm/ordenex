@@ -24,8 +24,17 @@ import { prepararAudio, reproducirTono } from "@/lib/audio/tono-notificacion";
  * - Bajadas y repeticiones no suenan (R12): marcar todas como leidas deja el contador en
  *   cero y no dispara nada.
  * - Un salto de varias unidades suena UNA vez, no una por unidad (R13).
+ *
+ * FICHA 410 (R43) — `suprimirTonoDeEsteIncremento` lo entrega `usePushEnVentana` y responde «este
+ * incremento ya lo anunció el sistema». Se consulta SOLO cuando hay un incremento de verdad, y se
+ * consulta antes que la preferencia de sonido: el hecho de que el sistema ya sonara no depende de
+ * si esta persona tiene el tono encendido. Sin ese argumento —el chat, o cualquier consumidor que
+ * no venga de un push— el comportamiento es exactamente el de siempre.
  */
-export function useTonoAlIncrementar(contador: number | null): void {
+export function useTonoAlIncrementar(
+  contador: number | null,
+  suprimirTonoDeEsteIncremento?: () => boolean,
+): void {
   const previo = useRef<number | null>(null);
 
   // R7: el contexto de audio se prepara con el primer gesto del usuario. `prepararAudio`
@@ -46,10 +55,13 @@ export function useTonoAlIncrementar(contador: number | null): void {
     if (anterior === null) return; // R11
     if (contador <= anterior) return; // R12
 
+    // FICHA 410 (R43): este incremento ya sonó, pero lo hizo el SISTEMA. Un hecho, un sonido.
+    if (suprimirTonoDeEsteIncremento?.()) return;
+
     // La preferencia se consulta AL EMITIR, no al montar: apagar el sonido tiene efecto
     // inmediato sin remontar el componente (R14).
     if (!leerPreferenciaSonido()) return;
 
     reproducirTono();
-  }, [contador]);
+  }, [contador, suprimirTonoDeEsteIncremento]);
 }

@@ -8,6 +8,7 @@ import { refrescarCacheAnalitica } from "@/lib/actions/analitica-refrescar";
 import { TAGS_OPERATIVA } from "@/lib/analytics/cache-tags";
 import {
   TAG_CICLO_VIDA,
+  TAG_COHORTE_CARGA,
   TAG_CONTEO_CARGADAS_POR_DIA,
   TAG_CONTEO_DEVOLUCIONES,
   TAG_CONTEO_ENTREGAS,
@@ -57,6 +58,7 @@ describe("refrescarCacheAnalitica", () => {
         TAG_CONTEO_DEVOLUCIONES,
         TAG_CICLO_VIDA,
         TAG_CONTEO_PRODUCTOS,
+        TAG_COHORTE_CARGA,
         ...TAGS_OPERATIVA,
       ]),
     );
@@ -73,10 +75,37 @@ describe("refrescarCacheAnalitica", () => {
 
     const [, tags] = invalidar.mock.calls[0] as unknown as [string, readonly string[]];
     expect(tags).toContain(TAG_CONTEO_PRODUCTOS);
-    expect(tags).toHaveLength(7 + TAGS_OPERATIVA.length);
+    // FICHA 411 — la CUENTA sube de 7 a 8 verticales con la cohorte de carga. Esta aserción y la
+    // lista escrita a mano de arriba se tocan LAS DOS, a conciencia: añadir el tag sin subir el
+    // número sólo pasaría si nadie más tocó la lista, y bajar el número sin quitar un tag no se
+    // vería. La cuenta es la que detecta que alguien retire una vertical de paso.
+    expect(tags).toHaveLength(8 + TAGS_OPERATIVA.length);
     // Y el prefijo es PROPIO: no colisiona con ninguna de las otras seis verticales.
     expect(TAG_CONTEO_PRODUCTOS).not.toBe(TAG_CONTEO_POR_STATUS);
     expect(new Set(tags).size).toBe(tags.length);
+  });
+
+  // FICHA 411 / T3.3 (R29) — el tag de la COHORTE DE CARGA entra en el botón. Sin él, la tabla de
+  // cohortes seguiría sirviendo lo cacheado durante 15 minutos mientras el resto del tablero ya
+  // se refrescó: dos mitades de la misma pantalla con distinta edad.
+  it("el tag de la cohorte de carga está, y su prefijo es propio", async () => {
+    const { cache, invalidar } = cacheEspia();
+
+    await refrescarCacheAnalitica({ cache, getActor: async () => ADMIN, now: NOW });
+
+    const [, tags] = invalidar.mock.calls[0] as unknown as [string, readonly string[]];
+    expect(tags).toContain(TAG_COHORTE_CARGA);
+    for (const otra of [
+      TAG_CONTEO_ENTREGAS,
+      TAG_CONTEO_POR_STATUS,
+      TAG_CONTEO_CARGADAS_POR_DIA,
+      TAG_CONTEO_HOY_GESTION,
+      TAG_CONTEO_DEVOLUCIONES,
+      TAG_CICLO_VIDA,
+      TAG_CONTEO_PRODUCTOS,
+    ]) {
+      expect(TAG_COHORTE_CARGA).not.toBe(otra);
+    }
   });
 
   // Sin sesión no se toca la cache: tirarla es un efecto sobre TODOS los inquilinos, y un

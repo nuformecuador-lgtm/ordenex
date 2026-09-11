@@ -263,8 +263,12 @@ describe("405/R21 — el enum de `motivo` del detalle coincide valor a valor con
 // ---------------------------------------------------------------------------------------------
 
 describe("405/R16 — el cuerpo del listado y el del webhook no ganan ninguna clave", () => {
-  it("`OrdenListItem` sigue con sus DIEZ propiedades, sin `gestiones`", () => {
+  it("`OrdenListItem` sigue SIN `gestiones` (y desde la 415 tiene TRECE propiedades)", () => {
     const item = schemas.OrdenListItem;
+    // ⏳ 2026-09-10 (feature 415, R34) — ENMENDADO. Este caso mide lo que la 405 se comprometio a
+    // NO tocar: que `gestiones` no se cuele en el ITEM (vive solo en el detalle). Eso no cambia.
+    // Lo que cambia es el conteo: DIEZ -> TRECE, por los tres campos aditivos de la 415. Sigue
+    // siendo una igualdad de la lista entera y en orden, asi que una clave colada cae aqui.
     expect(Object.keys(item.properties as Nodo)).toEqual([
       "numGuia",
       "numRemision",
@@ -276,6 +280,9 @@ describe("405/R16 — el cuerpo del listado y el del webhook no ganan ninguna cl
       "montoCobrar",
       "createdAt",
       "mensajero",
+      "zona",
+      "costoEstimado",
+      "costoReal",
     ]);
     expect(Object.keys(item.properties as Nodo)).not.toContain("gestiones");
     expect(item.required).not.toContain("gestiones");

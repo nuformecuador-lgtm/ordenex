@@ -16,6 +16,7 @@ import type {
   IEtiquetasLotePdfService,
 } from "@/lib/interfaces/services/IEtiquetasLotePdfService";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
+import { costeoFixture, ZONA_FIXTURE } from "@/tests/fixtures/api-orden-costeo-415";
 
 // Feature 177 — T11/T12. Tests del service de PDF de etiquetas del canal integrador, SOLO con
 // dobles (ni DB ni Storage reales). Cubren R4, R7, R12, R20-R25, R29-R31, R33, R34, R37, R38.
@@ -58,6 +59,10 @@ function filaOrden(downloadUrl: string | null): FilaOrdenFake {
     // ⏳ 2026-09-09 (feature 404): campo REQUERIDO de `ApiOrdenDetalleRow`. El PDF de etiqueta no
     // lo pinta ni lo necesita; aqui esta solo para que el doble tenga la forma del contrato.
     mensajero: null,
+    // ⏳ 2026-09-10 (feature 415): idem — la etiqueta no pinta ni la zona ni el costo; estan
+    // aqui solo para que el doble tenga la forma del contrato.
+    zona: ZONA_FIXTURE,
+    costeo: costeoFixture(),
     downloadUrl,
   };
 }

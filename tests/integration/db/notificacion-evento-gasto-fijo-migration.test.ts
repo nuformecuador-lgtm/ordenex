@@ -8,6 +8,7 @@ import {
   crearPrismaDeTest,
   enTransaccionRevertida,
   serializarEscriturasReales,
+  soltarDependientesPosterioresDelEnumDeEventos,
 } from "./_postgres-real";
 
 // FICHA 333 (A8, design §4.1/§10) — la migracion que anade el aviso de la campana a los DOS enums
@@ -296,6 +297,10 @@ describeSiHayBase("333/A8 — la base aplicada, y el DOWN ejercitado de verdad",
       // espaciaron». Migracion `20260909130000_notificacion_evento_webhook_suscripcion`.
       "webhook_suscripcion_pausada",
       "geocodificacion_caida", // ficha 401 / design 3.3
+      // FICHA 409 (design §4.2): los DOS avisos AGREGADOS del panel accionable. Migracion
+      // `20260911120000_notificacion_evento_avisos_agregados`, POSTERIOR a la de la 401.
+      "novedades_sin_gestionar",
+      "devoluciones_represadas",
     ]);
     expect(await valoresDe("notificacion_entidad_tipo")).toEqual([
       ...ENTIDADES_PREVIAS,
@@ -304,6 +309,12 @@ describeSiHayBase("333/A8 — la base aplicada, y el DOWN ejercitado de verdad",
       // suscripcion: es el mismo argumento por el que esta ficha 333 eligio EL DIA y no el cobro.
       "webhook_suscripcion_pausa",
       "geocodificacion_caida_dia", // ficha 401 / design 3.3 — LA JORNADA CR
+      // FICHA 409 (design §4.2): las entidades de los dos avisos AGREGADOS. Llevan EL ALCANCE
+      // DENTRO (`${tiendaId}:${diaCR}` y `${ambito}:${diaCR}`) porque `notificacion_dedupe_key`
+      // no incluye `tienda_id` ni `zona_id`: sin el, la primera tienda de la corrida se llevaria
+      // el aviso y todas las demas quedarian mudas.
+      "novedades_sin_gestionar_dia",
+      "devoluciones_represadas_dia",
     ]);
   });
 
@@ -358,6 +369,12 @@ describeSiHayBase("333/A8 — la base aplicada, y el DOWN ejercitado de verdad",
                    '2026-08-29', 'maestro'::"rol_value")`,
           randomUUID(),
         );
+        // FICHA 410: `push_envio_dia.evento` usa este mismo enum, y su migracion es POSTERIOR.
+        // En el rollback REAL la tabla ya no existe cuando a este down le llega el turno; aqui
+        // se ejecuta contra la base de HOY, asi que hay que ponerla en ese estado o el
+        // `DROP TYPE ..._old` muere con 2BP01 por una dependencia que el rollback no tendria.
+        await soltarDependientesPosterioresDelEnumDeEventos(tx);
+
         for (const sentencia of sentencias) {
           await tx.$executeRawUnsafe(sentencia);
         }
@@ -379,6 +396,12 @@ describeSiHayBase("333/A8 — la base aplicada, y el DOWN ejercitado de verdad",
         EVENTO_NUEVO,
         ENTIDAD_NUEVA,
       );
+      // FICHA 410: `push_envio_dia.evento` usa este mismo enum, y su migracion es POSTERIOR.
+      // En el rollback REAL la tabla ya no existe cuando a este down le llega el turno; aqui
+      // se ejecuta contra la base de HOY, asi que hay que ponerla en ese estado o el
+      // `DROP TYPE ..._old` muere con 2BP01 por una dependencia que el rollback no tendria.
+      await soltarDependientesPosterioresDelEnumDeEventos(tx);
+
       for (const sentencia of downDdl
         .split(";")
         .map((x) => x.trim())

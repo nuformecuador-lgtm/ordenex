@@ -99,6 +99,111 @@ if (ES_DEV || RESCATE_FORZOSO) {
   // que no divergen.
   const MENSAJE_RELEVO_AHORA = "ordenex:relevo-ahora";
   const MENSAJE_PAGINA_LISTA = "ordenex:pagina-lista";
+  // FICHA 410 (R43): el unico mensaje que va en sentido CONTRARIO, del SW hacia la pagina.
+  const MENSAJE_PUSH_RECIBIDO = "ordenex:push-recibido";
+
+  // ---------------------------------------------------------------------------------------
+  // FICHA 410 — EL PUSH. Vive DENTRO de la rama de produccion a proposito (R42): en la rama de
+  // desarrollo y en la del rescate forzoso este service worker se AUTODESTRUYE, y un manejador
+  // de push en un SW que se des-registra no es codigo muerto, es codigo que confunde.
+  // ---------------------------------------------------------------------------------------
+
+  // R38: lo que se muestra cuando el contenido del push NO SE PUEDE INTERPRETAR. Nunca silencio:
+  // un push que no muestra nada hace que el navegador pinte su propio «este sitio se actualizo en
+  // segundo plano», que es peor —dice menos y asusta igual—.
+  const TITULO_RESERVA = "Ordenex";
+  const CUERPO_RESERVA = "Tenés un aviso nuevo. Abrí la app para verlo.";
+  const DESTINO_RESERVA = "/";
+  const ICONO = "/icons/icon-192.png";
+  // El icono pequeño que Android pinta en la barra de estado. SOLO usa el canal alfa: un PNG a
+  // color se ve como una mancha blanca, por eso este es el glifo del lienzo en blanco sobre
+  // transparente. Si algun dia faltara el archivo, hay que QUITAR el campo — no dejarlo apuntando
+  // a un 404.
+  const BADGE = "/icons/badge-72.png";
+
+  /** Lee el payload sin confiar en el: cualquier fallo cae en los textos de reserva (R38). */
+  function leerCarga(event) {
+    try {
+      const datos = event.data ? event.data.json() : null;
+      if (!datos || typeof datos !== "object") return null;
+      const titulo = typeof datos.titulo === "string" && datos.titulo ? datos.titulo : null;
+      if (!titulo) return null;
+      return {
+        titulo,
+        cuerpo: typeof datos.cuerpo === "string" ? datos.cuerpo : "",
+        destino:
+          typeof datos.destino === "string" && datos.destino.startsWith("/")
+            ? datos.destino
+            : DESTINO_RESERVA,
+        evento: typeof datos.evento === "string" ? datos.evento : "aviso",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async function mostrarPush(event) {
+    const carga = leerCarga(event) || {
+      titulo: TITULO_RESERVA,
+      cuerpo: CUERPO_RESERVA,
+      destino: DESTINO_RESERVA,
+      evento: "aviso",
+    };
+
+    await self.registration.showNotification(carga.titulo, {
+      body: carga.cuerpo,
+      icon: ICONO,
+      badge: BADGE,
+      // R41: la etiqueta se DERIVA DEL EVENTO, asi que un push posterior del mismo tipo REEMPLAZA
+      // al anterior en vez de apilarse. Sin esto, tres avisos de cierres serian tres lineas en la
+      // bandeja diciendo casi lo mismo.
+      tag: "ordenex:" + carga.evento,
+      // `false` para que el reemplazo sea silencioso: el primero ya sono.
+      renotify: false,
+      // El destino viaja en `data` porque es lo unico que sobrevive hasta el `notificationclick`.
+      data: { destino: carga.destino },
+    });
+
+    // R43: si hay una ventana VISIBLE, se le avisa para que revalide su campana y SUPRIMA su tono
+    // propio. El navegador obliga a mostrar la notificacion igualmente, asi que sin esto la
+    // persona oiria dos avisos del mismo hecho.
+    const ventanas = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const cliente of ventanas) {
+      if (cliente.visibilityState === "visible") {
+        cliente.postMessage({ tipo: MENSAJE_PUSH_RECIBIDO, destino: carga.destino });
+      }
+    }
+  }
+
+  self.addEventListener("push", (event) => {
+    event.waitUntil(mostrarPush(event));
+  });
+
+  /**
+   * R39/R40 — al tocar la notificacion: si ya hay una ventana de la app, SE ENFOCA y se la lleva al
+   * destino; si no hay ninguna, se abre una. La diferencia es entre volver a lo que tenias y
+   * encontrarte una tercera pestaña de la misma app.
+   */
+  async function abrirDestino(event) {
+    event.notification.close();
+    const destino =
+      (event.notification.data && event.notification.data.destino) || DESTINO_RESERVA;
+
+    const ventanas = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const cliente of ventanas) {
+      if (new URL(cliente.url).origin !== self.location.origin) continue;
+      // `focus()` PRIMERO: es lo que trae la app al frente. Sin el, `navigate` cambia la ruta de
+      // una ventana que la persona no ve, y parece que el toque no hizo nada.
+      await cliente.focus();
+      if (typeof cliente.navigate === "function") await cliente.navigate(destino);
+      return;
+    }
+    await self.clients.openWindow(destino);
+  }
+
+  self.addEventListener("notificationclick", (event) => {
+    event.waitUntil(abrirDestino(event));
+  });
 
   // ---------------------------------------------------------------------------------------
   // EL RELEVO Y LA PURGA SON LA MISMA DECISION

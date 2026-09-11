@@ -108,14 +108,20 @@ describe("DOWN — recrea el enum sin el valor", () => {
 });
 
 describe("schema.prisma refleja la migracion (sin drift)", () => {
-  it("el enum JobTipo trae los nueve valores, con el nuevo al final", () => {
+  it("el enum JobTipo trae los nueve valores de esta migracion, con el nuevo en su sitio", () => {
     const bloque = schemaPrisma.match(/enum JobTipo \{([\s\S]*?)\n\}/);
     expect(bloque).not.toBeNull();
     const valores = (bloque as RegExpMatchArray)[1]
       .split("\n")
       .map((l) => l.trim().split(/\s|\/\//)[0])
       .filter((l) => l.length > 0 && !l.startsWith("@@"));
-    expect(valores).toEqual([...VALORES_PREVIOS, VALOR]);
+    // FICHA 410: el enum CRECIO (`push_web`), asi que este censo ya no puede exigir que la lista
+    // TERMINE aqui — eso lo afirma su propia migracion. Lo que sigue siendo suyo, y lo unico que
+    // esta migracion puede prometer, es que sus nueve valores estan y EN ESTE ORDEN al principio:
+    // recrear el tipo con otro orden cambiaria el orden de comparacion del enum.
+    expect(valores.slice(0, VALORES_PREVIOS.length + 1)).toEqual([...VALORES_PREVIOS, VALOR]);
+    // Y que el valor de ESTA migracion sigue existiendo, que es lo que el archivo vigila.
+    expect(valores).toContain(VALOR);
   });
 });
 

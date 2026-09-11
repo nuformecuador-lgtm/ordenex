@@ -10,6 +10,7 @@ import {
   crearPrismaDeTest,
   enTransaccionRevertida,
   serializarEscriturasReales,
+  soltarDependientesPosterioresDelEnumDeEventos,
   type TxDeTest,
 } from "./_postgres-real";
 
@@ -265,6 +266,10 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
       // peticiones por un problema de configuracion de la cuenta». Lo emite `GeocodeSaludService`
       // desde la rama de configuracion del job de geocodificacion; va al `maestro` Y al `admin`.
       "geocodificacion_caida",
+      // FICHA 409 (design §4.2): los DOS avisos AGREGADOS del panel accionable. Migracion
+      // `20260911120000_notificacion_evento_avisos_agregados`, POSTERIOR a la de la 401.
+      "novedades_sin_gestionar",
+      "devoluciones_represadas",
     ]);
     expect(await valoresDe("notificacion_entidad_tipo")).toEqual([
       ...ENTIDADES_PREVIAS,
@@ -273,6 +278,12 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
       // entidad del aviso es LA JORNADA CR. Mismo argumento por el que esta ficha 403 eligio LA
       // RACHA y no la suscripcion.
       "geocodificacion_caida_dia",
+      // FICHA 409 (design §4.2): las entidades de los dos avisos AGREGADOS. Llevan EL ALCANCE
+      // DENTRO (`${tiendaId}:${diaCR}` y `${ambito}:${diaCR}`) porque `notificacion_dedupe_key`
+      // no incluye `tienda_id` ni `zona_id`: sin el, la primera tienda de la corrida se llevaria
+      // el aviso y todas las demas quedarian mudas.
+      "novedades_sin_gestionar_dia",
+      "devoluciones_represadas_dia",
     ]);
   });
 
@@ -324,6 +335,12 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
                    'usr-x:2091-03-11T00:00:00.000Z', 'maestro'::"rol_value")`,
           randomUUID(),
         );
+        // FICHA 410: `push_envio_dia.evento` usa este mismo enum, y su migracion es POSTERIOR.
+        // En el rollback REAL la tabla ya no existe cuando a este down le llega el turno; aqui
+        // se ejecuta contra la base de HOY, asi que hay que ponerla en ese estado o el
+        // `DROP TYPE ..._old` muere con 2BP01 por una dependencia que el rollback no tendria.
+        await soltarDependientesPosterioresDelEnumDeEventos(tx);
+
         for (const sentencia of sentencias) {
           await tx.$executeRawUnsafe(sentencia);
         }
@@ -343,6 +360,12 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
         EVENTO_NUEVO,
         ENTIDAD_NUEVA,
       );
+      // FICHA 410: `push_envio_dia.evento` usa este mismo enum, y su migracion es POSTERIOR.
+      // En el rollback REAL la tabla ya no existe cuando a este down le llega el turno; aqui
+      // se ejecuta contra la base de HOY, asi que hay que ponerla en ese estado o el
+      // `DROP TYPE ..._old` muere con 2BP01 por una dependencia que el rollback no tendria.
+      await soltarDependientesPosterioresDelEnumDeEventos(tx);
+
       for (const sentencia of downDdl
         .split(";")
         .map((x) => x.trim())
@@ -372,6 +395,12 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
         EVENTO_NUEVO,
         ENTIDAD_NUEVA,
       );
+      // FICHA 410: `push_envio_dia.evento` usa este mismo enum, y su migracion es POSTERIOR.
+      // En el rollback REAL la tabla ya no existe cuando a este down le llega el turno; aqui
+      // se ejecuta contra la base de HOY, asi que hay que ponerla en ese estado o el
+      // `DROP TYPE ..._old` muere con 2BP01 por una dependencia que el rollback no tendria.
+      await soltarDependientesPosterioresDelEnumDeEventos(tx);
+
       for (const sentencia of downDdl
         .split(";")
         .map((x) => x.trim())

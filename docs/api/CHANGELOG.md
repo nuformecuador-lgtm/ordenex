@@ -21,6 +21,145 @@
 
 ---
 
+## 2026-09-10 — Tres campos NUEVOS: `zona`, `costoEstimado` y `costoReal`, en el listado y en el detalle
+
+**Es aditivo: nada de lo que hoy funciona deja de funcionar.** Ninguna clave se retira ni se
+renombra, ningún path cambia, ningún código de estado cambia. El **webhook** y la **cotización**
+no cambian **en absoluto**: ni una clave.
+
+⚠️ **Si validás el esquema en estricto** (`additionalProperties: false`, o un DTO generado que
+rechace claves desconocidas), **regenerá tu modelo contra el contrato actualizado antes de
+desplegar**. Es la única forma de que esto te rompa, y ya pasó con `mensajero`: lo repetimos con el
+mismo tono.
+
+**Dónde:** `GET /api/ordenes/api-key` (cada ítem) y `GET /api/ordenes/api-key/orden/{id}` (el
+detalle, que hereda los mismos campos del ítem).
+
+```json
+{
+  "numGuia": 100234,
+  "numRemision": "REM-0001",
+  "estado": "en_reparto",
+  "destinatario": "Ana Solís",
+  "telefonoDest": "0991234567",
+  "producto": "Caja",
+  "direccion": "Calle 1",
+  "montoCobrar": 25900,
+  "createdAt": "2026-09-07T15:04:00.000Z",
+  "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" },
+  "zona": { "id": "018f2c31-0000-4000-8000-00000000za01", "nombre": "GAM" },
+  "costoEstimado": { "flete": "2500.00", "iva": "325.00", "comision": "906.50",
+                     "ivaComision": "117.85", "fulfillment": "696.00" },
+  "costoReal": { "flete": "2500.00", "iva": "325.00", "comision": "906.50",
+                 "ivaComision": "117.85", "fulfillment": "692.00" }
+}
+```
+
+---
+
+### 1. `zona` — a dónde va el paquete
+
+Un objeto con **exactamente** `id` y `nombre`: **la misma forma que `mensajero`, y con la misma
+regla — agrupá por `id`, nunca por `nombre`**. Dos entidades con nombre en el mismo objeto, con la
+misma forma y la misma regla, para que no tengas que recordar cuál es cuál.
+
+- **`zona.id`** es un UUID en **texto**, estable y que nunca se reasigna a otra zona. Es tu clave
+  de agrupación.
+- **`zona.nombre`** es el nombre del catálogo tal cual, **texto para mostrar**. Puede cambiar: el
+  día que «FGAM El Coco» pase a «FGAM Coco», una serie agrupada por el nombre se parte en dos sin
+  avisarte.
+
+⚠️ **`zona` NUNCA es `null`**, a diferencia de `mensajero`: toda orden tiene zona. Es la única
+diferencia entre los dos campos.
+
+⚠️ **Es la zona DEL ENVÍO, no la del mensajero.** En qué zona trabaja una persona mensajera es un
+dato suyo y **sigue sin publicarse** por ningún endpoint.
+
+Los ocho valores que existen hoy: `GAM`, `FGAM Zona Sur`, `FGAM San Ramón`, `FGAM El Coco`,
+`FGAM Guanacaste`, `FGAM Puntarenas`, `FGAM Limón` y `FGAM San Carlos`. **La lista puede crecer**:
+tratá un `id` que no conozcas como una zona más, no como un error.
+
+**No se puede filtrar ni ordenar el listado por zona.** No hay parámetro de query para eso: un
+`?zona=GAM` o un `?zona_id=...` se ignora como cualquier clave desconocida. Y `zona.id` **no** sirve
+como identificador de orden: el `{id}` del detalle solo casa por `numGuia` o `numRemision`.
+
+---
+
+### 2. `costoEstimado` y `costoReal` — lo que ese paquete te cuesta
+
+Los dos tienen **la misma forma**: un objeto con **exactamente cinco** cadenas —`flete`, `iva`,
+`comision`, `ivaComision`, `fulfillment`—, o `null`. **Las dos claves viajan siempre**: `null` es
+un valor, no una omisión.
+
+Los importes son **texto crudo con dos decimales y punto decimal**, sin símbolo de moneda y sin
+separador de miles (`"2500.00"`). Es el mismo dialecto que la cotización y que el `costoEnvio` de
+la carga: no tenés que aprender dos.
+
+Un `"0.00"` **dentro** del objeto es un cero afirmado —por ejemplo, una orden que no cobra
+comisión—, nunca un dato faltante: ahí dentro ningún concepto es `null` y ninguno se omite.
+
+**NO hay ningún campo que sume los cinco, ni `total` ni equivalente.** Es deliberado: el único
+`total` que este canal publica —el de la cotización— significa **lo contrario** («lo que RECIBÍS
+vos» = monto a cobrar menos los conceptos), y darte dos `total` de signo opuesto sería una trampa.
+Sumá los cinco: son tuyos y sabés qué estás sumando.
+
+#### Por qué son DOS y no uno
+
+| | de dónde sale | ¿se mueve? |
+|---|---|---|
+| `costoEstimado` | la tarifa **vigente hoy** para tu tienda en la zona de la orden | **sí**, mientras `costoReal` sea `null` |
+| `costoReal` | la tarifa **congelada** cuando la orden entró en un cierre aprobado | no |
+
+No guardamos histórico de tarifas: cuando una cambia, se edita en sitio. Si publicáramos solo el
+estimado, **cada ajuste de tarifa te reescribiría hacia atrás la rentabilidad histórica sin que
+pudieras enterarte**. Está medido: el `fulfillment` pasó de **692,00 a 696,00 en 1 de cada 6**
+órdenes ya cerradas. Son 4 colones, y precisamente por eso: si algo tan pequeño se mueve, lo demás
+también puede.
+
+**La frase que no puede faltar:** *mientras `costoReal` sea `null`, `costoEstimado` puede moverse
+entre dos lecturas de la misma orden; cuando `costoReal` llega, es lo que se congeló al cerrar y ya
+no cambia.* Archivá `costoReal`, no el estimado.
+
+#### ⚠️ La segunda frase que no puede faltar: son el escenario de ENTREGA
+
+**`costoReal` es lo que se congeló al cerrar, NO la línea que entró en tu wallet.** Los dos campos
+responden a la misma pregunta —«¿cuánto cuesta este paquete **si se entrega**?»— y difieren solo en
+qué tarifa los alimenta.
+
+Si la orden terminó **rechazada**, lo que se te factura es el **flete de devolución y su IVA**, que
+son conceptos distintos y que **no** son estos importes. Ese escenario lo sirve la cotización
+(`POST /api/ordenes/api-key/cotizacion`), en su bloque `devuelto`.
+
+#### Qué significa cada `null`
+
+- **`costoEstimado: null`** → **no hay ninguna tarifa configurada para tu tienda en esa zona**.
+  **NO significa que el envío sea gratis.** A propósito no te mandamos cinco ceros: en un endpoint
+  que sirve precios, un `0.00` no sería un dato faltante, sería una cifra falsa servida como
+  precio. Si te aparece, avisanos: es un hueco de configuración nuestro, no un dato del envío.
+- **`costoReal: null`** → esa orden **todavía no ha entrado en ningún cierre aprobado**. Es lo
+  normal en una orden reciente.
+- **`costoReal` con los cinco en `"0.00"`** → esto **sí** es un cero de verdad: esa orden se cerró
+  cuando no había tarifa vigente y por esos conceptos se liquidó cero. Es un caso distinto de
+  `null`, y por eso se dice distinto.
+
+#### El único caso en que `costoReal` se mueve
+
+Si la orden vuelve a entrar en **un segundo cierre aprobado** —una orden devuelta sigue viva y
+puede recorrerse otra vez—, publicamos la fila del cierre **más reciente**.
+
+**No se puede filtrar ni ordenar el listado por el costo** ni por ninguno de sus cinco conceptos, y
+no publicamos de dónde salen los importes (ni el identificador de la tarifa, ni el del cierre, ni
+la fecha de congelación).
+
+---
+
+**Qué NO cambia:** el **webhook** `orden.estado_actualizado` (ni una clave nueva: su cuerpo va
+firmado y el orden de sus claves es parte de la firma), la **cotización**, la **carga**, la
+cancelación, el borrado, los PDF, los diez campos que el ítem ya publicaba, el bloque `pagination`,
+el orden de las filas entre páginas, y —en el detalle— `evidencias[]` y `gestiones[]`.
+
+---
+
 ## 2026-09-10 — ARREGLO: el `evidenciasUrl` del webhook de `incidente` ahora sí se puede abrir
 
 **Esto es un arreglo, no un cambio de contrato.** Ninguna clave cambia de nombre, de tipo ni de

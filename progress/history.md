@@ -4932,3 +4932,172 @@ Cerrada y en produccion. Cuatro PR (#760, #761, #762, #763), release #764. Sin m
   lote, espaciado, enfriamiento). Ausente, vacio, no numerico, cero o negativo cae al default sin
   lanzar. **No se declaran en `.env.example`**: `lib/config/jobs.ts` sigue el mismo patron con cinco
   variables y ninguna esta ahi.
+
+## 2026-09-10 — 404 · el mensajero de la orden viaja en el webhook y en la API
+
+- Pedido por un integrador real para medir su operacion por mensajero. Campo **aditivo** `{id, nombre}`
+  en el evento de estado, el listado y el detalle.
+- **La puerta de privacidad la abrio el humano con un argumento medible:** la tienda ya ve ese nombre
+  en la UI, asi que la API no le expone a esa tienda nada que no tuviera. El spec **verifico la
+  premisa en el codigo** en vez de suponerla.
+- Trampa cazada en T0: **`toListItemDTO` existe DOS veces** en el repo. Se toco el correcto y quedo
+  dicho cual era el otro.
+- Una mutacion sobrevivio y el implementador la declaro: mover la linea dentro del mismo literal no
+  cambia el cuerpo serializado, asi que **ningun test puede verla**. El reviewer la juzgo equivalente
+  y su variante observable muere con 2 rojos. Declararla valio mas que taparla.
+
+## 2026-09-10 — 405 · el detalle por API publica el historial de gestiones
+
+- **RECHAZADA en ronda 1 por dos bloqueantes medidos**, y es el mejor ejemplo del dia de por que la
+  revision no es tramite.
+- **Una mutacion sobrevivia a 9.446 tests en verde.** Al esquivar un limite de Prisma, el filtro de
+  evidencias paso del `WHERE` a un `.filter()` en memoria y solo media condicion quedo vigilada. La
+  causa raiz era el ESCENARIO: una `devuelta` SIN foto, que es un **estado imposible** desde la 75.
+  Se arreglo el escenario, no el aserto.
+- **R19 era INALCANZABLE POR CONSTRUCCION**: pedia «el mismo numero de consultas que hoy» y no se
+  puede devolver `gestiones[]` sin leerlas. Lo falso era la premisa del design. Se acepto 6 -> 9,
+  medido en las dos ramas, **sin N+1** (9 con 3 gestiones y 9 con 6), y se congelo el numero con un
+  test que dice CUAL sobra.
+- **Tres frases falsas corregidas**, una de ellas en un comentario de produccion que afirmaba «sigue
+  siendo UNA sola consulta».
+
+## 2026-09-10 — 406 · el enlace de evidencias del webhook dejaba de dar 404
+
+- El enlace se construia con el id interno de la orden y el endpoint solo resuelve por guia o
+  remision: **respondia 404 siempre, para cualquier orden**. No funciono nunca, y el CHANGELOG lo
+  dice asi en vez de maquillarlo.
+- **El rojo se vio ANTES del arreglo** y el reviewer lo reprodujo revirtiendolo: 4 casos con 404 que
+  arrastran **22 rojos en 4 archivos**, 4 de ellos contra Postgres real.
+- **Q5 se MIDIO, no se asumio**: sonda contra un servidor real para comprobar que Next decodifica el
+  segmento dinamico **exactamente una vez**. De ahi sale que `encodeURIComponent` basta.
+- Deuda ajena destapada y arreglada: un test localizaba una entrada del CHANGELOG **por su fecha**, y
+  la entrada nueva del mismo dia lo rompia. Se anclo al titulo. **Queda otro igual, latente**, en
+  `openapi-374-nodo-retirado.test.ts`.
+
+## 2026-09-10 — 407 · el operador autoriza asignar una orden que no se pudo ubicar
+
+- Nace de un caso real: una direccion tica de referencias —correcta para un humano, ilegible para el
+  mapa— dejo una orden **cinco dias parada**. Son 2 ordenes asi en toda la base.
+- **Hallazgo que abarato la ficha:** la optimizacion de ruta YA convive con ordenes sin coordenadas
+  (las excluye del calculo sin abortar y las pinta al final). El unico punto que se plantaba era el
+  gate de asignacion.
+- **Sin rastro, por decision del humano**: la autorizacion viaja por parametro y no se persiste, asi
+  que no se podra saber quien autorizo. Contrapartida declarada: al no persistirse, **la marca no
+  puede quedarse pegada desactivando el gate para siempre**.
+- **El texto no puede mentir:** el aviso de la 400 dice «por un problema del sistema, NO de la
+  direccion» y aqui SI es la direccion. Literal propio, con un guardia que se pone rojo si vuelve.
+
+## 2026-09-10 — 408 · el motivo de un rechazo automatico se lee en lenguaje humano
+
+- La columna Motivo pintaba `escalado SLA wrong_address` —jerga, y con una sigla que este repo
+  decidio no mostrar—, mientras **el tooltip de al lado lo explicaba mejor que el propio dato**.
+- **Manda el vocabulario YA APROBADO en la 73**, no uno nuevo: un concepto, un nombre.
+- El caso que mas importaba no era el reportado: **en `/cierre-dia` el mensajero ve la jerga sin
+  ningun marcador al lado**, porque alli `esRechazoSla` va false por decision de la 102. Una funcion
+  con dos variantes y **un solo booleano** —el mismo que decide si el marcador se pinta— impide que
+  se desincronicen.
+- **Hueco declarado y CERRADO por el reviewer:** un `false` fijo es indistinguible del codigo
+  correcto y no se puede proteger sin un test que ATORNILLE el bug. Se declaro en vez de fabricar una
+  proteccion falsa.
+
+## 2026-09-10 — 409 · el panel de notificaciones avisa lo que hay que hacer y lleva a resolverlo
+
+- Medido: **1.214 avisos emitidos y 26 de 39 personas no han abierto ninguno** — 1 de 5 tiendas y 1
+  de 4 admins, justo los dos roles a los que mas urgia avisar.
+- **El hallazgo que decidio el diseño:** `notificacion_dedupe_key` **no incluye el alcance**, asi que
+  con `entidad_id = diaCR` a secas **solo la primera tienda habria recibido su aviso y las demas
+  quedaban silenciadas sin error ni log**. Su test es LA UNICA prueba que existe: las 27 represadas
+  de produccion son de una sola tienda, asi que produccion no lo habria cazado jamas.
+- **Una guardia impidio un texto que mentia:** al derivar por segunda vez el ancla de la devolucion,
+  el aviso habria dicho «3 dias» sobre una orden a la que el cron le cuenta 5.
+- **El umbral se midio antes de fijarlo, y cambio el ESTADO vigilado:** `devolviendo_a_tienda` tiene
+  247 ordenes y ninguna pasa de dia y medio (fluye); el represamiento esta en `por_devolver`, 27 con
+  7 por encima de 3 dias. Una regla PROHIBE vigilar el que fluye.
+- **Al tirar del hilo del bloqueante de tramite aparecio un fallo real:** el ultimo commit del backend
+  no estaba en la rama del frontend y el PR se habria mergeado sin el, **sin ninguna señal**.
+
+## 2026-09-10 — 411 · la analitica sigue un lote de carga hasta su desenlace
+
+- Responde «de las que cargue el lunes, cuantas se entregaron», que la base de los KPI no responde:
+  aquella es el **inventario vivo del dia** e incluye ordenes viejas.
+- **El riesgo principal se vio EN ROJO, no se afirmo:** copiar la ventana del ciclo de vida hace caer
+  el tiempo sobre el CIERRE en vez de sobre la CARGA y **no rompe nada visible**. Reproducido por
+  implementador y reviewer: aparece una cohorte `2001-06-14` que nadie pidio, se cae la orden de las
+  23:50, y una entregada sale contada como `viva`.
+- **Sin migracion**, y la medicion contra produccion trajo un matiz que el numero solo escondia: los
+  rangos de 30 y 366 dias son **UNA SOLA MEDIDA** (produccion solo tiene datos desde el arranque
+  comercial) y el planificador elige `Seq Scan`, asi que **la consulta es barata por el TAMAÑO de las
+  tablas, no por el indice**.
+- Dos mutaciones sobrevivieron a la primera pasada, una por capa, y **de cada una nacio un test**.
+
+## 2026-09-10 — 415 · la orden dice su zona y lo que costo, en el listado y en el detalle
+
+- Dos peticiones del integrador en UNA ficha: separadas costaban dos gates completos, un rebase
+  seguro y **dos entradas de CHANGELOG el mismo dia para el mismo endpoint** —y esa entrada ES el
+  aviso.
+- **El manual habia mentido** diciendo que la zona venia en el listado. Se corrigio **diciendo que
+  era falso**, y esta ficha lo hizo verdad.
+- **Se publican DOS costos, no uno.** La tabla `tarifas` no tiene historico —se edita en sitio—, asi
+  que `cierre_detail` es la unica memoria de lo que se cobro. Medido: el fulfillment cambio en 263 de
+  1.581 detalles (4 colones: trivial en dinero, **pero prueba que cambia**). Con solo el estimado,
+  cada ajuste de tarifa **reescribiria hacia atras la rentabilidad historica del integrador**.
+- **Corrigio un error del leader con archivo y linea:** `cierre_detail` se escribe al **SOLICITAR**
+  (`CierreDiaRepository:942`), no al aprobar. Con la version equivocada el filtro por `aprobado` era
+  redundante y el primero que lo leyera lo habria borrado; con la real es **load-bearing**.
+- Decision no pedida y acertada: **el webhook no gana zona ni costo**, porque su cuerpo va FIRMADO y
+  el orden de sus claves es parte de la firma.
+
+## 2026-09-11 — 410 · el canal de push web, cableado en un solo punto
+- Ocho de los trece eventos de la campana salen ademas por PUSH al telefono, con tope duro de **un
+  push por persona, evento y jornada de Costa Rica**. Los otros cinco no salen, y cada ausencia
+  lleva su porque escrito en el catalogo: una ausencia explicada es una decision, una sin explicar
+  es un olvido.
+- Requisitos R1-R52, mapeados en `progress/impl_410_backend.md` e `impl_410_frontend.md`.
+- **ORIGEN, medido:** el 2026-08-23 se conto en este mismo arbol que de SIETE notificadores reales
+  **DOS no los pasaba nadie** —incluido el aviso nocturno del corte, el que mas se emite— y la suite
+  entera estaba verde. Con DOCE productores, repetir el patron de inyectar uno a uno garantizaba que
+  alguno se quedara fuera. Por eso el canal es un DECORADOR con **un** punto de fallo en vez de doce,
+  y ese punto se vigila.
+- **El cupo del dia se toma INSERTANDO**, no comprobando antes: quien excluye es un indice unico, y
+  el `P2002` es el desenlace NORMAL del metodo, no un error.
+- **LO QUE CASI SE CUELA (1): R7 no lo defendia nadie.** La revision sustituyo el INSERT por un
+  comprobar-antes —lo unico que R7 prohibe— y los 13 archivos del backend salieron **157/157
+  verdes**, con el caso de la carrera pasando **5 de 5**. Dos razones, y las dos sirven para otras
+  fichas: el caso principal afirmaba «un cupo, un encolado», que se cumple TAMBIEN si las dos
+  llamadas se serializan solas —y en esta maquina se serializan SIEMPRE, medido 5 de 5, asi que
+  nunca llegaba a la ventana—; y el segundo caso reproducia el SELECT y el INSERT **a pelo, con SQL
+  escrito dentro del test**, o sea que probaba una propiedad del MOTOR y del INDICE —cierta y util—
+  pero indiferente a lo que hiciera el codigo de produccion. **El arreglo:** una barrera en
+  `pushEnvioDia.create`, DENTRO del camino real, por la costura que el propio constructor del
+  repositorio declara; retiene a las dos conexiones hasta que las dos han llegado. Va en `create` y
+  no en `findFirst` a proposito: `create` lo llaman las DOS versiones, asi que el caso no puede
+  quedarse colgado contra la buena. Y **lo que separa a las dos implementaciones no es el numero de
+  filas** —el indice salva a las dos— **sino el numero de ENCOLADOS**, que es lo que el telefono
+  nota. Con la mutacion puesta: ROJO 5 de 5.
+- **LO QUE CASI SE CUELA (2): la guardia del cableado leia UN archivo.** Un productor nuevo en OTRO
+  archivo, emitiendo un evento SI elegible, dejaba **213 archivos de guardias y 3.124 tests en
+  verde** con el canal saltado: linea por linea, el fallo del 2026-08-23 que esta ficha existia para
+  cerrar. Ahora es un **censo con lista blanca sobre `lib/` y `app/`** que **cuenta apariciones, no
+  archivos ni simbolos** —este repo ya midio dos veces que una guardia que decide «este archivo, si
+  o no» se queda verde cuando borras UNA de varias apariciones del mismo sitio—. Reproducido con el
+  archivo intruso de verdad en el arbol: `test:guardias` pasa de 213/213 verdes a **1 fallado,
+  exit 1**.
+- **Y el censo corrigio un dato que se daba por sabido:** `lib/actions/notificaciones.ts` se
+  describia como «solo lectura» y NO lo es —por `notificarCargaTerminada` llega a CREAR un aviso—.
+  Es inofensivo porque `carga_masiva_terminada` no es elegible para push, pero eso ahora **se
+  afirma** en la lista blanca en vez de suponerse; igual con el `orden_rechazada` de `emitir.ts`. El
+  dia que uno de esos dos eventos se haga elegible, la guardia se pone roja y manda releer el motivo
+  escrito, que es donde dice que ese repositorio no lleva el canal.
+- **Sin claves VAPID no pasa nada, y se midio:** cero ocurrencias de VAPID en el `.env` del arbol, y
+  los 238 tests de la ficha corren con el canal SIN CONFIGURAR sin que nada lance. El control ni se
+  ofrece. Es la leccion de la 400, aplicada.
+- **`push_envio_dia.evento` es la SEGUNDA columna del esquema que usa `notificacion_evento`.** Antes
+  de esta ficha era una sola. Consecuencia para el futuro, escrita en `db/schema.prisma` pegada al
+  modelo: un `down.sql` que amplie ese enum tiene que retipar **las dos** columnas o morira con
+  2BP01. Los cinco `down.sql` anteriores NO se tocaron —son fotos historicas—; lo que se arreglo
+  fueron sus controles de test.
+- **Limite abierto con nombre: nadie ha visto todavia un push en un telefono.** Todo lo verificado
+  es jsdom, Postgres y un arnes que ejecuta `public/sw.js` en un `new Function`. Las claves VAPID ya
+  estan en Vercel (par DISTINTO en Production y en Preview, ninguna en Development, ninguna
+  compartida); la prueba en un telefono real queda para el 2026-09-12 y **T6.5 sigue sin marcar**
+  hasta entonces.

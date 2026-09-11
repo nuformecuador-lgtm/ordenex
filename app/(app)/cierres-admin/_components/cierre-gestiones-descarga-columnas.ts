@@ -47,6 +47,10 @@ import {
   RECHAZO_MANUAL_BADGE_LABEL,
   RECHAZO_ORIGEN_COL,
   RECHAZO_SLA_BADGE_LABEL,
+  // FICHA 408: en el archivo NO hay tooltip que compense la jerga, así que aquí es todavía
+  // peor que en la pantalla. El precedente está en este mismo módulo: la causa del incidente
+  // sale como etiqueta legible y jamás como el value del enum.
+  motivoGestionLegible,
 } from "./cierre-labels";
 import { celdasMediosPago, COLUMNAS_MEDIOS_PAGO } from "./medios-pago-descarga-columnas";
 
@@ -212,7 +216,7 @@ export function filaDescargaGestionReprogramada(
     montoCobrar: gestion.ingresoOrdenex ? gestion.ingresoOrdenex.montoCobrar : null,
     fulfillment: gestion.ingresoOrdenex?.tarifa?.fulfillment ?? null,
     nuevaFecha: gestion.fechaReprogramacion,
-    motivo: gestion.motivo,
+    motivo: motivoGestionLegible(gestion.motivo, gestion.esRechazoSla),
     pagoMensajero: gestion.pagoMensajero,
   };
 }
@@ -237,7 +241,7 @@ export function filaDescargaGestionDevuelta(gestion: CierreDetalleGestion): Desc
     ...celdasComunes(gestion),
     montoCobrar: ingreso ? ingreso.montoCobrar : null,
     fulfillment: ingreso?.tarifa?.fulfillment ?? null,
-    motivo: gestion.motivo,
+    motivo: motivoGestionLegible(gestion.motivo, gestion.esRechazoSla),
     fleteDevolucionConIva: ingreso ? ingreso.fleteDevolucionConIva : null,
     ingresoTotal: ingreso ? ingreso.total : null,
     pagoMensajero: gestion.pagoMensajero,
@@ -274,7 +278,7 @@ export function filaDescargaGestionRechazada(gestion: CierreDetalleGestion): Des
       gestion.esRechazoSla === true ? RECHAZO_SLA_BADGE_LABEL : RECHAZO_MANUAL_BADGE_LABEL,
     montoCobrar: ingreso ? ingreso.montoCobrar : null,
     fulfillment: ingreso?.tarifa?.fulfillment ?? null,
-    motivo: gestion.motivo,
+    motivo: motivoGestionLegible(gestion.motivo, gestion.esRechazoSla),
     tieneEvidencia: tieneEvidencia(gestion),
     fleteDevolucionConIva: ingreso ? ingreso.fleteDevolucionConIva : null,
     ingresoTotal: ingreso ? ingreso.total : null,
@@ -312,7 +316,7 @@ export function filaDescargaGestionIncidente(gestion: CierreDetalleGestion): Des
     causa: gestion.causaIncidente
       ? CAUSA_INCIDENTE_LABEL[gestion.causaIncidente] ?? gestion.causaIncidente
       : null,
-    motivo: gestion.motivo,
+    motivo: motivoGestionLegible(gestion.motivo, gestion.esRechazoSla),
     tieneEvidencia: tieneEvidencia(gestion),
     indemnizacion: gestion.indemnizacion,
   };

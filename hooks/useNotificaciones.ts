@@ -17,6 +17,15 @@ export interface NotificacionesData {
   items: NotificacionDTO[];
   /** No leidas por el actor DENTRO del mismo conjunto que devuelve `items` (R30). */
   noLeidas: number;
+  /**
+   * FICHA 409 (R8/R9, T6.1) — CUANTAS COSAS HAY POR HACER, que NO es cuantos mensajes hay sin
+   * leer. Lo cuenta el SERVIDOR sobre el mismo conjunto que viaja en `items` (accionables y
+   * vigentes, sin mirar la lectura): la campana no lo deriva ni lo recalcula.
+   *
+   * Es la cifra del distintivo (R11), la del filtro (R25) y la que dispara el tono (R30, Q8):
+   * un solo criterio para el mismo hecho.
+   */
+  porHacer: number;
 }
 
 /**
@@ -27,7 +36,10 @@ export interface NotificacionesData {
 export async function notificacionesFetcher(): Promise<NotificacionesData> {
   const res = await listarNotificaciones();
   if (res.status !== "ok") throw new Error(res.status);
-  return { items: res.items, noLeidas: res.noLeidas };
+  // `?? 0` no es defensa muerta: el resultado de la accion es la frontera con el servidor y en
+  // los dobles de las suites vigentes de la 146/161 ese campo no existe todavia. Sin el, el
+  // distintivo pintaria "undefined por hacer" en vez de apagarse.
+  return { items: res.items, noLeidas: res.noLeidas, porHacer: res.porHacer ?? 0 };
 }
 
 export interface UseNotificacionesOptions {
@@ -72,6 +84,9 @@ export function useNotificaciones(
   return {
     items: vacio ? [] : data.items,
     noLeidas: vacio ? 0 : data.noLeidas,
+    // R48 de la 146, aplicado a la cifra nueva: ante error (incluido `unauthenticated`) la
+    // campana degrada a CERO por hacer, o sea a "sin distintivo", sin romper la cabecera.
+    porHacer: vacio ? 0 : data.porHacer,
     error,
     isLoading,
     mutate: () => mutate(),

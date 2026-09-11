@@ -1,5 +1,6 @@
 import type { GestionCausaDevolucion } from "@prisma/client";
 import { reintentosConfig } from "@/lib/config/reintentos";
+import { devolucionSlaConfig } from "@/lib/config/devolucion-sla";
 import type {
   DevueltaSlaRow,
   IDevolucionSlaRepository,
@@ -24,8 +25,17 @@ const HORA_MS = 60 * 60 * 1000;
 const DIA_MS = 24 * HORA_MS;
 // R6/Q3: ventanas ROLLING desde el anclaje. `not_found` = 24h; `wrong_*` = 5 dias (accion el
 // dia 6). Independientes de la cadencia con la que corra el cron (horario).
-const VENTANA_NOT_FOUND_MS = 24 * HORA_MS;
-const VENTANA_WRONG_MS = 5 * DIA_MS;
+//
+// ⚠️ FICHA 409 (T1.2, R39) — LOS DOS NUMEROS DEJAN DE ESTAR ESCRITOS AQUI y pasan a DERIVARSE de
+// `lib/config/devolucion-sla.ts`. El comportamiento es exactamente el mismo (5 dias y 24 horas);
+// lo que cambia es que ahora hay UNA sola fuente. El motivo no es estetico: el aviso
+// `novedades_sin_gestionar` de la 409 le DICE EL PLAZO A LA TIENDA («A los 5 dias se rechaza
+// automaticamente»), y con dos copias del «5» el dia que el humano mueva el plazo el cron
+// escalaria a los 6 y el aviso seguiria prometiendo 5. La tienda organiza su trabajo con ese
+// numero: el texto no puede mentir. Lo mide `devolucion-sla-plazo-unica-fuente.test.ts`, que
+// afirma la configuracion Y el COMPORTAMIENTO del cron (4 d 23 h no escala, 5 d 00 h si).
+const VENTANA_NOT_FOUND_MS = devolucionSlaConfig.HORAS_REINTENTO * HORA_MS;
+const VENTANA_WRONG_MS = devolucionSlaConfig.DIAS_RECHAZO_AUTOMATICO * DIA_MS;
 
 // Metodos de repo/servicio consumidos (Pick para dobles de test sin DB/red).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;

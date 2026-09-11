@@ -273,6 +273,36 @@ export async function serializarEscriturasReales(tx: {
   await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${CLAVE_LOCK_ESCRITURA_REAL})`);
 }
 
+/**
+ * FICHA 410 — deja la base como estaria en el MOMENTO REAL de revertir un `down.sql` HISTORICO del
+ * enum `notificacion_evento`.
+ *
+ * ⚠️ POR QUE HACE FALTA, Y ES UNA TRAMPA NUEVA DE VERDAD. Esos `down.sql` recrean el tipo:
+ * `RENAME TO ..._old` -> `CREATE TYPE` -> `ALTER COLUMN "notificacion"."evento" TYPE ...` ->
+ * `DROP TYPE ..._old`. Funcionaban porque `notificacion.evento` era la UNICA columna del esquema que
+ * usaba ese tipo. Desde la 410 hay una segunda: `push_envio_dia.evento`. Con ella viva, el
+ * `DROP TYPE` muere con `2BP01` («otros objetos dependen de el») — medido en el gate del 2026-09-10,
+ * doce archivos rojos de golpe.
+ *
+ * EN UN ROLLBACK REAL ESO NO PASA, y por eso NO se toca ni un `down.sql` anterior: `db:rollback` va
+ * de la ULTIMA migracion hacia atras, y la de `push_suscripcion` (20260912120000) es POSTERIOR a
+ * todas las que recrean este enum. Cuando les llega el turno, la tabla ya no existe. Lo que estos
+ * tests hacen —ejecutar un down historico contra la base de HOY— es una simulacion, y esta funcion
+ * le pone la unica pieza que le faltaba.
+ *
+ * ⚠️ LO QUE ESTO **NO** TAPA, y hay que escribirlo donde se lea: el `down.sql` de una migracion
+ * FUTURA que anada un valor a `notificacion_evento` —y que por tanto sea POSTERIOR a la 410— SI
+ * tendra que retipar las DOS columnas. Si se olvida, fallara RUIDOSAMENTE con el mismo `2BP01`, que
+ * es el modo de fallo correcto. Queda dicho tambien en `db/schema.prisma`, junto al modelo.
+ *
+ * Todo esto corre DENTRO de la transaccion revertida del test: la tabla vuelve al hacer rollback.
+ */
+export async function soltarDependientesPosterioresDelEnumDeEventos(tx: {
+  $executeRawUnsafe: (sql: string, ...args: unknown[]) => Promise<number>;
+}): Promise<void> {
+  await tx.$executeRawUnsafe(`DROP TABLE IF EXISTS "push_envio_dia"`);
+}
+
 /** FKs obligatorias de `orden`, tomadas de una fila existente. `null` si la tabla esta vacia. */
 export interface FksDeOrden {
   estatusId: string;

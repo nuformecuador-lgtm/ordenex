@@ -8,6 +8,7 @@ import type {
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { ApiMensajeroDTO, ApiOrdenGestionDTO } from "@/lib/types/api-orden";
+import { costeoFixture, ZONA_FIXTURE } from "@/tests/fixtures/api-orden-costeo-415";
 
 // ⏳ 2026-09-10 — Feature 405 (T9): GUARDIA DE LISTA BLANCA Y NO-FUGA de `gestiones[]`.
 // Cubre R3, R9 y R12. Molde: `rastreo-dto-lista-blanca.guardia.test.ts` (229).
@@ -130,6 +131,10 @@ const FILA_DETALLE: ApiOrdenDetalleRow = {
   montoCobrar: 1500,
   createdAt: new Date("2026-07-20T15:04:00.000Z"),
   mensajero: null,
+  // ⏳ 2026-09-10 (feature 415): campos REQUERIDOS de la fila del repo. Esta guardia mide la
+  // lista blanca de `gestiones[]`, no el costo; el defecto neutro basta.
+  zona: ZONA_FIXTURE,
+  costeo: costeoFixture(),
   evidencias: [],
   gestiones: [GESTION_POBLADA],
 };
@@ -144,12 +149,18 @@ function servicio() {
     createSignedUrl: vi.fn(async () => "https://signed/one"),
     createSignedUrls: vi.fn(async () => ({})),
   };
-  return new ApiOrdenLecturaService(repo as never, signedUrls);
+  return new ApiOrdenLecturaService(repo as never, signedUrls, fakeTarifas() as never);
 }
 
 // ---------------------------------------------------------------------------------------------
 // 1. FORMA — el conjunto EXACTO de claves
 // ---------------------------------------------------------------------------------------------
+
+/**
+ * ⏳ 2026-09-10 (feature 415): el resolutor de tarifa VIGENTE que el service pide por
+ * constructor. Aqui no resuelve ninguna: estos casos no miden importes.
+ */
+const fakeTarifas = () => ({ resolveTarifas: vi.fn().mockResolvedValue(new Map()) });
 
 describe("405/R3 — cada gestion lleva EXACTAMENTE las cinco claves publicas", () => {
   it("el conjunto de claves del elemento es el conjunto entero, ni una mas ni una menos", async () => {
@@ -175,7 +186,7 @@ describe("405/R3 — cada gestion lleva EXACTAMENTE las cinco claves publicas", 
     const svc = new ApiOrdenLecturaService(repo as never, {
       createSignedUrl: vi.fn(),
       createSignedUrls: vi.fn(async () => ({})),
-    } as unknown as ISignedUrlProvider);
+    } as unknown as ISignedUrlProvider, fakeTarifas() as never);
 
     const res = await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
 

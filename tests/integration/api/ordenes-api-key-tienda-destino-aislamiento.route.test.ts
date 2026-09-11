@@ -27,6 +27,7 @@ import type {
   IApiKeyRepository,
 } from "@/lib/interfaces/repositories/IApiKeyRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
+import { costeoFixture, ZONA_FIXTURE } from "@/tests/fixtures/api-orden-costeo-415";
 
 const SECRETO = "ordx_secretovivo1234567890";
 
@@ -46,6 +47,12 @@ interface FilaFalsa {
   direccion: string | null;
   montoCobrar: number | null;
   createdAt: Date;
+  // ⏳ 2026-09-10 (feature 415): la fila publica del repo gana estos dos. `mensajero` lo gano la
+  // 404 y este doble nunca lo declaro: se anaden los tres para que el service reciba lo que el
+  // repositorio REAL le daria, que es de lo que va este archivo.
+  mensajero: null;
+  zona: typeof ZONA_FIXTURE;
+  costeo: ReturnType<typeof costeoFixture>;
 }
 
 function fila(tiendaId: string, numGuia: number, numRemision: string): FilaFalsa {
@@ -60,6 +67,9 @@ function fila(tiendaId: string, numGuia: number, numRemision: string): FilaFalsa
     direccion: null,
     montoCobrar: null,
     createdAt: new Date("2026-08-28T12:00:00Z"),
+    mensajero: null,
+    zona: ZONA_FIXTURE,
+    costeo: costeoFixture(),
   };
 }
 
@@ -157,7 +167,7 @@ function depsListado(key: Partial<ApiKeyAutenticada>) {
   const auth = new ApiKeyAuthService(apiKeyRepo(key));
   const deps: ListadoApiDeps = {
     autenticar: (raw) => auth.autenticar(raw),
-    lecturaService: new ApiOrdenLecturaService(repo as never, signedUrls),
+    lecturaService: new ApiOrdenLecturaService(repo as never, signedUrls, fakeTarifas() as never),
   };
   return { deps, owners };
 }
@@ -165,7 +175,7 @@ function depsListado(key: Partial<ApiKeyAutenticada>) {
 function depsDetalle(key: Partial<ApiKeyAutenticada>) {
   const { repo, owners } = ordenRepo();
   const auth = new ApiKeyAuthService(apiKeyRepo(key));
-  const lectura = new ApiOrdenLecturaService(repo as never, signedUrls);
+  const lectura = new ApiOrdenLecturaService(repo as never, signedUrls, fakeTarifas() as never);
   const deps: ConsultaOrdenApiDeps = {
     autenticar: (raw) => auth.autenticar(raw),
     resolucionService: new ApiOrdenResolucionService(repo as never),
@@ -180,6 +190,12 @@ function req(query = ""): Request {
     headers: { Authorization: `Bearer ${SECRETO}` },
   });
 }
+
+/**
+ * ⏳ 2026-09-10 (feature 415): el resolutor de tarifa VIGENTE que el service pide por
+ * constructor. Aqui no resuelve ninguna: estos casos no miden importes.
+ */
+const fakeTarifas = () => ({ resolveTarifas: vi.fn().mockResolvedValue(new Map()) });
 
 describe("302 — que VE una key con tienda destino", () => {
   it("ve las ordenes de SU tienda, incluidas las que la tienda cargo por pantalla", async () => {

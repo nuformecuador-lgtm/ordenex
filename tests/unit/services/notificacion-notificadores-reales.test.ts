@@ -9,7 +9,9 @@ import {
   notificadorNoOp,
   notificarCargaMasivaTerminadaCon,
   notificarCierreDiaPorAprobarCon,
+  notificarDevolucionesRepresadasCon,
   notificarGeocodificacionCaidaCon,
+  notificarNovedadesSinGestionarCon,
   notificarPostulacionPendienteCon,
 } from "@/lib/notificaciones/notificadores";
 import { PostulacionMensajeroService } from "@/lib/services/PostulacionMensajeroService";
@@ -39,9 +41,11 @@ const ROOT = path.join(__dirname, "..", "..", "..");
 /** Repositorio doble: registra lo creado, sin dedupe previa. */
 class RepoDoble implements INotificacionRepository {
   creadas: CrearNotificacionInput[] = [];
-  async crear(input: CrearNotificacionInput): Promise<boolean> {
+  // FICHA 410 (design 6.1): `crear` devuelve el ID de la fila creada y `null` cuando la dedupe
+  // la absorbio. `null` significa EXACTAMENTE lo que significaba `false`.
+  async crear(input: CrearNotificacionInput): Promise<string | null> {
     this.creadas.push(input);
-    return true;
+    return `n-${this.creadas.length}`;
   }
   existeNoLeidaPara = vi.fn().mockResolvedValue(false);
   listarParaUsuario = vi.fn().mockResolvedValue([]);
@@ -52,7 +56,7 @@ class RepoDoble implements INotificacionRepository {
 
 /** Repositorio que revienta al crear: modela la base caida en el camino real. */
 class RepoQueFalla extends RepoDoble {
-  override async crear(): Promise<boolean> {
+  override async crear(): Promise<string | null> {
     throw new Error("base caida");
   }
 }
@@ -127,6 +131,98 @@ describe("401/R7-R8-R11 — camino real del notificador de «el servicio de mapa
     expect(logError).toHaveBeenCalledTimes(1); // NO es un catch vacio
     const registrado = logError.mock.calls[0][0] as Error;
     expect(registrado.message).toContain("geocodificacion_caida");
+    expect((registrado.cause as Error).message).toBe("base caida");
+  });
+});
+
+describe("409/R35-R60 — camino real del notificador de «tienes N novedades sin gestionar»", () => {
+  it("crea UNA fila por `INotificacionRepository.crear`, acotada a la tienda", async () => {
+    const repo = new RepoDoble();
+
+    await notificarNovedadesSinGestionarCon(repo)({
+      tiendaId: "tienda-1",
+      diasMasAntigua: 3,
+      plazo: "cinco_dias",
+      diaCR: "2026-09-11",
+    });
+
+    expect(repo.creadas).toHaveLength(1);
+    expect(repo.creadas[0].destinatario).toEqual({
+      tipo: "rol",
+      rol: "adminTienda",
+      tiendaId: "tienda-1",
+    });
+    // El ALCANCE va ADEMAS dentro de la entidad: sin eso, solo la primera tienda de la corrida
+    // recibiria su aviso (la clave de dedupe no incluye `tienda_id`).
+    expect(repo.creadas[0].entidadId).toBe("tienda-1:2026-09-11");
+    expect(repo.creadas[0].entidadTipo).toBe("novedades_sin_gestionar_dia");
+  });
+
+  it("R60: absorbe el fallo del repositorio y lo REGISTRA con contexto, sin propagarlo", async () => {
+    const logError = vi.fn();
+
+    await expect(
+      notificarNovedadesSinGestionarCon(new RepoQueFalla(), { logError })({
+        tiendaId: "tienda-1",
+        diasMasAntigua: 3,
+        plazo: "mezclado",
+        diaCR: "2026-09-11",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(logError).toHaveBeenCalledTimes(1); // NO es un catch vacio
+    const registrado = logError.mock.calls[0][0] as Error;
+    expect(registrado.message).toContain("novedades_sin_gestionar");
+    expect((registrado.cause as Error).message).toBe("base caida");
+  });
+});
+
+describe("409/R47-R60 — camino real del notificador de «N ordenes esperan volver a su tienda»", () => {
+  it("ambito global: DOS filas (maestro y admin); ambito zona: UNA, acotada a la zona", async () => {
+    const global = new RepoDoble();
+    const zona = new RepoDoble();
+
+    await notificarDevolucionesRepresadasCon(global)({
+      ambito: { tipo: "global" },
+      diasMasAntigua: 8,
+      diaCR: "2026-09-11",
+    });
+    await notificarDevolucionesRepresadasCon(zona)({
+      ambito: { tipo: "zona", zonaId: "zona-a" },
+      diasMasAntigua: 4,
+      diaCR: "2026-09-11",
+    });
+
+    // A MANO, nunca derivado de `ROLES_ADMINISTRACION`.
+    expect(global.creadas.map((c) => c.destinatario)).toEqual([
+      { tipo: "rol", rol: "maestro" },
+      { tipo: "rol", rol: "admin" },
+    ]);
+    expect(global.creadas.every((c) => c.entidadId === "global:2026-09-11")).toBe(true);
+
+    expect(zona.creadas).toHaveLength(1);
+    expect(zona.creadas[0].destinatario).toEqual({
+      tipo: "rol",
+      rol: "adminSatelite",
+      zonaId: "zona-a",
+    });
+    expect(zona.creadas[0].entidadId).toBe("zona-a:2026-09-11");
+  });
+
+  it("R60: absorbe el fallo del repositorio y lo REGISTRA con contexto, sin propagarlo", async () => {
+    const logError = vi.fn();
+
+    await expect(
+      notificarDevolucionesRepresadasCon(new RepoQueFalla(), { logError })({
+        ambito: { tipo: "global" },
+        diasMasAntigua: 8,
+        diaCR: "2026-09-11",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(logError).toHaveBeenCalledTimes(1);
+    const registrado = logError.mock.calls[0][0] as Error;
+    expect(registrado.message).toContain("devoluciones_represadas");
     expect((registrado.cause as Error).message).toBe("base caida");
   });
 });
@@ -430,6 +526,12 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     // no-op no es comodidad — es lo que impide que una suite escriba avisos contra la base local,
     // que en este repo es COMPARTIDA entre worktrees.
     "GeocodeSaludService.ts", // ficha 401 / §5.2
+    // FICHA 409 (T4.5, R62): el CRON DE AVISOS DIARIOS pasa a tener DOS notificadores —«tienes N
+    // novedades sin gestionar» y «N ordenes esperan volver a su tienda»—. Es el QUINTO aviso del
+    // arbol que se dispara SOLO y sin nadie mirando (07:00 CR), y el primero que emite UNO POR
+    // DESTINATARIO: sus defaults no-op son lo que impide que una suite reparta avisos a todas las
+    // tiendas de la base local, que en este repo es COMPARTIDA entre worktrees.
+    "AvisosDiariosService.ts", // ficha 409 / §4.4
   ] as const;
 
   it("lib/actions/postulacion-recurso.ts inyecta el notificador real", () => {
@@ -533,6 +635,46 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     // a `GeocodificacionService`, este se queda con `geocodeSaludNoOp` y la ficha entera queda
     // inerte —ni avisa ni recupera— sin un solo test rojo.
     expect(uso).toMatch(/new GeocodificacionService\([\s\S]*\bsalud,?[\s\S]*\)/);
+  });
+
+  it("app/api/cron/avisos-diarios/route.ts inyecta LOS DOS notificadores reales", () => {
+    // FICHA 409 (T4.5, R62) — MISMO MOLDE QUE `generar-gastos-fijos`, Y POR EL MISMO MOTIVO
+    // MEDIDO. Los notificadores son el CUARTO y el QUINTO argumento de `AvisosDiariosService`,
+    // detras del umbral; si `buildService()` dejara de pasarlos, el service se quedaria con sus
+    // defaults NO-OP y los DOS avisos de esta ficha no se emitirian JAMAS en produccion con la
+    // suite entera en verde — que es exactamente lo que le paso a `corte-diario`, que pasaba
+    // CINCO argumentos y dejaba el notificador en su septima posicion.
+    //
+    // Se afirma sobre el USO EFECTIVO (fuente sin imports ni comentarios) y no con un `toContain`
+    // a secas: medido en este mismo archivo, un `toContain` se satisface con el `import` de
+    // arriba, asi que borrar SOLO el argumento del cableado lo dejaria EN VERDE.
+    const fuente = leer("app", "api", "cron", "avisos-diarios", "route.ts");
+    const uso = fuenteSinImportsNiComentarios(fuente);
+    expect(uso).toContain("notificarNovedadesSinGestionarReal");
+    expect(uso).toContain("notificarDevolucionesRepresadasReal");
+    expect(uso).toMatch(
+      /new AvisosDiariosService\([\s\S]*notificarNovedadesSinGestionarReal,?[\s\S]*notificarDevolucionesRepresadasReal,?[\s\S]*\)/,
+    );
+    // Y los `import` tienen que seguir ahi: sin ellos lo de arriba no compilaria — pero es el USO
+    // lo que se exige, no el import.
+    expect(fuente).toContain("notificarDevolucionesRepresadasReal");
+    expect(fuente).toContain("notificarNovedadesSinGestionarReal");
+  });
+
+  it("lib/actions/notificaciones.ts inyecta el RESOLUTOR DE VIGENCIA de los avisos agregados", () => {
+    // FICHA 409 (T5.4, design §5) — la misma familia, con otro sintoma. `NotificacionService` toma
+    // un resolutor de vigencia; su default LANZA (nunca devuelve un numero), pero un default que
+    // lanza tampoco apaga los avisos: si nadie inyecta el real, los agregados no se apagarian
+    // NUNCA y la campana volveria a ser ruido — con la suite entera en verde.
+    //
+    // Se afirma sobre el USO EFECTIVO: importar `VigenciaAvisoAgregadoService` sin PASARLO es
+    // exactamente el estado que produjo el fallo del cron.
+    const fuente = leer("lib", "actions", "notificaciones.ts");
+    const uso = fuenteSinImportsNiComentarios(fuente);
+    expect(uso).toContain("new VigenciaAvisoAgregadoService(");
+    expect(uso).toMatch(
+      /new NotificacionService\([\s\S]*new VigenciaAvisoAgregadoService\([\s\S]*\)/,
+    );
   });
 
   it("lib/actions/cierres-admin.ts inyecta el notificador real", () => {

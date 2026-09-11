@@ -180,10 +180,17 @@ function ordenHeredada(overrides: Fila = {}): Fila {
     historialEstados: [], // 405: relacion nueva del select del detalle
     incidentesAdmin: [],
     tienda: { nombre: "Tienda Uno" },
-    zona: { nombre: "GAM" },
+    // ⏳ 2026-09-10 (feature 415): la MISMA fila la lee tambien el `select` del canal, que pide
+    // `zona.id` y `zona.esCentral`; la etiqueta solo usa el `nombre` y no le estorban.
+    zona: { id: "018f2c31-0000-4000-8000-00000000za01", nombre: "GAM", esCentral: true },
+    zonaId: "018f2c31-0000-4000-8000-00000000za01",
+    cobraComision: false,
+    cierreDetalles: [],
     provincia: { nombre: "Pichincha" },
     canton: { nombre: "Quito" },
-    distrito: { nombre: "Centro" },
+    // La etiqueta pide `distrito.nombre` y el `select` del canal pide `distrito.zonaEspecial`:
+    // la MISMA fila alimenta a los dos, asi que lleva las dos columnas.
+    distrito: { nombre: "Centro", zonaEspecial: false },
     ...overrides,
   };
 }

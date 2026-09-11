@@ -7,6 +7,9 @@ import {
   COLUMNAS_DESCARGA_GESTIONES_RECHAZADAS,
   COLUMNAS_DESCARGA_GESTIONES_INCIDENTES,
   filaDescargaGestionEntregada,
+  // FICHA 408 — las dos proyecciones que pueden traer el motivo del cron de plazos vencidos.
+  filaDescargaGestionRechazada,
+  filaDescargaGestionReprogramada,
 } from "@/app/(app)/cierres-admin/_components/cierre-gestiones-descarga-columnas";
 import type { CierreDetalleGestion } from "@/lib/interfaces/services/ICierreDiaService";
 
@@ -417,5 +420,79 @@ describe("columnas por MEDIO DE PAGO de la sección ENTREGADAS del detalle (admi
     expect(fila.pago_SINPE).toBe("0.10");
     expect(String(fila.pago_efectivo)).not.toMatch(/[₡$]/);
     expect(String(fila.pago_efectivo)).not.toMatch(/1[.,]234[.,]567/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FICHA 408 — la celda «Motivo» dice lo MISMO que la pantalla (R6), y el hueco sigue vacío (R3)
+// ---------------------------------------------------------------------------
+//
+// En el archivo NO hay tooltip ninguno, así que `escalado SLA wrong_address` es ahí todavía peor
+// que en la pantalla. El precedente de traducir está en este mismo módulo: la causa de un
+// incidente sale como etiqueta legible y jamás como el slug del enum.
+//
+// Los literales van TECLEADOS. Compararlos contra `motivoGestionLegible` sería compararlos
+// contra su propia fuente y saldrían verdes aunque las palabras se rompieran.
+
+/** Gestión mínima con el resultado y el motivo que cada caso necesita. */
+function gestionConMotivo(
+  resultado: CierreDetalleGestion["resultado"],
+  motivo: string | null,
+  esRechazoSla: boolean,
+): CierreDetalleGestion {
+  return {
+    ...gestionEntregada([]),
+    gestionId: "g-motivo",
+    resultado,
+    motivo,
+    esRechazoSla,
+    montoRecibido: null,
+  };
+}
+
+describe("FICHA 408 — el motivo del cron de plazos vencidos en el archivo del admin", () => {
+  it("la celda «Motivo» de un rechazo automático dice «Dirección errada» (R6)", () => {
+    // La cadena de entrada es la que hay guardada HOY en producción: se traduce sin migración
+    // ninguna y sin campo nuevo en el DTO (R10).
+    const fila = filaDescargaGestionRechazada(
+      gestionConMotivo("rechazada", "escalado SLA wrong_address", true),
+    );
+
+    expect(fila.motivo).toBe("Dirección errada");
+    // La hoja del admin lleva la columna «Origen» al lado, que es la que dice quién lo hizo.
+    expect(fila.origenRechazo).toBe("Automático");
+  });
+
+  it("ni la sigla ni el value del enum acaban dentro del archivo (R4)", () => {
+    const fila = filaDescargaGestionRechazada(
+      gestionConMotivo("rechazada", "escalado SLA not_found", true),
+    );
+
+    expect(fila.motivo).toBe("Cliente no localizado");
+    expect(String(fila.motivo)).not.toContain("SLA");
+    expect(String(fila.motivo)).not.toContain("not_found");
+  });
+
+  it("el motivo que escribió el mensajero sale intacto (R2)", () => {
+    const fila = filaDescargaGestionRechazada(
+      gestionConMotivo("rechazada", "El cliente no contesta el timbre", false),
+    );
+
+    expect(fila.motivo).toBe("El cliente no contesta el timbre");
+    expect(fila.origenRechazo).toBe("Manual");
+  });
+
+  it("un motivo AUSENTE deja la celda VACÍA, y nunca el guion de pantalla (R3)", () => {
+    // Éste es el caso que el traductor no puede colapsar: `"—"` es un marcador de PANTALLA y
+    // en una hoja de cálculo sería un dato falso (R10 de la feature 170).
+    const rechazada = filaDescargaGestionRechazada(gestionConMotivo("rechazada", null, true));
+    const reprogramada = filaDescargaGestionReprogramada(
+      gestionConMotivo("reprogramada", null, false),
+    );
+
+    expect(rechazada.motivo).toBeNull();
+    expect(rechazada.motivo).not.toBe("—");
+    expect(reprogramada.motivo).toBeNull();
+    expect(reprogramada.motivo).not.toBe("—");
   });
 });

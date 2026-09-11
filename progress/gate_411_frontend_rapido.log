@@ -1,0 +1,12 @@
+== Arnes SDD :: init (modo: rapido) ==
+[0;32m✓ node v24.13.0[0m
+[0;32m✓ dependencias presentes[0m
+[0;32m✓ feature_list.json: sin ids duplicados (408 fichas), cupo por zona respetado (in_progress=2) y specs en su sitio[0m
+[1;33mTu cambio toca cimientos, y para eso el modo rapido no alcanza:[0m
+    lib/types/cohorte-carga.ts
+
+  El modo rapido corre 'vitest --changed', que selecciona por grafo de IMPORTS.
+  Una migracion no la importa nadie, y un tipo compartido lo importa medio repo:
+  en los dos casos 'los tests relacionados' no es la respuesta correcta.
+[0;31m✗ esto exige el gate completo. Corre: ./init.sh[0m
+INIT_EXIT=1

@@ -59,6 +59,14 @@ import {
   DESTINO_TIPO_LABEL,
   ESTADO_LABEL,
   RESULTADO_LABEL,
+  // FICHA 408 — el traductor del motivo de un rechazo automático. Se AÑADE al import que ya
+  // estaba escrito: esta pantalla lee del módulo puro desde la 170, no se estrena dependencia.
+  motivoGestionLegible,
+  // FICHA 414 — los dos textos de la marca «La tienda» (237/R41) se DECLARABAN abajo, en este
+  // mismo archivo, y se mudaron al módulo puro para que el COMPROBANTE pueda leer los MISMOS (R9).
+  // Mismo import ya existente: no se estrena dependencia ninguna.
+  GESTION_TIENDA_BADGE_LABEL,
+  GESTION_TIENDA_BADGE_NOTA,
 } from "@/app/(app)/cierres-admin/_components/cierre-labels";
 // Feature 213 (T7): el desglose de pago se formatea en UN solo sitio para los cinco
 // consumidores que lo pintan; esta pantalla ya no compone la etiqueta por su cuenta.
@@ -1072,16 +1080,12 @@ function TotalItem({
 // transaccion que la gestion (ver `lib/utils/gestion-de-la-tienda-flag.ts`). La ausencia es una
 // afirmacion, y por eso su test va emparejado con el de la presencia.
 
-/** Rotulo de la marca. Dice QUIEN, no solo que la fila es distinta, y cabe en una celda apretada. */
-export const GESTION_TIENDA_BADGE_LABEL = "La tienda";
-
-/**
- * La nota accesible del badge (`title` + `aria-label`). El rotulo dice quien; la nota dice lo que el
- * mensajero necesita para explicarla si le preguntan: desde donde se hizo, que el motivo y la foto
- * no son suyos, y que aun asi cuenta en este cierre.
- */
-export const GESTION_TIENDA_BADGE_NOTA =
-  "Esta gestión la registró la tienda desde «Ayuda solicitada», no vos: el motivo y la foto son suyos. Cuenta en tu cierre igual.";
+// FICHA 414 — el rotulo y la nota se DECLARABAN aqui y ahora viven en el modulo PURO
+// `cierres-admin/_components/cierre-labels.ts`, sin cambiar un caracter (ver el import de arriba).
+// Se mudaron porque el COMPROBANTE de esta misma pantalla (`cierre-factura.tsx`) tambien tiene que
+// decirlo, y no puede pedirselos a este archivo: `CierreDiaModule` ya importa
+// `CierreFacturaDetalle`, asi que la vuelta seria un ciclo. Copiar los literales alla esta
+// descartado (414/R9): las dos superficies dicen lo mismo porque LEEN DEL MISMO SITIO.
 
 // --- Columnas comunes a TODAS las secciones (R4; feature 158: tambien al grupo `incidente`) ---
 const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
@@ -1192,7 +1196,17 @@ function columnasPara(
         value: "Nueva fecha",
         render: (g) => g.fechaReprogramacion ?? "—",
       },
-      { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      {
+        id: "motivo",
+        value: "Motivo",
+        // FICHA 408: se pasa `g.esRechazoSla`, el MISMO booleano que en las pantallas de admin.
+        // En ESTA vista llega siempre `false` (`CierreDiaRepository`, decisión de la 102), así
+        // que resuelve a la variante LARGA — y tiene que ser así: aquí no hay columna «Origen»
+        // ni puede haberla, y sin la cola el mensajero leería un motivo que parecería suyo
+        // sobre un rechazo que no hizo. ⚠️ Pasar `true` fijo aquí no rompe nada visible, sólo
+        // acorta el texto: es el fallo mudo que `CierreDiaMotivoRechazoAutomatico.test.tsx` caza.
+        render: (g) => motivoGestionLegible(g.motivo, g.esRechazoSla) ?? "—",
+      },
       columnaPago,
       columnaAcciones,
     ];
@@ -1200,7 +1214,17 @@ function columnasPara(
   if (resultado === "devuelta") {
     return [
       ...COLUMNAS_COMUNES,
-      { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      {
+        id: "motivo",
+        value: "Motivo",
+        // FICHA 408: se pasa `g.esRechazoSla`, el MISMO booleano que en las pantallas de admin.
+        // En ESTA vista llega siempre `false` (`CierreDiaRepository`, decisión de la 102), así
+        // que resuelve a la variante LARGA — y tiene que ser así: aquí no hay columna «Origen»
+        // ni puede haberla, y sin la cola el mensajero leería un motivo que parecería suyo
+        // sobre un rechazo que no hizo. ⚠️ Pasar `true` fijo aquí no rompe nada visible, sólo
+        // acorta el texto: es el fallo mudo que `CierreDiaMotivoRechazoAutomatico.test.tsx` caza.
+        render: (g) => motivoGestionLegible(g.motivo, g.esRechazoSla) ?? "—",
+      },
       columnaPago,
       columnaAcciones,
     ];
@@ -1220,7 +1244,17 @@ function columnasPara(
     return [
       ...COLUMNAS_COMUNES,
       COLUMNA_CAUSA_INCIDENTE,
-      { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+      {
+        id: "motivo",
+        value: "Motivo",
+        // FICHA 408: se pasa `g.esRechazoSla`, el MISMO booleano que en las pantallas de admin.
+        // En ESTA vista llega siempre `false` (`CierreDiaRepository`, decisión de la 102), así
+        // que resuelve a la variante LARGA — y tiene que ser así: aquí no hay columna «Origen»
+        // ni puede haberla, y sin la cola el mensajero leería un motivo que parecería suyo
+        // sobre un rechazo que no hizo. ⚠️ Pasar `true` fijo aquí no rompe nada visible, sólo
+        // acorta el texto: es el fallo mudo que `CierreDiaMotivoRechazoAutomatico.test.tsx` caza.
+        render: (g) => motivoGestionLegible(g.motivo, g.esRechazoSla) ?? "—",
+      },
       columnaEvidencia(verEvidencia),
       columnaAcciones,
     ];
@@ -1228,7 +1262,13 @@ function columnasPara(
   // rechazada: motivo + evidencia firmada (R5)
   return [
     ...COLUMNAS_COMUNES,
-    { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
+    {
+      id: "motivo",
+      value: "Motivo",
+      // FICHA 408: LA sección que abrió esta ficha. El mensajero lee aquí el rechazo que NO
+      // hizo, y este texto es el único que se lo puede decir: mismo booleano que arriba.
+      render: (g) => motivoGestionLegible(g.motivo, g.esRechazoSla) ?? "—",
+    },
     columnaEvidencia(verEvidencia),
     columnaPago,
     columnaAcciones,
