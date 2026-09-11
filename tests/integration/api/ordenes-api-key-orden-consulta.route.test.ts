@@ -18,6 +18,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { ApiOrdenLecturaService } from "@/lib/services/ApiOrdenLecturaService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
+import { FILA_PRISMA_415 } from "@/tests/fixtures/api-orden-costeo-415";
 
 const ACTOR: Actor = { usuarioId: "store-1", rol: "apiKey" };
 const OK_AUTH: ApiKeyAuthResult = { status: "ok", actor: ACTOR, apiKeyId: "k1" };
@@ -42,6 +43,10 @@ function detalleDe(fila: Fila, overrides: Partial<ApiOrdenDetalleDTO> = {}): Api
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
     // ⏳ 2026-09-09 (feature 404): campo REQUERIDO del DTO publico; por defecto, sin asignado.
     mensajero: null,
+    // ⏳ 2026-09-10 (feature 415): campos REQUERIDOS del DTO publico.
+    zona: { id: "018f2c31-0000-4000-8000-00000000za01", nombre: "GAM" },
+    costoEstimado: null,
+    costoReal: null,
     // ⏳ 2026-09-10 (feature 405): campo REQUERIDO del DTO publico; por defecto, sin gestiones.
     // Los casos de la 405 que SI las miden cablean la cadena real (`depsRealesDetalle`), no este
     // doble: con el doble pasarian aunque el repositorio no proyectara nada.
@@ -103,6 +108,12 @@ function req(bearer?: string, esquema = "Bearer"): Request {
     headers,
   });
 }
+
+/**
+ * ⏳ 2026-09-10 (feature 415): el resolutor de tarifa VIGENTE que el service pide por
+ * constructor. Aqui no resuelve ninguna: estos casos no miden importes.
+ */
+const fakeTarifas = () => ({ resolveTarifas: vi.fn().mockResolvedValue(new Map()) });
 
 describe("GET /api/ordenes/api-key/orden/{id} — autenticacion (R1/R2/R3)", () => {
   it("R1: sin Bearer, con esquema distinto o con token vacio -> 401 sin tocar DB ni Storage", async () => {
@@ -307,6 +318,8 @@ function filaDetalle(over: Record<string, unknown> = {}) {
     montoCobrar: new Prisma.Decimal(1500),
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
     estatus: { value: "en_reparto" },
+    // ⏳ 2026-09-10 (feature 415): lo que el `select` del canal anade a la fila cruda.
+    ...FILA_PRISMA_415,
     gestiones: [],
     // ⏳ 2026-09-10 (feature 405): la relacion del historial que el `select` del detalle pide para
     // resolver `estadoResultante`.
@@ -333,7 +346,7 @@ function depsRealesDetalle(fila: Record<string, unknown> | null) {
     usuario: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
   };
   const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-  const svc = new ApiOrdenLecturaService(repo, signedUrlsNoOp);
+  const svc = new ApiOrdenLecturaService(repo, signedUrlsNoOp, fakeTarifas() as never);
   const d: ConsultaOrdenApiDeps = {
     autenticar: vi.fn(async () => OK_AUTH),
     resolucionService: new ApiOrdenResolucionService(repoCon([ORDEN_A])),
@@ -371,6 +384,12 @@ describe("GET /api/ordenes/api-key/orden/{id} — `mensajero` de punta a punta (
     // ⏳ 2026-09-10 (feature 405/R1) — ONCE claves pasan a ser DOCE: `gestiones` es el array nuevo
     // del detalle. Igualdad exacta, como estaba: una clave de mas sigue siendo un fallo.
     expect(Object.keys(json).sort()).toEqual([
+      // ⏳ 2026-09-10 (feature 415, R34) — DOCE claves pasan a QUINCE: `zona`, `costoEstimado` y
+      // `costoReal` son los tres campos ADITIVOS de la 415, que el detalle HEREDA del item por el
+      // `...toListItemDTO(row)`. El literal se ENMIENDA y sigue siendo una igualdad exacta: una
+      // clave de mas la pone roja igual que antes. Las doce anteriores conservan su nombre.
+      "costoEstimado",
+      "costoReal",
       "createdAt",
       "destinatario",
       "direccion",
@@ -383,6 +402,7 @@ describe("GET /api/ordenes/api-key/orden/{id} — `mensajero` de punta a punta (
       "numRemision",
       "producto",
       "telefonoDest",
+      "zona",
     ]);
   });
 

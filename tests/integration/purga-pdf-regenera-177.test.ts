@@ -34,6 +34,7 @@ import type {
   IEtiquetasLotePdfService,
 } from "@/lib/interfaces/services/IEtiquetasLotePdfService";
 import type { ApiOrdenDetalleRow } from "@/lib/interfaces/repositories/IOrdenRepository";
+import { costeoFixture, ZONA_FIXTURE } from "@/tests/fixtures/api-orden-costeo-415";
 
 const OWNER = "store-1";
 const ACTOR: Actor = { usuarioId: OWNER, rol: "apiKey" };
@@ -299,6 +300,9 @@ function detalleDe(orden: OrdenRow): ApiOrdenDetalleRow {
     gestiones: [],
     // ⏳ 2026-09-09 (feature 404): campo REQUERIDO de `ApiOrdenDetalleRow`.
     mensajero: null,
+  // ⏳ 2026-09-10 (feature 415): campos REQUERIDOS de la fila del repo.
+  zona: ZONA_FIXTURE,
+  costeo: costeoFixture(),
   };
 }
 

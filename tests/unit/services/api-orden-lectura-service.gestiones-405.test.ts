@@ -22,6 +22,7 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ApiOrdenDetalleRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
+import { FILA_PRISMA_415 } from "@/tests/fixtures/api-orden-costeo-415";
 
 const ACTOR: Actor = { usuarioId: "store-1", rol: "apiKey" };
 const ORDEN_ID = "3f6a1c2e-0000-4000-8000-000000000001";
@@ -75,6 +76,8 @@ function ordenCruda(over: Record<string, unknown> = {}) {
     montoCobrar: new Prisma.Decimal(1500),
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
     estatus: { value: "entregada" },
+    // ⏳ 2026-09-10 (feature 415): lo que el `select` del canal anade a la fila cruda.
+    ...FILA_PRISMA_415,
     mensajeroAsignado: null,
     gestiones: [],
     historialEstados: [],
@@ -93,12 +96,18 @@ function servicioSobrePrisma(fila: Record<string, unknown> | null) {
     },
   };
   const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-  return { svc: new ApiOrdenLecturaService(repo, signedUrls), prisma };
+  return { svc: new ApiOrdenLecturaService(repo, signedUrls, fakeTarifas() as never), prisma };
 }
 
 // ---------------------------------------------------------------------------------------------
 // R2 — la clave viaja SIEMPRE, y vacia es `[]`
 // ---------------------------------------------------------------------------------------------
+
+/**
+ * ⏳ 2026-09-10 (feature 415): el resolutor de tarifa VIGENTE que el service pide por
+ * constructor. Aqui no resuelve ninguna: estos casos no miden importes.
+ */
+const fakeTarifas = () => ({ resolveTarifas: vi.fn().mockResolvedValue(new Map()) });
 
 describe("405/R2 — una orden sin gestiones vigentes devuelve `gestiones` vacio, no null", () => {
   it("el detalle de una orden sin ninguna gestion trae la CLAVE con un array vacio", async () => {
@@ -120,6 +129,12 @@ describe("405/R2 — una orden sin gestiones vigentes devuelve `gestiones` vacio
 
     expect(res!.evidencias).toEqual([]);
     expect(Object.keys(res!).sort()).toEqual([
+      // ⏳ 2026-09-10 (feature 415, R34) — DOCE claves pasan a QUINCE: `zona`, `costoEstimado` y
+      // `costoReal` son los tres campos ADITIVOS de la 415, que el detalle HEREDA del item por el
+      // `...toListItemDTO(row)`. El literal se ENMIENDA y sigue siendo una igualdad exacta: una
+      // clave de mas la pone roja igual que antes. Las doce anteriores conservan su nombre.
+      "costoEstimado",
+      "costoReal",
       "createdAt",
       "destinatario",
       "direccion",
@@ -132,6 +147,7 @@ describe("405/R2 — una orden sin gestiones vigentes devuelve `gestiones` vacio
       "numRemision",
       "producto",
       "telefonoDest",
+      "zona",
     ]);
   });
 

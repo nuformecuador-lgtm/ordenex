@@ -16,6 +16,15 @@ import type {
 } from "@/lib/types/api-orden";
 import { gestionConfig } from "@/lib/config/gestion";
 import { inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } from "@/lib/utils/fecha-cr";
+// ⏳ 2026-09-10 (feature 415, T4): la resolucion de la tarifa VIGENTE entra por la MISMA cascada
+// y el MISMO metodo batch que ya usan el cierre de dia y la cotizacion (R19/R24). No se escribe
+// una segunda regla de resolucion.
+import type {
+  ITarifaVigenteRepository,
+  TarifaVigenteResuelta,
+} from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
+import { clavePar, type ParTarifa } from "@/lib/utils/cascada-tarifa";
+import { costoEstimadoDe, costoRealDe } from "@/lib/utils/api-orden-costo";
 
 // Subconjunto del repo que este service consume (DI ligera para tests, sin construir toda la
 // superficie de IOrdenRepository).
@@ -26,8 +35,37 @@ type LecturaRepo = Pick<
   | "findEstatusIdByValue"
 >;
 
+// ⏳ 2026-09-10 (feature 415, T4): la MISMA DI ligera que `LecturaRepo`, y el mismo subconjunto de
+// un solo metodo que ya declara `CotizacionOrdenService`.
+type LecturaTarifaRepo = Pick<ITarifaVigenteRepository, "resolveTarifas">;
+
+/**
+ * ⏳ 2026-09-10 (feature 415, R24) — los pares (tienda, zona) DISTINTOS de la pagina, en orden de
+ * primera aparicion. Copiado del patron que ya existe (`CotizacionOrdenService.paresDistintos`):
+ * la consulta de tarifas es UNA sola y una pagina de 100 ordenes de la misma zona no tiene por que
+ * pedir 100 veces el mismo par.
+ *
+ * El `tiendaId` es SIEMPRE el actor resuelto por la autenticacion (R32); nunca llega del input.
+ */
+function paresDistintos(tiendaId: string, filas: readonly ApiOrdenRow[]): ParTarifa[] {
+  const vistos = new Set<string>();
+  const pares: ParTarifa[] = [];
+  for (const fila of filas) {
+    const par: ParTarifa = { tiendaId, zonaId: fila.costeo.zonaId };
+    const clave = clavePar(par);
+    if (vistos.has(clave)) continue;
+    vistos.add(clave);
+    pares.push(par);
+  }
+  return pares;
+}
+
 /** Fila publica del repo -> DTO publico (renombra `estatusValue` a `estado`). */
-function toListItemDTO(row: ApiOrdenRow): ApiOrdenListItemDTO {
+function toListItemDTO(
+  row: ApiOrdenRow,
+  tarifaVigente: TarifaVigenteResuelta | null,
+): ApiOrdenListItemDTO {
+  const { costeo } = row;
   return {
     numGuia: row.numGuia,
     numRemision: row.numRemision,
@@ -43,6 +81,32 @@ function toListItemDTO(row: ApiOrdenRow): ApiOrdenListItemDTO {
     // se filtra por estado y no se decide nada: `toDetalleDTO` hace `...toListItemDTO(row)`, asi
     // que el detalle lo hereda por esta misma linea.
     mensajero: row.mensajero,
+    // ⏳ 2026-09-10 (feature 415, R1/R2): igual que `mensajero`, se COPIA lo que dio el repo. Las
+    // dos claves y nada mas; y nunca `null`, porque `orden.zona_id` es NOT NULL.
+    zona: { id: row.zona.id, nombre: row.zona.nombre },
+    // ⏳ 2026-09-10 (feature 415, R19/R20/R22): la tarifa VIGENTE del par (tienda, zona) con las
+    // entradas VIVAS de la orden. `null` cuando ninguna tarifa resuelve: es el hueco DECLARADO, no
+    // cinco ceros (design §D7). Los importes los deriva el modulo puro; aqui no se calcula nada.
+    costoEstimado: costoEstimadoDe(tarifaVigente, tarifaVigente?.fulfillment ?? "0.00", {
+      esCentral: costeo.esCentral,
+      esZonaEspecial: costeo.esZonaEspecial,
+      montoCobrar: costeo.montoCobrar,
+      cobraComision: costeo.cobraComision,
+    }),
+    // ⏳ 2026-09-10 (feature 415, R25/R26/R28): la tarifa y las entradas CONGELADAS de la fila
+    // elegible que trajo el repo. Sin fila -> `null` («no ha entrado en ningun cierre aprobado»).
+    // Con fila y sin tarifa congelada -> cinco `"0.00"`, que es el cero AFIRMADO de design §D8:
+    // ese cierre liquido cero, y ahi el cero es verdad. La asimetria con el estimado es
+    // deliberada; vive explicada en `lib/utils/api-orden-costo.ts`.
+    costoReal:
+      costeo.congelado === null
+        ? null
+        : costoRealDe(costeo.congelado.tarifa, costeo.congelado.fulfillment, {
+            esCentral: costeo.congelado.esCentral,
+            esZonaEspecial: costeo.congelado.esZonaEspecial,
+            montoCobrar: costeo.congelado.montoCobrar,
+            cobraComision: costeo.congelado.cobraComision,
+          }),
   };
 }
 
@@ -67,7 +131,23 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
   constructor(
     private readonly repo: LecturaRepo,
     private readonly signedUrls: ISignedUrlProvider,
+    // ⏳ 2026-09-10 (feature 415, T4/T5): la tarifa VIGENTE con la que se deriva `costoEstimado`.
+    // Los DOS composition roots la construyen y la PASAN; que un modulo la importe no basta.
+    private readonly tarifaRepo: LecturaTarifaRepo,
   ) {}
+
+  /**
+   * ⏳ 2026-09-10 (feature 415, R24) — UNA sola consulta de tarifas por peticion, con los pares
+   * DISTINTOS. Con la pagina vacia no se consulta NADA: no hay ni un par que pedir.
+   */
+  private async tarifasDe(
+    ownerId: string,
+    filas: readonly ApiOrdenRow[],
+  ): Promise<Map<string, TarifaVigenteResuelta | null>> {
+    const pares = paresDistintos(ownerId, filas);
+    if (pares.length === 0) return new Map();
+    return this.tarifaRepo.resolveTarifas(pares);
+  }
 
   async listar(actor: Actor, params: ApiOrdenListarParams): Promise<ApiOrdenListadoDTO> {
     const { limit, offset, estado, desde, hasta, numGuia, numRemision } = params;
@@ -97,7 +177,18 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
       skip: offset,
       take: limit,
     });
-    return { items: items.map(toListItemDTO), pagination: { limit, offset, total } };
+    // R24: los pares DISTINTOS de ESTA pagina en UNA llamada, despues de tener las filas. El
+    // numero de consultas no depende del numero de items ni de cuantas zonas distintas haya.
+    const tarifas = await this.tarifasDe(actor.usuarioId, items);
+    return {
+      items: items.map((row) =>
+        toListItemDTO(
+          row,
+          tarifas.get(clavePar({ tiendaId: actor.usuarioId, zonaId: row.costeo.zonaId })) ?? null,
+        ),
+      ),
+      pagination: { limit, offset, total },
+    };
   }
 
   /**
@@ -112,11 +203,14 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
    */
   async detallePorOrdenId(actor: Actor, ordenId: string): Promise<ApiOrdenDetalleDTO | null> {
     const row = await this.repo.findDetalleByOrdenIdForOwner(ordenId, actor.usuarioId);
-    return this.toDetalleDTO(row);
+    return this.toDetalleDTO(actor, row);
   }
 
   /** Fila del repo -> DTO publico con las evidencias firmadas. */
-  private async toDetalleDTO(row: ApiOrdenDetalleRow | null): Promise<ApiOrdenDetalleDTO | null> {
+  private async toDetalleDTO(
+    actor: Actor,
+    row: ApiOrdenDetalleRow | null,
+  ): Promise<ApiOrdenDetalleDTO | null> {
     if (!row) return null; // R13/R14: 404 uniforme (no se filtra existencia ajena)
 
     const ttl = gestionConfig.SIGNED_URL_TTL_SECONDS; // R17: 5 min
@@ -147,6 +241,12 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
       mensajero: { id: g.mensajero.id, nombre: g.mensajero.nombre },
     }));
 
-    return { ...toListItemDTO(row), evidencias, gestiones };
+    // ⏳ 2026-09-10 (feature 415, T4): el detalle hereda `zona`, `costoEstimado` y `costoReal` por
+    // este MISMO spread, sin declarar nada propio. Una sola fila -> un solo par -> UNA llamada.
+    const tarifas = await this.tarifasDe(actor.usuarioId, [row]);
+    const tarifa =
+      tarifas.get(clavePar({ tiendaId: actor.usuarioId, zonaId: row.costeo.zonaId })) ?? null;
+
+    return { ...toListItemDTO(row, tarifa), evidencias, gestiones };
   }
 }

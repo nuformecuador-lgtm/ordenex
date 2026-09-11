@@ -12,6 +12,7 @@ import type { ApiOrdenListadoDTO } from "@/lib/types/api-orden";
 import { ApiOrdenLecturaService } from "@/lib/services/ApiOrdenLecturaService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
+import { FILA_PRISMA_415 } from "@/tests/fixtures/api-orden-costeo-415";
 
 const ACTOR: Actor = { usuarioId: "store-1", rol: "apiKey" };
 const SECRETO = "ordx_secretovivo1234567890";
@@ -31,6 +32,11 @@ function okListado(): ApiOrdenListadoDTO {
         createdAt: new Date("2026-07-20T15:04:00.000Z"),
         // ⏳ 2026-09-09 (feature 404): campo REQUERIDO del DTO publico.
         mensajero: null,
+        // ⏳ 2026-09-10 (feature 415): campos REQUERIDOS del DTO publico. Este doble no mide
+        // importes: los casos que si los miden montan la cadena real.
+        zona: { id: "018f2c31-0000-4000-8000-00000000za01", nombre: "GAM" },
+        costoEstimado: null,
+        costoReal: null,
       },
     ],
     pagination: { limit: 50, offset: 0, total: 173 },
@@ -58,6 +64,12 @@ function req(query = "", bearer?: string): Request {
   if (bearer !== undefined) headers.Authorization = `Bearer ${bearer}`;
   return new Request(`http://localhost/api/ordenes/api-key${query}`, { method: "GET", headers });
 }
+
+/**
+ * ⏳ 2026-09-10 (feature 415): el resolutor de tarifa VIGENTE que el service pide por
+ * constructor. Aqui no resuelve ninguna: estos casos no miden importes.
+ */
+const fakeTarifas = () => ({ resolveTarifas: vi.fn().mockResolvedValue(new Map()) });
 
 describe("GET /api/ordenes/api-key — autenticacion (R1/R2/R3)", () => {
   it("R1: sin Bearer -> 401 y autenticar recibe null, sin llamar al service", async () => {
@@ -172,6 +184,8 @@ function filaOrden(over: Record<string, unknown> = {}) {
     montoCobrar: new Prisma.Decimal(1500),
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
     estatus: { value: "en_reparto" },
+    // ⏳ 2026-09-10 (feature 415): lo que el `select` del canal anade a la fila cruda.
+    ...FILA_PRISMA_415,
     mensajeroAsignado: MENSAJERO_ROW,
     ...over,
   };
@@ -204,7 +218,7 @@ function depsReales(prisma: ReturnType<typeof prismaConOrdenes>): ListadoApiDeps
   const repo = new OrdenRepository(prisma as unknown as PrismaClient);
   return {
     autenticar: async () => ({ status: "ok", actor: ACTOR, apiKeyId: "k1" }) as ApiKeyAuthResult,
-    lecturaService: new ApiOrdenLecturaService(repo, signedUrlsNoOp),
+    lecturaService: new ApiOrdenLecturaService(repo, signedUrlsNoOp, fakeTarifas() as never),
   };
 }
 
@@ -240,7 +254,15 @@ describe("GET /api/ordenes/api-key — `mensajero` de punta a punta (feature 404
 
     const json = await res.json();
     // Igualdad exacta del juego de claves: un decimo campo colado la pone roja.
+    //
+    // ⏳ 2026-09-10 (feature 415, R34) — ENMENDADO con su motivo, no relajado. La 415 anade TRES
+    // campos ADITIVOS (`zona`, `costoEstimado`, `costoReal`) y el conjunto exacto pasa de DIEZ a
+    // TRECE. Sigue siendo una igualdad de la lista ENTERA —ni `toContain` ni un aserto de
+    // longitud—, asi que un campo colado por un spread la sigue poniendo roja y diciendo cual.
+    // Las diez de antes conservan su nombre, que es lo que R34 pide.
     expect(Object.keys(json.items[0]).sort()).toEqual([
+      "costoEstimado",
+      "costoReal",
       "createdAt",
       "destinatario",
       "direccion",
@@ -251,6 +273,7 @@ describe("GET /api/ordenes/api-key — `mensajero` de punta a punta (feature 404
       "numRemision",
       "producto",
       "telefonoDest",
+      "zona",
     ]);
     expect(json.pagination).toEqual({ limit: 50, offset: 0, total: 1 });
     expect(Object.keys(json).sort()).toEqual(["items", "pagination"]);

@@ -107,6 +107,8 @@ import {
   // ⏳ 2026-09-10 (feature 405): la fila publica de UNA gestion del detalle.
   type ApiOrdenGestionRow,
   type ApiOrdenRow,
+  // ⏳ 2026-09-10 (feature 415): lo congelado de la orden en su cierre. NO se publica.
+  type ApiOrdenCongeladoRow,
   type CancelarViaApiResult,
   type LoteContexto,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
@@ -117,6 +119,10 @@ import { ensureCargaEnTx } from "@/lib/repositories/carga-lote";
 import { registrarCambioDiaReparto } from "@/lib/repositories/registrar-cambio-dia-reparto";
 import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import { costosListadoOrden } from "@/lib/utils/ingreso-ordenex";
+// ⏳ 2026-09-10 (feature 415, T3): la reconstruccion de la tarifa CONGELADA se importa de su fuente
+// UNICA y no se reescribe aqui. `TarifaCongeladaRow` es justo el subconjunto de columnas que
+// `tarifaDe` necesita, asi que el `select` de `cierreDetalles` y este tipo no pueden divergir.
+import { tarifaDe as tarifaCongeladaDe, type TarifaCongeladaRow } from "@/lib/utils/cierre-detalle";
 import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 // Feature 236 (T2.1, R3/R5): la DECLARACION UNICA de los grupos de `/novedades`. El predicado de
 // cada superficie sale de aqui y de ningun otro sitio; ver `novedadWhere`.
@@ -218,22 +224,127 @@ const ESTADOS_CANCELABLES_API: readonly string[] = ["en_bodega_central", "en_rut
 // ⏳ 2026-09-09 (feature 404, R14/R15/R18) — `mensajeroAsignado` entra AQUI y no en cada consumidor:
 // asi el listado y el detalle lo ganan a la vez (`API_ORDEN_DETALLE_SELECT` hace el spread de esta
 // constante) y siguen sin poder divergir, que es la razon por la que esta constante existe.
-const API_ORDEN_SELECT = {
-  numGuia: true,
-  numRemision: true,
-  destinatario: true,
-  telefonoDest: true,
-  producto: true,
-  direccion: true,
-  montoCobrar: true,
-  createdAt: true,
-  estatus: { select: { value: true } },
-  // ⏳ 2026-09-09 (feature 404, R6/R15): una RELACION ANIDADA de la misma `findMany`/`findUnique`
-  // —un LEFT JOIN por la PK de `usuario`—, no una consulta por item: la pagina entera se resuelve
-  // con la consulta que ya se hacia. Se proyectan `id` + las tres columnas de identidad y NADA MAS
-  // (ni telefono, ni email, ni cedula, ni zona, ni vehiculo, ni estado interno).
-  mensajeroAsignado: { select: { id: true, ...NOMBRE_USUARIO_SELECT } },
-} as const;
+//
+// ⏳ 2026-09-10 (feature 415, T3 / design §5.1) — DEJA DE SER UNA CONSTANTE Y PASA A SER UNA
+// FUNCION DE `ownerId`, y hay que decir por que, porque la constante existia por una razon buena:
+// el detalle hace el spread de esto, asi que listado y detalle **no pueden divergir**.
+//
+// **Esa propiedad SE CONSERVA**, y es lo unico que importa del cambio: los dos llamadores siguen
+// pasando por ESTA MISMA funcion (`apiOrdenDetalleSelect` spreadea `apiOrdenSelect(ownerId)`), asi
+// que una columna que entre aqui la ganan los dos a la vez y ninguno puede ganar una que el otro
+// no tenga. Lo unico que cambia es que la proyeccion ahora depende de un valor de la PETICION.
+//
+// Por que depende: R33 exige acotar la fila congelada de `cierre_detail` por su `tienda_id`
+// **CONGELADO** —no por el `tienda_id` vivo de la orden—, para que un cambio posterior de dueño no
+// pueda publicar a una tienda lo que se le facturo a otra. Eso es un `where` dentro del `select`, y
+// un `where` con un valor de la peticion no cabe en una constante de modulo. La alternativa
+// —constante + filtrar en memoria— se descarta en design §10/A6: con `take: 1`, filtrar despues NO
+// trae la siguiente fila candidata, devolveria `costoReal: null` para una orden que si tiene
+// congelado del dueño actual.
+function apiOrdenSelect(ownerId: string) {
+  return {
+    numGuia: true,
+    numRemision: true,
+    destinatario: true,
+    telefonoDest: true,
+    producto: true,
+    direccion: true,
+    montoCobrar: true,
+    createdAt: true,
+    estatus: { select: { value: true } },
+    // ⏳ 2026-09-09 (feature 404, R6/R15): una RELACION ANIDADA de la misma `findMany`/`findUnique`
+    // —un LEFT JOIN por la PK de `usuario`—, no una consulta por item: la pagina entera se resuelve
+    // con la consulta que ya se hacia. Se proyectan `id` + las tres columnas de identidad y NADA MAS
+    // (ni telefono, ni email, ni cedula, ni zona, ni vehiculo, ni estado interno).
+    mensajeroAsignado: { select: { id: true, ...NOMBRE_USUARIO_SELECT } },
+    // --- ⏳ 2026-09-10 (feature 415) — LA ZONA Y LAS ENTRADAS DEL COSTO -----------------------
+    // R19/R24: la mitad del par (tienda, zona) con el que el service resuelve la tarifa vigente de
+    // toda la pagina en UNA sola consulta. No se publica.
+    zonaId: true,
+    // R20: entrada VIVA de la formula. No se publica.
+    cobraComision: true,
+    /**
+     * ⚠️ ESTA ES LA ZONA **DE LA ORDEN** (a donde va el paquete), NO LA DEL MENSAJERO.
+     *
+     * En este sistema «zona» nombra dos cosas y solo una es esta. La exclusion de «zona» que
+     * figura unas lineas mas arriba, DENTRO de la proyeccion de `mensajeroAsignado`, habla de la
+     * OTRA —`usuario.zona_id`, en que zona trabaja esa persona, dato personal suyo— y sigue
+     * vigente palabra por palabra: esa no se publica y esta feature no la toca (R6).
+     *
+     * `id` y `nombre` se PUBLICAN (R1). `esCentral` **NO se publica** (R5): entra solo en
+     * `costeo` porque elige la columna de flete. Ni subzona, ni marca de zona especial, ni
+     * geografia: nadie las pidio y `es_central` es una columna mutable que daria un segundo sitio
+     * donde responder «¿es GAM?».
+     */
+    zona: { select: { id: true, nombre: true, esCentral: true } },
+    // R20/R21: la marca del DISTRITO, la otra entrada viva. `zona_especial` es tri-valuada
+    // (`null` = nadie lo decidio) y se resuelve con `=== true` en `toApiOrdenRow`; `distrito` es
+    // el unico FK nullable de `orden`, asi que la relacion puede venir `null`. No se publica ni
+    // esta columna ni ninguna otra del distrito (ni provincia, ni canton, ni el nombre).
+    distrito: { select: { zonaEspecial: true } },
+    /**
+     * R25/R26/R27/R31/R33 — LA FILA CONGELADA de `cierre_detail` con la que se deriva `costoReal`.
+     *
+     * ⚠️ EL FILTRO POR `aprobado` NO ES REDUNDANTE, aunque HOY no recorte ni una fila. Medido
+     * contra produccion el 2026-09-10: de 1.652 ordenes vivas, 1.182 tienen fila congelada y las
+     * **1.182 son de cierres `aprobado`** —cero en `solicitado`, `rechazado` o `vencido`—.
+     * (Reproducido en local el mismo dia: 15 de 15.)
+     *
+     * Y ESTE ES EL MECANISMO, que es lo que hace falta saber para no borrarlo: la fila **se
+     * escribe al SOLICITAR** el cierre, no al aprobarlo —`tx.cierreDetail.createMany` vive dentro
+     * de `CierreDiaRepository.crearCierre` (`lib/repositories/CierreDiaRepository.ts:942`), en la
+     * misma `$transaction` que vincula las gestiones—, y es **INMUTABLE** (69/R10, con guardia que
+     * prohibe borrarla desde `lib/`). O sea: un cierre `solicitado` YA tiene su fila y un
+     * `rechazado` la CONSERVA.
+     *
+     * El 100 % medido significa, entonces, que hoy no quedan cierres sin resolver con ordenes
+     * vivas —un estado de los datos—, **no** que el codigo lo garantice. Sin este filtro,
+     * `costoReal` cambiaria **HACIA ATRAS** en cuanto vuelva a haber un cierre solicitado o en
+     * cuanto uno se rechace. Cambiar hacia atras es exactamente el defecto que esta ficha existe
+     * para evitar. Lo mata `tests/integration/db/costo-y-zona-api-415.test.ts` (casos 2 y 3), que
+     * siembra los dos estados que hoy no existen en produccion.
+     *
+     * `tiendaId: ownerId` es el `tienda_id` **CONGELADO** de la fila, no el vivo de la orden
+     * (R33): un cambio posterior de dueño no puede publicar a una tienda lo que se le facturo a
+     * otra.
+     *
+     * `orderBy` de DOS claves + `take: 1` (R27, D6): gana la MAS RECIENTE, con desempate por `id`
+     * para que el orden sea TOTAL y dos lecturas consecutivas den lo mismo. Una orden `devuelta`
+     * sigue viva y puede entrar en un segundo cierre; en la base local hay 5 ordenes con dos o mas
+     * filas elegibles, asi que no es hipotetico.
+     *
+     * `take: 1` en una relacion anidada lo aplica Prisma POR FILA PADRE: no hay N+1 y el coste no
+     * depende de en cuantos cierres apareciera cada orden (R31).
+     */
+    cierreDetalles: {
+      where: { tiendaId: ownerId, cierre: { estado: "aprobado" } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 1,
+      select: {
+        // Las entradas CONGELADAS de la formula...
+        montoCobrar: true,
+        cobraComision: true,
+        esCentral: true,
+        esZonaEspecial: true,
+        // ...y la tarifa CONGELADA, que `tarifaDe` reconstruye. Ni una columna mas: ni el `id` de
+        // la fila, ni el `cierre_id`, ni el `zona_id`/`zona_nombre` congelados, ni los
+        // descriptivos, ni el `created_at` —nada de eso se publica (R18) y lo que no se lee no se
+        // puede filtrar—. `tiendaId` tampoco: ya va en el `where`.
+        tarifaId: true,
+        tarifaValorFlete: true,
+        tarifaValorFleteGam: true,
+        tarifaValorFleteDevuelto: true,
+        tarifaValorFleteDevueltoGam: true,
+        tarifaComisionCod: true,
+        tarifaIvaFlete: true,
+        tarifaIvaComisionCod: true,
+        tarifaEspecial: true,
+        tarifaEspecialDevuelta: true,
+        tarifaFulfillment: true,
+      },
+    },
+  } satisfies Prisma.OrdenSelect;
+}
 
 // Feature 106 + 177 — `select` del DETALLE (campos publicos + evidencias de entrega/rechazo con
 // `evidencia_storage_path` no nulo). Nacio como constante para que la variante por `num_guia`
@@ -307,8 +418,14 @@ const API_ORDEN_SELECT = {
 // relacion mas aqui pone ese test rojo y dice cual es la consulta nueva. Lo que NO cambia, y es lo
 // que de verdad importa: el numero es FIJO, no depende de cuantas gestiones tenga la orden. Cero,
 // tres o seis gestiones cuestan las mismas 9.
-const API_ORDEN_DETALLE_SELECT = {
-  ...API_ORDEN_SELECT,
+//
+// ⏳ 2026-09-10 (feature 415, T3 / design §5.1) — TAMBIEN PASA A SER UNA FUNCION DE `ownerId`, por
+// la unica razon de que lo que spreadea lo es. La propiedad que la constante garantizaba —que el
+// detalle NO pueda divergir del listado— se conserva intacta: sigue habiendo UN solo sitio donde
+// se decide la proyeccion publica, y el detalle sigue sin declarar nada propio de esos campos.
+function apiOrdenDetalleSelect(ownerId: string) {
+  return {
+  ...apiOrdenSelect(ownerId),
   gestiones: {
     where: {
       OR: [
@@ -377,7 +494,8 @@ const API_ORDEN_DETALLE_SELECT = {
     },
     orderBy: { createdAt: "asc" },
   },
-} satisfies Prisma.OrdenSelect;
+  } satisfies Prisma.OrdenSelect;
+}
 
 type ApiOrdenSelectRow = {
   numGuia: number | null;
@@ -396,6 +514,23 @@ type ApiOrdenSelectRow = {
     primerApellido: string | null;
     segundoApellido: string | null;
   } | null;
+  // ⏳ 2026-09-10 (feature 415): la zona de la ORDEN. `orden.zona_id` es NOT NULL, asi que la
+  // relacion NUNCA viene `null`. `esCentral` entra en el costeo y NO se publica.
+  zonaId: string;
+  cobraComision: boolean;
+  zona: { id: string; nombre: string; esCentral: boolean };
+  // El unico FK nullable de `orden`; y la columna es ademas tri-valuada.
+  distrito: { zonaEspecial: boolean | null } | null;
+  // La fila congelada elegible mas reciente. `take: 1` -> `[]` o exactamente un elemento.
+  cierreDetalles: Array<
+    TarifaCongeladaRow & {
+      montoCobrar: Prisma.Decimal | null;
+      cobraComision: boolean;
+      esCentral: boolean;
+      esZonaEspecial: boolean;
+      tarifaFulfillment: Prisma.Decimal | null;
+    }
+  >;
 };
 
 type ApiOrdenDetalleSelectRow = ApiOrdenSelectRow & {
@@ -450,6 +585,52 @@ function toApiOrdenRow(r: ApiOrdenSelectRow): ApiOrdenRow {
     mensajero: r.mensajeroAsignado
       ? { id: r.mensajeroAsignado.id, nombre: nombreCompletoUsuario(r.mensajeroAsignado) }
       : null,
+    // ⏳ 2026-09-10 (feature 415, R1/R4): la zona DE LA ORDEN, con su `id` y su `nombre` del
+    // catalogo TAL CUAL —sin derivar, sin traducir, sin recortar y sin normalizar—. `esCentral`
+    // se queda fuera del campo publicado a proposito (R5) y baja al `costeo`.
+    zona: { id: r.zona.id, nombre: r.zona.nombre },
+    // ⛔ NO PUBLICABLE: las entradas del calculo. El service las consume y no cruzan al DTO.
+    costeo: {
+      zonaId: r.zonaId,
+      esCentral: r.zona.esCentral,
+      // R21: `=== true` y NUNCA `!zonaEspecial`. La columna es tri-valuada y con `null` —«nadie lo
+      // decidio»— eso NO es `false`; lo dice el propio esquema. Una orden SIN distrito entra
+      // tambien como `false`: sin distrito no hay marca que aplicar.
+      esZonaEspecial: r.distrito?.zonaEspecial === true,
+      // R17 / design §D9: CADENA de escala 2, no el `number` publicado de arriba. Las dos salen de
+      // la misma columna, pero la que alimenta el calculo no pasa por coma flotante.
+      montoCobrar: r.montoCobrar !== null ? r.montoCobrar.toFixed(2) : null,
+      cobraComision: r.cobraComision,
+      congelado: congeladoDe(r.cierreDetalles),
+    },
+  };
+}
+
+/**
+ * ⏳ 2026-09-10 (feature 415, R25/R28/R29) — la fila congelada elegible -> lo que el service
+ * necesita para derivar `costoReal`.
+ *
+ * El `take: 1` del `select` ya dejo aqui, como mucho, UNA fila: la mas reciente de un cierre
+ * `aprobado` cuyo `tienda_id` congelado es el dueño que pregunta (R26/R27/R33). Un array vacio es
+ * «esta orden no ha entrado en ningun cierre aprobado» -> `costoReal: null`.
+ *
+ * La tarifa se reconstruye con `tarifaDe` (importada como `tarifaCongeladaDe`) (`lib/utils/cierre-detalle.ts`), la UNICA funcion del
+ * repo que lo hace: aqui no se reescribe la reconstruccion ni se calcula un solo importe.
+ */
+function congeladoDe(filas: ApiOrdenSelectRow["cierreDetalles"]): ApiOrdenCongeladoRow | null {
+  const d = filas[0];
+  if (d === undefined) return null;
+  return {
+    tarifa: tarifaCongeladaDe(d),
+    // R29: `tarifa_fulfillment` NULL -> `"0.00"`. Por construccion solo puede ser NULL cuando
+    // `tarifa_id` tambien lo es (`CierreDiaRepository.tarifaColumnas` escribe las columnas de
+    // tarifa todas o ninguna), asi que el cero afirmado de R28 sale completo.
+    fulfillment: d.tarifaFulfillment !== null ? d.tarifaFulfillment.toFixed(2) : "0.00",
+    esCentral: d.esCentral,
+    esZonaEspecial: d.esZonaEspecial,
+    // R17: cadena de escala 2 tambien aqui, por el mismo motivo.
+    montoCobrar: d.montoCobrar !== null ? d.montoCobrar.toFixed(2) : null,
+    cobraComision: d.cobraComision,
   };
 }
 
@@ -3080,7 +3261,7 @@ export class OrdenRepository implements IOrdenRepository {
         orderBy: { createdAt: "desc" }, // orden estable entre paginas (R10)
         skip: params.skip,
         take: params.take,
-        select: API_ORDEN_SELECT,
+        select: apiOrdenSelect(params.ownerId),
       }),
       this.prisma.orden.count({ where }),
     ]);
@@ -3135,7 +3316,7 @@ export class OrdenRepository implements IOrdenRepository {
   ): Promise<ApiOrdenDetalleRow | null> {
     const row = await this.prisma.orden.findFirst({
       where: { id: ordenId, tiendaId: ownerId, deletedAt: null },
-      select: API_ORDEN_DETALLE_SELECT,
+      select: apiOrdenDetalleSelect(ownerId),
     });
     if (!row) return null;
     return toApiOrdenDetalleRow(row);

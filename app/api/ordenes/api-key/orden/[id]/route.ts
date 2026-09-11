@@ -55,6 +55,8 @@ import { ApiOrdenResolucionService } from "@/lib/services/ApiOrdenResolucionServ
 import { ApiOrdenLecturaService } from "@/lib/services/ApiOrdenLecturaService";
 import { ApiOrdenEliminacionService } from "@/lib/services/ApiOrdenEliminacionService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+// ⏳ 2026-09-10 (feature 415, T5): la tarifa VIGENTE que alimenta `costoEstimado`.
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
@@ -91,7 +93,13 @@ function buildResolucionService(): IApiOrdenResolucionService {
 function buildDetallePorOrdenId(): DetallePorOrdenId {
   const prisma = getPrismaClient();
   const signedUrls = new SupabaseSignedUrlProvider(undefined, gestionConfig.EVIDENCIA_BUCKET);
-  const lectura = new ApiOrdenLecturaService(new OrdenRepository(prisma), signedUrls);
+  // ⏳ 2026-09-10 (feature 415, T5): el MISMO resolutor que el listado, construido y **PASADO**.
+  // Si no se pasara, el detalle publicaria `costoEstimado` muerto y nada mas se enteraria.
+  const lectura = new ApiOrdenLecturaService(
+    new OrdenRepository(prisma),
+    signedUrls,
+    new TarifaVigenteRepository(prisma),
+  );
   return (actor, ordenId) => lectura.detallePorOrdenId(actor, ordenId);
 }
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { FILA_PRISMA_415 } from "@/tests/fixtures/api-orden-costeo-415";
 
 // Feature 177 (Bloque C: T6/T7/T8/T9) — metodos de repositorio del canal integrador para la
 // consulta por identificador libre y el PDF de etiquetas. Prisma mockeado: lo que se afirma es
@@ -43,6 +44,8 @@ function ordenDetalleRow(overrides: Record<string, unknown> = {}) {
     montoCobrar: new Prisma.Decimal(25.9),
     createdAt: new Date("2026-07-22T14:03:11.000Z"),
     estatus: { value: "entregada" },
+    // ⏳ 2026-09-10 (feature 415): lo que el `select` del canal anade a la fila cruda.
+    ...FILA_PRISMA_415,
     gestiones: [],
     historialEstados: [], // 405: relacion nueva del select del detalle
     incidentesAdmin: [], // 268/R27: segunda procedencia de las evidencias (incidente del ADMIN)
