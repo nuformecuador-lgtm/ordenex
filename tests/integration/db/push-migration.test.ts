@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
+import { HAY_BASE_DE_DATOS, crearPrismaDeTest, etiquetasDeEnum } from "./_postgres-real";
 
 // FICHA 410 (T1.2/T1.3, R49) — LAS DOS MIGRACIONES Y SUS `down.sql`.
 //
@@ -175,11 +175,8 @@ describeSiHayBase("410 — y lo que SOLO sabe el motor: la base tiene lo que la 
   });
 
   it("⭑ `push_web` esta en el enum `job_tipo`, y al final", async () => {
-    const valores = await prisma.$queryRawUnsafe<{ enumlabel: string }[]>(
-      `SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-        WHERE t.typname = 'job_tipo' ORDER BY e.enumsortorder`,
-    );
-    const lista = valores.map((v) => v.enumlabel);
+    // FICHA 421 — acota `nspname = 'public'`: ver `etiquetasDeEnum` en `_postgres-real.ts`.
+    const lista = await etiquetasDeEnum(prisma, "job_tipo");
     expect(lista.length).toBeGreaterThanOrEqual(10);
     expect(lista).toContain("push_web");
     // «Al final»: los valores previos conservan su orden de comparacion.
@@ -238,7 +235,9 @@ describeSiHayBase("410 — y lo que SOLO sabe el motor: la base tiene lo que la 
          FROM information_schema.table_constraints tc
          JOIN information_schema.referential_constraints rc
            ON rc.constraint_name = tc.constraint_name
+          AND rc.constraint_schema = tc.constraint_schema
         WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_schema = 'public'
           AND tc.table_name IN ('push_suscripcion','push_envio_dia')
         ORDER BY tc.table_name`,
     );
@@ -254,7 +253,9 @@ describeSiHayBase("410 — y lo que SOLO sabe el motor: la base tiene lo que la 
          FROM information_schema.key_column_usage k
          JOIN information_schema.table_constraints tc
            ON tc.constraint_name = k.constraint_name
+          AND tc.constraint_schema = k.constraint_schema
         WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND k.table_schema = 'public'
           AND k.table_name = 'push_envio_dia' AND k.column_name = 'notificacion_id'`,
     );
     expect(Number(filas[0].n)).toBe(0);

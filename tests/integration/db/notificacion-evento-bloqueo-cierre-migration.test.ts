@@ -7,6 +7,7 @@ import {
   HAY_BASE_DE_DATOS,
   crearPrismaDeTest,
   enTransaccionRevertida,
+  etiquetasDeEnum,
   serializarEscriturasReales,
   soltarDependientesPosterioresDelEnumDeEventos,
 } from "./_postgres-real";
@@ -180,14 +181,11 @@ describeSiHayBase("271 / §3.2 — la base aplicada, y el DOWN ejercitado de ver
     await prisma.$disconnect();
   });
 
+  // FICHA 421 — la lectura del enum vive en `_postgres-real.ts` y ACOTA `nspname = 'public'`.
+  // Filtrando solo por `typname` esta consulta sumaba tambien el enum CLONADO en el esquema
+  // temporal de otro archivo que corriera a la vez: el rojo del gate de release del 2026-09-11.
   async function valoresDe(tipo: string): Promise<string[]> {
-    const filas = await prisma.$queryRawUnsafe<{ valores: string }[]>(
-      `SELECT string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder) AS valores
-         FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-        WHERE t.typname = $1`,
-      tipo,
-    );
-    return (filas[0]?.valores ?? "").split(",").filter((v) => v.length > 0);
+    return etiquetasDeEnum(prisma, tipo);
   }
 
   // ⚠️ ACTUALIZADO EL 2026-08-29 POR LA FICHA 333 Y EL 2026-09-09 POR LA 403, Y SOLO ESTE CASO. Lee

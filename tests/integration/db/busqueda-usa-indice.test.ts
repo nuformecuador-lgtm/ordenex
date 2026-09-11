@@ -376,7 +376,8 @@ describeSiHayBase("R31 — la busqueda usa el indice y no recorre `orden`", () =
     it("es un GIN sobre `busqueda_texto` con el opclass de trigramas", async () => {
       if (!fks) return;
       const filas = (await prisma.$queryRawUnsafe(
-        "SELECT indexdef FROM pg_indexes WHERE indexname = 'orden_busqueda_texto_trgm_idx'",
+        `SELECT indexdef FROM pg_indexes
+          WHERE schemaname = 'public' AND indexname = 'orden_busqueda_texto_trgm_idx'`,
       )) as { indexdef: string }[];
       expect(filas).toHaveLength(1);
       expect(filas[0].indexdef).toContain("USING gin");

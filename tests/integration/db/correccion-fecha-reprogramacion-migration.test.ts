@@ -5,7 +5,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { HISTORIAL_ACCION_TIPOS } from "@/lib/types/historial-accion";
 
-import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
+import { HAY_BASE_DE_DATOS, crearPrismaDeTest, etiquetasDeEnum } from "./_postgres-real";
 
 /**
  * ⭑ FICHA 371 — LA MIGRACION DE LA FICHA, LEIDA DE LA BASE APLICADA.
@@ -133,11 +133,8 @@ describeSiHayBase("371/T1 — la base APLICADA", () => {
   });
 
   it("⭑ `pg_enum` tiene el valor nuevo, y el catalogo y la base dicen lo mismo", async () => {
-    const filas = await prisma.$queryRawUnsafe<{ enumlabel: string }[]>(
-      `SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-        WHERE t.typname = 'historial_accion_tipo' ORDER BY e.enumsortorder`,
-    );
-    const enLaBase = filas.map((f) => f.enumlabel);
+    // FICHA 421 — acota `nspname = 'public'`: ver `etiquetasDeEnum` en `_postgres-real.ts`.
+    const enLaBase = await etiquetasDeEnum(prisma, "historial_accion_tipo");
     expect(enLaBase, "la migracion no esta aplicada en esta base").toContain(VALOR_NUEVO);
     // Las DOS direcciones: ni el catalogo nombra algo que la base no tiene, ni al reves.
     expect(enLaBase.slice().sort()).toEqual([...HISTORIAL_ACCION_TIPOS].sort());
@@ -156,7 +153,7 @@ describeSiHayBase("371/T1 — la base APLICADA", () => {
       { column_name: string; data_type: string; is_nullable: string }[]
     >(
       `SELECT column_name, data_type, is_nullable FROM information_schema.columns
-        WHERE table_name = '${TABLA}' ORDER BY ordinal_position`,
+        WHERE table_schema = 'public' AND table_name = '${TABLA}' ORDER BY ordinal_position`,
     );
     const porNombre = new Map(columnas.map((c) => [c.column_name, c]));
     expect([...porNombre.keys()].sort()).toEqual(
@@ -189,7 +186,9 @@ describeSiHayBase("371/T1 — la base APLICADA", () => {
     // `contype` es `char` y Prisma no sabe deserializarlo: se castea a texto en el SQL.
     const constraints = await prisma.$queryRawUnsafe<{ conname: string; contype: string }[]>(
       `SELECT c.conname, c.contype::text AS contype FROM pg_constraint c
-        JOIN pg_class t ON t.oid = c.conrelid WHERE t.relname = '${TABLA}'`,
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+       WHERE t.relname = '${TABLA}' AND n.nspname = 'public'`,
     );
     const nombres = constraints.map((c) => c.conname);
     expect(nombres).toContain(`${TABLA}_fecha_distinta`);
@@ -198,25 +197,31 @@ describeSiHayBase("371/T1 — la base APLICADA", () => {
     const restrict = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
       `SELECT count(*)::bigint AS n FROM pg_constraint c
         JOIN pg_class t ON t.oid = c.conrelid
-        WHERE t.relname = '${TABLA}' AND c.contype = 'f' AND c.confdeltype = 'r'`,
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE t.relname = '${TABLA}' AND n.nspname = 'public'
+          AND c.contype = 'f' AND c.confdeltype = 'r'`,
     );
     expect(Number(restrict[0].n), "alguna FK dejo de ser RESTRICT").toBe(3);
   });
 
   it("la RLS esta habilitada y sin policies (solo service role)", async () => {
     const filas = await prisma.$queryRawUnsafe<{ relrowsecurity: boolean }[]>(
-      `SELECT relrowsecurity FROM pg_class WHERE relname = '${TABLA}'`,
+      `SELECT relrowsecurity FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE c.relname = '${TABLA}' AND n.nspname = 'public'`,
     );
     expect(filas[0].relrowsecurity).toBe(true);
     const policies = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
-      `SELECT count(*)::bigint AS n FROM pg_policies WHERE tablename = '${TABLA}'`,
+      `SELECT count(*)::bigint AS n FROM pg_policies
+        WHERE schemaname = 'public' AND tablename = '${TABLA}'`,
     );
     expect(Number(policies[0].n)).toBe(0);
   });
 
   it("los tres indices declarados existen", async () => {
     const filas = await prisma.$queryRawUnsafe<{ indexname: string }[]>(
-      `SELECT indexname FROM pg_indexes WHERE tablename = '${TABLA}'`,
+      `SELECT indexname FROM pg_indexes
+        WHERE schemaname = 'public' AND tablename = '${TABLA}'`,
     );
     const nombres = filas.map((f) => f.indexname);
     for (const sufijo of [

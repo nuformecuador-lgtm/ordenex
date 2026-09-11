@@ -8,7 +8,12 @@ import {
   type WalletMovimientoCategoria,
   type WalletMovimientoTipo,
 } from "@/lib/types/wallet";
-import { HAY_BASE_DE_DATOS, crearPrismaDeTest, enTransaccionRevertida } from "./_postgres-real";
+import {
+  HAY_BASE_DE_DATOS,
+  crearPrismaDeTest,
+  enTransaccionRevertida,
+  etiquetasDeEnum,
+} from "./_postgres-real";
 
 // Feature 173 (T A.1, R49/R50 · T A.2, R45/R46) — cobertura de la migracion
 // `*_caja_tesoreria`, en DOS niveles:
@@ -528,12 +533,8 @@ describeSiHayBase("T A.2 — el CHECK categoria↔tipo, contra Postgres (R45/R46
     // `convalidated` = las filas EXISTENTES se revisaron al aplicarla (nada de `NOT VALID`).
     expect(check.convalidated).toBe(true);
 
-    const etiquetasDelEnum = (
-      await prisma.$queryRaw<{ enumlabel: string }[]>`
-        SELECT e.enumlabel FROM pg_enum e
-        JOIN pg_type t ON t.oid = e.enumtypid
-        WHERE t.typname = 'wallet_movimiento_categoria'`
-    ).map((r) => r.enumlabel);
+    // FICHA 421 — acota `nspname = 'public'`: ver `etiquetasDeEnum` en `_postgres-real.ts`.
+    const etiquetasDelEnum = await etiquetasDeEnum(prisma, "wallet_movimiento_categoria");
 
     const nombradasEnElCheck = [
       ...new Set(

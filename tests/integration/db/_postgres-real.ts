@@ -324,3 +324,41 @@ export async function fksDeOrden(prisma: PrismaClient): Promise<FksDeOrden | nul
   });
   return fila ?? null;
 }
+
+/**
+ * FICHA 421 — las etiquetas de un enum de Postgres, en su orden, **y solo las de `public`**.
+ *
+ * ⚠️ POR QUE EXISTE ESTA FUNCION EN VEZ DE LA CONSULTA A PELO. Los catalogos de Postgres
+ * (`pg_enum`, `pg_type`, `pg_class`, `pg_indexes`, …) son GLOBALES A LA BASE: no los filtra el
+ * `search_path`. Y varios archivos de esta carpeta se aislan CREANDO UN ESQUEMA TEMPORAL en el que
+ * clonan este mismo enum (`push-cupo-carrera.test.ts` lo hace explicitamente, porque el cliente de
+ * Prisma cualifica el tipo con el esquema del adaptador). Con `maxWorkers` > 1 y doce archivos
+ * tocando `notificacion_evento`, dos coinciden en el tiempo y una consulta que filtre solo por
+ * `typname` suma LOS DOS TIPOS.
+ *
+ * No es una hipotesis: el 2026-09-11 puso el gate de release en rojo con «esperado 11, recibido
+ * 23 — cada etiqueta duplicada» (`progress/flake_enum_esquema_2026-09-11.md`). Un enum de Postgres
+ * no admite etiquetas repetidas, asi que 23 solo puede significar dos tipos.
+ *
+ * El `JOIN` a `pg_namespace` es el arreglo. NO se usa `::regtype`: eso resuelve por `search_path`,
+ * o sea que devuelve UN tipo pero cual depende de un estado global que el test no fija.
+ */
+export const SQL_ETIQUETAS_DE_ENUM = `SELECT e.enumlabel AS etiqueta
+     FROM pg_enum e
+     JOIN pg_type t ON t.oid = e.enumtypid
+     JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = $1 AND n.nspname = 'public'
+    ORDER BY e.enumsortorder`;
+
+/** Cualquier cliente capaz de mandar SQL crudo: el `PrismaClient` o el `tx` de un test. */
+export interface ClienteDeSqlCrudo {
+  $queryRawUnsafe: <T = unknown>(sql: string, ...args: unknown[]) => Promise<T>;
+}
+
+export async function etiquetasDeEnum(
+  cliente: ClienteDeSqlCrudo,
+  tipo: string,
+): Promise<string[]> {
+  const filas = await cliente.$queryRawUnsafe<{ etiqueta: string }[]>(SQL_ETIQUETAS_DE_ENUM, tipo);
+  return filas.map((f) => f.etiqueta);
+}
