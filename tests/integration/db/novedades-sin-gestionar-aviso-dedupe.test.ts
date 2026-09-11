@@ -83,10 +83,12 @@ async function crearConSavepoint(
   tx: TxDeTest,
   repo: NotificacionRepository,
   input: Parameters<NotificacionRepository["crear"]>[0],
+  // FICHA 410 (design 6.1): `crear` devuelve el id creado, o `null` si la dedupe lo absorbio.
+  // Este ayudante sigue contestando SI/NO porque lo unico que le importa es si la fila entro.
 ): Promise<boolean> {
   const punto = `sp_${randomUUID().replace(/-/g, "")}`;
   await tx.$executeRawUnsafe(`SAVEPOINT ${punto}`);
-  const creada = await repo.crear(input, tx);
+  const creada = (await repo.crear(input, tx)) !== null;
   await tx.$executeRawUnsafe(
     creada ? `RELEASE SAVEPOINT ${punto}` : `ROLLBACK TO SAVEPOINT ${punto}`,
   );

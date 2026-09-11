@@ -1,7 +1,7 @@
 // Feature 146 (design §1.5/§2) — repositorio de notificaciones. SOLO queries Prisma: la
 // ventana de 30 dias, el limite, el mapeo a DTO y las respuestas de dominio viven en el
 // service. Aqui vive UNA cosa de peso: `predicadoVisibilidad`, la fuente UNICA de R13-R17.
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient, type RolValue } from "@prisma/client";
 import type {
   CrearNotificacionInput,
   INotificacionRepository,
@@ -46,6 +46,65 @@ export function predicadoVisibilidad(actor: NotificacionActor): Prisma.Notificac
         AND: [{ OR: [{ zonaId: null }, { zonaId: actor.zonaId }] }],
       },
     ],
+  };
+}
+
+/**
+ * Las CUATRO columnas de alcance de una fila de `notificacion`, que es todo lo que hace falta para
+ * resolver a QUIEN llega. Ni el texto, ni el evento, ni la fecha.
+ */
+export interface AlcanceDeAviso {
+  destinatarioRol: RolValue | null;
+  destinatarioUsuarioId: string | null;
+  tiendaId: string | null;
+  zonaId: string | null;
+}
+
+/**
+ * FICHA 410 (design §8) — EL CAMINO INVERSO DEL PREDICADO DE ARRIBA: dado un AVISO, que usuarios lo
+ * verian en su campana.
+ *
+ * ⚠️ VIVE AQUI Y NO EN EL MODULO DE PUSH, Y ESO ES LA MITAD DEL REQUISITO (R24). `predicadoVisibilidad`
+ * y este son la MISMA regla leida en las dos direcciones. En archivos distintos se separan el dia
+ * que alguien toque una sola de las dos, y el sintoma seria el peor posible de esta ficha: un push
+ * en el telefono de quien NO ve ese aviso al abrir la app (R25). Juntos, cambiar uno sin mirar el
+ * otro es imposible de no ver.
+ *
+ *   destinatarios(aviso) :=  usuario.estado = 'activo'                              (R21)
+ *                        AND ( usuario.id = aviso.destinatario_usuario_id
+ *                           OR ( usuario.rol.value = aviso.destinatario_rol
+ *                                AND (aviso.tienda_id IS NULL OR usuario.id      = aviso.tienda_id)
+ *                                AND (aviso.zona_id   IS NULL OR usuario.zona_id = aviso.zona_id) ) )
+ *
+ * Cada linea es el espejo de la suya:
+ * - la fila dirigida a un usuario llega a ESE usuario y a nadie mas;
+ * - el alcance NULL en las dos columnas llega a TODO el rol (R13 de la 146);
+ * - `tienda_id` con valor llega solo al `adminTienda` QUE ES esa tienda —`notificacion.tienda_id`
+ *   es una FK a `usuario`, no hay un segundo identificador de tienda— (R14/R15);
+ * - `zona_id` con valor llega solo a los usuarios de ese rol con esa `usuario.zona_id` (R16).
+ *
+ * LO QUE ANADE Y NO TIENE EL ESPEJO: `estado = 'activo'` (R21). Quien no esta activo no recibe push
+ * aunque conserve suscripciones. En el listado eso no hace falta porque un inactivo no tiene sesion.
+ */
+export function predicadoDestinatariosDeAviso(aviso: AlcanceDeAviso): Prisma.UsuarioWhereInput {
+  const porRol: Prisma.UsuarioWhereInput[] =
+    aviso.destinatarioRol === null
+      ? []
+      : [
+          {
+            rol: { value: aviso.destinatarioRol },
+            ...(aviso.tiendaId === null ? {} : { id: aviso.tiendaId }),
+            ...(aviso.zonaId === null ? {} : { zonaId: aviso.zonaId }),
+          },
+        ];
+  const porUsuario: Prisma.UsuarioWhereInput[] =
+    aviso.destinatarioUsuarioId === null ? [] : [{ id: aviso.destinatarioUsuarioId }];
+
+  return {
+    estado: "activo", // R21
+    // Sin destinatario no hay nadie: `OR: []` en Prisma NO filtra nada, asi que la fila
+    // imposible se corta con un `id` que no existe en vez de devolver la plantilla entera.
+    OR: porUsuario.length + porRol.length === 0 ? [{ id: "" }] : [...porUsuario, ...porRol],
   };
 }
 
@@ -95,10 +154,13 @@ export class NotificacionRepository implements INotificacionRepository {
     return tx ?? this.prisma;
   }
 
-  async crear(input: CrearNotificacionInput, tx?: NotificacionTxClient): Promise<boolean> {
+  async crear(input: CrearNotificacionInput, tx?: NotificacionTxClient): Promise<string | null> {
     const cols = columnasDestinatario(input.destinatario);
     try {
-      await this.cliente(tx).notificacion.create({
+      // FICHA 410 (design §6.1): el `select: { id: true }` ya estaba; lo unico que cambia es que
+      // ese id AHORA SE DEVUELVE en vez de tirarse. El decorador del canal de push lo necesita
+      // para releer la fila en el momento del envio (R8) y para su `dedupe_key` (R35).
+      const fila = await this.cliente(tx).notificacion.create({
         data: {
           tipo: input.tipo,
           evento: input.evento,
@@ -110,14 +172,14 @@ export class NotificacionRepository implements INotificacionRepository {
         },
         select: { id: true },
       });
-      return true;
+      return fila.id;
     } catch (error) {
       // R27: chocar con `notificacion_dedupe_key` NO es un fallo, es la dedupe haciendo su
       // trabajo ante una carrera que la guardia previa no pudo ver. Se trata como no-op.
       // Cualquier otro error SI se propaga (en el productor transaccional del rechazo eso
       // revierte el cambio de estado, F1.4-3 / R21).
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        return false;
+        return null;
       }
       throw error;
     }

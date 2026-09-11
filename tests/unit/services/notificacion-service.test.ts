@@ -58,7 +58,8 @@ class RepoFake implements INotificacionRepository {
 
   constructor(public filas: FilaFake[] = []) {}
 
-  crear = vi.fn(async () => true);
+  // FICHA 410 (design 6.1): `crear` devuelve el id de la fila creada, nunca un booleano.
+  crear = vi.fn(async () => "n-1");
   existeNoLeidaPara = vi.fn(async () => false);
 
   async listarParaUsuario(input: ListarParaUsuarioInput): Promise<NotificacionRow[]> {

@@ -158,6 +158,8 @@ model Usuario {
   cobrosRechazoTiendaDecididos        RechazoTiendaCobro[]               @relation("RechazoTiendaCobroDecisor") // ficha 337: cobros por rechazo de tienda que ESTE usuario aprobo o rechazo. FK RESTRICT por el mismo motivo que la linea de arriba: quien autorizo un cobro es evidencia y no se pierde al dar de baja al usuario.
   cobrosRechazoTiendaComoTienda       RechazoTiendaCobro[]               @relation("RechazoTiendaCobroTienda") // ficha 337: cobros por rechazo emitidos CONTRA esta tienda. `tienda_id` va CONGELADO en la fila (leccion 69/R13), asi que esta relacion es historia y no una consulta viva sobre `orden.tienda_id`.
   historialAcciones                   HistorialAccion[]                  @relation("HistorialAccionActor") // ficha 362/R3: acciones (dinero / desaparicion / permisos) que ESTE usuario ejecuto. La FK es RESTRICT: quien borro 79 ordenes o aprobo un cierre es evidencia y no se pierde al dar de baja al usuario. `actor_nombre` y `actor_rol` van CONGELADOS en la fila, asi que esta relacion NO es la que pinta el listado.
+  pushSuscripciones                   PushSuscripcion[]                  @relation("PushSuscripcionUsuario") // ficha 410/R16/R22: suscripciones push de los DISPOSITIVOS de este usuario. La FK es CASCADE: una credencial de entrega no es evidencia, y dejarla huerfana seria mandar push a nombre de nadie
+  pushEnviosDia                       PushEnvioDia[]                     @relation("PushEnvioDiaUsuario") // ficha 410/R6/R22: cupo diario de push consumido por este usuario. CASCADE por el mismo motivo: es un contador del canal, no historia
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -2478,6 +2480,7 @@ enum JobTipo {
   analitica_rollup_diario // feature 124/D4: agrega el rollup diario de la fecha CR que acaba de cerrar (D-1); RECURRENTE a las 00:30 CR, payload vacio {}
   analitica_invalidacion_cache // feature 128/D3: invalida por tag la cache de la analitica operativa tras un recomputo del backfill (125); PUNTUAL, encolado por el script, payload { desde, hasta }
   whatsapp_bienvenida // mensaje de bienvenida: envia la plantilla marcada al recoger el paquete (por_recoger -> en_reparto, familia `recoleccion`); PUNTUAL, encolado por el choke point de estado, payload { ordenId, mensajeroId, ocurridoAt }
+  push_web // ficha 410 (design 7): entrega de UNA notificacion ya creada a las suscripciones push de sus destinatarios. PUNTUAL, lo encola el decorador del repositorio de notificaciones; payload { notificacionId }, dedupe_key `push:<notificacionId>`, max_intentos 3
 
   @@map("job_tipo")
 }
@@ -3435,4 +3438,110 @@ model HistorialAccion {
   /// «Que le paso a esta entidad».
   @@index([entidadTipo, entidadId])
   @@map("historial_accion")
+}
+
+// =================================================================================================
+// FICHA 410 — EL CANAL DE PUSH WEB. Dos tablas, y ninguna guarda un aviso: el aviso ya existe y
+// vive en `notificacion`. Aqui solo esta el TRANSPORTE.
+// =================================================================================================
+
+/// FICHA 410 (design 4.1, R16-R18/R22/R47) — UNA SUSCRIPCION DE PUSH, QUE ES DE UN DISPOSITIVO.
+///
+/// ⚠️ LA IDENTIDAD ES EL `endpoint`, NO LA PERSONA, y esa decision es el diseno entero. El trio
+/// (endpoint, p256dh, auth) lo emite el NAVEGADOR de un dispositivo concreto; si Ana cierra sesion
+/// y Beto entra en el mismo telefono, el navegador devuelve EL MISMO endpoint. Con `endpoint`
+/// UNIQUE el registro es un upsert que reescribe `usuario_id` y Beto pasa a ser el dueno sin una
+/// sola linea de codigo que "detecte el cambio de dueno" (R17/R18). Con la clave puesta en
+/// (usuario, endpoint) habria DOS filas vivas y Ana seguiria recibiendo push en un telefono que ya
+/// no es suyo.
+///
+/// RLS habilitada SIN policies (R47), patron `jobs` / `notificacion` / `gasto_fijo_cobro`: guarda
+/// una CREDENCIAL DE ENTREGA y solo la toca el servidor de la aplicacion.
+///
+/// NO SE GUARDA EL USER-AGENT CRUDO. `etiqueta` es un texto corto que compone el cliente para que
+/// la persona reconozca su dispositivo; no es PII y no se registra en logs (R23).
+model PushSuscripcion {
+  id        String @id @default(uuid())
+  usuarioId String @map("usuario_id")
+
+  /// LA IDENTIDAD. Unico en toda la tabla: un dispositivo-navegador, una fila.
+  endpoint String @unique
+
+  /// Claves de cifrado del payload que entrega el navegador al suscribirse. NUNCA salen en un log
+  /// ni en un mensaje de error (R23).
+  p256dh String
+  auth   String
+
+  /// "Chrome en Android", puesto por el cliente. Opcional: una suscripcion sin etiqueta funciona.
+  etiqueta String?
+
+  /// Sello del ultimo envio ACEPTADO por el servicio de push. Diagnostico, no politica: nada
+  /// decide en funcion de este campo.
+  ultimoEnvioOkAt DateTime? @map("ultimo_envio_ok_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  usuario Usuario @relation("PushSuscripcionUsuario", fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  /// El envio lee POR USUARIO (`WHERE usuario_id IN (...)`), que es la unica consulta caliente.
+  @@index([usuarioId])
+  @@map("push_suscripcion")
+}
+
+/// FICHA 410 (design 4.2, R6/R7) — EL CUPO DIARIO DEL CANAL, Y POR QUE ES UNA TABLA.
+///
+/// ⚠️ EL CUPO SE TOMA INSERTANDO, NO CONSULTANDO. Quien consigue insertar la fila
+/// (usuario, evento, jornada) es quien manda el push; un `P2002` significa «ya salio hoy» y es un
+/// no-op. Asi la regla «uno al dia por tipo» es ESTRUCTURAL: dos productores concurrentes no
+/// pueden colarse por la rendija entre un `SELECT` y un `INSERT`, que es exactamente la carrera
+/// que una comprobacion previa deja abierta.
+///
+/// POR QUE NO `jobs.dedupe_key` (A4 descartada): un `dedupe_key` protege mientras la fila del job
+/// exista, y los jobs se completan y se purgan. Un cupo que se «recarga» cuando alguien limpia la
+/// cola no es un cupo.
+///
+/// POR QUE NO `notificacion_dedupe_key` (A6 descartada): son dos preguntas distintas. La del AVISO
+/// es «¿ya hay una no leida para esta entidad?»; la del CANAL es «¿ya sono hoy este tipo para esta
+/// persona?». `cierre_dia_por_aprobar` crea legitimamente cinco avisos en un dia —cinco cierres,
+/// cinco entidades— y debe pushear UNO.
+///
+/// Volumen: <= 39 usuarios x 8 eventos elegibles = 312 filas/dia en el peor caso absoluto. No
+/// necesita purga.
+model PushEnvioDia {
+  id        String @id @default(uuid())
+  usuarioId String @map("usuario_id")
+
+  /// ⚠️ ESTA ES LA **SEGUNDA** COLUMNA DEL ESQUEMA QUE USA `notificacion_evento`, Y ESO CAMBIA UNA
+  /// REGLA QUE LLEVABA VIGENTE DESDE LA 146. Los `down.sql` que anaden un valor a ese enum lo
+  /// RECREAN (`RENAME TO ..._old` -> `CREATE TYPE` -> `ALTER COLUMN ... TYPE` -> `DROP TYPE ..._old`)
+  /// porque Postgres no tiene `DROP VALUE`, y hasta hoy todos retipaban UNA sola columna:
+  /// `notificacion.evento`.
+  ///
+  /// A PARTIR DE AQUI, el `down.sql` de cualquier migracion POSTERIOR a la 410 que amplie
+  /// `notificacion_evento` tiene que retipar **las dos**. Si se olvida, el `DROP TYPE` falla con
+  /// `2BP01` («otros objetos dependen de el») — RUIDOSAMENTE, que es el modo de fallo correcto, y
+  /// los tests de migracion de `tests/integration/db/notificacion-evento-*` lo cazan antes de que
+  /// salga de aqui.
+  ///
+  /// Los `down.sql` ANTERIORES **no se tocan** y siguen siendo correctos: `db:rollback` va de la
+  /// ultima migracion hacia atras, y esta tabla se crea DESPUES de todas ellas, asi que cuando les
+  /// toca el turno ya no existe.
+  evento NotificacionEvento
+
+  /// Jornada de Costa Rica como `YYYY-MM-DD` (`fechaCalendarioCR`), la misma unidad que usan los
+  /// avisos periodicos del repo. TEXTO y no `DATE` a proposito: es parte de una CLAVE, y una clave
+  /// no se somete a la conversion de huso de un tipo temporal.
+  diaCr String @map("dia_cr")
+
+  /// Que aviso gasto el cupo. TRAZABILIDAD, sin FK: la fila del aviso puede borrarse y el cupo
+  /// del dia tiene que seguir gastado. Es el mismo criterio polimorfico de `notificacion.entidad_id`.
+  notificacionId String? @map("notificacion_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  usuario Usuario @relation("PushEnvioDiaUsuario", fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, evento, diaCr], map: "push_envio_dia_cupo")
+  @@map("push_envio_dia")
 }

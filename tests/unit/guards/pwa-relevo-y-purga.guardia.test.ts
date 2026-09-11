@@ -233,11 +233,17 @@ describe("pwa · el arnes ejecuta el service worker de verdad", () => {
     // repo: una guardia salio verde con su detector roto porque no encontraba nada.
     expect(FUENTE.length).toBeGreaterThan(1000);
     const sw = cargarSw();
+    // CENSO LITERAL de manejadores. Se pone rojo cuando el service worker gana uno, y que se
+    // ponga rojo es la prueba de que el inventario sigue cerrado. La FICHA 410 anadio `push` y
+    // `notificationclick` a la rama de produccion; su comportamiento se mide aparte, en
+    // `pwa-push.guardia.test.ts`, que trae el arnes con `showNotification` y `openWindow`.
     expect(Object.keys(sw.manejadores).sort()).toEqual([
       "activate",
       "fetch",
       "install",
       "message",
+      "notificationclick",
+      "push",
     ]);
   });
 

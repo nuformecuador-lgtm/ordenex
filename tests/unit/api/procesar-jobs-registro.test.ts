@@ -45,6 +45,11 @@ describe("R21 — registro en el drenador", () => {
       "geocodificacion",
       "liberar_reprogramadas",
       "optimizacion_ruta",
+      // FICHA 410: entrega de UNA notificacion ya creada a las suscripciones push de sus
+      // destinatarios. PUNTUAL —lo encola el decorador del repositorio de notificaciones—, asi que
+      // tampoco va en `buildRecurrencias`. Este censo es LITERAL a proposito y se pone rojo cuando
+      // el inventario de tipos crece: que se pusiera rojo es la prueba de que sigue cerrado.
+      "push_web",
       "webhook_estado", // feature 99
       "whatsapp_bienvenida", // mensaje de bienvenida al recoger: PUNTUAL, no va en buildRecurrencias
       "whatsapp_chat_envio", // feature 109

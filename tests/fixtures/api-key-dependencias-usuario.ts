@@ -198,4 +198,22 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
     categoria: "no_alcanzable",
     motivo: `Corregir la fecha de una reprogramacion es solo de maestro/admin: ${SOLO_OPERADOR}`,
   },
+  // ── FICHA 410 (2026-09-10): el canal de push web ─────────────────────────────────────────────
+  // Las dos son CASCADE y las dos son INALCANZABLES para una cuenta dedicada. No se clasifican
+  // como `se_borra_con_ella` —que es para lo que desaparece DENTRO de la transaccion del borrado
+  // de la key— porque para esta cuenta la fila no llega a existir nunca.
+  "PushSuscripcion.usuario": {
+    categoria: "no_alcanzable",
+    motivo:
+      "Suscribir un dispositivo exige un NAVEGADOR con sesion de pantalla: la Server Action fija " +
+      "el dueno con `resolveActorFromSession`, y la cuenta dedicada no entra por el formulario de " +
+      `login (su contrasena es aleatoria y no se revela). ${SOLO_OPERADOR}`,
+  },
+  "PushEnvioDia.usuario": {
+    categoria: "no_alcanzable",
+    motivo:
+      "El cupo del dia solo se toma para un destinatario ELEGIBLE del catalogo de push, y el rol " +
+      "`apiKey` no aparece en ninguna de sus ocho entradas: una cuenta dedicada no tiene telefono " +
+      "al que interrumpir.",
+  },
 };

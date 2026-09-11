@@ -8,6 +8,7 @@ import {
   crearPrismaDeTest,
   enTransaccionRevertida,
   serializarEscriturasReales,
+  soltarDependientesPosterioresDelEnumDeEventos,
   type TxDeTest,
 } from "./_postgres-real";
 
@@ -365,6 +366,12 @@ describeSiHayBase("409/T2.4 â€” el DOWN ejercitado de verdad, con su precondiciÃ
           "devoluciones_represadas",
           "devoluciones_represadas_dia",
         );
+        // FICHA 410: `push_envio_dia.evento` usa este mismo enum, y su migracion es POSTERIOR.
+        // En el rollback REAL la tabla ya no existe cuando a este down le llega el turno; aqui
+        // se ejecuta contra la base de HOY, asi que hay que ponerla en ese estado o el
+        // `DROP TYPE ..._old` muere con 2BP01 por una dependencia que el rollback no tendria.
+        await soltarDependientesPosterioresDelEnumDeEventos(tx);
+
         for (const sentencia of sentenciasDelDown()) await tx.$executeRawUnsafe(sentencia);
       }),
     ).rejects.toThrow();
@@ -377,6 +384,12 @@ describeSiHayBase("409/T2.4 â€” el DOWN ejercitado de verdad, con su precondiciÃ
     const r = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       await apartarFilasConValoresNoListados(tx);
+      // FICHA 410: `push_envio_dia.evento` usa este mismo enum, y su migracion es POSTERIOR.
+      // En el rollback REAL la tabla ya no existe cuando a este down le llega el turno; aqui
+      // se ejecuta contra la base de HOY, asi que hay que ponerla en ese estado o el
+      // `DROP TYPE ..._old` muere con 2BP01 por una dependencia que el rollback no tendria.
+      await soltarDependientesPosterioresDelEnumDeEventos(tx);
+
       for (const sentencia of sentenciasDelDown()) await tx.$executeRawUnsafe(sentencia);
       const indices = await tx.$queryRawUnsafe<{ def: string }[]>(
         `SELECT indexdef AS def FROM pg_indexes

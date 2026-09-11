@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { logout } from "@/lib/actions/auth";
+import { darDeBajaDeEsteDispositivo } from "@/lib/pwa/baja-push";
 import { useToast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 
@@ -20,6 +21,13 @@ import { Button } from "@/components/ui/button";
  * oscuro el control quedaba en 1.03–1.09:1 de contraste — el encabezado se leía
  * y su botón no. `text-foreground` es el mismo token del `<h1>` de al lado, así
  * que ahora los dos se leen igual en los dos temas y en los cinco roles.
+ *
+ * FICHA 410 (T5.5 — R19/R20): antes de salir, este dispositivo se da de baja del canal de push.
+ * Es lo que impide que el siguiente aviso de esta persona suene en un teléfono donde ya no tiene
+ * sesión. Se hace ANTES de `logout()` porque la baja necesita la sesión para autorizarse (el
+ * usuario sale de la cookie, R50), y **solo se toca ESTE dispositivo**: sus otros teléfonos siguen
+ * suscritos. Si la baja falla, la sesión se cierra igualmente y el fallo queda registrado (R20):
+ * nadie se queda dentro de la aplicación porque un servicio de push no respondiera.
  */
 export function LogoutButton() {
   const router = useRouter();
@@ -28,6 +36,9 @@ export function LogoutButton() {
 
   const handleLogout = () => {
     startTransition(async () => {
+      // R20: no lleva `try`. `darDeBajaDeEsteDispositivo` no lanza nunca por contrato, y envolverla
+      // aquí escondería que el que decide es ella.
+      await darDeBajaDeEsteDispositivo();
       try {
         await logout();
         // R7: al completar el logout, redirige a la home pública (/).

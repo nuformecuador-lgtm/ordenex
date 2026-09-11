@@ -5046,3 +5046,58 @@ Cerrada y en produccion. Cuatro PR (#760, #761, #762, #763), release #764. Sin m
   redundante y el primero que lo leyera lo habria borrado; con la real es **load-bearing**.
 - Decision no pedida y acertada: **el webhook no gana zona ni costo**, porque su cuerpo va FIRMADO y
   el orden de sus claves es parte de la firma.
+
+## 2026-09-11 — 410 · el canal de push web, cableado en un solo punto
+- Ocho de los trece eventos de la campana salen ademas por PUSH al telefono, con tope duro de **un
+  push por persona, evento y jornada de Costa Rica**. Los otros cinco no salen, y cada ausencia
+  lleva su porque escrito en el catalogo: una ausencia explicada es una decision, una sin explicar
+  es un olvido.
+- Requisitos R1-R52, mapeados en `progress/impl_410_backend.md` e `impl_410_frontend.md`.
+- **ORIGEN, medido:** el 2026-08-23 se conto en este mismo arbol que de SIETE notificadores reales
+  **DOS no los pasaba nadie** —incluido el aviso nocturno del corte, el que mas se emite— y la suite
+  entera estaba verde. Con DOCE productores, repetir el patron de inyectar uno a uno garantizaba que
+  alguno se quedara fuera. Por eso el canal es un DECORADOR con **un** punto de fallo en vez de doce,
+  y ese punto se vigila.
+- **El cupo del dia se toma INSERTANDO**, no comprobando antes: quien excluye es un indice unico, y
+  el `P2002` es el desenlace NORMAL del metodo, no un error.
+- **LO QUE CASI SE CUELA (1): R7 no lo defendia nadie.** La revision sustituyo el INSERT por un
+  comprobar-antes —lo unico que R7 prohibe— y los 13 archivos del backend salieron **157/157
+  verdes**, con el caso de la carrera pasando **5 de 5**. Dos razones, y las dos sirven para otras
+  fichas: el caso principal afirmaba «un cupo, un encolado», que se cumple TAMBIEN si las dos
+  llamadas se serializan solas —y en esta maquina se serializan SIEMPRE, medido 5 de 5, asi que
+  nunca llegaba a la ventana—; y el segundo caso reproducia el SELECT y el INSERT **a pelo, con SQL
+  escrito dentro del test**, o sea que probaba una propiedad del MOTOR y del INDICE —cierta y util—
+  pero indiferente a lo que hiciera el codigo de produccion. **El arreglo:** una barrera en
+  `pushEnvioDia.create`, DENTRO del camino real, por la costura que el propio constructor del
+  repositorio declara; retiene a las dos conexiones hasta que las dos han llegado. Va en `create` y
+  no en `findFirst` a proposito: `create` lo llaman las DOS versiones, asi que el caso no puede
+  quedarse colgado contra la buena. Y **lo que separa a las dos implementaciones no es el numero de
+  filas** —el indice salva a las dos— **sino el numero de ENCOLADOS**, que es lo que el telefono
+  nota. Con la mutacion puesta: ROJO 5 de 5.
+- **LO QUE CASI SE CUELA (2): la guardia del cableado leia UN archivo.** Un productor nuevo en OTRO
+  archivo, emitiendo un evento SI elegible, dejaba **213 archivos de guardias y 3.124 tests en
+  verde** con el canal saltado: linea por linea, el fallo del 2026-08-23 que esta ficha existia para
+  cerrar. Ahora es un **censo con lista blanca sobre `lib/` y `app/`** que **cuenta apariciones, no
+  archivos ni simbolos** —este repo ya midio dos veces que una guardia que decide «este archivo, si
+  o no» se queda verde cuando borras UNA de varias apariciones del mismo sitio—. Reproducido con el
+  archivo intruso de verdad en el arbol: `test:guardias` pasa de 213/213 verdes a **1 fallado,
+  exit 1**.
+- **Y el censo corrigio un dato que se daba por sabido:** `lib/actions/notificaciones.ts` se
+  describia como «solo lectura» y NO lo es —por `notificarCargaTerminada` llega a CREAR un aviso—.
+  Es inofensivo porque `carga_masiva_terminada` no es elegible para push, pero eso ahora **se
+  afirma** en la lista blanca en vez de suponerse; igual con el `orden_rechazada` de `emitir.ts`. El
+  dia que uno de esos dos eventos se haga elegible, la guardia se pone roja y manda releer el motivo
+  escrito, que es donde dice que ese repositorio no lleva el canal.
+- **Sin claves VAPID no pasa nada, y se midio:** cero ocurrencias de VAPID en el `.env` del arbol, y
+  los 238 tests de la ficha corren con el canal SIN CONFIGURAR sin que nada lance. El control ni se
+  ofrece. Es la leccion de la 400, aplicada.
+- **`push_envio_dia.evento` es la SEGUNDA columna del esquema que usa `notificacion_evento`.** Antes
+  de esta ficha era una sola. Consecuencia para el futuro, escrita en `db/schema.prisma` pegada al
+  modelo: un `down.sql` que amplie ese enum tiene que retipar **las dos** columnas o morira con
+  2BP01. Los cinco `down.sql` anteriores NO se tocaron —son fotos historicas—; lo que se arreglo
+  fueron sus controles de test.
+- **Limite abierto con nombre: nadie ha visto todavia un push en un telefono.** Todo lo verificado
+  es jsdom, Postgres y un arnes que ejecuta `public/sw.js` en un `new Function`. Las claves VAPID ya
+  estan en Vercel (par DISTINTO en Production y en Preview, ninguna en Development, ninguna
+  compartida); la prueba en un telefono real queda para el 2026-09-12 y **T6.5 sigue sin marcar**
+  hasta entonces.

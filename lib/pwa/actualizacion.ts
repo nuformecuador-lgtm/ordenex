@@ -28,6 +28,21 @@ export const MENSAJE_RELEVO_AHORA = "ordenex:relevo-ahora";
 export const MENSAJE_PAGINA_LISTA = "ordenex:pagina-lista";
 
 /**
+ * FICHA 410 (R43) — mensaje que el SERVICE WORKER manda a la pagina cuando acaba de mostrar un push
+ * y hay una ventana VISIBLE.
+ *
+ * Va en el sentido contrario a los dos de arriba (del SW hacia la pagina, no al reves) y existe por
+ * una razon concreta: con la app abierta y enfocada, el navegador OBLIGA a mostrar la notificacion
+ * del sistema igualmente, asi que sin esto la persona oiria DOS avisos del mismo hecho —el del
+ * sistema y el tono propio de la campana—. Con el, la pagina revalida su campana y SUPRIME su tono
+ * para ese incremento: un hecho, un sonido.
+ *
+ * El literal esta duplicado en `public/sw.js` porque el service worker no puede importar del bundle;
+ * la guardia `pwa-push.guardia.test.ts` comprueba que los dos textos siguen siendo el mismo.
+ */
+export const MENSAJE_PUSH_RECIBIDO = "ordenex:push-recibido";
+
+/**
  * Parametro de rescate (`?rescate=sw`). Lo lee un script INLINE del `<head>`; ver
  * `lib/pwa/rescate-inline.ts`.
  */

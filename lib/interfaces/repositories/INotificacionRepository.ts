@@ -76,12 +76,24 @@ export interface ListarParaUsuarioInput {
 
 export interface INotificacionRepository {
   /**
-   * Crea UNA fila. Acepta `tx` para que el productor transaccional del rechazo (F1.4-3)
-   * escriba dentro de la transaccion del cambio de estado. Devuelve `false` —sin lanzar—
-   * cuando la fila choca con el indice unico de dedupe (`notificacion_dedupe_key`), que es
-   * exactamente el comportamiento que R27 pide: no-op, no error.
+   * Crea UNA fila y devuelve SU ID. Acepta `tx` para que el productor transaccional del
+   * rechazo (F1.4-3) escriba dentro de la transaccion del cambio de estado. Devuelve `null`
+   * —sin lanzar— cuando la fila choca con el indice unico de dedupe
+   * (`notificacion_dedupe_key`), que es exactamente el comportamiento que R27 pide: no-op,
+   * no error.
+   *
+   * ⚠️ FICHA 410 (design §6.1) — DEVOLVIA `boolean` Y AHORA DEVUELVE EL ID, y el cambio es
+   * deliberado: el decorador del canal de push necesita la identidad de la fila que ACABA de
+   * insertarse para que el trabajo de la cola pueda releerla en el momento del envio (R8) y
+   * para componer su `dedupe_key` (R35). `null` sigue significando exactamente lo mismo que
+   * `false`: no se creo nada.
+   *
+   * La alternativa —releer la fila con un `findFirst` desde el decorador— se descarto: es una
+   * consulta extra por aviso y, peor, RECONSTRUYE una identidad que el `INSERT` ya tenia en la
+   * mano, que es el tipo de codigo que acaba devolviendo la fila equivocada el dia que haya dos
+   * parecidas.
    */
-  crear(input: CrearNotificacionInput, tx?: NotificacionTxClient): Promise<boolean>;
+  crear(input: CrearNotificacionInput, tx?: NotificacionTxClient): Promise<string | null>;
 
   /**
    * Guardia de dedupe (design §1.4, R27): ya existe una notificacion para ese
