@@ -7,6 +7,7 @@ import {
   HAY_BASE_DE_DATOS,
   crearPrismaDeTest,
   enTransaccionRevertida,
+  etiquetasDeEnum,
   serializarEscriturasReales,
   soltarDependientesPosterioresDelEnumDeEventos,
   type TxDeTest,
@@ -270,14 +271,12 @@ describeSiHayBase("409/T2.4 — la base aplicada, y el índice de dedupe que la 
     await prisma.$disconnect();
   });
 
+  // FICHA 421 — la lectura del enum vive en `_postgres-real.ts` y ACOTA `nspname = 'public'`.
+  // Antes se hacia aqui filtrando solo por `typname`, y eso puso el gate de release en rojo el
+  // 2026-09-11: otro archivo tenia vivo su esquema temporal con un `notificacion_evento` clonado y
+  // esta consulta sumo los DOS tipos (11 esperados, 23 recibidos, cada etiqueta duplicada).
   async function valoresDe(tipo: string): Promise<string[]> {
-    const filas = await prisma.$queryRawUnsafe<{ valores: string }[]>(
-      `SELECT string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder) AS valores
-         FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-        WHERE t.typname = $1`,
-      tipo,
-    );
-    return (filas[0]?.valores ?? "").split(",").filter((v) => v.length > 0);
+    return etiquetasDeEnum(prisma, tipo);
   }
 
   it("⭑ la base tiene los cuatro valores nuevos, AÑADIDOS al final (no recreados por detrás)", async () => {
@@ -395,20 +394,15 @@ describeSiHayBase("409/T2.4 — el DOWN ejercitado de verdad, con su precondici�
         `SELECT indexdef AS def FROM pg_indexes
           WHERE schemaname = 'public' AND indexname = 'notificacion_dedupe_key'`,
       );
-      const eventos = await tx.$queryRawUnsafe<{ valores: string }[]>(
-        `SELECT string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder) AS valores
-           FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-          WHERE t.typname = 'notificacion_evento'`,
-      );
-      const entidades = await tx.$queryRawUnsafe<{ valores: string }[]>(
-        `SELECT string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder) AS valores
-           FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-          WHERE t.typname = 'notificacion_entidad_tipo'`,
-      );
+      // FICHA 421 — por la MISMA razon por la que la consulta de arriba acota `schemaname`: estas
+      // dos filtraban solo por `typname` y veian tambien el enum clonado en el esquema temporal de
+      // otro archivo que corriera a la vez. Ese era EL ROJO del gate de release del 2026-09-11.
+      const eventos = await etiquetasDeEnum(tx, "notificacion_evento");
+      const entidades = await etiquetasDeEnum(tx, "notificacion_entidad_tipo");
       return {
         def: indices[0]?.def ?? "",
-        eventos: (eventos[0]?.valores ?? "").split(","),
-        entidades: (entidades[0]?.valores ?? "").split(","),
+        eventos,
+        entidades,
       };
     });
 

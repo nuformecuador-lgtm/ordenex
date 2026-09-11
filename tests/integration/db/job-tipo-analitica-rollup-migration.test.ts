@@ -6,6 +6,7 @@ import {
   HAY_BASE_DE_DATOS,
   crearPrismaDeTest,
   enTransaccionRevertida,
+  etiquetasDeEnum,
 } from "./_postgres-real";
 import { JobRepository } from "@/lib/repositories/JobRepository";
 import type {
@@ -179,13 +180,9 @@ afterAll(async () => {
 
 describeDb("T4.1/T4.5 contra Postgres — el valor existe y la siembra es idempotente", () => {
   it("`analitica_rollup_diario` es un valor del enum `job_tipo` en la base", async () => {
-    const filas = await prismaDeTest().$queryRaw<{ enumlabel: string }[]>`
-      SELECT e."enumlabel"
-        FROM pg_enum e
-        JOIN pg_type t ON t.oid = e.enumtypid
-       WHERE t.typname = 'job_tipo'
-       ORDER BY e.enumsortorder`;
-    expect(filas.map((f) => f.enumlabel)).toContain(VALOR);
+    // FICHA 421 — acota `nspname = 'public'`: ver `etiquetasDeEnum` en `_postgres-real.ts`.
+    const etiquetas = await etiquetasDeEnum(prismaDeTest(), "job_tipo");
+    expect(etiquetas).toContain(VALOR);
   });
 
   it("R36 — dos siembras del mismo objetivo dejan UNA fila en `jobs`", async () => {

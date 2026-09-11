@@ -148,7 +148,8 @@ describeSiHayBase("362/T0.3 — la migracion del historial de acciones, contra P
       `SELECT c.conname, pg_get_constraintdef(c.oid) AS def
          FROM pg_constraint c
          JOIN pg_class t ON t.oid = c.conrelid
-        WHERE t.relname = 'historial_accion' AND c.contype = 'f'`,
+         JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE t.relname = 'historial_accion' AND n.nspname = 'public' AND c.contype = 'f'`,
     );
     // UNA sola FK: `entidad_id` es OPACO a proposito (design §1.3-a). `RESTRICT` lo haria
     // INBORRABLE y `SET NULL` vaciaria el rastro en silencio.

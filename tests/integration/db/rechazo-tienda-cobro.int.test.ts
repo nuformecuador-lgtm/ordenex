@@ -432,7 +432,9 @@ describeSiHayBase("💰 337 — el cobro por rechazo desde novedades, contra Pos
   describe("la tabla, tal como quedo aplicada", () => {
     it("tiene RLS habilitada (a estas filas solo se llega por el servidor)", async () => {
       const filas = await prisma.$queryRawUnsafe<Array<{ relrowsecurity: boolean }>>(
-        "SELECT relrowsecurity FROM pg_class WHERE relname = 'rechazo_tienda_cobro'",
+        `SELECT relrowsecurity FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relname = 'rechazo_tienda_cobro' AND n.nspname = 'public'`,
       );
       expect(filas).toHaveLength(1);
       expect(filas[0].relrowsecurity).toBe(true);
@@ -452,7 +454,8 @@ describeSiHayBase("💰 337 — el cobro por rechazo desde novedades, contra Pos
       // indice parcial `WHERE estado = 'pendiente'` dejaria pasar el alta de un rechazo ya
       // decidido, que es la alternativa A9 descartada por escrito.
       const filas = await prisma.$queryRawUnsafe<Array<{ indexdef: string }>>(
-        "SELECT indexdef FROM pg_indexes WHERE indexname = 'rechazo_tienda_cobro_gestion_uq'",
+        `SELECT indexdef FROM pg_indexes
+          WHERE schemaname = 'public' AND indexname = 'rechazo_tienda_cobro_gestion_uq'`,
       );
       expect(filas).toHaveLength(1);
       expect(filas[0].indexdef).toContain("UNIQUE");
