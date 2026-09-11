@@ -4882,10 +4882,11 @@
       "title": "las notificaciones llegan al telefono aunque la app este cerrada",
       "description": "Hoy no hay push: el service worker no maneja el evento y no hay suscripciones, asi que un aviso urgente solo existe si alguien entra a la app.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "alta",
-      "branch": null,
+      "spec_path": "specs/410-notificaciones-push/",
+      "branch": "feat/410-notificaciones-push",
       "depends_on": 409,
       "status_note": "MEDIDO el 2026-09-10: `public/sw.js` NO tiene manejador de `push` ni de `notificationclick`, y no hay `web-push` ni suscripciones en el repo. La PWA existe (manifest mas sw registrado en `app/layout.tsx`) pero el canal no. || DEPENDE DE LA 409: primero que el aviso exista y sea correcto, luego que persiga a la gente. Reusa su catalogo y su atajo. || QUE MERECE PUSH, decidido con el humano: SOLO lo que tiene PLAZO o DINERO, y siempre agregado. Tienda: novedades sin gestionar. Admin y satelite: devoluciones represadas y cierre por aprobar. Mensajero: su cierre rechazado, quedo bloqueado, su reparto de mañana, le cambiaron el dia. Maestro: un servicio caido. NUNCA: un aviso por orden, cada cambio de estado, ni nada que quien lo recibe no pueda resolver. || PIEZAS QUE NO EXISTEN: permiso del navegador, suscripcion por dispositivo, claves VAPID como secreto de entorno, tabla de suscripciones y un emisor. No es una notificacion mas."
     },
