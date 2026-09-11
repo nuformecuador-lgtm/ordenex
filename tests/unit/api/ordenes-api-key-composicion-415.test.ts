@@ -115,7 +115,7 @@ const { handleListadoApi } = await import("@/app/api/ordenes/api-key/route");
 const { handleConsultaOrdenApi } = await import("@/app/api/ordenes/api-key/orden/[id]/route");
 
 const ACTOR = { usuarioId: OWNER, rol: "apiKey" as const };
-const autenticar = async () => ({ status: "ok" as const, actor: ACTOR });
+const autenticar = async () => ({ status: "ok" as const, actor: ACTOR, apiKeyId: "k1" });
 
 function req(url: string): Request {
   return new Request(url, { headers: { authorization: `Bearer ${SECRETO}` } });
@@ -146,7 +146,8 @@ describe("415/T5 — el composition root del LISTADO pasa el resolutor de tarifa
 
     // UNA sola consulta de tarifas para la pagina (R24), y con el OWNER de la peticion (R32).
     expect(prismaFalso.tarifa.findMany).toHaveBeenCalledTimes(1);
-    const where = JSON.stringify(prismaFalso.tarifa.findMany.mock.calls[0][0].where);
+    const llamada = prismaFalso.tarifa.findMany.mock.calls[0] as unknown as [{ where: unknown }];
+    const where = JSON.stringify(llamada[0].where);
     expect(where).toContain(OWNER);
     expect(where).toContain(ZONA_ID);
   });

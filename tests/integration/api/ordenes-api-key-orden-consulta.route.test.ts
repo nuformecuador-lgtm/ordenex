@@ -17,6 +17,8 @@ import type { ApiOrdenDetalleDTO } from "@/lib/types/api-orden";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { ApiOrdenLecturaService } from "@/lib/services/ApiOrdenLecturaService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+// ⏳ 2026-09-10 (feature 415, T6): el resolutor REAL de la tarifa vigente.
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import { FILA_PRISMA_415 } from "@/tests/fixtures/api-orden-costeo-415";
 
@@ -552,5 +554,210 @@ describe("GET /api/ordenes/api-key/orden/{id} — `gestiones` de punta a punta (
       // Y ninguna respuesta de error menciona la clave nueva.
       expect(cuerpo).not.toContain("gestiones");
     }
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// ⏳ 2026-09-10 — Feature 415 (T6): el DETALLE hereda `zona`, `costoEstimado` y `costoReal`.
+// -----------------------------------------------------------------------------------------------
+
+const ZONA_415 = { id: "018f2c31-0000-4000-8000-00000000za01", nombre: "GAM" };
+
+/** La tarifa vigente de nivel 1 (tienda + zona) del test. */
+const TARIFA_415 = {
+  id: "tarifa-415",
+  tiendaId: ACTOR.usuarioId,
+  zonaId: ZONA_415.id,
+  fulfillment: new Prisma.Decimal("696.00"),
+  valorFlete: new Prisma.Decimal("3000.00"),
+  valorFleteGam: new Prisma.Decimal("2500.00"),
+  valorFleteDevuelto: new Prisma.Decimal("1500.00"),
+  valorFleteDevueltoGam: new Prisma.Decimal("1200.00"),
+  comisionCod: new Prisma.Decimal("3.50"),
+  ivaFlete: new Prisma.Decimal("13.00"),
+  ivaComisionCod: new Prisma.Decimal("13.00"),
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
+};
+
+/** La fila congelada: MISMA tarifa, pero con el fulfillment VIEJO (el caso medido 692 -> 696). */
+const CONGELADO_415 = {
+  montoCobrar: new Prisma.Decimal("25900.00"),
+  cobraComision: true,
+  esCentral: true,
+  esZonaEspecial: false,
+  tarifaId: "tarifa-congelada-415",
+  tarifaValorFlete: new Prisma.Decimal("3000.00"),
+  tarifaValorFleteGam: new Prisma.Decimal("2500.00"),
+  tarifaValorFleteDevuelto: new Prisma.Decimal("1500.00"),
+  tarifaValorFleteDevueltoGam: new Prisma.Decimal("1200.00"),
+  tarifaComisionCod: new Prisma.Decimal("3.50"),
+  tarifaIvaFlete: new Prisma.Decimal("13.00"),
+  tarifaIvaComisionCod: new Prisma.Decimal("13.00"),
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
+  tarifaFulfillment: new Prisma.Decimal("692.00"),
+};
+
+/**
+ * Importes ESCRITOS A MANO (aritmetica anotada), con `montoCobrar` 25900.00 y comision activa:
+ *   flete = 2500.00 (GAM) · iva = 2500.00 x 13 % = 325.00
+ *   comision = 25900.00 x 3.50 % = 906.50 · ivaComision = 906.50 x 13 % = 117.845 -> 117.85
+ *   fulfillment: 696.00 el VIGENTE, 692.00 el CONGELADO.
+ */
+const COSTO_VIGENTE_415 = {
+  flete: "2500.00",
+  iva: "325.00",
+  comision: "906.50",
+  ivaComision: "117.85",
+  fulfillment: "696.00",
+};
+const COSTO_CONGELADO_415 = { ...COSTO_VIGENTE_415, fulfillment: "692.00" };
+
+/** La misma cadena real que `depsRealesDetalle`, mas el resolutor de tarifas de PRODUCCION. */
+function depsDetalleConTarifa(fila: Record<string, unknown> | null, tarifas: unknown[] = [TARIFA_415]) {
+  const prisma = {
+    orden: {
+      findFirst: vi.fn(async (arg: { where: Record<string, unknown> }) =>
+        fila !== null && fila.tiendaId === arg.where.tiendaId ? fila : null,
+      ),
+      findMany: vi.fn(async () => []),
+      count: vi.fn(async () => 0),
+    },
+    usuario: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
+    tarifa: { findMany: vi.fn(async () => tarifas) },
+  };
+  const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+  const svc = new ApiOrdenLecturaService(
+    repo,
+    signedUrlsNoOp,
+    new TarifaVigenteRepository(prisma as unknown as PrismaClient),
+  );
+  const d: ConsultaOrdenApiDeps = {
+    autenticar: vi.fn(async () => OK_AUTH),
+    resolucionService: new ApiOrdenResolucionService(repoCon([ORDEN_A])),
+    detallePorOrdenId: (actor: Actor, ordenId: string) => svc.detallePorOrdenId(actor, ordenId),
+  };
+  return { deps: d, prisma };
+}
+
+/** La orden con COD y comision, para que los cinco conceptos no sean todos cero. */
+function filaDetalle415(over: Record<string, unknown> = {}) {
+  return filaDetalle({
+    montoCobrar: new Prisma.Decimal("25900.00"),
+    cobraComision: true,
+    ...over,
+  });
+}
+
+describe("GET /api/ordenes/api-key/orden/{id} — zona y costo (feature 415)", () => {
+  it("415/R1+R2: el detalle trae `zona` con las dos claves y nunca `null`", async () => {
+    const { deps: d } = depsDetalleConTarifa(filaDetalle415());
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.zona).toEqual(ZONA_415);
+    expect(Object.keys(json.zona).sort()).toEqual(["id", "nombre"]);
+  });
+
+  it("415/R9+R29: el detalle trae los DOS costos, y el `fulfillment` del real es el CONGELADO", async () => {
+    const { deps: d } = depsDetalleConTarifa(filaDetalle415({ cierreDetalles: [CONGELADO_415] }));
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    const json = await res.json();
+    // Los dos, con literales A MANO. La UNICA diferencia es el fulfillment: 696 vigente contra
+    // 692 congelado, que es el caso medido en produccion (263 de 1.581 detalles).
+    expect(json.costoEstimado).toEqual(COSTO_VIGENTE_415);
+    expect(json.costoReal).toEqual(COSTO_CONGELADO_415);
+    expect(json.costoEstimado.fulfillment).not.toBe(json.costoReal.fulfillment);
+  });
+
+  it("415/R26: sin fila congelada, `costoReal` viaja como `null` explicito", async () => {
+    const { deps: d } = depsDetalleConTarifa(filaDetalle415());
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    const cuerpo = await res.text();
+    expect(cuerpo).toContain('"costoReal":null');
+    expect(JSON.parse(cuerpo).costoReal).toBeNull();
+  });
+
+  it("415/R34: el detalle conserva `evidencias[]` y `gestiones[]` junto a los tres campos nuevos", async () => {
+    const { deps: d } = depsDetalleConTarifa(filaDetalle415());
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    const json = await res.json();
+    expect(json.evidencias).toEqual([]);
+    expect(json.gestiones).toEqual([]);
+    expect(json.zona).toEqual(ZONA_415);
+    expect(json.costoEstimado).toEqual(COSTO_VIGENTE_415);
+  });
+
+  it("415/R32: una orden de OTRO owner sigue dando 404, y su zona y su costo no se filtran", async () => {
+    const { deps: d } = depsDetalleConTarifa(
+      filaDetalle415({
+        tiendaId: "store-AJENA",
+        zona: { id: "zona-AJENA", nombre: "ZONA AJENA", esCentral: false },
+        zonaId: "zona-AJENA",
+        cierreDetalles: [CONGELADO_415],
+      }),
+    );
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    expect(res.status).toBe(404);
+    const cuerpo = await res.text();
+    expect(cuerpo).not.toContain("ZONA AJENA");
+    expect(cuerpo).not.toContain("zona-AJENA");
+    expect(cuerpo).not.toContain("2500.00");
+    expect(cuerpo).not.toContain("692.00");
+  });
+
+  it("415/R5+R18+R35: el detalle no expone `zonaId`, `esCentral`, `tarifaId` ni `cierreId`", async () => {
+    const { deps: d } = depsDetalleConTarifa(filaDetalle415({ cierreDetalles: [CONGELADO_415] }));
+    const res = await handleConsultaOrdenApi(req(SECRETO), "100234", d);
+
+    const texto = JSON.stringify(await res.json());
+    for (const prohibida of [
+      "zonaId",
+      "esCentral",
+      "esZonaEspecial",
+      "costeo",
+      "tarifaId",
+      "tarifa-congelada-415",
+      "cierreId",
+      "cierreDetalles",
+      "tarifaFulfillment",
+    ]) {
+      expect(texto, `se filtro \`${prohibida}\``).not.toContain(prohibida);
+    }
+  });
+
+  it("415/R35: `zona.id` NO resuelve un `{id}` — el resolutor solo casa por guia o remision", async () => {
+    // Se pide el detalle usando el UUID de la ZONA como identificador. El resolutor de `{id}`
+    // (feature 177) compara contra `num_guia` y `num_remision` y nada mas, asi que no casa: 404.
+    const { deps: d } = depsDetalleConTarifa(filaDetalle415());
+    const res = await handleConsultaOrdenApi(req(SECRETO), ZONA_415.id, d);
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).not.toContain("GAM");
+  });
+
+  it("415/R36: los codigos de estado no cambian — 401, 403 y 422 conservan su criterio", async () => {
+    const { deps: d } = depsDetalleConTarifa(filaDetalle415());
+
+    const sinKey = await handleConsultaOrdenApi(req(SECRETO), "100234", {
+      ...d,
+      autenticar: vi.fn(async () => ({ status: "unauthenticated" }) as ApiKeyAuthResult),
+    });
+    expect(sinKey.status).toBe(401);
+
+    const prohibida = await handleConsultaOrdenApi(req(SECRETO), "100234", {
+      ...d,
+      autenticar: vi.fn(async () => ({ status: "forbidden" }) as ApiKeyAuthResult),
+    });
+    expect(prohibida.status).toBe(403);
+
+    const idVacio = await handleConsultaOrdenApi(req(SECRETO), "   ", d);
+    expect(idVacio.status).toBe(422);
   });
 });

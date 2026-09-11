@@ -57,6 +57,9 @@ function tablasDe(eventos: { query: string }[]): string[] {
 /**
  * ⏳ 2026-09-10 (R19/R19-b) — EL COSTE DEL DETALLE, CONGELADO.
  *
+ * ⚠️ AQUI DECIA «Nueve consultas» y hoy son DOCE: lo enmienda el bloque fechado de justo debajo
+ * (feature 415). Lo que sigue vigente de este parrafo es el HISTORIAL de como se llego a nueve.
+ *
  * Nueve consultas, en este orden, y cada una con su porqué. Las SEIS primeras son las que ya
  * emitía `dev` —medido el 2026-09-10 con este mismo espía sobre la misma orden: 6—; las TRES
  * marcadas con ⭑ las añade esta ficha, porque Prisma resuelve cada relación anidada con su propia
@@ -66,16 +69,32 @@ function tablasDe(eventos: { query: string }[]): string[] {
  * este `toEqual` se pone rojo y le enseña la consulta nueva por su nombre. Es justo lo que faltaba
  * cuando la revisión midió 6 → 9 con la suite entera en verde.
  */
+//
+// ⏳ 2026-09-10 (feature 415, T3/T7) — NUEVE PASAN A DOCE, Y ES DELIBERADO. La 415 anade TRES
+// relaciones al `select` del canal (`zona`, `distrito` y `cierreDetalles`) y Prisma resuelve cada
+// relacion anidada con su propia consulta. El numero se MIDIO con este mismo espia, no se estimo:
+// esta escrito en `progress/impl_415.md` junto a la linea base (9) que este archivo congelaba.
+//
+// ⚠️ Publicar `zona.id` NO anade ninguna consulta: es una columna mas del `select` de una relacion
+// que ya hacia falta para `esCentral`. Y `cierreDetalles` lleva `take: 1`, que Prisma aplica POR
+// FILA PADRE: sigue sin depender de en cuantos cierres aparezca cada orden.
+//
+// Lo que NO cambia, y es lo que de verdad importa: el numero es FIJO. Cero, tres o seis gestiones
+// cuestan las mismas doce, y el `it` de abajo lo sigue afirmando comparando la orden CON gestiones
+// contra la orden SIN ellas.
 const CONSULTAS_DEL_DETALLE = [
   "orden", //   1. el `findFirst` con el `where` del owner
   "order_status", //   2. `estatus` de la orden
   "usuario", //   3. `mensajeroAsignado` (feature 404)
-  "gestion_orden", //   4. la relacion `gestiones` (superconjunto)
-  "orden_historial_estado", // ⭑ 5. 405: el historial de la ORDEN (R6)
-  "orden_incidente", //   6. `incidentesAdmin` (feature 268)
-  "usuario", // ⭑ 7. 405: `gestiones.mensajero` (R9)
-  "order_status", // ⭑ 8. 405: `historialEstados.estatusDestino` (R6)
-  "orden_incidente_evidencia", //   9. la portada del incidente del admin (268)
+  "zona", // ⭑ 4. 415: la zona DE LA ORDEN (id, nombre, esCentral)
+  "distrito", // ⭑ 5. 415: `distrito.zonaEspecial`, la marca tri-valuada
+  "cierre_detail", // ⭑ 6. 415: la fila congelada del cierre aprobado (take: 1)
+  "gestion_orden", //   7. la relacion `gestiones` (superconjunto)
+  "orden_historial_estado", //   8. 405: el historial de la ORDEN (R6)
+  "orden_incidente", //   9. `incidentesAdmin` (feature 268)
+  "usuario", //  10. 405: `gestiones.mensajero` (R9)
+  "order_status", //  11. 405: `historialEstados.estatusDestino` (R6)
+  "orden_incidente_evidencia", //  12. la portada del incidente del admin (268)
 ];
 
 /** Sufijo unico por corrida: `num_remision` es UNICO entre las ordenes vivas de una tienda. */
@@ -566,13 +585,14 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
   //
   // El requisito se reescribió con el número MEDIDO y aquí se CONGELA. Las dos mitades se afirman
   // por separado, porque protegen cosas distintas.
-  it("R19/R19-b: el detalle emite EXACTAMENTE 9 consultas, y son estas nueve", async () => {
+  it("R19/R19-b (+415): el detalle emite EXACTAMENTE 12 consultas, y son estas doce", async () => {
     const m = await escenario();
 
     // ⭑ EL NUMERO, CON NOMBRE Y APELLIDOS. Un `toEqual` de la lista entera: si mañana alguien
     // añade una relación al `select`, este aserto dice CUÁL es la consulta nueva.
     expect(m.tablasConGestiones).toEqual(CONSULTAS_DEL_DETALLE);
-    expect(m.tablasConGestiones).toHaveLength(9);
+    // ⏳ 2026-09-10 (feature 415): NUEVE -> DOCE, medido con este mismo espia.
+    expect(m.tablasConGestiones).toHaveLength(12);
     // Y el espía está midiendo de verdad: una lista vacía significaría que el `log: query` no
     // llegó y que este caso lleva pasando en falso.
     expect(m.tablasConGestiones.length).toBeGreaterThan(0);
@@ -586,7 +606,7 @@ describeSiHayBase("ficha 405 — el detalle por API key publica las gestiones VI
     // La segunda mitad del requisito, y la que de verdad importa para el coste: si alguien
     // resolviera `estadoResultante` con una consulta por gestión, aquí habría tres de más.
     expect(m.tablasConGestiones).toHaveLength(m.tablasSinGestiones.length);
-    // Ojo con el matiz: una orden SIN gestiones emite las mismas 9. Prisma pide la relación
+    // Ojo con el matiz: una orden SIN gestiones emite las mismas 12. Prisma pide la relación
     // igualmente, y por eso el conteo no se mueve.
     expect(m.tablasSinGestiones).toEqual(CONSULTAS_DEL_DETALLE);
   });

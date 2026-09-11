@@ -11,6 +11,9 @@ import type { ApiOrdenListadoDTO } from "@/lib/types/api-orden";
 // el modo de fallo del «composition root que no inyecta».
 import { ApiOrdenLecturaService } from "@/lib/services/ApiOrdenLecturaService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+// ⏳ 2026-09-10 (feature 415, T6): el resolutor REAL de la tarifa vigente, para que los importes
+// que se afirman salgan de la cadena entera y no de un doble.
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import { FILA_PRISMA_415 } from "@/tests/fixtures/api-orden-costeo-415";
 
@@ -349,5 +352,222 @@ describe("GET /api/ordenes/api-key — `mensajero` de punta a punta (feature 404
     // 256/R22: el texto libre del mensajero no se emite por ninguna superficie.
     expect(cuerpo).not.toContain("gestion");
     expect(cuerpo).not.toMatch(/mensajeroId|mensajeroGestion/);
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// ⏳ 2026-09-10 — Feature 415 (T6): `zona`, `costoEstimado` y `costoReal` de PUNTA A PUNTA.
+//
+// Cadena REAL: route handler -> `ApiOrdenLecturaService` -> `OrdenRepository` ->
+// `TarifaVigenteRepository` -> Prisma falso. Lo unico de mentira es Prisma.
+// -----------------------------------------------------------------------------------------------
+
+const ZONA_415 = { id: "018f2c31-0000-4000-8000-00000000za01", nombre: "GAM" };
+const ZONA_415_B = { id: "018f2c31-0000-4000-8000-00000000za07", nombre: "FGAM Limon" };
+
+/** La fila de `tarifas` de nivel 1 (tienda + zona) para la zona GAM del test. */
+const TARIFA_415 = {
+  id: "tarifa-415",
+  tiendaId: "store-1",
+  zonaId: ZONA_415.id,
+  fulfillment: new Prisma.Decimal("696.00"),
+  valorFlete: new Prisma.Decimal("3000.00"),
+  valorFleteGam: new Prisma.Decimal("2500.00"),
+  valorFleteDevuelto: new Prisma.Decimal("1500.00"),
+  valorFleteDevueltoGam: new Prisma.Decimal("1200.00"),
+  comisionCod: new Prisma.Decimal("3.50"),
+  ivaFlete: new Prisma.Decimal("13.00"),
+  ivaComisionCod: new Prisma.Decimal("13.00"),
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
+};
+
+/**
+ * Importes ESCRITOS A MANO (aritmetica anotada), con `montoCobrar` 25900.00 y comision activa:
+ *   flete = 2500.00 (GAM) · iva = 2500.00 x 13 % = 325.00
+ *   comision = 25900.00 x 3.50 % = 906.50 · ivaComision = 906.50 x 13 % = 117.845 -> 117.85
+ *   fulfillment = 696.00
+ */
+const COSTO_415 = {
+  flete: "2500.00",
+  iva: "325.00",
+  comision: "906.50",
+  ivaComision: "117.85",
+  fulfillment: "696.00",
+};
+
+/** La orden con COD y comision, para que los cinco conceptos sean distintos de cero. */
+function filaOrden415(over: Record<string, unknown> = {}) {
+  return filaOrden({
+    montoCobrar: new Prisma.Decimal("25900.00"),
+    cobraComision: true,
+    ...over,
+  });
+}
+
+/** Prisma falso que ADEMAS responde a `tarifa.findMany`, para el resolutor REAL. */
+function prismaConTarifas(filas: ReturnType<typeof filaOrden>[], tarifas: unknown[] = [TARIFA_415]) {
+  const base = prismaConOrdenes(filas);
+  return { ...base, tarifa: { findMany: vi.fn(async () => tarifas) } };
+}
+
+/** La cadena real COMPLETA, con el `TarifaVigenteRepository` de produccion. */
+function depsRealesConTarifa(prisma: ReturnType<typeof prismaConTarifas>): ListadoApiDeps {
+  const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+  return {
+    autenticar: async () => ({ status: "ok", actor: ACTOR, apiKeyId: "k1" }) as ApiKeyAuthResult,
+    lecturaService: new ApiOrdenLecturaService(
+      repo,
+      signedUrlsNoOp,
+      new TarifaVigenteRepository(prisma as unknown as PrismaClient),
+    ),
+  };
+}
+
+describe("GET /api/ordenes/api-key — zona y costo de punta a punta (feature 415)", () => {
+  it("415/R1+R2: CADA item trae `zona` con las dos claves, y nunca `null`", async () => {
+    const prisma = prismaConTarifas([
+      filaOrden415({ numRemision: "REM-1" }),
+      filaOrden415({ numRemision: "REM-2", zona: { ...ZONA_415_B, esCentral: false }, zonaId: ZONA_415_B.id }),
+    ]);
+    const res = await handleListadoApi(req("?limit=50", SECRETO), depsRealesConTarifa(prisma));
+
+    const json = await res.json();
+    expect(json.items).toHaveLength(2);
+    expect(json.items[0].zona).toEqual(ZONA_415);
+    expect(json.items[1].zona).toEqual(ZONA_415_B);
+    for (const item of json.items) {
+      expect(item.zona).not.toBeNull();
+      expect(Object.keys(item.zona).sort()).toEqual(["id", "nombre"]);
+    }
+  });
+
+  it("415/R9+R19: cada item trae `costoEstimado` con los CINCO conceptos exactos", async () => {
+    const prisma = prismaConTarifas([filaOrden415()]);
+    const res = await handleListadoApi(req("?limit=50", SECRETO), depsRealesConTarifa(prisma));
+
+    const json = await res.json();
+    // Literales a mano (ver la aritmetica de `COSTO_415`), sobre la respuesta HTTP REAL.
+    expect(json.items[0].costoEstimado).toEqual(COSTO_415);
+    // Y sin fila congelada, `costoReal` viaja como `null` explicito, no omitido.
+    expect(json.items[0].costoReal).toBeNull();
+  });
+
+  it("415/R22: sin tarifa que resuelva, `costoEstimado` es `null` y NO cinco ceros", async () => {
+    // La tabla de tarifas no devuelve ninguna fila que case con el par.
+    const prisma = prismaConTarifas([filaOrden415()], []);
+    const res = await handleListadoApi(req("?limit=50", SECRETO), depsRealesConTarifa(prisma));
+
+    const cuerpo = await res.text();
+    expect(cuerpo).toContain('"costoEstimado":null');
+    expect(cuerpo).not.toContain('"flete":"0.00"');
+    expect(JSON.parse(cuerpo).items[0].costoEstimado).toBeNull();
+  });
+
+  it("415/R7+R18: `?zona=`, `?zona_id=`, `?costoEstimado=` y `?order_by=costo` se IGNORAN", async () => {
+    const sinParam = prismaConTarifas([filaOrden415()]);
+    const conParam = prismaConTarifas([filaOrden415()]);
+
+    const a = await handleListadoApi(
+      req("?limit=50&offset=0", SECRETO),
+      depsRealesConTarifa(sinParam),
+    );
+    const b = await handleListadoApi(
+      req(
+        `?limit=50&offset=0&zona=GAM&zona_id=${ZONA_415.id}&costoEstimado=2500.00&costo_real=1&order_by=costo`,
+        SECRETO,
+      ),
+      depsRealesConTarifa(conParam),
+    );
+
+    expect(b.status).toBe(200); // clave desconocida -> se ignora (106/R8), no es un 422
+    expect(await b.text()).toBe(await a.text()); // respuesta identica, byte a byte
+    const argA = sinParam.orden.findMany.mock.calls[0][0] as Record<string, unknown>;
+    const argB = conParam.orden.findMany.mock.calls[0][0] as Record<string, unknown>;
+    expect(argB).toEqual(argA);
+    expect(argB.orderBy).toEqual({ createdAt: "desc" }); // el orden entre paginas no se mueve
+    expect(JSON.stringify(argB.orderBy)).not.toMatch(/zona|costo|flete|tarifa/i);
+  });
+
+  it("415/R32: una orden de OTRO owner sigue sin aparecer, y su zona y su costo tampoco", async () => {
+    const prisma = prismaConTarifas([
+      filaOrden415({ numRemision: "REM-MIA" }),
+      filaOrden415({
+        tiendaId: "store-AJENA",
+        numRemision: "REM-AJENA",
+        zona: { id: "zona-AJENA", nombre: "ZONA AJENA", esCentral: false },
+        zonaId: "zona-AJENA",
+      }),
+    ]);
+    const res = await handleListadoApi(req("?limit=50", SECRETO), depsRealesConTarifa(prisma));
+
+    const cuerpo = await res.text();
+    expect(JSON.parse(cuerpo).items).toHaveLength(1);
+    expect(cuerpo).not.toContain("REM-AJENA");
+    expect(cuerpo).not.toContain("ZONA AJENA");
+    expect(cuerpo).not.toContain("zona-AJENA");
+    // Y el par que se pidio a `tarifas` lleva el owner del ACTOR, no el de la fila ajena.
+    const llamada = prisma.tarifa.findMany.mock.calls[0] as unknown as [{ where: unknown }];
+    const whereTarifas = JSON.stringify(llamada[0].where);
+    expect(whereTarifas).toContain("store-1");
+    expect(whereTarifas).not.toContain("store-AJENA");
+  });
+
+  it("415/R5+R18+R35: la respuesta no lleva `zonaId`, `esCentral`, `tarifaId` ni `cierreId`", async () => {
+    const prisma = prismaConTarifas([filaOrden415()]);
+    const res = await handleListadoApi(req("?limit=50", SECRETO), depsRealesConTarifa(prisma));
+
+    const cuerpo = await res.text();
+    // Ampliacion del aserto de exclusion que ya existia mas arriba, no uno paralelo: aqui entran
+    // por su nombre las cosas que la 415 LEE y no publica.
+    for (const fuga of [
+      "zonaId",
+      "esCentral",
+      "esZonaEspecial",
+      "costeo",
+      "tarifaId",
+      "tarifa-415",
+      "cierreId",
+      "cierreDetalles",
+    ]) {
+      expect(cuerpo, `se filtro \`${fuga}\``).not.toContain(fuga);
+    }
+  });
+
+  it("415/R24: la pagina entera resuelve tarifas en UNA sola consulta, sea cual sea su tamano", async () => {
+    const muchas = Array.from({ length: 20 }, (_, i) =>
+      filaOrden415({
+        numRemision: `REM-${i}`,
+        // Diez en GAM y diez en Limon: dos pares DISTINTOS, una sola consulta.
+        ...(i % 2 === 0 ? {} : { zona: { ...ZONA_415_B, esCentral: false }, zonaId: ZONA_415_B.id }),
+      }),
+    );
+    const prisma = prismaConTarifas(muchas);
+
+    const res = await handleListadoApi(req("?limit=50", SECRETO), depsRealesConTarifa(prisma));
+
+    expect(JSON.parse(await res.text()).items).toHaveLength(20);
+    expect(prisma.tarifa.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.orden.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("415/R36: los codigos de estado no cambian — 401 sin key y 422 con un `limit` invalido", async () => {
+    const prisma = prismaConTarifas([filaOrden415()]);
+    const deps = depsRealesConTarifa(prisma);
+
+    const sinKey = await handleListadoApi(req("?limit=50", SECRETO), {
+      ...deps,
+      autenticar: async () => ({ status: "unauthenticated" }) as ApiKeyAuthResult,
+    });
+    expect(sinKey.status).toBe(401);
+
+    const prohibida = await handleListadoApi(req("?limit=50", SECRETO), {
+      ...deps,
+      autenticar: async () => ({ status: "forbidden" }) as ApiKeyAuthResult,
+    });
+    expect(prohibida.status).toBe(403);
+
+    const limiteMalo = await handleListadoApi(req("?limit=0", SECRETO), deps);
+    expect(limiteMalo.status).toBe(422);
   });
 });

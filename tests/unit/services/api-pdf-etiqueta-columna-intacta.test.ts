@@ -185,11 +185,12 @@ function ordenHeredada(overrides: Fila = {}): Fila {
     zona: { id: "018f2c31-0000-4000-8000-00000000za01", nombre: "GAM", esCentral: true },
     zonaId: "018f2c31-0000-4000-8000-00000000za01",
     cobraComision: false,
-    distrito: null,
     cierreDetalles: [],
     provincia: { nombre: "Pichincha" },
     canton: { nombre: "Quito" },
-    distrito: { nombre: "Centro" },
+    // La etiqueta pide `distrito.nombre` y el `select` del canal pide `distrito.zonaEspecial`:
+    // la MISMA fila alimenta a los dos, asi que lleva las dos columnas.
+    distrito: { nombre: "Centro", zonaEspecial: false },
     ...overrides,
   };
 }
