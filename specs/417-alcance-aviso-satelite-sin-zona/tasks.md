@@ -154,13 +154,25 @@ Zona: **backend**. Complejidad: **baja**. Sin migración, sin UI, sin endpoint n
 
 ## T8 — Opcional, NO bloqueante
 
-- [ ] **T8.1 `[P]`** — **NO HECHA: no se pudo medir.** El MCP de Supabase no está en el conjunto de
-  herramientas de este agente y la `DATABASE_URL` de producción es *sensitive*, así que no hay vía de
-  solo-lectura desde aquí. Queda escrito en `progress/impl_417.md` §Desviaciones. No bloquea: la
-  guarda es la misma exista o no ese usuario (`design.md` §10). Medir en producción, **en solo
-  lectura**, cuántos `usuario` con rol
+- [x] **T8.1 `[P]`** Medir en producción, **en solo lectura**, cuántos `usuario` con rol
   `adminSatelite` tienen `zona_id IS NULL`, y decir el número en la bitácora.
-  **Hecho cuando:** el número está escrito, o está escrito que **no se pudo medir y por qué**.
+  **MEDIDO EN PRODUCCIÓN (2026-09-10), y lo midió el orquestador** —este agente no tiene el MCP de
+  Supabase en su conjunto de herramientas y la `DATABASE_URL` de prod es *sensitive*—:
+
+  > **Los 10 `adminSatelite` tienen zona asignada. Cero sin zona.** Los `usuario` que sí salen con
+  > `zona_id` nulo son `admin` (4), `maestro` (2) y las tiendas (5), y para ésos el ámbito **global**
+  > es el correcto (R6/R7): no son este caso.
+
+  **El número CONFIRMA el diseño, no lo debilita**, y por tres motivos que conviene dejar escritos:
+  1. **El caso no existe hoy**, así que la ficha es **puramente preventiva**, exactamente como se
+     registró. **Nadie verá un cambio de comportamiento al desplegar esto**: cero actores afectados.
+  2. **Pero nada lo impide.** `Actor.zonaId` es opcional en el modelo, así que basta dar de alta un
+     satélite y olvidar la zona. **No hace falta ningún cambio de código para que aparezca el
+     primero.**
+  3. Y por eso **el valor de la ficha no es el arreglo, es el rojo**: el día que ocurra, salta en un
+     test —M1 y M4, medidas con el predicado de la 146 intacto— en vez de en un número equivocado en
+     la pantalla de alguien.
+
   **No bloquea el despliegue** y no cambia ni una línea del diseño (`design.md` §10): la guarda es la
   misma exista o no ese usuario. Es información, no puerta.
 

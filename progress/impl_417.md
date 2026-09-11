@@ -354,12 +354,9 @@ negándose y lo diga.
 
 ## Desviaciones y límites
 
-- **T8.1 (opcional, no bloqueante): NO se pudo medir.** Habría que contar en producción los
-  `usuario` con rol `adminSatelite` y `zona_id IS NULL`. Esa medición se hace por el MCP de Supabase
-  y **ese MCP no está en el conjunto de herramientas de este agente** (solo tengo `codebase-memory`);
-  la `DATABASE_URL` de producción es *sensitive* y no se obtiene por CLI. **No cambia ni una línea
-  del diseño**: la guarda es la misma exista o no ese usuario (design §10). Queda para quien tenga
-  el MCP delante, como información, no como puerta.
+- **T8.1 (opcional, no bloqueante): MEDIDA — ver §T8.1 abajo.** Yo no pude hacerlo (el MCP de
+  Supabase no está en mi conjunto de herramientas y la `DATABASE_URL` de prod es *sensitive*); **la
+  midió el orquestador contra producción** y el número está escrito con su lectura.
 - **Nombre de la bitácora**: explicado arriba del todo.
 - **Índice del grafo**: usé `codebase-memory` para confirmar el consumidor único de `cifra`
   (`search_code` con `\.cifra\(` → solo `lib/services/NotificacionService.ts`). El índice está
@@ -370,6 +367,30 @@ negándose y lo diga.
   compartido venía **rancio** (typecheck rojo en `NotificacionRepository.ts` por enums de la 409 que
   faltaban); `pnpm exec prisma generate` sobre `db/schema.prisma` de esta rama lo dejó al día. **Ni
   `node_modules` ni `.env` entran en el commit** (`git check-ignore` lo confirma).
+
+---
+
+## T8.1 — el censo de producción (medido el 2026-09-10 por el orquestador, en solo lectura)
+
+> **Los 10 `adminSatelite` tienen zona asignada. Cero sin zona.** Los `usuario` con `zona_id` nulo
+> son `admin` (4), `maestro` (2) y las tiendas (5) — y para ésos el ámbito **global** es el correcto
+> (R6/R7), así que no son este caso.
+
+**El número confirma el diseño en vez de debilitarlo**, y es importante leerlo bien:
+
+1. **El caso no existe hoy.** La ficha es **puramente preventiva**, exactamente como se registró.
+   **Nadie verá un cambio de comportamiento al desplegar esto**: cero actores afectados, cero
+   errores nuevos en el log, cero avisos que cambien de aspecto.
+2. **Pero nada lo impide.** `Actor.zonaId` es opcional en el modelo (`IOrdenService.ts:21`), así que
+   basta dar de alta un satélite y olvidar la zona. **No hace falta ningún cambio de código para que
+   aparezca el primero** — es un alta de usuario.
+3. Y por eso **el valor de la ficha no es el arreglo, es el rojo.** El día que ocurra, salta en un
+   test —M1 y M4, medidas arriba con el predicado de la 146 intacto— en vez de en un número
+   equivocado en la pantalla de alguien. Ésa es toda la diferencia entre una protección heredada y
+   una afirmada.
+
+Sigue sin ser puerta: la guarda es la misma exista o no ese usuario (`design.md` §10). Es
+información.
 
 ---
 
