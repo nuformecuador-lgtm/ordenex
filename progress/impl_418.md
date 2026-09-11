@@ -481,10 +481,16 @@ producción es *sensitive*.
   `pnpm install --frozen-lockfile` + `pnpm exec prisma generate` **dentro del worktree** — lo que de
   paso evita que `prisma generate` se pise entre árboles. Copié el `.env` tras comprobar que apunta
   a `localhost`. **Ni `node_modules` ni `.env` entran en el commit.**
-- **Índice del grafo**: el MCP `codebase-memory` **no está en mi conjunto de herramientas** en esta
-  sesión, así que la búsqueda de código fue con `grep`/`Grep` y lectura del archivo real. Lo digo
-  explícitamente porque la regla 7 manda empezar por el grafo. Todo lo que se afirma arriba está
-  **confirmado en el archivo real**, que es lo que la regla exige de todos modos antes de concluir.
+- **Índice del grafo (regla 7), y esta vez falla POR DEFECTO, no por exceso.** El MCP
+  `codebase-memory` **sí está** en el conjunto de herramientas, y confirmó lo que importaba: el
+  **único** consumidor de `.cifra(` en producción es `lib/services/NotificacionService.ts:161`
+  (`search_code`, 1 sola coincidencia en todo el árbol). Pero **está rancio respecto de la 409**:
+  `search_graph(name_pattern=".*emitirDevolucionesRepresadas.*")` devuelve **0 nodos** para una
+  función que lleva en `dev` desde la 409, y ese mismo `search_code` devolvió `total_results: 0`
+  —es decir, encontró el texto pero **no supo atribuirlo a ninguna función del grafo**—. Además el
+  índice apunta al **checkout principal**, no a este worktree, así que no ve nada de esta rama. Por
+  eso el pre-vuelo (T0) se hizo **leyendo los archivos reales** con `sed -n`/`cat -n`, que es lo que
+  la regla exige de todos modos antes de concluir que algo existe — o, aquí, que no existe.
 - **Lo que esta ficha NO entrega, dicho con nombre**: no vigila que el predicado de la 146 siga
   existiendo, ni que el emisor siga emitiendo a quien emite, ni cierra la familia entera de listas
   negras del repo (`design.md` §10). Lo que entrega es que, **si eso cambia**, este seam siga
