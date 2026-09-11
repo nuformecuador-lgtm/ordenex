@@ -4910,11 +4910,11 @@
       "title": "al mensajero le avisan cuando le rechazan un cierre, aunque no lo bloqueen",
       "description": "Un cierre rechazado que no llega a bloquear al mensajero no produce ningun aviso: se entera si entra a mirar.",
       "zone": "backend",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "baja",
       "spec_path": "specs/412-aviso-cierre-rechazado/",
-      "branch": null,
+      "branch": "feat/412-aviso-cierre-rechazado",
       "depends_on": 410,
       "status_note": "DESTAPADA AL ESPECIFICAR LA 410 el 2026-09-10, y es un hueco REAL, no una mejora: el lienzo de notificaciones aprobado por el humano promete al mensajero el aviso «tu cierre fue rechazado», y NO EXISTE. Medido en `NotificacionEvento`: solo hay `mensajero_bloqueado_por_cierres`, que se emite cuando el rechazo ademas BLOQUEA. Un rechazo que no bloquea no produce hoy ningun aviso, ni siquiera en la campana. || POR QUE IMPORTA: el cierre es el dinero del mensajero. Si se lo rechazan y nadie se lo dice, lo descubre cuando entra a mirar, y mientras tanto no corrige nada. || ALCANCE: un evento nuevo emitido donde ya se resuelve el rechazo del cierre; el canal (campana y push) ya lo cubren las fichas 409 y 410. R2 de la 410 impide que el enum compile sin decidir su elegibilidad para push, asi que esta ficha entra sola en ese carril. || El aviso lleva atajo a `/cierre-dia`, que es donde el mensajero lo corrige."
     },
@@ -4998,6 +4998,42 @@
       "depends_on": null,
       "status_note": "DESTAPADA POR EL REVIEWER DE LA 417 el 2026-09-10, y es la CONTINUACION natural de esa ficha, no un defecto suyo: quedaba fuera de su R6 por alcance. || QUE ES: en `VigenciaAvisoAgregadoService`, la rama de `devoluciones_represadas` decide por LISTA NEGRA (`rol !== 'adminSatelite'` => ambito global) mientras la de `novedades_sin_gestionar` quedo con LISTA BLANCA tras la 417. Consecuencia: `mensajero`, `adminTienda` y `apiKey` recibirian el TOTAL del sistema si llegaran a esa rama. || INALCANZABLE HOY -verificado en la emision por el reviewer-, pero lo impide exactamente LA MISMA HERENCIA que la 417 existe para dejar de confiar: una lista negra da por bueno todo lo que no enumera, asi que un rol nuevo entra al ambito global sin que nada se ponga rojo. || EL ARREGLO ES SIMETRIA: la misma regla que la 417 aplico a su rama -si el ambito del actor no existe, se falla; no se inventa uno- pero por inclusion. || El entregable, igual que en la 417, es EL ROJO: quitar la guarda debe poner algo en rojo por si mismo. || CERRADA 2026-09-11, PR #782 mergeado a dev (merge 9e1d465a). Reviewer OK a la primera, 0 bloqueantes. || Las DOS mitades del rojo, reaplicadas por el reviewer: M1 quitar la guarda da 10 rojos con `NotificacionRepository.ts` en diff VACIO comprobado EN LA MISMA CORRIDA; y M1b, los 4 archivos restaurados al dev de partida CON el defecto delante, sale 46/46 VERDE. Sin M1b el rojo de M1 no probaria nada. || 7 mutaciones, 0 supervivientes, mas una OCTAVA del propio reviewer (M7) que el spec no pedia: tocar solo `AMBITO_REPRESADAS_POR_ROL` da 6 rojos, asi que la cadena test<->catalogo<->produccion esta cerrada en LOS DOS sentidos. || Cero casos derogados (los dos archivos de test con 0 borrados, verificado aparte por el leader). El `toBeNull()` que queda ES contrato: `contarRepresadas:170` hace `zonaId === null ? filas.length`, o sea null ES el ambito global. || Preventiva y medida: 0 de 10 adminSatelite sin zona en produccion. Nadie vera un cambio al desplegar. || MENOR VIVO: falta su entrada en progress/history.md (la 417 tampoco la tiene). Deuda de cierre, no del implementador.",
       "merged_pr": 782
+    },
+    {
+      "id": 419,
+      "title": "la bodega central cierra la devolucion con su comprobante, sin depender de que la tienda escanee",
+      "description": "El paso final de una devolucion solo lo puede dar la tienda, y ninguna lo ha dado nunca.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "MEDIDO CONTRA PRODUCCION el 2026-09-11, no supuesto: `devuelta_a_tienda` tiene CERO transiciones EN TODA LA HISTORIA, y hay 305 ordenes paradas en el recorrido (devolviendo_a_tienda 247, rechazada 31, por_devolver 27). || NO FALTA CODIGO: el catalogo declara UNA sola transicion hacia el estado final -`devolviendo_a_tienda` a `devuelta_a_tienda`, via `ajuste_estado`, rol adminTienda (order-status-transiciones.ts:401, transicion #28)- y la pantalla existe (`EscanerRecepcionOrigen.tsx`, un escaner dentro del listado de ordenes). El problema es que depende de que LA TIENDA escanee, y ninguna lo hace. || DECISION DEL HUMANO (2026-09-11), y es el alcance de esta ficha: que el paso lo pueda dar LA BODEGA CENTRAL. Sube un comprobante de que la tienda recibio los paquetes, selecciona las ordenes que correspondan, y con UN boton las pasa de estado en lote. || LO QUE EL SPEC TIENE QUE RESOLVER, no dar por hecho: (a) si el comprobante es obligatorio y donde vive, si reusa el bucket privado de evidencias o necesita uno propio; (b) la transicion nueva hay que declararla en el catalogo con su rol, porque HOY solo la admite adminTienda; (c) si la via del escaner de la tienda SE CONSERVA -no se borra: es la correcta cuando la tienda si participa- o se sustituye; (d) el lote: que pasa si una de las seleccionadas no esta en `devolviendo_a_tienda`, porque una asignacion por lote que aborta entera ya fue un problema en este repo. || EFECTO COLATERAL MEDIDO: esas 305 cuentan como VIVAS en la cohorte de carga de la 411 y hunden la efectividad historica de cada dia. Al desatascarlas, los porcentajes suben solos."
+    },
+    {
+      "id": 420,
+      "title": "el gate dice dependencias presentes cuando falta una dependencia declarada",
+      "description": "Comprueba si existe la carpeta node_modules, no si estan las dependencias del package.json.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "baja",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "MEDIDO el 2026-09-11 durante el gate de release, no supuesto. `init.sh:38-43` comprueba si existe el DIRECTORIO node_modules y, si existe, imprime el visto bueno de «dependencias presentes» sin mirar el `package.json`. || EL CASO REAL: tras mergear la 410 -que anade `web-push` y `@types/web-push`- el gate completo sobre `dev` dio dependencias presentes en verde, y DOS PASOS DESPUES: `lib/push/web-push-sender.ts(11,21): error TS2307: Cannot find module 'web-push'`, con INIT_EXIT=1. Parece un error de codigo y era un `pnpm install` que faltaba. Se resolvio en 1,3 segundos. || POR QUE IMPORTA: es la familia de fallo que este repo persigue -el sistema no falla, APARENTA- y enga~na en la direccion peor, diciendo que algo esta bien justo en el paso que existe para avisarte de lo contrario. || EL ARREGLO ES UNA LINEA: `pnpm install --frozen-lockfile` es idempotente y tarda 1,3 s cuando no hay nada que hacer, asi que puede correr SIEMPRE en vez de solo cuando falta el directorio. || EL ENTREGABLE ES EL ROJO: quitar una dependencia del arbol y comprobar que lo dice EL PASO DE DEPENDENCIAS, no el typecheck dos pasos mas tarde."
+    },
+    {
+      "id": 421,
+      "title": "un test de migracion consulta el enum sin fijar el esquema y enrojece por culpa de otro archivo",
+      "description": "Filtra por typname sin namespace; con el harness aislando en esquemas temporales, suma dos tipos.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "baja",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "PUSO EL GATE DE RELEASE EN ROJO el 2026-09-11, y esta diagnosticado, no supuesto. || SINTOMA: `notificacion-evento-avisos-agregados-migration.test.ts:416` esperaba 11 valores del enum y recibio 23, cada etiqueta DUPLICADA. Un enum de Postgres no puede tener etiquetas repetidas: la consulta estaba viendo DOS tipos. || CAUSA: la consulta (linea 399) filtra por `t.typname = 'notificacion_evento'` y NO fija el namespace, mientras el harness (`tests/integration/db/_postgres-real.ts:61`) aisla cada archivo creando un ESQUEMA TEMPORAL y soltandolo al terminar. Con MAX_WORKERS = max(2, availableParallelism por 2/3) en vitest.config.ts:38 y DOCE archivos de integration/db tocando ese enum, dos coinciden y el `string_agg` suma los dos tipos. || LA PRUEBA DE QUE ES UN OLVIDO Y NO UNA DECISION: la consulta de al lado, en el MISMO bloque (linea 396), SI acota `schemaname = 'public'` para los indices. || MEDIDO: aislado 20/20 verde; en el gate completo 1 failed de 1927; segunda corrida completa entera en verde. NO se metio en `baseline-rojos.json`: eso habria sido comprar el verde. Diagnostico completo en `progress/flake_enum_esquema_2026-09-11.md`. || ARREGLO: anadir el filtro de esquema. Y REVISAR SI EL MISMO OLVIDO ESTA EN LOS OTROS ONCE archivos que consultan ese enum: si esta, es la misma ficha, no once fichas."
     }
   ]
 }
