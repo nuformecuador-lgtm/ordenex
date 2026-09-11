@@ -4986,10 +4986,11 @@
       "title": "el aviso de represadas confia en una lista negra donde la ficha hermana ya usa lista blanca",
       "description": "Tres roles seguirian recibiendo la cifra global de un aviso porque su rama decide por exclusion, no por inclusion.",
       "zone": "backend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "baja",
-      "branch": null,
+      "spec_path": "specs/418-alcance-represadas-lista-blanca/",
+      "branch": "feat/418-alcance-represadas-lista-blanca",
       "depends_on": null,
       "status_note": "DESTAPADA POR EL REVIEWER DE LA 417 el 2026-09-10, y es la CONTINUACION natural de esa ficha, no un defecto suyo: quedaba fuera de su R6 por alcance. || QUE ES: en `VigenciaAvisoAgregadoService`, la rama de `devoluciones_represadas` decide por LISTA NEGRA (`rol !== 'adminSatelite'` => ambito global) mientras la de `novedades_sin_gestionar` quedo con LISTA BLANCA tras la 417. Consecuencia: `mensajero`, `adminTienda` y `apiKey` recibirian el TOTAL del sistema si llegaran a esa rama. || INALCANZABLE HOY -verificado en la emision por el reviewer-, pero lo impide exactamente LA MISMA HERENCIA que la 417 existe para dejar de confiar: una lista negra da por bueno todo lo que no enumera, asi que un rol nuevo entra al ambito global sin que nada se ponga rojo. || EL ARREGLO ES SIMETRIA: la misma regla que la 417 aplico a su rama -si el ambito del actor no existe, se falla; no se inventa uno- pero por inclusion. || El entregable, igual que en la 417, es EL ROJO: quitar la guarda debe poner algo en rojo por si mismo."
     }
