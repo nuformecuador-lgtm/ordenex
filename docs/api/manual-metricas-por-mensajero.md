@@ -2,8 +2,9 @@
 
 > Para integradores del canal por API key. Publicado el **2026-09-10**.
 >
-> Cubre los tres campos que se añadieron ese día: `mensajero` (webhook, listado y detalle),
-> `gestiones[]` (detalle) y el arreglo del `evidenciasUrl` del webhook.
+> Cubre los campos que se añadieron ese día: `mensajero` (webhook, listado y detalle),
+> `gestiones[]` (detalle), el arreglo del `evidenciasUrl` del webhook y —desde la actualización de
+> esa misma fecha— **`zona`, `costoEstimado` y `costoReal`** en el listado y en el detalle.
 >
 > Este documento explica **cómo usarlos**. El detalle exacto de cada cambio está en
 > [`CHANGELOG.md`](./CHANGELOG.md), y el contrato vigente en
@@ -20,8 +21,12 @@ de las respuestas que ya recibís hoy:
 | Dónde | Qué gana |
 |---|---|
 | Webhook `orden.estado_actualizado` | `data.mensajero` |
-| `GET /api/ordenes/api-key` (listado) | `mensajero` en cada ítem |
-| `GET /api/ordenes/api-key/orden/{id}` (detalle) | `mensajero` **y** `gestiones[]` |
+| `GET /api/ordenes/api-key` (listado) | `mensajero`, **`zona`, `costoEstimado` y `costoReal`** en cada ítem |
+| `GET /api/ordenes/api-key/orden/{id}` (detalle) | lo mismo del ítem **más** `gestiones[]` |
+
+⚠️ **El webhook NO gana ni la zona ni el costo.** Su cuerpo va firmado y el orden de sus claves es
+parte de esa firma; meter dinero ahí es otra decisión, con su propio aviso. Si necesitás la zona o
+el costo de una orden que te llegó por webhook, pedila por el detalle con su `numGuia`.
 
 Todo es **aditivo**: ningún campo se retira ni se renombra, ningún path cambia, ningún código de
 estado cambia.
@@ -58,17 +63,27 @@ ese momento, así que no necesitás consultar nada después.
 
 Acumulá por `data.mensajero.id` y por `data.estado`.
 
-> **Corrección del 2026-09-10.** Una versión anterior de este documento decía que la zona se podía
-> cruzar con el listado. **Es falso: hoy no publicamos la zona por ningún endpoint.** El ítem del
-> listado lleva exactamente `numGuia`, `numRemision`, `estado`, `destinatario`, `telefonoDest`,
-> `producto`, `direccion`, `montoCobrar`, `createdAt` y `mensajero`, y nada más. La medición por
-> mensajero funciona; **la medición por zona no se puede hacer con lo que publicamos hoy**.
+> **Corrección del 2026-09-10, y su desenlace.** Una versión anterior de este documento decía que
+> la zona se podía cruzar con el listado. **Cuando se escribió, era falso**: el ítem no publicaba
+> ninguna zona, y así se corrigió aquí mismo ese día.
+>
+> **Desde la actualización del 2026-09-10 esa instrucción original ES CIERTA**: el ítem del listado
+> y el detalle publican `zona`, así que la medición por zona ya se puede hacer, y se hace cruzando
+> por `zona.id`. Se deja escrito el recorrido entero —y no solo el resultado— porque quien leyó la
+> corrección tiene que poder saber que ya no aplica.
+>
+> El ítem lleva hoy trece claves: `numGuia`, `numRemision`, `estado`, `destinatario`,
+> `telefonoDest`, `producto`, `direccion`, `montoCobrar`, `createdAt`, `mensajero`, `zona`,
+> `costoEstimado` y `costoReal`.
 
 **Tres reglas que evitan una serie histórica rota:**
 
-1. **Agrupá por `id`, nunca por `nombre`.** El `id` es un UUID en texto —no un entero— estable y
-   que no se reasigna jamás a otra persona. El nombre es un texto para mostrar y puede corregirse:
-   agrupar por él te partiría la serie en dos el día que alguien arregle una tilde.
+1. **Agrupá por `id`, nunca por `nombre` — y esto vale para las DOS entidades con nombre del
+   payload, `mensajero` y `zona`.** El `id` es un UUID en texto —no un entero— estable, y no se
+   reasigna jamás a otra persona ni a otra zona. El nombre es un texto para mostrar y puede
+   corregirse: agrupar por él te partiría la serie en dos el día que alguien arregle una tilde, o
+   el día que «FGAM El Coco» pase a llamarse «FGAM Coco». Una sola regla para los dos campos, a
+   propósito: tienen la misma forma `{ id, nombre }` para que no tengas que recordar cuál es cuál.
 2. **`mensajero: null` significa «todavía nadie la lleva»**, no «no se sabe». La clave **viaja
    siempre**: ramificá por su valor, no por si la clave existe.
 3. **Es quién la LLEVA, no quién la entregó.** Hay flujos que limpian la asignación (generar guía,
@@ -192,7 +207,93 @@ omite**, para no mandarte un enlace que sabemos que va a fallar.
 
 ---
 
+## Caso 3 — Margen por paquete y por zona
+
+Es lo que pediste: **restar de lo que cobrás el costo del envío**, y poder agruparlo por zona. Los
+dos datos viajan ahora en el mismo ítem del listado, así que no hace falta ninguna llamada extra.
+
+Un ítem completo, con los trece campos:
+
+```json
+{
+  "numGuia": 100234,
+  "numRemision": "REM-0001",
+  "estado": "en_reparto",
+  "destinatario": "Ana Solís",
+  "telefonoDest": "0991234567",
+  "producto": "Caja",
+  "direccion": "Calle 1",
+  "montoCobrar": 25900,
+  "createdAt": "2026-09-07T15:04:00.000Z",
+  "mensajero": { "id": "018f2c31-0000-4000-8000-0000000000aa", "nombre": "Carlos Jiménez Mora" },
+  "zona": { "id": "018f2c31-0000-4000-8000-00000000za01", "nombre": "GAM" },
+  "costoEstimado": { "flete": "2500.00", "iva": "325.00", "comision": "906.50",
+                     "ivaComision": "117.85", "fulfillment": "696.00" },
+  "costoReal": { "flete": "2500.00", "iva": "325.00", "comision": "906.50",
+                 "ivaComision": "117.85", "fulfillment": "692.00" }
+}
+```
+
+**El margen se calcula así:** sumás los cinco conceptos del costo y los restás de `montoCobrar`.
+**No publicamos un campo con esa suma**, y no es un olvido: el único `total` que este canal publica
+—el de la cotización— significa lo contrario («lo que recibís vos»), y dos `total` de signo
+opuesto es exactamente el error que preferimos no darte.
+
+### Por qué son DOS campos y no uno
+
+| | de dónde sale | ¿se mueve? |
+|---|---|---|
+| `costoEstimado` | la tarifa **vigente hoy** para tu tienda en la zona de la orden | **sí**, mientras `costoReal` sea `null` |
+| `costoReal` | la tarifa **congelada** cuando la orden entró en un cierre aprobado | no (salvo un segundo cierre aprobado) |
+
+No guardamos histórico de tarifas: cuando una cambia, se edita en sitio. Si publicáramos solo el
+estimado, **cada ajuste de tarifa te reescribiría hacia atrás la rentabilidad histórica sin que
+pudieras enterarte**. Ya pasó, y está medido: el `fulfillment` cambió de 692,00 a 696,00 en 1 de
+cada 6 órdenes cerradas. Son 4 colones, pero prueban que la tarifa se mueve.
+
+**La regla práctica:** mientras `costoReal` sea `null`, usá `costoEstimado` y tratalo como una
+estimación —no lo archives como definitivo—. Cuando llega `costoReal`, ése es el número que se
+congeló al cerrar y ya no cambia: archivá ese.
+
+### Cuándo es `null` cada uno, y qué significa
+
+- **`costoEstimado: null`** → no hay ninguna tarifa configurada para tu tienda en esa zona.
+  **No significa que el envío sea gratis.** Deliberadamente no te mandamos cinco ceros: un `0.00`
+  ahí sería una cifra falsa servida como precio. Si te aparece, escribinos: es un hueco de
+  configuración, no un dato del envío.
+- **`costoReal: null`** → esa orden todavía no ha entrado en ningún cierre aprobado. Es lo normal
+  en una orden reciente.
+- **`costoReal` con los cinco conceptos en `"0.00"`** → esto **sí** es un cero de verdad: esa orden
+  se cerró cuando tu tienda no tenía tarifa, y por esos conceptos se liquidó cero. Es distinto de
+  `null`, y por eso se dice distinto.
+
+### ⚠️ Los dos son el escenario de ENTREGA
+
+`costoReal` es **lo que se congeló al cerrar**, no «la línea que entró en tu wallet». Los dos
+campos responden a la misma pregunta —«¿cuánto cuesta este paquete si se entrega?»— y difieren solo
+en qué tarifa los alimenta.
+
+Si la orden terminó **rechazada**, lo que se te factura es el **flete de devolución y su IVA**, que
+son conceptos distintos y que **no** son estos importes. Ese escenario lo sirve la cotización
+(`POST /api/ordenes/api-key/cotizacion`), en su bloque `devuelto`.
+
+### Lo que no se puede hacer
+
+**No podés filtrar ni ordenar el listado por zona ni por costo.** No hay parámetro de query para
+eso: un `?zona=GAM`, un `?zona_id=...` o un `?order_by=costo` se ignoran como cualquier clave
+desconocida, y la respuesta sale idéntica a la que saldría sin ellos. Agrupá del lado tuyo, por
+`zona.id`.
+
+`zona.id` tampoco sirve como identificador de orden: el `{id}` del detalle solo casa por `numGuia`
+o por `numRemision`.
+
+---
+
 ## Qué NO se publica de un mensajero
 
 Solo su `id` y su `nombre`. Ningún otro dato personal —teléfono, correo, cédula, foto, zona,
 vehículo— sale por este canal.
+
+⚠️ **La palabra «zona» de esa lista es la zona DEL MENSAJERO**: en qué zona trabaja esa persona.
+Es un dato suyo y sigue sin publicarse. **No la confundas con el campo `zona` del ítem**, que es
+otra cosa: el **destino del paquete**, y ése sí se publica.

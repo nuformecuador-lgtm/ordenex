@@ -14,7 +14,17 @@ import type {
   ApiOrdenDetalleRow,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
+// ⏳ 2026-09-10 (feature 415): los dos campos que `ApiOrdenRow` gano. `zona` se publica;
+// `costeo` NO. El defecto no resuelve tarifa, asi que `costoEstimado` sale `null`.
+import { costeoFixture, FILA_PRISMA_415, ZONA_FIXTURE } from "@/tests/fixtures/api-orden-costeo-415";
 import { gestionConfig } from "@/lib/config/gestion";
+
+
+/**
+ * ⏳ 2026-09-10 (feature 415): el resolutor de tarifa VIGENTE que el service pide por
+ * constructor. Aqui no resuelve ninguna: estos casos no miden importes.
+ */
+const fakeTarifas = () => ({ resolveTarifas: vi.fn().mockResolvedValue(new Map()) });
 
 const ACTOR: Actor = { usuarioId: "store-1", rol: "apiKey" };
 const ORDEN_ID = "3f6a1c2e-0000-4000-8000-000000000001";
@@ -32,6 +42,9 @@ function row(overrides: Partial<ApiOrdenRow> = {}): ApiOrdenRow {
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
     // ⏳ 2026-09-09 (feature 404): campo REQUERIDO de `ApiOrdenRow`. Por defecto, sin asignado.
     mensajero: null,
+    // ⏳ 2026-09-10 (feature 415): campos REQUERIDOS de `ApiOrdenRow`.
+    zona: ZONA_FIXTURE,
+    costeo: costeoFixture(),
     ...overrides,
   };
 }
@@ -73,7 +86,7 @@ describe("ApiOrdenLecturaService.detallePorOrdenId (feature 177)", () => {
     });
     const repo = fakeRepo(filaConEvidencia);
     const provider = fakeSignedUrls({ "ordenes/o1/e.jpg": "https://signed/e.jpg" });
-    const svc = new ApiOrdenLecturaService(repo as never, provider);
+    const svc = new ApiOrdenLecturaService(repo as never, provider, fakeTarifas() as never);
 
     const res = await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
 
@@ -110,7 +123,7 @@ describe("ApiOrdenLecturaService.detallePorOrdenId (feature 177)", () => {
   it("R16: orden propia sin evidencias -> [] y NO se invoca el provider", async () => {
     const repo = fakeRepo(detalleRow());
     const provider = fakeSignedUrls();
-    const svc = new ApiOrdenLecturaService(repo as never, provider);
+    const svc = new ApiOrdenLecturaService(repo as never, provider, fakeTarifas() as never);
 
     const res = await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
 
@@ -121,7 +134,7 @@ describe("ApiOrdenLecturaService.detallePorOrdenId (feature 177)", () => {
   it("R11/R12: orden ajena o borrada (repo null) -> null y no se firma nada", async () => {
     const repo = fakeRepo(null);
     const provider = fakeSignedUrls();
-    const svc = new ApiOrdenLecturaService(repo as never, provider);
+    const svc = new ApiOrdenLecturaService(repo as never, provider, fakeTarifas() as never);
 
     const res = await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
 
@@ -131,7 +144,7 @@ describe("ApiOrdenLecturaService.detallePorOrdenId (feature 177)", () => {
 
   it("R4/R7: el ownerId que llega al repo es actor.usuarioId (y el ordenId va como ordenId)", async () => {
     const repo = fakeRepo(detalleRow());
-    const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls());
+    const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls(), fakeTarifas() as never);
 
     await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
 
@@ -146,7 +159,7 @@ describe("ApiOrdenLecturaService.detallePorOrdenId (feature 177)", () => {
 describe("ApiOrdenLecturaService.detallePorOrdenId — `mensajero` (feature 404)", () => {
   it("404/R18+R19: el detalle lleva `mensajero` y conserva `evidencias`, incluido el `[]`", async () => {
     const repo = fakeRepo(detalleRow({ mensajero: MENSAJERO }));
-    const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls());
+    const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls(), fakeTarifas() as never);
 
     const res = await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
 
@@ -161,6 +174,12 @@ describe("ApiOrdenLecturaService.detallePorOrdenId — `mensajero` (feature 404)
     // array nuevo del detalle. El literal se ENMIENDA (sigue siendo una igualdad exacta y sigue
     // cazando una clave de mas), no se relaja a `toContain`: ES el contrato publicado.
     expect(Object.keys(res!).sort()).toEqual([
+      // ⏳ 2026-09-10 (feature 415, R34) — DOCE claves pasan a QUINCE: `zona`, `costoEstimado` y
+      // `costoReal` son los tres campos ADITIVOS de la 415, que el detalle HEREDA del item por el
+      // `...toListItemDTO(row)`. El literal se ENMIENDA y sigue siendo una igualdad exacta: una
+      // clave de mas la pone roja igual que antes. Las doce anteriores conservan su nombre.
+      "costoEstimado",
+      "costoReal",
       "createdAt",
       "destinatario",
       "direccion",
@@ -173,12 +192,13 @@ describe("ApiOrdenLecturaService.detallePorOrdenId — `mensajero` (feature 404)
       "numRemision",
       "producto",
       "telefonoDest",
+      "zona",
     ]);
   });
 
   it("404/R1+R6: el `mensajero` del detalle tiene exactamente dos claves", async () => {
     const repo = fakeRepo(detalleRow({ mensajero: MENSAJERO }));
-    const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls());
+    const svc = new ApiOrdenLecturaService(repo as never, fakeSignedUrls(), fakeTarifas() as never);
 
     const res = await svc.detallePorOrdenId(ACTOR, ORDEN_ID);
 
@@ -245,6 +265,8 @@ function prismaDetalleRow(overrides: Record<string, unknown> = {}) {
     montoCobrar: new Prisma.Decimal(1500),
     createdAt: new Date("2026-07-20T15:04:00.000Z"),
     estatus: { value: "incidente" },
+    // ⏳ 2026-09-10 (feature 415): lo que el `select` del canal anade a la fila cruda.
+    ...FILA_PRISMA_415,
     gestiones: [],
     // ⏳ 2026-09-10 (feature 405): la relacion que el `select` del detalle pide ahora para resolver
     // `estadoResultante`. Sin gestiones que emparejar, esta vacia.
@@ -267,7 +289,7 @@ function servicioSobrePrisma(detalle: Record<string, unknown>, urls: Record<stri
   };
   const provider = fakeSignedUrls(urls);
   const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-  return { svc: new ApiOrdenLecturaService(repo, provider), provider };
+  return { svc: new ApiOrdenLecturaService(repo, provider, fakeTarifas() as never), provider };
 }
 
 describe("ApiOrdenLecturaService.detallePorOrdenId — evidencias de incidente (feature 268, R27)", () => {

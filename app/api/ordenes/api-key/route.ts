@@ -17,6 +17,8 @@ import type { ApiKeyAuthResult } from "@/lib/interfaces/services/IApiKeyAuthServ
 import type { IApiOrdenLecturaService } from "@/lib/interfaces/services/IApiOrdenLecturaService";
 import { ApiOrdenLecturaService } from "@/lib/services/ApiOrdenLecturaService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+// ⏳ 2026-09-10 (feature 415, T5): la tarifa VIGENTE que alimenta `costoEstimado`.
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { gestionConfig } from "@/lib/config/gestion";
@@ -33,7 +35,14 @@ function buildLecturaService(): IApiOrdenLecturaService {
   const prisma = getPrismaClient();
   // El provider firma contra el bucket PRIVADO de evidencias (feature 36), con TTL de 5 min.
   const signedUrls = new SupabaseSignedUrlProvider(undefined, gestionConfig.EVIDENCIA_BUCKET);
-  return new ApiOrdenLecturaService(new OrdenRepository(prisma), signedUrls);
+  // ⏳ 2026-09-10 (feature 415, T5): el resolutor de la tarifa VIGENTE se construye y se **PASA**.
+  // Importarlo no basta y no es teorico: este repo ya midio un composition root que importaba una
+  // dependencia sin inyectarla y dejaba el camino muerto con la suite en verde.
+  return new ApiOrdenLecturaService(
+    new OrdenRepository(prisma),
+    signedUrls,
+    new TarifaVigenteRepository(prisma),
+  );
 }
 
 // R9: paginacion offset/limit validada en el borde. `limit` 1..100 (tope 100, default 50);

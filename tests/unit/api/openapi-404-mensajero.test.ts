@@ -81,6 +81,11 @@ describe("404/R9+R24 — `required` y la unica clave opcional", () => {
   });
 
   it("`mensajero` esta en `required` de `OrdenListItem`, junto a los nueve de siempre", () => {
+    // ⏳ 2026-09-10 (feature 415, R37) — ENMENDADO con su motivo, no relajado. La 415 anade TRES
+    // campos ADITIVOS al item (`zona`, `costoEstimado`, `costoReal`) y los TRES entran en
+    // `required`, porque las tres claves viajan SIEMPRE. Lo que este caso mide sigue siendo lo
+    // mismo —que `mensajero` esta en `required` y que NINGUNA propiedad del item es opcional— y
+    // sigue siendo una igualdad de la lista entera, en orden.
     expect(listItem.required).toEqual([
       "numGuia",
       "numRemision",
@@ -92,6 +97,9 @@ describe("404/R9+R24 — `required` y la unica clave opcional", () => {
       "montoCobrar",
       "createdAt",
       "mensajero",
+      "zona",
+      "costoEstimado",
+      "costoReal",
     ]);
     // Y no hay ninguna propiedad opcional en el item: todas las declaradas son requeridas.
     expect(Object.keys(listItem.properties as Nodo).sort()).toEqual(

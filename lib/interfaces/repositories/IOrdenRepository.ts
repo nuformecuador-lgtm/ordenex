@@ -25,7 +25,10 @@ import type { FiltroAlcanceTablero } from "@/lib/types/alcance-tablero";
 import type { GrupoNovedad } from "@/lib/types/novedad-grupo";
 // ⏳ 2026-09-09 (feature 404, design §D5): la forma del mensajero publico se declara UNA vez, en el
 // archivo de DTOs del canal, y las tres superficies la importan de ahi.
-import type { ApiMensajeroDTO } from "@/lib/types/api-orden";
+import type { ApiMensajeroDTO, ApiZonaDTO } from "@/lib/types/api-orden";
+// Feature 415 (T3): la tarifa reconstruida desde la fila congelada viaja con el MISMO tipo que la
+// vigente, que es lo que permite que las dos alimenten la MISMA funcion de derivacion (R16).
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 // ⏳ 2026-09-10 (feature 405, R8/R21): las DOS causas TIPIFICADAS, importadas de sus fuentes
 // unicas. NO se reescriben aqui como union de strings: `causa-devolucion.ts` y
 // `causa-incidente.ts` tienen su doble candado contra el enum de Prisma, y una copia literal se
@@ -1062,6 +1065,82 @@ export interface ApiOrdenRow {
    * mensajero anterior. `ApiOrdenDetalleRow` lo hereda por el `extends`.
    */
   mensajero: ApiMensajeroDTO | null;
+  /**
+   * ⏳ 2026-09-10 (feature 415, R1/R2) — la zona DE LA ORDEN (el destino del paquete), NUNCA la
+   * del mensajero. **PUBLICABLE tal cual**: el service la copia al DTO sin tocarla.
+   * `orden.zona_id` es NOT NULL, asi que aqui nunca es `null`.
+   */
+  zona: ApiZonaDTO;
+  /**
+   * ⏳ 2026-09-10 (feature 415, T3) — ⛔ **NO PUBLICABLE**. Las entradas con las que el service
+   * deriva `costoEstimado` y `costoReal`, y **nada de esto cruza al DTO**: ni el `zonaId`, ni el
+   * `esCentral`, ni la tarifa congelada, ni el `montoCobrar` en cadena. Lo que el integrador ve
+   * son los cinco importes derivados (R18: no se publica la procedencia interna de los importes).
+   *
+   * Vive aqui, y no derivado dentro del repositorio, porque el repositorio SOLO ejecuta queries
+   * (`docs/architecture.md`): meter la derivacion ahi crearia un SEGUNDO sitio donde se decide
+   * cuanto cuesta una orden (design §10/A7).
+   */
+  costeo: ApiOrdenCosteoRow;
+}
+
+/**
+ * ⏳ 2026-09-10 (feature 415, R20/R21/R17) — las entradas VIVAS de la orden para el costo
+ * ESTIMADO, mas la fila CONGELADA si la hay. ⛔ NO PUBLICABLE (ver `ApiOrdenRow.costeo`).
+ */
+export interface ApiOrdenCosteoRow {
+  /** `orden.zona_id`: la mitad del par (tienda, zona) con el que se resuelve la tarifa vigente. */
+  zonaId: string;
+  /** `zona.es_central` VIVO (R20): elige la columna de flete GAM vs estandar. */
+  esCentral: boolean;
+  /**
+   * `distrito.zona_especial IS TRUE` VIVO (R20/R21). Ya resuelto a DOS valores: la columna es
+   * tri-valuada (`null` = «nadie lo decidio») y esa duda se cierra en el borde que lee la fila,
+   * con `=== true`. Una orden SIN distrito —el unico FK nullable de `orden`— entra como `false`.
+   */
+  esZonaEspecial: boolean;
+  /**
+   * `orden.monto_cobrar` como CADENA de escala 2 (R17 / design §D9), NUNCA el `number` que se
+   * publica en `ApiOrdenRow.montoCobrar`. La feature 204 midio 14 de 66 ordenes con un centimo de
+   * desviacion por calcular sobre `number`.
+   */
+  montoCobrar: string | null;
+  /** `orden.cobra_comision` VIVO (R20). */
+  cobraComision: boolean;
+  /**
+   * La fila de `cierre_detail` ELEGIBLE mas reciente (R26/R27/R33), o `null` si no hay ninguna
+   * —el 28 % de las ordenes vivas, medido—. «Elegible» = pertenece a un cierre `aprobado` **y**
+   * su `tienda_id` CONGELADO es el dueño que pregunta.
+   */
+  congelado: ApiOrdenCongeladoRow | null;
+}
+
+/**
+ * ⏳ 2026-09-10 (feature 415, R25/R28/R29) — lo CONGELADO de esa orden en su cierre: la tarifa
+ * reconstruida y las entradas de la formula tal y como estaban al solicitar el cierre.
+ * ⛔ NO PUBLICABLE.
+ *
+ * ⚠️ Estas entradas son las CONGELADAS y NO las vivas, y es el punto de la ficha: `zona.es_central`
+ * y `distrito.zona_especial` son columnas MUTABLES, y la ficha 366 puede corregir `orden.zona_id`
+ * hacia adelante sin re-tarifar hacia atras. El `costoReal` describe lo que se congelo, no lo que
+ * se veria hoy.
+ */
+export interface ApiOrdenCongeladoRow {
+  /**
+   * La tarifa congelada reconstruida con `tarifaDe` (`lib/utils/cierre-detalle.ts`), la UNICA
+   * funcion que lo hace en el repo. `null` cuando `cierre_detail.tarifa_id IS NULL`: la tienda no
+   * tenia tarifa vigente al SOLICITAR el cierre, y ese cierre liquido cero (R28).
+   */
+  tarifa: TarifaVigente | null;
+  /**
+   * `cierre_detail.tarifa_fulfillment` como CADENA de escala 2; `"0.00"` cuando la columna es
+   * NULL (R29). No hay historico posible de ese monto: por eso se congela.
+   */
+  fulfillment: string;
+  esCentral: boolean;
+  esZonaEspecial: boolean;
+  montoCobrar: string | null;
+  cobraComision: boolean;
 }
 
 export interface ApiOrdenListResult {

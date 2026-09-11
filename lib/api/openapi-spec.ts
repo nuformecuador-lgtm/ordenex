@@ -1175,7 +1175,7 @@ export const openApiSpec = {
         // terceros» a secas, y eso ya no describe el item: publica el NOMBRE del mensajero
         // asignado. La exclusión queda ACOTADA, no derogada, y se dice con su alcance.
         description:
-          "Item público de una orden propia: sin ids internos de la orden ni de la tienda. La única excepción a «sin datos personales de terceros» es el campo `mensajero`, que lleva el `id` y el NOMBRE del mensajero ASIGNADO —y nada más— hacia el dueño de la orden, que ya ve ese mismo nombre en la aplicación. El resto de los datos personales del mensajero (teléfono, email, cédula, foto, zona, vehículo) sigue excluido, y también el mensajero que GESTIONÓ la orden y el texto libre que escribe al gestionarla.",
+          "Item público de una orden propia: sin ids internos de la orden ni de la tienda. La única excepción a «sin datos personales de terceros» es el campo `mensajero`, que lleva el `id` y el NOMBRE del mensajero ASIGNADO —y nada más— hacia el dueño de la orden, que ya ve ese mismo nombre en la aplicación. El resto de los datos personales del mensajero (teléfono, email, cédula, foto, zona, vehículo) sigue excluido, y también el mensajero que GESTIONÓ la orden y el texto libre que escribe al gestionarla. Desde el 2026-09-10 el ítem publica además la ZONA DE LA ORDEN (a dónde va el paquete) y lo que ese paquete le cuesta a tu tienda, en dos campos: `costoEstimado` y `costoReal`.",
         required: [
           "numGuia",
           "numRemision",
@@ -1188,6 +1188,11 @@ export const openApiSpec = {
           "createdAt",
           // ⏳ 2026-09-09 (feature 404/R2/R24): SIEMPRE presente; `null` cuando no hay asignado.
           "mensajero",
+          // ⏳ 2026-09-10 (feature 415/R9/R37): las TRES SIEMPRE presentes. `zona` nunca es `null`;
+          // los dos costos pueden serlo, y su `null` significa algo concreto (ver sus descriptions).
+          "zona",
+          "costoEstimado",
+          "costoReal",
         ],
         properties: {
           numGuia: { type: ["integer", "null"], description: "Número de guía (null si aún no asignado)." },
@@ -1230,7 +1235,106 @@ export const openApiSpec = {
               "",
               "No se puede filtrar ni ordenar el listado por este campo: un parámetro de query que lo",
               "intente se ignora, como cualquier otra clave desconocida.",
+              "",
+              "⏳ **2026-09-10 — la palabra «zona» de la lista de exclusiones de arriba se refiere a",
+              "la zona DEL MENSAJERO** (en qué zona trabaja esa persona), que es un dato personal",
+              "suyo y sigue SIN publicarse. **No la confundas con el campo `zona` de la orden**, que",
+              "sí se publica desde esa fecha y es otra cosa: el DESTINO del paquete.",
             ].join("\n"),
+          },
+          // ⏳ 2026-09-10 (feature 415/R1/R2/R37): la zona DE LA ORDEN. `$ref` y NO nullable:
+          // `orden.zona_id` es NOT NULL, y esa es la única diferencia con `mensajero`.
+          zona: { $ref: "#/components/schemas/Zona" },
+          costoEstimado: {
+            oneOf: [{ $ref: "#/components/schemas/OrdenCosto" }, { type: "null" }],
+            description: [
+              "Lo que costaría este paquete con la tarifa VIGENTE HOY para tu tienda en la zona de",
+              "la orden, en el escenario de ENTREGA.",
+              "",
+              "⚠️ **Mientras `costoReal` sea `null`, este importe PUEDE CAMBIAR entre dos lecturas de",
+              "la misma orden: se calcula con la tarifa de hoy**, y las tarifas se editan en sitio",
+              "(no guardamos su histórico). Si lo archivás sin leer esto, construirás una serie que",
+              "cambia sola. Cuando llega `costoReal`, ése ya no se mueve: es lo que se congeló al",
+              "cerrar.",
+              "",
+              "`null` significa **«no hay ninguna tarifa configurada para tu tienda en esa zona»**, y",
+              "**NO significa que el envío sea gratis**. Deliberadamente NO devolvemos cinco ceros:",
+              "un `0.00` sería una cifra falsa servida como precio.",
+              "",
+              "No se puede filtrar ni ordenar el listado por este campo ni por ninguno de sus cinco",
+              "conceptos: un parámetro de query que lo intente se ignora.",
+            ].join("\n"),
+          },
+          costoReal: {
+            oneOf: [{ $ref: "#/components/schemas/OrdenCosto" }, { type: "null" }],
+            description: [
+              "Lo que se CONGELÓ al cerrar: la tarifa y los datos de la orden tal y como estaban",
+              "cuando entró en un cierre aprobado. Ya no se mueve con los cambios de tarifa.",
+              "",
+              "⚠️ **Es lo que se congeló al cerrar, NO «la línea que entró en tu wallet».** Como",
+              "`costoEstimado`, es el escenario de **ENTREGA**. Si la orden terminó RECHAZADA, lo que",
+              "se te factura es el flete de DEVOLUCIÓN y su IVA, que son conceptos distintos y que",
+              "podés consultar en el escenario `devuelto` de la cotización.",
+              "",
+              "`null` significa **«esta orden todavía no ha entrado en ningún cierre aprobado»**.",
+              "",
+              "Puede moverse UNA vez más en un caso concreto: si la orden vuelve a entrar en un",
+              "segundo cierre aprobado (una orden devuelta sigue viva y puede recorrerse otra vez),",
+              "publicamos la fila del cierre MÁS RECIENTE.",
+            ].join("\n"),
+          },
+        },
+      },
+      /**
+       * ⏳ 2026-09-10 (feature 415/R1/R4/R38) — LA ZONA DE LA ORDEN.
+       *
+       * MISMA FORMA que `Mensajero` y MISMA REGLA de agrupación, a propósito: son las dos
+       * entidades con nombre del mismo payload, y obligar al integrador a recordar cuál se agrupa
+       * de qué manera sería el error de diseño. `openapi-415-zona-y-costo.test.ts` compara los dos
+       * schemas clave a clave y tipo a tipo.
+       */
+      Zona: {
+        type: "object",
+        required: ["id", "nombre"],
+        additionalProperties: false,
+        description:
+          "La ZONA DE LA ORDEN: a dónde va el paquete. ⚠️ NO es la zona del mensajero (en qué zona trabaja esa persona), que es un dato personal suyo y no se publica por ningún endpoint. Este campo NUNCA es `null`: toda orden tiene zona.",
+        properties: {
+          id: {
+            type: "string",
+            description:
+              "Identificador ESTABLE de la zona: un UUID en TEXTO. La misma zona produce el mismo `id` en el listado, en el detalle y en todas las lecturas, y nunca se reasigna a otra zona: **agrupá por este valor, nunca por `nombre`**.",
+          },
+          nombre: {
+            type: "string",
+            description:
+              "Nombre de la zona tal y como está en el catálogo (p. ej. `GAM`, `FGAM Zona Sur`). Texto para MOSTRAR; PUEDE cambiar si se corrige o se renombra, así que no lo uses como clave de agrupación: el día que «FGAM El Coco» pase a «FGAM Coco», una serie agrupada por el nombre se parte en dos sin avisar.",
+          },
+        },
+      },
+      /**
+       * ⏳ 2026-09-10 (feature 415/R10/R11/R12/R15) — LOS CINCO CONCEPTOS DEL COSTO DE UNA ORDEN.
+       *
+       * Los mismos cinco que `CotizacionEscenarioEntregado`, **menos su `total`**. Y no hay campo
+       * sumado con ningún otro nombre: el único `total` que este canal publica significa lo
+       * CONTRARIO («lo que RECIBE la tienda» = monto a cobrar − los cinco conceptos), y dos
+       * `total` de signo opuesto en el mismo canal es la ambigüedad que esto existe para evitar.
+       */
+      OrdenCosto: {
+        type: "object",
+        required: ["flete", "iva", "comision", "ivaComision", "fulfillment"],
+        additionalProperties: false,
+        description:
+          "Los CINCO conceptos que Ordenex factura por una orden, en el escenario de ENTREGA («cuánto cuesta este paquete si se entrega»). Importes en texto crudo con dos decimales y punto decimal, sin símbolo de moneda y sin separador de miles (`\"2500.00\"`) — el mismo dialecto que la cotización y el `costoEnvio` de la carga. Un `\"0.00\"` es un CERO AFIRMADO (por ejemplo, una orden que no cobra comisión), nunca un dato faltante: dentro de este objeto ningún concepto es `null` y ninguno se omite. **NO hay ningún campo que sume los cinco, ni `total` ni equivalente**: sumalos vos, que sabés qué estás sumando.",
+        properties: {
+          flete: { type: "string", description: "Flete del envío." },
+          iva: { type: "string", description: "IVA del flete." },
+          comision: { type: "string", description: "Comisión por el recaudo contra entrega (COD)." },
+          ivaComision: { type: "string", description: "IVA de la comisión COD." },
+          fulfillment: {
+            type: "string",
+            description:
+              "Monto fijo de fulfillment por orden cuando el paquete sale de nuestra bodega. `\"0.00\"` si tu tienda no hace fulfillment.",
           },
         },
       },

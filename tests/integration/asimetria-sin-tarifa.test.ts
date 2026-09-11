@@ -5,6 +5,9 @@ import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import { CotizacionOrdenService } from "@/lib/services/CotizacionOrdenService";
+// ⏳ 2026-09-10 (feature 415, T8): la QUINTA superficie ante el mismo hueco.
+import { ApiOrdenLecturaService } from "@/lib/services/ApiOrdenLecturaService";
+import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import { handleCargaApi, type CargaApiDeps } from "@/app/api/ordenes/api-key/carga/route";
 import {
   handleCotizacionApi,
@@ -25,7 +28,7 @@ import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-esta
  * ⚠️ SI ESTE ARCHIVO SE TE PONE ROJO, LEE ESTO ANTES DE "ARREGLARLO".
  *
  * Ante EL MISMO hueco de datos —ninguna fila de `tarifas` aplica al par (tienda, zona)— las
- * cuatro superficies responden distinto, y es DELIBERADO. Lo decidio el humano el 2026-08-24
+ * CINCO superficies responden distinto, y es DELIBERADO. Lo decidio el humano el 2026-08-24
  * y esta escrito en `specs/274-cascada-tarifa-zona-tienda/requirements.md`, seccion «Tres
  * superficies, dos comportamientos»:
  *
@@ -33,6 +36,17 @@ import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-esta
  *   · Cierre de dia       -> las 9 columnas de tarifa en NULL y el cierre se crea (R23).
  *   · Carga por API key   -> `409` (R29).
  *   · Cotizacion por key  -> `409` (R35).
+ *   · Lectura por API key -> `costoEstimado: null` (415/R22). ⏳ 2026-09-10, LA QUINTA.
+ *
+ * ⏳ 2026-09-10 — POR QUE LA QUINTA NECESITA UNA RESPUESTA PROPIA Y NO PUEDE COPIAR A NINGUNA DE
+ * LAS CUATRO. El listado y el detalle por API key los consume el MISMO integrador que la carga y
+ * la cotizacion, asi que le aplica el argumento (2) de abajo palabra por palabra: un `"0.00"` ahi
+ * seria una MENTIRA sobre dinero servida como precio. Pero **no puede devolver 409**: la orden
+ * EXISTE y hay que listarla; un 409 le negaria el listado entero de sus ordenes por un hueco de
+ * configuracion de una zona. La salida es el hueco DECLARADO —`costoEstimado: null`—, que no
+ * bloquea y no miente. Y su hermano `costoReal` SI emite cinco `"0.00"` cuando la fila congelada
+ * no tiene tarifa (415/R28): ahi el cero es VERDAD, porque ese cierre liquido cero. Las dos
+ * mitades viven explicadas juntas en `lib/utils/api-orden-costo.ts`.
  *
  * EL PORQUE, que es lo que hace que no sea una incoherencia:
  *
@@ -47,14 +61,14 @@ import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-esta
  *       una MENTIRA sobre dinero servida como precio. Ese era el gap D1/R8 de la feature 98, y
  *       esta feature lo invierte a proposito.
  *
- * Por eso «unificar los cuatro bordes por simetria» no es una limpieza: es revertir una
+ * Por eso «unificar los cinco bordes por simetria» no es una limpieza: es revertir una
  * decision, y hay que discutirla antes, no descubrirla al ver este archivo en rojo.
  *
- * COMO SE PRUEBA QUE ES EL MISMO ESTADO: las cuatro superficies corren contra el MISMO array
+ * COMO SE PRUEBA QUE ES EL MISMO ESTADO: las CINCO superficies corren contra el MISMO array
  * `TABLA_TARIFAS` y el MISMO doble de `prisma.tarifa.findMany`, resolviendo con el
  * `TarifaVigenteRepository` REAL (no un doble que devuelva `null` cuando le conviene). Y hay
- * una contraprueba: con UNA fila anadida que si aplica al par, las cuatro pasan a responder
- * bien —asi se descarta que el "0.00" y los dos `409` salgan de un montaje roto.
+ * una contraprueba: con UNA fila anadida que si aplica al par, las cinco pasan a responder
+ * bien —asi se descarta que el "0.00", el `null` y los dos `409` salgan de un montaje roto.
  */
 
 // El dueño de la API key es TAMBIEN la tienda de la orden del listado y del cierre: es lo que
@@ -364,6 +378,60 @@ async function porLaCotizacion(filas: readonly FilaTarifa[]) {
   return { res, body: (await res.json()) as Record<string, unknown> };
 }
 
+// ---------------------------------------------------------------------------------------
+// SUPERFICIE 5 — la LECTURA por API key (listado/detalle), ⏳ 2026-09-10, feature 415
+// ---------------------------------------------------------------------------------------
+
+/** Fila de `orden` como la devuelve el `select` del canal integrador (`apiOrdenSelect`). */
+function ordenApiRow() {
+  return {
+    numGuia: 10,
+    numRemision: "REM-1",
+    destinatario: "Ana",
+    telefonoDest: "0991234567",
+    producto: "Caja",
+    direccion: "Av 1",
+    montoCobrar: new Prisma.Decimal("25000.00"),
+    createdAt: new Date("2026-01-01"),
+    estatus: { value: "en_bodega_central" },
+    mensajeroAsignado: null,
+    // ⭑ EL MISMO PAR que preguntan las otras cuatro: (key-user-1, z1).
+    zonaId: ZONA,
+    cobraComision: true,
+    zona: { id: ZONA, nombre: "Limón", esCentral: false },
+    distrito: null,
+    // Sin fila congelada: este archivo mide el hueco de la tarifa VIGENTE.
+    cierreDetalles: [],
+    gestiones: [],
+    historialEstados: [],
+    incidentesAdmin: [],
+  };
+}
+
+async function porLaLecturaApi(filas: readonly FilaTarifa[]) {
+  const fila = ordenApiRow();
+  const prisma = {
+    orden: {
+      findMany: vi.fn(async () => [fila]),
+      count: vi.fn(async () => 1),
+      findFirst: vi.fn(async () => fila),
+    },
+    ...prismaTarifas(filas),
+  };
+  const svc = new ApiOrdenLecturaService(
+    new OrdenRepository(prisma as unknown as PrismaClient),
+    {
+      createSignedUrl: vi.fn(async () => "https://signed/one"),
+      createSignedUrls: vi.fn(async () => ({})),
+    } as unknown as ISignedUrlProvider,
+    // El resolutor REAL, igual que las otras cuatro superficies.
+    resolverReal(filas),
+  );
+  const listado = await svc.listar(KEY_ACTOR, { limit: 50, offset: 0 });
+  const detalle = await svc.detallePorOrdenId(KEY_ACTOR, "ord-1");
+  return { item: listado.items[0], detalle: detalle! };
+}
+
 // =======================================================================================
 
 beforeEach(async () => {
@@ -424,15 +492,55 @@ describe("274/R39 — los dos bordes de API por key SI bloquean, con 409", () =>
   });
 });
 
+describe("415/R22 — la QUINTA superficie: la LECTURA por API key devuelve `null`", () => {
+  it("`costoEstimado` es `null` y NO cinco `\"0.00\"` (ni en el item ni en el detalle)", async () => {
+    const { item, detalle } = await porLaLecturaApi(TABLA_TARIFAS);
+
+    expect(item.costoEstimado).toBeNull();
+    expect(detalle.costoEstimado).toBeNull();
+    // Ni un cero disfrazado de precio: el cuerpo no lleva ningun importe `"0.00"`. Se busca CON
+    // las comillas a proposito —un valor de cadena, no una subcadena cualquiera—: el `createdAt`
+    // serializado (`...T00:00:00.000Z`) contiene `0.00` y no es dinero.
+    expect(JSON.stringify(item)).not.toContain('"0.00"');
+    // Pero la orden SE SIRVE: esta superficie no puede bloquear con un 409 (la orden existe).
+    expect(item.numRemision).toBe("REM-1");
+    expect(item.zona).toEqual({ id: ZONA, nombre: "Limón" });
+    // Y la clave viaja explicita, que es lo que distingue «no hay tarifa» de «no te lo digo».
+    expect(JSON.stringify(item)).toContain('"costoEstimado":null');
+  });
+
+  it("CONTRAPRUEBA: anadida la fila del par, la quinta devuelve los CINCO conceptos", async () => {
+    // Sin esta contraprueba, un montaje roto —un par mal formado, un resolutor que nunca
+    // resuelve— daria `null` por una razon que no tiene nada que ver con la tarifa.
+    const { item } = await porLaLecturaApi(TABLA_CON_TARIFA);
+
+    // Aritmetica A MANO con `ta-del-par` (valorFlete 1000.00, zona NO central; IVA flete 13 %;
+    // comision COD 5 % sobre 25000.00; IVA comision 13 %; fulfillment 1.00):
+    //   flete       = 1000.00
+    //   iva         = 1000.00 x 13 %            =  130.00
+    //   comision    = 25000.00 x 5 %            = 1250.00
+    //   ivaComision = 1250.00 x 13 %            =  162.50
+    //   fulfillment = tarifas.fulfillment       =    1.00
+    expect(item.costoEstimado).toEqual({
+      flete: "1000.00",
+      iva: "130.00",
+      comision: "1250.00",
+      ivaComision: "162.50",
+      fulfillment: "1.00",
+    });
+  });
+});
+
 describe("274/R39 — la asimetria, afirmada de una sola vez sobre el MISMO estado", () => {
-  it("mismo hueco, cuatro respuestas: '0.00' / NULL / 409 / 409", async () => {
-    // El MISMO array para las cuatro llamadas: no hay margen para que una vea otra tabla.
+  it("mismo hueco, CINCO respuestas: '0.00' / NULL / 409 / 409 / null", async () => {
+    // El MISMO array para las cinco llamadas: no hay margen para que una vea otra tabla.
     const filas = TABLA_TARIFAS;
 
     const listado = await porElListado(filas);
     const cierre = await porElCierre(filas);
     const carga = await porLaCarga(filas);
     const cotizacion = await porLaCotizacion(filas);
+    const lecturaApi = await porLaLecturaApi(filas);
 
     expect({
       listado: listado.fleteConIva,
@@ -441,6 +549,9 @@ describe("274/R39 — la asimetria, afirmada de una sola vez sobre el MISMO esta
       cierreCreado: cierre.cierreId !== null,
       carga: carga.res.status,
       cotizacion: cotizacion.res.status,
+      // ⏳ 2026-09-10 (415/R22): la quinta. NO bloquea —el item se sirve— y NO miente.
+      lecturaApiCosto: lecturaApi.item.costoEstimado,
+      lecturaApiSirveLaOrden: lecturaApi.item.numRemision,
     }).toEqual({
       listado: "0.00",
       listadoTarifa: null,
@@ -448,10 +559,12 @@ describe("274/R39 — la asimetria, afirmada de una sola vez sobre el MISMO esta
       cierreCreado: true,
       carga: 409,
       cotizacion: 409,
+      lecturaApiCosto: null,
+      lecturaApiSirveLaOrden: "REM-1",
     });
   });
 
-  it("CONTRAPRUEBA: anadida la fila del par, las CUATRO responden bien (el montaje no miente)", async () => {
+  it("CONTRAPRUEBA: anadida la fila del par, las CINCO responden bien (el montaje no miente)", async () => {
     // Sin esta contraprueba, un montaje roto —una geografia que no resuelve, un actor mal
     // formado— daria "0.00" y dos 409 por motivos que no tienen nada que ver con la tarifa, y
     // el test de arriba estaria verde por la razon equivocada.
@@ -469,5 +582,10 @@ describe("274/R39 — la asimetria, afirmada de una sola vez sobre el MISMO esta
 
     const cotizacion = await porLaCotizacion(filas);
     expect(cotizacion.res.status).toBe(200);
+
+    // ⏳ 2026-09-10 (415/R22): la quinta pasa de `null` a los cinco conceptos.
+    const lecturaApi = await porLaLecturaApi(filas);
+    expect(lecturaApi.item.costoEstimado).not.toBeNull();
+    expect(lecturaApi.item.costoEstimado!.flete).toBe("1000.00");
   });
 });
