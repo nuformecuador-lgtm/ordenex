@@ -4939,27 +4939,27 @@
     },
     {
       "id": 415,
-      "title": "la zona de la orden viaja en el listado y en el detalle de la API",
-      "description": "El integrador no puede medir por zona porque la zona no se publica por ningun endpoint, y el manual llego a decir lo contrario.",
-      "zone": "backend",
-      "status": "pending",
-      "sdd": true,
-      "complexity": "baja",
-      "branch": null,
-      "depends_on": null,
-      "status_note": "PEDIDA POR EL INTEGRADOR (Daniel Marin) el 2026-09-10 y VERIFICADA: el item del listado publica EXACTAMENTE numGuia, numRemision, estado, destinatario, telefonoDest, producto, direccion, montoCobrar, createdAt y mensajero. La zona NO esta, ni en el listado ni en el detalle. || ⚠️ EL MANUAL MENTIA, y es un error nuestro: `docs/api/manual-metricas-por-mensajero.md` decia «cruza con el zona que ya recibis en el listado». Ya se corrigio DICIENDO que era falso, no borrando la frase. Esta ficha es la que hace verdad esa instruccion. || BARATA Y CON MOLDE EXACTO: es el mismo patron aditivo de la 404 (`mensajero`), sin migracion y sin puerta de privacidad -la zona es un dato operativo, no personal-. `API_ORDEN_SELECT` en `OrdenRepository` no la lee hoy; `orden.zona_id` ya existe. || LOS NOMBRES YA SIRVEN TAL CUAL, medido: las zonas son `GAM` (1.090 ordenes) y siete `FGAM ...` (Zona Sur 204, San Ramon 132, El Coco 103, Guanacaste 55, Puntarenas 47, Limon 21, San Carlos 0). El «GAM / fuera de GAM y su subzona» que pide el integrador YA esta en el nombre: no hay que derivar nada. || OJO: el comentario de `API_ORDEN_SELECT` que excluye «zona» habla de la zona DEL MENSAJERO (dato personal suyo), no de la zona de la ORDEN. Son cosas distintas y el spec debe decirlo para que nadie lea una contradiccion. || El alcance por tienda NO se toca: sigue forzado dentro del WHERE. || Actualiza el manual."
-    },
-    {
-      "id": 416,
-      "title": "cada orden dice cuanto costo, estimado y real",
-      "description": "El costo por orden solo existe en la cotizacion, asi que el integrador no puede restar el costo de cada paquete para medir su rentabilidad.",
+      "title": "la orden dice su zona y lo que costo, en el listado y en el detalle",
+      "description": "El integrador no puede medir por zona ni restar el costo de cada paquete: ninguno de los dos datos se publica por la API, y el manual llego a decir lo contrario de la zona.",
       "zone": "backend",
       "status": "pending",
       "sdd": true,
       "complexity": "media",
       "branch": null,
       "depends_on": null,
-      "status_note": "PEDIDA POR EL INTEGRADOR (Daniel Marin) el 2026-09-10 y VERIFICADA: flete, iva, comision, ivaComision y fulfillment se publican SOLO en `CotizacionEscenarioEntregado` (el endpoint de cotizacion), nunca por orden en el listado ni en el detalle. || DECISION DEL HUMANO 2026-09-10: publicar la estructura de costos NO es problema -los consumidores son las propias tiendas y ya conocen sus tarifas-. || ⚠️ SE PUBLICAN LOS DOS VALORES, y esta es LA decision de la ficha: `costoEstimado` (derivado de la tarifa VIGENTE, presente siempre) y `costoReal` (el CONGELADO en `cierre_detail`, presente SOLO tras el cierre y `null` antes). Medido: de 1.652 ordenes vivas, 1.182 tienen costo congelado (72%) y 470 NO (28%). || POR QUE NO BASTA EL ESTIMADO, medido y no razonado: la tabla `tarifas` NO tiene historico -una fila por (tienda, zona) que se EDITA EN SITIO-, asi que `cierre_detail` es la unica memoria de lo que se cobro. Comparando los 1.581 detalles contra la tarifa vigente de su misma fila: flete 0 cambios, comision 0, iva 0, pero FULFILLMENT cambio en 263 (1 de cada 6), de 692,00 a 696,00. Son 4 colones y 1.052 en total -trivial en dinero-, PERO demuestra que cambia: publicando solo el estimado, cada ajuste de tarifa REESCRIBE hacia atras la rentabilidad historica del integrador, sin que el pueda saberlo. || EL CONTRATO DEBE DECIR que mientras `costoReal` sea null el estimado puede moverse. || El alcance por tienda NO se afloja: `cierre_detail.tienda_id` va CONGELADO (leccion 69/R13), asi que ni un cambio posterior de dueño abre una rendija. || Actualiza el manual."
+      "status_note": "FUNDE LAS DOS PETICIONES DEL INTEGRADOR (Daniel Marin) del 2026-09-10, aprobadas por el humano. Se fusionan a proposito y no por comodidad: las dos son campos ADITIVOS sobre el MISMO item del listado y el MISMO detalle, tocan los mismos cinco artefactos de contrato (`lib/types/api-orden.ts`, `OrdenRepository`, `lib/api/openapi-spec.ts`, `docs/api/api-key-openapi.yaml`, `docs/api/CHANGELOG.md`) y el manual. Separadas serian dos gates completos, un rebase garantizado entre ellas y DOS entradas de CHANGELOG el mismo dia para el mismo endpoint -y esa entrada ES el aviso al integrador, asi que partirla en dos lo empeora-. La 416 queda `superseded` por esta. || === PARTE A: LA ZONA === VERIFICADO: el item publica EXACTAMENTE numGuia, numRemision, estado, destinatario, telefonoDest, producto, direccion, montoCobrar, createdAt y mensajero. La zona NO esta. ⚠️ EL MANUAL MENTIA: `docs/api/manual-metricas-por-mensajero.md` decia «cruza con el zona que ya recibis en el listado»; ya se corrigio DICIENDO que era falso, y esta ficha hace verdad la instruccion. MOLDE EXACTO en la 404 (`mensajero`): aditivo, sin migracion, y sin puerta de privacidad porque la zona es un dato operativo. LOS NOMBRES YA SIRVEN TAL CUAL, medido: `GAM` (1.090 ordenes) y siete `FGAM ...` (Zona Sur 204, San Ramon 132, El Coco 103, Guanacaste 55, Puntarenas 47, Limon 21, San Carlos 0) -el «GAM / fuera de GAM y su subzona» que pide YA esta en el nombre-. OJO: el comentario de `API_ORDEN_SELECT` que excluye «zona» habla de la zona DEL MENSAJERO (dato personal suyo), no de la zona de la ORDEN: el spec debe decirlo o parecera una contradiccion. || === PARTE B: EL COSTO === VERIFICADO: flete, iva, comision, ivaComision y fulfillment se publican SOLO en `CotizacionEscenarioEntregado`, nunca por orden. DECISION DEL HUMANO: publicar la estructura de costos NO es problema -los consumidores son las propias tiendas y ya conocen sus tarifas-. ⚠️ SE PUBLICAN LOS DOS VALORES: `costoEstimado` (derivado de la tarifa VIGENTE, presente siempre) y `costoReal` (el CONGELADO en `cierre_detail`, `null` hasta que la orden cierra). Medido: de 1.652 ordenes vivas, 1.182 tienen congelado (72%) y 470 no (28%). POR QUE NO BASTA EL ESTIMADO, medido y no razonado: `tarifas` NO tiene historico -una fila por (tienda, zona) EDITADA EN SITIO-, asi que `cierre_detail` es la unica memoria de lo que se cobro; comparando los 1.581 detalles contra la tarifa vigente de su misma fila, el FULFILLMENT cambio en 263 (1 de cada 6), de 692,00 a 696,00 -4 colones, 1.052 en total: trivial en dinero pero PRUEBA que cambia-. Con solo el estimado, cada ajuste de tarifa REESCRIBIRIA hacia atras la rentabilidad historica del integrador sin que el pueda saberlo. EL CONTRATO DEBE DECIR que mientras `costoReal` sea null el estimado puede moverse. || === COMUN === El alcance por tienda NO se afloja: sigue forzado dentro del WHERE, y `cierre_detail.tienda_id` va CONGELADO (leccion 69/R13), asi que ni un cambio posterior de dueño abre una rendija. UNA sola entrada de CHANGELOG para las dos partes. Actualiza el manual."
+    },
+    {
+      "id": 416,
+      "title": "cada orden dice cuanto costo, estimado y real",
+      "description": "El costo por orden solo existe en la cotizacion, asi que el integrador no puede restar el costo de cada paquete para medir su rentabilidad.",
+      "zone": "backend",
+      "status": "superseded",
+      "sdd": true,
+      "complexity": "media",
+      "branch": null,
+      "depends_on": null,
+      "status_note": "SUPERSEDED POR LA 415 el 2026-09-10, el mismo dia en que se registro y antes de escribir una linea de spec. MOTIVO: las dos peticiones del integrador son campos ADITIVOS sobre el mismo item del listado y el mismo detalle, y tocan los mismos cinco artefactos de contrato. Mantenerlas separadas obligaba a dos gates completos, a un rebase garantizado entre ellas y a dos entradas de CHANGELOG el mismo dia para el mismo endpoint -y esa entrada ES el aviso al integrador-. Todo lo medido aqui (el 72/28 de ordenes con costo congelado, y el fulfillment que cambio en 263 de 1.581 detalles) esta recogido en la nota de la 415, que es donde se implementa."
     }
   ]
 }
