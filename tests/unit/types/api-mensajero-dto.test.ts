@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
 import type { ApiMensajeroDTO, ApiOrdenListItemDTO, ApiOrdenDetalleDTO } from "@/lib/types/api-orden";
+// ⏳ 2026-09-10 (feature 415): los tres campos ADITIVOS que el item gano. Se anaden a las tres
+// fixtures de este archivo para que lo que cada `@ts-expect-error` mide siga siendo EXACTAMENTE lo
+// que decia —que falta `mensajero`— y no «faltan cuatro campos, vaya usted a saber cual».
+const CAMPOS_415 = {
+  zona: { id: "018f2c31-0000-4000-8000-00000000za01", nombre: "GAM" },
+  costoEstimado: null,
+  costoReal: null,
+} as const;
 
 // ⏳ 2026-09-09 — Feature 404 (T1): la FORMA del campo `mensajero` del canal publico.
 //
@@ -58,6 +66,7 @@ describe("404/R2+R5 — la convencion de ausencia y la herencia del detalle", ()
       direccion: "Calle 1",
       montoCobrar: 1500,
       createdAt: new Date("2026-09-09T10:00:00.000Z"),
+      ...CAMPOS_415,
     };
     expect(sinMensajero.numRemision).toBe("REM-1");
   });
@@ -74,6 +83,7 @@ describe("404/R2+R5 — la convencion de ausencia y la herencia del detalle", ()
       montoCobrar: 1500,
       createdAt: new Date("2026-09-09T10:00:00.000Z"),
       mensajero: null,
+      ...CAMPOS_415,
     };
     expect("mensajero" in item).toBe(true);
     expect(item.mensajero).toBeNull();
@@ -92,6 +102,7 @@ describe("404/R2+R5 — la convencion de ausencia y la herencia del detalle", ()
       montoCobrar: 1500,
       createdAt: new Date("2026-09-09T10:00:00.000Z"),
       mensajero: MENSAJERO,
+      ...CAMPOS_415,
       evidencias: [],
       // ⏳ 2026-09-10 (feature 405): campo REQUERIDO del detalle. Este caso mide la HERENCIA del
       // `mensajero` del item, no el historial.

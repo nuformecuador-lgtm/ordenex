@@ -33,6 +33,8 @@ Leyenda: `[P]` = paralelizable con las demás `[P]` de su bloque.
 
 ### T0.1 — Los símbolos existen, en el archivo real
 
+- [x] **HECHA** — los 22 símbolos confirmados ABRIENDO el archivo real (no el grafo), con su línea. Tabla completa en `progress/impl_415.md`.
+
 El índice del grafo **devuelve de más** y ya dio una línea rancia en esta zona al escribir el spec
 (`ApiOrdenRow` reportado en `IOrdenRepository.ts:841`, real: 1046). Confirmar **abriendo el
 archivo**, no el grafo, que siguen existiendo:
@@ -55,6 +57,8 @@ implementer, la revisa el reviewer).
 
 ### T0.2 — Reproducir la medición de cobertura y CONFIRMAR el mecanismo (cierra D5)
 
+- [x] **HECHA** — los tres puntos. Los dos conteos reproducidos en local (69 vivas / 15 con fila / 15 elegibles, 100 % `aprobado`) y 5 órdenes con ≥2 filas elegibles. **El punto 3 confirmado en el archivo real**: `tx.cierreDetail.createMany` está en `lib/repositories/CierreDiaRepository.ts:942`, dentro de `crearCierre` (líneas 651-984), y es la ÚNICA escritura de `cierre_detail` en `lib/`, `app/` y `scripts/`. El mecanismo sale como decía el spec: la fila se escribe al SOLICITAR.
+
 El humano ya midió contra producción el 2026-09-10: **1.182 de 1.652** órdenes vivas tienen fila en
 `cierre_detail` (72 %), y **las 1.182 son de cierres `aprobado`**. Aquí no se vuelve a medir
 producción: se **reproduce en local** y, sobre todo, se **confirma el mecanismo**, porque de él
@@ -74,6 +78,8 @@ humana.
 
 ### T0.3 [P] — El coste de consulta ANTES (línea base)
 
+- [x] **HECHA** — medido con el espía `$on("query")` DENTRO de una transacción (fuera de ella Prisma paraleliza y el orden no es estable): detalle **9**, listado **4** con `limit` 1, 50 y 100; cuerpo de `limit=100` = 68 ítems, 23.720 bytes.
+
 Con el espía `$on("query")` que ya usa `tests/integration/db/gestiones-detalle-api-405.test.ts`,
 medir **hoy**, sobre `origin/dev`: cuántas consultas emite el detalle (debería ser 9) y cuántas el
 listado con `limit=1` y con `limit=50`. Anotar también el tamaño del cuerpo con `limit=100`.
@@ -84,6 +90,8 @@ nada. Verificación humana.
 ---
 
 ## T1 — Los tipos públicos (depende de T0; bloquea T2, T3, T4)
+
+- [x] **HECHA** — los tres puntos. `tests/unit/types/api-orden-415-dto.test.ts` (11 casos) con los `@ts-expect-error` de la tercera clave de `zona`, de la sexta del costo (con el nombre `total` **y con otro nombre**) y del `null` dentro del objeto. El punto 3 (la cabecera reescrita) queda para la verificación humana del reviewer, como dice la task.
 
 1. `lib/types/api-orden.ts`: **dos tipos nuevos**.
    - `ApiZonaDTO { id: string; nombre: string }`, con el comentario que dice: que es la zona **DE LA
@@ -113,6 +121,8 @@ punto 3 es verificación **humana** del reviewer: un comentario reescrito no pru
 ---
 
 ## T2 [P] — El módulo PURO de costo (depende de T1; bloquea T4)
+
+- [x] **HECHA** — `lib/utils/api-orden-costo.ts` + `tests/unit/utils/api-orden-costo.test.ts` (12 casos), con **todos los importes escritos a mano** y la aritmética anotada, incluida la contraprueba `657.25` vs `657.26` de la 204.
 
 `lib/utils/api-orden-costo.ts`, **sin Prisma Client, sin repositorios, sin reloj**. **Dos
 envoltorios explícitos**, no un parámetro de modo — el hueco de tarifa significa cosas distintas en
@@ -154,6 +164,8 @@ escritos a mano** y la aritmética anotada en el test:
 ---
 
 ## T3 — El repositorio proyecta zona, entradas vivas y congelado (depende de T1 y T0.2)
+
+- [x] **HECHA** — los tres puntos, incluido el literal `SELECT_DETALLE_106` ENMENDADO con su bloque fechado. 12 casos nuevos en `orden-repository.api-lectura.test.ts`, y el `toEqual` de la fila pública sigue siendo igualdad estructural.
 
 1. `lib/interfaces/repositories/IOrdenRepository.ts`: `ApiOrdenRow` gana `zona: ApiZonaDTO`
    (**publicable**) y `costeo: ApiOrdenCosteoRow` (**NO publicable**, con el comentario que lo dice
@@ -208,6 +220,8 @@ escritos a mano** y la aritmética anotada en el test:
 
 ## T4 — El service resuelve la tarifa y compone los DTO (depende de T2 y T3)
 
+- [x] **HECHA** — los tres puntos. 10 casos nuevos en `api-orden-lectura-service.test.ts`, con los 692,00 / 696,00 del caso medido escritos los dos a mano.
+
 1. `lib/services/ApiOrdenLecturaService.ts` gana una dependencia por constructor:
    `Pick<ITarifaVigenteRepository, "resolveTarifas">` (DI ligera, igual que `LecturaRepo`).
 2. `listar`: tras `repo.listByOwner`, construir los pares **DISTINTOS** `(actor.usuarioId, zonaId)`
@@ -239,6 +253,8 @@ publicar `costeo`.
 
 ## T5 — Los DOS composition roots inyectan de verdad (depende de T4)
 
+- [x] **HECHA** — `tests/unit/api/ordenes-api-key-composicion-415.test.ts`: corre los DOS builders REALES (sin `deps`) sobre un Prisma falso y exige importes. La mutación M8 —importar el resolutor y no pasarlo— lo pone rojo.
+
 `app/api/ordenes/api-key/route.ts` (`buildLecturaService`) y
 `app/api/ordenes/api-key/orden/[id]/route.ts` (`buildDetallePorOrdenId`) construyen el
 `TarifaVigenteRepository` y **se lo pasan** al service.
@@ -254,6 +270,8 @@ uso no puede poner este test verde.
 ---
 
 ## T6 [P] — Los dos bordes HTTP, de punta a punta (depende de T5)
+
+- [x] **HECHA** — 8 casos en el listado y 7 en el detalle, con el `TarifaVigenteRepository` REAL. Los dos tests de aislamiento siguen verdes; el de `tienda-destino` solo cambió su fixture (la fila del doble ganó los campos que el repositorio real ya devuelve).
 
 Casos nuevos en `tests/integration/api/ordenes-api-key-listado.route.test.ts` y
 `tests/integration/api/ordenes-api-key-orden-consulta.route.test.ts`:
@@ -279,6 +297,8 @@ Casos nuevos en `tests/integration/api/ordenes-api-key-listado.route.test.ts` y
 ---
 
 ## T7 — Contra Postgres real: el SQL, el congelado y el COSTE (depende de T5) — **NO OPCIONAL**
+
+- [x] **HECHA** — los diez casos, en `tests/integration/db/costo-y-zona-api-415.test.ts`. Sin ningún `if (!algo) return;`. N = **12** (detalle) y M = **8** (listado), MEDIDOS. Contraprueba hecha: contra ESTE archivo SOLO, quitar el filtro por `aprobado` deja 2 rojos, quitar el `tiendaId` congelado 1 y invertir el `orderBy` 1.
 
 `tests/integration/db/costo-y-zona-api-415.test.ts` (nuevo), con el mismo molde que
 `gestiones-detalle-api-405.test.ts`: base real, espía `$on("query")`, siembra explícita.
@@ -315,6 +335,8 @@ datos debe hacer **fallar** el test, no reportarlo `passed`. **Revisar los `skip
 
 ## T8 [P] — La QUINTA superficie ante el hueco de tarifa (depende de T4)
 
+- [x] **HECHA** — los tres puntos. `asimetria-sin-tarifa.test.ts` pasa de 4 a 5 superficies, con la cabecera reescrita, el mismo `TABLA_TARIFAS`, el `TarifaVigenteRepository` REAL y la contraprueba (con la fila del par, los cinco conceptos con importes a mano).
+
 `tests/integration/asimetria-sin-tarifa.test.ts` declara en su cabecera que ante **el mismo** hueco
 —ningún `tarifas` aplica al par (tienda, zona)— las **cuatro** superficies responden distinto a
 propósito. Esta ficha añade la quinta:
@@ -335,6 +357,8 @@ cabecera describe las cinco.
 ---
 
 ## T9 [P] — Guardia: una sola forma y una lista blanca (depende de T4)
+
+- [x] **HECHA** — los cuatro bloques, en `tests/unit/guards/costo-orden-forma-unica.guardia.test.ts` (11 casos). La guardia de la 404 se REVISÓ y **no se tocó**: su detector casa por NOMBRE (`/Api\w*Mensajero\w*DTO/`), no por forma, así que `ApiZonaDTO` no la hace caer; se comprobó corriéndola, no razonándolo.
 
 `tests/unit/guards/costo-orden-forma-unica.guardia.test.ts` (molde:
 `mensajero-forma-unica.guardia.test.ts` y `gestiones-detalle-lista-blanca.guardia.test.ts`):
@@ -360,6 +384,8 @@ la guardia de la 404 sigue verde con su alcance intacto o acotado con motivo.
 ---
 
 ## T10 — Contrato publicado: OpenAPI + espejo `.yaml` (depende de T4)
+
+- [x] **HECHA** — los dos puntos. `tests/unit/api/openapi-415-zona-y-costo.test.ts` (29 casos). ⚠️ **Lo que sigue pendiente y NO es mío**: la equivalencia palabra por palabra entre el `.ts` y el `.yaml` es verificación HUMANA del reviewer, como declara la propia task (no hay comparador entre los dos artefactos). Aquí se afirma la ESTRUCTURA del espejo y las frases clave, no su redacción entera.
 
 1. `lib/api/openapi-spec.ts`:
    - **Schema nuevo `Zona`**: `{ id, nombre }`, las dos en `required`, `additionalProperties:
@@ -405,6 +431,8 @@ automático entre los dos artefactos): se revisa el diff lado a lado.
 
 ## T11 [P] — El manual deja de mentir en el otro sentido (depende de T10)
 
+- [x] **HECHA** — los cinco puntos escritos en `docs/api/manual-metricas-por-mensajero.md`. ⚠️ **Su verificación es HUMANA del reviewer sobre el diff**, y sigue pendiente: la task prohíbe expresamente cualquier criterio de `grep` sobre estos textos.
+
 `docs/api/manual-metricas-por-mensajero.md`:
 
 1. **Reescribir** el bloque «Corrección del 2026-09-10» —que hoy dice «hoy no publicamos la zona por
@@ -425,6 +453,8 @@ de `grep`** sobre estos textos.
 ---
 
 ## T12 — Aviso a integradores: UNA entrada de CHANGELOG (BLOQUEA LA RELEASE, no el código)
+
+- [x] **HECHA** — UNA sola entrada fechada para las dos partes, arriba del todo, con los ocho puntos mínimos. ⚠️ **Escrita y commiteada ≠ enviada**: el texto ES el aviso y hay que MANDARLO antes de desplegar, en especial a quien valide esquema en estricto. Bloquea la release.
 
 `docs/api/CHANGELOG.md`, entrada fechada **antes de la release**, con la convención del propio
 archivo (el texto **es** el aviso: se copia y se manda). **UNA sola entrada para las dos partes**
@@ -454,6 +484,8 @@ Verificación humana. **No bloquea el código; bloquea la release.**
 ---
 
 ## T13 — Gate (depende de todo lo anterior)
+
+- [x] **HECHA** — `./init.sh` COMPLETO, con el log en archivo y `INIT_EXIT` DENTRO del log. El número, los `skipped` mirados uno a uno y los rojos ajenos medidos están en `progress/impl_415.md`.
 
 El diff toca **nombres de dinero** (`tarifa`, `cierre`, `comision`, `flete`) en `lib/`, así que
 **`--rapido` se niega solo** y manda al completo: eso es un `fail`, no un aviso. Correr `./init.sh`

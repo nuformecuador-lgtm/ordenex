@@ -38,6 +38,11 @@ function okListado(): ApiOrdenListadoDTO {
         createdAt: new Date("2026-07-20T15:04:00.000Z"),
         // ⏳ 2026-09-09 (feature 404): campo REQUERIDO del DTO publico.
         mensajero: null,
+        // ⏳ 2026-09-10 (feature 415): campos REQUERIDOS del DTO publico. Este doble no mide
+        // importes: los casos que si los miden montan la cadena real.
+        zona: { id: "018f2c31-0000-4000-8000-00000000za01", nombre: "GAM" },
+        costoEstimado: null,
+        costoReal: null,
       },
     ],
     pagination: { limit: 50, offset: 0, total: 173 },

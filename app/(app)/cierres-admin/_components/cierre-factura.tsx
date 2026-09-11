@@ -88,6 +88,12 @@ import {
   // que acompañe al motivo — sólo el badge de más abajo, y sólo en `rechazada`. Se pide por la
   // misma puerta que el resto de los textos de cierre.
   motivoGestionLegible,
+  // FICHA 414 (R7/R9): la marca «La tienda» que la tabla en vivo del mensajero ya pinta (237/R41).
+  // Los DOS textos se piden por esta puerta —viven en el módulo PURO `cierre-labels`— y NO se
+  // teclean aquí: dos copias del mismo texto de cara al usuario divergen a la primera corrección,
+  // y lo que hace que las dos superficies digan lo mismo es que LEEN DEL MISMO SITIO.
+  GESTION_TIENDA_BADGE_LABEL,
+  GESTION_TIENDA_BADGE_NOTA,
 } from "./cierre-detalle-shared";
 // Feature 213 (T6/T7): el desglose de pago se formatea en UN solo sitio (R25).
 import { desglosePantalla } from "./desglose-pago";
@@ -1533,8 +1539,37 @@ function FilaGestion({
             />
             <DatoFila
               label={FILA_MOTIVO_LABEL}
-              value={motivoGestionLegible(g.motivo, g.esRechazoSla)}
+              // FICHA 414 (R4) — `!esMensajero && g.esRechazoSla` y no `g.esRechazoSla` a secas: el
+              // parámetro se llama `hayMarcadorDeOrigen` y en ESTA superficie tiene que decir la
+              // verdad por construcción. Para el mensajero el marcador ya no se pinta (abajo),
+              // venga lo que venga del servidor, así que el texto del motivo vuelve a ser el ÚNICO
+              // portador de que el rechazo no fue suyo y tiene que salir en su variante LARGA.
+              // Para el admin la expresión resuelve a lo mismo de hoy, carácter por carácter.
+              value={motivoGestionLegible(g.motivo, !esMensajero && g.esRechazoSla)}
             />
+            {/* FICHA 414 (R7) — LA MARCA «La tienda», la misma que la tabla en vivo del mensajero
+                pinta desde la 237/R41. Dos detalles que parecen de forma y no lo son:
+
+                1. **Va FUERA del fragmento `rechazada` de aquí abajo.** `desdeAyudaTienda` es
+                   ORTOGONAL al resultado —en la tabla en vivo vive en `COLUMNAS_COMUNES`, o sea en
+                   las cinco secciones—. Anidarla donde está el distintivo de origen dejaría muda
+                   una ENTREGA registrada por la tienda sin romper nada visible.
+                2. **Va en el bloque desplegado y no pegada al número de guía**, que es donde la
+                   pone la tabla en vivo. Aquí la celda de la guía está DENTRO del `<button>` de la
+                   fila, y ese botón trae su propio `aria-label`, que SUSTITUYE al contenido como
+                   nombre accesible: la nota no se anunciaría. Allí la celda no está en ningún
+                   botón, y por eso la misma marca puede ir en dos sitios distintos. */}
+            {esMensajero && g.desdeAyudaTienda ? (
+              <span className="flex items-center gap-1">
+                <Badge
+                  variant="secondary"
+                  title={GESTION_TIENDA_BADGE_NOTA}
+                  aria-label={GESTION_TIENDA_BADGE_NOTA}
+                >
+                  {GESTION_TIENDA_BADGE_LABEL}
+                </Badge>
+              </span>
+            ) : null}
             {g.resultado === "rechazada" ? (
               <>
                 <DatoFila
@@ -1545,25 +1580,40 @@ function FilaGestion({
                       : money(g.ingresoBodegaRechazo)
                   }
                 />
-                <span className="flex items-center gap-1">
-                  {g.esRechazoSla ? (
-                    <Badge
-                      variant="secondary"
-                      title={RECHAZO_SLA_BADGE_NOTA}
-                      aria-label={RECHAZO_SLA_BADGE_NOTA}
-                    >
-                      {RECHAZO_SLA_BADGE_LABEL}
-                    </Badge>
-                  ) : (
-                    <Badge
-                      variant="outline"
-                      title={RECHAZO_MANUAL_BADGE_NOTA}
-                      aria-label={RECHAZO_MANUAL_BADGE_NOTA}
-                    >
-                      {RECHAZO_MANUAL_BADGE_LABEL}
-                    </Badge>
-                  )}
-                </span>
+                {/* FICHA 414 (R1) — EL DISTINTIVO DE ORIGEN NO SE LE ENSEÑA AL MENSAJERO.
+                    `CierreDiaRepository` fija `esRechazoSla: false` para su vista por decisión
+                    expresa de la 102/R11, así que aquí el badge caía SIEMPRE en la rama «Manual»
+                    y le atribuía a él tanto los rechazos del cron como los de la tienda. No se
+                    esconde una verdad incómoda: se retira una afirmación que el emisor no puede
+                    sostener. Para el admin —que sí recibe el origen derivado del historial— no
+                    cambia ni un carácter.
+
+                    ⚠️ ÉSTA es la única condición que hay que tocar si algún día se reabre la 102 y
+                    el servidor pasa a derivar el origen también para esta audiencia. Si eso llega,
+                    hay que decidir antes si el mensajero debe verlo (`design.md` §8.2) — y revisar
+                    el argumento de `motivoGestionLegible` de más arriba, que hoy depende de esta
+                    misma decisión. */}
+                {esMensajero ? null : (
+                  <span className="flex items-center gap-1">
+                    {g.esRechazoSla ? (
+                      <Badge
+                        variant="secondary"
+                        title={RECHAZO_SLA_BADGE_NOTA}
+                        aria-label={RECHAZO_SLA_BADGE_NOTA}
+                      >
+                        {RECHAZO_SLA_BADGE_LABEL}
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        title={RECHAZO_MANUAL_BADGE_NOTA}
+                        aria-label={RECHAZO_MANUAL_BADGE_NOTA}
+                      >
+                        {RECHAZO_MANUAL_BADGE_LABEL}
+                      </Badge>
+                    )}
+                  </span>
+                )}
               </>
             ) : null}
             {g.evidenciaUrl && onVerEvidencia ? (

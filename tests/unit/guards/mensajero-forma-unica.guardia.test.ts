@@ -15,6 +15,7 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ApiOrdenLecturaService } from "@/lib/services/ApiOrdenLecturaService";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { FILA_PRISMA_415 } from "@/tests/fixtures/api-orden-costeo-415";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // FEATURE 404 (R5) — LA GUARDIA DE QUE `mensajero` TIENE UNA SOLA FORMA EN LAS TRES SUPERFICIES.
@@ -145,6 +146,8 @@ function filaOrden(mensajeroAsignado: typeof USUARIO | null) {
     montoCobrar: new Prisma.Decimal(1500),
     createdAt: new Date("2026-09-09T10:00:00.000Z"),
     estatus: { value: "en_reparto" },
+    // ⏳ 2026-09-10 (feature 415): lo que el `select` del canal anade a la fila cruda.
+    ...FILA_PRISMA_415,
     gestiones: [],
     historialEstados: [], // 405: relacion nueva del select del detalle
     incidentesAdmin: [],
@@ -165,6 +168,7 @@ async function listadoYDetalle(mensajeroAsignado: typeof USUARIO | null) {
   const svc = new ApiOrdenLecturaService(
     new OrdenRepository(prisma as unknown as PrismaClient),
     signedUrlsNoOp,
+    fakeTarifas() as never,
   );
   const listado = await svc.listar(ACTOR, { limit: 50, offset: 0 });
   const detalle = await svc.detallePorOrdenId(ACTOR, "orden-1");
@@ -173,6 +177,12 @@ async function listadoYDetalle(mensajeroAsignado: typeof USUARIO | null) {
     detalle: detalle!,
   };
 }
+
+/**
+ * ⏳ 2026-09-10 (feature 415): el resolutor de tarifa VIGENTE que el service pide por
+ * constructor. Aqui no resuelve ninguna: estos casos no miden importes.
+ */
+const fakeTarifas = () => ({ resolveTarifas: vi.fn().mockResolvedValue(new Map()) });
 
 describe("404/R5 — comportamiento: las tres superficies producen la MISMA forma", () => {
   it("con mensajero asignado, webhook / listado / detalle dan el MISMO objeto y el MISMO JSON", async () => {

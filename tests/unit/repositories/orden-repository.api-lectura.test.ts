@@ -40,12 +40,47 @@ function ordenSelectRow(overrides: Record<string, unknown> = {}) {
     // ⏳ 2026-09-09 (feature 404): por DEFECTO la orden no tiene mensajero asignado
     // (`mensajero_asignado_id` NULL). Los casos que si lo tienen pasan `MENSAJERO_ROW`.
     mensajeroAsignado: null,
+    // ⏳ 2026-09-10 (feature 415): lo que el `select` nuevo trae. `orden.zona_id` es NOT NULL, asi
+    // que la relacion `zona` NUNCA llega `null`. Por DEFECTO: sin distrito registrado (el unico FK
+    // nullable de `orden`) y sin ninguna fila congelada elegible —el 28 % medido—.
+    zonaId: ZONA_ID,
+    cobraComision: false,
+    zona: { id: ZONA_ID, nombre: "GAM", esCentral: true },
+    distrito: null,
+    cierreDetalles: [],
     ...overrides,
   };
 }
 
 const OWNER = "store-1";
 const ORDEN_ID = "orden-1";
+const ZONA_ID = "018f2c31-0000-4000-8000-00000000za01";
+
+/**
+ * ⏳ 2026-09-10 (feature 415) — la fila de `cierre_detail` que Prisma devuelve para la relacion
+ * `cierreDetalles`, ya proyectada por el `select` del repositorio. Los montos son `Decimal`, como
+ * los devuelve el motor.
+ */
+function cierreDetalleRow(overrides: Record<string, unknown> = {}) {
+  return {
+    montoCobrar: new Prisma.Decimal("25900.00"),
+    cobraComision: true,
+    esCentral: true,
+    esZonaEspecial: false,
+    tarifaId: "tarifa-congelada-1",
+    tarifaValorFlete: new Prisma.Decimal("3000.00"),
+    tarifaValorFleteGam: new Prisma.Decimal("2500.00"),
+    tarifaValorFleteDevuelto: new Prisma.Decimal("1500.00"),
+    tarifaValorFleteDevueltoGam: new Prisma.Decimal("1200.00"),
+    tarifaComisionCod: new Prisma.Decimal("3.50"),
+    tarifaIvaFlete: new Prisma.Decimal("13.00"),
+    tarifaIvaComisionCod: new Prisma.Decimal("13.00"),
+    tarifaEspecial: null,
+    tarifaEspecialDevuelta: null,
+    tarifaFulfillment: new Prisma.Decimal("692.00"),
+    ...overrides,
+  };
+}
 
 /**
  * ⏳ 2026-09-09 (feature 404) — la fila de `usuario` que Prisma devuelve para la relacion
@@ -97,6 +132,11 @@ describe("OrdenRepository.listByOwner (feature 106, T5)", () => {
     // ⏳ 2026-09-09 (feature 404, R16): sigue siendo una igualdad ESTRUCTURAL —no `toMatchObject`—
     // para que un decimo campo que se colara ponga el test rojo. Gana `mensajero` y ni una clave
     // mas; los nueve publicados conservan nombre, tipo y valor.
+    //
+    // ⏳ 2026-09-10 (feature 415, R34): ENMENDADO, no relajado. La fila gana DOS campos —`zona`,
+    // que se publica, y `costeo`, que NO— y sigue siendo igualdad estructural: si alguien colara
+    // una tercera, esto se pone rojo. Los nueve de siempre y `mensajero` conservan nombre, tipo y
+    // valor, que es lo que R34 pide.
     expect(res.items[0]).toEqual({
       numGuia: 10234,
       numRemision: "REM-1",
@@ -108,6 +148,16 @@ describe("OrdenRepository.listByOwner (feature 106, T5)", () => {
       montoCobrar: 1500,
       createdAt: new Date("2026-07-20T15:04:00.000Z"),
       mensajero: null,
+      zona: { id: ZONA_ID, nombre: "GAM" },
+      costeo: {
+        zonaId: ZONA_ID,
+        esCentral: true,
+        esZonaEspecial: false,
+        // R17: CADENA de escala 2, mientras que el publicado de arriba es el `number` 1500.
+        montoCobrar: "1500.00",
+        cobraComision: false,
+        congelado: null,
+      },
     });
   });
 
@@ -430,5 +480,312 @@ describe("OrdenRepository detalle — evidencias de incidente (feature 268, R27)
     // `solicitado`/`aprobado`/`rechazado` es el estado del tramite ECONOMICO, no el de si el
     // incidente ocurrio. Filtrar por `aprobado` esconderia las fotos justo mientras se decide.
     expect(incidentesAdmin.where).toBeUndefined();
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// ⏳ 2026-09-10 — Feature 415 (T3): la zona, las entradas VIVAS y la fila CONGELADA.
+//
+// ⚠️ LO QUE ESTE ARCHIVO PUEDE Y NO PUEDE AFIRMAR. Prisma esta MOCKEADO, asi que aqui se afirma
+// **QUE SE LE PIDIO A PRISMA** —la forma del `select`, su `where`, su `orderBy` y su `take`— y el
+// MAPEO de lo que Prisma devuelve. Lo que Postgres HACE con ese `where` **solo lo dice Postgres**:
+// eso vive en `tests/integration/db/costo-y-zona-api-415.test.ts`, que no es opcional.
+// -----------------------------------------------------------------------------------------------
+
+describe("OrdenRepository — zona y costo del canal (feature 415)", () => {
+  it("415/R1+R5: `zona` sale con `id` y `nombre` del catalogo, sin transformar y SIN `esCentral`", async () => {
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi.fn().mockResolvedValue([
+          ordenSelectRow({
+            zona: { id: ZONA_ID, nombre: "FGAM Zona Sur", esCentral: false },
+          }),
+        ]),
+        count: vi.fn().mockResolvedValue(1),
+        findFirst: vi.fn(),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+
+    // El nombre va TAL CUAL: ni recortado, ni normalizado, ni partido por el espacio.
+    expect(res.items[0].zona).toEqual({ id: ZONA_ID, nombre: "FGAM Zona Sur" });
+    expect(Object.keys(res.items[0].zona).sort()).toEqual(["id", "nombre"]);
+    // `esCentral` baja al `costeo` —donde elige la columna de flete— y NO al campo publicado.
+    expect(res.items[0].zona).not.toHaveProperty("esCentral");
+    expect(res.items[0].costeo.esCentral).toBe(false);
+  });
+
+  it("415/R1: el `select` pide `id`, `nombre` y `esCentral` de la zona, y NADA mas", async () => {
+    const prisma = buildPrisma();
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+
+    const select = (prisma.orden.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0].select;
+    expect(select.zona).toEqual({ select: { id: true, nombre: true, esCentral: true } });
+    // R5: del distrito solo la marca, ni el nombre ni la geografia.
+    expect(select.distrito).toEqual({ select: { zonaEspecial: true } });
+  });
+
+  it("415/R21: distrito con `zonaEspecial: null` y orden SIN distrito dan los DOS `false`", async () => {
+    // La columna es TRI-VALUADA: `null` = «nadie lo decidio», y NO vale `!zonaEspecial`. Si el
+    // mapeo usara la negacion, el caso `null` saldria `true` y este aserto se pondria rojo.
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi.fn().mockResolvedValue([
+          ordenSelectRow({ distrito: { zonaEspecial: null } }),
+          ordenSelectRow({ numRemision: "REM-2", distrito: null }),
+          // Y el contraste: `true` SI es `true`, para que el caso de arriba no salga verde por
+          // vacio (un mapeo que devolviera siempre `false` moriria aqui).
+          ordenSelectRow({ numRemision: "REM-3", distrito: { zonaEspecial: true } }),
+        ]),
+        count: vi.fn().mockResolvedValue(3),
+        findFirst: vi.fn(),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+
+    expect(res.items[0].costeo.esZonaEspecial).toBe(false);
+    expect(res.items[1].costeo.esZonaEspecial).toBe(false);
+    expect(res.items[2].costeo.esZonaEspecial).toBe(true);
+  });
+
+  it("415/R17: `costeo.montoCobrar` es una CADENA de dos decimales, no el `number` publicado", async () => {
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi.fn().mockResolvedValue([
+          ordenSelectRow({ montoCobrar: new Prisma.Decimal("16618.4") }),
+          ordenSelectRow({ numRemision: "REM-2", montoCobrar: null }),
+        ]),
+        count: vi.fn().mockResolvedValue(2),
+        findFirst: vi.fn(),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+
+    // Publicado: `number` (feature 106). Para calcular: CADENA de escala 2 (design §D9).
+    expect(res.items[0].montoCobrar).toBe(16618.4);
+    expect(typeof res.items[0].montoCobrar).toBe("number");
+    expect(res.items[0].costeo.montoCobrar).toBe("16618.40");
+    expect(typeof res.items[0].costeo.montoCobrar).toBe("string");
+    // Sin COD, `null` en las dos (no "0.00" inventado aqui).
+    expect(res.items[1].montoCobrar).toBeNull();
+    expect(res.items[1].costeo.montoCobrar).toBeNull();
+  });
+
+  it("415/R26+R27+R33: el `select` del congelado lleva el `where`, el `orderBy` y el `take` exactos", async () => {
+    const prisma = buildPrisma();
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+
+    const select = (prisma.orden.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0].select;
+    const rel = select.cierreDetalles;
+
+    // R33: el `tienda_id` que acota es el CONGELADO de la fila, y es el OWNER de la peticion.
+    // R26: y el filtro por estado del cierre va EXPLICITO. Si alguien lo borrara por «redundante»,
+    // esta igualdad se pone roja y dice exactamente que falta.
+    expect(rel.where).toEqual({ tiendaId: OWNER, cierre: { estado: "aprobado" } });
+    // R27: orden TOTAL (dos claves) y una sola fila. Con una sola clave, dos filas del mismo
+    // instante podrian salir en distinto orden entre dos lecturas.
+    expect(rel.orderBy).toEqual([{ createdAt: "desc" }, { id: "desc" }]);
+    expect(rel.take).toBe(1);
+    // ⚠️ ESTO AFIRMA LO QUE SE LE PIDIO A PRISMA, NO LO QUE POSTGRES DEVUELVE. Que el filtro
+    // FUNCIONE —que un cierre `solicitado` o `rechazado` no alimente `costoReal`— lo demuestra
+    // `tests/integration/db/costo-y-zona-api-415.test.ts`, contra base real.
+  });
+
+  it("415/R18: el `select` del congelado NO pide ninguna columna que se publique", async () => {
+    const prisma = buildPrisma();
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+
+    const select = (prisma.orden.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0].select;
+    const claves = Object.keys(select.cierreDetalles.select).sort();
+    // Las QUINCE del design §4, ni una mas: las cuatro entradas congeladas y las once de tarifa.
+    expect(claves).toEqual([
+      "cobraComision",
+      "esCentral",
+      "esZonaEspecial",
+      "montoCobrar",
+      "tarifaComisionCod",
+      "tarifaEspecial",
+      "tarifaEspecialDevuelta",
+      "tarifaFulfillment",
+      "tarifaId",
+      "tarifaIvaComisionCod",
+      "tarifaIvaFlete",
+      "tarifaValorFlete",
+      "tarifaValorFleteDevuelto",
+      "tarifaValorFleteDevueltoGam",
+      "tarifaValorFleteGam",
+    ]);
+    // Lo que NO se lee no se puede filtrar: ni el id de la fila, ni el del cierre, ni el
+    // `zona_nombre` congelado, ni la fecha de congelacion, ni los descriptivos.
+    for (const prohibida of ["id", "cierreId", "ordenId", "zonaId", "zonaNombre", "createdAt", "tiendaId"]) {
+      expect(claves).not.toContain(prohibida);
+    }
+  });
+
+  it("415/R25+R29: el congelado se reconstruye con la tarifa y el fulfillment de la FILA", async () => {
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([ordenSelectRow({ cierreDetalles: [cierreDetalleRow()] })]),
+        count: vi.fn().mockResolvedValue(1),
+        findFirst: vi.fn(),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+
+    // Los valores van A MANO: son los mismos que `cierreDetalleRow` siembra, escritos aqui como
+    // cadenas de escala 2 —que es lo que `tarifaDe` produce— y no leidos de la fixture.
+    expect(res.items[0].costeo.congelado).toEqual({
+      tarifa: {
+        valorFlete: "3000.00",
+        valorFleteGam: "2500.00",
+        valorFleteDevuelto: "1500.00",
+        valorFleteDevueltoGam: "1200.00",
+        comisionCod: "3.50",
+        ivaFlete: "13.00",
+        ivaComisionCod: "13.00",
+        tarifaEspecial: null,
+        tarifaEspecialDevuelta: null,
+      },
+      fulfillment: "692.00",
+      esCentral: true,
+      esZonaEspecial: false,
+      montoCobrar: "25900.00",
+      cobraComision: true,
+    });
+  });
+
+  it("415/R28+R29: `tarifa_id` NULL da tarifa `null`, y `tarifa_fulfillment` NULL da `\"0.00\"`", async () => {
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi.fn().mockResolvedValue([
+          ordenSelectRow({
+            cierreDetalles: [cierreDetalleRow({ tarifaId: null, tarifaFulfillment: null })],
+          }),
+        ]),
+        count: vi.fn().mockResolvedValue(1),
+        findFirst: vi.fn(),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+
+    expect(res.items[0].costeo.congelado!.tarifa).toBeNull();
+    expect(res.items[0].costeo.congelado!.fulfillment).toBe("0.00");
+    // Pero la FILA existe: eso es lo que separa el cero AFIRMADO (R28) del `costoReal: null`.
+    expect(res.items[0].costeo.congelado).not.toBeNull();
+  });
+
+  it("415/R26: sin fila congelada, `costeo.congelado` es `null` — el 28 % medido", async () => {
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi.fn().mockResolvedValue([ordenSelectRow({ cierreDetalles: [] })]),
+        count: vi.fn().mockResolvedValue(1),
+        findFirst: vi.fn(),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+
+    expect(res.items[0].costeo.congelado).toBeNull();
+  });
+
+  it("415/R8+R31: una pagina de N ordenes con congelado NO anade consultas por item", async () => {
+    const filas = Array.from({ length: 25 }, (_, i) =>
+      ordenSelectRow({
+        numRemision: `REM-${i}`,
+        cierreDetalles: i % 2 === 0 ? [cierreDetalleRow()] : [],
+      }),
+    );
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi.fn().mockResolvedValue(filas),
+        count: vi.fn().mockResolvedValue(25),
+        findFirst: vi.fn(),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 25 });
+
+    expect(res.items).toHaveLength(25);
+    expect(prisma.orden.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.orden.count).toHaveBeenCalledTimes(1);
+  });
+
+  it("415/R32: el `where` del listado y el del detalle NO cambian", async () => {
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
+        findFirst: vi.fn().mockResolvedValue(null),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+    await repo.findDetalleByOrdenIdForOwner(ORDEN_ID, OWNER);
+
+    // El alcance se escribe en el WHERE de la ORDEN, y esta ficha no lo toca: lo que gano un
+    // `where` propio es la RELACION anidada del congelado, no la consulta.
+    expect((prisma.orden.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0].where).toEqual({
+      tiendaId: OWNER,
+      deletedAt: null,
+    });
+    expect((prisma.orden.findFirst as ReturnType<typeof vi.fn>).mock.calls[0][0].where).toEqual({
+      id: ORDEN_ID,
+      tiendaId: OWNER,
+      deletedAt: null,
+    });
+  });
+
+  it("415/design §5.1: el detalle NO puede divergir del listado — misma proyeccion, misma fuente", async () => {
+    const prisma = buildPrisma({
+      orden: {
+        findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
+        findFirst: vi.fn().mockResolvedValue(null),
+      },
+    });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.listByOwner({ ownerId: OWNER, skip: 0, take: 50 });
+    await repo.findDetalleByOrdenIdForOwner(ORDEN_ID, OWNER);
+
+    const listado = (prisma.orden.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0].select;
+    const detalle = (prisma.orden.findFirst as ReturnType<typeof vi.fn>).mock.calls[0][0].select;
+
+    // ⭑ LA PROPIEDAD QUE LA CONSTANTE GARANTIZABA, AFIRMADA AHORA QUE ES UNA FUNCION. Para CADA
+    // clave del listado, el detalle pide EXACTAMENTE lo mismo. Si alguien anadiera una columna
+    // solo a uno de los dos, esto se pone rojo y dice cual. El detalle puede tener claves de MAS
+    // (`gestiones`, `historialEstados`, `incidentesAdmin`); lo que no puede es divergir en las
+    // compartidas ni perder ninguna.
+    for (const clave of Object.keys(listado)) {
+      expect(detalle, `falta \`${clave}\` en el detalle`).toHaveProperty(clave);
+      expect(detalle[clave], `\`${clave}\` diverge entre listado y detalle`).toEqual(
+        listado[clave],
+      );
+    }
+    // Y el mismo `ownerId` llega a los dos `where` del congelado: la funcion no puede cerrar sobre
+    // un valor distinto en cada camino.
+    expect(detalle.cierreDetalles.where.tiendaId).toBe(OWNER);
+    expect(listado.cierreDetalles.where.tiendaId).toBe(OWNER);
   });
 });

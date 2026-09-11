@@ -174,6 +174,11 @@ function detalleDe(orden: Orden): ApiOrdenDetalleDTO {
     montoCobrar: 1500,
     createdAt: new Date("2026-08-20T15:04:00.000Z"),
     mensajero: null,
+    // ⏳ 2026-09-10 (feature 415): campos REQUERIDOS del DTO publico. Este archivo mide las URL
+    // firmadas de las evidencias, no el costo: valores neutros.
+    zona: { id: "018f2c31-0000-4000-8000-00000000za01", nombre: "GAM" },
+    costoEstimado: null,
+    costoReal: null,
     gestiones: [],
     evidencias: [],
   };

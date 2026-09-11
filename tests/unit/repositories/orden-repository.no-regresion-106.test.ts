@@ -59,6 +59,31 @@ const ORDEN_ID = "orden-1";
  *   - `historialEstados` es la relacion NUEVA de la orden, la unica forma de saber a que estado
  *     llevo cada gestion sin entrar por una columna sin indice.
  *
+ * ⚠️ FEATURE 415 (T3, 2026-09-10) — AQUI NO EXISTIAN `zonaId`, `cobraComision`, `zona`, `distrito`
+ * NI `cierreDetalles`, y ya no es cierto. Los cinco son DELIBERADOS y estan firmados en
+ * `specs/415-zona-y-costo-por-orden-api/design.md` §5 y §5.1:
+ *
+ *   - `zona` (`id`, `nombre`, `esCentral`) -> el item publica `zona: { id, nombre }`, que es la
+ *     zona DE LA ORDEN (el destino del paquete). `esCentral` **NO se publica**: entra solo en el
+ *     bundle de costeo, donde elige la columna de flete. ⚠️ NO CONFUNDIR con la zona DEL
+ *     MENSAJERO (`usuario.zona_id`), que sigue excluida de `mensajeroAsignado` y que esta ficha no
+ *     toca (415/R6);
+ *   - `zonaId` y `cobraComision` -> entradas de la resolucion de tarifa y de la formula. No se
+ *     publican;
+ *   - `distrito: { zonaEspecial }` -> la marca tri-valuada que elige el pacto especial del flete.
+ *     Ni el nombre del distrito, ni la provincia, ni el canton (415/R5);
+ *   - `cierreDetalles` -> la fila CONGELADA de `cierre_detail` con la que se deriva `costoReal`,
+ *     acotada por `tiendaId` (el CONGELADO, 415/R33) **y** por `cierre.estado = "aprobado"`
+ *     (415/R26), con `orderBy` de dos claves y `take: 1` (415/R27). El `select` pide las quince
+ *     columnas congeladas y ni una mas: ni el `id` de la fila, ni el `cierre_id`, ni el
+ *     `zona_nombre` congelado, ni los descriptivos.
+ *
+ * ⚠️ EL `where` DEL CONGELADO NO ES UNA CONSTANTE: depende del `ownerId` de la peticion, y por eso
+ * `API_ORDEN_SELECT` paso a ser `apiOrdenSelect(ownerId)`. Aqui se congela con el OWNER del test,
+ * que es lo mismo que el codigo construye. La propiedad que la constante garantizaba —que listado
+ * y detalle no puedan divergir— se afirma aparte, clave a clave, en
+ * `orden-repository.api-lectura.test.ts`.
+ *
  * El literal se ENMIENDA, no se sustituye por una comparacion contra la constante de produccion:
  * eso seria tautologico y dejaria de vigilar nada. Lo que sigue congelando: que no aparezca ninguna
  * OTRA columna de `usuario` (telefono, email, cedula, rol...), los nueve campos publicos de la
@@ -84,6 +109,38 @@ const SELECT_DETALLE_106 = {
   // 404/R6 (2026-09-09): el mensajero ASIGNADO. Id + identidad, ni una columna mas de `usuario`.
   mensajeroAsignado: {
     select: { id: true, nombre: true, primerApellido: true, segundoApellido: true },
+  },
+  // --- 415 (2026-09-10): la zona de la ORDEN y las entradas del costo ---------------------------
+  zonaId: true,
+  cobraComision: true,
+  // `esCentral` se lee pero NO se publica: elige la columna de flete (GAM vs estandar).
+  zona: { select: { id: true, nombre: true, esCentral: true } },
+  // Del distrito, SOLO la marca tri-valuada. Ni nombre, ni provincia, ni canton (415/R5).
+  distrito: { select: { zonaEspecial: true } },
+  // La fila congelada elegible MAS RECIENTE. El `where` lleva las DOS mitades y las dos son
+  // load-bearing: `tiendaId` es el tienda_id CONGELADO (415/R33) y `cierre.estado` impide que
+  // `costoReal` cambie hacia atras cuando haya un cierre solicitado o rechazado (415/R26).
+  cierreDetalles: {
+    where: { tiendaId: OWNER, cierre: { estado: "aprobado" } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }], // 415/R27: orden TOTAL
+    take: 1,
+    select: {
+      montoCobrar: true,
+      cobraComision: true,
+      esCentral: true,
+      esZonaEspecial: true,
+      tarifaId: true,
+      tarifaValorFlete: true,
+      tarifaValorFleteGam: true,
+      tarifaValorFleteDevuelto: true,
+      tarifaValorFleteDevueltoGam: true,
+      tarifaComisionCod: true,
+      tarifaIvaFlete: true,
+      tarifaIvaComisionCod: true,
+      tarifaEspecial: true,
+      tarifaEspecialDevuelta: true,
+      tarifaFulfillment: true,
+    },
   },
   gestiones: {
     where: {

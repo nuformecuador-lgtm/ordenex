@@ -13,6 +13,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ApiKeyAuthResult } from "@/lib/interfaces/services/IApiKeyAuthService";
 import type { ApiOrdenDetalleRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IApiPdfEtiquetaService } from "@/lib/interfaces/services/IApiPdfEtiquetaService";
+import { costeoFixture, ZONA_FIXTURE } from "@/tests/fixtures/api-orden-costeo-415";
 
 const ACTOR: Actor = { usuarioId: "store-1", rol: "apiKey" };
 const OK_AUTH: ApiKeyAuthResult = { status: "ok", actor: ACTOR, apiKeyId: "k1" };
@@ -42,6 +43,9 @@ function detalleRow(fila: Fila): ApiOrdenDetalleRow {
     gestiones: [],
     // ⏳ 2026-09-09 (feature 404): campo REQUERIDO de `ApiOrdenDetalleRow`.
     mensajero: null,
+  // ⏳ 2026-09-10 (feature 415): campos REQUERIDOS de la fila del repo.
+  zona: ZONA_FIXTURE,
+  costeo: costeoFixture(),
   };
 }
 
