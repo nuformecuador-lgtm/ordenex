@@ -466,6 +466,25 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       //     `adminSatelite` de cada zona (ambito = su zona), cada uno con SU numero.
       "novedades_sin_gestionar", // ficha 409 / §4.3
       "devoluciones_represadas", // ficha 409 / §4.3
+      // FICHA 412 (T1.1) — DECIMOCUARTO valor, y que esta lista se pusiera roja ES otra vez LA
+      // PRUEBA de que el inventario sigue CERRADO. La ficha pago el precio completo: `ALTER TYPE`
+      // en migracion APARTE (por el 55P04), su `down.sql` recreando los DOS tipos con los TRECE
+      // eventos y las ONCE entidades previos —leidos de `origin/dev` @ `b4ee8412` y re-leidos en
+      // `6c5335fc` antes del PR—, y esta linea escrita a mano.
+      //
+      // Su productor es el RECHAZO de un cierre del dia (`CierresAdminService.rechazarCierre`),
+      // que lo emite SIEMPRE que la escritura confirme, deje bloqueado al mensajero o no.
+      // Destinatario UNICO: el MENSAJERO dueno del cierre, como fila dirigida a USUARIO — no hay
+      // fila de rol de este evento (R2); la administracion sigue recibiendo la suya de
+      // `mensajero_bloqueado_por_cierres`, sin cambios (R18).
+      //
+      // POR QUE UN EVENTO PROPIO Y NO UNA VARIANTE DE TEXTO DEL BLOQUEO: hasta esta ficha NINGUN
+      // aviso del sistema decia la palabra «rechazado» —el mensajero leia lo mismo que por un
+      // `vencido`—, y el compositor `avisoBloqueo` lo comparten TRES productores y TRES pantallas,
+      // asi que meterlo ahi seria FALSO para las otras dos causas. Ademas el evento es lo que la
+      // campana usa para AGRUPAR y DEDUPLICAR: una diferencia metida en la descripcion es
+      // invisible para todo lo que no sea leer la frase.
+      "cierre_dia_rechazado", // ficha 412 / §2
     ]);
   });
 
@@ -518,6 +537,24 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       // sin error y sin log — el fallo que la 262 documento con `orden` y la 403 con la racha.
       "novedades_sin_gestionar_dia", // ficha 409 / §4.2 — LA TIENDA Y EL DIA CR
       "devoluciones_represadas_dia", // ficha 409 / §4.2 — EL AMBITO Y EL DIA CR
+      // ⚠️ FICHA 412 (design §3) — SEXTO valor que NO apunta a una fila de tabla, y el primero
+      // cuya mitad variable es UN INSTANTE en vez de un dia:
+      //
+      //     cierre_dia_rechazo  ->  `${cierreId}:${resueltoAtISO}`
+      //
+      // POR QUE EL RECHAZO Y NO EL CIERRE, que es la eleccion natural —y la que sigue usando el
+      // aviso de bloqueo—: `notificacion_dedupe_key` NO MIRA EL ESTADO DE LECTURA, asi que con el
+      // cierre como entidad la clave admitiria UNA sola fila por (evento, cierre, mensajero) PARA
+      // SIEMPRE. Y como `rechazado` es RE-SOLICITABLE y `transicionarASolicitado` REUTILIZA la
+      // misma fila de `cierre_dia`, el ciclo NORMAL de esa pantalla —rechazo, correccion,
+      // rechazo— dejaria el SEGUNDO rechazo MUDO: sin error, sin log y sin nada. Es el fallo que
+      // la 262 documento con `orden` y la 403 con la racha, y es el que esta ficha vino a cerrar.
+      //
+      // Y NO es el DIA CR (como los cinco de arriba): el ciclo rechazo -> correccion -> rechazo
+      // cabe entero dentro del mismo dia. El dia es el grano de un RECORDATORIO que se repite
+      // mientras dure un estado; aqui la pregunta no es «¿ya avise hoy?» sino «¿ya avise de ESTE
+      // rechazo?».
+      "cierre_dia_rechazo", // ficha 412 / §3 — EL RECHAZO (cierre + instante), no el cierre
     ]);
   });
 });

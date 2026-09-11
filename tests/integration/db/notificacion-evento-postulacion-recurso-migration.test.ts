@@ -209,6 +209,12 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // `20260911120000_notificacion_evento_avisos_agregados`, POSTERIOR a la de la 401.
       "novedades_sin_gestionar",
       "devoluciones_represadas",
+      // FICHA 412 (design §2): «tu cierre del dia fue RECHAZADO», al mensajero dueno y a
+      // nadie mas. Lo emite el RECHAZO (`CierresAdminService`), SIEMPRE que la escritura
+      // confirme. Migracion `20260913120000_notificacion_evento_cierre_rechazado`, POSTERIOR
+      // a la de la 409 y tambien a las DOS de la 410 (de ahi que su `down.sql` sea el primero
+      // que tiene que retipar `push_envio_dia.evento`).
+      "cierre_dia_rechazado",
     ]);
   });
 
@@ -242,6 +248,10 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // el aviso y todas las demas quedarian mudas.
       "novedades_sin_gestionar_dia",
       "devoluciones_represadas_dia",
+      // FICHA 412 (design §3): la entidad es EL RECHAZO —`<cierreId>:<resuelto_at ISO>`—, no
+      // el cierre. Con el cierre, el SEGUNDO rechazo del mismo cierre no avisaria nunca: la
+      // clave no mira el estado de lectura y la re-solicitud REUTILIZA la misma fila.
+      "cierre_dia_rechazo",
     ]);
   });
 
@@ -307,6 +317,12 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       // `20260911120000_notificacion_evento_avisos_agregados`, POSTERIOR a la de la 401.
       "novedades_sin_gestionar",
       "devoluciones_represadas",
+      // FICHA 412 (design §2): «tu cierre del dia fue RECHAZADO», al mensajero dueno y a
+      // nadie mas. Lo emite el RECHAZO (`CierresAdminService`), SIEMPRE que la escritura
+      // confirme. Migracion `20260913120000_notificacion_evento_cierre_rechazado`, POSTERIOR
+      // a la de la 409 y tambien a las DOS de la 410 (de ahi que su `down.sql` sea el primero
+      // que tiene que retipar `push_envio_dia.evento`).
+      "cierre_dia_rechazado",
     ]);
   });
 
@@ -331,6 +347,10 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       // el aviso y todas las demas quedarian mudas.
       "novedades_sin_gestionar_dia",
       "devoluciones_represadas_dia",
+      // FICHA 412 (design §3): la entidad es EL RECHAZO —`<cierreId>:<resuelto_at ISO>`—, no
+      // el cierre. Con el cierre, el SEGUNDO rechazo del mismo cierre no avisaria nunca: la
+      // clave no mira el estado de lectura y la re-solicitud REUTILIZA la misma fila.
+      "cierre_dia_rechazo",
     ]);
   });
 
