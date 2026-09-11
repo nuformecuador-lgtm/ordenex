@@ -41,6 +41,7 @@ import {
 } from "@/lib/services/jobs/analitica-rollup-diario-handler";
 import { crearAnaliticaInvalidacionCacheHandler } from "@/lib/services/jobs/analitica-invalidacion-cache-handler";
 import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
+import { buildPushWebService, crearPushWebHandler } from "@/lib/services/jobs/push-web-handler";
 
 export interface ProcesarJobsDeps {
   // Secreto esperado (inyectable en tests). Por defecto, `CRON_SECRET` del entorno.
@@ -125,6 +126,15 @@ export function buildHandlers(now: () => Date): Map<JobTipo, JobHandler> {
     "analitica_invalidacion_cache",
     crearAnaliticaInvalidacionCacheHandler(crearAnaliticaCacheDeNext()),
   );
+  // FICHA 410 (R36): entrega de UNA notificacion ya creada a las suscripciones push de sus
+  // destinatarios. Como la geocodificacion y el webhook, NO se registra en `buildRecurrencias()`:
+  // se encola por EVENTO —la creacion de un aviso elegible, desde el decorador del repositorio de
+  // notificaciones—, nunca por reloj. Re-agendarlo mandaria un push por minuto a la misma persona.
+  //
+  // Sus deps se resuelven perezosamente y SIN LANZAR si faltan las claves VAPID: un entorno sin
+  // configurar falla ESTE job —que termina dejando constancia del nombre de la variable ausente—,
+  // no el drenado de los otros nueve tipos, que comparten este cron.
+  handlers.set("push_web", crearPushWebHandler(buildPushWebService(now)));
   return handlers;
 }
 

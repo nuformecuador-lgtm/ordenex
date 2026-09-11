@@ -32,15 +32,17 @@ class RepoDoble implements INotificacionRepository {
     return `${evento}|${entidadId}|${quien}`;
   }
 
-  async crear(input: CrearNotificacionInput): Promise<boolean> {
+  // FICHA 410 (design 6.1): `crear` devuelve el ID de la fila creada y `null` cuando la dedupe
+  // la absorbio. `null` significa EXACTAMENTE lo que significaba `false`.
+  async crear(input: CrearNotificacionInput): Promise<string | null> {
     if (input.entidadId !== null) {
       const k = this.clave(input.evento, input.entidadId, input.destinatario);
-      if (this.claves.has(k)) return false;
+      if (this.claves.has(k)) return null;
       this.claves.add(k);
       this.noLeidas.add(k);
     }
     this.creadas.push(input);
-    return true;
+    return `n-${this.creadas.length}`;
   }
 
   async existeNoLeidaPara(

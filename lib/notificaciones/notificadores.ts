@@ -17,10 +17,17 @@
 //     doble y se verifica que emite (ver `notificacion-notificadores-reales.test.ts`).
 // Ninguna rama de este archivo depende de `process.env`: apagar una emision segun el entorno
 // seria una falla silenciosa en cuanto una variable se filtrara a un preview.
-import { defaultLogger, type ErrorLogger } from "@/lib/errors";
+import type { ErrorLogger } from "@/lib/errors";
+import { emitirBestEffort } from "@/lib/notificaciones/best-effort";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import type { INotificacionRepository } from "@/lib/interfaces/repositories/INotificacionRepository";
 import { NotificacionRepository } from "@/lib/repositories/NotificacionRepository";
+// FICHA 410: las cuatro piezas del canal de push. Solo las usa `repoReal()`.
+import { conPushWeb } from "@/lib/notificaciones/notificacion-repo-con-push";
+import { PushNotificacionReader } from "@/lib/repositories/PushNotificacionReader";
+import { PushSuscripcionRepository } from "@/lib/repositories/PushSuscripcionRepository";
+import { JobRepository } from "@/lib/repositories/JobRepository";
+import { pushConfigurado } from "@/lib/config/push";
 import {
   emitirCargaMasivaTerminada,
   emitirCierreDiaPorAprobar,
@@ -49,21 +56,11 @@ import {
 } from "@/lib/notificaciones/emitir";
 
 /**
- * R25: ejecuta el productor y ABSORBE cualquier fallo, dejandolo registrado con el nombre de
- * la operacion. No es un `catch` vacio (docs/conventions.md): el error se loggea con contexto;
- * lo que no se hace es propagarlo al usuario, porque la operacion de negocio ya termino bien.
+ * R25: la envoltura best-effort. Vive desde la ficha 410 en `lib/notificaciones/best-effort.ts`
+ * —el decorador del canal de push la necesita y este archivo importa al decorador, asi que dejarla
+ * aqui cerraba un ciclo— y se RE-EXPORTA para que ningun importador cambie.
  */
-export async function emitirBestEffort(
-  operacion: string,
-  emitir: () => Promise<unknown>,
-  logger: ErrorLogger = defaultLogger,
-): Promise<void> {
-  try {
-    await emitir();
-  } catch (error) {
-    logger.logError(new Error(`notificacion "${operacion}" fallo (best-effort)`, { cause: error }));
-  }
-}
+export { emitirBestEffort };
 
 /** Firma del notificador de postulacion pendiente (R23/R25). */
 export type PostulacionNotificador = (ctx: PostulacionContexto) => Promise<void>;
@@ -137,9 +134,31 @@ export const notificadorNoOp: PostulacionNotificador &
 /**
  * Construye el repositorio real. Aislado en una funcion para que los tests del camino REAL
  * puedan ejercitar `notificar*Con(repoDoble)` sin tocar `getPrismaClient`.
+ *
+ * ⚠️ FICHA 410 (design §6) — ESTA ES LA UNICA LINEA QUE CABLEA EL CANAL DE PUSH, Y ESO ES TODO EL
+ * DISEÑO. `conPushWeb` devuelve un `INotificacionRepository` que delega todo y, despues de un
+ * `crear` que de verdad inserto, evalua elegibilidad, toma el cupo del dia y encola el trabajo.
+ * Como los DOCE `notificar<X>Real` de mas abajo resuelven su repositorio por aqui, los doce quedan
+ * cableados de una vez y un productor nuevo lo hereda sin acordarse de nada.
+ *
+ * NO se inyecta un notificador de push en cada productor (alternativa A1 del design). Ese patron es
+ * el que produjo aqui DOS de siete notificadores muertos con la suite entera en verde: cada
+ * productor tenia que acordarse, y el que se olvidaba no rompia nada. Aqui hay UN punto de fallo en
+ * vez de doce, y ese punto lo vigila `tests/unit/guards/push-cableado-unico.guardia.test.ts`:
+ * devolver el repositorio SIN decorar, o escribir un productor que construya el suyo por su cuenta,
+ * pone la guardia ROJA (R51).
+ *
+ * Sin claves VAPID el decorador no encola nada y no lanza (R30): `pushConfigurado()` se evalua en
+ * cada `crear`, no al importar, para que rotar o dar de alta las claves no exija reiniciar.
  */
 function repoReal(): INotificacionRepository {
-  return new NotificacionRepository(getPrismaClient());
+  const prisma = getPrismaClient();
+  return conPushWeb(new NotificacionRepository(prisma), {
+    lector: new PushNotificacionReader(prisma),
+    canal: new PushSuscripcionRepository(prisma),
+    cola: new JobRepository(prisma),
+    hayCanal: pushConfigurado,
+  });
 }
 
 // ---------------------------------------------------------------------------

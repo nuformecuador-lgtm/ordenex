@@ -313,9 +313,10 @@ describe("emitirOrdenRechazada — dedupe (R27) sobre el rechazo", () => {
   it("no crea una segunda tanda si ya existe una no leida para la misma orden", async () => {
     const creadas: CrearNotificacionInput[] = [];
     const repo = {
+      // FICHA 410 (design 6.1): `crear` devuelve el id de la fila creada, nunca un booleano.
       crear: vi.fn(async (input: CrearNotificacionInput) => {
         creadas.push(input);
-        return true;
+        return `n-${creadas.length}`;
       }),
       existeNoLeidaPara: vi.fn(async () => true),
       listarParaUsuario: vi.fn(),

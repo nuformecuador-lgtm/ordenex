@@ -41,9 +41,11 @@ const ROOT = path.join(__dirname, "..", "..", "..");
 /** Repositorio doble: registra lo creado, sin dedupe previa. */
 class RepoDoble implements INotificacionRepository {
   creadas: CrearNotificacionInput[] = [];
-  async crear(input: CrearNotificacionInput): Promise<boolean> {
+  // FICHA 410 (design 6.1): `crear` devuelve el ID de la fila creada y `null` cuando la dedupe
+  // la absorbio. `null` significa EXACTAMENTE lo que significaba `false`.
+  async crear(input: CrearNotificacionInput): Promise<string | null> {
     this.creadas.push(input);
-    return true;
+    return `n-${this.creadas.length}`;
   }
   existeNoLeidaPara = vi.fn().mockResolvedValue(false);
   listarParaUsuario = vi.fn().mockResolvedValue([]);
@@ -54,7 +56,7 @@ class RepoDoble implements INotificacionRepository {
 
 /** Repositorio que revienta al crear: modela la base caida en el camino real. */
 class RepoQueFalla extends RepoDoble {
-  override async crear(): Promise<boolean> {
+  override async crear(): Promise<string | null> {
     throw new Error("base caida");
   }
 }

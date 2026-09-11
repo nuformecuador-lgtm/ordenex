@@ -137,7 +137,10 @@ async function emitirFilas(
       );
       if (yaHay) continue;
     }
-    if (await repo.crear(fila, tx)) creadas += 1;
+    // FICHA 410 (design §6.1): `crear` devuelve el ID de la fila creada, o `null` si la dedupe la
+    // absorbio. La condicion es `!== null` y NO la veracidad del valor: un id es siempre truthy,
+    // pero escribirlo asi deja dicho que lo que se mira es «se creo o no», no el id.
+    if ((await repo.crear(fila, tx)) !== null) creadas += 1;
   }
   return creadas;
 }

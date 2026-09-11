@@ -209,7 +209,7 @@ describe("271/T6.4 · R38/R39 — el corte EMITE el aviso del `vencido`", () => 
  * la sostiene ENTERA el notificador, y por eso se prueba con el de verdad y no con un espia.
  */
 class RepoQueRevienta implements INotificacionRepository {
-  async crear(): Promise<boolean> {
+  async crear(): Promise<string | null> {
     throw new Error("base caida");
   }
   existeNoLeidaPara = vi.fn().mockResolvedValue(false);

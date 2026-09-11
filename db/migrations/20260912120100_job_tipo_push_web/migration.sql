@@ -1,0 +1,22 @@
+-- FICHA 410 (design 4.3, T1.3) -- anade el 10.º valor al enum `job_tipo`: `push_web`, el job
+-- PUNTUAL que entrega UNA notificacion ya creada a las suscripciones push de sus destinatarios.
+--
+-- POR QUE UN JOB Y NO UN ENVIO EN LINEA (R27, alternativa A2 descartada). El aviso se emite DENTRO
+-- de la operacion de negocio que lo provoco -- la Server Action con la que el mensajero envia su
+-- cierre, la corrida del cron de gastos, el drenado de la cola--. Colgarle ahi N peticiones HTTP a
+-- servicios de push de terceros es hacer esperar a esa persona por algo que no es suyo. Encolando,
+-- la operacion se confirma al instante y el cron `app/api/cron/procesar-jobs` --que corre cada
+-- minuto-- entrega con reintentos, backoff y dead-letter gratis. Es el mismo criterio con el que ya
+-- se encolan el webhook a integradores y el mensaje de bienvenida de WhatsApp.
+--
+-- UN JOB POR AVISO, NO POR SUSCRIPCION (alternativa A3 descartada). El drenador reclama 10 jobs por
+-- corrida y sirve a diez tipos: un tipo que produzca muchos jobs desplaza a los demas, que es la
+-- inanicion ya medida en este repositorio. `dedupe_key = 'push:<notificacionId>'` mas el
+-- `ON CONFLICT DO NOTHING` que ya hace `JobRepository.enqueue` dan R35 sin escribir nada.
+--
+-- POR QUE ESTA MIGRACION VA SOLA: Postgres NO permite USAR un valor de enum en la misma transaccion
+-- que lo anadio (error 55P04). Prisma Migrate corre cada migration.sql en una transaccion. Mismo
+-- criterio que 20260827100000_job_tipo_whatsapp_bienvenida y las ocho hermanas anteriores.
+--
+-- Aditiva: no altera ninguna tabla existente.
+ALTER TYPE "job_tipo" ADD VALUE IF NOT EXISTS 'push_web';

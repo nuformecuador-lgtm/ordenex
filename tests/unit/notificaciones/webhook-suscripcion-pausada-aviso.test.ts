@@ -44,16 +44,18 @@ class RepoDoble implements INotificacionRepository {
     return `${evento}|${entidadId}|${quien}`;
   }
 
-  async crear(input: CrearNotificacionInput): Promise<boolean> {
+  // FICHA 410 (design 6.1): `crear` devuelve el ID de la fila creada y `null` cuando la dedupe
+  // la absorbio. `null` significa EXACTAMENTE lo que significaba `false`.
+  async crear(input: CrearNotificacionInput): Promise<string | null> {
     if (input.entidadId !== null) {
       const k = this.clave(input.evento, input.entidadId, input.destinatario);
-      // El repositorio REAL absorbe el `P2002` devolviendo `false`; el doble hace lo mismo.
-      if (this.claves.has(k)) return false;
+      // El repositorio REAL absorbe el `P2002` devolviendo `null`; el doble hace lo mismo.
+      if (this.claves.has(k)) return null;
       this.claves.add(k);
       this.noLeidas.add(k);
     }
     this.creadas.push(input);
-    return true;
+    return `n-${this.creadas.length}`;
   }
 
   async existeNoLeidaPara(
@@ -77,7 +79,7 @@ class RepoDoble implements INotificacionRepository {
 
 /** Repositorio que revienta al crear: modela la base caida en el camino real. */
 class RepoQueFalla extends RepoDoble {
-  override async crear(): Promise<boolean> {
+  override async crear(): Promise<string | null> {
     throw new Error("base caida");
   }
 }
