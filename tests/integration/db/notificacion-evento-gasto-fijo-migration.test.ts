@@ -8,6 +8,7 @@ import {
   crearPrismaDeTest,
   enTransaccionRevertida,
   serializarEscriturasReales,
+  soltarDependientesPosterioresDelEnumDeEventos,
 } from "./_postgres-real";
 
 // FICHA 333 (A8, design §4.1/§10) — la migracion que anade el aviso de la campana a los DOS enums
@@ -368,6 +369,12 @@ describeSiHayBase("333/A8 — la base aplicada, y el DOWN ejercitado de verdad",
                    '2026-08-29', 'maestro'::"rol_value")`,
           randomUUID(),
         );
+        // FICHA 410: `push_envio_dia.evento` usa este mismo enum, y su migracion es POSTERIOR.
+        // En el rollback REAL la tabla ya no existe cuando a este down le llega el turno; aqui
+        // se ejecuta contra la base de HOY, asi que hay que ponerla en ese estado o el
+        // `DROP TYPE ..._old` muere con 2BP01 por una dependencia que el rollback no tendria.
+        await soltarDependientesPosterioresDelEnumDeEventos(tx);
+
         for (const sentencia of sentencias) {
           await tx.$executeRawUnsafe(sentencia);
         }
@@ -389,6 +396,12 @@ describeSiHayBase("333/A8 — la base aplicada, y el DOWN ejercitado de verdad",
         EVENTO_NUEVO,
         ENTIDAD_NUEVA,
       );
+      // FICHA 410: `push_envio_dia.evento` usa este mismo enum, y su migracion es POSTERIOR.
+      // En el rollback REAL la tabla ya no existe cuando a este down le llega el turno; aqui
+      // se ejecuta contra la base de HOY, asi que hay que ponerla en ese estado o el
+      // `DROP TYPE ..._old` muere con 2BP01 por una dependencia que el rollback no tendria.
+      await soltarDependientesPosterioresDelEnumDeEventos(tx);
+
       for (const sentencia of downDdl
         .split(";")
         .map((x) => x.trim())

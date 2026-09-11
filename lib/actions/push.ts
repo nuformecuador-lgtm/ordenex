@@ -50,6 +50,12 @@ async function actorRequerido(deps: PushActionDeps): Promise<Actor> {
  * control de activacion sencillamente no se ofrece (R13/R30). La app no se entera de nada mas.
  *
  * NO devuelve, ni por asomo, la clave PRIVADA (R31): `clavePublicaPush()` solo lee la publica.
+ *
+ * @sin-superficie la superficie de las tres acciones del canal es `components/shared/PushOptIn.tsx`
+ * via `hooks/usePushSuscripcion.ts`, que son la tanda 5 de ESTA MISMA ficha (410/T5.1-T5.3) y las
+ * escribe el agente de frontend sobre esta rama. El backend va primero por decision del arnes.
+ * ⚠️ QUIEN MONTE EL CONTROL TIENE QUE BORRAR ESTAS TRES ANOTACIONES: la guardia caduca solas y se
+ * pone roja si lo anotado vuelve a ser alcanzable.
  */
 export async function obtenerClavePublicaPush(
   deps: PushActionDeps = {},
@@ -65,6 +71,9 @@ export async function obtenerClavePublicaPush(
  * R16/R17/R18/R50 — registra (o REEMPLAZA) la suscripcion de ESTE dispositivo a nombre del usuario
  * de la sesion. La identidad es el `endpoint`: si el dispositivo ya estaba suscrito a otra persona,
  * la fila pasa a ser de quien acaba de iniciar sesion y la anterior deja de recibir ahi.
+ *
+ * @sin-superficie la llama `hooks/usePushSuscripcion.ts` al activar el control, y ese hook es la
+ * tanda 5 de ESTA MISMA ficha (410/T5.1). Se borra esta anotacion al montarlo.
  */
 export async function registrarSuscripcionPush(
   input: unknown,
@@ -87,6 +96,9 @@ export async function registrarSuscripcionPush(
  * Que no hubiera nada que borrar NO es un error: desactivar dos veces, o cerrar sesion en un
  * dispositivo que nunca se suscribio, devuelve `ok`. Un `not_found` aqui obligaria al cierre de
  * sesion a decidir que hacer con el (R20), y la respuesta correcta es «seguir saliendo».
+ *
+ * @sin-superficie la llaman el control al desactivar (410/T5.1) y el `LogoutButton` al cerrar
+ * sesion (410/T5.5), y las dos son la tanda 5 de ESTA MISMA ficha. Se borra al montarlas.
  */
 export async function eliminarSuscripcionPush(
   input: unknown,

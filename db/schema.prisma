@@ -3509,9 +3509,25 @@ model PushSuscripcion {
 /// Volumen: <= 39 usuarios x 8 eventos elegibles = 312 filas/dia en el peor caso absoluto. No
 /// necesita purga.
 model PushEnvioDia {
-  id        String             @id @default(uuid())
-  usuarioId String             @map("usuario_id")
-  evento    NotificacionEvento
+  id        String @id @default(uuid())
+  usuarioId String @map("usuario_id")
+
+  /// ⚠️ ESTA ES LA **SEGUNDA** COLUMNA DEL ESQUEMA QUE USA `notificacion_evento`, Y ESO CAMBIA UNA
+  /// REGLA QUE LLEVABA VIGENTE DESDE LA 146. Los `down.sql` que anaden un valor a ese enum lo
+  /// RECREAN (`RENAME TO ..._old` -> `CREATE TYPE` -> `ALTER COLUMN ... TYPE` -> `DROP TYPE ..._old`)
+  /// porque Postgres no tiene `DROP VALUE`, y hasta hoy todos retipaban UNA sola columna:
+  /// `notificacion.evento`.
+  ///
+  /// A PARTIR DE AQUI, el `down.sql` de cualquier migracion POSTERIOR a la 410 que amplie
+  /// `notificacion_evento` tiene que retipar **las dos**. Si se olvida, el `DROP TYPE` falla con
+  /// `2BP01` («otros objetos dependen de el») — RUIDOSAMENTE, que es el modo de fallo correcto, y
+  /// los tests de migracion de `tests/integration/db/notificacion-evento-*` lo cazan antes de que
+  /// salga de aqui.
+  ///
+  /// Los `down.sql` ANTERIORES **no se tocan** y siguen siendo correctos: `db:rollback` va de la
+  /// ultima migracion hacia atras, y esta tabla se crea DESPUES de todas ellas, asi que cuando les
+  /// toca el turno ya no existe.
+  evento NotificacionEvento
 
   /// Jornada de Costa Rica como `YYYY-MM-DD` (`fechaCalendarioCR`), la misma unidad que usan los
   /// avisos periodicos del repo. TEXTO y no `DATE` a proposito: es parte de una CLAVE, y una clave

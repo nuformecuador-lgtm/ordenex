@@ -10,6 +10,7 @@ import {
   crearPrismaDeTest,
   enTransaccionRevertida,
   serializarEscriturasReales,
+  soltarDependientesPosterioresDelEnumDeEventos,
   type TxDeTest,
 } from "./_postgres-real";
 
@@ -334,6 +335,12 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
                    'usr-x:2091-03-11T00:00:00.000Z', 'maestro'::"rol_value")`,
           randomUUID(),
         );
+        // FICHA 410: `push_envio_dia.evento` usa este mismo enum, y su migracion es POSTERIOR.
+        // En el rollback REAL la tabla ya no existe cuando a este down le llega el turno; aqui
+        // se ejecuta contra la base de HOY, asi que hay que ponerla en ese estado o el
+        // `DROP TYPE ..._old` muere con 2BP01 por una dependencia que el rollback no tendria.
+        await soltarDependientesPosterioresDelEnumDeEventos(tx);
+
         for (const sentencia of sentencias) {
           await tx.$executeRawUnsafe(sentencia);
         }
@@ -353,6 +360,12 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
         EVENTO_NUEVO,
         ENTIDAD_NUEVA,
       );
+      // FICHA 410: `push_envio_dia.evento` usa este mismo enum, y su migracion es POSTERIOR.
+      // En el rollback REAL la tabla ya no existe cuando a este down le llega el turno; aqui
+      // se ejecuta contra la base de HOY, asi que hay que ponerla en ese estado o el
+      // `DROP TYPE ..._old` muere con 2BP01 por una dependencia que el rollback no tendria.
+      await soltarDependientesPosterioresDelEnumDeEventos(tx);
+
       for (const sentencia of downDdl
         .split(";")
         .map((x) => x.trim())
@@ -382,6 +395,12 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
         EVENTO_NUEVO,
         ENTIDAD_NUEVA,
       );
+      // FICHA 410: `push_envio_dia.evento` usa este mismo enum, y su migracion es POSTERIOR.
+      // En el rollback REAL la tabla ya no existe cuando a este down le llega el turno; aqui
+      // se ejecuta contra la base de HOY, asi que hay que ponerla en ese estado o el
+      // `DROP TYPE ..._old` muere con 2BP01 por una dependencia que el rollback no tendria.
+      await soltarDependientesPosterioresDelEnumDeEventos(tx);
+
       for (const sentencia of downDdl
         .split(";")
         .map((x) => x.trim())

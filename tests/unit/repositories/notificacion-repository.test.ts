@@ -44,7 +44,9 @@ describe("crear — traduce el destinatario a las columnas del XOR", () => {
       destinatario: { tipo: "rol", rol: "adminSatelite", zonaId: "z-1" },
     });
 
-    expect(creada).toBe(true);
+    // FICHA 410 (design 6.1): `crear` devuelve el ID de la fila creada, no un booleano. El
+    // decorador del canal de push necesita esa identidad para releer el aviso al enviar.
+    expect(creada).toBe("n-1");
     expect(prisma.notificacion.create.mock.calls[0][0].data).toMatchObject({
       destinatarioRol: "adminSatelite",
       destinatarioUsuarioId: null,
@@ -98,7 +100,7 @@ describe("crear — traduce el destinatario a las columnas del XOR", () => {
 });
 
 describe("R27 — la violacion del indice de dedupe es un no-op, no un error", () => {
-  it("devuelve false sin lanzar cuando el create choca con notificacion_dedupe_key", async () => {
+  it("devuelve null sin lanzar cuando el create choca con notificacion_dedupe_key", async () => {
     const prisma = buildPrisma();
     prisma.notificacion.create.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError("unique", {
@@ -116,7 +118,9 @@ describe("R27 — la violacion del indice de dedupe es un no-op, no un error", (
       destinatario: { tipo: "rol", rol: "maestro" },
     });
 
-    expect(creada).toBe(false);
+    // FICHA 410: `null` significa EXACTAMENTE lo que significaba `false` — la dedupe absorbio
+    // el `P2002` y no se creo nada. Sigue sin lanzar, que es lo que R27 pide.
+    expect(creada).toBeNull();
   });
 
   it("propaga cualquier otro error (el productor transaccional debe revertir, R21)", async () => {
