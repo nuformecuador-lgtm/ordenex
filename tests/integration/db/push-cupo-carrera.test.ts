@@ -68,6 +68,104 @@ const lector: IPushNotificacionReader = {
   destinatariosPendientes: async () => [{ usuarioId: USUARIO, rol: "mensajero", zonaId: null }],
 };
 
+/** Un lector con OTRO destinatario: cada caso de este archivo necesita su propio cupo. */
+function lectorDe(usuarioId: string): IPushNotificacionReader {
+  return {
+    leerAviso: async () => null,
+    destinatariosPendientes: async () => [{ usuarioId, rol: "mensajero", zonaId: null }],
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// LA BARRERA, Y POR QUE VA DENTRO DEL CAMINO REAL
+// ---------------------------------------------------------------------------------------------
+// El caso `Promise.all` de mas abajo afirma «un cupo, un encolado», y eso se cumple TAMBIEN si las
+// dos llamadas se serializan solas — que es lo que pasa en esta maquina, medido 5 de 5. O sea que
+// por si solo NO mide la ventana. Y el caso de la mutacion a pelo mide una propiedad del MOTOR y
+// del INDICE, no del codigo de produccion: es indiferente a lo que haga `tomarCupoDelDia`.
+//
+// Lo que falta, y es lo que hay aqui: forzar la ventana DENTRO del camino real. `PushSuscripcionRepository`
+// recibe un `Pick<PrismaClient, "pushSuscripcion" | "pushEnvioDia">`, asi que hay costura para
+// envolver el cliente sin tocar una linea de produccion.
+//
+// ⚠️ LA BARRERA VA EN `create` Y NO EN `findFirst`, A PROPOSITO. `create` lo llaman las DOS
+// versiones —la buena y la de comprobar-antes—, asi que el caso no puede quedarse colgado contra la
+// implementacion buena. Una barrera en `findFirst` no la ejecutaria nadie con el codigo bueno y el
+// caso moriria por timeout en vez de por su asercion.
+
+/** El cliente minimo que `PushSuscripcionRepository` consume, leido de SU constructor. */
+type ClienteDelCanal = ConstructorParameters<typeof PushSuscripcionRepository>[0];
+
+interface Barrera {
+  /** Se bloquea hasta que han llegado `cuantos`. */
+  esperar(): Promise<void>;
+  /** `true` SOLO si la abrieron las llegadas; `false` si la abrio el tope de seguridad. */
+  readonly abiertaPorLlegadas: boolean;
+  readonly llegadas: number;
+}
+
+/**
+ * Compuerta de N llegadas. Nadie pasa hasta que han llegado todos.
+ *
+ * El tope de seguridad NO es decoracion: si una implementacion futura dejara de llamar a `create`
+ * en uno de los dos caminos, sin el tope este archivo se colgaria hasta el timeout de vitest y el
+ * rojo no diria por que. Con el, la compuerta se abre, `abiertaPorLlegadas` queda en `false` y el
+ * caso falla NOMBRANDO la causa.
+ */
+function crearBarrera(cuantos: number, topeMs = 15_000): Barrera {
+  let llegadas = 0;
+  let porLlegadas = false;
+  let abrir: () => void = () => {};
+  const compuerta = new Promise<void>((r) => {
+    abrir = r;
+  });
+  const tope = setTimeout(() => abrir(), topeMs);
+  tope.unref?.();
+  return {
+    get abiertaPorLlegadas() {
+      return porLlegadas;
+    },
+    get llegadas() {
+      return llegadas;
+    },
+    async esperar(): Promise<void> {
+      llegadas += 1;
+      if (llegadas >= cuantos) {
+        porLlegadas = true;
+        clearTimeout(tope);
+        abrir();
+      }
+      await compuerta;
+    },
+  };
+}
+
+/**
+ * El cliente REAL, con `pushEnvioDia.create` retenido en la barrera y TODO lo demas intacto.
+ *
+ * El `bind` es necesario: las funciones del cliente de Prisma necesitan su `this`, y devolverlas
+ * desatadas del proxy las rompe en silencio (misma tecnica que `clienteConSavepoint`).
+ */
+function clienteConBarreraEnCreate(cliente: PrismaClient, barrera: Barrera): ClienteDelCanal {
+  const envioDia = new Proxy(cliente.pushEnvioDia as object, {
+    get(objetivo, prop) {
+      if (prop === "create") {
+        return async (args: unknown) => {
+          await barrera.esperar();
+          const crear = Reflect.get(objetivo, prop) as (a: unknown) => Promise<unknown>;
+          return crear.call(objetivo, args);
+        };
+      }
+      const valor = Reflect.get(objetivo, prop) as unknown;
+      return typeof valor === "function" ? valor.bind(objetivo) : valor;
+    },
+  });
+  return {
+    pushSuscripcion: cliente.pushSuscripcion,
+    pushEnvioDia: envioDia as PrismaClient["pushEnvioDia"],
+  };
+}
+
 /** Cola compartida por las dos emisiones, con la idempotencia real del `enqueue`. */
 class ColaCompartida {
   readonly encolados: { tipo: JobTipo; payload: Record<string, unknown> }[] = [];
@@ -209,6 +307,87 @@ describeSiHayBase("410/R7 — dos emisiones SIMULTANEAS dejan UN cupo y UN encol
     const ganador = await clienteA.$queryRawUnsafe<{ notificacion_id: string }[]>(
       `SELECT "notificacion_id" FROM "${ESQUEMA}"."push_envio_dia" WHERE "usuario_id" = $1`,
       USUARIO,
+    );
+    expect(cola.encolados[0].payload).toEqual({ notificacionId: ganador[0].notificacion_id });
+  });
+
+  it("⭑⭑ R7: con las DOS conexiones retenidas en `create`, sale UN cupo y UN encolado", async () => {
+    // ESTE es el control del caso de arriba, y el unico de este archivo que pone a prueba
+    // `tomarCupoDelDia` EN LA VENTANA. La barrera esta DENTRO del camino real —el repositorio de
+    // produccion, el decorador de produccion, el indice unico de produccion—: lo unico envuelto es
+    // el cliente de Prisma, por la costura que el propio constructor declara.
+    //
+    // QUE MIDE, Y QUE PASA SI EL CODIGO CAMBIA:
+    //
+    //   codigo bueno (INSERTAR y traducir P2002)   -> los dos `create` corren A LA VEZ, uno se
+    //                                                 lleva el P2002 -> 1 cupo, 1 encolado. VERDE.
+    //   comprobar-antes (SELECT y luego INSERT)    -> los dos leyeron cero ANTES de la barrera y
+    //                                                 los dos devuelven `true` -> 1 cupo (lo impide
+    //                                                 el indice) pero DOS ENCOLADOS. ROJO.
+    //
+    // O sea: lo que separa las dos implementaciones NO es el numero de filas —el indice salva a las
+    // dos— sino el numero de ENCOLADOS, que es lo que el telefono nota. Por eso la asercion que
+    // manda aqui es `toHaveLength(1)` sobre la cola.
+    const usuario = "u-mensajero-barrera";
+    const barrera = crearBarrera(2);
+    const cola = new ColaCompartida();
+
+    const entrada: CrearNotificacionInput = {
+      ...ENTRADA,
+      destinatario: { tipo: "usuario", usuarioId: usuario },
+    };
+
+    const decorado = (cliente: PrismaClient, notificacionId: string) =>
+      conPushWeb(repoBase(notificacionId), {
+        lector: lectorDe(usuario),
+        // El repositorio REAL, con el cliente REAL; lo unico interpuesto es la espera.
+        canal: new PushSuscripcionRepository(clienteConBarreraEnCreate(cliente, barrera)),
+        cola,
+        hayCanal: () => true,
+        now: () => AHORA,
+      });
+
+    const [a, b] = await Promise.all([
+      decorado(clienteA, "n-barrera-A").crear({ ...entrada, entidadId: "c-3" }),
+      decorado(clienteB, "n-barrera-B").crear({ ...entrada, entidadId: "c-4" }),
+    ]);
+
+    // AUTOCOMPROBACION, y es la que impide que este caso se convierta en el de arriba: las DOS
+    // conexiones llegaron a `create` ANTES de que ninguna ejecutara. Si se hubieran serializado
+    // —o si una de las dos no hubiese llegado a `create`— la compuerta la habria abierto el tope
+    // de seguridad y esto seria `false`: el caso falla diciendo QUE no midio, en vez de pasar en
+    // verde sin haber medido nada.
+    expect(
+      barrera.abiertaPorLlegadas,
+      "la compuerta la abrio el TOPE, no las llegadas: las dos conexiones no coincidieron en " +
+        "`create` y este caso no ha medido la ventana",
+    ).toBe(true);
+    expect(barrera.llegadas, "las dos emisiones tienen que haber llamado a `create`").toBe(2);
+
+    // Los dos avisos existen: la campana los tiene los dos, igual que en el caso de arriba.
+    expect(a).toBe("n-barrera-A");
+    expect(b).toBe("n-barrera-B");
+
+    // Una fila de cupo: la exclusion la hace el indice, no una rama de codigo.
+    const cupos = await clienteA.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT COUNT(*)::bigint AS n FROM "${ESQUEMA}"."push_envio_dia"
+        WHERE "usuario_id" = $1 AND "evento" = 'cierre_dia_vencido'
+          AND "dia_cr" = '2026-09-12'`,
+      usuario,
+    );
+    expect(Number(cupos[0].n), "EXACTAMENTE una fila de cupo").toBe(1);
+
+    // ⭑ LA ASERCION QUE MATA LA MUTACION. Con comprobar-antes salen DOS.
+    expect(
+      cola.encolados,
+      "EXACTAMENTE un encolado: si `tomarCupoDelDia` decidiera con un `SELECT` previo, las dos " +
+        "emisiones se creerian ganadoras y el telefono sonaria dos veces",
+    ).toHaveLength(1);
+
+    // Y el encolado es el del aviso que GANO el cupo, no «uno cualquiera».
+    const ganador = await clienteA.$queryRawUnsafe<{ notificacion_id: string }[]>(
+      `SELECT "notificacion_id" FROM "${ESQUEMA}"."push_envio_dia" WHERE "usuario_id" = $1`,
+      usuario,
     );
     expect(cola.encolados[0].payload).toEqual({ notificacionId: ganador[0].notificacion_id });
   });

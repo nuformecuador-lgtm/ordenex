@@ -229,14 +229,26 @@
 - [x] **T6.3 — `./init.sh` COMPLETO en verde**, con `INIT_EXIT` escrito **dentro** del log (un `echo`
       posterior tapa el código de salida) y sin canalizar por `tail` (trunca el fichero en origen).
       *Hecho:* log pegado, con el número de `skipped` de `tests/integration/db` a la vista.
-- [ ] *(NO HECHA: este agente no tiene acceso a Vercel. BLOQUEANTE para que el canal funcione en produccion — sin las claves no sale ningun push, y por R30 en silencio)* **T6.4 — Alta de las tres variables VAPID en Vercel, POR ENTORNO** (producción y *preview* por
+- [x] **T6.4 — Alta de las tres variables VAPID en Vercel, POR ENTORNO** (producción y *preview* por
       separado; una variable compartida apunta al proyecto equivocado en uno de los dos).
-      *Hecho:* anotado quién las dio de alta y en qué entorno. La privada **no** se pega en ningún
-      informe.
-- [ ] *(NO HECHA: hace falta un telefono real, las claves de T6.4 y el control de la tanda 5. Queda como LIMITE ABIERTO — es la unica prueba de que el canal existe)* **T6.5 — Comprobación en un teléfono real**: instalar la PWA, activar el control, provocar un
+      *Hecho:* **las dio de alta el humano el 2026-09-11** y lo verificó con `vercel env ls`.
+      `VAPID_PUBLIC_KEY` y `VAPID_PRIVATE_KEY`, con **par DISTINTO por entorno**: uno en
+      *Production* y otro en *Preview*, **ninguna en Development** y **ninguna compartida entre
+      entornos** — que era justo el modo de fallo que esta casilla vigilaba.
+      **`VAPID_SUBJECT` no se puso, y es correcto:** `piezasVapidAusentes()` (`lib/config/push.ts`
+      línea 64) solo exige la pública y la privada; el *subject* trae default
+      (`DEFAULT_SUBJECT`), igual que `SMTP_HOST` en el canal de correo. Ninguna clave se pega aquí.
+      *(Queda vivo el **m7** del informe de revisión: el default es `mailto:soporte@…`, el buzón al
+      que los servicios de push nos escriben si hay abuso, y hoy esa dirección solo existe en el
+      repo. No bloquea nada.)*
+- [ ] *(NO MARCADA A PROPOSITO: la hace el humano mañana, 2026-09-12, con su teléfono. Ya no le falta nada — las claves de T6.4 están puestas y el control de la tanda 5 está mergeado. Es la única prueba de que el canal existe y se declara LIMITE ABIERTO hasta que esté hecha)* **T6.5 — Comprobación en un teléfono real**: instalar la PWA, activar el control, provocar un
       aviso elegible, ver llegar el push con la app **cerrada**, tocarlo y aterrizar en el destino.
       *Hecho:* descrito paso a paso con el resultado. **Es la única prueba de que el canal existe**:
       todo lo anterior es jsdom, Postgres y un arnés. Si no se puede hacer, se declara como límite
       abierto en la ficha, no se da por bueno.
-- [ ] *(a MEDIAS: `progress/impl_410_backend.md` e `impl_410_frontend.md` escritas y commiteadas; falta SOLO la entrada en `progress/history.md`, que es del leader)* **T6.6 — Bitácora**: `progress/impl_410.md` y entrada en `progress/history.md`, **commiteadas**
+- [x] **T6.6 — Bitácora**: `progress/impl_410.md` y entrada en `progress/history.md`, **commiteadas**
       (el informe describe el disco, no un commit: verificar el blob en la rama).
+      *Hecho:* `progress/impl_410_backend.md`, `impl_410_frontend.md` y —lo que faltaba—
+      `impl_410_fix.md` (esta vuelta), más la **entrada del 2026-09-11 en `progress/history.md`**:
+      qué se midió, qué se descubrió y **los dos que casi se cuelan** (R7 sin test que lo defienda y
+      la guardia que leía un solo archivo), no un changelog de archivos.
