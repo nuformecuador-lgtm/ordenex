@@ -346,8 +346,11 @@
   > rojos, todos `notificacion-evento-*-migration.test.ts`. **No están en el baseline y NO se
   > añadieron**, que es justo lo que la línea de arriba propone como salida — se decidió al revés a
   > propósito: son el estado transitorio de una base local compartida entre worktrees (una
-  > migración aplicada, `20260911120000_notificacion_evento_avisos_agregados`, que no existe en
-  > ninguna rama), y meterlos en esa lista enmascararía una regresión de verdad el día que llegue.
+  > migración aplicada, `20260911120000_notificacion_evento_avisos_agregados`, que **no está en
+  > `dev`** — ⏳ corregido el 2026-09-10: aquí decía «que no existe en ninguna rama» y **era falso**;
+  > sí existe, en `feat/409-panel-notificaciones-accionable` (commit `5211a566`), y saberlo es lo
+  > que le pone fecha de caducidad al rojo: desaparece solo cuando la 409 se mergee), y meterlos en
+  > esa lista enmascararía una regresión de verdad el día que llegue.
   > Se midieron con cinco pruebas en vez de con una consulta al baseline
   > (`progress/impl_411_frontend.md §6.3`). Lo que sí se cumple literalmente: **240** archivos de
   > `tests/integration/db` corrieron, **0** saltados, y está escrito en la bitácora.
