@@ -11,17 +11,17 @@ Zona: **backend**. Complejidad: **baja**. Sin migración, sin UI, sin endpoint n
 
 ## T0 — Pre-vuelo (10 min, sin escribir código)
 
-- [ ] **T0.1** Releer en el **archivo real** (no en el grafo: devuelve símbolos ya borrados):
+- [x] **T0.1** Releer en el **archivo real** (no en el grafo: devuelve símbolos ya borrados):
   `lib/services/VigenciaAvisoAgregadoService.ts`, `tests/unit/services/vigencia-aviso-agregado.test.ts`,
   `lib/services/NotificacionService.ts` (`cifrasVivas`) y
   `lib/repositories/AvisoAgregadoRepository.ts` (`contarRepresadas`).
   **Hecho cuando:** confirmas las cinco anclas de `requirements.md` §Verificado y, si alguna se
   movió, lo anotas en `progress/impl_417_backend.md` **antes** de tocar nada.
-- [ ] **T0.2** Confirmar que el caso mal nombrado sigue en el archivo (líneas 83-92 hoy) y que su
+- [x] **T0.2** Confirmar que el caso mal nombrado sigue en el archivo (líneas 83-92 hoy) y que su
   aserto es `toBeNull()`.
   **Hecho cuando:** está citado literal en la bitácora. Si ya no existe, **para y pregunta**: la
   ficha cambia de forma.
-- [ ] **T0.3** Confirmar el hecho que sostiene R3/R4: `novedades_sin_gestionar` tiene **un solo
+- [x] **T0.3** Confirmar el hecho que sostiene R3/R4: `novedades_sin_gestionar` tiene **un solo
   productor** (`lib/notificaciones/notificadores.ts:371` → `emitir.ts:1041-1062`), emite siempre a
   `{ rol: "adminTienda", tiendaId }` y el catálogo declara `destinatarios: ["adminTienda"]`.
   **Hecho cuando:** los tres están verificados en el archivo real. **Si apareciera un segundo
@@ -31,18 +31,18 @@ Zona: **backend**. Complejidad: **baja**. Sin migración, sin UI, sin endpoint n
 
 ## T1 — Las dos guardas en el seam (R1, R2, R3, R4) · depende de T0
 
-- [ ] **T1.1** En `VigenciaAvisoAgregadoService.cifra`, rama `devoluciones_represadas`: si el rol es
+- [x] **T1.1** En `VigenciaAvisoAgregadoService.cifra`, rama `devoluciones_represadas`: si el rol es
   `adminSatelite` y su zona no es un id útil (ausente, `null` o `""`), **no llamar al repositorio** y
   lanzar un error que **nombre la causa** (`sin zona asignada`) y el evento. Los demás caminos,
   intactos. Comentario al lado con **el porqué**, no con el qué.
   **Hecho cuando:** `pnpm run typecheck` y `pnpm run lint` pasan, y la rama de `maestro`/`admin` no
   ha cambiado ni una línea.
-- [ ] **T1.2** En la rama `novedades_sin_gestionar` del **mismo método**: si el rol **no** es
+- [x] **T1.2** En la rama `novedades_sin_gestionar` del **mismo método**: si el rol **no** es
   `adminTienda`, **no llamar al repositorio** y lanzar un error que nombre la causa. Mismo criterio
   que T1.1 —*si el ámbito del actor no existe, se falla; no se inventa uno*—, y por eso van en el
   mismo commit conceptual.
   **Hecho cuando:** `typecheck` y `lint` pasan y la rama del `adminTienda` legítimo no cambia.
-- [ ] **T1.3 `[P]`** Ampliar la documentación de `lib/interfaces/services/IVigenciaAvisoAgregado.ts`
+- [x] **T1.3 `[P]`** Ampliar la documentación de `lib/interfaces/services/IVigenciaAvisoAgregado.ts`
   con los **dos casos nuevos de lanzamiento**, junto al que ya declara para un evento no agregado.
   **Hecho cuando:** el contrato no dice menos de lo que la implementación hace. Sin cambio de firma.
 
@@ -50,20 +50,20 @@ Zona: **backend**. Complejidad: **baja**. Sin migración, sin UI, sin endpoint n
 
 ## T2 — Los tests del seam: derogar el mal nombrado y afirmar las dos guardas (R1, R2, R3, R4) · depende de T1
 
-- [ ] **T2.1** En `tests/unit/services/vigencia-aviso-agregado.test.ts`, sustituir el caso
+- [x] **T2.1** En `tests/unit/services/vigencia-aviso-agregado.test.ts`, sustituir el caso
   «un adminSatelite SIN zona no ve el total…» por casos que afirmen lo que su nombre promete:
   el repositorio **no se llama** (R1) y el resolutor **lanza con el nombre de la causa** (R2).
   **Tres formas del mismo estado**, porque `Actor.zonaId` es opcional: `null`, **ausente** y `""`.
   **Hecho cuando:** los casos pasan, el literal del mensaje está **escrito a mano** (nunca importado
   de producción) y la derogación queda **explicada en un comentario** en el propio archivo —por qué
   el aserto viejo era falso, no sólo que cambió.
-- [ ] **T2.2** Casos nuevos del **espejo** (R3, R4) en el mismo archivo: para un actor que no sea
+- [x] **T2.2** Casos nuevos del **espejo** (R3, R4) en el mismo archivo: para un actor que no sea
   `adminTienda` pidiendo `novedades_sin_gestionar`, el repositorio **no se llama** y el resolutor
   **lanza con el nombre de la causa**. Al menos **dos roles** (`maestro` y `adminSatelite`), porque
   el fallo silencioso de hoy es el mismo para los dos.
   **Hecho cuando:** pasan, el literal está escrito a mano y **ninguno afirma `0`**: un `0` es
   exactamente lo que la ficha prohíbe.
-- [ ] **T2.3** Verificar que **ningún caso ajeno** del archivo se tocó.
+- [x] **T2.3** Verificar que **ningún caso ajeno** del archivo se tocó.
   **Hecho cuando:** `git diff` de ese archivo muestra sólo el bloque derogado (T2.1) y los añadidos;
   los casos de R5, R6 y R7 salen **intactos** en el diff.
 
@@ -71,7 +71,7 @@ Zona: **backend**. Complejidad: **baja**. Sin migración, sin UI, sin endpoint n
 
 ## T3 — No regresión (R5, R6, R7) · depende de T1 · `[P]` con T4
 
-- [ ] **T3.1** Ejecutar los **tres** casos vigentes **sin editarlos**: «se pide con la ZONA del
+- [x] **T3.1** Ejecutar los **tres** casos vigentes **sin editarlos**: «se pide con la ZONA del
   adminSatelite» (R5), «maestro y admin lo piden GLOBAL (`null`)» (R6) y «`novedades_sin_gestionar`
   se pide con el usuarioId de la tienda» (R7).
   **Hecho cuando:** los tres pasan y su diff está **vacío**. Son el control positivo de la ficha: si
@@ -81,7 +81,7 @@ Zona: **backend**. Complejidad: **baja**. Sin migración, sin UI, sin endpoint n
 
 ## T4 — Dónde aterriza el fallo (R9) · depende de T1
 
-- [ ] **T4.1** Caso nuevo en `tests/unit/services/notificacion-service.test.ts`: `NotificacionService`
+- [x] **T4.1** Caso nuevo en `tests/unit/services/notificacion-service.test.ts`: `NotificacionService`
   con el resolutor **real** (`VigenciaAvisoAgregadoService` + repositorio espía), un actor
   `{ rol: "adminSatelite", zonaId: null }` y una fila de `devoluciones_represadas`.
   Debe afirmar **las dos mitades**: el aviso **sale en el listado y sin número**, y el **logger
@@ -100,7 +100,7 @@ Zona: **backend**. Complejidad: **baja**. Sin migración, sin UI, sin endpoint n
 
 ## T5 — El predicado de la 146 no se toca (R8) · `[P]` desde T0
 
-- [ ] **T5.1** Comprobar por **diff**, no por palabra, que salen vacíos:
+- [x] **T5.1** Comprobar por **diff**, no por palabra, que salen vacíos:
   `lib/repositories/NotificacionRepository.ts` y `tests/unit/repositories/notificacion-visibilidad.test.ts`.
   **Hecho cuando:** `git diff --stat dev...HEAD -- <esos dos>` sale **vacío** y la suite de
   visibilidad de la 146 pasa **sin haberse editado**. Pegado en la bitácora.
@@ -112,39 +112,41 @@ Zona: **backend**. Complejidad: **baja**. Sin migración, sin UI, sin endpoint n
 Árbol limpio antes y después de cada una (`git status --short`), y la salida **pegada** en
 `progress/impl_417_backend.md` con el conteo exacto de rojos.
 
-- [ ] **T6.1 — M1 (la que da sentido a la ficha).** Retirar la guarda de la zona y dejar
+- [x] **T6.1 — M1 (la que da sentido a la ficha).** Retirar la guarda de la zona y dejar
   `actor.zonaId ?? null`.
   **Hecho cuando:** se ponen **rojos R1, R2 y R9**, y lo hacen **con el predicado de la 146
   intacto** (no se toca `NotificacionRepository.ts` durante la mutación). Si sale verde, la ficha
   **no ha hecho nada** y hay que volver a T2.
-- [ ] **T6.2 — M2.** Sustituir ese lanzamiento por `return 0`.
+- [x] **T6.2 — M2.** Sustituir ese lanzamiento por `return 0`.
   **Hecho cuando:** se pone **rojo R2** (y R9: el aviso desaparecería en vez de mostrarse sin
   número). Demuestra que la ficha exige **ruido**, no silencio.
-- [ ] **T6.3 — M3 (control positivo).** Hacer que la guarda de la zona dispare **siempre** para
+- [x] **T6.3 — M3 (control positivo).** Hacer que la guarda de la zona dispare **siempre** para
   `adminSatelite`.
   **Hecho cuando:** se pone **rojo R5**. Demuestra que los casos de R1/R2 no están verdes por vacío.
-- [ ] **T6.4 — M4 (el espejo).** Retirar la guarda de rol de la rama `novedades_sin_gestionar`.
+- [x] **T6.4 — M4 (el espejo).** Retirar la guarda de rol de la rama `novedades_sin_gestionar`.
   **Hecho cuando:** se ponen **rojos R3 y R4**, también con el predicado de la 146 intacto. Si sale
   verde, el espejo quedó sin alarma propia y la reparación está a medias.
-- [ ] **T6.5 — M5 (control positivo del espejo).** Hacer que la guarda de rol dispare **siempre**.
+- [x] **T6.5 — M5 (control positivo del espejo).** Hacer que la guarda de rol dispare **siempre**.
   **Hecho cuando:** se pone **rojo R7**.
-- [ ] **T6.6** Revertir las cinco y confirmar árbol limpio.
+- [x] **T6.6** Revertir las cinco y confirmar árbol limpio.
   **Hecho cuando:** `git diff --numstat` sale vacío respecto del estado previo a T6.
 
 ---
 
 ## T7 — Gate y cierre · depende de T6
 
-- [ ] **T7.1** `./init.sh --rapido`, con `INIT_EXIT=$?` escrito **dentro** del log y **sin canalizar
+- [x] **T7.1** `./init.sh --rapido`, con `INIT_EXIT=$?` escrito **dentro** del log y **sin canalizar
   por `tail`**.
   **Hecho cuando:** el log dice `INIT_EXIT=0`, y los `skipped` se miran uno a uno (no sólo el exit
   code). Este diff **no** toca cimientos, así que el rápido **no debe negarse**; si se niega, algo se
   tocó de más — léelo antes de correr el completo.
-- [ ] **T7.2** `progress/impl_417_backend.md` con: el mapa `R<n> → test` de abajo, la salida de las
-  tres mutaciones, el diff vacío de T5 y las desviaciones si las hubo.
+- [x] **T7.2** — escrita en **`progress/impl_417.md`** (no `impl_417_backend.md`) por indicación
+  expresa del orquestador al lanzar la implementación; única desviación de la lista de archivos, y la
+  ficha es backend-only. Lleva el mapa `R<n> → test` de abajo, la salida de las **cinco** mutaciones,
+  el diff vacío de T5 y las desviaciones.
   **Hecho cuando:** existe **y está commiteado** (tres veces en un día se quedó sin commitear en este
   repo), y el blob commiteado se ha verificado en la rama.
-- [ ] **T7.3** Marcar en este archivo **todas** las casillas ejecutadas y dejar sin marcar las que no,
+- [x] **T7.3** Marcar en este archivo **todas** las casillas ejecutadas y dejar sin marcar las que no,
   **con el motivo en la propia línea**.
   **Hecho cuando:** no queda ninguna casilla ambigua.
 
@@ -152,9 +154,25 @@ Zona: **backend**. Complejidad: **baja**. Sin migración, sin UI, sin endpoint n
 
 ## T8 — Opcional, NO bloqueante
 
-- [ ] **T8.1 `[P]`** Medir en producción, **en solo lectura**, cuántos `usuario` con rol
+- [x] **T8.1 `[P]`** Medir en producción, **en solo lectura**, cuántos `usuario` con rol
   `adminSatelite` tienen `zona_id IS NULL`, y decir el número en la bitácora.
-  **Hecho cuando:** el número está escrito, o está escrito que **no se pudo medir y por qué**.
+  **MEDIDO EN PRODUCCIÓN (2026-09-10), y lo midió el orquestador** —este agente no tiene el MCP de
+  Supabase en su conjunto de herramientas y la `DATABASE_URL` de prod es *sensitive*—:
+
+  > **Los 10 `adminSatelite` tienen zona asignada. Cero sin zona.** Los `usuario` que sí salen con
+  > `zona_id` nulo son `admin` (4), `maestro` (2) y las tiendas (5), y para ésos el ámbito **global**
+  > es el correcto (R6/R7): no son este caso.
+
+  **El número CONFIRMA el diseño, no lo debilita**, y por tres motivos que conviene dejar escritos:
+  1. **El caso no existe hoy**, así que la ficha es **puramente preventiva**, exactamente como se
+     registró. **Nadie verá un cambio de comportamiento al desplegar esto**: cero actores afectados.
+  2. **Pero nada lo impide.** `Actor.zonaId` es opcional en el modelo, así que basta dar de alta un
+     satélite y olvidar la zona. **No hace falta ningún cambio de código para que aparezca el
+     primero.**
+  3. Y por eso **el valor de la ficha no es el arreglo, es el rojo**: el día que ocurra, salta en un
+     test —M1 y M4, medidas con el predicado de la 146 intacto— en vez de en un número equivocado en
+     la pantalla de alguien.
+
   **No bloquea el despliegue** y no cambia ni una línea del diseño (`design.md` §10): la guarda es la
   misma exista o no ese usuario. Es información, no puerta.
 

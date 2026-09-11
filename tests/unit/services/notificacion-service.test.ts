@@ -10,6 +10,9 @@ import { NotificacionService } from "@/lib/services/NotificacionService";
 import { notificacionesConfig } from "@/lib/config/notificaciones";
 import type { NotificacionEvento } from "@/lib/types/notificacion";
 import type { IVigenciaAvisoAgregado } from "@/lib/interfaces/services/IVigenciaAvisoAgregado";
+// FICHA 417 (T4.1) — el resolutor REAL, para que R9 se afirme de extremo a extremo.
+import { VigenciaAvisoAgregadoService } from "@/lib/services/VigenciaAvisoAgregadoService";
+import type { IAvisoAgregadoRepository } from "@/lib/interfaces/repositories/IAvisoAgregadoRepository";
 
 // Feature 146 — B9. Tests unit del service con repositorio FALSO en memoria (sin DB): el
 // repo aplica de verdad el descarte, el limite y la ventana, para que el test compruebe
@@ -570,5 +573,70 @@ describe("409/R58 — si la cifra viva no se puede resolver, el aviso SALE (nunc
     expect(r.items[0].titulo).toBe(
       "La más antigua lleva 8 días en bodega. Coordiná la devolución.",
     );
+  });
+});
+
+// ⚠️ FICHA 417 (T4.1, R9) — DONDE ATERRIZA EL FALLO NUEVO, afirmado de extremo a extremo y no
+// heredado de palabra. El caso de arriba usa el resolutor FALSO; este usa el de VERDAD
+// (`VigenciaAvisoAgregadoService` + un repositorio espia) para que lo que se prueba sea la cadena
+// entera: la guarda de la 417 lanza -> `cifrasVivas` lo registra con su causa -> el aviso SALE SIN
+// NUMERO. Las dos mitades importan y por eso las dos se afirman.
+//
+// NOTA DE HONESTIDAD: este caso construye a mano un estado que hoy el predicado de visibilidad de
+// la 146 no deja llegar (un `adminSatelite` sin zona no recibe filas acotadas por zona). Es
+// DELIBERADO: lo que se esta probando es una defensa en profundidad, no un camino alcanzable
+// (`specs/417-.../design.md` §9.6). Si esa capa cambiara, esta seguiria en pie.
+describe("417/R9 — un actor sin ambito: el aviso sale SIN numero y el fallo queda REGISTRADO", () => {
+  function repoAgregadoEspia(): IAvisoAgregadoRepository {
+    return {
+      resumenNovedadesPorTienda: vi.fn(async () => []),
+      contarNovedadesDeTienda: vi.fn(async () => 5),
+      resumenRepresadasPorZona: vi.fn(async () => []),
+      resumenRepresadasGlobal: vi.fn(async () => ({ total: 0, masAntiguaAt: null })),
+      contarRepresadas: vi.fn(async () => 7),
+    };
+  }
+
+  it("adminSatelite sin zona + un aviso de represadas: se ve el texto, no el total, y el log lo dice", async () => {
+    const SAT_SIN_ZONA: Actor = { usuarioId: "sat-9", rol: "adminSatelite", zonaId: null };
+    const repoAgregado = repoAgregadoEspia();
+    const repo = new RepoFake([
+      fila("agg", {
+        evento: "devoluciones_represadas",
+        descripcion: "La más antigua lleva 8 días en bodega. Coordiná la devolución.",
+        visiblePara: ["sat-9"],
+      }),
+    ]);
+    const logger = { logError: vi.fn() };
+    const servicio = new NotificacionService(
+      repo,
+      now,
+      new VigenciaAvisoAgregadoService(repoAgregado, 3, now),
+      logger,
+    );
+
+    const r = await servicio.listar(SAT_SIN_ZONA);
+
+    // Mitad 1 — el aviso SALE, y sin numero: el titulo es el texto persistido, no
+    // «7 órdenes esperan volver a su tienda», que es el TOTAL DEL SISTEMA que el repositorio
+    // espia tiene cargado. Si la guarda desapareciera, ese 7 seria justo lo que se leeria.
+    expect(r.items.map((i) => i.id)).toEqual(["agg"]);
+    expect(r.items[0].titulo).toBe(
+      "La más antigua lleva 8 días en bodega. Coordiná la devolución.",
+    );
+    // Lo que NO se lee, con el literal escrito a mano: el titulo compuesto con el total del
+    // sistema. `contarRepresadas` del espia devuelve 7, asi que sin la guarda de la 417 esto es
+    // exactamente lo que este satelite tendria delante.
+    expect(r.items[0].titulo).not.toBe("7 órdenes esperan volver a su tienda");
+    // ...y el ambito ni se llego a consultar.
+    expect(repoAgregado.contarRepresadas).not.toHaveBeenCalled();
+
+    // Mitad 2 — queda REGISTRADO, y con la causa nombrada. Literales escritos a mano.
+    expect(logger.logError).toHaveBeenCalledTimes(1);
+    const registrado = logger.logError.mock.calls[0][0] as Error;
+    expect(registrado.message).toMatch(/vigencia del aviso agregado/i);
+    expect((registrado.cause as Error).message).toMatch(/no tiene zona asignada/i);
+    // Y no lleva PII: el id del usuario no viaja en el mensaje del error (design §4).
+    expect(`${registrado.message} ${(registrado.cause as Error).message}`).not.toContain("sat-9");
   });
 });
