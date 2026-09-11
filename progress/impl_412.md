@@ -273,7 +273,94 @@ Ver `§7.1`. El log completo, con `INIT_EXIT=` escrito **dentro**, se generó en
 
 ### §7.1 — `./init.sh` COMPLETO
 
-<!--GATE-->
+**DOS corridas completas. La primera salio ROJA y la segunda VERDE**, y las dos van escritas:
+esconder la primera seria esconder el trabajo que hizo falta.
+
+### Corrida 1 — `INIT_EXIT=1`, y el gate hizo su trabajo
+
+```
+ Test Files  10 failed | 1922 passed (1932)
+      Tests  17 failed | 28009 passed | 26 skipped (28052)
+   Duration  713.21s
+ROJOS NUEVOS (10 archivo(s) que no estan en el baseline)
+✗ hay rojos NUEVOS respecto del baseline
+INIT_EXIT=1
+```
+
+**OCHO de los diez eran MIOS, y los ocho son inventarios LITERALES de enum** — la red que este
+repo mantiene a proposito para que anadir un valor no pueda pasar desapercibido. Que se pusieran
+rojos **es la senal correcta**, no un accidente; se actualizaron a mano, uno por uno, con su motivo:
+
+| Archivo | Por que |
+| --- | --- |
+| `unit/services/notificacion-productores-wiring` | las DOS listas literales leidas de `db/schema.prisma` |
+| `integration/db/no-migration-102` | la carpeta de la migracion se declara en `MIGRACIONES_NOTIFICACIONES_POSTERIORES` |
+| `integration/db/notificacion-evento-postulacion-recurso-migration` (253) | sus listas de estado ACTUAL (schema + base) |
+| `integration/db/notificacion-evento-dia-reparto-corregido-migration` (262) | idem |
+| `integration/db/notificacion-evento-bloqueo-cierre-migration` (271) | idem (solo eventos) |
+| `integration/db/notificacion-evento-gasto-fijo-migration` (333) | idem |
+| `integration/db/notificacion-evento-webhook-suscripcion-migration` (403) | idem |
+| `unit/services/cierre-dia-aviso-bloqueo` | el `toEqual` EXHAUSTIVO del contexto gana `destinatarios` |
+
+⚠️ **Las listas de «los enums ANTES de MI migracion» NO se tocaron.** Se distinguen porque terminan
+en el valor de SU propia ficha, no en `devoluciones_represadas`. Y el `toEqual` exhaustivo del
+ultimo se ACTUALIZO en vez de relajarse a `toMatchObject`: relajarlo habria dejado de vigilar el
+contexto entero, que es justo lo que ese aserto existe para hacer.
+
+**LOS OTROS DOS NO ERAN MIOS, y NO van al baseline.** Medidos AISLADOS, los dos en verde:
+
+- `tests/components/TableroOperativo.test.tsx` — `Error: Test timed out in 20000ms`. Aislado:
+  **50/50 passed**.
+- `tests/integration/db/seed-zonas-cruza-por-codigo.test.ts` — `prisma.$transaction.timeout`.
+  Aislado: **8/8 passed**.
+
+Son los dos modos de flake por saturacion que el arnes documenta. No son deuda de nadie.
+
+### Corrida 2 — `INIT_EXIT=0`
+
+```
+ Test Files  1932 passed (1932)
+      Tests  28026 passed | 26 skipped (28052)
+   Start at  10:30:34
+   Duration  1539.50s
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1932 ejecutado(s), todos en el baseline conocido)
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+**Los `skipped` son los 26 de siempre, y NINGUNO de `integration/db`** — que es la comprobacion que
+decide si esta ficha esta verificada o no:
+
+```
+✓ tests/components/AnaliticaPage.test.tsx  (64 tests | 17 skipped)
+✓ tests/components/AnaliticaShell.test.tsx (15 tests |  9 skipped)
+                                                       ────────── 26
+```
+
+No aparece la linea `! sin DATABASE_URL: … NO se van a ejecutar`, y `↓ tests/integration/db` sale
+**0 veces**: la capa de datos se ejecuto de verdad. Los cinco archivos de la ficha, corridos:
+
+```
+✓ tests/integration/db/notificacion-evento-cierre-rechazado-migration.test.ts (26 tests)
+✓ tests/integration/db/cierre-rechazado-aviso-dedupe.test.ts                  ( 6 tests)
+✓ tests/integration/db/cierre-rechazado-jornada-sql-real.test.ts              ( 6 tests)
+✓ tests/unit/services/cierres-admin-aviso-rechazo.test.ts                     (28 tests)
+✓ tests/unit/notificaciones/cierre-rechazado-aviso.test.ts                    (21 tests)
+✓ tests/unit/notificaciones/mensajero-bloqueado-aviso.test.ts                 ( 8 tests)
+```
+
+El aviso de `migraciones sin down.sql` nombra **tres de agosto que no son mias**; la de esta ficha
+tiene el suyo.
+
+### Comandos sueltos
+
+```
+pnpm run typecheck  -> sin salida (cero errores)
+pnpm run lint       -> ✖ 184 problems (0 errors, 184 warnings)
+                       ninguna advertencia en un archivo de esta ficha (verificado con grep)
+```
 
 ---
 
@@ -309,4 +396,14 @@ comentado en el archivo.
 
 ## §9 — Veredicto
 
-<!--VEREDICTO-->
+**La 412 esta implementada y verificada: `./init.sh` COMPLETO en verde
+(`INIT_EXIT=0`, 1932/1932 archivos, 28.026 tests, 26 `skipped` y ninguno de `integration/db`), los
+26 requisitos mapeados a un test que se pone rojo si el codigo esta mal, y las DIEZ mutaciones
+obligatorias del `design.md §12` aplicadas y revertidas con su rojo pegado — incluida la trampa de
+esta ficha, que es el `2BP01` del `down.sql` cuando se olvida retipar `push_envio_dia.evento`.**
+
+**Lo que NO se pudo hacer, dicho sin adornos:** no hay navegador en este entorno, asi que T7.4 no
+es «ver la app». Se recorrio el camino REAL contra el Postgres local y se midieron las cuatro
+observaciones como datos (§6). Y producción no puede confirmar nada de esta ficha: con **0 cierres
+rechazados en toda su historia**, mirar allí tras el despliegue devolverá cero avisos nuevos, y eso
+será lo correcto.
