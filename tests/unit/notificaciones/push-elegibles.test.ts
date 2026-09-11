@@ -26,9 +26,10 @@ describe("410/R2 — el catalogo cubre TODOS los eventos del enum, ni uno menos"
 
     // AUTOCOMPROBACION: si la extraccion del enum se rompiera, las dos listas quedarian vacias y
     // el `toEqual` de abajo pasaria sin haber comprobado nada.
-    expect(delEnum.length).toBeGreaterThanOrEqual(14);
+    expect(delEnum.length).toBeGreaterThanOrEqual(15);
     expect(delEnum).toContain("geocodificacion_caida");
     expect(delEnum).toContain("cierre_dia_rechazado"); // ficha 412
+    expect(delEnum).toContain("reparto_manana"); // ficha 413
 
     expect(delCatalogo).toEqual(delEnum);
   });
@@ -43,7 +44,7 @@ describe("410/R2 — el catalogo cubre TODOS los eventos del enum, ni uno menos"
     }
   });
 
-  it("⭑ son NUEVE elegibles y CINCO no, tal como los conto el diseno aprobado", () => {
+  it("⭑ son DIEZ elegibles y CINCO no, tal como los conto el diseno aprobado", () => {
     const elegibles = Object.entries(PUSH_ELEGIBLE)
       .filter(([, e]) => e.push === "si")
       .map(([k]) => k)
@@ -60,6 +61,11 @@ describe("410/R2 — el catalogo cubre TODOS los eventos del enum, ni uno menos"
       "geocodificacion_caida",
       "mensajero_bloqueado_por_cierres",
       "novedades_sin_gestionar",
+      // ⭑ FICHA 413 (R30/R31): PLAZO en su forma mas pura. El reparto es mañana por la mañana y el
+      // valor del aviso CADUCA ESA MISMA NOCHE -- a las 00:00 CR ya no sirve de nada, y es el
+      // unico del catalogo que se apaga solo al pasar la medianoche. Y siempre AGREGADA: una sola
+      // notificacion con la cifra dentro, jamas un push por orden.
+      "reparto_manana",
       "webhook_suscripcion_pausada",
     ]);
   });
@@ -200,5 +206,35 @@ describe("410 — `eventoPuedeEmpujar` es una puerta BARATA, no la decision", ()
 
   it("⭑ y `false` para `orden_rechazada`, que es el evento mas frecuente del sistema", () => {
     expect(eventoPuedeEmpujar("orden_rechazada")).toBe(false);
+  });
+});
+describe("413/R31 — `reparto_manana` es elegible para el MENSAJERO y para nadie mas", () => {
+  it("⭑⭑ el perfil es `si` con el rol `mensajero`, escrito a mano", () => {
+    // ⚠️ `rolLector` ES EL ROL DE QUIEN LEE, no `destinatario_rol`. Este aviso llega como fila
+    // DIRIGIDA A USUARIO, con `destinatario_rol` en NULL: resolver la elegibilidad contra esa
+    // columna lo dejaria sin push, que es justo lo que la cabecera de este modulo avisa.
+    expect(esElegiblePush("reparto_manana", "mensajero")).toBe(true);
+  });
+
+  it("⭑ y NINGUN otro rol lo recibe por push", () => {
+    // Si alguien añadiera `admin` o `maestro` aqui, la administracion recibiria en el telefono el
+    // reparto de cada mensajero: dieciocho pushes cada noche por algo que ya ve en `/ordenes`.
+    for (const rol of ["maestro", "admin", "adminTienda", "adminSatelite", "apiKey"] as const) {
+      expect(esElegiblePush("reparto_manana", rol), `${rol} no deberia recibir este push`).toBe(
+        false,
+      );
+    }
+  });
+
+  it("⭑ y la puerta barata dice que SI puede empujar", () => {
+    expect(eventoPuedeEmpujar("reparto_manana")).toBe(true);
+  });
+
+  it("⭑ R32: la entrada del catalogo NO crea ninguna notificacion — solo declara elegibilidad", () => {
+    // El push es TRANSPORTE del aviso que ya existe (R32). Este modulo es puro: sin Prisma en
+    // runtime, sin DB y sin reloj. Que no cree nada no es una promesa: es que no tiene con que.
+    const entrada = PUSH_ELEGIBLE.reparto_manana;
+    expect(entrada.push).toBe("si");
+    expect(entrada.push === "si" && entrada.roles).toEqual(["mensajero"]);
   });
 });

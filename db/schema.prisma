@@ -2675,6 +2675,25 @@ enum NotificacionEvento {
   // por un cierre VENCIDO, cuando solo el rechazo le exige CORREGIR algo antes de reenviar.
   // Su entidad es `cierre_dia_rechazo` (mas abajo), y lleva el INSTANTE del rechazo dentro.
   cierre_dia_rechazado
+  // Ficha 413 (R1/R5/R6/R42) - al MENSAJERO le avisan, la tarde anterior, CUANTAS ordenes tiene
+  // reservadas para el dia siguiente. Aviso AGREGADO: UNA sola notificacion con el numero dentro,
+  // jamas una por orden. Lo emite el cron `aviso-reparto-manana` a las 19:00 CR (= `0 1 * * *`
+  // UTC), una vez por DIA ANUNCIADO. Destinatario: el MENSAJERO asignado, como fila dirigida a
+  // USUARIO; no hay ninguna fila de rol de este evento.
+  //
+  // ⚠️ EL NUMERO NO SE PERSISTE: la `descripcion` nombra la FECHA y el titulo lo compone el
+  // catalogo con la CIFRA VIVA en cada lectura (409/R57). Un numero persistido es un numero que
+  // queda obsoleto en cuanto entra una orden mas y que nadie corrige.
+  //
+  // ⚠️ EL BLOQUEADO POR CIERRES NO LO RECIBE (decision del humano, 2026-09-11). No es regla nueva:
+  // el comentario de `findMensajerosBloqueadosPorCierres` dice desde el 2026-08-23 que el bloqueo
+  // alcanza «recibir trabajo nuevo». Anunciarle su reparto seria prometerle algo que el servidor
+  // le va a negar, y ya tiene su aviso propio -el de bloqueo- que si le pide la accion que lo
+  // desbloquea. El filtro es de EMISION, no de lectura: la cifra viva NO consulta cierres.
+  //
+  // Su entidad es `reparto_manana_dia` (mas abajo) y lleva EL DIA ANUNCIADO dentro. PUSH: elegible
+  // para el perfil `mensajero` y para ningun otro (`lib/notificaciones/push-elegibles.ts`).
+  reparto_manana
 
   @@map("notificacion_evento")
 }
@@ -2754,6 +2773,31 @@ enum NotificacionEntidadTipo {
   // dentro del mismo dia. El dia es el grano de un RECORDATORIO que se repite mientras dure un
   // estado (`gasto_fijo_cobro_dia`, `geocodificacion_caida_dia`), no el de un HECHO repetible.
   cierre_dia_rechazo
+  // Ficha 413 (design 7) - SEPTIMO `entidad_tipo` que NO apunta a una fila de tabla: la entidad de
+  // este aviso es EL DIA ANUNCIADO (`entidad_id = 'YYYY-MM-DD'`, el dia CR del reparto del que
+  // habla), no ninguna orden.
+  //
+  // ⚠️ POR QUE EL DIA VA DENTRO: PARA QUE EL AVISO DE PASADO MAÑANA SI SALGA. Con una entidad que
+  // no cambiara entre jornadas, `notificacion_dedupe_key` -UNIQUE sobre (evento, entidad_id,
+  // destinatario_rol, destinatario_usuario_id), `NULLS NOT DISTINCT`, `WHERE entidad_id IS NOT
+  // NULL`- admitiria UNA sola fila por (evento, entidad, mensajero) PARA SIEMPRE, `crear` absorbe
+  // el `P2002` y el aviso de la segunda noche no saldria NUNCA, en silencio. Es el fallo que
+  // pagaron la 262 (entidad = orden) y la 403 (entidad = suscripcion).
+  //   · noches distintas => entidades distintas => el recordatorio es ESTRUCTURAL (R23/R24);
+  //   · misma noche repetida => misma entidad => UNA sola fila (R22), y lo decide el INDICE, no un
+  //     `if` previo que una carrera pueda burlar.
+  //
+  // ⚠️ Y NO LLEVA PREFIJO DE MENSAJERO, al contrario que los dos de la 409, Y ESO HAY QUE LEERLO
+  // ANTES DE COPIARLO. Alli el destinatario es un ROL CON ALCANCE (`{rol: adminTienda, tiendaId}`)
+  // y el alcance NO esta en la clave unica, asi que sin el prefijo solo avisaba la PRIMERA tienda
+  // de la corrida. Aqui el destinatario es un USUARIO y `destinatario_usuario_id` **ES** una
+  // columna de esa clave: dos mensajeros => dos valores distintos => dos filas. El alcance ya esta
+  // dentro. La regla no es «prefija siempre», es «comprueba si el alcance esta en la clave» -- y
+  // quien lo sostiene no es este parrafo sino R7, con dos mensajeros contra Postgres real.
+  //
+  // Y NO es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el indice
+  // unico es PARCIAL, asi que saldria un aviso por cada ejecucion.
+  reparto_manana_dia
 
   @@map("notificacion_entidad_tipo")
 }

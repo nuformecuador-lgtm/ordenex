@@ -224,6 +224,11 @@ describeSiHayBase("271 / §3.2 — la base aplicada, y el DOWN ejercitado de ver
       // a la de la 409 y tambien a las DOS de la 410 (de ahi que su `down.sql` sea el primero
       // que tiene que retipar `push_envio_dia.evento`).
       "cierre_dia_rechazado",
+      // FICHA 413 (design §7): «tenés N órdenes para mañana», al MENSAJERO asignado y a nadie
+      // más. Lo emite el cron `aviso-reparto-manana` a las 19:00 CR (= `0 1 * * *` UTC), una vez
+      // por DÍA ANUNCIADO. Migracion `20260914120000_notificacion_evento_reparto_manana`,
+      // POSTERIOR a la de la 412 y tambien a las DOS de la 410.
+      "reparto_manana",
     ]);
   });
 

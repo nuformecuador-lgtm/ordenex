@@ -41,6 +41,7 @@ import {
   emitirNovedadesSinGestionar,
   emitirPostulacionPendiente,
   emitirPostulacionRecursoPendiente,
+  emitirRepartoManana,
   emitirWebhookSuscripcionPausada,
   type CargaMasivaContexto,
   type CierrePorAprobarContexto,
@@ -54,6 +55,7 @@ import {
   type NovedadesSinGestionarContexto,
   type PostulacionContexto,
   type PostulacionRecursoContexto,
+  type RepartoMananaContexto,
   type WebhookSuscripcionPausadaContexto,
 } from "@/lib/notificaciones/emitir";
 
@@ -120,6 +122,11 @@ export type NovedadesSinGestionarNotificador = (
 export type DevolucionesRepresadasNotificador = (
   ctx: DevolucionesRepresadasContexto,
 ) => Promise<void>;
+/**
+ * FICHA 413 (R5/R6/R36). Firma del notificador de «tenes N ordenes para mañana». Lo usa el CRON
+ * `aviso-reparto-manana`, a las 19:00 CR, UNA VEZ POR MENSAJERO CON REPARTO Y NO BLOQUEADO.
+ */
+export type RepartoMananaNotificador = (ctx: RepartoMananaContexto) => Promise<void>;
 
 /**
  * DEFAULT de los tres services: no hace nada. Un service construido sin cablear su notificador
@@ -138,7 +145,8 @@ export const notificadorNoOp: PostulacionNotificador &
   WebhookSuscripcionPausadaNotificador &
   GeocodificacionCaidaNotificador &
   NovedadesSinGestionarNotificador &
-  DevolucionesRepresadasNotificador = async () => {};
+  DevolucionesRepresadasNotificador &
+  RepartoMananaNotificador = async () => {};
 
 /**
  * Construye el repositorio real. Aislado en una funcion para que los tests del camino REAL
@@ -450,6 +458,33 @@ export function notificarDevolucionesRepresadasCon(
   };
 }
 
+/**
+ * FICHA 413 (T4.2, R34/R37) — emite «tenes N ordenes para mañana» contra `repo`, absorbiendo su
+ * fallo.
+ *
+ * BEST-EFFORT Y POR DESTINATARIO, y aqui el motivo no es comodidad: lo llama el CRON
+ * `aviso-reparto-manana`, que recorre TODOS los mensajeros con reparto y corre a las 19:00 CR sin
+ * nadie mirando. Envolver CADA emision es lo que impide que un mensajero que falle se lleve por
+ * delante a los demas ni tumbe la corrida (R34). LA CORRIDA MANDA, EL AVISO ES CORTESIA.
+ *
+ * Y NO CORRE DENTRO DE NINGUNA TRANSACCION DE NEGOCIO (R37): el aviso no participa de la
+ * asignacion ni de ninguna otra escritura, asi que un fallo suyo no puede revertir nada.
+ *
+ * Y no es un `catch` vacio (`docs/conventions.md`): `emitirBestEffort` deja el fallo REGISTRADO
+ * con el nombre de la operacion y su causa.
+ *
+ * R29: ni el nombre de la operacion ni el contexto llevan PII — el contexto solo tiene un id de
+ * usuario y una fecha. Ni guia, ni remision, ni direccion, ni telefono, ni tienda, ni monto.
+ */
+export function notificarRepartoMananaCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): RepartoMananaNotificador {
+  return async (ctx) => {
+    await emitirBestEffort("reparto_manana", () => emitirRepartoManana(repo, ctx), logger);
+  };
+}
+
 // Bindings de PRODUCCION. Solo el composition root los importa. Resuelven el repositorio en el
 // momento de la emision (no al importar el modulo), para no abrir una conexion por el hecho de
 // que alguien importe este archivo.
@@ -496,3 +531,9 @@ export const notificarNovedadesSinGestionarReal: NovedadesSinGestionarNotificado
 
 export const notificarDevolucionesRepresadasReal: DevolucionesRepresadasNotificador = async (ctx) =>
   notificarDevolucionesRepresadasCon(repoReal())(ctx);
+
+// FICHA 413 (R36/T5.3): resuelve su repositorio por `repoReal()` como sus trece hermanos, asi que
+// hereda el cableado UNICO del canal de push (410 §6) sin hacer nada especial. NO construye
+// `new NotificacionRepository(...)` por su cuenta: eso pondria roja la guardia de 410/R51.
+export const notificarRepartoMananaReal: RepartoMananaNotificador = async (ctx) =>
+  notificarRepartoMananaCon(repoReal())(ctx);

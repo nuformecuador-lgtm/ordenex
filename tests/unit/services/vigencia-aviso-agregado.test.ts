@@ -9,6 +9,7 @@ import { vigenciaNoResuelta } from "@/lib/services/NotificacionService";
 // aqui. La lista blanca de PRODUCCION no lo importa, y por eso este aserto no es vacuo.
 import { CATALOGO_AVISOS } from "@/lib/notificaciones/catalogo-avisos";
 import type { IAvisoAgregadoRepository } from "@/lib/interfaces/repositories/IAvisoAgregadoRepository";
+import type { IRepartoMananaRepository } from "@/lib/interfaces/repositories/IRepartoMananaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 // FICHA 409 (T5.2, R57) — LA CIFRA VIVA SE PIDE ACOTADA AL AMBITO DEL ACTOR.
@@ -42,6 +43,38 @@ function repoEspia() {
 function servicio(repo: IAvisoAgregadoRepository, dias = 3) {
   return new VigenciaAvisoAgregadoService(repo, dias, () => AHORA);
 }
+
+// ---------------------------------------------------------------------------------------------
+// FICHA 413 (T6.1) - la tercera rama: la cifra viva del REPARTO DE MAÑANA.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Doble del repositorio de reparto. `contarReservadasParaOtroDia` devuelve 4 por defecto.
+ *
+ * ⚠️ `resumenPorMensajero` LANZA a proposito: ese metodo es del CRON, no de la lectura. Si el
+ * resolutor lo llamara, este doble lo delata en vez de devolver un mudo `[]` que dejaria pasar el
+ * cambio en silencio - mismo criterio que el doble de tarifas de la 412.
+ */
+function repartoEspia(total = 4) {
+  return {
+    resumenPorMensajero: vi.fn<IRepartoMananaRepository["resumenPorMensajero"]>(async () => {
+      throw new Error("la cifra VIVA no usa el resumen del cron: eso es de la emision");
+    }),
+    contarReservadasParaOtroDia: vi.fn<IRepartoMananaRepository["contarReservadasParaOtroDia"]>(
+      async () => total,
+    ),
+  } satisfies IRepartoMananaRepository;
+}
+
+function servicioConReparto(
+  reparto: IRepartoMananaRepository,
+  ahora: Date = AHORA,
+  repo: IAvisoAgregadoRepository = repoEspia(),
+) {
+  return new VigenciaAvisoAgregadoService(repo, 3, () => ahora, reparto);
+}
+
+const MENSAJERO: Actor = { usuarioId: "u-mensajero-413", rol: "mensajero", zonaId: null };
 
 const TIENDA: Actor = { usuarioId: "tienda-1", rol: "adminTienda", zonaId: null };
 const SATELITE: Actor = { usuarioId: "sat-1", rol: "adminSatelite", zonaId: ZONA };
@@ -336,5 +369,177 @@ describe("el DEFAULT del service NO es un no-op: lanza", () => {
     await expect(vigenciaNoResuelta.cifra("novedades_sin_gestionar", TIENDA)).rejects.toThrow(
       /nadie inyecto el resolutor de vigencia/,
     );
+  });
+});
+// =============================================================================================
+// FICHA 413 - LA CIFRA VIVA DEL REPARTO DE MAÑANA (R13, R17, R21, R41, R43)
+// =============================================================================================
+
+describe("413/R13 - el ambito sale del ACTOR, y aqui el actor ES el mensajero", () => {
+  it("⭑ se pide con `actor.usuarioId` y con la cota de HOY, y devuelve esa cifra", async () => {
+    const reparto = repartoEspia(4);
+
+    const cifra = await servicioConReparto(reparto).cifra("reparto_manana", MENSAJERO);
+
+    expect(cifra).toBe(4);
+    expect(reparto.contarReservadasParaOtroDia).toHaveBeenCalledTimes(1);
+    const [mensajeroId, cota] = reparto.contarReservadasParaOtroDia.mock.calls[0];
+    expect(mensajeroId).toBe("u-mensajero-413");
+    // ⚠️ `startOfDayCR(2026-09-11T13:00Z)` = `2026-09-11T00:00:00Z`: la convencion de `@db.Date`.
+    // Con `inicioDelDiaCREnUtc` saldria `...T06:00:00Z`, seis horas mas tarde, y el aviso contaria
+    // otra poblacion que la pantalla.
+    expect(cota.toISOString()).toBe("2026-09-11T00:00:00.000Z");
+  });
+
+  it("⭑ NO lee nada del `entidad_id` de la fila: la firma ni siquiera lo recibe", async () => {
+    // `cifra(evento, actor)` - no hay por donde entrar la entidad. Leerla de ahi daria el numero
+    // del INSTANTE DE LA EMISION, que es justo lo que esta cifra existe para no mostrar.
+    const reparto = repartoEspia(9);
+
+    await servicioConReparto(reparto).cifra("reparto_manana", MENSAJERO);
+
+    expect(reparto.contarReservadasParaOtroDia.mock.calls[0]).toHaveLength(2);
+  });
+
+  it("⭑ y no toca el repositorio de los DOS agregados de la 409 (R41: una consulta, no tres)", async () => {
+    const agregados = repoEspia();
+    const reparto = repartoEspia();
+
+    await servicioConReparto(reparto, AHORA, agregados).cifra("reparto_manana", MENSAJERO);
+
+    expect(agregados.contarNovedadesDeTienda).not.toHaveBeenCalled();
+    expect(agregados.contarRepresadas).not.toHaveBeenCalled();
+    expect(reparto.contarReservadasParaOtroDia).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("413/R17 - el rol que NO puede tener reparto asignado hace FALLAR la resolucion", () => {
+  it("⭑⭑ un `adminTienda` pidiendo este evento LANZA, y no consulta nada", async () => {
+    // ⚠️ ES LA REGLA QUE CERRO LA 417: *si el ambito del actor no existe, se falla; no se inventa
+    // uno.* Para quien no es mensajero, su `usuarioId` no identifica a ningun mensajero asignado:
+    // el conteo solo podria dar `0`, y la 409/R55 apagaria el aviso SIN QUE NADIE LO LEA, LO
+    // MARQUE NI LO DESCARTE. Ese es el PEOR de los dos modos de fallo: un numero de mas se nota al
+    // mirarlo, un aviso que no sale no se nota nunca.
+    //
+    // MUTACION OBLIGATORIA (design 13.5): devolver `0` en vez de lanzar => ESTO SE PONE ROJO.
+    const reparto = repartoEspia();
+
+    await expect(servicioConReparto(reparto).cifra("reparto_manana", TIENDA)).rejects.toThrow(
+      /es de un mensajero y el rol "adminTienda" no lo es/,
+    );
+
+    expect(reparto.contarReservadasParaOtroDia).not.toHaveBeenCalled();
+  });
+
+  it("⭑ y TODOS los roles que no son `mensajero` fallan igual - no solo el `adminTienda`", async () => {
+    // Decide por INCLUSION, como las dos ramas hermanas desde la 418: lo que no es `mensajero` no
+    // tiene ambito y lanza. Un rol NUEVO del enum entra por aqui y falla CERRADO.
+    const roles = Object.values(RolValue).filter((r) => r !== "mensajero");
+    // El escenario no puede estar vacio.
+    expect(roles.length).toBeGreaterThanOrEqual(5);
+
+    for (const rol of roles) {
+      const reparto = repartoEspia();
+      const actor: Actor = { usuarioId: `u-${rol}`, rol, zonaId: ZONA };
+
+      await expect(servicioConReparto(reparto).cifra("reparto_manana", actor)).rejects.toThrow(
+        /es de un mensajero/,
+      );
+      expect(reparto.contarReservadasParaOtroDia).not.toHaveBeenCalled();
+    }
+  });
+
+  it("⭑ ANTI-VACUIDAD: el `mensajero` SI obtiene su cifra - el bucle de arriba no es vacuo", async () => {
+    const reparto = repartoEspia(6);
+
+    await expect(servicioConReparto(reparto).cifra("reparto_manana", MENSAJERO)).resolves.toBe(6);
+  });
+
+  it("⭑ si NADIE inyecto el repositorio, LANZA en vez de devolver un numero (R36)", async () => {
+    // La familia «el composition root que no inyecta»: sin esta rama, un `buildService` que se
+    // olvidara del repositorio dejaria el aviso apagado para TODOS los mensajeros, en silencio.
+    const servicioSinCablear = new VigenciaAvisoAgregadoService(repoEspia(), 3, () => AHORA);
+
+    await expect(servicioSinCablear.cifra("reparto_manana", MENSAJERO)).rejects.toThrow(
+      /necesita el repositorio de reparto y nadie lo inyecto/,
+    );
+  });
+});
+
+describe("413/R21 - cuando llega el dia anunciado, la cifra cae a cero SOLA", () => {
+  it("⭑⭑ con el reloj en las 00:01 CR del 12, la cota AVANZA sola", async () => {
+    // ⚠️ ES EL TEST QUE PROTEGE LA PALABRA «MAÑANA» DEL TITULO. No hay ningun proceso que caduque
+    // el aviso: al pasar la medianoche CR, `startOfDayCR(now)` AVANZA y las ordenes del dia
+    // anunciado dejan de ser «posteriores». La cifra cae a 0, `presentacionDe` devuelve `null` y
+    // el aviso desaparece del panel y del distintivo, SIN que nadie lo lea, lo marque ni lo
+    // descarte.
+    //
+    // Aqui se mide la MITAD que es de este servicio: que la cota que pide AVANZA con el reloj. La
+    // otra mitad -que con esa cota el conteo da 0- vive contra Postgres (R21 en
+    // `reparto-manana-repository.test.ts`), porque es el `WHERE`.
+    //
+    // MUTACION OBLIGATORIA (design 13.4): un resolutor que devolviera siempre `1` => el aviso no
+    // se apagaria nunca y sobreviviria a su dia.
+    const antes = repartoEspia();
+    const despues = repartoEspia();
+
+    // 23:50 CR del 11 (= 05:50Z del 12): la cota sigue siendo el dia 11.
+    await servicioConReparto(antes, new Date("2026-09-12T05:50:00.000Z")).cifra(
+      "reparto_manana",
+      MENSAJERO,
+    );
+    // 00:01 CR del 12 (= 06:01Z del 12): la cota ya es el dia 12.
+    await servicioConReparto(despues, new Date("2026-09-12T06:01:00.000Z")).cifra(
+      "reparto_manana",
+      MENSAJERO,
+    );
+
+    expect(antes.contarReservadasParaOtroDia.mock.calls[0][1].toISOString()).toBe(
+      "2026-09-11T00:00:00.000Z",
+    );
+    // ⭑ LA COTA AVANZO SOLA, sin que nadie ejecutara nada ni escribiera nada.
+    expect(despues.contarReservadasParaOtroDia.mock.calls[0][1].toISOString()).toBe(
+      "2026-09-12T00:00:00.000Z",
+    );
+  });
+});
+
+describe("413/R43 - la cifra viva NO consulta cierres, y es una DECISION", () => {
+  it("⭑⭑ con un doble que FALLA si alguien le pide el bloqueo, la cifra sale igual", async () => {
+    // ⚠️ EL FILTRO DEL BLOQUEADO ES DE **EMISION**, NO DE LECTURA (design 6.1). Esta ruta corre en
+    // CADA SONDEO de 60 s: meterle una consulta de cierres romperia R41 -una consulta de mas en la
+    // ruta caliente- y ataria el apagado de este aviso a un estado que YA TIENE SU PROPIO AVISO.
+    //
+    // Lo que se acepta a cambio, dicho: quien reciba su aviso a las 19:00 y se bloquee a las 21:00
+    // convivira esa noche con los dos, hasta que este se apague solo a medianoche. Un aviso de mas
+    // es la direccion segura, y el de bloqueo es accionable.
+    //
+    // MUTACION OBLIGATORIA (design 13.11): meter la comprobacion del bloqueo aqui => el servicio
+    // necesitaria un repositorio de cierres que NO TIENE (no compila), o llamaria a este doble y
+    // ESTE CASO SE PONE ROJO.
+    const reparto = repartoEspia(5);
+    const cierresQueExplotan = {
+      findMensajerosBloqueadosPorCierres: vi.fn(async () => {
+        throw new Error("la cifra VIVA no consulta cierres: el filtro del bloqueo es de EMISION");
+      }),
+    };
+
+    // El servicio NO recibe este repositorio por constructor -no hay parametro para el-, asi que
+    // la comprobacion de verdad es la de abajo: la cifra sale y el doble NO se toco.
+    const cifra = await servicioConReparto(reparto).cifra("reparto_manana", MENSAJERO);
+
+    expect(cifra).toBe(5);
+    expect(cierresQueExplotan.findMensajerosBloqueadosPorCierres).not.toHaveBeenCalled();
+  });
+
+  it("⭑ R41: UNA sola consulta por resolucion, ni una mas", async () => {
+    // El coste declarado de la ficha: «1 `count` por sondeo de 60 s Y SOLO para el mensajero que
+    // tiene el aviso vivo». Si alguien metiera aqui la consulta de cierres, serian dos.
+    const reparto = repartoEspia();
+
+    await servicioConReparto(reparto).cifra("reparto_manana", MENSAJERO);
+
+    expect(reparto.contarReservadasParaOtroDia).toHaveBeenCalledTimes(1);
+    expect(reparto.resumenPorMensajero).not.toHaveBeenCalled();
   });
 });

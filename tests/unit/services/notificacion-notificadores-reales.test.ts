@@ -532,6 +532,12 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     // DESTINATARIO: sus defaults no-op son lo que impide que una suite reparta avisos a todas las
     // tiendas de la base local, que en este repo es COMPARTIDA entre worktrees.
     "AvisosDiariosService.ts", // ficha 409 / §4.4
+    // FICHA 413 (T5.1, R36): el CRON DEL AVISO DE REPARTO pasa a tener notificador -- «tenes N
+    // ordenes para mañana»-. Es el SEXTO aviso del arbol que se dispara SOLO y sin nadie mirando
+    // (19:00 CR), y el primero AGREGADO dirigido a un USUARIO: su default no-op es lo que impide
+    // que una suite reparta avisos a todos los mensajeros de la base local, que en este repo es
+    // COMPARTIDA entre worktrees.
+    "RepartoMananaAvisoService.ts", // ficha 413 / §6
   ] as const;
 
   it("lib/actions/postulacion-recurso.ts inyecta el notificador real", () => {
@@ -661,6 +667,35 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     expect(fuente).toContain("notificarNovedadesSinGestionarReal");
   });
 
+  it("⭑⭑ 413/R36: app/api/cron/aviso-reparto-manana/route.ts PASA su notificador real", () => {
+    // FICHA 413 (T5.3, R36) — MISMO MOLDE QUE `avisos-diarios`, Y POR EL MISMO MOTIVO MEDIDO. El
+    // notificador es el TERCER argumento de `RepartoMananaAvisoService`, detras de los dos
+    // repositorios; si `buildService()` dejara de pasarlo, el service se quedaria con su default
+    // NO-OP y el aviso de la noche NO SE EMITIRIA JAMAS en produccion, con la suite entera en
+    // verde. Es exactamente lo que le paso a `corte-diario`: dos de siete notificadores muertos.
+    //
+    // MUTACION OBLIGATORIA (design §13.9): borrar el argumento DEJANDO EL IMPORT INTACTO ⇒ este
+    // caso ROJO. Por eso se afirma sobre el USO EFECTIVO (fuente sin imports ni comentarios) y no
+    // con un `toContain` a secas: medido en este mismo archivo, un `toContain` se satisface con el
+    // `import` de arriba.
+    const fuente = leer("app", "api", "cron", "aviso-reparto-manana", "route.ts");
+    const uso = fuenteSinImportsNiComentarios(fuente);
+
+    expect(uso).toContain("notificarRepartoMananaReal");
+    expect(uso).toMatch(
+      /new RepartoMananaAvisoService\([\s\S]*notificarRepartoMananaReal,?[\s\S]*\)/,
+    );
+    // ⭑ Y LA SEGUNDA MITAD DEL CABLEADO, tan mortal como la primera: sin el repositorio de
+    // cierres, R42 no se puede cumplir y el mensajero BLOQUEADO recibiria un aviso que contradice
+    // al suyo. Tambien se afirma sobre el uso.
+    expect(uso).toMatch(/new RepartoMananaAvisoService\([\s\S]*new OrdenRepository\(prisma\)/);
+    expect(uso).toContain("new RepartoMananaRepository(prisma)");
+
+    // Y los `import` tienen que seguir ahi: sin ellos lo de arriba no compilaria — pero es el USO
+    // lo que se exige, no el import.
+    expect(fuente).toContain("notificarRepartoMananaReal");
+  });
+
   it("lib/actions/notificaciones.ts inyecta el RESOLUTOR DE VIGENCIA de los avisos agregados", () => {
     // FICHA 409 (T5.4, design §5) — la misma familia, con otro sintoma. `NotificacionService` toma
     // un resolutor de vigencia; su default LANZA (nunca devuelve un numero), pero un default que
@@ -674,6 +709,14 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     expect(uso).toContain("new VigenciaAvisoAgregadoService(");
     expect(uso).toMatch(
       /new NotificacionService\([\s\S]*new VigenciaAvisoAgregadoService\([\s\S]*\)/,
+    );
+    // ⭑⭑ FICHA 413 (T6.1, R13) — Y EL REPOSITORIO DEL REPARTO DE MAÑANA, que es el CUARTO
+    // argumento de ese resolutor. Sin el, `cifra("reparto_manana", ...)` LANZA, `cifrasVivas` lo
+    // registra y el aviso sale SIN numero (R16): no se rompe nada visible, Y POR ESO EL FALLO
+    // SERIA MUDO. Misma familia, mismo remedio: se afirma que alguien lo PASA, no que lo importa.
+    expect(uso).toContain("new RepartoMananaRepository(prisma)");
+    expect(uso).toMatch(
+      /new VigenciaAvisoAgregadoService\([\s\S]*new RepartoMananaRepository\(prisma\)[\s\S]*\)/,
     );
   });
 
