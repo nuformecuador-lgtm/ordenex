@@ -640,3 +640,68 @@ describe("417/R9 — un actor sin ambito: el aviso sale SIN numero y el fallo qu
     expect(`${registrado.message} ${(registrado.cause as Error).message}`).not.toContain("sat-9");
   });
 });
+
+// ⚠️ FICHA 418 (T4.1, R10) — EL MISMO ATERRIZAJE, PARA EL FALLO NUEVO. La 417 dijo «basta uno»
+// porque los dos fallos caen en el mismo `catch` de `cifrasVivas`, y sigue siendo cierto. Este se
+// pide por otra razon: es EL UNICO ASERTO QUE ENSEÑA EL DEFECTO EN PALABRAS. Con la lista negra
+// de antes (`rol !== "adminSatelite"` => ambito global), este mensajero tendria delante
+// «7 órdenes esperan volver a su tienda» —el TOTAL DEL SISTEMA que el repositorio espia tiene
+// cargado—, y ningun test del repo lo decia.
+//
+// NOTA DE HONESTIDAD, igual que arriba: este caso construye a mano un estado que hoy el predicado
+// de visibilidad de la 146 no deja llegar (un `mensajero` no recibe filas de este evento, porque
+// el emisor solo las escribe para `maestro`, `admin` y `adminSatelite`). Es DELIBERADO: lo que se
+// prueba es una defensa en profundidad, no un camino alcanzable (`specs/418-.../design.md` §9.7).
+describe("418/R10 — un rol fuera de la lista blanca: el aviso sale SIN numero y el fallo queda REGISTRADO", () => {
+  // Espia propio, para no tocar ni una linea del bloque de la 417 de arriba.
+  function repoAgregadoEspia418(): IAvisoAgregadoRepository {
+    return {
+      resumenNovedadesPorTienda: vi.fn(async () => []),
+      contarNovedadesDeTienda: vi.fn(async () => 5),
+      resumenRepresadasPorZona: vi.fn(async () => []),
+      resumenRepresadasGlobal: vi.fn(async () => ({ total: 0, masAntiguaAt: null })),
+      contarRepresadas: vi.fn(async () => 7),
+    };
+  }
+
+  it("mensajero + un aviso de represadas: se ve el texto, NUNCA el total del sistema, y el log lo dice", async () => {
+    const MENSAJERO: Actor = { usuarioId: "men-9", rol: "mensajero", zonaId: null };
+    const repoAgregado = repoAgregadoEspia418();
+    const repo = new RepoFake([
+      fila("agg", {
+        evento: "devoluciones_represadas",
+        descripcion: "La más antigua lleva 8 días en bodega. Coordiná la devolución.",
+        visiblePara: ["men-9"],
+      }),
+    ]);
+    const logger = { logError: vi.fn() };
+    const servicio = new NotificacionService(
+      repo,
+      now,
+      new VigenciaAvisoAgregadoService(repoAgregado, 3, now),
+      logger,
+    );
+
+    const r = await servicio.listar(MENSAJERO);
+
+    // Mitad 1 — el aviso SALE, y sin numero: el titulo es el texto persistido.
+    expect(r.items.map((i) => i.id)).toEqual(["agg"]);
+    expect(r.items[0].titulo).toBe(
+      "La más antigua lleva 8 días en bodega. Coordiná la devolución.",
+    );
+    // Lo que NO se lee, con el literal escrito a mano: el titulo compuesto con el total del
+    // sistema. `contarRepresadas` del espia devuelve 7, asi que con la lista negra de antes esto
+    // era EXACTAMENTE lo que este mensajero tendria delante — un numero creible y falso.
+    expect(r.items[0].titulo).not.toBe("7 órdenes esperan volver a su tienda");
+    // ...y el ambito ni se llego a consultar: ni el global, ni el de ninguna zona.
+    expect(repoAgregado.contarRepresadas).not.toHaveBeenCalled();
+
+    // Mitad 2 — queda REGISTRADO, y con la causa nombrada. Literales escritos a mano.
+    expect(logger.logError).toHaveBeenCalledTimes(1);
+    const registrado = logger.logError.mock.calls[0][0] as Error;
+    expect(registrado.message).toMatch(/vigencia del aviso agregado/i);
+    expect((registrado.cause as Error).message).toMatch(/no define ambito para el rol/i);
+    // Y no lleva PII: el id del usuario no viaja en el mensaje del error (design §4).
+    expect(`${registrado.message} ${(registrado.cause as Error).message}`).not.toContain("men-9");
+  });
+});
