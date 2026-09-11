@@ -259,6 +259,26 @@ export const CATALOGO_AVISOS: Record<NotificacionEvento, EntradaCatalogo> = {
     },
     destinatarios: ["maestro", "admin", "adminSatelite"],
   },
+  // 14 — FICHA 412 (R20/R21/R22). ACCIONABLE por las tres condiciones: pide una accion (revisarlo,
+  // corregirlo y volver a enviarlo a aprobacion), tiene consecuencia si no se hace (no se le
+  // liquida el cierre y sigue bloqueado) y EL puede resolverla.
+  //
+  // CON ATAJO, por el criterio aprobado —«¿le acerca esta pantalla a resolverlo?»—: `/cierre-dia`
+  // NO es un mirador, es DONDE EJECUTA la re-solicitud. Mismo destino y misma etiqueta que
+  // `cierre_dia_vencido` y `mensajero_bloqueado_por_cierres` para el mensajero: tres avisos de su
+  // cierre, un solo sitio al que ir.
+  //
+  // SIN `porRol`, y no por olvido: este evento tiene UN SOLO destinatario (R2). La administracion
+  // NO recibe fila de este evento — sigue recibiendo la suya de `mensajero_bloqueado_por_cierres`,
+  // con su texto y su entidad de siempre (R18). Quien rechaza es la bodega: avisarle de su propio
+  // clic seria ruido puro.
+  cierre_dia_rechazado: {
+    porDefecto: {
+      clase: "accionable",
+      atajo: { href: "/cierre-dia", etiqueta: "Ver mi cierre" },
+    },
+    destinatarios: ["mensajero"],
+  },
 };
 
 /**

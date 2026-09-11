@@ -421,6 +421,32 @@ describe("409/R8 — el distintivo cuenta LO ACCIONABLE Y VIGENTE, no los mensaj
     expect(r.items.map((i) => i.id)).not.toContain("agg-0");
   });
 
+  it("⭑ 412/R22: el aviso de cierre RECHAZADO cuenta en `porHacer` y trae su boton", async () => {
+    // FICHA 412 — la fila le llega al mensajero DIRIGIDA A USUARIO (`destinatario_rol` en NULL):
+    // quien decide la clase es el rol del ACTOR, no la columna. Y no es un agregado, asi que cae
+    // en la rama normal de `presentacionDe`: titulo = descripcion, sin cifra viva que resolver.
+    const repo = new RepoFake([
+      fila("rech", {
+        evento: "cierre_dia_rechazado",
+        descripcion:
+          "Tu cierre del 21 de agosto fue rechazado. Revísalo, corrígelo y vuelve a enviarlo a aprobación.",
+        visiblePara: ["men-1"],
+      }),
+    ]);
+    const mensajero: Actor = { usuarioId: "men-1", rol: "mensajero", zonaId: null };
+
+    const r = await servicioCon(repo).listar(mensajero);
+
+    expect(r.porHacer).toBe(1);
+    expect(r.items).toHaveLength(1);
+    expect(r.items[0].accionable).toBe(true);
+    // Literal ESCRITO A MANO: es la etiqueta declarada en el catalogo, no leida de el.
+    expect(r.items[0].atajo).toEqual({ href: "/cierre-dia", etiqueta: "Ver mi cierre" });
+    expect(r.items[0].titulo).toBe(
+      "Tu cierre del 21 de agosto fue rechazado. Revísalo, corrígelo y vuelve a enviarlo a aprobación.",
+    );
+  });
+
   it("el mismo evento cuenta o no segun el ROL de quien consulta", async () => {
     // `cierre_dia_vencido` le llega al mensajero como fila dirigida A USUARIO (su
     // `destinatario_rol` es NULL): quien decide la clase es el rol del ACTOR, no la columna.

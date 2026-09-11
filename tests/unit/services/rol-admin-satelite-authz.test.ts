@@ -122,6 +122,8 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     // Feature 271: el contador N/V y el detalle del bloqueo son parte del puerto.
     contarCierresAbiertosPorMensajero: vi.fn(async () => new Map()),
     findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
+    // FICHA 412 (T5.1): la jornada de un cierre concreto. Doble MUDO: esta suite no la ejercita.
+    findJornadaDeCierre: vi.fn(async () => null),
     findZonasConMensajeroBloqueado: vi.fn(async (): Promise<Set<string>> => new Set()),
     existeBodegaSateliteBloqueada: vi.fn(async () => ({
       bloqueada: false,

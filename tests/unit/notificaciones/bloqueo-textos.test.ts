@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 
 import { describe, it, expect } from "vitest";
 
@@ -344,5 +344,70 @@ describe("271 · guardia de árbol: de DÓNDE sale la fecha de la rama nueva", (
   it("y la rama de la BODEGA sigue colgando su aposición de `aResolverPrimero`", () => {
     // La otra mitad: las dos fuentes conviven a propósito, una por rama.
     expect(FUENTE).toContain("const dia = fechaDeJornada(d.aResolverPrimero);");
+  });
+});
+
+describe("412/R14 · guardia de árbol: la frase de la consecuencia existe UNA SOLA VEZ", () => {
+  /**
+   * ⚠️ POR QUÉ UNA GUARDIA DE ÁRBOL Y NO UNA ASERCIÓN DE SALIDA.
+   *
+   * Que el aviso de rechazo TERMINE con esta frase ya se afirma, con el literal a mano, en
+   * `cierre-rechazado-aviso.test.ts`. Pero esa aserción pasa igual si el emisor se la COPIA en vez
+   * de importarla — la salida es idéntica byte a byte—, y una copia es exactamente cómo se
+   * desincronizan dos textos que dicen lo que el servidor hace. Ya había TRES redacciones de esta
+   * misma idea en el árbol (`NO_PUEDES`, `textoCierreVencidoMensajero` y la de la pantalla); el
+   * día que la regla de bloqueo cambie habría que encontrarlas todas.
+   *
+   * Así que lo que se fija aquí es la FUENTE: la frase se declara en UN solo sitio y el emisor la
+   * IMPORTA. MUTACIÓN QUE ESTO MATA (design §12.7): copiar la frase a `emitir.ts`.
+   */
+  const FRASE = "Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo.";
+  const RAIZ = process.cwd();
+
+  /** Todos los `.ts`/`.tsx` de producción: `lib/`, `app/` y `components/`. */
+  function ficherosDeProduccion(): string[] {
+    const encontrados: string[] = [];
+    const recorrer = (dir: string) => {
+      for (const entrada of readdirSync(dir, { withFileTypes: true })) {
+        const completo = join(dir, entrada.name);
+        if (entrada.isDirectory()) {
+          recorrer(completo);
+          continue;
+        }
+        if (/\.tsx?$/.test(entrada.name)) encontrados.push(completo);
+      }
+    };
+    for (const raiz of ["lib", "app", "components"]) recorrer(join(RAIZ, raiz));
+    return encontrados;
+  }
+
+  it("anti-vacuidad: el recorrido encuentra árbol de verdad", () => {
+    // Sin esto, un fallo del recorrido dejaría la lista vacía y los dos casos de abajo pasarían en
+    // verde sin haber leído un solo fichero. Este repo ya midió lo que cuesta un test que reporta
+    // `passed` sin ejercitar nada.
+    expect(ficherosDeProduccion().length).toBeGreaterThan(500);
+  });
+
+  it("⭑ la frase aparece en UN SOLO fichero de producción, y es donde se declara", () => {
+    const conLaFrase = ficherosDeProduccion()
+      .filter((f) => readFileSync(f, "utf8").includes(FRASE))
+      .map((f) => relative(RAIZ, f).split(sep).join("/"));
+
+    expect(conLaFrase).toEqual(["lib/constants/bloqueo-mensajero.ts"]);
+  });
+
+  it("⭑ y el emisor del aviso de rechazo la IMPORTA en vez de reescribirla", () => {
+    const emisor = readFileSync(join(RAIZ, "lib/notificaciones/emitir.ts"), "utf8");
+
+    // Se declara exportada donde vive...
+    expect(readFileSync(join(RAIZ, "lib/constants/bloqueo-mensajero.ts"), "utf8")).toContain(
+      `export const NO_PUEDES = "${FRASE}"`,
+    );
+    // ...y el emisor la trae de ahí y la USA (no sólo la importa).
+    expect(emisor).toMatch(
+      /import \{[^}]*NO_PUEDES[^}]*\} from "@\/lib\/constants\/bloqueo-mensajero"/,
+    );
+    expect(emisor).toContain("${base} ${NO_PUEDES}");
+    expect(emisor).not.toContain(FRASE);
   });
 });

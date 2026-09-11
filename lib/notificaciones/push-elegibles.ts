@@ -42,8 +42,8 @@ export type PerfilPush =
   | { readonly push: "si"; readonly roles: readonly RolValue[] };
 
 /**
- * EL CATALOGO, evento por evento y con su porque. Trece entradas: las once de siempre mas las dos
- * que anadio la 409. OCHO son elegibles.
+ * EL CATALOGO, evento por evento y con su porque. CATORCE entradas: las once de siempre, las dos
+ * que anadio la 409 y `cierre_dia_rechazado` de la 412. NUEVE son elegibles.
  */
 export const PUSH_ELEGIBLE = {
   // -------------------------------------------------------------------------------------------
@@ -75,6 +75,23 @@ export const PUSH_ELEGIBLE = {
   // MENSAJERO. Su cierre vencio (D2, decision del humano del 2026-09-10): SI entra, y SOLO para la
   // fila dirigida a el. Las tres copias a bodega, no.
   cierre_dia_vencido: { push: "si", roles: ["mensajero"] },
+
+  // MENSAJERO (FICHA 412, R23). Le RECHAZARON el cierre: tiene las DOS cosas que el criterio pide,
+  // y no por analogia.
+  //   · DINERO: el cierre es su liquidacion. Rechazado, no se le paga hasta que lo corrija, lo
+  //     reenvie y se lo aprueben.
+  //   · PLAZO, y de los caros: mientras siga sin aprobar, el servidor le rechaza entregar, cobrar
+  //     y recibir trabajo nuevo (`estaBloqueadoPorCierres`). Cada hora que tarda en enterarse es
+  //     una hora en la que no puede trabajar.
+  // Es el mismo argumento con el que entraron `cierre_dia_vencido` y
+  // `mensajero_bloqueado_por_cierres`.
+  //
+  // ⚠️ NO LLEVA NINGUN ROL, y no es un olvido: este evento NO CREA FILA DE ROL (412/R2). Su unico
+  // destinatario es el mensajero, como fila dirigida a USUARIO. Y no hay riesgo de doble push por
+  // el mismo hecho: en la rama del rechazo la fila de `mensajero_bloqueado_por_cierres` dirigida
+  // al mensajero YA NO SE CREA (412/R17), y las copias a bodega de ese evento estan aqui arriba
+  // declaradas no elegibles.
+  cierre_dia_rechazado: { push: "si", roles: ["mensajero"] },
 
   // MENSAJERO. Le cambiaron el dia de reparto de una orden suya. Si no se entera, se presenta el
   // dia equivocado: consecuencia real, personal y con fecha.

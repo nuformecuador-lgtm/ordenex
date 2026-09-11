@@ -58,9 +58,12 @@ describe("R5 — todo atajo declarado apunta a una ruta que EXISTE y que ese rol
     // verde sin haber comprobado ni un destino. Este repo ya midio lo que cuesta un test que
     // reporta `passed` sin ejercitar nada.
     const destinos = destinosDeclarados();
-    expect(destinos.length).toBeGreaterThanOrEqual(12);
+    expect(destinos.length).toBeGreaterThanOrEqual(13);
     expect(destinos.map((d) => d.href)).toContain("/novedades?superficie=devolucion");
     expect(destinos.map((d) => d.href)).toContain("/recepcion-satelite/en-bodega");
+    // FICHA 412: si el recorrido dejara de ver la entrada nueva, el bucle de abajo saldria verde
+    // sin haberla comprobado. Se nombra su par (evento, rol) para que eso no pueda pasar.
+    expect(destinos.map((d) => `${d.evento}|${d.rol}`)).toContain("cierre_dia_rechazado|mensajero");
   });
 
   it("cada destino, sin su parametro de consulta, es una ruta del menu de ese rol", () => {
@@ -78,6 +81,22 @@ describe("R5 — todo atajo declarado apunta a una ruta que EXISTE y que ese rol
     for (const rol of ["maestro", "admin", "adminTienda", "adminSatelite", "mensajero"] as const) {
       expect(rutasVisiblesPara(rol).size, `${rol} sin menu`).toBeGreaterThan(0);
     }
+  });
+
+  it("⭑ 412/R21: el destino de `cierre_dia_rechazado` existe Y lo ve el `mensajero`", () => {
+    // Nombrado aparte del barrido de arriba a proposito: R21 pide que ESTE par (evento, rol)
+    // quede afirmado, no solo que el recorrido generico no encuentre invalidos —un recorrido que
+    // dejara de ver esta entrada saldria verde igual—.
+    const accion = accionDeAviso("cierre_dia_rechazado", "mensajero");
+    expect(accion.clase).toBe("accionable");
+    expect(accion.clase === "accionable" && accion.atajo?.href).toBe("/cierre-dia");
+    expect(rutasVisiblesPara("mensajero").has("/cierre-dia")).toBe(true);
+
+    // MUTACION del design (§12): declarar `/cierres-admin` como destino del mensajero. Es la
+    // pantalla donde el ADMIN aprueba, y el mensajero no la ve: seria un `notFound()` en la cara
+    // de alguien que estaba intentando resolver su cierre.
+    expect(rutasVisiblesPara("mensajero").has("/cierres-admin")).toBe(false);
+    expect(rutasVisiblesPara("maestro").has("/cierres-admin")).toBe(true);
   });
 
   it("la guardia SI se pone roja ante el destino equivocado (mutacion, comprobada aqui)", () => {

@@ -2195,6 +2195,26 @@ export interface IOrdenRepository {
    */
   findBloqueoDetalle(mensajeroId: string): Promise<BloqueoDetalle>;
   /**
+   * FICHA 412 (T5.1, R11) — la JORNADA que cierra UN cierre concreto, en fecha calendario de Costa
+   * Rica (`YYYY-MM-DD`), o `null` si no hay ninguna fiable. Una sola consulta, y el resultado pasa
+   * por `derivarJornada` (`lib/utils/jornada-cierre.ts`), que es el UNICO derivador (271/R61).
+   *
+   * ⚠️ POR QUE UN METODO NUEVO Y NO SE REUSA `findBloqueoDetalle().aReenviarPrimero.jornadaCR`, que
+   * el productor del rechazo YA tiene en la mano: ese campo es el cierre RE-SOLICITABLE MAS VIEJO,
+   * que coincide con el recien rechazado solo cuando este es el mas viejo. En el resto de casos el
+   * aviso fecharia OTRO cierre — exactamente el fallo que `CierreDiaRepository.findCierreParaAviso`
+   * documenta: «el aviso apuntaba al otro cierre y la clave de dedupe se calculaba sobre la entidad
+   * equivocada — silencio o aviso falso, sin que nada se pusiera rojo».
+   *
+   * Tampoco se deriva de las gestiones del detalle de la pantalla: esa proyeccion es lo que el
+   * DETALLE necesita pintar, no «todas las vinculadas y no anuladas», asi que la fecha del aviso
+   * acabaria dependiendo de que pinte el detalle.
+   *
+   * Cierre inexistente -> `null`. NO se acota por alcance: el llamador ya releyo el cierre con el
+   * alcance que autorizo la escritura antes de pedir esto.
+   */
+  findJornadaDeCierre(cierreId: string): Promise<string | null>;
+  /**
    * Zonas (central y satelite) con AL MENOS 1 mensajero bloqueado: mismo criterio que
    * `findMensajerosBloqueadosPorCierres`, agregado por zona. Una zona sin mensajeros nunca
    * aparece. La pertenencia se lee de `usuario.zonaId`, no del snapshot

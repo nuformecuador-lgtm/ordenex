@@ -239,6 +239,11 @@ export class CierreDiaService implements ICierreDiaService {
         zonaId: info.destinoZonaId,
         mensajeroUsuarioId: mensajeroId,
         bloqueo,
+        // FICHA 412 (R19): la SOLICITUD no cambia. Aqui no hay ningun rechazo del que avisar —el
+        // mensajero se bloqueo por ACUMULAR—, asi que sigue recibiendo su fila igual que hasta
+        // hoy, con el mismo texto y la misma entidad. El campo es obligatorio a proposito: es lo
+        // que impide que un productor nuevo se quede sin decidir a quien avisa.
+        destinatarios: "mensajero_y_bodega",
       });
     });
   }

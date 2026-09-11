@@ -24,7 +24,11 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 // Feature 271 (§9.2/§10.1): el aviso de bloqueo al mensajero se COMPONE con el mismo formateador
 // que la pantalla. No es una cadena importada de fuera: es la regla que CUENTA (N, V y cual toca
 // primero) escrita una sola vez, para que campana y pantalla no puedan divergir (R43/R52).
-import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
+// FICHA 412 (R14): la segunda frase del aviso de rechazo es la MISMA CONSTANTE que usan el aviso
+// de bloqueo y las tres pantallas del mensajero, IMPORTADA y no copiada. Es la lista de lo que el
+// servidor va a rechazar; una cuarta redaccion de la misma idea seria una que divergiria el dia
+// que la regla cambie, y hay una guardia de arbol que afirma que la frase existe UNA SOLA VEZ.
+import { avisoBloqueo, NO_PUEDES } from "@/lib/constants/bloqueo-mensajero";
 import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
 // FICHA 409 (R39): el «5» y el «24» del texto del aviso de novedades salen de la MISMA
 // configuracion de la que `DevolucionSlaService` deriva sus ventanas. Con dos copias del numero,
@@ -606,6 +610,23 @@ export async function emitirCierreDiaVencido(
   return emitirFilas(repo, filas, tx);
 }
 
+/**
+ * FICHA 412 (T4.4, R17/R18/R19) — a QUIÉN va este aviso, decidido por el PRODUCTOR.
+ *
+ * Campo OBLIGATORIO y sin valor por defecto, a propósito: es el mismo mecanismo del `Record` del
+ * catálogo. Un productor nuevo no puede quedarse sin decidir, porque no compila.
+ *
+ *   · `"mensajero_y_bodega"` — lo que hacía el aviso hasta hoy, y lo que sigue haciendo la
+ *     SOLICITUD de cierre (`CierreDiaService.avisarBloqueoPorAcumular`) y el corte diario. R19: su
+ *     comportamiento no cambia ni a quién llega, ni qué dice, ni cuándo.
+ *   · `"solo_bodega"` — el RECHAZO (`CierresAdminService.avisarDelRechazo`). Ahí el mensajero
+ *     recibe `cierre_dia_rechazado`, que es el único de los dos que dice QUÉ PASÓ; mandarle
+ *     también éste serían DOS «por hacer» en el distintivo de la 409 para UN SOLO trabajo —los dos
+ *     llevan a `/cierre-dia` a pedir la misma acción— y, con la 410 encima, DOS pushes (el cupo
+ *     diario es por `(usuario, evento, jornada)` y son eventos distintos).
+ */
+export type DestinatariosBloqueo = "mensajero_y_bodega" | "solo_bodega";
+
 export interface MensajeroBloqueadoContexto {
   /** El cierre que lo dejó bloqueado (el recién creado, o el que acaban de rechazarle). */
   cierreId: string;
@@ -615,6 +636,8 @@ export interface MensajeroBloqueadoContexto {
   mensajeroUsuarioId: string;
   /** N, V y cuál toca resolver primero: lo que el texto al mensajero necesita CONTAR (R43). */
   bloqueo: BloqueoDetalle;
+  /** FICHA 412 (R17/R18): quién recibe ESTA emisión. Obligatorio: nadie puede no decidir. */
+  readonly destinatarios: DestinatariosBloqueo;
 }
 
 /**
@@ -629,6 +652,12 @@ export interface MensajeroBloqueadoContexto {
  * versiones del mismo aviso —una en la campana y otra en la pantalla— divergirían en cuanto una de
  * las dos cambie, y este aviso tiene que decir exactamente lo que el servidor va a rechazar (R43).
  * Se compone con `conCta: true` porque la campana no es «Cierre del día»: hay que decirle dónde ir.
+ *
+ * ⚠️ FICHA 412 (R17/R18/R19) — A QUIÉN LLEGA LO DECIDE AHORA EL PRODUCTOR (`ctx.destinatarios`),
+ * y el cambio es EXACTAMENTE UNO: en la rama del RECHAZO ya no se crea la fila del MENSAJERO,
+ * porque ahí él recibe `cierre_dia_rechazado` —el único de los dos que dice QUÉ PASÓ—. Las filas
+ * de bodega (maestro, admin y el `adminSatelite` de la zona destino) NO cambian en ningún
+ * productor: mismo texto, misma entidad, misma deduplicación.
  */
 export async function emitirMensajeroBloqueado(
   repo: INotificacionRepository,
@@ -640,16 +669,25 @@ export async function emitirMensajeroBloqueado(
     bodega.push({ tipo: "rol", rol: "adminSatelite", zonaId: ctx.zonaId });
   }
   const jornadaCR = ctx.bloqueo.aResolverPrimero?.jornadaCR ?? null;
+  // FICHA 412 (R17/R18): la fila del MENSAJERO sólo sale cuando el productor la pide. La del
+  // RECHAZO no la pide: allí él recibe `cierre_dia_rechazado`, y dos filas para un solo trabajo
+  // serían dos «por hacer» en el distintivo y dos pushes. Las de bodega NO cambian nunca.
+  const alMensajero: CrearNotificacionInput[] =
+    ctx.destinatarios === "solo_bodega"
+      ? []
+      : [
+          {
+            tipo: "alert",
+            evento: "mensajero_bloqueado_por_cierres",
+            descripcion: avisoBloqueo(ctx.bloqueo, { conCta: true }),
+            anexo: null,
+            entidadTipo: "cierre_dia",
+            entidadId: ctx.cierreId,
+            destinatario: { tipo: "usuario", usuarioId: ctx.mensajeroUsuarioId },
+          },
+        ];
   const filas: CrearNotificacionInput[] = [
-    {
-      tipo: "alert",
-      evento: "mensajero_bloqueado_por_cierres",
-      descripcion: avisoBloqueo(ctx.bloqueo, { conCta: true }),
-      anexo: null,
-      entidadTipo: "cierre_dia",
-      entidadId: ctx.cierreId,
-      destinatario: { tipo: "usuario", usuarioId: ctx.mensajeroUsuarioId },
-    },
+    ...alMensajero,
     ...bodega.map((destinatario) => ({
       tipo: "warning" as const,
       evento: "mensajero_bloqueado_por_cierres" as const,
@@ -659,6 +697,108 @@ export async function emitirMensajeroBloqueado(
       entidadId: ctx.cierreId,
       destinatario,
     })),
+  ];
+  return emitirFilas(repo, filas, tx);
+}
+
+// ---------------------------------------------------------------------------
+// FICHA 412 §4 — «TU CIERRE FUE RECHAZADO». BEST-EFFORT, desde el RECHAZO del admin.
+//
+// ⚠️ LA ENTIDAD DE ESTE AVISO ES **EL RECHAZO**, NO EL CIERRE, Y ESA ES LA DECISIÓN QUE EVITA UN
+// SILENCIO TOTAL. `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id,
+// destinatario_rol, destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT
+// NULL`, el índice NO MIRA EL ESTADO DE LECTURA, y `NotificacionRepository.crear` ABSORBE el
+// `P2002`. Con el CIERRE como entidad —que es lo que hace el aviso de bloqueo de aquí arriba— esa
+// clave admitiría UNA sola fila por (evento, cierre, mensajero) PARA SIEMPRE. Y como `rechazado`
+// es RE-SOLICITABLE y `transicionarASolicitado` REUTILIZA LA MISMA FILA de `cierre_dia`, el ciclo
+// NORMAL de esta pantalla —rechazo, corrección, rechazo— dejaría el SEGUNDO rechazo mudo: sin
+// error, sin log y sin nada. Y el segundo es justo cuando más falta hace, porque significa que lo
+// que corrigió no bastó. Es el fallo que documentaron la 262 y la 403.
+//
+// Con `${cierreId}:${resueltoAtISO}` las dos propiedades son ESTRUCTURALES, no de disciplina:
+//   · dos rechazos ⇒ dos `resuelto_at` ⇒ dos entidades ⇒ DOS avisos (R7), leído o no el primero;
+//   · el MISMO rechazo emitido dos veces ⇒ misma entidad ⇒ UNO solo (R8/R9) — y lo decide el
+//     índice único, no un `if` previo que una carrera pueda burlar.
+//
+// El instante es el PERSISTIDO (`cierre_dia.resuelto_at`, leído DESPUÉS de la escritura), nunca
+// un `new Date()` del servicio: con un reloj propio, dos emisiones del mismo rechazo —un
+// reintento— inventarían dos entidades y saldrían dos avisos por un solo hecho.
+//
+// Y no es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el índice
+// único es PARCIAL, así que saldría un aviso por cada ejecución.
+// ---------------------------------------------------------------------------
+
+/**
+ * R11/R12/R14/R15 — el texto, con sus TRES salidas. `jornadaCR` viene YA derivada por el único
+ * derivador (`lib/utils/jornada-cierre.ts`, 271/R61); aquí sólo se pone en palabras.
+ *
+ * LA FECHA ES LA DE LA **JORNADA**, no la del nacimiento del cierre: un cierre creado por el corte
+ * nace fechado un día por delante del día que el mensajero trabajó. Sin jornada fiable, «Tu cierre
+ * del día»: se OMITE, no se inventa (R12). Es el mismo patrón, palabra por palabra, de
+ * `textoCierreVencidoMensajero`.
+ *
+ * LA SEGUNDA FRASE ES `NO_PUEDES`, IMPORTADA (R14): la lista de lo que el servidor va a rechazar
+ * se escribe UNA VEZ. Y sólo aparece si el rechazo lo deja BLOQUEADO (R15): afirmar una
+ * consecuencia que el servidor no aplica es el fallo que la 271 documentó al revés.
+ *
+ * NO LLEVA EL MOTIVO DEL RECHAZO, y no por disciplina sino POR CONSTRUCCIÓN: no entra en el
+ * contexto, así que no hay nada que filtrar. Es texto libre escrito por un humano y puede traer un
+ * teléfono, un nombre o un monto (misma razón que 262/R48). El motivo se lee en `/cierre-dia`, que
+ * es donde la autorización por cierre vive.
+ */
+export function textoCierreRechazadoMensajero(
+  jornadaCR: string | null,
+  quedaBloqueado: boolean,
+): string {
+  const fecha = jornadaCR === null ? null : fechaLegible(jornadaCR);
+  const cual = fecha === null || fecha === jornadaCR ? "Tu cierre del día" : `Tu cierre del ${fecha}`;
+  const base = `${cual} fue rechazado. Revísalo, corrígelo y vuelve a enviarlo a aprobación.`;
+  return quedaBloqueado ? `${base} ${NO_PUEDES}` : base;
+}
+
+/** Lo MÍNIMO que el aviso necesita. SIN un solo campo de más — en particular, SIN el motivo (R16). */
+export interface CierreRechazadoContexto {
+  /** El cierre rechazado. Es la PRIMERA mitad de la entidad. */
+  cierreId: string;
+  /** `cierre_dia.resuelto_at` de ESTE rechazo, en ISO. Es la SEGUNDA mitad de la entidad (§3). */
+  resueltoAtISO: string;
+  /** El dueño del cierre: ÚNICO destinatario (R2). */
+  mensajeroUsuarioId: string;
+  /** Ya derivada por el único derivador. `null` -> el texto omite la fecha (R12). */
+  jornadaCR: string | null;
+  /** Leído DESPUÉS del rechazo. Decide la segunda frase, y nada más (R14/R15). */
+  quedaBloqueado: boolean;
+}
+
+/**
+ * R1/R2/R16 — UNA sola fila `alert` dirigida al MENSAJERO dueño del cierre, y a nadie más.
+ *
+ * `alert` y no `warning`: es el dinero del mensajero y además puede estar bloqueado, igual que
+ * `cierre_dia_vencido` para él.
+ *
+ * SIN FILA DE ROL, y no por olvido: quien rechaza es la bodega, y avisarle de su propio clic sería
+ * ruido puro. Su aviso —`mensajero_bloqueado_por_cierres` con `destinatarios: "solo_bodega"`—
+ * sigue saliendo igual, con el mismo texto y la misma entidad (R18).
+ *
+ * SIN ANEXO (R16): la fecha ya va dentro del texto, igual que en los dos avisos de la 271.
+ */
+export async function emitirCierreDiaRechazado(
+  repo: INotificacionRepository,
+  ctx: CierreRechazadoContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  const filas: CrearNotificacionInput[] = [
+    {
+      tipo: "alert",
+      evento: "cierre_dia_rechazado",
+      descripcion: textoCierreRechazadoMensajero(ctx.jornadaCR, ctx.quedaBloqueado),
+      anexo: null,
+      entidadTipo: "cierre_dia_rechazo",
+      // ⚠️ EL INSTANTE VA DENTRO. Ver el bloque de arriba: sin él, el segundo rechazo del mismo
+      // cierre no avisaría nunca, en silencio.
+      entidadId: `${ctx.cierreId}:${ctx.resueltoAtISO}`,
+      destinatario: { tipo: "usuario", usuarioId: ctx.mensajeroUsuarioId },
+    },
   ];
   return emitirFilas(repo, filas, tx);
 }

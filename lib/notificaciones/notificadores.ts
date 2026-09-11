@@ -31,6 +31,7 @@ import { pushConfigurado } from "@/lib/config/push";
 import {
   emitirCargaMasivaTerminada,
   emitirCierreDiaPorAprobar,
+  emitirCierreDiaRechazado,
   emitirCierreDiaVencido,
   emitirDevolucionesRepresadas,
   emitirDiaRepartoCorregido,
@@ -43,6 +44,7 @@ import {
   emitirWebhookSuscripcionPausada,
   type CargaMasivaContexto,
   type CierrePorAprobarContexto,
+  type CierreRechazadoContexto,
   type CierreVencidoContexto,
   type DevolucionesRepresadasContexto,
   type DiaRepartoCorregidoContexto,
@@ -76,6 +78,12 @@ export type DiaRepartoCorregidoNotificador = (ctx: DiaRepartoCorregidoContexto) 
 export type CierreVencidoNotificador = (ctx: CierreVencidoContexto) => Promise<void>;
 /** Feature 271 (R40/R41/R42). Firma del notificador de «quedaste bloqueado por cierres». */
 export type MensajeroBloqueadoNotificador = (ctx: MensajeroBloqueadoContexto) => Promise<void>;
+/**
+ * FICHA 412 (R1/R6). Firma del notificador de «tu cierre del dia fue RECHAZADO». Lo usa el RECHAZO
+ * del admin (`CierresAdminService`), y es el UNICO aviso del sistema que dice esa palabra: hasta
+ * hoy el mensajero leia el mismo texto que por un cierre vencido.
+ */
+export type CierreRechazadoNotificador = (ctx: CierreRechazadoContexto) => Promise<void>;
 /**
  * FICHA 333 (E2, R29/R33/R34). Firma del notificador de «quedan cobros de gasto fijo por
  * aprobar». Lo usa el CRON de gastos fijos, al final de su corrida.
@@ -125,6 +133,7 @@ export const notificadorNoOp: PostulacionNotificador &
   DiaRepartoCorregidoNotificador &
   CierreVencidoNotificador &
   MensajeroBloqueadoNotificador &
+  CierreRechazadoNotificador &
   GastoFijoCobroPendienteNotificador &
   WebhookSuscripcionPausadaNotificador &
   GeocodificacionCaidaNotificador &
@@ -287,6 +296,33 @@ export function notificarMensajeroBloqueadoCon(
 }
 
 /**
+ * FICHA 412 (R1/R4) — emite «tu cierre del dia fue RECHAZADO» contra `repo`, absorbiendo su fallo.
+ *
+ * BEST-EFFORT Y FUERA DE LA TRANSACCION DEL RECHAZO, y el motivo no es comodidad: en Postgres un
+ * error de sentencia aborta la transaccion ENTERA, asi que un aviso caido REVERTIRIA un rechazo
+ * legitimo y el admin veria un error por algo que ya ocurrio. EL RECHAZO MANDA, EL AVISO ES
+ * CORTESIA (R4).
+ *
+ * Y no es un `catch` vacio (`docs/conventions.md`): `emitirBestEffort` deja el fallo REGISTRADO
+ * con el nombre de la operacion y su causa.
+ *
+ * R16: ni el nombre de la operacion ni el contexto llevan el MOTIVO del rechazo -texto libre de un
+ * humano, que puede traer un telefono o un monto-, ni guia, ni remision, ni persona.
+ */
+export function notificarCierreDiaRechazadoCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): CierreRechazadoNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "cierre_dia_rechazado",
+      () => emitirCierreDiaRechazado(repo, ctx),
+      logger,
+    );
+  };
+}
+
+/**
  * FICHA 333 (E2, R29/R33) — emite «quedan N cobros de gasto fijo por aprobar» contra `repo`,
  * absorbiendo su fallo.
  *
@@ -437,6 +473,12 @@ export const notificarCierreDiaVencidoReal: CierreVencidoNotificador = async (ct
 
 export const notificarMensajeroBloqueadoReal: MensajeroBloqueadoNotificador = async (ctx) =>
   notificarMensajeroBloqueadoCon(repoReal())(ctx);
+
+// FICHA 412 (R6/T5.3): resuelve su repositorio por `repoReal()` como sus doce hermanos, asi que
+// hereda el cableado UNICO del canal de push (410 §6) sin hacer nada especial. NO construye
+// `new NotificacionRepository(...)` por su cuenta: eso pondria roja la guardia de 410/R51.
+export const notificarCierreDiaRechazadoReal: CierreRechazadoNotificador = async (ctx) =>
+  notificarCierreDiaRechazadoCon(repoReal())(ctx);
 
 export const notificarGastoFijoCobroPendienteReal: GastoFijoCobroPendienteNotificador = async (
   ctx,

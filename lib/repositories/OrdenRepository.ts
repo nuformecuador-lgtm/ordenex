@@ -4758,6 +4758,31 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
+   * FICHA 412 (T5.1, R11) — la JORNADA de UN cierre concreto, para fechar el aviso de «tu cierre
+   * fue rechazado». UNA sola consulta y el MISMO derivador que la pantalla y los avisos de la 271:
+   * `derivarJornada` (271/R61). Aqui solo se leen las fechas y se convierten a dia de Costa Rica.
+   *
+   * `anulada_at IS NULL` no es cosmetica: una gestion deshecha no es jornada trabajada que nombrar.
+   * Es el mismo `where` que usa `aCierreAResolver`, de donde sale la fecha de los otros dos avisos.
+   *
+   * Cierre inexistente -> `null`, y el texto que lo consuma OMITE la fecha (R12). Nunca la inventa.
+   */
+  async findJornadaDeCierre(cierreId: string): Promise<string | null> {
+    const fila = await this.prisma.cierreDia.findUnique({
+      where: { id: cierreId },
+      select: {
+        createdAt: true,
+        gestiones: { where: { anuladaAt: null }, select: { createdAt: true } },
+      },
+    });
+    if (fila === null) return null;
+    return derivarJornada({
+      diasCRDeGestiones: fila.gestiones.map((g) => fechaCalendarioCR(g.createdAt)),
+      diaCRDeCreacion: fechaCalendarioCR(fila.createdAt),
+    });
+  }
+
+  /**
    * FEATURE 271 (R57/R61) — de una fila de `cierre_dia` al `CierreAResolver` que viaja a la
    * pantalla, con su JORNADA derivada. Existe para que `aResolverPrimero` y `aReenviarPrimero`
    * salgan del MISMO codigo: dos derivaciones de la misma jornada es como se desincronizan.
