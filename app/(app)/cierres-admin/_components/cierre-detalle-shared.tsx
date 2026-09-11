@@ -84,6 +84,11 @@ import {
   // porque lo leen tambien las tres descargas, que no pueden arrastrar `Card`/`Badge`.
   MOTIVO_RECHAZO_AUTOMATICO_COLA,
   motivoGestionLegible,
+  // FICHA 414 — los dos textos de la marca «La tienda» (237/R41). Se importan aqui SOLO para
+  // re-exportarlos: los declaraba `CierreDiaModule`, y `cierre-factura` no puede pedirselos a el
+  // —ese modulo ya importa `CierreFacturaDetalle` y la vuelta seria un ciclo—.
+  GESTION_TIENDA_BADGE_LABEL,
+  GESTION_TIENDA_BADGE_NOTA,
 } from "./cierre-labels";
 // Feature 213 (T6/T7): el desglose de pago vive en UN solo sitio (R25). De ahí salen también
 // el orden de los medios y el monto de cada uno, que es lo que estas tablas pintan por columna.
@@ -171,6 +176,11 @@ export {
   // que es donde ya piden el resto. `cierre-factura` es quien lo lee de aqui.
   MOTIVO_RECHAZO_AUTOMATICO_COLA,
   motivoGestionLegible,
+  // FICHA 414 — la marca «La tienda» (237/R41), por el mismo camino y por el mismo motivo: el
+  // texto vive en el modulo PURO y las superficies lo piden por esta puerta. `cierre-factura` es
+  // quien lo lee de aqui; la tabla en vivo de `/cierre-dia` lo lee del modulo puro directamente.
+  GESTION_TIENDA_BADGE_LABEL,
+  GESTION_TIENDA_BADGE_NOTA,
 };
 
 export const RESULTADO_VACIO: Record<CierreResultado, string> = {

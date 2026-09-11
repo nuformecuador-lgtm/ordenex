@@ -116,6 +116,34 @@ export const INGRESO_BODEGA_RECHAZOS_COL = "Ingreso bodega";
 export const RECHAZO_ORIGEN_COL = "Origen";
 export const RECHAZO_SLA_BADGE_LABEL = "Automático";
 export const RECHAZO_MANUAL_BADGE_LABEL = "Manual";
+
+// ---------------------------------------------------------------------------
+// FEATURE 237 (R41, D6) — LA FILA DICE QUIEN LA REGISTRO.
+//
+// Los DOS textos se declararon en `cierre-dia/_components/CierreDiaModule.tsx` y la FICHA 414 los
+// MUDA aquí, al módulo PURO, SIN cambiar ni un carácter: el comprobante (`cierre-factura.tsx`)
+// también tiene que decirlo, y no puede pedírselos a `CierreDiaModule` —ese módulo ya importa
+// `CierreFacturaDetalle`, así que la vuelta sería un ciclo—. Copiar los literales está descartado
+// (414/R9): dos copias del mismo texto de cara al usuario divergen a la primera corrección, y la
+// regla de esta familia es que las superficies digan lo mismo PORQUE LEEN DEL MISMO SITIO.
+//
+// Que NO esté la marca significa que la gestión la registró el mensajero. NO es «no lo sé»:
+// `desdeAyudaTienda` es obligatorio en el DTO y se deriva del historial, que nace en la MISMA
+// transacción que la gestión (`lib/utils/gestion-de-la-tienda-flag.ts`). La ausencia es una
+// afirmación, y por eso su test va emparejado con el de la presencia.
+// ---------------------------------------------------------------------------
+
+/** Rotulo de la marca. Dice QUIEN, no solo que la fila es distinta, y cabe en una celda apretada. */
+export const GESTION_TIENDA_BADGE_LABEL = "La tienda";
+
+/**
+ * La nota accesible del badge (`title` + `aria-label`). El rotulo dice quien; la nota dice lo que el
+ * mensajero necesita para explicarla si le preguntan: desde donde se hizo, que el motivo y la foto
+ * no son suyos, y que aun asi cuenta en este cierre.
+ */
+export const GESTION_TIENDA_BADGE_NOTA =
+  "Esta gestión la registró la tienda desde «Ayuda solicitada», no vos: el motivo y la foto son suyos. Cuenta en tu cierre igual.";
+
 // --- Desglose del ingreso de Ordenex por orden (texto separado, i18n-ready) ---
 export const MONTO_COBRAR_COL = "A cobrar";
 // Monto FIJO de fulfillment de la tarifa CONGELADA del cierre (2026-08-19). No es un concepto
