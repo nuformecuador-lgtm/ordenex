@@ -1,94 +1,78 @@
 # Estado — sesión del 2026-09-10 / 11
 
-## Desplegado en producción y VERIFICADO
+## Desplegado en producción y VERIFICADO (segunda release del día)
 
-`prod` = **`09798ed4`** (merge del PR #783), READY desde las **07:20:36 UTC** del 2026-09-11,
-aliado a `ordenex.co`. `dev` = `b4ee8412`.
+`prod` = **`09183b22`** (merge del PR #788), READY, alias `ordenex.co`. `dev` = `cff9b27c`.
 
-Fichas que entraron: **408, 409, 410, 411, 414, 415, 417, 418**. Ninguna quedó abierta.
+Entraron **412, 413, 420 y 421**. Comprobado contra producción DESPUÉS de desplegar:
 
-Lo que se comprobó contra producción después de desplegar, con su número:
+- Las **dos migraciones** aplicadas, **0 revertidas**; la última es
+  `20260914120000_notificacion_evento_reparto_manana`.
+- `notificacion_evento` **13 → 15**; `notificacion_entidad_tipo` **11 → 13**. `cierre_dia_rechazado`
+  y el evento de reparto, presentes.
+- **10 crons** en `vercel.json`, incluido `/api/cron/aviso-reparto-manana` a `0 1 * * *` UTC
+  (**19:00 CR**, la hora que se midió: a esa hora ya está asignado el 96% del volumen del día).
+- `ordenex.co`, `/login` y `/sw.js` en **200**. **Cero errores de runtime.**
+- Gate completo verde sobre el SHA desplegado: 1944/1944 archivos, 28.192 tests, 256 de
+  `integration/db` ejecutados y **cero saltados**.
 
-- Las **tres migraciones** aplicadas y sin revertir; la última es `20260912120100_job_tipo_push_web`.
-- `notificacion_evento` **11 → 13** valores. `job_tipo` **9 → 10**, con `push_web`. Las dos tablas
-  de push creadas.
-- **El cron de las 07:00 CR emitió 6 avisos: 2 globales + 4 por zona**, el número exacto previsto.
-  Cada uno con su `entidad_id` de alcance (`global:2026-09-11`, `<zonaId>:2026-09-11`). **Es la
-  primera vez que producción ejerce el camino multi-alcance de la 409**: sin ese arreglo, solo la
-  primera zona habría recibido el suyo y las otras tres se habrían perdido sin error ni log.
-- El canal de push encoló **6 jobs, 0 con error**. **0 suscripciones**: nadie lo ha activado aún.
-- **Cero grupos de error de runtime nuevos** contra la línea base medida antes de desplegar.
-- `ordenex.co`, `/login` y `/sw.js` responden 200.
+La release anterior del día (`09798ed4`, PR #783) llevó **408, 409, 410, 411, 414, 415, 417, 418**.
 
-## En curso
+## Ninguna ficha queda abierta
 
-- **412** (`in_progress`, backend) — implementándose. Añade un valor al enum `notificacion_evento`.
-- **413** (`spec_ready`, backend) — **va DESPUÉS de la 412, en serie obligada**: comparten el enum
-  y su migración.
-
-## Registradas y sin empezar
-
-- **419** (fullstack) — la bodega central cierra la devolución con su comprobante. Alcance fijado
-  por el humano el 2026-09-11.
-- **420** (backend) — el gate canta «dependencias presentes» mirando solo si existe la carpeta.
-- **421** (backend) — el test de migración que consulta el enum sin fijar el esquema.
+`in_progress` = 0. Pendiente de empezar: **419** (la bodega central cierra la devolución), registrada
+con el diseño del humano y **sin especificar**.
 
 ## Lo que sigue abierto y ES DEL HUMANO
 
-1. **Probar el push en un teléfono real.** T6.5 de la 410 quedó sin marcar a propósito, y con ella
-   el checkpoint 9. **Nadie ha visto todavía un push en un dispositivo.** Todo lo verificado es
-   base de datos y arnés.
-   - Entrar como **admin**, no como maestro: al maestro solo le empujan dos averías que hoy no
-     ocurren.
-   - En un teléfono con la PWA ya instalada hay que **tomar el relevo del service worker**
-     (pulsar «actualizar» o cerrar todas las instancias). Si no, el aviso llega al worker viejo,
-     que no tiene handler, y el navegador pinta su mensaje genérico: parece roto y no lo está.
-   - **El aviso de represadas ya gastó su cupo del día** a las 07:00 con cero suscriptores —el
-     cupo se reclama por persona aunque no tenga dispositivo (`notificacion-repo-con-push.ts:130`)—.
-     Para probar hoy: que un mensajero solicite un cierre (`cierre_dia_por_aprobar`).
-   - En iPhone sin instalar en pantalla de inicio el control **no se ofrece**, a propósito (R45).
-2. **Avisar a Daniel** de la entrada del CHANGELOG de `zona`/`costoEstimado`/`costoReal` (deuda
-   T12 de la 415). Las otras tres entradas ya las tiene desde la release anterior.
+1. **Probar el push en un teléfono real.** Sigue sin hacerse. Entrar como **admin** (al maestro solo
+   le empujan dos averías que no ocurren); en un teléfono con la PWA ya instalada hay que **tomar el
+   relevo del service worker**; y el aviso de represadas gasta su cupo del día a las 07:00 aunque no
+   haya suscriptores.
+2. **Avisar a Daniel** de `zona`/`costoEstimado`/`costoReal` (deuda T12 de la 415). El mensaje está
+   redactado; las otras tres entradas del CHANGELOG ya las tiene.
+3. **Nadie ha visto el aviso de cierre rechazado en la campana**, y producción no puede confirmarlo:
+   cero cierres rechazados en toda su historia. Su estreno será el primero que rechaces.
+4. **El aviso de reparto se estrena esta noche a las 19:00 CR.** Mañana se puede comprobar si los
+   mensajeros lo recibieron.
 
 ## Decisiones del humano, para no reabrirlas
 
-- **`VAPID_SUBJECT` se queda sin configurar.** `soporte@ordenex.co` no existe y no se va a crear un
-  buzón solo para esto. El push funciona igual: solo se pierden los avisos de los proveedores.
-- **Las claves VAPID sí están dadas de alta**, par distinto en Production y en Preview, ninguna en
-  Development.
-- **El atasco de devoluciones no se resuelve pidiendo a las tiendas que escaneen**: no hay forma de
-  obligarlas. Lo hará la bodega central, con comprobante y en lote. Es la ficha **419**.
+- **`VAPID_SUBJECT` se queda sin configurar**: `soporte@ordenex.co` no existe y no se creará un buzón
+  solo para esto. El push funciona igual; solo se pierden los avisos de los proveedores.
+- **El atasco de devoluciones no se resuelve pidiendo a las tiendas que escaneen**: lo hará la bodega
+  central, con comprobante y en lote. Ficha **419**.
+- **La 420 no lleva `pnpm install` incondicional** aunque la ficha original lo prescribía: repararía
+  en silencio y no produce el rojo, que es el entregable.
 - Las tres del 2026-09-10 siguen firmes: las 219 en ruta, `en_bodega_central` borrable y los
   duplicados de Gameos.
 
 ## Hallazgos abiertos
 
-- **305 órdenes atascadas en el flujo de devolución** (247 `devolviendo_a_tienda`, 31 `rechazada`,
-  27 `por_devolver`) y **cero transiciones a `devuelta_a_tienda` en toda la historia**. Cuentan
-  como **vivas** en la cohorte de la 411 y hunden la efectividad histórica de cada día: el número
+- **305 órdenes atascadas en devolución** y **cero transiciones a `devuelta_a_tienda` en toda la
+  historia**. Cuentan como vivas en la cohorte de la 411 y hunden la efectividad histórica: el número
   es correcto, pero está deprimido por un atasco operativo, no por el reparto. Ficha **419**.
-- **La premisa de la 409 sobre `devolviendo_a_tienda` caducó**: se excluyó de la vigilancia porque
-  «fluye» (ninguna orden pasaba de día y medio), pero no es joven porque fluya — el estado se
-  empezó a usar el 9 de septiembre y **nada ha salido nunca de ahí**. Cuando esas 247 envejezcan,
-  nadie las estará mirando.
-- **m6 de la 410**: un reintento del job hace **vibrar dos veces** al dispositivo que ya recibió.
-  La etiqueta colapsa la tarjeta, así que se ve una notificación y suenan dos.
+- **La premisa de la 409 sobre `devolviendo_a_tienda` caducó**: se excluyó porque «fluye», pero no es
+  joven porque fluya — el estado se empezó a usar el 9 de septiembre y nada ha salido nunca de ahí.
+- **`recuperar-contrasena-form.test.tsx` cae por tiempo bajo carga**: pasa en 7,9 s y falla a partir
+  de ~10 s. Medido sobre seis suites completas. **Sin ficha todavía.**
+- **`ConsoleErrorLogger` pierde la cadena de `cause`** (`lib/errors/logger.ts:15`): un fallo
+  best-effort se lee en el servidor sin su motivo. Es de la 146 y afecta a todo el repo.
+- **m6 de la 410**: un reintento del job hace vibrar dos veces al dispositivo que ya recibió.
 
 ## Lecciones de esta sesión, medidas
 
-- **Leer el código no es medirlo.** Verifiqué que alguien inyectaba el canal de push y di por buena
-  la guardia que lo protege. El reviewer escribió el mismo productor en OTRO archivo y **213
-  archivos de guardias quedaron en verde con el push saltado en silencio**. La guardia leía un solo
-  archivo. Comprobar que existe una protección no es comprobar su alcance.
-- **Usar la prueba correcta.** Declaré «ascendencia rota» entre `prod` y `dev` porque `prod` no era
-  ancestro de `dev`. Eso es lo NORMAL: cada release deja allí un merge commit que `dev` nunca ve, y
-  hay 92. La prueba buena es el merge de prueba y comparar el árbol resultante.
-- **Un gate rojo se diagnostica, no se baselinea.** El rojo del gate de release era un test que
-  consulta el enum sin fijar el esquema mientras el harness aísla en esquemas temporales. Meterlo en
-  `baseline-rojos.json` habría comprado el verde. Quedó como ficha 421.
-- **Un centinela que solo busca la buena noticia se queda mudo ante un fallo.** El que escribí para
-  esperar el despliegue habría casado con un `Ready` VIEJO y cantado éxito. Hay que anclarlo a la
-  fila más reciente y aceptar también los estados de error.
-- **Comparar horas de la misma zona.** Casi reporto un hueco en el push por comparar timestamps UTC
-  de la base contra la hora local que devuelve `vercel inspect`. No había hueco: los eventos sin
-  cupo ocurrieron ANTES de que el despliegue estuviera vivo.
+- **Leer el código no es medirlo.** Di por buena la guardia del cableado de push; el reviewer escribió
+  el mismo productor en OTRO archivo y 213 archivos de guardias quedaron verdes con el push saltado.
+  Comprobar que una protección existe no es comprobar su alcance.
+- **Un centinela que vigila la señal fácil miente.** Tres veces escribí uno mal: uno esperaba un
+  formato de salida que cambia sin terminal, otro habría casado con un despliegue VIEJO en `Ready`.
+  Hay que anclarlos al dato estructurado — el commit, no el alias.
+- **Una ficha puede prescribir la solución equivocada.** La 420 que registré decía «`pnpm install`
+  incondicional»; el implementador lo descartó con medición y tenía razón.
+- **`in_progress` sin spec EN DEV rompe el gate de todos.** Marqué dos fichas cuyos specs vivían en
+  sus ramas y dejé a todo el mundo en rojo.
+- **Un barrido que solo limpia lo que escribe el código SANO es el que falla cuando hace falta.** Dos
+  fichas seguidas ensuciaron la base compartida por esto.
+- **El `down.sql` de un enum es una foto que caduca.** El spec de la 413 traía la lista anterior al
+  merge de la 412; revertir habría borrado dos valores en silencio.
