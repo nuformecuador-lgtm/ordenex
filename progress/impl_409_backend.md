@@ -348,9 +348,65 @@ Dos honestidades sobre el conteo, porque un número grande no siempre es mejor:
 | Tarea | Estado |
 | --- | --- |
 | **T7.4** — ver el panel en un navegador, en los dos temas | **No aplicable a este agente**: no hay panel todavía. Es del frontend, y su spec (T7.4) lo mantiene |
-| **T7.5** — medir producción en solo lectura (`por_devolver` y `por_devolver_a_tienda`) | **NO EJECUTADA**. Este agente no tiene el MCP de Supabase en su conjunto de herramientas y no hay otra vía de solo lectura contra producción desde el worktree. **Sigue siendo puerta de despliegue**: el umbral de 3 días y la decisión de no vigilar `por_devolver_a_tienda` descansan en la medición del 2026-09-10, que hay que confirmar antes de desplegar |
+| **T7.5** — medir producción en solo lectura (`por_devolver` y `por_devolver_a_tienda`) | **CERRADA**, pero **no por este agente**: no tiene el MCP de Supabase en su conjunto de herramientas. La midió el leader contra producción; los números y lo que se sigue de ellos están en **§7bis** |
 | **T2.5** — reescribir las listas del `down.sql` contra `origin/dev` **en el momento del PR** | Hecha hoy contra `aff769d8`. **Hay que repetirla** justo antes de abrir el PR (§4) |
 | **MCP `codebase-memory`** | No disponible en esta sesión; se usó `grep` y se verificó todo en el archivo real (§0) |
+
+---
+
+## §7bis — T7.5: la medición de producción, cerrada por el leader (2026-09-10)
+
+En **solo lectura** contra producción, después de que este backend estuviera escrito:
+
+| Estado | Órdenes | Media | Máximo | Pasan de 3 d |
+| --- | --- | --- | --- | --- |
+| `por_devolver` | **27** | **2,5 d** | **8,3 d** | **7** |
+| `por_devolver_a_tienda` | **0** | — | — | — |
+
+Y un dato que no estaba en la medición original: **las 27 son de UNA SOLA TIENDA.**
+
+De ahí salen tres cosas, y las tres cambian cómo se lee el aviso el día del despliegue.
+
+### 1. El umbral de 3 días queda confirmado con dato fresco
+
+Dispara sobre **7 de 27** — un número que alguien puede atender en una mañana. Coincide con la
+medición del 2026-09-10 que fijó el umbral (27 órdenes, 2,4 d de media, máx. 8,2, siete por encima
+de 3 d), así que **no ha derivado**: el valor de `avisosDiariosConfig.DIAS_REPRESAMIENTO` sigue
+justificado por el dato y no por la costumbre.
+
+### 2. ⚠️ `por_devolver_a_tienda` está VACÍO hoy — dicho como límite, no implícito
+
+Cero órdenes en ese estado en este momento. Eso **no** quiere decir que no importe: quiere decir que
+**el aviso no se puede ver funcionar contra ese estado en producción hasta que caiga la primera**.
+
+**Quien despliegue tiene que saberlo**: si mira la campana y no ve nada de ese ámbito, **puede ser
+el comportamiento correcto**, no un fallo. La confusión contraria —dar por roto lo que está bien— ya
+cuesta tiempo en este repo, y desde que producción se vació a propósito el 2026-08-25 un cero
+significa «aún no ha pasado», no «está roto».
+
+(Y sigue en pie lo que dijo el spec: `por_devolver_a_tienda` **no se vigila** en esta ficha. Si
+algún día resulta represado, entra como un ámbito más del mismo emisor y se registra como ficha
+aparte — no se cuela aquí.)
+
+### 3. Las 27 son de UNA sola tienda: el reparto por alcance NO se ejercita en producción
+
+Y ésta es la conexión que hay que dejar escrita, porque explica por qué un test concreto es
+insustituible:
+
+> Con los datos de hoy, **producción nunca habría cazado** el fallo del `dedupe_key`. El silencio
+> total —la primera tienda se lleva el aviso y todas las demás quedan mudas— **sólo aparece cuando
+> hay dos tiendas o dos zonas a la vez**, y hoy no las hay. El emisor habría corrido cada noche, la
+> única tienda habría recibido su aviso puntualmente, y el bug habría estado ahí, invisible, hasta
+> el día en que una segunda tienda acumulara novedades.
+>
+> Lo único que demuestra que funciona es
+> `tests/integration/db/novedades-sin-gestionar-aviso-dedupe.test.ts` › **«dos tiendas con novedades
+> el mismo día → DOS filas»**, contra Postgres real y con el índice de verdad. Su hermano
+> `devoluciones-represadas-aviso-dedupe.test.ts` hace lo propio con dos zonas.
+>
+> Es también la razón por la que sus mutaciones son **obligatorias** y no decorativas: son la única
+> señal que existe. Un doble no vale —los dobles de esta carpeta que meten el alcance en su clave
+> son más permisivos que la base—, y el dato de producción tampoco.
 
 ---
 
@@ -442,7 +498,10 @@ presentacionDe(fila: {
 
 **El backend de la 409 está entregado y verificado**: `./init.sh` completo en verde
 (`INIT_EXIT=0`, 27.276 tests, **158 archivos contra Postgres ejecutados de verdad**), 44 requisitos
-backend con test propio, las nueve mutaciones obligatorias muertas y **cero supervivientes**; queda
-el frontend, y T7.5 —medir producción en solo lectura— sigue siendo puerta de despliegue.
+backend con test propio, las nueve mutaciones obligatorias muertas y **cero supervivientes**, y
+T7.5 **cerrada** por el leader con dato fresco (§7bis: el umbral de 3 días confirmado, 7 de 27).
+Queda el frontend, y dos límites escritos: `por_devolver_a_tienda` está vacío en producción —así que
+no ver nada de ese ámbito puede ser lo correcto— y las 27 represadas son de **una sola tienda**, de
+modo que el reparto por alcance **sólo lo prueban los tests de dedupe contra Postgres real**.
 
 Commits: `5211a566` (implementación) · `be40bfc4` (el precio de los enums) · éste (la bitácora).
