@@ -1,0 +1,71 @@
+-- FICHA 413 (T2.2, design §10.1) -- el aviso que el lienzo prometia al mensajero y NUNCA existio:
+-- «tenes N ordenes para mañana».
+--
+-- QUE ANADE, y son DOS valores en DOS enums distintos:
+--
+--   `notificacion_evento`       += 'reparto_manana'
+--   `notificacion_entidad_tipo` += 'reparto_manana_dia'
+--
+-- POR QUE HACE FALTA, medido en el arbol el 2026-09-10 y re-medido el 2026-09-11: NO EXISTE NADA
+-- de este aviso. Ningun valor del enum habla del reparto del dia siguiente, `lib/notificaciones/
+-- emitir.ts` no tiene emisor, `vercel.json` no tiene cron y no hay productor. El mensajero es el
+-- unico rol al que la app le pide estar en un sitio concreto a una hora concreta, y es el unico
+-- que NO SABE LA NOCHE ANTERIOR CUANTO LE ESPERA: llega a la bodega y se entera ahi de si son 4
+-- paquetes o 40, que es lo que decide la moto, el combustible y la hora de salida. La 410 lo dejo
+-- escrito como SIN CUBRIR y con ficha aparte -- esta.
+--
+-- POR QUE VA SOLA Y CON TIMESTAMP PROPIO. Postgres NO permite USAR un valor de enum recien anadido
+-- en la misma transaccion que lo anadio (`55P04`) y Prisma Migrate corre cada `migration.sql`
+-- dentro de una. Aqui SOLO se anaden los valores; su primer uso ocurre en runtime
+-- (`emitirRepartoManana`), en transacciones posteriores. Mismo precedente que la 412, la 409, la
+-- 401, la 403, la 333, la 271, la 262, la 253, la 240, la 239 y la 237.
+--
+-- EL TIMESTAMP (20260914120000) SE ESCRIBE A MANO, como el de las ocho anteriores de esta familia,
+-- y es POSTERIOR a toda migracion ya aplicada -- incluidas las dos de la 410 (20260912120000,
+-- 20260912120100) y la de la 412 (20260913120000). Esto ultimo IMPORTA: es lo que obliga a este
+-- `down.sql` a retipar tambien `push_envio_dia.evento`.
+-- ⚠️ JAMAS RENUMERAR UNA CARPETA YA APLICADA: deja una fila fantasma que `migrate status` no ve.
+-- Si el timestamp chocara, se crea una carpeta con uno NUEVO.
+--
+-- ⚠️ POR QUE TAMBIEN EL SEGUNDO ENUM, Y POR QUE LA ENTIDAD ES EL DIA ANUNCIADO. ES LA DECISION
+-- QUE EVITA UN SILENCIO TOTAL, y este repo ya la pago dos veces (262 y 403).
+--
+-- `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+-- destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`
+-- (`20260727120000_notificacion/migration.sql:89-92`), el indice NO MIRA EL ESTADO DE LECTURA, y
+-- `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `null`.
+--
+-- Con una entidad que no cambiara entre jornadas -- la orden, o un literal fijo -- la clave seria
+-- la misma TODAS LAS NOCHES y el aviso del dia 2 no saldria JAMAS, sin error, sin log y sin nada.
+-- Por eso:
+--
+--   `reparto_manana_dia` -> entidad_id = '<fecha_reparto ISO>'   (`YYYY-MM-DD`, el DIA ANUNCIADO)
+--
+-- CONSECUENCIAS, y son ESTRUCTURALES, no de disciplina:
+--   - dos noches consecutivas => dos dias anunciados => dos entidades => DOS avisos (R23);
+--   - la misma noche emitida dos veces => misma entidad => UN solo aviso (R22), y lo decide el
+--     INDICE UNICO, no un `if` previo que una carrera pueda burlar (R24).
+--
+-- ⚠️ Y NO LLEVA PREFIJO DE MENSAJERO, al contrario que los dos avisos de la 409. Esto hay que
+-- leerlo ENTERO antes de copiarlo: alli el destinatario es un ROL CON ALCANCE
+-- (`{rol: adminTienda, tiendaId}`) y el alcance NO entra en la clave unica, asi que sin el prefijo
+-- solo habria avisado la PRIMERA tienda de la corrida. Aqui el destinatario es un USUARIO y
+-- `destinatario_usuario_id` **ES** una columna de esa clave: dos mensajeros => dos valores
+-- distintos => dos filas. La regla no es «prefija siempre», es «comprueba si el alcance esta en la
+-- clave». Y no lo sostiene este comentario: lo sostiene R7, con DOS mensajeros la misma noche
+-- contra Postgres real, y su mutacion obligatoria (dirigir el aviso a un rol) que lo pone rojo.
+--
+-- Y NO es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el indice
+-- unico es PARCIAL, asi que saldria un aviso por cada ejecucion del cron.
+--
+-- ADITIVA: no altera ninguna tabla, no crea columnas, NO CREA NINGUN INDICE y no toca RLS
+-- (`notificacion` conserva la de la 146). SIN BACKFILL: ninguna notificacion existente cambia de
+-- evento ni de entidad.
+--
+-- SOBRE EL INDICE QUE **NO** SE CREA, con su argumento: el conteo por mensajero se sirve con
+-- `@@index([mensajeroAsignadoId, asignadoAt, fechaReparto])` (246/D7), cuyo prefijo lo cubre, y el
+-- `GROUP BY` de la corrida recorre las ordenes vivas UNA VEZ AL DIA. No se anade un indice «por si
+-- acaso» a la tabla mas caliente del sistema; si hiciera falta, es una migracion aditiva de una
+-- linea en otra ficha.
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'reparto_manana';
+ALTER TYPE "notificacion_entidad_tipo" ADD VALUE IF NOT EXISTS 'reparto_manana_dia';

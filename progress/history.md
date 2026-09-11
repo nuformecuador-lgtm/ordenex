@@ -5101,3 +5101,77 @@ Cerrada y en produccion. Cuatro PR (#760, #761, #762, #763), release #764. Sin m
   estan en Vercel (par DISTINTO en Production y en Preview, ninguna en Development, ninguna
   compartida); la prueba en un telefono real queda para el 2026-09-12 y **T6.5 sigue sin marcar**
   hasta entonces.
+
+## 2026-09-11 — 412 · al mensajero le avisan cuando le rechazan un cierre
+
+- **El spec corrigio el diagnostico de la ficha y se implemento lo medido, no el titulo.** «Un
+  rechazo que no bloquea» era el caso MINORITARIO. El agujero real: **ningun aviso decia nunca
+  «rechazado»** —el mensajero leia lo mismo que por un vencido— y **el segundo rechazo del mismo
+  cierre no avisaria nunca, en silencio**.
+- **La garantia se mato para probarla.** La entidad es `${cierreId}:${resueltoAtISO}` con el
+  instante **persistido**. El reviewer midio las tres cosas: dos rechazos reales dan 2 avisos, el
+  mismo repetido da 1, y **con el instante derivado en vez de persistido el mismo hecho produce 2**.
+  Lo decide el indice unico, no un `if`.
+- **Una mutacion enseno algo incomodo:** copiar un literal en vez de importarlo deja el test de
+  literales **VERDE** —la salida es identica byte a byte— y solo lo caza la guardia de arbol.
+- **Otra destapo un aserto que no discrimina:** un `rejects.toThrow()` seguia verde con la mutacion
+  puesta, porque fallaba **por otro motivo**. Sin el caso de control, la trampa pasa inadvertida.
+- El reviewer planto una **mutacion de CONTROL disenada para morir**, y murio: es la unica prueba
+  de que el arnes ejecuto tests de verdad.
+- **Hueco nombrado, no escondido:** nadie ha visto el aviso en la campana, y produccion no puede
+  confirmarlo — **cero cierres rechazados en toda su historia**.
+
+## 2026-09-11 — 413 · al mensajero le avisan del reparto que tiene para el dia siguiente
+
+- **Evito un borrado silencioso.** El design traia la lista del `down.sql` de ANTES de que la 412 se
+  mergeara. Revertir con esa foto habria **borrado sin aviso** los dos valores que la 412 acababa de
+  anadir. El implementador leyo contra `dev` real en vez de fiarse del spec; el reviewer lo
+  verifico **contra la base** y **ejercito el down** para ver el `2BP01` de verdad.
+- **La ventana de fecha esta defendida, y se probo matandola.** `fecha_reparto` es `@db.Date`, asi
+  que `startOfDayCR` es el helper CORRECTO —al reves que en casi todas las demas fichas—. Cambiarlo
+  da `3 failed | 99 passed`.
+- **Un fallo propio, declarado en vez de tapado, y es la otra mitad de la leccion de la 412:** su
+  barrido de limpieza filtraba por `destinatario_usuario_id`, y la mutacion «aviso a un rol» escribe
+  esa columna en NULL. No la vio, sobrevivio en la base compartida y puso **rojos 15 casos de 5
+  suites ajenas**. *Un barrido que solo limpia lo que escribe el codigo SANO es justo el que falla
+  cuando hace falta.*
+- **T0.3 la midio el leader contra produccion**, que es lo que ni implementador ni reviewer podian
+  hacer —y el reviewer lo **declaro en vez de fingirlo**—: `Index Scan` por un indice COMPUESTO,
+  0,174 ms. No hace falta ficha de indice.
+
+## 2026-09-11 — 421 · las consultas a catalogos de Postgres acotan su esquema
+
+- **No era una consulta: eran 37, en 21 archivos.** Y el dato que lo demuestra es el del medio:
+  **125 de 162 ya lo hacian bien**, asi que las otras eran un olvido y no una convencion.
+- **Dos censos independientes, misma cifra.** El implementador uso un tokenizador propio; el
+  reviewer lo rehizo con el **AST del compilador de TypeScript**. `grep` crudo daba 88 «hallazgos»
+  y mas de la mitad eran titulos de `it(...)` y comentarios que nombran el catalogo a proposito.
+- **El rojo tenia un problema de diseno y se resolvio bien:** el defecto SOLO aparece con dos
+  esquemas vivos a la vez, asi que un test normal no lo caza. La solucion es clonar el enum en un
+  esquema desechable **con una etiqueta canaria que `public` no tiene** — la consulta correcta no
+  puede devolverla, la vieja si. **Inmune a la concurrencia en vez de depender de ella.**
+- **El limite escrito de la guardia estaba al reves**, y el reviewer lo midio: el corte que el
+  encabezado declaraba no ver, SI se caza; el que escapa en silencio es otro.
+- **La limpieza se comprobo cuatro veces, incluida la corrida MUTADA** — que es justo donde
+  fallaron dos fichas de esta misma sesion.
+
+## 2026-09-11 — 420 · el gate deja de decir «dependencias presentes» cuando falta una
+
+- **La ficha que registro el leader prescribia la solucion equivocada**, y el implementador la
+  descarto **con medicion**: un `pnpm install` incondicional **repararia en silencio y no produce
+  el rojo, que es el entregable**; y *un paso que mide no debe escribir en lo que mide*. El
+  verificador cuesta ~120 ms frente a ~1.650 ms: **13x menos**.
+- **El agujero era mayor de lo registrado.** Si falta solo el paquete de runtime y siguen sus tipos
+  en `@types/`, **el typecheck pasa VERDE** y el fallo sale en ejecucion. El typecheck nunca fue la
+  red de seguridad; el caso que disparo la ficha era el benigno.
+- **Una mutacion del reviewer sobrevivio, y era la que mas dolia:** silenciar la llamada dejaba los
+  13 tests verdes y el gate imprimiendo «no se pudo verificar» sobre un arbol roto. La guardia que
+  existe para que el gate deje de mentir, silenciable sin que nada enrojezca.
+- **Se cerro defendiendo LA PROPIEDAD, no la mutacion.** En vez de anclar la asercion a la forma
+  exacta de la linea —que habria matado esa y dejado viva la siguiente—, la guardia **recorta el
+  paso 2 real y lo ejecuta con bash** contra un arbol de mentira. Siete variantes con estructuras
+  distintas: cinco mueren, y **las dos supervivientes se declaran con su motivo MEDIDO** (bajo
+  `set -e` la asignacion sigue cortando: lo que se pierde es el mensaje, no el corte).
+- **El reviewer corrigio una explicacion que no se sostenia:** dos rojos atribuidos a «flakes,
+  archivo distinto cada vez» eran **3 de 4 el mismo archivo**, que pasa en 7,9 s y cae a partir de
+  ~10 s.

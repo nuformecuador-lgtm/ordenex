@@ -26,9 +26,11 @@ describe("R1 — el catalogo declara TODOS los eventos del enum, ni uno menos", 
 
     // AUTOCOMPROBACION: si la extraccion del enum se rompiera, la lista quedaria vacia y el
     // `toEqual` de abajo pasaria comparando dos listas vacias sin haber comprobado nada.
-    expect(delEnum.length).toBeGreaterThanOrEqual(13);
+    expect(delEnum.length).toBeGreaterThanOrEqual(15);
     expect(delEnum).toContain("novedades_sin_gestionar");
     expect(delEnum).toContain("devoluciones_represadas");
+    expect(delEnum).toContain("cierre_dia_rechazado"); // ficha 412
+    expect(delEnum).toContain("reparto_manana"); // ficha 413
 
     expect(delCatalogo).toEqual(delEnum);
   });
@@ -79,6 +81,54 @@ describe("R2 — un mismo evento puede pedir cosas distintas a roles distintos",
 
     expect(mensajero.clase === "accionable" && mensajero.atajo?.href).toBe("/cierre-dia");
     expect(bodega.clase === "accionable" && bodega.atajo?.href).toBe("/cierres-admin");
+  });
+
+  it("⭑ 412/R20/R21: `cierre_dia_rechazado` es ACCIONABLE para el mensajero, y sólo para él", () => {
+    // Las tres condiciones de accionable: pide una accion (revisarlo, corregirlo y reenviarlo),
+    // tiene consecuencia si no se hace (no se le liquida y sigue bloqueado) y EL puede resolverla.
+    // El destino es `/cierre-dia` —donde EJECUTA la re-solicitud—, el mismo sitio al que llevan
+    // `cierre_dia_vencido` y `mensajero_bloqueado_por_cierres`: tres avisos de su cierre, un solo
+    // sitio al que ir. Literales escritos a mano, no leidos del catalogo.
+    expect(accionDeAviso("cierre_dia_rechazado", "mensajero")).toEqual({
+      clase: "accionable",
+      atajo: { href: "/cierre-dia", etiqueta: "Ver mi cierre" },
+    });
+  });
+
+  it("⭑ 412/R2: `cierre_dia_rechazado` NO tiene mas destinatarios que el mensajero", () => {
+    // No es decoracion: es lo que la guardia de rutas RECORRE, y ademas deja escrito que la
+    // administracion NO recibe fila de este evento — sigue recibiendo la suya de
+    // `mensajero_bloqueado_por_cierres` (R18). Quien rechaza es la bodega: avisarle de su propio
+    // clic seria ruido puro.
+    expect(CATALOGO_AVISOS.cierre_dia_rechazado.destinatarios).toEqual(["mensajero"]);
+    // Y sin excepcion por rol: solo hay un destinatario, asi que `porRol` no tiene nada que decir.
+    expect(CATALOGO_AVISOS.cierre_dia_rechazado.porRol).toBeUndefined();
+  });
+
+  it("⭑ 413/R25/R26: `reparto_manana` es ACCIONABLE para el mensajero, con atajo a su reparto", () => {
+    // Las tres condiciones de accionable (design 8.1): pide una accion (organizarse para mañana),
+    // tiene consecuencia si no se hace (llegar a la bodega sin saber que le espera, que es la
+    // situacion de HOY y el motivo de la ficha) y SOLO EL puede resolverla.
+    //
+    // El destino es `/mis-asignaciones` —la lista de lo que va a llevar, el insumo de su
+    // preparacion—, el MISMO que `dia_reparto_corregido`, el evento hermano sobre el mismo asunto.
+    // Literales escritos a mano, no leidos del catalogo.
+    const accion = accionDeAviso("reparto_manana", "mensajero");
+    expect(accion.clase).toBe("accionable");
+    expect(accion.clase === "accionable" && accion.atajo).toEqual({
+      href: "/mis-asignaciones",
+      etiqueta: "Ver mi reparto",
+    });
+    // MUTACION del design (§13.7 de la 409, aplicada aqui): apuntarlo a `/wallet` ⇒ la guardia
+    // `atajo-aviso-ruta-visible.guardia.test.ts` se pone roja, porque el mensajero no ve esa ruta.
+  });
+
+  it("⭑ 413/R8: `reparto_manana` NO tiene mas destinatarios que el mensajero", () => {
+    // No es decoracion: es lo que la guardia de rutas RECORRE, y deja escrito que la
+    // administracion NO recibe fila de este evento — ya ve el reparto entero en `/ordenes`.
+    expect(CATALOGO_AVISOS.reparto_manana.destinatarios).toEqual(["mensajero"]);
+    // Y sin excepcion por rol: solo hay un destinatario, asi que `porRol` no tiene nada que decir.
+    expect(CATALOGO_AVISOS.reparto_manana.porRol).toBeUndefined();
   });
 
   it("Q4: `dia_reparto_corregido` es ACCIONABLE para el mensajero, con atajo a su reparto", () => {
@@ -138,9 +188,14 @@ describe("R4 — `geocodificacion_caida` es EL UNICO accionable sin atajo", () =
 
 describe("los avisos AGREGADOS son exactamente dos, y llevan compositor de titulo", () => {
   it("`esEventoAgregado` los reconoce y no reconoce a los demas", () => {
-    expect(EVENTOS_AGREGADOS).toEqual(["novedades_sin_gestionar", "devoluciones_represadas"]);
+    expect(EVENTOS_AGREGADOS).toEqual([
+      "novedades_sin_gestionar",
+      "devoluciones_represadas",
+      "reparto_manana", // ficha 413
+    ]);
     expect(esEventoAgregado("novedades_sin_gestionar")).toBe(true);
     expect(esEventoAgregado("devoluciones_represadas")).toBe(true);
+    expect(esEventoAgregado("reparto_manana")).toBe(true); // ficha 413
     expect(esEventoAgregado("orden_rechazada")).toBe(false);
     expect(esEventoAgregado("gasto_fijo_cobro_pendiente")).toBe(false);
   });
@@ -163,6 +218,23 @@ describe("los avisos AGREGADOS son exactamente dos, y llevan compositor de titul
     expect(represadasSatelite.titulo(12)).toBe("12 órdenes esperan volver a su tienda");
     // Los DOS destinos del mismo evento comparten el titulo: es el mismo hecho.
     expect(represadasCentral.titulo(12)).toBe("12 órdenes esperan volver a su tienda");
+  });
+
+  it("⭑ 413/R27: `reparto_manana` compone su titulo con la cifra VIVA — literales a mano", () => {
+    // ⚠️ ESCRITOS A MANO, nunca comparados contra `tituloRepartoManana`: un texto comparado contra
+    // la funcion que lo genera esta SIEMPRE VERDE. Y aqui importa el doble, porque lo que se
+    // afirma es el SINGULAR y el PLURAL: «Tenés 1 órdenes para mañana» es el texto roto que
+    // ninguna suite ve y que un humano lee todos los dias.
+    const accion = accionDeAviso("reparto_manana", "mensajero");
+    if (accion.clase !== "accionable" || !accion.titulo) throw new Error("sin compositor");
+
+    expect(accion.titulo(1)).toBe("Tenés 1 orden para mañana");
+    expect(accion.titulo(7)).toBe("Tenés 7 órdenes para mañana");
+    // Y el caso grande, que es el que motiva la ficha: saber si son 4 paquetes o 40 cambia la
+    // moto, el combustible y la hora de salida.
+    expect(accion.titulo(40)).toBe("Tenés 40 órdenes para mañana");
+    // VOSEO, como el resto del vocabulario al mensajero de la 409.
+    expect(accion.titulo(3)).toContain("Tenés");
   });
 
   it("ningun evento NO agregado declara compositor de titulo", () => {

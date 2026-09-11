@@ -1,0 +1,65 @@
+-- FICHA 412 (T2.1, design §10.1) -- el aviso que FALTABA: «tu cierre fue rechazado».
+--
+-- QUE ANADE, y son DOS valores en DOS enums distintos:
+--
+--   `notificacion_evento`       += 'cierre_dia_rechazado'
+--   `notificacion_entidad_tipo` += 'cierre_dia_rechazo'
+--
+-- POR QUE HACE FALTA UN EVENTO PROPIO, medido en el arbol el 2026-09-10: hasta hoy NINGUN aviso
+-- del sistema dice la palabra «rechazado». El unico productor del rechazo
+-- (`CierresAdminService.rechazarCierre`) emitia `mensajero_bloqueado_por_cierres`, cuyo texto es
+-- EL MISMO que recibe quien dejo VENCER su cierre --«Tienes un cierre sin enviar a aprobacion»--,
+-- y ademas se saltaba entero cuando el rechazo no dejaba bloqueado al mensajero. El mensajero no
+-- podia distinguir «vencio» de «me lo rechazaron», y solo el segundo le exige CORREGIR algo antes
+-- de reenviar. No se mete «rechazado» dentro de `avisoBloqueo` porque ese compositor lo comparten
+-- TRES productores y TRES pantallas (271/R43/R52): seria FALSO para el `vencido` y para la
+-- acumulacion, y ademas la campana agrupa y deduplica POR EVENTO, asi que una diferencia metida en
+-- la descripcion es invisible para todo lo que no sea leer la frase.
+--
+-- POR QUE VA SOLA Y CON TIMESTAMP PROPIO. Postgres NO permite USAR un valor de enum recien anadido
+-- en la misma transaccion que lo anadio (`55P04`) y Prisma Migrate corre cada `migration.sql`
+-- dentro de una. Aqui SOLO se anaden los valores; su primer uso ocurre en runtime
+-- (`emitirCierreDiaRechazado`), en transacciones posteriores. Mismo precedente que la 409, la 401,
+-- la 403, la 333, la 271, la 262, la 253, la 240, la 239 y la 237.
+--
+-- ⚠️ POR QUE TAMBIEN EL SEGUNDO ENUM, Y POR QUE LA ENTIDAD LLEVA EL INSTANTE DEL RECHAZO. ES LA
+-- DECISION QUE EVITA UN SILENCIO TOTAL, y este repo ya la pago dos veces (262 y 403).
+--
+-- `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+-- destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`
+-- (`20260727120000_notificacion/migration.sql:89-92`), el indice NO MIRA EL ESTADO DE LECTURA, y
+-- `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `null`.
+--
+-- Con `entidad_id = '<cierre_id>'` a secas --que es lo que hace hoy el aviso de bloqueo-- la clave
+-- seria ('cierre_dia_rechazado', '<cierre_id>', NULL, '<mensajero_id>') PARA SIEMPRE. Y como
+-- `rechazado` es RE-SOLICITABLE (`CIERRE_ESTADOS_RESOLICITABLES`) y `transicionarASolicitado`
+-- REUTILIZA LA MISMA FILA de `cierre_dia` (`CierreDiaRepository.ts:638`), el ciclo NORMAL de esta
+-- pantalla --rechazo, correccion, rechazo-- dejaria el SEGUNDO rechazo MUDO: sin error, sin log y
+-- sin nada. Y el segundo rechazo es justo cuando mas falta hace el aviso, porque significa que lo
+-- que corrigio no basto. Por eso:
+--
+--   `cierre_dia_rechazo` -> entidad_id = '<cierre_id>:<resuelto_at ISO>'
+--
+-- `resuelto_at` se lee DESPUES de la escritura (nunca un reloj del servicio: dos emisiones del
+-- MISMO rechazo inventarian dos entidades y saldrian dos avisos por un solo hecho).
+--
+-- Y NO es el DIA CR: el ciclo rechazo -> correccion -> rechazo cabe entero dentro del mismo dia.
+-- El dia es el grano de un RECORDATORIO que se repite mientras dure un estado
+-- (`gasto_fijo_cobro_dia`, `geocodificacion_caida_dia`, `novedades_sin_gestionar_dia`), no el de un
+-- HECHO que puede repetirse varias veces al dia.
+--
+-- Y NO es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el indice
+-- unico es PARCIAL (`WHERE entidad_id IS NOT NULL`), asi que saldria un aviso por cada ejecucion.
+--
+-- CONSECUENCIAS, y son ESTRUCTURALES, no de disciplina:
+--   - dos rechazos del mismo cierre => dos `resuelto_at` => dos entidades => DOS avisos (R7);
+--   - el MISMO rechazo emitido dos veces => misma entidad => UN solo aviso (R8/R9), y lo decide el
+--     INDICE UNICO, no un `if` previo que una carrera pueda burlar.
+--
+-- ADITIVA: no altera ninguna tabla, no crea columnas, no crea indices y no toca RLS
+-- (`notificacion` conserva la de la 146). SIN BACKFILL: ninguna notificacion existente cambia de
+-- evento ni de entidad. Y no hay nada que migrar: produccion tiene CERO cierres `rechazado` en
+-- toda su historia (medido por el humano el 2026-09-11: 78 `aprobado`, 5 `solicitado`, 0
+-- `rechazado` desde el arranque comercial del 2026-08-27).
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'cierre_dia_rechazado';
+ALTER TYPE "notificacion_entidad_tipo" ADD VALUE IF NOT EXISTS 'cierre_dia_rechazo';

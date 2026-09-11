@@ -100,10 +100,17 @@ export interface EntradaCatalogo {
   readonly destinatarios: readonly RolValue[];
 }
 
-/** Los dos eventos AGREGADOS: su titulo lleva una cifra VIVA y se apagan solos cuando es 0 (R55). */
+/** Los eventos AGREGADOS: su titulo lleva una cifra VIVA y se apagan solos cuando es 0 (R55). */
 export const EVENTOS_AGREGADOS = [
   "novedades_sin_gestionar",
   "devoluciones_represadas",
+  // FICHA 413 — el TERCERO, y el primero dirigido a un USUARIO en vez de a un rol con alcance. Su
+  // cifra viva es «cuantas ordenes tiene reservadas para un dia posterior al de hoy», acotada al
+  // `actor.usuarioId`. Es tambien el unico que se APAGA SOLO POR EL PASO DEL TIEMPO y no porque
+  // alguien resuelva nada: al pasar la medianoche CR esas ordenes dejan de ser «posteriores», la
+  // cifra cae a 0 y el aviso desaparece del panel y del distintivo (R21). Eso es exactamente lo
+  // que permite que su titulo diga «mañana» sin mentir nunca.
+  "reparto_manana",
 ] as const satisfies readonly NotificacionEvento[];
 
 export type EventoAgregado = (typeof EVENTOS_AGREGADOS)[number];
@@ -259,6 +266,55 @@ export const CATALOGO_AVISOS: Record<NotificacionEvento, EntradaCatalogo> = {
     },
     destinatarios: ["maestro", "admin", "adminSatelite"],
   },
+  // 14 — FICHA 412 (R20/R21/R22). ACCIONABLE por las tres condiciones: pide una accion (revisarlo,
+  // corregirlo y volver a enviarlo a aprobacion), tiene consecuencia si no se hace (no se le
+  // liquida el cierre y sigue bloqueado) y EL puede resolverla.
+  //
+  // CON ATAJO, por el criterio aprobado —«¿le acerca esta pantalla a resolverlo?»—: `/cierre-dia`
+  // NO es un mirador, es DONDE EJECUTA la re-solicitud. Mismo destino y misma etiqueta que
+  // `cierre_dia_vencido` y `mensajero_bloqueado_por_cierres` para el mensajero: tres avisos de su
+  // cierre, un solo sitio al que ir.
+  //
+  // SIN `porRol`, y no por olvido: este evento tiene UN SOLO destinatario (R2). La administracion
+  // NO recibe fila de este evento — sigue recibiendo la suya de `mensajero_bloqueado_por_cierres`,
+  // con su texto y su entidad de siempre (R18). Quien rechaza es la bodega: avisarle de su propio
+  // clic seria ruido puro.
+  cierre_dia_rechazado: {
+    porDefecto: {
+      clase: "accionable",
+      atajo: { href: "/cierre-dia", etiqueta: "Ver mi cierre" },
+    },
+    destinatarios: ["mensajero"],
+  },
+  // 15 — FICHA 413 (R25/R26/R27). AGREGADO (el tercero) y ACCIONABLE, defendido con la tabla de
+  // §2.1bis que decide TODOS los atajos:
+  //   (a) pide una accion: organizarse para mañana. Saber si son 4 paquetes o 40 cambia la moto,
+  //       el combustible y la hora de salida.
+  //   (b) tiene consecuencia si no se hace: llegar a la bodega sin saber que le espera, que es la
+  //       situacion de HOY y el motivo entero de la ficha.
+  //   (c) quien lo recibe puede resolverla: si, y SOLO el. Nadie mas puede preparar su dia.
+  //   atajo: `/mis-asignaciones` **es** la lista de lo que va a llevar — el insumo de su
+  //       preparacion, igual que `/ordenes` lo es de la llamada del admin a la bodega. CON BOTON.
+  //
+  // Mismo destino y misma etiqueta que `dia_reparto_corregido`, el evento hermano sobre el mismo
+  // asunto: dos avisos de su reparto, un solo sitio al que ir. La ruta esta en `SIDEBAR_ITEMS`
+  // para `mensajero` y redirige a `/mis-asignaciones/reparto`.
+  //
+  // COSTE DECLARADO DE SER ACCIONABLE: suma **1** al «N por hacer» de cada mensajero con reparto,
+  // desde las 19:00 CR hasta la medianoche y NI UN MINUTO MAS — se apaga solo (R21) y el
+  // distintivo vuelve a cero sin que nadie toque nada. Esa cota es lo que lo separa del ruido que
+  // la 409 existe para eliminar.
+  //
+  // SIN `porRol`, y no por olvido: este evento tiene UN SOLO destinatario (R8). La administracion
+  // no recibe fila de el — ya ve el reparto entero en `/ordenes`.
+  reparto_manana: {
+    porDefecto: {
+      clase: "accionable",
+      atajo: { href: "/mis-asignaciones", etiqueta: "Ver mi reparto" },
+      titulo: tituloRepartoManana,
+    },
+    destinatarios: ["mensajero"],
+  },
 };
 
 /**
@@ -290,4 +346,24 @@ function tituloDevolucionesRepresadas(n: number): string {
   return n === 1
     ? "1 orden espera volver a su tienda"
     : `${n} órdenes esperan volver a su tienda`;
+}
+
+/**
+ * FICHA 413 (R27) — titulo del aviso de reparto de mañana, con la cifra VIVA.
+ *
+ * Singular y plural EXPLICITOS, como sus dos hermanos de arriba y como `textoCargaMasivaTerminada`:
+ * «Tenés 1 órdenes para mañana» es el texto roto que ninguna suite ve y que un humano lee todos los
+ * dias.
+ *
+ * VOSEO, como el resto del vocabulario al mensajero («Coordiná la devolución», «revisalas una por
+ * una»).
+ *
+ * ⚠️ LA PALABRA «MAÑANA» ES SEGURA AQUI, Y ESO NO ES UN DESCUIDO DE LA REGLA DE LA 262 —«NOMBRA LA
+ * FECHA, NUNCA "hoy" NI "mañana"»—: este titulo NO SE PERSISTE. Se recompone en cada lectura con
+ * la cifra viva, y esa cifra CAE A CERO al pasar la medianoche CR, asi que el aviso no puede
+ * sobrevivir a su propio dia (R21, con reloj fijo a las 00:01 CR). El texto que SI se persiste
+ * —la `descripcion`, en `emitir.ts`— nombra la fecha igualmente, como cinturon.
+ */
+function tituloRepartoManana(n: number): string {
+  return n === 1 ? "Tenés 1 orden para mañana" : `Tenés ${n} órdenes para mañana`;
 }

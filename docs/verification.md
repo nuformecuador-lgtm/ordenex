@@ -151,6 +151,60 @@ Por eso **antes de abrir un PR se corre `./init.sh` completo, sin excepcion**. L
 PRs #209 y #237 de este repo va justo en esa direccion: se mergeo mirando el estado del PR —que es
 un build y **no corre tests**— y entro un guard rojo en `dev`.
 
+### El paso de dependencias mide, ya no afirma (ficha 420, 2026-09-11)
+
+El paso 2 de `init.sh` comprobaba si existía el **directorio** `node_modules` y, si existía,
+imprimía `✓ dependencias presentes` **sin abrir `package.json`**. Esa condición es cierta en
+cuanto se ha instalado **una vez**, para siempre. Tras mergear la ficha 410 —que añade
+`web-push` y `@types/web-push`— el gate completo sobre `dev` dio ese visto bueno **en verde** y
+dos pasos después:
+
+```
+lib/push/web-push-sender.ts(11,21): error TS2307: Cannot find module 'web-push'
+INIT_EXIT=1
+```
+
+Parecía un error de código y era un `pnpm install` que faltaba: **1,3 s de arreglo**, todo el
+coste en el diagnóstico. Es la familia de fallo que este repo persigue —el sistema no falla,
+**aparenta**— y engaña en la peor dirección: dice que algo está bien **justo en el paso que
+existe para avisarte de lo contrario**.
+
+Ahora `node scripts/verificar-dependencias.mjs` comprueba **paquete por paquete** que cada
+entrada de `dependencies` y `devDependencies` resuelve en el árbol, y el gate **corta ahí**
+nombrando lo que falta:
+
+```
+falta 1 de las 58 dependencias declaradas en package.json:
+    - web-push
+  Reparalo con: pnpm install --frozen-lockfile
+✗ faltan dependencias declaradas (el detalle esta justo arriba)
+INIT_EXIT=1
+```
+
+**El typecheck no es la red de seguridad de esto**, y eso se midió al arreglarlo: si falta
+**solo** el paquete de runtime y siguen estando sus tipos en `node_modules/@types/`, el typecheck
+**pasa en verde** —TypeScript resuelve las declaraciones desde `@types/`— y el fallo sale **en
+ejecución**. Este paso es estrictamente más fuerte.
+
+**Lo que NO se hizo, y el número que lo decidió.** La alternativa obvia era correr
+`pnpm install --frozen-lockfile` **siempre**: es idempotente y, medido el 2026-09-11 sobre un
+árbol ya instalado, cuesta **1.711 / 1.573 / 1.772 ms** y **ni siquiera necesita red** (exit 0 con
+el registro apuntando a `127.0.0.1:1`); tampoco destruye el cliente Prisma generado. O sea,
+barato. Se descartó igual por dos razones que el precio no toca:
+
+- **repararía en silencio** — el paso saldría verde y nadie llegaría a saber que el árbol estaba
+  mal; se cambiaría un fallo mudo por otro más callado todavía, y con lo de arriba, sin typecheck
+  detrás que grite;
+- **un paso que mide no debe escribir en lo medido** — el gate corre en el worktree de cada
+  agente, sobre un árbol que otros pasos (`prisma generate`) preparan.
+
+La comprobación cuesta **114–130 ms** (casi todo arranque de Node), no toca la red y no modifica
+nada. El árbol **vacío** sí se instala: ahí no hay nada que reportar, es un arranque.
+
+**Su límite, dicho aquí para que no se descubra como sorpresa:** mide **ausencia**, no versiones.
+Un `web-push@2` instalado donde `package.json` pide `^3.6.7` pasa. De eso responde
+`--frozen-lockfile` cuando alguien instala.
+
 ### Sin `DATABASE_URL` la suite se encoge — y en un worktree eso es lo normal
 
 **147 archivos de test** (medido por el propio gate el 2026-09-09; eran 77 el 2026-08-28) van

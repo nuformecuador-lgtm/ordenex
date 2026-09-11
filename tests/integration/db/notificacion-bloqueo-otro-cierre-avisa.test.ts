@@ -137,6 +137,10 @@ describeSiHayBase("271/T6.3 · R44 — otro cierre es otro hecho: DOS avisos, no
           zonaId: fks.zonaId,
           mensajeroUsuarioId: mensajeroId,
           bloqueo,
+          // FICHA 412 (R19): el argumento nuevo, y con el valor que usa el productor que este
+          // archivo modela — la SOLICITUD de cierre, que sigue avisando al mensajero Y a la
+          // bodega exactamente como hasta hoy. Las CUATRO filas de abajo son eso.
+          destinatarios: "mensajero_y_bodega",
         });
 
       // 1.ª emision por el cierre A.

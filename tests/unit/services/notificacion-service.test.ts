@@ -421,6 +421,32 @@ describe("409/R8 — el distintivo cuenta LO ACCIONABLE Y VIGENTE, no los mensaj
     expect(r.items.map((i) => i.id)).not.toContain("agg-0");
   });
 
+  it("⭑ 412/R22: el aviso de cierre RECHAZADO cuenta en `porHacer` y trae su boton", async () => {
+    // FICHA 412 — la fila le llega al mensajero DIRIGIDA A USUARIO (`destinatario_rol` en NULL):
+    // quien decide la clase es el rol del ACTOR, no la columna. Y no es un agregado, asi que cae
+    // en la rama normal de `presentacionDe`: titulo = descripcion, sin cifra viva que resolver.
+    const repo = new RepoFake([
+      fila("rech", {
+        evento: "cierre_dia_rechazado",
+        descripcion:
+          "Tu cierre del 21 de agosto fue rechazado. Revísalo, corrígelo y vuelve a enviarlo a aprobación.",
+        visiblePara: ["men-1"],
+      }),
+    ]);
+    const mensajero: Actor = { usuarioId: "men-1", rol: "mensajero", zonaId: null };
+
+    const r = await servicioCon(repo).listar(mensajero);
+
+    expect(r.porHacer).toBe(1);
+    expect(r.items).toHaveLength(1);
+    expect(r.items[0].accionable).toBe(true);
+    // Literal ESCRITO A MANO: es la etiqueta declarada en el catalogo, no leida de el.
+    expect(r.items[0].atajo).toEqual({ href: "/cierre-dia", etiqueta: "Ver mi cierre" });
+    expect(r.items[0].titulo).toBe(
+      "Tu cierre del 21 de agosto fue rechazado. Revísalo, corrígelo y vuelve a enviarlo a aprobación.",
+    );
+  });
+
   it("el mismo evento cuenta o no segun el ROL de quien consulta", async () => {
     // `cierre_dia_vencido` le llega al mensajero como fila dirigida A USUARIO (su
     // `destinatario_rol` es NULL): quien decide la clase es el rol del ACTOR, no la columna.
@@ -704,5 +730,169 @@ describe("418/R10 — un rol fuera de la lista blanca: el aviso sale SIN numero 
     expect((registrado.cause as Error).message).toMatch(/no define ambito para el rol/i);
     // Y no lleva PII: el id del usuario no viaja en el mensaje del error (design §4).
     expect(`${registrado.message} ${(registrado.cause as Error).message}`).not.toContain("men-9");
+  });
+});
+// =============================================================================================
+// FICHA 413 - EL AVISO DEL REPARTO DE MAÑANA EN EL LISTADO (R13, R16, R19, R20, R41)
+//
+// Es el TERCER aviso agregado, y el PRIMERO dirigido a un USUARIO en vez de a un rol con alcance.
+// Aqui se mide lo que es del listado; el `WHERE` que produce la cifra vive contra Postgres.
+// =============================================================================================
+
+/** El mensajero destinatario, y la fila de su aviso con el texto REAL que persiste el emisor. */
+const MENSAJERO_413: Actor = { usuarioId: "u-mensajero-413", rol: "mensajero", zonaId: null };
+
+function filaRepartoManana(id = "agg-reparto"): FilaFake {
+  return fila(id, {
+    evento: "reparto_manana",
+    tipo: "box",
+    // ⚠️ EL TEXTO PERSISTIDO NO LLEVA EL NUMERO (R15). Es el literal que escribe
+    // `textoRepartoManana`, copiado A MANO aqui: si el emisor empezara a persistir la cifra, este
+    // archivo seguiria verde pero `reparto-manana-aviso.test.ts` se pondria rojo, y el caso de
+    // R13 de abajo dejaria de significar lo que dice.
+    descripcion: "Es tu reparto del 12 de septiembre. Revisá la lista para organizarte.",
+    visiblePara: ["u-mensajero-413"],
+  });
+}
+
+describe("413/R13 - el numero que el mensajero LEE es la cifra VIVA, no la de la emision", () => {
+  it("⭑⭑ la fila se emitio con 5 y el resolutor dice 3: el titulo dice 3", async () => {
+    // ⚠️ ES R13. El emisor de las 19:00 vio 5; a las 21:00 le quitaron dos. El panel tiene que
+    // decir 3, y SIN una segunda notificacion (R14). Literal ESCRITO A MANO, nunca comparado
+    // contra el compositor del catalogo.
+    const repo = new RepoFake([filaRepartoManana()]);
+
+    const r = await servicioCon(repo, vigenciaFake({ reparto_manana: 3 })).listar(MENSAJERO_413);
+
+    expect(r.items).toHaveLength(1);
+    expect(r.items[0].titulo).toBe("Tenés 3 órdenes para mañana");
+    // Y el DETALLE es el texto persistido, que no lleva ninguna cifra de conteo (R15).
+    expect(r.items[0].detalle).toBe(
+      "Es tu reparto del 12 de septiembre. Revisá la lista para organizarte.",
+    );
+    // El atajo, escrito a mano: es donde ve su reparto (R26).
+    expect(r.items[0].atajo).toEqual({ href: "/mis-asignaciones", etiqueta: "Ver mi reparto" });
+    // Y ES ACCIONABLE: suma 1 al «N por hacer» del mensajero, desde las 19:00 hasta medianoche.
+    expect(r.items[0].accionable).toBe(true);
+    expect(r.porHacer).toBe(1);
+  });
+
+  it("⭑ si el numero SUBE, el panel dice el numero nuevo - sin una segunda fila (R14)", async () => {
+    // La otra direccion del mismo hecho. Es LA MISMA fila las dos veces: `crear` no se llama.
+    const repo = new RepoFake([filaRepartoManana()]);
+
+    const conCinco = await servicioCon(repo, vigenciaFake({ reparto_manana: 5 })).listar(
+      MENSAJERO_413,
+    );
+    const conOcho = await servicioCon(repo, vigenciaFake({ reparto_manana: 8 })).listar(
+      MENSAJERO_413,
+    );
+
+    expect(conCinco.items[0].titulo).toBe("Tenés 5 órdenes para mañana");
+    expect(conOcho.items[0].titulo).toBe("Tenés 8 órdenes para mañana");
+    expect(conCinco.items[0].id).toBe(conOcho.items[0].id);
+    expect(repo.crear).not.toHaveBeenCalled();
+  });
+
+  it("⭑ con UNA sola orden el titulo va en SINGULAR", async () => {
+    // «Tenés 1 órdenes para mañana» es el texto roto que ninguna suite ve y que un humano lee.
+    const repo = new RepoFake([filaRepartoManana()]);
+
+    const r = await servicioCon(repo, vigenciaFake({ reparto_manana: 1 })).listar(MENSAJERO_413);
+
+    expect(r.items[0].titulo).toBe("Tenés 1 orden para mañana");
+  });
+});
+
+describe("413/R19 y R20 - el aviso se apaga y se enciende SOLO, sin escribir nada", () => {
+  it("⭑⭑ R19: cifra 0 -> ni se ve ni cuenta, y NO se crea fila de lectura ni de descarte", async () => {
+    // ⚠️ ES EL MECANISMO QUE PERMITE QUE EL TITULO DIGA «MAÑANA». Cuando llega el dia anunciado la
+    // cifra cae a 0 sola (R21) y el aviso desaparece del panel y del distintivo SIN QUE NADIE LO
+    // LEA, LO MARQUE NI LO DESCARTE.
+    //
+    // MUTACION OBLIGATORIA (design 13.4): un resolutor que devolviera siempre `1` => el aviso no
+    // se apagaria nunca y sobreviviria a su dia => ESTE CASO ROJO.
+    const repo = new RepoFake([filaRepartoManana()]);
+
+    const r = await servicioCon(repo, vigenciaFake({ reparto_manana: 0 })).listar(MENSAJERO_413);
+
+    expect(r.items).toHaveLength(0);
+    expect(r.porHacer).toBe(0);
+    expect(r.noLeidas).toBe(0);
+    expect(repo.lecturas).toHaveLength(0); // nadie lo leyo, lo marco ni lo descarto
+  });
+
+  it("⭑ R20: vuelve a salir cuando la cifra sube el mismo dia, sin crear una segunda fila", async () => {
+    const repo = new RepoFake([filaRepartoManana()]);
+
+    const apagada = await servicioCon(repo, vigenciaFake({ reparto_manana: 0 })).listar(
+      MENSAJERO_413,
+    );
+    const encendida = await servicioCon(repo, vigenciaFake({ reparto_manana: 3 })).listar(
+      MENSAJERO_413,
+    );
+
+    expect(apagada.items).toHaveLength(0);
+    expect(encendida.items.map((i) => i.id)).toEqual(["agg-reparto"]);
+    expect(encendida.porHacer).toBe(1);
+    // ⭑ EL REPOSITORIO DE ESCRITURA NO SE TOCA EN NINGUNO DE LOS DOS.
+    expect(repo.crear).not.toHaveBeenCalled();
+    expect(repo.lecturas).toHaveLength(0);
+  });
+});
+
+describe("413/R16 - si la cifra no se puede resolver, el aviso SALE igual", () => {
+  it("⭑ el resolutor lanza: el aviso sale SIN numero y el resto del listado tambien", async () => {
+    // Fallo hacia MOSTRAR, nunca hacia una campana en blanco. Sin cifra no se puede componer el
+    // titulo con un numero: cae al texto PERSISTIDO, que es real y sigue siendo cierto porque
+    // nombra la fecha (R28) - que es justo para lo que R28 existe.
+    const repo = new RepoFake([
+      filaRepartoManana(),
+      fila("otra", { evento: "orden_rechazada", visiblePara: ["u-mensajero-413"] }),
+    ]);
+
+    const r = await servicioCon(repo, vigenciaFake("lanza")).listar(MENSAJERO_413);
+
+    expect(r.items.map((i) => i.id)).toEqual(["agg-reparto", "otra"]);
+    expect(r.items[0].titulo).toBe(
+      "Es tu reparto del 12 de septiembre. Revisá la lista para organizarte.",
+    );
+    expect(r.porHacer).toBe(1);
+  });
+});
+
+describe("413/R41 - una consulta para quien tiene el aviso vivo, NINGUNA para quien no", () => {
+  it("⭑⭑ el mensajero CON el aviso vivo paga UNA sola consulta, aunque tenga dos filas", async () => {
+    // El coste declarado: «1 `count` por sondeo de 60 s y SOLO para el mensajero que tiene el
+    // aviso vivo». La cifra se pide UNA vez POR EVENTO, no por fila.
+    const vigencia = vigenciaFake({ reparto_manana: 4 });
+    const repo = new RepoFake([
+      filaRepartoManana("agg-1"),
+      filaRepartoManana("agg-2"),
+      fila("c", { evento: "orden_rechazada", visiblePara: ["u-mensajero-413"] }),
+    ]);
+
+    await servicioCon(repo, vigencia).listar(MENSAJERO_413);
+
+    expect(vigencia.llamadas).toHaveLength(1);
+    expect(vigencia.llamadas[0].evento).toBe("reparto_manana");
+    // Y con el ACTOR que consulta: el ambito sale de ahi, nunca del `entidad_id` de la fila.
+    expect(vigencia.llamadas[0].actor).toBe(MENSAJERO_413);
+  });
+
+  it("⭑⭑ un mensajero SIN este aviso no paga NI UNA consulta", async () => {
+    // ⭑ ES LA SEGUNDA MITAD DE R41, y la que se olvida. Si el servicio resolviera la cifra para
+    // todo el mundo «por si acaso», cada sondeo de cada mensajero costaria un `count` de mas.
+    const vigencia = vigenciaFake({ reparto_manana: 4 });
+    const repo = new RepoFake([
+      fila("n-1", { evento: "orden_rechazada", visiblePara: ["u-mensajero-413"] }),
+      fila("n-2", { evento: "dia_reparto_corregido", visiblePara: ["u-mensajero-413"] }),
+    ]);
+
+    const r = await servicioCon(repo, vigencia).listar(MENSAJERO_413);
+
+    expect(vigencia.llamadas).toHaveLength(0);
+    // ANTI-VACUIDAD: el listado SI devolvio filas, o sea que el caso no paso por vacio.
+    expect(r.items).toHaveLength(2);
   });
 });

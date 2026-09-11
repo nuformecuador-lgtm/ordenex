@@ -34,16 +34,74 @@ command -v node >/dev/null 2>&1 || fail "node no esta instalado"
 command -v pnpm >/dev/null 2>&1 || fail "pnpm no esta instalado. Instalalo con: npm i -g pnpm"
 ok "node $(node -v)"
 
-# 2. Dependencias
+# -------------------------------------------------------------------------------------------------
+# 2. Dependencias — SE COMPRUEBAN UNA A UNA, NO SE DAN POR BUENAS (ficha 420, 2026-09-11)
+# -------------------------------------------------------------------------------------------------
+#
+# QUE HABIA AQUI. Este paso preguntaba si existia el DIRECTORIO `node_modules` y, si existia,
+# imprimia `✓ dependencias presentes` SIN HABER ABIERTO `package.json`. El `ok` colgaba del `if`
+# exterior, no del interior: se imprimia siempre que hubiera `package.json`. Y la unica condicion
+# que se llegaba a evaluar -"existe la carpeta"- es verdadera en cuanto se ha instalado UNA vez,
+# para siempre.
+#
+# QUE COSTO. Tras mergear la ficha 410 -que anade `web-push` y `@types/web-push`- el gate completo
+# sobre `dev` dio este visto bueno EN VERDE y dos pasos mas tarde:
+#
+#     lib/push/web-push-sender.ts(11,21): error TS2307: Cannot find module 'web-push'
+#     INIT_EXIT=1
+#
+# Parecia un error de codigo y era un `pnpm install` que faltaba. Se resolvio en 1,3 s; lo caro
+# fue el diagnostico, no la reparacion, y por eso el rojo de abajo trae el comando ya escrito.
+#
+# Y EL AGUJERO ERA MAYOR. Medido el 2026-09-11: si falta SOLO el paquete de runtime y siguen
+# estando sus tipos en `node_modules/@types/`, el TYPECHECK PASA EN VERDE -TypeScript resuelve las
+# declaraciones desde `@types/`- y el fallo sale en EJECUCION. El typecheck NO es la red de
+# seguridad de esto: solo lo caza cuando faltan los dos. Este paso es estrictamente mas fuerte.
+#
+# POR QUE NO SE INSTALA SIEMPRE Y YA (alternativa medida, no intuida). `pnpm install
+# --frozen-lockfile` es idempotente y cuesta 1.711 / 1.573 / 1.772 ms sobre arbol completo, y ni
+# siquiera necesita red (exit 0 con el registro apuntando a 127.0.0.1:1). O sea: barato. Se
+# descarta igual por dos razones que el precio no toca. La primera es que REPARARIA EN SILENCIO:
+# el paso saldria verde y nadie llegaria a saber que el arbol estaba mal -se cambiaria un fallo
+# mudo por otro mas callado todavia, y con lo de arriba, sin typecheck detras que grite-. La
+# segunda es que un paso que MIDE no debe ESCRIBIR en lo medido: el gate corre en el worktree de
+# cada agente, sobre un arbol que otros pasos (`prisma generate`) preparan. La comprobacion cuesta
+# 114-130 ms, ~13x menos, y no toca nada.
+#
+# El arbol VACIO si se instala: ahi no hay nada que reportar -serian 58 ausencias y ningun
+# titular-, es un arranque, y la unica salida util es instalarlo. Se hace con `--frozen-lockfile`
+# (antes era `pnpm install` a secas) para que un arbol recien creado quede EXACTAMENTE como dice
+# el lockfile, y para que un `package.json` desalineado salga a pantalla en vez de resolverse en
+# silencio con una resolucion nueva.
+#
+# LOS MARCADORES DE ABAJO NO SON DECORACION: LA GUARDIA EJECUTA ESTE BLOQUE (2026-09-11).
+# `tests/unit/guards/dependencias-declaradas-presentes.guardia.test.ts` corta este archivo por
+# `FIN PASO 2` y corre el trozo TAL CUAL con bash, contra un arbol de mentira al que le falta un
+# paquete, para exigir que el paso SALGA EN ROJO. Se hace asi porque la version anterior de esa
+# guardia afirmaba sobre el TEXTO -- pedia que la linea de la invocacion contuviera la palabra
+# `fail` -- y una revision demostro que eso se burla sin esfuerzo: basta cambiar el `|| fail` por
+# un `|| DEPENDENCIAS="no se pudo verificar (el fail se silencio)"` para que los 13 tests sigan en
+# VERDE mientras el gate imprime un `✓ dependencias: ...` sobre un arbol roto y sigue adelante. O
+# sea: la guardia que existe para que el gate deje de mentir se podia silenciar sin que nada se
+# pusiera rojo, que es exactamente la ironia que esta ficha vino a cerrar.
+#
+# Si mueves este bloque, muevete los marcadores con el. Si los borras, la guardia se pone ROJA en
+# vez de quedarse sin nada que medir -- que es la diferencia entre una comprobacion y un adorno.
+# >>> INICIO PASO 2: DEPENDENCIAS (ficha 420) <<<
 if [ -f package.json ]; then
   if [ ! -d node_modules ]; then
     echo "Instalando dependencias..."
-    pnpm install
+    pnpm install --frozen-lockfile || fail "'pnpm install --frozen-lockfile' fallo"
   fi
-  ok "dependencias presentes"
+  # El detalle del rojo -que paquetes faltan- lo escribe el script en STDERR, que ya se ve;
+  # `$(...)` solo captura STDOUT, donde va el resumen del caso verde con la CIFRA MEDIDA de
+  # dependencias comprobadas. Escrita a mano, esa cifra caducaria con el siguiente `pnpm add`.
+  DEPENDENCIAS=$(node scripts/verificar-dependencias.mjs)  || fail "faltan dependencias declaradas (el detalle esta justo arriba)"
+  ok "dependencias: $DEPENDENCIAS"
 else
   warn "no hay package.json todavia (repo recien inicializado)"
 fi
+# >>> FIN PASO 2: DEPENDENCIAS (ficha 420) <<<
 
 # 3. Regla: maximo 2 features in_progress por zona (frontend / backend / fullstack).
 #    Antes era 1; el humano lo subio a 2 (2026-07-22) para permitir dos peticiones

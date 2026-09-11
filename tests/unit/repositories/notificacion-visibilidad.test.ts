@@ -122,3 +122,44 @@ describe("direccionamiento por usuario — solo lo ve el destinatario", () => {
     expect(ve(MAESTRO_A, { destinatarioUsuarioId: "tienda-1" })).toBe(false);
   });
 });
+describe("413/R8 — el aviso de reparto de un mensajero no lo ve ningun otro usuario", () => {
+  // ⚠️ NO SE TOCA EL PREDICADO (R39). Estos casos EJERCITAN el de la 146 tal cual esta, con la
+  // forma de fila que la 413 escribe: dirigida a USUARIO, con `destinatario_rol` en NULL y sin
+  // alcance. Si alguien tuviera que editar `predicadoVisibilidad` para que esto pasara, seria la
+  // señal de que la ficha esta rompiendo algo — y no hizo falta.
+  const MENSAJERO_A: NotificacionActor = {
+    usuarioId: "u-mensajero-a",
+    rol: "mensajero",
+    zonaId: null,
+  };
+  const MENSAJERO_B: NotificacionActor = {
+    usuarioId: "u-mensajero-b",
+    rol: "mensajero",
+    zonaId: null,
+  };
+
+  /** La forma EXACTA de la fila que emite `emitirRepartoManana`: a usuario, sin rol ni alcance. */
+  const FILA_DE_A = { destinatarioUsuarioId: "u-mensajero-a" };
+
+  it("⭑⭑ el mensajero B NO ve la fila dirigida al mensajero A", () => {
+    expect(ve(MENSAJERO_B, FILA_DE_A)).toBe(false);
+  });
+
+  it("⭑ ANTI-VACUIDAD: el mensajero A SI ve la suya", () => {
+    // Sin esto, un predicado que no dejara ver nada a nadie dejaria el caso de arriba en verde.
+    expect(ve(MENSAJERO_A, FILA_DE_A)).toBe(true);
+  });
+
+  it("⭑ y no la ve NINGUN otro rol: ni la administracion, ni la tienda, ni el satelite", () => {
+    for (const otro of [MAESTRO_A, TIENDA_1, SATELITE_Z1]) {
+      expect(ve(otro, FILA_DE_A), `${otro.rol} ve el aviso de reparto de otro`).toBe(false);
+    }
+  });
+
+  it("⭑ y un mensajero NO ve las filas de ROL de la administracion", () => {
+    // La otra direccion: este evento no crea filas de rol, pero si alguien se las creara, el
+    // predicado sigue separando. Es el cinturon de R8 por el otro lado.
+    expect(ve(MENSAJERO_A, { destinatarioRol: "maestro" })).toBe(false);
+    expect(ve(MENSAJERO_A, { destinatarioRol: "adminTienda", tiendaId: "tienda-1" })).toBe(false);
+  });
+});

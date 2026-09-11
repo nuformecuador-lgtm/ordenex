@@ -90,6 +90,18 @@ const MIGRACIONES_NOTIFICACIONES_POSTERIORES = [
   // el mecanismo de la 146. Nada de esto es infra de la 102 — la clasificacion SLA sigue siendo
   // derivada y esta ficha no la toca.
   "_notificacion_evento_avisos_agregados",
+  // Ficha 412 / design §10.1 (2026-09-11): el aviso «tu cierre del dia fue RECHAZADO». Los DOS
+  // enums de la campana ganan un valor —`cierre_dia_rechazado` y `cierre_dia_rechazo`—; NO hay
+  // tabla nueva, ni columna, ni indice, ni backfill: la ficha entera cabe en el mecanismo de la
+  // 146. Nada de esto es infra de la 102 — la clasificacion SLA sigue siendo derivada y esta ficha
+  // no la toca.
+  "_notificacion_evento_cierre_rechazado",
+  // Ficha 413 / design §10.1 (2026-09-11): el aviso «tenes N ordenes para mañana», al MENSAJERO
+  // asignado. Los DOS enums de la campana ganan un valor -`reparto_manana` y
+  // `reparto_manana_dia`-; NO hay tabla nueva, ni columna, ni indice, ni backfill: la ficha entera
+  // cabe en el mecanismo de la 146 y en la maquinaria de avisos agregados de la 409. Nada de esto
+  // es infra de la 102 - la clasificacion SLA sigue siendo derivada y esta ficha no la toca.
+  "_notificacion_evento_reparto_manana",
 ] as const;
 
 describe("Feature 102 · SIN migracion nueva (R3)", () => {

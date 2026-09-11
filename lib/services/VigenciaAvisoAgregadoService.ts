@@ -1,9 +1,11 @@
 import type { RolValue } from "@prisma/client";
 
 import type { IAvisoAgregadoRepository } from "@/lib/interfaces/repositories/IAvisoAgregadoRepository";
+import type { IRepartoMananaRepository } from "@/lib/interfaces/repositories/IRepartoMananaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IVigenciaAvisoAgregado } from "@/lib/interfaces/services/IVigenciaAvisoAgregado";
 import type { NotificacionEvento } from "@/lib/types/notificacion";
+import { startOfDayCR } from "@/lib/utils/fecha-cr";
 
 // FICHA 409 (T5.2, design §5) — el resolutor de la CIFRA VIVA de un aviso agregado.
 //
@@ -69,6 +71,18 @@ export class VigenciaAvisoAgregadoService implements IVigenciaAvisoAgregado {
     /** R53: el mismo umbral que aplica el cron. Entra por constructor, no como literal. */
     private readonly diasRepresamiento: number,
     private readonly now: () => Date = () => new Date(),
+    /**
+     * FICHA 413 (T6.1) — el repositorio del reparto de mañana. Entra por constructor como el otro
+     * y SIN default: un default construido aqui dentro abriria una conexion por el hecho de
+     * instanciar el servicio, y ademas invitaria a que alguien lo cambiara por una consulta propia
+     * — las dos cifras (la del aviso y la de `/mis-asignaciones`) divergirian sin que nada se
+     * pusiera rojo.
+     *
+     * OPCIONAL EN EL TIPO, y es deliberado: los consumidores vigentes que solo resuelven los dos
+     * agregados de la 409 siguen compilando sin tocarlos (R40). Pedirlo y no tenerlo LANZA con su
+     * causa escrita, que es la direccion segura — un `0` de cortesia apagaria un aviso vivo.
+     */
+    private readonly repartoRepo?: IRepartoMananaRepository,
   ) {}
 
   async cifra(evento: NotificacionEvento, actor: Actor): Promise<number> {
@@ -130,6 +144,52 @@ export class VigenciaAvisoAgregadoService implements IVigenciaAvisoAgregado {
         );
       }
       return this.repo.contarRepresadas(this.ancladaAntesDe(), actor.zonaId);
+    }
+    if (evento === "reparto_manana") {
+      // ⚠️ FICHA 413 (R13/R17) — EL AMBITO ES EL ACTOR, Y AQUI EL ACTOR **ES** EL MENSAJERO. Del
+      // `entidad_id` de la fila NO SE LEE NADA: ahi vive el dia ANUNCIADO, que es la clave de
+      // dedupe, no el ambito. Leerlo de ahi daria el numero del instante de la emision — justo lo
+      // que esta cifra existe para no mostrar.
+      //
+      // Y para quien NO es `mensajero`, su `usuarioId` no identifica a ningun mensajero asignado:
+      // el conteo solo podria dar `0` y la 409/R55 apagaria el aviso SIN QUE NADIE LO LEA, LO
+      // MARQUE NI LO DESCARTE. Ese es el PEOR de los dos modos de fallo, no el menor: un numero de
+      // mas se nota al mirarlo, un aviso que no sale no se nota nunca. **Se lanza**, que es
+      // exactamente la regla que cerro la 417. `NotificacionService.cifrasVivas` lo registra con
+      // su causa y R16 muestra el aviso igual, SIN numero: lanzar aqui no rompe ninguna pantalla.
+      //
+      // MUTACION OBLIGATORIA (design §13.5): devolver `0` en vez de lanzar ⇒ R17 ROJO.
+      if (actor.rol !== "mensajero") {
+        throw new Error(
+          `vigencia: el evento "${evento}" es de un mensajero y el rol "${actor.rol}" no lo es`,
+        );
+      }
+      if (this.repartoRepo === undefined) {
+        // Mismo criterio que las dos ramas de arriba: si no se puede resolver, se falla; no se
+        // inventa un numero. Sin esto, un composition root que se olvidara de cablear el
+        // repositorio dejaria el aviso apagado para todos los mensajeros, en silencio.
+        throw new Error(
+          `vigencia: el evento "${evento}" necesita el repositorio de reparto y nadie lo inyecto`,
+        );
+      }
+      // ⚠️ `startOfDayCR` Y NO `inicioDelDiaCREnUtc`: `orden.fecha_reparto` es `@db.Date`. Ver la
+      // cabecera de `RepartoMananaRepository` — aqui la trampa horaria va al reves de lo que se
+      // suele avisar en este repo, y usar el otro helper desplazaria el dia seis horas.
+      //
+      // Y ES LO QUE APAGA EL AVISO SOLO CUANDO LLEGA SU DIA (R21): al pasar la medianoche CR esta
+      // cota avanza, las ordenes del dia anunciado dejan de ser «posteriores», la cifra cae a 0 y
+      // `presentacionDe` devuelve `null`. No hace falta ningun proceso que lo caduque, y es lo que
+      // permite que el titulo diga «mañana» sin mentir.
+      //
+      // ⚠️ Y AQUI **NO** SE CONSULTA EL BLOQUEO POR CIERRES (R43), Y ES UNA DECISION, NO UN
+      // OLVIDO. El filtro del bloqueado es de EMISION, no de lectura (design §6.1): esta ruta
+      // corre en CADA SONDEO de 60 s, y meterle una consulta de cierres romperia R41 —una consulta
+      // de mas en la ruta caliente— y ataria el apagado de este aviso a un estado que ya tiene su
+      // propio aviso. Lo que se acepta a cambio, dicho: quien reciba su aviso a las 19:00 y se
+      // bloquee a las 21:00 convivira esa noche con los dos, hasta que este se apague solo a
+      // medianoche. Un aviso de mas es la direccion segura, y el de bloqueo es accionable.
+      // MUTACION OBLIGATORIA (design §13.11): meter la comprobacion aqui ⇒ R43 y R41 ROJOS.
+      return this.repartoRepo.contarReservadasParaOtroDia(actor.usuarioId, startOfDayCR(this.now()));
     }
     // Un evento sin cifra viva no tiene nada que resolver. LANZA en vez de devolver `0`: un cero
     // de cortesia OCULTARIA un aviso vivo (R55 al reves), que es el peor desenlace posible aqui.

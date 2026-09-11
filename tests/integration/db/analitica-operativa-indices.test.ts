@@ -107,7 +107,8 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("R25 · la consulta intradia de gestiones us
     try {
       const filas = await prisma.$queryRaw<{ indexname: string }[]>`
         SELECT indexname FROM pg_indexes
-        WHERE tablename = 'gestion_orden' AND indexname = ${INDICE}`;
+        WHERE schemaname = 'public'
+          AND tablename = 'gestion_orden' AND indexname = ${INDICE}`;
       expect(
         filas.length,
         `${INDICE} no esta aplicado en esta base: corre las migraciones antes de medir`,

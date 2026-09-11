@@ -5,7 +5,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { HISTORIAL_ACCION_TIPOS } from "@/lib/types/historial-accion";
 
-import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
+import { HAY_BASE_DE_DATOS, crearPrismaDeTest, etiquetasDeEnum } from "./_postgres-real";
 
 /**
  * ⭑ FICHA 373 / A5 (R27/R39) — LA MIGRACION DEL VALOR NUEVO DEL ENUM, LEIDA DE LA BASE APLICADA.
@@ -137,12 +137,9 @@ describeSiHayBase("373/A5 — el enum en la base APLICADA", () => {
     await prisma?.$disconnect();
   });
 
+  // FICHA 421 — acota `nspname = 'public'`: ver `etiquetasDeEnum` en `_postgres-real.ts`.
   async function etiquetasDelEnum(): Promise<string[]> {
-    const filas = await prisma.$queryRawUnsafe<{ enumlabel: string }[]>(
-      `SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-        WHERE t.typname = 'historial_accion_tipo' ORDER BY e.enumsortorder`,
-    );
-    return filas.map((f) => f.enumlabel);
+    return etiquetasDeEnum(prisma, "historial_accion_tipo");
   }
 
   it("⭑ `pg_enum` tiene `api_key_eliminada`, y el catalogo y la base dicen lo mismo", async () => {

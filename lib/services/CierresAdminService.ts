@@ -72,11 +72,13 @@ import {
 } from "@/lib/types/gestion-destino";
 // FEATURE 271 (R48/R10): la regla del bloqueo se CONSULTA, no se re-deriva aqui.
 import { SIN_CIERRES_ABIERTOS, estaBloqueadoPorCierres } from "@/lib/utils/bloqueo-cierre";
+import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
 // FEATURE 271 (T6.6, R42/R47): el aviso de «quedaste BLOQUEADO» que emite el RECHAZO. Mismo
 // mecanismo que sus hermanos de la 146: notificador INYECTADO con default no-op + best-effort.
 import {
   emitirBestEffort,
   notificadorNoOp,
+  type CierreRechazadoNotificador,
   type MensajeroBloqueadoNotificador,
 } from "@/lib/notificaciones/notificadores";
 // FICHA 315 (defecto de produccion del 2026-08-28): aprobar un cierre libera las ordenes
@@ -184,6 +186,12 @@ type OrdenRepo = Pick<
   // aviso del RECHAZO. Es el detalle y no el contador porque el texto tiene que CONTAR: un
   // «estas bloqueado» a secas no cumple R43. Se pide UNA vez, por rechazo, fuera de toda tx.
   | "findBloqueoDetalle"
+  // FICHA 412 (T5.1, R11): la JORNADA del cierre RECIEN RECHAZADO, para fecharlo en su aviso. NO
+  // se reusa `bloqueo.aReenviarPrimero.jornadaCR` —el re-solicitable mas viejo— porque solo
+  // coincide cuando el rechazado ES el mas viejo; en el resto de casos el aviso fecharia OTRO
+  // cierre. Una consulta mas en un camino que un humano ejecuta a mano y pocas veces es barata;
+  // fechar el cierre equivocado, no.
+  | "findJornadaDeCierre"
 >;
 /**
  * Feature 172 (T C.2) — de todo el repositorio de la liquidacion, este servicio consume DOS
@@ -204,6 +212,21 @@ type LiquidacionLecturaRepo = Pick<
  * acto humano en `Wallet > Mensajeros`).
  */
 type PremiosLecturaRepo = Pick<IPagoMensajeroMovimientoRepository, "sumarPremiosVivosPorCierre">;
+
+/**
+ * FICHA 412 (T5.2) — lo que las lecturas posteriores al rechazo dejan en la mano, y que los DOS
+ * avisos comparten. Se hacen una vez: son tres consultas en un camino que un humano ejecuta a
+ * mano y pocas veces, y repetirlas invitaria a que los dos avisos hablasen de estados distintos.
+ */
+interface LecturasDelRechazo {
+  mensajeroId: string;
+  destinoZonaId: string | null;
+  /** `cierre_dia.resuelto_at` de ESTE rechazo, en ISO. Es la mitad de la entidad de dedupe. */
+  resueltoAt: string;
+  bloqueo: BloqueoDetalle;
+  /** Derivada por el UNICO derivador (271/R61). `null` -> el texto omite la fecha (R12). */
+  jornadaCR: string | null;
+}
 
 // Resultado interno de resolver el alcance del actor (R2/R3).
 type AlcanceResult =
@@ -264,12 +287,38 @@ export class CierresAdminService implements ICierresAdminService {
      * (`liberacion-al-aprobar-cierre.test.ts`).
      */
     private readonly liberarReprogramadasDelCierre: LiberarAlAprobarCierre = liberarAlAprobarCierreNoOp,
+    /**
+     * FICHA 412 (T5.2/T5.4, R1/R6) — el aviso de «TU CIERRE FUE RECHAZADO», al mensajero dueño.
+     *
+     * OPCIONAL Y CON DEFAULT NO-OP, por el mismo motivo exacto que `notificarBloqueo`: trece
+     * suites instancian este servicio y al otro lado hay una base de datos LOCAL COMPARTIDA; con
+     * el real por defecto, cualquiera de ellas escribiria avisos de verdad.
+     *
+     * VA AL FINAL, despues de `liberarReprogramadasDelCierre`, y eso NO es pereza: mover un
+     * parametro posicional en un constructor que se construye en trece sitios es como se cablea
+     * «casi bien» sin que nada se ponga rojo. El composition root
+     * (`lib/actions/cierres-admin.ts`) inyecta el real, y hay una guardia que comprueba que
+     * alguien lo PASA de verdad, no que lo importe
+     * (`tests/unit/services/notificacion-notificadores-reales.test.ts`).
+     */
+    private readonly notificarRechazo: CierreRechazadoNotificador = notificadorNoOp,
   ) {}
 
   /**
-   * FEATURE 271 (T6.6, R42/R43/R47) — el aviso de «quedaste BLOQUEADO» que sigue a un RECHAZO.
+   * FEATURE 271 (T6.6, R42/R43/R47) + FICHA 412 (T5.2, R1/R4/R5/R17) — LOS AVISOS QUE SIGUEN A UN
+   * RECHAZO CONFIRMADO. Se llamaba `avisarBloqueoPorRechazo` y emitia UNO; ahora emite DOS, a
+   * destinatarios distintos, en unidades best-effort INDEPENDIENTES.
    *
-   * Tres propiedades, y las tres son deliberadas:
+   * ⚠️ QUE CAMBIO Y POR QUE, para quien lo lea dentro de seis meses. Hasta la 412 este metodo se
+   * saltaba entero cuando el rechazo NO dejaba bloqueado al mensajero (`if (!bloqueo.bloqueado)
+   * return;`), y cuando SI lo dejaba le mandaba `mensajero_bloqueado_por_cierres`, cuyo texto es
+   * EL MISMO que recibe quien dejo VENCER su cierre: «Tienes un cierre sin enviar a aprobacion».
+   * El mensajero no podia distinguir «vencio» de «me lo rechazaron», y solo el segundo le exige
+   * CORREGIR algo antes de reenviar. El riesgo del cambio es CERO MEDIDO: produccion tenia 0
+   * cierres `rechazado` en toda su historia el 2026-09-11 (78 `aprobado`, 5 `solicitado`), asi que
+   * esa fila NUNCA se ha emitido a nadie.
+   *
+   * Las propiedades que NO cambian, y las cuatro son deliberadas:
    *
    *  1. **FUERA de la transaccion del rechazo, y despues de que haya confirmado.** No se pasa
    *     ningun notificador a `resolverCierre`: ese metodo abre la tx que mueve el estado del
@@ -278,40 +327,82 @@ export class CierresAdminService implements ICierresAdminService {
    *     262 dejo escrita en `notificarDiaRepartoCorregidoCon`.
    *  2. **BEST-EFFORT.** `emitirBestEffort` absorbe el fallo y lo deja registrado con su causa.
    *     EL RECHAZO MANDA, EL AVISO ES CORTESIA: si la campana esta caida, el rechazo sigue
-   *     siendo valido y el admin no ve un error por algo que ya ocurrio (R47).
+   *     siendo valido y el admin no ve un error por algo que ya ocurrio (R47/R4).
    *  3. **Relee el detalle DESPUES de escribir.** El `N`/`V` que el texto cuenta es el de AHORA,
    *     con el `rechazado` recien creado ya dentro; calcularlo antes diria uno menos.
+   *  4. **Las lecturas se hacen UNA vez y se comparten** por los dos avisos.
    *
-   * LA ENTIDAD DE LA NOTIFICACION ES EL CIERRE RECHAZADO, no el mensajero: dos rechazos son dos
-   * `entidad_id`, luego la clave `notificacion_dedupe_key` no colisiona y el segundo rechazo SI
-   * avisa aunque el primero siga sin leerse (R44). Elegir mal la entidad convierte «avisar dos
-   * veces» en un silencio estructural.
+   * ⚠️ LA ENTIDAD DEL AVISO NUEVO ES **EL RECHAZO**, NO EL CIERRE: `${cierreId}:${resueltoAt}`.
+   * Con el cierre a secas —que es lo que hace el aviso de bloqueo— la clave
+   * `notificacion_dedupe_key` admitiria UNA sola fila por (evento, cierre, mensajero) PARA
+   * SIEMPRE, y como `rechazado` es RE-SOLICITABLE y la re-solicitud REUTILIZA la misma fila de
+   * `cierre_dia`, el SEGUNDO rechazo del mismo cierre no avisaria nunca, en silencio. Todo el
+   * razonamiento vive en `lib/notificaciones/emitir.ts`, junto al emisor.
    *
    * POR QUE SE RELEE EL CIERRE: `rechazarCierre` recibe un `cierreId` y un actor que es el ADMIN;
-   * el mensajero y la zona destino —los dos destinatarios del aviso— viven en la fila. Se relee
-   * con `findCierreByIdEnAlcance` y con EL MISMO `alcance` que acaba de autorizar la escritura,
-   * asi que el aviso no puede alcanzar un cierre que este admin no podia tocar. Es una lectura de
-   * mas en un camino que un humano ejecuta a mano y raras veces —la pantalla acaba de correr esa
-   * misma consulta para pintarle el detalle—, y evita abrir una consulta nueva en el repositorio.
+   * el mensajero, la zona destino y el instante del rechazo viven en la fila. Se relee con
+   * `findCierreByIdEnAlcance` y con EL MISMO `alcance` que acaba de autorizar la escritura, asi
+   * que el aviso no puede alcanzar un cierre que este admin no podia tocar.
    */
-  private async avisarBloqueoPorRechazo(cierreId: string, alcance: Alcance): Promise<void> {
-    await emitirBestEffort("mensajero_bloqueado_por_cierres", async () => {
+  private async avisarDelRechazo(cierreId: string, alcance: Alcance): Promise<void> {
+    // (1) LAS LECTURAS, una sola vez y compartidas por los dos avisos. Su fallo NO puede tumbar
+    // nada: si algo aqui lanza, `emitirBestEffort` lo registra con su operacion y su causa y el
+    // rechazo sigue siendo `ok`.
+    //
+    // El resultado sale por un array de 0 o 1 elementos porque `emitirBestEffort` devuelve `void`
+    // A PROPOSITO (146 §4.5: «un valor de retorno invitaria a ramificar sobre el y a convertir un
+    // aviso perdido en una decision de negocio»). Aqui no se ramifica sobre el FALLO del aviso: se
+    // ramifica sobre si las LECTURAS llegaron a completarse, que es otra cosa — sin ellas no hay
+    // entidad de dedupe que escribir, y un aviso con entidad inventada es peor que ninguno.
+    const leidas: LecturasDelRechazo[] = [];
+    await emitirBestEffort("cierre_dia_rechazado", async () => {
       const detalle = await this.repo.findCierreByIdEnAlcance(cierreId, alcance);
       if (detalle === null) return; // sin cierre resoluble no se inventa un aviso
-      const { mensajeroId, destinoZonaId } = detalle.cierre;
+      const { mensajeroId, destinoZonaId, resueltoAt } = detalle.cierre;
+      // FICHA 412 (§5) — FALLO CERRADO, no aviso con entidad inventada. Tras un `updated` esto es
+      // inalcanzable (`resolverCierre` escribe `resueltoAt: new Date()` en la misma sentencia que
+      // mueve el estado), pero se comprueba: el instante ES LA MITAD DE LA ENTIDAD de dedupe, y
+      // sin el no hay forma de distinguir el segundo rechazo del primero.
+      if (resueltoAt === null) {
+        throw new Error(`cierre ${cierreId} rechazado sin resuelto_at: no se puede fechar el aviso`);
+      }
       const bloqueo = await this.ordenRepo.findBloqueoDetalle(mensajeroId);
-      // Tras un rechazo `V >= 1` y el mensajero esta bloqueado, asi que esto casi siempre pasa.
-      // Casi: entre la escritura y esta lectura el mensajero pudo re-solicitar el cierre (R16 lo
-      // permite SIEMPRE, es el anti-deadlock). Avisar entonces seria mandarle un aviso que dice
-      // lo que el servidor ya no hace, que es el fallo que R43 prohibe por su nombre.
-      if (!bloqueo.bloqueado) return;
-      await this.notificarBloqueo({
-        cierreId,
-        zonaId: destinoZonaId,
-        mensajeroUsuarioId: mensajeroId,
-        bloqueo,
-      });
+      const jornadaCR = await this.ordenRepo.findJornadaDeCierre(cierreId);
+      leidas.push({ mensajeroId, destinoZonaId, resueltoAt, bloqueo, jornadaCR });
     });
+    if (leidas.length === 0) return;
+    const contexto = leidas[0];
+
+    // (2) EL AVISO AL MENSAJERO — **SIEMPRE** (R1), lo deje bloqueado o no. Es el unico aviso del
+    // sistema que dice la palabra «rechazado»: hasta esta ficha el mensajero leia exactamente el
+    // mismo texto que por un cierre VENCIDO, y solo el rechazo le exige CORREGIR algo.
+    await emitirBestEffort("cierre_dia_rechazado", () =>
+      this.notificarRechazo({
+        cierreId,
+        resueltoAtISO: contexto.resueltoAt,
+        mensajeroUsuarioId: contexto.mensajeroId,
+        jornadaCR: contexto.jornadaCR,
+        quedaBloqueado: contexto.bloqueo.bloqueado,
+      }),
+    );
+
+    // (3) EL AVISO A LA BODEGA — sin cambios respecto de la 271 (R18), y SOLO si de verdad quedo
+    // bloqueado. `solo_bodega` es lo que evita la segunda fila al mensajero (R17): los dos avisos
+    // llevan a `/cierre-dia` a pedir la misma accion, asi que dos filas serian dos «por hacer» en
+    // el distintivo de la 409 para UN solo trabajo — y, con la 410, dos pushes.
+    //
+    // ⚠️ (2) Y (3) SON DOS UNIDADES `emitirBestEffort` SEPARADAS A PROPOSITO (R5). Con una sola
+    // envolviendo las dos, un fallo en la primera se llevaria la segunda por delante.
+    if (!contexto.bloqueo.bloqueado) return;
+    await emitirBestEffort("mensajero_bloqueado_por_cierres", () =>
+      this.notificarBloqueo({
+        cierreId,
+        zonaId: contexto.destinoZonaId,
+        mensajeroUsuarioId: contexto.mensajeroId,
+        bloqueo: contexto.bloqueo,
+        destinatarios: "solo_bodega",
+      }),
+    );
   }
 
   // R1/R2/R3: resuelve el alcance server-side por rol+zona. Acceso total (maestro/admin) ve
@@ -1423,9 +1514,10 @@ export class CierresAdminService implements ICierresAdminService {
       motivoRechazo: motivoLimpio,
     });
     if (res === "updated") {
-      // FEATURE 271 (T6.6, R42): el aviso va AQUI —despues de que el rechazo haya confirmado y
-      // fuera de su transaccion— y NUNCA altera lo que se devuelve. Ver `avisarBloqueoPorRechazo`.
-      await this.avisarBloqueoPorRechazo(cierreId, scope.alcance);
+      // FEATURE 271 (T6.6, R42) + FICHA 412 (R1/R4): los avisos van AQUI —despues de que el
+      // rechazo haya CONFIRMADO su escritura y fuera de su transaccion— y NUNCA alteran lo que se
+      // devuelve, tampoco cuando la emision falle. Ver `avisarDelRechazo`.
+      await this.avisarDelRechazo(cierreId, scope.alcance);
       return { status: "ok", cierreId, estado: "rechazado" };
     }
     // `conflict` y `no_encontrada` NO avisan, y esa es media R42: un aviso por un rechazo que no

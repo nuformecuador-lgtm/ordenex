@@ -42,8 +42,9 @@ export type PerfilPush =
   | { readonly push: "si"; readonly roles: readonly RolValue[] };
 
 /**
- * EL CATALOGO, evento por evento y con su porque. Trece entradas: las once de siempre mas las dos
- * que anadio la 409. OCHO son elegibles.
+ * EL CATALOGO, evento por evento y con su porque. QUINCE entradas: las once de siempre, las dos
+ * que anadio la 409, `cierre_dia_rechazado` de la 412 y `reparto_manana` de la 413. DIEZ son
+ * elegibles.
  */
 export const PUSH_ELEGIBLE = {
   // -------------------------------------------------------------------------------------------
@@ -76,9 +77,50 @@ export const PUSH_ELEGIBLE = {
   // fila dirigida a el. Las tres copias a bodega, no.
   cierre_dia_vencido: { push: "si", roles: ["mensajero"] },
 
+  // MENSAJERO (FICHA 412, R23). Le RECHAZARON el cierre: tiene las DOS cosas que el criterio pide,
+  // y no por analogia.
+  //   · DINERO: el cierre es su liquidacion. Rechazado, no se le paga hasta que lo corrija, lo
+  //     reenvie y se lo aprueben.
+  //   · PLAZO, y de los caros: mientras siga sin aprobar, el servidor le rechaza entregar, cobrar
+  //     y recibir trabajo nuevo (`estaBloqueadoPorCierres`). Cada hora que tarda en enterarse es
+  //     una hora en la que no puede trabajar.
+  // Es el mismo argumento con el que entraron `cierre_dia_vencido` y
+  // `mensajero_bloqueado_por_cierres`.
+  //
+  // ⚠️ NO LLEVA NINGUN ROL, y no es un olvido: este evento NO CREA FILA DE ROL (412/R2). Su unico
+  // destinatario es el mensajero, como fila dirigida a USUARIO. Y no hay riesgo de doble push por
+  // el mismo hecho: en la rama del rechazo la fila de `mensajero_bloqueado_por_cierres` dirigida
+  // al mensajero YA NO SE CREA (412/R17), y las copias a bodega de ese evento estan aqui arriba
+  // declaradas no elegibles.
+  cierre_dia_rechazado: { push: "si", roles: ["mensajero"] },
+
   // MENSAJERO. Le cambiaron el dia de reparto de una orden suya. Si no se entera, se presenta el
   // dia equivocado: consecuencia real, personal y con fecha.
   dia_reparto_corregido: { push: "si", roles: ["mensajero"] },
+
+  // MENSAJERO (FICHA 413, R30/R31). Su reparto de mañana, con el numero dentro. Tiene las dos
+  // cosas que el criterio pide, y la primera en su forma mas pura:
+  //   · PLAZO: el reparto es mañana por la mañana y el valor del aviso CADUCA ESA MISMA NOCHE. A
+  //     las 00:00 CR ya no sirve de nada — es el unico del catalogo cuyo aviso se apaga solo al
+  //     pasar la medianoche. No hay caso mas claro de «tiene plazo» en toda la tabla.
+  //   · Y SIEMPRE AGREGADA, por definicion: una sola notificacion con la cifra dentro, jamas un
+  //     push por orden (R5).
+  // «Nunca nada que quien lo recibe no pueda resolver»: solo el puede prepararse. Y merece
+  // interrumpir A ESA HORA — llega a las 19:00 CR, tarde-noche y fuera de la franja que R11
+  // prohibe: un mensajero que se entera a las 19:00 de que mañana lleva 35 paquetes cambia lo que
+  // hace esa noche; el mismo dato a las 07:00 del dia siguiente llega tarde.
+  //
+  // ⚠️ NO LLEVA NINGUN ROL MAS, y no es un olvido: este evento NO CREA FILA DE ROL (413/R8). Su
+  // unico destinatario es el mensajero, como fila dirigida a USUARIO — y por eso `rolLector` (el
+  // rol de QUIEN LEE) es `mensajero` y no `destinatario_rol`, que aqui es NULL.
+  //
+  // ⚠️ EL PUSH SI PUEDE QUEDAR OBSOLETO, Y ESTA DICHO (413 §5.3): sale a las 19:00 con el numero
+  // de ese instante y nadie lo corrige (410/R44). Medido: despues de las 19:00 se asignan ~10
+  // ordenes al dia entre 18 mensajeros (el 4 %), asi que la mayoria de las noches NINGUN push
+  // queda desfasado, y el que lo queda se desfasa en UNA O DOS unidades. No se persigue con un
+  // segundo push —eso romperia «uno al dia por tipo»—: se tapa con la cifra viva del panel, que es
+  // el unico sitio donde el mensajero va a mirar antes de salir. LA APP MANDA, EL PUSH ES EL AVISO.
+  reparto_manana: { push: "si", roles: ["mensajero"] },
 
   // ⚠️⚠️ MAESTRO Y SOLO EL, Y ESTO NO ES UNA OMISION (D4, design §3.1).
   //

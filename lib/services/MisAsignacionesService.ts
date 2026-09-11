@@ -46,6 +46,22 @@ import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
 import { RESERVA_MOTIVO_SERVIDOR } from "@/lib/utils/dia-reparto-textos";
 // Feature 271: el motivo del bloqueo lo compone el MISMO formateador que la pantalla y la campana.
 import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
+// FICHA 413 (T1.1, design 3.2) - EL UNIVERSO DE ESTE PORTAL, DECLARADO UNA VEZ Y LEIDO POR DOS.
+// El repositorio del aviso «tu reparto de mañana» cuenta EXACTAMENTE estos tres estados: si cada
+// uno escribiera su lista, el dia que este portal ganara un cuarto estatus el aviso contaria uno
+// menos y NADA se pondria rojo - y la 409 dejo escrito que un aviso que dice «5» sobre una
+// pantalla que enseña 4 queda desacreditado el primer dia.
+//
+// ⚠️ POR QUE SE IMPORTA EL **TIPO** Y LAS TRES `const` SIGUEN AQUI CON SU LITERAL, en vez de
+// pasarle el array a `findMisAsignaciones`: `tests/unit/guards/carga-del-mensajero.guardia.test.ts`
+// (235/262) lee ESTE fuente y exige que esa llamada reciba una lista LITERAL de identificadores
+// declarados con un literal EN ESTE MISMO MODULO. Su lector revienta con un spread o con un
+// import, asi que pasarle la constante pondria ROJA una guardia vigente que nacio de dos agujeros
+// reales que costaban dinero. El amarre se hace por las DOS vias que si caben: la ANOTACION de las
+// tres `const` de abajo -quitar un valor de `ESTADOS_REPARTO_MENSAJERO` deja este archivo SIN
+// COMPILAR- y la guardia de la 413, que extrae esta lista del FUENTE y la compara miembro a
+// miembro con aquella tupla. Ver el encabezado de `lib/constants/reparto-mensajero-estados.ts`.
+import type { EstadoRepartoMensajero } from "@/lib/constants/reparto-mensajero-estados";
 import {
   fechaCalendarioCR,
   inicioDelDiaCREnUtc,
@@ -83,14 +99,14 @@ function estaReservadaParaOtroDia(fechaReparto: Date | null, diaEnCurso: Date): 
 }
 
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
-const ORIGEN_RECOGER = "por_recoger";
-const ESTADO_EN_REPARTO = "en_reparto";
+const ORIGEN_RECOGER: EstadoRepartoMensajero = "por_recoger";
+const ESTADO_EN_REPARTO: EstadoRepartoMensajero = "en_reparto";
 /**
  * Feature 235 (R18/R19): el estatus de la SOLICITUD DE AYUDA viva. El panel lo LEE -esas ordenes
  * siguen siendo del mensajero y las tiene que ver- pero en un grupo APARTE, cortado aqui y no en
  * el cliente.
  */
-const ESTADO_AYUDA = "ayuda_tienda";
+const ESTADO_AYUDA: EstadoRepartoMensajero = "ayuda_tienda";
 // Unico estado de origen valido para gestionar los 4 resultados (R18).
 //
 // Feature 235 (R16): que siga siendo `en_reparto` -y no una lista- es lo que hace que una orden en
