@@ -4933,10 +4933,11 @@
       "title": "el comprobante del mensajero le atribuye un rechazo que hizo el sistema",
       "description": "En el comprobante, el texto del motivo dice que el rechazo fue automatico mientras el distintivo de al lado dice Manual: la fila se contradice.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "baja",
-      "branch": null,
+      "spec_path": "specs/414-comprobante-mensajero-rechazo-contradictorio/",
+      "branch": "feat/414-comprobante-mensajero-rechazo-contradictorio",
       "depends_on": null,
       "status_note": "DESTAPADA POR EL REVIEWER DE LA 408 el 2026-09-10, y MEDIDA CON UNA SONDA, no supuesta: en el comprobante del mensajero conviven el texto largo del motivo -que dice que lo rechazo el sistema al vencerse el plazo- y el distintivo «Manual», cuyo tooltip afirma «Rechazo registrado manualmente por el mensajero». La fila se contradice sola y le atribuye al mensajero un rechazo que no hizo. || ES PREEXISTENTE de la 102 y quedo FUERA del alcance de la 408 a proposito: sus dos arreglos posibles -rediseñar el marcador, o la alternativa G del spec- estan declarados fuera alli. La 408 no lo introdujo; lo hizo visible al poner un texto que si dice la verdad. || RAIZ MEDIDA: `CierreDiaRepository.ts:295` fija `esRechazoSla: false` para la vista del mensajero por decision expresa de la 102, asi que el marcador cae siempre en la rama «Manual» aunque el rechazo sea del cron. El arreglo honesto pasa por decidir que hace ese distintivo cuando el origen no se deriva, no por tocar el texto -que ya es correcto-. || Frontend puro."
     },
