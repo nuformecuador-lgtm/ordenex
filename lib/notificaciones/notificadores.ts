@@ -25,20 +25,24 @@ import {
   emitirCargaMasivaTerminada,
   emitirCierreDiaPorAprobar,
   emitirCierreDiaVencido,
+  emitirDevolucionesRepresadas,
   emitirDiaRepartoCorregido,
   emitirGastoFijoCobroPendiente,
   emitirGeocodificacionCaida,
   emitirMensajeroBloqueado,
+  emitirNovedadesSinGestionar,
   emitirPostulacionPendiente,
   emitirPostulacionRecursoPendiente,
   emitirWebhookSuscripcionPausada,
   type CargaMasivaContexto,
   type CierrePorAprobarContexto,
   type CierreVencidoContexto,
+  type DevolucionesRepresadasContexto,
   type DiaRepartoCorregidoContexto,
   type GastoFijoCobroPendienteContexto,
   type GeocodificacionCaidaContexto,
   type MensajeroBloqueadoContexto,
+  type NovedadesSinGestionarContexto,
   type PostulacionContexto,
   type PostulacionRecursoContexto,
   type WebhookSuscripcionPausadaContexto,
@@ -97,6 +101,20 @@ export type WebhookSuscripcionPausadaNotificador = (
 export type GeocodificacionCaidaNotificador = (
   ctx: GeocodificacionCaidaContexto,
 ) => Promise<void>;
+/**
+ * FICHA 409 (R35/R62). Firma del notificador de «tienes N novedades sin gestionar». Lo usa el CRON
+ * `avisos-diarios`, a las 07:00 CR, UNA VEZ POR TIENDA Y POR DIA.
+ */
+export type NovedadesSinGestionarNotificador = (
+  ctx: NovedadesSinGestionarContexto,
+) => Promise<void>;
+/**
+ * FICHA 409 (R47/R62). Firma del notificador de «N ordenes esperan volver a su tienda». Lo usa el
+ * mismo cron, UNA VEZ POR AMBITO (zona o global) Y POR DIA.
+ */
+export type DevolucionesRepresadasNotificador = (
+  ctx: DevolucionesRepresadasContexto,
+) => Promise<void>;
 
 /**
  * DEFAULT de los tres services: no hace nada. Un service construido sin cablear su notificador
@@ -112,7 +130,9 @@ export const notificadorNoOp: PostulacionNotificador &
   MensajeroBloqueadoNotificador &
   GastoFijoCobroPendienteNotificador &
   WebhookSuscripcionPausadaNotificador &
-  GeocodificacionCaidaNotificador = async () => {};
+  GeocodificacionCaidaNotificador &
+  NovedadesSinGestionarNotificador &
+  DevolucionesRepresadasNotificador = async () => {};
 
 /**
  * Construye el repositorio real. Aislado en una funcion para que los tests del camino REAL
@@ -327,6 +347,54 @@ export function notificarGeocodificacionCaidaCon(
   };
 }
 
+/**
+ * FICHA 409 (T3.3, R35/R60) — emite «tienes N novedades sin gestionar» contra `repo`, absorbiendo
+ * su fallo.
+ *
+ * BEST-EFFORT Y POR DESTINATARIO, y aqui el motivo no es comodidad: lo llama el CRON
+ * `avisos-diarios`, que recorre TODAS las tiendas con novedades y corre a las 07:00 CR sin nadie
+ * mirando. Envolver CADA emision es lo que impide que una tienda que falle se lleve por delante a
+ * las demas ni tumbe la corrida (R60). LA CORRIDA MANDA, EL AVISO ES CORTESIA.
+ *
+ * Y no es un `catch` vacio (`docs/conventions.md`): `emitirBestEffort` deja el fallo REGISTRADO
+ * con el nombre de la operacion y su causa.
+ *
+ * R44: ni el nombre de la operacion ni el contexto llevan PII — el contexto solo tiene un id de
+ * tienda, un numero de dias, un plazo y una fecha.
+ */
+export function notificarNovedadesSinGestionarCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): NovedadesSinGestionarNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "novedades_sin_gestionar",
+      () => emitirNovedadesSinGestionar(repo, ctx),
+      logger,
+    );
+  };
+}
+
+/**
+ * FICHA 409 (T3.3, R47/R60) — emite «N ordenes esperan volver a su tienda» contra `repo`,
+ * absorbiendo su fallo. Mismo cron, mismo argumento que el de arriba: una zona que falle no puede
+ * dejar sin aviso a las demas ni al ambito global.
+ *
+ * R54: el contexto no lleva PII — un ambito, unos dias y una fecha.
+ */
+export function notificarDevolucionesRepresadasCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): DevolucionesRepresadasNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "devoluciones_represadas",
+      () => emitirDevolucionesRepresadas(repo, ctx),
+      logger,
+    );
+  };
+}
+
 // Bindings de PRODUCCION. Solo el composition root los importa. Resuelven el repositorio en el
 // momento de la emision (no al importar el modulo), para no abrir una conexion por el hecho de
 // que alguien importe este archivo.
@@ -361,3 +429,9 @@ export const notificarWebhookSuscripcionPausadaReal: WebhookSuscripcionPausadaNo
 
 export const notificarGeocodificacionCaidaReal: GeocodificacionCaidaNotificador = async (ctx) =>
   notificarGeocodificacionCaidaCon(repoReal())(ctx);
+
+export const notificarNovedadesSinGestionarReal: NovedadesSinGestionarNotificador = async (ctx) =>
+  notificarNovedadesSinGestionarCon(repoReal())(ctx);
+
+export const notificarDevolucionesRepresadasReal: DevolucionesRepresadasNotificador = async (ctx) =>
+  notificarDevolucionesRepresadasCon(repoReal())(ctx);

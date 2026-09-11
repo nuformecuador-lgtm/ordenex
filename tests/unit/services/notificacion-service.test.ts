@@ -8,10 +8,21 @@ import type {
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { NotificacionService } from "@/lib/services/NotificacionService";
 import { notificacionesConfig } from "@/lib/config/notificaciones";
+import type { NotificacionEvento } from "@/lib/types/notificacion";
+import type { IVigenciaAvisoAgregado } from "@/lib/interfaces/services/IVigenciaAvisoAgregado";
 
 // Feature 146 — B9. Tests unit del service con repositorio FALSO en memoria (sin DB): el
 // repo aplica de verdad el descarte, el limite y la ventana, para que el test compruebe
 // COMPORTAMIENTO y no llamadas. Cubre R3, R28-R33, R35 y R37.
+//
+// FICHA 409 (T5.3) — se AMPLIA con R8, R9, R31, R55, R56, R57 y R58: `porHacer`, el instante
+// relativo resuelto en el servidor y los avisos agregados que se apagan solos.
+//
+// ⚠️ POR QUE ESTOS CASOS SI VALEN CON UN DOBLE, y no es una excusa: `porHacer` NO depende de
+// ningun `where` nuevo — se deriva en el servicio sobre la lista ya cargada—, asi que aqui no hay
+// SQL escondido que el doble pueda estar tapando. Lo que SI es SQL —el conteo de la cifra viva y
+// el predicado de represamiento— vive en `tests/integration/db/aviso-agregado-repository.test.ts`,
+// contra Postgres real. Es la leccion «probar el WHERE donde vive».
 
 const AHORA = new Date("2026-07-27T12:00:00.000Z");
 const now = () => AHORA;
@@ -24,6 +35,8 @@ interface FilaFake {
   createdAt: Date;
   /** Destinatarios que la ven (simplificacion: el alcance real se prueba en B7). */
   visiblePara: string[];
+  /** FICHA 409: el evento es el discriminante de todo (clase, atajo, cifra viva). */
+  evento: NotificacionEvento;
 }
 
 interface LecturaFake {
@@ -59,6 +72,7 @@ class RepoFake implements INotificacionRepository {
         anexo: f.anexo,
         createdAt: f.createdAt,
         leida: this.marca(f.id, input.actor.usuarioId)?.leidaAt != null,
+        evento: f.evento,
       }));
   }
 
@@ -120,6 +134,10 @@ function fila(id: string, opts: Partial<FilaFake> = {}): FilaFake {
     anexo: null,
     createdAt: AHORA,
     visiblePara: ["admin-1", "admin-2"],
+    // `orden_rechazada` es INFORMATIVA para los cuatro roles que la reciben (una notificacion por
+    // orden: en el momento del rechazo nadie decide nada). Sirve de fondo neutro para los casos
+    // que no hablan de `porHacer`.
+    evento: "orden_rechazada",
     ...opts,
   };
 }
@@ -127,8 +145,23 @@ function fila(id: string, opts: Partial<FilaFake> = {}): FilaFake {
 const ADMIN_1: Actor = { usuarioId: "admin-1", rol: "admin", zonaId: null };
 const ADMIN_2: Actor = { usuarioId: "admin-2", rol: "admin", zonaId: null };
 
-function servicioCon(repo: RepoFake) {
-  return new NotificacionService(repo, now);
+/** Resolutor de vigencia FALSO: devuelve lo que se le diga, o lanza si se le pide. */
+function vigenciaFake(
+  respuesta: Partial<Record<NotificacionEvento, number>> | "lanza",
+): IVigenciaAvisoAgregado & { llamadas: Array<{ evento: NotificacionEvento; actor: Actor }> } {
+  const llamadas: Array<{ evento: NotificacionEvento; actor: Actor }> = [];
+  return {
+    llamadas,
+    async cifra(evento, actor) {
+      llamadas.push({ evento, actor });
+      if (respuesta === "lanza") throw new Error("la base no responde");
+      return respuesta[evento] ?? 0;
+    },
+  };
+}
+
+function servicioCon(repo: RepoFake, vigencia?: IVigenciaAvisoAgregado) {
+  return new NotificacionService(repo, now, vigencia ?? vigenciaFake({}));
 }
 
 describe("R28 — el listado devuelve lo visible y no descartado, de mas reciente a mas antiguo", () => {
@@ -149,6 +182,9 @@ describe("R28 — el listado devuelve lo visible y no descartado, de mas recient
 
     const r = await servicioCon(repo).listar(ADMIN_1);
 
+    // FICHA 409: el literal se AMPLIA con los seis campos nuevos y sigue siendo un `toEqual`
+    // exacto —es el contrato del DTO, no un poliz0n—: un campo de mas o de menos lo pone rojo.
+    // Los seis vienen RESUELTOS por el servidor; la campana no clasifica ni compone nada.
     expect(r.items[0]).toEqual({
       id: "n-1",
       notification_type: "box",
@@ -156,8 +192,15 @@ describe("R28 — el listado devuelve lo visible y no descartado, de mas recient
       anexo: "REM-0042",
       read: false,
       createdAt: AHORA.toISOString(),
+      evento: "orden_rechazada",
+      accionable: false,
+      titulo: "desc n-1",
+      detalle: "REM-0042",
+      cuando: "hace un momento",
+      atajo: null,
     });
     expect(r.items[1]).not.toHaveProperty("anexo");
+    expect(r.items[1].detalle).toBeNull();
   });
 });
 
@@ -343,5 +386,189 @@ describe("R37 — repetir la operacion termina con exito y con una sola fila de 
 
     expect(repo.lecturas).toHaveLength(1);
     expect((await service.listar(ADMIN_1)).items).toHaveLength(0);
+  });
+});
+
+// ===========================================================================================
+// FICHA 409 — `porHacer`, el instante relativo y los avisos agregados que se apagan solos
+// ===========================================================================================
+
+describe("409/R8 — el distintivo cuenta LO ACCIONABLE Y VIGENTE, no los mensajes", () => {
+  it("2 accionables + 3 informativas + 1 accionable con cifra viva CERO -> porHacer === 2", async () => {
+    const repo = new RepoFake([
+      // accionables para el rol `admin`
+      fila("acc-1", { evento: "postulacion_mensajero_pendiente" }),
+      fila("acc-2", { evento: "cierre_dia_por_aprobar" }),
+      // informativas para el rol `admin`
+      fila("info-1", { evento: "orden_rechazada" }),
+      fila("info-2", { evento: "carga_masiva_terminada" }),
+      // `cierre_dia_vencido` es ACCIONABLE para el mensajero e INFORMATIVA para la bodega y la
+      // administracion: con la pelota en el tejado del mensajero, el admin no puede aprobar lo
+      // que no se ha enviado.
+      fila("info-3", { evento: "cierre_dia_vencido" }),
+      // accionable PERO agregada, y su cifra viva es 0: no sale y no cuenta (R55).
+      fila("agg-0", { evento: "devoluciones_represadas" }),
+    ]);
+
+    const r = await servicioCon(repo, vigenciaFake({ devoluciones_represadas: 0 })).listar(ADMIN_1);
+
+    expect(r.porHacer).toBe(2);
+    expect(r.items.filter((i) => i.accionable).map((i) => i.id)).toEqual(["acc-1", "acc-2"]);
+    expect(r.items.map((i) => i.id)).not.toContain("agg-0");
+  });
+
+  it("el mismo evento cuenta o no segun el ROL de quien consulta", async () => {
+    // `cierre_dia_vencido` le llega al mensajero como fila dirigida A USUARIO (su
+    // `destinatario_rol` es NULL): quien decide la clase es el rol del ACTOR, no la columna.
+    const repo = new RepoFake([
+      fila("v-1", { evento: "cierre_dia_vencido", visiblePara: ["admin-1", "men-1"] }),
+    ]);
+    const mensajero: Actor = { usuarioId: "men-1", rol: "mensajero", zonaId: null };
+
+    expect((await servicioCon(repo).listar(ADMIN_1)).porHacer).toBe(0);
+    expect((await servicioCon(repo).listar(mensajero)).porHacer).toBe(1);
+  });
+});
+
+describe("409/R9 — el estado de LECTURA no interviene en el conteo", () => {
+  it("marcar todas como leidas no baja porHacer", async () => {
+    const repo = new RepoFake([
+      fila("acc-1", { evento: "postulacion_mensajero_pendiente" }),
+      fila("acc-2", { evento: "cierre_dia_por_aprobar" }),
+    ]);
+    const service = servicioCon(repo);
+
+    expect((await service.listar(ADMIN_1)).porHacer).toBe(2);
+    await service.marcarTodasLeidas(ADMIN_1);
+    const despues = await service.listar(ADMIN_1);
+
+    expect(despues.items.every((i) => i.read)).toBe(true);
+    expect(despues.noLeidas).toBe(0); // los MENSAJES si bajan
+    expect(despues.porHacer).toBe(2); // el TRABAJO no
+  });
+});
+
+describe("409/R31 — el instante relativo se resuelve en el SERVIDOR y viaja como texto", () => {
+  it("un aviso de hace 2 h llega con `cuando` ya en palabras", async () => {
+    const repo = new RepoFake([
+      fila("n-1", { createdAt: new Date(AHORA.getTime() - 2 * 60 * 60 * 1000) }),
+      fila("n-2", { createdAt: new Date(AHORA.getTime() - 40 * 60 * 1000) }),
+    ]);
+
+    const r = await servicioCon(repo).listar(ADMIN_1);
+
+    expect(r.items.find((i) => i.id === "n-1")?.cuando).toBe("hace 2 h");
+    expect(r.items.find((i) => i.id === "n-2")?.cuando).toBe("hace 40 min");
+  });
+});
+
+describe("409/R55 y R56 — un aviso agregado se apaga y se enciende SOLO, sin escribir nada", () => {
+  it("cifra 0 -> ni se ve ni cuenta, y NO se crea fila de lectura ni de descarte", async () => {
+    const repo = new RepoFake([fila("agg", { evento: "novedades_sin_gestionar" })]);
+    const tienda: Actor = { usuarioId: "tienda-1", rol: "adminTienda", zonaId: null };
+    repo.filas[0].visiblePara = ["tienda-1"];
+
+    const r = await servicioCon(repo, vigenciaFake({ novedades_sin_gestionar: 0 })).listar(tienda);
+
+    expect(r.items).toHaveLength(0);
+    expect(r.porHacer).toBe(0);
+    expect(repo.lecturas).toHaveLength(0); // nadie lo leyo, lo marco ni lo descarto
+  });
+
+  it("la MISMA fila vuelve a salir cuando la cifra sube, sin crear una segunda", async () => {
+    const repo = new RepoFake([fila("agg", { evento: "novedades_sin_gestionar" })]);
+    const tienda: Actor = { usuarioId: "tienda-1", rol: "adminTienda", zonaId: null };
+    repo.filas[0].visiblePara = ["tienda-1"];
+
+    const apagada = await servicioCon(repo, vigenciaFake({ novedades_sin_gestionar: 0 })).listar(
+      tienda,
+    );
+    const encendida = await servicioCon(repo, vigenciaFake({ novedades_sin_gestionar: 3 })).listar(
+      tienda,
+    );
+
+    expect(apagada.items).toHaveLength(0);
+    expect(encendida.items.map((i) => i.id)).toEqual(["agg"]);
+    expect(encendida.porHacer).toBe(1);
+    expect(repo.crear).not.toHaveBeenCalled(); // no hay segunda fila: la de hoy ya existe
+    expect(repo.lecturas).toHaveLength(0);
+  });
+});
+
+describe("409/R57 — el numero del panel es la cifra VIVA, no la del instante de la emision", () => {
+  it("la fila se emitio con 5 y el resolutor dice 3: el titulo dice 3", async () => {
+    const repo = new RepoFake([
+      fila("agg", {
+        evento: "novedades_sin_gestionar",
+        descripcion: "La más antigua lleva 3 días en bodega. A los 5 días se rechaza automáticamente.",
+        visiblePara: ["tienda-1"],
+      }),
+    ]);
+    const tienda: Actor = { usuarioId: "tienda-1", rol: "adminTienda", zonaId: null };
+
+    const r = await servicioCon(repo, vigenciaFake({ novedades_sin_gestionar: 3 })).listar(tienda);
+
+    // Literal ESCRITO A MANO, nunca comparado contra la funcion que lo compone.
+    expect(r.items[0].titulo).toBe("3 novedades esperan tu decisión");
+    expect(r.items[0].detalle).toBe(
+      "La más antigua lleva 3 días en bodega. A los 5 días se rechaza automáticamente.",
+    );
+    expect(r.items[0].atajo).toEqual({
+      href: "/novedades?superficie=devolucion",
+      etiqueta: "Gestionar novedades",
+    });
+  });
+
+  it("con UNA sola novedad el titulo va en singular", async () => {
+    const repo = new RepoFake([
+      fila("agg", { evento: "novedades_sin_gestionar", visiblePara: ["tienda-1"] }),
+    ]);
+    const tienda: Actor = { usuarioId: "tienda-1", rol: "adminTienda", zonaId: null };
+
+    const r = await servicioCon(repo, vigenciaFake({ novedades_sin_gestionar: 1 })).listar(tienda);
+
+    expect(r.items[0].titulo).toBe("1 novedad espera tu decisión");
+  });
+
+  it("la cifra se pide UNA vez por evento y con el ACTOR que consulta", async () => {
+    const vigencia = vigenciaFake({ devoluciones_represadas: 4 });
+    const repo = new RepoFake([
+      fila("a", { evento: "devoluciones_represadas" }),
+      fila("b", { evento: "devoluciones_represadas" }),
+      fila("c", { evento: "orden_rechazada" }),
+    ]);
+
+    await servicioCon(repo, vigencia).listar(ADMIN_1);
+
+    expect(vigencia.llamadas).toHaveLength(1);
+    expect(vigencia.llamadas[0].evento).toBe("devoluciones_represadas");
+    expect(vigencia.llamadas[0].actor).toBe(ADMIN_1);
+  });
+
+  it("un actor SIN avisos agregados no paga ni una consulta de vigencia", async () => {
+    const vigencia = vigenciaFake({});
+    const repo = new RepoFake([fila("n-1"), fila("n-2")]);
+
+    await servicioCon(repo, vigencia).listar(ADMIN_1);
+
+    expect(vigencia.llamadas).toHaveLength(0);
+  });
+});
+
+describe("409/R58 — si la cifra viva no se puede resolver, el aviso SALE (nunca campana en blanco)", () => {
+  it("el resolutor lanza: el agregado sale, cuenta, y el resto del listado tambien", async () => {
+    const repo = new RepoFake([
+      fila("agg", { evento: "devoluciones_represadas", descripcion: "La más antigua lleva 8 días en bodega. Coordiná la devolución." }),
+      fila("otra", { evento: "orden_rechazada" }),
+    ]);
+
+    const r = await servicioCon(repo, vigenciaFake("lanza")).listar(ADMIN_1);
+
+    expect(r.items.map((i) => i.id)).toEqual(["agg", "otra"]);
+    expect(r.porHacer).toBe(1);
+    // Sin cifra no se puede componer el titulo con un numero: cae al texto PERSISTIDO, que es real.
+    expect(r.items[0].titulo).toBe(
+      "La más antigua lleva 8 días en bodega. Coordiná la devolución.",
+    );
   });
 });

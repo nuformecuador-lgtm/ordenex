@@ -250,6 +250,10 @@ describe("262 / D7 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // desde la rama de configuracion del job de geocodificacion, y va al `maestro` Y al `admin`.
       // Migracion `20260910120000_notificacion_evento_geocodificacion_caida`.
       "geocodificacion_caida",
+      // FICHA 409 (design §4.2): los DOS avisos AGREGADOS del panel accionable. Migracion
+      // `20260911120000_notificacion_evento_avisos_agregados`, POSTERIOR a la de la 401.
+      "novedades_sin_gestionar",
+      "devoluciones_represadas",
     ]);
   });
 
@@ -278,6 +282,12 @@ describe("262 / D7 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // el mismo motivo: la entidad del aviso es LA JORNADA CR. El corte medido del 2026-09-08
       // cruzo la medianoche, y sin valor propio el aviso del dia 2 no habria existido nunca.
       "geocodificacion_caida_dia",
+      // FICHA 409 (design §4.2): las entidades de los dos avisos AGREGADOS. Llevan EL ALCANCE
+      // DENTRO (`${tiendaId}:${diaCR}` y `${ambito}:${diaCR}`) porque `notificacion_dedupe_key`
+      // no incluye `tienda_id` ni `zona_id`: sin el, la primera tienda de la corrida se llevaria
+      // el aviso y todas las demas quedarian mudas.
+      "novedades_sin_gestionar_dia",
+      "devoluciones_represadas_dia",
     ]);
   });
 
@@ -337,6 +347,10 @@ describeSiHayBase("262 / D7 — la base aplicada, y el DOWN ejercitado de verdad
       // FICHA 401 (design 3.3, 2026-09-09) - «el servicio de mapas esta rechazando nuestras
       // peticiones». Migracion `20260910120000_notificacion_evento_geocodificacion_caida`.
       "geocodificacion_caida",
+      // FICHA 409 (design §4.2): los DOS avisos AGREGADOS del panel accionable. Migracion
+      // `20260911120000_notificacion_evento_avisos_agregados`, POSTERIOR a la de la 401.
+      "novedades_sin_gestionar",
+      "devoluciones_represadas",
     ]);
   });
 
@@ -355,6 +369,12 @@ describeSiHayBase("262 / D7 — la base aplicada, y el DOWN ejercitado de verdad
       "webhook_suscripcion_pausa",
       // FICHA 401 (design 3.3, 2026-09-09) - la entidad del aviso es LA JORNADA CR.
       "geocodificacion_caida_dia",
+      // FICHA 409 (design §4.2): las entidades de los dos avisos AGREGADOS. Llevan EL ALCANCE
+      // DENTRO (`${tiendaId}:${diaCR}` y `${ambito}:${diaCR}`) porque `notificacion_dedupe_key`
+      // no incluye `tienda_id` ni `zona_id`: sin el, la primera tienda de la corrida se llevaria
+      // el aviso y todas las demas quedarian mudas.
+      "novedades_sin_gestionar_dia",
+      "devoluciones_represadas_dia",
     ]);
   });
 

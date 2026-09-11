@@ -56,7 +56,32 @@ export type NotificacionEvento =
   // arreglarlo pero puede no estar delante; el admin no arregla la facturación, pero ESCALA, y
   // para escalar necesita enterarse. Se emite desde la rama de configuración del job, no desde el
   // drenador, y como mucho una vez por jornada CR y por rol.
-  | "geocodificacion_caida";
+  | "geocodificacion_caida"
+  // FICHA 409 (R35/R41/R42) — una tienda tiene NOVEDADES SIN GESTIONAR. Es el primero de los dos
+  // avisos AGREGADOS del arbol: UNA sola notificacion con el NUMERO dentro del texto, jamas una
+  // por orden (R36), emitida por el cron `avisos-diarios` a las 07:00 CR y repetida UNA VEZ POR
+  // DIA CALENDARIO DE COSTA RICA mientras quede al menos una novedad (R41). Destinatario: el rol
+  // `adminTienda` ACOTADO a su tienda.
+  //
+  // ⚠️ SU ENTIDAD ES `${tiendaId}:${diaCR}`, Y EL ALCANCE VA DENTRO A PROPOSITO: ver el comentario
+  // de `novedades_sin_gestionar_dia` mas abajo, donde se explica que sin el solo avisaria la
+  // PRIMERA tienda de la corrida y todas las demas quedarian mudas, sin error y sin log.
+  //
+  // El texto NO PUEDE PROMETER «5 dias» A SECAS (R39/R40): el plazo depende de la causa (5 dias
+  // para `wrong_*`, 24 h para `not_found`) y desde la 276 una novedad en el tope de intentos
+  // escala en la corrida siguiente sin esperar su ventana. Si el lote mezcla causas, el texto
+  // habla SIN plazo.
+  | "novedades_sin_gestionar"
+  // FICHA 409 (R45/R47/R51) — hay ordenes en `por_devolver` REPRESADAS en bodega por encima del
+  // umbral. Segundo aviso AGREGADO: UNA notificacion por AMBITO (la zona del satelite, o el
+  // ambito global de la administracion central) y por rol destinatario, una vez por dia CR.
+  //
+  // ⚠️ EL ESTADO VIGILADO ES `por_devolver` Y ESTA MEDIDO (produccion, 2026-09-10): `por_devolver`
+  // = 27 ordenes, media 2,4 d, maximo 8,2 d, SIETE por encima de 3 d. `devolviendo_a_tienda` = 247
+  // ordenes, media 1,0 d, maximo 1,3 d y NINGUNA por encima de 3 d: ese estado FLUYE y R46 PROHIBE
+  // vigilarlo — avisar sobre el seria ruido puro sobre el cubo mas grande, que es exactamente lo
+  // que esta ficha existe para no volver a hacer.
+  | "devoluciones_represadas";
 
 /** Entidad de origen referenciada (referencia polimorfica, sin FK — design §1.2). */
 export type NotificacionEntidadTipo =
@@ -120,12 +145,54 @@ export type NotificacionEntidadTipo =
   // Y no es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el índice
   // único es PARCIAL, así que saldría un aviso POR EVALUACIÓN. El drenador corre cada minuto: el
   // corte medido de 19 h habría dejado ~2.280 filas en vez de 4.
-  | "geocodificacion_caida_dia";
+  | "geocodificacion_caida_dia"
+  // ⚠️ FICHA 409 (design §4.2) — CUARTO `entidad_tipo` que NO apunta a una fila de tabla, y la
+  // entidad de este aviso es **LA TIENDA Y EL DIA CR JUNTOS**:
+  //
+  //     entidadId = `${tiendaId}:${diaCR}`
+  //
+  // POR QUE EL DIA, y por que ADEMAS la tienda. `notificacion_dedupe_key` es UNIQUE sobre
+  // `(evento, entidad_id, destinatario_rol, destinatario_usuario_id)` con `NULLS NOT DISTINCT` y
+  // `WHERE entidad_id IS NOT NULL`, **el ALCANCE (`tienda_id`, `zona_id`) NO ENTRA en esa clave**
+  // —esta escrito en `NotificacionRepository.columnasDestinatario`— y `crear` ABSORBE el `P2002`
+  // devolviendo `false`.
+  //
+  // Con `entidad_id = diaCR` a secas y destinatario `{rol: adminTienda, tiendaId: T}`, la clave
+  // seria ('novedades_sin_gestionar', '2026-09-11', 'adminTienda', NULL) **PARA TODAS LAS
+  // TIENDAS**: la PRIMERA tienda de la corrida se llevaria su aviso y **TODAS LAS DEMAS quedarian
+  // silenciadas, sin error, sin log y sin nada**. Es el mismo fallo que la 262 documento con
+  // `orden` y que la 403 evito con la racha, y este repo YA LO COMETIO DOS VECES.
+  //
+  // Con la tienda dentro, las dos propiedades son ESTRUCTURALES y no de disciplina:
+  //   · dias distintos ⇒ entidades distintas ⇒ el recordatorio diario sale siempre (R41);
+  //   · tiendas distintas el mismo dia ⇒ entidades distintas ⇒ CADA UNA recibe el suyo (R42).
+  | "novedades_sin_gestionar_dia"
+  // ⚠️ FICHA 409 (design §4.2) — QUINTO `entidad_tipo` que no apunta a una fila de tabla: la
+  // entidad es **EL AMBITO Y EL DIA CR**:
+  //
+  //     entidadId = `${ambito}:${diaCR}`,  con ambito ∈ { "global" } ∪ { zonaId }
+  //
+  // Mismo argumento que el de arriba, aplicado a las ZONAS: sin el ambito dentro, las zonas se
+  // pisarian entre si y solo la primera del recorrido recibiria su aviso. La FORMA es uniforme a
+  // proposito —`${ambito}:${dia}`, con el literal `"global"` para el ambito central—: dos formas
+  // distintas para el mismo evento invitarian a confundirlas al leer una fila, y `"global"` nunca
+  // puede colisionar con un uuid de zona.
+  | "devoluciones_represadas_dia";
 
 /**
  * DTO que viaja al cliente (design §3.1). `read` NO es una columna de `notificacion`:
  * se DERIVA de `notificacion_lectura` del usuario que consulta (D4), por eso dos
  * usuarios del mismo rol pueden ver la misma fila con `read` distinto (R3).
+ *
+ * ⚠️ FICHA 409 (T5.1, R34) — GANA SEIS CAMPOS, Y TODOS SON **ADITIVOS Y OPCIONALES**. El servidor
+ * los puebla SIEMPRE (`NotificacionService.listar`); son opcionales EN EL TIPO porque R34 exige
+ * que un DTO construido con solo los campos vigentes siga tipando, y porque los consumidores que
+ * construyen literales —las suites de la campana— no pueden dejar de compilar por este cambio.
+ * Ninguno cambia el tipo de un campo existente y ninguno se retira: `description` y `anexo` se
+ * CONSERVAN aunque el panel ya no los pinte directamente.
+ *
+ * EL REPARTO, y es la idea entera de la ficha: **el servidor decide y el cliente pinta**. La
+ * campana no clasifica, no compone texto, no calcula tiempo y no conoce rutas por evento.
  */
 export interface NotificacionDTO {
   id: string;
@@ -135,6 +202,31 @@ export interface NotificacionDTO {
   read: boolean;
   /** ISO-8601. */
   createdAt: string;
+
+  // — FICHA 409 —
+  /** El evento de dominio de la fila. Ya estaba en la tabla; hasta hoy no viajaba. */
+  evento?: NotificacionEvento;
+  /**
+   * Resuelto por el CATALOGO con el rol del actor que consulta (`accionDeAviso`), no por el
+   * componente que lo pinta. Es lo que parte el panel en «Requieren tu acción» / «Para tu
+   * información» (R16) y lo que cuenta el distintivo (R8).
+   */
+  accionable?: boolean;
+  /** Lo que se lee en negrita. En los avisos AGREGADOS lleva la cifra VIVA (R57). */
+  titulo?: string;
+  /** La linea de contexto bajo el titulo. `null` cuando no hay ninguna. NUNCA lleva «Anexo:». */
+  detalle?: string | null;
+  /**
+   * El instante relativo YA RESUELTO como texto («hace 2 h», «ayer»). Se calcula EN EL SERVIDOR
+   * (R31) para que la campana no lea el reloj del navegador y no rompa la hidratacion (R32).
+   */
+  cuando?: string;
+  /**
+   * A donde lleva el boton de accion, y como se llama. `null` cuando el par (evento, rol) esta
+   * declarado accionable pero NO hay pantalla que acerque a resolverlo (R4) — hoy solo
+   * `geocodificacion_caida`.
+   */
+  atajo?: { href: string; etiqueta: string } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +261,25 @@ export type ListarNotificacionesServiceResult = {
   status: "ok";
   items: NotificacionDTO[];
   noLeidas: number;
+  /**
+   * FICHA 409 (R8/R9) — CUANTAS COSAS HAY POR HACER, que no es lo mismo que cuantos mensajes hay
+   * sin leer, y ese es el cambio entero de la ficha.
+   *
+   *   porHacer = |{ n ∈ items : accionDeAviso(n.evento, actor.rol).clase === "accionable"
+   *                          && vigente(n) }|
+   *
+   * `items` es EL MISMO conjunto que ya devuelve el listado (visibles por el predicado de la 146,
+   * dentro de la ventana de 30 dias, no descartadas por el actor) y `vigente(n)` es `true` salvo
+   * para los eventos AGREGADOS, donde es `cifraViva(n) > 0`.
+   *
+   * ⚠️ EL ESTADO DE LECTURA NO ENTRA (R9). Marcar todas como leidas NO baja esta cifra: el trabajo
+   * sigue ahi. Es tambien la cifra que dispara el tono de aviso (161/Q8): dos criterios distintos
+   * para el mismo hecho es como se acaba con dos verdades sobre el mismo numero.
+   *
+   * REQUERIDO (no opcional como los campos del DTO): nadie construye este resultado fuera del
+   * servicio, asi que exigirlo no rompe a ningun consumidor y si obliga a poblarlo.
+   */
+  porHacer: number;
 };
 
 export type MarcarNotificacionServiceResult =
@@ -185,7 +296,9 @@ export type NotificarCargaServiceResult = { status: "ok" };
 // ---------------------------------------------------------------------------
 
 export type ListarNotificacionesResult =
-  | { status: "ok"; items: NotificacionDTO[]; noLeidas: number }
+  // FICHA 409: `porHacer` viaja hasta la campana. Ver la nota de
+  // `ListarNotificacionesServiceResult`: cuenta TRABAJO, no mensajes sin leer.
+  | { status: "ok"; items: NotificacionDTO[]; noLeidas: number; porHacer: number }
   | ActionError;
 
 export type MarcarNotificacionResult = { status: "ok" } | ActionError;

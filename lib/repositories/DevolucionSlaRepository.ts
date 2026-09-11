@@ -19,6 +19,32 @@ const RESULTADO_DEVUELTA = "devuelta";
 // literal en el `where` y en el comentario.
 const ORIGEN_ANCLAJE = "anclaje_devolucion";
 
+/**
+ * ⚠️ FICHA 409 (T4.1) — **EL PUNTO UNICO DE LECTURA DEL ANCLA**, extraido para que siga siendo UNO
+ * solo cuando aparece un segundo consumidor.
+ *
+ * La proyeccion es la de siempre: la ULTIMA fila de familia `anclaje_devolucion` de la orden
+ * (`take 1` con `createdAt desc` implementa R15 de la 239 — si la orden dio la vuelta entera y
+ * volvio a `devuelta`, gana el anclaje MAS RECIENTE, no el de la vuelta anterior).
+ *
+ * POR QUE SE EXPORTA, Y POR QUE VIVE AQUI Y NO EN UN MODULO NUEVO. La ficha 409 necesita el MISMO
+ * instante para decirle a la tienda «la mas antigua lleva N dias en bodega»: si el aviso contara
+ * desde otra fecha, diria «3 dias» sobre una orden a la que el cron le cuenta 5. La guardia
+ * `tests/unit/guards/anclaje-vs-intentos.guardia.test.ts` (239/R16) exige que la LECTURA que
+ * deriva el instante viva en UN solo modulo y no se multiplique — y esa exigencia es exactamente
+ * la razon por la que esto se comparte en vez de copiarse. Sacarlo a un modulo propio dejaria a
+ * este archivo sin la consulta que la guardia espera encontrar aqui.
+ *
+ * Y NO se mezcla con el criterio de INTENTOS, que es otra pregunta sobre el mismo hecho y cuyos
+ * errores van en direccion OPUESTA (contar de mas cobra antes; anclar tarde solo retrasa).
+ */
+export const PROYECCION_ANCLAJE_DEVOLUCION = {
+  where: { origenTipo: ORIGEN_ANCLAJE },
+  orderBy: { createdAt: "desc" },
+  take: 1,
+  select: { createdAt: true },
+} as const;
+
 // Feature 49/#10: `$transaction` para que el UPDATE guardado, el INSERT de la gestion sintetica
 // y el append del historial compartan tx (R18/R20). El `tx` del callback expone
 // `ordenHistorialEstado` (choke point) y `gestionOrden`.
@@ -76,12 +102,10 @@ export class DevolucionSlaRepository implements IDevolucionSlaRepository {
           select: { mensajeroId: true, causaDevolucion: true, createdAt: true },
         },
         // Feature 239 (R12/R15): EL ANCLA. La ultima transicion a `devuelta` de esta orden.
-        historialEstados: {
-          where: { origenTipo: ORIGEN_ANCLAJE },
-          orderBy: { createdAt: "desc" },
-          take: 1,
-          select: { createdAt: true },
-        },
+        // Ficha 409: la proyeccion se declara arriba, UNA vez, y la comparte el unico otro lector
+        // del ancla (`AvisoAgregadoRepository`) — para que el aviso de la campana no pueda contar
+        // desde una fecha distinta de la que el cron aplica.
+        historialEstados: PROYECCION_ANCLAJE_DEVOLUCION,
       },
     });
 

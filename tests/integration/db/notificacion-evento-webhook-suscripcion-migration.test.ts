@@ -265,6 +265,10 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
       // peticiones por un problema de configuracion de la cuenta». Lo emite `GeocodeSaludService`
       // desde la rama de configuracion del job de geocodificacion; va al `maestro` Y al `admin`.
       "geocodificacion_caida",
+      // FICHA 409 (design §4.2): los DOS avisos AGREGADOS del panel accionable. Migracion
+      // `20260911120000_notificacion_evento_avisos_agregados`, POSTERIOR a la de la 401.
+      "novedades_sin_gestionar",
+      "devoluciones_represadas",
     ]);
     expect(await valoresDe("notificacion_entidad_tipo")).toEqual([
       ...ENTIDADES_PREVIAS,
@@ -273,6 +277,12 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
       // entidad del aviso es LA JORNADA CR. Mismo argumento por el que esta ficha 403 eligio LA
       // RACHA y no la suscripcion.
       "geocodificacion_caida_dia",
+      // FICHA 409 (design §4.2): las entidades de los dos avisos AGREGADOS. Llevan EL ALCANCE
+      // DENTRO (`${tiendaId}:${diaCR}` y `${ambito}:${diaCR}`) porque `notificacion_dedupe_key`
+      // no incluye `tienda_id` ni `zona_id`: sin el, la primera tienda de la corrida se llevaria
+      // el aviso y todas las demas quedarian mudas.
+      "novedades_sin_gestionar_dia",
+      "devoluciones_represadas_dia",
     ]);
   });
 
