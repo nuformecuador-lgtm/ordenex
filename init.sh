@@ -73,6 +73,21 @@ ok "node $(node -v)"
 # (antes era `pnpm install` a secas) para que un arbol recien creado quede EXACTAMENTE como dice
 # el lockfile, y para que un `package.json` desalineado salga a pantalla en vez de resolverse en
 # silencio con una resolucion nueva.
+#
+# LOS MARCADORES DE ABAJO NO SON DECORACION: LA GUARDIA EJECUTA ESTE BLOQUE (2026-09-11).
+# `tests/unit/guards/dependencias-declaradas-presentes.guardia.test.ts` corta este archivo por
+# `FIN PASO 2` y corre el trozo TAL CUAL con bash, contra un arbol de mentira al que le falta un
+# paquete, para exigir que el paso SALGA EN ROJO. Se hace asi porque la version anterior de esa
+# guardia afirmaba sobre el TEXTO -- pedia que la linea de la invocacion contuviera la palabra
+# `fail` -- y una revision demostro que eso se burla sin esfuerzo: basta cambiar el `|| fail` por
+# un `|| DEPENDENCIAS="no se pudo verificar (el fail se silencio)"` para que los 13 tests sigan en
+# VERDE mientras el gate imprime un `✓ dependencias: ...` sobre un arbol roto y sigue adelante. O
+# sea: la guardia que existe para que el gate deje de mentir se podia silenciar sin que nada se
+# pusiera rojo, que es exactamente la ironia que esta ficha vino a cerrar.
+#
+# Si mueves este bloque, muevete los marcadores con el. Si los borras, la guardia se pone ROJA en
+# vez de quedarse sin nada que medir -- que es la diferencia entre una comprobacion y un adorno.
+# >>> INICIO PASO 2: DEPENDENCIAS (ficha 420) <<<
 if [ -f package.json ]; then
   if [ ! -d node_modules ]; then
     echo "Instalando dependencias..."
@@ -86,6 +101,7 @@ if [ -f package.json ]; then
 else
   warn "no hay package.json todavia (repo recien inicializado)"
 fi
+# >>> FIN PASO 2: DEPENDENCIAS (ficha 420) <<<
 
 # 3. Regla: maximo 2 features in_progress por zona (frontend / backend / fullstack).
 #    Antes era 1; el humano lo subio a 2 (2026-07-22) para permitir dos peticiones

@@ -136,6 +136,73 @@ e894ce9bee8c12071759b414100abe868ab2a4e977627da8e9850bd49eb4bd06 *scripts/verifi
 
 ---
 
+## 4-bis. El superviviente que encontro la revision, y como se cerro
+
+**El hallazgo (M2).** La primera version de la guardia afirmaba sobre el TEXTO de `init.sh`:
+buscaba la linea que invoca el verificador y pedia que contuviera la palabra `fail`. Se burla sin
+esfuerzo. Sustituyendo
+
+```sh
+DEPENDENCIAS=$(node scripts/verificar-dependencias.mjs)  || fail "faltan dependencias declaradas..."
+```
+
+por
+
+```sh
+DEPENDENCIAS=$(node scripts/verificar-dependencias.mjs)  || DEPENDENCIAS="no se pudo verificar (el fail se silencio)"
+```
+
+—que conserva la palabra— los **13 tests seguian en VERDE** (reproducido antes de arreglar nada) y
+el gate, sobre un arbol al que le falta `web-push`, imprimia:
+
+```
+falta 1 de las 58 dependencias declaradas en package.json:
+    - web-push
+✓ dependencias: no se pudo verificar (el fail se silencio)      <-- VERDE, y SIGUE ADELANTE
+```
+
+La guardia que existe para que el gate deje de mentir se podia silenciar sin que nada se pusiera
+rojo. La misma ironia que la ficha vino a cerrar, un piso mas abajo.
+
+**Que se hizo: se defendio LA PROPIEDAD, no se atornillo la mutacion.** El arreglo propuesto era
+anclar la asercion a la forma exacta de la invocacion; eso habria matado *esa* linea y dejado viva
+la siguiente. En su lugar, `init.sh` lleva ahora marcadores `>>> INICIO/FIN PASO 2 <<<`, y la
+guardia **recorta el paso 2 real y lo EJECUTA con bash** contra un arbol de mentira al que le falta
+un paquete, exigiendo (a) codigo de salida no-cero, (b) que se nombre el paquete y (c) que **no**
+se imprima el visto bueno. Se ejecuta el prefijo entero del archivo, asi que corren el
+`set -euo pipefail` y las funciones `fail`/`ok`/`warn` **reales**: no es una copia de la cosa.
+
+**Medido: 7 variantes aplicadas una a una, cada una revertida por copia con SHA256 comparado.**
+
+| variante | ¿muere? | lectura |
+| --- | --- | --- |
+| **M2** — `\|\| DEPENDENCIAS="…(el fail se silencio)"` (la del reviewer) | **MUERE** | el hallazgo, cerrado |
+| **V2** — `\|\| true` | **MUERE** | |
+| **V3** — `fail` degradado a `warn` | **MUERE** | |
+| **V4** — `if ! node …; then echo "aviso"; fi` (sin `\|\|`, sin `fail`) | **MUERE** (2 tests) | otra ESTRUCTURA, no otra redaccion |
+| **V5** — la llamada partida en dos lineas con `\` y silenciada | **MUERE** | |
+| **V1** — espacios y tabuladores distintos, codigo **correcto** | **sobrevive** | **correcto**: no es una mutacion de comportamiento |
+| **V6** — sin `\|\|` ninguno, confiando en `set -e` | **sobrevive** | **superviviente legitimo, ver abajo** |
+
+**V6 es un limite declarado, no un agujero.** `DEPENDENCIAS=$(…)` a secas, bajo `set -e`, **sigue
+cortando**: la asignacion hereda el codigo de la sustitucion, `set -e` dispara y el `ok` no llega a
+imprimirse. La guardia lo midio -no lo dedujo- y por eso lo deja pasar: el comportamiento que
+protege se mantiene. Lo que se pierde con V6 es el **mensaje** `✗ faltan dependencias declaradas`,
+no el corte. Esta guardia defiende «el paso corta y no da el visto bueno», **no** «el mensaje de
+`fail` es exactamente ese»; pedir lo segundo volveria a ser una asercion sobre texto, que es de
+donde venimos.
+
+**Otro limite declarado:** el bloque se ejecuta **en aislamiento**. No se prueba que el `exit 1` de
+`fail` detenga al `init.sh` completo (de eso responden `set -e` y el propio `exit`), ni se cubren
+los demas pasos del gate. Y si alguien borra los marcadores, la guardia **lanza y se pone roja** en
+vez de quedarse sin nada que medir.
+
+**Fuera de alcance por decision del coordinador:** `peerDependencies` y la comprobacion de
+versiones siguen sin cubrirse (ya estaban declarados como limite en `design.md`). Si se corrigio la
+errata de «90 paquetes» -> **58**, en dos sitios de `design.md`.
+
+---
+
 ## 5. Archivos
 
 **Creados**
@@ -194,8 +261,9 @@ LINT_EXIT=0
 ### `./init.sh` completo — DOS corridas
 
 `init.sh` está en `RUTAS_SENSIBLES`, así que el modo rápido **se niega solo** ante este diff: el
-gate de esta ficha es el completo, sin atajo. Las dos corridas con `INIT_EXIT=$?` **escrito dentro
-del log**.
+gate de esta ficha es el completo, sin atajo. **Tres** corridas, todas con `INIT_EXIT=$?` **escrito
+dentro del log**. La que vale es la tercera: es la única posterior al arreglo del superviviente
+(§4-bis) y al merge de `origin/dev` @ `9dca942a` (la 421, 31 archivos, cero solape).
 
 | | corrida 1 (`/r/wt/wt420_gate_completo.log`) | corrida 2 (`/r/wt/wt420_gate_completo_2.log`) |
 | --- | --- | --- |
@@ -206,6 +274,29 @@ del log**.
 | archivo rojo | `tests/integration/recuperar-contrasena-form.test.tsx` | `tests/components/descarga/CierresDescargaColumnas.test.tsx` |
 | `INIT_EXIT` | 1 | 1 |
 | duración | 828 s | 1406 s (máquina más cargada) |
+
+### Corrida 3 — la definitiva, VERDE (`/r/wt/wt420_gate_completo_3.log`)
+
+Tras cerrar el superviviente y mergear `origin/dev` @ `9dca942a`:
+
+```
+== Arnes SDD :: init (modo: completo) ==
+✓ node v24.13.0
+✓ dependencias: 58 declaradas, todas presentes
+✓ feature_list.json: sin ids duplicados (416 fichas), cupo por zona respetado (in_progress=0) y specs en su sitio
+...
+ Test Files  1814 passed | 130 skipped (1944)
+      Tests  26725 passed | 1493 skipped (28218)
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1944 ejecutado(s), todos en el baseline conocido)
+== init OK ==
+INIT_EXIT=0
+```
+
+**Cero rojos, ni propios ni flakes.** El paso 3 ya no bloquea: el coordinador arregló en `dev` las
+fichas `in_progress` sin spec, así que **no se necesitó ningún marcador local** en esta corrida.
+Las suites de migración de la 421 (`notificacion-evento-*`) pasan.
+
+### Corridas 1 y 2 — anteriores al arreglo del superviviente
 
 **Los dos rojos son flakes de saturación, no míos, y NO se han baselineado.** Es lo que
 `docs/verification.md` describe («2-5 flakes que cambian de sitio entre corridas») y lo que el
@@ -232,11 +323,12 @@ prohíbe («nunca solo para pasar el gate»).
 ### ⚠️ HUECO DECLARADO: este verde NO cubre la capa de datos
 
 ```
-! sin DATABASE_URL: 170 archivos de tests contra Postgres NO se van a ejecutar.
+! sin DATABASE_URL: 171 archivos de tests contra Postgres NO se van a ejecutar.
+! recuerda: este verde NO incluye los 171 archivos de tests contra Postgres (sin DATABASE_URL se saltaron).
 ```
 
-De los **129 archivos saltados, los 129 son de `tests/integration/`**. Los otros 26 tests saltados
-son los de siempre (17 `AnaliticaPage` + 9 `AnaliticaShell`). No se pudo conseguir una
+De los **130 archivos saltados en la corrida 3, los 130 son de `tests/integration/`** (cero fuera
+de ahí). Los otros tests saltados son los de siempre (17 `AnaliticaPage` + 9 `AnaliticaShell`). No se pudo conseguir una
 `DATABASE_URL`: el worktree no hereda el `.env` (vive solo en el árbol principal) y **leerlo está
 bloqueado por el clasificador de permisos de esta sesión**. No se copió ni se enlazó el `.env`, que
 es la política del repo.
@@ -247,7 +339,7 @@ una línea de la capa de datos —`init.sh`, `scripts/verificar-dependencias.mjs
 SQL. Pero eso es un razonamiento, no una medición: si el leader quiere el gate con base, hay que
 correrlo desde el árbol principal o exportando `DATABASE_URL` en la sesión.
 
-### Nota sobre la ficha 421 (en paralelo)
+### Nota sobre la ficha 421 (ya resuelta)
 
 `scripts/validar-feature-list.mjs` exige carpeta de specs a toda ficha `in_progress`, y la **421**
 —que no es mía y se está escribiendo a la vez— todavía no la tiene en `origin/dev`. Eso deja el
@@ -258,9 +350,12 @@ correrlo desde el árbol principal o exportando `DATABASE_URL` en la sesión.
 ✗ feature_list.json invalido (el detalle esta justo arriba)
 ```
 
-Para poder correr el gate completo se creó un marcador **local y temporal**
+Para poder correr las corridas 1 y 2 se usó un marcador **local y temporal**
 (`specs/421-TEMPORAL-NO-COMMITEAR/`), **borrado antes de commitear** y verificado con
 `git status`. No se tocó `feature_list.json` ni se escribió nada en el spec real de la 421.
+
+**Ya no hace falta:** el coordinador corrigió las fichas `in_progress` sin spec en `dev`, y la 421
+se mergeó. La corrida 3 pasa el paso 3 sin marcador de ningún tipo.
 
 ---
 
@@ -268,6 +363,9 @@ Para poder correr el gate completo se creó un marcador **local y temporal**
 
 **Hecho y demostrado con el rojo:** quitar una dependencia del árbol ahora corta el gate **en el
 paso de dependencias**, citando el paquete por su nombre, en vez de pasar en verde y reventar dos
-pasos más tarde (o, peor y también medido, no reventar en absoluto). Las dos mutaciones de control
-murieron; los únicos rojos del gate completo son flakes de saturación que pasan 3/3 aislados y no
-se han baselineado; el hueco de `DATABASE_URL` queda declarado, no tapado.
+pasos más tarde (o, peor y también medido, no reventar en absoluto). El superviviente que encontró
+la revisión está cerrado **defendiendo la propiedad, no atornillando la mutación**: el paso 2 se
+EJECUTA, y con él mueren M2 y cuatro variantes más —incluida una de estructura distinta—; los dos
+supervivientes que quedan son legítimos y están declarados. Gate completo **VERDE, `INIT_EXIT=0`,
+cero rojos**. El hueco de `DATABASE_URL` (130 archivos de `tests/integration/`) queda declarado, no
+tapado.

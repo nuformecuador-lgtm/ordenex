@@ -226,18 +226,138 @@ describe("guardia 420 — el verificador de dependencias", () => {
   });
 });
 
+// ---------------------------------------------------------------------------------------------
+// EL PASO 2 DE init.sh SE EJECUTA, NO SE LEE (revision de la 420, 2026-09-11)
+// ---------------------------------------------------------------------------------------------
+//
+// POR QUE. La primera version de esta guardia afirmaba sobre el TEXTO: buscaba la linea que
+// invoca el verificador y pedia que contuviera la palabra `fail`. Una revision demostro que eso
+// se burla sin esfuerzo. Sustituyendo el `|| fail "faltan dependencias..."` por un
+// `|| DEPENDENCIAS="no se pudo verificar (el fail se silencio)"` -- que conserva la palabra --
+// los 13 tests seguian EN VERDE (medido) y el gate, sobre un arbol al que le falta web-push,
+// imprimia su visto bueno con ese texto dentro y SEGUIA ADELANTE. La guardia que existe para que
+// el gate deje de mentir se podia silenciar sin que nada se pusiera rojo: la misma ironia que la
+// ficha vino a cerrar, un piso mas abajo.
+//
+// QUE SE HIZO, Y QUE NO. NO se ha anclado la asercion a la forma literal de esa linea: eso
+// mataria ESA mutacion y dejaria viva la siguiente -- un espacio de mas, la llamada partida en
+// dos lineas, un `|| true`, un `if ! node ...; then echo; fi` --. Lo que se comprueba es la
+// PROPIEDAD: se recorta el paso 2 REAL de init.sh por su marcador, se ejecuta con bash contra un
+// arbol de mentira al que le falta un paquete, y se exige que termine en ROJO sin imprimir el
+// visto bueno. Cualquier forma de silenciar el fallo -conocida o no- cambia ese desenlace.
+//
+// SE EJECUTA EL PREFIJO ENTERO DEL ARCHIVO (de la linea 1 al marcador de fin), no un extracto
+// suelto: asi corren el `set -euo pipefail`, los colores y las funciones fail/ok/warn REALES.
+// Reescribirlas aqui seria probar una copia de la cosa en vez de la cosa.
+//
+// LIMITE DECLARADO: esto mide el paso 2 EN AISLAMIENTO. No prueba que el corte detenga al init.sh
+// completo -de eso responden `set -e` y el `exit 1` de `fail`-, ni cubre los demas pasos del gate.
+
+const MARCA_FIN = ">>> FIN PASO 2: DEPENDENCIAS (ficha 420) <<<";
+
+/**
+ * El paso 2 tal y como esta escrito hoy, precedido de todo lo que init.sh define antes de el.
+ * Si el marcador desaparece esto LANZA y la guardia se pone roja: una comprobacion que se queda
+ * sin nada que medir tiene que gritar, no aprobar por vacio.
+ */
+function guionDelPasoDeDependencias(): string {
+  const init = readFileSync(INIT_SH, "utf8");
+  const corte = init.indexOf(MARCA_FIN);
+  if (corte === -1) {
+    throw new Error(
+      `init.sh ya no tiene el marcador "${MARCA_FIN}": la guardia no puede ejecutar el paso 2. ` +
+        "Si moviste el bloque, muevete los marcadores con el.",
+    );
+  }
+  return init.slice(0, corte + MARCA_FIN.length);
+}
+
+/** Git Bash no siempre esta en el PATH del proceso de vitest, pero init.sh NO corre sin el. */
+function rutaDeBash(): string {
+  const candidatos = ["bash", "C:/Program Files/Git/bin/bash.exe"];
+  for (const candidato of candidatos) {
+    const prueba = spawnSync(candidato, ["-c", "exit 0"]);
+    if (!prueba.error && prueba.status === 0) return candidato;
+  }
+  // NO se salta el test: sin bash no se puede correr ./init.sh, o sea que no se puede verificar
+  // nada en este repo. Un skip aqui dejaria el hueco tapado con un verde.
+  throw new Error(`no se encontro bash (probados: ${candidatos.join(", ")})`);
+}
+
+/** Corre el paso 2 real de init.sh con `raiz` como directorio de trabajo. */
+function correrPasoDeDependencias(raiz: string) {
+  const guion = path.join(raiz, "paso-2-recortado.sh");
+  writeFileSync(guion, guionDelPasoDeDependencias());
+  const proceso = spawnSync(rutaDeBash(), [guion], { cwd: raiz, encoding: "utf8" });
+  return {
+    codigo: proceso.status,
+    todo: `${proceso.stdout ?? ""}${proceso.stderr ?? ""}`,
+  };
+}
+
+/**
+ * Arbol de mentira que ademas lleva SU COPIA del verificador, para que el paso 2 lo encuentre en
+ * scripts/ como lo encuentra en el repo. Sin esto el rojo llegaria por "no existe el archivo",
+ * que es el desenlace correcto por el motivo equivocado.
+ */
+function arbolConVerificador(opciones: Parameters<typeof arbolFalso>[0]): string {
+  const raiz = arbolFalso(opciones);
+  mkdirSync(path.join(raiz, "scripts"), { recursive: true });
+  writeFileSync(
+    path.join(raiz, "scripts", "verificar-dependencias.mjs"),
+    readFileSync(VERIFICADOR, "utf8"),
+  );
+  return raiz;
+}
+
+describe("guardia 420 — el paso 2 de init.sh, EJECUTADO", () => {
+  it("R2/R6 — con una dependencia ausente el paso CORTA en rojo y NO da el visto bueno", () => {
+    const raiz = arbolConVerificador({
+      dependencias: { zod: "^4.0.0", "web-push": "^3.6.7" },
+      instalados: ["zod"],
+    });
+
+    const { codigo, todo } = correrPasoDeDependencias(raiz);
+
+    // Lo que de verdad importa: el paso termina en NO-CERO.
+    expect(
+      codigo,
+      `el paso 2 termino en ${codigo} sobre un arbol al que le falta web-push. Salida:\n${todo}`,
+    ).not.toBe(0);
+    // Y lo dice con el nombre del paquete, que es el requisito.
+    expect(todo).toContain("web-push");
+    // Y NO imprime el visto bueno. Esta es la asercion que mata al `fail` silenciado: aunque el
+    // codigo acabara siendo no-cero por otro motivo, el `ok` habria salido igual.
+    expect(todo).not.toContain("dependencias: ");
+  });
+
+  it("R4 — con el arbol completo el paso pasa y da el visto bueno con la cifra", () => {
+    // La otra mitad del par. Sin este, un paso que fallara SIEMPRE tambien pasaria el test de
+    // arriba, y el gate quedaria en rojo permanente -- que es otra forma de no medir nada.
+    const raiz = arbolConVerificador({
+      dependencias: { zod: "^4.0.0", "web-push": "^3.6.7" },
+      devDependencias: { vitest: "^4.0.0" },
+      instalados: ["zod", "web-push", "vitest"],
+    });
+
+    const { codigo, todo } = correrPasoDeDependencias(raiz);
+
+    expect(codigo, todo).toBe(0);
+    expect(todo).toContain("dependencias: 3 declaradas, todas presentes");
+  });
+});
+
 describe("guardia 420 — el gate LLAMA al verificador", () => {
   const init = readFileSync(INIT_SH, "utf8");
 
-  it("R6 — init.sh invoca scripts/verificar-dependencias.mjs y FALLA con el", () => {
+  it("R6 — init.sh invoca scripts/verificar-dependencias.mjs", () => {
     // La leccion del composition root: que el script exista no prueba nada si nadie lo llama.
     // Un verificador huerfano es el mismo fallo mudo que esta ficha cierra, un piso mas abajo.
-    const invocacion = init
-      .split("\n")
-      .find((linea) => linea.includes("scripts/verificar-dependencias.mjs"));
-
-    expect(invocacion, "init.sh ya no invoca el verificador de dependencias").toBeDefined();
-    expect(invocacion).toContain("fail");
+    //
+    // Esta comprobacion es de TEXTO y es deliberadamente DEBIL: ya no afirma nada sobre el
+    // `|| fail` -- eso lo mide, EJECUTANDOLO, el bloque de arriba --. Se queda porque da el
+    // mensaje claro y barato del caso mas tonto y mas probable: que alguien borre la llamada.
+    expect(init).toContain("scripts/verificar-dependencias.mjs");
   });
 
   it("R2 — el visto bueno de dependencias ya no cuelga solo de que exista la carpeta", () => {

@@ -43,7 +43,7 @@ tests/unit/guards/dependencias-declaradas-presentes.guardia.test.ts   # los test
   legible. Se comprueba el `package.json` de dentro y no la carpeta porque en pnpm
   `node_modules/<nombre>` es un **enlace simbólico** al store virtual: un enlace **roto** supera
   un `existsSync` sobre el directorio en algunos casos y no supera la lectura del manifiesto.
-- Si `node_modules` no existe, lo dice con su propio mensaje: no son 90 paquetes ausentes, es un
+- Si `node_modules` no existe, lo dice con su propio mensaje: no son 58 paquetes ausentes, es un
   árbol sin instalar (R5 lo resuelve en `init.sh`, instalando).
 - Verde → STDOUT: `N declaradas, todas presentes` (cifra medida, R4).
   Rojo → STDERR: una línea por paquete ausente, con el comando de reparación, y `exit 1`.
@@ -74,7 +74,7 @@ resolución nueva.
 **A1 — correr `pnpm install --frozen-lockfile` SIEMPRE, en vez de solo cuando falta el
 directorio.** Es idempotente, así que "arreglaría" el caso medido sin preguntar.
 
-Medido el 2026-09-11 en este worktree (`R:/wt/wt420`, Windows 11, pnpm 10.10.0, 90 paquetes
+Medido el 2026-09-11 en este worktree (`R:/wt/wt420`, Windows 11, pnpm 10.10.0, 58 paquetes
 declarados), árbol ya instalado y sin nada que hacer:
 
 | corrida | tiempo |
