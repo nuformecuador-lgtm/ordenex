@@ -22,6 +22,18 @@ export interface IVigenciaAvisoAgregado {
    *
    * Solo se invoca con eventos AGREGADOS. Con cualquier otro LANZA: llamarla para un evento que no
    * lleva cifra es un error de programacion, y un `0` de cortesia ocultaria un aviso vivo.
+   *
+   * FICHA 417 (R1-R4) — LANZA TAMBIEN CUANDO EL ACTOR NO TIENE EL AMBITO QUE EL AVISO PIDE. Son
+   * dos casos mas del mismo criterio —*si el ambito del actor no existe, se falla; no se inventa
+   * uno*— y se declaran aqui para que el contrato no diga menos de lo que la implementacion hace:
+   *   · `devoluciones_represadas` con un `adminSatelite` SIN zona util (ausente, `null` o `""`):
+   *     su ambito seria `null`, que NO es «su zona» sino TODO EL SISTEMA;
+   *   · `novedades_sin_gestionar` con un actor que NO es `adminTienda`: su `usuarioId` no
+   *     identifica ninguna tienda, asi que el conteo solo podria dar `0` y el aviso se apagaria
+   *     (R55) sin que nadie lo leyera.
+   * En los dos casos NO se consulta al repositorio y el error NOMBRA la causa. Quien lo llama
+   * (`NotificacionService.cifrasVivas`) lo registra y muestra el aviso SIN numero (R58): lanzar
+   * aqui no rompe ninguna pantalla, y devolver un numero inventado si romperia el ambito.
    */
   cifra(evento: NotificacionEvento, actor: Actor): Promise<number>;
 }
