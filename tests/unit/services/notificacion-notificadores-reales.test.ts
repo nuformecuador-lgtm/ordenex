@@ -677,11 +677,24 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     );
   });
 
-  it("lib/actions/cierres-admin.ts inyecta el notificador real", () => {
-    // FEATURE 271 (T6.6, R42): el aviso del RECHAZO. Sin esta linea el service se construye con
-    // su default NO-OP y el rechazo sigue siendo mudo en produccion con toda la suite en verde —
-    // exactamente el fallo que este bloque de guardias existe para nombrar.
-    expect(leer("lib", "actions", "cierres-admin.ts")).toContain("notificarMensajeroBloqueadoReal");
+  it("lib/actions/cierres-admin.ts inyecta LOS DOS notificadores reales que cablea", () => {
+    // FEATURE 271 (T6.6, R42): el aviso de bloqueo que sigue al RECHAZO.
+    // FICHA 412 (T5.4, R6): el aviso de «tu cierre fue rechazado», que es OTRO notificador y otro
+    // argumento del mismo `new CierresAdminService(...)`. Sin esa linea el service se construye
+    // con su default NO-OP y el rechazo vuelve a ser mudo en produccion con toda la suite en
+    // verde — exactamente el fallo que este bloque de guardias existe para nombrar.
+    //
+    // ⚠️ Y SE AFIRMA SOBRE EL **USO EFECTIVO** (sin imports ni comentarios), no sobre el fichero
+    // entero. Medido en este mismo repo: con un `toContain` a secas, borrar la linea del cableado
+    // deja el test EN VERDE, porque el import de arriba sigue conteniendo el nombre. Es el fallo
+    // del cron reproducido dentro de su propia guardia.
+    const uso = fuenteSinImportsNiComentarios(leer("lib", "actions", "cierres-admin.ts"));
+    expect(uso).toContain("notificarMensajeroBloqueadoReal");
+    expect(uso).toContain("notificarCierreDiaRechazadoReal");
+    // Y los DOS dentro de la construccion del service, no sueltos en cualquier sitio del fichero.
+    expect(uso).toMatch(
+      /new CierresAdminService\([\s\S]*notificarMensajeroBloqueadoReal[\s\S]*notificarCierreDiaRechazadoReal[\s\S]*\)/,
+    );
   });
 
   // El titulo NO lleva el numero a proposito: decia «los TRES» cuando eran cinco y «los CINCO»

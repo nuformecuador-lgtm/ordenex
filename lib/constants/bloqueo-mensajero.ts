@@ -45,8 +45,15 @@ import { fechaLegible } from "@/lib/utils/dia-reparto-textos";
  * tienda seguia permitida. Las dos las RECHAZA el servidor desde la 271. Un aviso que
  * permite mas de lo que el servidor acepta manda al mensajero al mostrador de la tienda a que le
  * digan que no — es el fallo que la 241 documento al reves (alli prohibia de mas).
+ *
+ * ⚠️ FICHA 412 (T4.1, R14) — PASA DE PRIVADA A **EXPORTADA**, sin cambiar su valor ni una coma.
+ * El aviso de «tu cierre fue rechazado» (`textoCierreRechazadoMensajero`, `lib/notificaciones/
+ * emitir.ts`) la IMPORTA en vez de reescribirla. Ya hay TRES redacciones de esta misma idea en el
+ * arbol (esta, la de `textoCierreVencidoMensajero` y la de la pantalla): la ficha 412 no anade una
+ * cuarta, porque el dia que el servidor cambie lo que rechaza habria que encontrar las cuatro. Una
+ * guardia de arbol (`bloqueo-textos.test.ts`) afirma que la frase aparece UNA SOLA VEZ en el repo.
  */
-const NO_PUEDES = "Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo.";
+export const NO_PUEDES = "Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo.";
 
 /** El puntero de los portales que NO son «Cierre del día»: la unica diferencia admitida (R52). */
 const IR_A_CIERRE = "Ve a «Cierre del día» para enviarlo a aprobación.";

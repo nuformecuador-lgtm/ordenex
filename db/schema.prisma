@@ -2667,6 +2667,14 @@ enum NotificacionEvento {
   // ordenes, media 2,4 d, maximo 8,2 d, SIETE por encima de 3 d. `devolviendo_a_tienda` = 247
   // ordenes y NINGUNA por encima de 3 d: ese estado FLUYE y R46 prohibe vigilarlo.
   devoluciones_represadas
+  // Ficha 412 (R1/R2/R7) - al mensajero le RECHAZARON su cierre del dia. Destinatario UNICO: el
+  // mensajero dueno del cierre; la administracion sigue recibiendo su
+  // `mensajero_bloqueado_por_cierres` de siempre, sin cambios (R18). Se emite SIEMPRE que el
+  // rechazo CONFIRME su escritura, deje bloqueado al mensajero o no -- porque hasta hoy NINGUN
+  // aviso del sistema decia la palabra «rechazado» y el mensajero leia exactamente lo mismo que
+  // por un cierre VENCIDO, cuando solo el rechazo le exige CORREGIR algo antes de reenviar.
+  // Su entidad es `cierre_dia_rechazo` (mas abajo), y lleva el INSTANTE del rechazo dentro.
+  cierre_dia_rechazado
 
   @@map("notificacion_evento")
 }
@@ -2724,6 +2732,28 @@ enum NotificacionEntidadTipo {
   // por el mismo motivo que el de arriba: sin el ambito dentro, LAS ZONAS SE PISAN ENTRE SI y
   // solo la primera del recorrido recibiria su aviso.
   devoluciones_represadas_dia
+  // Ficha 412 (design 3) - SEXTO `entidad_tipo` que NO apunta a una fila de tabla: la entidad de
+  // este aviso es EL RECHAZO, no el cierre (`entidad_id = '<cierre_id>:<resuelto_at ISO>'`).
+  //
+  // ⚠️ POR QUE EL INSTANTE VA DENTRO, Y ES LA DECISION QUE EVITA UN SILENCIO TOTAL.
+  // `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+  // destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`, y
+  // `NotificacionRepository.crear` ABSORBE el `P2002`. Con `entidad_id = <cierre_id>` a secas la
+  // clave admitiria UNA sola fila por (evento, cierre, mensajero) PARA SIEMPRE -- el indice no
+  // mira el estado de lectura-- y como `rechazado` es RE-SOLICITABLE y `transicionarASolicitado`
+  // REUTILIZA LA MISMA FILA de `cierre_dia`, el ciclo normal de esta pantalla --rechazo,
+  // correccion, rechazo-- dejaria el SEGUNDO rechazo MUDO: sin error, sin log y sin nada. Es el
+  // fallo que documentaron la 262 (con `orden`) y la 403 (con la suscripcion).
+  //
+  // Con el instante, las dos propiedades son ESTRUCTURALES y no de disciplina:
+  //   · dos rechazos del mismo cierre => dos `resuelto_at` => dos entidades => DOS avisos (R7);
+  //   · el MISMO rechazo emitido dos veces => misma entidad => UNO solo (R8/R9, lo decide el
+  //     indice unico y no un `if`, asi que una carrera no lo burla).
+  //
+  // Y NO es el dia CR (alternativa A2): el ciclo rechazo -> correccion -> rechazo cabe entero
+  // dentro del mismo dia. El dia es el grano de un RECORDATORIO que se repite mientras dure un
+  // estado (`gasto_fijo_cobro_dia`, `geocodificacion_caida_dia`), no el de un HECHO repetible.
+  cierre_dia_rechazo
 
   @@map("notificacion_entidad_tipo")
 }

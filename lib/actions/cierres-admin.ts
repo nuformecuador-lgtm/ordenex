@@ -14,7 +14,10 @@ import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService"
 import { WalletMensajeroFeedService } from "@/lib/services/WalletMensajeroFeedService";
 import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
-import { notificarMensajeroBloqueadoReal } from "@/lib/notificaciones/notificadores";
+import {
+  notificarCierreDiaRechazadoReal,
+  notificarMensajeroBloqueadoReal,
+} from "@/lib/notificaciones/notificadores";
 // FICHA 315: el timbre de la liberacion de reprogramadas al aprobar. `buildLiberarReprogramadas
 // Service` es el MISMO ensamblaje que usa el cron de las 00:00 CR (90/R22).
 import { liberarAlAprobarCierreCon } from "@/lib/services/liberacion-al-aprobar-cierre";
@@ -146,6 +149,14 @@ function buildService(): ICierresAdminService {
     // Reusa `buildLiberarReprogramadasService()`, el MISMO ensamblaje que usa el cron: dos
     // cableados distintos del mismo servicio serian dos comportamientos que pueden divergir.
     liberarAlAprobarCierreCon(buildLiberarReprogramadasService()),
+    // FICHA 412 (T5.4, R6): COMPOSITION ROOT del aviso «tu cierre fue rechazado». Sin esta linea
+    // el servicio se construye con su default NO-OP y el rechazo vuelve a ser mudo en produccion
+    // con toda la suite en verde — el mismo fallo que la 271 y la 315 documentan aqui arriba, y
+    // la familia de «2 de 7 notificadores muertos». La guardia de
+    // `tests/unit/services/notificacion-notificadores-reales.test.ts` afirma que este argumento
+    // se PASA, no que el simbolo se importe: se midio que con un `toContain` sobre el fichero
+    // entero, borrar esta linea deja el test en verde porque el import de arriba la contiene.
+    notificarCierreDiaRechazadoReal,
   );
 }
 

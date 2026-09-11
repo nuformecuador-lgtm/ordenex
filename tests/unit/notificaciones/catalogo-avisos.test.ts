@@ -26,9 +26,10 @@ describe("R1 — el catalogo declara TODOS los eventos del enum, ni uno menos", 
 
     // AUTOCOMPROBACION: si la extraccion del enum se rompiera, la lista quedaria vacia y el
     // `toEqual` de abajo pasaria comparando dos listas vacias sin haber comprobado nada.
-    expect(delEnum.length).toBeGreaterThanOrEqual(13);
+    expect(delEnum.length).toBeGreaterThanOrEqual(14);
     expect(delEnum).toContain("novedades_sin_gestionar");
     expect(delEnum).toContain("devoluciones_represadas");
+    expect(delEnum).toContain("cierre_dia_rechazado"); // ficha 412
 
     expect(delCatalogo).toEqual(delEnum);
   });
@@ -79,6 +80,28 @@ describe("R2 — un mismo evento puede pedir cosas distintas a roles distintos",
 
     expect(mensajero.clase === "accionable" && mensajero.atajo?.href).toBe("/cierre-dia");
     expect(bodega.clase === "accionable" && bodega.atajo?.href).toBe("/cierres-admin");
+  });
+
+  it("⭑ 412/R20/R21: `cierre_dia_rechazado` es ACCIONABLE para el mensajero, y sólo para él", () => {
+    // Las tres condiciones de accionable: pide una accion (revisarlo, corregirlo y reenviarlo),
+    // tiene consecuencia si no se hace (no se le liquida y sigue bloqueado) y EL puede resolverla.
+    // El destino es `/cierre-dia` —donde EJECUTA la re-solicitud—, el mismo sitio al que llevan
+    // `cierre_dia_vencido` y `mensajero_bloqueado_por_cierres`: tres avisos de su cierre, un solo
+    // sitio al que ir. Literales escritos a mano, no leidos del catalogo.
+    expect(accionDeAviso("cierre_dia_rechazado", "mensajero")).toEqual({
+      clase: "accionable",
+      atajo: { href: "/cierre-dia", etiqueta: "Ver mi cierre" },
+    });
+  });
+
+  it("⭑ 412/R2: `cierre_dia_rechazado` NO tiene mas destinatarios que el mensajero", () => {
+    // No es decoracion: es lo que la guardia de rutas RECORRE, y ademas deja escrito que la
+    // administracion NO recibe fila de este evento — sigue recibiendo la suya de
+    // `mensajero_bloqueado_por_cierres` (R18). Quien rechaza es la bodega: avisarle de su propio
+    // clic seria ruido puro.
+    expect(CATALOGO_AVISOS.cierre_dia_rechazado.destinatarios).toEqual(["mensajero"]);
+    // Y sin excepcion por rol: solo hay un destinatario, asi que `porRol` no tiene nada que decir.
+    expect(CATALOGO_AVISOS.cierre_dia_rechazado.porRol).toBeUndefined();
   });
 
   it("Q4: `dia_reparto_corregido` es ACCIONABLE para el mensajero, con atajo a su reparto", () => {

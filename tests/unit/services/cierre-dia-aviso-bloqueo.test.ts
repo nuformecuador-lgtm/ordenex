@@ -168,6 +168,16 @@ describe("271/T6.5 · R40/R41 — la solicitud que deja `N >= 2` avisa del bloqu
       zonaId: ZONA_DESTINO_DEL_CIERRE,
       mensajeroUsuarioId: MENSAJERO.usuarioId,
       bloqueo: despues,
+      // ⚠️ FICHA 412 (R19) — CAMPO NUEVO Y OBLIGATORIO, y este productor NO cambia nada: la
+      // SOLICITUD sigue avisando al mensajero Y a su bodega, con el mismo texto y la misma
+      // entidad. Aqui no hay ningun rechazo del que avisar —el mensajero se bloqueo por
+      // ACUMULAR—, asi que `mensajero_y_bodega` es lo que dice la verdad.
+      //
+      // El campo no tiene valor por defecto A PROPOSITO: es lo que impide que un productor nuevo
+      // se quede sin decidir a quien avisa. Que este `toEqual` exhaustivo se pusiera rojo al
+      // anadirlo ES la señal correcta — y por eso se actualiza a mano en vez de relajarlo a
+      // `toMatchObject`, que dejaria de vigilar el contexto entero.
+      destinatarios: "mensajero_y_bodega",
     });
     // Y la entidad NO es el cierre mas viejo, que es el otro id que anda por aqui: con el, dos
     // bloqueos distintos compartirian `entidad_id` y la dedupe se comeria el segundo aviso (R44).
