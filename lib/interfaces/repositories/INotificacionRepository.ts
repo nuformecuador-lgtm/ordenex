@@ -58,6 +58,12 @@ export interface NotificacionRow {
   createdAt: Date;
   /** Derivado del anti-join con `notificacion_lectura` del actor (D4). */
   leida: boolean;
+  /**
+   * FICHA 409 — el evento de dominio de la fila. La columna existe desde la 146; lo que no habia
+   * era quien la leyera. Ahora es el DISCRIMINANTE de todo: con el y el rol del actor, el catalogo
+   * decide si el aviso es accionable, a donde lleva su boton y si lleva cifra viva.
+   */
+  evento: NotificacionEvento;
 }
 
 export interface ListarParaUsuarioInput {

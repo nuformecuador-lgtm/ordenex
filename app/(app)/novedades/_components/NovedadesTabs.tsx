@@ -49,13 +49,33 @@ export interface NovedadesTabsProps {
    */
   novedades: Record<GrupoNovedad, Omit<NovedadesModuleProps, "grupo">>;
   rechazosSla: RechazosSlaModuleProps;
+  /**
+   * ⚠️ FICHA 409 (T6.5, R7) — QUE PESTAÑA QUEDA ABIERTA AL ENTRAR, cuando la URL lo pide.
+   *
+   * El aviso «N novedades esperan tu decisión» lleva a `/novedades?superficie=devolucion`, y sin
+   * esto el boton dejaria a la tienda en «Ayuda solicitada» —la primera pestaña, D6 de la 236—
+   * hablandole de la de al lado. Un atajo que aterriza en la superficie equivocada enseña a
+   * ignorar los atajos, que es justo lo que la 409 vino a deshacer.
+   *
+   * OPCIONAL A PROPOSITO: sin valor, el comportamiento por defecto de la pantalla no cambia ni un
+   * pixel (`TabsGroup` cae a la primera pestaña habilitada). Quien VALIDA el valor es la pagina,
+   * contra `GRUPOS_NOVEDAD` y nunca con un `as`: un valor arbitrario de la URL que llegara hasta
+   * `TabsGroup` activaria una pestaña que no existe y base-ui desmontaria el panel, dejando la
+   * pantalla en blanco (R66).
+   */
+  superficieInicial?: GrupoNovedad;
 }
 
-export function NovedadesTabs({ novedades, rechazosSla }: NovedadesTabsProps) {
+export function NovedadesTabs({
+  novedades,
+  rechazosSla,
+  superficieInicial,
+}: NovedadesTabsProps) {
   return (
     <TabsGroup
       ariaLabel={TABS_ARIA_LABEL}
       keepMounted
+      defaultValue={superficieInicial}
       items={[
         ...GRUPOS_NOVEDAD.map((grupo) => ({
           value: grupo,

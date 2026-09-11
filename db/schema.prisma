@@ -2651,6 +2651,19 @@ enum NotificacionEvento {
   // recupera sola al primer 2xx. Destinatario: el rol `maestro`, el mismo que opera esa pantalla.
   webhook_suscripcion_pausada
   geocodificacion_caida // ficha 401 (R7/R9/R10): el servicio de mapas rechaza nuestras peticiones por configuracion de NUESTRA cuenta. Se emite desde la rama de configuracion del job, una vez por jornada CR y POR ROL (`maestro` y `admin`), mientras el corte siga vivo; el texto lleva SOLO el numero de direcciones sin ubicar (R26/R27)
+  // Ficha 409 (R35/R41/R42) - una tienda tiene novedades SIN GESTIONAR. Aviso AGREGADO: UNO por
+  // tienda y por dia CR, con el numero dentro del texto, jamas uno por orden. Lo emite el cron
+  // `avisos-diarios` a las 07:00 CR. Destinatario: el rol `adminTienda` ACOTADO a su tienda.
+  // ⚠️ Su entidad es `${tienda_id}:${dia_CR}` y el ALCANCE VA DENTRO A PROPOSITO: ver el
+  // comentario de `novedades_sin_gestionar_dia` mas abajo, que es donde se explica por que sin el
+  // solo avisaria la PRIMERA tienda de la corrida y las demas quedarian mudas.
+  novedades_sin_gestionar
+  // Ficha 409 (R45/R47/R51) - hay ordenes en `por_devolver` represadas en bodega por encima del
+  // umbral. Aviso AGREGADO: UNO por AMBITO (la zona del satelite, o "global") y por rol
+  // destinatario, una vez por dia CR. Medido en produccion el 2026-09-10: `por_devolver` = 27
+  // ordenes, media 2,4 d, maximo 8,2 d, SIETE por encima de 3 d. `devolviendo_a_tienda` = 247
+  // ordenes y NINGUNA por encima de 3 d: ese estado FLUYE y R46 prohibe vigilarlo.
+  devoluciones_represadas
 
   @@map("notificacion_evento")
 }
@@ -2691,6 +2704,23 @@ enum NotificacionEntidadTipo {
   // siempre (R10); misma jornada => un solo aviso por rol (R9), y eso importa porque el drenador
   // corre CADA MINUTO (sin esto, el corte de 19 h del 2026-09-08 habria dejado ~2.280 filas).
   geocodificacion_caida_dia
+  // Ficha 409 (design 4.2) - CUARTO `entidad_tipo` que NO apunta a una fila de tabla: la entidad
+  // es LA TIENDA Y EL DIA CR juntos (`entidad_id = '<tienda_id>:YYYY-MM-DD'`).
+  // ⚠️ EL ALCANCE VA DENTRO DEL `entidad_id` Y ES LA DECISION QUE EVITA UN SILENCIO TOTAL.
+  // `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+  // destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`, y
+  // `tienda_id`/`zona_id` -el ALCANCE- NO ENTRAN en esa clave (`columnasDestinatario`). Con
+  // `entidad_id = 'YYYY-MM-DD'` a secas, la clave seria ('novedades_sin_gestionar', '<dia>',
+  // 'adminTienda', NULL) PARA TODAS LAS TIENDAS: la primera de la corrida se llevaria el aviso y
+  // TODAS LAS DEMAS quedarian silenciadas, sin error, sin log y sin nada -porque `crear` absorbe
+  // el `P2002` devolviendo `false`-. Es el fallo que documentaron la 262 y la 403.
+  novedades_sin_gestionar_dia
+  // Ficha 409 (design 4.2) - QUINTO `entidad_tipo` que NO apunta a una fila de tabla: la entidad
+  // es EL AMBITO Y EL DIA CR (`entidad_id = '<zona_id|global>:YYYY-MM-DD'`). Misma forma uniforme
+  // a proposito -`${ambito}:${dia}`, con el literal `global` para la administracion central-, y
+  // por el mismo motivo que el de arriba: sin el ambito dentro, LAS ZONAS SE PISAN ENTRE SI y
+  // solo la primera del recorrido recibiria su aviso.
+  devoluciones_represadas_dia
 
   @@map("notificacion_entidad_tipo")
 }

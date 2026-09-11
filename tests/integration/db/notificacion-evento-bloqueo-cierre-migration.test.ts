@@ -213,6 +213,10 @@ describeSiHayBase("271 / §3.2 — la base aplicada, y el DOWN ejercitado de ver
       // peticiones por un problema de configuracion de la cuenta». Migracion
       // `20260910120000_notificacion_evento_geocodificacion_caida`, POSTERIOR a la de la 403.
       "geocodificacion_caida",
+      // FICHA 409 (design §4.2): los DOS avisos AGREGADOS del panel accionable. Migracion
+      // `20260911120000_notificacion_evento_avisos_agregados`, POSTERIOR a la de la 401.
+      "novedades_sin_gestionar",
+      "devoluciones_represadas",
     ]);
   });
 

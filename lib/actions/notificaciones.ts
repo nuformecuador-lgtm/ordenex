@@ -23,6 +23,10 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { INotificacionService } from "@/lib/interfaces/services/INotificacionService";
 import { NotificacionService } from "@/lib/services/NotificacionService";
 import { NotificacionRepository } from "@/lib/repositories/NotificacionRepository";
+import { VigenciaAvisoAgregadoService } from "@/lib/services/VigenciaAvisoAgregadoService";
+import { AvisoAgregadoRepository } from "@/lib/repositories/AvisoAgregadoRepository";
+import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { avisosDiariosConfig } from "@/lib/config/avisos-diarios";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
@@ -34,8 +38,28 @@ import {
 } from "@/lib/errors";
 import { toActionError } from "@/lib/actions/_shared/to-action-error";
 
+/**
+ * ⚠️ FICHA 409 (T5.4, design §5) — COMPOSITION ROOT DEL RESOLUTOR DE VIGENCIA, y esta linea es el
+ * requisito. Sin ella el service se queda con `vigenciaNoResuelta` y los avisos AGREGADOS no se
+ * apagarian nunca: la campana volveria a ser ruido, que es exactamente lo que esta ficha existe
+ * para quitar. Es la familia «el composition root que no inyecta» —2 de 7 notificadores muertos en
+ * este arbol con la suite entera en verde—, y por eso hay un test que afirma que ALGUIEN LO PASA
+ * (sobre el fuente sin imports ni comentarios), no que alguien lo importe.
+ *
+ * El resolutor acota la cifra AL AMBITO DEL ACTOR (su tienda, su zona, o el total), que es lo que
+ * hace que el numero del panel sea el mismo que el de su pantalla (R57).
+ */
 function buildService(): INotificacionService {
-  return new NotificacionService(new NotificacionRepository(getPrismaClient()));
+  const prisma = getPrismaClient();
+  return new NotificacionService(
+    new NotificacionRepository(prisma),
+    () => new Date(),
+    new VigenciaAvisoAgregadoService(
+      // El conteo VIVO de novedades DELEGA en el metodo que ya pinta `/novedades`.
+      new AvisoAgregadoRepository(prisma, new OrdenRepository(prisma)),
+      avisosDiariosConfig.DIAS_REPRESAMIENTO, // R53: el MISMO umbral que aplica el cron
+    ),
+  );
 }
 
 export interface NotificacionActionDeps {
