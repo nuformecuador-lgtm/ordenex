@@ -19,10 +19,12 @@ import {
 import { cn } from "@/lib/utils";
 import { usePreferenciaSonido } from "@/hooks/usePreferenciaSonido";
 import { useTonoAlIncrementar } from "@/hooks/useTonoAlIncrementar";
+import { usePushEnVentana } from "@/hooks/usePushEnVentana";
 import {
   useNotificaciones,
   type NotificacionesData,
 } from "@/hooks/useNotificaciones";
+import { PushOptIn } from "@/components/shared/PushOptIn";
 import {
   descartarNotificacion,
   marcarTodasLeidas as marcarTodasLeidasAction,
@@ -164,7 +166,17 @@ export function NotificationsBell({ notifications }: NotificationsBellProps) {
   //
   // `null` MIENTRAS no hay conteo real (R24 de la 161): cargando, o lectura fallida -- que degrada
   // a cero por R48 de la 146 y, tomada como dato, haria sonar el tono al recuperarse.
-  useTonoAlIncrementar(isLoading || error != null ? null : porHacer);
+  //
+  // FICHA 410 (R43) — UN HECHO, UN SONIDO. Si el push llega con esta ventana visible, el service
+  // worker avisa: la campana revalida en el acto (sin esperar los 60 s del sondeo) y el tono propio
+  // se salta ESE incremento, porque el sistema ya sonó por el mismo hecho.
+  const { suprimirTonoDeEsteIncremento } = usePushEnVentana(() => {
+    void mutate();
+  });
+  useTonoAlIncrementar(
+    isLoading || error != null ? null : porHacer,
+    suprimirTonoDeEsteIncremento,
+  );
 
   // Feature 161 (R16/R18): preferencia de sonido del dispositivo. El hook la lee como
   // fuente externa a React para no romper la hidratacion (ver `usePreferenciaSonido`).
@@ -436,6 +448,11 @@ export function NotificationsBell({ notifications }: NotificationsBellProps) {
             )}
             {/* R29: NO hay pie. `/notificaciones` no existe y el panel no ofrece controles que
                 lleven a una pantalla que no hay (decisión Q7 del humano). */}
+            {/* FICHA 410 (T5.3, R11/R45): el interruptor de «avisarme en este dispositivo». No es
+                un pie que promete una pantalla: es el ajuste del canal, y va aquí porque aquí llega
+                quien ya está mirando sus avisos. Se pinta solo si hay canal y el navegador puede;
+                si el navegador no puede, en su sitio va la instrucción de instalar la app. */}
+            <PushOptIn />
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>

@@ -51,11 +51,9 @@ async function actorRequerido(deps: PushActionDeps): Promise<Actor> {
  *
  * NO devuelve, ni por asomo, la clave PRIVADA (R31): `clavePublicaPush()` solo lee la publica.
  *
- * @sin-superficie la superficie de las tres acciones del canal es `components/shared/PushOptIn.tsx`
- * via `hooks/usePushSuscripcion.ts`, que son la tanda 5 de ESTA MISMA ficha (410/T5.1-T5.3) y las
- * escribe el agente de frontend sobre esta rama. El backend va primero por decision del arnes.
- * ⚠️ QUIEN MONTE EL CONTROL TIENE QUE BORRAR ESTAS TRES ANOTACIONES: la guardia caduca solas y se
- * pone roja si lo anotado vuelve a ser alcanzable.
+ * Su superficie es `components/shared/PushOptIn.tsx` via `hooks/usePushSuscripcion.ts`, montado en
+ * el panel de la campana (410/T5.3). La excepcion que las tres acciones llevaron anotada mientras
+ * la tanda 5 no existia se retiro al montarlo, que es lo que la guardia `superficie-de-uso` exige.
  */
 export async function obtenerClavePublicaPush(
   deps: PushActionDeps = {},
@@ -72,8 +70,7 @@ export async function obtenerClavePublicaPush(
  * de la sesion. La identidad es el `endpoint`: si el dispositivo ya estaba suscrito a otra persona,
  * la fila pasa a ser de quien acaba de iniciar sesion y la anterior deja de recibir ahi.
  *
- * @sin-superficie la llama `hooks/usePushSuscripcion.ts` al activar el control, y ese hook es la
- * tanda 5 de ESTA MISMA ficha (410/T5.1). Se borra esta anotacion al montarlo.
+ * La llama `hooks/usePushSuscripcion.ts` al activar el control (410/T5.1).
  */
 export async function registrarSuscripcionPush(
   input: unknown,
@@ -97,8 +94,8 @@ export async function registrarSuscripcionPush(
  * dispositivo que nunca se suscribio, devuelve `ok`. Un `not_found` aqui obligaria al cierre de
  * sesion a decidir que hacer con el (R20), y la respuesta correcta es «seguir saliendo».
  *
- * @sin-superficie la llaman el control al desactivar (410/T5.1) y el `LogoutButton` al cerrar
- * sesion (410/T5.5), y las dos son la tanda 5 de ESTA MISMA ficha. Se borra al montarlas.
+ * La llaman el control al desactivar (410/T5.1) y el `LogoutButton` al cerrar sesion (410/T5.5),
+ * los dos a traves de `lib/pwa/baja-push.ts`, que es donde vive la baja de ESTE dispositivo.
  */
 export async function eliminarSuscripcionPush(
   input: unknown,
