@@ -4922,12 +4922,13 @@
       "title": "al mensajero le avisan del reparto que tiene para el dia siguiente",
       "description": "No hay ningun aviso del reparto de mañana: el mensajero se entera al abrir la app, si la abre.",
       "zone": "backend",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
       "complexity": "media",
+      "spec_path": "specs/413-aviso-reparto-de-manana/",
       "branch": null,
-      "depends_on": null,
-      "status_note": "DESTAPADA AL ESPECIFICAR LA 410 el 2026-09-10: el lienzo aprobado promete al mensajero «tenes N ordenes para mañana» y NO EXISTE NADA — ni valor en el enum, ni emisor, ni cron, ni productor. Medido, no supuesto. || ES LA MAS CARA DE LAS DOS y por eso va aparte: necesita un cron con hora propia, decidir a que hora del dia anterior se congela «lo de mañana» (una asignacion posterior cambiaria el numero ya avisado), y que hacer cuando el numero cambia despues de avisar. Ninguna de esas tres preguntas la responde el canal. || OJO CON LA HORA: `fecha_reparto` es una fecha calendario CR y las cotas correctas contra columnas `timestamp` son `inicioDelDiaCREnUtc`/`inicioDelDiaSiguienteCREnUtc`, nunca `startOfDayCR` -trampa ya documentada en `lib/analytics/ranges.ts`-. || Aviso AGREGADO por definicion (un numero, no una notificacion por orden) y con atajo a `/mis-asignaciones`. || NO ES URGENTE: nace de una promesa del diseño, no de un incidente."
+      "depends_on": 412,
+      "status_note": "CONFIRMADO POR EL LEADER 2026-09-11: el filtro del mensajero bloqueado se aplica en la EMISION, no en la lectura. Coste declarado y aceptado: quien se bloquee entre las 19:00 y medianoche convive esa noche con los dos avisos, hasta que el de reparto se apaga solo. La alternativa -filtrar al leer- metia una consulta PERMANENTE en la ruta caliente del sondeo de 60 s por una ventana de cinco horas, y la direccion del error aqui es la segura: un aviso de mas, y el accionable sigue siendo el de bloqueo. || DESTAPADA AL ESPECIFICAR LA 410 el 2026-09-10: el lienzo aprobado promete al mensajero «tenes N ordenes para mañana» y NO EXISTE NADA — ni valor en el enum, ni emisor, ni cron, ni productor. Medido, no supuesto. || ES LA MAS CARA DE LAS DOS y por eso va aparte: necesita un cron con hora propia, decidir a que hora del dia anterior se congela «lo de mañana» (una asignacion posterior cambiaria el numero ya avisado), y que hacer cuando el numero cambia despues de avisar. Ninguna de esas tres preguntas la responde el canal. || OJO CON LA HORA: `fecha_reparto` es una fecha calendario CR y las cotas correctas contra columnas `timestamp` son `inicioDelDiaCREnUtc`/`inicioDelDiaSiguienteCREnUtc`, nunca `startOfDayCR` -trampa ya documentada en `lib/analytics/ranges.ts`-. || Aviso AGREGADO por definicion (un numero, no una notificacion por orden) y con atajo a `/mis-asignaciones`. || NO ES URGENTE: nace de una promesa del diseño, no de un incidente."
     },
     {
       "id": 414,
