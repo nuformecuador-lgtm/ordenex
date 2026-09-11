@@ -240,7 +240,8 @@ describeSiHayBase("Feature 238 · la columna, tal como quedo en Postgres (R20)",
     const filas = (await prisma.$queryRawUnsafe(
       `SELECT data_type, is_nullable, column_default
          FROM information_schema.columns
-        WHERE table_name = 'gestion_orden' AND column_name = 'confirmada_fisica_at'`,
+        WHERE table_schema = 'public'
+          AND table_name = 'gestion_orden' AND column_name = 'confirmada_fisica_at'`,
     )) as Array<{ data_type: string; is_nullable: string; column_default: string | null }>;
 
     expect(filas, "la migracion no esta aplicada en esta base").toHaveLength(1);
@@ -353,7 +354,8 @@ describeSiHayBase("Feature 238 · la columna, tal como quedo en Postgres (R20)",
   it("no se creo ningun indice sobre la columna", async () => {
     const filas = (await prisma.$queryRawUnsafe(
       `SELECT indexdef FROM pg_indexes
-        WHERE tablename = 'gestion_orden' AND indexdef LIKE '%confirmada_fisica_at%'`,
+        WHERE schemaname = 'public'
+          AND tablename = 'gestion_orden' AND indexdef LIKE '%confirmada_fisica_at%'`,
     )) as unknown[];
     expect(filas).toEqual([]);
   });

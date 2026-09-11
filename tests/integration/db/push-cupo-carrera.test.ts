@@ -14,6 +14,7 @@ import {
   HAY_BASE_DE_DATOS,
   crearPrismaDeTest,
   crearPrismaDeTestEnEsquema,
+  etiquetasDeEnum,
 } from "./_postgres-real";
 
 // FICHA 410 (T1.5, R7) — EL CUPO DEL DIA SOBREVIVE A DOS EMISIONES SIMULTANEAS.
@@ -218,12 +219,12 @@ describeSiHayBase("410/R7 — dos emisiones SIMULTANEAS dejan UN cupo y UN encol
     // sin ese tipo la insercion muere con «no existe el tipo». Los valores se leen del enum REAL y
     // en su orden: una lista escrita a mano aqui caducaria con la siguiente ficha que anada un
     // evento, y lo haria en silencio.
-    const valores = await admin.$queryRawUnsafe<{ enumlabel: string }[]>(
-      `SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-        WHERE t.typname = 'notificacion_evento' ORDER BY e.enumsortorder`,
-    );
+    // FICHA 421 — y aqui el olvido mordia DOS veces: este archivo es uno de los que CREA un
+    // segundo `notificacion_evento` en un esquema temporal. Leyendo sin acotar, se habria clonado
+    // a si mismo DUPLICADO y el `CREATE TYPE` de abajo habria muerto con «label already exists».
+    const valores = await etiquetasDeEnum(admin, "notificacion_evento");
     expect(valores.length, "el enum `notificacion_evento` no se pudo leer").toBeGreaterThan(10);
-    const lista = valores.map((v) => `'${v.enumlabel}'`).join(", ");
+    const lista = valores.map((v) => `'${v}'`).join(", ");
     await admin.$executeRawUnsafe(
       `CREATE TYPE "${ESQUEMA}"."notificacion_evento" AS ENUM (${lista})`,
     );

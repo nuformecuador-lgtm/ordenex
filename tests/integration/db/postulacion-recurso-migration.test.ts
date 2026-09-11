@@ -7,6 +7,7 @@ import {
   HAY_BASE_DE_DATOS,
   crearPrismaDeTest,
   enTransaccionRevertida,
+  etiquetasDeEnum,
   serializarEscriturasReales,
 } from "./_postgres-real";
 import { PostulacionRecursoRepository } from "@/lib/repositories/PostulacionRecursoRepository";
@@ -261,12 +262,9 @@ describeSiHayBase("253 / bloque B — el DDL aplicado, leido de los catalogos", 
   });
 
   it("el enum nativo tiene exactamente `vehiculo` y `bodega`, en ese orden", async () => {
-    const filas = await prisma.$queryRawUnsafe<{ valores: string }[]>(
-      `SELECT string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder) AS valores
-         FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid
-        WHERE t.typname = 'postulacion_recurso_tipo'`,
-    );
-    expect(filas[0].valores).toBe("vehiculo,bodega");
+    // FICHA 421 — acota `nspname = 'public'`: ver `etiquetasDeEnum` en `_postgres-real.ts`.
+    const valores = await etiquetasDeEnum(prisma, "postulacion_recurso_tipo");
+    expect(valores.join(",")).toBe("vehiculo,bodega");
   });
 
   it("las columnas y su nullabilidad son las de la migracion", async () => {
@@ -295,7 +293,8 @@ describeSiHayBase("253 / bloque B — el DDL aplicado, leido de los catalogos", 
       `SELECT con.conname, pg_get_constraintdef(con.oid) AS def
          FROM pg_constraint con
          JOIN pg_class c ON c.oid = con.conrelid
-        WHERE c.relname = 'postulacion_recurso' AND con.contype = 'c'`,
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'postulacion_recurso' AND n.nspname = 'public' AND con.contype = 'c'`,
     );
     const check = filas.find((f) => f.conname === "postulacion_recurso_atendida_completa");
     expect(check, "falta el CHECK que empareja atendida_at con atendida_por_id").toBeDefined();
@@ -309,7 +308,8 @@ describeSiHayBase("253 / bloque B — el DDL aplicado, leido de los catalogos", 
       `SELECT con.confdeltype::text AS confdeltype
          FROM pg_constraint con
          JOIN pg_class c ON c.oid = con.conrelid
-        WHERE c.relname = 'postulacion_recurso'
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'postulacion_recurso' AND n.nspname = 'public'
           AND con.conname = 'postulacion_recurso_atendida_por_id_fkey'`,
     );
     expect(filas).toHaveLength(1);

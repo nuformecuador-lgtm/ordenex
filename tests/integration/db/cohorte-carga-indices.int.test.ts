@@ -137,7 +137,8 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("R36 · el plan de la consulta REAL de la co
   it("los dos indices estan aplicados en esta base (si no, no hay nada que medir)", async () => {
     const filas = await prisma.$queryRaw<{ indexname: string }[]>`
       SELECT indexname FROM pg_indexes
-      WHERE indexname IN (${INDICE_ORDEN}, ${INDICE_HISTORIAL})`;
+      WHERE schemaname = 'public'
+        AND indexname IN (${INDICE_ORDEN}, ${INDICE_HISTORIAL})`;
 
     expect(
       filas.map((f) => f.indexname).sort(),

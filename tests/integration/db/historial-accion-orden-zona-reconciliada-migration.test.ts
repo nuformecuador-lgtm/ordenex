@@ -5,7 +5,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { HISTORIAL_ACCION_TIPOS } from "@/lib/types/historial-accion";
 
-import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
+import { HAY_BASE_DE_DATOS, crearPrismaDeTest, etiquetasDeEnum } from "./_postgres-real";
 
 /**
  * ⭑ FICHA 366 / T1 — LA MIGRACION DEL VALOR NUEVO DEL ENUM, LEIDA DE LA BASE APLICADA.
@@ -127,11 +127,8 @@ describeSiHayBase("366/T1 — el enum en la base APLICADA", () => {
   });
 
   it("⭑ `pg_enum` tiene `orden_zona_reconciliada`, y el catalogo y la base dicen lo mismo", async () => {
-    const filas = await prisma.$queryRawUnsafe<{ enumlabel: string }[]>(
-      `SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-        WHERE t.typname = 'historial_accion_tipo' ORDER BY e.enumsortorder`,
-    );
-    const enLaBase = filas.map((f) => f.enumlabel);
+    // FICHA 421 — acota `nspname = 'public'`: ver `etiquetasDeEnum` en `_postgres-real.ts`.
+    const enLaBase = await etiquetasDeEnum(prisma, "historial_accion_tipo");
     expect(enLaBase, "la migracion no esta aplicada en esta base").toContain(VALOR_NUEVO);
     // Las DOS direcciones: ni el catalogo nombra algo que la base no tiene, ni al reves. Es el
     // mismo cierre que hacen `satisfies` y `_AsegurarExhaustivo` en compilacion, pero medido

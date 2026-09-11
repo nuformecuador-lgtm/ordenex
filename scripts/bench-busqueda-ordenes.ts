@@ -835,9 +835,16 @@ async function cargar(prisma: PrismaClient, plantilla: FilaCarga[]): Promise<num
  *  de la migracion (leido del archivo: no hay copia que pueda divergir). */
 async function asegurarEsquema(prisma: PrismaClient): Promise<void> {
   const estado = (await prisma.$queryRawUnsafe(
-    "SELECT (SELECT count(*)::int FROM information_schema.columns WHERE table_name='orden'" +
-      " AND column_name='busqueda_texto') col," +
-      " (SELECT count(*)::int FROM pg_indexes WHERE indexname='orden_busqueda_texto_trgm_idx') idx",
+    // FICHA 421 — las dos subconsultas acotan el esquema: los catalogos de Postgres son GLOBALES
+    // a la base y un objeto homonimo en otro esquema contaria de mas. Va en UNA plantilla y no
+    // concatenada como antes: troceada, la guardia `catalogo-postgres-acota-esquema` ve cada
+    // pedazo por separado y no puede saber si el `WHERE` de al lado acota o no.
+    `SELECT (SELECT count(*)::int FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'orden'
+                AND column_name = 'busqueda_texto') col,
+            (SELECT count(*)::int FROM pg_indexes
+              WHERE schemaname = 'public'
+                AND indexname = 'orden_busqueda_texto_trgm_idx') idx`,
   )) as { col: number; idx: number }[];
   if (estado[0].col > 0 && estado[0].idx > 0) return;
   console.log("Reponiendo columna/indice de la migracion 169 ...");
