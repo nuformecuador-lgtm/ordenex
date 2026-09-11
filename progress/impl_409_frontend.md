@@ -87,10 +87,21 @@ que el contrato visual no tiene. **No se inventó ningún literal fuera del mock
 ### 2.3 — El rótulo «Marcar todas como leídas» NO se acortó a «Marcar leídas»
 
 El `.dc.html` lo dibuja corto, pero **R28 protege el comportamiento vigente de ese control** y su
-rótulo actual es lo que afirman tres tests de la 146 que tienen que seguir verdes **sin editarse**.
-Acortarlo habría roto tres suites vigentes a cambio de cero requisitos. Queda dicho aquí y no
+rótulo vigente se afirma en **dos sitios** del archivo de la 146 — medido, no recordado
+(`git show fa8a72ef:tests/components/NotificationsBell.test.tsx | grep -n "Marcar todas como leídas"`
+⇒ líneas **86 y 514**):
+
+- **la línea 86 es el helper `abrir()`**, que es como **casi todos** los casos del archivo abren el
+  panel;
+- la 514 es el clic de «marcar todas» del caso del tono.
+
+O sea que acortar el rótulo no habría roto «tres tests»: habría roto **el helper con el que se abre
+el panel en la práctica totalidad de la suite**, a cambio de cero requisitos. Queda dicho aquí y no
 escondido: **es una desviación deliberada del mockup**, la misma clase de decisión que el backend
 tomó con el singular de «se rechaza automáticamente».
+
+> **Corregido el 2026-09-10 tras la revisión: esta bitácora decía «tres tests» y son dos sitios**,
+> uno de ellos el helper. El dato corregido no debilita el argumento: lo agranda.
 
 ### 2.4 — El bloque informativo pierde el icono de tipo (y gana el punto del mockup)
 
@@ -146,7 +157,9 @@ control. Una guardia afirma que **todo `<Link` del archivo va dentro de un `rend
 > Regla aplicada: *«Literal: contrato o polizón»*. Antes de tocar un aserto se miró si **ESE**
 > literal era el contrato. Los nueve que cambian son los que la 409 **deroga explícitamente**; los
 > demás quedaron intactos. **No se borró ni un test**, no se relajó ni un aserto (todos siguen
-> siendo igualdades con literal escrito a mano) y el archivo pasó de 34 a **43 tests**.
+> siendo igualdades con literal escrito a mano) y el archivo pasó de **28 a 43 tests**.
+> **Corregido el 2026-09-10 tras la revisión: decía «34», y eran 28** (`git show fa8a72ef:tests/components/NotificationsBell.test.tsx | grep -cE '^\s+it\('`).
+> Un número mal en una bitácora envejece igual de mal que un comentario falso.
 
 | Test vigente | Qué afirmaba | Qué requisito de la 409 lo deroga |
 | --- | --- | --- |
@@ -277,17 +290,33 @@ los siete archivos de esta tanda).
    y este repo ya midió que dos servidores se pisan. Queda como **puerta antes de dar la ficha por
    hecha**, con el lote que pide la tarea: ≥ 20 avisos, con atajo, **sin** atajo, informativos y un
    texto largo, en los **dos** temas.
-2. **T7.5 — la medición en producción en solo lectura** (`por_devolver` y `por_devolver_a_tienda`)
-   es del backend y sigue siendo puerta de despliegue. No la toca esta bitácora.
-3. **Defectos del backend encontrados: ninguno.** El DTO llegó con los seis campos poblados, el
+2. ~~**T7.5 — la medición en producción**~~ **CERRADA.** El commit `53dcbaa7` del backend la
+   trae y **este agente lo había dejado fuera**: la rama nació de `fa8a72ef`, un commit antes. Se
+   trajo con `git merge origin/feat/409-panel-notificaciones-accionable` (merge, no rebase) y se
+   confirmó con `git merge-base --is-ancestor 53dcbaa7 HEAD`. Sin eso, el PR #777 se habría
+   mergeado **sin esa medición y sin ninguna señal** — el patrón del PR apilado que este repo ya
+   pagó. Los números, de `53dcbaa7`: `por_devolver` = **27 órdenes**, media **2,5 d**, máximo
+   **8,3 d**, **7 pasan de 3 d** y **las 27 son de UNA SOLA tienda**; `por_devolver_a_tienda`
+   **vacío**. El umbral de 3 días queda confirmado con dato fresco.
+3. ⚠️ **Un `adminSatelite` SIN zona pediría la cifra GLOBAL, y hoy eso lo tapa otra ficha, no
+   este seam.** Lo levantó el reviewer y **se declara, no se arregla aquí** (arreglarlo sería
+   rediseñar por encima de lo evidenciado, y el encargo era el frontend). Lo que hay que saber:
+   la resolución de la cifra viva acota por el ámbito del actor, y para el satélite ese ámbito es
+   `actor.zonaId`; si llegara `null`, la consulta caería al ámbito global y ese rol vería un número
+   que no es el suyo. **Hoy no ocurre porque un predicado de OTRA ficha impide que un
+   `adminSatelite` sin zona llegue hasta aquí**: es decir, **una protección que funciona por
+   herencia y no por diseño propio de este seam**. El día que alguien toque aquel predicado, esto
+   se abre **sin que nada lo avise** — no hay test en esta ficha que se ponga rojo. Queda para
+   ficha propia; no es bloqueante de ésta.
+4. **Defectos del backend encontrados: ninguno.** El DTO llegó con los seis campos poblados, el
    `atajo` resuelto por par (evento, rol) y `porHacer` requerido en el resultado; el único ajuste
    defensivo del lado cliente es el `?? 0` del fetcher, que existe para los **dobles de las suites
    vigentes** (donde el campo aún no existe), no para tapar un hueco del servidor.
-4. **Pre-vuelo de la migración, re-medido al abrir el PR** (es la trampa «el pre-vuelo caduca»):
+5. **Pre-vuelo de la migración, re-medido al abrir el PR** (es la trampa «el pre-vuelo caduca»):
    `git diff aff769d8 origin/dev -- db/schema.prisma db/migrations` sale **vacío** con `origin/dev`
    en `d21c5e6f`, o sea que la lista del `down.sql` que escribió el backend **sigue siendo cierta**
    contra el `dev` de hoy. Si `dev` se mueve otra vez antes del merge, hay que repetir esa medida.
-5. **Colisión con la 408 (mergeada en `dev` mientras corría esta ficha): ninguna.** Tocó
+6. **Colisión con la 408 (mergeada en `dev` mientras corría esta ficha): ninguna.** Tocó
    `app/(app)/cierres-admin/_components/*` y `cierre-labels.ts`; esta ficha, `components/shared/`,
    `hooks/` y `app/(app)/novedades/`. Es lo que el diseño §8 había previsto.
 
