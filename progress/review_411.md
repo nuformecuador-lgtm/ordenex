@@ -314,3 +314,141 @@ Tres cosas, y ninguna es «hay muchos tests»:
    sitio donde se afloja una guardia para que pase lo tuyo, y aquí no pasó.
 
 **Arregla `tasks.md`, haz T8.2 con el navegador delante, y esto entra.**
+
+---
+---
+
+# RONDA 2 — 2026-09-10 · verificación del bloqueante
+
+> Cabeza revisada: **`1d0606cb`**. No repito gate ni mutaciones: **los 34 archivos de código y test
+> de la ficha están byte a byte como en la ronda 1** (comprobado con `git diff a46b90b9..1d0606cb`
+> sobre la lista entera, incluido `cohorte-carga-indices.int.test.ts` y `tests/baseline-rojos.json`:
+> salida vacía). Lo único propio del implementer en estos dos commits es
+> `specs/411-.../tasks.md`, `progress/impl_411_backend.md` y `progress/impl_411_frontend.md`.
+> Todo lo demás que aparece en el diff viene del merge de `origin/dev` (fichas 408 y 409).
+
+## Veredicto de la ronda 2: **APROBADO**
+
+El bloqueante de la ronda 1 está resuelto y **no se resolvió mintiendo**: contrasté las **32
+casillas marcadas contra su respaldo real**, no contra la bitácora, y **ninguna está marcada en
+falso**. `tasks.md`: **32 `[x]`, 1 `[ ]`, y la vacía es T8.2**.
+
+## 1 — Ninguna casilla marcada es falsa (32 contrastadas)
+
+Lo que verifiqué **esta ronda, con evidencia nueva**:
+
+| casilla | respaldo exigido | qué comprobé yo |
+| --- | --- | --- |
+| **T0.1** | tabla de los doce símbolos **con línea** | Scripté las **18 referencias** de la tabla contra el archivo real en `1d0606cb` (`git show REF:archivo | sed -n 'Np'`). **18 de 18 OK**, ni una línea desplazada: `resolverRango:117`, `inicioDelDiaCREnUtc:118`, `inicioDelDiaSiguienteCREnUtc:129`, `condicionDeVentanaTerminal:125`, los dos `TERMINALES` (63 y 48), `ESTADOS_TERMINALES:509`, `prepararConteoEntregas:365`, `claveConPrefijo:470`, `condicionesSinFecha:133`, `DIA_CR:98`, `condicionDeAlcance:65`, los cuatro de `base-del-kpi.ts` (62/46/53/74) y los dos `@@index` de `db/schema.prisma` (787 y 2222). Y **los dos `TERMINALES` siguen sin `export`**, como afirma la nota. |
+| **T4.1** | la salida del rojo pegada | Pegada en `impl_411_backend.md §5.1` — y **yo la reproduje en la ronda 1**: aparece la cohorte `2001-06-14` y se cae la de las 23:50. |
+| **T4.4** | la salida del rojo pegada | Pegada en `§5.2` — reproducida en la ronda 1: `expected [ 'viva' ] to include 'entregada'`. |
+| **T6.2** | el `EXPLAIN` | Está, y **ahora con el de producción**. Ver el punto 3. |
+| **T3.2** | «la anotación se retira en el commit que monta la tabla» | **Comprobado en el blob, no en la prosa:** `f69ed1dc` tenía la directiva `@sin-superficie` en el JSDoc; `602c782d` —el commit que monta la tabla— **ya no la tiene**. Lo que quedaba era una mención en prosa, retirada después en `98a7e23e` porque ese censo lee el texto crudo. La casilla es honesta. |
+| **T3.3** | **las DOS** aserciones de `refrescar-cache-analitica` | Las dos: la lista gana `TAG_COHORTE_CARGA` **y** la cuenta pasa de `7 + TAGS_OPERATIVA.length` a `8 + …`, más un caso nuevo de prefijo propio. |
+| **T0.3** | los siete censos en verde | Los **volví a correr en `1d0606cb`**: verdes. El número que la ficha mueve (7 → 8 verticales) es cierto y verificable. |
+| **T8.1** | el mapa `R<n> → test` | **39 de 39 verificados por mí en la ronda 1**, cruzados contra los casos realmente ejecutados. |
+| **T8.3** | el gate, con los rojos identificados y no supuestos | **Lo reproduje al dígito en la ronda 1.** Ver el punto 4 para una inexactitud menor de su nota. |
+| **T8.4** | bitácora **commiteada y verificada en el blob** | Las dos están en la rama. La nota explica que se partió en `_backend` y `_frontend`, que es lo que hay. |
+
+Las **22 restantes** (T1.1–T1.3, T2.1–T2.4, T3.1, T4.2–T4.7, T5.1–T5.3, T6.1, T7.1–T7.4) quedaron
+contrastadas en la ronda 1 contra el artefacto: **los archivos existen con el contenido que
+declaran, sus tests corrieron verdes (191 casos, 0 rojos, 0 saltados) y cinco de ellos los maté con
+mutación propia.** Ese respaldo **sigue siendo válido sin recorrerlo otra vez porque los archivos no
+han cambiado ni un byte** — cosa que comprobé antes de darlo por bueno, no después.
+
+## 2 — T8.2 sigue VACÍA, y con su motivo al lado
+
+`grep '^- \[ \]'` sobre `tasks.md` devuelve **una sola línea: T8.2**. Y no está vacía a secas: lleva
+una nota que empieza **«SIN MARCAR: NO SE HIZO»**, dice por qué (la sesión de B7 no tenía navegador y
+levantar un segundo dev server está desaconsejado aquí), y —esto es lo que la hace útil— **calibra el
+hueco en vez de taparlo**: enumera lo que sí cubre un test (la concordancia del singular, los siete
+rótulos afirmados a mano con sus tildes, el `minWidth` y el `overflow-visible`) y cierra con «nada de
+eso sustituye a mirarla». Es exactamente el tratamiento correcto. **Nadie ha visto todavía esta tabla
+en un navegador**, y el plan lo dice en su propia casilla en vez de en una nota al pie que nadie lee.
+
+## 3 — T0.2: los seis números están, y **con los dos matices**
+
+Los seis: `30 días → 31 filas, 3,169 ms de planificación, 19,766 ms de ejecución` ·
+`366 días → 31 filas, 4,356 ms, 25,509 ms`. Y los dos matices, **en la casilla y no escondidos**:
+
+1. **«No son dos medidas: son una.»** Con el motivo escrito —producción sólo tiene datos desde el
+   arranque comercial (2026-08-25), así que los 366 días y los 30 abarcan lo mismo— y la conclusión
+   que hay que sacar: **«medir un rango largo aquí todavía no prueba nada sobre un rango largo de
+   verdad»**.
+2. **«El planificador elige `Seq Scan`, no índice»**, con las cifras que lo sostienen (1.652 de 1.800
+   filas en `orden`, 12.511 en `orden_historial_estado`) y la frase que evita que el número engañe:
+   **«la consulta es barata, pero no por el índice — es barata porque las tablas son pequeñas»**.
+
+Y —lo que más me importaba— **el matiz se propagó a T6.2**, que es donde cambia de significado: el
+«no hace falta índice» **se sostiene pero por un motivo distinto del que suponía `design.md §1.2`**, y
+la nota deja escrito que el verde de `cohorte-carga-indices.int.test.ts` **protege el caso selectivo
+del futuro y NO describe producción hoy** — «lo que no se puede hacer es leer ese verde como “así se
+comporta producción”, porque hoy no es cierto». Hasta queda anotado el hueco que sigue abierto (el
+coste de un rango largo de verdad, sin medir hasta que la base acumule más de un año).
+
+**El test no se tocó, y lo comprobé en el blob:** `git diff a46b90b9..1d0606cb --
+tests/integration/db/cohorte-carga-indices.int.test.ts` sale **vacío**. Tampoco se tocó
+`db/schema.prisma`, ni apareció migración alguna. La atribución también es honesta: las dos bitácoras
+dicen que **lo midió el leader**, porque a la sesión del backend le faltaba el acceso, y la sección
+vieja de `impl_411_backend.md §3` se **anota** en vez de reescribirse («era cierta cuando se
+escribió»). Eso es lo correcto: una bitácora es un registro, no un documento vivo.
+
+## 4 — Lo que se va a mergear es lo que se midió
+
+- **Los 34 archivos de la ficha, intactos** desde la ronda 1 (diff vacío), `tests/baseline-rojos.json`
+  incluido. Lo medido sigue describiendo lo que entra.
+- **El merge de `origin/dev` no rompió las guardias.** Corrí en `1d0606cb` los siete censos de T0.3
+  más `catalogo-produccion`, las dos guardias nuevas de la ficha, `cobertura-tablas` y la guardia que
+  trajo la 408: **12 archivos, 126 casos, verdes.** Los cuatro contadores de `cobertura-tablas`
+  sobrevivieron al merge con el valor que yo verifiqué (35 / 35 / 12 / 36, y 23 `con_descarga` +
+  13 `fuera`).
+- **Mi informe de la ronda 1 sobrevivió al merge intacto** (`review_411.md` y `gate_review_411.log`,
+  diff vacío contra `a46b90b9`). El implementer resolvió el choque con un merge, no con un
+  `push --force`, y lo dejó escrito en su bitácora. Es la reacción correcta.
+- **`feature_list.json`: la rama NO lo tocó.** Diff contra el merge-base (`b84e5c75`): **vacío**.
+  Aparece `-24` líneas contra `origin/dev` sólo porque **dev avanzó después** (se registraron las
+  fichas 415 y 416 en `73379e09` / `5320b2ff`). **El merge no va a revertir esos dos registros**; lo
+  digo con el número delante para que nadie se asuste del `-24`. Ídem `progress/current.md`.
+
+## 5 — Hallazgos de la ronda 2
+
+### BLOQUEANTE
+**Ninguno.** El de la ronda 1 está cerrado.
+
+### menor
+
+6. **Una afirmación falsa DENTRO de una casilla marcada, aunque no la invalida.** La nota de **T8.3**
+   dice que la migración de más —`20260911120000_notificacion_evento_avisos_agregados`— «no existe en
+   ninguna rama». **Sí existe:** vive en `origin/feat/409-panel-notificaciones-accionable` (y en su
+   rama de frontend), añadida en el commit **`5211a566`**. Lo medí en la ronda 1 y está escrito arriba
+   en este mismo informe, tres párrafos más allá de donde la nota lo contradice.
+   **No invalida la casilla** —el criterio de T8.3 es «los rojos identificados como heredados, no
+   supuestos», y lo están— **ni cambia la decisión** de no tocar el baseline, que sigue siendo la
+   correcta. Pero conviene arreglar la frase: saber que la deuda es de la 409 da su **fecha de
+   caducidad** (se apaga sola cuando esa ficha mergee), mientras que «no existe en ninguna rama»
+   sugiere una migración huérfana, que es otro problema y más feo. **Una línea.**
+7. **T8.2 sigue sin hacer** (menor 2 de la ronda 1, vivo). Ver arriba y su nota en `tasks.md`.
+8. **La rama vuelve a ir por detrás de `dev`, ahora 2 commits** (los registros de las fichas 415 y
+   416). Sin conflicto a la vista: no tocan nada de la 411 ni `feature_list.json` por parte de la
+   rama.
+9. **Un rojo NO reproducible, y lo escribo en vez de callarlo.** La **primerísima** corrida del lote
+   de 12 guardias —hecha segundos después de crear el worktree— dio `cache-tags.guardia.test.ts` en
+   rojo. **No se reproduce:** 8 corridas más del mismo lote, verdes; el archivo aislado, verde; y
+   estuvo verde en las tres corridas completas del gate (la mía de la ronda 1 y las dos del
+   implementer). **La 411 no toca ese censo ni `lib/analytics/metrics.ts`.** Lo dejo anotado como
+   ruido de un árbol recién creado, no como hallazgo contra esta ficha; si alguien lo vuelve a ver,
+   aquí está el primer avistamiento con fecha.
+
+## 6 — Veredicto final de la ficha
+
+**APROBADO.** Se resolvió el único bloqueante y se resolvió bien: **32 casillas marcadas, las 32 con
+respaldo real contrastado, y la única vacía es la única que no se hizo.** Los tres sitios donde esto
+podía haber salido mal —marcar T8.2 «porque ya casi», marcar T0.2 con los números de `localhost`, o
+ajustar el test de índices para que cuadrara con lo que hace producción hoy— **son exactamente los
+tres que se resolvieron por el lado honesto**: T8.2 sigue vacía, T0.2 se cerró con medición de
+producción y sus dos matices, y el test de índices **no se tocó** y en su lugar se escribió qué
+protege y qué no.
+
+**Antes de mergear, dos cosas que no bloquean pero que alguien tiene que hacer:** corregir la frase de
+T8.3 (menor 6), y **mirar la tabla en un navegador** (T8.2) — sigue siendo el único hueco real de esta
+ficha, y son siete columnas.
