@@ -244,7 +244,13 @@ verde sin el arreglo**. Cada caso de ausencia afirma primero algo que sólo exis
 **Mutaciones obligatorias, cada una con su número de rojos anotado en `progress/impl_414.md`:**
 
 1. revertir (a): volver a pintar el distintivo de origen para el mensajero → R1, R4 y R5;
-2. ocultar el distintivo **también** para el admin → R2 (y debe caer `CierreMotivoRechazoAutomatico`);
+2. ocultar el distintivo **también** para el admin → R2. ⏳ **Corregido el 2026-09-10:** aquí decía
+   «y debe caer `CierreMotivoRechazoAutomatico`», y **era falso**. Ese archivo monta
+   `DetalleSecciones`, nunca `CierreFacturaDetalle`, así que una mutación en `cierre-factura.tsx`
+   **no puede** ponerlo rojo: la predicción confundía el distintivo del *comprobante* con la columna
+   «Origen» de la *tabla*. Medido por los dos lados — la mutación cae en 4 casos de 2 archivos (no
+   3 de 1), y la tabla del admin sí está protegida, por **dos** archivos, lo que se comprueba
+   mutando `renderRechazoOrigen` (2 rojos);
 3. volver a `g.esRechazoSla` en el argumento (b) → **sólo** el caso 3 de R4. Si no enrojece, ese caso
    no mide lo que dice;
 4. esconder el fragmento `rechazada` entero para el mensajero (se lleva el renglón del ingreso) → R3;
