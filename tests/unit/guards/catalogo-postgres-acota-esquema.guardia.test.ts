@@ -27,10 +27,10 @@ import { quitarComentarios } from "../../fixtures/sin-comentarios";
 // INTERMITENTE Y DEPENDE DE QUIEN CORRA AL LADO, que es el que menos se diagnostica y el que mas
 // tienta a comprar el verde metiendolo en el baseline.
 //
-// EL CENSO DEL DIA QUE SE ARREGLO: 162 consultas a catalogos en `tests/`, de las que **125 ya
-// acotaban** y **37 no** (en 21 archivos). Que la mayoria lo hiciera bien es justo lo que convierte
-// a las otras 37 en un olvido y no en una decision — y lo que hace falta para que no vuelva a
-// colarse una es esta guardia, no acordarse.
+// EL CENSO DEL DIA QUE SE ARREGLO, sobre `tests/` y contando tambien `pg_namespace`: 162
+// consultas, de las que **125 ya acotaban** y **37 no** (en 21 archivos). Que la mayoria lo
+// hiciera bien es justo lo que convierte a las otras 37 en un olvido y no en una decision — y lo
+// que hace falta para que no vuelva a colarse una es esta guardia, no acordarse.
 //
 // COMO MIDE. Sobre el fuente SIN COMENTARIOS (el quitador del repo: los comentarios de este arbol
 // nombran a proposito lo que el codigo tiene prohibido, y escanear prosa afirma en falso con la
@@ -173,8 +173,8 @@ describe("FICHA 421 — toda consulta a un catalogo de Postgres acota el esquema
       (n, f) => n + consultasACatalogos(readFileSync(path.join(RAIZ, f), "utf8")).length,
       0,
     );
-    // El dia del arreglo eran 148 (146 en `tests/` + 2 en `scripts/`). El umbral es holgado a
-    // proposito: lo que esta guardia vigila es que no haya NINGUNA sin acotar, no cuantas hay.
+    // El dia del arreglo eran 146 en el arbol: 145 en `tests/` y 1 en `scripts/`. El umbral es
+    // holgado a proposito: lo que vigila es que no haya NINGUNA sin acotar, no cuantas hay.
     expect(total, "el detector dejo de ver las consultas a catalogos").toBeGreaterThan(100);
   });
 
