@@ -481,3 +481,190 @@ lectura** (T7.5).
 ## §13 — Veredicto final
 
 **RECHAZADO** — 1 bloqueante (B1, de trámite), 9 menores. Ninguno pide tocar código de producción.
+
+---
+---
+
+# RONDA 2 — verificación del cierre (`f26170f3`)
+
+> Rama en **`f26170f3`**; el informe de la ronda 1 (`2e51bf24`) sigue dentro. PR #777: de 7 a 11
+> commits. Esta sección **se añade**, no reescribe nada de arriba: lo de la ronda 1 es lo que se
+> midió entonces y sigue siendo cierto.
+
+## R2.§1 — Veredicto
+
+**OK.** El bloqueante B1 está resuelto, y lo comprobé **contra el respaldo real, no contra la
+bitácora**. Queda **un solo menor abierto** (`progress/history.md`), que es paso de cierre del
+leader y no bloquea el PR.
+
+## R2.§2 — El commit que se había quedado fuera
+
+Mi «T7.5 pendiente» de la ronda 1 era lo que se veía desde aquella rama. La causa era otra y es más
+grave: **`53dcbaa7` —el commit del backend con la medición contra producción— no estaba en la rama
+del frontend**, que nació de `fa8a72ef`, un commit antes. El PR se habría mergeado sin esa medición,
+verde y «merged», **sin ninguna señal**.
+
+Verificado por mí, ahora:
+
+```
+git merge-base --is-ancestor 53dcbaa7 HEAD   ->  SÍ, es ancestro
+git log --oneline HEAD..origin/feat/409-panel-notificaciones-accionable  ->  0 commits
+```
+
+**Y no se quedó ningún otro fuera**, que era la segunda pregunta: la lista de commits de la rama del
+backend que faltan en HEAD está **vacía**, y `progress/impl_409_backend.md` —el único archivo que
+`53dcbaa7` tocó— sale **idéntico** al comparar HEAD con la rama del backend, o sea que el merge
+trajo su contenido íntegro y no una versión recortada. HEAD lleva hoy **11 commits sobre `dev`**, los
+5 del backend y los 6 del frontend.
+
+## R2.§3 — Lo que esta tanda cambió: **ni una línea de código**
+
+No me fío de la palabra, y tampoco hacía falta repetir el gate. Lo medí:
+
+```
+git diff --stat c9ad1ab8 HEAD -- lib/ app/ components/ hooks/ db/ tests/ vercel.json
+(vacío)
+```
+
+**Cero líneas de producción y cero de test** entre el punto donde corrí el gate completo y las nueve
+mutaciones (ronda 1) y HEAD. Los tres commits nuevos tocan **solo markdown**:
+`impl_409_backend.md` (53dcbaa7), el merge (af6f29c2) y `impl_409_frontend.md` + `tasks.md`
+(f26170f3). Por tanto **el gate y las mutaciones de la ronda 1 siguen describiendo este árbol**, y
+no repetirlos es correcto.
+
+## R2.§4 — Las casillas: **20 contrastadas contra su respaldo, 0 en falso**
+
+`tasks.md` está hoy en **35 marcadas, 1 vacía**. Una casilla marcada se lee como un hecho, así que
+no me bastó con contarlas: tomé muestra y fui **al artefacto**, nunca a la bitácora que lo cuenta.
+
+| Casilla | Qué afirma | Contra qué la contrasté | Resultado |
+| --- | --- | --- | --- |
+| T0.2 | `marcarNotificacionLeida` sin punto de entrada | barrido de `lib/ app/ components/ hooks/` descontando comentarios | **0 ocurrencias de código** ✓ |
+| T0.2 | `ROL_AUTORIZADO = "adminSatelite"` | `lib/services/EnvioDevolucionCentralService.ts:19` | literal exacto ✓ |
+| T0.2 | `notificacion_dedupe_key` es el de la 146 | `20260727120000_notificacion/migration.sql` | presente ✓ |
+| T1.2 | `DIAS_RECHAZO_AUTOMATICO: 5`, `HORAS_REINTENTO: 24` | `lib/config/devolucion-sla.ts:38-39` | **5 y 24** ✓ |
+| T1.3 | `DIAS_REPRESAMIENTO: 3` | `lib/config/avisos-diarios.ts:36` | **3** ✓ |
+| T1.1, T1.4, T1.5 | módulos y guardia creados | los tres archivos | existen ✓ |
+| **T2.1** | **+2 y +2 valores en los enums** | `db/schema.prisma`, contando dentro de cada bloque `enum` | **2 en `NotificacionEvento`, 2 en `NotificacionEntidadTipo`** ✓ |
+| T2.2 | cuatro `ADD VALUE IF NOT EXISTS` | `migration.sql` | **exactamente 4** ✓ |
+| **T2.3** | **`down.sql` con 11 eventos y 9 entidades** | parseo de los dos bloques `CREATE TYPE ... AS ENUM` del `down.sql` | **11 y 9**, y los nombres son los previos, sin los nuevos ✓ |
+| T2.4 | test de migración | `notificacion-evento-avisos-agregados-migration.test.ts` | existe, 20 casos, corrió en mi gate ✓ |
+| **T2.5** | listas releídas contra `origin/dev` | **re-medido HOY por mí**: ver R2.§5 | ✓ |
+| T3.x, T4.1–T4.3 | emisores, repositorio, servicio, route handler | los seis archivos | existen ✓ |
+| **T4.4** | **`vercel.json` con `0 13 * * *`** | parseo del JSON, entrada de `avisos-diarios` | `{'path': '/api/cron/avisos-diarios', 'schedule': '0 13 * * *'}` ✓ — y **13 UTC − 6 = 07:00 CR**, la conversión sale |
+| **T4.5** | **el route handler PASA los dos notificadores reales** | fuente **sin imports ni comentarios**, buscando dentro de la llamada a `new AvisosDiariosService(...)` | **los dos PASADOS** —no solo importados— y también el umbral de configuración ✓ |
+| T5.2 | interfaz + servicio de vigencia | los dos archivos | existen ✓ |
+| T5.4 | `buildService()` inyecta el resolutor real | fuente sin imports ni comentarios, patrón `new NotificacionService(... new VigenciaAvisoAgregadoService(` | **PASADO** ✓ |
+| T5.5 | los dos dedupe contra Postgres real | los dos archivos | existen y corrieron en mi gate ✓ |
+| T6.3, T6.4 | tres guardias del panel | los tres archivos | existen ✓ |
+| T6.5 | la página lee `?superficie=` y `NovedadesTabs` lo reenvía | `page.tsx` (2 usos de `searchParams`) y `NovedadesTabs.tsx:78` (`defaultValue={superficieInicial}`) | ✓ |
+| **T7.5** | **cerrada citando `53dcbaa7`** | abrí **ese commit** y busqué su §7bis | ver R2.§6 ✓ |
+
+**Ninguna casilla marcada está en falso.** Ninguna de las 35 afirma algo que el árbol no respalde.
+
+## R2.§5 — T2.5: `dev` se movió OTRA VEZ, y lo volví a medir
+
+En la ronda 1 medí contra `origin/dev` @ **`b84e5c75`**. Hoy `origin/dev` está en **`4a2f6094`**:
+**se movió entre mis dos rondas**, que es exactamente la trampa de «el pre-vuelo caduca». Lo volví a
+contar sobre ese árbol:
+
+- `NotificacionEvento`: **11 valores**. `NotificacionEntidadTipo`: **9**.
+- Las dos listas del `down.sql`: **11 y 9**, mismos nombres.
+
+**Siguen coincidiendo.** Revertir esta migración no borraría en silencio nada de otra ficha. Si `dev`
+vuelve a moverse antes del merge, esto se repite: es una medida con fecha, no una propiedad.
+
+## R2.§6 — T7.5 cita la FUENTE, no un mensaje
+
+La casilla dice «CERRADA el 2026-09-10, en el commit `53dcbaa7` (`progress/impl_409_backend.md`
+§7bis)». **Fui a ese commit**, no al texto de nadie: `git show 53dcbaa7:progress/impl_409_backend.md`
+tiene la §7bis, con su tabla y sus números —`por_devolver` 27 órdenes, media 2,5 d, máximo 8,3 d,
+**7 pasan de 3 d**, y **las 27 de UNA SOLA tienda**; `por_devolver_a_tienda` **0**—. **La casilla
+está respaldada por un commit, no por una conversación.**
+
+Y ese dato cierra el círculo de mi hallazgo de la ronda 1: **las 27 son de una sola tienda**, así que
+producción **nunca** habría cazado el silencio del `entidad_id` sin la tienda dentro. El test contra
+Postgres real es la única prueba, y ahora hay medición fresca que lo dice.
+
+El límite que trae consigo, y conviene que no se lea como un visto bueno: `por_devolver_a_tienda`
+está **vacío hoy**. Cero no es «no importa»: es que **no se puede ver funcionar contra ese estado
+hasta que caiga la primera orden**.
+
+## R2.§7 — T7.4 sigue VACÍA, y así debe estar
+
+Comprobado: **35 marcadas, 1 vacía, y la vacía es T7.4**, con su motivo escrito en la propia línea
+(nadie ha visto el panel en un navegador; no se levantó un dev server porque había otros agentes y
+dos dev servers se pisan). **Es la única casilla sin marcar de una lista donde todas las demás lo
+están, y esa asimetría es justo la señal que pedía la ronda 1**: ahora «no hecha» se distingue de
+«no anotada» de un vistazo.
+
+Sigue siendo **puerta antes de dar la ficha por hecha**: 20 avisos o más, con atajo, **sin** atajo,
+informativos y un texto largo, **en los dos temas**.
+
+## R2.§8 — El dato del rótulo, corregido Y cuantificado
+
+Confirmo los dos datos, medidos por mí sobre `dev`:
+
+- El literal «Marcar todas como leídas» vive en **dos sitios**: líneas **86** y **514**.
+- **La 86 ES el helper `abrir()`** — y no de pasada: es su `return`, o sea **el punto de espera con
+  el que el helper da por abierto el panel**.
+
+Y lo cuantifico, porque es lo que convierte el matiz en argumento: **14 de los 28 casos vigentes
+llaman a `abrir(user)`**, más el clic directo de la 514. Acortar el rótulo habría roto **15 de 28
+casos, el 54 % de la suite vigente**, por una ruta que no tiene nada que ver con la 409 y a cambio
+de cero requisitos. En la rama, tras la ficha, son **27 de 43** los que pasan por ese helper.
+
+**El dato corregido no debilita la decisión de no acortar el rótulo: la agranda.** Mi juicio de la
+ronda 1 (§9) se mantiene, ahora con número.
+
+Igual con el otro: **28 → 43**, no 34 → 43. Las dos correcciones están escritas en
+`progress/impl_409_frontend.md` con su comando de medición al lado, que es la forma correcta de
+corregir una bitácora: no borrando el número viejo, sino dejando cómo se midió el nuevo.
+
+## R2.§9 — El menor de seguridad: **ficha propia, NO bloqueante**. Y qué tiene que probar
+
+Me preguntan si merece más que una ficha o si debería bloquear. **No debe bloquear**, y lo razono en
+vez de afirmarlo:
+
+1. **Hoy no es alcanzable.** Un `adminSatelite` sin zona no recibe una fila acotada por zona, así que
+   el resolutor **no llega a llamarse** para él. No es una esperanza: es el predicado de la 146, que
+   esta ficha **no toca** (R64, diff vacío) y que tiene su propia suite vigente y verde.
+2. **El peor caso es un número, no un dato.** Lo que vería sería la **cifra** de represadas del
+   sistema en el título de un aviso cuyo texto R54 ya deja sin guía, sin remisión, sin dirección, sin
+   teléfono, sin destinatario, **sin tienda y sin zona**. Es un conteo fuera de ámbito, no una fuga.
+3. **Arreglarlo aquí sería rediseñar por encima de lo evidenciado**, que en este repo ya costó dos
+   specs descartados. El encargo de esta tanda era el frontend.
+
+Pero que no bloquee **no lo vuelve inocuo**, y la ficha conviene que nazca con su criterio de
+aceptación escrito, porque lo que falla aquí es mudo:
+
+> **Lo que hay que probar, y hoy no lo prueba nadie:** un test **en este seam** que construya un
+> actor `{ rol: "adminSatelite", zonaId: null }`, pida la cifra de `devoluciones_represadas` y exija
+> que **NO** se resuelva al ámbito global. Hoy el caso existe pero afirma lo contrario —que se pide
+> `null`— y se apoya en un comentario para justificarlo. **Ningún test de esta ficha se pone rojo si
+> alguien toca el predicado de la 146**, y ése es el problema real: la protección funciona **por
+> herencia** y no tiene alarma propia.
+
+Nota de precisión, para que la ficha no salga con el nombre equivocado: el caso vigente se llama «un
+adminSatelite SIN zona no ve el total», pero lo que **afirma** es que se pide `null` —que es el
+total—. El nombre promete lo que el aserto no comprueba.
+
+## R2.§10 — El único menor que queda abierto
+
+**`progress/history.md` sigue sin entrada de la 409** (0 ocurrencias). Es el último punto de
+«Verificación final» de `CHECKPOINTS.md` y, por el patrón de este repo, lo escribe el **leader al
+cerrar**. **No bloquea el PR**; sí bloquea dar la ficha por `done`.
+
+Los otros ocho menores de la ronda 1 siguen como estaban: cuatro quedaron **corregidos o declarados**
+en esta tanda (m3 cerrado con `53dcbaa7`; m4 y m5 corregidos en la bitácora; m6 declarado en §7), y
+los demás (m2/T7.4, m7, m8, m9) siguen siendo lo que eran: límites y matices anotados, no defectos.
+
+## R2.§11 — Veredicto final de la ronda 2
+
+**OK.** B1 resuelto y verificado contra el árbol, no contra la prosa: **20 casillas contrastadas
+con su respaldo real, cero en falso**; T7.4 correctamente vacía; T7.5 respaldada por un commit;
+`53dcbaa7` dentro y **ningún otro commit fuera**; y **cero líneas de código tocadas** desde el gate
+y las mutaciones de la ronda 1.
+
+Antes de dar la ficha por **hecha** (que no es lo mismo que mergeada) quedan, dichas con nombre:
+**T7.4** (ver el panel en un navegador, en los dos temas) y la **entrada en `progress/history.md`**.
