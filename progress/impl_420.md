@@ -333,6 +333,23 @@ de ahí). Los otros tests saltados son los de siempre (17 `AnaliticaPage` + 9 `A
 bloqueado por el clasificador de permisos de esta sesión**. No se copió ni se enlazó el `.env`, que
 es la política del repo.
 
+**CERRADO POR LA REVISION (2026-09-11).** El reviewer copió el `.env` al worktree —y lo borró al
+terminar— y corrió el gate completo **con base de datos**:
+
+```
+✓ DATABASE_URL resuelta: los 170 archivos de tests contra Postgres SI se ejecutan
+ Test Files  1942 passed (1942)
+      Tests  28177 passed | 26 skipped (28203)
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1942 ejecutado(s), todos en el baseline conocido)
+== init OK ==
+INIT_EXIT=0
+```
+
+**26 saltados** —los 17 de `AnaliticaPage` + 9 de `AnaliticaShell` de siempre— y **cero de
+`integration/db`**. Ese verde sí cubre la capa de datos. Mi corrida 3 (posterior, ya con el
+superviviente cerrado) sigue sin base, así que lo de abajo se mantiene como está escrito para esa
+corrida en concreto.
+
 Se dice, no se tapa. Lo que este hueco significa para ESTA ficha en concreto: el diff no toca ni
 una línea de la capa de datos —`init.sh`, `scripts/verificar-dependencias.mjs`, un test de guardia,
 `docs/` y `specs/`—, así que ninguna de las 129 suites saltadas puede alcanzarlo por imports ni por
