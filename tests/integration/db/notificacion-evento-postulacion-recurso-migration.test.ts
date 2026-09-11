@@ -215,6 +215,11 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // a la de la 409 y tambien a las DOS de la 410 (de ahi que su `down.sql` sea el primero
       // que tiene que retipar `push_envio_dia.evento`).
       "cierre_dia_rechazado",
+      // FICHA 413 (design §7): «tenés N órdenes para mañana», al MENSAJERO asignado y a nadie
+      // más. Lo emite el cron `aviso-reparto-manana` a las 19:00 CR (= `0 1 * * *` UTC), una vez
+      // por DÍA ANUNCIADO. Migracion `20260914120000_notificacion_evento_reparto_manana`,
+      // POSTERIOR a la de la 412 y tambien a las DOS de la 410.
+      "reparto_manana",
     ]);
   });
 
@@ -252,6 +257,9 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // el cierre. Con el cierre, el SEGUNDO rechazo del mismo cierre no avisaria nunca: la
       // clave no mira el estado de lectura y la re-solicitud REUTILIZA la misma fila.
       "cierre_dia_rechazo",
+      // FICHA 413 (design §7): la entidad de ese aviso es EL DIA ANUNCIADO (`'YYYY-MM-DD'`), no
+      // ninguna orden: con una entidad fija, el aviso de la segunda noche no saldria NUNCA.
+      "reparto_manana_dia",
     ]);
   });
 
@@ -323,6 +331,11 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       // a la de la 409 y tambien a las DOS de la 410 (de ahi que su `down.sql` sea el primero
       // que tiene que retipar `push_envio_dia.evento`).
       "cierre_dia_rechazado",
+      // FICHA 413 (design §7): «tenés N órdenes para mañana», al MENSAJERO asignado y a nadie
+      // más. Lo emite el cron `aviso-reparto-manana` a las 19:00 CR (= `0 1 * * *` UTC), una vez
+      // por DÍA ANUNCIADO. Migracion `20260914120000_notificacion_evento_reparto_manana`,
+      // POSTERIOR a la de la 412 y tambien a las DOS de la 410.
+      "reparto_manana",
     ]);
   });
 
@@ -351,6 +364,9 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       // el cierre. Con el cierre, el SEGUNDO rechazo del mismo cierre no avisaria nunca: la
       // clave no mira el estado de lectura y la re-solicitud REUTILIZA la misma fila.
       "cierre_dia_rechazo",
+      // FICHA 413 (design §7): la entidad de ese aviso es EL DIA ANUNCIADO (`'YYYY-MM-DD'`), no
+      // ninguna orden: con una entidad fija, el aviso de la segunda noche no saldria NUNCA.
+      "reparto_manana_dia",
     ]);
   });
 

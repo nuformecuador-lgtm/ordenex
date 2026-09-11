@@ -93,7 +93,26 @@ export type NotificacionEvento =
   //
   // ⚠️ SU ENTIDAD ES `cierre_dia_rechazo` Y LLEVA EL INSTANTE DENTRO: con el cierre a secas, el
   // SEGUNDO rechazo del mismo cierre no avisaría NUNCA. Ver el comentario de ese valor más abajo.
-  | "cierre_dia_rechazado";
+  | "cierre_dia_rechazado"
+  // FICHA 413 (R1/R5/R6/R42) — al MENSAJERO le avisan, la tarde anterior, CUÁNTAS órdenes tiene
+  // reservadas para el día siguiente. Es el primer aviso AGREGADO dirigido a un USUARIO: UNA sola
+  // notificación con el número dentro, jamás una por orden (R5), emitida por el cron
+  // `aviso-reparto-manana` a las **19:00 CR** (= `0 1 * * *` UTC) y una vez por DÍA ANUNCIADO
+  // (R22/R23). Destinatario: el mensajero asignado, como fila dirigida a usuario; no hay ninguna
+  // fila de rol de este evento.
+  //
+  // ⚠️ EL NÚMERO NO SE PERSISTE (R15). La `descripción` nombra la FECHA; el título lo compone el
+  // catálogo con la CIFRA VIVA en cada lectura (409/R57), así que si entran dos órdenes más el
+  // panel dice el número nuevo SIN una segunda notificación (R14) y sin ninguna rama de código que
+  // «detecte el cambio». Y cuando llega el día anunciado el aviso se apaga SOLO: `startOfDayCR`
+  // avanza, esas órdenes dejan de ser «posteriores», la cifra cae a 0 y `presentacionDe` devuelve
+  // `null` (R19/R21). Eso es lo que permite que el título diga «mañana» sin mentir nunca.
+  //
+  // ⚠️ EL BLOQUEADO POR CIERRES NO LO RECIBE (R42, decisión del humano del 2026-09-11), y el
+  // filtro es de EMISIÓN, no de lectura (R43): la cifra viva NO consulta cierres. No es regla
+  // nueva — el bloqueo alcanza «recibir trabajo nuevo» desde el 2026-08-23 (271) —, y dos avisos
+  // que apuntan a acciones opuestas es peor que uno menos.
+  | "reparto_manana";
 
 /** Entidad de origen referenciada (referencia polimorfica, sin FK — design §1.2). */
 export type NotificacionEntidadTipo =
@@ -218,7 +237,38 @@ export type NotificacionEntidadTipo =
   // Y NO es el día CR (A2): el ciclo rechazo → corrección → rechazo cabe entero dentro del mismo
   // día. El día es el grano de un RECORDATORIO que se repite mientras dure un estado; aquí la
   // pregunta no es «¿ya avisé hoy?» sino «¿ya avisé de ESTE rechazo?».
-  | "cierre_dia_rechazo";
+  | "cierre_dia_rechazo"
+  // ⚠️ FICHA 413 (design §7) — SÉPTIMO `entidad_tipo` que NO apunta a una fila de tabla, y la
+  // entidad de este aviso es **EL DÍA ANUNCIADO**:
+  //
+  //     entidadId = `${fechaRepartoISO}`   // `YYYY-MM-DD`, el día CR del reparto del que habla
+  //
+  // POR QUÉ EL DÍA VA DENTRO: **para que el aviso de la noche siguiente SÍ salga.**
+  // `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+  // destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`, el índice
+  // NO mira el estado de lectura, y `NotificacionRepository.crear` ABSORBE el `P2002`. Con una
+  // entidad que no cambiara entre jornadas, la clave sería la misma TODAS LAS NOCHES y el aviso
+  // del día 2 no saldría JAMÁS: sin error, sin log y sin nada. Es el fallo que la 262 documentó
+  // con `orden` y la 403 con la suscripción.
+  //
+  // Con el día, las dos propiedades son ESTRUCTURALES y no de disciplina:
+  //   · dos noches consecutivas ⇒ dos días anunciados ⇒ dos entidades ⇒ DOS avisos (R23);
+  //   · la misma noche emitida dos veces ⇒ misma entidad ⇒ UNO solo (R22) — y lo decide el índice
+  //     único, no un `if` previo que una carrera pueda burlar (R24).
+  //
+  // ⚠️ Y NO LLEVA PREFIJO DE MENSAJERO, al contrario que los dos de la 409. **Esto hay que leerlo
+  // entero antes de copiarlo.** Allí el destinatario es un ROL CON ALCANCE (`{rol: adminTienda,
+  // tiendaId}`) y el alcance NO está en la clave única, así que sin el prefijo sólo habría avisado
+  // la PRIMERA tienda de la corrida. Aquí el destinatario es un USUARIO y
+  // `destinatario_usuario_id` **ES** una columna de esa clave: dos mensajeros ⇒ dos valores
+  // distintos ⇒ dos filas. La regla no es «prefija siempre», es «comprueba si el alcance está en
+  // la clave». Y no lo sostiene este párrafo: lo sostiene **R7**, con dos mensajeros la misma
+  // noche contra Postgres real, cuya mutación obligatoria —dirigir el aviso a un rol— reproduce
+  // exactamente aquel silencio y pone el test rojo.
+  //
+  // Y NO es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el índice
+  // único es PARCIAL, así que saldría un aviso por cada ejecución del cron.
+  | "reparto_manana_dia";
 
 /**
  * DTO que viaja al cliente (design §3.1). `read` NO es una columna de `notificacion`:

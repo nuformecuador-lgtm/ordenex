@@ -1280,3 +1280,119 @@ export async function emitirDevolucionesRepresadas(
     tx,
   );
 }
+// ---------------------------------------------------------------------------
+// FICHA 413 §8.2 — «TENÉS N ÓRDENES PARA MAÑANA». AGREGADO, AL MENSAJERO, UNA VEZ POR TARDE.
+//
+// ⚠️ LA ENTIDAD DE ESTE AVISO ES **EL DÍA ANUNCIADO** (`entidad_id = 'YYYY-MM-DD'`), Y ESA ES LA
+// DECISIÓN QUE EVITA UN SILENCIO TOTAL. `notificacion_dedupe_key` es UNIQUE sobre `(evento,
+// entidad_id, destinatario_rol, destinatario_usuario_id)` con `NULLS NOT DISTINCT` y
+// `WHERE entidad_id IS NOT NULL`, el índice NO mira el estado de lectura, y
+// `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `null`. Con una entidad que no
+// cambiara entre jornadas, la clave sería la misma TODAS LAS NOCHES y el aviso del día 2 no
+// saldría JAMÁS —sin error, sin log, sin nada—: el fallo que documentaron la 262 (con `orden`) y
+// la 403 (con la suscripción).
+//
+// Con el día, las dos propiedades son ESTRUCTURALES y no de disciplina:
+//   · dos noches consecutivas ⇒ dos días anunciados ⇒ dos entidades ⇒ DOS avisos (R23);
+//   · la misma noche emitida dos veces ⇒ misma entidad ⇒ UNO solo (R22), y lo decide el índice
+//     único, no un `if` previo que una carrera pueda burlar (R24).
+//
+// ⚠️ Y **NO LLEVA PREFIJO DE MENSAJERO**, al contrario que los dos avisos de la 409 de aquí
+// arriba. Esto hay que leerlo entero antes de copiarlo: allí el destinatario es un ROL CON ALCANCE
+// (`{rol: adminTienda, tiendaId}`) y el alcance NO entra en la clave única, así que sin el prefijo
+// sólo habría avisado la PRIMERA tienda de la corrida. Aquí el destinatario es un USUARIO y
+// `destinatario_usuario_id` **ES** una columna de esa clave: dos mensajeros ⇒ dos valores
+// distintos ⇒ dos filas. La regla no es «prefija siempre», es «comprueba si el alcance está en la
+// clave». Y no lo sostiene este párrafo: lo sostiene R7, con DOS mensajeros la misma noche contra
+// Postgres real, cuya mutación obligatoria —dirigir el aviso a un rol— reproduce aquel silencio.
+//
+// Y no es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el índice
+// único es PARCIAL, así que saldría un aviso por cada ejecución del cron.
+// ---------------------------------------------------------------------------
+
+/**
+ * FICHA 413 (R15/R28/R29) — el texto PERSISTIDO del aviso de reparto de mañana.
+ *
+ * ⚠️ **SIN EL NÚMERO, Y NO ES UN OLVIDO (R15).** El número vive SÓLO en el título, que el catálogo
+ * recompone con la cifra VIVA en cada lectura (409/R57). Un número persistido es un número que
+ * queda obsoleto en cuanto entra una orden más y que nadie corrige — y el mensajero aprende que el
+ * aviso miente. Es la misma decisión que tomaron los dos agregados de la 409 y por el mismo
+ * motivo.
+ *
+ * ⚠️ **NOMBRA LA FECHA (R28).** La campana guarda 30 días, así que un texto que dijera «mañana»
+ * sería FALSO leído al día siguiente — es la lección que `textoDiaRepartoCorregido` (262) dejó
+ * escrita: «NOMBRA LA FECHA, NUNCA "hoy" NI "mañana"». La palabra «mañana» sí aparece en el
+ * TÍTULO, y ahí es segura porque el aviso NO PUEDE SOBREVIVIR A SU PROPIO DÍA: al pasar la
+ * medianoche CR la cifra viva cae a 0 y `presentacionDe` lo apaga (R21). Aquí, además, cinturón.
+ *
+ * La fecha en palabras sale de `fechaLegible`, el MISMO formateador que usa el selector del día y
+ * el aviso de la 262: se importa la CONVERSIÓN, no un literal, y las cadenas de notificación
+ * siguen viviendo sólo en este archivo (146 §4.6).
+ *
+ * SIN PII (R29): una fecha y una instrucción. Ni guía, ni remisión, ni dirección, ni teléfono, ni
+ * destinatario, ni tienda, ni monto.
+ *
+ * VOSEO, como el resto del vocabulario al mensajero de la 409 («Coordiná la devolución»).
+ *
+ * @param fechaRepartoISO `YYYY-MM-DD` del día anunciado. Lo que no sea una fecha calendario lo
+ *   devuelve `fechaLegible` TAL CUAL; la frase sigue siendo cierta, sólo pierde precisión.
+ */
+export function textoRepartoManana(fechaRepartoISO: string): string {
+  const fecha = fechaLegible(fechaRepartoISO);
+  return fecha
+    ? `Es tu reparto del ${fecha}. Revisá la lista para organizarte.`
+    : "Es tu reparto del día siguiente. Revisá la lista para organizarte.";
+}
+
+/** Lo MÍNIMO que el aviso necesita: un mensajero y un día. Sin número (R15) y sin PII (R29). */
+export interface RepartoMananaContexto {
+  /** El mensajero asignado: ÚNICO destinatario (R6/R8), como fila dirigida a USUARIO. */
+  mensajeroUsuarioId: string;
+  /**
+   * `YYYY-MM-DD` del DÍA ANUNCIADO —el siguiente al de la emisión—, en calendario de Costa Rica.
+   * Es la ENTIDAD del aviso y la fecha que va dentro del texto. Sale de `fechaCalendarioCR` sobre
+   * `startOfDayCR(now) + 1 día`, nunca de `toISOString().slice(0,10)`: la corrida es a las 19:00
+   * CR, o sea `01:00Z` del día siguiente en UTC, y ese recorte daría el día equivocado.
+   */
+  diaAnunciadoISO: string;
+}
+
+/**
+ * R5/R6/R8 — UNA sola fila `box` dirigida al MENSAJERO, con el número FUERA del texto.
+ *
+ * `box` y no `alert` ni `warning`: no hay nada roto ni vencido. Es su trabajo de mañana, puesto
+ * delante la tarde antes para que pueda organizarse; el tono de urgencia lo llevan los avisos de
+ * su cierre.
+ *
+ * ⚠️ EL TÍTULO (con el número) NO SE PERSISTE AQUÍ y no es un olvido: vive en el CATÁLOGO
+ * (`catalogo-avisos.ts`) porque se compone con la cifra VIVA en el instante de la consulta (R13).
+ * Si se persistiera, el aviso diría «5 órdenes» eternamente aunque ya fueran 8 — y ése es
+ * exactamente el modo en que un aviso pierde la confianza de quien lo lee.
+ *
+ * UNA FILA CUALQUIERA QUE SEA EL NÚMERO (R5): el array tiene un elemento, no uno por orden. Con 40
+ * órdenes, `crear` se llama EXACTAMENTE UNA VEZ.
+ *
+ * SIN FILA DE ROL, y no por olvido: nadie más que el mensajero puede preparar su día, y su reparto
+ * ya lo ve la administración en `/ordenes`. SIN ANEXO: la fecha ya va dentro del texto.
+ */
+export async function emitirRepartoManana(
+  repo: INotificacionRepository,
+  ctx: RepartoMananaContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  const filas: CrearNotificacionInput[] = [
+    {
+      tipo: "box",
+      evento: "reparto_manana",
+      descripcion: textoRepartoManana(ctx.diaAnunciadoISO),
+      anexo: null,
+      entidadTipo: "reparto_manana_dia",
+      // ⚠️ EL DÍA VA DENTRO, Y SOLO EL DÍA. Ver el bloque de arriba: sin él, el aviso de la noche
+      // siguiente no saldría nunca; con un prefijo de mensajero, sobraría — `destinatario_usuario_id`
+      // ya está en la clave única.
+      entidadId: ctx.diaAnunciadoISO,
+      destinatario: { tipo: "usuario", usuarioId: ctx.mensajeroUsuarioId },
+    },
+  ];
+  return emitirFilas(repo, filas, tx);
+}

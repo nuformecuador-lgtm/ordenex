@@ -25,6 +25,7 @@ import { NotificacionService } from "@/lib/services/NotificacionService";
 import { NotificacionRepository } from "@/lib/repositories/NotificacionRepository";
 import { VigenciaAvisoAgregadoService } from "@/lib/services/VigenciaAvisoAgregadoService";
 import { AvisoAgregadoRepository } from "@/lib/repositories/AvisoAgregadoRepository";
+import { RepartoMananaRepository } from "@/lib/repositories/RepartoMananaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { avisosDiariosConfig } from "@/lib/config/avisos-diarios";
 import { getPrismaClient } from "@/lib/db/prisma-client";
@@ -58,6 +59,13 @@ function buildService(): INotificacionService {
       // El conteo VIVO de novedades DELEGA en el metodo que ya pinta `/novedades`.
       new AvisoAgregadoRepository(prisma, new OrdenRepository(prisma)),
       avisosDiariosConfig.DIAS_REPRESAMIENTO, // R53: el MISMO umbral que aplica el cron
+      () => new Date(),
+      // ⚠️ FICHA 413 (T6.1, R13) — LA CIFRA VIVA DEL REPARTO DE MAÑANA, Y ESTA LINEA ES EL
+      // REQUISITO. Sin ella el resolutor lanza para `reparto_manana`, `cifrasVivas` lo registra y
+      // el aviso se muestra SIN numero (R16): no se rompe nada visible, y por eso el fallo seria
+      // MUDO — la familia «el composition root que no inyecta», que en este arbol ya dejo dos
+      // notificadores muertos con la suite entera en verde.
+      new RepartoMananaRepository(prisma),
     ),
   );
 }

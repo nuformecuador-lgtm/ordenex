@@ -485,6 +485,13 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       // campana usa para AGRUPAR y DEDUPLICAR: una diferencia metida en la descripcion es
       // invisible para todo lo que no sea leer la frase.
       "cierre_dia_rechazado", // ficha 412 / §2
+      // FICHA 413 (design 7) - DECIMOQUINTO valor, y este test rojo fue OTRA VEZ la prueba de que
+      // el inventario sigue CERRADO. Su productor es el CRON `aviso-reparto-manana`
+      // (`RepartoMananaAvisoService`), que lo emite a las 19:00 CR (= `0 1 * * *` UTC) UNA VEZ POR
+      // DIA ANUNCIADO, dirigido al MENSAJERO asignado como fila de USUARIO. Es el TERCER aviso
+      // AGREGADO: el numero NO se persiste -lo compone el catalogo con la cifra VIVA en cada
+      // lectura- y el BLOQUEADO por cierres no lo recibe (filtro de EMISION, no de lectura).
+      "reparto_manana", // ficha 413 / §7
     ]);
   });
 
@@ -555,6 +562,14 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       // mientras dure un estado; aqui la pregunta no es «¿ya avise hoy?» sino «¿ya avise de ESTE
       // rechazo?».
       "cierre_dia_rechazo", // ficha 412 / §3 — EL RECHAZO (cierre + instante), no el cierre
+      // FICHA 413 (design 7) - SEPTIMO valor que NO apunta a una fila de tabla: la entidad es EL
+      // DIA ANUNCIADO (`entidad_id = "YYYY-MM-DD"`), no ninguna orden. Con una entidad que no
+      // cambiara entre jornadas, el aviso de la SEGUNDA noche no saldria NUNCA, en silencio - el
+      // fallo que pagaron la 262 (con `orden`) y la 403 (con la suscripcion).
+      // Y NO lleva prefijo de mensajero, al contrario que los DOS de la 409: alli el destinatario
+      // es un ROL CON ALCANCE y el alcance no esta en la clave unica; aqui es un USUARIO, y
+      // `destinatario_usuario_id` YA ES una columna de `notificacion_dedupe_key`.
+      "reparto_manana_dia", // ficha 413 / §7 - EL DIA ANUNCIADO, sin prefijo de mensajero
     ]);
   });
 });
