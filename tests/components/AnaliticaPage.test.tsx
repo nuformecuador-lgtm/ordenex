@@ -104,6 +104,12 @@ vi.mock("@/lib/actions/usuarios-por-rol", () => ({
 vi.mock("@/lib/actions/conteo-productos", () => ({
   consultarConteoProductos: vi.fn(async () => ({ status: "forbidden" as const })),
 }));
+// FICHA 411 — la sección de cohortes es el octavo trozo del árbol de CLIENTE que la página monta
+// (`CohorteCargaTabla` → SWR → Server Action). Mismo trato y mismo motivo que los cuatro de
+// arriba. La página sigue sin importar `lib/actions`: quien invoca ésta es el componente.
+vi.mock("@/lib/actions/cohorte-carga", () => ({
+  consultarCohorteCarga: vi.fn(async () => ({ status: "forbidden" as const })),
+}));
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const cargarMock = vi.mocked(cargarTableroFinanciero);
@@ -1286,4 +1292,68 @@ describe("FICHA 345 (R5) — la sección de productos se monta por alcance, no p
       expect(fuente).not.toContain(`'${rol}'`);
     }
   });
+});
+
+/* ==========================================================================
+ * FICHA 411 (R31) — la SECCIÓN DE COHORTE DE CARGA, dentro de quien filtra
+ * ========================================================================== */
+
+/** El título de la sección que monta la ficha 411. Es también su etiqueta de búsqueda. */
+const TITULO_SECCION_COHORTE = "Detalle - Cohorte de carga";
+
+describe("FICHA 411 (R31) — la cohorte de carga se monta dentro de `FiltroEntregasProvider`", () => {
+  // La sección la mueve la MISMA barra que el resto de entregas, y eso no es una preferencia de
+  // maquetación: si colgara FUERA del proveedor, `useFiltroEntregas` caería a su valor «sin
+  // proveedor» —que existe a propósito para que un componente montado suelto no reviente— y la
+  // tabla pediría siempre la cohorte SIN FILTRAR mientras la barra dice otra cosa. No lanzaría
+  // nada, no rompería ningún tipo y en pantalla se vería una tabla perfectamente plausible.
+  //
+  // Por eso esto se afirma sobre el CÓDIGO FUENTE y no sobre el render: los dos montajes —dentro
+  // y fuera del proveedor— pintan exactamente el mismo DOM en esta página.
+  it("el componente está entre la apertura y el cierre del proveedor de filtro", () => {
+    const ruta = join(process.cwd(), "app", "(app)", "analitica", "page.tsx");
+    const fuente = readFileSync(ruta, "utf-8");
+
+    const abre = fuente.indexOf("<FiltroEntregasProvider>");
+    const cierra = fuente.indexOf("</FiltroEntregasProvider>");
+    const tabla = fuente.indexOf("<CohorteCargaTabla");
+
+    // Anti-vacío: sin las tres anclas el caso pasaría por no encontrar nada.
+    expect(abre, "no se encontró la apertura del proveedor").toBeGreaterThan(-1);
+    expect(cierra, "no se encontró el cierre del proveedor").toBeGreaterThan(abre);
+    expect(tabla, "no se encontró `<CohorteCargaTabla` en la página").toBeGreaterThan(-1);
+
+    expect(tabla).toBeGreaterThan(abre);
+    expect(tabla).toBeLessThan(cierra);
+  });
+
+  it("es una sección PROPIA y hermana de la de productos, no un bloque dentro de otra", () => {
+    const ruta = join(process.cwd(), "app", "(app)", "analitica", "page.tsx");
+    const fuente = readFileSync(ruta, "utf-8");
+    // Su propio `SeccionFiltrable` es lo que permite al campo de secciones esconderla sola: es
+    // otra pregunta, sobre otro grano.
+    const bloque = fuente.slice(
+      fuente.lastIndexOf("<SeccionFiltrable", fuente.indexOf("<CohorteCargaTabla")),
+      fuente.indexOf("<CohorteCargaTabla"),
+    );
+    expect(bloque).toContain("titulo={TITULO_COHORTE}");
+    expect(bloque).toContain("<ContenedorSeccion");
+    // Misma corrección medida en la ficha 348 para la tabla vecina: sin `overflow-visible` el
+    // `Card` crea un scrollport y la flecha de scroll horizontal deja de acompañar la ventana.
+    expect(bloque).toContain("overflow-visible");
+  });
+
+  // Los CUATRO roles que entran a la pantalla la ven, `adminSatelite` incluido (P2 del spec):
+  // no se inventa una excepción de permisos para esta tabla. Su recorte por zona lo aplica el
+  // borde de la Server Action, que es donde vive la frontera multi-tenant.
+  it.each([...ROLES_QUE_VEN_PRODUCTOS, ...ROLES_SIN_PRODUCTOS])(
+    "el rol `%s` ve la sección de cohorte de carga",
+    async (rol) => {
+      resolveActorMock.mockResolvedValue(actorDeAnalitica(rol));
+      await renderPage();
+
+      afirmarCuerpoPintado();
+      expect(screen.getByText(TITULO_SECCION_COHORTE)).toBeInTheDocument();
+    },
+  );
 });

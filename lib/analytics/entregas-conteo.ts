@@ -563,3 +563,28 @@ export function claveDeCicloVida(consulta: ConsultaConteoEntregas): string {
 
 /** Tag —y prefijo de clave— del ciclo de vida. Ver `claveDeCicloVida`. */
 export const TAG_CICLO_VIDA = "ciclo-vida";
+
+/**
+ * La clave de la COHORTE DE CARGA (de lo cargado cada dia, que fue de ello).
+ *
+ * Octavo prefijo, por el mismo motivo exacto que los anteriores: las ocho lecturas comparten
+ * `ConsultaConteoEntregas` entera —el filtro es identico a proposito, para que la barra las
+ * mueva a todas a la vez— asi que sin prefijo producirian LA MISMA CLAVE con valores de forma
+ * distinta, y quien pidiera la cohorte recibiria el `porDesenlace` del anillo.
+ *
+ * ⚠ EN ESTA LECTURA LOS COMPONENTES `d=` / `h=` NUNCA VALEN EL CENTINELA `*`: el rango es
+ * OBLIGATORIO (a diferencia de las otras siete) y el borde responde `sin_rango` antes de mirar
+ * la cache. Que el cuerpo comun sepa representar «sin ventana» no cambia nada aqui: ese caso no
+ * llega.
+ *
+ * La faceta `mensajero_id` SIGUE entrando en la clave (componente `x=`) aunque esta lectura no
+ * recorte por ella, exactamente como en la serie de cargadas por dia. Es redundante y se acepta:
+ * sacarla obligaria a una clave propia, y una clave que ignora un componente del filtro es la
+ * clase de atajo que un dia sirve datos de un recorte en otro.
+ */
+export function claveDeCohorteCarga(consulta: ConsultaConteoEntregas): string {
+  return claveConPrefijo(TAG_COHORTE_CARGA, consulta);
+}
+
+/** Tag —y prefijo de clave— de la cohorte de carga. Ver `claveDeCohorteCarga`. */
+export const TAG_COHORTE_CARGA = "cohorte-carga";

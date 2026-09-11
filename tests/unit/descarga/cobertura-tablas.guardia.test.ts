@@ -166,8 +166,19 @@ const ARBOLES_UI = ["app", "components"] as const;
 // app/(app)/historico/acciones/_components/HistorialAccionesModule.tsx #1» antes de tocar
 // estos numeros, que es la convencion escrita en este propio archivo. Censo total: 35 = 34
 // `<DataTable>` + 1 `<table>` cruda.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 34;
-const TOTAL_INSTANCIAS_DATATABLE = 34;
+//
+// FICHA 411 (B7/T7.2): 34 -> 35 archivos y 34 -> 35 instancias, por la COHORTE DE CARGA
+// (`app/(app)/analitica/_components/entregas/CohorteCargaTabla.tsx`), tercera `<DataTable>` de
+// `/analitica`. Nace `fuera` —y por eso la que sube es la cuenta de EXCLUSIONES, no la de dentro
+// de alcance— con un motivo que no es ninguno de los dos ya registrados: no le falta la puerta
+// (el borde sirve el DTO entero en una consulta) ni es un recorte de otra descarga; es que ⟨P5⟩
+// del spec de la ficha decidio que la descarga no entra. El motivo entero esta en su entrada de
+// `censo-tablas.ts`. Esta guardia se vio fallar PRIMERO con «hay tablas sin registrar:
+// app/(app)/analitica/_components/entregas/CohorteCargaTabla.tsx #1» antes de tocar estos
+// numeros, que es la convencion escrita en este propio archivo. Censo total: 36 = 35
+// `<DataTable>` + 1 `<table>` cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 35;
+const TOTAL_INSTANCIAS_DATATABLE = 35;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -313,7 +324,10 @@ describe("guardia de cobertura del censo de tablas", () => {
     // FICHA 347 (F5/G5): 10 -> 11. La de mas es el detalle orden por orden del dinero de un
     // producto: `fuera` y sin control, porque el borde solo lo sirve paginado y un archivo
     // saldria truncado a una pagina o reconstruido con N llamadas desde el navegador.
-    expect(excluidas.length).toBe(11);
+    // FICHA 411 (B7/T7.2): 11 -> 12. La de mas es la cohorte de carga por dia: `fuera` y sin
+    // control porque ⟨P5⟩ del spec decidio que la descarga no entra en la ficha, no porque falte
+    // la puerta ni por ser un recorte de otra descarga.
+    expect(excluidas.length).toBe(12);
     for (const inst of excluidas) {
       const tabla = registro.get(inst.ruta)!.tablas[inst.indice];
       expect(inst.declaraDescarga, `${inst.ruta} :: ${tabla.nombre}`).toBe(false);
@@ -354,7 +368,9 @@ describe("guardia de cobertura del censo de tablas", () => {
     // Las 22 con descarga NO se mueven: la que entra nace `fuera`.
     // FICHA 362 (T6.3): 34 → 35, por el registro de acciones. Las 12 exclusiones NO se mueven:
     // la que entra nace `con_descarga`.
-    expect(totalCensado).toBe(35);
+    // FICHA 411 (B7/T7.2): 35 → 36, por la cohorte de carga por día de `/analitica`. Las 23 con
+    // descarga NO se mueven: la que entra nace `fuera`, con ⟨P5⟩ del spec como motivo.
+    expect(totalCensado).toBe(36);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -449,8 +465,12 @@ describe("guardia de cobertura del censo de tablas", () => {
     // FICHA 362 (T6.3): 22 -> 23 dentro de alcance, y las 12 exclusiones NO se mueven. La de
     // mas es el registro de acciones: un registro de auditoria que no se puede sacar de la
     // pantalla no sirve para auditar, asi que `fuera` no era una opcion con motivo.
+    // FICHA 411 (B7/T7.2): las 23 dentro de alcance NO se mueven y las exclusiones pasan de 12 a
+    // 13. La que entra es la cohorte de carga por dia, y su motivo es el TERCERO distinto de
+    // este censo: no es un recorte de algo que ya se descarga (343) ni le falta la puerta para
+    // servirlo entero (347) — es que la descarga se pregunto y se decidio que no entra (⟨P5⟩).
     expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(23);
-    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(12);
+    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(13);
   });
 
   it("una tabla compartida declara TODAS las pantallas que la montan", () => {

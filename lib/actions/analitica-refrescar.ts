@@ -28,6 +28,7 @@
 import { TAGS_OPERATIVA } from "@/lib/analytics/cache-tags";
 import {
   TAG_CICLO_VIDA,
+  TAG_COHORTE_CARGA,
   TAG_CONTEO_CARGADAS_POR_DIA,
   TAG_CONTEO_DEVOLUCIONES,
   TAG_CONTEO_ENTREGAS,
@@ -43,7 +44,7 @@ import type { IAnaliticaCache } from "@/lib/interfaces/external/IAnaliticaCache"
 import type { RefrescoAnaliticaResult } from "@/lib/types/analitica-refresco";
 
 /**
- * TODOS los tags que cubre el botón: las SIETE verticales de entregas —cada una con espacio
+ * TODOS los tags que cubre el botón: las OCHO verticales de entregas —cada una con espacio
  * propio, porque no salen del rollup— y el dominio operativa.
  *
  * Se escriben importando las constantes y NUNCA a mano: un literal repetido es exactamente
@@ -52,6 +53,10 @@ import type { RefrescoAnaliticaResult } from "@/lib/types/analitica-refresco";
  * FICHA 345 (2026-09-01) — la séptima es el análisis de productos. Sin su tag aquí, el botón
  * «Actualizar» seguiría sirviendo los productos cacheados durante 15 minutos mientras el resto
  * del tablero ya se hubiera refrescado: dos mitades de la misma pantalla con distinta edad.
+ *
+ * FICHA 411 (2026-09-10) — la octava es la cohorte de carga, y el argumento es idéntico: sin su
+ * tag aquí, la tabla de cohortes seguiría sirviendo lo cacheado mientras el resto del tablero ya
+ * se hubiera refrescado.
  */
 const TAGS_ANALITICA: readonly string[] = [
   TAG_CONTEO_ENTREGAS,
@@ -61,6 +66,7 @@ const TAGS_ANALITICA: readonly string[] = [
   TAG_CONTEO_DEVOLUCIONES,
   TAG_CICLO_VIDA,
   TAG_CONTEO_PRODUCTOS,
+  TAG_COHORTE_CARGA,
   ...TAGS_OPERATIVA,
 ];
 

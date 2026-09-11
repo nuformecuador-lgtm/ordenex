@@ -23,6 +23,7 @@ import { CicloVidaKpi } from "./_components/entregas/CicloVidaKpi";
 import { DevolucionesPorCausaAnillo } from "./_components/entregas/DevolucionesPorCausaAnillo";
 import { KpisEfectividad } from "./_components/entregas/KpisEfectividad";
 import { ProductosTabla } from "./_components/entregas/ProductosTabla";
+import { CohorteCargaTabla } from "./_components/entregas/CohorteCargaTabla";
 import { cargarTableroFinanciero } from "./_components/financiero/cargar";
 // import { cargarKpisFinancieros, kpisDenegados } from "./_components/finanzas/cargar-kpis"; // sección de finanzas comentada (2026-08-18)
 // import { KpisFinancieros } from "./_components/finanzas/KpisFinancieros"; // sección de finanzas comentada (2026-08-18)
@@ -108,6 +109,17 @@ const TITULO_ENTREGAS = "Detalle - Movimiento de las ordenes";
 const TITULO_PRODUCTOS = "Detalle - Productos";
 const DESCRIPCION_PRODUCTOS =
   "Que productos se movieron en el rango y con que resultado. Responde a los mismos filtros de arriba.";
+// FICHA 411 — el titulo de la seccion de cohortes. Mismo criterio que los dos de arriba: el
+// rotulo visible ES la etiqueta que registra el campo de secciones, asi que teclear lo que se ve
+// en pantalla la encuentra. `coincideSeccion` busca por subcadena: «cohorte» a secas vale.
+const TITULO_COHORTE = "Detalle - Cohorte de carga";
+// Que contesta la seccion, y —lo mas importante— que NO contesta. Las secciones de arriba
+// reparten las ordenes por su fecha efectiva; esta las reparte por el dia en que ENTRARON y las
+// sigue hasta su desenlace, asi que sus totales no tienen por que cuadrar con los de aquellas.
+// La advertencia del filtro de mensajero NO va aqui: depende del filtro que el usuario tenga
+// puesto, que solo conoce el componente de cliente.
+const DESCRIPCION_COHORTE =
+  "De las órdenes que se cargaron cada día, qué pasó con ellas: cuántas se entregaron, cuántas se devolvieron y cuántas siguen vivas. Cada orden se sigue hasta su desenlace, aunque haya ocurrido después del periodo.";
 const TITULO_OPERATIVO = "Indicadores operativos";
 // Los dos rótulos de la sección de finanzas, comentados con ella (2026-08-18). Se conservan
 // aquí —y no dentro del bloque comentado— para que reactivarla sea descomentar en un sitio y
@@ -397,6 +409,41 @@ export default async function AnaliticaPage() {
           </ContenedorSeccion>
         </SeccionFiltrable>
       ) : null}
+      {/* FICHA 411 — LA COHORTE DE CARGA, hermana de la de productos y DENTRO del mismo
+          proveedor de filtro (R31): si colgara de fuera no sería descendiente de quien filtra y
+          la barra de arriba no la movería.
+
+          ⚠ POR QUÉ NO VA DENTRO DE «Detalle - Movimiento de las ordenes», que es donde uno la
+          pondría: aquella sección reparte las órdenes por su FECHA EFECTIVA (última gestión
+          vigente, o la creación si nunca se gestionó) y su ventana cae ahí; ésta las reparte por
+          su FECHA DE CARGA y las sigue HASTA SU DESENLACE, caiga donde caiga en el tiempo. Son
+          dos universos sobre el mismo recorte, y meterlas bajo el mismo título haría leer sus
+          totales como si tuvieran que cuadrar. Es el mismo argumento —y con las mismas palabras—
+          que ya lleva escrito `CargadasPorDiaBarras`.
+
+          Y no en un slot del shell por lo mismo que la de productos: las regiones «Filtros»,
+          «Tablero operativo» y «Tablero financiero» de `AnaliticaShell` están COMENTADAS y hoy
+          sólo se pinta `destacado`. Un panel colgado de ahí no se vería y parecería un fallo de
+          datos en vez de un slot apagado.
+
+          SIN gate de rol: `adminSatelite` SÍ ve esta sección, acotada a su zona (P2 del spec).
+          No se inventa una excepción de permisos para esta tabla — el recorte de datos lo aplica
+          el borde de la Server Action, que deniega igual a quien no puede leerla. */}
+      <SeccionFiltrable titulo={TITULO_COHORTE}>
+        {/* `overflow-visible` por el MISMO motivo medido en la ficha 348 para la tabla de
+            productos: `ContenedorSeccion` envuelve en un `Card`, `Card` trae `overflow-hidden`,
+            y un `overflow` distinto de `visible` CREA UN SCROLLPORT al que se pega la flecha de
+            scroll horizontal de `DataTable` — dejándola viajar con la tabla en vez de acompañar
+            la ventana. Esta tabla tiene siete columnas y desborda a poco que la pantalla sea
+            estrecha, así que hereda la corrección en lugar de repetir el defecto. */}
+        <ContenedorSeccion
+          titulo={TITULO_COHORTE}
+          descripcion={DESCRIPCION_COHORTE}
+          className="overflow-visible"
+        >
+          <CohorteCargaTabla />
+        </ContenedorSeccion>
+      </SeccionFiltrable>
     </FiltroEntregasProvider>
   );
 

@@ -89,8 +89,13 @@ const DESFASE_CR_SEGUNDOS =
  *    lo lee — que es exactamente como se reintroduce el off-by-one de seis horas. El contrato
  *    (`ConteoDeDia.fecha`) es una fecha CALENDARIO, y una cadena `YYYY-MM-DD` no admite dos
  *    lecturas.
+ *
+ * EXPORTADO desde la ficha 411 (cohorte de carga), y **solo el `export`**: aquella lectura
+ * agrupa por el MISMO dia CR sobre la MISMA columna, asi que copiar el fragmento seria una
+ * SEGUNDA definicion del dia operativo — el off-by-one de seis horas volviendo por la puerta de
+ * atras. Sigue esperando el alias `o` para `orden`, que es el que usan las dos consultas.
  */
-const DIA_CR = Prisma.sql`to_char(
+export const DIA_CR = Prisma.sql`to_char(
   (o."created_at" - ${DESFASE_CR_SEGUNDOS}::double precision * interval '1 second')::date,
   'YYYY-MM-DD'
 )`;
