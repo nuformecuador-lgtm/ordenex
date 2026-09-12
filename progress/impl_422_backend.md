@@ -526,9 +526,131 @@ vías de B2 en las dos guardias. Ni un archivo de test perdido, ni un `baseline-
 
 ---
 
+# 12. Tercera vuelta — B3 de `progress/review_422_fix.md`
+
+> La re-revisión confirma B1 y B2 cerrados y encuentra **una séptima vía**. Tenía razón otra vez, y
+> ésta era peor que la anterior: **tumbaba también la defensa del tipo**.
+
+## 12.1 B3 — la extensión del archivo
+
+El censo definía «archivo de código» con la aguja `\.(ts|tsx)$`. Un `.js` **dentro de una raíz ya
+censada** no se leía nunca. Medido con `components/shared/adios-legacy.js` importado desde un
+componente que el layout **ya monta**: `145 archivos / 2.117 casos en verde`, `TSC_EXIT=0`,
+`LINT_EXIT=0`.
+
+**Y por qué es peor que el límite que yo había declarado** —el argumento lo acepto entero—:
+`tsconfig.json` tiene `allowJs: true` **sin `checkJs`**, y su `include` no cubre `.js`. O sea que el
+archivo **no se type-checkea** y la llamada puede escribirse literalmente
+`await darDeBajaDeEsteDispositivo();` **sin ningún motivo**. En el límite de la cadena compuesta yo
+me apoyaba en que «el tipo conserva su mitad»; aquí **caen las dos líneas de defensa a la vez**, así
+que mi propio argumento no se sostenía.
+
+Y no es una vía retorcida: escribir un `.js` es un acto ordinario, el repo ya tiene cinco y nada en
+`docs/` lo prohíbe.
+
+## 12.2 El arreglo: ampliar la aguja y dejar que el mecanismo trabaje
+
+`EXTENSIONES_DE_CODIGO` pasa a `\.(ts|tsx|js|jsx|mjs|cjs)$`, en **un solo sitio** del fixture — antes
+la aguja estaba copiada cuatro veces; ahora es una constante con su porqué. Y entonces el mecanismo
+de B1 hace **solo** lo que hacía falta: **`public/` pasa a ser raíz de código** y el inventario
+**reclama su motivo**.
+
+**La decisión sobre `public/`: entra al censo.** Ahí vive **`public/sw.js`** —360 líneas,
+**desplegado**, registrado en `app/layout.tsx`, con su `addEventListener("push", …)`—, que es el
+sitio **idiomático** de un segundo `pushManager.subscribe()`: el manejador de
+`pushsubscriptionchange` es la receta estándar para re-suscribir, y ahí no hay ninguna comprobación
+de permiso. Hoy `sw.js` no lo tiene —medido—; el defecto era que **la guardia no lo vería**, que es
+el mismo enunciado que hizo bloqueante a B1.
+
+**Y si mañana aparece un `.js` de terceros minificado en `public/`:** el motivo de la entrada deja
+escrito qué hacer — **declarar ese archivo con su porqué**, como `use-mobile` declara su `subscribe`,
+**no aflojar la aguja**. Los artefactos de build no entran: viven en `.next/` y `.vitest/`, que son
+dot-dirs y ya se ignoraban, y `node_modules` sigue excluido por nombre. Medido: las únicas raíces que
+la aguja nueva añade son `public/` (1 archivo), cuatro `.mjs` en `scripts/` y dos en la raíz.
+
+## 12.3 Los intrusos, contra el árbol de verdad
+
+Escritos en los archivos, suite de guardias entera, revertidos con SHA256. **J0 es el control.**
+
+| # | Intruso | Veredicto | Qué se puso rojo |
+| --- | --- | --- | --- |
+| **J0** (control) | La aguja vuelve a ser solo `.ts/.tsx` | **CAZADO** (exit 1) | 5 casos, entre ellos `public/sw.js está DENTRO del censo` en **las dos** guardias y `el censo llega a las NUEVE raíces` |
+| **J1** | **El de la re-revisión, tal cual**: `adios-legacy.js` con la llamada **sin motivo**, importado desde un componente ya montado | **CAZADO** (exit 1) · `tsc 0`, `lint 0` | `NADIE MÁS del árbol censado trae ese módulo` · `ningún archivo de NINGUNA raíz censada se sale de la lista blanca` · `B3: un módulo .js dentro de una raíz censada tampoco se escapa` |
+| **J2** | **Otra extensión**: un `.mjs` en `scripts/`, con alias | **CAZADO** (exit 1) | 3 casos, incluido `B3: y lo mismo con un .mjs` |
+| **J3** | **El agujero concreto**: `pushsubscriptionchange` re-suscribiendo en `public/sw.js` | **CAZADO** (exit 1) | `B3: public/sw.js está en el censo, y su contenido se LEE` · `el censo del NOMBRE DEL MÉTODO cuadra con la lista blanca` · `el del CANAL sigue siendo exactamente uno` (+2 de las guardias de la 410 sobre `sw.js`, que también lo ven) |
+| **J4** | Un `.jsx` con `const { requestPermission } = Notification` | **CAZADO** (exit 1) | `una sola aparición, y está en activar()` |
+
+**Cinco de cinco, y el control murió.** Los cinco con `TSC_EXIT=0`: a ninguno lo caza el compilador.
+
+## 12.4 `m3` y su recaída, cerrados
+
+El reviewer señaló dos autocomprobaciones que **enrojecían en cadena** por usar un archivo real como
+lienzo. Se pasaron a **lienzos sintéticos** (`providers/__lienzo-…__.tsx`,
+`components/shared/__lienzo-alias__.tsx`), conservando sobre el archivo **real** la única afirmación
+que lo necesita: que está censado y es alcanzable.
+
+Y al medir J4 apareció **una recaída de la misma familia que él no había visto**: el caso del
+`providers/` comparaba la lista **literal** de archivos que piden el permiso, así que un intruso en
+*cualquier* raíz lo ponía rojo. Ahora **mide el delta** —qué aparece de más al inyectar el lienzo—.
+Comprobado: J4 pasa de 3 rojos a 2, y el que queda es la noticia (el censo) más una guardia ajena
+que caza legítimamente un componente inalcanzable.
+
+## 12.5 `m2` — límite declarado, no arreglado
+
+Un barril en `tests/fixtures/` que reexporte la baja, importado **con alias** desde producción, pasa
+el censo. **No se cierra, y queda escrito en el motivo de `tests/`** con la redacción corregida: lo
+que `tests/` no puede hacer es **desplegarse por sí sola**; reexportada **sí viaja**. Se acepta
+porque exige **dos** actos deliberados (que producción importe de `@/tests/` y que además renombre) y
+porque ahí **el tipo sí conserva su mitad** — el contraste exacto con B3, donde no la conservaba.
+
+## 12.6 Gate completo, tercera vuelta
+
+```
+✓ typecheck paso
+✓ lint paso
+ Test Files  1950 passed (1950)
+      Tests  28357 passed | 26 skipped (28383)
+   Duration  586.78s
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1950 ejecutado(s), todos en el baseline conocido)
+== init OK ==
+INIT_EXIT=0
+```
+
+`INIT_EXIT=0` escrito **dentro** del log (`scratchpad/gate422_4.log`). Los `skipped` siguen siendo
+los 26 de siempre —`AnaliticaPage` 17 + `AnaliticaShell` 9— y **cero de `tests/integration/db/`**
+(`grep -c`: 0).
+
+**28.351 → 28.357**: los seis casos nuevos de B3 (los canarios de `public/sw.js` y las dos
+extensiones en las dos guardias). Ni un archivo de test perdido, ni un `baseline-rojos.json` tocado,
+ni una línea de código de producción.
+
+> **No perseguí `impresion-flujo` ni `factura-contraste`**, los dos rojos no reproducibles que el
+> reviewer vio en una corrida: son de la ficha 223 y en este gate salen verdes.
+
+---
+
+## Los límites declarados, en un solo sitio
+
+Tres, y los tres con su caso o su motivo escrito en el árbol:
+
+1. **Especificador compuesto en ejecución** (`import("@/lib/pwa/" + "baja-push")`). No lo ve ninguna
+   guardia de texto. El tipo **sí** defiende: el motivo sigue siendo obligatorio. *Aceptado por el
+   reviewer.*
+2. **Re-export desde `tests/` importado con alias.** Dos actos deliberados; el tipo **sí** defiende.
+   *Declarado en el motivo de la entrada `tests`.*
+3. **`tests/` fuera del censo.** Es el único sitio con razón legítima para nombrar lo prohibido;
+   censarla convertiría a las guardias en infractoras.
+
+**B3 no era un límite de esta familia**, y por eso se arregló en vez de declararse: el acto es
+ordinario y el tipo **no** defendía.
+
+---
+
 ## Veredicto
 
-Tandas 1-4 implementadas y verificadas, y los dos bloqueantes de la revisión cerrados **por la
-propiedad y no por los dos casos**: el censo ya no puede quedarse corto de raíces —las deriva— ni
-ciego al nombre local —persigue el módulo—. Seis intrusos reaplicados contra el árbol real, seis
-cazados, control incluido, y el único hueco que queda está escrito con su porqué.
+Tandas 1-4 implementadas y verificadas. Las tres vías que la revisión encontró —raíz no censada,
+nombre local renombrado, extensión no leída— están cerradas **por la propiedad**: las raíces se
+derivan del disco y hay que declararlas, el censo persigue el módulo y no el identificador, y
+«archivo de código» ya no depende de una aguja copiada cuatro veces. Once intrusos reaplicados
+contra el árbol real en dos rondas, once cazados, dos controles muertos, y los tres huecos que
+quedan están escritos con su porqué.
