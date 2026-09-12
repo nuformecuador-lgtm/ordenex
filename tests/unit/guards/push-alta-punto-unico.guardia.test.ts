@@ -3,6 +3,13 @@ import path from "node:path";
 import { describe, it, expect } from "vitest";
 
 import { quitarComentarios } from "@/tests/fixtures/sin-comentarios";
+import {
+  RAIZ_DEL_REPO,
+  archivosDeCodigoCensados,
+  fallosDelInventario,
+  raicesCensadas,
+  raicesDelArbol,
+} from "@/tests/fixtures/raices-de-codigo";
 
 // FICHA 422 (T4.3, design §9 · R6, R16, R17, R24) — GUARDIA DEL PUNTO UNICO DEL ALTA, Y DE QUE LA
 // PREFERENCIA NO SE META EN EL CAMINO DEL ENVIO.
@@ -31,26 +38,36 @@ import { quitarComentarios } from "@/tests/fixtures/sin-comentarios";
 // ⚠️ VIVE EN `tests/unit/guards/` A PROPOSITO: vigila la FORMA del arbol, no un comportamiento que
 // un grafo de imports seleccione. Las guardias corren SIEMPRE, tambien en el modo rapido.
 
-const RAIZ = path.resolve(__dirname, "..", "..", "..");
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// ⚠️ REVISION 2026-09-11 (B1 de `progress/review_422.md`) — EL CENSO LEIA 4 DE LAS 8 RAICES
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+//
+// `RAICES_DEL_CENSO = ["app","components","hooks","lib"]` dejaba fuera `providers/`, y la revision
+// escribio ahi un SEGUNDO `Notification.requestPermission()` mas un `subscribe` sin comprobacion
+// del permiso: typecheck verde y 145 archivos de guardia / 2.091 casos EN VERDE, con esta guardia
+// afirmando que la peticion aparece «una sola vez en todo el arbol».
+//
+// El arreglo NO es anadir `"providers"`: eso repara el sintoma de hoy y deja la causa —una lista
+// escrita a mano que envejece sola y en silencio, que es la familia de fallo que esta guardia
+// existe para cerrar—. Las raices se DERIVAN del disco y se comparan contra un inventario
+// declarado en `tests/fixtures/raices-de-codigo.ts`; una raiz nueva pone esto rojo.
+//
+// Y los DETECTORES se endurecieron por el mismo criterio, porque acertar la raiz no basta si la
+// aguja se puede esquivar renombrando el receptor:
+//   · `requestPermission` se censa como IDENTIFICADOR DESNUDO, no como `Notification.requestPermission(`.
+//     Asi `const { requestPermission } = Notification` y `const N = Notification; N.requestPermission()`
+//     tambien caen.
+//   · `subscribe(` se censa igual, con lista blanca de dos entradas y sus cuentas, para que
+//     `const pm = registro.pushManager; pm.subscribe(...)` no se escape.
 
-const RAICES_DEL_CENSO = ["app", "components", "hooks", "lib"];
+const RAIZ = RAIZ_DEL_REPO;
 
 const RUTA_HOOK = "hooks/usePushSuscripcion.ts";
 const RUTA_ALTA = "lib/pwa/alta-push.ts";
 const RUTA_LAYOUT = "app/(app)/layout.tsx";
 const RUTA_COMPONENTE_REACTIVACION = "components/shared/PushReactivacion.tsx";
 
-function archivosDe(dir: string, acc: string[] = []): string[] {
-  const abs = path.join(RAIZ, dir);
-  for (const entrada of fs.readdirSync(abs)) {
-    const rel = path.join(dir, entrada).replace(/\\/g, "/");
-    if (fs.statSync(path.join(RAIZ, rel)).isDirectory()) archivosDe(rel, acc);
-    else if (/\.(ts|tsx)$/.test(rel)) acc.push(rel);
-  }
-  return acc;
-}
-
-const ARCHIVOS_DEL_CENSO = RAICES_DEL_CENSO.flatMap((r) => archivosDe(r));
+const ARCHIVOS_DEL_CENSO = archivosDeCodigoCensados();
 
 /**
  * Todo el arbol SIN COMENTARIOS. Este repo nombra en la prosa justo lo que el codigo tiene
@@ -78,9 +95,52 @@ function censo(aguja: RegExp): { ruta: string; veces: number }[] {
   return filas.sort((a, b) => a.ruta.localeCompare(b.ruta));
 }
 
-const PETICION_DE_PERMISO = /Notification\s*\.\s*requestPermission\s*\(/g;
-const SUSCRIBIR = /pushManager\s*\.\s*subscribe\s*\(/g;
+/**
+ * ⭑ EL IDENTIFICADOR DESNUDO, no `Notification.requestPermission(`.
+ *
+ * Perseguir el receptor era una aguja esquivable: `const N = Notification; N.requestPermission()` y
+ * `const { requestPermission } = Notification;` la evitan sin despeinarse. El nombre del metodo,
+ * en cambio, hay que escribirlo. Medido sobre el arbol sin comentarios: aparece exactamente UNA
+ * vez, y todas las demas menciones viven en la prosa (que el quitador ya retira).
+ */
+const PETICION_DE_PERMISO = /\brequestPermission\b/g;
+
+/**
+ * ⭑ Igual con `subscribe(`: el receptor puede renombrarse (`const pm = registro.pushManager`), el
+ * nombre del metodo no. El `\b` inicial deja fuera `unsubscribe(`, que es otra cosa y aparece tres
+ * veces de forma legitima.
+ */
+const SUSCRIBIR = /\bsubscribe\s*\(/g;
+
+/** La forma ESPECIFICA, que se sigue afirmando aparte: `subscribe` cuelga del `pushManager`. */
+const SUSCRIBIR_DEL_PUSH_MANAGER = /pushManager\s*\.\s*subscribe\s*\(/g;
+
 const MONTAJE_REACTIVACION = /<PushReactivacion\b/g;
+
+/**
+ * Los DOS sitios del arbol donde puede aparecer un `subscribe(`, con su cuenta y su porque.
+ *
+ * Uno es el del canal de push; el otro no tiene nada que ver y esta aqui justo para que se vea que
+ * no tiene nada que ver. Una lista blanca sin el segundo obligaria a aflojar la aguja.
+ */
+const SUSCRIPCIONES_AUTORIZADAS: readonly { ruta: string; veces: number; porque: string }[] = [
+  {
+    ruta: "hooks/use-mobile.ts",
+    veces: 1,
+    porque:
+      "NADA QUE VER CON PUSH: es el `subscribe` de `useSyncExternalStore` para una media query " +
+      "(`matchMedia('(max-width: 767px)')`). Se declara para que la aguja pueda ser el nombre del " +
+      "metodo —y no `pushManager.subscribe(`, que se esquiva renombrando el receptor—.",
+  },
+  {
+    ruta: "lib/pwa/alta-push.ts",
+    veces: 1,
+    porque:
+      "EL UNICO DEL CANAL (R15/R17). Vive donde vive la comprobacion del permiso, y esa vecindad " +
+      "es el argumento estructural del diseno: un segundo `subscribe` en otro archivo seria, por " +
+      "construccion, un camino para suscribir saltandose la comprobacion.",
+  },
+];
 
 describe("422 · autocomprobacion de la guardia", () => {
   it("el barrido lee un arbol GRANDE y de verdad", () => {
@@ -115,6 +175,59 @@ describe("422 · autocomprobacion de la guardia", () => {
     expect(apariciones("registro.pushManager.subscribe({})", SUSCRIBIR)).toBe(1);
     expect(apariciones("<PushReactivacion avisosRecordados={x} />", MONTAJE_REACTIVACION)).toBe(1);
   });
+
+  it("⭑ el detector del permiso NO depende del receptor: caza el alias y la desestructuracion", () => {
+    // La aguja vieja (`Notification\\.requestPermission\\(`) daba CERO en los tres casos de abajo.
+    // Son las formas en que un segundo camino se escribiria sin querer esconderse.
+    expect(apariciones("const N = Notification; await N.requestPermission();", PETICION_DE_PERMISO)).toBe(1);
+    expect(
+      apariciones("const { requestPermission } = Notification; await requestPermission();", PETICION_DE_PERMISO),
+    ).toBe(2);
+    expect(apariciones("await globalThis.Notification.requestPermission();", PETICION_DE_PERMISO)).toBe(1);
+    // Control negativo: no se dispara con un nombre que solo lo contiene.
+    expect(apariciones("const requestPermissionLabel = 1;", PETICION_DE_PERMISO)).toBe(0);
+  });
+
+  it("⭑ el detector de `subscribe(` tampoco depende del receptor, y NO confunde `unsubscribe(`", () => {
+    expect(apariciones("const pm = registro.pushManager; await pm.subscribe({});", SUSCRIBIR)).toBe(1);
+    expect(apariciones("const { subscribe } = registro.pushManager; await subscribe({});", SUSCRIBIR)).toBe(1);
+    // `unsubscribe(` NO es `subscribe(`: aparece tres veces de forma legitima en el arbol y
+    // contarla convertiria a la baja y al rescate del alta en infractores.
+    expect(apariciones("await suscripcion.unsubscribe();", SUSCRIBIR)).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// B1 · EL INVENTARIO DE RAICES: lo que «todo el arbol» significa, comparado con el disco
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe("422/B1 · «en todo el arbol» significa TODAS las raices de codigo, y se comprueba", () => {
+  it("⭑ toda raiz de codigo del repositorio esta clasificada, con su motivo", () => {
+    // Sin esto, «una sola vez en todo el arbol» es una afirmacion sobre las carpetas que alguien
+    // se acordo de escribir el dia que nacio la guardia. Es literalmente lo que paso con B1.
+    expect(fallosDelInventario()).toEqual([]);
+  });
+
+  it("⭑ `providers/` —donde la revision colo el segundo `requestPermission`— esta DENTRO", () => {
+    expect(raicesCensadas()).toContain("providers");
+    expect(ARCHIVOS_DEL_CENSO).toContain("providers/ToastProvider.tsx");
+    expect(ARCHIVOS_DEL_CENSO).toContain("providers/TemaProvider.tsx");
+  });
+
+  it("⭑ y el censo llega tambien a `scripts/`, `e2e/` y a los `.ts` sueltos de la raiz", () => {
+    // Las otras tres raices que la version vieja no miraba. `middleware.ts` corre en CADA peticion.
+    expect(ARCHIVOS_DEL_CENSO).toContain("middleware.ts");
+    expect(ARCHIVOS_DEL_CENSO.some((r) => r.startsWith("scripts/"))).toBe(true);
+    expect(ARCHIVOS_DEL_CENSO.some((r) => r.startsWith("e2e/"))).toBe(true);
+    // Y NO llega a `tests/`, que es el unico limite declarado (ahi viven los dobles del navegador).
+    expect(ARCHIVOS_DEL_CENSO.some((r) => r.startsWith("tests/"))).toBe(false);
+  });
+
+  it("⭑ AUTOCOMPROBACION: una raiz NUEVA sin clasificar pone el inventario rojo", () => {
+    const fallos = fallosDelInventario([...raicesDelArbol(), "widgets"]);
+    expect(fallos).toHaveLength(1);
+    expect(fallos[0]).toContain("`widgets/`");
+  });
 });
 
 describe("410/R11 + 422/R16 · `requestPermission` aparece UNA vez en todo el arbol", () => {
@@ -143,17 +256,65 @@ describe("410/R11 + 422/R16 · `requestPermission` aparece UNA vez en todo el ar
     // donde esconderse: si alguien la mete en el modulo compartido, el censo de arriba pasa a dos.
     expect(apariciones(FUENTES.get(RUTA_ALTA) ?? "", PETICION_DE_PERMISO)).toBe(0);
   });
+
+  it("⭑ EL CASO DE LA REVISION: un segundo camino escrito en `providers/` se caza", () => {
+    // Reproducido TAL CUAL el intruso de `progress/review_422.md` §B1, inyectado en el RECORRIDO y
+    // no en el arbol. Antes daba TSC_EXIT=0 y 145 guardias verdes; ahora cae por partida doble.
+    const ruta = "providers/ToastProvider.tsx";
+    expect(FUENTES.has(ruta), "la raiz `providers/` tiene que estar en el censo").toBe(true);
+
+    const intruso =
+      (FUENTES.get(ruta) ?? "") +
+      "\nexport async function segundoCaminoDelAlta(reg: ServiceWorkerRegistration) {\n" +
+      "  await Notification.requestPermission();\n" +
+      "  await reg.pushManager.subscribe({ userVisibleOnly: true });\n" +
+      "}\n";
+
+    // (a) la peticion del permiso pasa a aparecer DOS veces, en dos archivos.
+    expect(apariciones(intruso, PETICION_DE_PERMISO)).toBe(1);
+    const conIntruso = new Map(FUENTES);
+    conIntruso.set(ruta, intruso);
+    const permisos = [...conIntruso]
+      .filter(([, codigo]) => apariciones(codigo, new RegExp(PETICION_DE_PERMISO.source, "g")) > 0)
+      .map(([r]) => r)
+      .sort();
+    expect(permisos).toEqual([RUTA_HOOK, ruta].sort());
+
+    // (b) y el `subscribe` aparece fuera de `alta-push.ts`, o sea fuera de donde vive la
+    // comprobacion del permiso.
+    const suscripciones = [...conIntruso]
+      .filter(([, codigo]) => apariciones(codigo, new RegExp(SUSCRIBIR.source, "g")) > 0)
+      .map(([r]) => r)
+      .sort();
+    expect(suscripciones).toContain(ruta);
+    expect(suscripciones).not.toEqual(SUSCRIPCIONES_AUTORIZADAS.map((e) => e.ruta).sort());
+  });
 });
 
-describe("422/R15-R17 · `pushManager.subscribe` aparece UNA vez, y dentro de `alta-push.ts`", () => {
-  it("⭑ una sola aparicion, en el modulo que COMPRUEBA el permiso", () => {
+describe("422/R15-R17 · `subscribe(` aparece UNA vez en el canal, y dentro de `alta-push.ts`", () => {
+  it("⭑ el censo del NOMBRE DEL METODO cuadra con la lista blanca de dos entradas", () => {
     const filas = censo(SUSCRIBIR);
     expect(
       filas,
       "suscribir vive en UN solo sitio porque ahi vive la comprobacion del permiso (R17). Un " +
         "segundo `subscribe` en otro archivo es, por construccion, un camino para suscribir " +
-        "saltandose esa comprobacion — y con la preferencia puesta se ejecutaria solo.",
-    ).toEqual([{ ruta: RUTA_ALTA, veces: 1 }]);
+        "saltandose esa comprobacion — y con la preferencia puesta se ejecutaria solo. Si tu " +
+        "`subscribe` no tiene nada que ver con push, declaralo en SUSCRIPCIONES_AUTORIZADAS con " +
+        "su porque, como el de `use-mobile`.",
+    ).toEqual(SUSCRIPCIONES_AUTORIZADAS.map(({ ruta, veces }) => ({ ruta, veces })));
+  });
+
+  it("⭑ y el del CANAL —`pushManager.subscribe(`— sigue siendo exactamente uno", () => {
+    // La aserción especifica, ademas de la generica: lo que R15/R17 protege no es «un subscribe
+    // cualquiera», es el del canal de push.
+    expect(censo(SUSCRIBIR_DEL_PUSH_MANAGER)).toEqual([{ ruta: RUTA_ALTA, veces: 1 }]);
+  });
+
+  it("cada entrada de SUSCRIPCIONES_AUTORIZADAS lleva su PORQUE escrito", () => {
+    // Una lista blanca sin porques se convierte en una lista de excepciones que nadie relee.
+    for (const entrada of SUSCRIPCIONES_AUTORIZADAS) {
+      expect(entrada.porque.length, `${entrada.ruta} sin porque`).toBeGreaterThan(100);
+    }
   });
 
   it("⭑ y la comprobacion del permiso esta ANTES del `subscribe` en ese archivo", () => {

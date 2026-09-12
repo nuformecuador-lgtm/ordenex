@@ -3,6 +3,14 @@ import path from "node:path";
 import { describe, it, expect } from "vitest";
 
 import { quitarComentarios } from "@/tests/fixtures/sin-comentarios";
+import {
+  INVENTARIO_DE_RAICES,
+  RAIZ_DEL_REPO,
+  archivosDeCodigoCensados,
+  fallosDelInventario,
+  raicesCensadas,
+  raicesDelArbol,
+} from "@/tests/fixtures/raices-de-codigo";
 
 // FICHA 422 (T3.3, design §9 · R10) — GUARDIA DE LA INTENCION DECLARADA EN TODA BAJA DE PUSH.
 //
@@ -31,10 +39,39 @@ import { quitarComentarios } from "@/tests/fixtures/sin-comentarios";
 // ⚠️ VIVE EN `tests/unit/guards/` A PROPOSITO: lo que vigila es la FORMA del arbol, no un
 // comportamiento que un grafo de imports seleccione. Las guardias corren SIEMPRE.
 
-const RAIZ = path.resolve(__dirname, "..", "..", "..");
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// ⚠️ REVISION 2026-09-11 (B1 y B2 de `progress/review_422.md`) — DOS AGUJEROS MEDIDOS, CERRADOS
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+//
+// La primera version decia «en todo el arbol» y hacia DOS cosas mal. Las dos se midieron con el
+// typecheck verde y 145 archivos de guardia / 2.091 casos verdes:
+//
+//   B1 · EL CENSO LEIA 4 DE LAS 8 RAICES. `["app","components","hooks","lib"]` dejaba fuera
+//        `providers/`, donde vive el `ToastProvider` que ENVUELVE al componente de reactivacion de
+//        esta misma ficha. Una baja escrita ahi no la veia nadie.
+//        → Arreglado en `tests/fixtures/raices-de-codigo.ts`: las raices se DERIVAN del disco y se
+//          comparan contra un inventario declarado. Una raiz nueva pone esta guardia roja.
+//
+//   B2 · EL DETECTOR ERA CIEGO AL ALIAS. Buscaba `darDeBajaDeEsteDispositivo\s*\(`, asi que
+//        `import { darDeBajaDeEsteDispositivo as bajar } from "@/lib/pwa/baja-push"` + `bajar(...)`
+//        pasaba limpio: en la clausula `import` al nombre no le sigue un `(`, y la llamada se
+//        escribe con otro nombre.
+//        → Arreglado INVIRTIENDO LA PREGUNTA. El censo ya no persigue la LLAMADA: persigue el
+//          **ESPECIFICADOR DEL MODULO**. Para llamar a esta funcion hay que traerla, y traerla deja
+//          `lib/pwa/baja-push` escrito LITERAL — con alias, con re-export, con `import()` dinamico
+//          y con ruta relativa. El detector de llamadas se conserva, pero solo se aplica DENTRO de
+//          los dos archivos autorizados, para leer su motivo.
 
-/** Donde puede vivir una superficie que se de de baja: cliente y servidor del portal. */
-const RAICES_DEL_CENSO = ["app", "components", "hooks", "lib"];
+const RAIZ = RAIZ_DEL_REPO;
+
+/**
+ * LA AGUJA DEL CENSO: el modulo que hay que importar para poder darse de baja.
+ *
+ * Se acepta cualquier prefijo (`@/`, `../../`, `./`) y la extension opcional: lo que se persigue es
+ * EL MODULO, no una forma concreta de nombrarlo. Cubre `import`, `export ... from`, `import()`
+ * dinamico y `require()`, porque los cuatro llevan el especificador como literal de cadena.
+ */
+const ESPECIFICADOR_DE_LA_BAJA = /["'`][^"'`]*lib\/pwa\/baja-push(\.ts)?["'`]/g;
 
 /** El archivo donde la funcion VIVE. Su declaracion no es una llamada, y el detector lo distingue. */
 const RUTA_DEFINICION = "lib/pwa/baja-push.ts";
@@ -79,31 +116,23 @@ const LISTA_BLANCA: readonly EntradaAutorizada[] = [
   },
 ];
 
-function archivosDe(dir: string, acc: string[] = []): string[] {
-  const abs = path.join(RAIZ, dir);
-  for (const entrada of fs.readdirSync(abs)) {
-    const rel = path.join(dir, entrada).replace(/\\/g, "/");
-    if (fs.statSync(path.join(RAIZ, rel)).isDirectory()) archivosDe(rel, acc);
-    else if (/\.(ts|tsx)$/.test(rel)) acc.push(rel);
-  }
-  return acc;
-}
-
-const ARCHIVOS_DEL_CENSO = RAICES_DEL_CENSO.flatMap((r) => archivosDe(r));
+const ARCHIVOS_DEL_CENSO = archivosDeCodigoCensados();
 
 /**
  * El texto de un archivo tal y como lo lee el censo: SIN COMENTARIOS, porque este arbol nombra a
  * proposito en la prosa lo que el codigo tiene prohibido —la cabecera de `baja-push.ts` escribe
- * `darDeBajaDeEsteDispositivo()` para explicar que asi NO compila— y un censo sobre el texto crudo
- * denunciaria la explicacion.
+ * `darDeBajaDeEsteDispositivo()` para explicar que asi NO compila, y cuatro archivos mas citan
+ * `lib/pwa/baja-push.ts` en su documentacion— y un censo sobre el texto crudo denunciaria la
+ * explicacion.
  *
- * El atajo del `includes` sobre el crudo NO cambia ningun veredicto (si el nombre no esta en el
- * texto entero, tampoco esta despues de quitar comentarios) y ahorra la pasada a los archivos que
- * no lo mencionan.
+ * El atajo del `includes` sobre el crudo NO cambia ningun veredicto (si ninguna de las dos agujas
+ * esta en el texto entero, tampoco esta despues de quitar comentarios) y ahorra la pasada a los
+ * ~1.400 archivos que no las mencionan.
  */
 function textoCensable(rel: string): string {
   const crudo = fs.readFileSync(path.join(RAIZ, rel), "utf8");
-  return crudo.includes("darDeBajaDeEsteDispositivo") ? quitarComentarios(crudo) : "";
+  const interesa = crudo.includes("darDeBajaDeEsteDispositivo") || crudo.includes("baja-push");
+  return interesa ? quitarComentarios(crudo) : "";
 }
 
 const FUENTES: ReadonlyMap<string, string> = new Map(
@@ -138,36 +167,77 @@ export function llamadasEn(codigo: string): Llamada[] {
   return llamadas;
 }
 
+/**
+ * ⭑ EL DETECTOR QUE CIERRA B2: CUANTAS VECES ESTE CODIGO TRAE EL MODULO DE LA BAJA.
+ *
+ * Para llamar a `darDeBajaDeEsteDispositivo` hay que traerla, y traerla deja el especificador
+ * `lib/pwa/baja-push` escrito LITERAL. Da igual como se llame despues la funcion en el archivo:
+ * el alias cambia el nombre de la variable, no el del modulo.
+ */
+export function importacionesDeLaBaja(codigo: string): number {
+  return [...codigo.matchAll(new RegExp(ESPECIFICADOR_DE_LA_BAJA.source, "g"))].length;
+}
+
+/**
+ * ⭑ ¿El archivo trae la funcion CON SU NOMBRE, sin renombrarla?
+ *
+ * Los dos archivos autorizados tienen que importarla sin alias, y no es capricho: el censo lee su
+ * MOTIVO del texto de la llamada, asi que un alias ahi dejaria la lectura del motivo ciega justo en
+ * los dos sitios donde importa. Exigirlo mantiene alineados los dos detectores.
+ */
+export function importaSinAlias(codigo: string): boolean {
+  // El nombre, seguido de lo que NO sea ` as `: ni renombrado en la clausula, ni desestructurado
+  // desde un `import()` dinamico con `: otroNombre`.
+  const menciones = [...codigo.matchAll(/\bdarDeBajaDeEsteDispositivo\s*(as|:)?/g)];
+  return menciones.some((m) => m[1] === undefined);
+}
+
 interface Infraccion {
   readonly ruta: string;
-  readonly llamadas: number;
+  readonly importa: number;
   readonly autorizadas: number;
   readonly motivos: (string | null)[];
 }
 
 /**
- * El censo, sobre un mapa de fuentes que se le PASA — no sobre el disco. Es lo que permite
+ * EL CENSO, sobre un mapa de fuentes que se le PASA — no sobre el disco. Es lo que permite
  * inyectarle un archivo intruso y comprobar que lo caza (autocomprobacion), en vez de escribir
  * basura en el arbol.
+ *
+ * ⚠️ LA PREGUNTA ES «¿QUIEN TRAE EL MODULO?», NO «¿QUIEN LLAMA?». Esa inversion es todo el arreglo
+ * de B2: la llamada se puede renombrar, el modulo no. Para los archivos AUTORIZADOS se sigue
+ * mirando ademas la cuenta de llamadas y su motivo literal, que es lo que la lista blanca aporta
+ * sobre el tipo.
  */
 function censar(fuentes: ReadonlyMap<string, string>): Infraccion[] {
   const autorizadas = new Map(LISTA_BLANCA.map((e) => [e.ruta, e] as const));
   const infracciones: Infraccion[] = [];
   for (const [ruta, codigo] of fuentes) {
-    const llamadas = llamadasEn(codigo);
+    // El archivo donde la funcion VIVE no se importa a si mismo; y si algun dia lo hiciera, seria
+    // un ciclo que ya se veria en otro sitio.
+    if (ruta === RUTA_DEFINICION) continue;
+
+    const importa = importacionesDeLaBaja(codigo);
     const permitida = autorizadas.get(ruta);
-    const cuenta = permitida?.llamadas ?? 0;
+    const cuenta = permitida ? 1 : 0;
+    const llamadas = llamadasEn(codigo);
     const motivos = llamadas.map((l) => l.argumento);
-    // Distinto, no «mayor»: una entrada de la lista blanca que deja de ser cierta tambien tiene
-    // que volver a leerse. Una lista blanca que se desvia de la realidad ya no vigila nada.
-    const cuentaMal = llamadas.length !== cuenta;
-    // Y el MOTIVO declarado tiene que ser el que la lista dice: la mutacion que esta ficha exige
-    // por nombre —cambiar el motivo del `LogoutButton`— muere justo aqui.
+
+    // (a) TRAER EL MODULO. Distinto, no «mayor»: una entrada de la lista blanca que deja de ser
+    // cierta tambien tiene que volver a leerse. Una lista blanca que se desvia de la realidad ya
+    // no vigila nada.
+    const importaMal = importa !== cuenta;
+
+    // (b) Y, si esta autorizado, la CUENTA de llamadas, que se importe SIN ALIAS —si no, el motivo
+    // no se puede leer— y que cada motivo sea EL DECLARADO.
+    const llamadasMal = permitida ? llamadas.length !== permitida.llamadas : llamadas.length > 0;
+    const aliasMal = permitida !== undefined && importa > 0 && !importaSinAlias(codigo);
     const motivoMal = permitida
       ? motivos.some((m) => m !== permitida.motivo)
       : motivos.length > 0;
-    if (cuentaMal || motivoMal) {
-      infracciones.push({ ruta, llamadas: llamadas.length, autorizadas: cuenta, motivos });
+
+    if (importaMal || llamadasMal || aliasMal || motivoMal) {
+      infracciones.push({ ruta, importa, autorizadas: cuenta, motivos });
     }
   }
   return infracciones;
@@ -180,10 +250,75 @@ function censar(fuentes: ReadonlyMap<string, string>): Infraccion[] {
  * en cadena. Un rojo que arrastra a otros tres esconde cual de los cuatro es la noticia.
  */
 function nuevasInfracciones(fuentes: ReadonlyMap<string, string>): Infraccion[] {
-  const clave = (i: Infraccion) => `${i.ruta}:${i.llamadas}:${i.motivos.join(",")}`;
+  const clave = (i: Infraccion) => `${i.ruta}:${i.importa}:${i.motivos.join(",")}`;
   const yaHabia = new Set(censar(FUENTES).map(clave));
   return censar(fuentes).filter((i) => !yaHabia.has(clave(i)));
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// B1 · EL INVENTARIO DE RAICES: lo que «todo el arbol» significa, comparado con el disco
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe("422/B1 · «todo el arbol» se deriva del disco, no de una lista escrita a mano", () => {
+  it("⭑ toda raiz de codigo del repositorio esta clasificada, con su motivo", () => {
+    // ESTE es el caso que impide que B1 se repita. La lista vieja
+    // (`["app","components","hooks","lib"]`) envejecio en silencio: `providers/` aparecio y nadie
+    // se entero. Ahora las raices se LEEN DEL DISCO y se comparan contra el inventario; una raiz
+    // nueva —o una que desaparezca— pone esto rojo y obliga a decidir y a escribir el porque.
+    expect(fallosDelInventario()).toEqual([]);
+  });
+
+  it("⭑ y `providers/` —la que faltaba— esta DENTRO del censo", () => {
+    // El canario concreto de B1, escrito con nombre y apellido para que quitarlo se note.
+    expect(raicesCensadas()).toContain("providers");
+    expect(ARCHIVOS_DEL_CENSO).toContain("providers/ToastProvider.tsx");
+  });
+
+  it("⭑ el censo llega a las OCHO raices que el arbol tiene hoy", () => {
+    // Anti-vacuidad: si el recorrido del disco se rompiera, el inventario cuadraria contra una
+    // lista vacia y todo lo de arriba pasaria por vacio en vez de por limpio.
+    expect(raicesDelArbol()).toEqual([
+      "(raiz)",
+      "app",
+      "components",
+      "e2e",
+      "hooks",
+      "lib",
+      "providers",
+      "scripts",
+      "tests",
+    ]);
+  });
+
+  it("⭑ AUTOCOMPROBACION: una raiz NUEVA sin clasificar pone el inventario rojo", () => {
+    // Se inyecta en la lista derivada, no en el disco: la carpeta no llega a existir.
+    const fallos = fallosDelInventario([...raicesDelArbol(), "widgets"]);
+    expect(fallos).toHaveLength(1);
+    expect(fallos[0]).toContain("`widgets/`");
+    expect(fallos[0]).toContain("NO esta en INVENTARIO_DE_RAICES");
+  });
+
+  it("⭑ AUTOCOMPROBACION: una entrada del inventario que ya no existe tambien se caza", () => {
+    const fallos = fallosDelInventario(raicesDelArbol().filter((r) => r !== "providers"));
+    expect(fallos).toHaveLength(1);
+    expect(fallos[0]).toContain("ya no tiene codigo en el arbol");
+  });
+
+  it("⭑ AUTOCOMPROBACION: una raiz clasificada SIN motivo escrito se detecta", () => {
+    const fallos = fallosDelInventario(["app"], [
+      { ruta: "app", censada: true, motivo: "porque si" },
+    ]);
+    expect(fallos).toEqual(["la raiz `app` esta clasificada sin motivo escrito"]);
+  });
+
+  it("la unica raiz FUERA del censo es `tests/`, y su motivo dice por que", () => {
+    const fuera = INVENTARIO_DE_RAICES.filter((r) => !r.censada).map((r) => r.ruta);
+    expect(fuera).toEqual(["tests"]);
+    const tests = INVENTARIO_DE_RAICES.find((r) => r.ruta === "tests")!;
+    // El limite, declarado: es el unico sitio con una razon legitima para nombrar lo prohibido.
+    expect(tests.motivo).toContain("LIMITE DECLARADO");
+  });
+});
 
 describe("422/R10 · autocomprobacion del detector", () => {
   it("el detector CUENTA, y no se conforma con decir si/no", () => {
@@ -230,9 +365,17 @@ describe("422/R10 · autocomprobacion del detector", () => {
     expect(ARCHIVOS_DEL_CENSO).toContain(RUTA_DEFINICION);
   });
 
-  it("control positivo: las dos entradas de la lista blanca SI llaman, con la cuenta y el motivo declarados", () => {
+  it("control positivo: las dos entradas de la lista blanca SI importan y SI llaman, con su cuenta y su motivo", () => {
     for (const entrada of LISTA_BLANCA) {
-      const llamadas = llamadasEn(FUENTES.get(entrada.ruta) ?? "");
+      const codigo = FUENTES.get(entrada.ruta) ?? "";
+      // (a) traen el modulo UNA vez, y sin renombrarlo —de eso depende que el motivo sea legible—.
+      expect(
+        importacionesDeLaBaja(codigo),
+        `${entrada.ruta} no trae el modulo de la baja exactamente una vez`,
+      ).toBe(1);
+      expect(importaSinAlias(codigo), `${entrada.ruta} importa la baja con alias`).toBe(true);
+      // (b) y llaman las veces declaradas, con el motivo declarado.
+      const llamadas = llamadasEn(codigo);
       expect(llamadas, `${entrada.ruta} no llama las ${entrada.llamadas} veces declaradas`).toHaveLength(
         entrada.llamadas,
       );
@@ -240,6 +383,16 @@ describe("422/R10 · autocomprobacion del detector", () => {
         expect(l.argumento, `${entrada.ruta} no declara el motivo esperado`).toBe(entrada.motivo);
       }
     }
+  });
+
+  it("⭑ y NADIE MAS del arbol censado trae ese modulo", () => {
+    // La afirmacion central, dicha como lista para que el fallo nombre al culpable.
+    const quienesLoTraen = [...FUENTES]
+      .filter(([ruta]) => ruta !== RUTA_DEFINICION)
+      .filter(([, codigo]) => importacionesDeLaBaja(codigo) > 0)
+      .map(([ruta]) => ruta)
+      .sort();
+    expect(quienesLoTraen).toEqual(LISTA_BLANCA.map((e) => e.ruta).sort());
   });
 
   it("⭑ el archivo donde la funcion VIVE no cuenta como llamante", () => {
@@ -291,17 +444,19 @@ describe("422/R10 · EL CENSO: nadie se da de baja sin declarar por que", () => 
     const conIntruso = new Map(FUENTES);
     conIntruso.set(
       intruso,
-      'export function BotonPanico() {\n  void darDeBajaDeEsteDispositivo("cierre-de-sesion");\n}\n',
+      'import { darDeBajaDeEsteDispositivo } from "@/lib/pwa/baja-push";\n' +
+        'export function BotonPanico() {\n  void darDeBajaDeEsteDispositivo("cierre-de-sesion");\n}\n',
     );
 
     expect(nuevasInfracciones(conIntruso)).toEqual([
-      { ruta: intruso, llamadas: 1, autorizadas: 0, motivos: ["cierre-de-sesion"] },
+      { ruta: intruso, importa: 1, autorizadas: 0, motivos: ["cierre-de-sesion"] },
     ]);
   });
 
   it("⭑ AUTOCOMPROBACION: una SEGUNDA llamada dentro de un archivo YA autorizado tambien se caza", () => {
     // La leccion medida dos veces en este repo: una guardia que mide POR ARCHIVO se queda verde
-    // cuando la llamada de mas se esconde al lado de una legitima.
+    // cuando la llamada de mas se esconde al lado de una legitima. El import sigue siendo UNO, asi
+    // que este caso lo caza la mitad (b) del censo —la cuenta de llamadas—, no la del modulo.
     const ruta = "app/_components/LogoutButton.tsx";
     const conDos = new Map(FUENTES);
     conDos.set(
@@ -312,7 +467,7 @@ describe("422/R10 · EL CENSO: nadie se da de baja sin declarar por que", () => 
     expect(nuevasInfracciones(conDos)).toEqual([
       {
         ruta,
-        llamadas: 2,
+        importa: 1,
         autorizadas: 1,
         motivos: ["cierre-de-sesion", "cierre-de-sesion"],
       },
@@ -336,7 +491,7 @@ describe("422/R10 · EL CENSO: nadie se da de baja sin declarar por que", () => 
     expect(nuevasInfracciones(mutado)).toEqual([
       {
         ruta,
-        llamadas: 1,
+        importa: 1,
         autorizadas: 1,
         motivos: ["la-persona-apago-el-interruptor"],
       },
@@ -357,7 +512,7 @@ describe("422/R10 · EL CENSO: nadie se da de baja sin declarar por que", () => 
     );
 
     expect(nuevasInfracciones(mutado)).toEqual([
-      { ruta, llamadas: 1, autorizadas: 1, motivos: [null] },
+      { ruta, importa: 1, autorizadas: 1, motivos: [null] },
     ]);
   });
 
@@ -372,6 +527,140 @@ describe("422/R10 · EL CENSO: nadie se da de baja sin declarar por que", () => 
       ),
     );
     expect(nuevasInfracciones(conProsa)).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// B2 · LAS CUATRO FORMAS DE TRAERSE LA BAJA CON OTRO NOMBRE, Y LO QUE NO SE CIERRA
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// La revision colo una tercera superficie con un ALIAS. Arreglar SOLO el alias seria atornillar el
+// sintoma: hay cuatro maneras de escribir «traeme esa funcion» y el censo tiene que cazarlas todas
+// por la misma razon —el ESPECIFICADOR del modulo es lo unico que ninguna de ellas puede evitar—.
+// Cada una va con su caso, y el limite que queda abierto va escrito abajo en vez de tapado.
+
+describe("422/B2 · el censo persigue el MODULO, asi que el nombre local da igual", () => {
+  it("⭑ el detector cuenta el especificador en sus cuatro formas", () => {
+    expect(importacionesDeLaBaja('import { darDeBajaDeEsteDispositivo } from "@/lib/pwa/baja-push";')).toBe(1);
+    expect(importacionesDeLaBaja('import { darDeBajaDeEsteDispositivo as bajar } from "@/lib/pwa/baja-push";')).toBe(1);
+    expect(importacionesDeLaBaja('export { darDeBajaDeEsteDispositivo } from "@/lib/pwa/baja-push";')).toBe(1);
+    expect(importacionesDeLaBaja('const m = await import("@/lib/pwa/baja-push");')).toBe(1);
+    // Y con ruta RELATIVA, que es la via que un `@/` mal configurado dejaria abierta.
+    expect(importacionesDeLaBaja('import { x } from "../../lib/pwa/baja-push";')).toBe(1);
+    expect(importacionesDeLaBaja('import { x } from "./lib/pwa/baja-push.ts";')).toBe(1);
+    // Control negativo: un modulo que solo se PARECE no cuenta.
+    expect(importacionesDeLaBaja('import { x } from "@/lib/pwa/alta-push";')).toBe(0);
+    expect(importacionesDeLaBaja("const baja = 1;")).toBe(0);
+  });
+
+  it("⭑ EL CASO DE LA REVISION: alias en un componente YA montado", () => {
+    // Reproducido tal cual: `components/shared/AvisoVersionNueva.tsx` lo monta el layout del
+    // portal, asi que la guardia de «superficie inalcanzable» tampoco lo cazaba. Antes pasaba con
+    // typecheck verde y 145 guardias verdes; ahora el censo lo ve porque mira el import.
+    const ruta = "components/shared/AvisoVersionNueva.tsx";
+    expect(FUENTES.has(ruta), "el componente del caso tiene que existir de verdad").toBe(true);
+
+    const conAlias = new Map(FUENTES);
+    conAlias.set(
+      ruta,
+      'import { darDeBajaDeEsteDispositivo as bajar } from "@/lib/pwa/baja-push";\n' +
+        (FUENTES.get(ruta) ?? "") +
+        '\nvoid bajar("cierre-de-sesion");\n',
+    );
+
+    const nuevas = nuevasInfracciones(conAlias);
+    expect(nuevas).toHaveLength(1);
+    expect(nuevas[0].ruta).toBe(ruta);
+    expect(nuevas[0].importa).toBe(1);
+    expect(nuevas[0].autorizadas).toBe(0);
+    // ⚠️ Y NO HAY NINGUNA LLAMADA LEGIBLE: el motivo no se puede leer porque la llamada se escribe
+    // `bajar(...)`. Por eso el censo NO puede apoyarse en la llamada — es exactamente B2.
+    expect(nuevas[0].motivos).toEqual([]);
+  });
+
+  it("⭑ un RE-EXPORT tambien se caza, en el archivo que re-exporta", () => {
+    // La via «legal»: un barril que reexporta y luego todos importan del barril. El barril queda
+    // denunciado, que es donde hay que decidir.
+    const barril = "components/shared/index.ts";
+    const conBarril = new Map(FUENTES);
+    conBarril.set(barril, 'export { darDeBajaDeEsteDispositivo } from "@/lib/pwa/baja-push";\n');
+
+    expect(nuevasInfracciones(conBarril)).toEqual([
+      { ruta: barril, importa: 1, autorizadas: 0, motivos: [] },
+    ]);
+  });
+
+  it("⭑ un `import()` DINAMICO tambien se caza", () => {
+    const ruta = "providers/TemaProvider.tsx";
+    const conDinamico = new Map(FUENTES);
+    conDinamico.set(
+      ruta,
+      (FUENTES.get(ruta) ?? "") +
+        '\nconst { darDeBajaDeEsteDispositivo: irse } = await import("@/lib/pwa/baja-push");\n' +
+        'void irse("cierre-de-sesion");\n',
+    );
+
+    const nuevas = nuevasInfracciones(conDinamico);
+    expect(nuevas).toHaveLength(1);
+    expect(nuevas[0]).toMatchObject({ ruta, importa: 1, autorizadas: 0 });
+  });
+
+  it("⭑ y una RUTA RELATIVA no lo esquiva", () => {
+    const ruta = "providers/ToastProvider.tsx";
+    expect(FUENTES.has(ruta)).toBe(true);
+    const conRelativa = new Map(FUENTES);
+    conRelativa.set(
+      ruta,
+      'import { darDeBajaDeEsteDispositivo } from "../../lib/pwa/baja-push";\n' +
+        'void darDeBajaDeEsteDispositivo("cierre-de-sesion");\n',
+    );
+
+    expect(nuevasInfracciones(conRelativa)).toEqual([
+      { ruta, importa: 1, autorizadas: 0, motivos: ["cierre-de-sesion"] },
+    ]);
+  });
+
+  it("⭑ un ALIAS en uno de los DOS archivos autorizados tambien se caza", () => {
+    // No basta con que el import exista: en los dos sitios de la lista blanca tiene que venir SIN
+    // renombrar, porque el motivo se lee del texto de la llamada. Con alias, la cuenta del modulo
+    // seguiria siendo 1 y el motivo dejaria de ser legible — o sea, la guardia se quedaria muda
+    // justo donde mas afirma.
+    const ruta = "app/_components/LogoutButton.tsx";
+    const conAlias = new Map(FUENTES);
+    conAlias.set(
+      ruta,
+      (FUENTES.get(ruta) ?? "")
+        .replace(
+          "import { darDeBajaDeEsteDispositivo }",
+          "import { darDeBajaDeEsteDispositivo as bajar }",
+        )
+        .replace('darDeBajaDeEsteDispositivo("cierre-de-sesion")', 'bajar("cierre-de-sesion")'),
+    );
+
+    const nuevas = nuevasInfracciones(conAlias);
+    expect(nuevas).toHaveLength(1);
+    expect(nuevas[0]).toMatchObject({ ruta, importa: 1, autorizadas: 1, motivos: [] });
+  });
+
+  it("control positivo: `importaSinAlias` distingue de verdad", () => {
+    // Sin esto, el caso de arriba pasaria en verde con un detector que dijera «hay alias» siempre.
+    expect(importaSinAlias('import { darDeBajaDeEsteDispositivo } from "@/lib/pwa/baja-push";')).toBe(true);
+    expect(importaSinAlias('import { darDeBajaDeEsteDispositivo as bajar } from "@/lib/pwa/baja-push";')).toBe(false);
+    expect(importaSinAlias("const { darDeBajaDeEsteDispositivo: irse } = await import('x');")).toBe(false);
+  });
+
+  it("⭑ EL LIMITE, DECLARADO: un especificador COMPUESTO en tiempo de ejecucion no se caza", () => {
+    // `await import("@/lib/pwa/" + "baja-push")` no deja el especificador literal en ningun sitio,
+    // asi que ninguna guardia de texto puede verlo. Se escribe aqui en vez de fingir que no existe:
+    //
+    //   · lo que SI queda cerrado por el tipo: el motivo sigue siendo obligatorio y la union sigue
+    //     cerrada, asi que esa superficie tiene que declarar UNO de los dos motivos igualmente
+    //     (R10 conserva su mitad fuerte, la que no depende de ninguna guardia);
+    //   · y una cadena partida a proposito para esquivar un censo no es un descuido: es un acto
+    //     deliberado, que es justo lo contrario del fallo que estas guardias existen para cazar
+    //     —el de quien se olvida—.
+    const compuesto = 'const m = await import("@/lib/pwa/" + "baja-push");';
+    expect(importacionesDeLaBaja(compuesto)).toBe(0);
   });
 });
 
