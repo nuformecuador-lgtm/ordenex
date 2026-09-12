@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
@@ -57,6 +57,33 @@ vi.mock("@/lib/repositories/UserRepository", () => ({
     findById = vi.fn().mockResolvedValue({ id: "u1", nombre: "Ada Lovelace" });
   },
 }));
+
+// FICHA 422 (T5.2) — el layout lee además la PREFERENCIA DE AVISOS de la persona, en el servidor,
+// para bajarla por props. Se dobla el repositorio (no la base) y se recuerda CON QUÉ id se llamó:
+// leerla por otro id sería aplicarle a alguien la decisión de un tercero.
+const { avisosPushDeMock } = vi.hoisted(() => ({ avisosPushDeMock: vi.fn() }));
+vi.mock("@/lib/repositories/UsuarioPreferenciaRepository", () => ({
+  UsuarioPreferenciaRepository: class {
+    avisosPushDe = avisosPushDeMock;
+  },
+}));
+
+// El componente de la reactivación se dobla para poder AFIRMAR QUE ALGUIEN LE PASA EL DATO. Es la
+// lección de los dos notificadores muertos: se comprueba que se INYECTA, no que se importa. El
+// componente real devuelve `null`, así que un montaje sin su prop —o sin montaje— no se vería en
+// ninguna pantalla y la reactivación estaría muerta con toda la suite en verde.
+const { propsDeLaReactivacion } = vi.hoisted(() => ({
+  propsDeLaReactivacion: [] as { avisosRecordados: boolean }[],
+}));
+vi.mock("@/components/shared/PushReactivacion", () => ({
+  PushReactivacion: (props: { avisosRecordados: boolean }) => {
+    propsDeLaReactivacion.push(props);
+    return null;
+  },
+}));
+
+// Por defecto, alguien que no ha decidido nada: la preferencia «no puesta» (422/R2).
+avisosPushDeMock.mockResolvedValue(false);
 
 // Como el layout es async, se invoca y se espera su árbol antes de renderizar.
 async function renderLayout(children: ReactNode) {
@@ -227,5 +254,60 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
 
     expect(rootLayout).not.toMatch(/Sidebar/);
     expect(loginPage).not.toMatch(/Sidebar/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 422 · T5.2 — LA REACTIVACIÓN SE MONTA AQUÍ, Y ALGUIEN LE PASA LA PREFERENCIA
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// Por qué este layout y no el hook: `PushOptIn` —el único consumidor de `usePushSuscripcion`— vive
+// dentro del panel de la campana, que es un portal SIN `keepMounted`. Ese panel no existe mientras
+// la campana está cerrada, así que la reactivación ocurriría la primera vez que alguien ABRE la
+// campana: justo el gesto que esta ficha existe para no tener que pedir. Aquí ocurre al cargar
+// cualquier página del portal.
+
+describe("422/T5.2 — el layout lee la preferencia en el SERVIDOR y la baja por props", () => {
+  beforeEach(() => {
+    propsDeLaReactivacion.length = 0;
+    avisosPushDeMock.mockClear();
+    avisosPushDeMock.mockResolvedValue(false);
+  });
+
+  it("⭑ con actor, monta la reactivación pasándole la preferencia leída (y solo UNA vez)", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
+    avisosPushDeMock.mockResolvedValue(true);
+
+    await renderLayout(<div>Contenido</div>);
+
+    // La lee por el id DE LA SESIÓN, no por uno que venga de fuera (410/R50).
+    expect(avisosPushDeMock).toHaveBeenCalledTimes(1);
+    expect(avisosPushDeMock).toHaveBeenCalledWith("u1");
+    // Y ALGUIEN LE PASA EL DATO. Esto es lo que no se puede dar por supuesto: importarlo y montarlo
+    // sin la prop dejaría la reactivación muerta sin romper ninguna pantalla.
+    expect(propsDeLaReactivacion).toEqual([{ avisosRecordados: true }]);
+  });
+
+  it("⭑ con actor SIN preferencia guardada, baja `false` (R2: no hay estado «desconocido»)", async () => {
+    // El control negativo del caso de arriba: si el layout pasara una constante —o `true` siempre—
+    // la reactivación se dispararía para quien nunca dijo que sí (R18).
+    resolveActorMock.mockResolvedValue({ usuarioId: "u2", rol: "mensajero" });
+    avisosPushDeMock.mockResolvedValue(false);
+
+    await renderLayout(<div>Contenido</div>);
+
+    expect(avisosPushDeMock).toHaveBeenCalledWith("u2");
+    expect(propsDeLaReactivacion).toEqual([{ avisosRecordados: false }]);
+  });
+
+  it("⭑ R24: SIN sesión válida no se monta nada que pueda reactivar, ni se lee ninguna preferencia", async () => {
+    // Es la mitad que sostiene 410/R19 intacto: mientras no haya sesión en este dispositivo, no
+    // existe en el árbol nada capaz de volver a suscribirlo.
+    resolveActorMock.mockResolvedValue(null);
+
+    await renderLayout(<div>Contenido</div>);
+
+    expect(propsDeLaReactivacion).toEqual([]);
+    expect(avisosPushDeMock).not.toHaveBeenCalled();
   });
 });

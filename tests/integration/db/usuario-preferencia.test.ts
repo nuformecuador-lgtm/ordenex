@@ -312,6 +312,131 @@ describeSiHayBase("422 — dos pestanas activando a la vez dejan UNA sola fila",
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
+// R22 (T6.1) — DOS PESTANAS REACTIVANDO EL MISMO DISPOSITIVO A LA VEZ
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// Es la carrera de la REACTIVACION, no la de la preferencia: dos pestanas del portal abiertas, las
+// dos cargan, las dos reactivan. El navegador devuelve LA MISMA suscripcion para el mismo registro
+// y la misma clave, asi que las dos llegan al servidor con el MISMO `endpoint`.
+//
+// ⚠️ R22 EXIGE QUE LA EXCLUSION SEA ESTRUCTURAL, no una comprobacion previa. La diferencia no es de
+// estilo: un `findFirst` + `create` deja abierta la rendija entre la lectura y la escritura, y por
+// ahi caben dos INSERT. Ese fallo NO ROMPE NINGUN test de servicio —deja dos filas y la lectura
+// empieza a depender de cual salga primero—, y en produccion significa DOS avisos por cada uno.
+// Por eso se mide contra el motor, con dos conexiones que commitean de verdad.
+
+const ESQUEMA_ENDPOINT = `t422_endpoint_${Date.now().toString(36)}_${randomUUID().slice(0, 8).replace(/-/g, "")}`;
+
+describeSiHayBase("422/R22 — dos pestanas registrando el MISMO endpoint dejan UNA sola fila", () => {
+  let admin: PrismaClient;
+  let pestanaA: PrismaClient;
+  let pestanaB: PrismaClient;
+
+  beforeAll(async () => {
+    admin = crearPrismaDeTest();
+    await admin.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${ESQUEMA_ENDPOINT}"`);
+    // El clon REAL: `INCLUDING ALL` se trae el indice unico de `endpoint`. El `LIKE` no copia la
+    // clave ajena, asi que no hace falta sembrar usuarios.
+    await admin.$executeRawUnsafe(
+      `CREATE TABLE "${ESQUEMA_ENDPOINT}"."push_suscripcion"
+         (LIKE "public"."push_suscripcion" INCLUDING ALL)`,
+    );
+    // Y un clon GEMELO SIN INDICES (`INCLUDING DEFAULTS` copia los valores por defecto y NADA mas):
+    // es el mundo contrafactico contra el que se mide que la exclusion la da el indice.
+    await admin.$executeRawUnsafe(
+      `CREATE TABLE "${ESQUEMA_ENDPOINT}"."push_suscripcion_sin_unico"
+         (LIKE "public"."push_suscripcion" INCLUDING DEFAULTS)`,
+    );
+    pestanaA = crearPrismaDeTestEnEsquema(ESQUEMA_ENDPOINT);
+    pestanaB = crearPrismaDeTestEnEsquema(ESQUEMA_ENDPOINT);
+  });
+
+  afterAll(async () => {
+    await Promise.all([pestanaA?.$disconnect(), pestanaB?.$disconnect()]);
+    await admin.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${ESQUEMA_ENDPOINT}" CASCADE`);
+    await admin.$disconnect();
+  });
+
+  it("⭑ autocomprobacion: el clon real lleva el UNIQUE de `endpoint` y el gemelo NO", async () => {
+    // Sin esto, la carrera de abajo podria estar verde por una razon equivocada —un `LIKE` que no
+    // copio nada, o un gemelo que si copio el indice— y el contraste no significaria nada.
+    const indicesDe = (tabla: string) =>
+      admin.$queryRawUnsafe<{ indexdef: string }[]>(
+        `SELECT indexdef FROM pg_indexes WHERE schemaname = $1 AND tablename = $2`,
+        ESQUEMA_ENDPOINT,
+        tabla,
+      );
+    const unicoDeEndpoint = (filas: { indexdef: string }[]) =>
+      filas.some((i) => i.indexdef.includes("UNIQUE") && /\(endpoint\)/.test(i.indexdef));
+
+    expect(unicoDeEndpoint(await indicesDe("push_suscripcion"))).toBe(true);
+    expect(unicoDeEndpoint(await indicesDe("push_suscripcion_sin_unico"))).toBe(false);
+  });
+
+  it("⭑ las dos reactivaciones concurrentes dejan UNA fila para ese dispositivo", async () => {
+    const usuario = `pestanas-${randomUUID()}`;
+    const endpoint = `https://fcm.googleapis.com/fcm/send/422-dos-pestanas-${randomUUID()}`;
+    const canalA = new PushSuscripcionRepository(pestanaA);
+    const canalB = new PushSuscripcionRepository(pestanaB);
+
+    await expect(
+      Promise.all([
+        canalA.registrar(usuario, { endpoint, p256dh: "K", auth: "A", etiqueta: "Chrome en Android" }),
+        canalB.registrar(usuario, { endpoint, p256dh: "K", auth: "A", etiqueta: "Chrome en Android" }),
+      ]),
+    ).resolves.toBeDefined();
+
+    const filas = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT COUNT(*)::bigint AS n FROM "${ESQUEMA_ENDPOINT}"."push_suscripcion" WHERE "endpoint" = $1`,
+      endpoint,
+    );
+    expect(Number(filas[0].n)).toBe(1);
+  });
+
+  it("⭑ y la exclusion es ESTRUCTURAL: sin el UNIQUE, las mismas dos escrituras dejan DOS filas", async () => {
+    // El contrafactico, a pelo y contra el motor. En la tabla REAL el segundo INSERT viola; en la
+    // gemela sin indice pasa y quedan dos filas vivas para el mismo dispositivo — o sea, dos avisos
+    // por cada uno. Esto es lo que convierte «una fila» en una propiedad del ESQUEMA y no una
+    // casualidad del orden en que llegaron las dos pestanas.
+    const usuario = `estructural-${randomUUID()}`;
+    const endpoint = `https://fcm.googleapis.com/fcm/send/422-estructural-${randomUUID()}`;
+    const insertar = (tabla: string) =>
+      admin.$executeRawUnsafe(
+        `INSERT INTO "${ESQUEMA_ENDPOINT}"."${tabla}"
+           ("id","usuario_id","endpoint","p256dh","auth","updated_at")
+         VALUES ($1,$2,$3,'K','A',CURRENT_TIMESTAMP)`,
+        randomUUID(),
+        usuario,
+        endpoint,
+      );
+
+    await insertar("push_suscripcion");
+    let violo = false;
+    try {
+      await insertar("push_suscripcion");
+    } catch {
+      violo = true;
+    }
+
+    await insertar("push_suscripcion_sin_unico");
+    await insertar("push_suscripcion_sin_unico");
+
+    const contar = async (tabla: string) => {
+      const filas = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+        `SELECT COUNT(*)::bigint AS n FROM "${ESQUEMA_ENDPOINT}"."${tabla}" WHERE "endpoint" = $1`,
+        endpoint,
+      );
+      return Number(filas[0].n);
+    };
+
+    expect(violo, "el indice unico sobre `endpoint` NO esta haciendo su trabajo").toBe(true);
+    expect(await contar("push_suscripcion")).toBe(1);
+    // Y el mundo sin indice: DOS filas, sin que nada se queje.
+    expect(await contar("push_suscripcion_sin_unico")).toBe(2);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
 // 410/R19 — LO QUE LA 422 NO PUEDE EROSIONAR
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 

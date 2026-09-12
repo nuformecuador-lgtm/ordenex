@@ -3,12 +3,14 @@ import { cookies } from "next/headers";
 import { Sidebar } from "./_components/Sidebar";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { AvisoVersionNueva } from "@/components/shared/AvisoVersionNueva";
+import { PushReactivacion } from "@/components/shared/PushReactivacion";
 import { TemaProvider } from "@/providers/TemaProvider";
 import { COOKIE_TEMA, normalizarTema } from "@/lib/tema/tema";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { itemsVisibles, SIDEBAR_ITEMS } from "@/lib/auth/menu-visibility";
 import { ROL_LABELS } from "@/lib/auth/rol-label";
 import { UserRepository } from "@/lib/repositories/UserRepository";
+import { UsuarioPreferenciaRepository } from "@/lib/repositories/UsuarioPreferenciaRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import {
   SidebarInset,
@@ -36,9 +38,22 @@ export default async function AppLayout({
   // el nombre por id (el actor solo trae usuarioId + rol). Sin sesión -> null. Se pinta la
   // identidad COMPLETA —nombre y apellidos—: es el único sitio donde la persona se reconoce a
   // sí misma en la aplicación, y dos mensajeros con el mismo nombre de pila veían el mismo pie.
-  const usuarioRow = actor
-    ? await new UserRepository(getPrismaClient()).findById(actor.usuarioId)
-    : null;
+  //
+  // FICHA 422 (T5.2 — R14, R18, R24) — y, en la MISMA espera, la preferencia de avisos de esa
+  // persona. Se lee AQUÍ, en el servidor, y baja por props: es un dato privado, y el patrón de
+  // `docs/architecture.md` para eso es el componente padre que ya resolvió al actor. Una acción de
+  // lectura desde el cliente sería una ida y vuelta más por carga para un dato que el servidor ya
+  // tiene en la mano. `avisosPushDe` NO crea ninguna fila al leer.
+  //
+  // Las dos lecturas van en `Promise.all` y no encadenadas a propósito: este layout se pinta en
+  // TODAS las páginas del portal, así que una segunda consulta en serie le sumaría su latencia a
+  // cada carga. En paralelo, el coste en tiempo es el de la más lenta de las dos.
+  const [usuarioRow, avisosRecordados] = actor
+    ? await Promise.all([
+        new UserRepository(getPrismaClient()).findById(actor.usuarioId),
+        new UsuarioPreferenciaRepository(getPrismaClient()).avisosPushDe(actor.usuarioId),
+      ])
+    : ([null, false] as const);
   const usuario =
     actor && usuarioRow
       ? { nombre: nombreCompletoUsuario(usuarioRow), rolLabel: ROL_LABELS[actor.rol] }
@@ -75,6 +90,17 @@ export default async function AppLayout({
             El componente decide solo cuando pintarse; mientras el usuario tenga algo a medias
             no aparece. */}
         <AvisoVersionNueva />
+        {/* Ficha 422 — la reactivación silenciosa de los avisos. Va aquí, y solo aquí, por dos
+            razones que no son de estilo:
+              · R24 — este layout NO SE PINTA sin sesión, así que nada puede intentar reactivar a
+                quien no ha entrado. Montarlo en el layout raíz lo intentaría en la landing.
+              · R23 — el layout persiste entre navegaciones del portal, así que el intento ocurre
+                una vez por CARGA y no una por página visitada.
+            Dentro del panel de la campana no serviría: ese panel es un portal sin `keepMounted` y
+            no existe hasta que alguien ABRE la campana — justo el gesto que esta ficha evita.
+            La guardia `push-alta-punto-unico.guardia.test.ts` exige que éste sea el único montaje
+            del árbol. El componente no pinta nada: decide solo y en silencio. */}
+        {actor && <PushReactivacion avisosRecordados={avisosRecordados} />}
       </ToastProvider>
     </TemaProvider>
   );

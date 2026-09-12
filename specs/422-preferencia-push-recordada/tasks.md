@@ -106,20 +106,20 @@ misma tanda. Cada task trae su criterio de *hecho*; sin él no está hecha.
 
 ## Tanda 5 — La reactivación (frontend). Depende de T4.1 y T2.1
 
-- [ ] **T5.1 — `components/shared/PushReactivacion.tsx`.** Cliente, devuelve `null`, prop
+- [x] **T5.1 — `components/shared/PushReactivacion.tsx`.** Cliente, devuelve `null`, prop
   `avisosRecordados: boolean`, `useRef` de un solo intento, orden de comprobaciones de design §5.
   *Hecho:* `tests/components/PushReactivacion.test.tsx` con el fixture `tests/fixtures/navegador-push.ts`
   cubre R14, R15, R16, R17, R18, R19, R20, R21, R23. Cada caso negativo lleva **su control positivo al
   lado** (el mismo escenario, cambiando una sola condición, tiene que dar lo contrario): sin eso, un
   escenario vacío pasa en verde sin haber comprobado nada.
 
-- [ ] **T5.2 — Cableado en `app/(app)/layout.tsx`.** Leer la preferencia del actor con el repositorio
+- [x] **T5.2 — Cableado en `app/(app)/layout.tsx`.** Leer la preferencia del actor con el repositorio
   y montar el componente; sin actor, no se monta. Depende de T5.1 y T1.4.
   *Hecho:* alguien **pasa** el dato (no basta con importar el componente): la guardia G2 lo afirma, y
   el test del layout comprueba que con actor sin preferencia baja `false`. Es la lección de los dos
   notificadores muertos: comprobar que se inyecta, no que se importa.
 
-- [ ] **T5.3 [P] — El texto del control (R25, R26).** Una frase en `TEXTOS.ayuda` de
+- [x] **T5.3 [P] — El texto del control (R25, R26).** Una frase en `TEXTOS.ayuda` de
   `components/shared/PushOptIn.tsx` (design §8), pendiente del visto bueno de P3.
   *Hecho:* `tests/components/PushOptIn.test.tsx` afirma el **literal** visible —es el contrato con la
   persona, no un reflejo de su propia fuente— y que no contiene «suscripción», «endpoint» ni «token».
@@ -128,7 +128,7 @@ misma tanda. Cada task trae su criterio de *hecho*; sin él no está hecha.
 
 ## Tanda 6 — Cierre
 
-- [ ] **T6.1 — Carrera de dos pestañas contra la base (R22).** En
+- [x] **T6.1 — Carrera de dos pestañas contra la base (R22).** En
   `tests/integration/db/usuario-preferencia.test.ts` o su hermano de push: dos registros concurrentes
   del **mismo** `endpoint` → una fila, y la exclusión la da el índice único (si se quita el `UNIQUE`
   del esquema de prueba, salen dos).
@@ -138,8 +138,12 @@ misma tanda. Cada task trae su criterio de *hecho*; sin él no está hecha.
 - [ ] **T6.2 — Medición del backfill contra producción, ANTES de desplegar** (design §2.4).
   *Hecho:* el número de personas con suscripción escrito en `progress/impl_422.md` **antes** de
   aplicar, y las tres cifras de después (`filas = puestas = intactas`) escritas a continuación.
+  > ⚠️ **NO SE MARCA, Y NO POR OLVIDO.** Esta tarea mide contra **producción** y aplica una
+  > migración allí: las dos cosas están fuera del alcance de un agente de frontend y fuera de este
+  > entorno (sin acceso a la base de producción). Queda **abierta para quien despliegue**, con el
+  > SELECT exacto y las tres cifras de después escritos en `progress/impl_422_frontend.md §6`.
 
-- [ ] **T6.3 — Mapa `R<n> → test` y mutaciones** en `progress/impl_422.md`, con la salida real de los
+- [x] **T6.3 — Mapa `R<n> → test` y mutaciones** en `progress/impl_422.md`, con la salida real de los
   tests pegada. Depende de todo lo anterior.
   *Hecho:* los 26 requisitos mapeados, y la tabla de mutaciones de abajo **ejecutada de verdad**, con
   el nombre del test que se puso rojo y su salida. Una tabla de mutaciones sin salida pegada no se

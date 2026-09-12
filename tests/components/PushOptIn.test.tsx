@@ -49,6 +49,19 @@ const SIN_ACTIVAR = "Avisarme en este dispositivo";
 const ACTIVADO = "Activado en este dispositivo";
 const BLOQUEADO = "Bloqueado por el navegador";
 
+/**
+ * FICHA 422 (T5.3 — R25) — LA EXPLICACIÓN COMPLETA, PALABRA POR PALABRA, ESCRITA AQUÍ A MANO.
+ *
+ * Es el contrato con la persona, no un reflejo de su propia fuente: importar `TEXTOS` del
+ * componente dejaría este caso verde para siempre —diría que el componente dice lo que dice— y este
+ * repo ya se comió una aserción así. La tercera frase es la de esta ficha.
+ */
+const AYUDA =
+  "Te avisamos en este teléfono o computadora cuando algo tenga una fecha límite o dinero de " +
+  "por medio, aunque tengas la aplicación cerrada. Como mucho un aviso al día de cada tipo. " +
+  "Si cierras sesión dejamos de avisarte aquí, y volvemos a hacerlo cuando entres de nuevo en " +
+  "este dispositivo.";
+
 function montar() {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
@@ -102,10 +115,7 @@ describe("R14 — el control dice, con palabras, qué pasa en ESTE dispositivo",
 
     const control = await screen.findByRole("switch", { name: SIN_ACTIVAR });
     const ayuda = document.getElementById(control.getAttribute("aria-describedby") ?? "");
-    expect(ayuda?.textContent).toBe(
-      "Te avisamos en este teléfono o computadora cuando algo tenga una fecha límite o dinero de " +
-        "por medio, aunque tengas la aplicación cerrada. Como mucho un aviso al día de cada tipo.",
-    );
+    expect(ayuda?.textContent).toBe(AYUDA);
   });
 
   it("el texto visible NO usa siglas ni jerga de oficina", async () => {
@@ -121,6 +131,54 @@ describe("R14 — el control dice, con palabras, qué pasa en ESTE dispositivo",
     }
     // Control positivo: se leyó algo, no una pantalla vacía.
     expect(visible).toContain("fecha límite");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 422 · T5.3 — R25 y R26: EL TEXTO DICE QUÉ PASA AL SALIR Y AL VOLVER
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// Por qué hace falta decirlo: desde esta ficha, cerrar sesión da de baja este dispositivo (410/R19)
+// y al volver a entrar los avisos se reactivan SOLOS y EN SILENCIO. Las dos mitades son invisibles
+// —no hay ningún aviso que las anuncie, y esa fue la decisión— así que el único sitio donde la
+// persona puede enterarse es aquí, antes de tocar el interruptor.
+
+describe("422/R25-R26 — la explicación cuenta el cierre de sesión y la vuelta", () => {
+  it("⭑ dice las DOS mitades: que al salir se deja de avisar aquí, y que al volver se retoma", async () => {
+    montarNavegadorPush();
+
+    montar();
+
+    const control = await screen.findByRole("switch", { name: SIN_ACTIVAR });
+    const ayuda = document.getElementById(control.getAttribute("aria-describedby") ?? "");
+    // El literal entero: si alguien recorta la frase nueva, esto se pone rojo.
+    expect(ayuda?.textContent).toBe(AYUDA);
+    // Y las dos mitades por separado, para que el fallo diga CUÁL se perdió.
+    expect(ayuda?.textContent).toContain("Si cierras sesión dejamos de avisarte aquí");
+    expect(ayuda?.textContent).toContain("volvemos a hacerlo cuando entres de nuevo en este dispositivo");
+  });
+
+  it("⭑ R26: ni promete avisos sin sesión, ni usa jerga técnica", async () => {
+    montarNavegadorPush();
+
+    montar();
+
+    const control = await screen.findByRole("switch", { name: SIN_ACTIVAR });
+    const ayuda = document.getElementById(control.getAttribute("aria-describedby") ?? "")?.textContent ?? "";
+
+    // La jerga que R26 prohíbe, con el nombre de cada palabra en el fallo.
+    for (const jerga of ["suscripción", "suscripcion", "endpoint", "token", "permiso del navegador"]) {
+      expect(ayuda.toLowerCase(), `el texto del control usa «${jerga}»`).not.toContain(jerga);
+    }
+    // Lo que promete está SIEMPRE condicionado a volver a entrar: no hay promesa de avisos en un
+    // dispositivo donde nadie tiene la sesión abierta.
+    expect(ayuda).toContain("cuando entres de nuevo");
+
+    // CONTROL POSITIVO del detector: sobre un texto que sí lleva jerga, el mismo barrido la caza.
+    // Sin esto, un `textContent` vacío pasaría los cinco `not.toContain` de arriba en verde.
+    const conJerga = "Guardamos la suscripción y su endpoint en este dispositivo.";
+    expect(["suscripción", "endpoint"].filter((j) => conJerga.toLowerCase().includes(j))).toHaveLength(2);
+    expect(ayuda.length).toBeGreaterThan(150);
   });
 });
 

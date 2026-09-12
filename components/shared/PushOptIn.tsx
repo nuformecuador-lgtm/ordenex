@@ -40,9 +40,21 @@ const TEXTOS = {
   /**
    * La explicación va ANTES del clic, no después: quien toca el interruptor ya sabe qué se le va a
    * avisar y cada cuánto. Sin siglas y sin jerga (regla vigente del repo).
+   *
+   * FICHA 422 (T5.3 — R25, R26) — LA TERCERA FRASE ES NUEVA, y cierra el hueco que el humano
+   * reportó: el texto contaba cuándo te avisa y se callaba qué pasa al cerrar sesión. Dice las dos
+   * mitades —qué pasa al salir y qué pasa al volver— **sin** pedirle a nadie que entienda qué es
+   * una suscripción ni un permiso del navegador (R26). Y lo que promete es verdad exactamente en
+   * el caso en que la reactivación funciona: el mismo dispositivo, con el permiso ya concedido.
+   *
+   * ⚠️ Escrita en TUTEO, como el resto de este archivo («Te avisamos», «tengas», «abre los
+   * ajustes»). El diseño la proponía en voseo por el registro de los avisos del canal («Tenés un
+   * aviso nuevo»), pero mezclar los dos registros DENTRO del mismo control se lee como un descuido.
+   * La redacción sigue pendiente del visto bueno de P3: cambiarla es esta línea y el literal que la
+   * fija en `PushOptIn.test.tsx`, y nada más.
    */
   ayuda:
-    "Te avisamos en este teléfono o computadora cuando algo tenga una fecha límite o dinero de por medio, aunque tengas la aplicación cerrada. Como mucho un aviso al día de cada tipo.",
+    "Te avisamos en este teléfono o computadora cuando algo tenga una fecha límite o dinero de por medio, aunque tengas la aplicación cerrada. Como mucho un aviso al día de cada tipo. Si cierras sesión dejamos de avisarte aquí, y volvemos a hacerlo cuando entres de nuevo en este dispositivo.",
   /** R12 — cómo se revierte un «no». El navegador no deja volver a preguntar. */
   comoDesbloquear:
     "Bloqueaste los avisos para este sitio y el navegador no deja volver a pedírtelos. Para recibirlos, abre los ajustes del navegador, busca los permisos de este sitio y permite las notificaciones.",
