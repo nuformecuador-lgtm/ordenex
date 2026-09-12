@@ -1,0 +1,24 @@
+-- DOWN (ficha 422, T1.2) -- revierte EXACTAMENTE `migration.sql`.
+--
+-- Una sola sentencia, y arrastra TODO lo que el `up` creo: la tabla, su clave primaria, su indice
+-- unico `usuario_preferencia_usuario_id_key`, su FK a `usuario` y su configuracion de RLS. No hace
+-- falta soltarlos uno a uno y no se debe: un `DROP INDEX` suelto delante seria ruido que puede
+-- desincronizarse del `up`.
+--
+-- NO HAY `DROP TYPE`, Y NO ES UN OLVIDO. Esta migracion NO CREA NINGUN ENUM ni ningun tipo: solo
+-- usa `BOOLEAN`, `TEXT` y `TIMESTAMP`. Por eso aqui NO aplica la leccion de los enums recreados con
+-- lista -- no hay ninguna lista que recrear, asi que tampoco hay ninguna columna que retipar ni
+-- ningun valor posterior que se pueda borrar en silencio. Y por el mismo motivo NO SE TOCA NINGUN
+-- `down.sql` ANTERIOR: cada uno es una foto de SU rama y todos siguen siendo ciertos.
+--
+-- NO TOCA `usuario` NI `push_suscripcion`. Ni un `UPDATE`, ni un `DELETE`, ni un `INSERT` sobre
+-- nada que existiera antes: revertir esta ficha no da de baja a nadie ni retira una suscripcion.
+--
+-- QUE SE PIERDE AL REVERTIR, DICHO EN VOZ ALTA: LA PREFERENCIA DE TODO EL MUNDO, incluido el
+-- backfill. Nadie deja de recibir push por esto -- las suscripciones de `push_suscripcion` siguen
+-- intactas y el camino del envio no consulta esta tabla (R6) -- pero el siguiente cierre de sesion
+-- vuelve a olvidar la decision y la aplicacion ya no reactiva sola al volver a entrar. Es decir: se
+-- vuelve al estado de hoy, que es exactamente el que esta ficha vino a cambiar. Para recuperarlo
+-- hay que volver a aplicar el `up`, y su backfill reconstruira la preferencia de quien SIGA
+-- teniendo suscripcion; la de quien la haya perdido entre medias NO vuelve.
+DROP TABLE IF EXISTS "usuario_preferencia";

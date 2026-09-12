@@ -216,4 +216,18 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
       "`apiKey` no aparece en ninguna de sus ocho entradas: una cuenta dedicada no tiene telefono " +
       "al que interrumpir.",
   },
+  // ── FICHA 422 (2026-09-11): la preferencia «quiero avisos», que es de la PERSONA ─────────────
+  // CASCADE, y por el mismo criterio que sus dos vecinas de arriba: una preferencia no es
+  // evidencia. Tampoco es `se_borra_con_ella` —esa categoria es para lo que desaparece DENTRO de
+  // la transaccion del borrado de la key— porque para una cuenta dedicada la fila no llega a
+  // existir nunca.
+  "UsuarioPreferencia.usuario": {
+    categoria: "no_alcanzable",
+    motivo:
+      "Solo hay DOS caminos que crean esta fila y los dos exigen un NAVEGADOR con sesion de " +
+      "pantalla: `registrarSuscripcionPush` (que fija al dueno con `resolveActorFromSession`) y " +
+      "`olvidarPreferenciaDeAvisos`, las dos detras del interruptor de avisos. El backfill de su " +
+      "migracion copia de `push_suscripcion`, que es inalcanzable por lo mismo, asi que tampoco " +
+      `puede crearla. ${SOLO_OPERADOR}`,
+  },
 };
