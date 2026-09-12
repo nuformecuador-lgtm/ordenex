@@ -53,8 +53,13 @@ tests/components/LogoutButton.push.test.tsx        (motivo literal + R19 intacto
 tests/unit/hooks/usePushSuscripcion.test.tsx       (motivo literal + el alta por `alta-push`)
 tests/components/PushOptIn.test.tsx                (solo el doble del módulo de acciones)
 tests/components/NotificationsBell.push.test.tsx   (solo el doble del módulo de acciones)
+tests/fixtures/api-key-dependencias-usuario.ts     (censo de FKs hacia `Usuario`: +`UsuarioPreferencia.usuario`)
+tests/integration/db/schema-drift-saneamiento.test.ts (censo de defaults de `updated_at`: de NUEVE a DIEZ)
 specs/422-preferencia-push-recordada/tasks.md      (casillas de T1.1–T4.3)
 ```
+
+> Los dos últimos son **guardias ajenas que el gate puso rojas con razón**; el detalle de por qué y
+> qué se declaró en cada una está en §9.3.1.
 
 **Por qué cuatro archivos de test ajenos tocan su `vi.mock`.** `lib/pwa/baja-push.ts` ahora importa
 también `olvidarPreferenciaDeAvisos`, y esos cuatro archivos doblan `@/lib/actions/push` con una
