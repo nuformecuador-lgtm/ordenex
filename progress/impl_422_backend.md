@@ -278,11 +278,111 @@ dobles de test), ninguno en archivos de esta ficha.
 
 > El gate rápido **se niega solo** con este diff: toca `db/schema.prisma` y `db/migrations/**`.
 
-PENDIENTE_GATE
+```
+✓ typecheck paso
+✓ lint paso
+...
+ Test Files  1949 passed (1949)
+      Tests  28296 passed | 26 skipped (28322)
+   Duration  592.96s
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1949 ejecutado(s), todos en el baseline conocido)
+== init OK ==
+INIT_EXIT=0
+```
+
+**`INIT_EXIT=0` está escrito DENTRO del log**, no leído del código de salida del proceso. No es
+manía: la herramienta que lanzó este mismo comando reportó **«exit code 0» en la corrida anterior,
+que fue ROJA**. Sin el `INIT_EXIT` dentro del log me la habría creído.
+
+**Los `skipped` son 26, y son los de siempre:**
+
+```
+tests/components/AnaliticaPage.test.tsx  (64 tests | 17 skipped)
+tests/components/AnaliticaShell.test.tsx (15 tests |  9 skipped)
+```
+
+**Cero saltados de `tests/integration/db/`** (comprobado con un `grep -c` sobre el log: `0`). O sea
+que la capa de datos **se ejecutó de verdad**, que es lo que aquí más importa. Mis cinco archivos
+nuevos, con su cuenta:
+
+```
+tests/integration/db/usuario-preferencia-migration.test.ts  (19 tests)
+tests/integration/db/usuario-preferencia.test.ts            (11 tests)
+tests/unit/guards/push-intencion-de-baja.guardia.test.ts    (18 tests)
+tests/unit/guards/push-alta-punto-unico.guardia.test.ts     (13 tests)
+tests/unit/pwa/alta-push.test.ts                            (12 tests)
+```
+
+#### La primera corrida del gate salió ROJA, y los dos rojos eran míos
+
+No lo escondo porque es la parte útil. `INIT_EXIT=1`, `7 failed`, dos archivos fuera del baseline:
+
+- `tests/unit/guards/api-key-dependencias-usuario.guardia.test.ts` — exige que **toda** relación
+  hacia `usuario` esté clasificada con su motivo, y `UsuarioPreferencia.usuario` era nueva.
+- `tests/integration/db/schema-drift-saneamiento.test.ts` — su lista de tablas cuyo `CREATE TABLE`
+  puso `DEFAULT` en `updated_at` **se mantiene a mano**, justo para que una tabla nueva no entre sin
+  que alguien lo decida. Pasó de NUEVE a DIEZ.
+
+Las dos son guardias ajenas **haciendo exactamente lo que existen para hacer**. Se resolvieron
+**ampliando las listas con su motivo escrito**, sin relajar ni una aserción y sin tocar
+`tests/baseline-rojos.json`. Commit `b8c73643`.
+
+> Para quien venga detrás: **cualquier modelo nuevo en `db/schema.prisma` con relación a `Usuario` y
+> con `updated_at` con default va a poner estas dos guardias rojas.** No es tu código roto; es la
+> señal de que hay dos decisiones que declarar.
 
 ### 9.4 Las mutaciones
 
-PENDIENTE_MUTACIONES
+Cada mutación se aplicó **sola**, se corrió el gate acotado a lo que debía cazarla, se anotó qué se
+puso rojo y se revirtió **verificando el SHA256** del archivo restaurado (nunca `git checkout --`).
+Cada log lleva su `VITEST_EXIT=` / `TSC_EXIT=` escrito dentro.
+
+**M0 es la mutación de CONTROL, diseñada para MORIR**, y va primera a propósito: en este repo un
+arnés reportó «9/9 supervivientes» **dos veces sin haber ejecutado un solo test**. Si M0 hubiera
+sobrevivido, nada del resto de esta tabla valdría.
+
+| # | Mutación | Veredicto | Qué se puso rojo |
+| --- | --- | --- | --- |
+| **M0** (control) | `avisosPushDe` devuelve `true` cuando no hay fila | **MUERTA** (exit 1) | `usuario-preferencia.test.ts` › `sin fila, avisosPushDe devuelve false` · `la preferencia de OTRA persona no se cuela` |
+| **M1** | `LogoutButton` declara `"la-persona-apago-el-interruptor"` | **MUERTA** (exit 1) — **6 tests** | `LogoutButton.push.test.tsx` › `sale declarando que solo se va` · `sin suscripción en este dispositivo, salir tampoco apaga la preferencia` · G1 › `ningún archivo se sale de la lista blanca` + 3 autocomprobaciones |
+| **M1b** | Se quita el parámetro `motivo` | **MUERTA** (`TSC_EXIT=2`) | `pnpm run typecheck`: los dos sitios de llamada |
+| **M1c** | Tercer motivo en la unión sin tratarlo | **MUERTA** (`TSC_EXIT=2`) | `pnpm run typecheck`: el `never` del `default` |
+| **M1d** | La distinción borrada **dentro** del `switch` (salir pasa a borrar) | **MUERTA** (exit 1) — **8 tests** | `baja-push.test.ts` › `cerrar sesión NO borra la preferencia` · `lo ÚNICO que cambia entre los dos es la preferencia` · `control positivo: al SALIR sin suscripción no se toca la preferencia` + 5 más |
+| **M2** | Se quita `Notification.permission !== "granted"` de `alta-push` | **MUERTA** (exit 1) | `alta-push.test.ts` › `con el permiso en «default» NO se suscribe` · `con «denied» tampoco` · G2 › `la comprobación del permiso está ANTES del subscribe` |
+| **M4** | La intención, movida **detrás** del corte por «sin suscripción» | **MUERTA** (exit 1) | `baja-push.test.ts` › `apagar sin suscripción viva borra la preferencia igual` · `ni siquiera hace falta que haya service worker` · G1 › `la intención se resuelve ANTES del corte` |
+| **M5** | Borrado el `INSERT ... SELECT` del `migration.sql` | **MUERTA** (exit 1) — **7 tests** | `usuario-preferencia-migration.test.ts` › `quien ya tenía suscripción queda con la preferencia puesta` · `NO crea fila para quien no tenía ninguna` · `updated_at = created_at` + 4 más |
+| **M6** | El camino del envío filtra además por `avisosPush` | **MUERTA** (exit 1) | G2 › `ni un archivo del camino del envío nombra la preferencia` · `el repositorio del canal sigue eligiendo destinatarios SOLO por suscripción` |
+| **M8** | `registrarSuscripcionPush` no pone la preferencia | **MUERTA** (exit 1) | `push-action.test.ts` › `registrar deja la preferencia puesta` + 3 más |
+| **M10** | El índice de `usuario_id` deja de ser UNIQUE (**en la base**) | **MUERTA** (exit 1) — **8 tests** | `usuario-preferencia.test.ts` › `MUTACIÓN M10, medida contra el MOTOR` · `dos escrituras CONCURRENTES dejan una fila` · `el clon llevó consigo el ÍNDICE ÚNICO` · `usuario-preferencia-migration.test.ts` › `el índice de usuario_id es UNICO` |
+
+**11 mutaciones, 11 muertas. Cero supervivientes, y el control murió.**
+
+**Las dos que la ficha exigía por nombre, las dos cumplidas:**
+
+- *«quitar la distinción entre salir y apagar debe romper un test por sí solo»* → **M1** (6 tests) y
+  **M1d** (8 tests). Y quitarla del todo ni siquiera compila (**M1b**).
+- *«la preferencia puesta no debe poder saltarse la comprobación del permiso»* → **M2**. La
+  comprobación vive en `alta-push.ts`, **la preferencia ni siquiera entra en esa función**, y G2
+  exige que `pushManager.subscribe(` aparezca **una sola vez** y ahí dentro: no hay un segundo camino
+  por el que suscribir saltándosela.
+
+**M10 se aplicó contra la base local compartida** (`DROP INDEX` + `CREATE INDEX` no único) y se
+restauró en la misma corrida, **verificando el `indexdef` resultante**:
+
+```
+CREATE UNIQUE INDEX usuario_preferencia_usuario_id_key ON public.usuario_preferencia USING btree (usuario_id)
+```
+
+Es además la prueba de que el caso de la carrera **mide el índice** y no pasa por accidente: al
+quitarlo, las dos conexiones dejan de estar excluidas y el caso cae.
+
+#### Las tres mutaciones que NO están ejecutadas, y por qué
+
+**M3, M7 y M9 son de la tanda 5**: las tres mutan `components/shared/PushReactivacion.tsx`, que **no
+existe todavía** y no es de mi alcance. La mitad de **M2** que toca
+`PushReactivacion.test.tsx › la preferencia puesta no se salta el permiso` es de esa misma tanda.
+No las marco como «supervivientes» ni como «muertas»: **no se pueden ejecutar**, y decirlo es más
+honesto que inventarles un veredicto.
 
 ---
 
