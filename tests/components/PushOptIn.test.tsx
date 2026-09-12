@@ -25,16 +25,21 @@ import {
  * hueco HAY texto accionable, no que no haya control.
  */
 
-const { obtenerMock, registrarMock, eliminarMock } = vi.hoisted(() => ({
+const { obtenerMock, registrarMock, eliminarMock, olvidarMock } = vi.hoisted(() => ({
   obtenerMock: vi.fn(),
   registrarMock: vi.fn(),
   eliminarMock: vi.fn(),
+  olvidarMock: vi.fn(),
 }));
 
+// FICHA 422 — `lib/pwa/baja-push.ts` consume tambien la accion que olvida la preferencia, asi
+// que el doble del modulo tiene que traerla: sin ella el import se resuelve a `undefined` y el
+// fallo sale como «no es una funcion», que no dice nada de lo que este archivo mide.
 vi.mock("@/lib/actions/push", () => ({
   obtenerClavePublicaPush: obtenerMock,
   registrarSuscripcionPush: registrarMock,
   eliminarSuscripcionPush: eliminarMock,
+  olvidarPreferenciaDeAvisos: olvidarMock,
 }));
 
 const CLAVE = "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U";
@@ -57,6 +62,7 @@ beforeEach(() => {
   obtenerMock.mockResolvedValue({ status: "ok", clavePublica: CLAVE });
   registrarMock.mockResolvedValue({ status: "ok" });
   eliminarMock.mockResolvedValue({ status: "ok" });
+  olvidarMock.mockResolvedValue({ status: "ok" });
 });
 
 afterEach(() => {

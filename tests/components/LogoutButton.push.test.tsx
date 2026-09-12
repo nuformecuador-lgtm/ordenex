@@ -22,20 +22,46 @@ import {
  * canal de push. Aquellos casos siguen siendo suyos y siguen pasando.
  */
 
-const { logoutMock, eliminarMock, pushMock, errorToastMock } = vi.hoisted(() => ({
-  logoutMock: vi.fn(),
-  eliminarMock: vi.fn(),
-  pushMock: vi.fn(),
-  errorToastMock: vi.fn(),
-}));
+const { logoutMock, eliminarMock, olvidarMock, motivoMock, pushMock, errorToastMock } =
+  vi.hoisted(() => ({
+    logoutMock: vi.fn(),
+    eliminarMock: vi.fn(),
+    olvidarMock: vi.fn(),
+    motivoMock: vi.fn(),
+    pushMock: vi.fn(),
+    errorToastMock: vi.fn(),
+  }));
 
 vi.mock("@/lib/actions/auth", () => ({ logout: logoutMock }));
 
+// FICHA 422 — `lib/pwa/baja-push.ts` consume tambien la accion que olvida la preferencia, asi
+// que el doble del modulo tiene que traerla: sin ella el import se resuelve a `undefined` y el
+// fallo sale como «no es una funcion», que no dice nada de lo que este archivo mide.
 vi.mock("@/lib/actions/push", () => ({
   eliminarSuscripcionPush: eliminarMock,
+  olvidarPreferenciaDeAvisos: olvidarMock,
   registrarSuscripcionPush: vi.fn(),
   obtenerClavePublicaPush: vi.fn(),
 }));
+
+/**
+ * FICHA 422 (T3.2) — EL ESPIA DEL MOTIVO, QUE **NO** SUSTITUYE EL COMPORTAMIENTO.
+ *
+ * El doble delega en la implementacion real: todo lo que este archivo ya medía —las dos mitades de
+ * la baja, el orden respecto de `logout()`, los fallos que no lanzan— se sigue midiendo sobre el
+ * codigo de verdad. Lo unico que este envoltorio anade es apuntar CON QUE MOTIVO se llamo, que es
+ * lo que la 422 vino a distinguir y no se puede leer de ninguna otra forma desde aqui.
+ */
+vi.mock("@/lib/pwa/baja-push", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/pwa/baja-push")>();
+  return {
+    ...real,
+    darDeBajaDeEsteDispositivo: (motivo: import("@/lib/pwa/baja-push").MotivoDeLaBaja) => {
+      motivoMock(motivo);
+      return real.darDeBajaDeEsteDispositivo(motivo);
+    },
+  };
+});
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: pushMock }) }));
 
@@ -60,6 +86,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   logoutMock.mockResolvedValue(undefined);
   eliminarMock.mockResolvedValue({ status: "ok" });
+  olvidarMock.mockResolvedValue({ status: "ok" });
 });
 
 afterEach(() => {
@@ -105,6 +132,53 @@ describe("R19 — la baja es de ESTE dispositivo, y va antes de cerrar la sesió
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
     expect(eliminarMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("422/R8+R13 — al salir se declara que SOLO SE VA, y la preferencia sobrevive", () => {
+  it("⭑ sale declarando que solo se va", async () => {
+    // ⚠️ ÉSTE ES EL CASO QUE LA FICHA EXIGE QUE SE PONGA ROJO POR SÍ SOLO (mutación M1): cambiar
+    // aquí el motivo a «la persona apagó el interruptor» borraría la decisión de la persona en
+    // CADA cierre de sesión, y la aplicación nunca podría volver a avisarle al entrar — que es
+    // exactamente el fallo que la 422 vino a arreglar. La distinción entre «salir» y «apagar» se
+    // afirma con el literal, no solo con una consecuencia indirecta.
+    montarNavegadorPush({ permiso: "granted", suscripcionPrevia: suscripcionFalsa() });
+
+    await salir();
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
+    expect(motivoMock).toHaveBeenCalledTimes(1);
+    expect(motivoMock).toHaveBeenCalledWith("cierre-de-sesion");
+    // Y su consecuencia, medida aparte del literal: la preferencia NO se toca.
+    expect(olvidarMock).not.toHaveBeenCalled();
+  });
+
+  it("⭑ y la baja de ESTE dispositivo se hace igual: 410/R19 intacto", async () => {
+    // Lo que el motivo NO cambia. Salir sigue dando de baja este teléfono —en el servidor y en el
+    // navegador— y sigue sin tocar los otros dispositivos de esta persona.
+    const suscripcion = suscripcionFalsa();
+    montarNavegadorPush({ permiso: "granted", suscripcionPrevia: suscripcion });
+
+    await salir();
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
+    expect(eliminarMock).toHaveBeenCalledTimes(1);
+    expect(eliminarMock).toHaveBeenCalledWith({ endpoint: ENDPOINT_FALSO });
+    expect(suscripcion.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(logoutMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("⭑ sin suscripción en este dispositivo, salir tampoco apaga la preferencia", async () => {
+    // Control de la costura por el lado del servidor: este botón no tiene forma de borrar la
+    // preferencia, ni siquiera cuando no había suscripción que dar de baja — que es justo el caso
+    // en que el interruptor SÍ la borraría (R11).
+    montarNavegadorPush({ permiso: "granted", suscripcionPrevia: null });
+
+    await salir();
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
+    expect(olvidarMock).not.toHaveBeenCalled();
+    expect(motivoMock).toHaveBeenCalledWith("cierre-de-sesion");
   });
 });
 

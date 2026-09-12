@@ -23,11 +23,12 @@ import {
  * puede, que es la única forma de ver el control renderizado dentro del panel.
  */
 
-const { listarMock, obtenerMock, registrarMock, eliminarMock } = vi.hoisted(() => ({
+const { listarMock, obtenerMock, registrarMock, eliminarMock, olvidarMock } = vi.hoisted(() => ({
   listarMock: vi.fn(),
   obtenerMock: vi.fn(),
   registrarMock: vi.fn(),
   eliminarMock: vi.fn(),
+  olvidarMock: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/notificaciones", () => ({
@@ -37,10 +38,14 @@ vi.mock("@/lib/actions/notificaciones", () => ({
   notificarCargaMasivaTerminada: vi.fn(),
 }));
 
+// FICHA 422 — `lib/pwa/baja-push.ts` consume tambien la accion que olvida la preferencia, asi
+// que el doble del modulo tiene que traerla: sin ella el import se resuelve a `undefined` y el
+// fallo sale como «no es una funcion», que no dice nada de lo que este archivo mide.
 vi.mock("@/lib/actions/push", () => ({
   obtenerClavePublicaPush: obtenerMock,
   registrarSuscripcionPush: registrarMock,
   eliminarSuscripcionPush: eliminarMock,
+  olvidarPreferenciaDeAvisos: olvidarMock,
 }));
 
 vi.mock("@/lib/audio/tono-notificacion", () => ({
@@ -73,6 +78,7 @@ beforeEach(() => {
   obtenerMock.mockResolvedValue({ status: "ok", clavePublica: CLAVE });
   registrarMock.mockResolvedValue({ status: "ok" });
   eliminarMock.mockResolvedValue({ status: "ok" });
+  olvidarMock.mockResolvedValue({ status: "ok" });
 });
 
 afterEach(() => {

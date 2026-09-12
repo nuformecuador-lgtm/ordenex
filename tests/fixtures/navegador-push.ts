@@ -61,7 +61,17 @@ export function montarNavegadorPush(
     conPushManager = true,
   } = escenario;
 
-  const pedirPermiso = vi.fn().mockResolvedValue(respuestaAlPedir);
+  // ⚠️ FICHA 422 — UN NAVEGADOR DE VERDAD ACTUALIZA `Notification.permission` CON LA RESPUESTA.
+  // Antes este doble no lo hacía: `requestPermission()` resolvía «granted» y `permission` seguía
+  // diciendo «default» para siempre. Daba igual mientras `activar()` se guardaba la respuesta en
+  // una variable local, pero desde que el trabajo del alta vive en `lib/pwa/alta-push.ts` —que
+  // **comprueba** el permiso en vez de pedirlo (R16/R17)— un doble que no lo actualiza describe un
+  // navegador que no existe, y pondría rojo el camino correcto.
+  const estadoDelPermiso = { valor: permiso };
+  const pedirPermiso = vi.fn().mockImplementation(async () => {
+    estadoDelPermiso.valor = respuestaAlPedir;
+    return respuestaAlPedir;
+  });
   const subscribe = vi.fn().mockResolvedValue(suscripcionNueva ?? suscripcionFalsa());
   const getSubscription = vi.fn().mockResolvedValue(suscripcionPrevia);
   const registro = { pushManager: { getSubscription, subscribe } };
@@ -88,7 +98,13 @@ export function montarNavegadorPush(
     });
   }
   Object.defineProperty(window, "Notification", {
-    value: { permission: permiso, requestPermission: pedirPermiso },
+    value: {
+      // Captador y no valor fijo: así `permission` refleja lo que el navegador contestó.
+      get permission() {
+        return estadoDelPermiso.valor;
+      },
+      requestPermission: pedirPermiso,
+    },
     configurable: true,
     writable: true,
   });
