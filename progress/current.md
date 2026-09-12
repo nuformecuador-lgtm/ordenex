@@ -1,4 +1,35 @@
-# Estado — sesión del 2026-09-10 / 11
+# Estado — sesión del 2026-09-10 / 12
+
+## ⚠️ LO MÁS RECIENTE — tercera release (2026-09-12)
+
+`prod` = **`97fc983e`** (PR #790), READY, alias `ordenex.co`. `dev` = `7684dbb4`.
+
+Entró la **422** — «la app recuerda que quieres avisos y los reactiva sola al volver a entrar».
+Nace de que el humano probó el push en producción y vio que cerrar sesión lo apagaba. **No era un
+fallo**: era R19 de la 410 protegiendo el dispositivo. Ahora se guarda la DECISIÓN, no el aparato.
+
+**Verificado contra producción después de desplegar, las seis cuadran:**
+migración `20260915120000_usuario_preferencia` aplicada · **1 fila** en `usuario_preferencia` ·
+**1 intacta** (`updated_at = created_at`, prueba de que nada más la tocó) · **0** preferencias sin
+suscripción previa · 1 suscripción sin cambios · **0** migraciones revertidas.
+`ordenex.co`, `/login` y `/sw.js` en 200. **Cero errores de runtime.**
+
+**Tres rondas de revisión, tres bloqueantes, todos en las GUARDIAS y ninguno en código que corre.**
+Se cerraron atacando la causa: las raíces del censo se derivan del disco en vez de enumerarse; el
+censo persigue el módulo importado en vez de la llamada; y la aguja dejó de depender de la extensión
+`.ts`, con lo que `public/sw.js` entró al censo. **Once intrusos probados, once cazados**, todos con
+el typecheck en verde.
+
+**410/R19 pasó de afirmada a MEDIDA**: el caso que la defiende corre contra Postgres con dos
+suscripciones reales. Ese `WHERE` antes solo lo veían dobles.
+
+**Decisión del humano, no reabrir:** el permiso del navegador es POR DISPOSITIVO y así debe seguir.
+La preferencia solo recuerda la decisión y **no puede saltarse el permiso** (hay mutación que lo
+exige). Apagar el interruptor la borra; cerrar sesión la conserva.
+
+---
+
+## Estado anterior — sesión del 2026-09-10 / 11
 
 ## Desplegado en producción y VERIFICADO (segunda release del día)
 
