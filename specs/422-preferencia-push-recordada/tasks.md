@@ -11,13 +11,13 @@ misma tanda. Cada task trae su criterio de *hecho*; sin él no está hecha.
 
 ## Tanda 1 — El lugar de la preferencia (backend, datos)
 
-- [ ] **T1.1 — Modelo en `db/schema.prisma`.** Añadir `UsuarioPreferencia` (design §2.1) y la
+- [x] **T1.1 — Modelo en `db/schema.prisma`.** Añadir `UsuarioPreferencia` (design §2.1) y la
   relación `preferencia` en `Usuario`, con el comentario `///` que diga **por qué es tabla y no
   columna**.
   *Hecho:* `pnpm run typecheck` en verde tras `prisma generate`, y `prisma migrate diff` no reporta
   más deriva que la migración de T1.2.
 
-- [ ] **T1.2 — Migración + `down.sql`.** `db/migrations/20260915120000_usuario_preferencia/`:
+- [x] **T1.2 — Migración + `down.sql`.** `db/migrations/20260915120000_usuario_preferencia/`:
   `CREATE TABLE`, índice único de `usuario_id`, FK CASCADE, **backfill** (design §2.2) y
   `ENABLE ROW LEVEL SECURITY`. `down.sql` = `DROP TABLE IF EXISTS`. Depende de T1.1.
   *Hecho:* `pnpm run db:migrate` aplica; `pnpm run db:rollback` revierte; volver a aplicar deja la
@@ -25,7 +25,7 @@ misma tanda. Cada task trae su criterio de *hecho*; sin él no está hecha.
   anterior** (son fotos de su rama) y **no hay enum**, así que la lección del enum recreado con lista
   no aplica — dejarlo dicho en el propio archivo.
 
-- [ ] **T1.3 — Test de integración de la migración.** `tests/integration/db/usuario-preferencia-migration.test.ts`,
+- [x] **T1.3 — Test de integración de la migración.** `tests/integration/db/usuario-preferencia-migration.test.ts`,
   molde de `push-migration.test.ts`: las dos mitades (lo que se lee del `.sql` y lo que **solo** sabe
   el motor). Cubre R1, R2, R4, R5 y la RLS. Depende de T1.2.
   *Hecho:* con `DATABASE_URL`, los casos **se ejecutan** (no `skipped`): la tabla existe con su forma,
@@ -33,7 +33,7 @@ misma tanda. Cada task trae su criterio de *hecho*; sin él no está hecha.
   backfill deja `true` **solo** a quien tenía suscripción. El archivo empieza por su autocomprobación
   (si el `.sql` no se leyera, toda la guardia quedaría verde y muda).
 
-- [ ] **T1.4 [P] — Repositorio.** `lib/interfaces/repositories/IUsuarioPreferenciaRepository.ts` +
+- [x] **T1.4 [P] — Repositorio.** `lib/interfaces/repositories/IUsuarioPreferenciaRepository.ts` +
   `lib/repositories/UsuarioPreferenciaRepository.ts` (design §6.2). `fijarAvisosPush` es un **upsert**
   por `usuario_id`; `avisosPushDe` no crea nada.
   *Hecho:* `tests/integration/db/usuario-preferencia.test.ts` contra Postgres real —el `WHERE` se
@@ -44,13 +44,13 @@ misma tanda. Cada task trae su criterio de *hecho*; sin él no está hecha.
 
 ## Tanda 2 — La intención en el servidor (backend). Depende de T1.4
 
-- [ ] **T2.1 — `registrarSuscripcionPush` deja la preferencia puesta (R3).** En `lib/actions/push.ts`,
+- [x] **T2.1 — `registrarSuscripcionPush` deja la preferencia puesta (R3).** En `lib/actions/push.ts`,
   con el repositorio nuevo inyectable por `deps` (patrón de hoy).
   *Hecho:* `tests/unit/actions/push-action.test.ts` afirma que un registro correcto llama a
   `fijarAvisosPush(actor.usuarioId, true)`; y que **sin sesión** no se escribe ni la suscripción ni la
   preferencia (R24).
 
-- [ ] **T2.2 — `olvidarPreferenciaDeAvisos()` (R7).** Server Action sin cuerpo; actor de la sesión;
+- [x] **T2.2 — `olvidarPreferenciaDeAvisos()` (R7).** Server Action sin cuerpo; actor de la sesión;
   `withErrorHandler` + `toActionError`, igual que sus tres hermanas.
   *Hecho:* test de la acción: con sesión → `fijarAvisosPush(id, false)` y `{status:"ok"}`; sin sesión
   → error de autenticación y **cero** escrituras.
@@ -59,21 +59,21 @@ misma tanda. Cada task trae su criterio de *hecho*; sin él no está hecha.
 
 ## Tanda 3 — La costura (⚠️ el nudo). Depende de T2.2
 
-- [ ] **T3.1 — `lib/pwa/baja-push.ts` pide el motivo.** `MotivoDeLaBaja`, `ResultadoBajaPush`
+- [x] **T3.1 — `lib/pwa/baja-push.ts` pide el motivo.** `MotivoDeLaBaja`, `ResultadoBajaPush`
   ampliado, `switch` exhaustivo con `never`, la intención **antes** del corte por «sin suscripción»
   (design §3.1). El trabajo del dispositivo **no se toca**: mismas dos mitades, mismo orden, mismo
   «no lanza nunca».
   *Hecho:* `tests/unit/pwa/baja-push.test.ts` ampliado y en verde, cubriendo R7, R8, R9, R11 y R12; el
   caso de R9 afirma que **los dos motivos producen exactamente las mismas llamadas al dispositivo**.
 
-- [ ] **T3.2 — Las dos superficies declaran su motivo.** `hooks/usePushSuscripcion.ts:207` →
+- [x] **T3.2 — Las dos superficies declaran su motivo.** `hooks/usePushSuscripcion.ts:207` →
   `"la-persona-apago-el-interruptor"`; `app/_components/LogoutButton.tsx:41` → `"cierre-de-sesion"`.
   En `LogoutButton` se **conserva** el comentario que explica por qué se da de baja al salir y se le
   añade una línea: por qué ese motivo **no** borra la preferencia. Depende de T3.1.
   *Hecho:* `tests/components/LogoutButton.push.test.tsx` afirma el argumento literal y que la sesión
   se cierra igual; `tests/unit/hooks/usePushSuscripcion.test.tsx` afirma el suyo.
 
-- [ ] **T3.3 — Guardia G1, `tests/unit/guards/push-intencion-de-baja.guardia.test.ts`** (design §9).
+- [x] **T3.3 — Guardia G1, `tests/unit/guards/push-intencion-de-baja.guardia.test.ts`** (design §9).
   Censo con lista blanca de **dos** entradas, cada una con su cuenta, su motivo y su porqué escrito;
   autocomprobaciones incluidas (el detector cuenta, no dice sí/no; no se dispara con un comentario; un
   intruso inyectado **en el recorrido** se caza). Depende de T3.2.
@@ -85,17 +85,17 @@ misma tanda. Cada task trae su criterio de *hecho*; sin él no está hecha.
 
 ## Tanda 4 — El alta en un solo sitio (backend/cliente). Depende de T3.1
 
-- [ ] **T4.1 — `lib/pwa/alta-push.ts`.** Extraer de `activar()` el trabajo de suscribir + registrar
+- [x] **T4.1 — `lib/pwa/alta-push.ts`.** Extraer de `activar()` el trabajo de suscribir + registrar
   (design §4). **Comprueba el permiso; no lo pide.**
   *Hecho:* `tests/unit/pwa/alta-push.test.ts`: con permiso `granted` suscribe y registra; con
   `default` y con `denied` devuelve `sin-permiso` **sin llamar a `subscribe`**; un registro fallido
   deshace la suscripción; `requestPermission` no se llama en ningún caso.
 
-- [ ] **T4.2 — `activar()` usa `alta-push`.** El hook se queda con el permiso y el estado.
+- [x] **T4.2 — `activar()` usa `alta-push`.** El hook se queda con el permiso y el estado.
   *Hecho:* los tests de `usePushSuscripcion` de la 410 (R10–R15) siguen **verdes sin tocarlos**, salvo
   el del motivo (T3.2).
 
-- [ ] **T4.3 [P] — Guardia G2, `tests/unit/guards/push-alta-punto-unico.guardia.test.ts`**:
+- [x] **T4.3 [P] — Guardia G2, `tests/unit/guards/push-alta-punto-unico.guardia.test.ts`**:
   `Notification.requestPermission(` **una** vez en todo el árbol; `pushManager.subscribe(` **una** vez
   y dentro de `lib/pwa/alta-push.ts`; `<PushReactivacion` **una** vez y en `app/(app)/layout.tsx`
   (R24); y la preferencia (`avisosPush` / `usuario_preferencia`) **cero** veces en el camino del
