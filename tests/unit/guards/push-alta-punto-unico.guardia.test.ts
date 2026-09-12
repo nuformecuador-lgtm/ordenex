@@ -323,15 +323,26 @@ describe("410/R11 + 422/R16 · `requestPermission` aparece UNA vez en todo el ar
       "  await reg.pushManager.subscribe({ userVisibleOnly: true });\n" +
       "}\n";
 
-    // (a) la peticion del permiso pasa a aparecer DOS veces, en dos archivos.
+    // (a) la peticion del permiso aparece TAMBIEN en el lienzo, o sea en un archivo mas.
     expect(apariciones(intruso, PETICION_DE_PERMISO)).toBe(1);
     const conIntruso = new Map(FUENTES);
     conIntruso.set(ruta, intruso);
-    const permisos = [...conIntruso]
-      .filter(([, codigo]) => apariciones(codigo, new RegExp(PETICION_DE_PERMISO.source, "g")) > 0)
-      .map(([r]) => r)
-      .sort();
-    expect(permisos).toEqual([RUTA_HOOK, ruta].sort());
+
+    /** Los archivos que piden el permiso en un mapa de fuentes dado. */
+    const quienesPiden = (fuentes: ReadonlyMap<string, string>) =>
+      [...fuentes]
+        .filter(([, codigo]) => apariciones(codigo, new RegExp(PETICION_DE_PERMISO.source, "g")) > 0)
+        .map(([r]) => r)
+        .sort();
+
+    // ⚠️ SE MIDE EL DELTA, no la lista absoluta (m3, segunda vuelta). Con un intruso REAL viviendo
+    // en cualquier otra raiz censada, una lista literal de dos nombres enrojeceria aqui por algo
+    // que este caso no vigila. Lo que este caso afirma es que el detector VE el lienzo.
+    const nuevos = quienesPiden(conIntruso).filter((r) => !quienesPiden(FUENTES).includes(r));
+    expect(nuevos).toEqual([ruta]);
+    // Y el control positivo: sin el lienzo, el hook es quien pide (y sigue siendo el unico que
+    // este archivo autoriza, cosa que afirma el caso `una sola aparicion...` de mas arriba).
+    expect(quienesPiden(FUENTES)).toContain(RUTA_HOOK);
 
     // (b) y el `subscribe` aparece fuera de `alta-push.ts`, o sea fuera de donde vive la
     // comprobacion del permiso.
