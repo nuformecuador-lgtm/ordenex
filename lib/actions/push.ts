@@ -18,7 +18,9 @@ import {
 } from "@/lib/types/push";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IPushSuscripcionRepository } from "@/lib/interfaces/repositories/IPushSuscripcionRepository";
+import type { IUsuarioPreferenciaRepository } from "@/lib/interfaces/repositories/IUsuarioPreferenciaRepository";
 import { PushSuscripcionRepository } from "@/lib/repositories/PushSuscripcionRepository";
+import { UsuarioPreferenciaRepository } from "@/lib/repositories/UsuarioPreferenciaRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { clavePublicaPush } from "@/lib/config/push";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -27,6 +29,8 @@ import { toActionError } from "@/lib/actions/_shared/to-action-error";
 
 export interface PushActionDeps {
   repo?: IPushSuscripcionRepository;
+  /** FICHA 422 — el repositorio de la preferencia de LA PERSONA (R3/R7). Inyectable para test. */
+  preferenciaRepo?: IUsuarioPreferenciaRepository;
   getActor?: () => Promise<Actor | null>;
   /** La clave publica, inyectable para el test. Por defecto la del entorno (R32). */
   clavePublica?: () => string | null;
@@ -34,6 +38,10 @@ export interface PushActionDeps {
 
 function buildRepo(): IPushSuscripcionRepository {
   return new PushSuscripcionRepository(getPrismaClient());
+}
+
+function buildPreferenciaRepo(): IUsuarioPreferenciaRepository {
+  return new UsuarioPreferenciaRepository(getPrismaClient());
 }
 
 /** R50: sin sesion valida NO se lee ni se escribe NADA del canal. */
@@ -70,7 +78,14 @@ export async function obtenerClavePublicaPush(
  * de la sesion. La identidad es el `endpoint`: si el dispositivo ya estaba suscrito a otra persona,
  * la fila pasa a ser de quien acaba de iniciar sesion y la anterior deja de recibir ahi.
  *
- * La llama `hooks/usePushSuscripcion.ts` al activar el control (410/T5.1).
+ * La llaman `lib/pwa/alta-push.ts` (el alta del dispositivo, ficha 422/§4) y, por ella, el control
+ * al activarse y la reactivacion silenciosa del portal.
+ *
+ * FICHA 422/R3 — REGISTRAR UNA SUSCRIPCION ES, POR DEFINICION, DECIR QUE SI. No hay ningun otro
+ * camino en el arbol que cree una suscripcion, y llegar hasta aqui exige el gesto de la persona
+ * sobre el interruptor y el permiso del navegador. Por eso este es el sitio donde la preferencia se
+ * pone: asi no puede haber un alta que se olvide de anotarla. Es la misma regla que el backfill de
+ * la migracion aplica a la historia.
  */
 export async function registrarSuscripcionPush(
   input: unknown,
@@ -81,6 +96,47 @@ export async function registrarSuscripcionPush(
     const actor = await actorRequerido(deps);
     const data = registrarSuscripcionSchema.parse(input); // ZodError -> VALIDATION_ERROR
     await (deps.repo ?? buildRepo()).registrar(actor.usuarioId, data);
+
+    // ⚠️ LA SUSCRIPCION PRIMERO Y LA PREFERENCIA DESPUES, Y EL FALLO DE LA SEGUNDA NO SE PROPAGA.
+    // No es descuido: es lo mismo que R12 pide para la baja, por el lado del alta, y aqui tiene
+    // ademas una consecuencia MEDIBLE. Quien llama a esto (`lib/pwa/alta-push.ts`) deshace la
+    // suscripcion del navegador cuando el registro no sale `ok` —una suscripcion viva que el
+    // servidor no conoce es un dispositivo que cree que va a recibir y no va a recibir—. Si un
+    // fallo al anotar la preferencia devolviera error, un dispositivo PERFECTAMENTE registrado se
+    // quedaria sin avisos por una columna que no decide a donde sale un push (R6). El fallo no se
+    // absorbe en silencio: queda registrado con su operacion y su causa (docs/conventions.md).
+    try {
+      await (deps.preferenciaRepo ?? buildPreferenciaRepo()).fijarAvisosPush(actor.usuarioId, true);
+    } catch (error) {
+      console.error("[push] anotar la preferencia de avisos fallo", error);
+    }
+    return { status: "ok" as const };
+  });
+  return isAppErrorShape(r) ? toActionError(r) : r;
+}
+
+/**
+ * FICHA 422/R7 — LA PERSONA DIJO QUE NO: se borra su preferencia.
+ *
+ * ⚠️ SIN CUERPO, Y ES LA DECISION QUE HACE QUE ESTO FUNCIONE (design §3.4). La alternativa era
+ * meter el motivo en `eliminarSuscripcionPush` y que el servidor decidiera —una sola ida y vuelta,
+ * la decision del lado testeable— y **se rompe en R11**: esa accion necesita el `endpoint`, y el
+ * caso «apague el interruptor y aqui ya no habia suscripcion» NO TIENE ENDPOINT QUE MANDAR. La
+ * intencion no llegaria al servidor justo en el caso en que mas falta hace. Esta accion no depende
+ * de que haya dispositivo del que darse de baja.
+ *
+ * El actor sale de la SESION (410/R50), asi que no hay nada que validar en el borde: no hay borde.
+ *
+ * NO toca ninguna suscripcion. Apagar el interruptor da de baja ESTE dispositivo (eso lo hace
+ * `lib/pwa/baja-push.ts`) y borra la preferencia de la persona; las suscripciones de sus OTROS
+ * dispositivos no se tocan, que es 410/R19 y sigue intacto.
+ */
+export async function olvidarPreferenciaDeAvisos(
+  deps: PushActionDeps = {},
+): Promise<SuscripcionPushResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await actorRequerido(deps);
+    await (deps.preferenciaRepo ?? buildPreferenciaRepo()).fijarAvisosPush(actor.usuarioId, false);
     return { status: "ok" as const };
   });
   return isAppErrorShape(r) ? toActionError(r) : r;

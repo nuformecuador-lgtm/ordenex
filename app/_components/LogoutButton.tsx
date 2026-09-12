@@ -28,6 +28,15 @@ import { Button } from "@/components/ui/button";
  * usuario sale de la cookie, R50), y **solo se toca ESTE dispositivo**: sus otros teléfonos siguen
  * suscritos. Si la baja falla, la sesión se cierra igualmente y el fallo queda registrado (R20):
  * nadie se queda dentro de la aplicación porque un servicio de push no respondiera.
+ *
+ * FICHA 422 (T3.2 — R8/R13): esa baja ahora declara su motivo, y el de aquí es
+ * `"cierre-de-sesion"`. Lo que ese motivo significa —y por eso se elige— es que **la preferencia
+ * de la persona NO se borra**: salir no es decir que no, es solo irse. La distinción es el
+ * objetivo entero de la ficha: con `"la-persona-apago-el-interruptor"` aquí, cada cierre de sesión
+ * borraría la decisión y la aplicación no podría volver a avisar al entrar de nuevo — que es el
+ * fallo que la 422 vino a arreglar. El trabajo sobre el dispositivo es EXACTAMENTE el mismo con
+ * los dos motivos (R9): este botón no deja de dar de baja este teléfono, y sigue sin tocar los
+ * otros (410/R19 intacto).
  */
 export function LogoutButton() {
   const router = useRouter();
@@ -38,7 +47,9 @@ export function LogoutButton() {
     startTransition(async () => {
       // R20: no lleva `try`. `darDeBajaDeEsteDispositivo` no lanza nunca por contrato, y envolverla
       // aquí escondería que el que decide es ella.
-      await darDeBajaDeEsteDispositivo();
+      // 422/R8: el motivo NO es un adorno. «Cierre de sesión» = solo se va, y la preferencia se
+      // conserva para poder volver a avisarle cuando entre otra vez en este dispositivo.
+      await darDeBajaDeEsteDispositivo("cierre-de-sesion");
       try {
         await logout();
         // R7: al completar el logout, redirige a la home pública (/).

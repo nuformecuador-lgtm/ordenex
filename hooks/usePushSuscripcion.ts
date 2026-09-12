@@ -3,15 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import useSWR from "swr";
 
-import { obtenerClavePublicaPush, registrarSuscripcionPush } from "@/lib/actions/push";
+import { obtenerClavePublicaPush } from "@/lib/actions/push";
+import { suscribirYRegistrarEsteDispositivo } from "@/lib/pwa/alta-push";
 import { darDeBajaDeEsteDispositivo } from "@/lib/pwa/baja-push";
-import {
-  claveAplicacionDesde,
-  clavesDeSuscripcion,
-  contenedorDeServiceWorker,
-  etiquetaDeDispositivo,
-  haySoportePush,
-} from "@/lib/pwa/push-navegador";
+import { contenedorDeServiceWorker, haySoportePush } from "@/lib/pwa/push-navegador";
 
 /**
  * FICHA 410 (tanda 5, T5.1 — R10-R15, R45, R46) — EL ESTADO DEL CANAL **EN ESTE DISPOSITIVO**.
@@ -153,46 +148,25 @@ export function usePushSuscripcion(): UsePushSuscripcionResult {
 
     setOcupado(true);
     try {
-      // R11 — EL ÚNICO `requestPermission` DEL ÁRBOL, y solo tras el gesto de la persona.
+      // R11 — EL ÚNICO `requestPermission` DEL ÁRBOL, y solo tras el gesto de la persona. FICHA
+      // 422/R16: sigue siendo el único, y por eso el trabajo de suscribir se fue a `alta-push.ts`
+      // —que COMPRUEBA el permiso y no lo pide—: así la reactivación silenciosa puede reutilizar
+      // ese trabajo sin arrastrar esta línea, en vez de existir una segunda copia que se
+      // desincronice.
       const permiso = await Notification.requestPermission();
       if (permiso !== "granted") {
         setDispositivo({ soportado: true, permiso, suscrito: false });
         return;
       }
 
-      const contenedor = contenedorDeServiceWorker();
-      if (!contenedor) return;
-      const registro = await contenedor.ready;
-      const suscripcion = await registro.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: claveAplicacionDesde(clavePublica),
-      });
-
-      const claves = clavesDeSuscripcion(suscripcion);
-      if (!claves) {
-        await suscripcion.unsubscribe();
-        console.error("[push] el navegador entregó una suscripción incompleta");
-        setDispositivo({ soportado: true, permiso, suscrito: false });
-        return;
-      }
-
-      const resultado = await registrarSuscripcionPush({
-        ...claves,
-        etiqueta: etiquetaDeDispositivo(navigator.userAgent),
-      });
-      if (resultado.status !== "ok") {
-        // Una suscripción viva que el servidor no conoce es un dispositivo que cree que va a
-        // recibir avisos y no los va a recibir: se deshace.
-        await suscripcion.unsubscribe();
-        console.error("[push] registrar la suscripción falló", resultado.status);
-        setDispositivo({ soportado: true, permiso, suscrito: false });
-        return;
-      }
-
-      setDispositivo({ soportado: true, permiso, suscrito: true });
+      // 422/T4.1 — el alta del dispositivo vive en UN solo sitio, simétrico a la baja. Este hook
+      // se queda con lo suyo: el permiso y el estado que se pinta.
+      const resultado = await suscribirYRegistrarEsteDispositivo(clavePublica);
+      setDispositivo({ soportado: true, permiso, suscrito: resultado.estado === "suscrito" });
     } catch (error) {
-      // El permiso concedido y el `subscribe` fallido es un estado real (sin red, sin service
-      // worker). No se afirma «activado»: se registra y se deja el control como estaba.
+      // `suscribirYRegistrarEsteDispositivo` no lanza; lo que puede lanzar aquí es
+      // `requestPermission()`. No se afirma «activado»: se registra y se deja el control como
+      // estaba.
       console.error("[push] activar los avisos en este dispositivo falló", error);
     } finally {
       setOcupado(false);
@@ -204,7 +178,12 @@ export function usePushSuscripcion(): UsePushSuscripcionResult {
     setOcupado(true);
     try {
       // R15: baja en el servidor Y en el navegador, en un solo sitio y sin lanzar.
-      await darDeBajaDeEsteDispositivo();
+      // 422/R7: y con su motivo declarado. Éste es el interruptor: apagarlo es DECIR QUE NO, así
+      // que además de dar de baja este dispositivo se borra la preferencia de la persona — si no,
+      // la aplicación la volvería a suscribir sola la próxima vez que entrara, contradiciéndola.
+      // El trabajo sobre el dispositivo es idéntico al del cierre de sesión (R9): lo único que
+      // cambia es esto.
+      await darDeBajaDeEsteDispositivo("la-persona-apago-el-interruptor");
       setDispositivo((previo) => (previo ? { ...previo, suscrito: false } : previo));
     } finally {
       setOcupado(false);

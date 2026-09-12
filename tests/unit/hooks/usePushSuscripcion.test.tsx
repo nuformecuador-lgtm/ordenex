@@ -24,17 +24,42 @@ import {
  * escenario, con canal, tiene que dar OTRA cosa.
  */
 
-const { obtenerMock, registrarMock, eliminarMock } = vi.hoisted(() => ({
+const { obtenerMock, registrarMock, eliminarMock, olvidarMock, motivoMock } = vi.hoisted(() => ({
   obtenerMock: vi.fn(),
   registrarMock: vi.fn(),
   eliminarMock: vi.fn(),
+  olvidarMock: vi.fn(),
+  motivoMock: vi.fn(),
 }));
 
+// FICHA 422 — `lib/pwa/baja-push.ts` consume tambien la accion que olvida la preferencia, asi
+// que el doble del modulo tiene que traerla: sin ella el import se resuelve a `undefined` y el
+// fallo sale como «no es una funcion», que no dice nada de lo que este archivo mide.
 vi.mock("@/lib/actions/push", () => ({
   obtenerClavePublicaPush: obtenerMock,
   registrarSuscripcionPush: registrarMock,
   eliminarSuscripcionPush: eliminarMock,
+  olvidarPreferenciaDeAvisos: olvidarMock,
 }));
+
+/**
+ * FICHA 422 (T3.2) — EL ESPIA DEL MOTIVO, QUE **NO** SUSTITUYE EL COMPORTAMIENTO.
+ *
+ * El doble delega en la implementacion real: todo lo que este archivo ya medía —las dos mitades de
+ * la baja, el orden respecto de `logout()`, los fallos que no lanzan— se sigue midiendo sobre el
+ * codigo de verdad. Lo unico que este envoltorio anade es apuntar CON QUE MOTIVO se llamo, que es
+ * lo que la 422 vino a distinguir y no se puede leer de ninguna otra forma desde aqui.
+ */
+vi.mock("@/lib/pwa/baja-push", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/pwa/baja-push")>();
+  return {
+    ...real,
+    darDeBajaDeEsteDispositivo: (motivo: import("@/lib/pwa/baja-push").MotivoDeLaBaja) => {
+      motivoMock(motivo);
+      return real.darDeBajaDeEsteDispositivo(motivo);
+    },
+  };
+});
 
 /** Una clave pública base64url cualquiera; lo que importa es que NO sea `null`. */
 const CLAVE = "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U";
@@ -72,6 +97,7 @@ beforeEach(() => {
   obtenerMock.mockResolvedValue({ status: "ok", clavePublica: CLAVE });
   registrarMock.mockResolvedValue({ status: "ok" });
   eliminarMock.mockResolvedValue({ status: "ok" });
+  olvidarMock.mockResolvedValue({ status: "ok" });
 });
 
 afterEach(() => {
@@ -293,6 +319,76 @@ describe("R15 — desactivar es DOS cosas: el servidor y el navegador", () => {
     // La baja en el navegador sí se hizo, así que este dispositivo ya no recibe: decir «activado»
     // sería la mentira contraria.
     await waitFor(() => expect(suscripcion.unsubscribe).toHaveBeenCalledTimes(1));
+    await esperarEstado("sin-activar");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 422 (T3.2 / T4.2) — EL MOTIVO DEL INTERRUPTOR, Y EL ALTA EN UN SOLO SITIO
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe("422/R7 — apagar el interruptor declara que la persona DIJO QUE NO", () => {
+  it("⭑ desactivar declara `la-persona-apago-el-interruptor`", async () => {
+    const suscripcion = suscripcionFalsa();
+    montarNavegadorPush({ permiso: "granted", suscripcionPrevia: suscripcion });
+    const user = userEvent.setup();
+
+    montar();
+    await esperarEstado("activado");
+    await user.click(screen.getByRole("button", { name: "desactivar" }));
+
+    await waitFor(() => expect(motivoMock).toHaveBeenCalledWith("la-persona-apago-el-interruptor"));
+    // Y su consecuencia: la preferencia de la persona se borra. Sin esto, apagar aquí y volver a
+    // entrar mañana resucitaría los avisos que acaba de apagar.
+    await waitFor(() => expect(olvidarMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("⭑ R11: y lo hace igual aunque este dispositivo ya no tenga suscripción viva", async () => {
+    // El interruptor se pinta a partir de un estado leído al montar; entre ese render y el clic la
+    // suscripción pudo evaporarse. La intención tiene que llegar igual.
+    montarNavegadorPush({ permiso: "granted", suscripcionPrevia: null });
+    const user = userEvent.setup();
+
+    montar();
+    await esperarEstado("sin-activar");
+    await user.click(screen.getByRole("button", { name: "desactivar" }));
+
+    await waitFor(() => expect(olvidarMock).toHaveBeenCalledTimes(1));
+    // No había nada que dar de baja, y eso NO es un fallo (410/R46).
+    expect(eliminarMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("422/R16 — `activar()` sigue siendo el único sitio donde se PIDE el permiso", () => {
+  it("⭑ el alta pasa por `alta-push`, y el permiso se pide aquí y solo aquí", async () => {
+    const { pedirPermiso, subscribe } = montarNavegadorPush({ permiso: "default" });
+    const user = userEvent.setup();
+
+    montar();
+    await esperarEstado("sin-activar");
+    await user.click(screen.getByRole("button", { name: "activar" }));
+
+    // El gesto pide el permiso (410/R11) y el trabajo de suscribir lo hace el módulo compartido.
+    await waitFor(() => expect(pedirPermiso).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(subscribe).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(registrarMock).toHaveBeenCalledTimes(1));
+    await esperarEstado("activado");
+  });
+
+  it("⭑ si `alta-push` no llega a suscribir, el control NO dice «activado»", async () => {
+    // El servidor rechaza el registro: `alta-push` deshace la suscripción y devuelve `fallo`. El
+    // hook tiene que quedarse en «sin activar», que es la verdad.
+    const nueva = suscripcionFalsa();
+    montarNavegadorPush({ permiso: "default", suscripcionNueva: nueva });
+    registrarMock.mockResolvedValue({ status: "unauthenticated" });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    montar();
+    await esperarEstado("sin-activar");
+    await user.click(screen.getByRole("button", { name: "activar" }));
+
+    await waitFor(() => expect(nueva.unsubscribe).toHaveBeenCalledTimes(1));
     await esperarEstado("sin-activar");
   });
 });

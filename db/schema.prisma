@@ -160,6 +160,7 @@ model Usuario {
   historialAcciones                   HistorialAccion[]                  @relation("HistorialAccionActor") // ficha 362/R3: acciones (dinero / desaparicion / permisos) que ESTE usuario ejecuto. La FK es RESTRICT: quien borro 79 ordenes o aprobo un cierre es evidencia y no se pierde al dar de baja al usuario. `actor_nombre` y `actor_rol` van CONGELADOS en la fila, asi que esta relacion NO es la que pinta el listado.
   pushSuscripciones                   PushSuscripcion[]                  @relation("PushSuscripcionUsuario") // ficha 410/R16/R22: suscripciones push de los DISPOSITIVOS de este usuario. La FK es CASCADE: una credencial de entrega no es evidencia, y dejarla huerfana seria mandar push a nombre de nadie
   pushEnviosDia                       PushEnvioDia[]                     @relation("PushEnvioDiaUsuario") // ficha 410/R6/R22: cupo diario de push consumido por este usuario. CASCADE por el mismo motivo: es un contador del canal, no historia
+  preferencia                         UsuarioPreferencia?                @relation("UsuarioPreferenciaUsuario") // ficha 422/R1/R4: LA DECISION DE ESTA PERSONA sobre los avisos, aparte de sus dispositivos. 1:1. La FK es CASCADE: una preferencia no es evidencia (criterio de `push_suscripcion`, no el de `historial_accion`). Tabla propia y no columna aqui a proposito: ver el comentario del modelo `UsuarioPreferencia`.
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -3618,4 +3619,43 @@ model PushEnvioDia {
 
   @@unique([usuarioId, evento, diaCr], map: "push_envio_dia_cupo")
   @@map("push_envio_dia")
+}
+
+/// FICHA 422 (design §2.1, R1/R2/R4) — LA DECISION DE LA PERSONA, APARTE DEL DISPOSITIVO.
+///
+/// 1:1 con `usuario`. Una fila por persona que ha decidido algo alguna vez; su AUSENCIA es
+/// «todavia no ha decidido nada», que a efectos de comportamiento es «no» (R2). No hay estado
+/// «desconocido» que resolver preguntando.
+///
+/// ⚠️ POR QUE ES UNA TABLA PROPIA Y NO UNA COLUMNA EN `usuario`. `usuario` se lee en CADA
+/// resolucion de sesion y ya carga 20 columnas y ~50 relaciones de dominio: identidad, rol,
+/// vehiculo, zona, orden en gestion. Una preferencia no es identidad ni estado operativo — es lo
+/// que la persona quiere que la aplicacion haga con ella. Metida ahi viaja en cada lectura de
+/// usuario (incluidas las cuentas sinteticas de las API keys, que nunca tendran preferencias) y
+/// convierte la tabla mas caliente del esquema en el cajon de sastre donde acaba cada ajuste de
+/// interfaz. Aparte cuesta poco y acotado: una consulta extra, por indice unico, en el layout.
+///
+/// ⚠️ POR QUE COLUMNAS TIPADAS Y NO CLAVE/VALOR (EAV). Una tabla `(usuario_id, clave, valor TEXT)`
+/// parece mas «lista para el futuro» y es peor aqui: pierde el tipo en la frontera —hay que
+/// parsear un texto en cada lectura y decidir que hacer con `"si"`, `"1"` y `"true"`— y una CLAVE
+/// MAL ESCRITA NO FALLA: devuelve «no hay preferencia». Es exactamente la familia de fallo mudo
+/// que este arbol persigue. Con una columna, una preferencia mal nombrada NO COMPILA. El precio
+/// —una migracion por preferencia nueva— es sobre una tabla estrecha que no lee nadie mas.
+model UsuarioPreferencia {
+  id        String @id @default(uuid())
+  usuarioId String @unique @map("usuario_id")
+
+  /// R1/R7/R8 — «quiero que me avisen». NO dice en que dispositivo: eso lo dice
+  /// `push_suscripcion`, y el permiso del navegador lo dice el navegador. R6: esta columna NO
+  /// participa en la eleccion de destinatarios de un push.
+  avisosPush Boolean @default(false) @map("avisos_push")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  /// R4 — CASCADE, y no RESTRICT: una preferencia no es evidencia. Mismo criterio que
+  /// `push_suscripcion`, no el de `historial_accion`.
+  usuario Usuario @relation("UsuarioPreferenciaUsuario", fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("usuario_preferencia")
 }
