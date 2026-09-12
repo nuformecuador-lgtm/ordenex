@@ -290,18 +290,35 @@ describe("422/B1 · «todo el arbol» se deriva del disco, no de una lista escri
     ]);
   });
 
+  // ⚠️ LAS TRES AUTOCOMPROBACIONES DE ABAJO CORREN SOBRE UN MUNDO SINTETICO, no sobre el disco.
+  // Es deliberado y es la misma leccion que `nuevasInfracciones`: el dia que aparezca una raiz sin
+  // clasificar de VERDAD, el caso de arriba se pone rojo —esa es la noticia— y estos tienen que
+  // seguir midiendo LO SUYO en vez de enrojecer en cadena. Medido: con una carpeta `widgets/`
+  // inyectada en el arbol real, la version anterior arrastraba dos rojos de mas.
+  const INVENTARIO_DE_JUGUETE = [
+    { ruta: "app", censada: true, motivo: "un motivo suficientemente largo para pasar el umbral del detector de motivos" },
+  ];
+
   it("⭑ AUTOCOMPROBACION: una raiz NUEVA sin clasificar pone el inventario rojo", () => {
-    // Se inyecta en la lista derivada, no en el disco: la carpeta no llega a existir.
-    const fallos = fallosDelInventario([...raicesDelArbol(), "widgets"]);
+    const fallos = fallosDelInventario(["app", "widgets"], INVENTARIO_DE_JUGUETE);
     expect(fallos).toHaveLength(1);
     expect(fallos[0]).toContain("`widgets/`");
     expect(fallos[0]).toContain("NO esta en INVENTARIO_DE_RAICES");
   });
 
   it("⭑ AUTOCOMPROBACION: una entrada del inventario que ya no existe tambien se caza", () => {
-    const fallos = fallosDelInventario(raicesDelArbol().filter((r) => r !== "providers"));
+    const fallos = fallosDelInventario(["app"], [
+      ...INVENTARIO_DE_JUGUETE,
+      { ruta: "fantasma", censada: true, motivo: "un motivo suficientemente largo para pasar el umbral del detector" },
+    ]);
     expect(fallos).toHaveLength(1);
     expect(fallos[0]).toContain("ya no tiene codigo en el arbol");
+  });
+
+  it("control positivo: un mundo sintetico BIEN clasificado no produce ningun fallo", () => {
+    // Sin esto, los dos casos de arriba pasarian con un `fallosDelInventario` que devolviera
+    // siempre exactamente un fallo.
+    expect(fallosDelInventario(["app"], INVENTARIO_DE_JUGUETE)).toEqual([]);
   });
 
   it("⭑ AUTOCOMPROBACION: una raiz clasificada SIN motivo escrito se detecta", () => {
@@ -424,7 +441,7 @@ describe("422/R10 · autocomprobacion del detector", () => {
 });
 
 describe("422/R10 · EL CENSO: nadie se da de baja sin declarar por que", () => {
-  it("⭑ ningun archivo de `app/`, `components/`, `hooks/` ni `lib/` se sale de la lista blanca", () => {
+  it("⭑ ningun archivo de NINGUNA raiz censada se sale de la lista blanca", () => {
     const infracciones = censar(FUENTES);
     expect(
       infracciones,

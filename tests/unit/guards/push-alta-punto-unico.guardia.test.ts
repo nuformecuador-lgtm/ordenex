@@ -8,7 +8,6 @@ import {
   archivosDeCodigoCensados,
   fallosDelInventario,
   raicesCensadas,
-  raicesDelArbol,
 } from "@/tests/fixtures/raices-de-codigo";
 
 // FICHA 422 (T4.3, design §9 · R6, R16, R17, R24) — GUARDIA DEL PUNTO UNICO DEL ALTA, Y DE QUE LA
@@ -224,9 +223,15 @@ describe("422/B1 · «en todo el arbol» significa TODAS las raices de codigo, y
   });
 
   it("⭑ AUTOCOMPROBACION: una raiz NUEVA sin clasificar pone el inventario rojo", () => {
-    const fallos = fallosDelInventario([...raicesDelArbol(), "widgets"]);
-    expect(fallos).toHaveLength(1);
-    expect(fallos[0]).toContain("`widgets/`");
+    // Sobre un mundo SINTETICO, no sobre el disco: el dia que aparezca una raiz sin clasificar de
+    // verdad, la noticia es el caso de arriba y este tiene que seguir midiendo lo suyo.
+    const juguete = [
+      { ruta: "app", censada: true, motivo: "un motivo suficientemente largo para pasar el umbral del detector" },
+    ];
+    expect(fallosDelInventario(["app", "widgets"], juguete)).toHaveLength(1);
+    expect(fallosDelInventario(["app", "widgets"], juguete)[0]).toContain("`widgets/`");
+    // Control positivo: bien clasificado, ningun fallo.
+    expect(fallosDelInventario(["app"], juguete)).toEqual([]);
   });
 });
 
