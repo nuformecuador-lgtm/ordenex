@@ -115,12 +115,27 @@ export const INVENTARIO_DE_RAICES: readonly RaizDeCodigo[] = [
       "verdad, pero censarla cuesta cero y una raiz sin censar es una raiz por la que colarse.",
   },
   {
+    ruta: "public",
+    censada: true,
+    motivo:
+      "⚠️ LA RAIZ QUE B3 DESTAPO, y la que mas importa de todas: aqui vive `public/sw.js` — 360 " +
+      "lineas, DESPLEGADO, registrado en `app/layout.tsx` y con su `addEventListener(\"push\", ...)` " +
+      "puesto—. Es el sitio IDIOMATICO de un segundo `pushManager.subscribe()`: el manejador de " +
+      "`pushsubscriptionchange` es la receta estandar para re-suscribir, y ahi no hay ninguna " +
+      "comprobacion de permiso. G2 afirmaria «subscribe aparece UNA vez, y dentro de alta-push.ts, " +
+      "que es donde vive la comprobacion» (R15/R17) mientras eso existiera. Hoy `sw.js` no lo tiene " +
+      "—medido—, y el defecto era que la guardia NO LO VERIA. No llegaba ni a ser raiz de codigo, " +
+      "porque `public/` no contiene ningun `.ts` y nadie tenia que justificar dejarlo fuera. " +
+      "SI APARECE AQUI UN `.js` DE TERCEROS MINIFICADO: no se afloja la aguja — se declara ese " +
+      "archivo, con su motivo, igual que `use-mobile` declara su `subscribe`.",
+  },
+  {
     ruta: PSEUDO_RAIZ_ARCHIVOS,
     censada: true,
     motivo:
-      "Los `.ts` sueltos del directorio raiz. No son configuracion inerte: `middleware.ts` se " +
+      "Los archivos sueltos del directorio raiz. No son configuracion inerte: `middleware.ts` se " +
       "ejecuta en CADA peticion del portal. Van censados como una raiz mas para que no exista un " +
-      "hueco entre «carpetas» y «archivos».",
+      "hueco entre «carpetas» y «archivos». Desde B3 entran tambien los `.mjs` de configuracion.",
   },
   {
     ruta: "tests",
@@ -130,15 +145,46 @@ export const INVENTARIO_DE_RAICES: readonly RaizDeCodigo[] = [
       "nombrar lo que las guardias persiguen. `baja-push.test.ts` importa `lib/pwa/baja-push` para " +
       "probarlo, el doble `navegador-push.ts` define `requestPermission`, y las propias guardias " +
       "llevan los patrones escritos. Censarla las convertiria a ellas mismas en infractoras. " +
-      "LIMITE DECLARADO: una «superficie» escrita dentro de `tests/` no se despliega, no la ve " +
-      "ninguna persona y no puede dar de baja el dispositivo de nadie.",
+      "⚠️ LIMITE DECLARADO, CON LA REDACCION CORREGIDA (m2 de `review_422_fix.md`): lo que `tests/` " +
+      "no puede hacer es desplegarse POR SI SOLA — nada de `app/` la importa y Next no la compila—. " +
+      "Pero REEXPORTADA SI VIAJA: un barril en `tests/fixtures/` que reexporte la baja, importado " +
+      "con alias desde produccion, pasa el censo. No se cierra porque exige DOS actos deliberados " +
+      "(que produccion importe de `@/tests/` y que ademas renombre) y porque ahi el tipo SI conserva " +
+      "su mitad: el motivo sigue siendo parametro obligatorio de una union cerrada. Contrastese con " +
+      "B3, donde el `.js` tumbaba tambien esa defensa.",
   },
 ];
 
-/** Las carpetas que nunca son codigo de este repositorio, aunque contengan `.ts`. */
+/**
+ * Las carpetas que nunca son codigo de este repositorio, aunque contengan modulos.
+ *
+ * Es una lista corta A PROPOSITO: los artefactos de build de este arbol viven en `.next/` y
+ * `.vitest/`, que empiezan por punto y ya se ignoran por esa regla; `tsconfig.tsbuildinfo` no es un
+ * modulo. Lo unico que hay que nombrar es la dependencia de terceros.
+ */
 const NUNCA_ES_CODIGO = new Set(["node_modules"]);
 
-/** ¿Hay algun `.ts`/`.tsx` dentro de `dir`? Corta en cuanto encuentra el primero. */
+/**
+ * ⚠️ QUE CUENTA COMO «ARCHIVO DE CODIGO». LA EXTENSION IMPORTA, Y B3 LO MIDIO.
+ *
+ * Esto decia `\.(ts|tsx)$`, y esa aguja era la septima via: un `.js` DENTRO de una raiz censada no
+ * se leia nunca. Medido (`progress/review_422_fix.md` §4) con `components/shared/adios-legacy.js`
+ * importado desde un componente que el layout YA monta: 145 archivos de guardia / 2.117 casos en
+ * verde, `TSC_EXIT=0` y `LINT_EXIT=0`.
+ *
+ * ⚠️ Y ES PEOR QUE EL LIMITE DE LA CADENA COMPUESTA, por una razon concreta: `tsconfig.json` tiene
+ * `allowJs: true` **sin `checkJs`**, y su `include` solo lista las extensiones `.ts`, `.tsx` y
+ * `.mts` (el patron con barra y asterisco no se escribe aqui: cerraria este bloque de comentario).
+ * O sea que un `.js` NO SE TYPE-CHECKEA y la llamada puede escribirse literalmente
+ * `await darDeBajaDeEsteDispositivo();` **sin motivo ninguno**. Ahi no sobrevive «la mitad fuerte de
+ * R10 que no depende de ninguna guardia»: caen LAS DOS lineas de defensa a la vez.
+ *
+ * Y no es una via retorcida: escribir un `.js` es un acto ordinario, el repo ya tiene cinco
+ * (`public/sw.js` y cuatro `scripts/*.mjs`) y nada en `docs/` lo prohibe.
+ */
+const EXTENSIONES_DE_CODIGO = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
+
+/** ¿Hay algun archivo de codigo dentro de `dir`? Corta en cuanto encuentra el primero. */
 function tieneCodigo(dir: string): boolean {
   let entradas: fs.Dirent[];
   try {
@@ -150,7 +196,7 @@ function tieneCodigo(dir: string): boolean {
     if (entrada.name.startsWith(".") || NUNCA_ES_CODIGO.has(entrada.name)) continue;
     if (entrada.isDirectory()) {
       if (tieneCodigo(path.join(dir, entrada.name))) return true;
-    } else if (/\.(ts|tsx)$/.test(entrada.name)) {
+    } else if (EXTENSIONES_DE_CODIGO.test(entrada.name)) {
       return true;
     }
   }
@@ -171,7 +217,7 @@ export function raicesDelArbol(): string[] {
     if (entrada.name.startsWith(".") || NUNCA_ES_CODIGO.has(entrada.name)) continue;
     if (entrada.isDirectory()) {
       if (tieneCodigo(path.join(RAIZ_DEL_REPO, entrada.name))) raices.push(entrada.name);
-    } else if (/\.(ts|tsx)$/.test(entrada.name)) {
+    } else if (EXTENSIONES_DE_CODIGO.test(entrada.name)) {
       hayArchivosSueltos = true;
     }
   }
@@ -224,7 +270,7 @@ function archivosDe(dir: string, acc: string[]): string[] {
     if (entrada.name.startsWith(".") || NUNCA_ES_CODIGO.has(entrada.name)) continue;
     const rel = `${dir}/${entrada.name}`;
     if (entrada.isDirectory()) archivosDe(rel, acc);
-    else if (/\.(ts|tsx)$/.test(entrada.name)) acc.push(rel);
+    else if (EXTENSIONES_DE_CODIGO.test(entrada.name)) acc.push(rel);
   }
   return acc;
 }
@@ -240,7 +286,7 @@ export function archivosDeCodigoCensados(): string[] {
   for (const raiz of raicesCensadas()) {
     if (raiz === PSEUDO_RAIZ_ARCHIVOS) {
       for (const entrada of fs.readdirSync(RAIZ_DEL_REPO, { withFileTypes: true })) {
-        if (!entrada.isDirectory() && /\.(ts|tsx)$/.test(entrada.name)) archivos.push(entrada.name);
+        if (!entrada.isDirectory() && EXTENSIONES_DE_CODIGO.test(entrada.name)) archivos.push(entrada.name);
       }
     } else {
       archivosDe(raiz, archivos);

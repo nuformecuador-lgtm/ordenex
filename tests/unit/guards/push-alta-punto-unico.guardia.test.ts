@@ -213,13 +213,52 @@ describe("422/B1 · «en todo el arbol» significa TODAS las raices de codigo, y
     expect(ARCHIVOS_DEL_CENSO).toContain("providers/TemaProvider.tsx");
   });
 
-  it("⭑ y el censo llega tambien a `scripts/`, `e2e/` y a los `.ts` sueltos de la raiz", () => {
+  it("⭑ y el censo llega tambien a `scripts/`, `e2e/` y a los archivos sueltos de la raiz", () => {
     // Las otras tres raices que la version vieja no miraba. `middleware.ts` corre en CADA peticion.
     expect(ARCHIVOS_DEL_CENSO).toContain("middleware.ts");
     expect(ARCHIVOS_DEL_CENSO.some((r) => r.startsWith("scripts/"))).toBe(true);
     expect(ARCHIVOS_DEL_CENSO.some((r) => r.startsWith("e2e/"))).toBe(true);
     // Y NO llega a `tests/`, que es el unico limite declarado (ahi viven los dobles del navegador).
     expect(ARCHIVOS_DEL_CENSO.some((r) => r.startsWith("tests/"))).toBe(false);
+  });
+
+  it("⭑ B3: `public/sw.js` esta en el censo, y su contenido se LEE", () => {
+    // El service worker DESPLEGADO es el sitio idiomatico de un segundo `pushManager.subscribe()`
+    // —el manejador de `pushsubscriptionchange`—, y hasta este arreglo la guardia no lo veia: la
+    // aguja de extension era `\.(ts|tsx)$` y `public/` no llegaba ni a ser «raiz de codigo».
+    expect(raicesCensadas()).toContain("public");
+    expect(ARCHIVOS_DEL_CENSO).toContain("public/sw.js");
+    // Y se LEE: sin esto, estar en la lista y leerse vacio serian indistinguibles.
+    const sw = FUENTES.get("public/sw.js") ?? "";
+    expect(sw.length).toBeGreaterThan(3000);
+    expect(sw).toContain("addEventListener");
+    // Hoy NO trae ninguna de las dos agujas — el defecto era la ceguera, no un incumplimiento.
+    expect(apariciones(sw, PETICION_DE_PERMISO)).toBe(0);
+    expect(apariciones(sw, SUSCRIBIR)).toBe(0);
+  });
+
+  it("⭑ B3: un `subscribe` metido en el SERVICE WORKER se caza", () => {
+    // ESTE es el agujero concreto que B3 nombra: `pushsubscriptionchange` re-suscribiendo sin
+    // ninguna comprobacion de permiso, en un `.js` que el typecheck tampoco mira. Medido sobre un
+    // lienzo sintetico para no enrojecer en cadena si alguien lo escribe de verdad.
+    const ruta = "public/__lienzo-sw__.js";
+    expect(FUENTES.has(ruta)).toBe(false);
+    const conIntruso = new Map(FUENTES);
+    conIntruso.set(
+      ruta,
+      "self.addEventListener('pushsubscriptionchange', async (evento) => {\n" +
+        "  const nueva = await self.registration.pushManager.subscribe(evento.oldSubscription.options);\n" +
+        "  await fetch('/api/push', { method: 'POST', body: JSON.stringify(nueva) });\n" +
+        "});\n",
+    );
+
+    const suscripciones = [...conIntruso]
+      .filter(([, codigo]) => apariciones(codigo, new RegExp(SUSCRIBIR.source, "g")) > 0)
+      .map(([r]) => r)
+      .sort();
+    expect(suscripciones).toContain(ruta);
+    // Y por tanto el censo deja de cuadrar con la lista blanca: R15/R17 vuelve a tener defensa.
+    expect(suscripciones).not.toEqual(SUSCRIPCIONES_AUTORIZADAS.map((e) => e.ruta).sort());
   });
 
   it("⭑ AUTOCOMPROBACION: una raiz NUEVA sin clasificar pone el inventario rojo", () => {
@@ -265,12 +304,21 @@ describe("410/R11 + 422/R16 · `requestPermission` aparece UNA vez en todo el ar
   it("⭑ EL CASO DE LA REVISION: un segundo camino escrito en `providers/` se caza", () => {
     // Reproducido TAL CUAL el intruso de `progress/review_422.md` §B1, inyectado en el RECORRIDO y
     // no en el arbol. Antes daba TSC_EXIT=0 y 145 guardias verdes; ahora cae por partida doble.
-    const ruta = "providers/ToastProvider.tsx";
-    expect(FUENTES.has(ruta), "la raiz `providers/` tiene que estar en el censo").toBe(true);
+    //
+    // ⚠️ EL HECHO —que `providers/` esta censado— se afirma sobre el archivo REAL; LA MEDICION va
+    // sobre un lienzo SINTETICO de esa misma raiz (m3 de `review_422_fix.md`): con un infractor de
+    // verdad viviendo en `ToastProvider.tsx`, este caso enrojecia en cadena y se quedaba sin su
+    // noticia. Una guardia que enrojece en cadena ensena a no leer los rojos.
+    expect(
+      FUENTES.has("providers/ToastProvider.tsx"),
+      "la raiz `providers/` tiene que estar en el censo",
+    ).toBe(true);
+
+    const ruta = "providers/__lienzo-segundo-camino__.tsx";
+    expect(FUENTES.has(ruta), "el lienzo no puede existir de verdad en el arbol").toBe(false);
 
     const intruso =
-      (FUENTES.get(ruta) ?? "") +
-      "\nexport async function segundoCaminoDelAlta(reg: ServiceWorkerRegistration) {\n" +
+      "export async function segundoCaminoDelAlta(reg: ServiceWorkerRegistration) {\n" +
       "  await Notification.requestPermission();\n" +
       "  await reg.pushManager.subscribe({ userVisibleOnly: true });\n" +
       "}\n";

@@ -274,9 +274,34 @@ describe("422/B1 · «todo el arbol» se deriva del disco, no de una lista escri
     expect(ARCHIVOS_DEL_CENSO).toContain("providers/ToastProvider.tsx");
   });
 
-  it("⭑ el censo llega a las OCHO raices que el arbol tiene hoy", () => {
+  it("⭑ B3: `public/sw.js` esta DENTRO del censo, y es un `.js`", () => {
+    // El canario concreto de B3. `sw.js` es el unico archivo DESPLEGADO donde un segundo
+    // `pushManager.subscribe()` seria idiomatico —el manejador de `pushsubscriptionchange`— y hasta
+    // este arreglo la guardia ni siquiera lo leia: `public/` no llegaba a ser «raiz de codigo».
+    expect(raicesCensadas()).toContain("public");
+    expect(ARCHIVOS_DEL_CENSO).toContain("public/sw.js");
+    // Y las otras dos extensiones que B3 destapo, para que ampliar la aguja no sea solo `.js`.
+    expect(ARCHIVOS_DEL_CENSO).toContain("scripts/validar-feature-list.mjs");
+    expect(ARCHIVOS_DEL_CENSO).toContain("eslint.config.mjs");
+  });
+
+  it("⭑ B3: el censo LEE el contenido de un `.js`, no solo lo lista", () => {
+    // Sin esto, `public/sw.js` podria estar en la lista y leerse como cadena vacia: la guardia
+    // seguiria siendo ciega y nadie se enteraria. Es la leccion del detector apagado.
+    const codigoDelServiceWorker = fs.readFileSync(path.join(RAIZ, "public", "sw.js"), "utf8");
+    expect(codigoDelServiceWorker.length).toBeGreaterThan(3000);
+    expect(codigoDelServiceWorker).toContain("addEventListener");
+    // Y hoy no trae la aguja: el defecto era la CEGUERA, no un incumplimiento vivo.
+    expect(importacionesDeLaBaja(quitarComentarios(codigoDelServiceWorker))).toBe(0);
+  });
+
+  it("⭑ el censo llega a las NUEVE raices que el arbol tiene hoy", () => {
     // Anti-vacuidad: si el recorrido del disco se rompiera, el inventario cuadraria contra una
     // lista vacia y todo lo de arriba pasaria por vacio en vez de por limpio.
+    //
+    // ⚠️ ERAN OCHO HASTA B3. `public/` no aparecia porque la aguja de extension era `\.(ts|tsx)$` y
+    // ahi solo hay un `.js` — el service worker DESPLEGADO. Con la aguja ampliada la raiz aparece
+    // sola y el inventario le reclama su motivo, que era justo el desenlace que faltaba.
     expect(raicesDelArbol()).toEqual([
       "(raiz)",
       "app",
@@ -285,6 +310,7 @@ describe("422/B1 · «todo el arbol» se deriva del disco, no de una lista escri
       "hooks",
       "lib",
       "providers",
+      "public",
       "scripts",
       "tests",
     ]);
@@ -571,18 +597,25 @@ describe("422/B2 · el censo persigue el MODULO, asi que el nombre local da igua
   });
 
   it("⭑ EL CASO DE LA REVISION: alias en un componente YA montado", () => {
-    // Reproducido tal cual: `components/shared/AvisoVersionNueva.tsx` lo monta el layout del
-    // portal, asi que la guardia de «superficie inalcanzable» tampoco lo cazaba. Antes pasaba con
-    // typecheck verde y 145 guardias verdes; ahora el censo lo ve porque mira el import.
-    const ruta = "components/shared/AvisoVersionNueva.tsx";
-    expect(FUENTES.has(ruta), "el componente del caso tiene que existir de verdad").toBe(true);
+    // Reproducido tal cual: la revision uso `components/shared/AvisoVersionNueva.tsx`, que el
+    // layout del portal MONTA —asi que la guardia de «superficie inalcanzable» tampoco lo cazaba—.
+    // Antes pasaba con typecheck verde y 145 guardias verdes; ahora el censo lo ve por el import.
+    //
+    // EL HECHO va sobre el archivo REAL (existe, esta censado y es alcanzable); LA MEDICION va
+    // sobre un lienzo sintetico a su lado (m3): si alguien escribe un infractor de verdad en ese
+    // componente, la noticia tiene que ser el censo, no este caso enrojeciendo en cadena.
+    expect(
+      FUENTES.has("components/shared/AvisoVersionNueva.tsx"),
+      "el componente del caso tiene que existir y estar censado",
+    ).toBe(true);
 
+    const ruta = "components/shared/__lienzo-alias__.tsx";
+    expect(FUENTES.has(ruta), "el lienzo no puede existir de verdad en el arbol").toBe(false);
     const conAlias = new Map(FUENTES);
     conAlias.set(
       ruta,
       'import { darDeBajaDeEsteDispositivo as bajar } from "@/lib/pwa/baja-push";\n' +
-        (FUENTES.get(ruta) ?? "") +
-        '\nvoid bajar("cierre-de-sesion");\n',
+        'export function Aviso() {\n  void bajar("cierre-de-sesion");\n}\n',
     );
 
     const nuevas = nuevasInfracciones(conAlias);
@@ -608,13 +641,15 @@ describe("422/B2 · el censo persigue el MODULO, asi que el nombre local da igua
   });
 
   it("⭑ un `import()` DINAMICO tambien se caza", () => {
-    const ruta = "providers/TemaProvider.tsx";
+    // Lienzo sintetico, por lo mismo que arriba (m3).
+    const ruta = "providers/__lienzo-dinamico__.tsx";
+    expect(FUENTES.has(ruta)).toBe(false);
     const conDinamico = new Map(FUENTES);
     conDinamico.set(
       ruta,
-      (FUENTES.get(ruta) ?? "") +
-        '\nconst { darDeBajaDeEsteDispositivo: irse } = await import("@/lib/pwa/baja-push");\n' +
-        'void irse("cierre-de-sesion");\n',
+      'export async function irseDeAqui() {\n' +
+        '  const { darDeBajaDeEsteDispositivo: irse } = await import("@/lib/pwa/baja-push");\n' +
+        '  void irse("cierre-de-sesion");\n}\n',
     );
 
     const nuevas = nuevasInfracciones(conDinamico);
@@ -623,8 +658,13 @@ describe("422/B2 · el censo persigue el MODULO, asi que el nombre local da igua
   });
 
   it("⭑ y una RUTA RELATIVA no lo esquiva", () => {
-    const ruta = "providers/ToastProvider.tsx";
-    expect(FUENTES.has(ruta)).toBe(true);
+    // ⚠️ LIENZO SINTETICO, no un archivo real (m3 de `review_422_fix.md`). Con un infractor de
+    // verdad viviendo en `providers/ToastProvider.tsx`, `nuevasInfracciones` RESTABA la infraccion
+    // real —la clave coincidia— y este caso se quedaba sin su noticia, enrojeciendo en cadena. Es
+    // la misma leccion que ya se aplico al inventario: el lienzo no puede ser un sitio que alguien
+    // pueda ocupar.
+    const ruta = "providers/__lienzo-ruta-relativa__.tsx";
+    expect(FUENTES.has(ruta), "el lienzo no puede existir de verdad en el arbol").toBe(false);
     const conRelativa = new Map(FUENTES);
     conRelativa.set(
       ruta,
@@ -634,6 +674,37 @@ describe("422/B2 · el censo persigue el MODULO, asi que el nombre local da igua
 
     expect(nuevasInfracciones(conRelativa)).toEqual([
       { ruta, importa: 1, autorizadas: 0, motivos: ["cierre-de-sesion"] },
+    ]);
+  });
+
+  it("⭑ B3: un modulo `.js` dentro de una raiz censada tampoco se escapa", () => {
+    // EL CASO DE LA RE-REVISION, reproducido sobre el detector: `components/shared/adios-legacy.js`
+    // con la llamada SIN NINGUN MOTIVO —que en `.js` compila, porque `allowJs` va sin `checkJs`—.
+    // Antes ni se leia el archivo; ahora entra en el censo por la extension y cae por el import.
+    const ruta = "components/shared/adios-legacy.js";
+    expect(FUENTES.has(ruta), "el intruso no puede existir de verdad en el arbol").toBe(false);
+    const conJs = new Map(FUENTES);
+    conJs.set(
+      ruta,
+      'import { darDeBajaDeEsteDispositivo } from "@/lib/pwa/baja-push";\n' +
+        "export async function adiosLegacy() {\n  await darDeBajaDeEsteDispositivo();\n}\n",
+    );
+
+    // `motivos: [null]` es la parte que mas dice: la llamada no declara NADA, y en un `.js` el
+    // typecheck tampoco lo exige. Las dos lineas de defensa caian a la vez.
+    expect(nuevasInfracciones(conJs)).toEqual([
+      { ruta, importa: 1, autorizadas: 0, motivos: [null] },
+    ]);
+  });
+
+  it("⭑ B3: y lo mismo con un `.mjs`, que es la otra extension viva del repo", () => {
+    const ruta = "scripts/adios-legacy.mjs";
+    expect(FUENTES.has(ruta)).toBe(false);
+    const conMjs = new Map(FUENTES);
+    conMjs.set(ruta, 'import { darDeBajaDeEsteDispositivo as x } from "@/lib/pwa/baja-push";\nx();\n');
+
+    expect(nuevasInfracciones(conMjs)).toEqual([
+      { ruta, importa: 1, autorizadas: 0, motivos: [] },
     ]);
   });
 
