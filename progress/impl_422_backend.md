@@ -404,8 +404,131 @@ honesto que inventarles un veredicto.
 
 ---
 
+# 11. Segunda vuelta — B1 y B2 de `progress/review_422.md`
+
+> La revisión salió **RECHAZADA** por dos bloqueantes, **los dos en mis guardias**. Tenía razón: G1
+> y G2 decían «en todo el árbol» y no era verdad. Esta sección es lo que se arregló y, sobre todo,
+> **lo que se midió** — incluido lo que sigue abierto.
+
+## 11.1 Lo que estaba mal, dicho sin rodeos
+
+| | Qué afirmaba la guardia | Qué pasaba de verdad |
+| --- | --- | --- |
+| **B1** | «`requestPermission` aparece una sola vez **en todo el árbol**» (R16); «nadie se da de baja sin declarar su motivo» (R10) | El censo leía **4 de 8 raíces**. `providers/` —donde vive el `ToastProvider` que **envuelve a `<PushReactivacion />`**— quedaba fuera. |
+| **B2** | Lo mismo de R10, dentro de `components/` | El detector buscaba la **llamada**, así que un `import { … as bajar }` la esquivaba: en la cláusula `import` al nombre no le sigue un `(`. |
+
+Las dos con `TSC_EXIT=0` y **145 archivos de guardia / 2.091 casos en verde**.
+
+## 11.2 Por qué no bastaba con añadir `"providers"`
+
+Porque eso repara el síntoma de hoy y deja **la causa** intacta: una lista de carpetas escrita a
+mano **envejece sola y en silencio**, que es exactamente la familia de fallo que estas dos guardias
+existen para cerrar. Dentro de seis meses aparece otra carpeta y volvemos aquí.
+
+**Ahora las raíces se derivan del disco y se comparan contra un inventario declarado**
+(`tests/fixtures/raices-de-codigo.ts`, molde de `api-key-dependencias-usuario.ts`):
+
+- `raicesDelArbol()` recorre el repositorio. **No hay ninguna lista de carpetas ahí dentro**: una
+  raíz es «de código» si contiene algún `.ts`/`.tsx`; se ignoran `node_modules` y lo que empieza por
+  punto. Por eso una carpeta nueva **aparece sola**.
+- `INVENTARIO_DE_RAICES` dice, para cada una, **si se censa y por qué**.
+- `fallosDelInventario()` exige que coincidan. Una raíz sin clasificar —o una entrada que ya no
+  existe— **pone las dos guardias rojas**.
+
+**Las ocho raíces, con su decisión:** `app`, `components`, `e2e`, `hooks`, `lib`, `providers`,
+`scripts` y `(raiz)` —los `.ts` sueltos, porque **`middleware.ts` corre en cada petición**— entran
+al censo. La única fuera es **`tests/`**, y su motivo lleva escrito el **límite**: es el único sitio
+con una razón legítima para nombrar lo que las guardias persiguen (`baja-push.test.ts` importa el
+módulo para probarlo, el doble del navegador define `requestPermission`), y una «superficie» escrita
+ahí no se despliega ni la ve nadie.
+
+## 11.3 B2: la pregunta se invirtió
+
+El censo de G1 **ya no persigue la llamada**. Persigue el **especificador del módulo**: para llamar
+a la función hay que traerla, y traerla deja `lib/pwa/baja-push` escrito **literal**. El detector de
+llamadas se conserva, pero solo se aplica **dentro de los dos archivos autorizados**, para leer su
+motivo — y a esos dos se les exige además importar **sin alias**, porque de ahí sale el motivo.
+
+En G2, el mismo criterio aplicado al receptor: `requestPermission` y `subscribe(` se censan como
+**identificador desnudo**, no como `Notification.requestPermission(` ni `pushManager.subscribe(`.
+Así `const N = Notification; N.requestPermission()` y `const pm = reg.pushManager; pm.subscribe()`
+también caen. `hooks/use-mobile.ts` declara su `subscribe` (el de `useSyncExternalStore`, que no
+tiene nada que ver con push) **con su porqué**, para no tener que aflojar la aguja.
+
+## 11.4 Los intrusos, reaplicados **contra el árbol de verdad**
+
+No inyectados en el recorrido: **escritos en los archivos**, con la suite de guardias entera
+corriendo como la corrió el reviewer, y revertidos con copia byte a byte verificada por SHA256.
+**I0 es el control, diseñado para morir.**
+
+| # | Intruso | Veredicto | Qué se puso rojo |
+| --- | --- | --- | --- |
+| **I0** (control) | Se saca `providers` del censo en el inventario | **CAZADO** (exit 1) | 5 casos, entre ellos `providers/ … está DENTRO del censo` en las dos guardias |
+| **I1** | **El de la revisión, tal cual**: `tercerAdios()` + `segundoCaminoDelAlta()` en `providers/ToastProvider.tsx` | **CAZADO** (exit 1) | **7 casos**: `NADIE MÁS del árbol censado trae ese módulo` · `ningún archivo de NINGUNA raíz censada se sale de la lista blanca` · `una sola aparición, y está en activar()` · `EL CASO DE LA REVISIÓN: un segundo camino escrito en providers/` · `el censo del NOMBRE DEL MÉTODO cuadra…` · `el del CANAL sigue siendo exactamente uno` |
+| **I2** | **El de la revisión, tal cual**: alias en `components/shared/AvisoVersionNueva.tsx` (componente **ya montado**) | **CAZADO** (exit 1) | 3 casos, incluido `EL CASO DE LA REVISIÓN: alias en un componente YA montado` |
+| **I3** | **Re-export** desde un barril (`export { … } from "@/lib/pwa/baja-push"`) | **CAZADO** (exit 1) | 3 casos |
+| **I4** | **`import()` dinámico** con desestructuración renombrada, en `providers/TemaProvider.tsx` | **CAZADO** (exit 1) | 3 casos, incluido `un import() DINÁMICO también se caza` |
+| **I5** | **Una raíz nueva entera** (`widgets/`) con alias + `requestPermission` | **CAZADO** (exit 1) | 3 casos: `toda raíz de código está clasificada` **en las dos guardias** + la anti-vacuidad de las ocho |
+
+**Seis de seis, y el control murió.** Los seis con `TSC_EXIT=0`: a ninguno lo caza el compilador, que
+es precisamente por lo que las guardias tienen que verlos.
+
+> **Y una lección de la primera pasada, corregida:** en I5 las autocomprobaciones del inventario se
+> ponían rojas **en cadena** (2 rojos de más) porque medían contra el disco. Ahora corren sobre un
+> mundo **sintético**, así que el día que aparezca una raíz sin clasificar de verdad la noticia es
+> un solo caso y no cuatro. Es la misma lección que `nuevasInfracciones` ya aplicaba.
+
+## 11.5 Lo que NO se cierra, declarado en vez de tapado
+
+**Un especificador compuesto en tiempo de ejecución** —`await import("@/lib/pwa/" + "baja-push")`—
+no deja el módulo escrito literal en ninguna parte, así que **ninguna guardia de texto puede verlo**.
+Tiene su propio caso en G1 (`EL LIMITE, DECLARADO`) que afirma justamente que el detector da cero
+ahí, para que nadie lo descubra creyendo que es un fallo. Dos razones por las que se acepta:
+
+1. **El tipo sigue en pie por su cuenta.** Esa superficie tendría que declarar igualmente **uno de
+   los dos motivos** (unión cerrada, parámetro obligatorio): R10 conserva su mitad fuerte, la que no
+   depende de ninguna guardia.
+2. **Partir una cadena para esquivar un censo es deliberado**, y lo que estas guardias persiguen es
+   a **quien se olvida**, no a quien se esconde. Un límite declarado vale más que una protección
+   falsa.
+
+## 11.6 El menor `m1`
+
+La celda **M2** de `tasks.md` pedía un rojo en `PushReactivacion.test.tsx` que **no se produce, y es
+correcto que no se produzca**: el componente corta el permiso por su cuenta *antes* de llamar a
+`alta-push`, así que mutar una capa no puede caer en la otra. Se partió en **M2a / M2b / M2a+M2b**,
+con los rojos reales de cada una (3 / 2 / 5). La propiedad —*la preferencia puesta no se salta la
+comprobación del permiso*— está defendida por **dos cortes independientes**, y eso es más fuerte que
+lo que la celda original describía, no más débil.
+
+**P3** queda resuelta por el coordinador: **tuteo**, y no se toca.
+
+## 11.7 Gate completo, después del arreglo
+
+```
+✓ typecheck paso
+✓ lint paso
+ Test Files  1950 passed (1950)
+      Tests  28351 passed | 26 skipped (28377)
+   Duration  584.97s
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 1950 ejecutado(s), todos en el baseline conocido)
+== init OK ==
+INIT_EXIT=0
+```
+
+`INIT_EXIT=0` escrito **dentro** del log (`scratchpad/gate422_3.log`). Los `skipped` siguen siendo
+los 26 de siempre —`AnaliticaPage` 17 + `AnaliticaShell` 9— y **cero de `tests/integration/db/`**
+(`grep -c`: 0): la capa de datos se ejecutó.
+
+**Los números suben respecto de la corrida que el reviewer reprodujo** (28.325 → 28.351, +26 casos),
+y ese delta es exactamente lo añadido aquí: los casos nuevos del inventario de raíces y de las cuatro
+vías de B2 en las dos guardias. Ni un archivo de test perdido, ni un `baseline-rojos.json` tocado.
+
+---
+
 ## Veredicto
 
-Tandas 1-4 implementadas y verificadas: la preferencia vive aparte del dispositivo, toda baja declara
-su motivo y el compilador impide que una superficie nueva se lo salte; 410/R19 sigue intacto y hay un
-test contra Postgres que se pone rojo si alguien lo erosiona.
+Tandas 1-4 implementadas y verificadas, y los dos bloqueantes de la revisión cerrados **por la
+propiedad y no por los dos casos**: el censo ya no puede quedarse corto de raíces —las deriva— ni
+ciego al nombre local —persigue el módulo—. Seis intrusos reaplicados contra el árbol real, seis
+cazados, control incluido, y el único hueco que queda está escrito con su porqué.
