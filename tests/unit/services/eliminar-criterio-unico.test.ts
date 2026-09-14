@@ -27,6 +27,10 @@ const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
 // FICHA 358 (2026-09-02): el SEGUNDO rol que borra. Su `usuarioId` es la `tienda_id` de las
 // ordenes que fabrican los helpers de abajo (`store1`), asi que las filas son SUYAS.
 const TIENDA: Actor = { usuarioId: "store1", rol: "adminTienda" };
+// FICHA 424 (2026-09-14): el TERCER rol que borra, y el segundo SIN frontera de tienda. Su
+// `usuarioId` NO es la `tienda_id` de nada a proposito: el `admin` no es dueño de ninguna orden y
+// su alcance es «todas», asi que las filas de `store1` le tienen que salir eliminables igual.
+const ADMIN: Actor = { usuarioId: "a1", rol: "admin" };
 const PAGINA = { page: 1, pageSize: 20, sortBy: "created_at", sortDir: "desc" } as const;
 
 function listItem(estatusValue: string): OrdenListItemDTO {
@@ -211,6 +215,58 @@ describe("eliminar orden / la UI y el servidor responden LO MISMO (ficha 319)", 
 
       expect(await laUiOfreceElBoton(estatusValue, ajena)).toBe(false);
       expect(await elServidorLoAutoriza(estatusValue, ajena)).toBe(false);
+    },
+  );
+
+  // -------------------------------------------------------------------------------------
+  // FICHA 424 (2026-09-14) — LA MISMA PREGUNTA, PARA EL TERCER ROL QUE BORRA.
+  //
+  // El `admin` vuelve a poder eliminar (pedido humano, reversion del estrechamiento del
+  // 2026-08-27). Lo que este bloque descarta es el modo de fallo que la 358 ya reporto en
+  // produccion —«no le aparece el checkbox»—: que se abra la AUTORIZACION y no lo que la pantalla
+  // OFRECE, o al reves. Con el `admin` la trampa es mayor que con la tienda, porque el listado ya
+  // le pintaba casillas para las acciones por lote: una divergencia aqui se ve como «el boton no
+  // aparece» y no como un error.
+  //
+  // ⚠️ LAS TRES PATAS, y la tercera es la que hace que esto no sea decorativo. Que la UI y el
+  // servidor COINCIDAN no basta: con el `admin` denegado los dos responden `false` para todos los
+  // estados y el primer aserto seguiria verde sobre la nada. La referencia contra
+  // `ELIMINABLES_ESPERADOS` —escrita a mano, fuera de `lib/`— es la que se pone ROJA si alguien
+  // devuelve el `admin` a `denegado` sin decirlo.
+  // -------------------------------------------------------------------------------------
+  it.each(ORDER_STATUS_SEED)(
+    "%s (admin): la UI ofrece exactamente lo que el servidor autoriza, y es la ventana de siempre",
+    async (estatusValue) => {
+      const ofrecido = await laUiOfreceElBoton(estatusValue, ADMIN);
+      const autorizado = await elServidorLoAutoriza(estatusValue, ADMIN);
+
+      expect({ estatusValue, ofrecido }).toEqual({ estatusValue, ofrecido: autorizado });
+      // La tercera pata: el `admin` no tiene una ventana propia. Cambia QUIEN puede, no QUE se
+      // puede borrar. Y este es el aserto que cae si el `admin` vuelve a `denegado`.
+      expect(ofrecido).toBe(([...ELIMINABLES_ESPERADOS] as string[]).includes(estatusValue));
+    },
+  );
+
+  it.each(ELIMINABLES_ESPERADOS)(
+    "%s (admin): la orden es de OTRA tienda y aun asi se ofrece y se autoriza (alcance «todas»)",
+    async (estatusValue) => {
+      // El espejo exacto del caso de la tienda ajena, con el resultado CONTRARIO: el `admin` no
+      // tiene frontera de tienda. Si alguien le diera alcance «propias», su `usuarioId` (`a1`) no
+      // seria la `tienda_id` de ninguna orden y esto se pondria rojo por los dos lados a la vez —
+      // que es exactamente el «permiso que no permite nada» del design (A4).
+      expect(await laUiOfreceElBoton(estatusValue, ADMIN)).toBe(true);
+      expect(await elServidorLoAutoriza(estatusValue, ADMIN)).toBe(true);
+    },
+  );
+
+  it.each(ELIMINABLES_ESPERADOS)(
+    "%s (admin): la segunda mitad del criterio tampoco se olvida para el rol nuevo",
+    async (estatusValue) => {
+      // Un intento de entrega cierra el borrado tambien para el `admin`, y en LOS DOS lados. El
+      // control positivo de este caso es el `it.each` de justo arriba (con cero intentos, los dos
+      // dicen que si), asi que este no puede quedarse verde por vacio.
+      expect(await laUiOfreceElBoton(estatusValue, ADMIN, 1)).toBe(false);
+      expect(await elServidorLoAutoriza(estatusValue, ADMIN, 1)).toBe(false);
     },
   );
 });

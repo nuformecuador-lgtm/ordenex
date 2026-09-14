@@ -320,15 +320,22 @@ export function OrdenesListado({
   /**
    * Pedido humano (2026-08-27): ofrece ELIMINAR órdenes.
    *
-   * Prop propia y no `accionesLote` (que es maestro Y admin) porque el `admin` NO puede borrar:
-   * ese estrechamiento se decidió a propósito y sigue en pie. El servidor revalida el rol en la
-   * Server Action, así que esta prop decide qué se OFRECE, nunca qué se permite.
+   * Prop propia y no `accionesLote`, y sigue siéndolo aunque desde la ficha 424 los dos coincidan
+   * para `maestro`/`admin`: el `adminTienda` recibe ésta sin recibir aquélla, así que no son la
+   * misma pregunta. El servidor revalida el rol en la Server Action, así que esta prop decide qué
+   * se OFRECE, nunca qué se permite.
    *
    * ⭑ FICHA 358 (2026-09-02): ya no es «sólo el maestro». También el `adminTienda`, acotado a
    * SUS órdenes — la misma regla que la tienda ya tenía por API key. Quién es «lo suyo» no lo
    * decide esta pantalla: lo decide el servidor fila a fila, en el campo `eliminable` del DTO,
    * que sólo viaja `true` sobre órdenes que ese actor puede borrar de verdad. Aquí sólo se
    * pregunta `row.eliminable === true`.
+   *
+   * ⭑ FICHA 424 (2026-09-14): el `admin` TAMBIÉN, sin frontera de tienda. Se revirtió, a petición
+   * del humano, el estrechamiento del 2026-08-27 que se lo había quitado; lo que lo sostiene es
+   * que cada borrado deja hoy una fila con el nombre y el rol congelados de quien lo hizo (ficha
+   * 362). Este componente NO cambia ni una línea por ello, y es el punto: quién puede borrar se
+   * contesta en `resolverAlcanceBorradoOrden` y llega aquí por esta prop, ya resuelta.
    *
    * ⚠️ Encender esto para un rol SIN `accionesLote` monta la columna de casillas para él. La
    * barra no se le llena de acciones de flujo: `accionesDe` devuelve vacío sin `accionesLote`
@@ -344,6 +351,11 @@ export function OrdenesListado({
    * dueña y del mensajero asignado, y `RecuperarOrdenService` corta por rol; además `listar`
    * responde `forbidden` —no una lista vacía— a quien pida el interruptor sin serlo. Ofrecérselo
    * a la tienda sería pintar un control que el servidor rechaza.
+   *
+   * ⭑ Y SIGUE SIÉNDOLO TRAS LA FICHA 424 (2026-09-14): al `admin` se le devolvió `puedeEliminar`
+   * y NO ésta. Es decisión del humano ese mismo día (424/D1): «que borre»; la papelera no se le
+   * abre y, si se equivoca, se lo pide al `maestro`. Que las dos props estén separadas desde la
+   * 358 es lo que permite que diverjan sin tocar el componente.
    */
   puedeVerEliminadas?: boolean;
   /**

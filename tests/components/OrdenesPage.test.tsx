@@ -410,22 +410,86 @@ describe("OrdenesPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("eliminar: el `admin` NO la recibe — el estrechamiento del 2026-08-27 sigue en pie", async () => {
-    // El `admin` sí tiene acciones por lote, así que la columna de casillas existe para él por
-    // otra razón; lo que se afirma es que el servidor no le manda `eliminable` y que la página
-    // no se lo inventa. Se mide sobre una fila SIN el campo, que es como le llega.
+  // ⭑ FICHA 424 (2026-09-14) — ESTE CASO SE INVIERTE, Y SE DICE POR QUÉ.
+  //
+  // Hasta hoy afirmaba lo contrario: «eliminar: el `admin` NO la recibe — el estrechamiento del
+  // 2026-08-27 sigue en pie». El humano (Carlos Restrepo) revierte aquel estrechamiento el
+  // 2026-09-14, con su consecuencia sobre la mesa: de 2 personas capaces de retirar una orden del
+  // sistema se pasa a 6. Lo que sostiene la reversión es el rastro de la ficha 362 —nombre y rol
+  // congelados por orden borrada, agrupados por acto y consultables por el `maestro`—, medido con
+  // el rol nuevo en `tests/integration/db/orden-eliminada-actor-admin.test.ts`.
+  //
+  // ⚠️ POR QUÉ NO BASTA CON AFIRMAR LA CASILLA, como hace el caso del `adminTienda` de arriba. El
+  // `admin` ya tenía columna de casillas por sus acciones por lote (`haySeleccion = accionesLote
+  // || puedeEliminar`), así que la casilla está ahí con `puedeEliminar` a `true` y a `false`: un
+  // test que solo la mirara estaría verde con la regla revertida. Lo que SÍ distingue las dos
+  // ramas es la acción «Eliminar» en la barra de selección, y por eso este caso marca la fila y
+  // la busca. Es la mitad de pantalla de R20: tocar SOLO `resolverAlcanceBorradoOrden` tiene que
+  // poner rojo este caso — si no lo pusiera, la derivación de `page.tsx` sería decorativa.
+  it("⭑ eliminar: el `admin` SÍ recibe la casilla y la acción «Eliminar» (ficha 424)", async () => {
     listarOrdenesMock.mockResolvedValue({
       status: "ok",
-      items: [makeOrden({ id: "a", numGuia: 3002 })],
+      // `eliminable` lo resuelve el SERVIDOR con el mismo predicado que autoriza el borrado; aquí
+      // llega ya resuelto, que es como llega en producción. Desde la 424 el campo también viaja
+      // en las filas del `admin` (`OrdenService.marcarEliminable`).
+      items: [makeOrden({ id: "a", numGuia: 3002, numRemision: "REM-3002", eliminable: true })],
       page: 1,
       pageSize: 25,
       total: 1,
     });
     resolveActorMock.mockResolvedValueOnce({ usuarioId: "u", rol: RolValue.admin });
 
+    const user = userEvent.setup();
     await renderPage();
     await screen.findByText("3002");
 
+    const casilla = await screen.findByRole("checkbox", {
+      name: "Seleccionar orden REM-3002",
+    });
+    await user.click(casilla);
+
+    expect(
+      await screen.findByRole("button", { name: "Eliminar" }),
+    ).toBeInTheDocument();
+  });
+
+  it("eliminar: al `admin` NO se le ofrece sobre una fila que el servidor NO marca eliminable", async () => {
+    // El contrapeso del caso de arriba, y la razón de que la 424 no sea «ábrele el botón al
+    // admin»: la página sigue sin decidir nada. Obedece a `eliminable`, que resuelve el servidor
+    // (estado + cero intentos de entrega). Sin este caso, un `puedeEliminar` que ignorara el
+    // campo pasaría verde y ofrecería «Eliminar» sobre órdenes que el servidor va a rechazar.
+    listarOrdenesMock.mockResolvedValue({
+      status: "ok",
+      // Estado CON acciones por lote a propósito: así la fila se puede marcar por otra razón y
+      // la barra aparece. Si la fila no llevara a ningún botón, la casilla estaría bloqueada y
+      // este caso pasaría por el motivo equivocado.
+      items: [
+        makeOrden({
+          id: "a",
+          numGuia: 3003,
+          numRemision: "REM-3003",
+          estatusValue: "en_bodega_central",
+          eliminable: false,
+        }),
+      ],
+      page: 1,
+      pageSize: 25,
+      total: 1,
+    });
+    resolveActorMock.mockResolvedValueOnce({ usuarioId: "u", rol: RolValue.admin });
+
+    const user = userEvent.setup();
+    await renderPage();
+    await screen.findByText("3003");
+
+    await user.click(
+      await screen.findByRole("checkbox", { name: "Seleccionar orden REM-3003" }),
+    );
+
+    // La barra existe (el `admin` tiene otras acciones por lote), pero «Eliminar» no está en ella.
+    expect(
+      await screen.findByRole("button", { name: "Asignar mensajero" }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Eliminar" })).toBeNull();
   });
 

@@ -110,6 +110,56 @@ describe("ApiOrdenEliminacionService — la frontera multi-tenant (R3)", () => {
     // alguien anadiera un `ownerId` opcional a la firma, esto cae y hay que justificarlo.
     expect(ApiOrdenEliminacionService.prototype.eliminar).toHaveLength(2);
   });
+
+  // -------------------------------------------------------------------------------------
+  // ⭑ FICHA 424 (2026-09-14) — EL CANAL SIGUE CERRADO AL `admin`, Y ES UNA DECISION (D1).
+  //
+  // El 2026-09-14 el humano le devolvio al `admin` la capacidad de eliminar ordenes, y ese cambio
+  // es UNA LINEA en `resolverAlcanceBorradoOrden`: `admin` pasa de `denegado` a `todas`. Esa
+  // funcion la consultan TRES caminos, y este es el que NO se abre.
+  //
+  // POR QUE NO SE ABRE (design §3.3):
+  //   1. Por aqui no entra un `admin`: el borde autentica por API key y `ApiKeyAuthService` emite
+  //      SIEMPRE rol `apiKey`. Abrirlo seria legislar sobre un camino que nadie recorre.
+  //   2. Aceptar «todas» convertiria una credencial de integracion en capaz de borrar ordenes de
+  //      CUALQUIER tienda. El 404 uniforme de este canal existe justamente para no filtrar ni la
+  //      existencia de ordenes ajenas.
+  //   3. La contrapartida que sostiene la reversion es «una PERSONA con nombre y rol», y una API
+  //      key no es una persona.
+  //
+  // El paso 0 exige `alcance === "propias"`: cualquier otra cosa —incluido «todas»— cae en el 404
+  // uniforme SIN tocar la base. O sea que el canal ya fallaba cerrado; este caso lo fija por
+  // escrito para que quede como DECISION y no como efecto colateral.
+  //
+  // ⚠️ Y ES EL TEST QUE **NO** DEBE PONERSE ROJO al revertir la linea de la 424: si alguien
+  // devuelve el `admin` a `denegado`, este sigue verde (denegado tampoco es «propias»). Que esta
+  // afirmacion sea INDIFERENTE al rol del `admin` es justo lo que la hace util.
+  it("⭑ un actor con alcance «todas» (`admin`) -> `not_found`, y NO se toca la base", async () => {
+    const ADMIN: Actor = { usuarioId: "u-admin", rol: "admin" };
+    const repo = repoDoble(ordenEn("en_bodega_central"));
+
+    const res = await servicio(repo).eliminar(ADMIN, ORDEN_ID);
+
+    expect(res).toEqual({ status: "not_found" });
+    // Las DOS: ni la lectura ni la escritura. Un `not_found` devuelto DESPUES de consultar seria
+    // otra cosa —un canal lateral que confirma la existencia de la orden por el tiempo de
+    // respuesta— y ademas dejaria abierta la puerta al `softDeleteViaApi` con un owner inventado.
+    expect(repo.findParaEliminacionApi).not.toHaveBeenCalled();
+    expect(repo.softDeleteViaApi).not.toHaveBeenCalled();
+  });
+
+  it("y el `maestro` tampoco: «todas» se rechaza por el ALCANCE, no por el nombre del rol", async () => {
+    // Control que impide leer el caso de arriba como «hay una lista negra con el admin dentro».
+    // Lo que el canal exige es un actor ACOTADO A UNA TIENDA; los dos roles sin frontera caen
+    // igual, y por la misma linea.
+    const repo = repoDoble(ordenEn("en_bodega_central"));
+
+    const res = await servicio(repo).eliminar({ usuarioId: "u-maestro", rol: "maestro" }, ORDEN_ID);
+
+    expect(res).toEqual({ status: "not_found" });
+    expect(repo.findParaEliminacionApi).not.toHaveBeenCalled();
+    expect(repo.softDeleteViaApi).not.toHaveBeenCalled();
+  });
 });
 
 describe("ApiOrdenEliminacionService — el criterio de estado, compartido con la app (R4/R5)", () => {

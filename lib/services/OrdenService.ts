@@ -325,6 +325,12 @@ export class OrdenService implements IOrdenService {
    * `=== true`. El PRINCIPIO no cambia y es el que obliga a tocar esto: la pantalla no ofrece un
    * boton que el servidor vaya a rechazar. Lo que cambia es quien puede.
    *
+   * ⭑ FICHA 424 (2026-09-14) — y desde hoy tambien el `admin`, SIN frontera de tienda (pedido
+   * humano: se revierte el estrechamiento del 2026-08-27). Este metodo NO se toca por ello, y ese
+   * es justo el punto: pregunta a `resolverAlcanceBorradoOrden`, asi que el campo empezo a
+   * viajarle solo. Si aqui hubiera una lista de roles propia, el `admin` podria borrar en el
+   * servidor y no ver nunca el boton — el mismo fallo mudo de la 358, con otro rol.
+   *
    * Y por eso el `eliminable` de la tienda lleva ADEMAS la pertenencia (`tiendaId === ownerId`),
    * que no es redundante aunque hoy lo parezca: `construirWhere` ya acota el listado del
    * `adminTienda` a sus ordenes, asi que en la practica todas las filas son suyas. Se escribe
@@ -339,7 +345,8 @@ export class OrdenService implements IOrdenService {
    * aplica `EliminarOrdenService` para autorizar. Es la respuesta a «¿ofrezco el boton?» y tiene
    * que coincidir con la de «¿lo autorizo?»: si divergen, la barra ofrece «Eliminar» sobre filas
    * que el servidor rechaza. La coincidencia esta medida estado por estado en
-   * `tests/unit/services/eliminar-criterio-unico.test.ts`, para los dos roles.
+   * `tests/unit/services/eliminar-criterio-unico.test.ts`, para los TRES roles que borran
+   * (`maestro`, `adminTienda` y —desde la ficha 424— `admin`).
    */
   private marcarEliminable(
     items: OrdenListItemDTO[],

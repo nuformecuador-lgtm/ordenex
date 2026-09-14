@@ -11,9 +11,13 @@ import {
   MSG_ORDEN_NO_EXISTE,
 } from "@/lib/services/mensajes-eliminar-orden";
 
-// Pedido humano (2026-08-27) — REVERSION del borrado logico. Espejo de `EliminarOrdenService`:
-// mismo rol, misma precarga, mismo todo-o-nada, motivos de la misma fuente. No conoce HTTP ni
+// Pedido humano (2026-08-27) — REVERSION del borrado logico. Espejo de `EliminarOrdenService` en
+// la FORMA: misma precarga, mismo todo-o-nada, motivos de la misma fuente. No conoce HTTP ni
 // Prisma.
+//
+// ⚠️ PERO YA NO ES ESPEJO EN EL ROL, y decirlo aqui evita la deduccion equivocada: el borrado se
+// abrio a la TIENDA (ficha 358, 2026-09-02) y al `admin` (ficha 424, 2026-09-14); recuperar se
+// queda EN EL `maestro` y solo en el. Ver el paso 1.
 
 /**
  * Metodos de repo que consume. `findByIdsForTransicion` INCLUYE las borradas —que aqui son
@@ -31,9 +35,19 @@ export class RecuperarOrdenService implements IRecuperarOrdenService {
     input: RecuperarOrdenInput,
     actor: Actor,
   ): Promise<RecuperarOrdenServiceResult> {
-    // 1. MISMO rol que el borrado, y por la misma razon: recuperar devuelve la orden a los
-    // listados de la tienda dueña y del mensajero asignado. Quien no puede retirarla del sistema
-    // tampoco puede devolverla a el.
+    // 1. SOLO EL `maestro`. Esto decia «MISMO rol que el borrado», y dejo de ser cierto: el
+    // borrado se abrio a la TIENDA (ficha 358) y al `admin` (ficha 424), y recuperar NO.
+    //
+    // ⭑ Y ES UNA DECISION, no un resto. El humano la cerro el 2026-09-14 al pedir la reversion
+    // del `admin` (424/D1): «que borre»; la papelera no se le abre, y si se equivoca se lo pide
+    // al `maestro`. Dejar la recuperacion en UNA sola persona conserva ademas la mitad de lo que
+    // protegia la decision del 2026-08-27 —que estrecho el borrado para que el rastro fuera una
+    // persona—, ahora que el borrado ya no lo cumple.
+    //
+    // El motivo original sigue en pie: recuperar devuelve la orden a los listados de la tienda
+    // dueña y del mensajero asignado. NO se resuelve con `resolverAlcanceBorradoOrden` a
+    // proposito: es OTRA pregunta y tiene que poder divergir de aquella (es justo lo que hace
+    // hoy). La misma separacion que `puedeEliminar` / `puedeVerEliminadas` en la pantalla.
     if (actor.rol !== "maestro") return { status: "forbidden" };
 
     const ordenIds = [...new Set(input.ordenIds)];

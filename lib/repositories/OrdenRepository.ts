@@ -2335,7 +2335,7 @@ export class OrdenRepository implements IOrdenRepository {
    * El service SI comprueba ademas la pertenencia antes, pero para poder devolver el motivo del
    * rechazo; si esa comprobacion desapareciera, esta seguiria impidiendo el borrado.
    *
-   * `ownerId: null` es «sin frontera» y solo lo produce el `maestro`
+   * `ownerId: null` es «sin frontera» y lo producen el `maestro` y —desde la ficha 424— el `admin`
    * (`resolverAlcanceBorradoOrden` -> «todas»). Medido contra Postgres en
    * `tests/integration/db/eliminar-orden-pantalla-frontera-tienda.test.ts`: quitar `tiendaId` de
    * este `where` pone ese archivo ROJO.

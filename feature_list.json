@@ -5069,7 +5069,7 @@
       "title": "el admin no puede eliminar ordenes, solo el maestro",
       "description": "Se abre el borrado de ordenes al rol admin, hoy reservado al maestro.",
       "zone": "backend",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "baja",
       "branch": "feat/424-admin-elimina-ordenes",

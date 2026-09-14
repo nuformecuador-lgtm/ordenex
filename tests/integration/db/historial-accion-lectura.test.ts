@@ -3,6 +3,11 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 
 import { HistorialAccionRepository } from "@/lib/repositories/HistorialAccionRepository";
+// FICHA 424 / T8: el camino REAL de consulta (servicio + repositorio) y el camino REAL de
+// escritura (el borrado de una orden), para medir el rastro de punta a punta con el rol nuevo.
+import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { HistorialAccionService } from "@/lib/services/HistorialAccionService";
+import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   FiltroHistorialAccionResuelto,
   OrdenHistorialAccion,
@@ -10,8 +15,10 @@ import type {
 import { accionesDeCategoria } from "@/lib/types/historial-accion";
 import {
   HAY_BASE_DE_DATOS,
+  clienteConSavepoint,
   crearPrismaDeTest,
   enTransaccionRevertida,
+  fksDeOrden,
   serializarEscriturasReales,
   type TxDeTest,
 } from "./_postgres-real";
@@ -448,5 +455,179 @@ describeSiHayBase("362/T4.2 — el `WHERE` del historial, contra Postgres", () =
     expect(ids).toContain(r.actorA);
     expect(ids).toContain(r.actorB);
     for (const actor of r.actores) expect(actor.nombre.trim().length).toBeGreaterThan(0);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 424 / T8 (R15/R16) — **«QUIEN BORRO ESTO» SE PUEDE CONTESTAR, Y POR EL CAMINO REAL.**
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+//
+// El 2026-09-14 el humano le devolvio al `admin` la capacidad de eliminar ordenes. Su condicion
+// fue «que borre, pero que quede registro en el historial que ya tenemos», y ese registro es lo
+// UNICO que sostiene la reversion. T7 mide que la fila QUEDA (contra Postgres, con el rol nuevo);
+// este bloque mide la otra mitad, que sin ella la primera no sirve de nada: que la fila se puede
+// ENCONTRAR — filtrando por el tipo de accion y por el actor, y mostrando su nombre y su rol.
+//
+// ⚠️ DE PUNTA A PUNTA, Y POR EL CAMINO REAL. La fila NO se inserta a mano como en el corpus de
+// arriba: la escribe `OrdenRepository.softDelete` borrando una orden de verdad, y se lee con
+// `HistorialAccionService.listar` —el mismo servicio que sirve `/historico/acciones`, con su
+// validacion de entrada y su gate de rol—. Si alguna pieza de la cadena se rompiera (el
+// congelado, el filtro por actor, la proyeccion del DTO), este bloque lo dice; un test que
+// sembrara la fila a mano solo mediria el `WHERE`.
+//
+// ⚠️ EL LIMITE, DECLARADO Y ACEPTADO (R16, decision D2 de la ficha 362 y ratificada el
+// 2026-09-14): quien borra queda consultable **para el `maestro`**, no para si mismo. A partir de
+// esta ficha el `admin` GENERA filas en este registro y NO puede leerlas. No es un descuido, es
+// la contrapartida: la contrapartida no la revisa el revisado. El ultimo caso lo afirma.
+describeSiHayBase("424/T8 — quien borro es consultable filtrando por accion y actor", () => {
+  let prisma: PrismaClient;
+  let FKS: Awaited<ReturnType<typeof fksDeOrden>>;
+
+  /** Quien hace la CONSULTA. El modulo lo lee solo el `maestro` (`ROLES_HISTORIAL_ACCIONES`). */
+  const MAESTRO: Actor = { usuarioId: "no-se-usa-para-autorizar", rol: "maestro" };
+
+  beforeAll(async () => {
+    prisma = crearPrismaDeTest();
+    FKS = await fksDeOrden(prisma);
+    if (FKS === null) {
+      // ⚠️ LANZA, no `return`: un `if (!fks) return;` reporta `passed` sin comprobar nada.
+      throw new Error(
+        "hay DATABASE_URL pero la tabla `orden` esta vacia: sin FKs no se puede sembrar. Corre " +
+          "`pnpm run db:seed` antes de esta suite.",
+      );
+    }
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  /**
+   * Borra una orden REAL con un actor de rol `admin` recien sembrado, y devuelve con que
+   * consultar despues. Todo dentro de la transaccion que el caso revierte.
+   */
+  async function borrarComoAdmin(tx: TxDeTest, marca: string) {
+    const rolAdmin = await tx.rol.findFirstOrThrow({
+      where: { value: "admin" },
+      select: { id: true },
+    });
+    const plantilla = await tx.usuario.findFirstOrThrow({
+      select: { tipoIdentificacionId: true },
+    });
+    const nombre = `Admin${marca}`;
+    const primerApellido = "Efimero424";
+    const admin = await tx.usuario.create({
+      data: {
+        nombre,
+        primerApellido,
+        email: `${MARCA}-${marca}@example.test`,
+        telefono: "88880000",
+        passwordHash: "x",
+        cedula: `${MARCA}-${marca}`,
+        estado: "activo",
+        tipoIdentificacionId: plantilla.tipoIdentificacionId,
+        rolId: rolAdmin.id,
+      },
+      select: { id: true },
+    });
+
+    const orden = await tx.orden.create({
+      data: {
+        numRemision: `R-${MARCA}-${marca}`,
+        destinatario: "Dest",
+        telefonoDest: "88880000",
+        producto: "Prod",
+        estatusId: FKS!.estatusId,
+        tiendaId: FKS!.tiendaId,
+        zonaId: FKS!.zonaId,
+        provinciaId: FKS!.provinciaId,
+        cantonId: FKS!.cantonId,
+      },
+      select: { id: true },
+    });
+
+    const eliminadas = await new OrdenRepository(clienteConSavepoint(tx)).softDelete({
+      ids: [orden.id],
+      ownerId: null,
+      actorUsuarioId: admin.id,
+    });
+
+    return {
+      adminId: admin.id,
+      nombreCompleto: `${nombre} ${primerApellido}`,
+      ordenId: orden.id,
+      eliminadas,
+      servicio: new HistorialAccionService(
+        new HistorialAccionRepository(tx as unknown as PrismaClient),
+      ),
+    };
+  }
+
+  it("⭑ R15: filtrando por «orden eliminada» y por ese actor, la fila sale con su NOMBRE y su ROL", async () => {
+    const r = await enTransaccionRevertida(prisma, async (tx) => {
+      await serializarEscriturasReales(tx);
+      const c = await borrarComoAdmin(tx, "r15");
+
+      // El camino real de consulta: el servicio, con la entrada tal cual la manda la pantalla.
+      // `actorId` acota a un usuario EFIMERO de esta corrida, asi que no hace falta recorrer
+      // paginas: nada mas de la tabla compartida puede casar con el.
+      const salida = await c.servicio.listar(
+        { accion: ["orden_eliminada"], actorId: [c.adminId] },
+        MAESTRO,
+      );
+      // El caso NEGATIVO: preguntando por OTRO actor, esa fila no aparece.
+      const otro = await c.servicio.listar(
+        { accion: ["orden_eliminada"], actorId: [FKS!.tiendaId] },
+        MAESTRO,
+      );
+      return { c, salida, otro };
+    });
+
+    // Anti-vacuidad: el borrado ocurrio de verdad.
+    expect(r.c.eliminadas).toBe(1);
+
+    expect(r.salida.status).toBe("ok");
+    if (r.salida.status !== "ok") throw new Error("inalcanzable: ya se afirmo arriba");
+    expect(r.salida.total).toBe(1);
+    expect(r.salida.items).toHaveLength(1);
+    const fila = r.salida.items[0];
+    expect(fila.accion).toBe("orden_eliminada");
+    expect(fila.entidadTipo).toBe("orden");
+    // ⭑ LO QUE LA FICHA 424 EXIGE PODER CONTESTAR: quien, y con que rol.
+    expect(fila.actorNombre).toBe(r.c.nombreCompleto);
+    expect(fila.actorRol).toBe("admin");
+    // Y la etiqueta identifica la orden borrada (aqui sin guia: cae a la remision).
+    expect(fila.entidadEtiqueta).toContain(MARCA);
+
+    // El filtro por otro actor NO la devuelve. Sin este control, el caso de arriba podria estar
+    // verde con un `WHERE` que ignorara `actorId`.
+    expect(r.otro.status).toBe("ok");
+    if (r.otro.status !== "ok") throw new Error("inalcanzable: ya se afirmo arriba");
+    expect(r.otro.items.map((f) => f.actorNombre)).not.toContain(r.c.nombreCompleto);
+  });
+
+  it("R16: el propio `admin` NO puede leer ese registro — `forbidden` por el camino real", async () => {
+    // El limite aceptado por el humano (D2), medido donde vive y no deducido: el registro es la
+    // contrapartida de la reversion, y la contrapartida no la revisa el revisado. Quien audita es
+    // el `maestro`. Se afirma con el MISMO servicio y la MISMA entrada que el caso de arriba, asi
+    // que lo unico que cambia es el rol de quien pregunta.
+    const r = await enTransaccionRevertida(prisma, async (tx) => {
+      await serializarEscriturasReales(tx);
+      const c = await borrarComoAdmin(tx, "r16");
+      const entrada = { accion: ["orden_eliminada" as const], actorId: [c.adminId] };
+      return {
+        comoAdmin: await c.servicio.listar(entrada, { usuarioId: c.adminId, rol: "admin" }),
+        descarga: await c.servicio.listarCompleto(entrada, { usuarioId: c.adminId, rol: "admin" }),
+        comoMaestro: await c.servicio.listar(entrada, MAESTRO),
+      };
+    });
+
+    expect(r.comoAdmin).toEqual({ status: "forbidden" });
+    expect(r.descarga).toEqual({ status: "forbidden" });
+    // Control positivo: la fila EXISTE y el `maestro` si la ve. Sin esto, los dos `forbidden`
+    // podrian estar verdes sobre un registro vacio.
+    expect(r.comoMaestro.status).toBe("ok");
+    if (r.comoMaestro.status !== "ok") throw new Error("inalcanzable: ya se afirmo arriba");
+    expect(r.comoMaestro.total).toBe(1);
   });
 });

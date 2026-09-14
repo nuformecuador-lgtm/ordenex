@@ -5215,3 +5215,29 @@ prohíbe la redirección.
 ⚠️ Pendiente antes de `prod`: **avisar a Nuform**, su cliente pasa de `200`+HTML a `401`+JSON. Y
 queda dicho que esto hace el síntoma legible, **no** arregla que su sesión caduque cada 24 h: para
 eso tienen una API key activa sin usar.
+
+## 424 — El admin vuelve a poder eliminar órdenes (2026-09-14)
+
+Petición expresa del humano. **Revierte la decisión del 2026-08-27** que había estrechado el
+borrado a «solo maestro», cuyo motivo era que «con dos roles capaces de borrar, el rastro de quien
+lo hizo deja de ser una sola persona». Se revierte con esa consecuencia sobre la mesa y queda
+escrita: el borrado de una orden pasa de depender de **2 personas a 6** (4 admins activos + 2
+maestros).
+
+El cambio de regla es **una sola línea**. Lo que costó trabajo fueron las dos contrapartidas:
+
+- **La pantalla deja de duplicar la regla.** `puedeEliminar` era una copia literal; ahora se deriva
+  de la fuente única, y la mutación lo demuestra: tocar **solo** la regla pone rojo el caso de
+  pantalla **sin tocar `page.tsx`**. Si fuese decorativo, el test no se enteraría. Es el mismo
+  defecto que provocó el «no me aparece el checkbox» de la 358.
+- **El rastro se midió, no se dedujo.** Contra Postgres: el registro del borrado queda con rol
+  `admin` y el `maestro` lo encuentra. El reviewer reprodujo la mutación (`actorRol: null` tumba
+  los dos archivos) y descartó una a una las tres formas de test falso del repo — la fila se lee de
+  la tabla, el `beforeAll` **lanza** si no hay datos en vez de saltarse el cuerpo, y no hay dobles.
+
+El `toEqual` de la clasificación de roles se **actualizó**, no se relajó: sigue siendo la lista
+completa con su orden.
+
+Límites aceptados y escritos: el `admin` borra pero **no** puede ver ni recuperar lo borrado —se lo
+pide al maestro—, ni leer `/histórico/acciones`, así que genera filas que no puede auditar. El
+canal por API queda cerrado para él a propósito, fijado con un test.
