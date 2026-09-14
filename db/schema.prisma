@@ -708,6 +708,29 @@ model Orden {
   /// sentencia que, aplicada, no puede aplicarse (no hay default que quitar) y que solo
   /// existe porque el modelo callaba. Con el, el diff sale VACIO.
   busquedaTexto          String?   @default(dbgenerated()) @map("busqueda_texto")
+  /// FICHA 423 (design §2.1/§2.5) — columna GENERADA ALWAYS ... STORED en la base: la CLAVE DE
+  /// ORDEN NATURAL de `num_remision`. Deriva de ella `(serie, numero)` como texto comparable byte
+  /// a byte —prefijo alfanumerico en mayusculas + el bloque final de digitos rellenado a 18 con
+  /// `lpad`—, para que `NA-107` caiga antes que `NA-1069` (R3) y las series salgan agrupadas
+  /// `72912…`, `BS-`, `NA-`, `SC-` (R4). NUNCA se escribe desde la aplicacion: Postgres rechaza
+  /// cualquier INSERT/UPDATE sobre ella (R17), y el cliente la OMITE globalmente
+  /// (`lib/db/prisma-client.ts`, `PRISMA_OMIT`) para que no llegue a ningun DTO ni a la descarga
+  /// (R16). Su UNICO uso es el `orderBy` de `OrdenRepository.list` (`SORT_COLUMN`).
+  ///
+  /// ⚠️ LO QUE PRISMA NO PUEDE EXPRESAR Y POR TANTO **NO VIVE AQUI**, mismo hueco que el unico
+  /// parcial de la feature 294 unas lineas mas abajo: (a) el `COLLATE "C"` de la columna y (b) el
+  /// predicado `WHERE "deleted_at" IS NULL` del indice. Los dos estan escritos A MANO en
+  /// `db/migrations/20260916120000_orden_clave_remision/migration.sql`, que es donde hay que ir a
+  /// leerlos. `migrate diff --from-config-datasource` no los ve (no propone recrear nada), pero
+  /// `--from-empty --to-schema` —o sea `db push`— escribiria el indice SIN el `WHERE` y la columna
+  /// SIN la collation, y entonces el orden dependeria del locale de cada base sin que nada
+  /// fallara: exactamente el fallo mudo que R6 prohibe. Lo vigila
+  /// `tests/unit/db/orden-clave-remision.guardia.test.ts`.
+  ///
+  /// `@default(dbgenerated())` NO es decorativo, y se llego a el MIDIENDO (ficha 169, T1.5): sin
+  /// el, Prisma lee la expresion GENERATED como si fuera un DEFAULT de columna y cada
+  /// `migrate dev` futuro propone un `ALTER COLUMN ... DROP DEFAULT` imposible de aplicar.
+  claveRemision          String?   @default(dbgenerated()) @map("clave_remision")
   deletedAt              DateTime? @map("deleted_at") // soft delete
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
@@ -819,6 +842,22 @@ model Orden {
   // aplicado SI lo cualifica (`extensions.gin_trgm_ops`), que es lo que importa para que
   // la creacion no dependa del `search_path`.
   @@index([busquedaTexto(ops: raw("gin_trgm_ops"))], type: Gin, map: "orden_busqueda_texto_trgm_idx")
+  // FICHA 423 — el indice que sirve el orden por numero de remision de `/ordenes`. Copia el
+  // prefijo EXACTO del `ORDER BY` que arma `OrdenRepository.list`: `prioridad DESC` delante
+  // (feature 101/R6) y el desempate por `id` al final (ficha 352).
+  //
+  // ⚠️ EN LA BASE ES **PARCIAL** — `WHERE "deleted_at" IS NULL` — Y ESO NO SE PUEDE ESCRIBIR AQUI.
+  // Vive a mano en `db/migrations/20260916120000_orden_clave_remision/migration.sql`, igual que el
+  // predicado de `orden_tienda_id_num_remision_key` (294). `map:` reproduce el nombre exacto que
+  // la migracion escribio; sin el, Prisma propondria un RENAME INDEX (misma clase de drift que
+  // documenta `schema-drift-saneamiento.test.ts`). Si alguien "restaura" este indice desde el
+  // datamodel (`db push`), saldra SIN el `WHERE` y ademas la columna saldra sin su `COLLATE "C"`.
+  //
+  // Solo se declara el sentido ASCENDENTE de la clave, a proposito y con umbral escrito: el
+  // sentido descendente ORDENA en memoria (2.136 filas vivas, decenas de KB, muy por debajo del
+  // `work_mem` de 4 MB). El gemelo DESC se añade si `orden` supera las ~200.000 filas vivas; el
+  // SQL exacto esta en la cabecera de la migracion.
+  @@index([prioridad(sort: Desc), claveRemision, id], map: "orden_prioridad_clave_remision_idx")
   @@map("orden")
 }
 

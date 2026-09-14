@@ -42,7 +42,25 @@ function resolvePoolMax(): number {
  * unico que existe). Se exporta para que el test pueda comprobar la garantia sin abrir
  * una conexion.
  */
-export const PRISMA_OMIT = { orden: { busquedaTexto: true } } as const;
+/**
+ * FICHA 423 (design §2.6, R16) — SEGUNDA columna que ninguna lectura debe traer nunca.
+ *
+ * `orden.clave_remision` es la columna GENERADA que ordena el listado por numero de remision
+ * de forma natural. La calcula Postgres a partir de `num_remision` y su unico consumidor es el
+ * `orderBy` de `OrdenRepository.list`: nadie la LEE, ni la pantalla ni la descarga. Sin el
+ * `omit` viajaria ~25 bytes por fila en cada `findMany` sin `select` —hasta 5.000 filas por
+ * archivo en la descarga del dataset completo (feature 151)— y, sobre todo, bastaria con que un
+ * DTO futuro hiciera `...orden` para filtrarla al cliente. Con el `omit`, lo segundo es
+ * IMPOSIBLE POR CONSTRUCCION, no por disciplina.
+ *
+ * MEDIDO, NO SUPUESTO (task T2.4): el comentario de arriba afirma que el `omit` no afecta al
+ * `where`, pero sobre el `orderBy` no decia nada — y aqui la columna se usa EXACTAMENTE para
+ * eso. Se comprobo contra Postgres real que un `repo.list({ sortBy: "num_remision" })` con este
+ * `omit` puesto sigue ordenando por la columna Y sigue sin traerla en el payload:
+ * `tests/integration/db/orden-orden-remision-natural.test.ts`, caso «el `omit` global no
+ * impide el `orderBy`…». El `omit` recorta la PROYECCION, no la clausula de orden.
+ */
+export const PRISMA_OMIT = { orden: { busquedaTexto: true, claveRemision: true } } as const;
 
 /* -------------------------------------------------------------------------- */
 /* Log de consultas SQL                                                        */
