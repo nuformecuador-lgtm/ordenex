@@ -325,6 +325,13 @@ describe("filtro ELIMINADAS", () => {
   ])("%s -> forbidden, y NI SIQUIERA se consulta", async (_n, actor) => {
     // Se RECHAZA, no se ignora: devolver el listado de las vivas con el interruptor puesto
     // haria concluir a quien lo pidiera que no hay ninguna orden eliminada.
+    //
+    // ⭑ FICHA 424 (2026-09-14) — EL `admin` SIGUE AQUI, Y AHORA POR DECISION. Desde hoy el
+    // `admin` puede ELIMINAR ordenes (se revirtio el estrechamiento del 2026-08-27), pero el
+    // humano cerro expresamente que no se le abre la papelera (424/D1): ni recupera ni VE las
+    // eliminadas. Por eso `page.tsx` deriva `puedeEliminar` de la fuente unica del borrado y
+    // deja `puedeVerEliminadas` como literal `rol === maestro`: son dos preguntas distintas y
+    // tienen que poder divergir. Este caso es el lado servidor de esa divergencia.
     const { repo, list } = buildRepo();
     const service = new OrdenService(repo, fakeIntentosEnLote(), () => AHORA);
 

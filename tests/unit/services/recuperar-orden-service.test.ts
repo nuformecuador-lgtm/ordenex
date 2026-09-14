@@ -8,8 +8,9 @@ import {
 } from "@/lib/services/mensajes-eliminar-orden";
 
 // Pedido humano (2026-08-27) — REVERSION del borrado logico, con dobles (sin DB, sin HTTP).
-// Espejo de `eliminar-orden-service.test.ts`, y lo que mide es que sea espejo DE VERDAD: mismo
-// rol, mismo todo-o-nada, motivos invertidos.
+// Espejo de `eliminar-orden-service.test.ts` en la FORMA —mismo todo-o-nada, motivos invertidos—
+// pero YA NO en la matriz de roles: desde la ficha 424 (2026-09-14) el `admin` borra y NO
+// recupera, por decision del humano. El detalle, junto a la tabla de `forbidden`.
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 const ADMIN: Actor = { usuarioId: "u-admin", rol: "admin" };
@@ -57,6 +58,18 @@ describe("RecuperarOrdenService", () => {
     expect(restore).toHaveBeenCalledWith(["o1", "o2"], expect.any(String)); // ficha 362: QUIEN recupera
   });
 
+  // ⭑ FICHA 424 (2026-09-14) — EL `admin` SE QUEDA EN ESTA TABLA, Y AHORA ES UNA DECISION.
+  //
+  // Hasta hoy estar aqui era un RESTO del estrechamiento del 2026-08-27, que le habia quitado al
+  // `admin` el borrado entero. Ese estrechamiento se REVIRTIO: desde el 2026-09-14 el `admin`
+  // elimina ordenes (`resolverAlcanceBorradoOrden` -> «todas»). La papelera, en cambio, NO se le
+  // abre, y lo decidio el humano expresamente ese mismo dia (424/D1): «que borre»; si se
+  // equivoca, se lo pide al `maestro`.
+  //
+  // O sea que la asimetria borrar-si / recuperar-no pasa de ser un efecto colateral a ser el
+  // acuerdo, y conserva ademas LA MITAD de lo que protegia la decision del 2026-08-27: deshacer
+  // un borrado sigue estando en una sola persona. Este archivo dejo de ser «espejo» del de
+  // borrado en su matriz de roles, y por eso lo dice aqui en vez de dejarlo deducir.
   it.each([
     ["admin", ADMIN],
     ["adminSatelite", ADMIN_SATELITE],

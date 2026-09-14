@@ -39,6 +39,21 @@ import { resolverAlcanceBorradoOrden } from "@/lib/services/alcance-borrado-orde
 // sabiendas: en los estados eliminables el paquete esta quieto —no esta en ningun cierre
 // ni en la ruta de ningun mensajero— y la key identifica al autor. El motivo completo esta en
 // `IApiOrdenEliminacionService`. La 358 completo esa reversion llevandola a la pantalla.
+//
+// ⭑ FICHA 424 (2026-09-14) — ESTE CANAL **NO** SE ABRE AL `admin`, Y ES UNA DECISION (D1).
+// Ese dia el humano le devolvio al `admin` la capacidad de eliminar ordenes, y ese cambio es UNA
+// linea en `resolverAlcanceBorradoOrden`: `admin` pasa de `denegado` a «todas». Como el paso 0 de
+// aqui abajo exige «propias», el `admin` cae en el 404 uniforme SIN tocar la base — o sea que el
+// canal lo rechaza por la puerta que ya existia. Se deja asi a proposito, por tres motivos:
+//   1. por aqui no entra un `admin`: el borde autentica por API key y `ApiKeyAuthService` emite
+//      SIEMPRE rol `apiKey`. Abrirlo seria legislar sobre un camino que nadie recorre;
+//   2. aceptar «todas» convertiria una credencial de integracion en capaz de borrar ordenes de
+//      CUALQUIER tienda, y el 404 uniforme existe justamente para no filtrar ni la existencia de
+//      ordenes ajenas;
+//   3. la contrapartida que sostiene la reversion es «una PERSONA con nombre y rol congelados»
+//      (ficha 362), y una API key no es una persona.
+// Fijado con un test para que quede como decision y no como efecto colateral:
+// `tests/unit/services/api-orden-eliminacion-service.test.ts`.
 
 /** Subconjunto del repositorio que consume este service (DI por interfaz, no la superficie entera). */
 export type EliminacionApiRepo = Pick<
@@ -72,8 +87,9 @@ export class ApiOrdenEliminacionService implements IApiOrdenEliminacionService {
     //    con un `actor.usuarioId` escrito a mano. Este canal EXIGE un actor acotado a una tienda:
     //    «denegado» y «todas» se rechazan los dos con el 404 uniforme del canal.
     //
-    //    Que «todas» (el `maestro`) tambien se rechace no es un descuido: por aqui no entra —el
-    //    borde autentica por API key y `ApiKeyAuthService` emite siempre rol `apiKey`—, y si
+    //    Que «todas» (el `maestro` y, desde la ficha 424, el `admin`) tambien se rechace no es un
+    //    descuido: por aqui no entra ninguno de los dos —el borde autentica por API key y
+    //    `ApiKeyAuthService` emite siempre rol `apiKey`—, y si
     //    alguien cableara este servicio en otro sitio, un actor sin frontera tendria que elegir
     //    un dueño que nadie le dio. Falla CERRADO, y con el mismo estado que todo lo demas de
     //    este endpoint, para no abrir un canal lateral que distinga casos.

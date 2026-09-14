@@ -600,13 +600,15 @@ describe("listar / eliminable (eliminar orden)", () => {
   });
 
   it.each([
-    ["admin", { usuarioId: "a1", rol: "admin" } as Actor],
     ["mensajero", { usuarioId: "msg1", rol: "mensajero" } as Actor],
     // `adminSatelite` no entra: `listar` ni siquiera le responde `ok` (no esta en KNOWN_ROLES),
     // asi que preguntarle por este campo seria medir otra cosa.
+    //
+    // ⭑ FICHA 424 (2026-09-14): el `admin` SALE de esta tabla y tiene sus dos casos propios
+    // justo debajo. Hasta hoy la encabezaba, con el motivo del estrechamiento del 2026-08-27; el
+    // humano lo revierte y desde entonces el campo SI le viaja. El `mensajero` se queda como
+    // testigo VIVO: sin el, esta afirmacion se quedaria sin nadie a quien negarle el campo.
   ])("%s: un rol que NO puede eliminar no recibe el campo", async (_nombre, actor) => {
-    // El `admin` es el que hay que vigilar: la feature nacio con maestro/admin y el humano lo
-    // estrecho el 2026-08-27. La ficha 358 abre el borrado a la TIENDA y no reabre esto.
     const { service } = conPagina([
       listItem({ id: "o1", estatusValue: "en_preparacion", tiendaId: "store1" }),
     ]);
@@ -616,6 +618,46 @@ describe("listar / eliminable (eliminar orden)", () => {
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
     expect(r.items[0].eliminable).toBeUndefined();
+  });
+
+  // ---------------------------------------------------------------------------------------
+  // FICHA 424 (2026-09-14) — EL CAMPO VIAJA TAMBIEN AL `admin`, Y SIN RECORTE DE DUEÑO.
+  //
+  // La otra mitad de la reversion, y la que evita el fallo mudo: si se abriera la AUTORIZACION y
+  // el listado siguiera sin anotarle `eliminable`, el `admin` podria borrar en teoria y la
+  // pantalla no le ofreceria nunca la accion —la barra exige `row.eliminable === true`—. Es el
+  // defecto exacto que reporto la 358 («no le aparece el checkbox»), con otro rol.
+  // ---------------------------------------------------------------------------------------
+  it("⭑ admin: sobre una orden de OTRA tienda -> eliminable true (no hay recorte de dueño)", async () => {
+    // El caso que separa «todas» de «propias». El `usuarioId` del `admin` no es la `tienda_id` de
+    // ninguna orden: si alguien le diera alcance «propias», `marcarEliminable` compararia
+    // `o.tiendaId === "a1"` y el campo saldria `false` SIEMPRE — un permiso que no permite nada
+    // (alternativa A4 del design), y encima invisible porque el servidor si autorizaria.
+    const ADMIN: Actor = { usuarioId: "a1", rol: "admin" };
+    const { service } = conPagina([
+      listItem({ id: "o1", estatusValue: "en_bodega_central", tiendaId: "una-tienda-cualquiera" }),
+    ]);
+
+    const r = await service.listar(PAGINA, ADMIN);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.items[0].eliminable).toBe(true);
+  });
+
+  it("admin: el predicado de ESTADO le aplica igual (`en_reparto` -> eliminable false)", async () => {
+    // Cambia QUIEN puede, no QUE se puede borrar. Sin este caso, el de arriba no distinguiria
+    // «se le anota el campo con el criterio de siempre» de «se le anota `true` a todo».
+    const ADMIN: Actor = { usuarioId: "a1", rol: "admin" };
+    const { service } = conPagina([
+      listItem({ id: "o1", estatusValue: "en_reparto", tiendaId: "una-tienda-cualquiera" }),
+    ]);
+
+    const r = await service.listar(PAGINA, ADMIN);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.items[0].eliminable).toBe(false);
   });
 
   // ---------------------------------------------------------------------------------------

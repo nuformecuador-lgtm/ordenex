@@ -20,8 +20,8 @@ import {
 // HTTP). Los motivos se asertan contra las CONSTANTES tipadas, no contra literales duplicados.
 //
 // Contratos que este archivo mide:
-//   - QUIEN puede: el `maestro` sobre cualquier orden y la TIENDA sobre las suyas (ficha 358,
-//     2026-09-02), y NADIE mas —el `admin` sigue fuera desde el 2026-08-27—;
+//   - QUIEN puede: el `maestro` y el `admin` sobre cualquier orden (ficha 424, 2026-09-14) y la
+//     TIENDA sobre las suyas (ficha 358, 2026-09-02), y NADIE mas;
 //   - y alcanza EXACTAMENTE a los SIETE estados vigentes —los cuatro de la ficha 319 mas los
 //     tres que anadio el pedido humano del 2026-09-04—, ni uno mas, Y SOLO si la orden no tiene
 //     ningun intento de entrega (la segunda mitad del criterio, del mismo pedido).
@@ -119,10 +119,15 @@ describe("EliminarOrdenService", () => {
     });
   });
 
-  // Pedido humano 2026-08-27: el `admin` PIERDE la accion. Este test es el que impide que
-  // alguien "restaure la paridad admin-maestro" sin leer por que se rompio a proposito.
+  // ⭑ FICHA 424 (2026-09-14) — EL `admin` SALE DE ESTA TABLA. Hasta hoy la encabezaba, con el
+  // motivo del pedido humano del 2026-08-27 («con dos roles capaces de borrar, el rastro de quien
+  // lo hizo deja de ser una sola persona»); el humano revierte aquella decision con esa
+  // consecuencia sobre la mesa y lo que sostiene la reversion es el rastro de la ficha 362. Sus
+  // casos propios estan en el bloque «el admin borra» de mas abajo.
+  //
+  // La tabla NO se queda vacia ni de adorno: `adminSatelite` y `mensajero` son testigos VIVOS de
+  // R5, y son los que impiden que abrir un rol se haya llevado por delante el corte entero.
   it.each([
-    ["admin", ADMIN],
     ["adminSatelite", ADMIN_SATELITE],
     ["mensajero", MENSAJERO],
   ])("%s recibe forbidden y NO se toca la base", async (_nombre, actor) => {
@@ -499,5 +504,105 @@ describe("EliminarOrdenService / la tienda y lo suyo (ficha 358)", () => {
       ownerId: null,
       actorUsuarioId: expect.any(String), // ficha 362 (R3): QUIEN borra, congelado en la fila
     });
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// FICHA 424 (2026-09-14) — EL `admin` BORRA, Y EXACTAMENTE COMO EL `maestro`.
+//
+// Pedido humano (Carlos Restrepo): se revierte el estrechamiento del 2026-08-27, que habia
+// sacado al `admin` de esta capacidad para que «el rastro de quien borro fuera UNA persona». Lo
+// que sostiene la reversion es que hoy ese rastro EXISTE y dice mas que un nombre: por cada
+// orden efectivamente borrada queda una fila con el nombre y el rol CONGELADOS de quien la
+// borro, agrupada por acto (ficha 362). Medido con el rol nuevo contra Postgres en
+// `tests/integration/db/orden-eliminada-actor-admin.test.ts`.
+//
+// LO QUE ESTE BLOQUE MIDE Y POR QUE ASI. No basta con «el admin recibe ok»: lo que hace que su
+// borrado sea el del maestro y no un permiso a medias es el `ownerId: null` que baja al
+// repositorio —si viajara su `usuarioId`, el `where` no encontraria ninguna orden y el borrado
+// seria siempre «cero eliminadas» (alternativa A4 del design)—. Por eso se afirma el ARGUMENTO,
+// no solo el `status`.
+//
+// ⚠️ Y lo que este archivo NO puede demostrar sigue siendo lo mismo que ya dice la cabecera: con
+// dobles, `softDelete` es una funcion de mentira. Que el `where` APLIQUE ese `null` se mide
+// contra Postgres.
+// ---------------------------------------------------------------------------------------
+describe("EliminarOrdenService / el admin borra (ficha 424)", () => {
+  it("⭑ (a) borra una orden eliminable de CUALQUIER tienda, con `ownerId: null`", async () => {
+    const { service, softDelete } = escenario([
+      ordenRow({ id: "a", tiendaId: "store-1" }),
+      ordenRow({ id: "b", tiendaId: "store-9" }),
+    ]);
+
+    const r = await service.eliminar({ ordenIds: ["a", "b"] }, ADMIN);
+
+    expect(r).toEqual({ status: "ok", eliminadas: 2 });
+    // ⭑ EL ASERTO DE LA FICHA: `ownerId: null` = SIN frontera de tienda, igual que el maestro. Si
+    // alguien le diera alcance «propias», esto caeria con `ownerId: "u-admin"` — y en produccion
+    // el borrado del admin no alcanzaria jamas ninguna orden.
+    expect(softDelete).toHaveBeenCalledWith({
+      ids: ["a", "b"],
+      ownerId: null,
+      actorUsuarioId: "u-admin", // ficha 362 (R3): QUIEN borra, congelado en la fila
+    });
+  });
+
+  it("(b) un lote con UNA orden no eliminable sale `conflict` y NO borra ninguna", async () => {
+    // El todo-o-nada por lote es el MISMO que el del maestro: la ficha 424 cambia QUIEN puede, no
+    // QUE se puede borrar ni como se resuelve un lote mixto.
+    const { service, softDelete } = escenario([
+      ordenRow({ id: "o1", estatusValue: "en_bodega_central" }),
+      ordenRow({ id: "o2", estatusValue: "en_reparto" }),
+    ]);
+
+    const r = await service.eliminar({ ordenIds: ["o1", "o2"] }, ADMIN);
+
+    expect(r).toEqual({
+      status: "conflict",
+      detalle: [{ ordenId: "o2", motivo: MSG_ORDEN_NO_ELIMINABLE }],
+    });
+    expect(softDelete).not.toHaveBeenCalled();
+  });
+
+  it("(c) el motivo POR ORDEN se distingue igual que para el maestro", async () => {
+    // Las cuatro salidas del detalle, en un solo lote: inexistente, ya borrada, estado que no
+    // admite borrado e intentos de entrega. Si el `admin` hubiera entrado por un camino propio,
+    // aqui se veria —le faltaria alguno de los motivos, o los colapsaria en uno—.
+    const { service, softDelete } = escenario(
+      [
+        ordenRow({ id: "viva" }),
+        ordenRow({ id: "borrada", deletedAt: new Date("2026-08-01T00:00:00Z") }),
+        ordenRow({ id: "en-gestion", estatusValue: "en_reparto" }),
+        ordenRow({ id: "con-intentos", estatusValue: "en_bodega_central" }),
+      ],
+      { "con-intentos": 1 },
+    );
+
+    const ids = ["viva", "fantasma", "borrada", "en-gestion", "con-intentos"];
+    const comoAdmin = await service.eliminar({ ordenIds: ids }, ADMIN);
+
+    expect(comoAdmin).toEqual({
+      status: "conflict",
+      detalle: [
+        { ordenId: "fantasma", motivo: MSG_ORDEN_NO_EXISTE },
+        { ordenId: "borrada", motivo: MSG_ORDEN_YA_BORRADA },
+        { ordenId: "en-gestion", motivo: MSG_ORDEN_NO_ELIMINABLE },
+        { ordenId: "con-intentos", motivo: MSG_ORDEN_CON_INTENTOS },
+      ],
+    });
+    expect(softDelete).not.toHaveBeenCalled();
+
+    // Y «igual que para el maestro» se afirma COMPARANDO las dos respuestas, no repitiendo la
+    // lista a mano: si un dia divergieran, este es el aserto que lo dice.
+    const otro = escenario(
+      [
+        ordenRow({ id: "viva" }),
+        ordenRow({ id: "borrada", deletedAt: new Date("2026-08-01T00:00:00Z") }),
+        ordenRow({ id: "en-gestion", estatusValue: "en_reparto" }),
+        ordenRow({ id: "con-intentos", estatusValue: "en_bodega_central" }),
+      ],
+      { "con-intentos": 1 },
+    );
+    expect(await otro.service.eliminar({ ordenIds: ids }, MAESTRO)).toEqual(comoAdmin);
   });
 });

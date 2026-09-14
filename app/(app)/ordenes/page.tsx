@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+// FICHA 424 (R20): la MISMA función que autoriza el borrado en el servidor decide si la pantalla
+// lo ofrece. Es pura (sin Prisma, sin `next/`, sin entorno), como `esAccesoTotal`.
+import { resolverAlcanceBorradoOrden } from "@/lib/services/alcance-borrado-orden";
 import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import { fechaCalendarioCR, mananaCalendarioCR } from "@/lib/utils/fecha-cr";
@@ -104,11 +107,26 @@ export default async function OrdenesPage() {
   // la tienda un interruptor y un botón que el servidor rechaza, que es justo lo que el campo
   // `eliminable` del DTO existe para evitar.
   //
-  // `admin` NO entra en ninguna de las dos: ese estrechamiento del 2026-08-27 se conserva.
-  // Las Server Actions y el propio listado revalidan el rol server-side; esto decide qué se
-  // OFRECE, nunca qué se permite.
-  const puedeEliminar =
-    rol === RolValue.maestro || rol === RolValue.adminTienda;
+  // ⭑ FICHA 424 (2026-09-14, pedido humano): el `admin` SÍ entra en la primera —vuelve a poder
+  // ELIMINAR, revirtiendo el estrechamiento del 2026-08-27— y NO entra en la segunda: no recupera
+  // ni ve las eliminadas (D1: «que borre»; la papelera no se le abre, y si se equivoca se lo pide
+  // al `maestro`). Las Server Actions y el propio listado revalidan el rol server-side; esto
+  // decide qué se OFRECE, nunca qué se permite.
+  //
+  // ⚠️ Y AQUÍ NO HAY UNA SEGUNDA LISTA DE ROLES (R20, confirmado por el humano). `puedeEliminar`
+  // NO dice `|| rol === RolValue.admin`: se DERIVA de `resolverAlcanceBorradoOrden`, el MISMO
+  // punto que autoriza el borrado en el servidor (`EliminarOrdenService`) y que decide si el
+  // listado anota `eliminable` en cada fila (`OrdenService.marcarEliminable`). Dos listas que
+  // contestan la misma pregunta es EXACTAMENTE el defecto que reportó la ficha 358 («Nuform
+  // quiere eliminar NA-495 y no le aparece el checkbox»): una se amplía y la otra se queda, y el
+  // fallo se ve como un botón que no aparece, no como un error. La función es pura —sin Prisma,
+  // sin `next/`, sin entorno—, así que importarla desde un Server Component no arrastra nada.
+  //
+  // `puedeVerEliminadas` se queda como literal A PROPÓSITO: es OTRA pregunta (R18) y tiene que
+  // poder divergir de la primera, que es justo lo que la 358 partió en dos props.
+  const puedeEliminar = actor
+    ? resolverAlcanceBorradoOrden(actor).alcance !== "denegado"
+    : false;
   const puedeVerEliminadas = rol === RolValue.maestro;
 
   // Feature 144/TB2.5 (R47, R64): el catálogo de los filtros (zonas, cuentas tienda,
