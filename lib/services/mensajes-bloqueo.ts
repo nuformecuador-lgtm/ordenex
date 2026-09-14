@@ -61,6 +61,24 @@ export const MSG_MENSAJERO_BLOQUEADO_POR_CIERRES =
   "el mensajero tiene cierres sin resolver: no puede recibir trabajo nuevo hasta que se aprueben";
 
 /**
+ * FEATURE 157 (regla de DEDICACION) — motivo TIPADO y COMPARTIDO del rechazo cuando el mensajero
+ * destino tiene una RECOLECCION EN TIENDA pendiente. Recolectar y repartir son viajes
+ * incompatibles: quien va a una tienda a recoger un lote sale con el vehiculo vacio.
+ *
+ * ⚠️ VIVIA COMO `const` PRIVADA DE `GuiaAsignacionService.ts` HASTA LA FICHA 427, y se mueve aqui
+ * porque desde entonces lo emiten DOS servicios y es la MISMA regla:
+ *
+ *   · `GuiaAsignacionService.asignarDesdeBodega` — reparto desde la bodega central (R13 de la 157)
+ *   · `TraspasoMensajeroService.traspasar`       — traspaso en calle (427/R13)
+ *
+ * Dos literales gemelos es como se desincronizan dos pantallas que cuentan la misma regla, y el
+ * mapeo de la UI (`guia-decision-error-messages.ts`) lo traduce por su TEXTO. Se mueve la
+ * declaracion, no se copia el texto: el literal sigue existiendo UNA sola vez en el arbol.
+ */
+export const MSG_MENSAJERO_CON_RECOLECCION =
+  "el mensajero tiene una recoleccion en tienda pendiente: debe cerrarla antes de recibir reparto";
+
+/**
  * FEATURE 276 (R6/R20/R38, 2026-08-24) — LOS DOS MOTIVOS DEL TOPE DE INTENTOS, en su punto UNICO.
  *
  * Son DOS textos y no uno porque son dos preguntas distintas del usuario: al mensajero (y a la

@@ -279,6 +279,13 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
       // por DÍA ANUNCIADO. Migracion `20260914120000_notificacion_evento_reparto_manana`,
       // POSTERIOR a la de la 412 y tambien a las DOS de la 410.
       "reparto_manana",
+      // FICHA 427 (design §6.5): los DOS avisos del TRASPASO de ordenes entre mensajeros, al que
+      // RECIBE y al que CEDE. Los emite `TraspasoMensajeroService` FUERA de la transaccion del
+      // traspaso y best-effort. Migracion `20260917120100_notificacion_evento_traspaso`, POSTERIOR
+      // a la de la 413 y tambien a las DOS de la 410 (de ahi que su `down.sql` retipe las TRES
+      // columnas).
+      "traspaso_ordenes_recibido",
+      "traspaso_ordenes_cedido",
     ]);
     expect(await valoresDe("notificacion_entidad_tipo")).toEqual([
       ...ENTIDADES_PREVIAS,
@@ -300,6 +307,10 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
       // FICHA 413 (design §7): la entidad de ese aviso es EL DIA ANUNCIADO (`'YYYY-MM-DD'`), no
       // ninguna orden: con una entidad fija, el aviso de la segunda noche no saldria NUNCA.
       "reparto_manana_dia",
+      // FICHA 427 (design §6.5): la entidad de los dos avisos del traspaso es EL ACTO
+      // (`orden_traspaso_mensajero.lote_id`), no la orden ni el mensajero: con el mensajero, el
+      // SEGUNDO traspaso del dia a la misma persona no avisaria NUNCA.
+      "orden_traspaso_lote",
     ]);
   });
 

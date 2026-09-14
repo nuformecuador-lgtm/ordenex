@@ -42,6 +42,8 @@ import {
   emitirPostulacionPendiente,
   emitirPostulacionRecursoPendiente,
   emitirRepartoManana,
+  emitirTraspasoCedido,
+  emitirTraspasoRecibido,
   emitirWebhookSuscripcionPausada,
   type CargaMasivaContexto,
   type CierrePorAprobarContexto,
@@ -56,6 +58,7 @@ import {
   type PostulacionContexto,
   type PostulacionRecursoContexto,
   type RepartoMananaContexto,
+  type TraspasoOrdenesContexto,
   type WebhookSuscripcionPausadaContexto,
 } from "@/lib/notificaciones/emitir";
 
@@ -129,6 +132,21 @@ export type DevolucionesRepresadasNotificador = (
 export type RepartoMananaNotificador = (ctx: RepartoMananaContexto) => Promise<void>;
 
 /**
+ * FICHA 427 (R38/R41/R43). Firma del notificador de «recibiste N ordenes de otro mensajero». Lo usa
+ * `TraspasoMensajeroService`, FUERA de la transaccion del traspaso.
+ */
+export type TraspasoRecibidoNotificador = (ctx: TraspasoOrdenesContexto) => Promise<void>;
+/**
+ * FICHA 427 (R39/R41). Firma del notificador de «N ordenes tuyas pasaron a otro mensajero». Mismo
+ * productor, mismo acto, DOS destinatarios distintos.
+ *
+ * SON DOS TIPOS Y NO UNO aunque el contexto sea el mismo, y es deliberado: el composition root tiene
+ * que pasar LOS DOS, y un solo tipo dejaria que alguien cableara el mismo notificador dos veces sin
+ * que nada se pusiera rojo -- el aviso al origen quedaria emitido con el evento del destino.
+ */
+export type TraspasoCedidoNotificador = (ctx: TraspasoOrdenesContexto) => Promise<void>;
+
+/**
  * DEFAULT de los tres services: no hace nada. Un service construido sin cablear su notificador
  * —tipicamente un doble de test— no toca la base ni emite nada, sin necesidad de husmear el
  * entorno. El composition root es el responsable de inyectar el notificador real.
@@ -146,7 +164,9 @@ export const notificadorNoOp: PostulacionNotificador &
   GeocodificacionCaidaNotificador &
   NovedadesSinGestionarNotificador &
   DevolucionesRepresadasNotificador &
-  RepartoMananaNotificador = async () => {};
+  RepartoMananaNotificador &
+  TraspasoRecibidoNotificador &
+  TraspasoCedidoNotificador = async () => {};
 
 /**
  * Construye el repositorio real. Aislado en una funcion para que los tests del camino REAL
@@ -537,3 +557,52 @@ export const notificarDevolucionesRepresadasReal: DevolucionesRepresadasNotifica
 // `new NotificacionRepository(...)` por su cuenta: eso pondria roja la guardia de 410/R51.
 export const notificarRepartoMananaReal: RepartoMananaNotificador = async (ctx) =>
   notificarRepartoMananaCon(repoReal())(ctx);
+
+/**
+ * FICHA 427 (R38/R41) — emite «recibiste N ordenes de otro mensajero» contra `repo`, absorbiendo su
+ * fallo.
+ *
+ * BEST-EFFORT Y FUERA DE LA TRANSACCION, y aqui el motivo NO es comodidad (design §6.5): dentro de
+ * una transaccion de Postgres un error de sentencia aborta la transaccion ENTERA, asi que un aviso
+ * caido REVERTIRIA un traspaso legitimo y dejaria el paquete en manos de quien ya no puede
+ * entregarlo -- el mensajero enfermo del caso que motiva la ficha. La direccion segura del error es
+ * la contraria: EL TRASPASO MANDA, EL AVISO ES CORTESIA (R41).
+ *
+ * Y no es un `catch` vacio (`docs/conventions.md`): `emitirBestEffort` deja el fallo REGISTRADO con
+ * la operacion y su causa.
+ *
+ * R40: ni el nombre de la operacion ni el contexto llevan PII -- el contexto tiene un uuid de lote,
+ * un id de usuario, una cifra y el nombre del OTRO MENSAJERO. Ni el motivo escrito por quien
+ * traspaso, ni guia, ni direccion, ni telefono, ni destinatario, ni monto.
+ */
+export function notificarTraspasoRecibidoCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): TraspasoRecibidoNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "traspaso_ordenes_recibido",
+      () => emitirTraspasoRecibido(repo, ctx),
+      logger,
+    );
+  };
+}
+
+/** FICHA 427 (R39/R41): emite «N ordenes tuyas pasaron a otro mensajero», absorbiendo su fallo. */
+export function notificarTraspasoCedidoCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): TraspasoCedidoNotificador {
+  return async (ctx) => {
+    await emitirBestEffort("traspaso_ordenes_cedido", () => emitirTraspasoCedido(repo, ctx), logger);
+  };
+}
+
+// FICHA 427 (T12/T18): resuelven su repositorio por `repoReal()` como sus catorce hermanos, asi que
+// heredan el cableado UNICO del canal de push (410 §6) sin hacer nada especial. NO construyen
+// `new NotificacionRepository(...)` por su cuenta: eso pondria roja la guardia de 410/R51.
+export const notificarTraspasoRecibidoReal: TraspasoRecibidoNotificador = async (ctx) =>
+  notificarTraspasoRecibidoCon(repoReal())(ctx);
+
+export const notificarTraspasoCedidoReal: TraspasoCedidoNotificador = async (ctx) =>
+  notificarTraspasoCedidoCon(repoReal())(ctx);

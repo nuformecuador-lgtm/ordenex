@@ -42,9 +42,9 @@ export type PerfilPush =
   | { readonly push: "si"; readonly roles: readonly RolValue[] };
 
 /**
- * EL CATALOGO, evento por evento y con su porque. QUINCE entradas: las once de siempre, las dos
- * que anadio la 409, `cierre_dia_rechazado` de la 412 y `reparto_manana` de la 413. DIEZ son
- * elegibles.
+ * EL CATALOGO, evento por evento y con su porque. DIECISIETE entradas: las once de siempre, las
+ * dos que anadio la 409, `cierre_dia_rechazado` de la 412, `reparto_manana` de la 413 y los DOS del
+ * traspaso de la 427. ONCE son elegibles.
  */
 export const PUSH_ELEGIBLE = {
   // -------------------------------------------------------------------------------------------
@@ -122,6 +122,20 @@ export const PUSH_ELEGIBLE = {
   // el unico sitio donde el mensajero va a mirar antes de salir. LA APP MANDA, EL PUSH ES EL AVISO.
   reparto_manana: { push: "si", roles: ["mensajero"] },
 
+  // MENSAJERO (FICHA 427, R43). ACABA DE RECIBIR ordenes de otro mensajero. Tiene las dos cosas que
+  // el criterio pide:
+  //   · PLAZO: las ordenes son DE HOY y ya estan en la calle. El aviso caduca esta misma jornada.
+  //   · CONSECUENCIA REAL Y PERSONAL: si no se entera, no sale a repartirlas y el paquete no llega.
+  //     El caso medido (2026-09-14) son 31 ordenes que aparecen en su telefono sin que nadie se lo
+  //     diga; el humano lo dijo con esas palabras al pedir la ficha.
+  // Y SIEMPRE AGREGADA, por definicion: UNA sola notificacion por ACTO con la cifra dentro, jamas un
+  // push por orden (R38) -- con 31 ordenes, uno por orden serian 31 interrupciones.
+  //
+  // ⚠️ NO LLEVA NINGUN ROL MAS, y no es un olvido: este evento NO CREA FILA DE ROL. Su unico
+  // destinatario es el mensajero, como fila dirigida a USUARIO -- y por eso `rolLector` (el rol de
+  // QUIEN LEE) es `mensajero` y no `destinatario_rol`, que aqui es NULL.
+  traspaso_ordenes_recibido: { push: "si", roles: ["mensajero"] },
+
   // ⚠️⚠️ MAESTRO Y SOLO EL, Y ESTO NO ES UNA OMISION (D4, design §3.1).
   //
   // El aviso de la 401 crea DOS filas con el mismo texto, una para `maestro` y otra para `admin`.
@@ -165,6 +179,26 @@ export const PUSH_ELEGIBLE = {
   postulacion_recurso_pendiente: {
     push: "no",
     porQue: "Lo mismo: alguien ofrecio un vehiculo o una bodega. No caduca hoy.",
+  },
+  // ⚠️⚠️ FICHA 427 (R43) — EL HERMANO DEL DE ARRIBA, Y AQUI NO SE PUSHEA. A primera vista parece
+  // que falta media linea de codigo, asi que queda escrito por que NO falta.
+  //
+  // El aviso al mensajero que CEDE sus ordenes no le pide NINGUNA ACCION y NO VENCE NADA: deja de
+  // tener trabajo, no le aparece trabajo. Y el caso que motiva la ficha es alguien que NO PUEDE
+  // SEGUIR -- se enfermo a media jornada. Interrumpir con una vibracion a quien probablemente esta
+  // en cama para decirle que ya no tiene que hacer algo es gastar el canal en lo que no lo necesita,
+  // contra la regla que gobierna todo este catalogo: SE INTERRUMPE A QUIEN PUEDE RESOLVERLO.
+  //
+  // EN LA CAMPANA SI LO RECIBE, y eso no se toca: su lista encogio y el aviso es la explicacion.
+  // Lo que no se hace es sacarle el telefono del bolsillo por ello.
+  //
+  // Anadir `push: "si"` aqui pone ROJO un test que existe para esto. No lo «arregles».
+  traspaso_ordenes_cedido: {
+    push: "no",
+    porQue:
+      "NO PIDE NINGUNA ACCION Y NO VENCE NADA: al mensajero le QUITAN trabajo, no se lo dan. " +
+      "Y el caso normal es alguien que no puede seguir (enfermo, averia). En la campana si, para " +
+      "que su lista encogida tenga explicacion.",
   },
   gasto_fijo_cobro_pendiente: {
     push: "no",

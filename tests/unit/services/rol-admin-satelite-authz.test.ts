@@ -193,6 +193,9 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     deshacerAsignacionLote: vi.fn(async () => 0),
     // Feature 262: writer de la correccion del dia de reparto, exigido por IOrdenRepository.
     corregirDiaRepartoLote: vi.fn(async () => []),
+    // FICHA 427 (T8): la transaccion del traspaso entre mensajeros. Ningun servicio de este
+    // archivo la invoca; el doble existe para satisfacer el contrato completo del repo.
+    traspasarMensajeroLote: vi.fn(async () => ({ loteId: "lote-1", movidas: 0, conversaciones: 0 })),
     ...overrides,
   };
 }

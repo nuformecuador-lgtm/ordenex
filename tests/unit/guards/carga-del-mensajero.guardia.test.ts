@@ -139,6 +139,8 @@ const RUTA_PORTAL = "lib/services/MisAsignacionesService.ts";
 const RUTA_KPI_REPO = "lib/repositories/GestionOrdenRepository.ts";
 // Feature 262 (B10): la lista de estados sobre los que se ofrece corregir el día de reparto.
 const RUTA_CORRECCION_DIA = "lib/services/CorreccionDiaRepartoService.ts";
+// FICHA 427 (T17): la lista de estados que se pueden TRASPASAR a otro mensajero.
+const RUTA_TRASPASO = "lib/services/TraspasoMensajeroService.ts";
 
 interface MiembroDeLaFamilia {
   /** Cómo se llama en la conversación, no cómo se llama la constante. */
@@ -254,17 +256,36 @@ const FAMILIA: readonly MiembroDeLaFamilia[] = [
       "la resuelva mientras esté reservada, y el paquete SIGUE con el mensajero— se queda sin " +
       "forma de rescatarse, que es precisamente el agujero que esta ficha viene a cerrar",
   },
+  {
+    nombre: "los estados que se pueden traspasar a otro mensajero (`ESTADOS_TRASPASABLES`)",
+    ruta: RUTA_TRASPASO,
+    pregunta: "que ocupa al mensajero",
+    estatus: () => listaConstante(leer(RUTA_TRASPASO), RUTA_TRASPASO, "ESTADOS_TRASPASABLES"),
+    incluyeAyuda: true,
+    razon:
+      "427/D4 + 235/R1: es la lista que decide QUE SE LE PUEDE QUITAR DE LA MANO a un mensajero " +
+      "que ya no puede seguir. `ayuda_tienda` significa literalmente «pidio ayuda y EL PAQUETE " +
+      "SIGUE CON EL, EN LA CALLE»: es el MISMO hecho fisico que `en_reparto` y el mismo que motiva " +
+      "la ficha. Con `ayuda_tienda` fuera, el mensajero enfermo se queda con esos paquetes encima " +
+      "y sin ninguna via dentro del producto para pasarlos — que es justo lo que la ficha 427 " +
+      "existe para arreglar",
+  },
 ];
 
 describe("0 — el censo de esta guardia no está vacío ni miente", () => {
-  it("la familia tiene los OCHO miembros conocidos, y cada uno responde una de las TRES preguntas", () => {
+  it("la familia tiene los NUEVE miembros conocidos, y cada uno responde una de las TRES preguntas", () => {
     // Censo CERRADO. Si aparece una lista nueva de esta familia, hay que declararla aquí con su
     // decisión: eso es justo lo que no pasó con las dos que se rompieron.
     //
     // ⚠️ ERA SIETE hasta el 2026-08-22. La feature 262 añade
     // `ESTADOS_CON_DIA_DE_REPARTO_VIVO` con su TERCERA pregunta declarada: la lista pertenece a
     // esta familia pero no dice ni quién está ocupado ni a quién barre el corte.
-    expect(FAMILIA).toHaveLength(8);
+    //
+    // ⚠️ Y ERA OCHO hasta el 2026-09-14. La ficha 427 añade `ESTADOS_TRASPASABLES`, que responde
+    // «qué ocupa al mensajero» —es la lista de lo que se le puede QUITAR DE LA MANO a alguien que
+    // ya no puede seguir— y por eso entra ahí y no como una cuarta pregunta. La historia previa NO
+    // se tacha: cada número tiene su fecha y su motivo.
+    expect(FAMILIA).toHaveLength(9);
     for (const m of FAMILIA) {
       expect(
         ["que ocupa al mensajero", "a quien barre el corte", "donde vive el dia de reparto"],
@@ -346,7 +367,7 @@ describe("0 — el censo de esta guardia no está vacío ni miente", () => {
 // 235 — la decisión sobre `ayuda_tienda`, declarada miembro a miembro
 // =============================================================================================
 
-describe("235 — el estatus de ayuda OCUPA al mensajero, y las siete listas lo dicen", () => {
+describe("235 — el estatus de ayuda OCUPA al mensajero, y las NUEVE listas lo dicen", () => {
   it.each(FAMILIA.map((m) => [m.nombre, m] as const))(
     "%s incluye `ayuda_tienda`",
     (_nombre, miembro) => {

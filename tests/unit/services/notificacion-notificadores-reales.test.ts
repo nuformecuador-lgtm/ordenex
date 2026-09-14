@@ -538,6 +538,12 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     // que una suite reparta avisos a todos los mensajeros de la base local, que en este repo es
     // COMPARTIDA entre worktrees.
     "RepartoMananaAvisoService.ts", // ficha 413 / §6
+    // FICHA 427 (T15/T18): el TRASPASO de ordenes entre mensajeros pasa a tener **DOS**
+    // notificadores —«recibiste N ordenes de otro mensajero» y «N ordenes tuyas pasaron a otro»—,
+    // y es el primero del censo que avisa A DOS PERSONAS DISTINTAS por el MISMO acto. Sus dos
+    // defaults no-op son lo que impide que las suites del servicio escriban avisos contra la base
+    // local, que en este repo es COMPARTIDA entre worktrees.
+    "TraspasoMensajeroService.ts", // ficha 427 / §6.5
   ] as const;
 
   it("lib/actions/postulacion-recurso.ts inyecta el notificador real", () => {
@@ -549,6 +555,25 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
   it("lib/actions/corregir-dia-reparto.ts inyecta el notificador real", () => {
     expect(leer("lib", "actions", "corregir-dia-reparto.ts")).toContain(
       "notificarDiaRepartoCorregidoReal",
+    );
+  });
+
+  it("lib/actions/traspasar-mensajero.ts inyecta LOS DOS notificadores reales que cablea", () => {
+    // FICHA 427 (T18): el traspaso avisa A LOS DOS mensajeros, asi que su composition root tiene
+    // que pasar DOS notificadores al mismo `new TraspasoMensajeroService(...)`. Con uno solo, el
+    // otro cae en su default NO-OP y ese aviso es mudo en produccion con toda la suite en verde —
+    // exactamente el fallo que este bloque de guardias existe para nombrar (2 de 7 muertos el
+    // 2026-08-23).
+    //
+    // ⚠️ Se afirma sobre el USO EFECTIVO (sin imports ni comentarios), no sobre el fichero entero:
+    // con un `toContain` a secas, borrar la linea del cableado deja el test EN VERDE porque el
+    // import de arriba sigue conteniendo el nombre.
+    const uso = fuenteSinImportsNiComentarios(leer("lib", "actions", "traspasar-mensajero.ts"));
+    expect(uso).toContain("notificarTraspasoRecibidoReal");
+    expect(uso).toContain("notificarTraspasoCedidoReal");
+    // Y los DOS DENTRO de la construccion del service, no sueltos en cualquier sitio del fichero.
+    expect(uso).toMatch(
+      /new TraspasoMensajeroService\([\s\S]*notificarTraspasoRecibidoReal[\s\S]*notificarTraspasoCedidoReal[\s\S]*\)/,
     );
   });
 

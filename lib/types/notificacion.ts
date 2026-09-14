@@ -112,7 +112,28 @@ export type NotificacionEvento =
   // filtro es de EMISIÓN, no de lectura (R43): la cifra viva NO consulta cierres. No es regla
   // nueva — el bloqueo alcanza «recibir trabajo nuevo» desde el 2026-08-23 (271) —, y dos avisos
   // que apuntan a acciones opuestas es peor que uno menos.
-  | "reparto_manana";
+  | "reparto_manana"
+  // ⚠️ FICHA 427 (D3, R38/R39/R43) — LOS **DOS** AVISOS DEL TRASPASO DE ORDENES ENTRE MENSAJEROS.
+  //
+  // Decision del humano del 2026-09-14, con el caso encima: un mensajero se enfermo a media jornada
+  // y sus 31 ordenes las tuvo que hacer otro. Se avisa A LOS DOS, y con sus palabras: el destino se
+  // encuentra 31 ordenes nuevas en el telefono sin que nadie se lo diga.
+  //
+  // `traspaso_ordenes_recibido`: al mensajero DESTINO. Aviso AGREGADO: UNA sola notificacion por
+  // ACTO con el numero dentro del texto y el nombre del otro mensajero en el anexo, jamas una por
+  // orden (R38) -- con 31 ordenes serian 31 campanadas. PUSH: si, perfil `mensajero` (tiene plazo y
+  // consecuencia personal).
+  | "traspaso_ordenes_recibido"
+  // `traspaso_ordenes_cedido`: al mensajero de ORIGEN. DOS eventos y no uno porque piden acciones
+  // OPUESTAS (precedente 271): al destino le dicen «sal a repartir esto»; al origen, «esto ya no es
+  // tuyo». El evento es lo que la campana usa para agrupar y deduplicar, asi que meter la diferencia
+  // solo en la descripcion la vuelve invisible. PUSH: NO (R43) -- no le pide ninguna accion y no
+  // vence nada; en la campana si, para que su lista encogida tenga explicacion.
+  //
+  // ⚠️ LOS DOS llevan como entidad el `lote_id` del acto (`orden_traspaso_lote`), NUNCA la orden ni
+  // el mensajero: con cualquiera de esos dos, el SEGUNDO traspaso del dia a la misma persona no
+  // avisaria NUNCA. Ver el valor de entidad, mas abajo.
+  | "traspaso_ordenes_cedido";
 
 /** Entidad de origen referenciada (referencia polimorfica, sin FK — design §1.2). */
 export type NotificacionEntidadTipo =
@@ -268,7 +289,32 @@ export type NotificacionEntidadTipo =
   //
   // Y NO es `entidad_id = NULL`: con `null`, `emitirFilas` se salta su guardia previa y el índice
   // único es PARCIAL, así que saldría un aviso por cada ejecución del cron.
-  | "reparto_manana_dia";
+  | "reparto_manana_dia"
+  // ⚠️ FICHA 427 (design §6.5) — OCTAVO `entidad_tipo` que NO apunta a una fila de tabla... salvo
+  // que aqui SI hay tabla y aun asi la entidad no es una FILA suya, sino **EL ACTO**:
+  //
+  //     entidadId = `${orden_traspaso_mensajero.lote_id}`   // uuid POR ACTO, no por fila
+  //
+  // POR QUE EL LOTE Y NO LA ORDEN NI EL MENSAJERO. `notificacion_dedupe_key` es UNIQUE sobre
+  // `(evento, entidad_id, destinatario_rol, destinatario_usuario_id)` con `NULLS NOT DISTINCT` y
+  // `WHERE entidad_id IS NOT NULL`, el indice NO mira el estado de lectura, y
+  // `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `null`.
+  //   · Con el MENSAJERO como entidad, la clave admitiria UNA sola fila por (evento, mensajero,
+  //     mensajero) PARA SIEMPRE: el SEGUNDO traspaso del dia a la misma persona —el caso NORMAL
+  //     cuando alguien se enferma y su carga se reparte en dos tandas— no avisaria JAMAS.
+  //   · Con la ORDEN, ademas, harian falta N filas por acto, contra R38 (un aviso por acto).
+  // Es el fallo que ya pagaron la 262 (con `orden`), la 403 (con la suscripcion), la 409 y la 412.
+  //
+  // Con el lote, las dos propiedades son ESTRUCTURALES y no de disciplina:
+  //   · actos distintos ⇒ `lote_id` distintos ⇒ entidades distintas ⇒ DOS avisos (R42);
+  //   · el mismo acto emitido dos veces ⇒ misma entidad ⇒ UNO solo — y lo decide el indice unico,
+  //     no un `if` previo que una carrera pueda burlar.
+  //
+  // ⚠️ Y NO LLEVA PREFIJO DE MENSAJERO: el destinatario es un USUARIO y `destinatario_usuario_id`
+  // **ES** una columna de esa clave, asi que los DOS avisos del mismo acto —al origen y al destino,
+  // con eventos distintos ademas— no se pisan. La regla no es «prefija siempre», es «comprueba si
+  // el alcance esta en la clave» (413).
+  | "orden_traspaso_lote";
 
 /**
  * DTO que viaja al cliente (design §3.1). `read` NO es una columna de `notificacion`:
