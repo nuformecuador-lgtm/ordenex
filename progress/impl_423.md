@@ -513,3 +513,28 @@ La pantalla está completa y sus siete requisitos (R1, R9–R12, R14, R20) tiene
 exactamente los casos que las anclan. La clave interna de orden no aparece en un solo archivo de
 `app/` —la guardia lo confirma con la pantalla nueva encima—, y el único requisito que queda sin
 cubrir de esta tanda es T3.3, que es mirar, no programar.
+
+## T3.3 — VERIFICACIÓN VISUAL EN LA APP REAL (leader, 2026-09-14)
+
+Ejecutada con Playwright contra `pnpm dev` y la base local, entrando como `admin.qa@ordenex.test`.
+Era la única tarea que quedaba pendiente del frontend.
+
+**Lo que se vio, citado del DOM real y no de un test:**
+
+| Comprobación | Resultado |
+| --- | --- |
+| El control de campo existe y es visible | `Fecha de creación` \| `Número de remisión`, en el grupo `Ordenar por` |
+| Las etiquetas de dirección cambian con el campo | con remisión: **`Más altas` \| `Más bajas`** (no vocabulario temporal) |
+| El orden natural funciona | `REM-T302-1`, `REM-1001`, `REM-0001`, `QA-R-0021`, `QA-R-0020`… series agrupadas |
+| Aviso de series (R20) con varias series | aparece: «Las remisiones se agrupan por serie…» |
+| Aviso de series con el orden por FECHA | NO aparece (caption vacío) |
+
+Cuatro series distintas convivían en la página visible (`REM-T`, `REM-`, `QA-R-` y la numérica),
+que es justo el caso que R20 existe para explicar.
+
+⚠️ **UNA TRAMPA DE MEDICIÓN, anotada porque costó una vuelta y volverá a costarla:** la primera
+sonda leyó el texto de `main` tras **eliminar las tablas** del clon, y concluyó que el aviso no
+aparecía. Es falso: **las dos notas viven en el `<caption>` de la tabla** (así lo dejó la 356), así
+que quitar la tabla se lleva el aviso por delante. Quien vuelva a medir esto: lee
+`table caption`, no el texto de la barra.
+
