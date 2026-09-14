@@ -2741,7 +2741,7 @@ enum NotificacionEvento {
   // Ficha 427 (D3, R38/R43) - al mensajero DESTINO le avisan de que ha recibido ordenes de otro
   // mensajero. Aviso AGREGADO: UNA sola notificacion por ACTO de traspaso, con el numero dentro
   // del texto y el nombre del otro mensajero en el anexo; jamas una por orden (con 31 ordenes
-  // serian 31 campanadas y 31 interrupciones de push). Lo emite `TraspasoMensajeroService`,
+  // serian 31 avisos sueltos y 31 interrupciones de push). Lo emite `TraspasoMensajeroService`,
   // FUERA de la transaccion y best-effort (R41): un aviso caido no puede revertir un traspaso
   // legitimo y dejar el paquete con quien ya no puede entregarlo.
   //
@@ -2752,13 +2752,13 @@ enum NotificacionEvento {
   traspaso_ordenes_recibido
   // Ficha 427 (D3, R39/R43) - al mensajero de ORIGEN le avisan de que sus ordenes pasaron a otro.
   // DOS eventos y no uno porque piden acciones OPUESTAS (precedente 271): al destino le dicen
-  // «sal a repartir esto»; al origen, «esto ya no es tuyo». El tipo de evento es lo que la
-  // campana usa para agrupar y deduplicar, asi que meter la diferencia solo en la descripcion la
+  // «sal a repartir esto»; al origen, «esto ya no es tuyo». El tipo de evento es lo que el panel
+  // de avisos usa para agrupar y deduplicar, asi que meter la diferencia solo en la descripcion la
   // vuelve invisible.
   //
   // ⚠️ NO ES ELEGIBLE PARA PUSH, y no es un olvido (R43): no le pide NINGUNA accion y no vence
-  // nada -- deja de tener trabajo, no le aparece trabajo. En la campana si, para que su lista
-  // encogida tenga explicacion.
+  // nada -- deja de tener trabajo, no le aparece trabajo. En el panel de avisos si lo recibe, para
+  // que su lista encogida tenga explicacion.
   traspaso_ordenes_cedido
 
   @@map("notificacion_evento")

@@ -102,6 +102,22 @@ const MIGRACIONES_NOTIFICACIONES_POSTERIORES = [
   // cabe en el mecanismo de la 146 y en la maquinaria de avisos agregados de la 409. Nada de esto
   // es infra de la 102 - la clasificacion SLA sigue siendo derivada y esta ficha no la toca.
   "_notificacion_evento_reparto_manana",
+  // Ficha 427 / design §4.3 (2026-09-14): los DOS avisos del TRASPASO de ordenes entre mensajeros
+  // -«recibiste N ordenes de otro mensajero» al que las recibe, y «N ordenes tuyas pasaron a otro
+  // mensajero» al que las cede-. `notificacion_evento` gana DOS valores
+  // (`traspaso_ordenes_recibido`, `traspaso_ordenes_cedido`) y `notificacion_entidad_tipo` UNO
+  // (`orden_traspaso_lote`, que es el `lote_id` del ACTO y no la orden: con la orden o el
+  // mensajero, el segundo traspaso del dia a la misma persona no avisaria nunca). TRES `ALTER
+  // TYPE` y nada mas: sin tabla de aviso nueva, sin columna y sin indice, asi que las dos
+  // aserciones de abajo sobre `schema.prisma` -los DOS modelos de la 146 y las CINCO tablas/enums
+  // con nombre de notificacion- siguen siendo EXACTAMENTE las mismas y siguen verdes.
+  //
+  // La ficha 427 SI crea una tabla -`orden_traspaso_mensajero`-, pero vive en OTRA migracion
+  // (`20260917120000_orden_traspaso_mensajero`) que no lleva la palabra «notificacion» y no cae en
+  // este filtro: es el RASTRO del traspaso (quien lo hizo, desde quien, hacia quien y por que), no
+  // infra de avisos. Nada de esto es infra de la 102 - la clasificacion SLA sigue siendo derivada
+  // y esta ficha no la toca.
+  "_notificacion_evento_traspaso",
 ] as const;
 
 describe("Feature 102 · SIN migracion nueva (R3)", () => {
