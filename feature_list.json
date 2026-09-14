@@ -5057,7 +5057,7 @@
       "title": "las tablas de ordenes no se pueden ordenar por numero de remision",
       "description": "El control de orden solo ofrece fecha de creacion; falta la remision, y ordenarla como texto la descoloca.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
       "branch": "feat/423-ordenar-por-remision",

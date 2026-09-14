@@ -1,6 +1,36 @@
-# Estado — sesión del 2026-09-10 / 12
+# Estado — sesión del 2026-09-10 / 12 / 14
 
-## ⚠️ LO MÁS RECIENTE — tercera release (2026-09-12)
+## EN CURSO — ficha 423 (sesión del 2026-09-14)
+
+**423 — ordenar las tablas de órdenes por número de remisión.** `fullstack`, complejidad media,
+rama `feat/423-ordenar-por-remision` (desde `origin/dev` = `5b52f9f8`). Pedida por el humano hoy,
+con instrucción de llevarla a producción cuanto antes.
+
+**Evaluación.** `fullstack` porque toca migración (columna generada + índice), repositorio y UI.
+NO se parte en dos fichas: se secuencia `backend_dev` → `frontend_dev` dentro de la misma, que es
+lo que el humano tiene pedido para este repo. Zona sin otras `in_progress`, así que no hay
+validación de conflicto que hacer.
+
+**Lo que ya existía y por eso esto es corto:** el contrato del servidor YA acepta `num_remision`
+(`SORT_FIELDS`, ficha 352) y `OrdenesModule` ya transporta el orden, lo mete en la clave de caché
+y vuelve a la página 1. Lo que falta es la segunda dimensión del control (ficha 356, que dejó el
+hueco escrito) y el orden natural.
+
+**Medido contra producción el 2026-09-14, no supuesto:** `num_remision` es TEXT y el orden
+lexicográfico deja **1.582 de 1.664** remisiones `NA-` fuera de sitio, porque la serie mezcla 3 y 4
+dígitos: `NA-107` cae entre `NA-1069` y `NA-1070`. 2.136 órdenes vivas en cuatro formatos (5
+dígitos pelados ×437, `NA-` ×1.664, `SC-` ×29, `BS-` ×9).
+
+**Decisiones del humano, no reabrir:** clave de ordenamiento generada + índice (patrón de
+`busqueda_texto`), orden natural por (prefijo, número). Alcance **solo `/ordenes`**: los listados
+por rol y el histórico no se tocan.
+
+**Gate de partida verde** sobre la rama recién creada: 221 archivos, 3.252 tests, 0 rojos nuevos,
+`.env` presente (`progress/gate_423_base.log`).
+
+---
+
+## Estado anterior — tercera release (2026-09-12)
 
 `prod` = **`97fc983e`** (PR #790), READY, alias `ordenex.co`. `dev` = `7684dbb4`.
 
