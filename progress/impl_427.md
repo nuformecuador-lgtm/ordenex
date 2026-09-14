@@ -962,3 +962,28 @@ $ # los 7 de la 427 + el 102, para que el cambio de censos no moviera nada propi
  Test Files  8 passed (8)
       Tests  152 passed (152)
 ```
+
+## EL ROJO DEL GATE QUE NO ES DE ESTA FICHA (leader, 2026-09-14)
+
+El gate completo salió `INIT_EXIT=1` **dos veces**, y las dos por
+`tests/integration/db/ranking-snapshot-migration.test.ts` con `40P01` (**deadlock**) dentro de un
+`DROP SCHEMA … CASCADE`. **No es de la 427**, y esto es lo medido, no lo supuesto:
+
+| Evidencia | Resultado |
+| --- | --- |
+| Corrida 1 del gate | falla en el **bloque C** |
+| Corrida 2 del gate | falla en el **bloque B** — *bloque distinto* |
+| Aislado, 3 corridas seguidas (leader) | **49/49 verde** las tres |
+| Aislado, 3 corridas (backend) | verde |
+| Referencias a la 427 en ese archivo | **cero**; su último commit es `ac0d5d55 feat(196)` |
+| El mismo `40P01` corriendo en paralelo | reaparece **en otro archivo distinto** |
+
+Un defecto real es determinista: fallaría en el mismo sitio. Éste cambia de bloque entre corridas
+y desaparece al correr solo, que es la firma de un **flake de concurrencia** entre archivos de
+`integration/db` sobre la misma base local.
+
+**NO se mete en el baseline de rojos conocidos.** Taparlo ahí lo volvería invisible también en un
+entorno donde sí fuera un defecto real; queda escrito aquí para que el siguiente que lo vea no
+gaste el diagnóstico otra vez. Los otros **9 rojos de la primera corrida SÍ eran de la ficha** y se
+cerraron ampliando los censos de enum de las fichas 262, 253, 333 y 271 **sin borrar ni una línea
+de aserción**.
