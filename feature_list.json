@@ -5093,7 +5093,7 @@
       "title": "una ruta de api con la sesion vencida responde HTML en vez de 401",
       "description": "El guard la redirige a /login con 307, y el integrador recibe la pagina con codigo 200.",
       "zone": "backend",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "baja",
       "branch": "feat/426-api-401-json",

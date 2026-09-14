@@ -5175,3 +5175,43 @@ Cerrada y en produccion. Cuatro PR (#760, #761, #762, #763), release #764. Sin m
 - **El reviewer corrigio una explicacion que no se sostenia:** dos rojos atribuidos a «flakes,
   archivo distinto cada vez» eran **3 de 4 el mismo archivo**, que pasa en 7,9 s y cae a partir de
   ~10 s.
+
+## 423 — Ordenar las tablas de órdenes por número de remisión (2026-09-14)
+
+PR #791. El contrato del servidor ya aceptaba `num_remision` desde la 352; faltaba la interfaz,
+que la 356 había dejado a medias con una sola dimensión y el hueco escrito.
+
+**Lo que costaba el arreglo ingenuo:** `num_remision` es TEXT, y ordenarlo como texto dejaba
+**1.582 de 1.664** remisiones `NA-` fuera de sitio (`NA-107` caía entre `NA-1069` y `NA-1070`),
+porque esa serie mezcla 3 y 4 dígitos. La clave de ordenamiento es una columna **generada que no
+castea a número**: normaliza a texto rellenado con ceros y compara byte a byte con `COLLATE "C"`.
+Dos consecuencias buscadas: **no puede lanzar** al crear una orden, y el orden no depende del
+locale de la base.
+
+Los tests del orden corren contra Postgres real: mutar el `ORDER BY` los pone rojos. Verificada
+además en la app con Playwright — y ahí quedó anotada una trampa de medición: **las notas viven en
+el `<caption>` de la tabla**, así que una sonda que borre las tablas antes de leer concluye que el
+aviso no existe.
+
+## 426 — Una ruta de api con la sesión vencida responde 401 JSON, no HTML (2026-09-14)
+
+PR #792. Reportado por un integrador: «responde 200 pero con el HTML de la página». Reproducido:
+el guard devolvía **307 a `/login`**, y como el 307 conserva el método, el cliente repetía el POST
+contra la página de login y recibía su HTML con 200.
+
+**No lo rompió ningún despliegue** —el middleware no se tocaba desde el 2026-08-25 y el último
+deploy fue 60 h antes, con 48 h de cargas correctas por medio—: lo que venció fue **su sesión**,
+que dura 24 h clavadas.
+
+**El arreglo no escribe un 401 nuevo: desatasca el que ya existe.** Las dos rutas afectadas ya
+tenían su 401 en el handler y nunca corría. De 24 rutas bajo `app/api`, solo esas dos pasan por el
+guard de sesión — contado por separado por el implementador y el reviewer.
+
+Los 3 tests que afirmaban el defecto se **invirtieron** (mismo número de casos antes y después).
+La mutación que justifica un requisito entero: con el 401 convertido en `302` **y el mismo cuerpo
+JSON**, los dos casos del requisito principal **sobreviven verdes** y solo lo caza el requisito que
+prohíbe la redirección.
+
+⚠️ Pendiente antes de `prod`: **avisar a Nuform**, su cliente pasa de `200`+HTML a `401`+JSON. Y
+queda dicho que esto hace el síntoma legible, **no** arregla que su sesión caduque cada 24 h: para
+eso tienen una API key activa sin usar.
