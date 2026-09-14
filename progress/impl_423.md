@@ -290,3 +290,226 @@ rápido se negaría solo porque el diff toca `db/migrations/**` y `db/schema.pri
 Capa de datos y servidor completas y verificadas contra Postgres real: los 14 requisitos de
 backend tienen test ejecutado, la mutación del `ORDER BY` los pone rojos y el rollback deja la
 tabla sin la columna y con las 70 remisiones intactas; falta solo la pantalla.
+
+---
+---
+
+# 423 · Bitácora de FRONTEND (la pantalla)
+
+> Alcance: **solo `app/`**. Tandas T2.3, T3.1, T3.2 y T4.3–T4.6. Ni `lib/`, ni `db/`, ni una
+> línea de backend: lo de arriba se dio por bueno tal cual y no se tocó.
+> Rama `feat/423-ordenar-por-remision`, sobre el commit `134a8b0a` del backend.
+
+---
+
+## 1. Archivos creados / modificados / borrados
+
+| Archivo | Qué |
+| --- | --- |
+| `app/(app)/ordenes/_components/ordenamiento-ordenes.ts` | **nuevo** (T3.1) — el módulo de declaraciones del control, ahora en DOS dimensiones: `OPCIONES_CAMPO_ORDEN`, `OPCIONES_DIRECCION`/`ETIQUETA_DIRECCION` por campo, `notaPrioridad(campo)`, `serieDeRemision`, `notaAgrupacionPorSerie`, `NOTA_AGRUPACION_SERIE`, `ordenamientoDe` |
+| `app/(app)/ordenes/_components/ordenamiento-creacion.ts` | **borrado** (T3.1) — su nombre pasaba a mentir el día que declarase también la remisión |
+| `app/(app)/ordenes/_components/OrdenesListado.tsx` | **modificado** (T3.2) — estado `sortBy` + segundo `SegmentedToggle`. El de CAMPO delante, el de DIRECCIÓN detrás, los dos en el extremo izquierdo de la barra. `limpiarFiltros()` sigue sin tocar el orden |
+| `app/(app)/ordenes/_components/OrdenesModule.tsx` | **modificado** (T2.3) — `notaPrioridad(orden.sortBy)` en vez de la constante (R14) y la nota de series calculada sobre `items` (R20). Transporte, caché y reset de página: **cero cambios**, se aprovechan tal cual |
+| `app/(app)/historico/acciones/_components/historial-acciones-orden.ts` | **modificado** — importador nº 4, **que `tasks.md` no listaba** (§4). Solo cambia de dónde importa las etiquetas; las dos son las mismas palabra por palabra |
+| `tests/unit/components/ordenamiento-ordenes.test.ts` | **renombrado y ampliado** desde `ordenamiento-creacion.test.ts` (T4.5) — 6 → 20 casos |
+| `tests/unit/components/ordenes-agrupacion-serie.test.ts` | **nuevo** (T4.6) — 15 casos sobre las funciones puras |
+| `tests/unit/components/ordenes-listado-orden.test.tsx` | **ampliado** (T4.3) — 8 → 18 casos |
+| `tests/unit/components/ordenes-module-orden.test.tsx` | **ampliado** (T4.4 + R20 en pantalla) — 12 → 24 casos |
+| `tests/unit/components/ordenes-listado-filtros.test.tsx` | **modificado** — daño colateral medido y reparado (§5) |
+
+**Lo que NO se tocó, dicho porque es la mitad del encargo:** `lib/`, `db/`, `components/shared/`
+(incluido `DataTable`), `lib/types/orden.ts` y el transporte de `OrdenesModule`
+(`claveDeOrden`, la key de SWR, el reset a página 1). Los tres últimos ya hacían lo que R11/R12
+piden, y lo que aquí se hizo fue **comprobarlo con un test**, no reescribirlo.
+
+---
+
+## 2. Mapa `R<n> → test` (los que cubre el frontend)
+
+| R | Qué fija | Test | Resultado |
+| --- | --- | --- | --- |
+| R1 | El control ofrece los DOS campos, a la vista y ninguno más | `ordenamiento-ordenes` → «ofrece la fecha de creación y el número de remisión, en ese orden», «NO ofrece `num_guia`…» + `ordenes-listado-orden` → «R1 — ofrece los DOS campos sin desplegar nada…», «nace en la barra, sin pedirlo en el selector…» | ✅ |
+| R2 (cliente) | Elegir remisión llega a la petición, no se ordena en el navegador | `ordenes-listado-orden` → «R2 — «Número de remisión» pide `sortBy: num_remision` al servidor» | ✅ |
+| R9 (cliente) | Las dos direcciones, con el texto del campo | `ordenamiento-ordenes` → «cada campo ofrece las DOS direcciones…», «la REMISIÓN describe el número, no el tiempo», «las etiquetas de la remisión NO usan vocabulario temporal» + `ordenes-listado-orden` → «con la remisión puesta el conmutador dice «Más altas»/«Más bajas»…» | ✅ |
+| R10 | Cambiar de campo CONSERVA la dirección | `ordenes-listado-orden` → los tres casos de «cambiar de campo CONSERVA la dirección (R10)» | ✅ |
+| R11 | Cambiar de campo vuelve a la página 1 | `ordenes-module-orden` → «R11 — desde la página 3 por fecha, elegir la remisión pide la página 1» + `ordenes-listado-orden` → «R11 — cambiar de CAMPO desde la página 2 vuelve a la 1» | ✅ |
+| R12 | La caché no sirve el resultado del otro campo | `ordenes-module-orden` → «R12 — elegir la remisión vuelve a consultar y NO enseña el resultado de la fecha» + «volver al campo anterior sirve SU respuesta…» | ✅ |
+| R14 | La nota de prioridad nombra el campo VIGENTE | `ordenamiento-ordenes` → los 4 casos de «notaPrioridad — nombra el campo VIGENTE» + `ordenes-module-orden` → «con el orden por REMISIÓN la nota habla de la remisión, no de la fecha» | ✅ |
+| R20 | El aviso de series, solo cuando se observa | `ordenes-agrupacion-serie` (15 casos, las tres situaciones) + `ordenes-module-orden` → los tres casos numerados «1)», «2)», «3)» sobre la pantalla | ✅ |
+| R16 (flanco UI) | La clave interna no llega al cliente | `clave-remision-solo-lectura.guardia` → «NINGÚN archivo de `app/` ni de `components/` la nombra» — **sigue verde con la pantalla nueva encima**: la serie sale del `numRemision` del DTO | ✅ |
+
+Las **tres situaciones de R20**, ejercidas por duplicado (funciones puras y pantalla):
+
+| Situación | Esperado | Resultado |
+| --- | --- | --- |
+| Remisión + `["NA-107","72912","BS-00001"]` | aparece | ✅ |
+| Remisión + `["NA-107","NA-1069","NA-1863"]` (una serie) | **no** aparece | ✅ |
+| Fecha de creación + varias series | **no** aparece | ✅ |
+
+---
+
+## 3. Las mutaciones: cuatro tests que SÍ se ponen rojos
+
+Un test de texto o de nota que no puede ponerse rojo no prueba nada. Las cuatro mutaciones se
+aplicaron una a una sobre el árbol y se restauró el original después de cada una.
+
+| Mutación | Qué rompe | Resultado |
+| --- | --- | --- |
+| `if (series.size > 1)` → `> 0` (el aviso pasa a ser **permanente**) | R20, su segunda mitad | **4 rojos**, entre ellos los dos casos «2) … UNA sola serie → no aparece» (funciones puras Y pantalla) |
+| `onChange={setSortBy}` → también `setSortDir(DIRECCION_ORDEN_INICIAL)` | R10 | **3 rojos**: los dos de «CONSERVA la dirección» y «Limpiar todo no toca el orden» |
+| `notaPrioridad` devuelve el nombre **fijo** de la fecha | R14 | **4 rojos**, entre ellos «el texto CAMBIA con el campo (no es una constante disfrazada de función)» |
+| `claveDeOrden(orden)` → `orden.sortDir` en la key de SWR | R11 + R12 | **3 rojos**: R12, «volver al campo anterior sirve SU respuesta» y R11 |
+
+El detalle del primero, que es el que `tasks.md` T4.6 exige nombrar:
+
+```
+mutado: el aviso pasa a ser permanente
+ × 2) orden por remisión + UNA sola serie → no aparece
+ × una sola fila no anuncia nada
+ × las remisiones numéricas cuentan como serie frente a las que llevan prefijo
+ × 2) con el orden por remisión y UNA sola serie, no se anuncia una regla invisible
+ Test Files  2 failed (2)
+      Tests  4 failed | 35 passed (39)
+RESTAURADO
+```
+
+**Ningún literal de estos tests se importa del módulo que lo genera.** Los nombres accesibles
+(«Ordenar por», «Dirección del orden por número de remisión»), las etiquetas («Más altas»,
+«Más bajas») y los dos textos de las notas están **escritos a mano** en los archivos de test.
+Era la costumbre cara de este repo —«aserción contra su propia fuente»— y las cuatro mutaciones
+de arriba son la prueba de que aquí no se repitió: si se derivaran, ninguna habría salido roja.
+
+---
+
+## 4. Un importador que `tasks.md` no contaba: eran CUATRO, no tres
+
+T3.1 decía «actualizar los **tres** importadores». El censo real del árbol da **cuatro**: el
+registro del histórico (`app/(app)/historico/acciones/_components/historial-acciones-orden.ts`,
+ficha 362) importaba `OPCIONES_ORDEN_CREACION` para no reescribir las etiquetas «Más recientes /
+Más antiguas». Sin tocarlo, el borrado del módulo viejo dejaba el build roto.
+
+Qué se hizo: importar `OPCIONES_DIRECCION.created_at`, que **es exactamente el mismo par de
+opciones**, y dejar dicho en su comentario por qué esa rama y no otra. Su tabla ordena por fecha
+y por nada más (`HISTORIAL_SORT_FIELDS` tiene una sola clave), así que R15 no lo roza: no cambia
+ni su campo, ni su dirección, ni sus textos. Los 29 archivos de `vitest related` incluyen su
+suite y siguen verdes.
+
+---
+
+## 5. Daño colateral medido y reparado: dos botones con el mismo nombre
+
+Al añadir el conmutador de campo, la barra pasó a tener **dos** botones cuyo texto es «Fecha de
+creación»: el que ORDENA por ella y el disparador del filtro de rango que ya existía. Dos casos
+de `tests/unit/components/ordenes-listado-filtros.test.tsx` los buscaban con
+`getByRole("button", { name: "Fecha de creación" })` y pasaron a fallar por **ambiguos** —no por
+haber dejado de funcionar—:
+
+```
+ FAIL … > R58: el filtro de tiempo se traduce a `created_desde`/`created_hasta`
+ FAIL … > R58: el atajo de antigüedad se traduce al RANGO que representa
+```
+
+Reparación: un helper `disparadorRangoFecha()` que excluye los botones contenidos en el grupo
+«Ordenar por» y **asegura que queda exactamente uno**. La aserción no se debilitó: sigue
+pulsando el disparador del calendario y sigue midiendo el `filter` que sale.
+
+**Por qué no se cambió la etiqueta en su lugar:** es la que fija el design §4.1, y para quien
+navega con lector de pantalla los dos botones no son ambiguos — el de ordenar va dentro de un
+`role="group"` llamado «Ordenar por», que se anuncia al entrar. El nombre accesible del grupo de
+dirección nombra además su campo («Dirección del orden por número de remisión»), así que los dos
+conmutadores no se confunden entre sí ni con el filtro.
+
+---
+
+## 6. Las dos notas conviven en el mismo `<caption>`
+
+`DataTable` recibe `caption?: string` y lo pinta como `<caption>` de la tabla. Las dos notas
+—prioridad y series— se unen en ese único hueco separadas por un espacio, y **`DataTable` no se
+tocó**: ampliarlo a `ReactNode` habría cambiado la API de un componente que montan 33 tablas
+para ganar un salto de línea.
+
+Consecuencia para quien lea los tests: cuando las dos notas coinciden, el `<caption>` ya no es
+igual a ninguna de ellas, así que los casos nuevos leen el hueco entero (`textoCaption()`) y
+comprueban qué **contiene**. Los cuatro casos de la 356 que comparaban el texto exacto siguen
+haciéndolo tal cual, porque con el orden por fecha la nota de series no existe.
+
+---
+
+## 7. Salida real de lo que me tocaba correr
+
+```
+$ pnpm typecheck
+> tsc --noEmit
+TYPECHECK_EXIT=0
+```
+
+```
+$ pnpm lint
+✖ 184 problems (0 errors, 184 warnings)
+LINT_EXIT=0
+```
+
+Las 184 son el baseline del árbol, **el mismo número que midió el backend** antes de esta tanda:
+ni un warning nuevo. Sobre solo los archivos de la pantalla:
+
+```
+$ pnpm exec eslint <los 9 archivos tocados>
+LINT_MIOS_EXIT=0        # ni un warning
+```
+
+```
+$ pnpm exec vitest related --run <los archivos tocados>
+ Test Files  29 passed (29)
+      Tests  397 passed (397)
+   Duration  49.41s
+VITEST_RELATED_EXIT=0
+```
+
+Y los cinco archivos de test de esta tanda, solos:
+
+```
+$ pnpm exec vitest run tests/unit/components/{ordenamiento-ordenes,ordenes-agrupacion-serie}.test.ts \
+                      tests/unit/components/{ordenes-listado-orden,ordenes-module-orden,ordenes-listado-filtros}.test.tsx
+ Test Files  5 passed (5)
+      Tests  97 passed (97)
+VITEST_MIOS_EXIT=0
+```
+
+Las tres guardias de la feature, con la pantalla nueva encima del árbol:
+
+```
+$ pnpm exec vitest run tests/unit/guards/clave-remision-solo-lectura.guardia.test.ts \
+                      tests/unit/guards/orden-remision-alcance.guardia.test.ts \
+                      tests/unit/db/orden-clave-remision.guardia.test.ts
+ Test Files  3 passed (3)
+      Tests  37 passed (37)
+```
+
+**El gate completo (`./init.sh`, T6.1) NO lo corrí**: me lo reservó quien me lanzó.
+
+---
+
+## 8. Lo que queda PENDIENTE y no me invento que esté hecho
+
+**T3.3 — ver la pantalla en el navegador: NO EJECUTADO.** No se levantó dev server (se comprobó
+que no había ninguno escuchando en 3000-3009). Queda pendiente para quien cierre la feature, y
+no es un trámite: en este repo está medido que ver la app encuentra lo que la suite no. Lo que
+hay que mirar allí, en concreto:
+
+1. Que los dos conmutadores caben en la barra sin romper la fila en una pantalla estrecha (son
+   cuatro botones donde antes había dos).
+2. Que las primeras filas con «Número de remisión» + «Más bajas» salen en el orden de R3/R4
+   (`72912…`, luego `BS-`, `NA-`, `SC-`) — eso lo prueba `orden-orden-remision-natural` contra
+   Postgres, pero nadie lo ha **visto**.
+3. Que el aviso de series aparece de verdad en la primera página del orden por remisión, que es
+   donde conviven varias series.
+
+---
+
+## Veredicto del frontend
+
+La pantalla está completa y sus siete requisitos (R1, R9–R12, R14, R20) tienen test ejecutado y
+**verificado por mutación**: las cuatro mutaciones que romperían cada garantía ponen rojos
+exactamente los casos que las anclan. La clave interna de orden no aparece en un solo archivo de
+`app/` —la guardia lo confirma con la pantalla nueva encima—, y el único requisito que queda sin
+cubrir de esta tanda es T3.3, que es mirar, no programar.

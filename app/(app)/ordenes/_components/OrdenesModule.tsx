@@ -24,7 +24,10 @@ import {
   type OrdenamientoListado,
 } from "@/lib/types/ordenamiento-listado";
 
-import { NOTA_PRIORIDAD } from "./ordenamiento-creacion";
+import {
+  notaAgrupacionPorSerie,
+  notaPrioridad as textoNotaPrioridad,
+} from "./ordenamiento-ordenes";
 import { ordenesColumns } from "./ordenes-columns";
 import {
   AMBITO_DESCARGA_ORDENES,
@@ -535,11 +538,44 @@ export function OrdenesModule({
    * no ves es ruido. Va como `<caption>` de la tabla: sale justo encima de las filas, debajo
    * de la barra de filtros, y es la pieza que HTML tiene para describir una tabla —así la
    * explicación también existe para un lector de pantalla, no sólo para quien la ve—.
+   *
+   * FICHA 423 (R14): el texto nombra el campo VIGENTE. Con el orden por remisión puesto, una
+   * nota que siguiera diciendo «el resto sigue el orden por fecha de creación» describiría un
+   * listado que no es el que hay delante.
    */
   const notaPrioridad =
     orden !== undefined && items.some((row) => row.prioridad === true)
-      ? NOTA_PRIORIDAD
+      ? textoNotaPrioridad(orden.sortBy)
       : undefined;
+
+  /**
+   * FICHA 423 / R20 — POR QUÉ LAS REMISIONES SALEN EN BLOQUES.
+   *
+   * Ordenar por remisión agrupa las que comparten prefijo, y eso se lee como que el control
+   * hizo algo raro: se pidió «más bajas» y arriba hay un bloque de números sueltos seguido de
+   * bloques con letra. Es el mismo caso que la nota de prioridad —un orden correcto que parece
+   * un fallo— y lleva el mismo criterio: sólo se pinta cuando el fenómeno SE PUEDE OBSERVAR,
+   * o sea con el orden por remisión puesto Y con más de una serie en la página visible.
+   *
+   * Se calcula sobre `items` —las filas que la página está enseñando—, igual que la de
+   * prioridad, y a partir del `numRemision` que el DTO ya trae. La base tiene calculada una
+   * clave de orden con la serie ya resuelta, y traérsela sería la vía obvia: está prohibida
+   * (R16) y hay una guardia que pone rojo cualquier archivo de `app/` que la nombre.
+   *
+   * Las dos notas conviven en el mismo `<caption>` porque dicen cosas distintas y las dos
+   * explican el mismo listado; `DataTable` recibe un texto, así que se unen en uno.
+   */
+  const notaSeries =
+    orden !== undefined
+      ? notaAgrupacionPorSerie(
+          orden.sortBy,
+          items.map((row) => row.numRemision),
+        )
+      : undefined;
+
+  const notasDeOrden =
+    [notaPrioridad, notaSeries].filter((n) => n !== undefined).join(" ") ||
+    undefined;
 
   /**
    * Feature 151 (design §7) — configuración de descarga del dataset completo.
@@ -645,7 +681,7 @@ export function OrdenesModule({
         data={items}
         rowKey="id"
         ariaLabel="Órdenes"
-        caption={notaPrioridad}
+        caption={notasDeOrden}
         rowClassName={resaltarPrioridad ? resaltarFilaPrioridad : undefined}
         descarga={descarga}
         filtros={filtros}
