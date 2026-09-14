@@ -860,3 +860,105 @@ $ pnpm exec vitest run <los 7 archivos de test de esta ficha>
 
 > Los **dos rojos de `no-migration-102`** que esta bitácora dejó nombrados en §F6 los cerró el
 > backend en `87efe88b`, que ya está en la rama por debajo de este arreglo.
+
+---
+
+## 9. El gate completo salió ROJO (`progress/gate_427.log`, `INIT_EXIT=1`): los 10 rojos, uno por uno
+
+10 tests fallidos en 5 archivos, todos en `tests/integration/db/`. **Nueve eran míos; uno no.**
+
+### 9.1 Los nueve míos: los censos de enum de las fichas ANTERIORES
+
+Cada ficha que amplió el catálogo de avisos dejó su propio test de migración, y ese test afirma —con
+una lista **literal y cerrada**— qué valores tiene el enum y **que los posteriores quedan AL FINAL y
+en orden de adición**. Mis tres valores (`traspaso_ordenes_recibido`, `traspaso_ordenes_cedido`,
+`orden_traspaso_lote`) son posteriores a todas ellas, así que rompieron sus listas:
+
+| Archivo | Tests rojos | Qué faltaba |
+| --- | ---: | --- |
+| `notificacion-evento-dia-reparto-corregido-migration.test.ts` (262) | 4 | 2 listas de schema + 2 listas de «la base aplicada» |
+| `notificacion-evento-postulacion-recurso-migration.test.ts` (253) | 4 | idem |
+| `notificacion-evento-gasto-fijo-migration.test.ts` (333) | 1 | eventos + entidades de «la base aplicada» |
+| `notificacion-evento-bloqueo-cierre-migration.test.ts` (271) | 1 | sólo eventos (su `up` no tocó el otro enum) |
+
+**Se cerraron ampliando las listas, en su posición correcta (al final, en orden de adición) y con el
+motivo escrito.** 6 inserciones de eventos y 5 de entidades, repartidas en 4 archivos.
+
+**Lo que NO se hizo, y queda dicho:** no se relajó ni una aserción —ningún `toEqual` cambió de forma,
+ninguna lista se derivó del enum (una lista que se lee a sí misma está siempre verde) y nada fue al
+baseline de rojos conocidos—. `git diff` sobre los cuatro archivos **no borra ni una línea**: sólo
+añade.
+
+> Y el mismo agujero por el que entró esto: ya había ampliado
+> `MIGRACIONES_NOTIFICACIONES_POSTERIORES` en `no-migration-102.test.ts` (commit `87efe88b`), pero
+> **ése es otro censo**. En este repo, añadir un valor a `notificacion_evento` /
+> `notificacion_entidad_tipo` obliga hoy a tocar **seis** sitios, y conviene tenerlos escritos:
+>
+> 1. `db/schema.prisma` (los dos enums);
+> 2. `lib/types/notificacion.ts` (las dos uniones);
+> 3. `lib/notificaciones/push-elegibles.ts` y `catalogo-avisos.ts` (los dos `Record` exhaustivos —
+>    éstos avisan solos: **no compilan**);
+> 4. `tests/unit/services/notificacion-productores-wiring.test.ts` (dos inventarios literales);
+> 5. `tests/integration/db/no-migration-102.test.ts` (censo de migraciones de notificación);
+> 6. **los censos de migración de las fichas anteriores**: 253, 262, 271, 333 y 403 — que es el que
+>    se olvidó, porque los tres primeros no salen en `vitest related` del diff (una migración no la
+>    importa nadie) y sólo aparecen en el gate completo.
+>
+> Los de 401, 409, 412 y 413 **no** hicieron falta: sus listas usan `slice`/`indexOf` en vez de una
+> igualdad cerrada contra la base.
+
+### 9.2 El décimo NO era mío: `ranking-snapshot-migration.test.ts`
+
+Falla en «196 / bloque C — reejecutar el cron sobre una fecha ya congelada (R12/R14)» **con un
+`40P01` («se ha detectado un deadlock») en un `DROP SCHEMA IF EXISTS … CASCADE` dentro de un
+`finally`** — no con una aserción. **Medido, no supuesto:**
+
+| Medición | Resultado |
+| --- | --- |
+| ¿El archivo nombra algo de la 427? (`traspaso`, `notificacion_evento`, `notificacion_entidad_tipo`, `orden_traspaso`) | **0 ocurrencias** |
+| ¿Qué commit lo tocó por última vez? | `ac0d5d55 feat(196)` — ningún commit de la 427 |
+| ¿Está en `tests/baseline-rojos.json`? | no |
+| Corrido **aislado**, 3 veces seguidas | **49/49 verde las tres** |
+| Corrido junto a otros cinco de `integration/db` | el `40P01` **reaparece, pero en OTRO archivo** (`…dia-reparto-corregido…`), y el ranking pasa |
+
+Es la familia de fallo que el propio arnés documenta en `_postgres-real.ts`
+(`CLAVE_LOCK_ESCRITURA_REAL`): varios archivos corren en paralelo, cada uno abre una transacción
+larga y toman los mismos locks **en orden distinto**; Postgres mata a una de las dos. Que el rojo
+**cambie de archivo entre corridas** es la firma de la contención, no de una rotura determinista.
+
+**No se toca**, tal como pidió el coordinador. Lo que sí queda medido, por si se decide atacarlo:
+
+| Archivo | `enTransaccionRevertida` | `serializarEscriturasReales` |
+| --- | ---: | ---: |
+| `notificacion-evento-traspaso-migration` (427, **mío**) | 3 | **3** |
+| `notificacion-evento-bloqueo-cierre-migration` (271) | 2 | 2 |
+| `ranking-snapshot-migration` (196) | 1 | **0** |
+| `notificacion-evento-dia-reparto-corregido-migration` (262) | 0 | **0** |
+| `notificacion-evento-postulacion-recurso-migration` (253) | 0 | **0** |
+
+El archivo de esta ficha **sí** toma el lock de aviso en las tres transacciones donde escribe; los
+tres que no lo toman son anteriores. Dicho con honestidad: la 427 **añade un archivo más** que
+escribe en `notificacion` y `push_envio_dia`, así que sube la contención sobre esas tablas y hace
+**más probable** un flake que ya existía — aunque no lo cause. Si el coordinador quiere cerrarlo, el
+remedio está escrito en el arnés y es de una línea por transacción, pero son ficheros de otras
+fichas y no se tocan desde aquí.
+
+### 9.3 Estado tras el arreglo
+
+```
+$ pnpm exec vitest related --run db/schema.prisma <los 4 censos>
+ Test Files  4 passed (4)
+      Tests  76 passed (76)
+RELATED_EXIT=0
+
+$ # los CINCO de integración, uno por uno (sin contención entre ellos)
+notificacion-evento-dia-reparto-corregido-migration    Tests  22 passed (22)
+notificacion-evento-postulacion-recurso-migration      Tests  19 passed (19)
+notificacion-evento-gasto-fijo-migration               Tests  20 passed (20)
+notificacion-evento-bloqueo-cierre-migration           Tests  15 passed (15)
+ranking-snapshot-migration                             Tests  49 passed (49)
+
+$ # los 7 de la 427 + el 102, para que el cambio de censos no moviera nada propio
+ Test Files  8 passed (8)
+      Tests  152 passed (152)
+```
