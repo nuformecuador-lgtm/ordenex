@@ -165,6 +165,23 @@ async function abrir(user: ReturnType<typeof userEvent.setup>, label: string) {
   return screen.getByRole("listbox", { name: label });
 }
 
+/**
+ * El DISPARADOR DEL CALENDARIO del filtro de rango, no el botón de ORDENAR por fecha.
+ *
+ * FICHA 423: desde que el conmutador de orden ofrece también el campo, la barra tiene DOS
+ * botones cuyo texto es «Fecha de creación» — uno ACOTA por fecha y el otro ORDENA por ella—,
+ * y lo que los distingue es el grupo que los contiene («Ordenar por»). Sin este filtro, la
+ * consulta encontraría los dos y fallaría por ambigua.
+ */
+function disparadorRangoFecha(): HTMLElement {
+  const grupoOrden = screen.getByRole("group", { name: "Ordenar por" });
+  const candidatos = screen
+    .getAllByRole("button", { name: "Fecha de creación" })
+    .filter((boton) => !grupoOrden.contains(boton));
+  expect(candidatos).toHaveLength(1);
+  return candidatos[0];
+}
+
 async function marcar(
   user: ReturnType<typeof userEvent.setup>,
   label: string,
@@ -427,7 +444,7 @@ describe("OrdenesListado — inyección en el `filter` (R46, R58, R59)", () => {
 
     // El rango se elige en el calendario, que abre en el mes actual; el primer clic
     // deja un rango de un dia (`desde === hasta`).
-    await user.click(screen.getByRole("button", { name: "Fecha de creación" }));
+    await user.click(disparadorRangoFecha());
     const cuadriculas = await screen.findAllByRole("grid");
     await user.click(within(cuadriculas[0]).getByText("1"));
 
@@ -471,7 +488,7 @@ describe("OrdenesListado — inyección en el `filter` (R46, R58, R59)", () => {
 
     // Los atajos son botones dentro del propio calendario, no un control aparte, y no
     // emiten un valor propio: fijan el rango (30 días calendario CR incluido hoy).
-    await user.click(screen.getByRole("button", { name: "Fecha de creación" }));
+    await user.click(disparadorRangoFecha());
     const predefinidos = await screen.findByRole("group", {
       name: "Rangos predefinidos",
     });

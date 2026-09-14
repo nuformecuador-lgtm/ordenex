@@ -15,13 +15,18 @@ import { PRISMA_OMIT } from "@/lib/db/prisma-client";
 const ROOT = path.join(__dirname, "..", "..", "..");
 const fuente = fs.readFileSync(path.join(ROOT, "lib", "db", "prisma-client.ts"), "utf8");
 
-describe("omit global de `orden.busqueda_texto` (R28)", () => {
-  it("declara la columna del buscador como omitida", () => {
-    expect(PRISMA_OMIT).toEqual({ orden: { busquedaTexto: true } });
+// FICHA 423 (T2.4, R16) — el `omit` pasa a tener DOS columnas: entra `orden.clave_remision`,
+// la clave GENERADA que ordena el listado por numero de remision. El literal de abajo se
+// AMPLIA, no se deriva: es el CONTRATO de que exactamente estas dos columnas —y ninguna
+// tercera— no salen nunca de la base. Sustituirlo por `Object.keys(...)` de su propia fuente lo
+// dejaria verde para siempre (memoria del repo: «Aserción contra su propia fuente»).
+describe("omit global de `orden.busqueda_texto` (R28) y `orden.clave_remision` (423/R16)", () => {
+  it("declara las dos columnas generadas como omitidas", () => {
+    expect(PRISMA_OMIT).toEqual({ orden: { busquedaTexto: true, claveRemision: true } });
   });
 
   it("no omite ninguna otra columna de orden (no es un filtro de proyeccion general)", () => {
-    expect(Object.keys(PRISMA_OMIT.orden)).toEqual(["busquedaTexto"]);
+    expect(Object.keys(PRISMA_OMIT.orden)).toEqual(["busquedaTexto", "claveRemision"]);
   });
 
   it("no omite nada de ningun otro modelo", () => {

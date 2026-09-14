@@ -58,11 +58,15 @@ import {
   PLACEHOLDER_BUSQUEDA,
 } from "./ordenes-filtros-def";
 import {
+  CAMPO_ORDEN_INICIAL,
   DIRECCION_ORDEN_INICIAL,
-  ETIQUETA_ORDEN_CREACION,
-  OPCIONES_ORDEN_CREACION,
-  ordenamientoCreacion,
-} from "./ordenamiento-creacion";
+  ETIQUETA_CAMPO_ORDEN,
+  ETIQUETA_DIRECCION,
+  OPCIONES_CAMPO_ORDEN,
+  OPCIONES_DIRECCION,
+  ordenamientoDe,
+  type CampoOrdenOfrecido,
+} from "./ordenamiento-ordenes";
 // FICHA 355: el control de ESTADO se declara una sola vez y lo montan las dos superficies
 // (aquí y la bodega satélite). Ver la cabecera de ese módulo.
 import {
@@ -784,16 +788,24 @@ export function OrdenesListado({
   const [resetFiltros, setResetFiltros] = useState(0);
 
   /**
-   * FICHA 356 — dirección del orden por fecha de creación. Arranca donde arranca el contrato
-   * (`DIRECCION_ORDEN_INICIAL`, «Más recientes»), así que entrar a la pantalla enseña
-   * exactamente el listado de siempre, con el control ya puesto en lo que se está viendo.
+   * FICHA 356 + FICHA 423 — el orden del listado, en sus DOS dimensiones: por qué campo y en
+   * qué sentido. Arrancan donde arranca el contrato (`created_at` + «Más recientes»), así que
+   * entrar a la pantalla enseña exactamente el listado de siempre, con el control ya puesto en
+   * lo que se está viendo.
    *
-   * Vive AQUÍ y no dentro de `OrdenesModule` por la misma razón que la selección de filtros:
+   * SON DOS ESTADOS Y NO UNO, y eso ES el requisito R10: cambiar de campo no toca la dirección.
+   * Quien venía de «Más recientes» cae en «remisiones más altas primero», y el conmutador de
+   * dirección —que sigue a la vista, al lado— es el clic que lo invierte. Mover las dos cosas
+   * con un solo clic haría que el usuario obtuviera un cambio que no pidió, y el segundo sería
+   * invisible hasta mirar el listado.
+   *
+   * Viven AQUÍ y no dentro de `OrdenesModule` por la misma razón que la selección de filtros:
    * el control se pinta en la barra, la barra la monta esta superficie y el módulo recibe el
    * resultado ya decidido.
    */
+  const [sortBy, setSortBy] = useState<CampoOrdenOfrecido>(CAMPO_ORDEN_INICIAL);
   const [sortDir, setSortDir] = useState<DireccionOrden>(DIRECCION_ORDEN_INICIAL);
-  const orden = useMemo(() => ordenamientoCreacion(sortDir), [sortDir]);
+  const orden = useMemo(() => ordenamientoDe(sortBy, sortDir), [sortBy, sortDir]);
 
   /** Deja la barra como recién abierta: sin valores y sin filtros puestos. */
   function limpiarFiltros() {
@@ -1171,10 +1183,25 @@ export function OrdenesListado({
                 filtros que se vayan pidiendo: un sitio fijo, que no baila según qué filtros
                 haya puestos. Y es `SegmentedToggle`, el mismo conmutador del portal del
                 mensajero y de cierres, con el alto por defecto (`h-8`) que comparten el campo
-                de búsqueda y el botón de descarga de esta misma línea. */}
+                de búsqueda y el botón de descarga de esta misma línea.
+
+                FICHA 423 — ahora son DOS conmutadores pegados: el CAMPO delante y la DIRECCIÓN
+                detrás, los dos a la vista sin desplegar nada (R1). Dos grupos y no un
+                desplegable de cuatro combinaciones, por lo mismo que decía la 356: el
+                conmutador enseña la opción que no está puesta; un desplegable esconde la mitad
+                del control detrás de un clic. Las etiquetas de la dirección CAMBIAN con el
+                campo —«Más recientes/Más antiguas» para la fecha, «Más altas/Más bajas» para la
+                remisión—: llamar «reciente» a un número alto sería falso con cuatro series
+                conviviendo. */}
             <SegmentedToggle
-              ariaLabel={ETIQUETA_ORDEN_CREACION}
-              options={OPCIONES_ORDEN_CREACION}
+              ariaLabel={ETIQUETA_CAMPO_ORDEN}
+              options={OPCIONES_CAMPO_ORDEN}
+              valor={sortBy}
+              onChange={setSortBy}
+            />
+            <SegmentedToggle
+              ariaLabel={ETIQUETA_DIRECCION[sortBy]}
+              options={OPCIONES_DIRECCION[sortBy]}
               valor={sortDir}
               onChange={setSortDir}
             />

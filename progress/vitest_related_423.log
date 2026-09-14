@@ -1,0 +1,12 @@
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+
+ Test Files  762 passed (762)
+      Tests  10656 passed | 26 skipped (10682)
+   Start at  12:28:54
+   Duration  439.54s (transform 29.91s, setup 78.53s, import 1251.25s, tests 1275.90s, environment 606.91s)
+
+VITEST_RELATED_EXIT=0

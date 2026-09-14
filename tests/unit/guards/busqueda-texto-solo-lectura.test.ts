@@ -22,7 +22,9 @@ const EXTENSIONES = new Set([".ts", ".tsx"]);
 /**
  * Los UNICOS lugares donde el nombre puede aparecer EN CODIGO, y por que:
  *   · `lib/db/prisma-client.ts`  -> el `omit` global que la esconde de toda lectura (R28):
- *     `PRISMA_OMIT = { orden: { busquedaTexto: true } }`.
+ *     `PRISMA_OMIT`, que desde la ficha 423 esconde DOS columnas generadas de `orden`
+ *     (`busquedaTexto` y `claveRemision`); su forma exacta la fija
+ *     `tests/unit/db/prisma-omit-busqueda-texto.test.ts`.
  *   · `lib/repositories/OrdenRepository.ts` -> el `where` del buscador, que es su unico uso.
  *   · `scripts/bench-busqueda-ordenes.ts` (feature 169 / T4.1) -> el banco de rendimiento.
  *     Es el UNICO sitio que la nombra en DDL, y hacerlo es su trabajo: para medir el

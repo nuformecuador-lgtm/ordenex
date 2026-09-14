@@ -867,10 +867,34 @@ const ORIGEN_RECEPCION_ORIGEN = "devolviendo_a_tienda";
 // por ese estado. La guarda NO se acota por zona ni por tienda (R11): la bodega central es global.
 
 // Mapa columna de negocio -> columna Prisma para el orden (lista blanca R31).
-const SORT_COLUMN: Record<string, "createdAt" | "numGuia" | "numRemision"> = {
+//
+// FICHA 423 — `num_remision` YA NO APUNTA A `numRemision`, Y ESE ES TODO EL CAMBIO DE SERVIDOR
+// DE LA FEATURE.
+//
+// `sortBy` NUNCA fue un nombre de columna: es una CLAVE PUBLICA que este mapa traduce (esta
+// dicho en `lib/types/orden.ts:14`). Eso es justo lo que permite cambiar la columna REAL sin
+// tocar el contrato (R18) ni a ningun cliente: `SORT_FIELDS` sigue siendo
+// `created_at | num_guia | num_remision`, y una clave fuera de ese conjunto sigue respondiendo
+// `validation_error`.
+//
+// POR QUE HABIA QUE CAMBIARLO. `num_remision` es TEXT y lo provee la tienda: sobre las 2.136
+// ordenes vivas de produccion (2026-09-14) conviven cuatro series con relleno inconsistente, y
+// ordenar por el TEXTO deja 1.582 de las 1.664 remisiones `NA-` fuera de sitio —
+// `NA-1067, NA-1068, NA-1069, NA-107, NA-1070`. `clave_remision` es la columna GENERADA que
+// deriva de la misma remision una clave `(serie, numero)` comparable byte a byte
+// (`COLLATE "C"`), asi que `NA-107` cae antes que `NA-1069` (R3) y las series salen agrupadas
+// `72912…`, `BS-`, `NA-`, `SC-` (R4). Vive en
+// `db/migrations/20260916120000_orden_clave_remision/migration.sql`; la escribe Postgres y
+// NADIE mas (R17), y el `omit` global la esconde de toda lectura (R16).
+//
+// Ordenar por la columna CRUDA era el defecto, no una opcion: desde aqui ya no es alcanzable
+// desde fuera. El resto del `orderBy` (mas abajo, `ordenTotal([{prioridad}, {<campo>}], …)`) NO
+// se toca — `prioridad` sigue delante (feature 101/R6, R7) y el desempate por `id` sigue
+// cerrando la lista (ficha 352, R8).
+const SORT_COLUMN: Record<string, "createdAt" | "numGuia" | "claveRemision"> = {
   created_at: "createdAt",
   num_guia: "numGuia",
-  num_remision: "numRemision",
+  num_remision: "claveRemision",
 };
 
 /**

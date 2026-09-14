@@ -5,7 +5,7 @@ import type {
   OrdenamientoListado,
 } from "@/lib/types/ordenamiento-listado";
 
-import { OPCIONES_ORDEN_CREACION } from "@/app/(app)/ordenes/_components/ordenamiento-creacion";
+import { OPCIONES_DIRECCION } from "@/app/(app)/ordenes/_components/ordenamiento-ordenes";
 
 // FICHA 362 / T5.4 (design §5.3, R26/R27) — el control de ORDEN de la tabla del registro, en
 // declaraciones. Modulo de DATOS: no renderiza —lo hace `SegmentedToggle`, el conmutador que
@@ -27,9 +27,14 @@ import { OPCIONES_ORDEN_CREACION } from "@/app/(app)/ordenes/_components/ordenam
 //      pulsarlas. Dos controles distintos para «ordena esta tabla por fecha» es la divergencia
 //      que este repo lleva pagando en otras seis piezas.
 //
-// Las ETIQUETAS se IMPORTAN de la 356 (`OPCIONES_ORDEN_CREACION`) y no se reescriben: son
-// datos sobre la DIRECCION, no sobre las ordenes, y dos tablas que dicen «Mas recientes» de
-// dos sitios distintos acaban diciendo cosas distintas.
+// Las ETIQUETAS se IMPORTAN de la 356 y no se reescriben: son datos sobre la DIRECCION, no
+// sobre las ordenes, y dos tablas que dicen «Mas recientes» de dos sitios distintos acaban
+// diciendo cosas distintas.
+//
+// FICHA 423 — ese modulo paso a llamarse `ordenamiento-ordenes` y sus direcciones ahora
+// dependen del campo. Aqui se toma la rama de `created_at`, que son LAS MISMAS DOS OPCIONES
+// de siempre, palabra por palabra: este registro se ordena por fecha y por nada mas
+// (`HISTORIAL_SORT_FIELDS` tiene una sola clave), asi que R15 no lo roza.
 
 /**
  * El UNICO campo por el que este registro se ordena, y la lista blanca del servidor tambien
@@ -59,7 +64,7 @@ export const ETIQUETA_ORDEN_HISTORIAL = "Ordenar por fecha";
 
 /** Las dos opciones, con el sentido en el TEXTO y no solo en una flecha (356). */
 export const OPCIONES_ORDEN_HISTORIAL: readonly SegmentedOption<DireccionOrden>[] =
-  OPCIONES_ORDEN_CREACION;
+  OPCIONES_DIRECCION.created_at;
 
 /** El ordenamiento vigente, tal como lo espera el contrato del listado. */
 export function ordenamientoHistorial(
