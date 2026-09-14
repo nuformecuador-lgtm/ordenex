@@ -16,7 +16,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { TraspasarMensajeroModal } from "@/app/(app)/ordenes/_components/TraspasarMensajeroModal";
+import {
+  TraspasarMensajeroModal,
+  type TraspasarMensajeroOrdenUI,
+} from "@/app/(app)/ordenes/_components/TraspasarMensajeroModal";
 import { traspasarMensajero } from "@/lib/actions/traspasar-mensajero";
 import {
   MSG_CARRERA_TRASPASO,
@@ -60,17 +63,32 @@ const MOTIVO_OK = "Andy se reportó enfermo a media jornada";
 const CONFIRMAR = "Traspasar";
 const SELECTOR = "Mensajero que recibe el lote";
 
-function ordenDeAndy(id: string) {
+/**
+ * ⚠️ EL TIPO SE ANOTA A MANO, Y ES `TraspasarMensajeroOrdenUI` — el que el componente DECLARA.
+ *
+ * Antes esto no llevaba anotacion y el helper se auto-tipaba, con `mensajeroAsignadoId: string` y
+ * `relaciones` NO nulables: mas estrecho que el contrato real. Con eso, el caso «una orden SIN
+ * mensajero» no compilaba —`null` no cabia— y el rojo aparecia en el TEST, no donde estaba la
+ * causa. Anotar el contrato hace dos cosas: los casos de borde (sin mensajero, sin relacion) son
+ * expresables, y si el componente cambia su prop, estos fixtures se mueven con el en vez de seguir
+ * describiendo una forma que ya nadie acepta.
+ *
+ * `mensajeroAsignado` lleva solo `nombre` porque es lo UNICO que el contrato pide. Que la fila real
+ * del listado (`OrdenListItemDTO`, con su `{ id, nombre }`) encaje en esa forma no se afirma aqui:
+ * lo demuestra `pnpm typecheck` sobre `OrdenesListado.tsx`, que le pasa la seleccion entera, y lo
+ * ejercita de punta a punta `TraspasarMensajeroListado.test.tsx`.
+ */
+function ordenDeAndy(id: string): TraspasarMensajeroOrdenUI {
   return {
     id,
     numRemision: `REM-${id}`,
     mensajeroAsignadoId: ANDY.id,
-    relaciones: { mensajeroAsignado: { id: ANDY.id, nombre: ANDY.nombre } },
+    relaciones: { mensajeroAsignado: { nombre: ANDY.nombre } },
   };
 }
 
 function renderModal(
-  ordenes: readonly ReturnType<typeof ordenDeAndy>[] = [ordenDeAndy("o1"), ordenDeAndy("o2")],
+  ordenes: readonly TraspasarMensajeroOrdenUI[] = [ordenDeAndy("o1"), ordenDeAndy("o2")],
   extra: Partial<{
     mensajerosBloqueadosIds: string[];
     mensajerosNoAsignablesIds: string[];
@@ -192,7 +210,7 @@ describe("427/R6 — un lote con DOS orígenes no se puede confirmar", () => {
         id: "o2",
         numRemision: "REM-o2",
         mensajeroAsignadoId: CARLOS.id,
-        relaciones: { mensajeroAsignado: { id: CARLOS.id, nombre: CARLOS.nombre } },
+        relaciones: { mensajeroAsignado: { nombre: CARLOS.nombre } },
       },
     ]);
 
@@ -218,6 +236,33 @@ describe("427/R6 — un lote con DOS orígenes no se puede confirmar", () => {
         "Alguna orden de la selección no tiene mensajero asignado: eso no es un traspaso, hay que asignarla.",
       ),
     ).toBeInTheDocument();
+    expect(confirmar()).toBeDisabled();
+  });
+
+  it("un solo origen cuyo NOMBRE no se resuelve: mensaje propio, no el de «mezcla mensajeros»", () => {
+    // Medido con una mutacion el 2026-09-14: las dos causas compartian rama, asi que este caso se
+    // anunciaba como si alguien hubiera mezclado mensajeros —y mandaba a rehacer una seleccion que
+    // estaba bien—. Aqui hay UN solo origen; lo que falta es su nombre.
+    renderModal([
+      {
+        id: "o1",
+        numRemision: "REM-o1",
+        mensajeroAsignadoId: "m-fantasma",
+        relaciones: null,
+      },
+    ]);
+
+    expect(
+      screen.getByText(
+        "No se pudo identificar al mensajero de estas órdenes. Actualiza la lista y vuelve a seleccionarlas.",
+      ),
+    ).toBeInTheDocument();
+    // Y NO el de la otra causa: es la mitad que impide que las dos vuelvan a compartir rama.
+    expect(
+      screen.queryByText(
+        "La selección mezcla órdenes de varios mensajeros. Filtra por un solo mensajero y vuelve a seleccionarlas.",
+      ),
+    ).toBeNull();
     expect(confirmar()).toBeDisabled();
   });
 

@@ -69,6 +69,14 @@ const AVISO_VARIOS_ORIGENES =
   "La selección mezcla órdenes de varios mensajeros. Filtra por un solo mensajero y vuelve a seleccionarlas.";
 const AVISO_SIN_MENSAJERO =
   "Alguna orden de la selección no tiene mensajero asignado: eso no es un traspaso, hay que asignarla.";
+/**
+ * El lote tiene UN solo origen pero su nombre no se pudo resolver —ni en la fila del listado ni en
+ * el directorio de mensajeros—. Mensaje PROPIO y no el de «mezcla varios mensajeros», que es lo que
+ * salia antes: decirle a alguien que mezclo mensajeros cuando lo que pasa es que falta un dato lo
+ * manda a deshacer una seleccion que estaba bien.
+ */
+const AVISO_ORIGEN_DESCONOCIDO =
+  "No se pudo identificar al mensajero de estas órdenes. Actualiza la lista y vuelve a seleccionarlas.";
 
 const SELECT_PLACEHOLDER = "Selecciona el mensajero que las recibe";
 const SELECT_ARIA = "Mensajero que recibe el lote";
@@ -233,13 +241,24 @@ export function TraspasarMensajeroModal({
     toast.error(traspasarMensajeroErrorMessage(error));
   }
 
+  /**
+   * LAS CUATRO CAUSAS SE SEPARAN, Y NO ES ESTILO. Hasta el 2026-09-14 las dos ultimas compartian
+   * rama (`variosOrigenes || origenNombre === null`), y eso tenia dos defectos a la vez:
+   *
+   *   · `variosOrigenes` era LOGICA MUERTA —con dos origenes, `origenId` ya es `null` y por tanto
+   *     `origenNombre` tambien—, asi que una mutacion que lo apagara pasaba en verde. Se midio;
+   *   · y el caso de «un solo origen cuyo nombre no se resuelve» se anunciaba como si alguien
+   *     hubiera mezclado mensajeros, mandandolo a rehacer una seleccion correcta.
+   */
   const avisoLote = sinOrdenes
     ? AVISO_SIN_ORDENES
     : hayOrdenSinMensajero
       ? AVISO_SIN_MENSAJERO
-      : variosOrigenes || origenNombre === null
+      : variosOrigenes
         ? AVISO_VARIOS_ORIGENES
-        : null;
+        : origenNombre === null
+          ? AVISO_ORIGEN_DESCONOCIDO
+          : null;
 
   return (
     <Modal

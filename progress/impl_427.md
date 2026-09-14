@@ -749,3 +749,114 @@ ruta del que recibe queda pendiente de recalcularse**; `typecheck` y `lint` en c
 tests propios verdes, las 225 guardias verdes —**incluida `superficie-de-uso`, con la anotación ya
 borrada y su caducidad medida por mutación**— y las siete mutaciones del plan ejecutadas y todas
 rojas.
+
+---
+
+## F9. El typecheck que dejé rojo, y los dos defectos que aparecieron al arreglarlo
+
+> Añadido tras el reporte del coordinador. `dc230b7d` dejó **`pnpm typecheck` en rojo** con dos
+> errores en `tests/components/TraspasarMensajeroModal.test.tsx:213`. Es el paso 2 del gate: deja
+> rojo a cualquiera que corra después, no sólo a quien lo rompió.
+
+### Por qué se me escapó, dicho sin adornos
+
+**Corrí `tsc --noEmit` ANTES de escribir los archivos de test y nunca después.** El orden fue:
+cablear la pantalla → typecheck (verde) → escribir los dos `*.test.tsx` → correr `vitest` sobre
+ellos (verde) → commitear. `vitest` **no** hace comprobación de tipos —transpila y tira—, así que
+24 tests en verde convivieron con dos errores de compilación sin decir nada. La regla que se me
+olvidó es trivial: **el typecheck se corre al final, sobre el árbol que se va a commitear**, no en
+mitad.
+
+### Los dos errores, y el arreglo (sin silenciar nada)
+
+```
+tests/components/TraspasarMensajeroModal.test.tsx(213,42): error TS2322: Type 'null' is not assignable to type 'string'.
+tests/components/TraspasarMensajeroModal.test.tsx(213,69): error TS2322: Type 'null' is not assignable to type '{ mensajeroAsignado: { id: string; nombre: string; }; }'.
+```
+
+**Causa real:** el helper `ordenDeAndy` no llevaba anotación de tipo y se auto-tipaba a partir de su
+propio `return`, con `mensajeroAsignadoId: string` y `relaciones` **no nulables** — más estrecho que
+`TraspasarMensajeroOrdenUI`, que es el contrato que el componente declara. `renderModal` heredaba esa
+estrechez vía `ReturnType<typeof ordenDeAndy>`, así que el caso «una orden SIN mensajero» **no era
+expresable**: el rojo salía en el test, no donde estaba la causa.
+
+**Arreglo:** anotar los dos sitios contra `TraspasarMensajeroOrdenUI`, el tipo que el componente
+exporta. Ni `@ts-expect-error`, ni `as any`, ni relajar la prop. Con eso los casos de borde son
+expresables y, si el componente cambia su contrato, estos fixtures se mueven con él en vez de
+seguir describiendo una forma que ya nadie acepta. El `id` del `mensajeroAsignado` se cae de los
+fixtures porque el contrato sólo pide `nombre`; que la fila real (`OrdenListItemDTO`, con su
+`{ id, nombre }`) encaje ahí lo demuestra `pnpm typecheck` sobre `OrdenesListado.tsx` —que le pasa
+la selección entera— y lo ejercita de punta a punta `TraspasarMensajeroListado.test.tsx`.
+
+### ⚠️ Y al medirlo salió un SEGUNDO defecto, éste de producto
+
+El coordinador pidió re-correr `vitest related` además del typecheck, «porque un cambio de tipos en
+un test suele mover también lo que el test afirma». Se hizo, y además **dos mutaciones** sobre el
+camino que los fixtures tocaban. Una sobrevivió:
+
+```
+=== M9: quedarse con el PRIMER origen en vez de rechazar el lote de dos mensajeros (R6) ===
+ Test Files  1 passed (1)
+      Tests  24 passed (24)
+EXIT=0
+```
+
+**Por qué sobrevivió, y por qué no era «un mutante equivalente» que se pueda archivar.** La condición
+era `variosOrigenes || origenNombre === null`. Con dos orígenes, `origenId` ya es `null` y por tanto
+`origenNombre` también, así que **`variosOrigenes` era lógica muerta**: apagarlo no cambiaba nada.
+Pero la rama compartida tenía además un defecto **visible para una persona**: el caso de **un solo
+origen cuyo nombre no se resuelve** se anunciaba como «la selección mezcla órdenes de varios
+mensajeros», mandando a rehacer una selección que estaba bien.
+
+**Arreglo:** las cuatro causas se separan en cuatro ramas, y la nueva tiene mensaje propio
+(`AVISO_ORIGEN_DESCONOCIDO`). Caso nuevo: «un solo origen cuyo NOMBRE no se resuelve: mensaje propio,
+no el de "mezcla mensajeros"», que afirma las **dos** mitades —que sale el suyo y que NO sale el
+otro—, que es lo que impide que las dos causas vuelvan a compartir rama.
+
+Re-ejecutadas las dos mutaciones sobre el árbol arreglado:
+
+```
+=== M8: tratar la orden SIN mensajero como si tuviera origen ===
+ Test Files  1 failed (1)
+      Tests  1 failed | 24 passed (25)
+ FAIL  TraspasarMensajeroModal > R6 > una orden SIN mensajero tampoco es un traspaso: es una asignacion
+EXIT=1
+
+=== M9: quedarse con el PRIMER origen en vez de rechazar el lote de dos mensajeros (R6) ===
+ Test Files  1 failed (1)
+      Tests  1 failed | 24 passed (25)
+ FAIL  TraspasarMensajeroModal > R6 > lo dice con palabras y deja el confirmar apagado, SIN llamar a la accion
+EXIT=1
+
+ARBOL RESTAURADO
+```
+
+### Salida real tras el arreglo
+
+```
+$ pnpm exec tsc --noEmit
+TYPECHECK_EXIT=0        # el exit va DENTRO del log, no tapado por un `echo`
+```
+
+```
+$ pnpm run lint
+✖ 199 problems (0 errors, 199 warnings)
+LINT_EXIT=0
+```
+
+```
+$ pnpm exec vitest related --run tests/components/TraspasarMensajeroModal.test.tsx \
+    'app/(app)/ordenes/_components/TraspasarMensajeroModal.tsx'
+ Test Files  21 passed (21)
+      Tests  274 passed (274)
+RELATED_EXIT=0
+```
+
+```
+$ pnpm exec vitest run <los 7 archivos de test de esta ficha>
+ Test Files  7 passed (7)
+      Tests  130 passed (130)      # 129 + el caso nuevo de la causa separada
+```
+
+> Los **dos rojos de `no-migration-102`** que esta bitácora dejó nombrados en §F6 los cerró el
+> backend en `87efe88b`, que ya está en la rama por debajo de este arreglo.
