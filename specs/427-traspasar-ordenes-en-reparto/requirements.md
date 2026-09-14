@@ -30,6 +30,11 @@ Base: `dev` @ `6cc87ad1`. Todo lo de esta tabla está leído **del archivo**, no
 | Escribir en `orden_historial_estado` pasa por un choke point que **valida la transición**: `en_reparto → en_reparto` no existe en el inventario y reventaría | `lib/repositories/registrar-cambio-estado.ts` + `lib/types/order-status-transiciones.ts` |
 | El rastro con **motivo** de una operación manual sobre una orden ya tiene forma canónica en este repo: tabla propia (`orden_dia_reparto_cambio`, `gestion_fecha_reprogramacion_cambio`), porque `historial_accion` deja fuera todo texto libre | `db/schema.prisma:3140-3242` |
 | `/ordenes` ya tiene filtro por **mensajero asignado** (encadenado a zona) y por **estado**, y tamaño de página de hasta **50** | `OrdenesListado.tsx:283-287`, `OrdenesModule.tsx:58` |
+| El canal de avisos existe y ya avisa **a un mensajero concreto** por algo que le cambió la bodega: `emitirDiaRepartoCorregido`, **fuera de la transacción y best-effort** | `lib/notificaciones/emitir.ts:400-459` + `CorreccionDiaRepartoService.ts:185-214` |
+| `deshacerAsignacionLote` lleva escrito un `TODO(146)`: «productor de notificación al mensajero desasignado», con el destinatario ya pre-leído | `OrdenRepository.ts:4496-4503` |
+| La clave de deduplicación de avisos es UNIQUE sobre `(evento, entidad_id, destinatario_rol, destinatario_usuario_id)`, **no mira el estado de lectura**, y `crear` absorbe el choque devolviendo `null`: elegir mal la entidad silencia el segundo aviso **para siempre y sin ruido** (lo pagaron las fichas 262, 403 y 409) | `db/schema.prisma:2749-2759`, `20260914120000_*/migration.sql:30-59` |
+| El catálogo de elegibilidad de push es `satisfies Record<NotificacionEvento, PerfilPush>`: un evento nuevo **no compila** hasta que se decide si empuja y a qué rol | `lib/notificaciones/push-elegibles.ts:176` |
+| Los notificadores reales se inyectan **explícitamente** en el composition root; el default del servicio es un **no-op** | `lib/notificaciones/notificadores.ts:10-19` |
 
 **Números del caso real (2026-09-14), que son el caso de prueba:** 31 órdenes `en_reparto` movidas ·
 31 conversaciones · 0 filas en `orden_mensajero_meta` · 37 entregadas intactas · 24
@@ -183,6 +188,30 @@ cuántas conversaciones se movieron, y DEBE releer el listado del servidor.
 **R37.** SI un traspaso falla, ENTONCES el sistema DEBE mostrar un mensaje accionable por causa, sin
 exponer identificadores internos ni datos del destinatario.
 
+### Los avisos a los dos mensajeros
+
+> **Decisión del humano (2026-09-14): sí se avisa, y a los dos.** El motivo, con sus palabras: el
+> destino se encuentra 31 órdenes nuevas en el teléfono sin que nadie se lo diga.
+
+**R38.** CUANDO un traspaso se confirme, el sistema DEBE avisar al mensajero **destino** con **un
+solo** aviso por acto, que diga **cuántas** órdenes recibe y **de quién** — nunca uno por orden.
+
+**R39.** CUANDO un traspaso se confirme, el sistema DEBE avisar al mensajero **de origen** con **un
+solo** aviso por acto, que diga **cuántas** órdenes dejan de ser suyas y **hacia quién**.
+
+**R40.** El sistema NO DEBE incluir en esos avisos el motivo escrito por quien traspasó, ni ningún
+dato del destinatario de las órdenes (nombre, dirección, teléfono ni monto).
+
+**R41.** SI la emisión de cualquiera de los dos avisos falla, ENTONCES el traspaso DEBE seguir
+aplicado y su resultado DEBE seguir siendo de éxito.
+
+**R42.** CUANDO las mismas órdenes se traspasen dos veces al mismo mensajero en **actos distintos**,
+el sistema DEBE emitir el aviso las dos veces, aunque el primero siga sin leerse.
+
+**R43.** DONDE el mensajero destino tenga disponible el canal de avisos push, el sistema DEBE
+entregarle por ese canal el aviso de R38; y NO DEBE interrumpir por push al mensajero de origen con
+el de R39.
+
 ---
 
 ## Fuera de alcance, dicho para que no se cuele
@@ -192,52 +221,55 @@ exponer identificadores internos ni datos del destinatario.
 - **No** se mueven las órdenes `devolviendo_a_tienda` (decisión del humano: ahí el problema es dónde
   está la caja, no el sistema).
 - **No** se reasigna nada automáticamente: el traspaso siempre lo decide una persona.
-- **No** se cambia el cálculo del ranking ni de la analítica (ver Q2).
+- **No** se cambia el cálculo del ranking ni de la analítica (D2).
 
 ---
 
-## Preguntas abiertas
+## Decisiones cerradas (2026-09-14, Carlos Restrepo)
 
-**Q1 — ¿Puede el `adminSatelite` traspasar dentro de su zona?**
-Hoy asigna (`AsignacionSateliteService`) y deshace (149) dentro de su zona, así que por el criterio
-«los roles que hoy asignan» le tocaría. El spec asume que **NO** en esta ficha (R2), por dos motivos:
-el caso medido es central, y su pantalla (`/recepcion-satelite`) trabaja sobre `en_bodega_satelite`
-—paquetes que aún no ha recogido nadie—, así que hoy no tiene ninguna superficie donde ver una orden
-`en_reparto`. Abrirlo exige acotar por zona **las órdenes y los mensajeros** y añadir su guarda de
-bodega bloqueada: es una segunda superficie, no un `||` más. ¿Se confirma que queda para otra ficha?
+**No queda ninguna pregunta abierta.** Las seis que este spec planteó están decididas; se dejan
+escritas con su fecha y su motivo para que nadie las lea como descuidos ni las reabra sin datos
+nuevos.
 
-**Q2 — El traspaso mueve el denominador del ranking del día.**
-El denominador cuenta las órdenes por `mensajero_asignado_id` y día de reparto, y el numerador
-cuenta entregas por gestión. Tras el traspaso, el origen pierde del denominador las que ya no lleva
-(su porcentaje del día **sube**) y el destino las gana (el suyo **baja** hasta que las entregue). En
-el caso real son 31 órdenes. **El spec no propone tocar nada de eso** (R20 sólo protege las
-gestiones ya registradas), pero es un efecto de dinero blando —premio del podio— que conviene que el
-humano confirme antes de aprobar. Si no se acepta, hace falta una ficha propia: el ranking tendría
-que contar por «quién la tenía al empezar el día», que hoy no se guarda en ningún sitio.
+**D1 — El `adminSatelite` queda FUERA de esta ficha.**
+Hoy asigna (`AsignacionSateliteService`) y deshace (149) dentro de su zona, pero **no tiene ninguna
+superficie donde ver una orden `en_reparto`**: su pantalla (`/recepcion-satelite`) trabaja sobre
+`en_bodega_satelite`, paquetes que aún no ha recogido nadie. Abrirlo exige acotar por zona **las
+órdenes y los mensajeros** y añadir su guarda de bodega bloqueada: es otra superficie, **no un `||`
+más**. R2 lo deja en `forbidden`. → **Seguimiento S1.**
 
-**Q3 — ¿Se avisa a los mensajeros?**
-El destino se encuentra 31 órdenes nuevas en su teléfono sin que nadie se lo diga, y el origen ve
-desaparecer las suyas. Existe el canal (fichas 146/410) y existe el precedente exacto (la corrección
-de día avisa al mensajero, y `deshacerAsignacionLote` lleva un `TODO(146)` escrito para esto mismo).
-**El spec no lo pide** porque la ficha no lo menciona y añadiría dos eventos nuevos al catálogo de
-notificaciones. ¿Se quiere en esta ficha o se anota como seguimiento?
+**D2 — El efecto sobre el ranking se ACEPTA TAL CUAL, con el efecto sobre la mesa.**
+El denominador del ranking cuenta las órdenes por `mensajero_asignado_id` y día de reparto; el
+numerador cuenta entregas por gestión. Tras un traspaso, **quien cede ve subir su porcentaje del
+día** (pierde denominador y conserva sus entregas) y **quien recibe lo ve bajar hasta que entregue**.
+En el caso real son 31 órdenes, y el podio reparte premio. **Esta ficha no toca nada del ranking ni
+de la analítica**: es una decisión tomada, no un descuido ni un efecto que se descubrió tarde.
 
-**Q4 — `ayuda_tienda` dentro del traspaso (R4).**
-La ficha midió 31 `en_reparto` y no menciona `ayuda_tienda`. El spec lo **incluye** porque ese
-estatus significa literalmente «el mensajero pidió ayuda y **el paquete sigue con él, en la calle**»
-(235/R1): es el mismo hecho físico que motiva la ficha, y este repo ya pagó una vez el olvido de
-`ayuda_tienda` en las listas de «lo que lleva encima» (guardia `carga-del-mensajero`). Si el humano
-prefiere estrenar sólo con `en_reparto`, es quitar un elemento de una lista y una fila del censo de
-esa guardia.
+**D3 — Sí se avisa, y a LOS DOS mensajeros.** Entra en esta ficha (R38-R43), por el canal que ya
+existe (146/410) y con el precedente exacto de `emitirDiaRepartoCorregido`: **fuera de la
+transacción y best-effort**, porque un aviso caído no puede revertir un traspaso legítimo.
 
-**Q5 — Lotes de más de 50 órdenes.**
-El traspaso se hace sobre la selección del listado, y el tamaño máximo de página es 50. Con 31
-órdenes cabe en una pasada; con 60 harían falta dos actos (dos identificadores de lote distintos en
-el rastro). ¿Se acepta ese límite, o hace falta un «seleccionar las N del filtro»?
+**D4 — `ayuda_tienda` entra en los estados traspasables.**
+Ese estatus significa literalmente «el mensajero pidió ayuda y **el paquete sigue con él, en la
+calle**» (235/R1): es el mismo hecho físico que motiva la ficha. Y este repo ya pagó una vez el
+olvido de `ayuda_tienda` en las listas de «lo que lleva encima» — de ahí la guardia
+`carga-del-mensajero`, a la que esta ficha añade su noveno miembro.
 
-**Q6 — ¿El traspaso entra también en el registro de acciones (ficha 362)?**
-El spec elige **una sola fuente de rastro**, la tabla propia, siguiendo el precedente de las fichas
-262 y 371 (ahí el motivo es texto libre y `historial_accion` lo deja fuera por R5). La ficha 371,
-además de su tabla, sí añadió un tipo al catálogo de acciones. Si se quiere que el traspaso también
-aparezca en `/historico/acciones`, es un valor de enum más, su migración y su entrada en el censo de
-`historial-accion-escrituras-cubiertas`. ¿Hace falta?
+**D5 — Se acepta el límite de la página (50).**
+Con 31 órdenes cabe en una sola pasada. La consecuencia, dicha: **un lote mayor son dos actos, con
+dos identificadores de rastro distintos** (y, por R38/R39, dos avisos a cada mensajero). «Seleccionar
+las N del filtro» es alcance que nadie ha pedido.
+
+**D6 — Una sola fuente de rastro: la tabla propia.**
+No se añade el traspaso al catálogo de `/histórico/acciones`. Precedente de las fichas 262 y 371: el
+motivo es texto libre tecleado por una persona y R5 de la 362 lo deja fuera de esa tabla a propósito.
+→ **Seguimiento S2.**
+
+## Seguimiento (fuera de esta ficha)
+
+**S1.** Traspaso para el `adminSatelite` dentro de su zona: exige superficie propia donde vea sus
+órdenes en reparto, alcance por zona de órdenes **y** mensajeros, y su guarda de bodega bloqueada.
+
+**S2.** Si algún día se quiere el traspaso en `/histórico/acciones`: es un valor de
+`HistorialAccionTipo`, su migración de enum, su etiqueta y su entrada en el censo de
+`tests/unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts`.

@@ -77,8 +77,9 @@ test que NO debe ponerse rojo con la mutación 1 de T11.
 **Archivos:** `app/(app)/ordenes/page.tsx`; `tests/components/OrdenesPage.test.tsx`;
 `tests/unit/services/orden-service.test.ts`.
 **Qué:**
-1. `page.tsx`: `puedeEliminar` pasa a derivarse de `resolverAlcanceBorradoOrden(actor)` (design
-   §4). `puedeVerEliminadas` **no se toca** y sigue siendo el literal `rol === maestro`. El
+1. `page.tsx`: `puedeEliminar` pasa a derivarse de `resolverAlcanceBorradoOrden(actor)` (design §4,
+   **R20** — confirmado por el humano el 2026-09-14: nada de añadirle `|| admin` a una segunda
+   lista). `puedeVerEliminadas` **no se toca** y sigue siendo el literal `rol === maestro`. El
    comentario que dice «`admin` NO entra en ninguna de las dos» pasa a decir que entra en la
    primera y no en la segunda, con la fecha.
 2. `OrdenesPage.test.tsx`: el caso «eliminar: el `admin` NO la recibe — el estrechamiento del
@@ -94,9 +95,15 @@ test que NO debe ponerse rojo con la mutación 1 de T11.
 
 ## Tanda 3 — La contrapartida: el rastro, medido
 
-> Esta tanda **no es opcional ni "extra"**: es lo que sostiene la reversión. Hoy nadie mide el
-> congelado con el rol `admin` — el caso existente resuelve el actor con `findFirstOrThrow()` sin
-> filtrar por rol (design §6.2).
+> Esta tanda **no es opcional ni "extra"**: es REQUISITO de la ficha por decisión del humano
+> (2026-09-14, `requirements.md` D1) y es lo que sostiene la reversión. Hoy nadie mide el congelado
+> con el rol `admin` — el caso existente resuelve el actor con `findFirstOrThrow()` sin filtrar por
+> rol (design §6.2).
+>
+> ⚠️ **Es BLOQUEANTE.** Si al medir resulta que el rastro no queda, o que el `maestro` no puede
+> consultarlo con el rol nuevo, **se reporta y se para**. No se tapa, no se degrada a pendiente, no
+> se sigue con el resto. Y no se estrena mecanismo nuevo: lo que se mide es el historial que ya
+> existe (ficha 362).
 
 ### T7 · Contra Postgres: borrar como `admin` deja nombre y rol congelados
 **Depende de:** T1.
@@ -134,7 +141,9 @@ autorización del módulo); `tests/unit/services/recuperar-orden-service.test.ts
   `forbidden`, **sin llamar al repositorio** (R16). Si ya existe, basta con referenciarlo en el
   mapa y añadir el comentario de por qué importa ahora.
 - `RecuperarOrdenService.recuperar` con actor `admin` → `forbidden` y sin tocar la base (R17): el
-  caso ya existe, se le añade el comentario de que a partir de hoy la asimetría es intencionada.
+  caso ya existe, se le añade el comentario de que a partir de hoy la asimetría es **decisión del
+  humano** (2026-09-14, D1: «que borre»; la papelera no se le abre) y no un resto del
+  estrechamiento del 2026-08-27.
 - `OrdenService.listar` con `filter.eliminados = true` y actor `admin` → `forbidden` (R18).
 **Hecho cuando:** los tres pasan y ninguno depende de que `admin` esté en `denegado` para el
 borrado (si lo estuviera, serían vacíos).
@@ -206,6 +215,7 @@ rama lo lista.
 | R17 | El `admin` no recupera | **T9** (segundo punto) |
 | R18 | El `admin` no ve las eliminadas | **T9** (tercer punto) + T6.1 (`puedeVerEliminadas` intacto) |
 | R19 | Borrado lógico, historial de estados intacto | **T7** (la fila de `orden` sigue existiendo con `deleted_at`) + suite existente de `eliminar-orden-service` |
+| R20 | Una sola lista de roles para ofrecer y para autorizar | **T6.1** (`grep` a cero de la segunda lista) + **T11 mut. 1** (tocar solo la fuente única pone rojo el caso de pantalla) |
 
 ## Paralelizable
 
@@ -214,7 +224,12 @@ Todo lo demás es secuencial dentro de su tanda; la tanda 2 puede empezar en cua
 
 ## Antes de implementar
 
-Las tres **preguntas abiertas** de `requirements.md` (Q1: el `admin` borra pero no ve ni recupera;
-Q2: no puede auditar su propio rastro; Q3: cuántas personas quedan habilitadas) deben tener
-respuesta del humano en la puerta `spec_ready`. El spec asume la respuesta conservadora en Q1 y Q2
-y no depende de Q3; si alguna cambia, T6 y T9 cambian con ella.
+**No hay preguntas abiertas.** Las cuatro decisiones están cerradas por el humano el 2026-09-14 y
+escritas en `requirements.md` (D1–D4): el `admin` borra y no se le abre la papelera; el registro de
+quién borró es requisito y se resuelve con el historial existente de la 362; que el `admin` no lea
+`/histórico/acciones` es un límite aceptado; y `puedeEliminar` se deriva de la fuente única (R20).
+
+**Lo único que puede parar esta ficha es la tanda 3.** Si al medir T7/T8 resulta que el rastro no
+queda o no es consultable con el rol `admin`, **es bloqueante**: se reporta y se para. No se degrada
+a «mejora posterior», no se tapa con un test que afirme otra cosa, y no se implementa el resto
+mientras tanto — es lo único que sostiene la reversión.

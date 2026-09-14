@@ -108,7 +108,8 @@ Si esta ficha solo añadiera `|| rol === RolValue.admin` ahí, quedarían **dos*
 contestan la misma pregunta. Ese modo de fallo ya está documentado en el repo: el defecto de la
 ficha 358 («Nuform quiere eliminar NA-495 y no le aparece el checkbox») fue exactamente eso.
 
-**Decisión (D2):** `puedeEliminar` se **deriva** de la fuente única.
+**Decisión (D2), confirmada por el humano el 2026-09-14 y elevada a requisito (R20):**
+`puedeEliminar` se **deriva** de la fuente única. Nada de añadir `admin` a una segunda lista.
 
 ```ts
 // El MISMO punto que autoriza el borrado en el servidor decide si la pantalla lo ofrece.
@@ -159,6 +160,11 @@ con el mismo conjunto. Lo lee **solo el `maestro`** (`ROLES_HISTORIAL_ACCIONES`)
 
 ### 6.2 Veredicto sobre la contrapartida, y lo que falta
 
+> **Decisión del humano (2026-09-14):** «que borre, pero que quede registro en el historial que ya
+> tenemos». El registro es **requisito de esta ficha**, se resuelve con el mecanismo **existente**
+> (362) y **no se estrena nada nuevo**. La medición de §6.2 es **bloqueante**: si el rastro no
+> quedara o no fuera consultable con el rol `admin`, se dice y se para.
+
 **El rastro sigue en pie con el rol nuevo, y no hace falta construir nada.** Lo que falta es
 **medirlo con `admin`**, porque hoy nadie lo mide:
 
@@ -178,11 +184,12 @@ Dos cautelas que este repo ya pagó:
 - El caso **no puede** llevar un `if (!fks) return;` que lo deje «passed» sin comprobar nada.
 - El archivo tiene que ponerse **rojo** con una mutación deliberada antes de creerlo (§8).
 
-### 6.3 El residuo, declarado
+### 6.3 El límite conocido, declarado y aceptado
 
-Quien borra queda consultable **para el `maestro`**, no para sí mismo (R16). Es deliberado: el
-registro es la contrapartida, y la contrapartida no la revisa el revisado. Se anota como Q2 en
-`requirements.md` por si el humano quiere otra cosa.
+Quien borra queda consultable **para el `maestro`**, no para sí mismo (R16). Es deliberado y está
+**aceptado por el humano** (`requirements.md`, D2): el registro es la contrapartida, y la
+contrapartida no la revisa el revisado — la ficha 362 ya lo decidió con esas palabras. Esta ficha
+**no** lo resuelve; lo deja escrito como límite.
 
 ## 7. Alternativas descartadas
 
@@ -208,9 +215,10 @@ Un permiso que no permite nada es peor que no darlo.
 `admin`, y aceptar un actor sin frontera convertiría una credencial de integración en capaz de
 borrar órdenes ajenas.
 
-**A6 — Aprovechar y abrir también «recuperar» y el interruptor «Eliminadas».** Descartada: no está
-pedido. Además, dejar la recuperación en una sola persona conserva **la mitad** de lo que protegía
-la decisión del 2026-08-27, al coste declarado en Q1.
+**A6 — Aprovechar y abrir también «recuperar» y el interruptor «Eliminadas».** Descartada **por el
+humano el 2026-09-14** (`requirements.md`, D1): el `admin` borra y no se le abre la papelera; si se
+equivoca, se lo pide al `maestro`. Dejar la recuperación en una sola persona conserva además **la
+mitad** de lo que protegía la decisión del 2026-08-27.
 
 **A7 — Dejar las dos listas de roles (`page.tsx` y la función) y añadir una guardia que las
 compare.** Descartada frente a D2: una guardia que compara dos copias sigue dejando dos copias, y
@@ -225,9 +233,10 @@ que las dos diverjan.
 ## 8. Riesgo declarado
 
 El riesgo **es** la consecuencia que el humano aceptó el 2026-09-14: a partir de esta ficha hay más
-de una persona del equipo capaz de retirar una orden del sistema. Lo que esta ficha exige a cambio
-es que cada retirada diga **quién** y **con qué rol**, por orden y por acto, y que eso sea
-consultable — verificado, no supuesto (§6.2).
+de una persona del equipo capaz de retirar una orden del sistema. **Medido el 2026-09-14: de 2
+personas (2 `maestro`) se pasa a 6 (más 4 `admin` activos en producción).** Lo que esta ficha exige
+a cambio es que cada retirada diga **quién** y **con qué rol**, por orden y por acto, y que eso sea
+consultable — verificado, no supuesto (§6.2), y **bloqueante** si no lo fuera.
 
 Riesgo secundario, acotado: `admin` pasa a recibir `eliminable` en el listado, así que ve casillas
 de selección donde antes tenía solo las acciones de lote. No es un cambio de datos ni de contrato;

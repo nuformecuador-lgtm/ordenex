@@ -1,6 +1,8 @@
 # 425 — Salida del rechazo de tienda por el cierre · Tareas
 
 > Requisitos: `requirements.md` · Diseño: `design.md` · Decisiones: `progress/decisiones_425.md`.
+> **Diseño aprobado por Carlos Restrepo el 2026-09-14. Sin preguntas abiertas.** La forma de pantalla
+> aprobada está en `design.md` §5.4 y es la que F1/F4 tienen que reproducir.
 > Zona **fullstack** → se secuencia **backend primero, frontend después** (bloque B antes del F).
 > El diff toca `db/schema.prisma` + una migración: el gate rápido se niega solo, **`./init.sh`
 > completo es obligatorio** antes del PR y antes de la release.
@@ -10,13 +12,23 @@
 
 ## Bloque M — Medir antes de tocar nada (solo lectura contra producción)
 
-### M1. La sonda: ¿es este el único bloqueo? **(BLOQUEANTE, va primero)**
-Ejecutar la consulta `M5` de `design.md` §8 contra producción, en solo lectura.
-**Hecho:** las 3 órdenes en `rechazada` aparecen con `mensajero_asignado_id` **no nulo** e **igual**
-al `mensajero_id` de su última gestión vigente, y `deleted_at IS NULL`. El número medido y la salida
-cruda quedan pegados en `progress/impl_425.md`.
-**Si NO se cumple:** *parar*. El arreglo no destraba esas órdenes; volver al humano con el dato. No
-se escribe una línea de código.
+### M1. La sonda: ¿es este el único bloqueo? — ✅ **YA EJECUTADA, no hay nada que hacer**
+Medida por el humano contra producción el **2026-09-14** (consulta `M5` de `design.md` §8, solo
+lectura). **Resultado, medido y no supuesto:** las **3** órdenes atascadas en `rechazada` conservan
+las tres su `mensajero_asignado_id`, y las tres son del **mismo mensajero, Arnel Guillen Arce**:
+
+| Remisión | Guía |
+| --- | --- |
+| NA-947 | 19301246 |
+| NA-981 | 58980454 |
+| NA-1103 | 85696637 |
+
+Ninguna está sin mensajero → el bloque 139 **sí** las libera → **el arreglo las destraba**. Esta
+tarea **ya no bloquea** al bloque B.
+**Hecho:** el dato queda copiado en `progress/impl_425.md` al abrir la implementación, con su fecha.
+**Ojo al cruzar datos:** el mismo día se reasignaron a mano **31 órdenes de Andy Cortés a Carlos
+Eduardo**, pero eran **`en_reparto`, no `rechazada`**: no tocan a estas tres ni a ningún rechazo de
+tienda. Quien audite las dos cosas juntas puede atribuirle a esa reasignación un atasco que no causó.
 
 ### M2. [P] La evidencia del doble cobro
 Ejecutar la consulta `M6` de §8.
@@ -37,7 +49,7 @@ de sus gestiones (`M1/M2` de §8, mitad *antes*).
 
 ---
 
-## Bloque B — Backend (depende de M1 en verde)
+## Bloque B — Backend (desbloqueado: M1 ya está medida y en verde)
 
 ### B1. Esquema + migración
 `db/schema.prisma`: modelo `CierreRechazoTienda` (§4.1) y las relaciones inversas en `CierreDia`,
@@ -133,10 +145,12 @@ ninguno emite `[]`, y un cierre fuera de alcance no emite el campo.
 
 ## Bloque F — Frontend (empieza cuando B11 está verde)
 
-### F1. La sección en el comprobante
+### F1. La sección en el comprobante — **reproducir la forma aprobada** (`design.md` §5.4)
 `app/(app)/cierres-admin/_components/cierre-factura.tsx`: prop `rechazosDeTienda` y la sección de
-§5.4 (rótulo, la línea «no son gestiones del mensajero y no suman a su pago», guía · remisión ·
-destinatario · producto · tienda · **fecha del rechazo** · motivo).
+§5.4: los **dos conteos con su etiqueta** («Gestiones del mensajero — paga» / «Rechazados por la
+tienda — revisar»), «separar para devolución», la frase «al aprobar pasan a *por devolver a tienda*»
+(satélite: *por devolver*), la línea «no son gestiones del mensajero y no suman a su pago», y por fila
+guía · remisión · destinatario · producto · tienda · **fecha del rechazo** · motivo.
 **Hecho:** sin ninguna columna de importe, sin casilla de confirmación, y con la sección omitida
 entera cuando la lista está vacía. Componentes de `components/ui/` existentes; nada nuevo.
 **Depende de:** B11.
@@ -155,8 +169,9 @@ verde con las tres puestas (R14).
 
 ### F4. Test de componente — `tests/components/CierreRechazosDeTienda.test.tsx`
 **Hecho:** verde y afirma: se pinta la **fecha** de cada rechazo (R15); el rótulo dice que no son
-trabajo del mensajero (R16); **no** aparece ningún importe ni casilla de confirmación en esa sección;
-y una lista vacía no deja ni encabezado. Texto en español claro, sin siglas.
+trabajo del mensajero y **los dos conteos salen etiquetados** —«paga» frente a «revisar»— como en la
+forma aprobada (R16); **no** aparece ningún importe ni casilla de confirmación en esa sección; y una
+lista vacía no deja ni encabezado. Texto en español claro, sin siglas.
 **Depende de:** F1.
 
 ---
@@ -192,8 +207,9 @@ a quien aprueba los cierres.
 ### V5. Medición del «después» (post-despliegue)
 Sobre el **primer** cierre que incorpore rechazos: las dos consultas `M1/M2` de §8, mitad *después*.
 **Hecho:** `total_pago_mensajero` cuadra con la suma de los `pago_mensajero` de las gestiones **con
-`cierre_id`**, la consulta de contaminación devuelve **0**, y las órdenes atascadas —NA-981 incluida—
-están fuera de `rechazada`. Resultado pegado en `progress/impl_425.md`.
+`cierre_id`**, la consulta de contaminación devuelve **0**, y las **tres** órdenes atascadas —NA-947,
+NA-981 y NA-1103, todas de Arnel Guillen Arce— están fuera de `rechazada`, en `por_devolver_a_tienda`
+o `por_devolver` según su zona. Resultado pegado en `progress/impl_425.md`.
 **Si no cuadra:** revertir el código (la tabla vacía no estorba) y volver al humano. No se ha emitido
 ningún apunte, así que no hay nada que compensar.
 
@@ -231,8 +247,8 @@ ningún apunte, así que no hay nada que compensar.
 ## Orden de ejecución (resumen)
 
 ```
-M1 ──(verde)──> B1 ──> B2 [P] B3 ──> B4 ──> B5, B6, B7, B8 [P]
-                 └──> B9 [P]   └──> B10 ──> B11 ──> F1 ──> F2 ──> F3, F4 [P]
+M1 ✅ (ya medida el 2026-09-14) ──> B1 ──> B2 [P] B3 ──> B4 ──> B5, B6, B7, B8 [P]
+                                     └──> B9 [P]   └──> B10 ──> B11 ──> F1 ──> F2 ──> F3, F4 [P]
 M2, M3, M4 [P] (en cualquier momento; M3 bloquea V4)
-                                                   todo ──> V1 ──> V2 ──> V3 ──> V4 ──> V5
+                                                          todo ──> V1 ──> V2 ──> V3 ──> V4 ──> V5
 ```

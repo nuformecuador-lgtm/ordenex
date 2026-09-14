@@ -16,6 +16,12 @@ reviewer lo busca: aquí no aplica.
 
 Archivo de producción tocado: **`middleware.ts`, y solo ese.**
 
+**El arreglo no escribe un 401 nuevo: desatasca el que ya existe.** Las dos rutas afectadas ya
+tienen su rechazo por falta de sesión escrito en el handler —`chunk/route.ts:105-106` y
+`chat/media/[mensajeId]/route.ts:99-101`, ambos 401 con cuerpo JSON— y **nunca se ha ejecutado**,
+porque el middleware responde el 307 antes. Lo que se hace aquí es que el borde emita ese mismo
+desenlace en vez de redirigir. Ningún handler se toca.
+
 El orden de decisión actual (`middleware.ts:43-75`) se conserva entero; se inserta **un único
 desvío en el punto de rechazo**:
 
@@ -61,13 +67,18 @@ import { UnauthenticatedError } from "@/lib/errors/app-error";
 const response = appErrorToResponse(new UnauthenticatedError().toShape());
 ```
 
-**Por qué esta forma y no otra.** Es **exactamente** la que emitiría
+**Por qué esta forma y no otra** (decisión **D1** del humano, 2026-09-14: confirmada). Es
+**exactamente** la que emitiría
 `app/api/ordenes/carga-masiva/chunk/route.ts:105-106` si el handler llegara a correr
 (`UnauthenticatedError` → `withErrorHandler` → `appErrorToResponse`). Así el integrador ve **un solo
 contrato** para «no hay sesión», caiga el rechazo en el borde o dentro del handler; si se copiara el
 literal `{error:"unauthorized"}` de los crons, el mismo endpoint contestaría 401 con **dos cuerpos
 distintos** según dónde se le parara, que es una variante más sutil del problema que vinimos a
 arreglar.
+
+**El handler de la media conserva su `{error:"unauthenticated"}`** (decisión **D2**: no se unifica).
+Es código que hoy funciona, ninguna evidencia lo señala y su único consumidor lee `res.status`, no
+el cuerpo (`useMediaChat.ts:73-80`). La divergencia queda registrada a conciencia, no por descuido.
 
 **Imports profundos** (`@/lib/errors/http`, `@/lib/errors/app-error`) en vez del barril
 `@/lib/errors`: el barril arrastra `normalize.ts`, que importa `zod`, al bundle del middleware —que
@@ -167,8 +178,10 @@ igual.
 
 ## 8. Impacto en los tests que ya existen
 
-Tres casos **afirman hoy el comportamiento defectuoso** y hay que actualizarlos. Se nombran aquí
-para que el reviewer no lo confunda con «comprar el verde»:
+Tres casos **afirman hoy el comportamiento defectuoso** y se **INVIERTEN**: no se borran, no se
+relajan y no entran al baseline. Se nombran con ruta y línea para que el reviewer no lo confunda con
+«comprar el verde» — en los tres se conserva **el veredicto** (esa petición se rechaza) y cambia
+solo **la forma del rechazo**:
 
 | archivo:línea | qué afirma hoy | qué debe afirmar |
 | --- | --- | --- |
@@ -215,3 +228,10 @@ Repetido aquí a propósito, porque es la parte que se olvida: la sesión del in
 venciendo a las 24 h y su carga seguirá fallando. Lo único que cambia es que el fallo será
 **legible**: `401` con `{"code":"UNAUTHORIZED"}` en vez de un `200` con una página de login dentro.
 El arreglo de fondo es que Nuform use la API key que ya tiene, y eso no es código.
+
+Dos consecuencias que se gestionan **fuera del código** y están anotadas donde toca:
+
+- **El aviso a Nuform** (D4): su cliente pasa de `200`+HTML a `401`+JSON. Es un cambio observable
+  para un tercero y sale **antes** del despliegue — nota de despliegue en `tasks.md`.
+- **El «tu sesión venció» en la interfaz del chat** (D3): mejora real para el mensajero, pero es UI
+  y esta ficha es `backend`. Ficha aparte, a registrar cuando la 426 cierre.

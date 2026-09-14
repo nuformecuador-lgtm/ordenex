@@ -4,6 +4,10 @@
 > Decisiones humanas vinculantes: `progress/decisiones_425.md` (D1/D2/D3).
 > Todo lo que aquí se afirma del código está leído en el árbol de `dev` el 2026-09-14, con archivo y
 > línea. Lo que no está medido se dice que no lo está.
+>
+> **APROBADO por Carlos Restrepo el 2026-09-14**, con la lectura de D1 confirmada (§3) y la forma de
+> pantalla de §5.4 validada. **Sin preguntas abiertas.** La sonda de bloqueo previo (`M5`) está
+> ejecutada contra producción: §1.1.
 
 ---
 
@@ -38,9 +42,24 @@ hace rollback y `crearCierre` devuelve `null` —el «caso Andy Cortes» que la 
 propósito—. Sin cierre no hay aprobación, y sin aprobación no hay salida. Cuadra con lo medido: los
 3 rechazos de Arnel Guillen (todos del 2026-09-10) y 3 órdenes atascadas.
 
-> ⚠️ **Esto hay que medirlo antes de escribir código** (`M5`, §8). Si alguna de las 3 tiene
-> `mensajero_asignado_id` nulo o distinto del mensajero de su gestión, este arreglo **no la
-> destraba** y el spec vuelve al humano. Precedente: «la sonda que mide otro bloqueo».
+> ✅ **MEDIDO contra producción el 2026-09-14 por el humano — no es una deducción de leer el código.**
+> Era la sonda obligada («la sonda que mide otro bloqueo»): si alguna de las 3 tuviera
+> `mensajero_asignado_id` nulo o de otro mensajero, este arreglo **no la destrabaría**. Las tres lo
+> conservan y **las tres son del mismo mensajero, Arnel Guillen Arce**:
+>
+> | Remisión | Guía |
+> | --- | --- |
+> | NA-947 | 19301246 |
+> | NA-981 | 58980454 |
+> | NA-1103 | 85696637 |
+>
+> O sea: las 3 órdenes atascadas **son** exactamente los 3 rechazos de Arnel de la tabla de §6, y el
+> bloque 139 las libera en cuanto su cierre exista y se apruebe. El arreglo de §3 es suficiente.
+>
+> ⚠️ **No cruzar esto con la reasignación manual del 2026-09-14.** Ese día el humano pasó **31
+> órdenes de Andy Cortés a Carlos Eduardo**, pero eran **`en_reparto`, no `rechazada`**: no tocan a
+> estas tres ni a ningún rechazo de tienda. Quien audite las dos cosas juntas puede creer que un
+> cambio de mensajero explica el atasco, y no es así.
 
 ---
 
@@ -63,10 +82,12 @@ La gestión **no** recibe `cierre_id`. En su lugar, la transacción que crea el 
 en una tabla nueva, `cierre_rechazo_tienda`, con el grano `(cierre_id, gestion_id)` y **sin ninguna
 columna de importe**.
 
-**Por qué esto cumple D1.** El rechazo aparece **en el documento del cierre**, en las tres
-superficies, con guía y fecha; y la **aprobación de ese cierre** es lo que libera la orden (R11), sin
-acción manual de nadie (R13). Las dos alternativas que el humano descartó —colgarlo del cobro y una
-acción del admin— siguen descartadas: aquí no hay más botón que «Aprobar cierre».
+**Por qué esto cumple D1 — y está confirmado, no interpretado.** El rechazo aparece **en el documento
+del cierre**, en las tres superficies, con guía y fecha; y la **aprobación de ese cierre** es lo que
+libera la orden (R11), sin acción manual de nadie (R13). El humano validó esta lectura el 2026-09-14
+sobre la forma de §5.4: se ve, se separa el paquete, se destraba al aprobar, **y no entra en el
+cálculo del dinero**. Las dos alternativas que descartó —colgarlo del cobro y una acción del admin—
+siguen descartadas: aquí no hay más botón que «Aprobar cierre».
 
 **Por qué esto resuelve la tensión, y por construcción.** `gestion_orden.cierre_id` es la **única**
 llave que abre los cinco caminos de dinero, y todos preguntan literalmente `where: { cierreId }`:
@@ -245,13 +266,25 @@ existen y solo cambian de contenido:
 | Comprobante | `app/(app)/cierres-admin/_components/cierre-factura.tsx` | Declara la prop y pinta la sección |
 
 La **vista en vivo** del mensajero (`listarCierreDia`, `CierreDiaService.ts:263-353`) **no cambia**:
-los rechazos no son suyos y no puede hacer nada con ellos (ver Q2 en requirements).
+los rechazos no son suyos y no puede hacer nada con ellos (Q2, cerrada en requirements §5).
 
-### 5.4 Presentación (R14/R15/R16)
+### 5.4 Presentación (R14/R15/R16) — **forma aprobada por el humano el 2026-09-14**
 
-Sección propia, separada de los cuatro grupos de gestiones y del bloque de `sin_gestionar`, con:
+```
+CIERRE DEL DIA - Arnel Guillen
+  Gestiones del mensajero......  17   (paga)
+  RECHAZADOS POR LA TIENDA.....   3   (revisar)
+    NA-947, NA-981, NA-1103  -> separar para devolucion
+  Al aprobar: las 3 pasan a 'por devolver a tienda'
+```
 
-- rótulo propuesto: **«Rechazos registrados por la tienda — separar para devolución»**;
+Los **dos conteos, uno al lado del otro, con su etiqueta de qué hace cada uno** («paga» / «revisar»)
+son el corazón de lo aprobado: es lo que hace legible de un vistazo que la segunda lista no es
+trabajo del mensajero ni dinero. Sección propia, separada de los cuatro grupos de gestiones y del
+bloque de `sin_gestionar`, con:
+
+- rótulo: **«Rechazados por la tienda»**, con «separar para devolución» y la frase de efecto «al
+  aprobar pasan a *por devolver a tienda*» (en zona satélite, *por devolver*);
 - una línea fija: «No son gestiones del mensajero y no suman a su pago.»;
 - por fila: guía · remisión · destinatario · producto · tienda · **fecha del rechazo**, y el motivo;
 - **sin ninguna columna de importe** y **sin casilla de confirmación física** (`R10`): la casilla vive
@@ -280,6 +313,10 @@ despliegue** (`M7`), porque el conjunto se mueve:
 | Johel Hernandez Hernández | 4 | 2026-08-28 | 2026-09-10 |
 | Arnel Guillen Arce | 3 | 2026-09-10 | 2026-09-10 |
 | **Total** | **46** | | |
+
+Los **3 de Arnel son exactamente las 3 órdenes atascadas** (NA-947, NA-981, NA-1103; medido el
+2026-09-14, §1.1): su cierre es el que hoy no llega a existir, y por eso es el primero que hay que
+mirar tras desplegar.
 
 **Esto es lo esperado, no un error.** Quien aprueba verá un documento con hasta 19 paquetes de hasta
 tres semanas atrás en la sección nueva. Lo que tiene que hacer con ellos es **ir a la estantería,
@@ -351,7 +388,9 @@ Se listan aquí solo para que nadie las vuelva a proponer creyendo que no se mir
 Todo **solo lectura** contra producción (vía el MCP de Supabase; `DATABASE_URL` de prod es
 *sensitive*). El resultado se pega en `progress/impl_425.md`. Los `<...>` se resuelven al ejecutar.
 
-**M5 — ¿es este el único bloqueo? (ANTES de escribir código; si falla, se para)**
+**M5 — ¿es este el único bloqueo? ✅ EJECUTADA el 2026-09-14. Resultado: las 3 órdenes conservan su
+`mensajero_asignado_id` y las 3 son de Arnel Guillen Arce (NA-947 / NA-981 / NA-1103; ver §1.1). No
+hay un segundo bloqueo.** La consulta se conserva para poder repetirla si el conjunto cambia:
 
 ```sql
 SELECT o.id, o.num_guia, o.mensajero_asignado_id, g.mensajero_id, o.deleted_at, z.es_central
@@ -365,7 +404,7 @@ SELECT o.id, o.num_guia, o.mensajero_asignado_id, g.mensajero_id, o.deleted_at, 
  WHERE o.deleted_at IS NULL;
 ```
 *Criterio:* las 3 filas con `mensajero_asignado_id` no nulo **e igual** a `g.mensajero_id`. Cualquier
-otra cosa → parar y volver al humano.
+otra cosa → parar y volver al humano. **Cumplido: 3 de 3, mismo mensajero.**
 
 **M1/M2 — totales de un cierre real, antes y después.** *Antes* (hoy, prod): los seis totales del
 último cierre **aprobado** de cada uno de los 6 mensajeros, más el `SUM(pago_mensajero)` de sus
@@ -407,7 +446,7 @@ una transición, y aquí un test con dobles no prueba nada.
 
 | Riesgo | Mitigación |
 | --- | --- |
-| El arreglo no destraba las 3 órdenes porque el bloqueo era otro | `M5` **antes** de codificar; si falla, se para |
+| El arreglo no destraba las 3 órdenes porque el bloqueo era otro | **Descartado con medida**: `M5` ejecutada el 2026-09-14, las 3 conservan mensajero y son de Arnel (§1.1) |
 | Un documento con 19 filas viejas parece un error | Aviso previo (D3, §6) + fecha en cada fila |
 | Un mensajero queda bloqueado por el cierre nuevo | `M7` lo dice antes; la salida ya existe (aprobar el más viejo) |
 | Regresión silenciosa en el `WHERE` | Los tests de pertenencia corren **contra Postgres real**, y se les aplica contraprueba por mutación |

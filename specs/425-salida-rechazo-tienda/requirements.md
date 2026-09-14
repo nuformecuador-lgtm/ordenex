@@ -3,6 +3,10 @@
 > **Entrada vinculante:** `progress/decisiones_425.md` (D1/D2/D3, firmadas por Carlos Restrepo el
 > 2026-09-14) y la ficha 425 de `feature_list.json`. Nada de lo que dice ese archivo se reabre aquí.
 > Lo que sigue lo desarrolla; no lo discute.
+>
+> **Estado: diseño APROBADO por Carlos Restrepo el 2026-09-14.** Sin preguntas abiertas (§5). La vía
+> elegida es el vínculo de revisión en tabla propia (`cierre_rechazo_tienda`): el rechazo **se ve** en
+> el cierre y su aprobación destraba la orden, **sin entrar en el cálculo del dinero**.
 
 ## 0. El defecto, en una frase
 
@@ -102,8 +106,9 @@ administrador que aprobó como actor, y NO DEBE tocar ni el mensajero asignado, 
 ningún importe de la orden.
 
 **R13.** CUANDO se apruebe el primer cierre que incorpore los rechazos históricos, el sistema DEBE
-sacar de `rechazada` las órdenes hoy atascadas —entre ellas **NA-981** (guía 58980454, tienda
-Nuform)— **sin ninguna edición manual** sobre la orden ni sobre su gestión.
+sacar de `rechazada` las **tres** órdenes hoy atascadas —**NA-947** (guía 19301246), **NA-981**
+(58980454, tienda Nuform) y **NA-1103** (85696637), las tres de Arnel Guillen Arce, medido el
+2026-09-14— **sin ninguna edición manual** sobre la orden ni sobre su gestión.
 
 ### 3.4 Lo que ve quien aprueba (D1: «es la manera de enterarse», y D3: «que no parezca un error»)
 
@@ -155,11 +160,12 @@ con lo que apareció al leer el código. Las consultas viven en `design.md` §8 
 2. **M2** — Que `total_pago_mensajero` no se mueve cuando entra un rechazo de tienda.
 3. **M3** — Que la orden sale de `rechazada` y llega al estado que le toca **según su zona**.
 4. **M4** — Que las reprogramaciones de tienda siguen fuera, y que no cambió por accidente.
-5. **M5** *(añadido)* — Que **el bloqueo que se está arreglando es el único que hay**. Las 3 órdenes
-   atascadas tienen que conservar `mensajero_asignado_id` **y** que ese mensajero sea el de la
-   gestión: el bloque 139 busca las `rechazada` por `mensajero_asignado_id`, no por las gestiones del
-   cierre. Si alguna no lo cumple, este arreglo **no la destraba** y hay que volver al humano antes
-   de escribir código.
+5. **M5** *(añadido)* — ✅ **YA MEDIDO el 2026-09-14 contra producción, no supuesto.** Que **el bloqueo
+   que se está arreglando es el único que hay**: el bloque 139 busca las `rechazada` por
+   `mensajero_asignado_id`, no por las gestiones del cierre, así que una orden sin mensajero no se
+   destrabaría. **Las 3 órdenes atascadas conservan las tres su `mensajero_asignado_id`, y las tres
+   son del mismo mensajero — Arnel Guillen Arce**: NA-947 (guía 19301246), NA-981 (58980454) y
+   NA-1103 (85696637). El arreglo las destraba. Detalle en `design.md` §1.1.
 6. **M6** *(añadido)* — Cuántos de los 46 rechazos tienen ya su `rechazo_tienda_cobro` **aprobado**
    (24 cobros / ₡65.088 medidos): es la evidencia de que la tienda **ya pagó** y de que `R8` no es
    una precaución teórica.
@@ -169,33 +175,41 @@ con lo que apareció al leer el código. Las consultas viven en `design.md` §8 
 
 ---
 
-## 5. Preguntas abiertas
+## 5. Preguntas cerradas
 
-> Se dejan aquí en vez de rellenarlas con supuestos (CLAUDE.md, regla 6). Ninguna reabre D1/D2/D3.
+> **No queda ninguna pregunta abierta.** Las cinco que este spec planteó se cerraron el **2026-09-14**
+> con la aprobación del diseño por Carlos Restrepo. Se conservan aquí con su respuesta para que nadie
+> las vuelva a abrir creyendo que no se miraron. Ninguna reabre D1/D2/D3.
 
-**Q1 — Lectura de D1: «entra al cierre» ¿significa `gestion_orden.cierre_id`?**
-El diseño cumple D1 haciendo que el rechazo **aparezca en el documento del cierre y que la aprobación
-de ese cierre sea la que libera la orden**, pero **sin** escribirle `cierre_id` a la gestión, porque
-esa columna es la llave que abre los cinco caminos de dinero (ver `design.md` §3 y §5). Se pide
-confirmación explícita de que esa es la lectura correcta de D1. Si el humano exige literalmente el
-`cierre_id`, el diseño cambia entero y el coste medido es: doble cobro a la tienda, confirmación
-física obligatoria de 19 paquetes de tres semanas atrás y la pregunta abierta del `ingreso_bodega_rechazo`
-resuelta sin querer.
+**Q1 — Lectura de D1: «entra al cierre» ¿significa `gestion_orden.cierre_id`? → CERRADA: NO.**
+Confirmado por el humano: «llegar por un cierre» significa que el rechazo **se ve** en el cierre como
+sección de revisión, que quien aprueba **separa el paquete** y que al aprobar la orden **se destraba**
+— pero **no entra en el cálculo del dinero**. La forma aprobada es literalmente esta:
 
-**Q2 — ¿La vista EN VIVO del mensajero debe listar los rechazos, o solo el comprobante del cierre ya
-creado?** El diseño propone **solo el comprobante** (`R14`): en la vista en vivo no hay nada que el
-mensajero pueda hacer con ellos, y listarlos ahí reabriría justo la queja de atribución de la 337.
+```
+CIERRE DEL DIA - Arnel Guillen
+  Gestiones del mensajero......  17   (paga)
+  RECHAZADOS POR LA TIENDA.....   3   (revisar)
+    NA-947, NA-981, NA-1103  -> separar para devolucion
+  Al aprobar: las 3 pasan a 'por devolver a tienda'
+```
 
-**Q3 — Rótulo de la sección.** Se propone «**Rechazos registrados por la tienda — separar para
-devolución**», con la nota «no son gestiones del mensajero y no suman a su pago». Falta el visto
-bueno del humano sobre el texto exacto (y va sin siglas, según la convención del repo).
+El vínculo de revisión en tabla propia (`cierre_rechazo_tienda`, molde de `cierre_sin_gestion`) es la
+vía elegida. **No se reabre.** El coste de la lectura contraria queda medido en `design.md` §7.1.
 
-**Q4 — ¿Hay tope de antigüedad?** El diseño **no** pone ninguno: entran los 46, que es D3 palabra por
-palabra. Si el humano prefiriera un tope (p. ej. «solo los de los últimos N días») habría que decidir
-qué pasa con los que quedan fuera, y hoy la respuesta sería «siguen sin salida»: por eso no se
-propone.
+**Q2 — ¿La vista EN VIVO del mensajero lista los rechazos? → CERRADA: NO, solo el comprobante.**
+Se aprueba lo que el diseño proponía (`R14`, `design.md` §5.3): en la vista en vivo no hay nada que el
+mensajero pueda hacer con ellos, y listarlos ahí reabriría la queja de atribución de la 337.
 
-**Q5 — Los 25 sin `ingreso_bodega_rechazo`.** Queda abierta por decisión expresa del humano. Este
-diseño la mantiene abierta **por construcción** (`R9`) en vez de cerrarla de lado: conviene confirmar
-que se prefiere así antes de implementar, porque la alternativa descartada la habría cerrado sola y
-con la tarifa de hoy.
+**Q3 — Rótulo de la sección. → CERRADA.** El aprobado es el de la forma de Q1: **«Rechazados por la
+tienda»**, con «separar para devolución» y la frase de efecto «al aprobar pasan a *por devolver a
+tienda*». Se acompaña de la nota «no son gestiones del mensajero y no suman a su pago». Sin siglas,
+según la convención del repo.
+
+**Q4 — ¿Hay tope de antigüedad? → CERRADA: NO hay tope.** Entran los 46, que es D3 palabra por
+palabra. Un tope dejaría a los excluidos exactamente donde están hoy: sin salida.
+
+**Q5 — Los 25 sin `ingreso_bodega_rechazo`. → CERRADA como pregunta de este spec: es un pendiente del
+humano, no una decisión de diseño.** Está registrada en §2 «Fuera» y en `progress/decisiones_425.md`;
+se decide **después**, con este diseño delante. Lo que esta ficha se compromete a hacer es **no
+cerrarla de lado**: `R9` la mantiene abierta por construcción y no toca dinero histórico.

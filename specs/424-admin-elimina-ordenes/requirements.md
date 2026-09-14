@@ -37,6 +37,7 @@ congelado en el instante del borrado y consultable. Esa capacidad existe desde l
 | El rastro del borrado ya congela `actor_usuario_id`, `actor_nombre` y `actor_rol` en `historial_accion`, una fila por orden **efectivamente** borrada y un `lote_id` por acto | `lib/repositories/registrar-accion.ts`, `tests/integration/db/historial-accion-atomicidad.test.ts` |
 | `historial_accion.actor_rol` es el enum `rol_value`, que **ya contiene** `admin` | `db/schema.prisma` |
 | El módulo de consulta del rastro (`/historico/acciones`) lo lee **solo el `maestro`** | `ROLES_HISTORIAL_ACCIONES` en `lib/auth/menu-visibility.ts` |
+| **A cuánta gente alcanza la reversión: 4 usuarios con rol `admin` activos** en producción, más 2 `maestro` | Medido el **2026-09-14** por el humano |
 
 ---
 
@@ -75,6 +76,10 @@ eliminables, y sobre ninguna otra.
 
 **R8.** El sistema DEBE responder lo mismo a «¿ofrezco el botón Eliminar?» y a «¿autorizo este
 borrado?» para el rol `admin`, **estado por estado** del catálogo de estados de orden.
+
+**R20.** CUANDO cambie el conjunto de roles autorizados a eliminar órdenes, el sistema DEBE
+cambiar con él, **en el mismo acto y sin editar ninguna segunda lista de roles**, el conjunto de
+roles a los que la pantalla ofrece la selección y la acción «Eliminar».
 
 ### El canal por API key
 
@@ -123,25 +128,35 @@ de borrarla.
 
 ---
 
-## Preguntas abiertas
+## Decisiones cerradas por el humano (2026-09-14)
 
-**Q1 — El `admin` borra, pero no puede ver ni recuperar lo que borró.**
-R17 y R18 mantienen «ver eliminadas» y «recuperar» en el `maestro`. La consecuencia práctica: un
-`admin` que se equivoque al borrar no tiene ninguna forma de deshacerlo ni de ver la orden después;
-tiene que pedírselo al maestro. ¿Se acepta esa asimetría, o la reversión debe alcanzar también a
-recuperar y al interruptor «Eliminadas»? **El spec asume que NO alcanza** (la ficha pide eliminar y
-solo eliminar) y lo deja pinchado con tests para que la asimetría sea deliberada y no un descuido.
+**No queda ninguna pregunta abierta.** Las tres que este spec planteó están resueltas, y aquí
+quedan escritas con su consecuencia para que nadie las reabra por olvido.
 
-**Q2 — El `admin` no puede auditar su propio rastro.**
-El módulo `/historico/acciones` lo lee solo el `maestro`, por una decisión explícita de la ficha
-362 («el registro guarda las decisiones de dinero del `admin` y no puede ser el `admin` quien
-revise su propio registro»). Con esta ficha, el `admin` genera filas en ese registro y no puede
-leerlas. **El spec asume que eso se conserva** (R16) porque es justamente lo que hace del registro
-una contrapartida y no una formalidad. ¿Se confirma?
+**D1 — «Que borre, pero que quede registro en el historial que ya tenemos».** Es la frase del
+humano, y decide las dos mitades de la ficha:
 
-**Q3 — Cuántas personas quedan habilitadas.**
-No se ha medido cuántos usuarios con rol `admin` existen hoy en producción, y el spec no depende de
-ese número: ninguna decisión de aquí cambia según sea 1 o 10. Se anota porque es el dato que dice
-de cuántas personas pasa a depender el borrado, y quien apruebe esta ficha quizá quiera verlo
-antes — se saca con un `count` en **solo lectura** sobre `usuario` unido a su rol, filtrando por el
-valor `admin` y por los usuarios activos.
+- El `admin` **borra**. **No** se le abre la papelera ni la recuperación (R17, R18). Si se
+  equivoca, se lo pide al `maestro`. Aceptado con esa consecuencia sobre la mesa.
+- El **registro de quién borró es REQUISITO de esta ficha, no un extra** (R11–R15), y se resuelve
+  con el historial que **ya existe** — la ficha 362, que congela nombre y rol del actor. **No se
+  estrena ningún mecanismo nuevo.** Lo que esta ficha añade es la **medición** de que ese rastro
+  sigue en pie con el rol nuevo y es consultable por el `maestro`.
+- ⚠️ **Y es bloqueante:** si al medirlo se descubre que el rastro **no** queda o **no** es
+  consultable con el rol `admin`, se dice y se para — no se tapa ni se degrada a «mejora
+  posterior». Es lo único que sostiene la reversión.
+
+**D2 — El `admin` no puede leer `/historico/acciones`: límite conocido y aceptado.** No se resuelve
+en esta ficha. El motivo es una decisión explícita de la ficha 362: «el registro guarda las
+decisiones de dinero del `admin` y no puede ser el `admin` quien revise su propio registro». La
+consecuencia, dicha y no escondida: a partir de aquí el `admin` **genera** filas en ese registro y
+**no puede leerlas**; quien audita es el `maestro` (R16).
+
+**D3 — Alcance medido: 4 usuarios con rol `admin` activos en producción, más 2 `maestro`**
+(2026-09-14). No cambia el diseño; queda escrito porque es de cuántas personas pasa a depender el
+borrado de una orden: de 2 a 6.
+
+**D4 — La pregunta «¿quién puede borrar?» se contesta en un solo sitio** para el servidor y para la
+pantalla (R20). Confirmado por el humano: nada de añadir `admin` a una segunda lista de roles en la
+página. Dos listas que contestan la misma pregunta es exactamente el defecto que reportó la ficha
+358 («Nuform quiere eliminar NA-495 y no le aparece el checkbox»).

@@ -3,6 +3,26 @@
 > Zona `backend`. Un solo archivo de producción: `middleware.ts`.
 > **El gate de esta ficha es `./init.sh` COMPLETO**: `--rapido` se niega solo porque el diff toca
 > `middleware.ts` (`docs/verification.md:79`). No hay migración, no hay base de datos.
+>
+> **El arreglo no escribe un 401 nuevo.** Las dos rutas ya lo tienen escrito en su handler
+> (`app/api/ordenes/carga-masiva/chunk/route.ts:105-106`, `app/api/chat/media/[mensajeId]/route.ts:99-101`)
+> y **nunca corre**, porque el middleware responde el 307 antes. Lo único que se hace es dejar que
+> ese desenlace llegue a ejecutarse. **Ningún handler se toca.**
+
+## Nota de despliegue — sale ANTES de desplegar (D4)
+
+**Hay que avisar a Nuform antes de que esto llegue a producción.** Lo hace el humano por su canal;
+no es código y no hay task que lo automatice. Qué se le dice: a partir de este despliegue, una
+petición a `/api/ordenes/carga-masiva/chunk` con la sesión vencida deja de devolver **`200` con el
+HTML de la página de login** y pasa a devolver **`401` con cuerpo JSON**
+(`{"status":"error","code":"UNAUTHORIZED","message":"No hay una sesion valida."}`). Es estrictamente
+más legible, pero **es un cambio observable para un tercero**: si su cliente hoy da por buena
+cualquier respuesta `2xx`, empezará a ver un error donde antes veía un falso éxito — que es
+exactamente el punto. Aprovechar el aviso para recordarles la **API key** que tienen activa y sin
+usar desde el 2026-08-28, que es el canal que no caduca cada 24 h.
+
+**Seguimiento (D3):** registrar ficha aparte para el aviso «tu sesión venció, vuelve a entrar» en la
+interfaz del chat. No se abre aquí: esta ficha es `backend`.
 
 ## Archivos esperados
 
@@ -43,13 +63,25 @@
   *Hecho cuando:* el archivo está verde y **rojo** si se revierte T2.
   *Depende de:* T2.
 
-- [ ] **T4. Actualizar los tres casos que afirman el defecto (R6 sigue intacto).** [P] con T5, T6
-  `middleware.test.ts:164` y `:246` y `chat-media-middleware.test.ts:29`, según la tabla del
-  diseño §8. En cada uno, el comentario debe decir **qué se conservó** (la ruta sigue guardada), no
-  solo el número nuevo.
+- [ ] **T4. INVERTIR los tres casos que hoy afirman el defecto (R6 sigue intacto).** [P] con T5, T6
+  Se **invierten**: siguen existiendo, siguen exigiendo que la petición se rechace, y pasan a exigir
+  **401 + `application/json` sin `Location`** en vez de 307. **No se borran, no se relajan y no
+  entran en `tests/baseline-rojos.json`.**
+  - `tests/unit/auth/middleware.test.ts:164-169` — «una ruta de API no self-auth sin sesion se
+    guarda (307 a /login)» → mismo veredicto, desenlace 401 JSON.
+  - `tests/unit/auth/middleware.test.ts:246-253` — control negativo de la 177
+    (`/api/ordenes/orden/ABC-123` fuera del prefijo api-key): **el control se conserva entero** —la
+    ruta sigue sin pasar—, solo cambia el desenlace a 401 JSON.
+  - `tests/integration/api/chat-media-middleware.test.ts:29-36` — «GET sin cookie de sesion
+    redirige (307) a /login» (feature 311, R26) → la media **sigue detrás del guard**, que es lo que
+    R26 protegía; el rechazo pasa a ser 401 JSON.
+
+  En cada uno, el comentario debe decir **qué se conservó** (la ruta sigue guardada), no solo el
+  número nuevo.
   *Hecho cuando:* los tres archivos están verdes, los bloques de páginas y de self-auth **no se han
-  tocado** (se comprueba con `git diff`), y las dos aserciones de
-  `chat-media-middleware.test.ts:49-72` siguen exactamente igual.
+  tocado** (se comprueba con `git diff`), las dos aserciones de
+  `chat-media-middleware.test.ts:49-72` siguen exactamente igual, y `tests/baseline-rojos.json` no
+  ha crecido.
   *Depende de:* T2.
 
 - [ ] **T5. La guardia del barrido (R10).** [P] con T4, T6
@@ -86,10 +118,17 @@
   *Depende de:* T2–T7.
 
 - [ ] **T9. PR contra `dev` y ficha.** PR con el diff de los 8 archivos y el veredicto del gate
-  citado; `status_note` de la 426 en 3–6 líneas.
+  citado; `status_note` de la 426 en 3–6 líneas. El cuerpo del PR **cita la nota de despliegue** de
+  arriba, para que el aviso a Nuform no se descubra el día de la release.
   *Hecho cuando:* el PR está abierto, el log del gate **commiteado** como evidencia, y el árbol
   remoto contiene lo que dice el informe (verificar el blob, no el árbol local).
   *Depende de:* T8.
+
+- [ ] **T10. Puerta de despliegue (D4).** El aviso a Nuform ha salido —lo manda el humano— **antes**
+  de desplegar a `prod`.
+  *Hecho cuando:* el humano confirma el aviso enviado y queda anotado en `progress/impl_426.md` con
+  fecha. Sin eso, la release no sale.
+  *Depende de:* T9.
 
 ## Mapa `R<n> → test`
 
@@ -112,7 +151,9 @@
 - **No metas ninguna ruta en `PUBLIC_ROUTES` ni en `SELF_AUTH_ROUTES`.** Ese camino está descartado
   y razonado en `design.md §6 (A1)`; además pone rojas dos guardias.
 - **No toques los handlers.** Los dos ya responden 401 JSON por su cuenta; el defecto es que nunca
-  corren. Cambiar su cuerpo es la pregunta abierta 2, no una task.
+  corren. Y **no unifiques** el `{error:"unauthenticated"}` de
+  `app/api/chat/media/[mensajeId]/route.ts:100` con el `AppErrorShape`: está decidido que **no**
+  (D2) — es código que hoy funciona y ninguna evidencia lo señala.
 - El texto del cuerpo sale de `MSG.UNAUTHORIZED`; no escribas el literal a mano en ningún sitio,
   tampoco en los tests (compáralo contra la constante **solo** si el contrato que fijas es el
   `code`, no el mensaje: un `toEqual` contra su propia fuente siempre está verde).

@@ -26,7 +26,8 @@ La ficha pide elegir entre las dos y argumentarlo. Se elige **lote de órdenes s
    cambiar día) y lo que permite el `WHERE` guardado + todo-o-nada de R23/R24.
 4. Con ids explícitos, el rastro dice **qué** se movió sin tener que reconstruir un predicado.
 
-**Coste aceptado:** más de 50 órdenes exigen dos actos (dos `lote_id`). Límite declarado, Q5.
+**Coste aceptado:** más de 50 órdenes exigen dos actos (dos `lote_id`, y dos avisos a cada
+mensajero). Límite **aceptado por el humano** el 2026-09-14 (D5).
 
 **Un solo origen por lote (R6).** Un lote con dos orígenes no tiene caso de uso y deja la
 confirmación de R35 sin poder decir «de quién a quién». Además haría ambiguo el encolado de
@@ -60,7 +61,9 @@ otro rol: `forbidden` **antes de leer nada** (patrón literal de `DeshacerAsigna
 El `mensajero` no tiene ni acción ni superficie (R3): la barra de `/ordenes` ya no le ofrece acciones
 por lote (`accionesLote` es falso para su rol).
 
-`adminSatelite` queda fuera en esta ficha: ver Q1 en `requirements.md`.
+`adminSatelite` queda fuera en esta ficha — **decidido** el 2026-09-14 (D1 de `requirements.md`):
+hoy no tiene ninguna superficie donde ver una orden `en_reparto`, y abrirlo es otra superficie, no
+un `||` más. Queda como seguimiento S1.
 
 ---
 
@@ -160,7 +163,44 @@ ningún `down.sql` anterior** (son fotos de su rama). Lo que se pierde al revert
 alta: el rastro de los traspasos ya hechos. Las órdenes **no** vuelven a su mensajero anterior: el
 `down` no deshace traspasos, sólo borra su registro.
 
-### 4.3 Lo que **no** se toca en el esquema
+### 4.3 La segunda migración: los dos enums de avisos (D3)
+
+Carpeta **aparte y con timestamp propio**: `db/migrations/20260917120100_notificacion_evento_traspaso/`.
+Va sola por el precedente escrito de las nueve migraciones de esta familia (413, 412, 409, 401, 403,
+333, 271, 262, 253): Postgres no deja **usar** un valor de enum en la misma transacción que lo
+añadió (`55P04`), y Prisma corre cada `migration.sql` dentro de una.
+
+`migration.sql` — **aditiva**, sin backfill, sin índices, sin tocar RLS:
+
+```sql
+ALTER TYPE "notificacion_evento"       ADD VALUE IF NOT EXISTS 'traspaso_ordenes_recibido';
+ALTER TYPE "notificacion_evento"       ADD VALUE IF NOT EXISTS 'traspaso_ordenes_cedido';
+ALTER TYPE "notificacion_entidad_tipo" ADD VALUE IF NOT EXISTS 'orden_traspaso_lote';
+```
+
+`down.sql` — Postgres no soporta `ALTER TYPE … DROP VALUE`, así que **recrea los dos tipos** sin los
+valores nuevos, patrón literal del down de la 413:
+
+- retipa **TRES** columnas, no dos: `notificacion.evento`, `notificacion.entidad_tipo` y
+  **`push_envio_dia.evento`** — la que se olvida. Desde la 410 es obligación de toda migración
+  posterior que amplíe `notificacion_evento`; si queda una columna sin retipar, el `DROP TYPE` falla
+  con `2BP01` y el rollback aborta, que es el modo de fallo correcto;
+- las dos listas se escriben **leyendo `db/schema.prisma` del árbol**, nunca de memoria, y se
+  **vuelven a leer justo antes de abrir el PR** (el pre-vuelo caduca: otra ficha puede añadir un
+  valor y entrar en `dev` antes). Al escribir este diseño son **15 eventos y 13 entidades**, con
+  `reparto_manana` / `reparto_manana_dia` de la 413 ya dentro — **cuéntalos contra el árbol, no
+  contra este documento**;
+- **no se toca ningún `down.sql` anterior**: cada uno es una foto de su momento y todas siguen
+  siendo ciertas. Revertir con una lista vieja borraría en silencio el valor de otra ficha;
+- **precondición ruidosa:** ninguna fila de `notificacion` con esos eventos/entidad y ninguna de
+  `push_envio_dia` con esos eventos. Si queda alguna, el `USING` falla y el rollback aborta. **Aquí
+  no hay ningún `DELETE` para hacer sitio**: son avisos que su destinatario puede no haber leído.
+
+⚠️ Que el `NULLS NOT DISTINCT` y el `WHERE` parcial de `notificacion_dedupe_key`, y el único
+`push_envio_dia_cupo`, **sobrevivan** a la reconstrucción NO se supone: lo mide un test de
+integración contra Postgres, como en la 413.
+
+### 4.4 Lo que **no** se toca en el esquema
 
 `orden` no gana ninguna columna. `gestion_orden`, `cierre_*`, `orden_mensajero_meta`,
 `orden_historial_estado` y `historial_accion` quedan **exactamente** como están.
@@ -178,6 +218,9 @@ lib/repositories/OrdenRepository.ts  ::traspasarMensajeroLote   ← la transacci
 lib/repositories/traspasar-conversaciones.ts                ← ÚNICO escritor del chat en el traspaso
 lib/repositories/registrar-traspaso-mensajero.ts            ← ÚNICO escritor del rastro
 lib/repositories/OrdenTraspasoRepository.ts                 ← lectura del rastro (línea de tiempo)
+lib/notificaciones/emitir.ts                                ← los DOS emisores nuevos (textos incluidos)
+lib/notificaciones/notificadores.ts                         ← los DOS notificadores reales
+lib/notificaciones/push-elegibles.ts                        ← el perfil de push de los dos eventos
 ```
 
 Los dos módulos `traspasar-conversaciones.ts` y `registrar-traspaso-mensajero.ts` reciben el `tx`
@@ -290,6 +333,73 @@ WHERE "orden_id" IN (…)
     nuevas del destino se pintan **al final** (comportamiento declarado de `ruta_optimizada_parada`),
     y la pantalla tiene que decirlo.
 
+### 6.5 Los avisos (R38-R43), **fuera** de la transacción y best-effort
+
+Decisión D3. La transacción devuelve lo que los avisos necesitan (`loteId`, cuántas órdenes, los dos
+`mensajeroId` y sus nombres) y los emisores corren **después de que (6.2-6.4) haya confirmado**,
+envueltos en `try/catch`, con el resultado siguiendo siendo `ok` (R41).
+
+**Por qué fuera, y no por comodidad** (argumento literal de la 262/A22): dentro de una transacción de
+Postgres un error de sentencia aborta la transacción **entera**, así que un aviso caído **revertiría
+un traspaso legítimo** y dejaría el paquete con el mensajero que ya no puede entregarlo. La dirección
+segura del error es la contraria: **el traspaso manda, el aviso es cortesía.** El notificador real es
+`emitirBestEffort` por dentro, así que no propaga; el `try` es la red por si alguien inyecta uno que
+sí lo haga.
+
+**Dos eventos, no uno** (precedente 271): piden acciones opuestas. Al destino le dicen «sal a
+repartir esto»; al origen, «esto ya no es tuyo». El tipo de evento es lo que la campana usa para
+agrupar y deduplicar, así que meter la diferencia sólo en la descripción la vuelve invisible.
+
+| | Destino | Origen |
+| --- | --- | --- |
+| Evento | `traspaso_ordenes_recibido` | `traspaso_ordenes_cedido` |
+| Tipo (icono) | `box` | `box` |
+| Destinatario | `{ tipo: "usuario", usuarioId: destino }` | `{ tipo: "usuario", usuarioId: origen }` |
+| Descripción | «Recibiste 31 órdenes de otro mensajero.» (singular/plural explícitos) | «31 órdenes tuyas pasaron a otro mensajero.» |
+| Anexo | nombre del mensajero **de origen** | nombre del mensajero **destino** |
+| Push (R43) | **sí**, perfil `mensajero` | **no** |
+
+**Un aviso AGREGADO por acto, jamás uno por orden (R38/R39).** Aquí el spec **se separa a
+propósito** del precedente de la 262 —que emite uno por corrección para poder nombrar *qué* paquete—
+y sigue el de la 413 (`reparto_manana`): con 31 órdenes, uno por orden son 31 campanadas y, con
+push, 31 interrupciones. Y la acción que el aviso pide **no es sobre un paquete concreto**: es «mira
+tu lista, que cambió entera». El número va **dentro del texto** y no se persiste aparte.
+
+**LA ENTIDAD ES EL `lote_id` DEL TRASPASO, y es la decisión que evita un silencio total.**
+`notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+destinatario_usuario_id)` con `NULLS NOT DISTINCT`, **no mira el estado de lectura**, y
+`NotificacionRepository.crear` absorbe el `P2002` devolviendo `null`. Con el **mensajero** o con una
+**orden** como entidad, la clave admitiría UNA sola fila por (evento, entidad, mensajero) **para
+siempre**: el segundo traspaso del día a la misma persona —que es el caso normal cuando alguien se
+enferma y se reparte su carga en dos tandas— no avisaría **nunca**, sin error y sin log. Con el
+`lote_id`: actos distintos ⇒ entidades distintas ⇒ **dos avisos** (R42); el mismo acto emitido dos
+veces ⇒ misma entidad ⇒ **uno solo**, y lo decide el índice único, no un `if` que una carrera pueda
+burlar. Es el fallo que ya documentaron la 262, la 403, la 409 y la 412. Valor nuevo del enum:
+`orden_traspaso_lote`.
+
+**Push (R43), con el criterio del catálogo** (`push-elegibles.ts`, que es
+`satisfies Record<NotificacionEvento, PerfilPush>` y por tanto **no compila** hasta declarar los dos):
+
+- **destino ⇒ `{ push: "si", roles: ["mensajero"] }`**: tiene **plazo** (las órdenes son de hoy) y
+  **consecuencia real y personal** (si no se entera, no sale a repartirlas y el paquete no llega);
+- **origen ⇒ `{ push: "no", porQué: … }`**: no le pide **ninguna acción** y no vence nada — deja de
+  tener trabajo, no le aparece trabajo. Interrumpir a alguien que probablemente está enfermo para
+  decirle que ya no tiene que hacer algo es gastar el canal en lo que no lo necesita. En la campana
+  sí, para que su lista encogida tenga explicación.
+
+**Lo que los textos NO llevan (R40):** ni el motivo escrito por quien traspasó (texto libre de hasta
+300 caracteres, que puede contener cualquier cosa — argumento literal de 262/A24; el motivo se lee en
+el historial de la orden, que sí autoriza por orden), ni dirección, ni teléfono, ni monto, ni el
+destinatario de ninguna orden. El **nombre del otro mensajero** sí va, en el `anexo`: es el dato con
+el que la persona entiende qué pasó, y tiene precedente (`emitirCierreDiaPorAprobar` pasa
+`mensajeroNombre`).
+
+⚠️ **El cableado es la mitad del requisito.** El default del constructor del servicio es el
+notificador **no-op**, y el real se inyecta en el composition root (la Server Action). Este repo ya
+tuvo **2 de 7 notificadores muertos con la suite en verde** porque nadie comprobaba que alguien los
+**pasara**. Por eso T16 exige un test sobre el composition root que afirme que el servicio recibe los
+notificadores reales, no sólo que el módulo los importe.
+
 ---
 
 ## 7. Contratos de entrada/salida
@@ -346,7 +456,7 @@ pantallas que cuentan la misma regla.
 | Tope de intentos (276) | **No** | R14. Esa puerta existe para que una orden agotada **no salga a la calle**. Ya está en la calle. Aplicarla dejaría el paquete en manos de un enfermo y sin salida; y el traspaso no cuenta ningún intento. |
 | Gate de coordenadas (92) | **No** | R14. La orden ya pasó ese gate al asignarse. Sin coordenadas sólo se pierde su sitio en la ruta optimizada —queda de parada sin posicionar, al final—, que es un problema de orden de visita, no de custodia. |
 | Reprogramada bloqueada (46) | No aplica | `reprogramada` no es un estado traspasable: R5 la rechaza antes. |
-| Bodega satélite bloqueada (41) | No aplica | Sólo hay superficie central en esta ficha (Q1). |
+| Bodega satélite bloqueada (41) | No aplica | Sólo hay superficie central en esta ficha (D1). |
 
 Estas dos ausencias (tope y coordenadas) van **escritas en el servicio**, no omitidas: el precedente
 del repo es que una guarda ausente sin razón escrita se vuelve a cablear sin releer por qué se quitó.
@@ -423,7 +533,8 @@ estado sería una migración y una mentira.
 libre tecleado por una persona y R5 de la 362 lo deja fuera de esa tabla a propósito (se descarga a
 un archivo y no se purga nunca), y `valor_anterior`/`valor_nuevo` son `VarChar(60)` de vocabulario
 **cerrado** — un nombre de persona no lo es. Precedente exacto: 262 y 371 crearon tabla propia por
-esta misma razón. Queda como Q6 por si el humano quiere **además** la fila del catálogo.
+esta misma razón. **Decidido el 2026-09-14 (D6): una sola fuente de rastro, la tabla propia**; si
+algún día se quiere además la fila del catálogo, es el seguimiento S2.
 
 **A4 — «Traspasar todo lo del mensajero» como operación de servidor.** Descartada en §1: predicado
 vivo ⇒ se movería lo que el coordinador no vio, y cierra la puerta a repartir la mitad.
@@ -443,11 +554,21 @@ proveedor de optimización dentro de la transacción la alarga con una llamada d
 fallo tumbaría un traspaso que ya es correcto. La 92 ya resolvió esto con el outbox + debounce; se
 reusa (§6.4).
 
+**A8 — Un aviso por orden traspasada (el patrón de la 262).** Descartada: con 31 órdenes son 31
+campanadas y 31 interrupciones de push, y la acción que el aviso pide no es sobre un paquete
+concreto sino sobre la lista entera. Se sigue el patrón agregado de la 413, con el número dentro del
+texto (§6.5).
+
+**A9 — La orden (o el mensajero) como entidad del aviso.** Descartada por estructura, no por gusto:
+la clave de dedupe no mira el estado de lectura, así que el **segundo** traspaso a la misma persona
+quedaría mudo para siempre, sin error y sin log. Es el fallo que ya pagaron cuatro fichas de este
+repo. La entidad es el `lote_id` (§6.5).
+
 ---
 
 ## 12. Límites declarados
 
-1. **Más de 50 órdenes ⇒ dos actos** (§1, Q5).
+1. **Más de 50 órdenes ⇒ dos actos** (§1, D5 — aceptado).
 2. **Una gestión en vuelo del origen se pierde limpiamente**: si el mensajero de origen tenía el
    modal de gestión abierto sobre una orden traspasada, su envío será rechazado por la guarda de
    propiedad que ya existe (`MisAsignacionesService`: `row.mensajeroAsignadoId !== actor.usuarioId`).
@@ -456,6 +577,13 @@ reusa (§6.4).
 3. **La ruta del origen queda con paradas que ya no son suyas** hasta que su job corra (≤ ~1 min).
    La lectura de su ruta cruza contra sus órdenes `en_reparto`, así que no ve órdenes ajenas; lo que
    ve es un recorrido con huecos.
-4. **El ranking y la analítica del día se mueven con la asignación** (Q2). No se toca nada.
+4. **El ranking y la analítica del día se mueven con la asignación.** Quien cede ve **subir** su
+   porcentaje del día y quien recibe lo ve **bajar** hasta entregar, y el podio reparte premio.
+   **Decisión del humano del 2026-09-14 (D2), con el efecto sobre la mesa: se acepta tal cual y esta
+   ficha no toca nada del ranking.** No es un descuido.
 5. **El rastro no dice por qué el origen no podía seguir**, sólo el motivo escrito por quien
    traspasó. Es la misma profundidad que el motivo del deshacer.
+6. **Un aviso perdido no se reintenta.** Es best-effort por diseño (R41): si la emisión falla, el
+   traspaso es correcto igualmente y el mensajero se entera al abrir su lista. La alternativa
+   —reintentar— exigiría una cola propia para una cortesía, y la dirección del error dejaría de ser
+   la segura.
