@@ -14,6 +14,7 @@ import { NextRequest } from "next/server";
  * - ruta publica sin cookie -> `next()` (200), sin `location`.
  * - ruta con auth propia (cron / api-key) -> `next()` SIEMPRE, incluso sin cookie.
  * - ruta privada sin cookie -> 307 a `/login?redirect=<pathname>`.
+ * - ruta de API sin sesion -> 401 con cuerpo JSON y SIN `location` (feature 426).
  * - ruta privada con cookie INVALIDA -> 307 a login + `Set-Cookie` que la borra.
  * - ruta privada con cookie VALIDA -> `next()` (200).
  * - `/paquete/*` sin sesion -> 307 a `/` (no a `/login`).
@@ -160,12 +161,20 @@ describe("middleware — /paquete/[numGuia]", () => {
   // Modelo endurecido (feature 78 + integracion whatsapp): la rama /api ya NO pasa en bloque.
   // Solo los prefijos de SELF_AUTH_ROUTES (cron / api-key / webhooks) se autentican por su cuenta;
   // una ruta /api que no sea self-auth queda guardada por sesion como cualquier otra (secure by
-  // default). El navegador la alcanza con su cookie de sesion valida; sin sesion se redirige.
-  it("una ruta de API no self-auth sin sesion se guarda (307 a /login)", async () => {
+  // default). El navegador la alcanza con su cookie de sesion valida.
+  //
+  // FEATURE 426 — CASO INVERTIDO, y lo que SE CONSERVA es el veredicto: esta ruta SIGUE guardada
+  // por sesion, sin sesion NO pasa, y ninguna lista de excepcion la cubre. Lo unico que cambia es
+  // la FORMA del rechazo: antes era un 307 a /login, y como el 307 conserva el metodo, el cliente
+  // reposteaba contra la pagina de login y recibia su HTML con 200 (medido contra produccion el
+  // 2026-09-14, reportado por el integrador). Ahora el borde emite el mismo 401 JSON que habria
+  // emitido el handler.
+  it("una ruta de API no self-auth sin sesion se guarda (401 JSON, ya no 307 a /login)", async () => {
     const res = await middleware(buildRequest("/api/lo-que-sea/futuro"));
 
-    expect(res.status).toBe(307);
-    expect(new URL(res.headers.get("location") as string).pathname).toBe("/login");
+    expect(res.status).toBe(401);
+    expect(res.headers.get("content-type")).toMatch(/^application\/json/);
+    expect(res.headers.get("location")).toBeNull();
   });
 
   // El guard de cookie SIGUE aplicando a las paginas: la exclusion es solo /api.
@@ -243,12 +252,16 @@ describe("middleware — rutas de la feature 177 bajo SELF_AUTH_ROUTE (R40)", ()
   // CONTROL NEGATIVO: sin este caso el bloque anterior pasaria incluso si el
   // middleware dejara pasar cualquier cosa. Un pathname vecino que NO cuelga del
   // prefijo debe seguir guardado por sesion.
-  it("R40 (control): /api/ordenes/orden/ABC-123 (fuera del prefijo api-key) sigue siendo privada y redirige a /login", async () => {
+  //
+  // FEATURE 426 — EL CONTROL SE CONSERVA ENTERO: lo que este caso vigila es que
+  // `/api/ordenes/orden/ABC-123` NO se cuele por el prefijo `/api/ordenes/api-key`, y eso se
+  // sigue exigiendo igual: la ruta NO pasa (401), a diferencia de las tres del bloque de arriba,
+  // que pasan con 200. Solo cambia el desenlace del rechazo, de 307 a /login a 401 con JSON.
+  it("R40 (control): /api/ordenes/orden/ABC-123 (fuera del prefijo api-key) sigue siendo privada y se rechaza con 401 JSON", async () => {
     const res = await middleware(buildRequest("/api/ordenes/orden/ABC-123"));
 
-    expect(res.status).toBe(307);
-    expect(new URL(res.headers.get("location") as string).pathname).toBe(
-      "/login",
-    );
+    expect(res.status).toBe(401);
+    expect(res.headers.get("content-type")).toMatch(/^application\/json/);
+    expect(res.headers.get("location")).toBeNull();
   });
 });

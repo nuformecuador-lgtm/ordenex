@@ -5093,12 +5093,24 @@
       "title": "una ruta de api con la sesion vencida responde HTML en vez de 401",
       "description": "El guard la redirige a /login con 307, y el integrador recibe la pagina con codigo 200.",
       "zone": "backend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "baja",
       "branch": "feat/426-api-401-json",
       "depends_on": null,
       "status_note": "REPORTADO POR UN INTEGRADOR (Nuform) el 2026-09-14: «POST /api/ordenes/carga-masiva/chunk ya no devuelve JSON — responde 200 pero con el HTML de la pagina». || REPRODUCIDO CONTRA PRODUCCION, no supuesto: ese POST sin sesion valida devuelve `307` a `/login?redirect=...` con `Content-Type: text/plain`. Como el 307 CONSERVA el metodo, el cliente repite el POST contra la pagina de login y recibe su HTML con `200`. Desde fuera es indistinguible de «la API se cayo». || LA CAUSA NO ES UN DESPLIEGUE: `middleware.ts` no se toca desde el 2026-08-25 y el ultimo deploy a produccion fue 60 h antes del reporte; sus cargas funcionaron 48 h DESPUES de ese deploy (132 ordenes el 13, 120 el 14). Lo que vencio fue su SESION: duran 24,0 h clavadas, medido sobre sus propias filas de `Session`. || ALCANCE MEDIDO, y es pequeño: de las 24 rutas bajo `app/api`, 2 son publicas (`/api/health`, `/api/docs`), 20 se autentican solas (`/api/cron`, `/api/ordenes/api-key`, `/api/webhooks` -> ya responden 401 con `application/json`) y SOLO DOS pasan por el guard de sesion: `/api/ordenes/carga-masiva/chunk` y `/api/chat/media/[mensajeId]`. Esas dos son todo el defecto. || LO QUE SE PIDE: que una ruta cuyo path empieza por `/api/` conteste `401` con cuerpo JSON en vez de redirigir a una pagina. Las paginas (incluida `/api-docs`, que es una PAGINA pese al nombre) siguen redirigiendo igual. || A MEDIR EN EL SPEC ANTES DE TOCAR: quien llama hoy a esas dos rutas desde el NAVEGADOR y si alguien depende del redirect. `/api/chat/media` la pide la UI del chat para pintar adjuntos; hoy con la sesion vencida ya recibe HTML donde espera una imagen, asi que el 401 no puede empeorarlo — pero hay que COMPROBARLO, no deducirlo. || NO ARREGLA la causa del integrador (su sesion caduca porque usa el canal de sesion para una integracion; tienen una API key activa sin usar desde el 2026-08-28). Arregla que el sintoma sea legible."
+    },
+    {
+      "id": 427,
+      "title": "no hay forma de pasarle a otro mensajero las ordenes que ya lleva encima",
+      "description": "Deshacer asignacion solo funciona antes de recoger; con la orden en reparto no hay accion.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "branch": "feat/427-traspasar-ordenes-en-reparto",
+      "depends_on": null,
+      "status_note": "PEDIDO HUMANO 2026-09-14, con un caso real encima: el mensajero Andy Cortes se enfermo y sus ordenes del dia las tuvo que hacer Carlos Eduardo. El leader lo resolvio A MANO contra produccion porque LA APP NO SABE HACERLO. || MEDIDO: `DeshacerAsignacionService` solo admite `por_recoger` (feature 149) -> una orden YA RECOGIDA (`en_reparto`) no tiene ninguna accion de traspaso. Ese es exactamente el caso que ocurre cuando alguien se enferma a media jornada. || LO QUE EL ARREGLO MANUAL ENSEÑO, y la ficha tiene que cubrirlo o se queda a medias: (1) NO BASTA con mover `orden.mensajero_asignado_id`: hay que mover tambien `chat_conversacion.mensajero_id`, o el mensajero nuevo NO puede escribir a los clientes con los que el anterior ya venia hablando —fueron 31 conversaciones, una por orden—; (2) lo YA GESTIONADO no se toca: las 37 entregadas de Andy siguen siendo suyas y su cierre las necesita (`gestion_orden.mensajero_id` es independiente y no se toca); (3) la RUTA OPTIMIZADA del origen queda obsoleta (1 ruta, 31 paradas) y el destino tiene que volver a optimizar: hay que decirlo en pantalla o seguira un orden calculado para el recorrido de otro. || NUMEROS DEL CASO REAL, por si sirven de caso de prueba: 31 ordenes `en_reparto` de hoy movidas, 31 conversaciones, 0 filas en `orden_mensajero_meta`, 37 entregadas intactas y 24 `devolviendo_a_tienda` que NO se movieron a proposito (ahi el problema es donde esta la caja, no el sistema). || A DECIDIR EN EL SPEC: si el traspaso es de TODO lo del mensajero o se pueden elegir ordenes sueltas. Hoy el caso es «se enfermo, pasalo todo», pero «repartele la mitad a otro» es igual de real. Proponer con el argumento, no elegir en silencio. || QUIEN PUEDE HACERLO: acotarlo a los roles que hoy asignan (no el mensajero sobre si mismo), y dejar RASTRO de quien traspaso que y cuando."
     }
   ]
 }
