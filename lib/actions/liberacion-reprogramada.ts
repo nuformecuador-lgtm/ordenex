@@ -4,6 +4,7 @@ import { getPrismaClient } from "@/lib/db/prisma-client";
 import { LiberacionReprogramadaRepository } from "@/lib/repositories/LiberacionReprogramadaRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
@@ -65,6 +66,7 @@ function buildHistorialService(): Pick<IOrdenHistorialService, "contarIntentosEn
     new OrdenRepository(prisma),
     new OrdenHistorialRepository(prisma),
     new OrdenDiaRepartoCambioRepository(prisma),
+    new OrdenTraspasoRepository(prisma),
   );
 }
 

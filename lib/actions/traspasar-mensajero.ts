@@ -95,12 +95,14 @@ function toTraspasarActionError(shape: AppErrorShape): BorderError {
 }
 
 /**
- * @sin-superficie FICHA 427, tanda backend (2026-09-14): el servicio, la transaccion y los dos
- * avisos entran ANTES que su pantalla, que es la tanda 7 de `specs/427-traspasar-ordenes-en-reparto/
- * tasks.md` (T22/T23: `TraspasarMensajeroModal` + la accion en la barra de `/ordenes`). Hasta
- * entonces ningun modulo alcanzable la importa. ⚠️ ESTA ANOTACION CADUCA SOLA: en cuanto el modal
- * la monte, la otra mitad de `superficie-de-uso.guardia` se pone ROJA hasta que se borre — igual
- * que le paso a `corregirDiaReparto` (262), que dejo el episodio escrito en su cabecera.
+ * ⭑ LA ANOTACION DE EXCEPCION DE `superficie-de-uso.guardia` VIVIO AQUI EL 2026-09-14 Y YA SE
+ * BORRO, COMO ESTABA PREVISTO. La tanda de backend la puso porque el servicio, la transaccion y los
+ * dos avisos
+ * entraron ANTES que su pantalla; la tanda de frontend monto `TraspasarMensajeroModal` en la barra
+ * de `/ordenes` (T22/T23) y con eso la OTRA mitad de `superficie-de-uso.guardia` —«ninguna
+ * anotacion sobrevive a su motivo»— se puso roja hasta que se quito. Se deja escrito el episodio,
+ * como lo dejo `corregirDiaReparto` (262): el mecanismo funciono y por eso esta accion no se quedo
+ * sin control, que es lo que le paso a la ficha 352.
  *
  * R1-R43: traspasa el lote COMPLETO al mensajero destino —con sus conversaciones de chat, su rastro
  * y el recalculo de ruta de los DOS mensajeros— o no mueve ninguna orden.

@@ -22,6 +22,7 @@ import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { JobRepository } from "@/lib/repositories/JobRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { AsignabilidadCoordenadasService } from "@/lib/services/AsignabilidadCoordenadasService";
 import { getPrismaClient } from "@/lib/db/prisma-client";
@@ -46,6 +47,7 @@ function buildGuiaService(): IGuiaAsignacionService {
       ordenRepo,
       new OrdenHistorialRepository(prisma),
       new OrdenDiaRepartoCambioRepository(prisma),
+      new OrdenTraspasoRepository(prisma),
     ),
   );
 }

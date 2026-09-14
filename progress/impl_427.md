@@ -473,3 +473,279 @@ Backend de la 427 completo en las tandas 1-5 (datos, escritura, avisos, reglas y
 mutaciones del plan ejecutadas y **todas rojas** —la 7 sólo después de arreglar un arnés que no
 sabía distinguir `tx` de `this.prisma`—; queda fuera la tanda 6 porque su cambio de tipo rompe por
 diseño el `switch` exhaustivo de un componente de `app/`.
+
+---
+
+# 427 · Bitácora de implementación (FRONTEND) — tandas 6 y 7
+
+> Rama `feat/427-traspasar-ordenes-en-reparto`, sobre el commit de backend `895b3bdb`.
+> Alcance de esta tanda: **T20/T21 (la línea de tiempo, R29)** y **T22/T23/T24 (la pantalla)**.
+> Se escribe **debajo** de la bitácora del backend, sin tocarla.
+
+---
+
+## F1. Archivos
+
+### Creados
+
+| Archivo | Qué es |
+| --- | --- |
+| `lib/interfaces/repositories/IOrdenTraspasoRepository.ts` | T20 — contrato de **solo lectura** del rastro. No declara ningún método de escritura a propósito: el choke point del append ya existe y es `registrar-traspaso-mensajero.ts` |
+| `lib/repositories/OrdenTraspasoRepository.ts` | T20 — `findTraspasosByOrden`, `created_at ASC, id ASC`, `Pick<PrismaClient, "ordenTraspasoMensajero">`. Molde literal de `OrdenDiaRepartoCambioRepository` (262) |
+| `app/(app)/ordenes/_components/TraspasarMensajeroModal.tsx` | T22 — el modal. Cuerpo de `DeshacerAsignacionModal` + selector de `AsignarBodegaModal`, con la fase de **resultado** de `CorregirFechaReprogramacionModal` |
+| `app/(app)/ordenes/_components/traspaso-error-messages.ts` | T22 — el mapeo de errores por causa + las cotas del motivo. Compara contra las constantes tipadas de `mensajes-traspaso.ts`, nunca contra literales duplicados |
+| `tests/components/TraspasarMensajeroModal.test.tsx` | T24 — 24 casos sobre el componente real (R6/R7/R8/R28/R33/R35/R36/R37) |
+| `tests/components/TraspasarMensajeroListado.test.tsx` | T24 — 9 casos sobre la barra de `/ordenes` (R3/R34) y el cableado barra → modal |
+
+### Modificados
+
+| Archivo | Qué cambia |
+| --- | --- |
+| `lib/types/orden-historial.ts` | T20 — `OrdenHistorialTraspasoDTO` y la unión de **tres** |
+| `lib/services/OrdenHistorialService.ts` | T20 — `RANGO_POR_CLASE.traspaso_mensajero = 2`, tercer parámetro de `fusionarLineaDeTiempo`, cuarto parámetro **obligatorio** del constructor y la tercera lectura dentro del `Promise.all` |
+| `app/(app)/ordenes/_components/HistorialOrdenTimeline.tsx` | T20 — la rama `case "traspaso_mensajero"` que faltaba para que el `const _exhaustivo: never` volviera a compilar |
+| `app/(app)/ordenes/_components/OrdenesListado.tsx` | T23 — `abrirTraspasarMensajero`, `accionTraspasarMensajero`, el `case` de los dos estados traspasables y el montaje del modal |
+| `lib/actions/traspasar-mensajero.ts` | **Se borra la anotación de excepción de `superficie-de-uso.guardia`** y queda escrito el episodio |
+| **32 archivos** que construyen `new OrdenHistorialService(...)` | los **33 sitios** pasan ahora el repositorio nuevo (20 en `app/`+`lib/`, 1 en `scripts/`, 11 en `tests/`; `recepcion-satelite.ts` lo construye dos veces) |
+| `tests/unit/types/orden-historial-union.test.ts` | la tercera clase en el `switch` de `etiquetaDe`, tres `@ts-expect-error` nuevos y el censo de `clase` |
+| `tests/unit/services/orden-historial-fusion.test.ts` | T21 — fixture `traspaso()`, el doble de la tercera fuente y **8 casos nuevos** (R26/R29/R30 + no-regresión) |
+| `tests/components/HistorialOrdenTimeline.test.tsx` | T21 — **8 casos nuevos** sobre la entrada de traspaso |
+| `tests/unit/services/orden-historial-service.test.ts` | doble `traspasoRepo()` que devuelve lista vacía (no-regresión) |
+| `tests/components/AsignacionBloqueoPorCierre.test.tsx` | censo 271/R32: `toHaveLength(2)` → **3**, con el motivo escrito (el tercer consumidor de `bloqueadosIds` es este modal) |
+
+---
+
+## F2. Las tres decisiones de esta tanda que conviene conocer al revisar
+
+1. **El cuarto parámetro del constructor es OBLIGATORIO, como su vecino.** Podría haber sido
+   opcional con «sin traspasos» por defecto y los 33 sitios no se habrían tocado. Se descartó por el
+   mismo argumento que la 262 dejó escrito para el tercero: un cableado olvidado se convertiría en
+   un drawer que **enseña menos de lo que hay** —justo sobre la orden cuyo mensajero cambió, que es
+   la que más falta hace explicar— y **no rompería nada**. Con el obligatorio, olvidarlo es un rojo
+   de `pnpm typecheck`.
+
+2. **El rango del traspaso en el empate de instante es `2`, el último.** Es una regla arbitraria, y
+   por eso se declara en vez de dejarla al `sort`. El criterio: un traspaso **no** cambia el estado
+   (R21) ni el día (R16), así que cuando comparte instante con una transición o con una corrección,
+   lo que pasó primero es aquello —el cambio real sobre la orden— y el traspaso es el apunte de
+   quién la lleva a partir de ahí.
+
+3. **El modal NO se cierra solo tras el éxito.** `onSuccess` está cableado a `revalidarTablas` y no a
+   `handleSuccess`: el listado se relee detrás, pero el modal se queda con el desenlace a la vista.
+   Cerrarlo de golpe se llevaría **las dos cifras (R36) y el aviso de la ruta (R33)**, que es
+   exactamente lo que el arreglo manual del 2026-09-14 enseñó que hay que decir. Mismo criterio y
+   mismo precedente que `CorregirFechaReprogramacionModal` (371).
+
+   El aviso de la ruta sale **dos veces**: antes de confirmar (en cuanto hay destino elegido, cuando
+   todavía se puede decidir) y en el resultado. No es duplicación: son dos momentos distintos de la
+   misma consecuencia.
+
+---
+
+## F3. La guardia `@sin-superficie`: **verde, y medido**
+
+La anotación se borró de `lib/actions/traspasar-mensajero.ts` al montar el modal.
+`tests/unit/guards/superficie-de-uso.guardia.test.ts` pasa **18/18**.
+
+Y no se da por bueno leyendo el código: se **midió** re-poniendo la anotación sobre el árbol ya
+terminado, para comprobar que la otra mitad de la guardia la caza y **nombra la superficie**:
+
+```
+=== MUTACION: re-poner la anotacion con el modal ya montado ===
+ FAIL  tests/unit/guards/superficie-de-uso.guardia.test.ts > ninguna anotacion `@sin-superficie`
+       de accion sobrevive a su motivo
+- Expected  []
++ Received  [
++   "lib/actions/traspasar-mensajero.ts:115 traspasarMensajero -> app/(app)/ordenes/_components/TraspasarMensajeroModal.tsx",
++ ]
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 passed (18)
+EXIT=1
+```
+
+Restaurado el árbol: `grep -c 'sin-superficie' lib/actions/traspasar-mensajero.ts` → **0**.
+
+---
+
+## F4. Mapa `R<n> → test` de esta tanda
+
+Completa las siete filas que la bitácora del backend dejó marcadas como «frontend».
+
+| R | Test que lo cubre |
+| --- | --- |
+| R3 | `TraspasarMensajeroListado.test.tsx` › «sin `accionesLote` no hay ni casilla ni acción» + «con casilla pero SIN acciones de flujo (la tienda) tampoco aparece». La puerta dura sigue siendo el `notFound()` de `app/(app)/ordenes/page.tsx` para `mensajero` y `adminSatelite` |
+| R6 | `TraspasarMensajeroModal.test.tsx` › «lo dice con palabras y deja el confirmar apagado, SIN llamar a la acción» (+ «una orden SIN mensajero» y «selección vacía») |
+| R7 | idem › «Andy no está entre los destinos posibles, y los otros dos sí» (las dos mitades: la ausencia sola estaría verde con una lista vacía) |
+| R8 | idem › «el ORIGEN se muestra y NO se elige — no hay ningún control para cambiarlo» (un solo `combobox`, y es el del destino) + «el objeto enviado NO lleva ningún campo de origen» (`Object.keys(...).sort()`) |
+| R26 | `HistorialOrdenTimeline.test.tsx` › «el rol que se pinta es el CONGELADO de CADA fila»; `orden-historial-fusion.test.ts` › «la fusión NO toca el rol del actor» |
+| R28 | `TraspasarMensajeroModal.test.tsx` › 4 casos (sin motivo / 9 caracteres / sin destino / los dos puestos), los tres primeros afirmando `not.toHaveBeenCalled()` |
+| R29 | `orden-historial-fusion.test.ts` › bloque «(b-427)», 8 casos; `HistorialOrdenTimeline.test.tsx` › «nombra al de ORIGEN, al de DESTINO, a quien lo ejecutó y su motivo» + «mezclado con las otras DOS clases» |
+| R30 | `orden-historial-fusion.test.ts` › «DOS traspasos salen LOS DOS, en orden y sin alterarse» (literal a mano, campo a campo); `HistorialOrdenTimeline.test.tsx` › «la primera no se reescribe» |
+| R33 | `TraspasarMensajeroModal.test.tsx` › «tras el éxito, el aviso se LEE, con el nombre de quien recibe» **buscando el texto del aviso**, no la ausencia de error + «y ANTES de confirmar» |
+| R34 | `TraspasarMensajeroListado.test.tsx` › `en_reparto` y `ayuda_tienda` **sí**; `por_recoger`, `devolviendo_a_tienda` y `en_bodega_central` **no**, cada uno con su control positivo en la misma barra; + «con estados MEZCLADOS el traspaso desaparece» |
+| R35 | `TraspasarMensajeroModal.test.tsx` › «Vas a pasar 3 orden(es) de Andy Cortés a Carlos Eduardo.» (literal a mano) + la variante sin destino elegido; `TraspasarMensajeroListado.test.tsx` › el mismo texto **abriendo desde la barra**, con el origen derivado de dos filas |
+| R36 | `TraspasarMensajeroModal.test.tsx` › «con las cifras DEL SERVIDOR (31 y 31), no con el tamaño de la selección» (la selección es de 2: si la pantalla contara la selección, el caso cae) + `onSuccess` llamado una vez |
+| R37 | idem › 8 causas, cada una con su literal a mano, + «ninguno de los mensajes lleva un uuid» |
+
+---
+
+## F5. Autocomprobación por mutación: **siete, ejecutadas, todas rojas**
+
+Cada una: se aplicó al árbol, se corrieron los tests indicados, se restauró el árbol en un
+`finally` y se verificó el ancla con `grep` después. Salida real.
+
+```
+=== M1: quitar la accion de los dos `case` traspasables ===
+ Test Files  1 failed (1)
+      Tests  5 failed | 4 passed (9)
+ FAIL  TraspasarMensajeroListado > R34 > se ofrece en `en_reparto` — el caso de la ficha
+ FAIL  TraspasarMensajeroListado > R34 > se ofrece en `ayuda_tienda`
+ FAIL  TraspasarMensajeroListado > R34 > NO se ofrece en `devolviendo_a_tienda` (control positivo)
+ FAIL  TraspasarMensajeroListado > R34 > con estados MEZCLADOS, el traspaso desaparece de la barra
+ FAIL  TraspasarMensajeroListado > R35 > dice cuantas y de quien, y al confirmar manda UNA llamada
+EXIT=1
+
+=== M2: quitar el aviso de la ruta pendiente (R33) de la fase de resultado ===
+ Test Files  1 failed (1)
+      Tests  1 failed | 23 passed (24)
+ FAIL  TraspasarMensajeroModal > R33 > tras el exito, el aviso se LEE, con el nombre de quien recibe
+EXIT=1
+
+=== M3: NO excluir al mensajero de origen del selector (R7) ===
+ Test Files  1 failed (1)
+      Tests  1 failed | 23 passed (24)
+ FAIL  TraspasarMensajeroModal > R7 > Andy no esta entre los destinos posibles, y los otros dos si
+EXIT=1
+
+=== M4: contar la SELECCION en vez de las cifras del servidor (R36) ===
+ Test Files  1 failed (1)
+      Tests  1 failed | 23 passed (24)
+ FAIL  TraspasarMensajeroModal > R36 > con las cifras DEL SERVIDOR (31 y 31), no con el tamano
+EXIT=1
+
+=== M5: pintar el rol VIVO en la linea de tiempo en vez del congelado (R26) ===
+ Test Files  1 failed (1)
+      Tests  2 failed | 21 passed (23)
+ FAIL  HistorialOrdenTimeline > R29 > el traspaso nombra al de ORIGEN, al de DESTINO, a quien...
+ FAIL  HistorialOrdenTimeline > R26 > el rol que se pinta es el CONGELADO de CADA fila
+EXIT=1
+
+=== M6: dar rango 0 al traspaso en el empate de instante ===
+ Test Files  1 failed (1)
+      Tests  2 failed | 32 passed (34)
+ FAIL  fusion > 427/R29 > EMPATE EXACTO de instante: transicion, luego correccion, luego TRASPASO
+ FAIL  fusion > 427/R29 > empatado SOLO con una correccion, el traspaso va DESPUES
+EXIT=1
+
+=== M7: no leer la tercera fuente en el servicio (el drawer que ensena menos) ===
+ Test Files  1 failed (1)
+      Tests  2 failed | 32 passed (34)
+ FAIL  OrdenHistorialService > R41 > el `ok` trae YA fusionadas las entradas de las TRES fuentes
+ FAIL  OrdenHistorialService > R41 > ordena en el servidor aunque los repos devuelvan al reves
+EXIT=1
+
+ARBOL RESTAURADO
+```
+
+Verificación de las siete anclas tras restaurar (`grep -n`, una por mutación): las siete volvieron a
+su valor original antes de commitear.
+
+---
+
+## F6. Salida real de los comandos
+
+```
+$ pnpm exec tsc --noEmit
+(sin salida)
+TYPECHECK_EXIT=0
+```
+
+```
+$ pnpm run lint
+✖ 199 problems (0 errors, 199 warnings)
+LINT_EXIT=0
+```
+
+> **199, el MISMO número que midió la tanda de backend**: esta tanda no añade ni un warning.
+
+```
+$ pnpm exec vitest run <los 7 archivos de test tocados o creados>
+ Test Files  7 passed (7)
+      Tests  129 passed (129)
+   Duration  16.69s
+```
+
+```
+$ pnpm run test:guardias
+ Test Files  225 passed (225)
+      Tests  3295 passed (3295)
+GUARDIAS_EXIT=0
+```
+
+```
+$ pnpm exec vitest related --run lib/types/orden-historial.ts \
+    lib/services/OrdenHistorialService.ts lib/repositories/OrdenTraspasoRepository.ts \
+    lib/interfaces/repositories/IOrdenTraspasoRepository.ts lib/actions/traspasar-mensajero.ts \
+    'app/(app)/ordenes/_components/HistorialOrdenTimeline.tsx' \
+    'app/(app)/ordenes/_components/TraspasarMensajeroModal.tsx' \
+    'app/(app)/ordenes/_components/traspaso-error-messages.ts' \
+    'app/(app)/ordenes/_components/OrdenesListado.tsx'
+
+ Test Files  2 failed | 342 passed (344)
+      Tests  3 failed | 4892 passed | 17 skipped (4912)
+   Duration  240.36s
+RELATED_EXIT=1
+```
+
+De los **3** rojos, **1 era de esta tanda y ya está arreglado**; los otros **2 venían de `895b3bdb`**
+y siguen abiertos. Se detalla abajo porque un rojo sin dueño es lo que este repo paga más caro.
+
+### El rojo que era mío, y qué era
+
+`tests/components/AsignacionBloqueoPorCierre.test.tsx:251` (271/R32) cuenta cuántos modales de
+`OrdenesListado.tsx` reciben `mensajerosBloqueadosIds={mensajerosBloqueadosIds}`: eran **2** y ahora
+son **3**. Es un **censo cerrado que esta ficha tenía que ampliar**, que es justo para lo que existe:
+traspasar es poner trabajo en la mano de alguien —igual que las dos asignaciones— y
+`TraspasoMensajeroService` rechaza al destino bloqueado con el **mismo** motivo (R11). Se subió a 3
+**con el motivo escrito**, y no se tocó nada más: subir el número sin añadir el consumidor deja ese
+caso rojo, que es el punto.
+
+### ⚠️ Los DOS rojos que NO son de esta tanda: vienen de `895b3bdb` y siguen abiertos
+
+Los dos viven en `tests/integration/db/no-migration-102.test.ts` y **ya estaban rojos antes de esta
+tanda**. Medido, no supuesto: el diff de frontend **no toca `db/` en absoluto** (`git status`), y
+`git log -1` sobre las dos cosas que el test lee devuelve `895b3bdb` en las dos.
+
+| Rojo | Qué lo causa | El arreglo, en una línea |
+| --- | --- | --- |
+| «la unica migracion de notificaciones es la de la 146, salvo las declaradas arriba» (`:131`) | la carpeta `20260917120100_notificacion_evento_traspaso` no está declarada | añadir `"_notificacion_evento_traspaso"` a `MIGRACIONES_NOTIFICACIONES_POSTERIORES` (`:68`) **con su motivo**, como las siete que ya están |
+| «sin badge ni campana persistidos» (`:174`) | `db/schema.prisma` dice «campana» en **tres** comentarios de la 427 (líneas 2744, 2756, 2760) | reescribir esas tres líneas de prosa sin la palabra (el test busca la cadena en el archivo entero, comentarios incluidos) |
+
+**No se arreglan aquí a propósito:** uno exige editar `db/schema.prisma` y el otro es la declaración
+de una migración; las dos cosas son de la tanda de backend y están **fuera del alcance de
+frontend**. Quedan nombradas con archivo, línea y arreglo para que no cuesten un ciclo de gate.
+
+---
+
+## F7. Lo que queda pendiente de esta ficha
+
+**T25 — ver la app funcionando.** No se hizo en esta tanda. Doce mil tests en verde no han visto
+nunca esta pantalla, así que sigue debiendo los cinco puntos que `tasks.md` enumera: el listado con
+el mensajero nuevo, el destino viendo el hilo de chat con su historial **y su campanada**, el origen
+sin el hilo **y con su propio aviso**, y la entrada del traspaso en el historial de una de las
+órdenes. Requiere un solo dev server y una sesión de maestro.
+
+**T26/T27** (las doce mutaciones del backend, ya ejecutadas arriba por su tanda; el gate completo y
+la re-lectura de la lista de enums del `down.sql` contra `origin/dev`) siguen siendo del cierre.
+
+---
+
+## F8. Veredicto (frontend)
+
+Tandas 6 y 7 completas: la línea de tiempo gana su tercera clase sin dejar ningún `switch` sin rama,
+`/ordenes` ofrece el traspaso **exactamente** en `en_reparto` y `ayuda_tienda`, el modal deriva el
+origen de la selección, excluye al origen del selector y dice en pantalla **las dos cifras y que la
+ruta del que recibe queda pendiente de recalcularse**; `typecheck` y `lint` en cero errores, 129
+tests propios verdes, las 225 guardias verdes —**incluida `superficie-de-uso`, con la anotación ya
+borrada y su caducidad medida por mutación**— y las siete mutaciones del plan ejecutadas y todas
+rojas.

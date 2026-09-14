@@ -53,6 +53,7 @@ import { CargaNombreDuplicadoError } from "@/lib/interfaces/repositories/IOrdenR
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "@/lib/repositories/OrdenTraspasoRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { ApiKeyRepository } from "@/lib/repositories/ApiKeyRepository";
 import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
@@ -213,6 +214,7 @@ function buildManifiestoService(): IManifiestoService {
       ordenRepo,
       new OrdenHistorialRepository(prisma),
       new OrdenDiaRepartoCambioRepository(prisma),
+      new OrdenTraspasoRepository(prisma),
     ),
   );
 }

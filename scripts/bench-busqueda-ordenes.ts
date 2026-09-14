@@ -42,6 +42,7 @@ import path from "path";
 import { OrdenRepository } from "../lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "../lib/repositories/OrdenHistorialRepository";
 import { OrdenDiaRepartoCambioRepository } from "../lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenTraspasoRepository } from "../lib/repositories/OrdenTraspasoRepository";
 import { OrdenHistorialService } from "../lib/services/OrdenHistorialService";
 import { OrdenService } from "../lib/services/OrdenService";
 import type { Actor } from "../lib/interfaces/services/IOrdenService";
@@ -320,6 +321,7 @@ async function main(): Promise<void> {
         repo,
         new OrdenHistorialRepository(cliente),
         new OrdenDiaRepartoCambioRepository(cliente),
+        new OrdenTraspasoRepository(cliente),
       ),
     );
     const actor: Actor = { usuarioId: "bench", rol: "maestro" };

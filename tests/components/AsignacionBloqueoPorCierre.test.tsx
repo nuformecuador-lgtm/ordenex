@@ -242,13 +242,20 @@ describe("271/T9.4 · el modal de RECOLECCIÓN en tienda (R31/R32)", () => {
     ).not.toHaveAttribute("aria-disabled", "true");
   });
 
-  it("R32: la MISMA lista alimenta los dos modales — el campo no es «para reparto»", () => {
+  it("R32: la MISMA lista alimenta los TRES modales — el campo no es «para reparto»", () => {
     // Se afirma sobre el nombre del contrato, que es donde vivía la asimetría: el campo se llama
     // `bloqueadosIds` y NO `bloqueadosParaRepartoIds` porque desde el 2026-08-23 no hay dos
     // conjuntos. Si alguien vuelve a partirlo en dos, este caso se cae al compilar.
+    //
+    // ⭑ FICHA 427 (2026-09-14): DOS pasan a TRES, y el número se sube A PROPÓSITO. El tercer
+    // consumidor es `TraspasarMensajeroModal`: traspasar es poner trabajo en la mano de alguien,
+    // igual que las dos asignaciones, y `TraspasoMensajeroService` rechaza al destino bloqueado con
+    // el MISMO motivo (427/R11). Alimentarlo con otra lista —o no alimentarlo— devolvería la
+    // asimetría que este censo existe para impedir: un selector ofreciendo a quien el servidor va a
+    // negar. Subir el número sin añadir el consumidor deja este caso rojo, que es el punto.
     const fuente = readFileSync("app/(app)/ordenes/_components/OrdenesListado.tsx", "utf8");
     const ocurrencias = fuente.match(/mensajerosBloqueadosIds=\{mensajerosBloqueadosIds\}/g) ?? [];
-    expect(ocurrencias).toHaveLength(2);
+    expect(ocurrencias).toHaveLength(3);
   });
 });
 
