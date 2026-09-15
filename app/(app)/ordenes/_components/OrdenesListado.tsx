@@ -1247,18 +1247,28 @@ export function OrdenesListado({
                 del control detrás de un clic. Las etiquetas de la dirección CAMBIAN con el
                 campo —«Más recientes/Más antiguas» para la fecha, «Más altas/Más bajas» para la
                 remisión—: llamar «reciente» a un número alto sería falso con cuatro series
-                conviviendo. */}
+                conviviendo.
+
+                FICHA 428 — y los CUATRO botones van en SOLO ICONO (`soloIcono`), que es la
+                única pantalla de la app que lo pide. Con el texto escrito, estos dos
+                conmutadores ocupaban ~800 px de los ~1480 de esta fila —más de la mitad de la
+                barra, para dos controles que no filtran nada— y empujaban «Filtros» a una
+                tercera línea. Las etiquetas no se pierden: son el `aria-label` y el tooltip de
+                cada botón. Los dos costes están aceptados y escritos en
+                `ordenamiento-ordenes.ts`, junto a las etiquetas. */}
             <SegmentedToggle
               ariaLabel={ETIQUETA_CAMPO_ORDEN}
               options={OPCIONES_CAMPO_ORDEN}
               valor={sortBy}
               onChange={setSortBy}
+              soloIcono
             />
             <SegmentedToggle
               ariaLabel={ETIQUETA_DIRECCION[sortBy]}
               options={OPCIONES_DIRECCION[sortBy]}
               valor={sortDir}
               onChange={setSortDir}
+              soloIcono
             />
             {filtrosMontados.length > 0 ? (
               <FilterComponent

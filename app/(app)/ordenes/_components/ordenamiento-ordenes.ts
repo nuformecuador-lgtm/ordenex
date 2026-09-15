@@ -98,9 +98,28 @@ export const ETIQUETA_DIRECCION: Record<CampoOrdenOfrecido, string> = {
 /**
  * LAS DIRECCIONES, CON EL TEXTO QUE CORRESPONDE AL CAMPO.
  *
- * El sentido va en el TEXTO y no solo en una flecha: «Mas recientes» dice qué va a pasar; una
- * flecha sola obliga a pulsarla para averiguarlo, y `asc`/`desc` es vocabulario del servidor.
- * Los iconos acompañan, no informan solos.
+ * FICHA 428 — LA BARRA LOS PINTA EN SOLO ICONO, y esto REVIERTE lo que este mismo bloque
+ * defendia hasta el 2026-09-15 («el sentido va en el TEXTO y no solo en una flecha… los iconos
+ * acompañan, no informan solos»). El motivo es de espacio, medido sobre una captura de
+ * `/ordenes`: con el texto escrito, los dos conmutadores de orden ocupaban ~800 px de los
+ * ~1480 de la fila —mas de la mitad de la barra, para dos controles que no filtran nada— y
+ * empujaban el boton «Filtros» a una tercera linea. `OrdenesListado` pasa `soloIcono` a los dos
+ * `SegmentedToggle`; es la unica pantalla que lo hace.
+ *
+ * LOS DOS COSTES, DICHOS EN VOZ ALTA Y ACEPTADOS POR EL HUMANO EL 2026-09-15 —no son deuda
+ * pendiente ni una reproposicion a la espera: se ofrecieron dos variantes mas conservadoras y
+ * las descarto—:
+ *   · EN MOVIL NO HAY HOVER. Ahi el tooltip no se abre y los cuatro iconos se quedan mudos:
+ *     quien entre desde el telefono ve dos flechas y dos simbolos sin nada que los explique.
+ *   · LAS MISMAS DOS FLECHAS SIGNIFICAN DOS COSAS. `ArrowDownWideNarrow` es «Mas recientes» con
+ *     la fecha puesta y «Mas altas» con la remision, y en pantalla no queda NADA que lo diga:
+ *     el campo vigente solo se lee en el otro conmutador, que tambien es un icono.
+ *
+ * POR ESO LAS ETIQUETAS SIGUEN EXISTIENDO, y no son un resto del diseño anterior: viajan al
+ * `aria-label` del boton y a su tooltip. Son el NOMBRE ACCESIBLE del control —lo que anuncia un
+ * lector de pantalla, lo que revela el foco con teclado y por lo que las localizan los tests de
+ * `/ordenes` y de `/historico/acciones`—, no adorno. Borrarlas «porque ya no se ven» deja
+ * cuatro botones sin nombre.
  *
  * Y para la remision NO se reutiliza el vocabulario temporal, deliberadamente: «Mas recientes»
  * sugeriria que un numero mayor es mas nuevo, y con cuatro series conviviendo en esta base eso
