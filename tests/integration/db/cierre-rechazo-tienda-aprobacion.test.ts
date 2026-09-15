@@ -45,7 +45,7 @@ import {
  * `WalletIndemnizacionFeedService` y sus repositorios). R8 dice que aprobar NO emite ni un apunte por
  * un rechazo de tienda, y eso no lo puede afirmar un doble que no emite nada nunca.
  *
- * LOS TRES ESCENARIOS:
+ * LOS CUATRO ESCENARIOS:
  *
  *   1. NA-981 REPRODUCIDO (R13). Tres ordenes (NA-947, NA-981, NA-1103) de un mismo mensajero,
  *      rechazadas por la tienda POR LA VIA REAL (`GestionOrdenRepository.rechazarDesdeDevuelta`) desde
@@ -60,6 +60,13 @@ import {
  *
  *   3. CIERRE RECHAZADO (R20). El admin lo rechaza: el vinculo se queda con ESE cierre, un cierre
  *      posterior no se lo lleva y al re-solicitarlo sigue siendo el suyo.
+ *
+ *   4. EL CAMINO DE ANDY Y ARNEL, QUE NO TRABAJAN (R11/R12/R13). Nadie re-solicita: el corte crea
+ *      el `vencido` con solo rechazos y lo resuelve un ADMIN. P1: aprobarlo directamente da
+ *      `conflict` (solo se aprueba un `solicitado`, desde la 111) y las ordenes siguen en
+ *      `rechazada`. P2: el admin lo destraba con `forzarSolicitudVencido` y lo aprueba, y las
+ *      ordenes salen hacia su destino por zona sin que el mensajero toque nada. La contraprueba
+ *      —quitar el destrabe pone P2 en rojo— esta en `progress/impl_425.md`.
  *
  * Todo corre en transacciones que SIEMPRE se revierten. SIN base se SALTA; con base y sin catalogo o
  * sin zona central, falla RUIDOSAMENTE.
@@ -635,10 +642,99 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
 
   // ---------------------------------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------------------------------
+  // Escenario 4 — el mensajero NO trabaja: el ADMIN saca adelante el `vencido` (P1 y P2)
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * El camino que van a seguir Andy Cortes y Arnel Guillen: no trabajan, asi que nadie re-solicita su
+   * cierre. Lo crea el corte con SOLO rechazos y lo resuelve un administrador.
+   *
+   * `destrabar = false` es la sonda P1: aprobar el `vencido` tal cual. `destrabar = true` es P2:
+   * «Destrabar cierre vencido» (`forzarSolicitudVencido`) y despues aprobar. En los DOS, despues de
+   * registrar los rechazos NO se llama a ningun servicio del mensajero: ni solicitar ni re-solicitar.
+   */
+  function escenarioAdminSinMensajero(destrabar: boolean) {
+    return enTransaccionRevertida(prisma, async (tx) => {
+      await serializarEscriturasReales(tx);
+      const ctx = montar(tx);
+      const p = await sembrarPersonas(tx);
+
+      // Un rechazo de tienda en zona CENTRAL y otro en SATELITE, los dos por la VIA REAL de la tienda
+      // y desde una devolucion que ya se aprobo en un cierre anterior.
+      const viejo = await tx.cierreDia.create({
+        data: {
+          mensajeroId: p.mensajeroId,
+          estado: "aprobado",
+          destinoTipo: "bodega_satelite",
+          destinoZonaId: p.zonaSateliteId,
+        },
+        select: { id: true },
+      });
+      const ordenIds: string[] = [];
+      for (const zonaId of [centralZonaId, p.zonaSateliteId]) {
+        const o = await sembrarOrden(tx, {
+          mensajeroId: p.mensajeroId,
+          estatus: "devuelta",
+          zonaId,
+          montoCobrar: "18000.00",
+        });
+        await tx.gestionOrden.create({
+          data: {
+            ordenId: o.ordenId,
+            mensajeroId: p.mensajeroId,
+            resultado: "devuelta",
+            cierreId: viejo.id,
+            createdAt: new Date("2026-09-09T20:00:00.000Z"),
+          },
+        });
+        const aplicado = await ctx.gestionRepo.rechazarDesdeDevuelta({
+          ordenId: o.ordenId,
+          estatusDevueltaId: idDe("devuelta"),
+          estatusRechazadaId: idDe("rechazada"),
+          motivo: "La tienda no recibe la devolucion",
+          actorUsuarioId: fks.tiendaId,
+        });
+        if (!aplicado) throw new Error("rechazarDesdeDevuelta no aplico");
+        ordenIds.push(o.ordenId);
+      }
+      const antes = await leerOrdenes(tx, ordenIds);
+
+      const corte = await ctx.corteDe(p.mensajeroId).ejecutarCorte(new Date());
+      const vencido = await tx.cierreDia.findFirst({
+        where: { mensajeroId: p.mensajeroId, estado: "vencido" },
+        select: { id: true },
+      });
+      if (vencido === null) throw new Error(`el corte no creo el cierre: ${JSON.stringify(corte)}`);
+
+      // A partir de aqui actua el ADMIN, y solo el admin.
+      const destrabe = destrabar ? await ctx.admin.forzarSolicitudVencido(vencido.id, p.actorAdmin) : null;
+      const aprobacion = await ctx.admin.aprobarCierre(vencido.id, p.actorAdmin, [], []);
+
+      const estadoFinal = (
+        await tx.cierreDia.findUniqueOrThrow({ where: { id: vencido.id }, select: { estado: true } })
+      ).estado;
+      return {
+        adminId: p.adminId,
+        vencidosCreados: corte.vencidosCreados,
+        destrabe,
+        aprobacion: aprobacion.status,
+        estadoFinal,
+        antes,
+        despues: await leerOrdenes(tx, ordenIds),
+        historial: await historialDeDevolucion(tx, ordenIds),
+      };
+    });
+  }
+
+  // ---------------------------------------------------------------------------------------------
+
   let na981: Awaited<ReturnType<typeof escenarioNA981>>;
   let conRechazos: Awaited<ReturnType<typeof escenarioConCalle>>;
   let sinRechazos: Awaited<ReturnType<typeof escenarioConCalle>>;
   let rechazado: Awaited<ReturnType<typeof escenarioRechazado>>;
+  let adminP1: Awaited<ReturnType<typeof escenarioAdminSinMensajero>>;
+  let adminP2: Awaited<ReturnType<typeof escenarioAdminSinMensajero>>;
 
   beforeAll(async () => {
     prisma = crearPrismaDeTest();
@@ -671,6 +767,8 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
     conRechazos = await escenarioConCalle(true);
     sinRechazos = await escenarioConCalle(false);
     rechazado = await escenarioRechazado();
+    adminP1 = await escenarioAdminSinMensajero(false);
+    adminP2 = await escenarioAdminSinMensajero(true);
   }, 300_000);
 
   afterAll(async () => {
@@ -777,5 +875,38 @@ describeSiHayBase("425/B7 — aprobar un cierre con rechazos de tienda, contra P
     expect(rechazado.resolicitud).toEqual({ status: "ok", via: "resolicitado" });
     expect(rechazado.estadoDeC1).toBe("solicitado");
     expect(rechazado.cierresDelVinculoAlFinal).toEqual([rechazado.c1]);
+  });
+
+  // ================= Escenario 4 — el mensajero no trabaja: lo resuelve el ADMIN =================
+
+  it("P1: aprobar DIRECTAMENTE el `vencido` da `conflict` y las ordenes siguen en `rechazada`", () => {
+    // La regla, documentada: desde la 111 solo se aprueba un `solicitado` (`ESTADOS_RESOLUBLES`).
+    expect(adminP1.vencidosCreados).toBe(1);
+    expect(adminP1.aprobacion).toBe("conflict");
+    expect(adminP1.estadoFinal).toBe("vencido");
+    expect(adminP1.despues.map((o) => o.estatus)).toEqual(["rechazada", "rechazada"]);
+    expect(adminP1.historial).toEqual([[], []]);
+  });
+
+  it("P2 (R11/R13): el admin DESTRABA el `vencido` y lo aprueba; las ordenes salen hacia su destino sin que el mensajero haga nada", () => {
+    expect(adminP2.antes.map((o) => o.estatus)).toEqual(["rechazada", "rechazada"]);
+    // Primero el efecto que importa: la zona CENTRAL va a `por_devolver_a_tienda`, la SATELITE a
+    // `por_devolver`.
+    expect(adminP2.despues.map((o) => o.estatus)).toEqual(["por_devolver_a_tienda", "por_devolver"]);
+    expect(adminP2.aprobacion).toBe("ok");
+    expect(adminP2.estadoFinal).toBe("aprobado");
+  });
+
+  it("P2 (R12): cada salida lleva al admin en el historial y no toca mensajero, prioridad ni importe", () => {
+    expect(adminP2.historial).toEqual([
+      [{ actor: adminP2.adminId, origen: "rechazada", destino: "por_devolver_a_tienda" }],
+      [{ actor: adminP2.adminId, origen: "rechazada", destino: "por_devolver" }],
+    ]);
+    const sinEstatus = (o: EstadoDeOrden) => ({ ...o, estatus: undefined });
+    expect(adminP2.despues.map(sinEstatus)).toEqual(adminP2.antes.map(sinEstatus));
+  });
+
+  it("P2: el destrabe es `forzarSolicitudVencido`, y deja el cierre en `solicitado` antes de aprobarlo", () => {
+    expect(adminP2.destrabe).toMatchObject({ status: "ok", estado: "solicitado" });
   });
 });

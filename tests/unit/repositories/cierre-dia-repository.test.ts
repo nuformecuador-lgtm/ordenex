@@ -1696,7 +1696,9 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     await repo.crearCierre(INPUT_CIERRE);
 
     // FICHA 425: el snapshot es la ULTIMA lectura de `gestion_orden` de la tx; la primera es la de los
-    // rechazos de tienda a incorporar, que tiene su propio caso literal (425/B3).
+    // rechazos de tienda a incorporar, que tiene su propio caso literal (425/B3). Se fija el NUMERO
+    // de lecturas: si algun dia cambia, este caso lo dice en vez de apuntar a otra consulta en silencio.
+    expect(tx.gestionOrden.findMany).toHaveBeenCalledTimes(2);
     const arg = (tx.gestionOrden.findMany as ReturnType<typeof vi.fn>).mock.lastCall?.[0] as unknown as { where: unknown };
     expect(arg.where).toEqual({ cierreId: "c1" });
   });

@@ -287,8 +287,8 @@ describeSiHayBase("💰 337 — el cierre NO recoge las gestiones de escritorio 
       // rechazo y una reprogramacion y afirmaba `null`; la 425/R5 REVOCA a proposito esa mitad para el
       // RECHAZO —era lo que dejaba su orden sin salida— y su caso vive justo debajo. Para la
       // REPROGRAMACION (D2) sigue siendo el contrato, y por eso las aserciones no cambian ni una coma.
-      const rechazo = await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramada");
-      const repro = await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramada");
+      const reproUno = await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramada");
+      const reproDos = await sembrarGestion(tx, mensajeroId, REPRO_ESCRITORIO, "reprogramada");
 
       const cierreId = await repoDe(tx).crearCierre({
         ...INPUT_CIERRE_VACIO,
@@ -297,7 +297,7 @@ describeSiHayBase("💰 337 — el cierre NO recoge las gestiones de escritorio 
       });
       const cierres = await tx.cierreDia.count({ where: { mensajeroId } });
       const sueltas = await tx.gestionOrden.findMany({
-        where: { id: { in: [rechazo, repro] } },
+        where: { id: { in: [reproUno, reproDos] } },
         select: { cierreId: true },
       });
       return { cierreId, cierres, cierresDeLasGestiones: sueltas.map((g) => g.cierreId) };

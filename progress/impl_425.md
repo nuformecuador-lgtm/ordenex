@@ -204,7 +204,7 @@ Las rutas abreviadas:
 | R10 | `…/aprobacion` › «R10: la confirmacion fisica exige SOLO la rechazada de calle…» y «R13…» (aprobado sin confirmar nada) |
 | R11 | `…/aprobacion` › «R11: el rechazo de zona CENTRAL va a `por_devolver_a_tienda` y el de SATELITE a `por_devolver`» y «R13…» |
 | R12 | `…/aprobacion` › los dos «R12…» (historial con el admin como actor; ni mensajero, ni prioridad, ni importe) |
-| R13 | `…/aprobacion` › «R13: NA-947, NA-981 y NA-1103 salen de `rechazada` sin edicion manual (via real + corte + aprobacion)». Falta V5 en producción, que es del leader. |
+| R13 | `…/aprobacion` › «R13: NA-947, NA-981 y NA-1103 salen de `rechazada` sin edicion manual (via real + corte + aprobacion)» y, sin el mensajero, «P2 (R11/R13): el admin DESTRABA el `vencido` y lo aprueba…», con la sonda «P1: aprobar DIRECTAMENTE el `vencido` da `conflict`…» (ver la revisión, al final). Falta V5 en producción, que es del leader. |
 | R14 | Datos: `…/aprobacion` › «R14 (datos)…» y los unitarios B11 de los dos repositorios y los dos servicios. La guardia de superficies (F3) es del frontend. |
 | R15 | Datos: `…/sql-real` › «R2/R15…» y los unitarios B11 «R15». La pantalla (F4) es del frontend. |
 | R16 | Datos: los unitarios de servicio B11 «R16: … no se cuelan en ningun grupo…». La pantalla (F4) es del frontend. |
@@ -582,3 +582,65 @@ Son 3297 frente a los 3296 del backend: el caso nuevo es el R20 de la sección, 
 1. **V1:** el gate completo.
 2. **Ver la pantalla antes de V4,** con un cierre que traiga rechazos: el de Arnel en cero y uno mixto. Revisar el ancho de las dos cajas en el móvil del mensajero y la impresión con Ctrl+P.
 3. **Decidir si la frase de efecto se queda como regla** (central y satélite) **o si se quiere el destino exacto de cada orden,** que exige un campo por fila en `CierreRechazoDeTienda` (backend). Ver el punto 2 de arriba.
+
+## Revisión (2026-09-14): tres puntos menores, todos de `tests/`
+
+La revisión salió RECHAZADA por un texto del aviso, que corrige el coordinador. Estos tres puntos son del backend.
+
+### 1. El camino de Andy y Arnel: un ADMIN saca adelante el `vencido`, sin que el mensajero haga nada
+
+- **El hueco.** B7 cumplía R13 porque el **mensajero re-solicitaba** su cierre. Andy y Arnel no trabajan, así que su `vencido` lo tiene que resolver un administrador.
+- **Qué se añadió.** El escenario 4 de `tests/integration/db/cierre-rechazo-tienda-aprobacion.test.ts`, en la función `escenarioAdminSinMensajero(destrabar)`. Dos rechazos de tienda, uno en zona central y otro en satélite, llegan por la vía real (`rechazarDesdeDevuelta`). Después el corte real crea el `vencido`, y a partir de ahí **no se llama a ningún servicio del mensajero**.
+  - **P1** (`destrabar = false`) — caso «P1: aprobar DIRECTAMENTE el `vencido` da `conflict` y las ordenes siguen en `rechazada`». Documenta la regla: desde la 111 solo se aprueba un `solicitado` (`ESTADOS_RESOLUBLES = ["solicitado"]`). El cierre sigue `vencido` y no hay ninguna fila de historial de devolución.
+  - **P2** (`destrabar = true`) — el admin llama a `forzarSolicitudVencido` («Destrabar cierre vencido») y después a `aprobarCierre`. Tres casos:
+    - «P2 (R11/R13): … las ordenes salen hacia su destino sin que el mensajero haga nada»: la de zona central va a `por_devolver_a_tienda`, la de satélite a `por_devolver`, y el cierre queda `aprobado`.
+    - «P2 (R12): cada salida lleva al admin en el historial y no toca mensajero, prioridad ni importe».
+    - «P2: el destrabe es `forzarSolicitudVencido`, y deja el cierre en `solicitado` antes de aprobarlo».
+- **Cómo se corrió:** `pnpm exec vitest run --no-file-parallelism` sobre los tres archivos tocados en esta revisión.
+
+```
+ Test Files  3 passed (3)
+      Tests  138 passed (138)
+VITEST_EXIT=0
+```
+
+El typecheck, con estos cambios dentro, da `TYPECHECK_EXIT=0` y 0 errores.
+
+**Contraprueba: quitar el paso de destrabar pone P2 en ROJO.**
+
+- **La mutación:** `const destrabe = destrabar ? await ctx.admin.forzarSolicitudVencido(…) : null;` pasa a ser `const destrabe = null;`.
+- **Cómo se protege el arnés** (`scratchpad/ed/p2/contraprueba_p2.sh`): comprueba que el sha256 cambió, restaura desde copia, compara el sha256 con el original y corre un control sin mutar.
+
+```
+[sin_destrabe] mutacion aplicada (sha 1509c8e8… -> 392c2b7f…): 711:      const destrabe = null; // CONTRAPRUEBA: sin el paso de destrabar
+[sin_destrabe] exit=1 |  Test Files 1 failed (1)  Tests 3 failed | 13 passed (16) | restaurado=SI
+FAIL  tests/integration/db/cierre-rechazo-tienda-aprobacion.test.ts > 425/B7 — … > P2 (R11/R13): el admin DESTRABA el `vencido` y lo aprueba; las ordenes salen hacia su destino sin que el mensajero haga nada
+FAIL  tests/integration/db/cierre-rechazo-tienda-aprobacion.test.ts > 425/B7 — … > P2 (R12): cada salida lleva al admin en el historial y no toca mensajero, prioridad ni importe
+FAIL  tests/integration/db/cierre-rechazo-tienda-aprobacion.test.ts > 425/B7 — … > P2: el destrabe es `forzarSolicitudVencido`, y deja el cierre en `solicitado` antes de aprobarlo
+--- detalle del caso P2 (R11/R13):
+AssertionError: expected [ 'rechazada', 'rechazada' ] to deeply equal [ 'por_devolver_a_tienda', …(1) ]
+- Expected
++ Received
+-   "por_devolver_a_tienda",
+-   "por_devolver",
++   "rechazada",
++   "rechazada",
+ ❯ tests/integration/db/cierre-rechazo-tienda-aprobacion.test.ts:895:51
+== CONTROL: el mismo archivo SIN mutar
+[control] exit=0 |  Test Files 1 passed (1)  Tests 16 passed (16)
+```
+
+- **Por qué este rojo vale.** Sale del **efecto** —las órdenes se quedan en `rechazada`— y no solo de la aserción sobre el destrabe: en el caso principal de P2, la aserción de los estados va antes que las demás.
+- **P1 sigue verde** bajo la mutación: está entre los 13 que pasan.
+
+### 2. Un nombre que confundía
+
+En el caso de reprogramaciones de `tests/integration/db/cierre-excluye-gestiones-de-escritorio.test.ts`, las dos variables pasan a llamarse `reproUno` y `reproDos`. Antes, la primera se llamaba `rechazo` y guardaba una reprogramación. No cambia ninguna aserción. El caso `425/R5`, donde `rechazo` sí es un rechazo, no se toca.
+
+### 3. El `lastCall` fija el número de lecturas
+
+En `tests/unit/repositories/cierre-dia-repository.test.ts`, el caso de la 69 «R3: lee lo que la tx VINCULO…» afirma ahora `expect(tx.gestionOrden.findMany).toHaveBeenCalledTimes(2)` antes de leer `mock.lastCall`. Si algún día cambia el número de lecturas de `gestion_orden` dentro de la transacción, el caso lo dice en lugar de apuntar en silencio a otra consulta.
+
+### Queda como seguimiento, sin hacer ahora
+
+Tres casos de B5: un rechazo **anulado**, uno que ya tiene `cierre_id` y uno de **otro mensajero**. Hoy los protege el literal de B3, que fija las condiciones `anuladaAt: null`, `cierreId: null` y `mensajeroId` del predicado.
