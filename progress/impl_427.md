@@ -987,3 +987,5 @@ entorno donde sí fuera un defecto real; queda escrito aquí para que el siguien
 gaste el diagnóstico otra vez. Los otros **9 rojos de la primera corrida SÍ eran de la ficha** y se
 cerraron ampliando los censos de enum de las fichas 262, 253, 333 y 271 **sin borrar ni una línea
 de aserción**.
+
+> **Revisión 427/M2 (textos del modal), 2026-09-14:** «orden(es)» y «conversación(es)» pasan a singular y plural explícitos con el criterio `=== 1` de los emisores de la ficha —también el pronombre «se la / se las» de la confirmación—; el test del modal gana los casos de 1 y de varias para las dos palabras con literales a mano, incluidas filas MIXTAS (1 orden y 2 conversaciones, 3 órdenes y 1 conversación, 1 orden y 0 conversaciones) que caerían con una sola decisión para las dos, y `TraspasarMensajeroListado.test.tsx` actualiza sus dos literales, que afirmaban el texto viejo.

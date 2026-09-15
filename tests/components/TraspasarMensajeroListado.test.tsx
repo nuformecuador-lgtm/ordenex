@@ -340,7 +340,7 @@ describe("427/R35 — al abrir desde la barra, el modal ya sabe de quién son la
     // R35, literal a mano: el origen NO se eligió en ningún sitio, salió de las dos filas.
     expect(
       await screen.findByText(
-        "Vas a pasar 2 orden(es) de Andy Cortés. Elige a quién se las traspasas.",
+        "Vas a pasar 2 órdenes de Andy Cortés. Elige a quién se las traspasas.",
       ),
     ).toBeInTheDocument();
 
@@ -365,7 +365,7 @@ describe("427/R35 — al abrir desde la barra, el modal ya sabe de quién son la
 
     // R36/R33: las cifras del servidor y el aviso de la ruta se leen SIN cerrar el modal.
     expect(
-      await screen.findByText("Se movieron 2 orden(es) y 2 conversación(es) de chat."),
+      await screen.findByText("Se movieron 2 órdenes y 2 conversaciones de chat."),
     ).toBeInTheDocument();
     expect(
       screen.getByText(

@@ -83,21 +83,46 @@ const SELECT_ARIA = "Mensajero que recibe el lote";
 const SIN_MENSAJEROS_DISPONIBLES =
   "No hay otro mensajero al que traspasar estas órdenes.";
 
+/**
+ * REVISIÓN 427/M2 — SINGULAR Y PLURAL EXPLÍCITOS, con el MISMO criterio (`=== 1`) que los emisores de
+ * avisos de esta ficha (`textoTraspasoRecibido` / `textoTraspasoCedido`, en
+ * `lib/notificaciones/emitir.ts`). Hasta la revisión esto decía «31 orden(es)»: el paréntesis es lo
+ * que se escribe cuando no se quiere decidir, y quien lo lee todos los días es un operador. El
+ * design (§10) dice «N órdenes».
+ */
+function contarOrdenes(cuantas: number): string {
+  return cuantas === 1 ? "1 orden" : `${cuantas} órdenes`;
+}
+
+/** Idem para los hilos de chat. El `0` va en plural («0 conversaciones»): una orden puede no tener hilo. */
+function contarConversaciones(cuantas: number): string {
+  return cuantas === 1 ? "1 conversación" : `${cuantas} conversaciones`;
+}
+
 /** R35 — «cuántas, desde quién y hacia quién», ANTES de ejecutar nada. */
 function textoConfirmacion(
   cuantas: number,
   origenNombre: string,
   destinoNombre: string | null,
 ): string {
-  const lote = `${cuantas} orden(es)`;
+  const lote = contarOrdenes(cuantas);
+  // El pronombre concuerda con el lote: «se la traspasas» con una, «se las traspasas» con varias.
+  const pronombre = cuantas === 1 ? "se la" : "se las";
   return destinoNombre === null
-    ? `Vas a pasar ${lote} de ${origenNombre}. Elige a quién se las traspasas.`
+    ? `Vas a pasar ${lote} de ${origenNombre}. Elige a quién ${pronombre} traspasas.`
     : `Vas a pasar ${lote} de ${origenNombre} a ${destinoNombre}.`;
 }
 
-/** R36 — lo que de verdad se movió, con las cifras que devuelve el SERVIDOR (no la selección). */
+/**
+ * R36 — lo que de verdad se movió, con las cifras que devuelve el SERVIDOR (no la selección).
+ *
+ * Las dos palabras se eligen POR SEPARADO, cada una con su cifra: una orden puede tener más de un
+ * hilo, así que «1 orden y 2 conversaciones» es un desenlace real. El verbo va siempre en plural
+ * («Se movieron») porque el sujeto es compuesto —órdenes Y conversaciones—, también con «1 orden y
+ * 1 conversación».
+ */
 function textoMovidas(movidas: number, conversaciones: number): string {
-  return `Se movieron ${movidas} orden(es) y ${conversaciones} conversación(es) de chat.`;
+  return `Se movieron ${contarOrdenes(movidas)} y ${contarConversaciones(conversaciones)} de chat.`;
 }
 
 /**

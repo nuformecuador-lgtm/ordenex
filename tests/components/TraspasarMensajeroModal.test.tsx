@@ -158,7 +158,7 @@ describe("427/R35 — la confirmación dice cuántas órdenes, de quién y hacia
 
     // Literal A MANO: es lo que la persona lee antes de pulsar, no lo que una función devuelve.
     expect(
-      screen.getByText("Vas a pasar 3 orden(es) de Andy Cortés a Carlos Eduardo."),
+      screen.getByText("Vas a pasar 3 órdenes de Andy Cortés a Carlos Eduardo."),
     ).toBeInTheDocument();
   });
 
@@ -166,7 +166,7 @@ describe("427/R35 — la confirmación dice cuántas órdenes, de quién y hacia
     renderModal([ordenDeAndy("o1")]);
 
     expect(
-      screen.getByText("Vas a pasar 1 orden(es) de Andy Cortés. Elige a quién se las traspasas."),
+      screen.getByText("Vas a pasar 1 orden de Andy Cortés. Elige a quién se la traspasas."),
     ).toBeInTheDocument();
   });
 
@@ -341,7 +341,7 @@ describe("427/R36 — el éxito dice cuántas órdenes y cuántas conversaciones
   it("con las cifras DEL SERVIDOR (31 y 31), no con el tamaño de la selección", async () => {
     const user = userEvent.setup();
     // La selección es de DOS órdenes y el servidor responde 31/31: si la pantalla contara la
-    // selección, este caso saldría «2 orden(es)» y caería. Es la mitad que impide inventar cifras.
+    // selección, este caso saldría «2 órdenes» y caería. Es la mitad que impide inventar cifras.
     const { onSuccess } = renderModal([ordenDeAndy("o1"), ordenDeAndy("o2")]);
 
     await elegirDestino(user);
@@ -350,14 +350,72 @@ describe("427/R36 — el éxito dice cuántas órdenes y cuántas conversaciones
 
     await waitFor(() =>
       expect(
-        screen.getByText("Se movieron 31 orden(es) y 31 conversación(es) de chat."),
+        screen.getByText("Se movieron 31 órdenes y 31 conversaciones de chat."),
       ).toBeInTheDocument(),
     );
     expect(successMock).toHaveBeenCalledWith(
-      "Se movieron 31 orden(es) y 31 conversación(es) de chat.",
+      "Se movieron 31 órdenes y 31 conversaciones de chat.",
     );
     // R36: y se relee el listado del servidor.
     expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+});
+
+/* ============================================================================================ */
+/* Revisión 427/M2 — singular y plural, en las DOS palabras                                     */
+/* ============================================================================================ */
+
+describe("427/M2 — «1 orden» y «31 órdenes», nunca «orden(es)»", () => {
+  // ⚠️ Los literales van A MANO, fila por fila. Compararlos contra la función que genera el texto
+  // estaría verde por construcción y no podría ponerse rojo nunca.
+
+  it("confirmación con UNA orden y el destino elegido: singular", async () => {
+    const user = userEvent.setup();
+    renderModal([ordenDeAndy("o1")]);
+
+    await elegirDestino(user);
+
+    expect(
+      screen.getByText("Vas a pasar 1 orden de Andy Cortés a Carlos Eduardo."),
+    ).toBeInTheDocument();
+  });
+
+  it("confirmación con VARIAS órdenes y sin destino todavía: plural, también el pronombre", () => {
+    renderModal([ordenDeAndy("o1"), ordenDeAndy("o2")]);
+
+    expect(
+      screen.getByText("Vas a pasar 2 órdenes de Andy Cortés. Elige a quién se las traspasas."),
+    ).toBeInTheDocument();
+  });
+
+  // Las filas CRUZAN las dos palabras a propósito: con una sola decisión para las dos —por ejemplo
+  // mirar sólo `movidas === 1`— las filas mixtas saldrían mal y caerían.
+  it.each([
+    { movidas: 1, conversaciones: 1, texto: "Se movieron 1 orden y 1 conversación de chat." },
+    { movidas: 31, conversaciones: 31, texto: "Se movieron 31 órdenes y 31 conversaciones de chat." },
+    { movidas: 1, conversaciones: 2, texto: "Se movieron 1 orden y 2 conversaciones de chat." },
+    { movidas: 3, conversaciones: 1, texto: "Se movieron 3 órdenes y 1 conversación de chat." },
+    { movidas: 1, conversaciones: 0, texto: "Se movieron 1 orden y 0 conversaciones de chat." },
+  ])("éxito con $movidas y $conversaciones: «$texto»", async ({ movidas, conversaciones, texto }) => {
+    const user = userEvent.setup();
+    traspasarMock.mockResolvedValue({
+      status: "ok",
+      movidas,
+      conversaciones,
+      origen: { id: ANDY.id, nombre: ANDY.nombre },
+      destino: { id: CARLOS.id, nombre: CARLOS.nombre },
+    });
+    renderModal([ordenDeAndy("o1")]);
+
+    await elegirDestino(user);
+    await escribirMotivo(user);
+    await user.click(confirmar());
+
+    // En la fase de resultado Y en el toast: son los dos sitios donde se lee.
+    expect(await screen.findByText(texto)).toBeInTheDocument();
+    expect(successMock).toHaveBeenCalledWith(texto);
+    // Y el paréntesis de «no quise decidir» no aparece por ningún lado de la pantalla.
+    expect(document.body.textContent ?? "").not.toMatch(/\(es\)/);
   });
 });
 
